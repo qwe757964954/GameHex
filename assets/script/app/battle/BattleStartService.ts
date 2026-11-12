@@ -60,8 +60,7 @@ async function requestStartBattle(
     caller?: object,
     isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
-    const net = GameNet.instance;
-    if (!net.isConnected) {
+    if (!GameNet.instance.isConnected) {
         console.warn('[BattleStartService] 游戏服未连接，无法确认开战');
         return null;
     }
@@ -154,8 +153,7 @@ export function finishBattle(
     statisticsInfos: ReadonlyArray<CmdBattleStatisticsInfo> = [],
     caller?: object,
 ): Promise<ZCBattleFinish | null> {
-    const net = GameNet.instance;
-    if (!net.isConnected) {
+    if (!GameNet.instance.isConnected) {
         console.warn('[BattleStartService] 游戏服未连接，跳过完成战斗上报');
         return Promise.resolve(null);
     }

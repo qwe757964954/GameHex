@@ -1,5 +1,5 @@
 import { createZCBattleSession } from '../../zcds/application/ZCBattlePreparation';
-import { director, Layers, Node, SpriteFrame, UIOpacity, UITransform, view, Widget } from 'cc';
+import { director, instantiate, Node, Prefab, SpriteFrame, UIOpacity, UITransform, view } from 'cc';
 import type { GameContext } from '../../../core/runtime/GameContext';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
@@ -21,6 +21,16 @@ import { BigMapController } from './BigMapController';
 import { GameNet } from '../../net/GameNet';
 import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
+import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
+
+/**
+ * 页面宿主 prefab（只装 `UITransform` + 四边 `Widget` + `UIOpacity` + `BigMapPage`，没有视觉节点）。
+ *
+ * 以前这里是 `new Node` + 四个 `addComponent`：四边对齐、透明度、layer、页面组件全散在代码里，
+ * Inspector 里既看不见也调不了。搬到 prefab 后这些配置在编辑器可读可改，
+ * 代码只留「尺寸 / 位置 / 父子」—— 那三件必须运行时算（依赖宿主尺寸与 HUD 高度）。
+ */
+const BIGMAP_PAGE_HOST_PREFAB = 'ui/bigmap/BigMapPageHost';
 import { BigMapCampRepository } from './BigMapCampRepository';
 import { GameNetBigMapCampGateway } from './GameNetBigMapCampGateway';
 import { BigMapSlgRepository } from './BigMapSlgRepository';
@@ -117,9 +127,13 @@ export class BigMapEntry {
                 return;
             }
             const size = view.getVisibleSize();
-            const root = new Node('BigMapPage');
-            root.layer = Layers.Enum.UI_2D;
-            const transform = root.addComponent(UITransform);
+            const root = await this.instantiatePageHost();
+            // 实例化是异步的：期间页面可能已被关掉 / 换了存档，那就要销毁刚建的节点，别泄漏。
+            if (revision !== this.openRevision || !this.isSaveOwnerCurrent(owner)) {
+                root.destroy();
+                return;
+            }
+            const transform = root.getComponent(UITransform)!;
             if (host) {
                 // 宿主页里：宽度占满，顶部让出主界面 HUD、底部让出菜单栏，剩下的中间区域给地图。
                 const hostSize = host.getComponent(UITransform)?.contentSize;
@@ -144,15 +158,7 @@ export class BigMapEntry {
             } else {
                 if (!canvas) return;
                 transform.setContentSize(size.width, size.height);
-                const widget = root.addComponent(Widget);
-                widget.isAlignTop = true;
-                widget.isAlignBottom = true;
-                widget.isAlignLeft = true;
-                widget.isAlignRight = true;
-                widget.top = 0;
-                widget.bottom = 0;
-                widget.left = 0;
-                widget.right = 0;
+                // 四边对齐在 prefab 的 `cc.Widget` 上（flags=45 / ALWAYS），这里不再补组件。
                 root.setParent(canvas);
                 // 🔴 常驻 `Popup` 节点必须永远压在所有页面之上（Toast / LoadingPopup / 各类弹窗
                 // 全挂它下面）。世界页是后加的，默认拿到 Canvas 的**最后一个**兄弟序号，
@@ -228,9 +234,9 @@ export class BigMapEntry {
             const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });
             // Graphics 在 onEnable 中初始化材质。准备期间保持节点激活，避免提前绘制
             // 缓存空材质并在原生 UIModelProxy.activeSubModels 中崩溃；用透明度隐藏成品前的页面。
-            const opacity = root.addComponent(UIOpacity);
+            const opacity = root.getComponent(UIOpacity)!;
             opacity.opacity = 0;
-            const page = root.addComponent(BigMapPage);
+            const page = root.getComponent(BigMapPage)!;
             const navigation = options?.navigation;
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
@@ -240,7 +246,13 @@ export class BigMapEntry {
             this.page = page;
             this.onCloseCallback = options?.onClose ?? null;
             // 基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
-            void controller.initialize().catch((error: unknown) => {
+            // ⚠️ `initialize()` 失败时**不会 reject**（`request` 内部把异常吞成 null），
+            // 所以只看 `.catch` 是收不到信号的 —— 必须看返回值。
+            void controller.initialize().then((ok) => {
+                if (ok || revision !== this.openRevision || !root.isValid || !this.isSaveOwnerCurrent(owner)) return;
+                console.warn('[BigMapEntry] 基地信息同步失败：build / game / action 至少一项没回来，'
+                    + '建造与升级会一直提示「正在同步基地信息」（先看上面有没有「SLG 请求被拦下」的告警）');
+            }).catch((error: unknown) => {
                 if (revision === this.openRevision && root.isValid && this.isSaveOwnerCurrent(owner)) {
                     console.warn('[BigMapEntry] 基地信息同步失败', error);
                 }
@@ -359,6 +371,24 @@ export class BigMapEntry {
     private isSaveOwnerCurrent(owner: IBigMapSaveOwner | null): boolean {
         const current = this.readSaveOwner();
         return owner?.roleId === current?.roleId && owner?.serverId === current?.serverId;
+    }
+
+    /**
+     * 实例化页面宿主 prefab。
+     *
+     * 🔴 必须走 `AssetService` 而不是 `assetManager.loadBundle(BIGMAP_BUNDLE)`：bundle 的远程
+     * url 与 version 只有 `CocosAssetService` 会从热更 manifest（`CocosBundleRegistry`）解析。
+     * `bigmap` 在 manifest 里是 `onDemand`（`tools/hotupdate/build_hotupdate.mjs` 默认只把
+     * `remoteRef` 设为 startup），热更后第一次进大世界时它**必然是未加载状态** —— 只传 bundle
+     * 名会落到 Creator 构建期地址，拿到旧包或 404，且全程零报错。
+     *
+     * 这里是 `bigmap` bundle 的首个加载点（页面与地图 prefab 都在里面），所以这一处的口径
+     * 决定了热更是否真正生效；代价只是把「建节点」从同步变成异步，调用点因此补了一次
+     * `revision` 校验（见 `open()`）。
+     */
+    private async instantiatePageHost(): Promise<Node> {
+        const prefab = await this.context.assets.load(BIGMAP_PAGE_HOST_PREFAB, Prefab, { bundle: BIGMAP_BUNDLE });
+        return instantiate(prefab);
     }
 
     private findCanvas(): Node | null {

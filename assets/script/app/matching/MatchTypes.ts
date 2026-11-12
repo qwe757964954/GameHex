@@ -62,6 +62,14 @@ export type MatchPhase = 'searching' | 'matched';
 
 export const MATCH_STAT_SLOTS = 4;
 
+/** 蓝湖匹配条顺序：僵尸阵营、坦克、战士、射手；同一卡可同时贡献阵营和职业。 */
+export const MATCH_STAT_TYPES = [
+    { icon: 'icon_01', trait: 'camp', value: '僵尸' },
+    { icon: 'icon_03', trait: 'attack', value: '坦克' },
+    { icon: 'icon_02', trait: 'attack', value: '战士' },
+    { icon: 'icon_04', trait: 'attack', value: '射手' },
+] as const;
+
 export const MATCH_TEXT = {
     searching: '正在寻找对手中...',
     matched: '匹配成功！',

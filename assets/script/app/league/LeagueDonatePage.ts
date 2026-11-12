@@ -36,39 +36,36 @@
  *
  * | 处 | 老端 | 本端 | 为什么 |
  * |---|---|---|---|
- * | 确认框文案 | 硬编码 `"是否花费10金币进行联盟捐献？"` | `LEAGUE_DONATE_CONFIRM`（模板，页面填 `donateCost`） | 措辞一字不改，只把写死的数字变活 |
+ * | 确认框文案 | 硬编码 `"是否花费10金币进行联盟捐献？"` | `LEAGUE_DONATE_CONFIRM`（模板，控制器填 `donateCost`） | 措辞一字不改，只把写死的数字变活 |
  * | 确认框的「不再提示」 | `共用弹窗/组件_共用弹窗_提示` 带勾选框，勾了写 `TipsEnum.UnionDonate` | **恒问**（复用 `CommonTips`，无勾选框） | Demo3.8 既没有那个弹窗，也没有任何 `cc.CheckBox` 用法；新造一个只为一个勾选框不划算。对未勾过的玩家（默认态）行为**完全一致** |
  * | 钱不够的提示 | `OpenUnEnoughAlert` 详情面板（但联盟这处 `openDetail` 默认 `true`…实测走 tip） | 只 `showTip('{货币名}不足')` | 与 `ModelGoods_1` 的 tip 口径一致；不新造「道具不足」面板 |
  *
  * ## 本端有意增补
  *
  * - `busy` 防连点（老端没有）：捐献是写请求、走 5s 超时（同 `LeagueStorePage`）。
+ *
+ * ## MVC 归属（2026-11-09 迁移）
+ *
+ * 本类**只做展示与意图派发**：`onInit` 绑一次按钮、emit 带 `owner` 的
+ * `LeagueDonateEvent.Intent`；`render(state)` 按控制器推来的快照绝对赋值。
+ * 快照读取、广告「先播后发」、金币三道关、确认框、写锁与迟到回包都在
+ * `LeagueDonateController` / `LeagueDonateModel`，会话由外部
+ * `LeagueDonatePopupComposition` 每次打开新建、关闭释放。
+ * 奖励 / 消耗图标属**展示资源**，由本页异步预取，用 `revision` 作废迟到结果。
  */
 
 import { _decorator, Button, Label, Node } from 'cc';
-import { CommonTips } from '../common/CommonTips';
-import { FW } from '../../framework/FW';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { LeagueAdButton } from './LeagueAdButton';
-import {
-    leagueRepository,
-    type ILeagueDonateSnapshot,
-    type ILeagueRepository,
-    type LeagueRequestResult,
-} from './LeagueRepository';
+import { LeagueDonateEvent, type ILeagueDonateViewState } from './LeagueDonateEvents';
+import type { ILeagueDonateSnapshot } from './LeagueRepository';
 import { loadLeagueRewardArt, type ILeagueRewardArt } from './LeagueRewardArt';
 import { LeagueRewardSlot } from './LeagueRewardSlot';
-import { playLeagueAd } from './LeagueAd';
 import {
     fillLeagueText,
-    LEAGUE_DONATE_CONFIRM,
     LEAGUE_DONATE_FREE_COUNT_TEMPLATE,
     LEAGUE_DONATE_TITLE,
-    LEAGUE_TIP_AD_DONATE_LIMIT,
-    LEAGUE_TIP_DONATE_LIMIT,
-    LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_NOT_ENOUGH_TEMPLATE,
-    LEAGUE_TIP_OFFLINE,
 } from './LeagueTexts';
 // ⚠️ `LEAGUE_COIN_RES_ID`（= 10 金币）来自 `LeagueTable`（表常量），**不在** `LeagueTexts`。
 //    本节用的两个 `resId` 是两件事：
@@ -109,14 +106,14 @@ export class LeagueDonatePage extends PopupBase {
     @property({ type: LeagueAdButton, tooltip: 'BtnBuy：金币捐献' })
     buyButton: LeagueAdButton = null;
 
-    /** 本趟快照。 */
-    private snapshot: ILeagueDonateSnapshot | null = null;
+    /** 展示资源按快照缓存，避免每次 render 都重取三张图。 */
     private art: ILeagueRewardArt | null = null;
+    private artSnapshot: ILeagueDonateSnapshot | null = null;
 
-    /** 写操作在飞（防连点）。 */
+    /** 写请求在飞（视图侧也挡一道，避免重复派发意图）。 */
     private busy = false;
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 每次打开 / 关闭递增，用来作废在飞的展示资源加载。 */
     private revision = 0;
 
     // ============================================================
@@ -128,12 +125,15 @@ export class LeagueDonatePage extends PopupBase {
         if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueDonate] CloseBtn 上没有 cc.Button，点击不会生效');
 
-        this.bindClick(this.freeButton, () => void this.donateFree());
-        this.bindClick(this.buyButton, () => void this.donateByCoin());
+        this.bindClick(this.freeButton, () => this.emitFree());
+        this.bindClick(this.buyButton, () => this.emitCoin());
     }
 
     protected async onOpen(): Promise<void> {
-        await this.reload();
+        this.revision += 1;
+        this.art = null;
+        this.artSnapshot = null;
+        this.busy = false;
     }
 
     protected onClose(): void {
@@ -146,7 +146,21 @@ export class LeagueDonatePage extends PopupBase {
     }
 
     // ============================================================
-    // 取数
+    // 意图派发（只报「点了哪颗按钮」，业务判断全在 Controller）
+    // ============================================================
+
+    private emitFree(): void {
+        if (this.busy) return;
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { owner: this, kind: 'free' });
+    }
+
+    private emitCoin(): void {
+        if (this.busy) return;
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { owner: this, kind: 'coin' });
+    }
+
+    // ============================================================
+    // 渲染（控制器推来的状态一律绝对赋值）
     // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取）。 */
@@ -154,47 +168,21 @@ export class LeagueDonatePage extends PopupBase {
         return LEAGUE_DONATE_TITLE;
     }
 
-    /** 数据端口（单测 / 探针可换成内存桩）。 */
-    protected get repository(): ILeagueRepository {
-        return leagueRepository;
-    }
-
-    /** 读一次捐献数据 + 预取两件奖励的图 + 铺界面。 */
-    private async reload(): Promise<void> {
-        const revision = ++this.revision;
-
-        const snapshot = await this.repository.loadDonate();
-        if (!this.alive || revision !== this.revision) return;
-
-        this.snapshot = snapshot;
-        // 三张图：两件奖励（11 / 13）+ 金币按钮上那颗**金币**图标（10）
-        this.art = await loadLeagueRewardArt(
-            [snapshot.coinResId, snapshot.expResId, LEAGUE_COIN_RES_ID],
-            snapshot.items,
-            snapshot.resources,
-        );
-        if (!this.alive || revision !== this.revision) return;
-
+    render(state: ILeagueDonateViewState): void {
+        this.busy = state.busy;
+        const snapshot = state.snapshot;
+        if (!snapshot) return;
         this.present(snapshot);
+        void this.applyArt(snapshot);
     }
 
     /**
      * 铺界面 —— 老端 `LayerLeagueDonateUI.updateView()` 逐句对照。
      */
     private present(snapshot: ILeagueDonateSnapshot): void {
-        const art = this.art;
-
-        // 两件奖励：名字（语言表前缀 + 数量）+ 图标格
+        // 两件奖励：名字（语言表前缀 + 数量）
         if (this.coinName) this.coinName.string = snapshot.coinNameText;
         if (this.expName) this.expName.string = snapshot.expNameText;
-        if (this.coinSlot) {
-            const frames = art ? art.framesOf(snapshot.coinResId) : { frame: null, icon: null };
-            this.coinSlot.render(frames.frame, frames.icon, snapshot.config.donateGainCoin, true);
-        }
-        if (this.expSlot) {
-            const frames = art ? art.framesOf(snapshot.expResId) : { frame: null, icon: null };
-            this.expSlot.render(frames.frame, frames.icon, snapshot.config.donateGainExp, true);
-        }
 
         // 剩余次数
         if (this.countLabel) this.countLabel.string = snapshot.remainText;
@@ -210,114 +198,42 @@ export class LeagueDonatePage extends PopupBase {
             this.freeButton.setRedDot(false);
         }
 
-        // 金币按钮：「金币」页 + 金币图标（`roleProperty.coin` = 10）+ 单价
+        // 金币按钮：「金币」页 + 单价；图标由 applyArt 异步补上
         if (this.buyButton) {
             this.buyButton.setPage('coin');
             this.buyButton.setCost(snapshot.config.donateCost);
-            this.buyButton.setCostIcon(art ? art.iconFrameOf(LEAGUE_COIN_RES_ID) : null);
             this.buyButton.setRedDot(false);
         }
     }
 
-    // ============================================================
-    // 捐献
-    // ============================================================
-
-    /**
-     * 点「免费」（广告路）—— 老端 `onClickAdv()`。
-     *
-     * 本端**不发包**：Demo3.8 没有广告 SDK，`RequestLeagueDonate(true)` 会白拿一次捐献
-     * （服务端只看到 `adv=true`，没有任何「看完广告」的凭据）。见 `LEAGUE_AD_PLAYBACK_AVAILABLE`。
-     *
-     * 提示按老端的两道关照抄，只是把「次数」换成「能力未接入」：
-     * 老端是 `adTime <= 0 ⇒ LEAGUE_AD_DONATE_LIMIT`，本端先判「能力有没有」再判次数。
-     */
-    private async donateFree(): Promise<void> {
-        const snapshot = this.snapshot;
-        if (!snapshot || snapshot.todayDonateAdvTimes >= snapshot.config.donateAdvCount) {
-            FW.showTip(LEAGUE_TIP_AD_DONATE_LIMIT);
+    /** 三张图：两件奖励（11 / 13）+ 金币按钮上那颗**金币**图标（10）。 */
+    private async applyArt(snapshot: ILeagueDonateSnapshot): Promise<void> {
+        if (this.artSnapshot === snapshot && this.art) {
+            this.paintArt(snapshot, this.art);
             return;
         }
-        // ⚠️ **先播后发**：`RequestUnionDonate(true)` 的凭据就是「广告放完了」，没放完就发等于白拿。
-        //    这里自己管 `busy` 而不是转 `sendDonate()` —— 后者内部还会 `beginWrite()`，会自我锁死。
-        if (!this.beginWrite()) return;
-        try {
-            const watched = await playLeagueAd();
-            if (!watched) {
-                FW.showTip(LEAGUE_TIP_FAILED);
-                return;
-            }
-            const result = await this.repository.requestDonate(true, this);
-            await this.afterWrite(result);
-        } finally {
-            this.busy = false;
-        }
+        const revision = this.revision;
+        const art = await loadLeagueRewardArt(
+            [snapshot.coinResId, snapshot.expResId, LEAGUE_COIN_RES_ID],
+            snapshot.items,
+            snapshot.resources,
+        );
+        if (!this.alive || revision !== this.revision) return;
+        this.art = art;
+        this.artSnapshot = snapshot;
+        this.paintArt(snapshot, art);
     }
 
-    /**
-     * 点「金币」—— 老端 `onClickDonate()` 逐句对照：
-     *
-     * ```ts
-     * if (todayDonateTimes >= unionDonateMaxCount) { showTip(LEAGUE_DONATE_LIMIT); return; }
-     * if (!CheckHaveEnoughCostAndOpenAlert([{resId: coin, number: donateCost}])) return;
-     * if (!GetTipEnumState(TipsEnum.UnionDonate)) { 弹确认框 } else { RequestLeagueDonate(false) }
-     * ```
-     */
-    private async donateByCoin(): Promise<void> {
-        const snapshot = this.snapshot;
-        if (!snapshot) return;
-
-        // ① 次数用完
-        if (!snapshot.hasTimes) {
-            FW.showTip(LEAGUE_TIP_DONATE_LIMIT);
-            return;
+    private paintArt(snapshot: ILeagueDonateSnapshot, art: ILeagueRewardArt): void {
+        if (this.coinSlot) {
+            const frames = art.framesOf(snapshot.coinResId);
+            this.coinSlot.render(frames.frame, frames.icon, snapshot.config.donateGainCoin, true);
         }
-        // ② 钱不够
-        if (!snapshot.enough) {
-            FW.showTip(fillLeagueText(LEAGUE_TIP_NOT_ENOUGH_TEMPLATE, this.coinNameText()));
-            return;
+        if (this.expSlot) {
+            const frames = art.framesOf(snapshot.expResId);
+            this.expSlot.render(frames.frame, frames.icon, snapshot.config.donateGainExp, true);
         }
-        // ③ 二次确认（老端带「不再提示」勾选框，本端恒问 —— 见类头的「有意偏离」）
-        const content = fillLeagueText(LEAGUE_DONATE_CONFIRM, snapshot.config.donateCost);
-        void CommonTips.open({
-            userData: {
-                content,
-                onSure: () => void this.sendDonate(false),
-            },
-        });
-    }
-
-    /** 发一次捐献（`adv = false` 才真正会走到）。 */
-    private async sendDonate(adv: boolean): Promise<void> {
-        if (!this.beginWrite()) return;
-        try {
-            const result = await this.repository.requestDonate(adv, this);
-            await this.afterWrite(result);
-        } finally {
-            this.busy = false;
-        }
-    }
-
-    /** 金币的名字（「金币」）—— 从 `roleProperty` 表取 `resId=10` 那行，取不到退回空串。 */
-    private coinNameText(): string {
-        return this.snapshot?.resources.get(LEAGUE_COIN_RES_ID)?.name ?? '';
-    }
-
-    /** 防连点：写操作在飞时直接拒掉。 */
-    private beginWrite(): boolean {
-        if (this.busy) return false;
-        this.busy = true;
-        return true;
-    }
-
-    /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
-    private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        if (this.buyButton) this.buyButton.setCostIcon(art.iconFrameOf(LEAGUE_COIN_RES_ID));
     }
 
     // ============================================================

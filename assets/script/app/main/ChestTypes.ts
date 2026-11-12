@@ -29,9 +29,9 @@ export type ChestSlotState = (typeof ChestSlotState)[keyof typeof ChestSlotState
 
 /** 格子上那颗按钮要做什么。 */
 export const ChestSlotAction = {
-    /** 宝箱尚未启动计时：发起激活请求。 */
+    /** 宝箱尚未启动计时：发起激活请求（金色按钮，文案「解锁」）。 */
     Activate: 'activate',
-    /** 开启宝箱（金色按钮）。 */
+    /** 开启宝箱（绿色按钮，文案「开启」；与加速共用一套绿色底）。 */
     Open: 'open',
     /** 开始战斗（蓝色按钮，空槽位）。 */
     Battle: 'battle',
@@ -113,4 +113,25 @@ export function formatChestCountdown(seconds: number): string {
     const minutes = Math.floor((total % 3600) / 60);
     const rest = total % 60;
     return [hours, minutes, rest].map((value) => String(value).padStart(2, '0')).join(':');
+}
+
+/**
+ * 「这颗按钮该写什么」—— 宝箱栏那颗按钮与**详情弹窗的主按钮**共用这一份判断。
+ *
+ * | `action` | 含义 | 文案 |
+ * | :-- | :-- | :-- |
+ * | `Activate` | 还没开始等（卡上显示的是"要等多久"） | 解锁 |
+ * | `SpeedUp` | **正在等**（格上有倒计时） | 加速 |
+ * | `Open` | 等完了 | 开启 |
+ * | `Battle` | 空槽位 | 开始战斗 |
+ *
+ * 🔴 两处各写一份必然漂移：2026-11-09 栏位从「开启」改成「解锁」，详情弹窗还写着「打开」；
+ * 同一天把等待中改成「加速」，弹窗又落后一轮（用户：「点击解锁中的宝箱，宝箱详情中的开启按钮
+ * 用加速按钮替换」）。所以文案只在这里写一次，视图与页面都从这儿取。
+ */
+export function chestActionCaption(action: ChestSlotAction): string {
+    if (action === ChestSlotAction.Battle) return '开始战斗';
+    if (action === ChestSlotAction.SpeedUp) return '加速';
+    if (action === ChestSlotAction.Activate) return '解锁';
+    return '开启';
 }

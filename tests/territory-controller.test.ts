@@ -29,6 +29,7 @@ function harness() {
         applyCellInfoState(state: unknown) { calls.push(['cells', state]); },
         focusCurrentLevel() { return 7; },
         claimIdleRewards(now: number) { calls.push(['claimIdleRewards', now]); },
+        sweepIdleRewards(times: number) { calls.push(['sweepIdleRewards', times]); },
     };
     const listeners = new Map<string, { caller: object; handler: (msg: unknown) => void }>();
     let cache: (() => void) | null = null;
@@ -57,7 +58,18 @@ test('征收意图只交给当前控制器，并使用控制器时钟', () => {
     assert.equal(h.calls.length, count);
 });
 
-test('真实金币车组件无旧主线数据也保持可见，点击派发征收并随销毁退订', () => {
+test('扫荡意图把倍率原样透传给 Model（`times` 是协议里唯一决定扣多少体力的字段）', () => {
+    const h = harness();
+    h.controller.start();
+    EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'sweepChapter', times: 20 } });
+    assert.deepEqual(h.calls.at(-1), ['sweepIdleRewards', 20], '倍率必须跟着意图一路带到 Model');
+    // 视图漏带 `times`（老版本意图 / 手滑）⇒ 交给 Model 的默认参数，仍按 1 倍，不是 NaN
+    EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'sweepChapter' } });
+    assert.deepEqual(h.calls.at(-1), ['sweepIdleRewards', undefined]);
+    h.controller.dispose();
+});
+
+test('真实金币车组件无旧主线数据也保持可见，点击只打开征收弹窗并随销毁退订', () => {
     const h = harness();
     let click = () => {};
     const button = { interactable: true, node: {
@@ -73,6 +85,7 @@ test('真实金币车组件无旧主线数据也保持可见，点击派发征�
         onDestroy(): void;
     }
     const exports: { HangEntryButton?: new () => IEntryProbe } = {};
+    let opened = 0;
     const imports: Record<string, unknown> = {
         cc: {
             Component: class { schedule() {} unschedule() {} unscheduleAllCallbacks() {} },
@@ -83,6 +96,8 @@ test('真实金币车组件无旧主线数据也保持可见，点击派发征�
         '../territory/application/TerritoryEvents': { TerritoryUiEvent, TerritoryViewEvent },
         '../territory/model/TerritoryIdleReward': { TERRITORY_IDLE_REWARD_INTERVAL_MS },
         './HangTable': { formatHms },
+        // 2026-11-09：入口改成打开征收弹窗（`HangPage`），不再直接发领奖意图
+        './HangPage': { HangPage: { open: () => { opened += 1; return Promise.resolve(null); } } },
     };
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/hang/HangEntryButton.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
@@ -101,7 +116,9 @@ test('真实金币车组件无旧主线数据也保持可见，点击派发征�
         assert.equal(button.interactable, true);
         assert.equal(label.string, '00:30:00');
         click();
-        assert.deepEqual(h.calls.at(-1), ['claimIdleRewards', 42]);
+        assert.equal(opened, 1, '点金币车只打开征收弹窗');
+        assert.equal(h.calls.some((call) => call[0] === 'claimIdleRewards'), false,
+            '入口不许直接发领奖（会变成点一下就静默领掉）');
     } finally { entry.onDestroy(); h.controller.dispose(); }
     EventMgr.instance.emit(TerritoryViewEvent.Render, { state: {
         ready: false, idleRewardStartedAt: null, idleRewardMaxHours: 8,

@@ -21,7 +21,7 @@
  *
  * 用法：
  *     npx tsx tools/map-editor/gen_bigmap_draft.ts [输出名] [种子]
- *     npx tsx tools/map-editor/gen_bigmap_draft.ts dadi_tuchugao 20261020
+ *     npx tsx tools/map-editor/gen_bigmap_draft.ts bigMap 20261020
  *
  * 产物：`tools/map-editor/presets/bigmap/<名>.json`（编辑器「预设」下拉里直接可选）。
  *
@@ -37,7 +37,7 @@ import { parseBigMapLayout } from '../../assets/script/app/bigmap/model/BigMapLa
 
 const here = dirname(resolve(process.argv[1] ?? join(process.cwd(), 'gen_bigmap_draft.ts')));
 
-const outputName = process.argv[2] ?? 'dadi_tuchugao';
+const outputName = process.argv[2] ?? 'bigMap';
 const seed = Number(process.argv[3] ?? 20261020);
 if (!/^[A-Za-z0-9_-]+$/.test(outputName)) {
     throw new Error(`输出名只允许字母/数字/下划线/连字符，收到 ${outputName}`);

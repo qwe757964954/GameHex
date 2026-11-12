@@ -46,6 +46,15 @@ export interface EntrancePlayerState {
      * 它的状态在领地格子（`CmdCityChapterCellInfo.passCells`）里。
      */
     readonly isTerritoryLevelPassed: (levelId: number) => boolean;
+    /**
+     * 领地据点**激活**了没有 —— `isCellUnlocked || isOwned || isAreaPassed`，见
+     * `TerritoryMapView.isCellActivated`。
+     *
+     * ⚠️ 与 `isTerritoryLevelPassed` 是**两个口径**，别合并：`Passed` 要打完（服务端 `passCells`），
+     * `Activated` 花银币解锁就算 —— 「激活第 4 关地块就开某个功能」必须用后者，
+     * 用前者会晚一整场战斗。
+     */
+    readonly isTerritoryLevelActivated: (levelId: number) => boolean;
 }
 
 /** 什么都没拿到时的兜底：带条件入口一律不显示。 */
@@ -64,6 +73,7 @@ export const EMPTY_ENTRANCE_PLAYER_STATE: EntrancePlayerState = {
     osRankShow: false,
     isLevelPassed: () => false,
     isTerritoryLevelPassed: () => false,
+    isTerritoryLevelActivated: () => false,
 };
 
 // ============================================================
@@ -104,6 +114,11 @@ export function evaluateEntranceCondition(
             // 后者查领地格子 —— 两张表服务端各写各的，合成一个类型会让判定在两个数据源之间摇摆。
             if (resId == null) return missingParam(type, 'resId');
             return state.isTerritoryLevelPassed(resId) ? 'pass' : 'fail';
+        case 'territoryLevelActivated':
+            // 「据点地块**激活**」而不是「通关」：花银币解锁那一步就算（2026-11-09 快速寻敌用）。
+            // 与 `territoryLevel` 并存，是为了让表能分别表达「打完了」和「已激活」两种门槛。
+            if (resId == null) return missingParam(type, 'resId');
+            return state.isTerritoryLevelActivated(resId) ? 'pass' : 'fail';
         case 'roleCreateDays': {
             if (resId == null || value == null) return missingParam(type, 'resId/value');
             return state.createdDays >= resId && state.createdDays <= value ? 'pass' : 'fail';

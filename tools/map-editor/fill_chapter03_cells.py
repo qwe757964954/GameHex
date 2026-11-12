@@ -59,7 +59,7 @@
 用法：
 
     python tools/map-editor/fill_chapter03_cells.py --dry-run     # 看 ASCII 预览 + 统计，不写盘
-    python tools/map-editor/fill_chapter03_cells.py               # 改预设 + 发布三处 + 补 remoteRef
+    python tools/map-editor/fill_chapter03_cells.py               # 改预设 + 发布资源目录与策划 JSON
     python tools/map-editor/fill_chapter03_cells.py --no-publish  # 只改预设
 
 ⚠️ 重跑**不是幂等**的：`sites` 会再追加 70 个。要重来先从
@@ -337,10 +337,7 @@ def main() -> int:
         return 0
 
     targets, _ = publisher.copy_one(PRESET, dry_run=False)
-    # remoteRef 以**已发布的那份**（校验后的 normalized）为准再压一次，三处内容同源。
-    published = json.loads(targets[0].read_text(encoding="utf-8"))
-    randomizer.write_remote(published, "chapter_03", dry_run=False)
-    print(f"已发布 {len(targets) + 1} 处：{', '.join(str(t) for t in targets)} + assets/remoteRef/chapter_03.json")
+    print(f"已发布 {len(targets)} 处：{', '.join(str(t) for t in targets)}")
     return 0
 
 

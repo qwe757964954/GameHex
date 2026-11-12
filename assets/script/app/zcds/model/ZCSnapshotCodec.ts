@@ -219,17 +219,32 @@ export class ZCSnapshotCodec {
                     const prefix = `${path}.neutralFeature`;
                     check(typeof feature.claimed === 'boolean', `${prefix}.claimed`);
                     check(optional(feature.effect, v => oneOf(ZC_GATE_EFFECTS, v)), `${prefix}.effect`);
-                    for (const key of ['readyAt', 'windowUntil', 'nextAttackAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
-                    for (const key of ['buildUsed', 'awake']) check(optional(feature[key], v => typeof v === 'boolean'), `${prefix}.${key}`);
-                    check(optional(feature.buildOwner, v => typeof v === 'string' && ownerSet.has(v)), `${prefix}.buildOwner`);
+                    for (const key of ['readyAt', 'windowUntil', 'nextAttackAt', 'cooldownSeconds', 'startedAt', 'lineProgress', 'lineDamage', 'portalAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
+                    check(optional(feature.awake, v => typeof v === 'boolean'), `${prefix}.awake`);
+                    check(optional(feature.mowerOwner, v => typeof v === 'string' && ownerSet.has(v)), `${prefix}.mowerOwner`);
+                    check(optional(feature.usesRemaining, v => integer(v) && nonnegative(v)), `${prefix}.usesRemaining`);
+                    check(optional(feature.gateId, v => integer(v) && Number(v) > 0), `${prefix}.gateId`);
+                    check(optional(feature.hitUnitIds, v => Array.isArray(v) && v.every(id => integer(id) && id > 0)), `${prefix}.hitUnitIds`);
                     check(optional(feature.portalExitId, validHexId), `${prefix}.portalExitId`);
                     check(optional(feature.targetUnitId, v => v === null || typeof v === 'number' && integer(v) && v > 0), `${prefix}.targetUnitId`);
                     check(optional(feature.lineHexIds, v => Array.isArray(v) && v.every(validHexId)), `${prefix}.lineHexIds`);
                     check(optional(feature.insideUnitIds, v => Array.isArray(v) && v.every(id => integer(id) && id > 0)), `${prefix}.insideUnitIds`);
+                    if (feature.startedAt !== undefined) {
+                        check(Array.isArray(feature.lineHexIds) && Array.isArray(feature.hitUnitIds)
+                            && nonnegative(feature.lineProgress) && nonnegative(feature.lineDamage)
+                            && Number(feature.lineProgress) <= feature.lineHexIds.length
+                            && typeof feature.mowerOwner === 'string' && ownerSet.has(feature.mowerOwner), `${prefix}.mower`);
+                    }
                     if (neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Gate) {
                         check(oneOf(ZC_GATE_EFFECTS, feature.effect), `${prefix}.effect`);
                         check(nonnegative(feature.readyAt) && nonnegative(feature.windowUntil), `${prefix}.readyAt`);
                         check(Array.isArray(feature.insideUnitIds), `${prefix}.insideUnitIds`);
+                        const config = neutralResourceItemOf(hex.neutralResourceId).feature;
+                        check(optional(feature.gateId, id => config.gates.some(gate => gate.id === id && gate.effect === feature.effect)), `${prefix}.gateId`);
+                    }
+                    if (neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Portal) {
+                        const config = neutralResourceItemOf(hex.neutralResourceId).feature;
+                        check(optional(feature.usesRemaining, value => integer(value) && Number(value) >= 0 && Number(value) <= config.uses), `${prefix}.usesRemaining`);
                     }
                 }
             }
@@ -267,6 +282,15 @@ export class ZCSnapshotCodec {
                 check(optional(unit[key], v => nonnegative(v) && v > 0), `${path}.${key}`);
             }
             check(optional(unit.gateHpFlat, nonnegative), `${path}.gateHpFlat`);
+            if (unit.portalFlight !== undefined) {
+                const flight = unit.portalFlight;
+                check(record(flight), `${path}.portalFlight`);
+                if (record(flight)) {
+                    check(validHexId(flight.fromHexId), `${path}.portalFlight.fromHexId`);
+                    check(validHexId(flight.barracksHexId), `${path}.portalFlight.barracksHexId`);
+                    check(nonnegative(flight.startedAt) && flight.startedAt <= data.elapsedSeconds, `${path}.portalFlight.startedAt`);
+                }
+            }
             if (unit.inheritedStats !== undefined) {
                 check(record(unit.inheritedStats), `${path}.inheritedStats`);
                 if (record(unit.inheritedStats)) for (const key of ['attack', 'moveSpeed', 'attackInterval', 'attackRange', 'bodyRadius']) {
@@ -292,7 +316,14 @@ export class ZCSnapshotCodec {
                 'dashUntil', 'dashRecoverUntil',
                 // 移形换影（魔术师 103404，2026-11-06）：CD 截止 + 分身爆炸时刻。
                 // 与上面同一套「新增可选字段必须登记」的规矩；坐标在下面那一行按有限数校验。
-                'blinkReadyAt', 'blinkCloneAt']) {
+                'blinkReadyAt', 'blinkCloneAt',
+                // 自身光环（大威天芦 102503，2026-11-09）：CD 截止。默认 0/缺省 ⇒ 首次推进时
+                // 初始化为「当前 + CD」，开局不立刻放。
+                'auraReadyAt',
+                // 磁电冲击（磁电菇 101604，2026-11-11）：按累计普攻触发的上次计数。
+                'auraFiredCount',
+                // 五雷轰顶（磁电菇 68016，2026-11-11）：CD 截止。同一套口径。
+                'boltReadyAt']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
             for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
@@ -345,6 +376,13 @@ export class ZCSnapshotCodec {
             for (const key of ['skillName']) check(typeof projectile[key] === 'string', `${path}.${key}`);
             for (const key of ['effectKey', 'projectileKey']) check(projectile[key] === null || typeof projectile[key] === 'string', `${path}.${key}`);
             check(optional(projectile.effectPrefabPath, v => v === null || typeof v === 'string'), `${path}.effectPrefabPath`);
+            //  命中后爆炸（2026-11-11 麻辣铁锅「凤凰降临」102604）：半径 / 两段伤害 / 延迟 / 表现时长。
+            //  必须进校验 —— 这几项决定伤害，退不出快照就等于联机两端结算不一致。
+            check(optional(projectile.burstRadius, nonnegative), `${path}.burstRadius`);
+            check(optional(projectile.burstDamage, nonnegative), `${path}.burstDamage`);
+            check(optional(projectile.burstSecondDamage, nonnegative), `${path}.burstSecondDamage`);
+            check(optional(projectile.burstSecondDelay, nonnegative), `${path}.burstSecondDelay`);
+            check(optional(projectile.burstEffectSeconds, nonnegative), `${path}.burstEffectSeconds`);
         });
         check(optional(data.groundZones, v => Array.isArray(v)), 'groundZones');
         if (Array.isArray(data.groundZones)) data.groundZones.forEach((zone: unknown, index: number) => {
@@ -363,6 +401,7 @@ export class ZCSnapshotCodec {
             check(optional(zone.expireDamage, nonnegative), `${path}.expireDamage`);
             check(optional(zone.expireStatusId, v => typeof v === 'string'), `${path}.expireStatusId`);
             check(optional(zone.expireStatusDuration, nonnegative), `${path}.expireStatusDuration`);
+            check(optional(zone.casterLiftPx, nonnegative), `${path}.casterLiftPx`);
             //  2026-11-04 移动区域（椰蛋战士「暴风」）：速度可负（朝左上），命中名额是正整数。
             check(optional(zone.moveVelocityX, Number.isFinite), `${path}.moveVelocityX`);
             check(optional(zone.moveVelocityY, Number.isFinite), `${path}.moveVelocityY`);
@@ -379,6 +418,23 @@ export class ZCSnapshotCodec {
             check(optional(zone.sprintSpeed, nonnegative), `${path}.sprintSpeed`);
             check(optional(zone.sprinting, v => typeof v === 'boolean'), `${path}.sprinting`);
             check(optional(zone.visualAnimation, v => typeof v === 'string'), `${path}.visualAnimation`);
+            //  2026-11-09 自身光环（大威天芦「无尘禁土」102503）：跟随本体的绑定单位 id。
+            //  必须进快照 —— 不还原的话存档回来光环会停在原地，人走了它还留在那儿打空气。
+            check(optional(zone.followUnitId, v => integer(v) && (v as number) > 0), `${path}.followUnitId`);
+            //  2026-11-12 磁电冲击「固定在角色身前」：跟随本体时保持的前移距离（世界 px）。
+            //  同样必须进快照 —— 少了它，存档回来光柱会从「身前 160」跳回「贴脚」。
+            check(optional(zone.followForward, nonnegative), `${path}.followForward`);
+            //  2026-11-11 命中挂状态（磁电菇「五雷轰顶」101603）：状态 id + 概率(0~1) + 秒数。
+            check(optional(zone.hitStatusId, v => typeof v === 'string'), `${path}.hitStatusId`);
+            check(optional(zone.hitStatusChance, v => nonnegative(v) && (v as number) <= 1), `${path}.hitStatusChance`);
+            check(optional(zone.hitStatusSeconds, nonnegative), `${path}.hitStatusSeconds`);
+            check(optional(zone.waveMaxTargets, v => integer(v) && (v as number) >= 0), `${path}.waveMaxTargets`);
+            //  2026-11-11 矩形判定（磁电菇「磁电冲击」101604）：两条半边长，都是正数世界 px。
+            check(optional(zone.rectHalfLength, nonnegative), `${path}.rectHalfLength`);
+            check(optional(zone.rectHalfHeight, nonnegative), `${path}.rectHalfHeight`);
+            //  2026-11-11 磁电冲击：区域朝向（度，可负）+ 表现竖直抬升（屏上 px）。
+            check(optional(zone.angleDegrees, Number.isFinite), `${path}.angleDegrees`);
+            check(optional(zone.visualLiftPx, nonnegative), `${path}.visualLiftPx`);
         });
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
         check(optional(data.nextCombatEventId, (v) => integer(v) && (v as number) > 0), 'nextCombatEventId');

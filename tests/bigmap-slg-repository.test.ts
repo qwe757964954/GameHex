@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import Long from 'long';
 import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestBody, type IBigMapSlgRequestName } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
-import { normalizeBigMapBuild, normalizeBigMapBuildInfo, normalizeBigMapBuildQueue } from '../assets/script/app/bigmap/model/BigMapServerState';
+import {
+    bigMapServerCellIndex, normalizeBigMapBuild, normalizeBigMapBuildInfo, normalizeBigMapBuildQueue,
+    projectBigMapServerBase,
+} from '../assets/script/app/bigmap/model/BigMapServerState';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 const config = loadBigMapConfig();
@@ -182,6 +185,30 @@ test('写请求未确认且无广播时，只读重拉恢复服务端已经执�
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
+test('建筑脏标记不再触发定时 BuildInfo 请求，行动力轮询与广播重拉仍保留', async () => {
+    const { repo, gateway, advance } = harness();
+    await repo.initialize();
+    const count = (name: IBigMapSlgRequestName) => gateway.calls.filter((call) => call.name === name).length;
+    assert.equal(count('CmdSlgBuildInfoReqMsg'), 1, '进入页面拉一次全量');
+    // 写操作失败、随后的即时只读重拉也失败 ⇒ isBuildDirty 保持 true。
+    gateway.reply = async () => null;
+    assert.equal((await repo.move(ID, 2)).ok, false);
+    await flush();
+    const before = count('CmdSlgBuildInfoReqMsg');
+    assert.ok(before >= 2, '写操作未确认后仍有一次即时只读重拉（不是定时请求）');
+    // 跨过 10 个 5 秒节流窗口：若 tick 仍按脏标记/倒计时补拉，这里会多出一串 BuildInfo。
+    for (let i = 0; i < 10; i++) { advance(6); repo.tick(); }
+    await flush();
+    assert.equal(count('CmdSlgBuildInfoReqMsg'), before, '倒计时/脏标记不再定时重拉 BuildInfo');
+    assert.ok(count('CmdSlgActionUpdateReqMsg') >= 2, '行动力轮询按 10-30 口径保留');
+    // 广播失效通知仍是保留的全量重拉入口。
+    gateway.reply = async (name) => name === 'CmdSlgBuildInfoReqMsg' ? snapshot() : { info: { nextRevertTime: 20 } };
+    repo.invalidate('build');
+    await flush();
+    assert.equal(count('CmdSlgBuildInfoReqMsg'), before + 1, '广播仍触发一次全量重拉');
+    repo.dispose();
+});
+
 test('行动力倒计时到 0 必须自己发 ActionUpdate，回包重置后继续轮询', async () => {
     const { repo, gateway, advance } = harness();
     await repo.initialize();
@@ -228,4 +255,95 @@ test('nextRevertTime = 0 表示没有待恢复，不再自动轮询（否则每 
     await flush();
     assert.equal(actionCalls(), 1, '已经满了就不该再轮询');
     repo.dispose();
+});
+
+test('还没同步到基地信息时，写操作顺手补拉一次，而不是干等', async () => {
+    const { gateway, repo } = harness();
+    // 故意不 initialize：`info` 还是 null。
+    const result = await repo.build(config.mainBuildingId, 1);
+    assert.equal(result.ok, false, '未就绪时不能提交建造');
+    assert.equal(result.message, '正在同步基地信息');
+    // 关键：不能只回一句提示就完事 —— 要顺手补一次 BuildInfo，
+    // 否则表现就是用户看到的「点了没反应、服务器也没收到请求」。
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(gateway.calls.some((call) => call.name === 'CmdSlgBuildInfoReqMsg'), true,
+        '未就绪时必须主动补拉一次基地信息');
+
+    // 补拉成功后照常提交。
+    assert.equal(await repo.initialize(), true);
+    gateway.reply = async (name) => (name === 'CmdSlgBuildReqMsg' ? { build: build({ position: 1 }), queue: null } : {});
+    assert.equal((await repo.build(config.mainBuildingId, 1)).ok, true);
+});
+
+test('首帧同步确实失败后，写操作说「同步失败」而不是「正在同步」', async () => {
+    const { gateway, repo } = harness();
+    gateway.reply = async () => null;   // 全部被拦 / 超时
+    assert.equal(await repo.initialize(), false);
+    const result = await repo.build(config.mainBuildingId, 1);
+    assert.equal(result.ok, false);
+    // 「正在同步」会让人一直等；这里必须明说失败。
+    assert.match(result.message, /同步失败/);
+});
+
+test('unlockQueue=0（还没解锁任何队列）是合法快照，不能整包丢弃', () => {
+    // 之前写的是 `!unlockQueue`，把 0 当"字段缺失"⇒ 服务端首次下发 0 时 info 永远 null
+    // ⇒ ready 永远 false ⇒ 建造请求一帧都不发。
+    assert.deepEqual(normalizeBigMapBuildInfo({ builds: [], queues: [], unlockQueue: 0 }),
+        { builds: [], queues: [], unlockQueue: 0 });
+    // 负数 / 非整数仍然拒绝（那是真的脏数据）。
+    assert.equal(normalizeBigMapBuildInfo({ builds: [], queues: [], unlockQueue: -1 }), null);
+    assert.equal(normalizeBigMapBuildInfo({ builds: [], queues: [], unlockQueue: 1.5 }), null);
+});
+
+test('服务端 position 用 1001 系「初始位置 id」时归一到格索引（不改协议也能投影）', () => {
+    // 2026-11-11 实测：服务端下发 buildingId=71001 position=1001，客户端 5×5=25 格 ⇒ 整份快照被拒。
+    assert.equal(bigMapServerCellIndex(1001, 25), 0);
+    assert.equal(bigMapServerCellIndex(1023, 25), 22);
+    // 已经是格索引的原样用（服务端改成 0..24 之后走这条，上面的兼容自然不再命中）。
+    assert.equal(bigMapServerCellIndex(0, 25), 0);
+    assert.equal(bigMapServerCellIndex(24, 25), 24);
+    // 越界两条都不算：1000（低于基准）、1026（超格数）、负数、非整数。
+    assert.equal(bigMapServerCellIndex(1000, 25), -1);
+    assert.equal(bigMapServerCellIndex(1026, 25), -1);
+    assert.equal(bigMapServerCellIndex(-1, 25), -1);
+    assert.equal(bigMapServerCellIndex(1.5, 25), -1);
+
+    // 投影层：position=1001 的主城应该能落地，hexId 归一成 0。
+    const base = projectBigMapServerBase(
+        { builds: [{ instanceId: 1, buildingId: config.mainBuildingId, position: 1001, level: 1, state: 0, finishAt: 0 }],
+            queues: [], unlockQueue: 1 }, config, 1000);
+    assert.ok(base, 'position=1001 不能再把整份快照拒掉');
+    assert.equal(base!.buildings[0].hexId, 0);
+});
+
+test('建造 finishTime 到点主动拉一次基地信息，同一完成时间只拉一次', async () => {
+    const { gateway, repo, advance } = harness();
+    const finishAt = 1000 + 30;   // harness 的 now 从 1000 起
+    gateway.reply = async (name) => {
+        if (name === 'CmdSlgBuildInfoReqMsg') return { info: {
+            builds: [{ buildInstId: 7, buildingId: config.mainBuildingId, position: 1, level: 2, state: 1, finishTime: finishAt }],
+            queues: [{ queueId: 1, type: 1, buildInstId: 7 }], unlockQueue: 1 } };
+        if (name === 'CmdSlgActionUpdateReqMsg') return { info: { nextRevertTime: 0 } };
+        if (name === 'CmdSlgGameInfoReqMsg') return { info: { maxMonsterLevel: 0, toCampId: 0 } };
+        return {};
+    };
+    assert.equal(await repo.initialize(), true);
+    const pulls = () => gateway.calls.filter((call) => call.name === 'CmdSlgBuildInfoReqMsg').length;
+    const before = pulls();
+
+    // 还没到点：tick 不能多打服务器。
+    advance(5); repo.tick();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(pulls(), before, 'finishTime 未到不该拉');
+
+    // 到点：主动拉一次，让服务端告诉我们建完没有。
+    advance(30); repo.tick();
+    await new Promise((resolve) => setImmediate(resolve));
+    const afterFinish = pulls();
+    assert.equal(afterFinish, before + 1, 'finishTime 到点应主动拉一次');
+
+    // 同一个 finishAt 不重复拉（否则 500ms tick 会反复打服务器）。
+    advance(10); repo.tick();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(pulls(), afterFinish, '同一 finishAt 只拉一次');
 });

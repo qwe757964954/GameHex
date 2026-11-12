@@ -1,6 +1,7 @@
-"""把 `tools/map-editor/presets/bigmap/*.json` 发布到客户端资源目录与策划 JSON 目录。
+"""把 `tools/map-editor/presets/bigmap/*.json` 发布到客户端资源目录与策划 sever 目录。
 
 与 `copy_territory_maps.py` 同一条链路（写盘 / `.meta` / 批处理骨架都在 `presets_io.py`），
+只写 Cocos 资源目录 + 策划 `sever`，不写策划 `client`（原因见 `presets_io.py` 模块注释）。
 差别只有两点：
 
 1. **校验不在这里做**：规则只有一份权威实现（`BigMapLayout.parseBigMapLayout`），
@@ -28,7 +29,7 @@ SOURCE = presets_io.ROOT / "presets" / "bigmap"
 TARGET = presets_io.PROJECT / "assets" / "resources" / "config" / "bigmap-maps"
 VALIDATOR = presets_io.ROOT / "validate_bigmap_layout.ts"
 
-DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_TARGETS
+DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_SEVER_TARGET
 
 
 def _node_command() -> list[str] | None:

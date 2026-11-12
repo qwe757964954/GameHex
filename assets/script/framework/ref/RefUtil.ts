@@ -1,4 +1,5 @@
-import { AssetManager, assetManager, JsonAsset, path, resources } from 'cc';
+import { assetManager, JsonAsset, path, resources } from 'cc';
+import { loadAssetBundle } from '../../platform/cocos/AssetBundleLoader';
 import { ScriptObject } from "../base/ScriptObject";
 import { FW } from "../FW";
 import { HttpLoader } from "../utils/HttpLoader";
@@ -6,34 +7,17 @@ import { MergeKeyRefMgr } from "./MergeKeyRef";
 import { RedirectRefMgr } from "./RedirectRef";
 
 const REMOTE_REF_BUNDLE = 'remoteRef';
-let remoteRefBundlePromise: Promise<AssetManager.Bundle> | null = null;
 
 function getLoadedRemoteRefJson(assetPath: string): JsonAsset | null {
     const bundle = assetManager.getBundle(REMOTE_REF_BUNDLE);
     return bundle?.get(assetPath, JsonAsset) ?? null;
 }
 
-function loadRemoteRefBundle(): Promise<AssetManager.Bundle> {
-    const loaded = assetManager.getBundle(REMOTE_REF_BUNDLE);
-    if (loaded) return Promise.resolve(loaded);
-    if (!remoteRefBundlePromise) {
-        remoteRefBundlePromise = new Promise<AssetManager.Bundle>((resolve, reject) => {
-            assetManager.loadBundle(REMOTE_REF_BUNDLE, (error, bundle) => {
-                if (error) reject(error);
-                else resolve(bundle);
-            });
-        }).catch((error) => {
-            remoteRefBundlePromise = null;
-            throw error;
-        });
-    }
-    return remoteRefBundlePromise;
-}
-
 async function loadRemoteRefJson(assetPath: string): Promise<JsonAsset> {
     const cached = getLoadedRemoteRefJson(assetPath);
     if (cached) return cached;
-    const bundle = await loadRemoteRefBundle();
+    // 走 `loadAssetBundle`：同名并发去重、远程 url/version 由热更 manifest 解析都由它负责。
+    const bundle = await loadAssetBundle(REMOTE_REF_BUNDLE);
     return new Promise<JsonAsset>((resolve, reject) => {
         bundle.load(assetPath, JsonAsset, (error, asset) => {
             if (error) reject(error);
@@ -486,16 +470,11 @@ export class RefUtil extends ScriptObject {
             resName = resNameAll
         }
         let refPath = FW.GetRefPath(resName)
-        let result: any[]
+        let result: unknown
         if (FW.isRemoteRef) {
             FW.ZJJ.log("外部配置表:", refPath)
             let rsp = await HttpLoader.RequestJson(refPath, true)
-            result = rsp.json
-
-            //合并Ref数据
-            result = MergeKeyRefMgr.inst().Merge(resName, result)
-            //重定向Ref数据结构
-            result = RedirectRefMgr.inst().Redirect(resName, result)
+            result = this.tryGetCompressKeyRefData(resName, rsp.json)
         } else {
             // let res = await ResourceMgr.loadJson(refPath)
             //改成从bundle获取

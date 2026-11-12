@@ -82,7 +82,7 @@ export function bigMapUnlockedBuildings(
     config: IBigMapConfig,
     context: IBigMapUnlockContext,
 ): readonly IBigMapBuildingConfig[] {
-    return [...config.buildings.values()]
+    return Array.from(config.buildings.values())
         .filter((building) => bigMapBuildingUnlock(building, context).unlocked)
         .sort((a, b) => a.sort - b.sort || a.id - b.id);
 }
@@ -137,7 +137,7 @@ export function bigMapNextTargetCity(
     config: IBigMapConfig,
     context: IBigMapUnlockContext,
 ): IBigMapCityConfig | null {
-    const open = [...config.cities.values()]
+    const open = Array.from(config.cities.values())
         .filter((city) => bigMapCityState(city, context) === 'open')
         .sort((a, b) => a.cityLevel - b.cityLevel || a.cityId - b.cityId);
     return open.length > 0 ? open[0] : null;

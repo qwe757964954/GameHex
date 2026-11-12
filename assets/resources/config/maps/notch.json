@@ -446,27 +446,17 @@
   "resourcePoints": [
     {
       "row": 10,
-      "column": 3,
-      "groupId": 14009
-    },
-    {
-      "row": 7,
-      "column": 9,
-      "groupId": 14008
-    },
-    {
-      "row": 8,
-      "column": 1,
-      "groupId": 14006
-    },
-    {
-      "row": 7,
       "column": 4,
-      "groupId": 14003
+      "groupId": 17001
     },
     {
-      "row": 4,
-      "column": 1,
+      "row": 9,
+      "column": 0,
+      "groupId": 13003
+    },
+    {
+      "row": 15,
+      "column": 7,
       "groupId": 14007
     },
     {
@@ -475,14 +465,14 @@
       "groupId": 14007
     },
     {
-      "row": 15,
-      "column": 1,
-      "groupId": 14007
+      "row": 18,
+      "column": 4,
+      "groupId": 13009
     },
     {
-      "row": 13,
-      "column": 7,
-      "groupId": 14007
+      "row": 1,
+      "column": 4,
+      "groupId": 13009
     }
   ]
 }

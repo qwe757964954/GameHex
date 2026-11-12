@@ -112,8 +112,8 @@ export {
     monthCardBarVisibleOf,
     progressOf,
     reachedMaxOf,
+    sweepTimesOf,
     sweepUsedOf,
-    timesOf,
 } from './HangTable';
 import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
 import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
@@ -162,7 +162,10 @@ export const HJ_JUMP_TYPE_HANG = 9;
 export interface IHangRoleState {
     /** 挂机起点（毫秒）。`CmdRole.lastIdleRewardTime` 是 `Long`；读不到为 0。 */
     readonly lastIdleRewardTimeMs: number;
-    /** 今日已扫荡次数（有月卡时恒 0 —— 老端 `refreshGearBtn` 会复位档位）。 */
+    /**
+     * 今日已扫荡次数（`CmdRole.sweepTimes`；服务端按 `+= times` 累加，所以 50 倍扫一次算 50 次）。
+     * `AdCountText`（今日剩余 / 今日看广告次数）与「免费」角标的判据。
+     */
     readonly sweepTimes: number;
 }
 
@@ -288,8 +291,18 @@ function toNumber(value: unknown): number {
     return 0;
 }
 
-/** 读 `CmdRole` 的第一行；拿不到返回 `null`。 */
-function readRole(): IHangRoleState | null {
+/**
+ * 读 `CmdRole` 的第一行；拿不到返回 `null`。
+ *
+ * `sweepTimes` = **今日已扫荡次数**（服务端按 `+= times` 累加，`sweepFreeTimes` 到了就转「看广告」分支）。
+ * 它是 `AdCountText`（「今日剩余(x/y)」/「今日看广告次数:a/b」）的唯一数据源，也是
+ * 「免费」角标（`freePageOf`）的判据。
+ *
+ * ⚠️ 导出给页面用：`CmdRole` 没有查询协议，只能靠服务端推 `cmdCaches`
+ * ⇒ 扫荡 / 领奖成功后必须**重读一次**（见 `HangPage._refreshRoleState`），
+ * 否则文案停在打开弹窗那一刻，看起来就像「次数没接」。
+ */
+export function readRoleState(): IHangRoleState | null {
     try {
         const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
@@ -305,6 +318,31 @@ function readRole(): IHangRoleState | null {
     }
     return null;
 }
+
+/**
+ * 订阅 `CmdRole` 缓存更新（服务端推 `cmdCaches` 时触发）。
+ *
+ * 🔴 为什么必须订阅、而不是只在「扫荡成功」时重读一次：
+ *   · `CmdRole` **没有查询协议**，`sweepTimes` 只能靠服务端推送；
+ *   · `CmdCityChapterSweepRspMsg` 只回 `succ` + `tlCmdGoods`，**不含次数**；
+ *   · 扫荡 / 其它系统（体力恢复、金币、月卡）都可能刷 `CmdRole`，推送到达的时刻
+ *     与「谁的界面正开着」无关 ⇒ 订阅是最稳的刷新源。
+ *
+ * 返回退订函数（内部按 caller 一次性摘干净，重复调用安全）。
+ */
+export function subscribeRoleChange(caller: object, callback: () => void): () => void {
+    try {
+        CacheMgr.instance.setEventUpdate('CmdRole', caller, callback);
+    } catch (error) {
+        // ⚠️ `setEvent` 走 `getCache`，缺缓存时会 `new GameCache` 去读 `protoCache` 描述表；
+        //    未登录 / 断网 / 热更态下表还没加载，构造会抛。订阅失败只影响「推送即刷新」，
+        //    `rewards` 命令那条兜底仍在 —— 不能让一次订阅把整个弹窗打挂。
+        console.warn('[Hang] 订阅 CmdRole 缓存失败', error);
+        return () => {};
+    }
+    return () => CacheMgr.instance.removeEventCaller('CmdRole', caller);
+}
+
 
 /**
  * 读已互动建筑的 `resId` 集合（`CmdRoleInteractInfo.state === HJ_INTERACT_STATE_DONE`）。
@@ -484,7 +522,7 @@ export class RuntimeHangRepository implements IHangRepository {
         const guankaRows = parseGuankaRows(guankaRaw);
         const interactRows = parseInteractRows(interactRaw);
         const config = parseGameConfigRows(configRaw);
-        const role = readRole();
+        const role = readRoleState();
         const interactedIds = readInteractedIds();
         const monthCard = readMonthCard(planRaw, payRaw);
 

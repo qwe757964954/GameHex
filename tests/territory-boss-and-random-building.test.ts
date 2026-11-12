@@ -154,8 +154,12 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     // 锁态分支走 `handleUnlockThenBattle`（解锁成功立刻发开战），已解锁才 `detailSite = site`。
     assert.match(code, /this\.handleUnlockThenBattle\(site, lockedStage\)/,
         '锁着的主线关卡必须走「解锁 + 立刻开战」（解锁那一次直开）');
-    assert.match(code, /lockedStage && this\.isLevelSite\(site\)/,
-        '直开只给主线关卡：asyncPvp 的弹窗带侦查，绑不到关卡的格没有 battleParams');
+    // 2026-11-11 用户「触发异步据点也是直接进入战斗」：直开名单扩到全部战斗站点。
+    assert.match(code, /lockedStage && this\.isAutoStartSite\(site\)/,
+        '解锁那一次直开必须走 isAutoStartSite（含 asyncPvp）；绑不到关卡的格没有 battleParams');
+    const autoStartSite = codeOf(memberOf(src, 'private isAutoStartSite(site: TerritorySite): boolean'));
+    assert.match(autoStartSite, /this\.isBattleSite\(site\)/,
+        '直开名单 = 全部战斗站点：stage / boss / asyncPvp（已解锁仍弹侦查面板）');
     assert.ok(!/handleBattleStationStart/.test(code),
         '弹窗按钮那条路（handleBattleStationStart）不在这里 —— selectSite 只负责直开与弹窗分流');
     assert.match(code, /this\.detailSite = site/, '已解锁分支要选中站点给弹窗用');

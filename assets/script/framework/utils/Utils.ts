@@ -1,4 +1,4 @@
-import { view } from 'cc';
+import { view, Size, Vec2 as CocosVec2, Vec4 } from 'cc';
 import { EngineMain } from "../../engine/EngineMain";
 import { Vec2 } from "../../engine/Vec2";
 
@@ -22,20 +22,6 @@ export class Utils {
             }
         }
         return rst;
-    }
-
-    private static _gfx:any
-    /**
-     * 动态网格创建需要提前拿到gfx
-     * 参考地址:https://docs.cocos.com/creator/2.4/manual/zh/3d/mesh.html
-     */
-    static GetGFX(){
-        //微信下没有cc.renderEngine
-        //看源码cocos初始化之后会有一个 cc.gfx的变量
-        let result = this._gfx
-        result = result || cc['gfx']
-        result = result || cc.renderer.renderEngine.gfx
-        return result
     }
 
     public static log(...data: any)
@@ -118,10 +104,10 @@ export class Utils {
     private static CalcScaleX()
     {
         let scaleW = 1
-        let designSize = cc.view.getDesignResolutionSize() // 设计窗口大小 720x1280
+        let designSize = view.getDesignResolutionSize() // 设计窗口大小 720x1280
         let winsize = view.getVisibleSize()
         let liuhaiHeight = EngineMain.liuhaiHeight;
-        let realWinSize = new cc.Size(winsize.width, winsize.height - liuhaiHeight) // 去除刘海影响的实际尺寸
+        let realWinSize = new Size(winsize.width, winsize.height - liuhaiHeight) // 去除刘海影响的实际尺寸
         
         scaleW = realWinSize.width / designSize.width
         let newHeight = scaleW * designSize.height
@@ -139,7 +125,7 @@ export class Utils {
     public static CalcScale()
     {
         let x = Utils.CalcScaleX()
-        return new cc.Vec2(x, x)
+        return new CocosVec2(x, x)
     }
 
 
@@ -151,10 +137,10 @@ export class Utils {
     public static CalcGroundInfo()
     {
         let scaleX = 1
-        let designSize = cc.view.getDesignResolutionSize() // 设计窗口大小 720x1280
+        let designSize = view.getDesignResolutionSize() // 设计窗口大小 720x1280
         let winSize = view.getVisibleSize()
         let liuhaiHeight = EngineMain.liuhaiHeight;
-        let realWinSize = new cc.Size(winSize.width, winSize.height - liuhaiHeight) // 去除刘海影响的实际尺寸
+        let realWinSize = new Size(winSize.width, winSize.height - liuhaiHeight) // 去除刘海影响的实际尺寸
         
         scaleX = realWinSize.width / designSize.width
         let newHeight = scaleX * designSize.height
@@ -166,31 +152,9 @@ export class Utils {
         let x = (winSize.width - designSize.width * scaleX)/2// x居中
         let y = 0 // y最下面
 
-        return new cc.Vec4(x, y, scaleX, scaleY)
+        return new Vec4(x, y, scaleX, scaleY)
 
     }
 
-
-    public static FixFullScreen(obj: fgui.GObject | cc.Node)
-    {
-        let w = view.getVisibleSize().width
-        let h = view.getVisibleSize().height
-        let scale: number = 1
-        // base width
-        if (h >= w * 1280 / 720)
-        {
-            scale = w/obj.width
-            obj.scaleX = scale
-            obj.scaleY = scale
-        }
-        else
-        {
-            // base height
-            scale = h/obj.height
-            obj.scaleX = scale
-            obj.scaleY = scale
-        }
-
-    }
 
 }

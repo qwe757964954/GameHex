@@ -10,7 +10,10 @@ import {
 } from '../assets/script/app/common/MapMarkerBadge';
 import { assetPath } from './helpers/asset-paths';
 import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryNodeUIModule from '../assets/script/app/territory/model/TerritoryNodeUI';
+import * as territoryPreviewCinemaModule from '../assets/script/app/territory/model/TerritoryPreviewCinema';
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
+import * as territoryUnlockTransitionModule from '../assets/script/app/territory/model/TerritoryUnlockTransition';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 /**
@@ -25,7 +28,8 @@ import * as territoryBattleApproachModule from '../assets/script/app/territory/m
  * 逐条落成的实现口径：
  * | 格子状态 | 地皮 | 格面框 |
  * |---|---|---|
- * | 未解锁 | `tileLocked`（`img_land_02` 泥土） | 无（「解锁」就是框出现的那一刻） |
+ * | **未解锁（被前置卡住）** | **`tileGrey`（`img_land_01_gray` 灰版，2026-11-10）** | 无（「解锁」就是框出现的那一刻） |
+ * | 已解锁未通关 · 中立格 | `tileLocked`（`img_land_02` 泥土） | 无 |
  * | 已解锁未通关 · 首领 | `tileLocked` | `frameBoss`（`frame_01`） |
  * | 已解锁未通关 · 普通关卡 | `tileLocked` | `frameStage`（**2026-10-28 起同首领那张 `frame_01` 红**，原 `frame_03` 紫） |
  * | 已解锁未通关 · 异步关卡 | `tileLocked` | `frameAsyncPvp`（`frame_04`） |
@@ -111,7 +115,10 @@ function loadMapView() {
             // `bottomAnchor` 判定（69008~69015 底部对齐）由 TerritoryMapView 调用，
             // 桩里必须给函数，否则 `undefined is not a function`；本夹具只关心地皮/格面 ⇒ 恒 false。
             if (id === './TerritoryStationView') {
-                return { TerritoryStationView: class {}, territoryUsesBottomAnchor: () => false };
+                // `setConditionSpawnScale`：「未解锁 → 可激活」的 1s 过渡会往站点视图写价格系数，
+                // 桩上必须有这个方法，否则锁一消失就 `is not a function`（真视图在
+                // `TerritoryStationView` 里，曲线由 `territory-unlock-transition` 单测）。
+                return { TerritoryStationView: class { setConditionSpawnScale() {} }, territoryUsesBottomAnchor: () => false };
             }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心地皮 / 格面框，给个空壳即可。
@@ -215,6 +222,7 @@ function loadMapView() {
                 TerritoryCloudView: class {
                     attach(): void {}
                     setFrames(): void {}
+                    setKeepOutPoints(): void {}
                     sync(): void {}
                     step(): void {}
                     reset(): void {}
@@ -257,6 +265,12 @@ function loadMapView() {
             // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
             // 抄一遍就等于两边各改一半也能一起绿。
             if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 「一个节点只在一块地上长 UI」的分组判据（2026-11-09）：给**真模块** ——
+            // 退化成空集合会让「兄弟格被隐掉」的断言假绿，抄一份分组规则又会两边各改一半。
+            if (id === '../model/TerritoryNodeUI') return territoryNodeUIModule;
+            // 「预告首领关」过场的时间轴（2026-11-09）：给**真模块**（纯函数、零 cc）。
+            // 退化成空实现会让「什么时候推镜 / 什么时候放开压住格」的断言无从断言。
+            if (id === '../model/TerritoryPreviewCinema') return territoryPreviewCinemaModule;
             // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
             if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
             // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
@@ -273,6 +287,10 @@ function loadMapView() {
             // 「银币 / 体力够不够」的纯函数（2026-11-03）：给**真模块**，颜色判据不在这里验
             // （专项在 `territory-wallet-shortfall`），但退化成"永远够"会让颜色断言假绿。
             if (id === '../model/TerritoryCostShortfall') return territoryCostShortfallModule;
+            // 「未解锁 → 可激活」的 1s 过渡曲线（2026-11-09）：纯函数、零 cc ⇒ 给**真模块**。
+            if (id === '../model/TerritoryUnlockTransition') return territoryUnlockTransitionModule;
+            // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
+            if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -399,13 +417,20 @@ test('气泡层排在透明站点命中层之后，避免相邻行抢走编号�
 
 const TILE_LOCKED = { name: 'img_land_02', originalSize: { width: 126, height: 117 } };
 const TILE_CLEARED = { name: 'img_land_01', originalSize: { width: 126, height: 117 } };
+/** 灰版地皮**还是旧的 130×119**（新地皮 126×117）。锁着的格不画格面框，所以只多 2px 交叠。 */
+const TILE_GREY = { name: 'img_land_01_gray', originalSize: { width: 130, height: 119 } };
 const FRAME_BOSS = { name: 'frame_01', originalSize: { width: 124, height: 92 } };
 const FRAME_STAGE = { name: 'frame_03', originalSize: { width: 124, height: 92 } };
 const FRAME_ASYNC = { name: 'frame_04', originalSize: { width: 124, height: 92 } };
 const FRAME_CHEST = { name: 'fram_02', originalSize: { width: 124, height: 92 } };
 
 /** 一张含全部状态的图：起始格 / 四种站点 × 解锁与否 / 通关与否 / 随机格 / 中立格 / 未探索格。 */
-function paintSampleMap() {
+function paintSampleMap(options: {
+    /** 逐格「被前置卡住」（模型侧 `lockBlockedCells`）；不传 = 一个都不卡。 */
+    lockBlockedCells?: number[];
+    /** 灰版地皮；`null` = 美术没交（验降级）。 */
+    tileGrey?: unknown;
+} = {}) {
     const MapView = loadMapView();
     const mapView = new MapView();
     const cells = new Map<number, ReturnType<typeof makeHexCell>>();
@@ -429,7 +454,9 @@ function paintSampleMap() {
     };
     const sites = [
         { id: 'boss_2', type: 'boss', cellId: 2, unlock: {} },
-        { id: 'boss_3', type: 'boss', cellId: 3, unlock: {} },
+        // 3 号首领故意带一块 footprint([12])：chapter_02 起一关就是 5~10 格，模型只把锚点格
+        // 列进 `lockBlockedCells` ⇒ 置灰必须自己铺开 footprint，否则整片里只灰一格。
+        { id: 'boss_3', type: 'boss', cellId: 3, unlock: {}, footprint: [12] },
         { id: 'boss_4', type: 'boss', cellId: 4, unlock: {} },
         { id: 'stage_5', type: 'stage', cellId: 5, unlock: {} },
         { id: 'async_6', type: 'asyncPvp', cellId: 6, unlock: {} },
@@ -451,9 +478,11 @@ function paintSampleMap() {
         },
         art: {
             tileLocked: TILE_LOCKED, tileCleared: TILE_CLEARED,
+            tileGrey: options.tileGrey === null ? null : options.tileGrey ?? TILE_GREY,
             frameBoss: FRAME_BOSS, frameStage: FRAME_STAGE,
             frameAsyncPvp: FRAME_ASYNC, frameChest: FRAME_CHEST,
         },
+        lockBlockedCells: options.lockBlockedCells ?? [],
     });
     return { cells, frames };
 }
@@ -471,6 +500,66 @@ test('★★★未通关格用 img_land_02、已通关格用 img_land_01（起�
     assert.equal(tileOf(4), TILE_CLEARED, '已通关首领 ⇒ 草地');
     assert.equal(tileOf(8), TILE_CLEARED, '已领取宝箱 ⇒ 草地');
     assert.equal(tileOf(10), TILE_CLEARED, '随机格开启即算通关 ⇒ 草地');
+});
+
+/**
+ * 需求（2026-11-10 用户，配图圈住一片未解锁地块 + 灰色色块）：
+ * 「未解锁的地块整个地块图片都置灰，等待切换成可激活的状态（银币 icon + 数字）时再重新加载颜色」。
+ *
+ * 三条口径：
+ *  1. **整片灰** —— 判据是逐格的 `lockBlockedCells`，不是"一个节点一把锁"的收敛集合：
+ *     7 格的首领节点只有承载格画锁，但 7 格都灰（只灰一格会读成"这格特殊"）。
+ *  2. **通关 / 已解锁 / pending 不灰** —— 灰只是"被前置卡住"的表现，别把已开的格也压灰。
+ *  3. **锁一消失就换回来** —— 不需要额外的"上色"动作，`lockBlockedCells` 少一格，那一格
+ *     下一帧就是泥土（`shouldRecolor` 还会顺手播一段换色，读作"重新加载颜色"）。
+ */
+test('★★★被前置卡住的格整片置灰（img_land_01_gray），解锁那一刻换回泥土', () => {
+    const tileOf = (painted: ReturnType<typeof paintSampleMap>, id: number) =>
+        painted.cells.get(id)!.component.spriteFrame;
+
+    // 2=已解锁首领 / 3=未解锁首领 / 4=已通关首领 / 11=未开启随机格 / 12=中立格，全部塞进"被卡住"。
+    const locked = paintSampleMap({ lockBlockedCells: [2, 3, 4, 11, 12] });
+    assert.equal(tileOf(locked, 3), TILE_GREY, '未解锁的关卡格 ⇒ 灰版地皮');
+    assert.equal(tileOf(locked, 11), TILE_GREY, '没开的随机格同样被卡住 ⇒ 灰');
+    assert.equal(tileOf(locked, 12), TILE_GREY, '中立空格也灰（它同样"打不开"）');
+
+    // footprint 铺开：只把锚点格 3 列进 `lockBlockedCells`，它的 footprint 格 12 也得灰。
+    const footprint = paintSampleMap({ lockBlockedCells: [3] });
+    assert.equal(tileOf(footprint, 3), TILE_GREY, '锚点格灰');
+    assert.equal(tileOf(footprint, 12), TILE_GREY, 'footprint 里的空地跟着灰（否则整片只灰一格）');
+    assert.equal(tileOf(footprint, 4), TILE_CLEARED, '别人的 footprint 不受牵连');
+    assert.equal(tileOf(locked, 2), TILE_LOCKED, '已解锁 ⇒ 不灰（哪怕还在 lockBlockedCells 里）');
+    assert.equal(tileOf(locked, 4), TILE_CLEARED, '已通关 ⇒ 草地优先，绝不压灰');
+    assert.equal(tileOf(locked, 5), TILE_LOCKED, '没被卡住的已解锁格 ⇒ 泥土');
+
+    // 「重新加载颜色」：前置一满足，模型就不再把这格列进 `lockBlockedCells`。
+    const unlockedNow = paintSampleMap({ lockBlockedCells: [] });
+    assert.equal(tileOf(unlockedNow, 3), TILE_LOCKED, '锁消失 ⇒ 立刻换回泥土（不需要额外的上色动作）');
+    assert.equal(tileOf(unlockedNow, 11), TILE_LOCKED);
+    assert.equal(tileOf(unlockedNow, 12), TILE_LOCKED);
+});
+
+test('★★灰版地皮取不到 ⇒ 退回泥土（宁可这一格不置灰，也不能没地皮）', () => {
+    const { cells } = paintSampleMap({ lockBlockedCells: [3], tileGrey: null });
+    const cell = cells.get(3)!.component;
+    assert.equal(cell.spriteFrame, TILE_LOCKED, '灰图缺失时锁格退回 img_land_02，不能留空洞');
+    assert.equal(cell.enabled, true);
+});
+
+test('★★锁只画一处、地皮却是整片灰：两条判据各取各的集合', () => {
+    const code = stripComments(readFileSync(MAP_VIEW_PATH, 'utf8'));
+    // 锁：收敛集合（`territoryNodeLockCells`，一个节点一把）。
+    assert.match(code, /const lockCells = territoryNodeLockCells\(input\.map\.sites, input\.lockBlockedCells\)/);
+    // 地皮：逐格集合（原样吃 `lockBlockedCells`），否则 7 格的首领节点只会灰掉一格。
+    assert.match(code, /const blockedCells = new Set(<number>)?\(input\.lockBlockedCells \?\? \[\]\)/);
+    // 还要铺开 footprint：chapter_02 起一关一块 5~10 格，只把锚点格置灰等于没做。
+    assert.match(code, /for \(const cell of site\.footprint \?\? \[\]\) blockedCells\.add\(cell\)/);
+    assert.match(code, /input\.art\.tileGrey \?\? input\.art\.tileLocked/,
+        '灰图缺失要能退回泥土');
+    // 共用底座：`passed` / `pending` / 已解锁 / 已占领四条排除只写一份。
+    assert.match(code, /private isStructurallyBlocked\(/);
+    assert.equal((code.match(/isStructurallyBlocked\(/g) ?? []).length, 3,
+        '定义 1 次 + 锁/灰两个调用点（多一处就是判据分裂的开始）');
 });
 
 test('★★★格面框按站点类型四选一，且只给「已解锁未通关」的格', () => {
@@ -552,12 +641,15 @@ test('★类型→框的映射表：四类站点逐个对上，bonus 不在表�
     assert.doesNotMatch(code, /bonus: 'frame/, 'bonus 没有美术框，别为了表全硬指一张');
 });
 
-test('★★美术引用与磁盘：五张图都在、尺寸与代码口径一致（换图必须回来重算贴合）', () => {
+test('★★美术引用与磁盘：六张图都在、尺寸与代码口径一致（换图必须回来重算贴合）', () => {
     const source = readFileSync(ASSETS_PATH, 'utf8');
     // 名字逐字对照美术文件名 —— `fram_02` 少一个 e 是**美术的原始拼写**，别"顺手改对"。
     const expected: Record<string, [number, number]> = {
         img_land_02: [126, 117],
         img_land_01: [126, 117],
+        // 灰版地皮（锁住的格用）：还是 2026-10-16 换图前的 **130×119**。
+        // 锁着的格不画格面框（框只给「已解锁未通关」）⇒ 那 4×2 的差只表现为与邻居 2px 交叠。
+        img_land_01_gray: [130, 119],
         frame_01: [124, 92],
         frame_04: [124, 92],
         fram_02: [124, 92],
@@ -576,14 +668,19 @@ test('★★美术引用与磁盘：五张图都在、尺寸与代码口径一�
     // 图还留在美术目录里，但**代码不许再引用** —— 否则"地表又变紫了"会静默回流。
     assert.doesNotMatch(stripComments(source), /'frame_03'/,
         '普通关卡已改用 frame_01 红框，紫框 frame_03 不该再被引用');
-    // 旧灰图不该再被领地引用（它已由两张成品图取代；对局侧本来也不用它）。
-    assert.doesNotMatch(stripComments(source), /'img_land_01_gray'/,
-        '领地已经改用 img_land_01 / img_land_02，灰图引用应已删除');
+    // 灰图**回来了，但只许当「锁住那格」的地皮**（需求 2026-11-10）。
+    // 旧口径是「一张灰图 + 三色 tint」，那一套仍然不许回流（tint 已删，见上面那条断言）。
+    const greyUses = stripComments(source).match(/'img_land_01_gray'/g) ?? [];
+    assert.equal(greyUses.length, 1, '灰图只许在 tileGrey 那一条 loadFrame 里出现一次');
+    assert.match(stripComments(source), /img_land_01_gray'\)\),\s*\n?/,
+        '灰图必须走 loadFrame 进美术表');
+    assert.match(stripComments(source), /tileGrey/,
+        '灰图要落到 tileGrey 槽位（不是塞回 tileLocked）');
 });
 
 test('★TerritoryPresenter 的默认 art 字面量必须与接口同步（漏字段会静默退成 undefined）', () => {
     const presenter = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
-    for (const field of ['tileLocked', 'tileCleared', 'frameBoss', 'frameStage', 'frameAsyncPvp', 'frameChest']) {
+    for (const field of ['tileLocked', 'tileCleared', 'tileGrey', 'frameBoss', 'frameStage', 'frameAsyncPvp', 'frameChest']) {
         assert.match(presenter, new RegExp(`${field}: null`), `Presenter 默认 art 缺字段：${field}`);
     }
     assert.doesNotMatch(stripComments(presenter), /\btile: null/, '旧的单张 tile 字段已删除');

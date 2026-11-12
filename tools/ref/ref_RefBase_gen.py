@@ -28,13 +28,13 @@ try:
         # 使用正则表达式筛选出类似 ([wd]+) 的字符串
         matches = re.findall(r'interface IRef([\w\d]+) extends', content)
         # 将结果保存到 jsonlist.txt
-        # with open('jsonlist.txt', 'w', encoding='utf-8') as output_file:
+        # with open('jsonlist.txt', 'w', encoding='utf-8', newline='\n') as output_file:
             # output_file.write('n'.join(matches))
 
         # 将这些字符串加上后缀 .json 记录到 ts_list
 
     os.makedirs(ref_gen_path, exist_ok=True)
-    with open(output_file_path, 'w', encoding='utf-8') as f:
+    with open(output_file_path, 'w', encoding='utf-8', newline='\n') as f:
         f.write(begin_content)
         
         for match in matches:

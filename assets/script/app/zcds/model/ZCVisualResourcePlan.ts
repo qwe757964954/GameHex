@@ -2,6 +2,8 @@ import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { ZCCompiledModifierLoadout } from './ZCModifierRuntime';
 import { zcMissileFxOf } from './ZCCombatEffectFlight';
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, zcBlinkCastEffectPath } from './ZCBlinkCastFx';
+import { zcSelfAuraEffectPath } from './ZCSelfAuraFx';
+import { ZC_BOLT_EFFECT_PREFAB_PATH, zcBoltStrikeEffectPath } from './ZCBoltStrikeFx';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -33,7 +35,7 @@ export function resolveZCVisualUnitIds(
 
 type ZCVisualUnit = Pick<ZCUnitDefinition, 'unitId' | 'prefabPath'> & {
     readonly attackProfile: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath' | 'impactEffectPrefabPath'>;
-    readonly empoweredProfile?: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath'>;
+    readonly empoweredProfile?: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath' | 'impactEffectPrefabPath'>;
     readonly secondaryProfile?: Pick<ZCUnitDefinition['attackProfile'], 'effectPrefabPath'>;
 };
 type ZCVisualLoadout = Pick<ZCCompiledModifierLoadout, 'targetUnitId'> & {
@@ -69,13 +71,31 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     const blinkUnits = new Set((adapters.skillPlans ?? [])
         .filter(plan => plan.enabled && zcBlinkCastEffectPath(plan.behaviorKey))
         .map(plan => plan.unitId));
+    //  自身光环（`self_aura`，2026-11-09 大威天芦「无尘禁土」102503）同理：那条光柱的路径
+    //  只登记在 `ZCSelfAuraFx` 的代码常量里（行为技能在 `pvpSkill` 里没有造型槽）。
+    //  漏收的后果同样静默：技能照常每秒扣血，屏幕上一次都不亮。
+    const selfAuraUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcSelfAuraEffectPath(plan.behaviorKey))
+        .map(plan => plan.unitId));
+    //  五雷轰顶（`bolt_strike`，2026-11-11 磁电菇 101603）同理：每道雷的 `area` 事件带的是
+    //  `ZC_BOLT_EFFECT_PREFAB_PATH`（代码常量），`pvpSkill` 里没有造型槽。
+    //  漏收的后果：雷照常结算伤害、屏幕上一道闪电都不画，且不报错。
+    const boltUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcBoltStrikeEffectPath(plan.behaviorKey))
+        .map(plan => plan.unitId));
     // 普攻、命中附加、强化与副轨技能都可能声明独立表现。
     const effects = new Set(units.flatMap(unit => [
         unit.attackProfile.effectPrefabPath,
         unit.attackProfile.impactEffectPrefabPath,
         unit.empoweredProfile?.effectPrefabPath,
+        //  强化那一击的**命中爆炸**（2026-11-11 麻辣铁锅「凤凰降临」102604 的
+        //  `麻辣铁锅_爆炸龙卷`）。放在**武将技行**上（36182）而不是普攻行，
+        //  只收 `attackProfile` 那一份会漏掉它 ⇒ 命中照样结算、屏幕上不炸。
+        unit.empoweredProfile?.impactEffectPrefabPath,
         unit.secondaryProfile?.effectPrefabPath,
         blinkUnits.has(unit.unitId) ? ZC_BLINK_CAST_EFFECT_PREFAB_PATH : null,
+        selfAuraUnits.has(unit.unitId) ? zcSelfAuraEffectPath('self_aura', unit.unitId) : null,
+        boltUnits.has(unit.unitId) ? ZC_BOLT_EFFECT_PREFAB_PATH : null,
         //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight` 的
         //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面四个字段收不到。
         //  漏收的后果：`ZCGameLoader` 不加载 ⇒ `effectVisualPrefabs.get()` 返回 null

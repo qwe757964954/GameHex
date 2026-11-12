@@ -263,7 +263,8 @@ export class ZCCaptureSystem {
 
     private canBeCaptured(hex: ZCHexState): boolean {
         const type = neutralResourceItemOf(hex.neutralResourceId)?.resourceType;
-        if (type === ZCNeutralResourceType.Monster || type === ZCNeutralResourceType.Extension || type === ZCNeutralResourceType.Horn) return false;
+        if (type === ZCNeutralResourceType.Monster || type === ZCNeutralResourceType.Horn) return false;
+        if (type === ZCNeutralResourceType.Extension && !hex.neutralFeature?.claimed) return false;
         return hex.building === 'none' && hex.wallHp <= 0;
     }
 

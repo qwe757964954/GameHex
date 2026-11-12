@@ -5,7 +5,8 @@ import { RANK_PLAYING_TEXT } from '../model/ZCRankBoard';
 /**
  * 对局内排行榜的**一行**（prefab `ui/game/ZCGameRankRow`，628×128，行高 138 = 128 + 10 间距）。
  *
- * 行内元素与切图（设计稿坐标）：行底板 `phb_list_01/02`（**第一名单独一张高亮底**）、
+ * 行内元素与切图（设计稿坐标）：行底板 `phb_list_01/02`（**黄色那张只给本机玩家自己**，
+ * 玩家排第几就贴第几行 —— 2026-11-11 需求，改前是按「第一名」贴）、
  * 名次徽章 `icon_01/02/03`（**只有前三名有图**）、头像圆框 `common_txk` 96×96 + `icons/head` 头像、
  * 玩家名 Label（24.5px 深藏青 rgb(58,53,81)、左对齐不换行）、地块图标 `icon_tile` 48×50、
  * 右侧底板 `di_01`（地块数）/ `di_02`（比赛中…）。
@@ -29,7 +30,7 @@ const { ccclass, property } = _decorator;
 
 @ccclass('ZCGameRankRow')
 export class ZCGameRankRow extends Component {
-    @property({ type: Sprite, tooltip: 'Bg：行底板（第一名 phb_list_01，其余 phb_list_02）' })
+    @property({ type: Sprite, tooltip: 'Bg：行底板（本机玩家自己 phb_list_01，其余 phb_list_02）' })
     bg: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Badge：名次徽章（前三名显 icon_01/02/03，第 4 名起关掉改显数字）' })
@@ -65,7 +66,9 @@ export class ZCGameRankRow extends Component {
     /** 全量赋值。**必须同步**（虚拟列表按 index 现取行节点，见规则 55/146）。 */
     render(seat: IRankSeat, frames: IRankRowFrames): void {
         this.frames = frames;
-        this.bg.spriteFrame = frames.rowBg[seat.rank === 1 ? 'first' : 'normal'];
+        // 黄色高亮底只代表**本机玩家自己**，玩家排第几就贴在第几行（2026-11-11 需求）。
+        // ⚠️ 别写成 `seat.rank === 1` —— 那是改前的口径，玩家排第 2 时会去高亮别人。
+        this.bg.spriteFrame = frames.rowBg[seat.isSelf ? 'first' : 'normal'];
         // 名次：前三名走徽章图，第 4 名起显数字（同位互斥）。
         //  用 `enabled` 而不是 `active` —— `active=false` 的节点不参与渲染，
         //  虚拟列表回收复用时会残留上一次的显隐状态（规则 106）。

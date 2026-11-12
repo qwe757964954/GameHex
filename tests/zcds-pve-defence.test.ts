@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
+import { defenceMonsterScale, ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type ZCPveDefenceWave } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -20,12 +20,12 @@ function rows(name: string): Array<Record<string, unknown>> {
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus',
 ];
 loadPvpTables(Object.fromEntries(tableNames.map((name) => [name, rows(name)])) as unknown as ZCPvpTables);
-configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
 
 function defenceConfig(waves: readonly ZCPveDefenceWave[]): ZCMatchConfig {
     const base = captureZCMatchConfig();
@@ -211,7 +211,7 @@ test('本波血条：分子随存活血量走，分母固定在生成那一刻',
     assert.equal(model.defenceWaveProgress?.currentWaveMaxHp, unit.maxHp);
 });
 
-test('territory defence disables ordinary enemy expansion while waves are pending', () => {
+test('塔防局的 NPC 照常翻地块（2026-11-09：NPC 靠翻地解锁新的怪物卡）', () => {
     const config = defenceConfig([
         { waveId: 1, showAtSeconds: 999, cardId: '', monsterCount: 1, tier: 1 },
     ]);
@@ -219,8 +219,8 @@ test('territory defence disables ordinary enemy expansion while waves are pendin
     const before = model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
     model.tick(config.rules.enemyAiIntervalSeconds + .1);
     const after = model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
-    assert.equal(after, before);
-    assert.equal(model.snapshot.units.length, 0);
+    assert.ok(after > before, '塔防局的 NPC 不能整局不动，必须翻地块');
+    assert.equal(model.snapshot.units.length, 0, '这一段不该出怪');
 });
 
 /** 普通（非塔防）局面：AI 会翻地块，用它量「翻地块速度」。 */
@@ -243,7 +243,7 @@ function enemyDevelopedCount(model: ZCGameModel): number {
     return model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
 }
 
-test('NPC 翻地块速度不得超过关卡 openGrideTime：拦得住，也不会额外变慢', () => {
+test('openGrideTime 是「两次翻格之间的最小间隔」，从第一次翻格之后开始计时', () => {
     const capped = aiConfig(18);
     const free = aiConfig();
     // 兜底前提：不配 openGrideTime 时 AI 仍按全局间隔翻（否则这条用例量不到东西）。
@@ -254,15 +254,93 @@ test('NPC 翻地块速度不得超过关卡 openGrideTime：拦得住，也不�
 
     const model = new ZCGameModel(null, () => .1, capped);
     const start = enemyDevelopedCount(model);
-    // 3 秒：全局间隔（2.8s）早就到了，但关卡要求 18 秒 ⇒ 一格都不许翻。
+    // 首格不被间隔拖后：间隔只管「两次点击之间的距离」，计时从第一次翻格之后才开始。
+    advanceBy(model, .1);
+    assert.equal(enemyDevelopedCount(model), start + 1, '第一格不受 openGrideTime 限制');
+    // 之后 3 秒（远小于 18）一格都不许再翻 —— 这里量的是「间距」，不是全局 2.8s 的旧口径。
     advanceBy(model, 3);
-    assert.equal(enemyDevelopedCount(model), start, 'openGrideTime 内不许翻地块');
-    // 累计到 18 秒：放开一拍。
-    advanceBy(model, (capped.openGrideTime ?? 18) - 3 + .1);
-    assert.equal(enemyDevelopedCount(model), start + 1, '到点只翻一格');
+    assert.equal(enemyDevelopedCount(model), start + 1, 'openGrideTime 内不许再翻');
+    // 距首格满 18 秒：放开一拍，且只翻一格。
+    advanceBy(model, 15);
+    assert.equal(enemyDevelopedCount(model), start + 2, '到点只翻一格');
     // 再等不足 18 秒：不许接着翻。
     advanceBy(model, 2.9);
-    assert.equal(enemyDevelopedCount(model), start + 1);
+    assert.equal(enemyDevelopedCount(model), start + 2);
+});
+
+test('塔防局 NPC 同样要翻地块解锁新卡，节奏仍受 openGrideTime 约束', () => {
+    const base = captureZCMatchConfig();
+    const playable = base.enemyDeck.find((card) => card.unitId);
+    assert.ok(playable, 'test requires a spawnable enemy card');
+    // 波次挂到 999 秒：整段用例里不会真的出怪，量到的变化只可能来自翻地。
+    const config = captureZCMatchConfig({
+        ...base,
+        enemyDeck: [playable],
+        openGrideTime: 18,
+        pveDefence: {
+            waves: [{ waveId: 1, showAtSeconds: 999, cardId: playable.id, monsterCount: 1, tier: 1 }],
+        },
+    });
+    const model = new ZCGameModel(null, () => .1, config);
+    const start = enemyDevelopedCount(model);
+    // 塔防局以前整段跳过 AI（红方开局一格不动），这条守「必须动」+「首格不被拖后」。
+    advanceBy(model, .1);
+    assert.equal(enemyDevelopedCount(model), start + 1, '塔防局 NPC 开局就要翻第一格');
+    // 之后 3 秒（远小于 18）不许再翻。
+    advanceBy(model, 3);
+    assert.equal(enemyDevelopedCount(model), start + 1, 'openGrideTime 内不许再翻');
+    // 距首格满 18 秒：放开一拍 —— 塔防局的 NPC 不再整局不动。
+    advanceBy(model, 15);
+    assert.equal(enemyDevelopedCount(model), start + 2, '塔防局 NPC 必须翻地块，且到点只翻一格');
+});
+
+test('openGrideTime 的下限是 1 秒：填 1 真按 1 秒翻，不再被全局 2.8s 抬回去', () => {
+    // 旧实现 `max(enemyAiIntervalSeconds, openGrideTime)` 会把 1~2.7 秒的配置**静默抬到 2.8s**，
+    // 策划想调快等于没配（用户 2026-11-11）。现在下限固定 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS = 1`。
+    const fast = new ZCGameModel(null, () => .1, aiConfig(1));
+    advanceBy(fast, 3.1);
+    const fastCount = enemyDevelopedCount(fast);
+    const slow = new ZCGameModel(null, () => .1, aiConfig());
+    advanceBy(slow, 3.1);
+    const slowCount = enemyDevelopedCount(slow);
+    // 首格立刻翻，之后每 1 秒一拍 ⇒ 3.1 秒内 4 格；全局 2.8s 档只有 2 格。
+    assert.ok(fastCount >= 4, `1 秒档 3.1s 内应翻 >= 4 格，实际 ${fastCount}`);
+    assert.ok(fastCount > slowCount, `1 秒档必须比全局 2.8s 档快（${fastCount} vs ${slowCount}）`);
+});
+
+test('出怪表的怪物体型（monsterSize）要用上：BOSS 行放大模型，普通行保持原尺寸', () => {
+    const base = captureZCMatchConfig();
+    const playable = base.enemyDeck.filter((card) => card.unitId).slice(0, 2);
+    assert.equal(playable.length, 2, 'test requires two spawnable enemy cards');
+    const [minion, boss] = playable;
+    const config = captureZCMatchConfig({
+        ...base,
+        enemyDeck: playable,
+        pveDefence: {
+            waves: [
+                { waveId: 1, showAtSeconds: .05, cardId: minion.id, monsterCount: 1, tier: 1, monsterSize: 1 },
+                { waveId: 2, showAtSeconds: .05, cardId: boss.id, monsterCount: 1, tier: 1, monsterSize: 2, isBoss: true },
+            ],
+        },
+    });
+    const model = new ZCGameModel(null, () => .25, config);
+    model.tick(.05);
+    const units = [...model.snapshot.units];
+    const bossUnit = units.find((unit) => unit.cardId === boss.id);
+    const minionUnit = units.find((unit) => unit.cardId === minion.id);
+    assert.ok(bossUnit && minionUnit, '两波都要出场');
+    assert.equal(bossUnit.gateScale, 2, 'BOSS 行的模型要按体型放大（gateScale 是视图缩放通道）');
+    assert.equal(minionUnit.gateScale, undefined, '普通行不许被放大');
+});
+
+test('体型倍率：缺省 / 0 / 1 都不缩放，超上限封顶（防止表里手滑写大数）', () => {
+    assert.equal(defenceMonsterScale(undefined), 1);
+    assert.equal(defenceMonsterScale(null), 1);
+    assert.equal(defenceMonsterScale(0), 1);
+    assert.equal(defenceMonsterScale(1), 1);
+    assert.equal(defenceMonsterScale(2), 2);
+    assert.equal(defenceMonsterScale(99), 2.5);
+    assert.equal(defenceMonsterScale(Number.NaN), 1);
 });
 
 test('塔防 BOSS 被打死即结算，未清完的中间波残兵不再阻塞胜利', () => {

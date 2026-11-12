@@ -9,6 +9,7 @@ import {
 } from '../../../core/hex/HexFlipPresentation';
 
 const FLOAT_TEXT_CAP = 96;
+export const ZC_PORTAL_FLIGHT_SECONDS = 0.6;
 const CARD_REVEAL_CAP = 24;
 const HEX_ACTIVATION_CAP = 24;
 /**

@@ -189,3 +189,24 @@ test('接线：ZCGameHUDView 按「地块清零」判定出局，并与顶部四
     // 选点阶段：`setSeatProfiles` 只传 owners（没有 deadOf）⇒ 四行都不压黑。
     assert.match(hud, /this\.paintPlayerRows\(owners\);/, '选点阶段不带出局判据');
 });
+
+// ============================================================
+// 三、塔防局：基础信息三件套整体收掉（用户 2026-11-09）
+// ============================================================
+
+test('塔防局收掉基础信息：名字 / 头像 / 兵力一起收，切回匹配局能整组还原', () => {
+    const { row, ZCOwner } = makeRow();
+
+    row.render({ ...rowData(ZCOwner.Player, false), basicInfoVisible: false });
+    assert.equal(row.headFrame.node.active, false, '头像（含圆盘）要收掉');
+    assert.equal(row.nameText.node.active, false, '名字要收掉');
+    assert.equal(row.unitIcon.node.active, false, '兵力图标要收掉');
+    assert.equal(row.unitText.node.active, false, '兵力数字要收掉');
+
+    // 行节点由虚拟列表复用：切回匹配局必须整组还原，不能残留「收掉」状态。
+    row.render(rowData(ZCOwner.Player, false));
+    assert.equal(row.headFrame.node.active, true, '头像还原');
+    assert.equal(row.nameText.node.active, true, '名字还原');
+    assert.equal(row.unitIcon.node.active, true, '兵力图标还原');
+    assert.equal(row.unitText.node.active, true, '兵力数字还原');
+});

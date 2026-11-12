@@ -85,10 +85,10 @@ npm run config:export -- --engine tf
 
 | rarity | name | sort | face | disc | frame | diamond |
 | --- | --- | --- | --- | --- | --- | --- |
-| gold | 传说 | 0 | `image/card/common_img_kp_01` | `image/card/kpzr_di_01` | `image/frame/common_img_pzk_01` | `image/carddetail/diamond_gold` |
-| purple | 史诗 | 1 | `image/card/common_img_kp_02` | `image/card/kpzr_di_02` | `image/frame/common_img_pzk_02` | `image/carddetail/quality_purple` |
-| blue | 稀有 | 2 | `image/card/common_img_kp_04` | `image/card/kpzr_di_04` | `image/frame/common_img_pzk_04` | `image/carddetail/diamond_blue` |
-| green | 普通 | 3 | `image/card/common_img_kp_03` | `image/card/kpzr_di_03` | `image/frame/common_img_pzk_03` | `image/carddetail/diamond_green` |
+| gold | 传说 | 0 | `image/card/common_img_kp_01` | `image/card/kpzr_di_01` | `image/frame/common_img_pzk_01` | `image/carddetail/identity/icon_quality_legendary` |
+| purple | 史诗 | 1 | `image/card/common_img_kp_02` | `image/card/kpzr_di_02` | `image/frame/common_img_pzk_02` | `image/carddetail/identity/icon_quality_epic` |
+| blue | 稀有 | 2 | `image/card/common_img_kp_04` | `image/card/kpzr_di_04` | `image/frame/common_img_pzk_04` | `image/carddetail/identity/icon_quality_rare` |
+| green | 普通 | 3 | `image/card/common_img_kp_03` | `image/card/kpzr_di_03` | `image/frame/common_img_pzk_03` | `image/carddetail/identity/icon_quality_uncommon` |
 
 职业表（`cardUiArtClass`）：
 
@@ -110,7 +110,7 @@ npm run config:export -- --engine tf
 
 用途（谁用）：`face`/`disc` 阵容页卡库与槽位；`frame`/`boardHero` 布阵页卡池与空槽；`badge` 卡面角标；`iconOn`/`iconOff`/`icon` 阵容页图标行；`hero` 无专属图时的列表/详情立绘兜底；`diamond` 升级/详情页品质菱形。
 
-两个易错点：`face` 编号是 01金 / 02紫 / 03绿 / 04蓝（≠ 显示顺序，别按"蓝=03"改）；`diamond.紫` 的图名是 `quality_purple`，唯一命名异常项。
+两个易错点：`face` 编号是 01金 / 02紫 / 03绿 / 04蓝（≠ 显示顺序，别按"蓝=03"改）；`diamond.*` 统一指向 `image/carddetail/identity/icon_quality_{legendary,epic,rare,uncommon}`，按金/紫/蓝/绿对应传说/史诗/稀有/普通，四张同前缀，别再写回已退役的 `diamond_*` / `quality_purple` 顶层切图。
 
 解析与校验：`CardArtConfig.parseCardArtConfig(tables, iconRows)` 把三张表合成同一份 40 条 `ICardArtKey → path`，消费方契约不变（`CardArtProvider` / 页面零改）。逐表校验未知维度值、重复维度值、非法路径，最后用 `REQUIRED_CARD_ART_KEYS` 校验齐全（清单由 `ZC_CARD_RARITIES × face/disc/frame/diamond` + `ZC_CARD_CLASSES × badge/iconOn/iconOff/hero/boardHero` + `ZC_CARD_CAMPS` 唯一推导，测试与文档别另写死数量）。
 

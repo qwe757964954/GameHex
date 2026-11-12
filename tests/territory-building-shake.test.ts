@@ -37,7 +37,10 @@ import {
 import * as shakeCore from '../assets/script/core/hex/ShakePresentation';
 import * as zcdsUtil from '../assets/script/app/zcds/view/ZCGameViewUtil';
 import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryNodeUIModule from '../assets/script/app/territory/model/TerritoryNodeUI';
+import * as territoryPreviewCinemaModule from '../assets/script/app/territory/model/TerritoryPreviewCinema';
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
+import * as territoryUnlockTransitionModule from '../assets/script/app/territory/model/TerritoryUnlockTransition';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
@@ -225,7 +228,10 @@ function makeMapView() {
             // `bottomAnchor` 判定（69008~69015 底部对齐）由 TerritoryMapView 调用，
             // 桩里必须给函数，否则 `undefined is not a function`；本夹具只关心抖动 ⇒ 恒 false。
             if (id === './TerritoryStationView') {
-                return { TerritoryStationView: class {}, territoryUsesBottomAnchor: () => false };
+                // `setConditionSpawnScale`：「未解锁 → 可激活」的 1s 过渡会往站点视图写价格系数，
+                // 桩上必须有这个方法，否则锁一消失就 `is not a function`（真视图在
+                // `TerritoryStationView` 里，曲线由 `territory-unlock-transition` 单测）。
+                return { TerritoryStationView: class { setConditionSpawnScale() {} }, territoryUsesBottomAnchor: () => false };
             }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心建筑抖动，给个空壳即可。
@@ -336,6 +342,7 @@ function makeMapView() {
                 TerritoryCloudView: class {
                     attach(): void {}
                     setFrames(): void {}
+                    setKeepOutPoints(): void {}
                     sync(): void {}
                     step(): void {}
                     reset(): void {}
@@ -376,6 +383,12 @@ function makeMapView() {
             // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
             // 抄一遍就等于两边各改一半也能一起绿。
             if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 「一个节点只在一块地上长 UI」的分组判据（2026-11-09）：给**真模块** ——
+            // 退化成空集合会让「兄弟格被隐掉」的断言假绿，抄一份分组规则又会两边各改一半。
+            if (id === '../model/TerritoryNodeUI') return territoryNodeUIModule;
+            // 「预告首领关」过场的时间轴（2026-11-09）：给**真模块**（纯函数、零 cc）。
+            // 退化成空实现会让「什么时候推镜 / 什么时候放开压住格」的断言无从断言。
+            if (id === '../model/TerritoryPreviewCinema') return territoryPreviewCinemaModule;
             // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
             if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
             // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
@@ -392,6 +405,10 @@ function makeMapView() {
             // 「银币 / 体力够不够」的纯函数（2026-11-03）：给**真模块**，颜色判据不在这里验
             // （专项在 `territory-wallet-shortfall`），但退化成"永远够"会让颜色断言假绿。
             if (id === '../model/TerritoryCostShortfall') return territoryCostShortfallModule;
+            // 「未解锁 → 可激活」的 1s 过渡曲线（2026-11-09）：纯函数、零 cc ⇒ 给**真模块**。
+            if (id === '../model/TerritoryUnlockTransition') return territoryUnlockTransitionModule;
+            // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
+            if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });
@@ -440,6 +457,32 @@ function makeMapView() {
 }
 
 /** 随机资源格 4 号：一格候选、配了建筑图。 */
+test('领地虚影多轨道在同一帧结束时全部回收，逐帧不复制 Map', () => {
+    const { mapView } = makeMapView();
+    const opacity = new Map<number, number>();
+    const disposed: number[] = [];
+    for (const id of [1, 2, 3]) {
+        mapView.ghostViews.set(id, { setGhostOpacity: (value: number) => opacity.set(id, value),
+            dispose: () => disposed.push(id), node: { isValid: true, destroy() {} } });
+        mapView.ghostFades.set(id, 0.1);
+    }
+    mapView.stepGhostFade(0.05);
+    assert.equal(opacity.size, 3);
+    mapView.stepGhostFade(0.1);
+    assert.deepEqual(disposed, [1, 2, 3]);
+    assert.equal(mapView.ghostViews.size, 0);
+    assert.equal(mapView.ghostFades.size, 0);
+    for (const id of [4, 5, 6]) {
+        mapView.ghostViews.set(id, { setGhostOpacity: (value: number) => opacity.set(id, value) });
+        mapView.ghostFadeIn.set(id, 0.1);
+    }
+    mapView.stepGhostFade(0.2);
+    assert.equal(mapView.ghostFadeIn.size, 0);
+    assert.ok([4, 5, 6].every(id => opacity.get(id) === opacity.get(4)));
+    const method = MAP_VIEW_SRC.slice(MAP_VIEW_SRC.indexOf('private stepGhostFade('), MAP_VIEW_SRC.indexOf('private dropGhost('));
+    assert.doesNotMatch(method, /Array\.from|\.\.\./);
+});
+
 function flipInput(unlocked: boolean): unknown {
     return {
         map: { startCellId: 0, sites: [], randomSites: { candidateCells: [4], triggerSilver: 399, buildingIds: { 4: '69006' } } },

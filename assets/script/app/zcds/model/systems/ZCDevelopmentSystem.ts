@@ -6,12 +6,11 @@ import {
     isZCNeutralResourceBuilding, neutralResourceItemOf,
     type ZCNeutralResourceItem,
 } from '../ZCNeutralResourceGroup';
-import { drawPvpTile, type ZCPvpTileType } from '../ZCPvpTileRules';
+import { drawPvpTile, type ZCPvpSeatDrawRules, type ZCPvpTileType } from '../ZCPvpTileRules';
 import { tileTypeFromLegacyHex } from '../ZCSnapshotCodec';
 import { ZCArtifactSystem } from './ZCArtifactSystem';
 import { ZCEconomySystem } from './ZCEconomySystem';
 import type { IZCModelServices } from './ZCModelServices';
-import { ZCNeutralFeatureSystem } from './ZCNeutralFeatureSystem';
 
 export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 'unitCount' | 'spawnUnit'> {
     goldOf(owner: ZCOwner): number;
@@ -24,6 +23,15 @@ export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 
      * 而领取后的快照里这两个信息都不在了，所以必须在发奖拍补齐。
      */
     onNeutralReward?(hexId: number, itemId: number, owner: ZCOwner, item: ZCNeutralResourceItem): void;
+    /**
+     * 该席位翻地块抽卡要套用的关卡规则（品质权重乘数 + 是否保留金色保底）。
+     *
+     * **按 owner 判定放在模型层**：本系统只管「拿到什么规则就怎么算」，不判断谁是 NPC ——
+     * 目前 `ZCGameModel` 只对非玩家席返回 `{ rarityModifier, goldPity: false }`，
+     * 玩家恒为 `null`（原表权重 + 正常金色保底）。
+     * 缺省 / 返回 `null` ⇒ 不调整、保留保底。
+     */
+    drawRulesOf?(owner: ZCOwner): ZCPvpSeatDrawRules | null;
 }
 
 export interface IZCDevelopmentResult {
@@ -56,7 +64,8 @@ export class ZCDevelopmentSystem {
         }
         const result = forcedCard
             ? { card: forcedCard, pityTriggered: false, nextAllRandomNonGoldDraws: state.allRandomNonGoldDraws[owner] }
-            : drawPvpTile(deck, tileType, state.allRandomNonGoldDraws[owner], random, config.tiles, config.goldPity);
+            : drawPvpTile(deck, tileType, state.allRandomNonGoldDraws[owner], random, config.tiles, config.goldPity,
+                context.drawRulesOf?.(owner) ?? null);
         state.allRandomNonGoldDraws[owner] = result.nextAllRandomNonGoldDraws;
         hex.developmentResolved = true;
         hex.wallMaxHp = context.rules.wallMaxHp;
@@ -69,12 +78,7 @@ export class ZCDevelopmentSystem {
             return { card, building, tier: 0, tileType, pityTriggered: result.pityTriggered };
         }
         const tier = rarityRank(card.rarity);
-        const extensionBuild = ZCNeutralFeatureSystem.canBuild(state, hex.id, owner);
         hex.building = building;
-        ZCNeutralFeatureSystem.consumeBuild(state, hex.id, owner);
-        if (extensionBuild) for (const id of config.map.hexes[hex.id].neighbors) {
-            if (state.hexes[id].owner === 'neutral' && !state.hexes[id].neutralResourceId) state.hexes[id].owner = owner;
-        }
         hex.state = 'developed';
         hex.tier = tier;
         hex.cardId = card.id;

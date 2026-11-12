@@ -29,6 +29,8 @@ import { GameNet } from '../net/GameNet';
 import { GameSocketBridge } from '../gm/GameSocketBridge';
 import { createCardPopupComposition } from './card/CardPopupComposition';
 import { createLeaguePopupComposition } from './LeaguePopupComposition';
+import { createLeagueCreatePopupComposition } from './LeagueCreatePopupComposition';
+import { createLeagueDonatePopupComposition } from './LeagueDonatePopupComposition';
 import { ensureZCRuntimeCompiled } from '../zcds/application/ZCRuntimePrecompiler';
 import { resetZCRuntime } from '../zcds/model/ZCGameRuntimeConfig';
 
@@ -137,7 +139,9 @@ export class ProcedureBootstrap extends Component {
     }
     private configurePopups(manager: ProcedureManager): void {
         PopupManager.inst.initialize(manager.context.assets, GameNet.instance.callbackOwners, view =>
-            createCardPopupComposition(manager.context, view) ?? createLeaguePopupComposition(manager.context, view));
+            createCardPopupComposition(manager.context, view) ?? createLeaguePopupComposition(manager.context, view)
+                ?? createLeagueCreatePopupComposition(manager.context, view)
+                ?? createLeagueDonatePopupComposition(manager.context, view));
     }
     private registerRoutes(manager: ProcedureManager): void {
         manager.registerRoute(GameRoute.Update, ProcedureUpdate);

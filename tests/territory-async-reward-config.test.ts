@@ -12,10 +12,10 @@ test('第一章主线关卡配置展示挂机奖励，并可由关卡配置解�
     const stage = campaign.stages.find((entry) => entry.levelId === 10001);
     assert.ok(stage, '缺少主线关卡 10001');
     assert.deepEqual(stage.idleRewards.map(({ resId, amount, probability }) => ({ resId, amount, probability })), [
-        { resId: 7, amount: 16, probability: 10000 },
+        { resId: 7, amount: 160, probability: 10000 },
         { resId: 16014, amount: 1, probability: 600 },
-        { resId: 10012, amount: 2, probability: 10000 },
-        { resId: 10012, amount: 3, probability: 10000 },
+        { resId: 10010, amount: 2, probability: 10000 },
+        { resId: 10010, amount: 3, probability: 10000 },
         { resId: 10011, amount: 1, probability: 150 },
         { resId: 10013, amount: 1, probability: 150 },
     ]);
@@ -23,7 +23,8 @@ test('第一章主线关卡配置展示挂机奖励，并可由关卡配置解�
     const second = campaign.stages.find((entry) => entry.levelId === 10002);
     assert.ok(second);
     assert.equal(second.idleRewards[0].resId, 7);
-    assert.equal(second.idleRewards[0].amount, 17, '银币产出应随关卡变化');
+    // 2026-11-09：银币档整体 ×10（10001 16→160、10002 17→170），其余条目不动。
+    assert.equal(second.idleRewards[0].amount, 170, '银币产出应随关卡变化');
     // 异步据点不再配挂机奖励：以后再配回来的话，来源就变成两套了，必须显式改这条
     const asyncStage = campaign.stages.find((entry) => entry.levelId === 20001);
     assert.ok(asyncStage, '缺少异步据点 20001');

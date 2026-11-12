@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-    buildBigMapBaseLayout, clampBigMapBaseCamera, pickBigMapBasePlot, zoomBigMapBaseCamera,
+    bigMapNearestPlot, buildBigMapBaseLayout, clampBigMapBaseCamera, pickBigMapBasePlot, zoomBigMapBaseCamera,
 } from '../assets/script/app/bigmap/view/BigMapBasePresentation';
 import { BIGMAP_TILE_HEIGHT, BIGMAP_TILE_WIDTH } from '../assets/script/app/bigmap/view/BigMapWorldLayout';
 
@@ -48,4 +48,21 @@ test('缩放保持手指锚点的地图坐标，变换后格心仍能准确拾�
     const point = layout.points.get(1210)!;
     const screen = { x: point.x * after.zoom + after.x, y: point.y * after.zoom + after.y };
     assert.equal(pickBigMapBasePlot(layout, (screen.x - after.x) / after.zoom, (screen.y - after.y) / after.zoom), 1210);
+});
+
+test('摆放吸附：六边形缝隙里也能吸到最近格，图外仍然返回 -1', () => {
+    const layout = buildBigMapBaseLayout(cells(3, 3));
+    const center = layout.points.get(1004);
+    assert.ok(center, '夹具第 5 格必须存在');
+    // 正中心：精确命中与吸附给同一格。
+    assert.equal(pickBigMapBasePlot(layout, center!.x, center!.y), 1004);
+    assert.equal(bigMapNearestPlot(layout, center!.x, center!.y, layout.tileHeight), 1004);
+    // 靠近另一格心 ⇒ 吸附到那一格（而不是靠得很近还判成 1004）。
+    // ⚠️ 六边形是**密铺**，格与格之间没有缝：精确拾取本身不会"点偏就 miss"，
+    // 吸附的价值在「手指精度不够时仍落在意图上的那一格」，以及贴图边界外仍能取最近格。
+    const neighbour = layout.points.get(1005);
+    assert.ok(neighbour);
+    assert.equal(bigMapNearestPlot(layout, neighbour!.x - 1, neighbour!.y - 1, layout.tileHeight), 1005);
+    // 整张图外不吸附，避免「点屏幕角落也放建筑」。
+    assert.equal(bigMapNearestPlot(layout, center!.x + 5000, center!.y, layout.tileHeight), -1);
 });

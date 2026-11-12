@@ -53,7 +53,7 @@ function onDestroyBodies(source: string): Array<{ line: number; body: string[] }
 }
 
 /** 允许在 `onDestroy` 里 `off` 的接收者：自己的节点、全局输入、FGUI 全局对象。 */
-const SAFE_RECEIVERS = new Set(['this.node', 'input', 'gcom']);
+const SAFE_RECEIVERS = new Set(['this.node', 'input', 'gcom', 'EventMgr.instance']);
 
 /** 去掉注释再断言（规则 104：反向断言必须先剥注释，否则注释里的示例会被当成违规）。 */
 function stripComments(source: string): string {

@@ -165,7 +165,7 @@ import {
     LEAGUE_NORTH_TAB_REWARD_LEAGUE,
     LEAGUE_NORTH_TAB_REWARD_ROLE,
 } from '../assets/script/app/league/LeagueTexts';
-import { assetPath } from './helpers/asset-paths';
+import { assetDirPaths, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 路径
@@ -1262,7 +1262,7 @@ test('D0 `U` 表守卫：每个 uuid 都能在 assetPath(`image`) 里对上号�
             if (uuid) byUuid.set(uuid, e.name.replace(/\.(png|jpg)\.meta$/, ''));
         }
     };
-    walk(assetPath('image'));
+    for (const dir of assetDirPaths('image')) walk(dir);
     assert.ok(byUuid.size > 300, `图片索引只找到 ${byUuid.size} 张 —— 路径不对？`);
     for (const [art, sf] of Object.entries(U)) {
         const uuid = sf.replace(/@f9941$/, '');

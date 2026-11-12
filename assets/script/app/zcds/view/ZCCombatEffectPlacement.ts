@@ -68,6 +68,55 @@ export function zcCombatEffectAnchorPoint(
 }
 
 /**
+ * 弹道特效的**发射高度补偿**（视图 px，世界竖直、**不跟弹道旋转**）。
+ *
+ * ## 需求（2026-11-11）
+ *
+ * 原话：「部分射手/法师子弹的位置没有在角色中间发射出去，初始的发射位置调整：
+ * 玉林好汉的飞镖上移 20px；三个小丑的子弹上移 30px」。
+ *
+ * ## 为什么要补偿
+ *
+ * `projectile` 分支把子弹节点摆在**弹道的逻辑坐标**上，而单位根节点是**逻辑脚点**
+ * （`ZCUnitView` 口径：spine 骨架原点 ≈ 脚底，与 `ZCBeamEffect.muzzleLift` 注释同一结论）。
+ * 脚点在地面，角色本体在它上方 30~70px ⇒ 子弹看起来「从脚下擦着地面飞出去」。
+ *
+ * ## 为什么是视图 px 而不是 prefab 的 `_lpos`
+ *
+ * 宿主节点每帧被 `setRotationFromEuler` 转到弹道方向，`_lpos` 是**子节点本地坐标**，
+ * 会跟着转 —— 「上移」会变成「垂直于弹道的侧移」（往左打时反而往下掉）。
+ * 这里加在 `mapToViewY(...)` 之后，就是屏幕竖直方向，与弹道光束的 `muzzleLift`
+ * （注释原话「世界竖直、不跟弹道旋转」）完全同一口径。
+ *
+ * ## 数值口径
+ *
+ * 一格高 = 90 屏上 px，一个兵可见高 ≈ 67px ⇒ 20~30px 大约是「脚点 → 身体中心」的一半到全部。
+ * 单位是**屏上 px**（`mapToViewY` 的输出已经是屏上 px），不需要再换算。
+ *
+ * ⚠️ 只登记需要偏离的 prefab，默认 `0`。光束类不在此表 —— 它们走 `ZCBeamEffect.muzzleLift`，
+ *    两边同时开会叠成两笔。
+ */
+const PROJECTILE_LIFT_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
+    //  玉林好汉普攻（`pvpSkill` 30716）。强化那一击 30821 借的是**另一份 prefab**
+    //  （`玉林好汉_飞镖普攻_强化`，同一套 256×254 画布、只是 `offset` 缩到 0.6125），
+    //  两张都从同一个角色身上出手 ⇒ 高度必须一致，只改一张会让强化飞镖突然从脚下飞出去。
+    'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻': 20,
+    'units/projectiles/玉林好汉_飞镖普攻_强化/玉林好汉_飞镖普攻_强化': 20,
+    //  三叶小丑普攻（`pvpSkill` 30714）。它的强化那一击是「飓风」（`area` 类地面区域），
+    //  不走 `projectile` 分支，所以这里只有一条。
+    'units/projectiles/三叶小丑_普攻/三叶小丑_普攻': 30,
+};
+
+/**
+ * 特效路径 → 弹道竖直补偿（视图 px）。未登记 / 非法值 = `0`（贴原坐标，绝不把子弹甩飞）。
+ */
+export function zcCombatEffectLiftY(effectPrefabPath: string | null | undefined): number {
+    if (!effectPrefabPath) return 0;
+    const lift = PROJECTILE_LIFT_BY_PREFAB_PATH[effectPrefabPath];
+    return typeof lift === 'number' && Number.isFinite(lift) ? lift : 0;
+}
+
+/**
  * 事件类型 → 特效层级（2026-10-30）。
  *
  *  需求原话：「火焰树妖_灼热地带技能的特效层级应该在角色类的下层，当角色走过会遮挡该火焰，
@@ -106,6 +155,29 @@ export function zcCombatEffectLayerOfPath(
         if (override) return override;
     }
     return zcCombatEffectLayerOf(type);
+}
+
+/**
+ * 特效路径 → 预制体里「按阶段开关」的**叠层子节点名**（2026-11-12 鹿神守护改追踪弹）。
+ *
+ * 需求原话：「贴近目标后的移速快（140PX，**同步在小鹿身上覆盖火船特效**）」——
+ * 火船只在提速扑击那一段烧起来，慢速赶路时身上是干净的。
+ *
+ * 为什么用「模型给语义、视图查表」而不是把节点名写进配表：`skillParamJson` 只有数值槽，
+ * 而且模型层不该知道 prefab 内部结构。模型只推一个 `overlayFx` 布尔值，
+ * 点哪个子节点由这张表决定 —— 换美术 / 改节点名只改这里一处。
+ *
+ * ⚠️ 节点必须在**预制体根节点**直下（视图用 `visualNode.getChildByName` 找）；
+ *    鹿神守护那份的结构是 root → `spine` + `fx_火船`（见 `tools/build_deer_guard_fx.py`）。
+ */
+const OVERLAY_CHILD_BY_PREFAB_PATH: Readonly<Record<string, string>> = {
+    'units/projectiles/鹿神守护/鹿神守护': 'fx_火船',
+};
+
+/** 特效路径 → 叠层子节点名；未登记 = `null`（视图一次都不碰 `active`）。 */
+export function zcCombatEffectOverlayChild(effectPrefabPath: string | null | undefined): string | null {
+    if (!effectPrefabPath) return null;
+    return OVERLAY_CHILD_BY_PREFAB_PATH[effectPrefabPath] ?? null;
 }
 
 /**

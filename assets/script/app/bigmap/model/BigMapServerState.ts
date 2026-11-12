@@ -86,7 +86,11 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
     const row = bigMapServerRecord(value);
     if (!row) return null;
     const unlockQueue = bigMapServerUint(row.unlockQueue);
-    if (!unlockQueue || !Array.isArray(row.builds) || !Array.isArray(row.queues)) return null;
+    // 🔴 `0` 是**合法值**（还没解锁任何建造队列），不能拿 `!unlockQueue` 当"字段缺失"。
+    // 之前写成 `!unlockQueue` 时，服务端首次下发 `unlockQueue = 0` 会让整包被拒 ⇒
+    // `info` 永远 null ⇒ `ready` 永远 false ⇒ 建造请求一帧都不发，界面只剩
+    // 「正在同步基地信息」（2026-11-11 用户反馈）。
+    if (unlockQueue === null || !Array.isArray(row.builds) || !Array.isArray(row.queues)) return null;
     const builds: IBigMapServerBuild[] = [];
     const queues: IBigMapServerQueue[] = [];
     const ids = new Set<number>();
@@ -113,16 +117,43 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
     return { builds, queues, unlockQueue };
 }
 
+/** 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
+export const BIGMAP_SERVER_POSITION_BASE = 1001;
+
+/**
+ * 服务端 `position` → 客户端格索引。
+ *
+ * **两套坐标系**：
+ * - 客户端布局是 `0 .. plotRows*plotCols-1`（`buildBigMapBaseLayout` 按行列算出，5×5=25 格）；
+ * - 策划表 `baseBuilding.basebuildPositon` 是 `1001 ~ 1023` 的「初始位置 id」。
+ *
+ * 2026-11-11 实测服务端下发的是后者：`buildingId=71001 position=1001` ⇒
+ * `position >= 25` ⇒ `projectBigMapServerBase` 整份快照被拒 ⇒ `ready` 永远 false ⇒
+ * 建造请求一帧都不发（界面只显示「正在同步基地信息」）。
+ *
+ * 这里在**协议边界**做一次归一：`< cellCount` 原样用，`>= 1001` 的减 1001。
+ * ⚠️ 正解是服务端改成下发格索引 —— `CmdSlgBuildReqMsg.position` 本来就是 0..24，
+ * 两端必须同一套；服务端改完后 `position < cellCount` 直接命中，这段自然不再生效。
+ * 返回 `-1` 表示越界（既不是格索引也不是合法位置 id），调用方按坏数据处理。
+ */
+export function bigMapServerCellIndex(position: number, cellCount: number): number {
+    if (!Number.isInteger(position) || position < 0 || !Number.isInteger(cellCount) || cellCount <= 0) return -1;
+    if (position < cellCount) return position;
+    const shifted = position - BIGMAP_SERVER_POSITION_BASE;
+    return shifted >= 0 && shifted < cellCount ? shifted : -1;
+}
+
 /** uint32实例ID直接用于展示；联机基地不写入离线存档。 */
 export function projectBigMapServerBase(
     info: IBigMapServerBuildInfo, config: IBigMapConfig, now: number,
 ): IBigMapBaseState | null {
+    const cellCount = config.queue.plotRows * config.queue.plotCols;
     if (info.unlockQueue > config.queue.maxBuildQueue || info.builds.some((build) =>
-        !config.buildings.has(build.buildingId) || build.position >= config.queue.plotRows * config.queue.plotCols
+        !config.buildings.has(build.buildingId) || bigMapServerCellIndex(build.position, cellCount) < 0
         || !config.levels.get(build.buildingId)?.has(Math.max(1, build.level)))) return null;
     const buildings = info.builds.filter((build) => build.state !== 1).map((build) => ({
         instanceId: build.instanceId, buildingId: build.buildingId, level: build.level,
-        hexId: build.position, stored: 0, lastTickAt: now,
+        hexId: bigMapServerCellIndex(build.position, cellCount), stored: 0, lastTickAt: now,
     }));
     const queues = Array.from({ length: config.queue.maxBuildQueue }, (_, slotIndex) => {
         // 协议队列编号 1 起，视图槽位下标 0 起；所有转换集中在这里。
@@ -133,7 +164,7 @@ export function projectBigMapServerBase(
         return {
             slotIndex, state: build ? BigMapQueueState.Building : BigMapQueueState.Idle,
             buildingId: build?.buildingId ?? 0, instanceId: build && build.state !== 1 ? build.instanceId : 0,
-            targetLevel, anchorHexId: build?.position,
+            targetLevel, anchorHexId: build ? bigMapServerCellIndex(build.position, cellCount) : undefined,
             startAt: build ? build.finishAt - duration : 0, finishAt: build?.finishAt ?? 0,
         };
     });

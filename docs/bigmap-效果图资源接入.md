@@ -2,7 +2,7 @@
 
 ## 资源与分层
 
-资源入口：`assets/bundles/bigmap/image/concept/`（2026-11-04 从 `assets/bundles/bigmap/image/bigmap/concept/` 上提，bundle 内路径去掉一层 `bigmap`），共 26 张 PNG：16 张建筑、场景及资源图标，9 张界面素材，1 张无建筑的基地背景。
+资源入口：`assets/bundles/bigmap/image/concept/`（2026-11-04 从 `assets/bundles/bigmap/image/bigmap/concept/` 上提，bundle 内路径去掉一层 `bigmap`），当前保留 25 张 PNG：16 张建筑、场景及资源图标，9 张界面素材。旧基地底图 `base_ground.png` 已退役，基地现用分包内的 `image/base_background`。清单尺寸与 SHA-256 对应当前优化后的运行资源，源图位置仍用于追溯。
 
 这些资源由效果图风格重新分层生成，再切分透明图集；没有把带文字、等级与按钮的整屏截图当成游戏背景。图集源保留在本机 Codex 的 `generated_images` 目录，运行资源全部落在工程内。
 

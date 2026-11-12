@@ -6,7 +6,9 @@ import {
 } from '../assets/script/app/zcds/model/ZCGameModel';
 import { getPvpRuntimeRules, loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
-import { createPvpTileTypes, ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
+import {
+    createPvpTileTypes, getPvpTileTypeWeights, ZC_PVP_TILE_SET_SIZE, ZCPvpTileType,
+} from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { createSeededRandom } from '../assets/script/app/zcds/model/ZCSeededRandom';
 import { assetPath } from './helpers/asset-paths';
 import { resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
@@ -23,7 +25,7 @@ import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ] as const;
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -84,11 +86,23 @@ test('每张候选图的非主城可玩格都有合法类型；自选主城移�
 });
 
 /** 按「席位」列出主城邻格里的 `mine` 个数（自选主城图开局无固定 homes，返回空数组）。 */
-function ringMineCounts(seed: number, guaranteedOverride?: number): number[] {
+function ringMineCounts(
+    seed: number,
+    guaranteedOverride?: number,
+    mineSetLimit?: number,
+): number[] {
     const config = captureZCMatchConfig(undefined);
-    const match = guaranteedOverride === undefined ? config : {
+    const match = {
         ...config,
-        rules: { ...config.rules, initialGuaranteedMine: guaranteedOverride },
+        tileWeights: mineSetLimit === undefined ? config.tileWeights : config.tileWeights.map((entry) => (
+            entry.type === ZCPvpTileType.Mine
+                ? { ...entry, setCountLimit: mineSetLimit, initialCountLimit: mineSetLimit }
+                : entry
+        )),
+        rules: {
+            ...config.rules,
+            ...(guaranteedOverride === undefined ? {} : { initialGuaranteedMine: guaranteedOverride }),
+        },
     } as ZCMatchConfig;
     const types = createPvpTileTypes(createSeededRandom(seedOf(seed)), match);
     return match.map.homes!.map((homeId) => (
@@ -135,6 +149,68 @@ test('保底数量跟配置走：调成 2 时每席位至少 2 个，调成 0 �
         zeroSeen += ringMineCounts(seed, 0).filter((count) => count === 0).length;
     }
     assert.ok(zeroSeen > 0, 'initialGuaranteedMine = 0 时不该再强塞金矿');
+});
+
+/** 处理侧镜像对（取一份）按 id 升序切批：每 `setSize` 个格子一个集合，主城对不占名额。 */
+function processIdsBySet(match: ZCMatchConfig, setSize: number): number[][] {
+    const homes = new Set(match.map.homes ?? []);
+    const ordered = match.map.hexes
+        .filter((hex) => hex.playable && hex.id <= hex.mirrorId
+            && !(homes.has(hex.id) && homes.has(hex.mirrorId)))
+        .map((hex) => hex.id)
+        .sort((left, right) => left - right);
+    const sets: number[][] = [];
+    for (let index = 0; index < ordered.length; index += setSize) {
+        sets.push(ordered.slice(index, index + setSize));
+    }
+    return sets;
+}
+
+test('setCountLimit 每侧 20 个地块一个集合独立生效（不再整半场一个计数器）', () => {
+    const mineWeight = getPvpTileTypeWeights().find((entry) => entry.type === ZCPvpTileType.Mine);
+    assert.ok(mineWeight, '权重表里必须有金矿');
+    const limit = mineWeight!.setCountLimit;
+    assert.ok(limit > 0, `金矿 setCountLimit 必须 > 0 才有约束意义（现在 ${limit}）`);
+
+    let setsChecked = 0;
+    for (const layout of candidateLayouts) {
+        configureZCMap(layout);
+        if (layout.cityMode === 'select') continue;
+        const base = captureZCMatchConfig(undefined);
+        // 关掉保底，单独验集合上限：保底是独立的、不受 setCountLimit 约束。
+        const match = {
+            ...base,
+            rules: { ...base.rules, initialGuaranteedMine: 0 },
+        } as ZCMatchConfig;
+        const sets = processIdsBySet(match, ZC_PVP_TILE_SET_SIZE);
+        for (let seed = 1; seed <= SEEDS; seed += 1) {
+            const types = createPvpTileTypes(createSeededRandom(seedOf(seed)), match);
+            sets.forEach((ids, setId) => {
+                const mines = ids.filter((id) => types[id] === ZCPvpTileType.Mine).length;
+                assert.ok(
+                    mines <= limit,
+                    `${layout.id} seed=${seed} 集合 ${setId} 有 ${mines} 个金矿，超过 setCountLimit=${limit}`,
+                );
+                setsChecked += 1;
+            });
+        }
+    }
+    assert.ok(setsChecked > 100, `至少要覆盖上百个集合样本，实际 ${setsChecked}`);
+});
+
+test('金矿保底完全独立于集合限制：上限 1 时每席位仍拿到 2 个', () => {
+    for (const layout of candidateLayouts) {
+        configureZCMap(layout);
+        if (!ZC_MAP_HOMES.length || layout.cityMode === 'select') continue;
+        for (let seed = 1; seed <= SEEDS; seed += 1) {
+            for (const count of ringMineCounts(seed, 2, 1)) {
+                assert.ok(
+                    count >= 2,
+                    `${layout.id} seed=${seed}: 保底 2 个但主城邻格只有 ${count} 个金矿（setCountLimit=1 不该压保底）`,
+                );
+            }
+        }
+    }
 });
 
 test('初始地块分布是随机源的纯函数：同种子逐位一致，不同种子会变', () => {

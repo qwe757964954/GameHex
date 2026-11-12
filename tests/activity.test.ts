@@ -1417,10 +1417,10 @@ test('E. ⚠️ 装备强化（3）不能接 CardUpgradePage —— 它要卡牌
     //    这也正是老端那个「装备进化」浮层的常规入口（`TabRoleMain.ts:224`）。
     const route = resolveActivityJump(JUMP_TYPE.EQUIP_BUILD);
     assert.equal(route!.target, 'roleMain');
-    const upgradePage = readFileSync('assets/script/app/card/CardUpgradePage.ts', 'utf8');
+    const upgradePage = readFileSync('assets/script/app/card/CardUpgradeModel.ts', 'utf8');
     assert.ok(
-        /onOpen\(userData\?: ICardUpgradeOpenData\)/.test(upgradePage),
-        'CardUpgradePage 的 onOpen 仍需要 userData —— 若改了这条降级口径也要一起复核',
+        /constructor\(private data: ICardUpgradeOpenData\)/.test(upgradePage),
+        'CardUpgradeModel 构造仍需要卡牌实例 —— 若改了这条降级口径也要一起复核',
     );
 });
 
@@ -1516,11 +1516,8 @@ test('E. ⚠️ 接线：`前往`走跳转路由，且切 tab 目标要关掉本
 test('E. ⚠️ MainTabHost 开了按 index 切 tab 的外部入口', () => {
     const src = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
     assert.ok(/switchToTab\(index: number\): void/.test(src), 'MainTabHost 缺 switchToTab(index)');
-    assert.ok(/switchToRoleMain\(\): void \{\s*\n\s*void this\.switchTab\(MainTab\.Territory\)/.test(src),
-        'switchToRoleMain 必须仍切领地 tab（open.json 的 TabRoleMain 依赖它）');
-    // 竞技 tab 就是战斗选关主界面 —— 跳转表里的 `arenaTab` 依赖这个映射
-    assert.ok(
-        /if \(index === MainTab\.Arena\) return this\.arenaPage;/.test(src),
-        'Arena tab 必须绑 arenaPage（ArenaRoot = 战斗选关主界面 + 开始游戏）',
-    );
+    assert.ok(/switchToRoleMain\(\): void \{[\s\S]*?void this\.switchTab\(MainTab\.Role\)/.test(src),
+        'switchToRoleMain 必须切角色 tab（open.json 的 TabRoleMain 依赖它）');
+    const model = readFileSync('assets/script/app/main/MainTabModel.ts', 'utf8');
+    assert.match(model, /case MainTab\.Territory: return \{ kind: 'page', path: 'ui\/main\/ArenaRoot' \}/);
 });

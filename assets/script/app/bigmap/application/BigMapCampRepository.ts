@@ -37,9 +37,21 @@ export class BigMapCampRepository {
     private readonly updatedAt = new Map<number, number>();
     private readonly pending = new Map<string, Promise<boolean>>();
     private readonly simplePendingIds = new Set<number>();
+    /** 在途的简略请求（补发要等它们全部落定，见 `scheduleSimpleFollowUp`）。 */
+    private readonly simpleTasks = new Set<Promise<boolean>>();
+    /** 被「同批在途」丢掉的那一轮可见集合；只保留最新一份。 */
+    private followUpIds: readonly number[] | null = null;
+    private followUpQueued = false;
     /** 据点角色列表（`campId` → 该据点内的角色）。空数组是**有效事实**（据点里没人）。 */
     private readonly roleSnapshots = new Map<number, readonly IBigMapCampRoleInfo[]>();
     private readonly roleRevisions = new Map<number, number>();
+    /**
+     * 角色名单的新鲜度时间戳（与据点状态的 `updatedAt` 分开记：两条协议各自过期）。
+     *
+     * 视野补发（`refreshRolesFor`）靠它压住流量 —— 地图上按 `pos` 摆玩家标记，名单必须跟着滑动走，
+     * 但同一座城在窗口内不许重发，否则一次长拖就是同一批城反复刷屏。
+     */
+    private readonly roleUpdatedAt = new Map<number, number>();
     /** 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
     private movingCampId = 0;
     /** 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
@@ -86,6 +98,27 @@ export class BigMapCampRepository {
         const request = this.loadRoles(campId, revision).finally(() => this.pending.delete(key));
         this.pending.set(key, request);
         return request;
+    }
+
+    /**
+     * 视野内据点的**名单补发**（`CmdSlgCampRoleInfosReqMsg`）—— 滑动 / 缩放后由
+     * `BigMapModel.refreshVisibleCamps` 调用。
+     *
+     * 口径（2026-11-11 山猫）：*「据点名单要跟据点信息一样，滑动的时候请求」* ——
+     * 因为地图上要按 `role.pos` 摆玩家标记，没名单就没有标记。代价靠两把闸门压住：
+     * ① `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口，窗口内同一座城不重发；
+     * ② 在途复用 `refreshRoles` 的 `roles:<id>` 锁（拖到某城的同时点开它，也只发一条）。
+     *
+     * @returns `true` = 本轮至少有一座城真的拿到了名单（空列表也算），调用方据此重绘
+     */
+    refreshRolesFor(campIds: readonly number[], force = false): Promise<boolean> {
+        if (this.isDisposed) return Promise.resolve(false);
+        const window = BIGMAP_CAMP_REFRESH_SECONDS * 1000;
+        const due = Array.from(new Set(campIds.filter(isBigMapCampId)))
+            .filter((id) => force || this.now() - (this.roleUpdatedAt.get(id) ?? -Infinity) >= window);
+        if (due.length === 0) return Promise.resolve(false);
+        return Promise.all(due.map((id) => this.refreshRoles(id, force)))
+            .then((results) => results.some(Boolean));
     }
 
     /**
@@ -183,7 +216,7 @@ export class BigMapCampRepository {
         if (force) {
             const revision = ++this.revision;
             for (const id of campIds) this.appliedRevisions.set(id, revision);
-            const key = `detail:${[...new Set(campIds.filter(isBigMapCampId))].sort((a, b) => a - b).join(',')}`;
+            const key = `detail:${Array.from(new Set(campIds.filter(isBigMapCampId))).sort((a, b) => a - b).join(',')}`;
             const pending = this.pending.get(key);
             if (pending) return pending.then(() => this.refreshDetail(campIds));
         }
@@ -198,28 +231,48 @@ export class BigMapCampRepository {
         this.snapshots.clear();
         this.pending.clear();
         this.simplePendingIds.clear();
+        this.simpleTasks.clear();
+        this.followUpIds = null;
+        this.followUpQueued = false;
         this.appliedRevisions.clear();
         this.updatedAt.clear();
         this.roleSnapshots.clear();
         this.roleRevisions.clear();
+        this.roleUpdatedAt.clear();
         this.movingCampId = 0;
     }
 
     private refresh(campIds: readonly number[], isDetail: boolean, fullBatch = false): Promise<boolean> {
         if (this.isDisposed) return Promise.resolve(false);
-        const ids = [...new Set(campIds.filter(isBigMapCampId))].sort((a, b) => a - b);
+        const ids = Array.from(new Set(campIds.filter(isBigMapCampId))).sort((a, b) => a - b);
         if (ids.length === 0) return Promise.resolve(false);
         // 🔴 只发「没缓存或已过期」的城：视野集合一变（快速滑动/缩放）时，旧城不再跟着重发。
         // 否则 `campIds` 每变一次就把整批城重查一遍 —— 日志里表现为同一批 campId 反复刷屏。
-        let due = isDetail || fullBatch ? ids : ids.filter((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
+        //
+        // 整批刷新（`fullBatch` / 详情）**也要过这道新鲜度闸门**，它只决定「发的时候要不要拆包」，
+        // 不决定「要不要发」：只要这一批里没有任何过期/未查过的城，一条都不许发。
+        // 以前这里写成 `isDetail || fullBatch ? ids : 过滤`，等于整批刷新把 `updatedAt` 这张
+        // 「查过了」的标记整个绕过 ⇒ 视图只要因为裁剪边界抖动重新上报同一批可见据点
+        // （`marker.node.active` 翻一下就算「新城进视野」），就又是一条 `CmdSlgCampSimpleInfoReqMsg`。
+        const stale = ids.filter((id) => this.now() - (this.updatedAt.get(id) ?? -Infinity)
             >= BIGMAP_CAMP_REFRESH_SECONDS * 1000);
-        if (due.length === 0) return Promise.resolve(false);
+        // 简略包：整批都还新鲜 ⇒ 一条都不发（详情是玩家点出来的，不受简略缓存限制）。
+        if (!isDetail && stale.length === 0) return Promise.resolve(false);
+        let due = isDetail || fullBatch ? ids : stale;
         let key = `${isDetail ? 'detail' : 'simple'}:${due.join(',')}`;
         const pending = this.pending.get(key);
         if (pending) return pending;
         if (!isDetail) {
-            // 可见区域整批刷新不拆集合；重叠请求尚未完成时，留给下一轮重试。
-            if (fullBatch && due.some((id) => this.simplePendingIds.has(id))) return Promise.resolve(false);
+            // 可见区域整批刷新不拆集合；重叠请求尚未完成时本轮不发，但**不能就这么丢掉**：
+            // 这一轮里新进视野的城在在途那批里没有，丢掉就等于它的 `opType` 永远拿不到
+            // （而 `BigMapModel` 的名单预取和本方法同挂一个 `Promise.all`，照样发出去了 ——
+            //   日志里就是「Simple 只 3 个城，RoleInfos 却 4 条，其中两座城不在这次可见集合里」）。
+            // 兜法：登记这次被丢的可见集合，等在途落地后按**最新**集合补一轮；
+            // 补发同样过上面的新鲜度闸门，所以在途那批已经覆盖到的城不会再发一遍。
+            if (fullBatch && due.some((id) => this.simplePendingIds.has(id))) {
+                this.scheduleSimpleFollowUp(ids);
+                return Promise.resolve(false);
+            }
             due = due.filter((id) => !this.simplePendingIds.has(id));
             if (due.length === 0) return Promise.resolve(false);
             key = `simple:${due.join(',')}`;
@@ -231,7 +284,35 @@ export class BigMapCampRepository {
             if (!isDetail) for (const id of due) this.simplePendingIds.delete(id);
         });
         this.pending.set(key, request);
+        if (!isDetail) {
+            this.simpleTasks.add(request);
+            const release = (): void => { this.simpleTasks.delete(request); };
+            void request.then(release, release);
+        }
         return request;
+    }
+
+    /**
+     * 被「同批在途」丢掉的那一轮可见集合，等在途落地后按**最新**集合补发一次。
+     *
+     * 只补一次、只保留最新集合：补发时照样走上面的新鲜度闸门，在途那批已经覆盖到的城不会再发；
+     * `load` 自带 5s 硬超时，`waitSimpleIdle()` 不会永久挂住。
+     */
+    private scheduleSimpleFollowUp(ids: readonly number[]): void {
+        this.followUpIds = ids;
+        if (this.followUpQueued) return;
+        this.followUpQueued = true;
+        void this.waitSimpleIdle().then(() => {
+            this.followUpQueued = false;
+            const next = this.followUpIds;
+            this.followUpIds = null;
+            if (next == null || this.isDisposed) return;
+            void this.refresh(next, false, true);
+        });
+    }
+
+    private async waitSimpleIdle(): Promise<void> {
+        while (this.simpleTasks.size > 0) await Promise.all([...this.simpleTasks]);
     }
 
     private async loadRoles(campId: number, revision: number): Promise<boolean> {
@@ -244,6 +325,9 @@ export class BigMapCampRepository {
             if (revision < (this.roleRevisions.get(campId) ?? 0)) return false;
             this.roleSnapshots.set(campId, infos);
             this.roleRevisions.set(campId, revision);
+            // 只有真的拿到包才刷新时间戳：超时 / 坏包不该把这座城顶进「刚查过」，
+            // 否则滑动时它要再等一个窗口才有机会补上。
+            this.roleUpdatedAt.set(campId, this.now());
             return true;
         } catch {
             return false;

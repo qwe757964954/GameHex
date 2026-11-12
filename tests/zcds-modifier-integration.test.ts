@@ -20,7 +20,7 @@ test('客户端武将星级选择经真实旧表进入本局有效属性且按�
     //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar',
     ];
     const tables = Object.fromEntries(names.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables;

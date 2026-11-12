@@ -152,7 +152,7 @@ function placeCities(
 ): { sites: Map<number, IBigMapCitySite>; byHex: Map<number, number> } {
     const sites = new Map<number, IBigMapCitySite>();
     const byHex = new Map<number, number>();
-    const cities = [...config.cities.values()].sort((a, b) => a.layer - b.layer || a.cityId - b.cityId);
+    const cities = Array.from(config.cities.values()).sort((a, b) => a.layer - b.layer || a.cityId - b.cityId);
     for (const city of cities) {
         const ring = bigMapCityRing(config.world, city.layer as BigMapCityLayer);
         let anchor = pickRingAnchor(context, ring, city.slot, city.slotCount);
@@ -199,7 +199,7 @@ function placeMonsters(
 ): { sites: IBigMapMonsterSite[]; byHex: Map<number, number> } {
     const sites: IBigMapMonsterSite[] = [];
     const byHex = new Map<number, number>();
-    const monsters = [...config.monsters.values()].sort((a, b) => a.level - b.level || a.id - b.id);
+    const monsters = Array.from(config.monsters.values()).sort((a, b) => a.level - b.level || a.id - b.id);
     // 低级怪靠近出生区，高级怪向外推：迭代顺序本身已按等级升序，环带用等级做下限。
     for (const monster of monsters) {
         const anchor = pickMonsterAnchor(monster, config, context, seed, sites.length);

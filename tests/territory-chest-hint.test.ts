@@ -354,8 +354,9 @@ test('★★★唯一气泡的选择**一轮只算一次**，再透传给每一�
         body.includes('const chestHintCell = territoryChestHintCell('),
         'syncStations 没算唯一气泡格',
     );
-    assert.ok(
-        body.includes('this.stationRenderOf(site, input, chestHintCell)'),
+    assert.match(
+        body,
+        /this\.stationRenderOf\(site, input, chestHintCell[,)]/,
         'chestHintCell 没透传给 stationRenderOf ⇒ 每格都会觉得"该我挂"或"都不挂"',
     );
     const calls = body.match(/territoryChestHintCell\(/g) ?? [];

@@ -1,5 +1,5 @@
 
-import {view, macro} from 'cc';
+import { view, macro, assetManager, SpriteFrame, Rect, director } from 'cc';
 import * as env from 'cc/env';
 
 export type saveType = boolean | string | number;
@@ -225,9 +225,11 @@ export class EngineMain {
             console.error("saveLocalStorage key null")
             return
         }
-        globalThis.localStorage.setItem(key, value);
+        globalThis.localStorage.setItem(key, String(value));
     }
 
+    static readLocalStorage(key: string): string | undefined;
+    static readLocalStorage(key: string, defaultValue: saveType): saveType;
     static readLocalStorage(key: string, defaultValue?: saveType) {
         if (!key) {
             console.error("readLocalStorage key null")
@@ -291,7 +293,7 @@ export class EngineMain {
                 this.onClearCache()
             }
             if (!!((env as any).HTML5) == false) {
-                cc.assetManager.cacheManager?.clearCache()
+                assetManager.cacheManager?.clearCache()
             }
         } catch (e) {
             console.error(e)
@@ -330,8 +332,8 @@ export class EngineMain {
 
     private static fpsFrameRateKey = "fpsFrameRate3";
     static getFPSFrameRate() {
-        let fpsFrameRate = EngineMain.readLocalStorage(EngineMain.fpsFrameRateKey)
-        if (!fpsFrameRate || isNaN(fpsFrameRate)) {
+        let fpsFrameRate = Number(EngineMain.readLocalStorage(EngineMain.fpsFrameRateKey))
+        if (!fpsFrameRate || isNaN(Number(fpsFrameRate))) {
             fpsFrameRate = EngineMain.getDefFPS()
         } else {
             fpsFrameRate = Number(fpsFrameRate)
@@ -354,13 +356,14 @@ export class EngineMain {
 
     public static newGImageByTexture2D(texture2D: any, rect: any) {
         // FGUI 已剔除：构建 SpriteFrame 并直接返回，业务层用 cc.Sprite 渲染
-        let spf = new cc.SpriteFrame();
-        spf.setTexture(texture2D, new cc.Rect(rect.x, rect.y, rect.w, rect.h));
+        let spf = new SpriteFrame();
+        spf.texture = texture2D;
+        spf.rect = new Rect(rect.x, rect.y, rect.w, rect.h);
         return spf;
     }
 
     public static getTotalFrames() {
-        return (cc.game as any).frameCount;
+        return director.getTotalFrames();
     }
 
     static triggerGC() {

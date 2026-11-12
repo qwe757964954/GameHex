@@ -54,8 +54,7 @@ export function parseCmdGoodsList(raw: unknown): ICmdGoodsLike[] {
 // ============================================================
 // 网格几何（出处：FGUI 组件_获得奖励.xml 的 list size=468,330、flow_hz、
 // lineGap=12、colGap=20；奖励格本体 100×100）
-// ⚠️ 这组数字三处必须一致：本文件 / ShowRewardGrid.ts / tmp/gen_showreward.mjs
-//    （生成器读不到 ts），单测 showreward.test.ts C 段守卫。
+// 虚拟列表的列数、间距与视口在 ShowReward.prefab 配置，单测 showreward.test.ts 守卫。
 // ============================================================
 
 /** 视口宽。 */

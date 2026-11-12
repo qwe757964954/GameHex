@@ -8,7 +8,8 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { BIGMAP_TABLE, decompressBigMapRows, parseBigMapConfig } from '../assets/script/app/bigmap/model/BigMapConfig';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { createBigMapSave, serializeBigMapSave } from '../assets/script/app/bigmap/model/BigMapSaveData';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
@@ -33,7 +34,7 @@ test('据点战斗配置来自 bigMapCamp，严格保留 campId 与 campBattleId
 });
 
 function fixture(start?: (type: number, id: number, isCurrent: () => boolean) => Promise<{ ok: boolean; message: string }>,
-    campResponse: unknown = { infos: [{ campId: 101, opType: 0 }] }) {
+    campResponse: unknown = { infos: [{ campId: 101, opType: 0 }] }, clearedMonsterLevel=0) {
     const repository = new BigMapCampRepository({
         fetchSimple: async () => campResponse,
         fetchDetail: async () => campResponse,
@@ -43,7 +44,8 @@ function fixture(start?: (type: number, id: number, isCurrent: () => boolean) =>
         requestMove: async () => null,
     });
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage, saveKey: 'battle-entry',
+    if(clearedMonsterLevel>0){const save=createBigMapSave(loadBigMapConfig(),957600);storage.write('battle-entry',serializeBigMapSave({...save,battle:{...save.battle,clearedMonsterLevel}}));}
+    const presenter = new BigMapModel({ config: loadBigMapConfig(), storage, saveKey: 'battle-entry',
         adventureChapter: () => 0, now: () => 957600, campRepository: repository, startBattle: start });
     return { presenter, storage, setCampResponse(response: unknown) { campResponse = response; } };
 }
@@ -66,7 +68,7 @@ test('服务端据点开放后用 1004 + campId 开战，不走本地伤害和�
 
 test('野怪用 1003 + monsterId 开战，不传 monsterBattle 或地图实例 ID', async () => {
     const calls: number[][] = [];
-    const { presenter, storage } = fixture(async (type, id) => { calls.push([type, id]); return { ok: true, message: '' }; });
+    const { presenter, storage } = fixture(async (type, id) => { calls.push([type, id]); return { ok: true, message: '' }; },undefined,99);
     const original = storage.read('battle-entry');
     for (const site of presenter.world.monsters) {
         assert.equal(presenter.monsterView(site.instanceId)?.canAttack, true);
@@ -141,7 +143,7 @@ test('非攻城时段即使已开放也不许开战（协议不再下发「开�
         requestMove: async () => null,
     });
     // 957600 = 11 天又 02:00（UTC），+8 时区 = 10:00 本地（可打）；拨到 14:00 UTC = 22:00 本地（休战）。
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'battle-entry-night',
         adventureChapter: () => 3, now: () => 957600 + 12 * 3600, campRepository: repository,
         startBattle: async () => { calls += 1; return { ok: true, message: '' }; },

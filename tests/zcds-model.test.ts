@@ -45,7 +45,6 @@ import {
     drawPvpTile,
     getAllRandomGoldPity,
     getPvpTileConfigs,
-    getPvpTileTypeWeights,
     selectPvpTileType,
     ZCPvpTileType,
 } from '../assets/script/app/zcds/model/ZCPvpTileRules';
@@ -97,7 +96,6 @@ function readPvpTables(): ZCPvpTables {
         pvpPity: readPvpRef('pvpPity'),
         pvpTileGen: readPvpRef('pvpTileGen'),
         pvpTileGenParams: readPvpRef('pvpTileGenParams') as ZCPvpTables['pvpTileGenParams'],
-        pvpBaseTeamWeight: readPvpRef('pvpBaseTeamWeight'),
     };
 }
 
@@ -496,20 +494,26 @@ test('全类型随机连续 15 次未出金时触发金色保底并重置计数'
     assert.equal(result.nextAllRandomNonGoldDraws, 0);
 });
 
-test('全部地块类型均达上限时按数量最少均摊，而非固定回退 all-random', () => {
-    const weights = getPvpTileTypeWeights();
+test('集合内所有类型都达上限时按权重溢出，不再把低上限类型填满', () => {
+    // 2026-11-10：旧实现「挑当前数量最少的类型」会把金矿（上限低）一路硬填，
+    // 实测标准图 3 个/半场的金矿被填到 18 个。现在溢出份额与权重同比例。
+    const weights = [
+        { type: ZCPvpTileType.AllRandom, weight: 16, initialCountLimit: 0, setCountLimit: 0 },
+        { type: ZCPvpTileType.BarracksCommon, weight: 26, initialCountLimit: 0, setCountLimit: 0 },
+        { type: ZCPvpTileType.BarracksMedium, weight: 26, initialCountLimit: 0, setCountLimit: 0 },
+        { type: ZCPvpTileType.BarracksAdvanced, weight: 26, initialCountLimit: 0, setCountLimit: 0 },
+        { type: ZCPvpTileType.Mine, weight: 6, initialCountLimit: 0, setCountLimit: 0 },
+    ];
     const excluded = new Set(weights.map((entry) => entry.type));
-    const counts = new Map<ZCPvpTileType, number>([
-        [ZCPvpTileType.AllRandom, 9],
-        [ZCPvpTileType.BarracksCommon, 8],
-        [ZCPvpTileType.BarracksMedium, 9],
-        [ZCPvpTileType.BarracksAdvanced, 9],
-        // 必须是枚举值 10005，不能写字符串 'mine'：`selectPvpTileType` 按数字 key 查 Map，
-        // 键对不上等于 Mine 的计数是「没配」⇒ 反而被当成最少而选中。
-        [ZCPvpTileType.Mine, 9],
-    ]);
-    const result = selectPvpTileType(() => 0.99, weights, excluded, counts);
-    assert.equal(result, ZCPvpTileType.BarracksCommon);
+    const hits = new Map<ZCPvpTileType, number>();
+    // 均匀 1000 个采样点（确定性，不依赖 Math.random）。
+    for (let index = 0; index < 1000; index += 1) {
+        const type = selectPvpTileType(() => (index + 0.5) / 1000, weights, excluded);
+        hits.set(type, (hits.get(type) ?? 0) + 1);
+    }
+    assert.equal(hits.get(ZCPvpTileType.AllRandom), 160, '权重 16/100');
+    assert.equal(hits.get(ZCPvpTileType.BarracksCommon), 260, '权重 26/100');
+    assert.equal(hits.get(ZCPvpTileType.Mine), 60, '金矿只拿 6/100，不再被均摊成 1/5');
 });
 
 test('全类型随机抽空会扣费、消耗地块并累计保底', () => {
@@ -1027,8 +1031,16 @@ test('remoteRef 与转表产物逐格一致：运行时读 remoteRef、用例读
     //  只在 `remoteRef` 里调过（1.35→1.5 / 1→0.85），`json/client` 与 `PVP-卡牌.xlsx` 还是旧值
     //  ⇒ 运行时是新体型、导表产物是旧体型，下次谁一导表就把调整**悄悄抹回去**。
     //  `pvpSkillPlan` 一并纳入（2026-11-06 小鹿两段式就改的这张表），它的行键是 `modifierId`。
-    for (const name of ['pvpCard', 'pvpSkill', 'pvpSkillPlan']) {
-        const rowKey = (row: Record<string, unknown>) => String(row.id ?? row.skillId ?? row.modifierId);
+    //  `pvpUnitGrowth` 2026-11-10 纳入：摘掉星级表后，老卡丢的那截固定攻击全靠这张表的
+    //  `attackFlat` 补（按品质 45/55/65/75）。它行键是 `unitId:level` —— 单看 unitId 会
+    //  把同一张卡的 25 个等级压成一行，漏改等级根本发现不了。
+    //  `pvpTile` 2026-11-10 纳入：`weight / initialCountLimit / setCountLimit` 从「基础阵容
+    //  权重随机表」并进本表，两处产物都靠手写，必须互校（行键 `id`）。
+    const allDrift: string[] = [];
+    for (const name of ['pvpCard', 'pvpSkill', 'pvpSkillPlan', 'pvpUnitGrowth', 'pvpTile']) {
+        const rowKey = (row: Record<string, unknown>) => (name === 'pvpUnitGrowth'
+            ? `${row.unitId}:${row.level}`
+            : String(row.id ?? row.skillId ?? row.modifierId));
         const remote = new Map(readPvpRows(name).map((row) => [rowKey(row), row]));
         const source = new Map(readPvpRef(name).map((row) => [rowKey(row), row]));
         assert.deepEqual(Array.from(remote.keys()).sort(), Array.from(source.keys()).sort(),
@@ -1045,9 +1057,11 @@ test('remoteRef 与转表产物逐格一致：运行时读 remoteRef、用例读
                 }
             }
         }
-        assert.equal(drift.length, 0,
-            `${name} 的 remoteRef 与转表产物不一致（运行时用的是 remoteRef）：${drift.slice(0, 6).join(' | ')}`);
+        // 一张表有漂移不能挡住后面几张的检查：先累积，最后一次性断言。
+        allDrift.push(...drift.map((item) => `${name}.${item}`));
     }
+    assert.equal(allDrift.length, 0,
+        `remoteRef 与转表产物不一致（运行时用的是 remoteRef）：${allDrift.slice(0, 6).join(' | ')}`);
 });
 
 /**
@@ -2066,7 +2080,12 @@ test('击杀敌方单位与摧毁敌方建筑都给击杀方加金币，并飘�
     mirrorSnapshot.units = [enemyUnit];
     mirrorSnapshot.nextUnitId = 2;
     mirrorSnapshot.enemyGold = 1000;
-    const mirrorGame = new ZCGameModel(mirrorSnapshot, () => 0.1);
+    //  🔴 NPC 的 `openGrideTime` 计时**从第一次翻格之后**才起算（2026-11-11 口径），所以开局那一拍就会
+    //  翻走第一格、当场花掉建设费。这里的断言是「金币只增不减」，会被这笔支出打穿
+    //  （实测 1000 → 975，摧毁奖励只有 1）。⇒ 把翻格间隔顶到 999 秒，让这一小段只剩摧毁奖励一条流水。
+    //  这是适配新口径，不是把行为改回去。
+    const noAiConfig = { ...captureZCMatchConfig(), openGrideTime: 999 };
+    const mirrorGame = new ZCGameModel(mirrorSnapshot, () => 0.1, noAiConfig);
     for (let step = 0; step < 100 && mirrorGame.snapshot.hexes[sourceId].state !== 'ruins'; step++) {
         mirrorGame.tick(ZC_SIMULATION_STEP_SECONDS);
     }

@@ -1,7 +1,6 @@
 import type { ZCSnapshot, ZCHexState } from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import type { ZCOwner } from '../ZCMapConfig';
-import { ZCNeutralFeatureSystem } from './ZCNeutralFeatureSystem';
 
 /** 地块状态与城墙暴露规则。 */
 export class ZCTileSystem {
@@ -44,7 +43,7 @@ export class ZCTileSystem {
         if (hex.neutralResourceId) return false;
         // 废墟是建筑被摧毁后的永久状态，不可重建。
         if (hex.state === 'ruins' || hex.developmentResolved || hex.building !== 'none') return false;
-        if (hex.owner === owner) return hex.state === 'developable' || ZCNeutralFeatureSystem.canBuild(state, hexId, owner);
+        if (hex.owner === owner) return hex.state === 'developable';
         if (hex.owner !== 'neutral' || hex.state !== 'developable') return false;
         return this.hasAdjacentDeveloped(state, map, hexId, owner);
     }

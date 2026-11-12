@@ -1,5 +1,6 @@
-import type { ZCGamePreparedResources } from './ZCGameLoader';
+import type { IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
+import type { ZCPvpRarityModifier } from '../model/ZCPvpTileRules';
 import type { IRankSeatProfile } from '../model/ZCRankBoard';
 import type { ZCOwner } from '../model/ZCMapConfig';
 import type { ZCBattleController } from './ZCBattleController';
@@ -16,7 +17,7 @@ export interface IZCGamePveContext {
 
 /** 单局启动所需数据；由 ZCBattleEntryBuilder 组装，再交给 ZCGame 实例消费。 */
 export interface IZCGameEntry {
-    readonly resources: ZCGamePreparedResources;
+    readonly resources: IZCGamePreparedResources;
     readonly battleSeed: string | null;
     readonly matchConfig: ZCMatchConfig;
     readonly playerAvatars: Readonly<{ player: string; enemy: string }> | null;
@@ -34,6 +35,16 @@ export interface IZCGameEntry {
     readonly seatUnitIds?: readonly (readonly [ZCOwner, number])[];
     readonly pveContext: IZCGamePveContext | null;
     readonly slgBattleType?: IZCSlgBattleType | null;
+    /**
+     * 本局的**实际 battleType**（`CmdStartBattleReqMsg.battleType` 那一份），结算等广播用。
+     *
+     * 由 `buildZCBattleEntry` 从入口参数收敛：`params.battleType` → `params.slgBattleType` → `null`。
+     * 领地 PVE 不在这里补 1002（那是**推导**不是入口声明），运行时仍按 `pveContext` 兜底。
+     *
+     * ⚠️ 漏传的症状是**静默**的：结算不调 `waitResult` ⇒ `result = null` ⇒ 结算页奖励区全空，
+     * 且日志里一条错都没有（宝箱栏「开始战斗」曾经就是这样丢奖励的）。
+     */
+    readonly battleType?: number | null;
 }
 
 /** 对局入口模式：PVP 匹配 或 领地守城 PVE。 */
@@ -45,6 +56,13 @@ export type ZCGameEntryMode = (typeof ZCGameEntryMode)[keyof typeof ZCGameEntryM
 
 export interface ZCGameEntryParams {
     slgBattleType?: IZCSlgBattleType;
+    /**
+     * 本局的协议 battleType（1001 PVP / 1002 章节 / 1003 野怪 / 1004 据点）。
+     *
+     * 匹配入口（`IMatchingEntryParams.battleType`）必须原样透传：结算要按它等
+     * `CmdBattleResultBroMsg`，丢一个字段就是「打得完、结算没奖励」。
+     */
+    battleType?: number;
     opponent?: MatchPlayerData;
     /** 领地/冒险绕过 PVP 匹配，携带关卡数据直接进入本地 PVE。 */
     pve?: {
@@ -71,6 +89,13 @@ export interface ZCGameEntryParams {
          * 缺省 / 0 ⇒ 只受全局 `enemyAiIntervalSeconds` 约束（旧行为）。
          */
         openGrideTime?: number;
+        /**
+         * `levelInfo.gradeProModifier`：**NPC 席位**翻地块抽卡的品质权重乘数
+         * （`{ green: 2, blue: 3 }`）。缺省 / 空 ⇒ 抽卡仍走 `pvpTile.rarityWeights` 原表。
+         *
+         * 玩家席位不受它影响；金色保底也不受它影响。
+         */
+        gradeProModifier?: ZCPvpRarityModifier;
         /** 塔防关卡的确定性出怪表；空数组表示该关卡尚无可用波次，回退普通守军 AI。 */
         waves: ReadonlyArray<{
             waveId: number;
@@ -81,6 +106,8 @@ export interface ZCGameEntryParams {
             attackRate: number;
             /** BOSS 波（`defenceModWave.monsterType=3`，即每组最后一波）。 */
             isBoss?: boolean;
+            /** 怪物体型（`defenceModWave.monsterSize`）：1 普通 / 2 BOSS，出怪时当模型缩放倍率。 */
+            monsterSize?: number;
         }>;
     };
     /**

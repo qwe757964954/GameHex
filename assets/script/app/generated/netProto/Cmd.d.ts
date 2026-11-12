@@ -5615,6 +5615,12 @@
 
     
 
+    declare class CmdPvpHeroInfoBroMsg {
+        info: CmdPvpHeroInfo;
+    }
+
+    
+
     declare class CmdPvpArtifactInfoListReqMsg {
     }
 
@@ -5784,6 +5790,32 @@
 
     
 
+    declare class CmdPvpMapInfo {
+        id: string;
+        name: string;
+        version: number;
+        resourcePoints?: (CmdPvpResourcePointInfo[]|null);
+        unitHomeIndexes?: (CmdPvpUnitHomeIndex[]|null);
+    }
+
+    
+
+    declare class CmdPvpUnitHomeIndex {
+        unitId: number;
+        homeIndex: number;
+    }
+
+    
+
+    declare class CmdPvpResourcePointInfo {
+        row: number;
+        column: number;
+        groupId: number;
+        resourceId: number;
+    }
+
+    
+
     declare class CmdStartBattleReqMsg {
         startBattleInfo: CmdStartBattleInfo;
         version?: (string|null);
@@ -5798,6 +5830,7 @@
         battleId: string;
         startBattleInfo: CmdStartBattleInfo;
         unitInfos?: (CmdBattleUnitInfo[]|null);
+        mapInfo?: (CmdPvpMapInfo|null);
     }
 
     
@@ -5858,6 +5891,7 @@
     declare class CmdCityChapterSweepReqMsg {
         levelChapter: number;
         cellId: number;
+        times?: (number|null);
     }
 
     
@@ -6501,6 +6535,7 @@
         CmdRollBroMsg = 11546745,
         CmdMonsterManualActiveBroMsg = 1339999214,
         CmdNewTreasureInfoBroMsg = 779511813,
+        CmdPvpHeroInfoBroMsg = 1032394394,
         CmdBattleResultBroMsg = 921618703,
         CmdCelebrationUpdateDataBroMsg = 1157544859,
         CmdCelebrationBuyShopGoodsBroMsg = 1919419092,
@@ -7420,6 +7455,7 @@ declare type MessageProtoName =
 | "CmdPvpHeroUpLevelRspMsg"
 | "CmdPvpHeroUpSkillReqMsg"
 | "CmdPvpHeroUpSkillRspMsg"
+| "CmdPvpHeroInfoBroMsg"
 | "CmdPvpArtifactInfoListReqMsg"
 | "CmdPvpArtifactInfoListRspMsg"
 | "CmdPvpArtifactUpLevelReqMsg"
@@ -7443,6 +7479,9 @@ declare type MessageProtoName =
 | "CmdSlgMonsterBattleResultInfo"
 | "CmdSlgCampBattleResultInfo"
 | "CmdBattleFrameInfo"
+| "CmdPvpMapInfo"
+| "CmdPvpUnitHomeIndex"
+| "CmdPvpResourcePointInfo"
 | "CmdStartBattleReqMsg"
 | "CmdStartBattleRspMsg"
 | "CmdFinishBattleReqMsg"

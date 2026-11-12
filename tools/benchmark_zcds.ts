@@ -12,7 +12,7 @@ import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCGameRenderFrame } from '../assets/script/app/zcds/model/ZCGameRenderFrame';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
-const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight'];
+const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams'];
 loadPvpTables(Object.fromEntries(names.map(name => {
     const table = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
     return [name, Array.isArray(table) ? table : table.v.map((row: unknown[]) => Object.fromEntries(table.k.map((key: string, index: number) => [key, row[index]])))];

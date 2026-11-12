@@ -242,7 +242,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 ## 6. 测试护栏与交付验证标准
 
 1. **三层验证体系**：
-   - **纯函数与模型单测（首选、极速）**：曲线计算（`ZCGameViewUtil`）、布局换算（`TerritoryMapLayout`）、状态编排（`TerritoryPresenter`）直接用 `npx tsx --test tests/<name>.test.ts` 验证。测试必须直接 `import` 源码真实函数与常量，**严禁在测试桩里复制算式或写死易过期的中间浮点数**。
+   - **纯函数与模型单测（首选、极速）**：曲线计算（`ZCGameViewUtil`）、布局换算（`TerritoryMapLayout`）、状态编排（`TerritoryModel`）直接用 `npx tsx --test tests/<name>.test.ts` 验证。测试必须直接 `import` 源码真实函数与常量，**严禁在测试桩里复制算式或写死易过期的中间浮点数**。
    - **Prefab 与源码结构守卫单测**：通过读取 `.prefab` / `.meta` JSON 与剥离注释后的源码正则，断言图层顺序、组件属性（`_enableBatch`、`_isTrimmedMode`）、单属性唯一写入口与接线链完整性。
    - **真引擎端到端探针（`tmp/_*_probe.mjs`）**：涉及复杂节点树装配、动态合批或真实资源加载时，使用探针脚本在引擎环境实测。
 2. **交付报告要求**：任务完成时必须明确汇报：**修改了哪些文件、关键架构边界、实际运行的验证命令与通过条数、尚未覆盖的风险**。严禁未跑测试就声称“应该能运行”。
@@ -301,7 +301,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 - `ControllerBase` 从组合入口交付的必需 `GameContext` 统一取得资源、配置与会话服务，创建控制器 ResourceScope；页面只接收 `IControllerResources` 展示资源契约，不再单独注入可空 AssetService。资源加载默认归控制器，显式战斗 scope 原样传递，Controller dispose 时统一释放。
 - `BigMapEntry` 是组合入口，从既有 ProcedureManager 取得已配置 GameContext，创建 Model、Controller、仓库与 View，并在关闭时释放 Controller。
 - `BigMapController` 统一绑定网络广播、仓库/Model 变更和界面操作意图，管理操作锁、进入战斗状态与据点视野批量调度。
-- `BigMapModel` 保留状态和业务规则；仓库仅负责请求及快照，网关不自行监听广播。原 `BigMapPresenter` 路径仅兼容导出同一份 Model。
+- `BigMapModel` 保留状态和业务规则；仓库仅负责请求及快照，网关不自行监听广播。原 `BigMapPresenter` 兼容导出已于 2026-11 删除，一律 import `BigMapModel`。
 - `BigMapPage`、`BigMapWorldView`、`BigMapBaseView` 只消费 `IBigMapViewState`；用户操作经 `BigMapUiEvent.Intent` 派发，由 Controller 处理后发送 `BigMapViewEvent.Render/Command`。
 - 地图页面为单实例，界面事件只携带操作与展示数据；场景直接销毁页面时发送 `Disposed`，Controller 幂等停止时钟、解除全部监听、释放仓库和网络请求，迟到结果不得再通知界面。
 
@@ -310,7 +310,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 
 - `TerritoryEntry` 为每个页面装配 Model、Controller、章节加载器、Repository 与存档适配器；章节加载器与页面美术共用 ControllerBase 管理的 ResourceScope。
 - `TerritoryController` 集中绑定格子推送、角色缓存与界面意图，管理 1 秒 / 60 秒时钟；网络请求 caller 为 Controller，销毁时统一 removeCaller。
-- `TerritoryModel` 复用原 Presenter 的章节上下文、业务规则、加载期推送合并与交互版本校验；只通过实例 onOutput 通知 Controller，不广播全局界面事件。`TerritoryPresenter` 仅保留兼容重导出。
+- `TerritoryModel` 复用原 Presenter 的章节上下文、业务规则、加载期推送合并与交互版本校验；只通过实例 onOutput 通知 Controller，不广播全局界面事件。`TerritoryPresenter` 兼容重导出已删除（2026-11），一律 import `TerritoryModel`。
 - `MainTerritoryMap` 只消费 `TerritoryViewEvent.Render/Command`，地图与三个关卡弹窗通过 `TerritoryUiEvent.Intent` 派发操作，页面关闭时由 Controller 统一解除事件、网络和缓存订阅。格子命中在地图内部先做输入锁判定，再转发意图。
 - `TerritoryViewState` 为进度提供独立只读投影；未知服务端状态也须保留本地解锁格，不允许通过渲染快照修改 Model。
 - 页面销毁先通知 Disposed，再幂等释放 Entry；Controller 作废 Model 的在途任务、配对释放 busy 提示、停止时钟与订阅。页面退出时关闭全局关卡弹窗；异步补图保留节点有效性、内容与任务版本校验。

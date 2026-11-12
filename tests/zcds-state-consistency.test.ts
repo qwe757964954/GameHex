@@ -16,7 +16,7 @@ import { assetPath } from './helpers/asset-paths';
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ];
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));

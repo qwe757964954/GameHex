@@ -15,3 +15,11 @@ export const ZCDC_LOG_WARNINGS = true;
  * 用的还是同一个 `[导弹诊断]` 前缀，控制台过滤这 6 个字即可。
  */
 export const ZCDC_LOG_MISSILE = true;
+
+/**
+ * 技能释放链路专项诊断（`[技能诊断]` 前缀，2026-11-10）。
+ *
+ * 只打 `ZCSkillCastDiagnostics.ZC_SKILL_CAST_WATCH_UNITS` 里的卡，所以即使开着也不会刷屏。
+ * 排查完把关注名单清空，或把这里改回 `false`。
+ */
+export const ZCDC_LOG_SKILL_CAST = true;

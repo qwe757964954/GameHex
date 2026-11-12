@@ -3,10 +3,12 @@ import { ZC_ATTACK_TRAITS } from './ZCCombatCatalog';
 
 /** 战斗外壳路径唯一声明；预热只取公共子集，不构筑任何对局状态。 */
 export const ZC_BATTLE_SHELL_PATHS = {
+    // 棋盘图层顺序由 prefab 子节点声明。
     hud: 'ui/game/ZCGameHUD', board: 'ui/game/ZCGameBoard', hex: 'ui/game/ZCGameHex',
     unit: 'ui/game/ZCGameUnit', effect: 'ui/game/ZCGameEffect', wall: 'ui/game/ZCGameWall',
     wallLayer: 'ui/game/ZCGameWallLayer', floatText: 'ui/game/ZCGameFloatText',
     cardReveal: 'ui/game/ZCGameCardReveal', legendBanner: 'ui/game/ZCGameLegendBanner',
+    // 装饰 Sprite 的 CUSTOM 尺寸和不裁边配置由 prefab 声明。
     decor: 'ui/game/ZCGameDecor', spawnSelection: 'ui/game/ZCSpawnSelection', bossPanel: 'ui/game/ZCBossPanel',
 } as const;
 
@@ -71,11 +73,11 @@ export function buildZCBattleWarmupPaths(
     for (const fx of zcMissileFxPaths()) {
         paths.add(fx);
     }
-    return [...paths];
+    return Array.from(paths);
 }
 
 
 /** 单通道静默解析只覆盖公共外壳与单位模型，弹道仍按本局阵容取用。 */
 export function buildZCBattleParsePaths(cards: readonly unknown[]): readonly string[] {
-    return buildZCBattleWarmupPaths(cards, [], []);
+    return buildZCBattleWarmupPaths(cards, [], []).filter(path => !path.startsWith('units/projectiles/'));
 }

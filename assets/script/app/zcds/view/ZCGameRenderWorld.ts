@@ -1,6 +1,6 @@
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
-import type { IZCDeferredBattleArt } from '../application/ZCGameLoader';
+import type { IZCDeferredBattleArt } from '../application/ZCGamePreparedResources';
 import { EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
 import { findCatalogCard, resolveUnitDefinition, ZCUnitId } from '../model/ZCCombatCatalog';
@@ -13,7 +13,6 @@ import { ZCCombatEffectView } from './ZCCombatEffectView';
 import {
     zcCombatEffectAnchorOf,
     zcCombatEffectAnchorPoint,
-    zcCombatEffectLayerOf,
     zcCombatEffectLayerOfPath,
     zcCombatEffectSiblingIndex,
 } from './ZCCombatEffectPlacement';
@@ -47,6 +46,8 @@ import {
     buildTerritoryBoundaryMasks,
     mapToViewX,
     mapToViewY,
+    portalFlightProgress,
+    portalFlightLift,
     spawnBaseConfirmPoint,
     territoryTintOwner,
     zcNeutralHintAlpha,
@@ -246,7 +247,7 @@ interface ZCRenderWorldOptions {
      * 本局携带神器的图标帧（`image/artifact/<pvpArtifact[].icon>`）。
      *
      *  中立资源点「神器充能」格显示它（而不是中文字）。缺失时那一格退回文字兜底。
-     *  由 `ZCGameLoader` 预加载、随 `ZCGamePreparedResources` 一路传进来。
+     *  由 `ZCGameLoader` 预加载、随 `IZCGamePreparedResources` 一路传进来。
      */
     artifactIconFrame?: SpriteFrame | null;
     /**
@@ -454,6 +455,8 @@ export class ZCGameRenderWorld {
     private readonly pool = new ZCNodePool<Node>();
     private readonly pooledEntityKeys = new Map<number, string>();
     private readonly unitIds = new Set<number>();
+    /** 本帧「悬空施法」单位 → 屏上抬升高度（源：地面区域的 `casterLiftPx`）。每帧重建。 */
+    private readonly castLiftByUnit = new Map<number, number>();
     private readonly effectIds = new Set<number>();
     private readonly effectStates: Array<Readonly<ZCCombatEvent> | Readonly<ZCProjectileState>> = [];
     private readonly floatIds = new Set<number>();
@@ -1016,6 +1019,46 @@ export class ZCGameRenderWorld {
         this.renderTerritoryClaimWave(frame);
         this.renderNeutralHint(frame);
         this.renderNeutralRewards(frame);
+        this.renderNeutralFeatures(frame);
+    }
+
+    private renderNeutralFeatures(frame: ZCGameRenderFrame): void {
+        if (frame.mapConfig.cityMode === 'select') return;
+        const now = this.visualTime(frame);
+        for (const hex of frame.snapshot.hexes) {
+            const feature = hex.neutralFeature;
+            if (!feature?.claimed) continue;
+            const entity = this.hexEntityBySource.get(hex.id);
+            const view = this.hexViews.get(entity);
+            if (!view) continue;
+            if (feature.startedAt !== undefined && feature.lineHexIds) {
+                const line = feature.lineHexIds;
+                const progress = Math.min(line.length, view.mowerProgress(feature.startedAt, now));
+                if (!line.length) {
+                    view.renderMower(0, 0, false);
+                    continue;
+                }
+                const index = Math.min(line.length - 1, Math.floor(progress));
+                const from = this.scene.get(this.hexEntityBySource.get(line[index]))?.node;
+                const to = this.scene.get(this.hexEntityBySource.get(line[Math.min(line.length - 1, index + 1)]))?.node;
+                if (from && to) {
+                    const ratio = progress - index;
+                    view.renderMower(from.position.x + (to.position.x - from.position.x) * ratio - view.node.position.x,
+                        from.position.y + (to.position.y - from.position.y) * ratio - view.node.position.y, progress < line.length);
+                }
+            }
+            if (feature.portalAt !== undefined && now >= feature.portalAt
+                && portalFlightProgress(feature.portalAt, now) < 1) {
+                const portalFrame = this.options.neutralResourceFrames?.get('portal');
+                const entrance = frame.mapConfig.hexes[hex.id];
+                const exit = frame.mapConfig.hexes[feature.portalExitId];
+                if (portalFrame && exit) {
+                    this.effectPool.playPortalFx(hex.id, mapToViewX(entrance.x), mapToViewY(entrance.y), feature.portalAt, portalFrame);
+                    this.effectPool.playPortalFx(exit.id, mapToViewX(exit.x), mapToViewY(exit.y), feature.portalAt, portalFrame);
+                }
+            }
+        }
+        this.effectPool.recyclePortalFx(now);
     }
 
     /**
@@ -1293,9 +1336,7 @@ export class ZCGameRenderWorld {
             let entityId = this.cardRevealEntityBySource.get(reveal.id);
             if (!entityId) {
                 const node = this.pool.acquire('cardReveal', () => instantiate(cardRevealPrefab));
-                node.setParent(this.options.mapLayer);
-                node.setSiblingIndex(this.options.mapLayer.children.length - 1);
-                node.layer = this.options.mapLayer.layer;
+                this.attachToMapLayer(node);
                 // 位置由 ZCCardRevealView.render 每帧写（根节点承担世界定位），
                 // 这里只清掉实例化可能带进来的坐标 / 缩放残留。
                 node.setPosition(Vec3.ZERO);
@@ -1515,9 +1556,7 @@ export class ZCGameRenderWorld {
             let entityId = this.floatTextEntityBySource.get(text.id);
             if (!entityId) {
                 const node = this.pool.acquire('float', () => instantiate(floatTextPrefab));
-                node.setParent(this.options.mapLayer);
-                node.setSiblingIndex(this.options.mapLayer.children.length - 1);
-                node.layer = this.options.mapLayer.layer;
+                this.attachToMapLayer(node);
                 // 位置由 ZCFloatTextView.render 每帧写（根节点承担世界定位），
                 // 这里只清掉实例化可能带进来的坐标 / 缩放残留。
                 node.setPosition(Vec3.ZERO);
@@ -1915,6 +1954,17 @@ export class ZCGameRenderWorld {
         this.effectPool.recycleDeathFx(now);
         const activeIds = this.unitIds;
         activeIds.clear();
+        //  本帧「悬空施法」的单位（`self_aura` 区域上的 `casterLiftPx`，2026-11-11 麻辣铁锅 102603
+        //  「角色上移 30px」）。每帧重建：区域到期 ⇒ 下一帧就落回地面，不需要任何收尾逻辑。
+        //  同一单位可能有多片区域（理论上），取最大值，不做累加 —— 累加会让叠两层时角色飞出画面。
+        const liftByUnit = this.castLiftByUnit;
+        liftByUnit.clear();
+        for (const zone of frame.snapshot.groundZones ?? []) {
+            const lift = zone.casterLiftPx ?? 0;
+            if (!(lift > 0)) continue;
+            const previous = liftByUnit.get(zone.sourceUnitId) ?? 0;
+            if (lift > previous) liftByUnit.set(zone.sourceUnitId, lift);
+        }
         for (const unit of frame.snapshot.units) activeIds.add(unit.id);
         for (const [sourceId, entityId] of this.unitEntityBySource) {
             if (activeIds.has(sourceId)) continue;
@@ -1939,9 +1989,7 @@ export class ZCGameRenderWorld {
             if (!this.options.unitPrefab) return;
             const key = `unit:${unit.unitId}`;
             const node = this.pool.acquire(key, () => instantiate(this.options.unitPrefab));
-            node.setParent(this.options.mapLayer);
-            node.setSiblingIndex(this.options.mapLayer.children.length - 1);
-            node.layer = this.options.mapLayer.layer;
+            this.attachToMapLayer(node);
             node.setScale(Vec3.ONE);
             node.name = `Unit_${unit.id}`;
             // 同上：视图组件在 ZCGameUnit.prefab 上。
@@ -1968,6 +2016,16 @@ export class ZCGameRenderWorld {
         presentation.x = mapToViewX(x);
         presentation.y = mapToViewY(y);
         presentation.now = this.visualTime(frame);
+        //  每帧都要显式写：`presentation` 是复用的同一个对象，漏写会把上一个单位的
+        //  悬空高度带到这个单位身上（表现为随机某个兵凭空浮起来）。
+        presentation.castLiftPx = this.castLiftByUnit.get(unit.id) ?? 0;
+        const flight = unit.portalFlight;
+        if (flight && unit.battleState !== 'dead' && portalFlightProgress(flight.startedAt, presentation.now) < 1) {
+            const progress = portalFlightProgress(flight.startedAt, presentation.now);
+            const from = frame.mapConfig.hexes[flight.fromHexId];
+            presentation.x = mapToViewX(from.x + (unit.freeX - from.x) * progress);
+            presentation.y = mapToViewY(from.y + (unit.freeY - from.y) * progress) + portalFlightLift(progress);
+        }
         this.unitViews.get(entityId)?.render(presentation);
         // 出生光柱挂到**单位节点**下（不是 mapLayer 的兄弟），这样它自动跟着插值后的位置走。
         if (isBirth) {
@@ -1980,8 +2038,9 @@ export class ZCGameRenderWorld {
             // 判据用「出生单位的 `sourceHexId` 这一格的建筑是不是**兵营**」，不用「有没有冷却环」——
             // 主城 / 金矿也有环（收入 / 产出），而这条路要的是**产兵**建筑抖；
             // 主城 / 金矿的抖动走的是产金那条表现事件，两者别混。
-            if (frame.hexesById.get(unit.sourceHexId)?.state.building === 'barracks') {
-                this.triggerBuildingShake(unit.sourceHexId, presentation.now);
+            const barracksHexId = unit.portalFlight?.barracksHexId ?? unit.sourceHexId;
+            if (frame.hexesById.get(barracksHexId)?.state.building === 'barracks') {
+                this.triggerBuildingShake(barracksHexId, presentation.now);
             }
         }
         // 阵亡特效：**判死那一帧**播，坐标取 `presentation.x/y`（视图坐标，已含插值）。
@@ -2011,6 +2070,8 @@ export class ZCGameRenderWorld {
     private injectResourceUnits(view: ZCHexView, hexId: number): void {
         const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
         view.setGateCooldownSeconds(item?.feature?.cooldownSeconds ?? 0);
+        view.setPortalUses(item?.feature?.uses ?? 0);
+        view.setMowerSpeed(item?.feature?.speed ?? 0);
         const monster = item?.visual === ZCNeutralResourceVisual.Monster;
         const cardId = monster ? item.feature.resId
             : item && item.visual === ZCNeutralResourceVisual.UnitCap ? item.cardId : null;
@@ -2045,6 +2106,19 @@ export class ZCGameRenderWorld {
         legacy.x = source.x + (target.x - source.x) * unit.progress;
         legacy.y = source.y + (target.y - source.y) * unit.progress;
         return legacy;
+    }
+
+    /**
+     * 动态对象挂到 `mapLayer` 的**末尾**（新建即置顶）并继承其 layer。
+     *
+     * 三处调用点（卡牌揭示 / 飘字 / 单位）都是「池里取出来 → 挂到棋盘层」的同一步，
+     * 顺序固定：先 `setParent`（此时 `children.length` 才包含本节点）→ 置顶 → 同步 layer。
+     * 地面特效不走这里（要插到棋盘之后，见 `zcCombatEffectSiblingIndex`）。
+     */
+    private attachToMapLayer(node: Node): void {
+        node.setParent(this.options.mapLayer);
+        node.setSiblingIndex(this.options.mapLayer.children.length - 1);
+        node.layer = this.options.mapLayer.layer;
     }
 
     private renderEffectSystem(frame: ZCGameRenderFrame): void {

@@ -127,6 +127,31 @@ const buildingNames = readdirSync(BUILDING_DIR)
     .map((file) => file.slice(0, -4))
     .sort();
 
+/**
+ * 锁标层的落位（2026-11-10 用户：「锁的 UI 层级要在宝箱气泡 UI 的下层」）。
+ *
+ * 现状：`HexLockLayer` 插在 `StationBadgeLayer` **之前** ⇒ 气泡（宝箱「体力 icon + 数量」/
+ * 关卡编号）压在锁上，而锁仍压在 `StationCaptionLayer` / `StationTextLayer`（银币底条 + 数字）之上
+ * —— 后者是 §3.31 那 1s 过渡"锁挡住还没长好的价格"的前提，别顺手一起挪下去。
+ */
+test('★★★锁标层插在气泡层之前（气泡压住锁），且仍在价格层之上', () => {
+    const at = MAP_VIEW_SRC.indexOf('private ensureHexLockLayer(');
+    assert.ok(at > 0, 'TerritoryMapView 要有 ensureHexLockLayer');
+    const body = MAP_VIEW_SRC.slice(at, MAP_VIEW_SRC.indexOf('\n    private ', at + 10));
+    assert.match(body, /this\.stationBadgeLayer \?\? this\.stationHitLayer/,
+        '插入锚点必须是气泡层（缺省退回命中层），不能再直接钉在命中层上');
+    assert.match(body, /layer\.setSiblingIndex\(above\.getSiblingIndex\(\)\)/,
+        '锁层要落在气泡层当前下标处 = 气泡之下');
+    assert.doesNotMatch(body, /const hit = this\.stationHitLayer/,
+        '回到"插在命中层之前"就是又把锁压到气泡上了');
+
+    // 反向：价格层 / 文字层必须仍在锁层之下（锁要挡住还没长好的价格）。
+    const captionAt = MAP_VIEW_SRC.indexOf('private ensureGhostLayer(');
+    const ghost = MAP_VIEW_SRC.slice(captionAt, MAP_VIEW_SRC.indexOf('\n    private ', captionAt + 10));
+    assert.match(ghost, /this\.stationCaptionLayer \?\? this\.stationBadgeLayer/,
+        '虚影层锚点仍是价格层 —— 别为了"都在锁下面"顺手改它');
+});
+
 // ============================================================
 // 第一层：落点 —— 建筑必须贴在可见台面中心，不是节点锚点
 // ============================================================
@@ -159,13 +184,39 @@ test('★★格子节点本身的位置不许跟着偏移（那是蜂窝几何�
 });
 
 test('★★落点必须覆盖起始格与全部站点类型（不能只改一处）', () => {
-    // 起始格（主城）与普通站点各有一处 setMapPosition 调用，漏一处就有格子没对齐。
+    // 起始格（主城）、普通站点、随机格各有一处 setMapPosition 调用，漏一处就有格子没对齐。
+    // 🔴 2026-11-09 起是**四处**：多出来的是「虚影」（提前披露的关卡建筑）——
+    //    它必须跟实心建筑同源取格心（`cellCenter`），否则虚影 ↔ 实心切换时建筑会跳半格。
     const calls = MAP_VIEW_SRC.match(/setMapPosition\(/g) ?? [];
-    assert.ok(calls.length >= 3,
-        `syncStations 里应有起始格 + 站点 + 随机格三处 setMapPosition，实际 ${calls.length} 处`);
-    // 三处都吃 cellCenter 的返回值。
-    assert.equal((MAP_VIEW_SRC.match(/this\.cellCenter\(/g) ?? []).length, 3,
-        'cellCenter 必须被起始格 / 站点 / 随机格三处各调一次');
+    assert.ok(calls.length >= 4,
+        `syncStations / syncGhosts 里应有起始格 + 站点 + 随机格 + 虚影四处 setMapPosition，实际 ${calls.length} 处`);
+    // 四处都吃 cellCenter 的返回值。
+    assert.equal((MAP_VIEW_SRC.match(/this\.cellCenter\(/g) ?? []).length, 4,
+        'cellCenter 必须被起始格 / 站点 / 随机格 / 虚影四处各调一次');
+});
+
+/**
+ * 层序「**气泡 > 锁 > 价格 > 虚影 > 建筑**」（2026-11-09 定 + 2026-11-10 修）。
+ *
+ * `MapLayer` 的子节点顺序就是渲染序，所以虚影层必须插在 `StationCaptionLayer`（银币价格）
+ * **之前** —— 做法同 `HexLockLayer`：新节点 append 在末尾，再 `setSiblingIndex(上层下标)`
+ * 挤到它前面。
+ *
+ * 🔴 第一版插的是 `StationBadgeLayer`（= 压住价格），用户看了实机后改口径：
+ *    「银币 icon + 数字 UI 的层级也是高于建筑的」—— 数字被 35% 的虚影染成一块就读不出价格。
+ * 🔴 2026-11-10 用户：「锁的 UI 层级要在宝箱气泡 UI 的**下层**」—— 锁层锚点从 `StationHitLayer`
+ *    改成 `StationBadgeLayer`，于是气泡永远压得住锁，而锁仍压住银币底条与数字。
+ */
+test('★★★虚影层必须插在价格层之前（= 压住建筑、被银币价格压住）', () => {
+    const at = MAP_VIEW_SRC.indexOf('private ensureGhostLayer(');
+    assert.ok(at > 0, 'TerritoryMapView 要有 ensureGhostLayer');
+    const body = MAP_VIEW_SRC.slice(at, MAP_VIEW_SRC.indexOf('\n    private ', at + 10));
+    assert.match(body, /this\.stationCaptionLayer \?\? this\.stationBadgeLayer/,
+        '插入锚点必须是价格层（缺省退回角标层），不能再用角标层');
+    assert.match(body, /setSiblingIndex\(above\.getSiblingIndex\(\)\)/,
+        '虚影层要插在价格层当前下标处：建筑在下（被压住）、价格在上（压住虚影）');
+    assert.match(body, /shell\.active = false/,
+        '虚影壳必须整壳关掉 —— 里面装着带 cc.Button 的命中根节点，活着就会吃点击');
 });
 
 // ============================================================
@@ -200,7 +251,9 @@ test('★★★换帧后必须重算落点（否则残留上一张建筑的缩�
     const renderAt = STATION_SRC.indexOf('render(content:');
     assert.ok(renderAt > 0, 'TerritoryStationView 要有 render');
     const body = STATION_SRC.slice(renderAt, STATION_SRC.indexOf('\n    private ', renderAt));
-    assert.match(body, /this\.setIcon\(content\.icon\);[\s\S]*?this\.applyIconPlacement\(\);/,
+    // 银币宝箱退场期间 `setIcon` 吃的是「快照帧 ?? content.icon」，参数不再是裸 `content.icon`；
+    // 守卫要钉的是**顺序**（换帧 → 立刻重算落点），所以只要求 `content.icon` 仍在参数里。
+    assert.match(body, /this\.setIcon\([^;]*content\.icon\);[\s\S]*?this\.applyIconPlacement\(\);/,
         'render 里换帧后必须紧接着重算落点（setIcon 与 applyIconPlacement 的顺序不能反）');
 });
 

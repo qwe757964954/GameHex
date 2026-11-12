@@ -207,21 +207,20 @@ test('④ 光束（镭射飞龙）：只缩粗细，x 恒 1 —— 长度由每�
     const spec = zcBeamSpecOf(dragon.prefab);
     assert.ok(spec, 'ZCBeamEffect 没登记这个路径 ⇒ 它其实是普通子弹，x 就有意义了');
 
-    // 真正的算式（2026-11-03 新口径）：粗细 = 画布高 × widthScale。
-    // 0.7 已 **bake 进** widthScale（1.8 × 0.7 = 1.26），`applyBeamStretch` 把它作为
-    // **绝对值**写到 visualNode.scaleY —— prefab 根节点的 0.7 被覆盖而不是相乘，
-    // 否则池化复用下从旧 scale.y 读值会累乘污染（0.7→1.26→2.27…）。
-    // 普攻 30719：53 × 1.26 = 66.78px（与旧口径 53 × 1.8 × 0.7 数值一致）。
-    // 带强化的「镭射死光」30845 挂同一份美术（倍率 1.3 ⇒ 86.81px）。
+    // 真正的算式（2026-11-10 换新素材后的口径）：粗细 = 画布高 × widthScale。
+    // `applyBeamStretch` 把它作为**绝对值**写到 visualNode.scaleY —— prefab 根节点的 0.7
+    // 被覆盖而不是相乘，否则池化复用下从旧 scale.y 读值会累乘污染（0.7→0.8→1.36…）。
+    // 普攻 30719：73 × 0.8 = 58.4px。新素材（700×73）的亮芯只有 4.6px、柔光带 52px，
+    // 0.8 是按「发光总量对齐旧素材」反推的（旧 640×53 用 1.26），见 `ZCBeamEffect.widthScale`。
+    // 带强化的「镭射死光」30845 挂同一份美术（倍率 1.3 ⇒ 75.92px）。
     // 画布高从 prefab 的 UITransform 现取，不从注释里抄。
     const canvasHeight = (readJson(prefabFile(dragon.prefab)) as Array<Record<string, any>>)
         .find((entry) => entry.__type__ === 'cc.UITransform')!._contentSize.height;
-    assert.equal(canvasHeight, 53, '光束画布高变了 ⇒ 下面两个像素值要重算');
+    assert.equal(canvasHeight, 73, '光束画布高变了 ⇒ 下面两个像素值要重算');
     const thickness = (skillId: number): number => canvasHeight * zcBeamWidthScaleOf(spec!, skillId);
-    assert.ok(Math.abs(thickness(30719) - 66.78) < 0.1, `普攻光柱高 ${thickness(30719).toFixed(2)}px 应约 66.78`);
-    assert.ok(Math.abs(thickness(30845) - 86.81) < 0.1, `镭射死光高 ${thickness(30845).toFixed(2)}px 应约 86.81`);
-    assert.ok(near(zcBeamWidthScaleOf(spec!, 30719) / 1.8, SHRINK, 1e-6),
-        '美术目标粗细 1.8 中的 0.7 已 bake 进 widthScale（1.26），只 bake 一次');
+    assert.ok(Math.abs(thickness(30719) - 58.4) < 0.1, `普攻光柱高 ${thickness(30719).toFixed(2)}px 应约 58.4`);
+    assert.ok(Math.abs(thickness(30845) - 75.92) < 0.1, `镭射死光高 ${thickness(30845).toFixed(2)}px 应约 75.92`);
+    assert.ok(near(thickness(30845) / thickness(30719), 1.3, 1e-9), '死光恒比普攻粗 30%（同一份美术）');
 
     // 别处不许再乘一遍根节点缩放 —— 乘两遍就成了 49%。
     // （`beamBaseScaleY` 只允许出现在注释里 —— 字段本身已被移除。）

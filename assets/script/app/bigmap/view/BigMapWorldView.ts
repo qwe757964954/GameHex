@@ -5,6 +5,7 @@ import {
 import type { IHexGridLayout } from '../../../core/hex/HexGridLayout';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
 import type { IBigMapViewState, IBigMapCityView } from '../application/BigMapViewState';
+import { BIGMAP_CAMP_ROLE_TEXT, type IBigMapCampRoleInfo } from '../model/BigMapCampRoleInfo';
 import { bigMapHexDistance, bigMapOccupantOf } from '../model/BigMapWorld';
 import {
     assignTerritoryColorSlots, assignTerritoryColorSlotsFromAdjacency, bigMapPlayerBaseColorSlot,
@@ -35,19 +36,30 @@ export const WORLD_ROW_STEP = BIGMAP_ROW_STEP;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.6;
 /**
- * 选中城池据点后，那座城的标记整体上移的量。
+ * 选中城池据点后，**相机**额外上抬的量（内容系坐标，屏上是 `× zoom`）。
  *
  * 🔴 2026-11-03 用户口径（两轮）：
  *  · 第一轮：*「城池据点连带着名称和等级的UI节点上移200px（底部与当前城主的上沿对齐即可）」*；
  *  · 第二轮：*「还需要上移100px，并且是在地图放大到接近极限的85%的相机位置」*
  *    ⇒ **总量 300**（`MIN_ZOOM=0.15`、`MAX_ZOOM=1.6`，85% ≈ zoom 1.38，即用户验收的机位）。
  *
- * 名条 / 等级 / 占领旗都是标记节点（`BigMapWorldMarker`）的子节点，**挪节点一棵全跟着走**。
- * 「当前城主」徽章在 `BigMapCityPopup` 的城主区（屏幕系、贴面板顶上方），地图是可平移缩放的
- * 内容系，两边没法长期精确对齐 —— 所以落成**固定 300（内容系坐标）**，
- * 以 85% 机位（zoom ≈ 1.38，屏幕位移 ≈ 415px）的观感为准；要微调只改这一个值。
+ * 🔴 2026-11-11 用户口径：*「大地图点击查看城池据点，城池据点居中时，背景地图要同步移动」*
+ * ⇒ **抬的对象从标记节点换成相机**。旧做法只挪 `marker.node`，城飞起来、脚下那块地和势力色
+ * 还在原处（截图里就是「城在上面、它原来的格子空着」）。现在抬 `content`（背景 / 地块 /
+ * 势力色 / 标记的共同父节点），整张图一起上移，城永远贴着自己的格子。
+ *
+ * 数值不变：`content.y += 300 * zoom` 与旧版「标记在内容系 +300」算出同一个屏幕位置
+ * （`300 * zoom - 100`，相对视口中心），所以「名条对齐弹窗『当前城主』那块」的观感原样保留。
+ * 要微调只改这一个值。
  */
 const BIGMAP_FOCUSED_CITY_LIFT = 300;
+/**
+ * 玩家标记上「HP xxx」那行的 y（内容系坐标，标记原点 = 所在格中心）。
+ *
+ * 没有建筑图 ⇒ 名条占 -70..-16、头像挂在 +44 附近，血量只能再往上让一层；
+ * 头像换尺寸时只调这一个值（`BigMapWorldMarker.setStatusLine`）。
+ */
+const BIGMAP_ROLE_HP_Y = 132;
 /**
  * 地形色（**乘算**叠在 `grounds/ground_0x.png` 上，所以只能压暗、不能提亮）。
  *
@@ -84,11 +96,18 @@ const TRANSPARENT_TERRAIN_FILL: Readonly<Record<BigMapTerrain, Color>> = {
 const TRANSPARENT_GRID_COLOR = new Color(70, 92, 74, 48);
 interface IWorldMarker {
     readonly hexId: number;
-    readonly kind: 'city' | 'monster' | 'base';
+    readonly kind: 'city' | 'monster' | 'base' | 'role';
     readonly id: number | string;
     readonly node: Node;
     readonly icon: Sprite;
     readonly view: BigMapWorldMarker;
+    /**
+     * **名单归属**的据点 id（只有 `role` 标记有）。
+     *
+     * 聚焦态靠它判「本城玩家」，绝不用 `pos` 反查 —— 同格可能站着别城的角色，
+     * 按坐标反推会把不相关的玩家一起留下（`tests/bigmap-focus-city.test.ts` 守着）。
+     */
+    readonly cityId?: number;
 }
 
 /** 一次标记绘制的全部显示数据（建筑图 + 名条 + 文案 + 兜底色）。 */
@@ -136,11 +155,16 @@ export class BigMapWorldView extends Component {
     private readonly tilePool: Sprite[] = [];
     private readonly decorPool: Sprite[] = [];
     private readonly markers: IWorldMarker[] = [];
+    /** 名单角色标记（键 = `roleId@pos`）；随 `campRoles` 增删，和城池/野怪共用同一套模板。 */
+    private readonly roleMarkers = new Map<string, IWorldMarker>();
+    private roleMarkerKey = '';
     private contentKey = '';
     /** 上次绘制时玩家基地所在的格（`data.playerBaseHexId`）；变化即重建标记。 */
     private markerAnchorHexId = -1;
     private zoom = 1;
     private selectedHexId = -1;
+    /** 已经为哪座城把**相机**抬起来过（-1 = 没抬）；聚焦态切换时用来幂等/可逆地补偿。 */
+    private liftedFocusHexId = -1;
     /** 城池 id → 势力色板下标（相邻势力不同色，见 `assignTerritoryColorSlots`）。 */
     private territorySlots: ReadonlyMap<number, number> = new Map();
     private readonly territoryEdges = new Map<number, readonly IBigMapTerritoryEdge[]>();
@@ -159,6 +183,8 @@ export class BigMapWorldView extends Component {
         for (const sprite of this.decorPool) sprite.node.destroy();
         this.data = data;
         this.markers.length = 0;
+        this.roleMarkers.clear();
+        this.roleMarkerKey = '';
         this.tilePool.length = 0;
         this.decorPool.length = 0;
         this.contentKey = '';
@@ -344,7 +370,7 @@ export class BigMapWorldView extends Component {
             this.baseTerritoryEdges.set(hexId, buildBigMapTerritoryEdges(this.layout, [hexId]));
         }
         const paletteSize = BIGMAP_TERRITORY_COLORS.length;
-        const hasAdjacency = [...world.cities.values()].some((city) => (city.adjacentCityIds?.length ?? 0) > 0);
+        const hasAdjacency = Array.from(world.cities.values()).some((city) => (city.adjacentCityIds?.length ?? 0) > 0);
         this.territorySlots = hasAdjacency
             ? assignTerritoryColorSlotsFromAdjacency(
                 regions, (id) => world.cities.get(id)?.adjacentCityIds ?? [], paletteSize,
@@ -452,7 +478,7 @@ export class BigMapWorldView extends Component {
             if (!data.isServerBase && !base.isPlayer) this.addMarker('base', base.baseId, base.hexId);
         }
         // 基地落在城池锚点时复用城池标记，保留城池查询与点击，避免同格叠两套建筑和名条。
-        const playerCity = [...data.cities.values()].find((city) => city.hexId === data.playerBaseHexId);
+        const playerCity = Array.from(data.cities.values()).find((city) => city.hexId === data.playerBaseHexId);
         if (!playerCity) this.addMarker('base', data.world.playerBase.baseId, data.playerBaseHexId);
         this.markers.sort((a, b) => this.centerOf(b.hexId).y - this.centerOf(a.hexId).y);
         this.markers.forEach((marker, index) => marker.node.setSiblingIndex(index));
@@ -462,10 +488,15 @@ export class BigMapWorldView extends Component {
     private rebuildMarkers(): void {
         for (const marker of this.markers) marker.node.destroy();
         this.markers.length = 0;
+        // 角色标记也在 `markers` 里，跟着一起销毁 ⇒ 指针与结构 key 都要清，
+        // 否则 `syncRoleMarkers` 认为「集合没变」而不重建，地图上就再没有玩家标记了。
+        this.roleMarkers.clear();
+        this.roleMarkerKey = '';
         this.buildMarkers();
     }
 
-    private addMarker(kind: IWorldMarker['kind'], id: number | string, hexId: number): void {
+    private addMarker(kind: IWorldMarker['kind'], id: number | string, hexId: number,
+        cityId = 0): IWorldMarker {
         const center = this.centerOf(hexId);
         const node = instantiate(this.markerTemplate);
         node.name = `${kind}_${id}`;
@@ -473,12 +504,97 @@ export class BigMapWorldView extends Component {
         node.setPosition(center.x, center.y, 0);
         const marker = node.getComponent(BigMapWorldMarker);
         if (!marker) throw new Error('[BigMapWorldView] 标记模板缺少 BigMapWorldMarker');
-        this.markers.push({ kind, id, hexId, node, icon: marker.icon, view: marker });
+        const entry: IWorldMarker = {
+            kind, id, hexId, node, icon: marker.icon, view: marker,
+            ...(cityId > 0 ? { cityId } : {}),
+        };
+        this.markers.push(entry);
+        return entry;
     }
 
     private applyMarker(marker: IWorldMarker, view: IBigMapMarkerArt): void {
         marker.view.render(view.frame, view.plate, view.level, view.name, view.occupant, view.tint, view.width);
         marker.view.setOccupantFlag(view.occupant ? this.art?.plateFlag ?? null : null);
+    }
+
+    /**
+     * 名单角色标记与当前名单对齐：每个角色落在自己的 `pos` 格（`SlgGameCameRoleInfo.pos`）。
+     *
+     * 口径（2026-11-11 山猫）：*「把玩家摆放在对应的 pos」*。
+     *
+     * · **增删**只按 `roleId@pos` 集合 —— 只改血 / 等级 / 头像时不动节点（重建会让标记闪一下）；
+     * · `pos` 不在本图点位上（异常包）直接跳过，绝不落到原点堆成一坨；
+     * · 归属（`cityId`）随标记一起记，聚焦态按它判「本城玩家」，不用 `pos` 反推。
+     *
+     * @returns 内容 key：血 / 等级 / 头像 / 归属任一变化都要重绘
+     */
+    private syncRoleMarkers(): string {
+        const data = this.data;
+        if (!data) return '';
+        const desired = new Map<string, { cityId: number; role: IBigMapCampRoleInfo }>();
+        const parts: string[] = [];
+        for (const city of data.cities.values()) {
+            const self = city.territoryOwner === 'self' ? 's' : 'o';
+            for (const role of city.campRoles) {
+                const id = `${role.roleId}@${role.pos}`;
+                desired.set(id, { cityId: city.cityId, role });
+                parts.push(`${id}:${role.defenseHp}:${role.buildLevel ?? 0}:${role.avatarId}:${self}`);
+            }
+        }
+        parts.sort();
+        const structure = Array.from(desired.keys()).sort().join(',');
+        if (structure !== this.roleMarkerKey) {
+            this.roleMarkerKey = structure;
+            for (const [id, marker] of this.roleMarkers) {
+                if (desired.has(id)) continue;
+                this.removeMarker(marker);
+                this.roleMarkers.delete(id);
+            }
+            for (const [id, entry] of desired) {
+                if (this.roleMarkers.has(id) || !this.layout.points.has(entry.role.pos)) continue;
+                this.roleMarkers.set(id, this.addMarker('role', id, entry.role.pos, entry.cityId));
+            }
+            // 标记集合变了 ⇒ 按 y 重排一次，上下遮挡与点击顺序（取反序先命中靠下的）保持稳定。
+            this.markers.sort((a, b) => this.centerOf(b.hexId).y - this.centerOf(a.hexId).y);
+            this.markers.forEach((marker, index) => marker.node.setSiblingIndex(index));
+        }
+        return parts.join(',');
+    }
+
+    private removeMarker(marker: IWorldMarker): void {
+        marker.node.destroy();
+        const index = this.markers.indexOf(marker);
+        if (index >= 0) this.markers.splice(index, 1);
+    }
+
+    /** 标记对应的当前名单条目；角色跨城 / 被顶掉后返回 `null`（本轮不画，等结构同步摘节点）。 */
+    private roleOf(marker: IWorldMarker): IBigMapCampRoleInfo | null {
+        const city = marker.cityId ? this.data?.cities.get(marker.cityId) : undefined;
+        if (!city) return null;
+        return city.campRoles.find((role) => `${role.roleId}@${role.pos}` === marker.id) ?? null;
+    }
+
+    /**
+     * 玩家标记：头像 + 名条（建筑等级徽章 + 角色名）+ 血量，落在自己的 `pos` 格。
+     *
+     * 复用据点标记模板（`BigMapWorldMarker`），所以**没有建筑图**：`icon` 隐藏，名条落在
+     * 建筑位、头像挂在名条上方，血量走「占据者」那行（没有旗帜 ⇒ 只剩文字，见 `setStatusLine`）。
+     * 名条颜色仍按归属四选一：己方据点里的玩家走己方绿，其余走他人灰。
+     */
+    private renderRoleMarker(marker: IWorldMarker, role: IBigMapCampRoleInfo): void {
+        const self = marker.cityId ? this.data?.cities.get(marker.cityId)?.territoryOwner === 'self' : false;
+        this.applyMarker(marker, {
+            frame: null,
+            plate: this.art?.plates.get(self ? 'self' : 'other') ?? null,
+            level: role.buildLevel ? String(role.buildLevel) : '',
+            name: role.roleName || role.roleId,
+            // 名条下方已经是名条自己的位置，血量改走独立一行（`setStatusLine`），这里不占。
+            occupant: '',
+            tint: self ? BIGMAP_TERRITORY_SELF_COLOR : BIGMAP_COLORS.locked,
+            width: 0,
+        });
+        marker.view.setPortrait(this.rolePortraits.get(role.avatarId) ?? null);
+        marker.view.setStatusLine(BIGMAP_CAMP_ROLE_TEXT.hp(role.defenseHp), BIGMAP_ROLE_HP_Y);
     }
 
     setPlayerPortrait(frame: SpriteFrame | null): void {
@@ -533,7 +649,10 @@ export class BigMapWorldView extends Component {
             this.rebuildMarkers();
             this.contentKey = '';
         }
-        const cities = [...data.cities.values()];
+        // 名单角色标记先跟上当前名单（`CmdSlgCampRoleInfosRspMsg` 是异步到的），
+        // 它同时算出一份内容 key：血/等级/头像变化要重绘，只增删角色要重建节点。
+        const roleKey = this.syncRoleMarkers();
+        const cities = Array.from(data.cities.values());
         const monsters = data.world.monsters.map((site) => data.monsters.get(site.instanceId));
         // `playerCampId` 必须进 key：game 包到达后基地要换成所属城池的势力色，
         // 不带上它就会因为「其它内容没变」而早退，染色永远停在上一次。
@@ -542,20 +661,20 @@ export class BigMapWorldView extends Component {
         const key = `${this.selectedHexId}|${data.playerCampId}|${this.focusedCityHexId}|`
             + cities.map((c) => `${c.cityId}:${c.state}:${c.territoryOwner}:${c.campInfo?.opType}:${c.campInfo?.occupyRoleName}:`
                 + (c.rankEntries ?? []).filter((row) => row.rank === 1).map((row) => `${row.roleId}:${row.avatarId}`).join(';')).join(',')
-            + '|' + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',');
+            + '|' + monsters.map((m) => m ? `${m.instanceId}:${m.unlocked}:${m.respawnInSeconds > 0}` : '').join(',')
+            + '|' + roleKey;
         if (key === this.contentKey) return;
         this.contentKey = key;
         this.markerLayer.clear();
-        const cityById = new Map(cities.map((city) => [city.cityId, city] as const));
         // 每片势力范围整片铺色：无主走色板（相邻不同色），己方绿、他人红（见 `territoryPaint`）。
         for (const region of data.territories) {
-            const paint = this.territoryPaint(region.id, cityById.get(region.id));
+            const paint = this.territoryPaint(region.id, data.cities.get(region.id));
             this.paintTerritory(region.hexIds, paint.color,
                 this.territoryEdges.get(region.id) ?? [], paint.alpha);
         }
         for (const marker of this.markers) {
             if (marker.kind === 'city') {
-                const city = cities.find((entry) => entry.cityId === marker.id);
+                const city = data.cities.get(Number(marker.id));
                 if (!city) continue;
                 const isPlayerBase = marker.hexId === data.playerBaseHexId;
                 // 地块叠势力色（相邻不同色），角标仍用状态色 —— 两套信息各走各的通道。
@@ -588,11 +707,17 @@ export class BigMapWorldView extends Component {
                     ? this.rolePortraits.get(champion.avatarId) ?? null
                     : isPlayerBase ? this.playerPortrait : null);
             } else if (marker.kind === 'monster') {
-                const monster = monsters.find((entry) => entry?.instanceId === marker.id);
+                const monster = data.monsters.get(Number(marker.id));
                 if (!monster) continue;
                 this.applyMarker(marker, {
                     frame: this.art?.monster ?? null,
-                    plate: this.art?.plates.get('monster') ?? null,
+                    // 名条跟关卡据点**同一条红底**（2026-11-03 用户口径：
+                    // *「野怪的标识和城池据点的保持一样的红色」*）。
+                    // 原来走 `plate_monster`（设计稿 `title_01` 那张蓝底），本意是用颜色区分「野怪 / 关卡」，
+                    // 实机看下来红底更醒目、也和「据点 = 要去打的东西」这个语义一致 ⇒ 统一到 `city`（红）。
+                    // ⚠️ `plate_monster` 那张图**还留在** `BIGMAP_PLATE_KEYS` 里（照样加载、随时可切回来），
+                    //    只是本视图不再引用它 —— 别当成漏改又「修」回蓝色。
+                    plate: this.art?.plates.get('city') ?? null,
                     level: String(monster.level),
                     // 刷新中没得打：把「刷新中」放进名字位（徽章位留给等级，别让数字位忽大忽小）。
                     name: monster.respawnInSeconds > 0 ? '刷新中' : monster.name,
@@ -601,6 +726,11 @@ export class BigMapWorldView extends Component {
                     width: BIGMAP_MARKER_MONSTER_WIDTH,
                 });
                 marker.icon.color = monster.respawnInSeconds > 0 ? new Color(100, 100, 100) : Color.WHITE;
+            } else if (marker.kind === 'role') {
+                // 名单里已经没这条（跨城 / 被顶掉）⇒ 本轮不画，等 `syncRoleMarkers` 摘掉节点。
+                const role = this.roleOf(marker);
+                if (!role) continue;
+                this.renderRoleMarker(marker, role);
             } else {
                 const base = data.world.bases.find((entry) => entry.baseId === marker.id) ?? data.world.playerBase;
                 // 玩家基地的势力 = 服务器 `SlgGameInfo.toCampId` 指向的那座城（2026-10-23 山猫口径：
@@ -635,7 +765,7 @@ export class BigMapWorldView extends Component {
             this.hexPath(this.markerLayer, this.selectedHexId);
             this.markerLayer.stroke();
         }
-        this.applyFocusIsolation();
+        this.applyFocusCamera();
         this.cullMarkers();
     }
 
@@ -657,21 +787,32 @@ export class BigMapWorldView extends Component {
      * 玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px」*）：
      *
      * 1. 保留选中城与本城名单玩家：隐藏走 `cullMarkers`（平移 / 缩放共用）；
-     * 2. **选中的城标记上移 200**：标记位置只在 `addMarker` 落过一次位，这里按 `centerOf`
-     *    **幂等重摆** —— 聚焦解除时把 y 写回原位，绝不残留上一次的偏移
-     *    （`selectedHexId` 在 contentKey 里，选中态一变 `syncMarkers` 必然重跑）。
+     * 2. **把相机连同整张地图一起上抬**：2026-11-11 用户口径
+     *    *「城池据点居中时，背景地图要同步移动」*。
+     *
+     * 2026-11-03 那版抬的是 `marker.node`：城飞到半空，脚下那块地和势力色留在原处，
+     * 背景自然不会跟 —— 截图上就是「城在上面、它原来的格子空着」。
+     * 现在抬 `content`（背景 / 地块 / 势力色 / 标记的共同父节点）⇒ 城永远贴着自己的格子。
+     *
+     * 只在**聚焦态切换**那一拍做一次，两个方向都可逆、重复跑不叠加：
+     * · 聚焦建立 → `centerOnHex(居中 + 上抬)`，与随后的 `focusWorld` 命令（`focusOn`）
+     *   算出同一个绝对位置，所以先 `refresh` 后收命令也不会抬两次；
+     * · 聚焦解除 → **增量**落回 `LIFT * zoom`（保留用户在这期间平移过的位置，不强行重定位）。
+     *
+     * 选中态在 `contentKey` 里，选中一变 `refresh` 必然重跑，不需要另挂事件。
      */
-    private applyFocusIsolation(): void {
+    private applyFocusCamera(): void {
         const focus = this.focusedCityHexId;
-        for (const marker of this.markers) {
-            // 直接读布局点，不走 centerOf：那里每次都 new Vec2，最小 cc 桩的测试会炸
-            //（坐标语义与 addMarker 的 centerOf 完全一致：查不到点 = 原点）。
-            const point = this.layout.points.get(marker.hexId);
-            const x = point ? point.x : 0;
-            const y = (point ? point.y : 0)
-                + (marker.kind === 'city' && marker.hexId === focus ? BIGMAP_FOCUSED_CITY_LIFT : 0);
-            marker.node.setPosition(x, y, 0);
+        if (focus === this.liftedFocusHexId) return;
+        const wasLifted = this.liftedFocusHexId >= 0;
+        this.liftedFocusHexId = focus;
+        if (focus >= 0) {
+            this.centerOnHex(focus, BIGMAP_FOCUSED_CITY_LIFT);
+            return;
         }
+        if (!wasLifted) return;
+        const position = this.content.position;
+        this.applyCamera(this.zoom, position.x, position.y - BIGMAP_FOCUSED_CITY_LIFT * this.zoom);
     }
 
     private cityTint(state: BigMapCityState): Color {
@@ -683,12 +824,17 @@ export class BigMapWorldView extends Component {
     private cullMarkers(): void {
         const position = this.content.position;
         const halfWidth = this.viewportTransform.width / 2 + 130 * this.zoom;
-        // 城池聚焦时只显示选中的城池，榜首头像随城池标记一起显示。
+        // 城池聚焦时只显示选中的城池**和这座城名单里的玩家**（玩家是按 `pos` 摆在地图上的，
+        // 一起隐藏就等于「点了据点，人全没了」）。归属按标记创建时记下的 `cityId` 判，
+        // 不用 `pos` 反推：同格可能站着别城的角色。
         // 隐藏 = active false ⇒ 同一帧内不可点（hitAreas 按 active 过滤）、不进可见城池上报
-        // （`reportVisibleCamps`），聚焦解除后由 syncMarkers → cullMarkers 恢复。
+        // （`reportVisibleCamps`），聚焦解除后由 refresh → cullMarkers 恢复。
         const focus = this.focusedCityHexId;
+        const focusedCityId = focus >= 0 && this.data
+            ? Array.from(this.data.cities.values()).find((city) => city.hexId === focus)?.cityId ?? 0
+            : 0;
         for (const marker of this.markers) {
-            if (focus >= 0 && !(marker.kind === 'city' && marker.hexId === focus)) {
+            if (focus >= 0 && !this.isMarkerInFocus(marker, focus, focusedCityId)) {
                 marker.node.active = false;
                 continue;
             }
@@ -701,6 +847,12 @@ export class BigMapWorldView extends Component {
             marker.node.active = Math.abs(marker.node.position.x * this.zoom + position.x) < halfWidth
                 && Math.abs(marker.node.position.y * this.zoom + position.y) < halfHeight;
         }
+    }
+
+    /** 聚焦态下这条标记该不该留：选中城本体 + 选中城名单里的玩家。 */
+    private isMarkerInFocus(marker: IWorldMarker, focusHexId: number, focusedCityId: number): boolean {
+        if (marker.kind === 'city') return marker.hexId === focusHexId;
+        return marker.kind === 'role' && focusedCityId > 0 && marker.cityId === focusedCityId;
     }
 
     /** 平移和缩放共用入口，同步可见地块；没有逐帧重建。 */
@@ -749,6 +901,8 @@ export class BigMapWorldView extends Component {
 
     resetCamera(): void {
         if (!this.data) return;
+        // 绝对重定位 ⇒ 之前为城池聚焦抬过的那段已被覆盖，标记作废，免得解除选中时再落一次。
+        this.liftedFocusHexId = -1;
         const base = this.centerOf(this.data.playerBaseHexId);
         const scale = Math.min(1, Math.max(0.55, this.viewportTransform.width / 720));
         this.applyCamera(scale, -base.x * scale, -base.y * scale - 100);
@@ -762,9 +916,21 @@ export class BigMapWorldView extends Component {
         this.applyCamera(scale, anchor.x - (anchor.x - position.x) * ratio, anchor.y - (anchor.y - position.y) * ratio);
     }
 
+    /**
+     * 把某格挪到视口中央（`-100` = 略低于正中，给顶部 HUD 留位）。
+     *
+     * 城池据点额外**上抬** `BIGMAP_FOCUSED_CITY_LIFT`（2026-11-11：抬的是相机，背景跟着一起动）。
+     * 只有「这一格正是当前选中的城池」才抬 ⇒「回家」（选中的是玩家基地、没有城池选中态）
+     * 和野怪定位都不抬，口径与 `focusedCityHexId` 完全一致。
+     */
     focusOn(hexId: number): void {
+        this.centerOnHex(hexId, hexId === this.focusedCityHexId ? BIGMAP_FOCUSED_CITY_LIFT : 0);
+    }
+
+    /** 相机绝对定位到某格：`lift > 0` 时额外上抬（屏幕位移 = `lift * zoom`）。 */
+    private centerOnHex(hexId: number, lift: number): void {
         const center = this.centerOf(hexId);
-        this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom - 100);
+        this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom - 100 + lift * this.zoom);
     }
 
     get currentZoom(): number { return this.zoom; }

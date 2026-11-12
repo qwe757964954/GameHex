@@ -63,6 +63,28 @@ test('信息条仍存活时正常应用异步图标', async () => {
     assert.equal(h.writes, 2);
 });
 
+test('统计传入列表并显示整行，空神器隐藏且清掉旧帧', async () => {
+    const h = playerFixture();
+    delete h.item.renderStats;
+    let slots: unknown[] = [];
+    h.item.statRow = { active: false };
+    h.item.statList = { refreshList(data: unknown[]) { slots = data; } };
+    h.item.artifactIcon = { spriteFrame: {} };
+    h.item.setIconLoader(async () => null);
+    const data = { name: '我方', rank: '', trophy: 0, power: 0, avatarIcon: '',
+        artifactName: '', artifactIcon: '', stats: [{ icon: 'icon_01', value: 0 }] };
+    await h.item.refresh(data);
+    assert.equal(h.item.statRow.active, true);
+    assert.equal(slots.length, 1);
+    assert.equal(h.item.artifactRow.active, false);
+    assert.equal(h.item.artifactIcon.spriteFrame, null);
+    await h.item.refresh({ ...data, artifactName: '希瓦的守护', artifactIcon: '霜封冰刃' });
+    assert.equal(h.item.artifactRow.active, true);
+    h.item.clear();
+    assert.equal(h.item.statRow.active, false);
+    assert.equal(slots.length, 0);
+});
+
 test('matching ready is emitted from start after child onLoad, never from parent onLoad', () => {
     const code = readFileSync('assets/script/app/matching/MatchingPage.ts', 'utf8');
     const onLoad = code.slice(code.indexOf('protected onLoad()'), code.indexOf('protected start()'));

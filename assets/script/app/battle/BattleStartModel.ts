@@ -1,5 +1,6 @@
 import { toCount, toIdString, toPositiveInt } from '../net/RequestGuard';
 import type { MatchPlayerData } from '../matching/MatchTypes';
+import { MATCH_STAT_TYPES } from '../matching/MatchTypes';
 import { applyHeadArt, createHeadArtResolver } from '../HeadArtModel';
 import type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 import { CARD_LEVEL_ATTR_STAT, type ZCCardLevelAttrs } from '../card/CardLevelAttr';
@@ -202,6 +203,7 @@ export interface ZCBattleStart {
     readonly seed: string;
     readonly version: string;
     readonly units: readonly ZCBattleUnit[];
+    readonly mapInfo?: Readonly<CmdPvpMapInfo>;
 }
 
 export interface ZCBattleTeams {
@@ -382,11 +384,29 @@ export function normalizeBattleStart(rsp: CmdStartBattleRspMsg | null | undefine
         console.warn('[BattleStartModel] 没有可用战斗单元，已丢弃', rsp);
         return null;
     }
+    const mapInfo = rsp.mapInfo;
+    const isUint32 = (value: number): boolean => Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
+    if (mapInfo && (typeof mapInfo.id !== 'string' || !mapInfo.id.trim()
+        || typeof mapInfo.name !== 'string' || !isUint32(mapInfo.version)
+        || (mapInfo.resourcePoints != null && !Array.isArray(mapInfo.resourcePoints))
+        || (mapInfo.unitHomeIndexes != null && !Array.isArray(mapInfo.unitHomeIndexes))
+        || (mapInfo.resourcePoints ?? []).some(point => !point || !isUint32(point.row)
+            || !isUint32(point.column) || !isUint32(point.groupId) || !isUint32(point.resourceId))
+        || (mapInfo.unitHomeIndexes ?? []).some(home => !home || !isUint32(home.unitId)
+            || home.unitId === 0 || !isUint32(home.homeIndex)))) {
+        console.warn('[BattleStartModel] 本局地图快照无效，已丢弃', mapInfo);
+        return null;
+    }
     return {
         battleId,
         seed: toIdString(rsp.seed),
         version: typeof rsp.version === 'string' ? rsp.version : '',
         units,
+        ...(mapInfo ? { mapInfo: {
+            id: mapInfo.id, name: mapInfo.name, version: mapInfo.version,
+            resourcePoints: (mapInfo.resourcePoints ?? []).map(point => ({ ...point })),
+            unitHomeIndexes: (mapInfo.unitHomeIndexes ?? []).map(home => ({ ...home })),
+        } } : {}),
     };
 }
 
@@ -454,10 +474,16 @@ export interface ArtifactRow {
     icon?: unknown;
 }
 
+export interface MatchCardRow {
+    id?: unknown;
+    traits?: { camp?: unknown; attack?: unknown } | null;
+}
+
 export type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 
 /** 服务端 id → 界面显示值解析器；查不到返回空串，调用方保留原值。 */
 export interface MatchProfileLookup {
+    heroStats(heroIds: readonly number[]): MatchPlayerData['stats'];
     gradeName(gradeId: number): string;
     artifactName(artifactId: number): string;
     /** 神器图标资源名（`pvpArtifact[].icon`）；查不到返回空串，调用方保留 prefab 原帧。 */
@@ -473,12 +499,13 @@ export interface MatchProfileLookup {
     headArt: HeadArtResolver;
 }
 
-/** 用四张表行建解析器 —— 纯函数。id 经 toCount 收敛，坏行跳过。 */
+/** 用表行建展示解析器；id 经 toCount 收敛，坏行跳过。 */
 export function buildMatchProfileLookup(
     gradeRows: readonly GradeRow[] | null | undefined,
     artifactRows: readonly ArtifactRow[] | null | undefined,
     headRows?: readonly HeadRow[] | null,
     iconRows?: readonly IconRow[] | null,
+    cardRows?: readonly MatchCardRow[] | null,
 ): MatchProfileLookup {
     const grades = new Map<number, string>();
     for (const row of gradeRows ?? []) {
@@ -500,7 +527,21 @@ export function buildMatchProfileLookup(
         if (name) artifacts.set(id, name);
         if (icon) artifactIcons.set(id, icon);
     }
+    const cards = new Map<number, { camp: string; attack: string }>();
+    for (const row of cardRows ?? []) {
+        if (!row) continue;
+        const id = toCount(row.id);
+        if (id <= 0) continue;
+        cards.set(id, {
+            camp: typeof row.traits?.camp === 'string' ? row.traits.camp : '',
+            attack: typeof row.traits?.attack === 'string' ? row.traits.attack : '',
+        });
+    }
     return {
+        heroStats: heroIds => cards.size === 0 ? [] : MATCH_STAT_TYPES.map(stat => ({
+            icon: stat.icon,
+            value: heroIds.filter(id => cards.get(id)?.[stat.trait] === stat.value).length,
+        })),
         gradeName: (gradeId: number): string => grades.get(toCount(gradeId)) ?? '',
         artifactName: (artifactId: number): string => artifacts.get(toCount(artifactId)) ?? '',
         artifactIcon: (artifactId: number): string => artifactIcons.get(toCount(artifactId)) ?? '',
@@ -514,7 +555,7 @@ export function buildMatchProfileLookup(
 
 /**
  * 把服务端单元叠加到玩家数据：只覆盖服务端给了的字段。
- * name 非空、power/gradeScore > 0 才覆盖；rank/artifact 查表；
+ * name 非空、power/gradeScore > 0 才覆盖；rank/artifact 查表，神器 id 为 0 时清空；
  * 头像连根目录一起换（applyHeadArt 成对）。
  */
 export function applyUnitToPlayerView(
@@ -524,6 +565,11 @@ export function applyUnitToPlayerView(
 ): MatchPlayerData {
     if (!unit) return base;
     const next: MatchPlayerData = { ...base };
+    if (lookup) next.stats = lookup.heroStats(unit.heroIds);
+    if (unit.artifactId === 0) {
+        next.artifactName = '';
+        next.artifactIcon = '';
+    }
     if (unit.name) next.name = unit.name;
     if (unit.power > 0) next.power = unit.power;
     if (unit.gradeScore > 0) next.trophy = unit.gradeScore;

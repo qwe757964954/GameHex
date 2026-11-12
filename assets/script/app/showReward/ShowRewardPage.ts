@@ -4,7 +4,7 @@ import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { FW } from '../../framework/FW';
 import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
 import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
-import { ShowRewardGrid } from './ShowRewardGrid';
+import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { ShowRewardItem } from './ShowRewardItem';
 import { SHOW_REWARD_TEXTS, showRewardSoundKey } from './ShowRewardTexts';
 // 「CmdGoods → 帧」的换算与对局结算页**共用一份**（`RewardFrames`），别在这儿再抄一遍。
@@ -48,8 +48,8 @@ export class ShowRewardPage extends PopupBase {
     @property({ type: Node, tooltip: 'TitleImage：标题图（FGUI n2，延迟 3 帧弹入）' })
     titleImage: Node = null;
 
-    @property({ type: ShowRewardGrid, tooltip: 'RewardGrid：奖励网格（FGUI list，视口 468×330）' })
-    grid: ShowRewardGrid = null;
+    @property({ type: VirtualScrollView, tooltip: 'RewardGrid：奖励网格（FGUI list，视口 468×330）' })
+    grid: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'HintBg：底部提示条底（FGUI n10，延迟 4 帧显示）' })
     hintBg: Node = null;
@@ -75,10 +75,8 @@ export class ShowRewardPage extends PopupBase {
 
     protected onInit(): void {
         // Grid 回调只在这里绑一次，回调体按 dataIndex 现取 entries（捕获入参会永远显示第一屏）。
-        if (this.grid) {
-            this.grid.renderItem = (node: Node, dataIndex: number) => this.renderItem(node, dataIndex);
-            this.grid.onItemClick = (dataIndex: number) => this.onItemClick(dataIndex);
-        }
+        this.grid.renderItemFn = (node: Node, dataIndex: number) => this.renderItem(node, dataIndex);
+        this.grid.onItemClickFn = (_node: Node, dataIndex: number) => this.onItemClick(dataIndex);
     }
 
     protected async onOpen(userData?: IShowRewardParams): Promise<void> {
@@ -105,6 +103,9 @@ export class ShowRewardPage extends PopupBase {
         const frames = await loadRewardFrames(sorted);
         if (!this.alive || revision !== this.loadRevision) return;
 
+        await this.nextPopupFrame();
+        if (!this.alive || revision !== this.loadRevision) return;
+
         this.entries = sorted;
         this.frames = frames;
         this.present();
@@ -113,6 +114,10 @@ export class ShowRewardPage extends PopupBase {
     protected onClose(_reason: PopupCloseReason): void {
         // 作废在途 load（醒来时页面已关）。
         this.loadRevision += 1;
+        // 取消还没到点的错峰回调，并把槽位收干净：关窗后不留隐藏态 / 半截动画
+        // （弹窗实例若被缓存复用，这些状态会直接带到下一次打开）。
+        this.unscheduleAllCallbacks();
+        this.grid?.refreshList(0);
         this.entries = [];
         this.frames = [];
         this.playedAni.clear();
@@ -141,8 +146,8 @@ export class ShowRewardPage extends PopupBase {
         // 无条件写：实例会被复用。
         if (this.hintLabel) this.hintLabel.string = SHOW_REWARD_TEXTS.hint;
 
-        // refreshList 内部 bindSlots ⇒ 逐格回调 renderItem。
-        if (this.grid) this.grid.refreshList(this.entries.length);
+        this.grid.scrollToTop();
+        this.grid.refreshList(this.entries.length);
 
         this.playEnterAnimation();
 
@@ -156,13 +161,14 @@ export class ShowRewardPage extends PopupBase {
     private renderItem(node: Node, dataIndex: number): void {
         const item = node.getComponent(ShowRewardItem);
         if (!item) return;
+        const sameEntry = item.dataIndex === dataIndex;
         item.dataIndex = dataIndex;
 
         const entry = this.entries[dataIndex];
         const frame = this.frames[dataIndex];
         if (!entry) {
-            item.resetAppear();
-            node.active = false;
+            // 空槽也走待播态：隐藏 + 起手态归位，别留下上一格的半截动画。
+            item.prepareAppear();
             return;
         }
 
@@ -175,26 +181,28 @@ export class ShowRewardPage extends PopupBase {
         );
 
         if (this.playedAni.has(dataIndex)) {
-            // 已播过：摆到终态。
-            item.stopAnim();
-            item.node.setScale(1, 1, 1);
+            // 同槽刷新保留正在播放的特效，换槽复用才恢复终态。
+            if (!sameEntry) item.settle();
             return;
         }
 
-        item.resetAppear();
+        // 先隐藏：错峰等待期不许露出 0.2 倍的「小方块 + 全亮闪光」。
+        item.prepareAppear();
         // 错峰 100×(index+1) ms（老端 toolSet.addDelay）；用 scheduleOnce，节点停 / 毁时会被取消。
         this.scheduleOnce(() => {
             if (!this.alive) return;
-            // 错峰期间槽位可能已被复用 ⇒ 核身份。
+            // 错峰期间槽位可能已被复用 ⇒ 这一格由那一轮 renderItem 自己接管，旧回调别插手。
             if (item.dataIndex !== dataIndex) return;
             if (this.playedAni.has(dataIndex)) return;
             this.playedAni.add(dataIndex);
+            // 列表管理槽位 active，appear 只恢复表现与动画。
             item.appear();
         }, staggerSecondsOf(dataIndex));
     }
 
     /** 点一格 ⇒ 弹物品详情（传 resId + number、allowMultiple）。 */
     private onItemClick(dataIndex: number): void {
+        if (!this.playedAni.has(dataIndex)) return;
         const entry = this.entries[dataIndex];
         if (!entry || !(entry.resId > 0)) return;
         void ItemDetailPage.open({

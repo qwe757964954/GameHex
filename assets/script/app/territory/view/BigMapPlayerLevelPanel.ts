@@ -19,7 +19,7 @@ export interface IBigMapPlayerLevelReward {
 
 /** 弹窗内容。全部由 Presenter 的纯规则算出，视图只负责写节点。 */
 export interface IBigMapPlayerLevelContent {
-    /** 标题木牌：据点名（服务端暂不下发对手昵称，见 `TerritoryPresenter.playerStageContent`）。 */
+    /** 标题木牌：据点名（服务端暂不下发对手昵称，见 `TerritoryModel.playerStageContent`）。 */
     readonly title: string;
     /** 第一条占领奖励的文案（如「获得 1 个卡牌宝箱」）。空串 = 整条隐藏。 */
     readonly chestText: string;

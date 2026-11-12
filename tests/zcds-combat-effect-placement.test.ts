@@ -7,6 +7,7 @@ import {
     zcCombatEffectAnchorPoint,
     zcCombatEffectLayerOf,
     zcCombatEffectLayerOfPath,
+    zcCombatEffectLiftY,
     zcCombatEffectSiblingIndex,
 } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
 
@@ -122,4 +123,46 @@ test('⑤ 层序：地面区域特效（type=area）压在所有角色之下，�
         '地面特效要贴棋盘之后 —— 靠「新建置顶」会让后出生的角色把火盖回去');
     assert.doesNotMatch(body, /setSiblingIndex\(this\.options\.mapLayer\.children\.length - 1\)/,
         '特效通道不能再无条件置顶（那正是「火焰盖住角色」的成因）');
+});
+
+/**
+ * 2026-11-11 需求：「部分射手/法师子弹的位置没有在角色中间发射出去，初始的发射位置调整：
+ * 玉林好汉的飞镖上移 20px；三个小丑的子弹上移 30px」。
+ *
+ * 原因是单位根节点＝**逻辑脚点**，子弹贴在弹道逻辑坐标上 ⇒ 从脚下擦着地面飞。
+ * 补偿必须加在 `mapToViewY(...)` **之后**（屏幕竖直、不跟弹道旋转），
+ * 不能塞进 prefab 的 `_lpos`：宿主节点每帧会被转到弹道方向，那个偏移会变成侧移。
+ */
+test('⑥ 发射高度：飞镖 +20 / 小丑子弹 +30，其余一律 0', () => {
+    assert.equal(zcCombatEffectLiftY('units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻'), 20);
+    //  强化那一击借另一份 prefab（同一套画布、`offset` 缩到 0.6125），高度必须一致 ——
+    //  只改一张会让「精英猎手」那一镖突然从脚下飞出去。
+    assert.equal(zcCombatEffectLiftY('units/projectiles/玉林好汉_飞镖普攻_强化/玉林好汉_飞镖普攻_强化'), 20);
+    assert.equal(zcCombatEffectLiftY('units/projectiles/三叶小丑_普攻/三叶小丑_普攻'), 30);
+
+    //  未登记的一律 0：这张表是"补偏差"用的，默认值不能顺手把别人家的子弹也抬起来。
+    for (const path of [null, undefined, '', NUT_EFFECT,
+        'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻',
+        'units/projectiles/雷弹攻击/雷弹攻击']) {
+        assert.equal(zcCombatEffectLiftY(path), 0, `「${path}」不该被这张表命中`);
+    }
+});
+
+test('⑦ 源码守卫：补偿加在 mapToViewY 之后，直线与弧线两条 setPosition 都不能漏', () => {
+    const source = codeOf(EFFECT_VIEW);
+    const from = source.indexOf("if (event.type === 'projectile')");
+    const to = source.indexOf('this.node.setPosition(mapToViewX(event.toX)');
+    assert.ok(from > 0 && to > from, '两处锚点都要在（炮弹分支到近战分支之间）');
+    const branch = source.slice(from, to);
+
+    assert.match(branch, /const liftY = zcCombatEffectLiftY\(event\.effectPrefabPath\)/,
+        'lift 必须读登记表，不能写死数字');
+    assert.match(branch, /setPosition\(mapToViewX\(headX\), mapToViewY\(headY\) \+ liftY, 0\)/,
+        '直线段：加在 mapToViewY 之后（视图 px），不是加到 headY 上（那是逻辑 px）');
+    assert.match(branch, /mapToViewY\(headY\) \+ perpY \* mapToViewY\(lateral\) \+ liftY/,
+        '弧线段（追踪导弹）也要吃到同一个 liftY，不能各算一份');
+    //  光束分支有自己的 `muzzleLift`，重复叠会飞高一倍。
+    const beamAt = branch.indexOf('this.beamSpec)');
+    assert.ok(beamAt >= 0 && beamAt < branch.indexOf('const liftY'),
+        '光束必须在此之前 return（它走 muzzleLift，不吃这张表）');
 });

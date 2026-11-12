@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BIGMAP_TABLE, decompressBigMapRows, parseBigMapConfig } from '../assets/script/app/bigmap/model/BigMapConfig';
 import { loadBigMapConfig } from '../assets/script/app/bigmap/application/BigMapConfigLoader';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import type { ConfigService } from '../assets/script/core/config/ConfigService';
 
@@ -38,7 +38,7 @@ test('运行时 ConfigService 解压入口同样接受最新队列表，基地�
         },
     };
     const config = await loadBigMapConfig(service);
-    const presenter = new BigMapPresenter({ config, storage: createMemoryBigMapStorage(),
+    const presenter = new BigMapModel({ config, storage: createMemoryBigMapStorage(),
         saveKey: 'queue-config', adventureChapter: () => 3, now: () => 1000 });
     assert.equal(presenter.plotCells().length, 25);
     assert.equal(presenter.base.buildings[0].hexId, 12);
@@ -84,7 +84,7 @@ test('队列业务必填字段和基地20格上限保留校验，允许偶数尺
 
 test('队列槽位按 maxBuildQueue 全量返回：未解锁的标 locked，界面才知道上限几条', () => {
     const config = parseBigMapConfig(tables());
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: createMemoryBigMapStorage(), saveKey: 'queue-capacity',
         adventureChapter: () => 3, now: () => 1000,
     });
@@ -113,7 +113,7 @@ test('队列表七个字段一个都不能白填：每个都在行为上有出�
     assert.equal(config.queue.queueUnlockCost3, row.queueUnlockCost3); // 第 3 条价格
     assert.equal(config.queue.cancelReturnRate, row.cancelReturnRate); // 取消返还比例
     assert.equal(config.queue.upgradeUnlockChapter, row.upgradeUnlockChapter); // 升级解锁章节
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: createMemoryBigMapStorage(), saveKey: 'queue-fields',
         adventureChapter: () => row.upgradeUnlockChapter as number, now: () => 1000,
     });

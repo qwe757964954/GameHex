@@ -74,6 +74,17 @@ export class ZCSkillRuntimeRegistry {
         //  同样只带数据 —— 推进在 `ZCSkillTriggerSystem.applyBlinkStrike`，位移由组合根
         //  转给 `ZCMovementSystem.placeAt`，伤害复用 `ZCAttackResolutionSystem.strikeTargets`。
         this.register('blink_strike', 'none');
+        //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在**自己脚下**开一片
+        //  **跟着本体走**的周期伤害区域（大拳那一套是「打出去」，这个是「裹在身上」）。
+        //  与 `periodic_damage` 不是一回事：那个 handler 挂在状态上、只结算**承载者自己**
+        //  掉血（自伤 DoT），而这里要的是「半径内所有敌人每秒掉一次」。
+        //  与 `team_aura` 也不是一回事：那个给友军挂增益状态，不打人。
+        //  推进在 `ZCSkillTriggerSystem.applySelfAura`，结算复用 `ZCGroundZoneSystem`。
+        this.register('self_aura', 'none');
+        //  2026-11-11 磁电菇「五雷轰顶」（101603）：冷却到点在目标点连续落下 N 道雷，
+        //  每道雷独立判伤、独立掷麻痹。推进在 `ZCSkillTriggerSystem.applyBoltStrike`，
+        //  落点与结算在 `ZCAttackResolutionSystem.castBoltLine`（每道雷 = 一个「一波」地面区域）。
+        this.register('bolt_strike', 'none');
     }
 
     register(key: string, stateMode: ZCSkillStateMode): this {

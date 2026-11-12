@@ -18,6 +18,7 @@ import { assetPath } from './helpers/asset-paths';
  */
 const viewSource = readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionView.ts', 'utf8');
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
+const preparedSource = readFileSync('assets/script/app/zcds/application/ZCGamePreparedResources.ts', 'utf8');
 const loaderSource = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
 const viewMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSpawnSelectionView.ts.meta', 'utf8'));
 const prefabText = readFileSync(assetPath('ui/game/ZCSpawnSelection.prefab'), 'utf8');
@@ -364,15 +365,14 @@ test('两态口径：文案只有两条、等待态收掉倒计时/进度/绿勾
 
 test('自选主城 HUD 走实例化路径，并进了对局预加载清单', () => {
     const game = stripComments(gameSource);
-    //  preload 改造后 prefab 由 `ZCGamePreparedResources` 带进来（`prepared.spawnSelectionPrefab`），
+    //  preload 改造后 prefab 由 `IZCGamePreparedResources` 带进来（`prepared.spawnSelectionPrefab`），
     //  `this.cachedSpawnSelectionPrefab` 那套缓存字段已经删了 ⇒ 断言同步到新写法（口径不变：必须实例化、禁运行时挂脚本）。
     assert.match(game, /instantiate\(prepared\.spawnSelectionPrefab\)/, '必须实例化 prefab');
     assert.doesNotMatch(game, /addComponent\(ZCSpawnSelectionView\)/, '不再运行时挂脚本');
     assert.match(game, /getComponent\(ZCSpawnSelectionView\)/, '取组件失败应当场抛');
 
-    assert.match(loaderSource, /const SPAWN_SELECTION_URL = ZC_BATTLE_SHELL_PATHS\.spawnSelection/);
-    assert.match(loaderSource, /spawnSelectionPrefab: selectSpawn \? SPAWN_SELECTION_URL : null/);
-    assert.match(loaderSource, /spawnSelectionPrefab: Prefab \| null;/);
+    assert.match(loaderSource, /spawnSelectionPrefab: selectSpawn \? ZC_BATTLE_SHELL_PATHS\.spawnSelection : null/);
+    assert.match(preparedSource, /spawnSelectionPrefab: Prefab \| null;/);
 });
 
 

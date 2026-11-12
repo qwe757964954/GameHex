@@ -11,6 +11,7 @@ import {
     chapterFinalBossCell,
     expandBindingsToAreaSites,
     findCurrentTerritoryLevel,
+    findHighestPassedTerritoryLevel,
     territoryChapterCompletion,
 } from '../assets/script/app/territory/model/TerritoryStageBinding';
 
@@ -38,6 +39,31 @@ function chapter(number: number) {
         'utf8',
     )));
 }
+
+test('sweep target = highest PASSED stage cell（不是「下一关」）', () => {
+    const map = chapter(1);
+    const byCell = expandBindingsToAreaSites(map.sites, bindTerritoryBattleStages(map.sites, campaign(1).stages));
+    const progress = new TerritoryProgress(map);
+    const sites = [...map.sites].reverse();
+
+    // 一格都没通 ⇒ 没有可扫的目标。不许退到第 1 关 —— 那是发一个必然被服务端拒的 cellId。
+    assert.equal(findHighestPassedTerritoryLevel(sites, byCell, progress), null);
+
+    progress.markCellPassed(327);   // 第 1 关
+    assert.equal(findHighestPassedTerritoryLevel(sites, byCell, progress)?.site.cellId, 327,
+        '第 1 关整片算通过 ⇒ 取 cellId 小的那格（结果不随 sites 顺序漂）');
+
+    progress.markCellPassed(288);   // 第 2 关
+    assert.equal(findHighestPassedTerritoryLevel(sites, byCell, progress)?.site.cellId, 288);
+
+    // 🔴 两条口径必须分开：快速寻敌跳到第 3 关（未通关），扫荡留在第 2 关（已通关最高的）
+    assert.equal(findCurrentTerritoryLevel(sites, byCell, progress)?.site.cellId, 270);
+    assert.equal(findHighestPassedTerritoryLevel(sites, byCell, progress)?.site.cellId, 288,
+        '扫荡是「把已推进的进度再收一次」，不能跳到未通关的下一关');
+
+    progress.markCellPassed(269);   // 第 3 关
+    assert.equal(findHighestPassedTerritoryLevel(sites, byCell, progress)?.site.cellId, 269);
+});
 
 test('quick find walks the whole level chain, not just Bosses', () => {
     const map = chapter(1);

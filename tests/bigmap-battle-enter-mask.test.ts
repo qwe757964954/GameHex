@@ -140,7 +140,7 @@ function loadPageClass(): new () => Record<string, unknown> {
 function pageFixture() {
     const page = new (loadPageClass())() as any;
     const taps: number[] = [];
-    page.layout = { node: { children: [] } };
+    page.layout = { node: { children: [] }, renderPlotCard: () => {} };
     page.node = { children: new Array(3).fill(null) };
     page.worldView = { occupantAt: (hexId: number) => { taps.push(hexId); return { kind: 'empty' }; } };
     page.data = bigMapViewStateFixture();
@@ -199,7 +199,7 @@ test('等待时隐藏详情，取消后重新渲染选中目标且恢复模态',
     page.closeInfoPopup = () => { visible = false; };
     page.closeCityPopup = () => {};
     page.refreshInfoContent = () => { visible = true; refreshed++; };
-    page.layout = { node: { children: [] } };
+    page.layout = { node: { children: [] }, renderPlotCard: () => {} };
     page.node = { children: [] };
     page.data = bigMapViewStateFixture();
     page.applyMode = () => {};

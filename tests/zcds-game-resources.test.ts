@@ -107,7 +107,11 @@ test('对局组件在 onLoad 后通过实例入口接收本局数据，并在退
 test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     const instantiated: unknown[] = [];
     const rendered: unknown[][] = [];
-    const panel = { render: (...args: unknown[]) => rendered.push(args) };
+    const barVisible: boolean[] = [];
+    const panel = {
+        render: (...args: unknown[]) => rendered.push(args),
+        setBossBarVisible: (visible: boolean) => barVisible.push(visible),
+    };
     const ZCGame = loadGame((prefab) => {
         instantiated.push(prefab);
         return { layer: 0, setParent() {}, getComponent: () => panel };
@@ -124,11 +128,12 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
         node: { layer: 1, setParent() {}, destroy() {} },
     };
 
-    const progress = { currentWaveCardId: null, currentWaveIsBoss: true };
+    const progress = { currentWaveId: 1, currentWaveCardId: null, currentWaveIsBoss: true };
     game.renderBossPanel({ defenceWaveProgress: progress });
     assert.deepEqual(instantiated, [bossPanelPrefab]);
     assert.equal(rendered.length, 1);
     assert.equal(rendered[0][0], progress);
+    assert.deepEqual(barVisible, [true], 'BOSS 波要把血条组点亮');
 });
 
 test('view emits frames and destruction with its own owner, without owning business results', () => {

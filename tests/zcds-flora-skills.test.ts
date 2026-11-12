@@ -13,6 +13,7 @@ import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifier
 import {
     ZCAttackResolutionSystem, type IZCAttackResolutionContext,
 } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
+import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -31,7 +32,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
 ];
@@ -46,7 +47,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 
 function prepare() {
     loadPvpTables(Object.fromEntries(TABLE_NAMES.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 
@@ -294,4 +295,74 @@ test('自体中心区域：zoneSelfCentered=1 时区域落在施法者脚下，�
     onTarget.attack();
     assert.equal(onTarget.state.groundZones.length, 1);
     assert.equal(onTarget.state.groundZones[0].x, 60, '不配就仍在目标点');
+});
+
+test('三叶小丑的飓风缩到 50%：视觉倍率与判定半径必须同步', () => {
+    //  需求 2026-11-09：「三叶小丑的【飓风】技能，特效节点缩小 50%」
+    //  ＋追加「得把 areaRadius 改成 30，两处必须同步」。
+    //  36251「风法师武将技」= 三叶小丑（68020）`unitSkillId` 30714 的强化那一击。
+    const PREFAB = 'units/projectiles/风法师_龙卷风/风法师_龙卷风';
+
+    // ① 视觉：宿主节点必须乘 0.5（prefab 烘焙 4 倍 ⇒ 屏上约 512×616 缩到 256×308）。
+    assert.equal(zcCombatEffectNodeScaleOf(PREFAB), 0.5, '飓风宿主节点必须乘 0.5');
+    //  同一张表里还有椰蛋战士的旋风（2026-11-10 起是 0.7）：改这条不许顺手动它。
+    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风'), 0.7);
+    //  没登记的一律美术原样 —— 包括同职业的普攻风刃。
+    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/风法师_绿风/风法师_绿风'), 1);
+    assert.equal(zcCombatEffectNodeScaleOf(null), 1);
+
+    // ② 判定：配表半径同样砍半（60 → 30 逻辑 px ⇒ 世界半径 18 → 9），两处一比一。
+    //    只改一边的症状是「看着小了一圈、打到的还是原来那么大」（或反过来），实机看不出来、
+    //    只能靠这条断言钉住 —— 所以这里连着链路一起查，不孤立地只看 36251 的数字。
+    const card = readRows('pvpCard').find((row) => String(row.id) === '68020');
+    assert.ok(card, '三叶小丑 68020 必须存在');
+    const attack = skillRow(Number(card!.unitSkillId));
+    assert.equal(attack.empoweredSkillId, 36251, '68020 的强化那一击必须是「飓风」36251');
+
+    const hurricane = skillRow(36251);
+    assert.equal(hurricane.mode, 'area', '飓风必须是 area 模式才会建持续区域');
+    assert.equal(hurricane.areaRadius, 30,
+        'areaRadius 必须跟着视觉一起砍半（60 → 30）；改它等于改判定范围，别只改特效倍率');
+    assert.equal(hurricane.effectPrefabPath, PREFAB, '判定行的特效路径必须就是被缩的那张 prefab');
+
+    // ③ 世界半径与另一半（`combatDistanceScale`）对得上：30 × 0.3 = 9。
+    const global = readRows('pvpGlobal').find((row) => row.key === 'combatDistanceScale');
+    assert.ok(global, 'pvpGlobal 缺 combatDistanceScale');
+    assert.equal(Number(hurricane.areaRadius) * Number(global!.value), 9,
+        '世界半径 9px（原 18px）：视觉与判定同比例，才叫"两处同步"');
+});
+
+test('椰蛋战士的暴风缩到 70%：视觉倍率与判定半径必须同步', () => {
+    //  需求 2026-11-10：「68005 椰蛋战士的【暴风】技能，3 个飓风的大小调成 70% 大」
+    //  ＋追加「只改了视觉，也要同步改判定」。
+    //
+    //  30831「椰蛋战士·暴风」= 68005 的 `unitSkillId` 30707 的强化那一击
+    //  （每 5 次普攻，`on_cast_end_spawn_zone` 生成 3 道旋风）。
+    const PREFAB = 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风';
+    const BEFORE_SCALE = 0.8;
+    const AFTER_SCALE = 0.7;
+    const BEFORE_RADIUS = 30;
+
+    //  ① 视觉：宿主节点倍率。
+    assert.equal(zcCombatEffectNodeScaleOf(PREFAB), AFTER_SCALE, '暴风宿主节点必须乘 0.7');
+
+    //  ② 判定：半径按同一比例收 —— 30 × 0.7 / 0.8 = 26.25 ⇒ 取整 26。
+    //     只改视觉的症状是「看着小了一圈、打到的还是原来那么大」，实机看不出来。
+    const storm = skillRow(30831);
+    assert.equal(storm.mode, 'area', '暴风必须是 area 模式才会建持续区域');
+    assert.equal(storm.effectPrefabPath, PREFAB, '判定行的特效路径必须就是被缩的那张 prefab');
+    assert.equal(storm.areaRadius, 26,
+        `areaRadius 必须跟着视觉一起收（${BEFORE_RADIUS} → 26）；改它等于改判定范围，别只改特效倍率`);
+
+    //  ③ 比例守卫：两边收缩比必须一致（26/30 ≈ 0.7/0.8 = 0.875），偏差超过 2% 就是漂了。
+    const radiusRatio = Number(storm.areaRadius) / BEFORE_RADIUS;
+    const scaleRatio = AFTER_SCALE / BEFORE_SCALE;
+    assert.ok(Math.abs(radiusRatio - scaleRatio) / scaleRatio < 0.02,
+        `判定收缩比 ${radiusRatio.toFixed(3)} 与视觉收缩比 ${scaleRatio.toFixed(3)} 已经对不上`);
+
+    //  ④ 世界半径：26 × combatDistanceScale 0.3 = 7.8。
+    const global = readRows('pvpGlobal').find((row) => row.key === 'combatDistanceScale');
+    assert.ok(global, 'pvpGlobal 缺 combatDistanceScale');
+    assert.equal(Number(storm.areaRadius) * Number(global!.value), 7.8,
+        '世界半径 7.8px（原 9px）');
 });

@@ -84,7 +84,7 @@ const HIT_FX_TARGET_SECONDS = 0.15;
  * 参与"职业受击"的四组 —— 必须与卡表 `traits.attack`（= `ZCAttackTrait`）一一对应。
  *
  * 🔴 **「中毒受击」故意不在这里**：它是一个**状态**（中毒 debuff）不是职业，
- * 硬塞进职业映射会让"中毒"看起来像第五个职业。见 `ZCGameLoader.HIT_FX_TRAITS`。
+ * 硬塞进职业映射会让"中毒"看起来像第五个职业。见 `ZC_ATTACK_TRAITS`。
  */
 const HIT_FX_GROUPS: ReadonlyArray<{
     name: string;
@@ -333,11 +333,9 @@ test('阵亡特效 prefab：CUSTOM + trim 关 + 锚点底边（人物倒下时�
  */
 test('受击特效：加载侧只点名四个职业，「中毒」不进映射（它是状态不是职业）', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    // 加载侧不能自己再抄一份中文：`HIT_FX_TRAITS` 直接复用模型层的职业词表（唯一真源）。
-    const assignment = /HIT_FX_TRAITS: readonly ZCAttackTrait\[\] = ([^;]+);/.exec(loader);
-    assert.ok(assignment, '找不到 HIT_FX_TRAITS 赋值（加载侧的唯一真源）');
-    assert.equal(assignment[1].trim(), 'ZC_ATTACK_TRAITS',
-        'HIT_FX_TRAITS 必须复用 ZC_ATTACK_TRAITS，手写第二份职业清单会让表里加职业时加载侧静默漏配');
+    // 首帧和后补共用目录加载，职业映射只消费模型词表。
+    assert.match(loader, /private async loadCommonEffects[\s\S]*?ZC_ATTACK_TRAITS\.map\(/);
+    assert.match(loader, /private createDeferredArt[\s\S]*?this\.loadCommonEffects\(scope, BATTLE_DEFERRED_PRIORITY\)/);
 
     // 词表本身只有四个职业，顺序即受击特效目录（`<职业>受击`）的约定顺序。
     const catalog = readFileSync('assets/script/app/zcds/model/ZCCombatCatalog.ts', 'utf8');
@@ -348,21 +346,11 @@ test('受击特效：加载侧只点名四个职业，「中毒」不进映射�
     assert.ok(!listed.includes('中毒'), '「中毒受击」是状态不是职业，不该进职业映射');
 });
 
-/**
- * 加载器必须**逐个 load**、不 `loadDir`：`loadDir` 会把「中毒受击」那组
- * 和每个目录里的 `.pac` / `.anim` / 裸帧全捞回来，白白进内存还得再筛。
- */
-test('受击特效：加载器容错加载 + 逐个点名，不 loadDir（别把中毒那组捞进来）', () => {
+test('公共特效按目录限定 Prefab 类型，首帧与后补共用入口', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
-    assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/死亡特效/死亡特效'), '缺 DEATH_FX_URL');
-    assert.ok(loader.includes('loadDeathFxPrefab'), '缺阵亡特效容错加载器');
-    assert.ok(loader.includes('loadHitFxPrefabs'), '缺受击特效加载器');
-    assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/受击特效'), '缺 HIT_FX_DIRECTORY');
-    // loadHitFxPrefabs 函数体内不能出现 loadDir
-    const body = /private async loadHitFxPrefabs\([\s\S]*?\n    }/.exec(loader)?.[0] ?? '';
-    assert.ok(body.length > 0, '找不到 loadHitFxPrefabs 实现');
-    assert.ok(!body.includes('loadDir'),
-        'loadHitFxPrefabs 禁用 loadDir：会把「中毒受击」那组和裸帧一起捞进来');
+    assert.match(loader, /loadDir\(COMMON_EFFECT_DIRECTORY, Prefab,/);
+    assert.match(loader, /return this\.loadCommonEffects\(scope\)/);
+    assert.match(loader, /this\.loadCommonEffects\(scope, BATTLE_DEFERRED_PRIORITY\)/);
 });
 
 test('受击特效：模型按攻击方职业推事件 + 渲染层播放/回收，两端都接上了', () => {

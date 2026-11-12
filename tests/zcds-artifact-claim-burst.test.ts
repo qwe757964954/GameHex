@@ -42,9 +42,11 @@ test('接线：ArtPaths → Loader → PreparedResources → ZCGame → 渲染�
 
     const loader = readFileSync(join(ROOT, 'assets/script/app/zcds/application/ZCGameLoader.ts'), 'utf8');
     assert.match(loader, /ARTIFACT_CLAIM_BURST_ART_ROOT/, 'loader 要引 ArtPaths 的常量');
-    assert.match(loader, /artifactClaimBurstFrames:\s*readonly SpriteFrame\[\]/, 'prepared 要有帧字段');
+    const prepared = readFileSync(join(ROOT, 'assets/script/app/zcds/application/ZCGamePreparedResources.ts'), 'utf8');
+    assert.match(prepared, /artifactClaimBurstFrames:\s*readonly SpriteFrame\[\]/, 'prepared 要有帧字段');
     assert.match(loader, /loadArtifactClaimBurstFrames\(scope\)/, 'prepared 装配时要真的去加载');
-    assert.match(loader, /artifactClaimBurstFrames,\s*\n\s*decorFrames,/, 'return 里要带上它');
+    assert.match(loader, /return \{ hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames \}/, '场景表现返回具名帧字段');
+    assert.match(loader, /artifactClaimBurstFrames: sceneEffects\.artifactClaimBurstFrames,/, 'prepared 要包含场景表现');
 
     const game = readFileSync(join(ROOT, 'assets/script/app/zcds/ZCGame.ts'), 'utf8');
     assert.match(game, /artifactClaimBurstFrames:\s*prepared\.artifactClaimBurstFrames/, 'ZCGame 要把它递给渲染层');

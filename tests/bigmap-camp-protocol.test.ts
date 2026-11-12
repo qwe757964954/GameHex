@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 import { assetPath } from './helpers/asset-paths';
@@ -39,7 +39,7 @@ test('两组据点协议在真实运行时可注册、编码并解码', async ()
 });
 
 test('Presenter 提供可见据点查询与点击详情查询入口', () => {
-    const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage: createMemoryBigMapStorage(),
+    const presenter = new BigMapModel({ config: loadBigMapConfig(), storage: createMemoryBigMapStorage(),
         saveKey: 'camp-test', adventureChapter: () => 3, now: () => 957600 });
     assert.equal(typeof presenter.refreshVisibleCamps, 'function');
     assert.equal(typeof presenter.refreshCampDetail, 'function');

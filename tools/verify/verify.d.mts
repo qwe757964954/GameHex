@@ -57,6 +57,29 @@ export interface IDefinitionResult {
     issues: IDefinitionIssue[];
 }
 
+export interface IVerifyTestSummary {
+    tests: number;
+    pass: number;
+    fail: number;
+}
+
+export interface IVerifyTestRun {
+    failures: string[];
+    summary: IVerifyTestSummary;
+    cmd: string;
+    exitCode: number | null;
+    spawnFailed: boolean;
+    summaryOk: boolean;
+}
+
+export declare function testCommand(spec: string): string;
+export declare function splitTestBatches(files: readonly string[], size?: number): string[][];
+export declare function tapSummaryOk(summary: IVerifyTestSummary | null | undefined): boolean;
+export declare function parseTestRun(
+    result: { status?: number | null; stdout?: string; stderr?: string; error?: Error },
+    cmd: string,
+): IVerifyTestRun;
+
 export declare function exportedNamesOf(source: string): Set<string> | null;
 export declare function checkDefinitions(
     changedFiles: readonly string[],

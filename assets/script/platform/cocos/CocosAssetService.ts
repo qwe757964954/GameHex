@@ -1,7 +1,7 @@
-import { Asset, assetManager, AssetManager, Director, director, resources, SpriteFrame } from 'cc';
+import { Asset, assetManager, Director, director, SpriteFrame } from 'cc';
 import type { AssetLoadOptions, AssetService, AssetType } from '../../core/asset/AssetService';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
-import { CocosBundleRegistry } from '../hotupdate/CocosBundleRegistry';
+import { loadAssetBundle } from './AssetBundleLoader';
 import { reportDeadSpriteFrames } from './SpriteFrameGuard';
 
 const RESOURCES_BUNDLE = 'resources';
@@ -16,7 +16,7 @@ export class CocosAssetService implements AssetService {
     private releaseScheduled = false;
     async preload(path: string, options: AssetLoadOptions = {}): Promise<void> {
         if (options.scope?.disposed) return;
-        const bundle = await this.getBundle(resolveBundle(path, options));
+        const bundle = await loadAssetBundle(resolveBundle(path, options));
         if (options.scope?.disposed) return;
         await new Promise<void>((resolve, reject) => {
             // preload 预设每帧只派发2项，仍在途时会给共享下载队列留下低速调度。
@@ -26,7 +26,7 @@ export class CocosAssetService implements AssetService {
         });
     }
     async load<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T> {
-        const bundle = await this.getBundle(resolveBundle(path, options));
+        const bundle = await loadAssetBundle(resolveBundle(path, options));
         const asset = await new Promise<T>((resolve, reject) => {
             const callback = (error: Error | null, value: Asset) => {
                 if (error || !value) {
@@ -44,7 +44,7 @@ export class CocosAssetService implements AssetService {
     }
 
     async has<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<boolean> {
-        const bundle = await this.getBundle(resolveBundle(path, options));
+        const bundle = await loadAssetBundle(resolveBundle(path, options));
         try {
             // getInfoWithPath 查 bundle 构建索引（config.json 的 paths），不触发实际下载/反序列化。
             // Creator 3.8 的 Bundle 标准方法；防御性调用，方法缺失/异常时放行给 load 报真实错误。
@@ -59,7 +59,7 @@ export class CocosAssetService implements AssetService {
     }
 
     async loadDir<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T[]> {
-        const bundle = await this.getBundle(resolveBundle(path, options));
+        const bundle = await loadAssetBundle(resolveBundle(path, options));
         const assets = await new Promise<T[]>((resolve, reject) => {
             const callback = (error: Error | null, values: Asset[]) => {
                 if (error) {
@@ -74,28 +74,6 @@ export class CocosAssetService implements AssetService {
         });
         for (const asset of assets) this.retainInScope(asset, options);
         return assets;
-    }
-
-    private async getBundle(name = RESOURCES_BUNDLE): Promise<AssetManager.Bundle> {
-        if (name === RESOURCES_BUNDLE) return resources;
-        const cached = assetManager.getBundle(name);
-        if (cached) return cached;
-        const remote = CocosBundleRegistry.resolve(name);
-        return new Promise<AssetManager.Bundle>((resolve, reject) => {
-            const source = remote?.url ?? name;
-            const callback = (error: Error | null, bundle?: AssetManager.Bundle) => {
-                if (error || !bundle) {
-                    reject(error || new Error(`Asset Bundle 加载失败：${name}`));
-                    return;
-                }
-                resolve(bundle);
-            };
-            if (remote) {
-                (assetManager.loadBundle as any)(source, { version: remote.version }, callback);
-            } else {
-                assetManager.loadBundle(source, callback);
-            }
-        });
     }
 
     private retainInScope<T>(value: T, options: AssetLoadOptions): void {

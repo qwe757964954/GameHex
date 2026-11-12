@@ -1,5 +1,5 @@
 import { sys } from 'cc';
-import type { IBigMapStorage } from './BigMapPresenter';
+import type { IBigMapStorage } from './BigMapModel';
 import type { IBigMapSaveOwner } from './BigMapSaveKeys';
 import { BIGMAP_SAVE_KEY, createMemoryBigMapStorage } from './BigMapSaveKeys';
 

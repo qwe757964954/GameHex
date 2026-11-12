@@ -156,3 +156,52 @@ test('localStorage 不可用时，本次会话内照样记得住（内存兜底�
     assert.deepEqual([...store.loadPassedLevels()], [20001]);
     assert.deepEqual([...store.markLevelsPassed([20001])], [], '内存兜底下同样要幂等');
 });
+
+// ============================================================
+// 账号级「已激活的领地关卡」（快速寻敌 open 702 靠它活过切章）
+// ============================================================
+
+test('已激活关卡与已通关关卡各存一份：key 不共用，切章照样读得到 10004', () => {
+    const h = harness();
+    const store = h.create('activated-a');
+    assert.deepEqual([...store.loadActivatedLevels()], [], '新号没有任何激活记录');
+
+    assert.deepEqual([...store.markLevelsActivated([10004])], [10004], '首次记录要回「新增的」');
+    assert.deepEqual([...store.markLevelsActivated([10004])], [], '重复记录没有新增 ⇒ 不返回，也不该写盘');
+    assert.deepEqual([...store.markLevelsActivated([10004, 10005])], [10005]);
+
+    // 🔴 两张表必须互不污染：激活 ≠ 通关（快速寻敌用激活，战斗宝箱用通关）
+    assert.deepEqual([...store.loadPassedLevels()], [],
+        '记了激活不该顺手把「已通关」也写进去 —— 那会让只认通关的功能提前放行');
+    store.markLevelsPassed([20001]);
+    assert.deepEqual([...h.create('activated-a').loadActivatedLevels()].sort(), [10004, 10005],
+        '记通关也不该影响激活');
+
+    // 切章：第 2 章的存档怎么建都不该影响这份成就
+    store.load(2, { silver: 0, stamina: 0 });
+    assert.deepEqual([...h.create('activated-a').loadActivatedLevels()].sort(), [10004, 10005]);
+
+    const keys = [...h.memory.keys()].filter((key) => key.startsWith(texts.TERRITORY_ACTIVATED_LEVELS_KEY));
+    assert.equal(keys.length, 1, `已激活关卡只能有一份存档，实际 ${keys.length} 份：${keys.join(' / ')}`);
+    assert.equal(keys[0], `${texts.TERRITORY_ACTIVATED_LEVELS_KEY}.server:1:role:activated-a:`,
+        'key 必须是「账号作用域」，不能拼 chapterId');
+});
+
+test('已激活关卡按角色/区服隔离，脏数据不炸也不放行', () => {
+    const h = harness();
+    h.create('activated-b').markLevelsActivated([10004]);
+
+    assert.deepEqual([...h.create('activated-b', '2').loadActivatedLevels()], [], '换区服就是另一份成就');
+    assert.deepEqual([...h.create('activated-c').loadActivatedLevels()], [], '换角色就是另一份成就');
+
+    const key = `${texts.TERRITORY_ACTIVATED_LEVELS_KEY}.server:1:role:activated-b:`;
+    const broken = harness();
+    broken.memory.set(key, 'not json');
+    assert.deepEqual([...broken.create('activated-b').loadActivatedLevels()], [],
+        '存档损坏按「没有记录」处理，不能抛');
+
+    const dirty = harness();
+    dirty.memory.set(key, JSON.stringify([10004, -1, 2.5, '10005', 0]));
+    assert.deepEqual([...dirty.create('activated-b').loadActivatedLevels()], [10004],
+        '只认正整数关卡号，别让字符串/小数混进条件判定');
+});

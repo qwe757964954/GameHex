@@ -16,7 +16,7 @@
 - 业务合法性由 Model/领域规则判定；Controller 承担请求在途、重复操作、取消与外部输入的编排，复用 Model 的规则生成 canXxx 等展示字段。View 的 interactable 只是显示结果，不能代替业务校验。
 - 纯规则进入 feature 的 model/domain 或 core，不依赖 cc、UI 和直接 I/O。应用层 Model 可消费既有注入端口，不因 MVC 重构复制仓库或另建状态机。
 - Repository/Gateway 负责外部数据访问与边界归一化，不控制页面、不堆业务规则；业务广播按现有模块契约由 Controller 统一订阅。
-- Presenter 是存量命名：先确认它实际承担 Model、投影还是 Controller 职责，复用或迁移同一实现。不得仅为名称齐全新增第二份业务状态；BigMapPresenter / TerritoryPresenter 的兼容导出不代表另一套模型。
+- Presenter 是存量命名：先确认它实际承担 Model、投影还是 Controller 职责，复用或迁移同一实现。不得仅为名称齐全新增第二份业务状态，也不得以「兼容再导出」留第二套入口（`XxxPresenter.ts` 只写 `export ... from './XxxModel'`）；大地图、领地两个模块的该层已于 2026-11 删除，直接 import `BigMapModel` / `TerritoryModel`。
 
 ## 2. 输入到渲染的完整事件流
 

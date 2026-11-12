@@ -18,7 +18,7 @@
 | 收取 | `CmdSlgBuildCollectReqMsg`（`buildInstIds` 批量） | `requestHarvest`、`requestHarvestAll`（一次结算） |
 | 队列解锁 | `CmdSlgBuildUnlockQueueReqMsg` | `requestUnlockBuildQueue` |
 
-已有 `CmdSlgCampSimpleInfoReqMsg`、`CmdSlgCampInfoReqMsg` 继续由据点 Repository 处理，可见区域和点击详情的查询入口不变。两条回包的字段不同（2026-10-30 协议定稿）：
+已有 `CmdSlgCampSimpleInfoReqMsg`、`CmdSlgCampInfoReqMsg` 继续由据点 Repository 处理，可见区域和点击详情的查询入口不变，**但不再按秒轮询**：新城进入视野时查一次完整快照，之后玩家名单的增量由 `CmdSlgGameRoleInfoBroMsg` 广播驱动（见 `docs/bigmap-系统实现说明.md`「大地图玩家协议闭环」）。广播只带 `SlgGameCameRoleInfo`，不带据点 `opType`，所以占领状态仍只在「新城进入视野 / 点击城池详情 / 迁城后回查」三个按需入口刷新。两条回包的字段不同（2026-10-30 协议定稿）：
 
 | 消息 | 字段 | 用途 |
 | --- | --- | --- |
@@ -56,9 +56,10 @@
 - 进入世界时，三条 SLG 初始化请求与页面资源并行准备，显示地图不等待 `GameInfo` / 建筑 / 行动力全部回包或超时。快照未就绪时仍由 Repository 拒绝基地写操作；回包经 Presenter 通知视图刷新，不使用本地资源或建筑代替服务端事实。战后重进同样遵守此约定。
 - `buildInstId` 已统一为正数 `uint32`（1～4294967295），收发、归一化和展示均使用数字，不转换为 `Long` 或字符串，也不再维护展示编号映射。越界值在编码前拒绝，联机状态不落盘。
 - 建造区 `position=0` 有效；协议 `queueId` 按 1 起编号，转换成视图 0 起的槽位下标。
-- `state=1` 展示在建格，`state=2` 保留当前建筑等级并展示升级队列，`finishTime` 是秒级时间戳。倒计时到期只重拉，不在客户端宣布完成。
+- `state=1` 展示在建格，`state=2` 保留当前建筑等级并展示升级队列，`finishTime` 是秒级时间戳。**`CmdSlgBuildInfoReqMsg` 不再定时重拉**：建筑变化由写操作回包里的 `SlgBuildInfo`（单条，建造/升级/取消/移动）或 `builds`（领取批量）增量应用，或由 `CmdSlgBuildInfoBroMsg` 失效通知触发一次全量重拉；首包走 `initialize()`。倒计时到期不在客户端宣布完成，也不靠本地时钟猜服务端状态。
 - `nextRevertTime` 是剩余秒数，只计算恢复倒计时，不推算行动力总量。
-- r826 起，`CmdSlgGameInfoRspMsg`、`CmdSlgGameInfoBroMsg` 必填 `info`，其中 `SlgGameInfo.maxMonsterLevel` 表示最大击杀野怪等级；`CmdSlgBuildInfoBroMsg` 仍无字段。当前广播处理继续作为失效通知重拉；写操作期间收到广播，会延后全量刷新。
+- r826 起，`CmdSlgGameInfoRspMsg`、`CmdSlgGameInfoBroMsg` 必填 `info`，其中 `SlgGameInfo.maxMonsterLevel` 表示最大击杀野怪等级；`CmdSlgBuildInfoBroMsg` 仍无字段。当前广播处理继续作为失效通知重拉；写操作期间收到广播，会延后全量刷新。`BigMapSlgRepository.tick()` 的 5 秒节流只留给 `CmdSlgActionUpdateReqMsg` 行动力轮询。
+- 🔴 `CmdSlgBuildInfoBroMsg` 当前是**空消息**（无任何字段），所以它只能当失效通知，收到后仍会打一次 `CmdSlgBuildInfoReqMsg` 全量重拉。若后端要在这条广播里直接下发「单个建筑信息」`SlgBuildInfo` 做增量，需要先给 proto 加字段并重新生成随包静态模块，客户端再接单条 apply（`applyBuildResponse` / `replaceBuild` 已具备单条合并能力）—— 协议是跨端契约，不单侧修改。
 - 同页写操作串行且不乐观更新。SLG 写请求关闭网络超时重发和重连恢复；未确认的写操作不重发，只重拉建筑事实。通用请求默认保留已有重试行为。
 - 联机模式不读取、写入或结算离线基地存档；未登录预览继续使用已有本地规则。
 

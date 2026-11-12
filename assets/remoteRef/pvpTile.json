@@ -7,6 +7,9 @@
 "rarityWeights",
 "eligibleCardTypes",
 "description",
+"weight",
+"initialCountLimit",
+"setCountLimit",
 "pityGroup"
 ],
 "v":[
@@ -26,6 +29,9 @@
 2
 ],
 "可抽所有阵容卡；允许抽空",
+16,
+3,
+20,
 "all-random-gold"
 ],
 [
@@ -44,6 +50,9 @@
 2
 ],
 "只抽兵营卡",
+26,
+3,
+20,
 null
 ],
 [
@@ -62,6 +71,9 @@ null
 2
 ],
 "只抽兵营卡",
+26,
+2,
+20,
 null
 ],
 [
@@ -80,6 +92,9 @@ null
 2
 ],
 "只抽兵营卡",
+26,
+1,
+20,
 null
 ],
 [
@@ -98,6 +113,9 @@ null
 1
 ],
 "固定抽到阵容中的绿品级金矿卡",
+6,
+1,
+1,
 null
 ]
 ],

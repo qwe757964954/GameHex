@@ -135,6 +135,12 @@ export class LoginGateway {
         return this.unwrap<UserInfo>(await this.requestJson(url), '注册失败，请稍后重试');
     }
 
+    /** 渠道一键登录（微信/抖音授权），用平台 code 换取用户信息 */
+    async loginWithPlatform(config: GameConfig, code: string, channel: string): Promise<UserInfo> {
+        const url = withQuery(joinUrl(config.url, 'center/account/platform-login'), { code, channel, platform: config.channelCode });
+        return this.unwrap<UserInfo>(await this.requestJson(url), '渠道登录失败');
+    }
+
     async queryRecentServers(config: GameConfig, user: UserInfo): Promise<ActionLogin> {
         return this.actionLogin(config, {
             type: 'recentserverlist',

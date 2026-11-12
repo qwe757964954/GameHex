@@ -138,8 +138,7 @@ export async function saveFormation(
     heroIds: readonly number[],
     caller?: object,
 ): Promise<FormationSaveResult> {
-    const net = GameNet.instance;
-    if (!net.isConnected) return { kind: 'offline' };
+    if (!GameNet.instance.isConnected) return { kind: 'offline' };
 
     const normalizedId = toPositiveInt(formationId);
     if (normalizedId === null) {
@@ -248,8 +247,7 @@ function hasSelectProtocol(): boolean {
  * 超时按失败返回，调用方的本地页签切换不回滚。
  */
 export function selectFormation(formationId: number, caller?: object): Promise<boolean> {
-    const net = GameNet.instance;
-    if (!net.isConnected) return Promise.resolve(false);
+    if (!GameNet.instance.isConnected) return Promise.resolve(false);
     if (!hasSelectProtocol()) return Promise.resolve(false);
 
     const normalizedId = toPositiveInt(formationId);

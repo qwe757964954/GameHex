@@ -24,7 +24,7 @@ test('编译标志随 loadPvpTables 置位、resetZCRuntime 复位', () => {
     assert.equal(isZCRuntimeCompiled(), false);
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     ];
     loadPvpTables(Object.fromEntries(names.map((name) => [name, rows(name)])) as ZCPvpTables);
     assert.equal(isZCRuntimeCompiled(), true, '编译安装成功后标志置位');

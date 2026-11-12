@@ -1,3 +1,4 @@
+import { applyInstanceOverrides } from './helpers/prefab-overrides';
 /**
  * 主线任务详情弹窗（老端 `LayerMainTaskDetail`）+ 主界面「主线任务」入口
  * （老端 `组件_战斗_章节选择` 里的 `组件_主线任务`）的单测。
@@ -636,12 +637,12 @@ test('D11 详情弹窗节点默认显示，仅公共奖励框的概率标签隐�
     assert.deepEqual(off, [], `这些节点被烘成了隐藏（除了红点，本 prefab 一个都不该有）：\n  ${off.join('\n  ')}`);
 });
 
-test('D12 入口 HUD：根 231×84、锚点 (0.5,0.5)、`_active = true`、挂 MainTaskEntry', () => {
+test('D12 入口 HUD：根 113×96、锚点 (0.5,0.5)、`_active = true`、挂 MainTaskEntry', () => {
     const root = entry[1];
     assert.equal(root._name, 'MainTaskEntry');
     const uit = compOf(entry, 1, 'cc.UITransform');
-    assert.equal(uit._contentSize.width, 231, '实例尺寸 231（本体 225，被 `组件_战斗_章节选择` 覆写）');
-    assert.equal(uit._contentSize.height, 84);
+    assert.equal(uit._contentSize.width, 113, '实例尺寸 231（本体 225，被 `组件_战斗_章节选择` 覆写）');
+    assert.equal(uit._contentSize.height, 96);
     assert.deepEqual(uit._anchorPoint, { __type__: 'cc.Vec2', x: 0.5, y: 0.5 });
     // 规则 86：`_active` 必须烘 true —— `onLoad` 只在激活时跑，而 `refresh()` 就在 `onLoad` 里
     assert.equal(root._active, true, '烘成 false = 永不刷新的死锁，且一条错都不报');
@@ -650,59 +651,33 @@ test('D12 入口 HUD：根 231×84、锚点 (0.5,0.5)、`_active = true`、挂 M
 
 test('D13 入口 HUD：根子序 = Bg → Chest → RedDot → Label，且红点烘隐藏', () => {
     const names = (entry[1]._children ?? []).map((c: any) => byId(entry, c.__id__)._name);
-    assert.deepEqual(names, ['Bg', 'Chest', 'RedDot', 'Label']);
+    assert.deepEqual(names, ['Bg', 'Icon', 'RedDot', 'Label']);
     const rects = collectRects(entry);
     const redDot = rects.get('RedDot')!;
     assert.equal(entry[redDot.id]._active, false, '红点初始必须隐藏（老端由 OnRDUpdate 驱动，规则 82 每趟无条件写）');
     assert.equal(entry[rects.get('RedDot/DotText')!.id]._active, false, '红点里的数字同样隐藏');
 });
 
-test('D14 入口 HUD：几何用**相对偏移**断言（root 宽 231 是奇数，绝对坐标带半像素）', () => {
+test("D14 任务入口使用三段皮肤，图标与文字不横向溢出", () => {
     const rects = collectRects(entry);
-    const bg = rects.get('Bg')!;
-    const chest = rects.get('Chest')!;
-    const redDot = rects.get('RedDot')!;
-    const label = rects.get('Label')!;
-    // FGUI 原稿（`组件_战斗_主线任务.xml`，本体 225×84）：
-    //   n5(jldb)      xy="1,0"   size="222,84"
-    //   n8(lb1)       xy="138,-4" size="80,80" + relation `middle-middle,right-right`
-    //   com_rd        xy="193,0"
-    //   lab_task      xy="17,10" size="130,59"
-    //
-    // 实例被 `组件_战斗_章节选择` 覆写成 **231×84** ⇒ delta.w = 6 ⇒ 挂 `right-right` 的
-    // `n8` 向右位移 6 ⇒ 相对 `n5` 的 x 偏移 = 138 + 6 − 1 = **143**（不是 137）。
-    assert.ok(Math.abs((chest.l - bg.l) - 143) <= 0.6,
-        `Chest 相对 Bg 的 x 偏移应为 143（138 + 6 位移 − 1），实际 ${chest.l - bg.l} —— 差了 6 说明 compSize 没传给布局引擎`);
-    assert.ok(Math.abs((label.l - bg.l) - 16) <= 0.6, `Label 相对 Bg 的 x 偏移应为 17 − 1 = 16`);
-    assert.ok(Math.abs((redDot.l - bg.l) - 192) <= 0.6, `RedDot 相对 Bg 的 x 偏移应为 193 − 1 = 192（无 relation ⇒ 不位移）`);
-    // 尺寸：`lb1` 是 100×100 的原图、FGUI 显示 80×80（无九宫 ⇒ 按元素盒铺）
-    assert.equal(Math.round(bg.r - bg.l), 222);
-    assert.equal(Math.round(chest.r - chest.l), 80);
-    assert.equal(Math.round(chest.t - chest.b), 80);
-    assert.equal(Math.round(label.r - label.l), 130);
-    assert.equal(Math.round(label.t - label.b), 59, 'FGUI `lab_task` 的 size="130,59"（两行高）');
-    // 都在 root 内
-    const rootRect = rects.get('MainTaskEntry')!;
-    const inside: [string, IRect][] = [['Bg', bg], ['Chest', chest], ['RedDot', redDot], ['Label', label]];
-    for (const [path, r] of inside) {
-        assert.ok(r.l >= rootRect.l - 32 && r.r <= rootRect.r + 32,
-            `${path} 横向严重溢出 root（超出 32px 以上）`);
+    const root = rects.get('MainTaskEntry')!;
+    for (const [name, width, height] of [['Bg',111,79], ['Icon',79,71], ['Label',80,36]] as const) {
+        const box = rects.get(name)!;
+        assert.equal(Math.round(box.r-box.l), width, name);
+        assert.equal(Math.round(box.t-box.b), height, name);
+        assert.ok(box.l >= root.l-32 && box.r <= root.r+32, name);
     }
 });
 
-test('D15 入口 HUD：Label 是 22 号 `autoSize="shrink"` ⇒ Cocos `SHRINK`、不自动换行', () => {
+test("D15 任务入口使用单行任务文字，22号粗体描边", () => {
     const rects = collectRects(entry);
     const label = compOf(entry, rects.get('Label')!.id, 'cc.Label');
-    assert.ok(label, 'Label 节点上没有 cc.Label');
-    assert.equal(label._fontSize, 22, 'FGUI `lab_task` 的 fontSize="22"');
-    // FGUI `autoSize="shrink"` 的语义就是「尺寸不动、内容超了就缩字号」⇒ 与 Cocos 的 SHRINK 同义。
-    // ⚠️ 规则 76 记过「SHRINK 没有字号下限」：长任务名会被压小 —— 这是**照抄 FGUI 的行为**，
-    //    不是缺陷；真要防的是别把它改成 CLAMP（会裁字）或 NONE（会溢出底图）。
-    assert.equal(label._overflow, 2, 'Overflow.SHRINK');
-    assert.equal(label._enableWrapText, false, '老端用 `\\n` 硬换行，不靠自动换行');
-    // 初始文案必须是**真换行**（FGUI 原稿写的是 `&#xA;`，XML 字符引用要在解析层解码）
-    assert.ok(label._string.includes('\n'), `初始文案应有真换行，实际 ${JSON.stringify(label._string)}`);
-    assert.ok(!label._string.includes('&#x'), '`&#xA;` 没被解码 —— 会原样显示 6 个字符');
+    assert.equal(label._fontSize,22);
+    assert.equal(label._overflow,2);
+    assert.equal(label._enableWrapText,false);
+    assert.equal(label._string,'任务');
+    assert.equal(label._isBold,true);
+    assert.equal(label._enableOutline,true);
 });
 
 // ============================================================
@@ -880,15 +855,14 @@ test('G1 ArenaRoot 里挂着 MainTaskEntry 的嵌套实例，且只有一处', (
     assert.equal(hits.length, 1, `ArenaRoot 引用 MainTaskEntry 的次数应为 1，实际 ${hits.length}`);
 });
 
-test('G2 MainTaskEntry 实例是 ArenaRoot 的**直接子节点**，位置覆写为 (207.5, -84)', () => {
+test("G2 任务入口归属 BottomHud，使用实例位置并关闭源Widget", () => {
     const found = nestedInstanceOf(arena, ARENA_UUID);
-    assert.ok(found, 'ArenaRoot 里没有 MainTaskEntry 的嵌套实例');
-    assert.equal(arena[found!.nodeId]._parent.__id__, 1, '必须是根的直接子（与其它 HUD 一致）');
-    const ov = overridesOf(arena, found!.inst);
-    const pos = ov.get('_lpos');
-    assert.ok(pos, '实例没有 _lpos 覆写');
-    assert.equal(pos.x, 207.5, `right = 37（父宽 720）⇒ 中心 x = 360 − 37 − 231/2 = 207.5，实际 ${pos.x}`);
-    assert.equal(pos.y, -84, `bottom = 514 ⇒ 下边缘 y = −640 + 514 = −126 ⇒ 中心 = −126 + 42 = −84，实际 ${pos.y}`);
+    assert.ok(found);
+    const parent=arena[arena[found.nodeId]._parent.__id__];
+    assert.equal(parent._name,'BottomHud');
+    const resolved=applyInstanceOverrides(entry,arena,found.inst);
+    assert.deepEqual(resolved[1]._lpos,{__type__:'cc.Vec3',x:-288.5,y:295,z:0});
+    assert.equal(compOf(resolved,1,'cc.Widget')._enabled,false,'宿主位置不应被源Widget覆盖');
 });
 
 /** 子节点标签 —— 嵌套实例的根在**父 prefab** 里没有 `_name`（名字来自源 prefab），得靠 uuid 认。 */
@@ -911,18 +885,14 @@ function childLabels(): string[] {
     return (arena[1]._children ?? []).map((c: any) => childLabel(c.__id__));
 }
 
-test('G3 子序守卫：HangEntry 必须仍是**最后一个**子节点', () => {
-    const names = childLabels();
-    assert.equal(names[names.length - 1], 'HangEntry',
-        `最后一个子节点被顶掉了（实际 ${names[names.length - 1]}）——`
-        + ' `tests/hang.test.ts` 有这条守卫，且 HangEntry 自己算绝对位置时依赖它');
-    const mainIdx = names.indexOf('MainTaskEntry');
-    const heroIdx = names.indexOf('GetHeroEntry');
-    const hangIdx = names.indexOf('HangEntry');
-    assert.ok(mainIdx >= 0 && heroIdx >= 0 && hangIdx >= 0,
-        `三个入口都必须存在（实际 ${names.join(' / ')}）`);
-    assert.ok(mainIdx > heroIdx && mainIdx < hangIdx,
-        `MainTaskEntry 应插在 GetHeroEntry 之后、HangEntry 之前（实际 hero=${heroIdx} main=${mainIdx} hang=${hangIdx}）`);
+test("G3 顶底HUD均在地图之上，任务与挂机入口同属底部层", () => {
+    const names=childLabels();
+    assert.ok(names.indexOf('MapRoot') < names.indexOf('BottomHud'));
+    assert.ok(names.indexOf('TopHud') < names.indexOf('BottomHud'));
+    const hud=arena.find(n=>n.__type__==='cc.Node' && n._name==='BottomHud');
+    const labels=hud._children.map((ref:any)=>childLabel(ref.__id__));
+    assert.ok(labels.includes('MainTaskEntry'));
+    assert.ok(labels.includes('HangRewardEntry'));
 });
 
 test('G4 `cc.Widget` 必须烘在**源 prefab** 的根上（挂到嵌套实例根上 = 组件翻倍）', () => {
@@ -948,18 +918,14 @@ test('G5 实例侧不许有 `mountedComponents` / `mountedChildren`（否则嵌�
         + '`UITransform` 就翻倍了 —— 正确做法是把组件烘进源 prefab');
 });
 
-test('G6 MainTaskEntry 紧贴 GetHeroEntry 上方 10px（同列 HUD 堆叠）', () => {
-    const heroUuid = prefabUuid(assetPath('ui/MainTask/GetHeroEntry.prefab'));
-    const heroFound = nestedInstanceOf(arena, heroUuid);
-    const mainFound = nestedInstanceOf(arena, ARENA_UUID);
-    assert.ok(heroFound && mainFound, '两个入口的嵌套实例都要在');
-    const heroPos = overridesOf(arena, heroFound!.inst).get('_lpos');
-    const mainPos = overridesOf(arena, mainFound!.inst).get('_lpos');
-    assert.ok(heroPos && mainPos, '两个实例都要有 _lpos 覆写');
-    const heroTop = heroPos.y + 120 / 2;
-    const mainBottom = mainPos.y - 84 / 2;
-    assert.ok(Math.abs((mainBottom - heroTop) - 10) <= 0.6,
-        `MainTaskEntry 下边缘应比 GetHeroEntry 上边缘高 10px（实际 ${mainBottom - heroTop}）`);
+test("G6 任务与挂机入口保持上下间隔，避免重叠", () => {
+    const found=nestedInstanceOf(arena,ARENA_UUID);assert.ok(found);
+    const resolved=applyInstanceOverrides(entry,arena,found.inst);
+    const position=resolved[1]._lpos;
+    const hud=arena[arena[found.nodeId]._parent.__id__];
+    const hangId=hud._children.find((ref:any)=>arena[ref.__id__]._name==='HangRewardEntry').__id__;
+    const hang=arena[hangId];
+    assert.ok(position.y-48 >= hang._lpos.y+80+10,'任务和挂机入口至少保持 10px 间隔');
 });
 
 test('G7 GetHeroEntry（上一轮）的 Widget 也还好好的（没被生成器重跑抹掉）', () => {

@@ -41,6 +41,9 @@ export class CardLineupSlot extends Component {
     previewHeight = 120;
 
     private preview: CardUnitPreview | null = null;
+    private previewPrefab: Prefab | null = null;
+    private previewUnitId: string | null = null;
+    private previewPath: string | null = null;
 
     /**
      * 这个站台当前这张卡的体型系数（`pvpCard.prefabSize`）。
@@ -55,10 +58,15 @@ export class CardLineupSlot extends Component {
 
     /** @param frames null 项清空旧图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
+        const retainedPrefab = this.previewUnitId === card.unitId && this.previewPath === card.unitPrefabPath
+            ? this.previewPrefab : null;
+        this.previewUnitId = card.unitId;
+        this.previewPath = card.unitPrefabPath;
         this.previewSize = card.prefabSize ?? 1;
         this.disc.spriteFrame = frames.disc;
         this.classBadge.spriteFrame = frames.badge;
-        if (!this.applyPreview(prefab ?? null)) this.hero.spriteFrame = frames.hero;
+        // 等级/资源刷新沿用同兵种模型，省掉清除后分帧重新实例化。
+        if (!this.applyPreview(prefab === undefined ? retainedPrefab : prefab)) this.hero.spriteFrame = frames.hero;
         //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
         this.opacityOf().opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
@@ -93,8 +101,10 @@ export class CardLineupSlot extends Component {
     applyPreview(prefab: Prefab | null): boolean {
         if (prefab
             && (this.preview ??= new CardUnitPreview(this.hero, this.previewHeight)).show(prefab, this.previewSize)) {
+            this.previewPrefab = prefab;
             return true;
         }
+        this.previewPrefab = null;
         this.preview?.clear();
         return false;
     }
@@ -105,7 +115,7 @@ export class CardLineupSlot extends Component {
     }
 
     setEmpty(): void {
-        this.preview?.clear();
+        this.applyPreview(null);
         this.node.active = false;
     }
 }

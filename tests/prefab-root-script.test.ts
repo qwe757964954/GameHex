@@ -35,7 +35,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { assetPath } from './helpers/asset-paths';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 const ROOT = path.resolve(import.meta.dirname, '..');
 const B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
@@ -116,15 +116,15 @@ test('扫描口径：拿得到一批声明（防正则写错导致空跑全绿�
 });
 
 test('每个 prefabPath 指向的 .prefab 都存在', () => {
-    const missing = DECLS.filter((d) => !existsSync(path.join(ROOT, 'assets/resources', `${d.prefabPath}.prefab`)));
+    const missing = DECLS.filter((d) => !assetExists(`${d.prefabPath}.prefab`));
     assert.deepEqual(missing.map((d) => `${d.cls} → ${d.prefabPath}`), []);
 });
 
 test('每个页面 prefab 的根节点都挂着对应脚本组件（缺了 PopupManager 会补出「引用全 null 的空壳页」）', () => {
     const bad: string[] = [];
     for (const d of DECLS) {
-        const prefabFile = path.join(ROOT, 'assets/resources', `${d.prefabPath}.prefab`);
-        if (!existsSync(prefabFile)) continue; // 上一条测试已单独断言
+        if (!assetExists(`${d.prefabPath}.prefab`)) continue;
+        const prefabFile = assetPath(`${d.prefabPath}.prefab`); // 上一条测试已单独断言
         const objects = JSON.parse(readFileSync(prefabFile, 'utf8')) as Array<Record<string, unknown>>;
         const root = objects[1] as { _components?: Array<{ __id__: number }> } | undefined;
         assert.ok(root, `${d.prefabPath}.prefab 第 1 个对象不是根节点`);

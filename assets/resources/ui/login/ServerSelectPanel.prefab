@@ -282,7 +282,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 626,
-      "height": 866
+      "height": 600
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -318,7 +318,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "d04d6e56-7e33-4108-90c2-6fdf3f8ce1ce@f9941",
+      "__uuid__": "c060d11a-edf5-4502-aacd-55009eeeb53e@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 1,
@@ -381,7 +381,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 384.5,
+      "y": 260,
       "z": 0
     },
     "_lrot": {
@@ -581,7 +581,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 380,
-      "height": 81
+      "height": 76
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -617,7 +617,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "7a234c2b-d959-4ba5-a1a5-c0a9723b90d8@f9941",
+      "__uuid__": "1c600b0a-5017-4740-82b3-ae19bd7b94d7@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 1,
@@ -679,7 +679,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 281,
-      "y": 384.5,
+      "y": 260,
       "z": 0
     },
     "_lrot": {
@@ -756,7 +756,7 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "f0066f4d-d731-415f-a109-f988ed2b493a@f9941",
+      "__uuid__": "6bf70f3d-f31a-4cd3-bbf6-abd191de3fd9@f9941",
       "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 0,
@@ -792,7 +792,7 @@
     },
     "clickEvents": [],
     "_interactable": true,
-    "_transition": 3,
+    "_transition": 0,
     "_normalColor": {
       "__type__": "cc.Color",
       "r": 255,
@@ -881,7 +881,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 330,
+      "y": 205,
       "z": 0
     },
     "_lrot": {
@@ -969,7 +969,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 560,
-      "height": 740
+      "height": 440
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1010,7 +1010,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 560,
-      "height": 740
+      "height": 440
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",

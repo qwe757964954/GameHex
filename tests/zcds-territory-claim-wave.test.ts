@@ -183,7 +183,7 @@ test('buildClaimWavePlan：终点色走 tintOwnerOf（中立可开发格落在�
 test('真实自选主城图（select_river）：波覆盖整片半场的中立格（14 格归属格不入波）', () => {
     const tableNames = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     ];
     const tables = Object.fromEntries(tableNames.map((name) => {
         const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -194,7 +194,7 @@ test('真实自选主城图（select_river）：波覆盖整片半场的中立�
     loadPvpTables(tables);
 
     const layout = JSON.parse(
-        readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
+        readFileSync(assetPath('config/maps/river_custom_new.json'), 'utf8'),
     ) as ZCMapLayout;
     configureZCMap(layout);
     const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
@@ -249,7 +249,7 @@ test('真实自选主城图（select_river）：波覆盖整片半场的中立�
 
 test('真实自选主城图：半区划分与「上下半场二分」一致（波两侧各一半的由来）', () => {
     const layout = JSON.parse(
-        readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
+        readFileSync(assetPath('config/maps/river_custom_new.json'), 'utf8'),
     ) as ZCMapLayout;
     configureZCMap(layout);
     const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });

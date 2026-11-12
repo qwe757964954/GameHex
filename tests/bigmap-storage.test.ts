@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as saveKeys from '../assets/script/app/bigmap/application/BigMapSaveKeys';
-import type { IBigMapStorage } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import type { IBigMapStorage } from '../assets/script/app/bigmap/application/BigMapModel';
 
 interface IOwner { roleId: string; serverId: string }
 

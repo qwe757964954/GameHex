@@ -140,11 +140,11 @@ test('Repository 合并配置请求，失败后可重试，成功后只复用已
     assert.equal(reads, 8, '两次尝试各读四张表，缓存命中不再读表');
 });
 
-test('美术组合器只消费注入的映射与头像解析器，专属图缺失时回退配置路径', async () => {
+test('详情品质与职业使用新版切图，专属立绘缺失时回退注入的配置路径', async () => {
     const requested: string[] = [];
     const { CardArtProvider: Provider } = runtime<{ CardArtProvider: new () => CardArtProvider }>('CardArtProvider', {
         './CardLineupTypes': cardTypes,
-        './CardLineupIcons': { loadIconByArtPath: async (path: string) => {
+        './CardLineupIcons': { loadCardDetailArt: async (path: string) => path, loadIconByArtPath: async (path: string) => {
             requested.push(path);
             return path.endsWith('/missing') ? null : path;
         } },
@@ -154,7 +154,8 @@ test('美术组合器只消费注入的映射与头像解析器，专属图缺�
     const card = { id: '1', rarity: 'green', traits: { attack: '法师' }, headIcon: '专属图' } as ZCDeckCard;
     const result = await provider.loadDetail(card, art);
     assert.equal(result.hero, art.paths.get('hero.mage'));
-    assert.equal(result.diamond, art.paths.get('diamond.green'));
+    assert.equal(result.diamond, 'identity/icon_quality_uncommon');
+    assert.equal(result.classTag, 'identity/icon_class_mage');
     assert.ok(requested.includes('icons/cardHead/missing'));
     const tables = readCardArtTables();
     const different = parseCardArtConfig({
@@ -163,4 +164,18 @@ test('美术组合器只消费注入的映射与头像解析器，专属图缺�
     }, []);
     assert.equal((await provider.loadDetail(card, different)).hero, 'icons/card/另一个占位');
     assert.equal((await provider.loadDetail(card, art)).hero, art.paths.get('hero.mage'), '不同宿主的配置不能串用');
+    for (const [rarity, file] of Object.entries({ gold: 'legendary', purple: 'epic', blue: 'rare', green: 'uncommon' })) {
+        const frames = await provider.loadDetail({ ...card, rarity } as ZCDeckCard, art);
+        assert.equal(frames.diamond, `identity/icon_quality_${file}`);
+        assert.ok(assetPath(`image/carddetail/${frames.diamond}.png`));
+    }
+    for (const meta of art.lineup.classes) {
+        const frames = await provider.loadDetail({ ...card, traits: { attack: meta.name } }, art);
+        assert.equal(frames.classTag, `identity/icon_class_${meta.id}`);
+        assert.ok(assetPath(`image/carddetail/${frames.classTag}.png`));
+    }
+    const empty = await provider.loadDetail(null, art);
+    assert.equal(empty.hero, null);
+    assert.equal(empty.diamond, null);
+    assert.equal(empty.classTag, null);
 });

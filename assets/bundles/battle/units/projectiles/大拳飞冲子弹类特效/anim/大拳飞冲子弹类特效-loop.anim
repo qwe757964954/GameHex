@@ -1,0 +1,123 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "大拳飞冲子弹类特效-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.4166666667,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25,
+            1.3333333333
+          ],
+          "_values": [
+            {
+              "__uuid__": "b9e0b8c2-edef-44fd-bf39-516767273079@f9941"
+            },
+            {
+              "__uuid__": "2778e730-34cc-4b91-a5b0-284454973349@f9941"
+            },
+            {
+              "__uuid__": "dd66cf91-b524-4733-81ca-41ac25760552@f9941"
+            },
+            {
+              "__uuid__": "3eccc8aa-9d32-4bd4-b6ea-e9f6ed2d05ad@f9941"
+            },
+            {
+              "__uuid__": "9f2f7d81-99ac-4860-a23c-883f2c7ac392@f9941"
+            },
+            {
+              "__uuid__": "9048a24c-db2d-40d9-86eb-34e704c7d674@f9941"
+            },
+            {
+              "__uuid__": "0e4ee2e2-c9db-4875-abd0-2c36f7d294a6@f9941"
+            },
+            {
+              "__uuid__": "c79db43a-7a14-4d23-aa24-328c234bd9f8@f9941"
+            },
+            {
+              "__uuid__": "aae08b23-52f4-44f7-a22d-d1900b3f158e@f9941"
+            },
+            {
+              "__uuid__": "5507ecf9-db07-4dbf-9e3d-6f18dcf75d42@f9941"
+            },
+            {
+              "__uuid__": "c2bffbb9-feca-4e55-b0a9-5ac3681fe458@f9941"
+            },
+            {
+              "__uuid__": "54c78bfe-a57c-40e7-b197-1c925f92b712@f9941"
+            },
+            {
+              "__uuid__": "25e1249e-07fe-4ea6-ace8-4fd477887820@f9941"
+            },
+            {
+              "__uuid__": "feca8ff8-dc66-408a-83a1-e2e46434702a@f9941"
+            },
+            {
+              "__uuid__": "a64869ac-9ed7-4a7f-856c-c3dfb204b6fd@f9941"
+            },
+            {
+              "__uuid__": "6bf840e8-d50c-48dc-9baa-70c30802b76a@f9941"
+            },
+            {
+              "__uuid__": "2c23e843-0eb6-48f2-b966-341163f9695a@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

@@ -139,13 +139,13 @@ node tools/map-editor/server.mjs --open
 
 > 地图合法性的**权威判定处**是游戏侧 `assets/script/app/zcds/model/ZCMapConfig.ts` 的 `configureZCMap()`。编辑器与 `server.mjs` 会提前校验组合 ID、可通行格、主城重叠和资源间距；其余玩法规则仍以客户端校验为准。
 
-**新预设可以直接保存。**把顶部 `map-id` 改成一个新的英文、数字、`_` 或 `-` 组成的 ID，点击「保存当前为预设」，会新建 [`presets/<map-id>.json`](./presets)；使用已有 ID 则覆盖对应文件。列表可载入或删除。**顶部有预设下拉（选中即加载，未保存会先确认）**；「高级设置 → 预设文件」里仍保留载入、删除、覆盖与另存。若从 `index.html` 或 IDE 文件预览打开，保存时页面会给出“在本地服务中继续编辑当前地图”的链接，点击后可保留当前地图并转到可保存的页面。
+**新预设可以直接保存。**把顶部 `map-id` 改成一个新的英文、数字、`_` 或 `-` 组成的 ID，点击「保存当前为预设」，会新建 [`presets/gamemap/<map-id>.json`](./presets/gamemap)；使用已有 ID 则覆盖对应文件。列表可载入或删除。**顶部有预设下拉（选中即加载，未保存会先确认）**；「高级设置 → 预设文件」里仍保留载入、删除、覆盖与另存。若从 `index.html` 或 IDE 文件预览打开，保存时页面会给出“在本地服务中继续编辑当前地图”的链接，点击后可保留当前地图并转到可保存的页面。
 
 > **规则说明收进了「说明」弹窗**（2026-10-20）：顶部「说明」按钮 → 左 tab / 右正文，6 个主题（地图规则 / 预设文件 / 行列个数 / 镜头倍率 / 显示 / 操作）。侧栏不再常驻说明文字，控件区回到干净状态；常用分组（场景装饰 / 笔刷大小 / 中立资源 / 历史）仍保留 `?` 气泡。内容定义在 `app.js` 的 `EDITOR_HELP` 数组，加一组只改数据。
 >
 > 三套编辑器的交互规范、现状矩阵与待办见 [INTERACTION.md](./INTERACTION.md)。
 
-**拷贝地图不需要 Node.js。**双击 `copy-maps.bat` 会用 Python 3 将 `presets` 中的全部地图拷贝到游戏资源目录。也可在项目根目录使用 Python 命令预览或只拷贝一张：
+**拷贝地图不需要 Node.js。**双击 `copy-maps.bat` 会用 Python 3 将 `presets/gamemap` 中的全部地图拷贝到游戏资源目录，并同步一份到策划 `sever` 目录（不带 `.meta`）。也可在项目根目录使用 Python 命令预览或只拷贝一张：
 
 ```powershell
 python tools/map-editor/copy_maps.py --dry-run

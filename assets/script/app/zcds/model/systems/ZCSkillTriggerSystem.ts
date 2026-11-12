@@ -14,6 +14,10 @@
  *   所以任何既有单位、既有技能的行为逐字不变；
  * - **不碰战斗节拍**：本系统既不推进 `stateTime`，也不改 `battleState` / `nextAttackAt`，
  *   连发弹走独立的 `sendBurstShot`，不会打乱普攻节拍与强化 CD；
+ * - **触发范围闸门**（2026-11-11 新增，见 `IZCSkillTriggerContext.inAttackRange`）：
+ *   打人类的五条车道（副轨 / 自身光环 / 五雷轰顶 / 多点打击 / 移形换影）到点后还要「普攻射程内有目标」
+ *   才真的放出去，否则进入**待触发**（readyAt 停在过去、一个字节都不消费），
+ *   目标进范围的那一帧立刻补放。自身增益与被动不设闸门；
  * - **不依赖 Cocos**：只吃快照 + 状态系统 + 一个发射回调，可独立单测。
  */
 
@@ -25,6 +29,7 @@ import { ZCCombatEventType } from '../ZCCombatCatalog';
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, ZC_BLINK_CAST_EFFECT_SECONDS } from '../ZCBlinkCastFx';
 import { zcMissileFxOf } from '../ZCCombatEffectFlight';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
+import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 
 export interface IZCSkillTriggerContext {
     readonly statusSystem: ZCStatusSystem;
@@ -45,6 +50,22 @@ export interface IZCSkillTriggerContext {
      * 否则单位在跑位途中会把 CD 转掉，站定了反而半天不出手。
      */
     castSecondary(unit: ZCUnitState): boolean;
+    /**
+     * 自身光环到点开一片跟随本体的周期伤害区域（2026-11-09 大威天芦「无尘禁土」102503），
+     * 由 `ZCGameModel` 转给 `ZCAttackResolutionSystem.castSelfAura`。
+     *
+     * 返回 `false` ⇒ 参数不全（半径 / 时长 / 倍率有 0），此时**不要**消费 CD ——
+     * 与 `castSecondary` / `strike` 同一条口径。
+     */
+    castSelfAura?(unit: ZCUnitState): boolean;
+    /**
+     * 五雷轰顶到点放雷（2026-11-11 磁电菇「五雷轰顶」101603），由 `ZCGameModel` 转给
+     * `ZCAttackResolutionSystem.castBoltLine`。
+     *
+     * 返回 `false` ⇒ 参数不全（道数 / 倍率 / 半径有 0）或没有锁定目标，此时**不要**消费 CD ——
+     * 与 `castSecondary` / `castSelfAura` / `strike` 同一条口径。
+     */
+    castBolt?(unit: ZCUnitState): boolean;
     /**
      * 表值（与 `attackRange` 同一套 px 口径）→ 世界坐标的距离换算，即 `rules.combatDistanceScale`。
      *
@@ -87,6 +108,44 @@ export interface IZCSkillTriggerContext {
      * 缺省 ⇒ 退回 `freeX/freeY`（快照里一定有，只是可能落后于本帧的移动推进）。
      */
     unitPosition?(unit: ZCUnitState): { readonly x: number; readonly y: number };
+    /**
+     * **触发范围闸门**（2026-11-11 用户需求）：普攻射程内有没有可打的目标。
+     *
+     * 口径：「所有技能释放有一个触发范围，同角色的普通攻击的范围，否则达到触发条件也不会
+     * 直接触发，只是待触发状态，直到目标进入范围才会触发」。
+     *
+     * 到点的技能先过这道闸门：范围内没人 ⇒ **待触发**，冷却保持已就绪、一个字节都不消费，
+     * 下一帧继续试 —— 所以「待触发」不是一种新状态机，只是「readyAt 停在过去 + 本帧不执行」。
+     * 打人类的四条车道（副轨扇形 / 自身光环 / 多点打击 / 移形换影）全部上闸门。
+     *
+     * 不设闸门的两类（刻意）：
+     * - **自身增益**（`self_cast`：吃口菠萝自愈、嗜血、迅击）—— 用户 2026-11-11 拍板
+     *   「只有打人型的走闸门」：被远程风筝时敌人在自己普攻范围外，自愈若也被挡住就永远救不回；
+     * - **被动 / 连发 / 低血护体**（`passive_status` / `team_aura` / `burst` / `lowHpGuard`）——
+     *   它们不是「释放」，要么开局挂一次，要么是普攻的延续（普攻本身已经要求射程内）。
+     *
+     * 缺省 ⇒ 不设闸门，既有单位与既有单测行为逐字不变。
+     */
+    inAttackRange?(unit: ZCUnitState): boolean;
+    /**
+     * 触发范围本身（**世界 px**，= 当前普攻射程，已含 `attackRangePct` 与 `combatDistanceScale`）。
+     *
+     * 给「多点打击 / 移形换影」这类自带搜索半径的车道**封顶**用：`min(自身半径, 它)`。
+     * 只压不抬 —— 毒箭蘑菇 / 戈壁狂箭的搜索半径本来就比普攻近，保持原样；
+     * 镭射飞龙的 1100、魔术师的 600（表值）会被压到普攻射程（用户 2026-11-11 选「直接压到普攻范围」）。
+     * 缺省 ⇒ 不封顶。
+     */
+    attackReachOf?(unit: ZCUnitState): number;
+    /**
+     * **最近的敌对单位到本体的距离**（世界 px，中心到中心；没有可打的目标 ⇒ `Infinity`）。
+     *
+     * 给「技能自己的触发距离」用（2026-11-12 用户口径）：喷火（102603）的释放距离要**小于**
+     * 普攻射程、并且和特效自身长度对齐 —— 只有敌人进了 350px 才放，否则待触发。
+     * 与 {@link inAttackRange} 串联：先过普攻射程闸门，再由这条把范围**压小**，只压不抬。
+     *
+     * 缺省 ⇒ 不压，任何既有单位行为逐字不变。
+     */
+    nearestEnemyDistance?(unit: ZCUnitState): number;
 }
 
 /** 友军光环的刷新窗口（秒）：每步都重挂一次，离开半径后最多这么久失效。 */
@@ -175,15 +234,20 @@ export class ZCSkillTriggerSystem {
             if (unit.battleState === 'dead' || unit.hp <= 0) continue;
             const runtime = context.runtimeOf(unit);
             const params = runtime?.parameters;
+            //  触发范围闸门（2026-11-11）：每个单位每步只算一次，四条打人型车道共用。
+            //  缺省（老上下文 / 单测夹具）⇒ 恒 true，等价于「不设闸门」。
+            const release = context.inAttackRange?.(unit) ?? true;
 
             if (this.applyPassiveStatus(state, unit, runtime, context)) statusChanged = true;
             if (this.applyTeamAura(state, unit, runtime, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
-            this.applyRandomStrike(state, unit, params, now, context);
-            this.applyBlinkStrike(state, unit, params, now, context, runtime);
+            if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
+            this.applyBoltStrike(unit, params, now, context, release);
+            this.applyRandomStrike(state, unit, params, now, context, release);
+            this.applyBlinkStrike(state, unit, params, now, context, runtime, release);
             this.expireShield(unit, now);
             this.advanceBurst(state, unit, now, context);
-            this.advanceSecondary(unit, params, now, context);
+            this.advanceSecondary(unit, params, now, context, release);
             if (this.applyLowHpGuard(state, unit, params, now, context)) statusChanged = true;
         }
         if (statusChanged) state.statusEffects = context.statusSystem.exportSnapshot();
@@ -325,6 +389,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
+        release: boolean,
     ): void {
         const cooldown = Math.max(0, params?.secondaryCooldown ?? 0);
         if (!(cooldown > 0)) return;
@@ -332,6 +397,9 @@ export class ZCSkillTriggerSystem {
         //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `consumeEmpoweredAttack` 的 CD 分支同口径）。
         if (readyAt === undefined) { unit.secondaryReadyAt = now + cooldown; return; }
         if (now < readyAt) return;
+        //  触发范围闸门（2026-11-11）：`castFanSkill` 只判「有没有锁定目标」，锁敌是仇恨锁、
+        //  目标可能在半张图外跑过来 —— 那样扇形会原地清一片空气却把 CD 记掉。这里先挡一道。
+        if (!release) return;
         //  没打出去就不消费 CD —— 跑位途中别把这次机会转掉。
         if (!context.castSecondary(unit)) return;
         unit.secondaryReadyAt = now + cooldown;
@@ -408,6 +476,11 @@ export class ZCSkillTriggerSystem {
      *
      * 首次推进时把 `selfCastReadyAt` 初始化成「当前 + CD」，开局不立刻放
      * （与副轨 `secondaryReadyAt` 同口径）。
+     *
+     * ⚠️ **这条车道不设触发范围闸门**（2026-11-11 用户拍板「只有打人类的走闸门」）：
+     * 本车道全是**给自己 / 友军**的增益与治疗（吃口菠萝自愈、嗜血增伤、迅击闪避），
+     * 被远程风筝时敌人往往站在自己普攻范围外，若也要求「范围内有目标」，
+     * 残血时永远放不出自愈 —— 那不是「待触发」，是「永久哑火」。
      */
     private static applySelfCast(
         state: ZCSnapshot,
@@ -491,6 +564,205 @@ export class ZCSkillTriggerSystem {
     }
 
     /**
+     * ⑧ 自身光环（`behaviorKey = 'self_aura'`，2026-11-09 大威天芦「无尘禁土」102503）。
+     *
+     * 设计案口径：「本体携带的范围持续伤害，跟随本体移动。与其他周期性伤害互不覆盖，各自独立结算。」
+     *
+     * 三件事，都按 `auraCooldown` 走同一个节拍：
+     *   ① 到点在施法者脚下开一片跟随本体的周期伤害区域（转发给
+     *      `ZCAttackResolutionSystem.castSelfAura`，与副轨 / 多点打击同一条「打不出去不消费 CD」口径）；
+     *   ② III 级的「期间自身伤害提高 20%」：给**自己**挂一条 `damageRatePct` 状态，
+     *      时长与光环一致（`auraSeconds`），到期自动失效，不需要另设清理；
+     *   ③ 与 `applySelfCast` 的区别：那个只给自己挂增益、不打人；这个的**主体是那片区域**，
+     *      增益只是三档附带的甜头。两条车道各用各的 `readyAt`，可以同时挂在同一张卡上。
+     *
+     * 参数：`auraCooldown`（秒，与 `auraEvery` 二选一）/ `auraEvery`（累计普攻次数）/
+     *       `auraSeconds` / `auraInterval` / `auraRadius` /
+     *       `auraDamageRate` / `auraSelfDamagePct`（见 `castSelfAura` 的注释）。
+     */
+    private static applySelfAura(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): boolean {
+        if (!context.castSelfAura) return false;
+        const cooldown = Math.max(0, params?.auraCooldown ?? 0);
+        //  第二种触发口径（2026-11-11 磁电菇「磁电冲击」101604）：累计 N 次普攻。
+        //  与 `random_strike` 的 `strikeEvery` 同一套算法，两种口径二选一。
+        const every = Math.max(0, params?.auraEvery ?? 0);
+        if (!(cooldown > 0) && !(every > 0)) {
+            //  诊断③-a：连冷却/次数参数都读不到 ⇒ 说明 `skillParamJson` 没进运行时
+            //  （最可能是构筑期整卡被跳过，见 `[技能诊断][构筑]`）。
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`aura-params:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 自身光环没有 auraCooldown / auraEvery`
+                    + `（读到 ${params?.auraCooldown ?? 'undefined'} / ${params?.auraEvery ?? 'undefined'}）`
+                    + '⇒ 这条车道整段不执行');
+            }
+            return false;
+        }
+        if (cooldown > 0) {
+            const readyAt = unit.auraReadyAt;
+            //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `secondaryReadyAt` / `selfCastReadyAt` 同口径）。
+            if (readyAt === undefined) {
+                unit.auraReadyAt = now + cooldown;
+                if (zcSkillCastWatched(unit.unitId)) {
+                    skillCastLogOnce(`aura-arm:${unit.id}`, '触发',
+                        `${unit.unitId}#${unit.id} 自身光环冷却挂上：${now.toFixed(1)}s → `
+                        + `${(now + cooldown).toFixed(1)}s 首次可施放（cooldown=${cooldown}s）`);
+                }
+                return false;
+            }
+            if (now < readyAt) return false;
+        } else {
+            //  按累计普攻次数：`completedAttackCount` 由普攻流程推进，这里只比「比上次多打了 N 次」。
+            const done = unit.completedAttackCount ?? 0;
+            const fired = unit.auraFiredCount;
+            if (fired === undefined) { unit.auraFiredCount = done; return false; }
+            if (done - fired < Math.round(every)) return false;
+        }
+        //  触发范围闸门（2026-11-11）：条件满足但普攻范围内没人 ⇒ 待触发，**不消费条件**。
+        //  放在 `castSelfAura` 之前：那片区域是「打人」的，身边没人时开出来只是一块空烧的地。
+        //  次数分支这里**不推进 `auraFiredCount`** —— 目标一进范围那一下立刻补放。
+        if (!release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`aura-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 触发条件已满足但普攻范围内没有目标 ⇒ 待触发`);
+            }
+            return false;
+        }
+        //  技能**自己的**触发距离（2026-11-12 用户口径）：喷火的释放距离要小于普攻射程、
+        //  并且与特效长度对齐 —— 「只有敌人处于 350px 这个距离才会被攻击」。
+        //  与上面那道普攻射程闸门是串联的：先证明「普攻够得着」，再把范围往下压。
+        //  配 0 / 缺省 ⇒ 不压，退回「只看普攻射程」的旧行为。
+        const triggerRange = Math.max(0, params?.auraTriggerRange ?? 0);
+        if (triggerRange > 0 && context.nearestEnemyDistance) {
+            const limit = triggerRange * Math.max(1e-6, context.distanceScale ?? 1);
+            const nearest = context.nearestEnemyDistance(unit);
+            if (nearest > limit) {
+                if (zcSkillCastWatched(unit.unitId)) {
+                    skillCastLogChanging(`aura-far:${unit.id}`, '触发',
+                        `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 最近目标 ${(nearest / limit * triggerRange).toFixed(1)}`
+                        + ` 表值 px > 触发距离 ${triggerRange} ⇒ 待触发（不消费 CD）`);
+                }
+                return false;
+            }
+        }
+        //  参数不全（半径 / 时长 / 倍率有 0）⇒ 没真的开出来，**不消费 CD / 不记次数**。
+        const cast = context.castSelfAura(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            //  用「值变化才打」：失败时每帧都会走到这里，直接打就是每帧一行的洪水。
+            skillCastLogChanging(`aura-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 施放成功，`
+                    + (cooldown > 0 ? `CD 推到 ${(now + cooldown).toFixed(1)}s` : `次数记到 ${unit.completedAttackCount ?? 0}`)
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 施放被拒（参数不全）⇒ 不消费条件，下帧重试`);
+        }
+        if (!cast) return false;
+        if (cooldown > 0) unit.auraReadyAt = now + cooldown;
+        else unit.auraFiredCount = Math.max(0, Math.round(unit.completedAttackCount ?? 0));
+
+        //  ② 光环期间的自身增伤。按「生效词缀签名」复用同一条状态定义（`selfCastStatusId`），
+        //  避免每张卡每种数值都往状态系统里塞一条新定义。
+        const selfDamagePct = Math.max(0, params?.auraSelfDamagePct ?? 0);
+        const seconds = Math.max(0, params?.auraSeconds ?? 0);
+        if (!(selfDamagePct > 0) || !(seconds > 0)) return false;
+        const mods: ZCStatusStatMods = { damageRatePct: selfDamagePct };
+        const statusId = selfCastStatusId(mods, seconds);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: seconds,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: mods,
+                behavior: { kind: 'none' },
+            });
+        }
+        const result = context.statusSystem.apply(String(unit.id), statusId, {
+            at: state.elapsedSeconds, durationSeconds: seconds,
+        });
+        return result.applied;
+    }
+
+    // ────────────────────────────────────────── ⑨ 五雷轰顶（2026-11-11）
+
+    /**
+     * ⑨ 五雷轰顶（`behaviorKey = 'bolt_strike'`，磁电菇 68016 / 技能 101603）。
+     *
+     * 设计口径（技能设计案第 80 行）：「在目标的坐标直接释放 1 道雷电，并以该目标所在的坐标
+     * 背朝向，额外释放 2/3/4 道闪电（每道闪电间隔 30px），闪电出现间隔 0.1s，
+     * 每道闪电的伤害判定在特效的第 5 帧，每个级别的伤害分别是 160%/200%/250%，
+     * 并且有 30% 的概率造成敌人进入【麻痹状态】」。
+     *
+     * 落地口径（用户 2026-11-11 拍板）：
+     *   · 「160%/200%/250%」**每道雷独立计**（不是 3 道分一份），所以总伤 = 道数 × 单道倍率；
+     *   · 麻痹 30% **逐道独立判定**、逐目标判定，落在 `ZCGroundZoneSystem` 的波次结算里
+     *     （`hitStatusId` / `hitStatusChance`），此处只负责把雷排出去。
+     *
+     * 与其它车道的分工：
+     *   · 不是副轨扇形（方向由「目标背朝向」定，不由自身朝向定）；
+     *   · 不是 `self_aura`（区域不跟随本体、也不周期开）；
+     *   · 与 `random_strike` 的区别：那个按「就近/随机」挑一批目标各打一发，
+     *     这个只锁**一个**目标、把雷沿一条线排开，落点与目标位置强绑定。
+     *   所以另起一条车道，用自己的 `boltReadyAt`，可以和上面任一条同时挂在同一张卡上。
+     *
+     * 参数：`boltCooldown` / `boltCount` / `boltSpacing` / `boltInterval` / `boltDelay` /
+     *       `boltDamageRate` / `boltRadius` / `boltNumbChance` / `boltNumbSeconds`
+     *       （见 `castBoltLine` 的注释；半径与间距是**表值 px**）。
+     */
+    private static applyBoltStrike(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castBolt) return;
+        const cooldown = Math.max(0, params?.boltCooldown ?? 0);
+        if (!(cooldown > 0)) {
+            //  诊断⑨-a：读到 0 ⇒ `skillParamJson` 没进运行时（整卡被跳过），这条车道整段不执行。
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`bolt-params:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 五雷轰顶没有 boltCooldown`
+                    + `（读到 ${params?.boltCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
+            }
+            return;
+        }
+        const readyAt = unit.boltReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `auraReadyAt` / `strikeReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.boltReadyAt = now + cooldown;
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`bolt-arm:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 五雷轰顶冷却挂上：${now.toFixed(1)}s → `
+                    + `${(now + cooldown).toFixed(1)}s 首次可施放（cooldown=${cooldown}s）`);
+            }
+            return;
+        }
+        if (now < readyAt) return;
+        //  触发范围闸门（2026-11-11）：冷却到点但普攻范围内没人 ⇒ 待触发，**不消费 CD**。
+        if (!release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`bolt-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但普攻范围内没有目标 ⇒ 待触发`);
+            }
+            return;
+        }
+        const cast = context.castBolt(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`bolt-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 放雷成功，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 放雷被拒（参数不全 / 无锁定目标）⇒ 不消费 CD，下帧重试`);
+        }
+        if (!cast) return;
+        unit.boltReadyAt = now + cooldown;
+    }
+
+    /**
      * ⑦ 多点打击（`behaviorKey = 'random_strike'`）。
      *
      * 两种触发口径，配哪个用哪个：
@@ -515,6 +787,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
+        release: boolean,
     ): void {
         if (!context.strike) return;
         const count = Math.max(0, params?.strikeCount ?? 0);
@@ -524,6 +797,11 @@ export class ZCSkillTriggerSystem {
         const every = Math.max(0, params?.strikeEvery ?? 0);
         if (!(cooldown > 0) && !(every > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        //  触发范围封顶（2026-11-11 用户口径「直接压到普攻范围」）：
+        //  技能自带的搜索半径压到普攻射程以内，**只压不抬** ——
+        //  镭射飞龙 1100（330px）压到普攻射程；毒箭蘑菇 252（75.6px）本来就比普攻近，保持原样。
+        const reachCap = Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
+        const searchRadius = Math.min(radius * scale, reachCap);
         const missileFx = zcMissileFxOf(unit.unitId);
         //  诊断②：参数快照 + 每次开火结果。打空时 `fire()` 每帧都会被叫一遍（`if (!fire()) return;`
         //  不推进冷却），所以用「值变化才打」的通道，失败只留第一条、转成功再补一条。
@@ -531,14 +809,15 @@ export class ZCSkillTriggerSystem {
             missileLogOnce(`strike-params:${unit.unitId}`,
                 '模型',
                 `单位 ${unit.unitId} 拿到导弹参数：strikeCount=${count} strikeRadius=${radius}`
-                + `（世界 ${(radius * scale).toFixed(1)}）cooldown=${cooldown} every=${every}`
+                + `（世界 ${(radius * scale).toFixed(1)}，封顶后 ${searchRadius.toFixed(1)}）`
+                + ` cooldown=${cooldown} every=${every}`
                 + ` nearest=${params?.strikeNearest ?? 0} splash=${params?.strikeSplashRadius ?? 0}`
                 + ` | 弹体=${missileFx.missilePrefabPath} 爆炸=${missileFx.impactPrefabPath}`);
         }
         const fire = (): boolean => {
             const options: IZCStrikeOptions = {
                 count: Math.round(count),
-                radius: radius * scale,
+                radius: searchRadius,
                 damageRate: Math.max(0, params?.strikeDamageRate ?? 1),
                 nearest: (params?.strikeNearest ?? 0) > 0,
                 splashRadius: Math.max(0, params?.strikeSplashRadius ?? 0) * scale,
@@ -598,6 +877,8 @@ export class ZCSkillTriggerSystem {
                 return;
             }
             if (now < readyAt) return;
+            //  触发范围闸门（2026-11-11）：到点但普攻范围内没人 ⇒ 待触发，CD 保持就绪。
+            if (!release) return;
             //  打空后的退避：见 `STRIKE_RETRY_SECONDS`。没打空过（`strikeRetryAt` 缺省）⇒ 不停留。
             if (now < (unit.strikeRetryAt ?? 0)) return;
             if (!fire()) {
@@ -619,6 +900,9 @@ export class ZCSkillTriggerSystem {
         const fired = unit.strikeFiredCount;
         if (fired === undefined) { unit.strikeFiredCount = done; return; }
         if (done - fired < Math.round(every)) return;
+        //  触发范围闸门（2026-11-11）：次数攒够了但身边没人 ⇒ 待触发。
+        //  **不推进 `strikeFiredCount`** —— 目标一进范围，这一波立刻补出去。
+        if (!release) return;
         if (!fire()) return;
         unit.strikeFiredCount = done;
         if (windowSeconds > 0) {
@@ -667,6 +951,7 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
         runtime?: ZCSkillRuntimeDefinition,
+        release = true,
     ): void {
         const cooldown = Math.max(0, params?.blinkCooldown ?? 0);
         if (!(cooldown > 0)) return;
@@ -705,7 +990,12 @@ export class ZCSkillTriggerSystem {
         if (readyAt === undefined) { unit.blinkReadyAt = now + cooldown; return; }
         if (now < readyAt) return;
 
-        const searchRadius = Math.max(0, params?.blinkSearchRadius ?? 0) * scale;
+        //  触发范围闸门（2026-11-11）：到点但普攻范围内没人 ⇒ 待触发，不消费 CD。
+        if (!release) return;
+        //  触发范围封顶（用户口径「直接压到普攻范围」）：`blinkSearchRadius` 是表值 px，
+        //  魔术师配的 600（约 180px）大于普攻射程 148.5px ⇒ 压到普攻射程；只压不抬。
+        const reachCap = Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
+        const searchRadius = Math.min(Math.max(0, params?.blinkSearchRadius ?? 0) * scale, reachCap);
         if (!(searchRadius > 0)) return;
         const self = posOf(unit);
         let victim: ZCUnitState | undefined;

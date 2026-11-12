@@ -1,10 +1,12 @@
-import { Animation, Color, Graphics, instantiate, Node, Prefab, UITransform } from 'cc';
+import { Animation, Color, Graphics, instantiate, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import type { ZCAttackTrait } from '../model/ZCCombatCatalog';
 import type { ZCHitFx } from '../model/ZCGameTypes';
 import { zcHitFxNodeScale } from './ZCCombatEffectScale';
 import { zcHitFxSurfaceLiftY } from './ZCCombatEffectPlacement';
 import { ZCNodePool } from './ZCNodePool';
+import { ZC_PORTAL_FLIGHT_SECONDS } from '../model/ZCBattlePresentationQueue';
+import { HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT, HEX_GRID_CONTENT_LIFT } from '../../../core/hex/HexGridLayout';
 
 /** 资源在构造前准备好；对象池、挂载层和资源的所有权归调用方。 */
 export interface IZCEffectPoolDeps {
@@ -101,6 +103,7 @@ const GENERIC_HIT_LINE_WIDTH = 3;
  * - 出生光柱：挂单位节点下，跟随宿主插值移动
  */
 export class ZCEffectPool {
+    private readonly portalFxNodes = new Map<number, { node: Node; startedAt: number }>();
     private readonly spawnFxNodes: SpawnFxEntry[] = [];
     private readonly hitFxNodes: HitFxEntry[] = [];
     private readonly deathFxNodes: DeathFxEntry[] = [];
@@ -152,7 +155,7 @@ export class ZCEffectPool {
      * 代价是「美术交了图、代码也接了，但资源没打进包 / 加载失败」这种情形在游戏里表现为
      * **法师受击一次都没出现，而控制台干干净净** —— 只能靠翻代码猜。
      * 现在按职业各报一次（`console.warn`）：
-     *  - 有这条 warn ⇒ 问题在**加载侧**（`ZCGameLoader.loadHitFxPrefabs` 没拿到 prefab）；
+     *  - 有这条 warn ⇒ 问题在**加载侧**（`ZCGameLoader.loadCommonEffects` 没拿到 prefab）；
      *  - 没有这条 warn 但依然看不到 ⇒ 问题在**渲染侧**（层级 / 尺寸 / 时长 / 被单位挡住）。
      * 只报一次，不会每帧刷屏。
      */
@@ -433,8 +436,50 @@ export class ZCEffectPool {
         this.deadFxPending.delete(unitId);
     }
 
+    /** 入口和出口独立开合，同格同批只播一次，不改地块次数/冷却圆环。 */
+    playPortalFx(hexId: number, x: number, y: number, startedAt: number, frame: SpriteFrame): void {
+        const existing = this.portalFxNodes.get(hexId);
+        if (existing) {
+            existing.startedAt = Math.max(existing.startedAt, startedAt);
+            return;
+        }
+        const node = this.deps.pool.acquire('portalFx', () => {
+            const root = new Node('PortalFx');
+            root.layer = this.deps.mapLayer.layer;
+            root.addComponent(UITransform).setContentSize(HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT);
+            const sprite = root.addComponent(Sprite);
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.trim = false;
+            return root;
+        });
+        node.getComponent(Sprite).spriteFrame = frame;
+        node.setParent(this.deps.mapLayer);
+        node.setPosition(x, y + HEX_GRID_CONTENT_LIFT, 0);
+        node.setScale(0, 0, 1);
+        this.portalFxNodes.set(hexId, { node, startedAt });
+    }
+
+    recyclePortalFx(now: number): void {
+        for (const [id, entry] of this.portalFxNodes) {
+            const progress = (now - entry.startedAt) / ZC_PORTAL_FLIGHT_SECONDS;
+            if (progress >= 1) {
+                entry.node.removeFromParent();
+                this.deps.pool.release('portalFx', entry.node);
+                this.portalFxNodes.delete(id);
+                continue;
+            }
+            const scale = Math.sin(Math.PI * Math.max(0, progress));
+            entry.node.setScale(scale, scale, 1);
+        }
+    }
+
     /** 清空所有特效（换局 / destroy 时调用）。 */
     clear(): void {
+        for (const entry of this.portalFxNodes.values()) {
+            entry.node.removeFromParent();
+            this.deps.pool.release('portalFx', entry.node);
+        }
+        this.portalFxNodes.clear();
         for (const entry of this.spawnFxNodes) {
             if (!entry.node.isValid) continue;
             entry.node.removeFromParent();
@@ -473,6 +518,8 @@ export class ZCEffectPool {
      * 必须显式 destroy，否则会泄漏到下一局。
      */
     destroy(): void {
+        for (const entry of this.portalFxNodes.values()) entry.node.destroy();
+        this.portalFxNodes.clear();
         for (const entry of this.spawnFxNodes) {
             if (entry.node.isValid) entry.node.destroy();
         }

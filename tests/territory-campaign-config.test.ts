@@ -131,6 +131,8 @@ test('塔防每组只有最后一波是 BOSS：带 monsterType 时认 3，缺列
         waveRow({ waveId: 3, monsterType: 3, monsterSize: 2, monsterNum: 1 }),
     ]);
     assert.deepEqual(declared.waves.map((wave) => wave.isBoss), [false, false, true]);
+    // 怪物体型也要原样带到投影（对局拿它当模型缩放倍率，BOSS 那行填 2）。
+    assert.deepEqual(declared.waves.map((wave) => wave.monsterSize), [1, 1, 2]);
 
     // ② 客户端 JSON 还没有这一列 ⇒ 按「每组最后一波」兜底（口径与策划表一致）
     const fallback = build([waveRow({ waveId: 1 }), waveRow({ waveId: 2 })]);
@@ -147,7 +149,9 @@ test('关卡 openGrideTime 原样带到战役投影（NPC 翻地块限速用）'
         [levelRow({ openGrideTime: 18 })] as never, [] as never, [] as never, [] as never, 9, [] as never,
     ).stages[0];
     assert.equal(stage.openGrideTime, 18);
-    assert.equal(stage.exploreSeconds, 18, '通关后翻格时长与限速字段同源');
+    // 🔴 2026-11-11：`openGrideTime` **只**管战斗内 NPC 点地块的频率，不再兼任格子的「探索中」时长。
+    // 后者的真源是地图配置的 `site.unlock.exploreSeconds`（`TerritoryMapConfig`，缺省 2 秒）。
+    assert.equal('exploreSeconds' in stage, false, '关卡表不许再往阶段上投影 exploreSeconds');
 });
 
 test('真表：每个塔防组都恰好有一波 BOSS，且必定是最后一波', () => {
@@ -162,6 +166,11 @@ test('真表：每个塔防组都恰好有一波 BOSS，且必定是最后一波
         assert.deepEqual(bossFlags.slice(0, -1), bossFlags.slice(0, -1).map(() => false),
             `关卡 ${stage.levelId} 的中间波次里出现了 BOSS`);
         assert.equal(bossFlags[bossFlags.length - 1], true, `关卡 ${stage.levelId} 的最后一波不是 BOSS`);
+        // 真表的「怪物体型」：BOSS 行必须是 2（对局按它放大模型），中间波是 1（原尺寸）。
+        const sizes = stage.waves.map((wave) => wave.monsterSize);
+        assert.equal(sizes[sizes.length - 1], 2, `关卡 ${stage.levelId} 的 BOSS 波 monsterSize 不是 2`);
+        assert.deepEqual(sizes.slice(0, -1), sizes.slice(0, -1).map(() => 1),
+            `关卡 ${stage.levelId} 的普通波 monsterSize 不是 1`);
     }
 });
 
@@ -218,4 +227,91 @@ test('chapterLevelAutoStartConfig：1 开 / 0 关；缺行或脏值退回缺省�
         TERRITORY_LEVEL_AUTO_START_FALLBACK, '脏值不许被当成「关」（静默关功能是最难查的一类 bug）');
     assert.equal(TERRITORY_LEVEL_AUTO_START_FALLBACK, true,
         '缺省必须是开：读不到配置就静默退回两步的话，没人会发现开关没生效');
+});
+
+/**
+ * `levelInfo.gradeProModifier` 的真表投影（2026-11-09 接线）。
+ *
+ * 207 关里 190 关配了 `{ blue: 3, green: 3 }`（`green` 于 2026-11-09 由 2 提到 3，
+ * 目的是跨过 10003 的 2.6 门槛让绿卡也跟着涨）；17 关是空对象 `{}`（10001~10003 的开局三关、
+ * 10006、以及 10010 起每 5 关一档到 10070）。这一列此前全工程无消费，现在经
+ * `TerritoryCampaignStage` → 导航参数 → 对局配置，只作用于 NPC 抽卡。
+ */
+test('★ gradeProModifier：真表投影成乘数，空对象归一成 undefined', () => {
+    const campaign = buildTerritoryCampaign(
+        rows('levelInfo'), rows('monsterCard'), rows('npcTeam'), rows('pvpCard'),
+        1, rows('defenceModWave'), [...rows('item'), ...rows('roleProperty')],
+    );
+    const filled = campaign.stages.find((stage) => stage.levelId === 10004);
+    assert.ok(filled, '10004 必须在章节里');
+    assert.deepEqual({ ...filled.gradeProModifier }, { blue: 3, green: 3 });
+
+    // 开局三关（10001/10002/10003）该列留空 ⇒ 必须不是 `{}`，而是 undefined
+    //（`{}` 会被下游当成「配了但系数全是默认」而多跑一轮乘算）。
+    for (const levelId of [10001, 10002, 10003, 10006]) {
+        const stage = campaign.stages.find((item) => item.levelId === levelId);
+        assert.ok(stage, `${levelId} 必须在章节里`);
+        assert.equal(stage.gradeProModifier, undefined, `${levelId} 该列留空 ⇒ undefined`);
+    }
+    // 塔防关也吃这份配置（10005 是首领关），NPC 出怪前的翻格子同样受限。
+    const defence = campaign.stages.find((stage) => stage.levelId === 10005);
+    assert.equal(defence?.mode, 'defence');
+    assert.deepEqual({ ...defence?.gradeProModifier }, { blue: 3, green: 3 });
+});
+
+/**
+ * 脏数据边界：0 / 负数 / 字符串 / 写错的大小写都不能悄悄变成乘数。
+ * 0 按表说明是「没变化」，归一成 undefined；写错的键（`Green`）直接丢。
+ */
+test('★ gradeProModifier：0 / 负数 / 未知键一律不生效', () => {
+    const [stage] = (() => {
+        const levelRows = [{
+            levelId: 90001, levelChapter: 99, chapterStage: 1, levelMod: 1, levelModValue: 1,
+            levelHp: 1, levelAttack: 1, levelCost: 1, openGrideTime: 0,
+            gradeProModifier: { green: 0, blue: -3, Green: 2, purple: 'abc' },
+        }];
+        const campaign = buildTerritoryCampaign(
+            levelRows as any, [], [], [], 99, [], [],
+        );
+        return campaign.stages.filter((item) => item.levelId === 90001);
+    })();
+    assert.ok(stage, '构造的关卡应进入结果');
+    assert.equal(stage.gradeProModifier, undefined, '全是脏值 ⇒ 等同于没配');
+});
+
+/**
+ * 塔防关的 NPC 卡组必须能抽出**金矿卡**（`pvpCard.type === 1`）。
+ *
+ * 真实漏配（2026-11-11 定案）：`pvpTile.10005 金矿` 的 `eligibleCardTypes = [1]`，
+ * 而全表只有一张金矿卡 `2001`；塔防关走 `ZCBattleEntryBuilder.clipToLevelCards` 把敌方卡组
+ * 裁成 `enemyCardIds`，队伍里没配金矿卡时裁完就一张 type=1 都不剩 ⇒ `drawPvpTile` 的
+ * `eligibleCards` 为空 ⇒ **金矿格 100% 空手**（实测 17/17）。
+ * 雪上加霜的是 `pvpTileGenParams.initialGuaranteedMine = 1` 保证每个主城六邻格里必有一格金矿，
+ * 所以每局 NPC 至少白扔一次开发。
+ *
+ * 口径：`npcTeam.npcCard`（塔防队伍）填的是**怪物卡牌** id，金矿是 `50002`，
+ * 经 `projectCard` 的同名映射落到 `pvpCardId = 2001`。别再往这里写 `2001`（那是 pvpCard id 空间）。
+ */
+test('★ 塔防关的 NPC 卡组必须含金矿卡（type=1），否则保底金矿格必定空手', () => {
+    const levelInfo = rows('levelInfo');
+    const pvpCards = rows('pvpCard');
+    const cardTypeOf = new Map(pvpCards.map((card) => [Number(card.id), String(card.type)]));
+    const chapters = [...new Set(levelInfo.map((row) => Number(row.levelChapter)))];
+    let checked = 0;
+    for (const chapterId of chapters) {
+        const campaign = buildTerritoryCampaign(
+            levelInfo, rows('monsterCard'), rows('npcTeam'), pvpCards,
+            chapterId, rows('defenceModWave'), [...rows('item'), ...rows('roleProperty')],
+        );
+        for (const stage of campaign.stages) {
+            // 没有 `extraCards.enemy` 的塔防关不裁卡组（`requestedEnemyCards.size === 0`），
+            // 用的是整份 36 张池子，天生带 2001，不在本守卫范围。
+            if (stage.mode !== 'defence' || stage.enemyTeamIds.length === 0) continue;
+            checked += 1;
+            const mines = stage.enemies.filter((enemy) => cardTypeOf.get(Number(enemy.pvpCardId)) === '1');
+            assert.ok(mines.length > 0,
+                `塔防关 ${stage.levelId}（队伍 ${stage.enemyTeamIds[0]}）的 NPC 卡组缺金矿卡 type=1`);
+        }
+    }
+    assert.ok(checked >= 14, `至少要检查到 14 个带 NPC 队伍的塔防关，实际 ${checked}`);
 });

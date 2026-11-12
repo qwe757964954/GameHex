@@ -370,11 +370,28 @@ test('★★★刚解锁的格子也要播生成动画（关卡格花银币解�
     assert.match(source, /const entered = new Set<number>\(\);/, '两条触发要合到一个去重集合里');
 });
 
-test('站点视图：整站透明度覆盖四个视觉根，气泡背景与文字共同淡入', () => {
+test('站点视图：整站透明度覆盖全部视觉根，气泡背景与文字共同淡入', () => {
     const source = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
     assert.match(source, /setSpawnOpacity\(value: number\): void/);
-    assert.match(source, /iconSprite\.node, this\.captionSprite\.node, this\.captionLabel\.node, this\.levelBubble\?\.node \?\? this\.badgeLabel\.node/);
     assert.match(source, /private spawnOpacities: UIOpacity\[\] \| null = null;/);
+    const start = source.indexOf('setSpawnOpacity(value: number)');
+    assert.ok(start > 0, 'setSpawnOpacity 必须存在');
+    const body = source.slice(start, source.indexOf('setGhostOpacity(', start));
+    // 四个固定的视觉根：Icon / 银币图标 / 数字 / 气泡（没有气泡时退回角标）。
+    for (const root of [
+        'this.iconSprite.node',
+        'this.captionSprite.node',
+        'this.captionLabel.node',
+        'this.levelBubble?.node ?? this.badgeLabel.node',
+    ]) {
+        assert.ok(body.includes(root), `${root} 必须在淡入名单里`);
+    }
+    // 第五个是 2026-11-10 起才有的宝箱图标（`conditionChestIcon`），**惰性创建** ⇒
+    // 只有存在时才进名单；建节点那一步必须把 `spawnOpacities` 置空重建，否则它永远不跟着淡入。
+    assert.ok(body.includes('...(this.conditionChest ? [this.conditionChest.node] : [])'),
+        '宝箱图标要条件加入淡入名单（没有它的格不许凭空多一个 UIOpacity）');
+    assert.match(source, /this\.spawnOpacities = null;/,
+        '新增视觉节点（宝箱图标）时必须重建缓存');
 });
 
 test('视图：play 第 4 参把节奏档位带进每一格（同一批可能混档）', () => {

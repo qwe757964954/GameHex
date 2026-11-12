@@ -2,10 +2,31 @@ import { Color, Graphics, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 
 export const BIGMAP_SKIN_COLORS = {
     text: new Color(245, 233, 205),
+    /** 名字牌描边（参考图口径：白字压一圈深边，沙地/建筑上都压得住）。 */
+    nameOutline: new Color(34, 30, 24, 255),
     muted: new Color(189, 180, 161),
     gold: new Color(255, 202, 92),
     dark: new Color(41, 32, 21),
+    /** @deprecated 压在地图沙地上只有 1.22:1（选中态等于看不见），改用 {@link selectOuter} 双环。 */
     cyan: new Color(79, 216, 228),
+    /**
+     * 地图上「选中」的双环配色：外深内金。
+     *
+     * 沙地底色 `(201,176,138)` 亮度高，**亮色单环最高只能到 2.09:1（纯白）**，
+     * 原来的 cyan 只有 1.22:1。深色外环 `(20,18,14)` 对沙地 8.96:1 撑起可辨识度，
+     * 暖金内环（1.38:1）只负责"这一格是我的"这层语感，不承担对比度。
+     */
+    selectOuter: new Color(20, 18, 14, 210),
+    selectInner: new Color(255, 202, 92, 255),
+    /** 放置预判：可放（对沙地 3.87:1）/ 不可放（5.06:1）。都配 ✓/✕，不只靠颜色。 */
+    placeOk: new Color(24, 92, 40, 235),
+    placeBad: new Color(122, 26, 26, 235),
+    /** 选中底光（暖金压 25% —— 只是「亮了一点」，不参与对比度计算）。 */
+    glowFill: new Color(255, 226, 150, 64),
+    /** 进度环底圈 / 已建部分 / 剩余不足 1 分钟。 */
+    ringUnder: new Color(28, 24, 18, 150),
+    ringDone: new Color(255, 202, 92, 255),
+    ringUrgent: new Color(255, 140, 90, 255),
 };
 
 /**
@@ -39,8 +60,26 @@ export const BIGMAP_HUD_COLORS = {
     gold: new Color(245, 201, 92, 255),
     /** 压金色按钮上的文字色（深棕，不用纯黑：纯黑在暖底上发脏）。 */
     ink: new Color(48, 34, 22, 255),
-    /** 危险 / 消耗不足。 */
+    /**
+     * 危险 / 消耗不足（**只能用于浅底或图标**）。
+     *
+     * ⚠️ 实测对比度：压 `cardDeep` 3.55:1、压 `cardLight` 只有 1.74:1，正文（需 ≥4.5）不合格。
+     * 深色卡上的「不足 / 锁定」文字一律用 {@link BIGMAP_HUD_COLORS.dangerText}。
+     */
     danger: new Color(214, 96, 62, 255),
+    /**
+     * 深色卡上的「不足 / 锁定」正文色 —— `(255,205,190)` 在 `cardLight` 上 4.57:1、`card` 上 5.6:1。
+     *
+     * 注意它读起来更像「提示」而不是「警告」：这是深底 UI 的固有限制 —— 深底上能达到 4.5 的
+     * 只有浅色，所以「不足」的警示由**文案（差多少）+ 位置**承担，不靠红。
+     */
+    dangerText: new Color(255, 205, 190, 255),
+    /**
+     * 深色卡上的次要文字 —— `(224,220,208)` 在 `cardLight` 上 4.76:1。
+     *
+     * 原来的 `muted(178,176,168)` 压 `cardLight` 只有 3.00、压 `card` 4.11，正文全部不合格。
+     */
+    mutedText: new Color(224, 220, 208, 255),
     /** 弹窗暗底（与领地页 `TerritorySiteDetail` 的 `Dim` 同值：5,10,14,205）。 */
     scrim: new Color(5, 10, 14, 205),
 } as const;

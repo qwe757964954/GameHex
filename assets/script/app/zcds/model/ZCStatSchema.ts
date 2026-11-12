@@ -345,6 +345,14 @@ const SKILL_BEHAVIORS = new Set([
     //  两端各结算一次伤害，原位可选留一个到时爆炸的分身。
     //  见 `ZCSkillTriggerSystem.applyBlinkStrike`；位移落点走 `ZCMovementSystem.placeAt`。
     'blink_strike',
+    //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在施法者脚下开一片**跟随本体**的
+    //  周期伤害区域（每秒一波，持续 N 秒）。见 `ZCSkillTriggerSystem.applySelfAura` +
+    //  `ZCAttackResolutionSystem.castSelfAura`；结算复用 `ZCGroundZoneSystem`（`followUnitId`）。
+    'self_aura',
+    //  2026-11-11 磁电菇「五雷轰顶」（101603）：冷却到点在目标点连续落下 N 道雷（间隔 0.1s、
+    //  每道延迟 0.15s 判伤、每道独立掷麻痹）。见 `ZCSkillTriggerSystem.applyBoltStrike` +
+    //  `ZCAttackResolutionSystem.castBoltLine`；每道雷 = 一个「一波」地面区域。
+    'bolt_strike',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',
@@ -856,9 +864,12 @@ export function parseZCModifierAdapterCatalogs(
         const unitId = text(String(row.unitId ?? ''), `${path}.unitId`);
         const skillChainId = number(row.skillChainId, `${path}.skillChainId`);
         const skillLevel = number(row.skillLevel, `${path}.skillLevel`);
-        const unlockHeroLevel = number(row.unlockHeroLevel, `${path}.unlockHeroLevel`);
-        if (![skillChainId, skillLevel, unlockHeroLevel].every((value) => Number.isSafeInteger(value) && value >= 1)) {
-            throw new Error(`[ZCStatSchema] ${path} 的技能/等级字段必须是正整数`);
+        // unlockHeroLevel 允许 0：与旧 armySkillLevelUp 口径一致，0 表示一级就有（初始解锁），
+        // 运行时筛选 `unlockHeroLevel > heroLevel` 对 0 档天然放行；负数/小数仍不合法。
+        const unlockHeroLevel = number(row.unlockHeroLevel, `${path}.unlockHeroLevel`, 0);
+        if (![skillChainId, skillLevel].every((value) => Number.isSafeInteger(value) && value >= 1)
+            || !Number.isSafeInteger(unlockHeroLevel) || unlockHeroLevel < 0) {
+            throw new Error(`[ZCStatSchema] ${path} 的技能/等级字段非法`);
         }
         const planKey = `${unitId}:${skillChainId}:${skillLevel}`;
         if (skillPlanKeys.has(planKey)) throw new Error(`[ZCStatSchema] PVP 技能升级档重复：${planKey}`);

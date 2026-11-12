@@ -79,6 +79,7 @@ function createView() {
     const view = new loaded.exports.ZCCardRevealView();
     const node = makeNode();
     const luckNode = makeNode();
+
     view.cardOpacity = new UIOpacity();
     view.luckOpacityComp = new UIOpacity();
     node.components.push(view.cardOpacity);
@@ -86,8 +87,19 @@ function createView() {
     (view as unknown as { node: unknown }).node = node;
     // luckSprite 有图（问号地块才有评语）；卡框 / 卡面不设也能跑（setSprite 判空跳过）。
     view.luckSprite = { node: luckNode, spriteFrame: { name: 'luck' } as never, enabled: true };
-    return { view, node, luckNode };
+    return { view, node, luckNode, module: loaded.exports };
 }
+
+/**
+ * 翻牌小卡牌的**整体 UI 缩放**（需求 2026-11-11：「展示的小牌 UI 整体放大 125%」）。
+ * 从视图模块真源读，不在用例里抄 1.25 —— 弹跳曲线是乘在它上面的，抄死会两边悄悄分叉。
+ */
+const UI_SCALE: number = (() => {
+    const { module } = createView();
+    assert.equal(typeof module.ZC_CARD_REVEAL_UI_SCALE, 'number',
+        'ZCCardRevealView 应导出 ZC_CARD_REVEAL_UI_SCALE（翻牌整体缩放的真源）');
+    return module.ZC_CARD_REVEAL_UI_SCALE as number;
+})();
 
 /** 一张问号地块的绿卡评语（小有收获），生命周期取卡牌段真源。 */
 function reveal(startedAt: number) {
@@ -98,29 +110,32 @@ function reveal(startedAt: number) {
     } as const;
 }
 
-test('生成动画：由 0.2 冲到峰值 1.2，回落**穿过 1** 下探再落位，之后恒为 1', () => {
+test('生成动画：由 0.2 冲到峰值 1.2，回落**穿过 1** 下探再落位，之后恒为 1（整体再乘 UI 缩放 1.25）', () => {
     const { view, node } = createView();
+    // 曲线上每个档位都乘同一个整体缩放：0.2/1.2/0.92/1 → 0.25/1.5/1.15/1.25。
+    const at = (curve: number) => curve * UI_SCALE;
     const renderAt = (elapsed: number) => view.render(reveal(-elapsed) as never, 0);
 
     assert.equal(typeof util.elasticPopScale, 'function',
         'ZCGameViewUtil 应导出共用的生成曲线（建筑那边也吃这一条）');
+    assert.equal(UI_SCALE, 1.25, '★整体 UI 缩放 = 125%（2026-11-11 需求）');
     renderAt(0);
-    assert.equal(node.scale.x, POP.from, '出生瞬间是起手缩放');
+    assert.equal(node.scale.x, at(POP.from), '出生瞬间是起手缩放（× UI 缩放）');
     renderAt(POP_SECONDS * 0.25);
-    assert.ok(node.scale.x > POP.from && node.scale.x < POP.peak, '前半段在起手 → 峰值之间');
+    assert.ok(node.scale.x > at(POP.from) && node.scale.x < at(POP.peak), '前半段在起手 → 峰值之间');
     // 峰值落在弹出段正中。
     renderAt(POP_SECONDS * POP.peakAt);
-    assert.ok(Math.abs(node.scale.x - POP.peak) < 1e-9, `峰值应为 ${POP.peak}，实际 ${node.scale.x}`);
+    assert.ok(Math.abs(node.scale.x - at(POP.peak)) < 1e-9, `峰值应为 ${at(POP.peak)}，实际 ${node.scale.x}`);
     // 🔴 弹性：回落必须**穿过 1** 下探到 dip —— 旧曲线只回到 1，这一下就是本次要的「更弹」。
     assert.ok(POP.dip < 1, '下探点必须小于 1（收过头才叫弹性）');
     renderAt(POP_SECONDS * POP.dipAt);
-    assert.ok(Math.abs(node.scale.x - POP.dip) < 1e-9, `回落下探到 ${POP.dip}，实际 ${node.scale.x}`);
+    assert.ok(Math.abs(node.scale.x - at(POP.dip)) < 1e-9, `回落下探到 ${at(POP.dip)}，实际 ${node.scale.x}`);
     renderAt(POP_SECONDS);
-    assert.ok(Math.abs(node.scale.x - 1) < 1e-9, '弹出段结束落回 1');
+    assert.ok(Math.abs(node.scale.x - at(1)) < 1e-9, '弹出段结束落回 1 × UI 缩放');
     renderAt(1.0);
-    assert.equal(node.scale.x, 1, '生成动画之后恒为 1');
+    assert.equal(node.scale.x, at(1), '生成动画之后恒为基准缩放（1 × UI 缩放）');
     renderAt(2.0);
-    assert.equal(node.scale.x, 1, '淡出段不再动缩放');
+    assert.equal(node.scale.x, at(1), '淡出段不再动缩放');
 });
 
 test('评语延迟 0.13s 出现（短暂淡入），淡出与整卡同拍', () => {
@@ -161,7 +176,7 @@ test('起点之前整卡不渲染：小卡不会以 0.2 缩放静止着等（202
     //    中间没有静止段（需求原文：出现小卡后马上播放卡片变大的动画）。
     view.render(reveal(0.3) as never, 0.3);
     assert.equal(active(), true, '到点必须立刻显形');
-    assert.equal(node.scale.x, POP.from, '显形的第一帧就处在起手缩放，紧接着开始放大');
+    assert.equal(node.scale.x, POP.from * UI_SCALE, '显形的第一帧就处在起手缩放（× UI 缩放），紧接着开始放大');
 
     // ③ 池复用：节点先演一张「进行中」的卡（可见），再拿回来演一张「还没开始」的 ⇒ 必须重新关掉。
     view.render(reveal(0) as never, 1.0);

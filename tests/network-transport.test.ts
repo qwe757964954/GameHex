@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { FetchNetworkTransport } from '../assets/script/platform/network/FetchNetworkTransport';
+import { LoginGateway } from '../assets/script/app/login/LoginProtocol';
 
 /** 会被替换的运行时全局。未显式传值的会被设成 undefined，模拟「该能力不存在」。 */
 const REPLACED_GLOBALS = ['fetch', 'XMLHttpRequest', 'AbortController', 'location'] as const;
@@ -266,6 +267,58 @@ test('HTTP 业务失败、JSON 错误、超时与写请求不通过代理重复�
         assert.equal(calls,1,failure);
     }
 });
+
+test('登录 HTTP 错误不在诊断信息中暴露账号密码，实际请求保持协议参数', async () => {
+    const calls: string[] = [];
+    await withGlobals({ fetch: fakeFetch(calls, '', 503) }, async () => {
+        const gateway = new LoginGateway(new FetchNetworkTransport());
+        await assert.rejects(() => gateway.loginAccount({ url: 'https://game.example.com', backstageurl: '', channelCode: 1 },
+            'audit-account', 'audit-password'), (error: Error) => {
+            assert.match(error.message, /HTTP 503/);
+            assert.match(error.message, /GET https:\/\/game\.example\.com\/center\/account\/login/);
+            assert.doesNotMatch(error.message, /audit-account|audit-password/);
+            return true;
+        });
+    });
+    assert.equal(calls.length, 1);
+    const sent = new URL(calls[0]);
+    assert.equal(sent.searchParams.get('account'), 'audit-account');
+    assert.equal(sent.searchParams.get('password'), 'audit-password');
+});
+
+for (const failure of ['http', 'xhr', 'proxy', 'timeout', 'body']) {
+    test(`请求诊断隐藏查询参数与片段：${failure}`, async () => {
+        const url = 'https://game.example.com/login?account=audit-account&password=audit-password&token=audit-token#private-fragment';
+        const calls: string[] = [];
+        const globals: Partial<Record<ReplacedGlobal, unknown>> = {
+            fetch: async (sent: string) => {
+                calls.push(sent);
+                if (failure === 'proxy') throw new TypeError(`Failed to fetch ${sent}`);
+                if (failure === 'timeout') return new Promise(() => {});
+                return { ok: failure === 'body', status: 503, text: async () => {
+                    throw new TypeError(`Error decoding response body: ${sent}`);
+                } };
+            },
+        };
+        if (failure === 'proxy' || failure === 'body') globals.location = { hostname: 'localhost' };
+        if (failure === 'xhr') {
+            globals.fetch = undefined;
+            globals.XMLHttpRequest = FakeXhr;
+            FakeXhr.plan = xhr => { calls.push(xhr.url); xhr.respond(503, ''); };
+        }
+        await withGlobals(globals, async () => {
+            await assert.rejects(new FetchNetworkTransport({ defaultTimeoutMs: 5 }).requestJson({ url }), (error: Error) => {
+                assert.match(error.message, /GET https:\/\/game\.example\.com\/login/);
+                assert.doesNotMatch(error.message, /audit-account|audit-password|audit-token|private-fragment/);
+                const reason = failure === 'timeout' ? /请求超时/ : failure === 'proxy' ? /Failed to fetch/ : failure === 'body' ? /Error decoding response body/ : /HTTP 503/;
+                assert.match(error.message, reason);
+                return true;
+            });
+        });
+        assert.equal(calls.length, failure === 'proxy' ? 2 : 1);
+        assert.equal(calls[0], url);
+    });
+}
 
 test('平台层源码：超时不得再挂在 AbortController 上，且必须保留 XHR 回落', () => {
     const source = readFileSync('assets/script/platform/network/FetchNetworkTransport.ts', 'utf8');

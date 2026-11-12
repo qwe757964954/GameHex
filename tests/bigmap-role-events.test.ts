@@ -23,7 +23,7 @@ import {
     type IBigMapRoleEvent,
 } from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 import { BigMapCampRepository, type IBigMapCampGateway } from '../assets/script/app/bigmap/application/BigMapCampRepository';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 import { assetPath } from './helpers/asset-paths';
@@ -225,7 +225,7 @@ test('★Presenter：广播按 pos 反查据点，详情面板角色列表实时
         requestMove: async () => null,
     };
     const repository = new BigMapCampRepository(gateway);
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: createMemoryBigMapStorage(), saveKey: 'role-broadcast',
         adventureChapter: () => 0, now: () => 957600, campRepository: repository,
     });

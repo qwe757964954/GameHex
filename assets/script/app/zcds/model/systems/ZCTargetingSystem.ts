@@ -45,45 +45,49 @@ export interface IZCPathStepOptions {
 export class ZCTargetingSystem {
     static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {
         const definition = context.effectiveDefinition(unit);
-        const from = context.unitPosition(unit);
         const candidatePosition = { x: 0, y: 0 };
-        let best: ZCTargetSelection | null = null;
+        const from = context.unitPosition(unit, candidatePosition);
+        const fromX = from.x, fromY = from.y;
+        let bestKind: ZCCombatTargetKind | null = null;
+        let bestId = Infinity;
         let bestDistance = Infinity;
-        const consider = (kind: ZCCombatTargetKind, id: number, point: ZCPoint): void => {
-            const dx = from.x - point.x;
-            const dy = from.y - point.y;
-            const distanceSquared = dx * dx + dy * dy;
-            if (distanceSquared < bestDistance || (distanceSquared === bestDistance && id < (best?.id ?? Infinity))) {
-                bestDistance = distanceSquared;
-                best = { kind, id };
-            }
-        };
-
         if (unit.hatredUnitId !== null && context.now <= unit.hatredUntil) {
             const hater = context.unitById(unit.hatredUnitId);
             if (hater && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
                 && (definition.canAttackAir || !context.effectiveDefinition(hater).flying)) {
                 // 仇恨目标进入同一候选池；保留旧逻辑的距离排序语义。
-                consider('unit', hater.id, context.unitPosition(hater, candidatePosition));
+                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, candidatePosition));
+                if (distance < bestDistance || (distance === bestDistance && hater.id < bestId)) {
+                    bestDistance = distance; bestKind = 'unit'; bestId = hater.id;
+                }
             }
         }
         for (const candidate of context.units) {
             if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
             if (!definition.canAttackAir && context.effectiveDefinition(candidate).flying) continue;
-            consider('unit', candidate.id, context.unitPosition(candidate, candidatePosition));
-        }
-        if (unitsOnly || (best && context.preferUnitTargets?.(unit))) return best;
-        for (const hex of context.hexes) {
-            if (isZCAwakeMonster(hex)) {
-                consider('building', hex.id, context.hexPosition(hex.id));
-                continue;
+            const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, candidatePosition));
+            if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
+                bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
             }
-            if (hex.owner === 'neutral' || hex.owner === unit.owner) continue;
-            const point = context.hexPosition(hex.id);
-            if (context.hasExposedWall(hex)) consider('wall', hex.id, point);
-            else if (hex.building !== 'none' && hex.hp > 0 && hex.wallHp <= 0) consider('building', hex.id, point);
         }
-        return best;
+        if (unitsOnly || (bestKind !== null && context.preferUnitTargets?.(unit))) {
+            return bestKind === null ? null : { kind: bestKind, id: bestId };
+        }
+        for (const hex of context.hexes) {
+            let kind: ZCCombatTargetKind;
+            if (isZCAwakeMonster(hex)) kind = 'building';
+            else {
+                if (hex.owner === 'neutral' || hex.owner === unit.owner) continue;
+                if (context.hasExposedWall(hex)) kind = 'wall';
+                else if (hex.building !== 'none' && hex.hp > 0 && hex.wallHp <= 0) kind = 'building';
+                else continue;
+            }
+            const distance = targetDistanceSquared(fromX, fromY, context.hexPosition(hex.id));
+            if (distance < bestDistance || (distance === bestDistance && hex.id < bestId)) {
+                bestDistance = distance; bestKind = kind; bestId = hex.id;
+            }
+        }
+        return bestKind === null ? null : { kind: bestKind, id: bestId };
     }
 
     static attackReach(definition: ZCUnitDefinition, targetBodyRadius: number, distanceScale: number): number {
@@ -169,5 +173,10 @@ export class ZCTargetingSystem {
         }
         return step;
     }
+}
+
+function targetDistanceSquared(fromX: number, fromY: number, point: ZCPoint): number {
+    const dx = fromX - point.x, dy = fromY - point.y;
+    return dx * dx + dy * dy;
 }
 

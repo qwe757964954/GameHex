@@ -77,7 +77,8 @@ test('armySkillLevelUp：坏行跳过、name 取第一个非空', () => {
 test('resolveCardSkills：顺序以卡表 skillList 为准，缺失告警跳过', () => {
     const skills = resolveCardSkills(TABLE, PEASHOOTER_SKILLS, '68001');
     assert.deepEqual(skills.map((skill) => skill.skillId), PEASHOOTER_SKILLS);
-    assert.deepEqual(skills.map((skill) => skill.name), ['豌豆快送', '强化豌豆', '饥饿缠身', '黄袍加身']);
+    // 名称以 `pvpSkillPlan`（实际研发）为准：100104 已由「黄袍加身」更名为「豌豆机关枪」。
+    assert.deepEqual(skills.map((skill) => skill.name), ['豌豆快送', '强化豌豆', '饥饿缠身', '豌豆机关枪']);
 
     const reversed = resolveCardSkills(TABLE, [100104, 100101], '68001');
     assert.deepEqual(reversed.map((skill) => skill.skillId), [100104, 100101]);
@@ -162,4 +163,12 @@ test('pvpCard.skillList：启用卡每张 4 个技能，主城/金矿为 0', () 
             }
         }
     }
+});
+
+
+test('技能目标档解析真实金币和技能材料，丢弃无效或零消耗', () => {
+    const row = parseArmySkillLevelRow({ id: 100101, skilllevel: 2, costCoinID: 7, costCoinNum: 3000, costArmySkillLevelID: 10300, costArmySkillLevelNum: 10 });
+    assert.deepEqual(row.costs, [{ itemId: 7, need: 3000 }, { itemId: 10300, need: 10 }]);
+    const empty = parseArmySkillLevelRow({ id: 100101, skilllevel: 1, costCoinID: -1, costCoinNum: 3, costArmySkillLevelID: 10300, costArmySkillLevelNum: 0 });
+    assert.deepEqual(empty.costs, []);
 });

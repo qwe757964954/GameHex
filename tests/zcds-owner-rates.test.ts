@@ -34,7 +34,6 @@ loadPvpTables({
     pvpPity: readPvpRows('pvpPity'),
     pvpTileGen: readPvpRows('pvpTileGen'),
     pvpTileGenParams: readPvpRows('pvpTileGenParams') as ZCPvpTables['pvpTileGenParams'],
-    pvpBaseTeamWeight: readPvpRows('pvpBaseTeamWeight'),
 } as ZCPvpTables);
 
 const unitDefinitions = getAllUnitDefinitions();

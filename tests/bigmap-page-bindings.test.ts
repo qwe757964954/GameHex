@@ -7,6 +7,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as infoLayout from '../assets/script/app/bigmap/model/BigMapInfoLayout';
+import * as feedbackReal from '../assets/script/app/main/MainResBarFeedback';
 import { bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
 import { bigMapPrefabFixture } from './helpers/bigmap-prefab-fixture';
 
@@ -30,10 +31,11 @@ class Node {
     setScale(x: number, y: number) { this.scale = { x, y }; }
     setParent(parent: Node) { if (this.parent) this.parent.children.splice(this.parent.children.indexOf(this), 1); this.parent = parent; parent.children.push(this); }
     setSiblingIndex(index: number) { const siblings = this.parent!.children; siblings.splice(siblings.indexOf(this), 1); siblings.splice(index, 0, this); }
+    getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : 0; }
     on(event: string, callback: () => void, caller: object) { this.events.set(event, callback.bind(caller)); }
 }
 class Button { static EventType = { CLICK: 'click' }; interactable = true; }
-class Label { string = ''; lineHeight = 21; }
+class Label { static Overflow = { NONE: 0 }; string = ''; lineHeight = 21; }
 class Sprite {}
 class Widget { bottom = 0; alignmentUpdates = 0; updateAlignment() { this.alignmentUpdates++; } }
 class Graphics { clear() {} roundRect() {} fill() {} stroke() {} }
@@ -41,6 +43,23 @@ class BaseView { node!: Node; build() {} render() {} setArt() {} }
 class Color { static WHITE = new Color(); }
 const modules = new Map<string, any>();
 let instantiate: (template: object) => object;
+const feedbackCache = new Map<string, any>();
+// 反馈类依赖 cc（节点/标签），但曲线全是零依赖纯函数：在 vm 内加载真实反馈类，
+// 注入 cc 桩与真实 MainResBarFeedback，避免在桩里再抄一份曲线。
+function loadFeedback(): any {
+    if (feedbackCache.has('BigMapResourceFeedback')) return feedbackCache.get('BigMapResourceFeedback');
+    const fbExports: any = {};
+    const fbCode = ts.transpileModule(readFileSync('assets/script/app/bigmap/view/BigMapResourceFeedback.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(fbCode, { exports: fbExports, require: (id: string) => {
+        if (id === 'cc') return { Color, Label, Node, UITransform: Transform };
+        if (id.endsWith('/MainResBarFeedback')) return feedbackReal;
+        return {};
+    } });
+    feedbackCache.set('BigMapResourceFeedback', fbExports);
+    return fbExports;
+}
 function load(name: string): any {
     if (modules.has(name)) return modules.get(name);
     const exports = {};
@@ -57,10 +76,11 @@ function load(name: string): any {
             view: { getVisibleSize: () => ({ width: 720, height: 1280 }) } };
         if (id.endsWith('/ResourceScope')) return { ResourceScope };
         if (id === './BigMapBaseView') return { BigMapBaseView: BaseView };
+        if (id.endsWith('/BigMapResourceFeedback')) return loadFeedback();
         if (id.endsWith('/BigMapInfoLayout')) return infoLayout;
         if (id === './BigMapPresentationText') return { BIGMAP_PRESENTATION_TEXT: { baseToggle: '基地', worldToggle: '大地图' } };
         const dependency = id.split('/').pop()!;
-        if (['BigMapPageLayout', 'BigMapButton', 'BigMapPanel', 'BigMapBuildRow', 'BigMapSkin', 'BigMapTheme'].includes(dependency)) return load(dependency);
+        if (['BigMapPageLayout', 'BigMapButton', 'BigMapBuildRow', 'BigMapSkin', 'BigMapTheme'].includes(dependency)) return load(dependency);
         return {};
     } });
     return exports;
@@ -70,10 +90,9 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
     const { BigMapPage } = load('BigMapPage');
     const { BigMapPageLayout } = load('BigMapPageLayout');
     const { BigMapButton } = load('BigMapButton');
-    const { BigMapPanel } = load('BigMapPanel');
     const { BigMapBuildRow } = load('BigMapBuildRow');
     const fixture = bigMapPrefabFixture({ 'cc.Node': Node, 'cc.UITransform': Transform, 'cc.Label': Label,
-        'cc.Button': Button, 'cc.Sprite': Sprite, 'cc.Graphics': Graphics, 'cc.Widget': Widget, BigMapPageLayout, BigMapButton, BigMapPanel, BigMapBuildRow, BigMapBaseView: BaseView });
+        'cc.Button': Button, 'cc.Sprite': Sprite, 'cc.Graphics': Graphics, 'cc.Widget': Widget, BigMapPageLayout, BigMapButton, BigMapBuildRow, BigMapBaseView: BaseView });
     instantiate = fixture.instantiate;
     const page = new BigMapPage();
     page.node = new Node('Host');
@@ -97,23 +116,23 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
     page.buildUi(page.data);
     assert.equal(fixture.root.children[0].name, 'Backdrop');
     assert.equal(fixture.root.children[1], world);
-    assert.equal(layout.buildRows.length, 3);
-    assert.deepEqual(Array.from(layout.buildRows, (row: any) => row.name.string), ['粮田', '木场', '解锁建造队列']);
+    // 建造目录已搬进独立弹窗（BigMapBuildMenuPopup），Layout 不再持有行节点。
+    assert.equal((layout as unknown as { buildRows?: unknown }).buildRows, undefined,
+        'Layout 不该再持有 buildRows —— 行归弹窗管');
     const intents: mvcEvents.BigMapIntent[] = [];
     EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => intents.push(event.intent), page);
     try {
-        layout.buildRows[2].node.events.get('click')();
         layout.buildMenuButton.node.events.get('click')();
         layout.harvestButton.node.events.get('click')();
         layout.exploreButton.node.events.get('click')();
         layout.modeNode.events.get('click')();
         assert.deepEqual(JSON.parse(JSON.stringify(intents)), [
-            { kind: 'build', buildingKind: -1 }, { kind: 'toggleBuildMenu' }, { kind: 'harvestAll' },
+            { kind: 'toggleBuildMenu' }, { kind: 'harvestAll' },
             { kind: 'searchMonster' }, { kind: 'mode', mode: 'base' } ]);
         const base = { ...page.data, ui: { ...page.data.ui, mode: 'base', buildMenuVisible: true } };
         layout.render(base);
-        assert.equal(layout.buildPanel.active, true);
-        assert.equal(layout.buildRows[0].name.string, '粮田  0/5');
+        // 2026-11-11 用户口径：「基地界面隐藏 搜索icon，搜索icon 只在大地图显示」。
+        assert.equal(layout.exploreButton.node.active, false, '基地界面没有搜索按钮');
         assert.equal(layout.harvestButton.interactable, true);
         assert.equal(layout.resourceLabels[0].string, '粮食 1200/2000');
         layout.setArt({ resources: new Map(), hud: new Map() });
@@ -129,19 +148,18 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
         assert.equal(layout.modeLabel.string, '大地图');
         assert.match(layout.queueLabel.string, /0\/0/);
         layout.render({ ...base, canHarvest: false, ui: { ...base.ui, enteringBattle: true, buildMenuVisible: false } });
-        assert.equal(layout.buildPanel.active, false);
         assert.equal(layout.harvestButton.interactable, false);
         layout.exploreButton.node.events.get('click')();
         layout.modeNode.events.get('click')();
-        layout.buildRows[0].node.events.get('click')();
-        assert.equal(intents.length, 5, '入战锁同时约束所有 Layout 输入');
+        assert.equal(intents.length, 4, '入战锁同时约束所有 Layout 输入');
         layout.render(page.data);
         assert.equal(layout.baseView.node.active, false);
         assert.equal(layout.buildMenuButton.node.active, false);
         assert.equal(layout.queuePanel.active, false);
+        assert.equal(layout.exploreButton.node.active, true, '回到大地图，搜索按钮要回来');
         assert.equal(layout.modeLabel.string, '基地');
         layout.exploreButton.node.events.get('click')();
-        assert.equal(intents.length, 6, '取消入战后恢复输入');
+        assert.equal(intents.length, 5, '取消入战后恢复输入');
     } finally { EventMgr.instance.offTarget(page); }
     page.layout.applyNavigationHeight(88);
     for (const name of ['InfoPanel', 'InfoDim', 'Toast', 'EnteringBattleMask']) assert.equal(fixture.findNode(name), undefined);
@@ -198,7 +216,12 @@ test('资源栏由Prefab外层Layout均分Item，每个Item由Layout排列Icon�
     assert.equal(widget('ResourceCard')._left, 12);
     assert.equal(widget('ResourceCard')._right, 140);
     assert.equal(widget('QueueStatus')._alignFlags, 41);
-    assert.equal(widget('QueueText')._alignFlags, 56);
+    // QueueText 不再挂 Widget：它现在跟在固定排布的三个队列槽位后面，
+    // 用 Widget 会被按 `left/right` 重算成 0 宽（MCP 存盘时踩过），所以尺寸写死。
+    assert.equal(widget('QueueText'), undefined, 'QueueText 不该再用 Widget');
+    const queueText = node('QueueText')._components.map((ref: any) => objects[ref.__id__])
+        .find((item: any) => item.__type__ === 'cc.UITransform');
+    assert.equal(queueText._contentSize.width, 296);
     const layout = (name: string) => node(name)._components.map((ref: any) => objects[ref.__id__]).find((item: any) => item.__type__ === 'cc.Layout');
     assert.equal(layout('ResourceCard')._layoutType, 1);
     assert.equal(layout('ResourceCard')._resizeMode, 2);
@@ -212,7 +235,7 @@ test('资源栏由Prefab外层Layout均分Item，每个Item由Layout排列Icon�
         assert.equal(children[1]._components.map((ref: any) => objects[ref.__id__]).find((c: any) => c.__type__ === 'cc.Widget')._alignFlags, 42);
     }
     const source = readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8');
-    const navigation = source.slice(source.indexOf('private applyNavigationHeight'), source.indexOf('private bindBuildRows'));
+    const navigation = source.slice(source.indexOf('private applyNavigationHeight'), source.indexOf('private applyMode'));
     assert.doesNotMatch(navigation, /setContentSize|setPosition|const size/);
 });
 
@@ -227,7 +250,7 @@ test('Layout控件引用私有，宿主只调用展示接口，不持有控件�
 test('同步渲染显式接收必填快照，不用 nullable data 静默跳过初始化错误', () => {
     const layout = readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8');
     assert.doesNotMatch(layout, /this\.data|private data:/);
-    for (const name of ['refreshHeader', 'refreshBuildRows', 'refreshQueue']) {
+    for (const name of ['refreshHeader', 'refreshQueue']) {
         assert.ok(layout.includes(name + '(data: IBigMapViewState)'));
     }
     const page = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');

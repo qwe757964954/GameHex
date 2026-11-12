@@ -848,23 +848,33 @@
   "resourcePoints": [
     {
       "row": 9,
-      "column": 3,
-      "groupId": 14009
+      "column": 2,
+      "groupId": 14001
     },
     {
       "row": 9,
       "column": 8,
-      "groupId": 14008
+      "groupId": 14001
     },
     {
-      "row": 11,
-      "column": 2,
-      "groupId": 14006
-    },
-    {
-      "row": 5,
+      "row": 19,
       "column": 5,
-      "groupId": 14004
+      "groupId": 13003
+    },
+    {
+      "row": 0,
+      "column": 5,
+      "groupId": 13003
+    },
+    {
+      "row": 16,
+      "column": 5,
+      "groupId": 13004
+    },
+    {
+      "row": 3,
+      "column": 5,
+      "groupId": 13004
     }
   ]
 }

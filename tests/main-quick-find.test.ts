@@ -23,6 +23,9 @@ import {
 } from '../assets/script/app/territory/model/TerritoryMapLayout';
 import { configureTerritoryMap } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
+import * as chestEntryGate from '../assets/script/app/main/ChestEntryGate';
+import * as quickFindGate from '../assets/script/app/main/QuickFindGate';
+import { EMPTY_ENTRANCE_PLAYER_STATE } from '../assets/script/app/main/MainEntranceVisible';
 
 function loadComponent<T>(name: string, imports: Record<string, unknown>): new () => T {
     const exports: Record<string, new () => T> = {};
@@ -89,6 +92,11 @@ test('quick-find button dispatches focusLevel without navigating to matching', (
         '../../framework/event/EventMgr': { EventMgr },
         '../battle/BattleStartModel': battleStart,
         './NewTreasureRepository': { NewTreasureRepository: class {} },
+        './ChestEntryGate': chestEntryGate,
+        './QuickFindGate': quickFindGate,
+        './MainEntranceVisible': { EMPTY_ENTRANCE_PLAYER_STATE },
+        // 空表：让 `refreshOpenGates` 走同步分支（否则会去拉 `getRefAllAsync`，桩里没有它）
+        '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAll: () => [] } } },
         '../../framework/procedure/ProcedureManager': { ProcedureManager: {
             navigate: (...args: unknown[]) => routes.push(args),
         } },
@@ -100,16 +108,61 @@ test('quick-find button dispatches focusLevel without navigating to matching', (
         previousChapterButton: { active: false, on() {} },
         nextChapterButton: { active: false, on() {} },
         chestBar: { bindCollapse() {} },
+        // 门没开时 `applyChestEntryGate` 会 `unschedule` 掉生成动画（真组件自带，桩要补）
+        schedule() {},
+        unschedule() {},
     });
     page.hasTerritoryMap = true;
     const listener = {};
     EventMgr.instance.on(mvcEvents.TerritoryUiEvent.Intent, () => { findCount++; }, listener);
     page.onLoad();
     assert.ok(click);
+    // 2026-11-09：快速寻敌由 `open` 702 解锁（激活第 1 章第 4 关地块）；这里只钉「解锁后的点击」，
+    // 未解锁那条见下一条用例。
+    (page as unknown as { quickFindUnlocked: boolean }).quickFindUnlocked = true;
     click();
     assert.equal(findCount, 1);
     EventMgr.instance.offTarget(listener);
     assert.deepEqual(routes, []);
+    EventMgr.instance.offTarget(page);
+});
+
+test('快速寻敌没解锁时（open 702 条件没过）点了不派发 focusLevel', () => {
+    let findCount = 0;
+    let click: (() => void) | undefined;
+    const Page = loadComponent<MainPage>('MainPage', {
+        cc,
+        './ChestTypes': chestTypes,
+        './ChestEvents': { CHEST_EVENTS },
+        '../territory/application/TerritoryEvents': mvcEvents,
+        '../../framework/event/EventMgr': { EventMgr },
+        './NewTreasureRepository': { NewTreasureRepository: class {} },
+        './ChestEntryGate': chestEntryGate,
+        './QuickFindGate': quickFindGate,
+        './MainEntranceVisible': { EMPTY_ENTRANCE_PLAYER_STATE },
+        '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAll: () => [] } } },
+    });
+    const page = new Page();
+    Object.assign(page, {
+        startButton: { on: (_event: string, handler: () => void, caller: unknown) => { click = handler.bind(caller); } },
+        chestToggle: { on() {} },
+        previousChapterButton: { active: false, on() {} },
+        nextChapterButton: { active: false, on() {} },
+        chestBar: { bindCollapse() {} },
+        // 门没开时 `applyChestEntryGate` 会 `unschedule` 掉生成动画（真组件自带，桩要补）
+        schedule() {},
+        unschedule() {},
+    });
+    page.hasTerritoryMap = true;
+    const owner = {};
+    EventMgr.instance.on(mvcEvents.TerritoryUiEvent.Intent, () => { findCount++; }, owner);
+    page.onLoad();
+    assert.ok(click);
+    // 空 open 表 ⇒ `rowMissing` ⇒ 未解锁（fail-closed）
+    assert.equal((page as unknown as { quickFindUnlocked: boolean }).quickFindUnlocked, false);
+    click();
+    assert.equal(findCount, 0, '没解锁的按钮不许寻敌');
+    EventMgr.instance.offTarget(owner);
     EventMgr.instance.offTarget(page);
 });
 

@@ -47,6 +47,18 @@ export interface IRankSeat {
     readonly territoryCount: number;
     /** 是否是"比赛中"（设计稿的 `di_02` 提示态）。 */
     readonly isPlaying: boolean;
+    /**
+     * 是不是**本机玩家自己**这一席（`owner === ZCOwner.Player`）。
+     *
+     * 2026-11-11 需求：「排行榜的黄色底框只是代表玩家，玩家第几名，就在第几名显示」。
+     * 改前渲染层用的是 `rank === 1` ⇒ 黄色高亮底 `phb_list_01` 恒贴第一行，
+     * 玩家排第 2 时高亮的是别人。判据必须回到**席位身份**，与名次无关。
+     *
+     * 单独存成字段而不是让渲染层再判一次 `owner === ZCOwner.Player`：
+     * 行的 `render` 只认 `IRankSeat`，「谁是玩家」的口径与排序/席位分配保持一致
+     * （`assignSeatUnits` 已把本机钉进 `player` 槽），不要在两处各写一份。
+     */
+    readonly isSelf: boolean;
 }
 
 /** 席位档案：名字 + 头像。由 `ZCGame` 持有，本模块只读。 */
@@ -115,6 +127,8 @@ export function buildRankSeats(
             //  整局结束后一律给真值 —— 「比赛中」是**对局进行中**的语义，
             // 结算界面还写「比赛中」是错的。
             isPlaying: !finished && count === 0,
+            //  黄色高亮底代表「这是你」，与名次无关（2026-11-11 需求）。
+            isSelf: owner === ZCOwner.Player,
         };
     });
     rows.sort(compareRankSeats);
@@ -245,7 +259,13 @@ export function rankBadgeKeyOf(rank: number): string {
     return '';
 }
 
-/** 行底板资源键：第一名单独一张高亮底（`phb_list_01`），其余共用 `phb_list_02`。 */
-export function rowBackgroundKeyOf(rank: number): string {
-    return rank === 1 ? 'phb_list_01' : 'phb_list_02';
+/**
+ * 行底板资源键：**本机玩家自己那一行**用高亮底 `phb_list_01`，其余共用 `phb_list_02`。
+ *
+ * 2026-11-11 改口径：入参从 `rank` 换成 `isSelf`。
+ * 原实现 `rank === 1 ? 'phb_list_01' : 'phb_list_02'` 把「第一个」当成「我」——
+ * 玩家排第 2 时黄底仍贴在第 1 名身上。名次徽章（`icon_01/02/03`）才按名次走，两者别混。
+ */
+export function rowBackgroundKeyOf(isSelf: boolean): string {
+    return isSelf ? 'phb_list_01' : 'phb_list_02';
 }

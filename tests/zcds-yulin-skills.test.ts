@@ -12,6 +12,7 @@ import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import type { ZCProjectileState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCProjectileSystem';
 import { assetPath } from './helpers/asset-paths';
+import { withoutLineupCrit } from './helpers/lineup-crit';
 
 /**
  * 玉林好汉（68004）2026-10-30 全套：配表真值 + 三条新能力的运行期落点。
@@ -30,7 +31,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
 ];
@@ -45,7 +46,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 
 function prepare() {
     loadPvpTables(Object.fromEntries(TABLE_NAMES.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 
@@ -86,7 +87,9 @@ test('玉林好汉：普攻换成 30716（自己的飞镖），强化那一击�
 
 test('玉林好汉：12 行技能计划齐备，且 100404 三档的穿透/衰减/倍率逐档递增', () => {
     prepare();
-    const plans = readRows('pvpSkillPlan').filter((row) => String(row.unitId) === '68004');
+    const plans = withoutLineupCrit(readRows('pvpSkillPlan'))
+        .filter((row) => String(row.unitId) === '68004');
+    // 68004 另有 50 行「全队暴击伤害增幅」（skillChainId 109001），不是技能链，先剔掉。
     assert.equal(plans.length, 12, '4 条技能 × 3 档');
 
     const byChain = (chainId: number): Array<Record<string, unknown>> => plans
@@ -95,8 +98,15 @@ test('玉林好汉：12 行技能计划齐备，且 100404 三档的穿透/衰�
     for (const chainId of [100401, 100402, 100403, 100404]) {
         const tiers = byChain(chainId);
         assert.equal(tiers.length, 3, `${chainId} 必须三档齐备`);
-        // 设计案写「兵种 0 级」，但 `ZCStatSchema` 硬校验 unlockHeroLevel >= 1，所以落成 1。
-        for (const tier of tiers) assert.ok(Number(tier.unlockHeroLevel) >= 1);
+        // 第 1 档允许 0（「解锁即拥有」）：`ZCStatSchema` 对 unlockHeroLevel 只要求 >= 0。
+        for (const tier of tiers) {
+            const unlock = Number(tier.unlockHeroLevel);
+            assert.ok(Number.isSafeInteger(unlock) && unlock >= 0, `${chainId} 的解锁等级必须是非负整数`);
+        }
+        // 档位越高，门槛不能反而更低。
+        for (let k = 1; k < tiers.length; k += 1) {
+            assert.ok(Number(tiers[k].unlockHeroLevel) >= Number(tiers[k - 1].unlockHeroLevel), `${chainId} 的解锁等级必须逐档不降`);
+        }
         // 全部挂在普攻行 30716 上：`sendAttack` 取运行时用的键是 `${unitId}:${profile.skillId}`。
         for (const tier of tiers) assert.equal(Number(tier.pvpSkillId), 30716);
     }
@@ -134,7 +144,7 @@ test('100404 没有 pvpSkillBinding 行时，skillParamJson 仍进得到 skillRu
     assert.equal(bindings.some((row) => Number(row.pvpSkillId) === 30716), false,
         '前提变了：30716 现在有 binding 行，这条用例应改成走 merge 分支');
 
-    const selected = selectZCSkillPlans('68004', 25, catalogs);
+    const selected = withoutLineupCrit(selectZCSkillPlans('68004', 25, catalogs));
     // 四条链都是 `replace`（设计案「三级同值，不叠加」）⇒ 25 级每条链只留最高档，共 4 行。
     assert.equal(selected.length, 4, 'replace 语义下每条链只保留一档');
     assert.deepEqual(selected.map((row) => row.modifierId).sort(),

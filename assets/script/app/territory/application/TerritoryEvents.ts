@@ -31,7 +31,15 @@ export type TerritoryIntent =
         /** 整页过场接手开战：此后程序关掉详情不作废在途开战请求（见 `TerritoryModel.battleHandoff`）。 */
         | 'keepBattleRequest'
         /** 战斗流程没接手 ⇒ 复位在途开战态，别让「开始战斗」变成死按钮。 */
-        | 'cancelBattleStart' };
+        | 'cancelBattleStart' }
+    /**
+     * 征收弹窗的「快速征收」：对当前进度关卡格发 `CmdCityChapterSweepReqMsg`。
+     *
+     * `times` = 扫荡倍率（协议 `optional uint32 times = 3`，缺省 1），来自弹窗的
+     * `GearSwitch` 档位（1/5/10/20/50）。**必须随意图一起带到 Model** ——
+     * 只在视图里改角标文案、请求仍发 1 倍，是最难发现的那种「界面变了但没生效」。
+     */
+    | { readonly kind: 'sweepChapter'; readonly times?: number };
 export interface ITerritoryIntentEvent { readonly intent: TerritoryIntent }
 export type TerritoryViewCommand = Exclude<TerritoryModelOutput, { readonly kind: 'changed' | 'navigate' }>
     | { readonly kind: 'navigate'; readonly payload: import('./TerritoryModel').ITerritoryNavigateBattlePayload; readonly ready?: Promise<unknown> }

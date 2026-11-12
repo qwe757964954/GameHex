@@ -7,6 +7,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { EventBus } from '../assets/script/framework/event/EventBus';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 
@@ -139,4 +140,35 @@ test('EventBus：派发中移除再重订同一处理函数，新订阅只在下
     assert.deepEqual(seen, []);
     bus.emit(E.A);
     assert.deepEqual(seen, ['listener']);
+});
+
+test('EventBus：嵌套派发读取最新订阅，外层保持原来的派发范围', () => {
+    const bus = new EventBus<E>();
+    const seen: string[] = [];
+    const late = (depth: number) => seen.push(`late:${depth}`);
+    bus.on(E.A, (depth: number) => {
+        seen.push(`first:${depth}`);
+        if (depth === 0) { bus.on(E.A, late); bus.emit(E.A, 1); }
+    });
+    bus.emit(E.A, 0);
+    assert.deepEqual(seen, ['first:0', 'first:1', 'late:1']);
+});
+
+test('EventBus：监听抛错后下一次仍可派发，异常不被吞掉', () => {
+    const bus = new EventBus<E>();
+    const broken = () => { throw new Error('probe'); };
+    let hits = 0;
+    bus.on(E.A, broken);
+    bus.on(E.A, () => hits++);
+    assert.throws(() => bus.emit(E.A), /probe/);
+    assert.equal(hits, 0);
+    bus.off(E.A, broken);
+    bus.emit(E.A);
+    assert.equal(hits, 1);
+});
+
+test('EventBus：稳态派发不复制监听数组', () => {
+    const source = readFileSync('assets/script/framework/event/EventBus.ts', 'utf8');
+    const body = source.slice(source.indexOf('    emit('));
+    assert.doesNotMatch(body, /\[\s*\.\.\.|\.slice\(|Array\.from/);
 });

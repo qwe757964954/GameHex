@@ -30,7 +30,7 @@
 | 发布产物 | `assets/resources/config/bigmap-maps/<id>.json` | `copy_bigmap_maps.py` 用 `path.stem`，**不改名** |
 | 运行时读取 | `config/bigmap-maps/world_<worldId 补两位>` | `BigMapLayoutLoader.bigMapLayoutPath(config.world.worldId)` |
 
-⇒ **文件名必须是 `world_<worldId 两位>`**（如 `world_01`）。改名成 `dadi_tuchugao.json` 也能存、能发布，
+⇒ **文件名必须是 `world_<worldId 两位>`**（如 `world_01`）。改名成任意不按此规则的名字（如 `myDraft.json`）也能存、能发布，
 但运行时按 `world_01` 找，找不到就静默回退种子生成。`_` 开头的文件发布时跳过。
 
 ## 2. 坐标口径（所有 `hexId` 的共同前提）
@@ -221,8 +221,8 @@ bases:   baseId name isPlayer hexId ring power
 | 布局发布对账**实际处于降级状态** | `npx tsx tools/map-editor/validate_bigmap_layout.ts ...` 输出 `warnings`：`读不到 BigMap-城池配置，跳过城池对账` / `读不到 BigMap-野怪配置，跳过野怪对账` |
 | 原因是表名还是中文旧名 | `server.mjs`、`validate_bigmap_layout.ts` 写的是 `BigMap-城池配置` / `BigMap-野怪配置` / `BigMap-世界地图配置`，而 `assets/remoteRef/` 里实际是 `bigmapCity.json` / `bigmapMonster.json` / `bigmapWorld.json`（2026-10-20 表名统一改英文 camelCase） |
 | 连带：编辑器城池/野怪下拉为空 | `/api/bigmap-config` 的 `world` / `cities` / `monsters` 全走 `readRefRows`，同样读不到 ⇒ 返回 `null` / `[]` |
-| `dadi_tuchugao.json` 的城 id 与现表**零交集** | 布局 `2001~2081`（81 座），`bigmapCity` 是 `101~401`（25 座），命中 0；野怪 `8001~8020` 完全对得上 |
-| `dadi_tuchugao.json` 尺寸与配置表不一致 | 布局 `100×100`，`bigmapWorld` 是 `40×40` ⇒ `isBigMapLayoutCompatible` 判假，运行时回退种子生成（不白屏，但策划摆位全丢） |
+| `bigMap.json` 的城 id 与现表**零交集** | 布局 `2001~2081`（81 座），`bigmapCity` 是 `101~401`（25 座），命中 0；野怪 `8001~8020` 完全对得上 |
+| `bigMap.json` 尺寸与配置表不一致 | 布局 `100×100`，`bigmapWorld` 是 `40×40` ⇒ `isBigMapLayoutCompatible` 判假，运行时回退种子生成（不白屏，但策划摆位全丢） |
 
 前三条是同一个根因；第四条修好对账后会让发布直接失败（这是**正确**行为，得先把城 id 对齐）。
 

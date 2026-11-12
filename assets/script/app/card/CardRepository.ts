@@ -28,12 +28,15 @@ import {
     detailBaseOfRow,
     parseGrowthRows,
 } from './CardDetailPresenter';
+import { buildCritDamageGainTable, critDamageGainAt } from './CardDetailCritDamage';
+import type { ZCCritDamageGainTable } from './CardDetailCritDamage';
 import type { CardDetailPresentation } from './CardDetailPresenter';
-import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, saveFormation, selectFormation } from './FormationService';
+import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, saveFormation, selectFormation } from './FormationService';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
 import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
+import { visibleLineupCards } from './CardLineupTypes';
 import {
     applyPvpHeroLevel,
     applyPvpHeroSkillLevel,
@@ -46,6 +49,12 @@ import type { PvpHeroInfo, PvpHeroSkillLevel } from './PvpHeroService';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
 import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
+import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
+import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
+import type { ICardSkillCost } from './CardPresentations';
+import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
+import { readRoleRow } from '../main/MainRoleRow';
+import { toCount } from '../net/RequestGuard';
 
 export interface CardLineupData {
     /** 当前上阵卡攻击力合计；快照或权威数据未就绪时不提供。 */
@@ -83,6 +92,8 @@ export interface LineupBoardData {
 
 /** 技能面板一次取数要的东西：卡表里的技能顺序 + 技能表 + 该英雄的技能等级。 */
 export interface CardSkillListData {
+    readonly skillDetails?: ReadonlyMap<number, { readonly kind: string; readonly cooldown: number }>;
+    readonly costItems?: ReadonlyMap<number, Omit<ICardSkillCost, 'need'>>;
     /** 卡牌配置里的技能 id 顺序（`pvpCard.skillList`）；没配置时为空。 */
     readonly skillIds: readonly number[];
     /** `armySkillLevelUp` 聚合后的技能表。 */
@@ -114,7 +125,7 @@ export type UpgradeHeroSkillResult =
 export interface ICardRepository {
     loadArtConfig(): Promise<ICardArtConfig>;
     loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt>;
-    loadLineup(autoLoadDecks: boolean): Promise<CardLineupData>;
+    loadLineup(autoLoadDecks: boolean, refreshFormations?: boolean): Promise<CardLineupData>;
     /**
      * 首帧用的**本地阵容快照**（同步，命中才有值）。
      *
@@ -195,6 +206,14 @@ export class RuntimeCardRepository implements ICardRepository {
     private levelUpTable: { readonly rows: readonly unknown[]; readonly table: ZCCardLevelUpTable } | null = null;
 
     /**
+     * `pvpSkillPlan` 的「全队暴击伤害增幅」建表结果（2194 行 → 35 卡 × 50 级）。
+     *
+     * 与 `levelUpTable` 同样的缓存口径：按 `rows` 引用判命中。每次打开详情都重建 2194 行
+     * 的 Map 虽然只要零点几毫秒，但切卡是高频操作，没必要重复做。
+     */
+    private critGainTable: { readonly rows: readonly unknown[]; readonly table: ZCCritDamageGainTable } | null = null;
+
+    /**
      * 卡牌阵容页的取数。
      *
      *  本页显示的是**当前出阵的那套阵容**，所以八卡优先用服务端「选中阵型」的 `heroIds`
@@ -207,7 +226,7 @@ export class RuntimeCardRepository implements ICardRepository {
      *
      *  映射源用 `catalog`（pvpCard 全表）而不只是 `deck`：阵型里的英雄可能不在本地八卡里。
      */
-    async loadLineup(autoLoadDecks: boolean): Promise<CardLineupData> {
+    async loadLineup(autoLoadDecks: boolean, refreshFormations = true): Promise<CardLineupData> {
         // 与 `loadBoard` 同口径：缓存命中就不再发英雄列表请求。
         // 刚升级成功时 `applyPvpHeroLevel` 已经把新等级写进缓存，布阵保存不影响等级，
         // 所以重刷本页不需要重新拉一次权威列表。
@@ -220,7 +239,9 @@ export class RuntimeCardRepository implements ICardRepository {
             // 与布阵面板同口径等满 3000ms：没拿到就留空台（见下方 `deck`），不拿兜底卡组先顶上。
             //  `maxAgeMs`：切 tab 时 `MainTabsComposition.prefetchHero` 已经预取过一次，
             //  几百毫秒内的这份就是它拉回来的 —— 再发一遍是纯重复请求（首屏白等一个 RTT）。
-            fetchFormations({ label: '阵容页首屏阵型', maxAgeMs: FORMATION_PREFETCH_FRESH_MS }),
+            refreshFormations
+                ? fetchFormations({ label: '阵容页首屏阵型', maxAgeMs: FORMATION_PREFETCH_FRESH_MS })
+                : Promise.resolve(getCachedFormations()),
             this.loadArtConfig(),
         ]);
         const heroLevels = this.levels(heroInfos);
@@ -271,8 +292,17 @@ export class RuntimeCardRepository implements ICardRepository {
         };
     }
 
+    /**
+     * 详情页左右切卡的目录。
+     *
+     * `loadPvpCatalogCards()` 是**图鉴全表**，里面还留着金矿（`type=1` 建筑卡）——
+     * 它是真能上阵的一张卡，所以卡库要它；但详情页是「卡牌升级详情」，金矿没有升级配置
+     * （`cardLevelUp` 里没这一行），滑进去只会看到一排锁 + 「该卡暂无升级配置」。
+     * 于是这里跟卡库展示层用**同一个谓词** `visibleLineupCards` 摘掉金矿
+     * （主城在 `loadPvpCatalogCards` 里已被 `isHqCard` 摘掉，不重复判）。
+     */
     async loadDetailNavigation(): Promise<CardDetailNavigationData> {
-        const catalog = await loadPvpCatalogCards();
+        const catalog = visibleLineupCards(await loadPvpCatalogCards());
         const infos = getCachedPvpHeroInfos();
         return { catalog, heroLevels: this.levels(infos), heroListKnown: infos !== null };
     }
@@ -308,17 +338,19 @@ export class RuntimeCardRepository implements ICardRepository {
     /**
      * 详情页取数。
      *
-     * 三份数据并行：pvpCard 原始行（属性基础值）、pvpUnitGrowth（成长）、
-     * armySkillLevelUp（技能链与里程碑）；英雄等级取后端缓存（没有 = 0，全锁）。
+     * 四份数据并行：pvpCard 原始行（属性基础值）、pvpUnitGrowth（成长）、
+     * armySkillLevelUp（技能链与里程碑）、pvpSkillPlan（全队暴击伤害链）；
+     * 英雄等级取后端缓存（没有 = 0，全锁）。
      * 组装在 `CardDetailPresenter`（纯函数、可单测），这里只取数与编排。
      */
     async loadCardDetail(cardId: string, level: number): Promise<CardDetailPresentation> {
-        const [rawRow, growthRaw, skillRaw, cards, levelUpRaw] = await Promise.all([
+        const [rawRow, growthRaw, skillRaw, cards, levelUpRaw, plans] = await Promise.all([
             loadPvpCardRawRow(cardId),
             loadPvpUnitGrowthRows(),
             loadArmySkillLevelUpRows(),
             loadPvpCatalogCards(),
             loadCardLevelUpRows(),
+            RefUtil.instance.getRefAllAsync('pvpSkillPlan'),
         ]);
         const card = cards.find((item) => item.id === String(cardId)) ?? null;
         const skillIds = card?.skillIds ?? [];
@@ -340,6 +372,8 @@ export class RuntimeCardRepository implements ICardRepository {
                 levelAttrs.next,
             ),
             powerText: formatPowerText(cardAttackOf({ cardId, base, unitId, level, levelAttrs: levelAttrs.current }, growthRows)),
+            // 全队暴击伤害链按「目标等级」那一行取增量（卡牌升级就给，与星级/技能档无关）。
+            critDamageGain: critDamageGainAt(this.critGainTableOf(plans ?? []), String(cardId), level),
             chain: buildDetailChain(table, skillIds, heroLevel),
             milestones: buildDetailMilestones(table, skillIds, heroLevel),
         };
@@ -394,6 +428,14 @@ export class RuntimeCardRepository implements ICardRepository {
         return table;
     }
 
+    private critGainTableOf(rows: readonly unknown[]): ZCCritDamageGainTable {
+        const cached = this.critGainTable;
+        if (cached && cached.rows === rows) return cached.table;
+        const table = buildCritDamageGainTable(rows);
+        this.critGainTable = { rows, table };
+        return table;
+    }
+
     /**
      * 技能面板取数。
      *
@@ -408,11 +450,42 @@ export class RuntimeCardRepository implements ICardRepository {
      * 不需要再发一次英雄列表请求。
      */
     async loadSkillList(heroId: number): Promise<CardSkillListData> {
-        const table = buildArmySkillTable(await loadArmySkillLevelUpRows());
+        const [rows, plans, properties] = await Promise.all([
+            loadArmySkillLevelUpRows(), RefUtil.instance.getRefAllAsync('pvpSkillPlan'),
+            RefUtil.instance.getRefAllAsync('roleProperty'),
+        ]);
+        const table = buildArmySkillTable(rows);
         const info = getCachedPvpHeroInfo(heroId);
         const fallbackIds = Array.from(table.keys());
+        const skillIds = await this.skillIdsOf(heroId, fallbackIds);
+        const skillDetails = new Map<number, { kind: string; cooldown: number }>();
+        for (const raw of plans ?? []) {
+            const plan = raw as Record<string, unknown>;
+            const id = Number(plan.skillChainId);
+            if (String(plan.unitId) !== String(heroId) || !skillIds.includes(id) || !Number(plan.enabled)) continue;
+            if (skillDetails.has(id)) continue;
+            skillDetails.set(id, {
+                kind: String(plan.skillKind ?? ''),
+                cooldown: Math.max(0, Number(plan.cooldown) || 0),
+            });
+        }
+        const itemIds = new Set(skillIds.flatMap(id => table.get(id)?.levels.flatMap(level => level.costs?.map(cost => cost.itemId) ?? []) ?? []));
+        const counter = createItemCounter();
+        const role: Readonly<Record<string, unknown>> = { ...readRoleRow() };
+        const costItems = new Map<number, Omit<ICardSkillCost, 'need'>>();
+        await Promise.all(Array.from(itemIds, async itemId => {
+            const currency = resBarCellOfRefId(itemId, properties);
+            const item = currency.kind === 'roleProperty' ? null : await itemDetailRepository.loadItemRow(itemId);
+            const icon = currency.kind === 'roleProperty' ? resBarIconSpritePath(currency) : item?.icon ?? '';
+            const frame = icon ? await loadItemIconArt(icon) : null;
+            const key = currency.key;
+            const owned = key ? Math.max(0, Math.floor(toCount(role[key]))) : counter(String(itemId));
+            costItems.set(itemId, { itemId, name: currency.name || item?.name || String(itemId), frame, owned });
+        }));
         return {
-            skillIds: await this.skillIdsOf(heroId, fallbackIds),
+            skillIds,
+            skillDetails,
+            costItems,
             table,
             levels: info?.skills ?? [],
             heroLevel: info?.level ?? 0,

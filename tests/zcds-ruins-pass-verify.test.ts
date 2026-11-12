@@ -11,7 +11,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ];
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -21,7 +21,7 @@ const tables = Object.fromEntries(tableNames.map((name) => {
 })) as unknown as ZCPvpTables;
 loadPvpTables(tables);
 
-const layout = JSON.parse(readFileSync(assetPath('config/maps/select_river.json'), 'utf8')) as ZCMapLayout;
+const layout = JSON.parse(readFileSync(assetPath('config/maps/river_custom_new.json'), 'utf8')) as ZCMapLayout;
 configureZCMap(layout);
 const base = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
 

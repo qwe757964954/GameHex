@@ -50104,6 +50104,61 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpHeroUpSkillRspMsg";
 };
 return CmdPvpHeroUpSkillRspMsg;
 })();
+cmd.CmdPvpHeroInfoBroMsg = (function() {
+function CmdPvpHeroInfoBroMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpHeroInfoBroMsg.prototype.info = null;
+CmdPvpHeroInfoBroMsg.create = function create(properties) {
+return new CmdPvpHeroInfoBroMsg(properties);
+};
+CmdPvpHeroInfoBroMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.CmdPvpHeroInfo.encode(message.info, writer.uint32(  10).fork(), q + 1).ldelim();
+return writer;
+};
+CmdPvpHeroInfoBroMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpHeroInfoBroMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.info = $root.com.xkhy.tafang.cmd.CmdPvpHeroInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
+return message;
+};
+CmdPvpHeroInfoBroMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpHeroInfoBroMsg";
+};
+return CmdPvpHeroInfoBroMsg;
+})();
 cmd.CmdPvpArtifactInfoListReqMsg = (function() {
 function CmdPvpArtifactInfoListReqMsg(properties) {
 if (properties)
@@ -51657,6 +51712,241 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdBattleFrameInfo";
 };
 return CmdBattleFrameInfo;
 })();
+cmd.CmdPvpMapInfo = (function() {
+function CmdPvpMapInfo(properties) {
+this.resourcePoints = [];
+this.unitHomeIndexes = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpMapInfo.prototype.id = "";
+CmdPvpMapInfo.prototype.name = "";
+CmdPvpMapInfo.prototype.version = 0;
+CmdPvpMapInfo.prototype.resourcePoints = $util.emptyArray;
+CmdPvpMapInfo.prototype.unitHomeIndexes = $util.emptyArray;
+CmdPvpMapInfo.create = function create(properties) {
+return new CmdPvpMapInfo(properties);
+};
+CmdPvpMapInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  10).string(message.id);
+writer.uint32(  18).string(message.name);
+writer.uint32(  24).uint32(message.version);
+if (message.resourcePoints != null && message.resourcePoints.length)
+for (let i = 0; i < message.resourcePoints.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpResourcePointInfo.encode(message.resourcePoints[i], writer.uint32(  34).fork(), q + 1).ldelim();
+if (message.unitHomeIndexes != null && message.unitHomeIndexes.length)
+for (let i = 0; i < message.unitHomeIndexes.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdPvpUnitHomeIndex.encode(message.unitHomeIndexes[i], writer.uint32(  42).fork(), q + 1).ldelim();
+return writer;
+};
+CmdPvpMapInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpMapInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.id = reader.string();
+break;
+}
+case 2: {
+message.name = reader.string();
+break;
+}
+case 3: {
+message.version = reader.uint32();
+break;
+}
+case 4: {
+if (!(message.resourcePoints && message.resourcePoints.length))
+message.resourcePoints = [];
+message.resourcePoints.push($root.com.xkhy.tafang.cmd.CmdPvpResourcePointInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+case 5: {
+if (!(message.unitHomeIndexes && message.unitHomeIndexes.length))
+message.unitHomeIndexes = [];
+message.unitHomeIndexes.push($root.com.xkhy.tafang.cmd.CmdPvpUnitHomeIndex.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("id"))
+throw $util.ProtocolError("missing required 'id'", { instance: message });
+if (!message.hasOwnProperty("name"))
+throw $util.ProtocolError("missing required 'name'", { instance: message });
+if (!message.hasOwnProperty("version"))
+throw $util.ProtocolError("missing required 'version'", { instance: message });
+return message;
+};
+CmdPvpMapInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpMapInfo";
+};
+return CmdPvpMapInfo;
+})();
+cmd.CmdPvpUnitHomeIndex = (function() {
+function CmdPvpUnitHomeIndex(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpUnitHomeIndex.prototype.unitId = 0;
+CmdPvpUnitHomeIndex.prototype.homeIndex = 0;
+CmdPvpUnitHomeIndex.create = function create(properties) {
+return new CmdPvpUnitHomeIndex(properties);
+};
+CmdPvpUnitHomeIndex.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.unitId);
+writer.uint32(  16).uint32(message.homeIndex);
+return writer;
+};
+CmdPvpUnitHomeIndex.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpUnitHomeIndex();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.unitId = reader.uint32();
+break;
+}
+case 2: {
+message.homeIndex = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("unitId"))
+throw $util.ProtocolError("missing required 'unitId'", { instance: message });
+if (!message.hasOwnProperty("homeIndex"))
+throw $util.ProtocolError("missing required 'homeIndex'", { instance: message });
+return message;
+};
+CmdPvpUnitHomeIndex.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpUnitHomeIndex";
+};
+return CmdPvpUnitHomeIndex;
+})();
+cmd.CmdPvpResourcePointInfo = (function() {
+function CmdPvpResourcePointInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdPvpResourcePointInfo.prototype.row = 0;
+CmdPvpResourcePointInfo.prototype.column = 0;
+CmdPvpResourcePointInfo.prototype.groupId = 0;
+CmdPvpResourcePointInfo.prototype.resourceId = 0;
+CmdPvpResourcePointInfo.create = function create(properties) {
+return new CmdPvpResourcePointInfo(properties);
+};
+CmdPvpResourcePointInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.row);
+writer.uint32(  16).uint32(message.column);
+writer.uint32(  24).uint32(message.groupId);
+writer.uint32(  32).uint32(message.resourceId);
+return writer;
+};
+CmdPvpResourcePointInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdPvpResourcePointInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.row = reader.uint32();
+break;
+}
+case 2: {
+message.column = reader.uint32();
+break;
+}
+case 3: {
+message.groupId = reader.uint32();
+break;
+}
+case 4: {
+message.resourceId = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("row"))
+throw $util.ProtocolError("missing required 'row'", { instance: message });
+if (!message.hasOwnProperty("column"))
+throw $util.ProtocolError("missing required 'column'", { instance: message });
+if (!message.hasOwnProperty("groupId"))
+throw $util.ProtocolError("missing required 'groupId'", { instance: message });
+if (!message.hasOwnProperty("resourceId"))
+throw $util.ProtocolError("missing required 'resourceId'", { instance: message });
+return message;
+};
+CmdPvpResourcePointInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdPvpResourcePointInfo";
+};
+return CmdPvpResourcePointInfo;
+})();
 cmd.CmdStartBattleReqMsg = (function() {
 function CmdStartBattleReqMsg(properties) {
 if (properties)
@@ -51733,6 +52023,7 @@ CmdStartBattleRspMsg.prototype.version = "";
 CmdStartBattleRspMsg.prototype.battleId = "";
 CmdStartBattleRspMsg.prototype.startBattleInfo = null;
 CmdStartBattleRspMsg.prototype.unitInfos = $util.emptyArray;
+CmdStartBattleRspMsg.prototype.mapInfo = null;
 CmdStartBattleRspMsg.create = function create(properties) {
 return new CmdStartBattleRspMsg(properties);
 };
@@ -51751,6 +52042,8 @@ $root.com.xkhy.tafang.cmd.CmdStartBattleInfo.encode(message.startBattleInfo, wri
 if (message.unitInfos != null && message.unitInfos.length)
 for (let i = 0; i < message.unitInfos.length; ++i)
 $root.com.xkhy.tafang.cmd.CmdBattleUnitInfo.encode(message.unitInfos[i], writer.uint32(  50).fork(), q + 1).ldelim();
+if (message.mapInfo != null && Object.hasOwnProperty.call(message, "mapInfo"))
+$root.com.xkhy.tafang.cmd.CmdPvpMapInfo.encode(message.mapInfo, writer.uint32(  58).fork(), q + 1).ldelim();
 return writer;
 };
 CmdStartBattleRspMsg.decode = function decode(reader, length, error, long) {
@@ -51790,6 +52083,10 @@ case 6: {
 if (!(message.unitInfos && message.unitInfos.length))
 message.unitInfos = [];
 message.unitInfos.push($root.com.xkhy.tafang.cmd.CmdBattleUnitInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+case 7: {
+message.mapInfo = $root.com.xkhy.tafang.cmd.CmdPvpMapInfo.decode(reader, reader.uint32(), undefined, long + 1);
 break;
 }
 default:
@@ -52323,6 +52620,7 @@ this[keys[i]] = properties[keys[i]];
 }
 CmdCityChapterSweepReqMsg.prototype.levelChapter = 0;
 CmdCityChapterSweepReqMsg.prototype.cellId = 0;
+CmdCityChapterSweepReqMsg.prototype.times = 0;
 CmdCityChapterSweepReqMsg.create = function create(properties) {
 return new CmdCityChapterSweepReqMsg(properties);
 };
@@ -52335,6 +52633,8 @@ if (q > $util.recursionLimit)
 throw Error("max depth exceeded");
 writer.uint32(  8).uint32(message.levelChapter);
 writer.uint32(  16).uint32(message.cellId);
+if (message.times != null && Object.hasOwnProperty.call(message, "times"))
+writer.uint32(  24).uint32(message.times);
 return writer;
 };
 CmdCityChapterSweepReqMsg.decode = function decode(reader, length, error, long) {
@@ -52356,6 +52656,10 @@ break;
 }
 case 2: {
 message.cellId = reader.uint32();
+break;
+}
+case 3: {
+message.times = reader.uint32();
 break;
 }
 default:
@@ -55749,6 +56053,7 @@ values[valuesById[937248641] = "CmdBuyLimitedTimeBundleBroMsg"] = 937248641;
 values[valuesById[11546745] = "CmdRollBroMsg"] = 11546745;
 values[valuesById[1339999214] = "CmdMonsterManualActiveBroMsg"] = 1339999214;
 values[valuesById[779511813] = "CmdNewTreasureInfoBroMsg"] = 779511813;
+values[valuesById[1032394394] = "CmdPvpHeroInfoBroMsg"] = 1032394394;
 values[valuesById[921618703] = "CmdBattleResultBroMsg"] = 921618703;
 values[valuesById[1157544859] = "CmdCelebrationUpdateDataBroMsg"] = 1157544859;
 values[valuesById[1919419092] = "CmdCelebrationBuyShopGoodsBroMsg"] = 1919419092;

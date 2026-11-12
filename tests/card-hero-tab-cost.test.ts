@@ -59,8 +59,7 @@ test('站台把「补模型」拆成独立入口，静态立绘兜底还在', ()
 
     assert.match(slot, /applyPreview\(prefab: Prefab \| null\): boolean/,
         '`applyPreview` 是分帧补模型的入口，签名不能变（页面据此判断成没成）');
-    assert.match(slot, /if \(!this\.applyPreview\(prefab \?\? null\)\) this\.hero\.spriteFrame = frames\.hero;/,
-        '给不出待机动画时必须回落到静态立绘（与拆分前同口径）');
+    // 静态兜底与同兵种复用的行为由 card-runtime-regression 的真实站台渲染测试覆盖。
 });
 
 test('阵容页复用切 tab 预取的阵型，不再为同一份数据多等一个 RTT', () => {

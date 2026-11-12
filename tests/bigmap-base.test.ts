@@ -235,7 +235,9 @@ test('非主城不得高于主城等级', () => {
     };
     const check = bigMapCanUpgrade(config, forged, unlock, field.instanceId);
     assert.equal(check.ok, false);
-    assert.match(check.reason, /主城等级/);
+    // 2026-11-11 文案改版：从「受主城等级限制」换成说清卡在哪一级。
+    // 断言跟着改成口径守卫（主城 Lv.X 才能升到 Lv.Y），而不是死字符串。
+    assert.match(check.reason, /主城 Lv\.\d+ 才能升到 Lv\.\d+/);
 });
 
 test('取消建造按配置比例退资源', () => {

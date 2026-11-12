@@ -222,7 +222,7 @@ test('MainTerritoryMap.ts 不再做配置/战役/存档/进度编排，只接线
         '.beginBattle(',
     ]) {
         assert.equal(code.includes(banned), false,
-            `源码里仍有 ${banned}（业务已迁到 TerritoryPresenter）`);
+            `源码里仍有 ${banned}（业务已迁到 TerritoryModel）`);
     }
     // 主城页面仍驱动地图和详情视图（Passive View 的渲染入口）。
     assert.ok(code.includes('this.mapView.renderMap('), '页面应驱动地图渲染层');
@@ -232,10 +232,10 @@ test('MainTerritoryMap.ts 不再做配置/战役/存档/进度编排，只接线
 });
 
 // ── Presenter 纯度守卫：纯 TS 编排器，整条 import 链不许碰 cc / 边界 ───────
-const PRESENTER_SCRIPT = 'assets/script/app/territory/application/TerritoryModel.ts';
+const MODEL_SCRIPT = 'assets/script/app/territory/application/TerritoryModel.ts';
 
-test('TerritoryPresenter.ts 是纯 TS：不 import cc / framework / 边界模块', () => {
-    const source = readFileSync(PRESENTER_SCRIPT, 'utf8');
+test('TerritoryModel.ts 是纯 TS：不 import cc / framework / 边界模块', () => {
+    const source = readFileSync(MODEL_SCRIPT, 'utf8');
     // 剥注释（反向断言先剥注释），再剥 import type（type-only 编译期擦除，允许引用边界类型）。
     const code = source
         .replace(/\/\*[\s\S]*?\*\//g, '')

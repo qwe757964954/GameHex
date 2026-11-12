@@ -1047,7 +1047,7 @@ test('E8 ⚠️ `LeagueRepository.join`：逐 id 清洗 + 空早退 + 数组协�
     assert.ok(/if \(!ids\.length\) return 'failed'/.test(body), '一个合法 id 都没有 ⇒ 早退不发包');
     assert.ok(/new RequestUnionJoin\(\{ unionIds: ids \}/.test(body), '走 unionIds 数组协议');
     // 接口上有这个方法
-    assert.ok(/join\(unionIds: readonly string\[\], caller\?: unknown\): Promise<LeagueRequestResult>;/.test(src));
+    assert.ok(/join\(unionIds: readonly string\[\], caller\?: object\): Promise<LeagueRequestResult>;/.test(src));
 });
 
 test('E9 ⚠️ 两条链路都按「行 → 详情」透传（不是按 id 回缓存查）', () => {

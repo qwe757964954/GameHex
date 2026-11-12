@@ -576,6 +576,8 @@ function loadCoverClass(): new (host: FakeNode, frames?: readonly unknown[]) => 
                     territoryBattleIntroInFx,
                 };
             }
+            // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
+            if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

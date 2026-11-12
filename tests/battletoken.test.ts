@@ -1177,7 +1177,7 @@ test('⚠️ 页签图标：底边 −42.5（不是继承六格的 −34）、�
         assert.equal(tabOverride(name, 'iconRaiseY', TB_SCRIPT_FILEID), 26, `${name} 的 iconRaiseY`);
     }
     // 上面 −42.5 / 26 的前提：四格**未选图全 80 高、选中图全 100 高**（宽度不一，靠锚点居中）
-    const artDir = 'assets/resources/ui/Gift/art';
+    const artDir = assetPath('image/art');
     for (const [off, on] of [['djjj_1', 'djjj'], ['qtdl_1', 'qtdl'], ['txz_1', 'txz'], ['ggl_1', 'ggl']]) {
         assert.equal(pngSize(`${artDir}/${off}.png`).h, 80, `${off} 的图高变了 ⇒ −42.5 / 26 要重算`);
         assert.equal(pngSize(`${artDir}/${on}.png`).h, 100, `${on} 的图高变了 ⇒ −42.5 / 26 要重算`);
@@ -1185,7 +1185,7 @@ test('⚠️ 页签图标：底边 −42.5（不是继承六格的 −34）、�
 });
 
 test('底部 4 个 tab 使用原稿 on/off 图标，并与累充图标放在同一目录', () => {
-    const dir = 'assets/resources/ui/Gift/art';
+    const dir = assetPath('image/art');
     const frameUuid = (name: string): string => {
         const meta = JSON.parse(readFileSync(`${dir}/${name}.png.meta`, 'utf8')) as { subMetas?: Record<string, { uuid?: string }> };
         const uuid = Object.values(meta.subMetas ?? {}).map((sub) => sub.uuid).find((u) => u?.endsWith('@f9941'));

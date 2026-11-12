@@ -159,8 +159,8 @@ export class Vec2 {
      * var v3 = cc.v2(10, 10).clampf(min_inclusive, max_inclusive); // Vec2 {x: 10, y: 10};
      */
     clampf(min_inclusive: Vec2, max_inclusive: Vec2): Vec2 {
-        this.x = cc.misc.clampf(this.x, min_inclusive.x, max_inclusive.x);
-        this.y = cc.misc.clampf(this.y, min_inclusive.y, max_inclusive.y);
+        this.x = Math.min(Math.max(this.x, min_inclusive.x), max_inclusive.x);
+        this.y = Math.min(Math.max(this.y, min_inclusive.y), max_inclusive.y);
         return this;
     }
 
@@ -398,7 +398,7 @@ export class Vec2 {
 
         var dot = this.dot(vector);
         var theta = dot / (Math.sqrt(magSqr1 * magSqr2));
-        theta = cc.misc.clampf(theta, -1.0, 1.0);
+        theta = Math.min(Math.max(theta, -1.0), 1.0);
         return Math.acos(theta);
     }
 

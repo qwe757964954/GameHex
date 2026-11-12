@@ -327,10 +327,15 @@ export class LeagueJoinPage extends Component {
         }
     }
 
-    /** 「创建联盟」→ 开 `LeagueCreate` 弹窗；创建成功后同样回敲容器。 */
+    /**
+     * 「创建联盟」→ 开 `LeagueCreate` 弹窗。
+     *
+     * 只传容器 owner，不传回调：创建成功后由 `LeagueCreateController` 按 owner 发
+     * `LeagueTabEvent.Joined` 通知容器（与 `notifyJoined()` 同一条链路）。
+     */
     private onCreateClick(): void {
         void LeagueCreatePage.open({
-            userData: { onCreated: () => this.notifyJoined() },
+            userData: { owner: this.joinOwner },
         });
     }
 

@@ -21,8 +21,8 @@ import {
 
 const BUILDINGS = 'assets/resources/image/buildings/auto-atlas.pac.meta';
 
-/** 2026-11-05 实测快照：maxWidth = 0，需人工确认是「不限制」还是配置缺陷。 */
-const KNOWN_BAD_LIMIT = ['assets/resources/icons/common'];
+/** 容量字段为 0 / 缺失的目录基线：icons/common 已补齐容量，当前为空集，再出现即新增要红。 */
+const KNOWN_BAD_LIMIT: string[] = [];
 
 /** 2026-11-05 实测快照：单图尺寸超出所在图集容量（大背景，非图集碎图）。
  * 2026-11-05 晚：`matching/bg_main`（720×1610）与 `bigmap/bigMapBG`（2048×2048）已移出图集覆盖范围
@@ -84,4 +84,12 @@ test('C5 容量字段非法时也必须判不通过（0 值不能被当成「不
     assert.equal(report.ok, false);
     assert.equal(report.capacity, 0);
     assert.ok(report.reasons.some((reason) => reason.includes('容量字段非法')));
+});
+
+test('C6 battle/gameui 扩容覆盖伤害统计面板，回退 1024 必须报超尺寸', () => {
+    const meta = 'assets/bundles/battle/image/gameui/auto-atlas.pac.meta';
+    const report = atlasReport(meta);
+    assert.ok(report.files > 0);
+    assert.equal(report.oversizedSingle, false, report.reasons.join('；'));
+    assert.equal(atlasReport(meta, { maxWidth: 1024, maxHeight: 1024 }).oversizedSingle, true);
 });

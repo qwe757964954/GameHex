@@ -691,6 +691,7 @@ def inject_main_js(node: str, data_root: Path) -> dict:
         cwd=str(script.parent.parent.parent),
         capture_output=True,
         text=True,
+        encoding="utf-8",
         check=False,
     )
     if completed.returncode != 0:
@@ -783,7 +784,7 @@ def generate_manifests(
         str(output_dir),
     ]
     print(f"[4/8] 生成官方清单：{len(MANIFEST_DIRECTORIES)} 个子目录逐文件 md5")
-    completed = subprocess.run(command, cwd=str(script.parent.parent), capture_output=True, text=True, check=False)
+    completed = subprocess.run(command, cwd=str(script.parent.parent), capture_output=True, text=True, encoding="utf-8", check=False)
     if completed.returncode != 0:
         fail(f"清单生成失败：{completed.stderr.strip() or completed.stdout.strip()}")
     try:

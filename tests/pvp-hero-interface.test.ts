@@ -53,7 +53,11 @@ test('卡牌 Tab 通过 Repository 请求英雄数据，并由页面使用等级
     assert.match(request, /return ['"]CmdPvpHeroInfoListReqMsg['"]/);
     assert.match(service, /new RequestPvpHeroInfoList/);
     assert.match(repository, /fetchPvpHeroInfos\(\)/);
-    assert.match(page, /new CardLineupPresenter\(cardRepository\)/);
+    const controller=readFileSync('assets/script/app/card/CardLineupController.ts','utf8');
+    const composition=readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts','utf8');
+    assert.match(controller,/this\.options\.repository\.loadLineup\(/);
+    assert.match(composition,/new CardLineupController/);
+    assert.match(composition,/repository: cardRepository/);
     assert.match(page, /this\.levelOf\(card\)/);
     assert.match(page, /deployedIds\.has\(card\.id\)/);
     // 2026-09-18：阵容页卡库（CardGrid）改成**配置驱动**（pvpCard 全表图鉴），
@@ -66,12 +70,12 @@ test('卡牌 Tab 通过 Repository 请求英雄数据，并由页面使用等级
     // 2026-09-22：阵容页的八卡改成读服务端**选中阵型**（布阵面板保存时把它置为选中），
     // 拿不到阵型数据才退回本地卡表 —— 所以 `loadLineup` 也必须拉阵型，不能只在 `loadBoard` 里拉。
     assert.match(repository, /resolveSelectedDeck\(/);
-    assert.match(repository, /const deck = resolveSelectedDeck\(/);
+    assert.match(repository, /resolveSelectedDeck\(\{ deck: tableDeck, pool: catalog, formations \}/);
     // 空 deck 的两种成因必须分开：卡表压根没读到（catalog 也空）才保留 prefab 占位外观；
     // 「服务端说选中的阵型是空的」要真渲染成空站台 —— 写成「deck 空就 return」会把
     // 玩家一键下阵后保存的效果吃掉，看起来像下阵没生效。
-    assert.match(page, /deck\.length === 0 && cards\.length === 0/);
-    assert.match(board, /new LineupBoardPresenter\(cardRepository\)/);
+    assert.match(page, /data\.deck\.length === 0 && data\.catalog\.length === 0 && !data\.heroListKnown/);
+    assert.doesNotMatch(board,/new LineupBoardPresenter/);
     assert.match(board, /this\.levelOf\(card, this\.fallbackPoolLevel\)/);
 });
 
@@ -80,10 +84,12 @@ test('阵容编辑入口不再自建状态锁，下一帧等待统一走弹窗�
     const board = readFileSync('assets/script/app/card/LineupBoardPage.ts', 'utf8');
 
     // 打开参数里带「本次会话有没有落库」的共享对象：保存后本页要重刷（八卡读的是选中阵型）。
-    assert.match(page, /await LineupBoardPage\.open\(\{/);
-    assert.match(page, /userData: session/);
-    assert.match(page, /if \(session\.saved\) void this\.refresh\(\)/,
-        '只在真保存过时重刷 —— 没改就关面板不该白发一次英雄列表请求');
+    const composition=readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts','utf8');
+    const controller=readFileSync('assets/script/app/card/CardLineupController.ts','utf8');
+    assert.match(composition,/openEditor:.*LineupBoardPage\.open\(\)/);
+    assert.match(controller,/this\.listen\(CardLineupEvent\.DeckSaved, this\.onDeckSaved\)/);
+    assert.match(controller,/onDeckSaved[\s\S]*?void this\.refresh\(\)/);
+    assert.doesNotMatch(page,/LineupBoardPage\.open|session\.saved/);
     assert.doesNotMatch(page, /teamEditOpening|const unlock|onClose: unlock/);
     assert.match(board, /await this\.nextPopupFrame\(\)/);
     assert.doesNotMatch(board, /scheduleOnce|director\.once/);

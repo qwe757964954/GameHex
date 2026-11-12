@@ -55,6 +55,14 @@ export interface ITerritoryBattleArt {
     /** **已通关**格的地皮：`img_land_01` 草地块。 */
     readonly tileCleared: SpriteFrame | null;
     /**
+     * **被锁住**那一格的地皮：`img_land_01_gray` 灰版（需求 2026-11-10「未解锁的地块整个
+     * 地块图片都置灰，等切换成可激活时再重新加载颜色」）。
+     *
+     *  ⚠️ 这张是**旧的 130×119**（新地皮 126×117）。锁着的格不画格面框，所以尺寸差只表现为
+     *  与邻居 2px 交叠；**不要**为了对齐去拉伸它（`applyTileFrame` 按帧原样给尺寸）。
+     */
+    readonly tileGrey: SpriteFrame | null;
+    /**
      * 未解锁格的锁标：`image/territory/icon_lock`（31×43，蓝湖 `大地图(1)` 同名切片）。
      *
      * 2026-11-05 蓝湖新版大地图：未解锁的格子地皮正中压一枚白锁。
@@ -94,6 +102,17 @@ export interface ITerritoryBattleArt {
     readonly randomResource: SpriteFrame | null;
     /** 随机资源候选格的开启条件银币图标。 */
     readonly randomSilverIcon: SpriteFrame | null;
+    /**
+     * 固定宝箱格「**可激活**」时压在价格行上方的那颗宝箱图标：`image/territory/icon_baoxiang`（58×45）。
+     *
+     * 需求 2026-11-10（用户附美术效果图）：`fixedResource` 格可激活时，价格行照旧显示
+     * `银币 icon + 数字`，**上面再加一颗宝箱 icon**（排版见 `model/TerritoryConditionBadge`）；
+     * 未解锁（前置没满足 / 还没开）仍然**只画锁**，不画这颗。
+     *
+     * ⚠️ 与 {@link frameChest}（宝箱**格面框** `fram_02`）不是一回事：这张是格心的指示图标。
+     * 取不到 ⇒ 退回旧版（只有价格行一行），不阻断对局。
+     */
+    readonly chestIcon: SpriteFrame | null;
     /**
      * 固定宝箱提示气泡里的**体力图标**（`roleProperty` 的 `图标_体力`，与领奖飘字同一张）。
      *
@@ -265,7 +284,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
+    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -281,6 +300,10 @@ export async function loadTerritoryBattleArt(
         //    绿草地上再乘金色 tint 会发脏，状态全部交给「哪张地皮 + 哪个框」表达。
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'img_land_02')),
         loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'img_land_01')),
+        // 「锁住的格」地皮：灰版 `img_land_01_gray`（需求 2026-11-10）。
+        // 这张图本来就在包里（旧口径的单张地皮），只是 2026-10-16 起没再被引用 ⇒ 直接复用，
+        // 不新增美术。⚠️ 它是 **130×119**（新地皮 126×117），锁着的格不画格面框 ⇒ 只多 2px 交叠。
+        loadFrame(assets, spriteFramePath(BUILDING_ART_ROOT, 'img_land_01_gray')),
         // 前沿空锁格的锁标（2026-11-05 蓝湖 `大地图(1)` 的 `icon_lock`，31×43 一像素不缩）。
         // ⚠️ 放在 `image/territory/` 根目录 ⇒ 与地块同进 `auto-atlas.pac`，同帧的锁和地皮能合批。
         loadFrame(assets, spriteFramePath(TERRITORY_ART_ROOT, 'icon_lock')),
@@ -301,6 +324,9 @@ export async function loadTerritoryBattleArt(
         loadFrame(assets, spriteFramePath(TERRITORY_BUILDING_ART_ROOT, 'territory_fixed_resource_v1')),
         loadFrame(assets, spriteFramePath(TERRITORY_BUILDING_ART_ROOT, 'territory_random_resource_v1')),
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_铜币')),
+        // 固定宝箱格「可激活」时那颗宝箱图标（需求 2026-11-10）。
+        // ⚠️ 在 `image/territory/` 根目录 ⇒ 与锁标 / 地皮同进 `auto-atlas.pac`，同帧能合批。
+        loadFrame(assets, spriteFramePath(TERRITORY_ART_ROOT, 'icon_baoxiang')),
         loadFrame(assets, spriteFramePath(TERRITORY_BUILDING_ART_ROOT, 'territory_bonus_v1')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_title_brown')),
         loadFrame(assets, spriteFramePath(COMMON_ART_ROOT, 'cu_ty_btn09')),
@@ -319,7 +345,7 @@ export async function loadTerritoryBattleArt(
         // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
 }
 
 /**
@@ -348,16 +374,28 @@ async function loadBuildAssets(assets: AssetService): Promise<{
 }
 
 async function loadFrame(assets: AssetService, path: string): Promise<SpriteFrame | null> {
-    // 预检 bundle 索引：资源未进构建/路径不符时直接判空兜底，避免把
-    // `Bundle resources doesn't contain` 误当「美术没交图」（见 ArtPaths.spriteFramePathOf 注释）。
-    if (!(await assets.has(path, SpriteFrame))) {
-        console.warn(`[TerritoryPage] 美术未在 bundle 索引中，使用矢量兜底：${path}（请确认资源已导入并重新构建）`);
-        return null;
-    }
+    // 🔴 2026-11-11（§3.42）：**bundle 索引预检绝不许短路判空**。
+    //    旧实现是 `if (!(await assets.has(...))) return null;`，把 `getInfoWithPath` 的
+    //    「config.json 的 paths 里查不到」当成「这张图不存在」。但 `image/spawn-region/`
+    //    下 `frame_02`（未通关红气泡）是 `packable:false` 的散图、`frame_03`（已通关蓝）
+    //    是进 auto-atlas 的图集帧，索引登记方式并不一致；实机一旦对红图查不到索引，
+    //    `levelBubblePendingFrame` 就被静默置 null，`stationRenderOf` 两条「未通关」分支
+    //    一起回退 `levelBubbleFrame` ⇒ 预告气泡全变蓝（用户 2026-11-11 反馈），零报错。
+    //    而所有测试夹具都把 `has` 写成恒 true（`territory-random-resource-render` 等），
+    //    所以旧用例全绿也盖不住这条实机分支。
+    //    ⇒ 加不加载只由 `load` 自己判；`has` 降级为「失败时把日志说清楚」，正常路径还少一次查询。
+    //    真缺图仍由 catch 返回 null（旧降级策略一字未改），只是不再「明明有图却判空」。
     try {
         return await assets.load(path, SpriteFrame);
     } catch (error) {
-        console.warn(`[TerritoryPage] 战斗美术加载失败，使用矢量兜底：${path}`, error);
+        let indexed = true;
+        try {
+            indexed = await assets.has(path, SpriteFrame);
+        } catch {
+            indexed = false;
+        }
+        console.warn(`[TerritoryPage] 战斗美术加载失败，使用矢量兜底：${path}`
+            + `${indexed ? '' : '（bundle 索引也未登记此路径）'}`, error);
         return null;
     }
 }

@@ -5,9 +5,34 @@ import type { ZCGameRenderFrame, ZCBattlePresentationEvents } from '../model/ZCG
 import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import type { IZCGameEntry } from './ZCGameEntry';
-import type { ZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCGuidePreparedContent } from './ZCGuideLoader';
 import type { buildRankSeats, RankSeatProfiles } from '../model/ZCRankBoard';
 import type { IZCBattlePopup } from './ZCBattleSettlementController';
+import type { ZCOwner } from '../model/ZCMapConfig';
+
+export interface IZCDamageStatsPlayer {
+    readonly owner: ZCOwner;
+    readonly name: string;
+    readonly headKey: string;
+    readonly damage: number;
+    readonly damageTaken: number;
+}
+
+export interface IZCDamageStatsPopup extends IZCBattlePopup {
+    readonly isOpen: boolean;
+    refresh(players: readonly IZCDamageStatsPlayer[]): void;
+}
+
+/**
+ * 确认框入参。文案由调用方（控制器）给，弹窗层不写业务句子 ——
+ * 同一句话在「投降」「撤退」两处若是各写一份，改文案必漏一处。
+ */
+export interface IZCBattleConfirmOptions {
+    readonly content: string;
+    readonly title?: string;
+    readonly sureText?: string;
+    readonly cancelText?: string;
+}
 
 /** 展示适配器持有的单局资源表；视图只读，补载结果原位合并。 */
 export interface IZCBattlePresentationArt {
@@ -48,9 +73,16 @@ export interface IZCBattleRuntimeServices {
         loadEffectPrefab(path: string): Promise<Prefab | null>;
     };
     readonly popups: {
-        openGuide(content: ZCGuidePreparedContent): Promise<IZCBattlePopup | null>;
-        openDamage(summary: { mine: { name: string; damage: number; damageTaken: number }; enemy: { name: string; damage: number; damageTaken: number } }): Promise<IZCBattlePopup | null>;
+        openGuide(content: IZCGuidePreparedContent): Promise<IZCBattlePopup | null>;
+        openDamage(players: readonly IZCDamageStatsPlayer[]): Promise<IZCDamageStatsPopup | null>;
         openRank(seats: ReturnType<typeof buildRankSeats>, profiles: RankSeatProfiles): Promise<IZCBattlePopup | null>;
+        /**
+         * 询问式确认框（`ui/common/CommonTips`）。
+         *
+         * 返回的 `answered` 在玩家作答后兑现（确定 `true` / 取消、点空白、被 `close()` 都是 `false`）；
+         * 拿不到 `answered` 的实现在调用方一律按「没确认」处理 —— 宁可少弹结算，也不能无确认就退。
+         */
+        confirm(options: IZCBattleConfirmOptions): Promise<IZCBattlePopup | null>;
     };
     readonly clock: {
         schedule(callback: () => void, seconds: number): () => void;

@@ -102,11 +102,21 @@ export async function ensureLineupDecks(): Promise<readonly ZCDeckCard[]> {
 export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<readonly ZCDeckCard[]> {
     const wanted = new Set(infos.map((info) => String(info.heroId)));
     const found = new Set<string>();
+    /**
+     * 表里**存在**的 id（含下面被筛掉的主城）。
+     *
+     * 与 `found` 分开记的原因：告警问的是「后端给了、表里却没有」，而主城（`2002`）是
+     * **表里有、但不可上阵** —— 后端英雄列表里必然带着它。若直接拿 `found` 求差集，
+     * 每次进布阵页都会打一条 `["2002"]` 的「没有对应配置」，看着像丢了张卡，
+     * 实际只是被 `isHqCard` 正常筛掉了。
+     */
+    const known = new Set<string>();
     const cards: ZCDeckCard[] = [];
 
     for (const row of await readRows('pvpCard')) {
         try {
             const card = parseCardCatalogRow(row);
+            known.add(card.id);
             if (!card.enabled || isHqCard(card) || !wanted.has(card.id) || found.has(card.id)) continue;
             cards.push(card);
             found.add(card.id);
@@ -117,7 +127,8 @@ export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<r
 
     // `wanted` 是 Set：展开会被构建期降级成 `[].concat(set)` → unknown 变成 [Set]，
     // 这条警告日志会打出一堆看不懂的东西。用 Array.from。
-    const unknown = Array.from(wanted).filter((id) => !found.has(id));
+    // 差集用 `known` 而不是 `found`：主城这类「表里有、但不可上阵」的卡不算缺配置。
+    const unknown = Array.from(wanted).filter((id) => !known.has(id));
     if (unknown.length > 0) {
         console.warn('[CardLineupDecks] 后端英雄在 pvpCard 中没有对应配置', unknown);
     }

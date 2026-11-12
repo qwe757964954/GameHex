@@ -62,4 +62,5 @@
 {"refId":602,"belond":0,"order":0,"resShowType":[10302,9],"tipShow":"通关第15关解锁","visibleCondition":[{"param":{"resId":15},"type":"battleLevel"}],"condition":[]},
 {"refId":603,"belond":0,"order":0,"resShowType":[14],"tipShow":"40级解锁","visibleCondition":[{"param":{"value":40},"type":"roleLevel"}],"condition":[]},
 {"refId":604,"belond":0,"order":0,"resShowType":[14],"visibleCondition":[],"condition":[]},
-{"refId":701,"belond":0,"order":0,"resShowType":[10,7],"type":2,"tipShow":"通关第20001关后解锁","name":"战斗掉落宝箱","visibleCondition":[{"param":{"resId":20001},"type":"territoryLevel"}],"condition":[]}]
+{"refId":701,"belond":0,"order":0,"resShowType":[10,7],"type":2,"tipShow":"通关第20001关后解锁","name":"战斗掉落宝箱","visibleCondition":[{"param":{"resId":20001},"type":"territoryLevel"}],"condition":[]},
+{"refId":702,"belond":0,"order":0,"resShowType":[10,7],"type":2,"tipShow":"激活第1章第4关地块后解锁","name":"快速寻敌","visibleCondition":[{"param":{"resId":10004},"type":"territoryLevelActivated"}],"condition":[]}]

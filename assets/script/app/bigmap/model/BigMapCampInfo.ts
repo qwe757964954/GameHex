@@ -88,5 +88,5 @@ export function normalizeBigMapCampInfos(
             detailed,
         });
     }
-    return [...result.values()];
+    return Array.from(result.values());
 }

@@ -1,4 +1,4 @@
-import { runtimeFixture } from './helpers/battle-runtime';
+import { runtimeFixture, flush } from './helpers/battle-runtime';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
@@ -14,7 +14,7 @@ import type { ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeC
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ];
 loadPvpTables(Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -38,7 +38,7 @@ function makeConfig(): MatchConfig.ZCMatchConfig {
 }
 
 for (const mode of ['manual', 'timeout'] as const) {
-    test(`自选主城 ${mode}：最终出生格以 op=4 随完成战斗 commands 上报一次`, () => {
+    test(`自选主城 ${mode}：最终出生格以 op=4 随完成战斗 commands 上报一次`, async () => {
         const h = runtimeFixture({}, true);
         try {
             if (mode === 'manual') EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
@@ -52,6 +52,8 @@ for (const mode of ['manual', 'timeout'] as const) {
             model.recordSpawnSelection();
             EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm); h.finishShowcase();
             EventMgr.instance.emit(ZCGameUiEvent.Retreat); EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+            // 投降是两次确认的异步流程（连点第二次会被 retreating 挡住 ⇒ 仍只上报一次）。
+            await flush();
             assert.equal(h.requests.length, 1);
             const reported = h.requests[0].commands.filter(event => event.op === 4);
             assert.deepEqual(reported.map(event => event.unitId), [81, 82]);

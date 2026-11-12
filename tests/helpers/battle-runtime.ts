@@ -21,7 +21,7 @@ export const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 type ISettlementFixtureMethods = IZCBattleSettlementServices['results'] & IZCBattleSettlementServices['rewards'] & IZCBattleSettlementServices['popup'] & IZCBattleSettlementServices['flow'] & Pick<IZCBattleSettlementServices, 'failed'>;
 type IRuntimeFixtureMethods = IZCBattleRuntimeServices['art'] & IZCBattleRuntimeServices['popups'] & IZCBattleRuntimeServices['clock'] & Pick<IZCBattleRuntimeServices, 'failed'>;
 export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {}, selecting = false, slgBattleType?: 1003 | 1004, auxiliary: Partial<IRuntimeFixtureMethods> = {}) {
-    const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight', 'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride', 'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus'];
+    const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride', 'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus'];
     const tables = Object.fromEntries(names.map(name => {
         const data = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
         return [name, Array.isArray(data) ? data : data.v.map((values: unknown[]) => Object.fromEntries(data.k.map((key: string, index: number) => [key, values[index]])))];
@@ -45,6 +45,8 @@ export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {
         finish: async request => { calls.push('finish'); requests.push(request); },
         loadRewards: async () => [],
         open: async options => { calls.push('open'); pages.push(options); return { close: () => calls.push('close') }; },
+        // 默认「没弹」：≥3 人局也直接进结算。要验顺序时用 overrides 覆盖成可关闭的桩。
+        openRank: async seats => { calls.push(`rank:${seats.length}`); return null; },
         watchSwitch: callback => { switchCallback = callback; return () => calls.push('unwatch'); },
         cancelRequests: () => calls.push('cancel'), failed: () => calls.push('failed'),
         ...overrides,
@@ -57,8 +59,11 @@ export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {
         loadUnitPrefab: async () => null,
         loadEffectPrefab: async () => null,
         openGuide: async () => ({ close: () => calls.push('guideClose') }),
-        openDamage: async () => ({ close: () => calls.push('damageClose') }),
+        openDamage: async () => ({ isOpen: true, refresh() {}, close: () => calls.push('damageClose') }),
         openRank: async () => ({ close: () => calls.push('rankClose') }),
+        // 默认「点确定就确认」：既有用例 emit Retreat 期待直接进结算，别让两次确认挡路。
+        // 要验「点取消 / 只确认一次」时用 overrides 覆盖。
+        confirm: async () => ({ answered: Promise.resolve(true), close() {} }),
         schedule: callback => { scheduled = callback; return () => { scheduled = null; }; }, failed: () => calls.push('failed'), ...auxiliary,
     };
     const runtime = new ZCBattleRuntimeController(context, view, settlement, {

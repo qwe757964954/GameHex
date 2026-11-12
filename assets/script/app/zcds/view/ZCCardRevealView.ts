@@ -9,6 +9,16 @@ import { zcBuildingArt, elasticPopScale, mapToViewX, mapToViewY, POP_FROM_SCALE 
 const { ccclass, property } = _decorator;
 
 /**
+ * 翻牌小卡牌的**整体 UI 缩放**（2026-11-11 需求：「展示的小牌 UI 整体放大 125%」）。
+ *
+ * 为什么不写进 `ZCGameCardReveal.prefab` 的根 `_lscale`：`render` 每帧按弹跳曲线
+ * `setScale` 写**绝对**值，prefab 上的值一帧就被覆盖（同 `BUILDING_ICON_SCALE` 的口径）。
+ * 乘在这里 = 卡框 / 卡面 / 卡名 / 运气评语**一起**放大，弹跳曲线的相对幅度不变
+ * （0.2 → 1.2 → 0.92 → 1 变成 0.25 → 1.5 → 1.15 → 1.25）。
+ */
+export const ZC_CARD_REVEAL_UI_SCALE = 1.25;
+
+/**
  * 「抽到卡牌」的小卡牌表现，由 `ZCGameCardReveal.prefab` 拥有。
  *
  * 和 `ZCFloatTextView` / `ZCCombatEffectView` 一样是**按进度计算**、不是 tween：
@@ -137,7 +147,10 @@ export class ZCCardRevealView extends Component {
             mapToViewY(reveal.y) + this.offsetY,
             0,
         );
-        this.node.setScale(this.popScaleAt(progress), this.popScaleAt(progress), 1);
+        // 缩放 = 弹跳曲线 × 整体 UI 缩放（125%）。两者相乘而不是各写一处：
+        // 弹跳的起手 / 峰值 / 下探 / 落位一律按比例跟着放大，曲线本身一个字不用改。
+        const scale = this.popScaleAt(progress) * ZC_CARD_REVEAL_UI_SCALE;
+        this.node.setScale(scale, scale, 1);
         this.applyAlpha(progress, elapsedSeconds);
     }
 
@@ -146,7 +159,8 @@ export class ZCCardRevealView extends Component {
      * `elasticPopScale`（`popScale` → 1.2 → 0.92 → 1）。
      *
      *  **不要在这里另写一条曲线**：建筑生成（`ZCHexView` 的建筑段）用的就是同一条
-     * —— 需求要求两处「节奏类似」，共用才不会再分开跑。POP 段之外恒为 1，淡出段不再动缩放。
+     * —— 需求要求两处「节奏类似」，共用才不会再分开跑。POP 段之外本函数恒为 1
+     * （卡牌的整体 125% 在 `render` 里另乘，不进这条共用曲线，否则建筑那边也会跟着变大）。
      */
     private popScaleAt(progress: number): number {
         const t = progress / ZCCardRevealView.POP_PROGRESS;

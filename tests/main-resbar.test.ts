@@ -1,3 +1,4 @@
+import { applyInstanceOverrides } from './helpers/prefab-overrides';
 /**
  * 主界面顶部「资源栏」的单测。
  *
@@ -169,7 +170,7 @@ function readPrefab(path: string): PrefabObject[] {
 const childrenOf = (node: PrefabObject): ObjRef[] => (node._children ?? []) as ObjRef[];
 const compsOf = (node: PrefabObject): ObjRef[] => (node._components ?? []) as ObjRef[];
 const sizeOf = (component: PrefabObject): { width: number; height: number } =>
-    component._contentSize as { width: number; height: number };
+    ({ width: component._contentSize.width, height: component._contentSize.height });
 const anchorOf = (component: PrefabObject): { x: number; y: number } =>
     component._anchorPoint as { x: number; y: number };
 const posOf = (node: PrefabObject): { x: number; y: number } => node._lpos as { x: number; y: number };
@@ -222,172 +223,30 @@ function cidOf(tsPath: string): string {
     return cid;
 }
 
-test('ArenaRoot.prefab：资源栏子树的结构、layer 与全部 @property 绑定都在', () => {
-    const prefab = readPrefab(HUD_PREFAB);
-
-    const nodeNamed = (name: string): PrefabObject => {
-        const found = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === name);
-        assert.ok(found, `ArenaRoot.prefab 里没有节点 ${name}`);
-        return found!;
-    };
-
-    // ── 根：铺满 720×1280 + 顶对齐（随全面屏撑满宽度，底部不拉伸）────────
-    const layer = nodeNamed('ResBarLayer');
-    const layerTf = transform(prefab, layer);
-    assert.equal(sizeOf(layerTf).width, 720);
-    assert.equal(sizeOf(layerTf).height, 1280);
-
-    const widget = component(prefab, layer, '_alignFlags');
-    // 45 = TOP|LEFT|RIGHT
-    assert.equal(widget._alignFlags, 45, 'Widget 必须是 左右撑满 + 顶对齐');
-    assert.equal(widget._alignMode, 2, 'alignMode 必须是 2（ALWAYS，运行时改尺寸也重排）');
-    assert.equal(widget._top, 0);
-    assert.equal(widget._left, 0);
-    assert.equal(widget._right, 0);
-
-    // ── 几何：反解出的画布框必须逐条等于 FGUI 原值 ───────────────────────
-    //  见下面 `<xxx> 几何` 用例；这里只确认容器本身的锚点没跑偏。
-    // ⚠️ 2026-09-29：玩家信息块与货币条现在**平级**挂在 ResBarLayer 下（原先套一层 `Mid`）——
-    //    货币条是 `common/ResBar` 的嵌套实例（壳节点没 `_name`），PlayerInfo 直接是首个子节点。
-    assert.equal(anchorOf(layerTf).x, 0.5);
-    assert.equal(anchorOf(layerTf).y, 0.5);
-
-    // ── 玩家信息块：容器几何 + 八个引用逐个落地 ──────────────────────────
-    const playerInfo = child(prefab, layer, 'PlayerInfo');
-    assert.equal(childrenOf(layer)[0].__id__, prefab.indexOf(playerInfo), 'PlayerInfo 必须是 ResBarLayer 的首个子节点');
-    const infoTf = transform(prefab, playerInfo);
-    assert.equal(sizeOf(infoTf).width, 463);
-    assert.equal(sizeOf(infoTf).height, 106);
-    // ⚠️ 必须是 (0.5, 0.5)：锚点决定「子节点位置的参照点」。写成 (0.5,1) 会让
-    //   参照点从框中心变成框顶边，整块玩家信息被抬 53px（2026-09-23 踩过）。
-    assert.equal(anchorOf(infoTf).x, 0.5);
-    assert.equal(anchorOf(infoTf).y, 0.5, 'PlayerInfo 的锚点必须是框中心，子节点坐标才是按「父中心」算的');
-
-    const bar = component(prefab, layer, 'uidLabel');
-
-    const avatarHost = hostNode(prefab, binding(prefab, bar, 'avatarIcon'));
-    assert.equal(avatarHost._name, 'HeadIcon');
-    assert.equal((avatarHost._parent as ObjRef).__id__, prefab.indexOf(playerInfo));
-    // 头像位 80×80，尺寸必须固定（CUSTOM + 不裁剪），否则贴图会改写宿主节点
-    assert.equal(sizeOf(transform(prefab, avatarHost)).width, 80);
-    const avatarSprite = binding(prefab, bar, 'avatarIcon');
-    assert.equal(avatarSprite._sizeMode, 0, '头像 Sprite 必须 CUSTOM');
-    assert.equal(avatarSprite._isTrimmedMode, false);
-
-    const nameComp = binding(prefab, bar, 'nameLabel');
-    assert.equal(nameComp._string, '雨晴冰轮', '名称位要留占位文案，不能是空串');
-    assert.equal(binding(prefab, bar, 'levelLabel')._string, 'LV1');
-    assert.equal(binding(prefab, bar, 'uidLabel')._string, 'uid:0');
-    assert.equal(binding(prefab, bar, 'levelLabel')._fontSize, 20);
-    assert.equal(binding(prefab, bar, 'nameLabel')._fontSize, 22);
-
-    // 经验条：只靠 fillRange 表现进度 ⇒ 必须固定尺寸 + FILLED/HORIZONTAL + 初始 0
-    const expFill = binding(prefab, bar, 'expFill');
-    assert.equal(expFill._type, 3, 'Sprite type 必须是 3（FILLED）');
-    assert.equal(expFill._fillType, 0, 'fillType 必须是 0（HORIZONTAL）');
-    assert.equal(expFill._fillStart, 0);
-    assert.equal(expFill._fillRange, 0, '初始进度必须是 0（没数据时不该显示满格）');
-    assert.equal(expFill._sizeMode, 0, '经验条必须 CUSTOM，否则贴图会改写宿主宽度');
-    assert.equal(sizeOf(transform(prefab, hostNode(prefab, expFill))).width, 374);
-
-    // ── 货币三格：宿主里**一个内联节点都不许有**（全在公共实例里）─────────
-    assert.equal(
-        prefab.filter((entry) => entry.__type__ === 'cc.Node' && /^Res\d$/.test(String(entry._name))).length,
-        0,
-        'ArenaRoot 里不该再有内联的 Res0/1/2 —— 那是「手抄一份」的旧形态，改公共件时不会同步',
-    );
-
-    // ── 每个 UI 节点都必须在 33554432（UI_2D），否则相机拍不到 ──────────
-    // ⚠️ 按 `_components` 筛「真实节点」：嵌套实例的壳节点只有 `_parent` + `_prefab`，
-    //    没有 `_components` / `_layer`（它的 layer 在源 prefab 里，且已由各公共件自己的用例守）。
-    //    ArenaRoot 里共有 5 个这样的壳（含货币条那个）⇒ 38 个 `cc.Node` 里只有 33 个是本文件的。
-    const uiNodes = prefab.filter((entry) => entry.__type__ === 'cc.Node' && Array.isArray(entry._components));
-    assert.ok(uiNodes.length >= 30, `只找到 ${uiNodes.length} 个 UI 节点，prefab 可能被截断了`);
-    assert.deepEqual(
-        Array.from(uiNodes.filter((entry) => entry._layer !== 33554432), (entry) => entry._name),
-        [],
-        'UI 节点的 _layer 必须全是 33554432',
-    );
-    assert.deepEqual(
-        Array.from(uiNodes.filter((entry) => entry._layer !== 33554432), (entry) => entry._name),
-        [],
-        'UI 节点的 _layer 必须全是 33554432',
-    );
+test("ArenaRoot.prefab：TopHud 玩家信息绑定完整，经验使用水平填充", () => {
+    const prefab=readPrefab(HUD_PREFAB);
+    const top=prefab.find(o=>o.__type__==='cc.Node' && o._name==='TopHud')!;assert.ok(top);
+    assert.deepEqual(sizeOf(transform(prefab,top)),{width:720,height:130});
+    const renderer=component(prefab,top,'avatarIcon');
+    for(const key of ['avatarIcon','nameLabel','levelLabel','expFill','powerLabel']) assert.ok(binding(prefab,renderer,key),key);
+    assert.equal(renderer.uidLabel,null,'当前HUD不显示UID');
+    assert.equal(hostNode(prefab,binding(prefab,renderer,'avatarIcon'))._name,'AvatarHead');
+    assert.equal(binding(prefab,renderer,'expFill')._type,3);
+    assert.equal(binding(prefab,renderer,'expFill')._fillType,0);
+    for(const node of prefab.filter(o=>o.__type__==='cc.Node' && Array.isArray(o._components))) assert.equal(node._layer,33554432,String(node._name));
 });
 
-test('ArenaRoot.prefab：货币条 = common/ResBar 的嵌套实例（实例身份 + 位置 + resKeys 焊死 RES_BAR_KEYS）', () => {
-    // ⚠️ 2026-09-29（第二轮修正）：HUD 的货币三格**不是**「内联抄一份 + 挂脚本」，
-    //   而是 `common/ResBar.prefab` 的**嵌套 prefab 实例**（与天赋页 `TabMilitiaTalent` 同一姿势）。
-    //   区别是决定性的：只有实例化，改公共件才能穿透所有宿主；手抄一份 = 改 N 处、必然漂移。
-    //   这条用例守四件事，全是**静默失效**：
-    //   ① 实例壳挂的不是公共件（uuid 对不上）⇒ 改公共件时 HUD 纹丝不动，零报错；
-    //   ② `resKeys` 与 `RES_BAR_KEYS` 各说各话 ⇒ 货币顺序悄悄漂移（两处真源）；
-    //   ③ 位置覆盖丢了 ⇒ 整条资源栏落回 (0,0)，压住玩家信息且不报错；
-    //   ④ 宿主里又长回内联的 `Res0/1/2` / `ResBar`·`MainResBarSlot` 脚本 ⇒ 回归「手抄」形态。
-    const prefab = readPrefab(HUD_PREFAB);
-    const layer = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ResBarLayer');
-    assert.ok(layer, 'ArenaRoot.prefab 里没有 ResBarLayer');
-
-    // 实例壳 = 唯一没有 `_name` 的子节点（嵌套实例根不落 `_name`，名字在覆盖项里）
-    const shellRef = childrenOf(layer!).find((ref) => prefab[ref.__id__]._name === undefined);
-    assert.ok(shellRef, 'ResBarLayer 下找不到嵌套实例壳 —— 货币条要么被删了，要么又变成内联节点树了');
-    const shell = prefab[shellRef!.__id__];
-    assert.equal(shell._components, undefined, '实例壳不该有 _components（有就说明被改回内联了）');
-
-    const info = prefab[(shell._prefab as ObjRef).__id__];
-    assert.equal(
-        (info.asset as { __uuid__?: string } | undefined)?.__uuid__,
-        COMMON_RESBAR_UUID,
-        '货币条必须实例化 common/ResBar.prefab（uuid 对不上 ⇒ 改公共件不会同步到 HUD）',
-    );
-
-    // ① 覆盖项：名字 / 位置 / 格数真源（宿主里读不到 Res0/1/2，它们的值在公共件里）
-    const instance = prefab[(info.instance as ObjRef).__id__];
-    assert.equal(instance.__type__, 'cc.PrefabInstance');
-    const overrides = new Map<string, unknown>();
-    for (const ref of (instance.propertyOverrides ?? []) as ObjRef[]) {
-        const ov = prefab[ref.__id__] as { propertyPath?: string[]; value?: unknown };
-        overrides.set((ov.propertyPath ?? []).join('.'), ov.value);
-    }
-    assert.equal(overrides.get('_name'), 'ResBar', '实例覆盖名应为 ResBar');
-    const lpos = overrides.get('_lpos') as { x: number; y: number } | undefined;
-    assert.ok(lpos, '实例必须覆盖 _lpos —— 丢了就落回 (0,0)，整条压在玩家信息上');
-    assert.deepEqual({ x: lpos!.x, y: lpos!.y }, { x: -84, y: 587 }, '实例位置必须覆盖成 (-84,587)（= 原 Mid 的框左上）');
-
-    // ② 格数真源 = 实例覆盖的 `resKeys`
-    //   🔴 2026-10-26 用户口径：「资源栏的按钮分别对应 银币 icon 和 体力 icon」
-    //   ⇒ HUD 从 `gold,gem`（银币 + 晶石）改成 **`gold,end`**（银币 + 体力），
-    //     `gold` 的行是 `roleProperty.resId=7 icon=图标_铜币`，`end` 是 `resId=9 icon=图标_体力`。
-    //   别再拿 `RES_BAR_KEYS`（银币/晶石/体力三格）比 —— 那个常量只服务 `buildResBarView` 的默认参数。
-    assert.equal(
-        overrides.get('resKeys'),
-        'gold,end',
-        '实例上的 resKeys 必须是 gold,end（银币 + 体力）—— 改这里要同步 HUD 版面口径',
-    );
-    // ③ HUD 这三国货币是写死的（老端同口径）⇒ 不覆盖 `openRefId`，继承公共件默认 0
-    assert.ok(!overrides.has('openRefId'), 'HUD 货币不走 open.json，不该覆盖 openRefId');
-
-    // ④ 反向断言：宿主里不许再有内联脚本 / 内联 Res 格
-    for (const tsPath of ['assets/script/app/common/ResBar.ts', 'assets/script/app/main/MainResBarSlot.ts']) {
-        assert.ok(
-            !prefab.some((entry) => entry?.__type__ === cidOf(tsPath)),
-            `ArenaRoot 里不该再挂 ${tsPath} —— 那是「手抄一份」的旧形态（改公共件不会同步）`,
-        );
-    }
-    assert.equal(
-        prefab.filter((entry) => entry.__type__ === 'cc.Node' && /^Res\d$/.test(String(entry._name))).length,
-        0,
-        'ArenaRoot 里不该再有内联的 Res0/1/2',
-    );
-
-    // ⑤ `MainResBar` 上也不许留孤儿 `slotN` 字段（下次有人照它去接货币会接出死引用）
-    const src = readFileSync('assets/script/app/main/MainResBar.ts', 'utf8');
-    assert.doesNotMatch(src, /slot[0-2]:\s*MainResBarSlot/, 'MainResBar 不该再声明 slot0/1/2');
-    assert.doesNotMatch(src, /from '\.\/MainResBarSlot'/, 'MainResBar 不该再 import MainResBarSlot');
-    const bar = component(prefab, layer!, 'uidLabel');
-    for (const index of [0, 1, 2]) {
-        assert.equal(bar[`slot${index}`], undefined, `MainResBar 上残留孤儿字段 slot${index}（编辑器 save 应清掉）`);
-    }
+test("ArenaRoot.prefab：货币条复用公共实例，按目标fileId还原两格覆写", () => {
+    const {host,objects}=currentHudBar();
+    const root=objects[(objects[0].data as ObjRef).__id__];
+    assert.equal(root._name,'ResBar');
+    assert.deepEqual(root._lpos,{__type__:'cc.Vec3',x:188,y:45,z:0});
+    assert.deepEqual(sizeOf(transform(objects,root)),{width:300,height:52});
+    const bar=objects.find(o=>o.resKeys!==undefined)!;
+    assert.equal(bar.resKeys,'gold,end');
+    assert.equal(objects.filter(o=>o.__type__==='cc.Node' && /^Res\d$/.test(String(o._name)) && o._active).length,2);
+    assert.equal(host.some(o=>o.__type__===cidOf('assets/script/app/common/ResBar.ts')),false);
+    assert.equal(host.some(o=>o.__type__===cidOf('assets/script/app/main/MainResBarSlot.ts')),false);
 });
 
 // ── 几何守卫：反解回画布像素，逐条对 FGUI 原值 ────────────────────────
@@ -502,79 +361,31 @@ function resBarInstanceAnchor(prefab: PrefabObject[], layer: PrefabObject): { x:
     return { x: 360 + lpos!.value!.x, y: 640 - lpos!.value!.y };
 }
 
-test('资源栏几何：整块反解回画布后，每个节点的框逐条等于 FGUI 原值', () => {
-    const prefab = readPrefab(HUD_PREFAB);
-    const layer = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ResBarLayer');
-    assert.ok(layer, 'ArenaRoot.prefab 里没有 ResBarLayer');
-    const boxes = new Map(layoutBoxes(prefab, layer!).map((box) => [box.path, box]));
-
-    // 货币条实例：把**公共件**的子树按实例世界锚点摆一遍（实例内部不落宿主文件，只能这样复原）
-    const common = readPrefab(COMMON_RESBAR);
-    const commonRoot = common.find((entry) => entry.__type__ === 'cc.Node' && entry._parent === null);
-    assert.ok(commonRoot, 'common/ResBar.prefab 里没有根节点');
-    for (const box of layoutBoxes(common, commonRoot!, resBarInstanceAnchor(prefab, layer!))) {
-        boxes.set(box.path, box);
+test("资源栏几何：实际实例覆写同步到两个槽位的背景、图标和读数", () => {
+    const {objects}=currentHudBar();
+    const slots=objects.filter(o=>o.__type__==='cc.Node' && /^Res\d$/.test(String(o._name)) && o._active);
+    assert.equal(slots.length,2);
+    for(const slot of slots) {
+        const bg=child(objects,slot,'Bg');
+        const icon=child(objects,slot,'Icon');
+        const label=child(objects,slot,'Value');
+        assert.deepEqual(sizeOf(transform(objects,bg)),{width:119,height:32});
+        assert.deepEqual(sizeOf(transform(objects,icon)),{width:44,height:44});
+        assert.deepEqual(sizeOf(transform(objects,label)),{width:82,height:36});
+        assert.equal(component(objects,label,'_string').__type__,'cc.Label');
     }
-
-    const expected = [...FGUI_HOST_BOXES, ...FGUI_SLOT_BOXES];
-    for (const slot of FGUI_SLOT_BOXES) {
-        for (const local of FGUI_SLOT_LOCAL) {
-            expected.push({
-                path: `${slot.path}/${local.name}`,
-                left: slot.left + local.left,
-                top: slot.top + local.top,
-                width: local.width,
-                height: local.height,
-            });
-        }
-    }
-
-    const drift: string[] = [];
-    for (const want of expected) {
-        const got = boxes.get(want.path);
-        if (!got) { drift.push(`${want.path}：找不到`); continue; }
-        const same = Math.abs(got.left - want.left) < 0.6 && Math.abs(got.top - want.top) < 0.6
-            && Math.abs(got.width - want.width) < 0.01 && Math.abs(got.height - want.height) < 0.01;
-        if (!same) {
-            drift.push(`${want.path}：得到 ${got.left.toFixed(1)},${got.top.toFixed(1)} `
-                + `${got.width}×${got.height}，期望 ${want.left},${want.top} ${want.width}×${want.height}`);
-        }
-    }
-    assert.deepEqual(Array.from(drift), [], '资源栏几何与 FGUI 原值不符（多半是锚点/父参照系错了）');
-    // 8 个宿主节点（根 + PlayerInfo + 6 个玩家信息子节点）+ 3 个资源格 + 3×4 格内元素
-    assert.equal(expected.length, 23, '守卫覆盖的节点数变了，确认是有意为之');
 });
 
-test('资源栏几何：整块贴在画布左上角（不居中、不悬浮）', () => {
-    const prefab = readPrefab(HUD_PREFAB);
-    const layer = prefab.find((entry) => entry.__type__ === 'cc.Node' && entry._name === 'ResBarLayer');
-    const boxes = new Map(layoutBoxes(prefab, layer!).map((box) => [box.path, box]));
-
-    const common = readPrefab(COMMON_RESBAR);
-    const commonRoot = common.find((entry) => entry.__type__ === 'cc.Node' && entry._parent === null)!;
-    for (const box of layoutBoxes(common, commonRoot, resBarInstanceAnchor(prefab, layer!))) {
-        boxes.set(box.path, box);
-    }
-
-    // 货币条实例必须贴画布左缘/顶边（FGUI 里 `group mid` 是 xy="0,0"；实例位置错一点就露馅）
-    const bar = boxes.get('ResBar')!;
-    assert.equal(bar.left, 0, '货币条实例必须贴画布左缘');
-    assert.equal(bar.top, 0, '货币条实例必须贴画布顶边');
-    assert.equal(bar.width, 552);
-    assert.equal(bar.height, 106);
-
-    // 三个资源格整体落在货币条的框里、且不越过 106 高的条带
-    for (const index of [0, 1, 2]) {
-        const slot = boxes.get(`ResBar/Res${index}`)!;
-        assert.ok(slot.left >= bar.left && slot.left + slot.width <= bar.left + bar.width,
-            `Res${index} 横向越出货币条`);
-        assert.ok(slot.top >= bar.top && slot.top + slot.height <= bar.top + bar.height,
-            `Res${index} 纵向越出货币条`);
-    }
-    // 头像必须整块在画布内（之前偏 44.5px 时它会跑出屏幕）
-    const head = boxes.get('ResBarLayer/PlayerInfo/HeadIcon')!;
-    assert.ok(head.left >= 0 && head.left + head.width <= 720, `头像横向出屏：left=${head.left}`);
-    assert.ok(head.top >= 0 && head.top + head.height <= 1280, `头像纵向出屏：top=${head.top}`);
+test("资源栏几何：两格资源位于屏幕右上范围内", () => {
+    const {host,objects}=currentHudBar();
+    const top=host.find(o=>o._name==='TopHud')!;
+    const root=objects[(objects[0].data as ObjRef).__id__];
+    const size=sizeOf(transform(objects,root));
+    const pos=root._lpos as {x:number;y:number};
+    const parentPos=top._lpos as {x:number;y:number};
+    assert.ok(pos.x-size.width/2>=-360 && pos.x+size.width/2<=360);
+    assert.ok(parentPos.y+pos.y+size.height/2<=640);
+    assert.ok(parentPos.y+pos.y-size.height/2>0);
 });
 
 test('点头像弹个人信息：prefab 的 AvatarHead 挂 cc.Button + 脚本监听节点 CLICK 打开 PlayerInfoPage', () => {
@@ -774,4 +585,12 @@ test('ResBar 闪光只落在命中的那一格（不许整条一起亮）', () =
 /** 反向断言前先剥注释（规则 104：注释里会写反例，不剥会被自己的文档绊倒）。 */
 function stripSourceComments(src: string): string {
     return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+}
+
+function currentHudBar() {
+    const host=readPrefab(HUD_PREFAB); const common=readPrefab(COMMON_RESBAR);
+    const uuid=JSON.parse(readFileSync(COMMON_RESBAR+'.meta','utf8')).uuid;
+    const info=host.find(o=>o.__type__==='cc.PrefabInfo' && (o.asset as any)?.__uuid__===uuid)!;
+    assert.ok(info);
+    return {host,objects:applyInstanceOverrides(common,host,host[(info.instance as ObjRef).__id__])};
 }

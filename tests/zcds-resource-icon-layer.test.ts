@@ -23,6 +23,7 @@ import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCG
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { ZC_HEX_ACTIVATION_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
+import { HEX_GRID_FACE_HEIGHT } from '../assets/script/core/hex/HexGridLayout';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 installZCNeutralTestCatalog();
@@ -103,9 +104,10 @@ test('资源图标抬到 ResourceLayer，坐标换算成棋盘层局部坐标（
     assert.equal(view.iconSprite.spriteFrame, view.goldResourceFrame, '判据前提：这格确实画了资源图标');
     assert.equal(icon.parent, layer, '资源图标必须被抬到 ResourceLayer（否则会被邻格整图沿格边线切掉）');
     // 抬层后局部坐标 = 格节点位置 + BuildingLayer 偏移 + 图标在 BuildingLayer 里的偏移。
-    // `RESOURCE_ICON_POS` 是 (0, -2.342)，所以 y = 200 + 15.101 - 2.342。
+    const lift = load('./ZCHexView').NEUTRAL_RESOURCE_LIFT;
+    assert.ok(lift > 0 && lift < HEX_GRID_FACE_HEIGHT / 10, '整体上移不超过格面高度的一成');
     assert.ok(near(icon.position.x, 300), `x 要补上格心，实际 ${icon.position.x}`);
-    assert.ok(near(icon.position.y, 200 + BUILDING_LAYER_Y - 2.342),
+    assert.ok(near(icon.position.y, 200 + BUILDING_LAYER_Y - 2.342 + lift),
         `y 要补上格心与 BuildingLayer 偏移，实际 ${icon.position.y}`);
     assert.equal(icon.position.z, 0);
 });
@@ -142,8 +144,8 @@ test('没注入 ResourceLayer 时维持原样：不抬层、坐标仍是 Buildin
 
     assert.equal(view.iconSprite.spriteFrame, view.goldResourceFrame, '判据前提：资源图标照常显示');
     assert.equal(icon.parent, parentBefore, '缺层时不许乱挂父节点（宁可不抬）');
-    // 坐标仍按 BuildingLayer 局部写：`RESOURCE_ICON_POS` 原值。
-    assert.ok(near(icon.position.x, 0) && near(icon.position.y, -2.342),
+    const lift = load('./ZCHexView').NEUTRAL_RESOURCE_LIFT;
+    assert.ok(near(icon.position.x, 0) && near(icon.position.y, -2.342 + lift),
         `缺层时应保持局部坐标，实际 (${icon.position.x}, ${icon.position.y})`);
 });
 
@@ -257,9 +259,9 @@ test('神器点：Spine 容器与资源图标同口径抬到 ResourceLayer，坐
     assert.equal(spine.root.parent, layer,
         'Spine 容器必须抬到 ResourceLayer（浮动问号 / 光晕超出格子顶面，留在格节点会被邻格整图切掉）');
     assert.equal(spine.root.active, true, '神器点 Spine 容器要显示');
-    // 容器落点恒为 RESOURCE_ICON_POS (0,-2.342)，抬层后补「格心 + BuildingLayer 偏移」。
+    const lift = load('./ZCHexView').NEUTRAL_RESOURCE_LIFT;
     assert.ok(near(spine.root.position.x, 300), `容器 x 要补格心，实际 ${spine.root.position.x}`);
-    assert.ok(near(spine.root.position.y, 200 + BUILDING_LAYER_Y - 2.342),
+    assert.ok(near(spine.root.position.y, 200 + BUILDING_LAYER_Y - 2.342 + lift),
         `容器 y 要补格心与 BuildingLayer 偏移，实际 ${spine.root.position.y}`);
     // 六边形底播 animation、问号播 ui_indicatorNPC，均循环。
     assert.deepEqual(spine.played.map((p) => [p.who, p.name, p.track, p.loop]),

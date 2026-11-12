@@ -1,5 +1,5 @@
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const read = (path: string) => readFileSync(`assets/script/app/${path}`, 'utf8');
@@ -15,7 +15,7 @@ test('chapter model has instance outputs and no global view event subscriptions'
     assert.doesNotMatch(source, /import.*EventMgr|from.*view\/TerritoryEvents/);
     assert.match(source, /onOutput/);
 });
-test('chapter compatibility import is a re-export of the single model implementation', () => {
-    assert.match(read('territory/application/TerritoryPresenter.ts'), /TerritoryModel as TerritoryPresenter/);
-    assert.doesNotMatch(read('territory/application/TerritoryPresenter.ts'), /export class/);
+test('chapter has a single implementation: no compatibility re-export presenters', () => {
+    assert.equal(existsSync('assets/script/app/territory/application/TerritoryPresenter.ts'), false);
+    assert.equal(existsSync('assets/script/app/bigmap/application/BigMapPresenter.ts'), false);
 });

@@ -16,6 +16,7 @@ import {
     UITransform,
     Vec3,
 } from 'cc';
+import type { DeepReadonly } from '../model/ZCGameTypes';
 import type {
     ZCBuildingCooldownState,
     ZCBuildingType,
@@ -99,8 +100,10 @@ const NEUTRAL_RESOURCE_LABELS: Readonly<Record<string, string>> = {
  */
 const RESOURCE_ICON_TARGET_SIZE = 128;
 const NEUTRAL_FEATURE_ICON_SCALE = 0.85;
+/** 中立资源统一上移量随格面高度缩放，图标、Spine 与兵团预览共用。 */
+export const NEUTRAL_RESOURCE_LIFT = HEX_GRID_FACE_HEIGHT * 0.08;
 const MONSTER_SLEEP_TINT = new Color(130, 150, 180, 255);
-const MONSTER_BADGE_POS = { x: 28, y: 38, z: 0 };
+const MONSTER_BADGE_POS = { x: 28, y: 38 + NEUTRAL_RESOURCE_LIFT, z: 0 };
 const GATE_COOLDOWN_TINT = new Color(105, 105, 105, 255);
 
 /**
@@ -119,8 +122,28 @@ const UNKNOWN_RESOURCE_ICON_RATIO = 0.7;
  * 已建建筑外观图（`buildingSprite`）的基准缩放。
  * 必须落在代码而非 prefab：`applyActivationFx` 会覆写激活格的 scale，只改 prefab
  * 会出现「激活过的格子 1.0、没激活的 0.72」的静默偏差。`applyBuildingScale` 是唯一写入口。
+ *
+ * 2026-11-11 需求：「建筑的大小又放大了，重新缩小回 85%」⇒ 原 0.72 × 0.85 = **0.612**。
+ * 🔴 改这个值必须同步重标 `ZCGameViewUtil.FLOAT_TEXT_GOLD_INCOME_TOP_PX`
+ * （产金飘字的起飞点是「建筑顶」，算的是 `90 × 本值 / 2`；
+ * `tests/zcds-float-text-gold-income.test.ts` 会从 prefab 反算并卡这条）。
  */
-const BUILDING_ICON_SCALE = 0.72;
+const BUILDING_ICON_SCALE = 0.612;
+
+/**
+ * **按建筑类型**再乘的基准倍率（叠在 `BUILDING_ICON_SCALE` 之上）。
+ *
+ * 2026-11-11 需求：「金矿的建筑需要轻微放大成 110%」⇒ `mine` = 1.1，其余类型不登记（= 1）。
+ *
+ * 为什么挂在这里而不是各改一处：
+ * · 不改 `BUILDING_ICON_SCALE`（会把兵营 / 主城 / 塔一起放大，需求只点了金矿）；
+ * · 不改贴图 / prefab 尺寸（外观是 `SpriteFrame` 直取，真正生效的是 `applyBuildingScale`
+ *   写出的**绝对** scale，prefab 上的值一帧就被覆盖）；
+ * · 走同一张表 ⇒ 激活弹入、生成抖动、复位、选点阶段全都自动一致，不会出现「抖完变回别的尺寸」。
+ */
+const BUILDING_ICON_TYPE_SCALE: Readonly<Partial<Record<ZCBuildingType, number>>> = {
+    mine: 1.1,
+};
 
 /**
  * 地块类型图标（`icon_wh` / `icon_jk` / `icon_by` / `icon_em`，都挂在 `iconSprite` 上）的基准缩放。
@@ -322,7 +345,7 @@ type IZCBuildingFrameResolver = (
 ) => SpriteFrame | null;
 
 interface IZCHexPresentation {
-    state: Readonly<ZCHexState>;
+    state: DeepReadonly<ZCHexState>;
     canDevelop: boolean;
     /** 我方当前金币，用于把买不起的开发价格标红。 */
     playerGold: number;
@@ -436,12 +459,12 @@ export class ZCHexView extends Component {
      */
     private static readonly DEFAULT_TILE_ICON_POS = { x: -4.801, y: 4, z: 0 } as const;
     /**
-     * 中立资源点图标（金币 / 金矿 / 宝箱 / 神器）的落点：对齐顶面中心（换算见文件头）。
+     * 中立资源点图标（金币 / 金矿 / 宝箱 / 神器）的落点：顶面中心基准叠加共享上移量。
      *
      * ⚠️ 它比顶面**高 19px、也低 19px**（节点 128×128、顶面 123×90）：左右邻格的整图会盖住
      * 溢出到它们那一侧的部分 ⇒ 必须抬到棋盘级资源层再画，见 `setResourceIconRaised`。
      */
-    private static readonly RESOURCE_ICON_POS = { x: 0, y: -2.342, z: 0 } as const;
+    private static readonly RESOURCE_ICON_POS = { x: 0, y: -2.342 + NEUTRAL_RESOURCE_LIFT, z: 0 } as const;
 
     /**
      * 格内兵力资源点（`unit_cap`）骨骼的目标可见高度（格子高 128 的 38%）。
@@ -456,7 +479,7 @@ export class ZCHexView extends Component {
      * 🔴 2026-10-15 需求（`demo体验反馈` row7）：「格内兵团上移 30px」⇒ 由 `-18` 抬到 `12`
      * （`-18 + 30 = 12`）。脚底对齐的兵站上来时不会被格子下沿的侧壁压住。
      */
-    private static readonly RESOURCE_UNIT_POS_Y = 12;
+    private static readonly RESOURCE_UNIT_POS_Y = 12 + NEUTRAL_RESOURCE_LIFT;
 
     /**
      * 骨架 canvas 高度（设计单位），用来算缩放。
@@ -598,6 +621,10 @@ export class ZCHexView extends Component {
     private unknownResourceFrame: SpriteFrame | null = null;
     private neutralResourceFrames: ReadonlyMap<string, SpriteFrame> | null = null;
     private gateCooldownSeconds = 0;
+    private portalUses = 0;
+    private mowerSpeed = 0;
+    private mowerVisible = true;
+    private readonly mowerOffset = new Vec3();
     /**
      * 兵力资源点表里配的**卡 id**（`rewardCardId`，如 `'68001'`）与**要站几个**
      * （`rewardUnitCount`），都由渲染层注入 —— 视图不读表，与 `setBuildingFrameResolver` 同款口径。
@@ -701,6 +728,14 @@ export class ZCHexView extends Component {
      */
     private buildingShakeScaleX = 1;
     private buildingShakeScaleY = 1;
+    /**
+     * 本格建筑类型的基准倍率（查 `BUILDING_ICON_TYPE_SCALE`），由 `render` 每拍按
+     * `state.building` 写入。默认 1 = 不登记的类型。
+     *
+     * ⚠️ 必须在 `render` 里、`applyActivationFx` **之前**写：后者是每帧读它算 scale 的地方，
+     * 写在 `renderContent`（受 contentKey 拦截）里会漏掉「内容没变但类型变了」的帧。
+     */
+    private buildingTypeScale = 1;
     /**
      * 新点亮邻格「生成动画」的**起点**（秒）；null = 当前没在播。
      *
@@ -832,6 +867,8 @@ export class ZCHexView extends Component {
         // ⚠️ 不能用 `setResourceIconRaised(false)`：`resourceIconLayer` 是渲染层在
         // `initialize` **之后**才注入的，此刻它还是 null，那个方法会走早退分支收不回来。
         this.resourceIconRaised = false;
+        this.mowerVisible = true;
+        this.iconSprite.node.active = true;
         if (this.buildingLayer && this.iconSprite && this.iconSprite.node.parent !== this.buildingLayer) {
             this.iconSprite.node.setParent(this.buildingLayer);
         }
@@ -927,9 +964,7 @@ export class ZCHexView extends Component {
         if (raised === this.resourceIconRaised && iconNode.parent === target) return;
         this.resourceIconRaised = raised;
         iconNode.setParent(target);
-        // 抬层期间可能被激活表现的「隐藏段」关掉过，搬回来时统一恢复。
-        // 只在**真的换过父**时写，所以不会和 `applyActivationFx` 的隐藏段打架。
-        iconNode.active = true;
+        this.applyResourceIconVisibility();
         // 神器点 Spine 容器同口径搬（prefab 没挂则跳过）。
         const spineRoot = this.artifactSpineRoot;
         if (spineRoot && spineRoot.parent !== target) {
@@ -989,6 +1024,32 @@ export class ZCHexView extends Component {
         this.gateCooldownSeconds = seconds;
     }
 
+    setPortalUses(uses: number): void {
+        this.portalUses = uses;
+    }
+
+    setMowerSpeed(speed: number): void {
+        this.mowerSpeed = speed;
+    }
+
+    mowerProgress(startedAt: number, now: number): number {
+        return Math.max(0, now - startedAt) * this.mowerSpeed;
+    }
+
+    renderMower(offsetX: number, offsetY: number, active: boolean): void {
+        const pos = ZCHexView.RESOURCE_ICON_POS;
+        this.mowerOffset.set(pos.x + offsetX, pos.y + offsetY, pos.z);
+        this.applyIconPosition(this.mowerOffset);
+        this.mowerVisible = active;
+        this.applyResourceIconVisibility();
+    }
+
+    private applyResourceIconVisibility(): void {
+        // 移动结束和地块动画的隐藏条件叠加，任一刷新都不能把另一方隐藏的图标回显。
+        const visible = this.mowerVisible && !this.lastActivationFx?.hidden;
+        if (this.iconSprite.node.active !== visible) this.iconSprite.node.active = visible;
+    }
+
     /**
      * 注入「自选地图局的中立资源占位图」（`image/gameui/whh` 金色问号）。
      *
@@ -1036,6 +1097,9 @@ export class ZCHexView extends Component {
     render(presentation: Readonly<IZCHexPresentation>): void {
         const { state } = presentation;
         const now = presentation.now;
+        // 建筑外观的类型倍率（金矿 110%）每拍按 `state.building` 刷新 —— 必须在下面那次
+        // `applyActivationFx` 之前，它才是每帧真正写 scale 的地方。
+        this.buildingTypeScale = BUILDING_ICON_TYPE_SCALE[state.building] ?? 1;
         // 🔴 需求 2026-10-26：「战斗中，新格子的生成动画和地块脉冲动画同步播放」。
         // 先识别「这一格刚被点亮」那一拍并登记生成动画的起点（锚在**脉冲起点**），
         // 再把生成动画写一帧 —— 内容本身不再被按住，与脉冲同一拍亮出来。
@@ -1059,14 +1123,17 @@ export class ZCHexView extends Component {
         this.renderCooldown(
             !canDevelop && state.state !== 'ruins' && state.building !== 'none' ? presentation.cooldown : null,
         );
-        if (state.neutralFeature?.effect && presentation.hideNeutralResourceLabel !== true) {
+        if ((state.neutralFeature?.effect || this.portalUses > 0 && state.neutralFeature?.claimed)
+            && presentation.hideNeutralResourceLabel !== true) {
             const gate = state.neutralFeature;
             const active = gate.windowUntil > now;
             const cooling = !active && gate.readyAt > now;
             const bar = this.cooldownBar;
-            bar.node.active = active || cooling;
-            bar.progress = active ? 1 : this.gateCooldownSeconds > 0
-                ? clamp01(1 - (gate.readyAt - now) / this.gateCooldownSeconds) : 0;
+            const duration = gate.cooldownSeconds ?? this.gateCooldownSeconds;
+            bar.node.active = active || cooling || this.portalUses > 0;
+            bar.progress = active ? 1 : cooling && duration > 0
+                ? clamp01(1 - (gate.readyAt - now) / duration)
+                : this.portalUses > 0 ? (gate.usesRemaining ?? this.portalUses) / this.portalUses : 0;
             const scale = active ? 2 : 1;
             bar.node.setScale(scale, scale, 1);
         }
@@ -1224,18 +1291,14 @@ export class ZCHexView extends Component {
             this.applyTileTransform(1, 1);
             this.applyGroundGlow(0, 1);
             this.applyBuildingScale();
-            // 激活期结束：抬到棋盘层的资源图标要跟着回显（隐藏段可能把它关掉过）。
-            // 只在「抬层中 + 当前是关的」这一种情况下写，常规帧零开销。
-            if (this.resourceIconRaised && !this.iconSprite.node.active) {
-                this.iconSprite.node.active = true;
-            }
+            if (this.resourceIconRaised) this.applyResourceIconVisibility();
             return;
         }
         this.lastActivationFx = fx;
         if (this.node.active === fx.hidden) this.node.active = !fx.hidden;
         // 抬到棋盘层的资源图标**不随格节点隐藏**（它已经不在格节点下了），单独跟一下显隐，
         // 否则卡牌独占视线那段「整格隐藏」里会剩一个图标飘着。
-        if (this.resourceIconRaised) this.iconSprite.node.active = !fx.hidden;
+        if (this.resourceIconRaised) this.applyResourceIconVisibility();
         if (fx.hidden) {
             // 隐藏段整格不可见：位移与缩放也复位（收场末停在 0.1 与最高点，
             // 不复位的话地块回场那一刻会先看到「从最小展开」的帧差）。
@@ -1330,7 +1393,7 @@ export class ZCHexView extends Component {
     }
 
     /**
-     * 写建筑外观节点的缩放 / 显隐：`BUILDING_ICON_SCALE × multiplier`。
+     * 写建筑外观节点的缩放 / 显隐：`BUILDING_ICON_SCALE × buildingTypeScale × multiplier`。
      * 详见 docs/ZCHexView设计决策.md §18。
      */
     private applyBuildingScale(multiplier = 1): void {
@@ -1338,9 +1401,9 @@ export class ZCHexView extends Component {
         const visible = multiplier > 0;
         if (node.active !== visible) node.active = visible;
         if (!visible) return;
-        // 生成单位抖动（需求 row5）在这里叠一层因子：抖动期 x / y 分开拉（先 Y 后 X），
-        // 非抖动期两个因子都是 1 ⇒ 写出来的还是原来的等比 0.72。
-        const base = BUILDING_ICON_SCALE * multiplier;
+        // 三个因子：类型基准（金矿 ×1.1）× 生成动画段倍率 × 抖动拉伸（先 Y 后 X）。
+        // 非抖动期两个抖动因子都是 1 ⇒ 写出来的就是「基准 × 类型倍率」的等比缩放。
+        const base = BUILDING_ICON_SCALE * this.buildingTypeScale * multiplier;
         const scaleX = base * this.buildingShakeScaleX;
         const scaleY = base * this.buildingShakeScaleY;
         if (node.scale.x !== scaleX || node.scale.y !== scaleY) node.setScale(scaleX, scaleY, 1);
@@ -1562,6 +1625,9 @@ export class ZCHexView extends Component {
         // 与正式对局同一基准缩放（`applyBuildingScale` 是唯一写入口）：选点阶段不调
         // `applyActivationFx`，不显式设的话这里会停在 prefab 的 `_lscale = 0.9`，
         // 表现为「选点时的主城比开发完成后大一号」。
+        // ⚠️ 类型倍率必须显式复位成 1：视图是对象池复用的，上一局这一格若是金矿（1.1），
+        // 不复位会让选点阶段的主城莫名其妙大 10%。
+        this.buildingTypeScale = 1;
         this.applyBuildingScale();
         // 资源点与**正式对局同源**：
         //  · 兵力资源点（`unit_cap`）站表里配的那几个兵的**待机**骨骼（不用兵营图标、不写文字）；
@@ -1727,7 +1793,7 @@ export class ZCHexView extends Component {
      * 同时不产生多余的 spriteFrame 赋值。
      */
     private contentSignature(
-        state: Readonly<ZCHexState>,
+        state: DeepReadonly<ZCHexState>,
         presentation: Readonly<IZCHexPresentation>,
         canDevelop: boolean,
         affordable: boolean,
@@ -1746,7 +1812,7 @@ export class ZCHexView extends Component {
      * 一格一根血条，但一格上可能同时挂着城墙耐久和建筑耐久，按「当前能被打到的那样」取值：
      * 详见 docs/ZCHexView设计决策.md §24。
      */
-    private renderHealthBar(state: Readonly<ZCHexState>, now: number): void {
+    private renderHealthBar(state: DeepReadonly<ZCHexState>, now: number): void {
         const bar = this.healthBar;
         // 旧存档 / 测试桩可能没有城墙字段，缺字段一律按「没有墙」处理。
         const wallHp = Number.isFinite(state.wallHp) ? state.wallHp : 0;
@@ -1787,7 +1853,7 @@ export class ZCHexView extends Component {
         return this.barTrailAnimating;
     }
 
-    private renderTerrain(state: Readonly<ZCHexState>, canDevelop: boolean): void {
+    private renderTerrain(state: DeepReadonly<ZCHexState>, canDevelop: boolean): void {
         // 中立 → 可开发（点了相邻格亮出的购买位）按玩家色染色，与"纯中立"染色不同。
         // 纯中立格 `tint.a` 为 0 ⇒ 这一格不显示（口径见 `NEUTRAL_FILL_ALPHA`）。
         const tint = this.territoryTint(state, canDevelop);
@@ -1797,7 +1863,7 @@ export class ZCHexView extends Component {
         this.setSprite(this.tileSprite, this.tileFrame, tint);
     }
 
-    private territoryTint(state: Readonly<ZCHexState>, canDevelop: boolean): Color {
+    private territoryTint(state: DeepReadonly<ZCHexState>, canDevelop: boolean): Color {
         if (this.sweepOwner !== null) return this.sweepFill(this.sweepOwner, this.sweepMix, this.sweepShimmer);
         // 开局归属扩散：这一格还没轮到时按半区色画（`progress` 0），到了才过渡到战斗底色。
         // 压过下面那条常规口径，因为整盘底色此刻还没回到战斗态 —— 波前只管**何时**回。
@@ -1853,7 +1919,7 @@ export class ZCHexView extends Component {
     }
 
     private renderContent(
-        state: Readonly<ZCHexState>,
+        state: DeepReadonly<ZCHexState>,
         canDevelop: boolean,
         affordable: boolean,
         hideNeutralResourceLabel: boolean,
@@ -1951,7 +2017,7 @@ export class ZCHexView extends Component {
         this.iconLabel.color = this.contentTextColor(state, effectiveCanDevelop, affordable);
     }
 
-    private contentTextColor(state: Readonly<ZCHexState>, canDevelop: boolean, affordable: boolean): Color {
+    private contentTextColor(state: DeepReadonly<ZCHexState>, canDevelop: boolean, affordable: boolean): Color {
         if (state.neutralResourceId) {
             return state.developmentResolved
                 ? ZCHexView.RESOURCE_RESOLVED_COLOR
@@ -2088,7 +2154,7 @@ export class ZCHexView extends Component {
      * 其余优先用卡牌专属外观（`buildIcon`），主城 / 金矿回退 prefab 绑定的类型通用图。
      */
     private resolveBuildingFrame(
-        state: Readonly<ZCHexState>,
+        state: DeepReadonly<ZCHexState>,
         ruins: boolean,
         hasBuilding: boolean,
     ): SpriteFrame | null {
@@ -2099,7 +2165,7 @@ export class ZCHexView extends Component {
     }
 
     /** 建筑染色：废墟保持原色；敌方针红、多人席位按阵营色；我方纯白。 */
-    private buildingTint(state: Readonly<ZCHexState>, ruins: boolean): Color {
+    private buildingTint(state: DeepReadonly<ZCHexState>, ruins: boolean): Color {
         if (ruins) return Color.WHITE;
         if (state.owner === ZCOwner.Enemy) return ZCHexView.ENEMY_BUILDING_COLOR;
         if (state.owner === ZCOwner.Enemy2 || state.owner === ZCOwner.Enemy3) return zcFactionColor(state.owner);

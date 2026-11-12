@@ -266,6 +266,34 @@ test('★Repository 真的发包：走 GameNet.send 且带 withTimeout', () => {
     assert.ok(/isConnected/.test(REPO_SRC), '必须判 isConnected 并离线早退');
 });
 
+test('★章节扫荡请求带倍率 `times`（proto id 3），且运行时编码器真的编得出来', async () => {
+    // ① 协议定义（服务端 2026-11-11 加 `optional uint32 times = 3`）
+    const proto = readFileSync('client_proto/protoCompiled.proto', 'utf8');
+    const block = proto.match(/message CmdCityChapterSweepReqMsg \{([^}]+)\}/)?.[1] ?? '';
+    assert.match(block, /optional uint32 times\s*=\s*3/, '`times` 字段不在协议里');
+
+    // ② Repository 组包：倍率进报文 + 非法值归 1（0 会被服务端当成「倍率 0」）
+    assert.match(REPO_SRC, /times: sweepTimes/, '组包漏 `times` ⇒ 角标显示 x50、实际只扫 1 倍，零报错');
+    assert.match(REPO_SRC, /Number\.isSafeInteger\(times\) && times > 0 \? times : 1/, '倍率要归一到正整数');
+
+    // ③ Model 必须把倍率透传给网关 —— 只改 Controller 不改这里等于把倍率丢在半路。
+    const modelSrc = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
+    assert.match(modelSrc, /async sweepIdleRewards\(times: number = 1\)/);
+    assert.match(modelSrc, /gateway\.sweep\(chapterId, target\.site\.cellId, times,/);
+
+    // ③ 🔴 运行时编解码走 `protoCompiledStatic`（静态模块），**不是** protoCompiled.json：
+    //    static 产物落后于 proto 时，多传的字段会被 protobuf 静默丢弃 —— 日志里看不出任何异常。
+    //    这条用例真的编一次码，字节级钉住 id3（wireType 0 ⇒ tag = 3<<3 = 24）。
+    const root = (await import('../assets/script/lib/protobuf/protoCompiledStatic')).default as any;
+    const Type = root.com.xkhy.tafang.cmd.CmdCityChapterSweepReqMsg;
+    const withTimes = Type.encode(Type.create({ levelChapter: 2, cellId: 9, times: 20 })).finish();
+    assert.deepEqual([...withTimes], [8, 2, 16, 9, 24, 20], '报文里必须出现 id3（24）+ 20');
+    assert.equal(Type.decode(withTimes).times, 20);
+    // optional：不传就不写 id3（缺省 1 由服务端补），别变成恒带一个 times=0
+    const withoutTimes = Type.encode(Type.create({ levelChapter: 2, cellId: 9 })).finish();
+    assert.deepEqual([...withoutTimes], [8, 2, 16, 9], '没传倍率就不该写 id3');
+});
+
 test('★写请求一律等服务端 succ，不乐观更新', () => {
     // 每条写请求都要判 succ；本地记账（markCellPassed / markCellUnlocked）只在 ok 后调。
     assert.equal(
@@ -572,8 +600,9 @@ test('★★★ CellInfo 落地复用 applyServerState；完整快照可 markSer
         PRESENTER_SRC.indexOf('/** 随机资源位置'),
     );
     assert.ok(apply.length > 0, 'applyCellInfoState 要能定位');
-    assert.match(apply, /applyServerState\(state\)/,
-        '主动下发的快照必须复用 applyServerState（单调不减 + 越界裁剪 + 清 pendingPasses）');
+    assert.match(apply, /applyServerState\(state, \{ replaceUnlocks: true \}\)/,
+        '完整快照按服务端 unlockCells 重建解锁集（本地存档多出的解锁格必须消失，'
+        + '否则前置放行 ⇒ 点击被服务端打回「前置地块未解锁」）');
     // 与 Bro 相反：CellInfo 带 unlockCells 完整快照，应当 mark，否则下次点开仍按旧快照判。
     assert.match(apply, /markServerStateKnown\(true\)/,
         'CellInfo 是完整快照，应当 markServerStateKnown（Bro 才不能 mark）');

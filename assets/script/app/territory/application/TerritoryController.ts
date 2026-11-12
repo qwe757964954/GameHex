@@ -85,7 +85,8 @@ export class TerritoryController extends ControllerBase {
                 break;
             }
             case 'randomTap': this.model.selectRandomResource(intent.cellId); break;
-            case 'claimIdleRewards': this.model.claimIdleRewards(this.options.now?.() ?? Date.now()); break;
+            case 'claimIdleRewards': void this.model.claimIdleRewards(this.options.now?.() ?? Date.now()); break;
+            case 'sweepChapter': void this.model.sweepIdleRewards(intent.times); break;
             case 'chapter': this.model.switchChapter(intent.offset); break;
             case 'selectChapter': this.model.selectChapter(intent.chapterId); break;
             case 'enterBattle': {

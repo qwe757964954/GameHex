@@ -40,19 +40,17 @@ const SCRIPT_DIR = path.join(ROOT, 'assets/script/app/login');
 /**
  * 弹窗皮的取件表（uuid 前 8 位足以唯一化，全 32 位在 meta 里）。
  *
- * 2026-11-06 起这一套全部落在 `image/common`：底板与标题条是从 `image/itemdetail`
- * **移动**过来的（uuid 未变），关闭按钮与条目底改用 common 里**同字节同九宫**的副本
- * —— 目的是让选服弹窗（含列表 item）不再拖 `image/itemdetail` / `image/login` 两个图集。
+ * 底板、标题与账号登录页共用木质皮肤，关闭按钮和条目底复用 common。
  */
 const ART = {
-    /** common/id_panel_bg —— 底板九宫 620×656，九宫 164/164/155/155，中心 rgb(200,179,149) */
-    panelBg: 'd04d6e56',
-    /** common/id_title_gray —— 标题条九宫 344×81，九宫 26/34/170/146，中心 rgb(87,88,98) */
-    titleBg: '7a234c2b',
-    /** common/cu_btn_close_01 —— 60×60，中心橙 rgb(229,104,60)（= login/公用_按钮_关闭01 同字节） */
-    close: 'f0066f4d',
-    /** common/cu_tycb_pt —— 条目底九宫 407×103，九宫 25/28/101/104，中间 rgb(236,218,188)（= itemdetail/id_row_bg 同字节） */
-    rowBg: '787634e8',
+    /** login/login_panel */
+    panelBg: 'c060d11a',
+    /** login/login_title */
+    titleBg: '1c600b0a',
+    /** login/login_close —— 60×60，中心橙 rgb(229,104,60)（= login/公用_按钮_关闭01 同字节） */
+    close: '6bf70f3d',
+    /** login/server_row —— 条目底九宫 407×103，九宫 25/28/101/104，中间 rgb(236,218,188)（= itemdetail/id_row_bg 同字节） */
+    rowBg: '848bfa6b',
     /** 内置白图（用于画纯色遮罩） */
     white: '7d8f9b89',
 } as const;
@@ -169,26 +167,26 @@ test('黑遮罩 Bg：满屏 + 内置白图染 rgba(0,0,0,160)（与 GMPanel.Bg �
     assert.equal(findComp(objects, bg, 'cc.Button'), undefined, '遮罩不该有 Button');
 });
 
-test('换皮取件：PanelBg / TitleBg / CloseBtn 三张图与尺寸都对齐 common 通用套件', () => {
+test('选服弹窗复用登录木质框与标题，保留列表尺寸', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
 
     const panelBg = nodeByName(objects, 'PanelBg');
-    assert.equal(sfPrefix(objects, panelBg), ART.panelBg, 'PanelBg 应是 common/id_panel_bg');
-    assert.deepEqual(sizeOf(objects, panelBg), { width: 626, height: 866 }, '应与老端弹窗本体同尺寸');
+    assert.equal(sfPrefix(objects, panelBg), ART.panelBg, 'PanelBg 应复用登录木质框');
+    assert.deepEqual(sizeOf(objects, panelBg), { width: 626, height: 600 }, '紧凑选服弹窗尺寸');
     assert.equal(findComp(objects, panelBg, 'cc.Sprite')!._type, 1, '九宫图必须 SLICED(1)');
     assert.equal(findComp(objects, panelBg, 'cc.Sprite')!._sizeMode, 0, '口径：_sizeMode 一律 CUSTOM(0)');
 
     const titleBg = nodeByName(objects, 'TitleBg');
-    assert.equal(sfPrefix(objects, titleBg), ART.titleBg, 'TitleBg 应是 common/id_title_gray');
+    assert.equal(sfPrefix(objects, titleBg), ART.titleBg, 'TitleBg 应复用登录标题');
     assert.equal(findComp(objects, titleBg, 'cc.Sprite')!._sizeMode, 0);
 
     const closeBtn = nodeByName(objects, 'CloseBtn');
-    assert.equal(sfPrefix(objects, closeBtn), ART.close, 'CloseBtn 应是 common/cu_btn_close_01');
+    assert.equal(sfPrefix(objects, closeBtn), ART.close, 'CloseBtn 应是 login/login_close');
     assert.deepEqual(sizeOf(objects, closeBtn), { width: 60, height: 60 });
     assert.equal(findComp(objects, closeBtn, 'cc.Sprite')!._sizeMode, 0);
 });
 
-test('Title：文案「选择服务器」+ 暖白字色（标题条是深灰蓝底，不能默认黑字）', () => {
+test('Title：文案「选择服务器」+ 暖白字色', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
     const title = nodeByName(objects, 'Title');
     const label = findComp(objects, title, 'cc.Label');
@@ -200,13 +198,11 @@ test('Title：文案「选择服务器」+ 暖白字色（标题条是深灰蓝�
     assert.equal(label!._overflow, 2, 'overflow 应是 SHRINK(2)，防长文案溢出标题条');
 });
 
-test('CloseBtn 的 cc.Button 参数对齐 MailDetail（SCALE / 0.94 / 0.06 / _target:null）', () => {
+test('CloseBtn 预挂 Button 且无过渡与 target', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
     const button = findComp(objects, nodeByName(objects, 'CloseBtn'), 'cc.Button');
     assert.ok(button, 'CloseBtn 上没有 cc.Button');
-    assert.equal(button!._transition, 3, '_transition 应是 SCALE(3)');
-    assert.equal(button!._zoomScale, 0.94);
-    assert.equal(button!._duration, 0.06);
+    assert.equal(button!._transition, 0, '_transition 应是 NONE(0)');
     assert.equal(button!._target, null, '_target 留 null（作用于自身节点），别指向别的节点');
 });
 
@@ -237,7 +233,7 @@ test('ServerSelectPanel 脚本：走 PopupBase 标准壳（prefabPath / 层 / �
 test('ServerList：视口 anchor(0.5,1) + 组件序 [Mask, Graphics, VirtualScrollView]（对齐 ItemDetail）', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
     const list = nodeByName(objects, 'ServerList');
-    assert.deepEqual(sizeOf(objects, list), { width: 560, height: 740 });
+    assert.deepEqual(sizeOf(objects, list), { width: 560, height: 440 });
     assert.deepEqual(anchorOf(objects, list), { x: 0.5, y: 1 }, '纵向虚拟列表视口锚点必须是 (0.5,1)（规则 120）');
     assert.deepEqual(
         compsOf(objects, list).map((c) => c.__type__),
@@ -266,11 +262,11 @@ test('VirtualScrollView 取值：纵向 / 对象池 / itemPrefab 指向 ServerSe
     assert.equal(objects[view.content.__id__]._name, 'content');
 });
 
-test('content：560×740 anchor(0.5,1) 且【不挂 cc.Widget】（Widget 会回写宽度跟虚拟列表抢）', () => {
+test('content：560×440 anchor(0.5,1) 且【不挂 cc.Widget】（Widget 会回写宽度跟虚拟列表抢）', () => {
     const objects = loadPrefab('ServerSelectPanel.prefab');
     const content = nodeByName(objects, 'content');
     // 视口 560 / 条目 540 不等宽 ⇒ Widget 一旦挂上会立刻把宽度改成 1020（实测）
-    assert.deepEqual(sizeOf(objects, content), { width: 560, height: 740 });
+    assert.deepEqual(sizeOf(objects, content), { width: 560, height: 440 });
     assert.deepEqual(anchorOf(objects, content), { x: 0.5, y: 1 });
     assert.equal(
         findComp(objects, content, 'cc.Widget'),
@@ -321,25 +317,25 @@ test('ServerSelectItem 结构：540×78 底图 + 左名右状态（anchor 0/1 �
     const root = objects[1];
     assert.equal(root._name, 'ServerSelectItem');
     assert.deepEqual(sizeOf(objects, root), { width: 540, height: 78 });
-    assert.deepEqual(childNames(objects, root), ['Background', 'NameLabel', 'StatusLabel']);
+    assert.deepEqual(childNames(objects, root), ['Background', 'NameLabel', 'StatusLabel', 'StatusDot', 'SelectedMark']);
 
     const bg = nodeByName(objects, 'Background');
     assert.equal(sfPrefix(objects, bg), ART.rowBg, '条目底应是 id_row_bg');
     assert.equal(findComp(objects, bg, 'cc.Sprite')!._type, 1, '九宫图必须 SLICED(1)');
     assert.equal(findComp(objects, bg, 'cc.Sprite')!._sizeMode, 0);
 
-    // 名字：左对齐 —— anchor(0,0.5) 且 lpos.x = -250（左端贴底图左边）
+    // 名字：左对齐 —— anchor(0,0.5) 且 lpos.x = -205（左端贴底图左边）
     const name = nodeByName(objects, 'NameLabel');
     assert.deepEqual(anchorOf(objects, name), { x: 0, y: 0.5 });
-    assert.equal(name._lpos.x, -250);
-    assert.deepEqual(sizeOf(objects, name), { width: 330, height: 30 });
+    assert.equal(name._lpos.x, -205);
+    assert.deepEqual(sizeOf(objects, name), { width: 270, height: 34 });
     assert.equal(findComp(objects, name, 'cc.Label')!._horizontalAlign, 0, '名字应左对齐');
 
-    // 状态：右对齐 —— anchor(1,0.5) 且 lpos.x = 250
+    // 状态：右对齐 —— anchor(1,0.5) 且 lpos.x = 190
     const status = nodeByName(objects, 'StatusLabel');
     assert.deepEqual(anchorOf(objects, status), { x: 1, y: 0.5 });
-    assert.equal(status._lpos.x, 250);
-    assert.deepEqual(sizeOf(objects, status), { width: 120, height: 30 });
+    assert.equal(status._lpos.x, 190);
+    assert.deepEqual(sizeOf(objects, status), { width: 110, height: 34 });
     assert.equal(findComp(objects, status, 'cc.Label')!._horizontalAlign, 2, '状态应右对齐');
 });
 
@@ -431,7 +427,7 @@ test('ServerSelectItem binds CLICK once in onLoad; pooled initialization only re
     assert.equal([...src.matchAll(/this\.node\.on\(/g)].length, 1);
     assert.match(src, /onLoad\(\)[\s\S]*?this\.node\.on\(Button\.EventType\.CLICK/);
     assert.doesNotMatch(src.slice(src.indexOf('initialize(')), /this\.node\.on\(/);
-    for (const write of ['this.nameLabel.string', 'this.statusLabel.string', 'this.background.color']) assert.ok(src.includes(write));
+    for (const write of ['this.nameLabel.string', 'this.statusLabel.string', 'this.background.spriteFrame', 'this.selectedMark.active', 'this.statusDot.color']) assert.ok(src.includes(write));
     const data = JSON.parse(readFileSync(assetPath('ui/login/ServerSelectItem.prefab'), 'utf8'));
     const button = data.find((item: any) => item.__type__ === 'cc.Button');
     assert.ok(button); assert.equal(button._transition, 0); assert.equal(button._target, null);

@@ -1,7 +1,7 @@
 import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, sp, Sprite, UITransform, UIOpacity, Vec3 } from 'cc';
 import { ZCCombatEvent, ZCProjectileState } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
-import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint } from './ZCCombatEffectPlacement';
+import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint, zcCombatEffectLiftY, zcCombatEffectOverlayChild } from './ZCCombatEffectPlacement';
 import { zcCombatEffectFlightOf, zcCombatEffectFacingDegrees, zcCombatEffectHeadingDegrees } from '../model/ZCCombatEffectFlight';
 import { zcBeamCoreWidthOf, zcBeamFrame, zcBeamSpecOf, zcBeamStretchOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
 import type { IZCBeamSpec } from './ZCBeamEffect';
@@ -49,6 +49,10 @@ export class ZCCombatEffectView extends Component {
     private nodeOpacity: UIOpacity | null = null;
     /** 已经 `setAnimation` 过的骨架段名（池化复用下必须复位，见 `initialize`）。 */
     private appliedSpineAnimation = '';
+    /** 本预制体里「按阶段开关」的叠层子节点名；`null` = 这份特效没有叠层（一次都不碰）。 */
+    private overlayChildName: string | null = null;
+    /** 叠层当前是否已点亮；`null` = 本任还没设置过（池化复用后必须重设一遍）。 */
+    private appliedOverlayFx: boolean | null = null;
     private readonly genericTint = new Color(255, 229, 148);
     /** 诊断用：本节点对应的特效资源路径（只有 `initialize` 知道）。 */
     private diagEffectPath = '';
@@ -59,6 +63,9 @@ export class ZCCombatEffectView extends Component {
         this.renderedEventId = -1;
         //  池化复用：上一任可能把骨架切到 `attack`，不复位的话下一只小鹿「一出生就在冲」。
         this.appliedSpineAnimation = '';
+        //  叠层同理：上一任可能把火船点亮着还回来，不复位的话下一只小鹿「一出生就浑身着火」。
+        this.overlayChildName = zcCombatEffectOverlayChild(effectPrefabPath);
+        this.appliedOverlayFx = null;
         this.node.setRotationFromEuler(0, 0, 0);
         //  池化复用：上一任可能是淡到全透明的「定格光束」，不在这里复位的话，
         //  下一次借出来的特效会「一出生就是半透明」。
@@ -174,6 +181,26 @@ export class ZCCombatEffectView extends Component {
         skeleton.setAnimation(0, clip, true);
     }
 
+    /**
+     * 按事件给的语义开关**叠层子节点**（2026-11-12 鹿神守护：火船只在提速段烧起来）。
+     *
+     * 只在状态**翻转**时才动节点：`active` 变化会触发子树的启用/禁用周期，每帧写一次
+     * 会让粒子 / 动画反复重启。用 `appliedOverlayFx` 记住上一次的值。
+     *
+     * 这份特效没登记叠层（`overlayChildName === null`）时一次都不碰 ——
+     * 其余所有特效的预制体 `_active` 说了算，行为逐字不变。
+     */
+    private applyOverlayFx(active: boolean | undefined): void {
+        const name = this.overlayChildName;
+        if (!name) return;
+        const wanted = active === true;
+        if (wanted === this.appliedOverlayFx) return;
+        const child = this.visualNode?.getChildByName(name);
+        if (!child) return;
+        this.appliedOverlayFx = wanted;
+        child.active = wanted;
+    }
+
     render(event: Readonly<ZCCombatEvent>, now: number, projectile?: Readonly<ZCProjectileState>, alpha = 1): void {
         const progress = Math.max(0, Math.min(1, (now - event.startedAt) / event.durationSeconds));
         const firstRender = this.renderedEventId !== event.id;
@@ -185,8 +212,9 @@ export class ZCCombatEffectView extends Component {
             this.spriteNode.setScale(Vec3.ONE);
             this.spriteNode.setRotationFromEuler(0, 0, 0);
         }
-        if (firstRender || event.type !== 'projectile' || this.allowGeneric) this.graphics.clear();
-        if (!this.visualPrefab && this.allowGeneric) {
+        const hasMissileTrail = event.type === 'projectile' && zcMissileTrailOf(event.effectPrefabPath) !== null;
+        if (firstRender || event.type !== 'projectile' || (this.allowGeneric && !hasMissileTrail)) this.graphics.clear();
+        if (!this.visualPrefab && this.allowGeneric && !hasMissileTrail) {
             this.genericTint.a = Math.round(255 * (1 - progress * GENERIC_FADE_RATIO));
             this.graphics.strokeColor = this.genericTint;
             this.graphics.lineWidth = GENERIC_LINE_WIDTH;
@@ -199,16 +227,19 @@ export class ZCCombatEffectView extends Component {
             this.graphics.stroke();
         }
         if (this.visualNode) this.visualNode.active = true;
-        //  阶段动画（2026-11-07 鹿神守护：走过去播 `move`、冲刺播 `attack`）。
+        //  阶段动画（2026-11-07 鹿神守护：走过去播 `move`、提速扑击播 `attack`）。
         //  只有模型给了名字才切；没给的一次都不碰，预制体自带的 `defaultAnimation` 照旧播。
         this.applySpineAnimation(event.spineAnimation);
+        //  叠层（2026-11-12 鹿神守护：火船只在提速段覆盖在身上）。没登记叠层的特效不做任何事。
+        this.applyOverlayFx(event.overlayFx);
 
         // ── 整体尺寸（按 prefab 路径登记的倍率，未登记 = 1）──
-        //  需求 2026-11-03「龙卷风的特效范围和预制大小整体缩小成 80%」。
+        //  需求 2026-11-03「龙卷风的特效范围和预制大小整体缩小成 80%」；
+        //  2026-11-10 追加「椰蛋战士的暴风，3 个飓风调成 70%」⇒ 表里那条已改成 0.7。
         //  area 类地面区域的视觉尺寸完全来自 prefab 的烘焙缩放，视图从不按 `event.radius`
-        //  缩放，所以「缩到 80%」只能在这里乘一个倍率；碰撞半径跟着改的是配表 `areaRadius`。
+        //  缩放，所以「缩到 N%」只能在这里乘一个倍率；碰撞半径跟着改的是配表 `areaRadius`。
         //  ⚠️ 只缩**宿主节点**：光束分支改的是子节点（`visualNode`）的 scaleX/scaleY，
-        //  两者相乘正是期望行为（宿主 0.8 × 光束自己的宽度倍率）。
+        //  两者相乘正是期望行为（宿主 0.7 × 光束自己的宽度倍率）。
         const nodeScale = zcCombatEffectNodeScaleOf(event.effectPrefabPath);
         //  入场「由小变大」（2026-11-07 椰蛋战士「暴风」：生成后由小变大到当前大小）。
         //  `growSeconds` 缺省 ⇒ 系数恒 1，所有既有特效逐字不变。
@@ -261,20 +292,25 @@ export class ZCCombatEffectView extends Component {
                 this.applyBeamStretch(frame.length, event.skillId);
                 return;
             }
-            this.node.setPosition(mapToViewX(headX), mapToViewY(headY), 0);
+            //  发射高度补偿（2026-11-11）：单位根节点是**逻辑脚点**，子弹贴在弹道逻辑坐标上
+            //  就是「从脚下擦着地面飞出去」。加在 `mapToViewY` 之后 ⇒ 视图 px、屏幕竖直、
+            //  不跟弹道旋转（与光束的 `muzzleLift` 同一口径；写进 prefab 的 `_lpos` 会被
+            //  `setRotationFromEuler` 转成侧移）。数值表见 `ZCCombatEffectPlacement.zcCombatEffectLiftY`。
+            const liftY = zcCombatEffectLiftY(event.effectPrefabPath);
+            this.node.setPosition(mapToViewX(headX), mapToViewY(headY) + liftY, 0);
             const angle = Math.atan2(mapToViewY(event.toY - event.fromY), mapToViewX(event.toX - event.fromX)) * 180 / Math.PI;
             this.node.setRotationFromEuler(0, 0, angle);
             //  追踪导弹的弧线：飞行进度在中段达到最大横向偏移（`sin(π·progress)`）。
             //  偏移方向 = 弹道方向逆时针转 90°（即垂直于弹道的一侧），
             //  弹体节点在直线位置上再横推这一截，三个下标错开的 `arcOffset` 就成了三条不同弧线。
             if (projectile && (projectile.arcOffset ?? 0) !== 0) {
-                const flown = Math.max(0, Math.min(1, (now - projectile.startedAt) / projectile.durationSeconds));
+                const flown = Math.max(0, Math.min(1, (now - projectile.startedAt) / this.aimFlightSeconds(projectile)));
                 const lateral = Math.sin(Math.PI * flown) * (projectile.arcOffset ?? 0);
                 const perpX = -Math.sin(angle * Math.PI / 180);
                 const perpY = Math.cos(angle * Math.PI / 180);
                 this.node.setPosition(
                     mapToViewX(headX) + perpX * mapToViewX(lateral),
-                    mapToViewY(headY) + perpY * mapToViewY(lateral),
+                    mapToViewY(headY) + perpY * mapToViewY(lateral) + liftY,
                     0,
                 );
             }
@@ -282,12 +318,16 @@ export class ZCCombatEffectView extends Component {
             //  画在**这一帧的最终位置 + 转角**定好之后，
             //  所以必须放在所有 `setPosition` / `setRotationFromEuler` 之后 —— 它是本地坐标系里的
             //  图形，跟宿主节点一起转、一起缩，位置写死在这里就自动跟着弧线飞。
-            this.drawMissileTrail(event.effectPrefabPath);
+            // 局部几何不随帧变化，后续只变换宿主节点；新事件与 initialize 会重画。
+            if (firstRender) this.drawMissileTrail(event.effectPrefabPath);
             return;
         }
 
-        this.node.setPosition(mapToViewX(event.toX), mapToViewY(event.toY), 0);
-        this.node.setRotationFromEuler(0, 0, 0);
+        //  竖直抬升（2026-11-11 磁电冲击「起始位置要在角色的中心点」）：加在 `mapToViewY` 之后，
+        //  就是屏幕竖直方向、不跟下面那行转角走 —— 与 `zcCombatEffectLiftY`（弹道补偿）同口径。
+        //  缺省 0 ⇒ 所有既有特效位置逐字不变。
+        this.node.setPosition(mapToViewX(event.toX), mapToViewY(event.toY) + (event.visualLiftPx ?? 0), 0);
+        this.node.setRotationFromEuler(0, 0, event.angleDegrees ?? 0);
         if (event.type === 'melee') {
             // ── 登记了飞行段的近战特效：像子弹一样从出手点飞向目标 ──
             //  需求 2026-11-02「猎头者的攻击特效需要匹配射程，特效改成像子弹一样飞向目标」。
@@ -327,7 +367,10 @@ export class ZCCombatEffectView extends Component {
         //  只有登记过朝向的特效才转身（`FACING_BY_PREFAB_PATH`），没登记的与改前逐字一致。
         //  飞行段那条分支自带偏移（`zcCombatEffectFacingDegrees`）且已经在上面 `return`，
         //  不会走到这里 —— 两处不要各写一份「转角 = 弹道 + 偏移」。
-        const heading = zcCombatEffectHeadingDegrees(
+        //  ⚠️ 事件自己带角度时（`area` 原地特效，2026-11-11 磁电冲击）以它为准：
+        //  那一类事件 `from == to`，下面这条算式本来就只会返回 `null`；但万一某张图
+        //  同时登记了 `FACING_BY_PREFAB_PATH`，模型给的角度才是对的，不能被覆盖。
+        const heading = event.angleDegrees !== undefined ? null : zcCombatEffectHeadingDegrees(
             mapToViewX(event.toX - event.fromX),
             mapToViewY(event.toY - event.fromY),
             event.effectPrefabPath,
@@ -336,20 +379,24 @@ export class ZCCombatEffectView extends Component {
     }
 
     /**
-     * 画弹道拖尾（锥形：宽端贴弹体、往外收成尖 + 向外渐隐）。
-     * 没登记拖尾的 prefab 直接返回，不动 `graphics`。
+     * 弧线用的「瞄准段飞行秒数」= `出手点 → 瞄准点` 的距离 / 速度。
      *
-     * 方向与尺寸都在 `ZCMissileTrail` 的配置里（本地 px），这里只管把梯形逐段填出来 ——
-     * 所以调宽窄/长短不用动视图（屏上 80px ⇒ 本地 100，因为宿主节点还吃 0.8 缩放）。
+     * 为什么不能直接用 `durationSeconds`：2026-11-09 起弹道寿命多了「打空续飞」的一截
+     * （`ZC_PROJECTILE_MISS_DISTANCE`，命中即消耗所以只在没打中时走）。弧线是按
+     * `sin(π · 飞行进度)` 算横向偏移的，分子换成整条寿命会被**整条拉长** ——
+     * 飞到瞄准点时进度才 0.4 出头，弹体正好顶在最大偏移处横着飘出去，看着像脱靶。
      *
-     * 两个必须知道的点：
-     *  ① **每帧都要 `clear()`**：`render` 开头只对**首帧**清一次 `graphics`
-     *    （`if (firstRender || event.type !== 'projectile' ...)`），不清的话每帧都会把
-     *    上一帧的拖尾再叠一遍，飞一会儿就糊成一团实心色块；
-     *  ② 每段用一个新的 `Color` 实例：`Graphics` 是**按路径记录填充色**的
-     *    （同 `TerritoryChestView.applyRainbow` 的多色写法），复用同一个实例并改 alpha
-     *    在不同引擎版本上可能被"最后一次颜色覆盖全部路径"坑到。
+     * 速度从 `velocityX/velocityY` 反推（与出手时用的是同一个 speed），
+     * 距离用事件自带的 `from → to`。两者都取不到时退回 `durationSeconds`，与改前一致。
      */
+    private aimFlightSeconds(projectile: Readonly<ZCProjectileState>): number {
+        const speed = Math.hypot(projectile.velocityX, projectile.velocityY);
+        if (!(speed > 0)) return projectile.durationSeconds;
+        const aim = Math.hypot(projectile.toX - projectile.fromX, projectile.toY - projectile.fromY) / speed;
+        return aim > 0 ? Math.min(aim, projectile.durationSeconds) : projectile.durationSeconds;
+    }
+
+    /** 固定局部几何每事件画一次，后续随宿主变换；重画前清屏避免池化残留。 */
     private drawMissileTrail(prefabPath: string | null | undefined): void {
         const trail = zcMissileTrailOf(prefabPath);
         if (!trail) return;

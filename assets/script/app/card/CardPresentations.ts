@@ -1,3 +1,4 @@
+import type { SpriteFrame } from 'cc';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import type {
     LineupBoardData
@@ -29,11 +30,10 @@ export interface ICardUpgradeOpenData {
     readonly level: number;
 }
 
-/** 打开技能面板时带的业务数据（只要英雄 id，其余从配表与后端缓存读）。 */
+/** 单技能面板的身份；展示与升级条件从配置和服务端缓存读取。 */
 export interface ICardSkillOpenData {
     readonly heroId: number;
-    /** 卡名（可选，只用于标题下方那行文字）。 */
-    readonly cardName?: string;
+    readonly skillId: number;
 }
 
 export type CardUpgradePhase = 'loading' | 'ready' | 'submitting' | 'offline' | 'failed';
@@ -52,11 +52,23 @@ export interface CardSkillRowPresentation {
 export interface CardSkillListPresentation {
     readonly heroId: number;
     readonly heroLevel: number;
-    /** 是否正在发技能升级请求（期间四个按钮全置灰）。 */
+    /** 是否正在发技能升级请求。 */
     readonly busy: boolean;
     /** 最近一次的请求结果；`undefined` = 还没请求过。 */
     readonly phase: 'idle' | CardSkillUpgradePhase;
     readonly rows: readonly CardSkillRowPresentation[];
+    readonly skillKind?: string;
+    readonly cooldown?: number;
+    readonly costs?: readonly ICardSkillCost[];
+    readonly canUpgrade?: boolean;
+}
+
+export interface ICardSkillCost {
+    readonly itemId: number;
+    readonly name: string;
+    readonly need: number;
+    readonly owned: number;
+    readonly frame: SpriteFrame | null;
 }
 
 /** 技能升级请求的结果（不含 `idle`）。 */

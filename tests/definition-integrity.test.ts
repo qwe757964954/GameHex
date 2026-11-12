@@ -8,6 +8,10 @@
  * 因此不需要在 tests/ 下造临时 .ts 文件（工程 tsconfig 无 include，多一个就 TS6200）。
  */
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { normalizeSource, readSource } from './helpers/source-text';
 import test from 'node:test';
 import { checkDefinitions, exportedNamesOf } from '../tools/verify/verify.mjs';
 
@@ -96,4 +100,64 @@ test('F6 不可判定的目标文件走 skipped，不产生假阳性', () => {
     });
     assert.equal(result.skipped, 1);
     assert.equal(result.issues.length, 0);
+});
+
+
+/**
+ * 换行符形态守卫（2026-11-11）：`ZCGameModel.ts` 曾因整份 LF→CRLF 让 `svn diff`
+ * 从 +12/-1 假性膨胀到 4700 行，且硬编码 '\n' 的源码文本断言用例会集体假红。
+ * 判据按「基线 CRLF=0 → 当前 CRLF>0」逐文件比对，覆盖改动集 + 固定点名集
+ * （点名集保证工作副本干净时也不会「零执行假绿」）。
+ */
+const LINE_ENDING_WATCH = [
+    'assets/script/app/zcds/model/ZCGameModel.ts',
+    'assets/script/app/zcds/model/systems/ZCProjectileSystem.ts',
+    'assets/script/app/zcds/model/systems/ZCStatusResolutionSystem.ts',
+    'docs/zcds-performance.md',
+    'tests/zcds-legacy-skill-effect.test.ts',
+    'tests/zcds-status-resolution.test.ts',
+    'tests/zcds-hotpath-allocation.test.ts',
+];
+
+test('F7 换行符形态守卫：基线 LF 的文件不得被整份转成 CRLF', () => {
+    const root = process.cwd();
+    const scope = new Set(LINE_ENDING_WATCH);
+    try {
+        const xml = execFileSync('svn', ['status', '--xml', '.'],
+            { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        for (const m of xml.matchAll(/path="([^"]+\.(?:ts|md|json|meta|txt))"/g)) {
+            scope.add(m[1].replace(/\\/g, '/'));
+        }
+    } catch { /* 非 SVN 环境或无改动：仍要实检点名集 */ }
+    const offenders: string[] = [];
+    let checked = 0;
+    for (const file of scope) {
+        const rel = file.replace(/\\/g, '/');
+        const full = join(root, rel);
+        if (!existsSync(full)) continue;
+        let base: string;
+        try {
+            base = execFileSync('svn', ['cat', rel],
+                { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+        } catch { continue; } // 未入库文件没有基线
+        const wc = readFileSync(full, 'utf8');
+        checked += 1;
+        const baseCrlf = base.split('\r\n').length - 1;
+        const wcCrlf = wc.split('\r\n').length - 1;
+        if (baseCrlf === 0 && wcCrlf > 0) offenders.push(`${rel} (基线 LF → 现 CRLF ${wcCrlf} 行)`);
+    }
+    assert.ok(checked >= LINE_ENDING_WATCH.length,
+        `点名集必须被实检，实际只查到 ${checked} 个文件`);
+    assert.deepEqual(offenders, [],
+        '基线 LF 的文件被整份转成 CRLF：转回 LF 再提交，否则 diff 噪声 + 源码文本断言假红');
+});
+
+
+test('F8 源码文本归一 helper：CRLF 输入等价，且新增断言有可用入口', () => {
+    assert.equal(normalizeSource('a\r\nb\rc\n'), 'a\nb\nc\n');
+    assert.equal(normalizeSource('a\nb\n'), 'a\nb\n', '已是 LF 时保持原样');
+    const self = readSource('tests/helpers/source-text.ts');
+    assert.ok(self.includes('export function normalizeSource'));
+    assert.ok(self.includes('export function readSource'));
+    assert.equal(self.includes('\r'), false, 'helper 自身必须是 LF，否则双保险从根上失效');
 });

@@ -1225,7 +1225,7 @@ test('D4 ⚠️ `targetId` 必须发**十进制字符串**（`LongBits.from` 把
     assert.ok(REPO_CODE.includes('const id = toIdString(targetId)'), '发之前必须过 toIdString');
     assert.ok(REPO_CODE.includes(`if (!id) return Promise.resolve('failed')`), 'id 认不出来就别发');
     // 批量删除是唯一一个数组请求体
-    assert.ok(REPO_CODE.includes('new RequestFriendsRemove({ targetId: ids as any }'), '删除好友的 targetId 是数组');
+    assert.ok(REPO_CODE.includes('new RequestFriendsRemove({ targetId: ids }'), '删除好友的 targetId 是数组');
     for (const cls of ['RequestFriendGetEnd(', 'RequestFriendSendEnd(', 'RequestFriendsBlack(']) {
         assert.ok(REPO_CODE.includes(`new ${cls}{ targetId`), `${cls} 的单发请求体必须是 { targetId }`);
     }

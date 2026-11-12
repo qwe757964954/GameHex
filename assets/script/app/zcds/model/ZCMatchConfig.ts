@@ -29,13 +29,15 @@ import {
 } from './ZCModifierRuntime';
 import {
     getAllRandomGoldPity, getPvpTileConfigs, getPvpTileTypeWeights,
-    ZCPvpTileConfig, ZCPvpTileType, ZCPvpTileTypeWeight,
+    ZCPvpRarityModifier, ZCPvpTileConfig, ZCPvpTileType, ZCPvpTileTypeWeight,
 } from './ZCPvpTileRules';
 import type { ZCSkillBinding, ZCStatusConfigRecord } from './ZCStatSchema';
 import type { ZCStatusBehavior, ZCStatusEffectDef } from './ZCStatusEffect';
 
 export interface ZCMatchMap {
     id: string;
+    name?: string;
+    version?: number;
     rows: number;
     columns: number;
     playerHomeId: number;
@@ -85,6 +87,13 @@ export interface ZCPveDefenceWave {
      * 胜负判定只认「BOSS 已出场且被清空」。缺省 `undefined` ⇒ 用「最后一波」兜底。
      */
     isBoss?: boolean;
+    /**
+     * 怪物体型（`defenceModWave.monsterSize`）：`1` 普通 / `2` BOSS 体型。
+     *
+     * 直接当**模型缩放倍率**用（见 `defenceMonsterScale`）：1 = 保持 prefab 原尺寸，
+     * 2 = 放大一倍。缺省 / ≤1 ⇒ 不缩放，等价于历史行为。
+     */
+    monsterSize?: number;
 }
 
 export interface ZCPveDefenceConfig {
@@ -125,13 +134,26 @@ export interface ZCMatchConfig {
     /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。 */
     pveDefence?: Readonly<ZCPveDefenceConfig>;
     /**
-     * `levelInfo.openGrideTime`：「关卡翻地块频率」（秒，0 = 够钱就翻）。
+     * `levelInfo.openGrideTime`：NPC **两次点地块之间的最小间隔**（秒，0 = 按全局节奏）。
      *
-     * 只约束 **NPC（本地 AI 席位）翻地块的速度**：AI 的开发间隔取
-     * `max(rules.enemyAiIntervalSeconds, openGrideTime)`，见 `ZCGameModel.advance`。
-     * 缺省 / 0 ⇒ 不额外限速（旧行为）。
+     * 只约束 **NPC（本地 AI 席位）翻地块的速度**，可快可慢：AI 的开发间隔取
+     * `max(1, openGrideTime)`（下限 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`，**不是**全局 2.8s ——
+     * 旧实现拿 `rules.enemyAiIntervalSeconds` 当下限，填 1~2.7 秒会被静默抬回去）。
+     * 计时**从第一次翻格之后**起算，见 `ZCGameModel.advance`。
+     * 缺省 / 0 ⇒ 不额外限速（旧行为）。与领地格子「探索中」时长无关。
      */
     openGrideTime?: number;
+    /**
+     * `levelInfo.gradeProModifier`：**NPC 席位**翻地块抽卡的品质权重乘数（玩家不受影响）。
+     *
+     * 谁套用由 `ZCGameModel.buildDevelopmentContext().drawRulesOf` 决定 ——
+     * `owner === Player` 一律 `null`，其余席位给 `{ rarityModifier: 这一份, goldPity: false }`
+     *（NPC 同时不吃金色保底）。原表 `pvpTile.rarityWeights` 本身不改，只是 NPC 抽的时候
+     * 乘一层再归一（见 `applyPvpRarityModifier`）：绿蓝抬升的份额从紫金分走，`empty` 空手率不变。
+     *
+     * 缺省 / 空对象 ⇒ 不调整（塔防关卡与未配该列的关卡都走这条）。
+     */
+    gradeProModifier?: ZCPvpRarityModifier;
     configHash?: string;
 }
 

@@ -1,4 +1,4 @@
-import { TF_BattleTime } from "../../module/tf_battle/battle/utils/TF_BattleTime";
+import { game, director } from 'cc';
 import { ScriptObject } from "../base/ScriptObject";
 import { Container } from "../container/Container";
 import { Utils } from "../utils/Utils";
@@ -62,7 +62,7 @@ export class World extends ScriptObject {
      * 用于清理数据等逻辑
      */
     GetCurTime(){
-        return (cc.game as any).totalTime * 1000
+        return game.totalTime
     }
 
     //#region Com
@@ -303,7 +303,7 @@ export class World extends ScriptObject {
 
         
         
-        let nowframe = (cc.game as any).frameCount
+        let nowframe = director.getTotalFrames()
 
         for(let id of cacheSet){
          //   console.log("world.applyModify.RemoveEntity"+id, TF_BattleTime.time)

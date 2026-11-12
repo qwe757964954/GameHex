@@ -200,7 +200,9 @@ export class ZCProjectileSystem {
                     context.hit(projectile, target);
                     if (target.kind === 'unit' && (projectile.remainingPierces ?? 0) > 0) {
                         this.hitIds.add(target.id);
-                        projectile.hitUnitIds = [...this.hitIds];
+                        const hitUnitIds = projectile.hitUnitIds ?? (projectile.hitUnitIds = []);
+                        hitUnitIds.length = 0;
+                        for (const id of this.hitIds) hitUnitIds.push(id);
                         projectile.remainingPierces = Math.max(0, (projectile.remainingPierces ?? 0) - 1);
                         //  穿透衰减（2026-10-30 玉林好汉「精英猎手」：每穿一人伤害 -20%）。
                         const falloff = projectile.pierceFalloff ?? 0;

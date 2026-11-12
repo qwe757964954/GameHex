@@ -122,6 +122,21 @@ export class TerritoryChapterInfoRepository {
         this.snapshot = null;
     }
 
+    /**
+     * 领奖回包里的 `idleTime` 写回快照（新的挂机起点）。
+     *
+     * 为什么需要：`CmdCityChapterIdleRewardRspMsg.idleTime` 只跟着领奖回包回来，
+     * 服务端**不保证**再推一条 `CmdCityChapterInfoBroMsg`。不写回的话
+     * 征收弹窗与主城金币车的计时会停在上一次 `ChapterInfo` 的值（领完还显示满格）。
+     *
+     * @param seconds 秒；非正数忽略（避免把 1970 年当起点）
+     */
+    applyIdleTime(seconds: number): void {
+        const idleTime = Math.floor(Number(seconds));
+        if (!Number.isFinite(idleTime) || idleTime <= 0) return;
+        this.applySnapshot({ idleTime, chapters: this.snapshot?.chapters ?? FALLBACK_CHAPTERS }, true);
+    }
+
     // ============================================================
     // 内部
     // ============================================================

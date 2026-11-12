@@ -53,7 +53,7 @@ export function buildBigMapTerritoryEdges(layout: IHexGridLayout, hexIds: readon
             else edges.set(key, { start, end });
         }
     }
-    return [...edges.entries()].sort(([first], [second]) => first.localeCompare(second)).map(([, edge]) => edge);
+    return Array.from(edges.entries()).sort(([first], [second]) => first.localeCompare(second)).map(([, edge]) => edge);
 }
 
 export function buildBigMapWorldLayout(rows: number, columns: number): IHexGridLayout {

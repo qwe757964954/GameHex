@@ -400,7 +400,7 @@ export function exportBigMapLayout(world: IBigMapWorld, options: IBigMapExportOp
     const baseCityById = new Map<number, IBigMapLayoutCity>();
     for (const city of base?.cities ?? []) baseCityById.set(city.cityId, city);
 
-    const cities = [...world.cities.values()]
+    const cities = Array.from(world.cities.values())
         .sort((a, b) => a.cityId - b.cityId)
         .map((site): IBigMapLayoutCity => {
             const carried = baseCityById.get(site.cityId);

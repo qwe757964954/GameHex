@@ -45,6 +45,11 @@ function makeEnv() {
         cc: { assetManager, resources, AssetManager: class {} },
         '../../core/asset/AssetService': { AssetType: class {} },
         '../../core/asset/BundleCatalog': BundleCatalog,
+        // 真实 loader：bundle 解析（缓存 / 热更 url+version / 并发去重）已经下沉到它内部。
+        '../../platform/cocos/AssetBundleLoader': load('assets/script/platform/cocos/AssetBundleLoader.ts', {
+            cc: { assetManager, resources, AssetManager: class {} },
+            '../hotupdate/CocosBundleRegistry': { CocosBundleRegistry: { resolve: () => undefined } },
+        }),
     };
     return { calls, deps, bundles };
 }

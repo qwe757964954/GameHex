@@ -4,6 +4,8 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryNodeUIModule from '../assets/script/app/territory/model/TerritoryNodeUI';
+import * as territoryPreviewCinemaModule from '../assets/script/app/territory/model/TerritoryPreviewCinema';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 /**
@@ -53,6 +55,12 @@ function loadTheme(): IThemeExports {
             // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
             // 抄一遍就等于两边各改一半也能一起绿。
             if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 「一个节点只在一块地上长 UI」的分组判据（2026-11-09）：给**真模块** ——
+            // 退化成空集合会让「兄弟格被隐掉」的断言假绿，抄一份分组规则又会两边各改一半。
+            if (id === '../model/TerritoryNodeUI') return territoryNodeUIModule;
+            // 「预告首领关」过场的时间轴（2026-11-09）：给**真模块**（纯函数、零 cc）。
+            // 退化成空实现会让「什么时候推镜 / 什么时候放开压住格」的断言无从断言。
+            if (id === '../model/TerritoryPreviewCinema') return territoryPreviewCinemaModule;
             // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
             if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
             if (id === '../model/TerritoryChestHint') return {

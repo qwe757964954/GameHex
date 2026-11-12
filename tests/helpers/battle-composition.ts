@@ -55,6 +55,8 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
         if (name.endsWith('/ZCBattleEvents')) return { ZC_BATTLE_EVENTS };
         if (name.endsWith('/GameRoute')) return { GameRoute: { Main: 'main' } };
         if (name.endsWith('/FW')) return dependencies['../../framework/FW'] ?? { FW: { showTip() {} } };
+        // 投降二次确认走通用提示框；这条夹具不验弹窗本身，只要求模块能求值。
+        if (name.endsWith('/CommonTips')) return { CommonTips: { open: async () => null } };
         if (/\/(ZCSettlementPage|GameRunAway|ZCGuidePanel|ZCGameRankBoard|FW|GameRoute|BattleStartService|GameNet|RewardFrames|ZCBattleEvents)$/.test(name)) return {};
         if (name.endsWith('/ProcedureManager')) return dependencies['../../framework/procedure/ProcedureManager'] ?? {};
         const key = name.replace('../../', '../');

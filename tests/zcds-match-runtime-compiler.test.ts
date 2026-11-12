@@ -18,10 +18,10 @@ function rows(name: string): Array<Record<string, unknown>> {
 test('本局预计算按 owner 隔离卡组和有效单位定义，不修改冻结配置', () => {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     ];
     loadPvpTables(Object.fromEntries(names.map((name) => [name, rows(name)])) as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     const base = captureZCMatchConfig();
     const config = captureZCMatchConfig({
         ...base,

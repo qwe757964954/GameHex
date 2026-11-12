@@ -191,7 +191,9 @@ test('★★气泡尺寸按底图走：高度不能被写死成胶囊的 45', ()
     // 定位到 applyLevelBubblePosition：它必须读节点实际高度，而不是常量 45。
     const at = stationViewSource.indexOf('private applyLevelBubblePosition(): void {');
     assert.ok(at > 0);
-    const body = stationViewSource.slice(at, at + 900);
+    // ⚠️ 按**函数体边界**切片，别用固定字符数：2026-11-11 预告气泡给这个函数加了一段
+    //    锚点注释，旧的 `at + 900` 窗口被撑短 ⇒ 明明代码还在却报「尺寸没按底图刷新」。
+    const body = stationViewSource.slice(at, stationViewSource.indexOf('\n    private ', at + 10));
     assert.ok(body.includes('bubbleHeight'),
         '气泡定位还在用固定高度 ⇒ 87 的水滴会扎进地块 / 整体飘高');
     assert.ok(!body.includes('mapMarkerBadgeY(..., MAP_MARKER_BUBBLE_HEIGHT)'),
@@ -199,7 +201,7 @@ test('★★气泡尺寸按底图走：高度不能被写死成胶囊的 45', ()
 
     // 渲染入口：尺寸也是每帧对一遍（同一格可能从编号气泡变成宝箱提示）。
     const renderAt = stationViewSource.indexOf('private renderLevelBubble(');
-    const renderBody = stationViewSource.slice(renderAt, renderAt + 2600);
+    const renderBody = stationViewSource.slice(renderAt, stationViewSource.indexOf('\n    private ', renderAt + 10));
     assert.ok(renderBody.includes('nodeTransform.setContentSize(bubbleWidth, bubbleHeight)'),
         '气泡节点尺寸必须在渲染时按当前底图刷新');
     assert.ok(renderBody.includes('const chest = iconFrame ? territoryChestBubbleLayout() : null;'),

@@ -217,68 +217,6 @@
       "tendency": "rush"
     }
   ],
-  "resourcePoints": [
-    {
-      "row": 15,
-      "column": 2,
-      "groupId": 13002
-    },
-    {
-      "row": 14,
-      "column": 9,
-      "groupId": 13001
-    },
-    {
-      "row": 5,
-      "column": 1,
-      "groupId": 13002
-    },
-    {
-      "row": 5,
-      "column": 9,
-      "groupId": 13002
-    },
-    {
-      "row": 10,
-      "column": 3,
-      "groupId": 14009
-    },
-    {
-      "row": 9,
-      "column": 8,
-      "groupId": 14008
-    },
-    {
-      "row": 7,
-      "column": 2,
-      "groupId": 14006
-    },
-    {
-      "row": 5,
-      "column": 4,
-      "groupId": 14003
-    },
-    {
-      "row": 2,
-      "column": 2,
-      "groupId": 14007
-    },
-    {
-      "row": 7,
-      "column": 7,
-      "groupId": 14007
-    },
-    {
-      "row": 13,
-      "column": 1,
-      "groupId": 14007
-    },
-    {
-      "row": 12,
-      "column": 7,
-      "groupId": 14007
-    }
-  ],
   "art": {
     "freeDecor": [
       {
@@ -918,5 +856,37 @@
         "locked": false
       }
     ]
-  }
+  },
+  "resourcePoints": [
+    {
+      "row": 16,
+      "column": 2,
+      "groupId": 13006
+    },
+    {
+      "row": 3,
+      "column": 8,
+      "groupId": 13006
+    },
+    {
+      "row": 14,
+      "column": 7,
+      "groupId": 13001
+    },
+    {
+      "row": 5,
+      "column": 4,
+      "groupId": 13001
+    },
+    {
+      "row": 19,
+      "column": 8,
+      "groupId": 13009
+    },
+    {
+      "row": 0,
+      "column": 3,
+      "groupId": 13009
+    }
+  ]
 }

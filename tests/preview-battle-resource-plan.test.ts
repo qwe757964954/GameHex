@@ -44,7 +44,7 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
         // 加载器读 `CARD_ART_TABLES` 取三张美术矩阵表名，桩必须透传真实模块，漏给时
         // `CARD_ART_TABLES` 是 undefined，报错点是 `prepare` 内部，看不出是桩的问题。
         '../../card/CardArtConfig': cardArtModule,
-        cc: { JsonAsset: class {}, Prefab: class {} },
+        cc: { JsonAsset: class {}, Prefab: class {}, Material: class { initialize(): void {} } },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../../ArtPaths': { ...ArtPaths, spriteFramePath: (root: string, name: string) => `${root}/${name}/spriteFrame`, decorFramePath: (name: string) => `image/decor/${name}/spriteFrame` },
         '../model/ZCCombatCatalog': { ZC_ATTACK_TRAITS, setCardRarityMeta: () => {}, getAllUnitDefinitions: () => definitions, findCatalogCard: (id: string) => ({ unitId: id === '91001' ? '68003' : '68005' }) },
@@ -81,6 +81,9 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
             if (path === 'maps' && mapFailure) throw new Error('map file failed');
             directories.push(path);
             if (beforeLoad) await beforeLoad(path);
+            if (path === 'units/effects') return resourcePlan.ZC_BATTLE_COMMON_PREFABS
+                .filter(path => path.startsWith('units/effects/')).map(path => ({ name: path.split('/').at(-1), path }));
+            if (path === ArtPaths.SPAWN_REGION_ART_ROOT) return ['frame_04', 'frame_02', 'frame_01', 'frame_03'].map(name => ({ name }));
             if (path.startsWith('image/effects/')) return [{ name: 'frame_02' }, { name: 'frame_01' }];
             return path === 'maps' ? [{ name: 'map', json: { art: { freeDecor: [{ art: 'wasteland/st1' }] } } }] : [];
         },
@@ -131,9 +134,9 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     paths.length = 0;
     Object.assign(base.map, { cityMode: 'select' });
     await loader.prepare(undefined, { units: [{ heroes: [], heroIds: [] }, { heroes: [], heroIds: [] }] });
-    for (const path of ['image/gameui/whh/spriteFrame', 'image/spawn-region/frame_01/spriteFrame', 'image/spawn-region/frame_02/spriteFrame']) {
-        assert.ok(paths.includes(path), `自选主城仍需加载 ${path}`);
-    }
+    assert.ok(paths.includes('image/gameui/whh/spriteFrame'));
+    assert.ok(directories.includes(ArtPaths.SPAWN_REGION_ART_ROOT), '自选主城按目录加载气泡');
+    assert.ok(!paths.some(path => path.startsWith('image/spawn-region/')), '气泡不再逐张请求');
     paths.length = 0;
     const offline = await loader.prepare();
     assert.equal(offline.unitVisualPrefabs.size, 5);
@@ -153,6 +156,7 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
         assert.ok(!directories.includes(dir), `纯表现目录 ${dir} 不得挤占首帧`);
     }
     assert.equal(progressive.hitFxPrefabs.size, 0);
+    assert.ok(!directories.includes('units/effects'), '公共特效目录不进入首帧');
     assert.ok(!paths.some(p => p.startsWith('units/effects/')), '首帧不得提前派发专属或公共特效');
     assert.ok(!paths.some(p => p.startsWith('image/decor/')), '装饰延后');
     assert.ok(progressive.unitVisualPrefabs.has('68002'), '召唤链模型仍在首帧前准备');
@@ -164,8 +168,13 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
     const task = progressive.loadDeferredArt((art: unknown) => updates.push(art));
     assert.equal(progressive.loadDeferredArt(() => {}), task, '重复启动共用同一任务');
     await task;
+    assert.equal(updates[0].hitFxPrefabs.size, 0, '后续批次不修改此前发布的快照');
+    assert.equal(updates[0].effectVisualPrefabs.size, 0);
+    assert.equal(updates[0].decorFrames.size, 0);
     assert.ok(updates.at(-1).effectVisualPrefabs.has('units/effects/probe/empowered'));
     assert.equal(updates.at(-1).hitFxPrefabs.size, 4);
+    assert.equal(directories.filter(path => path === 'units/effects').length, 1, '公共特效只发起一次目录请求');
+    assert.ok(!paths.includes(resourcePlan.ZC_BATTLE_FX_PATHS.spawn), '公共特效不再逐项请求');
     assert.ok(updates.at(-1).decorFrames.has('wasteland/st1'));
     for (const frames of [updates.at(-1).hexGroundGlowFrames, updates.at(-1).hexPulseFrames, updates.at(-1).artifactClaimBurstFrames]) {
         assert.deepEqual(Array.from(frames, (f: any) => f.name), ['frame_01', 'frame_02']);

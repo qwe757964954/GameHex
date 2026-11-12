@@ -50,6 +50,14 @@ SAMPLE = 12              # 所有投射物特效的既有节奏
 LAYER_UI_2D = 33554432   # 1 << 25
 WRAP_LOOP = 2
 
+#  Sprite 的烘焙染色（`cc.Sprite._color`）。缺省 None ⇒ 不写这个字段（= 白色，原样）。
+#  只有「同一份美术要换个色系复用」时才给，例：持续光环伤害效果叠成黄色（见 build_aura_fx.py）。
+PREFAB_COLOR = None
+
+#  只取散图里的一段帧时（循环段不是第 1 帧起），剩下的散图会留在 bundle 里被打包。
+#  置 True ⇒ 把 `FRAMES` 之外的 `*.png` / `*.png.meta` 一起搬进 tmp 缓存。
+CACHE_UNUSED_FRAMES = False
+
 
 def new_uuid():
     return str(uuid_mod.uuid4())
@@ -332,6 +340,9 @@ def build_prefab(name, sprite_uuid, width, height, anim_uuid, seed):
                                     "__expectedType__": "cc.SpriteFrame"}
             item["_sizeMode"] = 0
             item["_isTrimmedMode"] = False
+            if PREFAB_COLOR is not None:
+                r, g, b = PREFAB_COLOR
+                item["_color"] = {"__type__": "cc.Color", "r": r, "g": g, "b": b, "a": 255}
         elif kind == "cc.Animation":
             item["_clips"] = [{"__uuid__": anim_uuid, "__expectedType__": "cc.AnimationClip"}]
             item["_defaultClip"] = {"__uuid__": anim_uuid, "__expectedType__": "cc.AnimationClip"}
@@ -390,6 +401,21 @@ def main():
             if os.path.isfile(stale):
                 os.makedirs(src_cache, exist_ok=True)
                 shutil.move(stale, os.path.join(src_cache, os.path.basename(stale)))
+
+    # 1.5) 只用一段帧时，把剩下的散图也搬出 bundle（见 CACHE_UNUSED_FRAMES）
+    if CACHE_UNUSED_FRAMES:
+        wanted = set(FRAMES)
+        src_cache = os.path.join(ROOT, "tmp", "projectile_src", SET_NAME)
+        moved = 0
+        for entry in sorted(os.listdir(set_dir)):
+            base_name = entry[:-5] if entry.endswith(".meta") else entry
+            if not base_name.lower().endswith(".png") or base_name in wanted:
+                continue
+            os.makedirs(src_cache, exist_ok=True)
+            shutil.move(os.path.join(set_dir, entry), os.path.join(src_cache, entry))
+            moved += 1
+        if moved:
+            print(f"[缓存] {moved} 个未用散图 -> tmp/projectile_src/{SET_NAME}/")
 
     # 2) 图集
     pac_path = os.path.join(atlas_dir, f"{SET_NAME}.pac")

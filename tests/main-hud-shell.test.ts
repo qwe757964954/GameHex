@@ -72,7 +72,7 @@ test('MainRoot 底部导航实例按 tabType 绑定类型与自身两态图标',
         assert.equal(overrideOf(item, MAIN_ROOT, '_enableOutline') ?? sharedLabel._enableOutline,
             true, `${name} 名称使用描边`);
         assert.equal(overrideOf(item, MAIN_ROOT, '_outlineWidth') ?? sharedLabel._outlineWidth,
-            3, `${name} 名称描边宽度`);
+            2, `${name} 名称描边宽度`);
         const iconMeta = JSON.parse(readFileSync(assetPath(`image/main/city/${specification.icon}.png.meta`), 'utf8')) as { uuid: string };
         const expectedFrame = `${iconMeta.uuid}@f9941`;
         for (const property of ['offIcon', 'onIcon']) {

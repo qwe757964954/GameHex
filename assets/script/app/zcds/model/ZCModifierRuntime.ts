@@ -1,6 +1,7 @@
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { IZCBattleRates } from './ZCMatchConfig';
 import { missileLog, ZC_MISSILE_DEBUG_HERO_LEVEL } from '../ZCMissileSkillDiagnostics';
+import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 import {
     executeGeneralStarModifiers,
     indexGeneralStarRows,
@@ -540,6 +541,16 @@ function compileSkillPlanLoadout(
             + ` | 命中技能链 ${skillPlans.map(row => `${row.skillChainId}@Lv${row.skillLevel}`).join(' ') || '（空）'}`
             + ` | 含 101003 追踪导弹？${skillPlans.some(row => row.skillChainId === 101003)}`);
     }
+    //  诊断①：构筑期快照。这条一打出来就能判断「是等级没到」还是「参数没进运行时」。
+    //  `因等级未解锁` 那段只列**表里确实配了、但这一级还没到**的链 —— 空的就说明不是等级问题。
+    if (zcSkillCastWatched(unitId)) {
+        const locked = catalogs.adapters.skillPlans
+            .filter(row => row.enabled && row.unitId === unitId && row.unlockHeroLevel > planLevel)
+            .map(row => `${row.skillChainId}@${row.unlockHeroLevel}级`);
+        skillCastLog('构筑', `${unitId} heroLevel=${planLevel}`
+            + ` | 选中 ${skillPlans.map(row => `${row.skillChainId}/Lv${row.skillLevel}`).join(' ') || '（空）'}`
+            + ` | 因等级未解锁 ${locked.join(' ') || '无'}`);
+    }
     if (!skillPlans.length) return null;
     const modifierIds = skillPlans.map((row) => row.modifierId);
     // Keep the old-client attribute dictionary as well as the typed PVP patch.
@@ -727,6 +738,31 @@ export function resolveZCUnitStatPatch(
         .flatMap((loadout) => loadout.typedModifiers);
     if (!typed.length) return {};
     return applyZCTypedUnitModifiers(base, typed).statPatch;
+}
+
+/**
+ * 全队共享暴击伤害（2026-11-10）。
+ *
+ * `critDamage`（折成 `critDamagePct`）与暴击率**不是同一类属性**：
+ * 暴击率是逐单位各自累加的；暴击伤害是 **owner 级唯一值** ——
+ * 阵容里每张卡 `pvpSkillPlan` 的「全队暴击伤害增幅」（`skillChainId 109001`）都加进同一个池子，
+ * 池子汇总之后再写回该 owner 的**每一个单位**。于是任何一张卡打出暴击，
+ * 用的都是这同一个「全队暴击伤害」比例，而不是只有它自己那几行。
+ *
+ * 入参是 `compileZCMatchRuntime` 建好的 owner 卡池 patch 表（键 = unitId）。
+ * 汇总为 0 时原样返回，没配这条属性的卡组结算路径逐字不变。
+ */
+export function shareLineupCritDamage(
+    patches: ReadonlyMap<string, ZCUnitStatPatch>,
+): ReadonlyMap<string, ZCUnitStatPatch> {
+    let total = 0;
+    for (const patch of patches.values()) total += patch.critDamagePct ?? 0;
+    if (total <= 0) return patches;
+    const shared = new Map<string, ZCUnitStatPatch>();
+    for (const [unitId, patch] of patches) {
+        shared.set(unitId, patch.critDamagePct === total ? patch : { ...patch, critDamagePct: total });
+    }
+    return shared;
 }
 
 /** UI/调试使用：返回最终属性的基础值、各层修正和来源。 */

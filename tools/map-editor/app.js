@@ -57,7 +57,7 @@
     },
     {
       "title": "预设文件",
-      "html": "清空后得到全中立底图，仅保留主城盘。预设保存在 <code>tools/map-editor/presets</code>；需要同步到游戏资源时运行 <code>copy-maps.bat</code>。"
+      "html": "清空后得到全中立底图，仅保留主城盘。预设保存在 <code>tools/map-editor/presets/gamemap</code>；需要同步到游戏资源与策划 sever 时运行 <code>copy-maps.bat</code>。"
     },
     {
       "title": "行列个数",

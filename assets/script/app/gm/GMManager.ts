@@ -204,13 +204,11 @@ export class GMManager extends Component {
     // ============================================================
 
     openPanel(): void {
-        const mgr = PopupManager.inst;
-        void mgr.openAsync(GMPanel, { layer: PopupLayer.SYSTEM, userData: {} });
+        void PopupManager.inst.openAsync(GMPanel, { layer: PopupLayer.SYSTEM, userData: {} });
     }
 
     togglePanel(): void {
-        const mgr = PopupManager.inst;
-        const panel = mgr.get(GMPanel);
+        const panel = PopupManager.inst.get(GMPanel);
         if (panel) {
             panel.close();
             return;

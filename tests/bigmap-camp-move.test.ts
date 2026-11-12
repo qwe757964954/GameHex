@@ -22,7 +22,7 @@ import {
     normalizeBigMapCampMoveRequest,
 } from '../assets/script/app/bigmap/model/BigMapCampMove';
 import { BigMapCampRepository, type IBigMapCampGateway } from '../assets/script/app/bigmap/application/BigMapCampRepository';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import type { BigMapSlgRepository } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
@@ -271,7 +271,7 @@ function makePresenter(overrides: { gameRefreshes?: { count: number } } = {}) {
         projectBase: () => null,
         refreshGame: () => { counter.count += 1; return Promise.resolve(true); },
     } as unknown as BigMapSlgRepository;
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'camp-move',
         adventureChapter: () => 0, now: () => 957600, campRepository: repository, slgRepository,
     });
@@ -279,7 +279,7 @@ function makePresenter(overrides: { gameRefreshes?: { count: number } } = {}) {
 }
 
 test('★Presenter：离线（无仓库）直接拒，给明确文案', async () => {
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'camp-move-offline',
         adventureChapter: () => 0, now: () => 957600,
     });

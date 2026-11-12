@@ -1,5 +1,5 @@
 import {
-    copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync,
+    copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -41,6 +41,8 @@ function usage() {
   --client-dir <目录>       engine=tf 时指定客户端 JSON 输出目录
   --ts-dir <目录>           engine=tf 时指定 TypeScript 输出目录
   --keep-config             保留本次临时目录，便于排查
+  --no-publish              真 dry-run：只导出到临时目录并校验，绝不写
+                            assets/remoteRef、refGen 与策划 JSON
   --help                    显示帮助
 
 默认流程：eSon 原生解析 -> 技能升级投影 -> 临时目录校验 -> 发布策划 JSON
@@ -53,6 +55,7 @@ function parseArgs(argv) {
         validateOnly: false,
         syncServerRun: false,
         keepConfig: false,
+        noPublish: false,
         useDefaultOverlays: true,
         overlays: [],
         docRoot: resolve(cityRoot, 'doc', '塔防数据配置'),
@@ -75,6 +78,7 @@ function parseArgs(argv) {
         else if (arg === '--validate-only') options.validateOnly = true;
         else if (arg === '--sync-server-run') options.syncServerRun = true;
         else if (arg === '--keep-config') options.keepConfig = true;
+        else if (arg === '--no-publish') options.noPublish = true;
         else if (arg === '--no-default-overlays') options.useDefaultOverlays = false;
         else if (arg === '--engine') options.engine = take(index++, arg, false).toLowerCase();
         else if (arg === '--doc-root') options.docRoot = take(index++, arg);
@@ -177,6 +181,23 @@ function generateClientRef(jsonClientDirectory) {
     });
 }
 
+/**
+ * 导表前「会冲补丁」检查（规则 401 自动化）。
+ * 2026-11-11 实测：xlsx 未含 r1226 的 cardLevelUp 1~50 级重算时，config:export
+ * 会把 remoteRef 回退成「恒定 45 / 25 级」旧口径，修 8 条红却新增 4 条红。
+ * 判据取**本次导出临时产物**里的 pvpUnitGrowth：68001 成长行 < 50 即视为旧口径。
+ */
+function checkSourcePatchLevel(stageClientDirectory) {
+    const growth = join(stageClientDirectory, 'pvpUnitGrowth.json');
+    if (!existsSync(growth)) return { ok: false, levels: 0 };
+    const table = JSON.parse(readFileSync(growth, 'utf8'));
+    const keys = Array.isArray(table) ? Object.keys(table[0] ?? {}) : (table.k ?? []);
+    const rows = Array.isArray(table) ? table
+        : (table.v ?? []).map((row) => Object.fromEntries(keys.map((k, i) => [k, row[i]])));
+    const levels = rows.filter((row) => String(row.unitId) === '68001').length;
+    return { ok: levels >= 50, levels };
+}
+
 function exportWithEson(options, tempDirectory) {
     requirePath(options.docRoot, 'Excel 配置目录');
     requirePath(options.esonDirectory, 'eSon 目录');
@@ -203,12 +224,25 @@ function exportWithEson(options, tempDirectory) {
     const projection = projectSkillPlan(stageClientDirectory);
     if (!projection.skipped) console.log(`[技能投影] 已关联 ${projection.linked} 个 K 表技能等级修改器`);
 
+    // 补丁口径诊断必须排在临时校验之前：校验器常因 pvpSkillPlan/pvpCard 不自洽直接抛错，
+    // 那样 dry-run 就看不到「成长表会被回退」这条 equally 重要的风险。
+    const patch = checkSourcePatchLevel(stageClientDirectory);
+    const patchMsg = `[导表] 补丁口径：68001 成长行 ${patch.levels} 级（期望 1~50）`;
+    if (!patch.ok && !options.noPublish) {
+        throw new Error(`${patchMsg} —— 源表仍是旧口径，发布会冲掉 r1226 的「全量重算·去掉补偿」补丁（规则 401）。先跑 patch_growth_from_card_level_up_excel.py / .js 修 xlsx 与产物，再导表。`);
+    }
+    console.log(patch.ok ? `${patchMsg} ✅` : `${patchMsg} ⚠️ --no-publish 仅告警，正式导出会拒绝`);
+
     const stagedValidation = validateSkillPipeline(stageClientDirectory, {
         serverDirectory: stageServerDirectory,
     });
     printValidationResult(stagedValidation);
     if (!stagedValidation.ok) throw new Error('临时导表校验未通过，未发布任何 JSON');
 
+    if (options.noPublish) {
+        console.log('[导表] --no-publish：临时目录内已完成导出与校验，未发布任何 JSON / 未生成客户端引用。');
+        return;
+    }
     copyJsonTree(stageClientDirectory, resolve(options.jsonDirectory, 'client'));
     copyJsonTree(stageServerDirectory, resolve(options.jsonDirectory, 'sever'));
     generateClientRef(stageClientDirectory);
@@ -218,6 +252,7 @@ function exportWithEson(options, tempDirectory) {
 }
 
 function exportWithTf(options, tempDirectory) {
+    if (options.noPublish) throw new Error('--no-publish 仅支持 --engine eson（tf 内核无法保证不发布）');
     requirePath(options.docRoot, 'Excel 配置目录');
     requirePath(options.generator, 'TFDocGenerator');
     const configPath = join(tempDirectory, 'config.json');
@@ -267,12 +302,16 @@ function run() {
         if (options.engine === 'eson') exportWithEson(options, tempDirectory);
         else exportWithTf(options, tempDirectory);
 
-        const validation = validateSkillPipeline(options.clientDirectory, {
-            serverDirectory: options.syncServerRun ? options.serverRunDirectory : undefined,
-        });
-        printValidationResult(validation);
-        if (!validation.ok) process.exitCode = 1;
-        else console.log('[导表完成] Excel、客户端 JSON、技能升级引用与后端配置契约已闭环');
+        if (options.noPublish) {
+            console.log('[导表完成] dry-run 结束：真实 remoteRef / refGen / 策划 JSON 均未写入。');
+        } else {
+            const validation = validateSkillPipeline(options.clientDirectory, {
+                serverDirectory: options.syncServerRun ? options.serverRunDirectory : undefined,
+            });
+            printValidationResult(validation);
+            if (!validation.ok) process.exitCode = 1;
+            else console.log('[导表完成] Excel、客户端 JSON、技能升级引用与后端配置契约已闭环');
+        }
     } finally {
         if (options.keepConfig) console.log(`[导表] 临时目录保留在：${tempDirectory}`);
         else rmSync(tempDirectory, { recursive: true, force: true });

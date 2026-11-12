@@ -72,8 +72,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_348",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "stage_4",
@@ -253,8 +253,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_268",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_14",
@@ -273,8 +273,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_314",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_15",
@@ -353,8 +353,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_292",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "stage_19",
@@ -412,8 +412,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_173",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_28",
@@ -643,8 +643,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_232",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_34",
@@ -683,8 +683,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_206",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_36",
@@ -723,8 +723,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_246",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_38",
@@ -803,8 +803,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_250",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_42",
@@ -925,8 +925,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_175",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_49",
@@ -1045,8 +1045,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_139",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "stage_62",
@@ -1185,8 +1185,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_55",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_86",
@@ -1428,8 +1428,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_181",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_100",
@@ -1746,8 +1746,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_393",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_112",
@@ -2306,8 +2306,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_49",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_129",
@@ -2326,8 +2326,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_29",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_130",
@@ -2346,8 +2346,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_109",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_132",
@@ -2406,8 +2406,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_87",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_135",
@@ -2546,8 +2546,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_115",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_142",
@@ -2586,8 +2586,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_72",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_144",
@@ -2787,8 +2787,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_102",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_154",
@@ -2867,8 +2867,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_128",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "stage_150",
@@ -3017,8 +3017,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_157",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_200",
@@ -3057,8 +3057,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_77",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_202",
@@ -3117,8 +3117,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_189",
-      "buildingId": "",
-      "rewardId": 1016
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "asyncPvp_155",

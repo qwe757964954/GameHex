@@ -43,17 +43,20 @@ test('两个编辑器 import 的 formats/*.js 都被静态路由覆盖', () => {
 // （2026-09-29 变异检验逮到过一次 —— 把条件退回硬编码白名单，用例照样绿）。
 test('那条正则真的接进了路由：条件判断 + 文件名拼接都必须用到 formatModule', () => {
     const start = server.indexOf('const formatModule');
-    const route = server.slice(start, server.indexOf('const content = await readFile', start));
+    const route = server.slice(start, server.indexOf('let content;', start));
     assert.ok(route.length > 0, '取不到路由分支');
-    assert.match(route, /if \(req\.method === 'GET' && \([\s\S]*formatModule\)\) \{/);
-    assert.match(route, /: formatModule \? `formats\/\$\{formatModule\[1\]\}` : 'index\.html';/);
+    assert.match(route, /if \(req\.method === 'GET' && \([\s\S]*formatModule \|\| pageFile\)\) \{/);
+    assert.match(route, /: formatModule \? `formats\/\$\{formatModule\[1\]\}`[\s\S]*: pageFile\[1\];/);
 });
 
 test('入口三件套在白名单里，且正则不许穿出 formats/', () => {
-    // 入口三件套也必须在白名单里
+    const literal = server.match(/const pageFile = (\/[^\n]*?\/)\.exec\(url\.pathname\);/);
+    assert.ok(literal, '根页面必须使用受限文件名匹配');
+    const pagePattern = new RegExp(literal[1].slice(1, -1));
     for (const entry of ['/territory.html', '/territory-app.js', '/app.js']) {
-        assert.ok(server.includes(`url.pathname === '${entry}'`), `白名单缺入口 ${entry}`);
+        assert.ok(pagePattern.test(entry), `白名单缺入口 ${entry}`);
     }
+    for (const path of ['/../server.mjs', '/dir/page.html', '/server.mjs', '/%2e%2e/app.js']) assert.equal(pagePattern.test(path), false);
     // 正则不许放行带路径分隔符的名字（否则能穿出 formats/）
     const pattern = /^\/formats\/([a-z0-9-]+\.js)$/;
     assert.equal(pattern.test('/formats/../server.mjs'), false);

@@ -5,7 +5,7 @@ import { FW } from "../FW";
 */
 export class WxUtil {
     static __cname: string = "WxUtil";
-    static get wx() { return window["wx"] as WechatMiniprogram.Wx }
+    static get wx() { return window["wx"] }
 
     /**微信-IOS高性能模式 */
     static get isIOSHighPerformanceMode() {

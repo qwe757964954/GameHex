@@ -31,6 +31,7 @@ import {
     bigMapMainBuilding,
     bigMapMainLevel,
     bigMapMove,
+    bigMapMissingResList,
     bigMapPendingHarvest,
     bigMapProducePerHour,
     bigMapResCap,
@@ -38,6 +39,7 @@ import {
     bigMapStartUpgrade,
     bigMapTick,
     bigMapUnlockQueue,
+    type IBigMapMissingRes,
 } from '../model/BigMapBase';
 import {
     bigMapAttackCity,
@@ -68,7 +70,7 @@ import { BIGMAP_CAMP_QUERY_TEXT } from '../model/BigMapCampInfo';
 import type { IBigMapCampRoleInfo, BigMapCampRoleStatus } from '../model/BigMapCampRoleInfo';
 import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 import type { BigMapCampRepository } from './BigMapCampRepository';
-import type { BigMapSlgRepository } from './BigMapSlgRepository';
+import type { IBigMapSlgReward, BigMapSlgRepository } from './BigMapSlgRepository';
 import { projectBigMapServerBase } from '../model/BigMapServerState';
 import { ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER } from '../../battle/BattleStartModel';
 import type { IZCSlgBattleType } from '../../battle/BattleStartModel';
@@ -196,6 +198,16 @@ export interface IBigMapPlotCellView {
     /** 站位预览色：空闲 / 已占 / 正在建造。 */
     readonly slot: 'empty' | 'building' | 'constructing';
     readonly remainSeconds: number;
+    /** 建造/升级进度 `0~1`；不在施工时为 0（进度环直接读它，不用再去 `plotDetails` 里翻）。 */
+    readonly progress: number;
+}
+
+/** 升级前置的一行（界面直接渲染「木材田 Lv.1 ✓/✗」）。 */
+export interface IBigMapPlotPreBuildView {
+    readonly buildingId: number;
+    readonly name: string;
+    readonly level: number;
+    readonly done: boolean;
 }
 
 export interface IBigMapPlotDetailView {
@@ -214,6 +226,30 @@ export interface IBigMapPlotDetailView {
     readonly queueSlotIndex: number;
     readonly remainSeconds: number;
     readonly progress: number;
+    /**
+     * 产量对比 —— 「升级到底换来什么」的唯一数据来源。
+     *
+     * ⚠️ 2026-11-11 之前这组字段**根本没 expose**：`bigmapProduce` 表（`producePerHour` /
+     * `produceCap` / `resType`）早就加载进 `config.produce`，但 `plotDetail` 只吐三种成本
+     * + 建造时长，界面只能写一句「提升建筑等级与发展能力」。补上之后建筑卡与升级详情
+     * 不用再动配表，直接就能画「1.2K/h → 1.5K/h　+0.3K/h」。
+     *
+     * `level = 0`（建造中的格子）时 `produceNow` 为 0。
+     */
+    readonly produceNow: number;
+    readonly produceNext: number;
+    readonly produceCap: number;
+    /** 该建筑产出的资源类型；非产出建筑为空串。 */
+    readonly resType: BigMapResType | '';
+    /** 已存 / 上限，`0~1`；上限为 0 时固定 0。 */
+    readonly storedRatio: number;
+    /** 升级后给的属性加成（千分比，50 = +5%）；无该字段时为 0。 */
+    readonly attrBonus: number;
+    /** 「立即完成」消耗的大地图货币；0 = 该等级不支持秒完成。 */
+    readonly instantCost: number;
+    readonly preBuild: readonly IBigMapPlotPreBuildView[];
+    /** 还差哪些资源（结构化，逐项标红用）；够付时为空数组。 */
+    readonly missing: readonly IBigMapMissingRes[];
 }
 
 export interface IBigMapBuildEntryView {
@@ -350,6 +386,7 @@ export interface IBigMapQueueUnlockInfo {
 export interface IBigMapActionFeedback {
     readonly ok: boolean;
     readonly message: string;
+    readonly rewards?: readonly IBigMapSlgReward[];
 }
 
 export class BigMapModel {
@@ -380,9 +417,9 @@ export class BigMapModel {
         this.deps = deps;
         this.config = deps.config;
         this.worldInstance = createBigMapWorldInstance(deps.config, deps.seed, deps.layout);
-        this.territories = [...this.worldInstance.cities.values()].map((site) => {
+        this.territories = Array.from(this.worldInstance.cities.values()).map((site) => {
             const annotation = deps.layout?.cities.find((city) => city.cityId === site.cityId);
-            const hexIds = [...new Set([...site.hexIds, ...(annotation?.rangeHex ?? [])])]
+            const hexIds = Array.from(new Set([...site.hexIds, ...(annotation?.rangeHex ?? [])]))
                 .filter((hexId) => this.worldInstance.tileById.has(hexId));
             return { id: site.cityId, hexIds };
         });
@@ -450,6 +487,19 @@ export class BigMapModel {
     }
 
     /** 某个建造区格子上「正在建造」的建筑名（空串 = 该格没有在建工程）。 */
+    /**
+     * 在建格对应的建筑 id（建造中的格**不在** `base.buildings` 里，只存在于队列）。
+     *
+     * `projectBigMapServerBase` 只把 `state !== 1` 的建筑放进基地，在建的那座在 `queues` ——
+     * 于是「建造中显示什么图」只能从这里反查。查不到返回 0，调用方退回脚手架图。
+     */
+    buildingIdOfQueueAt(hexId: number): number {
+        const slot = this.data.base.queues.find((item) => (
+            item.state === BigMapQueueState.Building && item.instanceId === 0 && item.anchorHexId === hexId
+        ));
+        return slot?.buildingId ?? 0;
+    }
+
     buildingNameOfQueueAt(hexId: number): string {
         const slot = this.data.base.queues.find((item) => (
             item.state === BigMapQueueState.Building && item.instanceId === 0 && item.anchorHexId === hexId
@@ -741,10 +791,57 @@ export class BigMapModel {
                     stored: Math.floor(instance?.stored ?? 0),
                     slot: queue && !instance ? 'constructing' : instance ? 'building' : 'empty',
                     remainSeconds: queue ? Math.max(0, Math.ceil(queue.finishAt - this.deps.now())) : 0,
+                    // 进度环直接读格子（不读 `plotDetails`）：详情是"选中才有"，
+                    // 而进度环要在一屏所有在建格子上同时画。
+                    progress: queue
+                        ? Math.max(0, Math.min(1, 1 - Math.max(0, queue.finishAt - this.deps.now())
+                            / Math.max(1, queue.finishAt - queue.startAt)))
+                        : 0,
                 });
             }
         }
         return views;
+    }
+
+    /**
+     * 摆放候选：现在有哪些空格能放下 `buildingId`（`0` = 不在摆放态，返回空）。
+     *
+     * 原先摆建筑只有一个 Toast + 所有空格画同一道细边 —— 玩家不知道"到底能放哪"，
+     * 只能一格一格试错。这里把 `bigMapCanPlace` 逐个空格跑一遍，界面据此上绿 / 红。
+     *
+     * ⚠️ **只是预判**：联机时真伪由服务端裁决（`isServerBase`），
+     * 所以界面文案不能说"一定可以"，点击之后仍要处理失败回包。
+     */
+    placeableHexIds(buildingId: number): readonly number[] {
+        if (buildingId === 0) return [];
+        const unlock = this.unlockContext;
+        const checkResources = !this.isServerBase;
+        const ids: number[] = [];
+        for (const plot of this.plotCells()) {
+            if (plot.slot !== 'empty') continue;
+            if (bigMapCanPlace(this.config, this.data.base, unlock, buildingId, plot.hexId, checkResources).ok) {
+                ids.push(plot.hexId);
+            }
+        }
+        return ids;
+    }
+
+    /**
+     * 移建态逐格试错：把 `bigMapCanMove` 对每个空格跑一遍，界面据此上绿 / 红。
+     *
+     * 与 {@link placeableHexIds} 不同，这里入参是 instanceId（移动的是已存在的建筑实例）。
+     * 原格被 `bigMapCanMove` 判 false，不会出现在结果里；只看空格，不重复资源校验。
+     */
+    moveableHexIds(instanceId: number): readonly number[] {
+        if (instanceId === 0) return [];
+        const ids: number[] = [];
+        for (const plot of this.plotCells()) {
+            if (plot.slot !== 'empty') continue;
+            if (bigMapCanMove(this.config, this.data.base, instanceId, plot.hexId).ok) {
+                ids.push(plot.hexId);
+            }
+        }
+        return ids;
     }
 
     plotDetail(hexId: number): IBigMapPlotDetailView | null {
@@ -761,13 +858,37 @@ export class BigMapModel {
             ? bigMapCanUpgrade(this.config, this.data.base, this.unlockContext, instance.instanceId, !this.isServerBase)
             : { ok: false, reason: '建造中' };
         const remainSeconds = queue ? Math.max(0, Math.ceil(queue.finishAt - now)) : 0;
+        // 产量：`level = 0`（建造中的格子）取不到本级，`produceNow` 落在 0 上，
+        // 界面据此显示「建成后 1.2K/h」而不是拿下一级冒充当前。
+        const produceNow = this.config.produce.get(buildingId)?.get(level);
+        const produceNext = this.config.produce.get(buildingId)?.get(targetLevel);
+        const produceCap = produceNow?.produceCap ?? produceNext?.produceCap ?? 0;
+        const stored = Math.floor(instance?.stored ?? 0);
+        const preBuild = (cost?.preBuild ?? []).map((pre) => {
+            const built = this.data.base.buildings.find((item) => item.buildingId === pre.id);
+            return {
+                buildingId: pre.id,
+                name: this.config.buildings.get(pre.id)?.name ?? '前置建筑',
+                level: pre.level,
+                done: (built?.level ?? 0) >= pre.level,
+            };
+        });
         return {
             name: this.config.buildings.get(buildingId)?.name ?? '', buildingId,
-            instanceId: instance?.instanceId ?? 0, level, targetLevel, stored: Math.floor(instance?.stored ?? 0),
+            instanceId: instance?.instanceId ?? 0, level, targetLevel, stored,
             costGrain: cost?.costGrain ?? 0, costWood: cost?.costWood ?? 0, costIron: cost?.costIron ?? 0,
             buildTime: cost?.buildTime ?? 0, canUpgrade: !queue && preview.ok,
             reason: queue ? '建造中' : preview.reason, queueSlotIndex: queue?.slotIndex ?? -1,
             remainSeconds, progress: queue ? Math.max(0, Math.min(1, 1 - remainSeconds / Math.max(1, queue.finishAt - queue.startAt))) : 0,
+            produceNow: produceNow?.producePerHour ?? 0,
+            produceNext: produceNext?.producePerHour ?? 0,
+            produceCap,
+            resType: produceNow?.resType ?? produceNext?.resType ?? '',
+            storedRatio: produceCap > 0 ? Math.min(1, stored / produceCap) : 0,
+            attrBonus: cost?.attrBonus ?? 0,
+            instantCost: cost?.instantCost ?? 0,
+            preBuild,
+            missing: cost ? bigMapMissingResList(this.config, this.data.base, cost) : [],
         };
     }
 
@@ -785,7 +906,7 @@ export class BigMapModel {
     buildMenu(): readonly IBigMapBuildEntryView[] {
         const context = this.unlockContext;
         const groups = new Map<number, IBigMapBuildingConfig[]>();
-        for (const building of [...this.config.buildings.values()].sort((a, b) => a.sort - b.sort || a.id - b.id)) {
+        for (const building of Array.from(this.config.buildings.values()).sort((a, b) => a.sort - b.sort || a.id - b.id)) {
             const members = groups.get(building.kind) ?? [];
             members.push(building);
             groups.set(building.kind, members);
@@ -925,7 +1046,12 @@ export class BigMapModel {
         const repository = this.deps.slgRepository;
         if (!repository) return this.startBuild(hexId, buildingId);
         const check = bigMapCanPlace(this.config, this.base, this.unlockContext, buildingId, hexId, false);
-        if (!check.ok) return { ok: false, message: check.reason };
+        if (!check.ok) {
+            // 预检拦在这里的话，`CmdSlgBuildReqMsg` 一样不会发 —— 而且界面上只闪一句 reason。
+            // 留下日志才能区分「规则不让建」和「服务端没同步上来」。
+            console.warn(`[BigMap] 建造预检未通过（${buildingId}@${hexId}）：${check.reason}`);
+            return { ok: false, message: check.reason };
+        }
         return repository.build(buildingId, hexId);
     }
 
@@ -1005,16 +1131,27 @@ export class BigMapModel {
         if (this.isDisposed || !this.deps.campRepository) return;
         const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
         const repository = this.deps.campRepository;
+        // 口径（2026-11-11 山猫）：*「据点名单要跟据点信息一样，滑动的时候请求，然后把玩家摆放在
+        // 对应的 `pos`」* —— 地图上每个角色都落在自己那一格，没有名单就没有标记，所以阵容/状态
+        // 两条协议在**同一次视野刷新**里一起发。
+        //
+        // 流量由 `refreshRolesFor` 的两把闸门压住，不需要在这里再拆包：
+        // ① 每城走 `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口，窗口内不重发；
+        // ② 在途复用详情路径的 `roles:<id>` 锁，「拖到某城 + 同时点开它」只有一条请求。
+        // 长拖一次因此收敛成「新进视野的城各一条 RoleInfos」，与 Simple 的整批凑一起。
         await Promise.all([
             ...ids.filter((id) => this.deps.rankProvider && !this.rankBoards.has(id))
                 .map((id) => this.refreshCityRank(id)),
             repository.refreshSimple(ids, true).then((loaded) => {
                 if (!this.isDisposed && loaded) this.emit();
             }),
-            ...ids.filter((id) => repository.rolesOf(id) === null).map(async (id) => {
-                const loaded = await repository.refreshRoles(id);
-                if (this.isDisposed) return;
-                this.campRoleStatuses.set(id, loaded ? 'ready' : 'failed');
+            repository.refreshRolesFor(ids).then((loaded) => {
+                if (this.isDisposed || !loaded) return;
+                // 预取到名单就把状态推到 ready：否则「滑动进来过的城」打开驻守面板，
+                // 空名单会一直显示「加载中」（没人 ≠ 没查过）。
+                for (const id of ids) {
+                    if (repository.rolesOf(id) !== null) this.campRoleStatuses.set(id, 'ready');
+                }
                 this.emit();
             }),
         ]);
@@ -1239,7 +1376,7 @@ export class BigMapModel {
     }
 
     allCityViews(): readonly IBigMapCityView[] {
-        return [...this.config.cities.values()]
+        return Array.from(this.config.cities.values())
             .map((city) => this.cityView(city.cityId))
             .filter((view): view is IBigMapCityView => view !== null);
     }

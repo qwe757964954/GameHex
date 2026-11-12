@@ -31,6 +31,13 @@ export interface IHudPlayerRowData {
      * 只改颜色，不改名字色：名字仍按席位色，「这是谁」不会因为出局而丢失。
      */
     readonly dead: boolean;
+    /**
+     * 是否展示「基础信息」三件套：头像（`HeadFrame`）、名字（`NameText`）、兵力（`Info/UnitIcon`+`UnitText`）。
+     *
+     * 缺省 `true`。守城（塔防）局传 `false`：那一局没有 PVP 席位概念，只要波次与首领信息，
+     * 玩家行只留壳（buff 位保留）。传 `false` 时兵力那组一律不显示，`unitText` 不再生效。
+     */
+    readonly basicInfoVisible?: boolean;
 }
 
 @ccclass('ZCGameHudPlayerRow')
@@ -106,6 +113,11 @@ export class ZCGameHudPlayerRow extends Component {
         this.discRect.setContentSize(discSize, discSize);
         this.headRect.setContentSize(headSize, headSize);
 
+        // 基础信息三件套（头像 / 名字 / 兵力）整体收放：塔防局传 `false`，这一行只剩壳。
+        const showBasic = data.basicInfoVisible !== false;
+        this.headFrame.node.active = showBasic;
+        this.nameText.node.active = showBasic;
+
         // 头像：没帧就保留上一张（清空会变成空框）。
         if (data.head) this.headIcon.spriteFrame = data.head;
 
@@ -125,7 +137,7 @@ export class ZCGameHudPlayerRow extends Component {
         this.nameText.color = new Color(tint.r, tint.g, tint.b, tint.a);
 
         // 兵力整组同显同隐：用 active 一次收掉图标+文字两个组件，避免"图标灭文字还在"。
-        const hasUnits = data.unitText !== null && data.unitText !== '';
+        const hasUnits = showBasic && data.unitText !== null && data.unitText !== '';
         this.unitIcon.node.active = hasUnits;
         this.unitText.node.active = hasUnits;
         if (hasUnits) this.unitText.string = data.unitText;

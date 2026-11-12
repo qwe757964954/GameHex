@@ -14,6 +14,7 @@ import type { IZCBattlePopup, IZCBattleSettlementServices } from '../../zcds/app
 import { ZCSettlementPage } from '../../zcds/ui/ZCSettlementPage';
 import { GameRunAway } from '../../zcds/ui/GameRunAway';
 import { ZCGuidePanel } from '../../zcds/ui/ZCGuidePanel';
+import { CommonTips } from '../../common/CommonTips';
 import { ZCGameRankBoard } from '../../zcds/view/ZCGameRankBoard';
 import { PopupCloseReason, PopupLayer } from '../../../framework/ui/PopupDef';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
@@ -103,8 +104,52 @@ const BATTLE_POPUPS: IZCBattleRuntimeServices['popups'] & IZCBattleSettlementSer
         return wrapPopup(ZCSettlementPage.open({ layer: PopupLayer.SYSTEM, closeOnBlank: false, userData: options }));
     },
     openGuide(content) { return wrapPopup(ZCGuidePanel.open({ userData: { content } })); },
-    openDamage(summary) { return wrapPopup(GameRunAway.open({ userData: summary })); },
-    openRank(seats, profiles) { return wrapPopup(ZCGameRankBoard.open({ userData: { seats, profiles } })); },
+    async openDamage(players) {
+        const popup = await GameRunAway.open({ closeOnBlank: true, userData: { players } });
+        return popup ? {
+            get isOpen() { return popup.isPopupOpen; },
+            refresh: players => popup.refresh(players),
+            close: () => { if (popup.isPopupOpen) popup.close(PopupCloseReason.Force); },
+        } : null;
+    },
+    openRank(seats, profiles) {
+        // 结算要先等玩家把排行榜关掉再弹奖励页 ⇒ 这里把「关闭」也交出去（`onClose` 覆盖
+        // 点空白 / 按钮 / 强制关闭三种来源）。打开失败时必须照样兑现，否则结算永远停在等待。
+        let resolveClosed: () => void = () => {};
+        const whenClosed = new Promise<void>(resolve => { resolveClosed = resolve; });
+        return ZCGameRankBoard.open({
+            userData: { seats, profiles }, closeOnBlank: true, onClose: () => resolveClosed(),
+        }).then(popup => {
+            if (!popup) { resolveClosed(); return null; }
+            return {
+                whenClosed,
+                close: () => { if (popup.isPopupOpen) popup.close(PopupCloseReason.Force); },
+            };
+        }, error => { resolveClosed(); throw error; });
+    },
+    /**
+     * 询问式确认框（通用 `ui/common/CommonTips`）。
+     *
+     * 「确定」走 `onSure`（在关窗之前触发），其余一切关闭来源（取消 / 点空白 / 强制关）都走 `onClose`。
+     * 两条路都兑现 `answered`，所以调用方**不会**出现「点了确定却永远等不到回答」。
+     *
+     * 一次确认：不透传 `CommonTips.confirmAgainText`（2026-11-11 口径，见 `RETREAT_CONFIRM`）。
+     */
+    confirm(options) {
+        let resolveAnswer: (answer: boolean) => void = () => {};
+        const answered = new Promise<boolean>(resolve => { resolveAnswer = resolve; });
+        return CommonTips.open({
+            userData: {
+                content: options.content, title: options.title,
+                sureText: options.sureText, cancelText: options.cancelText,
+                onSure: () => resolveAnswer(true),
+            },
+            onClose: () => resolveAnswer(false),
+        }).then(popup => {
+            if (!popup) { resolveAnswer(false); return null; }
+            return { answered, close: () => { if (popup.isPopupOpen) popup.close(PopupCloseReason.Force); } };
+        }, error => { resolveAnswer(false); throw error; });
+    },
 };
 async function wrapPopup(pending: Promise<{ close(reason: PopupCloseReason): void } | null>): Promise<IZCBattlePopup | null> {
     const popup = await pending;

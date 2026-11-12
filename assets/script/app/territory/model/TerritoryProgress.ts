@@ -122,18 +122,31 @@ export class TerritoryProgress {
      * ⚠️ 服务端的 `unlockCells` **不是**本地的 `disabled`（那是"玩家手动关掉的站点"），
      * 两者千万别混：一个管"能不能点"，一个管"玩家要不要它"。
      *
-     * ## 为什么是「合并」而不是「覆盖」
+     * ## `passCells` 只增；`unlockCells` 是**完整集合**
      *
-     * 本地可能有**服务端还不知道**的东西：探索进行中（`explorations`）、玩家手动禁用。
-     * 直接覆盖 ⇒ 玩家点开的探索凭空消失、禁用状态被服务端冲掉。
-     * 所以只做**单调增加**：服务端有的补进来，服务端没有的本地保留。
+     * 协议里两个都是 bitSet（`repeated uint64`），**一次性给全量**。所以：
+     *  - `passCells` 单调增加（本地可能在等服务端确认，覆盖会丢待确认态）；
+     *  - `unlockCells` 在 `replaceUnlocks` 时**按快照重建**（见下）。
      *
-     * ⚠️ 起点永远占领（构造里已保证），不在 `passCells` 里也要算已占领 ——
-     * 否则第一格会显示成可探索。
+     * ## 🔴 为什么 `unlockCells` 必须能重建（2026-11-09 实机）
+     *
+     * 原来这条也是单调 `add`，而 `unlockable` 在构造时还会灌入**本地存档**的
+     * `unlockedCells` ⇒ 两份数据只并集、从不清 ⇒ 本地一旦领先服务端就永久领先。
+     * 症状：点一个「服务端认为前置未解锁」的关卡格，客户端判前置全满足 ⇒ **不上锁**、
+     * 直接发 `CmdCityChapterUnlockCellReqMsg`，服务端回 `CmdTips「前置地块未解锁」`。
+     * 玩家看到的是一句莫名其妙的红字，而不是地图上那把锁。
+     *
+     * @param options.replaceUnlocks 传 `true` 表示这是一次**完整快照**（`CmdCityChapterCellInfoRspMsg`）：
+     *   `unlockable` 先用快照重建，本地存档里多出来的格跟着消失。
+     *   ⚠️ `CmdCityChapterPassCellBroMsg`（只讲通关、`unlockCells` 传空）**绝不能**传它，
+     *   否则整章格子会被清成未解锁、玩家一个都点不动。
      *
      * @returns 新增占领的格子（升序）。调用方据此决定要不要提示 / 刷新。
      */
-    applyServerState(state: { readonly unlockCells: readonly number[]; readonly passCells: readonly number[] }): number[] {
+    applyServerState(
+        state: { readonly unlockCells: readonly number[]; readonly passCells: readonly number[] },
+        options?: { readonly replaceUnlocks?: boolean },
+    ): number[] {
         const total = this.map.rows * this.map.columns;
         const validCell = (cell: unknown): cell is number =>
             typeof cell === 'number' && Number.isInteger(cell) && cell >= 0 && cell < total;
@@ -150,6 +163,14 @@ export class TerritoryProgress {
             this.owned.add(cell);
             added.push(cell);
         }
+        // 完整快照 ⇒ 重建解锁集：本地存档 / 旧回包里多出来的格子必须跟着消失，
+        // 否则前置判定会放行一个服务端认为未解锁的格（见方法头注）。
+        // 完整快照 ⇒ 重建解锁集：本地存档 / 旧回包里多出来的格子必须跟着消失，
+        // 否则前置判定会放行一个服务端认为未解锁的格（见方法头注）。
+        // ⚠️ **空数组不清空**：`unlockCells` 为空只可能是「服务端还没算好 / 桩数据 / 旧包」，
+        //    真清空会让整章格子一个都点不动（连起点格都没解锁）。宁可留着本地多出的格
+        //    （最多被服务端打回一次「前置地块未解锁」），也不能一次空包把图清死。
+        if (options?.replaceUnlocks && (state.unlockCells?.length ?? 0) > 0) this.unlockable.clear();
         for (const cell of state.unlockCells ?? []) {
             if (!validCell(cell)) continue;
             this.unlockable.add(cell);
@@ -514,6 +535,49 @@ export class TerritoryProgress {
         const site = this.siteForCell(cellId);
         const required = site?.unlock?.requiredCells ?? this.map.defaults.requiredCells ?? [];
         return Array.from(new Set(required)).filter((cell) => !this.isPrerequisiteComplete(cell));
+    }
+
+    /**
+     * 这一格的前置里，**已经解锁、但还没点开领取**的固定资源（宝箱）格。
+     *
+     * ## 为什么要单独列出来（2026-11-09 用户）
+     *
+     * > 「前置地块未解锁，展示的也是锁 icon，不是银币 + 显示红色的 UI」
+     *
+     * 前置宝箱走在 {@link isPrerequisiteComplete} 的**固定资源特例**里（`unlockable` 即算完成），
+     * 所以它既不进 {@link prerequisiteBlockers}、也不挡住点击 —— 解服务器口径就是这样
+     * （`unlockCells` 里记 completed）。但**玩家眼里那只宝箱还闭着**，后继格只把银币数字
+     * 染红（旧口径：山猫 2026-10-21）读起来像「钱不够」，和「先把宝箱点了」完全不是一回事。
+     *
+     * ⇒ 显示侧把这一种也归进「前置没完成」，画锁（见 `lockBlockedCells`），
+     *   红字只留给**真的缺钱**。⚠️ 只影响画法：点击拦截仍走 {@link checkUnlock}，
+     *   这一种**照常能解锁**（服务端允许），锁只是提示。
+     */
+    unclaimedFixedPrerequisites(cellId: number): number[] {
+        const site = this.siteForCell(cellId);
+        const required = site?.unlock?.requiredCells ?? this.map.defaults.requiredCells ?? [];
+        const out: number[] = [];
+        for (const cell of new Set(required)) {
+            if (this.owned.has(cell)) continue;
+            if (!this.unlockable.has(cell)) continue;
+            if (this.siteForCell(cell)?.type !== TERRITORY_SITE_TYPE.fixedResource) continue;
+            out.push(cell);
+        }
+        return out;
+    }
+
+    /**
+     * 这一格是不是「被前置卡住」—— **显示侧的唯一口径**（`siteOpenableCells` 排除、`lockBlockedCells` 纳入）。
+     *
+     * 两个来源取并集：
+     *  ① {@link prerequisiteBlockers}：前置关卡没打通 / 前置格根本还没开；
+     *  ② {@link unclaimedFixedPrerequisites}：前置宝箱解锁了却没点开（服务端已算完成）。
+     *
+     * 🔴 与 {@link checkUnlock} 的**拦截**口径不是同一条：②只影响画法，不拦点击。
+     */
+    isPrerequisitePending(cellId: number): boolean {
+        return this.prerequisiteBlockers(cellId).length > 0
+            || this.unclaimedFixedPrerequisites(cellId).length > 0;
     }
 
     /**

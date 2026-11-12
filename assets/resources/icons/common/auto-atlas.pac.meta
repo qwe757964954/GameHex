@@ -8,7 +8,7 @@
   ],
   "subMetas": {},
   "userData": {
-    "maxWidth": 0,
+    "maxWidth": 1024,
     "maxHeight": 1024,
     "padding": 2,
     "allowRotation": true,
@@ -23,7 +23,10 @@
     "removeTextureInBundle": true,
     "removeImageInBundle": true,
     "removeSpriteAtlasInBundle": true,
-    "compressSettings": {},
+    "compressSettings": {
+      "useCompressTexture": true,
+      "presetId": "aabpi/bUVNypEx52HEp8vu"
+    },
     "textureSetting": {
       "wrapModeS": "repeat",
       "wrapModeT": "repeat",

@@ -71,7 +71,7 @@ import {
     LEAGUE_HALL_WX_PREFIX,
     LEAGUE_TIP_NOT_OPEN,
 } from '../assets/script/app/league/LeagueTexts';
-import { assetPath } from './helpers/asset-paths';
+import { BUNDLE_ROOTS, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径（LeagueTexts 大厅段）
@@ -540,7 +540,7 @@ test('C11 ⚠️ prefab 里 31 个 spriteFrame 引用全部能解析到「sprite
     // prefab 里的 `"<顶层uuid>@f9941"` 就是**悬空引用**。它**不报错、`sprite.spriteFrame` 也不是 null**，
     // 只有画面上是品红块 ⇒ 必须在静态阶段核「引用能否解析」，这是唯一能提前逮住它的检查。
     const metas = new Map<string, { file: string; type: string; hasFrame: boolean }>();
-    indexImageMetas('assets/resources', metas);
+    for (const root of BUNDLE_ROOTS) indexImageMetas(root, metas);
 
     const raw = readFileSync(HALL_PREFAB, 'utf8');
     const refs = [...new Set([...raw.matchAll(/"([0-9a-f-]{36}@f9941)"/g)].map((m) => m[1]))];

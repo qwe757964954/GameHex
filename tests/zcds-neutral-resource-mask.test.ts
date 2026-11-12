@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import * as ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -100,7 +102,23 @@ test('遮蔽开关的唯一来源：`cityMode === select`（自选主城局）',
     const hits = world.match(/hideNeutralResourceLabel:\s*frame\.mapConfig\.cityMode === 'select'/g) ?? [];
     assert.equal(hits.length, 1, `自选判据只许一处（现有 ${hits.length} 处）—— 两处会漂移`);
     // 文字兜底也必须一起吃这个开关：自选局不许写出「宝箱 / 金矿」这类中文。
-    const hex = stripComments(read('assets/script/app/zcds/view/ZCHexView.ts'));
-    assert.ok(/resourceVisual && !hideNeutralResourceLabel && !resourceFrame/.test(hex),
-        '文字兜底那条仍要保留 `!hideNeutralResourceLabel`（遮蔽时不许写资源名）');
+    const path = 'assets/script/app/zcds/view/ZCHexView.ts';
+    const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+    const conditions: ts.Expression[] = [];
+    function visit(node: ts.Node): void {
+        if (ts.isIfStatement(node) && node.thenStatement.getText(source).includes('text = NEUTRAL_RESOURCE_LABELS')) {
+            conditions.push(node.expression);
+        }
+        ts.forEachChild(node, visit);
+    }
+    visit(source);
+    assert.equal(conditions.length, 1, '必须定位到唯一的资源名称兜底分支');
+    const context = { resourceVisual: 'gold', hideNeutralResourceLabel: false, state: { neutralFeature: null },
+        resourceFrame: null, resourceUnits: false, useArtifactSpine: false };
+    const visible = (changes: object): boolean => !!runInNewContext(conditions[0].getText(source), { ...context, ...changes });
+    assert.equal(visible({}), true, '无遮蔽且没有图/骨骼时应显示资源名称');
+    assert.equal(visible({ hideNeutralResourceLabel: true }), false, '遮蔽时不许写资源名');
+    for (const changes of [{ state: { neutralFeature: {} } }, { resourceFrame: {} }, { resourceUnits: true }, { useArtifactSpine: true }]) {
+        assert.equal(visible(changes), false, '已有资源表现时不叠名称兜底');
+    }
 });

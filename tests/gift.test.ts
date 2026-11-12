@@ -102,14 +102,10 @@ const ITEMS = parseGiftItemRows(readTable(ITEM_TABLE));
 // A. GiftTable 判定口径
 // ============================================================
 
-test('A1 商店类型 = 5（`CmdShopType.gift`），大页签按 open.json 只有两项', () => {
-    assert.equal(GIFT_SHOP_TYPE, 5);
-    assert.deepEqual(
-        GIFT_MAIN_TABS.map((tab) => tab.resId),
-        [409, 412],
-        'open.json 里 preResId=103 的开启行：409 超值礼包 / 412 灵玉直冲；411 晶石兑换是关的',
-    );
-    assert.deepEqual(GIFT_MAIN_TABS.map((tab) => tab.key), ['special', 'lingYu']);
+test("A1 礼包商店类型为5，底栏提供礼包、累充和每日充值", () => {
+    assert.equal(GIFT_SHOP_TYPE,5);
+    assert.deepEqual(GIFT_MAIN_TABS.map(tab=>tab.resId),[409,0,0]);
+    assert.deepEqual(GIFT_MAIN_TABS.map(tab=>tab.key),['special','total','daily']);
 });
 
 test('A2 ⚠️ 子页签恒 3 个，`type=4`（终身礼包）**有数据也不出页签**', () => {
@@ -459,6 +455,13 @@ const SCRIPT_FILES: Readonly<Record<string, string>> = {
     GiftLingYuCard: 'assets/script/app/gift/GiftLingYuCard.ts',
     GiftSubTab: 'assets/script/app/gift/GiftSubTab.ts',
     GiftTabButton: 'assets/script/app/gift/GiftTabButton.ts',
+    RechargeProgressBar: 'assets/script/app/gift/RechargeProgressBar.ts',
+    RechargeDailyRow: 'assets/script/app/gift/RechargeDailyRow.ts',
+    RechargeDailyStage: 'assets/script/app/gift/RechargeDailyStage.ts',
+    RechargeDailyView: 'assets/script/app/gift/RechargeDailyView.ts',
+    RechargeTotalRow: 'assets/script/app/gift/RechargeTotalRow.ts',
+    RechargeChest: 'assets/script/app/gift/RechargeChest.ts',
+    RechargeTotalView: 'assets/script/app/gift/RechargeTotalView.ts',
     VScrollView: 'assets/script/vscrollview/VScrollView.ts',
 };
 
@@ -500,11 +503,11 @@ test('C3 ⚠️ 每个脚本组件的 __type__ 都能从对应 .ts.meta 的 uuid
         counts.set(type, (counts.get(type) ?? 0) + 1);
     }
     assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftSubTab!)), 3, '子页签 3 个');
-    assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftRewardSlot!)), 4, '每行 4 个奖励格');
+    assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftRewardSlot!)), 16, '礼包模板4格，充值页面12格');
     assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftLingYuCard!)), 6, '灵玉档位卡 6 张');
-    assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftTabButton!)), 2, '底部大页签 2 个');
+    assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftTabButton!)), 3, '底部大页签 3 个');
     assert.equal(counts.get(scriptCid(SCRIPT_FILES.GiftShopRow!)), 1, '商品行模板 1 个（虚拟列表复用）');
-    assert.equal(counts.get(scriptCid(SCRIPT_FILES.VScrollView!)), 1, '虚拟列表 1 个');
+    assert.equal(counts.get(scriptCid(SCRIPT_FILES.VScrollView!)), 3, '礼包、累充、每日充值各1个虚拟列表');
 });
 
 // ---- 几何：反解回画布像素，对 FGUI XML 原值 ----
@@ -601,8 +604,8 @@ const EXPECT_LEFT_TOP: readonly (readonly [string, string, number, number, numbe
     ['Card1/DoubleTag', 'n15 (190,3) 40×256（卡内）', 213, 343, 40, 256],
     ['Card1/BuyBtn', 'btn_buy (37,229) 157×48（卡内）', 60, 569, 157, 48],
     ['Gift/BottomBar', 'n25 diban_BG (0,1160) 720×120', 0, 1160, 720, 120],
-    ['Gift/BackBtn', '按钮_返回 (0,1149) 123×123', 0, 1149, 123, 123],
-    ['Gift/TabBar', '组 n31 (360,1161) 360×111', 360, 1161, 360, 111],
+    ['Gift/BottomBar/BackBtn', '按钮_返回 (0,1149) 123×123', 0, 1149, 123, 123],
+    ['Gift/BottomBar/TabBar', '组 n31 (360,1161) 360×111', 360, 1161, 360, 111],
 ];
 
 /** `[路径后缀, FGUI 元素, 中心x, 中心y, 宽, 高]` —— FGUI 写了 `pivot + anchor="true"` 的。 */
@@ -645,7 +648,7 @@ test('C6 ⚠️ 根节点子序：PageRoot 必须排在 BottomBar / TabBar **之
     const order = GEOM.filter((node) => node.depth === 1).map((node) => node.name);
     assert.deepEqual(
         order,
-        ['PageRoot', 'BottomBar', 'BackBtn', 'TabBar', 'Hint'],
+        ['PageRoot', 'BottomBar', 'Hint'],
         '页面容器排在底部条之后 ⇒ 列表会被底部条盖住、底部页签也收不到点击',
     );
 });
@@ -675,16 +678,13 @@ test('C8 ⚠️ 卡片铺法（行优先）与 GiftLingYuView.cards 的取法必
     assert.equal(new Set(cards.map((node) => node.px)).size, 3, '三列');
 });
 
-test('C9 子页签 / 大页签落位（子页签等距 174，大页签占三等分槽位前两格）', () => {
-    const subTabs = GEOM.filter((node) => /\/SubTab\d+$/.test(node.path)).map((node) => node.left);
-    assert.deepEqual(subTabs, [126, 300, 474], '159 宽 + 15 间距 = 174 步长，左边缘 126');
-
-    const tabs = GEOM.filter((node) => /\/Tab\d+$/.test(node.path)).map((node) => node.left);
-    assert.deepEqual(
-        tabs,
-        [360, 480],
-        'FGUI 原稿三个页签落在 360/480/600 且组带 relation right-right；只开 2 个时左贴占前两格',
-    );
+test("C9 子页签等距174，底栏三个充值页签占满三等分槽位", () => {
+    const subTabs=GEOM.filter(node=>/\/SubTab\d+$/.test(node.path)).map(node=>node.left);
+    assert.deepEqual(subTabs,[126,300,474]);
+    const tabs=GEOM.filter(node=>/\/TabBar\/Tab\d+$/.test(node.path));
+    assert.deepEqual(tabs.map(node=>node.px),[420,540,660]);
+    assert.ok(tabs.every(node=>node.w===106 && node.h===143));
+    assert.equal(geom('Gift/BottomBar/BackBtn').left,0);
 });
 
 // ============================================================

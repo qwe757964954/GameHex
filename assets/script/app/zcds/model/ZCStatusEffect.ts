@@ -73,6 +73,17 @@ export interface ZCStatusStatMods {
      * 在 `lifestealRatioOf` 里与 unit 域的值**相加**。缺省 0 ⇒ 整段不执行。
      */
     lifestealRate?: number;
+    /**
+     * 禁止普攻（软控，2026-11-11 磁电菇「麻痹」软控状态 `numb`）。**1 = 禁，0/缺省 = 不禁**，越大越禁。
+     *
+     * 与 `control`（硬控：`stun` / `freeze` / `paralysis` / `blind`）的区别：
+     * 硬控走 `ZCUnitSystem` 最前置闸门、**冻结一切行动**（连移动都停）；
+     * 这一个只在 `startAttack` / 起冲处把「这一拳」挡下来，**移动与技能照常**，
+     * 移速降低另由同一条状态的 `moveSpeedPct` 表达。
+     * 为什么不用 `attackIntervalPct` 顶：那个是乘在间隔上（`1 - pct/100` 有 0.01 下限），
+     * 拉到 100 反而变成攻速暴涨，表达不出「一拳都打不出」。
+     */
+    attackDisabled?: number;
 }
 
 /** 硬控类别：受控单位不能移动/攻击/施放，差异主要在视觉表现（详见 ZCUnitSystem 受控闸门）。 */
@@ -268,6 +279,8 @@ export interface ZCPeriodicEvent {
     sourceOwner?: ZCOwner;
 }
 
+const EMPTY_STATUS_INSTANCES: readonly ZCStatusInstance[] = Object.freeze([]);
+
 /**
  * 状态系统：按 unitId 维护单位实例集合，提供 注册 / 施加 / 移除 / 过期结算 / 修正聚合。
  *
@@ -378,42 +391,43 @@ export class ZCStatusSystem {
         for (const unitId of unitIds) {
             const current = this.instances.get(unitId);
             if (!current) continue;
-            let changed = false;
-            const alive: ZCStatusInstance[] = [];
-            for (const inst of current) {
-                if (inst.stackRemainingSeconds?.length) {
-                    inst.stackRemainingSeconds = inst.stackRemainingSeconds
-                        .map((seconds) => seconds - dt)
-                        .filter((seconds) => seconds > 0);
-                    inst.stacks = inst.stackRemainingSeconds.length;
-                    if (inst.stacks > 0) {
-                        inst.remainingSeconds = Math.max(...inst.stackRemainingSeconds);
-                        alive.push(inst);
-                    } else changed = true;
-                    continue;
+            // 双指针原地压缩：不建收集数组、不建链式中间数组与闭包，也不把剩余层数摊成临时参数列表。
+            // 快照由 cloneStatusInstance 深拷贝数组，复用同一个数组引用不会串到历史快照。
+            let write = 0;
+            for (let read = 0; read < current.length; read++) {
+                const inst = current[read];
+                const timers = inst.stackRemainingSeconds;
+                if (timers && timers.length) {
+                    let timerWrite = 0;
+                    let maxRemaining = 0;
+                    for (let index = 0; index < timers.length; index++) {
+                        const remaining = timers[index] - dt;
+                        if (remaining <= 0) continue;
+                        timers[timerWrite++] = remaining;
+                        if (remaining > maxRemaining) maxRemaining = remaining;
+                    }
+                    timers.length = timerWrite;
+                    inst.stacks = timerWrite;
+                    if (timerWrite === 0) continue;
+                    inst.remainingSeconds = maxRemaining;
+                } else if (inst.remainingSeconds != null) {
+                    inst.remainingSeconds -= dt;
+                    if (inst.remainingSeconds <= 0) continue;
                 }
-                if (inst.remainingSeconds == null) {
-                    alive.push(inst);
-                    continue;
-                }
-                inst.remainingSeconds -= dt;
-                if (inst.remainingSeconds > 0) alive.push(inst);
-                else changed = true;
+                current[write++] = inst;
             }
-            if (changed) {
-                if (alive.length) this.instances.set(unitId, alive);
-                else this.instances.delete(unitId);
-            }
+            current.length = write;
+            if (write === 0) this.instances.delete(unitId);
         }
     }
 
     /**
      * 推进周期效果：返回自上次调用以来到点（now）的全部 periodic 结算事件，并把每个实例的
      * lastFiredAt 推进到最后一个触发点（确定性，可随快照回放）。调用方应在过期 tick 之前调用，
-     * 使本帧到期的状态仍结算最后一次（与旧 update 先伤害后移除一致）。
+     * 使本帧到期的状态仍结算最后一次（与旧 update 先伤害后移除一致）。传入输出缓冲时会先清空。
      */
-    collectPeriodicEvents(now: number): ZCPeriodicEvent[] {
-        const events: ZCPeriodicEvent[] = [];
+    collectPeriodicEvents(now: number, events: ZCPeriodicEvent[] = []): ZCPeriodicEvent[] {
+        events.length = 0;
         for (const [unitId, instances] of this.instances) {
             for (const inst of instances) {
                 const def = this.defs.get(inst.defId);
@@ -459,7 +473,7 @@ export class ZCStatusSystem {
     }
 
     instancesOf(unitId: string): readonly ZCStatusInstance[] {
-        return this.instances.get(unitId) ?? [];
+        return this.instances.get(unitId) ?? EMPTY_STATUS_INSTANCES;
     }
 
     cloneUnitStatuses(sourceId: string, targetId: string): void {
@@ -512,6 +526,16 @@ export class ZCStatusSystem {
         return best ? { kind: best.kind, defId: best.defId } : null;
     }
 
+    /**
+     * 聚合单位当前的**软控**：`statMods.attackDisabled > 0` ⇒ 禁普攻（移动/技能不受影响）。
+     *
+     * 与 `controlOf` 分开而不是并进硬控：并进去会让单位机在 `updateUnit` 开头整段 return，
+     * 连移动都停 —— 那是「麻痹」硬控，不是 2026-11-11 磁电菇要的「只禁攻击 + 移速 −50%」。
+     */
+    attackBlockedOf(unitId: string): boolean {
+        return (this.statModsOf(unitId).attackDisabled ?? 0) > 0;
+    }
+
     /** 聚合单位全部行为钩子（含层数缩放，kind='none' 跳过）。 */
     behaviorsOf(unitId: string): readonly (ZCStatusBehavior & { defId: string; stacks: number })[] {
         const result: (ZCStatusBehavior & { defId: string; stacks: number })[] = [];
@@ -528,8 +552,11 @@ export class ZCStatusSystem {
         return (this.instances.get(unitId)?.length ?? 0) > 0;
     }
 
-    unitIdsWithStatuses(): readonly string[] {
-        return Array.from(this.instances.keys());
+    /** 返回独立 ID 快照；提供 out 时清空并复用该缓冲，避免结算层每步分配。 */
+    unitIdsWithStatuses(out: string[] = []): readonly string[] {
+        out.length = 0;
+        for (const unitId of this.instances.keys()) out.push(unitId);
+        return out;
     }
 
     exportSnapshot(): ZCStatusSystemSnapshot {

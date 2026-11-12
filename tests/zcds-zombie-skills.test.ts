@@ -36,7 +36,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
 ];
@@ -51,7 +51,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 
 function prepare() {
     loadPvpTables(Object.fromEntries(TABLE_NAMES.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 

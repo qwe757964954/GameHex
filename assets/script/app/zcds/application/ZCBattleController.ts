@@ -3,7 +3,7 @@ import { ControllerBase, type IControllerContext, type IControllerResources } fr
 import type { ProcedurePreloadContext } from '../../../framework/procedure/ProcedureBase';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
-import type { ZCGamePreparedResources } from './ZCGameLoader';
+import type { IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
 import { ZC_BATTLE_EVENTS, type IZCBattleResult, type IZCBattleRuntimeDestroyed } from './ZCBattleEvents';
@@ -27,9 +27,9 @@ export interface IZCBattleRuntime {
     destroy(): void;
 }
 export interface IZCBattleControllerOptions {
-    readonly prepareDirect: (scope: ResourceScope, params: ZCGameEntryParams | undefined, resources: IControllerResources) => Promise<ZCGamePreparedResources>;
+    readonly prepareDirect: (scope: ResourceScope, params: ZCGameEntryParams | undefined, resources: IControllerResources) => Promise<IZCGamePreparedResources>;
     readonly resolvePveResult: (pve: ZCGameEntryParams['pve'], victory: boolean) => void;
-    readonly buildEntry: (prepared: ZCGamePreparedResources, params?: ZCGameEntryParams) => IZCGameEntry;
+    readonly buildEntry: (prepared: IZCGamePreparedResources, params?: ZCGameEntryParams) => IZCGameEntry;
 }
 export interface IZCBattleSessionInput {
     readonly owner: ResourceScope;
@@ -50,10 +50,10 @@ export interface IZCBattleRuntimeOptions<T extends IZCBattleRuntime> {
 export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBase {
     private phase: ZCBattlePhase = ZCBattlePhase.Idle;
     private runtime: T | null = null;
-    private prepared: ZCGamePreparedResources | null = null;
+    private prepared: IZCGamePreparedResources | null = null;
     private params: ZCGameEntryParams | undefined;
     private resultRecorded = false;
-    readonly ready: Promise<ZCGamePreparedResources>;
+    readonly ready: Promise<IZCGamePreparedResources>;
     private detachOwner: (() => void) | null = null;
     private adopted = false;
     private runtimeController: IZCBattleRuntimeController | null = null;
@@ -119,7 +119,7 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         return true;
     }
 
-    private async prepareResources(battle?: Promise<ZCBattleStart | null>): Promise<ZCGamePreparedResources> {
+    private async prepareResources(battle?: Promise<ZCBattleStart | null>): Promise<IZCGamePreparedResources> {
         try {
             if (battle) {
                 const result = await battle;

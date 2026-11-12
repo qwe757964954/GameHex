@@ -26,6 +26,9 @@
 
 /** 本工程界面层向外派发的全部意图。 */
 export enum ZCGameUiEvent {
+    /** GM：增加本局我方金币，payload 为数量；同步返回 DebugAddGoldResult（message）。 */
+    DebugAddGold = 'zcgame-debug-add-gold',
+    DebugAddGoldResult = 'zcgame-debug-add-gold-result',
     /** GM：设置本局我方后续翻格的指定卡；同步返回 DebugDrawCardResult。 */
     DebugDrawCard = 'zcgame-debug-draw-card',
     DebugDrawCardResult = 'zcgame-debug-draw-card-result',

@@ -642,7 +642,7 @@ for _json, _title, _fields, _data in BASE_SAVE_TABLES:
 # 用户 2026-10-20 那张「城池等级-数量-势力范围」表带来的新字段（原来散在布局里）。
 #
 # 城池 id 从 2001 起、按「等级从高到低」分配，与 `tools/map-editor/gen_bigmap_draft.ts`
-# 生成的 `presets/bigmap/dadi_tuchugao.json` **逐座对齐**（改一边就要改另一边）。
+# 生成的 `presets/bigmap/bigMap.json` **逐座对齐**（改一边就要改另一边）。
 #
 # 🔴 文件名叫「大地图XX」而不是「城池配置 / 城池等级」：文档派生的 `cityConfig.json` /
 # `cityLevelConfig.json` 已经占了「D-城池配置」「D-城池等级」两个名字（那是策划设计表，

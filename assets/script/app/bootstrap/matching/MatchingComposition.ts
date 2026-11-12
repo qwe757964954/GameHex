@@ -122,7 +122,7 @@ export class MatchingComposition extends ControllerBase {
                         if (!battle)
                             throw new Error('服务端未确认开战');
                         return battle;
-                    }), params: { pve: params?.pve, selfRoleId: identity?.roleId } }),
+                    }), params: { pve: params?.pve, selfRoleId: identity?.roleId, battleType: params?.battleType } }),
                 fetchPvp: caller => fetchPvpInfo(caller),
                 removeCaller: caller => GameNet.instance.removeCaller(caller)
             },

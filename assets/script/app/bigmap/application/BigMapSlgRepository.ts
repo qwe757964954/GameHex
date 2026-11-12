@@ -27,6 +27,13 @@ export interface IBigMapSlgResult {
 
 const SLG_TEXT = {
     failed: '服务器未确认操作，请刷新后重试', loading: '正在同步基地信息', busy: '操作处理中，请稍候',
+    /**
+     * 首帧同步**确实失败过**（不是还在路上）时的文案。
+     *
+     * 只用 `loading` 的话，玩家看到的是「正在同步基地信息」，等十秒也没变化，
+     * 既不知道是不是卡死、也不知道该不该重试 —— 2026-11-11 用户反馈的正是这个。
+     */
+    syncFailed: '基地信息同步失败，请检查网络后重试',
     disposed: '页面已关闭', invalid: '操作参数无效', built: '已提交建造', upgraded: '已提交升级',
     cancelled: '已取消建造或升级', moved: '建筑已移动', collected: '已领取产出', unlocked: '建造队列已解锁',
 } as const;
@@ -48,6 +55,14 @@ export class BigMapSlgRepository {
     private isBuildDirty = false;
     private actionRecoverAt: number | null = null;
     private nextPollAt = 0;
+    /** 首帧同步是否**确实失败过**（区别于「还在路上」），决定 `write` 该说哪句话。 */
+    private hasSyncFailed = false;
+    /** 回包被丢弃的诊断只打一次，避免 500ms 轮询刷屏。 */
+    private snapshotReported = false;
+    /** 首次拿到可用快照时打一条摘要（之后不再打）。 */
+    private firstSnapshotLogged = false;
+    /** `实例 id → 已同步过的 finishAt`：倒计时到点只拉一次，避免对着同一完成时间反复请求。 */
+    private readonly syncedFinishAt = new Map<number, number>();
 
     constructor(private readonly gateway: IBigMapSlgGateway, private readonly config: IBigMapConfig,
         private readonly now: () => number, private readonly timeoutMs = 5000) {}
@@ -91,7 +106,10 @@ export class BigMapSlgRepository {
         const [game, builds, action] = await Promise.all([
             this.refreshGame(), this.refreshBuildInfo(), this.refreshAction(),
         ]);
-        return !this.isDisposed && game && builds && action;
+        const ok = !this.isDisposed && game && builds && action;
+        // 记住「确实失败过」：`write` 据此把「正在同步」换成「同步失败，请检查网络后重试」。
+        this.hasSyncFailed = !ok;
+        return ok;
     }
 
     /**
@@ -127,17 +145,71 @@ export class BigMapSlgRepository {
         return this.buildTask;
     }
 
+    /**
+     * 快照合法但投影不成「可展示基地」—— 多半是**表对不上**，不是网络问题。
+     *
+     * `apply` 里两道关：合并校验（`normalizeBigMapBuildInfo`）与投影（`projectBigMapServerBase`），
+     * 任何一座建筑的 buildingId / level / position 对不上本端配置，整份快照都进不来。
+     */
+    private reportProjectRejected(info: IBigMapServerBuildInfo): void {
+        if (this.snapshotReported) return;
+        this.snapshotReported = true;
+        const maxQueue = this.config.queue.maxBuildQueue;
+        const cellCount = this.config.queue.plotRows * this.config.queue.plotCols;
+        const problems: string[] = [];
+        if (info.unlockQueue > maxQueue) problems.push(`unlockQueue=${info.unlockQueue} > 上限 ${maxQueue}`);
+        for (const build of info.builds) {
+            const known = this.config.buildings.has(build.buildingId);
+            const levels = this.config.levels.get(build.buildingId);
+            const levelOk = levels?.has(Math.max(1, build.level)) ?? false;
+            problems.push(`#${build.instanceId} buildingId=${build.buildingId}${known ? '' : '(不在 baseBuilding 表)'}`
+                + ` position=${build.position}${build.position >= cellCount ? `(≥格数 ${cellCount})` : ''}`
+                + ` level=${build.level}${levelOk ? '' : '(等级表缺该级)'}`);
+        }
+        console.warn(`[BigMap] 基地快照投影失败：${problems.join('；') || '(无建筑)'}`
+            + ` —— 本端格数 ${cellCount}（plotRows×plotCols）、队列上限 ${maxQueue}`);
+    }
+
     private async loadBuildInfo(): Promise<boolean> {
         let applied = false;
         do {
             this.refreshAgain = false;
             const revision = this.revision;
-            const response = bigMapServerRecord(await this.request('CmdSlgBuildInfoReqMsg', {}));
+            const raw = await this.request('CmdSlgBuildInfoReqMsg', {});
             if (this.isDisposed) return false;
+            const response = bigMapServerRecord(raw);
             const info = normalizeBigMapBuildInfo(response?.info);
-            if (info && revision === this.revision && !this.isWriting) applied = this.apply(info);
+            if (!info) this.reportSnapshotRejected(response);
+            if (info && revision === this.revision && !this.isWriting) {
+                applied = this.apply(info);
+                if (!applied) this.reportProjectRejected(info);
+            }
         } while (this.refreshAgain && !this.isDisposed);
         return applied;
+    }
+
+    /**
+     * 快照被丢弃时，把「为什么」打到控制台。
+     *
+     * 不写这条的话，`ready === false` 的表现是**完全静默**的：界面一句
+     * 「正在同步基地信息」，建造请求一帧都不发，抓包看不到 `CmdSlgBuildReqMsg`，
+     * 没法判断是「没回包」还是「回包不合规」（2026-11-11 用户反馈）。
+     */
+    private reportSnapshotRejected(response: Record<string, unknown> | null): void {
+        if (this.snapshotReported) return;
+        this.snapshotReported = true;
+        if (!response) {
+            console.warn('[BigMap] CmdSlgBuildInfoReqMsg 没有回包（超时 / 未连接 / 服务端无此协议），'
+                + '基地信息无法就绪 ⇒ 建造不会发出');
+            return;
+        }
+        const info = bigMapServerRecord(response.info);
+        const builds = Array.isArray(info?.builds) ? info.builds.length : `非数组(${typeof info?.builds})`;
+        const queues = Array.isArray(info?.queues) ? info.queues.length : `非数组(${typeof info?.queues})`;
+        console.warn(`[BigMap] CmdSlgBuildInfoReqMsg 回包被丢弃：unlockQueue=${String(info?.unlockQueue)} `
+            + `builds=${builds} queues=${queues}。`
+            + '整包拒绝的常见原因：unlockQueue 非法 / builds·queues 不是数组 / '
+            + '某条 build 的 buildingId 不在本端配置、position 越界或重复 / state≠0 却不在 queues 里');
     }
 
     refreshAction(): Promise<boolean> {
@@ -160,11 +232,16 @@ export class BigMapSlgRepository {
     }
 
     /**
-     * 由 `BigMapController` 每 500ms 调一次（内部 5 秒节流）。
+     * 由 `BigMapController` 每 500ms 调一次（内部 5 秒节流），**只负责行动力轮询**。
      *
      * 行动力是**轮询**的（2026-10-30 山猫口径）：`SlgGameActionInfo.nextRevertTime` 是
      * 「距下次恢复的剩余**秒数**」，客户端折算成 `actionRecoverAt`；到点就再发一次
      * `CmdSlgActionUpdateReqMsg`，回包重新设定下一次 —— 如此循环，直到服务端说「没有恢复计划」。
+     *
+     * 🔴 `CmdSlgBuildInfoReqMsg` 的触发点只有四个：首次 `initialize()`、`CmdSlgBuildInfoBroMsg`
+     * 失效通知、写操作回包应用失败后的重拉，以及**某个队列 `finishTime` 到点**（2026-11-11 服务端口径）。
+     * 前三个是「状态变了要拉」，第四个是「该问一句建完没有」—— 但**拉回来才改状态**：
+     * 客户端从不自己把 `state` 翻成已完成，也不本地结算产出。
      *
      * 三个取舍：
      * 1. `nextRevertTime = 0` ⇒ `actionRecoverAt = 0` ⇒ **停止轮询**。0 的含义是「当前没有待恢复」
@@ -177,12 +254,40 @@ export class BigMapSlgRepository {
     tick(): void {
         if (this.isDisposed || this.now() < this.nextPollAt) return;
         this.nextPollAt = this.now() + 5;
-        if (!this.info || this.isBuildDirty || this.info.builds.some((build) => build.state !== 0 && build.finishAt <= this.now())) void this.refreshBuildInfo();
         if (this.actionRecoverAt === null || (this.actionRecoverAt > 0 && this.now() >= this.actionRecoverAt)) void this.refreshAction();
+        this.syncFinishedQueue();
+    }
+
+    /**
+     * 建造 / 升级 `finishTime` 到点 ⇒ 主动拉一次 `CmdSlgBuildInfoReqMsg`。
+     *
+     * 服务端口径（2026-11-11）：「finishTime 倒计时结束要向服务器拉取一次，同步最新」。
+     * 客户端**只拉不判**：不把 `state` 自己翻成已完成、不本地结算产出 ——
+     * 建筑到底建完没、产出算到哪一秒，都只认这次回包。倒计时归零只是「该问一次了」的信号。
+     *
+     * 每个 `(实例, finishAt)` 只拉一次，记在 `syncedFinishAt` 里：同一座建筑再升级会拿到
+     * 新的 `finishAt`，自然再拉一次；否则 500ms 的 tick 会对着同一个完成时间反复打服务器。
+     */
+    private syncFinishedQueue(): void {
+        if (!this.info) return;
+        const now = this.now();
+        for (const queue of this.info.queues) {
+            const build = this.info.builds.find((entry) => entry.instanceId === queue.instanceId);
+            if (!build || build.finishAt <= 0 || now < build.finishAt) continue;
+            if (this.syncedFinishAt.get(build.instanceId) === build.finishAt) continue;
+            this.syncedFinishAt.set(build.instanceId, build.finishAt);
+            // `refreshBuildInfo` 自带 in-flight 合并：一轮只打一次，多了也只算一次。
+            void this.refreshBuildInfo(true);
+            return;
+        }
     }
 
     build(buildingId: number, position: number, instant = false): Promise<IBigMapSlgResult> {
         if (!this.config.buildings.has(buildingId) || !this.validPosition(position)) return this.invalid();
+        // 进入写链路就留痕：`ready=false` 时下面会直接返回、请求不会发出去，
+        // 抓包看到"没有 CmdSlgBuildReqMsg"时，这一行能立刻区分「压根没进来」和「进来了但被门禁挡」。
+        console.log(`[BigMap] 提交建造 ${buildingId}@${position}，ready=${this.ready}`
+            + `（info=${this.info ? '有' : '无'} dirty=${this.isBuildDirty}）`);
         return this.write('CmdSlgBuildReqMsg', { buildingId, position, instant: instant ? 1 : 0 }, (rsp) => {
             const build = normalizeBigMapBuild(rsp.build);
             return build && build.buildingId === buildingId && build.position === position && this.applyBuildResponse(build, rsp.queue);
@@ -286,7 +391,13 @@ export class BigMapSlgRepository {
     private async write(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody,
         apply: (rsp: Record<string, unknown>) => unknown, message: string): Promise<IBigMapSlgResult> {
         if (this.isDisposed) return { ok: false, message: SLG_TEXT.disposed };
-        if (!this.ready) return { ok: false, message: SLG_TEXT.loading };
+        if (!this.ready) {
+            // 还没拿到权威快照：可能是首帧 `initialize()` 没回，也可能是上次写失败置了 `isBuildDirty`。
+            // 只回一句「正在同步基地信息」就完事，玩家看到的是「点了没反应、服务器也没收到」——
+            // 所以这里主动补拉一次（`refreshBuildInfo` 自己有 in-flight 合并，不会打爆服务器）。
+            void this.refreshBuildInfo(true);
+            return { ok: false, message: this.hasSyncFailed ? SLG_TEXT.syncFailed : SLG_TEXT.loading };
+        }
         if (this.isWriting) return { ok: false, message: SLG_TEXT.busy };
         this.isWriting = true;
         this.revision += 1;
@@ -339,6 +450,15 @@ export class BigMapSlgRepository {
         this.info = validated;
         this.base = base;
         this.isBuildDirty = false;
+        // 拿到一次权威快照就算同步成功过；补拉成功即恢复，不必等下次开页。
+        this.hasSyncFailed = false;
+        // 首次就绪打一条摘要：`unlockQueue=0`（没解锁队列）和 `builds=0`（服务端没下发建筑）
+        // 都能让建造失败，但表现完全不同，必须一眼能分。
+        if (!this.firstSnapshotLogged) {
+            this.firstSnapshotLogged = true;
+            console.log(`[BigMap] 基地快照已就绪：unlockQueue=${validated.unlockQueue}`
+                + ` builds=${validated.builds.length} queues=${validated.queues.length}`);
+        }
         this.emit();
         return true;
     }

@@ -14,30 +14,55 @@ export interface IZCStatusResolutionContext extends Pick<IZCModelServices, 'stat
 
 /** Advances status effects against one match snapshot. Cross-system damage and presentation stay in the caller. */
 export class ZCStatusResolutionSystem {
-    static tick(state: ZCSnapshot, dt: number, context: IZCStatusResolutionContext): void {
+    private readonly alive = new Map<string, ZCUnitState>();
+    private readonly aliveIds: string[] = [];
+    private readonly previousMaxHp = new Map<number, number>();
+    private readonly tractionSources: ZCUnitState[] = [];
+    private readonly statusIds: string[] = [];
+    private readonly periodicEvents: ZCPeriodicEvent[] = [];
+
+    tick(state: ZCSnapshot, dt: number, context: IZCStatusResolutionContext): void {
         const statusSystem = context.statusSystem;
-        const alive = new Map(state.units
-            .filter((unit) => unit.battleState !== 'dead')
-            .map((unit) => [String(unit.id), unit]));
-        for (const unitId of statusSystem.unitIdsWithStatuses()) {
-            if (!alive.has(unitId)) statusSystem.removeAll(unitId);
+        // 每局独占 scratch；结算完成或抛错都释放单位引用，不进入快照。
+        const { alive, aliveIds, previousMaxHp, tractionSources } = this;
+        try {
+            const statusIds = statusSystem.unitIdsWithStatuses(this.statusIds);
+            if (statusIds.length === 0) {
+                state.statusEffects = statusSystem.exportSnapshot();
+                return;
+            }
+            for (const unit of state.units) {
+                if (unit.battleState === 'dead') continue;
+                const unitId = String(unit.id);
+                alive.set(unitId, unit);
+                aliveIds.push(unitId);
+            }
+            for (const unitId of statusIds) {
+                if (!alive.has(unitId)) statusSystem.removeAll(unitId);
+            }
+            for (const [unitId, unit] of alive) {
+                if (statusSystem.hasAny(unitId)) previousMaxHp.set(unit.id, context.effectiveDefinition(unit).maxHp);
+            }
+            ZCStatusResolutionSystem.tickLegacyTraction(dt, alive, tractionSources, context);
+            // An effect due on its expiry frame settles before the status loses its final duration.
+            for (const event of statusSystem.collectPeriodicEvents(state.elapsedSeconds, this.periodicEvents)) {
+                ZCStatusResolutionSystem.resolvePeriodicEvent(event, context);
+            }
+            statusSystem.tick(aliveIds, dt);
+            for (const unit of alive.values()) {
+                const before = previousMaxHp.get(unit.id);
+                if (before == null) continue;
+                ZCStatusResolutionSystem.rescaleUnitMaxHp(unit, before, context.effectiveDefinition(unit).maxHp);
+            }
+            state.statusEffects = statusSystem.exportSnapshot();
+        } finally {
+            alive.clear();
+            aliveIds.length = 0;
+            previousMaxHp.clear();
+            tractionSources.length = 0;
+            this.statusIds.length = 0;
+            this.periodicEvents.length = 0;
         }
-        const previousMaxHp = new Map<number, number>();
-        for (const [unitId, unit] of alive) {
-            if (statusSystem.hasAny(unitId)) previousMaxHp.set(unit.id, context.effectiveDefinition(unit).maxHp);
-        }
-        this.tickLegacyTraction(dt, alive, context);
-        // An effect due on its expiry frame settles before the status loses its final duration.
-        for (const event of statusSystem.collectPeriodicEvents(state.elapsedSeconds)) {
-            this.resolvePeriodicEvent(event, context);
-        }
-        statusSystem.tick(Array.from(alive.keys()), dt);
-        for (const unit of alive.values()) {
-            const before = previousMaxHp.get(unit.id);
-            if (before == null) continue;
-            this.rescaleUnitMaxHp(unit, before, context.effectiveDefinition(unit).maxHp);
-        }
-        state.statusEffects = statusSystem.exportSnapshot();
     }
 
     private static resolvePeriodicEvent(event: ZCPeriodicEvent, context: IZCStatusResolutionContext): void {
@@ -85,13 +110,14 @@ export class ZCStatusResolutionSystem {
     }
 
     private static tickLegacyTraction(dt: number, alive: ReadonlyMap<string, ZCUnitState>,
-        context: IZCStatusResolutionContext): void {
-        const sources = Array.from(alive.values()).sort((left, right) => left.id - right.id);
+        sources: ZCUnitState[], context: IZCStatusResolutionContext): void {
+        for (const unit of alive.values()) sources.push(unit);
+        sources.sort(compareUnitIds);
         for (const source of sources) {
-            const origin = context.unitPosition(source);
             for (const instance of context.statusSystem.instancesOf(String(source.id))) {
                 const runtime = instance.runtimeBehavior;
                 if (runtime?.kind !== 'legacyTraction') continue;
+                const origin = context.unitPosition(source);
                 const minimumDistance = 20 * context.combatDistanceScale;
                 for (const target of sources) {
                     if (target.owner === source.owner || target.battleState === 'dead') continue;
@@ -122,3 +148,6 @@ export class ZCStatusResolutionSystem {
     }
 }
 
+function compareUnitIds(left: ZCUnitState, right: ZCUnitState): number {
+    return left.id - right.id;
+}

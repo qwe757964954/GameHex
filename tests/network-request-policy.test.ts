@@ -18,6 +18,7 @@ interface IRequest {
     canSend: (() => boolean) | null;
     promise: Promise<boolean>;
     cancel(): void;
+    resolve(response: unknown): void;
     packageRequest(index: number, data: Uint8Array, msg: object, loading: boolean): void;
 }
 interface IState {
@@ -28,7 +29,7 @@ interface IState {
     onReceiveMessage(data: Uint8Array): void;
 }
 interface ISocket {
-    state: IState;
+    state: IState | null;
     isSending: boolean;
     tlRequest: IRequest[];
     addNetworkRequest(request: IRequest): void;
@@ -36,12 +37,12 @@ interface ISocket {
     ReconnectNetStateToRestoreRequest(request: IRequest): void;
 }
 
-function harness() {
+function harness(delay: () => Promise<void> = async () => {}) {
     let sent = 0;
     let cacheUpdates = 0;
     /** `ConnectedNetState.log` 实际打出的每一行（`recived` 的回包耗时就在里面）。 */
     const logs: string[] = [];
-    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay: async () => {} },
+    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay },
         CacheMgr: { handleCmdCache: () => { cacheUpdates++; } } } };
     const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
         name.endsWith('/FW') ? fw : { ScriptObject: class {} }).NetworkRequest as new () => IRequest;
@@ -72,9 +73,10 @@ function harness() {
     const state = new Connected();
     socket.state = state;
     state.socket = socket;
+    let requestIndex = 0;
     const makeRequest = (retry = true, canSend: (() => boolean) | null = null) => {
         const request = new Request();
-        request.packageRequest(1, new Uint8Array([1]), { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: retry, canSend }, false);
+        request.packageRequest(++requestIndex, new Uint8Array([1]), { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: retry, canSend }, false);
         return request;
     };
     return { socket, state, makeRequest, sent: () => sent, cacheUpdates: () => cacheUpdates, logs };
@@ -94,6 +96,37 @@ test('取消排队请求立即结束等待，不发送；同队列下一条仍�
     await h.socket.sendData();
     assert.equal(h.sent(), 1);
     assert.equal(h.socket.tlRequest.length, 0);
+});
+
+test('发送间隙断线保留待发请求，重连后按原顺序发送并结束等待', async () => {
+    let resume: () => void = () => {};
+    const gap = new Promise<void>(resolve => { resume = resolve; });
+    let firstDelay = true;
+    const h = harness(() => {
+        if (!firstDelay) return Promise.resolve();
+        firstDelay = false;
+        return gap;
+    });
+    const requests = [h.makeRequest(), h.makeRequest(), h.makeRequest()];
+    const pending = requests.map(request => request.promise);
+    h.socket.isSending = true;
+    for (const request of requests) h.socket.addNetworkRequest(request);
+    h.socket.isSending = false;
+    const draining = h.socket.sendData();
+    assert.equal(h.sent(), 1);
+    h.socket.state = null;
+    resume();
+    await draining;
+    assert.equal(h.socket.tlRequest.length, 2);
+    assert.equal(h.socket.tlRequest[0], requests[1]);
+    assert.equal(h.socket.tlRequest[1], requests[2]);
+    assert.equal(h.socket.isSending, false);
+    h.socket.state = h.state;
+    await h.socket.sendData();
+    assert.equal(h.sent(), 3);
+    assert.equal(h.socket.tlRequest.length, 0);
+    for (const request of requests) request.resolve({});
+    assert.deepEqual(await Promise.all(pending), [true, true, true]);
 });
 
 test('已发送请求取消后迟到回包仍更新公共缓存，等待保持取消结果', async () => {

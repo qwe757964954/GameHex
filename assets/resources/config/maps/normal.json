@@ -34,10 +34,10 @@
       {
         "id": 1,
         "art": "image/decor/wasteland/st3",
-        "x": -534.2259826660156,
-        "y": -106.14157104492188,
-        "width": 663.4888822646434,
-        "height": 215.76874219988403,
+        "x": -591.3926086425781,
+        "y": -114.47833251953125,
+        "width": 669.0308445914914,
+        "height": 217.57100637121673,
         "rotation": -0.7051782660536645,
         "flipX": false,
         "flipY": false,
@@ -212,47 +212,5 @@
         "locked": false
       }
     ]
-  },
-  "resourcePoints": [
-    {
-      "row": 8,
-      "column": 3,
-      "groupId": 14009
-    },
-    {
-      "row": 7,
-      "column": 6,
-      "groupId": 14008
-    },
-    {
-      "row": 6,
-      "column": 1,
-      "groupId": 14006
-    },
-    {
-      "row": 5,
-      "column": 7,
-      "groupId": 14002
-    },
-    {
-      "row": 3,
-      "column": 1,
-      "groupId": 14007
-    },
-    {
-      "row": 2,
-      "column": 7,
-      "groupId": 14007
-    },
-    {
-      "row": 12,
-      "column": 1,
-      "groupId": 14007
-    },
-    {
-      "row": 10,
-      "column": 6,
-      "groupId": 14007
-    }
-  ]
+  }
 }

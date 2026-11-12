@@ -1,3 +1,21 @@
+/**
+ * 参与抽卡权重调整的品质键。
+ *
+ * 与 `pvpTile.rarityWeights` / `pvpCard.rarity` 是同一套词表（`ZCCardRarity`），
+ * 这里单独声明是为了不让 `territory/model` 反向依赖 `zcds/model`。两边都改时必须同改，
+ * 守卫见 `tests/zcds-npc-rarity-modifier.test.ts`「品质键词表两处一致」。
+ */
+export const TERRITORY_CARD_RARITY_KEYS = ['green', 'blue', 'purple', 'gold'] as const;
+export type TerritoryCardRarityKey = (typeof TERRITORY_CARD_RARITY_KEYS)[number];
+
+/**
+ * `levelInfo.gradeProModifier`：品级 → 抽卡权重**乘数**。
+ *
+ * 缺省 / 0 / 非正数 ⇒ 1（表说明的「0 = 没变化」）。只作用于 **NPC 席位**，
+ * 计算方式见 `applyPvpRarityModifier`（`zcds/model/ZCPvpTileRules.ts`）。
+ */
+export type TerritoryGradeProModifier = Partial<Record<TerritoryCardRarityKey, number>>;
+
 /** 领地/冒险入口用到的 PVE 表行投影。 */
 export interface TerritoryLevelRow {
     levelId: number;
@@ -12,6 +30,8 @@ export interface TerritoryLevelRow {
     levelCost: number;
     /** 「关卡翻地块频率（秒）」：本关地块翻开的间隔上限，0 = 够钱就翻。 */
     openGrideTime: number;
+    /** NPC 抽卡品质权重乘数（`{ green: 2, blue: 3 }`）；缺省 / 空对象 = 不调整。 */
+    gradeProModifier?: TerritoryGradeProModifier;
     extraCards?: { enemy?: number };
     idleReward?: TerritoryRewardRow[];
 }
@@ -165,14 +185,23 @@ export interface TerritoryCampaignStage {
     waves: TerritoryCampaignWave[];
     idleRewards: TerritoryCampaignReward[];
     staminaCost: number;
-    exploreSeconds: number;
     /**
-     * `levelInfo.openGrideTime`：本关「翻地块频率」（秒，0 = 够钱就翻）。
+     * `levelInfo.openGrideTime`：本关「NPC 翻地块频率」（秒，0 = 不额外限速，按全局 2.8s）。
      *
-     * 与 {@link exploreSeconds} 同源但**不同用途**：`exploreSeconds` 是通关后格子翻开要等的时长；
-     * 这一个要带进对局，作为 NPC 翻地块（AI 开发中立格）的速度上限。
+     * 🔴 **只管战斗内 NPC 点地块的最小间隔**（两次点击之间的间距，计时从第一次翻格之后开始），
+     * 与领地格子的「探索中」时长**没有任何关系** —— 后者是地图配置自己的
+     * `site.unlock.exploreSeconds`（`TerritoryMapConfig`，缺省 2 秒，走 `TerritoryProgress` 的倒计时）。
+     * 2026-11-11 之前这里把同一列也喂给 `exploreSeconds`，导致「把 NPC 调慢到 10 秒，
+     * 领地通关后开那一格也要等 10 秒」，已拆开。
      */
     openGrideTime: number;
+    /**
+     * `levelInfo.gradeProModifier`：NPC 翻地块抽卡的品质权重乘数。
+     *
+     * 只影响 **NPC 席位**，玩家抽卡仍走 `pvpTile.rarityWeights` 原表。
+     * 缺省（`undefined`）⇒ 不调整：塔防关卡与该列留空的关卡都是这一条。
+     */
+    gradeProModifier?: TerritoryGradeProModifier;
     hpRate: number;
     attackRate: number;
 }
@@ -186,11 +215,35 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
+ * 解析 `levelInfo.gradeProModifier`。
+ *
+ * 表里是 `{ blue: 3, green: 2 }` 这种「品级 → 乘数」；也有 17 关整列留空，
+ * 转表器会写成 `{}`（与 `idleReward` / `npcTeam` 同一个坑）—— 空对象必须归一成
+ * `undefined`，否则下游「有没有配」的判断会误判成「配了但全是 1」。
+ *
+ * 只收**正数**：0 / 负数 / 非数字按「没变化」丢掉（表说明「0 = 没变化」）。
+ * 未知键（写错成 `Green` / `purple1`）直接丢，不会静默变成某个品级的乘数。
+ */
+function asGradeProModifier(value: unknown): TerritoryGradeProModifier | undefined {
+    const record = asRecord(value);
+    const result: TerritoryGradeProModifier = {};
+    let count = 0;
+    for (const rarity of TERRITORY_CARD_RARITY_KEYS) {
+        const factor = Number(record[rarity]);
+        if (Number.isFinite(factor) && factor > 0) {
+            result[rarity] = factor;
+            count += 1;
+        }
+    }
+    return count > 0 ? result : undefined;
+}
+
+/**
  * 表格列 → 数组。**`x ?? []` 顶不住空对象**（见 218）。
  *
  * 转表器可能把「空列表」写成 **`{}`** 而不是 `[]`。`{}` 不是 nullish ⇒ `??` **不生效** ⇒
  * 下游 `.flatMap` / `.map` 直接抛 `is not a function`，
- * 整章领地数据加载失败（`TerritoryPresenter.loadChapter` →「领地数据加载失败」+ 提示条）。
+ * 整章领地数据加载失败（`TerritoryModel.loadChapter` →「领地数据加载失败」+ 提示条）。
  *
  * 归一放在读表边界，而不是逐个调用点打补丁。
  *
@@ -366,8 +419,8 @@ export function buildTerritoryCampaign(
                 waves,
                 idleRewards,
                 staminaCost: row.levelCost,
-                exploreSeconds: Math.max(0, row.openGrideTime),
                 openGrideTime: Math.max(0, row.openGrideTime),
+                gradeProModifier: asGradeProModifier(row.gradeProModifier),
                 hpRate: row.levelHp,
                 attackRate: row.levelAttack,
             };

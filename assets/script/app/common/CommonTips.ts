@@ -45,6 +45,14 @@ export interface CommonTipsOptions {
     showCancel?: boolean;
     /** 是否显示右上角关闭按钮，默认 true */
     showClose?: boolean;
+    /**
+     * 「点两次才算确认」：第一次点确定**不关闭**，只把确定按钮文案换成这个值，
+     * 第二次点才走 `onSure` + 关闭。缺省 = 老行为（一次即确认）。
+     *
+     * 用于「提前退出对局」这类不可逆操作。「两次确认」指的是**两次点击**，
+     * 不是叠两个弹窗 —— 叠两个一模一样的框，玩家只会以为第一次没点上（2026-11-09 实机反馈）。
+     */
+    confirmAgainText?: string;
     /** 点击“确定”后的回调（关闭动作在回调之后自动执行） */
     onSure?: () => void;
     /** 点击“取消”后的回调 */
@@ -121,6 +129,8 @@ export class CommonTips extends PopupBase {
 
     // ===== 运行时状态 =====
     private options: CommonTipsOptions | null = null;
+    /** 「两次确认」是否已上膛：第一次点确定后为 true，第二次点才真的确认。 */
+    private armed = false;
 
     // ============================================================
     // PopupBase 生命周期
@@ -152,6 +162,8 @@ export class CommonTips extends PopupBase {
 
     private apply(options: CommonTipsOptions): void {
         this.options = options;
+        // 每次打开都从「未上膛」开始：实例复用时不能带着上一轮的二次确认状态。
+        this.armed = false;
         const showCancel = options.showCancel !== false;
         const showClose = options.showClose !== false;
 
@@ -172,7 +184,15 @@ export class CommonTips extends PopupBase {
     }
 
     private onSureClick(): void {
-        const onSure = this.options?.onSure;
+        const options = this.options;
+        // 两次确认：第一下只「上膛」—— 按钮文案换成 confirmAgainText，窗口留着；
+        // 第二下才走回调 + 关闭。玩家看到按钮变了，就知道这次是真的要执行了。
+        if (options?.confirmAgainText && !this.armed) {
+            this.armed = true;
+            this.sureLabel.string = options.confirmAgainText;
+            return;
+        }
+        const onSure = options?.onSure;
         // 先回调业务，再关闭；业务里若同步打开了新界面也不受影响
         onSure?.();
         this.close(PopupCloseReason.CloseButton);

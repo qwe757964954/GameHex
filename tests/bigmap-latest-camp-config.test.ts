@@ -1,8 +1,10 @@
+import { toBigMapArtPath, worldCampArtFor } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import { assetExists } from './helpers/asset-paths';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BIGMAP_TABLE, decompressBigMapRows, parseBigMapConfig } from '../assets/script/app/bigmap/model/BigMapConfig';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapLayout } from './helpers/bigmap-fixtures';
 import { buildBigMapWorld } from '../assets/script/app/bigmap/model/BigMapWorld';
@@ -34,7 +36,11 @@ test('81 条城池参数完整进入配置，图片、尺寸和积分不再丢�
         assert.deepEqual(camp.occupyReward, row.occupyReward, `${row.campId}.occupyReward`);
         assert.equal(camp.rallyOpen, row.rallyOpen === 1);
         assert.equal(camp.iconPath, row.campIcon);
-        assert.ok(existsSync(`assets/bundles/bigmap/${camp.iconPath}.png`), camp.iconPath);
+        // 2026-11-12：`campIcon` 已换成 `image/buildings/camp_*`（真源 xlsx 的 AC 列）。
+        // 仍过 `worldCampArtFor` 是为了同时兜住服务器下发的旧快照（概念占位路径）。
+        // 守卫验**真正加载的那张** —— 旧概念图已删库，直接验原值在旧数据下必假红。
+        const artPath = toBigMapArtPath(worldCampArtFor(camp.iconPath, camp.campId));
+        assert.ok(assetExists(`${artPath}.png`), artPath);
         assert.deepEqual(camp.adjacentCampIds, row.adjacentcampIds);
         assert.deepEqual(camp.buffGroupIds, row.buffGroupId);
         assert.deepEqual(camp.buffEffectIds, row.buffEffectId);
@@ -48,7 +54,7 @@ test('新城池显示改读策划表，所有城池锚点与占格沿用现有�
     raw[BIGMAP_TABLE.camp][0].minOccupyScore = 9876;
     const config = parseBigMapConfig(raw);
     const layout = loadBigMapLayout();
-    const presenter = new BigMapPresenter({ config, layout, storage: createMemoryBigMapStorage(),
+    const presenter = new BigMapModel({ config, layout, storage: createMemoryBigMapStorage(),
         saveKey: 'camp-config', adventureChapter: () => 3, now: () => 957600 });
     assert.equal(presenter.campConfigs, config.camps);
     assert.equal(presenter.cityView(101)?.name, '新营地');

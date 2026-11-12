@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""给「关卡 / 首领 / 异步据点」站点补建筑 ID（改预设 → 校验 → 发布三处 → 同步 remoteRef）。
+"""给「关卡 / 首领 / 异步据点」站点补建筑 ID（改预设 → 校验 → 发布资源目录与策划 JSON）。
 
 用户 2026-11-06：
 
@@ -31,9 +31,9 @@
 `presets/territory/chapter_0X.json` 是 `open-territory-editor` 的**编辑源**，产物由
 `copy_territory_maps.py` 生成。直接改产物下次发布就被覆盖。
 
-`assets/remoteRef/chapter_0X.json` 不属于 `copy_territory_maps.py` 的落点（那是
-`tools/ref/ref_compress_json.py` 从策划 `json/client` 压出来的），所以按同一套序列化补一份，
-保证三处内容同源（与 `randomize_random_sites.py` 完全同一路做法）。
+领地章节布局只由 `copy_territory_maps.py` 发布到 `resources/config/territory-maps` 与策划
+`json/sever`。`remoteRef` 不保留章节布局副本（地图不写策划 client，导表不会扫进去），
+本脚本只走 `copy_territory_maps` 这一条发布链路。
 
 用法：
 
@@ -137,16 +137,6 @@ def write_preset(path: Path, data: dict, dry_run: bool) -> None:
         handle.write(payload)
 
 
-def write_remote(payload: dict, name: str, dry_run: bool) -> None:
-    """补 `assets/remoteRef/<name>.json`：与 `tools/ref/ref_compress_json.py` 逐字节同款。"""
-    if dry_run:
-        return
-    target = REMOTE_DIR / f"{name}.json"
-    target.parent.mkdir(parents=True, exist_ok=True)
-    with target.open("w", encoding="utf-8") as handle:  # 不传 newline：跟 ref 脚本一样吃平台换行
-        json.dump(payload, handle, separators=(",", ":"), indent=0, ensure_ascii=False)
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="给关卡 / 首领 / 异步据点站点补建筑 ID")
     parser.add_argument("--id", action="append", dest="ids", help="只处理这些预设 id（可重复）")
@@ -191,12 +181,9 @@ def main() -> int:
         write_preset(path, data, args.dry_run)
         if not args.no_publish:
             if args.dry_run:
-                print(f"  [dry-run] 会发布 {name} 到资源目录 / 策划 JSON / remoteRef")
+                print(f"  [dry-run] 会发布 {name} 到资源目录 / 策划 JSON")
             else:
-                targets, _ = publisher.copy_one(path, dry_run=False)
-                # remoteRef 以**已发布的那份**为准再压一次，保证三处内容同源。
-                published = json.loads(targets[0].read_text(encoding="utf-8"))
-                write_remote(published, name, dry_run=False)
+                publisher.copy_one(path, dry_run=False)
 
         detail = ", ".join(f"{site_id}@{cell}={building}" for site_id, cell, _, _, building in changes)
         print(f"{name:<14}{len(changes):>7}  {detail}")

@@ -265,8 +265,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_249",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_2",
@@ -385,8 +385,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_172",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_8",
@@ -425,8 +425,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_212",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "asyncPvp_1",
@@ -631,8 +631,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_196",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_17",
@@ -771,8 +771,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_124",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_24",
@@ -831,8 +831,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_143",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_27",
@@ -851,8 +851,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_311",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_28",
@@ -891,8 +891,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_86",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_30",
@@ -931,8 +931,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_67",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_32",
@@ -971,8 +971,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_182",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_34",
@@ -1031,8 +1031,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_136",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_37",
@@ -1091,8 +1091,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_94",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_40",
@@ -1111,8 +1111,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_157",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_41",
@@ -1131,8 +1131,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_103",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     },
     {
       "id": "fixedResource_42",
@@ -1331,8 +1331,8 @@
         "staminaCost": 1
       },
       "configId": "fixedResource_121",
-      "buildingId": "",
-      "rewardId": 1022
+      "buildingId": "69020",
+      "rewardId": 1023
     }
   ],
   "randomSites": {

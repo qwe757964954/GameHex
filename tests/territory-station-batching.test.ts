@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 /**
  * `TerritoryStationView` 的三条硬约束：
  *  1. 四个视觉节点必须 reparent 到**共享 layer** 上（合批），并保留 prefab 的偏移；
- *  2. 未解锁格「银币图标 ×1.1 / 数值 ×1.5 / 间距恒 2px」的成对排布；
+ *  2. 未解锁格「银币图标 + 数值」的成对排布 —— 缩放与间距**不在这里抄数字**，
+ *     一律取 `TerritoryStationView` 的 `CONDITION_*` 导出常量（2026-11-10 缩小过一轮）；
  *  3. 切 tab 销毁页面时，`cc.Button` 先于本组件被 `_destruct()`（`onDestroy` 不许抛）。
  *
  * ⚠️ VM 夹具（Fake* / loader）已挪到 `tests/helpers/territory-station-fixtures.ts` ——
@@ -18,6 +19,7 @@ import {
     FakeSprite,
     FakeUIOpacity,
     attach,
+    loadTerritoryStationModule,
     loadTerritoryStationView,
     makeStationView,
     withTransform,
@@ -28,6 +30,20 @@ import {
 
 /** 本文件只关心「节点摆放 + 排布」，名字沿用旧调用点。 */
 const loadStationView = loadTerritoryStationView;
+
+/**
+ * 条件格（银币 + 数值）的四个排版常量，**一律取真源**。
+ *
+ * 2026-11-10 用户第二轮口径把这一组整体缩小过（图标 1.1 → 0.85、数值 1.5 → 1.2、
+ * 间距 2 → 1），当时用例里硬编码的 `1.1 / 1.5 / 2` 与派生坐标（`77.625` / `123`）一起全红
+ * —— 抄一遍数字就等于「两边各改一半也能一起绿」，所以这里直接读模块导出。
+ */
+const STATION_MODULE = loadTerritoryStationModule();
+const ICON_SCALE = STATION_MODULE.CONDITION_ICON_SCALE as number;
+const VALUE_SCALE = STATION_MODULE.CONDITION_VALUE_SCALE as number;
+const GAP = STATION_MODULE.CONDITION_GAP as number;
+/** 图标节点未缩放时的可见宽（prefab `CaptionBg` 是 40×40，读不到就退回同一个兜底值）。 */
+const ICON_BASE_WIDTH = STATION_MODULE.CONDITION_ICON_WIDTH_FALLBACK as number;
 
 test('随机格等待期间不展示文字，重复渲染和失败恢复保持正确', () => {
     const { view, caption, text, captionLabel } = makeStationView();
@@ -163,18 +179,26 @@ test('station visuals move into contiguous global render layers and preserve pre
     assert.equal(captionSprite.type, FakeSprite.Type.SIMPLE);
     assert.equal(caption.active, true, 'locked condition restores the cost icon');
     assert.equal(text.active, true, 'locked condition restores the cost value');
-    // 条件格的位置现在**按实测文本宽算**（图标 ×1.1、数值 ×1.5、间距 2px），不再是两个固定偏移。
+    // 条件格的位置**按实测文本宽算**（图标 ×CONDITION_ICON_SCALE、数值 ×CONDITION_VALUE_SCALE、
+    // 间距 CONDITION_GAP），不再是两个固定偏移。
     // 这一帧 Label 的宽还是 prefab 出厂宽 92 ⇒ 视图按「引擎还没量过」退回**按位数估**的宽
-    // （「399」3 位 ⇒ 28.5）⇒ 数值可见宽 42.75、图标可见宽 44、总宽 88.75
-    // ⇒ 图标中心 100−44.375+22、数值中心 100+44.375−21.375。
-    // 完整的不变量（间距恒 2px、与位数无关、出厂宽的处理）在下面那条用例里。
-    // ⚠️ 用容差而不是 `deepEqual`：`40 × 1.1` 在浮点下不是精确的 44。
-    assert.ok(Math.abs(caption.position.x - 77.625) < 1e-9, `图标中心应在 77.625，实际 ${caption.position.x}`);
+    // （「399」3 位 ⇒ 28.5）⇒ 数值可见宽 28.5 × 1.2 = 34.2、图标可见宽 40 × 0.85 = 34、
+    // 总宽 69.2 ⇒ 图标中心 100 − 34.6 + 17、数值中心 100 + 34.6 − 17.1。
+    // 完整的不变量（间距恒定、与位数无关、出厂宽的处理）在下面那条用例里。
+    // ⚠️ 用容差而不是 `deepEqual`：`40 × 0.85` 在浮点下不是精确的 34。
+    const cellIconWidth = ICON_BASE_WIDTH * ICON_SCALE;
+    const cellValueWidth = 28.5 * VALUE_SCALE;
+    const cellTotal = cellIconWidth + GAP + cellValueWidth;
+    const iconCenterX = 100 - cellTotal / 2 + cellIconWidth / 2;
+    const valueCenterX = 100 + cellTotal / 2 - cellValueWidth / 2;
+    assert.ok(Math.abs(caption.position.x - iconCenterX) < 1e-9,
+        `图标中心应在 ${iconCenterX}，实际 ${caption.position.x}`);
     assert.deepEqual([caption.position.y], [200]);
-    assert.ok(Math.abs(text.position.x - 123) < 1e-9, `数值中心应在 123，实际 ${text.position.x}`);
+    assert.ok(Math.abs(text.position.x - valueCenterX) < 1e-9,
+        `数值中心应在 ${valueCenterX}，实际 ${text.position.x}`);
     assert.deepEqual([text.position.y], [200]);
-    assert.deepEqual([caption.scale.x, caption.scale.y], [1.1, 1.1]);
-    assert.deepEqual([text.scale.x, text.scale.y], [1.5, 1.5]);
+    assert.deepEqual([caption.scale.x, caption.scale.y], [ICON_SCALE, ICON_SCALE]);
+    assert.deepEqual([text.scale.x, text.scale.y], [VALUE_SCALE, VALUE_SCALE]);
     assert.equal(captionLabel.overflow, FakeLabel.Overflow.NONE);
     assert.equal(captionLabel.color, red);
     view.render({ site: null, icon: null, isCondition: true, conditionIcon: silverIcon,
@@ -242,19 +266,20 @@ test('地图不显示关卡名称及状态文字，复用后仍保留银币条�
 });
 
 /**
- * 未解锁格「银币图标 + 数值」的排布口径（2026-10-16 冒险模块 UI 优化）：
- * **图标 ×1.1、数字 ×1.5、两者间距恒 2px**。
+ * 未解锁格「银币图标 + 数值」的排布口径（2026-10-16 冒险模块 UI 优化，
+ * 2026-11-10 用户第二轮：**图标缩到 0.85、数字缩到 1.2、间距收到 1px**）：
+ * **图标 ×`CONDITION_ICON_SCALE`、数字 ×`CONDITION_VALUE_SCALE`、两者间距恒 `CONDITION_GAP`**。
  *
  * 这里钉的不是「某两个固定坐标」——那正是旧实现的写法（`−24` / `+22`），间距会随位数漂。
  * 钉的是**不变量**：
- *   1. 数值左缘 − 图标右缘 === 2（对 1 / 3 / 5 位数都成立）；
+ *   1. 数值左缘 − 图标右缘 === `CONDITION_GAP`（对 1 / 3 / 5 位数都成立）；
  *   2. 这一对**以格心为中心**（总数位变化时整体不漂，只是图标往左让位）；
  *   3. 缩放与 `overflow` 在退出条件模式时全部还原（站点节点池化复用）。
  *
  * ⚠️ 引擎按文本刷新 `contentSize` 有**一帧延迟**，用例里靠改 `FakeUITransform.contentSize.width`
  * 来模拟「引擎已经把实测文本宽写回来了」；把宽留在 prefab 出厂值 92 就是「还没量过」那一帧。
  */
-test('locked-cell cost shows icon ×1.1 / value ×1.5 with a constant 2px gap, centered on the cell', () => {
+test(`locked-cell cost shows icon ×${ICON_SCALE} / value ×${VALUE_SCALE} with a constant ${GAP}px gap, centered on the cell`, () => {
     const View = loadStationView();
     const view = new View();
     const root = new FakeNode('TerritoryStation');
@@ -289,10 +314,6 @@ test('locked-cell cost shows icon ×1.1 / value ×1.5 with a constant 2px gap, c
 
     const tint = new FakeColor(20, 40, 60, 255);
     const silverIcon = { name: 'silver' };
-    const ICON_BASE_WIDTH = 40;
-    const ICON_SCALE = 1.1;
-    const VALUE_SCALE = 1.5;
-    const GAP = 2;
     const iconWidth = ICON_BASE_WIDTH * ICON_SCALE;
 
     /** 按「引擎量到的文本宽」渲染一格条件，并返回两个节点的可见区间。 */
@@ -346,7 +367,7 @@ test('locked-cell cost shows icon ×1.1 / value ×1.5 with a constant 2px gap, c
     view.setMapPosition(300, 400, 0);
     const iconRight = caption.position.x + iconWidth / 2;
     const valueLeft = text.position.x - valueWidth / 2;
-    assert.ok(Math.abs(valueLeft - iconRight - GAP) < 1e-9, '滑动后间距仍是 2px');
+    assert.ok(Math.abs(valueLeft - iconRight - GAP) < 1e-9, `滑动后间距仍是 ${GAP}px`);
     assert.ok(Math.abs((caption.position.x - iconWidth / 2 + text.position.x + valueWidth / 2) / 2 - 300) < 1e-9,
         '滑动后仍以新格心为中心');
     assert.deepEqual([caption.position.y, text.position.y], [400, 400]);

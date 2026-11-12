@@ -47,7 +47,10 @@ test('chapter two keeps the current editor site format in sync with the publishe
     // 真正的不变量是下面的 preset ≡ published，名字单独钉死只会每次重做地图就红一次。
     assert.equal(typeof config.name, 'string');
     assert.ok(config.name.length > 0);
-    assert.equal(config.sites.length, 104);
+    // 104 → 102（2026-11-11）：2-10 首领（`boss_2`）改「裂开的笑嘴」时，
+    // r14 的 289 / 290 / 291 三个固定宝箱格被并进 boss footprint，
+    // 同时把退出的 246 补成新的固定格（`fixedResource_90`）⇒ 净减 2 个站点。
+    assert.equal(config.sites.length, 102);
     // configId 两种口径（2026-10 之后的地图）：固定宝箱 `fixedResource_<n>`，
     // 关卡 / Boss / 异步据点直接存**数值关卡号**（10011…）。别再用一条
     // `^(fixedResource|stage|asyncPvp)_\d+$` 一刀切 —— 那会把 stage/boss 全判死。

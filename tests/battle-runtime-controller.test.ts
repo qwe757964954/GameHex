@@ -8,6 +8,85 @@ import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattle
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/BattleResultService';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
+import type { IZCDamageStatsPlayer, IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
+
+test('GM 加金币经事件修改当前模型并即时渲染，选点阶段拒绝，退出后解除', () => {
+    const target = {}, messages: string[] = [];
+    EventMgr.instance.on(ZCGameUiEvent.DebugAddGoldResult, ({ message }) => messages.push(message), target);
+    try {
+        const selecting = runtimeFixture({}, true);
+        try {
+            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+            assert.match(messages.at(-1), /出生点/);
+            assert.equal(selecting.runtime.currentModel, null);
+        } finally { selecting.dispose(); }
+        const h = runtimeFixture();
+        const model = h.runtime.currentModel;
+        const before = model.snapshot.playerGold;
+        try {
+            h.calls.length = 0;
+            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+            assert.equal(model.snapshot.playerGold, before + 123);
+            assert.ok(h.calls.includes('all'));
+            assert.match(messages.at(-1), /增加 123/);
+            h.calls.length = 0;
+            EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, -1);
+            assert.equal(model.snapshot.playerGold, before + 123);
+            assert.equal(h.calls.length, 0);
+        } finally { h.dispose(); }
+        const count = messages.length;
+        EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, 123);
+        assert.equal(messages.length, count);
+        assert.equal(model.snapshot.playerGold, before + 123);
+    } finally { EventMgr.instance.offTarget(target); }
+});
+
+test('伤害面板按实际席位逐人显示，打开时追平并按静态节奏实时刷新，关闭后停止', async () => {
+    for (const count of [2, 3, 4]) {
+        const opened: (readonly IZCDamageStatsPlayer[])[] = [];
+        const updates: (readonly IZCDamageStatsPlayer[])[] = [];
+        let isOpen = true, opens = 0;
+        const popup: IZCDamageStatsPopup = { get isOpen() { return isOpen; }, refresh: players => updates.push(players), close() { isOpen = false; } };
+        const h = runtimeFixture({}, false, undefined, { openDamage: async players => { opens++; opened.push(players); return popup; } });
+        try {
+            const owners = ['player', 'enemy', 'enemy2', 'enemy3'].slice(0, count);
+            const stats = { player: { dealt: 10, taken: 3 }, enemy: { dealt: 20, taken: 5 }, enemy2: { dealt: 30, taken: 7 }, enemy3: { dealt: 40, taken: 9 } };
+            Object.assign(h.entry, { seatProfiles: owners.map((owner, i) => [owner, { name: `玩家${i}`, headKey: `${i + 1}` }]) });
+            const model = h.runtime.currentModel;
+            Object.defineProperty(model, 'owners', { get: () => owners });
+            Object.defineProperty(model, 'damageStats', { get: () => stats });
+            model.tick = () => {};
+            EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
+            EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
+            stats.enemy.dealt = 25;
+            await flush();
+            assert.equal(opens, 1, '打开中的连点不重复加载弹窗');
+            assert.deepEqual(opened[0].map(player => player.owner), owners);
+            assert.deepEqual(opened[0].map(player => player.damage), [10, 20, 30, 40].slice(0, count));
+            assert.equal(updates[updates.length - 1][1].damage, 25, '加载期间发生的伤害在打开后追平');
+            assert.equal(updates[updates.length - 1][1].name, '玩家1');
+            assert.equal(updates[updates.length - 1][1].headKey, '2');
+            const before = updates.length;
+            stats.enemy.dealt = 100;
+            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.05 });
+            assert.equal(updates.length, before + 1);
+            assert.deepEqual(updates[updates.length - 1].map(player => player.owner), owners, '伤害改变不重排行');
+            assert.equal(updates[updates.length - 1][1].damage, 100);
+            isOpen = false;
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.15 });
+            assert.equal(updates.length, before + 1);
+            isOpen = true;
+            EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
+            await flush();
+            assert.equal(opens, 2);
+            h.dispose();
+            const final = updates.length;
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 1 });
+            assert.equal(updates.length, final);
+            assert.equal(isOpen, false);
+        } finally { h.dispose(); }
+    }
+});
 
 test('missing unit art is scoped to its real view, deduplicated and ignored after disposal', async () => {
     const pending = deferred<any>();
@@ -35,6 +114,24 @@ test('missing unit art is scoped to its real view, deduplicated and ignored afte
         EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
         assert.equal(loads.length, 1);
     } finally { h.dispose(); }
+});
+
+test('统计面板加载期间结束对局则关闭迟到窗口，已点空白关闭的窗口不再刷新', async () => {
+    for (const settled of [false, true]) {
+        const pending = deferred<IZCDamageStatsPopup | null>();
+        let closes = 0, refreshes = 0;
+        const h = runtimeFixture({}, false, undefined, { openDamage: () => pending.promise });
+        try {
+            EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
+            // 投降要过两次确认（异步），必须先让它落定再放行迟到的统计窗口 ——
+            // 否则「加载期间已经结束对局」这个前提根本没成立。
+            if (settled) { EventMgr.instance.emit(ZCGameUiEvent.Retreat); await flush(); }
+            pending.resolve({ isOpen: settled, refresh: () => refreshes++, close: () => closes++ });
+            await flush();
+            assert.equal(closes, settled ? 1 : 0);
+            assert.equal(refreshes, 0);
+        } finally { h.dispose(); }
+    }
 });
 
 test('successful unit art is published once and failed requests allow a later retry', async () => {
@@ -96,12 +193,15 @@ test('settlement waits before report, closes before navigation and restores on c
             cancelRequests: () => calls.push('cancel'),
         },
         rewards: { loadRewards: async () => [] },
-        popup: { open: async options => { pages.push(options); calls.push('open'); return { close: reason => { calls.push('close'); calls.push(`reason:${reason}`); } }; } },
+        popup: {
+            open: async options => { pages.push(options); calls.push('open'); return { close: reason => { calls.push('close'); calls.push(`reason:${reason}`); } }; },
+            openRank: async () => { calls.push('rank'); return null; },
+        },
         flow: { watchSwitch: callback => { settled = callback; return () => calls.push('unwatch'); } },
         failed: () => {},
     }, { owner, hasPveContext: true });
-    controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002 });
-    controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002 });
+    controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002, rank: null });
+    controller.start({ localVictory: true, elapsedSeconds: 1, commands: [], statistics: [], battleType: 1002, rank: null });
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(calls.slice(0, 3), ['wait', 'finish', 'record']);
     assert.equal((pages[0] as { victory: boolean }).victory, false);
@@ -150,6 +250,8 @@ test('terminal tick waits for presentation before settlement; retreat reports on
                 EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
             } else EventMgr.instance.emit(ZCGameUiEvent.Retreat);
             EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+            // 投降是「两次确认」的异步流程；这里等它落定再断言阶段与冻结效果。
+            await flush();
             assert.equal(h.session.currentPhase, 'settlement');
             const frozenTicks = ticks;
             EventMgr.instance.emit(ZCGameUiEvent.UseArtifact);
@@ -161,7 +263,7 @@ test('terminal tick waits for presentation before settlement; retreat reports on
         } finally { h.dispose(); }
     }
 });
-test('settlement commands identify player and each AI by server unitId', () => {
+test('settlement commands identify player and each AI by server unitId', async () => {
     const h = runtimeFixture();
     try {
         const model = h.runtime.currentModel;
@@ -170,6 +272,7 @@ test('settlement commands identify player and each AI by server unitId', () => {
         assert.equal(model.developHex(hex.id).ok, true);
         for (let i = 0; i < 100; i++) model.tick(0.1);
         EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();   // 两次确认走完之后才上报
         assert.equal(h.requests.length, 1);
         const commands = h.requests[0].commands;
         assert.deepEqual(commands[0], { frameId: 0, unitId: 81, op: 1, params: [hex.id] });
@@ -216,6 +319,7 @@ test('SLG awaits its own result before report and uses server defeat and war sco
         const h = runtimeFixture({ waitResult: battleType => { h.calls.push(`wait:${battleType}`); return pending.promise; } }, false, type);
         try {
             EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+            await flush();   // 两次确认之后才开始等广播
             assert.ok(h.calls.indexOf(`wait:${type}`) < h.calls.indexOf('finish'));
             pending.resolve({ code: 2, goods: [], treasureId: 0, warScore: 27 }); await flush();
             assert.equal((h.pages[0] as { victory: boolean }).victory, false);
@@ -313,4 +417,98 @@ test('runtime publishes return and tip notifications with the real view owner', 
     h.dispose();
     EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
     assert.equal(notifications.length, 2);
+});
+
+test('≥3 人局结算先弹排行榜，关掉之后才出奖励页；2 人局不弹', async () => {
+    const rankOpens: number[] = [];
+    let resolveClosed: () => void = () => {};
+    const whenClosed = new Promise<void>(resolve => { resolveClosed = resolve; });
+    const h = runtimeFixture({
+        openRank: async seats => { rankOpens.push(seats.length); return { close() {}, whenClosed }; },
+    });
+    try {
+        // standard_3 是三人图；这里显式钉住席位，免得换地图后用例失效。
+        Object.defineProperty(h.runtime.currentModel, 'owners', { get: () => ['player', 'enemy', 'enemy2'] });
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.deepEqual(rankOpens, [3], '≥3 人局必须先弹排行榜');
+        assert.equal(h.pages.length, 0, '排行榜没关之前不能弹结算页（否则两页叠在一起）');
+        assert.equal(h.calls.filter(call => call === 'finish').length, 1, '上报不受排行榜阻塞');
+        resolveClosed();
+        await flush();
+        assert.equal(h.pages.length, 1, '玩家关掉排行榜后补上结算页');
+    } finally { h.dispose(); }
+});
+
+test('2 人局不弹排行榜，直接结算', async () => {
+    const rankOpens: number[] = [];
+    const h = runtimeFixture({ openRank: async seats => { rankOpens.push(seats.length); return null; } });
+    try {
+        Object.defineProperty(h.runtime.currentModel, 'owners', { get: () => ['player', 'enemy'] });
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.deepEqual(rankOpens, [], '2 人局没有排行榜这一步');
+        assert.equal(h.pages.length, 1);
+    } finally { h.dispose(); }
+});
+
+test('排行榜还开着就退局：结算流程落定，不悬挂也不报错', async () => {
+    let closes = 0;
+    const h = runtimeFixture({
+        // 永不 resolve 的 whenClosed：只有 dispose 能把它放出来，正好验关停信号。
+        openRank: async () => ({ close() { closes += 1; }, whenClosed: new Promise<void>(() => {}) }),
+    });
+    Object.defineProperty(h.runtime.currentModel, 'owners', { get: () => ['player', 'enemy', 'enemy2'] });
+    EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+    await flush();
+    assert.equal(h.pages.length, 0);
+    h.dispose();
+    await flush();
+    assert.ok(closes >= 1, '退局必须把排行榜关掉');
+    assert.equal(h.calls.includes('failed'), false, '关停是正常路径，不能报失败');
+});
+
+test('投降只弹一个确认框，点一次确定就结算：取消不结算，确定按失败退', async () => {
+    const asks: string[] = [], carryAgain: boolean[] = [];
+    let answers: boolean[] = [];
+    const h = runtimeFixture({}, false, undefined, {
+        confirm: async options => {
+            asks.push(options.content);
+            carryAgain.push(Object.prototype.hasOwnProperty.call(options, 'confirmAgainText'));
+            return { answered: Promise.resolve(answers.shift() ?? false), close() {} };
+        },
+    });
+    try {
+        answers = [false];
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.equal(asks.length, 1, '投降只开一个确认框');
+        assert.equal(asks[0], '你确定放弃当前对局，提前退出嘛？', '文案是策划原文');
+        assert.equal(carryAgain[0], false, '不再配置「再次确认」：点一次「确定」即确认');
+        assert.equal(h.requests.length, 0, '取消不能结算');
+
+        answers = [true];
+        EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+        await flush();
+        assert.equal(asks.length, 2, '每次投降只开一个确认框');
+        assert.equal(h.requests.length, 1, '确认后上报一次');
+        assert.equal(h.requests[0].localVictory, false, '投降按失败结算');
+    } finally { h.dispose(); }
+});
+
+test('投降确认框还开着就退局：弹窗被关掉，也不会补一次结算', async () => {
+    let closes = 0;
+    let answer: (value: boolean) => void = () => {};
+    const h = runtimeFixture({}, false, undefined, {
+        // 模拟真实 CommonTips：`close()` 会走到 onClose ⇒ answered 兑现 false。
+        confirm: async () => ({ answered: new Promise<boolean>(resolve => { answer = resolve; }), close() { closes += 1; answer(false); } }),
+    });
+    EventMgr.instance.emit(ZCGameUiEvent.Retreat);
+    await flush();
+    assert.equal(closes, 0, '确认框还开着，不该被提前关');
+    assert.equal(h.requests.length, 0);
+    h.dispose();
+    await flush();
+    assert.ok(closes >= 1, '退局必须把确认框关掉，不能留在别的界面上');
+    assert.equal(h.requests.length, 0, '关窗口不等于确认，不能补结算');
 });

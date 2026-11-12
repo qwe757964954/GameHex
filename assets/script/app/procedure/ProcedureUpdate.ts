@@ -4,10 +4,11 @@ import { isNativeHotUpdatePlatform } from '../../core/update/HotUpdateNativePlan
 import type { IHotUpdateConfig, IHotUpdateProgress, INativeHotUpdateProgress } from '../../core/update/HotUpdateTypes';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
-import { createCocosHotUpdateManager, createNativeHotUpdateRuntime, detectHotUpdatePlatform } from '../../platform/hotupdate/CocosHotUpdateFactory';
+import { createCocosHotUpdateDependencies, createNativeHotUpdateRuntime, detectHotUpdatePlatform } from '../../platform/hotupdate/CocosHotUpdateFactory';
 import type { NativeHotUpdateRuntime } from '../../platform/hotupdate/NativeHotUpdateRuntime';
 import { loadHotUpdateConfig } from '../../platform/hotupdate/HotUpdateConfigLoader';
 import { LAUNCH_UPDATE_WEIGHT, LaunchProgressUI } from '../loading/LaunchProgressUI';
+import { HotUpdateManager } from '../update/HotUpdateManager';
 
 /** 失败后点击状态文字要做什么。 */
 type RetryKind = 'none' | 'rerun' | 'native-resume';
@@ -153,7 +154,7 @@ export class ProcedureUpdate extends ProcedureBase {
 
     /** 其他平台：沿用远程 Bundle 收敛（不含脚本）。 */
     private async runBundle(generation: number, config: IHotUpdateConfig): Promise<void> {
-        const manager = createCocosHotUpdateManager(this.network, config);
+        const manager = new HotUpdateManager(createCocosHotUpdateDependencies(this.network, config));
         const result = await manager.run(config, (progress) => this.onProgress(generation, progress));
         if (generation !== this.generation) return;
         this.setStatus(result.message);

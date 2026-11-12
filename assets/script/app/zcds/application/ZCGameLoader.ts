@@ -15,7 +15,8 @@ import type { ZCMatchConfig } from '../model/ZCMatchConfig';
 import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
-import type { ZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCGuidePreparedContent } from './ZCGuideLoader';
+import type { IZCDeferredBattleArt, IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
@@ -27,75 +28,8 @@ import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from '../../
 const BATTLE_ENTRY_PRIORITY = 100;
 const BATTLE_DEFERRED_PRIORITY = 10;
 const DEFERRED_ART_YIELD_MS = 16;
+const COMMON_EFFECT_DIRECTORY = 'units/effects';
 
-const HUD_URL = ZC_BATTLE_SHELL_PATHS.hud;
-/** 棋盘图层容器。`MapWater / HexLayer / DecorLayer / BuildingOverlay / CooldownOverlay`
- *  的层序就写在这个 prefab 的子节点顺序里，对局里不再用 `new Node` 现拼。 */
-const BOARD_URL = ZC_BATTLE_SHELL_PATHS.board;
-const HEX_URL = ZC_BATTLE_SHELL_PATHS.hex;
-const UNIT_URL = ZC_BATTLE_SHELL_PATHS.unit;
-const EFFECT_URL = ZC_BATTLE_SHELL_PATHS.effect;
-const WALL_URL = ZC_BATTLE_SHELL_PATHS.wall;
-const WALL_LAYER_URL = ZC_BATTLE_SHELL_PATHS.wallLayer;
-const FLOAT_TEXT_URL = ZC_BATTLE_SHELL_PATHS.floatText;
-const CARD_REVEAL_URL = ZC_BATTLE_SHELL_PATHS.cardReveal;
-/** 传说卡出场横幅（抽到金卡时弹出的整条 720×417 横幅，底板按玩家分四色）。 */
-const LEGEND_BANNER_URL = ZC_BATTLE_SHELL_PATHS.legendBanner;
-/** 场景装饰条目。Sprite 的关键配置（CUSTOM 尺寸 + 不裁边）烘在 prefab 里。 */
-const DECOR_URL = ZC_BATTLE_SHELL_PATHS.decor;
-/**
- * 单位出生特效：**老客户端那套**（`塔防/动效/sc/sc`，2026-10-14 换）。
- *
- *  帧 = 老端 `sc.plist` 拆出的 25 帧 `sc_idle_*`（原始像素 208×376，`_lscale=0.4`
- *  ⇒ 屏上 83.2×150.4）；`anim` 取**前 16 帧 @ sample 8 = 2.0s**，与老端
- *  `playEffectAnimByXY(..., "兵种生成", TopEffect, 2)` 的 2 秒存活逐帧等价。
- *  prefab 自带 `cc.Animation`（`playOnLoad` + ClampToForever）。
- *
- *  美术在 `assets/resources/units/effects/出生特效/`，沿用既有特效的三段式
- *  （`anim/*.anim` + `atlas/<名>.pac` + `<名>.prefab`），所以播放方式与
- *  `ZCCombatEffectView` 完全一致 —— `play(defaultClip.name)` 即可。
- */
-const SPAWN_FX_URL = ZC_BATTLE_FX_PATHS.spawn;
-/**
- * 单位**阵亡特效**（`units/effects/死亡特效`）。
- *
- * 13 帧 @12fps（原始像素 535×1092，`_lscale=0.2056` ⇒ 屏上 110×225），沿用与出生特效
- * 同一套三段式（`anim/*.anim` + `atlas/<名>.pac` + `<名>.prefab`）⇒ 播放方式一致，
- * `play(defaultClip.name)` 即可。缺失时为 `null` —— 单位照常阵亡（染灰 + alpha 190），只是少一层表现。
- */
-const DEATH_FX_URL = ZC_BATTLE_FX_PATHS.death;
-/**
- * 建筑**被拆掉**的白烟雾爆炸（`units/effects/建筑死亡特效`）。
- *
- * 4 帧 @12fps（原始像素 195×195，`_lscale=110/195` ⇒ 屏上 110px，与受击 / 出生同基准），
- * 同一套三段式（`anim/*.anim` + `atlas/<名>.pac` + `<名>.prefab`）。
- * 缺失时为 `null` —— 建筑照常变废墟，只是少这团烟。
- */
-const BUILDING_DESTROY_FX_URL = ZC_BATTLE_FX_PATHS.buildingDestroy;
-/**
- * 受击特效的**目录**，按攻击方职业取子目录。
- *
- * 美术给了 5 组，但只有 4 组能当"职业受击"用：`射手/战士/法师/坦克` 与 `ZCAttackTrait`
- * （=卡表 `traits.attack`）一一对应；**「中毒受击」不是职业、是状态**，故意不登记在这里
- * —— 硬塞进来会让"中毒"看起来像第五个职业。
- *
- * 子目录名 = `<职业>受击`，prefab 名与目录同名（与既有 `units/effects/出生特效` 同口径）。
- */
-const HIT_FX_DIRECTORY = ZC_BATTLE_FX_PATHS.hitDirectory;
-/**
- * 要加载哪几个职业的受击特效 —— **加载侧的唯一真源**。
- *
- * 为什么不写死成"遍历目录"：美术目录里还有「中毒受击」（状态，不是职业），遍历会把它
- * 也捞进来，将来`ZCAttackTrait` 加第五个职业时又得回头改这里。显式点名 4 个，
- * 加职业时**只改这一处**，渲染层照 `ZCAttackTrait` 的类型自动跟上。
- *
- *  目录名/ prefab 名约定 = `<职业>受击`（与美术源目录 `0通用-受击/<职业>受击` 同名）。
- */
-const HIT_FX_TRAITS: readonly ZCAttackTrait[] = ZC_ATTACK_TRAITS;
-/** 自选主城阶段的常驻 HUD（顶部信息带 + 底部按钮组 + 吐司）。 */
-const SPAWN_SELECTION_URL = ZC_BATTLE_SHELL_PATHS.spawnSelection;
-// 波次怪守城（塔防）左上角的首领条（蓝湖「BOSS」稿）。
-const BOSS_PANEL_URL = ZC_BATTLE_SHELL_PATHS.bossPanel;
 /** 建筑外观帧目录（buildIcon 指向的图片都在此目录）。 */
 const BUILDING_DIRECTORY = 'image/buildings';
 
@@ -107,33 +41,9 @@ const WALL_TILE_EFFECT_URL = 'shaders/wall-tile';
  * 兵种**整体外轮廓**的放大副本 shader（`shaders/unit-outline-copy.effect`）。
  *
  * 口径 = 顺着整只角色外形（所有散件拼出来的边缘）的描边：同一份美术 prefab 放大 8%、
- * 只画不透明像素，排在角色后面。失败时只关闭该表现，不影响对局。
+ * 只画不透明像素，排在角色后面。
  */
 const UNIT_OUTLINE_COPY_EFFECT_URL = 'shaders/unit-outline-copy';
-/**
- * 地块抬起后**原位开口**的底部发光序列帧目录（8 帧，文件名 `hex_ground_glow_01..08`）。
- *
- * 2026-10-14 由 `shaders/hex-ground-glow.effect`（shader 实时投影三个侧面）换成美术给的成品序列帧：
- * 图自带「淡入 → 峰值 → 淡出」的 alpha 曲线，视图只按翻面段进度切帧 + 乘阵营色。
- */
-const HEX_GROUND_GLOW_DIRECTORY = HEX_GROUND_GLOW_ART_ROOT;
-/**
- * 翻格**脉冲序列帧**目录（5 帧，文件名 `hex_pulse_0..4`，320×320 透明底）。
- *
- * 2026-10-19 换美术：放大与不透明度**烘焙在图里**（1.00→1.78 倍、70%→15%），
- * 视图只按 10fps 换帧、不再叠 scale / opacity，也**不再需要**旧那套 `hex-pulse.effect`
- * 的径向虚化（虚化已经画在图上了）。仍然**按卡牌品阶染色**（1 绿 / 2 蓝 / 3 紫 / 4 金，
- * 没抽到卡也走绿）。只有对局在用。
- */
-const HEX_FLIP_PULSE_DIRECTORY = HEX_FLIP_PULSE_ART_ROOT;
-/**
- * 神器领取爆炸序列帧目录（18 帧，文件名 `artifact_claim_burst_00..17`，90×90 透明底）。
- *
- * 需求 2026-10-26：中立资源点「神器充能」被玩家领到手的那一拍，格心原地炸一下。
- * 与 `hex_pulse_seq` 同一条加载口径（扫目录按名排序），但**不染色、不切片** ——
- * 这套图的颜色是美术定的蓝色，视图只换帧。
- */
-const ARTIFACT_CLAIM_BURST_DIRECTORY = ARTIFACT_CLAIM_BURST_ART_ROOT;
 /**
  * 神器图标目录（`pvpArtifact[].icon`，如「霜封冰刃」）。
  *
@@ -152,162 +62,7 @@ const ARTIFACT_DIRECTORY = 'image/artifact';
  */
 const ZC_SPAWN_SELECTION_WEIGHT = 11;
 
-/** 首帧后逐项发布的表现资源快照；资源仍归当前战斗作用域。 */
-export interface IZCDeferredBattleArt {
-    readonly effectVisualPrefabs: ReadonlyMap<string, Prefab>;
-    readonly spawnFxPrefab: Prefab | null;
-    readonly deathFxPrefab: Prefab | null;
-    readonly buildingDestroyFxPrefab: Prefab | null;
-    readonly hitFxPrefabs: ReadonlyMap<ZCAttackTrait, Prefab>;
-    readonly decorFrames: ReadonlyMap<string, SpriteFrame>;
-    readonly hexGroundGlowFrames?: readonly SpriteFrame[];
-    readonly hexPulseFrames?: readonly SpriteFrame[];
-    readonly artifactClaimBurstFrames?: readonly SpriteFrame[];
-}
-
-/** 进入对局前准备好的首帧资源；loadDeferredArt 显式补齐可后补表现。 */
-export interface ZCGamePreparedResources {
-    readonly cardArtConfig: ICardArtConfig;
-    /** 配置表与本次随机地图合成后冻结的基础战斗配置。 */
-    baseMatchConfig: ZCMatchConfig;
-    hudPrefab: Prefab;
-    /**
-     * 棋盘图层容器（`ui/game/ZCGameBoard`）。
-     *
-     * 水面 / 地块 / 装饰 / 建筑 / 状态条这五层连同它们的层序都在 prefab 里声明，
-     * 运行时只按名取引用 —— 以前这五层是 `new Node` 现建的，层序靠 `setSiblingIndex` 现算。
-     */
-    boardPrefab: Prefab;
-    hexPrefab: Prefab;
-    unitPrefab: Prefab;
-    effectPrefab: Prefab;
-    wallPrefab: Prefab;
-    wallLayerPrefab: Prefab;
-    floatTextPrefab: Prefab;
-    /** 抽卡小卡牌（格子上方弹出的品级卡）。 */
-    cardRevealPrefab: Prefab;
-    /**
-     * 传说卡出场横幅（`ui/game/ZCGameLegendBanner`）。
-     *
-     *  只在抽到金卡（tier 4）时弹出，所以和小卡牌是**两条独立的池**：同一张金卡既弹格子上的
-     * 小卡牌、也弹屏幕正中的横幅（策划口径）。几何全在 prefab 里。
-     */
-    legendBannerPrefab: Prefab;
-    /**
-     * 场景装饰条目（`image/decor` 那些装饰图的载体）。
-     *
-     * 把「`sizeMode = CUSTOM` + `trim = false`」这两个配置烘进 prefab —— 它们不是随手设的：
-     * CUSTOM 才不让 TRIMMED 按 SpriteFrame 重算尺寸、把 fit 缩放吃掉；不裁边才与地图编辑器
-     * 画 `<image>` 的口径一致。以前写在 `installDecor` 里，改配置得动代码。
-     */
-    decorPrefab: Prefab;
-    /**
-     * 单位出生特效（`units/effects/出生特效`）。prefab 自带 `cc.Animation` + `playOnLoad`，
-     * 渲染层 `ZCGameRenderWorld.playSpawnFx()` 只需 `play(defaultClip.name)` 就能播。
-     *
-     *  缺失时为 `null` —— 单位照样正常出现，只是少一层出生表现，不影响对局。
-     */
-    spawnFxPrefab: Prefab | null;
-    /**
-     * 单位**阵亡特效**（`units/effects/死亡特效`，13 帧 @12fps）。
-     *
-     *  同样是三段式 + `cc.Animation`（`playOnLoad`），渲染层 `playDeathFx()` 只需
-     *  `play(defaultClip.name)`。缺失时为 `null` —— 阵亡表现退回到"只有染灰 + alpha 190"。
-     *
-     *  ⚠️ **显示尺寸烘在 prefab 根的 `_lscale`**（535×1092 @ 0.16448 ⇒ 屏上 88×179.6）：
-     *  它比受击/出生特效的 110px 基准**故意小 20%**（2026-10-16 反馈「整体缩小成 0.8」），
-     *  因为它是脚下一团爆开、等宽会跟单位本体抢视觉重心。改大小动 prefab，别在代码里 `setScale`。
-     */
-    deathFxPrefab: Prefab | null;
-    /**
-     * 建筑**被拆掉**时的白烟雾爆炸（`units/effects/建筑死亡特效`，4 帧 @12fps）。
-     *
-     *  建筑一被打掉地块就转 `ruins`，快照里看不出「刚被拆」⇒ 模型发一次性通知
-     *  （`buildingDestructions`），渲染层按 hexId 取格心播这一下。缺失时为 `null`。
-     */
-    buildingDestroyFxPrefab: Prefab | null;
-    /**
-     * 受击特效，按**攻击方职业**索引（`units/effects/受击特效/<职业>受击`）。
-     *
-     *   键是 `ZCAttackTrait`（卡表 `traits.attack` 的四个职业），**不是**美术的目录全集 ——
-     *  「中毒受击」不在其中（那是状态不是职业）。某个职业缺资源就**没有这个键**，
-     *  渲染层 `get(trait)` 拿到 `undefined` 就跳过这一下，**不猜默认职业**。
-     */
-    hitFxPrefabs: ReadonlyMap<ZCAttackTrait, Prefab>;
-    /**
-     * 自选主城 HUD（`ui/game/ZCSpawnSelection`）。
-     *
-     * 节点树 / 尺寸 / Widget 对齐都在 prefab 里声明；以前 `ZCSpawnSelectionView.initialize()`
-     * 一进来就 `removeAllChildren()` 再用 `new Node` + `addComponent` 现搭 12 个节点。
-     */
-    spawnSelectionPrefab: Prefab | null;
-    /** 守城（塔防）局左上角的首领条；普通服务端对局不加载。 */
-    bossPanelPrefab: Prefab | null;
-    unitVisualPrefabs: ReadonlyMap<ZCUnitId, Prefab>;
-    effectVisualPrefabs: ReadonlyMap<string, Prefab>;
-    /**
-     * 本局携带神器的图标帧（`image/artifact/<pvpArtifact[].icon>`）。
-     *
-     *  中立资源点「神器充能」格的图标用这一张，所以换神器后格子上显示的图会自动跟着变。
-     *  拿不到时为 `null` —— 视图回退到文字兜底（`NEUTRAL_RESOURCE_LABELS`），不崩不空。
-     */
-    artifactIconFrame: SpriteFrame | null;
-    /**
-     * **自选地图局**中立资源格的占位图（`image/gameui/whh`，金色问号）。
-     *
-     *  `cityMode: 'select'` 的选点阶段还不能让玩家看出哪格是什么资源（进游戏才随机）
-     *  ⇒ 所有中立资源格统一盖这张问号（口径见 `ArtPaths.NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME`）。
-     *  拿不到时为 `null` —— 视图退回"只显示地块图标"，不会崩（只是回到"看不出有资源点"的旧表现）。
-     */
-    unknownResourceFrame: SpriteFrame | null;
-    neutralResourceFrames: ReadonlyMap<string, SpriteFrame>;
-    /**
-     * 中立资源「金币」图标帧（`image/map-resource/coin_icon`）—— 飞向 HUD 金币栏的那把金币贴图。
-     *
-     * 与格子内金币图标**同一张**（换图两边一起变）。
-     *
-     * 🔴 拿不到时为 `null` ⇒ 粒子节点仍会建、仍按曲线飞，但 `Sprite.spriteFrame` 为空
-     * **屏上什么都不画**（不是"透明图"，是压根不渲染）—— 这时只剩「+N」读数可见。
-     * 排查「金币没动画」先看这里有没有加载成功（失败会 warn `金币图标加载失败`）。
-     */
-    goldCoinFrame: SpriteFrame | null;
-    /**
-     * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
-     *
-     * 拿不到时为 `null` —— 气泡回退 Graphics 色块（旧样式），不阻断选点。
-     */
-    spawnRegionFrames: IZCSpawnRegionHintFrames | null;
-    /** image/buildings 下的建筑外观帧（按图片名索引）。 */
-    buildingFrames: ReadonlyMap<string, SpriteFrame>;
-    /** image/walls 下的城墙砖帧（up/down/rightUp/rightDown）。 */
-    wallFrames: ReadonlyMap<string, SpriteFrame>;
-    /**
-     * 城墙砖接缝材质（`shaders/wall-tile.effect` 实例，按墙砖分别融合左右端帽）。
-     * 接缝只替换深色端帽颜色并保留原 alpha，避免重叠处黑线或透明断口；
-     * 加载失败时为 `null` —— 视图回退默认材质，不影响对局。
-     */
-    wallMaterial: Material | null;
-    /** 非己方 Spine 的**整体外轮廓**（放大副本）shader；缺失时只关闭该表现。 */
-    unitOutlineCopyEffect: EffectAsset | null;
-    /** 地块抬起后的**底部发光序列帧**（已按帧序排好；空数组 ⇒ 不画光）。 */
-    hexGroundGlowFrames: readonly SpriteFrame[];
-    /** 翻格**脉冲序列帧（5 帧）**（已按帧序排好；空数组 ⇒ 脉冲段退化为只剩缩没，不报错）。 */
-    hexPulseFrames: readonly SpriteFrame[];
-    /**
-     * 「神器充能」领取时的**格心爆炸序列帧（18 帧）**（已按帧序排好）。
-     *
-     * 空数组 ⇒ 该表现整条跳过（神器图标照常飞向神器栏），不报错 —— 与其它序列帧同口径。
-     */
-    artifactClaimBurstFrames: readonly SpriteFrame[];
-    /** 本局地图使用的静态装饰帧，随流程 ResourceScope 释放。 */
-    decorFrames: ReadonlyMap<string, SpriteFrame>;
-    /** 首次打开指南时加载配置与图标，同局共享正在进行的请求。 */
-    loadGuide: () => Promise<ZCGuidePreparedContent>;
-    /** 仅正式有作用域的战斗启用；调用方必须等首帧绘制后启动。重复调用合并。 */
-    loadDeferredArt?: (onUpdate: (art: IZCDeferredBattleArt) => void) => Promise<void>;
-}
-
-type ZCShellPrefabs = Pick<ZCGamePreparedResources,
+type IZCShellPrefabs = Pick<IZCGamePreparedResources,
     'hudPrefab' | 'boardPrefab' | 'hexPrefab' | 'unitPrefab' | 'effectPrefab' | 'wallPrefab' |
     'wallLayerPrefab' | 'floatTextPrefab' | 'cardRevealPrefab' | 'legendBannerPrefab' |
     'decorPrefab' | 'spawnSelectionPrefab' | 'bossPanelPrefab'>;
@@ -329,9 +84,9 @@ export class ZCGameLoader {
     ) {}
 
     /** 仅用于 battle 独占资源；共享目录与配表路径交给 AssetService 按归属路由。 */
-    private readonly battleOptions = (scope?: ResourceScope): AssetLoadOptions => ({ scope, bundle: BATTLE_BUNDLE, priority: BATTLE_ENTRY_PRIORITY });
+    private readonly battleOptions = (scope?: ResourceScope, priority = BATTLE_ENTRY_PRIORITY): AssetLoadOptions => ({ scope, bundle: BATTLE_BUNDLE, priority });
 
-    async prepare(scope?: ResourceScope, battle?: ZCBattleStart | null, waveCardIds: readonly number[] = []): Promise<ZCGamePreparedResources> {
+    async prepare(scope?: ResourceScope, battle?: ZCBattleStart | null, waveCardIds: readonly number[] = []): Promise<IZCGamePreparedResources> {
         const startedAt = Date.now();
         // 文件读取不依赖战斗表；地图筛选与 configure 仍在本局配置应用后执行。
         const mapFiles = this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
@@ -342,86 +97,147 @@ export class ZCGameLoader {
         if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 战斗配置准备 ${configReadyAt - startedAt}ms`);
         const count = battle?.units.length;
         const battlePlayerCount = count === 2 || count === 3 || count === 4 ? count : undefined;
-        const mapReady = await this.loadRandomMap(scope, battlePlayerCount, mapFiles);
-        this.checkActive(scope);
+        const mapReady = await this.loadRandomMap(scope, battlePlayerCount, mapFiles, battle?.mapInfo);
         if (!mapReady) throw new Error(`地图目录中没有可用配置：${this.mapDirectory}`);
         const mapReadyAt = Date.now();
         if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 地图准备 ${mapReadyAt - configReadyAt}ms`);
         const baseMatchConfig = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
-        // 波次和中立奖励可从完整目录产兵，不受后端参战卡池限制。
-        // 兵团类资源项要产的兵同样从完整目录来（不走后端参战卡池）；表里没配时为空。
-        const neutralUnitCardIds = Array.from(getZCNeutralResourceCatalog().items.values())
-            .flatMap((item) => item.feature?.resId ? [item.feature.resId]
-                : item.cardId && item.unitCount > 0 ? [item.cardId] : []);
-        const additionalCardIds = battle ? [
-            ...waveCardIds.map(String),
-            ...neutralUnitCardIds,
-        ] : [];
-        const additionalUnitIds = additionalCardIds.flatMap((cardId) => {
-            const unitId = findCatalogCard(cardId)?.unitId;
-            return unitId === undefined ? [] : [Number(unitId)];
-        });
-        const heroIds = battle ? [
-            ...battle.units.flatMap((unit) => unit.heroes?.map((hero) => hero.heroId) ?? unit.heroIds),
-            ...additionalUnitIds,
-        ] : undefined;
-        const modifiers = battle ? buildZCClientCombatConfig(baseMatchConfig, battle, undefined, { allowUnresolvedSelect: true }).config.modifiers : undefined;
-
+        const { heroIds, modifiers } = this.buildVisualInputs(battle, waveCardIds, baseMatchConfig);
         // 后补机制只依赖 scope 做资源归属与取消检查，不依赖 battle；
         // PVE 本地局（battle=null）同样首帧快进，特效、序列帧与装饰在首帧后补齐。
         const progressive = !!scope;
         // 在任何后补 await 之前捕获地图声明，避免下一局重配污染本局。
         const decorNames = Array.from(new Set((this.selectedMap?.art?.freeDecor ?? [])
             .flatMap(item => typeof item?.art === 'string' && item.art.trim() ? [item.art.trim()] : [])));
-        const [
-            shellPrefabs,
-            [spawnFxPrefab, deathFxPrefab, buildingDestroyFxPrefab, hitFxPrefabs],
-            visualPrefabs,
-            [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect, hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames, artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames],
-            cardArtConfig,
-        ] = await Promise.all([
-            this.traceArt('公共外壳', this.loadShellPrefabs(scope, baseMatchConfig.map.cityMode === 'select', !battle || waveCardIds.length > 0)),
-            progressive ? Promise.resolve([null, null, null, new Map<ZCAttackTrait, Prefab>()] as const) : this.traceArt('公共特效', Promise.all([
-                this.loadSpawnFxPrefab(scope),
-                this.loadDeathFxPrefab(scope),
-                this.loadBuildingDestroyFxPrefab(scope),
-                this.loadHitFxPrefabs(scope),
-            ])),
+        const selectSpawn = baseMatchConfig.map.cityMode === 'select';
+        const [shellPrefabs, effects, visualPrefabs, terrain, icons, sceneEffects, cardArtConfig] = await Promise.all([
+            this.traceArt('公共外壳', this.loadShellPrefabs(scope, selectSpawn, !battle || waveCardIds.length > 0)),
+            this.traceArt('公共特效', this.loadInitialEffects(scope, progressive)),
             this.loadVisualPrefabs(scope, heroIds, modifiers, progressive),
-            this.traceArt('场景美术', Promise.all([
-                this.loadBuildingFrames(scope),
-                this.loadWallFrames(scope),
-                this.loadWallMaterial(scope),
-                this.loadUnitOutlineCopyEffect(scope),
-                progressive ? Promise.resolve([] as SpriteFrame[]) : this.loadHexGroundGlowFrames(scope),
-                progressive ? Promise.resolve([] as SpriteFrame[]) : this.loadHexPulseFrames(scope),
-                progressive ? Promise.resolve([] as SpriteFrame[]) : this.loadArtifactClaimBurstFrames(scope),
-                progressive ? Promise.resolve(new Map<string, SpriteFrame>()) : this.loadDecorFrames(scope),
-                this.loadArtifactIconFrame(scope),
-                baseMatchConfig.map.cityMode === 'select' ? this.loadUnknownResourceFrame(scope) : Promise.resolve(null),
-                this.loadGoldCoinFrame(scope),
-                baseMatchConfig.map.cityMode === 'select' ? this.loadSpawnRegionFrames(scope) : Promise.resolve(null),
-                this.loadNeutralResourceFrames(scope),
-            ])),
-            Promise.all([
-                this.resources.configs.getTable(CARD_ART_TABLES.rarity),
-                this.resources.configs.getTable(CARD_ART_TABLES.cardClass),
-                this.resources.configs.getTable(CARD_ART_TABLES.camp),
-                this.resources.configs.getTable('icon'),
-            ]).then(([rarity, cardClass, camp, icons]) => {
-                const art = parseCardArtConfig({
-                    rarity: rarity ?? [],
-                    cardClass: cardClass ?? [],
-                    camp: camp ?? [],
-                }, icons);
-                setCardRarityMeta(art.lineup.rarities);
-                return art;
-            }),
+            this.traceArt('地形美术', this.loadTerrainArt(scope)),
+            this.traceArt('地图图标', this.loadMapIcons(scope, selectSpawn)),
+            this.traceArt('场景表现', this.loadInitialSceneEffects(scope, progressive)),
+            this.loadCardArtConfig(scope),
         ]);
         this.checkActive(scope);
         if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] ${progressive ? '首帧美术准备' : '战斗美术准备'} ${Date.now() - mapReadyAt}ms`);
-        let guideTask: Promise<ZCGuidePreparedContent> | null = null;
-        const loadGuide = (): Promise<ZCGuidePreparedContent> => {
+        return {
+            cardArtConfig,
+            baseMatchConfig,
+            hudPrefab: shellPrefabs.hudPrefab,
+            boardPrefab: shellPrefabs.boardPrefab,
+            hexPrefab: shellPrefabs.hexPrefab,
+            unitPrefab: shellPrefabs.unitPrefab,
+            effectPrefab: shellPrefabs.effectPrefab,
+            wallPrefab: shellPrefabs.wallPrefab,
+            wallLayerPrefab: shellPrefabs.wallLayerPrefab,
+            floatTextPrefab: shellPrefabs.floatTextPrefab,
+            cardRevealPrefab: shellPrefabs.cardRevealPrefab,
+            legendBannerPrefab: shellPrefabs.legendBannerPrefab,
+            decorPrefab: shellPrefabs.decorPrefab,
+            spawnSelectionPrefab: shellPrefabs.spawnSelectionPrefab,
+            bossPanelPrefab: shellPrefabs.bossPanelPrefab,
+            spawnFxPrefab: effects.spawnFxPrefab,
+            deathFxPrefab: effects.deathFxPrefab,
+            buildingDestroyFxPrefab: effects.buildingDestroyFxPrefab,
+            hitFxPrefabs: effects.hitFxPrefabs,
+            buildingFrames: terrain.buildingFrames,
+            wallFrames: terrain.wallFrames,
+            wallMaterial: terrain.wallMaterial,
+            unitOutlineCopyEffect: terrain.unitOutlineCopyEffect,
+            artifactIconFrame: icons.artifactIconFrame,
+            unknownResourceFrame: icons.unknownResourceFrame,
+            goldCoinFrame: icons.goldCoinFrame,
+            spawnRegionFrames: icons.spawnRegionFrames,
+            neutralResourceFrames: icons.neutralResourceFrames,
+            hexGroundGlowFrames: sceneEffects.hexGroundGlowFrames,
+            hexPulseFrames: sceneEffects.hexPulseFrames,
+            artifactClaimBurstFrames: sceneEffects.artifactClaimBurstFrames,
+            decorFrames: sceneEffects.decorFrames,
+            unitVisualPrefabs: visualPrefabs.units,
+            effectVisualPrefabs: visualPrefabs.effects,
+            loadGuide: this.createGuideTask(scope),
+            loadDeferredArt: progressive ? this.createDeferredArt(scope, visualPrefabs.effectPaths, decorNames) : undefined,
+        };
+    }
+
+    private buildVisualInputs(battle: ZCBattleStart | null | undefined, waveCardIds: readonly number[], baseMatchConfig: ZCMatchConfig) {
+        // 波次、中立奖励与兵团可从完整目录产兵，不受后端参战卡池限制。
+        const neutralUnitCardIds = Array.from(getZCNeutralResourceCatalog().items.values())
+            .flatMap((item) => item.feature?.resId ? [item.feature.resId]
+                : item.cardId && item.unitCount > 0 ? [item.cardId] : []);
+        const additionalCardIds = battle ? waveCardIds.map(String).concat(neutralUnitCardIds) : [];
+        const additionalUnitIds = additionalCardIds.flatMap((cardId) => {
+            const unitId = findCatalogCard(cardId)?.unitId;
+            return unitId === undefined ? [] : [Number(unitId)];
+        });
+        const heroIds = battle ? battle.units
+            .flatMap((unit) => unit.heroes?.map((hero) => hero.heroId) ?? unit.heroIds)
+            .concat(additionalUnitIds) : undefined;
+        const modifiers = battle ? buildZCClientCombatConfig(baseMatchConfig, battle, undefined, { allowUnresolvedSelect: true }).config.modifiers : undefined;
+
+        return { heroIds, modifiers };
+    }
+
+    private async loadInitialEffects(scope: ResourceScope | undefined, progressive: boolean) {
+        if (progressive) return {
+            spawnFxPrefab: null, deathFxPrefab: null, buildingDestroyFxPrefab: null,
+            hitFxPrefabs: new Map<ZCAttackTrait, Prefab>(),
+        };
+        return this.loadCommonEffects(scope);
+    }
+
+    private async loadTerrainArt(scope?: ResourceScope) {
+        const [buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect] = await Promise.all([
+            this.loadBuildingFrames(scope),
+            this.loadWallFrames(scope),
+            this.loadWallMaterial(scope),
+            this.loadUnitOutlineCopyEffect(scope),
+        ]);
+        return { buildingFrames, wallFrames, wallMaterial, unitOutlineCopyEffect };
+    }
+
+    private async loadMapIcons(scope: ResourceScope | undefined, selectSpawn: boolean) {
+        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames] = await Promise.all([
+            this.loadArtifactIconFrame(scope),
+            selectSpawn ? this.loadUnknownResourceFrame(scope) : null,
+            this.loadGoldCoinFrame(scope),
+            selectSpawn ? this.loadSpawnRegionFrames(scope) : null,
+            this.loadNeutralResourceFrames(scope),
+        ]);
+        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames };
+    }
+
+    private async loadInitialSceneEffects(scope: ResourceScope | undefined, progressive: boolean) {
+        if (progressive) return {
+            hexGroundGlowFrames: [] as SpriteFrame[], hexPulseFrames: [] as SpriteFrame[],
+            artifactClaimBurstFrames: [] as SpriteFrame[], decorFrames: new Map<string, SpriteFrame>(),
+        };
+        const [hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames] = await Promise.all([
+            this.loadHexGroundGlowFrames(scope),
+            this.loadHexPulseFrames(scope),
+            this.loadArtifactClaimBurstFrames(scope),
+            this.loadDecorFrames(scope),
+        ]);
+        return { hexGroundGlowFrames, hexPulseFrames, artifactClaimBurstFrames, decorFrames };
+    }
+
+    private async loadCardArtConfig(scope?: ResourceScope): Promise<ICardArtConfig> {
+        const [rarity, cardClass, camp, icons] = await Promise.all([
+            this.resources.configs.getTable(CARD_ART_TABLES.rarity),
+            this.resources.configs.getTable(CARD_ART_TABLES.cardClass),
+            this.resources.configs.getTable(CARD_ART_TABLES.camp),
+            this.resources.configs.getTable('icon'),
+        ]);
+        this.checkActive(scope);
+        const art = parseCardArtConfig({ rarity: rarity ?? [], cardClass: cardClass ?? [], camp: camp ?? [] }, icons);
+        setCardRarityMeta(art.lineup.rarities);
+        return art;
+    }
+
+    private createGuideTask(scope?: ResourceScope): IZCGamePreparedResources['loadGuide'] {
+        let guideTask: Promise<IZCGuidePreparedContent> | null = null;
+        return () => {
             this.checkActive(scope);
             if (guideTask) return guideTask;
             const task = new ZCGuideLoader(this.resources).prepare(scope);
@@ -429,44 +245,16 @@ export class ZCGameLoader {
             void task.catch(() => { if (guideTask === task) guideTask = null; });
             return task;
         };
-
-        return {
-            cardArtConfig,
-            baseMatchConfig,
-            artifactIconFrame,
-            unknownResourceFrame,
-            neutralResourceFrames,
-            goldCoinFrame,
-            spawnRegionFrames,
-            ...shellPrefabs,
-            spawnFxPrefab,
-            deathFxPrefab,
-            buildingDestroyFxPrefab,
-            hitFxPrefabs,
-            unitVisualPrefabs: visualPrefabs.units,
-            effectVisualPrefabs: visualPrefabs.effects,
-            buildingFrames,
-            wallFrames,
-            wallMaterial,
-            unitOutlineCopyEffect,
-            hexGroundGlowFrames,
-            hexPulseFrames,
-            artifactClaimBurstFrames,
-            decorFrames,
-            loadGuide,
-            loadDeferredArt: progressive ? this.createDeferredArt(scope, visualPrefabs.effectPaths, decorNames) : undefined,
-        };
     }
 
-    private async loadShellPrefabs(scope: ResourceScope | undefined, selectSpawn: boolean, hasBossPanel: boolean): Promise<ZCShellPrefabs> {
-        this.checkActive(scope);
+    private async loadShellPrefabs(scope: ResourceScope | undefined, selectSpawn: boolean, hasBossPanel: boolean): Promise<IZCShellPrefabs> {
         const paths = {
-            hudPrefab: HUD_URL, boardPrefab: BOARD_URL, hexPrefab: HEX_URL, unitPrefab: UNIT_URL,
-            effectPrefab: EFFECT_URL, wallPrefab: WALL_URL, wallLayerPrefab: WALL_LAYER_URL,
-            floatTextPrefab: FLOAT_TEXT_URL, cardRevealPrefab: CARD_REVEAL_URL,
-            legendBannerPrefab: LEGEND_BANNER_URL, decorPrefab: DECOR_URL,
-            spawnSelectionPrefab: selectSpawn ? SPAWN_SELECTION_URL : null,
-            bossPanelPrefab: hasBossPanel ? BOSS_PANEL_URL : null,
+            hudPrefab: ZC_BATTLE_SHELL_PATHS.hud, boardPrefab: ZC_BATTLE_SHELL_PATHS.board, hexPrefab: ZC_BATTLE_SHELL_PATHS.hex, unitPrefab: ZC_BATTLE_SHELL_PATHS.unit,
+            effectPrefab: ZC_BATTLE_SHELL_PATHS.effect, wallPrefab: ZC_BATTLE_SHELL_PATHS.wall, wallLayerPrefab: ZC_BATTLE_SHELL_PATHS.wallLayer,
+            floatTextPrefab: ZC_BATTLE_SHELL_PATHS.floatText, cardRevealPrefab: ZC_BATTLE_SHELL_PATHS.cardReveal,
+            legendBannerPrefab: ZC_BATTLE_SHELL_PATHS.legendBanner, decorPrefab: ZC_BATTLE_SHELL_PATHS.decor,
+            spawnSelectionPrefab: selectSpawn ? ZC_BATTLE_SHELL_PATHS.spawnSelection : null,
+            bossPanelPrefab: hasBossPanel ? ZC_BATTLE_SHELL_PATHS.bossPanel : null,
         };
         const entries = Object.entries(paths).filter(([, path]) => path !== null);
         const requests = entries.map(([, path]) => ({ path, type: Prefab,
@@ -475,22 +263,20 @@ export class ZCGameLoader {
         // 正式入口复用资源管理器批次；可选槽位只在模式需要时加载。
         const values = scope && assets.loadBatch
             ? await assets.loadBatch(requests, { scope }).result
-            : await Promise.all(requests.map(request => assets.load(request.path, request.type, { ...request.options, scope })));
-        this.checkActive(scope);
+            : await Promise.all(requests.map(request => assets.load(request.path, request.type, { bundle: request.options.bundle, priority: request.options.priority, scope })));
         if (values === false) throw new Error('战斗资源批量加载已取消');
         // 批次按请求顺序返回；在此恢复名称，调用方不依赖数组位置。
-        return Object.fromEntries([
-            ['spawnSelectionPrefab', null], ['bossPanelPrefab', null],
-            ...entries.map(([key], index) => [key, values[index]]),
-        ]) as ZCShellPrefabs;
+        return Object.assign(
+            { spawnSelectionPrefab: null, bossPanelPrefab: null },
+            Object.fromEntries(entries.map(([key], index) => [key, values[index]])),
+        ) as IZCShellPrefabs;
     }
 
-    private createDeferredArt(scope: ResourceScope | undefined, effectPaths: readonly string[], decorNames: readonly string[]): NonNullable<ZCGamePreparedResources['loadDeferredArt']> {
+    private createDeferredArt(scope: ResourceScope | undefined, effectPaths: readonly string[], decorNames: readonly string[]): NonNullable<IZCGamePreparedResources['loadDeferredArt']> {
         let task: Promise<void> | null = null;
         return onUpdate => {
             if (task) return task;
             task = (async () => {
-                this.checkActive(scope);
                 const startedAt = Date.now();
                 let art: IZCDeferredBattleArt = {
                     effectVisualPrefabs: new Map(), hitFxPrefabs: new Map(), decorFrames: new Map(),
@@ -498,38 +284,36 @@ export class ZCGameLoader {
                 };
                 const jobs: Array<() => Promise<Partial<IZCDeferredBattleArt>>> = [
                     // 点击地块马上会用到的5帧脉冲先补齐，其余辅助序列帧排在战斗特效后。
-                    async () => ({ hexPulseFrames: await this.loadSortedSpriteFrames(HEX_FLIP_PULSE_DIRECTORY, '翻格脉冲', scope, BATTLE_DEFERRED_PRIORITY) }),
-                    ...HIT_FX_TRAITS.map(trait => async () => {
-                        const prefab = await this.resources.assets.load(`${HIT_FX_DIRECTORY}/${trait}受击/${trait}受击`, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
-                        return { hitFxPrefabs: new Map([...art.hitFxPrefabs, [trait, prefab]]) };
-                    }),
-                    ...effectPaths.map(path => async () => {
-                        //  ⚠️ 这里必须自己带路径的 label：外层循环那条 `loadOptional` 的文案是
-                        //  「后补特效失败，保留通用表现」，不带路径 ⇒ 十几条特效里哪一条挂了看不出来，
-                        //  战场上只表现为「这个兵的子弹不见了」（2026-11-04 萨尔/萨满）。
-                        const prefab = await this.loadOptional(scope, `技能特效加载失败：${path}`,
-                            () => this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY }), null);
-                        if (!prefab) return {};
-                        return { effectVisualPrefabs: new Map([...art.effectVisualPrefabs, [path, prefab]]) };
-                    }),
-                    async () => ({ spawnFxPrefab: await this.resources.assets.load(SPAWN_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
-                    async () => ({ deathFxPrefab: await this.resources.assets.load(DEATH_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
-                    async () => ({ buildingDestroyFxPrefab: await this.resources.assets.load(BUILDING_DESTROY_FX_URL, Prefab, { ...this.battleOptions(scope), priority: BATTLE_DEFERRED_PRIORITY }) }),
-                    async () => ({ hexGroundGlowFrames: await this.loadSortedSpriteFrames(HEX_GROUND_GLOW_DIRECTORY, '底部发光', scope, BATTLE_DEFERRED_PRIORITY) }),
-                    async () => ({ artifactClaimBurstFrames: await this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_DIRECTORY, '神器领取爆炸', scope, BATTLE_DEFERRED_PRIORITY) }),
-                    ...decorNames.map(name => async () => {
-                        const frame = await this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false, priority: BATTLE_DEFERRED_PRIORITY });
-                        return { decorFrames: new Map([...art.decorFrames, [name, frame]]) };
-                    }),
+                    async () => ({ hexPulseFrames: await this.loadSortedSpriteFrames(HEX_FLIP_PULSE_ART_ROOT, scope, BATTLE_DEFERRED_PRIORITY) }),
+                    () => this.loadCommonEffects(scope, BATTLE_DEFERRED_PRIORITY),
                 ];
+                for (const path of effectPaths) {
+                    jobs.push(async () => {
+                        const prefab = await this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_DEFERRED_PRIORITY });
+                        const effectVisualPrefabs = new Map(art.effectVisualPrefabs);
+                        effectVisualPrefabs.set(path, prefab);
+                        return { effectVisualPrefabs };
+                    });
+                }
+                jobs.push(
+                    async () => ({ hexGroundGlowFrames: await this.loadSortedSpriteFrames(HEX_GROUND_GLOW_ART_ROOT, scope, BATTLE_DEFERRED_PRIORITY) }),
+                    async () => ({ artifactClaimBurstFrames: await this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_ART_ROOT, scope, BATTLE_DEFERRED_PRIORITY) }),
+                );
+                for (const name of decorNames) {
+                    jobs.push(async () => {
+                        const frame = await this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false, priority: BATTLE_DEFERRED_PRIORITY });
+                        const decorFrames = new Map(art.decorFrames);
+                        decorFrames.set(name, frame);
+                        return { decorFrames };
+                    });
+                }
                 for (const job of jobs) {
-                    // 一次只派发一个根资源，并给交互、退出与渲染留出机会。
+                    // 每批之间给交互、退出与渲染留出机会。
                     await new Promise<void>(resolve => setTimeout(resolve, DEFERRED_ART_YIELD_MS));
                     this.checkActive(scope);
-                    const patch = await this.loadOptional(scope, '后补特效失败，保留通用表现', job, null);
+                    const patch = await job();
                     this.checkActive(scope);
-                    if (!patch) continue;
-                    art = { ...art, ...patch };
+                    art = Object.assign({}, art, patch);
                     onUpdate(art);
                 }
                 if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 完整特效准备 ${Date.now() - startedAt}ms（首帧后）`);
@@ -545,7 +329,7 @@ export class ZCGameLoader {
     }
 
     /** 加载候选地图并跳过损坏项；全部无效时返回 false。 */
-    async loadRandomMap(scope?: ResourceScope, battlePlayerCount?: 2 | 3 | 4, mapFiles?: Promise<JsonAsset[]>): Promise<boolean> {
+    async loadRandomMap(scope?: ResourceScope, battlePlayerCount?: 2 | 3 | 4, mapFiles?: Promise<JsonAsset[]>, mapInfo?: Readonly<CmdPvpMapInfo>): Promise<boolean> {
         let maps: JsonAsset[];
         try {
             maps = await (mapFiles ?? this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }));
@@ -554,6 +338,18 @@ export class ZCGameLoader {
             return false;
         }
         this.checkActive(scope);
+        if (mapInfo) {
+            const matches = maps.filter(asset => {
+                const layout = asset.json as ZCMapLayout | null;
+                return layout?.id === mapInfo.id && (layout.version ?? 1) === mapInfo.version;
+            });
+            if (matches.length !== 1) throw new Error(`后端地图不存在或不唯一：${mapInfo.id} v${mapInfo.version}`);
+            const layout = matches[0].json as ZCMapLayout;
+            if (!isRandomMapCandidate(layout, battlePlayerCount)) throw new Error(`后端地图人数或模式不匹配：${mapInfo.id}`);
+            configureZCMap(layout);
+            this.selectedMap = layout;
+            return true;
+        }
         if (!maps.length) {
             if (ZCDC_LOG_WARNINGS) console.error(`[ZCGameLoader] 地图目录为空：${this.mapDirectory}`);
             return false;
@@ -607,10 +403,8 @@ export class ZCGameLoader {
         const units = new Map<ZCUnitId, Prefab>();
         const effects = new Map<string, Prefab>();
         const load = async (path: string, assign: (prefab: Prefab) => void): Promise<void> => {
-            const prefab = await this.loadOptional(scope, `配置的 Prefab 加载失败：${path}`,
-                () => this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_ENTRY_PRIORITY }), null);
-            this.checkActive(scope);
-            if (prefab) assign(prefab);
+            const prefab = await this.resources.assets.load(path, Prefab, { scope, priority: BATTLE_ENTRY_PRIORITY });
+            assign(prefab);
         };
         const unitTasks = plan.units.map(definition => load(definition.prefabPath, prefab => units.set(definition.unitId, prefab)));
         const effectTasks = deferEffects ? [] : plan.effectPaths.map(path => load(path, prefab => effects.set(path, prefab)));
@@ -621,42 +415,25 @@ export class ZCGameLoader {
         return { units, effects, effectPaths: plan.effectPaths };
     }
 
-    /** 中立资源图标由本局 scope 持有，缺图时视图保留文字提示。 */
+    /** 中立资源图标由本局 scope 持有。 */
     private async loadNeutralResourceFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
-        const frames = await this.loadOptional(scope, '中立资源图标加载失败',
-            () => this.resources.assets.loadDir(MAP_RESOURCE_ART_ROOT, SpriteFrame, this.battleOptions(scope)), []);
+        const frames = await this.resources.assets.loadDir(MAP_RESOURCE_ART_ROOT, SpriteFrame, this.battleOptions(scope));
         return new Map(frames.map(frame => [frame.name, frame]));
     }
 
-    /**
-     * 加载 image/buildings 目录下全部建筑外观帧（SpriteFrame.name = 图片名，按它索引）。
-     * 失败不阻断整局：视图会回退到 prefab 里 @property 绑定的类型通用图。
-     */
+    /** 按图片名索引建筑外观帧。 */
     private async loadBuildingFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
-        const frames = await this.loadOptional(scope, `建筑外观目录加载失败：${BUILDING_DIRECTORY}`,
-            () => this.resources.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY }), []);
+        const frames = await this.resources.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
         return new Map(frames.filter(frame => !!frame?.name).map(frame => [frame.name, frame]));
     }
 
-    /**
-     * 加载**自选地图局**中立资源格的占位图（`image/gameui/whh`，金色问号）。
-     *
-     *  `cityMode: 'select'` 的选点阶段还不能让玩家看出哪格是什么资源（进游戏才随机）
-     *  ⇒ 所有中立资源格统一盖这张问号。
-     *  失败不阻断整局：返回 `null`，视图退回"只显示地块图标"（与引入遮蔽之前一致）。
-     */
-    private async loadUnknownResourceFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
+    /** 自选主城阶段用问号遮蔽中立资源。 */
+    private async loadUnknownResourceFrame(scope?: ResourceScope): Promise<SpriteFrame> {
         const path = spriteFramePath(GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME);
-        return this.loadOptional(scope, `中立资源占位图加载失败：${path}`,
-            () => this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope)), null);
+        return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
     }
 
-    /**
-     * 加载**本局携带的那件神器**的图标（`image/artifact/<pvpArtifact[].icon>`）。
-     *
-     *  失败不阻断整局：返回 `null`，视图回退到文字兜底（与「三张资源点图」的
-     *  「取不到就文字」是同一套降级思路）。
-     */
+    /** 加载本局神器图标，未配置神器时返回 null。 */
     private async loadArtifactIconFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         // 图名真源= `pvpArtifact` 第一行的 `icon` 列（已拍进 rules.artifactIcon）。
         const iconName = getPvpRuntimeRules().artifactIcon;
@@ -668,158 +445,85 @@ export class ZCGameLoader {
         // SpriteFrame **子资源**，裸路径（`image/artifact/霜封冰刃`）在bundle 里查不到，
         // 报错形态是 `Bundle resources doesn't contain ...`（不是 404，容易误判成「美术没交图」）。
         const path = spriteFramePath(ARTIFACT_DIRECTORY, iconName);
-        return this.loadOptional(scope, `神器图标加载失败：${path}`,
-            () => this.resources.assets.load(path, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY }), null);
+        return this.resources.assets.load(path, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
     }
 
-    /**
-     * 格心喷发那束金币的贴图：`image/map-resource/coin_icon`（**单枚金币 icon**，与 HUD 金币栏 /
-     * 格子金币资源图标同款视觉）。
-     *
-     * ⚠️ **别用 `image/map-resource/gold`** —— 那是一张「金币堆 + 钱袋」的装饰插画，
-     * 一颗颗飞出去像在撒装饰。2026-10-20 已切到 `coin_icon`。
-     *
-     * 失败不阻断整局：返回 `null`，粒子照常建、照常按曲线跑，但屏上**没有图**
-     * （`Sprite` 无 `spriteFrame` 不渲染，不是"透明图"）—— 此时只剩「+N」读数。
-     * 所以「金币没动画」的现场排查顺序是：先看这条 warn，再看事件有没有入队。
-     */
-    private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
+    /** 金币飞行使用单枚 coin_icon，与格子资源金币图标一致。 */
+    private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame> {
         const path = spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon');
-        return this.loadOptional(scope, `金币图标加载失败：${path}`,
-            () => this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope)), null);
+        return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
     }
 
-    /**
-     * 自选主城区域气泡底图：`image/spawn-region/frame_01`（绿 = 中/后区）、`frame_02`（红 = 前区）。
-     *
-     * 缺任何一张只掉对应纵深的气泡（回退 Graphics 色块）；两张全缺返回 `null`。
-     * 失败不阻断选点流程。
-     */
-    private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames | null> {
-        const [frame01, frame02] = await Promise.all([
-            this.loadSpawnRegionFrame('frame_01', scope),
-            this.loadSpawnRegionFrame('frame_02', scope),
-        ]);
-        if (!frame01 && !frame02) return null;
-        return { front: frame02, mid: frame01, back: frame01 };
+    /** 前区红色气泡，中后区绿色气泡。 */
+    private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames> {
+        const frames = await this.loadSortedSpriteFrames(SPAWN_REGION_ART_ROOT, scope);
+        const green = frames.find(frame => frame.name === 'frame_01');
+        const red = frames.find(frame => frame.name === 'frame_02');
+        if (!green || !red) throw new Error(`出生区域气泡目录缺少 frame_01 / frame_02：${SPAWN_REGION_ART_ROOT}`);
+        return { front: red, mid: green, back: green };
     }
 
-    private async loadSpawnRegionFrame(name: 'frame_01' | 'frame_02', scope?: ResourceScope): Promise<SpriteFrame | null> {
-        const path = spriteFramePath(SPAWN_REGION_ART_ROOT, name);
-        return this.loadOptional(scope, `区域气泡切图加载失败：${path}`,
-            () => this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope)), null);
+    /** 只取 Prefab 类型，动画与裸帧由 prefab 依赖加载；中毒不登记为职业受击。 */
+    private async loadCommonEffects(scope?: ResourceScope, priority = BATTLE_ENTRY_PRIORITY) {
+        const prefabs = await this.resources.assets.loadDir(COMMON_EFFECT_DIRECTORY, Prefab, this.battleOptions(scope, priority));
+        const byName = new Map(prefabs.map(prefab => [prefab.name, prefab]));
+        const getPrefab = (path: string): Prefab => {
+            const prefab = byName.get(path.substring(path.lastIndexOf('/') + 1));
+            if (!prefab) throw new Error(`公共特效目录缺少 prefab：${path}`);
+            return prefab;
+        };
+        return {
+            spawnFxPrefab: getPrefab(ZC_BATTLE_FX_PATHS.spawn),
+            deathFxPrefab: getPrefab(ZC_BATTLE_FX_PATHS.death),
+            buildingDestroyFxPrefab: getPrefab(ZC_BATTLE_FX_PATHS.buildingDestroy),
+            hitFxPrefabs: new Map(ZC_ATTACK_TRAITS.map(trait => [trait,
+                getPrefab(`${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`)])),
+        };
     }
 
-    /**
-     * 加载单位出生特效 prefab。失败不阻断整局：单位照样正常出现，只是少一层出生表现。
-     *
-     *  与神��图标同理走容错 —— 出生特效是纯表现件，不该因为它没交/ 路径写错就让整局开不起来。
-     */
-    private async loadSpawnFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
-        const path = SPAWN_FX_URL;
-        return this.loadOptional(scope, `出生特效加载失败：${path}`,
-            () => this.resources.assets.load(path, Prefab, this.battleOptions(scope)), null);
-    }
-
-    /**
-     * 加载单位阵亡特效 prefab。失败不阻断整局 —— 与出生特效同一套容错理由。
-     */
-    private async loadDeathFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
-        const path = DEATH_FX_URL;
-        return this.loadOptional(scope, `阵亡特效加载失败：${path}`,
-            () => this.resources.assets.load(path, Prefab, this.battleOptions(scope)), null);
-    }
-
-    /**
-     * 加载建筑摧毁特效 prefab。失败不阻断整局 —— 与出生 / 阵亡特效同一套容错理由：
-     * 纯表现件缺失时建筑照常变废墟，只是少一层交代。
-     */
-    private async loadBuildingDestroyFxPrefab(scope?: ResourceScope): Promise<Prefab | null> {
-        const path = BUILDING_DESTROY_FX_URL;
-        return this.loadOptional(scope, `建筑死亡特效加载失败：${path}`,
-            () => this.resources.assets.load(path, Prefab, this.battleOptions(scope)), null);
-    }
-
-    /**
-     * 加载四个职业的受击特效 prefab。
-     *
-     *  **逐个 `load`、不 `loadDir`**：`loadDir` 会把 `受击特效/` 下**全部**资源捞回来，
-     * 包括美术那组「中毒受击」（不是职业）和每个目录里的 `.pac` / `.anim` / 裸帧 ——
-     * 白白进内存、还得再筛一遍。这里按 `HIT_FX_TRAITS` 精确点名要哪四个。
-     *
-     * 单个失败只 `warn` 并跳过那一个键（Map 里就没这个职业了），
-     * **不 throw** —— 美术少交一组不该让整局开不起来。
-     */
-    private async loadHitFxPrefabs(
-        scope?: ResourceScope,
-    ): Promise<ReadonlyMap<ZCAttackTrait, Prefab>> {
-        const prefabs = new Map<ZCAttackTrait, Prefab>();
-        await Promise.all(HIT_FX_TRAITS.map(async (trait) => {
-            const url = `${HIT_FX_DIRECTORY}/${trait}受击/${trait}受击`;
-            const prefab = await this.loadOptional(scope, `受击特效加载失败：职业「${trait}」← ${url}`,
-                () => this.resources.assets.load(url, Prefab, this.battleOptions(scope)), null, 'error');
-            this.checkActive(scope);
-            if (prefab) prefabs.set(trait, prefab);
-        }));
-        return prefabs;
-    }
-
-    /**
-     * 加载 image/walls 下的城墙砖帧（SpriteFrame.name = up/down/rightUp/rightDown）。
-     * 失败不阻断整局：渲染层回退到 wall prefab 里原绑定的可拉伸通用墙砖。
-     */
+    /** 按方向加载城墙砖帧。 */
     private async loadWallFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
-        const frames = await this.loadOptional(scope, `城墙砖目录加载失败：${WALL_TILE_DIRECTORY}`,
-            () => this.resources.assets.loadDir(WALL_TILE_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY }), []);
+        const frames = await this.resources.assets.loadDir(WALL_TILE_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
         return new Map(frames.filter(frame => !!frame?.name).map(frame => [frame.name, frame]));
     }
 
-    /**
-     * 加载城墙砖接缝材质（`shaders/wall-tile.effect`）。失败不阻断对局：返回 null，
-     * 渲染层回退默认材质（砖自带描边，仅重叠接缝处不再融合）。
-     */
-    private async loadWallMaterial(scope?: ResourceScope): Promise<Material | null> {
-        return this.loadOptional(scope, `城墙砖接缝材质加载失败：${WALL_TILE_EFFECT_URL}`, async () => {
-            const effect = await this.resources.assets.load(WALL_TILE_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
-            this.checkActive(scope);
-            if (!effect) return null;
-            const material = new Material();
-            material.initialize({ effectAsset: effect });
-            return material;
-        }, null);
+    /** 按墙砖透视端帽范围融合接缝，保持原 alpha。 */
+    private async loadWallMaterial(scope?: ResourceScope): Promise<Material> {
+        const effect = await this.resources.assets.load(WALL_TILE_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
+        this.checkActive(scope);
+        const material = new Material();
+        material.initialize({ effectAsset: effect });
+        return material;
     }
 
-    /** 兵种整体外轮廓（放大副本）；失败返回 null ⇒ 只关闭该表现，不影响对局。 */
-    private async loadUnitOutlineCopyEffect(scope?: ResourceScope): Promise<EffectAsset | null> {
-        return this.loadOptional(scope, `单位整体轮廓材质加载失败：${UNIT_OUTLINE_COPY_EFFECT_URL}`,
-            () => this.resources.assets.load(UNIT_OUTLINE_COPY_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }), null);
+    /** 兵种整体外轮廓（放大副本）。 */
+    private async loadUnitOutlineCopyEffect(scope?: ResourceScope): Promise<EffectAsset> {
+        return this.resources.assets.load(UNIT_OUTLINE_COPY_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
     }
 
-    /** 序列帧按文件名排序；单目录加载失败时不影响对局表现。 */
+    /** 序列帧按文件名排序。 */
     private async loadSortedSpriteFrames(
         directory: string,
-        label: string,
         scope?: ResourceScope,
         priority = BATTLE_ENTRY_PRIORITY,
     ): Promise<SpriteFrame[]> {
-        const frames = await this.loadOptional(scope, `${label}序列帧加载失败：${directory}`,
-            () => this.resources.assets.loadDir(directory, SpriteFrame, { ...this.battleOptions(scope), priority }), []);
+        const frames = await this.resources.assets.loadDir(directory, SpriteFrame, this.battleOptions(scope, priority));
         return frames.filter(frame => !!frame?.name).sort((a, b) => a.name.localeCompare(b.name));
     }
 
     /** 加载地块抬起后的底部发光序列帧。 */
     private loadHexGroundGlowFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
-        return this.loadSortedSpriteFrames(HEX_GROUND_GLOW_DIRECTORY, '底部发光', scope);
+        return this.loadSortedSpriteFrames(HEX_GROUND_GLOW_ART_ROOT, scope);
     }
 
     /** 加载翻格脉冲呼吸序列帧。 */
     private loadHexPulseFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
-        return this.loadSortedSpriteFrames(HEX_FLIP_PULSE_DIRECTORY, '翻格脉冲', scope);
+        return this.loadSortedSpriteFrames(HEX_FLIP_PULSE_ART_ROOT, scope);
     }
 
     /** 加载「神器充能」领取时的格心爆炸序列帧。 */
     private loadArtifactClaimBurstFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
-        return this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_DIRECTORY, '神器领取爆炸', scope);
+        return this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_ART_ROOT, scope);
     }
 
     /** 仅加载本局地图声明的装饰，资源生命周期交给当前流程。 */
@@ -831,28 +535,13 @@ export class ZCGameLoader {
         const frames = new Map<string, SpriteFrame>();
         await Promise.all(Array.from(names).map(async (name) => {
             // 随机地图的小装饰只随本局持有，不占用会话复用缓存。
-            const frame = await this.loadOptional(scope, `地图装饰加载失败：${name}`,
-                () => this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false }), null);
-            this.checkActive(scope);
-            if (frame) frames.set(name, frame);
+            const frame = await this.resources.assets.load(decorFramePath(name), SpriteFrame, { scope, cache: false });
+            frames.set(name, frame);
         }));
         return frames;
     }
 
-    private async loadOptional<T>(scope: ResourceScope | undefined, label: string,
-        load: () => Promise<T>, fallback: T, level: 'warn' | 'error' = 'warn'): Promise<T> {
-        this.checkActive(scope);
-        try {
-            const value = await load();
-            this.checkActive(scope);
-            return value;
-        } catch (error) {
-            this.checkActive(scope);
-            if (ZCDC_LOG_WARNINGS) console[level](`[ZCGameLoader] ${label}`, error);
-            return fallback;
-        }
-    }
-
+    /** 资源加载的取消由 AssetService 处理；这里只守住配置写入、资源创建与结果发布。 */
     private checkActive(scope?: ResourceScope): void {
         if (scope?.disposed) throw new Error('对局预加载已取消');
     }

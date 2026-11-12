@@ -338,6 +338,9 @@ const CREATE_PREFAB = assetPath('ui/League/LeagueCreate.prefab');
 const TAB_PAGE_TS = 'assets/script/app/league/LeagueTabPage.ts';
 const JOIN_PAGE_TS = 'assets/script/app/league/LeagueJoinPage.ts';
 const CREATE_PAGE_TS = 'assets/script/app/league/LeagueCreatePage.ts';
+const CREATE_MODEL_TS = 'assets/script/app/league/LeagueCreateModel.ts';
+const CREATE_CONTROLLER_TS = 'assets/script/app/league/LeagueCreateController.ts';
+const CREATE_COMPOSITION_TS = 'assets/script/app/bootstrap/LeagueCreatePopupComposition.ts';
 const UNION_ROW_TS = 'assets/script/app/league/LeagueUnionRow.ts';
 const SCROLL_TS = 'assets/script/vscrollview/VScrollView.ts';
 const UI_2D = 33554432;
@@ -782,10 +785,16 @@ test('D16 ⚠️ 两个 EditBox：盒尺寸/键盘/长度不同，但**两个 la
         const r = join.P(p)!;
         const anchor = (((r.node._components ?? []) as unknown[]).map(join.at).find((c) => c?.__type__ === 'cc.UITransform')!._anchorPoint) as { x: number; y: number };
         assert.deepEqual([anchor.x, anchor.y], [0, 1], `${p} 锚点必须是 (0,1)`);
-        // 276×39 ⇒ 框左上角 = (−138, +19.5)
-        assert.deepEqual([lpos(r.node).x, lpos(r.node).y], [-138, 19.5], `${p} lpos = 框左上角`);
-        // FGUI `GTextInput` 构造写死 `singleLine=false` ⇒ 多行 ⇒ 开换行（与创建页同判据）
-        assert.equal(join.comp(p, 'cc.Label')!._enableWrapText, true, `${p} 多行 ⇒ enableWrapText`);
+        // 276×39 ⇒ 框左上角 = (−138, +19.5)；引擎 `_updateLabelPosition()` 实际摆的是
+        // `offX + LEFT_PADDING(2)` ⇒ 编辑器存盘会把 label 归一到 (−136, 19.5)、宽度 276−2 = 274。
+        // 断言的仍是「框左上角 + 引擎的 2px 内边距」，不是随手取的一个数。
+        const LEFT_PADDING = 2;
+        assert.deepEqual([lpos(r.node).x, lpos(r.node).y], [-138 + LEFT_PADDING, 19.5], `${p} lpos = 框左上角 + 2px`);
+        const ut = ((r.node._components ?? []) as unknown[]).map(join.at).find((c) => c?.__type__ === 'cc.UITransform')!;
+        assert.equal(ut._contentSize.width, 276 - LEFT_PADDING, `${p} 宽度 = 框宽 − 2px（引擎同款）`);
+        // ⚠️ 本页是 NUMERIC（单行）⇒ 换行必须是关的；编辑器存盘按单行口径归一成 false。
+        //   （创建页那条是 `_inputMode = ANY` 多行，才要 true —— 两页不要套同一判据）
+        assert.equal(join.comp(p, 'cc.Label')!._enableWrapText, false, `${p} 单行 ⇒ 关换行`);
     }
 
     // 创建页：366×34 宽扁盒 + FGUI `singleLine=false`（解 bin 定死）⇒ 多行；两 label 必须 (0,1) + 框左上角
@@ -956,8 +965,12 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
     // 勾选框：读写都落到 quickJoinCheck.active（FGUI 用 gearDisplay 控制勾的显隐，不是换图）
     assert.ok(src.includes('quickJoinCheck'), '勾选框的显隐靠 quickJoinCheck');
     assert.ok(!/quickJoinCheck[\s\S]{0,40}spriteFrame/.test(src), '勾选框不是换帧，是 active 开关');
-    // 名字守卫：走 isLeagueNameUsable（空 / '***' 都拒）
-    assert.ok(src.includes('isLeagueNameUsable'));
+    // 名字守卫：MVC 迁移后视图只派发意图，纯规则的真源在 LeagueCreateModel
+    assert.ok(!src.includes('isLeagueNameUsable'), '视图不该自己判名字守卫');
+    assert.ok(stripComments(readFileSync(CREATE_MODEL_TS, 'utf8')).includes('isLeagueNameUsable'),
+        '名字守卫（空 / `***` 都拒）必须落到 LeagueCreateModel');
+    assert.ok(src.includes('LeagueCreateEvent.Intent') && src.includes('owner: this'),
+        '创建页只 emit 带 owner 的意图');
     // 消耗两态：换色走 LeagueArt 的四色常量
     assert.ok(src.includes('LEAGUE_COST_ENOUGH_COLOR') && src.includes('LEAGUE_COST_SHORT_COLOR'),
         '`lab_has` 两态换色');
@@ -971,7 +984,14 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
     // ⚠️ 「允许快速加入」的节点是根下的兄弟（不是在 QuickJoinBox 里）
     assert.ok(src.includes('QUICK_JOIN_LABEL_NODE') && src.includes("'QuickJoinLabel'"),
         '要按兄弟名取 label（getComponentInChildren 在盒子里找不到）');
-    assert.ok(src.includes('onCreated'), '建盟成功后回敲');
+    // 建盟成功：不再让视图持有容器回调，改由 Controller 按 owner 发 LeagueTabEvent.Joined
+    assert.ok(!src.includes('onCreated'), '视图不再穿透容器回调');
+    assert.ok(stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
+        '成功通知由 LeagueCreateController 收口');
+    assert.ok(stripComments(readFileSync(CREATE_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
+        '成功通知必须落到容器已有的 Joined 事件（按 owner 限定）');
+    assert.ok(!stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('onCreated'),
+        '控制器也不接回调，只认 owner');
 });
 
 test('E6 三个页面类里不出现死写文案（一律从 LeagueTexts 取）', () => {

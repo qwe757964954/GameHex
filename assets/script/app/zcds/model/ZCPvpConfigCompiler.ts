@@ -14,7 +14,6 @@ import {
     number,
     object,
     parseAttackProfiles,
-    parseBaseTeamWeights,
     parseBondRules,
     parseCard,
     parseCounterRules,
@@ -113,6 +112,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     const neutralResources = compileZCNeutralResourceCatalog(
         tables.neutralResourceGroup ?? [],
         new Map(cards.map((card) => [card.id, card])),
+        tables.neutralEnhanceGate ?? [],
     );
 
     const tileRows = (tables.pvpTile ?? []).map((row) => ({
@@ -120,10 +120,9 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         pityGroup: refNullable(row.pityGroup),
     }));
     const tileConfigs = parseTileConfigs(tileRows);
-    // 抽取权重优先用基础阵容权重随机表（含初始/集合限制）；未提供时回退到地块生成表。
-    const tileWeights = (tables.pvpBaseTeamWeight?.length
-        ? parseBaseTeamWeights(tables.pvpBaseTeamWeight)
-        : parseTileWeights(tables.pvpTileGen ?? []));
+    // 抽取权重直接来自 `pvpTile` 每行的 weight / initialCountLimit / setCountLimit
+    // （2026-11-10 并入；旧的「基础阵容权重随机表」pvpBaseTeamWeight 已废弃）。
+    const tileWeights = parseTileWeights(tileConfigs);
 
     const pityRules = (tables.pvpPity ?? []).map((row) => object(row, 'pvpPity[]'));
     // 保底规则按 `tileType` 关联地块（`pvpPity.tileType` = `pvpTile.id`），不是按自己的 `id`。

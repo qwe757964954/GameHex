@@ -88,8 +88,8 @@ test('select maps require candidate cells for every player section', () => {
     );
 });
 
-test('三张河道自选主城地图都按各自前中后区并集限制游戏内落点', () => {
-    for (const file of ['river_custom.json', 'river_custom_new.json', 'select_river.json']) {
+test('河道自选主城地图按前中后区并集限制游戏内落点', () => {
+    for (const file of ['river_custom_new.json']) {
         const layout = JSON.parse(readFileSync(assetPath(`config/maps/${file}`), 'utf8')) as ZCMapLayout;
         const selection = new ZCSpawnSelection(makeMap(layout), sequence(0));
         for (const [owner, section] of [['player', 1], ['enemy', 2]] as const) {

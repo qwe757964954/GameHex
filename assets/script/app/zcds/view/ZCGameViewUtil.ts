@@ -12,6 +12,7 @@ import {
     HEX_GRID_VIEW_ROW_SPACING,
 } from '../../../core/hex/HexGridLayout';
 import { ZCFaction, ZCOwner } from '../model/ZCMapConfig';
+import { ZC_PORTAL_FLIGHT_SECONDS } from '../model/ZCBattlePresentationQueue';
 
 export const ZC_MAP_PRESENTATION_SCALE = 1;
 
@@ -33,6 +34,15 @@ export const ZC_MAP_SCALE_Y = ZC_HEX_ROW_SPACING / HEX_GRID_LOGICAL_ROW_STEP;
 
 export function mapToViewX(x: number): number { return x * ZC_MAP_SCALE_X; }
 export function mapToViewY(y: number): number { return y * ZC_MAP_SCALE_Y; }
+
+export function portalFlightProgress(startedAt: number, now: number): number {
+    return Math.max(0, Math.min(1, (now - startedAt) / ZC_PORTAL_FLIGHT_SECONDS));
+}
+
+export function portalFlightLift(progress: number): number {
+    const p = Math.max(0, Math.min(1, progress));
+    return 4 * p * (1 - p) * HEX_GRID_FACE_HEIGHT;
+}
 
 /**
  * 开局镜头的落点：**我方主城**那一格的视图坐标；地图还没定主城时为 `null`。
@@ -447,11 +457,12 @@ export const FLOAT_TEXT_GOLD_FADE_START = 0.3;
  * 建筑顶部相对**格心**的偏移（像素）。
  *
  * = 地块 prefab `ZCGameHex.prefab` 里 `buildingSprite` 所在节点的上边缘：
- * `lpos.y 15.651 + 高 90 × BUILDING_ICON_SCALE 0.72 / 2 = 48.05`。
+ * `lpos.y 15.651 + 高 90 × BUILDING_ICON_SCALE 0.612 / 2 = 43.19`。
  * 飘字锚点是格心（`ZCGameModel` 传的是 `hexCenter`），所以"建筑顶部"= 格心 + 本值。
  * ⚠️ 换建筑图（`ZCGameHex.prefab` 的 BuildingIcon 尺寸 / 位置）或改 `BUILDING_ICON_SCALE` 时要重标。
+ * 2026-11-11：建筑基准缩放 0.72 → 0.612（需求「缩小回 85%」），本值随之 48 → 43。
  */
-export const FLOAT_TEXT_GOLD_INCOME_TOP_PX = 48;
+export const FLOAT_TEXT_GOLD_INCOME_TOP_PX = 43;
 
 /** 建筑产金飘字某一刻的姿态。 */
 export interface IFloatTextGoldRiseFrame {

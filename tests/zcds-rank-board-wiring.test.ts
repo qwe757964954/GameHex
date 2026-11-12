@@ -274,7 +274,7 @@ test('★★★Panel 不该有 Mask/Graphics；Mask 只能挂在 List 上（滚�
 
 test('★★★行 prefab 的文字样式必须与设计稿一致（逐节点钉住，不按集合比）', () => {
     // 设计稿给的文字样式（lanhu `textInfo`，用 `inspect_design_region` 取的实测值）：
-    //   玩家名   : rgb(58,53,81) 深藏青  24.5px   **左对齐**
+    //   玩家名   : rgb(58,53,81) 深藏青  24.5px → **36.75px**   **左对齐**（2026-11-11 用户要求 ×1.5）
     //   比赛中…  : rgb(58,53,81) 深藏青  32px
     //   地块数   : 白色 24px + **黑描边**（压在 di_01 米色底上）
     //   名次数字 : 白色 40px
@@ -302,7 +302,10 @@ test('★★★行 prefab 的文字样式必须与设计稿一致（逐节点钉
 
     const name = label('NameText');
     assert.ok(name, '★找不到 NameText');
-    assert.equal(name!._fontSize, 24.5, '★玩家名字号应为 24.5（设计稿 size=24.516）');
+    // 2026-11-11 需求：「所有玩家的名字字号放大成现在的 1.5 倍」⇒ 设计稿 24.5 × 1.5 = 36.75。
+    // 框（168×30 → 252×45）与 `_lineHeight`（38 → 57）必须同步放大：
+    // `_overflow=2`（SHRINK）按框高缩字号，只改 `_fontSize` 会被压回去（24.5 在 30 高里只画 19）。
+    assert.equal(name!._fontSize, 36.75, '★玩家名字号应为 36.75（= 设计稿 24.516 × 1.5）');
     assert.equal(rgb(name!), '58,53,81', '★玩家名必须是 rgb(58,53,81) 深藏青（Label 默认白，不显式设就全白）');
     assert.equal(name!._horizontalAlign, 0, '★玩家名必须**左对齐**（设计稿 justification=left）');
 

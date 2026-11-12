@@ -39,8 +39,7 @@ export function clearLastPvpInfo(): void {
 }
 
 async function requestPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
-    const net = GameNet.instance;
-    if (!net.isConnected) {
+    if (!GameNet.instance.isConnected) {
         console.warn('[PvpInfoService] 游戏服未连接，跳过 PVP 信息请求（保留本地占位值）');
         return lastResult;
     }

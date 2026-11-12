@@ -1,30 +1,33 @@
 import type { NetworkTransport } from '../../core/network/NetworkTransport';
-import type { IHotUpdateConfig, IHotUpdateNativePlan, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
+import type { IHotUpdateConfig, IHotUpdateManagerDependencies, IHotUpdateNativePlan, HotUpdatePlatform } from '../../core/update/HotUpdateTypes';
 import { EngineMain } from '../../engine/EngineMain';
-import { HotUpdateManager } from '../../app/update/HotUpdateManager';
 import { CocosBundleRuntime } from './CocosBundleRuntime';
 import { CocosHotUpdateStore } from './CocosHotUpdateStore';
 import { CocosManifestVerifier } from './CocosManifestVerifier';
 import { CocosNativeHotUpdateHost } from './NativeHotUpdateHost';
 import { NativeHotUpdateRuntime } from './NativeHotUpdateRuntime';
 
-export function createCocosHotUpdateManager(
+/**
+ * 产出资源热更编排器所需的平台适配器集合，不装配编排器本身。
+ * 编排器属 app 层业务，platform 只实现 core 端口。
+ */
+export function createCocosHotUpdateDependencies(
     network: NetworkTransport,
     config: IHotUpdateConfig,
-): HotUpdateManager {
-    return new HotUpdateManager({
+): IHotUpdateManagerDependencies {
+    return {
         network,
         store: new CocosHotUpdateStore(),
         runtime: new CocosBundleRuntime(),
         verifier: new CocosManifestVerifier(config.allowUnsignedManifests),
         platform: config.platformOverride ?? detectHotUpdatePlatform(),
-    });
+    };
 }
 
 /**
  * 原生全构建目录热更（官方 native.AssetsManager 方案）。
  *
- * 只在 Android / iOS 生效；Web 与小游戏由 `createCocosHotUpdateManager` 那条
+ * 只在 Android / iOS 生效；Web 与小游戏由 `createCocosHotUpdateDependencies` 那条
  * 远程 Bundle 路径负责（那边解决的是包体而非脚本热更）。
  */
 export function createNativeHotUpdateRuntime(

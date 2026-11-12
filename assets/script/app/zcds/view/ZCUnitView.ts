@@ -19,6 +19,14 @@ export interface IZCUnitPresentation {
     y: number;
     /** 表现时间（秒），用于判断血条是否还在「被攻击后 3 秒」的显示窗口内。 */
     now: number;
+    /**
+     * 施法期间把美术整体上抬多少（**屏上 px**，2026-11-11 麻辣铁锅「喷射火焰」102603
+     * 「播放攻击动画时，角色上移 30px，触发特效时，角色在空中循环播放攻击动作」）。
+     *
+     * 来源是地面区域的 `casterLiftPx`（`self_aura` 施法者整段悬空）——
+     * 缺省 0 ⇒ 不抬，所有既有单位行为逐字不变。
+     */
+    castLiftPx?: number;
 }
 
 /**
@@ -274,6 +282,15 @@ export class ZCUnitView extends Component {
     private appliedVisualScaleY = Number.NaN;
     private lastFacing: 1 | -1 = 1;
     private appliedTint = -1;
+    /**
+     * `visualRoot` 的**基准** y 偏移（`attachVisual` 按骨架 / 序列帧各给一个）与当前已写入的悬空高度。
+     *
+     * 悬空高度**叠加在基准上**、不覆盖：`visualRoot` 的 y 是「美术相对脚下原点的摆位」，
+     * 直接把 y 写成 30 会让序列帧兵整体往下跳一截（它们的基准是负值）。
+     * 值没变就不写 —— 与 `appliedVisualScaleX` 同一条理由（setPosition 也置脏标记）。
+     */
+    private visualBaseOffsetY = 0;
+    private appliedCastLift = Number.NaN;
     /** 出生抖动起点（表现时间，秒）；null = 没在抖。建筑生成单位时由渲染层设一次。 */
     private spawnShakeStartedAt: number | null = null;
 
@@ -407,6 +424,8 @@ export class ZCUnitView extends Component {
         this.moveClip = '';
         this.attackClip = '';
         this.visualRoot.setPosition(Vec3.ZERO);
+        this.visualBaseOffsetY = 0;
+        this.appliedCastLift = Number.NaN;
     }
 
     private attachVisual(prefab: Prefab): void {
@@ -435,8 +454,11 @@ export class ZCUnitView extends Component {
         // 整体外轮廓用同一份美术 prefab 的第二个实例 ⇒ 只在有骨架时建。
         if (this.visualSkeleton) this.attachOutlineCopy(prefab);
         // Frame art is centered on its canvas; Spine art is already anchored near the feet.
-        this.visualRoot.setPosition(0, this.visualSkeleton
-            ? ZCUnitView.UNIT_VISUAL_OFFSET_SPINE : ZCUnitView.UNIT_VISUAL_OFFSET_FRAME, 0);
+        this.visualBaseOffsetY = this.visualSkeleton
+            ? ZCUnitView.UNIT_VISUAL_OFFSET_SPINE : ZCUnitView.UNIT_VISUAL_OFFSET_FRAME;
+        this.visualRoot.setPosition(0, this.visualBaseOffsetY, 0);
+        // 换过一套美术 ⇒ 悬空高度要按新基准重算，否则「上一套的 lift」会被当成已写入而跳过。
+        this.appliedCastLift = Number.NaN;
     }
 
     /**
@@ -508,6 +530,15 @@ export class ZCUnitView extends Component {
             else if (cos > ZCUnitView.FACING_HYSTERESIS_COS) this.lastFacing = 1;
             const facing = this.lastFacing;
 
+            // 施法悬空（2026-11-11 麻辣铁锅 102603「角色上移 30px」）：只抬**美术根节点**，
+            // 不动单位坐标 —— 判定 / 索敌 / 格子占用都还在脚下那个点上。
+            // 叠加在 `visualBaseOffsetY` 上（不是覆盖），见那个字段的注释。
+            const castLift = presentation.castLiftPx ?? 0;
+            if (castLift !== this.appliedCastLift) {
+                this.appliedCastLift = castLift;
+                this.visualRoot.setPosition(0, this.visualBaseOffsetY + castLift, 0);
+            }
+
             // 出生抖动：Y 拉 110% 回落 → X 拉 110% 回落，叠加在朝向翻转之上。
             let shakeX = 1;
             let shakeY = 1;
@@ -542,7 +573,11 @@ export class ZCUnitView extends Component {
             const moving = unit.battleState === 'move'
                 || unit.battleState === 'moveForward'
                 || unit.battleState === 'target';
-            const clip = attacking || charging ? this.attackClip : moving ? this.moveClip : this.idleClip;
+            // 悬空施法（`castLift > 0`）也播攻击动作，理由同 `charging`：设计案要求
+            // 「触发特效时，角色在空中循环播放攻击动作」。spine 的 `setAnimation(0, name, true)`
+            // 本身就是循环，这里只需要把片段选对。
+            const clip = attacking || charging || castLift > 0
+                ? this.attackClip : moving ? this.moveClip : this.idleClip;
             const attackRestarted = attacking && (unit.completedAttackCount ?? 0) !== this.lastAttackCount;
             this.playClip(clip, attackRestarted);
             this.lastAttackCount = unit.completedAttackCount ?? 0;

@@ -1,3 +1,4 @@
+type CacheKey<T> = T extends Long ? T | string | number : T;
 import { ResourceMgr } from "../../engine/ResourceMgr";
 import { ScriptObject } from "../base/ScriptObject";
 import { TDic } from "../collection/TDic";
@@ -199,7 +200,7 @@ export class GameCacheMgr extends ScriptObject {
      * @param cacheName 缓存名称
      * @param key 缓存key
      */
-    protected get<T extends keyof protoCacheGen, TK extends protoCacheGen[T]["c_k"]>(cacheName: T, key?: [keyof TK] extends [never] ? any : TK[keyof TK]): protoCacheGen[T]["c"] {
+    protected get<T extends keyof protoCacheGen, TK extends protoCacheGen[T]["c_k"]>(cacheName: T, key?: [keyof TK] extends [never] ? any : CacheKey<TK[keyof TK]>): protoCacheGen[T]["c"] {
         let cache = this.cacheDictionary.get(cacheName);
         if (cache != null) {
             return cache.get(key);

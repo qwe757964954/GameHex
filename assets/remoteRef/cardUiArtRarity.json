@@ -16,7 +16,7 @@
 "image/card/common_img_kp_01",
 "image/card/kpzr_di_01",
 "image/frame/common_img_pzk_01",
-"image/carddetail/diamond_gold"
+"image/carddetail/identity/icon_quality_legendary"
 ],
 [
 "purple",
@@ -25,7 +25,7 @@
 "image/card/common_img_kp_02",
 "image/card/kpzr_di_02",
 "image/frame/common_img_pzk_02",
-"image/carddetail/quality_purple"
+"image/carddetail/identity/icon_quality_epic"
 ],
 [
 "blue",
@@ -34,7 +34,7 @@
 "image/card/common_img_kp_04",
 "image/card/kpzr_di_04",
 "image/frame/common_img_pzk_04",
-"image/carddetail/diamond_blue"
+"image/carddetail/identity/icon_quality_rare"
 ],
 [
 "green",
@@ -43,7 +43,7 @@
 "image/card/common_img_kp_03",
 "image/card/kpzr_di_03",
 "image/frame/common_img_pzk_03",
-"image/carddetail/diamond_green"
+"image/carddetail/identity/icon_quality_uncommon"
 ]
 ],
 "c":1

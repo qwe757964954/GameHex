@@ -1,6 +1,8 @@
-"""把 `tools/map-editor/presets/territory/*.json` 发布到客户端资源目录与策划 JSON 目录。
+"""把 `tools/map-editor/presets/territory/*.json` 发布到客户端资源目录与策划 sever 目录。
 
-一份 payload 写三处：Cocos 资源目录（带 `.meta`）+ 策划仓的 `sever` / `client`（不带）。
+一份 payload 写两处：Cocos 资源目录（带 `.meta`）+ 策划仓的 `sever`（不带）。
+不写策划 `client` —— 那是 eSon 配表中间目录，写进去会被 `ref_compress_json.py` 扫进
+`assets/remoteRef` 形成冗余副本，原因详见 `presets_io.py` 模块注释。
 写盘与 `.meta` 的细节见 `presets_io.py` —— 那份是和 `copy_bigmap_maps.py` 共用的。
 
 用法：
@@ -21,16 +23,16 @@ ROOT = Path(__file__).resolve().parent
 SOURCE = presets_io.ROOT / "presets" / "territory"
 TARGET = presets_io.PROJECT / "assets" / "resources" / "config" / "territory-maps"
 
-# 策划侧的两份 JSON 目录（口径与 `export_tafang.mjs` 一致）。**留在本模块**是为了让
+# 策划侧 sever 目录。**留在本模块**是为了让
 # `tests/test_copy_territory_maps.py` 能 `patch.object(publisher, 'DOC_TARGETS', ...)`。
-DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_TARGETS
+DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_SEVER_TARGET
 
 
 def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
-    """校验一份预设并发布到三个落点；返回 (落盘路径列表, 警告列表)。
+    """校验一份预设并发布到两个落点；返回 (落盘路径列表, 警告列表)。
 
-    三个目标写的是**同一份校验后的 payload** —— 校验只跑一次、产物按字节相同，
-    避免三份目录各校验一次、规则漂移。
+    两个目标写的是**同一份校验后的 payload** —— 校验只跑一次、产物按字节相同，
+    避免两份目录各校验一次、规则漂移。
     """
     data = json.loads(path.read_text(encoding="utf-8"))
     normalized, warnings = validate_territory_map(data, path.stem)

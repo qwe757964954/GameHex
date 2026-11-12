@@ -198,6 +198,15 @@ function createEntryHarness() {
             if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { Node: FakeNode, UITransform, Widget, UIOpacity,
+                Prefab: class {}, AssetManager: class {},
+                // 页面宿主改为 instantiate prefab：造一个「组件已挂好」的节点，等价于 prefab 内容。
+                instantiate: () => {
+                    const node = new FakeNode('BigMapPage');
+                    node.addComponent(UITransform); node.addComponent(Widget);
+                    node.addComponent(UIOpacity); node.addComponent(Page);
+                    return node;
+                },
+                assetManager: { getBundle: () => ({ load: (_p: string, _t: unknown, cb: (e: null, a: unknown) => void) => cb(null, {}) }) },
                 Layers: { Enum: { UI_2D: 1 } }, view: { getVisibleSize: () => ({ width: 720, height: 1466 }) },
                 director: { getScene: () => ({ getChildByName: () => canvas }) } };
             if (name === './BigMapConfigLoader') return { loadBigMapConfig: async () => ({}) };

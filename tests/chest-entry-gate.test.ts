@@ -343,8 +343,10 @@ test('客户端不写死关卡号 —— 条件只有表里那一份', () => {
 test('MainPage 接线：先藏再判、解锁才播动画、销毁时退订关卡缓存', () => {
     const code = codeOnly(readFileSync(READ_PATH, 'utf8'));
 
-    // 先藏再判：onLoad 里 active=false 必须早于 refreshChestEntry()（数量格同步藏）
-    assert.match(code, /this\.chestToggle\.active = false;\s*this\.setChestCellsVisible\(false\);\s*this\.refreshChestEntry\(\);/,
+    // 先藏再判：onLoad 里 active=false 必须早于 refreshOpenGates()（数量格 / 快速寻敌同步藏）
+    assert.match(
+        code,
+        /this\.chestToggle\.active = false;\s*this\.setChestCellsVisible\(false\);\s*this\.startButton\.active = false;\s*this\.refreshOpenGates\(\);/,
         'onLoad 必须先把入口和数量格都藏起来再判条件，否则未解锁的号会瞥见一帧');
     // 解锁路径：显示 + 播生成动画（且只播一次，靠静态标记挡重播）
     assert.match(code, /private static chestEntryCelebrated = false;/,
@@ -463,7 +465,7 @@ test('MainPage 把判定接到账号级成就上：切章不回退，且只有�
         'MainPage 里又自己遍历格子了 —— 那样只看当前章，切到第 2 章就会丢入口');
 
     // ② 观察到的通关整批落盘，且发生在**判条件之前**（onTerritoryRender 里）
-    assert.match(code, /this\.rememberPassedTerritoryLevels\(\);[\s\S]{0,80}?this\.refreshChestEntry\(\);/,
+    assert.match(code, /this\.rememberPassedTerritoryLevels\(\);[\s\S]{0,120}?this\.refreshOpenGates\(\);/,
         '领地渲染时要先把这一章已通关的关卡记下来，再判入口 —— 顺序反了，切章那一笔会漏');
     assert.match(code, /this\.territoryArchive\(\)\.markLevelsPassed\(Array\.from\(passed\)\)/,
         '落盘要传 `Array.from(set)` —— release 构建把 `[...set]` 降级成 `[].concat(set)`，静默一条都记不上');

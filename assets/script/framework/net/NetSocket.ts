@@ -240,6 +240,7 @@ export class NetSocket extends NetSocketBase {
             }
             state = this.getState()
             if (!(state instanceof ConnectedNetState)) {
+                t.tlRequest.unshift(request)
                 break
             }
             let isOk = state.addNetworkRequest(request)

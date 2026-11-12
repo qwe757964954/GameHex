@@ -355,12 +355,15 @@ export function formatHms(ms: number): string {
 /**
  * 当前倍率。
  *
- * ⚠️ **只有福利月卡（无限次快速征收特权）玩家能切档**；非月卡玩家恒为 1
- * （老端 `refreshGearBtn` 在 `!hasPrivilege` 时**把下标复位成 0**）。
- * Demo3.8 没有月卡特权实现 ⇒ 调用方一律传 `false`，倍率恒 1。
+ * ⚠️ **2026-11-11 口径变更（山猫拍板）：倍率对所有玩家开放**，不再要求福利月卡。
+ * 协议 `CmdCityChapterSweepReqMsg` 新增 `optional uint32 times = 3`，由服务端按
+ * `倍率 × 单次消耗` 扣体力、按倍率发奖 ⇒ 客户端的档位不再需要「持卡」这道门禁。
+ * 老端 `refreshGearBtn` 那套「无特权把下标复位成 0」随之作废（见 `HangPage.reload`）。
+ *
+ * 保留下来的只有「越界下标退默认档」：`_gearIndex` 只会是 0..4，越界属于调用方传错，
+ * 退默认档能让错误可预测。
  */
-export function sweepTimesOf(gearIndex: number, hasUnlimited: boolean): number {
-    if (!hasUnlimited) return HJ_SWEEP_GEARS[HJ_DEFAULT_GEAR_INDEX];
+export function sweepTimesOf(gearIndex: number = HJ_DEFAULT_GEAR_INDEX): number {
     const i = Number.isInteger(gearIndex) && gearIndex >= 0 && gearIndex < HJ_SWEEP_GEARS.length
         ? gearIndex
         : HJ_DEFAULT_GEAR_INDEX;
@@ -561,14 +564,14 @@ export function claimableOf(snapshot: IHjSnapshotView): boolean {
     return canClaim(cappedElapsedMsOf(snapshot));
 }
 
-/** 当前倍率（无月卡恒 1）。 */
-export function timesOf(snapshot: IHjSnapshotView, gearIndex: number = HJ_DEFAULT_GEAR_INDEX): number {
-    return sweepTimesOf(gearIndex, snapshot.hasUnlimited);
-}
-
-/** 快速征收按钮上的花费文案 `x5`（= `sweepEnd × times`）。 */
+/**
+ * 快速征收按钮上的花费文案 `x10`。
+ *
+ * ⚠️ 服务端按 `end × times` 扣体力（老端 `BattleSweepHandler` 第 3 步），
+ * 这里同口径算，**不是**客户端乘算。
+ */
 export function costTextOf(snapshot: IHjSnapshotView, gearIndex: number = HJ_DEFAULT_GEAR_INDEX): string {
-    return sweepCostText(snapshot.sweepEnd, timesOf(snapshot, gearIndex));
+    return sweepCostText(snapshot.sweepEnd, sweepTimesOf(gearIndex));
 }
 
 /** 今日已扫荡次数（`CmdRole.sweepTimes`；读不到按 0）。 */

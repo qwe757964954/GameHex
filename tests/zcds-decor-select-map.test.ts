@@ -12,7 +12,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const GAME_SRC = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const layout = JSON.parse(
-    readFileSync(assetPath('config/maps/select_river.json'), 'utf8'),
+    readFileSync(assetPath('config/maps/river_custom_new.json'), 'utf8'),
 ) as ZCMapLayout;
 layout.art = {
     ...(layout.art ?? {}),

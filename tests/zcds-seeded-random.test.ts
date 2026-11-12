@@ -14,7 +14,7 @@ import type { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRul
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`，表已下线。
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ] as const;
 const tables = Object.fromEntries(TABLE_NAMES.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));

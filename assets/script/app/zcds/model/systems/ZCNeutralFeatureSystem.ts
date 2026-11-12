@@ -3,7 +3,9 @@ import type { ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ownersForPlayerCount, type ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import { ZCMapGeometry } from '../ZCMapGeometry';
-import { neutralResourceItemOf, ZC_GATE_EFFECTS, ZCNeutralResourceType, type IZCNeutralFeatureConfig } from '../ZCNeutralResourceGroup';
+import { neutralResourceItemOf, ZCNeutralResourceType, type IZCNeutralFeatureConfig } from '../ZCNeutralResourceGroup';
+import type { IZCBarracksSpawn } from './ZCEconomySystem';
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 
 export interface IZCNeutralFeatureContext {
     random(): number;
@@ -11,7 +13,9 @@ export interface IZCNeutralFeatureContext {
     monsterDefinition(card: ZCDeckCard): ZCUnitDefinition;
     cloneUnit(unit: ZCUnitState): ZCUnitState | void;
     spawnBatch(hex: ZCHexState): void;
-    damageUnit(unit: ZCUnitState, damage: number): void;
+    damageUnit(unit: ZCUnitState, damage: number, owner?: ZCOwner): void;
+    damageStructure(hex: ZCHexState, damage: number, owner: ZCOwner, fromId: number): void;
+    capture(hex: ZCHexState, owner: ZCOwner): void;
     changed(): void;
 }
 
@@ -42,14 +46,31 @@ export class ZCNeutralFeatureSystem {
             }
             this.hasFeatures = true;
             if (item.resourceType === ZCNeutralResourceType.Gate) this.hasGates = true;
-            if (hex.neutralFeature) continue;
+            if (hex.neutralFeature) {
+                if (item.feature.gates && hex.neutralFeature.gateId === undefined) {
+                    const gate = item.feature.gates.find(gate => gate.effect === hex.neutralFeature.effect) ?? item.feature.gates[0];
+                    hex.neutralFeature.gateId = gate.id;
+                    hex.neutralFeature.effect = gate.effect;
+                }
+                if (item.resourceType === ZCNeutralResourceType.Extension && hex.neutralFeature.startedAt === undefined) {
+                    hex.neutralFeature.lineHexIds = [];
+                }
+                continue;
+            }
             hex.neutralFeature = { claimed: false };
             hex.wallHp = hex.wallMaxHp = 0;
             if (item.resourceType === ZCNeutralResourceType.Gate) {
-                hex.neutralFeature.effect = item.feature.effect;
+                const gates = item.feature.gates;
+                const gate = gates[gates.length === 1 ? 0 : Math.min(gates.length - 1, Math.floor(this.context.random() * gates.length))];
+                hex.neutralFeature.gateId = gate.id;
+                hex.neutralFeature.effect = gate.effect;
                 hex.neutralFeature.readyAt = 0;
                 hex.neutralFeature.windowUntil = 0;
                 hex.neutralFeature.insideUnitIds = [];
+            }
+            if (item.resourceType === ZCNeutralResourceType.Portal) {
+                hex.neutralFeature.usesRemaining = item.feature.uses;
+                hex.neutralFeature.readyAt = 0;
             }
             if (item.resourceType === ZCNeutralResourceType.Monster) {
                 const card = findCatalogCard(item.feature.resId);
@@ -73,7 +94,11 @@ export class ZCNeutralFeatureSystem {
             const item = neutralResourceItemOf(hex.neutralResourceId);
             const feature = hex.neutralFeature;
             if (!item?.feature || !feature || feature.claimed) continue;
-            const neighborId = this.map.hexes[hex.id].neighbors.find(id => state.hexes[id].owner !== 'neutral');
+            const neighborId = this.map.hexes[hex.id].neighbors.find(id => state.hexes[id].owner !== 'neutral'
+                && state.hexes[id].developmentResolved
+                && (item.resourceType !== ZCNeutralResourceType.Extension || !state.hexes.some(resource =>
+                    resource.neutralFeature?.mowerOwner === state.hexes[id].owner
+                    && resource.neutralFeature.startedAt !== undefined)));
             if (neighborId === undefined) continue;
             const owner = state.hexes[neighborId].owner as ZCOwner;
             if (item.resourceType === ZCNeutralResourceType.Monster) {
@@ -90,13 +115,6 @@ export class ZCNeutralFeatureSystem {
             }
             this.context.changed();
         }
-        // 野怪的唤醒范围独立于资源邻接领取规则。
-        for (const hex of state.hexes) {
-            const item = neutralResourceItemOf(hex.neutralResourceId);
-            if (item?.resourceType === ZCNeutralResourceType.Monster && !hex.neutralFeature?.awake) {
-                this.wakeMonster(state, hex, item.feature);
-            }
-        }
     }
 
     private extend(state: ZCSnapshot, resource: ZCHexState, fromId: number, owner: ZCOwner): void {
@@ -110,11 +128,8 @@ export class ZCNeutralFeatureSystem {
         let current = resource.id;
         while (current !== null) {
             const hex = state.hexes[current];
-            if (hex.building === 'none' && hex.state !== 'ruins' && (!hex.neutralResourceId || hex.id === resource.id)) {
-                hex.owner = owner;
-                hex.developmentResolved = false;
-                if (hex.id !== resource.id) line.push(hex.id);
-            }
+            if (!this.map.hexes[current].playable) break;
+            line.push(hex.id);
             const point = this.map.hexes[current];
             const next = point.neighbors.find(id => id !== previous
                 && Math.abs(this.map.hexes[id].x - point.x - dx) < 2
@@ -123,41 +138,87 @@ export class ZCNeutralFeatureSystem {
             current = next ?? null;
         }
         feature.lineHexIds = line;
-        feature.buildOwner = owner;
-        feature.buildUsed = false;
-    }
-
-    static canBuild(state: ZCSnapshot, hexId: number, owner: ZCOwner): boolean {
-        return state.hexes.some(hex => hex.neutralFeature?.buildOwner === owner
-            && !hex.neutralFeature.buildUsed && hex.neutralFeature.lineHexIds?.includes(hexId));
-    }
-
-    static consumeBuild(state: ZCSnapshot, hexId: number, owner: ZCOwner): void {
-        for (const hex of state.hexes) {
-            const feature = hex.neutralFeature;
-            if (feature?.buildOwner === owner && !feature.buildUsed && feature.lineHexIds?.includes(hexId)) {
-                feature.buildUsed = true;
-                break;
-            }
+        feature.mowerOwner = owner;
+        feature.startedAt = state.elapsedSeconds;
+        feature.lineProgress = 0;
+        feature.hitUnitIds = [];
+        let attack = 0;
+        for (const unit of state.units) {
+            if (unit.owner === owner && unit.hp > 0 && unit.battleState !== 'dead') attack += this.context.definition(unit).attack;
         }
+        feature.lineDamage = attack * neutralResourceItemOf(resource.neutralResourceId).feature.damageRate;
+    }
+
+    private tickMower(state: ZCSnapshot, resource: ZCHexState, config: IZCNeutralFeatureConfig): void {
+        const feature = resource.neutralFeature;
+        if (!feature.claimed || !feature.lineHexIds?.length) return;
+        const line = feature.lineHexIds;
+        if (feature.lineProgress >= line.length) return;
+        const progress = Math.min(line.length, (state.elapsedSeconds - feature.startedAt) * config.speed);
+        const end = Math.min(line.length - 1, Math.floor(progress));
+        // 覆盖本拍扫过的整段；每个单位只受伤一次，伤害结算后再判断能否占地。
+        for (let i = Math.floor(feature.lineProgress); i <= end; i += 1) {
+            const hex = state.hexes[line[i]];
+            // 路径进度即结构命中记录；读档或同格多拍时不重复扣血。
+            if (i > feature.lineProgress && hex.owner !== feature.mowerOwner
+                && (hex.wallHp > 0 || hex.building !== 'none')) {
+                this.context.damageStructure(hex, feature.lineDamage, feature.mowerOwner, line[i - 1]);
+            }
+            for (const unit of state.units) {
+                if (unit.owner === feature.mowerOwner || unit.hp <= 0 || unit.battleState === 'dead'
+                    || feature.hitUnitIds.includes(unit.id) || this.geometry.hexIdAt(unit.freeX, unit.freeY) !== hex.id) continue;
+                feature.hitUnitIds.push(unit.id);
+                this.context.damageUnit(unit, feature.lineDamage, feature.mowerOwner);
+            }
+            if (hex.owner === 'neutral' && hex.building === 'none') this.context.capture(hex, feature.mowerOwner);
+        }
+        feature.lineProgress = progress;
     }
 
     /** 每批只选一次出生格；出口兵营、普通兵团奖励和路过的单位不再传送。 */
-    spawnHex(state: ZCSnapshot, barracks: ZCHexState): number {
-        if ((this.map.playerCount ?? 2) !== 2 || barracks.owner === 'neutral') return barracks.id;
-        const portals = state.hexes.filter(hex => hex.owner === barracks.owner && hex.neutralFeature?.claimed
-            && neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Portal);
-        if (portals.length < 2) return barracks.id;
-        const entrance = portals.find(hex => this.map.hexes[hex.id].neighbors.includes(barracks.id));
-        if (!entrance) return barracks.id;
+    spawnHex(state: ZCSnapshot, barracks: ZCHexState): IZCBarracksSpawn {
+        if ((this.map.playerCount ?? 2) !== 2 || barracks.owner === 'neutral') return { hexId: barracks.id };
+        const entrance = state.hexes.find(hex => hex.owner === barracks.owner && hex.neutralFeature?.claimed
+            && this.map.hexes[hex.id].neighbors.includes(barracks.id)
+            && neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Portal
+            && !(hex.neutralFeature.readyAt > state.elapsedSeconds));
+        if (!entrance) return { hexId: barracks.id };
+        const config = neutralResourceItemOf(entrance.neutralResourceId).feature;
+        const feature = entrance.neutralFeature;
+        if (!feature.usesRemaining) feature.usesRemaining = config.uses;
+        const origin = this.map.hexes[entrance.id];
+        let target: ZCUnitState | undefined;
+        let best = Infinity;
+        for (const unit of state.units) {
+            if (unit.owner === barracks.owner || unit.hp <= 0 || unit.battleState === 'dead') continue;
+            const id = this.geometry.hexIdAt(unit.freeX, unit.freeY);
+            if (id === null || this.geometry.distance(entrance.id, id) > config.range) continue;
+            const distance = Math.hypot(unit.freeX - origin.x, unit.freeY - origin.y);
+            if (distance < best) { target = unit; best = distance; }
+        }
         const owners = ownersForPlayerCount(2);
-        const enemyHome = this.map.homes[owners.findIndex(owner => owner !== barracks.owner)];
-        const goal = this.map.hexes[enemyHome];
-        const distance = (hex: ZCHexState) => Math.hypot(this.map.hexes[hex.id].x - goal.x, this.map.hexes[hex.id].y - goal.y);
-        let exit = portals.find(hex => hex.id === entrance.neutralFeature.portalExitId) ?? portals[0];
-        for (const portal of portals) if (distance(portal) < distance(exit) - 1e-9) exit = portal;
-        entrance.neutralFeature.portalExitId = exit.id;
-        return this.map.hexes[exit.id].neighbors.includes(barracks.id) ? barracks.id : exit.id;
+        const home = this.map.hexes[this.map.homes[owners.findIndex(owner => owner !== barracks.owner)]];
+        const goal = target ? { x: target.freeX, y: target.freeY } : home;
+        const distance = Math.hypot(goal.x - origin.x, goal.y - origin.y);
+        const ratio = distance > 0 ? target ? 1 : config.range * HEX_GRID_LOGICAL_ROW_STEP / distance : 0;
+        const x = origin.x + (goal.x - origin.x) * ratio;
+        const y = origin.y + (goal.y - origin.y) * ratio;
+        let exit = entrance.id;
+        best = Infinity;
+        for (const point of this.map.hexes) {
+            if (!point.playable || this.geometry.distance(entrance.id, point.id) > config.range
+                || state.hexes[point.id].building !== 'none') continue;
+            const d = Math.hypot(point.x - x, point.y - y);
+            if (d < best) { exit = point.id; best = d; }
+        }
+        feature.portalExitId = exit;
+        feature.portalAt = state.elapsedSeconds;
+        feature.usesRemaining -= 1;
+        if (!feature.usesRemaining) {
+            feature.readyAt = state.elapsedSeconds + config.cooldownSeconds;
+            feature.cooldownSeconds = config.cooldownSeconds;
+        }
+        return { hexId: exit, portalHexId: entrance.id };
     }
 
     tick(state: ZCSnapshot): void {
@@ -165,18 +226,24 @@ export class ZCNeutralFeatureSystem {
         for (const hex of state.hexes) {
             const item = neutralResourceItemOf(hex.neutralResourceId);
             if (!item?.feature) continue;
-            if (item.resourceType === ZCNeutralResourceType.Gate) this.tickGate(state, hex, item.feature);
+            if (item.resourceType === ZCNeutralResourceType.Gate && hex.neutralFeature.claimed) this.tickGate(state, hex, item.feature);
+            if (item.resourceType === ZCNeutralResourceType.Extension) this.tickMower(state, hex, item.feature);
+            if (item.resourceType === ZCNeutralResourceType.Portal && hex.neutralFeature.readyAt <= state.elapsedSeconds
+                && hex.neutralFeature.usesRemaining === 0) hex.neutralFeature.usesRemaining = item.feature.uses;
             if (item.resourceType === ZCNeutralResourceType.Monster) this.tickMonster(state, hex, item.feature);
         }
     }
 
     private tickGate(state: ZCSnapshot, hex: ZCHexState, config: IZCNeutralFeatureConfig): void {
         const gate = hex.neutralFeature;
+        config = config.gates.find(option => option.id === gate.gateId) ?? config.gates[0];
         const now = state.elapsedSeconds;
         if (gate.windowUntil > 0 && now >= gate.windowUntil) {
             gate.readyAt = gate.windowUntil + config.cooldownSeconds;
+            gate.cooldownSeconds = config.cooldownSeconds;
             gate.windowUntil = 0;
-            this.nextEffect(gate, config);
+            this.nextEffect(gate, neutralResourceItemOf(hex.neutralResourceId).feature);
+            config = neutralResourceItemOf(hex.neutralResourceId).feature.gates.find(option => option.id === gate.gateId);
         }
         const inside: number[] = [];
         const count = state.units.length;
@@ -199,7 +266,10 @@ export class ZCNeutralFeatureSystem {
             const effect = gate.effect;
             if (effect === 'multiply' || effect === 'shrink') {
                 if (!gate.windowUntil) gate.windowUntil = now + config.windowSeconds;
-            } else gate.readyAt = now + config.cooldownSeconds;
+            } else {
+                gate.readyAt = now + config.cooldownSeconds;
+                gate.cooldownSeconds = config.cooldownSeconds;
+            }
             if (effect === 'add' || effect === 'multiply') {
                 const amount = effect === 'add' ? config.value : config.value - 1;
                 for (let n = 0; n < amount; n += 1) {
@@ -207,31 +277,35 @@ export class ZCNeutralFeatureSystem {
                     if (clone && this.geometry.hexIdAt(clone.freeX, clone.freeY) === hex.id) inside.push(clone.id);
                 }
             } else if (effect === 'enlarge') {
-                unit.maxHp = Math.max(1, unit.maxHp - (unit.gateHpFlat ?? 0) + config.hpFlat);
-                unit.hp = Math.min(unit.maxHp, unit.hp + Math.max(0, config.hpFlat - (unit.gateHpFlat ?? 0)));
+                const baseHp = unit.maxHp - (unit.gateHpFlat ?? 0);
+                const hpFlat = Math.round(baseHp * (config.hpRate - 1));
+                unit.maxHp = Math.max(1, baseHp + hpFlat);
+                unit.hp = Math.min(unit.maxHp, unit.hp + Math.max(0, hpFlat - (unit.gateHpFlat ?? 0)));
                 unit.gateSize = 'enlarge';
                 unit.gateScale = config.scale;
-                unit.gateHpFlat = config.hpFlat;
+                unit.gateHpFlat = unit.maxHp - baseHp;
                 unit.gateMoveMultiplier = unit.gateAttackSpeedMultiplier = unit.gateDamageMultiplier = 1;
             } else if (unit.gateSize !== 'enlarge') {
                 unit.gateSize = 'shrink';
-                unit.gateScale = 1 / config.scale;
+                unit.gateScale = config.scale;
                 unit.gateMoveMultiplier = config.moveMultiplier;
                 unit.gateAttackSpeedMultiplier = config.attackSpeedMultiplier;
                 unit.gateDamageMultiplier = config.damageMultiplier;
             }
             if (effect === 'add' || effect === 'enlarge') {
                 immediateActivated = true;
-                this.nextEffect(gate, config);
+                this.nextEffect(gate, neutralResourceItemOf(hex.neutralResourceId).feature);
             }
         }
         gate.insideUnitIds = inside;
     }
 
     private nextEffect(gate: ZCHexState['neutralFeature'], config: IZCNeutralFeatureConfig): void {
-        if (config.mode !== 'random') return;
-        const effects = ZC_GATE_EFFECTS.filter(effect => effect !== gate.effect);
-        gate.effect = effects[Math.min(effects.length - 1, Math.floor(Math.max(0, this.context.random()) * effects.length))];
+        if (config.gates.length === 1) return;
+        const choices = config.gates.filter(option => option.id !== gate.gateId);
+        const next = choices[Math.min(choices.length - 1, Math.floor(Math.max(0, this.context.random()) * choices.length))];
+        gate.gateId = next.id;
+        gate.effect = next.effect;
     }
 
     private wakeMonster(state: ZCSnapshot, hex: ZCHexState, config: IZCNeutralFeatureConfig): void {
@@ -243,7 +317,7 @@ export class ZCNeutralFeatureSystem {
             for (const id of frontier) for (const neighbor of this.map.hexes[id].neighbors) {
                 if (seen.has(neighbor)) continue;
                 seen.add(neighbor);
-                if (state.hexes[neighbor].owner !== 'neutral') {
+                if (state.hexes[neighbor].owner !== 'neutral' && state.hexes[neighbor].developmentResolved) {
                     hex.neutralFeature.awake = true;
                     this.context.changed();
                     return;

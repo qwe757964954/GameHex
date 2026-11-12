@@ -28,7 +28,15 @@ function indexCards(source: PresetDeckSource): ReadonlyMap<string, ZCDeckCard> {
     return byId;
 }
 
-/** 阵型 heroId 列表 → 卡；本地没有的 id 跳过并告警。 */
+/**
+ * 阵型 heroId 列表 → 卡；本地没有的 id **跳过**并告警。
+ *
+ * 🔴 跳过是「压缩」而不是「留空」：后面的卡会整体往前挪一格，于是**空出来的永远是最后那几格**。
+ * 最常见的来源是主城（`2002`）—— 它是 `pvpCard` 的一行、后端当成"英雄"下发，
+ * 但客户端 `isHqCard` 把它当建筑摘掉（`loadPvpCatalogCards` / `playerDeck` 都摘），
+ * 所以只要某个阵型是老端口径存下来的（含主城），八卡就会只剩七张。
+ * 现场看到的是「某张卡的站台空着 / 阵容少一格」，很容易误判成「这张卡丢了」。
+ */
 function resolveHeroIds(
     heroIds: readonly number[],
     byId: ReadonlyMap<string, ZCDeckCard>,
@@ -42,7 +50,10 @@ function resolveHeroIds(
         else missing.push(heroId);
     }
     if (missing.length > 0) {
-        console.warn('[LineupPresets] 阵型里有本地卡表没有的英雄 id', formationId, missing);
+        console.warn(
+            '[LineupPresets] 阵型里有本地卡表没有的英雄 id，这些卡位会被跳过（站台会少格，不是卡丢了）',
+            formationId, missing,
+        );
     }
     return cards;
 }

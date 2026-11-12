@@ -1,5 +1,5 @@
 import { sys } from 'cc';
-import type { ITerritoryChapterStore } from './TerritoryPresenter';
+import type { ITerritoryChapterStore } from './TerritoryModel';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
 import {
     TerritorySaveStore,

@@ -1146,7 +1146,8 @@ test('RunAwayPlayerItem 刷新两列统计，处理零上限并在复用时清�
     view.nameLabel = { string: '' };
     view.damageLabel = { string: '' }; view.damageTakenLabel = { string: '' };
     view.damageProgress = bar(); view.damageTakenProgress = bar();
-    view.refresh({ name: '主公', headSpriteFrame: null, damage: 120.5, damageTaken: 30, maxDamage: 240, maxDamageTaken: 0 });
+    view.background = { color: null }; view.faction = { color: null }; view.selfBadge = { active: false };
+    view.refresh({ owner: 'player', name: '主公', headSpriteFrame: null, damage: 120.5, damageTaken: 30, maxDamage: 240, maxDamageTaken: 0 });
     assert.equal(view.avatar.spriteFrame, null);
     assert.equal(view.damageLabel.string, '120');
     assert.equal(view.damageProgress.progress, .5);

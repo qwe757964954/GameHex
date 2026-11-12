@@ -4,7 +4,7 @@ import type { ZCBoardCardFrames } from './LineupBoardCard';
 import type { ZCBoardSlotFrames } from './LineupBoardSlot';
 import type { ZCCardFrames } from './CardLineupCard';
 import type { ZCSlotFrames } from './CardLineupSlot';
-import { loadIconByArtPath } from './CardLineupIcons';
+import { loadCardDetailArt, loadIconByArtPath } from './CardLineupIcons';
 import { resolveCardClass } from './CardLineupTypes';
 import type { ZCCardClass, ZCCardTally } from './CardLineupTypes';
 import type { ICardArtConfig, ICardArtKey } from './CardArtConfig';
@@ -12,7 +12,12 @@ import type { ICardArtConfig, ICardArtKey } from './CardArtConfig';
 export interface ICardDetailArt {
     readonly hero: SpriteFrame | null;
     readonly diamond: SpriteFrame | null;
+    readonly classTag: SpriteFrame | null;
 }
+
+const DETAIL_QUALITY_ART = {
+    gold: 'legendary', purple: 'epic', blue: 'rare', green: 'uncommon',
+} as const;
 
 export interface CardClassFrames {
     readonly on: SpriteFrame | null;
@@ -90,11 +95,13 @@ export class CardArtProvider {
     }
 
     loadDetail(card: ZCDeckCard | null, art: ICardArtConfig): Promise<ICardDetailArt> {
-        if (!card) return Promise.resolve({ hero: null, diamond: null });
+        if (!card) return Promise.resolve({ hero: null, diamond: null, classTag: null });
+        const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
-            this.loadHeroArt(card, art, `hero.${resolveCardClass(card, art.lineup)}`),
-            this.load(art, `diamond.${card.rarity}`),
-        ]).then(([hero, diamond]) => ({ hero, diamond }));
+            this.loadHeroArt(card, art, `hero.${cardClass}`),
+            loadCardDetailArt(`identity/icon_quality_${DETAIL_QUALITY_ART[card.rarity]}`),
+            loadCardDetailArt(`identity/icon_class_${cardClass}`),
+        ]).then(([hero, diamond, classTag]) => ({ hero, diamond, classTag }));
     }
 
     private load(art: ICardArtConfig, key: ICardArtKey): Promise<SpriteFrame | null> {

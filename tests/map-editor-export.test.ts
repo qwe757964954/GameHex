@@ -11,7 +11,7 @@ import {
  * 编辑器 ↔ 客户端的地图契约对账。
  *
  * 两份来源都必须被游戏侧解析器吃下去：
- *   1. `tools/map-editor/presets/*.json` —— 编辑器当前预设库（v1/v2 存量 + 之后的 v3）；
+ *   1. `tools/map-editor/presets/gamemap/*.json` —— 编辑器当前预设库（v1/v2 存量 + 之后的 v3）；
  *   2. `tests/fixtures/zcds-map-v3-*.json` —— 编辑器实际产出的 v3 快照（由 CDP 探针导出后固化）。
  */
 const legacyLayout = JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout;
@@ -23,11 +23,11 @@ const fixture = (name: string): ZCMapLayout => (
 const sectionAt = (row: number, column: number): number => getZCMapSection(row * ZC_MAP_COLUMNS + column);
 
 test('编辑器预设库里的每一张都能被游戏侧解析器载入', () => {
-    const names = readdirSync('tools/map-editor/presets').filter((name) => name.endsWith('.json'));
+    const names = readdirSync('tools/map-editor/presets/gamemap').filter((name) => name.endsWith('.json'));
     assert.ok(names.length > 1, '预设库里应该有地图');
     try {
         for (const name of names) {
-            const source = JSON.parse(readFileSync(`tools/map-editor/presets/${name}`, 'utf8')) as ZCMapLayout;
+            const source = JSON.parse(readFileSync(`tools/map-editor/presets/gamemap/${name}`, 'utf8')) as ZCMapLayout;
             configureZCMap(source);
             assert.equal(ZC_MAP_PLAYER_COUNT, source.playerCount ?? 2, name);
             assert.equal(ZC_MAP_CITY_MODE, source.cityMode ?? 'fixed', name);
@@ -40,11 +40,10 @@ test('编辑器预设库里的每一张都能被游戏侧解析器载入', () =>
 });
 
 test('战斗地图预设包含可自选主城的河道地图', () => {
-    const selectRiver = JSON.parse(readFileSync('tools/map-editor/presets/select_river.json', 'utf8')) as ZCMapLayout;
-    assert.equal(selectRiver.id, 'select_river');
-    assert.equal(selectRiver.cityMode, 'select');
-    assert.equal(selectRiver.playerCount, 2);
-    assert.equal('homes' in selectRiver, false);
+    const riverCustom = JSON.parse(readFileSync('tools/map-editor/presets/gamemap/river_custom_new.json', 'utf8')) as ZCMapLayout;
+    assert.equal(riverCustom.id, 'river_custom_new');
+    assert.equal(riverCustom.cityMode, 'select');
+    assert.equal(riverCustom.playerCount, 2);
 });
 
 test('编辑器产出的 2 人镜像图：上下对折、双方各半', () => {

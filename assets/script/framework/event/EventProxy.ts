@@ -206,7 +206,7 @@ export class EventProxy<T extends number | string> extends ScriptObject {
 
         // 清理tmEventCaller残留引用,避免僵尸引用累积
         t.tmEventCaller.clear()
-        for (const caller of [...t.callerCleanups.keys()]) t.releaseCallerCleanups(caller);
+        for (const caller of Array.from(t.callerCleanups.keys())) t.releaseCallerCleanups(caller);
 
         let count = t.tmEventCaller.keys.length
         if (count > 0) {

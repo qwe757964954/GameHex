@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -493,7 +495,7 @@ test('🔴 确定按钮：派发 Confirm 事件、不退化成 close、且防重
         '结算页必须覆写 canCloseOnBlank 返回 false');
 });
 
-test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径未接线整组收起（2026-10-16 调整）', () => {
+test('双倍奖励常显；变强途径战败展示，胜利按接线状态整组显隐', () => {
     const code = stripComments(pageSource);
     // 双倍奖励在设计稿里是奖励区中间那一段（两侧 `RewardLineL/R` 接过去）⇒ **常显**：
     // 藏掉会中间断一截、左右不对称。但没接线只能「看得到、点不动」（`interactable = false`），
@@ -504,7 +506,7 @@ test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径
         '★没接线 ⇒ 不可点（展示位，不是假交互）');
     // ⚠️ 收的是 `Panel/Grow` **整组**（底板 + 标题 + 三个入口）而不是三个入口 ——
     // 只收入口会剩一个空标题框，比死按钮更奇怪。
-    assert.match(code, /this\.growGroup\.active = Boolean\(data\.hasGrowEntry\)/);
+    assert.match(code, /this\.growGroup\.active = !data\.victory \|\| Boolean\(data\.hasGrowEntry\)/);
     assert.doesNotMatch(code, /entryEquip\.node\.active|entryHero\.node\.active|entryRune\.node\.active/,
         '三个入口不许各自显隐（会剩空标题框）');
     assert.match(code, /this\.renderEntryGroups\(userData\);/, 'onOpen 必须调它，否则 prefab 的默认 active 会一直露着');
@@ -512,6 +514,32 @@ test('🔴 双倍奖励常显（只展示、未接线不可点）；变强途径
     // 箭头闭包在调用栈里没有名字，将来要 off 也没有稳定函数引用可传。
     assert.match(code, /confirmButton\.node\.on\(Button\.EventType\.CLICK, this\.onConfirmClicked, this\)/);
     assert.doesNotMatch(code, /Button\.EventType\.CLICK, \(\) =>/, '按钮监听不许再用箭头闭包');
+});
+
+test('变强途径：战败始终显示，胜败切换全量刷新，胜利保留原有显隐', () => {
+    const exports: Record<string, any> = {};
+    runInNewContext(ts.transpileModule(pageSource, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, {
+        exports,
+        require(name: string) {
+            if (name === 'cc') return { _decorator: { ccclass: () => () => {}, property: () => () => {} } };
+            if (name.endsWith('/PopupBase')) return { PopupBase: class {} };
+            return {};
+        },
+    });
+    const page = new exports.ZCSettlementPage();
+    page.doubleButton = { node: { active: false }, interactable: true };
+    page.growGroup = { active: false };
+    for (const victory of [false, true, false, true]) {
+        for (const hasGrowEntry of [undefined, false, true]) {
+            page.renderEntryGroups({ victory, hasGrowEntry });
+            assert.equal(page.growGroup.active, victory ? hasGrowEntry === true : true,
+                `victory=${victory}, hasGrowEntry=${hasGrowEntry}`);
+            assert.equal(page.doubleButton.node.active, true);
+            assert.equal(page.doubleButton.interactable, false);
+        }
+    }
 });
 
 test('四个按钮只 emit 意图事件，页面不持有任何回调（视图不认识流程）', () => {

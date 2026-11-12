@@ -240,13 +240,11 @@ export const RD_SET_VARS: Readonly<Record<string, string>> = {
  * 好让「还有多少没接」的统计里不把它们当成桩），而**定义**在 `RD_SET_VARS` ⇒ 两张表都有这个名字。
  * `RdRegistry` 第 ③ 步先注册、④⑤ 靠 `done.includes` 跳过，所以去重只是把同一件事写明。
  */
-export const RD_ALL_VAR_NAMES: readonly string[] = [
-    ...new Set([
+export const RD_ALL_VAR_NAMES: readonly string[] = Array.from(new Set([
         ...RD_REGISTERED_VAR_NAMES,
         ...RD_EXTRA_VAR_NAMES,
         ...Object.keys(RD_SET_VARS),
-    ]),
-];
+    ]));
 
 /**
  * 校验一个聚合表达式是否合法：只能引用**别的**变量名，且引用的名字都得注册过。

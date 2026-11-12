@@ -131,6 +131,7 @@ export function emptyZCNeutralResourceCatalog(): ZCNeutralResourceCatalog {
 export function compileZCNeutralResourceCatalog(
     rows: readonly Record<string, unknown>[],
     cards: ReadonlyMap<string, ZCDeckCard>,
+    gateRows: readonly Record<string, unknown>[] = [],
 ): ZCNeutralResourceCatalog {
     const groups = new Map<number, ZCNeutralResourceGroup>();
     const items = new Map<number, ZCNeutralResourceItem>();
@@ -167,7 +168,7 @@ export function compileZCNeutralResourceCatalog(
             unitCount: parsed.unitCount,
             buffKey: parsed.buffKey,
             ...(resourceType >= ZCNeutralResourceType.Gate
-                ? { feature: parseNeutralFeature(resourceType, param, where, cards) } : {}),
+                ? { feature: parseNeutralFeature(resourceType, param, where, cards, gateRows) } : {}),
             visual: neutralVisualOf(resourceType as ZCNeutralResourceType, icon),
         };
         items.set(item.id, item);
@@ -216,13 +217,18 @@ export type IZCGateEffect = 'add' | 'multiply' | 'shrink' | 'enlarge';
 export const ZC_GATE_EFFECTS: readonly IZCGateEffect[] = ['add', 'multiply', 'shrink', 'enlarge'];
 
 export interface IZCNeutralFeatureConfig {
+    readonly id?: number;
+    readonly gates?: readonly IZCNeutralFeatureConfig[];
     readonly effect?: IZCGateEffect;
-    readonly mode?: 'fixed' | 'random';
     readonly value?: number;
     readonly cooldownSeconds?: number;
     readonly windowSeconds?: number;
     readonly scale?: number;
-    readonly hpFlat?: number;
+    readonly hpRate?: number;
+    readonly range?: number;
+    readonly uses?: number;
+    readonly speed?: number;
+    readonly damageRate?: number;
     readonly moveMultiplier?: number;
     readonly attackSpeedMultiplier?: number;
     readonly damageMultiplier?: number;
@@ -232,28 +238,39 @@ export interface IZCNeutralFeatureConfig {
 }
 
 function parseNeutralFeature(type: number, param: unknown, where: string,
-    cards: ReadonlyMap<string, ZCDeckCard>): IZCNeutralFeatureConfig {
+    cards: ReadonlyMap<string, ZCDeckCard>, gateRows: readonly Record<string, unknown>[]): IZCNeutralFeatureConfig {
     if (!param || typeof param !== 'object' || Array.isArray(param)) throw new Error(`${where}.param 必须是对象`);
     const data = param as Record<string, unknown>;
     const allowed = type === ZCNeutralResourceType.Gate
-        ? ['effect', 'mode', 'value', 'cooldownSeconds', 'windowSeconds', 'scale', 'hpFlat', 'moveMultiplier', 'attackSpeedMultiplier', 'damageMultiplier']
+        ? ['gateIds']
+        : type === ZCNeutralResourceType.Portal ? ['range', 'uses', 'cooldownSeconds']
+        : type === ZCNeutralResourceType.Extension ? ['damageRate', 'speed']
         : type === ZCNeutralResourceType.Monster ? ['resId', 'wakeRange', 'attackRange'] : [];
     for (const key of Object.keys(data)) {
         if (!allowed.includes(key)) throw new Error(`${where}.param 出现未知字段：${key}`);
     }
     if (type === ZCNeutralResourceType.Gate) {
-        if (!ZC_GATE_EFFECTS.includes(data.effect as IZCGateEffect)) throw new Error(`${where}.param.effect 无效`);
-        if (data.mode !== 'fixed' && data.mode !== 'random') throw new Error(`${where}.param.mode 无效`);
-        for (const key of allowed.slice(2)) {
-            if (typeof data[key] !== 'number' || !Number.isFinite(data[key]) || (data[key] as number) < 0) {
-                throw new Error(`${where}.param.${key} 必须是非负数`);
+        if (!Array.isArray(data.gateIds) || !data.gateIds.length || new Set(data.gateIds).size !== data.gateIds.length) {
+            throw new Error(`${where}.param.gateIds 必须是非空且不重复的ID列表`);
+        }
+        const gates = data.gateIds.map(id => {
+            const matches = gateRows.filter(row => row.id === id);
+            if (!Number.isSafeInteger(id) || id <= 0 || matches.length !== 1) throw new Error(`${where}.param.gateIds 引用无效：${id}`);
+            return parseEnhanceGate(matches[0], `${where}.gate[${id}]`);
+        });
+        if (new Set(gates.map(gate => gate.effect)).size !== gates.length) throw new Error(`${where}.param.gateIds 效果不可重复`);
+        return { ...gates[0], gates };
+    }
+    if (type === ZCNeutralResourceType.Portal || type === ZCNeutralResourceType.Extension) {
+        for (const key of allowed) {
+            if (typeof data[key] !== 'number' || !Number.isFinite(data[key]) || (data[key] as number) < 0
+                || (key !== 'cooldownSeconds' && key !== 'damageRate' && (data[key] as number) === 0)) {
+                throw new Error(`${where}.param.${key} 无效`);
             }
         }
-        if (!Number.isSafeInteger(data.value) || (data.value as number) < 1 || (data.scale as number) <= 1
-            || (data.moveMultiplier as number) <= 0 || (data.attackSpeedMultiplier as number) <= 0
-            || (data.damageMultiplier as number) <= 0) throw new Error(`${where}.param 倍率或数量无效`);
-        if ((data.effect === 'multiply' || data.effect === 'shrink' || data.mode === 'random')
-            && (data.windowSeconds as number) <= 0) throw new Error(`${where}.param.windowSeconds 必须大于0`);
+        if (type === ZCNeutralResourceType.Portal && (!Number.isSafeInteger(data.range) || !Number.isSafeInteger(data.uses))) {
+            throw new Error(`${where}.param.range/uses 必须是正整数`);
+        }
     }
     if (type === ZCNeutralResourceType.Monster) {
         if (typeof data.resId !== 'string') throw new Error(`${where}.param.resId 必须是卡牌ID字符串`);
@@ -263,6 +280,23 @@ function parseNeutralFeature(type: number, param: unknown, where: string,
         }
     }
     return data as IZCNeutralFeatureConfig;
+}
+
+function parseEnhanceGate(row: Record<string, unknown>, where: string): IZCNeutralFeatureConfig {
+    const effects: readonly IZCGateEffect[] = ['add', 'multiply', 'enlarge', 'shrink'];
+    const effect = effects[Number(row.effectType) - 1];
+    if (!Number.isInteger(row.effectType) || !effect) throw new Error(`${where}.effectType 无效`);
+    for (const key of ['value', 'scale', 'hpRate', 'windowSeconds', 'cooldownSeconds', 'attackSpeedMultiplier', 'moveMultiplier', 'damageMultiplier']) {
+        if (typeof row[key] !== 'number' || !Number.isFinite(row[key]) || (row[key] as number) < 0) throw new Error(`${where}.${key} 必须是非负数`);
+    }
+    if (((effect === 'add' || effect === 'multiply') && (!Number.isSafeInteger(row.value) || Number(row.value) < 1))
+        || (effect === 'multiply' && Number(row.windowSeconds) <= 0)
+        || (effect === 'enlarge' && (Number(row.scale) <= 1 || Number(row.hpRate) <= 1))
+        || (effect === 'shrink' && (Number(row.scale) <= 0 || Number(row.scale) >= 1 || Number(row.windowSeconds) <= 0
+            || Number(row.attackSpeedMultiplier) <= 0 || Number(row.moveMultiplier) <= 0 || Number(row.damageMultiplier) <= 0))) {
+        throw new Error(`${where} 效果参数无效`);
+    }
+    return { ...row, effect } as IZCNeutralFeatureConfig;
 }
 
 interface IZCParsedParam {

@@ -10,8 +10,8 @@ installZCNeutralTestCatalog();
 
 test('强化门缩小图标，各阶段及缺图时都不显示资源文字', () => {
     installZCNeutralTestCatalog([{ groupId: 14001, id: 1400101, groupName: '门', resourceType: 7, weight: 1,
-        param: { effect: 'multiply', mode: 'fixed', value: 2, cooldownSeconds: 10, windowSeconds: 0.3,
-            scale: 3, hpFlat: 1000, moveMultiplier: 1.5, attackSpeedMultiplier: 1.5, damageMultiplier: 0.5 } }]);
+        param: { gateIds: [102] } }], [{ id: 102, name: '乘法', effectType: 2, value: 2, cooldownSeconds: 10,
+            windowSeconds: 0.3, scale: 0, hpRate: 0, moveMultiplier: 0, attackSpeedMultiplier: 0, damageMultiplier: 0 }]);
     try {
         const { load, cc, bar } = loadViews();
         const view = stubHexView(load, cc, bar);
@@ -73,7 +73,8 @@ test('衍生、传送与号角显示对应图形，池化换格不会沿用上�
     const visuals = ['extension', 'portal', 'horn'];
     installZCNeutralTestCatalog(visuals.map((visual, index) => ({
         groupId: 14006 + index, id: 1400601 + index, groupName: visual,
-        resourceType: 8 + index, weight: 1, param: {},
+        resourceType: 8 + index, weight: 1, param: index === 0 ? { damageRate: 1, speed: 2 }
+            : index === 1 ? { range: 6, uses: 3, cooldownSeconds: 10 } : {},
     })));
     try {
         const { load, cc, bar } = loadViews();
@@ -246,11 +247,9 @@ test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，
     // 跨 realm 的 Array 原型不同，deepEqual 必红（规则 167 同族坑）。
     assert.deepEqual(Array.from(nodes, (n) => n.position.x), [-16, 0, 16]);
 
-    // ⑥ 脚底落点 = `ZCHexView.RESOURCE_UNIT_POS_Y`（需求 row7：「格内兵团上移 30px」，
-    //    2026-10-15 由 -18 抬到 12）。钉住它是因为这个值**曾被改回去过一次**，
-    //    而没有任何用例会因此变红 —— 表现上只是兵又陷回格子里。
-    assert.deepEqual(Array.from(nodes, (n) => n.position.y), [12, 12, 12],
-        '格内兵团必须上移到 y = 12（-18 + 30，需求 row7）');
+    const y = 12 + load('./ZCHexView').NEUTRAL_RESOURCE_LIFT;
+    assert.deepEqual(Array.from(nodes, (n) => n.position.y), [y, y, y],
+        '兵团预览与中立资源图标共用整体上移量');
 });
 
 test('领取后（neutralResourceId 清空）骨���收掉，不残留', () => {
@@ -374,4 +373,69 @@ test('★自选出生点阶段：兵力资源点与对局一致（站待机兵�
     assert.equal((fallback as any).resourceUnitNodes.length, 0, '没喂骨骼时不该凭空造兵');
     assert.equal(fallback.iconSprite.spriteFrame, fallback.barracksIconFrame,
         '骨骼缺失时才退回兵营图标（保住「这一格是兵力点」的信息）');
+});
+
+
+test('割草机结束后刷新、地块动画和换层均不回显，复用后恢复', () => {
+    installZCNeutralTestCatalog([{ groupId: 1, id: 1, groupName: '割草机', resourceType: 8, weight: 1,
+        param: { damageRate: 1, speed: 2 } }]);
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        const frames = new Map([['extension', { name: 'extension', originalSize: { width: 256, height: 256 } }]]);
+        view.setNeutralResourceFrames(frames);
+        view.setResourceIconLayer(new cc.Node());
+        const p = { state: resourceHexState(1, { neutralFeature: { claimed: true } }),
+            canDevelop: false, playerGold: 0, cooldown: null, now: 10 };
+        view.render(p);
+        view.renderMower(100, 20, false);
+        view.render(p);
+        assert.equal(view.iconSprite.node.active, false, '静态刷新不能重新显示已结束的割草机');
+        const fx = { hidden: false, tileFlip: 1, tileScale: 1, tileLift: 0, buildingPopScale: 1, glowRadius: 0 };
+        view.applyActivationFx({ ...fx, hidden: true });
+        view.applyActivationFx(fx);
+        assert.equal(view.iconSprite.node.active, false, '激活动画结束也不能回显');
+        view.setResourceIconLayer(new cc.Node());
+        view.setNeutralResourceFrames(frames);
+        view.render(p);
+        assert.equal(view.iconSprite.node.active, false, '换层不能回显');
+        view.initialize(() => {});
+        view.render(p);
+        assert.equal(view.iconSprite.node.active, true, '复用时恢复正常资源图标');
+        view.applyActivationFx({ ...fx, hidden: true });
+        view.renderMower(100, 20, true);
+        assert.equal(view.iconSprite.node.active, false, '移动刷新不能覆盖地块动画的隐藏段');
+        view.applyActivationFx(fx);
+        assert.equal(view.iconSprite.node.active, true);
+    } finally { installZCNeutralTestCatalog(); }
+});
+
+test('传送圆环按批次扣除、冷却恢复；割草机时间轴与坐标幂等', () => {
+    installZCNeutralTestCatalog([{ groupId: 1, id: 1, groupName: '传送', resourceType: 9, weight: 1,
+        param: { range: 6, uses: 3, cooldownSeconds: 10 } }]);
+    try {
+        const { load, cc, bar } = loadViews();
+        const view = stubHexView(load, cc, bar);
+        view.setPortalUses(3);
+        const feature = { claimed: true, usesRemaining: 2, readyAt: 0, cooldownSeconds: 10 };
+        const p = { state: resourceHexState(1, { neutralFeature: feature }), canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
+        view.render(p);
+        assert.equal(view.cooldownBar.progress, 2 / 3);
+        feature.usesRemaining = 0; feature.readyAt = 10; p.now = 5;
+        view.render(p);
+        assert.equal(view.cooldownBar.progress, 0.5);
+        feature.usesRemaining = 3; p.now = 10;
+        view.render(p);
+        assert.equal(view.cooldownBar.progress, 1);
+        view.setMowerSpeed(2);
+        assert.equal(view.mowerProgress(1, 1.25), 0.5);
+        view.renderMower(100, 20, true);
+        const x = view.iconSprite.node.position.x;
+        view.renderMower(100, 20, true);
+        assert.equal(view.iconSprite.node.position.x, x);
+        view.renderMower(0, 0, false);
+        assert.equal(view.iconSprite.node.active, false);
+        view.initialize(() => {});
+        assert.equal(view.iconSprite.node.active, true, '复用地块时恢复已消失的割草机图标节点');
+    } finally { installZCNeutralTestCatalog(); }
 });

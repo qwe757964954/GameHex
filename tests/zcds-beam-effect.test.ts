@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
+import { decodePngRgba } from './helpers/png-alpha';
 import {
     ZC_BEAM_MIN_LENGTH,
     zcBeamCoreWidthOf,
@@ -30,12 +31,14 @@ import { ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCPr
  *   ① 几何：发射口从单位**脚点**按"前伸 8 / 上抬 44"挪出去，角度对住弹道，长度只到弹头；
  *   ② 拉伸：按**可见段**归一化，`scaleX` 与左侧留白位移成对给出；
  *   ③ 兜底：美术缺失时有线宽，不许「整条光束凭空消失」；
- *   ④ 资源：预制体真的从 19 帧散图建出来了，而且**锚点在左端**（否则拉伸会两头一起长）。
+ *   ④ 资源：预制体真的从 16 帧散图建出来了，而且**锚点在左端**（否则拉伸会两头一起长）；
+ *   ⑤ 归一化：16 帧的光束主体必须落在 `contentStart ~ contentEnd` 同一段上
+ *      （2026-11-05 / 2026-11-10 两次翻车的都是这一条）。
  */
 
 const PREFAB_PATH = 'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻';
 const SET_DIR = 'assets/bundles/battle/units/projectiles/镭射飞龙_普攻';
-const CANVAS_WIDTH = 640;
+const CANVAS_WIDTH = 700;
 
 /** 测几何用的 spec：把 `tailLift` 抹成 0，否则「正前方」的期望要跟着角度漂移。 */
 const TEST_SPEC = { ...zcBeamSpecOf(PREFAB_PATH)!, tailLift: 0 };
@@ -79,14 +82,45 @@ const close = (actual: number, expected: number, message: string): void => {
     assert.ok(Math.abs(actual - expected) < 1e-6, `${message}（实际 ${actual} / 期望 ${expected}）`);
 };
 
+/**
+ * 一帧里**光束主体**的横向区间：列 alpha 总和的**最长连续段**。
+ *
+ * 为什么不用「alpha 包围盒」：主体外面还有一圈 alpha≈8~30 的柔光，逐帧宽窄不一
+ * （新素材能探出 27~72px），拿包围盒当判据会把柔光的呼吸也算成"光束在伸缩"。
+ * 阈值取峰值的 12%（下限 200）后柔光被切掉，只剩真正看得见的那一段。
+ * 与 `tools/build_laser_beam_fx.py` 的 `body_span()` 同一口径 —— 那边是生产判据，这边是回归判据。
+ */
+function beamBodySpan(file: string): { left: number; right: number } {
+    const { width, height, pixels } = decodePngRgba(file);
+    const columnSums: number[] = [];
+    for (let x = 0; x < width; x += 1) {
+        let sum = 0;
+        for (let y = 0; y < height; y += 1) sum += pixels[(y * width + x) * 4 + 3];
+        columnSums.push(sum);
+    }
+    const threshold = Math.max(Math.max(...columnSums) * 0.12, 200);
+    let best = { left: 0, right: -1 };
+    let start = -1;
+    for (let x = 0; x <= width; x += 1) {
+        const inside = x < width && columnSums[x] >= threshold;
+        if (inside && start < 0) start = x;
+        if (!inside && start >= 0) {
+            if (x - 1 - start > best.right - best.left) best = { left: start, right: x - 1 };
+            start = -1;
+        }
+    }
+    return best;
+}
+
 test('光束配置按预制体路径登记，未登记的一律走通用弹道', () => {
     const spec = zcBeamSpecOf(PREFAB_PATH);
     assert.ok(spec, '镭射飞龙的光束必须登记');
     assert.equal(spec!.muzzleForward, 8);
     assert.equal(spec!.muzzleLift, 44, '单位原点是脚点，龙眼在头部而不是脚踝');
-    assert.equal(spec!.widthScale, 1.26,
-        '按亮芯 5~9px 反推（1.8）× prefab 烘焙纵向 0.7 = 1.26：0.7 已 bake 进本值，'
-        + 'applyBeamStretch 直接写绝对值（池化复用下读旧 scale.y 会累乘污染）');
+    assert.equal(spec!.widthScale, 0.8,
+        '按「列 α 和 × 倍率 = 旧素材的 3767」反推：新素材 4700 ⇒ 0.80。'
+        + 'applyBeamStretch 直接写绝对值（池化复用下读旧 scale.y 会累乘污染），'
+        + 'prefab 里那个 0.7 只是美术的原始纵向缩放，运行时会被覆盖');
     assert.equal(spec!.coreWidth, 10, '兜底线宽要盖得住地块底色');
     assert.ok(spec!.contentEnd > spec!.contentStart, '可见段区间必须有效');
 
@@ -144,12 +178,12 @@ test('两端重合时不产生 NaN，退化成一截最短的线', () => {
 test('拉伸按**可见段**归一化：线条起点落在锚点、末端正好到弹头', () => {
     const spec = TEST_SPEC;
     const visible = (spec.contentEnd - spec.contentStart) * CANVAS_WIDTH;
-    assert.ok(Math.abs(visible - 524) < 1e-6, '画布里真正有线的那一段 ≈ 524px（32~556）');
+    assert.ok(Math.abs(visible - 556) < 1e-6, '画布里真正有线的那一段 ≈ 556px（72~628）');
 
     // 可见段原尺寸 ⇒ 不用缩放，但左侧留白必须推到锚点外面
     const unit = zcBeamStretchOf(spec, CANVAS_WIDTH, visible);
     close(unit.scaleX, 1, '可见段原尺寸 = 1 倍');
-    close(unit.offsetX, -spec.contentStart * CANVAS_WIDTH, '留白（32px）推到锚点左侧');
+    close(unit.offsetX, -spec.contentStart * CANVAS_WIDTH, '留白（72px）推到锚点左侧');
 
     // 拉成两倍 ⇒ 起止都跟着走，位移也要跟着扩
     const doubled = zcBeamStretchOf(spec, CANVAS_WIDTH, visible * 2);
@@ -158,7 +192,7 @@ test('拉伸按**可见段**归一化：线条起点落在锚点、末端正好�
 
     // 落到 550 射程那一档（视图长度 ≈ 423）时的实际倍率
     const far = zcBeamStretchOf(spec, CANVAS_WIDTH, 423);
-    close(far.scaleX, 423 / 524, '长度 / 可见段宽度');
+    close(far.scaleX, 423 / 556, '长度 / 可见段宽度');
     assert.ok(far.scaleX < 1, '满射程下是缩，不是拉');
 });
 
@@ -166,7 +200,7 @@ test('拉伸有下限：长度被压到 0 时不会把预制体缩成看不见',
     const spec = TEST_SPEC;
     const degenerate = zcBeamStretchOf(spec, CANVAS_WIDTH, 0);
     assert.ok(degenerate.scaleX > 0, 'scaleX 不能是 0');
-    close(degenerate.scaleX, ZC_BEAM_MIN_LENGTH / 524, '按最短长度兜底');
+    close(degenerate.scaleX, ZC_BEAM_MIN_LENGTH / 556, '按最短长度兜底');
 });
 
 test('兜底线宽：普攻 10px，镭射死光同比例加粗', () => {
@@ -176,7 +210,7 @@ test('兜底线宽：普攻 10px，镭射死光同比例加粗', () => {
     assert.ok(Math.abs(zcBeamCoreWidthOf(spec, undefined) - 10) < 1e-9);
 });
 
-test('预制体从 19 帧散图建出来了，且锚点在左端', () => {
+test('预制体从 16 帧散图建出来了，且锚点在左端', () => {
     const prefabFile = `${SET_DIR}/镭射飞龙_普攻.prefab`;
     assert.ok(existsSync(prefabFile), '缺少预制体');
     const nodes = JSON.parse(readFileSync(prefabFile, 'utf8')) as Array<Record<string, unknown>>;
@@ -186,26 +220,55 @@ test('预制体从 19 帧散图建出来了，且锚点在左端', () => {
     assert.deepEqual([root._lpos.x, root._lpos.y], [0, 0], '根节点不许带美术偏置（发射点由运行时给）');
     assert.deepEqual([transform._anchorPoint.x, transform._anchorPoint.y], [0, 0.5], '锚点必须在左端');
     assert.equal(transform._contentSize.width, CANVAS_WIDTH, '画布宽度是拉伸的分母，改美术时要同步改测试');
+    assert.equal(transform._contentSize.height, 73, '画布高变了 ⇒ `widthScale` 要重新标定');
+
+    //  首帧必须指到 loop4_00 —— 换素材时最容易漏的一处（prefab 里写死的是旧帧 uuid）。
+    const sprite = nodes.find((item) => item.__type__ === 'cc.Sprite') as Record<string, any>;
+    const firstMeta = JSON.parse(
+        readFileSync(`${SET_DIR}/atlas/zheerniyasi_buff-xian_loop4_00.png.meta`, 'utf8'),
+    ) as Record<string, any>;
+    assert.equal(sprite._spriteFrame.__uuid__, `${firstMeta.uuid}@f9941`, 'prefab 的初始帧要跟上新素材');
 
     const frames = readdirSync(`${SET_DIR}/atlas`).filter((name) => name.endsWith('.png'));
-    assert.equal(frames.length, 19, '19 帧全要在图集目录里');
+    assert.equal(frames.length, 16, '16 帧全要在图集目录里（旧的 19 帧必须清掉，否则白占图集）');
+    assert.ok(frames.every((name) => name.includes('loop4_')), `图集里混进了旧帧：${frames.join(',')}`);
     assert.ok(existsSync(`${SET_DIR}/atlas/镭射飞龙_普攻.pac`), '缺图集');
     assert.ok(existsSync(`${SET_DIR}/anim/镭射飞龙_普攻-loop.anim`), '缺循环动画');
 
     const clip = JSON.parse(readFileSync(`${SET_DIR}/anim/镭射飞龙_普攻-loop.anim`, 'utf8')) as Record<string, any>;
     const keys = clip._tracks[0]._channel._curve._values as unknown[];
-    assert.equal(keys.length, 19, '动画要串满 19 帧');
+    assert.equal(keys.length, 16, '动画要串满 16 帧');
     assert.equal(clip.wrapMode, 2, '光束是常驻循环');
+});
+
+test('归一化：16 帧的光束主体都落在同一段上（末端不许周期性缩回去）', () => {
+    const spec = zcBeamSpecOf(PREFAB_PATH)!;
+    const expectedLeft = spec.contentStart * CANVAS_WIDTH;
+    const expectedRight = spec.contentEnd * CANVAS_WIDTH;
+    const frames = readdirSync(`${SET_DIR}/atlas`).filter((name) => name.endsWith('.png')).sort();
+    assert.equal(frames.length, 16, '先得是 16 帧新素材');
+
+    const seen: string[] = [];
+    for (const name of frames) {
+        const span = beamBodySpan(`${SET_DIR}/atlas/${name}`);
+        seen.push(`${name.slice(-6, -4)}:[${span.left},${span.right}]`);
+        assert.ok(Math.abs(span.left - expectedLeft) <= 2,
+            `${name} 的主体左端在 ${span.left}，应≈${expectedLeft}（发射口会露出留白）`);
+        assert.ok(Math.abs(span.right - expectedRight) <= 2,
+            `${name} 的主体右端在 ${span.right}，应≈${expectedRight}（否则末端"缩回去"，`
+            + '2026-11-05 与 2026-11-10 两次翻车都是这个）');
+    }
+    assert.ok(seen.length === 16, seen.join(' '));
 });
 
 test('镭射死光（30845）比普攻更粗，但共用同一份美术', () => {
     const spec = TEST_SPEC;
-    //  基准 1.26 = 美术目标 1.8 × prefab 烘焙纵向 0.7（0.7 已 bake，见「光束配置」用例）。
-    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 30719) - 1.26) < 1e-9, '普攻用基准宽度');
-    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 30845) - 1.26 * 1.3) < 1e-9,
-        '死光是同一根光束的 1.3 倍粗（1.638，与设计案 P 列一致）');
-    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, undefined) - 1.26) < 1e-9, '没带技能号时用基准宽度');
-    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 99999) - 1.26) < 1e-9, '没登记的技能号也用基准宽度');
+    //  基准 0.8 = 新素材（700×73）按发光总量对齐旧素材反推的结果。
+    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 30719) - 0.8) < 1e-9, '普攻用基准宽度');
+    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 30845) - 0.8 * 1.3) < 1e-9,
+        '死光是同一根光束的 1.3 倍粗（1.04，与设计案 P 列一致）');
+    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, undefined) - 0.8) < 1e-9, '没带技能号时用基准宽度');
+    assert.ok(Math.abs(zcBeamWidthScaleOf(spec, 99999) - 0.8) < 1e-9, '没登记的技能号也用基准宽度');
 });
 
 test('源码守卫：光束配置在 `if (!prefab) return` 之前认出来，且缺美术时有兜底线', () => {

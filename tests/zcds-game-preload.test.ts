@@ -47,6 +47,8 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
 
     class Prefab { constructor(public readonly path: string) {} }
     class SpriteFrame { constructor(public readonly name: string) {} }
+    let guideLoads = 0;
+    const guideFailure = new Error('guide unavailable');
     class EffectAsset {}
     class Material { initialize(): void {} }
     const assetService = {
@@ -56,6 +58,11 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         },
         loadDir: async (path: string, _type: unknown, options: { bundle?: string }) => {
             loadedDirectories.push(path);
+            if (path === 'units/effects') {
+                assert.equal(options.bundle, 'battle');
+                return resourcePlan.ZC_BATTLE_COMMON_PREFABS.filter(path => path.startsWith('units/effects/'))
+                    .map(path => ({ name: path.split('/').at(-1), path }));
+            }
             if (path === MAP_RESOURCE_ART_ROOT) {
                 assert.equal(options.bundle, 'battle', '中立图标从 battle 包加载');
                 return ['gate', 'extension', 'portal', 'horn'].map(name => new SpriteFrame(name));
@@ -117,6 +124,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         './ZCGuideLoader': {
             ZCGuideLoader: class {
                 async prepare() {
+                    if (++guideLoads === 1) throw guideFailure;
                     return { entries: [], params: {}, iconFrames: new Map() };
                 }
             },
@@ -187,7 +195,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.equal(prepared.neutralResourceFrames.get('portal').name, 'portal');
     assert.deepEqual(
         loadedDirectories.slice().sort(),
-        [mapDirectory, buildingDirectory, wallDirectory, HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, ARTIFACT_CLAIM_BURST_ART_ROOT, MAP_RESOURCE_ART_ROOT].sort(),
+        [mapDirectory, buildingDirectory, wallDirectory, 'units/effects', HEX_GROUND_GLOW_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, ARTIFACT_CLAIM_BURST_ART_ROOT, MAP_RESOURCE_ART_ROOT].sort(),
     );
     assert.deepEqual(configuredMaps, ['preloaded-map']);
     assert.deepEqual(loadedPrefabs.sort(), [
@@ -215,17 +223,11 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         'ui/game/ZCGameWall',
         'ui/game/ZCGameWallLayer',
         'units/archer',
-        // 单位出生特效（24 帧光柱，loader 既有加载；expected 此前漏同步）。
-        'units/effects/出生特效/出生特效',
-        // 阵亡 / 建筑摧毁 / 四职业受击特效（后期分批加入的纯表现件）。
-        'units/effects/死亡特效/死亡特效',
-        'units/effects/建筑死亡特效/建筑死亡特效',
-        'units/effects/受击特效/射手受击/射手受击',
-        'units/effects/受击特效/战士受击/战士受击',
-        'units/effects/受击特效/法师受击/法师受击',
-        'units/effects/受击特效/坦克受击/坦克受击',
         'units/militia',
     ].sort());
+    assert.equal(prepared.spawnFxPrefab.path, resourcePlan.ZC_BATTLE_FX_PATHS.spawn);
+    assert.equal(prepared.deathFxPrefab.path, resourcePlan.ZC_BATTLE_FX_PATHS.death);
+    assert.equal(prepared.hitFxPrefabs.size, 4);
     assert.equal(prepared.unitVisualPrefabs.size, 2);
     assert.equal(prepared.effectVisualPrefabs.size, 3);
     assert.equal(prepared.buildingFrames.size, 2);
@@ -233,18 +235,26 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
     assert.equal(prepared.wallFrames.size, 4);
     assert.ok(prepared.wallFrames.has('rightUp'), '城墙砖帧按图片名索引');
     assert.ok(prepared.wallMaterial, '城墙砖接缝材质随对局资源预加载');
-    assert.deepEqual((await prepared.loadGuide()).entries, [], '指南点击时加载，仍归属本局资源');
+    assert.equal(guideLoads, 0, '指南不进入首帧预加载');
+    await assert.rejects(prepared.loadGuide(), error => error === guideFailure);
+    const guideTask = prepared.loadGuide();
+    assert.equal(prepared.loadGuide(), guideTask, '重复点击复用本轮加载');
+    assert.deepEqual((await guideTask).entries, [], '失败后可以重新加载指南');
+    assert.equal(guideLoads, 2);
 });
 
-function shellLoader(assets: AssetService): {
+function resourceLoader(assets: AssetService, configs = {}, onRarityMeta = (_meta: unknown) => {}): {
+    loadCardArtConfig(scope: ResourceScope): Promise<cardArtModule.ICardArtConfig>;
     loadShellPrefabs(scope: ResourceScope, selectSpawn: boolean, hasBossPanel: boolean): Promise<Record<string, { path: string } | null>>;
 } {
     const source = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
     const context = {
-        exports: {} as { ZCGameLoader: new (resources: unknown, directory: string) => ReturnType<typeof shellLoader> },
+        exports: {} as { ZCGameLoader: new (resources: unknown, directory: string) => ReturnType<typeof resourceLoader> },
         require: (name: string): unknown => {
             if (name === '../model/ZCGameResourcePlan') return resourcePlan;
             if (name === 'cc') return { Prefab: class {} };
+            if (name === '../../card/CardArtConfig') return cardArtModule;
+            if (name === '../model/ZCCombatCatalog') return { setCardRarityMeta: onRarityMeta };
             if (name.endsWith('/BundleCatalog')) return { BATTLE_BUNDLE: 'battle' };
             return {};
         },
@@ -252,7 +262,7 @@ function shellLoader(assets: AssetService): {
     runInNewContext(ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, context);
-    return new context.exports.ZCGameLoader({ assets }, 'maps');
+    return new context.exports.ZCGameLoader({ assets, configs }, 'maps');
 }
 
 function shellAssets(beforeLoad = async (_path: string): Promise<void> => {}) {
@@ -280,7 +290,7 @@ test('首屏外壳复用资源管理器批次，保留条件槽位并随战斗�
         let batches = 0;
         const loadBatch = h.assets.loadBatch.bind(h.assets);
         h.assets.loadBatch = (requests, options) => { batches++; return loadBatch(requests, options); };
-        const values = await shellLoader(h.assets).loadShellPrefabs(scope, selectSpawn, hasBossPanel);
+        const values = await resourceLoader(h.assets).loadShellPrefabs(scope, selectSpawn, hasBossPanel);
         assert.equal(batches, 1);
         assert.equal(Object.keys(values).length, 13);
         assert.equal(values.hudPrefab?.path, resourcePlan.ZC_BATTLE_SHELL_PATHS.hud);
@@ -298,7 +308,7 @@ test('首屏外壳批次失败释放已加载资源并保留原始错误', async
     const failure = new Error('missing board');
     const h = shellAssets(async path => { if (path === resourcePlan.ZC_BATTLE_SHELL_PATHS.board) throw failure; });
     const scope = new ResourceScope('failed-shells');
-    await assert.rejects(shellLoader(h.assets).loadShellPrefabs(scope, true, true), error => error === failure);
+    await assert.rejects(resourceLoader(h.assets).loadShellPrefabs(scope, true, true), error => error === failure);
     assert.equal(h.released(), 1);
     assert.equal(h.loaded.length, 2, '失败后不派发剩余排队资源');
     scope.dispose();
@@ -310,7 +320,7 @@ test('取消首屏外壳批次停止排队资源，迟到结果仍被释放', as
     const pending = new Promise<void>(resolve => { finish = resolve; });
     const h = shellAssets(() => pending);
     const scope = new ResourceScope('cancelled-shells');
-    const result = shellLoader(h.assets).loadShellPrefabs(scope, true, true);
+    const result = resourceLoader(h.assets).loadShellPrefabs(scope, true, true);
     scope.dispose();
     await assert.rejects(result, /取消/);
     finish();
@@ -318,4 +328,17 @@ test('取消首屏外壳批次停止排队资源，迟到结果仍被释放', as
     assert.equal(h.loaded.length, 1);
     assert.equal(h.released(), 1);
     h.assets.dispose();
+});
+
+test('卡牌配置迟到时不向已取消的对局发布品级元数据', async () => {
+    let finish: (rows: unknown[]) => void;
+    const pending = new Promise<unknown[]>(resolve => { finish = resolve; });
+    const scope = new ResourceScope('cancelled-card-art');
+    let published = 0;
+    const loader = resourceLoader({} as AssetService, { getTable: () => pending }, () => published++);
+    const result = loader.loadCardArtConfig(scope);
+    scope.dispose();
+    finish([]);
+    await assert.rejects(result, /取消/);
+    assert.equal(published, 0);
 });

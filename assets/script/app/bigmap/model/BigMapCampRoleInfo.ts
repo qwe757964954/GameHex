@@ -63,6 +63,13 @@ export const BIGMAP_CAMP_ROLE_TEXT = {
     /** 单行角色描述：名字 · 血量 · 所在格。名字可能为空（SLG 守军允许空名），退回玩家 id。 */
     row: (name: string, fallbackId: string, hp: number, pos: number): string =>
         `· ${name || fallbackId}　HP ${hp}　格 ${pos}`,
+    /**
+     * 地图玩家标记上的血量行（`BigMapWorldMarker.setStatusLine`）。
+     *
+     * 地图按 `pos` 摆人之后，血量是四个展示项里唯一放不进名条的（名条只有"等级徽章 + 名字"），
+     * 所以单独一行、贴在头像上方。
+     */
+    hp: (value: number): string => `HP ${value}`,
 } as const;
 
 export function formatBigMapCampRoleDetail(role: IBigMapCampRoleInfo): string {
@@ -129,7 +136,7 @@ export function normalizeBigMapCampRoleInfos(
         if (!role) continue;
         byPos.set(role.pos, role);
     }
-    return [...byPos.values()].sort((a, b) => a.pos - b.pos);
+    return Array.from(byPos.values()).sort((a, b) => a.pos - b.pos);
 }
 
 /**

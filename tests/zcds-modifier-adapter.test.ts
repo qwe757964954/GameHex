@@ -62,11 +62,18 @@ test('68001 一星旧攻击 80 经 PVP 覆盖变为 8，并保留技能参数', 
 });
 
 test('等级、升星合并后按 flat 累加，并产生 UI 属性明细', () => {
+    //  ⚠️ 这里必须用**夹具成长行**，不能读真表：本条验的是「flat 怎么累加」，
+    //  真表的 `pvpUnitGrowth` 会随数值设计一直变（68001 现在 L4 是 attackFlat=45 的品质档），
+    //  拿它当夹具等于把设计数值钉进算法用例里 —— 2026-11-10 摘星级时就是这么红的。
+    const catalogs = catalogsWithGrowth([{
+        unitId: '68001', level: 4, attackFlat: 5, attackRate: 0,
+        maxHpFlat: 18, maxHpRate: 0, moveSpeedRate: 0, attackRangeFlat: 0, enabled: 1,
+    }]);
     const loadouts = compileZCCombatBuild({
         unitId: '68001', level: 4, generalStar: { generalId: 68001, star: 1 },
-    }, [unit], actualCatalogs());
+    }, [unit], catalogs);
     const resolved = resolveZCUnitDefinition(unit, loadouts);
-    // 成长表现在按 cardLevelUp.attrList 的绝对差配置：Lv4 attackFlat=5 / maxHpFlat=18，升星再 +8 攻击。
+    // 成长 Lv4 attackFlat=5 / maxHpFlat=18，升星再 +8 攻击：12+5+8=25、60+18=78。
     assert.equal(resolved.attack, 25);
     assert.equal(resolved.maxHp, 78);
     const attack = getZCUnitStatBreakdown(unit, loadouts).find((item) => item.statId === 'attack');

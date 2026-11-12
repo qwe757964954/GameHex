@@ -143,3 +143,33 @@ test('★★反向：区域没打穿仍要挡住 309（别把前置口径改得�
     assert.equal(progress.checkUnlock(309, 99999).ok, false,
         '区域一格都没通关 ⇒ 仍要挡（否则关卡2 会白送解锁）');
 });
+
+test('完整快照重建解锁集：本地存档里多出的解锁格不能顶替前置（2026-11-09 实机）', () => {
+    // 155 是关卡格，前置 153/154/175/176 全是固定资源点。
+    // 场景：这 4 格只在**本地存档**里留过解锁记录，服务端快照里没有。
+    const saved = { ownedCells: [map.startCellId], unlockedCells: [153, 154, 175, 176] };
+    const local = new TerritoryProgress(map, saved);
+    assert.equal(local.checkUnlock(155, 99999).ok, true, '快照未到之前按本地存档放行（离线兜底）');
+
+    // 服务端的完整快照到了：这 4 格不在 unlockCells 里 ⇒ 本地必须跟着消失，
+    // 否则点击会发 CmdCityChapterUnlockCellReqMsg 被服务端打回「前置地块未解锁」。
+    local.applyServerState(
+        { unlockCells: [map.startCellId], passCells: [map.startCellId] },
+        { replaceUnlocks: true },
+    );
+    assert.equal(local.isCellUnlocked(153), false, '服务端没解锁的格必须清掉');
+    assert.equal(local.isCellUnlocked(175), false);
+    assert.equal(local.checkUnlock(155, 99999).ok, false, '前置不满足要在本地拦住，别发请求');
+});
+
+test('只讲通关的广播（unlockCells 传空）绝不清空解锁集', () => {
+    const progress = new TerritoryProgress(map);
+    progress.applyServerState({ unlockCells: [234, 327], passCells: [] });
+    // CmdCityChapterPassCellBroMsg 的落地路径：只给 passCells，不传 replaceUnlocks
+    progress.applyServerState({ unlockCells: [], passCells: [367] });
+    assert.equal(progress.isCellUnlocked(234), true, '广播不带解锁信息，清空会让整章格子点不动');
+    assert.equal(progress.isCellUnlocked(327), true);
+    // 即使是「完整快照」语义，空 unlockCells 也不清 —— 空包只可能是服务端没算好 / 桩数据
+    progress.applyServerState({ unlockCells: [], passCells: [] }, { replaceUnlocks: true });
+    assert.equal(progress.isCellUnlocked(234), true, '空快照清空会把整张图锁死（连起点格都没解锁）');
+});

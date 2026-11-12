@@ -5,8 +5,8 @@ import { placeBigMapCities } from './BigMapWorld';
 
 /** 正式城池身份由 DM 表提供。旧表仅保留离线预览数值；正式开战/结算仍由服务端处理。 */
 export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
-    const camps = [...config.camps.values()].sort((a, b) => a.campId - b.campId);
-    const levels = [...config.cityLevels.values()].sort((a, b) => a.level - b.level);
+    const camps = Array.from(config.camps.values()).sort((a, b) => a.campId - b.campId);
+    const levels = Array.from(config.cityLevels.values()).sort((a, b) => a.level - b.level);
     if (!levels.length) throw new Error('[BigMap] 缺少城池预览等级配置');
     const cities = new Map<number, IBigMapCityConfig>();
     for (const camp of camps) {
@@ -57,7 +57,7 @@ export function completeBigMapCampLayout(config: IBigMapConfig, layout: IBigMapL
     const missing = new Map([...config.cities].filter(([id]) => !keptIds.has(id)));
     const added = placeBigMapCities({ ...config, cities: missing }, layout.terrainSeed, reserved);
     if (added.size !== missing.size) throw new Error('[BigMap] 当前地图无法容纳全部城池');
-    const cities: IBigMapLayoutCity[] = [...kept, ...[...added.values()].map((site) => ({
+    const cities: IBigMapLayoutCity[] = [...kept, ...Array.from(added.values()).map((site) => ({
         cityId: site.cityId, anchorHexId: site.anchorHexId, hexIds: site.hexIds, ring: site.ring,
         rangeHex: [], adjacentCityIds: [], label: config.cities.get(site.cityId)?.name ?? String(site.cityId),
     }))].sort((a, b) => a.cityId - b.cityId);

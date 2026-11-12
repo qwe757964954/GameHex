@@ -24,7 +24,7 @@ function upgradeStatus(level = 0) { return { cardId: '1', level, targetLevel: le
 test('详情与升级状态独立展示；升级后忽略上一等级迟到的详情', async () => {
     const h = upgradeFixture();
     const oldDetail = deferred<any>();
-    const newDetail = { stats: [], chain: [], milestones: [], powerText: 'new' };
+    const newDetail = { stats: [], chain: [], critDamageGain: 0, milestones: [], powerText: 'new' };
     h.repository.loadCardDetail = async (_id, level) => level === 0 ? oldDetail.promise : newDetail;
     try {
         const opening = h.controller.start(); await tick();
@@ -42,7 +42,7 @@ test('详情与升级状态独立展示；升级后忽略上一等级迟到的�
 test('技能详情先就绪时立即展示，不等待升级配置', async () => {
     const h = upgradeFixture(); const status = deferred<any>();
     h.repository.loadUpgradeStatus = async () => status.promise;
-    const detail = { stats: [], chain: [], milestones: [], powerText: 'ready' };
+    const detail = { stats: [], chain: [], critDamageGain: 0, milestones: [], powerText: 'ready' };
     h.repository.loadCardDetail = async () => detail;
     try {
         const opening = h.controller.start(); await tick();
@@ -64,7 +64,6 @@ test('详情左右切卡沿用卡库顺序与真实等级，升级在途禁止�
         assert.equal(h.states.at(-1).cardId, '1', '其他详情实例的意图不能串入');
         h.intent('next');
         await tick();
-        assert.equal(h.closed, 0, '切卡不能销毁整个弹窗');
         assert.equal(h.states.at(-1).cardId, '2');
         assert.equal(h.states.at(-1).level, 7);
         h.intent('previous');
@@ -72,37 +71,32 @@ test('详情左右切卡沿用卡库顺序与真实等级，升级在途禁止�
         assert.equal(h.states.at(-1).cardId, '1');
         assert.equal(h.states.at(-1).level, 0, '未解锁的卡不能借用上一张的等级');
         h.intent('submit');
-        h.intent('next'); h.intent('team'); h.intent('skills');
+        h.intent('next'); h.intent('skills');
         assert.equal(h.states.at(-1).cardId, '1');
-        assert.equal(h.editors, 0);
         assert.equal(h.skills.length, 0);
         h.pending.resolve({ kind: 'failed' });
         await tick();
-        h.intent('team');
-        assert.equal(h.editors, 1);
     } finally { h.finish(); }
 });
 
-test('完整卡库为空时不关闭，不跳到虚构卡牌', async () => {
+test('完整卡库为空时不跳到虚构卡牌', async () => {
     const h = upgradeFixture();
     try {
         await h.controller.start();
         h.intent('previous'); h.intent('next');
         await tick();
         assert.equal(h.states.at(-1).cardId, '1');
-        assert.equal(h.closed, 0);
     } finally { h.finish(); }
 });
 function upgradeFixture() {
     const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];
-    let editors = 0;
-    let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0, closed = 0;
+    let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0;
     const pending = deferred<UpgradeHeroResult>();
-    const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
+    const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null, classTag: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
         loadLineupSnapshot: (): CardLineupData | null => null,
         loadDetailNavigation: async () => ({ catalog: [] as readonly ZCDeckCard[], heroLevels: new Map<string, number>(), heroListKnown: true }),
-        loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', chain: [], milestones: [] }),
+        loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }),
         upgradeHero: async (_id: number, caller: object) => { calls++; assert.equal(caller, controller); return pending.promise; },
         applyHeroLevel: (id: number, level: number) => applied.push({ id, level }) };
     const controller = new CardUpgradeController(createControllerContext(), {
@@ -112,7 +106,6 @@ function upgradeFixture() {
         failed: error => failures.push(error),
         view: {
             render: state => { states.push(state); },
-            close: () => { closed++; }
         },
         loading: {
             beginLoading: () => { loading++; return () => { releases++; }; }
@@ -122,15 +115,13 @@ function upgradeFixture() {
         },
         popups: {
             openSkills: value => skills.push(value),
-            openEditor: () => { editors++; },
         },
     });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
-    const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind });
+    const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind, skillId: 100101 });
     return { owner, controller, repository, states, results, applied, skills, pending, intent, failures,
-        get editors() { return editors; },
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
-        get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; }, get closed() { return closed; } };
+        get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; } };
 }
 
 test('详情切卡等待新美术就绪后连同数据一次提交，期间保留原卡完整画面', async () => {
@@ -144,12 +135,11 @@ test('详情切卡等待新美术就绪后连同数据一次提交，期间保�
         h.intent('next'); await tick();
         assert.equal(h.states.length, count);
         assert.equal(h.states.at(-1), original);
-        const prepared: ICardDetailArt = { hero: null, diamond: null };
+        const prepared: ICardDetailArt = { hero: null, diamond: null, classTag: null };
         art.resolve(prepared); await tick();
         assert.equal(h.states.length, count + 1);
         assert.equal(h.states.at(-1).cardId, '2');
         assert.equal(h.states.at(-1).art, prepared);
-        assert.equal(h.closed, 0);
     } finally { h.finish(); }
 });
 
@@ -164,12 +154,12 @@ test('切卡美术加载失败保留原卡，可重试；关闭后迟到美术�
             const failure = new Error('美术加载失败');
             h.repository.loadDetailArt = () => exit === 'failure' ? Promise.reject(failure) : art.promise;
             h.intent('next'); await tick();
-            if (exit === 'dispose') { h.controller.dispose(); art.resolve({ hero: null, diamond: null }); await tick(); }
+            if (exit === 'dispose') { h.controller.dispose(); art.resolve({ hero: null, diamond: null, classTag: null }); await tick(); }
             assert.equal(h.states.length, count);
             assert.equal(h.states.at(-1), original);
             if (exit === 'failure') {
                 assert.equal(h.failures.at(-1), failure);
-                h.repository.loadDetailArt = async () => ({ hero: null, diamond: null });
+                h.repository.loadDetailArt = async () => ({ hero: null, diamond: null, classTag: null });
                 h.intent('next'); await tick();
                 assert.equal(h.states.at(-1).cardId, '2');
             }
@@ -200,7 +190,7 @@ test('failed upgrade retains level and allows retry; skill navigation comes from
         assert.equal(h.states[h.states.length - 1].level, 0); assert.equal(h.states[h.states.length - 1].phase, 'offline');
         h.repository.upgradeHero = async () => { throw new Error('offline'); }; h.intent(); await tick();
         assert.equal(h.states[h.states.length - 1].phase, 'failed'); assert.equal(h.releases, 2);
-        h.intent('skills'); assert.equal(h.closed, 1); assert.deepEqual(h.skills, [{ heroId: 1, cardName: '1' }]);
+        h.intent('skills'); assert.deepEqual(h.skills, [{ heroId: 1, skillId: 100101 }]);
     } finally { h.finish(); }
 });
 const boardData = (): LineupBoardData => ({ art: cardArtConfig, deck: [card('1')], pool: [card('1'), card('2'), card('3')], heroLevels: new Map(), heroLevelCaps: new Map(),
@@ -254,11 +244,11 @@ const RARITIES = ['gold', 'purple', 'blue', 'green'] as const;
 const fullDeck = (take = 8) => Array.from({ length: take }, (_unused, index) => ({
     id: String(index + 1), name: String(index + 1), rarity: RARITIES[index % RARITIES.length],
 }) as ZCDeckCard);
-const fullBoardData = (deck = fullDeck(8)): LineupBoardData => ({
+const fullBoardData = (deck = fullDeck(8), target = fullDeck(8)): LineupBoardData => ({
     art: cardArtConfig, deck, pool: fullDeck(8), heroLevels: new Map(), heroLevelCaps: new Map(),
     formations: [
         { formationId: 1, heroIds: deck.map((entry) => Number(entry.id)), selected: true },
-        { formationId: 2, heroIds: [1], selected: false },
+        { formationId: 2, heroIds: target.map((entry) => Number(entry.id)), selected: false },
     ],
 });
 test('切页签：当前方案是「有改动的完整阵容」时先提交最新阵容，成功后才切', async () => {
@@ -275,14 +265,36 @@ test('切页签：当前方案是「有改动的完整阵容」时先提交最�
         h.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [1, 2, 3, 4, 5, 6, 7, 8], selected: true } });
         await tick(); await tick();
         assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
-        assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), ['1']);
+        assert.deepEqual(h.states[h.states.length - 1].cards.map((v: ZCDeckCard) => v.id), fullDeck().map(card => card.id));
         assert.deepEqual(h.events, [
             { formationId: 1, heroIds: [1, 2, 3, 4, 5, 6, 7, 8] },
-            { formationId: 2, heroIds: [1] },
+            { formationId: 2, heroIds: [1, 2, 3, 4, 5, 6, 7, 8] },
         ], '自动提交与切页签各广播一次 DeckSaved');
         assert.deepEqual(h.tips, [], '点的是页签，不该弹「已保存」');
         assert.deepEqual(h.selects, [{ formationId: 2 }], '切过去要把出战阵型同步给服务器（CmdFormationSelectReqMsg）');
     } finally { h.finish(); }
+});
+test('切页签：完整阵容切到空阵型或半成品，不发送选中请求', async () => {
+    for (const target of [fullDeck(0), fullDeck(7)]) {
+        for (const dirty of [false, true]) {
+            const h = boardFixture();
+            try {
+                h.repository.loadBoard = async () => fullBoardData(fullDeck(dirty ? 7 : 8), target);
+                await h.controller.start();
+                if (dirty) h.intent('toggle', { cardId: '8' });
+                h.intent('preset', { index: 1 });
+                if (dirty) h.pending.resolve({ kind: 'success', formation: {
+                    formationId: 1, heroIds: fullDeck().map(card => Number(card.id)), selected: true,
+                } });
+                await tick(); await tick();
+                assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
+                assert.equal(h.states[h.states.length - 1].cards.length, target.length);
+                assert.equal(h.submissions.length, dirty ? 1 : 0, '原阵型的自动保存不受影响');
+                assert.deepEqual(h.selects, [], '目标阵型不完整，不能设为服务端出战阵型');
+                assert.deepEqual(h.events.map(event => event.formationId), dirty ? [1] : []);
+            } finally { h.finish(); }
+        }
+    }
 });
 test('切页签：阵容不满编或品级不全时只做本地切换，不发包', async () => {
     const cases: readonly { deck: readonly ZCDeckCard[]; edits: string[] }[] = [
@@ -315,7 +327,7 @@ test('切页签：完整阵容但没改动时只同步选中，不重复提交�
         assert.equal(h.submissions.length, 0, '没改动不用再存一遍');
         assert.deepEqual(h.selects, [{ formationId: 2 }]);
         assert.equal(h.states[h.states.length - 1].selectedPreset, 1);
-        assert.deepEqual(h.events, [{ formationId: 2, heroIds: [1] }]);
+        assert.deepEqual(h.events, [{ formationId: 2, heroIds: [1, 2, 3, 4, 5, 6, 7, 8] }]);
     } finally { h.finish(); }
 });
 test('切页签：自动提交失败时停在原方案，草稿与 dirty 都保留', async () => {
@@ -367,12 +379,14 @@ test('board close during load or save removes caller and rejects late view/resul
 
 test('upgrade and formation results refresh the live lineup controller; disposed lineup stops subscribing', async () => {
     let loads = 0;
+    const formationRefreshes: boolean[] = [];
     const lineup = new CardLineupController(createControllerContext(), {
         owner: {},
         autoLoadDecks: true,
         fallbackLevel: 1,
-        repository: { loadArtConfig: async () => cardArtConfig, loadLineupSnapshot: () => null, loadLineup: async () => {
+        repository: { loadArtConfig: async () => cardArtConfig, loadLineupSnapshot: () => null, loadLineup: async (_autoLoad, refreshFormations) => {
             loads++;
+            formationRefreshes.push(refreshFormations);
             return { art: cardArtConfig, deck: [], catalog: [], heroLevels: new Map(), heroLevelCaps: new Map(), heroListKnown: true,
                 formationsKnown: true, bonuses: { activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1,
                     moveSpeedMultiplier: 1, towerAttackMultiplier: 1, incomeBonus: 0, spawnIntervalMultiplier: 1 } };
@@ -392,6 +406,7 @@ test('upgrade and formation results refresh the live lineup controller; disposed
         await board.controller.start(); board.intent('save');
         board.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [1], selected: true } }); await tick();
         assert.equal(loads, 3);
+        assert.deepEqual(formationRefreshes, [true, false, true], '升级复用阵型，首屏和保存布阵仍刷新阵型');
         lineup.dispose(); EventMgr.instance.emit(CardLineupEvent.DeckSaved, { formationId: 1, heroIds: [] });
         await tick(); assert.equal(loads, 3);
     } finally { lineup.dispose(); upgrade.finish(); board.finish(); }
@@ -472,7 +487,6 @@ test('详情切卡加载期间拒绝重复切换与升级，关闭后迟到的�
         h.controller.dispose();
         pending.resolve({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
         await tick();
-        assert.equal(h.closed, 0);
         assert.equal(h.states.at(-1).cardId, '1');
     } finally { h.finish(); }
 });
@@ -483,13 +497,11 @@ test('切卡失败保留当前详情并允许重试，不依赖首帧阵容快�
     h.repository.loadDetailNavigation = async () => { throw failure; };
     try {
         await h.controller.start(); h.intent('next'); await tick();
-        assert.equal(h.closed, 0);
         assert.deepEqual(h.failures, [failure]);
         h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map([['2', 9]]), heroListKnown: true });
         h.intent('next'); await tick();
         assert.equal(h.states.at(-1).cardId, '2');
         assert.equal(h.states.at(-1).level, 9);
-        assert.equal(h.closed, 0);
     } finally { h.finish(); }
 });
 
@@ -497,7 +509,7 @@ test('切卡数据全部就绪后原位提交，等待期间不闪空且关闭�
     for (const close of [false, true]) {
         const h = upgradeFixture();
         const status = deferred<ReturnType<typeof upgradeStatus>>();
-        const detail = deferred<{ stats: []; powerText: string; chain: []; milestones: [] }>();
+        const detail = deferred<Awaited<ReturnType<typeof h.repository.loadCardDetail>>>();
         try {
             await h.controller.start();
             h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')],
@@ -510,16 +522,15 @@ test('切卡数据全部就绪后原位提交，等待期间不闪空且关闭�
             status.resolve({ ...upgradeStatus(7), cardId: '2' }); await tick();
             assert.equal(h.states.length, count, '只到升级状态时不能提前切换标题和卡面');
             if (close) h.controller.dispose();
-            detail.resolve({ stats: [], powerText: 'card-2', chain: [], milestones: [] }); await tick();
+            detail.resolve({ stats: [], powerText: 'card-2', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }); await tick();
             assert.equal(h.states.length, count + (close ? 0 : 1));
-            assert.equal(h.closed, 0);
             if (!close) {
                 assert.equal(h.states.at(-1).cardId, '2');
                 assert.equal(h.states.at(-1).status.cardId, '2');
                 assert.equal(h.states.at(-1).detail.powerText, 'card-2');
                 assert.equal(h.states.at(-1).phase, 'ready');
                 h.intent('skills');
-                assert.deepEqual(h.skills, [{ heroId: 2, cardName: '2' }]);
+                assert.deepEqual(h.skills, [{ heroId: 2, skillId: 100101 }]);
             }
         } finally { h.finish(); }
     }
@@ -536,7 +547,6 @@ test('下一张卡升级状态加载失败时保留旧详情并允许重试', as
         const count = h.states.length;
         h.intent('next'); await tick();
         assert.equal(h.states.length, count);
-        assert.equal(h.closed, 0);
         assert.deepEqual(h.failures, [failure]);
         h.repository.loadUpgradeStatus = async () => ({ ...upgradeStatus(), cardId: '2' });
         h.intent('next'); await tick();
@@ -546,7 +556,7 @@ test('下一张卡升级状态加载失败时保留旧详情并允许重试', as
 
 test('原位切卡后旧卡迟到详情不能覆盖新卡，详情失败仍保留新卡升级功能', async () => {
     const h = upgradeFixture();
-    const oldDetail = deferred<{ stats: []; powerText: string; chain: []; milestones: [] }>();
+    const oldDetail = deferred<Awaited<ReturnType<typeof h.repository.loadCardDetail>>>();
     h.repository.loadCardDetail = async (id?: string) => {
         if (id === '1') return oldDetail.promise;
         throw new Error('detail unavailable');
@@ -556,13 +566,12 @@ test('原位切卡后旧卡迟到详情不能覆盖新卡，详情失败仍保�
     try {
         const opening = h.controller.start(); await tick();
         h.intent('next'); await tick();
-        assert.equal(h.closed, 0);
         assert.equal(h.states.at(-1).cardId, '2');
         assert.equal(h.states.at(-1).level, 3);
         assert.equal(h.states.at(-1).phase, 'ready');
         assert.equal(h.states.at(-1).detail, null);
         const count = h.states.length;
-        oldDetail.resolve({ stats: [], powerText: 'old-card', chain: [], milestones: [] });
+        oldDetail.resolve({ stats: [], powerText: 'old-card', critDamageGain: 0, chain: [], milestones: [] });
         await opening;
         assert.equal(h.states.length, count);
     } finally { h.finish(); }

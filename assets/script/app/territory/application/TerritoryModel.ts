@@ -12,12 +12,14 @@ import {
 } from '../../battle/BattleStartModel';
 import { TERRITORY_BATTLE_STATUS } from '../model/TerritoryBattleStatus';
 import type { TerritoryCampaignStage } from '../model/TerritoryCampaignConfig';
+import type { TerritoryGradeProModifier } from '../model/TerritoryCampaignConfig';
 import {
     TERRITORY_IDLE_REWARD_MAX_HOURS_FALLBACK,
     TERRITORY_LEVEL_AUTO_START_FALLBACK,
 } from '../model/TerritoryCampaignConfig';
 import type { ITerritoryCellState } from '../model/TerritoryCellBitSet';
 import { territoryRevealedCells } from '../model/TerritoryCellReveal';
+import { territoryPreviewCells } from '../model/TerritoryPreview';
 import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
 import type {
     TerritoryIdleRewardGain,
@@ -28,7 +30,7 @@ import type {
     TerritoryMapConfig,
     TerritorySite,
 } from '../model/TerritoryMapConfig';
-import { configureTerritoryMap, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import { configureTerritoryMap, TERRITORY_SITE_TYPE, TERRITORY_SILVER_CHEST_REWARD_ID } from '../model/TerritoryMapConfig';
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
@@ -48,10 +50,16 @@ import {
     chapterFinalBossCell,
     expandBindingsToAreaSites,
     findCurrentTerritoryLevel,
+    findHighestPassedTerritoryLevel,
     territoryChapterCompletion,
 } from '../model/TerritoryStageBinding';
 import type { TerritoryChapterCompletion } from '../model/TerritoryStageBinding';
-import type { TerritoryCellFetchResult, TerritoryStartBattleResult, TerritoryWriteResult } from './TerritoryCellRepository';
+import type {
+    TerritoryCellFetchResult,
+    TerritoryIdleRewardResult,
+    TerritoryStartBattleResult,
+    TerritoryWriteResult,
+} from './TerritoryCellRepository';
 import type { ITerritoryBattleArt } from './TerritoryPageAssets';
 import {
     TERRITORY_ASYNC_REWARD_SLOTS,
@@ -74,6 +82,7 @@ import {
  */
 interface ITerritoryUnlockThenBattleOutcome {
     readonly unlockedCellIds: readonly number[];
+    readonly rewards: readonly ITerritoryGrantedReward[];
     /**
      * 服务端开战结果。
      *
@@ -117,6 +126,21 @@ export interface ITerritoryCellGateway {
         battleParams: readonly string[],
         host?: object,
     ): Promise<TerritoryStartBattleResult>;
+    /**
+     * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`）。
+     *
+     * 回包 `tlCmdGoods` 是**服务端实际发放**的物品，必须原样展示；
+     * `idleTime` 是新的挂机起点（秒），写回本地账本的只有它，不再本地掷骰结算。
+     */
+    claimIdleReward(host?: object): Promise<TerritoryIdleRewardResult>;
+    /**
+     * 章节扫荡（`CmdCityChapterSweepReqMsg { levelChapter, cellId, times }`）。
+     *
+     * 回包 `succ === 1` 才算成功，`tlCmdGoods` 是实际发放。
+     * `times` 是**扫荡倍率**（协议缺省 1，档位见 `HJ_SWEEP_GEARS`）：服务端按
+     * `倍率 × 单次消耗` 扣体力、按倍率发奖 —— 客户端只透传，不做本地结算。
+     */
+    sweep(chapterId: number, cellId: number, times: number, host?: object): Promise<TerritoryWriteResult>;
     clear(): void;
 }
 
@@ -170,6 +194,11 @@ export interface ITerritoryBattleNavParams {
     readonly attackRate: number;
     /** `levelInfo.openGrideTime`：本关翻地块频率（秒），对局内用它压 NPC 翻地块的速度。 */
     readonly openGrideTime: number;
+    /**
+     * `levelInfo.gradeProModifier`：NPC 翻地块抽卡的品质权重乘数。
+     * 缺省 ⇒ 不调整（塔防关卡 / 该列留空的关卡）。
+     */
+    readonly gradeProModifier?: TerritoryGradeProModifier;
     readonly waves: ReadonlyArray<{
         readonly waveId: number;
         readonly showAtSeconds: number;
@@ -179,6 +208,8 @@ export interface ITerritoryBattleNavParams {
         readonly attackRate: number;
         /** 塔防 BOSS 波（每组最后一波）：HUD 大血条与胜负判定都用它。 */
         readonly isBoss: boolean;
+        /** `defenceModWave.monsterSize`：1 普通 / 2 BOSS，对局内当怪物模型缩放倍率。 */
+        readonly monsterSize: number;
     }>;
 }
 
@@ -253,6 +284,25 @@ export interface ITerritorySetBusyPayload {
  */
 export interface ITerritoryRewardPresentation {
     readonly chest?: boolean;
+    /**
+     * `true` = **银币宝箱**（`rewardId = 1023` / `coinBox` 蓝银金属箱）的独立打开动画
+     * （2026-11-10 用户口径：「不要用卡牌宝箱的打开动画，因为他们的图标不一致」）。
+     *
+     * 页面收到后**不播** `playChestOpen`（那是黄铜藤蔓箱 `chest_seq_*` 的三档全屏表演），
+     * 改为让地图上那颗 `coinBox` icon 放大 → 缩小 → 消失。
+     *
+     * ⚠️ 判据由 Presenter 按 `site.rewardId` 给，页面不自己判格子类型 —— 与 `chest: false`
+     * 同一条「玩法口径由 Model 指定」的分工。缺省 `false` = 卡牌碎片宝箱 / 其它来源，保持原样。
+     */
+    readonly silverChest?: boolean;
+    /**
+     * `true` = **强制弹奖励窗**，即使全部是钱包类（银币 / 体力）。
+     *
+     * 默认分流（`splitTerritoryRewards`）会把银币 / 体力剥去飘字、其余弹窗 ——
+     * 那是给「格子产出」设计的。挂机征收要的是「点一下就看到服务端发了什么」，
+     * 产出常常只有银币 / 体力，不强制弹就什么都看不到。
+     */
+    readonly popup?: boolean;
 }
 
 export interface ITerritoryModelPorts {
@@ -261,6 +311,21 @@ export interface ITerritoryModelPorts {
     readonly store: ITerritoryChapterStore;
     readonly walletSeed: () => TerritoryWallet;
     readonly readServerWallet: () => TerritoryWallet | null;
+    /**
+     * 服务端章节级挂机起点（**秒**）；`null` = 还没拿到。
+     *
+     * 真源是 `TerritoryChapterInfoRepository.instance.current.idleTime`
+     * （账号级单例，登录后拉一次 + Bro 覆盖）—— Model 不自己发 `CmdCityChapterInfoReqMsg`，
+     * 否则每进一次领地页就多一条重复请求（2026-11-09 实测日志里出现过两条）。
+     */
+    readonly readServerIdleTimeSeconds?: () => number | null;
+    /**
+     * 把领奖回包的新起点写回账号级快照（`TerritoryChapterInfoRepository`）。
+     *
+     * 服务端只在领奖 rsp 里给新 `idleTime`，不保证再推 `CmdCityChapterInfoBroMsg`；
+     * 不写回的话征收弹窗 / 主城金币车的计时会停在旧值（领完仍显示满格）。
+     */
+    readonly writeServerIdleTimeSeconds?: (seconds: number) => void;
     readonly availableChapters: readonly number[];
     /** 网络请求的生命周期宿主（页面组件；断网/销毁时取消请求）。 */
     readonly lifecycleHost?: object;
@@ -402,16 +467,29 @@ export interface ITerritoryViewState {
     readonly art: ITerritoryBattleArt;
     readonly progress: TerritoryProgress | null;
     readonly revealedCells: readonly number[];
+    /**
+     * **提前披露**的格（2026-11-09）：第 1 关开局就露、通过第 1 关露首领 1、通过首领 1 露首领 2。
+     *
+     * 口径全在 `model/TerritoryPreview`（序列 = 第 1 关 + 每个首领，链式触发，整关 footprint）。
+     * 这些格**已经并进** {@link revealedCells}，这里单独再给一份是为了让视图知道
+     * 「哪几格要画建筑虚影」—— 只看 `revealedCells` 分不出"正常露出"与"提前披露"。
+     *
+     * 🔴 披露 ≠ 能开：解锁/扣银币那条链只认前置与钱包，与这份集合无关。
+     */
+    readonly previewCells: readonly number[];
     readonly siteOpenableCells: readonly number[];
     /**
-     * 「被**结构性条件**卡住、现在开不了」的格 —— 未解锁锁标（`icon_lock`）只认这一份。
+     * 「被**前置**卡住、现在开不了」的格 —— 未解锁锁标（`icon_lock`）只认这一份。
      *
-     *  · 站点格：`prerequisiteBlockers` 非空（前置关卡没打通 / 前置宝箱没领）；
+     *  · 站点格：`TerritoryProgress.isPrerequisitePending`
+     *    = `prerequisiteBlockers` 非空（前置关卡没打通）**或** 前置宝箱「解锁了但没点开」；
      *  · 随机候选格：`canOpenTerritoryRandomCell` 判 `needsNeighbor`（四周没有已开启格）。
      *
      * 🔴 **不含「银币 / 体力不够」**（山猫 2026-11-05：「只有这种才需要上锁」，配图是
      *   「PVP 关卡通关后解锁」那种被前置卡住的格）。缺钱是钱包问题，价格数字变红才是它的表达 ——
      *   把缺钱也上锁，玩家每花一笔银子就会看见整图上锁。
+     * 🔴 与 {@link siteOpenableCells} **互补**：进了这里的格一定不在可开启集合里（反之亦然），
+     *   守卫见 `tests/territory-presenter.test.ts`「never overlaps cells that can be opened」。
      */
     readonly lockBlockedCells: readonly number[];
     readonly stageByCell: ReadonlyMap<number, TerritoryCampaignStage>;
@@ -517,6 +595,14 @@ export class TerritoryModel {
 
     private currentChapterId: number;
     private chapter: ITerritoryChapterContext | null = null;
+    /**
+     * 服务端章节级挂机起点（毫秒）；`null` = 还没拿到（没拉过 `ChapterInfo`、离线、或刚切章）。
+     *
+     * ⚠️ 这是**服务端权威**的起点，优先级高于本地 per-level 账本
+     * `idleRewardAtByLevel`（后者是接入协议前自造的：每个据点独立计时）。
+     * 接入后 UI 计时看它，账本只在离线兜底时用。
+     */
+    private serverIdleTimeMs: number | null = null;
     private loadingPushes: ITerritoryChapterPushes | null = null;
     private get map() { return this.chapter?.map ?? null; }
     private get progress() { return this.chapter?.progress ?? null; }
@@ -547,9 +633,11 @@ export class TerritoryModel {
         levelBubblePendingFrame: null,
         // 宝箱提示气泡里的体力 icon（地图还没加载时页面会用这套空图，别让类型少一项）。
         staminaIcon: null,
-        // 地皮两态（未通关 / 已通关）+ 四张「已解锁未通关」的格面框，口径见 `TerritoryMapView.paintHexes`。
+        // 地皮三态（未通关 / 已通关 / **被前置卡住时置灰**）+ 四张「已解锁未通关」的格面框，
+        // 口径见 `TerritoryMapView.paintHexes`。灰版取不到 ⇒ 锁着的格退回泥土（不空不裂）。
         tileLocked: null,
         tileCleared: null,
+        tileGrey: null,
         // 前沿空锁格的锁标（`image/territory/icon_lock`）；空图 ⇒ 锁格只显示泥土台面。
         lockIcon: null,
         frameBoss: null,
@@ -563,6 +651,7 @@ export class TerritoryModel {
         fixedResource: null,
         randomResource: null,
         randomSilverIcon: null,
+        chestIcon: null,
         bonus: null,
         header: null,
         navButton: null,
@@ -739,7 +828,7 @@ export class TerritoryModel {
         // 同一格连点是 no-op，所以「连点同一格仍要记账」的那两条用例不受影响。
         this.beginInteraction(site.cellId);
         if (!this.progress || !this.map
-            || !territoryRevealedCells(this.map, this.progress).includes(site.cellId)) return;
+            || !territoryRevealedCells(this.map, this.progress, this.previewCellsNow()).includes(site.cellId)) return;
         if (this.isBattleSite(site) && this.pendingFixedResourceCells.has(site.cellId)) return;
         // 关卡、首领和异步据点统一先解锁展示建筑；已解锁后再次点击打开各自详情。
         //
@@ -756,8 +845,8 @@ export class TerritoryModel {
             // 弹出【领地关卡弹窗】」。
             //
             // ⇒ 锁着的格子点一下 = **花银币解锁**（校验前置 / 银币 / 体力 → `CmdCityChapterUnlockCellReqMsg`
-            //   → `markCellsUnlocked`），界面**不弹**；主线关卡解锁成功后**立刻发开战**（2026-10-29，
-            //   见下面那段口径）—— 只解锁的只剩 asyncPvp 与绑不到 campaign 行的格子。
+            //   → `markCellsUnlocked`），界面**不弹**；战斗站点解锁成功后**立刻发开战**（2026-10-29，
+            //   2026-11-11 起含 asyncPvp，见下面那段口径）—— 只解锁的只剩绑不到 campaign 行的格子。
             //   解锁动画由视图侧按「刚解锁」的 diff 播（与其它新露出格子同一套 `hexSpawn`）。
             //
             // ⚠️ 判据必须 **`isCellUnlocked || isAreaPassed`**（与 `isCellActivated` 同源）：
@@ -773,12 +862,16 @@ export class TerritoryModel {
                 //     进战斗，中途不弹关卡界面；解锁过（或区域已通关）的格子照旧走下面的详情分支。
                 //   ⇒ 判据就在这条 `if` 里，**不要**再按 `isOwned` / 是否打过二次分流：
                 //     「未通关」不是「该直开」的条件，不然玩家退出战斗后再点它又是直开、永远看不到关卡界面。
-                //   ⚠️ 只对**主线关卡**（stage / boss）生效：asyncPvp 的弹窗带「侦查」，先弹再接战；
-                //     绑不到 campaign 行时没有 battleParams，退回「只解锁」。
+                //   ⚠️ 2026-11-11 用户「触发异步据点也是直接进入战斗」：直开名单从
+                //     主线关卡（stage / boss）扩到**全部战斗站点**（含 asyncPvp）。
+                //     已解锁 / 已通关的 asyncPvp 仍走下面 `detailSite = site` ⇒
+                //     `BigMapPlayerLevelPanel` 的侦查 / 占领奖励 / 双按钮完整保留，
+                //     被跳过的只是「花银币解锁那一次」的弹窗。
+                //     绑不到 campaign 行时 `lockedStage = null` ⇒ 退回「只解锁」，不会发空请求。
                 //   ⚠️ 开关是 `gameConfig.chapterLevelAutoStartConfig`（1 开 / 0 关，策划表口径），
                 //     关掉之后这里退回「点一下只解锁」的老行为 —— 判据只在 `selectSite` 这一处，
                 //     别在 `handleUnlockThenBattle` 里再判一遍（两处判据迟早不一致）。
-                if (this.levelAutoStart && lockedStage && this.isLevelSite(site)) {
+                if (this.levelAutoStart && lockedStage && this.isAutoStartSite(site)) {
                     void this.handleUnlockThenBattle(site, lockedStage);
                     return;
                 }
@@ -1012,7 +1105,7 @@ export class TerritoryModel {
     }
 
     /**
-     * 锁着的关卡格：**解锁成功即开战**（不弹关卡界面）。
+     * 锁着的战斗站点格（关卡 / 首领 / **异步据点**）：**解锁成功即开战**（不弹详情面板）。
      *
      * 🔴 2026-10-29 口径（山猫）：「只有解锁那一次直开、之后仍弹窗」——
      * 所以这条入口只在 `!isCellUnlocked && !isAreaPassed` 时被 `selectSite` 调到；
@@ -1032,7 +1125,7 @@ export class TerritoryModel {
         if (!map || !progress) return;
         // 已占领 = 这一片已经打过了（`selectSite` 的锁态判据已排掉，这里再挡一次纯防御）。
         if (progress.isOwned(site.cellId)) return;
-        if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
+        if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
         // 解锁前的「前置满足 + 钱包够」与 `handleUnlockOnly` 同一条校验（失败自带提示）。
         if (!this.canAffordUnlock(site)) return;
         await this.runCellWrite<ITerritoryUnlockThenBattleOutcome | null>(
@@ -1040,6 +1133,7 @@ export class TerritoryModel {
             () => this.unlockThenStartBattle(site, stage, map.chapterId),
             (outcome) => {
                 if (!outcome) return;
+                if (outcome.rewards.length) this.showRewards(outcome.rewards, site.cellId);
                 // 🔴 按**回包给的数组**逐格记账（服务端一次解锁整片区域），与 `handleUnlockOnly` 同口径。
                 progress.markCellsUnlocked(outcome.unlockedCellIds);
                 this.persistProgress();
@@ -1076,14 +1170,14 @@ export class TerritoryModel {
             return null;
         }
         if (stage.mode === 'match') {
-            return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle: null };
+            return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle: null, rewards: unlock.rewards ?? [] };
         }
         const battle = await this.ports.gateway.startBattle(
             ZC_BATTLE_TYPE_CHAPTER,
             this.battleParamsFor(site, chapterId),
             this.ports.lifecycleHost,
         );
-        return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle };
+        return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle, rewards: unlock.rewards ?? [] };
     }
 
     /**
@@ -1107,7 +1201,7 @@ export class TerritoryModel {
         if (!progress || !map || progress.isOwned(site.cellId)
             || progress.isCellUnlocked(site.cellId)
             || this.pendingFixedResourceCells.has(site.cellId)) return;
-        if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
+        if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
         if (!this.canAffordUnlock(site)) return;
         await this.runCellWrite(
             site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyUnlock,
@@ -1122,6 +1216,7 @@ export class TerritoryModel {
                 progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
+                if (result.rewards?.length) this.showRewards(result.rewards, site.cellId);
                 this.showTip(unlockedText);
             },
         );
@@ -1143,7 +1238,7 @@ export class TerritoryModel {
         if (!progress || !map || progress.isOwned(site.cellId)) return;
         const isUnlocked = progress.isCellUnlocked(site.cellId);
         if (!isUnlocked) {
-            if (!territoryRevealedCells(map, progress).includes(site.cellId)) return;
+            if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
             if (!this.canAffordUnlock(site)) return;
         }
         await this.runCellWrite(
@@ -1165,7 +1260,18 @@ export class TerritoryModel {
                 const tip = isUnlocked ? texts.claimed : texts.unlocked;
                 if (tip) this.showTip(tip);
                 if (isUnlocked && result.rewards?.length) {
-                    this.showRewards(result.rewards, site.cellId);
+                    // 银币宝箱（rewardId = 1023 / coinBox 蓝银金属箱）走**独立**打开动画；
+                    // 卡牌碎片宝箱（1016~1022 / 黄铜藤蔓箱）仍走 `chest_seq_*` 三档开箱表演。
+                    // ⚠️ 保留 else 分支里 `showRewards(result.rewards, site.cellId)` 这串原样调用：
+                    //    `territory-cell-protocol` / `territory-burst-density` 钉的是「资源点领取
+                    //    仍走默认开箱」，不能因为新增一种宝箱就把那条契约抹掉。
+                    // ⚠️ 判据只认 `site.rewardId`（配表口径），不看回包奖励内容：奖励按概率抽，
+                    //    卡牌碎片宝箱这一批也可能恰好全是银币。
+                    if (site.rewardId === TERRITORY_SILVER_CHEST_REWARD_ID) {
+                        this.showRewards(result.rewards, site.cellId, { silverChest: true });
+                    } else {
+                        this.showRewards(result.rewards, site.cellId);
+                    }
                 }
             },
         );
@@ -1236,12 +1342,17 @@ export class TerritoryModel {
     }
 
     /**
-     * **主线关卡**（普通关 / 首领）。「解锁那一次直开」只对它生效：
-     * asyncPvp 的弹窗带「侦查」，要留给人点。
+     * **「花银币解锁那一次就立刻开战」的站点名单**（2026-11-11）。
+     *
+     * 2026-10-29 只有主线关卡（stage / boss）；当时的注释「asyncPvp 的弹窗带侦查，
+     * 要留给人点」在 2026-11-11 被用户「触发异步据点也是直接进入战斗」覆盖：
+     * asyncPvp 并入直开名单。**已解锁 / 已通关仍弹侦查面板**，那句旧注释只针对锁态分支。
+     *
+     * 与 {@link isBattleSite} 的区别：那边管「能不能发开战请求」，这边只管「要不要跳过弹窗」。
+     * 两张名单眼下恰好相同，但语义不同 —— 以后某个战斗站点要保留弹窗时只改这里。
      */
-    private isLevelSite(site: TerritorySite): boolean {
-        return site.type === TERRITORY_SITE_TYPE.stage
-            || site.type === TERRITORY_SITE_TYPE.boss;
+    private isAutoStartSite(site: TerritorySite): boolean {
+        return this.isBattleSite(site);
     }
 
     /**
@@ -1482,10 +1593,13 @@ export class TerritoryModel {
                     return;
                 }
                 console.warn(
-                    `[TerritoryPresenter] 第 ${map.chapterId} 章格子 ${site.cellId} 解锁请求未确认（${unlock.reason}），按本地继续`,
+                    `[TerritoryModel] 第 ${map.chapterId} 章格子 ${site.cellId} 解锁请求未确认（${unlock.reason}），按本地继续`,
                 );
             }
-            if (unlock.ok) this.progress?.markCellsUnlocked(unlock.unlockedCellIds ?? [site.cellId]);
+            if (unlock.ok) {
+                this.progress?.markCellsUnlocked(unlock.unlockedCellIds ?? [site.cellId]);
+                if (unlock.rewards?.length) this.showRewards(unlock.rewards, site.cellId);
+            }
 
             this.beginBattle(site, stage);
         } finally {
@@ -1539,6 +1653,7 @@ export class TerritoryModel {
             hpRate: stage.hpRate,
             attackRate: stage.attackRate,
             openGrideTime: stage.openGrideTime,
+            gradeProModifier: stage.gradeProModifier,
             waves: stage.waves.flatMap((wave) => wave.pvpCardId ? [{
                 waveId: wave.waveId,
                 showAtSeconds: wave.showAtSeconds,
@@ -1547,6 +1662,7 @@ export class TerritoryModel {
                 hpRate: wave.hpRate,
                 attackRate: wave.attackRate,
                 isBoss: wave.isBoss,
+                monsterSize: wave.monsterSize,
             }] : []),
         }, battle, approach, battleParams);
     }
@@ -1690,7 +1806,7 @@ export class TerritoryModel {
         try {
             bundle = await loader.load(chapterId);
         } catch (error) {
-            console.error('[TerritoryPresenter] 领地数据加载失败', error);
+            console.error('[TerritoryModel] 领地数据加载失败', error);
             if (loadId === this.loadId) {
                 this.showTip(TERRITORY_TEXTS.loadFailed);
                 this.currentChapterId = previousChapterId;
@@ -1728,8 +1844,9 @@ export class TerritoryModel {
                     ...site,
                     unlock: {
                         ...site.unlock,
+                        // 只覆盖体力；`exploreSeconds`（通关后「探索中」倒计时）留在**地图配置**里，
+                        // 不能被 `levelInfo.openGrideTime` 带过来 —— 那一列只管战斗内 NPC 翻地块的频率（2026-11-11）。
                         staminaCost: stage.staminaCost,
-                        exploreSeconds: stage.exploreSeconds,
                     },
                 } : site;
             }),
@@ -1751,6 +1868,7 @@ export class TerritoryModel {
             randomResourceCells: [],
         };
         this.chapter = context;
+        this.serverIdleTimeMs = null;
         this.loadingPushes = null;
         const wasComplete = this.chapterCompletion().complete;
         const returningFromBattle = saveState.battle !== null && saveState.battle !== undefined;
@@ -1770,6 +1888,7 @@ export class TerritoryModel {
         // 不再等服务端格子状态 —— 服务端慢/超时不再整页锁屏（生产口径：失败不阻断、本地兜底）。
         this.noteChapterJustCleared(wasComplete);
         this.emitStateChange();
+        this.refreshServerIdleTime(chapterId);
 
         await this.mergeServerState(chapterId, loadId, lifecycleHost);
         if (loadId !== this.loadId) return;
@@ -1885,7 +2004,10 @@ export class TerritoryModel {
         const pending = progress.pendingPassCells.length;
         const unconfirmed = state.passCells.filter(cellId => !progress.isServerOwned(cellId));
         progress.markServerStateKnown(true);
-        const added = progress.applyServerState(state);
+        // `CmdCityChapterCellInfoRspMsg` 是**完整快照**（`unlockCells` / `passCells` 都是全量 bitSet）
+        // ⇒ 解锁集按它重建。只并集的话，本地存档里多出来的解锁格会永久顶着「前置已满足」，
+        // 点击就会发 `CmdCityChapterUnlockCellReqMsg` 被服务端打回「前置地块未解锁」（2026-11-09 实机）。
+        const added = progress.applyServerState(state, { replaceUnlocks: true });
         context.serverCellStateCache = state;
         const changed = added.length > 0 || !known || unlocked !== progress.unlockedCells.length
             || pending !== progress.pendingPassCells.length
@@ -1952,7 +2074,7 @@ export class TerritoryModel {
         const result = await this.ports.gateway.fetchChapterCells(chapterId, total, host);
         if (loadId !== this.loadId || context !== this.chapter) return;
         if ('reason' in result) {
-            console.warn(`[TerritoryPresenter] 第 ${chapterId} 章服务端格子状态不可用（${result.reason}），沿用本地存档`);
+            console.warn(`[TerritoryModel] 第 ${chapterId} 章服务端格子状态不可用（${result.reason}），沿用本地存档`);
             return;
         }
         if (this.mergeCellInfo(context, result.state)) this.emitStateChange();
@@ -2040,6 +2162,7 @@ export class TerritoryModel {
                     if (loadId !== this.loadId) return;
                     if (!unlock.ok) break;
                     progress.markCellsUnlocked(unlock.unlockedCellIds ?? [cellId]);
+                    if (unlock.rewards?.length) this.showRewards(unlock.rewards, cellId);
                 }
                 // 🔴 不发 passCell：关卡通关等服务端主动下发，applyServerState 清 pendingPasses。
             }
@@ -2102,12 +2225,129 @@ export class TerritoryModel {
         return sources;
     }
 
-    claimIdleRewards(now: number): void {
+    /**
+     * 征收（领取挂机奖励）。
+     *
+     * ## 在线走协议（2026-11-09 接入）
+     *
+     * `CmdCityChapterIdleRewardReqMsg`（**空请求体**）→ rsp `{ idleTime, tlCmdGoods }`：
+     *
+     *   · `tlCmdGoods` 是服务端**实际发放**的物品，原样进奖励弹窗。这里传
+     *     `{ popup: true }` 强制弹 —— 挂机产出常常只有银币 / 体力，默认分流
+     *     （`splitTerritoryRewards`）会把这些剥去飘字、永不弹窗；
+     *   · `idleTime` 是新的挂机起点（秒），写进 `serverIdleTimeMs` 并落账本，
+     *     UI 的「已征收 00:xx:xx」立刻从它算。
+     *
+     * ## 离线才回落本地结算
+     *
+     * `offline` ⇒ 走 `settleIdleRewards()`（`TerritorySaveStore` 的本地概率结算），
+     * 保证断网 / 预览环境仍能看到产出。
+     *
+     * 🔴 **只在离线走**：在线也走会双算（服务端已进钱包，本地再加一次）；
+     * `failed` / `rejected` 也不走 —— 否则网络抖动一次就能靠本地掷骰刷奖励。
+     */
+    async claimIdleRewards(now: number): Promise<void> {
         if (this.loadingPushes || !this.chapter) return;
-        const idle = this.settleIdleRewards(now);
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyIdleReward);
+        try {
+            const result = await this.ports.gateway.claimIdleReward(this.ports.lifecycleHost);
+            if (result.ok) {
+                if (result.idleTimeSeconds > 0) this.applyServerIdleTime(result.idleTimeSeconds);
+                if (result.rewards.length) this.showRewards(result.rewards, null, { popup: true });
+                else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+                this.emitStateChange();
+                return;
+            }
+            // ⚠️ 用 `'reason' in result` 而不是 `!result.ok` 窄化：本工程 `strictNullChecks` 关闭，
+            //    字面量 `false` 可能被 widen 成 `boolean`，`if (!result.ok)` 之后拿不到 `reason`。
+            if (!('reason' in result)) return;
+            if (result.reason !== TERRITORY_REQUEST_STATUS.offline) {
+                this.showTip(TERRITORY_TEXTS.idleRewardFailed);
+                return;
+            }
+            const idle = this.settleIdleRewards(now);
+            this.emitStateChange();
+            if (idle?.rewards.length) this.showRewards(idle.rewards);
+            else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+        } finally {
+            exitBusy();
+        }
+    }
+
+    /**
+     * 扫荡（征收弹窗的「快速征收」按钮）。
+     *
+     * 目标格 = **已通关的最高关卡格**（山猫 2026-11-09 口径，`findHighestPassedTerritoryLevel`）：
+     * 扫荡是「把已经推进到的进度再收一次」，不是去开新关 —— 所以不取「下一关」。
+     * 一个都没通关 ⇒ 提示，不发请求（`cellId` 是协议必填，瞎填必被服务端拒）。
+     *
+     * `times` = 扫荡倍率（2026-11-11 需求：协议新增 `optional uint32 times = 3`）。
+     * 由视图（征收弹窗的 `GearSwitch`）决定，这里**只透传不校验档位** ——
+     * 合法档位表在 `HJ_SWEEP_GEARS`，业务侧的扣费口径在服务端。
+     */
+    async sweepIdleRewards(times: number = 1): Promise<void> {
+        if (this.loadingPushes || !this.chapter || !this.map || !this.progress) return;
+        const target = findHighestPassedTerritoryLevel(this.map.sites, this.stageByCell, this.progress);
+        if (!target) {
+            this.showTip(TERRITORY_TEXTS.noSweepTarget);
+            return;
+        }
+        const chapterId = this.map.chapterId;
+        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busySweep);
+        try {
+            const result = await this.ports.gateway.sweep(chapterId, target.site.cellId, times, this.ports.lifecycleHost);
+            if (!result.ok) {
+                // `'reason' in` 而不是 `!result.ok` —— 本工程 `strictNullChecks` 关闭，
+                // 字面量 `false` 会 widen 成 `boolean`，直接读 `result.reason` 报 TS2339。
+                const reason = 'reason' in result ? result.reason : TERRITORY_REQUEST_STATUS.failed;
+                this.showTip(reason === TERRITORY_REQUEST_STATUS.offline
+                    ? TERRITORY_TEXTS.idleRewardOffline
+                    : TERRITORY_TEXTS.sweepFailed);
+                return;
+            }
+            if (result.rewards?.length) this.showRewards(result.rewards, target.site.cellId, { popup: true });
+            else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+            this.emitStateChange();
+        } finally {
+            exitBusy();
+        }
+    }
+
+    /**
+     * 把服务端的章节级 `idleTime`（秒）落成起点：内存 + 本地账本各写一份。
+     *
+     * 账本（`idleRewardAtByLevel`）是 per-level 的，服务端只给一个数 ⇒ 所有据点写成同一个值。
+     * 这样切章重进、离线兜底、老的 `idleRewardStartedAt` 取最早值那套都不会读到过期起点。
+     */
+    private applyServerIdleTime(seconds: number): void {
+        const ms = Math.floor(seconds) * 1000;
+        if (!(ms > 0)) return;
+        this.serverIdleTimeMs = ms;
+        // 回包里的新起点同步写回账号级快照 —— 服务端不保证再推 Bro。
+        this.ports.writeServerIdleTimeSeconds?.(Math.floor(seconds));
+        const context = this.chapter;
+        if (!context) return;
+        const ledger = { ...context.saveState.idleRewardAtByLevel };
+        for (const key of Object.keys(ledger)) ledger[key] = ms;
+        context.saveState = { ...context.saveState, idleRewardAtByLevel: ledger };
+        context.saveState = this.ports.store.saveProgress(
+            context.map.chapterId, context.progress.toJSON(), context.saveState,
+        );
+    }
+
+    /**
+     * 进章后取一次服务端挂机起点（**读单例端口，不发请求**）。
+     *
+     * 端口没注入 / 还没拉到 ⇒ 静默跳过：本地账本已经有一份起点，界面不会因此停摆。
+     */
+    private refreshServerIdleTime(chapterId: number): void {
+        const read = this.ports.readServerIdleTimeSeconds;
+        if (!read) return;
+        const seconds = read();
+        if (!seconds || seconds <= 0) return;
+        if (this.chapter?.map.chapterId !== chapterId) return;
+        this.applyServerIdleTime(seconds);
         this.emitStateChange();
-        if (idle?.rewards.length) this.showRewards(idle.rewards);
-        else this.showTip(TERRITORY_TEXTS.noIdleRewards);
     }
 
     /** 领取后推进每个据点的账本，重复点击不会再次领取同一小时。 */
@@ -2142,21 +2382,55 @@ export class TerritoryModel {
         return this.stateCache ??= this.buildState();
     }
 
+    /**
+     * 当前该**提前披露**的格（口径与序列见 `model/TerritoryPreview`）。
+     *
+     * ⚠️ 与 `territoryRevealedCells` 同一个起点：没有地图 / 进度 / 关卡表时一律空数组
+     *   （章节还没加载完的那几帧，别让虚影先冒出来再消失）。
+     *
+     * 每次现算：`O(站点数 + 关卡数)`，百来级；调用方是 `buildState`（每秒一次，已有缓存）
+     * 与四条点击拦截（用户手势），都不在逐帧热路径上。
+     */
+    private previewCellsNow(): number[] {
+        const map = this.map;
+        const progress = this.progress;
+        if (!map || !progress) return [];
+        return territoryPreviewCells({
+            sites: map.sites,
+            stageByCell: this.stageByCell,
+            // 区域口径（同 `configId` 任一格 owned 即算通过），与显示侧 / 点击侧同源。
+            isAreaPassed: (cellId) => progress.isAreaPassed(cellId),
+        });
+    }
+
     private buildState(): ITerritoryViewState {
         const map = this.map;
         const progress = this.progress;
         const ready = this.chapter !== null && this.loadingPushes === null;
-        const revealedCells = map && progress ? territoryRevealedCells(map, progress) : [];
+        // 🔴 顺序不能反：先算「提前披露」的格，再并进揭示集合（`previewCells` 是它的可选入参）。
+        //    不传就是上一版行为，见 `territoryRevealedCells` 文件头第三条通道。
+        const previewCells = this.previewCellsNow();
+        const revealedCells = map && progress ? territoryRevealedCells(map, progress, previewCells) : [];
         // `revealedCells` 下面 `siteOpenableCells` 要逐 site 查一次 ⇒ 先做成 Set，
         // 把原来的 `Array.includes`（O(n) 线性查）降为 O(1)。
         const revealedSet = new Set(revealedCells);
         const wallet = this.saveState?.wallet;
         // 「能解锁」的判据**不在**这里另写一份：走 `canAffordUnlock(site, true)`（静默模式），
         // 与点击路径同源（含 `checkUnlock` 前置 + 银币 + 体力三项）。
+        // 🔴 「被前置卡住」只算一遍，**同时**喂下面两个集合（一个排除、一个纳入）：
+        // 两边共用同一份判据才不会出现「这格能开却顶着锁」。
+        // 判据见 `TerritoryProgress.isPrerequisitePending`：前置关卡没打通 ∪ 前置宝箱没点开。
+        const prereqPending = new Set<number>();
+        if (map && progress) {
+            for (const site of map.sites) {
+                if (progress.isPrerequisitePending(site.cellId)) prereqPending.add(site.cellId);
+            }
+        }
         const siteOpenableCells = map && progress && wallet ? map.sites
             .filter((site) => revealedSet.has(site.cellId)
                 && !progress.isCellUnlocked(site.cellId)
                 && !progress.isOwned(site.cellId)
+                && !prereqPending.has(site.cellId)
                 && this.canAffordUnlock(site, true))
             .map((site) => site.cellId) : [];
         // 随机格可开判定逐候选格一次，`openedCells`（owned+unlocked 并集）对每格都一样 ⇒
@@ -2170,7 +2444,7 @@ export class TerritoryModel {
             .filter((site) => revealedSet.has(site.cellId)
                 && !progress.isCellUnlocked(site.cellId)
                 && !progress.isOwned(site.cellId)
-                && progress.prerequisiteBlockers(site.cellId).length > 0)
+                && prereqPending.has(site.cellId))
             .map((site) => site.cellId) : [];
         const randomResourceOpenableCells = map?.randomSites?.candidateCells.filter((cellId) =>
             this.randomResourceOpenCheck(cellId, openedCells).ok) ?? [];
@@ -2180,10 +2454,13 @@ export class TerritoryModel {
             const check = this.randomResourceOpenCheck(cellId, openedCells);
             return 'reason' in check && check.reason === 'needsNeighbor';
         }) ?? [];
-        const idleRewardStartedAt = this.buildIdleRewardSources().reduce<number | null>((earliest, source) => {
-            const start = this.saveState.idleRewardAtByLevel[String(source.levelId)];
-            return start === undefined ? earliest : earliest === null ? start : Math.min(earliest, start);
-        }, null);
+        // 🔴 服务端 `ChapterInfo.idleTime` 优先（章节级权威起点）；没拿到才回落本地 per-level 账本
+        //    的最早值 —— 后者是接入协议前自造的计时，只能当离线预览用。
+        const idleRewardStartedAt = this.serverIdleTimeMs
+            ?? this.buildIdleRewardSources().reduce<number | null>((earliest, source) => {
+                const start = this.saveState.idleRewardAtByLevel[String(source.levelId)];
+                return start === undefined ? earliest : earliest === null ? start : Math.min(earliest, start);
+            }, null);
         return {
             ready,
             idleRewardStartedAt,
@@ -2194,6 +2471,7 @@ export class TerritoryModel {
             art: this.art,
             progress,
             revealedCells,
+            previewCells,
             siteOpenableCells,
             // 锁标：前置没满足的站点格 + 四周没有已开格的随机候选格（见字段注释）。
             lockBlockedCells: siteLockCells.concat(randomLockCells),

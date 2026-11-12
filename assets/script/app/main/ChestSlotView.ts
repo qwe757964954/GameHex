@@ -1,11 +1,13 @@
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { CHEST_EVENTS } from './ChestEvents';
-import { ChestSlotAction, ChestSlotState, IChestSlotData } from './ChestTypes';
+import { ChestSlotAction, ChestSlotState, IChestSlotData, chestActionCaption } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
-const CHEST_SPEED_UP_TEXT_X = 16;
 const CHEST_SPEED_UP_TEXT_SPACING = 2;
+const CHEST_SPEED_UP_ICON_WIDTH = 28;
+const CHEST_SPEED_UP_ICON_GAP = 4;
+const CHEST_BUTTON_LABEL_WIDTH = 94;
 const CHEST_CLOCK_WIDTH = 26;
 const CHEST_TIMER_GAP = 4;
 const CHEST_TIME_TEXT_MAX_WIDTH = 107;
@@ -94,6 +96,11 @@ export class ChestSlotView extends Component {
     onLoad(): void {
         // cc.Button 会停止触摸事件冒泡，必须监听实际按钮的 CLICK。
         this.btn.node.on(Button.EventType.CLICK, this.handleAction, this);
+        // 🔴 2026-11-09 用户：「点击整个宝箱都会打开宝箱详情弹窗」——
+        //    格子根节点也挂了一颗 `cc.Button`（`transition = NONE`、`target = null`，见 prefab），
+        //    点卡面 / 宝箱图 / 名字任意处都算一次。里面那颗 Btn 会吞掉自己的点击（Button 停冒泡）
+        //    ⇒ 同一次点击不会触发两遍。
+        this.node.on(Button.EventType.CLICK, this.handleAction, this);
     }
 
     private handleAction(): void {
@@ -113,8 +120,7 @@ export class ChestSlotView extends Component {
             : (isUnactivated || isCounting ? ChestSlotView.cardFrames.blue : ChestSlotView.cardFrames.gold);
         if (cardFrame) this.card.spriteFrame = cardFrame;
 
-        const btnFrame = data.action === ChestSlotAction.Battle ? ChestSlotView.btnFrames.blue
-            : (data.action === ChestSlotAction.SpeedUp ? ChestSlotView.btnFrames.green : ChestSlotView.btnFrames.gold);
+        const btnFrame = ChestSlotView.buttonFrame(data.action);
         if (btnFrame) this.btn.spriteFrame = btnFrame;
 
         // 显隐
@@ -135,8 +141,8 @@ export class ChestSlotView extends Component {
         if (this.costLabel) this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
         this.btnLabel.isBold = true;
-        this.btnLabel.node.setPosition(isSpeedUp ? CHEST_SPEED_UP_TEXT_X : 0, 0, 0);
         this.btnLabel.spacingX = isSpeedUp ? CHEST_SPEED_UP_TEXT_SPACING : 0;
+        this.layoutButtonLabel(isSpeedUp);
 
         this.timeBg.setPosition(CHEST_PROGRESS_X, 0, 0);
         this.timeBg.setScale(CHEST_PROGRESS_SCALE_X, 1, 1);
@@ -161,11 +167,54 @@ export class ChestSlotView extends Component {
         }
     }
 
+    /**
+     * 按钮文案的落点：加速态要和左边的视频图标拼成**一组整体居中**。
+     *
+     * 🔴 2026-11-09：文案从「-30分钟」(5 字) 缩成「加速」(2 字)，而老口径是写死的 `x = 16`
+     * —— 那是给 5 字配的。文字一短、图标还钉在 `-43`，中间会空出 20 多像素，读起来像两个
+     * 不相干的东西。所以改成「图标 + 间隔 + 文字」整体居中。
+     *
+     * 字宽按 `字数 × fontSize` 估（CJK 就是这么宽），**不去开关 `Overflow` 量真宽**：
+     * 那一下会把 Label 的 `UITransform` 一起改成文字尺寸，SHRINK 的框就永久变窄，
+     * 之后再画「开始战斗」(4 字) 会被挤成小字 —— 这套只用来摆位置，差一两像素看不出来。
+     */
+    private layoutButtonLabel(speedUp: boolean): void {
+        const labelNode = this.btnLabel.node;
+        if (!speedUp) {
+            labelNode.setPosition(0, 0, 0);
+            return;
+        }
+        const textWidth = Math.min(
+            this.btnLabel.string.length * this.btnLabel.fontSize + CHEST_SPEED_UP_TEXT_SPACING,
+            CHEST_BUTTON_LABEL_WIDTH,
+        );
+        const left = -(CHEST_SPEED_UP_ICON_WIDTH + CHEST_SPEED_UP_ICON_GAP + textWidth) / 2;
+        this.speedUpIcon.setPosition(left + CHEST_SPEED_UP_ICON_WIDTH / 2, 0, 0);
+        labelNode.setPosition(left + CHEST_SPEED_UP_ICON_WIDTH + CHEST_SPEED_UP_ICON_GAP + textWidth / 2, 0, 0);
+    }
+
+    /**
+     * 按钮底三态（2026-11-09 用户口径）：
+     *  · 蓝 = 开始战斗（空槽位）；
+     *  · 绿 = 等待中「加速」/ **等待结束、可以开启**；
+     *  · 金 = 解锁（宝箱还没开始等）。
+     */
+    private static buttonFrame(action: ChestSlotAction): SpriteFrame | null {
+        if (action === ChestSlotAction.Battle) return ChestSlotView.btnFrames.blue;
+        if (action === ChestSlotAction.SpeedUp || action === ChestSlotAction.Open) {
+            return ChestSlotView.btnFrames.green;
+        }
+        return ChestSlotView.btnFrames.gold;
+    }
+
+    /**
+     * 按钮文案：四种状态各一句，**全部来自 `chestActionCaption`**。
+     *
+     * 这份文案与详情弹窗的主按钮同源（2026-11-09 用户三轮收敛：解锁 → 加速 → 开启），
+     * 视图这边一个字都不许自己写 —— 上一轮就是"栏位改了、弹窗还停在旧词"。
+     */
     private static actionText(data: IChestSlotData): string {
-        if (data.action === ChestSlotAction.Battle) return '开始战斗';
-        if (data.action === ChestSlotAction.SpeedUp) return '-30分钟';
-        if (data.action === ChestSlotAction.Activate) return '开启';
-        return '开启';
+        return chestActionCaption(data.action);
     }
 
     /** 秒 → 紧凑英文时长；省略为零的单位，超过 24 小时继续累计小时。 */

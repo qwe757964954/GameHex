@@ -132,11 +132,14 @@ import {
     ROLE_PROPERTY_ICON_ROOT_OVERRIDE,
 } from '../assets/script/app/activity/LayerActivityArt';
 import { parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
-import { assetPath } from './helpers/asset-paths';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 const STORE_PAGE_TS = 'assets/script/app/league/LeagueStorePage.ts';
 const REPO_TS = 'assets/script/app/league/LeagueRepository.ts';
 const DONATE_PAGE_TS = 'assets/script/app/league/LeagueDonatePage.ts';
+const DONATE_CONTROLLER_TS = 'assets/script/app/league/LeagueDonateController.ts';
+const DONATE_MODEL_TS = 'assets/script/app/league/LeagueDonateModel.ts';
+const DONATE_COMPOSITION_TS = 'assets/script/app/bootstrap/LeagueDonatePopupComposition.ts';
 const DISCOUNT_PAGE_TS = 'assets/script/app/league/LeagueDiscountPage.ts';
 const ROW_TS = 'assets/script/app/league/LeagueStoreRow.ts';
 const DISCOUNT_ROW_TS = 'assets/script/app/league/LeagueDiscountRow.ts';
@@ -353,7 +356,7 @@ test('B11 `roleProperty` 裸名图标落哪个目录：默认 `icons/resource`�
     // 反向：覆盖表里不许有**多余**的条目（那些名字其实在 `icons/resource/` 有图 ⇒ 多余且会掩盖回归）。
     for (const name of Object.keys(ROLE_PROPERTY_ICON_ROOT_OVERRIDE)) {
         if (name === '图标_经验值') continue; // 本来就不在 icons/resource（见上面清单）
-        assert.ok(!existsSync(assetPath(`${RESOURCE_ICON_ART_ROOT}/${name}.png`)),
+        assert.ok(!assetExists(`${RESOURCE_ICON_ART_ROOT}/${name}.png`),
             `${name} 在 icons/resource/ 已经有图了 ⇒ 覆盖表里这条是多余的，删掉`);
     }
 });
@@ -667,12 +670,16 @@ test('C23 三个货币 resId 与老端 `roleProperty` 枚举逐字对齐', () =>
 
 test('E1 三页都不发「列表请求」：读缓存（老端靠 VO 推送刷新）', () => {
     const store = strip(read(STORE_PAGE_TS));
-    const donate = strip(read(DONATE_PAGE_TS));
+    // MVC 迁移后捐献取数的真源在 Controller；视图只派发意图。
+    const donate = strip(read(DONATE_CONTROLLER_TS));
+    const donateView = strip(read(DONATE_PAGE_TS));
     // 商店 / 捐献：只 load，不发任何包（买 / 捐才发）
     assert.ok(store.includes('loadStore()'));
     assert.ok(!store.includes('requestList('));
-    assert.ok(donate.includes('loadDonate()'));
+    assert.ok(donate.includes('loadDonate()'), '捐献取数真源已迁到 LeagueDonateController');
     assert.ok(!donate.includes('requestList('));
+    assert.ok(!donateView.includes('loadDonate(') && !donateView.includes('requestDonate('),
+        '捐献视图不读快照、不发包');
     // 砍价例外：老端 `initAsync` 就是三个并发请求（活动列表 + 详情 + 预载表）
     const discount = strip(read(DISCOUNT_PAGE_TS));
     assert.ok(discount.includes('requestActList(LeagueACT_TYPE.DISCOUNT'));
@@ -696,7 +703,7 @@ test('E2b 商店：买成功后要消费响应里的 `tlCmdGoods` ⇒ 弹「获�
         'buyStoreGoods 的响应回调里必须 FW.ShowReward（否则买成功不弹「获得奖励」）');
     // 必须把回调**真的传进** `RequestShopBuy` 的第 3 个参数：`sendWithResponse` 的 `make` 形参收到
     // `onRsp` 后原样塞进去。只 import FW、或只写一个没人引用的回调，都不算。
-    assert.ok(/\(onRsp\) => new RequestShopBuy\(\{[\s\S]{0,260}?caller as any, onRsp\)/.test(src),
+    assert.ok(/\(onRsp\) => new RequestShopBuy\(\{[\s\S]{0,260}?caller, onRsp\)/.test(src),
         '回调要作为 RequestShopBuy 的第 3 个参数传入，否则永远收不到响应');
     // 只有「真收到响应」才算 ok（沿用 GiftRepository.buyGift 的 applied 闸）
     assert.ok(
@@ -776,23 +783,30 @@ test('E3 商店行只染灰、**不关交互**（否则「已售罄 / 不足」�
 });
 
 test('E4 捐献：点「免费」= **先播广告**、播完才发 `requestDonate(true)`（绝不裸发）', () => {
-    const src = strip(read(DONATE_PAGE_TS));
+    // MVC 迁移后：编排在 Controller，广告实现由 Composition 注入；两处都要对上。
+    const src = strip(read(DONATE_CONTROLLER_TS));
+    const wiring = strip(read(DONATE_COMPOSITION_TS));
     // ⚠️ 核心守护：`RequestUnionDonate(true)` 的凭据就是「广告放完了」，必须先播后发。
-    assert.ok(/playLeagueAd\(\)[\s\S]{0,220}?requestDonate\(true/.test(src), '必须播完广告再发捐献请求');
+    assert.ok(/ads\.play\(\)[\s\S]{0,220}?requestDonate\(true/.test(src), '必须播完广告再发捐献请求');
     assert.ok(/if \(!watched\)[\s\S]{0,140}?return/.test(src), '没看完广告 ⇒ 直接退出、一个包都不发');
-    assert.ok(!/RequestUnionDonate/.test(src), '页面不直接构造协议对象（走 repository.requestDonate）');
-    // 次数闸照老端 `onClickAdv` 保留（广告捐献上限）
-    assert.ok(/todayDonateAdvTimes >= snapshot\.config\.donateAdvCount/.test(src),
+    assert.ok(!/RequestUnionDonate/.test(src), '控制器不直接构造协议对象（走 repository.requestDonate）');
+    assert.ok(/ads: \{ play: \(\) => playLeagueAd\(\) \}/.test(wiring), '广告端口必须真的接到 playLeagueAd()');
+    assert.ok(!strip(read(DONATE_PAGE_TS)).includes('playLeagueAd'), '视图不播广告、不发包');
+    // 次数闸照老端 `onClickAdv` 保留（广告捐献上限），真源迁到 Model
+    assert.ok(/todayDonateAdvTimes\s*<\s*snapshot\.config\.donateAdvCount/.test(strip(read(DONATE_MODEL_TS))),
         '广告捐献次数上限那道关要保留');
 });
 
 test('E5 捐献：金币按钮三道关的顺序是「次数 → 钱 → 确认」，且扣的是金币(10)', () => {
-    const src = strip(read(DONATE_PAGE_TS));
+    // 三道关的编排真源迁到 Controller；确认框实现由 Composition 注入；按钮图标仍由 View 渲染。
+    const src = strip(read(DONATE_CONTROLLER_TS));
+    const view = strip(read(DONATE_PAGE_TS));
     assert.ok(/!snapshot\.hasTimes[\s\S]{0,160}?LEAGUE_TIP_DONATE_LIMIT/.test(src));
     assert.ok(/!snapshot\.enough[\s\S]{0,200}?LEAGUE_TIP_NOT_ENOUGH_TEMPLATE/.test(src));
-    assert.ok(/CommonTips\.open[\s\S]{0,240}?sendDonate\(false\)/.test(src));
-    assert.ok(/LEAGUE_COIN_RES_ID/.test(src), '按钮图标 / 货币名都取 coin(10)');
-    assert.ok(!src.includes('LEAGUE_UNION_COIN_RES_ID'), '11 是奖励，不该出现在「扣钱 / 按钮图标」处');
+    assert.ok(/feedback\.confirm[\s\S]{0,240}?sendDonate\(false\)/.test(src), '确认后才发金币捐献');
+    assert.ok(/CommonTips\.open/.test(strip(read(DONATE_COMPOSITION_TS))), '确认框端口必须真的接到 CommonTips');
+    assert.ok(/LEAGUE_COIN_RES_ID/.test(view), '按钮图标取 coin(10)');
+    assert.ok(!view.includes('LEAGUE_UNION_COIN_RES_ID'), '11 是奖励，不该出现在「扣钱 / 按钮图标」处');
 });
 
 test('E6 捐献：免费按钮红点恒关（依赖未迁移的广告子系统）', () => {

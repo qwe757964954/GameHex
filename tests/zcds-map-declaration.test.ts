@@ -15,7 +15,7 @@ import { assetPath } from './helpers/asset-paths';
 //  `captureZCMatchConfig()` 的默认分支会读全局 PVP 表，先按 tests/zcds-neutral-map.test.ts 的口径装载。
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
 ] as const;
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));

@@ -91,7 +91,7 @@ import {
     osTabVisual,
     osTargetNodeState,
 } from '../assets/script/app/celebration/CelebrationViewState';
-import { assetPath } from './helpers/asset-paths';
+import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // 公共小工具
@@ -146,8 +146,9 @@ function deepBorder(obj: any): any | null {
 
 /** 取一张图的九宫 border（没配就是全 0）。 */
 function borderOf(value: string): { t: number; b: number; l: number; r: number } {
-    const metaPath = assetPath(`image/${value}.png.meta`);
-    if (!existsSync(metaPath)) return { t: 0, b: 0, l: 0, r: 0 };
+    const ext = artExt(`image/${value}`);
+    assert.ok(ext, `缺少美术 image/${value}`);
+    const metaPath = assetPath(`image/${value}.${ext}.meta`);
     const hit = deepBorder(JSON.parse(readFileSync(metaPath, 'utf8')));
     return hit
         ? { t: hit.borderTop ?? 0, b: hit.borderBottom ?? 0, l: hit.borderLeft ?? 0, r: hit.borderRight ?? 0 }
@@ -164,7 +165,7 @@ function stripComments(src: string): string {
 /** 一张图在磁盘上的第一个真实扩展名（`bg` 是 .jpg，其余基本是 .png）。 */
 function artExt(relPathUnderResources: string): string | null {
     for (const ext of ['png', 'jpg', 'jpeg']) {
-        if (existsSync(assetPath(`${relPathUnderResources}.${ext}`))) return ext;
+        if (assetExists(`${relPathUnderResources}.${ext}`)) return ext;
     }
     return null;
 }
@@ -434,7 +435,7 @@ test('庆祝 B3｜osArtPath 必须带 image/ 前缀 + /spriteFrame（漏前缀 �
         }
         // 拼出来的路径必须在 resources 下真的有这张图（png / jpg 都算）
         const rel = path.slice(0, -'/spriteFrame'.length);
-        const ok = ['png', 'jpg', 'jpeg'].some((ext) => existsSync(assetPath(`${rel}.${ext}`)));
+        const ok = ['png', 'jpg', 'jpeg'].some((ext) => assetExists(`${rel}.${ext}`));
         if (!ok) bad.push(`${key} → assets/resources/${rel} 在磁盘上不存在`);
     }
     assert.deepEqual(bad, [], '装配路径不对 / 磁盘上没这张图');

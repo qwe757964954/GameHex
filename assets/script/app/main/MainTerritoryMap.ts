@@ -57,6 +57,15 @@ import {
 } from '../common/ResTypes';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { ResBar } from '../common/ResBar';
+import { MainTabHost } from './MainTabHost';
+import { MainTab } from './MainTabModel';
+import { TabButton } from '../common/TabButton';
+import { isTerritoryHeroRewardResId } from '../territory/model/TerritoryHeroReward';
+import type {
+    ITerritoryHeroProgressSource,
+    ITerritoryRewardDelta,
+} from '../territory/model/TerritoryHeroReward';
+import { HeroFragmentBadge, type HeroFragmentBadgeFrames } from './HeroFragmentBadge';
 import {
     TERRITORY_MAP_BOTTOM_INSET,
     territoryMapContentPaddingBottom,
@@ -241,6 +250,13 @@ interface IChapterSwitchState {
     elapsed: number;
     /** 新章落位的总距离（px，按视口高度算；0 = 只演云不演位移）。 */
     readonly rise: number;
+    /**
+     * 「首通云散演完之后补的那一段切换」要等云盖满才允许换图（2026-11-11）。
+     *
+     * 自动推进时模型**早就**把新章加载完了；玩家点章节按钮那条路靠异步加载天然拖过
+     * `lead` + `cover` 那 0.42s，而这条没有 ⇒ 不压住的话新图会在云还没盖住时直接露出来。
+     */
+    deferRender: boolean;
 }
 
 /**
@@ -306,7 +322,21 @@ export class MainTerritoryMap extends Component {
      */
     private chapterSwapPending = false;
     /**
-     * 章节切换转场（`null` = 没在演）。只有玩家点章节按钮才会起（模型发的 `chapterSwitch`）。
+     * 「这一章刚刚首次通关」的一次性编排信号（2026-11-11）。
+     *
+     * 用户：「章节首次通关需要播放章节通过动画后，再播放切换」。模型通关那一拍立刻
+     * `advanceCompletedChapter()`，页面只有先把换图压住、等整章云散演完，才接得上切换转场。
+     * 这里记的是**意图**，不是动画状态：即使 SVN 合并把 `chapterClearPending` 那条边沿冲掉，
+     * 只要 `chapterCleared` 在同一章里 false→true，也照样认首通。
+     */
+    private chapterClearFollowup = false;
+    /** 首通自动推进的「旧章 → 新章」：云散演完那一刻拿它起切换转场。 */
+    private chapterClearSwitch: { readonly from: number; readonly to: number } | null = null;
+    /** 上一次真正画出来那一帧的通关电平（只用于同章内的 false→true 边沿）。 */
+    private lastRenderedChapterCleared = false;
+    /**
+     * 章节切换转场（`null` = 没在演）。玩家点章节按钮由模型的 `chapterSwitch` 命令起；
+     * 首通自动推进由 {@link chapterClearSwitch} 在云散演完之后补起同一段演出。
      */
     private chapterSwitch: IChapterSwitchState | null = null;
     private focusCell: { readonly chapterId: number; readonly cellId: number } | null = null;
@@ -371,6 +401,20 @@ export class MainTerritoryMap extends Component {
      * 存 Promise 而不是结果：同一个格子上连点两次也只会加载一次。
      */
     private readoutIconPending: Promise<SpriteFrame | null> | null = null;
+
+    /**
+     * 英雄碎片进度徽标的数据源（2026-11-10 需求 ③）。由 `MainPageComposition` 注入，
+     * 页面只认接口 —— 卡库表 / 背包 / 排序权重全在组合层，领地不反向依赖 `app/card`。
+     * `null` = 没注入（独立预览 / 单元测试）⇒ 不播徽标，发奖链路零变化。
+     */
+    private heroProgressSource: ITerritoryHeroProgressSource | null = null;
+    /** 底栏英雄按钮上方的徽标（惰性创建，页面销毁时 dispose）。 */
+    private heroBadge: HeroFragmentBadge | null = null;
+
+    /** 组合层注入英雄进度查询；纯表现能力，不接也不影响任何玩法。 */
+    setHeroProgressSource(source: ITerritoryHeroProgressSource | null): void {
+        this.heroProgressSource = source;
+    }
 
     /** Composition supplies presentation resources before mounting the page. */
     initialize(resources: IControllerResources, saveOwner: ITerritorySaveOwner | null = null): void {
@@ -577,6 +621,14 @@ export class MainTerritoryMap extends Component {
     }
 
     onDestroy(): void {
+        // 徽标挂在 `BottomNav`（页面外层的兄弟节点），不会随本页子节点自动销毁 ⇒ 必须手动收。
+        this.heroBadge?.dispose();
+        this.heroBadge = null;
+        // 飞舞奖励图标的顶层宿主挂在 `MainRoot`（本页之外），由视图建、由视图收：
+        // 页面只负责通知，不自己搭 UI（架构守卫禁止 `new Node` / `addComponent`）。
+        this.mapView?.disposeRewardFxLayer();
+        this.heroProgressSource = null;
+        this.mapView?.setHeroRewardLandedHandler(null);
         EventMgr.instance.emit(TerritoryUiEvent.Disposed);
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
         // 「等流程接手」的订阅必须自己摘：它是挂在全局 ProcedureManager 上的，
@@ -691,10 +743,12 @@ export class MainTerritoryMap extends Component {
      * 演不了（云美术没加载 / 在演整页过场）就**什么都不做** —— 模型那边已经把章换了，
      * 页面照常换图，只是没有这段动画。宁可没动画，也不要盖一片空底色。
      */
-    private beginChapterSwitch(fromChapterId: number, toChapterId: number): void {
+    private beginChapterSwitch(fromChapterId: number, toChapterId: number, deferRender = false): void {
         if (!territoryChapterSwitchWanted(fromChapterId, toChapterId)) return;
         if (!this.mapView?.isValid) return;
         if (this.chapterSwitch) return;
+        // 手动切章一到，旧的首通待播标记作废（去向由这次点击说了算）。
+        this.chapterClearFollowup = false;
         if (!this.mapView.beginChapterSwitch()) return;
         const [, height] = this.battleIntroViewport();
         this.chapterSwitch = {
@@ -704,6 +758,7 @@ export class MainTerritoryMap extends Component {
             phase: 'lead',
             elapsed: 0,
             rise: territoryChapterSwitchRise(height),
+            deferRender,
         };
         // 第一帧就写：`lead(0)` 是"云还在画面外、地图没动"的原样，读作无缝起手。
         this.writeChapterSwitchLead(0);
@@ -1045,17 +1100,51 @@ export class MainTerritoryMap extends Component {
      */
     update(dt: number): void {
         const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        // 英雄碎片徽标：排在**所有早退之前**（下面过场 / 战斗前奏会 return），
+        // 否则一个转场就能把整串队列卡住，后面的英雄永远不播。
+        this.heroBadge?.step(step);
         // ① 整章云散演完了 ⇒ 把压住的那一帧新章补画上来（排在所有早退之前：
         //    换图这件事不能因为"过场在演"之类的分支被跳过）。
         if (this.chapterSwapPending) {
+            // ①-a 整章云散（章节通过动画）还在演 ⇒ 一帧都不许动地图。
             if (this.mapView?.chapterClearPlaying) return;
-            this.chapterSwapPending = false;
-            this.renderAll();
-            if (!this.isValid) return;
+            const followup = this.chapterClearSwitch;
+            if (followup) {
+                // ①-b 云散演完 ⇒ 接着起「相机上移、新章居中」的切换转场。
+                this.chapterClearSwitch = null;
+                this.beginChapterSwitch(followup.from, followup.to, true);
+                if (!this.chapterSwitch) {
+                    // 云美术没加载 / 整页过场占着 ⇒ 演不了就直接换章，绝不把玩家卡在旧图。
+                    this.chapterSwapPending = false;
+                    this.renderAll();
+                    if (!this.isValid) return;
+                }
+                // 演得了 ⇒ 保持 chapterSwapPending，等 cover 走完由下面统一补画新章。
+            } else if (!this.chapterSwitch?.deferRender) {
+                // ①-c 普通换章（云散演完 / 没在演）：照旧补画。
+                this.chapterSwapPending = false;
+                this.renderAll();
+                if (!this.isValid) return;
+            }
         }
-        // ② 切章转场（玩家点的）。它自己要靠新章画上来才能揭幕，所以排在①之后。
+        // ② 切章转场（玩家点的 / 首通补起的）。它自己要靠新章画上来才能揭幕，所以排在①之后。
         if (this.chapterSwitch) {
             this.stepChapterSwitch(step);
+            if (!this.isValid) return;
+            const running = this.chapterSwitch;
+            // 云已经盖满（cover 走完进 wait）⇒ 把压住的那一帧新章画上来，下一帧就能揭幕。
+            if (running?.deferRender && this.chapterSwapPending
+                && (running.phase === 'wait' || running.phase === 'reveal')) {
+                running.deferRender = false;
+                this.chapterSwapPending = false;
+                this.renderAll();
+                if (!this.isValid) return;
+            }
+        }
+        // ③ 兜底：转场被超时 / 打断收掉了，压住的新章也必须补画，不能永远停在旧章。
+        if (this.chapterSwapPending && !this.chapterSwitch) {
+            this.chapterSwapPending = false;
+            this.renderAll();
             if (!this.isValid) return;
         }
         // 「首次解锁直开」的前奏（地块生成 → 推镜 → 盖云）排在整页过场之前：
@@ -1355,8 +1444,31 @@ export class MainTerritoryMap extends Component {
         //    `restoreChestCamera()`，云散 1.1s 拉远 + 2.0s 逐朵淡会被掐在第一帧。
         //    `state` 已经是新章了也没关系：地图保持旧章不动，等演出完再画（`update` 里补）。
         //    转场（玩家点的切章）例外：它自己要靠新章画上来才能揭幕。
-        if (state.chapterId !== this.lastRenderedChapter && !this.chapterSwitch
-            && this.mapView?.chapterClearPlaying) {
+        const chapterChanged = state.chapterId !== this.lastRenderedChapter;
+        // 🔴 2026-11-11 首通编排：`chapterClearPending` 是模型给的一次性边沿，但 SVN 合并
+        //    可能把它冲掉（症状「章节通关动画丢失，只剩切换」）⇒ 同一章里 `chapterCleared`
+        //    false→true 也认首通。换章进来的那一帧不算（切回早已通过的章节不许演）。
+        const firstClearEdge = state.chapterCleared && !this.lastRenderedChapterCleared
+            && !chapterChanged;
+        const clearSignal = state.chapterClearPending || firstClearEdge;
+        if (clearSignal && state.chapterCleared) this.chapterClearFollowup = true;
+        if (chapterChanged && !this.chapterSwitch) {
+            if (this.chapterClearFollowup) {
+                // 首通自动推进：把换图压住，update 里先演完云散、再起切换转场。
+                this.chapterClearFollowup = false;
+                this.chapterClearSwitch = { from: this.lastRenderedChapter, to: state.chapterId };
+                this.chapterSwapPending = true;
+                return;
+            }
+            // 非首通的换章也要让整章云散演完（旧口径，`syncGrid` 会 reset 掉云）。
+            if (this.mapView?.chapterClearPlaying) {
+                this.chapterSwapPending = true;
+                return;
+            }
+        }
+        // 切换转场正在合拢：新章早已加载完，云还没盖满时不许画（否则 lead 段露新图）。
+        if (chapterChanged && this.chapterSwitch?.deferRender
+            && (this.chapterSwitch.phase === 'lead' || this.chapterSwitch.phase === 'cover')) {
             this.chapterSwapPending = true;
             return;
         }
@@ -1368,6 +1480,7 @@ export class MainTerritoryMap extends Component {
         // 数据就绪即挂 tick（进入页面/切章后只需一次；加载中 state.ready=false 不会走到这里）。
         const resetScroll = state.chapterId !== this.lastRenderedChapter;
         this.lastRenderedChapter = state.chapterId;
+        this.lastRenderedChapterCleared = state.chapterCleared;
 
         this.mapView.renderMap({
             map: state.map,
@@ -1375,6 +1488,9 @@ export class MainTerritoryMap extends Component {
             art: state.art,
             progress: state.progress,
             revealedCells: state.revealedCells,
+            // 提前披露的格（2026-11-09）：视图据此给还没激活的关卡建筑画 35% 虚影。
+            // ⚠️ 这些格**已经含在** `revealedCells` 里，这份只是"哪几格要画虚影"。
+            previewCells: state.previewCells,
             siteOpenableCells: state.siteOpenableCells,
             // 锁标只认「结构性阻塞」（前置没打通 / 随机格四周没开），见 `ITerritoryViewState.lockBlockedCells`。
             lockBlockedCells: state.lockBlockedCells,
@@ -1391,7 +1507,8 @@ export class MainTerritoryMap extends Component {
             chapterCleared: state.chapterCleared,
             // 只给**首次通关**演的那一拍（一次性边沿）：切回已通过的章节时它是 false，
             // 地图只把雾收掉、不重演（2026-11-05）。
-            chapterClearPending: state.chapterClearPending,
+            // 合并后的电平边沿兜底与模型边沿一起喂给地图（二者都只认「首次通关」）。
+            chapterClearPending: clearSignal,
         });
         if (resetScroll) {
             const focus = this.focusCell;
@@ -1804,11 +1921,37 @@ export class MainTerritoryMap extends Component {
         presentation?: ITerritoryRewardPresentation,
     ): void {
         if (!rewards.length) return;
+        // 2026-11-10 需求 ③：任何来源的领奖都查一次「本次新达成可升级」的英雄。
+        // 徽标是纯表现且挂在底栏（比地图覆盖层更外层），放在所有分流之前 ⇒
+        // 随机格 / 固定格 / 银币宝箱 / 挂机弹窗四条路都覆盖，也不会被开箱表演盖住。
+        void this.playHeroBadges(rewards);
         const cellId = originCellId ?? null;
+        // 挂机征收（`{ popup: true }`）：服务端发什么就弹什么 —— 产出常常只有银币 / 体力，
+        // 走默认分流会被剥去飘字、一个弹窗都不出（用户 2026-11-09「点击征收就弹窗奖励」）。
+        if (presentation?.popup === true) {
+            FW.ShowReward(rewards.map((reward) => ({
+                resId: reward.resId,
+                number: reward.amount,
+            })) as unknown as CmdGoods[]);
+            return;
+        }
         // 随机资源格：**不播开箱、也不弹奖励窗**，直接在格子上喷资源（需求 2026-10-22 §1 / 2026-10-26 §3）。
         // 由 Controller 指定（`{ chest: false }`），页面不自己判格子类型 —— 那是玩法口径。
         if (presentation?.chest === false) {
             void this.playCellGains(rewards, cellId);
+            return;
+        }
+        // 银币宝箱（`rewardId = 1023` / `coinBox` 蓝银金属箱）：**独立**打开动画（2026-11-10）。
+        // 不复用 `playChestOpen` —— 那是给卡牌碎片宝箱画的黄铜藤蔓箱 `chest_seq_*` 开盖补帧 +
+        // 三档镜头/光柱/粒子，箱子图标与 `coinBox` 对不上。这里只让地图上那颗 icon 放大缩小消失。
+        //
+        // ⚠️ 奖励**当场结算**、绝不挂在动画回调上：pop 是纯表现，换章 / 页面销毁 / 视图被回收
+        //    都可能让它播不完，把结算系在 `onDone` 上就会静默吞掉这一批银币。
+        // ⚠️ `suppressGain = false`：这次没有飞出图标带过 `+N`，银币必须照常飘字（钱包类走
+        //    `playResourceGain`，非钱包类走奖励窗），否则玩家点开箱子什么都看不到。
+        if (presentation?.silverChest === true) {
+            if (cellId !== null && cellId >= 0) this.mapView.playSilverChestOpen(cellId);
+            this.settleRewards(rewards, cellId, false);
             return;
         }
         const tier = cellId !== null && cellId >= 0 ? territoryChestTierOfRewards(rewards) : null;
@@ -1817,6 +1960,70 @@ export class MainTerritoryMap extends Component {
             return;
         }
         void this.playChestThenSettle(tier, cellId as number, rewards);
+    }
+
+    /**
+     * 「本次领奖让某英雄碎片满 + 经验满」⇒ 在英雄按钮上逐个播进度长满徽标
+     * （2026-11-10 需求 ③）。
+     *
+     * 🔴 **纯表现、不接管结算**：拿不到数据源 / 查表失败 / 页面已销毁，一律安静跳过；
+     *    奖励怎么发是 `presentRewards` 的事，这里只在旁边演一段动画。
+     *
+     * ⚠️ 两处 `await` 之后都要判 `isValid`：读表与加载碎片图都是异步的，
+     *    期间换章 / 切 tab 会把页面销毁，往死节点上挂徽标会炸。
+     */
+    private async playHeroBadges(
+        rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
+    ): Promise<void> {
+        const source = this.heroProgressSource;
+        if (!source) return;
+        const deltas: ITerritoryRewardDelta[] = rewards.map((reward) => ({
+            resId: Number(reward?.resId),
+            amount: Number(reward?.amount),
+        }));
+        const items = await source.newlyReady(deltas);
+        if (!this.isValid || !items.length) return;
+        // 碎片图走页面现成的「奖励图标解析」真源（roleProperty + item 两张表 + 分包路由），
+        // 不另建一套加载器。缺图 = 空图标，进度条照常长满。
+        await Promise.all(items.map((item) => item.iconResId > 0
+            ? this.ensureRewardIcon(item.iconResId)
+            : Promise.resolve()));
+        if (!this.isValid) return;
+        const frames: HeroFragmentBadgeFrames = new Map(
+            items.map((item) => [
+                item.cardId,
+                item.iconResId > 0 ? this.rewardIcons.get(item.iconResId) ?? null : null,
+            ]),
+        );
+        this.ensureHeroBadge()?.enqueue(items, frames);
+    }
+
+    /** 惰性建徽标：挂在 `BottomNav` 上，摆在英雄按钮图标正上方。 */
+    private ensureHeroBadge(): HeroFragmentBadge | null {
+        if (this.heroBadge) return this.heroBadge;
+        const host = this.findHeroTabHost();
+        if (!host) return null;
+        const button = this.findHeroTabButton();
+        if (!button) return null;
+        this.heroBadge = new HeroFragmentBadge(host.navBar, button);
+        return this.heroBadge;
+    }
+
+    /**
+     * 飞舞奖励图标的**顶层根节点**（2026-11-11）。
+     *
+     * 只负责「找哪个节点」，建节点 / 排兄弟序 / 坐标换算全在 `TerritoryMapView`：
+     * 页面不许自己搭 UI（架构守卫 `territory-page-split` / `territory-battle-intro`）。
+     *
+     * `BottomNav` 是 `MainRoot` 的最后一个子节点 ⇒ 把特效层挂到它的父节点并排最后，
+     * 才能盖过底栏与 `ArenaRoot/BottomHud` 的聊天框；弹窗挂在 `MainRoot` 之外，仍在其上。
+     *
+     * ⚠️ 找不到 `MainTabHost`（结构被改 / 测试沙箱）就退回 `hostPageRoot()`（= `ArenaRoot`），
+     *    至少盖住聊天框；再找不到返回 `null` ⇒ 视图回退页面内覆盖层，**不静默消失**。
+     */
+    private rewardFxRoot(): Node | null {
+        const navBar = this.findHeroTabHost()?.navBar ?? null;
+        return navBar?.parent ?? this.hostPageRoot();
     }
 
     /**
@@ -1874,6 +2081,23 @@ export class MainTerritoryMap extends Component {
         // 读数合成一条：图标统一、数字求和；喷发粒子仍按 gains 各用各的图。
         const amount = gains.reduce((sum, gain) => sum + gain.amount, 0);
         this.mapView.playResourceGain(cellId, gains, { frame: readoutFrame, amount });
+
+        // ②（2026-11-10 需求 ②）碎片 / 种族经验**再补一段**飞向底部「英雄」按钮的动画。
+        //    只挑非钱包类：银币 / 体力归顶部资源栏，不能在这里重复飞一遍。
+        //    拿不到按钮 / 目标坐标 ⇒ 视图整段跳过，喷发、读数、发奖一个都不少（纯表现）。
+        const heroEntries = entries.filter((entry) => isTerritoryHeroRewardResId(entry.resId));
+        if (heroEntries.length) {
+            // 🔴 2026-11-11：飞行的图标必须画在**所有 UI 之上**（聊天框 / 快速寻敌 / 底栏）。
+            //    页面内 `TerritoryOverlay` 只在 `Content / ArenaRoot` 里靠上，跨到底栏就输了；
+            //    先把 `MainRoot` 交给视图建顶层宿主，再登记终点（否则坐标还是旧宿主的）。
+            this.mapView.mountRewardFxLayer(this.rewardFxRoot());
+            const heroButton = this.findHeroTabButton();
+            this.mapView.setHeroRewardTargetWorld(this.heroTabWorldPositionOf(heroButton));
+            this.mapView.setHeroRewardLandedHandler(() => {
+                if (heroButton?.isValid) heroButton.playHitFeedback();
+            });
+            this.mapView.playHeroRewardFlight(cellId, heroEntries);
+        }
     }
 
     /**
@@ -1923,46 +2147,86 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 把「奖励图标飞进资源栏 → 那一格跳动 + 闪光」这条链接上（2026-10-26 需求 ②）。
+     * 把「奖励图标飞进资源栏 / 英雄按钮 → 那一格跳动 / 按钮受击抖动」这条链接上。
      *
-     * ## 三个落点各管一段
+     * ## 两条目标（2026-11-10 扩展）
      *
      * ```
-     * resId → key        TERRITORY_WALLET_RES_KEY（7→gold / 9→end）
-     * key   → 那格中心  ResBar.slotWorldPositionOf(key)（世界坐标）
-     * 世界  → 覆盖层    TerritoryMapView.setRewardCatchWorldPoint(resId, world)（矩阵换算留在视图）
+     * 7 / 9（钱包类） → territoryWalletResKeyOf → ResBar.slotWorldPositionOf → 顶部资源栏
+     * 其余（碎片/经验） → findHeroTabButton → 图标节点世界坐标 → 底部「英雄」按钮
+     * 世界坐标 → 覆盖层    TerritoryMapView.setRewardCatchWorldPoint（矩阵换算留在视图）
      * ```
      *
-     * 拿到其它资源（道具 / 图纸）⇒ 不登记落点，图标按默认落点飞（那些资源**没有格子**，
-     * 硬飞过去只会砸在某一格上撒谎）。
+     * 🔴 用户口径「**只改碎片经验**」：银币 / 体力必须继续飞顶部资源栏并触发数字跳动，
+     *    否则钱包涨了玩家看不见。非钱包类以前没有登记落点 ⇒ 全部回落到「屏幕顶部中央」
+     *    堆成一团（2026-11-10 截图红框），现在统一改道到英雄按钮。
      *
      * ## 为什么回调里再算一次 key
-     *
-     * `TerritoryChestView` 的回调只给 `(resId, amount)` —— 它不知道资源栏长什么样，
-     * 也不该知道。`resId → key` 是玩法口径，两次都走同一个纯函数，不缓存第二份映射。
+     * `TerritoryChestView` 的回调只给 `(resId, amount)` —— 它不知道资源栏 / 底栏长什么样，
+     * 也不该知道。`resId → 目标` 是玩法口径，两次都走同一组纯函数，不缓存第二份映射。
      */
     private wireRewardCatch(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
     ): void {
         const bar = this.findResBar();
-        if (!bar) {
-            // 独立预览 / HUD 没挂这条栏：不阻断表演，只是图标飞向默认落点、没有资源栏反馈。
-            console.warn('[MainTerritoryMap] 没找到资源栏（ResBar），奖励图标按默认落点飞、不做跳动/闪光');
-            return;
-        }
+        const heroButton = this.findHeroTabButton();
+        const heroWorld = this.heroTabWorldPositionOf(heroButton);
         this.mapView.clearRewardCatchPoints();
         for (const reward of rewards) {
             const resId = Number(reward?.resId);
+            if (!Number.isFinite(resId) || resId <= 0) continue;
             const key = territoryWalletResKeyOf(resId);
-            if (!key) continue;
-            // `null`（那一格没显示 / 取不到变换）= 清掉这一种资源的专属落点，回落默认。
-            this.mapView.setRewardCatchWorldPoint(resId, bar.slotWorldPositionOf(key));
+            if (key) {
+                // `null`（那一格没显示 / 取不到变换）= 清掉这一种资源的专属落点，回落默认。
+                if (bar) this.mapView.setRewardCatchWorldPoint(resId, bar.slotWorldPositionOf(key));
+            } else if (heroWorld) {
+                this.mapView.setRewardCatchWorldPoint(resId, heroWorld);
+            }
         }
         this.mapView.setRewardLandedHandler((resId, amount) => {
             const key = territoryWalletResKeyOf(resId);
-            if (!key || !bar.isValid) return;
-            bar.playGainFeedback(key, amount);
+            if (key) {
+                if (bar?.isValid) bar.playGainFeedback(key, amount);
+                return;
+            }
+            // 非钱包类落在英雄按钮上 ⇒ 按钮播「被砸一下」的抖动（core 那条先 Y 后 X 脉冲）。
+            if (heroButton?.isValid && isTerritoryHeroRewardResId(resId)) {
+                heroButton.playHitFeedback();
+            }
         });
+    }
+
+    /**
+     * 找底栏「英雄」按钮：逐层往上问 `MainTabHost`，再按 `tabType` 精确定位。
+     *
+     * 🔴 与 {@link findResBar} 同一个「不许从场景根搜」的理由：底栏在 `MainRoot` 层、
+     *    与 `Content` 平级，逐层往上问保证拿到的是**本页那一栏**。按 `tabType` 而不是
+     *    「第 2 个子节点」—— 七格顺序是排版，不是契约。
+     */
+    private findHeroTabHost(): MainTabHost | null {
+        let scope: typeof this.node | null = this.node;
+        while (scope) {
+            const host = scope.getComponent(MainTabHost);
+            if (host?.isValid && host.navBar?.isValid) return host;
+            scope = scope.parent;
+        }
+        return null;
+    }
+
+    private findHeroTabButton(): TabButton | null {
+        const host = this.findHeroTabHost();
+        if (!host) return null;
+        return host.navBar.getComponentsInChildren(TabButton)
+            .find((item) => item?.isValid && item.tabType === MainTab.Hero) ?? null;
+    }
+
+    /** 英雄按钮**图标**中心的世界坐标（飞行终点）；拿不到变换返回 null ⇒ 回落默认落点。 */
+    private heroTabWorldPositionOf(button: TabButton | null): Vec3 | null {
+        const icon = button?.isValid ? button.icon : null;
+        if (!icon?.isValid) return null;
+        const transform = icon.node.getComponent(UITransform);
+        if (!transform) return null;
+        return transform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
     }
 
     /**

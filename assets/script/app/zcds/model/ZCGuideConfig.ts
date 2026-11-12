@@ -35,7 +35,7 @@ const DEFAULT_PARAMS: Readonly<ZCGuideParams> = {
  * 图标键到资源路径的唯一映射；具体加载由 application 层负责。
  *
  *  键名必须与 `remoteRef/zcGuide.json` 的 `icon` 列逐一对上（表里写了没登记的键 =
- * 静默无图标；登记了但磁盘没图 = `Bundle resources doesn't contain ...` 一条 warn + 留白）。
+ * 静默无图标；登记了但磁盘没图会使指南加载失败）。
  *
  * 「兵营」取 `barracks-default`：r361（2026-09-28）美术重做兵营外观时删掉了通用的
  * `barracks-icon.png`，换成 `barracks-<武将>.png` 八张专属图（卡表 `buildIcon` 用），

@@ -127,10 +127,31 @@ test('名次徽章只有前三名有图，第四名起必须退化（不能拿�
     assert.equal(rankBadgeKeyOf(10), '');
 });
 
-test('行底板：第一名单独高亮底，其余共用', () => {
-    assert.equal(rowBackgroundKeyOf(1), 'phb_list_01');
-    assert.equal(rowBackgroundKeyOf(2), 'phb_list_02');
-    assert.equal(rowBackgroundKeyOf(4), 'phb_list_02');
+test('行底板：黄色高亮底只给本机玩家自己，与名次无关', () => {
+    //  2026-11-11 需求：「排行榜的黄色底框只是代表玩家，玩家第几名，就在第几名显示」。
+    //  改前是 `rank === 1` ⇒ 玩家排第 2 时黄底贴在别人身上。
+    assert.equal(rowBackgroundKeyOf(true), 'phb_list_01');
+    assert.equal(rowBackgroundKeyOf(false), 'phb_list_02');
+});
+
+test('isSelf 只由席位身份决定：玩家排第几，第几行才是黄底', () => {
+    //  玩家 1 格、敌人 5 格 ⇒ 玩家第 2 名。黄底必须跟着玩家走，不是跟着第一名。
+    const seats = buildRankSeats(
+        ['player', 'enemy', 'enemy2'],
+        counter({ player: 1, enemy: 5, enemy2: 3 }),
+        profiles({}),
+        true,
+    );
+    assert.deepEqual(seats.map((s) => s.owner), ['enemy', 'enemy2', 'player'], '前置：玩家不是第一');
+    assert.deepEqual(seats.map((s) => s.rank), [1, 2, 3]);
+    assert.deepEqual(seats.map((s) => s.isSelf), [false, false, true], '只有玩家那一席是 isSelf');
+    //  渲染层拿 isSelf 选底板 ⇒ 黄底落在最后一行（第 3 名）。
+    assert.deepEqual(seats.map((s) => rowBackgroundKeyOf(s.isSelf)),
+        ['phb_list_02', 'phb_list_02', 'phb_list_01']);
+
+    //  玩家排第一时也只有**自己**那一行亮，不会因为「第一名」再多亮一行。
+    const lead = buildRankSeats(['player', 'enemy'], counter({ player: 9, enemy: 1 }), profiles({}), true);
+    assert.deepEqual(lead.map((s) => rowBackgroundKeyOf(s.isSelf)), ['phb_list_01', 'phb_list_02']);
 });
 
 // ── D. 档案与兜底 ───────────────────────────────────────────────────────

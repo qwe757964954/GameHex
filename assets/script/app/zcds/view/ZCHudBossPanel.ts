@@ -24,8 +24,11 @@ const ZC_BOSS_LABEL_OUTLINE_WIDTH = 3;
 
 /** 波次徽标：`第4/8波`（设计稿这一帧就这一行，不再塞「下 Ns / 敌 M」）。 */
 export function formatZCDefenceWaveText(progress: Readonly<ZCDefenceWaveProgress>): IZCHudBossWaveText {
+    //  徽标**常驻**（2026-11-09 用户：波次数字信息要从第一波开始一直挂着）：
+    //  第 1 波还没出场时 `spawnedWaves` 是 0，直接显示「第0/8波」很怪，钳到 1 起。
+    const spawned = Math.max(1, Math.min(progress.spawnedWaves, progress.totalWaves));
     return {
-        text: `第${progress.spawnedWaves}/${progress.totalWaves}波`,
+        text: `第${spawned}/${progress.totalWaves}波`,
         fontSize: ZC_BOSS_WAVE_FONT_SIZE,
         lineHeight: ZC_BOSS_WAVE_FONT_SIZE + 6,
         outlineWidth: ZC_BOSS_LABEL_OUTLINE_WIDTH,
@@ -69,6 +72,22 @@ export class ZCHudBossPanel extends Component {
 
     @property({ type: Label, group: '节点引用', tooltip: 'Bar/Rate：血量倍率 X4' })
     rateLabel: Label = null;
+
+    /**
+     * 当前波的头像 / 名字 / 总血条显隐，普通波与 BOSS 波共用。
+     *
+     * 波次徽标（`IconBoss` + `WaveText`）不在这里控制：它从第一波起**常驻**（2026-11-09 用户）。
+     * 三处引用都取自本组件已绑定的 Inspector 引用，不需要在 prefab 上再加容器节点：
+     *  · 头像 = `Portrait`（`Icon` 是它的子节点）
+     *  · 名字 = `BossName`
+     *  · 血条 = `Bar`（`Fill` / `Rate` 的父节点）
+     */
+    setBossBarVisible(visible: boolean): void {
+        this.portraitIcon.node.active = visible;
+        this.nameLabel.node.active = visible;
+        const bar = this.hpFill.node.parent;
+        if (bar) bar.active = visible;
+    }
 
     /**
      * 全量赋值（每次渲染都会被调）。

@@ -13,6 +13,9 @@ import type { ILoginService, IServerSelectContent } from '../../login/LoginEvent
 import { LoginUiEvent } from '../../login/LoginEvents';
 import { ServerSelectPanel } from '../../login/ServerSelectPanel';
 import { GameNet } from '../../net/GameNet';
+import { EngineMain } from '../../../engine/EngineMain';
+import { WxUtil } from '../../../framework/utils/WxUtil';
+import { TTUtil } from '../../../framework/utils/TTUtil';
 
 /** 登录组合根拥有页面、控制器及平台适配器；页面不持有业务对象。 */
 export class LoginComposition extends ControllerBase {
@@ -54,6 +57,9 @@ export class LoginComposition extends ControllerBase {
     private createController(page: LoginPage): LoginController {
         const root = new LoginRoot();
         root.configureGateway(new LoginGateway(this.network));
+        // 注入平台登录 SDK（微信 wx.login / 抖音 tt.login）
+        const platformProvider = createPlatformLoginProvider();
+        if (platformProvider) root.configurePlatformLogin(platformProvider);
         return new LoginController(this.resources, {
             owner: page,
             service: createLoginService(root),
@@ -74,6 +80,7 @@ export class LoginComposition extends ControllerBase {
             navigation: {
                 navigate: (route, params) => ProcedureManager.navigate(route, params)
             },
+            channel: resolveChannelConfig(),
         });
     }
     private async openServers(content: IServerSelectContent): Promise<void> {
@@ -111,9 +118,73 @@ function createLoginService(root: LoginRoot): ILoginService {
     return {
         get servers_() { return root.servers_; }, get selectedServerId_() { return root.selectedServerId_; },
         get recentServerIds_() { return root.recentServerIds_; }, get protocolReady_() { return root.protocolReady_; },
+        get hasSavedSession_() { return root.hasSavedSession_; },
         restoreAccount: () => root.restoreAccount(), bootstrap: version => root.bootstrap(version),
+        restoreAgreement: () => root.restoreAgreement(), saveAgreement: agreed => root.saveAgreement(agreed),
         login: (account, password) => root.login(account, password, GameNet.instance),
         register: (account, password) => root.register(account, password),
+        loginWithPlatform: () => root.loginWithPlatform(GameNet.instance),
         setSelectedServer: id => root.setSelectedServer(id), dispose: () => root.dispose(),
     };
+}
+
+/** 根据运行渠道计算登录界面的展示配置 */
+function resolveChannelConfig(): { platformLoginVisible: boolean; gmVisible: boolean } {
+    // 渠道登录尚未配置，各平台先统一使用账号登录。
+    if (EngineMain.isMiniGameWeiXin) {
+        return {
+            platformLoginVisible: false,
+            gmVisible: WxUtil.isDevelop() || WxUtil.isTrial(),
+        };
+    }
+    // 抖音 GM 按钮仅开发/预览版可见。
+    if (EngineMain.isMiniGameDouyin) {
+        return {
+            platformLoginVisible: false,
+            gmVisible: TTUtil.isDevelop() || TTUtil.isTrial(),
+        };
+    }
+    // 开发者模式 / 浏览器：显示账号密码登录，GM按钮可见
+    return {
+        platformLoginVisible: false,
+        gmVisible: true,
+    };
+}
+
+/** 创建平台登录 Provider（微信 wx.login / 抖音 tt.login），非小游戏渠道返回 null */
+function createPlatformLoginProvider(): { fetchCode: () => Promise<string> } | null {
+    // 微信小游戏：wx.login 获取临时登录凭证 code
+    if (EngineMain.isMiniGameWeiXin) {
+        return {
+            fetchCode: () => new Promise<string>((resolve, reject) => {
+                const wx = (window as any).wx;
+                if (!wx?.login) { reject(new Error('微信登录接口不可用')); return; }
+                wx.login({
+                    success: (res: { code: string }) => {
+                        if (res.code) resolve(res.code);
+                        else reject(new Error('微信登录未返回 code'));
+                    },
+                    fail: (err: { errMsg: string }) => reject(new Error(err.errMsg || '微信登录失败')),
+                });
+            }),
+        };
+    }
+    // 抖音小游戏：tt.login 获取临时登录凭证 code
+    if (EngineMain.isMiniGameDouyin) {
+        return {
+            fetchCode: () => new Promise<string>((resolve, reject) => {
+                const tt = (window as any).tt;
+                if (!tt?.login) { reject(new Error('抖音登录接口不可用')); return; }
+                tt.login({
+                    success: (res: { code: string }) => {
+                        if (res.code) resolve(res.code);
+                        else reject(new Error('抖音登录未返回 code'));
+                    },
+                    fail: (err: { errMsg: string }) => reject(new Error(err.errMsg || '抖音登录失败')),
+                });
+            }),
+        };
+    }
+    // 开发者模式：无平台 SDK，返回 null，由 UI 层降级到账号密码登录
+    return null;
 }

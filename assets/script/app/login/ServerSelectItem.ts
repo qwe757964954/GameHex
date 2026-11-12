@@ -1,37 +1,41 @@
-import { _decorator, Button, Color, Component, Label, Sprite } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { LoginUiEvent } from './LoginEvents';
 import { ServerInfoData, ServerStatus } from './LoginProtocol';
 
 const { ccclass, property } = _decorator;
 
-/**
- * 条目底图的着色（唯一随状态变化的部分）。
- *
- * 其余样式 —— 字号 / 颜色 / 对齐 / SHRINK —— 全在 `ServerSelectItem.prefab` 上，
- * 本类不再覆盖，避免同一份配置散在代码和 prefab 两处。
- *
- * 底图是 `common/cu_tycb_pt`（浅色九宫，与物品详情的 `id_row_bg` 同字节同九宫），
- * 所以三档取值都是「在浅色底图上做乘法着色」，不是直接画深色块。
- */
-const ITEM_COLORS = {
-    normal: new Color(255, 255, 255, 255),
-    selected: new Color(130, 225, 160, 255),
-    disabled: new Color(185, 185, 185, 255),
+const NORMAL_STATUS_COLOR = new Color(132, 220, 67, 255);
+const STATUS_COLORS: Record<number, Color> = {
+    [ServerStatus.Maintenance]: new Color(145, 145, 145, 255),
+    [ServerStatus.Full]: new Color(242, 90, 80, 255),
+    [ServerStatus.New]: new Color(248, 205, 78, 255),
 };
 
 /**
  * 选服列表中的单个服务器条目。
  *
- * 布局对齐老客户端 `ui://登录/组件_登录_选服_项`（左侧服务器名、右侧状态），
- * 只是把老端的状态图标换成了状态文字 —— 这批 `登录_服务器_*.png` 图标还没导进新工程。
- *
  * 对象池复用时全量更新展示与服务器 id；点击绑定仅随组件生命周期建立。
  */
 @ccclass('ServerSelectItem')
 export class ServerSelectItem extends Component {
-    @property({ type: Sprite, tooltip: '服务器条目底图（id_row_bg 九宫，按状态着色）' })
+    @property({ type: Sprite, tooltip: '服务器条目底图' })
     background: Sprite = null!;
+
+    @property(SpriteFrame)
+    normalFrame: SpriteFrame = null!;
+
+    @property(SpriteFrame)
+    selectedFrame: SpriteFrame = null!;
+
+    @property(SpriteFrame)
+    disabledFrame: SpriteFrame = null!;
+
+    @property(Sprite)
+    statusDot: Sprite = null!;
+
+    @property(Node)
+    selectedMark: Node = null!;
 
     @property({ type: Label, tooltip: '服务器名称' })
     nameLabel: Label = null!;
@@ -48,9 +52,12 @@ export class ServerSelectItem extends Component {
         const disabled = server.status === ServerStatus.Maintenance;
         this.node.name = `Server_${server.serverId}`;
 
-        this.background.color = selected ? ITEM_COLORS.selected : disabled ? ITEM_COLORS.disabled : ITEM_COLORS.normal;
+        this.background.spriteFrame = disabled ? this.disabledFrame : selected ? this.selectedFrame : this.normalFrame;
+        this.statusDot.color = serverStatusColor(server);
+        this.selectedMark.active = selected && !disabled;
         this.nameLabel.string = server.name;
         this.statusLabel.string = serverStatusText(server);
+        this.statusLabel.color = serverStatusColor(server);
 
     }
 
@@ -61,6 +68,10 @@ export class ServerSelectItem extends Component {
         if (selection) EventMgr.instance.emit(LoginUiEvent.Intent, { ...selection, kind: 'select' });
     };
 
+}
+
+export function serverStatusColor(server: ServerInfoData): Color {
+    return STATUS_COLORS[server.status] ?? NORMAL_STATUS_COLOR;
 }
 
 export function serverStatusText(server: ServerInfoData): string {

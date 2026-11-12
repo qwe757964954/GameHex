@@ -330,12 +330,12 @@ test('出生特效：垂直落位全归 prefab（anchorPoint + _lpos），渲染
         `出生特效必须把 2.0s 的 clip 压进 1.25s（speed 1.6×），实际 speed=${spawnState.speed}`);
 });
 
-test('出生特效：加载器容错加载 + 渲染层播放，两端都接上了', () => {
+test('出生特效：加载器直接加载 + 渲染层播放，两端都接上了', () => {
     const loader = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
     assert.ok(readFileSync('assets/script/app/zcds/model/ZCGameResourcePlan.ts', 'utf8').includes('units/effects/出生特效/出生特效'),
-        'SPAWN_FX_URL 没指向出生特效 prefab');
-    assert.ok(loader.includes('loadSpawnFxPrefab'),
-        '缺容错加载器 —— 出生特效没交/路径写错不该让整局开不起来');
+        '资源清单未声明出生特效 prefab');
+    assert.ok(loader.includes('spawnFxPrefab: getPrefab(ZC_BATTLE_FX_PATHS.spawn)'),
+        '缺出生特效加载入口');
 
     const world = readFileSync('assets/script/app/zcds/view/ZCGameRenderWorld.ts', 'utf8');
     // 播放/回收逻辑已抽到 ZCEffectPool，渲染世界只负责在单位出生/帧推进时委托给它。

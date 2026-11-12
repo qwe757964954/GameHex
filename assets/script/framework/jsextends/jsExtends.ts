@@ -1,3 +1,4 @@
+import { IOS } from 'cc/env';
 /**
 * jsExtends 
 */
@@ -16,11 +17,11 @@ export class jsExtends {
         }
 
         //重写console.log 避免在IOS平台打印对象
-        if ((env as any).IOS === true){
+        if (IOS === true){
             let console_log = console.log
             console.log = function (...args) {
                 let params = args
-                if ((env as any).IOS === true) {
+                if (IOS === true) {
                     params = args.map(item => {
                         if (typeof item == "string") return item
                         if (typeof item == "number") return item
@@ -36,7 +37,7 @@ export class jsExtends {
         let console_error = console.error
         console.error = function (...args) {
             let params = args
-            if ((env as any).IOS === true) {
+            if (IOS === true) {
                 params = args.map(item => {
                     if (typeof item == "string") return item
                     if (typeof item == "number") return item

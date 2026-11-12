@@ -421,17 +421,119 @@ function parseTapFailed(stdout) {
   return { failures: names, summary: sum };
 }
 
+/**
+ * 显式 TAP reporter，不依赖「非 TTY 时默认 tap」这一环境巧合。
+ * 默认 spec reporter 不产出 `not ok N - 名称` 行，失败名单会被抓成空数组，
+ * 于是「相对基线新增失败 0」恒真 —— 这类假绿比 -1/-1 更难发现。
+ */
+const TEST_RUNNER = 'npx tsx --test --test-reporter=tap';
+function testCommand(spec) {
+  return `${TEST_RUNNER} ${spec}`;
+}
+
+/** 三项汇总必须解析到且自洽；-1/-1/-1 表示根本没跑到用例，不是「没有失败」。 */
+function tapSummaryOk(summary) {
+  if (!summary) return false;
+  const { tests, pass, fail } = summary;
+  if (![tests, pass, fail].every((n) => Number.isInteger(n) && n >= 0)) return false;
+  return pass + fail === tests;
+}
+
+/**
+ * 把 spawnSync 结果归一成一次可判定的测试运行。
+ * 退出码非 0 不等于采集失败：基线长期带红，有失败用例时 tsx --test 就返回 1，
+ * 那是「正常的红」，仍要走基线差集；真异常是进程没起来（status null / spawn error）。
+ */
+function parseTestRun(r, cmd) {
+  const out = `${r.stdout || ''}\n${r.stderr || ''}`;
+  const parsed = parseTapFailed(out);
+  return {
+    ...parsed,
+    cmd,
+    exitCode: r.status,
+    spawnFailed: r.status == null || Boolean(r.error),
+    summaryOk: tapSummaryOk(parsed.summary),
+  };
+}
+
 function runTests(files) {
-  if (!files.length) return { failures: [], summary: { tests: 0, pass: 0, fail: 0 }, cmd: '' };
-  const cmd = `npx tsx --test ${files.map((f) => `"${norm(f)}"`).join(' ')}`;
-  const r = run(cmd);
-  return { ...parseTapFailed(r.stdout || ''), cmd };
+  if (!files.length) {
+    return { failures: [], summary: { tests: 0, pass: 0, fail: 0 }, cmd: '', exitCode: 0, spawnFailed: false, summaryOk: true };
+  }
+  const cmd = testCommand(files.map((f) => `"${norm(f)}"`).join(' '));
+  return parseTestRun(run(cmd), cmd);
+}
+
+/**
+ * 全量分批执行。
+ *
+ * 2026-11-09 实测：单进程并行跑 449 个测试文件会挂住（23m39s 不返回、worker CPU 0，
+ * 两次流式诊断分别卡在 2146 / 959 项，位置不固定）；而 60 文件一批 15s 就能跑完并
+ * 输出完整 TAP 汇总。每批独立进程 + 单批超时，任何一批不可信就整次判失败，
+ * 绝不用半截数据去比基线。
+ */
+const FULL_TEST_BATCH_SIZE = 60;
+const FULL_TEST_TIMEOUT_MS = 180000;
+
+function collectTestFiles() {
+  const out = [];
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (entry.isFile() && entry.name.endsWith('.test.ts')) out.push(norm(path.relative(ROOT, full)));
+    }
+  };
+  const root = path.join(ROOT, 'tests');
+  if (fs.existsSync(root)) walk(root);
+  return out.sort();
+}
+
+function splitTestBatches(files, size = FULL_TEST_BATCH_SIZE) {
+  if (!Number.isInteger(size) || size <= 0) throw new Error(`批大小非法：${size}`);
+  const out = [];
+  for (let i = 0; i < files.length; i += size) out.push(files.slice(i, i + size));
+  return out;
+}
+
+/**
+ * 分批采集器 —— full 与「路由命中集过大」的 check 共用。
+ * 2026-11-11 实测：check 改动 14 文件时路由命中 200+ 个测试文件，单进程一次性跑挂住
+ * ⇒ TAP -1/-1 ⇒ EXIT 2 判据作废。分批后每批独立进程 + 超时 + 重试，任何一批不可信
+ * 整次判失败，绝不用半截数据比基线。
+ */
+function runBatchedTests(files, label) {
+  const batches = splitTestBatches(files);
+  if (!batches.length) {
+    return { failures: [], summary: { tests: -1, pass: -1, fail: -1 }, cmd: label, exitCode: 0, spawnFailed: false, summaryOk: false };
+  }
+  const merged = { failures: [], summary: { tests: 0, pass: 0, fail: 0 }, cmd: label, exitCode: 0, spawnFailed: false, summaryOk: true };
+  for (const batch of batches) {
+    const cmd = testCommand(batch.map((f) => `"${norm(f)}"`).join(' '));
+    const opts = { timeout: FULL_TEST_TIMEOUT_MS };
+    let r = parseTestRun(run(cmd, opts), cmd);
+    // 偶发的进程启动 / IO 抖动会让单批超时（实测同批单跑 15s、连跑两次都正常）。
+    // 只重试一次并显式打日志；仍失败就整次判不可信，绝不拿半截数据比基线。
+    if (r.spawnFailed || !r.summaryOk) {
+      console.warn(`[verify] 批次采集异常（exitCode=${r.exitCode}），重试一次：${batch[0]} … ${batch[batch.length - 1]}`);
+      r = parseTestRun(run(cmd, opts), cmd);
+    }
+    if (r.spawnFailed || !r.summaryOk) {
+      return { ...r, cmd: `${label} → ${cmd}`, summaryOk: false };
+    }
+    merged.failures.push(...r.failures);
+    merged.summary.tests += r.summary.tests;
+    merged.summary.pass += r.summary.pass;
+    merged.summary.fail += r.summary.fail;
+  }
+  merged.failures.sort();
+  merged.summaryOk = tapSummaryOk(merged.summary);
+  return merged;
 }
 
 function runAllTests() {
-  const cmd = 'npx tsx --test "tests/**/*.test.ts"';
-  const r = run(cmd);
-  return { ...parseTapFailed(r.stdout || ''), cmd };
+  const files = collectTestFiles();
+  return runBatchedTests(files, `分批 ${Math.ceil(files.length / FULL_TEST_BATCH_SIZE)}×${FULL_TEST_BATCH_SIZE}`);
 }
 
 /**
@@ -471,6 +573,26 @@ function loadBaseline() {
   } catch {
     return null;
   }
+}
+
+/**
+ * 基线红哨兵：把 baseline.json 的失败用例名反查到测试文件，check 时一并跑。
+ * 2026-11-11 实测：改动文件=2 时路由只跑 11 个用例、判据报「新增失败 0」，而同批
+ * 5 个文件单跑是 123 用例 / 32 fail —— 红根本没跑，「零新增」是假绿。哨兵保证基线红
+ * 始终在判据视野内；未跑到的部分在判据里显式声明，不冒充完整判据。
+ */
+function baselineSentinelFiles() {
+  const base = loadBaseline();
+  if (!base || !Array.isArray(base.failures) || !base.failures.length) return [];
+  const names = base.failures.filter((n) => typeof n === 'string' && n.length >= 8);
+  if (!names.length) return [];
+  const out = new Set();
+  for (const t of listTestFiles()) {
+    let src;
+    try { src = fs.readFileSync(path.join(ROOT, t), 'utf8'); } catch { continue; }
+    if (names.some((n) => src.includes(n))) out.add(t);
+  }
+  return [...out].sort();
 }
 
 // ---------------------------------------------------------------------- CLI
@@ -614,18 +736,36 @@ function runCli(argv) {
 
   const useFull = mode === 'full' || mode === 'baseline';
   const selection = useFull ? null : selectTests(files);
-  const picked = useFull ? [] : selection.tests;
+  const sentinels = useFull ? [] : baselineSentinelFiles();
+  const picked = useFull ? [] : [...new Set([...selection.tests, ...sentinels])].sort();
   // 🔴 路由真源解析不出来 = 验收口径降级，此时任何 PASS 都不可信 ⇒ 不允许带病放行。
   const routeFail = !useFull && selection !== null && !selection.routeOk;
 
   console.log(`[verify] 模式=${mode}  改动文件=${files.length}  待跑用例=${useFull ? '全量' : picked.length}`);
+  if (!useFull) {
+    const extra = sentinels.filter((s) => !selection.tests.includes(s)).length;
+    console.log(`[verify] 基线红哨兵：${sentinels.length} 个测试文件并入（路由未命中 ${extra} 个），防「没跑 ≠ 修好」`);
+  }
   if (!useFull && selection) printRouteHits(selection, files);
 
   const t0 = Date.now();
-  const t = useFull ? runAllTests() : runTests(picked);
+  const t = useFull ? runAllTests()
+    : picked.length > FULL_TEST_BATCH_SIZE
+      ? runBatchedTests(picked, `check 分批 ${Math.ceil(picked.length / FULL_TEST_BATCH_SIZE)}×${FULL_TEST_BATCH_SIZE}`)
+      : runTests(picked);
   const c = collectTsc();
   console.log(`[verify] 耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s`);
   console.log(`[verify] 用例 ${t.summary.pass}/${t.summary.tests} 通过，${t.summary.fail} 失败；tsc(assets/script) ${c.total} 条`);
+
+  // 🔴 采集器自检必须先于写基线 / 比基线：汇总不完整时失败名单可能是空的，
+  // 此时「新增失败 0」恒真，任何 PASS 都不作数（2026-11-05 `verify full` 退出 0 却显示 -1/-1）。
+  if (t.spawnFailed || !t.summaryOk) {
+    console.error('\n❌ 中止：测试采集失败，本次「零新增」不作数（退出码 2）');
+    if (t.spawnFailed) console.error(`   子进程未正常结束：exitCode=${t.exitCode}`);
+    else console.error(`   TAP 汇总缺失或不一致：${JSON.stringify(t.summary)}`);
+    console.error(`   命令：${t.cmd}`);
+    return 2;
+  }
 
   const cur = {
     mode: useFull ? 'full' : 'partial',
@@ -652,7 +792,10 @@ function runCli(argv) {
     console.warn(`⚠️  基线是 partial 快照（${base.summary.tests} 条用例），与全量口径不可比`);
   }
   if (!useFull && base.mode === 'full') {
-    console.log(`ℹ️  基线为全量快照；本次按路由只跑子集，只看「新增」不看「消失」`);
+    console.log(`ℹ️  基线为全量快照（${base.summary.tests} 用例）；本次覆盖 ${picked.length} 个测试文件，未跑到的基线红不计入判据。`);
+    if (selection.wide.length) {
+      console.log(`ℹ️  有 ${selection.wide.length} 个域超过路由展开上限 ${FEATURE_AUTORUN_LIMIT}，完整判据请跑：npm run verify:full`);
+    }
   }
 
   const failures = useFull ? diff(cur.failures, base.failures) : { added: diff(cur.failures, base.failures).added, gone: [] };
@@ -679,7 +822,7 @@ function runCli(argv) {
   return bad === 0 ? 0 : 1;
 }
 
-export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm, changedFiles, runGate, writeGateReport, checkDefinitions, exportedNamesOf };
+export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm, changedFiles, runGate, writeGateReport, checkDefinitions, exportedNamesOf, testCommand, tapSummaryOk, parseTestRun, splitTestBatches, baselineSentinelFiles, runBatchedTests };
 
 // 直接 `node tools/verify/verify.mjs …` 才跑 CLI；被 import 时只导出（供用例断言）。
 const invokedDirectly = process.argv[1]

@@ -1,29 +1,17 @@
-import { AssetManager, assetManager, resources } from 'cc';
+import { AssetManager } from 'cc';
 import type { AssetType } from '../../core/asset/AssetService';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
+import { loadAssetBundle } from '../../platform/cocos/AssetBundleLoader';
 
 /** `resources.load` 回调签名（与 Creator 3.8 一致）。 */
 export type RoutedLoadCallback<T> = (error: Error | null, asset: T | null) => void;
 
 /**
  * 按路径解析目标 bundle：未命中 BundleCatalog 归属表（含显式首包）→ resources；
- * 命中分包 → 已加载直接取缓存，未加载则 loadBundle（幂等，之后走缓存）。
+ * 命中分包 → 交给 `loadAssetBundle`（已加载走缓存，未加载由它 loadBundle，并负责从热更
+ * manifest 解析远程 url/version、同名并发去重）。
  */
-const resolveBundle = (path: string): Promise<AssetManager.Bundle> => {
-    const name = bundleForPath(path);
-    if (!name || name === 'resources') return Promise.resolve(resources);
-    const cached = assetManager.getBundle(name);
-    if (cached) return Promise.resolve(cached);
-    return new Promise<AssetManager.Bundle>((resolve, reject) => {
-        assetManager.loadBundle(name, (error, bundle) => {
-            if (error || !bundle) {
-                reject(error || new Error(`Asset Bundle 加载失败：${name}`));
-                return;
-            }
-            resolve(bundle);
-        });
-    });
-};
+const resolveBundle = (path: string): Promise<AssetManager.Bundle> => loadAssetBundle(bundleForPath(path));
 
 /**
  * `resources.load` 的路由等价物：路径命中 BundleCatalog 分包时自动改走对应 bundle，

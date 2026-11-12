@@ -30,8 +30,8 @@ export interface LoginFlowResult {
 /**
  * 登录业务根（LoginRoot）：纯业务逻辑，不继承 Component、不碰 UI。
  *
- * 负责：版本配置加载、协议校验、服务器列表获取、账号登录/注册、
- * 游戏服连接、角色登录、本地账号密码缓存。
+ * 负责：版本配置加载、协议校验、服务器列表获取、账号登录/注册、渠道一键登录、
+ * 游戏服连接、角色登录、本地会话缓存。
  *
  * 由 LoginController 调用；LoginPage 仅派发意图、渲染快照。
  */
@@ -61,6 +61,8 @@ export class LoginRoot {
     get channel_(): string { return this.gameConfig?.channel ?? ''; }
     get channelCode_(): string { return String(this.gameConfig?.channelCode ?? ''); }
     get isWss_(): boolean { return !!this.gameConfig?.isWss; }
+    /** 是否有已保存的登录会话（用于自动登录判断） */
+    get hasSavedSession_(): boolean { return !!sys.localStorage.getItem('login_session'); }
 
     dispose(): void {
         if (this.disposed) return;
@@ -73,7 +75,21 @@ export class LoginRoot {
         this.gateway = gateway;
     }
 
+    /** 平台登录 Provider（微信 wx.login / 抖音 tt.login），由组装层注入 */
+    private platformLoginProvider: { fetchCode: () => Promise<string> } | null = null;
+    configurePlatformLogin(provider: { fetchCode: () => Promise<string> }): void {
+        this.platformLoginProvider = provider;
+    }
+
     // ---- 本地账号缓存 ----
+    restoreAgreement(): boolean {
+        return sys.localStorage.getItem('login_agreed') === 'true';
+    }
+
+    saveAgreement(agreed: boolean): void {
+        sys.localStorage.setItem('login_agreed', String(agreed));
+    }
+
     restoreAccount(): { account: string; password: string } {
         const account = sys.localStorage.getItem('account_num') || '';
         const password = sys.localStorage.getItem('password_num') || '';
@@ -132,7 +148,7 @@ export class LoginRoot {
 
     get protocolReady_(): boolean { return this.protocolReady; }
 
-    // ---- 登录 ----
+    // ---- 账号密码登录 ----
     async login(account: string, password: string, net: LoginNetwork): Promise<LoginFlowResult> {
         if (this.busy || this.disposed) return { ok: false, reason: 'busy' };
         if (!account || !password) return { ok: false, reason: '请输入账号和密码' };
@@ -186,6 +202,72 @@ export class LoginRoot {
         } finally {
             this.busy = false;
         }
+    }
+
+    // ---- 渠道一键登录（微信/抖音授权） ----
+    async loginWithPlatform(net: LoginNetwork): Promise<LoginFlowResult> {
+        if (this.busy || this.disposed) return { ok: false, reason: 'busy' };
+        const config = this.gameConfig;
+        const gateway = this.gateway;
+        if (!config || !gateway) return { ok: false, reason: '登录服务尚未就绪，请稍后重试' };
+        if (this.selectedServerId == null) return { ok: false, reason: '请先选择服务器' };
+
+        const selected = this.servers.find((s) => Number(s.serverId) === this.selectedServerId);
+        if (!selected) return { ok: false, reason: '选择的服务器不存在，请重新选择' };
+
+        this.busy = true;
+        this.network = net;
+        const serverId = this.selectedServerId;
+        try {
+            // 1. 调用平台 SDK 获取授权 code
+            const code = await this.fetchPlatformLoginCode();
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+
+            // 2. 用 code 向登录中心换取用户信息
+            const user = await gateway.loginWithPlatform(config, code, config.channel);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+
+            // 3. 后续流程与账号密码登录一致
+            const recent = await gateway.queryRecentServers(config, user);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+            this.recentServerIds = recent.roleServerList || recent.roleList?.map((i) => i.selectServerId) || [];
+            const allowedAfter = canEnterServer(selected, this.recentServerIds, recent.state === 1);
+            if (!allowedAfter.ok) return { ok: false, reason: allowedAfter.reason };
+
+            await gateway.loginServer(config, user, serverId);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+            const session = await gateway.enterServer(config, user, serverId);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+
+            const connected = await this.connectGameServer(user, session, net);
+            if (this.disposed) return { ok: false, reason: 'disposed' };
+            if (!connected.ok) return { ok: false, reason: connected.reason };
+
+            CenterPaymentService.current?.configure({
+                centerUrl: config.url,
+                platform: config.channelCode,
+                code: user.code,
+                roleId: Number(session.roleId),
+                sdkType: config.sdkType ?? '',
+            });
+
+            // 渠道登录不存账号密码，仅存会话和服务器
+            sys.localStorage.setItem('select_server_id', String(this.selectedServerId));
+            sys.localStorage.setItem('login_session', JSON.stringify(session));
+            return { ok: true, session, user };
+        } catch (error) {
+            return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+        } finally {
+            this.busy = false;
+        }
+    }
+
+    /** 调用平台 SDK 获取登录 code（微信 wx.login / 抖音 tt.login） */
+    private async fetchPlatformLoginCode(): Promise<string> {
+        if (!this.platformLoginProvider) {
+            throw new Error('当前渠道不支持一键登录，请使用账号密码登录');
+        }
+        return this.platformLoginProvider.fetchCode();
     }
 
     // ---- 注册 ----

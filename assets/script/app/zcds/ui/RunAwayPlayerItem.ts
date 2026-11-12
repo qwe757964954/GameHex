@@ -1,9 +1,14 @@
-import { _decorator, Component, Label, ProgressBar, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Color, Component, Label, Node, ProgressBar, Sprite, SpriteFrame } from 'cc';
+import type { ZCOwner } from '../model/ZCMapConfig';
+import { zcFactionColor } from '../view/ZCTheme';
 
 const { ccclass, property, disallowMultiple } = _decorator;
+const SELF_BACKGROUND = new Color(38, 57, 79, 255);
+const OTHER_BACKGROUND = new Color(53, 43, 40, 255);
 
 /** 伤害统计中的一行数据；最大值由父面板统一计算，保证各行可比较。 */
 export interface RunAwayPlayerInfo {
+    owner: ZCOwner;
     name: string;
     headSpriteFrame: SpriteFrame | null;
     /** 造成伤害。 */
@@ -41,21 +46,31 @@ export class RunAwayPlayerItem extends Component {
     @property({ type: Label, tooltip: 'DamageTakenValueLabel：承受伤害数值' })
     damageTakenLabel: Label = null;
 
+    @property(Sprite)
+    background: Sprite = null!;
+    @property(Sprite)
+    faction: Sprite = null!;
+    @property(Node)
+    selfBadge: Node = null!;
+
     /** 刷新昵称、头像及伤害数据；空头像会清理上一位玩家的图片。 */
     public refresh(info: Readonly<RunAwayPlayerInfo>): void {
         const damage = this.normalize(info.damage);
         const damageTaken = this.normalize(info.damageTaken);
         this.nameLabel.string = info.name;
         this.avatar.spriteFrame = info.headSpriteFrame;
-        this.damageLabel.string = String(damage);
-        this.damageTakenLabel.string = String(damageTaken);
+        this.faction.color = zcFactionColor(info.owner);
+        this.selfBadge.active = info.owner === 'player';
+        this.background.color = info.owner === 'player' ? SELF_BACKGROUND : OTHER_BACKGROUND;
+        this.damageLabel.string = damage.toLocaleString('en-US');
+        this.damageTakenLabel.string = damageTaken.toLocaleString('en-US');
         this.damageProgress.progress = this.ratio(damage, info.maxDamage ?? damage);
         this.damageTakenProgress.progress = this.ratio(damageTaken, info.maxDamageTaken ?? damageTaken);
     }
 
     /** 列表项回收或面板清空时调用。 */
     public clear(): void {
-        this.refresh({ name: '', headSpriteFrame: null, damage: 0, damageTaken: 0 });
+        this.refresh({ owner: 'player', name: '', headSpriteFrame: null, damage: 0, damageTaken: 0 });
     }
 
     private normalize(value: number): number {

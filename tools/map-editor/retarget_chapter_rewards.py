@@ -221,10 +221,8 @@ def main() -> int:
 
     for name, _ in written:
         targets, _ = publisher.copy_one(SOURCE / f"{name}.json", dry_run=False)
-        published = json.loads(targets[0].read_text(encoding="utf-8"))
-        randomizer.write_remote(published, name, dry_run=False)
-        print(f"已发布 {len(targets) + 1} 处：{name} → {targets[0].parent.name}/ + doc/sever + doc/client"
-              f" + assets/remoteRef/{name}.json")
+        print(f"已发布 {len(targets)} 处：{name} → {targets[0].parent.name}/ + doc/sever")
+    return 0
     return 0
 
 

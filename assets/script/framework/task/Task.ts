@@ -88,24 +88,6 @@ export class Task extends ScriptObject {
         })
     }
 
-    waitUntilTest(condition: () => boolean, caller: destroyable, nFrame: number = 1, timeout?: number): Promise<void> {
-        return new Promise<void>((resolve) => {
-            console.log((cc.game as any).frameCount);
-            resolve();
-            // let frameTimer = FrameTimer.getFrameTimer(() => {
-            //     if (frameTimer) {
-            //         console.log((cc.game as any).frameCount);
-            //         resolve();
-            //         console.log((cc.game as any).frameCount);
-            //         frameTimer = null;
-            //         console.log((cc.game as any).frameCount);
-            //         console.log("----------------------------------");
-            //     }
-            // }, caller, nFrame, -1)
-            // frameTimer.start();
-        })
-    }
-
     async waitSuccess(callback: Function, caller?: destroyable, interval?: number) {
         while (true) {
             if (Func.runFunc(callback, caller)) {

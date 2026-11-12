@@ -1,4 +1,5 @@
-import { view } from 'cc';
+import { view, Rect } from 'cc';
+import { EDITOR, HTML5 } from 'cc/env';
 import { FW } from "./FW";
 import { Utils } from "./utils/Utils";
 import { WxUtil } from "./utils/WxUtil";
@@ -168,7 +169,7 @@ export class Func {
         let winSize = view.getVisibleSize()
         let x = winSize.width
         let y = winSize.height
-        let factory = !((env as any).EDITOR || (env as any).HTML5) ? 16 : 32
+        let factory = !(EDITOR || HTML5) ? 16 : 32
         d += x * y * factory
         let uuid = "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
             let r = (d + Math.random() * 16) % 16 | 0
@@ -456,7 +457,7 @@ export class Func {
     }
 
     /**区域内随机坐标 */
-    static randomRectPos(bound: cc.Rect, offsetX: number = 0, offsetY: number = 0) {
+    static randomRectPos(bound: Rect, offsetX: number = 0, offsetY: number = 0) {
         return Func.randomRectPos2(bound.x, bound.y, bound.width, bound.height, offsetX, offsetY)
     }
 

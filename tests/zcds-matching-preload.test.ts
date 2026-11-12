@@ -20,7 +20,7 @@ import * as PvpInfoModel from '../assets/script/app/battle/PvpInfoModel';
 import { ZCBattleController } from '../assets/script/app/zcds/application/ZCBattleController';
 import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import type { ZCGamePreparedResources } from '../assets/script/app/zcds/application/ZCGameLoader';
+import type { IZCGamePreparedResources } from '../assets/script/app/zcds/application/ZCGamePreparedResources';
 
 function deferred<T>() {
     let resolve!: (value: T) => void, reject!: (error: Error) => void;
@@ -40,12 +40,12 @@ const SELF_AVATAR_ID = '70002';
 const prepared = {
     hudPrefab: { name: 'hud' },
     baseMatchConfig: { map: {}, enemyDeck: [] },
-} as unknown as ZCGamePreparedResources;
+} as unknown as IZCGamePreparedResources;
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
 test('后台准备失败保留原始错误并立即释放单局 scope', async () => {
     let released = 0;
-    const pending = deferred<ZCGamePreparedResources>();
+    const pending = deferred<IZCGamePreparedResources>();
     const session = new ZCBattleController(createControllerContext(), {
         prepareDirect: scope => { scope.defer(() => released++); return pending.promise; },
         buildEntry: () => { throw new Error('not mounting'); }, resolvePveResult() {},
@@ -97,7 +97,7 @@ test('开战失败后重新匹配，旧界面回调不能启动新局，新回�
 });
 
 function procedures() {
-    const loads: Array<ReturnType<typeof deferred<ZCGamePreparedResources>>> = [];
+    const loads: Array<ReturnType<typeof deferred<IZCGamePreparedResources>>> = [];
     const scopes: ResourceScope[] = [];
     const options: any[] = [];
     /** 匹配过程中 `page.updateMine()` 收到的我方数据（服务端回包到达后刷新用）。 */
@@ -122,7 +122,7 @@ function procedures() {
     class Loader {
         prepare(scope?: ResourceScope) {
             if (scope) { scopes.push(scope); scope.defer(() => released++); }
-            const pending = deferred<ZCGamePreparedResources>(); loads.push(pending); return pending.promise;
+            const pending = deferred<IZCGamePreparedResources>(); loads.push(pending); return pending.promise;
         }
     }
     /**
@@ -270,7 +270,6 @@ function procedures() {
         '../zcds/application/ZCGameLoader': { ZCGameLoader: Loader },
         '../../framework/controller/ComponentController': componentControllerModule(),
         '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
-        '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
         '../zcds/model/ZCMatchConfig': { captureZCMatchConfig: (config: unknown) => config ?? { map: {}, enemyDeck: [] } },
         '../zcds/model/ZCRankBoard': { buildSeatProfiles: () => new Map(), buildSeatUnitIds: () => new Map() },
         '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
@@ -562,7 +561,7 @@ test('匹配中显示服务端 PVP 信息（段位/积分），本接口没有�
     assert.equal(mine.rank, '菜鸟护卫Ⅰ', 'grade 是 id → 经 grade 表换成段位名');
     assert.equal(mine.name, '本机昵称', '本接口没有昵称列 → 保留 CmdRole 缓存的本机昵称');
     assert.equal(mine.trophy, 1, 'score = 0 不是有效显示值 → 保留本地占位，不能清成 0');
-    assert.equal(mine.artifactName, '本地神器', '本接口没有神器列 → 保留本地值');
+    assert.equal(mine.artifactName, '', '开战回包 artifactId=0 → 清空本地占位神器');
     assert.equal(mine.power, 1, '本接口没有战力列 → 保留本地值');
 });
 
@@ -599,32 +598,49 @@ test('PVP 信息与「开始游戏」回包并行到达时叠加，不互相整�
     assert.equal(last.rank, '菜鸟护卫Ⅰ', '单元那份 gradeId 查不到 → 保留 PVP 信息给的段位，不能被清成本地占位');
 });
 
+test('后端指定地图按 id 和 version 精确加载，缺图或人数错误不随机回退', async () => {
+    const fixture = loaderFixture({ loadDir: async () => [
+        { json: { id: 'other', version: 3, playerCount: 4 } },
+        { json: { id: 'server', version: 3, playerCount: 4 } },
+    ] });
+    const info = { id: 'server', name: '后端地图', version: 3 };
+    assert.equal(await fixture.loader.loadRandomMap(undefined, 4, undefined, info), true);
+    assert.equal(fixture.configured, 1);
+    await assert.rejects(fixture.loader.loadRandomMap(undefined, 4, undefined, { ...info, version: 2 }), /后端地图不存在/);
+    await assert.rejects(fixture.loader.loadRandomMap(undefined, 2, undefined, info), /人数或模式不匹配/);
+    assert.equal(fixture.configured, 1);
+});
+
 function loaderFixture(assets: any, configs = { initialize: async () => {}, getTable: async (_name: string) => [] }) {
     let configured = 0, injected = 0;
     const dependencies: Record<string, unknown> = {
-        '../../card/CardArtConfig': { parseCardArtConfig: () => ({ paths: new Map() }) },
+        '../../card/CardArtConfig': {
+            CARD_ART_TABLES: { rarity: 'cardRarity', cardClass: 'cardClass', camp: 'cardCamp' },
+            parseCardArtConfig: () => ({ paths: new Map(), lineup: { rarities: new Map() } }),
+        },
         '../model/ZCGameResourcePlan': resourcePlan,
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
         '../model/ZCMatchConfig': { captureZCMatchConfig: () => ({ map: {}, playerDeck: [], enemyDeck: [] }) },
         '../model/ZCModifierRuntime': { getZCModifierCatalogs: () => ({ adapters: { textOverrides: new Map(), skillPlans: [] } }) },
         '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
-        cc: { JsonAsset: class {}, Prefab: class {} },
+        cc: { JsonAsset: class {}, Prefab: class {}, Material: class { initialize(): void {} } },
         '../../ArtPaths': {
             decorFramePath: (name: string) => `decor/${name}`,
             spriteFramePath: (root: string, name: string) => `${root}/${name}/spriteFrame`,
         },
         '../view/ZCGameViewUtil': { ZC_DECOR_KEY_PATTERN: /^\d+,\d+$/ },
         './ZCGuideLoader': { ZCGuideLoader: class { async prepare() { return { entries: [], params: {}, iconFrames: new Map() }; } } },
-        '../model/ZCCombatCatalog': { getAllUnitDefinitions: () => [{ unitId: 'test', prefabPath: 'visual/unit', attackProfile: { effectPrefabPath: 'visual/effect' } }] },
+        '../model/ZCCombatCatalog': { setCardRarityMeta() {}, getAllUnitDefinitions: () => [{ unitId: 'test', prefabPath: 'visual/unit', attackProfile: { effectPrefabPath: 'visual/effect' } }] },
         // `isRandomMapCandidate` 是 `loadRandomMap` 的随机池判据：桩里缺符号会在调用时
         // 抛 TypeError（跟被测行为无关）。替身与真实实现同口径。
         '../model/ZCGameModel': {
             configureZCMap: () => configured++,
             getZCLocalPlayerCountOverride: () => null,
-            isRandomMapCandidate: (layout: { playerCount?: number; cityMode?: string } | null) => {
+            isRandomMapCandidate: (layout: { playerCount?: number; cityMode?: string } | null, requestedPlayerCount?: number) => {
                 const count = layout?.playerCount ?? 2;
                 return (count === 2 || count === 3 || count === 4)
+                    && (!requestedPlayerCount || count === requestedPlayerCount)
                     && (layout?.cityMode === undefined || layout.cityMode === 'fixed' || layout.cityMode === 'select');
             },
         },

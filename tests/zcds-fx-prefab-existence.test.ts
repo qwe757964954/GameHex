@@ -96,3 +96,23 @@ test('配表与代码引用的每个战斗特效 prefab 都必须真实存在（
     }
     assert.deepEqual(missing, [], `以下特效 prefab 在 assets/bundles/battle 下不存在，运行时会静默隐形：\n${missing.join('\n')}`);
 });
+
+test('战斗特效 prefab 的内部引用必须指向存在的对象，节点 prefab 信息类型正确', () => {
+    const referenced = new Set([...pathsFromTables().keys(), ...pathsFromSource().keys()]);
+    for (const path of referenced) {
+        const objects = JSON.parse(readFileSync(join(BATTLE_ASSETS, `${path}.prefab`), 'utf8'));
+        const visit = (value: unknown): void => {
+            if (!value || typeof value !== 'object') return;
+            if ('__id__' in value) {
+                const id = value.__id__;
+                assert.ok(typeof id === 'number' && Number.isInteger(id) && id >= 0 && id < objects.length,
+                    `${path}: 无效内部引用 ${id}，对象数 ${objects.length}`);
+            }
+            for (const child of Object.values(value)) visit(child);
+        };
+        visit(objects);
+        for (const node of objects.filter((item: { __type__: string }) => item.__type__ === 'cc.Node')) {
+            if (node._prefab) assert.equal(objects[node._prefab.__id__].__type__, 'cc.PrefabInfo', path);
+        }
+    }
+});

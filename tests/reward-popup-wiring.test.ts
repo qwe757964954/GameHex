@@ -202,6 +202,51 @@ function methodBodyOf(source: string, mask: string, name: string): string | null
 const hasWiring = (text: string, rewardFields: string[]): boolean =>
     text.includes('FW.ShowReward') && rewardFields.some((field) => text.includes(field));
 
+/** MVC repositories return rewards; verify every consumer and the actual view outlet. */
+function hasDelegatedWiring(request: string, file: string, scope: string): boolean {
+    const read = (path: string) => sources.get(join(APP_ROOT, path)) ?? '';
+    if (request === 'RequestSlgBuildCollect'
+        && file === join(APP_ROOT, 'bigmap/application/GameNetBigMapSlgGateway.ts')) {
+        const repository = read('bigmap/application/BigMapSlgRepository.ts');
+        const collect = methodBodyOf(repository, maskOf(repository), 'collect') ?? '';
+        const model = read('bigmap/application/BigMapModel.ts');
+        const controller = read('bigmap/application/BigMapController.ts');
+        const view = read('bigmap/view/BigMapPage.ts');
+        return scope.includes('new RequestSlgBuildCollect')
+            && collect.includes('rsp.tlCmdGoods') && collect.includes('{ ...result, rewards }')
+            && ['requestHarvest', 'requestHarvestAll'].every(name =>
+                methodBodyOf(model, maskOf(model), name)?.includes('return repository.collect('))
+            && controller.includes("result.ok && result.rewards?.length")
+            && controller.includes("kind: 'rewards', rewards: result.rewards")
+            && view.includes("command.kind === 'rewards'")
+            && view.includes('ShowRewardPage.open') && view.includes('goods: command.rewards.map');
+    }
+    const methods: Record<string, string> = {
+        RequestTerritoryUnlockCell: 'unlockCell', RequestTerritoryPassCell: 'passCell',
+        RequestTerritorySweep: 'sweep', RequestTerritoryIdleReward: 'claimIdleReward',
+    };
+    const method = methods[request];
+    if (!method || file !== join(APP_ROOT, 'territory/application/TerritoryCellRepository.ts')) return false;
+    if (!scope.includes('readTerritoryGrantedRewards') || !scope.includes('tlCmdGoods') || !scope.includes('rewards')) return false;
+    const model = read('territory/application/TerritoryModel.ts');
+    const mask = maskOf(model);
+    const sites = [...mask.matchAll(new RegExp(`\\.gateway\\.${method}\\(`, 'g'))];
+    if (!sites.length || !sites.every(site => {
+        const body = memberScopeOf(model, mask, site.index!);
+        if (body.includes('this.showRewards(') && body.includes('.rewards')) return true;
+        // Two-stage battle request carries rewards to the guarded runCellWrite completion.
+        return body.includes('rewards: unlock.rewards ?? []')
+            && (methodBodyOf(model, mask, 'handleUnlockThenBattle') ?? '').includes('this.showRewards(outcome.rewards');
+    })) return false;
+    const view = read('main/MainTerritoryMap.ts');
+    const controller = read('territory/application/TerritoryController.ts');
+    return model.includes("kind: 'rewards', payload: { rewards, originCellId, options }")
+        && controller.includes('else this.command(output)')
+        && view.includes("case 'rewards': this.onShowRewards(command.payload)")
+        && view.includes('this.presentRewards(payload.rewards')
+        && view.includes('FW.ShowReward(rewards.map') && view.includes('this.playCellGains(rewards');
+}
+
 test('所有已使用、且响应带奖励列表的请求都接入 FW.ShowReward', () => {
     const masks = new Map<string, string>();
     for (const [file, source] of sources) masks.set(file, maskOf(source));
@@ -254,6 +299,7 @@ test('所有已使用、且响应带奖励列表的请求都接入 FW.ShowReward
             const unwired = sites.filter((index) => {
                 const scope = memberScopeOf(source, mask, index);
                 if (hasWiring(scope, rewardFields)) return false;
+                if (hasDelegatedWiring(request, file, scope)) return false;
                 // 写法 C：真正的 `FW.ShowReward` 写在被这个函数体调用的同文件方法里。
                 return !calledNames(scope).some((name) => {
                     const body = methodBodyOf(source, mask, name);

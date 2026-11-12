@@ -52,6 +52,7 @@ async function makeHost(currentTab = 3) {
             if (name.endsWith('/ComponentController')) return componentControllerModule(context);
             if (name.endsWith('/MainTabController')) return { MainTabController };
             if (name.endsWith('/MainTabModel')) return { MainTab };
+            if (name.endsWith('/PvpHeroService')) return { getCachedPvpHeroInfos: () => [], fetchPvpHeroInfos: async () => [] };
             if (name.endsWith('/FormationService')) return { fetchFormations: async () => {} };
             if (name === 'cc') return {
                 _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },

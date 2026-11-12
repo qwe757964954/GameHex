@@ -8,6 +8,8 @@ import test from 'node:test';
 import ts from 'typescript';
 import { toIdString } from '../assets/script/app/net/RequestGuard';
 import { BIGMAP_BATTLE_TEXT } from '../assets/script/app/bigmap/model/BigMapBattle';
+// core 纯 TS：直接拿真源常量，别在桩里写死 'bigmap'（改名后断言要跟着红）。
+import * as BundleCatalog from '../assets/script/core/asset/BundleCatalog';
 
 test('加载配置期间切走页面，取消的世界入口不能稍后弹出覆盖新页', async () => {
     let finishConfig: (config: object) => void = () => undefined;
@@ -39,6 +41,14 @@ test('加载配置期间切走页面，取消的世界入口不能稍后弹出�
 
 function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layout: Promise<object | null> = Promise.resolve(null)) {
     const context = createControllerContext();
+    // 记录所有经 `AssetService` 的加载：页面宿主 prefab 必须走这条通道（bundle 的远程
+    // url/version 只有它从热更 manifest 解析），见文件末尾那条回归用例。
+    const assetLoads: { path: string; type: unknown; options?: { bundle?: string } }[] = [];
+    const loadAsset = context.assets.load.bind(context.assets);
+    context.assets.load = async (path, type, options) => {
+        assetLoads.push({ path, type, options });
+        return loadAsset(path, type, options);
+    };
     let role = { id: '9007199254740993', selectServerId: '1' };
     const owners: unknown[] = [];
     const chapterOwners: unknown[] = [];
@@ -72,6 +82,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     let slgRequests = 0;
     class Transform { setContentSize(): void {} }
     class Widget {}
+    class Opacity { opacity = 255; }
     const detailCallbacks: ((open: boolean) => void)[] = [];
     const cancelledEnters: number[] = [];
     class Page {
@@ -85,8 +96,17 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         isValid = true;
         active = true;
         layer = 0;
+        private readonly comps = new Map<unknown, unknown>();
         constructor(public name: string) { nodes.push(this); }
-        addComponent(type: unknown) { return type === Transform ? new Transform() : type === Widget ? new Widget() : new Page(); }
+        // 宿主 prefab 的组件由 `instantiate` 预先挂好（真实引擎就是这么来的），
+        // 所以 `getComponent` 必须是「取已有 / 缺了才补」而不是永远新建。
+        addComponent(type: unknown) {
+            const component = type === Transform ? new Transform()
+                : type === Widget ? new Widget() : type === Opacity ? new Opacity() : new Page();
+            this.comps.set(type, component);
+            return component;
+        }
+        getComponent(type: unknown) { if (!this.comps.has(type)) this.addComponent(type); return this.comps.get(type); }
         setParent(): void {}
         // 世界页会按 `Popup` 名字找常驻弹窗节点再插到它之前；这个 harness 不维护子节点，
         // 给 null 即可（层级顺序由 `bigmap-page-readiness` 那条用例钉）。
@@ -109,7 +129,17 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
-        if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget,
+        if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget, UIOpacity: Opacity,
+            // ⚠️ 刻意不提供 `assetManager`：页面宿主 prefab 必须经 `AssetService` 加载，
+            //    直连 `assetManager.loadBundle` 会在这里 TypeError。
+            Prefab: class {},
+            // 页面宿主改为 instantiate prefab：这里造一个「组件已挂好」的节点，等价于 prefab 内容。
+            instantiate: () => {
+                const node = new FakeNode('BigMapPage');
+                node.addComponent(Transform); node.addComponent(Widget);
+                node.addComponent(Opacity); node.addComponent(Page);
+                return node;
+            },
             Layers: { Enum: { UI_2D: 33554432 } }, view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
             director: { getScene: () => ({ getChildByName: () => ({ getChildByName: () => null }) }) } };
         if (name.endsWith('/ZCBattlePreparation')) return { createZCBattleSession: (_context: unknown, { battle }: { battle: unknown }) => { const preload = { battle }; preloads.push(preload); return preload; } };
@@ -118,6 +148,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
         if (name.endsWith('/RequestGuard')) return { toIdString };
         if (name.endsWith('/BigMapBattle')) return { BIGMAP_BATTLE_TEXT };
+        if (name.endsWith('/BundleCatalog')) return BundleCatalog;
         if (name.endsWith('/BattleStartService')) return { startBattle: (type: number, params: readonly string[], _caller: unknown, isCurrent: () => boolean) => {
             battles.push({ type, params, isCurrent });
             return new Promise((resolve) => { finishBattle = resolve; });
@@ -165,7 +196,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     };
     const entry = new Entry();
     return { entry, context, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks,
-        cancelledEnters,
+        cancelledEnters, assetLoads,
         setChapters(chapters: readonly number[] | null) {
             chapterSnapshot = chapters ? { idleTime: 0, chapters: [...chapters] } : null;
         },
@@ -405,5 +436,22 @@ test('入口按正式布局尺寸创建模型，不修改共享配置快照', as
     assert.equal(h.presenters[0].deps.config?.world.rows, 100);
     assert.equal(h.presenters[0].deps.config?.world.cols, 100);
     assert.equal(source.world.rows, 40);
+    h.entry.close();
+});
+
+/**
+ * `bigmap` 在热更 manifest 里是 `onDemand`（`build_hotupdate.mjs` 默认只把 `remoteRef` 设为
+ * startup），所以热更后第一次进大世界时它必然是未加载状态。bundle 的远程 url 与 version
+ * 只有 `CocosAssetService` 会从 `CocosBundleRegistry` 解析 —— 直连 `assetManager.loadBundle(name)`
+ * 会落到 Creator 构建期地址，拿到旧包或 404，而且全程零报错。这条用例把通道钉住。
+ */
+test('页面宿主 prefab 经 AssetService 显式指定 bigmap bundle 加载', async () => {
+    const h = createOwnerHarness();
+    await h.entry.open({});
+    const hostLoads = h.assetLoads.filter((item) => item.path === 'ui/bigmap/BigMapPageHost');
+    assert.equal(hostLoads.length, 1, '页面宿主只加载一次');
+    // 不做整对象 deepEqual：沙箱（vm）里造的对象与用例线程的对象原型不同，比较恒失败。
+    assert.equal(hostLoads[0].options?.bundle, BundleCatalog.BIGMAP_BUNDLE,
+        '必须走 AssetService 并显式指定 bundle，否则热更后拿不到远程地址/版本');
     h.entry.close();
 });

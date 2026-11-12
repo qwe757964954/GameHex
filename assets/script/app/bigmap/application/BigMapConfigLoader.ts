@@ -50,7 +50,7 @@ async function applyScheduleOverrides(config: ConfigService, parsed: IBigMapConf
  * 退回空表，视图就用概念图。
  */
 async function readItemRows(config: ConfigService, parsed: IBigMapConfig): Promise<readonly unknown[]> {
-    const usesItem = [...parsed.resources.values()].some((res) => res.itemId > 0);
+    const usesItem = Array.from(parsed.resources.values()).some((res) => res.itemId > 0);
     if (!usesItem) return [];
     try {
         return await config.getTable('item');

@@ -223,7 +223,7 @@
     "_isAbsVerticalCenter": true,
     "_originalWidth": 720,
     "_originalHeight": 1280,
-    "_alignMode": 1,
+    "_alignMode": 2,
     "_lockFlags": 45,
     "_id": ""
   },
@@ -4054,7 +4054,7 @@
     "_isAbsVerticalCenter": true,
     "_originalWidth": 720,
     "_originalHeight": 1280,
-    "_alignMode": 1,
+    "_alignMode": 2,
     "_lockFlags": 45,
     "_id": ""
   },

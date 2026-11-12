@@ -230,6 +230,8 @@ export class MainEntranceList extends Component {
             // 所以按「未通关」处理 —— 与 `EMPTY_ENTRANCE_PLAYER_STATE` 同口径：
             // 缺数据时宁可不显示（少一个入口），也不要凭空放行一个还没打通的活动。
             isTerritoryLevelPassed: () => false,
+            // 同理：「据点激活」也需要领地快照，这个列表拿不到 ⇒ 一律按未激活。
+            isTerritoryLevelActivated: () => false,
         };
     }
 

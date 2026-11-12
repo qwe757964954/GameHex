@@ -67,7 +67,7 @@ import {
     LEAGUE_LEVEL_ROW_CTX_PREFIX,
     LEAGUE_LEVEL_ROW_TITLE_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
-import { assetPath } from './helpers/asset-paths';
+import { BUNDLE_ROOTS, assetPath } from './helpers/asset-paths';
 
 // ============================================================
 // A. 文案口径（LeagueTexts 子面板段）
@@ -656,7 +656,7 @@ test('D13 ⚠️ prefab 里 7 个 spriteFrame 引用全部能解析到「sprite-
     // 没有 `@f9941` 帧 ⇒ prefab 里的引用**悬空**。它**不报错、`sprite.spriteFrame` 也不是 null**，
     // 只有画面上是品红块 ⇒ 必须在静态阶段核「引用能否解析」。
     const metas = new Map<string, { file: string; type: string; hasFrame: boolean }>();
-    indexImageMetas('assets/resources', metas);
+    for (const root of BUNDLE_ROOTS) indexImageMetas(root, metas);
 
     const raw = readFileSync(PREVIEW_PREFAB, 'utf8');
     const refs = [...new Set([...raw.matchAll(/"([0-9a-f-]{36}@f9941)"/g)].map((m) => m[1]))];

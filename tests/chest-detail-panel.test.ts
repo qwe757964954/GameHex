@@ -47,6 +47,9 @@ test('宝箱详情弹窗：根节点挂专用组件，22 个引用全部绑上�
         openLabel: 'cc.Label',
         openCostRoot: 'cc.Node',
         openCostLabel: 'cc.Label',
+        // 2026-11-11 加速态：绿底 + 播放 icon（三处绑定，缺一个就只剩黄色「加速」）。
+        openFrame: 'cc.Sprite',
+        openSpeedUpIcon: 'cc.Node',
         closeButton: 'cc.Button',
     };
     for (const [key, type] of Object.entries(expected)) {

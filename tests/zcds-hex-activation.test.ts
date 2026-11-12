@@ -64,7 +64,6 @@ function readPvpTables(): ZCPvpTables {
         pvpPity: readPvpRef('pvpPity'),
         pvpTileGen: readPvpRef('pvpTileGen'),
         pvpTileGenParams: readPvpRef('pvpTileGenParams') as ZCPvpTables['pvpTileGenParams'],
-        pvpBaseTeamWeight: readPvpRef('pvpBaseTeamWeight'),
     };
 }
 

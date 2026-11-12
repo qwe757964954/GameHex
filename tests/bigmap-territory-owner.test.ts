@@ -12,7 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import {
     BigMapCampRepository,
     type IBigMapCampGateway,
@@ -74,7 +74,7 @@ class CampGateway implements IBigMapCampGateway {
     subscribeRoleEvents(): () => void { return () => undefined; }
 }
 
-async function onlinePresenter(): Promise<BigMapPresenter> {
+async function onlinePresenter(): Promise<BigMapModel> {
     const slg = new BigMapSlgRepository(new SlgGateway(MY_CITY), config, () => NOW, 100);
     const camps = new BigMapCampRepository(new CampGateway([
         // 我的城被标已占领；另一座被别的玩家占了；第三座还开着。
@@ -82,7 +82,7 @@ async function onlinePresenter(): Promise<BigMapPresenter> {
         { campId: ENEMY_CITY, opType: 1, state: 1 },
         { campId: NEUTRAL_CITY, opType: 0, state: 1 },
     ]), () => NOW);
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config,
         storage: { read: () => { throw new Error('联机不能读取离线基地'); }, write: () => {} },
         saveKey: 'territory-owner-online',
@@ -108,7 +108,7 @@ test('联机档：我的城染绿，其他玩家占的城染红，没被占的�
 
 test('联机档：还没查到据点状态的城按无主处理，不猜成「别人的红」', () => {
     const slg = new BigMapSlgRepository(new SlgGateway(MY_CITY), config, () => NOW, 100);
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config,
         storage: { read: () => { throw new Error('联机不能读取离线基地'); }, write: () => {} },
         saveKey: 'territory-owner-online-empty',
@@ -125,10 +125,10 @@ test('联机档：还没查到据点状态的城按无主处理，不猜成「�
 // 离线档：本地「已占领」就是我自己打的
 // ---------------------------------------------------------------------------
 
-function offlinePresenter(occupiedCityIds: readonly number[]): BigMapPresenter {
+function offlinePresenter(occupiedCityIds: readonly number[]): BigMapModel {
     const fresh = parseBigMapSave(null, config, NOW).save;
     const text = serializeBigMapSave({ ...fresh, battle: { ...fresh.battle, occupiedCityIds: [...occupiedCityIds] } });
-    return new BigMapPresenter({
+    return new BigMapModel({
         config,
         storage: { read: () => text, write: () => {} },
         saveKey: 'territory-owner-offline',

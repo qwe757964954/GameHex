@@ -10,6 +10,7 @@ import { _decorator, Button, Component, Label, Node, Tween, tween, Vec3 } from '
 import { EventMgr } from '../../framework/event/EventMgr';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 import { TERRITORY_IDLE_REWARD_INTERVAL_MS } from '../territory/model/TerritoryIdleReward';
+import { HangPage } from './HangPage';
 import { formatHms } from './HangTable';
 
 const { ccclass, property } = _decorator;
@@ -82,8 +83,15 @@ export class HangEntryButton extends Component {
     // 公开入口
     // ============================================================
 
+    /**
+     * 点金币车：**只打开征收弹窗，不直接领奖**（山猫 2026-11-09）。
+     *
+     * 领取 / 扫荡都在弹窗里按按钮触发（`HangPage` 的 `ClaimBtn` / `SweepBtn`）——
+     * 早先这里直接 `emit(claimIdleRewards)`，玩家点一下入口就静默领掉了，
+     * 看不到服务端到底发了什么。
+     */
     onClick(): void {
-        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
+        void HangPage.open({});
     }
 
     applySnapshot({ state }: ITerritoryRenderEvent): void {

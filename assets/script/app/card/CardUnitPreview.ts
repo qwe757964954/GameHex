@@ -67,7 +67,7 @@ export class CardUnitPreview {
         if (this.prefab === prefab && this.visual?.isValid) {
             this.hero.node.active = true;
             this.hero.enabled = false;
-            // 同一份 prefab 可能被多张卡共用（`units/萨满/萨满` = 萨尔 / 雷蕉），体型按卡不同 ⇒
+            // 多张卡可能共用同一份 prefab（形态皮肤 / 共用兵种），而 `prefabSize` 按卡配 ⇒
             // 早退分支必须按新系数重写一遍缩放，否则第二张卡会带着第一张的尺寸。
             this.applySize(prefabSize);
             return true;

@@ -244,7 +244,7 @@ export enum TaskType {
 export enum ItemKey {
     suijijinengjuanzhou = 10010,
     suijizhuangbeituzhi = 10011,
-    suijijinengjuanzhou = 10012,
+    suijijinengjuanzhou_10012 = 10012,
     zhangjiesuijibaoshixiangzi = 10117,
     zhangjiesuijijingshixiangzi = 10119,
     yuanlingguo = 10121,

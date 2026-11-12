@@ -19,17 +19,17 @@ function rows(name: string): Array<Record<string, unknown>> {
 
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus',
 ];
 loadPvpTables(Object.fromEntries(tableNames.map((name) => [name, rows(name)])) as unknown as ZCPvpTables);
 
 test('local 2/3/4-player battles initialize every owner and preserve deterministic snapshots', () => {
-    const baseline = JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8'));
+    const baseline = JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8'));
     try {
         for (const playerCount of [2, 3, 4] as const) {
-            const mapName = playerCount === 2 ? 'standard' : `standard_${playerCount}`;
+            const mapName = playerCount === 2 ? 'normal' : `standard_${playerCount}`;
             configureZCMap(JSON.parse(readFileSync(assetPath(`config/maps/${mapName}.json`), 'utf8')));
             const built = buildZCClientCombatConfig(captureZCMatchConfig(), null);
             const owners = ownersForPlayerCount(playerCount);
@@ -66,7 +66,7 @@ test('local 2/3/4-player battles initialize every owner and preserve determinist
 });
 
 test('多人局某玩家最后建筑被摧毁后，其剩余空地归中立，不能被残兵重新占回', () => {
-    const baseline = JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8'));
+    const baseline = JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8'));
     try {
         configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard_4.json'), 'utf8')));
         const config = buildZCClientCombatConfig(captureZCMatchConfig(), null).config;

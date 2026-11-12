@@ -9,6 +9,11 @@ import type { IZCModelServices } from './ZCModelServices';
 export type ZCUnitDefinitionResolver = (unitId: string) => ZCUnitDefinition;
 export type ZCCardResolver = (owner: ZCOwner, cardId: string) => ZCDeckCard | undefined;
 
+export interface IZCBarracksSpawn {
+    readonly hexId: number;
+    readonly portalHexId?: number;
+}
+
 export interface ZCEconomyContext extends Pick<IZCModelServices, 'rules' | 'bonuses' | 'unitCount' | 'spawnUnit'> {
     owners: readonly ZCOwner[];
     homeId(owner: ZCOwner): number;
@@ -17,7 +22,9 @@ export interface ZCEconomyContext extends Pick<IZCModelServices, 'rules' | 'bonu
     grantGold(owner: ZCOwner, amount: number, hexId: number): void;
     constructionComplete(hex: ZCHexState): void;
     recruitPatch?(owner: ZCOwner, card: ZCDeckCard): Readonly<ZCUnitStatPatch>;
-    spawnHex?(hex: ZCHexState): number;
+    spawnHex?(hex: ZCHexState): IZCBarracksSpawn;
+    spawnUnit(owner: ZCOwner, card: ZCDeckCard, tier: number, hexId: number,
+        portalHexId?: number, barracksHexId?: number): void;
 }
 
 /** 建筑建造、周期推进、主城和金矿收入、兵营产兵规则。 */
@@ -107,10 +114,11 @@ export class ZCEconomySystem {
         const amount = Math.max(1, Math.floor(card.cycleBaseValue ?? 1)
             + Math.round(patch?.singleRecruitNumFlat ?? 0)
             + Math.round(patch?.singleRecruitLegionCountFlat ?? 0));
-        const spawnHexId = context.spawnHex ? context.spawnHex(hex) : hex.id;
+        if (context.unitCount(hex.owner) >= cap) return;
+        const spawn = context.spawnHex ? context.spawnHex(hex) : { hexId: hex.id };
         for (let index = 0; index < amount; index += 1) {
             if (context.unitCount(hex.owner) >= cap) break;
-            context.spawnUnit(hex.owner, card, hex.tier, spawnHexId);
+            context.spawnUnit(hex.owner, card, hex.tier, spawn.hexId, spawn.portalHexId, hex.id);
         }
     }
 

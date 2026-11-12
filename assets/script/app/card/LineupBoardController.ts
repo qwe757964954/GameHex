@@ -59,14 +59,14 @@ export class LineupBoardController extends ControllerBase {
     /**
      * 切页签。
      *
-     * **发包门槛是「当前方案是一份完整阵容」**（满编 + 每个品级都有，`model.currentLineupComplete`）：
-     * 空方案 / 半成品只在本地切，一个包都不发 —— 它们没有「最新阵容」可同步。
+     * 切走前的方案完整时才自动保存；选中请求还要求目标方案完整。
+     * 空方案 / 半成品可在本地查看，不能同步为服务端的出战阵型。
      *
      * 满足门槛后按顺序走两步，顺序不能颠倒：
      *  ① **切走前**：有未提交改动就先 `saveFormation`（协议口径是「保存并选中」）。
      *     失败就停在原方案 —— 草稿和 dirty 都还在，玩家看到「保存失败」，
      *     而不是切过去、再切回来发现服务器上还是旧阵容。
-     *  ② **切换本身**：`CmdFormationSelectReqMsg` 把「出战阵型」指向新页签，卡组不动。
+     *  ② **切换本身**：目标方案完整时，`CmdFormationSelectReqMsg` 把「出战阵型」指向新页签，卡组不动。
      *     没有它，服务端记着的仍是切走的那条（①的 select=1 正好指在它上面）。
      */
     private async switchPreset(index: number): Promise<void> {
@@ -92,7 +92,7 @@ export class LineupBoardController extends ControllerBase {
      */
     private async selectOnServer(): Promise<void> {
         const state = this.options.model.snapshot;
-        if (!state || this.isDisposed) return;
+        if (!state || this.isDisposed || !this.options.model.currentLineupComplete) return;
         const formationId = this.options.model.selectedFormationId;
         if (!await this.options.repository.selectFormation(formationId, this)) return;
         if (this.isDisposed) return;

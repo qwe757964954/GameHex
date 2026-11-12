@@ -124,7 +124,7 @@ node tools/map-editor/server.mjs           # 只起服务，手动访问 http://
 对账规则：布局里出现的 `cityId` / `monsterId` 必须在 `BigMap-城池配置` / `BigMap-野怪配置` 里存在，
 否则拒绝发布（否则进游戏就是「图上有城、表里没数值」）。
 
-命令行发布（同时写策划侧 `doc/塔防数据配置/json/{sever,client}` 两份）：
+命令行发布（同时写策划侧 `doc/塔防数据配置/json/sever` 一份）：
 
 ```powershell
 python tools/map-editor/copy_bigmap_maps.py --dry-run

@@ -24,7 +24,7 @@ test('详情排版由Prefab Widget和Layout管理，正文自动增高，引用�
     for (const name of ['Close', 'Primary', 'Secondary']) {
         assert.equal(component(name, 'cc.Button')._transition, 0);
         assert.equal(component(name, 'cc.Button')._target, null);
-        const art = node(name)._children.map((ref: any) => objects[ref.__id__]).find((child: any) => child._name === 'ButtonArt');
+        const art = node(name)._children.map((ref: any) => objects[ref.__id__]).find((child: any) => child._name === 'ButtonArt') ?? node(name);
         assert.equal(art._active, true, name + ' 的底图必须在 prefab 激活，原生 Button 不会替代旧 setSkin 激活它');
         const sprite = art._components.map((ref: any) => objects[ref.__id__]).find((item: any) => item.__type__ === 'cc.Sprite');
         assert.equal(sprite._enabled, true);

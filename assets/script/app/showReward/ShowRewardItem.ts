@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Sprite, SpriteFrame, Tween, tween, Vec3 } from 'cc';
+import { _decorator, Color, Component, Sprite, SpriteFrame, UIOpacity, Tween, tween, Vec3 } from 'cc';
 import { GoodsBox } from '../itemdetail/GoodsBox';
 import { FGUI_FPS, SR_STAR_TRACKS } from './ShowRewardTable';
 
@@ -9,11 +9,13 @@ const sec = (frames: number): number => frames / FGUI_FPS;
 
 /**
  * 一个奖励格（FGUI `列表_奖励列表Item`，100×100）：GoodsBox + 闪光 Glow + 5 星点。
- * 节点 active 恒 true：挂脚本的节点 inactive 时 onLoad 不跑、会静默不显示，显隐交给 Grid。
+ *
+ * 显隐由虚拟列表管理 active，格子通过 UIOpacity 隐藏（错峰等待期不许露出 0.2 倍的小方块 + 全亮闪光），轮到本格时再由 `appear()` /
+ * `settle()` 显示。使用透明度避免列表重新激活槽位时露出待播态。
  *
  * 出现动画（老端 t0，18 帧 ≈ 0.3s）：0 帧 scale 0.2、闪光全亮、星点 scale 0；
  * 5 帧放大、星点飞散、闪光淡出；10 帧星点缩回。
- * 槽位会被复用，每格只播一次（账本在 Page 的 playedAni），铺新数据前先 resetAppear。
+ * 槽位会被复用，每格只播一次（账本在 Page 的 playedAni），铺新数据前先 prepareAppear。
  */
 @ccclass('ShowRewardItem')
 export class ShowRewardItem extends Component {
@@ -25,6 +27,9 @@ export class ShowRewardItem extends Component {
 
     @property({ type: [Sprite], tooltip: 'Stars：5 个星点（FGUI n2~n6，按顺序传入，与 SR_STAR_TRACKS 对应）' })
     stars: Sprite[] = [];
+
+    @property(UIOpacity)
+    opacity: UIOpacity = null!;
 
     /** 当前承载的数据下标（`-1` = 未绑定）；动画回调靠它核身份，错峰期间槽位可能已被复用。 */
     dataIndex = -1;
@@ -80,8 +85,37 @@ export class ShowRewardItem extends Component {
         }
     }
 
+    /**
+     * 待播态：起手态就位，但**整格先隐藏**。
+     * 错峰 `100×(index+1)` ms 内这一格还没轮到，露出来就是一个 0.2 倍的发光小方块
+     * （玩家看到的「小点」）；按口径先隐藏，等轮到本格需要显示时再显示。
+     */
+    prepareAppear(): void {
+        this.resetAppear();
+        this.opacity.opacity = 0;
+    }
+
+    /**
+     * 终态兜底：停动画、整格还原、闪光与 5 星全部收掉，并恢复可见。
+     * 任何「本次不播动画」的分支（已播过 / 判重 / 被打断）都必须走这里 ——
+     * `stopAnim()` 只停 tween，不复位 Glow 的 alpha 与星点 scale，会留半截轨迹。
+     */
+    settle(): void {
+        this.stopAnim();
+        this.node.setScale(1, 1, 1);
+        if (this.glow) this.glow.node.active = false;
+        for (const star of this.stars) {
+            if (!star) continue;
+            star.node.active = false;
+            star.node.setScale(0, 0, 1);
+        }
+        this.opacity.opacity = 255;
+    }
+
     /** 播一次出现动画（同一格只播一次，见类注释）。 */
     appear(): void {
+        // active 由列表持有，延迟动画不能重新激活已回收槽位。
+        this.opacity.opacity = 255;
         this.resetAppear();
         const rev = this.animRevision;
 

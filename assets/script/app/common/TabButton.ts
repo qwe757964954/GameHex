@@ -1,6 +1,12 @@
 import { _decorator, Button, CCFloat, CCInteger, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { RdExprBinding } from '../rd/RedDotBinding';
 import { RedDot } from './RedDot';
+import {
+    BUILDING_SHAKE_STRETCH,
+    SPAWN_SHAKE_TOTAL_SECONDS,
+    spawnShakeScaleX,
+    spawnShakeScaleY,
+} from '../../core/hex/ShakePresentation';
 
 const { ccclass, property } = _decorator;
 const TAB_ENABLED_TINT = new Color(255, 255, 255, 255);
@@ -124,6 +130,11 @@ export class TabButton extends Component {
     private isEnabled = true;
     private isSelected = false;
 
+    /** 「奖励粒子飞进本按钮」受击抖动的已用时（< 0 = 空闲）；基准缩放在起播那刻读一次。 */
+    private hitElapsed = -1;
+    private hitBaseScaleX = 1;
+    private hitBaseScaleY = 1;
+
     protected onLoad(): void {
         this.ensureInit();
     }
@@ -173,6 +184,46 @@ export class TabButton extends Component {
      */
     setIconFrame(frame: SpriteFrame | null): void {
         if (frame) this.icon.spriteFrame = frame;
+    }
+
+    /**
+     * 「奖励粒子飞进本按钮」的受击抖动反馈（2026-11-10）。
+     *
+     * 复用 `core/hex/ShakePresentation` **同一条**「先 Y 后 X」两段脉冲（建筑生成 120% 档），
+     * 不另造曲线 —— 与 `TerritoryStationView.playBuildingShake` / `ZCUnitView.playSpawnShake`
+     * 同源，改拉伸量只改 core 一处。
+     *
+     * ⚠️ 只写 `icon.node` 的缩放，且**乘进起播那一刻的基准缩放**：不覆盖 `setSelected` 的位移，
+     *    也不覆盖将来别人给图标设的缩放。纯 `elapsed` + `update`，不建 tween（本组件是共用件，
+     *    战令页也在用，tween 挂在复用节点上回收后会继续写）。
+     */
+    playHitFeedback(): void {
+        if (!this.icon?.isValid) return;
+        if (this.hitElapsed < 0) {
+            const scale = this.icon.node.scale;
+            this.hitBaseScaleX = scale.x;
+            this.hitBaseScaleY = scale.y;
+        }
+        this.hitElapsed = 0;
+    }
+
+    /** 逐帧推进受击抖动；播完把缩放**显式复位**并停表（不是靠曲线自己恒 1）。 */
+    update(dt: number): void {
+        if (this.hitElapsed < 0) return;
+        const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        this.hitElapsed += step;
+        if (!this.icon?.isValid) {
+            this.hitElapsed = -1;
+            return;
+        }
+        if (this.hitElapsed >= SPAWN_SHAKE_TOTAL_SECONDS) {
+            this.icon.node.setScale(this.hitBaseScaleX, this.hitBaseScaleY, 1);
+            this.hitElapsed = -1;
+            return;
+        }
+        const x = spawnShakeScaleX(this.hitElapsed, BUILDING_SHAKE_STRETCH);
+        const y = spawnShakeScaleY(this.hitElapsed, BUILDING_SHAKE_STRETCH);
+        this.icon.node.setScale(this.hitBaseScaleX * x, this.hitBaseScaleY * y, 1);
     }
 
     /** 选中态：底图 / 图标 / 图标位移 / 选中底板 / 文字颜色**两态都绝对赋值**（只写一半会多个同时高亮）。 */

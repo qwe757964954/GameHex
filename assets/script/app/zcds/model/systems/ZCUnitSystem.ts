@@ -1,6 +1,7 @@
 import type { IZCModelServices } from './ZCModelServices';
 import type { ZCCombatTarget, ZCUnitState } from '../ZCGameTypes';
 import { ZCCombatSystem } from './ZCCombatSystem';
+import { ZC_PORTAL_FLIGHT_SECONDS } from '../ZCBattlePresentationQueue';
 import type { IZCDashStep } from './ZCMovementSystem';
 import type { IZCDashHit } from './ZCUnitTargeting';
 
@@ -10,6 +11,18 @@ export interface IZCUnitTargeting {
     current(unit: ZCUnitState): ZCCombatTarget | null;
     isInAttackRange(unit: ZCUnitState): boolean;
     isOutOfAttackRange(unit: ZCUnitState): boolean;
+    /**
+     * 「触发范围」闸门：普攻射程内有没有可打的目标（2026-11-11）。
+     *
+     * 可选：缺省 ⇒ 技能触发不设闸门（老上下文 / 单测夹具行为逐字不变）。
+     * 实现见 `ZCUnitTargeting.hasTargetInAttackRange`。
+     */
+    hasTargetInAttackRange?(unit: ZCUnitState): boolean;
+    /**
+     * 当前普攻射程（世界 px），给技能自带搜索半径封顶用；只压不抬。
+     * 可选：缺省 ⇒ 不封顶。实现见 `ZCUnitTargeting.attackReachOf`。
+     */
+    attackReachOf?(unit: ZCUnitState): number;
     findStepToward(unit: ZCUnitState): number | null;
     face(unit: ZCUnitState): void;
     /**
@@ -45,6 +58,14 @@ export interface IZCUnitContext extends Pick<IZCModelServices, 'effectiveDefinit
     now(): number;
     /** 当前硬控（无则 null）；受控单位由状态机闸门冻结一切行动。 */
     controlOf(unit: ZCUnitState): { kind: string; defId: string } | null;
+    /**
+     * **软控：禁普攻**（2026-11-11 磁电菇「麻痹」软控 `numb`）。
+     *
+     * 与 `controlOf` 的区别：硬控冻结一切；软控只挡「这一拳」，移动与技能照常，
+     * 移速的 −50% 由状态自己的 `moveSpeedPct` 走属性链，不在这里处理。
+     * 缺省 ⇒ 不禁（老上下文 / 单测夹具行为逐字不变）。
+     */
+    attackBlockedOf?(unit: ZCUnitState): boolean;
     readonly unitById: ReadonlyMap<number, ZCUnitState>;
     readonly targeting: IZCUnitTargeting;
     readonly movement: IZCUnitMovement;
@@ -70,6 +91,11 @@ export class ZCUnitSystem {
     }
 
     private static startAttack(unit: ZCUnitState, context: IZCUnitContext): void {
+        //  软控闸门（2026-11-11 磁电菇「麻痹」`numb`）：禁普攻，但**不**冻移动。
+        //  直接 return、不改 battleState ⇒ 单位原地站着（追到射程内就停手），
+        //  解控后下一帧 `now >= nextAttackAt` 立刻补一拳 —— 与技能侧「待触发」同一套思路。
+        //  放在这而不是 `updateUnit` 开头，是因为开头那条 `controlOf` 会连移动一起冻住。
+        if (context.attackBlockedOf?.(unit)) return;
         // 出手前重新确认目标与射程，避免在等待期间攻击已经移动的单位。
         context.targeting.acquire(unit);
         if (!context.targeting.current(unit) || !context.targeting.isInAttackRange(unit)) {
@@ -176,6 +202,8 @@ export class ZCUnitSystem {
      * （远距离继续走、贴身且冷却好就走普通挥拳 —— 后者只对没配冲刺的单位有意义）。
      */
     private static tryStartDash(unit: ZCUnitState, dt: number, context: IZCUnitContext): boolean {
+        //  冲刺就是这套普攻本身 ⇒ 软控期间一样不许起冲（否则「禁攻击」形同虚设）。
+        if (context.attackBlockedOf?.(unit)) return false;
         if (unit.battleState === 'attack' || unit.battleState === 'born'
             || unit.battleState === 'moveForward' || unit.battleState === 'dead') return false;
         if (context.now() < unit.nextAttackAt) return false;
@@ -225,7 +253,10 @@ export class ZCUnitSystem {
         const definition = context.effectiveDefinition(unit);
 
         if (unit.battleState === 'born') {
-            if (unit.stateTime >= BORN_SECONDS) ZCCombatSystem.switchState(unit, 'target');
+            if (unit.stateTime >= BORN_SECONDS && (!unit.portalFlight
+                || context.now() >= unit.portalFlight.startedAt + ZC_PORTAL_FLIGHT_SECONDS)) {
+                ZCCombatSystem.switchState(unit, 'target');
+            }
             return;
         }
         //  冲刺后的冷却：**静止在原地播待机动作**（用户 2026-11-03 口径）。

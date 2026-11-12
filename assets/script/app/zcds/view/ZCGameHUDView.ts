@@ -186,6 +186,13 @@ export class ZCGameHUDView extends Component {
      */
     private rowDeadOf: ((owner: ZCOwner, index: number) => boolean) | null = null;
     /**
+     * 是否收起玩家行的**基础信息**（名字 / 头像 / 兵力），由 `render` 按局型置位。
+     *
+     * 守城（塔防）局为 `true`（用户 2026-11-09）：那一局只关心波次与首领，左侧不该再出现
+     * PVP 席位那一套「谁是谁、兵力 14/100」。选点阶段与匹配局仍为 `false`。
+     */
+    private hidePlayerBasicInfo = false;
+    /**
      * 是否处于选点阶段。
      *
      *  `render()` 现在也会开关 `topInfoPanel`（守城局整个收起），所以**必须**记住这个模式 ——
@@ -458,6 +465,7 @@ private fillPlayerRow(node: Node, index: number): void {
             name: this.seatProfiles.get(owner)?.name ?? '',
             head: this.headFrames.get(owner) ?? null,
             unitText: this.rowUnitTextOf?.(owner, index) ?? null,
+            basicInfoVisible: !this.hidePlayerBasicInfo,
             buffA: null,
             buffB: null,
             dead: this.rowDeadOf?.(owner, index) ?? false,
@@ -522,6 +530,9 @@ private fillPlayerRow(node: Node, index: number): void {
         // 左侧四行玩家：逐席位渲染头像框 / 头像 / 名字 / 兵力 / buff。
         // 兵力按 `unit.owner === owner` 现数活口（`battleState === 'dead'` 不算）。
         // **四行都显示**（2026-10-09 用户要求「所有玩家兵力数量都要显示」；设计稿只画了第 1 行的 `14/100`）。
+        // ⚠️ 守城（塔防）局整套基础信息收掉（用户 2026-11-09）：名字 / 头像 / 兵力都不画，
+        //    见 `hidePlayerBasicInfo`。`paintPlayerRows` 之后的重刷都读这个字段，先置位再调。
+        this.hidePlayerBasicInfo = defence !== null;
         //
         // 第三个参数「是否已出局」：直接复用上面刚数好的 `counts`，而不是再调一遍
         // `territoryCountOf` —— 左侧头像的压黑与顶部四格的红 X 因此是**同一帧的同一个数**，

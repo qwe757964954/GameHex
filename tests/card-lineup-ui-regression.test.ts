@@ -1,6 +1,6 @@
 const controllerSource = readFileSync('assets/script/app/card/CardLineupController.ts', 'utf8');
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { assetPath } from './helpers/asset-paths';
 
@@ -462,45 +462,11 @@ test('升级弹窗的按钮直接绑 cc.Button，不再 getComponent', () => {
 // 注意 prefab 里有 **4 个槽位实例**（Row1~Row4 各一个 `Left`），每个都要绑自己的子树。
 // ============================================================================
 
-test('技能槽位的六个引用直接绑组件，四个槽位实例都要绑全', () => {
-    const slotViewSource = readFileSync('assets/script/app/card/CardSkillSlotView.ts', 'utf8');
-    assert.doesNotMatch(slotViewSource, /this\.[A-Za-z]+\.getComponent\(/,
-        'CardSkillSlotView 不许再用 getComponent —— 六个引用都直接绑组件');
-    assert.doesNotMatch(slotViewSource, /^function setLabel/m,
-        'setLabel 辅助函数已删：找不到 Label 就静默跳过，是"文字空白且零日志"的来源');
-
-    const skillPrefab = JSON.parse(
-        readFileSync('assets/bundles/main-pages/ui/card/CardSkill.prefab', 'utf8'),
-    ) as Array<Record<string, any>>;
-    const slotUuid = (JSON.parse(
-        readFileSync('assets/script/app/card/CardSkillSlotView.ts.meta', 'utf8'),
-    ) as Record<string, any>).uuid as string;
-    const slotHead = String(slotUuid).replace(/-/g, '').slice(0, 5);
-    const slotNodes = skillPrefab.filter((item) => item.__type__ === 'cc.Node');
-
-    const expected: Array<[string, string, string]> = [
-        ['nameLabel', 'cc.Label', 'NameLabel'],
-        ['levelLabel', 'cc.Label', 'LevelLabel'],
-        ['descLabel', 'cc.Label', 'DescLabel'],
-        ['lockTip', 'cc.Label', 'LockTip'],
-        ['nextButton', 'cc.Button', 'NextBtn'],
-        ['nextLabel', 'cc.Label', 'Label'],
-    ];
-    const slots = skillPrefab.filter((item) =>
-        item && typeof item === 'object' && String(item.__type__).startsWith(slotHead) && 'nameLabel' in item);
-    assert.equal(slots.length, 4, 'prefab 里应有 4 个技能槽位实例（Row1~Row4）');
-
-    for (const slot of slots) {
-        for (const [key, expectType, expectNode] of expected) {
-            const ref = slot[key] as { __id__?: number } | undefined;
-            assert.ok(ref && typeof ref.__id__ === 'number', `${key} 未绑定`);
-            const component = skillPrefab[ref!.__id__!];
-            assert.equal(component.__type__, expectType, `${key} 必须绑 ${expectType}`);
-            assert.equal(skillPrefab[(component.node as { __id__: number }).__id__]._name, expectNode,
-                `${key} 必须指向 ${expectNode}`);
-        }
-        assert.equal('nameNode' in slot, false, '旧属性名 nameNode 应已清理');
-    }
+test('旧多技能行预制体已经退役，单技能弹窗继续使用当前切图', () => {
+    assert.equal(existsSync('assets/bundles/main-pages/ui/card/CardSkillRow.prefab'), false);
+    const current = readFileSync('assets/bundles/main-pages/ui/card/CardSkill.prefab', 'utf8');
+    assert.ok(current.includes('tierScroll'));
+    assert.equal(current.includes('15627250-f840-421f-9691-c1e6e4672059'), false);
 });
 // ============================================================================
 // 技能行的点击走事件（`CardLineupEvent.SkillStep`）
@@ -513,6 +479,8 @@ test('技能槽位的六个引用直接绑组件，四个槽位实例都要绑�
 const skillRowSource = readFileSync('assets/script/app/card/CardSkillRowView.ts', 'utf8');
 const skillListSource = readFileSync('assets/script/app/card/CardSkillListView.ts', 'utf8');
 const skillPageSource = readFileSync('assets/script/app/card/CardSkillPage.ts', 'utf8');
+const skillControllerSource = readFileSync('assets/script/app/card/CardSkillController.ts', 'utf8');
+const cardCompositionSource = readFileSync('assets/script/app/bootstrap/card/CardPopupComposition.ts', 'utf8');
 
 test('技能行点击走事件，注入式宿主回调已删', () => {
     assert.doesNotMatch(skillRowSource, /ICardSkillRowHost/, 'CardSkillRowView 不许再有宿主接口');
@@ -524,7 +492,40 @@ test('技能行点击走事件，注入式宿主回调已删', () => {
     assert.doesNotMatch(skillListSource, /ICardSkillRowHost/, 'CardSkillListView 不许再有宿主接口');
     assert.doesNotMatch(skillListSource, /this\.host/, '列表不再中转宿主');
 
-    assert.match(skillPageSource, /EventMgr\.instance\.on\(CardLineupEvent\.SkillStep, this\.onSkillStep, this\)/,
-        '页面要订阅 SkillStep，target 传 this（offTarget 才摘得掉）');
+    //  P0 架构整改：View 只做只读渲染，意图订阅 / 业务状态归 Controller，由组合层装配。
+    assert.doesNotMatch(skillPageSource, /cardRepository/, 'View 不得直连 repository');
+    assert.doesNotMatch(skillPageSource, /EventMgr\.instance\.(on|off)/, 'View 不得订阅业务意图');
+    assert.match(skillPageSource, /emit\(CardPopupEvent\.SkillIntent, \{ owner: this \}/);
+    assert.match(skillPageSource, /render\(state: CardSkillListPresentation \| null\)/,
+        'Page 只按只读 ViewState 渲染');
+    assert.match(skillControllerSource, /this\.listen\(CardPopupEvent\.SkillIntent, this\.onUpgradeIntent\)/,
+        'Controller 订阅 SkillStep，由组合层持有并在 dispose 时解绑');
+    assert.match(cardCompositionSource, /createSkillController\(view: CardSkillPage/,
+        '组合层要装配技能会话');
     assert.doesNotMatch(skillPageSource, /skillList\.host\s*=/, '页面不许再往列表注入宿主');
+});
+
+test('单技能预制体：三档说明、单个升级按钮和两类消耗引用齐全', () => {
+    const prefab = JSON.parse(readFileSync('assets/bundles/main-pages/ui/card/CardSkill.prefab', 'utf8'));
+    const page = prefab.find(item => 'tierScroll' in item && 'coinIcon' in item);
+    assert.ok(page);
+    for (const key of ['nameLabel', 'kindLabel', 'cooldownLabel', 'cooldownValue', 'upgradeLabel', 'coinLabel', 'materialLabel']) {
+        assert.equal(prefab[page[key].__id__].__type__, 'cc.Label', key);
+    }
+    const button = prefab[page.upgradeButton.__id__];
+    assert.equal(button.__type__, 'cc.Button');
+    assert.equal(button._transition, 0);
+    assert.equal(button._target, null);
+    assert.equal(prefab.filter(c => c.__type__ === 'cc.Button').length, 1);
+    const scroll = prefab[page.tierScroll.__id__];
+    assert.equal(scroll.useVirtualList, true); assert.equal(scroll.useDynamicSize, true);
+    assert.equal(scroll.itemNodes.length, 1);
+    assert.equal(prefab[scroll.content.__id__]._children.length, 0);
+    for (const key of ['TierTemplate']) {
+        const tier = prefab.find(c => 'descTransform' in c && 'tierLabel' in c);
+        for (const field of ['unlockedBackground', 'lockedBackground', 'tierLabel', 'descLabel', 'lockLabel', 'lockRoot']) {
+            assert.ok(tier[field]?.__id__ > 0, `${key}.${field}`);
+        }
+    }
+    assert.equal(prefab.some(n => n.__type__ === 'cc.Node' && /^Row[1-4]$/.test(n._name)), false);
 });

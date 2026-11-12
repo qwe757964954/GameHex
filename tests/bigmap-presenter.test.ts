@@ -6,10 +6,10 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { createMemoryBigMapStorage, BIGMAP_SAVE_KEY } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
-import type { IBigMapStorage, IBigMapPresenterDeps } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import type { IBigMapStorage, IBigMapModelDeps } from '../assets/script/app/bigmap/application/BigMapModel';
 import type { IBigMapCityRankBoard } from '../assets/script/app/bigmap/model/BigMapRank';
 import type { IBigMapConfig } from '../assets/script/app/bigmap/model/BigMapTypes';
 import { bigMapPlotHexId } from '../assets/script/app/bigmap/model/BigMapBase';
@@ -38,7 +38,7 @@ const CLOCK_CLOSED = 68_400;
 const CLOCK_SNAPSHOT = 50_700;
 
 interface IHarness {
-    presenter: BigMapPresenter;
+    presenter: BigMapModel;
     storage: IBigMapStorage;
     clock: { now: number; chapter: number };
 }
@@ -48,10 +48,10 @@ function makeHarness(
     storage = createMemoryBigMapStorage(),
     now = CLOCK_PREPARE,
     layout: IBigMapLayout | null = null,
-    extra: Partial<IBigMapPresenterDeps> = {},
+    extra: Partial<IBigMapModelDeps> = {},
 ): IHarness {
     const clock = { now, chapter };
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config,
         layout,
         storage,
@@ -214,7 +214,7 @@ test('连打 4 次占领首城，并把占领结果写进存档', () => {
     assert.equal(presenter.cityView(102)!.state, 'open');
 
     // 重新构造一个 Presenter（模拟重进页面），占领结果必须还在。
-    const reloaded = new BigMapPresenter({
+    const reloaded = new BigMapModel({
         config, storage, saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => 3, now: () => 1_000_000,
     });
@@ -360,7 +360,7 @@ test('日程来自配置表：把开战时间推到 23:00，同一时刻就打�
             snapshotAt: 23 * 3600 + 180,
         },
     };
-    const late = new BigMapPresenter({
+    const late = new BigMapModel({
         config: lateConfig,
         storage: createMemoryBigMapStorage(),
         saveKey: BIGMAP_SAVE_KEY,
@@ -396,7 +396,7 @@ test('22:05 tick 出当日快照：一天只出一份，且能写进存档', () 
     assert.deepEqual(presenter.daySnapshot(), snapshot);
 
     // 持久化：关掉重进页面，昨天那份还在
-    const reloaded = new BigMapPresenter({
+    const reloaded = new BigMapModel({
         config, storage, saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => 3, now: () => CLOCK_SNAPSHOT + 300,
     });
@@ -461,7 +461,7 @@ test('野怪：可打、击杀后进 CD，视图给出倒计时', () => {
 
 test('存档损坏时自动退回新档，不把报错抛给界面', () => {
     const storage = createMemoryBigMapStorage({ [BIGMAP_SAVE_KEY]: '{这不是 json' });
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage, saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => 3, now: () => 1_000_000,
     });
@@ -489,7 +489,7 @@ test('脏存档里的非法建筑会被丢掉，主城缺失时自动补回', ()
         battle: { occupiedCityIds: [101, 7777], clearedMonsterLevel: -3 },
     });
     const storage = createMemoryBigMapStorage({ [BIGMAP_SAVE_KEY]: broken });
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage, saveKey: BIGMAP_SAVE_KEY,
         adventureChapter: () => 3, now: () => 1_000_000,
     });

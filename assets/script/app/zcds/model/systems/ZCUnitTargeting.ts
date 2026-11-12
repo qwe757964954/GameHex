@@ -102,6 +102,82 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         return ZCTargetingSystem.isInRange(from, target, reach);
     }
 
+    /**
+     * 「触发范围」闸门：**普攻射程内有没有可打的目标**（2026-11-11 用户口径）。
+     *
+     * 技能到点之后不立刻释放，先过这道闸门：范围内一个敌人都没有 ⇒ 待触发
+     * （冷却保持就绪、不消费），直到目标走进普攻射程才真正放出去。
+     *
+     * 与 `isInAttackRange` 的区别：那个只认**当前锁定的那个目标** —— 锁敌是 RTS 式仇恨锁，
+     * 目标完全可能在半张图外正往这边跑，`current()` 照样返回它。这里问的是「身边有没有人能打」，
+     * 所以不依赖锁敌：锁定的目标就在范围内就直接返回（最常见的一条路，不扫全场），
+     * 否则才按 `acquire` + `isInAttackRange` 同一套判据扫一遍敌我单位。
+     *
+     * 判据与普攻完全同源（`attackReach`：射程 ≤100 补身体半径、>100 打九折，再乘
+     * `combatDistanceScale`），且 `effectiveDefinition` 已经把 `attackRangePct` 算进去 ——
+     * 攻击距离 buff 会同步放大触发范围，不会出现「普攻够得着、技能说没目标」。
+     *
+     * 城墙 / 建筑只认**已锁定的那个**：地块不在 `units` 里，全场遍历一遍地块表太贵，
+     * 而攻城时它一定被 `targetWallHexId` / `targetBuildingHexId` 锁着。
+     */
+    hasTargetInAttackRange(unit: ZCUnitState): boolean {
+        const locked = this.current(unit);
+        if (locked && this.isInAttackRange(unit)) return true;
+        const definition = this.context.effectiveDefinition(unit);
+        const from = this.context.unitPosition(unit);
+        for (const other of this.context.units.values()) {
+            if (other.id === unit.id || other.owner === unit.owner) continue;
+            if (other.battleState === 'dead' || other.hp <= 0) continue;
+            const otherDefinition = this.context.baseDefinition(other.unitId);
+            if (otherDefinition.flying && !definition.canAttackAir) continue;
+            const reach = this.attackReach(definition, otherDefinition.bodyRadius);
+            if (ZCTargetingSystem.isInRange(from, this.context.unitPosition(other), reach)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 当前普攻射程（世界 px）：技能自带的搜索半径**封顶**到它为止。
+     *
+     * 只压不抬：毒箭蘑菇 `strikeRadius = 252`（约 75.6px）本来就比普攻近，
+     * 封顶后仍是 252；镭射飞龙 `strikeRadius = 1100`（330px）、魔术师
+     * `blinkSearchRadius = 600`（180px）这类超出普攻的，一律压到普攻射程。
+     *
+     * 身体半径取**自己**的（与 `castFanSkill` 算扇形半径时同一条口径），
+     * 这样「近战 45 + 身体 24」与普攻 `attackReach` 给的是同一个数。
+     */
+    attackReachOf(unit: ZCUnitState): number {
+        const definition = this.context.effectiveDefinition(unit);
+        return this.attackReach(definition, definition.bodyRadius);
+    }
+
+    /**
+     * 最近的敌对单位到本体的距离（世界 px，中心到中心）。没有可打的目标 ⇒ `Infinity`。
+     *
+     * 给「技能自己的触发距离」用（2026-11-12 用户口径，喷火 102603）：技能到点后如果最近的
+     * 敌人还在 350 表值 px 之外，就**待触发**、不消费 CD —— 避免「普攻射程 550 一到点就喷、
+     * 火焰却只够 350」这种打空气的释放。
+     *
+     * 判据与 `hasTargetInAttackRange` 同源：同一套敌人集合，同样过滤「不会飞 / 打不到空中」。
+     * 但这里**不补身体半径、不打九折** —— 用户说的是「敌人处于 350px 这个距离」，
+     * 量的是两个单位中心的直线距离。
+     */
+    nearestEnemyDistance(unit: ZCUnitState): number {
+        const definition = this.context.effectiveDefinition(unit);
+        const from = this.context.unitPosition(unit);
+        let nearest = Number.POSITIVE_INFINITY;
+        for (const other of this.context.units.values()) {
+            if (other.id === unit.id || other.owner === unit.owner) continue;
+            if (other.battleState === 'dead' || other.hp <= 0) continue;
+            const otherDefinition = this.context.baseDefinition(other.unitId);
+            if (otherDefinition.flying && !definition.canAttackAir) continue;
+            const position = this.context.unitPosition(other);
+            const distance = Math.hypot(position.x - from.x, position.y - from.y);
+            if (distance < nearest) nearest = distance;
+        }
+        return nearest;
+    }
+
     /** 滞回脱离判定：目标移出 reach * 1.3 后才重新追击。 */
     isOutOfAttackRange(unit: ZCUnitState): boolean {
         const target = this.current(unit);

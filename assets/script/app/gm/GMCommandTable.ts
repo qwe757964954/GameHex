@@ -55,6 +55,21 @@ export class GMCommandTable {
         GMCommandTable._serverList = [];
 
         // ===================== 本地指令 =====================
+        this.registerLocal('addBattleGold', (args) => {
+            if (args.length !== 2 || !/^\d+$/.test(args[1]) || !Number.isSafeInteger(Number(args[1])) || Number(args[1]) <= 0) {
+                GMCommandTable.tip('用法：addBattleGold <金币数量（正整数）>');
+                return;
+            }
+            let message = '请先进入战斗并完成出生点选择';
+            const onResult = (result: { message: string }) => { message = result.message; };
+            EventMgr.instance.on(ZCGameUiEvent.DebugAddGoldResult, onResult, GMCommandTable);
+            try {
+                EventMgr.instance.emit(ZCGameUiEvent.DebugAddGold, Number(args[1]));
+            } finally {
+                EventMgr.instance.off(ZCGameUiEvent.DebugAddGoldResult, onResult, GMCommandTable);
+            }
+            GMCommandTable.tip(message);
+        });
         this.registerLocal('addBattleCard', (args) => {
             if (args.length !== 3 || !/^\d+$/.test(args[1]) || !/^\d+$/.test(args[2])) {
                 GMCommandTable.tip('用法：addBattleCard <卡牌ID> <翻格次数>');
@@ -124,8 +139,7 @@ export class GMCommandTable {
         });
 
         this.registerLocal('TestReconnectSocket', async () => {
-            const net = GameNet.instance;
-            const socket = net.netSocket;
+            const socket = GameNet.instance.netSocket;
             if (!socket) {
                 GMCommandTable.tip('网络未初始化');
                 return;
@@ -141,6 +155,7 @@ export class GMCommandTable {
 
         // ===================== 指令列表 =====================
         GMCommandTable._list = [
+            { gm: 'addBattleGold 100000', desc: '加自己对局金币' },
             { gm: 'addBattleCard 68001 1', desc: '指定翻格卡' },
             { gm: '3经验 6钻石 7金币', desc: '资源ID' },
             { gm: '8洗炼石 9体力 10充值币', desc: '资源ID' },

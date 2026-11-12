@@ -40,6 +40,8 @@ test('玩家详情展示全部身份字段及头像，循环索引不越界，�
     const page = new Page();
     page.mode = 'world'; page.selectedCityId = 101;
     page.closeCityPopup = () => {}; page.closeInfoPopup = () => {};
+    // 基地建筑改走贴底卡：这里只跑城池/驻守链路，卡给空桩。
+    (page as any).layout = { node: { children: [] }, renderPlotCard: () => undefined };
     let content: IContent;
     page.showInfoPopup = (value) => { content = value; };
     const frame = {};
@@ -67,7 +69,7 @@ test('玩家详情展示全部身份字段及头像，循环索引不越界，�
     assert.equal(confirmation.secondary.enabled, false);
 });
 
-test('玩家头像按ID合并加载，资源域释放后迟到结果不回填地图或弹窗', async () => {
+test('玩家头像按ID合并加载（榜首 + 名单全员），资源域释放后迟到结果不回填地图或弹窗', async () => {
     const pending: ((frame: object) => void)[] = [];
     const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
@@ -92,19 +94,19 @@ test('玩家头像按ID合并加载，资源域释放后迟到结果不回填地
     }]]) };
     page.loadRolePortraits(data);
     page.loadRolePortraits(data);
-    assert.equal(pending.length, 1);
-    const frame = {};
-    pending[0](frame);
+    // 榜单榜首 + 名单全员（地图按 `pos` 摆人，每个玩家头像都要）⇒ 1001 / 1003 / 1004 三条，重复调用不新增。
+    assert.equal(pending.length, 3);
+    for (const done of pending) done({});
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(written, 1, '榜首头像加载后交给地图');
-    assert.equal(page.rolePortraits.get('1001'), frame);
+    assert.equal(written, 3, '三人头像都交给地图');
+    assert.deepEqual(page.rolePortraits.get('1001'), {});
     data.cities.get(101).rankEntries = [{ rank: 1, avatarId: '1005' }];
     page.loadRolePortraits(data);
-    assert.equal(pending.length, 2, '换榜首后加载新头像，不预载驻守名单');
+    assert.equal(pending.length, 4, '换榜首后加载新头像');
     resources.scope.dispose();
-    pending[1]({});
+    pending[3]({});
     await new Promise((resolve) => setImmediate(resolve));
-    assert.equal(written, 1);
+    assert.equal(written, 3);
     assert.equal(page.rolePortraits.get('1005'), null);
 });
 
@@ -163,6 +165,7 @@ function makeWorldView() {
         if (name === './BigMapWorldLayout') return geometry;
         if (name === './BigMapTheme') return { BIGMAP_COLORS: colors };
         if (name.endsWith('/BigMapCampRepository')) return { BIGMAP_CAMP_REFRESH_SECONDS };
+        if (name.endsWith('/BigMapCampRoleInfo')) return { BIGMAP_CAMP_ROLE_TEXT: { hp: (value: number) => `HP ${value}` } };
         return {};
     }, {
         setTimeout: (callback: () => void) => { const id = ++timerId; timers.set(id, callback); return id; },
@@ -172,7 +175,11 @@ function makeWorldView() {
         view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height?: number }; setPortrait?(frame: unknown): void } }
     interface IView extends Component {
         data: object; viewportTransform: object; content: object; markers: IMarker[];
-        art: { background: { originalSize: { width: number; height: number } } };
+        art: {
+            background?: { originalSize: { width: number; height: number } };
+            plates?: ReadonlyMap<string, object | null>;
+            monster?: object | null;
+        };
         backgroundTransform: { setContentSize(w: number, h: number): void };
         background: { node: { setScale(x: number, y: number, z: number): void; setPosition(x: number, y: number, z: number): void } };
         syncBackground(): void;
@@ -257,7 +264,7 @@ test('据点名条兜底色按 opType 红黄显示，opType 未变时不重绘',
     h.view.markers = [h.view.markers[0]];
     h.view.markers[0].view.setPortrait = () => undefined;
     h.view.data = { ui: {}, world: { monsters: [] }, playerBaseHexId: -1, territories: [],
-        get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true,
+        get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true, campRoles: [],
             campInfo: { campId: 101, opType, occupyRoleId: '', occupyRoleName: '', detailed: false } }]]); },
     };
     h.view.markerLayer = { clear() {} };
@@ -270,6 +277,34 @@ test('据点名条兜底色按 opType 红黄显示，opType 未变时不重绘',
     opType = 1;
     h.view.refresh();
     assert.equal(tints[1], h.colors.campOccupied, '协议只表达有没有人占，角标也只看 opType');
+});
+
+/**
+ * 2026-11-03 用户口径：*「野怪的标识和城池据点的保持一样的红色」*。
+ *
+ * 野怪名条原来取 `monster` 那张蓝底（设计稿 `title_01`），现在与关卡据点共用 `city` 红底。
+ * 这条守的是**取哪个 key**，不是贴图本身 —— `plate_monster` 仍在 `BIGMAP_PLATE_KEYS` 里照常
+ * 加载、只是没有调用点，想切回蓝色只需改 key，不涉及加载链与 prefab 默认底图。
+ */
+test('野怪名条跟城池据点同一条红底，不再单独走蓝色 plate_monster', () => {
+    const h = makeWorldView();
+    const plates = new Map<string, object>([
+        ['monster', { tag: 'plate_monster' }],
+        ['city', { tag: 'plate_city' }],
+    ]);
+    // 只留野怪那一个标记（`makeWorldView` 里下标 2），免得城池分支也往 `used` 里写一遍。
+    h.view.markers = [h.view.markers[2]];
+    h.view.art = { plates };
+    const used: unknown[] = [];
+    const monster = { instanceId: 7, level: 3, name: '荒狼', respawnInSeconds: 0, unlocked: true };
+    h.view.data = { ui: {}, world: { monsters: [{ instanceId: 7 }] }, monsters: new Map([[7, monster]]),
+        cities: new Map(), territories: [], playerBaseHexId: -1, refreshVisibleCamps: () => undefined };
+    h.view.markerLayer = { clear() {} };
+    h.view.applyMarker = (...args: unknown[]) => { used.push((args[1] as { plate: unknown }).plate); };
+    h.view.refresh();
+    assert.equal(used.length, 1, '野怪标记必须渲染一次');
+    assert.equal(used[0], plates.get('city'), '野怪名条要与关卡据点同一条红底');
+    h.view.onDisable();
 });
 
 test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并自动聚焦一次替代旧「定位」按钮', () => {
@@ -339,6 +374,8 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     page.primaryButton = { node: { active: true }, setText() {}, setEnabled(value) { enabled = value; } };
     page.secondaryButton = { node: { active: true }, setText() {} };
     page.setInfoVisible = () => undefined;
+    // 基地建筑改走贴底卡（非模态）：这里只跑城池链路，卡片渲染给个空桩即可。
+    page.layout = { node: { children: [] }, renderPlotCard: () => undefined };
     (page as any).ready = true;
     (page as any).selectedCityId = 101;
     EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {

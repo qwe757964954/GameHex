@@ -18,6 +18,7 @@ import { assetPath } from './helpers/asset-paths';
 const panelSource = readFileSync('assets/script/app/zcds/view/ZCHudBossPanel.ts', 'utf8');
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const hudSource = readFileSync('assets/script/app/zcds/view/ZCGameHUDView.ts', 'utf8');
+const preparedSource = readFileSync('assets/script/app/zcds/application/ZCGamePreparedResources.ts', 'utf8');
 const loaderSource = readFileSync('assets/script/app/zcds/application/ZCGameLoader.ts', 'utf8');
 const panelMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCHudBossPanel.ts.meta', 'utf8'));
 const prefabText = readFileSync(assetPath('ui/game/ZCBossPanel.prefab'), 'utf8');
@@ -220,7 +221,6 @@ test('接线条：守城局实例化首领条、非守城局销毁；顶部信�
     const hud = stripComments(hudSource);
     assert.match(hud, /this\.topInfoPanel\.active = defence === null && !this\.spawnSelectionMode/,
         '守城局收起顶部信息带（计时 + 四格）；选点阶段也不许被顶回来');
-    assert.match(loaderSource, /const BOSS_PANEL_URL = ZC_BATTLE_SHELL_PATHS\.bossPanel/);
-    assert.match(loaderSource, /bossPanelPrefab: hasBossPanel \? BOSS_PANEL_URL : null/);
-    assert.match(loaderSource, /bossPanelPrefab: Prefab \| null;/);
+    assert.match(loaderSource, /bossPanelPrefab: hasBossPanel \? ZC_BATTLE_SHELL_PATHS\.bossPanel : null/);
+    assert.match(preparedSource, /bossPanelPrefab: Prefab \| null;/);
 });

@@ -7,7 +7,7 @@
  * |---|---|---|
  * | A | `ShowRewardTable` 的纯口径（网格几何 / 排序 / 图标分流 / 帧换算 / **虚拟窗口公式**） | 静默 —— 4×3 算成 3×4、货币格只剩品质框、错峰时间算错、滚动后空白 + 数据错行 |
  * | B | 美术映射 ↔ 磁盘 ↔ `.meta` border 双向对账 | 静默留白 / 九宫图按 SIMPLE 画 ⇒ 拉伸变形 |
- * | C | prefab 结构 + 几何（12 个槽位坐标 ↔ `slotLocalCenterOf`、5 星静置位 ↔ `SR_STAR_TRACKS.from`、加色混合、`HintLabel` 的 `overflow`） | 静默 —— 整块偏心 / 星点飞散起点错 / 闪光不发光 / 提示文案被压字号 |
+ * | C | prefab 结构 + 几何（奖励模板与虚拟列表接线 ↔ `slotLocalCenterOf`、5 星静置位 ↔ `SR_STAR_TRACKS.from`、加色混合、`HintLabel` 的 `overflow`） | 静默 —— 整块偏心 / 星点飞散起点错 / 闪光不发光 / 提示文案被压字号 |
  * | D | 视图脚本的**生命周期与账本**（源码文本） | 静默 —— 滑一次重播一遍动画、槽位复用后播放上一格的轨迹、音效不播 |
  * | E | 文案 + 音效 key（与 `mL.json` / `audioConfig.json` / 磁盘 mp3 对账） | 静默 —— 文案与设计稿分叉 / 音效 `null` 静默丢弃 |
  * | F | 全局入口接线 + 反向守卫（`FW` / 组合根 / 两个 Repository / `HeadGridList` 的死回调） | 静默 —— `FW.ShowReward` 空转（20+ 个调用点全不弹）/ 换头像点一格选不中 |
@@ -15,7 +15,7 @@
  * ## 为什么能直接 `import` 这些源码
  *
  * `ShowRewardTable` / `ShowRewardTexts` / `ShowRewardArt` 的 import 链上**没有 `cc`**。
- * ⚠️ `ShowRewardPage` / `ShowRewardItem` / `ShowRewardGrid` / `GoodsBox` **都带 `cc`**
+ * ⚠️ `ShowRewardPage` / `ShowRewardItem` / `GoodsBox` **都带 `cc`**
  * ⇒ 本文件**不** import 它们（相关约束走 D / F 组的源码文本断言）。
  *
  * ⚠️ 这也是 `windowSlotOf()` 从 `ShowRewardGrid.ts`（带 `cc`）搬到 `ShowRewardTable.ts`
@@ -25,6 +25,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import { runInNewContext } from 'node:vm';
+import * as ts from 'typescript';
 import { SR_ART_NAMES, SR_ART_SLICED, SR_ART_TILED } from '../assets/script/app/showReward/ShowRewardArt';
 import { SHOW_REWARD_SOUNDS, SHOW_REWARD_TEXTS, showRewardSoundKey } from '../assets/script/app/showReward/ShowRewardTexts';
 import {
@@ -67,17 +69,14 @@ import { assetPath } from './helpers/asset-paths';
 const CANVAS_W = 720;
 const CANVAS_H = 1280;
 const PREFAB = assetPath('ui/ShowReward/ShowReward.prefab');
-const GENERATOR = 'tmp/gen_showreward.mjs';
 
 const PAGE_SRC = readFileSync('assets/script/app/showReward/ShowRewardPage.ts', 'utf8');
 const ITEM_SRC = readFileSync('assets/script/app/showReward/ShowRewardItem.ts', 'utf8');
-const GRID_SRC = readFileSync('assets/script/app/showReward/ShowRewardGrid.ts', 'utf8');
 const HEAD_SRC = readFileSync('assets/script/app/playerinfo/HeadGridList.ts', 'utf8');
 const FW_SRC = readFileSync('assets/script/framework/FW.ts', 'utf8');
 const BOOTSTRAP_SRC = readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8');
 const CELEB_SRC = readFileSync('assets/script/app/celebration/CelebrationRepository.ts', 'utf8');
 const FIRST_SRC = readFileSync('assets/script/app/firstRecharge/FirstRechargeRepository.ts', 'utf8');
-const GEN_SRC = readFileSync(GENERATOR, 'utf8');
 
 function loadPrefab(): any[] {
     return JSON.parse(readFileSync(PREFAB, 'utf8')) as any[];
@@ -91,13 +90,12 @@ function loadPrefab(): any[] {
  * 永远红着，最后被人顺手删掉。正向断言仍用原文（注释里出现不影响）。
  */
 function stripComments(src: string): string {
-    return src
+    return src.replace(/\r\n/g, '\n')
         .replace(/\/\*[\s\S]*?\*\//g, '')
         .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
 }
 
 /** 剥掉注释的几份源码（供反向断言用）。 */
-const GRID_CODE = stripComments(GRID_SRC);
 const ITEM_CODE = stripComments(ITEM_SRC);
 const PAGE_CODE = stripComments(PAGE_SRC);
 const HEAD_CODE = stripComments(HEAD_SRC);
@@ -392,7 +390,7 @@ test('C1｜根节点与直接子序：PanelBg → TitleImage → RewardGrid → 
 test('C2｜全部节点的 layer 恒 33554432、`_lscale` 只允许 ±1（规则 80① / 生成器自检①）', () => {
     const o = loadPrefab();
     const nodes = o.filter((v) => v && v.__type__ === 'cc.Node');
-    assert.ok(nodes.length > 100, `节点数异常：${nodes.length}`);
+    assert.equal(nodes.length, 18, '仅保留一份奖励模板');
     for (const n of nodes) {
         assert.equal(n._layer, 33554432, `${n._name} 的 layer`);
         assert.ok((n._lscale.x === 1 || n._lscale.x === -1) && (n._lscale.y === 1 || n._lscale.y === -1),
@@ -436,25 +434,25 @@ test('C3｜四个主元素的盒 + 锚点（锚点 = FGUI `pivot`，缩放/生�
     assert.deepEqual(at('HintBg').lpos, [217 - CANVAS_W / 2, CANVAS_H / 2 - 842]);
 });
 
-test('C4｜`Content` 层：与 `list` 同盒同锚点、`_lpos` 恒 (0,0)（不存在则 `viewHeight` 会被覆写）', () => {
+test('C4｜Content 顶部居中，对齐虚拟列表坐标系，只有一个模板', () => {
     const o = loadPrefab();
     const byPath = pathIndex(o);
     const grid = byPath.get('ShowReward/RewardGrid')!;
     const content = byPath.get('ShowReward/RewardGrid/Content');
     assert.ok(content !== undefined, '缺少 Content 层');
     assert.equal(o[content!]._parent.__id__, grid);
-    assert.deepEqual([o[content!]._lpos.x, o[content!]._lpos.y], [0, 0]);
+    assert.deepEqual([o[content!]._lpos.x, o[content!]._lpos.y], [SR_VIEW_W / 2, 0]);
     const ui = uitOf(o, content!);
     assert.deepEqual([ui._contentSize.width, ui._contentSize.height], [SR_VIEW_W, SR_VIEW_H]);
-    assert.deepEqual([ui._anchorPoint.x, ui._anchorPoint.y], [0, 1]);
-    // 槽位全部挂在 Content 下（`ShowRewardGrid.slots` = `content.children`）
-    assert.equal((o[content!]._children as any[]).length, SR_SLOT_COUNT);
+    assert.deepEqual([ui._anchorPoint.x, ui._anchorPoint.y], [0.5, 1]);
+    // Content 仅保留一个奖励模板，运行时由虚拟列表生成并复用槽位。
+    assert.equal((o[content!]._children as any[]).length, 1);
 });
 
-test('C5｜12 个槽位：坐标 = `slotLocalCenterOf(i)`、兄弟序 = 槽位序、锚点 (0.5,0.5)', () => {
+test('C5｜奖励模板保留尺寸、锚点与美术子节点', () => {
     const o = loadPrefab();
     const byPath = pathIndex(o);
-    for (let i = 0; i < SR_SLOT_COUNT; i += 1) {
+    for (let i = 0; i < 1; i += 1) {
         const path = `ShowReward/RewardGrid/Content/Slot${i + 1}`;
         const idx = byPath.get(path);
         assert.ok(idx !== undefined, `缺槽位 ${path}`);
@@ -469,16 +467,16 @@ test('C5｜12 个槽位：坐标 = `slotLocalCenterOf(i)`、兄弟序 = 槽位�
     // 槽位兄弟序必须与 `slots[slot]` 一致（`windowSlotOf` 的 slot 参数就是它）
     const content = byPath.get('ShowReward/RewardGrid/Content')!;
     const names = (o[content]._children as any[]).map((c) => o[c.__id__]._name);
-    assert.deepEqual(names, Array.from({ length: SR_SLOT_COUNT }, (_u, i) => `Slot${i + 1}`));
+    assert.deepEqual(names, Array.from({ length: 1 }, (_u, i) => `Slot${i + 1}`));
 });
 
 test('C6｜每格的兄弟序 = 原稿 displayList 序：Goods → Glow → Star1..Star5', () => {
     const o = loadPrefab();
     const byPath = pathIndex(o);
-    const slot = byPath.get('ShowReward/RewardGrid/Content/Slot7')!;
+    const slot = byPath.get('ShowReward/RewardGrid/Content/Slot1')!;
     assert.deepEqual((o[slot]._children as any[]).map((c) => o[c.__id__]._name),
         ['Goods', 'Glow', 'Star1', 'Star2', 'Star3', 'Star4', 'Star5']);
-    const goods = byPath.get('ShowReward/RewardGrid/Content/Slot7/Goods')!;
+    const goods = byPath.get('ShowReward/RewardGrid/Content/Slot1/Goods')!;
     assert.deepEqual((o[goods]._children as any[]).map((c) => o[c.__id__]._name), ['Frame', 'Icon', 'Num']);
 });
 
@@ -506,7 +504,7 @@ test('C8｜闪光 + 5 星：尺寸 / 加色混合 / 颜色 / 静置位 = `SR_STA
     const o = loadPrefab();
     const byPath = pathIndex(o);
     let additive = 0;
-    for (let i = 0; i < SR_SLOT_COUNT; i += 1) {
+    for (let i = 0; i < 1; i += 1) {
         const slot = `ShowReward/RewardGrid/Content/Slot${i + 1}`;
         const glow = byPath.get(`${slot}/Glow`)!;
         const glowUi = uitOf(o, glow);
@@ -537,7 +535,7 @@ test('C8｜闪光 + 5 星：尺寸 / 加色混合 / 颜色 / 静置位 = `SR_STA
             additive += 1;
         }
     }
-    assert.equal(additive, SR_SLOT_COUNT * (1 + SR_STAR_COUNT));
+    assert.equal(additive, 1 + SR_STAR_COUNT);
 
     // 颜色：闪光 #ffd077、星点 #ffdf95
     const glowColor = compOf(o, byPath.get('ShowReward/RewardGrid/Content/Slot1/Glow')!, 'cc.Sprite')._color;
@@ -585,7 +583,7 @@ test('C10｜`HintLabel`：文案照原稿、`overflow=NONE`（SHRINK 会把 24 �
     assert.deepEqual([uitOf(o, idx)._contentSize.width, uitOf(o, idx)._contentSize.height], [196, 34]);
 });
 
-test('C11｜脚本挂载：Page×1 / Grid×1 / Item×12 / GoodsBox×12，且无 MissingScript', () => {
+test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×1，且无 MissingScript', () => {
     const o = loadPrefab();
     const cids = new Map<string, number>();
     for (const obj of o) {
@@ -595,7 +593,7 @@ test('C11｜脚本挂载：Page×1 / Grid×1 / Item×12 / GoodsBox×12，且无 
     }
     assert.equal(cids.size, 4, `脚本类应有 4 种，实际 ${[...cids.keys()].join(',')}`);
     const counts = [...cids.values()].sort((a, b) => a - b);
-    assert.deepEqual(counts, [1, 1, 12, 12]);
+    assert.deepEqual(counts, [1, 1, 1, 1]);
 });
 
 test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 goods/glow/stars(5)', () => {
@@ -612,7 +610,7 @@ test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 g
     const nameOfRef = (ref: any) => {
         const target = o[ref.__id__];
         // Page 的 5 个 @property 有 **两种** 引用：`Node`（panelBg/titleImage/hintBg）和
-        // 组件（`ShowRewardGrid` / `cc.Label`）—— 后者要顺着 `.node` 拿节点名。
+        // 组件（`VirtualScrollView` / `cc.Label`）—— 后者要顺着 `.node` 拿节点名。
         return target.__type__ === 'cc.Node' ? target._name : o[target.node.__id__]._name;
     };
 
@@ -623,7 +621,7 @@ test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 g
     );
     // 引用类型也要对：`grid` 必须指到组件（Page 直接调 `grid.renderItem = …`），
     // `hintLabel` 必须指到 `cc.Label`（不是节点）—— 指错类型在编辑器里表现为属性框空着。
-    assert.equal(o[page.grid.__id__].__type__, 'b5aeczXSdNCB5eAkMyjp39W', 'grid 应指 ShowRewardGrid 组件');
+    assert.equal(o[page.grid.__id__].__type__, '544earF5qRLB4JTuTnSr11+', 'grid 应指 VirtualScrollView 组件');
     assert.equal(o[page.hintLabel.__id__].__type__, 'cc.Label', 'hintLabel 应指 cc.Label 组件');
     // 老端 `LayerOrder.TipsUI` ⇒ 烘 `PopupLayer.SYSTEM(1)`（`PopupManager.openAsync` 读 prefab 上的这个值）
     assert.equal(page.popupLayer, 1);
@@ -634,8 +632,10 @@ test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 g
     const grid = scriptOf('RewardGrid');
     assert.equal(nameOfRef(grid.content), 'Content');
 
-    for (let i = 1; i <= SR_SLOT_COUNT; i += 1) {
+    for (let i = 1; i <= 1; i += 1) {
         const item = scriptOf(`RewardGrid/Content/Slot${i}`);
+        assert.equal(o[item.opacity.__id__].__type__, 'cc.UIOpacity');
+        assert.equal(nameOfRef(item.opacity), `Slot${i}`);
         assert.equal(nameOfRef(item.goods), 'Goods');
         assert.equal(nameOfRef(item.glow), 'Glow');
         assert.ok(Array.isArray(item.stars), 'stars 必须是数组引用');
@@ -645,50 +645,6 @@ test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 g
 
         const goods = scriptOf(`RewardGrid/Content/Slot${i}/Goods`);
         assert.deepEqual(['frame', 'icon', 'num'].map((k) => nameOfRef(goods[k])), ['Frame', 'Icon', 'Num']);
-    }
-});
-
-test('C13｜网格口径三处相等：`ShowRewardTable` ↔ `gen_showreward.mjs` ↔ prefab 里的槽位坐标', () => {
-    // ① 生成器源码里的常量（生成器读不到 `.ts`，只能各写一份）
-    assert.equal(genConst('SR_VIEW_W'), SR_VIEW_W);
-    assert.equal(genConst('SR_VIEW_H'), SR_VIEW_H);
-    assert.equal(genConst('SR_ITEM'), SR_ITEM_SIZE);
-    assert.equal(genConst('SR_COL_GAP'), SR_COL_GAP);
-    assert.equal(genConst('SR_ROW_GAP'), SR_ROW_GAP);
-    // ⚠️ 生成器里 `SR_COLUMNS` / `SR_ROWS` / `SR_STEP_X` / `SR_STEP_Y` 全是**表达式**不是字面量
-    //    （`columnsOf(SR_VIEW_W)` 之类）⇒ `genConst` 读不到，只能核它们引用的字面量 + 公式本身。
-    assert.ok(/const SR_STEP_X = SR_ITEM \+ SR_COL_GAP;/.test(GEN_SRC), 'SR_STEP_X 应 = 格 + 列距');
-    assert.ok(/const SR_STEP_Y = SR_ITEM \+ SR_ROW_GAP;/.test(GEN_SRC), 'SR_STEP_Y 应 = 格 + 行距');
-    assert.ok(/const columnsOf = \(viewW, itemSize = SR_ITEM, gap = SR_COL_GAP\) =>/.test(GEN_SRC),
-        'columnsOf 的默认参数必须与 Table 层同口径');
-    assert.ok(/const rowsOf = \(viewH, itemSize = SR_ITEM, gap = SR_ROW_GAP\) =>/.test(GEN_SRC));
-    // ⚠️ 这条同时钉住「列/行数由公式算出」这件事：生成器里**不许**出现写死的 `SR_COLUMNS = 4`
-    assert.ok(!/const SR_COLUMNS = \d/.test(GEN_SRC), '列数必须算出来，不许写死');
-    assert.ok(!/const SR_ROWS = \d/.test(GEN_SRC), '行数必须算出来，不许写死');
-    assert.ok(/const SR_COLUMNS = columnsOf\(SR_VIEW_W\);/.test(GEN_SRC), 'SR_COLUMNS 应由 columnsOf 算出');
-    assert.ok(/const SR_ROWS = rowsOf\(SR_VIEW_H\);/.test(GEN_SRC), 'SR_ROWS 应由 rowsOf 算出');
-    // 生成器里的 `SR_SLOT_COUNT` 是「两常量相乘」而不是字面量 ⇒ 单独核它引用的两个常量
-    assert.ok(/const SR_SLOT_COUNT = SR_COLUMNS \* SR_ROWS;/.test(GEN_SRC), 'SR_SLOT_COUNT 应 = SR_COLUMNS × SR_ROWS');
-
-    // ② 5 星的静态位也必须两边一致（`SR_STARS` 是生成器另写的一份）
-    const starBlock = GEN_SRC.match(/const SR_STARS = \[([\s\S]*?)\n\];/);
-    assert.ok(starBlock, '生成器里读不到 SR_STARS');
-    const l = [...starBlock![1].matchAll(/l:\s*(-?[\d.]+),\s*t:\s*(-?[\d.]+),\s*w:\s*([\d.]+)/g)]
-        .map((m) => [Number(m[1]), Number(m[2]), Number(m[3])]);
-    assert.equal(l.length, SR_STAR_COUNT);
-    for (let i = 0; i < SR_STAR_COUNT; i += 1) {
-        const [lx, ty, w] = l[i];
-        // 换算：中心 = (l + w/2, t + w/2) → lpos = (中心x − 50, 50 − 中心y)
-        assert.deepEqual([lx + w / 2 - 50, 50 - (ty + w / 2)], SR_STAR_TRACKS[i].from, `Star${i + 1}`);
-    }
-
-    // ③ prefab 实际烘出来的槽位坐标（由 C5 的公式驱动，这里再独立核一遍「与 ① 一致」）
-    const o = loadPrefab();
-    const byPath = pathIndex(o);
-    for (let i = 0; i < SR_SLOT_COUNT; i += 1) {
-        const idx = byPath.get(`ShowReward/RewardGrid/Content/Slot${i + 1}`)!;
-        const c = slotLocalCenterOf(i);
-        assert.deepEqual([o[idx]._lpos.x, o[idx]._lpos.y], [c.x, -c.y]);
     }
 });
 
@@ -723,7 +679,12 @@ test('D1｜出现动画账本：`playedAni` 只加一次、错峰用 `scheduleOn
     assert.ok(/playedAni\.has\(dataIndex\)/.test(PAGE_SRC), '账本判重');
     // 播放前必须无条件铺数据（规则 82）
     assert.ok(/item\.render\(/.test(PAGE_SRC));
-    assert.ok(/item\.resetAppear\(\)/.test(PAGE_SRC));
+    // 真源迁移：铺数据后走 prepareAppear（先隐藏 + 复用起手态），Page 不许裸调 resetAppear ——
+    // 裸调会把 0.2 倍的发光小方块直接露在错峰等待期（玩家看到的「小点」）。
+    assert.ok(/item\.prepareAppear\(\)/.test(PAGE_SRC), '铺数据后必须先隐藏，等需要显示再显示');
+    assert.ok(!/item\.resetAppear\(\)/.test(PAGE_CODE), 'Page 不该裸调 resetAppear');
+    assert.ok(/prepareAppear\(\): void \{[\s\S]{0,120}?this\.resetAppear\(\)/.test(ITEM_CODE),
+        '待播态必须复用 resetAppear 的起手态');
     assert.ok(/item\.appear\(\)/.test(PAGE_SRC));
 });
 
@@ -766,30 +727,127 @@ test('D5｜点一格 → 物品详情：必须传 resId **和 number** + `allowM
         '物品详情须继承奖励弹窗层级，否则 NORMAL 详情会被 SYSTEM 奖励窗遮挡');
 });
 
-test('D6｜Grid：槽位用 TOUCH_END（不是 Button.CLICK）、只绑一次、闭包捕获槽位序号', () => {
-    assert.ok(/Node\.EventType\.TOUCH_END/.test(GRID_SRC), '槽位点击必须用 TOUCH_END（规则 81b）');
-    assert.ok(!/Button\.EventType\.CLICK/.test(GRID_CODE), '槽位没有 cc.Button，绑 CLICK 是静默死按钮');
-    assert.ok(/for \(let i = 0; i < slots\.length; i \+= 1\)/.test(GRID_SRC), '槽位监听只绑一次');
-    assert.ok(/this\.onSlotTap\(i\)/.test(GRID_SRC), '闭包必须捕获**槽位序号**');
-    assert.ok(/this\.renderItem\?\.\(node, where\)/.test(GRID_SRC), '回调按 index 现取（规则 55）');
-    assert.ok(/if \(this\._moved\) return;/.test(GRID_SRC), '拖动过就不算点击');
+test('D6｜RewardGrid 使用四列虚拟列表，复用单个模板', () => {
+    const o = loadPrefab();
+    const paths = pathIndex(o);
+    const grid = compOf(o, paths.get('ShowReward/RewardGrid')!, '544earF5qRLB4JTuTnSr11+');
+    assert.ok(compOf(o, paths.get('ShowReward/RewardGrid')!, 'cc.Mask'));
+    assert.equal(grid.useVirtualList, true);
+    assert.equal(grid.direction, 0);
+    assert.equal(grid.itemCreationMode, 0);
+    assert.equal(grid.itemNode.__id__, paths.get('ShowReward/RewardGrid/Content/Slot1'));
+    assert.equal(grid.gridCount, SR_COLUMNS);
+    assert.equal(grid.gridSpacing, SR_COL_GAP);
+    assert.equal(grid.spacing, SR_ROW_GAP);
+    assert.equal(grid.autoCenter, false, '末行从第一列向右排，不独立居中');
+    assert.equal(grid.enableItemClickEffect, false);
+    assert.equal(grid.enableMouseWheel, true);
+    assert.match(PAGE_CODE, /this\.grid\.renderItemFn =/);
+    assert.match(PAGE_CODE, /this\.grid\.onItemClickFn =/);
+    assert.doesNotMatch(PAGE_CODE, /ShowRewardGrid|TOUCH_END/);
+    assert.match(PAGE_CODE, /private onItemClick\(dataIndex: number\): void \{\s*if \(!this\.playedAni\.has\(dataIndex\)\) return;/, '待播透明格不可点击');
 });
 
-test('D7｜Grid：滚动模型是「槽位位置固定 + 换数据窗口」（禁 Content 位移）', () => {
-    // 旧模型的两个特征一个都不能有
-    assert.ok(!/applyScroll/.test(GRID_CODE), '不该有 applyScroll');
-    assert.ok(!/this\.content\.setPosition\(/.test(GRID_CODE), '禁让 Content 位移（槽位会跑出视口 ⇒ 空白 + 错行）');
-    assert.ok(/windowSlotOf\(i, this\._topRow\)/.test(GRID_SRC), '必须用 windowSlotOf');
-    assert.ok(/_slotDataIndex\[i\] = has \? where : -1;/.test(GRID_SRC), '每个槽位都要无条件写数据下标');
-    // `refreshList` 不许重置 `_topRow`（点一格后会再调一次，重置会让列表跳回顶部）
-    // ⚠️ 断言必须**只看 refreshList 的方法体** —— `private _topRow = 0;` 这个**字段声明**
-    //    是合法的初始值，全局正则会把声明本身当成违规（曾假红一次）。
-    const refreshBody = GRID_CODE.match(/refreshList\([^)]*\)\s*:\s*void\s*\{([\s\S]*?)\n    \}/);
-    assert.ok(refreshBody, '读不到 refreshList 方法体');
-    assert.ok(!/_topRow = 0/.test(refreshBody![1]), 'refreshList 不该把 _topRow 归零');
-    assert.ok(/this\._topRow = Math\.min\(this\._topRow, this\._maxTopRow\)/.test(GRID_SRC));
-    // 公式的真源在零 cc 的 Table 层（可被 A3 穷举守卫）
-    assert.ok(/export \{ windowSlotOf \} from '\.\/ShowRewardTable'/.test(GRID_SRC), '应转发 Table 层的实现');
+test('D7｜首次铺列表等到 start 后，打开时回到顶部', () => {
+    const waitAt = PAGE_CODE.indexOf('await this.nextPopupFrame()');
+    const presentAt = PAGE_CODE.indexOf('this.present()');
+    assert.ok(waitAt >= 0 && waitAt < presentAt);
+    assert.match(PAGE_CODE.slice(waitAt, presentAt), /revision !== this.loadRevision/);
+    assert.match(PAGE_CODE, /this\.grid\.scrollToTop\(\)/);
+});
+
+test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已播终态', () => {
+    const dependencies: Record<string, unknown> = {
+        cc: { _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} } },
+        '../../framework/ui/PopupBase': { PopupBase: class {} },
+        '../../framework/ui/PopupDef': {}, '../../framework/FW': {},
+        '../itemdetail/ItemDetailPage': {},
+        '../itemdetail/ItemDetailTable': { itemNumberTextOf: String },
+        '../../vscrollview/VScrollView': {}, './ShowRewardItem': {},
+        './ShowRewardTexts': {}, './RewardFrames': {},
+        './ShowRewardTable': { staggerSecondsOf },
+    };
+    const source = ts.transpileModule(PAGE_SRC, {
+        compilerOptions: {
+            module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+        },
+    }).outputText;
+    runInNewContext(source + `
+        const page = new exports.ShowRewardPage();
+        page.isPopupOpen = true;
+        page.node = { isValid: true };
+        page.entries = [{ resId: 1, number: 1 }];
+        page.frames = [{}];
+        const pending = [];
+        page.scheduleOnce = fn => pending.push(fn);
+        let appeared = 0;
+        let settled = 0;
+        const createItem = () => ({
+            dataIndex: -1, render() {}, prepareAppear() {},
+            appear() { appeared++; }, settle() { settled++; },
+        });
+        const item = createItem();
+        const node = { getComponent: () => item };
+        page.renderItem(node, 0);
+        page.renderItem(node, 0);
+        for (const fn of pending.splice(0)) fn();
+        assert.equal(appeared, 1, '同一奖励只开始一次动画');
+        assert.equal(settled, 0, '重复回调不能收掉正在播放的特效');
+        page.renderItem(node, 0);
+        assert.equal(settled, 0, '同槽重复铺数据不能停掉特效');
+        const reused = createItem();
+        page.renderItem({ getComponent: () => reused }, 0);
+        assert.equal(settled, 1, '换槽位展示已播奖励时直接恢复终态');
+        const stale = createItem();
+        page.playedAni.clear();
+        page.renderItem({ getComponent: () => stale }, 0);
+        stale.dataIndex = 1;
+        for (const fn of pending.splice(0)) fn();
+        assert.equal(appeared, 1, '回收后的旧回调不能播放到新奖励上');
+    `, { exports: {}, assert, require(name: string) {
+        if (name in dependencies) return dependencies[name];
+        throw new Error('Unexpected dependency: ' + name);
+    } });
+});
+
+test('虚拟槽位回收后，延迟动画不能改变列表管理的 active', () => {
+    const exports = {} as typeof import('../assets/script/app/showReward/ShowRewardItem');
+    const chain = { to() { return this; }, start() { return this; } };
+    class Component {}
+    class UIOpacity {}
+    const cc = {
+        _decorator: {
+            ccclass: () => (type: unknown) => type,
+            property: () => () => {},
+        },
+        Component, UIOpacity,
+        Tween: { stopAllByTarget() {} },
+        tween: () => chain,
+        Vec3: class { constructor(public x: number, public y: number, public z: number) {} },
+    };
+    runInNewContext(ts.transpileModule(ITEM_SRC, {
+        compilerOptions: {
+            module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
+        },
+    }).outputText, { exports, require(name: string) {
+        if (name === 'cc') return cc;
+        if (name === '../itemdetail/GoodsBox') return { GoodsBox: class {} };
+        if (name === './ShowRewardTable') return { FGUI_FPS, SR_STAR_TRACKS };
+        throw new Error(`Unexpected dependency: ${name}`);
+    } });
+    const item = new exports.ShowRewardItem();
+    const node = { active: true, setScale() {} };
+    Object.assign(item, { node, opacity: { opacity: 255 } });
+    item.prepareAppear();
+    assert.equal(item.opacity.opacity, 0);
+    assert.equal(node.active, true, '等待动画时仍由列表控制激活状态');
+    node.active = false;
+    item.appear();
+    assert.equal(item.opacity.opacity, 255);
+    assert.equal(node.active, false, '旧动画不能重新激活已回收槽位');
+    item.settle();
+    assert.equal(node.active, false);
+    assert.equal(item.opacity.opacity, 255);
 });
 
 test('D8｜Item：动画作废用 `animRevision` + `Tween.stopAllByTarget`（复用槽位不会画上一格轨迹）', () => {
@@ -801,13 +859,50 @@ test('D8｜Item：动画作废用 `animRevision` + `Tween.stopAllByTarget`（复
     assert.ok(/SR_STAR_TRACKS\[i\]/.test(ITEM_SRC), '轨迹必须按序取表');
     // 铺数据必须无条件写四件（规则 82）
     assert.ok(/this\.goods\?\.render\(qualityFrame, iconFrame, numberText, showNumber\)/.test(ITEM_SRC));
-    assert.ok(/resetAppear\(\): void \{\n\s+this\.stopAnim\(\);/.test(ITEM_SRC), 'resetAppear 先停动画');
+    assert.ok(/resetAppear\(\): void \{\n\s+this\.stopAnim\(\);/.test(ITEM_CODE), 'resetAppear 先停动画');
     // `resetAppear` 必须把 5 星摆回 `track.from`（与 C8 的 prefab 静置位是同一组数字）
     assert.ok(/star\.node\.setPosition\(track\.from\[0\], track\.from\[1\], 0\)/.test(ITEM_SRC));
     // 不许写 `off(...)`（规则 71：会中断销毁链）
     assert.ok(!/\.off\s*\(/.test(ITEM_CODE));
-    assert.ok(!/\.off\s*\(/.test(GRID_CODE));
     assert.ok(!/\.off\s*\(/.test(PAGE_CODE));
+});
+
+test('D9｜错峰等待期先隐藏，虚拟列表持有槽位显隐', () => {
+    // ① 待播态：起手态就位但整格隐藏，不许露出 0.2 倍的发光小方块
+    const prepare = ITEM_CODE.match(/prepareAppear\(\): void \{([\s\S]*?)\n    \}/);
+    assert.ok(prepare, '读不到 prepareAppear 方法体');
+    assert.ok(/this\.resetAppear\(\)/.test(prepare![1]), '待播态必须复用起手态');
+    assert.ok(/this\.opacity\.opacity = 0/.test(prepare![1]), '待播态必须整格隐藏');
+
+    // ② appear 先恢复透明度，active 由列表管理。
+    const appear = ITEM_CODE.match(/appear\(\): void \{([\s\S]*?)\n    \}/);
+    assert.ok(appear, '读不到 appear 方法体');
+    const activateAt = appear![1].indexOf('this.opacity.opacity = 255');
+    const startAt = appear![1].indexOf('this.resetAppear()');
+    assert.ok(activateAt >= 0 && startAt > activateAt, '必须先恢复透明度再起动画');
+
+    // ③ settle：停动画 + 整格还原 + 闪光/5 星收掉 + 恢复可见
+    const settle = ITEM_CODE.match(/settle\(\): void \{([\s\S]*?)\n    \}/);
+    assert.ok(settle, '读不到 settle 方法体');
+    assert.ok(/this\.stopAnim\(\)/.test(settle![1]));
+    assert.ok(/this\.node\.setScale\(1, 1, 1\)/.test(settle![1]));
+    assert.ok(/this\.glow\.node\.active = false/.test(settle![1]), '终态必须收掉闪光');
+    assert.ok(/star\.node\.active = false/.test(settle![1]), '终态必须收掉 5 星');
+    assert.ok(/this\.opacity\.opacity = 255/.test(settle![1]), '终态必须恢复可见');
+
+    // ④ Page：复用到不同奖励时恢复终态，同槽刷新保留特效。
+    const render = PAGE_CODE.match(/private renderItem\(node: Node, dataIndex: number\): void \{([\s\S]*?)\n    \}/);
+    assert.ok(render, '读不到 renderItem 方法体');
+    const body = render![1];
+    assert.ok(/item\.prepareAppear\(\)/.test(body), '铺数据后必须先隐藏');
+    assert.ok(/item\.appear\(\)/.test(body));
+    assert.match(body, /if \(!sameEntry\) item\.settle\(\);/);
+
+    assert.doesNotMatch(ITEM_CODE, /this\.node\.active\s*=/, '槽位 active 由列表管理');
+
+    // ⑤ 关窗取消排队回调并清空槽位（缓存复用不留隐藏态 / 半截动画）
+    assert.ok(/this\.unscheduleAllCallbacks\(\)/.test(PAGE_CODE), '关窗要取消错峰回调');
+    assert.ok(/this\.grid\?\.refreshList\(0\)/.test(PAGE_CODE), '关窗要清空槽位');
 });
 
 // ============================================================
@@ -861,7 +956,7 @@ test('F2｜组合根把出口接到 `ShowRewardPage.open`', () => {
     assert.ok(/ShowRewardPage\.open\(\{ userData: \{ goods, isGold \} \}\)/.test(BOOTSTRAP_SRC));
     // 注入点必须与 showTip / playSound 同处（都在 onLoad 里、且早于导航）
     const onLoadAt = BOOTSTRAP_SRC.indexOf('onLoad(): void {');
-    const bindAt = BOOTSTRAP_SRC.indexOf('FW.showReward =');
+    const bindAt = BOOTSTRAP_SRC.indexOf('this.configurePresentation();');
     const navAt = BOOTSTRAP_SRC.indexOf('manager.navigate(');
     assert.ok(onLoadAt > 0 && bindAt > onLoadAt && bindAt < navAt, '注入必须在 navigate 之前');
 });

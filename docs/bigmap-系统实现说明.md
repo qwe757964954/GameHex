@@ -704,11 +704,21 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 
 ### 大地图玩家协议闭环（2026-11-05）
 
-视野上报由 Controller 的 500ms 时钟合并调度；世界模式下每 5 秒刷新当前可见区域，Simple 请求将全部可见据点放进同一个 campIds 集合，不按单城缓存到期时间拆分。若有重叠请求在途，本轮不拆出剩余据点，下轮重新提交最新完整集合。基地模式与进入战斗期间暂停查询。
+视野上报由 Controller 的 500ms 时钟合并调度；世界模式下**新城进入视野时查一次**当前完整可见区域，Simple 请求将全部可见据点放进同一个 campIds 集合，不按单城缓存到期时间拆分。若有重叠请求在途，本轮不拆出剩余据点，下次新城进入视野时重新提交最新完整集合。基地模式与进入战斗期间暂停查询。
 
-联机可见城池查询 `CmdSlgCampRoleInfos`；`CmdSlgGameRoleInfoBroMsg` 更新已知名单，未知名单补查服务器完整快照。广播发生于首次查询期间时，旧回包作废并补发查询，避免玩家出生被漏掉。角色跨城后从旧名单移除；失败不清空已有快照。
+**可见查询按 1s 限速**（`BIGMAP_VISIBLE_REFRESH_INTERVAL_MS`）：拖动是「停顿—拖—停顿」，视图每次停顿后 150ms 防抖就上报一次，每报一次带新城就是一条整批 Simple。Controller 记 `lastVisibleRefreshAt`，距上一轮不足 1s 时只更新可见集合、不发请求，`visibleCampRefreshPending` 保持 true 等下个 500ms 时钟再判；代价是新城占领状态最多晚 1s 出现。判据：`tests/bigmap-controller.test.ts` 「快速滑动的多次视野上报合并到Controller时钟一次查询」。
 
-地图使用真实玩家 `pos` 显示名称、头像、建筑等级和防御血量，联机不再绘制布局 NPC 基地。城池弹窗的“驻守 / 迁城”入口逐位查看全部玩家，包含角色 ID、区服、名称、头像、建筑等级、HP 与位置；uint64 ID 保持字符串。名单态解除城池聚焦隔离，头像通过 HeadArt 与页面资源作用域加载，退出后迟到结果不再写入。新增 `buildLevel=7` 同步经既有生成工具更新随包静态编解码模块。
+整批刷新只决定「发的时候要不要拆包」，**不决定「要不要发」**：`BigMapCampRepository.refresh` 先按 `updatedAt` 算一遍过期集合，简略包在这一批据点全都还在 `BIGMAP_CAMP_REFRESH_SECONDS`(5s) 新鲜窗口内时一条都不发（详情是玩家点出来的，不受简略缓存限制）。视图侧 150ms 防抖后重报同一批可见据点、或裁剪边界上 `marker.node.active` 反复翻转被当成「新城进视野」，都属于这类重复上报 —— 以前整批分支直接绕过 `updatedAt`，会连着刷 `CmdSlgCampSimpleInfoReqMsg`。判据：`tests/bigmap-camp-repository.test.ts` 「同一批可见据点反复上报时，整批刷新在新鲜窗口内不重发」。
+
+拖动中新进视野的城撞上「同批在途」时，本轮当场不发（不拆包），但**不能丢掉**：`scheduleSimpleFollowUp` 只留最新一份可见集合，等在途落地后按它补一轮，补发同样过新鲜度闸门。否则那批新进的城 `opType` 一直拿不到（2026-11-11 之前还会出现「Simple 只 3 个城，RoleInfos 却 4 条，其中两座城不在这次可见集合里」—— 那时名单预取和 `refreshSimple` 同挂一个 `Promise.all`，Simple 被丢、名单照发）。判据：同文件「整批撞上在途被跳过时，在途落地后按最新可见集合补一次」。
+
+**名单跟据点信息一起在滑动时查**（`CmdSlgCampRoleInfosReqMsg`，2026-11-11 山猫口径：*「据点还是要跟 CmdSlgCampInfoReqMsg 滑动的时候请求，然后把玩家摆放在对应的 pos」*）：地图上每个玩家都按 `role.pos` 摆成一个标记，没有名单就没有标记，所以 `BigMapModel.refreshVisibleCamps` 与 `refreshSimple` 同一批发名单。流量靠 `BigMapCampRepository.refreshRolesFor` 的两把闸门压住：① 每城走 `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口（拿到包才记时间戳，失败不占窗口）；② 在途复用详情路径的 `roles:<id>` 锁，「拖到某城 + 同时点开它」只发一条。预取到的城打开城池直接复用缓存（`refreshCampDetail` 的 `rolesCached` 分支），并把 `campRoleStatuses` 推到 `ready`（空名单 ≠ 没查过，否则驻守面板一直「加载中」）。广播补查（未查过的城收到 `CmdSlgGameRoleInfoBroMsg`）仍走 `refreshCampDetail(campId, true)`。判据：`tests/bigmap-camp-repository.test.ts`（窗口内不重发 / 失败不占窗口 / 与详情共用在途锁）、`tests/bigmap-controller.test.ts`「视野刷新按城预取名单（窗口内不重发），打开城池复用缓存」。
+
+**`CmdSlgCampSimpleInfoReqMsg` / `CmdSlgCampRoleInfosReqMsg` 不再按秒轮询**：后端改走 `CmdSlgGameRoleInfoBroMsg`（`eventType` 1攻击 / 2复活 / 3移动 / 4出生，带完整 `SlgGameCameRoleInfo`）推送增量，客户端 `BigMapController.onRoleBroadcast` → `normalizeBigMapRoleEvent` → `BigMapModel.applyRoleEvent` 按 `roleId` 覆盖名单。500ms 时钟本身保留，仍负责 SLG 倒计时、本地时序与视图发布。广播不带 `campId`，由 `role.pos` 反查归属城；未查过的城收到广播时补查一次完整快照；广播发生于首次查询期间时旧回包作废并补发查询，避免玩家出生被漏掉。角色跨城后从旧名单移除；失败不清空已有快照。
+
+🔴 边界：这条广播**只有角色信息，没有据点 `opType`**。去掉轮询后，据点占领状态只在「新城进入视野 / 点击城池详情 / 迁城后回查」三个按需入口刷新；若服务端后续要用广播同步占领状态，需另接带 `opType` 的推送，不能靠玩家广播推。
+
+地图上每个名单角色在 `role.pos` 那一格摆一个标记（`BigMapWorldView.syncRoleMarkers`，2026-11-11）：**复用 `BigMapWorldMarker` 模板**，`icon` 隐藏（玩家没有建筑图），名条 = 建筑等级徽章 + 角色名（`self` / `other` 两档归属色），血量走 `setStatusLine` 单独一行贴在头像上方（`BIGMAP_ROLE_HP_Y`）。标记按 `roleId@pos` 增删（只改血 / 等级 / 头像不重建节点），`pos` 不在本图点位上直接跳过；归属 `cityId` 跟着创建时来自哪座城的名单记下来 —— 城池聚焦时保留**本城**玩家、别城同格玩家仍隐藏，裁剪与点击命中复用既有 `cullMarkers` / `pickBigMapMarker`。判据：`tests/bigmap-transparent-tiles.test.ts`「136条驻守信息各自落在自己的 pos 格」、`tests/bigmap-focus-city.test.ts`「聚焦只显示选中城池与本城名单玩家」。城池弹窗的“驻守 / 迁城”入口逐位查看全部玩家，包含角色 ID、区服、名称、头像、建筑等级、HP 与位置；uint64 ID 保持字符串。头像通过 HeadArt 与页面资源作用域加载（名单全员预取），退出后迟到结果不再写入。新增 `buildLevel=7` 同步经既有生成工具更新随包静态编解码模块。
 
 迁城先选择目标城池，再点该城范围内未被已知玩家占用的有效格，最后确认提交原始 `pos`。Controller 串行写入，迁城请求不自动重试，排队请求超过时限不再发送，退出解除 caller。结果后重新查询 game 与迁出、迁入城池，强制回查排在已有查询之后，避免旧快照覆盖迁城结果；服务端仍决定最终可迁入条件。
 
@@ -725,7 +735,45 @@ npx tsx --test tests/bigmap-info-layout.test.ts     # 15 条：详情弹窗排�
 实现全在 `BigMapWorldView`，两条规则：
 
 - **隐藏**走 `cullMarkers`（平移 / 缩放共用入口，口径不会分叉）：`focusedCityHexId`（选中格是某座城池的锚点才算，选野怪 / 基地不聚焦）非 -1 时，保留选中城及其 `CmdSlgCampRoleInfosRspMsg.campId` 对应名单内的玩家，其他城池、玩家和野怪标记 `active = false`。玩家归属按城池名单中的 roleId 判定，不用 pos 反推或覆盖回包归属；本城玩家仍受视口裁剪。隐藏标记同帧不可点，聚焦解除后恢复。
-- **上移**走 `applyFocusIsolation`：仅选中城池标记按 `layout.points` 幂等重摆（聚焦 +300 = `BIGMAP_FOCUSED_CITY_LIFT`，解除写回原位），其名条 / 等级 / 占领旗跟随。玩家仍在原始 pos，不跟随城池展示位移。选中态与各城名单身份进入 contentKey，玩家归属变化也触发重绘。
+- **上移**走 `applyFocusCamera` + `centerOnHex`：**抬的是相机**（`content.y += 300 * zoom`），不是标记节点（2026-11-11 改，见下节）。`focusOn` 只在「这一格正是当前选中的城池」时带上抬量，所以野怪定位和「回家」都不抬。聚焦建立按绝对位置算（与 `focusWorld` 命令幂等），聚焦解除按增量落回 `300 * zoom`、保留玩家期间的平移。选中态与各城名单身份进入 contentKey，玩家归属变化也触发重绘。
 
-300 是**内容系**坐标（zoom=1 即屏幕 300px；在 85% 机位 zoom≈1.38 下屏幕位移 ≈ 415px）：「当前城主」徽章在 `BigMapCityPopup` 城主区（屏幕系、贴面板顶），地图可平移缩放，两边没法长期精确对齐，所以落固定值、以默认机位观感为准。坑：重摆**直接读 `layout.points`**，不走 `centerOf`（它每次 `new Vec2`，最小 cc 桩的测试会炸）。判据：`tests/bigmap-focus-city.test.ts`。
+300 是**内容系**坐标（zoom=1 即屏幕 300px；在 85% 机位 zoom≈1.38 下屏幕位移 ≈ 415px）：「当前城主」徽章在 `BigMapCityPopup` 城主区（屏幕系、贴面板顶），地图可平移缩放，两边没法长期精确对齐，所以落固定值、以默认机位观感为准。判据：`tests/bigmap-focus-city.test.ts`。
+
+### 城池聚焦从「搬标记」改成「抬相机」（2026-11-11）
+
+用户口径：*「大地图点击查看城池据点，城池据点居中时，背景地图要同步移动」*。
+
+上一版抬的是 `marker.node`：城飞到半空，**脚下那块地和势力色留在原处**，背景自然不跟 —— 截图里就是「城浮在上面、它原来的格子空着」。现在改成抬 `content`：
+
+- `content` 是背景 / 沙地 / 地形 / 势力色（`markerLayer`）/ 标记（`iconLayer`）的**共同父节点** ⇒ 只动它一个，整张地图一起上移，城池永远贴着自己的格子。`background` 是 tiled 时本来就被 `setParent(content)`（见 `setArt`），非 tiled 时由 `bigMapBackgroundLayout` 跟着 `content.position` 重排，两条路都跟得住。
+- **标记位置只在 `addMarker` 落一次**，`applyFocusCamera` 不再碰任何 `node.setPosition`；守卫断言源码里不存在 `marker.node.setPosition(`。
+- 数值不变：`content.y += 300 * zoom` 与旧版「标记内容系 +300」得到同一个屏幕位置（`300 * zoom - 100`，相对视口中心），名条对齐弹窗「当前城主」的观感原样保留。
+- **幂等**：`focusOn`（点选后的 `focusWorld` 命令）和 `applyFocusCamera`（选中态变化那一拍）都按**绝对位置**算（`centerOnHex` = 居中 −100 + 上抬），先 `refresh` 后收命令不会抬两次；`liftedFocusHexId` 记住「已经为哪座城抬过」，同一座城反复刷新直接早退。
+- **可逆**：聚焦解除（点空白 / 关弹窗 / 打开驻守名单 / 迁城态）按**增量**落回 `300 * zoom`，只动 y、保留玩家在这期间平移过的位置，不强行重新居中。
+- ⚠️ `resetCamera` 是绝对重定位，必须把 `liftedFocusHexId` 作废，否则「回家」之后再解除选中会多落一次 300。
+- 坑：`centerOnHex` 走 `centerOf`（每次 `new Vec2`），最小 `cc` 桩必须提供 `Vec2`；断言相机位时 `-center.x * zoom` 在中心为 0 处会产出 `-0`，而 `node:assert/strict` 的 `equal` 是 `Object.is`，要比 `+ 0` 归一。
+- 判据：`tests/bigmap-focus-city.test.ts` 8 条（含「抬相机不搬标记」「解除落回」「focusOn 只给选中城池上抬」与结构守卫）。
+
+### 野怪名条改红（2026-11-03）
+
+用户口径：*「野怪的标识和城池据点的保持一样的红色」*。
+
+名条贴图本来按归属四选一（`BIGMAP_PLATE_KEYS`：`monster` 蓝 / `city` 红 / `self` 绿 / `other` 深灰），野怪走的是 `monster` 那张蓝底。现在 `BigMapWorldView.syncMarkers` 的 monster 分支直接取 `plates.get('city')` ⇒ 野怪与关卡据点共用**同一条红底**，视觉上「凡是要打的都是红的」。
+
+- 只改**取哪个 key**，不动 `BigMapWorldMarker.render`（它按贴图自身 `rect.width || originalSize.width` 定尺寸）；`plate_city` 与 `plate_monster` 都是 202×56，命中框与文字位置零改动。
+- `plate_monster` 仍留在 `BIGMAP_PLATE_KEYS` / `BIGMAP_PLATE_FILES` 里照常加载（一张 PNG，代价可忽略），只是**不再有调用点** —— 想回到蓝色区分，改这一处 key 即可，不用动加载链或 prefab 默认底图。
+- 野怪与城池的其余视觉区分仍在：建筑图标不同（骨门 121 宽 vs 马戏团 235 宽）、等级徽章位、锁定态灰度（`icon.color`）。
+- 判据：`tests/bigmap-camp-view.test.ts`「野怪名条跟城池据点同一条红底」。
+
+### 基地界面隐藏「探索」按钮（2026-11-11）
+
+用户口径：*「基地界面隐藏 搜索icon，搜索icon 只在大地图显示」*。
+
+左下角那颗放大镜（`ExploreButton`，「探索」= 定位当前能打、等级最高的野怪，意图 `searchMonster`）原来常显，基地模式也挂在屏幕上。它找的是**地图上的野怪**，基地界面既看不到野怪、也没有可平移缩放的相机，留着只会点出一句「附近没有可挑战的野怪」。
+
+- 显隐进 `BigMapPageLayout.applyMode`：`this.exploreButton.node.active = mode === 'world'` —— 与 `baseView` / `buildMenuButton` / `queuePanel` 同一处、同一套 `mode` 判定，`render()` 与 `setArt()` 都会走到，不需要另加开关。
+- 位置不动：Widget `bottom = navigationHeight + 128`（`applyNavigationHeight` 照旧设，节点隐藏时 `updateAlignment` 无害），模式按钮仍在 `+20`，所以基地界面左下角只剩「大地图」一颗，不会留空位。
+- prefab 的 `_active` 保持 `true`（编辑器里看得见、好摆位置），初始态由 `initialize → buildUi → render → applyMode` 在首帧定。
+- 入战锁不变：`sendIntent` 仍看 `inputEnabled`，隐藏与禁用是两条独立的门。
+- 判据：`tests/bigmap-page-bindings.test.ts`——`render(base)` 后 `exploreButton.node.active === false`，`render(world)` 后又变 `true`。
 

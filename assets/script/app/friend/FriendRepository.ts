@@ -255,7 +255,7 @@ export class RuntimeFriendRepository implements IFriendRepository {
         if (ids.length === 0) return 'failed';
         // 本地也把「申请过」的记录清掉：删掉的人不该再显示「已申请」
         for (const id of ids) this.appliedIds.delete(id);
-        return this.send(() => new RequestFriendsRemove({ targetId: ids as any }, caller));
+        return this.send(() => new RequestFriendsRemove({ targetId: ids }, caller));
     }
 
     async black(targetId: string, caller?: object): Promise<FriendRequestResult> {

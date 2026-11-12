@@ -92,11 +92,24 @@ nocompressed_list = get_list_from_file(os.path.join(SCRIPT_DIR, "nocompressed.tx
 
 os.makedirs(client_config_path, exist_ok=True)
 
+selected_table = None
+if len(sys.argv) > 2:
+    if len(sys.argv) != 4 or sys.argv[2] != '--table':
+        raise SystemExit('Usage: ref_compress_json.py [config_path] [--table table]')
+    selected_table = sys.argv[3].removesuffix('.json')
+    if not os.path.isfile(os.path.join(config_path, selected_table + '.json')):
+        raise SystemExit('Table not found: ' + selected_table)
+
 small = {}
+if selected_table and os.path.isfile(ref_json_path):
+    with open(ref_json_path, encoding='utf-8') as file:
+        small = json.load(file)
 for file_name in os.listdir(config_path):
     # 示例调用
     if file_name.endswith(".json"):
         name,ext = os.path.splitext(file_name)
+        if selected_table and name != selected_table:
+            continue
         if name in exclude_list:
             continue
        
@@ -112,12 +125,13 @@ for file_name in os.listdir(config_path):
             small[name] = my_dict
             continue
         
-        with open(os.path.join(client_config_path, file_name), 'w', encoding='utf-8') as file:
+        with open(os.path.join(client_config_path, file_name), 'w', encoding='utf-8', newline='\n') as file:
             # 将字典转换为 JSON 格式的字符串并写入文件
             # indent=4 用于格式化输出，让 JSON 更易读
             json.dump(my_dict, file, separators=(',', ':'), indent=0, ensure_ascii=False)
 
-with open(os.path.join(client_config_path, "refSmallAll.json"), 'w', encoding='utf-8') as file:
-    # 将字典转换为 JSON 格式的字符串并写入文件
-    # indent=4 用于格式化输出，让 JSON 更易读
-    json.dump(small, file, separators=(',', ':'), indent=0, ensure_ascii=False)
+if not selected_table or selected_table in small_list:
+    with open(os.path.join(client_config_path, "refSmallAll.json"), 'w', encoding='utf-8', newline='\n') as file:
+        # 将字典转换为 JSON 格式的字符串并写入文件
+        # indent=4 用于格式化输出，让 JSON 更易读
+        json.dump(small, file, separators=(',', ':'), indent=0, ensure_ascii=False)

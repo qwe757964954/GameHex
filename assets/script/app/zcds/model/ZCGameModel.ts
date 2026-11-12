@@ -18,7 +18,40 @@ import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
 /** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。 */
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
 export const ZC_MAX_TICK_SECONDS = 5;
+/**
+ * NPC 翻地块间隔的**下限**（秒），`openGrideTime` 的守卫值。
+ *
+ * 表里 `openGrideTime` 是「关卡翻地块频率」，策划想调快就填更小的数（用户 2026-11-11）。
+ * 旧实现拿全局 `enemyAiIntervalSeconds`（2.8s）当下限，**1~2.7 秒的配置会被静默抬回 2.8**，
+ * 调快等于没配。这里改成固定 1 秒下限：小于 1 秒按 1 秒算（再小就是逐帧翻格，AI 会失去节奏，
+ * 也不符合「两次点击之间的最小间隔」这个语义）。
+ */
+export const ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS = 1;
+/**
+ * 塔防怪物体型的缩放上限。
+ *
+ * `defenceModWave.monsterSize` 当**倍率**用（1 = 原尺寸，2 = 两倍），这里只做防御性封顶：
+ * 策划手滑写成 20 时不至于把整个棋盘糊住。
+ */
+export const ZC_DEFENCE_MONSTER_SCALE_MAX = 2.5;
 const EMPTY_CONNECTED_DEVELOPED_HEXES: readonly number[] = [];
+
+/**
+ * `defenceModWave.monsterSize` → 单位模型缩放倍率。
+ *
+ * 口径（2026-11-09 用户：出怪表的「怪物体型」没用上、BOSS 模型太小）：
+ *  · `1` = 普通体型，**不缩放**（与改动前逐字一致）；
+ *  · `2` = BOSS 体型，放大一倍；更大的值按表走，封顶 {@link ZC_DEFENCE_MONSTER_SCALE_MAX}；
+ *  · 缺省 / 0 / 负数 / 非数字 ⇒ 1（老存档、老配置不加尺寸）。
+ *
+ * 值直接当倍率用（不再另设「档位 → 倍率」映射表）：策划想调大小只改表里那一个数，
+ * 客户端不需要跟着改常量。
+ */
+export function defenceMonsterScale(monsterSize: number | null | undefined): number {
+    const size = Number(monsterSize);
+    if (!Number.isFinite(size) || size <= 1) return 1;
+    return Math.min(ZC_DEFENCE_MONSTER_SCALE_MAX, size);
+}
 
 import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
 import { ZCAttackResolutionSystem, type IZCAttackResolutionContext, type IZCStructureDamageSource } from './systems/ZCAttackResolutionSystem';
@@ -57,6 +90,7 @@ import {
 import { compileZCMatchRuntime } from './ZCMatchRuntimeCompiler';
 import type { ZCUnitStatPatch } from './ZCModifierRuntime';
 import { ZCPvpTileType } from './ZCPvpTileRules';
+import type { ZCPvpRarityModifier } from './ZCPvpTileRules';
 import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
@@ -155,8 +189,6 @@ const STRUCTURE_TARGET_BODY_RADIUS = 80;
  * 而每帧最多也只多算 2~3 个点（`hexIdAt` 是 3×3 邻域查表，代价可控）。
  */
 const STRUCTURE_SAMPLE_STEP = 8;
-/** 平顶六边形相邻格中心距（视觉步长，与 hexDistance 归一单位一致）。 */
-const HEX_STEP = HEX_GRID_LOGICAL_ROW_STEP;
 /** 伤害飘字存活时长（秒）。 */
 const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
 /**
@@ -265,6 +297,7 @@ export class ZCGameModel {
     private readonly units = new ZCUnitRegistry();
     private readonly statusSystem = new ZCStatusSystem();
     private readonly projectileSystem = new ZCProjectileSystem();
+    private readonly statusResolutionSystem = new ZCStatusResolutionSystem();
     private readonly projectileContext: ZCProjectileContext;
     private readonly targetingContext: ZCTargetingContext;
     private readonly unitTargeting: ZCUnitTargeting;
@@ -336,13 +369,25 @@ export class ZCGameModel {
     private readonly pveDefence: Readonly<ZCPveDefenceConfig> | null;
     private readonly outcomeContext: IZCOutcomeContext;
     /**
-     * NPC（本地 AI 席位）翻地块的最小间隔（秒）。
+     * NPC（本地 AI 席位）**两次翻地块之间的最小间隔**（秒）。
      *
-     * 取 `max(rules.enemyAiIntervalSeconds, 关卡 openGrideTime)`：`openGrideTime` 是策划表
-     * 「关卡翻地块频率」，**AI 的执行速度不允许超过这个限制**（用户 2026-11-07）。
-     * 0 / 缺省 ⇒ 只受全局 AI 间隔约束。
+     * 口径（2026-11-11 用户确认）：
+     * - `openGrideTime` 是「战斗中每个 NPC 点地块的频率」，**只压 NPC**，玩家翻格不受影响；
+     * - 它约束的是「两次点击之间的间距」，**计时从第一次翻格之后才开始**（首格不被拖后，
+     *   见 `restoreOrCreateState` 的 `aiClock` 预置）；
+     * - 守卫值 `max(ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS, openGrideTime)`，下限 **1 秒**
+     *   （旧实现拿全局 2.8s 当下限，1~2.7 秒的配置会被静默抬回去，策划调快直接失效）；
+     * - `0` / 缺省 ⇒ 不额外限速，仍按全局 `enemyAiIntervalSeconds` 走。
      */
     private readonly aiDevelopIntervalSeconds: number;
+    /**
+     * `levelInfo.gradeProModifier`：NPC 席位翻地块抽卡的品质权重乘数。
+     *
+     * **玩家席位永远不套用**（`drawRulesOf` 里按 `owner === ZCOwner.Player` 拦截）：
+     * 这是关卡难度旋钮，压的是 NPC 抽卡质量，不是改全局地块表。
+     * `null` ⇒ 本关没配（塔防关卡、以及空对象的 17 关）。
+     */
+    private readonly npcRarityModifier: ZCPvpRarityModifier | null;
     private nextDefenceWaveIndex = 0;
     /**
      * 本局**真正的胜方**（`draw` / 未定 = `null`），由 `ZCOutcomeSystem` 判定后写入。
@@ -399,9 +444,18 @@ export class ZCGameModel {
         //  关卡「翻地块频率」只做**限速**：AI 原本 2.8s 一拍，关卡要求 18s 就按 18s 走。
         //  0 表示「够钱就翻」⇒ 不额外压，保持全局节奏。
         const openGrideTime = Number(this.config.openGrideTime);
+        //  关卡「翻地块频率」= NPC 两次点地块的**最小间隔**，可上可下：表里填 1~2.7 秒同样生效，
+        //  只有小于 1 秒才会被压到 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`（旧实现用全局 2.8s 当下限，
+        //  等于只能变慢、不能变快，策划调快会被静默吞掉）。0 = 不额外限速，按全局节奏。
         this.aiDevelopIntervalSeconds = Number.isFinite(openGrideTime) && openGrideTime > 0
-            ? Math.max(this.rules.enemyAiIntervalSeconds, openGrideTime)
+            ? Math.max(ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS, openGrideTime)
             : this.rules.enemyAiIntervalSeconds;
+        //  关卡「抽卡品质权重乘数」：**只给 NPC 席位**。空对象等同于没配，早期就归一成 null，
+        //  免得每一拍抽卡都白跑一次乘算。
+        const gradeProModifier = this.config.gradeProModifier;
+        this.npcRarityModifier = gradeProModifier && Object.keys(gradeProModifier).length > 0
+            ? gradeProModifier
+            : null;
         this.outcomeContext = {
             activeOwners: this.activeOwners,
             pveDefence: this.pveDefence,
@@ -440,7 +494,14 @@ export class ZCGameModel {
             monsterDefinition: card => this.unitDefinition(card.unitId),
             cloneUnit: unit => this.cloneGateUnit(unit),
             spawnBatch: hex => this.spawnFirstBarracksUnit(hex),
-            damageUnit: (unit, damage) => { this.damageUnit(unit, damage, { owner: 'neutral', kind: 'building' }); },
+            damageUnit: (unit, damage, owner) => { this.damageUnit(unit, damage, { owner: owner ?? 'neutral', kind: 'building' }); },
+            damageStructure: (hex, damage, owner, fromId) => {
+                const from = this.config.map.hexes[fromId];
+                const source = { owner, freeX: from.x, freeY: from.y };
+                if (hex.wallHp > 0) this.damageWall(source, hex, damage, true);
+                else this.damageBuilding(source, hex, damage);
+            },
+            capture: (hex, owner) => this.captureEmptyTile(hex, owner),
             changed: () => { this.tileStatesDirty = true; this.invalidateTerrain(); },
         });
         this.restoreOrCreateState(snapshot);
@@ -481,7 +542,7 @@ export class ZCGameModel {
             //  两段式移动的接近阶段要追着目标走（2026-11-07 鹿神守护 103405）：
             //  给的是索引查询而不是 `state.units.find`，一个区域每帧一次，不该线性扫全表。
             unitById: (id) => this.units.byId.get(id),
-            hexStep: HEX_STEP,
+            hexStep: HEX_GRID_LOGICAL_ROW_STEP,
             hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
             unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
             unitPosition: this.services.unitPosition,
@@ -489,6 +550,9 @@ export class ZCGameModel {
             ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
             applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
             exportStatusEffects: () => this.statusSystem.exportSnapshot(),
+            //  命中挂状态的概率掷骰（2026-11-11 磁电菇「五雷轰顶」的 30% 麻痹）：
+            //  必须走**对局种子随机**，`Math.random` 会让回放/快照重算给出不同的控制结果。
+            random: this.services.random,
             //  区域波次的吸血（2026-11-04）：区域上下文只有「谁打的 + 这一跳掉多少」，
             //  这里补回源单位，转给普攻同一条 applyLifesteal（比例取法完全同源）。
             //  源单位已阵亡 / 已离场 ⇒ 直接跳过：区域还在飘、人已经没了，不该继续吸。
@@ -569,7 +633,9 @@ export class ZCGameModel {
                 damage: 0,
                 empowered: projectile.empowered,
                 startedAt: this.state.elapsedSeconds,
-                durationSeconds: 0.5,
+                //  与命中那一拍同一条口径：配了 `burstEffectSeconds` 就活够整段动画
+                //  （爆炸龙卷 32 帧 = 1.0667s），否则沿用老口径 0.5s。
+                durationSeconds: projectile.burstEffectSeconds ?? 0.5,
             });
             return;
         }
@@ -617,6 +683,11 @@ export class ZCGameModel {
             setGold: (owner, amount) => this.setGold(owner, amount),
             unitCount: this.services.unitCount,
             spawnUnit: this.services.spawnUnit,
+            //  关卡抽卡规则只作用于 NPC：玩家翻地块拿到的仍是 `pvpTile.rarityWeights` 原表 + 正常金色保底。
+            //  NPC 一并关掉金色保底：保底绕过权重，会让本关的 `gradeProModifier` 形同虚设。
+            drawRulesOf: (owner) => (owner === ZCOwner.Player
+                ? null
+                : { rarityModifier: this.npcRarityModifier, goldPity: false }),
             onNeutralReward: (hexId, itemId, owner, item) => {
                 this.pushNeutralReward(hexId, itemId, owner, item);
             },
@@ -703,7 +774,12 @@ export class ZCGameModel {
                 this.scheduleFirstBarracksUnit(hex.id);
             },
             unitCount: this.services.unitCount,
-            spawnUnit: this.services.spawnUnit,
+            spawnUnit: (owner, card, tier, hexId, portalHexId, barracksHexId) => {
+                const unit = this.spawnUnit(owner, card, tier, hexId);
+                if (unit && portalHexId !== undefined) {
+                    unit.portalFlight = { fromHexId: portalHexId, barracksHexId, startedAt: this.state.elapsedSeconds };
+                }
+            },
             spawnHex: hex => this.neutralFeatures.spawnHex(this.state, hex),
             //  产兵四项修正（`pvpAttrMap` 的 recruitCd/recruitMaxNum/singleRecruitNum/
             //  singleRecruitLegionCount，2026-10-13）。建筑按卡的 `unitId` 找所属单位。
@@ -745,6 +821,8 @@ export class ZCGameModel {
             now: () => this.state.elapsedSeconds,
             effectiveDefinition: this.services.effectiveDefinition,
             controlOf: (unit) => this.statusSystem.controlOf(String(unit.id)),
+            //  软控（磁电菇「麻痹」`numb`）：只挡普攻 / 起冲，不冻移动 —— 与上面那行硬控分开。
+            attackBlockedOf: (unit) => this.statusSystem.attackBlockedOf(String(unit.id)),
             random: this.services.random,
             unitById: this.units.byId,
             targeting: this.unitTargeting,
@@ -764,6 +842,12 @@ export class ZCGameModel {
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
             //  副轨主动（横扫）：走独立的扇形结算，不推进普攻节拍与强化 CD。
             castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
+            //  自身光环（大威天芦「无尘禁土」102503）：在**本体脚下**开一片跟随本体的周期伤害区域。
+            //  与副轨/强化互不干涉 —— 它有自己的 `auraReadyAt`，不推进普攻节拍。
+            castSelfAura: (unit) => ZCAttackResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext),
+            //  五雷轰顶（磁电菇 101603）：沿「目标 → 背朝向」排开 3/4/5 道雷，每道独立结算。
+            //  与副轨 / 光环同样不推进普攻节拍，用自己的 `boltReadyAt`。
+            castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
             //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
             distanceScale: this.rules.combatDistanceScale,
             //  自身施法的治疗（吃口菠萝 100603）：走与吸血同一条 `healUnit` 实现，
@@ -778,6 +862,15 @@ export class ZCGameModel {
             blinkTo: (unit, x, y) => { this.movement.placeAt(unit, x, y); },
             //  挑「最近的敌人」必须与 `strikeTargets` 用同一份坐标，否则会挑中却打不到。
             unitPosition: (unit) => this.services.unitPosition(unit),
+            //  触发范围闸门（2026-11-11 用户需求）：技能到点后还要「普攻射程内有目标」才真的放出去，
+            //  否则进入待触发、不消费冷却。判据与普攻完全同源（同一个 `attackReach`，
+            //  含 `attackRangePct` 与 `combatDistanceScale`），吃攻击距离 buff。
+            inAttackRange: (unit) => this.unitTargeting.hasTargetInAttackRange(unit),
+            //  触发范围本身：给多点打击 / 移形换影的搜索半径封顶，只压不抬。
+            attackReachOf: (unit) => this.unitTargeting.attackReachOf(unit),
+            //  技能**自己的**触发距离（2026-11-12 用户口径）：喷火 102603 要「小于普攻距离、
+            //  与特效 350px 对齐」⇒ 最近目标还在 350 表值 px 之外时待触发，不消费 CD。
+            nearestEnemyDistance: (unit) => this.unitTargeting.nearestEnemyDistance(unit),
         };
     }
 
@@ -788,6 +881,12 @@ export class ZCGameModel {
             this.state = restored.snapshot;
         } else {
             this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
+            //  `openGrideTime` 约束的是「两次点击之间的最小间隔」，**计时从第一次翻格之后开始**（用户 2026-11-11）：
+            //  新建快照时把 AI 时钟预置成一个完整间隔，第一次 `advance` 立刻给一拍（NPC 有钱且
+            //  有相邻可翻格就当场动第一格），之后每 `aiDevelopIntervalSeconds` 秒一拍。
+            //  若从 0 起算，这一列就变成了「开局干等 N 秒」的首刀延迟 —— 配 18 秒要等 18 秒才动，语义不符。
+            //  从存档恢复时不清零：沿用快照里的 `aiClock`，否则读档会让 NPC 白得一次翻格机会。
+            this.state.aiClock = this.aiDevelopIntervalSeconds;
         }
         if (this.pveDefence && this.state.nextDefenceWaveIndex !== undefined) {
             this.nextDefenceWaveIndex = this.state.nextDefenceWaveIndex;
@@ -1155,6 +1254,16 @@ export class ZCGameModel {
         return ZCTileSystem.canDevelopFor(this.state, this.config.map, hexId, owner);
     }
 
+    addDebugGold(amount: number): ZCActionResult {
+        if (this.state.status !== 'playing') return this.fail('本局已经结束。');
+        const gold = this.goldOf(ZCOwner.Player) + amount;
+        if (!Number.isSafeInteger(amount) || amount <= 0 || !Number.isSafeInteger(gold)) {
+            return this.fail('金币数量必须为正整数，且增加后不能超出安全整数范围。');
+        }
+        this.setGold(ZCOwner.Player, gold);
+        return this.success(`已给自己增加 ${amount} 对局金币`);
+    }
+
     /** GM 覆盖本局后续我方抽卡；不改卡组、金币费用或 AI 抽卡。 */
     setDebugDrawCard(cardId: string, count: number): ZCActionResult {
         if (this.state.status !== 'playing') return this.fail('本局已经结束。');
@@ -1215,6 +1324,8 @@ export class ZCGameModel {
         this.debugDraw = null;
         this.debugCards.clear();
         this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
+        // 同 `restoreOrCreateState`：新开一局，AI 时钟预置成一个完整间隔，首格不被 openGrideTime 拖后。
+        this.state.aiClock = this.aiDevelopIntervalSeconds;
         this.neutralFeatures.initialize(this.state);
         this.statusSystem.restore(this.state.statusEffects);
         this.state.statusEffects = this.statusSystem.exportSnapshot();
@@ -1250,7 +1361,7 @@ export class ZCGameModel {
         ));
         this.presentation.prune(this.state.elapsedSeconds);
         ZCArtifactSystem.tick(this.state, dt);
-        ZCStatusResolutionSystem.tick(this.state, dt, this.statusResolutionContext);
+        this.statusResolutionSystem.tick(this.state, dt, this.statusResolutionContext);
         this.updateConstruction(dt);
         this.updateEconomy(dt);
         this.updateBarracks(dt);
@@ -1266,12 +1377,16 @@ export class ZCGameModel {
         this.projectileSystem.update(this.state.projectiles, dt, this.projectileContext);
         this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner));
         this.refreshTileStates();
-        if (!this.pveDefence) {
-            this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
-            if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
-                this.state.aiClock -= this.aiDevelopIntervalSeconds;
-                this.runEnemyAI();
-            }
+        //  塔防局同样要跑 NPC 翻地（2026-11-09）：NPC 靠翻地块解锁新的怪物卡牌，
+        //  早前这里用 `!this.pveDefence` 整段跳过 ⇒ 红方棋盘从开局起一格都不动。
+        //  节奏：时钟从**第一次翻格之后**起算（新建快照时预置成一个完整间隔，见 `restoreOrCreateState`），
+        //  每步最多给一拍，所以同一席位两次翻格的间隔 ≥ `aiDevelopIntervalSeconds`。
+        //  ⚠️ 这里每步只减一次、只跑一拍 `runEnemyAI`（多的部分累加到下一步）—— 一帧内不补拍；
+        //  实时间隔 ≥ 1 秒、步长 0.05 秒，永远补不到第二拍。
+        this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
+        if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
+            this.state.aiClock -= this.aiDevelopIntervalSeconds;
+            this.runEnemyAI();
         }
         this.checkOutcome();
     }
@@ -1687,10 +1802,10 @@ export class ZCGameModel {
         }
     }
 
-    private damageWall(unit: IZCStructureDamageSource, wall: ZCHexState, damage: number): void {
+    private damageWall(unit: IZCStructureDamageSource, wall: ZCHexState, damage: number, isExposed = this.hasExposedWall(wall)): void {
         const center = this.hexCenter(wall.id);
         const result = ZCDamageResolutionSystem.damageWall(
-            wall, damage, unit, this.hasExposedWall(wall), center, this.damageResolutionContext);
+            wall, damage, unit, isExposed, center, this.damageResolutionContext);
         if (!result) return;
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
@@ -2021,10 +2136,16 @@ export class ZCGameModel {
                 continue;
             }
             const count = Math.max(0, Math.floor(wave.monsterCount));
+            // 怪物体型（表 `defenceModWave.monsterSize`）：BOSS 行填 2，模型放大一倍。
+            const sizeScale = defenceMonsterScale(wave.monsterSize);
             for (let index = 0; index < count; index += 1) {
                 const unit = this.spawnUnit(ZCOwner.Enemy, card, Math.max(1, Math.floor(wave.tier)),
                     this.homeId(ZCOwner.Enemy), forceLastWave);
                 if (!unit) continue;
+                // `gateScale` 是本工程现有的「单位级视觉缩放」通道：`ZCUnitView` 的模型缩放、
+                // 头顶血条偏移与兜底体型半径都乘它（见 `ZCUnitView.render`）。体型只影响观感，
+                // 不动 `bodyRadius` 等逻辑数值。
+                if (sizeScale !== 1) unit.gateScale = sizeScale;
                 ledger.ids.push(unit.id);
                 ledger.maxHp += Math.max(0, unit.maxHp);
             }

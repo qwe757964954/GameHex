@@ -105,14 +105,19 @@ test('城池弹窗所有节点都在 UI_2D 层，且面板/按钮/城主区落�
         return node._lpos as unknown as { x: number; y: number };
     };
     // 设计稿 1610 高、工程 1280 ⇒ 只重排纵向：面板贴底（按钮底距底 20），横向居中。
-    assert.deepEqual({ x: posOf('Panel').x, y: posOf('Panel').y }, { x: 0, y: -281.5 });
-    assert.deepEqual({ x: posOf('BtnFight').x, y: posOf('BtnFight').y }, { x: 0, y: -566 });
+    const panel=nodes.find(row=>row._name==='Panel')!;
+    const widget=panel._components.map(r=>rows[r.__id__]).find(c=>c.__type__==='cc.Widget')!;
+    assert.equal(posOf('Panel').x,0);
+    assert.ok(Math.abs(posOf('Panel').y-(-640+Number(widget._bottom)+397/2))<0.001,'面板位置应与 Widget 底边距一致');
+    assert.equal(posOf('BtnFight').x,0);
+    assert.ok(Math.abs(posOf('BtnFight').y-(posOf('Panel').y-284.5))<0.001,'按钮随面板平移，保持原稿纵向间隔');
     assert.deepEqual({ x: posOf('LeftBg').x, y: posOf('LeftBg').y }, { x: -139.5, y: 0 });
     const rank0 = posOf('Rank0');
     assert.deepEqual({ x: rank0.x, y: rank0.y }, { x: 145, y: 140.5 });
     // 城主区挂 root（不是 Panel），漏算 `+281.5` 会连人带台子甩到画布外。
     const lord = posOf('LordTitle');
-    assert.deepEqual({ x: lord.x, y: lord.y }, { x: 218, y: 220 });
+    assert.equal(lord.x,218);
+    assert.ok(Math.abs(lord.y-(posOf('Panel').y+501.5))<0.001,'城主区与面板保持原稿间隔');
 });
 
 test('弹窗文字样式按设计稿写死在预制体里：字号/溢出/对齐/描边不是默认值', () => {
@@ -165,15 +170,17 @@ test('适配全部走 prefab 的 cc.Widget，代码不再手写缩放，且 Dim 
     };
     // 根节点四边对齐（TOP1|MID2|BOT4|LEFT8|CENTER16|RIGHT32 → 45 = 四边）
     assert.equal(widgetOf('BigMapCityPopup')._alignFlags, 45, '根节点必须四边对齐，才能跟弹窗层同尺寸');
-    assert.equal(widgetOf('BigMapCityPopup')._alignMode, 1, 'alignMode 必须是 ALWAYS(1)');
+    assert.equal(widgetOf('BigMapCityPopup')._alignMode, 2, '根节点在窗口尺寸变化时适配');
     // 面板 / 按钮 / 城主区：贴底 + 水平居中（BOT4 + CENTER16 = 20）
+    assert.ok(widgetOf('Panel')._bottom>=160 && widgetOf('Panel')._bottom+397<=1280,'面板保持在视口内并为底部按钮留位');
     const bottoms: Record<string, number> = {
-        Panel: 160, BtnFight: 20, LordTitle: 835, LordPerson: 651, LordBase: 591, LordName: 622, LordScoreBg: 585,
+        Panel: Number(widgetOf('Panel')._bottom), BtnFight: Number(widgetOf('Panel')._bottom)-140, LordTitle: 835, LordPerson: 651, LordBase: 591, LordName: 622, LordScoreBg: 585,
     };
     for (const [name, bottom] of Object.entries(bottoms)) {
         const widget = widgetOf(name);
         assert.equal(widget._alignFlags, 20, `${name} 应为「贴底 + 水平居中」`);
-        assert.equal(widget._bottom, bottom, `${name} 的贴底间距应为 ${bottom}`);
+        const expected=name==='Panel'||name==='BtnFight'?bottom:bottom+Number(widgetOf('Panel')._bottom)-160;
+        assert.ok(Math.abs(widget._bottom-expected)<0.001, `${name} 的贴底间距应随面板整体平移`);
         assert.equal(widget._alignMode, 1, `${name} 的 alignMode 必须是 ALWAYS(1)`);
     }
     // 代码侧：不许再手写缩放（那是改之前 layout() 干的事）

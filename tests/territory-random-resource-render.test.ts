@@ -6,6 +6,8 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryNodeUIModule from '../assets/script/app/territory/model/TerritoryNodeUI';
+import * as territoryPreviewCinemaModule from '../assets/script/app/territory/model/TerritoryPreviewCinema';
 import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
@@ -149,10 +151,13 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     assert.equal(passed.caption, '', '已领取 ⇒ 名称底条文字也要清空（只清 icon 会让它冒出来）');
     assert.equal(passed.badge, '', '已领取 ⇒ 不再有「已领取」角标');
 
-    // 🔴 前置宝箱未领取 ⇒ 后继格银币数字用**红色**提示（山猫 2026-10-21：
-    // 前置格没有通关状态 = 还没 passCell 领取）。服务端 completed 记在 unlockCells
-    // （`isPrerequisiteComplete` 固定资源特例的镜像），所以这里**只改视觉、解锁照常可进行**；
-    // 前置领取后（owned）数字回白。
+    // 🔴 2026-11-09 用户（配图：紫框圈住一格「银币 + 红色 15」）：「前置地块未解锁，展示的
+    // 也是锁 icon，不是银币 + 显示红色的 UI」。
+    // 前置宝箱（fixedResource）**解锁了却没点开**这一种，旧口径是「后继格银币数字染红」
+    // （山猫 2026-10-21）—— 那是**没有锁的红字**，玩家读成"钱不够"。现在整条判据上移到
+    // 模型侧 `TerritoryProgress.isPrerequisitePending` ⇒ 进 `lockBlockedCells` ⇒
+    // 画锁 + `syncStations` 把 `isCondition` 置 false 摘掉整条价格。
+    // 所以 `stationRenderOf` 这一层**不再**为它染红，红字只留给真的缺钱。
     const dependentOnFixed = { id: 'bonus-2', type: 'bonus', cellId: 2, footprint: [2],
         unlock: { requiredCells: [1], silverCost: 20, staminaCost: 1 } };
     const prereqFixedMap = {
@@ -172,9 +177,9 @@ test('locked sites show only the silver icon and amount, and random sites hide t
         ...prereqInput,
         progress: { isCellUnlocked: (cell: number) => cell === 1, isOwned: () => false },
     });
-    assert.equal(beforeClaim.conditionTextColor, 'red',
-        '前置宝箱已解锁未领取 ⇒ 后继格数字红字（前置没有通关状态）');
-    assert.equal(beforeClaim.interactive, true, '红字只是视觉提示，解锁照常可点');
+    assert.equal(beforeClaim.conditionTextColor, 'white',
+        '前置宝箱未领取不再把银币数字染红（改由模型侧上锁）');
+    assert.equal(beforeClaim.interactive, true, '锁只改画法，解锁照常可点');
     const afterClaim = renderDependent(dependentOnFixed, {
         ...prereqInput,
         progress: { isCellUnlocked: (cell: number) => cell === 1, isOwned: (cell: number) => cell === 1 },
@@ -314,6 +319,12 @@ test('territory art loads the existing silver icon for random conditions', async
             // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
             // 抄一遍就等于两边各改一半也能一起绿。
             if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 「一个节点只在一块地上长 UI」的分组判据（2026-11-09）：给**真模块** ——
+            // 退化成空集合会让「兄弟格被隐掉」的断言假绿，抄一份分组规则又会两边各改一半。
+            if (id === '../model/TerritoryNodeUI') return territoryNodeUIModule;
+            // 「预告首领关」过场的时间轴（2026-11-09）：给**真模块**（纯函数、零 cc）。
+            // 退化成空实现会让「什么时候推镜 / 什么时候放开压住格」的断言无从断言。
+            if (id === '../model/TerritoryPreviewCinema') return territoryPreviewCinemaModule;
             // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
             if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
             // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
@@ -332,6 +343,8 @@ test('territory art loads the existing silver icon for random conditions', async
             // 「银币 / 体力够不够」的纯函数（2026-11-03）：给**真模块**，颜色判据不在这里验
             // （专项在 `territory-wallet-shortfall`），但退化成"永远够"会让颜色断言假绿。
             if (id === '../model/TerritoryCostShortfall') return territoryCostShortfallModule;
+            // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
+            if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

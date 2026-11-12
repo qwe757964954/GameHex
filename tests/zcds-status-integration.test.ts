@@ -22,7 +22,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 function loadActualPvpTables(): void {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus',
     ];

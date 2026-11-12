@@ -16,7 +16,8 @@ import { ChestDetailPanel } from './ChestDetailPanel';
 import type { IChestDetailContent } from './ChestDetailPanel';
 import { CHEST_EVENTS } from './ChestEvents';
 import {
-    CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState, formatChestCountdown,
+    CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState,
+    chestActionCaption, formatChestCountdown,
 } from './ChestTypes';
 import type { IChestDetailData, IChestSlotData } from './ChestTypes';
 import { NewTreasureRepository } from './NewTreasureRepository';
@@ -35,14 +36,17 @@ import { toCount } from '../net/RequestGuard';
 import { battleLevelPassDetail, isLevelPassed } from './BattleLevelPassed';
 import {
     CHEST_ENTRY_POP_SECONDS,
+    activatedTerritoryLevelIds,
     chestEntryPopScale,
     inspectChestEntryConditions,
     isChestEntryVerdictProvisional,
+    isTerritoryLevelActivatedInTerritory,
     isTerritoryLevelPassedInTerritory,
     passedTerritoryLevelIds,
     resolveChestEntryGate,
     territoryLevelCellsInChapter,
 } from './ChestEntryGate';
+import { resolveQuickFindGate } from './QuickFindGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
 
@@ -86,7 +90,7 @@ export class MainPage extends Component {
     /**
      * 「领地格子还没到，先别判」这条 log 只打一次。
      *
-     * 快照到之前 `refreshChestEntry` 会被调好几次（`onLoad`、关卡缓存推送），
+     * 快照到之前 `refreshOpenGates` 会被调好几次（`onLoad`、关卡缓存推送），
      * 不去重就是同一条刷屏 —— 但也不能完全静默，否则「icon 一直不出现」时
      * 日志里连「还在等数据」都看不到。同样要静态：主城页会重建。
      */
@@ -154,6 +158,12 @@ export class MainPage extends Component {
     private readonly chestBlankTouchStart = new Vec2();
     /** 战斗宝箱入口开没开（`open.json` `refId=701`「战斗掉落宝箱」的条件）；`false` = icon 不显示。 */
     private chestEntryUnlocked = false;
+    /**
+     * 快速寻敌开没开（`open` `refId=702`，条件是「激活第 1 章第 4 关地块」）；`false` = 按钮不显示。
+     *
+     * 默认 `false`（fail-closed）：`onLoad` 判完之前一帧都不该露出来。
+     */
+    private quickFindUnlocked = false;
     /** 领地最新一帧的「格子 → 关卡」映射（判 pvp 据点通没通要用）。 */
     private territoryStageByCell: ReadonlyMap<number, TerritoryCampaignStage> | null = null;
     /** 领地最新一帧的进度快照（冻结过的，读 `isAreaPassed` 不会读到半更新状态）。 */
@@ -169,6 +179,13 @@ export class MainPage extends Component {
      * 只看当前章的格子，切到别的章就查不到（2026-11-04 战斗宝箱入口消失的根因）。
      */
     private passedTerritoryLevels: Set<number> | null = null;
+    /**
+     * 账号级「已激活的领地关卡」的内存镜像（源在 `TerritorySaveStore.loadActivatedLevels`）。
+     *
+     * 与 {@link passedTerritoryLevels} 同一个用途、不同判据：快速寻敌要的是「激活」，
+     * 而第 1 章第 4 关（10004）只在第 1 章的 `stageByCell` 里 ⇒ 不落盘就会切章即消失。
+     */
+    private activatedTerritoryLevels: Set<number> | null = null;
     /** 生成缩放动画的起播时刻（秒）；`chestEntryPopping` 为假时不看它。 */
     private chestEntryPopStartedAt = 0;
     private chestEntryPopping = false;
@@ -221,15 +238,18 @@ export class MainPage extends Component {
         }
         // 入口默认是藏的：先压下去再判，未解锁的号一帧都不该瞥见它（`onLoad` 早于首帧渲染）。
         // 四个数量格是入口的一部分，同步藏 —— 只藏 icon 会留下 4 个孤零零的格子。
+        // 快速寻敌同理（`open` 702：激活第 1 章第 4 关地块后才有），一起在判之前压住。
         this.chestToggle.active = false;
         this.setChestCellsVisible(false);
-        this.refreshChestEntry();
+        this.startButton.active = false;
+        this.refreshOpenGates();
     }
 
     start(): void {
         this.renderChests(this.emptyChestSlots);
         this.chestBar.setOpen(false, false);
-        this.startButton.active = true;
+        // ⚠️ 不能无条件 `true`：这会把 `onLoad` 刚判完的「快速寻敌还没解锁」又亮回来。
+        this.startButton.active = this.quickFindUnlocked;
         // 队列照拉：`open.json` 的开启条件是**客户端显示闸**，服务端不看它；
         // 提前把队列焐热，20001 一过 icon 长出来就有数据，不用再等一次往返。
         void this.loadTreasureQueue();
@@ -262,21 +282,24 @@ export class MainPage extends Component {
         GameNet.instance.removeCaller(this);
     }
 
-    private readonly onBattleLevelCacheUpdate = (): void => { this.refreshChestEntry(); };
+    private readonly onBattleLevelCacheUpdate = (): void => { this.refreshOpenGates(); };
 
     // ========================================================
-    // 战斗宝箱入口：开启条件（open.json refId=701「战斗掉落宝箱」）+ 生成动画
+    // `open` 表驱动的入口：战斗宝箱（701）+ 快速寻敌（702）
     // ========================================================
 
     /**
-     * 重算「战斗宝箱入口」开没开。
+     * 重算所有吃 `open` 表的入口（701 战斗宝箱 icon / 702 快速寻敌按钮）。
      *
-     * 条件写在 `open.json` 的 `refId=701`（`battleLevel` + `resId=20001`），这里**不认关卡号**，
-     * 只把整张表交给 `ChestEntryGate` 判 —— 策划换关卡 / 叠条件都不用动客户端。
+     * 条件写在表里，这里**不认关卡号**，只把整张表交给两个闸门判 ——
+     * 策划换关卡 / 换条件类型都不用动客户端。
+     *
+     * 一次读表判两个：两处各读一遍会让「表没进缓存」时并发拉两次
+     * `getRefAllAsync('open')`，也会让两边的进/退时序不一致。
      *
      * 表没进缓存时走异步：`getRefAll` 返回 `undefined` 才是"没缓存"，不能当成"表里没这一行"。
      */
-    private refreshChestEntry(): void {
+    private refreshOpenGates(): void {
         let rows: readonly EntranceVisibleRow[] | null = null;
         try {
             rows = (RefUtil.instance.getRefAll('open') ?? null) as readonly EntranceVisibleRow[] | null;
@@ -284,21 +307,39 @@ export class MainPage extends Component {
             console.warn('[MainPage] 读 open 表缓存失败', error);
         }
         if (rows) {
-            this.applyChestEntryGate(rows);
+            this.applyOpenGates(rows);
             return;
         }
-        void this.loadOpenTableThenGate();
+        void this.loadOpenTableThenGates();
     }
 
-    private async loadOpenTableThenGate(): Promise<void> {
+    private async loadOpenTableThenGates(): Promise<void> {
         let rows: readonly EntranceVisibleRow[] | null = null;
         try {
             rows = (await RefUtil.instance.getRefAllAsync('open')) as readonly EntranceVisibleRow[];
         } catch (error) {
-            console.warn('[MainPage] 拉 open 表失败，战斗宝箱入口先不显示', error);
+            console.warn('[MainPage] 拉 open 表失败，战斗宝箱 / 快速寻敌先不显示', error);
         }
         if (!this.isValid) return;
-        this.applyChestEntryGate(rows ?? null);
+        this.applyOpenGates(rows ?? null);
+    }
+
+    private applyOpenGates(rows: readonly EntranceVisibleRow[] | null): void {
+        this.applyChestEntryGate(rows);
+        this.applyQuickFindGate(rows);
+    }
+
+    /**
+     * 快速寻敌开没开：`open` 的 `refId=702`，条件是 `territoryLevelActivated`（激活第 1 章第 4 关地块）。
+     *
+     * 未解锁 ⇒ 整颗按钮藏起来（与 701 战斗宝箱入口、两侧三角同一个口径：还没开的入口不占位）。
+     * 解锁后由存档记住（`territory.activatedLevels.v1`）⇒ 切章常驻。
+     */
+    private applyQuickFindGate(rows: readonly EntranceVisibleRow[] | null): void {
+        const gate = resolveQuickFindGate(rows, this.entrancePlayerState());
+        this.quickFindUnlocked = gate.unlocked;
+        // 宝箱栏正展开时它是被收起的；这里只决定「解锁后该不该回来」。
+        this.startButton.active = gate.unlocked && !(this.chestBar ? this.chestBar.opened : false);
     }
 
     /**
@@ -322,7 +363,7 @@ export class MainPage extends Component {
      * 未解锁 ⇒ 藏起来，连点击都不接。
      */
     private applyChestEntryGate(openRows: readonly EntranceVisibleRow[] | null): void {
-        const state = this.chestEntryPlayerState();
+        const state = this.entrancePlayerState();
         const gate = resolveChestEntryGate(openRows, state);
         this.chestEntryUnlocked = gate.unlocked;
 
@@ -390,7 +431,7 @@ export class MainPage extends Component {
         if (!stageByCell || stageByCell.size === 0) {
             return '领地格子还没到（stageByCell 为空），等地图刷一帧后再判';
         }
-        const cells = territoryLevelCellsInChapter({ stageByCell, isAreaPassed: null }, levelId);
+        const cells = territoryLevelCellsInChapter({ stageByCell }, levelId);
         // 走到这里说明落盘的跨章成就里也没有它 —— 否则判定早就不是 fail 了。
         if (!cells.length) {
             return `领地这一章没有 levelId=${levelId} 的格子（当前章共 ${stageByCell.size} 格），`
@@ -440,6 +481,60 @@ export class MainPage extends Component {
     }
 
     /**
+     * 领地据点（`levelInfo.levelId`）那一片格子**激活**了没有 —— 快速寻敌（702）的门槛。
+     *
+     * 判据是领地自己那套「激活」：`isCellUnlocked || isOwned || isAreaPassed`
+     * （`TerritoryMapView.isCellActivated` 同款）。**不是** `isAreaPassed`（通关）：
+     * 用户口径是「激活第 1 章第 4 关的**地块**后解锁」，花银币解锁那一刻就该开，
+     * 用通关会晚一整场战斗，打输了还一直锁着。
+     *
+     * 跨章节同 {@link isTerritoryLevelPassed}：先看账号级落盘（`territory.activatedLevels.v1`），
+     * 再看当前章快照 —— 否则切到第 2 章，`stageByCell` 里没有 10004，按钮就会消失。
+     */
+    private readonly isTerritoryLevelActivated = (levelId: number): boolean => {
+        const progress = this.territoryProgress;
+        return isTerritoryLevelActivatedInTerritory(levelId, {
+            stageByCell: this.territoryStageByCell,
+            isCellActivated: progress ? (cellId: number) => MainPage.isCellActivatedIn(progress, cellId) : null,
+        }, this.activatedTerritoryLevelSet());
+    };
+
+    /** 「这一格激活了没有」的单一判据（与 `TerritoryMapView.isCellActivated` 同口径）。 */
+    private static isCellActivatedIn(progress: ITerritoryProgressView, cellId: number): boolean {
+        return progress.isCellUnlocked(cellId) || progress.isOwned(cellId) || progress.isAreaPassed(cellId);
+    }
+
+    /** 已激活关卡的集合（懒读盘）。 */
+    private activatedTerritoryLevelSet(): Set<number> {
+        if (!this.activatedTerritoryLevels) {
+            this.activatedTerritoryLevels = new Set(this.territoryArchive().loadActivatedLevels());
+        }
+        return this.activatedTerritoryLevels;
+    }
+
+    /**
+     * 把当前章**已激活**的关卡整批记进账号成就（切章不回退）。
+     *
+     * 与 {@link rememberPassedTerritoryLevels} 成对：同一处（`onTerritoryRender` 每帧）调，
+     * 同样幂等（内存 `Set` 先挡），同样必须 `Array.from`（release 会降级 `[...set]`）。
+     */
+    private rememberActivatedTerritoryLevels(): void {
+        const progress = this.territoryProgress;
+        if (!progress) return;
+        const activated = this.activatedTerritoryLevelSet();
+        const fresh = activatedTerritoryLevelIds({
+            stageByCell: this.territoryStageByCell,
+            isCellActivated: (cellId: number) => MainPage.isCellActivatedIn(progress, cellId),
+        }).filter((levelId) => !activated.has(levelId));
+        if (!fresh.length) return;
+        for (const levelId of fresh) activated.add(levelId);
+        const added = this.territoryArchive().markLevelsActivated(Array.from(activated));
+        if (added.length) {
+            console.log(`[MainPage] 领地关卡 ${added.join('/')} 已激活，记成跨章成就（切章后快速寻敌不消失）`);
+        }
+    }
+
+    /**
      * 把当前章**已通关**的关卡整批记进账号成就（跨章节，切章不回退）。
      *
      * 落盘只在这一处（`onTerritoryRender` 每帧调），条件判定那边保持纯函数 ——
@@ -473,13 +568,14 @@ export class MainPage extends Component {
     }
 
     /**
-     * 条件判定要的玩家状态。
+     * 条件判定要的玩家状态（701 战斗宝箱 / 702 快速寻敌共用）。
      *
-     * 两个取数口都给：`battleLevel` 查 `CmdBattleLevel`（主线关卡），
-     * `territoryLevel` 查领地格子（pvp 据点）—— 前者服务端对据点不写，后者才能判 20001。
+     * 三个取数口都给：`battleLevel` 查 `CmdBattleLevel`（主线关卡）；
+     * `territoryLevel` 查领地格子通没通（pvp 据点）；`territoryLevelActivated` 查领地格子
+     * 激活没激活 —— 服务端对据点不写 `CmdBattleLevel`，只有领地格子判得了。
      * 其余字段与主界面两侧入口同源，将来表上叠 `roleLevel` 之类也能直接生效。
      */
-    private chestEntryPlayerState(): EntrancePlayerState {
+    private entrancePlayerState(): EntrancePlayerState {
         let role: CmdRole | null = null;
         try {
             role = (CacheMgr.instance.getTlCmdRole() ?? []).find((row) => row != null) ?? null;
@@ -492,6 +588,7 @@ export class MainPage extends Component {
             roleLevel: role ? toCount(role.lv) : 0,
             isLevelPassed,
             isTerritoryLevelPassed: this.isTerritoryLevelPassed,
+            isTerritoryLevelActivated: this.isTerritoryLevelActivated,
         };
     }
 
@@ -515,7 +612,9 @@ export class MainPage extends Component {
     };
 
     private async loadTreasureQueue(): Promise<void> {
-        const result = await this.treasureRepository.load(this, (slots) => this.renderChests(slots));
+        // 队列变化的回调同时刷宝箱栏与详情弹窗（激活回包 / 广播一到就同步，
+        // 不等下一次 1s tick；2026-11-11「点击解锁后详情按钮同步刷新」）。
+        const result = await this.treasureRepository.load(this, () => this.refreshTreasureDisplay());
         if (!this.isValid) return;
         if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.treasureUnavailable);
         else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.treasureLoadFailed);
@@ -531,7 +630,8 @@ export class MainPage extends Component {
     private setChestPanelOpen(open: boolean): void {
         if (!this.chestBar) return;
         this.chestBar.setOpen(open);
-        this.startButton.active = !open;
+        // 🔴 不能只写 `!open`：快速寻敌没解锁时，收起宝箱栏不该把它顺手亮出来。
+        this.startButton.active = this.quickFindUnlocked && !open;
         this.applyChestBlankCatcher(open);
     }
 
@@ -608,6 +708,8 @@ export class MainPage extends Component {
     };
 
     private onStartGame(): void {
+        // 节点藏着时正常点不到；事件被转发进来时也要挡住（`open` 702 没解锁不该能寻敌）。
+        if (!this.quickFindUnlocked) return;
         if (!this.hasTerritoryMap) {
             FW.showTip(MAIN_PAGE_TEXTS.bossMapUnavailable);
             return;
@@ -626,10 +728,11 @@ export class MainPage extends Component {
         // 只能查领地格子）。快照是渲染帧冻结过的，`isAreaPassed` 读它不会读到半更新的状态。
         this.territoryStageByCell = event.state.stageByCell ?? null;
         this.territoryProgress = event.state.progress ?? null;
-        // 先把这一章已通关的关卡记进账号成就，再判条件 —— 顺序反了会让「刚打完的那一帧」
+        // 先把这一章已通关 / 已激活的关卡记进账号成就，再判条件 —— 顺序反了会让「刚打完的那一帧」
         // 只靠快照通过，万一这一帧之后立刻切章，那一笔就永远没落盘。
         this.rememberPassedTerritoryLevels();
-        this.refreshChestEntry();
+        this.rememberActivatedTerritoryLevels();
+        this.refreshOpenGates();
     }
 
     /** 打开章节选择弹窗（行数据由 `loadChapterSelectRows` 组装，弹窗只负责铺行）。 */
@@ -678,7 +781,14 @@ export class MainPage extends Component {
             return;
         }
         this.detailAction = detail.action;
-        panel.updateCountdown(detail.remainSeconds, detail.action === ChestSlotAction.SpeedUp);
+        // 🔴 2026-11-11 用户：「点击解锁后，详情的按钮也要同步刷新」。
+        //    旧实现只把倒计时塞给弹窗 ⇒ 槽位已变成绿色「加速」，弹窗还写着黄色「解锁」。
+        //    现在文案、绿底、播放 icon 都随这份状态一起下发（弹窗内部是全量赋值）。
+        const speedUp = detail.action === ChestSlotAction.SpeedUp;
+        panel.updateCountdown(detail.remainSeconds, speedUp, {
+            caption: chestActionCaption(detail.action),
+            speedUp,
+        });
     }
 
     private async onChestAction(slot: number): Promise<void> {
@@ -747,9 +857,18 @@ export class MainPage extends Component {
             fastOpenCost: detail.fastOpenCost,
             // 未激活时也能花银币直接开（跳过倒计时）；空槽位走不到这里。
             fastOpenEnabled: true,
-            openCaption: '打开',
+            // 🔴 与宝箱栏那颗按钮**同源**（`chestActionCaption`）：未激活 ⇒「解锁」、**正在等 ⇒「加速」**、
+            //    等完 ⇒「开启」。以前这里固定写「打开」，未激活时点它其实是**启动倒计时**；
+            //    2026-11-09 用户又补了一轮：「点击解锁中的宝箱，宝箱详情中的开启按钮用加速按钮替换」。
+            openCaption: chestActionCaption(detail.action),
+            // 加速态 = 绿色底 + 播放 icon（2026-11-11）；解锁 / 开启仍是黄色底。
+            openSpeedUp: counting,
             openCountdown: detail.remainSeconds > 0 ? formatChestCountdown(detail.remainSeconds) : '',
             // 倒计时中不能开（要么等、要么点「立即打开」）；未激活时这颗 = 开始计时。
+            // ⚠️ 等待中那颗写的是「加速」但**仍是禁用**：服务端只有
+            //    `CmdNewTreasure{InfoList,Activate,FastOpen,Open}`，没有"加速"这条命令 ——
+            //    真加速（看广告 / 扣资源把 openTime 提前）要先有协议，接上后把这里改 true
+            //    并在 `onChestDetailOpen` 里加 `speedUp` 分支。
             openEnabled: !counting && (activated || detail.remainSeconds >= 0),
         };
     }

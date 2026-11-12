@@ -283,6 +283,28 @@ test('C2 真表：这次调的两个值没被回滚（爆锤莲王 1.5 / 魔术�
     assert.equal(parseCardCatalogRow(magician!).prefabSize, 0.85, '魔术师要调小');
 });
 
+test('C2b 真表：大威天芦（68025）在基准上放大 20%（1 → 1.2）', () => {
+    //  用户口径：「模型本来就按卡表的 prefabSize 走」。落到表里是 **1.2**（放大 20%），
+    //  而不是 1.5 那种量级 —— 站台上跟旁边的卡比只差一点。
+    //
+    //  🔴 这里原来钉的是 1.05（「再轻微放大 5%」）。源表 `PVP-卡牌.xlsx / 卡牌配置` 已经改到 1.2，
+    //  `doc/塔防数据配置/json/client/pvpCard.json` 同步是 1.2，只有 `assets/remoteRef` 漏了 →
+    //  「运行时按旧值画、用例按新值断言」两边都不报错。2026-11-11 把 remoteRef 补齐，期望值随源表走。
+    //  真正的红线没变：**不能被回滚成 1**。
+    const byId = new Map(readRows('pvpCard').map((row) => [String(row.id), row]));
+    const card = byId.get('68025');
+    assert.equal(card?.name, '大威天芦');
+    assert.equal(parseCardCatalogRow(card!).prefabSize, 1.2,
+        '大威天芦要按源表 1.2 画；改回 1 就是这次需求被回滚了');
+
+    //  这个系数在阵容页与布阵页都是线性的（`cardPreviewFactor` 里只有乘积），
+    //  所以 1.2 落到两边都是整 20%，不会因为可见高度不同而变。
+    const lineup = cardPreviewFactor(120, 1.2, 256, 1, 0.5) / cardPreviewFactor(120, 1, 256, 1, 0.5);
+    const board = cardPreviewFactor(90, 1.2, 256, 1, 0.4) / cardPreviewFactor(90, 1, 256, 1, 0.4);
+    assert.ok(Math.abs(lineup - 1.2) < 1e-9, `阵容页应是 ×1.2，实际 ×${lineup}`);
+    assert.ok(Math.abs(board - 1.2) < 1e-9, `布阵页应是 ×1.2，实际 ×${board}`);
+});
+
 test('C3 两端同口径：阵卡与战场单位读的是同一列的同一个值', () => {
     // 阵容页（`parseCard.prefabSize`）与对局（`ZCUnitDefinition.prefabSize`）必须一致 ——
     // 不一致的表现是「同一张卡在站台上和在战场里大小不同」，而且两边各自看着都合理。
@@ -327,7 +349,10 @@ test('D1 两处并排站台都把 prefabSize 传给了预览', () => {
 
 test('D2 详情弹窗有意不乘体型（乘了会顶出 Header），别被顺手补齐', () => {
     const upgrade = readFileSync('assets/script/app/card/CardUpgradePage.ts', 'utf8');
-    assert.match(upgrade, /new CardUnitPreview\(this\.heroSprite, 270\)/);
+    // r1224 重构后待机预览画布 270 -> 390；展示栏压缩后收到 318（与 Hero 节点 _lscale 同步）。
+    // 尺寸与「乘不乘体型」无关，语义由下面 doesNotMatch(.show(prefab, <size>)) 守住。
+    assert.match(upgrade, /const HERO_PREVIEW_HEIGHT = 318;/);
+    assert.match(upgrade, /new CardUnitPreview\(this\.heroSprite, HERO_PREVIEW_HEIGHT\)/);
     assert.doesNotMatch(upgrade, /\.show\(prefab, /,
         '详情弹窗一次只展示一个兵种、没有并排对比，不参与体型差');
 });

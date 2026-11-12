@@ -41,12 +41,20 @@ export const CARD_LINEUP_TEXTS = {
     upgradeOffline: '未连接服务器，先登录才能升级',
     upgradeFailed: '升级失败，请稍后再试',
     upgradeNoConfig: '该卡暂无升级配置',
-    skillTitle: '技能',
+    skillTitle: '技能升级',
+    skillUpgradeSingle: '升级技能',
+    skillTierSuffix: '阶',
+    /** ⚠️ 判据是 `heroLevel`（这张卡/英雄自己的等级），不是 `CmdRole.lv` 的「角色等级」。 */
+    skillUnlockPrefix: '英雄等级',
+    skillUnlockSuffix: '级解锁',
+    skillActive: '主动',
+    skillPassive: '被动',
+    skillCooldown: '冷却：',
+    skillSeconds: '秒',
     /**
-     * 技能等级前缀。**留空**：2026-10-20 起需求是「显示等级就好」，不再带 `Lv.` 前缀
-     * （渲染成 `2` / `2/3` / `3（满级）`）。
+     * 技能等级与升级目标统一使用设计稿的 Lv. 前缀。
      */
-    skillLevelPrefix: '',
+    skillLevelPrefix: 'Lv.',
     /** 技能列表空的说法（主城 / 金矿这类没配技能的卡）。 */
     skillEmpty: '该卡没有技能',
     /** 「↓」按钮文案（往回看一档，纯本地预览，不发包）。 */
@@ -63,6 +71,7 @@ export const CARD_LINEUP_TEXTS = {
     skillMaxed: '（满级）',
     /** 升级按钮的常态文案。 */
     skillUpgradeButton: '升级',
+    skillUpgradeSending: '升级中',
     skillUpgradeOffline: '未连接服务器',
     skillUpgradeFailed: '技能升级失败',
     // ---- 卡牌详情页（2026-11-03 改版：CardUpgrade 弹窗整体换成详情页外观）----
@@ -75,6 +84,18 @@ export const CARD_LINEUP_TEXTS = {
     detailRewardPrefix: '升级奖励：',
     /** 里程碑行等级前缀（效果图 `Lv.3` 形态）。 */
     detailMilestonePrefix: 'Lv.',
+    detailLevelSuffix: '级',
+    /** 首档解锁等级为 0（一级就有）时的等级块文案：表里 0 = 开局即解锁，展示按「1级」算。 */
+    detailLevelInitial: '1级',
+    /** 里程碑行里「技能名 + 该档描述」之间的分隔。 */
+    detailSkillNameSeparator: '：',
+    /** 描述栏一条都没有时的占位（这些卡的技能描述整块还没配，见 armySkillLevelUp）。 */
+    detailMilestoneEmpty: '暂无技能描述',
+    /**
+     * 升级奖励条的「全队暴击伤害」文案前缀（数值拼在后面，如 `升级增加全队暴击伤害：2%`）。
+     * 数值来自 `pvpSkillPlan` 的 109001 链，见 `CardDetailCritDamage`。
+     */
+    upgradeCritDamage: '升级增加全队暴击伤害：',
     /** 品质字（菱形中央）：品级中文名（普通/稀有/史诗/传说）。 */
     detailQualityPrefix: '',
     detailQualityGrade: '品',

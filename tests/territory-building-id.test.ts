@@ -260,3 +260,58 @@ test('★★★章节 02~07：每个 (type, configId) 组都要配建筑，且 i
         }
     }
 });
+
+/**
+ * 🔴 2026-11-10 用户：「chapter01~07 地块使用了 1023 奖励的，建筑 id 从 69005 改成 69020」。
+ *
+ * ## 为什么这几格原来是「空串」，却长得和 69005 一样
+ *
+ * `stationIconOf` 对 `stage` / `boss` / `asyncPvp` 是「没配 `buildingId` ⇒ 不画建筑」，
+ * 但 `fixedResource` / `bonus` **会继续往下回退**到 `TERRITORY_SITE_ART`：
+ *
+ *     fixedResource ⇒ art.fixedResource ⇒ image/territory/buildings/territory_fixed_resource_v1
+ *
+ * 那张图正好就是 `build.json` 里 `69005` 的贴图 ⇒ 空串与「配了 69005」视觉上完全一样。
+ * 所以用户说的「从 69005 改成 69020」与实测「148 格全是空串」并不矛盾，
+ * 本用例钉的是**结果**：`rewardId=1023` 的格必须显式写 `69020`。
+ *
+ * ## 为什么必须显式配 id
+ *
+ * 只有配了 `buildingId`，`stationIconOf` 的第一条分支（`buildFrames.get(69020)`）才会命中、
+ * 并且**不再回退**。留着空串，改 `build.json` 里 69020 的贴图是**完全无效**的 —— 没人读它。
+ *
+ * ## 判据钉的是已发布产物
+ *
+ * 与上一条同口径：改预设忘了发布，玩家看到的就是发布那份。这里逐章核 `assets/resources/config/territory-maps`。
+ */
+test('★★★章节 01~07：用 1023 奖励的宝箱格配 69020（coinBox），且建筑表与贴图都在（2026-11-10）', () => {
+    const REWARD_ID = 1023;
+    const CHEST_BUILDING = '69020';
+    const table = parseTerritoryBuildTable(JSON.parse(readFileSync(BUILD_TABLE, 'utf8')));
+
+    const row = table.get(Number(CHEST_BUILDING));
+    assert.ok(row, `${CHEST_BUILDING} 必须在 build 表里，否则配了 id 也查不到帧（零报错、外观不变）`);
+    assert.equal(row!.buildType, 5, `${CHEST_BUILDING} 应是 buildType=5（固定宝箱）`);
+    assert.equal(row!.buildresource, 'image/territory/buildings/coinBox',
+        `${CHEST_BUILDING} 的贴图应是 coinBox`);
+
+    let total = 0;
+    for (const chapter of [1, 2, 3, 4, 5, 6, 7]) {
+        const path = `assets/resources/config/territory-maps/chapter_0${chapter}.json`;
+        const map = JSON.parse(readFileSync(path, 'utf8')) as Raw;
+        const chests = (map.sites as Raw[]).filter((site) => site.rewardId === REWARD_ID);
+        // 7 章合计 148 格（ch01=25 ch02=27 ch03=36 ch04~07 各 15）；某章变 0 说明奖励 id 被改回去了。
+        assert.ok(chests.length > 0, `chapter_0${chapter} 应有 rewardId=${REWARD_ID} 的宝箱格`);
+
+        for (const site of chests) {
+            assert.equal(site.type, 'fixedResource',
+                `chapter_0${chapter} 的 ${site.id} 带 rewardId=${REWARD_ID}，type 却不是 fixedResource`);
+            assert.equal(String(site.buildingId ?? ''), CHEST_BUILDING,
+                `chapter_0${chapter} 的 ${site.id}（cell ${site.cellId}）应配 ${CHEST_BUILDING}，`
+                + `实际 "${site.buildingId ?? ''}" —— 空串会回退到 69005 的同款贴图，改了也没用`);
+        }
+        total += chests.length;
+    }
+    // 每格一个独立 `configId`（`fixedResource_<cellId>`）⇒ 逐格填，不像关卡那样「每组一格」。
+    assert.equal(total, 148, '七章合计应有 148 个 rewardId=1023 的宝箱格');
+});

@@ -71,8 +71,10 @@ test('波次徽标只有一行 `第N/M波`，字号与描边取自设计稿量�
     });
 });
 
-test('波次徽标：开波前是第 0/M 波，最后一波也不会越界', () => {
-    assert.equal(panel.formatZCDefenceWaveText(wave({ spawnedWaves: 0, currentWaveId: null })).text, '第0/8波');
+test('波次徽标：开波前按第一波显示，最后一波也不会越界', () => {
+    //  徽标常驻（2026-11-09）：一开场就要有「第1/M波」，不能出现「第0/8波」。
+    assert.equal(panel.formatZCDefenceWaveText(wave({ spawnedWaves: 0, currentWaveId: null })).text, '第1/8波');
+    assert.equal(panel.formatZCDefenceWaveText(wave({ spawnedWaves: 1 })).text, '第1/8波');
     assert.equal(panel.formatZCDefenceWaveText(wave({ spawnedWaves: 8, nextWaveId: null })).text, '第8/8波');
 });
 
@@ -121,9 +123,10 @@ test('波次头像从本局所有席位和完整卡表获取，并按当前波�
     assert.equal(boss.portraitIcon.spriteFrame, frames.b);
 });
 
-test('守城大血条只在 BOSS 波出现：普通小怪的波次不实例化面板', () => {
+test('守城波次面板常驻：普通波与 BOSS 波均显示头像和总血条', () => {
     const created: unknown[] = [];
     const destroyed: string[] = [];
+    const barVisible: boolean[] = [];
     const exports: { ZCGame?: typeof import('../assets/script/app/zcds/ZCGame').ZCGame } = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
@@ -134,7 +137,13 @@ test('守城大血条只在 BOSS 波出现：普通小怪的波次不实例化�
             ...STUB_CC,
             instantiate: (prefab: unknown) => {
                 created.push(prefab);
-                return { layer: 0, setParent() {}, getComponent: () => ({ render() {} }) };
+                return {
+                    layer: 0, setParent() {},
+                    getComponent: () => ({
+                        render() {},
+                        setBossBarVisible: (visible: boolean) => barVisible.push(visible),
+                    }),
+                };
             },
         };
         return {};
@@ -146,21 +155,32 @@ test('守城大血条只在 BOSS 波出现：普通小怪的波次不实例化�
         preparedResources: { bossPanelPrefab: prefab },
         hudView: { node: { layer: 1, setParent() {}, destroy() {} } },
     });
-    const render = (progress: Record<string, unknown>) => Reflect.get(game, 'renderBossPanel')
+    const render = (progress: Record<string, unknown> | null) => Reflect.get(game, 'renderBossPanel')
         .call(game, { defenceWaveProgress: progress });
 
-    // 普通小怪波：不建面板 —— 「普通小怪只有头顶血条」。
-    render({ ...wave({ currentWaveIsBoss: false }) });
-    assert.deepEqual(created, [], '普通波不许拉大血条');
-    assert.equal(Reflect.get(game, 'bossPanel'), null);
-
-    // BOSS 波：建面板并渲染。
-    render(wave({ currentWaveIsBoss: true }));
+    // 第一波尚未生成：徽标常驻，头像与总血条等待当前波数据。
+    render({ ...wave({ currentWaveId: null, currentWaveIsBoss: false, spawnedWaves: 0 }) });
     assert.deepEqual(created, [prefab]);
+    assert.deepEqual(barVisible, [false]);
 
-    // 掉回普通波（例如重开 / 换配置）：把手上的面板销毁掉，别留在屏幕上。
-    Object.assign(Reflect.get(game, 'bossPanel'), { node: { destroy: () => destroyed.push('panel') } });
+    // 普通小怪波也要显示当前波的头像与总血条。
+    render({ ...wave({ currentWaveIsBoss: false, spawnedWaves: 1 }) });
+    assert.deepEqual(created, [prefab], '第一波起就要有波次徽标');
+    assert.deepEqual(barVisible, [false, true], '普通波也必须显示头像和总血条');
+
+    // BOSS 波：同一块面板复用，血条组点亮（不重建）。
+    render(wave({ currentWaveIsBoss: true }));
+    assert.deepEqual(created, [prefab], '同局不重建面板');
+    assert.deepEqual(barVisible, [false, true, true]);
+
+    // 回到普通波，头像与总血条继续显示。
     render({ ...wave({ currentWaveIsBoss: false }) });
+    assert.deepEqual(barVisible, [false, true, true, true]);
+    assert.deepEqual(destroyed, [], '面板不销毁，徽标要一直挂着');
+
+    // 非守城局（没有波次进度）：面板销毁。
+    Object.assign(Reflect.get(game, 'bossPanel'), { node: { destroy: () => destroyed.push('panel') } });
+    render(null);
     assert.deepEqual(destroyed, ['panel']);
     assert.equal(Reflect.get(game, 'bossPanel'), null);
 });
@@ -179,10 +199,18 @@ test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都
     const game = new exports.ZCGame();
     Object.assign(game, { isValid: true });
     const boss = new panel.ZCHudBossPanel();
-    const hpFill = { fillRange: 1 };
+    // `setBossBarVisible` 会摸头像 / 名字 / 血条的 `node`，夹具要给出可写的 active。
+    const portraitNode = { active: true };
+    const nameNode = { active: true };
+    const barNode = { active: true };
+    const hpFill = { fillRange: 1, node: { parent: barNode } };
     const waveLabel = { string: '' };
     const rateLabel = { string: '' };
-    Object.assign(boss, { hpFill, waveLabel, rateLabel, nameLabel: { string: '' }, portraitIcon: {} });
+    Object.assign(boss, {
+        hpFill, waveLabel, rateLabel,
+        nameLabel: { string: '', node: nameNode },
+        portraitIcon: { node: portraitNode },
+    });
     const progress = { totalWaves: 8, spawnedWaves: 1, currentWaveId: 1, nextWaveId: 2,
         secondsUntilNextWave: 1, aliveEnemies: 2, currentWaveHp: 50, currentWaveMaxHp: 100,
         currentWaveHpRate: 4, currentWaveCardId: '68010', currentWaveIsBoss: true };
@@ -196,6 +224,7 @@ test('战斗主循环按 HUD 节奏刷新首领血条，受伤清零和换波都
     Reflect.get(game, 'renderBattle').call(game, model, {}, {}, 'static');
     assert.equal(hudRenders, 1);
     assert.equal(hpFill.fillRange, 0.5, '受伤后血条必须随普通 HUD 同步刷新');
+    assert.equal(barNode.active, true, 'BOSS 波血条组要亮');
     progress.currentWaveHp = 0;
     Reflect.get(game, 'renderBattle').call(game, model, {}, {}, 'static');
     assert.equal(hpFill.fillRange, 0, '当前波死亡后显示空条');

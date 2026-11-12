@@ -8,6 +8,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import { bigMapPrefabFixture } from './helpers/bigmap-prefab-fixture';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapBasePresentation';
+import * as presentationText from '../assets/script/app/bigmap/view/BigMapPresentationText';
 
 class Vec { constructor(public x = 0, public y = 0, public z = 0) {} }
 class MockNode {
@@ -43,7 +44,7 @@ class Transform {
     }
 }
 class Sprite { static SizeMode = { RAW: 1, CUSTOM: 0 }; static Type = { SLICED: 1 }; node!: MockNode; spriteFrame: unknown = null; }
-class Graphics { node!: MockNode; strokes = 0; clear() { this.strokes = 0; } fill() {} stroke() { this.strokes++; } rect() {} moveTo() {} lineTo() {} close() {} }
+class Graphics { node!: MockNode; strokes = 0; clear() { this.strokes = 0; } fill() {} stroke() { this.strokes++; } rect() {} ellipse() {} moveTo() {} lineTo() {} close() {} }
 class Label { static HorizontalAlign = { CENTER: 0 }; static Overflow = { SHRINK: 0 }; node!: MockNode; }
 class Mask { static Type = { GRAPHICS_RECT: 0 }; node!: MockNode; }
 class Color { static WHITE = {}; constructor(..._args: number[]) {} }
@@ -69,7 +70,10 @@ interface IView {
     onLoad(): void;
     onDisable(): void;
 }
-function harness() {
+function harness(options: {
+    buildingConfigs?: ReadonlyMap<number, { canMove: boolean }>;
+    moveableHexIds?: readonly number[];
+} = {}) {
     class Plot {}
     let instantiate: (template: object) => object;
     const exports: { BigMapBaseView?: new () => IView } = {};
@@ -84,7 +88,14 @@ function harness() {
         if (id.endsWith('/BigMapBasePlot')) return { BigMapBasePlot: Plot };
         if (id.endsWith('/BigMapBasePresentation')) return geometry;
         if (id.endsWith('/BigMapSkin')) return {
-            BIGMAP_SKIN_COLORS: {}, requireBigMapTransform: (n: MockNode) => n.getComponent(Transform),
+            // 选中双环 / 底光 / 进度环用到的色值都要给，否则 `strokeColor` 被赋成 undefined，
+            // 断言虽然只看 strokes 次数，但假绿会掩盖"忘了补色"的真实问题。
+            BIGMAP_SKIN_COLORS: {
+                text: {}, muted: {}, gold: {}, dark: {}, cyan: {},
+                selectOuter: {}, selectInner: {}, placeOk: {}, placeBad: {},
+                glowFill: {}, ringUnder: {}, ringDone: {}, ringUrgent: {},
+            },
+            requireBigMapTransform: (n: MockNode) => n.getComponent(Transform),
             createBigMapSprite: (name: string, parent: MockNode) => createNode(name, parent, 80, 80).addComponent(Sprite),
             fitBigMapSprite: (s: Sprite, frame: unknown, width: number, x: number, y: number) => {
                 s.spriteFrame = frame; s.node.active = !!frame; s.node.setPosition(x, y);
@@ -93,7 +104,13 @@ function harness() {
         };
         if (id.endsWith('/BigMapTheme')) return { BIGMAP_COLORS: {}, createUiNode: createNode,
             createLabel: (p: MockNode) => createNode('Label', p).addComponent(Label) };
-        if (id.endsWith('/BigMapPresentationText')) return { BIGMAP_PRESENTATION_TEXT: { emptyPlot: '空地' } };
+        if (id.endsWith('/BigMapPresentationText')) return {
+            // 用真实纯函数：`bigMapHexCorners` / `buildBigMapProgressPolyline` / `formatBigMapDuration`
+            // 都是零引擎依赖的几何与格式化，直接引用比在 mock 里再抄一份可靠
+            // （抄一份的话，改了真实实现测试仍然绿）。
+            ...presentationText,
+            BIGMAP_PRESENTATION_TEXT: { ...presentationText.BIGMAP_PRESENTATION_TEXT, emptyPlot: '空地' },
+        };
         return {};
     } });
     const view = new exports.BigMapBaseView!();
@@ -108,15 +125,18 @@ function harness() {
     const cells = Array.from({ length: 400 }, (_, hexId) => ({ hexId, row: Math.floor(hexId / 20), column: hexId % 20,
         slot: hexId === 210 ? 'building' : 'empty', buildingId: hexId === 210 ? 1 : 0, instanceId: 7, level: 1,
         name: '主城', stored: hexId === 210 ? 12 : 0, resType: 'coin', remainSeconds: 0 }));
-    view.build(bigMapViewStateFixture({ plots: cells, mainBuildingId: 1 }), 720, 900);
+    view.build(bigMapViewStateFixture({ plots: cells, mainBuildingId: 1,
+        buildingConfigs: options.buildingConfigs ?? new Map(),
+        moveableHexIds: options.moveableHexIds ?? [] }), 720, 900);
     const frame = { rect: { width: 100, height: 100 }, originalSize: { width: 2048, height: 2048 }, offset: { x: 0, y: 0 } };
     view.setArt({ baseBackground: frame, buildings: new Map([[1, frame]]), resources: new Map([['coin', frame]]), ui: new Map([['badge', frame]]) });
-    const taps: number[] = []; const harvests: number[] = [];
+    const taps: number[] = []; const harvests: number[] = []; const moveBegins: number[] = [];
     EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
         if (event.intent.kind === 'plotTap') taps.push(event.intent.hexId);
         if (event.intent.kind === 'harvest') harvests.push(event.intent.instanceId);
+        if (event.intent.kind === 'moveBegin') moveBegins.push(event.intent.instanceId);
     }, view);
-    return { view, cells, taps, harvests };
+    return { view, cells, taps, harvests, moveBegins };
 }
 const touch = (x: number, y: number, count = 1) => ({ getUILocation: () => new Vec(x, y),
     getAllTouches: () => Array.from({ length: count }, (_, i) => ({ getUILocation: () => new Vec(x + i * 100, y) })) });
@@ -201,4 +221,89 @@ test('重复构建与禁用再启用不重复绑定或移除 viewport 监听', (
     assert.equal(viewport.node.onCount, 5);
     assert.equal(viewport.node.targetOffCount, 0);
     assert.equal((view as unknown as { dragStart: Vec | null }).dragStart, null);
+});
+
+// 长按手势专用：取某格建筑 icon 的屏幕坐标（含相机 zoom / 偏移）。
+const iconScreenOf = (view: IView, hexId: number) => {
+    const iconNode = view.slots.get(hexId)!.icon.node;
+    const point = view.layout.points.get(hexId)!;
+    return {
+        x: (point.x + iconNode.position.x) * view.camera.zoom + view.camera.x,
+        y: (point.y + iconNode.position.y) * view.camera.zoom + view.camera.y,
+    };
+};
+const stepView = (view: IView, dt: number) =>
+    (view as unknown as { update(dt: number): void }).update(dt);
+
+test('按住可移动建筑不动 0.4s 触发移建，原格松手不移动', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: true }]]) });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    assert.deepEqual(h.moveBegins, []);
+    stepView(h.view, 0.2);
+    assert.deepEqual(h.moveBegins, [], '不到 0.4s 不触发');
+    stepView(h.view, 0.2);
+    assert.deepEqual(h.moveBegins, [7]);
+    const ghost = (h.view as unknown as { plotGhost: Sprite }).plotGhost;
+    assert.equal(ghost.node.active, true, '触发后应显示跟手 ghost');
+    h.view.onTouchEnd(touch(p.x, p.y));
+    assert.deepEqual(h.taps, [], '拖回原格（不在 moveable）不发移动');
+});
+
+test('0.4s 内移动超 12px 仲裁为平移镜头，不触发移建', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: true }]]) });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    h.view.onTouchMove(touch(p.x + 60, p.y));
+    stepView(h.view, 0.5);
+    assert.deepEqual(h.moveBegins, []);
+    h.view.onTouchEnd(touch(p.x + 60, p.y));
+    assert.deepEqual(h.taps, []);
+});
+
+test('短按松手仍是普通点选，不误触发移建', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: true }]]) });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    stepView(h.view, 0.2);
+    h.view.onTouchEnd(touch(p.x, p.y));
+    assert.deepEqual(h.moveBegins, []);
+    assert.deepEqual(h.taps, [210]);
+});
+
+test('canMove=false 的钉死建筑，长按不触发移建', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: false }]]) });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    stepView(h.view, 0.5);
+    assert.deepEqual(h.moveBegins, []);
+});
+
+test('双指缩放介入立刻取消长按，不触发移建', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: true }]]) });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    h.view.onTouchMove(touch(p.x, p.y, 2));
+    stepView(h.view, 0.5);
+    assert.deepEqual(h.moveBegins, []);
+});
+
+test('长按触发后拖到合法落点松手，发 plotTap 走 requestMove', () => {
+    const h = harness({ buildingConfigs: new Map([[1, { canMove: true }]]), moveableHexIds: [209] });
+    h.view.focusOn(210);
+    const p = iconScreenOf(h.view, 210);
+    h.view.onTouchStart(touch(p.x, p.y));
+    stepView(h.view, 0.4);
+    assert.deepEqual(h.moveBegins, [7]);
+    const targetPoint = h.view.layout.points.get(209)!;
+    const tx = targetPoint.x * h.view.camera.zoom + h.view.camera.x;
+    const ty = targetPoint.y * h.view.camera.zoom + h.view.camera.y;
+    h.view.onTouchMove(touch(tx, ty));
+    h.view.onTouchEnd(touch(tx, ty));
+    assert.deepEqual(h.taps, [209]);
 });

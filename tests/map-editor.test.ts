@@ -222,7 +222,7 @@ test('左栏长说明收纳为可点击的问号帮助气泡', () => {
     const html = readFileSync('tools/map-editor/index.html', 'utf8');
     assert.match(html, /<details class="helpTip">/);
     assert.match(html, /查看中立资源说明/);
-    assert.match(html, /查看操作说明/);
+    assert.match(html, /role="dialog" aria-modal="true" aria-label="编辑器说明"/);
     assert.match(html, /\.helpBubble/);
 });
 
@@ -376,7 +376,7 @@ test('服务连接失败时给出可迁移当前地图的链接', async () => {
 });
 
 test('从文件页转到服务页时保留当前地图', async () => {
-    const river = JSON.parse(readFileSync('tools/map-editor/presets/river.json', 'utf8'));
+    const river = JSON.parse(readFileSync('tools/map-editor/presets/gamemap/river.json', 'utf8'));
     const custom = { ...river, id: 'migrated', ascii: [...river.ascii] };
     custom.ascii[2] = custom.ascii[2].slice(0, 3) + '.' + custom.ascii[2].slice(4);
     const { editor } = createEditor({
@@ -391,7 +391,13 @@ test('从文件页转到服务页时保留当前地图', async () => {
 
 test('预设只存 1 区半场，导入后重建其余分区和虚空', () => {
     const { editor } = createEditor();
-    const river = JSON.parse(readFileSync('tools/map-editor/presets/river.json', 'utf8'));
+    const river = {
+        id: 'legacy-river', version: 2, rows: 20, columns: 11, playerCount: 2,
+        cityMode: 'fixed', mirrorVertical: true, mirrorHorizontal: false,
+        ascii: ['..##...##..', '..##...##..', '..##...##..', '..###..###.', '.#########.',
+            '###########', '###########', '###########', '###########', '###########'],
+        homes: [{ row: 15, column: 5 }, { row: 4, column: 5 }],
+    };
     editor.applyLayout(river);
     const state = editor.state();
     assert.equal(state.cols, 11);
@@ -413,7 +419,12 @@ test('预设只存 1 区半场，导入后重建其余分区和虚空', () => {
 
 test('v2 中立格导入后保持可用、镜像和字符画，主城不能画到中立格', () => {
     const { editor } = createEditor();
-    const neutral = JSON.parse(readFileSync('tools/map-editor/presets/neutral_standard.json', 'utf8'));
+    const neutral = {
+        id: 'legacy-neutral', version: 2, rows: 18, columns: 11, playerCount: 2,
+        cityMode: 'fixed', mirrorVertical: true, mirrorHorizontal: false,
+        ascii: ['NNNNNNNNNNN', ...Array.from({ length: 8 }, () => '###########')],
+        homes: [{ row: 13, column: 5 }, { row: 4, column: 5 }],
+    };
     editor.applyLayout(neutral);
     let state = editor.state();
     assert.equal(state.grid[9][5], 0);
@@ -740,7 +751,7 @@ test('常见棋盘尺寸下三人主城都保持等边，且主城蜂巢不越�
  */
 test('带虚空的旧图切到 3 人，默认三点必须保留（不能被主城失效检查误杀）', () => {
     const { editor } = createEditor();
-    const river = JSON.parse(readFileSync('tools/map-editor/presets/river.json', 'utf8'));
+    const river = JSON.parse(readFileSync('tools/map-editor/presets/gamemap/river.json', 'utf8'));
     editor.applyLayout(river);
     const before = editor.state();
     assert.equal(before.playerCount, 2);

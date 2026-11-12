@@ -53,7 +53,6 @@ loadPvpTables({
     pvpPity: readPvpRef('pvpPity'),
     pvpTileGen: readPvpRef('pvpTileGen'),
     pvpTileGenParams: readPvpRef('pvpTileGenParams') as ZCPvpTables['pvpTileGenParams'],
-    pvpBaseTeamWeight: readPvpRef('pvpBaseTeamWeight'),
 });
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);

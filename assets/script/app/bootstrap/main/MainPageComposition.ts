@@ -21,6 +21,7 @@ import { MainPage } from '../../main/MainPage';
 import { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { TerritoryEntry } from '../../territory/application/TerritoryEntry';
 import { FW } from '../../../framework/FW';
+import { TerritoryHeroProgressSource } from './TerritoryHeroProgressSource';
 
 interface IPageLifecycle {
     readonly ready: () => void;
@@ -85,6 +86,9 @@ export class MainPageComposition extends ControllerBase {
         const entry = this.createTerritoryEntry(territory);
         this.registerPage(territory, entry, { ready: () => entry.start() });
         territory.initialize(entry.controller.resources, entry.saveOwner);
+        // 2026-11-10 需求 ③：英雄碎片进度徽标的数据源由组合层注入（页面只认接口，
+        // 不反向 import `app/card`）。纯表现，没注入 ⇒ 不播徽标，发奖链路零变化。
+        territory.setHeroProgressSource(new TerritoryHeroProgressSource());
         if (main) {
             // 宝箱栏的「战斗」格使用本页地图演整页过场。
             main.territoryMap = territory;

@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import test from 'node:test';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 test('查看基地升级详情不扣资源、不启动队列，实际升级仍由既有规则执行', () => {
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage, saveKey: 'base-art-test',
         adventureChapter: () => 3, now: () => 1000,
     });
@@ -31,7 +31,7 @@ test('查看基地升级详情不扣资源、不启动队列，实际升级仍�
 });
 
 test('新号升级详情显示真实章节限制，不因加载美术而解锁建筑', () => {
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config: loadBigMapConfig(), storage: createMemoryBigMapStorage(), saveKey: 'base-locked-test',
         adventureChapter: () => 1, now: () => 1000,
     });

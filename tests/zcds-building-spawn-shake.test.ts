@@ -10,7 +10,7 @@
  *  1. 两段曲线 `spawnShakeScaleY` / `spawnShakeScaleX`：先 Y 后 X、段外恒 1、
  *     缺省 = 单位档 110%、显式传 `BUILDING_SHAKE_STRETCH` = 建筑档 120%；
  *  2. `ZCHexView.playBuildingShake` + `advanceBuildingShake` 把抖动**乘进** `applyBuildingScale`
- *     （基准 0.72 × 因子），播完复位并返回 false；
+ *     （基准 0.612 × 因子），播完复位并返回 false；
  *  3. `ZCBattlePresentationQueue.push/drainBuildingShake`：**取走即空**（抖动不幂等）、
  *     超上限丢最旧、`reset` 清空（换局不许带出上一局的通知）；
  *  4. `ZCGameModel` 只在产金**真的发出去**时推通知（击杀 / 拆建筑奖励那条私有 `grantGold` 不抖）；
@@ -32,7 +32,7 @@ import {
 import { ZCBattlePresentationQueue } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 
 /** `ZCHexView.BUILDING_ICON_SCALE`（模块私有）：建筑外观的基准缩放。 */
-const EXPECTED = 0.72;
+const EXPECTED = 0.612;
 const near = (actual: number, expected: number): boolean => Math.abs(actual - expected) <= 1e-9;
 
 function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any {
@@ -90,7 +90,7 @@ test('★row12 建筑档拉伸量 = 120%，形状/相位与单位档完全一致
     }
 });
 
-test('建筑生成抖动：playBuildingShake 后在基准 0.72 上叠「先 Y 后 X」的 120%，播完复位', () => {
+test('建筑生成抖动：playBuildingShake 后在基准 0.612 上叠「先 Y 后 X」的 120%，播完复位', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
     const node = view.buildingSprite.node;
@@ -101,16 +101,16 @@ test('建筑生成抖动：playBuildingShake 后在基准 0.72 上叠「先 Y �
 
     view.playBuildingShake(0);
 
-    // Y 段中点：Y = 0.72 × 1.2，X 仍 0.72。
+    // Y 段中点：Y = 0.612 × 1.2，X 仍 0.612。
     assert.equal(view.advanceBuildingShake(SPAWN_SHAKE_PHASE_SECONDS / 2), true, '抖动中应返回 true');
     assert.ok(near(node.scale.y, EXPECTED * peak),
-        `Y 段中点应到 0.72 × 1.2，实际 ${node.scale.y}`);
+        `Y 段中点应到 0.612 × 1.2，实际 ${node.scale.y}`);
     assert.ok(near(node.scale.x, EXPECTED), 'Y 段 X 保持基准');
 
-    // X 段中点：X = 0.72 × 1.2，Y 回落 0.72。
+    // X 段中点：X = 0.612 × 1.2，Y 回落 0.612。
     assert.equal(view.advanceBuildingShake(SPAWN_SHAKE_PHASE_SECONDS * 1.5), true);
     assert.ok(near(node.scale.x, EXPECTED * peak),
-        `X 段中点应到 0.72 × 1.2，实际 ${node.scale.x}`);
+        `X 段中点应到 0.612 × 1.2，实际 ${node.scale.x}`);
     assert.ok(near(node.scale.y, EXPECTED), 'X 段 Y 已回落基准');
 
     // 播完：返回 false 且复位基准（不能停在被拉长的姿态）。
@@ -195,12 +195,12 @@ test('ZCGameRenderWorld：兵营产兵时登记建筑抖动，并在 renderDynam
     assert.ok(start > 0 && end > start, 'renderUnitEntity 必须存在');
     const body = source.slice(start, end);
     assert.match(body,
-        /if \(isBirth\) \{[\s\S]*?triggerBuildingShake\(unit\.sourceHexId, presentation\.now\)/,
+        /if \(isBirth\) \{[\s\S]*?triggerBuildingShake\(barracksHexId, presentation\.now\)/,
         '单位首次出现（isBirth）时必须登记建筑抖动');
 
     // ② 只对兵营触发（主城 / 金矿的抖动走产金那条通知，两者别混）。
     assert.match(body,
-        /building === 'barracks'\)[\s\S]{0,160}?triggerBuildingShake\(unit\.sourceHexId, presentation\.now\)/,
+        /building === 'barracks'\)[\s\S]{0,160}?triggerBuildingShake\(barracksHexId, presentation\.now\)/,
         '只对兵营格触发产兵抖动');
 
     // ③ renderDynamic 必须每帧推进（renderStatic 是 0.15s 节流，播不出 0.24s 的抖动），

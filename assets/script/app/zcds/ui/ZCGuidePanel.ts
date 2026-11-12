@@ -30,7 +30,7 @@
  * 脚本只负责喂数据和提供渲染回调（renderItemFn / onItemClickFn）。
  *
  * 打开方式：
- *   // 对局流程预加载完成后，由 ZCGame 传入已准备的 content。
+ *   // 点击指南后，由对局控制器加载并传入 content。
  *   ZCGuidePanel.open({ userData: { content } });
  */
 
@@ -45,7 +45,7 @@ import {
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
-import type { ZCGuidePreparedContent } from '../application/ZCGuideLoader';
+import type { IZCGuidePreparedContent } from '../application/ZCGuideLoader';
 import type { ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
 import { ZCGuideItem } from './ZCGuideItem';
 
@@ -59,8 +59,8 @@ const EMPTY_PARAMS: ZCGuideParams = {
 
 /** ZCGuidePanel.open 的 userData 结构。 */
 export interface ZCGuidePanelOptions {
-    /** 由对局预加载器准备；Popup 不做配置读取或资源加载。 */
-    readonly content: ZCGuidePreparedContent;
+    /** 由对局控制器按需加载；Popup 只消费展示数据。 */
+    readonly content: IZCGuidePreparedContent;
 }
 
 /**
@@ -99,7 +99,7 @@ export class ZCGuidePanel extends PopupBase {
     // PopupBase 生命周期
     
 
-    /** Popup 只消费预加载结果，因此打开过程无异步竞争。 */
+    /** Popup 同步展示已加载内容。 */
     protected onOpen(userData?: ZCGuidePanelOptions): void {
         const content = userData?.content;
         this.entries = content ? [...content.entries] : [];

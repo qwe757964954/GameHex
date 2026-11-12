@@ -1,3 +1,4 @@
+import { director } from 'cc';
 import { ScriptObject } from "../base/ScriptObject";
 import { Pool } from "../pool/Pool";
 import { UpdateBeat, UpdateClass } from "./UpdateBeat";
@@ -50,9 +51,9 @@ export class FrameTimer extends ScriptObject {
         let t = this;
         t.func = func;
         t.caller = caller;
-        let c = (cc.game as any).frameCount;
-        t.nFrame = c;
-        t.duration = nFrame;
+        let c = director.getTotalFrames();
+        t.nFrame = c + (nFrame ?? 1);
+        t.duration = nFrame ?? 1;
         t.loop = loop;
         t.running = false;
     }
@@ -100,7 +101,7 @@ export class FrameTimer extends ScriptObject {
     update() {
         let t = this;
         if (t.running) {
-            let frameCount = (cc.game as any).frameCount;
+            let frameCount = director.getTotalFrames();
             if (frameCount >= t.nFrame) {
                 t.func.call(t.caller)
                 if (t.loop == null) {

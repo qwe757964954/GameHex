@@ -9,6 +9,7 @@ import ts from 'typescript';
 import { bigMapPrefabFixture } from './helpers/bigmap-prefab-fixture';
 import * as baseGeometry from '../assets/script/app/bigmap/view/BigMapBasePresentation';
 import * as worldGeometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
+import * as presentationText from '../assets/script/app/bigmap/view/BigMapPresentationText';
 
 function buildBase() {
     class Color {
@@ -22,7 +23,7 @@ function buildBase() {
     class Graphics {
         fillCount = 0;
         clear() { this.fillCount = 0; } rect() {} fill() { this.fillCount++; }
-        moveTo() {} lineTo() {} close() {} stroke() {}
+        ellipse() {} moveTo() {} lineTo() {} close() {} stroke() {}
     }
     class Sprite { static SizeMode = { RAW: 2, CUSTOM: 0 }; static Type = { SLICED: 1 }; }
     class Label { static HorizontalAlign = { CENTER: 1 }; static Overflow = { SHRINK: 2 }; }
@@ -62,7 +63,11 @@ function buildBase() {
         const node = new FakeNode(name); node.setParent(parent); return node;
     };
     const skin = {
-        BIGMAP_SKIN_COLORS: { cyan: Color.WHITE, text: Color.WHITE, gold: Color.WHITE, dark: Color.WHITE },
+        BIGMAP_SKIN_COLORS: {
+            cyan: Color.WHITE, text: Color.WHITE, gold: Color.WHITE, dark: Color.WHITE,
+            selectOuter: Color.WHITE, selectInner: Color.WHITE, placeOk: Color.WHITE, placeBad: Color.WHITE,
+            glowFill: Color.WHITE, ringUnder: Color.WHITE, ringDone: Color.WHITE, ringUrgent: Color.WHITE,
+        },
         requireBigMapTransform: (node: FakeNode) => node.getComponent(Transform),
         createBigMapSprite: (name: string, parent: FakeNode) => createNode(name, parent).addComponent(Sprite),
         fitBigMapSprite(sprite: { spriteFrame: object | null; node: FakeNode }, frame: object | null) {
@@ -83,6 +88,9 @@ function buildBase() {
         if (name === './BigMapSkin') return skin;
         if (name === './BigMapTheme') return { BIGMAP_COLORS: { text: Color.WHITE }, createUiNode: createNode,
             createLabel: (parent: FakeNode) => createNode('Label', parent).addComponent(Label) };
+        // 几何 / 格式化纯函数用真实实现（`bigMapHexCorners`、`buildBigMapProgressPolyline`）：
+        // 在 mock 里抄一份的话，真实实现改了这里仍然绿。
+        if (name === './BigMapPresentationText') return presentationText;
         return { BIGMAP_PRESENTATION_TEXT: { emptyPlot: '空地' } };
     } });
     interface ISprite { node: FakeNode; spriteFrame: object | null; color: Color; sizeMode: number; trim: boolean }
@@ -111,6 +119,27 @@ function buildBase() {
         buildings: new Map(), resources: new Map(), ui: new Map([['plot', { rect: { width: 397, height: 301 } }]]) };
     return { view, art, ground, Transform };
 }
+
+test('建筑图标按「格高」撑满、水平居中、scale=1：换一张图不会变小也不会偏出格子', () => {
+    const h = buildBase();
+    // 212×212 的新美术图：正方形，内容四周留白。
+    const building = { rect: { width: 212, height: 212 }, originalSize: { width: 212, height: 212 }, offset: { x: 0, y: 0 } };
+    h.view.setArt({ ...h.art, buildings: new Map([[71001, building]]) });
+    const slot = h.view.slots.get(4) as unknown as { icon: { node: InstanceType<typeof h.Transform> & { scale: { x: number }; position: { x: number } } } };
+    const iconNode = slot.icon.node as unknown as {
+        getComponent: (t: unknown) => { width: number; height: number };
+        scale: { x: number }; position: { x: number };
+    };
+    const transform = iconNode.getComponent(h.Transform);
+    // 主城在代码里是 `格高 * 1.06`；其它建筑恰好等于格高。
+    const expected = h.view.layout.tileHeight * 1.06;
+    assert.ok(Math.abs(transform.height - expected) < 0.5,
+        `图标高 ${transform.height} 应 ≈ ${expected}（格子高 ${h.view.layout.tileHeight}）`);
+    assert.ok(Math.abs(transform.width - expected) < 0.5, '正方形图：宽应等于高');
+    // 关键：尺寸走 contentSize，不靠 scale —— 靠 scale 时换图（212 / 279）就会漂。
+    assert.equal(iconNode.scale.x, 1, '不应再用 setScale 缩放图标');
+    assert.equal(iconNode.position.x, 0, '必须水平居中');
+});
 
 test('基地使用一张连续背景，选择和调整窗口不恢复旧地面贴片', () => {
     const h = buildBase();
@@ -142,4 +171,42 @@ test('连续背景始终画在建筑层下方，建筑按纵向位置排序', ()
         h.view.resize(width, height);
         assert.deepEqual(parent.children.map((node) => Number(node.name.slice(5))), h.view.layout.paintOrder);
     }
+});
+
+test('名字牌只在选中时出现：无底板、两行「名称 / 等级N」', () => {
+    const h = buildBase();
+    // 212×212 的新美术图：正方形。
+    const building = { rect: { width: 212, height: 212 }, originalSize: { width: 212, height: 212 }, offset: { x: 0, y: 0 } };
+    h.view.setArt({ ...h.art, buildings: new Map([[71001, building]]) });
+    const slot = h.view.slots.get(4) as unknown as {
+        name: { node: { active: boolean }; string: string };
+        badge: { node: { active: boolean } };
+    };
+    // 未选中：什么都不挂（2026-11-11 用户口径：平时不要那圈黑底文字）。
+    h.view.select(-1);
+    assert.equal(slot.name.node.active, false, '未选中时名字牌不应显示');
+    assert.equal(slot.badge.node.active, false, '底板不该显示');
+    // 选中：两行「名称 / 等级N」，仍然没有底板。
+    h.view.select(4);
+    assert.equal(slot.name.node.active, true, '选中时必须显示名称等级');
+    assert.match(slot.name.string, /\n等级\d+$/, '应为「名称\\n等级N」两行');
+    assert.equal(slot.badge.node.active, false, '底板永不再显示（参考图无底板）');
+});
+
+test('建造中的格用这座建筑自己的图，不再退回通用脚手架', () => {
+    const h = buildBase();
+    const building = { rect: { width: 212, height: 212 }, originalSize: { width: 212, height: 212 }, offset: { x: 0, y: 0 } };
+    const scaffold = { rect: { width: 96, height: 96 }, originalSize: { width: 96, height: 96 }, offset: { x: 0, y: 0 } };
+    h.view.setArt({ ...h.art, buildings: new Map([[71001, building]]), construction: scaffold });
+    const data = (h.view as unknown as { data: { plots: readonly Record<string, unknown>[] } }).data;
+    // 4 号格改成「建造中」：投影层不给在建建筑 `buildingId`，id 只能来自 `queueBuildingIds`。
+    h.view.render({
+        ...(h.view as unknown as { data: object }).data,
+        plots: data.plots.map((cell) => (cell.hexId === 4
+            ? { ...cell, slot: 'constructing', buildingId: 0 } : cell)),
+        queueBuildingIds: new Map([[4, 71001]]),
+    } as never);
+    const slot = h.view.slots.get(4) as unknown as { icon: { spriteFrame: unknown } };
+    assert.equal(slot.icon.spriteFrame, building, '在建也要用这座建筑自己的图（不要通用脚手架）');
+    assert.notEqual(slot.icon.spriteFrame, scaffold);
 });

@@ -1,6 +1,10 @@
 import { _decorator, Button, Label, Node, ProgressBar, SpriteFrame, UITransform } from 'cc';
 import { POPUP_BLANK_CATCHER, PopupBase } from '../../framework/ui/PopupBase';
-import { FW } from '../../framework/FW';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { TerritoryUiEvent, TerritoryViewEvent } from '../territory/application/TerritoryEvents';
+import type { ITerritoryCommandEvent, ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
+import { findHighestPassedTerritoryLevel } from '../territory/model/TerritoryStageBinding';
+import { TerritoryChapterInfoRepository } from '../territory/application/TerritoryChapterInfoRepository';
 import { CommonTips } from '../common/CommonTips';
 import { routedLoad } from '../common/RoutedResource';
 import { MonthCardGiftPage } from '../monthcard/MonthCardGiftPage';
@@ -8,8 +12,6 @@ import { HJ_COST_ICON_PATH, hjSharedPath } from './HangArt';
 import {
     HJ_DEFAULT_GEAR_INDEX,
     HJ_MAX_IDLE_MS,
-    HJ_SWEEP_TYPE_CHAPTER,
-    canClaim,
     contentCenterOffsetY,
     formatHms,
     gearLabel,
@@ -21,10 +23,8 @@ import {
     perHourText,
     rewardAt,
 } from './HangTable';
-import type { IHjLocalBox } from './HangTable';
-import { HJ_TEXTS, hjFormat } from './HangTexts';
+import type { IHjLocalBox, IHjReward } from './HangTable';
 import {
-    HJ_AD_TYPE_SWEEP,
     adCountTextOf,
     costTextOf,
     freePageOf,
@@ -32,9 +32,11 @@ import {
     hangRepository,
     monthCardBarVisibleOf,
     monthCardPriceTextOf,
+    readRoleState,
     rewardIconRefOf,
     rewardQualityOf,
-    timesOf,
+    subscribeRoleChange,
+    sweepTimesOf,
 } from './HangRepository';
 import type { IHangSnapshot } from './HangRepository';
 import { qualityFramePath } from './HangArt';
@@ -87,8 +89,9 @@ const SWEEP_DEBOUNCE_MS = 500;
  *
  * ① **`sweepTimes` 读不到就恒 0** ⇒ 免费次数永远「没用过」⇒ 广告分支本轮走不到
  *    （`CmdRole.sweepTimes` 字段存在、离线时不给值）。
- * ② **玩家持卡状态读不到**（`protoCache.json` 里没有月卡表）⇒ `hasUnlimited` 恒 `false`
- *    ⇒ 倍率恒 1、月卡条恒显示（这正是用户拍板的「无月卡默认分支」）。
+ * ② **玩家持卡状态读不到**（`protoCache.json` 里没有月卡表，`readMonthCard` 的 `owned`
+ *    写死 `false`）⇒ `hasUnlimited` 恒 `false` ⇒ 月卡条恒显示。它**只影响月卡条与
+ *    免费次数文案**；2026-11-11 起**不再限制倍率切换**（协议已带 `times`）。
  * ③ **预加载集合必须覆盖「界面会 `_setFrame()` 的每一处」**：收益条图标 ×2、快速征收的
  *    体力图标、6 个奖励格的图标 + 品质框。漏了不报错，只是那一格永远留白。
  */
@@ -168,8 +171,26 @@ export class HangPage extends PopupBase {
     /** 正在跑请求（防重入）。 */
     private _busy = false;
 
+    /**
+     * `CmdRole` 缓存更新的退订函数（`onOpen` 订阅、`onClose` 退订）。
+     *
+     * `sweepTimes` 没有查询协议、扫荡回包也不带次数 ⇒ 这是 AdCountText 唯一的实时刷新源。
+     */
+    private _unsubscribeRole: (() => void) | null = null;
+
     /** 图片缓存（`resources.load` 结果；`null` = 加载失败，别反复重试）。 */
     private readonly _frames = new Map<string, SpriteFrame | null>();
+
+    /**
+     * 产出奖励的**占城数据源**：`levelInfo.idleReward`（已通关最高关卡的配置）。
+     *
+     * `null` = 还没收到领地渲染（活动 / 军团跳转直接开弹窗、主城 Controller 不在），
+     * 这时回落到老表 `guankaReward.idleRewards`（`snapshot.mergedRewards`）。
+     */
+    private _territoryRewards: readonly IHjReward[] | null = null;
+
+    /** 上一次铺的 resId 串（Render 每秒可能来一次，列表没变就不重铺）。 */
+    private _territoryRewardKey = '';
 
     // ============================================================
     // 生命周期
@@ -190,16 +211,35 @@ export class HangPage extends PopupBase {
         //    按钮的缩放反馈，加了反而多一个老端没有的表现。
         this.monthCardEntry?.on(Node.EventType.TOUCH_END, this._onTapMonthCard, this);
         this.monthCardBuy?.on(Button.EventType.CLICK, this._onTapMonthCard, this);
-        this.sweepButton?.bindTap(() => { void this._onTapSweep(); });
+        this.sweepButton?.bindTap(() => { this._onTapSweep(); });
         this.gearSwitch?.bindTap(() => this._onTapGear());
+        // 领奖 / 扫荡的回包由领地 Controller 发 `rewards` 命令 ⇒ 收到后重读服务端起点。
+        EventMgr.instance.on(TerritoryViewEvent.Command, this._onTerritoryCommand, this);
+        // 产出奖励格的真正数据源是 `levelInfo.idleReward`（随领地状态变化）。
+        EventMgr.instance.on(TerritoryViewEvent.Render, this._onTerritoryRender, this);
     }
 
     protected async onOpen(): Promise<void> {
+        // 🔴 `CmdRole` 没有查询协议、扫荡回包（`CmdCityChapterSweepRspMsg`）也不带次数
+        //    ⇒ `sweepTimes` 只在服务端推 `cmdCaches` 时变。订阅它，AdCountText / 免费角标
+        //    才能实时跟上；只靠「打开弹窗读一次」会在扫荡后一直显示旧值（看着就像字段没接）。
+        //    订阅放 `onOpen` 而不是 `onInit`：弹窗可能被复用（`cache=true`），
+        //    `onInit` 只跑一次，`onClose` 退订后再次打开就漏订阅了。
+        this._unsubscribeRole?.();
+        this._unsubscribeRole = subscribeRoleChange(this, () => { this._refreshRoleState(); });
+        // 借 Ready 让领地 Controller 重发一帧渲染：产出奖励格的数据源（`levelInfo.idleReward`）
+        // 只在 Render 里给，而弹窗常常在主城渲染完之后才打开。`onReady` 就是一次幂等 publish。
+        EventMgr.instance.emit(TerritoryUiEvent.Ready);
         await this.reload();
     }
 
     protected onClose(): void {
         this.unscheduleAllCallbacks();
+        // 缓存订阅按 caller 一次摘干净（`removeEventCaller` 内部 `peekCache`，
+        // 缓存还没建也不会抛）—— 不清会和下一次打开的弹窗实例抢同一份回调。
+        this._unsubscribeRole?.();
+        this._unsubscribeRole = null;
+        EventMgr.instance.offTarget(this);
     }
 
     // 空白关闭：**不覆写** `canCloseOnBlank()` —— 老端 `LayerHangUI.init()` 里
@@ -217,11 +257,16 @@ export class HangPage extends PopupBase {
         this._snapshot = snapshot;
         // 老端 refreshLastTime()：`lastIdleRewardTime || now` —— 起点为 0 时退到「现在」，
         // 否则进度条会从 1970 年算起（`elapsed` 溢出成 8h 满格）。
+        //
+        // 🔴 占城接入后（2026-11-09）：**服务端 `ChapterInfo.idleTime` 优先**。
+        // 它是账号级、登录后拉一次 + Bro 覆盖的唯一权威起点；`CmdRole.lastIdleRewardTime`
+        // 是旧主线挂机那套，与领地征收不是一条账。
         const start = snapshot.role ? snapshot.role.lastIdleRewardTimeMs : 0;
-        this._startMs = start > 0 ? start : Date.now();
-        // 无月卡 ⇒ 倍率复位（老端 refreshGearBtn：不复位的话「刚点到 50 倍月卡就到期」
-        // 的玩家下一次快速征收会按 50 倍扣体力）。
-        if (!snapshot.hasUnlimited) this._gearIndex = HJ_DEFAULT_GEAR_INDEX;
+        this._startMs = this._serverIdleStartMs() ?? (start > 0 ? start : Date.now());
+        // ⚠️ 2026-11-11 起**不再**「无月卡就把倍率复位到 1 倍」（老端 `refreshGearBtn` 的做法）。
+        //    协议新增 `times` 后倍率对所有玩家开放（山猫口径）；每次 reload 都复位会把档位
+        //    抹回 x1 —— 表现就是「点了 GearSwitch 角标闪一下又变回来、请求永远 1 倍」。
+        //    越界兜底在 `sweepTimesOf`，这里刻意不动 `_gearIndex`。
 
         await this._preloadFrames(snapshot);
         this._renderGains(snapshot);
@@ -253,6 +298,96 @@ export class HangPage extends PopupBase {
     }
 
     /**
+     * 服务端章节级挂机起点（毫秒）；没拉到返回 `null`。
+     *
+     * 真源 `TerritoryChapterInfoRepository.instance.current.idleTime`（秒）——
+     * 账号级单例，登录后拉一次，服务端 `CmdCityChapterInfoBroMsg` 会整包覆盖。
+     */
+    private _serverIdleStartMs(): number | null {
+        const seconds = TerritoryChapterInfoRepository.instance.current?.idleTime;
+        return seconds && seconds > 0 ? seconds * 1000 : null;
+    }
+
+    /**
+     * 领地 Controller 的命令：收到 `rewards`（领奖 / 扫荡的实际发放）就重读服务端状态。
+     *
+     * 🔴 必须重读，不能本地 `_startMs = Date.now()`：服务端 `idleTime` 是**秒级时间戳**，
+     * 且按整小时结余（领完还会留零头），本地「从现在重新计时」会与下一次结算错位。
+     * 只有快照真的变了才动 —— 扫荡不一定重置挂机起点。
+     *
+     * 🔴 同一处还要重读 `CmdRole`：**扫荡回包 `CmdCityChapterSweepRspMsg` 只有 `succ` +
+     * `tlCmdGoods`，根本没有次数**。`sweepTimes` 靠服务端更新 `CmdRole` 后推 `cmdCaches`，
+     * 客户端不重读就只能一直显示打开弹窗那一刻的旧值（症状 =「次数接了但看着没接」）。
+     */
+    private _onTerritoryCommand(event: ITerritoryCommandEvent): void {
+        if (event.command.kind !== 'rewards') return;
+        const next = this._serverIdleStartMs();
+        if (next !== null && next !== this._startMs) {
+            this._startMs = next;
+            this._refreshTime();
+            this._restartTimer();
+        }
+        this._refreshRoleState();
+    }
+
+    /**
+     * 重读 `CmdRole`（`sweepTimes` / `lastIdleRewardTime`）并刷新按钮区。
+     *
+     * ⚠️ 读不到（离线 / 缓存没推）就**保留旧值直接返回** —— 不能把 `sweepTimes` 当成 0 写回去，
+     * 那会让「今日剩余」瞬移回满、免费角标重新亮起来，比不刷新更糟。
+     */
+    private _refreshRoleState(): void {
+        const snapshot = this._snapshot;
+        if (!snapshot) return;
+        const role = readRoleState();
+        if (!role) return;
+        const prev = snapshot.role;
+        if (prev && prev.sweepTimes === role.sweepTimes
+            && prev.lastIdleRewardTimeMs === role.lastIdleRewardTimeMs) return;
+        this._snapshot = { ...snapshot, role };
+        this._refreshButtons();
+    }
+
+    /**
+     * 领地渲染：用「已通关的最高关卡格」那一关的 `levelInfo.idleReward` 铺产出奖励区。
+     *
+     * 🔴 口径与扫荡目标**同源**（`findHighestPassedTerritoryLevel`）：
+     * 展示的每小时产出就是征收 / 扫荡按的那一关，不用「下一关」，也不用老主线表
+     * `guankaReward.idleRewards`（那是主线挂机，和占城不是一条账）。
+     *
+     * 一格都没通关 / 还没收到 Render ⇒ 保持 `null`（回落老表），否则产出区会整块空掉。
+     */
+    private _onTerritoryRender(event: ITerritoryRenderEvent): void {
+        const { map, progress, stageByCell } = event.state;
+        if (!map || !progress) return;
+        const target = findHighestPassedTerritoryLevel(map.sites, stageByCell, progress);
+        if (!target) return;
+        const next: IHjReward[] = target.stage.idleRewards
+            .filter((reward) => reward.probability > 0 && reward.amount > 0)
+            .map((reward) => ({ resId: reward.resId, number: Math.floor(reward.amount) }));
+        if (!next.length) return;
+        // Render 可能每秒来一次：列表没变就不重铺（重铺会重建图标请求）
+        const key = next.map((reward) => reward.resId).join(',');
+        if (key === this._territoryRewardKey) return;
+        this._territoryRewardKey = key;
+        this._territoryRewards = next;
+        const snapshot = this._snapshot;
+        if (!snapshot) return;
+        // 先补图再铺格：漏加载会静默留白（`_iconFrameOf` 拿不到就返回 null）
+        void this._preloadFrames(snapshot).then(() => {
+            const current = this._snapshot;
+            if (!current) return;
+            this._renderGains(current);
+            this._renderRewards(current);
+        });
+    }
+
+    /** 产出奖励区（收益条 + 6 格）的数据源：占城 `levelInfo.idleReward` 优先，回落老表。 */
+    private _displayRewards(snapshot: IHangSnapshot): readonly IHjReward[] {
+        return this._territoryRewards ?? snapshot.mergedRewards;
+    }
+
+    /**
      * 进度条 / 时间文案 / `MAX` 角标。
      *
      * 🔴 `maxBadge.active` **必须无条件写**（哪怕值没变），不能写成「只在翻转时写」——
@@ -278,7 +413,7 @@ export class HangPage extends PopupBase {
         const snapshot = this._snapshot;
         if (!snapshot) return;
 
-        const times = timesOf(snapshot, this._gearIndex);
+        const times = sweepTimesOf(this._gearIndex);
         this.sweepButton?.renderCost(costTextOf(snapshot, this._gearIndex));
         // `免费 = 是`（page 1）才是「还有免费次数」—— 语义反直觉，别写反
         this.sweepButton?.renderFree(freePageOf(snapshot) === 1);
@@ -294,8 +429,9 @@ export class HangPage extends PopupBase {
 
     /** 收益条 1/2：`mergedRewards[0]` / `[1]` 的「图标 + `16/h`」。 */
     private _renderGains(snapshot: IHangSnapshot): void {
-        const first = rewardAt(snapshot.mergedRewards, 0);
-        const second = rewardAt(snapshot.mergedRewards, 1);
+        const rewards = this._displayRewards(snapshot);
+        const first = rewardAt(rewards, 0);
+        const second = rewardAt(rewards, 1);
         this.gain1?.render(this._iconFrameOf(snapshot, first ? first.resId : 0), perHourText(first));
         this.gain2?.render(this._iconFrameOf(snapshot, second ? second.resId : 0), perHourText(second));
     }
@@ -312,10 +448,11 @@ export class HangPage extends PopupBase {
      * 「条数 ≤ 6」这个约束在单测里钉住，免得以后策划加第 7 条产出时静默丢格。
      */
     private _renderRewards(snapshot: IHangSnapshot): void {
+        const rewards = this._displayRewards(snapshot);
         for (let i = 0; i < this.rewardSlots.length; i++) {
             const slot = this.rewardSlots[i];
             if (!slot) continue;
-            const reward = rewardAt(snapshot.mergedRewards, i);
+            const reward = rewardAt(rewards, i);
             if (!reward) {
                 slot.hide();
                 continue;
@@ -379,129 +516,48 @@ export class HangPage extends PopupBase {
         void this.close();
     }
 
-    /** 领取：不足 1 小时只提示（老端 `onClickReceive`）。 */
+    /**
+     * 领取（`ClaimBtn`）：发意图给领地 Controller。
+     *
+     * 🔴 2026-11-09 起征收走占城协议 `CmdCityChapterIdleRewardReqMsg`，
+     * 奖励由服务端 `tlCmdGoods` 决定、由 `MainTerritoryMap.presentRewards({ popup: true })`
+     * 弹窗展示。本地不再判「满 1 小时」—— 结算口径在服务端，客户端拦一道只会
+     * 把合法领取挡在门外（且服务端按整小时结算，前端判据必然对不齐）。
+     */
     private _onTapClaim(): void {
         if (this._busy) return;
-        if (!canClaim(this._elapsed())) {
-            FW.showTip(HJ_TEXTS.fullOneHour);
-            return;
-        }
-        void this._claim();
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
     }
 
-    private async _claim(): Promise<void> {
-        this._busy = true;
-        try {
-            const result = await hangRepository.claimReward(this);
-            if (result === 'offline') {
-                FW.showTip(HJ_TEXTS.offlineTip);
-                return;
-            }
-            if (result !== 'ok') {
-                FW.showTip(HJ_TEXTS.failedTip);
-                return;
-            }
-            FW.showTip(HJ_TEXTS.claimSuccess);
-            // 老端 requestHangGetReward 由服务端推 `lastIdleRewardTime`；这里本地先复位起点，
-            // 免得等推送到达之前进度条还停在满格。
-            this._startMs = Date.now();
-            await this.reload();
-        } finally {
-            this._busy = false;
-        }
-    }
-
-    /** 倍率切换：非月卡只提示（老端 `onClickChangeGear`）。 */
+    /**
+     * 倍率切换（`GearSwitch`）：`1 → 5 → 10 → 20 → 50 → 1` 循环。
+     *
+     * ⚠️ 2026-11-11 口径变更：**不再拦月卡**。老端 `onClickChangeGear` 对非月卡玩家
+     * 只弹「激活月卡后解锁功能」，但协议已加 `times` 字段、扣费在服务端，
+     * 客户端再拦一道只会让「界面有角标但永远切不动」。
+     */
     private _onTapGear(): void {
-        const snapshot = this._snapshot;
-        if (!snapshot) return;
-        if (!snapshot.hasUnlimited) {
-            FW.showTip(HJ_TEXTS.monthCardLockTip);
-            return;
-        }
+        if (!this._snapshot) return;
         this._gearIndex = nextGearIndex(this._gearIndex);
         this._refreshButtons();
     }
 
     /**
-     * 快速征收。
+     * 扫荡（`SweepBtn`）：发意图给领地 Controller，走 `CmdCityChapterSweepReqMsg`。
      *
-     * 与老端 `onClickLevy` 逐步对齐：
-     * ① 500ms 防抖；② 体力校验（`sweepEnd × times`）；③ 免费次数用完且还有广告次数
-     * ⇒ 弹「看广告」二次确认（**这一支不继续扫荡**，等玩家点「立即观看」）。
+     * 老端那套「体力校验 / 免费次数 / 看广告换次数」全部下线 —— 它们是主线挂机
+     * （`CmdBattleSweepReqMsg`）的规则，占城扫荡由服务端按章节格子扣，客户端只防连点。
+     *
+     * 🔴 `times` 必须随意图带上：它既是「请求倍率」，也是「服务端扣多少体力」的唯一依据。
+     * 漏带 ⇒ 界面角标显示 x50、实际只扫 1 倍，且零报错（协议字段可缺省）。
      */
-    private async _onTapSweep(): Promise<void> {
-        const snapshot = this._snapshot;
-        if (!snapshot || this._busy) return;
-
+    private _onTapSweep(): void {
         const now = Date.now();
         if (this._lastSweepMs > 0 && now - this._lastSweepMs < SWEEP_DEBOUNCE_MS) return;
         this._lastSweepMs = now;
-
-        if (snapshot.sweepLevel <= 0 || snapshot.sweepEnd <= 0) return;
-
-        const times = timesOf(snapshot, this._gearIndex);
-        // 体力校验：服务端按 `end × times` 扣，客户端同口径先拦一道
-        // （老端 `CheckHaveEnoughCostAndOpenAlert` —— 体力不足时它自己会弹提示）
-        if (!this._hasEnoughEnd(snapshot, snapshot.sweepEnd * times)) {
-            FW.showTip(HJ_TEXTS.failedTip);
-            return;
-        }
-
-        const used = snapshot.role ? snapshot.role.sweepTimes : 0;
-        if (!snapshot.hasUnlimited && used >= snapshot.sweepFreeTimes && snapshot.adRest > 0) {
-            await this._confirmWatchAd(snapshot);
-            return;
-        }
-
-        await this._doSweep();
-    }
-
-    /** 弹「免费次数用完，看广告 +1 次」二次确认（老端 `GObjChapterSelect_1`）。 */
-    private async _confirmWatchAd(snapshot: IHangSnapshot): Promise<void> {
-        await CommonTips.open({
-            userData: {
-                content: hjFormat(HJ_TEXTS.adConfirmContent, snapshot.adRest, snapshot.adLimit),
-                sureText: HJ_TEXTS.adConfirmWatch,
-                onSure: () => { void this._watchAdThenSweep(); },
-            },
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, {
+            intent: { kind: 'sweepChapter', times: sweepTimesOf(this._gearIndex) },
         });
-    }
-
-    /** 「立即观看」：放广告 → 记一次 → 再扫荡。SDK 没接时只提示（见 `HJ_AD_PLAYBACK_AVAILABLE`）。 */
-    private async _watchAdThenSweep(): Promise<void> {
-        if (!HJ_AD_PLAYBACK_AVAILABLE) {
-            FW.showTip(HJ_TEXTS.adUnavailable);
-            return;
-        }
-        const result = await hangRepository.watchAd(HJ_AD_TYPE_SWEEP, this);
-        if (result !== 'ok') {
-            FW.showTip(result === 'offline' ? HJ_TEXTS.offlineTip : HJ_TEXTS.failedTip);
-            return;
-        }
-        await this._doSweep();
-    }
-
-    private async _doSweep(): Promise<void> {
-        const snapshot = this._snapshot;
-        if (!snapshot) return;
-        this._busy = true;
-        try {
-            const result = await hangRepository.sweep(snapshot.sweepLevel, HJ_SWEEP_TYPE_CHAPTER, this);
-            if (result === 'offline') {
-                FW.showTip(HJ_TEXTS.offlineTip);
-                return;
-            }
-            if (result !== 'ok') {
-                FW.showTip(HJ_TEXTS.failedTip);
-                return;
-            }
-            // 老端 onClickLevy 成功后就 refreshLastTime()（挂机重新从 0 计）
-            this._startMs = Date.now();
-            await this.reload();
-        } finally {
-            this._busy = false;
-        }
     }
 
     /** 月卡入口 / 购买键 —— 都进已移植的月卡礼包页（老端 `SystemId.MonthCardGift`）。 */
@@ -522,7 +578,7 @@ export class HangPage extends PopupBase {
      */
     private async _preloadFrames(snapshot: IHangSnapshot): Promise<void> {
         const paths = new Set<string>([HJ_COST_ICON_PATH]);
-        for (const reward of snapshot.mergedRewards) {
+        for (const reward of this._displayRewards(snapshot)) {
             const ref = rewardIconRefOf(snapshot, reward.resId);
             if (ref) paths.add(hjSharedPath(ref));
             paths.add(qualityFramePath(rewardQualityOf(snapshot, reward.resId)));
@@ -561,20 +617,6 @@ export class HangPage extends PopupBase {
         return ref ? this._frameOf(hjSharedPath(ref)) : null;
     }
 
-    // ============================================================
-    // 体力校验
-    // ============================================================
-
-    /**
-     * 体力够不够（老端 `ModelGoods.CheckHaveEnoughCostAndOpenAlert` 的判定那一半）。
-     *
-     * ⚠️ 新工程没有「背包持有量」读层（`CacheMgr` 里没有 `CmdGoods` 缓存入口）⇒ 这里
-     * **读不到就放行**（`true`），把把关交给服务端。老端那套会顺带弹「体力不足」的引导框，
-     * 本轮不接（要跳购买页）。宁可让服务端拒一次，也别在客户端把能点的人拦在外面。
-     */
-    private _hasEnoughEnd(_snapshot: IHangSnapshot, _cost: number): boolean {
-        return true;
-    }
 }
 
 /** `HJ_MAX_IDLE_MS` 的展示口径（给探针 / 单测读，避免两边各写一遍 8h）。 */

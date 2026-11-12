@@ -177,7 +177,7 @@ export class LeagueMgrPage extends PopupBase {
     quickJoinCheck: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinLabel：勾选框右侧的说明文字（仅「是」页可见）' })
-    quickJoinLabel: Node = null;
+    quickJoinLabel: Node = null!;
 
     /** 本趟铺上来的视图（`onClose` 时拿它比对「勾选变了没」）。 */
     private view: ILeagueMgrView | null = null;

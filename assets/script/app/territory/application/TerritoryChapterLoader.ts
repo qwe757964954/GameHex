@@ -2,7 +2,7 @@ import type { AssetService } from '../../../core/asset/AssetService';
 import type {
     ITerritoryChapterBundle,
     ITerritoryChapterLoader,
-} from './TerritoryPresenter';
+} from './TerritoryModel';
 import {
     loadTerritoryBattleArt,
     loadTerritoryMapJson,

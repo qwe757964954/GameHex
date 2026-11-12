@@ -832,6 +832,25 @@ function stage() {
 }
 
 /** 一套带页面根的舞台（云洞层要挂在 `MapLayer.parent.parent` 上）。 */
+test('云消散批量轨道同帧结束全部结算，推进不复制键数组', () => {
+    const { view } = stage();
+    const runtime = view;
+    const settled: unknown[] = [];
+    const tracks = [1, 2, 3].map(cellId => ({ cellId, elapsed: 0 }));
+    runtime.dissolving = new Map(tracks.map(track => [track.cellId, track]));
+    runtime.poseAt = (elapsed: number) => elapsed < 0.2 ? {} : null;
+    runtime.applyDissolve = () => {};
+    runtime.settleDissolve = (track: unknown) => settled.push(track);
+    runtime.stepDissolve(0.1);
+    assert.equal(runtime.dissolving.size, 3);
+    runtime.stepDissolve(0.1);
+    assert.equal(runtime.dissolving.size, 0);
+    assert.deepEqual(settled, tracks);
+    const source = readFileSync('assets/script/app/territory/view/TerritoryCloudView.ts', 'utf8');
+    const method = source.slice(source.indexOf('private stepDissolve('), source.indexOf('private applyDissolve('));
+    assert.doesNotMatch(method, /Array\.from|\.\.\./);
+});
+
 function stageWithPage() {
     const page = new NodeStub('Page');
     const viewport = new NodeStub('MapViewport');
@@ -1985,4 +2004,117 @@ test('镜头对焦点可覆盖：k=1/f=0 与 O 无关，k=fit/f=1 时把 O 摆�
         assert.ok(Math.abs(spot.x) < 1e-9 && Math.abs(spot.y) < 1e-9,
             `k=fit / f=1 时对焦点必须落在覆盖层原点（屏幕正中），实际 ${spot.x},${spot.y}`);
     }
+});
+
+// ============================================================
+// 2026-11-11：第 2 章「云层和地块没有固定间隔」
+// ============================================================
+//
+// 真因不是间隔常量变了，而是**挡云区漏描格**：`CloudKeepOut` 只按 `cloudCells`
+//（sites / randomSites / 起始格）画外扩多边形，`chapter_02` 起预告披露的却是整关
+// `footprint`（一关 5~10 格）。那些格会被 `paintHexes` 画成地块，却不在 `cloudCells` 里
+// ⇒ 云一直贴到地块边缘。修法：地图视图注入全量 `layout.points`，遮罩按「所有已揭示格」描。
+
+/** 造一份「整张格网」的格心；`scale` 用来模拟换章后坐标系变了。 */
+function allGridPoints(count: number, scale = 1): Map<number, { x: number; y: number }> {
+    return new Map(Array.from({ length: count }, (_, cellId) => [
+        cellId,
+        { x: cellId * 92.25 * scale, y: cellId * 90 * scale },
+    ]));
+}
+
+/** 从 Graphics 的 `moveTo` 反推出被描过的格心 x（第一个顶点 = 格心 + 外扩右尖角）。 */
+function keepOutCenters(graphics: GraphicsStub): number[] {
+    const edge = cloud.territoryCloudKeepOutPoints()[0].x;
+    return graphics.ops
+        .filter((item) => item.op === 'moveTo')
+        .map((item) => Number(((item.x ?? 0) - edge).toFixed(4)))
+        .sort((a, b) => a - b);
+}
+
+test('★★★挡云区按「所有已揭示格」描：footprint 格不在 cloudCells 里也有 15px 间隔', () => {
+    const { view } = stage();
+    const cloudCells = cells(3);            // 只有 0 / 1 / 2 配了内容云
+    const revealed = new Set([0, 3, 7]);    // 3、7 是预告披露出来的 footprint 格
+    const graphics = view.keepOutNode!.getComponent(GraphicsStub) as GraphicsStub;
+
+    // 旧口径（没人注入格心）正是用户截图里的 bug：只描得出 1 个多边形。
+    view.sync(cloudCells, revealed);
+    assert.equal(graphics.polygonCount, 1, '旧口径：3 / 7 两格没有挡云区，云贴着地块');
+
+    // 注入全量格心 ⇒ 三格全部描上，且位置取的是**注入的格心**。
+    view.setKeepOutPoints(allGridPoints(9));
+    assert.equal(graphics.polygonCount, 3, '每一个已揭示格都要有 15px 外扩轮廓');
+    assert.equal(graphics.vertexCount, 18, '一个轮廓 6 个顶点');
+    assert.deepEqual(keepOutCenters(graphics), [0, 3 * 92.25, 7 * 92.25]);
+    assert.equal((view.keepOutNode!.getComponent(MaskStub) as MaskStub).enabled, true);
+});
+
+test('★★★换章换了坐标系：revealed 集合没变也要按新格心重描一次', () => {
+    const { view } = stage();
+    const revealed = new Set([0, 3, 7]);
+    view.setKeepOutPoints(allGridPoints(9));
+    view.sync(cells(3), revealed);
+    const graphics = view.keepOutNode!.getComponent(GraphicsStub) as GraphicsStub;
+    const clears = graphics.clearCalls;
+
+    // 同一份 revealed、换一张格网（新章 layout.points 是新对象）⇒ `syncKeepOut` 会早退，
+    // 必须由 `setKeepOutPoints` 自己逼一次重画，否则 15px 间隔整体贴在旧格心上。
+    view.setKeepOutPoints(allGridPoints(9, 2));
+    assert.equal(graphics.clearCalls, clears + 1, '格心换了必须重描');
+    assert.equal(graphics.polygonCount, 3);
+    assert.deepEqual(keepOutCenters(graphics), [0, 3 * 184.5, 7 * 184.5]);
+
+    // 同一份格心重复注入 ⇒ 不重画（renderMap 每帧都调，重画几百个多边形会掉帧）。
+    const same = allGridPoints(9, 2);
+    view.setKeepOutPoints(same);             // 新引用 ⇒ 重描一次
+    const after = graphics.clearCalls;
+    view.setKeepOutPoints(same);
+    view.setKeepOutPoints(same);
+    assert.equal(graphics.clearCalls, after, '引用没变就别重画');
+});
+
+test('★★★真表佐证：chapter_02 起预告 footprint 有多数格不在 cloudCells（第一章没有）', () => {
+    const chapter = (id: string): any => JSON.parse(
+        read(`assets/resources/config/territory-maps/${id}.json`));
+    const cloudCellsOf = (map: any): Set<number> => new Set<number>([
+        ...map.sites.map((site: any) => site.cellId),
+        ...(map.randomSites?.candidateCells ?? []),
+        map.startCellId,
+    ]);
+    const firstLevelFootprint = (map: any): Set<number> => {
+        const stages = map.sites.filter((site: any) => site.type === 'stage' || site.type === 'boss');
+        const first = stages.reduce((a: any, b: any) =>
+            Number(b.configId) < Number(a.configId) ? b : a);
+        const out = new Set<number>();
+        for (const site of map.sites) {
+            if (site.configId !== first.configId) continue;
+            for (const cellId of site.footprint ?? []) out.add(cellId);
+        }
+        return out;
+    };
+    const missing = (id: string): number => {
+        const map = chapter(id);
+        const cells = cloudCellsOf(map);
+        return Array.from(firstLevelFootprint(map)).filter((cellId) => !cells.has(cellId)).length;
+    };
+    // 第一章的站点 footprint 就是自己那格 ⇒ 旧口径碰巧不露馅。
+    assert.equal(missing('chapter_01'), 0, '第一章没有「画了地块却没描挡云区」的格');
+    // 第二章起一关是一个带多格 footprint 的站点 ⇒ 用户截图里那圈贴着地块的云就是这么来的。
+    assert.ok(missing('chapter_02') > 0, '第二章必须至少有 1 格 footprint 不在 cloudCells');
+    assert.ok(missing('chapter_03') > 0, '后续章节同理');
+});
+
+test('★★★消散层那张「擦邻居」遮罩也用同一份全量格心', () => {
+    const { view } = stage();
+    const revealed = new Set([0, 3, 7]);
+    view.setKeepOutPoints(allGridPoints(9));
+    view.sync(cells(3), revealed);
+    const runtime = view as any;
+    // 0 号格正在消散 ⇒ 它自己那一格不擦，3 / 7 两个邻居照旧擦 15px。
+    runtime.dissolving = new Map([[0, {}]]);
+    runtime.syncDissolveKeepOut();
+    const graphics = view.dissolveLayerNode!.getComponent(GraphicsStub) as GraphicsStub;
+    assert.equal(graphics.polygonCount, 2, '正在消散的那一格要留着，其余已揭示格都要擦');
+    assert.deepEqual(keepOutCenters(graphics), [3 * 92.25, 7 * 92.25]);
 });

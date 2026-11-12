@@ -16,7 +16,7 @@ function rows(name: string) {
         Object.fromEntries(value.k.map((key: string, i: number) => [key, row[i]])));
 }
 const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight'];
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams'];
 loadPvpTables(Object.fromEntries(names.map(name => [name, rows(name)])) as ZCPvpTables);
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 const config = captureZCMatchConfig();
@@ -37,6 +37,26 @@ function flip(game: ZCGameModel) {
     assert.equal(game.developHex(hex.id).ok, true);
     return game.snapshot.hexes[hex.id];
 }
+
+test('GM 加金币只修改本局我方金币，拒绝非法数量、溢出与已结束对局', () => {
+    const game = fixture();
+    const before = { ...game.snapshot };
+    assert.equal(game.addDebugGold(123).ok, true);
+    assert.equal(game.snapshot.playerGold, before.playerGold + 123);
+    assert.equal(game.snapshot.goldByOwner.player, before.playerGold + 123);
+    assert.equal(game.snapshot.enemyGold, before.enemyGold);
+    for (const amount of [0, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.equal(game.addDebugGold(amount).ok, false);
+        assert.equal(game.snapshot.playerGold, before.playerGold + 123);
+    }
+    const ended = game.snapshot;
+    ended.status = 'victory';
+    const finished = new ZCGameModel(ended, () => 0.1, config);
+    assert.equal(finished.addDebugGold(1).ok, false);
+    assert.equal(finished.snapshot.playerGold, ended.playerGold);
+    game.reset();
+    assert.equal(game.snapshot.playerGold, new ZCGameModel(null, () => 0.1, config).snapshot.playerGold);
+});
 
 test('本地指定卡跨地块类型生效，按次数消耗，耗尽恢复随机并保留已生成单位的卡定义', () => {
     const game = fixture();
@@ -119,6 +139,32 @@ test('GM 本地指令不联网，参数错误与无对局有反馈，结果监�
     table.onTip = (message: string) => tips.push(message);
     table.init();
     assert.ok(table.getCommandList().some((item: { gm: string }) => item.gm.startsWith('addBattleCard ')));
+    assert.ok(table.getCommandList().some((item: { gm: string }) => item.gm === 'addBattleGold 100000'));
+    await table.execute('addBattleGold 100');
+    assert.match(tips.at(-1), /先进入战斗/);
+    const goldOwner = {};
+    let goldRequests = 0;
+    EventMgr.instance.on(ZCGameUiEvent.DebugAddGold, (amount: number) => {
+        goldRequests++;
+        assert.equal(amount, 123);
+        EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: '加金币成功' });
+    }, goldOwner);
+    try {
+        for (const command of ['addBattleGold', 'addBattleGold abc', 'addBattleGold 0', 'addBattleGold -1',
+            'addBattleGold 1.5', 'addBattleGold Infinity', 'addBattleGold 9007199254740992', 'addBattleGold 1 2']) {
+            await table.execute(command);
+            assert.match(tips.at(-1), /用法/);
+        }
+        assert.equal(goldRequests, 0);
+        assert.equal(await table.execute('addBattleGold 123'), true);
+        assert.equal(goldRequests, 1);
+        assert.equal(tips.at(-1), '加金币成功');
+    } finally {
+        EventMgr.instance.offTarget(goldOwner);
+    }
+    const goldTips = tips.length;
+    EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: '迟到金币结果' });
+    assert.equal(tips.length, goldTips);
     assert.equal(await table.execute('addBattleCard 68001 1'), true);
     assert.match(tips.at(-1), /先进入战斗/);
     await table.execute('addBattleCard 68001 abc');

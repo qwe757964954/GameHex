@@ -8,7 +8,7 @@ import { completeBigMapCampLayout } from '../model/BigMapCampWorld';
  * 大地图**布局文件**的加载器（唯一允许碰 `cc` 的布局入口）。
  *
  * 与 `TerritoryChapterLoader` 同一套口径：`AssetService` 加载、拿不到就返回 `null`，
- * 由调用方（`BigMapPresenter`）回退种子生成。**任何异常都不向外抛** —— 策划把图配错
+ * 由调用方（`BigMapModel`）回退种子生成。**任何异常都不向外抛** —— 策划把图配错
  * 最多是「回到默认地图」，不能把大世界整个打不开。
  *
  * 世界 1 使用策划布局 `config/bigmap-maps/bigMap`，尺寸以该布局为准。

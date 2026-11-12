@@ -1,0 +1,127 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "持续光环伤害效果-loop",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 12,
+  "speed": 1,
+  "wrapMode": 2,
+  "events": [],
+  "_duration": 1.5,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0833333333,
+            0.1666666667,
+            0.25,
+            0.3333333333,
+            0.4166666667,
+            0.5,
+            0.5833333333,
+            0.6666666667,
+            0.75,
+            0.8333333333,
+            0.9166666667,
+            1.0,
+            1.0833333333,
+            1.1666666667,
+            1.25,
+            1.3333333333,
+            1.4166666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "f74fadf0-6b1d-4128-bbf1-54430c822aae@f9941"
+            },
+            {
+              "__uuid__": "b59f5c00-05b2-4927-8758-5993e654ddf6@f9941"
+            },
+            {
+              "__uuid__": "7672253f-50da-4c38-9bf3-6f96503d35f7@f9941"
+            },
+            {
+              "__uuid__": "e1652381-ce7a-424b-8e9f-f4847e50cda0@f9941"
+            },
+            {
+              "__uuid__": "1341ed1c-6c92-48d7-b7ee-9902a663fd67@f9941"
+            },
+            {
+              "__uuid__": "e4f2416a-9960-4c9a-b04a-259a6d2d9786@f9941"
+            },
+            {
+              "__uuid__": "30522a5a-503f-473f-8fde-a0b691ed332c@f9941"
+            },
+            {
+              "__uuid__": "4bcb664f-ef8d-4505-b79d-997635d5354d@f9941"
+            },
+            {
+              "__uuid__": "4a272de0-2dc5-4413-9a44-cb0c793de3db@f9941"
+            },
+            {
+              "__uuid__": "ecb58ae0-d25c-4b99-8f17-324e89c1de94@f9941"
+            },
+            {
+              "__uuid__": "101b571f-524e-427e-9319-d064a36d13fd@f9941"
+            },
+            {
+              "__uuid__": "32a5581b-742a-46a6-8be3-f7b23604d258@f9941"
+            },
+            {
+              "__uuid__": "2f678130-5974-4759-b798-abb093b32545@f9941"
+            },
+            {
+              "__uuid__": "446c03e9-692f-495a-a10a-7da59077529c@f9941"
+            },
+            {
+              "__uuid__": "2a0bb75a-f2b7-4859-904e-36249c8aa030@f9941"
+            },
+            {
+              "__uuid__": "29c70a5c-c445-4a10-b07e-6039cb668114@f9941"
+            },
+            {
+              "__uuid__": "82d6e546-ea7d-41a1-96dd-70eccc3db7bf@f9941"
+            },
+            {
+              "__uuid__": "6b46e063-d8f4-4bac-a08a-7f6c713f5f49@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

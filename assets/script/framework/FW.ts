@@ -180,28 +180,6 @@ export class FW {
         })
     }
 
-    static adjustViewFullPhone(com: fairygui.GComponent, liuhaiHeightAdjust: number = 0) {
-        if (com == null) {
-            return
-        }
-        if (EngineMain.isNeedLiuHaiAdjust()) {
-            let fullCom = com.tm("组件_通用_全面屏适配")
-            if (fullCom != null && !fullCom["isAdjustLiuHai"]) {
-                let h = EngineMain.liuhaiHeight + liuhaiHeightAdjust;
-                fullCom.height = h;
-                fullCom["isAdjustLiuHai"] = true
-                //处理关联：延展的处理
-                if (h != 0) {
-                    let listRelationCom = com.tm("组件_通用_全面屏适配_延展")
-                    if (listRelationCom != null && !listRelationCom["clientHitRelationOk"]) {
-                        listRelationCom.height -= h;
-                        listRelationCom["clientHitRelationOk"] = true;
-                    }
-                }
-            }
-        }
-    }
-
     static GetRefPath(resName: string) {
         if (FW.isRemoteRef)
             return FW.refPath + resName + ".json"

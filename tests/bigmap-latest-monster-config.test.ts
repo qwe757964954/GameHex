@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { BIGMAP_TABLE, decompressBigMapRows, parseBigMapConfig } from '../assets/script/app/bigmap/model/BigMapConfig';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { bigMapMonsterUnlock } from '../assets/script/app/bigmap/model/BigMapUnlock';
 import { buildBigMapWorld } from '../assets/script/app/bigmap/model/BigMapWorld';
@@ -64,7 +64,7 @@ test('新表 unlockType=0 仍需逐级解锁；新版野怪不走旧血量模拟
     assert.equal(bigMapMonsterUnlock(monster, makeUnlockContext({ maxClearedMonsterLevel: 9 })).unlocked, true);
     assert.equal(bigMapMonsterUnlock(config.monsters.get(8001)!, makeUnlockContext()).unlocked, true);
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({ config, storage, saveKey: 'latest-monster',
+    const presenter = new BigMapModel({ config, storage, saveKey: 'latest-monster',
         adventureChapter: () => 3, now: () => 957600 });
     const site = presenter.world.monsters.find((entry) => entry.monsterId === monster.id);
     assert.ok(site);

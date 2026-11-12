@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "337c03e9-62e8-4f61-bafb-6b7ac6a7f9d2",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "BigMapPageHost",
+    "hasIcon": false
+  }
+}

@@ -1,8 +1,7 @@
-import type { ZCGamePreparedResources } from './ZCGameLoader';
+import type { IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
-import { buildZCPveEnemyDecks } from './ZCPveCombatConfig';
 import { buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
 
 /** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。 */
@@ -20,7 +19,7 @@ export function resolveZCBattlePlayerCount(params?: ZCGameEntryParams): 2 | 3 | 
 }
 
 /** 纯构筑：不修改预加载配置，不捕获存档服务或控制器回调。 */
-export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZCGameEntryParams): IZCGameEntry {
+export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: ZCGameEntryParams): IZCGameEntry {
     const battle = entry?.battle ?? null;
     const pve = entry?.pve;
     const captureOptions = { allowUnresolvedSelect: true } as const;
@@ -50,6 +49,9 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
                 tier: 1,
                 // 只随配置走 `isBoss`：BOSS 波决定 HUD 大血条与「击败首领才算赢」。
                 ...(wave.isBoss ? { isBoss: true } : {}),
+                // 怪物体型（`defenceModWave.monsterSize`）只在 >1 时写：1 是普通体型，
+                // 写进去也只是让对局多做一次无效乘算。
+                ...(wave.monsterSize && wave.monsterSize > 1 ? { monsterSize: wave.monsterSize } : {}),
             })),
     } : undefined;
     let matchConfig = baseConfig;
@@ -60,10 +62,9 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
         if (Number.isFinite(openGrideTime) && openGrideTime > 0) {
             matchConfig.openGrideTime = openGrideTime;
         }
+        // 关卡「NPC 抽卡品质乘数」：有配置就带上，缺省不写（对局内按原表权重抽）。
+        if (pve.gradeProModifier) matchConfig.gradeProModifier = pve.gradeProModifier;
         if (pveEnemyDeck.length > 0) matchConfig.enemyDeck = pveEnemyDeck;
-        if (!battle && pve.mode === 'match' && pve.enemyTeamCardIds.length > 0) {
-            matchConfig.ownerDecks = buildZCPveEnemyDecks(baseConfig.enemyDeck, pve.enemyTeamCardIds);
-        }
         if (pveDefence?.waves.length) matchConfig.pveDefence = pveDefence;
     }
     const clientCombat = buildZCClientCombatConfig(
@@ -97,5 +98,8 @@ export function buildZCBattleEntry(prepared: ZCGamePreparedResources, entry?: ZC
         playerAvatars, seatProfiles, seatUnitIds,
         pveContext: pve ? { chapterId: pve.chapterId, territoryCellId: pve.territoryCellId, levelId: pve.levelId } : null,
         slgBattleType: entry?.slgBattleType ?? null,
+        // 结算等广播认这个字段：匹配入口的 battleType（宝箱栏「开始战斗」= 1002）必须一路带到这里，
+        // 否则运行时 `battleType` 落到 null ⇒ 不等 `CmdBattleResultBroMsg` ⇒ 结算页奖励区空着。
+        battleType: entry?.battleType ?? entry?.slgBattleType ?? null,
     };
 }

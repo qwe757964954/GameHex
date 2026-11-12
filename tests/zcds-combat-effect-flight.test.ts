@@ -40,10 +40,12 @@ const HUNTER_PREFAB = 'assets/bundles/battle/units/projectiles/斧盾兵_反击�
 const EFFECT_VIEW = 'assets/script/app/zcds/view/ZCCombatEffectView.ts';
 const RESOLUTION = 'assets/script/app/zcds/model/systems/ZCAttackResolutionSystem.ts';
 
-/** `combatDistanceScale = 0.3`（pvpGlobal）：射程 500 逻辑 ⇒ 150 世界 px。 */
+/** `combatDistanceScale = 0.3`（pvpGlobal）。 */
 const DISTANCE_SCALE = 0.3;
-/** 猎头者（68012）的 `unitAttackRange`。 */
-const HUNTER_RANGE = 500;
+/** 纯函数远距离测试输入：验证飞行时长随距离变化，不代表当前真实射程。 */
+const FAR_RANGE = 500;
+/** 菇八戒（68012）当前真实 `unitAttackRange`（2026-11 近战化：500→45）。 */
+const HUNTER_RANGE = 45;
 
 function readPvpRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(join(ROOT, `assets/remoteRef/${name}.json`), 'utf8')) as
@@ -96,9 +98,9 @@ test('① 飞行表：只登记猎头者那条月牙气刃，其余近战特效�
 });
 
 test('② 表现时长：登记的特效按「距离 / 速度」算并夹在上下限之间', () => {
-    // 满射程：500 逻辑 × 0.3 = 150 世界 px ⇒ 150 / 420 ≈ 0.357s。
-    // 改前是固定 0.32s —— 现在「飞多远、飞多久」终于和射程挂上了钩。
-    const full = zcCombatEffectTravelSeconds('melee', HUNTER_RANGE * DISTANCE_SCALE, undefined, HUNTER_EFFECT);
+    // 远距离输入：500 逻辑 × 0.3 = 150 世界 px ⇒ 150 / 420 ≈ 0.357s。
+    // 改前是固定 0.32s —— 现在「飞多远、飞多久」终于和距离挂上了钩。
+    const full = zcCombatEffectTravelSeconds('melee', FAR_RANGE * DISTANCE_SCALE, undefined, HUNTER_EFFECT);
     assert.ok(Math.abs(full - 150 / 420) < 1e-9, `满射程应飞 ${150 / 420}s，实际 ${full}`);
     assert.ok(full > 0.32, '满射程要比原来的固定 0.32s 更久（否则看不出「匹配射程」）');
 

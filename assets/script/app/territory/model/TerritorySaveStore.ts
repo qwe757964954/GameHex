@@ -1,4 +1,5 @@
 import {
+    TERRITORY_ACTIVATED_LEVELS_KEY,
     TERRITORY_LAST_CHAPTER_KEY,
     TERRITORY_PASSED_LEVELS_KEY,
     TERRITORY_STORAGE_PREFIX,
@@ -339,6 +340,41 @@ export class TerritorySaveStore {
      */
     private passedLevelsKey(): string {
         return `${TERRITORY_PASSED_LEVELS_KEY}.${this.namespace}`;
+    }
+
+    /**
+     * 账号级「已激活的领地关卡」（**不分章节**，见 {@link TERRITORY_ACTIVATED_LEVELS_KEY}）。
+     *
+     * 与 {@link loadPassedLevels} 一一对应，判据换成「花银币激活」。
+     * 存档损坏 / 写成非数组时同样给空表而不是抛 —— 它只决定「快速寻敌按钮晚一点出现」。
+     */
+    loadActivatedLevels(): number[] {
+        const parsed = this.readJson(this.activatedLevelsKey());
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter((levelId): levelId is number => Number.isSafeInteger(levelId) && levelId > 0);
+    }
+
+    /**
+     * 把这几关记成「已激活」，返回这次**真正新增**的那些（幂等）。
+     *
+     * 幂等是必须的：`MainPage` 每次领地渲染都会整批记一遍，没有新增就不该写盘。
+     */
+    markLevelsActivated(levelIds: readonly number[]): number[] {
+        const activated = this.loadActivatedLevels();
+        const known = new Set(activated);
+        const added: number[] = [];
+        for (const levelId of levelIds) {
+            if (!Number.isSafeInteger(levelId) || levelId <= 0 || known.has(levelId)) continue;
+            known.add(levelId);
+            added.push(levelId);
+        }
+        if (!added.length) return added;
+        this.writeRaw(this.activatedLevelsKey(), JSON.stringify([...activated, ...added]));
+        return added;
+    }
+
+    private activatedLevelsKey(): string {
+        return `${TERRITORY_ACTIVATED_LEVELS_KEY}.${this.namespace}`;
     }
 
     /** 读原始串：先看内存兜底（storage 不可用时 `save` 只写了内存）。 */

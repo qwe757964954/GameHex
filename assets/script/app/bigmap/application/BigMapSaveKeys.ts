@@ -1,4 +1,4 @@
-import type { IBigMapStorage } from './BigMapPresenter';
+import type { IBigMapStorage } from './BigMapModel';
 
 /**
  * 存档键前缀。与领地章节（`TERRITORY_LAST_CHAPTER_KEY`）分开命名空间，

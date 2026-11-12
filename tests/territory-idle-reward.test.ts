@@ -229,10 +229,11 @@ test('real level table: offline 9h settles 8h of guaranteed silver and item rows
         8,
         NO_DROP_RANDOM,
     );
-    // Silver 16 × 8 = 128; item 10012 has two rows (2 + 3) × 8 = 40; rare rows never roll.
+    // Silver 160 × 8 = 1280（2026-11-09 银币档 ×10：16 → 160）；item 10010 has two rows (2 + 3) × 8 = 40；
+    // rare rows never roll.
     assert.deepEqual(result.rewards, [
-        { resId: 7, name: 'res_7', amount: 128 },
-        { resId: 10012, name: 'res_10012', amount: 40 },
+        { resId: 7, name: 'res_7', amount: 1280 },
+        { resId: 10010, name: 'res_10010', amount: 40 },
     ]);
 });
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as geometry from '../assets/script/app/bigmap/view/BigMapWorldLayout';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { buildBigMapWorld } from '../assets/script/app/bigmap/model/BigMapWorld';
 import { exportBigMapLayout } from '../assets/script/app/bigmap/model/BigMapLayout';
@@ -32,7 +32,7 @@ test('地图配置的 rangeHex 进入表现数据，范围覆盖城池占地且�
     const annotated = { ...layout, cities: layout.cities.map((site) => site.cityId === city.cityId
         ? { ...site, rangeHex: [extraHex] } : site) };
     const before = JSON.stringify(annotated);
-    const presenter = new BigMapPresenter({ config, layout: annotated,
+    const presenter = new BigMapModel({ config, layout: annotated,
         storage: createMemoryBigMapStorage(), saveKey: 'territory-presentation',
         now: () => 1000, adventureChapter: () => 3 });
     assert.equal(typeof presenter.territoryRegions, 'function');

@@ -63,6 +63,24 @@ export type TerritoryStartBattleResult =
     | { readonly ok: true; readonly battle: ZCBattleStart }
     | { readonly ok: false; readonly reason: TerritoryRequestFailure };
 
+/**
+ * 领挂机奖励结果。
+ *
+ * ⚠️ 回包 **没有 `succ`**（`CmdCityChapterIdleRewardRspMsg` 只有 `idleTime` + `tlCmdGoods`）
+ * ⇒ 不能用 `writeWithSucc` 那套判定：**回包到达即成功**，`tlCmdGoods` 为空只是「这次没产出」。
+ * 判失败只认「包没发出去 / 超时 / 回包没到」。
+ */
+export type TerritoryIdleRewardResult =
+    | {
+        readonly ok: true;
+        /** 服务端实际发放的物品（可能为空数组）。**必须原样展示**，不要拿本地配置重算。 */
+        readonly rewards: readonly ITerritoryGrantedReward[];
+        /** 回包里的 `idleTime`（秒）＝新的挂机起点；0 = 服务端没给有效值。 */
+        readonly idleTimeSeconds: number;
+    }
+    | { readonly ok: false; readonly reason: TerritoryRequestFailure };
+
+
 /** 读超时：与服务端断连时不能让领地页一直转圈。 */
 const READ_TIMEOUT_MS = 5000;
 
@@ -82,6 +100,17 @@ function readCellIdArray(rsp: unknown): number[] {
         if (Number.isInteger(cell) && cell >= 0) out.push(cell);
     }
     return out;
+}
+
+/**
+ * `idleTime` 是 `uint32` **秒**（不是 `Long`），非法值一律归 0。
+ *
+ * ⚠️ 不要用 `Number.isFinite` 就放行：0 / 负数当「服务端没给有效起点」处理，
+ * 否则会把 1970 年当起点，UI 直接顶到 8h 上限。
+ */
+function readSeconds(value: unknown): number {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
 }
 
 export class TerritoryCellRepository {
@@ -222,37 +251,64 @@ export class TerritoryCellRepository {
         return { ok: true, battle: started };
     }
 
-    /** 章节扫荡。 */
-    async sweep(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
-        return this.writeWithSucc(
+    /**
+     * 章节扫荡（回包 `succ` + 实际发放的 `tlCmdGoods`）。
+     *
+     * `times` 是**扫荡倍率**（协议 `optional uint32 times = 3`，缺省 1）：
+     * 服务端按 `倍率 × 单次消耗` 扣体力、按倍率发奖，客户端只负责把倍率原样带上。
+     * 非法值（0 / 负数 / 小数 / NaN）一律归 1 —— 传 0 会被服务端当成「倍率 0」。
+     */
+    async sweep(
+        levelChapter: number,
+        cellId: number,
+        times: number = 1,
+        caller?: object,
+    ): Promise<TerritoryWriteResult> {
+        const sweepTimes = Number.isSafeInteger(times) && times > 0 ? times : 1;
+        let rewards: ITerritoryGrantedReward[] = [];
+        const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritorySweep(
-                { levelChapter: this.normalizeChapter(levelChapter), cellId },
+                { levelChapter: this.normalizeChapter(levelChapter), cellId, times: sweepTimes },
                 caller,
-                (rsp) => { recordSuccess(Number((rsp as { succ?: unknown })?.succ) === 1); },
+                (rsp) => {
+                    const success = Number((rsp as { succ?: unknown })?.succ) === 1;
+                    recordSuccess(success);
+                    if (success) rewards = readTerritoryGrantedRewards((rsp as { tlCmdGoods?: unknown })?.tlCmdGoods);
+                },
             ),
             '[TerritoryCell] 章节扫荡失败',
         );
+        return result.ok ? { ...result, rewards } : result;
     }
 
     /**
-     * 领挂机奖励。回包带 `idleTime`（上次挂机时间戳，秒）。
-     * 领奖态由服务端 `rewardState` 权威给出，客户端不自行推断。
+     * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`，**空请求体**）。
+     *
+     * 回包带 `idleTime`（新的挂机起点，秒）与 `tlCmdGoods`（实际发放的物品）。
+     * ⚠️ 这条 rsp **没有 `succ`** ⇒ 不能用 `writeWithSucc`：回包到达即成功，
+     * `tlCmdGoods` 为空只是「这一段时间没产出」，不是失败。
+     * 失败的判定只有三种：离线 / 包发不出去 / 包发了但回包没到。
      */
-    async claimIdleReward(levelChapter: number, caller?: object): Promise<TerritoryWriteResult> {
-        return this.writeWithSucc(
-            (recordSuccess) => new RequestTerritoryIdleReward(
-                { levelChapter: this.normalizeChapter(levelChapter) },
-                caller,
-                (rsp) => {
-                    const time = Number((rsp as { idleTime?: unknown })?.idleTime);
-                    this.lastIdleTime = Number.isFinite(time) && time > 0 ? time : 0;
-                    // ⚠️ 这条 rsp **没有 succ 字段**（proto里只有 idleTime）⇒ 只要回包到达就算成功。
-                    recordSuccess(true);
-                },
-            ),
+    async claimIdleReward(caller?: object): Promise<TerritoryIdleRewardResult> {
+        let received = false;
+        let idleTimeSeconds = 0;
+        let rewards: ITerritoryGrantedReward[] = [];
+        const sent = await this.send(
+            () => new RequestTerritoryIdleReward({}, caller, (rsp) => {
+                received = true;
+                idleTimeSeconds = readSeconds((rsp as { idleTime?: unknown })?.idleTime);
+                rewards = readTerritoryGrantedRewards((rsp as { tlCmdGoods?: unknown })?.tlCmdGoods);
+            }),
             '[TerritoryCell] 领挂机奖励失败',
         );
+        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: sent };
+        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: sent };
+        // `send` 的 ok 只代表包发出去了；超时兜底先返回时回调可能还没跑。
+        if (!received) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
+        this.lastIdleTime = idleTimeSeconds;
+        return { ok: true, rewards, idleTimeSeconds };
     }
+
 
     /** 最近一次领奖回包里的挂机时间戳（秒）；没领过或没给有效值时为 0。 */
     get lastIdleTimeSeconds(): number {

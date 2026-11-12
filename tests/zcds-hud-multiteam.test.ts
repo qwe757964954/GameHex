@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
+import * as ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -216,19 +218,41 @@ test('★★★PlayerList 必须关掉触摸接管（否则挡住下方翻地块
         '★PlayerList 必须 interactive=false（它不滚、也没有点击回调，留着只会吞掉棋盘拖动）');
 });
 
-test('★★★VScrollView 的 interactive 开关必须真能关掉全部 TOUCH_*（源码形状断言）', () => {
-    // 只断言 prefab 上的字段不够：`interactive` 写对了、但代码里三处 early return 漏一处，
-    // 运行时照样会绑上。`_updateItemClickHandler` 那处尤其容易漏 ——
-    // 它是**运行时 addComponent(VScrollViewItem)**，而 `VScrollViewItem.onLoad()`
-    // 又会给行根绑 4 个 ⇒ 只关容器那层的话，**行区域照样吞触摸**（治了容器没治行）。
-    const src = readFileSync('assets/script/vscrollview/VScrollView.ts', 'utf8');
-    assert.match(src, /public interactive: boolean = true;/,
-        '★interactive 必须是 @property 且默认 true（默认接管，别牵连所有现有页面）');
-    // 三处：容器绑定 / 全局触摸 / 行点击组件
-    const guards = src.match(/if \(!this\.interactive\) return;/g) ?? [];
-    assert.ok(guards.length >= 3,
-        `★必须有三处 \`if (!this.interactive) return;\`（_bindTouch / _bindGlobalTouch / _updateItemClickHandler），`
-        + `实际只有 ${guards.length} 处 —— 漏了 _updateItemClickHandler 则行区域仍吞触摸`);
+test('VScrollView 非交互列表与原生滚动列表均不重复接管触摸', () => {
+    const path = 'assets/script/vscrollview/VScrollView.ts';
+    const source = ts.createSourceFile(path, readFileSync(path, 'utf8'), ts.ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'VirtualScrollView');
+    assert.ok(declaration && ts.isClassDeclaration(declaration));
+    const names = ['_bindTouch', '_bindGlobalTouch', '_updateItemClickHandler'];
+    const methods = names.map(name => {
+        const method = declaration.members.find(member => member.name?.getText(source) === name);
+        assert.ok(method && ts.isMethodDeclaration(method));
+        return method.getText(source);
+    });
+    let globalBindings = 0;
+    const exports: Record<string, new () => Record<string, any>> = {};
+    runInNewContext(ts.transpileModule(`class TouchProbe { ${methods.join('\n')} } exports.TouchProbe = TouchProbe;`, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, {
+        exports, Node: { EventType: {} }, Input: { EventType: {} },
+        input: { on() { globalBindings += 1; } }, VScrollViewItem: class {},
+    });
+    for (const [interactive, nativeScrollView] of [[false, false], [false, true], [true, true], [true, false]]) {
+        let nodeBindings = 0;
+        let itemQueries = 0;
+        globalBindings = 0;
+        const view = new exports.TouchProbe();
+        Object.assign(view, { interactive, nativeScrollView, useVirtualList: true,
+            node: { on() { nodeBindings += 1; } } });
+        const item = { offSortLayer() {}, dataIndex: 0 };
+        view._bindTouch();
+        view._bindGlobalTouch();
+        view._updateItemClickHandler({ getComponent() { itemQueries += 1; return item; } }, 0);
+        const enabled = interactive && !nativeScrollView;
+        assert.equal(nodeBindings, enabled ? 4 : 0);
+        assert.equal(globalBindings, enabled ? 2 : 0);
+        assert.equal(itemQueries, enabled ? 1 : 0);
+    }
 });
 
 test('★★★条目预制体：13 个引用全绑、Info 是横排 Layout、样式与设计稿一致', () => {
@@ -247,7 +271,10 @@ test('★★★条目预制体：13 个引用全绑、Info 是横排 Layout、�
     // 我方那一档：圆盘 88 + 头像 74（其余席位由条目脚本按 owner 换成 77 / 66）
     assert.deepEqual([itemUi('HeadFrame')._contentSize.width, itemUi('HeadFrame')._contentSize.height], [88, 88]);
     assert.deepEqual([itemUi('HeadIcon')._contentSize.width, itemUi('HeadIcon')._contentSize.height], [74, 74]);
-    assert.deepEqual([itemUi('NameText')._contentSize.width, itemUi('NameText')._contentSize.height], [159, 22]);
+    // 名字框按 2026-11-11 需求「玩家名字号 ×1.5」等比放大：159×22 → 238.5×33。
+    // 🔴 框必须跟着字号一起长：Label 是 `overflow=2`（SHRINK），只改 `_fontSize` 会被
+    //    引擎按框高压回去（实测 24.5 在 22 高的框里只画到 14px），字号改了等于没改。
+    assert.deepEqual([itemUi('NameText')._contentSize.width, itemUi('NameText')._contentSize.height], [238.5, 33]);
 
     // 兵力 + buff 收在 Info 的横排 Layout 下。
     // ⚠️ 2026-10-09 按**蓝湖设计稿实测**重定：工程此前把整组摆在行中心下方 46px（**挂到行框外面**，
@@ -310,7 +337,9 @@ test('★★★条目预制体：13 个引用全绑、Info 是横排 Layout、�
     // 名字样式：字号 / 左对齐 / 不换行；**占位文字必须空**
     // （虚拟列表在 `render` 之前就实例化条目，占位会漏出首帧）
     const nameLabel = itemComps(itemNode('NameText')!).find((c) => c.__type__ === 'cc.Label')!;
-    assert.equal(nameLabel._fontSize, 24.5, '★名字字号 24.5');
+    // 2026-11-11 需求：「所有玩家的名字字号放大成现在的 1.5 倍」⇒ 24.5 × 1.5 = 36.75。
+    // ⚠️ 兵力（UnitText）不在本次范围内，仍是 24.5，别跟着改。
+    assert.equal(nameLabel._fontSize, 36.75, '★名字字号 36.75（= 设计稿 24.5 × 1.5）');
     assert.equal(nameLabel._horizontalAlign, 0, '★名字左对齐');
     assert.equal(nameLabel._enableWrapText, false, '★名字不换行');
     assert.equal(nameLabel._string, '', '★名字占位必须空');

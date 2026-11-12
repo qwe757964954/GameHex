@@ -79,6 +79,7 @@ import {
     storeCardCount,
     storeQualityFrame,
 } from '../assets/script/app/store/StoreShopTable';
+import { mainTabTarget, MainTab } from '../assets/script/app/main/MainTabModel';
 import { assetExists, assetPath } from './helpers/asset-paths';
 
 /** 段内反复出现的几个图标路径（写死在这里 = 一旦表改成别的图，B 段会立刻红）。 */
@@ -315,7 +316,6 @@ test('B7 品质框映射：1..4 全有、越界夹到两端（`100×100` 物品�
 });
 
 test('B8 段内图标**都真的在磁盘上**且 meta 是 sprite-frame（悬空引用会让运行期变品红块）', () => {
-    const res = 'assets/resources';
     const paths = new Set<string>([
         // 宝箱两档的钥匙**逐档不同**（银 / 金），两张都要在磁盘上。
         ...STORE_CHEST_ROWS.map((r) => r.keyIcon),
@@ -327,7 +327,7 @@ test('B8 段内图标**都真的在磁盘上**且 meta 是 sprite-frame（悬空
         ...Object.values(STORE_QUALITY_FRAMES),
     ]);
     for (const rel of paths) {
-        const png = `${res}/${rel}.png`;
+        const png = assetPath(`${rel}.png`);
         assert.ok(existsSync(png), `缺图：${png}`);
         const meta = JSON.parse(readFileSync(`${png}.meta`, 'utf8')) as {
             userData?: { type?: string }; subMetas?: Record<string, unknown>;
@@ -939,22 +939,22 @@ test('D1 `StorePage.prefabPath` 与磁盘目录大小写一致（Android/iOS 的
     assert.ok(assetExists('ui/Store/Store.prefab'), '磁盘上必须有 ui/Store/Store.prefab');
 });
 
-test('D2 `MainTabHost` 有 `shopPage`，且 `MainTab.Shop` 路由到它', () => {
-    const src = readFileSync(MAIN_TAB_HOST_TS, 'utf8');
-    assert.match(src, /shopPage:\s*Prefab/, '缺少 shopPage @property');
-    assert.match(src, /index === MainTab\.Shop\)\s*return this\.shopPage/, 'pagePrefab 没把 Shop 路由到 shopPage');
+test('D2 商店导航契约指定 main-pages 分包内的 Store 页面', () => {
+    assert.deepEqual(mainTabTarget(MainTab.Shop), {
+        kind: 'page', path: 'ui/Store/Store', bundle: 'main-pages',
+    });
 });
 
-test('D3 `MainRoot.prefab` 的 `shopPage` 真的绑到了 `Store.prefab` 的 uuid', () => {
-    const prefab = JSON.parse(readFileSync(MAIN_ROOT, 'utf8')) as Entry[];
-    const host = prefab.find((e) => typeof e?.shopPage === 'object' && e.shopPage !== null);
-    assert.ok(host, 'MainRoot.prefab 里找不到绑了 shopPage 的组件');
-    const bound = (host!.shopPage as { __uuid__?: string }).__uuid__;
-    const expect = (JSON.parse(readFileSync(`${PREFAB_DIR}/Store.prefab.meta`, 'utf8')) as { uuid: string }).uuid;
-    assert.equal(bound, expect, `shopPage 绑的 uuid 不是 Store.prefab（绑到了 ${bound}）`);
-    // 其余四个 tab 页必须还在（别把别的绑定碰掉）
-    for (const prop of ['arenaPage', 'rolePage', 'roleMainPage', 'alliancePage']) {
-        assert.ok(typeof host![prop] === 'object' && host![prop] !== null, `${prop} 的绑定被弄丢了`);
+test('D3 所有页面导航目标都能解析到真实 prefab 与引擎元数据', () => {
+    for (const tab of [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory, MainTab.Alliance]) {
+        const target = mainTabTarget(tab);
+        assert.equal(target?.kind, 'page');
+        if (target?.kind !== 'page') throw new Error(`缺少页面目标 ${tab}`);
+        const file = assetPath(`${target.path}.prefab`);
+        assert.ok(Array.isArray(JSON.parse(readFileSync(file, 'utf8'))));
+        const meta = JSON.parse(readFileSync(`${file}.meta`, 'utf8')) as { uuid: string };
+        assert.ok(meta.uuid, `${file} 缺少资源 UUID`);
+        if (target.bundle) assert.ok(file.startsWith(`assets/bundles/${target.bundle}/`));
     }
 });
 

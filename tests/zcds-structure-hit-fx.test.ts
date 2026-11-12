@@ -44,7 +44,6 @@ function tables(): ZCPvpTables {
         pvpPity: readRows('pvpPity'),
         pvpTileGen: readRows('pvpTileGen'),
         pvpTileGenParams: readRows('pvpTileGenParams') as unknown as ZCPvpTables['pvpTileGenParams'],
-        pvpBaseTeamWeight: readRows('pvpBaseTeamWeight'),
     };
 }
 

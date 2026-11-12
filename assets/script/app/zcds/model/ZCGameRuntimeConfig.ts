@@ -139,7 +139,8 @@ export interface ZCPvpTables {
     pvpPity?: Array<Record<string, unknown>>;
     pvpTileGen?: Array<Record<string, unknown>>;
     pvpTileGenParams?: Array<{ key: string; value: unknown }>;
-    pvpBaseTeamWeight?: Array<Record<string, unknown>>;
+    //  `pvpBaseTeamWeight`（基础阵容权重随机表）已于 2026-11-10 并入 `pvpTile` 并下线：
+    //  weight / initialCountLimit / setCountLimit 现在直接挂在地块行上，读取方是 `createPvpTileTypes`。
     /**
      * 中立资源组合（`PVP-中立资源配置.xlsx / 中立资源组合`）。
      *
@@ -147,6 +148,7 @@ export interface ZCPvpTables {
      *  旧表 `neutralResource`（PVP-地块 / 中立资源 sheet）已于 2026-10-26 下线。
      */
     neutralResourceGroup?: Array<Record<string, unknown>>;
+    neutralEnhanceGate?: Array<Record<string, unknown>>;
     skillAttrModifier?: Array<Record<string, unknown>>;
     generalStar?: Array<Record<string, unknown>>;
     pvpAttrMap?: Array<Record<string, unknown>>;

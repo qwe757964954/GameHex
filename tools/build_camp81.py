@@ -4,7 +4,7 @@ import json, copy, os
 import openpyxl
 
 SRC = r"D:/Alan/Project/POW/doc/塔防数据配置/DM-城池配置.xlsx"
-MAP = r"D:/Alan/Project/POW/Demo3.8/tools/map-editor/presets/bigmap/dadi_tuchugao.json"
+MAP = r"D:/Alan/Project/POW/Demo3.8/tools/map-editor/presets/bigmap/bigMap.json"
 OUT_DIR = r"D:/Alan/占城玩法/策划文档/大地图"
 OUT = os.path.join(OUT_DIR, "DM-城池配置_81城池.xlsx")
 

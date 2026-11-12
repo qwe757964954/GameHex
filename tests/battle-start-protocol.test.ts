@@ -71,6 +71,29 @@ function loadRoot(): protobuf.Root {
 
 const root = loadRoot();
 
+test('开战回包保留独立地图快照，homeIndex=0 合法，非法快照拒绝', () => {
+    const mapInfo: CmdPvpMapInfo = { id: 'standard_4', name: '后端地图', version: 3,
+        resourcePoints: [{ row: 0, column: 0, groupId: 1, resourceId: 2 }],
+        unitHomeIndexes: [{ unitId: 1, homeIndex: 0 }] };
+    const start = normalizeBattleStart(rsp({ mapInfo }));
+    assert.deepEqual(start.mapInfo, mapInfo);
+    mapInfo.unitHomeIndexes[0].homeIndex = 2;
+    assert.equal(start.mapInfo.unitHomeIndexes[0].homeIndex, 0);
+    assert.equal(normalizeBattleStart(rsp({ mapInfo: { ...mapInfo, version: -1 } })), null);
+    assert.equal(normalizeBattleStart(rsp({ mapInfo: { ...mapInfo, unitHomeIndexes: [{ unitId: 1, homeIndex: -1 }] } })), null);
+});
+
+test('地图快照在真实静态协议与反射协议间完整互通', () => {
+    const info = { id: 'standard_4', name: '后端地图', version: 3,
+        resourcePoints: [{ row: 0, column: 1, groupId: 14009, resourceId: 1400901 }],
+        unitHomeIndexes: [{ unitId: 87, homeIndex: 0 }] };
+    const reflected = root.lookupType(`${CMD}.CmdPvpMapInfo`);
+    const compiled = protobufRoot.com.xkhy.tafang.cmd.CmdPvpMapInfo;
+    assert.deepEqual(reflected.toObject(reflected.decode(compiled.encode(info).finish())), info);
+    const decoded = compiled.decode(reflected.encode(reflected.fromObject(info)).finish());
+    assert.deepEqual(reflected.toObject(reflected.fromObject(decoded)), info);
+});
+
 /**
  * 把注释剥掉再对源码做形状断言。
  *
@@ -112,7 +135,9 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
     assert.equal(info.fields.battleParams.type, 'string');
 
     // 响应：battleId / seed 是这一局的命根子，code 决定成功失败
-    assert.deepEqual(Object.keys(rsp.fields), ['code', 'seed', 'version', 'battleId', 'startBattleInfo', 'unitInfos']);
+    assert.deepEqual(Object.keys(rsp.fields), ['code', 'seed', 'version', 'battleId', 'startBattleInfo', 'unitInfos', 'mapInfo']);
+    assert.equal(rsp.fields.mapInfo.id, 7);
+    assert.equal(rsp.fields.mapInfo.resolvedType, root.lookupType(`${CMD}.CmdPvpMapInfo`));
     assert.equal(rsp.fields.code.id, 1);
     assert.equal(rsp.fields.seed.id, 2);
     assert.equal(rsp.fields.seed.type, 'uint64');
@@ -361,7 +386,7 @@ test('开始战斗请求兜硬超时、永不 reject、失败返回 null', () =>
     assert.match(service, /export const BATTLE_START_TIMEOUT_MS\s*=\s*\d+/, '必须有硬超时常量');
     assert.match(service, /withTimeout\(sendStartBattle\(/, '发送必须包在 withTimeout 里');
     // 未连接直接早退，不发包
-    assert.match(service, /if \(!net\.isConnected\)/, '离线时不能发包（离线复现不出"悬着"的问题）');
+    assert.match(service, /if \(!GameNet\.instance\.isConnected\)/, '离线时不能发包（离线复现不出"悬着"的问题）');
     // GameNet 统一检查 MessageId；战斗服务只负责离线、超时和响应归一化。
     const gameNet = codeOf('assets/script/app/net/GameNet.ts');
     assert.match(gameNet, /getMessageId\(messageName\)/);

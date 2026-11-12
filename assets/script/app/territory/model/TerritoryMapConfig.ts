@@ -5,6 +5,21 @@ export const TERRITORY_MAP_KIND = 'territoryChapter' as const;
 export const TERRITORY_MAP_VERSION = 1 as const;
 
 /**
+ * 「**银币宝箱**」的 `rewardId`（2026-11-10 用户口径：它有独立的打开动画）。
+ *
+ * `levelMapGrideReward.json` 里 `1023` 是唯一**只发银币**（`resId=7`）的格子奖励，
+ * 其余 `1016~1022` 是「银币 + 卡牌碎片 + 专属道具」的**卡牌碎片宝箱**。
+ * 地图侧两者也分开：`1023` 的格子显式配 `buildingId = 69020`（`coinBox` 蓝银金属箱），
+ * 其它固定资源格 `buildingId` 为空 ⇒ 回退 `TERRITORY_SITE_ART` ⇒ `art.fixedResource`
+ * = `69005` 的 `territory_fixed_resource_v1`（黄铜藤蔓箱）。
+ *
+ * ⚠️ **判据别写成「奖励里有没有银币」或「奖励全是银币」**：卡牌碎片宝箱也发银币，
+ * 而且奖励组是按概率抽的、回包内容会变；只有 `rewardId` 是稳定的配表口径。
+ * 七章合计 148 格配有这个 `rewardId`（`tests/territory-building-id.test.ts` 有全表守卫）。
+ */
+export const TERRITORY_SILVER_CHEST_REWARD_ID = 1023;
+
+/**
  * 站点类型**命名常量**（**唯一事实源**：`TerritorySiteType` 与 `TERRITORY_SITE_TYPES` 都由它推导）。
  *
  * ⚠️ 禁止在别处写 `'stage'` / `['stage', …] as const` 这类第二份字面量——
@@ -34,7 +49,7 @@ type AssertSiteTypeKeysAreValues = Assert<
  * 硬编码**的（`TERRITORY_TWO_STEP_CELL_IDS = [327, 328]`，只有 `configId=10001` 这一片），
  * 于是出现了「关卡 1 点建筑就开战、关卡 2 只能弹详情面板」的分裂。
  *
- * 现在改由**站点类型**判定：`TerritoryPresenter.selectSite` 与
+ * 现在改由**站点类型**判定：`TerritoryModel.selectSite` 与
  * `TerritoryMapView.stationRenderOf` 按可开战站点类型处理 `stage` / `boss` / `asyncPvp`
  * ⇒ 两份硬编码名单连同 `isTerritoryTwoStepCell()` 一起删掉了。
  *

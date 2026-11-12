@@ -1,3 +1,4 @@
+import * as cc from 'cc';
 import { EngineMain } from "../../engine/EngineMain";
 const IMG_EXT = "(png|jpg|jpeg|gif|bmp|webp)";
 const IMG_EXT_LIST = new RegExp(`.*\.${IMG_EXT}`);
@@ -18,7 +19,10 @@ export class HttpLoader {
             if(options == null && !IMG_EXT_LIST.test(url)){
                 options = {ext: ".jpg"}
             }
-            cc.assetManager.loadRemote(url, options, function (err, texture: cc.Texture2D) {
+            cc.assetManager.loadRemote(url, options, function (err, image: cc.ImageAsset) {
+                if (err) { reject(err); return; }
+                const texture = new cc.Texture2D();
+                texture.image = image;
                 resolve(texture)
             });
         })
@@ -33,7 +37,10 @@ export class HttpLoader {
      */
     public static RequestTextureWith(url: string, ext: '.png' | '.jpb' | '.gif'): Promise<cc.Texture2D> {
         let promise = new Promise<cc.Texture2D>((resolve, reject) => {
-            cc.assetManager.loadRemote(url, { ext: ext }, function (err, texture: cc.Texture2D) {
+            cc.assetManager.loadRemote(url, { ext: ext }, function (err, image: cc.ImageAsset) {
+                if (err) { reject(err); return; }
+                const texture = new cc.Texture2D();
+                texture.image = image;
                 resolve(texture)
             });
         })
@@ -48,6 +55,7 @@ export class HttpLoader {
     public static RequestAudioClip<T extends cc.AudioClip>(url: string): Promise<T> {
         let promise = new Promise<T>((resolve, reject) => {
             cc.assetManager.loadRemote(url, function (err, asset: T) {
+                if (err) { reject(err); return; }
                 resolve(asset)
             });
         })
@@ -63,13 +71,10 @@ export class HttpLoader {
         if (clearCache || EngineMain.isBrowser) {
             let randomNum = Math.floor(Math.random() * (HttpLoader.randomMax - HttpLoader.randomMin + 1) + HttpLoader.randomMin);
             url = url + "?v=" + randomNum
-            clearCache = false
         }
         let promise = new Promise<T>((resolve, reject) => {
             cc.assetManager.loadRemote(url, function (err, asset: T) {
-                if (clearCache && asset) {
-                    cc.assetManager.cacheManager.removeCache(asset.nativeUrl)
-                }
+                if (err) { reject(err); return; }
                 resolve(asset)
             });
         })
@@ -84,6 +89,7 @@ export class HttpLoader {
     public static RequestText<T extends cc.TextAsset>(url: string): Promise<T> {
         let promise = new Promise<T>((resolve, reject) => {
             cc.assetManager.loadRemote(url, function (err, asset: T) {
+                if (err) { reject(err); return; }
                 resolve(asset)
             });
         })

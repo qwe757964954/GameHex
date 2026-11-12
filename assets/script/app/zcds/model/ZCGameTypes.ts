@@ -151,6 +151,8 @@ export interface ZCHexState {
 }
 
 export interface ZCUnitState {
+    /** 兵营传送批次的表现时间轴；恢复时继续飞行，不重新扣次数。 */
+    portalFlight?: { fromHexId: number; barracksHexId: number; startedAt: number };
     inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>;
     gateSize?: 'enlarge' | 'shrink';
     gateScale?: number;
@@ -287,6 +289,32 @@ export interface ZCUnitState {
      * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
      */
     selfCastReadyAt?: number;
+    /**
+     * 自身光环（`behaviorKey = 'self_aura'`）的下次可用时刻（秒，同 `empoweredReadyAt` 的绝对时间基准）。
+     *
+     * 2026-11-09 大威天芦「无尘禁土」102503：冷却 15 秒的主动，出手内容不是「打一下」而是
+     * 「在自己脚下开一片跟随本体的周期伤害区域」，既占不到强化槽也占不到副轨，
+     * 所以由 `ZCSkillTriggerSystem.applySelfAura` 按这个时间自己推进。
+     * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     */
+    auraReadyAt?: number;
+    /**
+     * 自身光环（按累计普攻触发，`auraEvery`）上一次触发时的 `completedAttackCount`。
+     *
+     * 2026-11-11 磁电菇「磁电冲击」101604：累计 8 次普攻放一次冲击波。
+     * 与 `auraReadyAt` 是**同一条车道的两种口径**（二选一），互不干扰。
+     * 缺省 undefined ⇒ 第一次推进时只记下当前计数，不立刻放。
+     */
+    auraFiredCount?: number;
+    /**
+     * 五雷轰顶（`behaviorKey = 'bolt_strike'`）的下次可用时刻（秒，同 `auraReadyAt` 的绝对时间基准）。
+     *
+     * 2026-11-11 磁电菇 68016「五雷轰顶」101603：冷却 12 秒的主动，出手内容不是「打一下」
+     * 而是「沿目标背朝向排开 3/4/5 道雷，每道独立结算」——既不是副轨扇形、也不是地面区域，
+     * 所以由 `ZCSkillTriggerSystem.applyBoltStrike` 按这个时间自己推进。
+     * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     */
+    boltReadyAt?: number;
     /** 多点打击（`behaviorKey = 'random_strike'`，按 CD 触发）的下次可用时刻（秒）。 */
     strikeReadyAt?: number;
     /**
@@ -327,13 +355,20 @@ export interface ZCUnitState {
 
 export interface IZCNeutralFeatureState {
     claimed: boolean;
+    gateId?: number;
+    cooldownSeconds?: number;
+    usesRemaining?: number;
+    portalAt?: number;
+    startedAt?: number;
+    lineProgress?: number;
+    lineDamage?: number;
+    hitUnitIds?: number[];
+    mowerOwner?: ZCOwner;
     effect?: import('./ZCNeutralResourceGroup').IZCGateEffect;
     readyAt?: number;
     windowUntil?: number;
     insideUnitIds?: readonly number[];
     lineHexIds?: readonly number[];
-    buildOwner?: ZCOwner;
-    buildUsed?: boolean;
     portalExitId?: number;
     awake?: boolean;
     targetUnitId?: number | null;
@@ -401,6 +436,45 @@ export interface ZCCombatEvent {
      * ⚠️ `combatEvents` 不进存档，加字段不影响兼容。
      */
     spineAnimation?: string;
+    /**
+     * 是否显示这条特效预制体里「叠加层」子节点（2026-11-12 鹿神守护改追踪弹）。
+     *
+     * 需求原话：「贴近目标后的移速快（140PX，**同步在小鹿身上覆盖火船特效**）」——
+     * 火船只在**提速段**才烧起来，慢速赶路时身上是干净的。
+     *
+     * 实现上用「语义标记 + 视图登记的节点名」两段式：模型只说「叠层该不该亮」，
+     * 具体点哪个子节点由 `zcCombatEffectOverlayChild(路径)` 决定（`ZCCombatEffectPlacement`）。
+     * 这样模型不需要知道 prefab 内部结构，换美术只改登记表。
+     *
+     * 缺省 `undefined` ⇒ 视图一次都不碰叠层，预制体自己的 `_active` 说了算 ——
+     * 所有既有特效行为逐字不变。
+     *
+     * ⚠️ `combatEvents` 不进存档，加字段不影响兼容。
+     */
+    overlayFx?: boolean;
+    /**
+     * 这条特效的**朝向**（度，逆时针，0 = 朝 +x；2026-11-11 磁电冲击 101604）。
+     *
+     * 为什么事件需要自己带角度：`area` 类事件的 `from` 与 `to` 是同一个点（原地炸），
+     * `zcCombatEffectHeadingDegrees` 对零位移直接返回 `null` ⇒ 视图永远不转，
+     * 于是「朝右画好的光束」不管目标在哪个方向都朝右。要让它朝目标，只能由模型把
+     * 「施法那一刻的方位角」记下来交给视图。
+     *
+     * 缺省 `undefined` ⇒ 保持 0°（与改前逐字一致）；`melee` / `projectile` 分支不看这个字段
+     * （它们的朝向由弹道算）。
+     *
+     * ⚠️ `combatEvents` 不进存档，加字段不影响兼容。
+     */
+    angleDegrees?: number;
+    /**
+     * 这条特效整体**竖直抬升**多少（**屏上 px**，2026-11-11 磁电冲击「起始位置要在角色的中心点」）。
+     *
+     * 单位根节点是逻辑脚点，贴原坐标画的光束有一半埋在地面线以下；加在 `mapToViewY` 之后
+     * ⇒ 屏幕竖直、不跟旋转（与 `zcCombatEffectLiftY` 同口径，写进 prefab `_lpos` 会被转成侧移）。
+     *
+     * 缺省 `undefined` ⇒ 不抬，所有既有特效逐字不变。
+     */
+    visualLiftPx?: number;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。 */
@@ -462,6 +536,28 @@ export interface ZCProjectileState extends ZCCombatEvent {
      * 缺省 ⇒ 与既有弹道一致，只把 `effectPrefabPath` 那一个特效播到底。
      */
     impactEffectPrefabPath?: string | null;
+    /**
+     * 命中后「爆炸」的判定半径（**世界坐标**，出手时已乘过 `combatDistanceScale`）。
+     *
+     * 与 `splashRadius` 是两件事：`splashRadius` 是**溅射**（不打主目标、倍率另算），
+     * 这条是**爆炸**——以命中点为圆心、把包括主目标在内的所有敌人各打一次。
+     * 缺省 `0` / `undefined` ⇒ 整段不执行，存量弹道行为逐字不变。
+     *
+     * 服务麻辣铁锅「凤凰降临」102604 第一段爆炸（设计案：「命中目标爆炸，爆炸产生瞬间伤害」）。
+     */
+    burstRadius?: number;
+    /** 爆炸瞬间那一下的伤害（出手时按 `impactBurstDamageRate` 算好，含暴击）。 */
+    burstDamage?: number;
+    /**
+     * 第二段爆炸伤害（设计案：「爆炸开始后第 26 帧造成 1 次伤害」）。
+     *
+     * 缺省 `undefined` ⇒ 只有一段爆炸。有值时按 `burstSecondDelay` 在**命中点**补一轮。
+     */
+    burstSecondDamage?: number;
+    /** 第二段爆炸的延迟秒数（缺省 0 = 与第一段同时）。第 26 帧 @30fps ⇒ 0.8333。 */
+    burstSecondDelay?: number;
+    /** 爆炸表现的时长（秒）。缺省 ⇒ 沿用命中特效的 0.5s。用于活够整段序列帧动画。 */
+    burstEffectSeconds?: number;
     /** 弧线飞行：出手点到目标点之间的**中段最大横向偏移**（世界坐标，缺省 0 = 直线）。 */
     arcOffset?: number;
 }
@@ -860,28 +956,30 @@ export interface ZCGroundZoneState {
      */
     growSeconds?: number;
     /**
-     * 「接近阶段」的移动速度（世界 px/秒，2026-11-07 魔术师「鹿神守护」103405 需求 2）。
+     * 「追踪段」的**慢速档**（世界 px/秒，2026-11-07 魔术师「鹿神守护」103405）。
      *
-     * 给了它就进入**两段式移动**：
-     * 1. **接近**：朝 `approachTargetId` 走（每帧重算方向，目标会跑），速度 = 本字段；
+     * 给了它就进入**追踪式移动**（2026-11-12 改成「会追踪的子弹」口径）：
+     * 1. **慢档**：每帧朝当前目标重算方向走过去，速度 = 本字段；
      *    期间**不扣** `remainingSeconds`、**不结算**任何一波伤害；
-     * 2. **冲刺**：与目标距离 ≤ `sprintRange`（或目标已倒下）时切段 —— 速度换成 `sprintSpeed`、
-     *    方向锁定切换那一刻的朝向，`remainingSeconds` 从满值开始扣、波次照旧结算。
+     * 2. **快档**：与目标距离 ≤ `sprintRange` 时提速到 `sprintSpeed`、开始读秒与结算，
+     *    并在表现上点亮叠层（火船）；
+     * 3. **换目标**：目标阵亡 / 找不到时自动改追**最近的敌人**（`ZCGroundZoneSystem` 自己找），
+     *    两档都会继续转向 —— 它是追踪弹，不是「锁定方向撞出去」的冲刺。
      *
-     * 缺省 undefined ⇒ 没有接近阶段，所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风）行为逐字不变。
+     * 缺省 undefined ⇒ 没有追踪阶段，所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风）行为逐字不变。
      */
     approachSpeed?: number;
-    /** 接近阶段追的目标单位 id（`unit.id`）；目标倒下 / 找不到时立刻转冲刺。 */
+    /** 追踪的目标单位 id（`unit.id`）；目标倒下时由区域系统改追最近敌人。 */
     approachTargetId?: number;
-    /** 与 `approachTargetId` 的距离 ≤ 它（世界 px）就转冲刺。缺省 0 ⇒ 一出生就冲。 */
+    /** 与目标的距离 ≤ 它（世界 px）就切快档。缺省 0 ⇒ 一出生就快档。 */
     sprintRange?: number;
-    /** 冲刺速度（世界 px/秒）；转段时写进 `moveVelocityX/Y`（世界 px/秒）。缺省 0 ⇒ 转段后原地不动。 */
+    /** 快档速度（世界 px/秒）；同时写进 `moveVelocityX/Y`（世界 px/秒）。缺省 0 ⇒ 切档后原地不动。 */
     sprintSpeed?: number;
     /**
-     * 是否已经切到冲刺段。
+     * 是否已经切到快档。
      *
-     * 缺省 / false ⇒ 仍在接近（或压根没有接近阶段）。**必须进快照**：存档还原后小鹿不能
-     * 又从出生点重新走一遍，也不能把「已经冲过的两秒」再冲一次。
+     * 缺省 / false ⇒ 仍在慢档（或压根没有追踪阶段）。**必须进快照**：存档还原后小鹿不能
+     * 又从出生点重新走一遍，也不能把「已经读过的两秒」再读一次。
      */
     sprinting?: boolean;
     /**
@@ -892,6 +990,114 @@ export interface ZCGroundZoneState {
      * 缺省 undefined ⇒ 视图不碰动画（既有特效的预制自带 `defaultAnimation`，行为逐字不变）。
      */
     visualAnimation?: string;
+    /**
+     * 「跟随本体」的绑定单位 id（`unit.id`，2026-11-09 大威天芦「无尘禁土」102503）。
+     *
+     * 给了它以后，区域每帧把坐标**改写**成该单位的当前位置（见
+     * `ZCGroundZoneSystem.followCaster`），于是「每秒一波」的判定圆心永远裹在施法者身上 ——
+     * 这是设计案「本体携带的范围持续伤害，跟随本体移动」的落地方式。
+     *
+     * 为什么不用 `moveVelocity`：那是「朝某个方向匀速飞」，追不上会走位 / 冲锋 /
+     * 被击退的角色。为什么不像鹿神守护那样走 `approachSpeed`：那个会在到达后转冲刺、
+     * 然后把速度锁死，语义是「一次性撞击」，不是「常驻光环」。
+     *
+     * 缺省 undefined ⇒ 区域原地不动，所有既有区域（暴风雪 / 灼热地带 / 火船 / 暴风 / 鹿神守护）行为逐字不变。
+     */
+    followUnitId?: number;
+    /**
+     * 跟随时保持的「身前距离」（世界 px，2026-11-12 磁电菇「磁电冲击」101604）。
+     *
+     * `followUnitId` 单独用是「圆心拍在本体身上」；给了本字段就改成
+     * **落点 = 本体坐标 + 朝向前移 `followForward`**，于是光环永远悬在施法者身前那个固定距离上 ——
+     * 设计口径「磁电冲击应该跟随角色一起移动，固定在角色身前」。
+     *
+     * 朝向取施法者的 `facingRadians`（美术朝向，玩家眼睛看到的那一面），并且**同时刷新
+     * `angleDegrees`**：落点沿着朝向偏、矩形却还朝旧角度的话，中心与光束方向会立刻错开。
+     * 两者必须同源，所以这里不给「只偏不转」的开关。
+     *
+     * 缺省 0 ⇒ 圆心贴本体（无尘禁土 102503 / 所有既有光环行为逐字不变）。
+     */
+    followForward?: number;
+    /**
+     * 每一波**命中后**按概率挂一个状态（2026-11-11 磁电菇「五雷轰顶」101603）。
+     *
+     * 为什么放在区域上而不是施法那一刻：设计口径是「每道雷打到的**每个**敌人各有 30% 概率进入麻痹」，
+     * 判定发生在每一波结算里、每个被打到的单位身上；施法那一刻还没有「打到了谁」这个概念。
+     *
+     * 与 `expireStatusId` 的区别：那个只在区域**到期**时挂一次（而且要求 `expireDamage > 0`），
+     * 这里每一波都判、与伤害同拍。缺省 ⇒ 不挂，所有既有区域行为逐字不变。
+     */
+    hitStatusId?: string;
+    /** 命中挂状态的概率（0~1）。缺省 0 ⇒ 不挂；为 1 时等价于必挂。 */
+    hitStatusChance?: number;
+    /** 命中挂状态的持续秒数；缺省用状态表里的 `durationSeconds`。 */
+    hitStatusSeconds?: number;
+    /**
+     * **每一波**最多打几个目标（2026-11-11 磁电菇「磁电冲击」101604「最多对范围内 5 个敌人」）。
+     *
+     * 与 `maxHits` 的区别是口径：`maxHits` 是**整个区域**的命中名额（同一个敌人只算一次，
+     * 名额满了提前散场，服务「风扫过路径上 N 个人」）；这里是**每波重新计数**，同一个敌人
+     * 下一波还能再吃，区域也不会提前消失 —— 服务「站桩持续伤害、每波最多打 5 个」。
+     *
+     * 缺省 0 ⇒ 不限，所有既有区域行为逐字不变。
+     */
+    waveMaxTargets?: number;
+    /**
+     * 施法期间把**施法者的美术**整体上抬多少（**屏上 px**，2026-11-11 麻辣铁锅「喷射火焰」102603
+     * 「播放攻击动画时，角色上移 30px，触发特效时，角色在空中循环播放攻击动作」）。
+     *
+     * 为什么挂在区域上而不是给单位加一个状态：这段「跳起来」的时长**恰好等于这片区域的存在时长**
+     * （`auraSeconds`），挂在区域上就天然同生共死，不需要另一套到期清理。
+     * 区域消失 ⇒ 这一帧取不到值 ⇒ 角色落回地面，不需要补任何收尾逻辑。
+     *
+     * 🔴 它只抬**美术根节点**（`ZCUnitView.visualRoot`），不动单位自己的坐标 ——
+     * 否则命中判定、格子占用、索敌距离全都会跟着飘。
+     * 缺省 0 ⇒ 任何既有区域都不抬，行为逐字不变。
+     */
+    casterLiftPx?: number;
+    /**
+     * **矩形判定**的两条半边长（工业 px，2026-11-11 磁电菇「磁电冲击」101604）。
+     *
+     * 需求原文（用户口径）：「把判定改成长方形，尽可能贴合特效范围」。`雷电冲击` 是一道
+     * **横向束**（美术 485×143 画布 px ⇒ 363×107 逻辑 px），塞进半径 160~200 的圆里，
+     * 圆的上 / 下缘是空的 —— 判定比视觉慷慨，但玩家看不出来「为什么站在火边上没被打到」。
+     *
+     * 两条口径：
+     * - `rectHalfHeight > 0` 才启用矩形；缺省（undefined / 0）⇒ 仍然是圆形，所有既有区域逐字不变；
+     * - `rectHalfLength` 缺省（undefined / 0）⇒ **跟随 `radius`**，即长度仍由 `auraRadius` 那三档
+     *   （160 / 180 / 200）驱动 —— 特效是按 L2 的 180 烘焙的，所以只有 L2 是严丝合缝的，
+     *   L1 会短一截、L3 会长一截。要固定贴合美术，在表里显式写 `auraRectHalfLength: 182`。
+     *
+     * ⚠️ 矩形**与坐标轴对齐**（横平竖直），不跟本体朝向旋转 —— `area` 事件的两端同点，
+     * `zcCombatEffectHeadingDegrees` 对零位移直接返回 `null`，美術本体也是不转的。
+     * 判定和美术必须用同一个朝向口径，否则朝向一换就对不上。
+     */
+    rectHalfLength?: number;
+    rectHalfHeight?: number;
+    /**
+     * 区域的**朝向**（度，逆时针，0 = 朝 +x；2026-11-11 磁电冲击 101604「终点要朝向目标方向」）。
+     *
+     * 两件事一起转：
+     * - **判定**：`zcGroundZoneReaches` 先把目标点按 `-angleDegrees` 转回区域本地系再判形状；
+     * - **表现**：`syncHoldVisual` / `resolveWave` 把角度抄进 `area` 事件的 `angleDegrees`，
+     *   视图据此 `setRotationFromEuler` —— 见 `ZCCombatEventState.angleDegrees` 的注释
+     *   （`area` 事件 `from == to`，视图自己算不出朝向）。
+     *
+     * 缺省 `undefined` ⇒ 不转（0°），所有既有区域行为逐字不变。
+     * 必须进快照：不还原的话，读档回来光束会突然躺平，判定也跟着换方向。
+     */
+    angleDegrees?: number;
+    /**
+     * 表现的**竖直抬升**（**屏上 px**，2026-11-11 磁电冲击「起始位置要在角色的中心点」）。
+     *
+     * 单位根节点是**逻辑脚点**，`area` 特效不抬的话光束有一半埋在地面线以下；
+     * 一屏上一格 = 90px、一个兵可见高 ≈ 67px，所以「脚点 → 身体中心」约 30px。
+     *
+     * 为什么是屏上 px：与 `ZCCombatEffectPlacement.zcCombatEffectLiftY`（弹道的竖直补偿）
+     * 同一口径 —— 那里加在 `mapToViewY` 之后，屏幕竖直、不跟旋转，本字段照做。
+     * 缺省 0 ⇒ 任何既有区域都不抬。
+     */
+    visualLiftPx?: number;
 }
 
 /**

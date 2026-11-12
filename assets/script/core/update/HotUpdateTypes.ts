@@ -1,3 +1,5 @@
+import type { NetworkTransport } from '../network/NetworkTransport';
+
 export const HOT_UPDATE_SCHEMA_VERSION = 1;
 
 /**
@@ -130,6 +132,19 @@ export interface IHotUpdateBundleRuntime {
 
 export interface IHotUpdateManifestVerifier {
     verify(pointer: IHotUpdateReleasePointer, manifest: IHotUpdateManifest): Promise<boolean>;
+}
+
+/**
+ * 资源热更编排器所需的适配器集合。
+ * 放在 core 端口层：platform 只负责产出实现，app 层负责装配编排器本身。
+ */
+export interface IHotUpdateManagerDependencies {
+    readonly network: NetworkTransport;
+    readonly store: IHotUpdateStore;
+    readonly runtime: IHotUpdateBundleRuntime;
+    readonly verifier: IHotUpdateManifestVerifier;
+    readonly platform: HotUpdatePlatform;
+    readonly now?: () => number;
 }
 
 /**

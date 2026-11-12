@@ -146,7 +146,6 @@ import {
     sweepLevelOf,
     sweepTimesOf,
     sweepUsedOf,
-    timesOf,
 } from '../assets/script/app/hang/HangTable';
 import type { IHjGuankaRow, IHjInteractRow, IHjReward, IHjSnapshotView } from '../assets/script/app/hang/HangTable';
 import { HJ_TEXTS, hjFormat, hjFormatPercent } from '../assets/script/app/hang/HangTexts';
@@ -470,14 +469,18 @@ test('⚠️ formatHms 是 `08:00:00` 形态，**不是**战令那个带「N天�
     assert.equal(formatHms(27 * 3_600_000), '27:00:00', '不带「N天」前缀（与战令那个刻意不同）');
 });
 
-test('倍率口径：非月卡恒 1；`nextGearIndex` 环绕；角标 / 花费文案', () => {
-    for (const index of [0, 1, 2, 3, 4, 99, -1]) {
-        assert.equal(sweepTimesOf(index, false), 1, '`hasUnlimited=false` ⇒ 下标被忽略，恒 1');
-    }
-    assert.equal(sweepTimesOf(0, true), 1);
-    assert.equal(sweepTimesOf(2, true), 10);
-    assert.equal(sweepTimesOf(4, true), 50);
-    assert.equal(sweepTimesOf(9, true), 1, '越界退默认档');
+test('倍率口径：档位 1/5/10/20/50，**不再受月卡限制**；`nextGearIndex` 环绕；角标 / 花费文案', () => {
+    // 2026-11-11 变更：协议 `CmdCityChapterSweepReqMsg` 新增 `optional uint32 times = 3`
+    // ⇒ 倍率对所有玩家开放，档位只由 `gearIndex` 决定（老端「无月卡恒 1 倍」作废）。
+    assert.equal(sweepTimesOf(0), 1);
+    assert.equal(sweepTimesOf(1), 5);
+    assert.equal(sweepTimesOf(2), 10);
+    assert.equal(sweepTimesOf(3), 20);
+    assert.equal(sweepTimesOf(4), 50);
+    assert.equal(sweepTimesOf(9), 1, '越界退默认档');
+    assert.equal(sweepTimesOf(-1), 1, '负数退默认档');
+    assert.equal(sweepTimesOf(1.5), 1, '非整数退默认档');
+    assert.equal(sweepTimesOf(), 1, '缺省档 = 1 倍');
 
     assert.deepEqual([0, 1, 2, 3, 4].map(nextGearIndex), [1, 2, 3, 4, 0], '1→5→10→20→50→1');
     assert.equal(nextGearIndex(99), HJ_DEFAULT_GEAR_INDEX, '非法下标 → 默认档（0）');
@@ -592,13 +595,14 @@ test('快照查询：起点为 0（离线）时进度归 0，**不是**从 1970 
     assert.equal(reachedMaxOf(full), true);
 });
 
-test('快照查询：倍率 / 花费（无月卡恒 `x5`，即使快照里带了别的档位）', () => {
+test('快照查询：花费文案 = `sweepEnd × 档位倍率`（倍率跟档位，不跟月卡）', () => {
     const s = snapshot({ sweepEnd: 5 });
-    assert.equal(timesOf(s), 1);
-    assert.equal(timesOf(s, 4), 1, '无月卡时档位参数被忽略');
+    assert.equal(sweepTimesOf(), 1);
+    assert.equal(sweepTimesOf(4), 50, '满档 50 倍');
     assert.equal(costTextOf(s), 'x5');
-    assert.equal(costTextOf(s, 4), 'x5');
-    assert.equal(costTextOf(snapshot({ sweepEnd: 5, hasUnlimited: true }), 4), 'x250', '满档 50 倍 ⇒ 5×50');
+    assert.equal(costTextOf(s, 4), 'x250', '满档 50 倍 ⇒ 5×50');
+    assert.equal(costTextOf(s, 2), 'x50', '10 倍 ⇒ 5×10');
+    assert.equal(costTextOf(snapshot({ sweepEnd: 0 }), 4), 'x0', '`end` 查不到就是 0');
 });
 
 test('⚠️ `freePageOf`：语义反直觉 —— **「免费=是」(1) 才是「还有免费次数」**', () => {
@@ -1611,7 +1615,7 @@ test('⚠️ `CmdBattleSweepReqMsg` 在 proto 源里**没有 `times`** ⇒ 请�
     assert.equal(/times/.test(block![1]!), false, 'proto 里出现了 `times` —— 处置口径要重核');
 
     const repository = src('HangRepository.ts');
-    assert.match(repository, /new RequestBattleSweep\(\{ level, type \}, caller as any, callback\)/);
+    assert.match(repository, /new RequestBattleSweep\(\{ level, type \}, caller, callback\)/);
     // ⚠️ 「倍率只作用于客户端…」这段口径写在 **RequestHangMsg.ts** 的文件头（请求体定义那儿），
     //    不是 Repository —— 别在 Repository 里找
     assert.match(src('RequestHangMsg.ts'), /倍率只作用于\*\*客户端\*\*的体力校验与花费文案/);
@@ -1661,7 +1665,7 @@ test('⚠️ 三条请求都必须 `withTimeout` + 离线早退 + `catch` 返结
     assert.match(repository, /const READ_TIMEOUT_MS = 800;/);
     assert.match(repository, /const WRITE_TIMEOUT_MS = 5000;/);
     // watchAd 走 `RequestRoleWatchAdvert`（不是本模块的 RequestHangMsg）
-    assert.match(repository, /new RequestRoleWatchAdvert\(\{ type \}, caller as any, callback\)/);
+    assert.match(repository, /new RequestRoleWatchAdvert\(\{ type \}, caller, callback\)/);
     assert.match(repository, /import \{ RequestRoleWatchAdvert \} from '\.\.\/generated\/requestMsg\/RequestRoleMsg';/);
 });
 
@@ -1844,33 +1848,95 @@ test('🔴 click 监听必须挂在**真挂了 `cc.Button` 的节点**上（挂�
         '`Entry` 上没有 cc.Button，写成 Button CLICK 会静默失效');
 });
 
-test('⚠️ 广告**播放**能力没迁 ⇒ `HJ_AD_PLAYBACK_AVAILABLE = false`，只提示不发请求', () => {
+test('⚠️ 征收不再走广告分支（占城协议没有「看广告换次数」）', () => {
     const page = src('HangPage.ts');
+    // 常量保留：主线挂机（`BattleSweep`）那条链路后续还要用，别跟着删
     assert.match(page, /export const HJ_AD_PLAYBACK_AVAILABLE = false;/);
-    assert.match(page, /if \(!HJ_AD_PLAYBACK_AVAILABLE\) \{\s*FW\.showTip\(HJ_TEXTS\.adUnavailable\);\s*return;/);
-    // 二次确认弹窗走 `CommonTips`（老端 `GObjChapterSelect_1`），`onSure` 才去看广告
-    assert.match(page, /await CommonTips\.open\(\{/);
-    assert.match(page, /sureText: HJ_TEXTS\.adConfirmWatch,/);
-    assert.match(page, /onSure: \(\) => \{ void this\._watchAdThenSweep\(\); \},/);
-    // 免费次数用完且还有广告次数才弹（老端 `refreshBtn` 的分支）
-    assert.match(page, /if \(!snapshot\.hasUnlimited && used >= snapshot\.sweepFreeTimes && snapshot\.adRest > 0\) \{/);
+    // 占城征收 2026-11-09：领奖 / 扫荡都由服务端结算，客户端不再弹「免费次数用完，看广告 +1 次」
+    assert.equal(/CommonTips\.open\(/.test(page), false, '征收页面不该再弹看广告二次确认');
+    assert.equal(/_watchAdThenSweep|_confirmWatchAd/.test(page), false, '广告换次数链路已下线');
+    assert.equal(/snapshot\.adRest > 0/.test(page), false, '广告次数分支已下线');
 });
 
-test('页面：500ms 防抖 + 体力校验 + 成功后重挂起点（老端 `onClickLevy`）', () => {
+test('页面：领取 / 扫荡都发意图给领地 Controller，客户端不再自己判体力与时长', () => {
     const page = src('HangPage.ts');
+    // 扫荡：500ms 防抖后发 `sweepChapter`
     assert.match(page, /const SWEEP_DEBOUNCE_MS = 500;/);
     assert.match(page, /if \(this\._lastSweepMs > 0 && now - this\._lastSweepMs < SWEEP_DEBOUNCE_MS\) return;/);
-    assert.match(page, /if \(!this\._hasEnoughEnd\(snapshot, snapshot\.sweepEnd \* times\)\) \{/);
-    assert.match(page, /this\._startMs = Date\.now\(\);/);
-    // 不满 1 小时点领取只提示
-    assert.match(page, /if \(!canClaim\(this\._elapsed\(\)\)\) \{\s*FW\.showTip\(HJ_TEXTS\.fullOneHour\);/);
-    // 非月卡点倍率切换只提示
-    assert.match(page, /FW\.showTip\(HJ_TEXTS\.monthCardLockTip\);/);
+    // 🔴 倍率必须随意图带走（协议 `optional uint32 times = 3`）：
+    //    只改角标文案、请求仍发 1 倍，是「界面变了但没生效」里最难发现的一种（零报错）。
+    assert.match(page, /intent: \{ kind: 'sweepChapter', times: sweepTimesOf\(this\._gearIndex\) \}/);
+    // 领取：发 `claimIdleRewards`，奖励由服务端 `tlCmdGoods` 决定
+    assert.match(page, /EventMgr\.instance\.emit\(TerritoryUiEvent\.Intent, \{ intent: \{ kind: 'claimIdleRewards' \} \}\);/);
+    // 体力校验 / 「满 1 小时」本地判据全部下线（结算口径在服务端）
+    assert.equal(/_hasEnoughEnd/.test(page), false, '体力校验属主线挂机，占城扫荡由服务端扣');
+    assert.equal(/canClaim\(this\._elapsed\(\)\)/.test(page), false, '本地不再拦「不满 1 小时」');
+    // 2026-11-11 口径变更：倍率对所有玩家开放 ⇒ 不再有「激活月卡后解锁功能」这道拦截
+    assert.equal(/monthCardLockTip/.test(page), false, '倍率切换不再受月卡限制（协议已带 times）');
+    assert.equal(/hasUnlimited\) this\._gearIndex/.test(page), false, 'reload 不再把档位复位成 1 倍');
+});
+
+test('⚠️ AdCountText 吃的是 `CmdRole.sweepTimes`，扫荡成功后必须重读（回包不带次数）', () => {
+    const repository = src('HangRepository.ts');
+    // 读：CmdRole 第一行的 sweepTimes（今日已用次数）
+    assert.match(repository, /export function readRoleState\(\): IHangRoleState \| null/);
+    assert.match(repository, /sweepTimes: Number\(cmd\.sweepTimes\) \|\| 0/);
+    // 用：三个分支（无限 / 看广告 / 剩余）都由它决定，剩余是 `freeTimes - sweepTimes`
+    assert.match(repository, /switch \(adCountBranchOf\(snapshot\)\)/);
+    assert.match(repository, /adLeftOf\(snapshot\), snapshot\.sweepFreeTimes/);
+
+    const page = src('HangPage.ts');
+    assert.match(page, /this\.adCountLabel\.string = adCountTextOf\(snapshot, snapshot\.adRest, snapshot\.adLimit\);/);
+    // 🔴 刷新源①：订阅 `CmdRole` 缓存推送（服务端一推就到），`onOpen` 订阅 / `onClose` 退订
+    assert.match(repository, /CacheMgr\.instance\.setEventUpdate\('CmdRole', caller, callback\)/);
+    assert.match(repository, /removeEventCaller\('CmdRole', caller\)/);
+    assert.match(page, /this\._unsubscribeRole = subscribeRoleChange\(this, \(\) => \{ this\._refreshRoleState\(\); \}\);/);
+    assert.match(page, /this\._unsubscribeRole\?\.\(\);/);
+    // 🔴 刷新源②：扫荡 rsp 只有 `succ` + `tlCmdGoods`，次数只能靠推送 ⇒ 收到 rewards 再重读一次兜底
+    assert.match(page, /this\._refreshRoleState\(\);/);
+    assert.match(page, /const role = readRoleState\(\);/);
+    // 读不到（离线）保留旧值，绝不把次数写成 0（会让「今日剩余」跳回满、免费角标重新亮）
+    assert.match(page, /if \(!role\) return;/);
+    // ⚠️ 曾经写成「起点没变 ⇒ 整个回调早退」，把次数刷新一起跳掉了
+    assert.equal(
+        /if \(next === null \|\| next === this\._startMs\) return;/.test(page),
+        false,
+        '`_onTerritoryCommand` 不能因为 `idleTime` 没变就整段返回（会跳过次数刷新）',
+    );
+});
+
+test('产出奖励区用 levelInfo.idleReward（已通关最高关卡），不是老 guankaReward', () => {
+    const page = src('HangPage.ts');
+    // 数据源：与扫荡同一个纯函数（`findHighestPassedTerritoryLevel`）
+    assert.match(page, /import \{ findHighestPassedTerritoryLevel \} from '\.\.\/territory\/model\/TerritoryStageBinding';/);
+    assert.match(page, /findHighestPassedTerritoryLevel\(map\.sites, stageByCell, progress\)/);
+    assert.match(page, /target\.stage\.idleRewards/);
+    assert.match(page, /private _displayRewards\(snapshot: IHangSnapshot\): readonly IHjReward\[\]/);
+
+    // 🔴 收益条 / 网格 / 预加载三处都必须走 `_displayRewards`：
+    //    `mergedRewards`（老表 guankaReward）只允许当**回落分支**出现一次。
+    //    直接读它的次数 > 1 ⇒ 有一处没换源，界面会出现「收益条说 16/h、格子却是另一关的图」。
+    // 先剥注释：字段说明里会提到 `snapshot.mergedRewards`，那是文档不是代码
+    const code = page
+        .replace(/\/\*[\s\S]*?\*\//g, '')
+        .replace(/^\s*\/\/.*$/gm, '')
+        .replace(/\/\/[^\n]*$/gm, '');
+    const direct = code.match(/snapshot\.mergedRewards/g) ?? [];
+    assert.equal(direct.length, 1,
+        `只允许 _displayRewards 的回落分支读 mergedRewards，实际 ${direct.length} 处`);
+    assert.match(page, /const rewards = this\._displayRewards\(snapshot\);/);
+    assert.match(page, /for \(const reward of this\._displayRewards\(snapshot\)\)/);
+
+    // Render 订阅（数据随领地状态变化）+ 打开时补一帧
+    assert.match(page, /EventMgr\.instance\.on\(TerritoryViewEvent\.Render, this\._onTerritoryRender, this\);/);
+    assert.match(page, /EventMgr\.instance\.emit\(TerritoryUiEvent\.Ready\);/);
 });
 
 test('⚠️ 界面文案的唯一入口是 `HJ_TEXTS`（页面里不许再写中文字面量）', () => {
     const page = src('HangPage.ts');
-    assert.match(page, /import \{ HJ_TEXTS, hjFormat \} from '\.\/HangTexts';/);
+    // 2026-11-11：倍率不再受月卡限制 ⇒ 页面里最后一句中文提示（`monthCardLockTip`）随之下线，
+    // 页面已经**不需要** `HJ_TEXTS / hjFormat`。所以不再要求这两行 import 存在；
+    // 真正的守卫是下面那条「代码里不许出现中文界面文案字面量」——它一条都没放松。
     assert.match(page, /this\.timeLabel\.string = formatHms\(capped\);/);
     assert.match(page, /this\.adCountLabel\.string = adCountTextOf\(snapshot, snapshot\.adRest, snapshot\.adLimit\);/);
     assert.match(page, /this\.monthCardPriceLabel\.string = monthCardPriceTextOf\(snapshot\);/);
@@ -2165,7 +2231,7 @@ test('新入口累计时长使用黄色 24 号字，保持单行并从零初始�
     const label = aCompOfType(entryChild('HangTime'), 'cc.Label');
     assert.equal(label._string, '00:00:00');
     assert.equal(label._fontSize, 24);
-    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 234, g: 195, b: 37, a: 255 });
+    assert.deepEqual(label._color, { __type__: 'cc.Color', r: 250, g: 184, b: 3, a: 255 });
     assert.equal(label._overflow, 2);
     assert.equal(label._enableWrapText, false);
 });
@@ -2181,7 +2247,7 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     assert.ok(code.includes('applySnapshot'), '剥完注释应当还剩下代码文本（不然下面的断言全是假绿）');
 
     // 征收入口不再依赖旧主线通关；计时消费领地快照。
-    assert.doesNotMatch(code, /sweetLevel|hangRepository|HangPage/);
+    assert.doesNotMatch(code, /sweetLevel|hangRepository/);
     // 🔴 无条件写（规则 82）：prefab 烘的是 `true`（见上一条），写成「只在翻转时写」就会
     //    因为「新值 === 缓存初值」短路 ⇒ 新号永久停在可见态。
     assert.match(code, /this\.node\.active = true;/);
@@ -2190,7 +2256,9 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     // ---- ② 点击：挂在金币车容器的 cc.Button 上，覆盖图标和时间 ----
     assert.match(code, /this\.node\.getComponent\(Button\)/);
     assert.match(code, /button\.node\.on\(Button\.EventType\.CLICK, this\.onClick, this\);/);
-    assert.match(code, /EventMgr\.instance\.emit\(TerritoryUiEvent\.Intent, \{ intent: \{ kind: 'claimIdleRewards' \} \}\);/);
+    // 2026-11-09：点入口**只开弹窗**，领奖 / 扫荡都在弹窗里按按钮触发
+    assert.match(code, /void HangPage\.open\(\{\}\);/);
+    assert.equal(/claimIdleRewards/.test(code), false, '入口不许自己发领奖意图（会变成「点一下就静默领掉」）');
     assert.match(code, /EventMgr\.instance\.on\(TerritoryViewEvent\.Render, this\.applySnapshot, this\);/);
 
     // ---- ③ 规则 71：`onDestroy` 里**禁** `off(`（会抛 TypeError 并中断销毁链）----

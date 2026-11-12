@@ -157,7 +157,9 @@ test('★★★页面：拿到 approach 才延迟跳转，且跳转只有一个�
 test('★★★视图：过场必须纳入 `cameraBusy` 那条唯一收尾路径（否则第一帧就被还原）', () => {
     assert.ok(mapViewSource.includes('private stepBattleApproach(dt: number): void {'));
     assert.ok(mapViewSource.includes('this.stepBattleApproach(dt);'), 'update 没推进过场');
-    assert.ok(mapViewSource.includes('|| this.battleApproach !== null;'),
+    // ⚠️ 用正则而不是整串 `includes`：2026-11-09 起这道判定后面还挂着「预告首领关」过场
+    //    （`|| this.previewCinema !== null`），整串匹配会在每次新增一条镜头时间轴时误报。
+    assert.match(mapViewSource, /\|\| this\.battleApproach !== null/,
         '`cameraBusy` 没把过场算进去 ⇒ 播完前就被 restoreChestCamera 按回原位');
     // 换章 / 页面销毁前要清掉，否则半路的 scale 会留在新图上。
     assert.ok(mapViewSource.includes('this.battleApproach = null;'));

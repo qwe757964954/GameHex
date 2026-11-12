@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BigMapCampRepository, type IBigMapCampGateway } from '../assets/script/app/bigmap/application/BigMapCampRepository';
+import { BigMapCampRepository, BIGMAP_CAMP_REFRESH_SECONDS, type IBigMapCampGateway } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { normalizeBigMapCampInfos } from '../assets/script/app/bigmap/model/BigMapCampInfo';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { withBigMapCampCities, completeBigMapCampLayout } from '../assets/script/app/bigmap/model/BigMapCampWorld';
 import { loadBigMapConfig, loadBigMapLayout } from './helpers/bigmap-fixtures';
@@ -133,6 +133,61 @@ test('可见区域整批刷新包含未过期缓存，重叠在途时不拆成�
     repository.dispose();
 });
 
+test('同一批可见据点反复上报时，整批刷新在新鲜窗口内不重发', async () => {
+    let now = 0;
+    const sent: number[][] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async (ids) => { sent.push([...ids]); return { infos: ids.map((campId) => ({ campId, opType: 0 })) }; },
+        fetchDetail: async () => null,
+        fetchRoles: async (campId) => ({ campId, infos: [] }),
+        requestMove: async () => null,
+    }, () => now);
+    await repository.refreshSimple([304, 306, 505, 606, 706], true);
+    assert.deepEqual(sent, [[304, 306, 505, 606, 706]], '首次整批查询');
+    // 视图 150ms 防抖后又报同一批（裁剪边界上 marker 反复 active/inactive），Controller 再驱动一次整批刷新
+    now = 300;
+    assert.equal(await repository.refreshSimple([304, 306, 505, 606, 706], true), false);
+    now = 1200;
+    assert.equal(await repository.refreshSimple([606, 505, 304, 706, 306], true), false);
+    assert.equal(sent.length, 1, '★ 全批仍在 5 秒新鲜窗口内，整批不重发');
+    // 真有不新鲜的目标时才整批重发，且仍然一次发完整集合（不拆单城）
+    now = 1500;
+    await repository.refreshSimple([304, 306, 505, 606, 706, 707], true);
+    assert.deepEqual(sent[1], [304, 306, 505, 606, 706, 707], '新城进入视野仍发完整集合');
+    repository.dispose();
+});
+
+test('整批撞上在途被跳过时，在途落地后按最新可见集合补一次，新进视野的城不漏快照', async () => {
+    const sent: number[][] = [];
+    const first = deferred();
+    let calls = 0;
+    const repository = new BigMapCampRepository({
+        fetchSimple: async (ids) => {
+            sent.push([...ids]);
+            calls += 1;
+            return calls === 1 ? first.promise
+                : { infos: ids.map((campId) => ({ campId, opType: campId === 101 ? 1 : 0 })) };
+        },
+        fetchDetail: async () => null,
+        fetchRoles: async (campId) => ({ campId, infos: [] }),
+        requestMove: async () => null,
+    });
+    const loading = repository.refreshSimple([101], true);
+    // 拖动中新进视野 102：这一轮整批撞上在途，当场不发（不拆包），但必须登记补发
+    assert.equal(await repository.refreshSimple([101, 102], true), false);
+    assert.equal(repository.get(102), null, '此刻 102 还没有快照');
+    first.resolve({ infos: [{ campId: 101, opType: 1 }] });
+    await loading;
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(sent, [[101], [101, 102]], '★ 在途落地后按最新集合补一次');
+    assert.equal(repository.get(102)?.opType, 0, '补发把漏掉的城补上，不留空状态');
+    assert.equal(repository.get(101)?.opType, 1, '老城的快照不被补发覆盖成旧值');
+    // 再补一次同批：全部新鲜 ⇒ 不再发
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(sent.length, 2);
+    repository.dispose();
+});
+
 test('详情查询仅发送点击据点，迟到的简略回包不能覆盖更新的详情', async () => {
     const h = makeGateway();
     const repository = new BigMapCampRepository(h.gateway);
@@ -248,7 +303,7 @@ test('Presenter 以服务器状态展示据点，不改本地占领存档，也�
     const h = makeGateway();
     const repository = new BigMapCampRepository(h.gateway);
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage, saveKey: 'server-camp',
+    const presenter = new BigMapModel({ config: loadBigMapConfig(), storage, saveKey: 'server-camp',
         adventureChapter: () => 0, now: () => 957600, campRepository: repository });
     const original = storage.read('server-camp');
     const loading = presenter.refreshVisibleCamps([101, 999999]);
@@ -280,7 +335,7 @@ test('Presenter 以服务器状态展示据点，不改本地占领存档，也�
 test('详情失败可以重新点选；切走页面后不通知视图', async () => {
     const h = makeGateway();
     const repository = new BigMapCampRepository(h.gateway);
-    const presenter = new BigMapPresenter({ config: loadBigMapConfig(), storage: createMemoryBigMapStorage(),
+    const presenter = new BigMapModel({ config: loadBigMapConfig(), storage: createMemoryBigMapStorage(),
         saveKey: 'server-camp-close', adventureChapter: () => 3, now: () => 957600, campRepository: repository });
     let notifications = 0;
     presenter.onChanged(() => { notifications += 1; });
@@ -320,7 +375,7 @@ test('联机表 81 座据点全部可用：军团层不会被 available 判成�
         cities: new Map([...config.cities].map(([id, city]) => [id,
             id === 101 ? { ...city, available: false } : city] as const)),
     };
-    const presenter = new BigMapPresenter({ config: closed, storage: createMemoryBigMapStorage(),
+    const presenter = new BigMapModel({ config: closed, storage: createMemoryBigMapStorage(),
         saveKey: 'camp-layer-state', adventureChapter: () => 1, now: () => 957600, campRepository: repository });
     const loading = presenter.refreshVisibleCamps([101, 102]);
     h.roles.resolve(null);
@@ -345,7 +400,7 @@ test('真实配置 + 真实布局下，点城池必须真的发出详情请求',
         fetchRoles: async (campId) => ({ campId, infos: [] }),
         requestMove: async () => null,
     });
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, layout, storage: createMemoryBigMapStorage(), saveKey: 'camp-detail-wire',
         adventureChapter: () => 3, now: () => 957600, campRepository: repository,
     });
@@ -355,4 +410,55 @@ test('真实配置 + 真实布局下，点城池必须真的发出详情请求',
     await presenter.refreshCampDetail(101);
     assert.deepEqual(called.filter((item) => item === 'detail:101'), ['detail:101']);
     presenter.dispose();
+});
+
+test('视野补发名单：同城在新鲜窗口内只发一次，窗口过后可再拉，空名单也是有效事实', async () => {
+    let clock = 0;
+    const calls: number[] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchRoles: async (campId) => { calls.push(campId); return { campId, infos: [] }; },
+    }, () => clock);
+    try {
+        assert.equal(await repository.refreshRolesFor([101, 102]), true, '至少一条真的拿到包');
+        assert.deepEqual(calls, [101, 102], '滑到两座城各发一条');
+        assert.equal(await repository.refreshRolesFor([101, 102]), false);
+        assert.deepEqual(calls, [101, 102], '★ 新鲜窗口内同一批城不重发（长拖不刷屏）');
+        clock = BIGMAP_CAMP_REFRESH_SECONDS * 1000;
+        assert.equal(await repository.refreshRolesFor([101]), true);
+        assert.deepEqual(calls, [101, 102, 101], '窗口过后可再拉');
+        assert.deepEqual(repository.rolesOf(102), [], '空名单=查过、确实没人');
+    } finally { repository.dispose(); }
+});
+
+test('视野补发的名单失败不占新鲜窗口，下一次滑动还能补上', async () => {
+    let fail = true;
+    const calls: number[] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchRoles: async (campId) => { calls.push(campId); return fail ? null : { campId, infos: [] }; },
+    }, () => 0);
+    try {
+        assert.equal(await repository.refreshRolesFor([101]), false);
+        fail = false;
+        assert.equal(await repository.refreshRolesFor([101]), true, '超时/坏包不能把这座城顶进「刚查过」');
+        assert.equal(calls.length, 2);
+    } finally { repository.dispose(); }
+});
+
+test('视野补发与点开城池共用同一把在途锁：同时触发只发一条', async () => {
+    const pending: ((value: unknown) => void)[] = [];
+    const calls: number[] = [];
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => null, fetchDetail: async () => null, requestMove: async () => null,
+        fetchRoles: (campId) => { calls.push(campId); return new Promise((resolve) => { pending.push(resolve); }); },
+    }, () => 0);
+    try {
+        const visible = repository.refreshRolesFor([101]);
+        const opening = repository.refreshRoles(101);
+        assert.deepEqual(calls, [101], '★ 拖动进视野的同时点开同一座城，只发一条');
+        pending[0]({ campId: 101, infos: [] });
+        assert.equal(await visible, true);
+        assert.equal(await opening, true);
+    } finally { repository.dispose(); }
 });

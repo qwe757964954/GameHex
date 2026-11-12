@@ -3,7 +3,8 @@ import { readFileSync } from 'node:fs';
 /** 用真实 Prefab 的层级和引用装配引擎桩，避免测试继续复制旧版 UI 构建代码。 */
 export function bigMapPrefabFixture(types: Record<string, new (...args: any[]) => any>, path = 'assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab') {
     const objects = JSON.parse(readFileSync(path, 'utf8'));
-    const scriptNames = ['BigMapPageLayout', 'BigMapBaseView', 'BigMapBasePlot', 'BigMapBuildRow', 'BigMapButton', 'BigMapPanel', 'BigMapInfoPopup'];
+    const scriptNames = ['BigMapPageLayout', 'BigMapBaseView', 'BigMapBasePlot', 'BigMapBuildRow', 'BigMapButton',
+        'BigMapInfoPopup', 'BigMapPlotCard'];
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     const constructors = { ...types };
     for (const name of scriptNames) {
@@ -30,6 +31,10 @@ export function bigMapPrefabFixture(types: Record<string, new (...args: any[]) =
                 const item = objects[ref.__id__];
                 const Type = constructors[item.__type__] ?? class {};
                 const component = node.getComponent(Type) ?? node.addComponent(Type);
+                // 引擎里每个 Component 都有 `node`；测试桩的 `class {}` 没有。
+                // 不补的话，产品代码里 `something.node.active = false` 会在桩上炸
+                // （表现为「基地界面没有搜索按钮」这类假失败）。
+                if (component && !component.node) (component as { node?: unknown }).node = node;
                 instances.set(ref.__id__, component);
             }
             for (const child of data._children) visit(child.__id__);

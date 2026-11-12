@@ -7,13 +7,27 @@ import { captureZCMatchConfig } from '../model/ZCMatchConfig';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
-import { buildRankSeats } from '../model/ZCRankBoard';
+import { buildRankSeats, RANK_FALLBACK_NAMES } from '../model/ZCRankBoard';
 import { ZCGameUiEvent, type IZCRequestUnitArtIntent, type IZCRequestEffectArtIntent, type IZCDebugDrawCardIntent } from '../view/ZCGameHudEvents';
 import type { IZCBattlePhase } from './ZCBattleController';
 import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
 import type { IZCGameEntry } from './ZCGameEntry';
-import type { IZCBattleView, IZCBattleRuntimeServices } from './ZCBattleRuntimeContract';
+import type { IZCBattleView, IZCBattleRuntimeServices, IZCBattleConfirmOptions, IZCDamageStatsPlayer, IZCDamageStatsPopup } from './ZCBattleRuntimeContract';
 import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSettlementController';
+
+/**
+ * 投降（提前退出）的确认文案。
+ *
+ * 需求（11-4 测试包反馈「【战斗】投降功能」）原本写「提前结束需要 **2 次确认**」，
+ * 11-09 曾按「同一个框点两次」实现（`CommonTips.confirmAgainText` 上膛文案）。
+ * 山猫 2026-11-11 实机确认：**只留一次确认** —— 点「确定」直接结算，不再上膛。
+ *
+ * 所以这里**不传** `confirmAgainText`。`CommonTips` 上的「点两次」能力保留（缺省不生效），
+ * 但投降不再使用；别在没确认需求前加回来，否则按钮会变成「再次确认」、看起来像第二层弹窗。
+ */
+const RETREAT_CONFIRM = {
+    content: '你确定放弃当前对局，提前退出嘛？', sureText: '确定', cancelText: '取消',
+} as const;
 
 /** 每局唯一的规则编排入口；组件只提供帧脉冲及展示端口。 */
 export class ZCBattleRuntimeController extends ControllerBase {
@@ -24,7 +38,11 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private renderClock = 0;
     private hints = true;
     private stopShowcase: (() => void) | null = null;
-    private readonly popups = new Map<'guide' | 'damage' | 'rank', IZCBattlePopup>();
+    private readonly popups = new Map<'guide' | 'damage' | 'rank' | 'retreat', IZCBattlePopup>();
+    /** 投降确认进行中（await 期间连点不能叠出第二个确认框）。 */
+    private retreating = false;
+    private damagePopup: IZCDamageStatsPopup | null = null;
+    private damageOpening = false;
     private readonly pendingUnitArt = new Set<string>();
     private readonly loadedUnitArt = new Set<string>();
     /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。 */
@@ -61,6 +79,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.listen(ZCGameUiEvent.RequestEffectArt, this.onRequestEffectArt);
         this.listen(ZCGameUiEvent.HexClick, this.onHexClick);
         this.listen(ZCGameUiEvent.DebugDrawCard, this.onDebugDrawCard);
+        this.listen(ZCGameUiEvent.DebugAddGold, this.onDebugAddGold);
         this.listen(ZCGameUiEvent.UseArtifact, this.onUseArtifact);
         this.listen(ZCGameUiEvent.OpenGuide, this.onOpenGuide);
         this.listen(ZCGameUiEvent.OpenDamageStats, this.onOpenDamage);
@@ -92,10 +111,12 @@ export class ZCBattleRuntimeController extends ControllerBase {
             if (this.renderClock >= 0.15) {
                 this.renderClock = 0;
                 this.view.renderBattle(model, frame, events, 'static');
+                this.refreshDamageStats();
             }
             return;
         }
         this.phase.beginSettlementPresentation();
+        this.refreshDamageStats();
         if (this.view.advanceSettlementPresentation(frame, dt)) return;
         this.render();
         this.openSettlement(false);
@@ -185,7 +206,45 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const result = this.model ? this.model.setDebugDrawCard(intent.cardId, intent.count) : { message: '请先完成出生点选择' };
         EventMgr.instance.emit(ZCGameUiEvent.DebugDrawCardResult, { message: result.message });
     }
-    private onRetreat(): void { this.openSettlement(true); }
+    private onDebugAddGold(amount: number): void {
+        const result = this.model ? this.model.addDebugGold(amount) : { ok: false, message: '请先完成出生点选择' };
+        if (result.ok) this.render();
+        EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: result.message });
+    }
+    /**
+     * 投降 = **一次确认**才结算。
+     *
+     * 取消 / 点空白关闭都直接返回，不产生任何对局副作用；`retreating` 挡住连点。
+     */
+    private async onRetreat(): Promise<void> {
+        if (this.isDisposed || this.phase.isSettled || this.retreating) return;
+        this.retreating = true;
+        try {
+            if (!await this.askRetreat(RETREAT_CONFIRM)) return;
+            this.openSettlement(true);
+        } catch (error) {
+            if (!this.isDisposed) this.services.failed(error);
+        } finally {
+            this.retreating = false;
+        }
+    }
+    /**
+     * 问一次。返回 `true` 只有「玩家点了确定」这一种情况。
+     *
+     * 弹窗句柄存进 `popups`，退出对局时 `closePopups` 会关它 ⇒ `answered` 兑现 `false`，
+     * 这里就自然不会再往下走（不需要额外的 disposed 竞速）。
+     */
+    private async askRetreat(step: IZCBattleConfirmOptions): Promise<boolean> {
+        const popup = await this.services.popups.confirm(step);
+        if (!popup) return false;
+        if (this.isDisposed) { popup.close('force'); return false; }
+        this.popups.set('retreat', popup);
+        try {
+            return (await popup.answered) === true;
+        } finally {
+            if (this.popups.get('retreat') === popup) this.popups.delete('retreat');
+        }
+    }
     private onResetCamera(): void { this.view.resetCamera(); }
     private onSettlementConfirm(): void { this.settlement.confirm(); }
     private onReturnToMain(): void { EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: this.view }); }
@@ -194,12 +253,24 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || !entry || this.phase.isSettled) return;
         if (!retreated && model.snapshot.status === 'playing') return;
         if (!this.phase.openSettlement()) return;
+        this.damagePopup?.close();
+        this.damagePopup = null;
+        this.popups.delete('damage');
         const stats = model.damageStats, unitIds = new Map(entry.seatUnitIds ?? []);
+        // ≥3 人局的结算要先过排行榜（需求 11-4）。席位与档案和 HUD 那颗「排行榜」按钮同源，
+        // `finished=true` ⇒ 不再出现「比赛中…」态（结算时每方地块数都已是定局）。
+        const profiles = new Map(entry.seatProfiles);
+        const rankSeats = model.owners.length >= 3
+            ? buildRankSeats(model.owners, owner => model.territoryCountOf(owner), profiles, true)
+            : [];
         this.settlement.start({
             localVictory: !retreated && model.snapshot.status === 'victory', elapsedSeconds: model.snapshot.elapsedSeconds,
             commands: model.frameEvents.map(event => ({ frameId: event.frameId, unitId: unitIds.get(event.owner) ?? 0, op: event.op, params: event.params })),
             statistics: buildDamageStatistics(model.owners.map(owner => ({ unitId: unitIds.get(owner) ?? 0, harm: stats[owner].dealt }))),
-            battleType: entry.slgBattleType ?? (entry.pveContext ? ZC_BATTLE_TYPE_CHAPTER : null),
+            // 入口声明的 battleType 优先（匹配入口：宝箱栏 1002 / PVP 1001），
+            // 老形状（只给 slgBattleType）与领地 PVE 各自保留一条退路。
+            battleType: entry.battleType ?? entry.slgBattleType ?? (entry.pveContext ? ZC_BATTLE_TYPE_CHAPTER : null),
+            rank: rankSeats.length >= 3 ? { seats: rankSeats, profiles } : null,
         });
     }
     private async onOpenGuide(): Promise<void> {
@@ -211,15 +282,36 @@ export class ZCBattleRuntimeController extends ControllerBase {
             await this.trackPopup('guide', this.services.popups.openGuide(content));
         } catch (error) { if (!this.isDisposed) this.services.failed(error); }
     }
-    private onOpenDamage(): void {
-        const model = this.model, entry = this.entry;
-        if (!model || !entry || this.phase.isSettled) return;
-        const profiles = new Map(entry.seatProfiles), stats = model.damageStats;
-        const opponents = Object.entries(stats).filter(([owner]) => owner !== ZCOwner.Player);
-        void this.trackPopup('damage', this.services.popups.openDamage({
-            mine: { name: profiles.get(ZCOwner.Player)?.name || '我方', damage: stats.player.dealt, damageTaken: stats.player.taken },
-            enemy: { name: profiles.get(ZCOwner.Enemy)?.name || '敌方', damage: opponents.reduce((sum, [, value]) => sum + value.dealt, 0), damageTaken: opponents.reduce((sum, [, value]) => sum + value.taken, 0) },
+    private async onOpenDamage(): Promise<void> {
+        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || this.damagePopup?.isOpen) return;
+        this.damageOpening = true;
+        try {
+            const popup = await this.services.popups.openDamage(this.damagePlayers());
+            if (!popup) return;
+            if (this.isDisposed || this.phase.isSettled) { popup.close(); return; }
+            if (!popup.isOpen) return;
+            this.damagePopup = popup;
+            this.popups.set('damage', popup);
+            this.refreshDamageStats();
+        } catch (error) { if (!this.isDisposed) this.services.failed(error); }
+        finally { this.damageOpening = false; }
+    }
+    private damagePlayers(): readonly IZCDamageStatsPlayer[] {
+        const profiles = new Map(this.entry.seatProfiles), stats = this.model.damageStats;
+        return this.model.owners.map(owner => ({
+            owner, name: profiles.get(owner)?.name || RANK_FALLBACK_NAMES[owner],
+            headKey: profiles.get(owner)?.headKey ?? '',
+            damage: stats[owner].dealt, damageTaken: stats[owner].taken,
         }));
+    }
+    private refreshDamageStats(): void {
+        if (!this.damagePopup) return;
+        if (!this.damagePopup.isOpen) {
+            this.damagePopup = null;
+            this.popups.delete('damage');
+            return;
+        }
+        this.damagePopup.refresh(this.damagePlayers());
     }
     private onOpenRank(): void {
         const model = this.model, entry = this.entry;
@@ -259,6 +351,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
                 finally {
                     this.pendingUnitArt.clear(); this.loadedUnitArt.clear();
                     this.model = null; this.selection = null; this.entry = null;
+                    this.damagePopup = null;
                     super.dispose();
                 }
             }

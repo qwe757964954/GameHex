@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer } from 'node:http';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { assetExists, assetPath } from './helpers/asset-paths';
 
@@ -64,7 +64,7 @@ async function withServer(run: (base: string) => Promise<void>): Promise<void> {
     }
 }
 
-/** 一份合法的半场镜像底图（与 presets/river.json 同构，虚空格在绝对行 9/10 的 0/1 列）。 */
+/** 一份合法的半场镜像底图（与 presets/gamemap/river.json 同构，虚空格在绝对行 9/10 的 0/1 列）。 */
 function basePreset(id: string) {
     return {
         id, name: id, version: 3, rows: 20, columns: 11,
@@ -156,7 +156,10 @@ test('编辑器从 battle 包提供新旧资源贴图，组合接口保留类型
         const { groups } = await (await fetch(`${base}/api/neutral-resource-groups`)).json();
         assert.deepEqual(groups.find((group: { groupId: number }) => group.groupId === 14009).items.map(
             (item: { resId: string }) => item.resId).sort(), ['68007', '68008']);
-        assert.equal(groups.find((group: { groupId: number }) => group.groupId === 14003).items[0].effect, 'shrink');
+        assert.equal(
+            groups.find((group: { groupId: number }) => group.groupId === 14001)
+                ?.items.find((item: { effect: string }) => item.effect === 'shrink')?.effect,
+            'shrink', '缩小强化门已并入 14001 组（gate 104），不再有独立的 14003 组');
         assert.ok(groups.find((group: { groupId: number }) => group.groupId === 14007).items.some(
             (item: { resourceType: number; weight: number }) => item.resourceType === 9 && item.weight > 0));
         assert.equal((await fetch(`${base}/map-resource/${encodeURIComponent('image/map-resource/../secret')}`)).status, 404);
@@ -253,6 +256,27 @@ test('组合点位的间距沿可通行路径计算且镜像压缩图使用绝�
             assert.deepEqual(response.body.preset.resourcePoints, mirrored.resourcePoints);
         } finally {
             await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' });
+        }
+    });
+});
+
+test('静态页面和实际导入的格式模块返回正确 MIME，缺失与穿越路径返回 404', async () => {
+    await withServer(async base => {
+        const modules = ['tools/map-editor/app.js', 'tools/map-editor/territory-app.js']
+            .flatMap(path => Array.from(readFileSync(path, 'utf8').matchAll(/from '(\.\/formats\/[^']+)'/g),
+                match => '/' + match[1].slice(2)));
+        const routes = new Set(['/app.js', '/territory.html', '/territory-app.js', '/bigmap.html', ...modules]);
+        for (const path of routes) {
+            const response = await fetch(base + path);
+            assert.equal(response.status, 200, path);
+            assert.match(response.headers.get('content-type') ?? '', path.endsWith('.js') ? /javascript/ : /text\/html/);
+            assert.equal(response.headers.get('cache-control'), 'no-store');
+            assert.deepEqual(Buffer.from(await response.arrayBuffer()), readFileSync('tools/map-editor' + path));
+        }
+        for (const path of ['/not-a-real-page.js', '/server.mjs', '/formats/%2e%2e%2fserver.mjs']) {
+            const response = await fetch(base + path);
+            assert.equal(response.status, 404, path);
+            await response.body?.cancel();
         }
     });
 });

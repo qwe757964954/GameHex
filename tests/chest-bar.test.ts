@@ -134,7 +134,8 @@ test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢�
     assert.match(page, /this\.chestToggle\.on\(Button\.EventType\.CLICK, this\.onToggleChestPanel, this\)/);
     assert.match(page, /setChestPanelOpen\(open: boolean\): void/);
     assert.match(page, /this\.chestBar\.setOpen\(open\)/);
-    assert.match(page, /this\.startButton\.active = !open/);
+    assert.match(page, /this\.startButton\.active = this\.quickFindUnlocked && !open/,
+        '收起时恢复快速寻敌，但**不能绕过 702 闸门** —— 没解锁的号不该被「关宝箱栏」点亮');
     assert.match(page, /this\.chestToggle\.on\(Button\.EventType\.CLICK, this\.onToggleChestPanel, this\);[\s\S]*?start\(\): void \{[\s\S]*?this\.chestBar\.setOpen\(false, false\)/);
 });
 

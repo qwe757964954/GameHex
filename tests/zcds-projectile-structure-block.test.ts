@@ -20,7 +20,7 @@ import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
  *  ③ 自家格的墙不拦自己的子弹（`owner === projectile.owner` 跳过），否则会自伤城墙。
  */
 
-const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight'];
+const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams'];
 const tables = Object.fromEntries(names.map(name => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
     return [name, Array.isArray(source) ? source : source.v.map((row: unknown[]) => Object.fromEntries(source.k.map((key: string, i: number) => [key, row[i]])))];

@@ -12,12 +12,12 @@ import {
     ITerritoryChapterLoader,
     ITerritoryChapterStore,
     ITerritoryNavigateBattlePayload,
-    ITerritoryPresenterPorts,
+    ITerritoryModelPorts,
     ITerritoryShowRewardsPayload,
     ITerritoryShowTipPayload,
     ITerritorySetBusyPayload,
-    TerritoryPresenter,
-} from '../assets/script/app/territory/application/TerritoryPresenter';
+    TerritoryModel,
+} from '../assets/script/app/territory/application/TerritoryModel';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
 import * as territoryEvents from '../assets/script/app/territory/application/TerritoryEvents';
@@ -37,6 +37,7 @@ import type {
 } from '../assets/script/app/territory/model/TerritoryIdleReward';
 import type {
     TerritoryCellFetchResult,
+    TerritoryIdleRewardResult,
     TerritoryStartBattleResult,
     TerritoryWriteResult,
 } from '../assets/script/app/territory/application/TerritoryCellRepository';
@@ -50,7 +51,7 @@ interface IBattlePageProbe {
 }
 
 /** 用真实页面事件处理器连接真实 Presenter；只替换引擎、弹窗栈和最终路由。 */
-function createBattlePageProbe(presenter: TerritoryPresenter) {
+function createBattlePageProbe(presenter: TerritoryModel) {
     const exports: { MainTerritoryMap?: new () => IBattlePageProbe } = {};
     class LevelInfoPanel {}
     class LevelTipPanel {}
@@ -231,7 +232,6 @@ const stage: TerritoryCampaignStage = {
     waves: [],
     idleRewards: [{ resId: 1, name: '银币', amount: 100, probability: 10000 }],
     staminaCost: 5,
-    exploreSeconds: 2,
     openGrideTime: 18,
     hpRate: 1,
     attackRate: 1,
@@ -242,6 +242,8 @@ const nullArt = {
     // 2026-10-16：单张 `tile` 拆成「未通关 / 已通关」两张地皮，另加四张格面框（见 paintHexes）。
     tileLocked: null,
     tileCleared: null,
+    // 2026-11-10：再加一张「被前置卡住 ⇒ 整块置灰」的灰版地皮（`img_land_01_gray`）。
+    tileGrey: null,
     frameBoss: null,
     frameStage: null,
     frameAsyncPvp: null,
@@ -253,6 +255,7 @@ const nullArt = {
     fixedResource: null,
     randomResource: null,
     randomSilverIcon: null,
+    chestIcon: null,
     bonus: null,
     header: null,
     navButton: null,
@@ -269,7 +272,7 @@ const bundle: ITerritoryChapterBundle = {
 function createBossFindLoader() {
     return createFakeLoader({
         ...bundle,
-        mapJson: JSON.parse(readFileSync('assets/remoteRef/chapter_01.json', 'utf8')),
+        mapJson: JSON.parse(readFileSync('assets/resources/config/territory-maps/chapter_01.json', 'utf8')),
         campaign: {
             ...bundle.campaign,
             stages: [
@@ -478,10 +481,14 @@ function createFakeGateway(options: {
     unlock?: TerritoryWriteResult;
     pass?: TerritoryWriteResult;
     start?: TerritoryStartBattleResult;
+    /** 领挂机奖励；缺省 `offline` ⇒ 领奖走本地结算兜底，与改造前的断言口径一致。 */
+    claim?: TerritoryIdleRewardResult;
+    /** 章节扫荡；缺省成功（无奖励）。 */
+    sweep?: TerritoryWriteResult;
 } = {}) {
     const calls = { fetch: 0, unlock: 0, unlockedCells: [] as number[],
         pass: 0, passedCells: [] as number[], startBattle: 0,
-        battleTypes: [] as number[], battleParamsList: [] as string[][], clear: 0 };
+        battleTypes: [] as number[], battleParamsList: [] as string[][], clear: 0, claim: 0, sweep: 0 };
     const gateway: ITerritoryCellGateway = {
         fetchChapterCells: async () => {
             calls.fetch++;
@@ -502,6 +509,14 @@ function createFakeGateway(options: {
             calls.battleTypes.push(battleType);
             calls.battleParamsList.push([...battleParams]);
             return options.start ?? { ok: true, battle: fakeBattleStart };
+        },
+        claimIdleReward: async () => {
+            calls.claim++;
+            return options.claim ?? { ok: false, reason: 'offline' };
+        },
+        sweep: async () => {
+            calls.sweep++;
+            return options.sweep ?? { ok: true };
         },
         clear: () => { calls.clear++; },
     };
@@ -929,6 +944,8 @@ function createOutputSpy() {
     const rewards: { resId: number; amount: number }[][] = [];
     /** 与 `rewards` 逐条对应的「来源格」；`null` = 挂机产出这类没有格子的发奖。 */
     const rewardOrigins: (number | null | undefined)[] = [];
+    /** 与 `rewards` 逐条对应的展示选项（挂机征收要断言 `{ popup: true }`）。 */
+    const rewardOptions: ({ chest?: boolean; popup?: boolean } | undefined)[] = [];
     const nav: ITerritoryBattleNavParams[] = [];
     const battles: (ZCBattleStart | undefined)[] = [];
     /**
@@ -946,7 +963,7 @@ function createOutputSpy() {
      * 通关后自动推进一定会让 `chapterId` 变，但绝不能出现在这里。
      */
     const chapterSwitches: Array<{ from: number; to: number }> = [];
-    return { tips, rewards, rewardOrigins, nav, battles, battleParams, busy, chapterSwitches };
+    return { tips, rewards, rewardOrigins, rewardOptions, nav, battles, battleParams, busy, chapterSwitches };
 }
 
 interface HarnessOptions {
@@ -963,7 +980,7 @@ function createHarness(options: HarnessOptions = {}) {
     const store = options.store ?? createFakeStore();
     const spy = createOutputSpy();
     let stateChanges = 0;
-    const ports: ITerritoryPresenterPorts = {
+    const ports: ITerritoryModelPorts = {
         loader: loader.loader,
         gateway: gateway.gateway,
         store: store.store,
@@ -971,7 +988,7 @@ function createHarness(options: HarnessOptions = {}) {
         readServerWallet: () => (options.serverWallet ? options.serverWallet() : null),
         availableChapters: options.chapters ?? [1],
     };
-    const presenter = new TerritoryPresenter(ports);
+    const presenter = new TerritoryModel(ports);
     presenter.onOutput((event) => {
         switch (event.kind) {
             case 'changed': stateChanges++; break;
@@ -983,7 +1000,9 @@ function createHarness(options: HarnessOptions = {}) {
             case 'tip': spy.tips.push(event.payload.text); break;
             case 'rewards':
                 spy.rewards.push(event.payload.rewards.map(g => ({ resId: g.resId, amount: g.amount })));
-                spy.rewardOrigins.push(event.payload.originCellId); break;
+                spy.rewardOrigins.push(event.payload.originCellId);
+                spy.rewardOptions.push(event.payload.options);
+                break;
             case 'busy': spy.busy.push({ ...event.payload }); break;
             case 'chapterSwitch':
                 spy.chapterSwitches.push({ from: event.fromChapterId, to: event.toChapterId });
@@ -2403,7 +2422,6 @@ const bossStage: TerritoryCampaignStage = {
     waves: [],
     idleRewards: [{ resId: 1, name: '银币', amount: 100, probability: 10000 }],
     staminaCost: 5,
-    exploreSeconds: 2,
     openGrideTime: 18,
     hpRate: 1,
     attackRate: 1,
@@ -2557,12 +2575,15 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
 
     assert.deepEqual(h.gatewayCalls.unlockedCells, [372, 373, 392]);
     assert.deepEqual(h.gatewayCalls.passedCells, [], '异步关卡解锁不走资源点通关接口');
-    assert.equal(h.gatewayCalls.startBattle, 0, '首次点击只解锁，不启动战斗');
-    assert.deepEqual(h.tips, ['已解锁，点击查看关卡', '已解锁，点击查看关卡', '已解锁，点击查看关卡']);
+    // 2026-11-11 用户「触发异步据点也是直接进入战斗」：解锁那一次就 `beginBattle`
+    // （mode = match ⇒ 请求交给匹配页，领地侧 `startBattle` 仍为 0），不再弹「已解锁」提示。
+    assert.equal(h.gatewayCalls.startBattle, 0, 'mode = match：请求交给匹配页，领地侧不发');
+    assert.deepEqual(h.tips, [], '解锁即直开，不再提示「已解锁，点击查看关卡」');
+    assert.equal(h.storeCalls.beginBattle, 3, '三格各自解锁即开战（2026-11-11 口径）');
 
     h.presenter.selectSite(sites[0]);
     await flush();
-    assert.ok(h.presenter.state.detail.playerStage, '解锁后再次点击才弹玩家关卡详情');
+    assert.ok(h.presenter.state.detail.playerStage, '已解锁后再次点击仍弹玩家关卡详情（侦查面板保留）');
     h.presenter.requestBattle();
     await flush();
     assert.equal(h.gatewayCalls.unlock, 3, '已解锁的异步格再次点击不重复请求解锁');
@@ -2572,7 +2593,7 @@ test('asyncPvp sites sharing configId unlock independently then start their conf
     // 战斗子类型 1（`chapterCellBattleParams`）；已通关重复挑战才切宝箱战斗子类型 2。
     // 372 在这里只解锁没通关 ⇒ 子类型 1（服务端按 0 位分流，打过的格传 2 会回「配置错误」）。
     assert.deepEqual(h.battleParams[0], ['1', '1', '372']);
-    assert.equal(h.storeCalls.beginBattle, 1);
+    assert.equal(h.storeCalls.beginBattle, 4, '三格解锁直开 + 372 面板按钮再开一次');
     assert.equal(h.nav[0]?.levelId, 20001, '开战应使用 levelInfo.json 中的 20001');
     assert.equal(h.nav[0]?.territoryCellId, 372);
     assert.deepEqual(h.gatewayCalls.passedCells, [], '异步战斗不走资源点通关接口');
@@ -2748,7 +2769,8 @@ test('挂机产出没有来源格：originCellId 为空（页面回落到起始�
     h.presenter.fastTick(Date.now());
     assert.equal(h.storeCalls.settleIdle, 0, '进入页面与定时拍都不能消费挂机产出');
     assert.equal(h.rewards.length, 0);
-    h.presenter.claimIdleRewards(Date.now());
+    // 领奖已改为异步（在线走 `CmdCityChapterIdleRewardReqMsg`）；夹具 base 返回 offline ⇒ 本地兜底。
+    await h.presenter.claimIdleRewards(Date.now());
     assert.equal(h.storeCalls.settleIdle, 1);
     assert.equal(h.rewards.length, 1, '仅点击征收后发奖');
     assert.ok(h.rewards.every((batch) => batch.some((g) => g.resId === 9 && g.amount === 3)));
@@ -2776,18 +2798,42 @@ test('征收保留离线累计，领取推进真实账本，连点与重进均�
     h.presenter.slowTick(now);
     assert.equal(h.rewards.length, 0);
     assert.equal(h.presenter.state.idleRewardStartedAt, start);
-    h.presenter.claimIdleRewards(now);
+    await h.presenter.claimIdleRewards(now);
     assert.equal(h.rewards.length, 1);
     assert.equal(h.presenter.state.idleRewardStartedAt, start + 60 * 60 * 1000);
-    h.presenter.claimIdleRewards(now);
+    await h.presenter.claimIdleRewards(now);
     assert.equal(h.rewards.length, 1, '连点不会重复发奖');
     h.presenter.dispose();
     const reopened = createHarness({ store });
     reopened.presenter.start();
     await flush();
-    reopened.presenter.claimIdleRewards(now);
+    await reopened.presenter.claimIdleRewards(now);
     assert.equal(reopened.rewards.length, 0, '重进后不能重复领取已结算小时');
     reopened.presenter.dispose();
+});
+
+test('征收走协议：tlCmdGoods 原样弹窗、idleTime 覆盖起点、不再本地结算', async () => {
+    const serverIdleSeconds = 1_700_000_000;
+    const gateway = createFakeGateway({
+        claim: {
+            ok: true,
+            rewards: [{ resId: 7, amount: 120 }, { resId: 501, amount: 2 }],
+            idleTimeSeconds: serverIdleSeconds,
+        },
+    });
+    const h = createHarness({ gateway });
+    h.presenter.start();
+    await flush();
+    const settleBefore = h.storeCalls.settleIdle;
+    await h.presenter.claimIdleRewards(Date.now());
+    assert.equal(h.gatewayCalls.claim, 1, '点征收必须发 CmdCityChapterIdleRewardReqMsg');
+    assert.equal(h.storeCalls.settleIdle, settleBefore, '在线不得再走本地结算（会双算）');
+    assert.deepEqual(h.rewards, [[{ resId: 7, amount: 120 }, { resId: 501, amount: 2 }]],
+        '展示的必须是服务端实际发放的 tlCmdGoods');
+    assert.deepEqual(h.rewardOptions[0], { popup: true },
+        '挂机产出必须强制弹窗 —— 钱包类默认分流只会飘字，玩家看不到奖励');
+    assert.equal(h.presenter.state.idleRewardStartedAt, serverIdleSeconds * 1000,
+        'idleTime 是新的挂机起点，UI 计时必须从它算');
 });
 
 test('★★★★真机口径：只打通 328，点 309 解锁后必须立刻发开战协议', async () => {
@@ -3106,21 +3152,23 @@ test('★asyncPvp 未通关：首次挑战用格子战斗子类型 1（通关后
     const site = h.presenter.state.map!.sites[0];
     assert.equal(h.presenter.state.progress?.isOwned(372), false, '372 未通关');
     assert.equal(h.presenter.state.progress?.isCellUnlocked(372), false, '372 未解锁');
-    h.presenter.selectSite(site); // 第一次点击只解锁
+    h.presenter.selectSite(site); // 第一次点击：解锁并直接开战（2026-11-11）
     assert.equal(h.presenter.state.detail.playerStage, null, '未解锁时不弹据点详情');
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1, '未通关 asyncPvp 先发解锁');
     assert.equal(h.gatewayCalls.startBattle, 0, '解锁步不发战斗请求');
     assert.equal(h.presenter.state.detail.playerStage, null, '解锁回包成功也不自动弹窗');
     assert.equal(h.presenter.state.progress?.isCellUnlocked(372), true);
-    h.presenter.selectSite(site); // 解锁后再点：再弹窗
+    // 2026-11-11：花银币解锁那一次就直接进战斗（mode = match ⇒ 匹配页），不等弹窗按钮。
+    assert.equal(h.nav.length, 1, '解锁即直开：第一跳由 selectSite 触发');
+    h.presenter.selectSite(site); // 已解锁后再点：仍弹侦查面板
     await flush();
-    h.presenter.requestBattle(); // 再点「开始战斗」→ 开战步
+    h.presenter.requestBattle(); // 面板「开始战斗」→ 第二跳
     await flush();
     assert.equal(h.gatewayCalls.startBattle, 0, '请求交给匹配页');
     assert.deepEqual(h.battleParams[0], ['1', '1', '372'],
         '未通关 asyncPvp 用格子战斗子类型 1（服务端对没打过的格按格子战斗分流）');
-    assert.equal(h.nav.length, 1);
+    assert.equal(h.nav.length, 2, '解锁那一次 + 面板按钮各一跳');
 });
 
 test('★asyncPvp 本地旧档残留通关但服务端未确认：子类型按服务端判据传 1', async () => {
@@ -3318,4 +3366,40 @@ test('unlock lock marker never overlaps cells that can be opened right now', asy
     for (const cellId of h.presenter.state.randomResourceOpenableCells) {
         assert.equal(lockBlocked.has(cellId), false, `随机格 ${cellId} 能开却被上锁`);
     }
+});
+
+/**
+ * 🔴 2026-11-09 用户（配图：紫框圈住一格「银币 + 红色 15」）：
+ * 「前置地块未解锁，展示的也是锁 icon，不是银币 + 显示红色的 UI」。
+ *
+ * 前置**宝箱**（`fixedResource`）解锁了但没点开时，旧的 `isPrerequisiteComplete` 固定资源特例
+ * 已经把它当「完成」（服务端把 completed 记在 `unlockCells`），于是这一格既**不进**
+ * `prerequisiteBlockers`（不画锁），又命中旧的「未领取 ⇒ 银币数字染红」分支 ⇒
+ * 画面上只剩一条**没有锁的红价格**，玩家读成"钱不够"。
+ *
+ * 现在这一种归进 `lockBlockedCells`（画锁 + 摘掉整条价格），并且与 `siteOpenableCells` 互补。
+ */
+test('unlocked-but-unclaimed chest prerequisite locks the successor instead of reddening the price', async () => {
+    const chest = (cellId: number, required: number[]) => ({
+        id: `chest_${cellId}`, type: 'fixedResource', cellId, footprint: [cellId], rewardId: 1011,
+        unlock: { requiredCells: required, combatPower: 0, silverCost: 10,
+            staminaCost: 1, exploreSeconds: 1 },
+    });
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [chest(5, [0]), chest(6, [5])] },
+    };
+    // 5 已解锁（进 unlockCells）但没 pass ⇒ 未领取；6 只差「把 5 点开」这一步。
+    const h = createHarness({
+        loader: createFakeLoader(fixedBundle),
+        gateway: createFakeGateway({ fetch: {
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [5], passCells: [0] },
+        } }),
+        store: createFakeStore({ silver: 10000, stamina: 100 }),
+    });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.lockBlockedCells.includes(6), true, '前置宝箱没点开 ⇒ 上锁');
+    assert.equal(h.presenter.state.siteOpenableCells.includes(6), false, '锁与可开启集合必须互补');
+    assert.equal(h.presenter.state.lockBlockedCells.includes(5), false, '5 自己已解锁，不再上锁');
 });

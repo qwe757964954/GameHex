@@ -48,7 +48,7 @@ test('真实 skillView/skillEffect/skillAttr 可完整编译并复现长枪兵�
     assert.deepEqual(bindings[36171], ['长枪兵_武将普攻']);
     // Several legacy skillView rows left exSkillId empty; current pvpSkill owns
     // that binding, so exHurt must still reach the empowered profile.
-    assert.deepEqual(bindings[36181], ['火法师_武将火球术']);
+    assert.deepEqual(bindings[36182], ['火法师_武将火球术']);
     assert.equal(Object.keys(config.effectsByKey).length, referenced.size);
 
     const runtime = new ZCLegacySkillEffectRuntime(config);
@@ -109,7 +109,7 @@ test('旧效果表跨段复制的相同行只执行一次，段内重复仍保�
 test('正式战斗优先使用旧公式，弹道快照恢复不重抽公式与 buff', () => {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
         'skillAttr', 'skillView', 'skillEffect', 'skillBuff',
@@ -117,7 +117,10 @@ test('正式战斗优先使用旧公式，弹道快照恢复不重抽公式与 b
     loadPvpTables(Object.fromEntries(names.map((name) => [name, rows(name)])) as unknown as ZCPvpTables);
     configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')));
     const captured = captureZCMatchConfig();
-    const sourceDefinition = captured.units.find((item) => item.attackProfile.skillId === 30171)!;
+    //  2026-11-09：68025 大威天芦自建普攻行 30858，不再借 30171（长枪兵普攻），
+    //  30171 只剩兵种单位在用 ⇒ 这里改用 68019 窝瓜人的 30191（轻骑兵普攻），
+    //  它仍在 skillView 里挂着旧公式，用例意图（旧公式优先）不变。
+    const sourceDefinition = captured.units.find((item) => item.attackProfile.skillId === 30191)!;
     const config = captureZCMatchConfig({
         ...captured,
         rules: { ...captured.rules, combatDamageMultiplier: 1, combatDistanceScale: 1 },
@@ -144,19 +147,20 @@ test('正式战斗优先使用旧公式，弹道快照恢复不重抽公式与 b
     (model as any).sendAttack(source);
     const projectile = model.snapshot.projectiles[0];
     assert.ok(projectile);
-    // The match's current tier/deck attack scaling raises the standalone 196 formula result.
-    assert.equal(projectile.baseDamage, 207.2);
+    // The match's current tier/deck attack scaling raises the standalone formula result；
+    // 轻骑兵公式（30191）在 attack=100 上比长枪兵那条高 14.8，故 207.2 → 222。
+    assert.equal(projectile.baseDamage, 222);
     assert.deepEqual(projectile.legacyBuffs, []);
 
     const restored = new ZCGameModel(model.snapshot, () => { throw new Error('恢复在途弹道不应重算公式'); }, config);
     assert.deepEqual(restored.snapshot.projectiles[0].legacyBuffs, []);
-    assert.equal(restored.snapshot.projectiles[0].baseDamage, 207.2);
+    assert.equal(restored.snapshot.projectiles[0].baseDamage, 222);
 });
 
 test('启用旧状态时，燃烧、流血、撕裂、击退和牵引可结算并恢复', () => {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
         'skillAttr', 'skillView', 'skillEffect', 'skillBuff',
@@ -173,7 +177,7 @@ test('启用旧状态时，燃烧、流血、撕裂、击退和牵引可结算�
         ...baseConfig,
         map: { ...baseConfig.map, playerCount: 4 },
     });
-    const definition = config.units.find((item) => item.attackProfile.skillId === 30171)!;
+    const definition = config.units.find((item) => item.attackProfile.skillId === 30191)!;
     const makeUnit = (id: number, owner: ZCOwner, x: number): ZCUnitState => ({
         id, owner, unitId: definition.unitId,
         cardId: owner === 'player'
@@ -231,7 +235,7 @@ test('启用旧状态时，燃烧、流血、撕裂、击退和牵引可结算�
     const restored = new ZCGameModel(frozen, () => .5, config);
     for (const current of [model, restored]) {
         (current as any).state.elapsedSeconds = .5;
-        ZCStatusResolutionSystem.tick((current as any).state, .5, (current as any).statusResolutionContext);
+        new ZCStatusResolutionSystem().tick((current as any).state, .5, (current as any).statusResolutionContext);
     }
     assert.deepEqual(
         JSON.parse(JSON.stringify(restored.snapshot.statusEffects)),

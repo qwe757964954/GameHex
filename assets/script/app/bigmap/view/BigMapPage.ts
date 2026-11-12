@@ -11,9 +11,12 @@ import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { PopupManager } from '../../../framework/ui/PopupManager';
+import { ShowRewardPage } from '../../showReward/ShowRewardPage';
 import { Toast } from '../../common/Toast';
 import { BigMapCityPopup, type IBigMapCityPopupContent } from './BigMapCityPopup';
 import { BigMapInfoPopup, type IBigMapInfoPopupContent } from './BigMapInfoPopup';
+import { BIGMAP_QUEUE_ROW_KIND, BigMapBuildMenuPopup, type IBigMapBuildMenuRow } from './BigMapBuildMenuPopup';
+import type { IBigMapPlotCardContent } from './BigMapPlotCard';
 import { BigMapPageLayout } from './BigMapPageLayout';
 
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -55,6 +58,8 @@ export class BigMapPage extends Component {
     private infoPopupOpening = false;
     private infoPopupRevision = 0;
     private infoPopupContent: IBigMapInfoPopupContent | null = null;
+    /** `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
+    private buildMenuOpening = false;
     /** 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
     private focusedCityId = 0;
 
@@ -218,7 +223,9 @@ export class BigMapPage extends Component {
     private onCommand(event: IBigMapViewCommandEvent): void {
         if (!this.ready) return;
         const command = event.command;
-        if (command.kind === 'feedback') this.feedback(command);
+        if (command.kind === 'rewards') {
+            void ShowRewardPage.open({ userData: { goods: command.rewards.map(reward => ({ resId: reward.resId, number: reward.amount })) } });
+        } else if (command.kind === 'feedback') this.feedback(command);
         else if (command.kind === 'focusWorld') this.worldView.focusOn(command.hexId);
         else this.layout.focusBase(command.hexId);
     }
@@ -241,14 +248,81 @@ export class BigMapPage extends Component {
     private refreshAll(data: IBigMapViewState): void {
         this.loadRolePortraits(data);
         this.layout.render(data);
+        this.refreshBuildMenu(data);
         this.refreshInfo(data);
         this.worldView.render(data);
+    }
+
+    /**
+     * 建造目录：`buildMenuVisible` 一开就打开弹窗，一关就关掉。
+     *
+     * 走 `PopupBase`（`BigMapBuildMenuPopup`）而不是页面内节点：
+     * 遮罩、点空白关闭、栈顺序、关闭原因全部由基类接管，页面这边只剩「什么时候开」。
+     */
+    private refreshBuildMenu(data: IBigMapViewState): void {
+        const shouldOpen = data.ui.mode === 'base' && data.ui.buildMenuVisible;
+        const opened = PopupManager.inst.get(BigMapBuildMenuPopup);
+        if (!shouldOpen) {
+            this.buildMenuOpening = false;
+            if (opened) opened.close(PopupCloseReason.Force);
+            return;
+        }
+        const content = { rows: this.buildMenuRows(data) };
+        if (opened) { opened.render(content); return; }
+        if (this.buildMenuOpening) return;
+        this.buildMenuOpening = true;
+        void BigMapBuildMenuPopup.open({
+            userData: content,
+            // 点空白只让弹窗自己收掉，页面状态里的 `buildMenuVisible` 还是 true ⇒
+            // 下一次 500ms `tick → publish` 会按「该开」再弹回来。所以把用户主动收起
+            // 翻译成意图，让 model 的可见性跟着关。
+            onClose: (reason) => {
+                // `Force` 是页面自己在收（切模式 / 状态已经变了），model 那边早就关过了；
+                // 其余（点空白、点了某一行、关闭按钮）都是用户主动关 —— 状态必须跟着关，
+                // 否则下一次 500ms `tick → publish` 会把弹窗原样再弹回来。
+                if (reason === PopupCloseReason.Force) return;
+                if (this.isValid) this.sendIntent({ kind: 'closeBuildMenu' });
+            },
+        }).then((popup) => {
+            this.buildMenuOpening = false;
+            if (!popup || !this.isValid) return;
+            const now = this.data;
+            // 打开期间状态已经变了（关页 / 退出基地 / 又点了一次「建造」）⇒ 立刻收掉，别留个孤儿弹窗。
+            if (!now || now.ui.mode !== 'base' || !now.ui.buildMenuVisible) popup.close(PopupCloseReason.Force);
+        });
+    }
+
+    /** 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
+    private buildMenuRows(data: IBigMapViewState): IBigMapBuildMenuRow[] {
+        const rows: IBigMapBuildMenuRow[] = data.buildMenu.map((entry) => ({
+            kind: entry.kind,
+            name: `${entry.name}  ${entry.count}/${entry.maxOwnNum}`,
+            detail: entry.unlocked
+                ? `粮${entry.costGrain} 木${entry.costWood} 铁${entry.costIron} · ${entry.buildTime}s · 第${entry.unlockChapter}章`
+                : entry.reason,
+            selected: data.ui.pendingBuildingId !== 0 && data.ui.pendingBuildingId === entry.buildingId,
+            nameMuted: !entry.unlocked,
+            detailDanger: !entry.unlocked || !entry.affordable,
+        }));
+        // 解锁队列固定排最后一行（与目录的「你还能再开一条队列」语义一致）。
+        const unlock = data.queueUnlock;
+        rows.push({
+            kind: BIGMAP_QUEUE_ROW_KIND,
+            name: `解锁建造队列  ${unlock.current}/${unlock.max}`,
+            detail: unlock.canUnlock ? `货币 ${Math.round(unlock.cost)} · 点击解锁第 ${unlock.current + 1} 条` : unlock.reason,
+            selected: false,
+            nameMuted: !unlock.canUnlock,
+            detailDanger: !unlock.canUnlock,
+        });
+        return rows;
     }
 
     private refreshInfo(data: IBigMapViewState): void {
         if (this.enteringBattle) {
             this.closeInfoPopup();
             this.closeCityPopup();
+            // 开战遮罩盖上来时，贴底卡也得收 —— 否则它压在遮罩下面露出半个角。
+            this.layout.renderPlotCard(null);
             return;
         }
         this.refreshInfoContent(data);
@@ -324,6 +398,9 @@ export class BigMapPage extends Component {
     }
 
     private refreshInfoContent(data: IBigMapViewState): void {
+        // 基地建筑一律走**贴底卡**（非模态，地图不下线）；野怪 / 迁城确认仍走居中 InfoPopup。
+        // 每帧只写一遍：`buildPlotCardContent` 返回 null 就是收起。
+        this.layout.renderPlotCard(this.buildPlotCardContent(data));
         const city = this.mode === 'world' && this.selectedCityId !== 0 ? data.cities.get(this.selectedCityId) : null;
         if (city && data.ui.campRolesVisible) {
             this.closeCityPopup();
@@ -357,6 +434,41 @@ export class BigMapPage extends Component {
         else this.closeInfoPopup();
     }
 
+    /**
+     * 建筑卡内容。
+     *
+     * 与原先 `BigMapInfoPopup` 的 base 分支是同一套语义（主按钮 = 升级 / 取消建造，
+     * 次按钮 = 收取 / 移动），只是**不再塞进模态弹窗**，并且正文换成带产量对比的版本。
+     */
+    private buildPlotCardContent(data: IBigMapViewState): IBigMapPlotCardContent | null {
+        // 用页面自己的 `mode`（`render` 里从 `ui.mode` 同步过来），与 `buildInfoPopupContent` 同口径。
+        if (this.mode !== 'base' || this.selectedPlotHexId < 0) return null;
+        const detail = data.plotDetails.get(this.selectedPlotHexId);
+        if (!detail) return null;
+        const busy = detail.queueSlotIndex >= 0;
+        const moving = this.pendingMoveInstanceId === detail.instanceId;
+        const canHarvest = detail.stored > 0 || data.collectableBuildings.has(detail.buildingId);
+        return {
+            name: detail.name,
+            level: detail.level,
+            targetLevel: detail.targetLevel,
+            body: formatBigMapPlotDetail(detail) + (moving ? `\n${BIGMAP_PRESENTATION_TEXT.moveHint}` : ''),
+            icon: this.art?.buildings.get(detail.buildingId) ?? null,
+            busy,
+            remainSeconds: detail.remainSeconds,
+            primary: {
+                text: busy ? BIGMAP_PRESENTATION_TEXT.cancelBuild : BIGMAP_PRESENTATION_TEXT.upgrade,
+                enabled: !data.ui.baseActionPending && (busy || detail.canUpgrade),
+            },
+            secondary: canHarvest || !busy ? {
+                text: canHarvest ? data.isServerBase ? BIGMAP_PRESENTATION_TEXT.harvest
+                    : `${BIGMAP_PRESENTATION_TEXT.harvest} ${detail.stored}`
+                    : moving ? BIGMAP_PRESENTATION_TEXT.moveCancel : BIGMAP_PRESENTATION_TEXT.move,
+                enabled: !data.ui.baseActionPending,
+            } : null,
+        };
+    }
+
     private buildInfoPopupContent(data: IBigMapViewState): IBigMapInfoPopupContent | null {
         if (data.ui.pendingCampMoveId > 0 && data.ui.selectedBaseHexId >= 0) {
             const city = data.cities.get(data.ui.pendingCampMoveId);
@@ -366,26 +478,7 @@ export class BigMapPage extends Component {
                 secondary: { text: BIGMAP_CAMP_MOVE_TEXT.cancel, enabled: !this.baseActionPending },
             };
         }
-        if (this.mode === 'base' && this.selectedPlotHexId >= 0) {
-            const detail = data.plotDetails.get(this.selectedPlotHexId);
-            if (!detail) return null;
-            const busy = detail.queueSlotIndex >= 0;
-            const moving = this.pendingMoveInstanceId === detail.instanceId;
-            const canHarvest = detail.stored > 0 || data.collectableBuildings.has(detail.buildingId);
-            return {
-                title: `${detail.name}  Lv.${detail.level} → ${detail.targetLevel}`,
-                body: formatBigMapPlotDetail(detail) + (moving ? `\n${BIGMAP_PRESENTATION_TEXT.moveHint}` : ''),
-                icon: this.art?.buildings.get(detail.buildingId) ?? null,
-                primary: { text: busy ? BIGMAP_PRESENTATION_TEXT.cancelBuild : BIGMAP_PRESENTATION_TEXT.upgrade,
-                    enabled: !this.baseActionPending && (busy || detail.canUpgrade) },
-                secondary: canHarvest || !busy ? {
-                    text: canHarvest ? data.isServerBase ? BIGMAP_PRESENTATION_TEXT.harvest
-                        : `${BIGMAP_PRESENTATION_TEXT.harvest} ${detail.stored}`
-                        : moving ? BIGMAP_PRESENTATION_TEXT.moveCancel : BIGMAP_PRESENTATION_TEXT.move,
-                    enabled: !this.baseActionPending,
-                } : null,
-            };
-        }
+        if (this.mode === 'base') return null;
         const monster = this.mode === 'world' && this.selectedMonsterId !== 0 ? data.monsters.get(this.selectedMonsterId) : null;
         if (!monster) return null;
         return {
@@ -425,13 +518,17 @@ export class BigMapPage extends Component {
         if (feedback.message) Toast.show(feedback.message);
     }
 
+    /**
+     * 头像预取：地图上每个玩家标记都要头像（榜单榜首 + 名单里全部角色）。
+     *
+     * `rolePortraits` 兼作"已发起"的登记表（先写 `null` 占位），所以每帧全量扫一遍不会重复发请求；
+     * 新进视野的据点名单到达后，下一帧自然补上。
+     */
     private loadRolePortraits(data: IBigMapViewState): void {
-        for (const [cityId, city] of data.cities) {
+        for (const city of data.cities.values()) {
             const avatarIds = [city.rankEntries.find((row) => row.rank === 1)?.avatarId];
-            if (data.ui.campRolesVisible && data.ui.selectedCityId === cityId) {
-                const roles = city.campRoles;
-                avatarIds.push(roles[data.ui.campRoleIndex % roles.length]?.avatarId);
-            }
+            // 2026-11-11：名单角色已按 `pos` 摆在地图上 ⇒ 全员头像都要，不能只加载弹窗当前那位。
+            for (const role of city.campRoles) avatarIds.push(role.avatarId);
             for (const avatarId of avatarIds) {
                 if (!avatarId || this.rolePortraits.has(avatarId)) continue;
                 this.rolePortraits.set(avatarId, null);

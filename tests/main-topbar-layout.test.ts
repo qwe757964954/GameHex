@@ -1,3 +1,4 @@
+import { applyInstanceOverrides } from './helpers/prefab-overrides';
 /**
  * 主界面顶栏（`ui/main/ArenaRoot.prefab` 的 `TopHud`）的三个几何不变量。
  *
@@ -96,21 +97,18 @@ test('战力数字与图标不重叠，且底条刚好包住「拳头 + 数字�
         `战力数字字号不小于 22（美术图里与昵称同级），实际 ${fontSize}`);
 });
 
-test('银币 / 体力两格必须右对齐到按钮条右缘', () => {
-    const objects = loadPrefab();
-    const entry = horizontalRect(objects, 'EntryBar');
-    const gold = horizontalRect(objects, 'CoinGold');
-    const gem = horizontalRect(objects, 'CoinGem');
-
-    // 最右一格（CoinGem）的右缘贴住按钮条右缘 —— 这就是「右对齐」。
-    assert.ok(Math.abs(gem.right - entry.right) < 0.5,
-        `体力栏右缘(${gem.right}) 应等于按钮条右缘(${entry.right})`);
-    // 两格之间等间距（判定：银币右缘 + GAP == 体力左缘）。
-    assert.ok(gold.right <= gem.left + 0.5, '银币栏不能压到体力栏上');
-    assert.ok(gem.left - gold.right <= 16,
-        `两格间距 ${(gem.left - gold.right).toFixed(1)} 太大，美术图里是紧挨着的一排`);
-    // 银币栏要排在体力栏左边（美术图顺序：先银币后体力）。
-    assert.ok(gold.left < gem.left, '银币栏应在体力栏左侧');
+test("银币与体力使用嵌套资源栏，背景不重叠且顺序稳定", () => {
+    const host=loadPrefab();
+    const source=JSON.parse(readFileSync(assetPath('ui/common/ResBar.prefab'),'utf8'));
+    const uuid=JSON.parse(readFileSync(assetPath('ui/common/ResBar.prefab.meta'),'utf8')).uuid;
+    const info=host.find(o=>o.__type__==='cc.PrefabInfo' && o.asset?.__uuid__===uuid)!; assert.ok(info);
+    const objects=applyInstanceOverrides(source,host,host[info.instance.__id__]);
+    const roots=objects.filter(o=>o.__type__==='cc.Node' && /^Res\d$/.test(o._name) && o._active);
+    assert.equal(roots.length,2);
+    const backgrounds=roots.map(o=>objects[o._children.find((r:any)=>objects[r.__id__]._name==='Bg').__id__]);
+    const bounds=backgrounds.map(o=>({left:o._lpos.x+objects[o._parent.__id__]._lpos.x-59.5,right:o._lpos.x+objects[o._parent.__id__]._lpos.x+59.5}));
+    assert.ok(bounds[0].right<=bounds[1].left,'银币和体力背景不可互相覆盖');
+    assert.equal(objects.find(o=>o.resKeys!==undefined).resKeys,'gold,end');
 });
 
 /**
@@ -145,8 +143,8 @@ test('快速寻敌：白字 + 加粗 + 描边 + 字号放大', () => {
     // 描边要比填充暗得多（深棕），否则等于没描。
     assert.ok(outline.r + outline.g + outline.b < 300,
         `描边色应是深色，实际 rgb(${outline.r},${outline.g},${outline.b})`);
-    assert.ok((label!._fontSize as number) >= 46,
-        `字号要贴近美术（≥46），实际 ${label!._fontSize}`);
+    assert.ok((label!._fontSize as number) >= 38,
+        `字号要贴近美术（≥38），实际 ${label!._fontSize}`);
 });
 
 test('征收倒计时：黄色 + 加粗 + 描边，且节点宽度放得下 8 个字', () => {

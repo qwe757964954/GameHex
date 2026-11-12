@@ -14,12 +14,13 @@ for (const name of ['CardLineupCard', 'LineupSlot', 'LineupBoardCard', 'LineupBo
         const script = root._components.map(ref => items[ref.__id__]).find(item => !item.__type__.startsWith('cc.'));
         assert.equal('heroTransform' in script, false);
         assert.equal(sprite._sizeMode, 2);
-        const expectedScale = { CardLineupCard: 0.4, LineupSlot: 0.5, LineupBoardCard: 0.3, LineupBoardSlot: 0.4, CardUpgrade: 1 };
+        const expectedScale = { CardLineupCard: 0.4, LineupSlot: 0.5, LineupBoardCard: 0.3, LineupBoardSlot: 0.4, CardUpgrade: 318 / 390 };
         assert.equal(hero._lscale.x, expectedScale[name]);
         assert.equal(sprite._enabled, true);
         assert.equal(hero._active, true);
         assert.equal(sprite._isTrimmedMode, false);
-        assert.equal(transform._contentSize.width, transform._contentSize.height);
+        assert.equal(transform._contentSize.width, name === 'CardUpgrade' ? 365 : transform._contentSize.height);
+        assert.ok(transform._contentSize.height > 0);
         assert.equal(hero._lscale.x, hero._lscale.y);
         assert.equal(items.filter(item => item.__type__ === 'cc.Node').every(item => item._layer === 33554432), true);
     });

@@ -1,3 +1,8 @@
+
+/** protobufjs 编码接受十进制字符串，响应仍保持 Long 类型，避免大 ID 丢精度。 */
+export type ProtoInput<T> = T extends Long ? T | string | number
+    : T extends object ? { [K in keyof T]: ProtoInput<T[K]> } : T;
+
 import { ScriptObject } from "../base/ScriptObject";
 
 export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
@@ -9,12 +14,12 @@ export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     /**错误回调 */
     public fErrorCallback: Function;
     /**请求协议 */
-    public cmdReqMsg: CmdReqMsg;
+    public cmdReqMsg: CmdReqMsg | ProtoInput<CmdReqMsg>;
     /** 非幂等写操作可关闭超时重发及重连恢复；默认保留旧行为。 */
     public allowRetry = true;
     /** 实际出队前检查请求所属会话与有效期。 */
     public canSend: (() => boolean) | null = null;
-    constructor(cmdReqMsg: CmdReqMsg, caller?: object, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
+    constructor(cmdReqMsg: CmdReqMsg | ProtoInput<CmdReqMsg>, caller?: object, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
         super();
         this.cmdReqMsg = cmdReqMsg
         this.caller = caller;

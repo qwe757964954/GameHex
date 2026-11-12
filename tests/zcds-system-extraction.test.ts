@@ -2,11 +2,12 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { ZCDeckBonuses, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
-import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import type { ZCHexState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCArtifactSystem } from '../assets/script/app/zcds/model/systems/ZCArtifactSystem';
 import { ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { ZCEconomySystem } from '../assets/script/app/zcds/model/systems/ZCEconomySystem';
 import { ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
+import type { ZCTargetingContext } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
 
 const artifactRules = {
     artifactMaxStored: 2,
@@ -49,6 +50,29 @@ test('Targeting 系统独立计算射程与确定性 BFS 首步', () => {
         rank: (id) => id,
     });
     assert.equal(step, 1);
+});
+
+test('索敌复用坐标输出时保持原点、ID 平局、空中筛选和单位优先规则', () => {
+    const makeUnit = (id: number, x: number, owner = 'enemy') => ({
+        id, freeX: x, freeY: 0, owner, hp: 100, battleState: 'idle', hatredUnitId: null,
+    } as ZCUnitState);
+    const source = makeUnit(1, 100, 'player');
+    const candidates = [makeUnit(3, 120), makeUnit(2, 80), makeUnit(5, 100), makeUnit(4, 100, 'player')];
+    const hater = makeUnit(6, 101);
+    const wall = { id: 1, owner: 'enemy', wallHp: 100, hp: 100, building: 'none' } as ZCHexState;
+    const context: ZCTargetingContext = {
+        now: 1, units: candidates, hexes: [], unitById: () => hater,
+        effectiveDefinition: (unit) => ({ canAttackAir: false, flying: unit.id === 5 } as ZCUnitDefinition),
+        unitPosition: (unit, result = { x: 0, y: 0 }) => { result.x = unit.freeX; result.y = unit.freeY; return result; },
+        hexPosition: () => ({ x: 120, y: 0 }), hasExposedWall: () => true,
+    };
+    assert.deepEqual(ZCTargetingSystem.acquire(source, context), { kind: 'unit', id: 2 });
+    assert.deepEqual(ZCTargetingSystem.acquire(source, { ...context, hexes: [wall] }), { kind: 'wall', id: 1 });
+    assert.deepEqual(ZCTargetingSystem.acquire(source, { ...context, hexes: [wall], preferUnitTargets: () => true }), { kind: 'unit', id: 2 });
+    source.hatredUnitId = hater.id; source.hatredUntil = 2;
+    assert.deepEqual(ZCTargetingSystem.acquire(source, context), { kind: 'unit', id: 6 });
+    source.hatredUnitId = null;
+    assert.equal(ZCTargetingSystem.acquire(source, { ...context, units: [] }, true), null);
 });
 
 test('Combat 系统计算有效伤害并维护状态切换不变量', () => {

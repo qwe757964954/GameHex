@@ -382,6 +382,7 @@ export class ZCSpawnSelection {
  * 在对局开始时冻结地图资源点的抽取结果。固定主城和自选主城共用，避免资源点只在选点流程中生效。
  */
 export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZCMapResolvedResource[] {
+    if (map.resolvedResources !== undefined) return map.resolvedResources.map(point => ({ ...point }));
     const resolved: ZCMapResolvedResource[] = [];
     const monsters = new Map<number, number>();
     for (const point of map.resourcePoints ?? []) {

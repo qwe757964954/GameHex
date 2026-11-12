@@ -248,7 +248,7 @@ export function bigMapCanPlace(
     if (!bigMapFreeQueueSlot(state)) return { ok: false, reason: '建造队列已满' };
     const cost = config.levels.get(buildingId)?.get(1);
     if (!cost) return { ok: false, reason: '缺少 1 级建造配置' };
-    const lack = checkResources ? bigMapMissingRes(state, cost) : '';
+    const lack = checkResources ? bigMapMissingRes(config, state, cost) : '';
     if (lack) return { ok: false, reason: `资源不足：${lack}` };
     return { ok: true, reason: '' };
 }
@@ -302,16 +302,48 @@ export function bigMapMove(
     };
 }
 
-function bigMapMissingRes(
+/** 缺料一项：给界面直接渲染（带中文名与差额），不用再解析字符串。 */
+export interface IBigMapMissingRes {
+    readonly res: BigMapResType;
+    /** 中文资源名（`bigmapResource.name`，缺表时退回 key）。 */
+    readonly label: string;
+    /** 还差多少（向上取整，>= 1）。 */
+    readonly amount: number;
+}
+
+/**
+ * 建造 / 升级缺哪些资源、各差多少。
+ *
+ * ⚠️ 2026-11-11 之前这里是 `bigMapMissingRes` 直接拼 `` `${res} 差 ${n}` ``，
+ * 于是 **`grain` / `wood` / `iron` 这些英文 key 会漏到玩家界面**（`bigMapCanUpgrade`
+ * 的 `reason` 原样进详情正文）。现在统一走 `config.resources` 的中文名，
+ * 界面要结构化数据（逐项标红、点击跳转）用这个函数，要一句话用 `bigMapMissingRes`。
+ */
+export function bigMapMissingResList(
+    config: IBigMapConfig,
     state: IBigMapBaseState,
     cost: { readonly costGrain: number; readonly costWood: number; readonly costIron: number },
-): string {
+): readonly IBigMapMissingRes[] {
     const need: [BigMapResType, number][] = [
         ['grain', cost.costGrain], ['wood', cost.costWood], ['iron', cost.costIron],
     ];
-    const lack = need.filter(([res, amount]) => state.res[res] < amount);
-    if (lack.length === 0) return '';
-    return lack.map(([res, amount]) => `${res} 差 ${amount - state.res[res]}`).join('、');
+    const lack: IBigMapMissingRes[] = [];
+    for (const [res, amount] of need) {
+        const short = amount - state.res[res];
+        if (short <= 0) continue;
+        lack.push({ res, label: config.resources.get(res)?.name ?? res, amount: Math.ceil(short) });
+    }
+    return lack;
+}
+
+function bigMapMissingRes(
+    config: IBigMapConfig,
+    state: IBigMapBaseState,
+    cost: { readonly costGrain: number; readonly costWood: number; readonly costIron: number },
+): string {
+    return bigMapMissingResList(config, state, cost)
+        .map((item) => `${item.label}差 ${item.amount}`)
+        .join('、');
 }
 
 function payRes(
@@ -347,8 +379,10 @@ export function bigMapCanUpgrade(
     }
     // 主城之外：不得超过主城当前等级，也不得低于前置建筑等级。
     if (instance.buildingId !== config.mainBuildingId) {
-        if (instance.level + 1 > bigMapMainLevel(config, state)) {
-            return { ok: false, reason: '受主城等级限制' };
+        const mainLevel = bigMapMainLevel(config, state);
+        if (instance.level + 1 > mainLevel) {
+            // 玩家语：说清「卡在哪一级」，不要只丢一句「受主城等级限制」。
+            return { ok: false, reason: `主城 Lv.${mainLevel} 才能升到 Lv.${instance.level + 1}` };
         }
     }
     // 前置建筑是**列表**（策划表 `baseBuildingLevel.preBuild`）：主城升 2 级就要求
@@ -361,7 +395,7 @@ export function bigMapCanUpgrade(
         }
     }
     if (!bigMapFreeQueueSlot(state)) return { ok: false, reason: '建造队列已满' };
-    const lack = checkResources ? bigMapMissingRes(state, next) : '';
+    const lack = checkResources ? bigMapMissingRes(config, state, next) : '';
     if (lack) return { ok: false, reason: `资源不足：${lack}` };
     return { ok: true, reason: '' };
 }

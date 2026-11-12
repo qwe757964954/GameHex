@@ -15,6 +15,7 @@ import { ZCCombatEventType, type ZCAttackProfile, type ZCUnitDefinition } from '
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH } from '../assets/script/app/zcds/model/ZCBlinkCastFx';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
+import { zcCombatEffectOverlayChild } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -34,7 +35,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
 ];
@@ -49,7 +50,7 @@ function readRows(name: string): Array<Record<string, any>> {
 
 function prepare() {
     loadPvpTables(Object.fromEntries(TABLE_NAMES.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 
@@ -128,10 +129,18 @@ test('鹿神守护：走强化槽的移动区域，伤害按 600/700/800 ÷ 面�
     for (const level of [1, 2, 3]) {
         const params = paramsOf(103405, level);
         assert.deepEqual(
-            [params.zoneMoveSpeed, params.zoneDuration, params.zoneDamageFalloff, params.zoneMaxHits],
-            [140, 2, 0.5, 5], '冲刺速度 140 / 持续 2 秒 / 每多一个目标 -50% / 最多 5 个');
+            [params.zoneMoveSpeed, params.zoneDuration, params.zoneMaxHits, params.zoneWaveInterval],
+            [140, 2, 1, 0.15],
+            '快档 140 / 兜底 2 秒 / 命中名额 1（接触即消失）/ 每 0.15 秒探一次接触');
+        assert.deepEqual(
+            [params.zoneSpawnForward, params.zoneApproachSpeed, params.zoneSprintRange],
+            [15, 70, 200],
+            '身前 15px 生成 / 慢档 70px/s / 距目标 200px 提速',
+        );
+        assert.equal(params.zoneDamageFalloff, undefined,
+            '2026-11-12 起不再递减：命中即消失，没有第二个目标可减');
         assert.equal(params.zoneHoldVisual, 1,
-            '「整个冲刺阶段循环播火特效」必须开整段持有视觉，否则会闪成一串残影');
+            '「整个追击阶段循环播火特效」必须开整段持有视觉，否则会闪成一串残影');
     }
 
     //  成长链也要有，否则界面上点不出这一级。
@@ -297,7 +306,7 @@ test('移形换影：没配 blinkCooldown 时整段不执行', () => {
 
 // ── 三、移动区域：逐目标递减 ────────────────────────────────────────────────────
 
-test('鹿神守护：冲刺区域内每多命中一个目标就按 damageFalloff 再降一半', () => {
+test('damageFalloff 槽位仍在：移动区域内每多命中一个目标就再降一半（103405 已不用）', () => {
     const caster = makeUnit(1, ZCOwner.Player, 0, '68034');
     const victims = [1, 2, 3].map((offset) => makeUnit(10 + offset, ZCOwner.Enemy, offset, '68028'));
     const state = makeState([caster, ...victims], 1);
@@ -457,6 +466,9 @@ test('鹿神守护预制：小鹿在下、火特效在上，火特效是循环 c
     assert.equal(skeleton!.defaultAnimation, 'idle');
 
     const fire = children[1];
+    //  2026-11-12：火船只在小鹿**提速段**点亮（模型推 `overlayFx`，视图按登记表开关），
+    //  所以 prefab 里默认必须是关的 —— 否则慢档赶路的第一帧就会带着一身火。
+    assert.equal(fire._active, false, 'fx_火船 默认关：由 `applyOverlayFx` 按阶段打开');
     const fireComponents = (fire._components as Array<{ __id__: number }>).map((ref) => prefab[ref.__id__]);
     const animation = fireComponents.find((component) => component.__type__ === 'cc.Animation');
     assert.ok(animation, '火特效节点必须带 Animation');
@@ -650,23 +662,24 @@ function deerZoneHarness(options: { level?: number; targetX?: number; facing?: n
     return { state, caster, target, params, attack: () => ZCAttackResolutionSystem.sendAttack(state, caster, context as never) };
 }
 
-test('鹿神守护：小鹿落在魔术师**前进方向** 30px（表值）处，不是目标处', () => {
+test('鹿神守护：小鹿落在魔术师**前进方向** 15px（表值）处，不是目标处', () => {
     const harness = deerZoneHarness({ level: 1, targetX: 300, facing: 0 });
     harness.attack();
     assert.equal(harness.state.groundZones.length, 1);
     const zone = harness.state.groundZones[0];
-    //  朝向 0（朝右）⇒ 前移 30 表值 px × 0.3 = 9 世界 px。
-    assert.ok(Math.abs(zone.x - 9) < 1e-9, `应落在 x=9，实际 ${zone.x}`);
+    //  朝向 0（朝右）⇒ 前移 15 表值 px × 0.3 = 4.5 世界 px。
+    assert.ok(Math.abs(zone.x - 4.5) < 1e-9, `应落在 x=4.5，实际 ${zone.x}`);
     assert.ok(Math.abs(zone.y) < 1e-9);
 
-    //  换朝向验证「沿着 facing 走」：朝上（-90°）⇒ 落点 (0, -9)，不是朝目标偏。
+    //  换朝向验证「沿着 facing 走」：朝上（-90°）⇒ 落点 (0, -4.5)，不是朝目标偏。
     const up = deerZoneHarness({ level: 1, targetX: 300, facing: -Math.PI / 2 });
     up.attack();
     assert.ok(Math.abs(up.state.groundZones[0].x) < 1e-9, '朝上时 x 不该动');
-    assert.ok(Math.abs(up.state.groundZones[0].y + 9) < 1e-9, `朝上时 y 应为 -9，实际 ${up.state.groundZones[0].y}`);
+    assert.ok(Math.abs(up.state.groundZones[0].y + 4.5) < 1e-9,
+        `朝上时 y 应为 -4.5，实际 ${up.state.groundZones[0].y}`);
 });
 
-test('鹿神守护：三档参数接线（出生 30 / 接近 70 / 转段 200 / 冲刺 140，全部 ×0.3）', () => {
+test('鹿神守护：三档参数接线（出生 15 / 慢档 70 / 提速 200 / 快档 140，全部 ×0.3）', () => {
     for (const level of [1, 2, 3]) {
         const harness = deerZoneHarness({ level });
         harness.attack();
@@ -674,15 +687,17 @@ test('鹿神守护：三档参数接线（出生 30 / 接近 70 / 转段 200 / �
         assert.deepEqual(
             [zone.approachSpeed, zone.sprintRange, zone.sprintSpeed, zone.sprinting],
             [70 * 0.3, 200 * 0.3, 140 * 0.3, false],
-            `L${level}：接近 21 / 转段 60 / 冲刺 42（世界 px/s），且刚出生时还没冲刺`,
+            `L${level}：慢档 21 / 提速 60 / 快档 42（世界 px/s），且刚出生时还没提速`,
         );
         assert.equal(zone.approachTargetId, harness.target.id, '追的就是这一击的攻击目标');
-        //  冲刺段的第一波不能提前打：出生这一拍 `nextWaveAt` 已经到点，但仍在接近段。
-        assert.equal(zone.remainingSeconds, 2, '冲刺 2 秒还没开始读秒');
+        assert.equal(zone.maxHits, 1, '接触任意目标就消失 ⇒ 命中名额只有 1');
+        assert.equal(zone.damageFalloff, undefined, '不再有「每多一个目标 −50%」');
+        //  快档的第一波不能提前打：出生这一拍 `nextWaveAt` 已经到点，但仍在慢档。
+        assert.equal(zone.remainingSeconds, 2, '快档 2 秒还没开始读秒');
     }
 });
 
-test('鹿神守护：接近段按 70px/s 走、不结算；进入 200px 才切冲刺并换动画', () => {
+test('鹿神守护：慢档按 70px/s 追、不结算；进入 200px 才提速并换动画 / 点亮火船', () => {
     //  世界坐标：小鹿在 x=9，目标在 x=200 ⇒ 相距 191 > 60（200 表值 px），要先走。
     const caster = makeUnit(1, ZCOwner.Player, 9, '68034');
     const target = makeUnit(2, ZCOwner.Enemy, 200, '68028');
@@ -692,7 +707,7 @@ test('鹿神守护：接近段按 70px/s 走、不结算；进入 200px 才切�
         skillId: 30854, skillName: '鹿神守护',
         effectPrefabPath: 'units/projectiles/鹿神守护/鹿神守护',
         remainingSeconds: 2, wavesLeft: 14, nextWaveAt: 0, waveInterval: 0.15,
-        damage: 600, slowRatio: 0, hitUnitIds: [], maxHits: 5,
+        damage: 600, slowRatio: 0, hitUnitIds: [], maxHits: 1,
         holdVisual: true,
         approachSpeed: 21, approachTargetId: target.id, sprintRange: 60, sprintSpeed: 42,
         sprinting: false,
@@ -717,44 +732,190 @@ test('鹿神守护：接近段按 70px/s 走、不结算；进入 200px 才切�
         } as never);
     };
 
-    //  ① 接近段：1 秒走 21。位置在涨、时长不动、一次都不打。
+    //  ① 慢档：1 秒走 21。位置在涨、时长不动、一次都不打。
     tick(1);
     assert.ok(Math.abs(zone.x - 30) < 1e-6, `1 秒后应走到 30，实际 ${zone.x}`);
-    assert.equal(zone.remainingSeconds, 2, '接近段不扣冲刺时长');
-    assert.equal(waves, 0, '接近段不结算任何一波');
+    assert.equal(zone.remainingSeconds, 2, '慢档不扣快档时长');
+    assert.equal(waves, 0, '慢档不结算任何一波');
     assert.equal(zone.sprinting, false);
-    assert.equal(zone.visualAnimation, 'move', '接近段播 move');
+    assert.equal(zone.visualAnimation, 'move', '慢档播 move（骨架里的走路段，没有 walk）');
 
-    //  ② 表现事件跟着走，而且时长被续住（初始只有「冲刺 2 秒」，走 4 秒就没了会半路消失）。
+    //  ② 表现事件跟着走，而且时长被续住（初始只有「快档 2 秒」，走 4 秒就没了会半路消失）。
     const visual = state.combatEvents.find((event) => event.effectPrefabPath);
     assert.ok(visual, '整段持有视觉还在');
     assert.equal(visual!.toX, zone.x, '视觉坐标跟着区域');
     assert.equal(visual!.spineAnimation, 'move');
+    assert.equal(visual!.overlayFx, undefined, '慢档身上不点火船');
     const bornDuration = visual!.durationSeconds;
     tick(0.5);
     assert.ok(visual!.durationSeconds > bornDuration,
-        `接近段每帧要把事件续长，${bornDuration} → ${visual!.durationSeconds}`);
+        `慢档每帧要把事件续长，${bornDuration} → ${visual!.durationSeconds}`);
 
-    //  ③ 一直走到进入 60 世界 px（目标 200 ⇒ 小鹿约 140 时转段）。
+    //  ③ 一直走到进入 60 世界 px（目标 200 ⇒ 小鹿约 140 时提速）。
     let switchedAt = 0;
     for (let step = 0; step < 60 && !zone.sprinting; step += 1) {
         tick(0.15);
         if (zone.sprinting) switchedAt = zone.x;
     }
-    assert.equal(zone.sprinting, true, '进入 200 表值 px 就切冲刺');
+    assert.equal(zone.sprinting, true, '进入 200 表值 px 就提速');
     assert.ok(200 - switchedAt <= 60,
-        `转段必须发生在「距目标 ≤ 200 表值 px」之内，实际还差 ${200 - switchedAt}`);
-    assert.ok(switchedAt > 130, `转段点不能提前太多，实际 ${switchedAt}`);
+        `提速必须发生在「距目标 ≤ 200 表值 px」之内，实际还差 ${200 - switchedAt}`);
+    assert.ok(switchedAt > 130, `提速点不能提前太多，实际 ${switchedAt}`);
     assert.deepEqual(
         [zone.moveVelocityX, zone.moveVelocityY, zone.visualAnimation],
-        [42, 0, 'attack'], '冲刺速度换成 140 表值 px/s，动画换 attack',
+        [42, 0, 'attack'], '快档速度换成 140 表值 px/s，动画换 attack',
     );
     const sprintVisual = state.combatEvents.find((event) => event.effectPrefabPath);
     assert.equal(sprintVisual!.spineAnimation, 'attack', '事件上的动画名也要跟着换');
+    assert.equal(sprintVisual!.overlayFx, true, '提速段才在小鹿身上点起火船');
 
-    //  ④ 冲刺段才开始结算：冲过目标那一下必须真的打到人（半径 15 世界 px，要先贴上）。
-    assert.equal(waves, 0, '切段那一拍离目标还有 58 世界 px，够不着');
+    //  ④ 快档才开始结算：贴上去那一下必须真的打到人（半径 15 世界 px，要先贴上）。
+    assert.equal(waves, 0, '提速那一拍离目标还有 58 世界 px，够不着');
     for (let step = 0; step < 20 && waves === 0; step += 1) tick(0.15);
-    assert.ok(waves > 0, '冲刺撞到目标后必须造成伤害');
-    assert.equal(zone.remainingSeconds < 2, true, '冲刺时长从切段那一刻开始读秒');
+    assert.ok(waves > 0, '快档撞到目标后必须造成伤害');
+    assert.equal(zone.remainingSeconds < 2, true, '快档时长从提速那一刻开始读秒');
+});
+
+// ── 七、鹿神守护改成「会追踪目标的子弹」（2026-11-12） ─────────────────────────
+//
+// 需求原话：「小鹿应该是类似子弹一样的效果，只是一个会追踪目标的子弹……当原目标死亡后，
+// 小鹿会转向新目标，接触到任意目标后造成伤害，子弹消失」。
+//
+// 三条新行为各自钉一颗钉子：换目标 / 接触即消失 / 没有目标也别卡死。
+
+/**
+ * 只跑区域系统的最小上下文（世界 px）：小鹿一个、敌人若干，`unitById` 与 `unitsInRadius` 都给真的。
+ *
+ * `unitsInRadius` 直接返回全部敌人 —— 它在本系统里只是**粗筛**，真正的形状由
+ * `zcGroundZoneReaches` 按 `radius` 收口，所以这里放宽不会让判定变松。
+ */
+function chaseHarness(startX: number, enemies: ZCUnitState[]) {
+    const deer = makeUnit(1, ZCOwner.Player, startX, '68034');
+    const state = makeState([deer, ...enemies], 0);
+    const byId = new Map(state.units.map((unit) => [unit.id, unit]));
+    const zone: ZCGroundZoneState = {
+        x: startX, y: 0, radius: 15, owner: ZCOwner.Player, sourceUnitId: 1,
+        skillId: 30854, skillName: '鹿神守护',
+        effectPrefabPath: 'units/projectiles/鹿神守护/鹿神守护',
+        remainingSeconds: 2, wavesLeft: 14, nextWaveAt: 0, waveInterval: 0.15,
+        damage: 600, slowRatio: 0, hitUnitIds: [], maxHits: 1,
+        holdVisual: true,
+        approachSpeed: 21, approachTargetId: enemies[0]?.id, sprintRange: 60, sprintSpeed: 42,
+        sprinting: false,
+    };
+    state.groundZones.push(zone);
+    const damaged: number[] = [];
+    const tick = (dt: number): void => {
+        state.elapsedSeconds = Math.round((state.elapsedSeconds + dt) * 1e9) / 1e9;
+        state.combatEvents = state.combatEvents.filter(
+            (event) => state.elapsedSeconds < event.startedAt + event.durationSeconds);
+        ZCGroundZoneSystem.tick(state, dt, {
+            unitPosition: (unit: ZCUnitState) => ({ x: unit.freeX, y: unit.freeY }),
+            unitById: (id: number) => byId.get(id),
+            hexStep: 42,
+            hexIdAt: () => 0,
+            unitsInRadius: () => state.units.filter((unit) => unit.owner !== ZCOwner.Player),
+            ensureSlowStatus: () => undefined,
+            applyStatus: () => undefined,
+            exportStatusEffects: () => undefined,
+            damageUnit: (target: ZCUnitState) => { damaged.push(target.id); return { value: 0 } as never; },
+        } as never);
+    };
+    return { state, zone, tick, damaged, deer };
+}
+
+test('鹿神守护：原目标阵亡后**改追最近的敌人**，不是朝原方向撞出去', () => {
+    //  小鹿在 x=9；一号目标在 x=300（正右方），二号敌人在 (9, 200)（正上方，也在搜索半径内）。
+    const first = makeUnit(2, ZCOwner.Enemy, 300, '68028');
+    const second = makeUnit(3, ZCOwner.Enemy, 9, '68028');
+    second.freeY = 200;
+    const harness = chaseHarness(9, [first, second]);
+
+    //  ① 先朝一号目标走：x 涨、y 不动。
+    harness.tick(0.5);
+    assert.ok(harness.zone.x > 9, '慢档朝目标前进');
+    assert.ok(Math.abs(harness.zone.y) < 1e-9, '此时还不该有纵向位移');
+    assert.equal(harness.zone.approachTargetId, first.id);
+
+    //  ② 一号目标倒下 ⇒ 下一拍改追二号，方向立刻拐上去。
+    first.hp = 0;
+    first.battleState = 'dead';
+    const beforeX = harness.zone.x;
+    harness.tick(0.5);
+    assert.equal(harness.zone.approachTargetId, second.id, '必须换成最近的活敌人');
+    assert.ok(harness.zone.y > 0, `要朝新目标拐上来，实际 y=${harness.zone.y}`);
+    assert.ok(harness.zone.x < beforeX + 1e-9, '旧方向的推进要停，不能继续往右飞');
+
+    //  ③ 慢档/快档都跟着转：再跑一段，全程都在缩小与二号目标的距离。
+    let last = Math.hypot(harness.zone.x - second.freeX, harness.zone.y - second.freeY);
+    for (let step = 0; step < 6; step += 1) {
+        harness.tick(0.15);
+        const now = Math.hypot(harness.zone.x - second.freeX, harness.zone.y - second.freeY);
+        assert.ok(now < last, `第 ${step} 拍必须还在逼近新目标（${last} → ${now}）`);
+        last = now;
+    }
+});
+
+test('鹿神守护：接触到任意目标后造成一次伤害就消失（不再多次结算 / 不再递减）', () => {
+    //  目标贴在 11 世界 px 处（半径 15 之内）⇒ 第一拍就提速并接触。
+    const victim = makeUnit(2, ZCOwner.Enemy, 20, '68028');
+    const harness = chaseHarness(9, [victim]);
+    harness.tick(0.1);
+
+    assert.deepEqual(harness.damaged, [victim.id], '只打一发，且打的就是碰到的那个');
+    assert.equal(harness.state.groundZones.length, 0, '子弹碰到目标立刻消失');
+    assert.equal(harness.state.combatEvents.filter((event) => event.effectPrefabPath).length, 0,
+        '小鹿的表现事件与区域同一拍摘掉（不会留个残影在原地）');
+
+    //  再跑几拍也不能「复活」二次结算。
+    harness.tick(0.5);
+    harness.tick(0.5);
+    assert.equal(harness.damaged.length, 1, '消失后不许再结算');
+});
+
+test('鹿神守护：场上一个活敌人都没有时，按原方向提速飞完 2 秒兜底散场（不卡在慢档）', () => {
+    const dead = makeUnit(2, ZCOwner.Enemy, 300, '68028');
+    dead.hp = 0;
+    dead.battleState = 'dead';
+    const harness = chaseHarness(9, [dead]);
+    harness.tick(0.1);
+    //  出生时带的目标已经死了 ⇒ 找不到替代 ⇒ 直接提速，朝原速度方向（+x）飞。
+    assert.equal(harness.zone.sprinting, true, '没有目标也要进快档读秒，否则永远不会消失');
+    assert.equal(harness.zone.approachTargetId, undefined);
+    assert.ok(harness.zone.moveVelocityX > 0, '朝原方向（+x）继续飞');
+    for (let step = 0; step < 3; step += 1) harness.tick(1);
+    assert.equal(harness.state.groundZones.length, 0, '2 秒兜底到点必须散场');
+});
+
+test('鹿神守护：叠层节点按登记表开关（火船 = fx_火船，其他特效一律不碰）', () => {
+    assert.equal(zcCombatEffectOverlayChild('units/projectiles/鹿神守护/鹿神守护'), 'fx_火船');
+    assert.equal(zcCombatEffectOverlayChild('units/projectiles/雷弹命中/雷弹命中'), null,
+        '没登记的特效视图一次都不许碰 `active`');
+    assert.equal(zcCombatEffectOverlayChild(null), null);
+
+    //  登记的名字必须真在 prefab 的**根节点直下**（视图用 `visualNode.getChildByName` 找）。
+    const prefab = JSON.parse(readFileSync(
+        assetPath('units/projectiles/鹿神守护/鹿神守护.prefab'), 'utf8',
+    )) as Array<Record<string, any>>;
+    const rootChildren = (prefab[1]._children as Array<{ __id__: number }>)
+        .map((ref) => String(prefab[ref.__id__]._name));
+    assert.ok(rootChildren.includes(zcCombatEffectOverlayChild('units/projectiles/鹿神守护/鹿神守护')!),
+        `fx_火船 必须挂在根节点下，实际 ${rootChildren.join(' / ')}`);
+});
+
+//  ⚠️ 与上面「三档参数接线」重复了一部分：那一条挂在 `prepare()` 后面，而 `prepare()` 现在
+//  因为 `config/maps/standard.json` 缺失（本仓库只有 standard_3 / standard_4）直接抛错，
+//  断言根本跑不到。这里直接读 `remoteRef` 再钉一遍，保证「追踪弹参数」这组真值有人守。
+test('鹿神守护：三档参数真值（绕开地图配置，直接读 remoteRef）', () => {
+    for (const level of [1, 2, 3]) {
+        const params = paramsOf(103405, level);
+        assert.deepEqual(
+            [params.zoneSpawnForward, params.zoneApproachSpeed, params.zoneSprintRange, params.zoneMoveSpeed],
+            [15, 70, 200, 140],
+            `L${level}：身前 15px 生成 / 慢档 70 / 距目标 200 提速 / 快档 140`,
+        );
+        assert.equal(params.zoneMaxHits, 1, '接触任意目标即消失');
+        assert.equal(params.zoneDamageFalloff, undefined, '不再有「每多一个目标 −50%」');
+        assert.equal(params.zoneHoldVisual, 1, '整段持有一条跟随视觉');
+    }
 });

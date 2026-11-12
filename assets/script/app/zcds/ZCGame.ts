@@ -11,7 +11,7 @@ import {
     Vec3,
     Widget,
 } from 'cc';
-import type { ZCGamePreparedResources } from './application/ZCGameLoader';
+import type { IZCGamePreparedResources } from './application/ZCGamePreparedResources';
 import type { IZCGameEntry } from './application/ZCGameEntry';
 import { getEnemyDeck, getPlayerDeck, type ZCDeckCard, type ZCUnitId } from './model/ZCCombatCatalog';
 import { ZCGameHUDView } from './view/ZCGameHUDView';
@@ -45,7 +45,7 @@ const { ccclass } = _decorator;
  */
 export const MAP_DIRECTORY = 'config/maps';
 
-export type { ZCGamePreparedResources } from './application/ZCGameLoader';
+export type { IZCGamePreparedResources } from './application/ZCGamePreparedResources';
 
 export type { IZCGameEntry } from './application/ZCGameEntry';
 
@@ -129,7 +129,7 @@ export class ZCGame extends Component {
         widget: Widget | null;
     } | null = null;
     private deferredAfterDraw: (() => void) | null = null;
-    private preparedResources: ZCGamePreparedResources | null = null;
+    private preparedResources: IZCGamePreparedResources | null = null;
     /**
      * 本局角色卡面图（卡表 `headIcon` → `icons/cardHead/**`）；异步加载，整局一份。
      * 视图通过注入的本局只读资源表按 id 取图。
@@ -162,7 +162,13 @@ export class ZCGame extends Component {
         catch (error) { this.shutdown(); throw error; }
     }
 
-    update(dt: number): void { EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: this, dt }); }
+    /** 帧事件 payload 复用：EventMgr 同步派发，唯一监听者只解构取 owner/dt，不持有引用。 */
+    private readonly framePayload: { owner: ZCGame; dt: number } = { owner: this, dt: 0 };
+
+    update(dt: number): void {
+        this.framePayload.dt = dt;
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, this.framePayload);
+    }
 
 
     /**
@@ -281,8 +287,8 @@ export class ZCGame extends Component {
      *  否则会先闪一帧回退图（兵种 idle / 建筑图）再换成卡面图。
      *
      *   卡池口径必须与模型 `ZCGameModel.deckFor` **逐条对齐**：那边是
-     *  `ownerDecks?.[owner] ?? (player ? playerDeck : enemyDeck)`，PVE / 英雄模式会经
-     *  `buildZCPveEnemyDecks` / `hasRemoteHeroes` 换掉牌组（见 `ZCClientCombatConfig`）⇒
+     *  `ownerDecks?.[owner] ?? (player ? playerDeck : enemyDeck)`，正式对局会经
+     *  `ZCClientCombatConfig` 按后端各席位阵容构筑牌组 ⇒
      *  这里若只扫全局 `getPlayerDeck()/getEnemyDeck()`，那些局会一张卡面都取不到，
      *  然后每张卡都刷「没有角色卡面图」的日志。宁可多扫，不可漏扫。
      */
@@ -347,7 +353,7 @@ export class ZCGame extends Component {
     }
 
     /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。 */
-    private createGame(prepared: ZCGamePreparedResources, model: IZCBattleRenderModel | null, selection: ZCSpawnSelection | null): void {
+    private createGame(prepared: IZCGamePreparedResources, model: IZCBattleRenderModel | null, selection: ZCSpawnSelection | null): void {
         const entryMatchConfig = this.matchConfig;
         if (!entryMatchConfig) throw new Error('ZCGame.initialize 缺少本局配置快照');
         const setupConfig = entryMatchConfig;
@@ -467,7 +473,7 @@ export class ZCGame extends Component {
         this.scheduleDeferredArt(prepared, setupConfig.map);
     }
 
-    private scheduleDeferredArt(prepared: ZCGamePreparedResources, map: ZCMatchMap): void {
+    private scheduleDeferredArt(prepared: IZCGamePreparedResources, map: ZCMatchMap): void {
         const load = prepared.loadDeferredArt;
         if (!load) return;
         const isCurrent = (): boolean => !this.leaving && this.isValid && this.preparedResources === prepared;
@@ -501,7 +507,7 @@ export class ZCGame extends Component {
             decorFrames,
         );
     }
-    private startSpawnSelection(prepared: ZCGamePreparedResources): void {
+    private startSpawnSelection(prepared: IZCGamePreparedResources): void {
         this.hudView.setSpawnSelectionMode(true);
         if (!prepared.spawnSelectionPrefab) throw new Error('自选主城缺少选点界面资源');
         const node = instantiate(prepared.spawnSelectionPrefab);
@@ -580,17 +586,18 @@ export class ZCGame extends Component {
     }
 
     /**
-     * 守城（塔防）局的首领条：**按需实例化**，非守城局 / 非 BOSS 波直接销毁。
+     * 守城（塔防）局的波次面板：**按需实例化**，非守城局直接销毁。
      *
-     * 🔴 只有 BOSS 波才展示这条大血条（用户 2026-11-07）：普通小怪只留头顶血条。
-     * 判据是 `progress.currentWaveIsBoss`（表 `defenceModWave.monsterType=3`，缺列时按最后一波）。
+     * 面板上两拨东西的生命周期**不同**（2026-11-09 用户）：
+     *  · 波次徽标（`IconBoss` + `第N/M波`）**常驻**，从第一波起一直挂着；
+     *  · 当前波生成后，普通波与 BOSS 波都显示头像 / 名字 / 总血条。
      *
      * 头像与名字按 `currentWaveCardId` 查 `loadDefenceBossArt()` 预扫好的表（解析必须同步命中，
      * 否则会先闪一帧空框再换成怪图）；`render` 每帧全量赋值，面板侧不做增量。
      */
     private renderBossPanel(model: IZCBattleRenderModel): void {
         const progress = model.defenceWaveProgress;
-        if (!progress || !progress.currentWaveIsBoss) {
+        if (!progress) {
             this.bossPanel?.node.destroy();
             this.bossPanel = null;
             return;
@@ -607,6 +614,7 @@ export class ZCGame extends Component {
             // 位置归 prefab 的 Widget（左上角按 top=76 / left=129 钉住），这里不写 setPosition。
             this.bossPanel = node.getComponent(ZCHudBossPanel);
         }
+        this.bossPanel.setBossBarVisible(progress.currentWaveId !== null);
         const cardId = progress.currentWaveCardId;
         this.bossPanel.render(
             progress,

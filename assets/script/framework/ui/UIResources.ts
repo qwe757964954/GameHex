@@ -7,14 +7,15 @@
  *  1. CC 3.x 的 `resources.load()` 只接受相对 resources/ 的路径（如 `'ui/uidemo/UIDemoLayer'`）
  *  2. 加载完成回调签名是 (err, asset)，不是 Promise —— 本类同时提供 `loadAsync` 包一层
  *  3. 缓存以最终 URL 为 key，避免重复 load
- *  4. `releasePrefab` 用 `resources.release(url)` 释放底层资源
+ *  4. 按缓存的 Prefab 实例释放，兼容 resources 与其他 bundle
  *
  *  本文件原先 import 旧 UI 框架的 `UIDef`（只为了拿 `UI_RESOURCE_ROOT` 常量）。
  *    旧框架下线后前缀常量就地定义，本文件现在**只依赖 cc**。
  * ------------------------------------------------------------------
  */
-import { assetManager, Prefab, resources } from 'cc';
+import { assetManager, Prefab } from 'cc';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
+import { loadAssetBundle } from '../../platform/cocos/AssetBundleLoader';
 
 /** UI prefab 在 resources/ 下的统一根目录。 */
 export const UI_RESOURCE_ROOT = 'ui';
@@ -48,22 +49,12 @@ export class UIResources {
             this._cache.set(url, asset);
             cb(null, asset);
         };
-        if (!bundleName || bundleName === 'resources') {
-            resources.load(url, Prefab, onLoaded);
-            return;
-        }
-        const bundled = assetManager.getBundle(bundleName);
-        if (bundled) {
-            (bundled.load as any)(url, Prefab, onLoaded);
-            return;
-        }
-        assetManager.loadBundle(bundleName, (error, bundle) => {
-            if (error || !bundle) {
-                cb(error || new Error(`UIResources: Bundle ${bundleName} 加载失败`), null);
-                return;
-            }
-            (bundle.load as any)(url, Prefab, onLoaded);
-        });
+        // 首包与分包的差别只在 `loadAssetBundle` 内部分支：它返回 `resources` 或对应 bundle，
+        // 远程 url/version 也从热更 manifest 解析（重试、并发去重都下沉在那里）。
+        void loadAssetBundle(bundleName).then(
+            (bundle) => (bundle.load as any)(url, Prefab, onLoaded),
+            (error: Error) => cb(error, null),
+        );
     }
 
     /**
@@ -86,15 +77,16 @@ export class UIResources {
     /** 释放单个 prefab（缓存也一并清掉）。 */
     public static releasePrefab(path: string): void {
         const url = this.resolveUrl(path);
-        if (!this._cache.has(url)) return;
-        resources.release(url);
+        const prefab = this._cache.get(url);
+        if (!prefab) return;
+        assetManager.releaseAsset(prefab);
         this._cache.delete(url);
     }
 
     /** 释放所有缓存的 UI prefab。 */
     public static releaseAll(): void {
-        this._cache.forEach((_prefab, url) => {
-            resources.release(url);
+        this._cache.forEach((prefab) => {
+            assetManager.releaseAsset(prefab);
         });
         this._cache.clear();
     }

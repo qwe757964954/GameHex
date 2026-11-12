@@ -16,6 +16,8 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as MapMarkerBadge from '../../assets/script/app/common/MapMarkerBadge';
 import * as TerritoryChestBubble from '../../assets/script/app/territory/model/TerritoryChestBubble';
+import * as TerritoryConditionBadge from '../../assets/script/app/territory/model/TerritoryConditionBadge';
+import * as TerritorySilverChestOpen from '../../assets/script/app/territory/model/TerritorySilverChestOpen';
 import * as TerritoryUiEvents from '../../assets/script/app/territory/application/TerritoryEvents';
 import * as TerritoryViewEvents from '../../assets/script/app/territory/view/TerritoryEvents';
 
@@ -183,6 +185,8 @@ export interface StationRenderContent {
     readonly isCondition?: boolean;
     readonly conditionIcon?: unknown;
     readonly conditionTextColor?: FakeColor;
+    /** 条件模式价格行**之上**那颗宝箱图标（2026-11-10，`icon_baoxiang`）；缺省 = 没有。 */
+    readonly conditionChestIcon?: unknown;
     /** 建筑表 `buildSize` 的大小倍率（`applyIconPlacement` 的第二乘数）。 */
     readonly iconScale?: number;
     /** 底部对齐（69008~69015）：可见底边压格心，而不是可见中心压格心。 */
@@ -192,6 +196,10 @@ export interface StationRenderContent {
     readonly badge: string;
     readonly levelBubble?: string;
     readonly levelBubbleFrame?: unknown;
+    /** 2026-11-11 预告关卡：未解锁条件格也要显示编号气泡。 */
+    readonly previewBubble?: boolean;
+    /** 预告气泡按虚影建筑抬升用的锚点帧（与 syncGhosts 同源）。 */
+    readonly levelBubbleAnchorFrame?: unknown;
     readonly interactive: boolean;
     readonly isLoading?: boolean;
     /** 需求 row14：建筑展示滞后期间整站不显示（见 `ITerritoryStationRender.hidden`）。 */
@@ -213,6 +221,20 @@ export interface StationView {
     setMapPosition(x: number, y: number, z?: number): void;
     render(content: StationRenderContent): void;
     setSpawnOpacity(value: number): void;
+    /** 宝箱提示气泡的显示开关（2026-11-02）；视图真方法，夹具接口同步声明。 */
+    setHintBubbleSuppressed(suppressed: boolean): void;
+    /**
+     * 「银币图标 + 数字」的生成缩放系数（「未解锁 → 可激活」的 1s 过渡，2026-11-09）。
+     *
+     *  乘在 `CONDITION_ICON_SCALE(0.85)` / `CONDITION_VALUE_SCALE(1.2)` 上，1 = 完全展开、
+     *  0 = 还没长出来；退出条件模式自动归 1（站点节点池化复用）。
+     */
+    setConditionSpawnScale(scale: number): void;
+    /**
+     * 「银币宝箱」独立打开动画（2026-11-10）：icon 放大 → 缩小 → 消失。
+     * 返回 `false` = 这一刻没有可播的宝箱图；纯表现，不接管奖励结算。
+     */
+    playSilverChestIconPop(): boolean;
     /** 建筑生成抖动（需求 row14）：登记起点。 */
     playBuildingShake(): void;
     /** 建筑生成抖动：逐帧推进（引擎每帧调）。 */
@@ -292,6 +314,12 @@ export function loadTerritoryStationModule(): Record<string, unknown> {
             // 宝箱气泡的底图尺寸 / 排版常量（2026-11-02 换 `frame_04` 时新增）⇒ 给**真模块**。
             // 抄一份常量会让「视图用的尺寸」和「用例钉的尺寸」各自漂。
             if (id.endsWith('/TerritoryChestBubble')) return TerritoryChestBubble;
+            // 「宝箱 icon + 价格行」的竖直排版（2026-11-10）⇒ 给**真模块**：
+            // 抄一份公式会让「视图怎么摆」和「用例钉的位置」各自漂。
+            if (id.endsWith('/TerritoryConditionBadge')) return TerritoryConditionBadge;
+            // 「银币宝箱」独立打开动画的时间轴（2026-11-10）⇒ 给**真模块**：
+            // 用例要按真曲线断言 icon 缩到 0，抄一份倍率会让两边各改一半也一起绿。
+            if (id.endsWith('/TerritorySilverChestOpen')) return TerritorySilverChestOpen;
             // 「章节入口」那条 UI 事件（2026-11-03）：给**真模块** —— 用例要按真常量断言
             // `emit` 出去的字符串，桩里抄一份就会"改了一边两边都绿"。
             if (id === '../application/TerritoryEvents') return TerritoryUiEvents;

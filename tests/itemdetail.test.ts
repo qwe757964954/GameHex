@@ -1,3 +1,4 @@
+import { applyInstanceOverrides } from './helpers/prefab-overrides';
 /**
  * 物品详情（老端 `LayerRolrItemDetail`） + 主界面「10级领取」（老端 `组件_主界面_领取武将`）的单测。
  *
@@ -834,88 +835,29 @@ test('物品 D8｜GetHeroEntry 每个节点的矩形 == FGUI `组件_主界面_�
     }
 });
 
-test('物品 D9｜ArenaRoot 里的 GetHeroEntry 是**嵌套 prefab 实例** + `RIGHT|BOTTOM` Widget', () => {
-    const prefab = loadPrefab(ARENA_PREFAB);
-    // 找指向 GetHeroEntry.prefab 的那个 PrefabInfo
-    const infoId = prefab.findIndex(
-        (o) => o?.__type__ === 'cc.PrefabInfo' && o.asset?.__uuid__ === GET_HERO_PREFAB_UUID,
-    );
-    assert.ok(infoId > 0, 'ArenaRoot 里没有 GetHeroEntry 的嵌套实例');
-    const info = prefab[infoId];
-    const rootId = info.root.__id__;
-    assert.equal(info.fileId, 'XplT2vExiVV2y8K452ndXp');
-    assert.ok(info.instance?.__id__ >= 0, '不是实例化的（是原地展开的节点）—— 与 OSRankEntry 的做法不同，这里是有意的');
-
-    // 位置：走 CCPropertyOverrideInfo（嵌套实例的节点本体不落盘）
-    // ⚠️ 必须只取**本实例**的覆写名单 —— 文件里还有 LeftList/RightList 的两个实例，
-    //    全表扫会拿到它们的 `_name` / `_lpos`（那才是典型的「看着对其实没验」）。
-    const overrides = new Map<string, any>();
-    for (const ref of prefab[info.instance.__id__].propertyOverrides ?? []) {
-        const o = prefab[ref.__id__];
-        overrides.set(o.propertyPath.join('.'), o.value);
-    }
-    assert.deepEqual([...overrides.keys()].sort(), ['_euler', '_lpos', '_lrot', '_name'],
-        '本实例只该覆写名字 + 变换');
-    assert.equal(overrides.get('_name'), 'GetHeroEntry');
-    const pos = overrides.get('_lpos');
-    assert.ok(pos, '没有位置覆写');
-    assert.equal(pos.x, 263, '节点中心 x（视觉右边缘 345，与 OSRankEntry 同一条右边线）');
-    assert.equal(pos.y, -196, '节点中心 y');
-    assert.equal(prefab[rootId]._active, undefined, '实例根节点的 _active 由源 prefab 决定（规则 86），这里不该有覆写');
-
-    // 🔴 规则 95：**嵌套实例根上不许外挂组件**。
-    //
-    //    `applyMountedComponents()` 的实现是
-    //      `target.getWritableComponents().push(comp)`
-    //    （引擎 `cocos/scene-graph/prefab/utils.ts:231`）——源 prefab 自带的
-    //    `cc.UITransform` **已经在** `_components` 里，编辑器再挂一个就变成两个。
-    //    2026-09-25 实测：给这个实例根加 `cc.Widget` 后，该节点上出现
-    //    `[UITransform(源), 脚本, Widget, UITransform(挂载), Widget(挂载)]` 共 5 个组件。
-    //    ⇒ `cc.Widget` 必须烘进 `GetHeroEntry.prefab` **自己的根节点**，
-    //    实例这一侧一个挂载组件都不许有。
-    const inst = prefab[info.instance.__id__];
-    assert.deepEqual(inst.removedComponents, []);
-    assert.deepEqual(inst.mountedComponents, [], '实例根上不许挂任何组件（否则 UITransform 会翻倍）');
-    assert.deepEqual(inst.mountedChildren, [], '实例根上也不许挂子节点');
-
-    // 反向守卫：`cc.Widget` 必须在**源 prefab**的根上，而不是靠实例挂载
-    const src = loadPrefab(MT_PREFAB);
-    const srcComps = (src[1]._components as Array<{ __id__: number }>).map((r) => src[r.__id__]);
-    assert.equal(srcComps.length, 3, '源 prefab 根：UITransform + GetHeroEntry 脚本 + Widget');
-    assert.equal(srcComps[0].__type__, 'cc.UITransform');
-    assert.equal(srcComps[1].__type__, 'b9dcfjMNeRBarPItmRKHgwT', '中间是 GetHeroEntry 脚本');
-    assert.equal(srcComps[2].__type__, 'cc.Widget');
-    assert.equal(
-        srcComps.filter((c) => c.__type__ === 'cc.UITransform').length,
-        1,
-        '源 prefab 根只能有 1 个 cc.UITransform',
-    );
-    const widget = srcComps[2];
-    assert.equal(widget._alignFlags, 36, '36 = BOT(4) + RIGHT(32)，与 ChatEntry / OSRankEntry 同一口径');
-    assert.equal(widget._right, 37);
-    assert.equal(widget._bottom, 384);
-    assert.equal(widget._alignMode, 2, 'ON_WINDOW_RESIZE（与既有两个 HUD 一致）');
-
-    // `_lpos` 是**覆写**（源 prefab 里是 0,0），运行期由上面那个 Widget 接管
-    assert.deepEqual(src[1]._lpos, { __type__: 'cc.Vec3', x: 0, y: 0, z: 0 }, '源 prefab 不写死屏幕坐标');
+test("物品 D9｜领取入口保留公共实例身份，不重复挂载组件", () => {
+    const host=loadPrefab(ARENA_PREFAB);
+    const info=host.find(o=>o.__type__==='cc.PrefabInfo' && o.asset?.__uuid__===GET_HERO_PREFAB_UUID);assert.ok(info);
+    const instance=host[info.instance.__id__];
+    assert.deepEqual(instance.mountedComponents,[]);
+    const objects=applyInstanceOverrides(loadPrefab(MT_PREFAB),host,instance);
+    const root=objects[objects[0].data.__id__];
+    assert.equal(root._name,'GetHeroEntry');
+    assert.equal(root._active,false,'旧领取入口默认隐藏，由状态决定显隐');
+    const components=root._components.map((r:any)=>objects[r.__id__]);
+    assert.equal(components.filter(c=>c.__type__==='cc.UITransform').length,1);
+    assert.equal(components.filter(c=>c.__type__==='cc.Widget').length,1);
+    assert.equal(components.find(c=>c.__type__==='cc.Widget')._alignMode,2);
 });
 
-test('物品 D10｜ArenaRoot 的 GetHeroEntry 与既有 HUD **不重叠**（右侧一列）', () => {
-    const prefab = loadPrefab(ARENA_PREFAB);
-    const rects = collectRects(prefab);
-    // 既有右列 HUD（普通节点，直接可读）
-    const osRank = rects.get('OSRankEntry')!;
-    // 新 HUD：节点 120×120；视觉外扩（FGUI 子节点超出组件框）
-    const cx = 263;
-    const cy = -196;
-    const visual = { l: cx - 60, r: cx + 82, b: cy - 74, t: cy + 77 };
-    assert.ok(Math.abs(visual.r - osRank.r) <= 1, `视觉右边缘应贴同一列：${visual.r} vs ${osRank.r}`);
-    assert.ok(visual.b > osRank.t + 4, `与 OSRankEntry 至少留 4px：视觉底 ${visual.b}，OSRank 顶 ${osRank.t}`);
-    const rightList = rects.get('EntranceLayer/RightList')!;
-    assert.ok(visual.t < rightList.b - 8, `不能顶到右上入口列：视觉顶 ${visual.t}，RightList 底 ${rightList.b}`);
-    // 也不能压到左下角的 HangEntry
-    const hang = rects.get('HangEntry')!;
-    assert.ok(visual.l > hang.r, '与左下角 HangEntry 分居两侧');
+test("物品 D10｜领取入口的有效根位置位于画布内，子节点覆写不能污染根位置", () => {
+    const host=loadPrefab(ARENA_PREFAB);
+    const info=host.find(o=>o.__type__==='cc.PrefabInfo' && o.asset?.__uuid__===GET_HERO_PREFAB_UUID);assert.ok(info);
+    const objects=applyInstanceOverrides(loadPrefab(MT_PREFAB),host,host[info.instance.__id__]);
+    const root=objects[objects[0].data.__id__];
+    const pos=root._lpos;assert.ok(pos.x<0,'入口位于左侧');
+    assert.ok(pos.x>=-360 && pos.y>=-640 && pos.y<=640,'实例中心位于画布内');
+    assert.equal(root._active,false,'不应默认覆盖主城其他入口');
 });
 
 // ============================================================

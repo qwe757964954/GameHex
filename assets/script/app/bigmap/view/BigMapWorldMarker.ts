@@ -153,6 +153,19 @@ export class BigMapWorldMarker extends Component {
         this.occupantLabel.node.setPosition(-84, 0, 0);
     }
 
+    /**
+     * 把「占据者」那一行改成**状态行**（名单玩家标记用它显示血量）。
+     *
+     * 复用同一个 Label 而不是新增节点：玩家标记没有建筑图，`iconY + height/2` 落点会跟名条撞，
+     * 所以 y 由调用方给。旗帜一律隐藏 —— 玩家不是"占据这座建筑"的人，挂旗会读成据点归属。
+     */
+    setStatusLine(text: string, y: number): void {
+        this.occupantRoot.active = text !== '';
+        this.occupantFlag.node.active = false;
+        this.occupantLabel.string = text;
+        this.occupantRoot.setPosition(0, y, 0);
+    }
+
     setPortrait(frame: SpriteFrame | null): void {
         this.portrait.spriteFrame = frame;
         this.portraitRoot.active = frame !== null;

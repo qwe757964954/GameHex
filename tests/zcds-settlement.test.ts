@@ -1,6 +1,7 @@
 import { runtimeFixture, deferred, flush as flushRuntime } from './helpers/battle-runtime';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
+import type { IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 import { ZC_BATTLE_EVENTS } from '../assets/script/app/zcds/application/ZCBattleEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -39,18 +40,24 @@ test('结算按钮显示、空白关闭被拦截，返回只调用一次，复�
     }
     const events: string[] = [];
     const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
-        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Label: class {}, SpriteFrame: class {} },
+        cc: { _decorator: decorator, Button: { EventType: { CLICK: 'click' } }, Label: class {}, Node: class {}, UITransform: class {}, SpriteFrame: class {} },
         '../../../framework/ui/PopupBase': { PopupBase: Base },
         '../../../framework/ui/PopupDef': { PopupCloseReason: { CloseButton: 2 } },
         // 返回按钮只派发 `ZCGameUiEvent.ReturnToMain`（视图不碰流程，回主界面由控制器决定）。
         '../../../framework/event/EventMgr': { EventMgr: { instance: { emit: (event: string) => events.push(event) } } },
         '../view/ZCGameHudEvents': { ZCGameUiEvent },
         './RunAwayPlayerItem': { RunAwayPlayerItem: class {} },
+        '../../HeadArt': {}, '../../common/SpriteFrameCache': {},
     });
     const popup = new GameRunAway();
     const listeners: Array<{ fn: Function; target: unknown }> = [];
     popup.returnButton = { node: { active: false, on: (_event: string, fn: Function, target: unknown) => listeners.push({ fn, target }) }, interactable: true };
     popup.titleLabel = { string: '' };
+    popup.panelTransform = { width: 650, setContentSize() {} };
+    popup.backgroundTransform = { width: 646, setContentSize() {} };
+    popup.header = { setPosition() {} };
+    popup.footerLabel = { node: { setPosition() {} } };
+    popup.returnButton.node.setPosition = () => {};
     // 按钮监听在 `onInit` 里绑（`PopupBase` 首次打开前调一次），夹具不走完整打开流程 ⇒ 手动调。
     popup.onInit();
     // `showReturn` 才是「有没有返回按钮」的开关（原先靠有没有 `summary` 推断，那个字段已随
@@ -78,6 +85,34 @@ test('神器结果弹吐司，模型与意图在运行控制器内处理', () =>
         EventMgr.instance.emit(ZCGameUiEvent.HexClick, -1);
         assert.equal(h.calls.filter(call => call.startsWith('tip:')).length, count);
     } finally { h.dispose(); }
+});
+
+test('统计面板四人共用量尺、自己标记，切回双人收起多余行并缩短面板', () => {
+    const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
+        cc: { _decorator: decorator, Button: {}, Label: class {}, Node: class {}, UITransform: class {} },
+        '../../../framework/ui/PopupBase': { PopupBase: class {} },
+        '../../../framework/ui/PopupDef': {}, '../../../framework/event/EventMgr': {},
+        '../view/ZCGameHudEvents': {}, './RunAwayPlayerItem': { RunAwayPlayerItem: class {} },
+        '../../HeadArt': {}, '../../common/SpriteFrameCache': {},
+    });
+    const panel = new GameRunAway();
+    const node = () => ({ active: true, y: 0, setPosition(_x: number, y: number) { this.y = y; } });
+    panel.panelTransform = { width: 650, height: 0, setContentSize(_w: number, h: number) { this.height = h; } };
+    panel.backgroundTransform = { width: 646, setContentSize() {} };
+    panel.header = node(); panel.footerLabel = { node: node() }; panel.returnButton = { node: node() };
+    const values: any[] = [];
+    panel.items = Array.from({ length: 4 }, (_, i) => ({ node: node(), refresh: (value: unknown) => { values[i] = value; } }));
+    const players = [ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3].map((owner, i) => ({ owner, name: `${i}`, headKey: '', damage: (i + 1) * 100, damageTaken: 400 - i * 100 }));
+    panel.refresh(players);
+    const fourHeight = panel.panelTransform.height;
+    assert.ok(panel.items.every((item: any) => item.node.active));
+    assert.ok(values.every(value => value.maxDamage === 400 && value.maxDamageTaken === 400));
+    assert.deepEqual(values.map(value => value.owner), players.map(player => player.owner));
+    for (const item of panel.items) assert.ok(Math.abs(item.node.y) + 56 < fourHeight / 2);
+    panel.refresh(players.slice(0, 2));
+    assert.equal(panel.panelTransform.height, fourHeight - 2 * 116);
+    assert.deepEqual(Array.from(panel.items, (item: any) => item.node.active), [true, true, false, false]);
+    assert.equal(values[0].maxDamage, 200);
 });
 test('胜负和平局自动结算一次，返回使用组合层导航端口', async () => {
     for (const status of ['victory', 'defeat', 'draw'] as const) {
@@ -120,10 +155,10 @@ test('主动撤退冻结业务，退出统一关闭统计和指南', async () =>
 });
 test('退出后迟到的统计和指南窗口立即关闭，旧意图不再导航', async () => {
     for (const event of [ZCGameUiEvent.OpenDamageStats, ZCGameUiEvent.OpenGuide]) {
-        const pending = deferred<IZCBattlePopup | null>(); let closed = 0;
+        const pending = deferred<IZCDamageStatsPopup | null>(); let closed = 0;
         const h = runtimeFixture({}, false, undefined, { openDamage: () => pending.promise, openGuide: () => pending.promise });
         EventMgr.instance.emit(event); await flushRuntime(); h.dispose();
-        pending.resolve({ close: () => closed++ }); await flushRuntime();
+        pending.resolve({ isOpen: true, refresh() {}, close: () => closed++ }); await flushRuntime();
         EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
         assert.equal(closed, 1); assert.equal(h.calls.includes('navigate'), false);
     }

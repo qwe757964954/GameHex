@@ -5,7 +5,7 @@ const controllers: BigMapController[] = [];
 afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapSlgRepository, type IBigMapSlgGateway } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
@@ -24,7 +24,7 @@ function harness(itemCounts?: () => ReadonlyMap<string, number>) {
         request(name, body) { calls.push({ name, body }); return reply(name, body); },
     };
     const repo = new BigMapSlgRepository(gateway, config, () => now);
-    const presenter = new BigMapPresenter({ config, storage: { read: () => { throw new Error('联机不能读取离线基地'); },
+    const presenter = new BigMapModel({ config, storage: { read: () => { throw new Error('联机不能读取离线基地'); },
         write: () => { writes += 1; } }, saveKey: 'slg-test', adventureChapter: () => 10,
         now: () => now, slgRepository: repo, itemCounts });
     const controller = new BigMapController(presenter, { context: createControllerContext(), slgRepository: repo, schedule: () => () => {} });
@@ -37,7 +37,7 @@ test('当前缺 itemId 列的资源表仍展示背包材料，战斗奖励到账
     const bag = new Map([['18501', 100], ['18502', 80], ['18503', 60], ['18504', 40], ['18505', 20]]);
     const h = harness(() => bag);
     await h.presenter.initializeSlg();
-    const assertBar = (presenter: BigMapPresenter, amounts: number[]) => {
+    const assertBar = (presenter: BigMapModel, amounts: number[]) => {
         const bar = presenter.resourceBar();
         assert.ok(bar.every((item) => item.amountKnown));
         assert.deepEqual(bar.map((item) => item.amount), amounts);

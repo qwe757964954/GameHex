@@ -146,13 +146,13 @@ test('「建筑顶部」基准 = 地块 prefab 里建筑图的上边缘（不许
     const node = raw[sprite.node.__id__];
     const uit = raw[node._components.find((c: { __id__: number }) => raw[c.__id__].__type__ === 'cc.UITransform').__id__];
 
-    // `applyBuildingScale` 是唯一写入口，静止态恒为 BUILDING_ICON_SCALE（0.72 × 1）。
+    // `applyBuildingScale` 是唯一写入口，静止态恒为 BUILDING_ICON_SCALE（2026-11-11 起 0.612 × 1）。
     const viewSrc = readFileSync('assets/script/app/zcds/view/ZCHexView.ts', 'utf8');
     const scale = Number(/const BUILDING_ICON_SCALE = ([\d.]+);/.exec(viewSrc)?.[1]);
     assert.ok(Number.isFinite(scale), '找不到 BUILDING_ICON_SCALE');
 
     const top = node._lpos.y + (uit._contentSize.height * scale) / 2;
-    // 允许 1px 以内的取整（48.05 → 48）。
+    // 允许 1px 以内的取整（43.19 → 43）。
     assert.ok(Math.abs(top - FLOAT_TEXT_GOLD_INCOME_TOP_PX) <= 1,
         `建筑顶在格心上方 ${top.toFixed(2)}px，常量却是 ${FLOAT_TEXT_GOLD_INCOME_TOP_PX}px`
         + ' —— 换建筑图或改 BUILDING_ICON_SCALE 后要重标');

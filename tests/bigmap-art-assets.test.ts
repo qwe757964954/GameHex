@@ -3,15 +3,17 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_UI_KEYS } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import { BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_UI_KEYS } from '../assets/script/app/bigmap/application/BigMapArtCatalog';
 import { assetPath } from './helpers/asset-paths';
 
 const root = assetPath(BIGMAP_CONCEPT_ROOT);
 
-test('26 张设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
+test('16 张在用设计切图与清单一致，建筑和 UI 保持真实透明通道', () => {
     const manifest = JSON.parse(readFileSync(join(root, 'manifest.json'), 'utf8'));
-    assert.equal(manifest.assets.length, 26);
-    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 26);
+    // 2026-11-12：9 张基地/世界旧概念图（barracks/farm/fortress/headquarters/ironworks/
+    // mutant_camp/sawmill/warehouse/water_tower）随新美术删库，清单同步裁到 16 条。
+    assert.equal(manifest.assets.length, 16);
+    assert.equal(new Set(manifest.assets.map((asset: { path: string }) => asset.path)).size, 16);
     for (const asset of manifest.assets) {
         const bytes = readFileSync(join(root, asset.path));
         assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256, asset.path);
@@ -23,9 +25,11 @@ test('26 张设计切图与清单一致，建筑和 UI 保持真实透明通道'
 });
 
 test('实际配置建筑与所有运行时图标均有资源，自动图集只放在最外层', () => {
-    for (const name of Object.values(BIGMAP_BUILDING_ART)) assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);
+    // 通用建筑兜底图放在 resources 下（不走 concept 目录）。
+    assert.equal(BIGMAP_BASE_FALLBACK_ART, 'image/buildings/camp_outpost');
     for (const name of BIGMAP_UI_KEYS) assert.ok(existsSync(join(root, 'ui', `${name}.png`)), name);
-    for (const name of ['grain', 'wood', 'iron', 'coin', 'fortress', 'mutant_camp']) {
+    // 剩下的 7 张 sprites：4 张资源图标 + 3 张基地/地形（建造中、石头、草）。
+    for (const name of ['grain', 'wood', 'iron', 'coin', 'construction', 'rocks', 'grass']) {
         assert.ok(existsSync(join(root, 'sprites', `${name}.png`)), name);
     }
     // 自动图集只能贴在 bundle 的 `image/` 根上（`bigmap` 分包内路径，2026-11-04 上提后少一层 `bigmap`）。

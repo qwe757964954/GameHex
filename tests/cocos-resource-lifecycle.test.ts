@@ -25,13 +25,48 @@ class Asset {
     decRef() { this.refs--; if (this.refs === 0) this.isValid = false; return this; }
 }
 
+test('UIResources 释放实际缓存的资源，battle bundle 不误走 resources.release', async () => {
+    const common = new Asset(), battle = new Asset();
+    const released: Asset[] = [];
+    const cc = { Prefab: Asset,
+        resources: { load: (_path: string, _type: unknown, done: Function) => done(null, common),
+            release: () => assert.fail('不能按 resources 路径释放其他 bundle 资源') },
+        assetManager: { getBundle: () => ({ load: (_path: string, _type: unknown, done: Function) => done(null, battle) }),
+            releaseAsset: (asset: Asset) => released.push(asset) } };
+    const { UIResources } = load('assets/script/framework/ui/UIResources.ts', {
+        cc,
+        '../../core/asset/BundleCatalog': { bundleForPath: (path: string) => path.startsWith('ui/game/') ? 'battle' : undefined },
+        '../../platform/cocos/AssetBundleLoader': load('assets/script/platform/cocos/AssetBundleLoader.ts', {
+            cc, '../hotupdate/CocosBundleRegistry': { CocosBundleRegistry: { resolve: () => undefined } },
+        }),
+    });
+    // `loadPrefab` 现在统一经 `loadAssetBundle`（Promise），回调一定异步 —— 不能像以前那样
+    // 同步调用后立刻断言缓存。
+    const loadPrefab = (path: string): Promise<void> => new Promise((resolve, reject) => {
+        UIResources.loadPrefab(path, (error: Error | null) => error ? reject(error) : resolve());
+    });
+    await loadPrefab('common/Test');
+    await loadPrefab('game/Test');
+    assert.equal(UIResources.cacheSize, 2);
+    UIResources.releasePrefab('game/Test');
+    assert.deepEqual(released, [battle]);
+    UIResources.releasePrefab('game/Test');
+    UIResources.releaseAll();
+    assert.deepEqual(released, [battle, common]);
+    assert.equal(UIResources.cacheSize, 0);
+});
+
 test('流程资源引用保留到延迟节点销毁和绘制结束，批量释放且取消后的迟到资源也释放', async () => {
     const frame = new Asset(), events: Array<() => void> = [];
+    const cc = { Asset, SpriteFrame: class SpriteFrame {}, resources: { load: (_path: string, _type: unknown, done: Function) => done(null, frame) },
+        assetManager: { getBundle: () => undefined },
+        Director: { EVENT_AFTER_DRAW: 'after-draw' }, director: { once: (event: string, fn: () => void) => { assert.equal(event, 'after-draw'); events.push(fn); } } };
     const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
-        cc: { Asset, SpriteFrame: class SpriteFrame {}, resources: { load: (_path: string, _type: unknown, done: Function) => done(null, frame) },
-            Director: { EVENT_AFTER_DRAW: 'after-draw' }, director: { once: (event: string, fn: () => void) => { assert.equal(event, 'after-draw'); events.push(fn); } } },
+        cc,
         '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
-        '../hotupdate/CocosBundleRegistry': {},
+        './AssetBundleLoader': load('assets/script/platform/cocos/AssetBundleLoader.ts', {
+            cc, '../hotupdate/CocosBundleRegistry': { CocosBundleRegistry: { resolve: () => undefined } },
+        }),
         './SpriteFrameGuard': { reportDeadSpriteFrames: () => {} },
     });
     const service = new CocosAssetService(), scope = new ResourceScope('battle');
@@ -81,7 +116,6 @@ test('战斗流程先关闭视图再销毁组件和释放作用域，不等待 C
         '../zcds/ZCGame': { ZCGame: class ZCGame { initialize() {} } },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: class { async prepare() { return { baseMatchConfig: { map: {}, enemyDeck: [] } }; } } },
         '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
-        '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
         '../zcds/model/ZCMatchConfig': { captureZCMatchConfig: (config: unknown) => config ?? { map: {}, enemyDeck: [] } },
         '../zcds/model/ZCRankBoard': { buildSeatProfiles: () => new Map() },
         '../territory/model/TerritorySaveStore': { TerritorySaveStore: { resolveBattle() {} } },
@@ -112,7 +146,6 @@ test('流程管理器能拿到对局控制器（只读出口）；不在对局�
         '../zcds/ZCGame': { ZCGame: class ZCGame { initialize() {} } },
         '../zcds/application/ZCGameLoader': { ZCGameLoader: class { async prepare() { return { baseMatchConfig: { map: {}, enemyDeck: [] } }; } } },
         '../zcds/application/ZCClientCombatConfig': { buildZCClientCombatConfig: (config: unknown) => ({ config, skipped: [] }) },
-        '../zcds/application/ZCPveCombatConfig': { buildZCPveEnemyDecks: () => ({}) },
         '../zcds/model/ZCMatchConfig': { captureZCMatchConfig: (config: unknown) => config ?? { map: {}, enemyDeck: [] } },
         '../zcds/model/ZCRankBoard': { buildSeatProfiles: () => new Map() },
         '../territory/application/TerritorySaveStoreAdapter': { createTerritorySaveStore: () => ({ resolveBattle() {} }) },
@@ -140,14 +173,17 @@ test('流程管理器能拿到对局控制器（只读出口）；不在对局�
 test('公共预下载用标准下载节奏保留低优先级，不继承每帧2项节流；取消不派发', async () => {
     const requests: unknown[] = [];
     const presets: unknown[] = [];
+    const cc = { SpriteFrame: class SpriteFrame {}, resources: { name: 'resources', load() { throw new Error('不能解析'); } },
+        assetManager: { preloadAny: (request: unknown, optionsOrDone: { preset: string } | Function, done?: Function) => {
+            requests.push(request); presets.push(typeof optionsOrDone === 'function' ? undefined : optionsOrDone.preset);
+            (typeof optionsOrDone === 'function' ? optionsOrDone : done!)(null, []);
+        } } };
     const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
-        cc: { SpriteFrame: class SpriteFrame {}, resources: { name: 'resources', load() { throw new Error('不能解析'); } },
-            assetManager: { preloadAny: (request: unknown, optionsOrDone: { preset: string } | Function, done?: Function) => {
-                requests.push(request); presets.push(typeof optionsOrDone === 'function' ? undefined : optionsOrDone.preset);
-                (typeof optionsOrDone === 'function' ? optionsOrDone : done!)(null, []);
-            } } },
+        cc,
         '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
-        '../hotupdate/CocosBundleRegistry': {},
+        './AssetBundleLoader': load('assets/script/platform/cocos/AssetBundleLoader.ts', {
+            cc, '../hotupdate/CocosBundleRegistry': { CocosBundleRegistry: { resolve: () => undefined } },
+        }),
         './SpriteFrameGuard': { reportDeadSpriteFrames: () => {} },
     });
     const service = new CocosAssetService();
@@ -163,16 +199,20 @@ test('公共预下载用标准下载节奏保留低优先级，不继承每帧2�
 
 test('Cocos 适配器通过公开 loadAny 透传优先级和目录数组语义', async () => {
     const requests: object[] = [];
+    const cc = { Asset, SpriteFrame: class SpriteFrame {}, resources: { name: 'resources' }, assetManager: {
+        loadAny: (request: { dir?: string }, optionsOrDone: Function | object, done?: Function) => {
+            requests.push(request);
+            if (request.dir) { assert.deepEqual(Object.keys(optionsOrDone), ['__outputAsArray__']); done!(null, []); }
+            else (optionsOrDone as Function)(null, new Asset());
+        },
+        preloadAny: (request: object, _options: unknown, done: Function) => { requests.push(request); done(null); },
+    } };
     const { CocosAssetService } = load('assets/script/platform/cocos/CocosAssetService.ts', {
-        cc: { Asset, SpriteFrame: class SpriteFrame {}, resources: { name: 'resources' }, assetManager: {
-            loadAny: (request: { dir?: string }, optionsOrDone: Function | object, done?: Function) => {
-                requests.push(request);
-                if (request.dir) { assert.deepEqual(Object.keys(optionsOrDone), ['__outputAsArray__']); done!(null, []); }
-                else (optionsOrDone as Function)(null, new Asset());
-            },
-            preloadAny: (request: object, _options: unknown, done: Function) => { requests.push(request); done(null); },
-        } },
-        '../../core/asset/BundleCatalog': { bundleForPath: () => undefined }, '../hotupdate/CocosBundleRegistry': {},
+        cc,
+        '../../core/asset/BundleCatalog': { bundleForPath: () => undefined },
+        './AssetBundleLoader': load('assets/script/platform/cocos/AssetBundleLoader.ts', {
+            cc, '../hotupdate/CocosBundleRegistry': { CocosBundleRegistry: { resolve: () => undefined } },
+        }),
         './SpriteFrameGuard': { reportDeadSpriteFrames: () => {} },
     });
     const service = new CocosAssetService();

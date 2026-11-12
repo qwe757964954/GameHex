@@ -6,8 +6,8 @@
  *   - 六维数值 ← `computeDetailStats`（成长公式与战斗层同源，见 `CardDetailStats`）；
  *   - 技能链格子 ← 卡表 `skillIds` 顺序，格子名取技能名，角标 = 首档解锁英雄等级，
  *     锁定态 = 当前英雄等级不够；表里没配到的技能占「未解锁」空格；
- *   - 里程碑行 ← 每个技能**除首档外**的每一档（`unlockHeroLevel > 0`），
- *     按 `Lv.X 解锁描述` 升序 —— 与效果图「Lv.3 / Lv.6 / Lv.9 / Lv.12」一致。
+ *   - 里程碑行 ← 每个技能的**每一档**（含首档），按解锁等级升序，行内带技能名；
+ *   - 暴击伤害文案 ← `CardDetailCritDamage`（`pvpSkillPlan` 的 109001 链，取目标等级那一行）。
  */
 
 import type { ZCArmySkill, ZCArmySkillTable } from './CardSkillList';
@@ -43,8 +43,10 @@ export interface CardDetailSkillSlot {
     readonly empty: boolean;
 }
 
-/** 里程碑一行（某个技能档的解锁说明）。 */
+/** 里程碑一行（某个技能某一档的解锁说明）。 */
 export interface CardDetailMilestone {
+    /** 该档所属技能名（表里没配名字时为空串，视图只显示描述）。 */
+    readonly name: string;
     readonly unlockLevel: number;
     readonly desc: string;
     readonly unlocked: boolean;
@@ -55,6 +57,8 @@ export interface CardDetailPresentation {
     readonly stats: readonly CardDetailStatLine[];
     /** 当前等级的单卡战力文案，与详情攻击属性同源。 */
     readonly powerText: string;
+    /** 升到下一级新增的「全队暴击伤害」（百分点，1 = +1%）；无配置 / 已满级为 0。 */
+    readonly critDamageGain: number;
     readonly chain: readonly CardDetailSkillSlot[];
     readonly milestones: readonly CardDetailMilestone[];
 }
@@ -93,7 +97,13 @@ export function buildDetailStats(
     ];
 }
 
-/** 技能链：按卡表顺序，最多 5 格（效果图 5 格；超出的技能里程碑里仍能看到）。 */
+/**
+ * 技能链：按卡表顺序出格，**最多 5 格**（超出的技能里程碑里仍能看到）。
+ *
+ * 2026-11-11 起不再补空占位格 —— 每张卡 `pvpCard.skillList` 都只有 4 个技能，
+ * 补到 5 格会多出一个永远「未解锁」的假技能。表里查不到的技能 id 仍占一格（保持与卡表同序），
+ * 由视图按 `empty` 画成锁定态。
+ */
 export const DETAIL_CHAIN_SLOTS = 5;
 
 export function buildDetailChain(
@@ -118,13 +128,19 @@ export function buildDetailChain(
             empty: false,
         });
     }
-    while (slots.length < DETAIL_CHAIN_SLOTS) {
-        slots.push({ skillId: 0, name: '', unlockLevel: 0, unlocked: false, empty: true });
-    }
     return slots;
 }
 
-/** 里程碑：所有技能的非首档（unlockHeroLevel > 0），按解锁等级升序。 */
+/**
+ * 里程碑：**卡表里每个技能的每一档**（含首档），按解锁等级升序。
+ *
+ * 2026-11-10 起不再跳过首档 —— 首档（`unlockHeroLevel` 常为 0 / 3 / 6）才是玩家已经拿到的
+ * 那几条，跳掉就会出现「技能格上有名字、描述栏里查无此技能」。同等级同描述的不同技能各留一行
+ * （描述栏要囊括全部技能），只有同一技能的同一档重复出现在 `skillIds` 里才去重。
+ *
+ * 表里 `desc` 整块没填的技能（`armySkillLevelUp` 有 24 个技能 72 行是这样）**整档不出列**：
+ * 玩家看到的是「18级 暂无描述」这种空条，不如不显示（2026-11-10 需求）。
+ */
 export function buildDetailMilestones(
     table: ZCArmySkillTable,
     skillIds: readonly number[],
@@ -133,15 +149,16 @@ export function buildDetailMilestones(
     const milestones: CardDetailMilestone[] = [];
     const seen = new Set<string>();
     for (const rawId of skillIds) {
-        const skill = table.get(Number(rawId));
+        const skillId = Number(rawId);
+        const skill = table.get(skillId);
         if (!skill) continue;
-        for (let i = 1; i < skill.levels.length; i++) {
-            const row = skill.levels[i];
-            if (row.unlockHeroLevel <= 0) continue;
-            const key = `${row.unlockHeroLevel}|${row.desc}`;
+        for (const row of skill.levels) {
+            if (!String(row.desc ?? '').trim()) continue;
+            const key = `${skillId}|${row.level}`;
             if (seen.has(key)) continue;
             seen.add(key);
             milestones.push({
+                name: skill.name,
                 unlockLevel: row.unlockHeroLevel,
                 desc: row.desc,
                 unlocked: Math.floor(Number(heroLevel) || 0) >= row.unlockHeroLevel,
@@ -149,6 +166,24 @@ export function buildDetailMilestones(
         }
     }
     return milestones.sort((a, b) => a.unlockLevel - b.unlockLevel);
+}
+
+/**
+ * 描述栏打开时的默认落点（`milestones` 已按解锁等级升序）。
+ *
+ * 从**最新解锁的那一档**开始看：它下面是「接下来能拿的」，上面是已经过去的档位（仍可上滚）。
+ * 一档都没解锁时落在第一行；全部解锁时退一格，让最后两档同屏 —— 与 2026-11-10 的默认窗口口径一致，
+ * 区别只是**不再删行**，历史档位始终能滚回去看。
+ */
+export function milestoneAnchorIndex(milestones: readonly CardDetailMilestone[]): number {
+    const total = milestones.length;
+    if (total === 0) return 0;
+    let lastUnlocked = -1;
+    for (let i = total - 1; i >= 0; i--) {
+        if (milestones[i].unlocked) { lastUnlocked = i; break; }
+    }
+    if (lastUnlocked < 0) return 0;
+    return lastUnlocked === total - 1 ? Math.max(0, total - 2) : lastUnlocked;
 }
 
 /** `pvpCard` 原始行 → 详情属性的基础值（缺列按 0）。 */

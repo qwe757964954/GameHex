@@ -22,6 +22,8 @@
 | 传说卡出场横幅（金卡 tier 4） | `ZCGameLegendBanner.prefab` / `legendRoleProgress`、`legendRoleEase` | `tests/zcds-legend-banner.test.ts` |
 | **战斗技能特效：锚点 / 层级 / 飞行段 / 朝向**（2026-11-02） | `ZCCombatEffectPlacement.ts` / `ZCCombatEffectFlight.ts`（均按 prefab 路径配）/ `ZCCombatEffectView.render` | `tests/zcds-combat-effect-placement.test.ts`、`tests/zcds-combat-effect-flight.test.ts` |
 | **冲刺（运动霸「拳击冲撞」）**（2026-11-02 接线） | `ZCUnitSystem`（`chargeSpeedScale` → `speedScale` + `unit.charging`）/ `ZCUnitTargeting.chargeSpeedScale` / `ZCUnitView` 动作切换 | `tests/zcds-charge.test.ts` |
+| **技能释放的触发范围（待触发闸门）**（2026-11-11，见 §13） | `ZCUnitTargeting.hasTargetInAttackRange` / `attackReachOf` → `IZCSkillTriggerContext.inAttackRange` / `attackReachOf` → `ZCSkillTriggerSystem.tick` | `tests/zcds-skill-trigger-range.test.ts`、`tests/zcds-skill-trigger.test.ts` |
+| **五雷轰顶 `bolt_strike` + 磁电冲击 `self_aura`（累计普攻）+ 软控麻痹 `numb`**（2026-11-11，见 §14） | `ZCSkillTriggerSystem.applyBoltStrike` / `applySelfAura`（`auraEvery`）/ `ZCAttackResolutionSystem.castBoltLine` / `ZCBoltStrikeFx.ts` / `ZCStatusSystem.attackBlockedOf` + `ZCUnitSystem.startAttack` | `tests/zcds-magdi-mushroom.test.ts`、`tests/zcds-skill-trigger.test.ts` |
 | 「冒险」领地页与台面中心对齐 | `TerritoryPresenter.ts` / `TerritoryMapView.cellCenter`、`applyIconPlacement` | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts` |
 | 敌方单位顶点色置灰 | `ZCUnitView.applyVisualTint` | `tests/zcds-unit-view-render.test.ts` |
 | 自选主城（选择基地模式） | `ZCSpawnSelection.defaultHexFor`、`isPlacing` / `borrowSpawnConfirmButton` | `tests/zcds-spawn-base-confirm.test.ts` |
@@ -43,13 +45,31 @@
 | **「章节选择」行排版**（金边即底框 / 区块留白 / 挂锁 ×1.3 / 序号块与完成度块缩 90%+上抬 / 章节名居中 / 挂锁两轴跟随；2026-11-03/04 五轮） | `ChapterSelectPanel.prefab` 的 `CurrentRing` · `NumBlock` · `StatusBlock` · `LockIcon` · `NameLabel` 几何 / `main/ChapterSelectItem.render` | `tests/chapter-select.test.ts` |
 | **「章节选择」完成度 = 已通关格子 / 章节全部格子**（格子按区域关整片算通关、资源据点不扩散；空格不算；与金牌判据解耦；2026-11-05） | `model/ChapterSelectRows.chapterPercentOf`（+ `passedCellSet`）/ `IChapterSelectMapInfo.areaGroups` / `ChapterSelectLoader.buildAreaGroups`（与 `TerritoryProgress.areaPeers` 同源） | `tests/chapter-select.test.ts` |
 | **战斗宝箱入口开启条件**（pvp 20001 通关才显示 + `0→1.15→1` 生成动画 + `Cell0..Cell3` 同进同出；2026-11-03） | `open.json` `refId=701`「战斗掉落宝箱」的 `visibleCondition` / `main/ChestEntryGate.ts` / `main/BattleLevelPassed.ts` / `MainPage.onLoad`、`applyChestEntryGate`、`setChestCellsVisible` | `tests/chest-entry-gate.test.ts` |
+| **快速寻敌开启条件**（激活第 1 章第 4 关地块才出现、解锁后全章常驻；`open` `refId=702` + 条件类型 `territoryLevelActivated`；2026-11-09） | `open` `refId=702` 的 `visibleCondition` / `main/QuickFindGate.ts` / `main/ChestEntryGate.isTerritoryLevelActivatedInTerritory`、`activatedTerritoryLevelIds` / `model/TerritorySaveStore.loadActivatedLevels`、`markLevelsActivated` / `MainPage.applyQuickFindGate`、`rememberActivatedTerritoryLevels`、`refreshOpenGates` | `tests/quick-find-gate.test.ts`、`tests/main-quick-find.test.ts`、`tests/territory-save-store.test.ts` |
+| **未解锁 → 可激活的 1s 过渡**（锁 `1→1.2→0` + 银币数字 `0→1.15→1`，两段同时起手同时收工；2026-11-09） | `model/TerritoryUnlockTransition.territoryUnlockLockScale / territoryUnlockPriceScale` / `TerritoryMapView.applyHexLock`（记「锁刚消失」）、`startUnlockTransitionIfNeeded`、`stepUnlockTransitions`、`applyUnlockTransitionFrame` / `TerritoryStationView.setConditionSpawnScale`、`applyCaptionPlacement` | `tests/territory-unlock-transition.test.ts` |
+| **未解锁地块整块置灰**（锁住 ⇒ `img_land_01_gray`，前置满足那帧换回泥土 + 0.36s 换色；整片灰按**逐格** `lockBlockedCells`、锁仍按节点收敛；2026-11-10） | `TerritoryPageAssets.tileGrey` / `TerritoryMapView.paintHexes`（`greyCell`）、`isStructurallyBlocked` | `tests/territory-tile-frames.test.ts` |
+| **固定宝箱格可激活 ⇒ 价格行之上加一颗宝箱 icon**（`icon_baoxiang` 58×45，宝箱在上、`银币+数字`在下、整块居中；无宝箱时零偏移；未解锁仍只画锁；2026-11-10） | `model/TerritoryConditionBadge.territoryConditionBlockLayout` / `TerritoryStationView.applyConditionChest`、`applyCaptionPlacement`、`readCaptionIconHeight` / `TerritoryMapView.stationRenderOf`（`conditionChestIcon`，只给 `fixedResource`）/ `TerritoryPageAssets.chestIcon` | `tests/territory-condition-chest.test.ts` |
+| **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
+| **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
+| **宝箱详情主按钮加速态**（绿底 `btn_speed_up` + 播放 icon `chest_bolt`；解锁 / 开启仍黄色；**点解锁后整颗按钮同步刷新**，不再只刷倒计时；2026-11-11） | `ChestDetailPanel.applyOpenButton`（唯一写入口）/ `updateCountdown(秒, 计时中, {caption, speedUp})` / `MainPage.chestDetailContentOf`（`openSpeedUp`）、`refreshChestDetailCountdown`、`loadTreasureQueue`（回调改 `refreshTreasureDisplay`）/ `tools/gen_chest_speed_up_button.py`、`tools/patch_chest_detail_speed_up_prefab.py` | `tests/chest-detail-speed-up.test.ts`、`tests/chest-detail-panel.test.ts`、`tests/chest-detail-lifecycle.test.ts` |
+| **预告关卡红色编号气泡 + 异步据点解锁即直开**（预告整关 footprint 只给**虚影承载格**挂一颗红 `frame_02`；气泡按虚影帧抬高，未解锁仍是锁/价格；`asyncPvp` 并入「花银币解锁那一次直开」，已解锁仍弹侦查面板；2026-11-11） | `TerritoryMapView.stationRenderOf`（`isPreviewBattleSite` / `previewBubble` / `levelBubbleAnchorFrame`）/ `TerritoryStationView.renderLevelBubble`、`previewAnchorScale`、`applyLevelBubblePosition` / `TerritoryModel.selectSite`、`isAutoStartSite` / `tools/patch_territory_preview_bubble.py` | `tests/territory-preview-bubble.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-boss-and-random-building.test.ts`、`tests/territory-chest-bubble.test.ts` |
 | **章节通关判据 = 通过本章最后一个首领关**（异步据点不参与；无首领退回全占领；2026-11-04） | `model/TerritoryStageBinding.chapterFinalBossCell`（取 `stage.stage` 最大，同级比 `levelId` 再比 `cellId`）/ `TerritoryModel.chapterCompletion`（`bossCellId` + `progress.isAreaPassed`）/ `model/ChapterSelectRows.chapterClearedOf` / `ChapterSelectLoader.finalBossLevelIdOf`（`levelMod === 2`）与 `finalBossCells` | `tests/territory-stage-binding.test.ts`、`tests/territory-presenter.test.ts`、`tests/chapter-select.test.ts` |
-| **整章云散回收 + 章节切换镜头 + 散雾只给首次通关演**（模型只发 `chapterSwitch` 命令 → 页面压住换图保住云散 → `cover/wait/reveal` 三段 + 只认按钮来源；散雾判**边沿**（`chapterClearPending`）不判电平；2026-11-04 / 11-05） | `model/TerritoryChapterSwitch`（四段时长 / `lead` 相机先行 / `rise` / `sink` / `reveal` 曲线）/ `model/TerritoryCloud.territoryCloudClearAction`（`none` / `animate` / `instant`）/ `TerritoryModel.noteChapterJustCleared`、`emitStateChange`（发一拍就消费）/ `MainTerritoryMap.beginChapterSwitch`、`stepChapterSwitch`（`lead`/`cover`/`wait`/`reveal`）、`writeChapterSwitchLead`、`renderAll`（`chapterSwapPending`）/ `TerritoryMapView.beginChapterSwitch`、`setChapterSwitchOffset`、`syncClouds` / `TerritoryCloudView.setChapterCleared(cleared, animate)`、`dismissFillNow`、`dismissing` | `tests/territory-chapter-switch.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-battle-prelude.test.ts` |
+| **整章云散回收 + 章节切换镜头 + 散雾只给首次通关演**（模型只发 `chapterSwitch` 命令 → 页面压住换图保住云散 → `lead/cover/wait/reveal` 四段；**模型命令只认按钮来源**，首通自动推进由页面补起同一段转场（§3.40）；散雾主判**边沿** `chapterClearPending`、辅以同章 `chapterCleared false→true` 电平兜底，**换章那一帧不认**；2026-11-04 / 11-05 / 11-11） | `model/TerritoryChapterSwitch`（四段时长 / `lead` 相机先行 / `rise` / `sink` / `reveal` 曲线）/ `model/TerritoryCloud.territoryCloudClearAction`（`none` / `animate` / `instant`）/ `TerritoryModel.noteChapterJustCleared`、`emitStateChange`（发一拍就消费）/ `MainTerritoryMap.beginChapterSwitch`、`stepChapterSwitch`（`lead`/`cover`/`wait`/`reveal`）、`writeChapterSwitchLead`、`renderAll`（`chapterSwapPending` / `firstClearEdge`）/ `TerritoryMapView.beginChapterSwitch`、`setChapterSwitchOffset`、`syncClouds` / `TerritoryCloudView.setChapterCleared(cleared, animate)`、`dismissFillNow`、`dismissing` | `tests/territory-chapter-switch.test.ts`、`tests/territory-cloud.test.ts`、`tests/territory-battle-prelude.test.ts`、`tests/territory-chapter-clear-followup.test.ts` |
+| 🔴 **SVN 合并后「章节通关动画丢失」+「第 2 章云层贴地块」**（首通编排：边沿丢了也能靠同章电平兜底 → 云散演完 → **补起切换转场** → 云盖满才画新章；云层 15px 间隔按**全量格心 × 所有已揭示格**描，不再只按 `cloudCells`；2026-11-11，见 §3.40） | `MainTerritoryMap.renderAll`（`firstClearEdge` / `clearSignal` / `chapterClearFollowup` / `chapterClearSwitch`）、`update`（`chapterSwapPending` ①-a/b/c）、`beginChapterSwitch(..., deferRender)` / `TerritoryMapView.syncClouds`（`setKeepOutPoints(input.layout.points)`）/ `TerritoryCloudView.setKeepOutPoints`、`forEachKeepOutCell` / `tools/patch_chapter_clear_followup.py`、`tools/patch_territory_cloud_gap.py` | `tests/territory-chapter-clear-followup.test.ts`、`tests/territory-cloud.test.ts`（4 条挡云间隔）、`tests/territory-chapter-switch.test.ts` |
+| 🔴 **飞舞的奖励图标画在所有 UI 之上**（页面内 `TerritoryOverlay` 盖不过 `BottomHud` 聊天框与 `BottomNav` 底栏 ⇒ 粒子层挂 `MainRoot` 最后一位；**页面只找根、视图建层**，不许页面 `new Node`；只迁「飞向英雄按钮」那批，格心喷发与开箱表演原层不动；2026-11-11，见 §3.41） | `MainTerritoryMap.rewardFxRoot()`（找 `MainTabHost.navBar.parent`） / `TerritoryMapView.mountRewardFxLayer`、`disposeRewardFxLayer`、`setRewardFxHost`、`rewardFxLayer`、`cellPointInNode` / `tools/patch_territory_reward_fx_layer.py` | `tests/territory-reward-fx-layer.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-battle-intro.test.ts` |
+| 🔴 **SVN 合并后「未通关预告气泡变回蓝色」**（根因**不在**判据 / 路径 / 资源：`TerritoryPageAssets.loadFrame` 用 `assets.has()` 查 bundle 索引、查不到就静默 `return null` ⇒ `levelBubblePendingFrame = null` ⇒ `stationRenderOf` 两条未通关分支一起回退蓝 `frame_03`；改为**只由 `load` 判加载**、`has` 降级成失败后的日志；旧夹具一律 `has: () => true`，所以 12 条专项全绿也盖不住实机；2026-11-11，见 §3.42） | `TerritoryPageAssets.loadFrame` / `common/MapMarkerBadge.MAP_MARKER_BUBBLE_FRAME_{PASSED,PENDING}_PATH` / `TerritoryMapView.stationRenderOf`（`previewBubble` 与 `claimed` 两条分支） | `tests/territory-bubble-red-frame.test.ts`、`tests/territory-preview-bubble.test.ts`、`tests/territory-random-resource-render.test.ts` |
 | **铺满背景的雾（铺满层）**：盖住"没有内容"的空格与内容层那圈留白；换章那一帧必须**当场重建**（2026-10-26 / 11-06） | `model/TerritoryCloud.territoryCloudFillPoints` / `TerritoryCloudView.setFillArea`、`setFillOccupied`（判据是 `fillAreaReady`，**不是** `fillKey`）、`rebuildFill`、`applyFillActive` / `TerritoryMapView.syncContentSize`、`syncClouds`、`syncGrid`（`reset()`） | `tests/territory-cloud.test.ts` |
 | **塔防 BOSS 波识别**（`defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS；客户端 JSON 必须含该列，缺列时按「每组最后一波」兜底，2026-11-07） | `model/TerritoryCampaignConfig.projectDefenceWaves`（→ `TerritoryCampaignWave.isBoss`）/ `ZCGameModel.defenceBossWaveIndex`、`isBossWave`、`ZCPveDefenceWave.isBoss` | `tests/territory-campaign-config.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | **塔防胜负只认「BOSS 已被击败」**（中间波清空不算赢；拆 BOSS 建筑提前触发的跳末波逻辑保持不变，2026-11-07） | `ZCGameModel.defenceBossState`（账本空时按场上同卡单位兜底）→ `ZCOutcomeSystem.checkOutcome(state, context, nextWaveIndex, defenceBoss)` | `tests/zcds-outcome-system.test.ts`、`tests/zcds-pve-defence.test.ts` |
-| **塔防中间 UI 大血条只在 BOSS 波显示**（普通小怪只有头顶血条，2026-11-07） | `ZCGame.renderBossPanel`（判 `progress.currentWaveIsBoss`）/ `ZCHudBossPanel` | `tests/zcds-pve-defence-hud.test.ts` |
-| **NPC 翻地块限速不超过 `levelInfo.openGrideTime`**（「关卡翻地快频率(s)」；`0` = 不受限，2026-11-07） | `ZCGameModel.aiDevelopIntervalSeconds = max(rules.enemyAiIntervalSeconds, openGrideTime)` / `TerritoryCampaignStage.openGrideTime` → `ITerritoryBattleNavParams` → `ZCBattleEntryBuilder` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts` |
+| **塔防波次面板常驻 + 普通波与 BOSS 波均显示头像和总血条**（波次徽标从第一波起一直挂着；当前波生成后显示头像、名字和总血条，2026-11-10） | `ZCGame.renderBossPanel`（有 `defenceWaveProgress` 就建面板，按 `progress.currentWaveId !== null` 调 `setBossBarVisible`）/ `ZCHudBossPanel.setBossBarVisible`、`formatZCDefenceWaveText`（`spawnedWaves` 钳到 1 起） | `tests/zcds-pve-defence-hud.test.ts` |
+| **塔防局 NPC 也翻地块**（靠翻地解锁新的怪物卡；节奏仍受 `openGrideTime` 约束，2026-11-09） | `ZCGameModel.advance`（AI 节拍不再按 `pveDefence` 跳过）/ `runEnemyAI`、`aiDevelopIntervalSeconds` | `tests/zcds-pve-defence.test.ts` |
+| **出怪表的「怪物体型」要生效**（`defenceModWave.monsterSize` 当模型缩放倍率：1 普通 / 2 BOSS，缺省不缩放，封顶 2.5；2026-11-09） | `ZCGameModel.defenceMonsterScale` → 出怪时写 `unit.gateScale`（视图/头顶血条/兜底体型都乘它）/ 链路 `TerritoryCampaignWave.monsterSize` → `ZCPveDefenceWave.monsterSize` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts`、`tests/zcds-client-combat-config.test.ts` |
+| **塔防局收起玩家基础信息**（名字 / 头像 / 兵力三件套不画，buff 位保留，2026-11-09） | `ZCGameHUDView.hidePlayerBasicInfo`（`defence !== null` 置位）→ `ZCGameHudPlayerRow.render`（`basicInfoVisible`） | `tests/zcds-hud-dead-avatar-tint.test.ts` |
+| **`levelInfo.openGrideTime` = NPC 两次翻地块的最小间隔**（「关卡翻地快频率(s)」；**计时从第一次翻格之后开始**，首格不被拖后；下限 **1 秒**（`ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`，2026-11-11 起不再用全局 2.8s 当下限，否则填 1~2.7 秒会被静默抬回去）；`0`/缺省 = 不额外限速、按全局 `enemyAiIntervalSeconds`；**只压 NPC**，玩家不受影响） | `ZCGameModel.aiDevelopIntervalSeconds` / `restoreOrCreateState` 预置 `state.aiClock`；链路 `TerritoryCampaignStage.openGrideTime` → `ITerritoryBattleNavParams` → `ZCBattleEntryBuilder` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts` |
+| 🔴 **`openGrideTime` 与领地格子的「探索中」时长无关**（2026-11-11 拆开）：后者只认地图配置的 `site.unlock.exploreSeconds`（`TerritoryMapConfig`，缺省 2 秒，`TerritoryProgress` 算 `finishesAt`）。旧实现把同一列也喂给 `TerritoryCampaignStage.exploreSeconds` ⇒「把 NPC 调慢到 10 秒，通关后开那一格也要等 10 秒」 | `TerritoryModel.loadChapter` 的 `unlock` 覆盖只留 `staminaCost`；`TerritoryCampaignStage` 已删 `exploreSeconds` | `tests/territory-campaign-config.test.ts`（`'exploreSeconds' in stage === false`）、`tests/territory-map-config.test.ts` |
+| **`levelInfo.gradeProModifier` 只给 NPC 加权抽卡**（乘品质权重后再归一；玩家恒走 `pvpTile` 原表，2026-11-09） | `applyPvpRarityModifier`（**只在非空品级内部归一**，`empty` 空手率不变；表头原话「抽取概率*系数，同时其他品阶均等变化」= 未加权品级按同一比例缩）→ `drawPvpTile(..., seatRules)`；席位判定在 `ZCGameModel.buildDevelopmentContext().drawRulesOf`（`owner === Player ? null : { rarityModifier, goldPity: false }`）。链路 `TerritoryCampaignStage.gradeProModifier` → `ITerritoryBattleNavParams` → `ZCGameEntry.pve` → `ZCMatchConfig.gradeProModifier` | `tests/zcds-npc-rarity-modifier.test.ts`、`tests/territory-campaign-config.test.ts` |
+| **NPC 不参与金色保底**（「全类型随机」连续未出金的兜底只给玩家；2026-11-09） | `ZCPvpSeatDrawRules.goldPity = false`（`drawPvpTile` 里 `seatRules?.goldPity !== false` 才判保底）。保底绕过 `rarityWeights`，给 AI 等于「隔固定次数必送金卡」，会把关卡难度拉平 | `tests/zcds-npc-rarity-modifier.test.ts` |
+| **`gradeProModifier` 是「乘系数」不是「目标占比」**：某品级占比涨跌取决于它的系数 vs **其余品级的加权平均**（10003 门槛 2.6；表里 2026-11-09 已把 green 从 2 提到 3 才跨过门槛，绿 50%→53.57%、蓝 40%→42.86%、金 2%→0.71%） | 同前两行；门槛算法钉在测试里，别把「系数配了 2 倍占比却降了」当回归 bug 改公式 | `tests/zcds-npc-rarity-modifier.test.ts` |
 | **塔防关 NPC 卡组按 `npcCard` 收紧**（服务端开战回包里带英雄也不能整池上阵，2026-11-07） | `ZCBattleEntryBuilder.buildZCBattleEntry`（`clipToLevelCards = requestedEnemyCards.size > 0 && (!battle \|\| pve?.mode === 'defence')`） | `tests/zcds-client-combat-config.test.ts` |
 
 ## 对局资源与控制器生命周期（2026-10-30）
@@ -109,8 +129,9 @@ mapLayer（= ZCGameHUD.prefab 的 content）
   - 地块类型图标字形仅 33×33 落在顶面内，**不抬层**。激活表现的「整格隐藏」段需在 `applyActivationFx` 中同步控制已抬层资源图标的显隐。
   - **判据**：`tests/zcds-resource-icon-layer.test.ts`。
 - **地块类型图标落点与兵团资源落点**：
+  - 中立资源在原有落点基础上统一小幅上移；静态图标、神器 Spine、兵团与野怪预览共用 `NEUTRAL_RESOURCE_LIFT`，按 `HEX_GRID_FACE_HEIGHT` 的比例计算，不在渲染分支散写固定像素补偿。调节量以代码常量为准，地块类型图标和价格行保持原样。
   - `ZCHexView.DEFAULT_TILE_ICON_POS` 与 `ZCGameHex.prefab` 的 `BuildingLayer/BuildingIcon._lpos` 必须同值：当前 `y = 4`（下界 `y >= 1.4`，再小会切到底部 `y = -26.376` 的金币图标）。注意 `BuildingLayer` 挂有 `cc.Widget`，运行时局部 `y = 15.101`（早期注释中的 `2.342` 已作废）。
-  - 中立兵团资源点（`unit_cap`）格内兵团纵向落点为 `ZCHexView.RESOURCE_UNIT_POS_Y = 12`（横向间距 `RESOURCE_UNIT_SPACING = 16`、目标高 `RESOURCE_UNIT_TARGET_HEIGHT = 48.6` 保持不变），防止小兵陷进地块下半部被侧壁遮挡。
+  - 中立兵团资源点（`unit_cap`）格内兵团纵向落点由 `ZCHexView.RESOURCE_UNIT_POS_Y` 统一管理，并叠加上述共享上移量；横向间距与目标高保持不变，防止小兵陷进地块下半部被侧壁遮挡。
   - **判据**：`tests/zcds-resource-unit-preview.test.ts`。
 
 ### 1.3 地块激活表现：点击动画（阶段 1 脉冲 → 阶段 2 缩没，0.7s）→ 卡牌弹出 → 建筑同拍由小变大
@@ -1397,16 +1418,24 @@ distance → 波次    territoryCloudFillWaveOrder(distance, maxDistance)     //
 
 | 这一格 | 入口 | 结果 |
 | :-- | :-- | :-- |
-| **未解锁** + 绑得到关卡（`stage` / `boss`） | `handleUnlockThenBattle` | 校验前置 / 银币 / 体力 → `unlockCell` → **回包 `ok` 后立刻 `CmdStartBattleReqMsg`** → 进战斗；界面不弹 |
-| **未解锁** + 绑不到 campaign 行 / `asyncPvp` | `handleUnlockOnly` | 只解锁 + 「已解锁，点击查看关卡」提示（asyncPvp 的弹窗带侦查，要留给人点） |
-| **已解锁 / 区域已通关** | 打开对应详情 | 窗里「开始战斗」→ `requestBattle` |
+| **未解锁** + 绑得到关卡（`stage` / `boss` / **`asyncPvp`**） | `handleUnlockThenBattle` | 校验前置 / 银币 / 体力 → `unlockCell` → **回包 `ok` 后立刻进战斗**（`mode = match` 时请求交匹配页）→ 界面不弹 |
+| **未解锁** + 绑不到 campaign 行 | `handleUnlockOnly` | 只解锁 + 「已解锁，点击查看关卡」提示 |
+| **已解锁 / 区域已通关** | 打开对应详情 | `asyncPvp` 弹 `BigMapPlayerLevelPanel`（侦查 / 占领奖励 / 双按钮），其余弹关卡界面；窗里「开始战斗」→ `requestBattle` |
+
+🔴 **2026-11-11 口径**：用户「触发异步据点也是直接进入战斗」，把 `asyncPvp` 并进直开名单。
+被跳过的**只是「花银币解锁那一次」的弹窗** —— 已解锁 / 已通关的异步据点照旧弹侦查面板，
+侦查、占领奖励、费用角标一个都没删（详见 §3.39）。
 
 判据两段（`selectSite`）：
 
 - 进不进锁态分支：`!progress.isCellUnlocked(cellId) && !progress.isAreaPassed(cellId)`。
   `isAreaPassed` 必须有：同 `configId` 的格子共享通关状态，只判 `isCellUnlocked` 会让
   "区域已通关、本格没单独解锁"的格子反复走解锁请求。
-- 直不直开：`stageByCell.get(cellId)` 有值 **且** `isLevelSite(site)`（`stage` / `boss`）。
+- 直不直开：`stageByCell.get(cellId)` 有值 **且** `isAutoStartSite(site)`。
+  🔴 2026-11-11 起这份名单 = `isBattleSite(site)` = `stage` / `boss` / **`asyncPvp`**；
+  旧的 `isLevelSite`（只含主线两型）已彻底退役，源码守卫会红线挡住它回来。
+  ⚠️ `isAutoStartSite` 与 `isBattleSite` 眼下同集合但**语义不同**：前者管「要不要跳过弹窗」，
+  后者管「能不能发开战请求」；以后某型要留弹窗时只改前者。
   🔴 **不要**再按 `isOwned` / 是否打过二次分流 —— 「未通关」不是「该直开」的条件，
   否则玩家退出战斗后再点它又是直开、永远看不到关卡界面。
 
@@ -1415,7 +1444,7 @@ distance → 波次    territoryCloudFillWaveOrder(distance, maxDistance)     //
 
 | 值 | 行为 |
 | :-- | :-- |
-| `1`（表里当前值） | 锁着的主线关卡点一下 = 解锁 + 立刻开战 |
+| `1`（表里当前值） | 锁着的战斗站点点一下 = 解锁 + 立刻开战 |
 | `0` | **完整退回**改之前的两步：只解锁 + 「已解锁，点击查看关卡」，界面不弹、不发开战 |
 
 读表口径 `readTerritoryLevelAutoStart`：**`0` 是唯一表示「关」的值**；缺行 / `''` / `'  '` / `null`
@@ -1477,8 +1506,12 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
 - `tests/territory-campaign-config.test.ts`：`chapterLevelAutoStartConfig：1 开 / 0 关；缺行或脏值退回缺省（开）`
   —— 含「真表里这行必须是 1」的守卫（删表行 / 改值会红）。
 - `tests/territory-boss-and-random-building.test.ts`：源码钉住 `selectSite` 走
-  `handleUnlockThenBattle(site, lockedStage)` 且受 `lockedStage && isLevelSite(site)` 守卫；
+  `handleUnlockThenBattle(site, lockedStage)` 且受 `lockedStage && isAutoStartSite(site)` 守卫，
+  后者必须委托 `isBattleSite(site)`（2026-11-11 起含 asyncPvp）；
   `battleParamsFor` 内部仍走 `chapterCellBattleParams`。
+- `tests/territory-presenter.test.ts`：异步据点三格共享 `configId` 时各自「解锁即直开」
+  （`tips = []`、`beginBattle = 3`），已解锁后再点仍弹侦查面板；「未通关首次挑战」那条
+  断言第一跳由 `selectSite` 触发、第二跳由面板按钮触发（`nav.length = 2`）。
 - `tests/territory-hex-spawn.test.ts`：源码钉住 `unlockedSnapshot` 的三件事
   （首帧快照 / 每帧推新 / 换章清空）+ `entered` 去重 + 「刚解锁要进场」那一条判据。
 
@@ -2276,6 +2309,7 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 | :-- | :-- | :-- |
 | `battleLevel` | `CmdBattleLevel.star >= 1` | 主线 / 章节关卡 |
 | `territoryLevel` | 领地格子 `CmdCityChapterCellInfo.passCells` | 领地据点，含 pvp 异步据点（2000x） |
+| `territoryLevelActivated` | 领地格子 `unlockCells ∪ passCells`（+ 本地 `isOwned`） | 同上，但门槛是**激活**（花银币解锁）而不是通关，见 §3.32 |
 
 类型与数据源**必须成对**：`battleLevel` 配据点关卡 = 永远打不开（用例有对照断言）。
 
@@ -2444,7 +2478,7 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 | 关键约束 | 为什么 |
 | :-- | :-- |
-| **只有玩家点章节按钮才播** | 模型只在 `switchChapter` / `selectChapter` 里发 `chapterSwitch` 命令；`advanceCompletedChapter`（通关自动推进）**不发**。判据是事件来源，不是"猜这次是不是自动" |
+| **模型命令只来自玩家点章节按钮**（2026-11-11 补，见 §3.40） | 模型只在 `switchChapter` / `selectChapter` 里发 `chapterSwitch` 命令；`advanceCompletedChapter`（通关自动推进）**不发**。判据是事件来源，不是"猜这次是不是自动"。🔴 **这不等于「首通自动推进不播切换」**：2026-11-11 起，页面在整章云散演完后按 `{from,to}` **补起同一段转场**（模型命令通道一个字没改），实现「先通过动画、再切换」 |
 | 揭幕看 `lastRenderedChapter === to` | 模型在 `loadChapter` 开头就把 `chapterId` 改了，那时地图还是旧的 —— 按 `state.chapterId` 判会在旧图上揭幕 |
 | 演不了就**不演** | `beginChapterSwitch()` 返回 `false`（云美术没加载 / 整页过场或推镜过场正在演）时直接换章。宁可没动画，也不要盖一片空底色 |
 | `lead` 段云必须完全透明 | 这一段的目的是让位移单独被看见；云只要露一点，就又变回"云和位移同时开始" |
@@ -2490,6 +2524,10 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 `tests/territory-chapter-switch.test.ts`（19 条：纯曲线 + 触发源 + 四处接线 + 首次通关判据 + 相机先行段）、
 `tests/territory-presenter.test.ts` 的「切章命令只发给玩家点的章节按钮」、
 `tests/territory-stage-binding.test.ts` 的四条判据用例、`tests/chapter-select.test.ts` 的弹窗同源用例。
+
+> 🔴 **2026-11-11 增补（§3.40）**：SVN 合并后出现「首次通关只剩切换动画、通过动画丢了」。本节四段曲线与**模型命令来源**不变，
+> 但「只有玩家点按钮才播切换」这条已被本轮用户口径覆盖 —— 首通自动推进也要播切换，由页面在云散演完后用**同一组曲线**补起。
+> 同时 `chapterClearPending` 一次性边沿可能被合并 / 回包时序冲掉，页面加了同章电平兜底。**排查动画丢失时先读 §3.40。**
 
 ### 3.23 「章节选择」的完成度 = 已通关格子 / 章节全部格子（2026-11-05）
 
@@ -2704,11 +2742,11 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 ```bash
 python tools/map-editor/fill_chapter03_cells.py --dry-run   # ASCII 预览 + 统计，不写盘
-python tools/map-editor/fill_chapter03_cells.py             # 改预设 + 发布 4 处
+python tools/map-editor/fill_chapter03_cells.py             # 改预设 + 发布 2 处
 ```
 
 写盘落点与其他章一致：预设 → `assets/resources/config/territory-maps/`（带 `.meta`，uuid 不动）
-→ 策划 `json/{sever,client}` → 单独补 `assets/remoteRef/chapter_03.json`（`indent=0` 紧凑格式）。
+→ 策划 `json/sever`。`remoteRef` 不保留章节布局（地图不写策划 client，不会被扫进去）。
 改前备份在 `tools/map-editor/backups/chapter_03.pre-fill140-20261106.*`。
 
 🔴 **别对 `chapter_03` 跑 `gen_territory_shapes.py --only 03`**：它从图形重新生成，
@@ -2748,6 +2786,318 @@ python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + �
 ⚠️ **顺序**：`gen_territory_shapes.py`（门写 `1011`、池写 `2001`）和 `fill_chapter03_cells.py`
 （宝箱写 `1014`）里都是**占位值**。任何时候重跑它们，都必须再跑一次 `retarget_chapter_rewards.py`，
 否则奖励 id 会静默退回占位值。
+
+### 3.27 提前披露（预告）与建筑虚影（2026-11-09）
+
+用户口径：「默认提前展示关卡 10001 所在的地块 → 通过第一关后提前展示 boss 关卡建筑 →
+通过 boss 后提前披露第 2 个 boss 的位置；**提前展示不改变消耗银币激活地块的逻辑**」。
+
+**披露序列 = `[本章第 1 关] + [本章每个首领]`，链式触发**（`model/TerritoryPreview.ts`）：
+
+| 目标 | 触发条件 |
+| --- | --- |
+| 第 1 关 | 开局恒披露（前一项是出生点） |
+| 首领 1 | 第 1 关已通过 |
+| 首领 2 | 首领 1 已通过 |
+
+任一时刻最多 **1 个**目标处于「未通过、被披露」状态。「已通过」走 `isAreaPassed`
+（同 `configId` 任一格 owned），与显示侧 / 点击拦截同源。披露范围是**整关 footprint**
+（用户：「不然大建筑会有错位」——`chapter_02` 起一关就是一个带 5~10 格 footprint 的站点）。
+
+**三态与虚影的组合**（虚影不是第四种状态，锁 / 价格 / 编号全部照旧）：
+
+| 状态 | 地块 | 锁 | 价格 | 虚影 |
+| --- | --- | --- | --- | --- |
+| 未解锁（前置没满足） | ✔ | ✔ | ✘（`locked` 时被摘掉） | ✔ 35% |
+| 可激活（前置满足、没花钱） | ✔ | ✘ | ✔ | ✔ 35%（**被价格压住**） |
+| 已激活（花了银币） | ✔ | ✘ | ✘ | ✘（换实心建筑，0.2s 淡出） |
+
+**层序：气泡 > 锁 > 价格 > 虚影 > 建筑**（2026-11-09 二轮定前四层；2026-11-10 追加「气泡 > 锁」）。`MapLayer` 子节点顺序即渲染序，
+虚影层（`StationGhostLayer`）运行时建、插在 `StationCaptionLayer` **之前**
+（`… → StationIconLayer → **StationGhostLayer** → StationCaptionLayer → StationTextLayer → StationBadgeLayer → HexLockLayer → StationHitLayer`），
+所以：建筑在最底、虚影 35% 压住建筑、银币图标与数字压在虚影上、锁压在价格上、关卡编号气泡再**压住锁**。
+
+⚠️ 第一版是「锁 > 虚影 > 价格」（虚影插在 `StationBadgeLayer` 之前），实机看图后用户改成现在这版：
+「银币 icon + 数字 UI 的层级也是高于建筑的」—— 数字被 35% 的虚影染成一块，读不出这一格要花多少钱。
+
+⚠️ 2026-11-10 用户追加：「**锁的 UI 层级要在宝箱气泡 UI 的下层**」—— 锁标层锚点从 `StationHitLayer`
+前挪到 `StationBadgeLayer` 前，于是顺序变成「气泡 > 锁 > 价格」。**不能**顺势挪到价格层之前：
+§3.31 那 1s 过渡的前半段就是靠「锁盖住还没长好的价格」才不穿帮，锁一旦掉到价格底下，
+过渡会先露出半大的银币再被锁盖住，视觉上等于闪一下。守卫用例在 `tests/territory-cell-center-align.test.ts`
+（`★★★锁标层插在气泡层之前（气泡压住锁），且仍在价格层之上`）。
+
+🔴 **绝不能放宽 `isPrerequisiteComplete`**。2026-11-06 刚修过一个同源的 bug
+（「花钱解锁 2-9、没打，2-10 就露出来了」），守卫用例在
+`tests/territory-cell-reveal.test.ts`。披露走的是**并行的可选入参**：
+`territoryRevealedCells(map, progress, previewCells?)` —— 不传时逐格与旧版相同。
+`previewCells` 由 `ITerritoryViewState` 透到渲染输入，**不进任何扣费 / 解锁判据**。
+披露的格因此**看得见、点得动（会弹前置未满足）、但开不了**，与「不改变激活逻辑」一致。
+
+**虚影怎么画**：复用 `TerritoryStationView`（`instantiate` 站点 prefab）而不是直接摆 Sprite
+—— 落点 / 可见宽度归一 / trim 偏移补偿 / 底边对齐全走同一套 `setMapPosition` + `render`，
+虚影与实心建筑才会逐像素重合。只 `Icon` 进虚影层，底条 / 文字 / 角标 / **带 `cc.Button` 的
+命中根节点**全部塞进一个 `active = false` 的壳里（`StationGhostShell/Shell`）⇒ 不吃点击。
+
+**只在带 `buildingId` 的那一格画**：一关占 2~11 格，但 `stationIconOf` 对没配 `buildingId`
+的 stage/boss 返回 `null`（2026-10-16 口径），所以整关只有一格有建筑、也只有一格有虚影。
+`chapter_01` 的第 1 关是特例：可激活的 `327` 没有建筑，有建筑的 `328` 被两个宝箱锁着 ——
+开局呈现为「一块空地（`327`，按 §3.28 不再标价）+ 一个被锁住的虚影（`328`）」。`328` 这一格
+在未解锁时按现行口径只显示价格、不长建筑（虚影补上了「这格是关卡」的读法）。
+
+**0.2s 淡入**：虚影 0.35 → 0 与底下实心建筑 0 → 1 同时走（后者是 `hexSpawn` 的生成淡入），
+合成出来就是 35% → 100%。与全工程一致**不建 tween**，在 `update` 里扣时间
+（`stepGhostFade`，扣到 0 销毁）。换章整批清空（`ghostKey` 变即 `clearGhosts`）。
+
+判据：`tests/territory-preview.test.ts`（序列 / 链式 / 整关 footprint / 披露≠能开 / 揭示函数
+不传时不变 / 只画带建筑未激活的格 / 0.2s 淡出 / 换章清空）
++ `tests/territory-cell-center-align.test.ts`（四处 `cellCenter`、虚影层插位）。
+
+### 3.28 一个节点只在一块地上长 UI：同节点的非建筑格不画任何东西（2026-11-09）
+
+> 用户原话：「关卡或者 boss 关卡，或者 pvp 据点，**置于建筑地块上**展示具体的 UI，
+> 其他**同一节点**的地块不展示任何 UI。」
+
+**现象**：`chapter_01` 的一关不是「一个站点带一整块 footprint」，而是**多个单格站点共用
+同一个 `configId`**（`10001` = `327` 无建筑 + `328` 建筑 69004，两格各 30 银币）。于是同一片
+地块上出现「一个建筑 + 一圈银币数字」，读起来像「这一关要买三次」——截图里 `30` / `15` 混排
+就是这么来的。
+
+**口径**：节点 = **同 `configId` 的战斗站点组**（`stage` / `boss` / `asyncPvp`）。组内只有
+**配了 `buildingId`** 的那一格承载 UI，其余格（`cellId` / `footprint`）什么都不画。
+
+| 格 | 未解锁 | 已解锁 |
+| :--- | :--- | :--- |
+| **建筑格** | 银币 + 价格（不长建筑，§3.27 的虚影补「这格是关卡」） | 建筑 + 编号气泡 |
+| **同节点其它格** | **纯空地** | **纯空地** |
+
+> 🔴 2026-11-10 用户再次确认，并收回了 2026-11-09 第四 / 五轮的两次放宽
+> （「解锁后兄弟格还是要显示银币 icon 和数量」、「兄弟格跟 30 样式一样」）：
+> 「和 boss 关卡是同一个节点的地块都不显示 UI，只有建筑虚影上显示 UI
+> （锁住的 icon 或者是银币 icon + 数字）」。
+> 截图是 `10010` 首领：11 格里 10 格空地被挂满了红色 `35`，其中一把锁在 `105` 上 ——
+> 现在那 10 格一律纯空地，`35` 只在承载格出现（四种状态见 §3.31）。
+> ⚠️ 代码侧的关键是 `stationRenderOf` 的 muted 分支**不许带 `isOpened` 条件**，
+> 一带就会退化成「未解锁时兄弟格也挂价格」。
+
+**七章分布**：只有 `chapter_01` 命中 —— 13 个关卡组、69 格里有 **56 格没建筑**；
+`chapter_02~07` 一个站点就是整块 footprint，非锚点格根本不是站点，本来就什么都不画。
+
+**实现**：`model/TerritoryNodeUI.ts` 的 `territoryNodeMutedCells(sites)` 算出该隐的 `cellId`
+集合（零 `cc` 纯函数），`syncStations` 每轮算一次、作为 `stationRenderOf` 的**第 4 个可选参数**
+透下去；缺省是空集合 ⇒ 老调用方与沙箱测试逐格不变。命中时 `stationRenderOf` 直接返回
+`{ icon: null, caption: '', badge: '', interactive: !pending }` —— 价格 / 编号 / 建筑三者一起摘，
+`interactive` **原样保留**。
+
+🔴 **隐的是 UI，不是格子**：用户 2026-11-09 明确「保留可点，照常解锁」。所以这个集合
+**只能**喂给画法分支，不许拿去过滤 `revealedCells` / `siteOpenableCells` / 扣费判据 ——
+否则这 56 格永远激活不了。消耗数字由点击后的确认弹窗承担。
+
+🔴 **锁**：节点内的**非建筑格不画锁**，整组收敛成建筑格上的一把（用户 2026-11-09 第二轮
+「锁的 UI 也是只显示 1 个，在建筑格子上即可」）。判据在 `territoryNodeLockCells`，见 §3.29。
+
+**边界（都有用例）**：
+- 组内**一格建筑都没有** ⇒ 一格都不隐（隐了整关凭空消失）；
+- 组内**每格都有建筑** ⇒ 不隐（各自承载自己的 UI）；
+- 没有 `configId` 的站点不参与分组（宁可不隐，别乱隐）；
+- `fixedResource` / `bonus` 即使共用 `configId` 也不参与（它们不是「节点」）；
+- 兄弟站的 footprint 万一压到承载格上 ⇒ 承载格保住 UI。
+
+判据：`tests/territory-node-ui.test.ts`（真实 `chapter_01` 56 格 / `chapter_02~07` 零命中 /
+四条边界 / 沙箱跑 `syncStations` 验「兄弟格无价格无气泡无建筑但仍可点」/ 不传参行为不变）。
+
+### 3.29 一个节点一把锁 + 「预告首领关」过场（2026-11-09 第二轮）
+
+> 用户原话：「1. 锁的 UI 也是只显示 1 个，在建筑格子上即可；
+> 2. 预告 boss 关卡有预告动画 —— 2.1 通过第 1 关的地块动画结束后，镜头移动到 boss 位置、
+> 屏幕居中；2.2 云层消失动画、boss 关卡地块生成动画、建筑虚影和锁**同时**生成动画，
+> 动画结束停留 1s，镜头自动挪回初始位置。」
+
+#### ① 锁：一个节点一把，画在建筑格
+
+> 2026-11-10 细化成「一处 UI、锁与银币二选一」，见 §3.31（本节的收敛口径不变，落点判据更严）。
+
+模型给的 `lockBlockedCells` 是**逐格**的（`chapter_01` 的 `10005` 首领 = 7 个单格站点，
+于是截图里 7 把锁）。`territoryNodeLockCells(sites, lockedCells)` 把它收敛成
+「节点内任一格被卡住 ⇒ 锁画在**承载格**（配了建筑的那格）上」，非节点格（随机资源格 / 宝箱）
+原样透传。
+
+- 承载格的口径来自 `territoryNodeCarrierByCell`：同 `configId` 组内有建筑格 ⇒ 整组（含各自
+  `footprint`）都指向它；一个建筑都没有 ⇒ 指向自己的 `cellId`（`chapter_02` 起的一台站
+  footprint 因此收敛到锚点，也是「一把锁」）。
+- `paintHexes` 与 `syncStations` **必须同源**调它：前者画锁，后者据此摘掉价格 ——
+  两个地方各算一份就会出现「锁在这格、价格在那格」。
+
+#### ② 过场：四段 + 一个「先压住」
+
+时间轴在 `model/TerritoryPreviewCinema.ts`（纯函数）：
+
+| 段 | 时长 | `focus` | 干什么 |
+| :--- | :--- | :--- | :--- |
+| `wait` | 动态 | 0 | 等**第 1 关那一批**胜利地块长完（`territoryHexSpawnBatchSeconds(victoryClaimCells, 胜利档)`） |
+| `pan` | 0.55s | 0 → 1 | 镜头推到首领建筑格、屏幕居中 |
+| `reveal` | 0.6s | 1 | **放开被压住的格** ⇒ 云散 / 地块生成 / 虚影淡入 + 锁弹跳同时起手 |
+| `hold` | 1.0s | 1 | 需求「停留 1s」 |
+| `back` | 0.55s | 1 → 0 | 镜头自动归位 |
+
+🔴 **关键是「先压住」**：披露是模型算的，它一旦把首领格并进 `revealedCells`，云会在同一帧散完、
+地块也在同一帧长完 —— 镜头还在原位，玩家只看到一块静态地形。所以视图在 `wait` / `pan`
+期间把这批格同时从 `revealedCells` 与 `previewCells` 里剔掉（`holdPreviewCinemaCells`）：
+云照旧盖着、虚影也不建；`reveal` 段一到清空压住集合并**就地重渲染一帧**
+（`rerenderForPreviewCinema`），五套原有表现自己就同时开演了 —— 过场**不重复实现**任何动画。
+
+- 起演条件四条（`armPreviewCinema`）：这一帧新披露了格子 + 新披露里有**首领** +
+  这一帧有 `victoryClaimCells`（= 刚打完一关）+ 不是首帧（`spawnBootstrapped`）。
+  第三条是"通过第 1 关"的判据，第四条防止重进页面把过场再播一遍。
+- 镜头复用 `captureChestCamera` + `applyChestCamera(1, focus, point)`（与开箱 / 推镜 / 过场
+  同一套基准）；`cameraBusyLocked` 必须把它算进去，否则第一帧就被 `restoreChestCamera` 按回去。
+- 虚影淡入（0 → 35%）与锁弹跳（0.55 → 1.12 → 1，0.2s）只在**过场放开的那一帧**生效
+  （`previewCinemaRevealPending` 一次性开关），其它时机仍是"直接 35% / 直接出现"。
+- 换章（`syncGrid` 重建格子）必须 `cancelPreviewCinema()`：压住集合不清，新章头几格会永久不出现。
+
+判据：`tests/territory-preview-cinema.test.ts`（段序 / 时长 / focus 单调 / 大帧跨段 /
+起演四条 / 压住哪些格 / 放开即重渲染 / 收尾清空 / 换章作废）。
+
+### 3.30 锁 = 「前置没完成」；红字只留给缺钱（2026-11-09 第三轮）
+
+> 用户原话（配图紫框圈住一格「银币 + 红色 15」）：「前置地块未解锁，展示的也是锁 icon，
+> 不是银币 + 显示红色的 UI。」
+
+#### 现象与根因
+
+截图里那一格画的是**银币图标 + 红色 15**，既没有锁，也不是缺钱（钱包 350，单价 15）。
+它是**前置宝箱解锁了却没点开**的一种：
+
+- `TerritoryProgress.isPrerequisiteComplete` 对 `fixedResource` 有个特例 ——
+  「`unlockable`（服务端 `unlockCells` 里有）即算完成」，因为服务端把宝箱的 completed
+  记在 `unlockCells` 而不是 `passCells`。
+- 于是这种格**不进** `prerequisiteBlockers` ⇒ **不画锁**；
+- 而 `stationRenderOf` 里还有一条旧口径（山猫 2026-10-21）「前置宝箱未领取 ⇒ 银币数字染红」
+  ⇒ 画面上只剩一条**没有锁的红价格**，玩家读成"钱不够"。
+
+#### 现在的口径
+
+| 状态 | 画什么 | 判据 |
+| :--- | :--- | :--- |
+| 前置关卡没打通 / 前置格还没开 | **锁**（价格整条摘掉） | `prerequisiteBlockers` 非空 |
+| 前置宝箱解锁了没点开 | **锁**（价格整条摘掉） | `unclaimedFixedPrerequisites` 非空 |
+| 随机格四周没有已开格 | **锁** | `canOpenTerritoryRandomCell` = `needsNeighbor` |
+| 银币不够 | 价格数字**红**，不上锁 | `territoryCostShortfall.silver` |
+| 体力不够 | 体力那颗数字红，银币**不红**、不上锁 | `territoryCostShortfall.stamina` |
+
+实现：
+
+- `TerritoryProgress.isPrerequisitePending(cellId)` = 上面两行前置判据的并集，**唯一入口**。
+- `TerritoryModel` 只算一遍 `prereqPending` 集合，**同时**喂两个集合：
+  `siteOpenableCells`（排除）与 `lockBlockedCells`（纳入）⇒ 两者天然互补，
+  不会再出现「这格能开却顶着锁」。
+- `TerritoryMapView.stationRenderOf` 删掉 `unclaimedFixedPrereq` 那条红字分支 ——
+  这一种已经由模型侧上锁（`syncStations` 的 `locked` 会把 `isCondition` 置 false，
+  `captionSprite` / `captionLabel` 两个节点一起关掉）。
+- ⚠️ **只改画法，不拦点击**：这一种在服务端是允许解锁的（`checkUnlock` 过），
+  锁只是「先把旁边那只宝箱点了」的提示，点下去照常扣银币解锁（同 §3.28 的「保留可点」）。
+
+判据：`tests/territory-presenter.test.ts` 的两条守卫（缺钱不上锁 / 能开的格不许上锁）+
+新增「unlocked-but-unclaimed chest prerequisite locks the successor instead of reddening the price」；
+`tests/territory-random-resource-render.test.ts` 里那条旧断言已翻面（红 → 白）。
+
+### 3.31 「未解锁 → 可激活」的 1s 过渡（2026-11-09 第四轮）
+
+> 用户原话：「增加一个未解锁过渡到可激活的动画 1.锁放大1.2，再缩小消失，动画总时间1s
+> 2.银币和数字UI生成动画，总时间1s」
+
+#### 触发条件：**锁消失的那一刻**，不是「解锁成功」
+
+| 事件 | 画面 | 播过渡吗 |
+| :--- | :--- | :--- |
+| 前置满足（隔壁格激活 / 宝箱点了） | 锁消失 + 价格出现 | **播**（需求说的就是这一步） |
+| 点价格花钱激活 | 锁早就没了，价格消失、建筑长出来 | 不播（走的是地块生成 + 建筑抖动那条链） |
+| 服务端直接把这格标成已解锁 | 既没锁也没价 | 不播（`isCondition` 为假，没有价可长） |
+
+判据三条缺一不可：① 这一帧锁刚被摘掉；② 价格真的出现了（`isCondition`）；③ 站点视图已存在。
+
+#### 两条曲线（`model/TerritoryUnlockTransition`，纯函数）
+
+| 目标 | 0s | 峰值 | 落点 | 关键帧 |
+| :-- | :-- | :-- | :-- | :-- |
+| 锁的 `scale` | 1 | **1.2** @ 0.35s（`easeOutCubic`） | 0 @ 1s（`easeInCubic`，越缩越快） | 放大要快、消失要拖 |
+| 价格的系数 | **0** | **1.15** @ 0.55s | 1 @ 1s | 系数乘在 `1.1 / 1.5` 两个基准上 |
+
+🔴 **两段同时起手、同时收工**（各 1s，不是首尾相接的 2s）。锁层（`HexLockLayer`，插在 `StationBadgeLayer` 之前）压在价格层
+（`StationCaptionLayer`）上面，所以前半段是「锁挡住价格」、后半段是「锁缩没了、价格已经长好」，
+天然衔接；把价格延后 0.5s 会让总时长变成 2s，违背用户口径。
+
+🔴 **用缩放，不用透明度**：价格那两颗节点（`CaptionBg` / `CaptionLabel`）的**位置**是按实测文本宽
+算出来的（`applyCaptionPlacement`），改透明度只会淡入、读不出"生成"；而且半透明的语义已经被
+`setSpawnOpacity`（"地块还在长"）占用了。
+
+#### 实现（四个写点，别散在别处）
+
+| 位置 | 干什么 |
+| :-- | :-- |
+| `TerritoryMapView.applyHexLock` | 锁显隐的**唯一交汇点**：上一帧 `active`、这一帧摘掉 ⇒ 记进 `lockVanishedCells`；过渡在播时**不许**把锁关掉 |
+| `TerritoryMapView.startUnlockTransitionIfNeeded`（`syncStations` 里两条路各调一次） | 消费票据 ⇒ `unlockTransitions.set(cellId, 0)`；先 `lockPops.delete` 让位（抢同一颗节点的 `scale`） |
+| `TerritoryMapView.stepUnlockTransitions`（`update` 里，排在 `stepLockPops` 之后） | 推进秒表，写锁的缩放；收尾那一帧先把 `scale` 复位成 1 **再**关节点 |
+| `TerritoryStationView.setConditionSpawnScale` | 乘在 `CONDITION_ICON_SCALE / CONDITION_VALUE_SCALE` 上（**唯一**缩放写入口是 `applyCaptionPlacement`） |
+
+服务细节：
+
+- 起播必须排在 `view.render(content)` **之前** —— 视图先把系数记下来，随后那次
+  `applyCaptionPlacement` 才按它摆，否则第一帧是全尺寸闪一下再缩回去。
+- 位置**不跟着缩**：两颗各自绕中心长大，合起来读作"整条价格从中间长出来"；按缩放后的宽度
+  重排位置反而会让它在放大时左右乱窜。
+- 退出条件模式（下一格借到同一个池化槽位）必须把系数写回 1；`dispose()` 也复位
+  （同「抖动 / 气泡偏移不许跟着池化槽位走」那一族约束）。
+- 换章 `cancelPreviewCinema()` 一并清空 `unlockTransitions` / `lockVanishedCells`：
+  格子与锁节点都要重建，留着的秒表会去写已经销毁或复用给别格的节点。
+- `paintHexes` 每秒全量走一遍 ⇒ 过渡期间它会用 `show = false` 再调一次 `applyHexLock`，
+  靠"在播就 return"挡住，否则消失的锁会闪回一帧。
+
+判据：`tests/territory-unlock-transition.test.ts`（曲线端点 / 单调性 / 1s 收工 / 视图系数乘法
+与池化复位 / 三处接线的源码位置）。
+
+### 3.31 一个节点一处 UI：锁与银币**二选一**（2026-11-10）
+
+> 用户原话（配图是 `chapter_01` 的 1-5 首领截图：中心一格「银币 + 红 50」、周围 6 格各一把锁，
+> 红圈圈住了其中一把锁和那个 50）：「应该是只有建筑承载 UI，这个是老账号的脏数据引起的原因吗」；
+> 追问后定稿：「**如果是未解锁，那么整个关卡节点就只有建筑虚影上显示锁住的 icon，
+> 如果是可激活，那么只有建筑虚影显示银币和数值 UI，不会出现锁和银币同时存在的情况**。」
+
+#### 先说结论：不是脏数据
+
+那 7 格是配置里固定的同一条 `configId`（`10005`）：`213` 有建筑，周围 6 格是同关空地，
+六边形邻接关系正好是「中心 + 6 邻格」。但**前置本来就不同**：
+
+| 格 | 前置 `requiredCells` |
+| :--- | :--- |
+| `213`（建筑） | `[252]` = 1-4 通过即可 |
+| 其余 6 格（空地） | `[252, 253, 232, 231]` = 1-4 + 三只宝箱（`253/232/231`） |
+
+⇒ 6 格被三只未点开的宝箱卡住（§3.30 的口径）、`213` 自己没被卡住所以照常标价，
+两者叠在一起就成了「一格价格 + 六格锁」。任何账号都是这个配置，与存档新旧无关。
+
+#### 现在的口径（三句话）
+
+1. **只有承载格（`chapter_02` 起是锚点）承载 UI** —— 空地一格都不画，包括锁；
+2. **锁与价格互斥** —— 画锁的格一定不画价格，绝不会「锁 + 银币」并排；
+3. **组内任一格被卡住 ⇒ 整个节点算「未解锁」⇒ 锁落在承载格上**（这条保留了
+   2026-11-09 第三轮「附近格子也要有锁」的诉求，但落点从「空地也复制一把」改成「收到建筑格」）。
+
+由此得到的四种画面：
+
+| 节点状态 | 承载格 | 其余格 |
+| :--- | :--- | :--- |
+| 未解锁（前置没打通 / 前置宝箱没点开） | **锁** | 什么都不画 |
+| 可激活（前置满足，钱够） | **银币图标 + 数值（白）** | 什么都不画 |
+| 可激活但钱不够 | **银币图标 + 数值（红）** | 什么都不画 |
+| 已解锁 / 已通关 | 建筑 / 编号气泡 / 已通关绿 | 什么都不画 |
+
+实现：`territoryNodeLockCells(sites, lockedCells)` 用 `territoryNodeCarrierByCell` 把
+`lockBlockedCells` 收敛到承载格；`paintHexes`（画锁）与 `syncStations`（摘价格）**同源调用**它。
+⚠️ 只改画法不拦点击：`213` 这种「自己前置已满足、被兄弟格连坐」的格仍然点了就能解锁
+（与 §3.28「保留可点，照常解锁」同一条纪律）；真要连坐拦截，得改 `checkUnlock` 并与服务端口径对齐。
+
+判据：`tests/territory-node-ui.test.ts` 的「10005 首领 ⇒ 只收敛成 213 那一把」、
+「footprint 收敛到锚点」、「非节点格原样透传」、「空输入零改动」。
 
 ## 4. 其他玩家席位的视觉区分：顶点色相乘灰
 - **统一判据**：`owner !== 'player'`（与领地染色、城墙敌我同口径）。
@@ -2977,6 +3327,920 @@ python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + �
 - **必须显式 `setScale(1,1,1)`**：节点来自对象池，上一条可能是 `gold`（末尾 `scale` 收到 0），
   不写回 1 就会得到「透明度满但看不见」的一条。
 - **判据**：`tests/zcds-float-text-gold-income.test.ts`（13 条）。
+
+### 3.32 「快速寻敌」的开启条件：激活第 1 章第 4 关地块（`open` 702，2026-11-09）
+
+> 用户原话：「1. 快速寻敌按钮在激活第 1 章第 4 关的地块后才解锁该功能，解锁后所有的章节都常驻；
+> 2. 同步到【功能开启表中】，新增 id 702」
+
+跟 §3.21（战斗宝箱入口）是**同一套机制的第二条用例**：表里一行条件 + 一个纯函数闸门 +
+账号级落盘的「一次性成就」。
+
+| 项 | 战斗宝箱（701） | 快速寻敌（702） |
+| :-- | :-- | :-- |
+| 载体 | `open` `refId=701` | `open` `refId=702`（`name=快速寻敌`，`belond=0`、`type=2`） |
+| 条件类型 | `territoryLevel`（据点**通关**） | **`territoryLevelActivated`**（据点**激活**） |
+| 参数 | `resId=20001` | `resId=10004`（`levelInfo` 里 `chapterLevel=1`、`chapterStage=4`） |
+| 表现 | 底部 icon + `0→1.15→1` 生成动画 | 底部大按钮 `ArenaRoot/BeginGame` 显隐 |
+| 闸门 | `main/ChestEntryGate.resolveChestEntryGate` | `main/QuickFindGate.resolveQuickFindGate` |
+| 落盘 | `territory.passedLevels.v1` | `territory.activatedLevels.v1` |
+
+🔴 **激活 ≠ 通关**，这是本条最容易写错的地方：
+
+```
+激活（花银币解锁那一格）  isCellUnlocked || isOwned || isAreaPassed
+通关（打完了）            isAreaPassed（同 configId 任一格 owned）
+```
+
+用 `isTerritoryLevelPassedInTerritory`（通关）会**晚一整场战斗**——玩家花银币激活了却还没打/打输了，
+按钮就一直不出来，与「激活地块后解锁」不符。反过来也不能把 `territoryLevel` 改成读激活：
+战斗宝箱那条要求「pvp 20001 胜利通过」，放宽会让未通关就掉宝箱。
+
+所以 `MainEntranceVisible` 里两条条件**并存**：`territoryLevel` 走 `isTerritoryLevelPassed`，
+`territoryLevelActivated` 走 `isTerritoryLevelActivated`。`EMPTY_ENTRANCE_PLAYER_STATE` 与
+`MainEntranceList`（拿不到领地快照的那条列表）两条都给 `false` —— 缺数据一律不放行。
+
+🔴 **「所有章节常驻」必须落盘**：10004 只出现在第 1 章的 `stageByCell` 里。
+只查当前章 ⇒ 玩家切到第 2 章，`MainPage.refreshOpenGates` 立刻判「未解锁」把按钮收走 ——
+这就是 2026-11-04 战斗宝箱入口那个 bug 的同款形状（§3.21 三）。所以：
+
+- `MainPage.onTerritoryRender` 先 `rememberPassedTerritoryLevels()` 再
+  `rememberActivatedTerritoryLevels()`，最后才 `refreshOpenGates()`；
+- 记账用 `activatedTerritoryLevelIds(view)` 整批算（纯函数），落盘 `markLevelsActivated(Array.from(set))`
+  —— **必须 `Array.from`**，release 构建把 `[...set]` 降级成 `[].concat(set)`；
+- 判定 `isTerritoryLevelActivatedInTerritory(levelId, view, archived)` 先看落盘再看当前章快照。
+
+**按钮显隐只有一个开关**（`quickFindUnlocked`），三处写点都对它取与：
+
+| 位置 | 写什么 |
+| :-- | :-- |
+| `MainPage.onLoad` | 先 `startButton.active = false`（早于首帧渲染），再 `refreshOpenGates()` |
+| `MainPage.start` | `= this.quickFindUnlocked`（**不能**再无条件 `true`） |
+| `MainPage.setChestPanelOpen` | `= this.quickFindUnlocked && !open`（收起宝箱栏不许绕过闸门） |
+| `MainPage.onStartGame` | `if (!this.quickFindUnlocked) return;`（事件被转发进来也挡住） |
+
+表缺行 / 整表读失败 ⇒ `rowMissing` ⇒ 按未解锁（fail-closed），并 warn 到 `refId`。
+这条对**主 CTA** 比 icon 更痛，所以恢复脚本一并留在 `tmp/patch_open702.py`（三层表同步 + 校验）。
+
+判据：`tests/quick-find-gate.test.ts`（11 条：表 3 项、两判据不串台 4 项、跨章常驻 3 项、页面接线 2 项）
++ `tests/territory-save-store.test.ts`（激活集合单独一份 key、与通关互不污染、脏数据不放行）
++ `tests/main-quick-find.test.ts`（未解锁点击不派发 `focusLevel`）。
+
+### 3.33 未解锁的地块整块置灰，变成可激活时再"重新加载颜色"（2026-11-10）
+
+> 用户原话（配图圈住一片未解锁地块，箭头指向一个灰色色块）：
+> 「未解锁的地块整个地块图片都置灰，等待切换成可激活的状态（银币 icon + 数字）时再重新加载颜色」
+
+#### 状态表（地皮三选一 + 锁 + 价格）
+
+| 状态 | 地皮 | 锁 | 银币 + 数字 |
+| :-- | :-- | :-- | :-- |
+| 未解锁（被前置卡住） | **`tileGrey`（`img_land_01_gray` 灰版）** | ✔（一个节点一把，画在承载格） | ✘ |
+| 可激活（前置满足、没花钱） | `tileLocked`（`img_land_02` 泥土） | ✘ | ✔ |
+| 已激活（花了银币）/ 已通关 | `tileCleared`（`img_land_01` 草地） | ✘ | ✘ |
+
+#### 为什么另起一张灰图，而不是给泥土乘灰
+
+承 §3.10 / §3.30 那条老结论「成品美术自带明暗，再乘色会发脏」：`Sprite.color` 是**逐通道相乘**，
+泥土 `#8b7355` 乘任何灰只会得到更暗的棕，**读不出"灰"**（灰度化需要 shader，而这张灰图本来就在包里，
+2026-10-16 之前就是它 —— 只是当时还配着三色 tint，被一起删了）。所以：**换图，不染色**。
+
+- 灰图是旧的 **130×119**（新地皮 126×117）。**锁着的格不画格面框**（框只给「已解锁未通关」），
+  所以 126 那套"框缩在格子中间"的问题在这里不成立，多出来的 4×2 只表现为与邻居 2px 交叠。
+  美术补一张 126×117 的灰版后，只需改 `TerritoryPageAssets` 那一行路径，代码其余不动。
+- 灰图缺失 ⇒ 退回 `tileLocked`（宁可这一格不置灰，也不能没地皮）。
+
+#### 🔴 整片灰 vs 一把锁：两条判据、两个集合
+
+| 出口 | 判据 | 集合 |
+| :-- | :-- | :-- |
+| 锁标画在哪 | `isHexLockCell` + `territoryNodeLockCells` | **收敛**：一个节点一把（7 格的首领只在承载格画锁，2026-11-09 用户口径） |
+| 地皮灰到哪些格 | `isStructurallyBlocked` + `lockBlockedCells` | **逐格**：整片都灰 —— 只灰一格会读成"这格特殊" |
+
+两套共用同一个底座 `isStructurallyBlocked(cellId, input, passed)`（`passed` / `pending` /
+已解锁 / 已占领四条排除只写一份）。`paintHexes` 里就是 `lockCell`（收敛）与
+`greyCell`（逐格）两行，各自喂给 `applyHexLock` 与地皮三选一。
+
+#### 「重新加载颜色」不需要额外动作
+
+前置一满足，模型就不再把这格列进 `lockBlockedCells` ⇒ 下一帧 `greyCell` 变假、地皮自然换回
+`tileLocked`；`shouldRecolor` 还会顺手播一段 **0.36s 换色**（旧灰皮缩掉、泥土露出来），
+叠在 §3.31 那 1s 过渡上就是三件事同帧起手：**灰变彩 + 锁缩没 + 银币和数字长出来**。
+
+#### 写点
+
+| 位置 | 干什么 |
+| :-- | :-- |
+| `TerritoryPageAssets` | `tileGrey` 槽位 + `loadFrame(img_land_01_gray)`（不新增美术） |
+| `TerritoryModel.emptyArt` | `tileGrey: null`（章节未加载时的空图也要有这一项） |
+| `TerritoryMapView.paintHexes` | `greyCell` → `nextFrame = passed ? 草地 : greyCell ? (tileGrey ?? tileLocked) : 泥土` |
+| `TerritoryMapView.isStructurallyBlocked` | 锁与灰的公共底座（新增；`isHexLockCell` 改为调它） |
+
+判据：`tests/territory-tile-frames.test.ts`（整片置灰 / 已解锁与已通关不灰 / 解锁那帧换回泥土 /
+灰图缺失降级 / 两个集合不合并 / 灰图只许当 `tileGrey` 用且磁盘尺寸 130×119）。
+
+### 3.34 固定宝箱格「可激活」：宝箱 icon 压在价格行之上（2026-11-10）
+
+> 「当固定格资源处于可激活状态时，除了展示银币 icon + 数字外，**新增宝箱 icon 展示**，
+>  宝箱 icon 使用美术资源 `icon_baoxiang`，整个格子的排版参照美术效果图。
+>  当银币不足，只有数字 UI 显示红色的逻辑不变。固定格未解锁，**仍然只显示锁 icon**。」
+
+**美术**：`image/territory/icon_baoxiang`（58×45），与锁标 / 地皮同目录 ⇒ 同进 `auto-atlas`，同帧能合批；
+槽位 `ITerritoryBattleArt.chestIcon`。⚠️ 与 `frameChest`（宝箱**格面框** `fram_02`）不是一回事。
+
+**排版**：两行 = 宝箱在上、`银币 icon + 数字`在下，整块在格心**居中**（不是贴着格子下沿）。
+公式在 `model/TerritoryConditionBadge.territoryConditionBlockLayout`。
+
+配数（2026-11-10 用户第二轮：「缩银币 icon 和数字，宝箱 0.95，间隙再小点，全在格内且离边留 1px」）：
+
+| 项 | 常量 | 值 | 未缩放 | 缩放后 |
+| :--- | :--- | :--- | ---: | ---: |
+| 银币 icon | `CONDITION_ICON_SCALE` | 0.85 | 40×40 | 34×34 |
+| 数字 | `CONDITION_VALUE_SCALE` | 1.2 | 实测文本宽 | ×1.2 |
+| 行内间隙 | `CONDITION_GAP` | 1 | — | 1 |
+| 宝箱 | `TERRITORY_CONDITION_CHEST_SCALE` | 0.95 | 58×45 | 55.1×42.75 |
+| 行间间隙 | `TERRITORY_CONDITION_CHEST_GAP` | 1 | — | 1 |
+
+⇒ 块高 = 42.75 + 1 + 34 = **77.75**；格面 123×90 ⇒ 上下各留 **6.125**（`TERRITORY_CONDITION_FACE_MIN_MARGIN`
+= 1 是验收下限）。价格行 `y = −21.875`、宝箱 `y = +17.5`，关于格心对称；宝箱横向 55.1 在 `|y| ≈ 17.5`
+处的可用宽（六边形收窄后 `≈ 61.5 − 17.5/tan60° × 2` 之外的余量）内，3 位数价格行（34.2 宽）也不顶斜边。
+
+🔴 **没有宝箱时必须 `rowY = 0`**。站点节点是池化复用的，同一个槽位这一秒画宝箱格、下一秒可能画关卡格；
+只要这里带一点点偏移，「非宝箱格的价格行整体下移」就会变成全局的版式回归。
+
+**只在「`fixedResource` + 可激活」这一种状态**：`TerritoryMapView.stationRenderOf` 的「未解锁」分支里
+按 `site.type` 判（不是按「有没有图」判）；前置没满足的宝箱格走 `syncStations` 的 `locked`
+（`isCondition = false`）⇒ 只画锁，天然满足「未解锁仍然只显示锁 icon」。
+
+**红字规则不变**：宝箱图标是独立 Sprite、不参与染色；`conditionTextColor`（银币不足 / 开不了且原因不是
+体力不足 ⇒ 只数字变红）原样保留。
+
+**节点**：`ConditionChest` 运行时建在 `StationCaptionLayer`（与价格行同层：压在建筑 / 虚影之上，
+气泡与锁之下），惰性创建 + 池化复用；§3.31 的生成缩放（基准 1）与 `setSpawnOpacity` 的整站淡入都带上它，
+`dispose()` 必须手动销毁 —— 它挂在共享层上、不在根节点底下。
+
+判据：`tests/territory-condition-chest.test.ts`（排版零偏移 / 对称 / 视图落位与显隐 / 生成缩放与销毁 /
+只有 `fixedResource` 拿得到图 / 美术槽位守卫）。
+
+### 3.35 「1023 奖励」的宝箱格换成新建筑 `69020`（`coinBox`，2026-11-10）
+
+> 「使用地图编辑器编辑 chapter01~07 地块使用了 1023 奖励的，建筑 id 从 69005 改成 69020，
+>  如果需要给建筑图片补充预制，按照统一的格式制作，现在已经有图片了」
+
+**先纠正一处前提**：实测 148 个 `rewardId=1023` 的格 `buildingId` **全是空串**，没有任何一格写着 `69005`。
+但用户看到的「像是 69005」是对的 —— 空串**确实**长得跟 69005 一模一样，原因见下。
+
+**为什么空串 = 69005**：`stationIconOf` 对 `stage`/`boss`/`asyncPvp` 是「没配 `buildingId` ⇒ 不画建筑」，
+而 `fixedResource`/`bonus` **会继续往下回退**到 `TERRITORY_SITE_ART`：
+
+```
+fixedResource ⇒ art.fixedResource ⇒ image/territory/buildings/territory_fixed_resource_v1
+```
+
+这张图正好就是 `build.json` 里 `69005` 的贴图。所以「空串」与「配了 69005」在画面上无法区分。
+
+🔴 **只改 `build.json` 里 69020 的贴图是无效的** —— 没有格子在读它。必须先让格子显式配 `"69020"`，
+`stationIconOf` 的第一条分支（`buildFrames.get(69020)`）才会命中，且命中后**不再回退**。
+
+**配数**（`assets/remoteRef/build.json`，源表 `PVP-建筑.xlsx / 装饰建筑` 页早有此行）：
+
+| buildId | buildType | buildresource | buildSize |
+| :--- | :--- | :--- | :--- |
+| `69020` | 5（固定宝箱） | `image/territory/buildings/coinBox` | 1 |
+
+`buildType` **不参与选图**（见 §3.15 那条），只作语义标注；对账是为了「表里改了 buildType 而脚本没跟着改」
+时立刻报错，而不是静默填出一个长得不对的建筑。
+
+**为什么 148 格逐格填、而不是像关卡那样「每组一格」**：那套口径针对的是 `stage`/`boss`/`asyncPvp`
+（同一 `configId` 的多格共享同一个关卡，每格都画建筑会让整片区域长满同一个建筑）。
+固定宝箱格**没有这个问题**：148 格 ⇒ 148 个唯一 `configId`（`fixedResource_<cellId>`），每格就是自己那栋建筑。
+
+**落点**（两处，由发布脚本一次写同一份 payload）：预设 + `assets/resources/config/territory-maps/` +
+策划 `doc/塔防数据配置/json/sever/`。⚠️ 预设必须写**归一化后**的形态，否则与产物只差一个键序
+（校验器把站点键重排成 `… configId, buildingId, rewardId`），下次有人做「预设 vs 产物」比对会当成脏改动。
+
+| 章 | 01 | 02 | 03 | 04 | 05 | 06 | 07 | 合计 |
+| :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 1023 格数（= 69020 格数） | 25 | 27 | 36 | 15 | 15 | 15 | 15 | **148** |
+
+**脚本**：`tools/map-editor/set_chest_building.py`（幂等；`--dry-run` / `--id` / `--no-publish`；
+内置「除 `buildingId` 外字段一律不许变」的硬断言）。
+
+**图片/预制**：`coinBox.png` 已在 `image/territory/buildings/`，212×212，`.meta` 与其它建筑图**同构**
+（`importer: image` / `ver 1.0.27` / `subMetas` 同为 `6c48a` texture + `f9941` sprite-frame）
+⇒ **不需要补预制**：建筑一律是 `SpriteFrame` 直取（`buildresource` + `/spriteFrame`），全局没有建筑预制这一层。
+
+**锚点**：`69020` **不进** `TERRITORY_BOTTOM_ANCHOR_BUILD_IDS`（那里只有装饰树 `69010~69013`，落地影子要往下压 4px）；
+宝箱是对称方盒，居中锚点即可。
+
+判据：`tests/territory-building-id.test.ts` 末条（七章 148 格逐格核 `69020` / 表里 `buildType=5` 且贴图是 `coinBox`）。
+
+### 3.36 银币宝箱的独立打开动画：icon 原地 pop，不复用卡牌宝箱（2026-11-10）
+
+> 「银币宝箱是**独立的**打开动画，不要用卡牌宝箱的打开动画，因为他们的图标不一致。
+>  评估下能否根据现有的图制作类似卡牌碎片宝箱打开序列帧图，**可以就开始画图制作动画**，
+>  **不行的话就直接播放 icon 放大缩小的消失动画**作为银币宝箱的打开动画即可。」
+
+#### 评估结论：**做不出同款序列帧，采用用户给的兜底 pop**
+
+先盘素材（`tools/gen_chest_open_frames.py` 是唯一已有的序列帧烘焙工具）：
+
+| 素材 | 尺寸 | 状态 | 能不能补帧 |
+| :--- | :--- | :--- | :--- |
+| `chest/territory_fixed_resource_v1.png`（黄铜藤蔓箱闭合态） | 212×212 | 闭合 | ✅ 与下一行成对 |
+| `chest/chest_open_v1.png`（**同一只**黄箱子开盖态） | 142×156 | 开盖 | ✅ 现成，`chest_seq_0…5` 就是这么来的 |
+| `chest/chest_seq_0.png … chest_seq_5.png` | 142×156 ×6 | 开盖过程 | 黄箱子专用 |
+| `buildings/coinBox.png`（蓝银金属箱，69020） | 212×212 | **只有闭合态** | ❌ 缺开盖态 / 箱内衬 / 箱盖内侧 / 分层源文件 |
+| `icon_baoxiang.png`（白绿线条小宝箱） | 58×45 | **只有闭合态** | ❌ 同上 |
+
+`gen_chest_open_frames.py` 的做法要求**同一只箱子的闭合态 + 开盖态两张整图**：箱体取开盖图、
+闭合盖垫在下面压扁淡出、新盖绕接缝纵向长出。银币宝箱只有一张闭合整图 ⇒ 没有可对齐的盖几何；
+把黄箱子的盖子贴上去正是用户说的「图标不一致」；临时生成一张开盖态，金属铆钉 / 蓝色菱形纹 /
+银色包边无法逐像素对齐，只会造出**第三种图标**。
+
+⇒ **不新增任何美术资源**，按兜底实现：`icon 放大 1→1.3 → 缩小到 0（消失）`。
+
+#### 两类宝箱（判据表）
+
+| 类别 | `rewardId` | 奖励 | 地图图标 | 打开动画 |
+| :--- | :--- | :--- | :--- | :--- |
+| 卡牌碎片宝箱 | `1016~1022` | 银币 + 卡牌碎片 + 专属道具 | `territory_fixed_resource_v1`（黄铜藤蔓箱，69005） | `chest_seq_0…5` 开盖补帧 + 三档全屏表演 `playChestOpen` |
+| **银币宝箱** | **1023** | **只有银币**（`resId=7`） | `coinBox`（蓝银金属箱，69020） | **独立 pop**，原地缩放消失 |
+
+🔴 **判据只能用 `site.rewardId`，不能看领取回包里的奖励内容**。奖励是概率组，卡牌碎片宝箱
+也可能恰好抽到银币；`levelMapGrideReward.json` 里 `1023` 是唯一**整组只发 `resId=7`** 的组，
+常量落在 `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID`。七章 148 格见 §3.35。
+
+#### 时间轴（`model/TerritorySilverChestOpen.ts`，纯函数、零 `cc`）
+
+```
+0s          0.12s                0.4s
+ 1 ───────↗ 1.3 ─────────────↘ 0（消失）
+   easeOutCubic(30%)   easeInQuad(70%)
+```
+
+- `TERRITORY_SILVER_CHEST_POP_SECONDS = 0.4` / `TERRITORY_SILVER_CHEST_POP_PEAK = 1.3` /
+  `GROW_PORTION = 0.3`。`NaN` / `±Infinity` / `≤ 0` 返回 `1`（原样，别先闪一下没了），
+  `≥ 0.4s` 返回 `0` —— 与 `territoryUnlockLockScale(-1) = 1` 同口径。
+- **缩到 0 就是消失**：不叠 `UIOpacity` 淡出，少一条与 `setSpawnOpacity` 抢同一颗节点的通道。
+- **纯函数时间轴，不是 tween**：站点节点池化复用，tween 回收后仍会继续写节点；沿用
+  `TerritoryUnlockTransition` / `ShakePresentation` 的模式，视图只按 `elapsed` 写当前帧，
+  复位时把 `elapsed` 置 `-1`，没有要销毁的定时器。
+
+#### 链路（四步，不改配表）
+
+1. `TerritoryModel.handleUnlockThenPass`：领取回包按 `site.rewardId === 1023` 分流出
+   `showRewards(..., { silverChest: true })`；**其余仍保留 `showRewards(result.rewards, site.cellId)`
+   原串调用**（`territory-cell-protocol` / `territory-burst-density` 的结构守卫钉的就是它）。
+2. `MainTerritoryMap.presentRewards`：`presentation?.silverChest === true` ⇒
+   `mapView.playSilverChestOpen(cellId)` + **`settleRewards(rewards, cellId, false)` 当场结算后 return**。
+   🔴 不进 `playChestOpen` / `playChestThenSettle`，不看 `tier`、不碰 `chest_seq_*`；
+   **奖励绝不挂 `onDone` / `isChestPlaying` / `wireRewardCatch`** —— 换章 / 页面销毁 / 视图回收
+   都可能让 0.4s 播不完，挂回调会静默吞掉这批银币。`suppressGain = false`：这次没有飞出图标带过 `+N`。
+3. `TerritoryMapView.playSilverChestOpen` 只转发 `stationViews.get(cellId)?.playSilverChestIconPop()`：
+   不建覆盖层、不锁输入、不推镜头、不碰 `chestView` / `captureChestCamera`。
+4. `TerritoryStationView`：`writeIconScale()` 改成 `iconBaseScale × buildingShake × pop` 三因子相乘；
+   `stepSilverChestPop(deltaTime)` 在 `update()` 最前面推进，播完 `resetSilverChestPop()` 并
+   `render(this.lastContent)` 让箱子真正退场。
+
+#### 三个容易踩的边界
+
+- **帧快照**：领取回包一到，`stationRenderOf` 会把 claimed 格的 `content.icon` 置 `null`。
+  `playSilverChestIconPop()` 必须**当场快照 `iconSprite.spriteFrame`**，退场期间
+  `setIcon(popFrame ?? content.icon)` 顶上，否则动画还没起手箱子就没了。
+- **池化换格**：`render()` 里 `contentCellId !== silverChestPopCellId` 立即 `resetSilverChestPop()`，
+  否则 pop 系数会被带到下一格；`dispose()` 同样复位。
+- **无图 / 已销毁降级**：`playSilverChestIconPop()` 拿不到 `spriteFrame` 或 `cellId` 就返回 `false`，
+  页面照常结算奖励（纯表现不许挡玩法）。
+
+判据：`tests/territory-silver-chest-open.test.ts`（10 条：曲线端点 / 单调 / 峰值接合 / 非法值、
+`1023` 全表判据与 148 格 `69020`、帧快照播完才消失、换格停表、无图与 dispose 降级、
+Presenter 分流、页面不进 `playChestOpen` 且当场结算、MapView 不碰覆盖层、pop 不建 tween 不抢 `UIOpacity`）。
+
+### 3.37 碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度徽标（2026-11-10）
+
+> 「1. 固定格打开，对应往上飞的卡牌碎片粒子和种族经验的终点位置改成**英雄图标**的位置，
+>  并且英雄图标播放粒子飞入的**抖动受击反馈**；
+>  2. 随机格打开获取的卡牌碎片和种族经验也**增加 1 个往卡牌飞的动画**；
+>  3. 当英雄内某一个角色的卡牌碎片累计满且种族经验也累计满，在英雄 icon 上播放
+>  **对应碎片 icon 进度长满**的动画（进度增长，整个 UI 消失），多个英雄按排序优先级逐个播放。」
+
+#### 用户当场确认的三条口径（`AskUserQuestion`）
+
+| 问题 | 口径 | 实现 |
+| :--- | :--- | :--- |
+| 哪些奖励改道飞英雄按钮 | **只改碎片经验** | `7` 银币 / `9` 体力仍飞顶部资源栏并触发数字跳动；其余一律飞英雄按钮 |
+| 进度长满何时触发 | **仅本次新达成** | 领奖前已可升级 / 已满级 / 未配置 ⇒ 不播，避免每次领奖重复播同一个英雄 |
+| 进度条起点 | **从当前比例起** | `from = clamp(cardOwned / cardNeed, 0, 1)`，长到 `1` 后整个徽标淡出消失 |
+
+#### 判据只有一条：`isTerritoryHeroRewardResId`
+
+```
+isTerritoryHeroRewardResId(resId) = 合法正数 && !isTerritoryWalletResId(resId)
+```
+
+`model/TerritoryHeroReward.ts`（零 `cc`）是「判据 / 飞行曲线 / 徽标进度 / 队列排序」的**唯一真源**。
+非钱包类不只是 `18xxx` 碎片和 `16xxx` 种族经验，还包含 `10010` 卷轴、`19xxx` 专属道具等
+—— 用户口径是「除了银币体力都归英雄」，所以**不按资源段白名单逐个枚举**，一律用钱包补集。
+改之前这些资源没有登记落点，`TerritoryChestView` 全部回落到「屏幕顶部中央」堆成一团
+（就是需求截图红框里的现象）。
+
+#### ① 固定格：改落点，不改开箱表演
+
+`MainTerritoryMap.wireRewardCatch()` 一处分流，两处都走 `setRewardCatchWorldPoint(resId, world)`：
+
+```
+7 / 9 → territoryWalletResKeyOf → ResBar.slotWorldPositionOf(key) → 顶部资源栏
+其余  → findHeroTabButton → button.icon 的 UITransform.convertToWorldSpaceAR → 底部英雄按钮
+世界坐标 → 覆盖层局部坐标：TerritoryMapView.setRewardCatchWorldPoint / setHeroRewardTargetWorld
+```
+
+🔴 **页面只负责「哪个节点」，矩阵换算一律留在视图**（`convertToNodeSpaceAR`）；
+`TerritoryChestView` 一行都不用改 —— 它的 `catchPoints: Map<resId,{x,y}>` 本来就按 `resId` 取点。
+
+> 🔴 **2026-11-11 修订（§3.41）**：随机格那段飞行（`setHeroRewardTargetWorld` / `playHeroRewardFlight`）
+> 的坐标系已从页面内 `TerritoryOverlay` 换到 `MainRoot` 顶层 `TerritoryRewardFx` —— 否则图标飞到
+> 底部会被聊天框 / 底栏挡住。**固定格开箱表演仍走覆盖层**，两条链路换算入口不同但都用 `convertToNodeSpaceAR`。
+落地回调同样按 `territoryWalletResKeyOf` 再算一次目标：钱包类 `bar.playGainFeedback(key, amount)`，
+其余 `heroButton.playHitFeedback()`。**不在回调里缓存第二份映射**。
+
+按钮抖动**复用** `core/hex/ShakePresentation` 的 `spawnShakeScaleX/Y` + `BUILDING_SHAKE_STRETCH`
+（先 Y 后 X 两段脉冲），`TabButton` 只加 `hitElapsed` + `update(dt)` 按帧写 `icon.node.setScale`；
+不建 tween、不另抄曲线、不改 prefab。
+
+#### ② 随机格：保留原表演，另补一段飞行
+
+随机格原本只有「格心 12 颗抛物线喷发 + 合成读数」，**没有飞行段**。
+`playCellGains()` 的 `playResourceGain()` 原样保留，后面**再补**：
+
+```
+entries.filter(isTerritoryHeroRewardResId)
+  → mountRewardFxLayer(rewardFxRoot())   ← 2026-11-11 补：先换成 MainRoot 顶层宿主
+  → setHeroRewardTargetWorld(英雄按钮世界坐标)
+  → setHeroRewardLandedHandler(一次 playHitFeedback)
+  → playHeroRewardFlight(cellId, heroEntries)
+```
+
+`view/TerritoryHeroFlight.ts` 是轻量二次贝塞尔飞行（不复用 `chestView` 开箱覆盖层、不锁输入）：
+
+| 常量 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `TERRITORY_HERO_FLIGHT_MAX_COUNT` | `8` | 一批最多飞 8 枚，防止随机池开出几十条奖励时铺满屏 |
+| `TERRITORY_HERO_FLIGHT_SECONDS` | `0.62` | 单枚时长，`easeOutQuad` |
+| `TERRITORY_HERO_FLIGHT_STAGGER` | `0.055` | 逐枚错峰 |
+| `TERRITORY_HERO_FLIGHT_ARC_RATIO` | `0.42` | 控制点抬升比例（按 `|dy|` 算，向上向下都鼓） |
+
+控制点 `(startX + dx·0.3, startY + |dy|·arcRatio)`；末段 `k>0.82` 淡出。
+**本批只通知一次落地抖动**（`landed` 布尔量），不是每枚图标抖一次。
+节点池化，`step(dt)` 纯函数按 `elapsed` 写当前帧，`resetHeroFlights()` 在 `resetGains()` 里复位。
+
+#### ③ 碎片进度徽标：新达成检测 + 串行队列
+
+`app/main/HeroFragmentBadge.ts`（非 `Component` 的纯表现视图）挂在 `BottomNav` 上、
+摆在英雄按钮图标正上方：`碎片 icon + 角色头像 + 绿色圆角进度条`，用 `Graphics` 每帧重画，
+**不用 `cc.ProgressBar`、不用 tween**。
+
+```
+grow 0.7s（easeOutCubic：from → 1） → hold 0.2s → fade 0.25s → 整个 UI 消失
+```
+
+🔴 **新达成判定用「预测叠加」，不是「领奖前后各读一次背包」**：服务端奖励回包到达时
+`CacheMgr` 的 `CmdItem` 缓存可能还没刷新，两次读会是同一个值 ⇒ 永远检测不到。
+适配器把本次 `resId → amount` 直接叠进 `countOf`：
+
+```
+before = evaluateUpgrade(表, cardId, 等级, 当前背包)
+after  = evaluateUpgrade(表, cardId, 等级, 当前背包 + 本次增量)
+入队   ⇔ !before.canUpgrade && after.canUpgrade && !maxedOrUnconfigured
+```
+
+`canUpgrade = 碎片够 && 经验够`（`CardUpgradeCost.evaluateUpgrade` 真源），正好就是用户说的
+「碎片累计满且种族经验也累计满」。进度起点 `cardOwned / cardNeed` 钳到 `[0,1]`。
+
+**依赖倒置**：领地 model 只声明 `ITerritoryHeroProgressSource`；组合层
+`bootstrap/main/TerritoryHeroProgressSource.ts` 实现它并 import `app/card`。
+`app/territory` / `MainTerritoryMap` **不许反向依赖 `app/card`**，注入点是
+`MainPageComposition.mountTerritory()` 的 `territory.setHeroProgressSource(...)`。
+
+**排序优先级**复用 `sortLineupCards` 的返回下标（已上阵 > 已解锁 > 解锁中 > 未获得；
+同组比品质 / 等级 / 职业），与玩家在卡库里看到的顺序一致，不另造权重；
+`sortTerritoryHeroBadges` 稳定排序，同优先级按 `cardId.localeCompare` 兜底。
+`HeroFragmentBadge.enqueue()` 一次只播一个，播完 `startNext()`，多英雄逐个播放。
+
+#### 四个边界
+
+- **纯表现，绝不接管结算**：`presentRewards()` 开头 `void this.playHeroBadges(rewards)` 是即发即忘的
+  异步分支（覆盖固定格 / 随机格 / 银币宝箱 / 挂机弹窗四条路）；数据源读失败 / 徽标没建起来 /
+  缺碎片图都只降级成「不播」，奖励仍走既有 `settleRewards` / `playCellGains`。
+- **坐标拿不到就整段跳过**：找不到 `MainTabHost` / `TabButton` / `UITransform` ⇒ 目标 `null`，
+  固定格回落默认落点、随机格不补飞行，喷发 / 读数 / 发奖一个都不少。
+- **异步回来页面可能已销毁**：`playHeroBadges` 两次 `isValid` 检查（查表后、取图后）；
+  `onDestroy()` 手动 `heroBadge.dispose()`、清空数据源与落地回调。
+- **每加一个 import 都要补 VM 夹具白名单**：`TerritoryMapView` 新增
+  `./TerritoryHeroFlight` 触发 5 个独立夹具的 `Unexpected dependency`，
+  `TabButton` 新增 `../../core/hex/ShakePresentation` 触发 `tests/tab-button.test.ts` 的
+  `Unexpected import`（返回零依赖的抖动真模块，不造假曲线）。
+
+判据：`tests/territory-hero-reward.test.ts`（15 条：判据 / 飞行曲线错峰与端点 / 落地时刻 /
+徽标三段进度 / 仅本次新达成 / 稳定排序 / 固定格落点分流与按钮真源 / 随机格保留喷发并补飞行 /
+飞行不 tween 且只抖一次 / 页面不接管结算 / update 驱动与销毁 dispose / 徽标串行队列 /
+数据源组合层注入与预测叠加）+ `tests/territory-chest-animation.test.ts`（既有资源栏落点守卫不回退）
++ `tests/tab-button.test.ts`（抖动 import 白名单）。
+
+### 3.38 宝箱详情弹窗主按钮：加速态绿底 + 播放 icon + 解锁后同步刷新（2026-11-11）
+
+> 「加入按钮是绿色的，加速文案前面缺了播放 icon」「点击解锁后，详情的按钮也要同步刷新」。
+> （「加入」是「加速」笔误；用户当场确认：**只把加速态改绿**，解锁 / 开启仍用黄色底。）
+
+#### 症状与根因
+
+弹窗右侧主按钮 `BtnPrimary` 一直用 prefab 上那张**黄色** `btn_open.png`，而下方宝箱栏
+`ChestSlot` 的「加速」按钮是**绿色** `chest_btn_green.png` + 文字前一颗播放（摄影机）icon
+`chest_bolt.png` ⇒ 同一个状态在两处长得不一样。更糟的是**状态切了弹窗不跟着切**：
+点「解锁」→ 服务端把槽位从 `Activate` 变成 `SpeedUp` → 栏位已经变绿「加速」，
+弹窗还写着黄色「解锁」（用户截图 3 的两个红框）。
+
+根因是 `MainPage.refreshChestDetailCountdown()` 只调 `panel.updateCountdown(秒, 是否计时中)`，
+而那个方法**只写倒计时文本 + `interactable`**，文案 / 底图 / icon 全都不碰。
+
+#### 绿色底图为什么是新生成一张，而不是复用栏位那张
+
+| 素材 | 尺寸 | 结论 |
+| :--- | :--- | :--- |
+| `chest/detail/btn_open.png`（黄，弹窗主按钮） | 321×108 | 圆角 / 黑描边 / 左上高光 / 右下缺口，与蓝色 `btn.png` 成套 |
+| `chest/chest_btn_green.png`（绿，栏位按钮） | 130×54 | 只有一半大，直接放大到 255×108 会把描边和圆角拉伸变形 |
+| **`chest/detail/btn_speed_up.png`（新）** | **321×108** | **按 `btn_open.png` 只换色相**（+65°，主体 43°→108° 与栏位绿同色相；s/v 收敛到蓝色那颗的量级），几何逐像素不变 |
+
+`tools/gen_chest_speed_up_button.py` 可复现：meta 从 `btn_open.png.meta` 克隆，**固定 uuid**
+`b6c1e904-…`，尺寸 / 九宫格 / 顶点数据全抄，只换 uuid / displayName / 内部引用 ⇒ 重跑不会
+弄脏 prefab 引用。⚠️ Windows 上写 prefab 必须 `newline='\n'`（原文件 LF），否则整份大 diff。
+
+#### 一条入口写全按钮，不再有「半刷新」
+
+`ChestDetailPanel.applyOpenButton(state)` 是主按钮的**唯一写入口**：
+文案 / 底图（加速=绿，其余=`onInit` 快照的黄）/ 播放 icon 显隐与排版 / 倒计时胶囊 / 可点。
+`applyContent`（开窗、换箱）与 `updateCountdown`（每秒、状态变化）都走它。
+
+```
+MainPage.chestDetailContentOf  → openSpeedUp: counting（只 SpeedUp 为真）
+MainPage.refreshChestDetailCountdown → panel.updateCountdown(秒, speedUp,
+                                       { caption: chestActionCaption(action), speedUp })
+MainPage.loadTreasureQueue     → load(this, () => refreshTreasureDisplay())
+                                 （激活回包 / 广播一到就刷，不等下一次 1s tick）
+```
+
+🔴 **文案只能来自 `chestActionCaption(action)`**，弹窗一个字都不许自己写（2026-11-09 就因为
+两处各写一份，栏位改成「解锁 / 加速」后弹窗连续落后两轮）。`IChestOpenButtonRefresh` 把
+「当前文案 + 是否加速」随倒计时一起下发，这才是「同步刷新」的落点。
+
+#### 排版与边界
+
+- 播放 icon 节点 `BtnPrimary/SpeedUpIcon`（42×44，复用 `chest_bolt.png`），**默认 `active=false`**；
+  加速态把「icon 42 + 间隙 6 + 文案（2 字 × 34 + 字距 1.8）」拼成一组围绕设计稿 x=4 居中
+  ⇒ icon x≈−33.9、文案 x≈28；倒计时胶囊仍在 (4.5, −22) 不动。
+- 字宽按字数 × 字号估，与 `ChestSlotView.layoutButtonLabel` 一样**不去开关 `Overflow` 量真宽**
+  （那会把 SHRINK 的框永久改窄）。非加速态文案必须回到 x=4、icon 隐藏、底图还原黄色；
+  两态都是全量赋值，连续调用不累加位移。
+- 「加速」仍是**禁用**按钮：服务端只有 InfoList / Activate / FastOpen / Open，没有加速协议
+  （见 `MainPage.chestDetailContentOf` 注释）。配色变化纯表现，不改玩法。
+- `SpeedUpIcon` 节点追加在 prefab 对象数组**末尾**、作为 `BtnPrimary` 最后一个子节点，
+  不动任何既有 `__id__`；新节点同样要 `UI_2D` + `UITransform`。
+
+判据：`tests/chest-detail-speed-up.test.ts`（7 条：绿图几何与 meta、prefab 节点 / 三处绑定、
+加速态排版、还原黄底、解锁后整颗同步切态、幂等、源码守卫）+ `tests/chest-detail-panel.test.ts`
+（新引用绑定）+ `tests/chest-detail-lifecycle.test.ts`（内容 `openSpeedUp`、激活后刷新参数、
+队列变化立即刷详情）+ `tests/chest-entry-count.test.ts`（补 `PopupManager` 桩）。
+
+### 3.39 预告关卡红色编号气泡 + 异步据点解锁即直开（2026-11-11）
+
+需求原文（两句，一次提完）：
+
+> 1. 预告关卡节点，展示气泡提示（**红色未通过的状态**）；
+> 2. 触发异步据点也是**直接进入战斗**。
+
+当场确认的两个口径（都不靠猜）：
+
+| 口径 | 选择 | 理由 |
+| :--- | :--- | :--- |
+| 气泡画在哪一格 | **只画虚影承载格** | 预告披露的是整关 footprint（`chapter_02` 起一关 5~10 格），每格都挂会满屏 `1-1`；与 §3.28「一个节点只有承载格承载 UI」同源 |
+| 「直开」的范围 | **与主线一致：仅解锁那一次** | 把 `asyncPvp` 并进「花银币解锁那一次直开」名单；已解锁 / 已通关仍弹 `BigMapPlayerLevelPanel`，侦查功能完整保留 |
+
+#### 一、为什么预告节点原本没有气泡
+
+`TerritoryPreview.territoryPreviewLevels()` 的披露序列 = `[本章第 1 关] + [每个首领]`，
+`territoryPreviewCells()` 取**整关 footprint 并集**，经 `TerritoryCellReveal` **无条件并入**
+`revealedCells`（只改可见性 / 画 35% 虚影）。🔴 **披露 ≠ 能开**：解锁、扣费、开战判据
+一个字没动（`isPrerequisiteComplete` / `checkUnlock` 同源，见 `TerritoryCellReveal` 文件头）。
+
+而 `TerritoryMapView.stationRenderOf()` 的 `!isOpened` 分支原本返回
+`icon: null` + `isCondition: true`（锁 / 银币价格），**不给 `levelBubble`**；
+即便给了，`TerritoryStationView.renderLevelBubble()` 的 visible 也要求
+`content.icon !== null && !content.isCondition` —— 两道门槛都过不了。所以不是"漏了一张图"，
+是结构上就没有气泡。
+
+#### 二、数据层：四条判据一次收口
+
+在未解锁分支加 `isPreviewBattleSite`，四条**同时成立**才挂：
+
+1. `input.previewCells.includes(site.cellId)` —— 确实是本轮披露的预告关卡；
+2. `type ∈ { stage, boss, asyncPvp }` —— 资源点 / 装饰格不挂编号；
+3. `!!site.buildingId` —— 与 `syncGhosts` 同一条判据，只有**会画 35% 虚影**的那格；
+4. `territoryLevelBubbleText(site, stage) !== undefined` —— 文案真源算得出编号
+   （`asyncPvp` 恒 `PVP`，其余要绑到 campaign 行才有 `章节-关卡`）。
+
+再取 `previewAnchor = stationIconOf(site, stage, input.art)`，**查得到帧**才置
+`previewBubble = true`（虚影都画不出来时不挂气泡）。输出三个字段：
+
+| 字段 | 值 | 用途 |
+| :--- | :--- | :--- |
+| `levelBubble` | `territoryLevelBubbleText(site, stage)` | 复用文案真源，不另拼编号 |
+| `levelBubbleFrame` | `levelBubblePendingFrame ?? levelBubbleFrame` | **红色未通关 `frame_02`**；红图缺失回退蓝图，别让编号消失 |
+| `levelBubbleAnchorFrame` | 虚影那张建筑帧 | 让气泡抬到虚影顶上 |
+
+`ITerritoryStationRender` 新增 `previewBubble?: boolean` / `levelBubbleAnchorFrame?`；
+`syncStations` 的 `{...base}` 自动带过去，锁态把 `isCondition` 置 false 也不影响气泡
+（层序仍是**气泡 > 锁 > 价格 > 虚影 > 建筑**）。
+
+#### 三、视图层：只放宽两条门槛 + 按虚影抬升
+
+```ts
+const preview = content.previewBubble === true;
+const visible = text !== '' && frame !== null
+    && (preview || (content.icon !== null && !content.isCondition))
+    && !content.hidden && !content.isLoading && !this.hintBubbleSuppressed;
+```
+
+`hidden` / `isLoading` / `hintBubbleSuppressed` 三道约束**原样保留**，气泡形状、点击、
+层级也全部复用既有路径 —— 没有第二套渲染。
+
+🔴 **位置坑**：`applyLevelBubblePosition()` 原本按 `iconSprite.spriteFrame` 算建筑可见高，
+预告格 `icon` 是 null ⇒ `height = 0` ⇒ 气泡落回格心、压住价格与 35% 虚影。
+改法是用 `levelBubbleAnchorFrame` 当锚点帧，缩放走 `previewAnchorScale()`
+（**逐字复刻 `applyIconPlacement` 的归一系数** `BUILDING_VISIBLE_WIDTH / 可见宽 × iconSizeScale`），
+与 `renderGhost` 传给虚影 View 的 `iconScale` 同源，因此两者逐像素对齐。
+`dispose()` 必须把 `levelBubbleAnchorFrame` 置 null（站点节点池化复用，别把上一格的虚影高度带走）。
+
+#### 四、玩法层：`isLevelSite` → `isAutoStartSite`
+
+`TerritoryModel.selectSite()` 的锁态分支原来写 `lockedStage && this.isLevelSite(site)`
+（`isLevelSite` 只含 `stage` / `boss`，注释还写着「asyncPvp 的弹窗带侦查，要留给人点」）。
+改为 `lockedStage && this.isAutoStartSite(site)`，后者 `return this.isBattleSite(site)`
+= `stage` / `boss` / `asyncPvp`。**`isLevelSite` 彻底删除**，避免旧口径留在源码里复活。
+
+- 仍然只在 `!isCellUnlocked && !isAreaPassed` 时生效 → 已解锁 / 已通关走
+  `detailSite = site` → 页面 `renderDetail` 的 `detail.playerStage` 分支 → 侦查面板照旧；
+- `lockedStage === null`（绑不到 campaign 行）→ 退回 `handleUnlockOnly` 只解锁，不发空请求；
+- `levelAutoStart` 开关（`chapterLevelAutoStartConfig`）判据只在 `selectSite` 一处，没动；
+- `mode = match` 的 asyncPvp 与主线一样把开战请求交给匹配页，领地侧 `startBattle` 计数仍为 0。
+
+#### 五、回归与既有坑
+
+- 定向 `tests/territory-preview-bubble.test.ts`（12 条）：数据层四条判据 / 红图回退 /
+  已解锁分色 / 视图真的可见 / 锚点抬升（有锚点比无锚点高 >20px）/ 三道门槛仍生效 /
+  源码守卫（判据、`isAutoStartSite`、侦查面板保留）。
+- 既有 `tests/territory-presenter.test.ts` 两条 asyncPvp 用例按新口径改写：
+  「只解锁」的 `tips` 从 3 条 `已解锁，点击查看关卡` 变 `[]`，`beginBattle` 从 1 变 4，
+  `nav.length` 从 1 变 2（第一跳由 `selectSite` 触发）。
+- 🔴 `tests/territory-chest-bubble.test.ts`「气泡尺寸按底图走」用 `slice(at, at + 2600)`
+  **固定字符窗口**取 `renderLevelBubble` 函数体；本轮加注释把窗口撑短，明明代码还在却报红。
+  已改成按 `\n    private ` 找函数体边界 —— 以后再加注释不会再假红。
+- 三份应用源码与相关测试都是 **CRLF**；改动走 `tools/patch_territory_preview_bubble.py`
+  按 bytes 替换并自动保持行尾（带 `already` 幂等标记，可重复跑）。
+- 结果：定向 4 个文件 **162/162 绿**；领地全量 `tests/territory-*.test.ts`
+  **1049 条 / 1046 绿 / 3 红**，3 红全是既有（campaign 缺 battle card、`gradeProModifier`
+  真表漂移、`全是 7/9 时整批跳过 ShowReward` 的旧正则）。`tsc --noEmit` 三份应用源码零错误。
+
+### 3.40 SVN 合并后：首通「先通过、再切换」+ 第 2 章云层与地块固定 15px 间隔（2026-11-11）
+
+需求两句（截图 = 第 2 章 `2-1` 红色编号气泡、浅色云纹紧贴六边形边缘、地块外圈没有一圈均匀留白）：
+
+> 1. svn 合并后，章节通关动画丢失了，只有章节切换动画，章节首次通关需要播放章节通过动画后，再播放切换
+> 2. 第2章的云层和地块没有固定间隔
+
+🔴 **口径覆盖**：§3.22 的「只有玩家点章节按钮才播」说的是**模型命令来源**；本轮用户明确要求首通自动推进也播切换。
+**不改模型命令通道**（`switchChapter` / `selectChapter` 仍是唯一两处发 `chapterSwitch` 的地方），
+由页面在整章云散演完后用**同一组四段曲线**补起转场。
+
+#### 一、为什么"只剩切换动画"（两条真因同时成立）
+
+只读勘察：`territory-chapter-switch` + `territory-cloud` + `territory-battle-prelude` 当时 **82/82 全绿**
+（旧用例没覆盖合并后的时序）；`TerritoryMapView.ts` / `TerritoryCloudView.ts` 在
+`2026-11-11 14:09:46` **同一秒**被改过，仓库里还留着 `.mine` / `.rNNNN` 冲突残留
+（`reference-image.json`、`zcds-building-spawn-shake.test.ts`）。本机没有 `svn` 命令，只能按代码倒推。
+
+| # | 真因 | 症状 |
+| :-- | :-- | :-- |
+| ① | `chapterClearPending` 是模型**一次性边沿**（`emitStateChange()` 发一拍就消费）。只有它为真，`TerritoryCloudView.setChapterCleared(cleared, true)` 才走 `animate` 起整章云散；合并 / 回包时序把它冲掉 ⇒ 页面只看得到持久 `chapterCleared` 电平，云走 `instant` **直接收掉** | 章节通过动画整段消失 |
+| ② | 旧编排里 `advanceCompletedChapter()`（首通自动推进）**不发 `chapterSwitch` 命令**，页面压住换图等云散；云散没演就直接补画新章 | 「先通过后切换」根本串不起来，玩家只看到换章 / 切换镜头 |
+
+🔴 只修任一条都不够：光补边沿只能把云散找回来，后面仍没有切换；光补切换会在通过动画之前就把新章画上来。
+
+#### 二、首通编排：五拍串接（全部在页面侧）
+
+`MainTerritoryMap` 新增三个字段 + 一个参数：
+
+| 字段 / 参数 | 语义 |
+| :-- | :-- |
+| `lastRenderedChapterCleared` | 上一次**真正渲染过**的通关电平，用来算 `false→true` 边沿 |
+| `chapterClearFollowup` | 「这一轮是首通自动推进」的意图标记（手动切章会被 `beginChapterSwitch` 清掉） |
+| `chapterClearSwitch` | `{ from, to }`，云散演完后要补起的那一段切换 |
+| `IChapterSwitchState.deferRender` | 这段转场期间**新章不许画**，等云盖满（`wait` / `reveal`）才放行 |
+
+| 拍 | 触发 | 页面动作 |
+| :-- | :-- | :-- |
+| 1 | 首领打通那一拍 | `firstClearEdge = state.chapterCleared && !lastRenderedChapterCleared && !chapterChanged`；`clearSignal = chapterClearPending \|\| firstClearEdge` ⇒ 置 `chapterClearFollowup = true`，并把 `clearSignal` 当 `chapterClearPending` 喂给 `renderMap`（**云才会走 `animate`**） |
+| 2 | 模型 `advanceCompletedChapter()` 立刻 `loadChapter(下一章)` | `renderAll()` 见 `chapterChanged && chapterClearFollowup` ⇒ 记 `chapterClearSwitch = {from, to}`、`chapterSwapPending = true`、**return 不画新章**（`syncGrid` 的 `clouds.reset()` 不许掐断云散） |
+| 3 | `update()` 发现 `chapterClearPlaying === false`（云散演完） | ①-b 调 `beginChapterSwitch(from, to, true)` 补起 `lead → cover → wait → reveal`；演不了（`beginChapterSwitch` 返回 false）就 ①-c 直接换章，**绝不把玩家卡在旧图** |
+| 4 | 转场进 `wait` / `reveal`（云已盖满） | ② 把 `deferRender` / `chapterSwapPending` 清掉，`renderAll()` 这才发现新章并揭幕；`lead` / `cover` 期间 `renderAll` 里的守卫继续压画，否则会提前露新图 |
+| 5 | 转场被超时 / 打断收掉 | ③ `chapterSwapPending && !chapterSwitch` 兜底补画，`lastRenderedChapterCleared` 在每次真正渲染后落定 |
+
+```ts
+const firstClearEdge = state.chapterCleared && !this.lastRenderedChapterCleared
+    && !chapterChanged;
+const clearSignal = state.chapterClearPending || firstClearEdge;
+if (clearSignal && state.chapterCleared) this.chapterClearFollowup = true;
+```
+
+| 关键约束 | 为什么 |
+| :-- | :-- |
+| 🔴 `firstClearEdge` **必须带 `!chapterChanged`** | 切回一个早就通关的章节时 `lastRenderedChapterCleared` 还是 false，不带这个条件会误判首通、重演一遍散场（§3.22 四「散雾只给首次通关」） |
+| 🔴 `clearSignal` 要**同时**喂给 `renderMap` | 只置页面字段、不给地图，`setChapterCleared` 仍收不到 `animate=true`，通过动画照样不演 |
+| 🔴 手动切章清掉 `chapterClearFollowup` | 玩家点章节按钮与首通自动推进是两条路，别把意图标记带过去二次补转场 |
+| 模型命令口径**一个字不改** | 新编排只在页面侧补起同一段演出；`tests/territory-chapter-clear-followup.test.ts` 有源码守卫钉住「模型仍只有 `switchChapter` / `selectChapter` 两处发 `chapterSwitch`」 |
+| `heroBadge.step()` 排在 `update()` 所有早退之前 | ① 的 `if (chapterClearPlaying) return` 会把整串英雄徽标队列卡住（代码注释已写明） |
+| 转场 ① / ② / ③ 的顺序不能换 | ① 先补画新章，② 才可能揭幕；② 期间还要压住 ①-c 的「普通换章补画」分支（`!chapterSwitch?.deferRender`） |
+
+#### 三、第 2 章云层为什么没有固定间隔
+
+`CloudKeepOut` 反向遮罩按 `territoryCloudKeepOutPoints()`（`TERRITORY_CLOUD_KEEP_OUT_PX = 15`，
+**地块轮廓 = 格面 + 侧壁**外扩 15px）描擦除区，但遍历的是 `cloudCells`
+（= `sites[].cellId` + `randomSites.candidateCells` + `startCellId`）。
+§3.27 之后预告披露的是**整关 footprint**（`chapter_02` 起一关 5~10 格），
+`paintHexes` 会把这些格画成地块，它们**不在 `cloudCells`** ⇒ 云纹直接盖到地块边缘，
+视觉上就是「第 2 章起云和地块之间没有那一圈固定留白」。
+
+真表佐证（第一关 footprint 与 `cloudCells` 的差集）：
+
+| 章 | 第一关 footprint | 漏描 |
+| :-- | :-- | --: |
+| `chapter_01` | `[327, 328]` | **0**（都在表里，旧口径不露馅） |
+| `chapter_02` | `[306, 309, 327, 328, 329, 330, 348, 350]` | **7 / 8** |
+| `chapter_03` | `[331, 332, 350, 351]` | **3 / 4** |
+
+修法：`TerritoryMapView.syncClouds()` 在 `setChapterCleared` **之前**注入全量格心：
+
+```ts
+this.clouds.setKeepOutPoints(input.layout.points);
+this.clouds.setChapterCleared(input.chapterCleared, input.chapterClearPending);
+this.clouds.sync(this.cloudCells, revealed, pockets, ...);
+```
+
+`TerritoryCloudView` 新增 `keepOutPoints` / `setKeepOutPoints()` / `forEachKeepOutCell()`：
+**挡云区 `rebuildKeepOut()` 与消散层 `syncDissolveKeepOut()` 共用同一份遍历** ——
+`keepOutIds`（= `revealed`）× 全量格心，已揭示格一个不漏。
+
+| 坑 | 说明 |
+| :-- | :-- |
+| 🔴 **引用变化要强制重描** | 换章时坐标系换了，但 `revealed` 集合有可能碰巧一样 ⇒ `syncKeepOut` 的判等早退，旧多边形留在旧格心、15px 间隔整体错位。`setKeepOutPoints` 里按 `this.keepOutPoints === points` 判引用，变了就 `rebuildKeepOut()` + 把 `dissolveIds` 清空逼遮罩重画 |
+| 🔴 `null` 退回旧口径 | 老用例 / 没有布局的退化路径不注入格心，此时 `forEachKeepOutCell` 退回「只遍历 `this.cells`」，别让无布局场景整块崩掉 |
+| 消散层遮罩必须同源 | 「擦邻居」那层如果用旧 `cells`，消散时会在 footprint 格上留一圈云；两处都走 `forEachKeepOutCell` |
+| ⚠️ 三份 VM 夹具要补桩 | `tests/helpers/territory-map-view-sandbox.ts`、`territory-building-shake.test.ts`、`territory-tile-frames.test.ts` 里的 `TerritoryCloudView` 是空壳类，新增调用不补 `setKeepOutPoints(): void {}` 会直接 TypeError |
+
+#### 四、判据与回归
+
+| 项 | 结果 |
+| :-- | :-- |
+| 定向 `territory-cloud`(56) + `territory-chapter-clear-followup`(9) + `territory-chapter-switch`(19) | **84 / 84 绿** |
+| 领地全量 `tests/territory-*.test.ts` | **1065 条 / 1063 绿 / 2 红**，2 红全是既有：`territory campaign joins chapter levels, NPC teams and monster cards`（真表缺 battle card）、`全是 7/9 时整批跳过 ShowReward`（旧正则） |
+| 广域 `chest-*` + `main-*` + `tab-button` + `new-treasure*` + `territory-*` | **1272 条 / 1261 绿 / 11 红**，全是既有 `ArenaRoot.prefab` / 资源栏几何 / 快速寻敌文案 / 真表漂移，**零新增红** |
+| `tsc --noEmit` | 三份改动的应用源码**零错误**；`tests/zcds-building-spawn-shake.test.ts` 仍有 3 条 `TS1185`（`<<<<<<< .mine` / `=======` / `>>>>>>> .r1236` 的 SVN 冲突标记残留，本轮未清理） |
+
+新增用例 `tests/territory-chapter-clear-followup.test.ts`（9 条，VM 真实例化 `MainTerritoryMap` 跑
+`renderAll()` / `update()` 状态机）：边沿丢失时的电平兜底 / 切回已通关章节不重演 / 首通自动推进压画 /
+演出顺序 / 降级与中断兜底 / 模型命令口径守卫 / 页面源码守卫 / 云层接线守卫。
+`tests/territory-cloud.test.ts` 补 4 条：footprint 格不在 `cloudCells` 也有 15px 轮廓、
+换章换了坐标系但 `revealed` 没变也要重描、消散层遮罩同源、三章真表佐证。
+
+工具：`tools/patch_chapter_clear_followup.py`（8 个 hunk）、`tools/patch_territory_cloud_gap.py`（4 个文件），
+都按 **bytes 精确替换**并自动保持 `MainTerritoryMap.ts` / `TerritoryMapView.ts` 的 CRLF、
+新 TS / 用例的 LF，带 `already` 幂等标记可重复跑（沿用 §3.39 的行尾教训）。
+
+### 3.41 飞舞的奖励图标要画在所有 UI 之上（2026-11-11）
+
+需求一句（截图 = 第 2 章地图，`EXP` 小图标飞到「快速寻敌」按钮与底部聊天框一带被压住，
+红圈标出其中一颗）：
+
+> 飞舞的icon粒子要处在UI的上层，现在被聊天框挡住
+
+#### 一、真层级：页面内「排最后」不等于屏幕最上层
+
+prefab 实测（`assets/resources/ui/main/`）：
+
+| 节点 | 子节点顺序（左 → 右 = 先 → 后渲染） | 后果 |
+| :-- | :-- | :-- |
+| `MainRoot` | `Bg` → `Content` → **`BottomNav`** | 底栏是最后一个 ⇒ 整棵领地页都画在它下面 |
+| `Content / ArenaRoot` | `MapRoot` → `BeginGame` → `EntranceLayer` → `OSRankEntry` → `TopHud` → **`BottomHud`**（内含 `ChatBar`） → `ChestBar` | 领地页在 `MapRoot` 里，比 `TopHud` / `BottomHud` 都早 ⇒ 聊天框、快速寻敌、资源栏全压在页面上 |
+| `ArenaRoot / MapRoot / MainTerritoryMap` | `MapViewport`（→ `MapLayer` → … → `GainLayer`） | `TerritoryOverlay` 懒建在页面根并排最后，**只在这一页内部**靠上 |
+
+所以「把覆盖层在页面里再往后挪」是无效的：跨到 `ArenaRoot` 就被 `BottomHud` 盖，
+跨到 `MainRoot` 又被 `BottomNav` 盖。唯一正确的落点是 **`MainRoot` 的最后一个子节点**。
+弹窗由 `PopupManager` 挂在 `MainRoot` 之外 ⇒ 仍盖在图标之上（模态不该被飞过的粒子压住）。
+
+#### 二、分工：页面找根、视图建层
+
+🔴 **页面不许自己搭 UI**：`tests/territory-page-split.test.ts` 与
+`tests/territory-battle-intro.test.ts` 两条架构守卫禁止 `MainTerritoryMap.ts` 出现
+`new Node(` / `addComponent(`。本轮第一版把建层写在页面里，广域回归当场红这两条，已改回视图。
+
+| 角色 | 职责 |
+| :-- | :-- |
+| `MainTerritoryMap.rewardFxRoot()` | **只找节点**：`findHeroTabHost()?.navBar.parent`（= `MainRoot`）；拿不到 `MainTabHost` 退 `hostPageRoot()`（= `ArenaRoot`，至少盖住聊天框）；再不行 `null` |
+| `TerritoryMapView.mountRewardFxLayer(root)` | 懒建 `TerritoryRewardFx`：`layer` 跟随宿主、`addComponent(UITransform)` 撑尺寸、`setSiblingIndex(root.children.length - 1)`，然后 `setRewardFxHost(host)` |
+| `setRewardFxHost(host)` | 换宿主时**丢掉在飞 / 池化中的图标**（旧节点挂在旧层，复用会「新层一个图标都不出现」），并作废 `heroRewardTarget`（旧宿主的局部坐标） |
+| `rewardFxLayer()` | 顶层优先；没注入 / 节点已失效 ⇒ 回退 `ensureOverlayHost()`（旧行为，**不静默消失**） |
+| `disposeRewardFxLayer()` | 页面 `onDestroy` 通知，收掉挂在 `MainRoot` 上的那个节点（它不随本页子节点销毁） |
+
+| 关键约束 | 为什么 |
+| :-- | :-- |
+| 🔴 注入顺序 = `mountRewardFxLayer` → `setHeroRewardTargetWorld` → `playHeroRewardFlight` | 先换宿主再登记终点，否则这一批飞行的终点还是旧覆盖层坐标，整批飞偏 |
+| 🔴 起点与终点必须同一套坐标系 | `cellPointInNode(cellId, host)` 从 `cellPointInOverlay` 抽出；`cellPointInOverlay` 仍给开箱 / 点击反馈 / 推镜用，不受影响 |
+| `layer` 必须跟宿主 | 不跟 `_layer` 时整层不进 UI 相机，且**不报错**（与散图 `f9941` 同类静默故障） |
+| 节点不吃点击 | 新层没有 `cc.Button` / `TOUCH_*` 监听；Sprite 子节点默认不参与触摸派发（对比 `MainPage.ensureChestBlankCatcher` 是显式 `on(TOUCH_START)` 才接点击） |
+
+#### 三、范围：只迁「飞向英雄按钮」那批
+
+| 表现 | 宿主 | 本轮是否迁 |
+| :-- | :-- | :-- |
+| 随机格飞向英雄按钮（`TerritoryHeroFlight`，≤8 枚 0.62s） | `MainRoot / TerritoryRewardFx` | ✅ 就是被聊天框挡住的那批 |
+| 格心抛物线喷发 12 颗（`TerritoryGainBurst`） | `MapLayer / GainLayer` | ❌ 必须继续画在 `+N` 读数**之下**（§3.17）；喷发范围在地图中部，本来也到不了聊天框 |
+| 开箱表演 / 点击反馈 / 云盖 / 切章镜头 | `MainTerritoryMap / TerritoryOverlay` | ❌ 另一套全屏表演与页面坐标系，动它们会连带改镜头基准 |
+| 固定格开箱飞图标（`TerritoryChestView`） | 覆盖层 | ❌ 落点是顶部资源栏，不在用户截图范围内 |
+
+> ⚠️ 「页面内覆盖层盖不过 HUD」这条对**开箱表演**同样成立；本轮只按用户反馈修飞行图标，
+> 若后续发现开箱光柱 / 飞图标也被 HUD 压住，复用 `mountRewardFxLayer` 的宿主即可，别再建第二份层。
+
+#### 四、判据与回归
+
+- `tests/territory-reward-fx-layer.test.ts`（**19 条**）：三份 prefab 层级真值 / `MainRoot` 内无弹窗层 /
+  运行时节点不进 prefab / VM 行为（注入、回退、换宿主清池、终点按新矩阵换算、起播把同一宿主交给起点与父层、
+  `cellPointInNode`、挂载排最后与幂等、销毁回落）/ 源码守卫（页面不搭 UI、注入顺序、其它表演不许迁层）。
+- 领地全量 `tests/territory-*.test.ts` **1087 / 1087 绿**；广域
+  `chest-*` + `main-*` + `tab-button` + `new-treasure*` + `territory-*` **1294 / 1294 绿**；
+  `tsc --noEmit` 两份应用源码与新用例**零错误**。
+- 工具 `tools/patch_territory_reward_fx_layer.py`：从原始状态**一次到位**（按 bytes 替换、自动保持 CRLF / LF、
+  `already` 幂等标记），重复执行会输出 `skipped`。
+- ⚠️ VM 沙箱里建的对象与本文件**不同 realm**，`deepStrictEqual` 会因原型不同而假红 ⇒
+  坐标断言一律逐字段比（`assert.equal(point.x, …)`）。
+- ⚠️ 共享夹具 `tests/helpers/territory-map-view-sandbox.ts` 的 `cc` 桩补了 `Vec3` / 最小 `Node`；
+  给 `TerritoryMapView` 加 import 时仍要全盘 grep `Unexpected dependency` 补白名单。
+
+### 3.42 第 2 章 2-10 首领改成「裂开的笑嘴」：10 格 U 形（2026-11-11）
+
+> 「修改第2关的2-10的boss 关卡形状，像裂开的笑嘴（绿框范围），保持正确的解锁关系，
+>  用随机格或者固定格填充替换缺失的地块」
+
+**先认清对象**：编辑器的红色格子上标的是「皇冠 + `2`」= 站点 id `boss_2` 的后缀。
+`boss_2.configId = 10020`、`levelInfo` 里 `10020` 是 `levelChapter 2 / chapterStage 10`
+⇒ **2-10 = `boss_2`**（不是 `boss_1`/10015 = 2-5）。
+
+**为什么还需要反向核对几何**：编辑器画的是**正六边形**（列距 37.25 / 行距 43.5 / 相位 = 行距一半），
+而游戏是压扁的（列距 92.25 / 行距 90 / 相位 ±22.5 = 行距四分之一）。两者**拓扑一致、仿射不一致**，
+所以「从截图量像素反推格号」要靠 token 反算：先由金币/皇冠图标质心拟合出编辑器的列距/行距/相位，
+把每个红像素归到最近的格心，才能得到 (u,v) 网格。直接拿游戏常量去套会整体错位。
+
+**目标形状（D3，10 格）**
+
+| 行 | 格 | 作用 |
+| :--- | :--- | :--- |
+| r12c6 | `246` | **退出 boss**，改回固定格 |
+| r13c7~c13 | `267 268 269 270 271 272 273` | 嘴身（`270` = 承载格） |
+| r14c9~c11 | `289 290 291` | 下唇，比嘴身低一层 ⇒ 中间下凹 = 张嘴笑 |
+
+嘴身上沿是一条直线（304 那格已退出）⇒ 两端不外凸，配合下唇下沉就是「笑嘴」。
+「裂开」的版本（下唇中间留一格当裂口）是 A 方案，用户最终选了 D3 连成一条。
+
+🔴 **`270` 必须留在 boss 里，且必须继续当承载格**。它是 `boss_2.cellId`，而且
+**17 个站点把 `270` 写进 `requiredCells`**（`asyncPvp_3`、`fixedResource_10/11/16/17/18/19/20/21/22/27/30/36/38/46/48/63`）——
+它是通往下半区的唯一关口。`isPrerequisiteComplete` 对固定资源格有「只要可解锁就算完成」的特例
+（§3.30），`270` 一旦变成资源格，那 17 格会在开局全部可解锁，推进线直接塌。
+⇒ `unlock.requiredCells` 保持 `[314, 292]` 不动（两个前置都还在，无环）。
+
+**「缺失地块」怎么填**：退出的 `246` 新建固定格 `fixedResource_90`
+（`configId: fixedResource_246` / `requiredCells [270]` / `silverCost 15` / `exploreSeconds 1` / `staminaCost 1`）。
+
+⚠️ **奖励要用 1023 + `69020`**：被并掉的 `289`（`fixedResource_46`）恰好是本章一个 1023 银币宝箱。
+新格若用默认的 `1017`，本章 1023 宝箱会从 27 变 26（七章合计 148 → 147），等于顺手删了个设计好的宝箱。
+所以把那个宝箱**挪到 246** ⇒ 数量与 §3.35 的守卫（148 格）都保持不变。
+
+**站点总数 104 → 102**（吞 3 个固定格、补 1 个）⇒ 章节完成度分母少 2。
+`tests/territory-map-config.test.ts` 里 `config.sites.length` 的期望值因此从 104 改成 102。
+
+**发布落点变了（2026-11-11）**：`presets_io.py` 的 `DOC_TARGETS`（sever + client）已收成
+`DOC_SEVER_TARGET = (sever,)`，`copy_territory_maps.copy_one` 只写
+**Cocos 资源目录 + 策划 `sever`** 两处。策划 `json/client` 仍与 sever 保持一致（人工同步），
+但**不再由脚本自动写** —— 以后改地图记得单独同步 client，否则七章里会只有被改的那一章不一致。
+
+**脚本**：`tools/map-editor/patch_boss2_mouth.py`（幂等；`--dry-run` / `--no-publish`；
+硬断言「除 `boss_2.footprint` 与增删的那几个站点外一律不许变」；另有两条前置校验：
+退出集合必须等于 `[246]`、1023 宝箱数量必须持平）。
+
+判据：`tests/territory-map-config.test.ts`（preset ≡ 已发布 + 站点数 102）、
+`tests/territory-building-id.test.ts`（七章 148 格 1023 宝箱仍在），
+`npx tsx --test tests/territory-*.test.ts` 全量 1097 条全绿。
+
+### 3.42 SVN 合并后：未通关预告气泡变回蓝色（2026-11-11）
+
+需求原文：
+
+> 「合并svn之后，未通关的预告气泡又变回了蓝色，不是红色」
+
+#### 一、现象与「旧用例全绿」的悖论
+
+截图里同屏两颗编号气泡**都是蓝** `frame_03`：`2-9` 在绿色已通关地块（蓝是对的）、
+`2-10` 在褐色未通关地块（应为红 `frame_02`）。而 §3.39 的
+`tests/territory-preview-bubble.test.ts` **12 / 12 绿**，`stationRenderOf` 里两条
+`levelBubblePendingFrame` 分支也都在 —— 与 §3.40 那次一样，是
+**用例没覆盖合并后的实机状态**，不是代码被合并删了。
+
+#### 二、逐项排除（全是绿的，别再往这些方向改）
+
+| 环节 | 核对结果 |
+| :--- | :--- |
+| 路径常量 | `MapMarkerBadge`：`PASSED = image/spawn-region/frame_03/spriteFrame`（蓝）、`PENDING = image/spawn-region/frame_02/spriteFrame`（红），两者不等 |
+| 磁盘资源 / meta | `assets/bundles/battle/image/spawn-region/frame_02.png`（红胶囊）/ `frame_03.png`（蓝胶囊）都在，`type: sprite-frame` + `@f9941` 齐全 |
+| bundle 路由 | `BundleCatalog` 的 `image/spawn-region` → `BATTLE_BUNDLE`，`bundleForPath()` 两条路径都命中 |
+| `Promise.all` 顺序 | 26 项与解构逐项对齐：`levelBubbleFrame`(蓝) → `levelBubblePendingFrame`(红) → `chestBubbleFrame` → `staminaIcon` |
+| art 传递 | `loadTerritoryBattleArt → TerritoryChapterLoader.art → context.art → buildState().art`，整对象传，没裁字段 |
+| 数据层判据 | `previewBubble` 分支与 `claimed ? 蓝 : 红` 分支都在；`isAreaPassed`、`isOpened`、`areaPeers` 口径未变 |
+| 视图层 | `renderLevelBubble` 每帧 `if (bubble.sprite.spriteFrame !== frame)` 写回，池化复用不会残留旧图 |
+
+#### 三、真因：`has()` 索引预检把「查不到索引」当成「图不存在」
+
+```ts
+// 旧实现（已删）
+if (!(await assets.has(path, SpriteFrame))) {
+    console.warn(`美术未在 bundle 索引中，使用矢量兜底：${path}`);
+    return null;              // ← 静默判空，零报错
+}
+```
+
+`CocosAssetService.has()` 走 `bundle.getInfoWithPath(path, SpriteFrame)`，查的是
+构建产物 `config.json` 的 **paths 索引**；`load()` 才真正解析 uuid。两者不是一回事。
+`spawn-region/` 下两张图的登记方式本来就不一致：
+
+| 图 | `packable` | 登记方式 |
+| :--- | :--- | :--- |
+| `frame_03`（已通关蓝） | `true` | 进 `auto-atlas.pac` 图集 |
+| `frame_02`（未通关红） | `false` | 独立散图 |
+
+实机一旦对红图查不到索引，`levelBubblePendingFrame` 就是 `null`；
+`stationRenderOf` 两条「未通关」分支的尾巴都是
+`?? input.art.levelBubbleFrame`（**宁可蓝一下，也不能没气泡**），于是
+`2-10` 和 `2-9` 一起变蓝 —— 与截图逐像素一致。
+
+🔴 **为什么旧用例全绿**：`tests/territory-random-resource-render.test.ts:365` 等夹具把
+`AssetService` 桩写成 `{ load, has: async () => true }`，`has=false` 这条分支从未被跑过。
+「恒 true 的桩」是这类资源假阴性问题的通用盲区，凡改 `loadFrame` 必补一条 `has=false` 用例。
+
+#### 四、修复：`has` 不参与「要不要加载」的判断
+
+```ts
+async function loadFrame(assets: AssetService, path: string): Promise<SpriteFrame | null> {
+    try {
+        return await assets.load(path, SpriteFrame);
+    } catch (error) {
+        let indexed = true;
+        try { indexed = await assets.has(path, SpriteFrame); } catch { indexed = false; }
+        console.warn(`[TerritoryPage] 战斗美术加载失败，使用矢量兜底：${path}`
+            + `${indexed ? '' : '（bundle 索引也未登记此路径）'}`, error);
+        return null;
+    }
+}
+```
+
+- **加不加载只由 `load` 自己判**：真缺图仍由 `catch` 返回 `null`，旧降级策略一字未改；
+  只是不再「明明有图却判空」。正常路径还少一次异步索引查询。
+- `has` 降级为**失败后把日志说清楚**（区分「路径拼错」与「资源没进包」）。
+- ⚠️ **不要**顺手改掉「红图缺失回退蓝图」这条口径：那会让红图真丢时**整颗编号气泡消失**，
+  比蓝更糟；用户要的是「本该有红图时别变蓝」，不是「宁可没气泡」。
+- ⚠️ 函数头注释里逐字引用了旧写法 `if (!(await assets.has(...))) return null`，
+  源码守卫必须**先去注释再断言**，否则会像 `territory-chest-bubble` 那次一样假红。
+
+#### 五、回归
+
+- 新增 `tests/territory-bubble-red-frame.test.ts`（**10 条**）：`has=false` / `has=true` / 单张
+  load 失败三种实机状态跑真 `loadTerritoryBattleArt`；源码守卫（`load` 排在 `has` 之前、
+  无短路 `return`、解构顺序）；磁盘 PNG + meta + bundle 路由真值；红图进 art 后
+  `stationRenderOf` 预告 / 已解锁未通关取红、已通关取蓝。
+- 定向 `tests/territory-preview-bubble.test.ts` **12 / 12 绿**；领地全量
+  `tests/territory-*.test.ts` **1097 / 1097 全绿**；广域
+  `chest-* + main-* + tab-button + new-treasure* + territory-*` **1304 / 1304 全绿**。
+- ⚠️ 首轮曾跑出 1 红 `tests/territory-map-config.test.ts`
+  「chapter two keeps the current editor site format…」`sites.length` **102 ≠ 104**：同一批
+  SVN 合并**分批落盘** —— 当日日志已把 `chapter_02` 站点数 104 → 102 并把用例期望同步成 102，
+  但合并中途用例先落回 104、地图已是 102；落盘完成后复跑即全绿。与气泡修复无关，**别去改地图表**。
+- 两份改动文件仍为 **LF**；定向 `tsc --noEmit` 涉改动文件只剩 2 条环境错误
+  （`cc` 模块声明缺失 + 其派生的 `JsonAsset.json`），新用例零错误。
 
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
@@ -3256,3 +4520,888 @@ Creator 的规则是「被多个包引用时，资源存进**优先级高**的�
 判据：`tests/zcds-settlement-page.test.ts`（PREFAB 模式 / `itemPrefab` 指向公共件 / content 无静态槽位 / 落位公式）
 + `tests/reward-item.test.ts`（控制器资源归属 / 加载失败必须出声）；
 端到端探针 `tmp/g_settlement_rewarditem_verify.mjs`（12 条：奖励格**真的出图出框**、数量、落位、尺寸）。
+
+## 12. 多人伤害统计（2026-11-09）
+
+- `GameRunAway` 使用逐玩家纵向列表，按本局席位顺序显示 2～4 人，自己固定首行并标“我”；头像与昵称来自 `seatProfiles`，阵营标记复用战场配色，不合并对手数据。
+- 每行显示金色造成伤害和蓝色承受伤害；同类进度条以全体玩家该项最大值为统一上限，数值独立右对齐并使用千位分隔。数据变化不重排行。
+- 面板随实际人数调整高度；无关闭按钮，沿用 `PopupBase` 的点内容外空白关闭。原有返回主界面模式保留独立按钮和空白关闭限制。
+- 运行控制器在已有静态刷新节奏（0.15 秒）推送本局模型统计，只刷新已打开窗口；异步加载完成时立即追平最新统计。关闭后停止刷新，结算或退出时关闭窗口，退出/结算后迟到的加载结果立即释放。
+- 头像经弹窗资源作用域与既有 `HeadArt` / `createIconLoader` 加载，关闭后迟到结果不得回填。视图不读取全局模型、不推进战斗规则、不新增统计网络请求。
+- 验证：`tests/battle-runtime-controller.test.ts`、`tests/battle-composition-services.test.ts`、`tests/zcds-settlement.test.ts`、`tests/zcds-progress.test.ts`；交互和归属守卫 `tests/view-intent-events.test.ts`、`tests/callback-owner.test.ts`。真实引擎探针需覆盖四行绑定、双人收缩、数值/比例更新与点空白关闭。
+
+## 13. 技能释放的触发范围：到点之后还要「普攻射程内有目标」（2026-11-11）
+
+需求原文：
+
+> 所有技能释放有一个触发范围，同角色的普通攻击的范围，否则达到触发条件也不会直接触发，
+> 只是待触发状态，直到目标进入范围才会触发。
+
+改前是**每条车道各判各的**，同一个「能不能放」的问题有四套答案：
+
+| 车道 | 触发时机 | 改前的目标判据 | 没目标时 |
+| :--- | :--- | :--- | :--- |
+| 强化普攻 `empowered` | `sendAttack` 内 | 已要求身处普攻射程（天然满足） | — |
+| 副轨扇形 `secondary` | `secondaryCooldown` | **只判「有锁定目标」**，不判距离 | ⚠️ 目标在半张图外也清一片空气，CD 照扣 |
+| 自身施法 `self_cast` | `selfCastCooldown` | **完全不判目标** | ❌ 空场也给自己上增益 |
+| 自身光环 `self_aura` | `auraCooldown` | **完全不判目标** | ❌ 空场在脚下开一片空烧的地 |
+| 多点打击 `random_strike` | `strikeCooldown` / `strikeEvery` | 自带 `strikeRadius` | 不消费 CD |
+| 移形换影 `blink_strike` | `blinkCooldown` | 自带 `blinkSearchRadius` | 不消费 CD |
+
+### 13.1 四个口径（用户当场拍板，不要重推）
+
+| 口径 | 选择 |
+| :--- | :--- |
+| 哪些技能走闸门 | **只有打人类的走**（副轨 / 自身光环 / 多点打击 / 移形换影）；自身增益与被动、连发、低血护体**不设闸门** |
+| 与技能自带搜索半径冲突时 | **直接压到普攻范围**（封顶，只压不抬） |
+| 表现层提示 | **不需要**，纯逻辑，不动任何 prefab |
+| 是否吃 `attackRangePct` | **吃**，与普攻同源 |
+
+自身增益（`self_cast`：吃口菠萝自愈 / 嗜血 / 迅击）必须豁免：被远程风筝时敌人站在自己
+普攻范围之外，若也要求「范围内有目标」，残血时永远放不出自愈 —— 那不是待触发，是永久哑火。
+
+### 13.2 判据与唯一写入口
+
+- 闸门 `ZCUnitTargeting.hasTargetInAttackRange(unit)`：**不依赖锁敌**（锁敌是 RTS 式仇恨锁，
+  `current()` 会返回半张图外的目标）。锁定目标就在范围内直接返回（常见路径不扫全场），
+  否则按 `acquire` + `isInAttackRange` 同一套判据扫一遍敌我单位；城墙 / 建筑只认**已锁定的那个**
+  （地块不在 `units` 里，全场遍历地块表太贵，而攻城时它一定被 `targetWallHexId` 锁着）。
+- 射程口径与普攻**完全同源**：`ZCTargetingSystem.attackReach` —— `attackRange ≤ 100 ? attackRange + 目标身体半径 : attackRange × 0.9`，
+  再乘 `combatDistanceScale`；`effectiveDefinition` 已把 `attackRangePct` 算进去。
+- 封顶半径 `ZCUnitTargeting.attackReachOf(unit)`：身体半径取**自己**的（与 `castFanSkill` 算扇形半径同一口径），
+  所以「近战 45 + 身体 24」与普攻给的是同一个数。
+- 两者经 `IZCSkillTriggerContext.inAttackRange` / `attackReachOf` 注入，唯一装配点是
+  `ZCGameModel.buildSkillTriggerContext`。**两个字段都是可选的**：缺省 ⇒ 不设闸门，存量单测与既有单位行为逐字不变。
+- `ZCSkillTriggerSystem.tick` 里每个单位每步**只算一次** `release`，四条车道共用，不是各扫一遍。
+
+### 13.3 「待触发」不是新状态机
+
+`readyAt` 停在过去 + 本帧不执行、**一个字节都不消费**，目标进范围的那一帧立刻补放。
+所以不需要新增单位字段、不需要快照兼容处理：
+
+- `applySelfAura` / `advanceSecondary` / `applyRandomStrike`（CD 分支）/ `applyBlinkStrike`：
+  在 `now >= readyAt` 之后、真正施放之前插一道 `if (!release) return;`；
+- `applyRandomStrike` 的**累计次数**分支：闸门关闭时**不推进 `strikeFiredCount`**，
+  于是目标一进范围这一波立刻补出去；
+- 持续窗口（`strikeSeconds`）进行中的每一波不再判闸门 —— 那是**已经放出去**的效果，不该半路收掉。
+
+### 13.4 封顶只压不抬
+
+| 技能 | 表值 | 世界 px（×0.3） | 普攻射程 | 结果 |
+| :--- | :--- | :--- | :--- | :--- |
+| 镭射飞龙 `strikeRadius` | 1100 | 330 | 148.5 | 压到 **148.5** |
+| 魔术师 `blinkSearchRadius` | 600 | 180 | 148.5 | 压到 **148.5** |
+| 毒箭蘑菇 / 戈壁狂箭 `strikeRadius` | 252 | 75.6 | 135 | **保持 75.6**（本来就比普攻近，不许被放大） |
+
+`strikeSplashRadius` / `blinkHitRadius` / `blinkCloneRadius` 是**命中后的爆炸半径**，不是挑选半径，不受封顶影响。
+
+判据：`tests/zcds-skill-trigger-range.test.ts`（9 条 —— 缺省无闸门、三条待触发（含「按累计次数」那条不许记次数）、
+封顶只压不抬、闪现射程外空闪不消费 CD、自身增益豁免、被动/连发/低血豁免、`hasTargetInAttackRange` 判据本身）
++ `tests/zcds-skill-trigger.test.ts`（既有 6 条须全绿，证明不传闸门时行为逐字不变）。
+
+## 14. 磁电菇两条新主动：`bolt_strike` 车道 + 软控「麻痹」（2026-11-11）
+
+技能设计案第 80/81 行新设两条主动（68016 磁电菇，金档）：
+
+| 技能 | 触发 | 行为键 | 车道 |
+| :--- | :--- | :--- | :--- |
+| 101603 五雷轰顶 | 主动 · 冷却 12 秒 | `bolt_strike` | **新开**（`ZCSkillTriggerSystem.applyBoltStrike` → `ZCAttackResolutionSystem.castBoltLine`） |
+| 101604 磁电冲击 | 主动 · 累计 8 次普攻 | `self_aura` | 复用自身光环，新增「累计次数」触发口径 |
+
+### 14.1 五雷轰顶：为什么另起一条车道
+
+设计口径是「锁定目标落 1 道雷，再沿**该目标的背朝向**补 2/3/4 道，每道间隔 45px」。
+它与已有两条「打人」车道的差别都不小：
+
+- 副轨扇形（`secondary`）的方向由**自身朝向**定，而且是一整片扇形，不是一条线；
+- 多点打击（`random_strike`）按「就近 / 随机」挑**一批**目标各打一发，落点与目标位置无关。
+
+所以另起 `bolt_strike`：只锁**一个**目标，雷沿「自身 → 目标」的延长线排开。它有自己的 CD 字段
+`unit.boltReadyAt`（`ZCSnapshotCodec` 已登记），可以与副轨 / 光环同时挂在同一张卡上。
+
+落点与判伤：
+
+| 量 | 来源 | 换算 |
+| :--- | :--- | :--- |
+| 雷数 | `boltCount` = 3 / 4 / 5 | 1 道落在目标身上 + 2/3/4 道沿背朝向 |
+| 间距 | `boltSpacing` = **60**（表值；2026-11-11 第二轮 30 → 45，2026-11-12 第三轮 45 → 60，每次 +15px） | × `combatDistanceScale` 0.3 = **18 世界 px**；屏上 ×0.76875 = **46.1 px** |
+| 出现间隔 | `boltInterval` = **0.15 秒**（原 0.1 → 0.18 → 0.15） | `nextWaveAt = now + index × 0.15 + boltDelay`；五道 = 0.15 / 0.30 / 0.45 / 0.60 / 0.75s |
+| 判伤延迟 | `boltDelay` = 0.15 秒 | 落在特效**第 5 帧**的时间窗内（见 §14.5） |
+| 单道倍率 | `boltDamageRate` = 1.6 / 2.0 / 2.5 | **每道独立计** ⇒ 总伤 480% / 800% / 1250% |
+| 判定半径 | `boltRadius` = 90（表值） | × 0.3 = 27 世界 px |
+
+「160%/200%/250% 每道独立计」是用户 2026-11-11 拍板的口径 —— 不是 3/4/5 道**分摊**一份伤害。
+
+实现上每道雷 = **一条 `area` 表现事件 + 一个 `wavesLeft: 1` 的地面区域**：表现事件负责画闪电，
+区域只负责**在 `nextWaveAt` 那一刻**结算一次伤害与麻痹，所以两者不会重复扣血。
+
+### 14.2 磁电冲击：`self_aura` 的第二种触发口径
+
+「一片持续 N 秒、每秒一波、最多 N 人」正是自身光环已有的能力集，缺的只是
+**触发口径**（原来只有 `auraCooldown` 秒）与四个可选落点 / 朝向参数：
+
+| 参数 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `auraEvery` | 8 | **累计 8 次普攻**触发，与 `auraCooldown` **二选一**；计数走 `unit.auraFiredCount` |
+| `auraForward` | **= 同档 `auraRadius`**（160/180/200） | 2026-11-11 第二轮：从 1 改成同档半径 ⇒ 光束覆盖「本体中心 → 前方 `2×radius`」，起点贴中心。**表值** × `combatDistanceScale` |
+| `auraFollow` | 0 | 冲击波**站桩**，不跟本体跑（缺省 1 = 跟随，无尘禁土不变） |
+| `auraFaceTarget` | 1 | 出生点偏移与矩形朝向共用「本体 → 当前目标」方位角（见 §14.6） |
+| `auraVisualLiftPx` | 30 | 表现竖直抬升（屏上 px），把光束从脚点抬到身体中心 |
+| `auraWaveMaxTargets` | 5 | **每波**目标上限（与 `maxHits` 的「整段名额」不是一回事） |
+
+波数 `waves = round(auraSeconds / auraInterval)` ⇒ 3 秒 / 每秒 1 波 = **3 波**。
+判定是**随目标方向旋转的矩形**（半长跟随 `auraRadius`、半宽 54），贴合横向束美术 —— 见 §14.6。
+
+自身光环的造型现在**按单位可覆盖**（`ZCSelfAuraFx.SELF_AURA_FX_BY_UNIT`，写法同
+`ZCCombatEffectFlight.MISSILE_FX_BY_UNIT`）：68016 → `雷电冲击`，其余（68025 无尘禁土）→ 原来那根光柱。
+
+### 14.3 软控「麻痹」`numb`：与硬控 `paralysis` 不是一回事
+
+设计原文「麻痹只禁止攻击，移动速度减少 50%」。现有 `paralysis` 是**硬控**：
+`controlOf` 非空 ⇒ `ZCUnitSystem.updateUnit` 在最前置闸门整段 `return`，连移动、索敌都停。
+直接复用它会把「减速 50%」变成「定身」。
+
+所以新建 `pvpStatus.numb`：**`control` 留空**，数值全部走 `statJson`：
+
+```json
+{ "moveSpeedPct": -50, "attackDisabled": 1 }
+```
+
+- `moveSpeedPct` 走既有属性链，不需要新代码；
+- `attackDisabled` 是 `ZCStatusStatMods` 新增的软控位（`> 0` 即禁），由
+  `ZCStatusSystem.attackBlockedOf(unitId)` 聚合；
+- 消费点只有两处，都在「这一拳」上：`ZCUnitSystem.startAttack` 开头 `return`（不改
+  `battleState`，单位原地站着，解控后下一帧就补一拳）、`tryStartDash` 返回 `false`（冲刺就是普攻本身）；
+- **移动 / 索敌 / 技能不受影响** —— 那才是「只禁攻击」。
+- 为什么不用 `attackIntervalPct` 顶：那个是乘在间隔上的（`1 - pct/100`，下限 0.01），
+  拉到 100 反而变成攻速暴涨，表达不出「一拳都打不出」。
+
+每个被打到的敌人**各自掷 30%**（不是整段判定一次）：判定落在 `ZCGroundZoneSystem` 的波次结算里，
+由区域的 `hitStatusId` / `hitStatusChance` / `hitStatusSeconds` 三个可选字段驱动，
+`context.random()` 必须是**对局种子随机**（不能用 `Math.random`，否则回放重算不一致）。
+
+### 14.4 配表落点
+
+| 表 | 改动 |
+| :--- | :--- |
+| `pvpSkillPlan` | +6 行（101603 / 101604 × 3 档，`pvpSkillId=30231`），参数全在 `skillParamJson` |
+| `pvpStatus` | +1 行 `numb`（`control` 空、`statJson` 见上） |
+| `K-卡牌升级.xlsx / 卡牌技能升级表` | 193~198 行本来就有这两条技能的空行，补 `name` / `desc`（`modfiy` 由 `project_skill_plan.mjs` 回填） |
+| `armySkillLevelUp` | 同步 6 行 `name` / `desc` / `modfiy=[9401603x / 9401604x]` |
+
+修改器号段：101603 = **94016031~33**，101604 = **94016041~43**（与 101601 的 94016011~13、
+101602 的 94016021~23 同一套编号法）。解锁等级以 K 表为唯一真源（101603 = 9/18/24，101604 = 0/20/25）。
+
+一键落地：`node tools/config/patch_magdi_mushroom.js assets/remoteRef "../doc/塔防数据配置/json/client"`
+（幂等，重复跑只校正解锁等级）+ `python tools/config/patch_magdi_mushroom_k.py`（K 表 B/C 两列，zip 级手术）。
+
+判据：`tests/zcds-magdi-mushroom.test.ts`（**25 条** —— 配表 / 两份产物互校 / K 表 6 行 / 双登记 /
+每道独立伤害与排布 / 无目标不放 / 待触发不消费 CD / 累计 8 次 / 每波 5 人 / 逐目标掷骰 /
+软控只挡普攻不冻移动；后 7 条盯两套特效预制体：三件套齐备 / 屏上尺寸对得上判定半径 /
+帧数与 `wrapMode` / 「第 5 帧判伤」/ `f9941` 子资源 / 两条路径进得了本局加载清单）。
+
+一键重建特效：`python tools/build_magdi_strike_fx.py`（幂等，复用已有 uuid；源散图在
+`tmp/projectile_src/<目录>/`，原始尺寸备份在 `tmp/fx_backup/`）。
+
+
+### 14.5 两套特效的预制体（2026-11-11 补齐）
+
+美术原本只丢了散帧，两个目录里**没有 prefab / anim / pac** ⇒ 两条技能只能借别人的预制体占位
+（`雷法师_武将闪电` / `持续光环伤害效果`）。现在由 `tools/build_magdi_strike_fx.py` 生成三件套：
+
+| 目录 | 帧 | sample | wrapMode | 动画时长 | 画布 | 烘焙缩放 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `磁电菇_劈雷技能/` | 20（全取） | **30** | 1（一次性） | 0.667s | 237×283 | 0.816372 |
+| `雷电冲击/` | 6（第 9~14 帧） | 12 | 2（循环） | 0.5s | 489×144 | 0.575963 |
+
+三条硬口径：
+
+1. **`sample` 取 30 是为了「判伤在特效第 5 帧」**。第 5 帧 = 下标 4，占
+   `4/30 ~ 5/30` = 0.1333~0.1667s，配表 `boltDelay = 0.15` 正落在这一帧**中间** ——
+   配表一个数都不用改。换成项目里最常见的 `sample 12`，第 5 帧在 0.333s，判伤会早 0.2s。
+   ⚠️ 表现事件的 `durationSeconds` 必须 ≥ 动画总长，否则 `ZCGameModel` 按
+   `startedAt + durationSeconds` 剔除事件，第 16 帧之后那段「雷尾消散」永远看不到
+   ⇒ 代码常量 `ZCBoltStrikeFx.ZC_BOLT_EFFECT_SECONDS = 20/30`，`castBoltLine` 用它算时长。
+2. **`wrapMode` 由「这张特效要不要持续」决定**：落雷是一次性的（1 = Normal，停在末帧）；
+   冲击波要在 3 秒里一直亮着，只能循环（2 = Loop），否则播 0.5s 就定格成一张静止图。
+   设计案 101604 表现原文「中间需要持续时间是，使用 9~14 帧循环」⇒ 只取 6 帧，
+   1~8（起势）/ 15~18（消散）搬去 `tmp/projectile_src/雷电冲击/`，不留在 bundle 里被打包。
+   入场「由无到有」由区域系统的 `growSeconds = 0.2` 负责。
+3. **尺寸反算**（屏上 px = 逻辑 px × 0.76875，见 §1.11），分母取「可见尺寸」不是画布宽：
+   - 落雷：`boltRadius = 90` ⇒ 爆闪直径 **138.4** 屏上 px；分母 = 20 帧底部 12% 带的最大可见宽
+     = 339 源 px（画布 1019 宽里闪电只占 450，拿画布当分母会把雷缩到三分之一）；
+   - 冲击波：`auraRadius = 180`（L2 档）⇒ 长度 **276.8** 屏上 px；分母 = 内容并集宽 961 源 px。
+     三档半径 160/180/200 只有一个预制体 ⇒ 按中档烘焙，L1 视觉偏大约 12.5%、L3 偏小约 10%。
+   - 落雷的**地面接地点压在节点原点上**（`_lpos.y = +110.618`，Cocos +y 朝上）——
+     `ZCCombatEffectView.mountVisual` 明确**不清零**根节点位置，所以这个静态摆位有效。
+     符号写反的症状是「雷悬在地面上方半个画布」，最难一眼看出来。
+
+✅ **形状不一致已解决（2026-11-11 用户口径「把判定改成长方形，尽可能贴合特效范围」）**：
+磁电冲击的判定已从**圆**改成**随目标方向旋转的矩形**，且光束起点压到本体中心、终点朝目标，见 §14.6。
+落雷那边一直不存在这个问题（判定圆就压在爆闪上，见 §14.1 的落点表）。
+
+🔴 散图 meta 必须是 `type: "sprite-frame"` 且带 `f9941` 子资源。默认导入是 `type: "texture"`
+（只有 `@6c48a`），`cc.Sprite._spriteFrame` 引 `@f9941` 取不到 —— **不报错、特效永远不出现**，
+整条链路上没有任何一处会告警。生成器里 `build_sprite_frame_meta` 专门处理这一步，
+`tests/zcds-magdi-mushroom.test.ts` 有守卫。
+
+### 14.6 磁电冲击的判定改成矩形、起点压中心、终点朝目标（2026-11-11）
+
+两轮用户口径，**后一轮覆盖前一轮的表现结论、不改判定尺寸**：
+
+1. 「**把判定改成长方形，尽可能贴合特效范围**」（附「横束套在红色虚线圈里、圆的上 / 下缘大片空白」截图）；
+2. 「**释放磁电冲击技能的特效起始位置要在角色的中心点，终点要朝向目标方向**」。
+
+**尺寸怎么来的**：把 6 帧散图的 alpha 并集量出来 —— 485×143 画布 px，乘 prefab `_lscale`
+0.575963 = 屏上 **279.3 × 82.4**；再除 0.76875 得逻辑 **363 × 107**。
+
+| 量 | 取值 | 依据 |
+| :--- | :--- | :--- |
+| 半长 `rectHalfLength` | **跟随 `auraRadius`**（160 / 180 / 200） | 美术按 L2 的 180 烘焙 ⇒ L2 的 360 正好等于美术宽 363 |
+| 半宽 `rectHalfHeight` | **54**（表值逻辑 px） | 108 逻辑 = 屏上 83.0 ≈ 美术高 82.4 |
+
+表里**只加一个尺寸键**：`skillParamJson.auraRectHalfHeight = 54`（三档同值），
+半长不写 —— 写了就等于把 `auraRadius` 那三档变成摆设。要让长度也固定贴合美术，
+加一行 `auraRectHalfLength: 182` 即可。
+
+**起点与朝向（第二轮）**
+
+| 表键 | 值（101604 L1/L2/L3） | 效果 |
+| :--- | :--- | :--- |
+| `auraForward` | **160 / 180 / 200**（= 同档 `auraRadius`） | 区域中心从本体前移**半个身位** ⇒ 整条束覆盖「本体中心 → 前方 `2×radius`」，起点贴中心 |
+| `auraFollow` | 0 | 站桩，不跟本体跑 |
+| `auraFaceTarget` | **1** | 出生点偏移与矩形朝向共用「本体 → 当前目标」方位角 |
+| `auraVisualLiftPx` | **30**（屏上 px） | 竖直抬升：单位根节点是逻辑**脚点**，不抬的话光束一半埋在地面线以下 |
+
+🔴 **`auraForward` 与 `auraFaceTarget` 必须同源**。两个量都由
+`castSelfAura` 里同一个 `aimRadians = atan2(target.y - origin.y, target.x - origin.x)` 算出
+（没目标时回落到 `unit.facingRadians`）。历史 bug 的形态是：出生点沿本体朝向飘、矩形朝目标，
+**中心对不上** —— 所以 `spawnX/spawnY`、`angleDegrees` 三处共用一个角，不能各算一遍。
+
+**实现要点**
+
+- `ZCGroundZoneState` 新增 `rectHalfLength` / `rectHalfHeight` / `angleDegrees` / `visualLiftPx`，
+  四个都进 `ZCSnapshotCodec` 白名单（缺了会在读档时报错，补了才还原得了形状与朝向）；
+- `castSelfAura` 读表值后**乘 `combatDistanceScale`**（与 `auraRadius` 同一套口径），
+  `rectHalfHeight > 0` 才启用矩形，否则一个字节都不变；
+  `auraFaceTarget` / `auraVisualLiftPx` 缺省 0 ⇒ 无尘禁土（102503）、喷射火焰（102603）逐字不变；
+- 形状判定收口成一个纯函数 `zcGroundZoneReaches(zone, x, y)`：
+  圆形 = `hypot ≤ radius`；矩形 = 先把点按 `-angleDegrees` 转回区域本地系
+  （`localX = dx·cos + dy·sin`、`localY = -dx·sin + dy·cos`），再判 `|localX| ≤ 半长 && |localY| ≤ 半宽`。
+  **`resolveWave` 与 `resolveExpiry` 两处都必须换** —— 漏掉到期那一处，
+  症状是「每波打不到、区域消散那一下突然按圆炸一次」，最难查；
+- 粗筛 `radiusHex` 改用 `zcGroundZoneBroadRadius`（矩形取**外接圆** `hypot(半长, 半宽)`）——
+  粗筛只负责别漏人，真正的形状由上面的纯函数收口。矩形长边不取外接圆会被格子索引直接筛掉。
+
+🔴 **朝向只能由模型给，视图算不出来**：`area` 事件 `from == to`，
+`zcCombatEffectHeadingDegrees` 对零位移返回 `null`，美术本体本来也不转。
+所以模型把方位角写进 `ZCCombatEventState.angleDegrees`，`ZCCombatEffectView` 见
+`event.angleDegrees !== undefined` 就直接 `setRotationFromEuler(0, 0, angle)` 并**跳过头函数**；
+`syncHoldVisual` 每帧同步，区域跟着目标转向时美术一起转。
+
+🔴 **`visualLiftPx` 必须加在 `mapToViewY` 之后**（屏幕竖直、不跟旋转），
+与 `ZCCombatEffectPlacement.zcCombatEffectLiftY` 同口径。写进 prefab `_lpos` 会被
+`setRotationFromEuler` 一起转成侧移 —— 表现是「一转向光束就飘起来」。
+
+⚠️ **不写 `casterLiftPx` 抬本体**：设计原文要的是「特效起始位置在角色中心」，
+抬的是光束不是人（麻辣铁锅 102603 的「跳起来」才抬本体，见 §15.2）。两者别混。
+
+🔴 这条是**逐技能开的**，不是全局改形状：无尘禁土（102503 站桩光柱）与麻辣铁锅
+喷射火焰（102603 身前圆形）仍然是圆 —— 设计原文就写的「圆形区域」。
+守卫 `tests/zcds-magdi-mushroom.test.ts` 第八节 4 条（配表 / 几何 / 结算 / 代码接线）
++ 第九节 3 条（旋转几何 / 事件抄角度 / 代码接线）；
+一键 `python tools/config/patch_magdi_rect_judgment.py`（尺寸）与
+`python tools/config/patch_magdi_aura_facing.py`（起点与朝向），两者幂等、都先做逐字节 round-trip 自检再写。
+
+🔴 **描述有两份，改数值时必须一起改**：`armySkillLevelUp.desc`（卡片 UI 真读，
+`CardSkillDescMarkup` 就是拿它转 RichText）+ **`pvpSkillPlan.desc`**（没有代码消费，但会被人读）。
+只改前者会出现「同一行里 `boltSpacing: 60` 配着『每道间隔 30px』」这种自相矛盾的状态 ——
+2026-11-11 第三轮就踩过，靠 `tools/config/patch_magdi_plan_desc_round3.py` 补的。
+`pvpSkillPlan` 要按 **`modifierId`** 定位，`pvpSkillId`（30231）被 101603/101604 两条链共用、**不唯一**。
+
+✅ **源表已补齐（2026-11-11 17:4x）**：`J-技能表.xlsx / PVP技能配置` 原本**没有 101603/101604 这 6 行**
+（68016 共 59 行全是 101601/101602/191602/109001），两条技能只活在两份 JSON 产物里 —— 一旦某天
+eSon 打表以 Excel 为准重生成 JSON，这 6 行会被整块刷掉。现已追加到 **2213~2218** 行，
+`dimension` 同步到 `A1:AC2218`，29 列逐格与 JSON 对拍一致。
+
+- 一键 `python tools/config/patch_magdi_skill_rows_excel.py`，**zip 级手术**：只重写
+  `xl/worksheets/sheet9.xml`，其余 51 个成员逐字节复制；按成长技能链取行、已进表的自动跳过（幂等）。
+- 页内两种编码：**表头行 `t="s"`（共享字符串）、数据行 `t="inlineStr"`** —— 读表头要解
+  `sharedStrings.xml`，写数据行不碰它、样式逐列沿用末行。
+- ⚠️ `export_tafang.mjs --validate-only` 校验的是 `assets/remoteRef`（不是 xlsx），所以补行不改变
+  校验结果；它的错误行走 stderr。
+- ✅ **68026 麻辣铁锅那 9 行也已进表（2026-11-12）**：`94026031~33` / `94026041~43` / `97026011~13`。
+  命令行直接传链号即可：`python tools/config/patch_magdi_skill_rows_excel.py 102603 102604 372601`。
+- 🔴 脚本原先是**只追加**（已存在的键整段 skip）⇒ 改已有行的数值时它会打印 `[skip]` 然后什么都不做，
+  源表静默停在旧值。现已改成 **upsert**（原地重写 + 缺的补末尾），回读逐格对拍。
+
+### 14.7 五雷轰顶的「看得见间隔」：间距 60、逐道 0.15 秒（2026-11-12 第三轮）
+
+用户口径：「还是没做出明显的出现时间间隔差异和距离间隔，增加每道落雷的间隔 15px，
+每道特效播放时间间隔 0.15s」。
+
+| 量 | 第二轮 | 第三轮 | 屏上读数 |
+| :--- | :--- | :--- | :--- |
+| `boltSpacing` | 45 | **60** | 45 ⇒ 34.6px（几乎叠死）、60 ⇒ **46.1px** |
+| `boltInterval` | 0.18 | **0.15** | 五道出现时刻 0.15 / 0.30 / 0.45 / 0.60 / 0.75s |
+| `boltDelay` | 0.15 | 0.15（**不动**） | 它锚的是特效第 5 帧的判伤窗口，与逐道间隔是两件事 |
+
+尺度感：一道雷特效本身约 **193×231 屏上 px**，而 45 表值只有 34.6px —— 五道完全叠住，
+所以「加间距」必须加到和特效自身尺寸同一个量级才看得出排开；0.18s 又短于单道特效的
+播放时长（0.667s），五道几乎同时在播 ⇒ 时间上也糊成一团。
+
+三写落点：`pvpSkillPlan` + `armySkillLevelUp`（两份 × remoteRef/client）+ `J-技能表.xlsx`
+`PVP技能配置`（`patch_magdi_skill_rows_excel.py 101603 101604`，upsert）+ `K-卡牌升级.xlsx`
+B/C 列（`patch_magdi_mushroom_k.py`）+ 技能设计案 K80/P80
+（`patch_skill_design_magdi_round4.py`）。守卫 `zcds-magdi-mushroom` 32 条。
+
+## 15. 麻辣铁锅 68026：三段命中、滞空喷火与「第 26 帧」（2026-11-11）
+
+技能设计案第 127~131 行（68026 麻辣铁锅，金档 · 盆栽 · 法师）。一动普攻 + 两条被动 + 两条主动：
+
+| 技能 | 触发 | 行为键 | 车道 |
+| :--- | :--- | :--- | :--- |
+| 202601 烈焰弹 | 普攻 · 1.8 秒 | `projectile` | 既有；强化槽挂在本行 |
+| 102601 孢子弹幕 | 被动 | `passive_stat` + `skill_params` | 既有（多弹 / 攻速 / 增伤） |
+| 102602 吸养根须 | 被动 | `passive_stat` + `skill_params` | 既有（吸血 / 增伤 / 溅射） |
+| 102603 喷射火焰 | 主动 · 冷却 12 秒 | `self_aura` | **复用**，新增 `casterLiftPx` |
+| 102604 凤凰降临 | 主动 · 累计 8 次普攻 | `skill_params` | 既有 `projectile` + 新增「命中三段」 |
+
+### 15.1 喷射火焰为什么复用 `self_aura`
+
+设计原文「跳起来，在身前 350px 的位置造成一个 100×100 的圆形伤害，持续 3 秒、每秒一次，
+范围内所有敌人都会受到伤害」。这句话逐项都能在 `castSelfAura` 上找到对应，**没有一项需要新车道**：
+
+| 设计口径 | 参数 | 值 |
+| :--- | :--- | :--- |
+| 脚点 → 350 的矩形 | `auraForward` / `auraRadius` | **175 / 175**（矩形中心 ± 半长 ⇒ 覆盖 0~350，见 §15.11） |
+| 矩形宽 140 | `auraRectHalfHeight` | **70**（半宽；`> 0` 即启用矩形判定） |
+| 只有敌人进 350px 才放 | `auraTriggerRange` | **350**（2026-11-12 新增：超出则待触发、不消费 CD） |
+| ~~直径 100 的圆~~ | ~~`auraRadius`~~ | ~~50~~ —— 2026-11-12 第八轮改矩形后作废 |
+| 持续 3 秒、每秒一波 | `auraSeconds` / `auraInterval` | 3 / 1 ⇒ `waves = 3` |
+| 范围内所有敌人 | `auraWaveMaxTargets` | 0（= 不限人数） |
+| 跳起来、原地喷 | `auraFollow` | 0（站桩，缺省 1 = 跟本体跑） |
+| 起点在角色头部 | `auraVisualLiftPx` | **97**（屏上 px；67 一个兵可见高 + 30 施法抬升） |
+| 冷却 12 秒 | `auraCooldown` | 12 |
+
+⚠️ `auraRadius` 是**半径**。设计案写「直径 100」，表里必须填 50 —— 填 100 会让判定圆
+变成屏上直径 153.75px，比美术的火焰束宽出近一倍。
+`auraForward` / `auraRadius` 都是**逻辑 px**，屏上要 × 0.76875（§1.11）。
+
+### 15.2 `casterLiftPx`：抬美术根节点，时长寄生在地面区域上
+
+「角色上移 30px、在空中循环播攻击动作」是纯表现，但它有**结束时刻**——火焰一停就该落地。
+如果给单位加一个状态位，就得再写一套「什么时候清掉」的收尾逻辑；而这段滞空时长
+**恰好等于 `auraSeconds`**。
+
+所以把抬升量挂在 `ZCGroundZoneState.casterLiftPx` 上，与光环区域同生共死：
+
+- `ZCGameRenderWorld.renderUnitSystem` 每帧从 `frame.snapshot.groundZones` **重建** `castLiftByUnit`
+  （取最大值、不累加，多段光环叠加不会叠成 60px）；
+- `renderUnitEntity` 每帧**显式**写 `presentation.castLiftPx`（`presentation` 是复用对象，
+  不写就会带着上一帧/上一个单位的值）；
+- 区域一到期，下一帧就查不到 ⇒ 自动落回地面，**零收尾逻辑**。
+
+🔴 **抬的是叠加量，不是绝对值。** `ZCUnitView.visualRoot.y` 存的是「美术相对脚下原点」的摆位，
+序列帧兵那个值是**负数**（`UNIT_VISUAL_OFFSET_FRAME`），骨骼兵是另一个值
+（`UNIT_VISUAL_OFFSET_SPINE`）。直接写 `setPosition(0, 30)` 会让整只兵往上跳一截；
+正确写法是 `visualBaseOffsetY + castLift`，且 `attachVisual` / `detachVisual` 时要重置
+`appliedCastLift = Number.NaN`（下次 `render` 强制重写）。
+
+滞空期间播攻击动作：`attacking || charging || castLift > 0` ⇒ `attackClip`。
+单位坐标、索敌、受击判定全部不动 —— 「跳起来」只是视觉。
+
+### 15.3 凤凰降临的三段伤害怎么落
+
+设计原文三段：**命中直击 → 命中爆炸 → 爆炸开始后第 26 帧再炸一次**。
+原来的落地口径写的是「新增 `summon_projectile` 车道 + II 级起残留火海依赖 1008 持续区域元件」，
+2026-11-11 拍板**作废**：三段都实现，且不加持续火海。
+
+| 段 | 实现 | 备注 |
+| :--- | :--- | :--- |
+| ① 直击 | 既有 `resolveProjectileHit` → `damageUnit` | `damageRate` 2.2 / 2.8 / 3.0 |
+| ② 立即爆炸 | `resolveProjectileHit` 里**先**遍历 `context.unitsInRadius` 逐人结算 | `impactBurstRadius` 100、`impactBurstDamageRate` 1.5 / 2.0 / 2.5 |
+| ③ 延迟爆炸 | 推一个 `groundZones` 波次：`nextWaveAt = now + delay`、`effectPrefabPath: null` | `impactBurstSecondRate` 1.5 / 1.8 / 2.0、`impactBurstSecondDelay` 0.8334 |
+
+第二条要特别注意：**`ZCProjectileState.splashRadius` 不是这件事**。溅射不打主目标，
+而且只在 `!empowered` 时读；「命中爆炸」要把**包括主目标在内**的所有人各打一次，
+所以它走的是新加的 `burst*` 一组字段，与 `splash*` 完全平行。
+
+第三段为什么不新开车道：`groundZones` 的「延迟波次」本来就是干这个的
+（`nextWaveAt` 到了才结算、`wavesLeft: 1`），与五雷轰顶「第 5 帧判伤」（§14.1）是同一套机制。
+`effectPrefabPath: null` 表示这一波**不推表现事件**——爆炸图已经由②那条 `area` 事件画了，
+再推一次会闪两下。
+
+⚠️ 命中事件的 `durationSeconds` 必须 ≥ 动画总长（`impactBurstEffectSeconds = 1.0667`），
+否则 `ZCGameModel` 按 `startedAt + durationSeconds` 剔除事件，爆炸龙卷在尾帧前被摘掉。
+不写这个键时退回 `.18`。
+
+### 15.4 两道闸门：`projectileCount` 与 `projectileSpreadDeg`
+
+102604 要「固定 4 颗、夹角 90°」，但同一张卡上 102601 的 `bulletNum` 是 +1 / +1 / +2：
+
+- 🔴 **`projectileCount` 一旦显式声明（> 0），`patch.bulletNumFlat` 就不再叠加。**
+  否则玩家点满 102601 后，凤凰弹会变成 4 + 2 = **6 颗**。
+  这个闸门只在 `empowered`（强化那一击）路径上开，普攻的多弹逻辑不受影响 ——
+  全表此前没有任何一条技能用过 `projectileCount`，所以是纯加法。
+- 🔴 **`projectileSpreadDeg` 只覆盖强化那一击。** `bulletAngle` 是 **unit 域**修改器，
+  同一张卡的普攻与强化击共用同一份槽；直接把它改成 90° 会把**普攻**也拉成 90° 扇形。
+  102601 的张角走 `pvpSkillPlan 372601` 三行 `statId: 'bulletAngle'`：**2026-11-11 第四轮已从 20 收到 0**
+  （20° 扇形 + 偶数弹 = 没有一发对准目标，普攻全脱靶，见 §15.7）。别为了「好看」再往上加。
+- 🔴 **`projectileSpreadDeg` 有两种语义，靠 `359.999` 分界**（2026-11-11 第三轮）：
+
+  | 取值 | 语义 | 每颗的角度 |
+  | :--- | :--- | :--- |
+  | `< 360` | **扇形**：整组摊在这段张角里 | `aim - 半张角 + spread × 全张角`，第 0 颗偏 `-一半`、最后一颗偏 `+一半` |
+  | `≥ 360` | **全向均分**：向四周各打一发 | `aim + index × 360/count`，第 0 颗仍对准目标 |
+
+  扇形那套**算不出十字**：`count = 4` 时 spread 是 −1 / −⅓ / +⅓ / +1，张角 360 会让首尾两颗
+  同向朝背后（−180 与 +180 是一回事）⇒ 实际只剩 3 个方向。必须单独一条分支。
+  凤凰降临原来配 90°（四发落在 −45 / −15 / +15 / +45），实测**四发全部脱靶**：
+  ±15° 在 140px 处横向偏 37.5px，而目标身圈只有 27px ⇒ 一发不中、也不播受击。
+
+### 15.5 三套特效与「第 26 帧 ⇒ 0.8334 秒」
+
+| 特效 | 帧 | `sample` | `wrapMode` | 画布 | 缩放 | 对应判定 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `麻辣铁锅_喷射火焰` | 39 | 12 | 1（一次性 3.250s） | 222×168 | **1.278207** | 触发距离 350 反算缩放，**稳态**可见长度 210.5 画布 px ⇒ 屏上 269.06px；判定＝矩形 0~350×宽 140 |
+| `麻辣铁锅_爆炸龙卷` | 32 | 30 | 1（一次性 1.067s） | 449×412 | 0.351831 | 半径 100 ⇒ 屏上直径 153.75 |
+| `麻辣铁锅_凤凰弹` | 17 | 12 | 2（循环） | 派生副本 | 0.650000 | 弹体，无判定（= 火船 1.733333 × 1.5 × 0.25） |
+
+**喷射火焰的 39 帧怎么来的**：设计案表现列写「需要延长时间时使用循环帧 11-17」。
+落地做法是**把第 11~17 帧重复 3 遍直接拼进同一条 clip**：
+源图 `146-1-attack_064~081` 共 18 帧 + `074~080` 再播 3 遍 = **39 帧** @12fps = 3.25 秒。
+这样单条 clip 天然覆盖 3 秒，**不依赖 `wrapMode` 的循环标记**，
+「第 N 帧」与时间轴仍然一一对应（循环播放时帧号会回绕，就没法用帧号对齐配表了）。
+以后再要加时长，只需改拼帧遍数。
+
+摆放（2026-11-12 第七轮定稿，🔴 距离反过来定长度，详见 §15.10）：
+
+    **触发距离先定死 350 表值逻辑 px**（< 普攻 unitAttackRange 550，折后 495）
+    尾部取**稳态尾部** = 各帧可见左缘的中位数（源 x=238），不是全序列并集左缘 68
+    稳态可见长度 659 − 238 = 421 源 px ÷ 2 = 210.5 画布 px
+    缩放 = 350 × 0.76875 ÷ 210.5 = **1.278207** ⇒ 视觉长度正好 350（屏上 269.06px）
+    判定矩形：半长 auraRadius = 175、中心前移 auraForward = 175 ⇒ 覆盖 0~350、宽 140
+    火焰尾部钉在施法者**逻辑脚点**：本地 (0, 0) ⇒ _lpos = (-0.320, -14.060)
+    竖直抬到头部不写进 _lpos，走 auraVisualLiftPx = 97（视图在 mapToViewY 之后加）
+    释放闸门：`auraTriggerRange = 350`，最近目标还在外面 ⇒ 待触发、不消费 CD
+
+~~第四轮：缩放 1.040609 把可见长度拉到 400 逻辑 px、尾部钉在 (0, +45)~~ —— **已作废**。
+第四轮按「铺满判定范围」反算缩放，只要可见并集的量法差一点，尾巴就离开角色一大截。
+~~第五轮：并集左缘 68 当尾部 ⇒ 384 逻辑 px、`_lpos = (-109.2625, -58)`~~ —— **也已作废**（见 §15.9）。
+~~第六轮：自然尺寸 1 + 稳态长度 ⇒ 274 逻辑 px、`_lpos = (-67.2, -11)`~~ —— **也已作废**（见 §15.10）。
+`tools/build_maladi_guo_fx.py` 已同步（`reach_logic_px=350` + `pin_tail_y_zero` + `tail_policy='steady'`）。
+
+朝向：`area` 事件由模型写 `angleDegrees`（`auraFaceTarget: 1`），宿主节点整体旋转，
+各方向都跟着转，不再依赖美术摆正。
+
+🔴 **`impactBurstSecondDelay` 必须取 0.8334，不是 0.8333。**
+「第 N 帧」⇔ 时间窗 `[(N-1)/sample, N/sample)`，判据 `floor(t × sample) === N - 1`：
+
+- 第 26 帧的窗 = `[25/30, 26/30)` = `[0.833333, 0.866667)`；
+- `0.8333 × 30 = 24.999` ⇒ `floor` 到 **24** ⇒ 第 **25** 帧，早打一帧；
+- `0.8334 × 30 = 25.002` ⇒ 第 26 帧，正确。
+
+**爆炸龙卷为什么取 `sample 30` 而不是 12**：32 帧 @12fps 只有 2.67 秒，而且帧窗与配表秒数对不上；
+取 30 之后「第 26 帧」= 0.8333 秒，与配表 `impactBurstSecondDelay` 落在**同一条时间轴**上 ——
+和磁电菇劈雷取 `sample 30`（§14.5）是同一个理由。用例里直接钉死
+`Math.floor(secondDelay * sample) === 25`。
+
+**凤凰弹为什么是派生副本**：设计案表现列写「子弹使用火法师_火船(17帧) 放大 150%」。
+`units/projectiles/火法师_火船/火法师_火船` 同时被 `pvpSkill 36181「火法师武将技」` 使用，
+挂进 `ZCCombatEffectScale` 会把**别人的技能**一起放大。所以派生一份
+`units/projectiles/麻辣铁锅_凤凰弹`：只写 prefab + meta，复用同一份 clip（`f73e3359`）
+与散图 uuid，`_lscale` 从 1.733333 改成 **2.6**（×1.5），目录里**不放 png**。
+
+### 15.6 配表落点
+
+| 表 | 位置 | 内容 |
+| :--- | :--- | :--- |
+| `pvpSkill` | 30181 | `empoweredEvery: 8`、`empoweredSkillId: 36182`（原 10 / 36181） |
+| `pvpSkill` | **36182（新增）** | `mode: projectile`、`projectileSpeed: 150`、`effectPrefabPath: 麻辣铁锅_凤凰弹`、`impactEffectPrefabPath: 麻辣铁锅_爆炸龙卷` |
+| `pvpSkillPlan` | 372601 ×3 | `statId: 'bulletAngle'`、`add`、**`0`**（97026011~13，解锁 null/14/22；原 20，见 §15.7） |
+| `pvpSkillPlan` | 102601 ×3 | 94026011~13：`attackSpeed` .14/.20/.26 + `damageRate` .08/.12/.16 |
+| `pvpSkillPlan` | 102602 ×3 | 94026021~23：`lifestealRate` add .30/.40/.50 + `damageRate` .15/.20/.25 + `splashDamageRate` .20/.28/.36 + `splashRadius` 38/46/55 |
+| `pvpSkillPlan` | 102603 ×3 | 94026031~33：`self_aura` + 光环参数（`auraForward` **175**、`auraRadius` **175**、`auraRectHalfHeight` **70**、`auraTriggerRange` **350**、`auraVisualLiftPx` **97**、`casterLiftPx: 30`、`auraFaceTarget: 1`）（解锁 9/18/24） |
+| `pvpSkillPlan` | 102604 ×3 | 94026041~43：`skill_params` + 九个参数（解锁 0/20/25） |
+| `armySkillLevelUp` | 102603/102604 ×6 | 补 `name` / `desc` / `modfiy`（94026031~33、94026041~43） |
+
+🔴 **102602 的溅射字段名是 `splashDamageRate`**。设计案 P 列原来写的是
+`explosionDamageRate` —— 引擎**不识别这个键**，配了等于没配（`ZCProjectileState` 上
+叫「命中爆炸」的那组是 `burst*`，与「溅射」是两套东西）。设计案已于 2026-11-11 修正。
+
+一键：
+`node tools/config/patch_maladi_guo.js assets/remoteRef "<client json dir>"`（幂等 + 逐表 try/catch，
+能吃掉 SVN 冲突态的 `pvpSkillPlan.json`）、`python tools/config/patch_maladi_spray_range.py`
+（102603 的触发距离 / 抬升 / 两份描述，见 §15.8）、`python tools/config/patch_skill_design_maladi.py`
+（回填设计案 127~131 行的 K/L/M/N/O/P/S）、`python tools/build_maladi_guo_fx.py`（两套特效 + 一份派生）。
+守卫 `tests/zcds-maladi-guo.test.ts`（13 条）。
+
+### 15.7 普攻「穿透目标不结算」的真因：偶数弹的扇形没有一发对准目标（2026-11-11 第四轮）
+
+用户口径：「普通攻击穿透了目标没有造成伤害，接触目标没有播放法师受击效果」。
+
+**真因是张角，不是命中圈。** `bulletNum` 在这张卡上是 **+1 / +1 / +2**（`skillChainId 282601`），
+普攻基数 1 发 ⇒ 弹数 **2 / 2 / 3**。前两档是**偶数**，而扇形那套是
+
+    halfSpan = bulletAngle / 2
+    spread   = (index / (count - 1)) * 2 - 1        // count=2 ⇒ 只有 −1 和 +1
+    heading  = aim + spread * halfSpan             // ⇒ −10° / +10°
+
+⇒ **没有一发走 `aim`**。`bulletAngle = 20` 时两发分别偏 ±10°，射程 550 逻辑 px 处横向偏
+`550 × tan10° = 97` 逻辑 px，而命中圈只有 **29** 逻辑 px（弹道 3 + 目标身圈 26）⇒ 两发从目标
+两侧飞过去，既不结算伤害、也不触发受击特效。
+
+真实模型实测（`tmp/diag_maladi_fan.ts`，`attackRange 550`，目标 68001 `bodyRadius 26`）：
+
+| 英雄等级 | 弹数 | 各弹角度 | 受击特效 | 单次普攻伤害 |
+| :--- | :--- | :--- | :--- | :--- |
+| Lv1 ~ Lv20（`20°`） | 2 | −10 / +10 | 0 条 | **0**（两发全脱靶） |
+| Lv25 / Lv30（`20°`） | 3 | −10 / 0 / +10 | 1 条 | 156（只有中间那发，应 468） |
+| Lv1 ~ Lv20（`0°`，本版） | 2 | 0 / 0 | **2 条** | **312** |
+| Lv25 / Lv30（`0°`，本版） | 3 | 0 / 0 / 0 | **3 条** | **468** |
+
+修法：`97026011~13` 三行 `value` 20 → **0**（`halfSpan = 0` ⇒ 全部子弹走 `aim`，任何距离必中）。
+一键 `python tools/config/patch_maladi_bullet_angle.py`（幂等，两份产物先跑 round-trip 自检）。
+
+🔴 **不是「命中圈只有 3 逻辑 px」。** 那条推测（上一轮写的）实测**不成立**：ZC 运行时表清单
+（`ZC_RUNTIME_TABLE_NAMES`）里**没有 `monsterCard`**，战斗单位一律来自 `pvpCard`；
+塔防 NPC 的怪物卡 id（50028 等）在 `TerritoryCampaignConfig.projectCard` 里是**按名字**
+映射到同名 `pvpCard`（50028 → 68026）的。运行目录里 `bodyRadius` 的实际分布是
+**18 × 1 / 24 × 32 / 26 × 2，一个 0 都没有**。所以补 `PVP-怪物卡牌` 的 AA 列对战斗**零影响**
+（已顺手补上 30 行 × 24，纯粹是配表整洁，别当成修好这条 bug 的原因）。
+
+⚠️ 同款未修：`68010` 镭射飞龙（12°）、`68034` 魔术师（20°）也是偶数弹 × 扇形，同一症状
+（12° 在 550 逻辑 px 处偏 `550 × tan6° = 58` > 命中圈 ⇒ Lv1/Lv2 同样全脱靶）。
+本轮只按用户报的范围改了 68026，**这两张要改也是一行 `value`**。
+
+### 15.8 第五轮：每颗凤凰弹朝自己的方向 + 触发距离由特效全长反推（2026-11-11）
+
+用户两条口径：
+
+> 「1. 释放【凤凰降临】技能子弹需要匹配正确的方向，2 号顺时针旋转 90 度、3 号顺时针旋转 180 度、
+>   4 号顺时针旋转 270 度，1 号是正确的朝向」
+> 「2. 喷火技能的位置还是不正确，如果是目标距离的问题，根据特效的最长像素作为触发技能的实际距离，
+>   并把触发距离补充到技能描述中，特效的起始位置在角色的头部」
+
+#### 15.8.1 每颗弹体的朝向必须由模型摊开，视图算不出来
+
+**症状**：四颗弹体全部朝同一个方向画（截图里只有 1 号对）。
+
+**真因**：视图（`ZCCombatEffectView` 的 projectile 分支）是拿 `to − from` 算转角的
+
+    angle = Math.atan2(mapToViewY(toY − fromY), mapToViewX(toX − fromX))
+
+而 `projectile` 事件里的 `to` 是**所有弹共用**的那个目标点 —— 四颗弹各自有独立的
+`velocityX/Y`（`projectileSpreadDeg ≥ 360` 时是 `aim + i×360/n`），但转角读的是 `to`，
+于是四颗全部朝 target 方向。
+
+**修法**（`ZCAttackResolutionSystem` 推 `state.projectiles` 之前）：按各弹自己的 `heading`
+把 `to` 沿该方向摊开，**长度保持 `length` 不变**：
+
+    const bulletToX = fanned ? from.x + dirX * length : projectileEvent.toX;
+    const bulletToY = fanned ? from.y + dirY * length : projectileEvent.toY;
+
+- `fanned = length > 0 && (halfSpan > 0 || fullCircle)` ⇒ **单发弹道逐字不变**；
+- 长度不变 ⇒ `aimFlightSeconds`（弧线进度）与「打空之后继续飞」的口径都不受影响；
+- 视图不需要改，`ZCCombatEffectScale` / `FACING_BY_PREFAB_PATH` 都不需要登记 ——
+  `火法师武将_火船_attack_01.png` 的焰头本来就是 **+X**，与 `atan2` 的 0° 同向。
+
+**编号映射**（用户口中的 1~4 号 = 截图里右/下/左/上四个位置的火焰）：
+散射顺序是 index 0 对准目标、之后 +90/+180/+270 ⇒ **1 = index0、4 = index1、3 = index2、2 = index3**。
+用户要的「2 号 +90 / 3 号 +180 / 4 号 +270」正好等价于「每颗朝自己的飞行方向」。
+
+**判据**：`tests/zcds-projectile.test.ts` 新增一条 —— 每颗弹道的 `to − from` 方向必须等于
+它自己的速度方向（差角 < 1e-9），且散开只改方向不改长度。真实模型实测
+（`tmp/diag_phoenix_dir.ts`，8 次普攻触发凤凰降临）：四颗差角全 **0.0°**、`to` 长度一致 242.3。
+
+#### 15.8.2 喷射火焰：长度定距离，而不是距离定长度
+
+**第四轮错在哪**：为了「可见长度铺满 350 + 50 = 400 逻辑 px」，反算缩放 1.040609。
+于是量法（`alpha > 60` 的可见并集）只要差一点，尾巴就离开角色一大截；更要命的是
+`_lpos` 是**宿主本地坐标**，宿主每帧 `setRotationFromEuler(朝向)`，写进 `_lpos.y` 的
+竖直位移会变成「垂直于火焰的侧移」—— 只有正中朝右那一次看着是对的。
+
+**第五轮口径**：特效取**自然尺寸**（`scale_policy = 'natural'` ⇒ 缩放恒 1），
+长度反过来决定触发距离（⚠️ 下面这组数字是第五轮的，第六轮按**稳态尾部**重算、第七轮又改回
+「距离定长度」，见 §15.9 / §15.10）：
+
+    ~~可见并集 591 源 px ÷ DOWNSCALE 2 = 295.5 画布 px = 295.5 屏上 px（缩放 1）~~
+    ~~⇒ 触发距离 = 295.5 ÷ 0.76875 = 384.4 ⇒ **384 逻辑 px**~~
+    ~~⇒ auraForward = 384 − auraRadius 50 = **334**~~
+    ~~⇒ prefab 根 `_lpos = (−109.262500, −58.000000)`~~
+    ~~第六轮：稳态长度 421 源 px ÷ 2 = 210.5 屏上 px ⇒ 触发距离 274 ⇒ auraForward 224、
+       _lpos = (−67.2, −11)、画布 222×168~~
+    ~~第七轮：触发距离定死 350 ⇒ 缩放 1.278207、`auraForward` 300、`_lpos = (−96.413, −14.060)`~~
+    ⇒ **第八轮（现行）**：判定改矩形 ⇒ `auraRadius` **175**（半长）、`auraForward` **175**、
+       `auraRectHalfHeight` **70**、`_lpos = (−0.320, −14.060)`、画布 222×168、`auraTriggerRange` 350
+    ⇒ 火焰尾部钉在施法者**逻辑脚点**：本地 (0, 0)
+
+**竖直抬到头部只能走 `auraVisualLiftPx`**（视图在 `mapToViewY` **之后**加，屏幕上永远是竖直的，
+不跟旋转）：
+
+    auraVisualLiftPx = 97 = 67（一个兵可见高，`ZCCombatEffectPlacement` 既有口径）
+                          + 30（`casterLiftPx` 施法抬升；抬升挂在地面区域上，与火焰同寿）
+
+链路：`skillParamJson.auraVisualLiftPx` → `ZCAttackResolutionSystem.castSelfAura`
+→ `groundZone.visualLiftPx` → `ZCGroundZoneSystem` 的 `area` 事件（`syncHoldVisual`
+每帧跟着区域重写一次）→ `ZCCombatEffectView` 的
+`setPosition(mapToViewX(toX), mapToViewY(toY) + (event.visualLiftPx ?? 0), 0)`。
+缺省 0 ⇒ 任何既有光环逐字不变。
+
+**描述同步**：`pvpSkillPlan.desc`（给人看）与 `armySkillLevelUp.desc`（卡片 UI 真读，
+`CardSkillDescMarkup`）两份都要带触发距离 —— 只改一份，玩家看到的还是旧数字。
+
+一键 `python tools/config/patch_maladi_spray_range.py`（四份文件先跑 round-trip 自检，
+K 表的「每个标量独占一行 + 空数组压成 `[]`」排版必须逐字节还原）。
+`patch_maladi_guo.js` 已同步同一组常量（`SPRAY_REACH / SPRAY_FORWARD / SPRAY_VISUAL_LIFT`），
+重跑它与 Python 脚本的产物**逐字节一致**。
+
+### 15.9 第六轮：锚点必须取**稳态尾部**，不是全序列并集（2026-11-12）
+
+用户口径：「喷射火焰特效在下方的时候施法位置相对接近，但目标在右侧时，特效起始位置
+离角色很远（相距 60px）」。
+
+**真因不是触发距离没匹配，而是锚点选错了帧。** 逐帧量可见左缘（`alpha > 60`，源 px，
+`tools/build_maladi_guo_fx.py` 里的 `content_box` 口径）：
+
+| 帧 | 可见左缘（源 px） |
+| :--- | :--- |
+| 1~2（`064` / `065`） | 68 ~ 69 |
+| 3 起（`066` 之后，共 39 帧里的 37 帧） | **230 ~ 247**（中位 238） |
+
+第五轮按「全序列可见并集的左缘 = 68」钉尾部 ⇒ 锚在那团**只出现 2 帧（5% 时长）的起势火苗**上；
+而 95% 的时间里火焰实体从 238 才起。两者相差 170 源 px ÷ 2 = **85 屏上 px** —— 屏幕上的
+表现就是「火焰离开角色一大截」，朝右时因为你盯着看所以最刺眼。
+
+**改法**：构建器新增 `tail_policy='steady'`：
+
+    tail_x = median(各帧 content_box 左缘)                      # 238
+    anchor_src = (tail_x, tail_centroid_y(sources, boxes, tail_x))  # 尾部窗内 alpha 加权重心 y
+    crop_left = tail_x − CROP_MARGIN (12)                       # 226 ⇒ 画布宽 (670 − 226) ÷ 2 = 222
+    measured_src = right − tail_x                                # 421 源 px ⇒ 210.5 屏上 px
+
+三个连带结果（⚠️ 第三项已被第七轮改成 350，见 §15.10）：
+
+- 画布 **307×168 → 222×168**：那 170 源 px 的透明空档不再打进图集（这一项保留）；
+- ~~触发距离 384 → 274 逻辑 px、`auraForward` 334 → 224~~（第七轮：**350 / 300**）；
+- ~~`_lpos` (−109.2625, −58) → (−67.2, −11)~~（第七轮：**(−96.413, −14.060)**）；
+  尾部仍然钉本地 (0, 0)、竖直抬升仍只走 `auraVisualLiftPx = 97`
+  （🔴 写进 `_lpos.y` 会被宿主旋转成侧移）。
+
+`_lpos.y` 的来历：尾部窗 alpha 重心在画布 y=73（自上而下），锚点 0.5 ⇒ 相对中心是本地
+**+11 画布 px**，所以根节点要下移 `11 × 缩放` 把它按回 0（第六轮缩放 1 ⇒ −11；第七轮
+缩放 1.278207 ⇒ −14.060）。守卫 `tests/zcds-maladi-guo.test.ts` 第 8 条（现 13 条全绿）会同时断言
+「尾部本地 x = 0」「尾部本地 y = 0」「尖端压在 350×0.76875」。
+
+**判据：以后给任何序列帧特效钉尾部，先打印逐帧左缘再决定取哪个分位数。**
+「并集」天然被最边缘的一两帧极值绑架，对 39 帧里出现过 2 帧的火苗毫无代表性。
+
+同步落点：两份 `pvpSkillPlan` + 两份 `armySkillLevelUp`（`patch_maladi_spray_range.py`
++ 回灌 `patch_maladi_guo.js`）、`J-技能表.xlsx`（`patch_magdi_skill_rows_excel.py 102603`）、
+`K-卡牌升级.xlsx` B/C（`patch_skill_k_desc_excel.py 102603 102604`）、技能设计案
+130 行 K/L/M/O/P（`patch_skill_design_maladi.py`）。
+
+### 15.10 第七轮：触发距离小于普攻、按 350px 反算特效长度（2026-11-12）
+
+用户口径：「68026 的喷火技能的释放触发距离应该小于普通攻击的距离，和特效的 350px 范围相匹配，
+只有敌人处于 350px 这个距离才会被攻击」。
+
+**第六轮留下的病根**：触发距离按「稳态可见长度」反推成 274，但释放闸门仍是**普攻射程** ——
+`pvpCard 68026.unitAttackRange = 550`（`attackReach` 对 >100 打九折 ⇒ 495 表值 = 148.5 世界 px）。
+于是敌人在 280~495 之间时技能**会放**，而火焰只够 274 ⇒ 白喷一管 12 秒 CD。
+
+**改法：距离定死、特效去匹配，再加第三道闸门。**
+
+| 量 | 第六轮 | 第七轮 | 依据 |
+| :--- | :--- | :--- | :--- |
+| 触发距离 | 274（长度反推） | **350**（用户定） | 350 < 495（普攻折后） |
+| 特效缩放 | 1.0 | **1.278207** = 350×0.76875 ÷ 210.5 | 视觉长度正好 350 |
+| `auraForward` | 224 | **300** = 350 − 半径 50 | 判定圆 250~350 |
+| `auraTriggerRange` | — | **350** | 闸门：最近目标在外 ⇒ 待触发 |
+| `_lpos` | (−67.2, −11) | **(−96.413, −14.060)** | 尾部仍钉本地 (0,0) |
+| 画布 | 222×168 | 222×168（不变） | 裁切口径没动 |
+
+**为什么这次允许拉伸**：第四轮的教训是「按并集最左缘做量法 ⇒ 误差被放大成 85px 空档」。
+现在锚点是**稳态尾部**（26/39 帧的共同左缘），被拉伸的就是那团 95% 时长都在的火焰实体，
+量法误差只剩几 px，不会重新引入「尾巴离角色」。
+
+**第三道闸门（新增代码，不是改配表就行）**：
+
+- `ZCUnitTargeting.nearestEnemyDistance(unit)` —— 最近的敌对单位中心距（世界 px），
+  过滤死人 / 打不到的空中单位，**不补身体半径、不打九折**（用户量的是「敌人处于多少 px」）；
+- `IZCSkillTriggerContext.nearestEnemyDistance?` —— 缺省不压，既有单位逐字不变；
+- `ZCSkillTriggerSystem.applySelfAura` 在 `release`（普攻射程闸门）之后加：
+  `最近距离 > auraTriggerRange × distanceScale ⇒ 返回 false`，**不消费 CD**，
+  目标走进来的那一帧立刻补放（与既有的「待触发」同一套语义，不新增状态机）；
+- 组合根接线：`ZCGameModel.buildSkillTriggerContext`。
+
+守卫：`tests/zcds-skill-trigger-range.test.ts` 新增 3 条
+（闸门待触发不消费 CD / 不配该参数时不生效 / `nearestEnemyDistance` 的过滤与单位），
+`tests/zcds-maladi-guo.test.ts` 第 8 条几何守卫改按 350/1.278207/(−96.413, −14.060) 断言，
+并新增一条「触发距离必须小于普攻折后射程」。
+
+⚠️ **已知取舍（已被第八轮解决）**：判定圆是 `auraForward 300 ± 半径 50` = 250~350，所以
+贴脸（<250）的敌人不会被喷火打到。第八轮按用户口径改成矩形，见 §15.11。
+
+同步落点：两份 `pvpSkillPlan` + 两份 `armySkillLevelUp`（`patch_maladi_spray_range.py`
++ 回灌 `patch_maladi_guo.js`，两者产物逐字节一致）、`J-技能表.xlsx`
+（`patch_magdi_skill_rows_excel.py 102603`，upsert 3 行）、`K-卡牌升级.xlsx` B/C
+（`patch_skill_k_desc_excel.py 102603 102604`）、技能设计案 130 行 K/L/M/O/P
+（`patch_skill_design_maladi.py`）、特效 prefab（`build_maladi_guo_fx.py` 的 `reach_logic_px`）。
+
+### 15.11 第八轮：判定改矩形，覆盖「脚点 → 350」（2026-11-12）
+
+用户口径：「改矩形：加 `auraRectHalfHeight`（半长跟随 `auraRadius`），像磁电冲击 101604 那样
+做成从脚点到 350 的锥/矩形」。
+
+**为什么改**：第七轮的圆是 `auraForward 300 ± 半径 50` = **250~350**。敌人贴脸（<250）时技能
+会放（闸门只看"最近敌人在 350 内"）却打不到，白烧一管 12 秒 CD，而且视觉上火焰明明穿过了敌人。
+
+**怎么改**：复用 101604 那条矩形车道，一个参数都不用加代码 ——
+`zcGroundZoneReaches` 判 `|dx| <= 半长 && |dy| <= 半宽`，半长**缺省跟随 `radius`**：
+
+| 参数 | 值（表值逻辑 px） | 说明 |
+| :--- | :--- | :--- |
+| `auraRadius` | **175** | 在这里是**半长**（缺省跟随半径） |
+| `auraForward` | **175** | 矩形中心前移 ⇒ 沿朝向覆盖 `175 ± 175` = **0~350** |
+| `auraRectHalfHeight` | **70** | 半宽 ⇒ 宽 **140**；`> 0` 就是矩形判定的开关 |
+| `auraTriggerRange` | **350** | 闸门不变：最近目标在 350 外 ⇒ 待触发 |
+
+半宽 70 的来历：逐帧量火焰的垂直跨度（`alpha > 60`，源 px）中位 **195.5**，扣掉火柱约 26° 的
+倾斜后垂直于朝向的厚度约 **175 源 px** ⇒ 屏上 ≈112px ⇒ 表值 ≈**145** ⇒ 取一半 72.5 再收一点
+= **70**（宽 140）。判定略窄于视觉，宁可少打一点也不打空气。
+
+**特效跟着挪了宿主**：`auraForward` 从 300 变 175，而 `build_maladi_guo_fx.py` 的 `_lpos` 是
+「宿主摆在判定中心」算的 ⇒ 重跑后 `_lpos` 从 `(−96.413, −14.060)` 变成 **`(−0.320, −14.060)`**
+（火焰尾巴仍然精确落在施法者脚点、尖端仍然压在 350）。**缩放 1.278207、画布 222×168、
+`auraVisualLiftPx 97` 全部不变** —— 只动了判定形状，没动美术。
+
+**两处结算都自动跟着变**：`resolveWave` 与 `resolveExpiry` 都调同一个 `zcGroundZoneReaches`，
+101604 那一轮已经收口，所以这里只是"配表开了个开关"。粗筛 `zcGroundZoneBroadRadius` 取
+外接圆 `hypot(52.5, 21) ≈ 56.55` 世界 px > 半长 52.5，不会漏人。
+
+守卫 `tests/zcds-maladi-guo.test.ts`（现 **14 条**全绿）：新增第 14 条直接对 `zcGroundZoneReaches`
+断言「脚点 true / 右边缘 350 true / 350.01 false / 横向 ±21 世界 true、多 0.01 false /
+粗筛 > 半长 / 旋转到 −90° 后同样成立」；第 8 条几何守卫补了「左边缘 = 0、右边缘 = 350」两条。
+
+同步落点：两份 `pvpSkillPlan` + 两份 `armySkillLevelUp`（`patch_maladi_spray_range.py` +
+回灌 `patch_maladi_guo.js`，对拍 0 差异）、`J-技能表.xlsx`（`patch_magdi_skill_rows_excel.py 102603`）、
+`K-卡牌升级.xlsx` B/C（`patch_skill_k_desc_excel.py`）、技能设计案 130 行 K/L/M/O/P
+（`patch_skill_design_maladi.py`）、特效 prefab（`build_maladi_guo_fx.py`，`AURA_RADIUS_LOGIC 175`）。
+
+描述文案随之变成：**「每秒对身前 0~350px 的矩形（宽 140）内所有敌人造成 X% 攻击力伤害
+（触发距离 350px：敌人进入 350px 内才会释放，与火焰特效等长）」**。
+
+## 16. 魔术师 68034「鹿神守护」：从「地面区域冲刺」改成「会追踪的子弹」（2026-11-12）
+
+用户口径原话：
+
+> 「68034 魔术师的召唤物 小鹿 应该是类似子弹一样的效果，只是一个会追踪目标的子弹，
+> 从角色朝向的 15px 处生成，移动时小鹿播放 walk 动画，前半段移速慢（70px），
+> 贴近目标后的移速快（140PX，同步在小鹿身上覆盖火船特效），当原目标死亡后，小鹿会转向新目标，
+> 接触到任意目标后造成伤害，子弹消失」
+
+### 16.1 为什么不换成 `projectiles` 真弹道
+
+小鹿现在走的是「**会移动的地面区域**」（`pvpSkillPlan 103405` → `ZCGroundZoneSystem`），
+看起来像绕远路，但三件它需要的事真弹道都没有：
+
+| 需要的东西 | 区域已有 | 真弹道（`ZCProjectileState`） |
+| :--- | :--- | :--- |
+| 一条跟着走的**复合视觉**（小鹿 spine + 火船） | `holdVisual` + `syncHoldVisual`（每帧搬事件坐标） | 每条弹道一个 sprite，没有「整段持有」概念 |
+| **两档速度 + 阶段动画** | `visualAnimation` 推给 `applySpineAnimation` | 没有阶段字段 |
+| 原目标**阵亡后改追** | 有 `context.unitsInRadius` 做就近搜索 | 弹道只有 `targetId`，目标死了就直线飞 |
+
+换成真弹道等于把这三件事全部重写一遍，还会踩「弹道命中与区域命中两套结算口径」的分裂。
+所以本轮只在区域系统内部换语义：**位置推进由 `advanceChase` 全权接管，主循环只负责计时与结算**。
+
+### 16.2 三张口径表
+
+配表（`pvpSkillPlan` 94034051~53，表值逻辑 px / px·s⁻¹，运行时 × `combatDistanceScale=0.3`）：
+
+| 参数 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `zoneSpawnForward` | **15**（原 30） | 沿施法者 `facingRadians` 前移；不落在目标处 |
+| `zoneApproachSpeed` | 70 | 慢档 |
+| `zoneMoveSpeed` | 140 | 快档（代码里叫 `sprintSpeed`） |
+| `zoneSprintRange` | 200 | 与目标距离 ≤ 它 ⇒ 切快档 |
+| `zoneMaxHits` | **1**（原 5） | 接触任意目标即消失 |
+| `zoneDamageFalloff` | **删除**（原 0.5） | 只打一个目标，没有第二个可递减 |
+| `zoneDuration` | 2 | 快档最长存活（兜底） |
+| `zoneWaveInterval` | 0.15 | 快档探接触的节拍 |
+| `zoneHoldVisual` | 1 | 整段持有一条跟随视觉 |
+
+行为（`ZCGroundZoneSystem.advanceChase`，返回 `true` = 位移已由它推进）：
+
+| 档位 | 触发 | 速度 | 动画 | 火船 | 读秒 / 结算 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 慢档 | 出生 | 70 | `move` | 灭 | **不读秒、不结算** |
+| 快档 | 距目标 ≤ 200 | 140 | `attack` | **亮** | 每 0.15s 一波 |
+
+**两档都每帧重算方向**：目标会走位，锁死出生朝向就是「小鹿飞到空地上」。
+
+### 16.3 🔴 三个坑
+
+**① `chased` 标记不能省。** 旧代码是「非接近段 ⇒ `remainingSeconds -= dt` **并且**按 `moveVelocity` 位移」。
+现在位移归 `advanceChase` 管，快档时它也返回 `true`，如果主循环还照旧推一遍就是**双倍速度**。
+所以 `tick` 里写成「`chased` 为假时才按 `moveVelocity` 推」：
+
+```ts
+const chased = this.advanceChase(zone, dt, now, context);
+if (!chased && (zone.moveVelocityX || zone.moveVelocityY)) { /* 位移 */ }
+const approaching = this.isApproaching(zone);        // approachSpeed > 0 && !sprinting
+if (!approaching) zone.remainingSeconds -= dt;       // ← 读秒与位移彻底解耦
+```
+
+**② 换目标只在「目标不可追」时发生，不是每帧都选。** 每帧重选会带来「两个目标距离交替变小 ⇒
+小鹿在两颗之间来回摆」。判据是 `isChaseable(unit)`（活着 + 未 dead），只在它变假时才查
+`nearestChaseTarget`（`hexIdAt` + `unitsInRadius`，搜索半径 `max(sprintRange, 600)`）。
+
+**③ 一个活敌人都没有时不能停在慢档。** 慢档不读秒 ⇒ 区域永远不会到期 ⇒ 小鹿永远飘在场上。
+所以「追不到」的分支**强制进快档**、沿当前速度方向（没有速度就朝 +x）飞，让 2 秒兜底把它收掉。
+
+### 16.4 火船只在快档：`overlayFx` 派生自 `sprinting`
+
+需求「同步在小鹿身上覆盖火船特效」的落法是两段式，**模型不碰节点名**：
+
+1. `ZCGroundZoneState` **不加字段** —— `syncHoldVisual` 直接把 `zone.sprinting === true` 写成
+   `event.overlayFx`（派生值，不可能与档位脱拍）；
+2. 视图查表 `zcCombatEffectOverlayChild(路径)`（`ZCCombatEffectPlacement`）拿到子节点名
+   `fx_火船`，只在**翻转时**写 `child.active`（每帧写会反复重启粒子和 Animation）。
+
+没登记叠层的特效一次都不碰 `active`（`overlayChildName === null` 直接 return），所以暴风 /
+灼热地带那些完全不受影响。prefab 侧 `fx_火船` 的 `_active` 改成 **false**（`build_deer_guard_fx.py`
+同步），保证「慢档第一帧」也不带火。
+
+### 16.5 「walk 动画」实际落到 `move`
+
+`魔术师召唤鹿/lu.skel` 只有三段动画：`idle` / `move` / `attack`（Spine 3.8 二进制里三个
+长度前缀串可读）。美术那一段「走」就叫 `move`，**没有 `walk`**。所以
+`ZONE_APPROACH_ANIMATION = 'move'` 就是需求里的走路，不要为它改名 —— 改名会让
+`setAnimation` 找不到段，小鹿会定格在第一帧且不报错。
+
+### 16.6 配表与产物落点
+
+- 两份 JSON（`assets/remoteRef` / `doc/塔防数据配置/json/client`）的 `pvpSkillPlan` +
+  `armySkillLevelUp`：`tools/config/patch_deer_tracking_bolt.js`（幂等，带三档偏差 + 两份一致自查）；
+- 源表 `J-技能表.xlsx / PVP技能配置`：`patch_magdi_skill_rows_excel.py 103405`（upsert 3 行）；
+- 源表 `K-卡牌升级.xlsx / 卡牌技能升级表` B/C：`patch_skill_k_desc_excel.py 103405`；
+- 技能设计案第 **171** 行：`patch_skill_design_deer_tracking.py`
+  （顺带修掉 G 列链号笔误 103404 → **103405**，K/L/M/N/O/P 从空补全，S 待规划 → 已实现）；
+- prefab：`tools/build_deer_guard_fx.py`（`fx_火船` `_active=False`）。
+
+新描述：**「累计8次普攻召唤小鹿：从身前15px生成并追踪最近的敌人，前段70px/s行走、
+贴近后140px/s加速并燃起火焰，接触敌人造成 600/700/800 点伤害后消失；目标阵亡会自动转向最近的敌人」**
+
+### 16.7 守卫（`tests/zcds-magician-skills.test.ts`，现 26 条）
+
+| 条 | 钉什么 |
+| :--- | :--- |
+| 三档参数接线 / 参数真值 | 15 / 70 / 200 / 140、`maxHits 1`、`damageFalloff` 已消失 |
+| 慢档按 70px/s 追、不结算 | 位置在涨、时长不动、`visualAnimation='move'`、`overlayFx=undefined` |
+| 提速并换动画 / 点亮火船 | 进 60 世界 px 切档、`attack`、`overlayFx=true` |
+| 原目标阵亡后改追最近敌人 | 换 `approachTargetId`、纵向拐弯、旧方向停推、逐拍逼近 |
+| 接触即消失 | 只结算 1 次、区域与视觉同拍摘掉、之后不再复活 |
+| 没敌人时兜底 | 强制进快档、朝原方向、2 秒散场 |
+| 叠层登记 | `fx_火船` / 未登记 = `null` / 名字真在 prefab 根节点下 / `_active=false` |

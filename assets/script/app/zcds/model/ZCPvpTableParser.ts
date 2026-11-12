@@ -425,6 +425,10 @@ export function parseTileConfigs(value: unknown): Readonly<Record<ZCPvpTileType,
                 gold: number(weights.gold, `${type}.gold`, 0, true),
             },
             eligibleCardTypes: parseCardTypeList(raw.eligibleCardTypes, `${type}.eligibleCardTypes`),
+            // 生成权重三列 2026-11-10 从「基础阵容权重随机表」并入本表；上限 `0` = 不限。
+            weight: number(raw.weight, `pvpTiles.configs.${type}.weight`, 0, true),
+            initialCountLimit: number(raw.initialCountLimit, `pvpTiles.configs.${type}.initialCountLimit`, 0, true),
+            setCountLimit: number(raw.setCountLimit, `pvpTiles.configs.${type}.setCountLimit`, 0, true),
         };
     }
     for (const type of ZC_PVP_TILE_TYPES) {
@@ -433,29 +437,16 @@ export function parseTileConfigs(value: unknown): Readonly<Record<ZCPvpTileType,
     return result;
 }
 
-export function parseTileWeights(value: unknown): ZCPvpTileTypeWeight[] {
-    return array(value, 'tileGeneration.weights').map((item) => {
-        const raw = object(item, 'tileGeneration.weights[]');
-        return {
-            type: number(raw.tileType, 'tileGeneration.weights[].tileType') as ZCPvpTileType,
-            weight: number(raw.weight, 'tileGeneration.weights[].weight'),
-            initialCountLimit: 0,
-            setCountLimit: 0,
-        };
-    });
-}
-
-/** 解析基础阵容权重随机表 pvpBaseTeamWeight：地块类型 / 生成权重 / 初始生成个数限制 / 集合内个数限制。 */
-export function parseBaseTeamWeights(value: unknown): ZCPvpTileTypeWeight[] {
-    return array(value, 'pvpBaseTeamWeight').map((item) => {
-        const raw = object(item, 'pvpBaseTeamWeight[]');
-        return {
-            type: number(raw.tileType, 'pvpBaseTeamWeight[].tileType') as ZCPvpTileType,
-            weight: number(raw.weight, 'pvpBaseTeamWeight[].weight'),
-            initialCountLimit: number(raw.initialCountLimit, 'pvpBaseTeamWeight[].initialCountLimit', 0, true),
-            setCountLimit: number(raw.setCountLimit, 'pvpBaseTeamWeight[].setCountLimit', 0, true),
-        };
-    });
+/** 地块生成权重表：直接由 `pvpTile` 每行派生（权重/初始上限/集合上限都挂在地块行上）。 */
+export function parseTileWeights(
+    configs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>,
+): ZCPvpTileTypeWeight[] {
+    return ZC_PVP_TILE_TYPES.map((type) => ({
+        type,
+        weight: configs[type].weight,
+        initialCountLimit: configs[type].initialCountLimit,
+        setCountLimit: configs[type].setCountLimit,
+    }));
 }
 
 /**

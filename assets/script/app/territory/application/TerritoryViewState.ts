@@ -2,7 +2,7 @@ import { TerritoryProgress } from '../model/TerritoryProgress';
 import type { ITerritoryViewState } from './TerritoryModel';
 
 export type ITerritoryProgressView = Pick<TerritoryProgress,
-    'isCellUnlocked' | 'isOwned' | 'isAreaPassed' | 'explorationAt' | 'checkUnlock'>;
+    'isCellUnlocked' | 'isOwned' | 'isAreaPassed' | 'isDisabled' | 'explorationAt' | 'checkUnlock'>;
 export interface ITerritoryRenderState extends Omit<ITerritoryViewState, 'progress'> {
     readonly progress: ITerritoryProgressView | null;
 }
@@ -19,6 +19,7 @@ export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryR
             isCellUnlocked: (id: number) => snapshot.isCellUnlocked(id),
             isOwned: (id: number) => snapshot.isOwned(id),
             isAreaPassed: (id: number) => snapshot.isAreaPassed(id),
+            isDisabled: (id: number) => snapshot.isDisabled(id),
             explorationAt: (id: number) => snapshot.explorationAt(id),
             checkUnlock: (id: number, power: number) => snapshot.checkUnlock(id, power),
         });

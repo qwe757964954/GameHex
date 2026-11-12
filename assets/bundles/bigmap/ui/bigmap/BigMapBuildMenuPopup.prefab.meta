@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "edfc4fd8-1174-49a3-b1ab-7420470f1a6e",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "BigMapBuildMenuPopup",
+    "hasIcon": false
+  }
+}

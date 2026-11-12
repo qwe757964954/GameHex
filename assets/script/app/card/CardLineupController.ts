@@ -11,7 +11,7 @@ export interface ICardLineupControllerOptions {
     readonly repository: {
         loadArtConfig(): Promise<unknown>;
         loadLineupSnapshot(): CardLineupData | null;
-        loadLineup(autoLoad: boolean): Promise<CardLineupData>;
+        loadLineup(autoLoad: boolean, refreshFormations?: boolean): Promise<CardLineupData>;
     };
     readonly failed: (error: unknown) => void;
     readonly popups: {
@@ -48,11 +48,11 @@ export class CardLineupController extends ControllerBase {
             // 权威数据刷新统一报告配置错误。
         }
     }
-    async refresh(): Promise<void> {
+    async refresh(refreshFormations = true): Promise<void> {
         if (this.isDisposed) return;
         const revision = ++this.revision;
         try {
-            const data = await this.options.repository.loadLineup(this.options.autoLoadDecks);
+            const data = await this.options.repository.loadLineup(this.options.autoLoadDecks, refreshFormations);
             if (this.isDisposed || revision !== this.revision) return;
             this.publish(data);
         } catch (error) {
@@ -70,7 +70,8 @@ export class CardLineupController extends ControllerBase {
             heroLevels.set(String(payload.heroId), payload.level);
             this.data = { ...this.data, heroLevels };
         }
-        void this.refresh();
+        // 升级只改变英雄等级，沿用已有阵型重算战力。
+        void this.refresh(false);
     }
     private onIntent(event: ICardLineupIntent): void {
         if (event.owner !== this.options.owner) return;

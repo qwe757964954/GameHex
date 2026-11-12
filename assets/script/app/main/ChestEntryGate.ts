@@ -1,5 +1,19 @@
 /**
- * 战斗宝箱入口的**开启条件** + 「生成」缩放动画 —— 纯函数，零引擎依赖，可单测。
+ * 主界面「按 `open` 表解锁」的入口闸门 —— 纯函数，零引擎依赖，可单测。
+ *
+ * 两个功能共用这一套（各自只多一个 `refId` 常量）：
+ *
+ * | 功能 | `refId` | 条件 | 闸门 |
+ * | :-- | :-- | :-- | :-- |
+ * | 战斗掉落宝箱（底部 icon） | 701 | `territoryLevel`（据点**通关**） | `resolveChestEntryGate` |
+ * | 快速寻敌（底部大按钮） | 702 | `territoryLevelActivated`（据点**激活**） | `QuickFindGate.resolveQuickFindGate` |
+ *
+ * 通用部分（按 `refId` 捞行 + `MainEntranceVisible` 判可见）在 {@link resolveOpenRowGate}；
+ * 领地据点那两条跨章判据（通关 / 激活）也在本模块，因为两者共用「当前章哪几格属于这一关」。
+ *
+ * ---
+ *
+ * 战斗宝箱入口的**开启条件** + 「生成」缩放动画。
  *
  * 需求（2026-11-03）：*「在功能开启表中补充完整战斗宝箱掉落的开启条件，只有当 pvp 节点
  * 20001 胜利通过后，才展示出战斗宝箱入口 icon，播放 icon 生成的缩放动画」*。
@@ -81,21 +95,53 @@ const POP_RISE_PORTION = 0.65;
 // 判定
 // ============================================================
 
-export interface ChestEntryGate {
+/**
+ * 「某个 `refId` 的 `open` 行开没开」的通用结果 —— 701（战斗宝箱）与 702（快速寻敌）共用。
+ *
+ * `rowMissing` 与「条件没过」必须分开报：前者是**表没下发 / 行被改号**（改代码或恢复表即可），
+ * 后者是玩家还没打到那儿（正常状态），混在一起排障时会往错方向找。
+ */
+export interface EntranceRowGate {
     /** 入口该不该显示。 */
     readonly unlocked: boolean;
-    /** 表里根本没有 `refId = CHEST_ENTRY_OPEN_REF_ID` 那一行（或整张表没拿到）。 */
+    /** 表里根本没有这个 `refId` 那一行（或整张表没拿到）。 */
     readonly rowMissing: boolean;
+}
+
+/** @deprecated 用 {@link EntranceRowGate}；保留别名只为不动既有的 701 调用点与用例。 */
+export type ChestEntryGate = EntranceRowGate;
+
+/** 从 `open` 全表里按 `refId` 捞一行；没有返回 `null`。 */
+export function findOpenRowByRefId(
+    openRows: readonly EntranceVisibleRow[] | null | undefined,
+    refId: number,
+): EntranceVisibleRow | null {
+    for (const row of openRows ?? []) {
+        if (row && Number(row.refId) === refId) return row;
+    }
+    return null;
+}
+
+/**
+ * 按 `refId` 取那一行、用 `MainEntranceVisible` 判它可不可见 —— **不认具体关卡号**。
+ *
+ * `openRows` 传 `open` 全表（不是单行）：`preResId` 前置链要顺着全表往上找条件。
+ */
+export function resolveOpenRowGate(
+    openRows: readonly EntranceVisibleRow[] | null | undefined,
+    state: EntrancePlayerState,
+    refId: number,
+): EntranceRowGate {
+    const row = findOpenRowByRefId(openRows, refId);
+    if (!row) return { unlocked: false, rowMissing: true };
+    return { unlocked: isEntranceRowVisible(row, indexOpenRowsByRefId(openRows ?? []), state), rowMissing: false };
 }
 
 /** 从 `open` 全表里捞「战斗宝箱」那一行；没有返回 `null`。 */
 export function findChestEntryRow(
     openRows: readonly EntranceVisibleRow[] | null | undefined,
 ): EntranceVisibleRow | null {
-    for (const row of openRows ?? []) {
-        if (row && Number(row.refId) === CHEST_ENTRY_OPEN_REF_ID) return row;
-    }
-    return null;
+    return findOpenRowByRefId(openRows, CHEST_ENTRY_OPEN_REF_ID);
 }
 
 /**
@@ -107,20 +153,17 @@ export function resolveChestEntryGate(
     openRows: readonly EntranceVisibleRow[] | null | undefined,
     state: EntrancePlayerState,
 ): ChestEntryGate {
-    const row = findChestEntryRow(openRows);
-    if (!row) {
-        // ⚠️ 文案别写 `open.json`：运行时只认 `refSmallAll.json` 的 `open` 块，
-        // 同目录的 `open.json` 是死文件（2026-11-03 实机踩到一次、
-        // 2026-11-04 SVN 合并又把它冲回旧版一次）。写错文件名会让人去改死文件。
-        console.warn(
-            `[ChestEntryGate] open 表里找不到 refId=${CHEST_ENTRY_OPEN_REF_ID} 的战斗宝箱行，入口先不显示`
-            + '（运行时读 assets/remoteRef/refSmallAll.json 的 open 块，改同目录 open.json 无效；'
-            + 'SVN 合并后常被冲回旧版，重跑 tmp/restore_open701_refsmallall.py 恢复）',
-        );
-        return { unlocked: false, rowMissing: true };
-    }
-    const unlocked = isEntranceRowVisible(row, indexOpenRowsByRefId(openRows), state);
-    return { unlocked, rowMissing: false };
+    const gate = resolveOpenRowGate(openRows, state, CHEST_ENTRY_OPEN_REF_ID);
+    if (!gate.rowMissing) return gate;
+    // ⚠️ 文案别写 `open.json`：运行时只认 `refSmallAll.json` 的 `open` 块，
+    // 同目录的 `open.json` 是死文件（2026-11-03 实机踩到一次、
+    // 2026-11-04 SVN 合并又把它冲回旧版一次）。写错文件名会让人去改死文件。
+    console.warn(
+        `[ChestEntryGate] open 表里找不到 refId=${CHEST_ENTRY_OPEN_REF_ID} 的战斗宝箱行，入口先不显示`
+        + '（运行时读 assets/remoteRef/refSmallAll.json 的 open 块，改同目录 open.json 无效；'
+        + 'SVN 合并后常被冲回旧版，重跑 tmp/restore_open701_refsmallall.py 恢复）',
+    );
+    return gate;
 }
 
 /**
@@ -178,29 +221,45 @@ export function isChestEntryVerdictProvisional(
     territorySnapshotReady: boolean,
 ): boolean {
     if (territorySnapshotReady) return false;
-    return reports.some((report) => report.type === 'territoryLevel');
+    // 两种「据点」条件都靠领地快照，快照没到时的 fail 一律是「还没数据」。
+    return reports.some((report) => report.type === 'territoryLevel' || report.type === 'territoryLevelActivated');
 }
 
 // ============================================================
-// 领地据点：「这一关通没通」要跨章节算
+// 领地据点：「这一关通没通 / 激活没激活」都要跨章节算
 // ============================================================
 
 /**
- * 判「领地这一关通没通」要的两个快照。
+ * 判领地据点状态时，两条口径**共用的那一半**：当前章的「格子 → 关卡」映射。
  *
  * 结构类型而非直接 import `TerritoryCampaignStage` / `TerritoryProgress`：本模块要保持
- * 零引擎依赖（Node 里直接跑用例），只认这里真的会用到的两个方法。
+ * 零引擎依赖（Node 里直接跑用例），只认这里真的会用到的字段与方法。
  */
-export interface ChestEntryTerritoryView {
+export interface TerritoryStageView {
     /** 当前章的「格子 → 关卡」映射；`null` = 快照还没到（注意空 Map 也是「没到」）。 */
     readonly stageByCell: ReadonlyMap<number, { readonly levelId: number }> | null;
+}
+
+/** 判「领地这一关通没通」要的快照（701 战斗宝箱用）。 */
+export interface ChestEntryTerritoryView extends TerritoryStageView {
     /** 领地进度：这一格（所在区域）通了没有。 */
     readonly isAreaPassed: ((cellId: number) => boolean) | null;
 }
 
+/**
+ * 判「领地这一关的格子激活没激活」要的快照（702 快速寻敌用）。
+ *
+ * ⚠️ `isCellActivated` 与 `isAreaPassed` 是**两个口径**，别互相顶替：
+ * 前者是「花银币解锁 / 已占领 / 区域已通关」，后者只认「已占领」。
+ */
+export interface TerritoryActivationView extends TerritoryStageView {
+    /** 领地进度：这一格**激活**了没有（`isCellUnlocked || isOwned || isAreaPassed`）。 */
+    readonly isCellActivated: ((cellId: number) => boolean) | null;
+}
+
 /** 当前章里属于 `levelId` 的格子（一片战斗区域常常横跨好几格）。 */
 export function territoryLevelCellsInChapter(
-    view: ChestEntryTerritoryView,
+    view: TerritoryStageView,
     levelId: number,
 ): number[] {
     const stageByCell = view.stageByCell;
@@ -258,6 +317,51 @@ export function isTerritoryLevelPassedInTerritory(
     if (!isAreaPassed) return false;
     for (const cellId of territoryLevelCellsInChapter(view, levelId)) {
         if (isAreaPassed(cellId)) return true;
+    }
+    return false;
+}
+
+/**
+ * 当前章里**已经激活**的关卡号（去重）。
+ *
+ * 与 {@link passedTerritoryLevelIds} 一一对应，只是判据换成「激活」：
+ * 给 `MainPage` 在领地每次渲染时整批记进账号成就（`territory.activatedLevels.v1`）。
+ */
+export function activatedTerritoryLevelIds(view: TerritoryActivationView): number[] {
+    const stageByCell = view.stageByCell;
+    const isCellActivated = view.isCellActivated;
+    if (!stageByCell || !isCellActivated) return [];
+    const activated = new Set<number>();
+    for (const [cellId, stage] of stageByCell) {
+        if (!activated.has(stage.levelId) && isCellActivated(cellId)) activated.add(stage.levelId);
+    }
+    return Array.from(activated);
+}
+
+/**
+ * 领地据点（`levelInfo.levelId`）**激活**了没有 —— 与 {@link isTerritoryLevelPassedInTerritory}
+ * 同一套跨章逻辑，只把判据从「已通关」换成「已激活」。
+ *
+ * 需求（2026-11-09）：*「快速寻敌按钮在激活第 1 章第 4 关的地块后才解锁该功能，
+ * 解锁后所有章节都常驻」*。两件事都由这个函数负责：
+ *
+ *  · **激活**而不是通关：玩家花银币解锁那一格就算（`isCellUnlocked || isOwned || isAreaPassed`）。
+ *    用 `isTerritoryLevelPassedInTerritory` 会晚一整场战斗 —— 那一关打输了功能就一直不开。
+ *  · **常驻**：`archived` 是账号级落盘的已激活关卡集合（`TerritorySaveStore.loadActivatedLevels`）。
+ *    先看落盘（不受切章影响），再看当前章快照（首次激活那一刻只有快照知道）。
+ *    少了这一步，切到第 2 章（`stageByCell` 里没有第 1 章的 10004）功能就会消失 ——
+ *    与 2026-11-04 战斗宝箱入口那个 bug 是同一个形状。
+ */
+export function isTerritoryLevelActivatedInTerritory(
+    levelId: number,
+    view: TerritoryActivationView,
+    archived: { has(levelId: number): boolean } | null = null,
+): boolean {
+    if (archived?.has(levelId)) return true;
+    const isCellActivated = view.isCellActivated;
+    if (!isCellActivated) return false;
+    for (const cellId of territoryLevelCellsInChapter(view, levelId)) {
+        if (isCellActivated(cellId)) return true;
     }
     return false;
 }

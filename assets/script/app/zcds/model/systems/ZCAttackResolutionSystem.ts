@@ -1,7 +1,10 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 import { cardCounterMultiplier, ZCCombatEventType, type ZCAttackProfile, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard } from '../ZCCombatCatalog';
 import { zcCombatEffectTravelSeconds } from '../ZCCombatEffectFlight';
+import { ZC_SELF_AURA_EFFECT_PREFAB_PATH, ZC_SELF_AURA_BEHAVIOR_KEY, zcSelfAuraEffectPath } from '../ZCSelfAuraFx';
+import { ZC_BOLT_EFFECT_PREFAB_PATH, ZC_BOLT_EFFECT_SECONDS, ZC_BOLT_NUMB_STATUS_ID } from '../ZCBoltStrikeFx';
 import { missileLog } from '../../ZCMissileSkillDiagnostics';
+import { skillCastLog, skillCastLogChanging, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 import type {
     ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCFloatText,
     ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
@@ -10,7 +13,7 @@ import type { ZCLegacyBuffApplication, ZCLegacySkillEvaluation } from '../ZCLega
 import { ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
 import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
-import { ZCCombatSystem } from './ZCCombatSystem';
+import { ZC_PROJECTILE_MISS_DISTANCE, ZCCombatSystem } from './ZCCombatSystem';
 import type { IZCModelServices } from './ZCModelServices';
 import { ZCTargetingSystem } from './ZCTargetingSystem';
 
@@ -424,6 +427,290 @@ export class ZCAttackResolutionSystem {
     }
 
     /**
+     * 自身光环：在施法者脚下开一片**跟着本体走**的周期伤害区域（2026-11-09 大威天芦
+     * 「无尘禁土」102503）。
+     *
+     * 为什么建区域而不是「每秒扫一遍半径」：区域系统已经有一整套「波次 / 间隔 / 到期 /
+     * 吸血 / 飘字 / 长寿命表现」的实现（`ZCGroundZoneSystem`），自己再写一套只会让
+     * 「光环」和「灼热地带」这两件本质相同的事出现两套口径。这里只多补一个
+     * `followUnitId`：每帧把圆心拍回本体，就是设计案要的「跟随本体移动」。
+     *
+     * 参数（`skillParamJson`，**表值口径**，半径与攻击距离同一套 px）：
+     *   `auraCooldown`    冷却秒数（只给触发系统用，本函数不读）
+     *   `auraSeconds`     持续秒数（4 / 6 / 8）
+     *   `auraInterval`    每波间隔秒（缺省 1 ⇒ 「每秒对周围敌人造成 N% 伤害」）
+     *   `auraRadius`      半径（表值 px；`areaRadius=60` 这一档与既有区域同量级）
+     *   `auraDamageRate`  每波相对**面板伤害**的倍率（0.30 / 0.40 / 0.55）
+     *   `auraSelfDamagePct` III 级「期间自身伤害提高 20%」由触发系统挂状态，本函数不读
+     *
+     * 返回 `true` = 真的开出来了（调用方才消费 CD）。参数缺失 ⇒ `false`，
+     * 与副轨 / 多点打击同一条口径：跑位途中不把这次机会转掉。
+     */
+    static castSelfAura(state: ZCSnapshot, unit: ZCUnitState,
+        context: IZCAttackResolutionContext): boolean {
+        const definition = context.effectiveDefinition(unit);
+        const profile = definition.attackProfile;
+        const parameters = context.skillRuntime[unit.owner]
+            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const radius = Math.max(0, parameters?.auraRadius ?? 0) * context.rules.combatDistanceScale;
+        const seconds = Math.max(0, parameters?.auraSeconds ?? 0);
+        const interval = Math.max(0.05, parameters?.auraInterval ?? 1);
+        const damageRate = Math.max(0, parameters?.auraDamageRate ?? 0);
+        if (!(radius > 0) || !(seconds > 0) || !(damageRate > 0)) {
+            //  诊断④-a：三个必需参数里哪个是 0。这条一打出来就说明「走得到施法函数、但表没配上」。
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`selfaura-params:${unit.id}`, '施法',
+                    `${unit.unitId}#${unit.id} 自身光环（${profile.name}）参数不全：`
+                    + `radius=${radius}（表值 ${parameters?.auraRadius ?? 'undefined'}）`
+                    + ` seconds=${seconds} damageRate=${damageRate} ⇒ 不开区域、不消费 CD`);
+            }
+            return false;
+        }
+
+        //  暴击 / 克制按**开光环那一刻**的当前目标算一次，之后每一波都吃同一个数 ——
+        //  与 `castFanSkill` / `attackProfile.damageRate` 的区域伤害同源（区域只存
+        //  `damage` 一个标量，逐波重算暴击会让「同一片光环」一会儿暴一会儿不暴）。
+        const target = context.currentTarget(unit);
+        const targetOwner = target ? this.targetOwner(state, target, context) : unit.owner;
+        const targetCardId = target?.cardId ?? null;
+        const criticalMultiplier = this.criticalMultiplier(unit, context);
+        const damage = Math.round(
+            this.unitDamage(context, unit, targetOwner, targetCardId, damageRate) * criticalMultiplier);
+        const counterMultiplier = target
+            ? cardCounterMultiplier(
+                this.cardById(context, unit.owner, unit.cardId),
+                target.cardId ? this.cardById(context, this.targetOwner(state, target, context), target.cardId) : undefined,
+                context.counters)
+            : 1;
+        const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
+        //  波数向下取整再加一：`auraSeconds = 4` / `interval = 1` ⇒ 4 波（立刻一波 + 3 波），
+        //  最后一波正好落在到期那一拍；留 `1e-6` 吸收 6 / 1 = 6.000000000000001 这类浮点误差。
+        const waves = Math.max(1, Math.round(seconds / interval + 1e-6));
+        const origin = context.unitPosition(unit);
+        //  「身前 N px」出生点（2026-11-11 磁电菇「磁电冲击」101604「在身前 1px 的位置」）：
+        //  沿本体**美术朝向**前移，与区域半径同一套表值口径 ⇒ 乘 `combatDistanceScale`。
+        //  缺省 0 ⇒ 就是本体脚下，无尘禁土（102503）行为逐字不变。
+        const forward = Math.max(0, parameters?.auraForward ?? 0) * context.rules.combatDistanceScale;
+        //  「终点朝向目标方向」（2026-11-11 磁电冲击 101604 第二轮）：
+        //  开了 `auraFaceTarget` 就用「本体 → 当前目标」的方位角，**出生点偏移也用同一个角** ——
+        //  两者必须同源，否则区域会沿本体朝向飘出去、矩形却朝目标，中心对不上。
+        //  没有目标 / 上下文不给位置 ⇒ 回落到本体美术朝向（与改前逐字一致）。
+        const faceTarget = (parameters?.auraFaceTarget ?? 0) > 0;
+        //  `ZCCombatTarget` 自带 `x / y`（与 `unitPosition` 同一套世界坐标），不用再查单位表。
+        const targetPos = faceTarget && target ? { x: target.x, y: target.y } : null;
+        const aimRadians = targetPos && (targetPos.x !== origin.x || targetPos.y !== origin.y)
+            ? Math.atan2(targetPos.y - origin.y, targetPos.x - origin.x)
+            : unit.facingRadians;
+        const spawnX = forward > 0 ? origin.x + Math.cos(aimRadians) * forward : origin.x;
+        const spawnY = forward > 0 ? origin.y + Math.sin(aimRadians) * forward : origin.y;
+        //  区域朝向（度）：只有真的「朝目标」才写，否则保持缺省 0° ⇒ 既有区域一个字节都不变。
+        const angleDegrees = targetPos ? aimRadians * 180 / Math.PI : undefined;
+        //  表现的竖直抬升（屏上 px）：「起始位置要在角色的中心点」，单位根节点是逻辑脚点，
+        //  不抬的话光束有一半埋在地面线以下。缺省 0 ⇒ 既有区域一律不抬。
+        const visualLiftPx = Math.max(0, parameters?.auraVisualLiftPx ?? 0);
+        //  是否跟随本体（缺省 1 = 跟随，与无尘禁土一致）。冲击波是**站桩**的，配 0。
+        //  2026-11-12 磁电冲击改成「跟随角色一起移动、固定在角色身前」⇒ 配 1。
+        const follow = (parameters?.auraFollow ?? 1) > 0;
+        //  跟随落点保持的身前距离：直接复用 `auraForward` —— 「出生时在身前 N px」与
+        //  「之后一直悬在身前 N px」本来就是同一个数，没必要再开一个口径让两者能配歪。
+        //  `auraForward` 缺省 0 ⇒ 圆心跳回本体，与无尘禁土逐字一致。
+        const followForward = follow && forward > 0 ? forward : 0;
+        //  每波目标上限（磁电冲击「最多对范围内 5 个敌人」）。缺省 0 ⇒ 不限。
+        const waveMaxTargets = Math.max(0, Math.round(parameters?.auraWaveMaxTargets ?? 0));
+        //  施法者在此期间「跳起来」的高度（屏上 px，只抬美术根节点，不动坐标）。
+        //  麻辣铁锅「喷射火焰」102603：「播放攻击动画时，角色上移 30px…角色在空中循环播放攻击动作」。
+        //  挂在区域上 ⇒ 与光环同生共死，不需要另设到期清理。缺省 0 ⇒ 任何既有光环都不抬。
+        const casterLiftPx = Math.max(0, parameters?.casterLiftPx ?? 0);
+        //  矩形判定（2026-11-11 磁电冲击 101604 「把判定改成长方形，尽可能贴合特效范围」）：
+        //  `auraRectHalfHeight > 0` 才启用；半长缺省跟随半径（长度仍由 auraRadius 三档驱动）。
+        //  两者都是**表值逻辑 px**，与 `auraRadius` 同一套口径 ⇒ 一起乘 `combatDistanceScale`。
+        const rectHalfHeight = Math.max(0, parameters?.auraRectHalfHeight ?? 0)
+            * context.rules.combatDistanceScale;
+        const rectHalfLength = rectHalfHeight > 0
+            ? Math.max(0, parameters?.auraRectHalfLength ?? 0) * context.rules.combatDistanceScale || radius
+            : 0;
+        state.groundZones.push({
+            x: spawnX,
+            y: spawnY,
+            radius,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            //  `skillName` 只能取普攻行的名字：`skillParamJson` 只有数值槽，装不下字符串
+            //  （同 `ZCGroundZoneSystem` 里 `ZONE_APPROACH_ANIMATION` 那条注释的理由）。
+            //  它只服务事件日志/调试，不参与任何结算。
+            skillId: profile.skillId,
+            skillName: profile.name,
+            effectPrefabPath: zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, unit.unitId)
+                ?? ZC_SELF_AURA_EFFECT_PREFAB_PATH,
+            //  必须给**上限**而不是 `Number.POSITIVE_INFINITY`：`remainingSeconds` 会进快照，
+            //  非有限值过不了 `ZCSnapshotCodec` 的数值校验。
+            remainingSeconds: seconds,
+            wavesLeft: waves,
+            nextWaveAt: state.elapsedSeconds,
+            waveInterval: interval,
+            damage,
+            floatTextKind,
+            slowRatio: 0,
+            //  整段持有一条长效表现事件：光环是一根**持续燃着**的光柱，不是每波闪一次。
+            //  同时让 `syncHoldVisual` 每帧把事件挪到区域当前位置 ⇒ 视觉跟着本体走。
+            holdVisual: true,
+            growSeconds: 0.2,
+            followUnitId: follow ? unit.id : undefined,
+            followForward: followForward > 0 ? followForward : undefined,
+            waveMaxTargets: waveMaxTargets > 0 ? waveMaxTargets : undefined,
+            casterLiftPx: casterLiftPx > 0 ? casterLiftPx : undefined,
+            rectHalfLength: rectHalfLength > 0 ? rectHalfLength : undefined,
+            rectHalfHeight: rectHalfHeight > 0 ? rectHalfHeight : undefined,
+            angleDegrees,
+            visualLiftPx: visualLiftPx > 0 ? visualLiftPx : undefined,
+        });
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLog('施法', `${unit.unitId}#${unit.id} 在 (${origin.x.toFixed(1)}, ${origin.y.toFixed(1)})`
+                + ` 开出【${profile.name}】：半径 ${radius.toFixed(1)} 世界px（表值 ${parameters?.auraRadius}）`
+                + (rectHalfHeight > 0
+                    ? `，矩形判定 ${(rectHalfLength * 2).toFixed(1)}×${(rectHalfHeight * 2).toFixed(1)} 世界px`
+                    : '')
+                + `，${seconds}s × 每 ${interval}s = ${waves} 波，单跳 ${damage}，`
+                + (follow
+                    ? (followForward > 0 ? `跟随本体 #${unit.id}、身前 ${followForward.toFixed(1)} 世界px` : `跟随本体 #${unit.id}`)
+                    : '站桩（不跟随本体）'));
+        }
+        return true;
+    }
+
+    /**
+     * 落雷连线（2026-11-11 磁电菇「五雷轰顶」101603）。
+     *
+     * 需求原文：「在目标的坐标直接释放 1 道雷电，并以该目标所在的坐标**背朝向**，额外释放 2/3/4 道闪电
+     * （每道闪电间隔 30px），闪电出现间隔 0.1s，每道闪电的伤害判定在特效的第 5 帧，每个级别的伤害分别是
+     * 160%/200%/250%，并且有 30% 的概率造成敌人进入【麻痹状态】」。
+     *
+     * 实现方式刻意**不新增系统**：每道雷 = 一个「一波」地面区域。
+     * - 视觉：落点自己推一条 `area` 事件（在**出现**那一刻播，所以能看出 0.1s 的逐道闪烁）；
+     * - 结算：区域的首波延迟到 `boltDelay`（≈特效第 5 帧）才触发，由 `ZCGroundZoneSystem` 照常
+     *   结伤 + 吸血 + 飘字 + 命中挂状态，`wavesLeft = 1` 打完即散；
+     * - 之所以不直接在这里 `damageUnit`：那样就没有「第 5 帧判伤」这回事了，而且会绕开
+     *   区域系统已有的护盾/减伤/死亡结算与表现事件。
+     *
+     * 参数（`skillParamJson`，**距离全部是表值 px**，内部乘 `combatDistanceScale`）：
+     *   `boltCount`        总道数（3/4/5，含主雷）
+     *   `boltSpacing`      相邻落点间距（30）
+     *   `boltInterval`     逐道出现的间隔秒（0.1）
+     *   `boltDelay`        出现 → 判伤的延迟秒（0.15，≈第 5 帧 @30fps）
+     *   `boltDamageRate`   每道雷相对面板的倍率（1.6/2.0/2.5）
+     *   `boltRadius`       每道雷的判定半径（表值 px）
+     *   `boltNumbChance`   每个被打到的敌人进入麻痹的概率（0.3）
+     *   `boltNumbSeconds`  麻痹持续秒数
+     *
+     * 返回 `true` = 真的放出去了（调用方才消费 CD）；没有目标 / 参数不全 ⇒ `false`。
+     */
+    static castBoltLine(state: ZCSnapshot, unit: ZCUnitState,
+        context: IZCAttackResolutionContext): boolean {
+        const definition = context.effectiveDefinition(unit);
+        const profile = definition.attackProfile;
+        const parameters = context.skillRuntime[unit.owner]
+            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const count = Math.max(0, Math.round(parameters?.boltCount ?? 0));
+        const damageRate = Math.max(0, parameters?.boltDamageRate ?? 0);
+        const radiusTable = Math.max(0, parameters?.boltRadius ?? 0);
+        if (!(count >= 1) || !(damageRate > 0) || !(radiusTable > 0)) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`bolt-params:${unit.id}`, '施法',
+                    `${unit.unitId}#${unit.id} 五雷轰顶参数不全：count=${count} damageRate=${damageRate}`
+                    + ` radius=${radiusTable} ⇒ 不放雷、不消费 CD`);
+            }
+            return false;
+        }
+        const target = context.currentTarget(unit);
+        if (!target) return false;
+        const scale = context.rules.combatDistanceScale;
+        const radius = radiusTable * scale;
+        const spacing = Math.max(0, parameters?.boltSpacing ?? 0) * scale;
+        const interval = Math.max(0.02, parameters?.boltInterval ?? 0.1);
+        const delay = Math.max(0, parameters?.boltDelay ?? 0.15);
+        const numbChance = Math.max(0, Math.min(1, parameters?.boltNumbChance ?? 0));
+        const numbSeconds = Math.max(0, parameters?.boltNumbSeconds ?? 0);
+        const origin = context.unitPosition(unit);
+        //  「背朝向」= 从施法者指向目标的方向继续往后排。目标与本体几乎重合时方向没有意义，
+        //  退回美术朝向（与 `castFanSkill` 的 `heading` 同一条兜底）。
+        const dx = target.x - origin.x;
+        const dy = target.y - origin.y;
+        const length = Math.hypot(dx, dy);
+        const dirX = length > 1e-6 ? dx / length : Math.cos(unit.facingRadians);
+        const dirY = length > 1e-6 ? dy / length : Math.sin(unit.facingRadians);
+        //  暴击 / 克制按**出手那一刻**的目标算一次，之后每道雷共用 —— 与光环 / 扇形同口径
+        //  （同一轮技能里一会儿暴一会儿不暴只会让飘字抖）。
+        const criticalMultiplier = this.criticalMultiplier(unit, context);
+        const counterMultiplier = cardCounterMultiplier(
+            this.cardById(context, unit.owner, unit.cardId),
+            target.cardId ? this.cardById(context, this.targetOwner(state, target, context), target.cardId) : undefined,
+            context.counters,
+        );
+        const damage = Math.round(this.unitDamage(context, unit,
+            this.targetOwner(state, target, context), target.cardId, damageRate) * criticalMultiplier);
+        const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
+        for (let index = 0; index < count; index += 1) {
+            const x = target.x + dirX * spacing * index;
+            const y = target.y + dirY * spacing * index;
+            const waveAt = state.elapsedSeconds + index * interval + delay;
+            state.combatEvents.push({
+                id: state.nextCombatEventId++,
+                type: ZCCombatEventType.Area,
+                owner: unit.owner,
+                sourceUnitId: unit.id,
+                targetUnitId: target.kind === 'unit' ? target.id : null,
+                skillId: profile.skillId,
+                skillName: profile.name,
+                effectKey: null,
+                projectileKey: null,
+                effectPrefabPath: ZC_BOLT_EFFECT_PREFAB_PATH,
+                fromX: x,
+                fromY: y,
+                toX: x,
+                toY: y,
+                radius,
+                damage,
+                //  与 `castFanSkill` 同一条口径：这是「技能出手」而不是普攻强化，
+                //  `empowered` 只影响表现层的强化标识。
+                empowered: false,
+                startedAt: state.elapsedSeconds + index * interval,
+                //  必须**活够整段动画**：`ZCGameModel` 按 `startedAt + durationSeconds` 剔除事件，
+                //  短一截就会在「雷尾消散」那几帧之前把节点摘掉。动画总长见 `ZC_BOLT_EFFECT_SECONDS`
+                //  （20 帧 @ sample 30 = 0.667s），再加上出现 → 判伤的前摇。
+                durationSeconds: delay + ZC_BOLT_EFFECT_SECONDS,
+            });
+            state.groundZones.push({
+                x, y, radius,
+                owner: unit.owner,
+                sourceUnitId: unit.id,
+                skillId: profile.skillId,
+                skillName: profile.name,
+                //  视觉已经由上面那条事件负责 ⇒ 区域**不再**逐波推自己的 event。
+                effectPrefabPath: null,
+                //  必须活到这一道雷结算完：首波在 `waveAt`，之后留 0.3s 收尾。
+                remainingSeconds: index * interval + delay + 0.3,
+                wavesLeft: 1,
+                nextWaveAt: waveAt,
+                waveInterval: interval,
+                damage,
+                floatTextKind,
+                slowRatio: 0,
+                //  麻痹：每个被打到的敌人各自掷 30%（在区域的波次结算里判）。
+                hitStatusId: numbChance > 0 ? ZC_BOLT_NUMB_STATUS_ID : undefined,
+                hitStatusChance: numbChance > 0 ? numbChance : undefined,
+                hitStatusSeconds: numbSeconds > 0 ? numbSeconds : undefined,
+            });
+        }
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLog('施法', `${unit.unitId}#${unit.id} 放【五雷轰顶】：${count} 道，`
+                + `间距 ${spacing.toFixed(1)}（表值 ${parameters?.boltSpacing}）`
+                + `，逐道 ${interval}s、延迟 ${delay}s 判伤，单道 ${damage}`
+                + `，麻痹 ${(numbChance * 100).toFixed(0)}% / ${numbSeconds}s`);
+        }
+        return true;
+    }
+
+    /**
      * 多点打击（2026-10-30「戈壁狂箭」100804、「追踪导弹」101003）。
      *
      * 为什么单开一条而不是走副轨扇形：这两条要的是「在半径里挑 N 个人各打一发」，
@@ -519,8 +806,10 @@ export class ZCAttackResolutionSystem {
                     damage: 0,
                     empowered: false,
                     startedAt: state.elapsedSeconds,
+                    //  打空续飞（2026-11-09）：寿命取「目标距离 + `ZC_PROJECTILE_MISS_DISTANCE`」，
+                    //  没命中就沿这条方向飞完再消失，不再在目标的落点上凭空截断。
                     durationSeconds: ZCCombatSystem.attackTravelSeconds(
-                        ZCCombatEventType.Projectile, length, speed),
+                        ZCCombatEventType.Projectile, length, speed, ZC_PROJECTILE_MISS_DISTANCE),
                     targetKind: 'unit',
                     targetId: victim.id,
                     sourceCardId: unit.cardId,
@@ -706,9 +995,15 @@ export class ZCAttackResolutionSystem {
         const profile = definition.attackProfile;
         const empowered = ZCCombatSystem.consumeEmpoweredAttack(unit, profile, state.elapsedSeconds);
         const skillRuntime = context.skillRuntime[unit.owner].get(`${unit.unitId}:${profile.skillId}`);
-        let projectileCount = empowered
-            ? Math.max(1, Math.round(skillRuntime?.parameters.projectileCount ?? 1))
-            : 1;
+        //  「这一击固定发几颗」的显式声明（`skillParamJson.projectileCount`，只服务强化那一击）。
+        //  与 `bulletNum`（普攻被动「多打 N 发」）是两种语义，必须分开记：
+        //  麻辣铁锅 102601 给 `bulletNum +2`、102604 要求「凤凰降临固定 4 颗」，
+        //  两者叠在一起会变成 6 颗。所以**声明了固定颗数时不再叠加 `bulletNum`**。
+        //  ⚠️ 现有计划行一条都没用过这个键（全表 grep 无命中）⇒ 存量单位行为逐字不变。
+        const declaredProjectileCount = empowered
+            ? Math.max(0, Math.round(skillRuntime?.parameters.projectileCount ?? 0))
+            : 0;
+        let projectileCount = declaredProjectileCount > 0 ? declaredProjectileCount : 1;
         const criticalMultiplier = this.criticalMultiplier(unit, context);
         //  unit 域伤害倍率（`pvpSkillPlan.statId = damageRate`）：弹道走 `unitDamageBase`、
         //  近战/区域走本类的 `unitDamage`，两处各自乘以同一个系数，口径一致。缺省 0 ⇒ 1。
@@ -741,7 +1036,8 @@ export class ZCAttackResolutionSystem {
         if (legacyHitCount > 0) projectileCount = Math.max(projectileCount, Math.round(legacyHitCount));
         //  `pvpAttrMap.bulletNum`（2026-10-13）：正数 = 多打几发，负数 = 少几发，下限 1。
         //  用「增量」而非「绝对值」，才能与技能表原有的 projectileCount / hitCount 叠加。
-        if (patch.bulletNumFlat) {
+        //  「显式固定颗数」的那一击不叠（见上面 `declaredProjectileCount` 的注释）。
+        if (patch.bulletNumFlat && declaredProjectileCount <= 0) {
             projectileCount = Math.max(1, Math.round(projectileCount + patch.bulletNumFlat));
         }
         const counterMultiplier = cardCounterMultiplier(
@@ -842,21 +1138,94 @@ export class ZCAttackResolutionSystem {
             const dx = target.x - from.x, dy = target.y - from.y;
             const length = Math.hypot(dx, dy);
             const speed = activeProfile.projectileSpeed || 500;
+            //  固定弹道寿命（2026-11-09 大威芦「天降神拳」102504：子弹 100px/s、**持续 4 秒**）。
+            //  `event.durationSeconds` 对 projectile 恒为「距离 / 速度」——射程跟着目标远近变，
+            //  表达不了「不管打多远都飞 4 秒」。这里让 `skillParamJson.projectileLifeSeconds`
+            //  直接接管寿命：位移 = 速度 × 寿命，与目标站位无关。
+            //  缺省/0 ⇒ 沿用 `travelSeconds`，既有弹道（含镭射死光自己那条 18 格硬编码）逐字不变。
+            //  ⚠️ 必须 `empowered` 才读：技能计划行是按 `unitId:pvpSkillId` 合并的，102504 的
+            //  `skillParamJson` 和本卡普攻共用同一份 runtime —— 不设闸门的话，普攻那一发也会
+            //  被改成 4 秒寿命（与 `pierceCount` 同一个理由，两者都只服务「强化那一击」）。
+            const lifeSeconds = empowered
+                ? Math.max(0, parameters?.projectileLifeSeconds ?? 0)
+                : 0;
+            //  打空续飞（2026-11-09）：`event.durationSeconds` 是「到目标的飞行时长」，
+            //  再加一段「飞过目标也不消失」的余程 —— 命中即消耗，所以这段只在没打中时走。
+            //  `projectileLifeSeconds`（固定寿命的技能）仍然优先，不受这条影响。
+            const projectileSeconds = lifeSeconds > 0
+                ? lifeSeconds
+                : event.durationSeconds + ZC_PROJECTILE_MISS_DISTANCE / speed;
             const bonuses = context.deckBonuses[unit.owner];
+            //  命中后爆炸（2026-11-11 麻辣铁锅「凤凰降临」102604）。
+            //
+            //  与 `splashRadius` / `splashDamageRate` 是两件事，不能复用那一对：
+            //    · 溅射**不打主目标**，而且只在 `!empowered` 时读（见下面 push 里的三元）；
+            //    · 爆炸要**把包括主目标在内的所有人**各打一次，并且强度只在强化那一击出现。
+            //  所以另开一组 `impactBurst*` 键，缺省全 0 ⇒ 整段不执行，任何存量弹道逐字不变。
+            //
+            //  伤害基数按 `unitDamageBase` 算（**不含克制**）：克制系数是逐个受击者算的，
+            //  存进弹道里的必须是一个中性值，否则带主目标的克制关系去炸别人就会算错。
+            //  与 `baseDamage` / `splashDamage` 同一条口径。
+            const burstRadius = (empowered ? Math.max(0, parameters?.impactBurstRadius ?? 0) : 0)
+                * context.rules.combatDistanceScale;
+            const burstRate = empowered ? Math.max(0, parameters?.impactBurstDamageRate ?? 0) : 0;
+            const burstBase = burstRadius > 0 && burstRate > 0
+                ? ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules, burstRate)
+                    * (unit.attackMultiplier ?? 1) * criticalMultiplier
+                : 0;
+            const burstSecondRate = empowered ? Math.max(0, parameters?.impactBurstSecondRate ?? 0) : 0;
+            const burstSecondBase = burstRadius > 0 && burstSecondRate > 0
+                ? ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules, burstSecondRate)
+                    * (unit.attackMultiplier ?? 1) * criticalMultiplier
+                : 0;
+            //  第二段的时间锚点：设计案「爆炸开始后第 26 帧」@30fps ⇒ 25/30 = 0.8333s。
+            //  第 N 帧（1 起数）= 下标 N-1，与 `ZCBoltStrikeFx` 的「第 5 帧 ⇒ 4/30」同一条换算。
+            const burstSecondDelay = Math.max(0, parameters?.impactBurstSecondDelay ?? 0);
+            const burstEffectSeconds = Math.max(0, parameters?.impactBurstEffectSeconds ?? 0);
+            const burstImpactPrefab = empowered ? (activeProfile.impactEffectPrefabPath ?? null) : null;
             for (let index = 0; index < projectileCount; index += 1) {
                 const projectileEvent = index === 0 ? event : { ...event, id: state.nextCombatEventId++ };
                 //  多发扇形展开：只有 `bulletAngle > 0` 时才转方向，缺省仍是全部打同一条直线
                 //  （老技能没有任何表数据，行为必须逐字不变）。
-                const halfSpan = (patch.bulletAngleFlat ?? 0) > 0 && projectileCount > 1
-                    ? ((patch.bulletAngleFlat ?? 0) * Math.PI / 180) / 2
+                //  `projectileSpreadDeg`（2026-11-11 麻辣铁锅「凤凰降临」102604）是**强化那一击专用**的
+                //  张角覆盖：`bulletAngle` 是 unit 域的修改器（`patch.bulletAngleFlat`），同一张卡的
+                //  普攻与强化击共用一份，而 102601 要求普攻 20°、102604 要求 4 颗 90° —— 一个槽装不下。
+                //  取「强化 + 配了就用它、否则退回 patch」：既有技能一条都没有这个键，行为逐字不变。
+                const spreadTable = (empowered ? Math.max(0, parameters?.projectileSpreadDeg ?? 0) : 0)
+                    || (patch.bulletAngleFlat ?? 0);
+                //  两种张角语义（2026-11-11 第三轮，麻辣铁锅「凤凰降临」）：
+                //    · < 360 ⇒ **扇形**：整组子弹摊在 `spreadTable` 这段张角里，第 0 颗偏 -一半、
+                //      最后一颗偏 +一半（20° 三连发的既有口径，别动）；
+                //    · ≥ 360 ⇒ **全向均分**：等于「向四周各打一发」，相邻两颗差 `360/count`，
+                //      第 0 颗仍对准目标。用户口径「4 颗子弹的 4 个方向」= 图例里那四个箭头（十字）。
+                //  扇形那套算不出十字：count=4 时 spread 是 -1/-⅓/+⅓/+1，张角 360 会让
+                //  首尾两颗都朝背后（-180 与 +180 同向）⇒ 实际只有 3 个方向。必须单独一条分支。
+                const fullCircle = spreadTable >= 359.999 && projectileCount > 1;
+                const halfSpan = spreadTable > 0 && projectileCount > 1 && !fullCircle
+                    ? (spreadTable * Math.PI / 180) / 2
                     : 0;
                 const spread = projectileCount > 1 ? (index / (projectileCount - 1)) * 2 - 1 : 0;
-                const heading = (length > 0 ? Math.atan2(dy, dx) : unit.facingRadians) + spread * halfSpan;
-                const dirX = length > 0 || halfSpan > 0 ? Math.cos(heading) : Math.cos(unit.facingRadians);
-                const dirY = length > 0 || halfSpan > 0 ? Math.sin(heading) : Math.sin(unit.facingRadians);
+                const aim = length > 0 ? Math.atan2(dy, dx) : unit.facingRadians;
+                const heading = fullCircle
+                    ? aim + index * (Math.PI * 2 / projectileCount)
+                    : aim + spread * halfSpan;
+                const dirX = length > 0 || halfSpan > 0 || fullCircle ? Math.cos(heading) : Math.cos(unit.facingRadians);
+                const dirY = length > 0 || halfSpan > 0 || fullCircle ? Math.sin(heading) : Math.sin(unit.facingRadians);
+                //  🔴 每颗弹道**自己的终点**（2026-11-11 第五轮用户口径：「1 号朝向对，2 号顺时针 90、
+                //  3 号 180、4 号 270」）。事件里的 `to` 是所有弹**共用**的目标点，而视图
+                //  （`ZCCombatEffectView` 的 projectile 分支）是拿 `to - from` 算转角的 ⇒ 四颗弹体
+                //  全部朝同一个方向 —— 飞出去的四颗里只有「正好落在瞄准线上」的那颗看着对，
+                //  其余三颗是「侧着飞」。所以这里按各弹自己的 `heading` 把 `to` 沿该方向摊开，
+                //  **长度保持 `length` 不变** ⇒ `aimFlightSeconds`（弧线进度）与打空续飞都不受影响。
+                //  只在真的散开时改（`halfSpan > 0 || fullCircle`），单发弹道逐字不动。
+                const fanned = length > 0 && (halfSpan > 0 || fullCircle);
+                const bulletToX = fanned ? from.x + dirX * length : projectileEvent.toX;
+                const bulletToY = fanned ? from.y + dirY * length : projectileEvent.toY;
                 state.projectiles.push({
                     ...projectileEvent, type: 'projectile', targetKind: target.kind, targetId: target.id,
                     sourceCardId: unit.cardId,
+                    toX: bulletToX,
+                    toY: bulletToY,
                     baseDamage: legacy.hasDamageFormula
                         ? legacy.damage * criticalMultiplier
                         : ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules,
@@ -865,6 +1234,8 @@ export class ZCAttackResolutionSystem {
                     x: from.x, y: from.y, previousX: from.x, previousY: from.y,
                     velocityX: dirX * speed,
                     velocityY: dirY * speed,
+                    //  寿命：`projectileLifeSeconds` 有值时固定、否则沿用 travelSeconds（见上）。
+                    durationSeconds: projectileSeconds,
                     collisionRadius: (activeProfile.collisionRadius ?? 3) * context.rules.combatDistanceScale,
                     canHitAir: definition.canAttackAir,
                     // 投射物命中后在落点创建持续区域（火船/风龙：飞过去命中后才烧）
@@ -902,6 +1273,14 @@ export class ZCAttackResolutionSystem {
                     splashDamageRate: legacyAreaRadius > 0
                         ? undefined
                         : (empowered ? undefined : skillRuntime?.parameters.splashDamageRate),
+                    //  命中爆炸（见上面 `burstRadius` 那一段）。四项任一为 0 就不写，
+                    //  保持「没有这个键」= 存量弹道逐字不变。
+                    impactEffectPrefabPath: burstImpactPrefab,
+                    burstRadius: burstRadius > 0 ? burstRadius : undefined,
+                    burstDamage: burstBase > 0 ? burstBase : undefined,
+                    burstSecondDamage: burstSecondBase > 0 ? burstSecondBase : undefined,
+                    burstSecondDelay: burstSecondBase > 0 ? burstSecondDelay : undefined,
+                    burstEffectSeconds: burstEffectSeconds > 0 ? burstEffectSeconds : undefined,
                 });
             }
             return;
@@ -951,13 +1330,15 @@ export class ZCAttackResolutionSystem {
             //  就改成落在施法者脚下，半径与波次仍按 areaRadius / durationSeconds / waves 走。
             //  缺省 0 ⇒ 仍在目标点，暴风雪 / 灼热地带逐字不变。
             const selfCentered = !moving && (mParams?.zoneSelfCentered ?? 0) > 0;
-            //  出生点前移（2026-11-07 鹿神守护需求 1）：「小鹿初始位置在魔术师前进方向 30px 的位置」。
+            //  出生点前移（2026-11-07 鹿神守护需求 1）：「生成位置在魔术师前进方向 15px 处」
+            //  （2026-11-12 由 30 改成 15，与「子弹从枪口出来」的观感对齐）。
             //  与攻击距离 / 区域半径同一套表值口径 ⇒ 乘 `combatDistanceScale`。
             const spawnForward = moving
                 ? Math.max(0, mParams?.zoneSpawnForward ?? 0) * context.rules.combatDistanceScale
                 : 0;
-            //  两段式移动（2026-11-07 鹿神守护需求 2）：给了 `zoneApproachSpeed` 才走「先走再冲」，
-            //  缺省 0 ⇒ 一出生就按 `zoneMoveSpeed` 冲刺（暴风 / 既有移动区域逐字不变）。
+            //  追踪式移动（2026-11-07 鹿神守护需求 2，2026-11-12 改成「会追踪的子弹」）：
+            //  给了 `zoneApproachSpeed` 才走「慢档走过去、贴近后提速」，缺省 0 ⇒ 一出生就按
+            //  `zoneMoveSpeed` 飞（暴风 / 既有移动区域逐字不变）。
             const approachSpeed = moving
                 ? Math.max(0, mParams?.zoneApproachSpeed ?? 0) * context.rules.combatDistanceScale
                 : 0;
@@ -1000,9 +1381,11 @@ export class ZCAttackResolutionSystem {
                     moveVelocityY: moving ? Math.sin(angle) * moveSpeed * context.rules.combatDistanceScale : undefined,
                     hitUnitIds: maxHits > 0 ? [] : undefined,
                     maxHits: maxHits > 0 ? maxHits : undefined,
-                    //  逐目标递减（2026-11-06 魔术师「鹿神守护」103405）：第 k 个被命中的敌人吃
-                    //  `damage × (1 - zoneDamageFalloff)^k`。设计口径「每多一个目标减少 50%」
-                    //  就是 0.5。缺省 0 ⇒ 不递减，既有移动区域（暴风）行为逐字不变。
+                    //  逐目标递减（2026-11-06 引入，移动区域的通用能力）：第 k 个被命中的敌人吃
+                    //  `damage × (1 - zoneDamageFalloff)^k`，设计口径「每多一个目标减少 50%」就是 0.5。
+                    //  缺省 0 ⇒ 不递减，既有移动区域（暴风）行为逐字不变。
+                    //  ⚠️ 2026-11-12 起 103405 不再配它：小鹿改成「撞到第一个目标就消失」
+                    //  （`zoneMaxHits = 1`），根本没有「第二个目标」可递减。槽位保留给后续技能用。
                     damageFalloff: moving
                         ? Math.max(0, Math.min(1, mParams?.zoneDamageFalloff ?? 0)) || undefined
                         : undefined,
@@ -1016,12 +1399,13 @@ export class ZCAttackResolutionSystem {
                     growSeconds: moving
                         ? Math.max(0, mParams?.zoneGrowSeconds ?? 0) || undefined
                         : undefined,
-                    //  两段式移动（2026-11-07 鹿神守护需求 2）：先走近、再冲刺。
+                    //  追踪式移动（2026-11-12 鹿神守护改成「会追踪的子弹」）：慢档走近、贴近后提速。
                     //  `approachSpeed` 是世界 px/秒（表值 × combatDistanceScale），
-                    //  `sprintSpeed` 同样 —— 转段时由 `ZCGroundZoneSystem.startSprint` 写进 `moveVelocity`。
+                    //  `sprintSpeed` 同样 —— 由 `ZCGroundZoneSystem.advanceChase` 每帧写进 `moveVelocity`
+                    //  （它会持续转向目标、目标阵亡还会改追最近敌人，所以速度不能锁死在出生朝向）。
                     approachSpeed: approachSpeed > 0 ? approachSpeed : undefined,
                     //  追的目标就是这一击的攻击目标；目标是城墙 / 建筑（没有单位 id）时不给，
-                    //  区域会在第一帧「追不到目标」直接转冲刺，等于退回旧口径。
+                    //  区域会在第一帧自己找最近的敌人再提速。
                     approachTargetId: approachSpeed > 0 && target.kind === 'unit' ? target.id : undefined,
                     sprintRange: approachSpeed > 0 ? sprintRange : undefined,
                     sprintSpeed: approachSpeed > 0 ? moveSpeed * context.rules.combatDistanceScale : undefined,
@@ -1127,7 +1511,8 @@ export class ZCAttackResolutionSystem {
             empowered: true,
             startedAt: state.elapsedSeconds,
             durationSeconds: ZCCombatSystem.attackTravelSeconds(
-                ZCCombatEventType.Projectile, distance(from.x, from.y, target.x, target.y), speed),
+                ZCCombatEventType.Projectile, distance(from.x, from.y, target.x, target.y), speed,
+                ZC_PROJECTILE_MISS_DISTANCE),
             targetKind: target.kind,
             targetId: target.id,
             sourceCardId: unit.cardId,
@@ -1220,6 +1605,70 @@ export class ZCAttackResolutionSystem {
                 context.applyLegacyBuffs(splash, projectile.legacyBuffs ?? [], projectile.sourceUnitId);
             }
         }
+        //  命中爆炸（2026-11-11 麻辣铁锅「凤凰降临」102604）。设计案原文：
+        //  「子弹命中目标产生 220%/280%/300% 的伤害，命中目标爆炸，爆炸产生瞬间伤害
+        //   150%/200%/250%，爆炸开始后第 26 帧造成 1 次伤害 150%/180%/200%，
+        //   爆炸伤害和第 2 段伤害都是范围伤害」。
+        //
+        //  三段的分工：直击在上面 `damageUnit` 已经结算完；这里补第一段爆炸（立刻）+ 第二段（延迟）。
+        //  两段都**以命中点为圆心**、都把包括主目标在内的所有敌人各打一次 —— 所以不用
+        //  `splashRadius` 那条路（它按设计就是「不打主目标」的）。
+        //
+        //  第二段借 `groundZones` 而不是自己排一个定时器：区域系统本来就有
+        //  「首波延迟到 `nextWaveAt`」的能力（五雷轰顶的「第 5 帧判伤」就是这么做的），
+        //  再写一套延迟伤害只会让「延迟结算」出现两份口径。`effectPrefabPath: null`
+        //  表示这块区域不推表现事件 —— 爆炸特效已经由上面那条 `area` 事件播了。
+        const burstRadius = projectile.burstRadius ?? 0;
+        if (burstRadius > 0 && (projectile.burstDamage ?? 0) > 0) {
+            const burstHexId = context.geometry.hexIdAt(projectile.x, projectile.y);
+            const burstHexRadius = burstHexId == null
+                ? 0 : Math.ceil(burstRadius / HEX_GRID_LOGICAL_ROW_STEP) + 1;
+            const burstCandidates = burstHexId == null ? [] : context.unitsInRadius(burstHexId, burstHexRadius);
+            const burstAttacker = this.cardById(context, projectile.owner, projectile.sourceCardId);
+            for (const victim of burstCandidates) {
+                if (victim.owner === projectile.owner || victim.battleState === 'dead') continue;
+                const position = context.unitPosition(victim);
+                if (distance(projectile.x, projectile.y, position.x, position.y) > burstRadius) continue;
+                const burstMultiplier = cardCounterMultiplier(
+                    burstAttacker, this.cardById(context, victim.owner, victim.cardId), context.counters);
+                const burstText = context.damageUnit(victim,
+                    Math.round((projectile.burstDamage ?? 0) * burstMultiplier), {
+                        owner: projectile.owner,
+                        kind: 'unit',
+                        unitId: projectile.sourceUnitId,
+                        floatTextKind: damageFloatTextKind(projectile.criticalHit === true, burstMultiplier),
+                        ranged: true,
+                    });
+                if (shooter) this.applyLifesteal(shooter, burstText, context);
+                context.tryExecuteUnit(victim, projectile.executeChance, projectile.owner,
+                    projectile.sourceUnitId, burstText);
+            }
+            const secondDamage = projectile.burstSecondDamage ?? 0;
+            if (secondDamage > 0) {
+                const delay = Math.max(0, projectile.burstSecondDelay ?? 0);
+                state.groundZones.push({
+                    x: projectile.x,
+                    y: projectile.y,
+                    radius: burstRadius,
+                    owner: projectile.owner,
+                    sourceUnitId: projectile.sourceUnitId,
+                    skillId: projectile.skillId,
+                    skillName: projectile.skillName,
+                    effectPrefabPath: null,
+                    //  活到那一波打完：延迟 + 0.3s 收尾（与五雷轰顶逐字同口径）。
+                    remainingSeconds: delay + 0.3,
+                    wavesLeft: 1,
+                    nextWaveAt: state.elapsedSeconds + delay,
+                    waveInterval: Math.max(0.05, delay),
+                    //  第二段的克制系数按**受击者**算，所以基数存的是不含克制的那一份；
+                    //  这里没有具体受击者，落回施法者自己的克制（中性 = 1），逐人克制在区域的
+                    //  波次结算里按 `ZCGroundZoneSystem` 的既有口径处理。
+                    damage: Math.round(secondDamage),
+                    floatTextKind,
+                    slowRatio: 0,
+                });
+            }
+        }
         state.combatEvents.push({
             id: state.nextCombatEventId++, type: 'area', owner: projectile.owner,
             sourceUnitId: projectile.sourceUnitId, skillId: projectile.skillId, skillName: projectile.skillName,
@@ -1231,7 +1680,12 @@ export class ZCAttackResolutionSystem {
             effectPrefabPath: projectile.impactEffectPrefabPath ?? null,
             effectKey: projectile.impactEffectPrefabPath ? null : 'hit',
             projectileKey: null,
-            radius: 4, damage, startedAt: state.elapsedSeconds, durationSeconds: projectile.impactEffectPrefabPath ? 0.5 : .18,
+            //  命中表现的时长：配了爆炸（`burstEffectSeconds`）就活够整段序列帧动画
+            //  （爆炸龙卷 32 帧 @30fps = 1.0667s），否则沿用 0.5 / 0.18 的老口径。
+            //  短一截会被 `ZCGameModel` 按 `startedAt + durationSeconds` 提前摘掉 —— 同 §14.5。
+            radius: 4, damage, startedAt: state.elapsedSeconds,
+            durationSeconds: projectile.impactEffectPrefabPath
+                ? (projectile.burstEffectSeconds ?? 0.5) : .18,
         });
         // 投射物命中后在落点创建持续区域（火船/风龙：命中后才烧）
         if ((projectile.zoneDuration ?? 0) > 0 && projectile.radius > 0) {

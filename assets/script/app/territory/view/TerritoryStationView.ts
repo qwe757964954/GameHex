@@ -16,6 +16,11 @@ import {
 import type { TerritorySite } from '../model/TerritoryMapConfig';
 import { territoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import type { ITerritoryChestBubbleLayout } from '../model/TerritoryChestBubble';
+import { TERRITORY_CONDITION_CHEST_SCALE, territoryConditionBlockLayout } from '../model/TerritoryConditionBadge';
+import {
+    TERRITORY_SILVER_CHEST_POP_SECONDS,
+    territorySilverChestIconPop,
+} from '../model/TerritorySilverChestOpen';
 import { TERRITORY_EVENTS } from './TerritoryEvents';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
 
@@ -29,23 +34,31 @@ export type TerritoryStationTarget = TerritorySite | ITerritoryRandomResourceTar
 const { ccclass, property } = _decorator;
 
 /**
- * 未解锁格「银币图标」的缩放（需求：**icon 放大 1.1 倍**）。
+ * 未解锁格「银币图标」的缩放。
  *
  *  写的是**节点缩放**而不是改 `contentSize`：`CaptionBg` 是 `sizeMode = CUSTOM(0)`，
  *  条件模式下 `type` 被切成 `SIMPLE` ⇒ 引擎把整帧铺满节点 ⇒ 节点宽就是图标可见宽。
  *  改 `contentSize` 会让「名称底条」分支（同一个节点、`SLICED`）跟着变形，缩放不会。
+ *
+ *  1.1（2026-10-16「icon 放大 1.1 倍」）→ **0.85**（2026-11-10 第二轮）：
+ *  固定宝箱格要在价格行之上再放一颗宝箱，两行合起来必须**整块塞进格面 123×90**
+ *  并留 1px 以上的边（用户：「保证所有 icon 和 UI 都在格子内」）。
+ *  缩到 0.85 后价格行 34 高、宝箱 42.75、间距 1 ⇒ 块高 77.75，上下各留 6.1px。
  */
 // 气泡内图标的尺寸 / 位置**全部**读 `model/TerritoryChestBubble`（新底图 frame_04 是
 // 77×87 竖向水滴，icon 在上、数字在下）。以前这里有一对 `LEVEL_BUBBLE_ICON_SIZE/GAP`
 // 给「图标 + 数字并排」用 —— 水滴气泡没有横向空间，2026-11-02 已随排版一起删掉。
 
-const CONDITION_ICON_SCALE = 1.1;
+export const CONDITION_ICON_SCALE = 0.85;
 
-/** 未解锁格「数值」的缩放（需求：**数字放大 1.5 倍**）。 */
-const CONDITION_VALUE_SCALE = 1.5;
+/** 未解锁格「数值」的缩放（1.5 → **1.2**，2026-11-10 第二轮：与银币图标一起缩，别让数字比 icon 还抢眼）。 */
+export const CONDITION_VALUE_SCALE = 1.2;
 
-/** 数值左缘与银币图标右缘之间的间距（像素）——需求：**间隔 2 个像素**。 */
-const CONDITION_GAP = 2;
+/**
+ * 数值左缘与银币图标右缘之间的间距（像素）。2 → **1**（2026-11-10 第二轮，缩了 icon 之后
+ * 2px 会显得松，1px 正好"贴住但不叠"）。
+ */
+export const CONDITION_GAP = 1;
 
 /**
  * 数值宽度的**采纳上限** —— 必须**严格小于** prefab 里 `CaptionLabel` 的出厂宽 `92`。
@@ -70,8 +83,8 @@ const CONDITION_VALUE_WIDTH_MAX = 91;
  */
 const CONDITION_DIGIT_WIDTH = 9.5;
 
-/** `CaptionBg` 节点的出厂边长（拿不到 `UITransform` 时用来兜底）。 */
-const CONDITION_ICON_WIDTH_FALLBACK = 40;
+/** `CaptionBg` 节点的出厂边长（拿不到 `UITransform` 时用来兜底；用例按它算几何）。 */
+export const CONDITION_ICON_WIDTH_FALLBACK = 40;
 
 /**
  * 建筑图标的目标**可见宽度**（美术单位）。
@@ -185,6 +198,14 @@ export interface ITerritoryStationRender {
     readonly isCondition?: boolean;
     readonly conditionIcon?: SpriteFrame | null;
     readonly conditionTextColor?: Color;
+    /**
+     * 条件模式下**额外**画在价格行之上的一颗图标（2026-11-10：固定宝箱格的 `icon_baoxiang`）。
+     *
+     *  缺省 / `null` ⇒ 不画，排版退回「只有价格行一行」—— 非宝箱格全部走这一支，
+     *  所以这里缺省时**不许**产生任何位移（见 `model/TerritoryConditionBadge`）。
+     *  未解锁（前置没满足 / 还没开）的宝箱格也不传：用户口径「仍然只显示锁 icon」。
+     */
+    readonly conditionChestIcon?: SpriteFrame | null;
     /** 仅条件模式显示银币消耗数值。 */
     readonly caption: string;
     /** 站点状态色。 */
@@ -208,6 +229,21 @@ export interface ITerritoryStationRender {
      */
     readonly levelBubbleIcon?: SpriteFrame | null;
     readonly levelBubbleFrame?: SpriteFrame | null;
+    /**
+     * **预告关卡**的编号气泡（2026-11-11）。这一格仍是「未解锁」画法（`icon: null` +
+     * `isCondition: true`），但气泡要照常显示 ⇒ `renderLevelBubble` 对这一支放宽
+     * 「必须有实心建筑 / 不能是条件格」两道门槛。**只有承载格**会传 true
+     * （判据在 `TerritoryMapView.stationRenderOf`，整关 footprint 只挂一颗）。
+     */
+    readonly previewBubble?: boolean;
+    /**
+     * 预告气泡的**锚点帧** = 35% 虚影用的那张建筑图。
+     *
+     * `icon` 是 null（不画实心建筑），`applyLevelBubblePosition` 原本按「没有建筑」把
+     * 气泡压在格心，会盖住虚影和价格。传这张帧给视图按虚影的可见高抬起，
+     * 与 `syncGhosts` / `renderGhost` 用的是同一个 `stationIconOf` 结果。
+     */
+    readonly levelBubbleAnchorFrame?: SpriteFrame | null;
     /**
      * 气泡文字的**覆盖色**（缺省 = 按底图那套默认色：宝箱深棕 / 编号白）。
      *
@@ -337,6 +373,8 @@ export class TerritoryStationView extends Component {
     private chestHintOffsetY = 0;
     /** 跳动期间**抑制提示气泡**（需求 2026-11-02 第 3 条）。 */
     private hintBubbleSuppressed = false;
+    /** 本帧预告气泡的锚点帧（`renderLevelBubble` 每帧写入；池化复用时不许留上一格的值）。 */
+    private levelBubbleAnchorFrame: SpriteFrame | null = null;
     /** `Icon` 节点**未叠加跳动偏移**时的位置（`applyIconPlacement` 写，`writeIconPosition` 加偏移）。 */
     private iconBaseX = 0;
     private iconBaseY = 0;
@@ -350,6 +388,39 @@ export class TerritoryStationView extends Component {
      *  规则格是 prefab 偏移），所以要记住当前处在哪一支。
      */
     private conditionMode = false;
+    /**
+     * 「银币图标 + 数字」的**生成缩放系数**（`0 ~ 1` 之外还能过冲，见
+     * `model/TerritoryUnlockTransition`）—— 给「未解锁 → 可激活」那 1s 过渡用（2026-11-09）。
+     *
+     *  缺省 1 = 完全展开。由 `TerritoryMapView` 每帧经 {@link setConditionSpawnScale} 推进；
+     *  视图自己不认识曲线、也不持有秒表（同 `chestHintOffsetY` 那套分工）。
+     *
+     *  ⚠️ 与两个基准缩放是**乘法**关系（`CONDITION_ICON_SCALE × 本值`），不是替换 ——
+     *  否则动画结束时会落在错误尺寸上。退出条件模式时强制回 1（见 `render`）：
+     *  站点节点池化复用，别把 0.3 倍的缩放带给下一格。
+     */
+    private conditionSpawnScale = 1;
+    /**
+     * 条件模式下价格行**之上**的那颗图标节点（`icon_baoxiang`，2026-11-10）。
+     *
+     *  惰性创建、复用同一个节点（同 `levelBubble` 那套）：不是每个站点格都有它，
+     *  而站点节点是**池化复用**的 ⇒ 建一次就够，换格只换帧 / 改显隐。
+     *
+     *  挂在 `StationCaptionLayer`（= 银币图标的父层）：视觉上压在建筑 / 虚影之上，
+     *  又在关卡编号气泡与锁标之下，与价格行同一层。
+     */
+    private conditionChest: {
+        readonly node: Node;
+        readonly sprite: Sprite;
+        readonly transform: UITransform;
+    } | null = null;
+    /**
+     * 上面那颗宝箱图标的**未缩放**高度（这一格没有宝箱时为 0）。
+     *
+     *  `applyCaptionPlacement` 用它算竖直块的高度；写 0 就等于告诉排版函数「按单行摆」
+     *  —— 这正是非宝箱格与旧版逐像素一致的原因。
+     */
+    private conditionChestHeight = 0;
 
     /**
      * `Icon` 的**基准**缩放 —— `applyIconPlacement` 算出的「可见宽度归一化」系数。
@@ -389,6 +460,26 @@ export class TerritoryStationView extends Component {
      *  `presentation.now`，也没必要为了一个 0.24s 的抖动再引一条时钟。
      */
     private buildingShakeElapsed = -1;
+
+    /**
+     * 「银币宝箱」独立打开动画的**已用时（秒）**；`< 0` = 没在播（与抖动同一套停表标记）。
+     *
+     * 2026-11-10：银币宝箱（`rewardId=1023` / `coinBox` 蓝银箱）不复用卡牌宝箱的
+     * `chest_seq_*` 开盖表演，改为让**地图上这颗 icon 自己**放大 → 缩小 → 消失。
+     * 曲线真源在 `model/TerritorySilverChestOpen`（纯函数），这里只按帧写缩放。
+     */
+    private silverChestPopElapsed = -1;
+    /**
+     * 退场期间的**帧快照**。
+     *
+     * 🔴 领取回包一到，`stationRenderOf` 立刻把这一格的 `icon` 置 `null`（宝箱从地图消失）。
+     *    不快照就会「动画还没起手，箱子先没了」。退场期间 `render` 用这张快照顶替 `content.icon`。
+     */
+    private silverChestPopFrame: SpriteFrame | null = null;
+    /** 起播那一刻的 `cellId`：站点节点池化复用，换格必须立刻收掉动画（见 `render`）。 */
+    private silverChestPopCellId: number | null = null;
+    /** 本帧的 pop 系数，乘进 `Icon` 的基准缩放（非退场期恒 1）。 */
+    private silverChestPopScale = 1;
 
     /**
      * 「新地块生成」期间整站乘透明度用的四个 `UIOpacity`（`Icon` / `CaptionBg` / `CaptionLabel` /
@@ -446,8 +537,8 @@ export class TerritoryStationView extends Component {
      * **四个不同的层**（`StationIconLayer` / `CaptionLayer` / `TextLayer` / `BadgeLayer`），
      * 都不在格节点底下 ⇒ 格节点淡多少都管不到它们。而层节点是**多格共享**的容器，
      * 也不能在层上写透明度（会连累同层其它站点）。
-     * 所以只能一格一份：四个节点各自懒加一个 `UIOpacity`（一格最多 4 个，且只有
-     * 真正播过生成动画的格子才会有）。
+     * 所以只能一格一份：每个节点各自懒加一个 `UIOpacity`（一格最多 5 个 —— 第 5 个是
+     * 宝箱图标，2026-11-10 起才有，且只有真正播过生成动画的格子才会有）。
      *
      * ⚠️ 与 `render` 的显隐（`active`）正交：不透明度管「淡」，`active` 管「有没有」，
      *    两者互不覆盖，所以每秒一次的全量 `render` 不会把淡入状态顶掉。
@@ -457,13 +548,67 @@ export class TerritoryStationView extends Component {
         const raw = Number.isFinite(value) ? value : 1;
         const target = Math.round((raw > 1 ? 1 : raw < 0 ? 0 : raw) * 255);
         this.spawnOpacity = target / 255;
-        const nodes = [this.iconSprite.node, this.captionSprite.node, this.captionLabel.node, this.levelBubble?.node ?? this.badgeLabel.node];
+        const nodes = [
+            this.iconSprite.node,
+            this.captionSprite.node,
+            this.captionLabel.node,
+            this.levelBubble?.node ?? this.badgeLabel.node,
+            // 宝箱图标（2026-11-10）惰性建 ⇒ 建的时候会把 `spawnOpacities` 置空重建，顺序不能挪到后面。
+            ...(this.conditionChest ? [this.conditionChest.node] : []),
+        ];
         if (!this.spawnOpacities) {
             this.spawnOpacities = nodes.map((node) => node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity));
         }
         for (const opacity of this.spawnOpacities) {
             if (opacity.opacity !== target) opacity.opacity = target;
         }
+    }
+
+    /**
+     * 「建筑虚影」透明度（`0 ~ 1`，只写 `Icon` 节点）—— 给**提前披露**关卡的虚影视图用（2026-11-09）。
+     *
+     * 需求：`未解锁 = 地块 + 锁 + 虚影`、`可激活 = 虚影 + 价格`、`已激活 = 实心建筑`，
+     * 虚影恒为 **35%**；已激活那一下 0.2s 淡出（底下那层实心建筑自有生成淡入，合成即「淡入」）。
+     *
+     * 与 {@link setSpawnOpacity} 分工，互不覆盖：
+     *  · 那个是**生成动画**的逐帧整站淡入，每帧被 `hexSpawn` 回调重写，管四个节点；
+     *  · 这个只管 `Icon` 一颗，且只作用在**独立的虚影视图**上 —— 虚影视图不在 `stationViews`
+     *    里，永远收不到生成回调，所以两者不会抢同一个 `UIOpacity`。
+     */
+    setGhostOpacity(value: number): void {
+        if (this.isDisposed) return;
+        const node = this.iconSprite.node;
+        const opacity = node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity);
+        const raw = Number.isFinite(value) ? value : 1;
+        const target = Math.round((raw > 1 ? 1 : raw < 0 ? 0 : raw) * 255);
+        if (opacity.opacity !== target) opacity.opacity = target;
+    }
+
+    /**
+     * 「银币图标 + 数字」的**生成缩放**（`0 ~ 1.15 ~ 1`，见 `model/TerritoryUnlockTransition`）。
+     *
+     * 需求（2026-11-09）：「银币和数字 UI 生成动画，总时间 1s」—— 与锁那 1s **同时起手**。
+     *
+     * 为什么缩放而不是透明度：两颗节点的**位置**是按实测文本宽算出来的（见
+     * `applyCaptionPlacement`），改透明度只会淡入、读不出"生成"；而绕各自中心缩放
+     * 不动排版，也不会撞上 `setSpawnOpacity` 的语义（那个是"地块还在长"的半透明态）。
+     *
+     * ⚠️ 只在条件模式生效：非条件模式的这两颗节点是**名称底条**，缩放由
+     *    `applyCaptionPlacement` 钉死成 1（那里会先把系数写回 1，见 `render`）。
+     * ⚠️ 位置**不跟着缩**：两颗各自绕中心长大，合起来的观感就是"整条价格从中间长出来"；
+     *    按缩放后的宽度重排位置反而会让它在放大时左右乱窜。
+     */
+    setConditionSpawnScale(scale: number): void {
+        if (this.isDisposed) return;
+        const next = Number.isFinite(scale) && scale > 0 ? scale : 0;
+        if (this.conditionSpawnScale === next) return;
+        this.conditionSpawnScale = next;
+        if (!this.conditionMode) return;
+        this.applyCaptionScale(this.captionSprite.node, CONDITION_ICON_SCALE * next);
+        this.applyCaptionScale(this.captionLabel.node, CONDITION_VALUE_SCALE * next);
+        // 宝箱图标同属这块条件标注 ⇒ 一起"生成"，基准缩放是 0.95（不是 1）。
+        const chest = this.conditionChest;
+        if (chest) this.applyCaptionScale(chest.node, TERRITORY_CONDITION_CHEST_SCALE * next);
     }
 
     /**
@@ -603,8 +748,11 @@ export class TerritoryStationView extends Component {
      */
     private writeIconScale(): void {
         const node = this.iconSprite.node;
-        const scaleX = this.iconBaseScale * this.buildingShakeX;
-        const scaleY = this.iconBaseScale * this.buildingShakeY;
+        // 三个独立因子，互不覆盖：归一基准 × 建筑生成抖动 × 银币宝箱退场 pop。
+        // pop 只在这里落节点，退场期间 `render` 每来一次都会重算一遍，系数不会丢。
+        const pop = this.silverChestPopScale;
+        const scaleX = this.iconBaseScale * this.buildingShakeX * pop;
+        const scaleY = this.iconBaseScale * this.buildingShakeY * pop;
         // 同值不写：站点每秒刷新一次，避免把整棵 layer 标脏（领地滑动的性能口径）。
         const current = node.scale;
         if (current && current.x === scaleX && current.y === scaleY) return;
@@ -631,14 +779,41 @@ export class TerritoryStationView extends Component {
     }
 
     /**
-     * 逐帧推进建筑抖动。没在抖时只做一次数值比较（一张地图上百个站点，早退必须便宜）。
+     * 起播「**银币宝箱**」的独立打开动画（icon 放大 → 缩小 → 消失，2026-11-10）。
      *
-     *  播完**显式复位**到 1：否则建筑会停在被拉长的姿态 —— 没有别的地方会把它改回来。
+     *  🔴 必须**在领取回包重绘之前**调：回包一到 `stationRenderOf` 就把 `icon` 置 `null`，
+     *    这里会快照当前帧，退场期间 `render` 用快照顶替 `content.icon`，动画才有东西可缩。
+     *
+     * @returns `false` = 这一刻没有可播的宝箱图（视图还没建 / 已销毁 / 格子已空）。
+     *          ⚠️ 调用方只把它当「表演没播起来」，**奖励结算绝不能挂在这个返回值上**。
+     */
+    playSilverChestIconPop(): boolean {
+        if (this.isDisposed) return false;
+        const frame = this.iconSprite.spriteFrame;
+        const cellId = this.site ? this.site.cellId : null;
+        // 没有宝箱图 / 这一格还没绑 `cellId`（单测桩 / 站点刚建）⇒ 不演，也不留半套状态。
+        if (!frame || !Number.isFinite(cellId)) return false;
+        this.silverChestPopFrame = frame;
+        this.silverChestPopCellId = cellId;
+        this.silverChestPopElapsed = 0;
+        this.silverChestPopScale = territorySilverChestIconPop(0);
+        this.writeIconScale();
+        return true;
+    }
+
+    /**
+     * 逐帧推进建筑抖动 + 银币宝箱退场。两条秒表各自独立，共用一次 `isDisposed` 早退
+     * （一张地图上百个站点，没在播时总开销只是一次判断 + 两次数值比较）。
+     *
+     *  播完都**显式复位**到 1：否则节点会停在拉长 / 缩到 0 的姿态 —— 没有别的地方会把它改回来，
+     *  池化复用时会把 0 尺寸带给下一格。
      */
     update(deltaTime: number): void {
         // ⚠️ `isDisposed` 也要挡：`dispose()` 会把四个视觉节点当场 `destroy()`，
         //    而站点根节点是**帧末**才销毁的 ⇒ 不挡就会对已销毁的节点写缩放。
-        if (this.isDisposed || this.buildingShakeElapsed < 0) return;
+        if (this.isDisposed) return;
+        this.stepSilverChestPop(deltaTime);
+        if (this.buildingShakeElapsed < 0) return;
         const elapsed = this.buildingShakeElapsed + deltaTime;
         if (elapsed >= SPAWN_SHAKE_TOTAL_SECONDS) {
             this.buildingShakeElapsed = -1;
@@ -653,24 +828,51 @@ export class TerritoryStationView extends Component {
         this.writeIconScale();
     }
 
+    /** 银币宝箱退场的逐帧推进；没在播时一次数值比较就早退。 */
+    private stepSilverChestPop(deltaTime: number): void {
+        if (this.silverChestPopElapsed < 0) return;
+        const step = Number.isFinite(deltaTime) && deltaTime > 0 ? deltaTime : 0;
+        const elapsed = this.silverChestPopElapsed + step;
+        if (elapsed >= TERRITORY_SILVER_CHEST_POP_SECONDS) {
+            // 🔴 先停表再重绘：顺序反了 `render` 又会把快照帧贴回去，节点永远收不掉。
+            this.resetSilverChestPop();
+            // 最后一帧的 `content.icon` 已是 `null`（已领取）⇒ 这次重绘才是真正让宝箱消失。
+            if (this.lastContent) this.render(this.lastContent);
+            return;
+        }
+        this.silverChestPopElapsed = elapsed;
+        this.silverChestPopScale = territorySilverChestIconPop(elapsed);
+        this.writeIconScale();
+    }
+
+    /** pop 停表 + 复位（播完 / 换格 / 销毁共用）。只清数值，节点由随后那次 `render` 写回。 */
+    private resetSilverChestPop(): void {
+        this.silverChestPopElapsed = -1;
+        this.silverChestPopFrame = null;
+        this.silverChestPopCellId = null;
+        this.silverChestPopScale = 1;
+    }
+
     /**
      * 未解锁格「银币图标 + 数值」的成对排布（**唯一写入口**，`render` 与 `setMapPosition` 都走它）。
      *
      * 需求（2026-10-16 冒险模块 UI 优化）：**图标放大 1.1 倍、数字放大 1.5 倍、两者间隔 2 像素**。
+     * ⚠️ 2026-11-10 用户第二轮整体缩小（图标 0.85 / 数字 1.2 / 间距 1）—— 以 `CONDITION_*` 常量为准，
+     * 下面公式里的数字只是举例，别照着写死。
      *
      * ## 为什么间距不能再写成两个「固定偏移」
      *
      * 旧实现是两个常量（图标中心 `−24`、数值中心 `+22`，见 git 历史）：间距由**两者的实际宽度
-     * 隐式决定**，而数字从「9」变到「1200」时框宽不变、字数变多 ⇒ 间距自己会漂，钉不住 2px。
+     * 隐式决定**，而数字从「9」变到「1200」时框宽不变、字数变多 ⇒ 间距自己会漂，钉不住常量间距。
      * 要精确到像素就必须按**实测文本宽**算 —— 这与 `ZCFloatTextView.renderGoldIcon` 是同一套口径
      * （那边是 `GOLD_ICON_GAP`），本文件只是把「图标在数字左侧」搬到了领地站点上。
      *
      * ## 排布公式（两个节点的锚点都是 `(0.5, 0.5)`）
      *
      * ```
-     * 图标可见宽 = CaptionBg 节点宽 × 1.1    // SIMPLE + CUSTOM ⇒ 帧铺满节点，节点宽就是可见宽
-     * 数值可见宽 = Label 实测文本宽 × 1.5    // 见 readConditionValueWidth
-     * 总宽       = 图标宽 + 2 + 数值宽
+     * 图标可见宽 = CaptionBg 节点宽 × CONDITION_ICON_SCALE    // SIMPLE + CUSTOM ⇒ 帧铺满节点，节点宽就是可见宽
+     * 数值可见宽 = Label 实测文本宽 × CONDITION_VALUE_SCALE    // 见 readConditionValueWidth
+     * 总宽       = 图标宽 + CONDITION_GAP + 数值宽
      * 图标中心 x = −总宽 / 2 + 图标宽 / 2
      * 数值中心 x = +总宽 / 2 − 数值宽 / 2
      * ```
@@ -702,6 +904,9 @@ export class TerritoryStationView extends Component {
         const overflow = isCondition ? Label.Overflow.NONE : this.defaultCaptionOverflow;
         if (this.captionLabel.overflow !== overflow) this.captionLabel.overflow = overflow;
         if (!isCondition) {
+            // 退出条件模式 ⇒「生成缩放」一并归位：站点节点池化复用，留着 0.3 倍会把
+            // 下一格的**名称底条**画小（这句同时兜住 `setMapPosition` 与 `render` 两个调用方）。
+            this.conditionSpawnScale = 1;
             this.applyCaptionScale(this.captionSprite.node, 1);
             this.applyCaptionScale(this.captionLabel.node, 1);
             this.captionSprite.node.setPosition(x + offsets.caption.x, y + offsets.caption.y, z + offsets.caption.z);
@@ -709,13 +914,31 @@ export class TerritoryStationView extends Component {
             return;
         }
         const iconWidth = this.readCaptionIconWidth() * CONDITION_ICON_SCALE;
+        const iconHeight = this.readCaptionIconHeight() * CONDITION_ICON_SCALE;
         this.refreshCaptionTextLayout();
         const valueWidth = this.readConditionValueWidth() * CONDITION_VALUE_SCALE;
         const total = iconWidth + CONDITION_GAP + valueWidth;
-        this.applyCaptionScale(this.captionSprite.node, CONDITION_ICON_SCALE);
-        this.applyCaptionScale(this.captionLabel.node, CONDITION_VALUE_SCALE);
-        this.captionSprite.node.setPosition(x - total / 2 + iconWidth / 2, y, z + offsets.caption.z);
-        this.captionLabel.node.setPosition(x + total / 2 - valueWidth / 2, y, z + offsets.text.z);
+        // 有宝箱图标 ⇒ **两行**（宝箱在上、价格行在下）合成一块、整块在格心居中；
+        // 没有 ⇒ `rowY = 0`，与旧版逐像素一致（公式与理由见 `model/TerritoryConditionBadge`）。
+        // 宝箱高度要乘显示缩放（0.95）再进排版：`conditionChestHeight` 存的是**未缩放**高，
+        // 与价格行「未缩放 40 × 0.85」是同一条口径，两行才按同一把尺子算块高。
+        const chestHeight = this.conditionChestHeight > 0
+            ? this.conditionChestHeight * TERRITORY_CONDITION_CHEST_SCALE
+            : 0;
+        const block = territoryConditionBlockLayout(iconHeight, chestHeight);
+        // 「生成缩放」乘在两个基准上（见 `conditionSpawnScale`）：1 = 完全展开，0 = 还没长出来。
+        // ⚠️ 只有缩放乘、`total` 不乘 —— 位置永远按**展开后**的宽度摆，动画期间不动版。
+        const spawn = this.conditionSpawnScale;
+        this.applyCaptionScale(this.captionSprite.node, CONDITION_ICON_SCALE * spawn);
+        this.applyCaptionScale(this.captionLabel.node, CONDITION_VALUE_SCALE * spawn);
+        const rowY = y + block.rowY;
+        this.captionSprite.node.setPosition(x - total / 2 + iconWidth / 2, rowY, z + offsets.caption.z);
+        this.captionLabel.node.setPosition(x + total / 2 - valueWidth / 2, rowY, z + offsets.text.z);
+        const chest = this.conditionChest;
+        if (chest && block.chestY !== 0 && chest.node.active) {
+            this.applyCaptionScale(chest.node, TERRITORY_CONDITION_CHEST_SCALE * spawn);
+            chest.node.setPosition(x, y + block.chestY, z + offsets.caption.z);
+        }
     }
 
     /**
@@ -747,6 +970,18 @@ export class TerritoryStationView extends Component {
     }
 
     /**
+     * 银币图标节点**未缩放**时的高（`CaptionBg` 的 `contentSize.height`，prefab 里 40×40）。
+     *
+     *  只给「宝箱 + 价格」两行排版的竖直块算高度用（见 `model/TerritoryConditionBadge`）。
+     *  `CaptionBg` 是 `CUSTOM` + `SIMPLE` ⇒ 节点高就是可见高，没有 trim 偏移问题；
+     *  量不到（单测桩 / 还没绑定）时按出厂 40 兜底，与宽度兜底同值。
+     */
+    private readCaptionIconHeight(): number {
+        const height = this.captionIconTransform.contentSize.height;
+        return height > 0 ? height : CONDITION_ICON_WIDTH_FALLBACK;
+    }
+
+    /**
      * 数值 Label 的**实测文本宽**（未乘缩放）。
      *
      * ⚠️ 判据见 `CONDITION_VALUE_WIDTH_MAX`：读到的宽 ≥ 92（prefab 出厂宽）说明引擎还没量过
@@ -768,6 +1003,67 @@ export class TerritoryStationView extends Component {
         node.setScale(scale, scale, 1);
     }
 
+    /**
+     * 落条件模式上方那颗**宝箱图标**的帧与显隐，并记下它的高度给排布用（2026-11-10）。
+     *
+     * 需求：`fixedResource` 格处于**可激活**状态时，除了银币 icon + 数字，上面再加一颗
+     * `icon_baoxiang`；**未解锁（只显示锁）时不画**（那时 `isCondition = false`，`visible` 直接是 false）。
+     *
+     * @param frame `null` = 这一格不该有宝箱图标（非宝箱格 / 锁着 / 加载中）
+     * @param visible 状态上该不该显示（与 `captionSprite` / `captionLabel` 同一条判据）
+     *
+     * ⚠️ 帧尺寸变化要**每帧**对一遍：站点节点池化复用，上一格留下的 58×45 不能带给下一个站点。
+     * ⚠️ `conditionChestHeight` 写的是**未缩放**高：生成缩放由 `applyCaptionPlacement` 单独乘，
+     *    若把缩放后的高写进来，两行块会在动画期间自己变高变矮（版式抖）。
+     */
+    private applyConditionChest(frame: SpriteFrame | null, visible: boolean): void {
+        if (this.isDisposed) return;
+        const hide = (): void => {
+            if (this.conditionChest && this.conditionChest.node.active) this.conditionChest.node.active = false;
+            this.conditionChestHeight = 0;
+        };
+        if (!visible || !frame) {
+            hide();
+            return;
+        }
+        // 取不到原始尺寸（桩 / 坏图）⇒ 当没有这张图，宁可少一颗也不能让排版按 0 高算。
+        const size = frame.originalSize as { readonly width?: number; readonly height?: number } | undefined;
+        const width = size && Number.isFinite(size.width) ? size.width! : 0;
+        const height = size && Number.isFinite(size.height) ? size.height! : 0;
+        if (width <= 0 || height <= 0) {
+            hide();
+            return;
+        }
+        let chest = this.conditionChest;
+        if (!chest) {
+            const parent = this.captionSprite.node.parent;
+            if (!parent) {
+                hide();
+                return;
+            }
+            const node = new Node('ConditionChest');
+            node.layer = this.captionSprite.node.layer;
+            const transform = node.addComponent(UITransform);
+            node.setParent(parent);
+            const sprite = node.addComponent(Sprite);
+            // 与 `levelBubble` 同一套：整帧铺满节点（`CUSTOM` + `trim = false`），
+            // `icon_baoxiang` 是 58×45 的成品图，没有九宫格切边。
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.trim = false;
+            sprite.type = Sprite.Type.SIMPLE;
+            sprite.color = Color.WHITE;
+            chest = { node, sprite, transform };
+            this.conditionChest = chest;
+            // 多了一个要跟着淡入的视觉节点 ⇒ 重建 `setSpawnOpacity` 的缓存（它只建一次）。
+            this.spawnOpacities = null;
+        }
+        if (chest.sprite.spriteFrame !== frame) chest.sprite.spriteFrame = frame;
+        const current = chest.transform.contentSize;
+        if (current.width !== width || current.height !== height) chest.transform.setContentSize(width, height);
+        chest.node.active = true;
+        this.conditionChestHeight = height;
+    }
+
     render(content: ITerritoryStationRender): void {
         const offsets = this.localOffsets;
         const defaultTextColor = this.defaultCaptionTextColor;
@@ -779,6 +1075,12 @@ export class TerritoryStationView extends Component {
         //   关站点根节点只会关掉命中区，视觉照旧留在屏幕上。
         const isHidden = content.hidden === true;
         this.site = content.site;
+        // 🔴 池化复用：银币宝箱的 pop 还没播完，节点已被借给别的格 ⇒ 立刻停表，
+        //    否则下一格会凭空闪出一只不属于它的宝箱（与「抖动 / 生成缩放归位」同一族约束）。
+        const contentCellId = content.site ? content.site.cellId : null;
+        if (this.silverChestPopCellId !== null && contentCellId !== this.silverChestPopCellId) {
+            this.resetSilverChestPop();
+        }
         // ⚠️ 每帧都写：站点节点是池化复用的，不写就会带着上一格的"能点进章节"或反过来。
         this.chapterEntry = content.chapterEntry === true;
         // 存一份：跳跳动结束 / 气泡抑制解除时按它重画气泡，不用等下一轮 `syncStations`。
@@ -788,7 +1090,11 @@ export class TerritoryStationView extends Component {
         this.iconSizeScale = content.iconScale && content.iconScale > 0 ? content.iconScale : 1;
         // 同上：底部对齐也是 `applyIconPlacement` 的入参，晚写就晚一帧（池化复用时是"用上一格的口径"）。
         this.bottomAnchored = content.bottomAnchor === true;
-        this.setIcon(content.icon);
+        // 银币宝箱退场期间用**帧快照**顶替 `content.icon`：领取回包一到，
+        // `stationRenderOf` 就把这格的 icon 置 `null`（claimed ⇒ 宝箱从地图消失），
+        // 不顶替的话动画还没起手箱子就已经没了。非退场期 `popFrame` 恒 null ⇒ 逐像素同旧版。
+        const popFrame = this.silverChestPopElapsed >= 0 ? this.silverChestPopFrame : null;
+        this.setIcon(popFrame ?? content.icon);
         if (this.iconSprite.node.active === isHidden) this.iconSprite.node.active = !isHidden;
         // 🔴 换帧后必须重算：不同建筑的 trim 偏移与画布尺寸都不同（见 applyIconPlacement），
         // 不重算就会出现「同一张图上有的高有的低」，且池化复用时残留上一张的缩放。
@@ -806,6 +1112,9 @@ export class TerritoryStationView extends Component {
         // （`applyCaptionPlacement` 的第一步就是把 `overflow` 切到 `NONE` 让引擎量文本）。
         // 反过来的话这一帧量到的还是上一个字符串的宽度，整对图标会先错一拍。
         if (this.captionLabel.string !== content.caption) this.captionLabel.string = content.caption;
+        // 宝箱图标（2026-11-10）：只有「固定宝箱格 + 可激活」才有图 ⇒ 必须先落帧 / 量高，
+        // 再排布（`applyCaptionPlacement` 要用 `conditionChestHeight` 决定整块怎么居中）。
+        this.applyConditionChest(content.conditionChestIcon ?? null, isCondition && !isHidden && !isLoading);
         this.applyCaptionPlacement();
         this.captionLabel.node.active = !isHidden && !isLoading && isCondition;
         const textColor = isCondition ? content.conditionTextColor ?? defaultTextColor : defaultTextColor;
@@ -818,9 +1127,15 @@ export class TerritoryStationView extends Component {
         const text = content.levelBubble ?? '';
         const frame = content.levelBubbleFrame ?? null;
         const iconFrame = content.levelBubbleIcon ?? null;
+        this.levelBubbleAnchorFrame = content.levelBubbleAnchorFrame ?? null;
         // 需求 2026-11-02 第 3 条：播放「宝箱还没点我」跳动时**隐藏**它的提示气泡。
         // 判据走开关（`setHintBubbleSuppressed`），不是直接关节点 —— 站点每秒会被重画一次。
-        const visible = text !== '' && frame !== null && content.icon !== null && !content.isCondition
+        // 🔴 预告关卡（2026-11-11）：格子未解锁 ⇒ `icon: null` + `isCondition: true`，
+        //    按老门槛两颗都过不了。这一支**只放宽这两条**，hidden / loading / suppressed
+        //    与气泡形状、点击、层级全部照旧，不另起一套渲染路径。
+        const preview = content.previewBubble === true;
+        const visible = text !== '' && frame !== null
+            && (preview || (content.icon !== null && !content.isCondition))
             && !content.hidden && !content.isLoading && !this.hintBubbleSuppressed;
         /**
          * 两套排版，按**有没有体力图标**分流（2026-11-02 需求）：
@@ -991,12 +1306,35 @@ export class TerritoryStationView extends Component {
         const bubbleTransform = bubble.node.getComponent(UITransform);
         const bubbleHeight = bubbleTransform && bubbleTransform.contentSize.height > 0
             ? bubbleTransform.contentSize.height : MAP_MARKER_BUBBLE_HEIGHT;
-        const frame = this.iconSprite.spriteFrame;
-        const height = frame && frame.originalSize.height > 0
-            ? frame.rect.height * this.iconTransform.contentSize.height / frame.originalSize.height * this.iconBaseScale : 0;
+        // 🔴 预告格：站点自身没有实心建筑（`icon: null`），改按虚影那张帧算可见高，
+        //    否则气泡会落回格心、压住价格与 35% 建筑。缩放也换成对应的归一系数
+        //    （`previewAnchorScale` 逐字复刻 `applyIconPlacement`），两者必须同源才不飘。
+        const anchorFrame = this.levelBubbleAnchorFrame ?? this.iconSprite.spriteFrame;
+        const anchorScale = this.levelBubbleAnchorFrame
+            ? this.previewAnchorScale() : this.iconBaseScale;
+        const height = anchorFrame && anchorFrame.originalSize.height > 0
+            ? anchorFrame.rect.height * this.iconTransform.contentSize.height
+                / anchorFrame.originalSize.height * anchorScale : 0;
         const lift = this.bottomAnchored ? height / 2 - TERRITORY_BOTTOM_ANCHOR_DROP_PX : 0;
         bubble.node.setPosition(this.mapX + offsets.icon.x,
             mapMarkerBadgeY(this.mapY + offsets.icon.y + lift + height / 2, bubbleHeight), this.mapZ + offsets.icon.z);
+    }
+
+    /**
+     * 预告气泡锚点帧的缩放：**逐字复刻 `applyIconPlacement` 的归一系数**，只是把帧换成虚影那张。
+     *
+     * `iconSizeScale` 与虚影同源（`syncStations` 和 `renderGhost` 都传 `buildScaleOf`），
+     * 所以这里算出的可见高与虚影 View 的 `anchorLiftY` / 可见高逐像素一致。
+     */
+    private previewAnchorScale(): number {
+        const frame = this.levelBubbleAnchorFrame;
+        const nodeSize = this.iconTransform.contentSize;
+        const canvas = frame?.originalSize;
+        const trimmed = frame?.rect;
+        if (!frame || !canvas || !trimmed || !(canvas.width > 0) || !(trimmed.width > 0)
+            || !(nodeSize.width > 0)) return 1;
+        const visibleWidth = trimmed.width * nodeSize.width / canvas.width;
+        return (visibleWidth > 0 ? BUILDING_VISIBLE_WIDTH / visibleWidth : 1) * this.iconSizeScale;
     }
 
     private readonly handleClick = (): void => {
@@ -1029,6 +1367,12 @@ export class TerritoryStationView extends Component {
         this.buildingShakeElapsed = -1;
         this.buildingShakeX = 1;
         this.buildingShakeY = 1;
+        // 同上：价格生成缩放的系数也不许跟着池化槽位走。
+        this.conditionSpawnScale = 1;
+        // 银币宝箱退场也要停表：节点马上被 destroy，不能留着一条会写已销毁节点的秒表。
+        this.resetSilverChestPop();
+        // 预告气泡锚点帧同理：池化槽位借给下一格时，别把上一格的虚影高度带过去。
+        this.levelBubbleAnchorFrame = null;
         this.button.node.off(Button.EventType.CLICK, this.handleClick, this);
         for (const visual of [
             this.iconSprite.node,
@@ -1038,6 +1382,11 @@ export class TerritoryStationView extends Component {
         ]) {
             if (visual.isValid && visual.parent !== this.node) visual.destroy();
         }
+        // 宝箱图标同样挂在共享的 `StationCaptionLayer` 上（不在根节点底下）⇒ 也要手动销毁。
+        const chest = this.conditionChest;
+        if (chest && chest.node.isValid) chest.node.destroy();
+        this.conditionChest = null;
+        this.conditionChestHeight = 0;
         this.site = null;
         this.levelBubble = null;
         // 图标节点挂在气泡根上（随它一起销毁），这里只清引用；跳动两项也要复位，

@@ -4383,6 +4383,11 @@ message CmdPvpHeroUpSkillRspMsg {
    required CmdPvpHeroInfo info = 1;//信息
 }
 
+// 广播英雄信息
+message CmdPvpHeroInfoBroMsg {
+   required CmdPvpHeroInfo info = 1;//英雄信息
+}
+
 // 请求pvp神器列表
 message CmdPvpArtifactInfoListReqMsg {
 
@@ -4541,6 +4546,29 @@ message CmdBattleFrameInfo {
   repeated uint32 params  = 4;//操作参数格子坐标
 }
 
+// PVP 本局地图快照
+message CmdPvpMapInfo {
+   required string id = 1;//地图编号
+   required string name = 2;//地图名称
+   required uint32 version = 3;//地图版本
+   repeated CmdPvpResourcePointInfo resourcePoints = 4;//中立资源点
+   repeated CmdPvpUnitHomeIndex unitHomeIndexes = 5;//单元 ID 与初始位置下标
+}
+
+// PVP 战斗单元初始位置下标
+message CmdPvpUnitHomeIndex {
+   required uint32 unitId = 1;//战斗单元 ID
+   required uint32 homeIndex = 2;//homes 列表下标
+}
+
+// PVP 中立资源点
+message CmdPvpResourcePointInfo {
+   required uint32 row = 1;//行号
+   required uint32 column = 2;//列号
+   required uint32 groupId = 3;//资源组编号
+   required uint32 resourceId = 4;//本局抽取的资源编号
+}
+
 // 请求开始战斗
 message CmdStartBattleReqMsg {
    required CmdStartBattleInfo startBattleInfo = 1;//发起战斗信息
@@ -4556,7 +4584,7 @@ message CmdStartBattleRspMsg {
    required string battleId = 4;//战斗id
    required CmdStartBattleInfo startBattleInfo = 5;//发起战斗信息
    repeated CmdBattleUnitInfo unitInfos = 6;//战斗单元集合
-
+   optional CmdPvpMapInfo mapInfo = 7;//本局地图快照
 }
 
 // 请求完成战斗
@@ -4612,6 +4640,7 @@ message CmdCityChapterIdleRewardRspMsg {
 message CmdCityChapterSweepReqMsg {
    required uint32 levelChapter   = 1;//章节
    required uint32 cellId         = 2;//格子id
+   optional uint32 times          = 3;//倍率,缺省1
 }
 
 // 占城 响应章节扫荡
@@ -5214,6 +5243,7 @@ enum MessageId {
 	CmdRollBroMsg = 11546745; //提示飘字广播
 	CmdMonsterManualActiveBroMsg = 1339999214; //激活怪物图鉴广播
     CmdNewTreasureInfoBroMsg = 779511813; //新宝箱广播
+    CmdPvpHeroInfoBroMsg = 1032394394; //广播英雄信息
     CmdBattleResultBroMsg = 921618703; //响应战斗结果(广播)
 	CmdCelebrationUpdateDataBroMsg = 1157544859; //开服庆典更新协议广播
 	CmdCelebrationBuyShopGoodsBroMsg = 1919419092; //购买开服庆典购买特惠礼包广播

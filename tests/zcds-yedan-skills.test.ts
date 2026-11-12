@@ -13,6 +13,7 @@ import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/system
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { zcCombatEffectGrowFactor } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { assetPath } from './helpers/asset-paths';
+import { withoutLineupCrit } from './helpers/lineup-crit';
 
 /**
  * 椰蛋战士（68005）2026-11-04 全套：配表真值 + 三条新能力的运行期落点。
@@ -31,7 +32,7 @@ import { assetPath } from './helpers/asset-paths';
 
 const TABLE_NAMES = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
     'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus', 'pvpSkillPlan',
 ];
@@ -46,7 +47,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 
 function prepare() {
     loadPvpTables(Object.fromEntries(TABLE_NAMES.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     return captureZCMatchConfig();
 }
 
@@ -88,7 +89,9 @@ test('椰蛋战士：30707 换链（暴风进强化槽、横扫进副轨），30
 
 test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐档递增', () => {
     prepare();
-    const plans = readRows('pvpSkillPlan').filter((row) => String(row.unitId) === '68005');
+    const plans = withoutLineupCrit(readRows('pvpSkillPlan'))
+        .filter((row) => String(row.unitId) === '68005');
+    // 68005 另有 50 行「全队暴击伤害增幅」（skillChainId 109001），不是技能链，先剔掉。
     assert.equal(plans.length, 12, '4 条技能 × 3 档');
 
     const byChain = (chainId: number): Array<Record<string, unknown>> => plans
@@ -96,7 +99,11 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel) || Number(a.modifierId) - Number(b.modifierId));
     for (const chainId of [100501, 100502, 100503, 100504]) {
         assert.ok(byChain(chainId).length >= 3, `${chainId} 必须三档齐备`);
-        for (const tier of byChain(chainId)) assert.ok(Number(tier.unlockHeroLevel) >= 1);
+        // 第 1 档允许 0（「解锁即拥有」）：`ZCStatSchema` 对 unlockHeroLevel 只要求 >= 0。
+        for (const tier of byChain(chainId)) {
+            const unlock = Number(tier.unlockHeroLevel);
+            assert.ok(Number.isSafeInteger(unlock) && unlock >= 0, `${chainId} 的解锁等级必须是非负整数`);
+        }
         // 全部挂在普攻行上：`sendAttack` 取运行时的键是 `${unitId}:${profile.skillId}`。
         for (const tier of byChain(chainId)) assert.equal(Number(tier.pvpSkillId), 30707);
     }
@@ -146,7 +153,7 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
 test('25 级：移速 +15% / 攻击范围 +30% 落进 unit 域 statPatch，吸血走技能参数', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
-    const selected = selectZCSkillPlans('68005', 25, catalogs);
+    const selected = withoutLineupCrit(selectZCSkillPlans('68005', 25, catalogs));
     // 四条链都是 `replace`（三级同值）⇒ 25 级每条链只留最高档，共 4 行。
     assert.equal(selected.length, 4, `四条链的最高档共 4 行，实得 ${selected.length}`);
     assert.deepEqual(selected.map((row) => row.modifierId).sort(),

@@ -611,7 +611,11 @@ test('游戏帧循环由运行控制器推进，组件只派发帧事件', () =>
     const view = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
     const controller = readFileSync('assets/script/app/zcds/application/ZCBattleRuntimeController.ts', 'utf8');
     assert.doesNotMatch(view, /model\.tick\(|drainPresentationEvents\(/);
-    assert.match(view, /emit\(ZC_BATTLE_EVENTS\.FRAME, \{ owner: this, dt \}\)/);
+    // 帧事件 payload 改为复用实例（不再每帧新建对象）：接线仍要求派发 FRAME 且带 owner/dt，
+    // 「禁止内联对象字面量」由 tests/zcds-hotpath-allocation.test.ts 守卫。
+    assert.match(view, /emit\(ZC_BATTLE_EVENTS\.FRAME, this\.framePayload\)/);
+    assert.match(view, /\{\s*owner: this,\s*dt: 0\s*\}/);
+    assert.match(view, /this\.framePayload\.dt = dt/);
     assert.match(controller, /model\.tick\(dt\)/);
     assert.match(controller, /this\.renderClock >= 0\.15/);
 });
@@ -626,7 +630,7 @@ test('城墙边→邻格匹配不得把同一个邻格分给两条边（阈值 �
     // 一旦发现 connected.has(adjacentId) 就当「同簇内部边」跳过 ⇒ 外轮廓缺一段（「靠近外层会断」）。
     // 判据：正确匹配的 cos 实测最小 0.951、误匹配 0.737 ⇒ 同一邻格不该被方向不同的两条边同时选中。
     try {
-        for (const file of ['standard.json', 'standard_3.json', 'standard_4.json']) {
+        for (const file of ['normal.json', 'standard_3.json', 'standard_4.json']) {
             configureZCMap(JSON.parse(readFileSync(assetPath(`config/maps/${file}`), 'utf8')));
             const hexes = ZC_HEX_CONFIG;                    // configureZCMap 之后的真源
             // 每张地图独立一个几何缓存（等价于产品路径 initialize 时 setMap）。

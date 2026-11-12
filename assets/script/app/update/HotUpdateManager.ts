@@ -1,4 +1,3 @@
-import type { NetworkTransport } from '../../core/network/NetworkTransport';
 import {
     appendCacheBust,
     compareVersion,
@@ -7,24 +6,13 @@ import {
     parseReleasePointer,
 } from '../../core/update/HotUpdateManifest';
 import type {
-    IHotUpdateBundleRuntime,
     IHotUpdateConfig,
+    IHotUpdateManagerDependencies,
     IHotUpdateManifest,
-    IHotUpdateManifestVerifier,
     HotUpdatePlatform,
     IHotUpdateProgress,
     IHotUpdateResult,
-    IHotUpdateStore,
 } from '../../core/update/HotUpdateTypes';
-
-export interface IHotUpdateManagerDependencies {
-    readonly network: NetworkTransport;
-    readonly store: IHotUpdateStore;
-    readonly runtime: IHotUpdateBundleRuntime;
-    readonly verifier: IHotUpdateManifestVerifier;
-    readonly platform: HotUpdatePlatform;
-    readonly now?: () => number;
-}
 
 /**
  * 与具体平台无关的热更新编排器。

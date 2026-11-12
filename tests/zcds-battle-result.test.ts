@@ -305,11 +305,30 @@ test('C1 组合层在运行期启动前订阅结果广播', () => {
 });
 
 test('C2 结算等待和奖励解析位于控制器与组合层，匹配局不等待', () => {
-    assert.match(runtimeSource, /entry\.slgBattleType \?\? \(entry\.pveContext \? ZC_BATTLE_TYPE_CHAPTER : null\)/);
+    assert.match(runtimeSource, /battleType: entry\.battleType \?\? entry\.slgBattleType \?\? \(entry\.pveContext \? ZC_BATTLE_TYPE_CHAPTER : null\)/);
     assert.match(settlementSource, /request\.battleType === null \? null : this\.services\.results\.waitResult/);
     assert.match(compositionSource, /resolveCmdGoodsFrames\(result\.goods, resources\)/);
     assert.match(compositionSource, /resId: reward\.resId, amount: reward\.number/);
     assert.ok(settlementSource.indexOf('await pending') < settlementSource.indexOf('await this.open()'));
+});
+
+/**
+ * C7 —— 结算等广播认的是「入口声明」的 battleType，不是从 pve 猜出来的。
+ *
+ * 宝箱栏「开始战斗」走匹配（`battleType = 1002` + 子类型 2），既没有 `pve` 也不是 SLG；
+ * 原来 `entry.slgBattleType ?? (pveContext ? 1002 : null)` 在这一路恒为 null
+ * ⇒ 不调 `waitResult` ⇒ 结算页奖励区全空，**日志里一条错都没有**。
+ * 所以三处必须同时成立：匹配组合层透传 → builder 收敛成一个字段 → 运行时直接用它。
+ */
+test('C7 匹配入口（宝箱战斗）的 battleType 必须一路透传到结算', () => {
+    const matchingSource = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
+    const builderSource = readFileSync('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', 'utf8');
+    const entrySource = readFileSync('assets/script/app/zcds/application/ZCGameEntry.ts', 'utf8');
+    assert.match(matchingSource, /params: \{ pve: params\?\.pve, selfRoleId: identity\?\.roleId, battleType: params\?\.battleType \}/,
+        '匹配组合层丢了这个字段 ⇒ 宝箱战斗结算无奖励');
+    assert.match(builderSource, /battleType: entry\?\.battleType \?\? entry\?\.slgBattleType \?\? null/);
+    assert.match(entrySource, /readonly battleType\?: number \| null;/, 'IZCGameEntry 要带上收敛后的 battleType');
+    assert.match(entrySource, /battleType\?: number;/, 'ZCGameEntryParams 要能接收入口的协议 battleType');
 });
 
 test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames', () => {

@@ -18,7 +18,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import { MONTHCARD_ART_ROOT, spriteFramePath } from '../assets/script/app/ArtPaths';
+import { MONTHCARD_ART_ROOT, spriteFramePath, spriteFramePathOf } from '../assets/script/app/ArtPaths';
 import {
     MONTHCARD_ART,
     MONTHCARD_FRAME_NAMES,
@@ -76,7 +76,6 @@ import { RES_BAR_ICON_ART } from '../assets/script/app/main/MainResBarTypes';
 import { resIconRoot } from '../assets/script/app/common/ResTypes';
 import { assetPath } from './helpers/asset-paths';
 
-const RESOURCES = 'assets/resources';
 const DAY_MS = 86400000;
 
 /** 读一张 remoteRef 分表（都是「对象数组」形态）。 */
@@ -87,7 +86,7 @@ function readTable(name: string): unknown[] {
 /** 断言 `<root>/<name>.png` 真实存在。 */
 function assertSpriteExists(root: string, name: string, hint: string): void {
     assert.ok(name, `${hint}：资源名为空`);
-    const file = `${RESOURCES}/${root}/${name}.png`;
+    const file = assetPath(`${root}/${name}.png`);
     assert.ok(existsSync(file), `${hint}：缺少美术 ${file}（根目录来自 ArtPaths，别在别处另写一份）`);
 }
 
@@ -196,7 +195,7 @@ test('⚠️ 真实表：福利月卡没有每日奖励 / 购买奖励，超值�
     );
 });
 
-test('⚠️ 真实表：物品图标一律空串（本工程一张物品图都没导），货币只认 5 张白名单', () => {
+test('⚠️ 真实表：奖励图标使用真实物品与货币映射，每张图必须存在', () => {
     const meta = buildRewardMeta(readTable('roleProperty'), readTable('item'));
     const gifts = buildGifts(readTable('monthCardActPlan'), buildPriceResolver(readTable('payChannel')), meta);
     const premium = gifts.find((gift) => gift.type === MONTH_CARD_TYPE_PREMIUM)!;
@@ -207,23 +206,13 @@ test('⚠️ 真实表：物品图标一律空串（本工程一张物品图都�
     assert.equal(premium.buyReward!.iconArt, '图标_幻灵玉');
     assert.ok(premium.buyReward!.name.length > 0, 'roleProperty 里有名字就该带上');
 
-    // 每日奖励：银币（有图）+ 3 个物品（没图）
-    const withIcon = premium.dayRewards.filter((reward) => reward.iconArt.length > 0);
-    const withoutIcon = premium.dayRewards.filter((reward) => reward.iconArt.length === 0);
-    assert.equal(withIcon.length, 1, '只有银币那一格的图标导进来了');
-    assert.equal(withIcon[0].iconArt, '图标_铜币');
-    assert.equal(withoutIcon.length, 3, '金钥匙 / 图纸 / 兵书这三张物品图本工程没有');
-
-    // 没图的那几个仍然要有名字（`item.json` 里有），但 `iconArt` 必须是空串
-    for (const reward of withoutIcon) {
-        assert.ok(reward.resId >= 10000, `resId=${reward.resId} 应当落在 item 表区间`);
-        assert.ok(reward.number > 0);
-    }
-    // 图标名不许出现"没导进来却写上了"的情况
+    assert.equal(premium.dayRewards.length, 4);
     for (const reward of premium.dayRewards) {
-        if (reward.iconArt.length > 0) {
-            assert.ok(MONTHCARD_IMPORTED_CURRENCY_ART.includes(reward.iconArt), `${reward.iconArt} 不在已导入白名单里`);
-        }
+        assert.ok(reward.name.length > 0);
+        assert.ok(reward.number > 0);
+        assert.ok(reward.iconArt.length > 0, `奖励 ${reward.resId} 缺图标`);
+        const path = (reward.iconArt.startsWith('icons/') ? spriteFramePathOf(reward.iconArt) : currencyRewardFramePath(reward.iconArt)).replace(/\/spriteFrame$/, '.png');
+        assert.ok(existsSync(assetPath(path)), path);
     }
     // `buildGifts` 默认（无 meta）时也必须是空串，而不是别的兜底
     const noMeta = buildGifts(readTable('monthCardActPlan'), buildPriceResolver(readTable('payChannel')), new Map());
@@ -428,9 +417,9 @@ test('月卡的每张图都在 image/monthcard 下，且两张卡面是两张不
     assert.equal(backgroundArtForType(99), MONTHCARD_ART.bgNormal);
 
     // `bg`（外层面板底）与 `yueka.png` 是两回事：后者在 skel/yueka 且不能改名
-    assert.ok(existsSync(`${RESOURCES}/skel/yueka/yueka.atlas.txt`), 'spine atlas 文本必须叫 <名字>.atlas.txt');
-    assert.ok(existsSync(`${RESOURCES}/skel/yueka/yueka.skel`));
-    assert.ok(existsSync(`${RESOURCES}/skel/yueka/yueka.png`));
+    assert.ok(existsSync(assetPath('skel/yueka/yueka.atlas.txt')), 'spine atlas 文本必须叫 <名字>.atlas.txt');
+    assert.ok(existsSync(assetPath('skel/yueka/yueka.skel')));
+    assert.ok(existsSync(assetPath('skel/yueka/yueka.png')));
 });
 
 // ============================================================
@@ -654,7 +643,7 @@ test('月卡购买：rsp.ret 为真后必须触发支付（FW.pay(payId, "common
     // Demo3.8 的支付走可注入出口 `FW.pay`（组合根接真实现），Repository 里必须调用它。
     assert.match(repository, /FW\.pay\(payId, 'common', 0\)/);
     // buy 的签名要带上 `payId`（= payChannel.id = monthCardActPlan.rmb），否则支付不知道收多少钱
-    assert.match(repository, /async buy\(type: number, payId: number, caller\?: unknown\)/);
+    assert.match(repository, /async buy\(type: number, payId: number, caller\?: object\)/);
     // 支付出口 `FW.pay` 在 framework 层定义（可注入空实现，同 showReward 口径）
     const fw = readFileSync('assets/script/framework/FW.ts', 'utf8');
     assert.match(fw, /static pay: \(payChannelId: number, fromType: string, fromId: number\) => void = \(\) => \{ \};/);

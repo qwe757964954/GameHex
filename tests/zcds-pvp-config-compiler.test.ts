@@ -15,7 +15,7 @@ function rows(name: string): Array<Record<string, unknown>> {
 function tables(): runtimeConfig.ZCPvpTables {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     ];
     return Object.fromEntries(names.map((name) => [name, rows(name)])) as runtimeConfig.ZCPvpTables;
 }

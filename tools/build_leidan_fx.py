@@ -77,7 +77,7 @@ def prefab_doc(name, width, height, scale, frames, clip_uuid):
             '_children': [],
             '_active': True,
             '_components': comps,
-            '_prefab': {'__id__': 7 if clip_uuid is None else 9},
+            '_prefab': {'__id__': 6 if clip_uuid is None else 8},
             '_lpos': {'__type__': 'cc.Vec3', 'x': 0, 'y': 0, 'z': 0},
             '_lrot': {'__type__': 'cc.Quat', 'x': 0, 'y': 0, 'z': 0, 'w': 1},
             '_lscale': {'__type__': 'cc.Vec3', 'x': scale, 'y': scale, 'z': scale},

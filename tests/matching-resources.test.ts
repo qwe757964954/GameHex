@@ -90,6 +90,40 @@ test('匹配配置按注入来源读取，失败不污染后续解析', async ()
     assert.equal((await loadMatchProfileLookup(configs({ grade: [{ gradeId: 1, gradeName: '恢复' }] }))).gradeName(1), '恢复');
 });
 
+test('开战回包阵容经真实卡表生成僵尸、坦克、战士、射手统计，零计数仍展示', async () => {
+    const { loadMatchProfileLookup } = load<typeof import('../assets/script/app/matching/MatchProfileConfig')>('MatchProfileConfig', {
+        '../battle/BattleStartModel': BattleStartModel,
+    });
+    const rows = Object.fromEntries(['grade', 'pvpArtifact', 'head', 'icon', 'pvpCard'].map(name => {
+        const table = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
+        return [name, Array.isArray(table) ? table : table.v.map((values: unknown[]) => Object.fromEntries(table.k.map((key: string, i: number) => [key, values[i]])))];
+    }));
+    const lookup = await loadMatchProfileLookup(configs(rows));
+    const base = { name: '', avatarIcon: '', power: 0, rank: '', trophy: 0, artifactName: '', artifactIcon: '', stats: [] };
+    for (const [ids, expected] of [
+        [[68001, 68002, 68005, 68020, 68033, 68021, 68012, 68004], [1, 1, 4, 3]],
+        [[68002, 68028, 68020, 68013, 68029, 68022, 68031, 68034], [4, 3, 1, 2]],
+        [[68022, 99999], [0, 0, 0, 0]],
+    ]) {
+        const unit = BattleStartModel.normalizeBattleUnit({ campId: 1, showInfo: {},
+            heroInfos: ids.map(heroId => ({ heroId, level: 1 })), artifactId: 0 } as never);
+        const view = BattleStartModel.applyUnitToPlayerView(base, unit, lookup);
+        assert.deepEqual(view.stats.map(stat => stat.icon), ['icon_01', 'icon_03', 'icon_02', 'icon_04']);
+        assert.deepEqual(view.stats.map(stat => stat.value), expected);
+        assert.equal(view.artifactName, '');
+        assert.equal(view.artifactIcon, '');
+    }
+    assert.deepEqual(base.stats, [], '不修改占位数据');
+});
+
+test('无效卡表行跳过，未加载卡表时不伪造统计', () => {
+    const lookup = BattleStartModel.buildMatchProfileLookup(null, null, null, null, [
+        null as never, { id: 0 }, { id: 1, traits: null }, { id: 2, traits: { camp: 3, attack: false } },
+    ]);
+    assert.deepEqual(lookup.heroStats([1, 2, 999]).map(stat => stat.value), [0, 0, 0, 0]);
+    assert.deepEqual(BattleStartModel.buildMatchProfileLookup(null, null).heroStats([1]), []);
+});
+
 test('匹配提示过滤空文案并稳定排序，失败后可重新读取', async () => {
     const { loadMatchTips } = load<typeof import('../assets/script/app/matching/MatchTipsConfig')>('MatchTipsConfig', {
         '../../framework/ref/RefUtil': {},

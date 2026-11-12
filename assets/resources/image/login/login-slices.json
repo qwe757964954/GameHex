@@ -1,0 +1,238 @@
+{
+  "login_panel": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      638,
+      480,
+      996,
+      900
+    ],
+    "size": [
+      128,
+      128
+    ],
+    "borders": [
+      48,
+      48,
+      48,
+      48
+    ]
+  },
+  "login_title": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      726,
+      473,
+      918,
+      511
+    ],
+    "size": [
+      384,
+      76
+    ],
+    "borders": [
+      60,
+      60,
+      16,
+      16
+    ]
+  },
+  "login_primary": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      677,
+      628,
+      957,
+      675
+    ],
+    "size": [
+      80,
+      80
+    ],
+    "borders": [
+      32,
+      32,
+      32,
+      32
+    ]
+  },
+  "login_secondary": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      682,
+      683,
+      953,
+      726
+    ],
+    "size": [
+      72,
+      72
+    ],
+    "borders": [
+      28,
+      28,
+      28,
+      28
+    ]
+  },
+  "login_input": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      730,
+      527,
+      969,
+      567
+    ],
+    "size": [
+      56,
+      56
+    ],
+    "borders": [
+      20,
+      20,
+      20,
+      20
+    ]
+  },
+  "login_server": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      698,
+      736,
+      937,
+      778
+    ],
+    "size": [
+      56,
+      56
+    ],
+    "borders": [
+      20,
+      20,
+      20,
+      20
+    ]
+  },
+  "server_row": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1121,
+      454,
+      1390,
+      498
+    ],
+    "size": [
+      64,
+      64
+    ],
+    "borders": [
+      24,
+      24,
+      24,
+      24
+    ]
+  },
+  "server_row_selected": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1121,
+      404,
+      1390,
+      449
+    ],
+    "size": [
+      64,
+      64
+    ],
+    "borders": [
+      24,
+      24,
+      24,
+      24
+    ]
+  },
+  "server_row_disabled": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1121,
+      555,
+      1390,
+      600
+    ],
+    "size": [
+      64,
+      64
+    ],
+    "borders": [
+      24,
+      24,
+      24,
+      24
+    ]
+  },
+  "login_checkbox": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      700,
+      792,
+      730,
+      823
+    ],
+    "size": [
+      60,
+      62
+    ]
+  },
+  "login_close": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1373,
+      349,
+      1415,
+      387
+    ],
+    "size": [
+      84,
+      76
+    ]
+  },
+  "login_eye": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      931,
+      585,
+      959,
+      604
+    ],
+    "size": [
+      56,
+      38
+    ]
+  },
+  "login_check": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1350,
+      414,
+      1378,
+      437
+    ],
+    "size": [
+      56,
+      46
+    ]
+  },
+  "server_dot": {
+    "source": "approved-mockup.png",
+    "bounds": [
+      1137,
+      416,
+      1157,
+      436
+    ],
+    "size": [
+      40,
+      40
+    ]
+  }
+}

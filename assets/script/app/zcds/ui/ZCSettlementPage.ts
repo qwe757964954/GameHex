@@ -52,7 +52,7 @@ export interface IZCSettlementOptions {
      */
     readonly hasDoubleReward?: boolean;
     /**
-     * 是否接了「变强途径」。缺省 / `false` ⇒ `Panel/Grow`（连标题）**整组收起**。
+     * 是否接了「变强途径」。战败时始终展示；胜利时缺省 / `false` ⇒ 整组收起。
      *
      * 入口点哪个走 `SettlementGrowEntry` 事件的 payload（`'equip' | 'hero' | 'rune'`）。
      */
@@ -250,11 +250,11 @@ export class ZCSettlementPage extends PopupBase {
      * 「双倍奖励」与「变强途径」的显隐口径（与 `renderRank` 的 `hasRank` 同一套思路）：
      *  - 双倍按钮**常显但按 `hasDoubleReward` 置灰**：它在设计稿里是奖励区中间那一段，
      *    藏掉两侧 `RewardLineL/R` 会断开 ⇒ 一律显示，只在没接线时 `interactable = false`；
-     *  - 变强途径**整组收起**：只收入口会剩一个空标题框，比死按钮更奇怪。
+     *  - 变强途径战败时整组展示，胜利时按 `hasGrowEntry` 整组显隐。
      */
     private renderEntryGroups(data: IZCSettlementOptions): void {
         this.doubleButton.node.active = true;
         this.doubleButton.interactable = Boolean(data.hasDoubleReward);
-        this.growGroup.active = Boolean(data.hasGrowEntry);
+        this.growGroup.active = !data.victory || Boolean(data.hasGrowEntry);
     }
 }

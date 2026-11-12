@@ -61,6 +61,56 @@ export function findCurrentTerritoryLevel(
 }
 
 /**
+ * 扫荡目标查询用到的进度子集。
+ *
+ * ⚠️ 用**结构子集**而不是 `TerritoryProgress`：视图层拿到的是
+ * `ITerritoryProgressView`（`Pick` 出来的只读查询），它不是类实例、传不进原签名。
+ * 与 `TerritoryChestHint` 的「最小进度视图」同一处置。
+ */
+export interface ITerritoryStagePassQuery {
+    isAreaPassed(cellId: number): boolean;
+    isDisabled(cellId: number): boolean;
+}
+
+/**
+ * 「**已通关**的最高关卡格」—— 征收扫荡的目标格（山猫 2026-11-09 口径）。
+ *
+ * 与 {@link findCurrentTerritoryLevel} 的分工：
+ * - 那个优先给「还没打的下一关」，是**快速寻敌**（跳过去打）；
+ * - 这个只在**已通关**的关卡里挑关号最大的，是**扫荡**（把已经推进到的进度再收一次）。
+ *
+ * 一个都没通关 ⇒ `null`。别退到第 1 关：新号点扫荡应该提示「暂无可扫荡」，
+ * 而不是发一个必然被服务端拒的 `cellId`。
+ *
+ * 同关号多格时取 `levelId` 大的，再同则取 `cellId` 小的（保证结果稳定，不随 map 顺序漂）。
+ */
+export function findHighestPassedTerritoryLevel(
+    sites: readonly TerritorySite[],
+    stageByCell: ReadonlyMap<number, TerritoryCampaignStage>,
+    progress: ITerritoryStagePassQuery,
+): TerritoryStageBinding | null {
+    let best: TerritoryStageBinding | null = null;
+    for (const site of sites) {
+        const stage = stageByCell.get(site.cellId);
+        if (!stage) continue;
+        if (site.type !== TERRITORY_SITE_TYPE.stage && site.type !== TERRITORY_SITE_TYPE.boss) continue;
+        if (progress.isDisabled(site.cellId)) continue;
+        if (!progress.isAreaPassed(site.cellId)) continue;
+        if (!best) {
+            best = { site, stage };
+            continue;
+        }
+        const better = stage.stage !== best.stage.stage
+            ? stage.stage > best.stage.stage
+            : stage.levelId !== best.stage.levelId
+                ? stage.levelId > best.stage.levelId
+                : site.cellId < best.site.cellId;
+        if (better) best = { site, stage };
+    }
+    return best;
+}
+
+/**
  * 这一格关卡**能不能直接打**（快速寻敌的准入条件）。
  *
  * 两条与点击路径 `TerritoryModel.selectSite` 完全同源：

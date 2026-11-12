@@ -1,19 +1,20 @@
 import { buildZCBattleEntry } from '../assets/script/app/zcds/application/ZCBattleEntryBuilder';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
-import { parseBattleBuffs, parseBattleHeroAttrs } from '../assets/script/app/battle/BattleStartModel';
+import { ZC_BATTLE_TYPE_CHAPTER, ZC_BATTLE_TYPE_SLG_MONSTER, parseBattleBuffs, parseBattleHeroAttrs } from '../assets/script/app/battle/BattleStartModel';
 import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
 import { buildZCClientCombatConfig, clientHeroIdsByOwner } from '../assets/script/app/zcds/application/ZCClientCombatConfig';
-import { buildZCPveEnemyDecks } from '../assets/script/app/zcds/application/ZCPveCombatConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { assetPath } from './helpers/asset-paths';
+import { compileZCNeutralResourceCatalog, setZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
+import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 
 function readRows(name: string): Array<Record<string, unknown>> {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
@@ -28,7 +29,7 @@ function readRows(name: string): Array<Record<string, unknown>> {
 function prepare(playerCount: 3 | 4 = 4) {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus',
     ];
@@ -61,6 +62,99 @@ function battle(
     };
 }
 
+function serverMapBattle(source: ReturnType<typeof prepare>): ZCBattleStart {
+    const start = battle();
+    return { ...start,
+        units: start.units.map((unit, index) => ({ ...unit, unitId: 101 + index })),
+        mapInfo: { id: source.map.id, name: '后端地图', version: 3, resourcePoints: [],
+            unitHomeIndexes: [2, 3, 0, 1].map((homeIndex, index) => ({ unitId: 101 + index, homeIndex })) },
+    };
+}
+
+test('后端最终出生点按 unitId 映射玩家视角，同步转换分区并跳过自选主城', () => {
+    const source = prepare(4);
+    const start = serverMapBattle(source);
+    const result = buildZCClientCombatConfig({ ...source, map: { ...source.map, cityMode: 'select' } }, start, 'self', { allowUnresolvedSelect: true }).config;
+    assert.equal(result.map.cityMode, 'fixed');
+    assert.deepEqual(result.map.homes, [3, 2, 0, 1].map(index => source.map.homes[index]));
+    assert.equal(result.map.playerHomeId, source.map.homes[3]);
+    assert.deepEqual(result.map.sections, source.map.sections.map(section => [0, 3, 4, 2, 1][section]));
+    assert.equal(result.map.name, '后端地图');
+    assert.equal(result.map.version, 3);
+    assert.deepEqual(result.map.resolvedResources, []);
+    const model = new ZCGameModel(null, () => 0.5, result);
+    assert.equal(model.snapshot.hexes[result.map.playerHomeId].owner, 'player');
+    assert.equal(model.snapshot.hexes[result.map.enemyHomeId].owner, 'enemy');
+    assert.deepEqual(resolveZCMapResources(result.map, () => { throw new Error('不应重新抽取'); }), []);
+    assert.equal(source.map.cityMode, 'fixed');
+});
+
+test('自选地图的后端空出生点保留选点流程，并沿用服务端资源快照', () => {
+    prepare();
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/river_custom_new.json'), 'utf8')));
+    const source = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
+    const serverStart = serverMapBattle(source);
+    const start = { ...serverStart, units: serverStart.units.slice(0, 2) };
+    start.mapInfo.unitHomeIndexes.length = 0;
+    const options = { allowUnresolvedSelect: true };
+    const result = buildZCClientCombatConfig(source, start, 'self', options).config;
+    assert.equal(result.map.cityMode, 'select');
+    assert.deepEqual(result.map.homes, source.map.homes);
+    assert.deepEqual(result.map.sections, source.map.sections);
+    assert.equal(result.map.name, '后端地图');
+    assert.deepEqual(result.map.resolvedResources, []);
+    const selection = new ZCSpawnSelection(result.map, () => 0.5);
+    selection.tick(60);
+    const selectionResult = selection.result;
+    assert.ok(selectionResult);
+    const resolved = resolveZCSpawnMatchConfig(result, selectionResult);
+    assert.equal(resolved.map.cityMode, 'fixed');
+    assert.deepEqual(resolved.map.resolvedResources, []);
+    assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /自选主城/);
+});
+
+test('后端资源编号直接进入对局，校验坐标和组合归属，不重新抽签', () => {
+    const source = prepare(4);
+    setZCNeutralResourceCatalog(compileZCNeutralResourceCatalog([
+        { id: 99001, groupId: 99, groupName: '测试', resourceType: 1, weight: 0, param: 10 },
+    ], new Map()));
+    try {
+        const start = serverMapBattle(source);
+        const cell = source.map.hexes.find(hex => hex.playable && !source.map.homes.includes(hex.id));
+        start.mapInfo.resourcePoints.push({ row: cell.row, column: cell.column, groupId: 99, resourceId: 99001 });
+        const result = buildZCClientCombatConfig(source, start, 'self').config;
+        assert.equal(result.map.resolvedResources[0].hexId, cell.id);
+        assert.equal(result.map.resolvedResources[0].itemId, 99001);
+        assert.deepEqual(resolveZCMapResources(result.map, () => { throw new Error('不应重新抽取'); }), result.map.resolvedResources);
+        const selectStart = { ...start, mapInfo: { ...start.mapInfo, unitHomeIndexes: [] } };
+        const selectResult = buildZCClientCombatConfig(
+            { ...source, map: { ...source.map, cityMode: 'select' } }, selectStart, 'self', { allowUnresolvedSelect: true },
+        ).config;
+        assert.equal(selectResult.map.cityMode, 'select');
+        assert.equal(selectResult.map.resolvedResources[0].itemId, 99001);
+        assert.deepEqual(resolveZCMapResources(selectResult.map, () => { throw new Error('不应重新抽取'); }), selectResult.map.resolvedResources);
+        start.mapInfo.resourcePoints[0].groupId = 98;
+        assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /资源点配置不匹配/);
+        start.mapInfo.resourcePoints[0].column = source.map.columns;
+        assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /资源点位置无效/);
+    } finally { setZCNeutralResourceCatalog(null); }
+});
+
+test('后端出生点缺失、重复、越界和未知 unitId 均拒绝开局', () => {
+    const source = prepare(4);
+    for (const mutate of [
+        (info: CmdPvpMapInfo) => { info.unitHomeIndexes.length = 0; },
+        (info: CmdPvpMapInfo) => info.unitHomeIndexes.pop(),
+        (info: CmdPvpMapInfo) => { info.unitHomeIndexes[0].homeIndex = info.unitHomeIndexes[1].homeIndex; },
+        (info: CmdPvpMapInfo) => { info.unitHomeIndexes[0].homeIndex = 4; },
+        (info: CmdPvpMapInfo) => { info.unitHomeIndexes[0].unitId = 999; },
+    ]) {
+        const start = serverMapBattle(source);
+        mutate(start.mapInfo);
+        assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /后端出生点/);
+    }
+});
+
 test('四方服务端阵容按本机 roleId 与 campId 映射到 client owner', () => {
     const config = prepare(4);
     const roster = clientHeroIdsByOwner(config, battle(), 'self');
@@ -74,13 +168,16 @@ test('正式客户端构筑为四个 owner 分别编译并冻结修改器', () =
     assert.deepEqual(result.skipped, []);
     for (const owner of ['player', 'enemy', 'enemy2', 'enemy3'] as const) {
         const loadouts = result.config.modifiers?.[owner] ?? [];
-        // 一名武将编译成「等级成长 + 升星」两条；将/星级归属只在升星那条上，所以按 generalId 挑出来断言。
-        assert.equal(loadouts.filter((loadout) => loadout.sourceKind === 'growth').length, 1, owner);
-        const generals = loadouts.filter((loadout) => loadout.generalId !== undefined);
-        assert.equal(generals.length, 1, owner);
-        assert.equal(generals[0].generalId, 68001);
-        assert.equal(generals[0].star, 1);
-        assert.deepEqual(generals[0].unsupportedAttributes, []);
+        //  星级表 2026-11-10 弃用后，一名武将只编「等级成长 + 技能计划」两条，**不再有 generalStar 那条**。
+        //  归属原来靠 generalStar 的 `generalId` 反查，现在改看 `targetUnitId`。
+        const growth = loadouts.filter((loadout) => loadout.sourceKind === 'growth');
+        assert.equal(growth.length, 1, owner);
+        assert.equal(growth[0].targetUnitId, '68001');
+        //  星级那条要彻底消失：谁把它加回构筑，这里立刻红。
+        assert.equal(loadouts.filter((loadout) => loadout.sourceKind === 'generalStar').length, 0, owner);
+        //  「全量重算·去掉补偿」后 1 级 attackFlat=0，过滤器 value !== 0 ⇒ 无 attackFlat 补丁；
+        //  品质固定 45 是已废弃的旧口径，别被顺手加回来。
+        assert.equal(growth[0].statPatch.attackFlat ?? 0, 0, owner);
     }
     assert.equal(Object.isFrozen(result.config), true);
 });
@@ -114,7 +211,8 @@ test('正式客户端卡池只采用后端每方最多八张英雄卡，并独�
         playerHeroIds.slice(0, 8),
     );
     assert.deepEqual(
-        result.config.modifiers?.player?.map((loadout) => loadout.generalId).filter((id) => id !== undefined),
+        result.config.modifiers?.player?.filter((loadout) => loadout.sourceKind === 'growth')
+            .map((loadout) => Number(loadout.targetUnitId)),
         playerHeroIds.slice(0, 8),
     );
     assert.deepEqual(
@@ -147,11 +245,13 @@ test('三人本地模式没有服务端阵容时使用客户端默认卡组且�
     assert.ok(result.config.modifiers?.enemy2);
     assert.equal(result.config.modifiers?.enemy3, undefined);
     assert.deepEqual(result.skipped, []);
-    const spear = result.config.modifiers?.player?.find((loadout) => loadout.generalId === 68002);
+    //  星级表弃用后没有 generalStar 那条了，改按成长行的 `targetUnitId` 找。
+    const spear = result.config.modifiers?.player?.find(
+        (loadout) => loadout.sourceKind === 'growth' && loadout.targetUnitId === '68002',
+    );
     assert.ok(spear);
-    const spearDamage = spear.typedModifiers.find((modifier) => modifier.legacyKey === '长枪兵武将普攻伤害加成buff用');
-    assert.equal(spearDamage?.statId, 'damageRate');
-    assert.equal(spearDamage?.value, 2);
+    //  同上：1 级为曲线起点 0，不再补品质固定 45。
+    assert.equal(spear.statPatch.attackFlat ?? 0, 0);
 });
 
 test('local PVE keeps distinct configured enemy decks for each AI seat', () => {
@@ -169,14 +269,23 @@ test('local PVE keeps distinct configured enemy decks for each AI seat', () => {
     }
 });
 
-test('territory NPC teams retain separate cards and shared system cards', () => {
+test('章节敌方各席位直接使用后端阵容并保留系统卡', () => {
     const source = prepare(4);
-    const heroes = source.enemyDeck.filter((card) => card.unitId !== undefined);
-    const system = source.enemyDeck.filter((card) => card.unitId === undefined).map((card) => card.id);
-    const decks = buildZCPveEnemyDecks(source.enemyDeck, [[Number(heroes[0].id)], [Number(heroes[1].id)], [Number(heroes[2].id)]]);
+    const remote = battle([68001], [68002], [68003], [68004]);
+    const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
+        battle: remote, selfRoleId: 'self',
+        pve: {
+            mode: 'match', chapterId: 1, levelId: 1, territoryCellId: 327, stage: 1,
+            enemyName: '', territorySaveOwner: null, playerCount: 4,
+            enemyCardIds: [68001], enemyTeamCardIds: [[68001], [68001], [68001]],
+            waves: [], hpRate: 1, attackRate: 1,
+        },
+    });
+    const system = source.enemyDeck.filter(card => card.unitId === undefined).map(card => card.id);
     for (const [index, owner] of (['enemy', 'enemy2', 'enemy3'] as const).entries()) {
-        assert.deepEqual(decks[owner]?.filter((card) => card.unitId !== undefined).map((card) => card.id), [heroes[index].id]);
-        assert.deepEqual(decks[owner]?.filter((card) => card.unitId === undefined).map((card) => card.id), system);
+        const deck = entry.matchConfig.ownerDecks[owner];
+        assert.deepEqual(deck.filter(card => card.unitId !== undefined).map(card => Number(card.unitId)), [68002 + index]);
+        assert.deepEqual(deck.filter(card => card.unitId === undefined).map(card => card.id), system);
     }
 });
 
@@ -295,7 +404,7 @@ test('自选主城配置可在显式预备模式下完成客户端构筑', () =>
     assert.equal(result.config.map.cityMode, 'select');
     assert.equal(result.config.map.playerHomeId, -1);
     assert.equal(
-        result.config.modifiers?.player?.filter((loadout) => loadout.generalId !== undefined).length,
+        result.config.modifiers?.player?.filter((loadout) => loadout.sourceKind === 'growth').length,
         1,
     );
     assert.equal(Object.isFrozen(result.config), true);
@@ -372,6 +481,19 @@ test('battle entry copies PVE navigation data without callbacks and normalizes d
     assert.equal(entry.battleSeed, null);
 });
 
+test('匹配入口的 battleType 一路带进对局：宝箱战斗（1002）才不会静默丢结算奖励', () => {
+    const prepared = { baseMatchConfig: prepare(4) } as Parameters<typeof buildZCBattleEntry>[0];
+    // 宝箱栏「开始战斗」的真实形状：battleType 1002 + 子类型 2，没有 pve、没有 slgBattleType。
+    // 漏了这一个字段 ⇒ 结算不调 waitResult ⇒ result 恒 null ⇒ 奖励区全空且零报错。
+    const treasure = buildZCBattleEntry(prepared, { battleType: ZC_BATTLE_TYPE_CHAPTER });
+    assert.equal(treasure.battleType, ZC_BATTLE_TYPE_CHAPTER);
+    assert.equal(treasure.pveContext, null);
+    // 老形状（只有 slgBattleType 的 SLG 入口）继续收敛成同一个字段
+    assert.equal(buildZCBattleEntry(prepared, { slgBattleType: ZC_BATTLE_TYPE_SLG_MONSTER }).battleType, ZC_BATTLE_TYPE_SLG_MONSTER);
+    // 两个都没有 ⇒ null：领地 PVE 由运行时按 pveContext 兜底，这里不替它猜 1002
+    assert.equal(buildZCBattleEntry(prepared, { selfRoleId: 'self' }).battleType, null);
+});
+
 test('关卡 openGrideTime 与 BOSS 波标记随 PVE 参数进入对局配置', () => {
     const source = prepare(4);
     const prepared = { baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0];
@@ -380,14 +502,17 @@ test('关卡 openGrideTime 与 BOSS 波标记随 PVE 参数进入对局配置', 
         territorySaveOwner: null, enemyName: '', enemyCardIds: [], enemyTeamCardIds: [],
         playerCount: 2 as const, hpRate: 1, attackRate: 1,
         waves: [
-            { waveId: 1, showAtSeconds: 3, pvpCardId: 68001, monsterCount: 5, hpRate: 1, attackRate: 1 },
-            { waveId: 2, showAtSeconds: 95, pvpCardId: 68002, monsterCount: 1, hpRate: 1, attackRate: 1, isBoss: true },
+            { waveId: 1, showAtSeconds: 3, pvpCardId: 68001, monsterCount: 5, hpRate: 1, attackRate: 1, monsterSize: 1 },
+            { waveId: 2, showAtSeconds: 95, pvpCardId: 68002, monsterCount: 1, hpRate: 1, attackRate: 1, isBoss: true, monsterSize: 2 },
         ],
     };
     const entry = buildZCBattleEntry(prepared, { pve: { ...pveBase, openGrideTime: 18 } });
     assert.equal(entry.matchConfig.openGrideTime, 18, 'NPC 翻地块限速要带进对局');
     assert.deepEqual(entry.matchConfig.pveDefence?.waves.map((wave) => [wave.waveId, wave.isBoss === true]),
         [[1, false], [2, true]], 'BOSS 波标记必须原样投影（HUD 大血条与胜负都靠它）');
+    // 怪物体型只在 >1 时写：1 是普通体型，写进去只是让对局多做一次无效乘算。
+    assert.deepEqual(entry.matchConfig.pveDefence?.waves.map((wave) => wave.monsterSize),
+        [undefined, 2], 'BOSS 那行要带上 monsterSize=2（模型放大）');
 
     // 0 = 「够钱就翻」⇒ 不写进配置，避免把「不限速」当成 0 秒限速。
     const uncapped = buildZCBattleEntry(prepared, { pve: { ...pveBase, openGrideTime: 0 } });
@@ -426,7 +551,7 @@ test('首领塔防关拿到服务端开战回包也要按 npcCard 收紧敌方�
 
 test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后才判胜', () => {
     prepare(4);
-    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/standard.json'), 'utf8')));
+    configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     const source = captureZCMatchConfig();
     const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
         battle: battle([68001], [68001]), selfRoleId: 'self',
@@ -478,4 +603,59 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     for (const unit of model.snapshot.units) Object.assign(unit, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
     assert.equal(model.snapshot.status, 'victory');
+});
+
+/**
+ * 星级表 2026-11-10 弃用：构筑侧不再传 `generalStar`。
+ * 2026-11-10 二次口径（patch_growth_from_card_level_up.js）：「全量重算·去掉补偿」——
+ * `pvpUnitGrowth` 按 `cardLevelUp` 反推 1~50 级，品质固定补偿 45/55/65/75 被曲线吸收，
+ * 第 1 级为 0（`ZCModifierRuntime` 过滤 value !== 0 ⇒ 不产生 attackFlat 补丁）。
+ * 这条用例钉的是**曲线形状与完整性**：漏级、被改回恒定档位、曲线非单调，都要当场红。
+ */
+test('成长表按 cardLevelUp 全量重算：14 张老卡 1~50 级齐备且 attackFlat 单调递增', () => {
+    const cards = new Map(readRows('pvpCard').map((row) => [String(row.id), row]));
+    const growth = readRows('pvpUnitGrowth');
+    const stars = new Set(readRows('generalStar').map((row) => `${row.id}:${row.star}`));
+
+    const oldCards = ['68001', '68002', '68003', '68004', '68005', '68006', '68007',
+        '68008', '68009', '68010', '68011', '68012', '68013', '68014'];
+
+    for (const unitId of oldCards) {
+        assert.ok(cards.has(unitId), `${unitId} 必须仍在卡表`);
+        const rows = growth.filter((row) => String(row.unitId) === unitId);
+        assert.equal(rows.length, 50, `${unitId} 成长行必须是 1~50 级`);
+        const levels = rows.map((row) => Number(row.level)).sort((a, b) => a - b);
+        assert.deepEqual(levels, Array.from({ length: 50 }, (_, i) => i + 1), `${unitId} 等级要连续`);
+        const byLevel = new Map(rows.map((row) => [Number(row.level), Number(row.attackFlat)]));
+        assert.equal(byLevel.get(1), 0, `${unitId} 1 级是曲线起点（去掉品质固定补偿）`);
+        for (let level = 2; level <= 50; level += 1) {
+            assert.ok((byLevel.get(level) ?? 0) > (byLevel.get(level - 1) ?? 0),
+                `${unitId} 第 ${level} 级 attackFlat 必须严格递增（改回恒定档位会在这里红）`);
+        }
+        for (const row of rows) {
+            assert.equal(Number(row.enabled), 1, `${unitId} 第 ${row.level} 级必须启用`);
+        }
+    }
+
+    //  反向守卫：这批卡的星级 1 行如果还在表里，说明「摘星级」只摘了代码没摘数据，
+    //  下一个人接回构筑就会重复吃加成 —— 两头只留一头。
+    for (const unitId of oldCards) {
+        assert.equal(stars.has(`${unitId}:1`), true,
+            `${unitId} 的 1 星行被删了？本次口径是「代码不再用」，表本身允许留着不补，删了要同步改这条`);
+    }
+});
+
+// `pvpBaseTeamWeight` 已于 2026-11-10 并入 `pvpTile` 并下线（见 ZCGameRuntimeConfig 注释、
+// ZCPvpTileRules）。守住两件事：权重三列确实由 pvpTile 承载、下线表没被重新导入 ——
+// 否则「表悄悄回来了 / 权重列被删了」会变成静默回归，而不是一组 ENOENT。
+test('下线的 pvpBaseTeamWeight 不再入库，权重三列由 pvpTile 承载', () => {
+    const tile = JSON.parse(readFileSync('assets/remoteRef/pvpTile.json', 'utf8')) as
+        | { k: string[]; v: unknown[][] }
+        | Array<Record<string, unknown>>;
+    const columns = Array.isArray(tile) ? Object.keys(tile[0] ?? {}) : tile.k;
+    for (const column of ['weight', 'initialCountLimit', 'setCountLimit']) {
+        assert.ok(columns.includes(column), `pvpTile 必须承载 ${column}`);
+    }
+    assert.equal(existsSync('assets/remoteRef/pvpBaseTeamWeight.json'), false,
+        'pvpBaseTeamWeight 已并入 pvpTile 下线，不应被重新导入');
 });

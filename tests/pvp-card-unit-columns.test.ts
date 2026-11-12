@@ -167,7 +167,7 @@ function readSkillIds(): Set<number> {
 function readAllPvpTables(): ZCPvpTables {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
+        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
     ];
     return Object.fromEntries(names.map((name) => [name, readPvpRows(name)])) as unknown as ZCPvpTables;
 }

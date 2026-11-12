@@ -34,8 +34,7 @@ export class EventBus<E extends number | string = string> {
     on(event: E, handler: EventBusHandler, target?: unknown): void {
         const list = this.handlers.get(event) ?? [];
         if (list.some((item) => item.handler === handler && item.target === target)) return;
-        list.push({ handler, target });
-        this.handlers.set(event, list);
+        this.handlers.set(event, [...list, { handler, target }]);
     }
 
     /** 注销（同一 (事件, 函数, target) 才移除；不存在时静默返回）。 */
@@ -62,14 +61,15 @@ export class EventBus<E extends number | string = string> {
     }
 
     /**
-     * 派发。遍历前**拷一份** —— 回调里再订阅 / 注销都不会漏派或越界
+     * 订阅变化时替换数组，派发直接持有当前快照，回调增删不改变本轮范围。
      * （本次新增监听延后到下次；已解绑的监听立即停止，即使还在遍历副本中）。
      */
     emit(event: E, payload?: any): void {
         const list = this.handlers.get(event);
         if (!list) return;
-        for (const item of [...list]) {
-            if (this.handlers.get(event)?.includes(item)) item.handler.call(item.target, payload);
+        for (const item of list) {
+            const current = this.handlers.get(event);
+            if (current === list || current?.includes(item)) item.handler.call(item.target, payload);
         }
     }
 }

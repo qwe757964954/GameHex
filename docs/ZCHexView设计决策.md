@@ -51,7 +51,7 @@
 ⚠️ BuildingLayer 在 prefab 上挂着一个 `cc.Widget`（`_alignMode = ALWAYS`、`_verticalCenter = 15.101`），
 运行时它的局部 y 就被这个 Widget 钉在 **15.101**。换算成「格节点局部坐标」要 +15.101：
 · 地块**格面（可见六边形台面）中心**在格内 y = 12.5（见 `ZC_LAND_TOP_CENTER_LIFT`）
-· 资源点 / 敌方可开发图标的 -2.342 → 格内 12.759 ≈ 格面中心 ⇒ 这就是它们「居中」的实现方式
+· 资源点原始基准 / 敌方可开发图标的 -2.342 → 格内 12.759 ≈ 格面中心；中立资源在此基准上额外叠加随格面高度计算的 `NEUTRAL_RESOURCE_LIFT`，与神器 Spine、兵团和野怪预览共用，禁止在各分支散写固定像素补偿。具体调节量以代码常量为准。
 · 地块类型图标 = `DEFAULT_TILE_ICON_POS`，主动落在格面中心**上方**，与底部价格行配对
 
 早期注释写的「BuildingLayer 在 y=2.342」是过期值（大概是 Widget 生效前的手调值），
@@ -446,6 +446,23 @@ prefab 已序列化引用。
 
 本方法是 `buildingSprite.node.scale` 与 `active` 的**唯一写入口** —— 激活表现、
 选点阶段、常规 `renderContent` 都从这里过。新增写 scale 的路径前先确认不需要绕过它。
+
+**基准值 0.612**（2026-11-11）：0.9（prefab）× 0.8（2026-10-14 首次缩短）× 0.85
+（2026-11-11「建筑又放大了，重新缩小回 85%」）。格子顶面 123×90，建筑画布 90 ⇒ 屏上 55.1px。
+🔴 改它必须同步重标 `ZCGameViewUtil.FLOAT_TEXT_GOLD_INCOME_TOP_PX`（产金飘字从「建筑顶」起跑，
+= `15.651 + 90 × 0.612 / 2 ≈ 43`），`tests/zcds-float-text-gold-income.test.ts` 会从 prefab 反算卡这条。
+
+**按类型再乘 `BUILDING_ICON_TYPE_SCALE`**（2026-11-11「金矿的建筑需要轻微放大成 110%」）：
+
+| 类型 | 倍率 | 最终 scale | 屏上 |
+| :--- | :--- | :--- | :--- |
+| `mine`（金矿） | 1.1 | 0.6732 | 60.6px |
+| 其余（hq / barracks / tower / none） | 1 | 0.612 | 55.1px |
+
+倍率由 `render` 每拍按 `state.building` 写进 `buildingTypeScale`，**必须在 `applyActivationFx` 之前**
+（后者才是每帧写 scale 的地方；写进 `renderContent` 会被 contentKey 拦掉）。
+`renderSpawnSelection` 里要**显式复位成 1** —— 视图是对象池复用的，上一局这格若是金矿，
+选点阶段的主城会莫名大 10%。判据 `tests/zcds-building-icon-scale.test.ts`（金矿 1.1 + 池复用复位两条）。
 
 `multiplier` 有两个语义档：
 - `> 0`：正常渲染 / 生成动画中（`elasticPopScale` 的 0.2 ~ 1.2），按倍率缩放；

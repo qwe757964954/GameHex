@@ -34,6 +34,7 @@ export interface ZCArmySkillLevelRow {
     readonly skillType: number;
     /** 该档的效果描述。 */
     readonly desc: string;
+    readonly costs?: readonly { readonly itemId: number; readonly need: number }[];
 }
 
 /** 一个技能（聚合同一 `skillId` 的多个档）。 */
@@ -64,6 +65,12 @@ export function parseArmySkillLevelRow(value: unknown): ZCArmySkillLevelRow | nu
         unlockHeroLevel: Math.max(0, toCount(row.unlockarmylevel) ?? 0),
         skillType: toCount(row.armySkillType) ?? 1,
         desc: typeof row.desc === 'string' ? row.desc : '',
+        ...(row.costCoinID !== undefined || row.costArmySkillLevelID !== undefined ? {
+            costs: [
+                { itemId: toPositiveInt(row.costCoinID) ?? 0, need: toCount(row.costCoinNum) ?? 0 },
+                { itemId: toPositiveInt(row.costArmySkillLevelID) ?? 0, need: toCount(row.costArmySkillLevelNum) ?? 0 },
+            ].filter(cost => cost.itemId > 0 && cost.need > 0),
+        } : {}),
     };
 }
 
@@ -154,7 +161,7 @@ export function skillMaxLevel(skill: ZCArmySkill): number {
 /**
  * 该技能是否已满级 = **`level + 1` 这一档在表里不存在**。
  *
- * 与 `CardSkillPresenter.step` 的目标档算法（`target = level + 1`）保持同一口径：
+ * 与 `CardSkillPage.step` 的目标档算法（`target = level + 1`）保持同一口径：
  * 升级请求永远是「+1 级」，所以只要有 `level + 1` 就能升，没有就是满级。
  *
  * 不用 `level >= skillMaxLevel`：档位可能不连续（配了 1/2/4、缺 3），
@@ -168,7 +175,7 @@ export function isSkillMaxed(skill: ZCArmySkill, level: number): boolean {
 /**
  * 目标档的解锁判据：英雄等级够不够。
  *
- * 只做**按钮可用状态**，不是校验 —— 真正的扣费与门槛都在服务端。
+ * 供界面锁定与请求前校验共用；服务端仍负责最终校验与扣费。
  */
 export function skillLevelUnlocked(skill: ZCArmySkill, targetLevel: number, heroLevel: number): boolean {
     const row = skillLevelRow(skill, targetLevel);

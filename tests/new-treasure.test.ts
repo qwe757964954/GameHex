@@ -104,6 +104,22 @@ function createChestSlotView() {
     const timeText = { string: '', overflow: 0, node: timerNode(), updateRenderData() {
         timeTextTransform.width = this.string.length * 9;
     } };
+    // 按钮文案：`fontSize` 用来估字宽（视图按「字数 × 字号」摆「图标 + 文字」那组）。
+    const btnLabelTransform = { width: 94 };
+    const btnLabel = {
+        string: '', isBold: false, spacingX: 0, overflow: 2, fontSize: 24,
+        node: {
+            position: { x: 0, y: 0 },
+            setPosition(x: number, y: number) { this.position = { x, y }; },
+            getComponent: () => btnLabelTransform,
+        },
+        updateRenderData() { btnLabelTransform.width = this.string.length * this.fontSize; },
+    };
+    const speedUpIcon = {
+        active: false,
+        position: { x: -43 },
+        setPosition(x: number, _y: number) { this.position = { x }; },
+    };
     Object.assign(view, {
         card: { spriteFrame: null },
         timer: { active: false },
@@ -118,8 +134,8 @@ function createChestSlotView() {
         cost: { active: false },
         costLabel: { string: '' },
         btn: { spriteFrame: null, node: { active: true } },
-        btnLabel: { string: '', isBold: false, spacingX: 0, node: { setPosition() {} } },
-        speedUpIcon: { active: false },
+        btnLabel,
+        speedUpIcon,
     });
     exports.ChestSlotView.setArt(
         { blue, gold, empty: { name: 'empty' } } as never,
@@ -343,4 +359,84 @@ test('开启与开始战斗使用相同加粗字形，槽位状态切换后不�
         view.render({ ...slot, action });
         assert.equal(view.btnLabel.isBold, true, `${action} 应保持与开始战斗一致的加粗字形`);
     }
+});
+
+/**
+ * 🔴 2026-11-09 用户：「点击整个宝箱都会打开宝箱详情弹窗」。
+ *
+ * 以前只有那颗 Btn 能点（卡面 / 宝箱图 / 名字都不响应）。现在根节点也挂一颗 `cc.Button`
+ * （`transition = NONE`、`target = null`），视图在 `onLoad` 里**同时**把 CLICK 绑到根节点与按钮上。
+ *
+ * 两件事必须一起成立，缺一半就是"看着能点、其实没反应"：
+ *  · prefab 根节点上真有那颗 Button（没挂 ⇒ 根节点根本收不到点击）；
+ *  · 视图真绑了根节点的 CLICK（没绑 ⇒ 白挂）。
+ */
+test('★★★点整格也能开详情：根节点挂 cc.Button（无按压反馈），视图把 CLICK 同时绑到根节点与按钮', () => {
+    const prefab = JSON.parse(readFileSync('assets/resources/ui/main/ChestSlot.prefab', 'utf8')) as {
+        __type__?: string; node?: { __id__?: number }; _parent?: unknown; _components?: { __id__: number }[];
+        _transition?: number; _target?: unknown;
+    }[];
+    const root = prefab.find((item) => item?.__type__ === 'cc.Node' && item._parent === null);
+    assert.ok(root, 'prefab 必须有根节点');
+    const rootIndex = prefab.indexOf(root);
+    const rootButtons = prefab.filter((item) => item?.__type__ === 'cc.Button' && item.node?.__id__ === rootIndex);
+    assert.equal(rootButtons.length, 1, '根节点上挂一颗 cc.Button（挂了才收得到点击；多挂会重复派发）');
+    assert.equal(rootButtons[0]._transition, 0, '整卡不许有按压反馈（缩放/换色都很怪），用 NONE');
+    assert.equal(rootButtons[0]._target ?? null, null, 'target 留空：不需要第二个被反馈的节点');
+
+    // 视图侧：CLICK 必须两处都绑（同一个 handleAction，同一颗按钮的行为）。
+    const view = createChestSlotView();
+    const bound: string[] = [];
+    const selfNode = { on: (type: string) => bound.push(`self:${type}`) };
+    const btnNode = { active: true, on: (type: string) => bound.push(`btn:${type}`) };
+    Object.assign(view, { node: selfNode, btn: { spriteFrame: null, node: btnNode } });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (view as any).onLoad();
+    assert.deepEqual(bound.sort(), ['btn:click', 'self:click'],
+        '根节点与 Btn 都要绑 CLICK（同一次点击不会触发两遍：Button 会停冒泡）');
+});
+
+/**
+ * 🔴 2026-11-09 用户：「战斗宝箱需要等待时间解锁时按钮的名称为【解锁】而不是开启，
+ * 等待时间结束，点击可以开启时，按钮是绿色的」。
+ *
+ * 以前的映射把 `Activate`（还没开始等）和 `Open`（等完了）都落到「开启」+ 金色底：
+ * 截图上三格都在倒计时（卡上写着 `30s` / `15s` / `10s`，还没启动）却一律写着「开启」，
+ * 玩家分不清"现在点会不会真开到箱子"。
+ */
+test('★★★还没开始等 ⇒ 金色「解锁」；等完了 ⇒ 绿色「开启」（两种状态不许再共用一套）', () => {
+    const view = createChestSlotView();
+    const base = {
+        index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱',
+        remainSeconds: 30, totalSeconds: 30, cost: 0,
+    };
+    const frameOf = () => String((view.btn.spriteFrame as { name?: string } | null)?.name ?? '');
+
+    // 未激活：卡上显示"要等多久"（formatRemain 口径），按钮是**解锁**。
+    view.render({ ...base, action: chestTypes.ChestSlotAction.Activate });
+    assert.equal(view.btnLabel.string, '解锁', '等待解锁的宝箱不许写「开启」');
+    assert.equal(frameOf(), 'gold-button', '「解锁」仍是金色底（绿色留给"可以开启"）');
+
+    // 到点：可以开了 ⇒ 绿色 + 「开启」。
+    view.render({ ...base, remainSeconds: 0, action: chestTypes.ChestSlotAction.Open });
+    assert.equal(view.btnLabel.string, '开启');
+    assert.equal(frameOf(), 'green-button', '可以开启时按钮必须是绿色的');
+
+    // 另外两态不受影响：空槽蓝「开始战斗」、等待中绿「加速」。
+    view.render({ ...base, state: chestTypes.ChestSlotState.Empty, action: chestTypes.ChestSlotAction.Battle });
+    assert.equal(view.btnLabel.string, '开始战斗');
+    assert.equal(frameOf(), 'blue-button');
+    view.render({ ...base, state: chestTypes.ChestSlotState.Counting, remainSeconds: 8,
+        action: chestTypes.ChestSlotAction.SpeedUp });
+    assert.equal(view.btnLabel.string, '加速', '正在等的那格按钮写「加速」（不是「-30分钟」也不是「解锁」）');
+    assert.equal(frameOf(), 'green-button');
+    // 图标与文字要拼成**一组整体居中**：文案从 5 字缩到 2 字后，老口径（文字钉 x=16、图标钉 -43）
+    // 会空出 20 多像素的缝。判据 = 组的左边缘与右边缘关于 0 对称。
+    const icon = view.speedUpIcon as unknown as { position: { x: number } };
+    const labelNode = (view.btnLabel as unknown as { node: { position: { x: number } } }).node;
+    const textWidth = view.btnLabel.string.length * 24 + 2;
+    const left = icon.position.x - 28 / 2;
+    const right = labelNode.position.x + textWidth / 2;
+    assert.ok(Math.abs(left + right) < 1e-6, `图标 + 文字必须整体居中（左 ${left} / 右 ${right}）`);
+    assert.ok(left < -10 && right > 10, '这一组是横向铺开的，不是挤在一点上');
 });

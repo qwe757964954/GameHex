@@ -1,26 +1,10 @@
 import { cardArtConfig } from './helpers/card-art-config';
-/**
- * 「卡牌阵容」页的单测。
- *
- * 覆盖三个**曾经静默失效**的点：
- *   ① `CardLineupDecks` 必须先用 `normalizeCardRow` 再 `parseCard` —— 表里
- *      `enabled` 是数字 `1`，而 `parseCard` 判严格 `=== true`，漏掉归一化会把
- *      整张 pvpCard 过滤空（不报错，只表现为页面保留占位外观）。
- *   ② 加成条标题要按 `ZCDeckBonuses.activeBonds` 里的**羁绊名**取，
- *      不是去 find `pvpBond.id`（那样恒定退回兜底文案）。
- *   ③ 卡表自 2026-09-17 起是「20 张卡池 + 16 张出战 + 1 行主城」，卡池行 `deck`/`slot` 为空
- *      （但迁移到源表 id 后**卡池行也有 id**），必须先过 `isDeckCardRow` —— 否则 `parseCard`
- *      会在卡池首行抛错，**整局进不去**。
- *   ④ 主城行（`type=5`）配了 `deck=玩家默认`（转表器只导出首列非空的行），但它是场地固有
- *      建筑、不是出战卡 —— 两道消费路径都要 `isHqCard` 摘掉，否则卡牌阵容页会多出一个站台。
- *
- * 只 import 无引擎依赖的模块（`CardLineupTypes` / `ZCGameRuntimeConfig` /
- * `ZCCombatCatalog`）；`CardLineupDecks` 经 `RefUtil` 拉进 `cc`，在 Node 里 import 不了，
- * 所以它的取数口径在这里用「同一批表 + 同样的调用序列」等价复现。
- */
+/** 卡牌解析、固定阵容的职业/阵营计数与羁绊展示。线上卡库与预览取数另验真实实现。 */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
+import ts from 'typescript';
+import { runInNewContext } from 'node:vm';
 import {
     activeBondTitle,
     bondPercentTotal,
@@ -62,30 +46,31 @@ function readPvpRef(name: string): Array<Record<string, unknown>> {
     });
 }
 
-/**
- * 等价复现 `CardLineupDecks.parseDecks` 的调用序列。
- *
- *  两道闸缺一不可：
- *   ① 卡池行（没配 `deck` 的行）必须先在 `parseCard` 之前滤掉 —— 2026-09-16 起
- *      `PVP-卡牌` 是「36 张卡池 + 16 张出战」，卡池行 `deck`/`slot`/`id` 全空。
- *   ② 主城行（`type=5`）虽然配了 `deck=玩家默认`，但它是场地固有建筑、不是出战卡，
- *      漏掉它这里会算出 9 张 —— 实际页面就会多出一个站台（且不报错）。
- */
+/** 固定八卡夹具验证计数与羁绊；线上卡组已改由后端下发，不再从已删除的 deck 列推导。 */
 function deckRows(): Array<Record<string, unknown>> {
-    return readPvpRef('pvpCard');
+    const players: Array<[string, string, string, number]> = [
+        ['2001', '金矿', '', 6], ['66001', '熊猫人', '战士', 8],
+        ['60016', '火法师', '法师', 6], ['66003', '精灵弓箭手', '射手', 13],
+        ['66011', '测试射手', '射手', 8], ['66007', '测试战士', '战士', 8],
+        ['68006', '测试坦克', '坦克', 8], ['68004', '骷髅战士', '坦克', 8],
+    ];
+    const row = (id: string, name: string, attack: string, camp: string, cycle: number, index: number) => ({
+        id, name, enabled: 1, type: id === '2001' ? 1 : 2, rarity: index % 4 + 1,
+        unitId: id === '2001' ? null : id, baseHp: 100,
+        traits: attack ? { attack, camp } : undefined,
+        goldDigTime: cycle, soilderAddTime: cycle, buildAttackTime: cycle,
+    });
+    return [
+        ...players.map(([id, name, attack, cycle], index) => row(id, name, attack, '花果', cycle, index)),
+        ...Array.from({ length: 8 }, (_, index) => row(String(69002 + index), `敌方${index}`,
+            index < 2 ? '战士' : index < 6 ? '法师' : '射手', index < 3 ? '花果' : '蘑菇', 40, index)),
+        { id: '2002', name: '主城', enabled: 1, type: 5, rarity: 1, baseHp: 100, cycleSeconds: 1 },
+    ];
 }
 
-function buildDecksFromTables(): { player: Array<ZCDeckCard & { deck: string }>; enemy: Array<ZCDeckCard & { deck: string }> } {
-    const player: Array<ZCDeckCard & { deck: string }> = [];
-    const enemy: Array<ZCDeckCard & { deck: string }> = [];
-    for (const row of deckRows()) {
-        const card = parseCard(normalizeCardRow(row));
-        if (!card.enabled) continue;
-        if (isHqCard(card)) continue;
-        if (card.deck === '玩家默认') player.push(card);
-        else if (card.deck === 'PVE敌方') enemy.push(card);
-    }
-    return { player, enemy };
+function buildFixtureDecks(): { player: ZCDeckCard[]; enemy: ZCDeckCard[] } {
+    const parse = (row: Record<string, unknown>) => parseCard(normalizeCardRow(row));
+    return { player: deckRows().slice(0, 8).map(parse), enemy: deckRows().slice(8, 16).map(parse) };
 }
 
 const neutral = (): ZCDeckBonuses => ({
@@ -97,7 +82,7 @@ test('normalizeCardRow 把表里的数字 enabled 归一化成布尔（否则整
     const rows = readPvpRef('pvpCard');
     // 36 张卡池（含末行 enabled=0 的占位卡「民兵」）+ 16 张出战卡 + 1 行主城 = 38 行
     assert.equal(rows.length, 37);
-    assert.equal(deckRows().length, 17, '配了 deck 的才进卡组解析（玩家 8 + PVE 敌方 8 + 主城 1）');
+    assert.equal(deckRows().length, 17, '固定夹具含玩家 8 + 敌方 8 + 主城 1');
 
     // 原始行直接交给 parseCard：enabled 是数字 1，严格判等拿不到 true —— 这就是当初的坑
     const rawParsed = deckRows().map(parseCard);
@@ -109,8 +94,7 @@ test('normalizeCardRow 把表里的数字 enabled 归一化成布尔（否则整
 
     // 主城行确实混在「玩家默认」里 —— 所以下游那道 isHqCard 不能省
     assert.equal(fixed.filter(isHqCard).length, 1, '表里恰好一行主城');
-    assert.equal(fixed.find(isHqCard)!.deck, '玩家默认', '主城挂在玩家默认（转表器只导出首列 deck 非空的行）');
-    assert.equal(buildDecksFromTables().player.length, 8, '摘掉主城后玩家才是 8 张');
+    assert.equal(buildFixtureDecks().player.length, 8, '摘掉主城后玩家才是 8 张');
 
     // 归一化的具体口径
     const normalized = normalizeCardRow({ deck: '玩家默认', enabled: 1, unitId: '', description: '' });
@@ -163,11 +147,9 @@ test('type 是数字 1=金矿 2=兵营 3=防御塔 4=城墙 5=主城，且城墙
     assert.equal(parseCard(normalizeCardRow(byId('2001'))).type, ZCCardType.Mine, '金矿行 type=1');
     assert.equal(parseCard(normalizeCardRow(byId('66001'))).type, ZCCardType.Barracks, '兵营行 type=2');
 
-    // 灰度期「表已改成数字、json 还是旧字符串」的中间态必须照样能加载
-    const legacyType = parseCard(normalizeCardRow({ ...byId('2001'), type: 'mine' }));
-    assert.equal(legacyType.type, ZCCardType.Mine, '旧字符串 mine 仍映射到 1');
-    const legacyHq = parseCard(normalizeCardRow({ ...byId('2001'), type: 'hq', deck: '主城' }));
-    assert.equal(legacyHq.type, ZCCardType.Hq, '旧字符串 hq 仍映射到 5');
+    for (const type of ['mine', 'hq']) {
+        assert.throws(() => parseCard(normalizeCardRow({ ...byId('2001'), type })), /type 必须是/);
+    }
 
     // 卡类型 → 格子建筑：城墙的耐久挂在「边」上，不占 hex.building
     assert.equal(cardTypeToBuilding(ZCCardType.Mine), 'mine');
@@ -213,8 +195,8 @@ test('parseUnits 只收「预设 + 技能」齐备的兵种卡行（建筑卡不
     );
 });
 
-test('玩家默认八卡按 traits.attack 推出职业计数 战士2 / 法师1 / 射手2 / 坦克3', () => {
-    const { player, enemy } = buildDecksFromTables();
+test('固定八卡夹具按 traits.attack 推出职业计数 战士2 / 法师1 / 射手2 / 坦克3', () => {
+    const { player, enemy } = buildFixtureDecks();
     assert.equal(player.length, 8);
     assert.equal(enemy.length, 8);
 
@@ -254,7 +236,7 @@ test('玩家默认八卡按 traits.attack 推出职业计数 战士2 / 法师1 /
 });
 
 test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序即 ZC_CARD_CAMPS）', () => {
-    const { player, enemy } = buildDecksFromTables();
+    const { player, enemy } = buildFixtureDecks();
     const items = tallyDeckIcons(player, cardArtConfig.lineup);
 
     assert.equal(items.length, 8, '4 职业 + 4 阵营');
@@ -293,7 +275,7 @@ test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序
 });
 
 test('图标行只列卡数 > 0 的维度（0 项不进虚拟列表）', () => {
-    const { player, enemy } = buildDecksFromTables();
+    const { player, enemy } = buildFixtureDecks();
 
     // 职业那 4 维在玩家八卡里全部命中；阵营只有花果 7，后 3 个是 0 → 整项不出现。
     const items = visibleIconTallies(player, cardArtConfig.lineup);
@@ -526,8 +508,8 @@ test('加成条百分比只累加倍率型效果，金币收入不进百分比',
     assert.ok(Math.abs(bondPercentTotal(bonuses) - 0.46) < 1e-9);
 });
 
-test('真实 pvpBond + 玩家八卡算出两条生效羁绊与 16.00% 合计', () => {
-    const { player, enemy } = buildDecksFromTables();
+test('真实 pvpBond + 固定八卡夹具算出两条生效羁绊与 16.00% 合计', () => {
+    const { player, enemy } = buildFixtureDecks();
     setRuntimeDecks(player, enemy as never);
     setBondRules(parseBondRules(readPvpRef('pvpBond')));
 
@@ -575,4 +557,23 @@ test('CardLineupCard binds level and card fragment progress to the prefab', () =
     const script = prefab.find((item) => item.__type__ === '501ccr5l81NCICYhHQoq0U7');
     assert.ok(script?.levelPlate?.__id__ != null && script?.levelLabel?.__id__ != null);
     assert.ok(script?.progressBar?.__id__ != null && script?.cardFragmentLabel?.__id__ != null);
+});
+
+test('编辑器预览读取真实卡表，跳过主城、禁用与损坏行，双方数组独立', () => {
+    const source = readFileSync('assets/script/app/card/CardLineupDecks.ts', 'utf8');
+    const ast = ts.createSourceFile('CardLineupDecks.ts', source, ts.ScriptTarget.Latest, true);
+    const declaration = ast.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === 'parseDecks');
+    assert.ok(declaration);
+    const script = ts.transpileModule(declaration.getText(ast), { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+    const warnings: unknown[][] = [];
+    const parse = runInNewContext(`${script}; parseDecks`, {
+        normalizeCardRow, parseCard, isHqCard, console: { warn: (...args: unknown[]) => warnings.push(args) },
+    }) as (rows: unknown[]) => { player: ZCDeckCard[]; enemy: ZCDeckCard[] };
+    const rows = readPvpRef('pvpCard');
+    const expected = rows.map(normalizeCardRow).map(parseCard).filter((card) => card.enabled && !isHqCard(card));
+    const { player, enemy } = parse([...rows, { ...rows[0], enabled: 0 }, { type: 9 }]);
+    assert.deepEqual(Array.from(player, (card) => card.id), expected.map((card) => card.id));
+    assert.deepEqual(Array.from(enemy, (card) => card.id), expected.map((card) => card.id));
+    assert.notEqual(player, enemy);
+    assert.equal(warnings.length, 1);
 });

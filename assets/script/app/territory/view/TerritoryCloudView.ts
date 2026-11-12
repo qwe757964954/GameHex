@@ -420,6 +420,19 @@ export class TerritoryCloudView {
     private dissolveShadowFrames: readonly SpriteFrame[] = [];
     /** 上一版挡云范围（只在它变化时才重画遮罩 —— 别每秒重画几百个多边形）。 */
     private keepOutIds: ReadonlySet<number> = new Set<number>();
+    /**
+     * **整张格网**的格心坐标（地图视图注入 `input.layout.points`）。
+     *
+     * 🔴 2026-11-11：挡云区不能再只认 {@link cells}（= `territoryCloudCells`，只有
+     *    `sites` / `randomSites` / 起始格）。`chapter_02` 起「预告关卡」披露的是**整关
+     *    footprint**（一关 5~10 格），`paintHexes` 会把它们全画成地块，可这些格根本不在
+     *    `cells` 里 ⇒ 一个挡云多边形都描不上，云直接贴到地块边缘
+     *    （用户：「第 2 章的云层和地块没有固定间隔」）。
+     *
+     * 注入的是**全量**格心，所以「凡是已揭示、且拿得到坐标的格」都能描出 15px 外扩轮廓；
+     * 第一章那种「站点格就是 footprint 本身」的图行为逐格不变。
+     */
+    private keepOutPoints: ReadonlyMap<number, ITerritoryCloudPoint> | null = null;
     /** 写透明的复用容器（每帧 `new Color` 会在 update 里造垃圾）。 */
     private readonly tint = new Color(255, 255, 255, 255);
     /** 遮罩模具的填充色：**全透明**（模板只写 stencil，不写颜色）。 */
@@ -576,6 +589,45 @@ export class TerritoryCloudView {
         }
         this.rebindSprites(Array.from(this.shadowSprites.values()), this.shadowFrame);
         if (!this.idleFrame) this.reset();
+    }
+
+    /**
+     * 注入**整张格网**的格心坐标（`renderMap` 每帧都调，同一份 `layout.points` 直接早退）。
+     *
+     * 换章时坐标系换了，但 `revealed` 集合有可能碰巧一样 ⇒ `syncKeepOut` 的判等会早退，
+     * 旧多边形留在旧格心上、15px 间隔整体错位。所以这里在**引用变化**的那一拍强制重描一次。
+     *
+     * `null` = 调用方没给（老用例 / 没有布局的退化路径）⇒ 退回「只在有内容云格上描」的旧口径。
+     */
+    setKeepOutPoints(points: ReadonlyMap<number, ITerritoryCloudPoint> | null): void {
+        if (this.keepOutPoints === points) return;
+        this.keepOutPoints = points;
+        this.rebuildKeepOut();
+        // 消散层那张「擦邻居」的遮罩也吃同一套格心 ⇒ 判等缓存一并作废，逼它重画。
+        this.dissolveIds = new Set<number>();
+        this.syncDissolveKeepOut();
+    }
+
+    /**
+     * 遍历「已揭示、且拿得到格心」的格 —— 挡云区与消散层遮罩**共用这一份**。
+     *
+     * 有 {@link keepOutPoints} 时按 `keepOutIds`（= `revealed`）× 全量格心来描：
+     * 预告披露的 footprint 格、已占领格、随机候选格一个都不漏。
+     */
+    private forEachKeepOutCell(visit: (cell: ITerritoryCloudCell) => void): void {
+        const source = this.keepOutPoints;
+        if (source) {
+            for (const cellId of this.keepOutIds) {
+                const point = source.get(cellId);
+                if (!point) continue;
+                visit({ cellId, x: point.x, y: point.y });
+            }
+            return;
+        }
+        for (const cell of this.cells) {
+            if (!this.keepOutIds.has(cell.cellId)) continue;
+            visit(cell);
+        }
     }
 
     /**
@@ -877,7 +929,7 @@ export class TerritoryCloudView {
         }
         this.applyFillActive();
         // 挡云区排在逐格之前：这一帧刚解锁的格子也要立刻进入"云不许碰"的范围。
-        this.syncKeepOut(cells, revealed);
+        this.syncKeepOut(revealed);
         // 云洞**也要在逐格之前**：洞格解锁时它那朵得原地转成"消散"，而不是跟着洞一起被瞬间销毁。
         this.syncPocket(cells, pockets, revealed);
 
@@ -1194,22 +1246,21 @@ export class TerritoryCloudView {
     // ============================================================
 
     /** 挡云范围只在**已解锁集合**变化时重画（每秒都重画几百个多边形是纯浪费）。 */
-    private syncKeepOut(cells: readonly ITerritoryCloudCell[], revealed: ReadonlySet<number>): void {
-        const mask = this.keepOutMask;
-        const graphics = this.keepOutGraphics;
-        if (!mask || !graphics) return;
+    private syncKeepOut(revealed: ReadonlySet<number>): void {
         if (sameSet(revealed, this.keepOutIds)) return;
         this.keepOutIds = new Set(revealed);
-        this.rebuildKeepOut(cells);
+        this.rebuildKeepOut();
     }
 
     /**
-     * 重画挡云模具：每个已解锁格画一个「格面外扩 15px」的六边形。
+     * 重画挡云模具：每个已揭示格画一个「地块轮廓外扩 15px」的六边形。
      *
      * 位置用**格面中心**（布局点 + `HEX_GRID_CONTENT_LIFT`），与地块同源 ——
      * 少加这一下，擦除区会整体低 12.5px，上边缘的云会压到地块。
+     *
+     * 🔴 遍历范围见 {@link forEachKeepOutCell}：**所有已揭示格**，不只是有内容云的那些格。
      */
-    private rebuildKeepOut(cells: readonly ITerritoryCloudCell[]): void {
+    private rebuildKeepOut(): void {
         const mask = this.keepOutMask;
         const graphics = this.keepOutGraphics;
         if (!mask || !graphics) return;
@@ -1221,10 +1272,7 @@ export class TerritoryCloudView {
         if (!mask.enabled) mask.enabled = true;
         const points = territoryCloudKeepOutPoints();
         graphics.fillColor = this.keepOutFill;
-        for (const cell of cells) {
-            if (!this.keepOutIds.has(cell.cellId)) continue;
-            this.traceKeepOut(graphics, cell, points);
-        }
+        this.forEachKeepOutCell((cell) => this.traceKeepOut(graphics, cell, points));
         // 一次 `fill()`：重叠的六边形（相邻格）会在模板里合成一个并集，正是要的"沿岛外一圈"。
         graphics.fill();
     }
@@ -1286,11 +1334,10 @@ export class TerritoryCloudView {
         if (!mask.enabled) mask.enabled = true;
         const points = territoryCloudKeepOutPoints();
         graphics.fillColor = this.dissolveFill;
-        for (const cell of this.cells) {
-            if (!this.keepOutIds.has(cell.cellId)) continue;
-            if (ids.has(cell.cellId)) continue;
+        this.forEachKeepOutCell((cell) => {
+            if (ids.has(cell.cellId)) return;
             this.traceKeepOut(graphics, cell, points);
-        }
+        });
         graphics.fill();
     }
 
@@ -1688,9 +1735,7 @@ export class TerritoryCloudView {
     }
 
     private stepDissolve(dt: number): void {
-        for (const cellId of Array.from(this.dissolving.keys())) {
-            const track = this.dissolving.get(cellId);
-            if (!track) continue;
+        for (const [cellId, track] of this.dissolving) {
             track.elapsed += dt;
             const frame = this.poseAt(track.elapsed);
             if (!frame) {

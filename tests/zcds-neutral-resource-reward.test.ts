@@ -17,8 +17,8 @@ import { assetPath } from './helpers/asset-paths';
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
 const tableNames = [
     'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight',
-    'neutralResourceGroup',
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
+    'neutralResourceGroup', 'neutralEnhanceGate',
 ] as const;
 const tables = Object.fromEntries(tableNames.map((name) => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
@@ -32,7 +32,7 @@ loadPvpTables(tables);
  * `standard_3` 是**固定主城**地图（`cityMode: fixed`）且带 9 个资源点，类型齐全
  * （6 宝箱 + 1 金币 + 2 金矿）—— 同一局里能覆盖多种发奖分支。
  *
- *⚠️ 不用 `select_river.json`：它是 `cityMode: select`，`captureZCMatchConfig` 直接抛
+ *⚠️ 不用 `river_custom_new.json`：它是 `cityMode: select`，`captureZCMatchConfig` 直接抛
  * 「自选主城地图需要先完成开局选点」，测试里造不出可开发的现场。
  */
 const riverLayout = JSON.parse(
@@ -207,6 +207,25 @@ test('★资源项：按 resourceType 归一出奖励字段，未知 id 返回 n
     for (const bad of [null, undefined, 0, -1, 99999999, 1.5]) {
         assert.equal(neutralResourceItemOf(bad as number | null), null, `${String(bad)} 应当查不到`);
     }
+});
+
+test('普通资源不因邻格已有归属而领取，必须等邻格翻开', () => {
+    withRiverMap((match) => {
+        forceResourceItem(match, ZC_TEST_ITEM.Gold);
+        const { hexId, itemId, snapshot } = bareScene(match);
+        for (const id of match.map.hexes[hexId].neighbors) {
+            snapshot.hexes[id].owner = 'player';
+            snapshot.hexes[id].developmentResolved = false;
+            snapshot.hexes[id].building = 'none';
+        }
+        const unopened = new ZCGameModel(snapshot as never, () => 0.1, match);
+        assert.equal(unopened.snapshot.hexes[hexId].neutralResourceId, itemId);
+        assert.equal(unopened.snapshot.playerGold, snapshot.playerGold);
+        snapshot.hexes[match.map.hexes[hexId].neighbors[0]].developmentResolved = true;
+        const opened = new ZCGameModel(snapshot as never, () => 0.1, match);
+        assert.equal(opened.snapshot.hexes[hexId].neutralResourceId, null);
+        assert.equal(opened.snapshot.playerGold, snapshot.playerGold + neutralResourceItemOf(itemId).gold);
+    });
 });
 
 test('相邻即自动领取：金币与神器充能都入袋，格子变成已占领且不重复领', () => {

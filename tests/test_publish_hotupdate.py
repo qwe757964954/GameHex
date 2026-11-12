@@ -338,6 +338,7 @@ class PublishHotUpdateTest(unittest.TestCase):
                 cwd=PROJECT_ROOT,
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
             )
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("没有找到任何待清单化目录", result.stderr)
@@ -372,6 +373,7 @@ class PublishHotUpdateTest(unittest.TestCase):
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(probe.returncode, 0, probe.stderr)
         hooks = json.loads(probe.stdout)["*"]["hooks"]
@@ -400,6 +402,7 @@ class PublishHotUpdateTest(unittest.TestCase):
             cwd=PROJECT_ROOT,
             capture_output=True,
             text=True,
+            encoding="utf-8",
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("FAIL", result.stdout, result.stdout)
@@ -532,6 +535,7 @@ class PublishHotUpdateTest(unittest.TestCase):
             input="0\n",
             capture_output=True,
             text=True,
+            encoding="utf-8",
             errors="replace",
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)

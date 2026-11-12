@@ -46,6 +46,11 @@ const REQUIRED_DOCS = [
 const TEXT_EXT = new Set(['.ts', '.mts', '.js', '.mjs', '.json', '.md', '.prefab', '.meta',
   '.scene', '.xml', '.yaml', '.yml', '.txt', '.py', '.proto', '.fire']);
 const MAX_HASH_BYTES = 2 * 1024 * 1024;
+// 全量树快照目录：svn status 靠 mtime+size 快速判定，保 mtime 写入（shutil.copy2 类）
+// 会漏报（规则 411）。对这些目录逐文件算 hash，才能抓到「status 干净但内容已变」。
+const TREE_WATCH_DIRS = [
+    'assets/script', 'tests', 'docs', 'tools/verify', 'tools/config', 'assets/remoteRef',
+];
 
 const norm = (p) => String(p).replace(/\\/g, '/').replace(/^\.\//, '');
 const isProtected = (rel) => !ALLOW_PREFIXES.some(a => rel.startsWith(a));
@@ -85,6 +90,28 @@ function readIfHashable(rel) {
 
 function hashBuf(buf) { return crypto.createHash('sha256').update(buf).digest('hex').slice(0, 16); }
 
+function treeHashes() {
+  const out = {};
+  const walk = (rel) => {
+    let entries;
+    try { entries = fs.readdirSync(path.join(ROOT, rel), { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const child = `${rel}/${e.name}`;
+      if (e.isDirectory()) {
+        if (!e.name.startsWith('.') && e.name !== '__pycache__' && e.name !== 'node_modules') walk(child);
+        continue;
+      }
+      if (!e.isFile() || !TEXT_EXT.has(path.extname(e.name).toLowerCase())) continue;
+      try {
+        if (fs.statSync(path.join(ROOT, child)).size > MAX_HASH_BYTES) continue;
+        out[child] = hashBuf(fs.readFileSync(path.join(ROOT, child)));
+      } catch {}
+    }
+  };
+  for (const dir of TREE_WATCH_DIRS) walk(dir);
+  return out;
+}
+
 function snapshot(inject, extraPaths = [], backupDir = null) {
   const entries = svnEntries();
   const rels = [...new Set([...entries.map(e => e.rel), ...extraPaths.map(norm)])];
@@ -101,7 +128,7 @@ function snapshot(inject, extraPaths = [], backupDir = null) {
       backups[rel] = { file: dest, hash: hashes[rel] };
     }
   }
-  return { ts: Date.now(), sigs: entries.map(e => e.sig), hashes, backups };
+  return { ts: Date.now(), sigs: entries.map(e => e.sig), hashes, backups, tree: treeHashes() };
 }
 
 function runFile(runId) {
@@ -161,14 +188,20 @@ function cmdEnd(runId) {
     const h2 = after.hashes[rel];
     if (h !== null && h2 !== undefined && h !== h2) changed.push(rel);
   }
+  // 全量树哈希：不依赖 svn status，能抓到保 mtime 的静默写入（规则 411）。
+  const beforeTree = before.tree ?? {}, afterTree = after.tree ?? {};
+  const treeChanged = [...new Set([...Object.keys(beforeTree), ...Object.keys(afterTree)])]
+    .filter((p) => beforeTree[p] !== afterTree[p]);
 
   const label = (s) => s.slice(s.indexOf(' ') + 1);
-  const candidates = [...added.map(label), ...removed.map(label), ...changed];
+  const candidates = [...added.map(label), ...removed.map(label), ...changed, ...treeChanged];
   const violations = [...new Set(candidates)].filter(p => p && isProtected(p));
   const allowed = [...new Set(candidates)].filter(p => p && !isProtected(p));
 
   console.log(`[guard] end ${runId}：墙钟 ${((after.ts - before.ts) / 1000).toFixed(2)}s`);
   console.log(`[guard] status 新增 ${added.length} / 消失 ${removed.length} / 内容变化 ${changed.length}`);
+  console.log(`[guard] 全量树哈希：采集 ${Object.keys(afterTree).length} 个文件，变化 ${treeChanged.length} 个`);
+  if (treeChanged.length) treeChanged.slice(0, 20).forEach((p) => console.log(`  🌲 ${p}`));
   for (const s of added) console.log(`  + ${s}`);
   for (const s of removed) console.log(`  - ${s}`);
   if (allowed.length) console.log(`[guard] 允许范围内写入（不判违规）：${allowed.join(', ')}`);

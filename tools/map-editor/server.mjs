@@ -8,7 +8,7 @@ import { BigmapValidationError, normalizeBigmapLayout } from './formats/bigmap-f
 import { hexNeighbors } from './formats/hex-grid.js';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
-const presetDir = join(root, 'presets');
+const presetDir = join(root, 'presets', 'gamemap');
 const territoryPresetDir = join(root, 'presets', 'territory');
 // 大地图布局预设（编辑器保存到这里；发布时才写 assets）。
 const bigmapPresetDir = join(root, 'presets', 'bigmap');
@@ -769,6 +769,8 @@ const server = createServer(async (req, res) => {
         const rows = Array.isArray(source)
           ? source
           : source.v.map((values) => Object.fromEntries(source.k.map((key, index) => [key, values[index]])));
+        const gates = await readRefRows('neutralEnhanceGate') ?? [];
+        const effects = ['add', 'multiply', 'enlarge', 'shrink'];
         const groups = new Map();
         for (const row of rows) {
           const groupId = Number(row.groupId);
@@ -783,7 +785,7 @@ const server = createServer(async (req, res) => {
             resourceType: Number(row.resourceType),
             weight: Number(row.weight) || 0,
             icon: typeof row.icon === 'string' ? row.icon : null,
-            effect: row.param && typeof row.param === 'object' ? row.param.effect : null,
+            effect: effects[Number(gates.find(gate => gate.id === row.param?.gateIds?.[0])?.effectType) - 1] ?? null,
             resId: row.param && typeof row.param === 'object' ? row.param.resId : null,
           });
         }

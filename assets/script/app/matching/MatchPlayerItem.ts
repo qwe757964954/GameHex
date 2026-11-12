@@ -167,7 +167,7 @@ export class MatchPlayerItem extends Component {
         ]);
         if (token !== this.contentRevision) return;
         if (avatarFrame) this.avatar.spriteFrame = avatarFrame;
-        if (artifactFrame) this.artifactIcon.spriteFrame = artifactFrame;
+        this.artifactIcon.spriteFrame = artifactFrame;
         this.renderStats(slots, statFrames);
     }
 

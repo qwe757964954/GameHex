@@ -36,8 +36,9 @@ export const ZC_TEST_NEUTRAL_RESOURCE_ROWS: ReadonlyArray<Record<string, unknown
 /** 装一份确定的目录，返回它（用例要断言 id / visual 时直接用）。 */
 export function installZCNeutralTestCatalog(
     rows: ReadonlyArray<Record<string, unknown>> = ZC_TEST_NEUTRAL_RESOURCE_ROWS,
+    gates: ReadonlyArray<Record<string, unknown>> = [],
 ): ZCNeutralResourceCatalog {
-    const catalog = compileZCNeutralResourceCatalog(rows, TEST_CARDS as never);
+    const catalog = compileZCNeutralResourceCatalog(rows, TEST_CARDS as never, gates);
     setZCNeutralResourceCatalog(catalog);
     return catalog;
 }

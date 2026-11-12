@@ -1,0 +1,134 @@
+{
+  "ver": "1.0.27",
+  "importer": "image",
+  "imported": true,
+  "uuid": "61f29162-0e50-455b-912a-0e5f8abbb981",
+  "files": [
+    ".json",
+    ".png"
+  ],
+  "subMetas": {
+    "6c48a": {
+      "importer": "texture",
+      "uuid": "61f29162-0e50-455b-912a-0e5f8abbb981@6c48a",
+      "displayName": "camp_sun_throne",
+      "id": "6c48a",
+      "name": "texture",
+      "userData": {
+        "wrapModeS": "clamp-to-edge",
+        "wrapModeT": "clamp-to-edge",
+        "imageUuidOrDatabaseUri": "61f29162-0e50-455b-912a-0e5f8abbb981",
+        "isUuid": true,
+        "visible": false,
+        "minfilter": "linear",
+        "magfilter": "linear",
+        "mipfilter": "none",
+        "anisotropy": 0
+      },
+      "ver": "1.0.22",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "f9941": {
+      "importer": "sprite-frame",
+      "uuid": "61f29162-0e50-455b-912a-0e5f8abbb981@f9941",
+      "displayName": "camp_sun_throne",
+      "id": "f9941",
+      "name": "spriteFrame",
+      "userData": {
+        "trimThreshold": 1,
+        "rotated": false,
+        "offsetX": 0,
+        "offsetY": 0,
+        "trimX": 28,
+        "trimY": 19,
+        "width": 156,
+        "height": 174,
+        "rawWidth": 212,
+        "rawHeight": 212,
+        "borderTop": 0,
+        "borderBottom": 0,
+        "borderLeft": 0,
+        "borderRight": 0,
+        "packable": true,
+        "pixelsToUnit": 100,
+        "pivotX": 0.5,
+        "pivotY": 0.5,
+        "meshType": 0,
+        "vertices": {
+          "rawPosition": [
+            -78,
+            -87,
+            0,
+            78,
+            -87,
+            0,
+            -78,
+            87,
+            0,
+            78,
+            87,
+            0
+          ],
+          "indexes": [
+            0,
+            1,
+            2,
+            2,
+            1,
+            3
+          ],
+          "uv": [
+            28,
+            193,
+            184,
+            193,
+            28,
+            19,
+            184,
+            19
+          ],
+          "nuv": [
+            0.1320754716981132,
+            0.08962264150943396,
+            0.8679245283018868,
+            0.08962264150943396,
+            0.1320754716981132,
+            0.910377358490566,
+            0.8679245283018868,
+            0.910377358490566
+          ],
+          "minPos": [
+            -78,
+            -87,
+            0
+          ],
+          "maxPos": [
+            78,
+            87,
+            0
+          ]
+        },
+        "isUuid": true,
+        "imageUuidOrDatabaseUri": "61f29162-0e50-455b-912a-0e5f8abbb981@6c48a",
+        "atlasUuid": "",
+        "trimType": "auto"
+      },
+      "ver": "1.0.12",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "type": "sprite-frame",
+    "fixAlphaTransparencyArtifacts": false,
+    "hasAlpha": true,
+    "redirect": "61f29162-0e50-455b-912a-0e5f8abbb981@6c48a"
+  }
+}

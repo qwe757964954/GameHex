@@ -45,6 +45,8 @@ import {
 } from '../assets/script/app/territory/model/TerritoryResourceGain';
 import { assetPath } from './helpers/asset-paths';
 import * as territoryLevelBubbleModule from '../assets/script/app/territory/model/TerritoryLevelBubble';
+import * as territoryNodeUIModule from '../assets/script/app/territory/model/TerritoryNodeUI';
+import * as territoryPreviewCinemaModule from '../assets/script/app/territory/model/TerritoryPreviewCinema';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
@@ -270,18 +272,56 @@ test('领地页 prefab：MapView 绑到 GainLayer，且 GainLayer 是 MapLayer �
     assert.match(String(prefabUuid), /^[0-9a-f-]{36}$/, 'gainPrefab 必须是 prefab 资源 uuid');
 });
 
-// ── 页面接线：7 / 9 必须「跳过奖励弹窗」 ─────────────────────────────────
+// ── 页面接线：默认奖励分流与挂机征收 ─────────────────────────────────
 
-test('页面只对「非钱包类」奖励弹窗：全是 7/9 时整批跳过 ShowReward', () => {
-    // 反例断言先剥注释（规则 104）—— 类注释里提到旧写法是合法的。
-    const src = read('assets/script/app/main/MainTerritoryMap.ts')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .replace(/\/\/[^\n]*/g, '');
-    assert.match(src, /const \{ gains, popup \} = splitTerritoryRewards\(rewards\)/);
-    assert.match(src, /playResourceGain\(/, '钱包类要走格子上方飘字');
-    assert.match(src, /if \(!popup\.length\) return;/, '全是 7/9 ⇒ 一条都不该弹窗');
-    assert.match(src, /FW\.ShowReward\(popup\.map/);
-    assert.doesNotMatch(src, /FW\.ShowReward\(rewards/, '不能把未分流的整批奖励喂给弹窗');
+test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹窗', () => {
+    const path = 'assets/script/app/main/MainTerritoryMap.ts';
+    const source = ts.createSourceFile(path, read(path), ts.ScriptTarget.Latest, true);
+    const declaration = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'MainTerritoryMap');
+    assert.ok(declaration && ts.isClassDeclaration(declaration));
+    // 只提取真实页面方法，避免为奖励分流模拟整棵 Cocos 节点树。
+    const methods = ['presentRewards', 'settleRewards'].map(name => {
+        const method = declaration.members.find(member => member.name?.getText(source) === name);
+        assert.ok(method && ts.isMethodDeclaration(method) && method.body, name);
+        return method.getText(source);
+    });
+    type Reward = { resId: number; amount: number };
+    const popups: { resId: number; number: number }[][] = [];
+    const gained: Reward[][] = [];
+    const heroBadges: readonly Reward[][] = [];
+    const exports: Record<string, new () => {
+        state: { map: { startCellId: number } };
+        mapView: { playResourceGain(cellId: number, rewards: readonly Reward[]): void };
+        presentRewards(rewards: readonly Reward[], originCellId?: number, presentation?: { popup: boolean }): void;
+    }> = {};
+    runInNewContext(ts.transpileModule(`class RewardView { async playHeroBadges(rewards) { heroBadges.push(rewards); } ${methods.join('\n')} } exports.RewardView = RewardView;`, {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    }).outputText, { exports, heroBadges, splitTerritoryRewards, FW: {
+        ShowReward: (items: readonly { resId: number; number: number }[]) => popups.push(Array.from(items, item => ({ ...item }))),
+    } });
+    const view = new exports.RewardView();
+    view.state = { map: { startCellId: 3 } };
+    view.mapView = { playResourceGain: (cellId, rewards) => {
+        assert.equal(cellId, 3);
+        gained.push([...rewards]);
+    } };
+    const wallet = [{ resId: 7, amount: 50 }, { resId: 9, amount: 1 }];
+    view.presentRewards(wallet);
+    assert.deepEqual(heroBadges, [wallet]);
+    assert.deepEqual(popups, []);
+    assert.deepEqual(gained, [wallet]);
+    gained.length = 0;
+    view.presentRewards([wallet[0], { resId: 10, amount: 2 }]);
+    assert.deepEqual(gained, [[wallet[0]]]);
+    assert.deepEqual(popups, [[{ resId: 10, number: 2 }]]);
+    gained.length = 0; popups.length = 0;
+    view.presentRewards(wallet, undefined, { popup: true });
+    assert.deepEqual(gained, []);
+    assert.deepEqual(popups, [[{ resId: 7, number: 50 }, { resId: 9, number: 1 }]]);
+    popups.length = 0;
+    view.presentRewards([], undefined, { popup: true });
+    assert.deepEqual(popups, []);
+    assert.equal(heroBadges.length, 3, '空奖励不触发英雄徽标');
 });
 
 // ── 喷发曲线（需求 2026-10-16 row17） ────────────────────────────────────
@@ -749,6 +789,12 @@ function loadBurstModule(): Record<string, unknown> {
             // 气泡文案真源（2026-11-02 起搬进 model）：直接给**真模块**，别抄一份拼法 ——
             // 抄一遍就等于两边各改一半也能一起绿。
             if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
+            // 「一个节点只在一块地上长 UI」的分组判据（2026-11-09）：给**真模块** ——
+            // 退化成空集合会让「兄弟格被隐掉」的断言假绿，抄一份分组规则又会两边各改一半。
+            if (id === '../model/TerritoryNodeUI') return territoryNodeUIModule;
+            // 「预告首领关」过场的时间轴（2026-11-09）：给**真模块**（纯函数、零 cc）。
+            // 退化成空实现会让「什么时候推镜 / 什么时候放开压住格」的断言无从断言。
+            if (id === '../model/TerritoryPreviewCinema') return territoryPreviewCinemaModule;
             // 战斗过场曲线（2026-11-02）：纯函数、与本文件判据无关 ⇒ 给真模块，别抄一份常量。
             if (id === '../model/TerritoryBattleApproach') return territoryBattleApproachModule;
             // 2026-11-02 整页过场：地图视图新增的云盖层依赖。这组用例不演过场 ⇒ 给个空壳，
@@ -762,6 +808,8 @@ function loadBurstModule(): Record<string, unknown> {
                 territoryChestHintCell: () => null,
                 territoryPrerequisiteChestCell: () => null,
             };
+            // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
+            if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

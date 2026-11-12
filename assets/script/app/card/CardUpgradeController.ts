@@ -16,7 +16,6 @@ export interface ICardUpgradeControllerOptions {
     readonly failed: (error: unknown) => void;
     readonly view: {
         readonly render: (state: ICardUpgradeViewState) => void;
-        readonly close: () => void;
     };
     readonly loading: {
         readonly beginLoading: () => () => void;
@@ -26,7 +25,6 @@ export interface ICardUpgradeControllerOptions {
     };
     readonly popups: {
         readonly openSkills: (data: ICardSkillOpenData) => void;
-        readonly openEditor: () => void;
     };
 }
 export class CardUpgradeController extends ControllerBase {
@@ -93,18 +91,13 @@ export class CardUpgradeController extends ControllerBase {
         if (event.kind === 'submit') { void this.submit(); return; }
         const { model } = this.options;
         if (model.snapshot.phase === 'submitting') return;
-        if (event.kind === 'team') {
-            this.options.view.close();
-            this.options.popups.openEditor();
-            return;
-        }
         if (event.kind === 'previous' || event.kind === 'next') {
             void this.switchDetail(event.kind === 'previous' ? -1 : 1);
             return;
         }
         if (event.kind !== 'skills' || !Number.isSafeInteger(model.heroId) || model.heroId <= 0) return;
-        const data = { heroId: model.heroId, cardName: model.snapshot.data.card?.name ?? '' };
-        this.options.view.close();
+        if (!model.snapshot.detail?.chain.some(slot => !slot.empty && slot.skillId === event.skillId)) return;
+        const data = { heroId: model.heroId, skillId: event.skillId };
         this.options.popups.openSkills(data);
     }
     private async switchDetail(direction: -1 | 1): Promise<void> {

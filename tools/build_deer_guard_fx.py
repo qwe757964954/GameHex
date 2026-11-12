@@ -6,11 +6,16 @@
   「小鹿模型本体使用【魔术师召唤鹿】的预制，在小鹿冲刺的整个阶段都需要循环播放
     【火法师火船】特效，且该特效节点在小鹿的上层，小鹿冲刺结束后所有特效同步消失。」
 
+2026-11-12 追加口径：「贴近目标后的移速快（140PX，**同步在小鹿身上覆盖火船特效**）」
+  ⇒ 火船不再是「全程常亮」，只在**提速段**点亮：`fx_火船` 生成时 `_active=False`，
+  由 `ZCCombatEffectView.applyOverlayFx` 按模型推的 `overlayFx`（派生自 `sprinting`）开关。
+
 为什么要**新做一个复合预制**，而不是把两条特效拆成两条战斗事件：
   · 「火特效在小鹿上层」是**节点层序**语义。拆成两个平铺的事件节点，层序得靠创建顺序
     （`zcCombatEffectSiblingIndex` 只按事件类型分 ground/top，同类型无先后保证），
     一旦池化复用顺序变了遮挡就翻。装进同一个 prefab、按 `_children` 顺序摆放是静态确定的。
   · 「同时消失」也是一个节点树天然成立的事：根节点一销毁，小鹿和火特效一起走。
+  · 「按阶段开关」需要两者共享同一个生命周期钩子，装在一棵树里才能在每次 render 时同步。
 
 结构：
   鹿神守护（root，UITransform 657x685 / 锚点中心）
@@ -63,7 +68,7 @@ def write_json(path, data):
     print('[ok]', path)
 
 
-def node(node_id, name, children, components, prefab_info, parent, pos, scale):
+def node(node_id, name, children, components, prefab_info, parent, pos, scale, active=True):
     return {
         '__type__': 'cc.Node',
         '_name': name,
@@ -71,7 +76,7 @@ def node(node_id, name, children, components, prefab_info, parent, pos, scale):
         '__editorExtras__': {},
         '_parent': {'__id__': parent} if parent is not None else None,
         '_children': [{'__id__': i} for i in children],
-        '_active': True,
+        '_active': active,
         '_components': [{'__id__': i} for i in components],
         '_prefab': {'__id__': prefab_info},
         '_lpos': {'__type__': 'cc.Vec3', 'x': pos[0], 'y': pos[1], 'z': 0},
@@ -164,7 +169,11 @@ def build():
         comp_info(),                                    # 6
         prefab_info(2),                                 # 7
         # 8 火特效（兄弟序在小鹿之后 ⇒ 画在小鹿上层）
-        node(8, 'fx_火船', [], [9, 11, 13], 15, 1, (FIRE_OFFSET_X, FIRE_OFFSET_Y), (FIRE_SCALE, FIRE_SCALE)),
+        #   `_active=False`：2026-11-12 起火船只在小鹿**提速段**才点亮（模型推 `overlayFx`，
+        #   视图按 `zcCombatEffectOverlayChild` 的登记开关本节点）。默认关掉可以保证
+        #   「慢档赶路身上是干净的」连第一帧都不闪；开启由 `ZCCombatEffectView.applyOverlayFx` 负责。
+        node(8, 'fx_火船', [], [9, 11, 13], 15, 1, (FIRE_OFFSET_X, FIRE_OFFSET_Y),
+             (FIRE_SCALE, FIRE_SCALE), active=False),
         ui_transform(8, FIRE_UI_WIDTH, FIRE_UI_HEIGHT, 0.5, 0.5, 10),   # 9
         comp_info(),                                                    # 10
         {

@@ -35,7 +35,7 @@ export function loadBigMapConfig(offlineMonsters = false): IBigMapConfig {
  * 需要垫图布局数据（势力范围 `rangeHex`、邻接 `adjacentCityIds`）的用例都用这个，
  * 不要手搓 —— 手搓的数据永远比盘上的干净，测不出真问题。
  *
- * @param name `bigmap-maps/` 下的文件名（不带 `.json`）。`dadi_tuchugao` 是 100×100 的设计稿，
+ * @param name `bigmap-maps/` 下的文件名（不带 `.json`）。`bigMap` 是 100×100 的正式布局，
  *             与旧版 40×40 配表尺寸不同；构建世界前需采用布局尺寸，正式入口已做此装配。
  */
 export function loadBigMapLayout(name = 'world_01'): IBigMapLayout {

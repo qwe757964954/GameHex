@@ -18,7 +18,16 @@ function sources(directory: string): string[] {
 
 test('bootstrap lifecycle entry points delegate controller/model construction to named factories', () => {
     const files = sources(root);
-    assert.equal(files.filter(file => file.endsWith('Composition.ts')).length, 8);
+    // 精确清单而非计数：每加一个弹窗组合会话都要显式纳入本用例，并受下面的命名工厂约束。
+    assert.deepEqual(
+        files.filter(file => file.endsWith('Composition.ts')).map(file => file.split('/').pop()).sort(),
+        [
+            'BattleComposition.ts', 'CardPopupComposition.ts', 'LeagueCreatePopupComposition.ts',
+            'LeagueDonatePopupComposition.ts', 'LeaguePopupComposition.ts', 'LoginComposition.ts',
+            'MainPageComposition.ts', 'MainTabsComposition.ts', 'MatchingComposition.ts',
+            'PostLoginComposition.ts',
+        ],
+    );
     for (const file of files) {
         const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
         function inspect(node: ts.Node): void {
@@ -43,6 +52,8 @@ test('controller initialization contracts group operational dependencies by resp
         ['card/CardLineupController', 'ICardLineupControllerOptions'], ['card/CardUpgradeController', 'ICardUpgradeControllerOptions'],
         ['card/LineupBoardController', 'ILineupBoardControllerOptions'],
         ['league/LeagueEditController', 'ILeagueEditControllerOptions'],
+        ['league/LeagueCreateController', 'ILeagueCreateControllerOptions'],
+        ['league/LeagueDonateController', 'ILeagueDonateControllerOptions'],
         ['zcds/application/ZCBattleRuntimeContract', 'IZCBattleRuntimeServices'],
         ['zcds/application/ZCBattleSettlementController', 'IZCBattleSettlementServices'],
     ];
@@ -76,6 +87,7 @@ function loginFixture(activationFails = false, cleanupFails = false) {
         if (name.endsWith('/ControllerBase')) return { ControllerBase };
         if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
         if (name.endsWith('/LoginEvents')) return { LoginUiEvent };
+        if (name.endsWith('/EngineMain')) return { EngineMain: { isMiniGameWeiXin: false, isMiniGameDouyin: false } };
         if (name.endsWith('/LoginRoot')) return { LoginRoot: class { configureGateway() {} } };
         if (name.endsWith('/LoginProtocol')) return { LoginGateway: class {} };
         if (name.endsWith('/LoginController')) return { LoginController: class {

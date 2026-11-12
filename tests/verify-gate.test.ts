@@ -15,11 +15,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-    existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync,
+    existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { changedFiles, writeGateReport } from '../tools/verify/verify.mjs';
+import { changedFiles, writeGateReport, testCommand, tapSummaryOk, parseTestRun, splitTestBatches, baselineSentinelFiles } from '../tools/verify/verify.mjs';
 
 const ROOT = join(__dirname, '..');
 const VERIFY_MJS = join(ROOT, 'tools/verify/verify.mjs');
@@ -155,4 +155,111 @@ test('G7 护栏用例单一真源：清单完整、含自身、别处不许另�
         .map(([key]) => key);
     assert.deepEqual(duplicates, [],
         '别在别的 npm 脚本里再抄一份护栏清单：两份清单必然漂移');
+});
+
+test('G8 采集器：TAP 汇总必须完整自洽，-1/-1 或缺项一律判不可信', () => {
+    assert.equal(tapSummaryOk({ tests: 5046, pass: 4948, fail: 98 }), true);
+    assert.equal(tapSummaryOk({ tests: 0, pass: 0, fail: 0 }), true, '零用例是合法空跑');
+    assert.equal(tapSummaryOk({ tests: -1, pass: -1, fail: -1 }), false,
+        '2026-11-05 假 PASS 的 -1/-1 形态必须拦住');
+    assert.equal(tapSummaryOk({ tests: 10, pass: 9, fail: 0 }), false,
+        'pass + fail 与 tests 不符 = 输出被截断或 reporter 不对');
+    assert.equal(tapSummaryOk(null), false);
+});
+
+test('G9 采集器：显式 TAP、stderr 纳入解析、进程未起要拦、正常红不误杀', () => {
+    const cmd = testCommand('"tests/**/*.test.ts"');
+    assert.match(cmd, /--test-reporter=tap/, '不依赖「非 TTY 默认 tap」的环境巧合');
+    assert.match(cmd, /tests\/\*\*\/\*\.test\.ts/, '命令要保留传入的用例集');
+
+    const empty = parseTestRun({ status: 0, stdout: '', stderr: '' }, cmd);
+    assert.equal(empty.summaryOk, false, 'stdout 无汇总 ⇒ 必须判不可信');
+    assert.deepEqual(empty.failures, [], '空名单恰恰是「零新增」恒真的成因');
+
+    const failing = parseTestRun({
+        status: 1,
+        stdout: 'not ok 1 - 用例A\n1..1\n# tests 1\n# pass 0\n# fail 1\n',
+        stderr: '',
+    }, cmd);
+    assert.equal(failing.summaryOk, true, '用例失败是「正常的红」，仍要走基线差集');
+    assert.equal(failing.spawnFailed, false, '退出码 1 不等于采集失败');
+    assert.deepEqual(failing.failures, ['用例A']);
+
+    const inStderr = parseTestRun({
+        status: 1,
+        stdout: '',
+        stderr: 'not ok 1 - 用例B\n1..1\n# tests 1\n# pass 0\n# fail 1\n',
+    }, cmd);
+    assert.equal(inStderr.summaryOk, true, '汇总 / 失败名落在 stderr 也要采到');
+    assert.deepEqual(inStderr.failures, ['用例B']);
+
+    const broken = parseTestRun({ status: null, error: new Error('spawn ENOENT') }, cmd);
+    assert.equal(broken.spawnFailed, true, '进程没起来不能当成「零失败」');
+
+    const source = readFileSync(VERIFY_MJS, 'utf8');
+    assert.match(source, /if \(t\.spawnFailed \|\| !t\.summaryOk\)/,
+        'check / full / baseline 都必须先过采集器自检');
+    assert.match(source, /console\.error\('\\n❌ 中止：测试采集失败/,
+        '采集失败必须硬失败，不能带病打印 PASS');
+});
+
+test('G10 platform 只实现 core 端口，不反向依赖 app 业务层', () => {
+    function collect(dir: string): string[] {
+        const out: string[] = [];
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+            const full = join(dir, entry.name);
+            if (entry.isDirectory()) out.push(...collect(full));
+            else if (entry.isFile() && entry.name.endsWith('.ts')) out.push(full);
+        }
+        return out;
+    }
+    const root = join(ROOT, 'assets', 'script', 'platform');
+    const violations = collect(root)
+        .filter((file) => /from\s+['"][^'"]*app\//.test(readFileSync(file, 'utf8')))
+        .map((file) => file.slice(ROOT.length + 1));
+    assert.deepEqual(violations, [],
+        'platform 反向依赖 app 会把业务编排带进适配层；装配编排器留在 app 组合层');
+});
+
+test('G11 全量分批：文件不丢、单批有超时、任一批不可信整次失败', () => {
+    const files = Array.from({ length: 145 }, (_, i) => `tests/f${i}.test.ts`);
+    const batches = splitTestBatches(files, 60);
+    assert.deepEqual(batches.map((b) => b.length), [60, 60, 25]);
+    assert.deepEqual(batches.flat(), files, '分批不能丢文件，也不能重复');
+    assert.deepEqual(splitTestBatches([], 60), []);
+    assert.throws(() => splitTestBatches(files, 0), /批大小非法/);
+
+    const source = readFileSync(VERIFY_MJS, 'utf8');
+    assert.match(source, /timeout: FULL_TEST_TIMEOUT_MS/,
+        '单批必须有墙钟超时，否则一个挂起的批次又会拖死整次 full/baseline');
+    assert.match(source, /if \(r\.spawnFailed \|\| !r\.summaryOk\)/,
+        '任一批采集失败必须立即整次失败，不能拿半截数据比基线');
+    assert.match(source, /summaryOk: false/);
+    assert.match(source, /console\.warn\(`\[verify\] 批次采集异常/,
+        '重试必须显式打日志，不能悄悄把偶发抖动吞掉');
+    assert.doesNotMatch(source, /testCommand\('"tests\/\*\*\/\*\.test\.ts"'\)/,
+        '全量不再走单进程一次性 glob（那个路径会挂住）');
+});
+
+
+test('G12 基线红哨兵：改动集为空也不许零用例跑出「零新增」', () => {
+    const source = readFileSync(VERIFY_MJS, 'utf8');
+    assert.match(source, /function baselineSentinelFiles\(\)/,
+        'check 必须有基线红反查，否则「改动 0 文件」时判据恒绿');
+    const files = baselineSentinelFiles();
+    assert.ok(files.length > 0, '基线 97 红必须反查到测试文件，空哨兵等于没守');
+    assert.ok(files.every((f) => /^tests\/[\w.-]+\.test\.ts$/.test(f)));
+    assert.match(source, /new Set\(\[\.\.\.selection\.tests, \.\.\.sentinels\]\)/,
+        '哨兵必须并入 check 的 picked，不能只打印不跑');
+    assert.match(source, /基线红哨兵：/, '判据要显式声明本次覆盖边界');
+});
+
+test('G13 check 大集走分批：与 full 共用采集器，杜绝 TAP -1/-1', () => {
+    const source = readFileSync(VERIFY_MJS, 'utf8');
+    assert.match(source, /function runBatchedTests\(/, '分批采集器必须存在');
+    assert.match(source, /picked\.length > FULL_TEST_BATCH_SIZE/, 'check 必须有大集判定');
+    assert.match(source, /runBatchedTests\(picked,/, 'check 大集必须真的走分批');
+    assert.match(source, /return runBatchedTests\(files,/, 'full 复用同一采集器，别维护两套');
+    const batches = splitTestBatches(Array.from({ length: 145 }, (_, i) => `tests/f${i}.test.ts`), 60);
+    assert.deepEqual(batches.map((b) => b.length), [60, 60, 25]);
 });

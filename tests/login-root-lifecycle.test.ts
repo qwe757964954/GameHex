@@ -6,13 +6,14 @@ import ts from 'typescript';
 import * as LoginProtocol from '../assets/script/app/login/LoginProtocol';
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred() { let resolve: (value?: unknown) => void = () => {}; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
-function fixture(block = '') {
+function fixture(block = '', storage = new Map<string, string>()) {
     const exports: Record<string, any> = {}, gate = deferred(), calls: string[] = [], writes: string[] = [], owners: object[] = [];
     let reconnect: (() => Promise<unknown>) | null = null;
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/login/LoginRoot.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console, require(name: string) {
-        if (name === 'cc') return { sys: { localStorage: { getItem: () => null, setItem: (key: string) => writes.push(key) } } };
+        if (name === 'cc') return { sys: { localStorage: { getItem: (key: string) => storage.get(key) ?? null,
+            setItem: (key: string, value: string) => { writes.push(key); storage.set(key, value); } } } };
         if (name === './LoginProtocol') return LoginProtocol;
         if (name === './ProtocolCodec') return { ProtocolCodec: class { validate() { return { hasClientEnvelope: true, hasServerEnvelope: true, hasRoleLogin: true }; } } };
         if (name.endsWith('/CmdInterface')) return { LoginStatus: { WEI_HU: 8, BAN: 9 } };
@@ -49,6 +50,23 @@ test('login service stops every pending stage after disposal; late bootstrap/reg
         assert.equal(result.ok, false, stage); assert.equal(h.calls.length, count, stage);
         assert.deepEqual(h.writes, [], stage);
         if (stage === 'bootstrap') assert.equal(h.root.servers_.length, 0);
+    }
+});
+
+test('agreement only restores explicit consent and persists both choices across login service instances', () => {
+    const storage = new Map<string, string>([['login_session', '{}'], ['account_num', 'saved']]);
+    const first = fixture('', storage);
+    assert.equal(first.root.restoreAgreement(), false);
+    first.root.saveAgreement(true);
+    first.root.dispose();
+    const second = fixture('', storage);
+    assert.equal(second.root.restoreAgreement(), true);
+    second.root.saveAgreement(false);
+    second.root.dispose();
+    assert.equal(fixture('', storage).root.restoreAgreement(), false);
+    for (const invalid of ['', '1', 'false', 'corrupt']) {
+        storage.set('login_agreed', invalid);
+        assert.equal(fixture('', storage).root.restoreAgreement(), false, invalid);
     }
 });
 test('successful login preserves connection and reconnect owner after controller/service disposal', async () => {

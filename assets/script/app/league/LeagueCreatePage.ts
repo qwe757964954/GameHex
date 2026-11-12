@@ -38,7 +38,16 @@
  * 否则第一张旗会跑到列表中线右边去。纵向那批用 `(0.5, 1)` 是同一个道理
  * （item 往 −y 方向长 ⇒ 锚点在顶部）。
  *
- * ## 老端行为（`LayerLeagueCreatUI`）与移植取舍
+ * ## MVC 归属（2026-11-09 迁移）
+ *
+ * 本类**只做展示与意图派发**：`onInit` 绑一次事件、emit 带 `owner` 的
+ * `LeagueCreateEvent.Intent`；`render(state)` 按控制器推来的状态绝对赋值。
+ * 名字守卫、费用复读、防连点、发包、成功后通知容器都在
+ * `LeagueCreateController` / `LeagueCreateModel`，会话由外部
+ * `LeagueCreatePopupComposition` 每次打开新建、关闭释放。
+ * 创建成功改发 `LeagueTabEvent.Joined`（按 owner），不再由本页持有容器回调。
+ *
+ * ## 老端行为与移植取舍
  *
  * 1. **`selectIndex` 默认 0**（老端字段初值），`arr = [0..7]` ⇒ 传出去的就是颜色下标本身
  *    （`LeagueTable.leagueCreateBannerIndices()`）。
@@ -49,20 +58,10 @@
  * 3. **旗面按「颜色下标」换图**（FGUI `gearIcon controller="颜色"`，不是染色）；
  *    选中外框 = `gearDisplay controller="选中"`。8 张图**一次性预载**（`bannerFrames`）
  *    ⇒ `renderItemFn` 变成**纯同步**，槽位复用不会闪（同 `LeaguePage.applyBannerColor` 的口径）。
- * 4. **点击守卫链**（`onClickCreat`）：`_creating` 防连点 → 空名 / `***` 静默 return
- *    → 违禁词校验（**本端无 SDK 层，跳过**，同 `LeagueEditPage`）→ 消耗校验 → 发包。
- *    ⚠️ 本端 `_creating` 的置位点**比老端更早**（挪到第一个 `await` 之前）：
- *    老端的消耗校验是同步读缓存，本端要 `await createCost()` 读三张表，
- *    照老端写法会在那次 await 的空档里被第二次点击穿透（见 `onSubmit` 的注释）。
- *    本端把第 2 步的「静默」改成**给一条提示**（`LEAGUE_TIP_UNION_NAME_EMPTY`）——
- *    点「创建」毫无反应会让玩家以为卡了（有意偏离，见该常量的注释）。
- * 5. **消耗**：`creatCost = { resId: roleProperty.coin, number: gameConfig.unionCreateCost }`
+ * 4. **消耗**：`creatCost = { resId: roleProperty.coin, number: gameConfig.unionCreateCost }`
  *    ⇒ 交给 `ILeagueRepository.createCost()`（读表 + 读缓存，不发包），
  *    上屏口径照 `ViewConsumeItemOne.updateByConsume`：`lab_has` 两态换色、`lab_need` 恒一色。
- * 6. **创建成功后 `unload()`**：本端 `close()` + 回敲 `onCreated`（老端靠 `CmdRoleUnion`
- *    的**推送**让容器页 `TabLeague.updateView` 切到主页；本端没有推送事件，
- *    只能由「写成功」这条链路主动通知 —— 见 `LeagueTabPage.refresh`）。
- * 7. **`lab_leagueName` 是多行输入**（FGUI 没写 `singleLine`，同 `LeagueEditPage` 的判据）
+ * 5. **`lab_leagueName` 是多行输入**（FGUI 没写 `singleLine`，同 `LeagueEditPage` 的判据）
  *    ⇒ 两个 label 锚点 `(0,1)` + `lpos` = 框左上角，正文开 `enableWrapText`。
  *    FGUI 该节点**没写 `maxLength`**（FGUI 语义 0 = 不限），但 cocos 的 `cc.EditBox` 会把 `0`
  *    原样透传给原生 `maxlength=0` —— **一个字符都打不进去**，而且不报错。
@@ -71,7 +70,7 @@
  */
 
 import { _decorator, Button, Color, EditBox, Label, Node, Sprite, SpriteFrame } from 'cc';
-import { FW } from '../../framework/FW';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
@@ -84,31 +83,23 @@ import {
     LEAGUE_COST_SHORT_STROKE,
     leagueBannerArt,
 } from './LeagueArt';
-import {leagueRepository, type ILeagueRepository} from './LeagueRepository';
+import { LeagueCreateEvent, type ILeagueCreateViewState } from './LeagueCreateEvents';
+import { leagueCreateBannerIndices, type ILeagueCostView } from './LeagueTable';
 import {
-    isLeagueNameUsable,
-    leagueCreateBannerIndices,
-    type ILeagueCostView,
-} from './LeagueTable';
-import {
-    fillLeagueText,
-    LEAGUE_COST_NOT_ENOUGH_FALLBACK,
-    LEAGUE_COST_NOT_ENOUGH_TEMPLATE,
     LEAGUE_CREATE_NAME_PROMPT,
     LEAGUE_CREATE_QUICK_JOIN,
     LEAGUE_CREATE_SUBMIT,
     LEAGUE_CREATE_TITLE,
-    LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_OFFLINE,
-    LEAGUE_TIP_UNION_NAME_EMPTY,
 } from './LeagueTexts';
 
 const { ccclass, property } = _decorator;
 
-/** 打开本弹窗的参数（`PopupBase.open({ userData: ... })`）。 */
+/**
+ * 打开本弹窗的参数（`PopupBase.open({ userData: ... })`）。
+ * 只带容器 owner，不带回调 —— 成功后由控制器按 owner 发 `LeagueTabEvent.Joined`。
+ */
 export interface ILeagueCreateParams {
-    /** 建盟成功后的回敲（`LeagueJoinPage.onCreateClick` 传 `onJoined`）。 */
-    readonly onCreated?: () => void;
+    readonly owner?: object | null;
 }
 
 /** 旗帜行的两个可切节点名（与别的页面同源：`组件_联盟_旗帜` 的 `n5` / `icon`）。 */
@@ -150,25 +141,16 @@ export class LeagueCreatePage extends PopupBase {
     @property({ type: Label, tooltip: 'BtnCreate/Cost/Need：需要量（恒一色，FGUI 没有 gearColor）' })
     costNeedLabel: Label = null;
 
-    /** 建盟成功后的回敲（由 `LeagueJoinPage` 传入）。 */
-    private onCreated?: () => void;
-
-    /** 当前选中的旗帜色下标（= FGUI `颜色` controller 页序；老端 `selectIndex` 初值 0）。 */
-    private selectIndex = 0;
-
     /** 列表数据源 —— 就是颜色下标本身（`[0..7]`）。 */
     private readonly bannerIndices: number[] = leagueCreateBannerIndices();
 
     /** 8 张旗面（首次打开后缓存，之后 `renderItemFn` 不再走异步）。 */
     private bannerFrames: (SpriteFrame | null)[] | null = null;
 
-    /** 最近一次的消耗展示模型（发包前要复读一遍「够不够」）。 */
-    private cost: ILeagueCostView | null = null;
+    /** 当前选中的旗帜色下标（渲染用；业务真源在 Model）。 */
+    private selectIndex = 0;
 
-    /** 老端 `_creating`（防连点）。 */
-    private creating = false;
-
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 每次取数递增，用来作废在飞的展示资源加载。 */
     private revision = 0;
 
     // ============================================================
@@ -184,20 +166,19 @@ export class LeagueCreatePage extends PopupBase {
         if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueCreate] CloseBtn 上没有 cc.Button，点击不会生效');
 
-        this.bindClick(this.costButton, () => void this.onSubmit());
-        this.bindClick(this.quickJoinBox, () => this.toggleQuickJoin());
+        this.bindClick(this.costButton, () => this.emitSubmit());
+        this.bindClick(this.quickJoinBox, () => this.emitQuickJoin());
+        this.nameInput?.node.on('text-changed', this.emitName, this);
 
         if (this.bannerList) {
             this.bannerList.renderItemFn = (node, index) => this.renderBanner(node, index);
-            this.bannerList.onItemClickFn = (_node, index) => this.onBannerClick(index);
+            this.bannerList.onItemClickFn = (_node, index) => this.emitBanner(index);
         } else {
             console.warn('[LeagueCreate] BannerListView 没绑上，旗帜列表不会渲染');
         }
     }
 
-    protected async onOpen(userData?: ILeagueCreateParams): Promise<void> {
-        this.onCreated = userData?.onCreated;
-        this.creating = false;
+    protected async onOpen(): Promise<void> {
         this.selectIndex = 0;
         if (this.nameInput) this.nameInput.string = '';
         this.applyStaticTexts();
@@ -206,13 +187,10 @@ export class LeagueCreatePage extends PopupBase {
         if (!this.alive) return;
 
         const revision = ++this.revision;
-        await this.refreshCost();
-        if (!this.alive || revision !== this.revision) return;
-
         // ⚠️ 列表槽位在 `VirtualScrollView.start()` 里建，而 `onOpen` 早于它
         //    ⇒ 必须让出一帧再 `refreshList`，否则落在「槽位还没建」的空档（表现为列表空白）。
         await this.nextPopupFrame();
-        if (!this.alive) return;
+        if (!this.alive || revision !== this.revision) return;
         this.present();
     }
 
@@ -226,7 +204,41 @@ export class LeagueCreatePage extends PopupBase {
     }
 
     // ============================================================
-    // 取数
+    // 意图派发（只带原文 / 下标 / 勾选态，不带回调）
+    // ============================================================
+
+    private emitName(): void {
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, {
+            owner: this, kind: 'name', name: this.nameInput?.string ?? '',
+        });
+    }
+
+    private emitBanner(index: number): void {
+        if (this.bannerIndices[index] === undefined) return;
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, { owner: this, kind: 'banner', index });
+    }
+
+    private emitQuickJoin(): void {
+        if (!this.quickJoinCheck) {
+            console.warn('[LeagueCreate] QuickJoinBox/Check 没绑上，勾选框点不动');
+            return;
+        }
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, {
+            owner: this, kind: 'quickJoin', quickJoin: !this.quickJoinCheck.active,
+        });
+    }
+
+    private emitSubmit(): void {
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, {
+            owner: this,
+            kind: 'submit',
+            name: this.nameInput?.string ?? '',
+            quickJoin: this.quickJoinSelected,
+        });
+    }
+
+    // ============================================================
+    // 渲染（控制器推来的状态一律绝对赋值）
     // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
@@ -234,27 +246,26 @@ export class LeagueCreatePage extends PopupBase {
         return LEAGUE_CREATE_TITLE;
     }
 
-    /** 数据端口（单测 / 探针可换成内存桩）。 */
-    protected get repository(): ILeagueRepository {
-        return leagueRepository;
+    render(state: ILeagueCreateViewState): void {
+        const input = this.nameInput;
+        if (input && input.string !== state.name) input.string = state.name;
+        if (this.quickJoinCheck) this.quickJoinCheck.active = state.quickJoin;
+        this.selectIndex = state.selectIndex;
+        this.repaintBanners();
+        if (state.cost) this.applyCost(state.cost);
+        const button = this.costButton?.getComponent(Button);
+        if (button) button.interactable = !state.submitting;
     }
 
     /** 8 张旗面一次性预载（之后行渲染是纯同步的，槽位复用时不会闪上一张的图）。 */
     private async loadBannerFrames(): Promise<void> {
         if (this.bannerFrames) return;
+        const revision = this.revision;
         const frames = await Promise.all(
             this.bannerIndices.map((index) => loadArt(leagueBannerArt(index), LEAGUE_ART_ROOT)),
         );
-        if (!this.alive) return;
+        if (!this.alive || revision !== this.revision) return;
         this.bannerFrames = frames;
-    }
-
-    /** 读一次消耗展示模型（三张表全是**读**，不发包）。 */
-    private async refreshCost(): Promise<void> {
-        const cost = await this.repository.createCost();
-        if (!this.alive) return;
-        this.cost = cost;
-        this.applyCost(cost);
     }
 
     /** 铺列表（`bannerIndices` 是静态的 8 项，直接 `refreshList`）。 */
@@ -299,8 +310,9 @@ export class LeagueCreatePage extends PopupBase {
     private async applyCostIcon(cost: ILeagueCostView): Promise<void> {
         const sprite = this.costIcon;
         if (!sprite) return;
+        const revision = this.revision;
         const frame = await loadArt(cost.iconName, cost.iconRoot || LEAGUE_COST_ICON_ROOT);
-        if (!sprite.isValid) return;
+        if (!sprite.isValid || revision !== this.revision) return;
         if (!frame) {
             // 表里没有图标（或图挂了）：藏掉节点，别留一个空框
             sprite.node.active = false;
@@ -350,18 +362,9 @@ export class LeagueCreatePage extends PopupBase {
     }
 
     /**
-     * 点一张旗 ⇒ 选中它。
-     *
-     * 只刷「选中外框」的显隐，**不重跑 `renderItemFn`**（老端 `updateShowItem` 的同义做法）：
-     * 重排整表会让横向列表跳一下，而且这里要改的只是一个布尔值。
+     * 点一张旗 ⇒ 只刷「选中外框」的显隐，**不重跑 `renderItemFn`**
+     * （老端 `updateShowItem` 的同义做法）：重排整表会让横向列表跳一下。
      */
-    private onBannerClick(index: number): void {
-        if (this.bannerIndices[index] === undefined) return;
-        this.selectIndex = index;
-        this.repaintBanners();
-    }
-
-    /** 逐槽刷选中态（取不到的槽位说明该行不在可视区，跳过即可）。 */
     private repaintBanners(): void {
         if (!this.bannerList || !this.bannerList.isValid) return;
         for (let index = 0; index < this.bannerIndices.length; index += 1) {
@@ -379,86 +382,6 @@ export class LeagueCreatePage extends PopupBase {
     /** 当前是否勾了「允许快速加入」（老端读 `按钮_勾选` 的 `selected`）。 */
     get quickJoinSelected(): boolean {
         return this.quickJoinCheck?.active === true;
-    }
-
-    private toggleQuickJoin(): void {
-        if (!this.quickJoinCheck) {
-            console.warn('[LeagueCreate] QuickJoinBox/Check 没绑上，勾选框点不动');
-            return;
-        }
-        this.quickJoinCheck.active = !this.quickJoinCheck.active;
-    }
-
-    // ============================================================
-    // 提交
-    // ============================================================
-
-    /**
-     * 点「创建」—— 老端 `onClickCreat()` 的守卫链照搬，只把「空名静默」改成给提示。
-     *
-     * ⚠️ 消耗在这里**重新读一次**（不是复用打开时那份）：表可以热更、金币也可能刚被花掉，
-     *    老端 `CheckHaveEnoughCostAndOpenAlert` 也是现读。
-     *
-     * ⚠️⚠️ `creating` 必须在**第一个 `await` 之前**就置位、在 `finally` 里清除。
-     *    老端 `CheckHaveEnoughCostAndOpenAlert` 是**同步**读本地缓存，所以它的
-     *    `if (this._creating) return;` 天然覆盖整条链路；本端的 `createCost()` 是
-     *    **异步**的（要读三张表）⇒ 若照老端只在发包前置位，则「取消耗」那段空档里
-     *    的第二次点击会**穿透**守卫、并发发两次包（探针 2G.3 实测到的就是这条）。
-     */
-    private async onSubmit(): Promise<void> {
-        if (this.creating) return;
-        this.creating = true;
-        try {
-            const input = this.nameInput;
-            const name = input ? input.string : '';
-            if (!isLeagueNameUsable(name)) {
-                // 老端这里是静默 return；本端补提示（有意偏离，见 LeagueTexts 的说明）
-                FW.showTip(LEAGUE_TIP_UNION_NAME_EMPTY);
-                return;
-            }
-
-            const cost = await this.repository.createCost();
-            if (!this.alive) return;
-            this.cost = cost;
-            this.applyCost(cost);
-            if (!cost.enough) {
-                FW.showTip(this.costTip(cost));
-                return;
-            }
-            // 结果回来时输入框已被改动 ⇒ 放弃（同老端的 `input.text != labName`）
-            if (!input || input.string !== name) return;
-
-            const result = await this.repository.requestCreat(this.selectIndex, name, this.quickJoinSelected, this);
-            if (!this.alive) return;
-            if (result === 'ok') {
-                this.finishCreated();
-                return;
-            }
-            FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
-        } finally {
-            this.creating = false;
-        }
-    }
-
-    /**
-     * 消耗不足的提示 —— 老端 `ModelGoods.CheckHaveEnoughCostAndOpenAlert()`：
-     * 优先用 `roleProperty.unenoughTips`（现网 resId=10 写着「金币不足」），
-     * 没写就用 `ModelGoods_1`（`{0}不足`）拿资源名拼，再兜底一句通用提示。
-     */
-    private costTip(cost: ILeagueCostView): string {
-        if (cost.unenoughTips) return cost.unenoughTips;
-        if (cost.name) return fillLeagueText(LEAGUE_COST_NOT_ENOUGH_TEMPLATE, cost.name);
-        return LEAGUE_COST_NOT_ENOUGH_FALLBACK;
-    }
-
-    /** 建盟成功：关掉自己 + 回敲容器（老端 `unload()` 后靠推送刷新）。 */
-    private finishCreated(): void {
-        this.closeByButton();
-        try {
-            this.onCreated?.();
-        } catch (error) {
-            console.error('[LeagueCreate] onCreated 回调抛错', error);
-        }
     }
 
     // ============================================================

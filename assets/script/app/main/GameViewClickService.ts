@@ -51,8 +51,7 @@ export const GAME_VIEW_CLICK_TIMEOUT_MS = 3000;
  * @returns `true` = 服务端回 `succ === 1`；未连接 / 超时 / 失败一律 `false`
  */
 export function reportGameViewClick(mark: GameViewMark, caller?: object): Promise<boolean> {
-    const net = GameNet.instance;
-    if (!net.isConnected) {
+    if (!GameNet.instance.isConnected) {
         // 离线（单机预览 / 断线）不算错误：这是埋点，没有本地兜底也不需要告警刷屏。
         console.info('[GameViewClick] 游戏服未连接，跳过界面点击上报');
         return Promise.resolve(false);

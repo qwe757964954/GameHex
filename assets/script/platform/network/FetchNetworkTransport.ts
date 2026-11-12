@@ -57,7 +57,9 @@ export class FetchNetworkTransport implements NetworkTransport {
                 return await this.requestJsonOnce<T>(request, capability);
             } catch (error) {
                 // 只有浏览器网络/CORS 拒绝才尝试代理；已收到 HTTP 响应、解析错误或超时不重发。
-                if (!(error instanceof FetchConnectionError)) throw error;
+                if (!(error instanceof FetchConnectionError)) {
+                    throw new Error(`网络请求失败：${this.errorMessage(error)}（${describeRequest(request)}）`);
+                }
                 directError = error;
             }
             const proxiedRequest: NetworkRequest = {
@@ -240,10 +242,11 @@ export class FetchNetworkTransport implements NetworkTransport {
     }
 
     private errorMessage(error: unknown): string {
-        return error instanceof Error ? error.message : String(error);
+        const message = error instanceof Error ? error.message : String(error);
+        return message.replace(/https?:\/\/[^\s"'<>]+/gi, url => url.split(/[?#]/, 1)[0]);
     }
 }
 
 function describeRequest(request: NetworkRequest): string {
-    return `${request.method ?? 'GET'} ${request.url}`;
+    return `${request.method ?? 'GET'} ${request.url.split(/[?#]/, 1)[0]}`;
 }

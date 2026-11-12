@@ -1,6 +1,6 @@
 import { createControllerContext } from './helpers/controller-context';
 import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
-import { bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
+import { bigMapPlotDetailFixture, bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 /**
@@ -29,9 +29,9 @@ import {
     createBigMapBaseState,
 } from '../assets/script/app/bigmap/model/BigMapBase';
 import type { IBigMapBaseState } from '../assets/script/app/bigmap/model/BigMapTypes';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
-import type { IBigMapMonsterView } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import type { IBigMapMonsterView } from '../assets/script/app/bigmap/application/BigMapModel';
 import { formatBigMapMonsterDetail } from '../assets/script/app/bigmap/view/BigMapPresentationText';
 import { loadBigMapConfig, makeUnlockContext } from './helpers/bigmap-fixtures';
 
@@ -125,7 +125,7 @@ test('越界 / 同格 / 实例不存在：全部拒绝并给原因', () => {
 
 test('Presenter 离线态：requestMove 走本地分支，换格后落盘', async () => {
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage, saveKey: 'move-offline', adventureChapter: () => 6, now: () => NOW,
     });
     const mainHexId = presenter.plotCells().find((cell) => cell.buildingId === MAIN)!.hexId;
@@ -137,7 +137,7 @@ test('Presenter 离线态：requestMove 走本地分支，换格后落盘', asyn
     assert.notEqual(mainHexId, target);
 
     // 存档也要跟上，否则重进页面又搬回去了。
-    const again = new BigMapPresenter({
+    const again = new BigMapModel({
         config, storage, saveKey: 'move-offline', adventureChapter: () => 6, now: () => NOW,
     });
     assert.equal(again.plotCells().find((cell) => cell.buildingId === MAIN)!.hexId, target);
@@ -145,7 +145,7 @@ test('Presenter 离线态：requestMove 走本地分支，换格后落盘', asyn
 
 test('Presenter 离线态：非法目标格拒绝且不改存档', async () => {
     const storage = createMemoryBigMapStorage();
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage, saveKey: 'move-invalid', adventureChapter: () => 6, now: () => NOW,
     });
     const before = storage.read('move-invalid');
@@ -214,7 +214,7 @@ function loadPageClass(): new () => Record<string, unknown> {
 }
 
 for (const succeeds of [true, false]) test(`Controller 搬移：${succeeds ? '成功后退出，点原格取消' : '拒绝后保留搬移态供重试'}`, async () => {
-    const model = new BigMapPresenter({ config, storage: createMemoryBigMapStorage(), saveKey: 'mvc-move', adventureChapter: () => 10, now: () => NOW });
+    const model = new BigMapModel({ config, storage: createMemoryBigMapStorage(), saveKey: 'mvc-move', adventureChapter: () => 10, now: () => NOW });
     const calls: number[][] = [];
     model.plotDetail = () => ({ instanceId: 7, buildingId: 71001, hexId: 12, queueSlotIndex: -1, stored: 0 } as any);
     model.requestMove = async (id, hexId) => { calls.push([id, hexId]); return { ok: succeeds, message: '' }; };
@@ -259,15 +259,16 @@ test('基地详情次按钮：收不了的角色给「移动」，施工中的�
         page.setInfoVisible = () => undefined;
         page.setInfoIcon = () => undefined;
         page.data = bigMapViewStateFixture({
-            plotDetails: new Map([[12, {
-                name: '主城', buildingId: 71001, instanceId: 1, level: 1, targetLevel: 2, stored: 0,
-                costGrain: 0, costWood: 0, costIron: 0, buildTime: 0, canUpgrade: true,
-                reason: '', queueSlotIndex, remainSeconds: 0, progress: 0,
-            }]]),
+            plotDetails: new Map([[12, bigMapPlotDetailFixture({
+                name: '主城', buildingId: 71001, level: 1, targetLevel: 2, canUpgrade: true,
+                queueSlotIndex,
+            })]]),
             isServerBase: false,
         });
         Object.defineProperty(page, 'size', { value: { width: 720, height: 1280 } });
-        return page.buildInfoPopupContent(page.data);
+        // 2026-11-11：基地建筑不再走居中 `BigMapInfoPopup`，改由贴底卡渲染
+        // （`buildPlotCardContent`）。语义不变 —— 主=升级/取消建造，次=收取/移动。
+        return page.buildPlotCardContent(page.data);
     };
 
     const idle = build(-1);

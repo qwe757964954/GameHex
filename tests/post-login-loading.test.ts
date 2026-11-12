@@ -181,7 +181,11 @@ test('会话基础资源合并并发 prepare，完成后可统一释放', async 
     let releaseCalls = 0;
     const loaded: string[] = [];
     const context = {
-        exports: {} as { AppSessionAssetService: new (configs: any) => any },
+        // 构造函数真实签名是 `(assets, configs, runtimePrecompiler?)`（见
+        // `AppSessionAssetService.ts`），这里曾按旧的单参 `(configs)` 写死 ⇒ 下面 `new` 传两个实参
+        // 被 tsc 判 TS2554「Expected 1 arguments, but got 2」。运行期是 `as` 断言、不受影响，
+        // 但类型漂移会让全量 `tsc` 一直挂着一条红，顺手对齐。
+        exports: {} as { AppSessionAssetService: new (assets: any, configs: any, runtimePrecompiler?: any) => any },
         require: (name: string) => {
             if (name === 'cc') return { Prefab: class {} };
             if (name.endsWith('/ScopedAssetCache')) return { ScopedAssetCache };

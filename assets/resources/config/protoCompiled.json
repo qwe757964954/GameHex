@@ -10080,6 +10080,15 @@
                         }
                       }
                     },
+                    "CmdPvpHeroInfoBroMsg": {
+                      "fields": {
+                        "info": {
+                          "rule": "required",
+                          "type": "CmdPvpHeroInfo",
+                          "id": 1
+                        }
+                      }
+                    },
                     "CmdPvpArtifactInfoListReqMsg": {
                       "fields": {}
                     },
@@ -10435,6 +10444,73 @@
                         }
                       }
                     },
+                    "CmdPvpMapInfo": {
+                      "fields": {
+                        "id": {
+                          "rule": "required",
+                          "type": "string",
+                          "id": 1
+                        },
+                        "name": {
+                          "rule": "required",
+                          "type": "string",
+                          "id": 2
+                        },
+                        "version": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        },
+                        "resourcePoints": {
+                          "rule": "repeated",
+                          "type": "CmdPvpResourcePointInfo",
+                          "id": 4
+                        },
+                        "unitHomeIndexes": {
+                          "rule": "repeated",
+                          "type": "CmdPvpUnitHomeIndex",
+                          "id": 5
+                        }
+                      }
+                    },
+                    "CmdPvpUnitHomeIndex": {
+                      "fields": {
+                        "unitId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "homeIndex": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdPvpResourcePointInfo": {
+                      "fields": {
+                        "row": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "column": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        },
+                        "groupId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 3
+                        },
+                        "resourceId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 4
+                        }
+                      }
+                    },
                     "CmdStartBattleReqMsg": {
                       "fields": {
                         "startBattleInfo": {
@@ -10479,6 +10555,10 @@
                           "rule": "repeated",
                           "type": "CmdBattleUnitInfo",
                           "id": 6
+                        },
+                        "mapInfo": {
+                          "type": "CmdPvpMapInfo",
+                          "id": 7
                         }
                       }
                     },
@@ -10588,6 +10668,10 @@
                           "rule": "required",
                           "type": "uint32",
                           "id": 2
+                        },
+                        "times": {
+                          "type": "uint32",
+                          "id": 3
                         }
                       }
                     },
@@ -11536,6 +11620,7 @@
                         "CmdRollBroMsg": 11546745,
                         "CmdMonsterManualActiveBroMsg": 1339999214,
                         "CmdNewTreasureInfoBroMsg": 779511813,
+                        "CmdPvpHeroInfoBroMsg": 1032394394,
                         "CmdBattleResultBroMsg": 921618703,
                         "CmdCelebrationUpdateDataBroMsg": 1157544859,
                         "CmdCelebrationBuyShopGoodsBroMsg": 1919419092,

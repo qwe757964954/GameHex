@@ -4,10 +4,11 @@ import { ZCOwner } from './ZCMapConfig';
 import { ZC_OWNER_ORDER } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import type { ZCCompiledModifierLoadout, ZCUnitStatPatch } from './ZCModifierRuntime';
-import { resolveZCUnitDefinition, resolveZCUnitStatPatch } from './ZCModifierRuntime';
+import { resolveZCUnitDefinition, resolveZCUnitStatPatch, shareLineupCritDamage } from './ZCModifierRuntime';
 import type { ZCSkillPlanRecord } from './ZCStatSchema';
 import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCSkillRuntimeRegistry } from './ZCSkillRuntime';
+import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 
 export interface IZCMatchRuntime {
     readonly definitions: ReadonlyMap<string, ZCUnitDefinition>;
@@ -45,10 +46,12 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
             unit.unitId,
             resolveZCUnitDefinition(unit, loadouts, config.ownerRates?.[owner]),
         ]));
-        unitStatPatches[owner] = new Map(config.units.map((unit) => [
+        unitStatPatches[owner] = shareLineupCritDamage(new Map(config.units.map((unit) => [
             unit.unitId,
             resolveZCUnitStatPatch(unit, loadouts),
-        ]));
+        ])));
+        //  全队暴击伤害是 owner 级共享值（2026-11-10）：先把阵容里所有卡的 `critDamage` 汇总成一个数，
+        //  再写回每一个单位 —— 见 `shareLineupCritDamage`。暴击率不走这条，仍然逐单位各自累加。
         const typed = loadouts.flatMap((loadout) => loadout.typedModifiers);
         const runtimes = new Map<string, ZCSkillRuntimeDefinition>(skillRegistry
             .compileBindings((config.skillBindings ?? []).filter((binding) => binding.enabled), typed)
@@ -80,6 +83,15 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
             }
         }
         skillRuntime[owner] = runtimes;
+        //  诊断②：本局建出来的技能运行时里到底有什么参数。
+        //  `auraCooldown` / `pierceCount` 这类键**只可能**从 `pvpSkillPlan.skillParamJson` 并进来，
+        //  这里看不到就说明构筑期已经把整卡跳过了（诊断①会同时给出原因）。
+        for (const runtime of runtimes.values()) {
+            if (!zcSkillCastWatched(runtime.unitId)) continue;
+            skillCastLog('运行时', `${owner} ${runtime.unitId}:${runtime.skillId}`
+                + ` behaviorKey=${runtime.behaviorKey ?? 'null'}`
+                + ` 参数=${JSON.stringify(runtime.parameters)}`);
+        }
         const attributes = new Map<string, Readonly<Record<string, unknown>>>();
         for (const loadout of loadouts) {
             attributes.set(loadout.targetUnitId, {

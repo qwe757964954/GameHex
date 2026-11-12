@@ -4,26 +4,14 @@ import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
-    BIGMAP_BASE_BACKGROUND, BIGMAP_BUILDING_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
+    BIGMAP_BASE_BACKGROUND, BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
     BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_UI_KEYS,
+    BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, worldCampArtFor,
     type IBigMapHudUiKey, type IBigMapPlateKey, type IBigMapUiKey,
 } from './BigMapArtCatalog';
 
-/**
- * bundle 内旧前缀 —— 2026-11-04 `assets/bundles/bigmap/image/bigmap/` 整目录上提成
- * `assets/bundles/bigmap/image/`，bundle 内路径少了一层 `bigmap`。
- *
- * 只有**服务器下发**的路径还可能是旧的（`bigMapCamp.campIcon`、`bigMapLayout.background`）：
- * 客户端不能单方面改配置表，所以在加载入口统一归一。新配置直接用 `image/...` 也照常通过。
- */
-const LEGACY_BUNDLE_IMAGE_PREFIX = 'image/bigmap/';
-
-/** 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）。 */
-export function toBigMapArtPath(path: string): string {
-    return path.startsWith(LEGACY_BUNDLE_IMAGE_PREFIX)
-        ? `image/${path.slice(LEGACY_BUNDLE_IMAGE_PREFIX.length)}`
-        : path;
-}
+export { toBigMapArtPath } from './BigMapArtCatalog';
+import { toBigMapArtPath } from './BigMapArtCatalog';
 
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;
@@ -55,7 +43,7 @@ export interface IBigMapArt {
  * @param resourceIcons 资源类型 → **背包道具图标路径**（`item.icon`，来自 `bigmapResource.itemId`）。
  *   有就走背包那份图，没有 / 加载失败退回 `image/concept/sprites/<resType>` 概念图。
  * @param buildingConfigs 基地建筑配置。**优先用表里的 `baseBuildIcon`**（`building.icon`），
- *   没配 / 加载失败才退回按 `baseBuildType` 的概念图（`BIGMAP_BUILDING_ART`）。
+ *   没配 / 加载失败才退回通用建筑图（`BIGMAP_BASE_FALLBACK_ART`）。
  *
  *   ⚠️ 2026-11-06 之前这里写死「只按类型使用现有图片，baseBuildIcon 不接入加载」——
  *   而 `bigmapBuilding.json` 当时**根本没有这一列**，所以两层都退概念图，玩家看到的是
@@ -106,8 +94,8 @@ export async function loadBigMapArt(
     const terrainTask = Promise.all([
         background && toBigMapArtPath(background) !== 'image/wasteland_background'
             ? load(background) : Promise.resolve(null),
-        load('image/buildings/hq-base'),
-        load('image/buildings/barracks-default'),
+        load(BIGMAP_WORLD_HOME_ART),
+        load(BIGMAP_WORLD_CITY_ART),
         load('image/territory/buildings/territory_boss_v1'),
         load('image/decor/wasteland/st2'),
         load('image/decor/wasteland/cao'),
@@ -122,7 +110,7 @@ export async function loadBigMapArt(
      * 排查时只能靠猜（2026-11-06 就是踩了这个 —— 用户说"还是旧资源"，而日志一片干净）。
      */
     const missedIcons: string[] = [];
-    const buildingTask = Promise.all([...buildingConfigs.values()].map(async (building) => {
+    const buildingTask = Promise.all(Array.from(buildingConfigs.values()).map(async (building) => {
         // ① 表里的 `baseBuildIcon` 优先：它才是「这座建筑长什么样」的唯一真源。
         //    路径口径与 `campIcon` 一致（相对 resources / bundle 内路径），统一过 `load`
         //    ⇒ 旧前缀归一、按 bundle 路由、命中检查都在一处，不另写一套加载分支。
@@ -131,12 +119,15 @@ export async function loadBigMapArt(
             if (frame) return [building.id, frame] as const;
             missedIcons.push(`${building.id}:${building.icon}`);
         }
-        // ② 没配 / 图还没入库 ⇒ 退回按 `baseBuildType` 的概念图（初版就是这套，别删）。
-        const name = BIGMAP_BUILDING_ART[building.kind];
-        return [building.id, name ? await sprite(name) : null] as const;
+        // ② 没配 / 图还没入库 ⇒ 退回一张通用建筑图。
+        //    2026-11-12 删掉了按 `baseBuildType` 对 8 张概念图的旧兜底（那 8 张已随新美术删库），
+        //    现在只有 71017 会走到这里。
+        return [building.id, await load(BIGMAP_BASE_FALLBACK_ART)] as const;
     }));
-    const campTask = Promise.all([...campConfigs.values()].map(async (camp) => (
-        [camp.campId, camp.iconPath ? await load(camp.iconPath) : null] as const
+    const campTask = Promise.all(Array.from(campConfigs.values()).map(async (camp) => (
+        // `campIcon` 现在还是概念占位图（8 张），按据点段换成新美术；
+        // 换成真实图名后 `worldCampArtFor` 原样返回，不用再动这里。
+        [camp.campId, camp.iconPath ? await load(worldCampArtFor(camp.iconPath, camp.campId)) : null] as const
     )));
     const uiTask = Promise.all(BIGMAP_UI_KEYS.map(async (key) => {
         const frame = await load(`${BIGMAP_CONCEPT_ROOT}/ui/${key}`);
@@ -168,8 +159,7 @@ export async function loadBigMapArt(
             : await sprite(key)] as const;
     }));
     const baseTask = Promise.all([
-        load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('fortress'),
-        sprite('mutant_camp'), sprite('rocks'), sprite('grass'),
+        load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('rocks'), sprite('grass'),
     ]);
     // 名条原尺寸贴图：**不**走 `uiTask`，那组会统一覆写九宫边（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
@@ -177,21 +167,21 @@ export async function loadBigMapArt(
     )));
     const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
     const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries, uiEntries,
-        hudEntries, resourceEntries, [baseBackground, construction, fortress, mutantCamp, conceptRock, conceptGrass], campEntries,
+        hudEntries, resourceEntries, [baseBackground, construction, conceptRock, conceptGrass], campEntries,
         plateEntries, plateFlag] = await Promise.all([
         terrainTask, buildingTask, uiTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
     const buildings = new Map(buildingEntries);
     if (missedIcons.length > 0) {
         const sample = missedIcons.slice(0, 4).join('、');
-        console.warn(`[BigMap] ${missedIcons.length} 座建筑的 baseBuildIcon 没加载到，已回退概念图：${sample}`
+        console.warn(`[BigMap] ${missedIcons.length} 座建筑的 baseBuildIcon 没加载到，已回退通用建筑图：${sample}`
             + `${missedIcons.length > 4 ? ' …' : ''}（检查路径是否在 resources / 对应 bundle 下）`);
     }
     return { background: backdrop, tiledBackground, ground: null,
-        groundVariants: [], home: home ?? buildings.get(71001) ?? null, city: city ?? fortress, monster: monster ?? mutantCamp,
+        groundVariants: [], home: home ?? buildings.get(71001) ?? null, city, monster,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
         baseBackground, construction, buildings,
-        camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city ?? fortress])),
+        camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city])),
         ui: new Map(uiEntries), hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
         resources: new Map(resourceEntries) };
 }

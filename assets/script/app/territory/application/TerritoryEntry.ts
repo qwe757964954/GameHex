@@ -41,6 +41,10 @@ export class TerritoryEntry {
             availableChapters: chapters,
             walletSeed: () => readWallet() ?? { ...TERRITORY_FALLBACK_WALLET },
             readServerWallet: readWallet,
+            // 章节级挂机起点只读账号单例（登录后已拉过一次），Model 不再重复发 Info 请求。
+            readServerIdleTimeSeconds: () => TerritoryChapterInfoRepository.instance.current?.idleTime ?? null,
+            // 领奖回包的 `idleTime` 是新起点：写回单例，弹窗 / 金币车下一次读就是新值。
+            writeServerIdleTimeSeconds: (seconds) => TerritoryChapterInfoRepository.instance.applyIdleTime(seconds),
             // Evaluated only when a request is sent, after the Controller has been assigned.
             get lifecycleHost() { return controller; },
         }), {

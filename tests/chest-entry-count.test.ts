@@ -43,11 +43,16 @@ function createHarness() {
         if (name === 'cc') return {
             _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} },
             Component: class {},
+            // `MainPage` 把「点空白收起宝箱栏」的起点当字段初始化（`new Vec2()`）⇒ 桩里缺它连页面都建不出来
+            // （2026-11-09 补；`distance` 恒 0 = 不算空白点击，用例不碰这条分支）。
+            Vec2: class { constructor(public x = 0, public y = 0) {} static distance(): number { return 0; } },
         };
         if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { on: () => undefined, offTarget: () => undefined } } };
         if (name === './ChestEvents') return { CHEST_EVENTS: { SLOT_ACTION: 'slot', COLLAPSE: 'collapse', PAGE: 'page' } };
         if (name === './ChestTypes') return chestTypes;
         if (name === './NewTreasureRepository') return { NewTreasureRepository: RepositoryStub };
+        // 2026-11-11：队列变化回调现在还会顺手刷详情弹窗（本夹具没开窗 ⇒ get 恒 null）。
+        if (name === '../../framework/ui/PopupManager') return { PopupManager: { inst: { get: () => null } } };
         return {};
     } });
     assert.ok(exports.MainPage);

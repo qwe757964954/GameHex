@@ -13,7 +13,7 @@ const CHEST_COLLAPSE_HIT_AREA_SIZE = { width: 96, height: 180 };
 /**
  * 主城底部**宝箱栏**（2026-10-19 蓝湖「塔防主界面-2」），720×317 压在底栏上沿。
  * 版式：4 个 ChestSlot（155×246、pitch 163、左箭头翻页），卡底蓝/金/空三态，
- * 顶部计时条，宝箱图 + 名字/空槽文案 + 开启按钮（金/蓝/绿三态）。
+ * 顶部计时条，宝箱图 + 名字/空槽文案 + 按钮（金「解锁」/ 蓝「开始战斗」/ 绿「-30分钟 · 开启」三态）。
  *
  * 状态由外部喂（`render`），本组件只做**幂等的全量赋值**（与 `MainTabHost.renderNavItem`
  * 同口径：每次写全，不依赖上一次的残留）。
@@ -40,13 +40,13 @@ export class ChestBar extends Component {
     @property({ type: SpriteFrame, tooltip: '卡底·空槽（list_04）' })
     cardEmpty: SpriteFrame = null;
 
-    @property({ type: SpriteFrame, tooltip: '按钮·金色「开启」（btn_01）' })
+    @property({ type: SpriteFrame, tooltip: '按钮·金色「解锁」（btn_01）' })
     btnGold: SpriteFrame = null;
 
     @property({ type: SpriteFrame, tooltip: '按钮·蓝色「开始战斗」（btn_02）' })
     btnBlue: SpriteFrame = null;
 
-    @property({ type: SpriteFrame, tooltip: '按钮·绿色「-30分钟」（btn_03）' })
+    @property({ type: SpriteFrame, tooltip: '按钮·绿色「-30分钟 / 开启」（btn_03）' })
     btnGreen: SpriteFrame = null;
 
     private slots: ChestSlotView[] = [];

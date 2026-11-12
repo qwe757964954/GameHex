@@ -1,3 +1,4 @@
+import { MainTab, mainTabTarget, isMainTabLocked } from '../assets/script/app/main/MainTabModel';
 /**
  * 「联盟」主页（P1 = 主页外壳）的回归网。
  *
@@ -657,26 +658,20 @@ test('D1 LeaguePage.prefabPath 大小写正确，且磁盘上有这个 prefab', 
     assert.ok(assetExists('ui/League.meta'), '目录 meta 缺失');
 });
 
-test('D2 MainTabHost 里有 alliancePage 字段，且 pagePrefab 真的返回它', () => {
-    const code = readFileSync('assets/script/app/main/MainTabHost.ts', 'utf8');
-    assert.ok(/@property\([^)]*Prefab[^)]*\)\s*alliancePage\s*:\s*Prefab/.test(code), '缺 alliancePage @property');
-    assert.ok(
-        code.includes('if (index === MainTab.Alliance) return this.alliancePage;'),
-        'pagePrefab 没有处理 MainTab.Alliance ⇒ 点底部第 6 格会静默忽略',
-    );
+test("D2 联盟页签由 MainTabModel 路由至已开放的联盟容器页", () => {
+    assert.equal(isMainTabLocked(MainTab.Alliance),false);
+    assert.deepEqual(mainTabTarget(MainTab.Alliance),{kind:'page',path:'ui/League/LeagueTab',bundle:'main-pages'});
 });
 
-test('D3 ⚠️ MainRoot.prefab 上 alliancePage 真的绑到了联盟**容器页**（否则点了高亮不动）', () => {
-    const mainRoot = JSON.parse(readFileSync(assetPath('ui/main/MainRoot.prefab'), 'utf8')) as Entry[];
-    const comp = mainRoot.find((e) => e && e.alliancePage !== undefined);
-    assert.ok(comp, 'MainRoot.prefab 里找不到带 alliancePage 的组件（主界面的 tab 宿主）');
-    const ref = comp!.alliancePage as { __uuid__?: string };
-    // P3 起必须指容器页：指大厅的话「未入盟」的玩家点进来会看到一张空白大厅（没有加入入口）
-    assert.equal(ref.__uuid__, leagueTabPrefabUuid, `alliancePage 应指向容器页 LeagueTab（${leagueTabPrefabUuid}）`);
-    assert.notEqual(ref.__uuid__, leaguePrefabUuid, 'alliancePage 不该再指向大厅 League（P3 起由 LeagueTab 兜）');
-    // 另外两个已落地的 tab 也不能掉（顺带守一下别把别人的绑定改坏）
-    assert.ok((comp!.arenaPage as { __uuid__?: string })?.__uuid__, 'arenaPage 掉绑了');
-    assert.ok((comp!.rolePage as { __uuid__?: string })?.__uuid__, 'rolePage 掉绑了');
+test("D3 联盟、角色和领地路由资源存在，联盟指向容器而非大厅", () => {
+    for (const tab of [MainTab.Alliance,MainTab.Role,MainTab.Territory]) {
+        const target=mainTabTarget(tab);assert.ok(target && target.kind==='page');
+        assert.ok(assetExists(target.path+'.prefab'),target.path);
+    }
+    const target=mainTabTarget(MainTab.Alliance);assert.ok(target && target.kind==='page');
+    const uuid=JSON.parse(readFileSync(assetPath(target.path+'.prefab.meta'),'utf8')).uuid;
+    assert.equal(uuid,leagueTabPrefabUuid);
+    assert.notEqual(uuid,leaguePrefabUuid);
 });
 
 test('D4 LeaguePage 的 onLoad 真的接了入口 / 信息条 / 旗面（源码文本层守一遍）', () => {

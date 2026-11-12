@@ -28,6 +28,11 @@ import {
 } from '../model/TerritoryResourceGain';
 import { TerritoryResourceGainView } from './TerritoryResourceGainView';
 import { TerritoryGainBurst, TERRITORY_GAIN_BURST_NODE } from './TerritoryGainBurst';
+import {
+    TerritoryHeroFlight,
+    type ITerritoryHeroFlightEntry,
+    type ITerritoryHeroFlightPoint,
+} from './TerritoryHeroFlight';
 import { TerritoryChestView, type ITerritoryChestIconEntry } from './TerritoryChestView';
 import { TerritoryTapFeedback } from './TerritoryTapFeedback';
 import type { TerritoryChestTier } from '../model/TerritoryChestTier';
@@ -48,7 +53,18 @@ import {
     territoryPrerequisiteChestCell,
 } from '../model/TerritoryChestHint';
 import { territoryLevelBubbleText } from '../model/TerritoryLevelBubble';
+import { territoryNodeLockCells, territoryNodeMutedCells } from '../model/TerritoryNodeUI';
+import {
+    stepTerritoryPreviewCinema,
+    territoryPreviewCinema,
+    type ITerritoryPreviewCinemaState,
+} from '../model/TerritoryPreviewCinema';
 import { territoryUnlockShortfall } from '../model/TerritoryCostShortfall';
+import {
+    TERRITORY_UNLOCK_TRANSITION_SECONDS,
+    territoryUnlockLockScale,
+    territoryUnlockPriceScale,
+} from '../model/TerritoryUnlockTransition';
 import type { TerritoryWallet } from '../model/TerritorySaveStore';
 import { territoryBattleApproachFx } from '../model/TerritoryBattleApproach';
 import type { ITerritoryBattleIntroFx } from '../model/TerritoryBattleIntro';
@@ -67,6 +83,7 @@ import { TerritoryHexSpawn } from './TerritoryHexSpawn';
 import {
     TERRITORY_HEX_SPAWN_TIMING,
     TERRITORY_HEX_SPAWN_VICTORY_TIMING,
+    territoryHexSpawnBatchSeconds,
     territoryHexSpawnDelays,
 } from '../model/TerritoryHexSpawn';
 import {
@@ -133,6 +150,19 @@ export interface ITerritoryMapArt {
     /** **已通关**格的地皮：`img_land_01` 草地块。 */
     readonly tileCleared: SpriteFrame | null;
     /**
+     * **被锁住**（前置没满足 / 随机格四周没开）那一格的地皮：`img_land_01_gray` 灰版。
+     *
+     * 需求 2026-11-10：「未解锁的地块整个地块图片都置灰，等切换成可激活（银币 icon + 数字）
+     * 时再重新加载颜色」。**只换图不染色** —— 与 2026-10-16「成品图自带明暗，再乘色会发脏」
+     * 同一条理由（乘灰只会把泥土压得更黑，读不出"灰"）。
+     *
+     * 取不到 ⇒ 退回 {@link tileLocked}（宁可这一格不置灰，也不能没地皮）。
+     * ⚠️ 这张灰图是**旧的 130×119**（新地皮是 126×117），比邻居每边多 2px。锁着的格
+     * **不画格面框**（框只给「已解锁未通关」），所以 126→130 那套"框缩在格子中间"的问题
+     * 在这里不成立；真要修的是美术补一张 126×117 的灰版。
+     */
+    readonly tileGrey?: SpriteFrame | null;
+    /**
      * 未解锁格的锁标（`image/territory/icon_lock`，31×43 原样显示）。
      *
      * 画在「露出来 + 还没开」的格上（见 {@link TerritoryMapView} 的 `isHexLockCell`），
@@ -183,6 +213,18 @@ export interface ITerritoryMapArt {
      */
     readonly randomResource: SpriteFrame | null;
     readonly randomSilverIcon: SpriteFrame | null;
+    /**
+     * 固定宝箱格「**可激活**」时压在价格行上方的那颗宝箱图标：
+     * `image/territory/icon_baoxiang`（58×45）。
+     *
+     * 需求 2026-11-10（用户附美术效果图）：`fixedResource` 格可激活时，价格行照旧是
+     * `银币 icon + 数字`，**上面再加一颗宝箱 icon**（两行整块居中，排版见
+     * `model/TerritoryConditionBadge`）。银币不足只染数字那条规则不变。
+     *
+     * 🔴 **未解锁（前置没满足 / 还没开）的宝箱格不传** —— 用户口径「仍然只显示锁 icon」。
+     * 取不到这张图 ⇒ 退回旧版只有价格行，不阻断对局。
+     */
+    readonly chestIcon?: SpriteFrame | null;
     /**
      * 固定宝箱提示气泡里的**体力图标**（需求 2026-11-02）。
      *
@@ -294,6 +336,52 @@ const HEX_FRAME_NODE_NAME = 'Frame';
  */
 export const TERRITORY_HEX_LOCK_LAYER = 'HexLockLayer';
 
+/** 运行时补在 `MainRoot` 下的「飞舞奖励图标」顶层宿主（不进 prefab）。 */
+const TERRITORY_REWARD_FX_NODE = 'TerritoryRewardFx';
+
+/**
+ * 建筑**虚影层**的节点名（运行时建、`MapLayer` 的子节点）。
+ *
+ * 层序：`… → StationIconLayer → **StationGhostLayer** → StationCaptionLayer → StationTextLayer
+ * → StationBadgeLayer → HexLockLayer → StationHitLayer`。
+ *
+ * 用户 2026-11-09 定「**锁 > 价格 > 虚影 > 建筑**」，2026-11-10 追加「**气泡 > 锁**」——
+ *  · 建筑（`StationIconLayer`）在最下，虚影要压住它；
+ *  · 价格（银币图标 + 数字）住在 `StationCaptionLayer` / `StationTextLayer`，**压在虚影之上**
+ *    （用户原话：「银币 icon + 数字 UI 的层级也是高于建筑的」—— 虚影盖在数字上时，
+ *      数字会被 35% 的红棕色染成一块，读不出这一格要花多少银币）；
+ *  · 关卡编号气泡住在 `StationBadgeLayer`，编号不能被虚影盖住；
+ *  · 锁标在 `HexLockLayer`（插在 `StationBadgeLayer` 之前）⇒ 锁压在价格之上、气泡之下。
+ *
+ * 🔴 虚影**不能**直接用站点自己的 `Icon`：那一层（`StationIconLayer`）是所有站点元素里**最低**的，
+ *    共享层是"整层一个渲染序"，没有"这一颗盖住那一颗"的粒度。
+ */
+export const TERRITORY_GHOST_LAYER = 'StationGhostLayer';
+
+/** 虚影壳（装 `Caption` / `Text` / `Badge` / 命中根节点的容器，恒 `active = false`）。 */
+const TERRITORY_GHOST_SHELL = 'Shell';
+
+/**
+ * 虚影不透明度（需求：**35%**）。
+ *
+ * 35% 是刻意压得够透：虚影要能读出「这格长的是哪栋建筑」，又要让下面那块地块的状态色
+ * （可激活金 / 被锁棕 / 已通关绿）透出来 —— 太实会把地块状态盖掉。
+ *
+ * ⚠️ 价格（银币图标 + 数字）**不在**虚影之下：用户 2026-11-09 第二轮把层序改成
+ * 「锁 > 价格 > 虚影 > 建筑」—— 数字要能清清楚楚读出来（见 `TERRITORY_GHOST_LAYER`）。
+ */
+const TERRITORY_GHOST_OPACITY = 0.35;
+
+/**
+ * 虚影 → 实心建筑的过渡时长（需求：**0.2s 淡入**）。
+ *
+ * 实现是「虚影 0.35 → 0 + 底下实心建筑 0 → 1」，两条同时走：
+ * 虚影这一侧由 {@link TerritoryMapView.stepGhostFade} 扣时间，实心那一侧由
+ * `hexSpawn` 的生成回调（`setSpawnOpacity`）负责 —— 合成出来就是 35% → 100%。
+ * 这比"把虚影直接染到 100%"稳：那颗节点在更高层，染实了会挡住编号气泡。
+ */
+const TERRITORY_GHOST_FADE_SECONDS = 0.2;
+
 /**
  * 宝箱「生成」抖动比地块那一下**晚多少秒**（需求 2026-10-22 §3：
  * 「宝箱生成动画需要比地块生成动画稍晚展示」）。
@@ -304,6 +392,15 @@ export const TERRITORY_HEX_LOCK_LAYER = 'HexLockLayer';
  *  ⚠️ 别调到 0.4s 以上：`syncStations` 每秒才全量走一遍，太晚会被下一轮渲染盖掉节奏感。
  */
 const CHEST_SPAWN_SHAKE_DELAY_SECONDS = 0.22;
+
+/**
+ * 空集合常量：`stationRenderOf` 的 `mutedCells` 缺省值。
+ *
+ * 用它当默认参数（而不是 `new Set()`）是为了让「不传」这条路**不产生任何分配** ——
+ * 每帧每格都会走一次 `stationRenderOf`，默认值写成 `new Set()` 等于每秒白造几百个空集合。
+ */
+const EMPTY_CELL_SET: ReadonlySet<number> = new Set<number>();
+
 
 /**
  * 一格待播的「换色」：本帧地皮**帧 → 帧**真的变了，攒起来统一算错峰。
@@ -343,6 +440,16 @@ export interface ITerritoryMapRenderInput {
     readonly art: ITerritoryMapArt;
     readonly progress: ITerritoryProgressView;
     readonly revealedCells: readonly number[];
+    /**
+     * **提前披露**的格（2026-11-09）：视图据此给「还没激活」的关卡建筑画 **35% 虚影**。
+     *
+     * 这些格**已经包含在** {@link revealedCells} 里（模型侧并过），这里只用来区分
+     * 「正常露出」与「提前披露」—— 只看 `revealedCells` 分不出来。
+     *
+     * ⚠️ 可选：`undefined` 等价于「没有披露」，老调用方（沙箱用例 / 别的页面）零改动。
+     * 🔴 披露 ≠ 能开：点击与扣费链路完全不看这份集合。
+     */
+    readonly previewCells?: readonly number[];
     readonly siteOpenableCells: readonly number[];
     /**
      * 「被结构性条件卡住、现在开不了」的格 —— 未解锁锁标**只认这一份**（2026-11-05 山猫配图）：
@@ -499,6 +606,31 @@ export class TerritoryMapView extends Component {
     private readonly hexLocks = new Map<number, Sprite>();
     /** 锁标层（懒建一次；`MapLayer` 的子节点，排在 `StationHitLayer` 之前）。 */
     private hexLockLayer: Node | null = null;
+    /**
+     * cellId → **虚影**视图（提前披露的关卡建筑，见 {@link TERRITORY_GHOST_LAYER}）。
+     *
+     * 与 `stationViews` **完全分开**：虚影只用 `Icon` 一颗，底条 / 文字 / 角标 / 命中根
+     * 全部塞进一个 `active = false` 的壳里（`ghostShell`），所以它既不出文案也不吃手势。
+     * 用的是同一个 `TerritoryStationView` + 同一套 `setMapPosition` / `render`
+     * ⇒ 落点、可见宽度归一、trim 补偿、底边对齐与实心建筑**逐像素相同**（用户 2026-11-09
+     * 「不然大建筑会有错位」）。
+     */
+    private readonly ghostViews = new Map<number, TerritoryStationView>();
+    /**
+     * 正在淡出的虚影（cellId → 剩余秒），扣到 0 就销毁。
+     *
+     * 触发点只有一个：这一格**已激活**（花了银币）。为什么不直接 `destroy`：
+     * 需求「0.2s 淡入」，而底下那层实心建筑由 `hexSpawn` 的生成淡入 0 → 1，
+     * 两条同时走，合成出来才是 35% → 100%。与全工程一致，不建 tween/定时器（见
+     * `chestSpawnDelay` 的注释），在 `update` 里扣时间。
+     */
+    private readonly ghostFades = new Map<number, number>();
+    /** 虚影层（懒建一次）。 */
+    private ghostLayer: Node | null = null;
+    /** 虚影壳：装虚影视图那些**不该显示**的节点，恒 `active = false`。 */
+    private ghostShell: Node | null = null;
+    /** 上一轮算虚影的地图标识；换章时整批清掉（格子都换了，虚影不能留着）。 */
+    private ghostKey = '';
     /** cellId → 站点视图（含「起点」以外的全部站点）。 */
     private readonly stationViews = new Map<number, TerritoryStationView>();
     /** 起始格单独一个实例：唯一、不可点、不参与池化。 */
@@ -639,6 +771,25 @@ export class TerritoryMapView extends Component {
      */
     private burstSeed = 0;
 
+    /** 随机格飞行的终点（覆盖层局部坐标）；null = 没拿到英雄按钮 ⇒ 这段动画整段降级。 */
+    private heroRewardTarget: ITerritoryHeroFlightPoint | null = null;
+    /** 「随机格飞行落地」回调（页面据此让英雄按钮播受击抖动）。 */
+    private heroRewardLandedHandler: (() => void) | null = null;
+    /** 正在飞的随机格奖励组。 */
+    private readonly activeHeroFlights: TerritoryHeroFlight[] = [];
+    /** 飞完回收的奖励组（与 `burstPool` 同一套池化策略）。 */
+    private readonly heroFlightPool: TerritoryHeroFlight[] = [];
+    /**
+     * 飞舞奖励图标的**顶层宿主**（页面从 `MainRoot` 注入）。
+     *
+     * 🔴 2026-11-11：页面内 `TerritoryOverlay` 会被 `ArenaRoot/BottomHud`（聊天框）与
+     *    `MainRoot/BottomNav`（底栏）压住 ⇒ 图标飞到底部就看不见了。
+     *    `null` = 没注入 ⇒ {@link rewardFxLayer} 回退覆盖层（旧行为，绝不静默消失）。
+     */
+    private rewardFxHost: Node | null = null;
+    /** 本视图自己建的那一个顶层节点（页面销毁时要收，不能靠页面子节点自动销毁）。 */
+    private rewardFxOwned: Node | null = null;
+
     /** 页面坐标系覆盖层宿主（点击反馈 + 开箱表演都挂它上面）。 */
     private overlayHost: Node | null = null;
     /** 开箱表演（懒建在覆盖层上；三档参数走 `model/TerritoryChestAnimation`）。 */
@@ -734,6 +885,56 @@ export class TerritoryMapView extends Component {
      *  由 `update` 里那条唯一的 `cameraBusy` 收尾路径还原地图并放开输入锁。
      */
     private battleApproach: { elapsed: number; origin: Vec3 } | null = null;
+
+    // ============================================================
+    // 「预告首领关」过场：镜头推过去 → 放开被压住的格 → 停 1s → 镜头归位
+    // ============================================================
+
+    /**
+     * 正在演的预告过场（`null` = 没在演）。
+     *
+     *  与开箱 / 推镜 / 过场**共用同一套镜头基准**（`captureChestCamera` + `applyChestCamera`），
+     *  时间轴在 `model/TerritoryPreviewCinema`（纯函数、可单测）。本字段只持「演到哪 + 对着哪」。
+     */
+    private previewCinema: { state: ITerritoryPreviewCinemaState; cells: number[]; anchor: Vec3 } | null = null;
+    /**
+     * 过场期间**临时压住**的格（`wait` / `pan` 两段）。
+     *
+     *  这些格已经被模型披露进 `revealedCells` 了 —— 不压住的话，云在**同一帧**就散完、
+     *  地块也在同一帧长完，等镜头推过去只剩一块静态地形（动画全在镜头背后播完了）。
+     */
+    private previewCinemaHold = new Set<number>();
+    /** 上一轮渲染见过的披露格（判「这一帧新披露了哪些」）。 */
+    private previewSeen = new Set<number>();
+    /** 这一轮渲染是「过场放开后的那一帧」⇒ 新做出来的虚影 / 锁要补生成动画。 */
+    private previewCinemaRevealPending = false;
+    /** `renderMap` 重入闸（过场放开时要在 `update` 里自己再渲染一次）。 */
+    private cinemaRerendering = false;
+    /** 虚影**淡入**剩余秒数（只在过场放开那一帧建出来的虚影上生效；0.2s 从 0 到 35%）。 */
+    private readonly ghostFadeIn = new Map<number, number>();
+    /** 锁标的生成弹跳剩余秒数（同上，0.2s 从 0.55 过冲到 1.12 再回 1）。 */
+    private readonly lockPops = new Map<number, number>();
+    /**
+     * 「未解锁 → 可激活」的 1s 过渡已播秒数（`cellId → elapsed`）。
+     *
+     * 需求（2026-11-09）：「锁放大 1.2，再缩小消失，总时间 1s」+「银币和数字 UI 生成动画，总时间 1s」。
+     * 两条曲线都在 `model/TerritoryUnlockTransition`，这里只管计时与写节点。
+     *
+     * ⚠️ 两段**同时起手同时收工**：锁层压在价格层上（`HexLockLayer` 插在 `StationBadgeLayer` 之前），
+     *    前半段锁挡住价格、后半段锁缩没了价格已经长好 —— 把价格延后就是 2s，不符合口径。
+     * ⚠️ 与 {@link lockPops} 是两件事：那个是过场里「锁刚长出来」的弹跳，这个是「锁消失」。
+     *    起播时要先 `lockPops.delete`，否则两套曲线抢同一颗节点的 `scale`。
+     */
+    private readonly unlockTransitions = new Map<number, number>();
+    /**
+     * 本帧**锁刚被摘掉**的格子（`applyHexLock` 记，`syncStations` 消费，帧末清空）。
+     *
+     *  `applyHexLock` 是所有锁显隐路径的唯一交汇点，而它排在 `paintHexes` 里、
+     *  早于同一帧的 `syncStations` ⇒ 这份集合正好让后者判出「这一格刚刚变可激活」。
+     *  ⚠️ 不能靠 `hexLocks.get(cellId).node.active` 判：`applyHexLock` 已经把这帧的
+     *     `active = false` 写进去了，冲到 `syncStations` 时读到的永远是"本来就没有"。
+     */
+    private readonly lockVanishedCells = new Set<number>();
 
     /**
      * 「进战斗 / 匹配」整页过场是否在演（`true` ⇒ 地图在缩、在淡，云盖层可能开着）。
@@ -936,17 +1137,26 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 格心（台面中心）→ **覆盖层局部坐标**。
+     * 格心（台面中心）→ **覆盖层局部坐标**（开箱 / 点击反馈 / 推镜用）。
      *
      * 走 `convertToWorldSpaceAR` → `convertToNodeSpaceAR` 而不是自己算偏移：
      * 地图在 ScrollView 里滚动、章节之间布局尺寸也不同，只有引擎的矩阵是权威。
      * 拿不到节点 / 变换时返回 `null`（调用方直接跳过这次表现，不猜一个坐标）。
      */
     private cellPointInOverlay(cellId: number): Vec3 | null {
+        return this.cellPointInNode(cellId, this.ensureOverlayHost());
+    }
+
+    /**
+     * 格心 → **指定宿主**的局部坐标（2026-11-11 抽出）。
+     *
+     * 飞舞图标换了 `MainRoot` 顶层宿主之后，起点与终点必须落在**同一套坐标系**里；
+     * 其它全屏表演仍走 {@link cellPointInOverlay}，不受影响。
+     */
+    private cellPointInNode(cellId: number, host: Node): Vec3 | null {
         const hex = this.hexNodes.get(cellId);
         if (!hex?.isValid) return null;
         const hexTransform = hex.getComponent(UITransform);
-        const host = this.ensureOverlayHost();
         const hostTransform = host.getComponent(UITransform);
         if (!hexTransform || !hostTransform) return null;
         // `HEX_GRID_CONTENT_LIFT` = 锚点与"人眼看到的台面中心"的差（见 `cellCenter`）。
@@ -1001,6 +1211,112 @@ export class TerritoryMapView extends Component {
     }
 
     /**
+     * 页面把顶层根节点（`MainRoot`）交进来，由**视图**建特效层并排到最后一个子节点。
+     *
+     * 🔴 页面不许自己搭 UI（`territory-page-split` / `territory-battle-intro` 两条架构守卫
+     *    禁止页面出现 `new Node(` / `addComponent(`），所以建节点 / 排兄弟序全在这里。
+     *    弹窗由 `PopupManager` 挂在 `MainRoot` 之外，仍盖在图标之上。
+     *
+     * `null`（页面连 `ArenaRoot` 都找不到）⇒ 不建层，`rewardFxLayer()` 回退页面内覆盖层。
+     */
+    mountRewardFxLayer(root: Node | null): Node | null {
+        if (this.rewardFxHost?.isValid) return this.rewardFxHost;
+        if (!root?.isValid) return null;
+        const host = new Node(TERRITORY_REWARD_FX_NODE);
+        host.layer = root.layer;
+        const size = root.getComponent(UITransform)?.contentSize;
+        host.addComponent(UITransform).setContentSize(size?.width ?? 720, size?.height ?? 1280);
+        host.setParent(root);
+        // 子节点顺序 = 渲染顺序；排最后 ⇒ 画在 `BottomNav` / `ChestBar` / `BottomHud` 之上。
+        host.setSiblingIndex(root.children.length - 1);
+        this.rewardFxOwned = host;
+        this.setRewardFxHost(host);
+        return host;
+    }
+
+    /** 页面销毁时收掉运行时补的顶层节点（它不随本页子节点自动销毁）。 */
+    disposeRewardFxLayer(): void {
+        const owned = this.rewardFxOwned;
+        this.setRewardFxHost(null);
+        if (owned?.isValid) owned.destroy();
+        this.rewardFxOwned = null;
+    }
+
+    /**
+     * 注入「飞舞奖励图标」的顶层宿主（`MainRoot` 最后一层，由 `mountRewardFxLayer` 建）。
+     *
+     * 🔴 换宿主时把在飞 / 池化中的图标**全部丢弃重建**：它们的节点挂在旧宿主下，
+     *    复用就会「新层上一个图标都不出现」。同时作废 `heroRewardTarget` —— 那是旧宿主的
+     *    局部坐标，继续用会整批飞偏。
+     */
+    setRewardFxHost(host: Node | null): void {
+        const next = host?.isValid ? host : null;
+        if (this.rewardFxHost === next) return;
+        this.rewardFxHost = next;
+        this.resetHeroFlights();
+        for (const flight of this.heroFlightPool) {
+            if (flight.node.isValid) flight.node.destroy();
+        }
+        this.heroFlightPool.length = 0;
+        this.heroRewardTarget = null;
+    }
+
+    /** 飞舞图标的宿主：顶层优先，没注入 / 已失效时回退页面内覆盖层（旧行为）。 */
+    private rewardFxLayer(): Node {
+        return this.rewardFxHost?.isValid ? this.rewardFxHost : this.ensureOverlayHost();
+    }
+
+    /**
+     * 随机格飞行的终点（**世界坐标** → 飞舞图标宿主局部坐标，矩阵换算留在视图）。
+     *
+     * `null` = 清掉 ⇒ 随机格飞行整段跳过（**纯表现**：喷发、读数、发奖一个都不少）。
+     * 与 {@link setRewardCatchWorldPoint} 同一套换算，只是目标从「资源栏某一格」换成
+     * 「底栏英雄按钮」—— 两者都在 `MainRoot` 层，页面根在 `Content` 层，只有引擎矩阵说得准。
+     */
+    setHeroRewardTargetWorld(world: Vec3 | null): void {
+        if (!world) {
+            this.heroRewardTarget = null;
+            return;
+        }
+        const host = this.rewardFxLayer();
+        const transform = host.getComponent(UITransform);
+        if (!transform) {
+            this.heroRewardTarget = null;
+            return;
+        }
+        const local = transform.convertToNodeSpaceAR(world, new Vec3());
+        this.heroRewardTarget = { x: local.x, y: local.y };
+    }
+
+    /** 注入「随机格飞行落地」回调（页面据此让英雄按钮播受击抖动，本批只调一次）。 */
+    setHeroRewardLandedHandler(handler: (() => void) | null): void {
+        this.heroRewardLandedHandler = handler;
+    }
+
+    /**
+     * 随机格：在原有「格心喷发 + 合成读数」之外，**再补一段**飞向英雄按钮的动画
+     * （2026-11-10 需求 ②）。不建覆盖层表演、不锁输入、不接管奖励结算。
+     *
+     * @returns `true` = 起播；`false` = 格心 / 终点拿不到 ⇒ 整段跳过，
+     *          喷发、读数与发奖完全不受影响（缺图只是空图标，不阻断）。
+     */
+    playHeroRewardFlight(
+        cellId: number,
+        entries: readonly ITerritoryHeroFlightEntry[],
+    ): boolean {
+        if (!entries.length || !this.heroRewardTarget) return false;
+        const host = this.rewardFxLayer();
+        const origin = this.cellPointInNode(cellId, host);
+        if (!origin) return false;
+        return this.acquireHeroFlight(host).play(
+            { x: origin.x, y: origin.y },
+            this.heroRewardTarget,
+            entries,
+            this.heroRewardLandedHandler,
+        );
+    }
+
+    /**
      * 注入「奖励图标落进资源栏」的回调（页面据此让那一格跳一下 + **那一格**闪光，别的格不动）。
      *
      * 本类只做转发：`resId → 资源栏的哪一格` 是**玩法/版面口径**，归页面。
@@ -1008,6 +1324,24 @@ export class TerritoryMapView extends Component {
     setRewardLandedHandler(handler: ((resId: number, amount: number) => void) | null): void {
         this.ensureOverlayHost();
         this.chestView?.setLandedHandler(handler);
+    }
+
+    /**
+     * 播一次「**银币宝箱**」的独立打开动画（2026-11-10）。
+     *
+     * 与 {@link playChestOpen} 是**两条互不相干的路**：那条给卡牌碎片宝箱用
+     * （黄铜藤蔓箱 `chest_seq_*` 开盖补帧 + 三档镜头 / 光柱 / 粒子 / 飞图标 + 覆盖层 + 输入锁）；
+     * 这条只让地图上那颗 `coinBox` icon 放大 → 缩小 → 消失（0.4s 纯缩放，曲线在
+     * `model/TerritorySilverChestOpen`），**不建覆盖层、不锁输入、不推镜头、不接管结算**。
+     *
+     * ⚠️ 图标为什么能对上：动画直接作用在站点自己的 `Icon` 节点上，那颗节点画的正是
+     *    `stationRenderOf` 给的 `buildingId = 69020`（`coinBox`）；不需要另找一张图来演开箱。
+     *
+     * @returns `true` = 起播成功；`false` = 格子不在视口 / 视图已回收 / 这一刻没有宝箱图。
+     *          **纯表现**：调用方不要据此决定发不发奖（奖励在页面当场结算）。
+     */
+    playSilverChestOpen(cellId: number): boolean {
+        return this.stationViews.get(cellId)?.playSilverChestIconPop() === true;
     }
 
     /**
@@ -1099,6 +1433,222 @@ export class TerritoryMapView extends Component {
         const fx = territoryBattleApproachFx(approach.elapsed);
         this.applyChestCamera(fx.scale, fx.focus, approach.origin);
         if (fx.done) this.battleApproach = null;
+    }
+
+    // ============================================================
+    // 「预告首领关」过场（用户 2026-11-09 第二轮）
+    // ============================================================
+
+    /** 过场是否在演（页面 / 用例可读）。 */
+    get isPreviewCinemaPlaying(): boolean {
+        return this.previewCinema !== null;
+    }
+
+    /**
+     * 起演判定（每帧渲染调用；**幂等** —— 已经在演就直接返回）。
+     *
+     * 起演条件四条，缺一不可：
+     *  ① 这一帧**新披露**了格子（`previewCells` 相对上一轮有增量）；
+     *  ② 新披露的格子里有**首领**关（披露序列里只有首领走这段预告，第 1 关是开局恒披露）；
+     *  ③ 这一帧有「胜利通过」的格子 —— 也就是**刚打完一关**，这正是「通过第 1 关」那一刻；
+     *  ④ 不是进页面 / 换章的首帧（`spawnBootstrapped` 为真），免得重进页面就重播一遍。
+     *
+     * 满足则：压住这一批格 → 量镜头基准 → 等第 1 关那批胜利地块长完（`wait`）→ 推镜。
+     */
+    private armPreviewCinema(input: ITerritoryMapRenderInput): void {
+        const preview = input.previewCells ?? [];
+        const added = preview.filter((cellId) => !this.previewSeen.has(cellId));
+        this.previewSeen = new Set(preview);
+        if (this.previewCinema) return;
+        if (added.length === 0) return;
+        if (input.victoryClaimCells.length === 0) return;
+        if (!this.spawnBootstrapped) return;
+        if (!added.some((cellId) => input.stageByCell.get(cellId)?.isBoss === true)) return;
+        const anchor = this.previewCinemaAnchor(input, added);
+        if (anchor === null) return;
+        const point = this.cellPointInOverlay(anchor);
+        if (!point) return;
+        this.ensureOverlayHost();
+        this.captureChestCamera(point);
+        if (!this.chestCameraActive) return;
+        this.previewCinema = {
+            // 需求「通过第 1 关的**地块动画结束**」⇒ 等这一批胜利格按胜利档长完再推镜。
+            state: territoryPreviewCinema(territoryHexSpawnBatchSeconds(
+                input.victoryClaimCells.length, TERRITORY_HEX_SPAWN_VICTORY_TIMING)),
+            cells: added.slice(),
+            anchor: point,
+        };
+        this.previewCinemaHold = new Set(added);
+        this.setInputLocked(true);
+        this.applyChestCamera(1, 0, point);
+    }
+
+    /** 镜头对着哪一格：优先「配了建筑」的那格（虚影画在它身上，镜头也该对着它）。 */
+    private previewCinemaAnchor(input: ITerritoryMapRenderInput, cells: readonly number[]): number | null {
+        for (const site of input.map.sites) {
+            if (site.buildingId && cells.includes(site.cellId)) return site.cellId;
+        }
+        return cells.length > 0 ? cells[0] : null;
+    }
+
+    /**
+     * 压住这一批格：`revealedCells` 与 `previewCells` 一起剔掉。
+     *
+     *  · 剔 `revealedCells` ⇒ 格子不画、云不散（云按 `revealed` 判"该不该让开"）；
+     *  · 剔 `previewCells` ⇒ 虚影不建（否则一圈 35% 建筑浮在云上）。
+     */
+    private holdPreviewCinemaCells(input: ITerritoryMapRenderInput): ITerritoryMapRenderInput {
+        const hold = this.previewCinemaHold;
+        return {
+            ...input,
+            revealedCells: input.revealedCells.filter((cellId) => !hold.has(cellId)),
+            previewCells: (input.previewCells ?? []).filter((cellId) => !hold.has(cellId)),
+        };
+    }
+
+    /**
+     * 推进过场：每帧写一次镜头；`reveal` 段一到就**放开压住格并重渲染一次**。
+     *
+     * 重渲染是整段的开关：云散（`clouds.sync` 见到 revealed ⇒ 播消散）、地块生成
+     * （`syncHexSpawn` 见到新格 ⇒ 播生成）、虚影（`syncGhosts` 新建 ⇒ 淡入）、
+     * 锁（`applyHexLock` 新显示 ⇒ 弹跳）**全都在同一次渲染里同时起手** —— 这就是需求里
+     * 「云层消失动画、地块生成动画、建筑虚影和锁同时生成动画」。
+     */
+    private stepPreviewCinema(dt: number): void {
+        const cinema = this.previewCinema;
+        if (!cinema) return;
+        const step = stepTerritoryPreviewCinema(cinema.state, dt);
+        cinema.state = step.state;
+        this.applyChestCamera(1, step.focus, cinema.anchor);
+        if (step.revealed && this.previewCinemaHold.size > 0) {
+            this.previewCinemaHold.clear();
+            this.previewCinemaRevealPending = true;
+            this.rerenderForPreviewCinema();
+        }
+        if (step.done) {
+            // 收尾交给 `update` 里那条唯一的 `cameraBusy` 路径：还原镜头 + 放开输入。
+            this.previewCinema = null;
+            this.previewCinemaHold.clear();
+        }
+    }
+
+    /** 放开压住格之后立刻重渲染一帧（用上一帧的入参快照；带重入闸）。 */
+    private rerenderForPreviewCinema(): void {
+        const input = this.lastRenderInput;
+        if (!input || this.cinemaRerendering) return;
+        this.cinemaRerendering = true;
+        try {
+            this.renderMap(input);
+        } finally {
+            this.cinemaRerendering = false;
+            // 只在这一帧生效：生成动画的"新节点"判据就是它。
+            this.previewCinemaRevealPending = false;
+        }
+    }
+
+    /** 作废过场（换章 / 重建格子时调）：被压住的格、镜头基准、已看快照全清。 */
+    private cancelPreviewCinema(): void {
+        this.previewCinema = null;
+        this.previewCinemaHold.clear();
+        this.previewSeen.clear();
+        this.previewCinemaRevealPending = false;
+        this.ghostFadeIn.clear();
+        this.lockPops.clear();
+        // 「未解锁 → 可激活」的过渡同样作废：换章后 `hexLocks` / `stationViews` 都要重建，
+        // 留着的秒表会去写一批已经销毁或复用给别格的节点。
+        this.unlockTransitions.clear();
+        this.lockVanishedCells.clear();
+    }
+
+    /** 锁标生成弹跳：0.55 → 1.12 → 1（0.2s），只写那几颗刚出现的锁。 */
+    private stepLockPops(dt: number): void {
+        if (this.lockPops.size === 0) return;
+        const total = TERRITORY_GHOST_FADE_SECONDS;
+        for (const [cellId, elapsed] of Array.from(this.lockPops)) {
+            const next = elapsed + (Number.isFinite(dt) && dt > 0 ? dt : 0);
+            const node = this.hexLocks.get(cellId)?.node;
+            // 节点被回收（换章 / 淘汰）⇒ 这条弹跳没有意义了，直接丢掉。
+            if (!node || !node.isValid) {
+                this.lockPops.delete(cellId);
+                continue;
+            }
+            if (next >= total) {
+                this.lockPops.delete(cellId);
+                node.setScale(1, 1, 1);
+                continue;
+            }
+            this.lockPops.set(cellId, next);
+            const t = next / total;
+            // 前 72% 长到 1.12，后 28% 收回来（与「建筑生成抖一下」同一条观感）。
+            const scale = t < 0.72
+                ? 0.55 + (1.12 - 0.55) * (t / 0.72)
+                : 1.12 - 0.12 * ((t - 0.72) / 0.28);
+            node.setScale(scale, scale, 1);
+        }
+    }
+
+    // ============================================================
+    // 「未解锁 → 可激活」的 1s 过渡（2026-11-09）
+    // ============================================================
+
+    /**
+     * 起播一格的过渡：锁 `1 → 1.2 → 0`、价格 `0 → 1.15 → 1`，两段都是 1s、同时起手。
+     *
+     * 判据三条缺一不可（都由调用方 `syncStations` 在同一帧内给齐）：
+     *  ① 这一帧 `applyHexLock` 刚把锁摘掉（{@link lockVanishedCells}）；
+     *  ② 价格**真的出现了**（`isCondition`）—— 没有价可长就别演（例如这格已被别的途径解锁）；
+     *  ③ 站点视图已经存在 —— 价格那两颗节点长在它身上。
+     *
+     * ⚠️ 同一格已经在播就不重入（`set` 会把它拍回 0，表现为"卡在开头反复放大"）。
+     */
+    private startUnlockTransitionIfNeeded(cellId: number, priceVisible: boolean): void {
+        if (!this.lockVanishedCells.delete(cellId)) return;
+        if (!priceVisible) return;
+        if (!this.stationViews.has(cellId)) return;
+        // 过场里那一下「锁刚长出来」的弹跳还在跑 ⇒ 让位：两套曲线写的是同一颗节点的 `scale`。
+        this.lockPops.delete(cellId);
+        this.unlockTransitions.set(cellId, 0);
+        this.applyUnlockTransitionFrame(cellId, 0);
+    }
+
+    /** 推进所有在播的过渡；没有在播的格子时开销只是一次长度判断。 */
+    private stepUnlockTransitions(dt: number): void {
+        if (this.unlockTransitions.size === 0) return;
+        const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        for (const [cellId, elapsed] of Array.from(this.unlockTransitions)) {
+            const next = elapsed + step;
+            if (next >= TERRITORY_UNLOCK_TRANSITION_SECONDS) {
+                // 收工：锁缩到 0 并关节点，价格落回 1 并**留在** 1（别把过冲带进稳态）。
+                this.unlockTransitions.delete(cellId);
+                this.applyUnlockTransitionFrame(cellId, TERRITORY_UNLOCK_TRANSITION_SECONDS);
+                continue;
+            }
+            this.unlockTransitions.set(cellId, next);
+            this.applyUnlockTransitionFrame(cellId, next);
+        }
+    }
+
+    /**
+     * 写一格过渡的当前帧：锁那颗 `Sprite` 的缩放 + 站点的价格生成系数。
+     *
+     * ⚠️ 锁节点在锁消失时已被 `applyHexLock` 关掉，这里要**重新点亮**再缩 ——
+     *    否则用户看到的还是"一下子就没了"，锁那半段完全白做。
+     * ⚠️ 收尾帧（`elapsed ≥ 1s` ⇒ 曲线给 0）必须**先复位成 1 再关节点**：留一个
+     *    `scale = 0` 的隐藏节点，下一把锁（同一格）会以 0 尺寸长出来、肉眼等于"丢了"。
+     */
+    private applyUnlockTransitionFrame(cellId: number, elapsed: number): void {
+        const lockScale = territoryUnlockLockScale(elapsed);
+        const sprite = this.hexLocks.get(cellId);
+        if (sprite && sprite.node.isValid) {
+            if (lockScale > 0) {
+                if (!sprite.node.active) sprite.node.active = true;
+                sprite.node.setScale(lockScale, lockScale, 1);
+            } else {
+                sprite.node.setScale(1, 1, 1);
+                sprite.node.active = false;
+            }
+        }
+        this.stationViews.get(cellId)?.setConditionSpawnScale(territoryUnlockPriceScale(elapsed));
     }
 
     // ============================================================
@@ -1528,7 +2078,8 @@ export class TerritoryMapView extends Component {
     private get cameraBusyLocked(): boolean {
         return this.chestView?.isPlaying === true || this.clouds.dollyActive
             || this.battleIntroActive
-            || this.battleApproach !== null;
+            || this.battleApproach !== null
+            || this.previewCinema !== null;
     }
 
     /**
@@ -1555,11 +2106,22 @@ export class TerritoryMapView extends Component {
         // 不碰格根、也不参与建筑待办那条链），免得把「两个 step 之后立刻补建筑」掰成晚一帧。
         this.hexRecolor.step(dt);
         this.stepChestSpawnDelays(dt);
+        // 虚影 → 实心建筑的 0.2s 淡出。只写虚影那颗 `Icon` 的 `UIOpacity`，
+        // 不碰格根、也不参与「建筑待办」那条链 ⇒ 与 `clouds.step` 同一类，排在哪里都安全。
+        this.stepGhostFade(dt);
+        // 锁生成弹跳 / 虚影淡入：同样只写自己那一颗 `Sprite` 的缩放与透明度。
+        this.stepLockPops(dt);
+        // 「未解锁 → 可激活」的 1s 过渡（锁 1 → 1.2 → 0，价格 0 → 1.15 → 1）。
+        // 排在 `stepLockPops` **之后**：起播时已经从 `lockPops` 里让位，这里只是把顺序钉死 ——
+        // 万一同一格两套都还在（外力打断的中间态），本帧以过渡为准。
+        this.stepUnlockTransitions(dt);
         // 「宝箱还没点我」的 1.5s 跳动（需求 2026-11-02 第 3 条）：只写**那一只**站点的
         // Icon 偏移，不碰格根、不参与建筑待办那条链，所以排在这里安全。
         this.stepChestHint(dt);
         this.stepGains(dt);
         this.stepBursts(dt);
+        // 随机格「飞向英雄按钮」：与喷发同一帧序推进，只写自己那几个图标节点。
+        this.stepHeroFlights(dt);
         // 页面坐标系的两套表现：点击反馈（0.3s）与开箱表演（2.3~3.2s）。
         // 都是「时钟置 -1 即空闲」的池化契约，没在播时开销只是一次数值比较。
         this.tapFeedback?.step(dt);
@@ -1570,6 +2132,10 @@ export class TerritoryMapView extends Component {
         // 「首次解锁 ⇒ 自动进战斗」的推进（1.2s）。与开箱共用镜头基准，所以必须排在
         // `stepCloudDolly` 之后、`cameraBusy` 判定之前：本帧刚播完的话，下面一读就见不到它了。
         this.stepBattleApproach(dt);
+        // 「预告首领关」过场（推镜 → 放开压住格 → 停 1s → 归位）。它写的是同一个 `MapLayer`，
+        // 所以必须排在 `cameraBusy` 判定**之前**，且上面那几条镜头时间轴不可能与它同时在播
+        // （`playBattleApproach` / `beginBattleIntro` 都各自有互斥判定）。
+        this.stepPreviewCinema(dt);
         // 🔴 收尾只留一条路径：开箱 / 散场 / 战斗过场**共用同一套镜头基准**，谁还在播都不许还原 / 解锁。
         const cameraBusy = this.cameraBusyLocked;
         if (this.chestCameraActive && !cameraBusy) this.restoreChestCamera();
@@ -1756,6 +2322,37 @@ export class TerritoryMapView extends Component {
         }
     }
 
+    /** 取一束飞行图标：池里有就复用，没有才现建（挂在顶层宿主，与飞行终点同坐标系）。 */
+    private acquireHeroFlight(layer: Node): TerritoryHeroFlight {
+        const reused = this.heroFlightPool.pop();
+        if (reused) {
+            this.activeHeroFlights.push(reused);
+            return reused;
+        }
+        const flight = new TerritoryHeroFlight(layer);
+        this.activeHeroFlights.push(flight);
+        return flight;
+    }
+
+    /** 逐帧推进随机格飞行，放完回池（与 `stepBursts` 同一套）。 */
+    private stepHeroFlights(dt: number): void {
+        for (let index = this.activeHeroFlights.length - 1; index >= 0; index -= 1) {
+            const flight = this.activeHeroFlights[index];
+            if (flight.step(dt)) continue;
+            this.activeHeroFlights.splice(index, 1);
+            this.heroFlightPool.push(flight);
+        }
+    }
+
+    /** 换章 / 格子重建前收掉全部在飞的图标，免得飘在已经不存在的格子上。 */
+    private resetHeroFlights(): void {
+        for (const flight of this.activeHeroFlights) {
+            flight.stop();
+            this.heroFlightPool.push(flight);
+        }
+        this.activeHeroFlights.length = 0;
+    }
+
     /** 逐帧推进喷发粒子，放完回池（与 `stepGains` 同一套；两者时长不同、各走各的）。 */
     private stepBursts(dt: number): void {
         for (let index = this.activeBursts.length - 1; index >= 0; index -= 1) {
@@ -1778,6 +2375,7 @@ export class TerritoryMapView extends Component {
             this.burstPool.push(burst);
         }
         this.activeBursts.length = 0;
+        this.resetHeroFlights();
     }
 
     /**
@@ -1790,6 +2388,10 @@ export class TerritoryMapView extends Component {
      */
     renderMap(input: ITerritoryMapRenderInput): void {
         this.lastRenderInput = input;
+        // 🔴 「预告首领关」过场：起演判定必须排在**画格子之前** —— 它要先把这一批新披露的格压住，
+        //    否则第一帧云就散了、地块就长完了，镜头再推过去只剩静态地形（见 `previewCinemaHold`）。
+        this.armPreviewCinema(input);
+        if (this.previewCinemaHold.size > 0) input = this.holdPreviewCinemaCells(input);
         this.syncContentSize(input.layout, input.map.rows, input.map.columns);
         this.syncBackground(input);
         this.syncGrid(input);
@@ -1797,6 +2399,9 @@ export class TerritoryMapView extends Component {
         this.syncClouds(input);
         this.syncFlip(input);
         this.syncStations(input);
+        // 虚影排在站点之后：它只往自己那一层加 `Icon`，与站点视图互不覆盖；
+        // 排最后是为了「这一帧谁是已激活」已经由 `syncStations` 落定（淡出判据读同一份进度）。
+        this.syncGhosts(input);
     }
 
     /**
@@ -1845,6 +2450,10 @@ export class TerritoryMapView extends Component {
         // 🔴 第二个参数是"刚通关"这条**一次性边沿**：只有它才配演完整散场，切回已通过的
         //    章节时它是 `false` ⇒ 直接收掉（2026-11-05 用户：「通过的动画只有首次通关
         //    章节播放，切换章节后获取到通过状态也不用播放」）。
+        // 🔴 挡云区要按「所有已揭示格」描 15px 外扩轮廓（2026-11-11）：
+        //    `chapter_02` 起预告披露的是整关 footprint，那些格会画成地块却不在 `cloudCells` 里，
+        //    只按 `cloudCells` 描就会「云层贴着地块、没有固定间隔」。
+        this.clouds.setKeepOutPoints(input.layout.points);
         this.clouds.setChapterCleared(input.chapterCleared, input.chapterClearPending);
         this.clouds.sync(this.cloudCells, revealed, pockets, (cellId) => this.isCellActivated(cellId, input));
     }
@@ -2071,6 +2680,9 @@ export class TerritoryMapView extends Component {
         this.chestView?.stop();
         // 换章时把战斗过场一并作废：格子节点会被重建，半路的 scale/focus 留在新图上就是"地图歪着"。
         this.battleApproach = null;
+        // 「预告首领关」过场同理：被压住的格、镜头基准、已看快照都要作废，否则新图首帧会
+        // 带着旧图的"压住集合"渲染（表现为新章前几格永久不出现）。
+        this.cancelPreviewCinema();
         // 整页过场同理（云盖层是真的盖住整屏，不作废会一直挡着新章节）。
         this.endBattleIntro();
         this.restoreChestCamera();
@@ -2226,10 +2838,12 @@ export class TerritoryMapView extends Component {
      * 格子**地皮 + 格面框**：按 cellId 状态二选一地皮、四选一叠框。幂等，可重复调用。
      *
      *  🔴 2026-10-16 换口径（山猫）：
-     *  · **地皮**只有两张 —— 已通关 ⇒ `tileCleared`（`img_land_01` 草地块），其余 ⇒
-     *    `tileLocked`（`img_land_02` 泥土块）。原先的「一张 `img_land_01_gray` + 三色
+     *  · **地皮**按状态三选一 —— 已通关 ⇒ `tileCleared`（`img_land_01` 草地块）；
+     *    **被前置卡住** ⇒ `tileGrey`（`img_land_01_gray` 灰版，2026-11-10 用户
+     *    「未解锁的地块整个地块图片都置灰，等切换成可激活时再重新加载颜色」）；
+     *    其余 ⇒ `tileLocked`（`img_land_02` 泥土块）。原先的「一张灰图 + 三色
      *    tint（已占领绿 / 有站点金 / 中立米）」整体删除：成品美术图自带明暗，再乘色会发脏，
-     *    状态改由「哪张地皮 + 哪个框」表达。
+     *    状态改由「哪张地皮 + 哪个框」表达 —— 灰版是**另一张成品图**，不是给泥土乘灰。
      *  · **格面框**表达「这里有东西可打」：**已解锁且未通关**才叠，站点类型决定用哪张
      *    （首领 `frame_01` 红 / 普通关卡**同样用 `frame_01` 红**（2026-10-28 起，原 `frame_03` 紫）/
      *      异步关卡 `frame_04` 金 / 宝箱 `fram_02` 蓝）。
@@ -2240,9 +2854,21 @@ export class TerritoryMapView extends Component {
         const siteByCell = new Map(input.map.sites.map((site) => [site.cellId, site]));
         const candidateCells = new Set(input.map.randomSites?.candidateCells ?? []);
         const lockFrame = input.art.lockIcon;
-        // 锁只挂在「结构性阻塞」的格上（前置没打通 / 随机格四周没开）。
+        // 锁只挂在「被前置卡住」的格上（前置没打通 / 前置宝箱没点开 / 随机格四周没开）。
         // ⚠️ 不拿 `siteOpenableCells` 反推：那份含「银币/体力够不够」，会把缺钱也画成锁。
-        const lockCells = new Set<number>(input.lockBlockedCells ?? []);
+        // 🔴 一个节点**只画一处 UI、就在建筑格上**（用户 2026-11-10：「如果是未解锁，整个关卡节点
+        //    就只有建筑虚影上显示锁住的 icon；如果是可激活，就只有建筑虚影显示银币和数值，
+        //    不会出现锁和银币同时存在」）⇒ 组内任一格被卡住，锁都收敛到承载格，空地不画。
+        const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
+        // 地皮置灰用的是**逐格**口径，不是上面那份"一个节点一把锁"的收敛集合：
+        // 7 格的首领节点只有承载格画锁，但这 7 格都得灰 —— 只灰一格会读成"这格特殊"。
+        // ⚠️ 还要铺开 `footprint`：`chapter_02` 起「一关 = 一块 5~10 格的 footprint」，模型只把
+        //    锚点格列进 `lockBlockedCells`，不铺开的话整片里只有那一格变灰（其余仍是泥土）。
+        const blockedCells = new Set<number>(input.lockBlockedCells ?? []);
+        for (const site of input.map.sites) {
+            if (!blockedCells.has(site.cellId)) continue;
+            for (const cell of site.footprint ?? []) blockedCells.add(cell);
+        }
         const recolors: ITerritoryHexRecolorPending[] = [];
         for (const [cellId, node] of this.hexNodes) {
             node.active = revealed.has(cellId);
@@ -2250,14 +2876,23 @@ export class TerritoryMapView extends Component {
             // ⚠️ `?.`：渲染输入的 `layout` 在「只测地皮/框」的用例里是缺的（它们不关心坐标）。
             const point = input.layout?.points?.get(cellId);
             const passed = this.isCellPassed(cellId, input, siteByCell, candidateCells);
+            // 这一格是不是「被前置卡住」，两套口径**同源判定、分别取集合**（见两个函数的注释）：
+            //  · `lockCell`：锁标画在哪（节点收敛到承载格）；
+            //  · `greyCell`：地皮置灰到哪些格（逐格，整片都灰）。
+            const lockCell = this.isHexLockCell(cellId, input, passed, lockCells);
+            const greyCell = this.isStructurallyBlocked(cellId, input, passed) && blockedCells.has(cellId);
             // 未解锁格：格面正中一枚锁（露出来但还没开的格才有它，见 `isHexLockCell`）。
             // ⚠️ 锁住在独立的 `HexLockLayer` 上（不是格子子节点）—— 否则会被建筑/价格/编号压住。
-            this.applyHexLock(
-                cellId,
-                !!lockFrame && !!point && this.isHexLockCell(cellId, input, passed, lockCells),
-                lockFrame,
-                point);
-            const nextFrame = passed ? input.art.tileCleared : input.art.tileLocked;
+            // ⚠️ 锁美术缺失时整支不显示，此时地皮**照样置灰**：灰表达的是"这格被卡住"，
+            //    不依赖那张图在不在（美术缺失也不该让状态从画面上消失）。
+            this.applyHexLock(cellId, lockCell && !!lockFrame && !!point, lockFrame, point);
+            // 地皮三选一：通关 ⇒ 草地；被卡住 ⇒ 灰版（需求 2026-11-10「未解锁的地块整个地块
+            // 图片都置灰，等切换成可激活时再重新加载颜色」）；其余未通关 ⇒ 泥土。
+            // 🔴 「重新加载颜色」不需要额外做什么：前置一满足 `greyCell` 就变假，这一帧自然换回
+            //    `tileLocked`，`shouldRecolor` 还会顺手播一段 0.36s 换色（旧灰皮缩掉、泥土露出来）。
+            const nextFrame = passed
+                ? input.art.tileCleared
+                : greyCell ? input.art.tileGrey ?? input.art.tileLocked : input.art.tileLocked;
             const ground = node.getComponent(Sprite);
             // 换色判据要的是「**写之前**那一帧」—— `applyTileFrame` 一写就没有可 diff 的东西了。
             const fromFrame = ground?.spriteFrame ?? null;
@@ -2302,8 +2937,23 @@ export class TerritoryMapView extends Component {
         passed: boolean,
         lockCells: ReadonlySet<number>,
     ): boolean {
-        if (passed) return false;
         if (!lockCells.has(cellId)) return false;
+        return this.isStructurallyBlocked(cellId, input, passed);
+    }
+
+    /**
+     * 「这一格被前置卡住、打不开」的**逐格**判据（锁标与地皮置灰的共同底座）。
+     *
+     *  三条与 `lockBlockedCells` 无关的排除，缺一条都会误判：
+     *  · `passed` ⇒ 已经通关，只是被条件集合残留（草地块压锁会读成"又被锁回去"）；
+     *  · `pending` ⇒ 请求在途，服务端还没确认，"锁"只是暂时的；
+     *  · 已解锁 / 已占领 ⇒ 已经开了，锁与灰都该收。
+     *
+     * ⚠️ 只判「这一格」本身，**不碰节点收敛** —— 收不收敛是调用方的事（锁标收敛到承载格、
+     *    地皮置灰逐格全灰，见 `paintHexes` 里那两句注释）。
+     */
+    private isStructurallyBlocked(cellId: number, input: ITerritoryMapRenderInput, passed: boolean): boolean {
+        if (passed) return false;
         // `pending` 的格是在请求里（loading），不是锁着 —— 模型那一份还没被服务端确认。
         if ((input.pendingRandomResourceCells ?? []).includes(cellId)) return false;
         if ((input.pendingFixedResourceCells ?? []).includes(cellId)) return false;
@@ -2311,12 +2961,18 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 懒建锁标层：`MapLayer` 的子节点，插在 `StationHitLayer` 之前。
+     * 懒建锁标层：`MapLayer` 的子节点，插在 `StationBadgeLayer`（气泡层）**之前**。
      *
      * 为什么不挂在格子节点下：`MapLayer` 的兄弟顺序是
-     * `GridLayer → StationIconLayer → StationCaptionLayer → StationTextLayer → StationBadgeLayer → StationHitLayer`，
+     * `GridLayer → StationIconLayer → StationGhostLayer → StationCaptionLayer → StationTextLayer → StationBadgeLayer → HexLockLayer → StationHitLayer`，
      * 挂在格子里会被建筑图、银币数字、关卡编号整片压住 ⇒ 只剩空地上看得见锁。
-     * 插在命中层**之前**：锁压住内容，但不抢点击（点击仍由 `StationHitLayer` 兜）。
+     *
+     * 🔴 2026-11-10 用户：「锁的 UI 层级要在**宝箱气泡 UI 的下层**」。原先插在 `StationHitLayer`
+     * 之前（= 压住气泡），锁定格自己那颗气泡（宝箱的「体力 icon + 数量」、关卡编号）会被锁啃掉一块。
+     * 现在落位「**价格之上、气泡之下**」：
+     *  · 仍压在 `StationCaptionLayer`（银币底条）/ `StationTextLayer`（数字）之上 ——
+     *    §3.31 那 1s 过渡的前半段就是靠它挡住还没长好的价格；
+     *  · 但气泡层（`StationBadgeLayer`）永远压得住锁，气泡的尖角/尾巴不会被切。
      *
      * 只在第一次建的时候排一次序 —— 反复 `setSiblingIndex` 会因为基准节点自己也在挪而漂移。
      */
@@ -2330,9 +2986,10 @@ export class TerritoryMapView extends Component {
             layer.layer = this.gridLayer.layer;
             layer.setParent(parent);
             layer.addComponent(UITransform);
-            // 新节点 append 在末尾（index 最大）⇒ 挪到命中层当前下标 = 插在它前面。
-            const hit = this.stationHitLayer;
-            if (hit && hit.parent === parent) layer.setSiblingIndex(hit.getSiblingIndex());
+            // 新节点 append 在末尾（index 最大）⇒ 挪到气泡层当前下标 = 插在它前面（= 在气泡下层）。
+            // 气泡层缺失时退回命中层之前（宁可按老口径压在内容上，也不能没有锁）。
+            const above = this.stationBadgeLayer ?? this.stationHitLayer;
+            if (above && above.parent === parent) layer.setSiblingIndex(above.getSiblingIndex());
         }
         this.hexLockLayer = layer;
         return layer;
@@ -2351,11 +3008,21 @@ export class TerritoryMapView extends Component {
     ): void {
         let sprite = this.hexLocks.get(cellId);
         if (!show || !frame || !point) {
-            if (sprite) sprite.node.active = false;
+            if (sprite && sprite.node.active) {
+                // 「锁消失」正在演这一格的退场（1s：1 → 1.2 → 0）：**不许**在这里掐掉，
+                // 收尾（缩到 0 再关节点）由 `stepUnlockTransitions` 负责。
+                // ⚠️ `paintHexes` 每秒全量走一遍，不挡这一下就会让消失的锁闪回一帧再消失。
+                if (this.unlockTransitions.has(cellId)) return;
+                sprite.node.active = false;
+                // 上一帧还看得见、这一帧摘掉 ⇒ 「未解锁 → 可激活」。记下来给同一帧的
+                // `syncStations` 起播过渡（它比本函数晚，见 `lockVanishedCells`）。
+                this.lockVanishedCells.add(cellId);
+            }
             return;
         }
         const layer = this.ensureHexLockLayer();
         if (!layer) return;
+        let createdNow = false;
         if (!sprite) {
             const node = new Node(`Lock_${cellId}`);
             node.layer = layer.layer;
@@ -2367,12 +3034,29 @@ export class TerritoryMapView extends Component {
             created.sizeMode = Sprite.SizeMode.RAW;
             sprite = created;
             this.hexLocks.set(cellId, sprite);
+            createdNow = true;
         }
         if (sprite.node.parent !== layer) sprite.node.setParent(layer);
+        // 「刚出现」= 这一帧才建出来，或上一帧还是关着的（这个函数每帧都会对每格走一遍）。
+        // ⚠️ 必须带上 `createdNow`：`new Node` 默认 `active = true`，只看 active 会把
+        //    「第一次长出来的锁」判成"早就有了" ⇒ 过场里那一下弹跳永远不播。
+        const appearing = createdNow || !sprite.node.active;
         sprite.node.active = true;
+        // 又锁回去了（前置被退回 / 换章重算）：半路的退场就地收掉 —— 否则两套曲线会抢这一颗
+        // 节点的 `scale`（下面那句自愈只在"没在播"时才把缩放掰回 1，会被过渡反复覆盖）。
+        if (this.unlockTransitions.delete(cellId)) this.stationViews.get(cellId)?.setConditionSpawnScale(1);
         // 与格面框同轴：2.5D 台面的视觉中心（格根 + `HEX_GRID_CONTENT_LIFT`），不是格根。
         sprite.node.setPosition(point.x, point.y + HEX_GRID_CONTENT_LIFT, 0);
         if (sprite.spriteFrame !== frame) sprite.spriteFrame = frame;
+        // 「预告首领关」过场放开的那一帧：锁跟着弹出来（0.55 → 1.12 → 1，0.2s），
+        // 与虚影淡入同一时刻起手（需求原文「建筑虚影和锁同时生成动画」）。
+        if (appearing && this.previewCinemaRevealPending) {
+            this.lockPops.set(cellId, 0);
+            sprite.node.setScale(0.55, 0.55, 1);
+        } else if (!this.lockPops.has(cellId) && sprite.node.scale.x !== 1) {
+            // 自愈：弹跳演到一半被打断（换章 / 视图复用）时，别把这颗锁永远留在缩放态。
+            sprite.node.setScale(1, 1, 1);
+        }
     }
 
     /**
@@ -2618,7 +3302,9 @@ export class TerritoryMapView extends Component {
         // 上锁的格不显示解锁条件（银币图标 + 数量）：锁已经说明「被卡住」，
         // 再挂一条价格会读成「交钱就能开」，与锁自相矛盾（山猫 2026-11-05
         // 「上锁下方的银币与字就不要显示了」）。
-        const lockCells = new Set<number>(input.lockBlockedCells ?? []);
+        // 🔴 与 `paintHexes` 同源（同一份收敛结果）：锁与价格**互斥** ——
+        //    组内任一格被卡住 ⇒ 锁落在承载格 ⇒ 承载格的价格整条摘掉，绝不会"锁 + 银币"并排。
+        const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
         // 首轮只做快照、不播任何「刚生成」的动效（见 `syncChestSpawnView`）。
         const firstPass = !this.stationsReady;
         const startPoint = input.layout.points.get(input.map.startCellId);
@@ -2649,6 +3335,10 @@ export class TerritoryMapView extends Component {
         // 🔴 需求 2026-11-02 第 2 条：同屏多个宝箱**只留一个气泡**（解锁 id 最大的那只）。
         // 每轮渲染先算一次再分发 —— 判据在 model 里（纯函数），这里只做一次全图遍历，O(sites)。
         const chestHintCell = territoryChestHintCell(input.map.sites, input.progress, input.revealedCells);
+        // 🔴 一个节点只在一块地上长**建筑 / 编号气泡**（用户 2026-11-09）：同 `configId` 的
+        //    战斗站点组里，只有配了 `buildingId` 的那格解锁后画建筑与编号；其余格已解锁时纯空地。
+        //    ⚠️ **价格不归这条管**：未解锁的兄弟格照样显示「银币 + 数量」（第五轮口径）。
+        const mutedCells = territoryNodeMutedCells(input.map.sites);
         for (const site of input.map.sites) {
             if (!revealed.has(site.cellId)) continue;
             const point = input.layout.points.get(site.cellId);
@@ -2659,7 +3349,7 @@ export class TerritoryMapView extends Component {
             view.setMapPosition(center.x, center.y, 0);
             // 建筑体量倍率（表「模型大小」）在这里统一补：stationRenderOf 有 5 个 return 分支，
             // 逐个加字段容易漏；包一层只动一个点，且 site 本来就在手边。
-            const base = this.stationRenderOf(site, input, chestHintCell);
+            const base = this.stationRenderOf(site, input, chestHintCell, mutedCells);
             const performing = this.chestPlayingCell === site.cellId;
             // 🔴 上锁的格把「银币图标 + 数量」整条摘掉（`isCondition = false` ⇒ 视图把
             //    `captionSprite` 与 `captionLabel` 两个节点都关掉，见 `TerritoryStationView.render`）。
@@ -2677,6 +3367,10 @@ export class TerritoryMapView extends Component {
                 icon: performing ? null : base.icon,
                 isCondition: locked ? false : base.isCondition,
             };
+            // 「未解锁 → 可激活」：这一帧锁刚被摘掉、价格刚长出来 ⇒ 起播 1s 过渡。
+            // ⚠️ 必须排在 `view.render` **之前**：视图先把系数记下来，随后那次
+            //    `applyCaptionPlacement` 才会按它摆（否则第一帧是全尺寸闪一下再缩回去）。
+            this.startUnlockTransitionIfNeeded(site.cellId, content.isCondition === true);
             view.render(content);
             // 站点比格节点晚一拍建出来 ⇒ 补写一次当前的生成进度，免得先以全不透明闪一帧。
             this.applyHexSpawnFade(site.cellId, view);
@@ -2736,6 +3430,8 @@ export class TerritoryMapView extends Component {
                 badge: '',
                 interactive: !isOpened && input.pendingRandomResourceCells.length === 0,
             };
+            // 随机资源格与站点格同一条口径：锁刚摘掉 + 价格刚出现 ⇒ 起播 1s 过渡。
+            this.startUnlockTransitionIfNeeded(cellId, content.isCondition === true);
             if (this.pendingBuildingReveal.has(cellId)) {
                 // 需求 2026-10-16 row14：**建筑展示滞后到地块翻转结束**。
                 // 数据上这一格已经是「已开启」，但地皮正在翻 ⇒ 先整站不显示，
@@ -2757,6 +3453,193 @@ export class TerritoryMapView extends Component {
         }
         // 首轮快照到此为止：从下一轮起「上一轮有没有宝箱」才有意义。
         this.stationsReady = true;
+        // 本帧的「锁刚被摘掉」到此消费完（站点格 + 随机格两条路都走过了）。
+        // ⚠️ 必须清：`paintHexes` 只对**露出来**的格调 `applyHexLock`，没露出/被跳过的格
+        //    永远等不到本帧的第二次写入，留着就会把一份过期判据叠到下一次渲染上。
+        this.lockVanishedCells.clear();
+    }
+
+    /**
+     * 「建筑虚影」：把**提前披露**的关卡（见 `ITerritoryMapRenderInput.previewCells`）画成 35% 的透明建筑。
+     *
+     * ## 三态与虚影的关系（用户 2026-11-09 定）
+     *
+     * | 状态 | 地块 | 锁 | 价格 | 虚影 |
+     * | :--- | :--- | :--- | :--- | :--- |
+     * | 未解锁（前置没满足） | ✔（灰图） | ✔（`HexLockLayer`，压价格、压不住气泡） | ✘（`locked` 时被摘掉） | ✔ |
+     * | 可激活（前置满足、没花钱） | ✔ | ✘ | ✔ | ✔（压住价格） |
+     * | 已激活（花了银币） | ✔ | ✘ | ✘ | ✘（换实心建筑，0.2s 淡出） |
+     *
+     * **虚影不是第四种状态**：锁 / 价格 / 编号全部照旧由 `stationRenderOf` 与锁标层决定，
+     * 这里只往更高的一层多画一颗 `Icon`。所以「提前披露不影响状态展示」是结构上成立的，
+     * 不靠两套判据对齐。
+     *
+     * ## 只在**带建筑**的那一格画
+     *
+     * 一关可能占 2~11 格，但只有一格配了 `buildingId`（`stationIconOf` 对
+     * 没配 `buildingId` 的 stage/boss **返回 null**，那是 2026-10-16 定下的口径）。
+     * 披露的是整关 footprint（用户：「不然大建筑会有错位」），画虚影的只有这一格。
+     */
+    private syncGhosts(input: ITerritoryMapRenderInput): void {
+        // 换章：格子几何都换了，旧虚影一格都不能留。
+        if (input.map.id !== this.ghostKey) {
+            this.ghostKey = input.map.id;
+            this.clearGhosts();
+        }
+        const previewSet = new Set(input.previewCells ?? []);
+        const wanted = new Set<number>();
+        for (const site of input.map.sites) {
+            if (!previewSet.has(site.cellId)) continue;
+            if (!site.buildingId) continue;
+            // 已激活 ⇒ 交给实心建筑那条路（下面按「不在 wanted 里」收尾）。
+            if (input.progress.isCellUnlocked(site.cellId) || input.progress.isOwned(site.cellId)) continue;
+            const point = input.layout.points.get(site.cellId);
+            if (!point) continue;
+            if (!this.renderGhost(site, input, point)) continue;
+            wanted.add(site.cellId);
+        }
+        for (const cellId of Array.from(this.ghostViews.keys())) {
+            if (wanted.has(cellId)) continue;
+            const activated = input.progress.isCellUnlocked(cellId) || input.progress.isOwned(cellId);
+            // 只是「不再是预告目标」（换章之外几乎没有）⇒ 直接收；
+            // 已激活 ⇒ 走 0.2s 淡出（需求「0.2s 淡入」的那一半）。
+            if (!activated) {
+                this.dropGhost(cellId);
+                continue;
+            }
+            if (!this.ghostFades.has(cellId)) this.ghostFades.set(cellId, TERRITORY_GHOST_FADE_SECONDS);
+        }
+    }
+
+    /**
+     * 画 / 更新一颗虚影。返回 `false` 表示这一格画不出来（没取到建筑图），别进 `wanted`。
+     *
+     * 复用 `TerritoryStationView` 是**为了对齐**：`setMapPosition` + `render`
+     * 会走同一套「可见宽度归一 + trim 偏移补偿 + 底边对齐」，
+     * 虚影和实心建筑才会逐像素重合（用户 2026-11-09：「不然大建筑会有错位」）。
+     */
+    private renderGhost(site: TerritorySite, input: ITerritoryMapRenderInput, point: ITerritoryMapPoint): boolean {
+        const frame = this.stationIconOf(site, input.stageByCell.get(site.cellId) ?? null, input.art);
+        if (!frame) return false;
+        const layer = this.ensureGhostLayer();
+        const shell = this.ghostShell;
+        if (!layer || !shell) return false;
+
+        let view = this.ghostViews.get(site.cellId);
+        if (view && !view.isValid) {
+            this.ghostViews.delete(site.cellId);
+            view = undefined;
+        }
+        if (!view) {
+            const node = instantiate(this.stationPrefab);
+            node.layer = layer.layer;
+            node.name = `Ghost_${site.id}`;
+            node.setParent(shell);
+            view = node.getComponent(TerritoryStationView);
+            // `clickable = false` + 根节点住在 `active = false` 的壳里 ⇒ 双保险不抢手势。
+            view.initialize({ icon: layer, caption: shell, text: shell, badge: shell, hit: shell }, false);
+            this.ghostViews.set(site.cellId, view);
+            // 「预告首领关」过场放开的那一帧：虚影要**淡入**（0 → 35%），与锁的弹跳同时起手
+            // （需求原文「建筑虚影和锁同时生成动画」）。其它时机（开局披露 / 换章）仍是直接 35%。
+            if (this.previewCinemaRevealPending) this.ghostFadeIn.set(site.cellId, TERRITORY_GHOST_FADE_SECONDS);
+        }
+        const center = this.cellCenter(point);
+        view.setMapPosition(center.x, center.y, 0);
+        view.render({
+            site: null,
+            icon: frame,
+            iconScale: this.buildScaleOf(site, input.art),
+            // 与实心建筑同一条判据（棕榈那四棵树走底边对齐），否则虚影会比实心"浮"半格。
+            bottomAnchor: territoryUsesBottomAnchor(Number(site.buildingId)),
+            caption: '',
+            // 虚影不给 `Icon` 上色（`render` 恒把建筑刷成白），这里只为满足入参。
+            tint: TERRITORY_COLORS.locked,
+            badge: '',
+            interactive: false,
+        });
+        // 正在淡出的那颗别把透明度顶回 35%（淡出是单向的，写回去会闪一下）。
+        // 正在**淡入**的那颗从 0 起（同上，写回 35% 就没有淡入了）。
+        if (this.ghostFadeIn.has(site.cellId)) view.setGhostOpacity(0);
+        else if (!this.ghostFades.has(site.cellId)) view.setGhostOpacity(TERRITORY_GHOST_OPACITY);
+        return true;
+    }
+
+    /** 懒建虚影层 + 虚影壳（照 `ensureHexLockLayer` 的写法：运行时建、按兄弟下标插位）。 */
+    private ensureGhostLayer(): Node | null {
+        if (this.ghostLayer?.isValid) return this.ghostLayer;
+        const parent = this.stationIconLayer?.parent;
+        if (!parent || !this.stationIconLayer) return null;
+        let layer = parent.getChildByName(TERRITORY_GHOST_LAYER);
+        if (!layer) {
+            layer = new Node(TERRITORY_GHOST_LAYER);
+            layer.layer = this.stationIconLayer.layer;
+            layer.setParent(parent);
+            layer.addComponent(UITransform);
+            // 新节点 append 在末尾（index 最大）⇒ 挪到**价格层**当前下标就是"插在它前面"，
+            // 落位「图标层之后、价格层之前」：压住建筑、被银币价格压住（见 TERRITORY_GHOST_LAYER）。
+            // 🔴 2026-11-09 第二轮：目标从 `StationBadgeLayer` 换成 `StationCaptionLayer` ——
+            //    用户看了实机后要「银币 icon + 数字的层级高于建筑」（原来数字被 35% 的虚影染成一块，
+            //    读不出这一格要花多少银币）。价格底条在 Caption 层、数字在 Text 层，都在它上面。
+            const above = this.stationCaptionLayer ?? this.stationBadgeLayer;
+            if (above && above.parent === parent) layer.setSiblingIndex(above.getSiblingIndex());
+        }
+        this.ghostLayer = layer;
+        let shell = layer.getChildByName(TERRITORY_GHOST_SHELL);
+        if (!shell) {
+            shell = new Node(TERRITORY_GHOST_SHELL);
+            shell.layer = layer.layer;
+            shell.setParent(layer);
+            shell.addComponent(UITransform);
+            // 🔴 整壳关掉：虚影的底条 / 文字 / 角标 / **带 `cc.Button` 的命中根节点**都住这儿，
+            //    只写 `interactive = false` 不够 —— 活着的根节点仍然参与命中测试，会吃掉点击。
+            shell.active = false;
+        }
+        this.ghostShell = shell;
+        return layer;
+    }
+
+    /** 虚影淡出：0.2s 内 0.35 → 0，扣完就销毁。事件循环里扣时间，不建 tween（与全工程一致）。 */
+    private stepGhostFade(dt: number): void {
+        // 淡入（只在「预告首领关」过场放开的那一批上出现）：0 → 35%。
+        for (const [cellId, remaining] of this.ghostFadeIn) {
+            const left = remaining - (Number.isFinite(dt) && dt > 0 ? dt : 0);
+            if (left <= 0) {
+                this.ghostFadeIn.delete(cellId);
+                this.ghostViews.get(cellId)?.setGhostOpacity(TERRITORY_GHOST_OPACITY);
+                continue;
+            }
+            this.ghostFadeIn.set(cellId, left);
+            this.ghostViews.get(cellId)?.setGhostOpacity(
+                TERRITORY_GHOST_OPACITY * (1 - left / TERRITORY_GHOST_FADE_SECONDS));
+        }
+        if (this.ghostFades.size === 0) return;
+        for (const [cellId, remaining] of this.ghostFades) {
+            const left = remaining - dt;
+            if (left <= 0) {
+                this.dropGhost(cellId);
+                continue;
+            }
+            this.ghostFades.set(cellId, left);
+            this.ghostViews.get(cellId)?.setGhostOpacity(
+                TERRITORY_GHOST_OPACITY * (left / TERRITORY_GHOST_FADE_SECONDS));
+        }
+    }
+
+    /** 收掉一颗虚影（`dispose` 负责散落在外层的那几颗节点，`node.destroy()` 才是根）。 */
+    private dropGhost(cellId: number): void {
+        this.ghostFades.delete(cellId);
+        this.ghostFadeIn.delete(cellId);
+        const view = this.ghostViews.get(cellId);
+        this.ghostViews.delete(cellId);
+        if (!view) return;
+        view.dispose();
+        if (view.node.isValid) view.node.destroy();
+    }
+
+    private clearGhosts(): void {
+        for (const cellId of Array.from(this.ghostViews.keys())) this.dropGhost(cellId);
+        this.ghostFades.clear();
+        this.ghostFadeIn.clear();
     }
 
     /**
@@ -2958,44 +3841,99 @@ export class TerritoryMapView extends Component {
         input: ITerritoryMapRenderInput,
         /** 本轮唯一该挂气泡的宝箱格（`territoryChestHintCell` 的结果；`null` = 一个都不挂）。 */
         chestHintCell: number | null = null,
+        /**
+         * 同一节点里**不承载 UI** 的格子（`territoryNodeMutedCells` 的结果）。
+         *
+         * 不传 = 空集合 = 保持现状（每个站点各自画自己的价格/编号），沙箱测试与老调用方零改动。
+         */
+        mutedCells: ReadonlySet<number> = EMPTY_CELL_SET,
     ): ITerritoryStationRender {
         const stage = input.stageByCell.get(site.cellId) ?? null;
         const isOpened = input.progress.isCellUnlocked(site.cellId)
             || input.progress.isOwned(site.cellId);
+        // 🔴 同一节点的「非建筑格」：**任何状态都不画任何 UI**（用户 2026-11-10：
+        //    「和 boss 关卡是同一个节点的地块都不显示 UI，只有建筑虚影上显示 UI
+        //     （锁住的 icon 或者是银币 icon + 数字）」）。
+        //    ⇒ 价格 / 编号气泡 / 建筑 / 锁**全部只落在承载格**上，兄弟格永远是空地。
+        //    ⚠️ 2026-11-09 第四 / 五轮曾两次放宽（「解锁后兄弟格还是要显示银币 icon 和数量」、
+        //       「兄弟格跟 30 样式一样」），两条都被本轮覆盖：同一关十几片褐色格各挂一条 35，
+        //       读起来就是"这一关要连续买十几次"。状态改由承载格一处表达。
+        //    ⚠️ `interactive` 保持原样：这些格照样能点、照样扣银币解锁（§3.28「保留可点，照常解锁」），
+        //       消耗数字由点击后的确认弹窗承担。
+        if (mutedCells.has(site.cellId)) {
+            const mutedPending = input.pendingFixedResourceCells.includes(site.cellId);
+            return {
+                site,
+                icon: null,
+                caption: '',
+                // 地皮色是**地形**不是 UI：未解锁仍是泥土色，解锁后转草地（与承载格同一套 `isOpened` 判定）。
+                tint: isOpened ? TERRITORY_COLORS.cleared : TERRITORY_COLORS.locked,
+                badge: '',
+                isLoading: mutedPending,
+                interactive: !mutedPending,
+            };
+        }
         if (!isOpened) {
             const isOpenable = input.siteOpenableCells.includes(site.cellId);
             const isPending = input.pendingFixedResourceCells.includes(site.cellId);
-            // 🔴 前置宝箱（fixedResource）已解锁但没领取 ⇒ 后继格银币数字用**红色**提示
-            // （山猫 2026-10-21：前置格没有通关状态 = 还没 passCell 领取）。服务端对固定资源
-            // 的 completed 记在 unlockCells（`isPrerequisiteComplete` 的固定资源特例正是镜像它），
-            // 所以这里**只改视觉不动解锁**：未领取只把数字染红，点击解锁照常可进行 ——
-            // 领取后（owned）数字回白。
-            //（`input.map?.` 全链可选：防御沙箱测试的宽松输入，真实渲染 input.map 必有；
-            //  `requiredCells ?? []` 同理 —— 配置归一后恒有，裸对象沙箱可能缺。）
-            const unclaimedFixedPrereq = (site.unlock.requiredCells ?? []).some((cell) =>
-                input.progress.isCellUnlocked(cell)
-                && !input.progress.isOwned(cell)
-                && (input.map?.sites?.find((s) => s.footprint.includes(cell))?.type
-                    === TERRITORY_SITE_TYPE.fixedResource));
+            // 🔴 「前置没完成」这一种**不在这里表达**（2026-11-09 用户：「前置地块未解锁，展示的
+            //    也是锁 icon，不是银币 + 显示红色的 UI」）。
+            //    这里原先还有一条「前置宝箱已解锁但没领取 ⇒ 银币数字染红」（山猫 2026-10-21），
+            //    那是**没有锁**的红字：玩家看到一片红价格，读成"钱不够"，而不是"先把宝箱点了"。
+            //    现已上移到模型侧（`TerritoryProgress.isPrerequisitePending`）⇒ 进 `lockBlockedCells`
+            //    ⇒ 画锁 + `isCondition = false` 摘掉整条价格（见 `syncStations` 的 `locked`）。
             // 🔴 「银币数字什么时候红」（用户 2026-11-03：「体力不足或银币不足时，**对应的**
-            //    数字 UI 显示红色」）——三个来源，缺一不可：
+            //    数字 UI 显示红色」）——两个来源：
             //    ① 银币**确实**不够（`territoryCostShort`，两项各判各的）；
-            //    ② 前置宝箱还没领取（2026-10-21 山猫口径，见上）；
-            //    ③ 这格开不了，但**不是因为体力** —— 前置没打 / 战力不够时底条已是红，
+            //    ② 这格开不了，但**不是因为体力** —— 战力不够这类情况底条已是红，
             //       数字跟着红是旧的读法（保留）。⊂ 体力不足这一种**排除掉**：
             //       那是体力那颗数字的事，把银币染红等于告诉玩家"钱不够"，他会去攒错东西。
             const short = territoryUnlockShortfall(input.wallet, site.unlock);
             const silverRed = short.silver
-                || unclaimedFixedPrereq
                 || (!isOpenable && !short.stamina);
+            // 🔴 2026-11-11 用户：「预告关卡节点，展示气泡提示（红色未通过的状态）」。
+            //   提前披露只改可见性 —— 这一格仍然走「未解锁」的锁 / 价格画法，气泡是**额外叠上去的**，
+            //   绝不因此放宽解锁、扣费、开战判据（模型侧 `territoryRevealedCells` 的口径一个字没动）。
+            //   四条判据同时成立才挂：
+            //     ① 在 `previewCells` 里（披露序列 = 本章第 1 关 + 每个首领，见 `model/TerritoryPreview`）；
+            //     ② 是战斗站点（stage / boss / asyncPvp），资源点与装饰格不挂编号；
+            //     ③ 配了 `buildingId` 且查得到帧 = **虚影承载格**（`syncGhosts` 也只在这格画虚影）；
+            //     ④ 能算出气泡文案（asyncPvp 恒 `PVP`，其余要绑到 campaign 行才有 `章节-关卡`）。
+            //   ⇒ 一关 footprint 有 5~10 格，只有承载格挂一颗，不会满屏 `1-1`（§3.28 同口径）。
+            const isPreviewBattleSite = (input.previewCells ?? []).includes(site.cellId)
+                && (site.type === TERRITORY_SITE_TYPE.stage
+                    || site.type === TERRITORY_SITE_TYPE.boss
+                    || site.type === TERRITORY_SITE_TYPE.asyncPvp)
+                && !!site.buildingId
+                && territoryLevelBubbleText(site, stage) !== undefined;
+            // 站点自身 `icon` 必须是 null（未解锁不画实心建筑），但气泡要抬到**虚影建筑**顶上：
+            // 把虚影那张帧单独交给视图算可见高，别让它按「没有建筑 ⇒ height 0」把气泡压回格心。
+            const previewAnchor = isPreviewBattleSite
+                ? this.stationIconOf(site, stage, input.art) : null;
+            const previewBubble = isPreviewBattleSite && previewAnchor !== null;
             return {
                 site,
                 icon: null,
                 isCondition: true,
                 isLoading: isPending,
                 conditionIcon: input.art.randomSilverIcon,
+                // 固定宝箱格可激活时在价格行**上方**再加一颗宝箱图标（需求 2026-11-10）。
+                // 只给 `fixedResource`：关卡 / 异步据点 / 随机格的格心只放价格，别跟着长出一颗箱子。
+                // ⚠️ 前置没满足的宝箱格走的是 `syncStations` 的 `locked` 分支（`isCondition = false`），
+                //    到这里的一定是「可激活」⇒ 天然满足「未解锁只显示锁」。
+                conditionChestIcon: site.type === TERRITORY_SITE_TYPE.fixedResource
+                    ? input.art.chestIcon ?? null
+                    : null,
                 conditionTextColor: silverRed
                     ? TERRITORY_COLORS.randomConditionText : TERRITORY_COLORS.randomAvailableText,
+                // 预告关卡的红色编号气泡：文案复用 `model/TerritoryLevelBubble`，底图固定取
+                // 「未通关」红 `frame_02`（这一格本来就没通过）；红图缺失照旧回退蓝图，别让编号消失。
+                levelBubble: previewBubble ? territoryLevelBubbleText(site, stage) : undefined,
+                levelBubbleFrame: previewBubble
+                    ? input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null
+                    : undefined,
+                previewBubble,
+                levelBubbleAnchorFrame: previewAnchor,
                 caption: isPending
                     ? ''
                     : String(site.unlock.silverCost),
@@ -3041,7 +3979,7 @@ export class TerritoryMapView extends Component {
         }
         // 所有战斗站点（`stage` / `boss` / `asyncPvp`）都在这里：先解锁展示建筑，
         // 已解锁再点击 ⇒ `CmdStartBattleReqMsg` 开战（**不发**通关）。
-        // 判定必须与 `TerritoryPresenter.selectSite` 的关卡分支**同口径**（都是站点类型），
+        // 判定必须与 `TerritoryModel.selectSite` 的关卡分支**同口径**（都是站点类型），
         // 之前两边都写的是「两步式名单 [327,328] 或 isBoss」⇒ 只有关卡 1 会长这样、能点下有反应，
         // 其余关卡外观照旧却已经不可点 ⇒ 「外观说能打、点了没反应」。
         if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {

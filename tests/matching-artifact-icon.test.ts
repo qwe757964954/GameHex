@@ -63,6 +63,19 @@ test('对手数据带上图标名（服务端 artifactId → 资源名）', () =
     assert.equal(base.artifactIcon, '');
 });
 
+test('回包神器为 0 时清空旧神器，有效 id 时显示查表结果', () => {
+    const lookup = buildMatchProfileLookup(null, ARTIFACT_ROWS);
+    const base: MatchPlayerData = { name: '', avatarIcon: '', power: 0, rank: '', trophy: 0,
+        artifactName: '旧神器', artifactIcon: '旧图', stats: [] };
+    const withoutArtifact = applyUnitToPlayerView(base, { artifactId: 0, heroIds: [] } as never, lookup);
+    assert.equal(withoutArtifact.artifactName, '');
+    assert.equal(withoutArtifact.artifactIcon, '');
+    const withArtifact = applyUnitToPlayerView(withoutArtifact, { artifactId: 69002, heroIds: [] } as never, lookup);
+    assert.equal(withArtifact.artifactName, '疾风之靴');
+    assert.equal(withArtifact.artifactIcon, '狂猎皮靴');
+    assert.equal(base.artifactName, '旧神器');
+});
+
 test('匹配界面从 image/artifact 取神器图，不是 image/matching', () => {
     const artPaths = readFileSync('assets/script/app/ArtPaths.ts', 'utf8');
     assert.match(artPaths, /ARTIFACT_ART_ROOT\s*=\s*`\$\{ART_ROOT\}\/artifact`/,

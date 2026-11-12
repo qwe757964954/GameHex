@@ -11,6 +11,7 @@ import {
   math,
   Node,
   Prefab,
+  ScrollView,
   tween,
   UITransform,
   Vec2,
@@ -184,6 +185,9 @@ export class VirtualScrollView extends Component {
     tooltip: '是否启用虚拟列表模式（关闭则仅提供滚动功能）',
   })
   public useVirtualList: boolean = true;
+
+  @property({ type: ScrollView, tooltip: '可选：由原生 ScrollView 处理手势、惯性和回弹，本组件只负责虚拟条目' })
+  public nativeScrollView: ScrollView | null = null;
 
   @property({
     type: Enum(ScrollDirection),
@@ -971,7 +975,7 @@ export class VirtualScrollView extends Component {
     // `interactive = false` 的纯展示列表：**一个 TOUCH_* 都不绑**。
     // 绑了就会进引擎命中链，把压在它下面的可拖区域（棋盘）整片吞掉 ——
     // 而事件只沿祖先链冒泡，兄弟节点（mapViewport）连 capture 都收不到。
-    if (!this.interactive) return;
+    if (!this.interactive || this.nativeScrollView) return;
     this.node.on(Node.EventType.TOUCH_START, this._onDown, this);
     this.node.on(Node.EventType.TOUCH_MOVE, this._onMove, this);
     this.node.on(Node.EventType.TOUCH_END, this._onUp, this);
@@ -1053,7 +1057,7 @@ export class VirtualScrollView extends Component {
   }
 
   private _bindGlobalTouch() {
-    if (!this.interactive) return;
+    if (!this.interactive || this.nativeScrollView) return;
     input.on(Input.EventType.TOUCH_END, this._onGlobalTouchEnd, this);
     input.on(Input.EventType.TOUCH_CANCEL, this._onGlobalTouchEnd, this);
   }
@@ -1348,6 +1352,10 @@ export class VirtualScrollView extends Component {
   }
 
   update(dt: number) {
+    if (this.nativeScrollView) {
+      if (this._isStarted) this._updateVisible(false);
+      return;
+    }
     if (!this.content || this._isTouching || this._scrollTween) return;
     let pos = this._getContentMainPos();
     let a = 0;
@@ -2430,7 +2438,7 @@ export class VirtualScrollView extends Component {
     if (!this.useVirtualList) return;
     // `interactive = false` ⇒ 连 `VScrollViewItem` 都不挂：它在 `onLoad` 里会给行根
     // 再注册 4 个 `TOUCH_*`，只关容器那层的话行区域照样把触摸吞掉（治了容器没治行）。
-    if (!this.interactive) return;
+    if (!this.interactive || this.nativeScrollView) return;
     let itemScript = node.getComponent(VScrollViewItem);
     if (!itemScript) itemScript = node.addComponent(VScrollViewItem);
     this._initSortLayerFlag ? itemScript.onSortLayer() : itemScript.offSortLayer();

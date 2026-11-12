@@ -196,7 +196,7 @@ try:
                 target.write(content)
             print('已更新单表类型: ' + selected_table)
             sys.exit(0)
-        with open(output_file_path, 'w', encoding='utf-8') as output_file:
+        with open(output_file_path, 'w', encoding='utf-8', newline='\n') as output_file:
             output_file.write(begin_content)
             output_file.write('\n\n'.join(result_contents))
             output_file.write("type TRefName=")

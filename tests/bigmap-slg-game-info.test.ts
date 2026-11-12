@@ -13,7 +13,7 @@ afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { BigMapPresenter } from '../assets/script/app/bigmap/application/BigMapPresenter';
+import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapSlgRepository, type IBigMapSlgGateway, type IBigMapSlgRequestName } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
 import { bigMapCityAttackPreview } from '../assets/script/app/bigmap/model/BigMapBattle';
 import { createBigMapBaseState } from '../assets/script/app/bigmap/model/BigMapBase';
@@ -51,7 +51,7 @@ class Gateway implements IBigMapSlgGateway {
 function harness() {
     const gateway = new Gateway();
     const repo = new BigMapSlgRepository(gateway, config, () => NOW, 100);
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: { read: () => { throw new Error('联机不能读取离线基地'); }, write: () => {} },
         saveKey: 'slg-game-info', adventureChapter: () => 10, now: () => NOW, slgRepository: repo,
     });
@@ -147,7 +147,7 @@ test('联机搜索随服务器击杀进度更新，跳过最近的未解锁怪�
     const gateway = new Gateway();
     const repo = new BigMapSlgRepository(gateway, config, () => NOW, 100);
     const battles: number[] = [];
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: { read: () => null, write: () => {} },
         saveKey: 'online-monster-search', adventureChapter: () => 10, now: () => NOW,
         slgRepository: repo,
@@ -179,7 +179,7 @@ test('联机搜索随服务器击杀进度更新，跳过最近的未解锁怪�
 });
 
 test('Presenter：离线档没有 toCampId，playerCampId 恒 0 且没有城池被标成本城', () => {
-    const presenter = new BigMapPresenter({
+    const presenter = new BigMapModel({
         config, storage: { read: () => null, write: () => {} },
         saveKey: 'offline-game-info', adventureChapter: () => 10, now: () => NOW,
     });

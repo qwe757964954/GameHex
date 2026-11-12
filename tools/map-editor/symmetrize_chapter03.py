@@ -34,7 +34,7 @@
 用法：
 
     python tools/map-editor/symmetrize_chapter03.py --dry-run   # 打预览，不写盘
-    python tools/map-editor/symmetrize_chapter03.py             # 改预设 + 发布 4 处
+    python tools/map-editor/symmetrize_chapter03.py             # 改预设 + 发布 2 处
 
 脚本是**幂等**的：同一份输入跑几次结果一样（不依赖当前谁是随机格，只看剖面与固定格）。
 """
@@ -272,9 +272,7 @@ def main() -> int:
         return 0
 
     targets, _ = publisher.copy_one(PRESET, dry_run=False)
-    published = json.loads(targets[0].read_text(encoding="utf-8"))
-    randomizer.write_remote(published, "chapter_03", dry_run=False)
-    print(f"已发布 {len(targets) + 1} 处：{', '.join(str(t) for t in targets)} + assets/remoteRef/chapter_03.json")
+    print(f"已发布 {len(targets)} 处：{', '.join(str(t) for t in targets)}")
     return 0
 
 

@@ -192,14 +192,28 @@ test('真表 + 磁盘：pvpCard 的每一行 headIcon 都能解出资源名，�
     assert.deepEqual(missing, [], '解出来的每一张都必须已在磁盘上（否则就是 resources.load 的静默留白）');
     assert.ok(filled.length >= 32, `至少应有 32 张卡配了头像，实际 ${filled.length}`);
     assert.ok(blank >= 1, '骷髅战士 / 冰霜巨龙 / 亡灵法师 老端也没有头像，应当留空');
-    // 两个目录都要真的被用到 —— 只填一个目录说明这批映射退化了
-    assert.ok(filled.includes('兵种_头像_弓兵'), '兵种头像那批（icons/cardHead）必须有');
-    assert.ok(filled.some((key) => key.startsWith('图标_头像_')),
-        '玩家头像那批（icons/head，近卫 4 张）也必须有');
-    // 2026-10-09：12 个有专属立绘的角色必须走自己的 key，不能再共用兵种级那张脸
-    assert.ok(filled.includes('兵种_头像_豌豆游侠'),
-        '豌豆游侠必须用角色专属头像（共用 兵种_头像_弓兵 就是这次改动被回滚了）');
+    assert.ok(new Set(filled).size >= 32, '角色应使用专属头像，不能全部回退到同一张兵种图');
 });
+
+/**
+ * 2026-11-10 退役：当前工程配置表零消费的 15 张民兵种族变体。
+ * `pvpCard.headIcon` 与 `monsterCard.headIcon` 全不指向它们；`icon_map.json` 里同名的
+ * 3 个 key 走的是 `icons/hero/` 下另一套图，不在 cardHead。名单写死在这里 = 单一真源：
+ * 既防止有人把退役图重新导入，也防止拿它当借口放过新漏图。
+ */
+const RETIRED_CARD_HEAD_ARTS: readonly string[] = [
+    'tx_icon_MB_BFS_KULOU', 'tx_icon_MB_BFS_SHOUREN', 'tx_icon_MB_BFS_YUREN',
+    'tx_icon_MB_CQB_KULOU', 'tx_icon_MB_CQB_SHOUREN', 'tx_icon_MB_CQB_YUREN',
+    'tx_icon_MB_DDB_KULOU', 'tx_icon_MB_DDB_SHOUREN', 'tx_icon_MB_DDB_YUREN',
+    'tx_icon_MB_GB_KULOU', 'tx_icon_MB_GB_SHOUREN', 'tx_icon_MB_GB_YUREN',
+    'tx_icon_MB_JXK_KULOU', 'tx_icon_MB_JXK_SHOUREN', 'tx_icon_MB_JXK_YUREN',
+];
+
+/** 老端 army / advisor / monster 独占的 6 张兵种级头像：icon.json 有条目、工程从未导入。 */
+const LEGACY_UNIMPORTED_CARD_HEAD_ARTS: readonly string[] = [
+    'tx_icon_DDB_HMR', 'tx_icon_FDB_yjl', 'tx_icon_MB_GB',
+    'tx_icon_MB_CQB', 'tx_icon_MB_DDB', 'tx_icon_MB_BFS',
+];
 
 test('真表 + 守卫：cardHead 目录里的图与 icon.json 的「兵种_头像_*」条目一一对应', () => {
     const iconRows = readRows('icon') as { key?: unknown; path?: unknown }[];
@@ -216,11 +230,14 @@ test('真表 + 守卫：cardHead 目录里的图与 icon.json 的「兵种_头�
         assert.equal(target!.root, ArtPaths.CARD_HEAD_ART_ROOT);
         mapped.add(target!.art);
     }
-    // 2026-10-15 清理：army / advisor / monster 三张老表零活消费（代码 + 测试都无getTable），
-    // 它们独占的 6 张兵种级头像（刀盾兵/斧盾兵/弓手民兵/战士民兵/法师民兵/枪兵民兵）
-    // 连同 icon.json 条目一起清掉 ⇒ 50 → 44。
-    assert.equal(mapped.size, 44,
-        `icon.json 里应有 44 个「兵种_头像_*」条目（50 减去army/advisor/monster 独占的 6 张），实际 ${mapped.size}`);
-    assert.deepEqual([...mapped].filter((a) => !onDisk.has(a)), [],
-        'icon.json 里的每一个兵种头像都必须已导入 icons/cardHead（否则那张卡静默留白）');
+    const exempt = new Set([...LEGACY_UNIMPORTED_CARD_HEAD_ARTS, ...RETIRED_CARD_HEAD_ARTS]);
+    // 双向对应，不写死条目数：2026-11-06 补 35 张专属立绘时，硬编码的 44 整条漂掉过。
+    assert.deepEqual([...mapped].filter((a) => !onDisk.has(a) && !exempt.has(a)), [],
+        'icon.json 里每个在用兵种头像都必须已导入 icons/cardHead（否则那张卡静默留白）');
+    assert.deepEqual([...onDisk].filter((a) => !mapped.has(a)), [],
+        'cardHead 里不该有没登记的孤立图');
+    assert.deepEqual([...RETIRED_CARD_HEAD_ARTS].filter((a) => onDisk.has(a)), [],
+        '已退役的民兵种族变体不得再导入 cardHead');
+    assert.deepEqual([...exempt].filter((a) => !mapped.has(a)), [],
+        '豁免名单必须真的还在 icon.json 里；策划清掉条目时把名单一起删，别留永久白名单');
 });

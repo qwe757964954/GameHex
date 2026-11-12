@@ -8,8 +8,9 @@ import { LineupBoardPage } from '../../card/LineupBoardPage';
 import { LineupBoardModel } from '../../card/LineupBoardModel';
 import { LineupBoardController } from '../../card/LineupBoardController';
 import { cardRepository } from '../../card/CardRepository';
-import type { ICardUpgradeOpenData } from '../../card/CardPresentations';
+import type { ICardUpgradeOpenData, ICardSkillOpenData } from '../../card/CardPresentations';
 import { CardSkillPage } from '../../card/CardSkillPage';
+import { CardSkillController } from '../../card/CardSkillController';
 import { GameNet } from '../../net/GameNet';
 import { LoadingPopup } from '../../common/LoadingPopup';
 import { Toast } from '../../common/Toast';
@@ -18,7 +19,7 @@ import { CARD_LINEUP_TEXTS } from '../../card/CardLineupTexts';
 /** PopupManager owns this session; pages only expose rendering and serialized configuration. */
 class CardPopupComposition implements IPopupComposition {
     private controller: ControllerBase | null = null;
-    constructor(private readonly context: IControllerContext, private readonly view: CardUpgradePage | LineupBoardPage) {}
+    constructor(private readonly context: IControllerContext, private readonly view: CardUpgradePage | LineupBoardPage | CardSkillPage) {}
     async open(userData: unknown): Promise<void> {
         if (this.controller) throw new Error('卡牌会话不可重复启动');
         const controller = this.createController(userData);
@@ -30,9 +31,11 @@ class CardPopupComposition implements IPopupComposition {
             throw error;
         }
     }
-    private createController(userData: unknown): CardUpgradeController | LineupBoardController {
+    private createController(userData: unknown): CardUpgradeController | LineupBoardController | CardSkillController {
         const view = this.view;
-        return view instanceof CardUpgradePage ? this.createUpgradeController(view, userData as ICardUpgradeOpenData) : this.createBoardController(view);
+        if (view instanceof CardUpgradePage) return this.createUpgradeController(view, userData as ICardUpgradeOpenData);
+        if (view instanceof LineupBoardPage) return this.createBoardController(view);
+        return this.createSkillController(view, userData as ICardSkillOpenData);
     }
     private createUpgradeController(view: CardUpgradePage, userData: ICardUpgradeOpenData): CardUpgradeController {
         const model = new CardUpgradeModel(userData);
@@ -43,7 +46,6 @@ class CardPopupComposition implements IPopupComposition {
             failed: reportCardPopupFailure,
             view: {
                 render: state => view.render(state),
-                close: () => view.close()
             },
             loading: {
                 beginLoading: () => {
@@ -56,7 +58,6 @@ class CardPopupComposition implements IPopupComposition {
             },
             popups: {
                 openSkills: data => { void CardSkillPage.open({ userData: data }).catch(reportCardPopupFailure); },
-                openEditor: () => { void LineupBoardPage.open().catch(reportCardPopupFailure); },
             },
         });
     }
@@ -80,6 +81,20 @@ class CardPopupComposition implements IPopupComposition {
             },
         });
     }
+    private createSkillController(view: CardSkillPage, data: ICardSkillOpenData): CardSkillController {
+        return new CardSkillController(this.context, {
+            owner: view,
+            data,
+            repository: cardRepository,
+            view: {
+                render: state => view.render(state),
+                close: () => view.close(),
+                notify: kind => view.notify(kind),
+            },
+            requests: { removeCaller: removeCardPopupCaller },
+            failed: reportCardPopupFailure,
+        });
+    }
     dispose(): void {
         const controller = this.controller;
         this.controller = null;
@@ -88,7 +103,9 @@ class CardPopupComposition implements IPopupComposition {
 }
 
 export function createCardPopupComposition(context: IControllerContext, view: PopupBase): IPopupComposition | null {
-    return view instanceof CardUpgradePage || view instanceof LineupBoardPage ? new CardPopupComposition(context, view) : null;
+    return view instanceof CardUpgradePage || view instanceof LineupBoardPage || view instanceof CardSkillPage
+        ? new CardPopupComposition(context, view)
+        : null;
 }
 
 function reportCardPopupFailure(error: unknown): void { console.error('[CardPopupComposition] 卡牌会话失败', error); }

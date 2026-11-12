@@ -23,6 +23,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import * as shakeCore from '../assets/script/core/hex/ShakePresentation';
 import { assetPath } from './helpers/asset-paths';
 
 type Entry = Record<string, unknown>;
@@ -350,6 +351,8 @@ test('D2 页签禁用时显示锁并阻止点击，切换选中态不丢锁，�
         };
         if (name === '../rd/RedDotBinding') return {};
         if (name === './RedDot') return {};
+        // 2026-11-10 领地奖励飞入英雄按钮：TabButton 复用 core/hex 的生成抖动曲线（零 cc）。
+        if (name === '../../core/hex/ShakePresentation') return shakeCore;
         throw new Error(`Unexpected import: ${name}`);
     } });
     const view = new exports.TabButton();

@@ -61,6 +61,8 @@ function fixture(ground: unknown = { name: 'opaque-ground' }) {
     const theme = load('assets/script/app/bigmap/view/BigMapTheme.ts', { cc });
     const { BigMapWorldView } = load('assets/script/app/bigmap/view/BigMapWorldView.ts', {
         cc, '../../../framework/event/EventMgr': { EventMgr }, '../application/BigMapEvents': mvcEvents, '../model/BigMapWorld': {}, '../model/BigMapTerritoryColor': territoryColor,
+        // 名单角色标记要读血量文案（`BIGMAP_CAMP_ROLE_TEXT.hp`）；真模块依赖链在最小 cc 桩下不可用，给等价桩。
+        '../model/BigMapCampRoleInfo': { BIGMAP_CAMP_ROLE_TEXT: { hp: (value: number) => `HP ${value}` } },
         './BigMapWorldLayout': geometry, './BigMapTheme': theme, './BigMapWorldMarker': {},
         './BigMapWorldTemplates': {}, './BigMapBackgroundLayout': {},
     });
@@ -84,8 +86,8 @@ function playerMarkerFixture() {
     Object.assign(view.data, {
         ui: {}, playerBaseHexId: 5050, playerCampId: 101, territories: [], monsters: new Map(),
         cities: new Map([
-            [101, { cityId: 101, hexId: 5050, level: 3, name: '城池甲', state: 'open', territoryOwner: 'neutral' }],
-            [102, { cityId: 102, hexId: 5051, level: 4, name: '城池乙', state: 'open', territoryOwner: 'neutral' }],
+            [101, { cityId: 101, hexId: 5050, level: 3, name: '城池甲', state: 'open', territoryOwner: 'neutral', campRoles: [] }],
+            [102, { cityId: 102, hexId: 5051, level: 4, name: '城池乙', state: 'open', territoryOwner: 'neutral', campRoles: [] }],
         ]),
     });
     Object.assign(view.data.world, { monsters: [], playerBase, bases: [playerBase,
@@ -94,20 +96,39 @@ function playerMarkerFixture() {
         plates: new Map([['self', { name: 'self' }], ['city', { name: 'city-plate' }]]) });
     view.playerPortrait = { name: 'portrait' };
     view.paintTerritory = () => {};
-    view.addMarker = (kind: string, id: number | string, hexId: number) => {
+    view.addMarker = (kind: string, id: number | string, hexId: number, cityId = 0) => {
         const point = view.layout.points.get(hexId);
-        view.markers.push({ kind, id, hexId, icon: {},
+        view.markers.push({ kind, id, hexId, cityId, icon: {},
             node: { active: true, position: point, destroyed: false,
                 destroy() { this.destroyed = true; }, setSiblingIndex() {},
-                // 城池聚焦会把标记按布局点幂等重摆（applyFocusIsolation），桩节点要能接 setPosition
+                // 2026-11-11 起城池聚焦改成抬相机，标记不再被重摆；setPosition 留着只是让桩节点
+                // 与 `addMarker` 的签名一致，免得以后再加位置逻辑时又踩一遍。
                 setPosition(x: number, y: number) { this.position = { x, y }; } },
             view: { hitArea: { height: 200 }, portrait: null,
-                setPortrait(frame: unknown) { this.portrait = frame; } },
+                setPortrait(frame: unknown) { this.portrait = frame; },
+                setStatusLine(text: string, y: number) { this.status = { text, y }; } },
         });
     };
     view.applyMarker = (marker: { appearance?: unknown }, appearance: unknown) => { marker.appearance = appearance; };
     return view;
 }
+
+test('SLG 刷新按已有 Map 索引查询标记，数据不变时不重复写标记', () => {
+    const view = playerMarkerFixture();
+    let lookups = 0, writes = 0;
+    const get = view.data.cities.get.bind(view.data.cities);
+    view.data.cities.get = (id: number) => { lookups++; return get(id); };
+    const apply = view.applyMarker;
+    view.applyMarker = (...args: unknown[]) => { writes++; apply(...args); };
+    view.refresh();
+    assert.ok(lookups >= 2, '每个城池标记应直接查询城市 Map');
+    const firstWrites = writes;
+    view.refresh();
+    assert.equal(writes, firstWrites);
+    const source = readFileSync('assets/script/app/bigmap/view/BigMapWorldView.ts', 'utf8');
+    const refresh = source.slice(source.indexOf('    refresh(): void'), source.indexOf('    private get focusedCityHexId'));
+    assert.doesNotMatch(refresh, /cities\.find|monsters\.find|new Map/);
+});
 
 test('玩家基地与城池同格时只有一个标记，显示主城与头像且保留城池查询', () => {
     const view = playerMarkerFixture();
@@ -136,7 +157,7 @@ test('玩家基地与城池同格时只有一个标记，显示主城与头像�
     } finally { EventMgr.instance.offTarget(owner); }
 });
 
-test('136条驻守信息不生成玩家基地，城池只显示真实第一名头像并随换榜清空', () => {
+test('136条驻守信息各自落在自己的 pos 格，不生成玩家基地，城池只显示真实第一名头像并随换榜清空', () => {
     const view = playerMarkerFixture();
     view.data.isServerBase = true;
     view.data.selfRoleId = 'self';
@@ -146,7 +167,13 @@ test('136条驻守信息不生成玩家基地，城池只显示真实第一名�
     city.rankEntries = [{ rank: 2, roleId: 'second', avatarId: '1002' }, { rank: 1, roleId: 'first', avatarId: '1001' }];
     view.refresh();
     assert.equal(view.markers.some((marker) => marker.id === 'npc'), false);
-    assert.equal(view.markers.some((marker) => marker.kind === 'role'), false);
+    // 2026-11-11 口径：名单角色按 `pos` 各自摆一个标记（地图上每个玩家占自己那一格）。
+    const roles = view.markers.filter((marker) => marker.kind === 'role');
+    assert.equal(roles.length, 136);
+    // 用 join 比字符串：`markers` 是 vm 里建出来的数组，跨 realm 直接 deepStrictEqual 会挂在原型上。
+    assert.equal(roles.map((marker) => marker.hexId).sort((a, b) => a - b).join(','),
+        city.campRoles.map((role) => role.pos).sort((a, b) => a - b).join(','));
+    assert.ok(roles.every((marker) => marker.cityId === 101), '角色归属跟着回包的城池记，不靠 pos 反推');
     const marker = view.markers.find((marker) => marker.kind === 'city' && marker.id === 101);
     const frame = { name: 'first' };
     view.setRolePortrait('1002', { name: 'second' });
@@ -167,7 +194,7 @@ test('同城普通详情切换驻守名单时立即解除地图聚焦，不等�
     const view = playerMarkerFixture();
     view.selectedHexId = view.data.cities.get(101).hexId;
     let focus = 0;
-    view.applyFocusIsolation = () => { focus = view.focusedCityHexId; };
+    view.applyFocusCamera = () => { focus = view.focusedCityHexId; };
     view.refresh();
     assert.equal(focus, view.selectedHexId);
     view.data.ui.campRolesVisible = true;

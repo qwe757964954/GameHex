@@ -1,4 +1,4 @@
-import { _decorator, CCInteger, Color, Component, Graphics, Node, UITransform, Vec3 } from 'cc';
+import { _decorator, CCInteger, Color, Component, Graphics, Layout, Node, UITransform, Vec3, Widget } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { readRoleRow } from '../main/MainRoleRow';
@@ -95,6 +95,9 @@ const GLOW_PADDING = 8;
  */
 @ccclass('ResBar')
 export class ResBar extends Component {
+    @property(Layout) slotsLayout: Layout = null!;
+    @property(UITransform) barTransform: UITransform = null!;
+    @property(Widget) barWidget: Widget = null!;
     @property({ type: MainResBarSlot, tooltip: 'Res0：第 1 格（顺序 = openRefId 的 resShowType / resKeys）' })
     slot0: MainResBarSlot = null;
 
@@ -192,6 +195,11 @@ export class ResBar extends Component {
                 slot.render(slots[i] ?? null);
             });
             this.keys = keys;
+            if (this.slotsLayout.enabled) {
+                this.barTransform.height = this.slotsLayout.cellSize.height;
+                this.slotsLayout.updateLayout();
+                this.barWidget.updateAlignment();
+            }
         } catch (error) {
             console.error('[ResBar] 货币条刷新失败', error);
         } finally {
@@ -228,7 +236,9 @@ export class ResBar extends Component {
     update(dt: number): void {
         if (!this.feedbackActive) return;
         let busy = false;
-        for (const slot of this.hostSlots()) if (slot.step(dt)) busy = true;
+        if (this.slot0 && this.slot0.step(dt)) busy = true;
+        if (this.slot1 && this.slot1.step(dt)) busy = true;
+        if (this.slot2 && this.slot2.step(dt)) busy = true;
         if (this.stepFlash(dt)) busy = true;
         this.feedbackActive = busy;
     }
@@ -340,6 +350,7 @@ export class ResBar extends Component {
         if (!glow) return;
         const strength = resBarFlashFx(this.flashElapsed) ?? 0;
         glow.node.active = true;
+        if (this.slotsLayout.enabled) glow.node.setWorldPosition(this.node.worldPosition);
         glow.clear();
         if (strength <= 0) return;
         const rect = this.glowRect;
@@ -368,9 +379,10 @@ export class ResBar extends Component {
         if (!host) return null;
         const node = new Node('FeedbackGlow');
         node.layer = this.node.layer;
-        node.setParent(this.node);
+        // 自适应 Layout 只排列资源格，闪光留在格内并保持货币条坐标原点。
+        node.setParent(this.slotsLayout.enabled ? this.hostSlots()[0].node : this.node);
         node.addComponent(UITransform);
-        node.setSiblingIndex(this.node.children.length - 1);
+        node.setSiblingIndex(node.parent.children.length - 1);
         node.active = false;
         this.glow = node.addComponent(Graphics);
         return this.glow;

@@ -18,10 +18,24 @@ import type { TerritoryProgress } from './TerritoryProgress';
  * ⚠️ **只揭示有内容的格**（2026-11-05 山猫）：前沿上「没有站点、没有随机候选」的空格
  *   一律留在云里，不要为了放锁标把它们露出来 —— 那会让地图边缘凭空长出一整排灰地块。
  *   锁标只叠在**本来就会显示**的未解锁格上（见 `TerritoryMapView.isHexLockCell`）。
+ *
+ * ## 第三条通道：`previewCells`（提前披露，2026-11-09）
+ *
+ * 用户要求「开局就看得见第 1 关、通过第 1 关就看得见首领」，即**有意**提前披露 —— 这与
+ * 上面那条「前置必须通关才揭示」的判据**方向相反**。所以它是**独立的可选入参**，
+ * 不是把 `isPrerequisiteComplete` 放宽：
+ *
+ *  · 不传 `previewCells` ⇒ 行为与本函数上一版**逐格相同**（守卫用例继续成立）；
+ *  · 传了 ⇒ 这些格**无条件**并进揭示集合（它们的 `requiredCells` 一个都没满足，仍然开不了）。
+ *
+ * 🔴 披露 ≠ 能开：解锁/扣银币那条链只认前置与钱包，与揭示集合无关。
+ *    用户原话「提前展示不改变消耗银币激活地块的逻辑」。
  */
 export function territoryRevealedCells(
     map: TerritoryMapConfig,
     progress: TerritoryProgress,
+    /** 提前披露的格（见 `model/TerritoryPreview`）。缺省 = 不披露任何额外格。 */
+    previewCells: readonly number[] = [],
 ): number[] {
     const opened = new Set(progress.ownedCells.concat(progress.unlockedCells));
     const frontier = new Set<number>();
@@ -48,5 +62,7 @@ export function territoryRevealedCells(
     for (const cellId of map.randomSites?.candidateCells ?? []) {
         if (frontier.has(cellId)) revealed.add(cellId);
     }
+    // 提前披露（独立通道，见文件头）：无条件并入，不看前置。
+    for (const cellId of previewCells) revealed.add(cellId);
     return Array.from(revealed).sort((a, b) => a - b);
 }

@@ -1,4 +1,4 @@
-import type { ZCGamePreparedResources } from '../assets/script/app/zcds/application/ZCGameLoader';
+import type { IZCGamePreparedResources } from '../assets/script/app/zcds/application/ZCGamePreparedResources';
 import type { IZCGameEntry } from '../assets/script/app/zcds/application/ZCGameEntry';
 import type { ZCGameEntryParams } from '../assets/script/app/zcds/application/ZCGameEntry';
 import assert from 'node:assert/strict';
@@ -14,7 +14,7 @@ function fixture(fail = false, input: { owner?: ResourceScope; battle?: Promise<
     const calls: string[] = [];
     let resolve: (value: unknown) => void = () => {};
     let reject: (error: Error) => void = () => {};
-    const pending = new Promise<ZCGamePreparedResources>((yes, no) => { resolve = value => yes(value as ZCGamePreparedResources); reject = no; });
+    const pending = new Promise<IZCGamePreparedResources>((yes, no) => { resolve = value => yes(value as IZCGamePreparedResources); reject = no; });
     const runtime = {
         initialize() { calls.push('initialize'); if (fail) throw new Error('mount failed'); },
         shutdown() { calls.push('shutdown'); }, destroy() { calls.push('destroy'); },

@@ -1,14 +1,22 @@
 """`copy_territory_maps.py` / `copy_bigmap_maps.py` 的公共骨架。
 
 这两份脚本的差别只有三样：**源目录、目标目录、怎么校验**。其余部分逐字相同 ——
-策划 JSON 双写（`sever` / `client`）、`.meta` 只给 Cocos 资源目录生成、`--id` / `--dry-run`
+策划 `sever` 目录同步、`.meta` 只给 Cocos 资源目录生成、`--id` / `--dry-run`
 参数、逐份打印。尤其 `.meta` 的字段是 Cocos 的导入契约，写在两处就会漂移一次
 （`ver 1.1.2` 那套），所以收在这里。
+
+## 为什么只同步 sever、不写 client
+
+策划 `json/client` 是 eSon 配表的中间目录，`tools/ref/ref_compress_json.py` 会遍历
+该目录下所有 json 全量压缩进 `assets/remoteRef`。地图不是配表、游戏运行时只从
+`assets/resources/config/*-maps/` 读布局，写进 client 只会被扫成 remoteRef 里的
+第二份冗余副本（更新滞后、内容会过时）。服务端需要的那份走 sever。
 
 ## 为什么 `copy_maps.py` 不进来
 
 对局地图那套的 `.meta` 是 `ver 2.0.1 + uuid + subMetas + userData`（导入器版本不同），
-目标目录还是从 `ZCGame.ts` 的 `MAP_DIRECTORY` 反查出来的，也不需要写策划 JSON。
+目标目录还是从 `ZCGame.ts` 的 `MAP_DIRECTORY` 反查出来的；它同样只同步一份到策划
+`sever`（不带 `.meta`），但写盘骨架与这里仍不通用。
 硬合并只会让这里多出一堆 `if kind == ...` —— 重复没消掉，可读性先没了。
 
 ## 为什么 `copy_one` 留在各自的脚本里
@@ -28,23 +36,18 @@ from typing import Callable
 ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT.parents[1]
 
-# 策划侧的两份 JSON 导出目录（在 Demo3.8 之外，与 `export_tafang.mjs` 同一套口径：
-# `cityRoot/doc/塔防数据配置/json/{sever,client}`）。
+# 策划侧 JSON 目录（在 Demo3.8 之外，与 `export_tafang.mjs` 同一套根目录：
+# `cityRoot/doc/塔防数据配置/json/`）。
 #
 # ⚠️ `sever` 是仓库既有拼写（不是 server 的笔误），改名会打断转表链路，别"顺手修正"。
-# 这两个目录**不生成 Cocos 的 .meta** —— 它们不是 Cocos 资源目录，生成 .meta 只会污染策划仓。
+# 该目录**不生成 Cocos 的 .meta** —— 它不是 Cocos 资源目录，生成 .meta 只会污染策划仓。
 DOC_JSON_ROOT = PROJECT.parents[0] / "doc" / "塔防数据配置" / "json"
-DOC_TARGETS: tuple[Path, ...] = (DOC_JSON_ROOT / "sever", DOC_JSON_ROOT / "client")
+DOC_SEVER_TARGET: tuple[Path, ...] = (DOC_JSON_ROOT / "sever",)
 
 # Cocos json 导入器的 meta 契约（territory / bigmap 共用这一套；对局地图是另一套，见模块注释）。
 META_PAYLOAD = {"ver": "1.1.2", "importer": "json", "imported": True, "uuid": "", "files": {}}
 
 CopyOne = Callable[[Path, bool], "tuple[list[Path], list[str]]"]
-
-
-def targets_for(target_dir: Path, stem: str) -> list[Path]:
-    """一份预设的三个落点：Cocos 资源目录 + 策划 sever + 策划 client。"""
-    return [target_dir / f"{stem}.json", *(directory / f"{stem}.json" for directory in DOC_TARGETS)]
 
 
 def publish(targets: list[Path], payload: str) -> None:

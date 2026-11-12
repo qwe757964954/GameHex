@@ -8,12 +8,13 @@ import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/m
 import type { ZCCompiledModifierLoadout } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import type { ZCCombatTarget, ZCProjectileState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { sweptCircleHit, ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCProjectileSystem';
+import { ZC_PROJECTILE_MISS_DISTANCE, ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { loadViews } from './helpers/zcds-view-fixtures';
 
 //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀），表已下线。
-const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'pvpBaseTeamWeight'];
+const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams'];
 const tables = Object.fromEntries(names.map(name => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
     return [name, Array.isArray(source) ? source : source.v.map((row: unknown[]) => Object.fromEntries(source.k.map((key: string, i: number) => [key, row[i]])))];
@@ -96,14 +97,56 @@ test('同拍穿过多个小兵只命中沿轨迹最先碰到的敌人，忽略�
     assert.equal(model.snapshot.projectiles.length, 0);
 });
 
-test('目标离开直线弹道后可以躲避，飞到终点过期不会补扣锁定目标血量', () => {
+test('目标挪开后子弹打空：沿原方向继续飞完续飞距离才消失，不补扣锁定目标血', () => {
+    //  需求 2026-11-09：「子弹会打空，但是会沿着方向继续前进，直到达到指定的距离消失，
+    //  或者命中其他目标消失」。改前寿命 = 距离 / 速度，目标一挪位子弹就在那条空线上凭空消失。
     const model = game();
-    launch(model);
+    //  `launch` 返回的是**活引用**（同一颗弹道对象），所以出手点当场取成数字再比。
+    const startX = launch(model).x;
     (model as any).state.units[1].freeY = 100;
+
+    //  出手点 -80 → 瞄准点 40（120 距离 / 100 速度 = 1.2s）。超过 1.2s 子弹还必须在飞。
     model.tick(1.3);
-    assert.equal(model.snapshot.units.find(unit => unit.id === 2)!.hp, 1000);
-    assert.equal(model.snapshot.projectiles.length, 0);
+    const flying = model.snapshot.projectiles;
+    assert.equal(flying.length, 1, '瞄准点过了也不该消失');
+    assert.ok(flying[0].x > 40, `应该飞过瞄准点（x=${flying[0].x}）`);
+    //  位移 ≈ 速度 × 1.3s = 130（出手当拍不飞，取一个逻辑步的容差，别把口径钉死在浮点上）。
+    const flown = flying[0].x - startX;
+    assert.ok(flown > 120 && flown <= 130, `续飞段速度必须与飞行段一致（飞了 ${flown}）`);
+
+    //  续飞距离 `ZC_PROJECTILE_MISS_DISTANCE`（100）⇒ 总位移 220 ⇒ 寿命 2.2s。
+    model.tick(0.6);
+    assert.equal(model.snapshot.projectiles.length, 1, '2.0s 时还在飞（改前 1.2s 就没了）');
+    model.tick(0.5);
+    assert.equal(model.snapshot.projectiles.length, 0, '飞满「目标距离 + 续飞距离」后消失');
+    assert.equal(model.snapshot.units.find(unit => unit.id === 2)!.hp, 1000, '打空就是打空，不许补扣');
     assert.equal(model.damageStats.player.dealt, 0);
+});
+
+test('打空后继续飞，路上撞到别的敌人就命中它（打空 ≠ 白打）', () => {
+    //  锁定 2 号（x=40），但 2 号挪开；3 号站在 x=120（瞄准点之后 80，仍在续飞段内）。
+    const model = game([unit(1, 'player', -80), unit(2, 'enemy', 40), unit(3, 'enemy', 120)]);
+    launch(model, 1, 2);
+    (model as any).state.units[1].freeY = 100;
+
+    for (let step = 0; step < 60 && model.snapshot.projectiles.length; step++) model.tick(.05);
+    assert.equal(model.snapshot.projectiles.length, 0);
+    assert.equal(model.snapshot.units.find(unit => unit.id === 2)!.hp, 1000, '躲开的那只不掉血');
+    assert.ok(model.snapshot.units.find(unit => unit.id === 3)!.hp < 1000, '沿线的另一只应该吃到这一发');
+    assert.equal(model.damageStats.player.dealt, 1000 - model.snapshot.units.find(unit => unit.id === 3)!.hp);
+});
+
+test('续飞距离只加在 projectile 上：近战 0.32s 与固定寿命技能都不受影响', () => {
+    assert.equal(
+        ZCCombatSystem.attackTravelSeconds('projectile', 120, 100, ZC_PROJECTILE_MISS_DISTANCE),
+        (120 + ZC_PROJECTILE_MISS_DISTANCE) / 100,
+        '寿命 = (目标距离 + 续飞距离) / 速度',
+    );
+    assert.equal(ZCCombatSystem.attackTravelSeconds('projectile', 120, 100), 1.2, '不传续飞 ⇒ 与改前一致');
+    assert.equal(ZCCombatSystem.attackTravelSeconds('melee', 120, 100, 150), 0.32, '近战恒 0.32s');
+    assert.equal(ZCCombatSystem.attackTravelSeconds('area', 120, 100, 150), 0.32);
+    //  续飞距离是「打空后还能飞多远」的唯一来源：100 ≈ 2.4 格（一格 36×42）。
+    assert.equal(ZC_PROJECTILE_MISS_DISTANCE, 100);
 });
 
 test('真实卡表的单位轻微调整站位后停下，覆盖身体的子弹仍应命中', () => {
@@ -315,6 +358,7 @@ test('穿透后继续走完本拍距离，同位置目标按 ID 命中且后续�
     const system = new ZCProjectileSystem();
     system.beginStep(units);
     const shots = [projectile({ durationSeconds: .15, remainingPierces: 3, hitUnitIds: [] })];
+    const hitUnitIds = shots[0].hitUnitIds;
     const hits: number[] = [];
     const context = { now: .05, units, distanceScale: 1, effectiveDefinition: () => definition,
         structureTargets: () => {}, hit: (_shot: ZCProjectileState, target: ZCCombatTarget) => hits.push(target.id) };
@@ -323,6 +367,7 @@ test('穿透后继续走完本拍距离，同位置目标按 ID 命中且后续�
     assert.equal(shots[0].x, 100);
     assert.equal(shots[0].remainingPierces, 0);
     assert.deepEqual(shots[0].hitUnitIds, hits);
+    assert.equal(shots[0].hitUnitIds, hitUnitIds, '每颗弹道复用自己的命中数组');
     context.now = .1;
     system.beginStep(units);
     system.update(shots, .05, context);
@@ -497,4 +542,56 @@ test('渲染使用逻辑弹道插值，碰撞移除后回收节点，单位显�
         const position = world.unitPosition(unit(id, 'enemy', 40, 20));
         assert.equal(position.x, 40); assert.equal(position.y, 20);
     }
+});
+
+/**
+ * 多发扇形：**每颗弹道自己的朝向**必须等于它自己的飞行方向（2026-11-11 第五轮）。
+ *
+ * 用户口径：「1 号是正确的朝向，2 号顺时针 90°、3 号 180°、4 号 270°」。
+ * 真因是视图拿 `to - from` 算转角，而四颗弹共用**同一个** `to`（目标点）⇒ 四颗弹体
+ * 全部朝同一个方向，只有「正好落在瞄准线上」的那颗看着对，其余三颗是侧着飞的。
+ * 修法见 `ZCAttackResolutionSystem.sendAttack`：按各弹自己的 `heading` 把 `to` 沿该方向摊开，
+ * 长度保持 `length` 不变（`aimFlightSeconds` 与打空续飞都不受影响）。
+ *
+ * 守卫用**视图同一条算式**（`atan2(mvY(⊿), mvX(⊿))`）比较，避免「模型对了、视图还是歪的」。
+ */
+test('多发扇形：每颗弹道的 to-from 方向 = 它自己的速度方向，且角度按张角散开', () => {
+    const fan = 90;
+    const loadout = {
+        targetUnitId: definition.unitId,
+        statPatch: {},
+        typedModifiers: [
+            { sourceId: 'test-bullet-num', sourceKind: 'skill', targetUnitId: definition.unitId, domain: 'unit', statId: 'bulletNum', operation: 'add', value: 1, priority: 0 },
+            { sourceId: 'test-bullet-angle', sourceKind: 'skill', targetUnitId: definition.unitId, domain: 'unit', statId: 'bulletAngle', operation: 'add', value: fan, priority: 0 },
+        ],
+        skillPlans: [], breakdown: [], effects: [], unsupportedAttributes: [], configHash: 'test',
+    } as unknown as ZCCompiledModifierLoadout;
+    const match: ZCMatchConfig = {
+        ...config,
+        modifiers: { player: [loadout], enemy: [] } as unknown as ZCMatchConfig['modifiers'],
+    };
+    const model = game([unit(1, 'player', -80), unit(2, 'enemy', 40)], match);
+    const source = (model as any).state.units[0] as ZCUnitState;
+    source.targetUnitId = 2;
+    (model as any).sendAttack(source);
+
+    const shots = model.snapshot.projectiles;
+    assert.equal(shots.length, 2, 'bulletNum +1 ⇒ 两发');
+    const angles = shots.map(shot => Math.atan2(shot.toY - shot.fromY, shot.toX - shot.fromX));
+    const lengths = shots.map(shot => Math.hypot(shot.toX - shot.fromX, shot.toY - shot.fromY));
+    for (const shot of shots) {
+        const flight = Math.atan2(shot.velocityY, shot.velocityX);
+        const sprite = Math.atan2(shot.toY - shot.fromY, shot.toX - shot.fromX);
+        assert.ok(Math.abs(sprite - flight) < 1e-9,
+            `弹体朝向必须跟着自己的速度走：速度 ${flight} ≠ to-from ${sprite}`);
+    }
+    //  `to` 的长度保持不变（两颗一样，且等于原来那个瞄准距离）⇒ 视图的 `aimFlightSeconds`
+    //  （弧线进度）与「打空续飞」口径都不受影响，只有**方向**被摊开。
+    assert.ok(Math.abs(lengths[0] - lengths[1]) < 1e-9, '散开只改方向，不许改长度');
+    //  两发之间正好差一个张角。差 0 就是改前的 bug（四颗全朝同一方向）；
+    //  差 2 倍张角则是把 `spread` 从「首尾摊满」写成了「每发固定偏一半」。
+    const gap = Math.abs(angles[1] - angles[0]);
+    const expected = fan * Math.PI / 180;
+    assert.ok(Math.abs(gap - expected) < 1e-9 || Math.abs(gap - (2 * Math.PI - expected)) < 1e-9,
+        `两发的方向差必须等于张角 ${fan}°（实际 ${gap * 180 / Math.PI}°）`);
 });

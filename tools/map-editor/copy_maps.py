@@ -1,4 +1,4 @@
-"""Copy editor presets into Cocos resources without Node.js."""
+"""Copy editor presets into Cocos resources and the planner sever directory without Node.js."""
 
 import argparse
 import json
@@ -8,11 +8,14 @@ import shutil
 import uuid
 
 from map_format import valid_id, validate_preset
+import presets_io
 
 
 ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT.parents[1]
-SOURCE = ROOT / "presets"
+SOURCE = ROOT / "presets" / "gamemap"
+# 与 bigmap / territory 同一策划落点，但本次只同步 sever（不带 .meta）。
+SEVER_TARGET = presets_io.DOC_JSON_ROOT / "sever"
 GAME_SOURCE = PROJECT / "assets" / "script" / "app" / "zcds" / "ZCGame.ts"
 MAP_DIRECTORY_PATTERN = re.compile(r"MAP_DIRECTORY = '([^']+)'")
 
@@ -39,7 +42,8 @@ def main():
     files = sorted(file for file in SOURCE.glob("*.json") if valid_id(file.stem)
                    and (not args.preset_id or file.stem == args.preset_id))
     if not files:
-        parser.error(f"找不到 presets/{args.preset_id}.json" if args.preset_id else "presets 文件夹里没有地图")
+        parser.error(f"找不到 presets/gamemap/{args.preset_id}.json" if args.preset_id
+                     else "presets/gamemap 文件夹里没有地图")
 
     # Validate every source before copying any map, so an invalid preset cannot
     # leave a partly updated resource directory.
@@ -48,10 +52,13 @@ def main():
 
     if not args.dry_run:
         TARGET.mkdir(parents=True, exist_ok=True)
+        SEVER_TARGET.mkdir(parents=True, exist_ok=True)
     for file in files:
         target = TARGET / file.name
+        sever_path = SEVER_TARGET / file.name
         if args.dry_run:
             print(f"将拷贝 {file.name} → {target}")
+            print(f"将同步 {file.name} → {sever_path}")
             continue
         shutil.copyfile(file, target)
         meta = Path(str(target) + ".meta")
@@ -61,6 +68,8 @@ def main():
                 "uuid": str(uuid.uuid4()), "files": [".json"],
                 "subMetas": {}, "userData": {},
             }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        # 策划 sever 目录只写 JSON，不生成 .meta（与 bigmap / territory 发布口径一致）。
+        shutil.copyfile(file, sever_path)
         print(f"已拷贝 {file.name}")
 
 

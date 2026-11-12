@@ -15,18 +15,19 @@ tools\map-editor\copy-territory-maps.bat --dry-run
 tools\map-editor\copy-territory-maps.bat --id chapter_02
 ```
 
-编辑器保存到 `tools/map-editor/presets/territory/`，发布时把**同一份校验后的 JSON**写入三个目标：
+编辑器保存到 `tools/map-editor/presets/territory/`，发布时把**同一份校验后的 JSON**写入两个目标：
 
 | 目标 | 用途 | 是否生成 `.meta` |
 | --- | --- | --- |
 | `assets/resources/config/territory-maps/` | Cocos 资源（客户端读） | 是 |
 | `doc/塔防数据配置/json/sever/` | 策划侧服务端表 | 否 |
-| `doc/塔防数据配置/json/client/` | 策划侧客户端表 | 否 |
 
 > `sever` 是仓库既有拼写（与 `tools/config/export_tafang.mjs` 一致），不是 `server` 的笔误。
-> 两个策划目录不是 Cocos 资源目录，**不生成 `.meta`**。
+> 策划目录不是 Cocos 资源目录，**不生成 `.meta`**。
+> 不写策划 `client`：那是 eSon 配表中间目录，写进去会被 `ref_compress_json.py` 扫进
+> `assets/remoteRef` 形成冗余副本。
 
-发布前会检查地图尺寸、初始格、固定站点、前置依赖、站点重叠、随机候选格和资源字段；站点数量不是 10 个只提示 warning，不阻断保存。校验只跑一次，三份产物按字节相同。
+发布前会检查地图尺寸、初始格、固定站点、前置依赖、站点重叠、随机候选格和资源字段；站点数量不是 10 个只提示 warning，不阻断保存。校验只跑一次，两份产物按字节相同。
 
 固定资源点选中后，在右侧填写“固定资源奖励 ID”，对应策划“关卡地图格子奖励”表的正整数 ID。每个固定资源点可以独立填写，切换格子或点击保存时会提交当前输入，地图 JSON 记录在该站点的 `rewardId`；原有 `configId` 保持原义。旧地图没有 `rewardId` 时仍可加载，待策划给出具体 ID 后逐点补齐。
 右侧“批量设置固定资源奖励”可输入一个正整数奖励 ID，一键覆盖当前地图全部固定资源格的 `rewardId`。该操作可一次撤销，仍需 Ctrl+S 保存；其他类型站点不受影响。
@@ -50,8 +51,8 @@ python tools/map-editor/randomize_random_sites.py --building-ids 69008-69015 --n
 - 名额 = `round(候选格 × --ratio)`，**先定名额再随机挑格**（52 格的小图逐格抛硬币会漂到 77%/92%）；
 - 每格从 `--building-ids` 里均匀抽 1 个，默认 `69008-69015` = `territory_decor_01_v1 … _08_v1`；
 - 只认 `chapter_\d{2}`，`chapter_smile` 这类试验图不会被顺手改；
-- 改完依次落三处：预设（`indent=2` + LF）、`copy_territory_maps.copy_one`（资源目录 + 策划 JSON）、
-  `assets/remoteRef/`（与 `tools/ref/ref_compress_json.py` 同款 `indent=0` 紧凑格式）。
+- 改完依次落两处：预设（`indent=2` + LF）、`copy_territory_maps.copy_one`（资源目录 + 策划 sever）。
+  不写 `assets/remoteRef`（地图不进策划 client，不会被 `ref_compress_json.py` 扫进去）。
 
 ### 关卡 / 首领 / 异步据点的建筑 ID（2026-11-06 批量补齐）
 
@@ -74,7 +75,7 @@ python tools/map-editor/fill_site_buildings.py --id chapter_03 --no-publish
 - 组内填在 **cellId 最小**的那一格（与遍历顺序无关，重跑结果一致）；
 - 为什么不是"每格都填"：同一片战斗区域的所有格子共享同一关，每格都画会长出满片同款建筑
   （用户 2026-10-16 报的「327 和 328 长得一样」），`TerritoryStageBinding` 也优先挑带建筑的那格做代表；
-- 落盘与校验同 `copy_territory_maps.py`（预设 → 资源目录 + 策划 JSON → `assets/remoteRef`）。
+- 落盘与校验同 `copy_territory_maps.py`（预设 → 资源目录 + 策划 sever，不写 `assets/remoteRef`）。
 
 ---
 

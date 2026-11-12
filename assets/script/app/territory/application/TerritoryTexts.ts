@@ -179,6 +179,18 @@ export const TERRITORY_TEXTS = {
     busyPass: '通关中…',
     busyBattle: '开战中…',
     busyOpen: '开启中…',
+    /** 征收（领挂机奖励）在途。 */
+    busyIdleReward: '领取中…',
+    /** 征收请求失败（网络超时 / 服务端拒绝）；离线另走本地兜底，不弹这条。 */
+    idleRewardFailed: '领取失败，请稍后再试',
+    /** 征收离线提示（扫荡 / 领奖共用）。 */
+    idleRewardOffline: '网络未连接，请稍后再试',
+    /** 章节扫荡在途。 */
+    busySweep: '扫荡中…',
+    /** 章节扫荡失败（服务端 `succ !== 1`）。 */
+    sweepFailed: '扫荡失败，请稍后再试',
+    /** 一个关卡都没通关时点扫荡（没有可扫的目标格，不发请求）。 */
+    noSweepTarget: '暂无可扫荡的关卡',
 } as const;
 
 /** 未绑定关卡的据点类型名（地图上的"类型"标签）。 */
@@ -235,6 +247,18 @@ export const TERRITORY_LAST_CHAPTER_KEY = 'territory.lastChapter.v1';
  * 所以「通关」在这里按**一次性成就**落盘：过了就永远算过，与当前在哪个章节无关。
  */
 export const TERRITORY_PASSED_LEVELS_KEY = 'territory.passedLevels.v1';
+/**
+ * 「已激活的领地关卡」storage key（**账号级，不带 chapterId**）。
+ *
+ * 与 {@link TERRITORY_PASSED_LEVELS_KEY} 并列，只是判据从「打完」换成「花银币激活」：
+ * 快速寻敌（`open` 表 `refId = 702`）要求「激活第 1 章第 4 关地块后解锁，且解锁后所有章节常驻」。
+ * 只查当前章的 `stageByCell`，切到第 2 章就查不到 10004 ⇒ 按钮会在解锁之后消失（2026-11-04
+ * 战斗宝箱入口那个 bug 的同款形状），所以激活也按**一次性成就**落盘。
+ *
+ * ⚠️ 两张表**不能合并**：「激活」包含「还没打」的状态，合并会让「打赢了但没激活」这种
+ * 不存在的情况互相污染，也会让将来某个功能只想要「激活」时被迫接受「通关」。
+ */
+export const TERRITORY_ACTIVATED_LEVELS_KEY = 'territory.activatedLevels.v1';
 
 // ============================================================
 // 「关卡界面」/「关卡提示」（蓝湖，2026-10-27）

@@ -116,6 +116,8 @@ export interface ZCMapResourcePoint {
     depth?: ZCDepth;
     /** 中立资源组合 id（`neutralResourceGroup.groupId`）；开局在组内按权重抽一个资源项。 */
     groupId: number;
+    /** 野怪唤醒后的巡逻格；缺省/空数组保持固定野怪。 */
+    patrolCells?: number[];
 }
 
 /** 选点结束时由点位所属组合抽出的本局中立资源项。 */
@@ -743,7 +745,32 @@ export function parseZCMap(layout: ZCMapLayout): ZCMatchMap {
                 section: 0,
                 depth: point.depth ?? regionDepthByCell.get(id),
                 groupId: groupId as number,
+                ...(point.patrolCells !== undefined ? { patrolCells: point.patrolCells } : {}),
             });
+        }
+        for (const point of resourcePoints) {
+            if (point.patrolCells === undefined) continue;
+            if (!Array.isArray(point.patrolCells)) throw new Error('野怪巡逻范围必须是格子数组');
+            if (!point.patrolCells.length) { delete point.patrolCells; continue; }
+            const origin = point.row * columns + point.column;
+            const cells = new Set<number>();
+            for (const id of point.patrolCells) {
+                if (!Number.isInteger(id) || id < 0 || id >= rows * columns || !playable[id]
+                    || homes.includes(id) || (occupied.has(id) && id !== origin) || cells.has(id)) {
+                    throw new Error('野怪巡逻范围含重复、越界、虚空、主城或其他资源点');
+                }
+                cells.add(id);
+            }
+            if (!cells.has(origin)) throw new Error('野怪巡逻范围必须包含出生格');
+            const seen = new Set<number>([origin]);
+            const queue = [origin];
+            for (let head = 0; head < queue.length; head += 1) {
+                for (const id of neighborsOf(queue[head])) {
+                    if (cells.has(id) && !seen.has(id)) { seen.add(id); queue.push(id); }
+                }
+            }
+            if (seen.size !== cells.size) throw new Error('野怪巡逻范围必须连通');
+            point.patrolCells = Array.from(cells).sort((a, b) => a - b);
         }
         for (let i = 0; i < resourcePoints.length; i += 1) {
             for (let j = i + 1; j < resourcePoints.length; j += 1) {

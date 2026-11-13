@@ -47,8 +47,8 @@ test('未解锁卡：卡框右上角锁标挂在 prefab 上、默认隐藏，压
     assert.ok(lock, 'CardLineupCard 里找不到 Lock 节点（卡框右上角的锁标）');
     const sprite = components(lock!).find((component: Record<string, any>) => component.__type__ === 'cc.Sprite');
     assert.ok(sprite, 'Lock 上要挂 cc.Sprite');
-    assert.equal(sprite!._spriteFrame?.__uuid__, 'ad50a988-7b1d-4a96-a882-db253db3589f@f9941',
-        'Lock 用的图是 main-pages/image/card/kpzr_lock（卡牌阵容专用锁标）');
+    assert.equal(sprite!._spriteFrame?.__uuid__, '2d2f47c1-e82c-4725-b864-06b1b57171f2@f9941',
+        'Lock 用的图是 main-pages/image/card_lineup/icon_lock（卡牌阵容新版锁标）');
     assert.equal(lock!._active, false, 'Lock 默认隐藏：数据没到不许先挂一把锁');
     assert.ok(lock!._lpos.x > 0 && lock!._lpos.y > 0, '锁标要贴在卡框右上角（x / y 均为正）');
 
@@ -166,7 +166,10 @@ test('站台顺序靠 Layout 的兄弟顺序，不再按坐标反推', () => {
     const teamLayout = layoutOf(pagePrefab, 'TeamArea');
     assert.ok(teamLayout, 'TeamArea 必须挂 cc.Layout —— 站台顺序的契约就是它的兄弟顺序');
     assert.equal(teamLayout!._layoutType, 3, 'TeamArea 的 Layout 必须是 GRID（3）');
-    assert.equal(teamLayout!._cellSize?.width, 154, 'cellSize 变了要同步这条断言');
+    assert.equal(teamLayout!._cellSize?.width, 151, 'cellSize 变了要同步这条断言');
+    assert.equal(teamLayout!._cellSize?.height, 204, '站台高 204：蓝湖两行组 204 高，行距 5');
+    assert.equal(teamLayout!._spacingX, 23.5, '列间距 23.5：蓝湖站台 151 + 间距 23~24');
+    assert.equal(teamLayout!._spacingY, 5, '行间距 5：蓝湖行组 204 + 5');
 
     assert.doesNotMatch(source, /static gridOrder/,
         'CardLineupPage 不再按坐标排序：Layout 的坐标就是兄弟顺序的产物，反推是原地转圈');
@@ -242,10 +245,10 @@ test('长屏适配：四块按设计值钉顶，多出来的高度只进卡库',
     };
 
     const expected: Array<[string, number]> = [
-        ['TeamArea', 132.5],
-        ['MidBar', 561.09],
-        ['Banner', 638.857],
-        ['CardGrid', 704.137],
+        ['TeamArea', 197],
+        ['MidBar', 643],
+        ['Banner', 732],
+        ['CardGrid', 790],
     ];
     for (const [name, designTop] of expected) {
         assert.equal(widgetOf(name)._top, designTop,
@@ -529,3 +532,163 @@ test('单技能预制体：三档说明、单个升级按钮和两类消耗引�
     }
     assert.equal(prefab.some(n => n.__type__ === 'cc.Node' && /^Row[1-4]$/.test(n._name)), false);
 });
+
+// ============================================================================
+// 「卡牌阵容-新」版式（720×1610 设计稿）
+//
+// prefab 是视觉真源：尺寸、间距、层级、图都钉在这里；代码只按数据换图/显隐。
+// 下面这些数字来自蓝湖节点 bounds，改版时同步更新，别让它们在编辑器里漂回去。
+// ============================================================================
+
+const nodeOf = (items: Array<Record<string, any>>, name: string) =>
+    items.find((item) => item.__type__ === 'cc.Node' && item._name === name) as Record<string, any> | undefined;
+
+const sizeOf = (items: Array<Record<string, any>>, node: Record<string, any>) => {
+    const transform = node._components
+        .map((ref: { __id__: number }) => items[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === 'cc.UITransform');
+    assert.ok(transform, `${node._name} 缺少 UITransform`);
+    return { width: transform!._contentSize.width, height: transform!._contentSize.height };
+};
+
+const spriteOf = (items: Array<Record<string, any>>, node: Record<string, any>) =>
+    node._components
+        .map((ref: { __id__: number }) => items[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === 'cc.Sprite') as Record<string, any> | undefined;
+
+test('卡库条目按新版设计：169×230、底部三件套与新图', () => {
+    const root = nodeOf(prefab, 'CardLineupCard');
+    assert.ok(root);
+    assert.deepEqual(sizeOf(prefab, root!), { width: 169, height: 230 });
+
+    const face = nodeOf(prefab, 'Face');
+    assert.ok(face);
+    assert.deepEqual(sizeOf(prefab, face!), { width: 160, height: 223 });
+    assert.equal(spriteOf(prefab, face!)!._spriteFrame?.__uuid__, 'a21c4c86-e7b0-4be6-870b-8068514c50c2@f9941');
+
+    const progress = nodeOf(prefab, 'CardFragmentProgress');
+    const fill = nodeOf(prefab, 'CardFragmentFill');
+    assert.ok(progress && fill);
+    assert.deepEqual(sizeOf(prefab, progress!), { width: 156, height: 28 });
+    assert.deepEqual(sizeOf(prefab, fill!), { width: 144, height: 16 });
+    const fillTransform = fill!._components
+        .map((ref: { __id__: number }) => prefab[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === 'cc.UITransform');
+    assert.equal(fillTransform!._anchorPoint.x, 0, '进度条从左侧填充');
+
+    const plate = nodeOf(prefab, 'LevelPlate');
+    const ribbon = nodeOf(prefab, 'OnField');
+    const lock = nodeOf(prefab, 'Lock');
+    const badge = nodeOf(prefab, 'ClassBadge');
+    assert.ok(plate && ribbon && lock && badge);
+    assert.deepEqual(sizeOf(prefab, plate!), { width: 36, height: 39 });
+    assert.deepEqual(sizeOf(prefab, ribbon!), { width: 74, height: 26 });
+    assert.deepEqual(sizeOf(prefab, lock!), { width: 29, height: 40 });
+    assert.deepEqual(sizeOf(prefab, badge!), { width: 40, height: 40 });
+
+    // 状态差异：压暗遮罩与可升级箭头必须是卡条目自己的节点，默认隐藏。
+    const script = prefab.find((item) => 'lockVeil' in item && 'upgradeArrow' in item);
+    assert.ok(script, 'CardLineupCard 缺少 lockVeil / upgradeArrow 字段');
+    for (const key of ['lockVeil', 'upgradeArrow']) {
+        assert.ok(script![key]?.__id__ > 0, `${key} 未绑定`);
+        assert.equal(prefab[script![key].__id__]._active, false, `${key} 默认隐藏`);
+    }
+    const veil = nodeOf(prefab, 'LockVeil');
+    assert.ok(veil);
+    assert.deepEqual(sizeOf(prefab, veil!), { width: 167, height: 227 });
+    assert.equal(spriteOf(prefab, veil!)!._spriteFrame?.__uuid__, '10ed9e5f-3f88-4185-8549-86afd8f06e74@f9941');
+
+    // 锁定态层级：遮罩压卡面/立绘，锁标必须压在遮罩上，锁不会被压灰。
+    const cardRoot = nodeOf(prefab, 'CardLineupCard');
+    assert.ok(cardRoot);
+    const childNames = cardRoot!._children.map((ref: { __id__: number }) => prefab[ref.__id__]._name);
+    assert.ok(childNames.indexOf('Lock') > childNames.indexOf('LockVeil'), 'Lock 必须排在 LockVeil 之后');
+    assert.ok(childNames.indexOf('LockVeil') > childNames.indexOf('UpgradeArrow'), 'LockVeil 必须排在 UpgradeArrow 之后');
+});
+
+test('站台按新版设计：151×204、台座/光效/角标/等级各就位', () => {
+    const root = nodeOf(slotPrefab, 'LineupSlot');
+    assert.ok(root);
+    assert.deepEqual(sizeOf(slotPrefab, root!), { width: 151, height: 204 });
+
+    const stage = nodeOf(slotPrefab, 'Stage');
+    const disc = nodeOf(slotPrefab, 'Disc');
+    const hero = nodeOf(slotPrefab, 'Hero');
+    assert.ok(stage && disc && hero);
+    assert.deepEqual(sizeOf(slotPrefab, stage!), { width: 151, height: 63 });
+    assert.equal(stage!._lpos.y, -70.5, '台座中心：站台 204 高、台座顶距 141');
+    assert.deepEqual(sizeOf(slotPrefab, disc!), { width: 117, height: 31 });
+    assert.equal(spriteOf(slotPrefab, stage!)!._spriteFrame?.__uuid__, '5729b272-2fb2-490b-8721-51593fde7dbe@f9941');
+    assert.equal(hero!._lscale.x, 0.65);
+    assert.equal(disc!._lpos.y, -59.5, '光效中心：台座顶 +5');
+    assert.equal(hero!._lpos.y, -70.5, '立绘脚点对齐台座中心');
+
+    const badge = nodeOf(slotPrefab, 'ClassBadge');
+    const level = nodeOf(slotPrefab, 'LevelLabel');
+    assert.ok(badge && level);
+    assert.deepEqual(sizeOf(slotPrefab, badge!), { width: 36, height: 36 });
+    const label = slotComponent(level!, 'cc.Label');
+    assert.equal(label!._fontSize, 22);
+});
+
+test('页面版式按新版设计：四块钉顶、卡库/羁绊/页签尺寸与间距', () => {
+    const team = nodeOf(pagePrefab, 'TeamArea');
+    const mid = nodeOf(pagePrefab, 'MidBar');
+    const banner = nodeOf(pagePrefab, 'Banner');
+    const grid = nodeOf(pagePrefab, 'CardGrid');
+    const tabs = nodeOf(pagePrefab, 'TabBar');
+    assert.ok(team && mid && banner && grid && tabs);
+    assert.deepEqual(sizeOf(pagePrefab, team!), { width: 720, height: 413 });
+    assert.deepEqual(sizeOf(pagePrefab, mid!), { width: 720, height: 68 });
+    assert.deepEqual(sizeOf(pagePrefab, banner!), { width: 576, height: 52 });
+    assert.deepEqual(sizeOf(pagePrefab, grid!), { width: 688, height: 586 });
+    assert.deepEqual(sizeOf(pagePrefab, tabs!), { width: 495, height: 65 });
+
+    const tabWidget = tabs!._components
+        .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === 'cc.Widget');
+    assert.equal(tabWidget!._bottom, 166, '页签底边设计值 = 1610-1444');
+
+    const teamWidget = team!._components
+        .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === 'cc.Widget');
+    assert.equal(teamWidget!._top, 197, '上阵区顶边 = 蓝湖首行组 top 197');
+
+    const bond = nodeOf(pagePrefab, 'BondList');
+    assert.ok(bond);
+    assert.deepEqual(sizeOf(pagePrefab, bond!), { width: 512, height: 68 });
+    const bondScroll = bond!._components
+        .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === '544earF5qRLB4JTuTnSr11+');
+    assert.equal(bondScroll!.spacing, 42, '图标步进 82 = 40 图标 + 42 间距');
+    assert.equal(bondScroll!.gridCount, 1);
+});
+
+test('加成条文案单行：标题 158 宽、数值 81 宽，禁止换行并自动缩放', () => {
+    const cases: Array<[string, number]> = [['BondTitleLabel', 158], ['BondValueLabel', 81]];
+    for (const [name, width] of cases) {
+        const node = nodeOf(pagePrefab, name);
+        assert.ok(node, name);
+        assert.equal(sizeOf(pagePrefab, node!).width, width, `${name} 宽度`);
+        const label = node!._components
+            .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
+            .find((component: Record<string, any>) => component.__type__ === 'cc.Label');
+        assert.ok(label, `${name} 缺少 Label`);
+        assert.equal(label!._enableWrapText, false, `${name} 不许换行`);
+        assert.equal(label!._overflow, 2, `${name} 用 SHRINK 保证动态羁绊名单行可读`);
+    }
+});
+
+test('卡库虚拟列表按新版单元格：169 宽 + 4 列间距 + 6 行间距 + 10 顶部留白', () => {
+    const grid = nodeOf(pagePrefab, 'CardGrid');
+    const scroll = grid!._components
+        .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
+        .find((component: Record<string, any>) => component.__type__ === '544earF5qRLB4JTuTnSr11+');
+    assert.ok(scroll);
+    assert.equal(scroll!.gridCount, 4);
+    assert.equal(scroll!.gridSpacing, 4);
+    assert.equal(scroll!.spacing, 6);
+    assert.equal(scroll!.headerSpacing, 10);
+    assert.equal(scroll!.itemPrefab.__uuid__, '48e8058e-d1f5-4bb3-b995-be259a10a917');
+});
+

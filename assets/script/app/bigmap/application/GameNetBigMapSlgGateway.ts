@@ -7,7 +7,7 @@ import {
     RequestSlgBuildCancel, RequestSlgBuildMove, RequestSlgBuildCollect, RequestSlgBuildUnlockQueue,
 } from './RequestBigMapSlgMsg';
 
-/
+/**
  *同一类拦截只吼一次。
  *
  * 为什么必须留下这条日志：`request` 在「没连上 / 存档已切换」时返回 `null`，
@@ -22,7 +22,7 @@ function warnBlocked(reason: string): void {
     console.warn(`[BigMap] SLG 请求被拦下（${reason}），基地信息拉不到 ⇒ 建造/升级会一直提示「正在同步基地信息」`);
 }
 
-/ 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
+/** 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
 export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
     private isDisposed = false;
     constructor(private readonly isOwnerCurrent: () => boolean) {}
@@ -50,7 +50,7 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
             if (!value) throw new Error('[SLG] 非法建筑实例 ID');
             return value;
         };
-        / 批量领取的实例列表：空数组、越界或非数字都拒绝，不编码截断。 */
+        /** 批量领取的实例列表：空数组、越界或非数字都拒绝，不编码截断。 */
         const ids = (): number[] => {
             const raw = body.buildInstIds;
             if (!Array.isArray(raw) || raw.length === 0) throw new Error('[SLG] 非法建筑实例 ID');

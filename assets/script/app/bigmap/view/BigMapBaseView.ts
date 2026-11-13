@@ -15,9 +15,9 @@ import { BigMapUiEvent } from '../application/BigMapEvents';
 
 const { ccclass, property } = _decorator;
 
-/ 长按触发时长（秒）：按住不动 0.4s 进入移建拖拽。 */
+/** 长按触发时长（秒）：按住不动 0.4s 进入移建拖拽。 */
 const LONG_PRESS_SECONDS = 0.4;
-/ 长按判定的手指移动上限（px）：与「点选 vs 平移」共用同一 12px 阈值。 */
+/** 长按判定的手指移动上限（px）：与「点选 vs 平移」共用同一 12px 阈值。 */
 const LONG_PRESS_MOVE_LIMIT = 12;
 
 interface IBigMapPlotArt {
@@ -44,7 +44,7 @@ export class BigMapBaseView extends Component {
     @property(UITransform) private fallback: UITransform = null;
     @property(Node) private plots: Node = null;
     @property(Node) private plotTemplate: Node = null;
-    /
+    /**
      *摆放预览（半透明建筑图，跟着手指走）。
      *
      *原先选完建筑只有一句 Toast + 所有空格画同一道细边，玩家不知道"放下去长什么样、
@@ -68,20 +68,20 @@ export class BigMapBaseView extends Component {
     private currentHeight = 900;
     private selectedHexId = -1;
     private pendingBuildingId = 0;
-    / 摆放态下放得下的格子（红绿预判；`pendingBuildingId === 0` 时恒空）。 */
+    /** 摆放态下放得下的格子（红绿预判；`pendingBuildingId === 0` 时恒空）。 */
     private placeable: ReadonlySet<number> = new Set();
-    / ghost 当前吸附的格子；`-1` = 还没指过任何格（回落到选中格）。 */
+    /** ghost 当前吸附的格子；`-1` = 还没指过任何格（回落到选中格）。 */
     private ghostHexId = -1;
 
-    / 手势状态：idle（无按下）/ press（按下等长按判定）/ dragging（长按触发的移建拖拽）。 */
+    /** 手势状态：idle（无按下）/ press（按下等长按判定）/ dragging（长按触发的移建拖拽）。 */
     private gesture: 'idle' | 'press' | 'dragging' = 'idle';
-    / press 态累计时间（秒），由 update 推进（不依赖 Date.now，测试可注入）。 */
+    /** press 态累计时间（秒），由 update 推进（不依赖 Date.now，测试可注入）。 */
     private pressElapsed = 0;
-    / 按下时命中的候选建筑实例（配置 canMove）；`0` = 没命中可移动建筑。 */
+    /** 按下时命中的候选建筑实例（配置 canMove）；`0` = 没命中可移动建筑。 */
     private pressInstanceId = 0;
-    / dragging 态被拖动建筑的 buildingId（ghost 取图用）。 */
+    /** dragging 态被拖动建筑的 buildingId（ghost 取图用）。 */
     private dragBuildingId = 0;
-    / 移建态落得下的格子（红绿预判；非移建态恒空）。 */
+    /** 移建态落得下的格子（红绿预判；非移建态恒空）。 */
     private moveable: ReadonlySet<number> = new Set();
 
 
@@ -94,7 +94,7 @@ export class BigMapBaseView extends Component {
         viewport.on(Node.EventType.MOUSE_WHEEL, this.onWheel, this);
     }
 
-    /
+    /**
      *长按检测心跳：手指不动时没有 touch 事件，只能靠 update 累计 pressElapsed。
      *
      *非 press 态直接返回，不做逐帧空转。到点且候选建筑可移动才触发拖拽。
@@ -105,14 +105,14 @@ export class BigMapBaseView extends Component {
         if (this.pressElapsed >= LONG_PRESS_SECONDS && this.pressInstanceId !== 0) this.triggerDragging();
     }
 
-    / 非摆放态单指按下：起一个长按候选，命中可移动建筑才记录实例。 */
+    /** 非摆放态单指按下：起一个长按候选，命中可移动建筑才记录实例。 */
     private beginPress(screen: Vec3): void {
         this.gesture = 'press';
         this.pressElapsed = 0;
         this.pressInstanceId = this.pressCandidateAt(screen);
     }
 
-    / 从最上方建筑向下拾取 icon，只把配置 canMove 的建筑当长按候选。 */
+    /** 从最上方建筑向下拾取 icon，只把配置 canMove 的建筑当长按候选。 */
     private pressCandidateAt(screen: Vec3): number {
         if (this.moving) return 0;
         for (let i = this.layout.paintOrder.length - 1; i >= 0; i -= 1) {
@@ -127,7 +127,7 @@ export class BigMapBaseView extends Component {
         return 0;
     }
 
-    / 长按到点：乐观进拖拽态并通知 controller 进移建态（moveBegin）。 */
+    /** 长按到点：乐观进拖拽态并通知 controller 进移建态（moveBegin）。 */
     private triggerDragging(): void {
         const instanceId = this.pressInstanceId;
         //移动的是建筑实例：限定非空格，避免不规范数据里空格带了同 instanceId 时找错格。
@@ -140,7 +140,7 @@ export class BigMapBaseView extends Component {
         this.refreshGhost();
     }
 
-    / 按下后移动超 12px（仲裁为平移）或双指介入时取消长按；已触发的拖拽不受影响。 */
+    /** 按下后移动超 12px（仲裁为平移）或双指介入时取消长按；已触发的拖拽不受影响。 */
     private cancelPress(): void {
         if (this.gesture === 'dragging') return;
         this.gesture = 'idle';
@@ -148,7 +148,7 @@ export class BigMapBaseView extends Component {
         this.pressElapsed = 0;
     }
 
-    / 拖拽松手：落点在 moveable 内才发 plotTap（controller 的 move 分支 requestMove），否则不动。 */
+    /** 拖拽松手：落点在 moveable 内才发 plotTap（controller 的 move 分支 requestMove），否则不动。 */
     private finishDragging(screen: Vec3): void {
         const target = this.placingHexAt(screen);
         this.gesture = 'idle';
@@ -287,8 +287,8 @@ export class BigMapBaseView extends Component {
             const iconBuildingId = cell.buildingId !== 0
                 ? cell.buildingId : data.queueBuildingIds.get(cell.hexId) ?? 0;
             const frame = this.art?.buildings.get(iconBuildingId)
-                ?? (cell.buildingId === data.mainBuildingId ? this.art?.home ?? null : null)
-                ?? (cell.slot === 'constructing' ? this.art?.construction ?? null : null);
+                ?? (cell.buildingId === data.mainBuildingId ? this.art?.home : null)
+                ?? (cell.slot === 'constructing' ? this.art?.construction : null);
             //建筑高度撑满一格（主城略高一点，压住视觉重心）；
             //水平居中、底部略沉 `-height * 0.04` —— 正方图直接居中会在等距视角下发飘。
             const iconHeight = this.fitPlotIcon(slot.icon, frame,
@@ -325,7 +325,7 @@ export class BigMapBaseView extends Component {
         this.syncVisibility();
     }
 
-    /
+    /**
      *摆放预览：半透明建筑图吸在当前格上。
      *
      *没指过格时落在选中格（点完建造目录、还没动手指的那一帧就有东西可看）；
@@ -360,7 +360,7 @@ export class BigMapBaseView extends Component {
         this.plotGhostOpacity.opacity = ok ? 150 : 90;
     }
 
-    /
+    /**
      *把建筑图钉成「高度 = 指定高度、水平居中、底边贴 `y`」。
      *
      *为什么按高度而不是宽度约束：格子是扁六边形（`tileWidth : tileHeight ≈ 147 : 96`），
@@ -389,13 +389,13 @@ export class BigMapBaseView extends Component {
         return height;
     }
 
-    / 屏幕坐标 → 格 id（ghost 与放置共用同一条换算，避免「看到的」和「放下去的」不是一格）。 */
+    /** 屏幕坐标 → 格 id（ghost 与放置共用同一条换算，避免「看到的」和「放下去的」不是一格）。 */
     private hexAt(screen: Vec3): number {
         const local = this.contentTransform.convertToNodeSpaceAR(screen);
         return pickBigMapBasePlot(this.layout, local.x, local.y);
     }
 
-    /
+    /**
      *摆放态用最近格吸附，而不是精确命中六边形。
      *
      *六边形之间天生有空隙，`pickBigMapBasePlot` 点偏一点就返回 -1：
@@ -408,7 +408,7 @@ export class BigMapBaseView extends Component {
         return bigMapNearestPlot(this.layout, local.x, local.y, tolerance);
     }
 
-    / 摆放态取格：先精确命中，再按 `tileHeight * 1.1` 吸附（覆盖六边形之间的空隙）。 */
+    /** 摆放态取格：先精确命中，再按 `tileHeight * 1.1` 吸附（覆盖六边形之间的空隙）。 */
     private placingHexAt(screen: Vec3): number {
         const hit = this.hexAt(screen);
         return hit >= 0 ? hit : this.nearestHex(screen, this.layout.tileHeight * 1.1);
@@ -421,7 +421,7 @@ export class BigMapBaseView extends Component {
         this.refreshGhost();
     }
 
-    / 选中底光：一格暖金椭圆，压在建筑图下面。不选中时清空（不隐藏节点，省一次 active 切换）。 */
+    /** 选中底光：一格暖金椭圆，压在建筑图下面。不选中时清空（不隐藏节点，省一次 active 切换）。 */
     private renderGlow(glow: Graphics, selected: boolean, width: number, height: number): void {
         glow.clear();
         if (!selected) return;
@@ -430,7 +430,7 @@ export class BigMapBaseView extends Component {
         glow.fill();
     }
 
-    /
+    /**
      *建造进度环：底圈 + 已建部分。
      *
      *二十几格同屏时，「哪几格在施工」原先只能靠一行 `120s` 小字找，等于没有；
@@ -462,7 +462,7 @@ export class BigMapBaseView extends Component {
         ring.stroke();
     }
 
-    / 描一个六边格轮廓 —— 选中双环 / 放置候选共用同一条路径，避免两处各画一遍。 */
+    /** 描一个六边格轮廓 —— 选中双环 / 放置候选共用同一条路径，避免两处各画一遍。 */
     private strokeHex(graphics: Graphics, width: number, height: number, color: Color, lineWidth: number): void {
         graphics.strokeColor = color;
         graphics.lineWidth = lineWidth;

@@ -36,10 +36,10 @@ const { ccclass, property } = _decorator;
  * 取值口径：展示栏里「战力牌顶 → 上排（名字/品质/职业）底」那段可用带的高度 ——
  * 原版 390 对 388.5 的带，缩完 318 对 317.5，脚点距牌顶 12、头顶压过上排底 12.5 也都沿用。
  *
- * ⚠️ 必须与 `CardUpgrade.prefab` 的 `Header/Hero._lscale`（318/390）一起改：
- *   - spine 预览的高度**只认这个入参** —— `cardPreviewFactor` 会把宿主（Hero 节点）的缩放
- *     **抵消**掉，所以单独调节点缩放对 spine 无效；
- *   - 静态立绘（没有待机骨架时的兜底）**只认节点缩放**，这个入参管不到它。
+ * 必须与 `CardUpgrade.prefab` 的 `Header/Hero._lscale`（318/390）一起改：
+ *   - spine 预览的高度只认这个入参 —— `cardPreviewFactor` 会把宿主（Hero 节点）的缩放
+ *     抵消掉，所以单独调节点缩放对 spine 无效；
+ *   - 静态立绘（没有待机骨架时的兜底）只认节点缩放，这个入参管不到它。
  * Hero 锚点是 (0.5, 0)（脚底基线），两条路径都绕脚点缩，所以这里写同一个比例就够。
  */
 const HERO_PREVIEW_HEIGHT = 318;
@@ -166,7 +166,7 @@ export class CardUpgradePage extends PopupBase {
      * 经验材料图标的按钮 —— 点它开「道具信息」弹窗（蓝湖「道具信息」稿）。
      *
      * 允许为空：老 prefab 没挂按钮时这个入口就不存在，不影响升级流程。
-     * 打开的是**当前显示的那颗图标**对应的道具（通用经验没配图时是兵种经验），
+     * 打开的是当前显示的那颗图标对应的道具（通用经验没配图时是兵种经验），
      * 数量用该道具自己的持有数，不是「通用 + 兵种」的合计。
      */
     @property({ group: '升级材料', type: Button, tooltip: 'ExpIcon 上的 cc.Button（**绑组件不绑节点**；可留空）' })
@@ -228,7 +228,7 @@ export class CardUpgradePage extends PopupBase {
         this.upgradeLabelColor = this.upgradeLabel.color.clone();
         this.upgradeLabel.string = upgradeButtonText(1, false);
         //  打开瞬间的初始文案由 render 按真实等级覆盖。
-        //  按「1 级」写，于是仍然是「升级」；走同一个函数是为了让按钮文案**只有一个来源**。
+        //  按「1 级」写，于是仍然是「升级」；走同一个函数是为了让按钮文案只有一个来源。
         this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.previousButton.node.on(Button.EventType.CLICK, this.onPreviousClick, this);
         this.nextButton.node.on(Button.EventType.CLICK, this.onNextClick, this);
@@ -274,7 +274,7 @@ export class CardUpgradePage extends PopupBase {
     /**
      * 点经验材料图标 → 开「道具信息」弹窗（蓝湖「道具信息」稿）。
      *
-     * 顺序上必须先由 `renderStatus` 把 `expItemId` 定下来（它是**这一趟**图标画的那件道具）；
+     * 顺序上必须先由 `renderStatus` 把 `expItemId` 定下来（它是这一趟图标画的那件道具）；
      * 图标还没铺出来时不响应，避免拿上一张卡的经验道具去开详情。
      */
     private readonly onExpIconClick = (): void => {
@@ -418,7 +418,7 @@ export class CardUpgradePage extends PopupBase {
     }
 
     /**
-     * 描述栏：**全部技能档都进列表**，只把打开时的落点放到「最新解锁那一档」。
+     * 描述栏：全部技能档都进列表，只把打开时的落点放到「最新解锁那一档」。
      *
      * 只有落点或行数变了才滚 —— 同一张卡刷新（升级回包、状态刷两次）保持玩家当前阅读位置。
      * 一条都没有（技能描述整块未配）时显示占位条，而不是留一片空白。
@@ -487,7 +487,7 @@ export class CardUpgradePage extends PopupBase {
     // 固定底栏：原升级判定与提示语义保持不变
     // ------------------------------------------------------------------
 
-    /** 把判定结果铺到升级面板（这是升级侧**唯一**的写 UI 入口）。 */
+    /** 把判定结果铺到升级面板（这是升级侧唯一的写 UI 入口）。 */
     private renderStatus(status: ZCUpgradeStatus, phase: CardUpgradePhase): void {
         const texts = CARD_LINEUP_TEXTS;
         //  经验图标的「点开道具信息」身份每一趟都重算：图标换了、道具就不能还停在上一次那件。
@@ -600,7 +600,7 @@ export class CardUpgradePage extends PopupBase {
                 const frame = await loadItemIconArt(item.icon);
                 if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
                 sprite.spriteFrame = frame;
-                //  只有**真的画出来**的那一件才算「当前显示的道具」（点图标开的就是它）。
+                //  只有真的画出来的那一件才算「当前显示的道具」（点图标开的就是它）。
                 onPick?.(entry);
                 return;
             }

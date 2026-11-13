@@ -5,7 +5,7 @@ import type { ZCMatchMap } from '../ZCMatchConfig';
 import { sweptCircleHit } from './ZCProjectileSystem';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
-import { isZCAwakeMonster } from './ZCNeutralFeatureSystem';
+import { isZCAwakeMonster, zcMonsterPosition } from './ZCNeutralFeatureSystem';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 
@@ -88,8 +88,8 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
             const hex = this.context.hex(unit.targetBuildingHexId);
             if (!hex || (!isZCAwakeMonster(hex) && (hex.owner === 'neutral' || hex.owner === unit.owner || hex.building === 'none')) || hex.hp <= 0
                 || hex.wallHp > 0) return null;
-            const config = this.context.map.hexes[hex.id];
-            return { kind: 'building', id: hex.id, x: config.x, y: config.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: hex.cardId };
+            const position = zcMonsterPosition(this.context.map, hex, this.context.targeting.now);
+            return { kind: 'building', id: hex.id, x: position.x, y: position.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: hex.cardId };
         }
         return null;
     }

@@ -26,6 +26,7 @@
   // 资源点是地图玩法配置，不隶属于主城模式；固定主城和自选主城地图共用这份数据。
   // 新点位只保存组合 ID；候选奖励与权重由中立资源配置表管理。旧 pool 仅兼容读取。
   var resourcePoints = [];
+  var patrolPointId = null;
   var regions = [];
   var regionBrush = { section: 1, depth: 'front', tendency: 'rush' };
   var partitionDepth = 'none';
@@ -183,6 +184,8 @@
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
   }
   function activeBrushLabel() {
+    if (brush === 'patrol-select') return '巡逻范围：请选择野怪资源点';
+    if (brush === 'patrol') return '野怪巡逻范围';
     if (brush === 'freeDecor') return decorBrush ? '自由装饰：' + decorBrush : '自由装饰';
     if (brush === 'resource') return resourceGroupId !== null ? '资源组合：' + resourceGroupId : resourceBrush ? '旧资源池：' + (RESOURCE_LABELS[resourceBrush] || resourceBrush) : '资源点（请填组合 ID）';
     if (brush === 'partition') return regionBrush.section + ' 区 · ' + ({ none: '仅分区', front: '前区', mid: '中区', back: '后区' }[partitionDepth]);
@@ -205,7 +208,9 @@
   function cloneResourcePoints(points) {
     return points.map(function (point) {
       if (Object.prototype.hasOwnProperty.call(point, 'groupId')) {
-        return { row: point.row, column: point.column, groupId: point.groupId };
+        var copy = { row: point.row, column: point.column, groupId: point.groupId };
+        if (point.patrolCells !== undefined) copy.patrolCells = Array.isArray(point.patrolCells) ? point.patrolCells.slice() : point.patrolCells;
+        return copy;
       }
       return JSON.parse(JSON.stringify(point));
     });
@@ -313,6 +318,57 @@
     var configured = passthrough.spacing && Number(passthrough.spacing.resourceMinDistance);
     return Number.isFinite(configured) ? Math.max(3, configured) : 3;
   }
+  function selectedPatrolPoint() {
+    return resourcePoints.find(function (point) { return point.row * COLS + point.column === patrolPointId; }) || null;
+  }
+  function patrolCellError(point, id) {
+    if (!Number.isInteger(id) || id < 0 || id >= ROWS * COLS || grid[Math.floor(id / COLS)][id % COLS] === VOID) return '巡逻范围不能包含越界或虚空格';
+    if (homes.some(function (home) { return home && home.row * COLS + home.column === id; })) return '巡逻范围不能包含主城';
+    if (resourcePoints.some(function (other) { return other !== point && other.row * COLS + other.column === id; })) return '巡逻范围不能包含其他资源点';
+    return '';
+  }
+  function patrolRangeError(point) {
+    if (point.patrolCells === undefined) return '';
+    var cells = point.patrolCells;
+    if (!Array.isArray(cells)) return '巡逻范围必须是格子数组';
+    if (!cells.length) return '';
+    var origin = point.row * COLS + point.column;
+    var set = new Set(cells);
+    if (set.size !== cells.length) return '巡逻范围不能有重复格';
+    if (!set.has(origin)) return '巡逻范围必须包含出生格';
+    for (var i = 0; i < cells.length; i += 1) {
+      var error = patrolCellError(point, cells[i]);
+      if (error) return error;
+    }
+    var seen = new Set([origin]), queue = [origin];
+    for (var head = 0; head < queue.length; head += 1) {
+      neighbors(Math.floor(queue[head] / COLS), queue[head] % COLS).forEach(function (cell) {
+        var id = cell[0] * COLS + cell[1];
+        if (set.has(id) && !seen.has(id)) { seen.add(id); queue.push(id); }
+      });
+    }
+    return seen.size === set.size ? '' : '巡逻范围必须连通，请连接或擦除孤立格';
+  }
+  function selectPatrolPoint(row, column) {
+    var point = resourcePointAt(row, column);
+    if (!point) { flash('请点击一个野怪资源点', 'warn'); return false; }
+    var group = neutralGroups[point.groupId];
+    if (group && !group.items.some(function (item) { return item.resourceType === 11 && item.weight > 0; })) {
+      flash('该组合没有正权重野怪，不能设置巡逻', 'warn'); return false;
+    }
+    patrolPointId = row * COLS + column;
+    brush = 'patrol'; eraseBrush = false; selectedFreeDecorId = null;
+    syncControls(); render();
+    return true;
+  }
+  function clearPatrolCells() {
+    var point = selectedPatrolPoint();
+    if (!point || !point.patrolCells) return false;
+    var before = snapshot();
+    delete point.patrolCells;
+    render();
+    return commitUndo(before);
+  }
   function renderResourcePanel() {
     var button = $('btnResourcePlace');
     var active = brush === 'resource' && resourceGroupId !== null && !eraseBrush;
@@ -337,6 +393,12 @@
       legacy.hidden = !count;
       legacy.textContent = '含 ' + count + ' 个旧资源池点位。继续保留；在该格放置组合可替换。';
     }
+    var patrolPoint = selectedPatrolPoint();
+    $('patrolStatus').textContent = patrolPoint
+      ? '出生点（' + (patrolPoint.row + 1) + ' 行，' + (patrolPoint.column + 1) + ' 列）· ' + (patrolPoint.patrolCells || []).length + ' 格；左键涂格，右键擦除。'
+      : '点击“编辑巡逻范围”，再选择地图上的野怪资源点。';
+    $('btnClearPatrol').disabled = !patrolPoint || !patrolPoint.patrolCells;
+    $('btnPatrolSelect').setAttribute('aria-pressed', brush === 'patrol' || brush === 'patrol-select' ? 'true' : 'false');
   }
   function setResourceGroup(value) {
     var groupId = typeof value === 'string' && value.trim() ? Number(value) : value;
@@ -438,6 +500,7 @@
     if (error) throw new Error(error);
     var before = snapshot();
     var point = { row: row, column: column, groupId: groupId };
+    if (index >= 0 && resourcePoints[index].patrolCells) point.patrolCells = resourcePoints[index].patrolCells.slice();
     if (index >= 0) resourcePoints[index] = point;
     else resourcePoints.push(point);
     render();
@@ -1210,11 +1273,17 @@
     });
 
     // ② 资源点：行列索引跟着格走，越界的丢掉（缩小尺寸时贴边的那圈）。
+    var selectedPoint = resourcePoints.find(function (point) { return point.row * oldCols + point.column === patrolPointId; });
     resourcePoints = resourcePoints.filter(function (point) {
       point.row += rowShift;
       point.column += columnShift;
+      if (point.patrolCells) point.patrolCells = point.patrolCells.flatMap(function (id) {
+        var row = Math.floor(id / oldCols) + rowShift, column = id % oldCols + columnShift;
+        return row >= 0 && row < ROWS && column >= 0 && column < COLS ? [row * COLS + column] : [];
+      });
       return point.row >= 0 && point.row < ROWS && point.column >= 0 && point.column < COLS;
     });
+    patrolPointId = selectedPoint && resourcePoints.indexOf(selectedPoint) >= 0 ? selectedPoint.row * COLS + selectedPoint.column : null;
 
     // ③ 区域标记：id 必须按**旧**列数反解、加位移、再按**新**列数编回去。
     //    直接用旧 id 的话，同一个数字在新棋盘上指向完全另一格。
@@ -1375,6 +1444,7 @@
     }
   }
   function applyLayoutData(data, clean) {
+    patrolPointId = null;
     if (!data || typeof data !== 'object') throw new Error('不是地图 JSON');
     var before = snapshot();
     var version = data.version == null ? 1 : data.version;
@@ -1506,7 +1576,7 @@
     }
     for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
       var resourcePoint = resourcePoints[resourceIndex];
-      var resourceError = resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex);
+      var resourceError = resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex) || patrolRangeError(resourcePoint);
       if (resourceError) throw new Error(resourceError);
     }
     var importedFreeDecor = data.art && typeof data.art === 'object' && !Array.isArray(data.art)
@@ -2188,6 +2258,18 @@
   }
   function mapMetadataMarkup() {
     var parts = [];
+    resourcePoints.forEach(function (point) {
+      var selected = point.row * COLS + point.column === patrolPointId;
+      (point.patrolCells || []).forEach(function (id) {
+        if (!Number.isInteger(id) || id < 0 || id >= ROWS * COLS) return;
+        var center = hexCenter(Math.floor(id / COLS), id % COLS);
+        parts.push('<path class="patrolRange" d="' + hexPathD(center.x, center.y) + '" fill="' + (selected ? '#22d3ee55' : '#22d3ee22') + '" stroke="#22d3ee" stroke-width="2" pointer-events="none"></path>');
+      });
+      if (selected) {
+        var center = hexCenter(point.row, point.column);
+        parts.push('<circle class="patrolOrigin" cx="' + center.x + '" cy="' + center.y + '" r="34" fill="none" stroke="#67e8f9" stroke-width="4" pointer-events="none"></circle>');
+      }
+    });
     var depthLabels = { front: '前区', mid: '中区', back: '后区' };
     var depthColors = { front: '#ff5959', mid: '#7f73ff', back: '#39a8ff' };
     var depthPatterns = {
@@ -2260,6 +2342,7 @@
       grid: grid.map(function (row) { return row.slice(); }),
       freeDecor: cloneFreeDecor(freeDecor),
       resourcePoints: cloneResourcePoints(resourcePoints),
+      patrolPointId: patrolPointId,
       regions: cloneRegions(regions),
       homes: homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; })
     };
@@ -2315,6 +2398,7 @@
     }, 1);
     if (!freeDecorById(selectedFreeDecorId)) selectedFreeDecorId = null;
     resourcePoints = cloneResourcePoints(state.resourcePoints || []);
+    patrolPointId = state.patrolPointId === undefined ? null : state.patrolPointId;
     regions = cloneRegions(state.regions || []);
     homes = state.homes.map(function (home) { return home ? { row: home.row, column: home.column } : null; });
     while (homes.length < MAX_SECTIONS) homes.push(null);
@@ -2429,6 +2513,23 @@
   function paintCells(cells, selected) {
     var mode = selected === undefined ? brush : selected;
     if (mode === 'none') return false;
+    if (mode === 'patrol' || mode === 'patrol-clear') {
+      var point = selectedPatrolPoint();
+      if (!point) { flash('先选择要编辑巡逻范围的资源点', 'warn'); return false; }
+      var origin = point.row * COLS + point.column;
+      var next = new Set(point.patrolCells || [origin]);
+      cells.forEach(function (cell) {
+        var id = cell.row * COLS + cell.column;
+        if (mode === 'patrol-clear') { if (id !== origin) next.delete(id); }
+        else if (!patrolCellError(point, id)) next.add(id);
+      });
+      var values = Array.from(next).sort(function (a, b) { return a - b; });
+      if (JSON.stringify(values) === JSON.stringify(point.patrolCells || [])
+          || (mode === 'patrol-clear' && !point.patrolCells)) return false;
+      point.patrolCells = values;
+      render();
+      return true;
+    }
     if (mode === 'partition' || mode === 'partition-clear') return paintPartitionCells(cells, mode === 'partition-clear');
     var changed = false;
     var blocked = 0;
@@ -2556,6 +2657,7 @@
             : existingIndex >= 0 && resourcePoints[existingIndex].pool ? cloneResourcePoints([resourcePoints[existingIndex]])[0]
               : { row: pointRow, column: pointColumn, pool: {} };
           if (resourceGroupId === null) point.pool[resourceBrush] = resourceWeight;
+          if (existingIndex >= 0 && resourcePoints[existingIndex].patrolCells) point.patrolCells = resourcePoints[existingIndex].patrolCells.slice();
           if (resourcePositionError(pointRow, pointColumn, existingIndex)) {
             blocked += 1;
           } else if (existingIndex >= 0) {
@@ -2673,7 +2775,7 @@
     for (var resourceIndex = 0; resourceIndex < resourcePoints.length; resourceIndex += 1) {
       var resourcePoint = resourcePoints[resourceIndex];
       var resourceKey = resourcePoint.row + ',' + resourcePoint.column;
-      var resourceError = resourceDefinitionError(resourcePoint) || resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex);
+      var resourceError = resourceDefinitionError(resourcePoint) || resourcePositionError(resourcePoint.row, resourcePoint.column, resourceIndex) || patrolRangeError(resourcePoint);
       if (resourceCells[resourceKey] || resourceError) {
         invalidResources.push(resourceKey + (resourceError ? '（' + resourceError + '）' : '（重复点位）'));
       }
@@ -3365,9 +3467,14 @@
       }
       var cell = cellAtLocal(local.x, local.y);
       if (!cell) return;
+      if (brush === 'patrol-select') {
+        if (event.button === 0) selectPatrolPoint(cell.row, cell.column);
+        event.preventDefault(); return;
+      }
       // 一次按下到抬起 = 一个撤销步；笔画期间只记起点快照。
       // 右键：资源笔刷删除资源点，其余格子笔刷擦成虚空。
       var eraseMode = brush === 'resource' ? 'resource-clear'
+        : brush === 'patrol' ? 'patrol-clear'
         : brush === 'home' ? 'home-clear'
           : brush === 'partition' ? 'partition-clear'
           : brush === 'region' ? 'region-clear'
@@ -3670,6 +3777,11 @@
     $('btnClearRegion').addEventListener('click', clearSelectedRegion);
     $('btnClearDecorations').addEventListener('click', clearFreeDecor);
     $('btnClearResources').addEventListener('click', clearResourcePoints);
+    $('btnPatrolSelect').addEventListener('click', function () {
+      brush = 'patrol-select'; eraseBrush = false; selectedFreeDecorId = null;
+      syncControls(); render();
+    });
+    $('btnClearPatrol').addEventListener('click', clearPatrolCells);
     $('btnSavePreset').addEventListener('click', savePreset);
     $('openServer').addEventListener('click', function () {
       this.href = SERVER_URL + '#map=' + encodeURIComponent(JSON.stringify(buildJSON()));
@@ -3797,6 +3909,7 @@
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
     setResourceGroup: setResourceGroup, addResourceGroupPoint: addResourceGroupPoint,
+    selectPatrolPoint: selectPatrolPoint, clearPatrolCells: clearPatrolCells,
     setPartitionBrush: setPartitionBrush, setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setRegionText: setRegionText,
     mapMetadataMarkup: mapMetadataMarkup,
     addResourcePoint: addResourcePoint, removeResourcePoint: removeResourcePoint,

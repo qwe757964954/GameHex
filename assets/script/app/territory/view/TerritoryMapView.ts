@@ -247,6 +247,7 @@ export interface ITerritoryMapArt {
      * 编号是这一格唯一的关卡标识（`stationRenderOf` 里做兜底）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
+    readonly pvpBubblePortrait?: SpriteFrame | null;
     /**
      * **宝箱提示气泡**的底图（新美术 `image/spawn-region/frame_04`，77×87 竖向水滴）。
      *
@@ -3929,6 +3930,8 @@ export class TerritoryMapView extends Component {
                 // 预告关卡的红色编号气泡：文案复用 `model/TerritoryLevelBubble`，底图固定取
                 // 「未通关」红 `frame_02`（这一格本来就没通过）；红图缺失照旧回退蓝图，别让编号消失。
                 levelBubble: previewBubble ? territoryLevelBubbleText(site, stage) : undefined,
+                levelBubblePortrait: previewBubble && site.type === TERRITORY_SITE_TYPE.asyncPvp
+                    && input.art.levelBubblePendingFrame ? input.art.pvpBubblePortrait ?? null : null,
                 levelBubbleFrame: previewBubble
                     ? input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null
                     : undefined,
@@ -3990,6 +3993,11 @@ export class TerritoryMapView extends Component {
                 return {
                     site,
                     icon: this.stationIconOf(site, null, input.art),
+                    levelBubble: !isOwned ? territoryLevelBubbleText(site, null) : undefined,
+                    levelBubbleFrame: !isOwned
+                        ? input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null : undefined,
+                    levelBubblePortrait: !isOwned && input.art.levelBubblePendingFrame
+                        ? input.art.pvpBubblePortrait ?? null : null,
                     caption: '',
                     tint: isUnlocked ? territoryBossTint()
                         : isOwned ? TERRITORY_COLORS.owned : territoryStationTint(this.stateOf(site, input)),
@@ -4010,6 +4018,8 @@ export class TerritoryMapView extends Component {
                 // 🔴 文案真源在 `model/TerritoryLevelBubble`（异步据点固定 `PVP`，其余拼编号）——
                 //   点击被前置挡住时的提示也调它，两处**必须同源**（需求 2026-11-02「名字同气泡文案」）。
                 levelBubble: territoryLevelBubbleText(site, stage),
+                levelBubblePortrait: isAsyncPvp && !claimed && input.art.levelBubblePendingFrame
+                    ? input.art.pvpBubblePortrait ?? null : null,
                 // 气泡底图按「通没通过」二选一（2026-10-29 用户）：未通关红 `frame_02` / 已通关蓝 `frame_03`。
                 // 判据必须用**区域口径** `isAreaPassed`（同 `configId` 的兄弟格共享通关状态）；
                 // 红图没加载到时回退蓝图，别让这一格连编号都没有。

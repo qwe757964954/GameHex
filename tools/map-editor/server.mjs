@@ -484,7 +484,8 @@ function validatePreset(data, id) {
         }
       }
       occupied.add(cell);
-      resourcePoints.push(hasGroup ? { row: point.row, column: point.column, groupId: point.groupId } : point);
+      resourcePoints.push(hasGroup ? { row: point.row, column: point.column, groupId: point.groupId,
+        ...(point.patrolCells !== undefined ? { patrolCells: point.patrolCells } : {}) } : point);
     }
   }
   const art = data.art;
@@ -540,6 +541,29 @@ function validatePreset(data, id) {
   }
   if (resourcePoints?.some((point) => homes.some((home) => home && home.row === point.row && home.column === point.column))) {
     throw new RequestError('资源点不能与主城重叠');
+  }
+  for (const point of resourcePoints ?? []) {
+    if (point.patrolCells === undefined) continue;
+    if (!Array.isArray(point.patrolCells)) throw new RequestError('巡逻范围必须是格子数组');
+    if (!point.patrolCells.length) { delete point.patrolCells; continue; }
+    const origin = point.row * columns + point.column;
+    const cells = new Set(point.patrolCells);
+    if (!cells.has(origin) || cells.size !== point.patrolCells.length) throw new RequestError('巡逻范围必须包含出生格且不能有重复格');
+    for (const id of cells) {
+      if (!Number.isInteger(id) || id < 0 || id >= rows * columns || !isWalkable(Math.floor(id / columns), id % columns)
+          || homes.some(home => home && home.row * columns + home.column === id)
+          || resourcePoints.some(other => other !== point && other.row * columns + other.column === id)) {
+        throw new RequestError('巡逻范围含越界、虚空、主城或其他资源点');
+      }
+    }
+    const seen = new Set([origin]), queue = [origin];
+    for (let head = 0; head < queue.length; head += 1) {
+      for (const id of hexNeighbors(queue[head], rows, columns)) {
+        if (cells.has(id) && !seen.has(id)) { seen.add(id); queue.push(id); }
+      }
+    }
+    if (seen.size !== cells.size) throw new RequestError('巡逻范围必须连通');
+    point.patrolCells = [...cells].sort((a, b) => a - b);
   }
   const preset = {
     id, name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : id,

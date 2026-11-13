@@ -1,51 +1,24 @@
 import type { CardLineupData } from './CardRepository';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 /**
- * 「卡牌阵容 ↔ 布阵面板」这条链的**结果事件**契约（只放事件名与 payload 类型）。
- *
- * ## 为什么不是回调
- *
- * 布阵面板保存成功后，卡牌阵容页要重刷 —— 它显示的八卡读的是服务端「选中阵型」，而保存会改它。
- * 以前是：
- *
- * ```ts
- * const session: ILineupBoardOpenSession = { assets };
- * await LineupBoardPage.open({ userData: session, onClose: () => { if (session.saved) refresh(); } });
- * ```
- *
- * 两个问题：
- *   1. **结果绑在「关闭」上**：面板开着时点了保存，页面不会更新，要等玩家点右上角关闭；
- *   2. `saved` 是跨对象共享的临时可变字段，写的一侧和读的一侧要靠「这轮是不是我写的」互相猜。
- *
- * 改成事件后：保存成功当场派发，谁关心谁订阅，面板完全不知道外面有谁 —— 这也是
- * `docs/AI架构与代码规范.md` §2.1「视图只派发意图、不持有控制器回调」的一体两面。
- *
- * ⚠️ 本文件**不许 import `cc`**：`EventMgr` 是纯 TS 单例，这里必须能被单测直接 require。
+ * 卡牌阵容和布阵面板之间的事件契约，只放事件名和 payload。
+ * 保存结果走事件而不是回调，面板开着时保存也能立刻刷新外面。
+ * 本文件不 import cc，保证单测能直接 require。
  */
 
 /** 本链条对外派发的全部事件名。 */
 export const CardLineupEvent = {
     /**
-     * 布阵面板改了「出战阵型」（服务端已确认）。payload = `ICardDeckSavedPayload`。
-     *
-     * 两个触发点：① 保存成功（`draft.commit()` 之后）；② 切页签选中成功（`CmdFormationSelectReqMsg`）——
-     * 切换会改服务端记着的选中阵型，卡牌阵容页的八卡读的就是它，所以两者共用同一个事件。
+     * 出战阵型变了（服务端已确认）。保存成功和切页签选中都会发。
      */
     DeckSaved: 'card-lineup-deck-saved',
     /**
-     * 某张卡升级成功（服务端已确认）。payload = `IHeroUpgradedPayload`。
-     *
-     * 原来走的是 `ICardUpgradeOpenData.onUpgraded` 回调 —— 升级弹窗持有调用方的闭包，
-     * 谁想听就得在打开时传一个进去（漏传 = 升级后外面不刷新，且零报错）。
-     * 改成事件后弹窗只管"我升成功了"，外面谁关心谁订阅（`CardLineupPage` 拿它回写等级缓存）。
+     * 某张卡升级成功（服务端已确认）。
+     * 原来靠 onUpgraded 回调，漏传就静默不刷新；现在谁关心谁订阅。
      */
     HeroUpgraded: 'card-lineup-hero-upgraded',
     /**
-     * 技能行点了「↑ / ↓」。payload = `ISkillStepPayload`。
-     *
-     * 原来是注入式回调（`CardSkillRowView.host` ← `CardSkillListView.host` ← `CardSkillPage`），
-     * 而且为了兜住「注入失败」还写了个沿父链**鸭子类型反射**找 `onSkillStep` 的兜底
-     * —— 那套已经删了：行只派发意图，页面订阅，找不到宿主这种状态从根上不存在。
+     * 技能行点了上下切换。payload = ISkillStepPayload。
      */
     SkillStep: 'card-skill-step',
 } as const;

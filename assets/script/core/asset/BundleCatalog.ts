@@ -43,13 +43,15 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'ui/Role', 'ui/League', 'ui/Store', 'ui/card', 'ui/Gift', 'ui/BattleToken', 'ui/Friend',
         'ui/Chat', 'ui/Mail', 'ui/PlayerInfo', 'ui/Hang', 'ui/Activity', 'ui/SevenDay',
         'ui/Celebration', 'ui/FirstRecharge', 'ui/LimitTimeAct', 'ui/MonthCardGift', 'ui/ShowReward',
-        'ui/ItemDetail', 'ui/ItemInfo', 'ui/gm', 'ui/vscroll',
-        'image/role', 'image/league', 'image/store', 'image/card', 'image/carddetail', 'image/gift', 'image/battletoken',
+        'ui/ItemDetail', 'ui/ItemInfo', 'ui/gm', 'ui/vscroll', 'ui/Guide',
+        'image/role', 'image/league', 'image/store', 'image/card', 'image/card_lineup', 'image/card_board', 'image/carddetail', 'image/gift', 'image/battletoken',
         'image/friend', 'image/chat', 'image/mail', 'image/playerinfo', 'image/hang', 'image/activity',
         'image/activityIcon', 'image/sevenDay', 'image/celebration', 'image/firstRecharge',
         'image/limitTimeAct', 'image/monthcard', 'image/showReward', 'image/itemdetail', 'image/iteminfo',
         'icons/item', 'icons/equip', 'icons/gem', 'icons/cardHead', 'icons/card', 'icons/skill',
         'icons/hero', 'icons/militia',
+        // 新手引导立绘：762×1107 的单张大图，刻意不进 `image/role`（那目录有 auto-atlas，会被图集缩糊）
+        'image/guide',
     ],
 };
 

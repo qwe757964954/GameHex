@@ -1,4 +1,4 @@
-/
+/**
  *SLG 据点迁城（`CmdSlgCampMoveReqMsg` / `CmdSlgCampMoveRspMsg`，协议 r882）的归一化与文案。
  *
  *纯 TS、零引擎依赖（规则 78），Node 下可直接单测。
@@ -36,32 +36,32 @@ import { isBigMapCampId } from './BigMapCampInfo';
 
 const UINT32_MAX = 0xffffffff;
 
-/
+/**
  *迁城类型 —— 对应 `CmdSlgCampMoveReqMsg.moveType`。
  *
  *目前协议只有 `1 常规移动`；用 `as const` 对象 + 同名派生类型（工程规范，禁 `enum` / 禁数组下标）。
  */
 export const BIGMAP_CAMP_MOVE_TYPE = {
-    / 常规移动（协议当前唯一口径）。 */
+    /** 常规移动（协议当前唯一口径）。 */
     Normal: 1,
 } as const;
 
 export type BigMapCampMoveType = (typeof BIGMAP_CAMP_MOVE_TYPE)[keyof typeof BIGMAP_CAMP_MOVE_TYPE];
 
-/ 一次迁城请求（与协议同形）。 */
+/** 一次迁城请求（与协议同形）。 */
 export interface IBigMapCampMoveRequest {
     readonly campId: number;
     readonly pos: number;
     readonly moveType: BigMapCampMoveType;
 }
 
-/ 迁城结果（与 `IBigMapActionFeedback` 同形，避免 Presenter 再包一层）。 */
+/** 迁城结果（与 `IBigMapActionFeedback` 同形，避免 Presenter 再包一层）。 */
 export interface IBigMapCampMoveResult {
     readonly ok: boolean;
     readonly message: string;
 }
 
-/ 迁城相关文案。 */
+/** 迁城相关文案。 */
 export const BIGMAP_CAMP_MOVE_TEXT = {
     moved: '迁城成功',
     busy: '正在迁城，请稍候',
@@ -76,12 +76,12 @@ export const BIGMAP_CAMP_MOVE_TEXT = {
     cancel: '取消',
 } as const;
 
-/ `pos` 是 `uint32`；0 合法（同建造 `position=0` 口径），只拒负数/小数/超界。 */
+/** `pos` 是 `uint32`；0 合法（同建造 `position=0` 口径），只拒负数/小数/超界。 */
 export function isBigMapCampPos(value: unknown): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= UINT32_MAX;
 }
 
-/ 迁城请求参数校验；不合法返回 `null`（调用方直接拒发，不浪费一次往返）。 */
+/** 迁城请求参数校验；不合法返回 `null`（调用方直接拒发，不浪费一次往返）。 */
 export function normalizeBigMapCampMoveRequest(
     campId: unknown,
     pos: unknown,
@@ -93,7 +93,7 @@ export function normalizeBigMapCampMoveRequest(
     return { campId, pos, moveType: BIGMAP_CAMP_MOVE_TYPE.Normal };
 }
 
-/
+/**
  *迁城回包是否属于本次请求，且成功。
  *
  *判定三件，缺一不可：

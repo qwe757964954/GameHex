@@ -1,10 +1,10 @@
 /**
- * 卡牌详情页的「升级增加全队暴击伤害」文案数据。**不 import cc，可单测**。
+ * 卡牌详情页的「升级增加全队暴击伤害」文案数据。不 import cc，可单测。
  *
  * 数据源 `pvpSkillPlan`：每张可上场卡都有 50 行固定链（`skillChainId = 109001`），
- * 一行 = 一个等级档的**增量**（不是累计值）：
+ * 一行 = 一个等级档的增量（不是累计值）：
  *   - `skillLevel` / `unlockHeroLevel` = 卡牌等级（两者相等）；
- *   - `statId = critDamage`、`operation = add`、`value` = **百分点**（1 = +1%）。
+ *   - `statId = critDamage`、`operation = add`、`value` = 百分点（1 = +1%）。
  *
  * 战斗层把本局阵容所有卡的这条链汇总成一个 owner 级共享池
  * （`ZCModifierRuntime.shareLineupCritDamage`），详情页只读这一条链，
@@ -53,7 +53,7 @@ export function buildCritDamageGainTable(rows: readonly unknown[]): ZCCritDamage
 /**
  * 从 `level` 升到 `level + 1` 会新增的全队暴击伤害（百分点）。
  *
- * 读的是**目标等级**那一行 —— 链路上每行是「到这一级才给」的增量；
+ * 读的是目标等级那一行 —— 链路上每行是「到这一级才给」的增量；
  * 没配 / 已满级（没有 level+1 行）返回 0，调用方据此不显示文案。
  */
 export function critDamageGainAt(

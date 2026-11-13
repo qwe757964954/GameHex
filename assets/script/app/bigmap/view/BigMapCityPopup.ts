@@ -7,13 +7,13 @@ import { HeadArt } from '../../HeadArt';
 
 const { ccclass, property } = _decorator;
 
-/ 一条「增益效果」：标题 + 描述（描述允许换行，最多两行）。 */
+/** 一条「增益效果」：标题 + 描述（描述允许换行，最多两行）。 */
 export interface IBigMapCityPopupBuff {
     readonly title: string;
     readonly desc: string;
 }
 
-/ 排行榜一行；头像按服务端 roleImg 经既有头像资源入口加载。 */
+/** 排行榜一行；头像按服务端 roleImg 经既有头像资源入口加载。 */
 export interface IBigMapCityPopupRank {
     readonly rank: number;
     readonly name: string;
@@ -22,7 +22,7 @@ export interface IBigMapCityPopupRank {
     readonly avatarId?: string;
 }
 
-/ 城池弹窗的全部展示数据（由 Presenter 算好，视图只写节点）。 */
+/** 城池弹窗的全部展示数据（由 Presenter 算好，视图只写节点）。 */
 export interface IBigMapCityPopupContent {
     readonly title: string;
     readonly openingText?: string;
@@ -39,20 +39,20 @@ export interface IBigMapCityPopupContent {
     readonly hasPlayerActions?: boolean;
 }
 
-/ 弹窗内固定槽位数量 —— 与 prefab 里预先摆好的节点数一致，多出来的数据直接丢弃。 */
+/** 弹窗内固定槽位数量 —— 与 prefab 里预先摆好的节点数一致，多出来的数据直接丢弃。 */
 export const BIGMAP_CITY_POPUP_BUFF_SLOTS = 2;
 export const BIGMAP_CITY_POPUP_RANK_SLOTS = 3;
-/ 排行榜每行「积分」前缀 —— 设计稿里是独立文本节点（与数值分两段）。 */
+/** 排行榜每行「积分」前缀 —— 设计稿里是独立文本节点（与数值分两段）。 */
 export const BIGMAP_CITY_POPUP_SCORE_LABEL = '积分';
 
-/ 设计稿积分统一用 K，避免切到 M 后丢掉千位信息。 */
+/** 设计稿积分统一用 K，避免切到 M 后丢掉千位信息。 */
 function formatCityScore(score: string): string {
     const value = Number(score);
     return value >= 1000 ? `${Math.floor(value / 1000)}K` : score;
 }
 
-/
- *城池弹窗 —— 蓝湖「城池弹窗3」（山猫 2026-11-02 口径：*「弹窗按照设计稿，尺寸按照设计稿 1:1」*）。
+/**
+ *城池弹窗 —— 蓝湖「城池弹窗3」（山猫 2026-11-02 口径：「弹窗按照设计稿，尺寸按照设计稿 1:1」）。
  *
  *## 尺寸与适配
  *
@@ -90,18 +90,18 @@ export class BigMapCityPopup extends PopupBase {
     @property({ type: [Node], group: '排行榜', tooltip: 'Right/Rank0..2' }) private rankRoots: Node[] = [];
     @property({ type: [Label], group: '排行榜' }) private rankNumbers: Label[] = [];
     @property({ type: [Label], group: '排行榜' }) private rankNames: Label[] = [];
-    /
+    /**
      *「积分」两个字（设计稿 x=553 起，左对齐）。
      *
      * 与数值分两个节点：设计稿是两段独立文本（553 / 607），合成一个 Label 左对齐的话
      *数值会紧贴「积分」，永远对不上蓝湖。
      *
-     *槽位在 prefab 里绑死（山猫 2026-11-02：*「绑定组件就好」*）—— 不做按名字兜底查找，
+     *槽位在 prefab 里绑死（山猫 2026-11-02：「绑定组件就好」）—— 不做按名字兜底查找，
      *绑错就在编辑器里露馅，比运行时静默凑合好。
      */
     @property({ type: [Label], group: '排行榜', tooltip: '「积分」标签，与数值分两段摆' })
     private rankScoreTags: Label[] = [];
-    / 积分数值（设计稿 x=607 起，左对齐）。 */
+    /** 积分数值（设计稿 x=607 起，左对齐）。 */
     @property({ type: [Label], group: '排行榜' }) private rankScoreValues: Label[] = [];
     @property({ type: [Sprite], group: '排行榜' }) private rankAvatars: Sprite[] = [];
     @property({ type: Node, group: '排行榜' }) private fullRankRoot: Node = null!;
@@ -113,7 +113,7 @@ export class BigMapCityPopup extends PopupBase {
 
     @property({ type: Label, group: '战功', tooltip: 'Panel/Progress/Label：当前 / 最低占领战功' })
     private warScoreLabel: Label = null;
-    / 战功填充条的 UITransform —— 直接拖组件，不走 `getComponent`（拖错在编辑器里就看得见）。 */
+    /** 战功填充条的 UITransform —— 直接拖组件，不走 `getComponent`（拖错在编辑器里就看得见）。 */
     @property({ type: UITransform, group: '战功', tooltip: 'Panel/Progress/Fill 的 UITransform：按比例改宽度' })
     private warScoreFillTransform: UITransform = null;
 
@@ -129,9 +129,9 @@ export class BigMapCityPopup extends PopupBase {
     @property({ type: Sprite, group: '操作' }) private staminaIcon: Sprite = null;
     @property({ type: Button, group: '操作' }) private playerActionsButton: Button = null!;
 
-    / 战功进度条槽的原始宽度（设计稿 `progress_02` = 250）—— 按比例改宽度时不能读被改过的值。 */
+    /** 战功进度条槽的原始宽度（设计稿 `progress_02` = 250）—— 按比例改宽度时不能读被改过的值。 */
     private warScoreTrackWidth = 250;
-    / 最近一次 render 的数据：`onOpen` 没带 userData 时用它兜底（先 open 后 render 的调用序）。 */
+    /** 最近一次 render 的数据：`onOpen` 没带 userData 时用它兜底（先 open 后 render 的调用序）。 */
     private pending: IBigMapCityPopupContent | null = null;
     private readonly rankAvatarIds: string[] = [];
     private avatarRevision = 0;
@@ -156,7 +156,7 @@ export class BigMapCityPopup extends PopupBase {
         if (reason !== PopupCloseReason.Force) this.sendIntent({ kind: 'clear' });
     }
 
-    / 全量覆盖：每次都把每个槽位的文本写一遍，不留上一座城的残值。 */
+    /** 全量覆盖：每次都把每个槽位的文本写一遍，不留上一座城的残值。 */
     render(content: IBigMapCityPopupContent | null): void {
         if (!content) return;
         this.pending = content;

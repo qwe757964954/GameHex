@@ -85,6 +85,12 @@ export class ZCSkillRuntimeRegistry {
         //  每道雷独立判伤、独立掷麻痹。推进在 `ZCSkillTriggerSystem.applyBoltStrike`，
         //  落点与结算在 `ZCAttackResolutionSystem.castBoltLine`（每道雷 = 一个「一波」地面区域）。
         this.register('bolt_strike', 'none');
+        //  2026-11-12 科学家「精密陷阱」（103504）：冷却到点**在自己脚下**留一个陷阱，
+        //  敌人踩上去（或到点）就炸。「放下就不管」的一次性布置，没有持续状态机。
+        //  推进在 `ZCSkillTriggerSystem.applyTrap`，摆放与表现路径在
+        //  `ZCAttackResolutionSystem.castTrap`，结算复用 `ZCGroundZoneSystem`
+        //  （触碰走 `contactRadius`、爆炸走 `expireDamage` + `expirePrefabPath`）。
+        this.register('trap_place', 'none');
     }
 
     register(key: string, stateMode: ZCSkillStateMode): this {

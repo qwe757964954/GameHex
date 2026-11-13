@@ -1,11 +1,11 @@
 /**
- * 卡牌等级曲线（等级 → 累计倍率）。**不 import cc，可单测**。
+ * 卡牌等级曲线（等级 → 累计倍率）。不 import cc，可单测。
  *
  * 为什么要单独量一条曲线，而不是让怪物卡也去查 `cardLevelUp`：
  *   怪物卡（`monsterCard.json`，id 50001 起）和卡牌（`pvpCard.json`，id 68001 起）
- *   是**同一个单位的两个 id 体系**，数值一模一样但 id 对不上，
+ *   是同一个单位的两个 id 体系，数值一模一样但 id 对不上，
  *   无法用 `cardLevelUp` 的 (卡 id, 等级) 直接查。而需求是「怪物卡同步升级属性、
- *   不建怪物卡升级表」—— 那就只借**曲线**，不借**绝对值**：
+ *   不建怪物卡升级表」—— 那就只借曲线，不借绝对值：
  *
  *      怪物卡属性(level) = 怪物卡自身基础值 × 曲线倍率(level)
  *
@@ -13,7 +13,7 @@
  *   怪物卡这边自动跟着变，全程不需要第二张表。
  *
  * 同一条曲线对全部卡成立，这个前提由「卡牌成长表全品级共用一条曲线」保证；
- * 这里对多张卡取**中位数**而不是取第一张，避免个别卡数值手滑把整条曲线带偏。
+ * 这里对多张卡取中位数而不是取第一张，避免个别卡数值手滑把整条曲线带偏。
  */
 
 import type { ZCCardLevelUpTable } from './CardUpgradeCost';
@@ -32,7 +32,7 @@ function statOf(row: { attrList?: readonly { statId: string; value: number }[] }
  *
  * 基准级优先取 Lv0（= 基础值），没有 Lv0 的卡退回 Lv1。
  * 只有同时有基准血量与该级血量的卡参与采样 —— 缺数据的卡不影响结果。
- * 返回的 Map 只含**真实采到的等级**，查不到就是没配这一级。
+ * 返回的 Map 只含真实采到的等级，查不到就是没配这一级。
  */
 export function measureLevelRates(table: ZCCardLevelUpTable): ReadonlyMap<number, number> {
     const samples = new Map<number, number[]>();

@@ -1,4 +1,4 @@
-/
+/**
  *SLG 据点角色展示信息（`SlgGameCameRoleInfo`，协议真源 r879/r880）的归一化层。
  *
  *纯 TS、零引擎依赖（规则 78），Node 下可直接单测。
@@ -31,39 +31,39 @@
 import { toCount, toIdString } from '../../net/RequestGuard';
 import { isBigMapCampId } from './BigMapCampInfo';
 
-/ 据点内的一个角色（一个玩家在某个格子上的驻守/占领记录）。 */
+/** 据点内的一个角色（一个玩家在某个格子上的驻守/占领记录）。 */
 export interface IBigMapCampRoleInfo {
-    / 玩家 id（`uint64` → 十进制字符串，禁止转 number）。 */
+    /** 玩家 id（`uint64` → 十进制字符串，禁止转 number）。 */
     readonly roleId: string;
-    / 玩家所在区服 id（`uint64` → 字符串）。跨服据点谁都能来，界面要能显示来源服。 */
+    /** 玩家所在区服 id（`uint64` → 字符串）。跨服据点谁都能来，界面要能显示来源服。 */
     readonly serverId: string;
     readonly roleName: string;
-    / 头像 id（`img`，`uint64` → 字符串）；不是资源名，要经 head/icon 表解析。 */
+    /** 头像 id（`img`，`uint64` → 字符串）；不是资源名，要经 head/icon 表解析。 */
     readonly avatarId: string;
-    / 当前血量（`uint32`，0 表示已破防但记录还在）。 */
+    /** 当前血量（`uint32`，0 表示已破防但记录还在）。 */
     readonly defenseHp: number;
-    / 所在格子 id（`uint32`，0 合法）。 */
+    /** 所在格子 id（`uint32`，0 合法）。 */
     readonly pos: number;
-    / 旧快照可缺省；最新协议归一化始终提供建筑等级。 */
+    /** 旧快照可缺省；最新协议归一化始终提供建筑等级。 */
     readonly buildLevel?: number;
 }
 
 const UINT32_MAX = 0xffffffff;
 
-/ 角色列表的查询状态（与据点状态 `campDetailStatus` 分开，两条独立协议）。 */
+/** 角色列表的查询状态（与据点状态 `campDetailStatus` 分开，两条独立协议）。 */
 export type BigMapCampRoleStatus = 'idle' | 'loading' | 'ready' | 'failed';
 
-/ 详情面板里角色段的文案。{n} 由调用方替换成人数。 */
+/** 详情面板里角色段的文案。{n} 由调用方替换成人数。 */
 export const BIGMAP_CAMP_ROLE_TEXT = {
     heading: '据点角色：{n} 人',
     empty: '据点角色：暂无',
     pending: '据点角色：加载中',
     failed: '据点角色：获取失败，重新选择据点可重试',
     next: '下一位',
-    / 单行角色描述：名字 · 血量 · 所在格。名字可能为空（SLG 守军允许空名），退回玩家 id。 */
+    /** 单行角色描述：名字 · 血量 · 所在格。名字可能为空（SLG 守军允许空名），退回玩家 id。 */
     row: (name: string, fallbackId: string, hp: number, pos: number): string =>
         `· ${name || fallbackId}　HP ${hp}　格 ${pos}`,
-    /
+    /**
      *地图玩家标记上的血量行（`BigMapWorldMarker.setStatusLine`）。
      *
      *地图按 `pos` 摆人之后，血量是四个展示项里唯一放不进名条的（名条只有"等级徽章 + 名字"），
@@ -77,19 +77,19 @@ export function formatBigMapCampRoleDetail(role: IBigMapCampRoleInfo): string {
         + `\n建筑等级：${role.buildLevel ?? 0}\nHP：${role.defenseHp}\n所在格：${role.pos}`;
 }
 
-/ 格子 id：整数且落在 uint32 内（0 合法）。 */
+/** 格子 id：整数且落在 uint32 内（0 合法）。 */
 function isHexId(value: unknown): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= UINT32_MAX;
 }
 
-/ 血量：uint32 非负整数。 */
+/** 血量：uint32 非负整数。 */
 function normalizeHp(value: unknown): number {
     const num = toCount(value);
     if (!Number.isFinite(num) || num < 0) return 0;
     return Math.min(UINT32_MAX, Math.floor(num));
 }
 
-/
+/**
  *单条角色归一化（`SlgGameCameRoleInfo`）：列表回包与广播事件共用同一口径。
  *
  *roleId 是主键（空串不是合法玩家 id）、`pos` 必须是 uint32 格 id（0 合法），
@@ -114,7 +114,7 @@ export function normalizeBigMapCampRoleInfo(raw: unknown): IBigMapCampRoleInfo |
     };
 }
 
-/
+/**
  *`CmdSlgCampRoleInfosRspMsg` → 角色列表。
  *
  *@param response 原始回包
@@ -139,7 +139,7 @@ export function normalizeBigMapCampRoleInfos(
     return Array.from(byPos.values()).sort((a, b) => a.pos - b.pos);
 }
 
-/
+/**
  *据点角色段落（喂给详情面板那段文本），视图只做拼接、不做判断。
  *
  *四条文案互斥且优先用已有数据：查询失败但有旧列表时仍然展示旧列表
@@ -160,7 +160,7 @@ export function formatBigMapCampRoleLines(
     ];
 }
 
-/
+/**
  *角色事件类型 —— 对应 `CmdSlgGameRoleInfoBroMsg.eventType`。
  *
  *| 值 | 含义 | 客户端要看重的字段 |
@@ -182,13 +182,13 @@ export const BIGMAP_ROLE_EVENT_TYPE = {
 
 export type BigMapRoleEventType = (typeof BIGMAP_ROLE_EVENT_TYPE)[keyof typeof BIGMAP_ROLE_EVENT_TYPE];
 
-/ 一条角色广播事件。 */
+/** 一条角色广播事件。 */
 export interface IBigMapRoleEvent {
     readonly eventType: BigMapRoleEventType;
     readonly role: IBigMapCampRoleInfo;
 }
 
-/
+/**
  *`CmdSlgGameRoleInfoBroMsg` → 事件对象；认不出来整条丢弃。
  *
  * `eventType` 只认 1~4，其它值直接 `null` —— 服务端以后加了新事件类型，

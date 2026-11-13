@@ -17,7 +17,7 @@ export interface IBigMapUiState {
     readonly pendingCampMoveId: number;
 }
 
-/ 数据消息不携带 Model、Controller 或业务回调。 */
+/** 数据消息不携带 Model、Controller 或业务回调。 */
 export interface IBigMapViewState {
     readonly ui: IBigMapUiState;
     readonly world: BigMapModel['world'];
@@ -37,17 +37,17 @@ export interface IBigMapViewState {
     readonly plots: ReturnType<BigMapModel['plotCells']>;
     readonly plotDetails: ReadonlyMap<number, NonNullable<ReturnType<BigMapModel['plotDetail']>>>;
     readonly queueNames: ReadonlyMap<number, string>;
-    / 在建格 → 建筑 id（建造中的格不在 `plots` 的建筑里，画图要靠它）。 */
+    /** 在建格 → 建筑 id（建造中的格不在 `plots` 的建筑里，画图要靠它）。 */
     readonly queueBuildingIds: ReadonlyMap<number, number>;
     readonly collectableBuildings: ReadonlySet<number>;
     readonly buildMenu: ReturnType<BigMapModel['buildMenu']>;
-    /
+    /**
      *摆放态下「哪些空格放得下」（红绿预判）。
      *
      *不在摆放态时恒为空数组。只是客户端预判：联机时以服务端回包为准。
      */
     readonly placeableHexIds: readonly number[];
-    /
+    /**
      *移建态下「哪些空格落得下」（红绿预判），用 `bigMapCanMove` 逐格判定。
      *
      *不在移建态时恒为空数组；原格不在内（`bigMapCanMove` 对原格返回 false）。

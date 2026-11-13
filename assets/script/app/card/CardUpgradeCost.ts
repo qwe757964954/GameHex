@@ -5,7 +5,7 @@
  * 升级条件：① 消耗卡牌数量够；② 通用经验 + 兵种经验合计够。
  * 从 level 升到 level+1 读的是 level+1 那一行。
  *
- * **解锁（level 0 → 1）也走同一套判定**：按钮叫「解锁」只是说法（`upgradeButtonText()`），
+ * 解锁（level 0 → 1）也走同一套判定：按钮叫「解锁」只是说法（`upgradeButtonText()`），
  * 经验照样按 `costArmyLevelNum` 判 —— 表里 level=1 那行配了多少经验就得有多少。
  */
 
@@ -18,7 +18,7 @@ function resolveUpgradeRow(
     return levels?.get(currentLevel + 1);
 }
 
-/** `cardLevelUp.attrList` 的一条：属性键 + 该等级的**绝对值**（不是增量）。 */
+/** `cardLevelUp.attrList` 的一条：属性键 + 该等级的绝对值（不是增量）。 */
 export interface ZCCardAttrEntry {
     readonly statId: string;
     readonly value: number;
@@ -63,7 +63,7 @@ export interface ZCCardLevelUpRow {
     /**
      * 该等级的绝对属性（`cardLevelUp.attrList`）。
      *
-     * **没有配时这个键不出现**（不是空数组）—— 这样 `parseCardLevelUpRow` 对老行的
+     * 没有配时这个键不出现（不是空数组）—— 这样 `parseCardLevelUpRow` 对老行的
      * 返回结构与引入本字段之前逐字相同，`deepEqual` 类断言不受影响。
      * 调用方判 `row.attrList?.length` 即可：缺键 / 空数组都按「没配」处理 ⇒
      * 回落 `pvpUnitGrowth` 的百分比成长。

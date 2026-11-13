@@ -1,4 +1,4 @@
-/
+/**
  *城池榜单 —— 纯规则，零 `cc`、零 `Date`、零随机源。
  *
  *存在原因：战功公式里的 `rank`（名次系数）和 `attackers`（拥挤系数）一直没人传，
@@ -15,7 +15,7 @@
  */
 import type { IBigMapConfig } from './BigMapTypes';
 
-/ 榜单一条：谁、多少战功、排第几。`isPlayer` 只给 UI 高亮用。 */
+/** 榜单一条：谁、多少战功、排第几。`isPlayer` 只给 UI 高亮用。 */
 export interface IBigMapCityRankEntry {
     readonly roleId?: string;
     readonly name?: string;
@@ -25,19 +25,19 @@ export interface IBigMapCityRankEntry {
     readonly isPlayer: boolean;
 }
 
-/ 一座城的榜单快照。 */
+/** 一座城的榜单快照。 */
 export interface IBigMapCityRankBoard {
     readonly playerWarScore?: number;
     readonly cityId: number;
     readonly entries: readonly IBigMapCityRankEntry[];
-    / 玩家在这座城的名次（从 1 起；服务端未上榜为 0）。 */
+    /** 玩家在这座城的名次（从 1 起；服务端未上榜为 0）。 */
     readonly playerRank: number;
-    / 同时在打的人数（含玩家），直接喂 `bigMapCrowdCoeff`。 */
+    /** 同时在打的人数（含玩家），直接喂 `bigMapCrowdCoeff`。 */
     readonly attackerCount: number;
     readonly topWarScore: number;
 }
 
-/
+/**
  *城池榜单端口。
  *
  *联机版 = `CmdGetRankReqMsg` 的城池伤害榜；单机版 = `buildBigMapCityRankBoard` 的 NPC 模拟。
@@ -48,7 +48,7 @@ export interface IBigMapRankProvider {
     fetchCityRank(cityId: number, playerWarScore: number): Promise<IBigMapCityRankBoard | null>;
 }
 
-/ 32 位混合哈希 —— 只用来把 `cityId` 打散成种子，不需要密码学强度。 */
+/** 32 位混合哈希 —— 只用来把 `cityId` 打散成种子，不需要密码学强度。 */
 function hash32(value: number): number {
     let h = (value ^ 0x9e3779b9) >>> 0;
     h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
@@ -56,16 +56,16 @@ function hash32(value: number): number {
     return (h ^ (h >>> 16)) >>> 0;
 }
 
-/ 线性同余 —— 一条链自己往下滚，保证同一种子出同一串数。 */
+/** 线性同余 —— 一条链自己往下滚，保证同一种子出同一串数。 */
 function nextRandom(state: number): number {
     return (Math.imul(state, 1664525) + 1013904223) >>> 0;
 }
 
-/ NPC 人数范围：5~12 人（与文档「一城辐射 8~12 个基地」同量级，但这是人数不是辐射容量）。 */
+/** NPC 人数范围：5~12 人（与文档「一城辐射 8~12 个基地」同量级，但这是人数不是辐射容量）。 */
 const NPC_MIN = 5;
 const NPC_SPAN = 8;
 
-/
+/**
  *造一座城的 NPC 榜单并把玩家插进去。
  *
  *@param playerWarScore 玩家在这座城当日的累计战功（存档 `battle.cityWarScore[cityId]`）。
@@ -114,7 +114,7 @@ export function buildBigMapCityRankBoard(
     };
 }
 
-/ 从城池配置直接造一份「只有玩家」的榜（榜单端口未注入时用）。 */
+/** 从城池配置直接造一份「只有玩家」的榜（榜单端口未注入时用）。 */
 export function buildSoloRankBoard(cityId: number, playerWarScore: number): IBigMapCityRankBoard {
     const score = Math.max(0, Math.round(playerWarScore));
     return {

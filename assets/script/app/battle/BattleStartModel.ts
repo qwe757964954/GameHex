@@ -102,10 +102,33 @@ export interface ZCBattleHero {
     readonly level: number;
 }
 
+/**
+ * 服务端下发的**增量**属性：`statId.operation`，与 `ZCStatSchema` 的字段选择器同一套命名法。
+ *
+ * 2026-11-13 实测 `CmdPvpAttrInfo.attrId` 开始出现 `attack.addRate` / `maxHp.addRate`、
+ * `value = "-0.2"` —— 是「攻击、生命各 -20%」这类规则增量，**不是绝对值**。
+ * 两种错法都会静默出错：当绝对值用会得到 `-0.2 点攻击`；当未知键丢掉则整条规则消失
+ * （`heroAttrs` 里连条目都没有，下游 `serverAttributes` 全空，只有一行 warn）。
+ *
+ * 只认 `attack` / `maxHp`：服务端目前只下发这两项，下游服务端通道也只把这两项
+ * 写进 `ZCUnitDefinition`。要加第三项，运行时白名单得一起改，别只扩这张表。
+ */
+export interface ZCBattleHeroModifier {
+    readonly statId: 'attack' | 'maxHp';
+    /** `add` = 绝对增量；`addRate` = 相对基础值的比例（`-0.2` = -20%）。 */
+    readonly operation: 'add' | 'addRate';
+    readonly value: number;
+}
+
 export interface ZCBattleHeroAttrs {
     readonly heroId: number;
-    /** 服务端最终绝对值，不再乘关卡倍率；缺失项保留客户端计算结果。 */
+    /** 服务端最终数值（允许负数），不再乘关卡倍率；缺失项保留客户端计算结果。 */
     readonly attributes: Readonly<Partial<ZCCardLevelAttrs>>;
+    /**
+     * 增量属性。**没有增量时不写这个键**：纯绝对值回包与引入增量前完全同形，
+     * 既保持"缺省即没有"的语义，也不给老数据多带一个空数组。
+     */
+    readonly modifiers?: readonly ZCBattleHeroModifier[];
 }
 
 /**
@@ -339,28 +362,62 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
     };
 }
 
+/** 累加中间态：一个 heroId 下的绝对值属性 + 增量属性。 */
+interface IZCBattleHeroAttrAccumulator {
+    readonly attributes: { -readonly [K in keyof ZCCardLevelAttrs]?: number };
+    /** 键 = 完整 `attrId`（即 `statId.operation`），重复下发后覆盖前。 */
+    readonly modifiers: Map<string, ZCBattleHeroModifier>;
+}
+
+/**
+ * `attrId` → 增量语义。键是**完整** `statId.operation`，查不到才算无效。
+ *
+ * 与 `CARD_LEVEL_ATTR_STAT`（绝对值）分成两张表：混成一张的话，调用方只能靠
+ * "这个键有没有点号 / 值有没有小数"去猜语义，猜错一次就是静默错算。
+ */
+const BATTLE_HERO_MODIFIER_STATS: Readonly<Record<string, Pick<ZCBattleHeroModifier, 'statId' | 'operation'>>> = {
+    'attack.add': { statId: 'attack', operation: 'add' },
+    'attack.addRate': { statId: 'attack', operation: 'addRate' },
+    'maxHp.add': { statId: 'maxHp', operation: 'add' },
+    'maxHp.addRate': { statId: 'maxHp', operation: 'addRate' },
+};
+
 /** 协议数值只在边界转一次；重复英雄/属性按最后一条合法值覆盖。 */
 export function parseBattleHeroAttrs(infos: CmdPvpHeroAttrInfo[] | null | undefined): ZCBattleHeroAttrs[] {
-    const heroes = new Map<number, { -readonly [K in keyof ZCCardLevelAttrs]?: number }>();
+    const heroes = new Map<number, IZCBattleHeroAttrAccumulator>();
     for (const info of Array.isArray(infos) ? infos : []) {
         if (!info) continue;
         const heroId = toPositiveInt(info.heroId);
         if (heroId === null) continue;
         for (const attr of Array.isArray(info.attrs) ? info.attrs : []) {
             if (!attr) continue;
-            const key = Object.prototype.hasOwnProperty.call(CARD_LEVEL_ATTR_STAT, attr.attrId)
-                ? CARD_LEVEL_ATTR_STAT[attr.attrId] : undefined;
+            const attrId = typeof attr.attrId === 'string' ? attr.attrId.trim() : '';
+            const key = Object.prototype.hasOwnProperty.call(CARD_LEVEL_ATTR_STAT, attrId)
+                ? CARD_LEVEL_ATTR_STAT[attrId] : undefined;
+            const modifier = key || !Object.prototype.hasOwnProperty.call(BATTLE_HERO_MODIFIER_STATS, attrId)
+                ? undefined : BATTLE_HERO_MODIFIER_STATS[attrId];
+            //  合法性按**目标字段**判，不按 attrId 判：`maxHp.add = 0` 与 `maxHp = 0` 一样没意义，
+            //  `attack` 系列允许 0 / 负数（服务端会下发减法类规则）。
+            const statId = key ?? modifier?.statId;
             const value = typeof attr.value === 'string' && attr.value.trim() !== '' ? Number(attr.value) : NaN;
-            if (!key || !Number.isFinite(value) || value < 0 || (key !== 'attack' && value === 0)) {
+            if (!statId || !Number.isFinite(value) || (statId !== 'attack' && value === 0)) {
                 console.warn('[BattleStartModel] 无效英雄属性，已跳过', heroId, attr);
                 continue;
             }
-            const attributes = heroes.get(heroId) ?? {};
-            attributes[key] = value;
-            heroes.set(heroId, attributes);
+            const entry = heroes.get(heroId) ?? { attributes: {}, modifiers: new Map<string, ZCBattleHeroModifier>() };
+            if (key) {
+                entry.attributes[key] = value;
+            } else if (modifier) {
+                entry.modifiers.set(attrId, { statId: modifier.statId, operation: modifier.operation, value });
+            }
+            heroes.set(heroId, entry);
         }
     }
-    return Array.from(heroes, ([heroId, attributes]) => ({ heroId, attributes }));
+    return Array.from(heroes, ([heroId, entry]) => ({
+        heroId,
+        attributes: entry.attributes,
+        ...(entry.modifiers.size ? { modifiers: Array.from(entry.modifiers.values()) } : {}),
+    }));
 }
 
 /**

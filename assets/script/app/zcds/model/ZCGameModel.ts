@@ -1,7 +1,7 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
-import { ZCNeutralFeatureSystem, isZCAwakeMonster } from './systems/ZCNeutralFeatureSystem';
+import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from './systems/ZCNeutralFeatureSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
 import { ZCMovementSystem } from './systems/ZCMovementSystem';
 import { ZCProjectileContext, ZCProjectileSystem } from './systems/ZCProjectileSystem';
@@ -574,7 +574,7 @@ export class ZCGameModel {
             get hexes() { model.refreshTargetHexes(); return model.targetHexes; },
             unitById: (id) => this.units.byId.get(id) ?? null,
             unitPosition: this.services.unitPosition,
-            hexPosition: (id) => this.config.map.hexes[id],
+            hexPosition: (id) => this.hexCenter(id),
             preferUnitTargets: (unit) => !!this.pveDefence && unit.owner === ZCOwner.Player,
             effectiveDefinition: this.services.effectiveDefinition,
             hasExposedWall: this.services.hasExposedWall,
@@ -848,6 +848,9 @@ export class ZCGameModel {
             //  五雷轰顶（磁电菇 101603）：沿「目标 → 背朝向」排开 3/4/5 道雷，每道独立结算。
             //  与副轨 / 光环同样不推进普攻节拍，用自己的 `boltReadyAt`。
             castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
+            //  精密陷阱（科学家 103504）：在**自己原地**留一个陷阱，踩响或到点各炸一次。
+            //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
+            castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
             //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
             distanceScale: this.rules.combatDistanceScale,
             //  自身施法的治疗（吃口菠萝 100603）：走与吸血同一条 `healUnit` 实现，
@@ -1060,7 +1063,8 @@ export class ZCGameModel {
 
     private hexCenter(hexId: number): { x: number; y: number } {
         const config = this.config.map.hexes[hexId];
-        return { x: config.x, y: config.y };
+        const hex = this.state.hexes[hexId];
+        return hex.neutralFeature?.patrol ? zcMonsterPosition(this.config.map, hex, this.state.elapsedSeconds) : config;
     }
 
     /** null 表示无时限；塔防只由清空全部波次或我方主城失守结束。 */
@@ -1486,6 +1490,12 @@ export class ZCGameModel {
             const locked = this.structureTargetOfHex(projectile.targetId, projectile.owner);
             if (locked) { out.push(locked); seen.add(locked.id); }
         }
+        // 巡逻怪以出生格标识，但可能走到飞行段经过的其他格。
+        for (const hexId of this.neutralFeatures.patrolOrigins) {
+            if (seen.has(hexId) || !isZCAwakeMonster(this.state.hexes[hexId])) continue;
+            const target = this.structureTargetOfHex(hexId, projectile.owner);
+            if (target) { out.push(target); seen.add(hexId); }
+        }
         //  目标单位的落脚格：跳过（见上面「目标所在的格不算障碍」）。
         let targetHexId = -1;
         if (projectile.targetKind === 'unit') {
@@ -1819,9 +1829,9 @@ export class ZCGameModel {
             if (!Number.isFinite(damage) || damage <= 0) return;
             building.hp = Math.max(0, building.hp - damage);
             if (building.hp === 0) {
+                const center = this.hexCenter(building.id);
                 building.neutralFeature.claimed = true;
                 building.neutralResourceId = null;
-                const center = this.config.map.hexes[building.id];
                 this.grantGold(unit.owner, this.rules.killUnitGoldReward, center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
                 this.tileStatesDirty = true;
                 this.invalidateTerrain();

@@ -115,15 +115,18 @@ test('自选地图的后端空出生点保留选点流程，并沿用服务端�
 });
 
 test('后端资源编号直接进入对局，校验坐标和组合归属，不重新抽签', () => {
-    const source = prepare(4);
+    let source = prepare(4);
     ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: compileZCNeutralResourceCatalog([
         { id: 99001, groupId: 99, groupName: '测试', resourceType: 1, weight: 0, param: 10 },
     ], new Map()) });
     try {
         const start = serverMapBattle(source);
         const cell = source.map.hexes.find(hex => hex.playable && !source.map.homes.includes(hex.id));
+        const patrolCells = [cell.id, cell.neighbors.find(id => !source.map.homes.includes(id))];
+        source = { ...source, map: { ...source.map, resourcePoints: [{ row: cell.row, column: cell.column, groupId: 99, patrolCells }] } };
         start.mapInfo.resourcePoints.push({ row: cell.row, column: cell.column, groupId: 99, resourceId: 99001 });
         const result = buildZCClientCombatConfig(source, start, 'self').config;
+        assert.deepEqual(result.map.resourcePoints[0].patrolCells, patrolCells, '正式开局保留点位巡逻元数据');
         assert.equal(result.map.resolvedResources[0].hexId, cell.id);
         assert.equal(result.map.resolvedResources[0].itemId, 99001);
         assert.deepEqual(resolveZCMapResources(result.map, () => { throw new Error('不应重新抽取'); }), result.map.resolvedResources);
@@ -134,6 +137,9 @@ test('后端资源编号直接进入对局，校验坐标和组合归属，不�
         assert.equal(selectResult.map.cityMode, 'select');
         assert.equal(selectResult.map.resolvedResources[0].itemId, 99001);
         assert.deepEqual(resolveZCMapResources(selectResult.map, () => { throw new Error('不应重新抽取'); }), selectResult.map.resolvedResources);
+        source = { ...source, map: { ...source.map, resourcePoints: [{ row: cell.row, column: cell.column, groupId: 98, patrolCells }] } };
+        assert.equal(buildZCClientCombatConfig(source, start, 'self').config.map.resourcePoints[0].patrolCells, undefined,
+            '后端点位组合发生变化时不沿用旧范围');
         start.mapInfo.resourcePoints[0].groupId = 98;
         assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /资源点配置不匹配/);
         start.mapInfo.resourcePoints[0].column = source.map.columns;
@@ -381,6 +387,27 @@ test('服务端倍率独立作用于成长后的属性，保留英雄技能参�
     }
     assert.deepEqual(after.legacyAttributes, before.legacyAttributes);
     assert.deepEqual(after.effectiveDefinitions.enemy, before.effectiveDefinitions.enemy);
+});
+
+test('服务端只下发增量属性时按比例生效，不再被当成无效键整条丢弃', () => {
+    const source = prepare(4);
+    const plain = compileZCMatchRuntime(buildZCClientCombatConfig(source, battle(), 'self').config);
+    const start = battle();
+    const crafted = { ...start, units: start.units.map((unit) => unit.roleId === 'self' ? {
+        ...unit,
+        heroAttrs: parseBattleHeroAttrs([
+            { heroId: 68001, attrs: [
+                { attrId: 'attack.addRate', value: '-0.2' },
+                { attrId: 'maxHp.addRate', value: '-0.2' },
+            ] },
+        ]),
+    } : unit) };
+    const after = compileZCMatchRuntime(buildZCClientCombatConfig(source, crafted, 'self').config);
+    const selfDef = (runtime: typeof plain) => runtime.effectiveDefinitions.player.get('68001')!;
+    assert.equal(selfDef(after).attack, selfDef(plain).attack * 0.8, 'attack.addRate 必须按基础值打折');
+    assert.equal(selfDef(after).maxHp, selfDef(plain).maxHp * 0.8, 'maxHp.addRate 必须按基础值打折');
+    //  只给 self 下发 ⇒ 敌方同 id 英雄不能被连带打折。
+    assert.deepEqual(after.effectiveDefinitions.enemy, plain.effectiveDefinitions.enemy);
 });
 
 test('自选主城配置可在显式预备模式下完成客户端构筑', () => {

@@ -59,7 +59,7 @@ export class LineupBoardModel {
     /**
      * 切页签前是否要先把当前方案提交给服务器（`saveFormation`）。
      *
-     * 比 `currentLineupComplete` 多一个条件：**有未提交改动**。
+     * 比 `currentLineupComplete` 多一个条件：有未提交改动。
      * 没改过还发保存，等于把服务端的出战阵型无谓地指到这条上。
      */
     get switchNeedsCommit(): boolean {

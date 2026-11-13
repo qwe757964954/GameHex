@@ -15,7 +15,7 @@ export interface PvpHeroInfo {
      * 英雄的技能等级表（后端 `CmdPvpHeroInfo.skills`）。
      *
      * 服务端可能给空数组（没技能 / 老数据），也可能整个字段缺省 —— 两种都归一成
-     * **空数组**，消费方不必判 `null`。
+     * 空数组，消费方不必判 `null`。
      */
     readonly skills: readonly PvpHeroSkillLevel[];
 }
@@ -45,7 +45,7 @@ export function getCachedPvpHeroInfos(): readonly PvpHeroInfo[] | null {
 /**
  * 取单个英雄（含技能等级表）。
  *
- * 技能升级响应只回**那一条**英雄信息，所以技能面板不必为了刷新再发一次列表请求 ——
+ * 技能升级响应只回那一条英雄信息，所以技能面板不必为了刷新再发一次列表请求 ——
  * 缓存已经被 `applyPvpHeroSkillLevel` 写回，这里读到的就是服务端刚确认的值。
  * 缓存为空（从未成功拉过列表）返回 `null`，调用方按「没有后端数据」处理。
  */
@@ -58,14 +58,14 @@ export function getCachedPvpHeroInfo(heroId: number): PvpHeroInfo | null {
  * 把「刚升级成功」的新等级写回本地缓存。
  *
  * 升级响应（`CmdPvpHeroUpLevelRspMsg`）只回一条 `CmdPvpHeroInfo`，
- * **不会**顺带刷新整份英雄列表缓存，而 `LineupBoardPage.refresh()` 在
- * `getCachedPvpHeroInfos()` 非空时是**不再发包**的 —— 不补这一步，
+ * 不会顺带刷新整份英雄列表缓存，而 `LineupBoardPage.refresh()` 在
+ * `getCachedPvpHeroInfos()` 非空时是不再发包的 —— 不补这一步，
  * 升完级打开布阵面板看到的还是旧等级。
  *
  * 缓存为空（从未成功拉过列表）时直接忽略：那种情况下页面一定会去发一次请求，
  * 服务端返回的就是最新值，凭空造一份只有一条的缓存反而会把别的英雄挤没。
  *
- * ⚠️ 技能等级**原样搬运**（响应里带 `skills` 就整份替换），不能因为只升了等级
+ * 技能等级原样搬运（响应里带 `skills` 就整份替换），不能因为只升了等级
  * 就把技能清空 —— 升完英雄等级打开技能页会看到技能全没了。
  */
 export function applyPvpHeroLevel(heroId: number, level: number, skills?: readonly PvpHeroSkillLevel[]): void {
@@ -90,7 +90,7 @@ export function applyPvpHeroLevel(heroId: number, level: number, skills?: readon
  * 与 {@link applyPvpHeroLevel} 同理：技能升级响应只回一条 `CmdPvpHeroInfo`，
  * 列表缓存不会自动刷新，不回写就会一直读到旧技能等级。
  *
- * 技能不存在于该英雄的缓存里（服务端刚给英雄开了新技能）→ **追加**而不是丢弃，
+ * 技能不存在于该英雄的缓存里（服务端刚给英雄开了新技能）→ 追加而不是丢弃，
  * 与等级那条同口径：服务端加的东西客户端不该吃掉。
  */
 export function applyPvpHeroSkillLevel(heroId: number, skillId: number, level: number): void {
@@ -151,7 +151,7 @@ export function normalizePvpHeroInfos(infos: CmdPvpHeroInfoListRspMsg['infos']):
 /**
  * 技能等级表归一化：去非法项、按 skillId 去重（后值覆盖前值）、按 skillId 升序。
  *
- * ⚠️ **返回新数组**（技能列表本身也要冻结语义）：`applyPvpHeroSkillLevel` 靠
+ * 返回新数组（技能列表本身也要冻结语义）：`applyPvpHeroSkillLevel` 靠
  * 「共享旧数组 + 生成新数组」表达更新，若这里返回服务端数组本身，
  * 缓存里的引用会被外部改到。
  */

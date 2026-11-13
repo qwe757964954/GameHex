@@ -356,6 +356,11 @@ const SKILL_BEHAVIORS = new Set([
     //  每道延迟 0.15s 判伤、每道独立掷麻痹）。见 `ZCSkillTriggerSystem.applyBoltStrike` +
     //  `ZCAttackResolutionSystem.castBoltLine`；每道雷 = 一个「一波」地面区域。
     'bolt_strike',
+    //  2026-11-12 科学家「精密陷阱」（103504）：冷却到点在施法者原地留一个陷阱，敌人踩上去
+    //  （或到点）就炸；触碰与爆炸各结算一次，爆炸范围内均等伤害。
+    //  见 `ZCSkillTriggerSystem.applyTrap` + `ZCAttackResolutionSystem.castTrap`；
+    //  结算复用 `ZCGroundZoneSystem`（`contactRadius` / `expireDamage` / `expirePrefabPath`）。
+    'trap_place',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',
@@ -1031,7 +1036,10 @@ export function applyZCTypedUnitModifiers(
         const overrides = sources.filter((item) => item.operation === 'override');
         const override = overrides.length ? overrides[overrides.length - 1].value : null;
         let effective = override ?? (baseStat + flat) * (1 + rate) * multiplier;
-        effective = clampStat(statId, effective);
+        // 服务端最终值保留负号，本地计算仍沿用属性下限。
+        if (!overrides.length || overrides[overrides.length - 1].sourceKind !== 'server') {
+            effective = clampStat(statId, effective);
+        }
         values.set(statId, effective);
         //  `override` 直接定值；否则 flat 是绝对增量、rate 是相对增量（乘在 base 上）。
         foldStatPatch(statId, override ?? flat, override === null ? rate * baseStat : 0, statPatch);

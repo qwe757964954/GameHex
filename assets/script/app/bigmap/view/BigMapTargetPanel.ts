@@ -15,7 +15,7 @@ export interface IBigMapTargetPanelContent {
     readonly staminaIcon: SpriteFrame | null;
 }
 
-/ 复用设计稿弹窗节点；只接收展示数据，操作通过事件交由 Controller 处理。 */
+/** 复用设计稿弹窗节点；只接收展示数据，操作通过事件交由 Controller 处理。 */
 @ccclass('BigMapTargetPanel')
 export class BigMapTargetPanel extends Component {
     @property(UITransform) private rootTransform: UITransform = null;

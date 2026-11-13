@@ -3,7 +3,7 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { ZCGameModel } from '../model/ZCGameModel';
 import { createSeededRandom } from '../model/ZCSeededRandom';
 import { ZCOwner } from '../model/ZCMapConfig';
-import { captureZCMatchConfig } from '../model/ZCMatchConfig';
+import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
@@ -67,6 +67,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
                 map: Object.assign({}, config.map, { resolvedResources: resolveZCMapResources(config.map, this.random) }),
             });
             this.model = new ZCGameModel(null, this.random, resolved);
+            this.logCardAttributes(this.model, resolved);
             this.phase.startPlaying();
         }
         this.bindUiEvents();
@@ -133,10 +134,25 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const config = captureZCMatchConfig(resolveZCSpawnMatchConfig(entry.matchConfig, result));
         this.selection = null;
         const model = new ZCGameModel(null, this.random, config);
+        this.logCardAttributes(model, config);
         model.recordSpawnSelection();
         this.model = model;
         this.phase.startPlaying();
         this.view.startPlaying(model, config, selection, model.createRenderFrame(), model.drainPresentationEvents());
+    }
+    private logCardAttributes(model: ZCGameModel, config: ZCMatchConfig): void {
+        for (const owner of model.owners) {
+            const deck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+            console.info('[对局卡牌属性]', owner, JSON.stringify(deck.map((card) => {
+                const definition = card.unitId ? model.effectiveDefinitionForUnit(owner, card.unitId) : null;
+                return {
+                    cardId: card.id, name: card.name, heroId: card.unitId ?? null,
+                    buildingHp: card.baseHp ?? null,
+                    maxHp: definition?.maxHp ?? null,
+                    attack: definition?.attack ?? null,
+                };
+            })));
+        }
     }
     private async onRequestUnitArt({ owner, unitId }: IZCRequestUnitArtIntent): Promise<void> {
         if (owner !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;

@@ -1,6 +1,6 @@
 import { Color, Graphics, Label, Node, SpriteFrame } from 'cc';
 
-/
+/**
  *大世界地图／基地建造的配色与 UI 构建工具。
  *
  *色板口径（2026-10-21 v2）：参考项目现有 Q 版卡通等距美术（`grounds/` 地块 + `barracks-*` 建筑 +
@@ -17,29 +17,29 @@ import { Color, Graphics, Label, Node, SpriteFrame } from 'cc';
 export const BIGMAP_COLORS = {
     campOccupied: new Color(220, 60, 50, 255),
     campUnoccupied: new Color(245, 205, 60, 255),
-    / 页面最底（地图未覆盖处的露底）。 */
+    /** 页面最底（地图未覆盖处的露底）。 */
     pageBg: new Color(201, 176, 138, 255),
-    / 纸面（面板/弹窗底）。 */
+    /** 纸面（面板/弹窗底）。 */
     panel: new Color(248, 239, 221, 250),
-    / 卡片底（比纸面暖一档）。 */
+    /** 卡片底（比纸面暖一档）。 */
     panelLight: new Color(245, 224, 172, 255),
-    / 统一描边。 */
+    /** 统一描边。 */
     border: new Color(176, 138, 78, 255),
-    / 主强调 = 橙（按钮/数值/标题）。 */
+    /** 主强调 = 橙（按钮/数值/标题）。 */
     gold: new Color(232, 137, 26, 255),
-    / 正文深棕。 */
+    /** 正文深棕。 */
     text: new Color(90, 58, 24, 255),
-    / 次要信息。 */
+    /** 次要信息。 */
     muted: new Color(138, 106, 68, 255),
-    / 危险 / 消耗不足。 */
+    /** 危险 / 消耗不足。 */
     danger: new Color(180, 70, 15, 255),
-    / 己方占领 / 可挑战。 */
+    /** 己方占领 / 可挑战。 */
     open: new Color(95, 168, 46, 255),
-    / 未解锁。 */
+    /** 未解锁。 */
     locked: new Color(138, 128, 115, 255),
     occupied: new Color(232, 137, 26, 255),
     unavailable: new Color(74, 79, 74, 255),
-    / 玩家基地。 */
+    /** 玩家基地。 */
     player: new Color(62, 134, 216, 255),
     npc: new Color(193, 105, 74, 255),
     //地形（大地图底色）—— 与美术地块同色系，不随 UI 变。
@@ -51,15 +51,15 @@ export const BIGMAP_COLORS = {
     ringLine: new Color(120, 156, 126, 190),
 } as const;
 
-/ 卡片底部厚边（`shadow` 用；`drawPanel` 不画，留给 prefab 的九宫）。 */
+/** 卡片底部厚边（`shadow` 用；`drawPanel` 不画，留给 prefab 的九宫）。 */
 export const BIGMAP_EDGE_DARK = new Color(122, 87, 48, 255);
 
-/
+/**
  *势力范围色板 —— 无主势力用的颜色（2026-10-21 用户口径：
- **「每个城池占据的势力范围都用颜色叠加，相邻的势力用不同的颜色」*）。
+ * 「每个城池占据的势力范围都用颜色叠加，相邻的势力用不同的颜色」）。
  *
  *五条约束，缺一条就会毁掉地图：
- *1.  不许出现红族与绿族（2026-10-28 用户口径：*「除了红色和绿色外，用任意颜色填充」*）。
+ *1.  不许出现红族与绿族（2026-10-28 用户口径：「除了红色和绿色外，用任意颜色填充」）。
  *   红 = 被其他玩家占据、绿 = 被我占据，这两个色相由归属独占（见下面的
  *   `BIGMAP_TERRITORY_SELF_COLOR` / `BIGMAP_TERRITORY_ENEMY_COLOR`）；色板里再放绿/红，
  *   玩家就分不清「这块地是谁的」和「这块地的势力编号是多少」。
@@ -87,10 +87,10 @@ export const BIGMAP_TERRITORY_COLORS: readonly Color[] = [
     new Color(46, 111, 134),    // 深青（196°，备用）
 ];
 
-/
+/**
  *势力归属色（2026-10-28 用户口径）：
- *- 己方占据的城池 → 绿（*「当玩家占据了城池时，城池所属的颜色变成绿色」*）；
- *- 其他玩家占据的城池 → 红（*「当其他玩家占据了城池时……变成红色」*）。
+ *- 己方占据的城池 → 绿（「当玩家占据了城池时，城池所属的颜色变成绿色」）；
+ *- 其他玩家占据的城池 → 红（「当其他玩家占据了城池时……变成红色」）。
  *
  *取 `BIGMAP_COLORS` 里已有的 `open` / `campOccupied`，与城池角标同一套红绿，
  *让「地图上那片地」和「城头上的状态色」说同一件事。
@@ -98,7 +98,7 @@ export const BIGMAP_TERRITORY_COLORS: readonly Color[] = [
 export const BIGMAP_TERRITORY_SELF_COLOR = BIGMAP_COLORS.open;
 export const BIGMAP_TERRITORY_ENEMY_COLOR = BIGMAP_COLORS.campOccupied;
 
-/
+/**
  *势力染色透明度。
  *
  *填充只给 ~40%（`104/255`）：必须透出地块的裂缝与明暗，这正是图片 3「颜色叠加」的样子 ——
@@ -108,7 +108,7 @@ export const BIGMAP_TERRITORY_ENEMY_COLOR = BIGMAP_COLORS.campOccupied;
 export const BIGMAP_TERRITORY_FILL_ALPHA = 104;
 export const BIGMAP_TERRITORY_STROKE_ALPHA = 216;
 
-/
+/**
  *己方 / 他人势力的填充浓度（比无主的 `BIGMAP_TERRITORY_FILL_ALPHA` 实一档）。
  *
  *理由：无主色板是「暗两档 + 降饱和」的柔和色，而红绿是状态色 —— 玩家扫一眼地图就要看出
@@ -117,7 +117,7 @@ export const BIGMAP_TERRITORY_STROKE_ALPHA = 216;
  */
 export const BIGMAP_TERRITORY_OWNED_FILL_ALPHA = 150;
 
-/
+/**
  *「相邻势力」的判定距离（六边格数）。
  *
  * 这个数字不能取 2（贴身）：城池是按环上槽位排布的（`BigMapWorld.pickRingAnchor`），
@@ -129,7 +129,7 @@ export const BIGMAP_TERRITORY_OWNED_FILL_ALPHA = 150;
  */
 export const BIGMAP_TERRITORY_NEIGHBOR_GAP = 10;
 
-/ 画一块面板底（圆角 + 描边），所有面板 / 按钮共用这一套观感。 */
+/** 画一块面板底（圆角 + 描边），所有面板 / 按钮共用这一套观感。 */
 export function drawPanel(
     graphics: Graphics,
     width: number,
@@ -150,7 +150,7 @@ export function drawPanel(
     }
 }
 
-/ 一个用 Graphics 画的方按钮：返回节点、Label、以及置灰方法。 */
+/** 一个用 Graphics 画的方按钮：返回节点、Label、以及置灰方法。 */
 export interface IBigMapButton {
     readonly node: Node;
     readonly label: Label;

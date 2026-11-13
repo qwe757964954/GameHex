@@ -3,7 +3,7 @@ import type { IBigMapCityConfig, IBigMapConfig } from './BigMapTypes';
 import type { IBigMapLayout, IBigMapLayoutCity } from './BigMapLayout';
 import { placeBigMapCities } from './BigMapWorld';
 
-/ 正式城池身份由 DM 表提供。旧表仅保留离线预览数值；正式开战/结算仍由服务端处理。 */
+/** 正式城池身份由 DM 表提供。旧表仅保留离线预览数值；正式开战/结算仍由服务端处理。 */
 export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
     const camps = Array.from(config.camps.values()).sort((a, b) => a.campId - b.campId);
     const levels = Array.from(config.cityLevels.values()).sort((a, b) => a.level - b.level);
@@ -30,7 +30,7 @@ export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
     return { ...config, cities };
 }
 
-/ 保留有效锚点、怪物与基地；新增城池复用原环位算法，重新分配相连且不重叠的势力范围。 */
+/** 保留有效锚点、怪物与基地；新增城池复用原环位算法，重新分配相连且不重叠的势力范围。 */
 export function completeBigMapCampLayout(config: IBigMapConfig, layout: IBigMapLayout): IBigMapLayout {
     //bigMap 的编辑器 ID 为 2001~2081，标签记录正式 campId；映射身份时保留手工几何。
     const ids = new Map(layout.cities.map((city) => [city.cityId,

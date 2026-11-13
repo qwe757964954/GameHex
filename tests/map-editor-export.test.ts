@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
+import { parseZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import {
     configureZCMap, getZCMapSection, ZC_ENEMY_HOME_ID, ZC_HEX_CONFIG, ZC_INITIAL_TERRITORY,
     ZC_MAP_ART, ZC_MAP_CITY_MODE, ZC_MAP_COLUMNS, ZC_MAP_HOMES, ZC_MAP_ID, ZC_MAP_PLAYER_COUNT,
@@ -18,6 +19,27 @@ const legacyLayout = JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.jso
 const fixture = (name: string): ZCMapLayout => (
     JSON.parse(readFileSync(`tests/fixtures/${name}.json`, 'utf8')) as ZCMapLayout
 );
+
+test('野怪巡逻格保留到对局配置，并拒绝缺出生格、断连和冲突', () => {
+    const source = fixture('zcds-map-v3-neutral-2p');
+    const point = { row: 8, column: 5, groupId: 1, patrolCells: [93, 104] };
+    try {
+        configureZCMap({ ...source, resourcePoints: [point] });
+        assert.deepEqual(parseZCMap({ ...source, resourcePoints: [point] }).resourcePoints[0].patrolCells, [93, 104]);
+        for (const cells of [[104], [93, 0], [93, -1], [93, 220], [93, 93]]) {
+            assert.throws(() => configureZCMap({ ...source,
+                resourcePoints: [{ ...point, patrolCells: cells }] }), /巡逻/);
+        }
+        const other = { row: 11, column: 5, groupId: 1 };
+        assert.throws(() => configureZCMap({ ...source,
+            resourcePoints: [{ ...point, patrolCells: [93, 104, 115, 126] }, other] }), /巡逻/);
+        assert.throws(() => configureZCMap({ ...source, resourcePoints: [
+            { row: 3, column: 1, groupId: 1, patrolCells: [34, 23, 12] },
+        ] }), /巡逻/);
+        configureZCMap({ ...source, resourcePoints: [{ ...point, patrolCells: [] }] });
+        assert.equal(parseZCMap({ ...source, resourcePoints: [{ ...point, patrolCells: [] }] }).resourcePoints[0].patrolCells, undefined);
+    } finally { configureZCMap(legacyLayout); }
+});
 
 /** 分区号按象限编码：1 = 下左、2 = 上左、3 = 下右、4 = 上右。 */
 const sectionAt = (row: number, column: number): number => getZCMapSection(row * ZC_MAP_COLUMNS + column);

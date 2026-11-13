@@ -576,7 +576,18 @@ export class ZCUnitView extends Component {
             // 悬空施法（`castLift > 0`）也播攻击动作，理由同 `charging`：设计案要求
             // 「触发特效时，角色在空中循环播放攻击动作」。spine 的 `setAnimation(0, name, true)`
             // 本身就是循环，这里只需要把片段选对。
-            const clip = attacking || charging || castLift > 0
+            // **施法动作窗口**（2026-11-13 用户需求）：「角色在移动中，释放任意的主动技能
+            // 都需要角色要播放攻击动作（当前已经是攻击动作就无需打断）」——
+            // 主动技能落地那半秒里即使 `battleState` 还是 `move`，也切成攻击动作，
+            // 否则边走边放技能看起来就是「一路小跑过去顺手扔了个雷」。
+            // 已经是 `attack` 状态时本来就落在这条三元的前半段，窗口不会打断它：
+            // 下面 `attackRestarted` 只认 `attacking`，不会把正在播的那一拳拉回第 0 帧。
+            //  ⚠️ `battleState !== 'dead'` 不能省：自愈这种 buff 本来就常在残血时放，
+            //  落地半秒内被打死的话，窗口没到期会让尸体保持出拳姿势 —— 与 `unit.charging`
+            //  那条「每帧先清、别把出拳姿势带进 idle」是同一类事故。
+            const casting = unit.castActionUntil !== undefined && now < unit.castActionUntil
+                && unit.battleState !== 'dead';
+            const clip = attacking || charging || castLift > 0 || casting
                 ? this.attackClip : moving ? this.moveClip : this.idleClip;
             const attackRestarted = attacking && (unit.completedAttackCount ?? 0) !== this.lastAttackCount;
             this.playClip(clip, attackRestarted);

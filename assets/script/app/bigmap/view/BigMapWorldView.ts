@@ -35,15 +35,15 @@ export const WORLD_COL_STEP = BIGMAP_COLUMN_STEP;
 export const WORLD_ROW_STEP = BIGMAP_ROW_STEP;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.6;
-/
+/**
  *选中城池据点后，相机额外上抬的量（内容系坐标，屏上是 `× zoom`）。
  *
  * 2026-11-03 用户口径（两轮）：
- * · 第一轮：*「城池据点连带着名称和等级的UI节点上移200px（底部与当前城主的上沿对齐即可）」*；
- * · 第二轮：*「还需要上移100px，并且是在地图放大到接近极限的85%的相机位置」*
+ * · 第一轮：「城池据点连带着名称和等级的UI节点上移200px（底部与当前城主的上沿对齐即可）」；
+ * · 第二轮：「还需要上移100px，并且是在地图放大到接近极限的85%的相机位置」
  *   ⇒ 总量 300（`MIN_ZOOM=0.15`、`MAX_ZOOM=1.6`，85% ≈ zoom 1.38，即用户验收的机位）。
  *
- * 2026-11-11 用户口径：*「大地图点击查看城池据点，城池据点居中时，背景地图要同步移动」*
+ * 2026-11-11 用户口径：「大地图点击查看城池据点，城池据点居中时，背景地图要同步移动」
  *⇒ 抬的对象从标记节点换成相机。旧做法只挪 `marker.node`，城飞起来、脚下那块地和势力色
  *还在原处（截图里就是「城在上面、它原来的格子空着」）。现在抬 `content`（背景 / 地块 /
  *势力色 / 标记的共同父节点），整张图一起上移，城永远贴着自己的格子。
@@ -53,14 +53,14 @@ const MAX_ZOOM = 1.6;
  *要微调只改这一个值。
  */
 const BIGMAP_FOCUSED_CITY_LIFT = 300;
-/
+/**
  *玩家标记上「HP xxx」那行的 y（内容系坐标，标记原点 = 所在格中心）。
  *
  *没有建筑图 ⇒ 名条占 -70..-16、头像挂在 +44 附近，血量只能再往上让一层；
  *头像换尺寸时只调这一个值（`BigMapWorldMarker.setStatusLine`）。
  */
 const BIGMAP_ROLE_HP_Y = 132;
-/
+/**
  *地形色（乘算叠在 `grounds/ground_0x.png` 上，所以只能压暗、不能提亮）。
  *
  *口径（2026-10-21 用户口径：「地块默认颜色如图 2」）：默认一律是沙地本色，
@@ -74,7 +74,7 @@ const TERRAIN_TINT: Readonly<Record<BigMapTerrain, Color>> = {
     rock: new Color(240, 238, 234),
     water: new Color(228, 240, 244),
 };
-/
+/**
  *没有地块美术时的兜底填色（`paintTerrain`）。
  *
  *注意这一套是直接填充、不是乘算，所以要给实色 —— 直接拿 `TERRAIN_TINT` 去填
@@ -86,7 +86,7 @@ const TERRAIN_FILL: Readonly<Record<BigMapTerrain, Color>> = {
     rock: new Color(190, 186, 178),
     water: new Color(152, 190, 202),
 };
-/ 连续背景上的地形只留轻色；空地完全透出底图，势力颜色仍由 markerLayer 表达。 */
+/** 连续背景上的地形只留轻色；空地完全透出底图，势力颜色仍由 markerLayer 表达。 */
 const TRANSPARENT_TERRAIN_FILL: Readonly<Record<BigMapTerrain, Color>> = {
     plain: new Color(0, 0, 0, 0),
     forest: new Color(96, 170, 104, 24),
@@ -101,7 +101,7 @@ interface IWorldMarker {
     readonly node: Node;
     readonly icon: Sprite;
     readonly view: BigMapWorldMarker;
-    /
+    /**
      *名单归属的据点 id（只有 `role` 标记有）。
      *
      *聚焦态靠它判「本城玩家」，绝不用 `pos` 反查 —— 同格可能站着别城的角色，
@@ -110,20 +110,20 @@ interface IWorldMarker {
     readonly cityId?: number;
 }
 
-/ 一次标记绘制的全部显示数据（建筑图 + 名条 + 文案 + 兜底色）。 */
+/** 一次标记绘制的全部显示数据（建筑图 + 名条 + 文案 + 兜底色）。 */
 interface IBigMapMarkerArt {
     readonly frame: SpriteFrame | null;
     readonly plate: SpriteFrame | null;
-    / 名条左端徽章位：等级 / 关卡号；空串 = 只留名字。 */
+    /** 名条左端徽章位：等级 / 关卡号；空串 = 只留名字。 */
     readonly level: string;
     readonly name: string;
-    / 占据者名字；空串 = 不挂旗、不显示。 */
+    /** 占据者名字；空串 = 不挂旗、不显示。 */
     readonly occupant: string;
     readonly tint: Color;
     readonly width: number;
 }
 
-/ JSON 世界的表现：地块按视口复用，规则和落位只读 Presenter。 */
+/** JSON 世界的表现：地块按视口复用，规则和落位只读 Presenter。 */
 @ccclass('BigMapWorldView')
 export class BigMapWorldView extends Component {
     private data: IBigMapViewState | null = null;
@@ -155,17 +155,17 @@ export class BigMapWorldView extends Component {
     private readonly tilePool: Sprite[] = [];
     private readonly decorPool: Sprite[] = [];
     private readonly markers: IWorldMarker[] = [];
-    / 名单角色标记（键 = `roleId@pos`）；随 `campRoles` 增删，和城池/野怪共用同一套模板。 */
+    /** 名单角色标记（键 = `roleId@pos`）；随 `campRoles` 增删，和城池/野怪共用同一套模板。 */
     private readonly roleMarkers = new Map<string, IWorldMarker>();
     private roleMarkerKey = '';
     private contentKey = '';
-    / 上次绘制时玩家基地所在的格（`data.playerBaseHexId`）；变化即重建标记。 */
+    /** 上次绘制时玩家基地所在的格（`data.playerBaseHexId`）；变化即重建标记。 */
     private markerAnchorHexId = -1;
     private zoom = 1;
     private selectedHexId = -1;
-    / 已经为哪座城把相机抬起来过（-1 = 没抬）；聚焦态切换时用来幂等/可逆地补偿。 */
+    /** 已经为哪座城把相机抬起来过（-1 = 没抬）；聚焦态切换时用来幂等/可逆地补偿。 */
     private liftedFocusHexId = -1;
-    / 城池 id → 势力色板下标（相邻势力不同色，见 `assignTerritoryColorSlots`）。 */
+    /** 城池 id → 势力色板下标（相邻势力不同色，见 `assignTerritoryColorSlots`）。 */
     private territorySlots: ReadonlyMap<number, number> = new Map();
     private readonly territoryEdges = new Map<number, readonly IBigMapTerritoryEdge[]>();
     private readonly baseTerritoryEdges = new Map<number, readonly IBigMapTerritoryEdge[]>();
@@ -347,7 +347,7 @@ export class BigMapWorldView extends Component {
         g.stroke();
     }
 
-    /
+    /**
      *算一次势力配色（世界是只读快照，城池占格不会变，所以只在 `build` 时跑）。
      *
      *「相邻」优先信布局里的 `adjacentCityIds`（编辑器按范围真实相接推导）：
@@ -383,7 +383,7 @@ export class BigMapWorldView extends Component {
             );
     }
 
-    /
+    /**
      *城池 → 势力范围该刷什么色、刷多实。
      *
      *口径（2026-10-28 用户要求）：
@@ -406,7 +406,7 @@ export class BigMapWorldView extends Component {
         };
     }
 
-    / 相机变化时复用可见槽位，避免为百行地图创建一万个 Sprite。 */
+    /** 相机变化时复用可见槽位，避免为百行地图创建一万个 Sprite。 */
     private syncVisibleTiles(): void {
         const world = this.data?.world;
         const art = this.art;
@@ -484,7 +484,7 @@ export class BigMapWorldView extends Component {
         this.markers.forEach((marker, index) => marker.node.setSiblingIndex(index));
     }
 
-    / 基地位置会随 `toCampId` 到达而变化：清掉旧标记整套重建（只在格真的变了时跑）。 */
+    /** 基地位置会随 `toCampId` 到达而变化：清掉旧标记整套重建（只在格真的变了时跑）。 */
     private rebuildMarkers(): void {
         for (const marker of this.markers) marker.node.destroy();
         this.markers.length = 0;
@@ -517,10 +517,10 @@ export class BigMapWorldView extends Component {
         marker.view.setOccupantFlag(view.occupant ? this.art?.plateFlag ?? null : null);
     }
 
-    /
+    /**
      *名单角色标记与当前名单对齐：每个角色落在自己的 `pos` 格（`SlgGameCameRoleInfo.pos`）。
      *
-     *口径（2026-11-11 山猫）：*「把玩家摆放在对应的 pos」*。
+     *口径（2026-11-11 山猫）：「把玩家摆放在对应的 pos」。
      *
      *· 增删只按 `roleId@pos` 集合 —— 只改血 / 等级 / 头像时不动节点（重建会让标记闪一下）；
      *· `pos` 不在本图点位上（异常包）直接跳过，绝不落到原点堆成一坨；
@@ -567,14 +567,14 @@ export class BigMapWorldView extends Component {
         if (index >= 0) this.markers.splice(index, 1);
     }
 
-    / 标记对应的当前名单条目；角色跨城 / 被顶掉后返回 `null`（本轮不画，等结构同步摘节点）。 */
+    /** 标记对应的当前名单条目；角色跨城 / 被顶掉后返回 `null`（本轮不画，等结构同步摘节点）。 */
     private roleOf(marker: IWorldMarker): IBigMapCampRoleInfo | null {
         const city = marker.cityId ? this.data?.cities.get(marker.cityId) : undefined;
         if (!city) return null;
         return city.campRoles.find((role) => `${role.roleId}@${role.pos}` === marker.id) ?? null;
     }
 
-    /
+    /**
      *玩家标记：头像 + 名条（建筑等级徽章 + 角色名）+ 血量，落在自己的 `pos` 格。
      *
      *复用据点标记模板（`BigMapWorldMarker`），所以没有建筑图：`icon` 隐藏，名条落在
@@ -712,7 +712,7 @@ export class BigMapWorldView extends Component {
                 this.applyMarker(marker, {
                     frame: this.art?.monster ?? null,
                     //名条跟关卡据点同一条红底（2026-11-03 用户口径：
-                    //*「野怪的标识和城池据点的保持一样的红色」*）。
+                    //「野怪的标识和城池据点的保持一样的红色」）。
                     //原来走 `plate_monster`（设计稿 `title_01` 那张蓝底），本意是用颜色区分「野怪 / 关卡」，
                     //实机看下来红底更醒目、也和「据点 = 要去打的东西」这个语义一致 ⇒ 统一到 `city`（红）。
                     // `plate_monster` 那张图还留在 `BIGMAP_PLATE_KEYS` 里（照样加载、随时可切回来），
@@ -769,7 +769,7 @@ export class BigMapWorldView extends Component {
         this.cullMarkers();
     }
 
-    /
+    /**
      *是否处于「城池聚焦」态：选中格是某座城池的锚点才算。
      *选野怪 / 玩家基地不聚焦（2026-11-03 口径只提了城池据点）；没选中也不聚焦。
      */
@@ -782,13 +782,13 @@ export class BigMapWorldView extends Component {
         return -1;
     }
 
-    /
-     *城池聚焦的两件事（2026-11-03 用户：*「在大地图点击城池据点后，隐藏其他的城池据点和
-     *玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px」*）：
+    /**
+     *城池聚焦的两件事（2026-11-03 用户：「在大地图点击城池据点后，隐藏其他的城池据点和
+     *玩家基地以及野怪模型，只展示该城池据点，城池据点连带着名称和等级的UI节点上移200px」）：
      *
      *1. 保留选中城与本城名单玩家：隐藏走 `cullMarkers`（平移 / 缩放共用）；
      *2. 把相机连同整张地图一起上抬：2026-11-11 用户口径
-     *   *「城池据点居中时，背景地图要同步移动」*。
+     *   「城池据点居中时，背景地图要同步移动」。
      *
      *2026-11-03 那版抬的是 `marker.node`：城飞到半空，脚下那块地和势力色留在原处，
      *背景自然不会跟 —— 截图上就是「城在上面、它原来的格子空着」。
@@ -849,13 +849,13 @@ export class BigMapWorldView extends Component {
         }
     }
 
-    / 聚焦态下这条标记该不该留：选中城本体 + 选中城名单里的玩家。 */
+    /** 聚焦态下这条标记该不该留：选中城本体 + 选中城名单里的玩家。 */
     private isMarkerInFocus(marker: IWorldMarker, focusHexId: number, focusedCityId: number): boolean {
         if (marker.kind === 'city') return marker.hexId === focusHexId;
         return marker.kind === 'role' && focusedCityId > 0 && marker.cityId === focusedCityId;
     }
 
-    / 平移和缩放共用入口，同步可见地块；没有逐帧重建。 */
+    /** 平移和缩放共用入口，同步可见地块；没有逐帧重建。 */
     private applyCamera(scale: number, x: number, y: number): void {
         this.zoom = scale;
         this.content.setScale(scale, scale, 1);
@@ -916,7 +916,7 @@ export class BigMapWorldView extends Component {
         this.applyCamera(scale, anchor.x - (anchor.x - position.x) * ratio, anchor.y - (anchor.y - position.y) * ratio);
     }
 
-    /
+    /**
      *把某格挪到视口中央（`-100` = 略低于正中，给顶部 HUD 留位）。
      *
      *城池据点额外上抬 `BIGMAP_FOCUSED_CITY_LIFT`（2026-11-11：抬的是相机，背景跟着一起动）。
@@ -927,7 +927,7 @@ export class BigMapWorldView extends Component {
         this.centerOnHex(hexId, hexId === this.focusedCityHexId ? BIGMAP_FOCUSED_CITY_LIFT : 0);
     }
 
-    / 相机绝对定位到某格：`lift > 0` 时额外上抬（屏幕位移 = `lift * zoom`）。 */
+    /** 相机绝对定位到某格：`lift > 0` 时额外上抬（屏幕位移 = `lift * zoom`）。 */
     private centerOnHex(hexId: number, lift: number): void {
         const center = this.centerOf(hexId);
         this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom - 100 + lift * this.zoom);

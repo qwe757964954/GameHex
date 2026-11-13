@@ -10,6 +10,46 @@ import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/Battle
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 import type { IZCDamageStatsPlayer, IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
 
+test('固定与自选出生点开局按阵营打印卡牌最终属性，后续帧不重复打印', (t) => {
+    const log = t.mock.method(console, 'info', () => {});
+    for (const selecting of [false, true]) {
+        const before = log.mock.callCount();
+        const h = runtimeFixture({}, selecting);
+        try {
+            const cardLogs = () => log.mock.calls.slice(before).filter((call) => call.arguments[0] === '[对局卡牌属性]');
+            if (selecting) {
+                assert.equal(cardLogs().length, 0);
+                EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 20 });
+                h.finishShowcase();
+            }
+            const model = h.runtime.currentModel;
+            assert.ok(model);
+            assert.deepEqual(cardLogs().map((call) => call.arguments[1]), model.owners);
+            for (const call of cardLogs()) {
+                const owner = call.arguments[1];
+                const rows = JSON.parse(call.arguments[2]);
+                const config = h.entry.matchConfig;
+                const deck = config.ownerDecks?.[owner] ?? (owner === 'player' ? config.playerDeck : config.enemyDeck);
+                assert.equal(rows.length, deck.length);
+                const card = deck.find((item) => item.unitId);
+                assert.ok(card);
+                const definition = model.effectiveDefinitionForUnit(owner, card.unitId);
+                assert.deepEqual(rows.find((row) => row.cardId === card.id), {
+                    cardId: card.id, name: card.name, heroId: card.unitId,
+                    buildingHp: card.baseHp ?? null, maxHp: definition.maxHp, attack: definition.attack,
+                });
+                const building = deck.find((item) => !item.unitId);
+                if (building) assert.equal(rows.find((row) => row.cardId === building.id).maxHp, null);
+            }
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+            EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
+            h.finishShowcase();
+            assert.equal(cardLogs().length, model.owners.length);
+        } finally { h.dispose(); }
+    }
+});
+
 test('GM 加金币经事件修改当前模型并即时渲染，选点阶段拒绝，退出后解除', () => {
     const target = {}, messages: string[] = [];
     EventMgr.instance.on(ZCGameUiEvent.DebugAddGoldResult, ({ message }) => messages.push(message), target);

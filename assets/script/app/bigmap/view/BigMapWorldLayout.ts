@@ -4,10 +4,10 @@ import {
 } from '../../../core/hex/HexGridLayout';
 import { bigMapHash } from '../model/BigMapWorld';
 
-/
+/**
  *大地图地块的格宽 / 格高。
  *
- *2026-11-02 山猫口径：*「按当前的宽度，地块没跟上」* —— 建筑图标放大到设计稿原尺寸
+ *2026-11-02 山猫口径：「按当前的宽度，地块没跟上」 —— 建筑图标放大到设计稿原尺寸
  *（城池 235 / 基地 148 / 野怪 121）之后，147×96 的格子显得过小，建筑像浮在小格子上。
  *这里把格子按城池宽度对齐：一格 = 235 宽，高按平顶六边形 147:96 的比例取 154。
  *
@@ -15,7 +15,7 @@ import { bigMapHash } from '../model/BigMapWorld';
  *战斗 / 冒险场景走 `HexGridLayout` 的 130×119，不受这里影响。
  */
 export const BIGMAP_TILE_WIDTH = 235;
-/
+/**
  *高度由宽度按原稿 147:96 反算，不取整 —— 平顶六边形共边的前提就是宽高比固定，
  *取整（153 或 154）会让相邻格出现 1~2px 的缝或重叠。
  */
@@ -93,9 +93,9 @@ export interface IBigMapMarkerHitArea {
 }
 
 export const BIGMAP_MARKER_ICON_LIFT = 24;
-/ 建筑脚底到格子中心的下沉量：`iconY = height/2 - 16` ⇒ 建筑底边恒在 `-16`。 */
+/** 建筑脚底到格子中心的下沉量：`iconY = height/2 - 16` ⇒ 建筑底边恒在 `-16`。 */
 export const BIGMAP_MARKER_FOOT_LIFT = 16;
-/
+/**
  *名条命中框的兜底尺寸（设计稿「大地图3」里最大的那张：202×56）。
  *
  *真正的尺寸按贴图来（`bigMapMarkerLayout` 的入参）：名条有四张，
@@ -103,7 +103,7 @@ export const BIGMAP_MARKER_FOOT_LIFT = 16;
  */
 export const BIGMAP_MARKER_BADGE_WIDTH = 202;
 export const BIGMAP_MARKER_BADGE_HEIGHT = 56;
-/
+/**
  *名条落点：压在建筑下方，顶边与建筑底边（`-16`）齐平 —— 设计稿里三者
  *（野怪 `title_01` / 关卡 `title_02` / 玩家 `title_03/04`）都是紧贴建筑底边，重叠 0~5px。
  *
@@ -112,7 +112,7 @@ export const BIGMAP_MARKER_BADGE_HEIGHT = 56;
  */
 export const BIGMAP_MARKER_BADGE_Y = -(BIGMAP_MARKER_FOOT_LIFT + BIGMAP_MARKER_BADGE_HEIGHT / 2);
 
-/
+/**
  *建筑图标的宽度（蓝湖「大地图3」原稿实测，高度按贴图比例自动算）。
  *
  *原稿：城池（马戏团）235×232、基地/据点（树桩）148×160、野怪（骨门）121×129。
@@ -126,7 +126,7 @@ export const BIGMAP_MARKER_CITY_WIDTH = 235;
 export const BIGMAP_MARKER_BASE_WIDTH = 148;
 export const BIGMAP_MARKER_MONSTER_WIDTH = 121;
 
-/ 脚底固定在台面，名条压在建筑下方，显示与点击共用坐标。 */
+/** 脚底固定在台面，名条压在建筑下方，显示与点击共用坐标。 */
 export function bigMapMarkerLayout(
     width: number,
     height: number,

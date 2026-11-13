@@ -9,18 +9,18 @@ import {
     resBarSpendFx,
 } from '../../main/MainResBarFeedback';
 
-/ 飘字描边宽度（px）：飘字悬在资源卡上方，白字需要一圈黑边压住。 */
+/** 飘字描边宽度（px）：飘字悬在资源卡上方，白字需要一圈黑边压住。 */
 const FLOAT_OUTLINE_WIDTH = 2;
-/ 飘字起点离资源格上沿的间隙（px）。 */
+/** 飘字起点离资源格上沿的间隙（px）。 */
 const FLOAT_GAP = 2;
 
-/ 资源整数 → 顶部栏紧凑文本（≥1000 用一位小数 K），常态与反馈滚动共用同一口径。 */
+/** 资源整数 → 顶部栏紧凑文本（≥1000 用一位小数 K），常态与反馈滚动共用同一口径。 */
 export function formatBigMapResourceAmount(amount: number): string {
     const value = Math.floor(Number.isFinite(amount) ? amount : 0);
     return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : `${value}`;
 }
 
-/
+/**
  *大地图顶部单个资源格的反馈驱动（普通类，非组件）。
  *
  *大地图资源条只有 Value Label（没有主界面 Slot 的 icon / plus / 底色节点），
@@ -50,9 +50,9 @@ export class BigMapResourceFeedback {
     private spendFrom = 0;
     private spendTo = 0;
     private spendAmount = 0;
-    / 数字后缀（体力的 /上限；其余为空），起播时锁定，滚动期间原样拼回。 */
+    /** 数字后缀（体力的 /上限；其余为空），起播时锁定，滚动期间原样拼回。 */
     private suffix = '';
-    / 上一次落定的原始整数（首帧 / 未知后为 null）。 */
+    /** 上一次落定的原始整数（首帧 / 未知后为 null）。 */
     private settledAmount: number | null = null;
 
     private floatNode: Node | null = null;
@@ -80,7 +80,7 @@ export class BigMapResourceFeedback {
         return this.hitElapsed >= 0 || this.spendElapsed >= 0;
     }
 
-    /
+    /**
      *每次 render 同步该资源：检测 amount 变化并起播；返回 true = 反馈在播、Label 由本类接管。
      *
      *amountKnown=false（联机余额未知）不起播并重置基线；首帧只建立基线，不演。
@@ -103,7 +103,7 @@ export class BigMapResourceFeedback {
         return true;
     }
 
-    / 逐帧推进两条互斥时间轴；true = 还在播。 */
+    /** 逐帧推进两条互斥时间轴；true = 还在播。 */
     step(dt: number): boolean {
         const safe = Number.isFinite(dt) && dt > 0 ? dt : 0;
         let busy = false;
@@ -126,7 +126,7 @@ export class BigMapResourceFeedback {
         return busy;
     }
 
-    / 立刻中止（切页 / 重置）：复原节点并收起飘字。 */
+    /** 立刻中止（切页 / 重置）：复原节点并收起飘字。 */
     cancel(): void {
         this.cancelHit();
         this.cancelSpend();
@@ -211,7 +211,7 @@ export class BigMapResourceFeedback {
         this.label.color = new Color(this.baseR, this.baseG, this.baseB, this.baseA);
     }
 
-    / 配置 prefab 预置的上方飘字（与 Value 平级），首次使用照抄 Value 排版并加描边。 */
+    /** 配置 prefab 预置的上方飘字（与 Value 平级），首次使用照抄 Value 排版并加描边。 */
     private prepareFloat(): void {
         const node = this.floatNode;
         const floatLabel = this.floatLabel;

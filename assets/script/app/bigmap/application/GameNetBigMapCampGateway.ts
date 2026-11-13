@@ -8,7 +8,7 @@ import {
     RequestSlgCampSimpleInfo,
 } from './RequestBigMapCampMsg';
 
-/ 复用游戏服 socket 与消息队列，不在 feature 内另开连接。 */
+/** 复用游戏服 socket 与消息队列，不在 feature 内另开连接。 */
 export class GameNetBigMapCampGateway implements IBigMapCampGateway {
     private isDisposed = false;
 

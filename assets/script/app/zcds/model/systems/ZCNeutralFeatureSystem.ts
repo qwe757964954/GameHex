@@ -1,5 +1,5 @@
 import { findCatalogCard, type ZCDeckCard, type ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { IZCMonsterPatrolState, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ownersForPlayerCount, type ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import { ZCMapGeometry } from '../ZCMapGeometry';
@@ -24,22 +24,48 @@ export function isZCAwakeMonster(hex: Readonly<ZCHexState>): boolean {
         && hex.neutralFeature?.awake === true && hex.hp > 0;
 }
 
+/** 身份仍是出生格；战斗与渲染共享这一段逻辑时间轴。 */
+export function zcMonsterPosition(
+    map: Pick<ZCMatchMap, 'hexes'>,
+    hex: { readonly id: number; readonly neutralFeature?: { readonly claimed?: boolean; readonly patrol?: Readonly<IZCMonsterPatrolState> } },
+    now: number,
+    result = { x: 0, y: 0 },
+): { x: number; y: number } {
+    const patrol = hex.neutralFeature?.claimed ? undefined : hex.neutralFeature?.patrol;
+    const from = map.hexes[patrol?.fromHexId ?? hex.id];
+    const to = map.hexes[patrol?.toHexId ?? hex.id];
+    const progress = patrol && patrol.durationSeconds > 0
+        ? Math.max(0, Math.min(1, ((patrol.pausedAt ?? now) - patrol.startedAt) / patrol.durationSeconds)) : 1;
+    result.x = from.x + (to.x - from.x) * progress;
+    result.y = from.y + (to.y - from.y) * progress;
+    return result;
+}
+
 /** 每局实例；资源的可恢复状态保存在格子快照，脚点仅缓存本逻辑拍。 */
 export class ZCNeutralFeatureSystem {
     private readonly previous = new Map<number, { x: number; y: number }>();
     private readonly geometry: ZCMapGeometry;
     private hasFeatures = false;
     private hasGates = false;
+    private readonly patrolCells = new Map<number, ReadonlySet<number>>();
+    private readonly patrolMonsterIds: number[] = [];
+    get patrolOrigins(): readonly number[] { return this.patrolMonsterIds; }
     constructor(private readonly map: ZCMatchMap, private readonly context: IZCNeutralFeatureContext) {
         this.geometry = new ZCMapGeometry(map);
     }
 
     initialize(state: ZCSnapshot): void {
         this.previous.clear();
+        this.patrolCells.clear();
+        this.patrolMonsterIds.length = 0;
+        for (const point of this.map.resourcePoints ?? []) {
+            if (point.patrolCells?.length) this.patrolCells.set(point.row * this.map.columns + point.column, new Set(point.patrolCells));
+        }
         this.hasFeatures = this.hasGates = false;
         for (const hex of state.hexes) {
             const item = neutralResourceItemOf(hex.neutralResourceId);
             if (!item?.feature) continue;
+            if (item.resourceType === ZCNeutralResourceType.Monster && this.patrolCells.has(hex.id)) this.patrolMonsterIds.push(hex.id);
             if (item.resourceType === ZCNeutralResourceType.Portal && (this.map.playerCount ?? 2) !== 2) {
                 hex.neutralResourceId = null;
                 continue;
@@ -332,12 +358,14 @@ export class ZCNeutralFeatureSystem {
         if (!isZCAwakeMonster(hex)) return;
         const feature = hex.neutralFeature;
         const definition = this.context.monsterDefinition(findCatalogCard(config.resId));
+        const center = zcMonsterPosition(this.map, hex, state.elapsedSeconds);
         const inRange = (unit: ZCUnitState) => unit.hp > 0 && unit.battleState !== 'dead'
             && (definition.canAttackAir || !this.context.definition(unit).flying)
-            && this.geometry.distance(hex.id, this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId) <= config.attackRange;
+            && (feature.patrol
+                ? Math.round(Math.hypot(unit.freeX - center.x, unit.freeY - center.y) / HEX_GRID_LOGICAL_ROW_STEP)
+                : this.geometry.distance(hex.id, this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId)) <= config.attackRange;
         let target = state.units.find(unit => unit.id === feature.targetUnitId && inRange(unit));
         if (!target) {
-            const center = this.map.hexes[hex.id];
             let best = Infinity;
             for (const unit of state.units) {
                 if (!inRange(unit)) continue;
@@ -346,8 +374,39 @@ export class ZCNeutralFeatureSystem {
             }
             feature.targetUnitId = target?.id ?? null;
         }
+        this.tickPatrol(state, hex, definition.moveSpeed, !!target);
         if (!target || state.elapsedSeconds < feature.nextAttackAt) return;
         feature.nextAttackAt = state.elapsedSeconds + definition.attackInterval;
         this.context.damageUnit(target, definition.attack);
+    }
+
+    private tickPatrol(state: ZCSnapshot, hex: ZCHexState, speed: number, attacking: boolean): void {
+        const cells = this.patrolCells.get(hex.id);
+        if (!cells || cells.size < 2 || speed <= 0) return;
+        const feature = hex.neutralFeature;
+        const patrol = feature.patrol ?? (feature.patrol = {
+            fromHexId: hex.id, toHexId: hex.id, startedAt: state.elapsedSeconds, durationSeconds: 0,
+        });
+        const canEnter = (id: number): boolean => cells.has(id) && state.hexes[id].building === 'none'
+            && state.hexes[id].wallHp <= 0 && (id === hex.id || state.hexes[id].neutralResourceId === null);
+        if (attacking || !canEnter(patrol.toHexId)) {
+            if (patrol.pausedAt === undefined) patrol.pausedAt = state.elapsedSeconds;
+            return;
+        }
+        if (patrol.pausedAt !== undefined) {
+            patrol.startedAt += state.elapsedSeconds - patrol.pausedAt;
+            delete patrol.pausedAt;
+        }
+        if (state.elapsedSeconds < patrol.startedAt + patrol.durationSeconds) return;
+        const neighbors = this.map.hexes[patrol.toHexId].neighbors.filter(canEnter).sort((a, b) => a - b);
+        const onward = neighbors.filter(id => id !== patrol.fromHexId);
+        const choices = onward.length ? onward : neighbors;
+        if (!choices.length) return;
+        patrol.fromHexId = patrol.toHexId;
+        patrol.toHexId = choices[Math.min(choices.length - 1, Math.floor(this.context.random() * choices.length))];
+        const from = this.map.hexes[patrol.fromHexId];
+        const to = this.map.hexes[patrol.toHexId];
+        patrol.startedAt = state.elapsedSeconds;
+        patrol.durationSeconds = Math.hypot(to.x - from.x, to.y - from.y) / speed;
     }
 }

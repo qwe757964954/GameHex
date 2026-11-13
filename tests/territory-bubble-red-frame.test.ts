@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as MapMarkerBadge from '../assets/script/app/common/MapMarkerBadge';
 import * as TerritoryChestBubble from '../assets/script/app/territory/model/TerritoryChestBubble';
+import * as TerritoryLevelBubble from '../assets/script/app/territory/model/TerritoryLevelBubble';
 import { BATTLE_BUNDLE, bundleForPath } from '../assets/script/core/asset/BundleCatalog';
 import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 
@@ -52,6 +53,7 @@ async function loadArt(makeAssets: (calls: { loaded: string[]; hasCalls: string[
             if (id === 'cc') return { JsonAsset: class {}, SpriteFrame: class {} };
             if (id.endsWith('/MapMarkerBadge')) return MapMarkerBadge;
             if (id === '../model/TerritoryChestBubble') return TerritoryChestBubble;
+            if (id === '../model/TerritoryLevelBubble') return TerritoryLevelBubble;
             // 建筑表走 RefUtil，不是 AssetService；给空表让这轮只验气泡链路。
             if (id === '../../../framework/ref/RefUtil') return {
                 RefUtil: { instance: { getRefAllAsync: async () => ([]) } },
@@ -94,6 +96,8 @@ test('★bundle 索引查不到（has=false）时，未通关红图仍然加载�
         '两个槽位不许被压成同一张图（2026-10-28 踩过一次）');
     assert.equal(calls.loaded.includes(RED_PATH), true, '红图必须真的被 load 过');
     assert.equal(calls.loaded.includes(BLUE_PATH), true);
+    assert.equal(art.pvpBubblePortrait.path, TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_PORTRAIT_PATH);
+    assert.equal(existsSync('assets/resources/' + TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_PORTRAIT_PATH.replace('/spriteFrame', '.png')), true);
     // 正常路径根本不该再查索引：预检只用于失败时写日志。
     assert.equal(calls.hasCalls.length, 0, 'has 已从「加载前的闸门」降级为「失败后的日志」');
 });

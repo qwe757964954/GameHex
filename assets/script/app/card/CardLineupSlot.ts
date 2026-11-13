@@ -5,7 +5,7 @@ import { CardUnitPreview } from './CardUnitPreview';
 
 const { ccclass, property } = _decorator;
 
-/** 站台一次渲染要的三张图（前三张按品级+职业复用，头像按卡）。 */
+/** 站台一次渲染的三张图：光效和角标按职业，立绘按卡。 */
 export interface ZCSlotFrames {
     disc: SpriteFrame | null;
     hero: SpriteFrame | null;
@@ -13,9 +13,8 @@ export interface ZCSlotFrames {
 }
 
 /**
- * 卡牌阵容页上阵八卡的单个站台。
- * 层次：木台底座 → 品级垫盘 → 立绘 → 等级牌。
- * 立绘锚点 (0.5,0) 让营地雕像底座对齐。
+ * 上阵区的一个站台：台座、品级光效、立绘、等级。
+ * 立绘锚点在脚底，正好落在台座中心。
  */
 @ccclass('CardLineupSlot')
 export class CardLineupSlot extends Component {
@@ -46,10 +45,7 @@ export class CardLineupSlot extends Component {
     private previewPath: string | null = null;
 
     /**
-     * 这个站台当前这张卡的体型系数（`pvpCard.prefabSize`）。
-     *
-     * 模型是「先画立绘、后补模型」两段提交的，`applyPreview` 拿到的是预制体、没有卡数据，
-     * 所以系数得在 `render` 时记下来 —— 否则模型补上来时只能按 1 缩放，跟对局里的体型对不上。
+     * 这张卡的体型系数。render 时先记下来，模型晚到时还能用对缩放。
      */
     private previewSize = 1;
 
@@ -73,30 +69,20 @@ export class CardLineupSlot extends Component {
     }
 
     /**
-     * 静态图**晚到**时只补图：等级牌、透明度这些 `render` 已经画好了，别再动。
-     *
-     * 冷启动第一屏不等 8 张站台图（实测 26ms），页面先把空台 + 等级提交出去，
-     * 图由 `CardLineupPage.fillSlotArt` 在这里补齐。站台是固定的 8 个节点、不复用，
-     * 所以不需要虚拟列表那种防串图 token；「旧阵容迟到图盖到新阵容」由页面 revision 挡。
+     * 静态图晚到时只补图，等级和透明度不要动。
+     * 首屏先用空台占位，页面拿到图后再调这里。
      */
     applyStaticArt(frames: ZCSlotFrames): void {
         this.disc.spriteFrame = frames.disc;
         this.classBadge.spriteFrame = frames.badge;
-        // 模型正在展示时 `CardUnitPreview.show` 会把 Hero Sprite 置为 disabled；
-        // `clear()` 又把它 enabled 回来。用这个状态判，比 `this.preview != null` 准
-        // （`clear()` 之后 preview 对象还在，但已经没在展示了）。
+        // 模型展示时 Hero 会被 disable，clear 后重新 enable；用 hero.enabled 判断比 preview 引用可靠。
         if (this.hero.enabled) this.hero.spriteFrame = frames.hero;
     }
 
     /**
-     * 只补单位模型（站台图与等级已经画好之后再调）。
+     * 只补单位模型。静态图已经画好后再调，页面会分帧逐个提交。
      *
-     * 单位预制体是 `sp.Skeleton`，一次实例化实测 ~1.4~2.7ms（2026-11-03 探针）；
-     * 八卡和整页数据一起提交会把 20ms 压进同一帧。页面因此拆成两步：先画静态立绘，
-     * 再逐帧补模型 —— 数据完全一致，只是视觉上「立绘 → 模型」。
-     *
-     * 返回 `false` = 这个预制体给不了待机动画（`CardUnitPreview.show` 内部会销毁它），
-     * 调用方据此保留静态立绘；已经在画立绘的站台不需要再补图。
+     * 返回 false 表示这个预制体没有可用的待机动画，调用方继续用静态立绘。
      */
     applyPreview(prefab: Prefab | null): boolean {
         if (prefab

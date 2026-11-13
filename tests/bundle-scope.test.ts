@@ -42,6 +42,8 @@ test('分包目录清单与路由表一致，命中前缀走对应 bundle', () =
     assert.equal(bundleForPath('ui/Role/Role'), MAIN_PAGES_BUNDLE);
     assert.equal(bundleForPath('ui/League/LeagueTab'), MAIN_PAGES_BUNDLE);
     assert.equal(bundleForPath('image/card/card_frame'), MAIN_PAGES_BUNDLE);
+    assert.equal(bundleForPath('image/card_lineup/yx_img_guang_01'), MAIN_PAGES_BUNDLE);
+    assert.equal(bundleForPath('image/card_board/bz_bg_01'), MAIN_PAGES_BUNDLE);
     assert.equal(bundleForPath('icons/item/foo'), MAIN_PAGES_BUNDLE);
     // 首包（resources）：未登记路径必须回 undefined
     assert.equal(bundleForPath('config/maps/map_01'), undefined);

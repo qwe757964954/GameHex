@@ -165,8 +165,8 @@ test('布阵缺少专属图时复用 cardHead 角色，职业角标仍走图标�
     }
     assert.deepEqual(heroRequests, ['jiezhanshi', 'jiezhanshi']);
     assert.deepEqual(iconRequests, ['class_mage', 'class_mage',
-        'common_img_huaguo', 'common_img_huaguo',
-        'common_img_mogu', 'common_img_mogu',
-        'common_img_penzai', 'common_img_penzai',
-        'common_img_jiangshi', 'common_img_jiangshi']);
+        'common_img_hg', 'common_img_hg',
+        'common_img_mg', 'common_img_mg',
+        'common_img_pz', 'common_img_pz',
+        'common_img_js', 'common_img_js']);
 });

@@ -1,5 +1,5 @@
 /**
- * 卡牌详情页六维属性计算。**不 import cc，可单测**。
+ * 卡牌详情页六维属性计算。不 import cc，可单测。
  *
  * 数据源：
  *   - `pvpCard` 原始行：`unitMaxHp` / `unitAttack` / `unitMoveSpeed` / `unitAttackRange` /
@@ -7,7 +7,7 @@
  *   - `pvpUnitGrowth`：一行 = `(unitId, level)` 的一档成长修正（enabled 过滤）。
  *
  * 公式与战斗层同口径（`ZCModifierRuntime.compileGrowthLoadout`：按 `(unitId, level)`
- * 取**单行**，行值本身就是到该级的累计修正）：
+ * 取单行，行值本身就是到该级的累计修正）：
  *   value(level) = (base + row(level).flat) × (1 + row(level).rate)
  * `level` 行不存在时按全 0（= 基础值）。
  *
@@ -125,7 +125,7 @@ export function growthMaxLevel(rows: readonly ZCUnitGrowthRow[], unitId: string)
 /**
  * 用 `cardLevelUp.attrList` 的绝对属性覆盖血量 / 攻击 / 建筑血量三项。
  *
- * **只覆盖这三项**：射程与移速不在 attrList 里，继续沿用 `pvpUnitGrowth` 那条路算出来的值。
+ * 只覆盖这三项：射程与移速不在 attrList 里，继续沿用 `pvpUnitGrowth` 那条路算出来的值。
  * `current` 为空（这张卡没配等级属性）⇒ 原样返回，行为与本函数引入前逐字一致。
  *
  * `gain` 取下一级减当前级；下一级没配（满级）时给 0，视图按「满级不显示增量」处理。

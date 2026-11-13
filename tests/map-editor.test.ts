@@ -85,6 +85,59 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
     return { editor: window.__editor, element, confirmCalls, board, frames, windowEvents, attributeWrites: () => attributeWrites };
 }
 
+test('巡逻范围按资源点涂擦，不镜像，保存/撤销/尺寸迁移保留格子', () => {
+    const { editor, element } = createEditor();
+    editor.applyLayout(JSON.parse(readFileSync('tests/fixtures/zcds-map-v3-neutral-2p.json', 'utf8')));
+    editor.addResourceGroupPoint(8, 5, 1);
+    assert.equal(editor.selectPatrolPoint(8, 5), true);
+    const before = editor.snapshot();
+    editor.paint(8, 5, 'patrol');
+    editor.paint(9, 5, 'patrol');
+    editor.commitUndo(before);
+    const point = () => JSON.parse(JSON.stringify(editor.buildJSON())).resourcePoints[0];
+    assert.deepEqual(point().patrolCells, [93, 104]);
+    assert.match(editor.mapMetadataMarkup(), /patrolRange/);
+    assert.match(element('patrolStatus').textContent, /2 格/);
+    assert.equal(editor.undo(), true);
+    assert.equal(point().patrolCells, undefined);
+    assert.equal(editor.redo(), true);
+    editor.paint(9, 5, 'patrol-clear');
+    assert.deepEqual(point().patrolCells, [93]);
+    editor.paint(8, 5, 'patrol-clear');
+    assert.deepEqual(point().patrolCells, [93], '出生格必须保留，使用清空按钮关闭巡逻');
+    editor.paint(9, 5, 'patrol');
+    editor.setSize(22, 13);
+    const moved = point();
+    const origin = moved.row * 13 + moved.column;
+    assert.deepEqual(moved.patrolCells, [origin, origin + 13]);
+    editor.undo();
+    assert.match(element('patrolStatus').textContent, /9 行，6 列/);
+    editor.redo();
+    assert.match(element('patrolStatus').textContent, new RegExp((moved.row + 1) + ' 行，' + (moved.column + 1) + ' 列'));
+    editor.clearPatrolCells();
+    assert.equal(point().patrolCells, undefined);
+    assert.equal(editor.undo(), true);
+    assert.deepEqual(point().patrolCells, [origin, origin + 13]);
+});
+
+test('巡逻范围拒绝虚空/主城/其他资源，断连阻止保存，导入失败恢复原图', () => {
+    const { editor } = createEditor();
+    editor.applyLayout(JSON.parse(readFileSync('tests/fixtures/zcds-map-v3-neutral-2p.json', 'utf8')));
+    editor.addResourceGroupPoint(8, 5, 1);
+    editor.selectPatrolPoint(8, 5);
+    editor.paint(8, 5, 'patrol');
+    assert.equal(editor.paint(1, 1, 'patrol'), false);
+    editor.paint(0, 0, 'patrol');
+    assert.ok(editor.validate().checks.some(check => check[0] === 'err' && check[1].includes('巡逻')));
+    editor.paint(0, 0, 'patrol-clear');
+    const original = JSON.stringify(editor.buildJSON());
+    const invalid = JSON.parse(original);
+    invalid.resourcePoints[0].patrolCells = [93, -1];
+    assert.throws(() => editor.applyLayout(invalid), /巡逻/);
+    assert.equal(JSON.stringify(editor.buildJSON()), original);
+    assert.equal(editor.clearPatrolCells(), true, '导入失败保留原选点，能继续编辑');
+});
+
 test('区域清空只删除当前分区与纵深，确认后可撤销恢复倾向与其他区域', () => {
     const { editor, element, confirmCalls } = createEditor();
     editor.applyLayout({

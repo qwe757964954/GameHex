@@ -1,4 +1,4 @@
-/
+/**
  *bundle 内旧前缀 —— 2026-11-04 `assets/bundles/bigmap/image/bigmap/` 整目录上提成
  *`assets/bundles/bigmap/image/`，bundle 内路径少了一层 `bigmap`。
  *
@@ -7,7 +7,7 @@
  */
 const LEGACY_BUNDLE_IMAGE_PREFIX = 'image/bigmap/';
 
-/ 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）。 */
+/** 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）。 */
 export function toBigMapArtPath(path: string): string {
     return path.startsWith(LEGACY_BUNDLE_IMAGE_PREFIX)
         ? `image/${path.slice(LEGACY_BUNDLE_IMAGE_PREFIX.length)}`
@@ -19,7 +19,7 @@ export function toBigMapArtPath(path: string): string {
 export const BIGMAP_CONCEPT_ROOT = 'image/concept';
 export const BIGMAP_BASE_BACKGROUND = 'image/base_background';
 
-/
+/**
  *基地建筑表里没配 `baseBuildIcon`（或配了但图没入库）时的通用外观。
  *
  *2026-11-12 之前这里是 `BIGMAP_BUILDING_ART`（按 `baseBuildType` 对 8 张概念图：
@@ -32,10 +32,10 @@ export const BIGMAP_BASE_BACKGROUND = 'image/base_background';
  */
 export const BIGMAP_BASE_FALLBACK_ART = 'image/buildings/camp_outpost';
 
-/ 概念占位图目录：`bigMapCamp.campIcon` 现在指向这里（由 `worldCampArtFor` 归一成新美术）。 */
+/** 概念占位图目录：`bigMapCamp.campIcon` 现在指向这里（由 `worldCampArtFor` 归一成新美术）。 */
 export const BIGMAP_CONCEPT_SPRITE_ROOT = `${BIGMAP_CONCEPT_ROOT}/sprites`;
 
-/
+/**
  *世界地图据点外观：`campId // 100` 分段的候选图，段内按 `campId % len` 稳定取一张。
  *
  *用于把旧表/旧包里的概念占位图（`image/concept/sprites/*`）映射成新据点图。
@@ -65,13 +65,13 @@ export const BIGMAP_WORLD_CAMP_ART: Readonly<Record<number, readonly string[]>> 
     8: ['image/buildings/camp_sun_throne'],
 };
 
-/ 世界地图玩家主城 / 基地的据点外观（`art.home`）。 */
+/** 世界地图玩家主城 / 基地的据点外观（`art.home`）。 */
 export const BIGMAP_WORLD_HOME_ART = 'image/buildings/camp_home';
 
-/ 城池没配 `campIcon`（或配了但不在分段表里）时的兜底外观（`art.city`）。 */
+/** 城池没配 `campIcon`（或配了但不在分段表里）时的兜底外观（`art.city`）。 */
 export const BIGMAP_WORLD_CITY_ART = 'image/buildings/camp_legion';
 
-/
+/**
  *把旧数据里配的概念占位图换成新美术；已经是真实图名就原样返回。
  *
  *只在 `campIcon` 指向 `image/concept/sprites/*` 时生效 —— 那 8 张是初版占位图，
@@ -86,7 +86,7 @@ export function worldCampArtFor(iconPath: string, campId: number): string {
     return group[campId % group.length] ?? path;
 }
 
-/
+/**
  *体力图标（`ui/stamina`）—— 概念题花里唯一还在用的 UI 件。
  *
  *2026-11-12 删掉 `BIGMAP_UI_KEYS`（header/detail/button/tab_idle/tab_active/badge/plot/home 共 8 张，
@@ -99,14 +99,14 @@ export function worldCampArtFor(iconPath: string, campId: number): string {
  */
 export const BIGMAP_STAMINA_ART = `${BIGMAP_CONCEPT_ROOT}/ui/stamina`;
 
-/
+/**
  *据点名条（地图上压在建筑下方的「徽章 + 名字」条）。
  *
  *口径（2026-11-02 山猫：「将大地图升级到蓝湖」，设计稿「大地图3」）：
  *名条不再是手画圆角牌，改成四张按归属分的整条贴图 —— 左端是徽章底
  *（野怪/关卡菱形、玩家占领圆形），右侧留名字位：
  *· `monster` 蓝（设计稿 `title_01`）= 野怪据点 —— 已停用：2026-11-03 用户口径
- *  *「野怪的标识和城池据点的保持一样的红色」*，野怪标记改取 `city` 那条红底
+ *  「野怪的标识和城池据点的保持一样的红色」，野怪标记改取 `city` 那条红底
  *  （见 `BigMapWorldView.syncMarkers` 的 monster 分支）。图仍按本表加载、随时可切回，
  *  只是没有调用点了 —— 别以为少读一张就是漏配；
  *· `city`    红（`title_02`）= 关卡 / 无主城池 / 野怪；
@@ -130,29 +130,29 @@ export const BIGMAP_PLATE_FILES: Readonly<Record<IBigMapPlateKey, string>> = {
     other: `${BIGMAP_CONCEPT_ROOT}/ui/plate_other`,
 };
 
-/ 名条左端徽章外那颗小旗（设计稿 `icon_qizhi`）：标「谁占着这个据点」。 */
+/** 名条左端徽章外那颗小旗（设计稿 `icon_qizhi`）：标「谁占着这个据点」。 */
 export const BIGMAP_PLATE_FLAG_FILE = `${BIGMAP_CONCEPT_ROOT}/ui/plate_flag`;
 
-/ 通用 UI 图根目录 —— 与领地页（`TerritoryPageAssets`）同一个 `image/common`。 */
+/** 通用 UI 图根目录 —— 与领地页（`TerritoryPageAssets`）同一个 `image/common`。 */
 export const BIGMAP_COMMON_ART_ROOT = 'image/common';
 
-/ 主城页 HUD / 按钮的根目录（`快速寻敌` 那颗大金钮就在这）。 */
+/** 主城页 HUD / 按钮的根目录（`快速寻敌` 那颗大金钮就在这）。 */
 export const BIGMAP_MAIN_CITY_ART_ROOT = 'image/main/city';
 
-/ 主界面 HUD 的根目录（【任务】按钮那块深板岩底框 + 它压在上面的卡通图标）。 */
+/** 主界面 HUD 的根目录（【任务】按钮那块深板岩底框 + 它压在上面的卡通图标）。 */
 export const BIGMAP_MAIN_HUD_ART_ROOT = 'image/main/hud';
 
-/
+/**
  *世界页「领地页 HUD 皮肤」要用的图（2026-10-22 第二轮用户口径：
- **「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式」*）。
+ * 「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式」）。
  *
  *口径落定：面板/弹窗走领地页顶部 HUD 那套深色卡（手画，见 `BigMapSkin.drawBigMapCardPanel`），
  *贴图只留「按钮」和「模式按钮」两类：
  *- `button` = `image/main/city/btn_quick_fight`，领地页【快速寻敌】那颗 3D 金钮 ——
  *  一键收取 / 攻打 / 定位 / 建造 全用它（原生 196×72，无九宫边，横向拉伸幅度小、看不出来）；
  *- `mode_frame` / `mode_base` / `mode_world` = 【基地 / 大地图】那颗模式按钮的三件套
- *  （2026-10-28 用户口径：*「基地按钮 和大地图按钮的图标更换成类似任务按钮的样式，
- *  底框加成对应内容(建筑icon-基地，地图icon--大地图)的卡通icon」*）：
+ *  （2026-10-28 用户口径：「基地按钮 和大地图按钮的图标更换成类似任务按钮的样式，
+ *  底框加成对应内容(建筑icon-基地，地图icon--大地图)的卡通icon」）：
  *    · `mode_frame` = `image/main/hud/hud_task_tab` —— 主界面【任务】按钮那块深板岩圆角底框，
  *      111×79 原尺寸贴，不拉伸（`.meta` 没有九宫边，拉伸只会把圆角拉糊）；
  *    · `mode_base` = `image/main/city/nav_territory` —— 现成的石堡城门卡通图标（86×86）；
@@ -170,7 +170,7 @@ export const BIGMAP_MAIN_HUD_ART_ROOT = 'image/main/hud';
 export const BIGMAP_HUD_UI_KEYS = ['mode_frame', 'mode_base', 'mode_world', 'button'] as const;
 export type IBigMapHudUiKey = typeof BIGMAP_HUD_UI_KEYS[number];
 
-/ 键 → 完整资源路径（不带 `/spriteFrame`）。按键分别落在三个根目录下，所以写全路径。 */
+/** 键 → 完整资源路径（不带 `/spriteFrame`）。按键分别落在三个根目录下，所以写全路径。 */
 export const BIGMAP_HUD_UI_FILES: Readonly<Record<IBigMapHudUiKey, string>> = {
     mode_frame: `${BIGMAP_MAIN_HUD_ART_ROOT}/hud_task_tab`,
     mode_base: `${BIGMAP_MAIN_CITY_ART_ROOT}/nav_territory`,

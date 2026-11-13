@@ -1,5 +1,6 @@
 import { _decorator, Component, EventTouch, Label, Node, Sprite, SpriteFrame, Vec2 } from 'cc';
 import { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 const { ccclass, property } = _decorator;
 
@@ -28,11 +29,11 @@ export interface IBoardCardHost {
  *
  * 挂在 `LineupBoardCard.prefab` 根节点上，由 `LineupBoardPage` 批量取到后逐个填数据。
  *
- * 层次（自下而上）：品级卡框 → 职业角标 → 立绘 → **压暗遮罩** → 等级牌 → 「已上阵」对勾。
- * 压暗遮罩与对勾只用来表达「这张已经在上阵区」，`Dim` 的黑色与透明度**绑在 prefab 的
- * Sprite 上**（样式在 prefab、代码只切显隐），与项目既有约定一致。
+ * 层次（自下而上）：品级卡框 → 职业角标 → 立绘 → 压暗遮罩 → 等级牌 → 「已上阵」对勾。
+ * 压暗遮罩与对勾只用来表达「这张已经在上阵区」，`Dim` 的黑色与透明度绑在 prefab 的
+ * Sprite 上（样式在 prefab、代码只切显隐），与项目既有约定一致。
  *
- *  卡框 99×100 来自 `image/frame`，与页面那套 155×195 的 `common_img_kp_*` 不是同一张，
+ *  卡框 100×100 来自 `image/frame`，与页面那套 155×195 的 `common_img_kp_*` 不是同一张，
  * 别把 `cardUiArt.face` 拿来这里用。
  *
  * ── 交互 ─────────────────────────────────────────────────────────────
@@ -56,7 +57,7 @@ export class LineupBoardCard extends Component {
     @property({ type: Node, tooltip: 'Check：绿色对勾（已上阵时显示）' })
     check: Node = null;
 
-    @property({ type: Label, tooltip: 'LevelLabel：左下角等级数字，只写数字本身（设计稿上是「1」）' })
+    @property({ type: Label, tooltip: 'LevelLabel：左下角等级（写成「N级」，与站台一致）' })
     levelLabel: Label = null;
 
     @property({ tooltip: '等级占位值：养成表落地前统一用这个数' })
@@ -90,17 +91,17 @@ export class LineupBoardCard extends Component {
      * 填入一张卡池卡。
      *
      * @param card    卡牌数据
-     * @param frames  已加载好的三张图；某张为 `null` 时会**清空**该位置（条目复用，不能保留上一张的图）
+     * @param frames  已加载好的三张图；某张为 `null` 时会清空该位置（条目复用，不能保留上一张的图）
      * @param onField 是否已在上阵区（决定压暗遮罩与对勾的显隐）
      * @param level   该卡等级；不传用 `fallbackLevel`
      */
     render(card: ZCDeckCard, frames: ZCBoardCardFrames, onField: boolean, level?: number): void {
-        //  三张图**无条件赋值**：本组件由虚拟列表复用，`null` 时跳过赋值会把上一张卡的
+        //  三张图无条件赋值：本组件由虚拟列表复用，`null` 时跳过赋值会把上一张卡的
         //  卡框 / 角标留在这一张上（串图）。`this.frame` 等是必绑组件，不用判。
         this.frame.spriteFrame = frames.frame;
         this.badge.spriteFrame = frames.badge;
         this.hero.spriteFrame = frames.hero;
-        this.levelLabel.string = String(Math.max(1, Math.round(level ?? this.fallbackLevel)));
+        this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
         this.setOnField(onField);
         this.currentCard = card;
     }

@@ -20,32 +20,50 @@ import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
-import ts from 'typescript';
+import { ccStub, loadTsModule } from './helpers/cc-sandbox';
+import { readSource } from './helpers/source-text';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as BigMapPresentationText from '../assets/script/app/bigmap/view/BigMapPresentationText';
 
-function loadManagerClass(): new () => {
-    registerRoute(route: string, type: unknown): { className: string };
-    navigate(route: string, params?: unknown): void;
-    subscribeSwitchSettled(listener: (entered: boolean) => void): () => void;
-    onLoad(): void;
+/**
+ * 装载 `ProcedureManager` 并记录「桩表没命中」的模块。
+ *
+ * 原来这里是内联的 `runInNewContext` + `return {}` 兜底：桩漏了不会报错，只会静默拿到
+ * 空对象。改成 `loadTsModule` 后兜底行为不变，但 `unresolved` 把漏桩变成可断言的清单。
+ */
+function loadManager(): {
+    Manager: new () => {
+        registerRoute(route: string, type: unknown): { className: string };
+        navigate(route: string, params?: unknown): void;
+        subscribeSwitchSettled(listener: (entered: boolean) => void): () => void;
+        onLoad(): void;
+    };
+    unresolved: string[];
 } {
-    const source = readFileSync('assets/script/framework/procedure/ProcedureManager.ts', 'utf8');
-    const code = ts.transpileModule(source, { compilerOptions: {
-        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
-    } }).outputText;
-    const exports: Record<string, unknown> = {};
-    runInNewContext(code, { exports, require: (name: string) => {
-        if (name.endsWith('/EventMgr')) return { EventMgr };
-        if (name.endsWith('/BigMapEvents')) return mvcEvents;
-        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined }, Component: class {} };
-        if (name.endsWith('/ResourceScope')) return { ResourceScope };
-        if (name.endsWith('/UpdateBeat')) return { UpdateBeat: { loop: () => undefined } };
-        return {};
-    } });
-    return exports.ProcedureManager as new () => ReturnType<typeof loadManagerClass> extends never ? never : any;
+    const loaded = loadTsModule<{ ProcedureManager: new () => any }>(
+        'assets/script/framework/procedure/ProcedureManager.ts',
+        {
+            modules: {
+                cc: ccStub(),
+                '/EventMgr': { EventMgr },
+                '/BigMapEvents': mvcEvents,
+                '/ResourceScope': { ResourceScope },
+                '/UpdateBeat': { UpdateBeat: { loop: () => undefined } },
+            },
+        },
+    );
+    return { Manager: loaded.exports.ProcedureManager, unresolved: loaded.unresolved };
 }
+
+function loadManagerClass() {
+    return loadManager().Manager;
+}
+
+test('沙箱桩表完整：`ProcedureManager` 的依赖一个都不缺', () => {
+    // `ProcedureBase` 只被当类型用（转译时擦除），所以不会出现在 unresolved 里；
+    // 出现任何 id 都意味着真有一条依赖在空转 → 用例可能只测了一半。
+    assert.deepEqual(loadManager().unresolved, [], '桩表漏了模块会静默拿到 {}，用例开始测空气');
+});
 
 function fakeProcedure(preload: () => Promise<void>): new () => object {
     return class {
@@ -120,21 +138,25 @@ test('流程切换落定：被新的切换顶掉回调 false，新的那次再�
     assert.deepEqual(entered, [false, true]);
 });
 
+/**
+ * `BigMapPage` 依赖远多于本用例真正走到的分支，桩表只覆盖被触达的那几个。
+ * 这里**故意不断言 `unresolved` 为空** —— 它非空是事实（页面大部分逻辑不在本用例射程内），
+ * 断成空只会逼着往下补一堆用不上的桩。需要的分支跑起来时再补桩。
+ */
 function loadPageClass(): new () => Record<string, unknown> {
-    const source = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
-    const code = ts.transpileModule(source, { compilerOptions: {
-        module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
-    } }).outputText;
-    const exports: Record<string, unknown> = {};
-    runInNewContext(code, { exports, require: (name: string) => {
-        if (name.endsWith('/EventMgr')) return { EventMgr };
-        if (name.endsWith('/BigMapEvents')) return mvcEvents;
-        if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
-        if (name.endsWith('/ResourceScope')) return { ResourceScope };
-        if (name.endsWith('/BigMapPresentationText')) return BigMapPresentationText;
-        return {};
-    } });
-    return exports.BigMapPage as new () => Record<string, unknown>;
+    const { exports } = loadTsModule<{ BigMapPage: new () => Record<string, unknown> }>(
+        'assets/script/app/bigmap/view/BigMapPage.ts',
+        {
+            modules: {
+                cc: ccStub(),
+                '/EventMgr': { EventMgr },
+                '/BigMapEvents': mvcEvents,
+                '/ResourceScope': { ResourceScope },
+                '/BigMapPresentationText': BigMapPresentationText,
+            },
+        },
+    );
+    return exports.BigMapPage;
 }
 
 function pageFixture() {
@@ -171,7 +193,7 @@ test('开战成功后锁输入，预加载失败后允许重新点击', () => {
 });
 
 test('开战入口不再立刻关世界页：源码上必须走落定钩子', () => {
-    const source = readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8');
+    const source = readSource('assets/script/app/bigmap/application/BigMapEntry.ts');
     assert.match(source, /ProcedureManager\.onSwitchSettled\(/, '开战后必须订阅流程落定');
     const navigateAt = source.indexOf('ProcedureManager.navigate(GameRoute.Battle');
     assert.ok(navigateAt > 0);
@@ -182,7 +204,7 @@ test('开战入口不再立刻关世界页：源码上必须走落定钩子', ()
 
 
 test('移除独立入战遮罩，等待期间关闭两类详情弹窗', () => {
-    const source = readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8');
+    const source = readSource('assets/script/app/bigmap/view/BigMapPage.ts');
     const prefab = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab', 'utf8'));
     assert.equal(prefab.some((item: any) => item._name === 'EnteringBattleMask'), false);
     assert.doesNotMatch(source, /enterMask/);

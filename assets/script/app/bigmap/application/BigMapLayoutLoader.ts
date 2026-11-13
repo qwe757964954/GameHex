@@ -4,7 +4,7 @@ import { parseBigMapLayout, isBigMapLayoutCompatible, type IBigMapLayout } from 
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { completeBigMapCampLayout } from '../model/BigMapCampWorld';
 
-/
+/**
  *大地图布局文件的加载器（唯一允许碰 `cc` 的布局入口）。
  *
  *与 `TerritoryChapterLoader` 同一套口径：`AssetService` 加载、拿不到就返回 `null`，

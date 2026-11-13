@@ -15,14 +15,14 @@ export interface IBigMapCampGateway {
     dispose?(): void;
     fetchSimple(campIds: readonly number[]): Promise<unknown>;
     fetchDetail(campIds: readonly number[]): Promise<unknown>;
-    /
+    /**
      *据点角色列表（`CmdSlgCampRoleInfosReqMsg`，一次一个 `campId`）。
      *
      *与 `fetchDetail` 分开：角色是详情展开后才需要的附加信息，
      *和据点状态（占领/开放）来自两条不同协议，任一条失败都不该拖垮另一条。
      */
     fetchRoles(campId: number): Promise<unknown>;
-    / 迁城（`CmdSlgCampMoveReqMsg`）——写操作，与上面三条读请求分开走。 */
+    /** 迁城（`CmdSlgCampMoveReqMsg`）——写操作，与上面三条读请求分开走。 */
     requestMove(body: IBigMapCampMoveRequest): Promise<unknown>;
 
 }
@@ -30,31 +30,31 @@ export interface IBigMapCampGateway {
 export const BIGMAP_CAMP_REFRESH_SECONDS = 5;
 const READ_TIMEOUT_MS = 5000;
 
-/ 页面级缓存：不落盘，销毁后所有迟到回包失效；网络实现由入口注入。 */
+/** 页面级缓存：不落盘，销毁后所有迟到回包失效；网络实现由入口注入。 */
 export class BigMapCampRepository {
     private readonly snapshots = new Map<number, IBigMapCampInfo>();
     private readonly appliedRevisions = new Map<number, number>();
     private readonly updatedAt = new Map<number, number>();
     private readonly pending = new Map<string, Promise<boolean>>();
     private readonly simplePendingIds = new Set<number>();
-    / 在途的简略请求（补发要等它们全部落定，见 `scheduleSimpleFollowUp`）。 */
+    /** 在途的简略请求（补发要等它们全部落定，见 `scheduleSimpleFollowUp`）。 */
     private readonly simpleTasks = new Set<Promise<boolean>>();
-    / 被「同批在途」丢掉的那一轮可见集合；只保留最新一份。 */
+    /** 被「同批在途」丢掉的那一轮可见集合；只保留最新一份。 */
     private followUpIds: readonly number[] | null = null;
     private followUpQueued = false;
-    / 据点角色列表（`campId` → 该据点内的角色）。空数组是有效事实（据点里没人）。 */
+    /** 据点角色列表（`campId` → 该据点内的角色）。空数组是有效事实（据点里没人）。 */
     private readonly roleSnapshots = new Map<number, readonly IBigMapCampRoleInfo[]>();
     private readonly roleRevisions = new Map<number, number>();
-    /
+    /**
      *角色名单的新鲜度时间戳（与据点状态的 `updatedAt` 分开记：两条协议各自过期）。
      *
      *视野补发（`refreshRolesFor`）靠它压住流量 —— 地图上按 `pos` 摆玩家标记，名单必须跟着滑动走，
      *但同一座城在窗口内不许重发，否则一次长拖就是同一批城反复刷屏。
      */
     private readonly roleUpdatedAt = new Map<number, number>();
-    / 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
+    /** 正在迁城的据点 id（0 = 空闲）。迁城是写操作，同页串行。 */
     private movingCampId = 0;
-    / 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
+    /** 缓存变化监听（Presenter 用它把角色广播转成一次视图重绘）。 */
     private listeners: (() => void)[] = [];
     private revision = 0;
     private isDisposed = false;
@@ -65,7 +65,7 @@ export class BigMapCampRepository {
         return this.snapshots.get(campId) ?? null;
     }
 
-    /
+    /**
      *已知被占领的据点 id（`opType = 1`）。
      *
      *只覆盖「客户端刷到过」的据点 —— 服务器不下发全量归属，所以它是下界：
@@ -77,12 +77,12 @@ export class BigMapCampRepository {
         return ids;
     }
 
-    / 已缓存的角色列表；`null` = 还没成功查过（与「查过、确实没人」的空数组不同）。 */
+    /** 已缓存的角色列表；`null` = 还没成功查过（与「查过、确实没人」的空数组不同）。 */
     rolesOf(campId: number): readonly IBigMapCampRoleInfo[] | null {
         return this.roleSnapshots.get(campId) ?? null;
     }
 
-    /
+    /**
      *拉某座据点的角色列表。
      *
      *返回 `true` = 这次真的拿到了（哪怕是空列表）；`false` = 超时/断线/坏包/已销毁 ——
@@ -100,11 +100,11 @@ export class BigMapCampRepository {
         return request;
     }
 
-    /
+    /**
      *视野内据点的名单补发（`CmdSlgCampRoleInfosReqMsg`）—— 滑动 / 缩放后由
      *`BigMapModel.refreshVisibleCamps` 调用。
      *
-     *口径（2026-11-11 山猫）：*「据点名单要跟据点信息一样，滑动的时候请求」* ——
+     *口径（2026-11-11 山猫）：「据点名单要跟据点信息一样，滑动的时候请求」 ——
      *因为地图上要按 `role.pos` 摆玩家标记，没名单就没有标记。代价靠两把闸门压住：
      *① `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口，窗口内同一座城不重发；
      *② 在途复用 `refreshRoles` 的 `roles:<id>` 锁（拖到某城的同时点开它，也只发一条）。
@@ -121,7 +121,7 @@ export class BigMapCampRepository {
             .then((results) => results.some(Boolean));
     }
 
-    /
+    /**
      *迁城：把 `campId` 这个据点挪到 `pos`。
      *
      *## 三件必须做对的事
@@ -164,7 +164,7 @@ export class BigMapCampRepository {
         }
     }
 
-    / 按角色身份跨据点迁移；未查询的目标不补造名单，广播版本阻止旧查询回写。 */
+    /** 按角色身份跨据点迁移；未查询的目标不补造名单，广播版本阻止旧查询回写。 */
     applyRoleEvent(campId: number, event: IBigMapRoleEvent): boolean {
         if (this.isDisposed || !event) return false;
         let changed = false;
@@ -194,7 +194,7 @@ export class BigMapCampRepository {
         return true;
     }
 
-    / 缓存变化通知（角色广播是异步来的，视图要靠它重绘）。 */
+    /** 缓存变化通知（角色广播是异步来的，视图要靠它重绘）。 */
     onChanged(listener: () => void): () => void {
         this.listeners.push(listener);
         return () => {
@@ -292,7 +292,7 @@ export class BigMapCampRepository {
         return request;
     }
 
-    /
+    /**
      *被「同批在途」丢掉的那一轮可见集合，等在途落地后按最新集合补发一次。
      *
      *只补一次、只保留最新集合：补发时照样走上面的新鲜度闸门，在途那批已经覆盖到的城不会再发；
@@ -359,7 +359,7 @@ export class BigMapCampRepository {
         }
     }
 
-    /
+    /**
      *简略包只覆盖 `opType`，详情包整条替换。
      *
      *两份协议字段不同：简略包没有占领者。直接 `set` 会让一次可见范围刷新把已经查到的

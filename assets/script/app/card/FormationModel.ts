@@ -1,9 +1,9 @@
 /**
- * 阵型（布阵方案）的数据模型与边界校验 —— **纯函数、零引擎依赖**。
+ * 阵型（布阵方案）的数据模型与边界校验 —— 纯函数、零引擎依赖。
  *
  *  `FormationService` 负责网络与缓存，本文件只回答「这份数据能不能用」。
  *  拆开的原因不是洁癖：`FormationService` 经 `GameNet` 拉进 `cc`，在 Node 单测里
- *  **import 就炸**，而校验规则恰恰是最需要被用例锁住的部分
+ *  import 就炸，而校验规则恰恰是最需要被用例锁住的部分
  *  （服务端少回一个字段、id 回成 0 或字符串，都不该把整块面板带崩）。
  */
 
@@ -68,12 +68,12 @@ export function toPositiveInt(value: unknown): number | null {
 }
 
 /**
- * 给一个 Promise 兜**硬超时**：`ms` 内没兑现就用 `fallback()` 顶上，**保证一定兑现**。
+ * 给一个 Promise 兜硬超时：`ms` 内没兑现就用 `fallback()` 顶上，保证一定兑现。
  *
  * 为什么必须有它：`GameNet.send` 只在「收到回包」或「断线」时兑现（`NetSocket.onTimeOut()`
- * 只在断线清心跳 / `ClearAllRequest()` 里被调用），**没有按请求的超时** —— 服务端不认识
- * 某条消息、干脆不回应时，那个 Promise 会**永远悬着**。若把它放进 `Promise.all` 做数据加载，
- * 整个面板就停在 prefab 占位外观（站台空、计数 0、列表空白），而且**离线跑不出来**
+ * 只在断线清心跳 / `ClearAllRequest()` 里被调用），没有按请求的超时 —— 服务端不认识
+ * 某条消息、干脆不回应时，那个 Promise 会永远悬着。若把它放进 `Promise.all` 做数据加载，
+ * 整个面板就停在 prefab 占位外观（站台空、计数 0、列表空白），而且离线跑不出来
  * （离线时请求根本不发），只在连真服时才炸 —— 2026-09-20 就这么炸过一次。
  *
  * 放纯模块里是为了能被单测覆盖：`FormationService` 经 `GameNet` 拉进 `cc`，Node 里 import 不了。

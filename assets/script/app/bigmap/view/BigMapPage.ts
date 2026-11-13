@@ -33,7 +33,7 @@ const FOOTER_HEIGHT = 88;
 const BIGMAP_PAGE_PREFAB_PATH = 'ui/bigmap/BigMapPage';
 const BIGMAP_WORLD_PREFAB_PATH = 'ui/bigmap/BigMapWorldView';
 
-/
+/**
  *大世界页面：地图铺满浏览区，目标详情点选时浮出；建造菜单仅基地模式显示。
  *
  *负责页面装配、世界地图与详情弹窗流程；预制体内部渲染和输入交给 BigMapPageLayout。
@@ -50,7 +50,7 @@ export class BigMapPage extends Component {
 
     private layout: BigMapPageLayout = null;
     private worldView: BigMapWorldView = null;
-    /
+    /**
      *城池弹窗（`PopupBase` 子类，走 PopupManager 栈）。命中时懒打开，之后复用同一实例；
      *野怪 / 地块详情走 BigMapInfoPopup。
      */
@@ -58,9 +58,9 @@ export class BigMapPage extends Component {
     private infoPopupOpening = false;
     private infoPopupRevision = 0;
     private infoPopupContent: IBigMapInfoPopupContent | null = null;
-    / `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
+    /** `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
     private buildMenuOpening = false;
-    / 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
+    /** 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
     private focusedCityId = 0;
 
     private art: IBigMapArt | null = null;
@@ -69,14 +69,14 @@ export class BigMapPage extends Component {
     private selectedCityId = 0;
     private selectedMonsterId = 0;
     private selectedPlotHexId = -1;
-    / 搬移态：非 0 时点空地 = 把这栋建筑搬过去（协议 `CmdSlgBuildMoveReqMsg`）。 */
+    /** 搬移态：非 0 时点空地 = 把这栋建筑搬过去（协议 `CmdSlgBuildMoveReqMsg`）。 */
     private pendingMoveInstanceId = 0;
     private baseActionPending = false;
     private playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null;
     private playerPortrait: SpriteFrame | null = null;
     private readonly rolePortraits = new Map<string, SpriteFrame | null>();
 
-    / 由入口交付初始快照，之后只响应展示事件。 */
+    /** 由入口交付初始快照，之后只响应展示事件。 */
     async initialize(data: IBigMapViewState, resources: IControllerResources, background = '', navigationHeight = FOOTER_HEIGHT,
         playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null): Promise<void> {
         this.controllerResources = resources;
@@ -179,7 +179,7 @@ export class BigMapPage extends Component {
         this.applyMode();
     }
 
-    / 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
+    /** 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
     private worldAreaRect(width: number, height: number): { x: number; y: number; width: number; height: number } {
         const left = -width / 2 + 12;
         const right = width / 2 - 12;
@@ -253,7 +253,7 @@ export class BigMapPage extends Component {
         this.worldView.render(data);
     }
 
-    /
+    /**
      *建造目录：`buildMenuVisible` 一开就打开弹窗，一关就关掉。
      *
      *走 `PopupBase`（`BigMapBuildMenuPopup`）而不是页面内节点：
@@ -292,7 +292,7 @@ export class BigMapPage extends Component {
         });
     }
 
-    / 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
+    /** 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
     private buildMenuRows(data: IBigMapViewState): IBigMapBuildMenuRow[] {
         const rows: IBigMapBuildMenuRow[] = data.buildMenu.map((entry) => ({
             kind: entry.kind,
@@ -328,7 +328,7 @@ export class BigMapPage extends Component {
         this.refreshInfoContent(data);
     }
 
-    /
+    /**
      *显示 / 复用城池弹窗。
      *
      *弹窗是 `PopupBase` 子类、由 `PopupManager` 管生命周期，所以这里只做两件事：
@@ -360,14 +360,14 @@ export class BigMapPage extends Component {
         });
     }
 
-    / 关掉城池弹窗（没开着时是空操作）。`Force` = 由页面侧主动收，不算用户点空白。 */
+    /** 关掉城池弹窗（没开着时是空操作）。`Force` = 由页面侧主动收，不算用户点空白。 */
     private closeCityPopup(): void {
         if (!this.cityPopupOpened) return;
         this.cityPopupOpened = false;
         PopupManager.inst.closeByClass(BigMapCityPopup, PopupCloseReason.Force);
     }
 
-    /
+    /**
      *城池 → 弹窗展示数据。
      *
      *排行榜来自当前城池快照；增益效果：`bigMapCamp` 表只有 `buffConNum` / `buffRate` 两个数值 + 一句 `campDesc`，
@@ -434,7 +434,7 @@ export class BigMapPage extends Component {
         else this.closeInfoPopup();
     }
 
-    /
+    /**
      *建筑卡内容。
      *
      *与原先 `BigMapInfoPopup` 的 base 分支是同一套语义（主按钮 = 升级 / 取消建造，
@@ -518,7 +518,7 @@ export class BigMapPage extends Component {
         if (feedback.message) Toast.show(feedback.message);
     }
 
-    /
+    /**
      *头像预取：地图上每个玩家标记都要头像（榜单榜首 + 名单里全部角色）。
      *
      *`rolePortraits` 兼作"已发起"的登记表（先写 `null` 占位），所以每帧全量扫一遍不会重复发请求；

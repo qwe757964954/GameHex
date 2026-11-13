@@ -1,4 +1,4 @@
-/
+/**
  *大世界地图生成 —— 确定性种子生成，纯 TS，零 `cc` 依赖。
  *
  *为什么不用 `Math.random()`：同一份配置 + 同一个种子必须永远生成同一张地图。
@@ -24,10 +24,10 @@ import {
     type IBigMapWorld,
 } from './BigMapTypes';
 
-/ 默认世界种子。改它等于换一张新地图 —— 存档里的格子 id 会整体错位，仅调参时用。 */
+/** 默认世界种子。改它等于换一张新地图 —— 存档里的格子 id 会整体错位，仅调参时用。 */
 export const DEFAULT_BIGMAP_WORLD_SEED = 20261017;
 
-/ 32 位整数哈希（MurmurHash3 的收尾混合，够散且无分配）。 */
+/** 32 位整数哈希（MurmurHash3 的收尾混合，够散且无分配）。 */
 export function bigMapHash(seed: number, a = 0, b = 0, c = 0): number {
     let h = (seed ^ 0x9e3779b9) >>> 0;
     h = Math.imul(h ^ (a | 0), 0x85ebca6b) >>> 0;
@@ -39,12 +39,12 @@ export function bigMapHash(seed: number, a = 0, b = 0, c = 0): number {
     return h;
 }
 
-/ 稳定伪随机 `[0, 1)`；同参数恒等。 */
+/** 稳定伪随机 `[0, 1)`；同参数恒等。 */
 export function bigMapRandom(seed: number, a = 0, b = 0, c = 0): number {
     return bigMapHash(seed, a, b, c) / 4294967296;
 }
 
-/
+/**
  *奇数列偏移 → axial 的 `r`。
  *
  * 这里的 `+ (column & 1)` 不能写成 `- (column & 1)`：偶数列整体下移半格（`hexGridViewPoint`
@@ -55,7 +55,7 @@ function axialR(row: number, column: number): number {
     return row - (column + (column & 1)) / 2;
 }
 
-/ 两格之间的六边距离（环数）。越界返回 `Number.POSITIVE_INFINITY`。 */
+/** 两格之间的六边距离（环数）。越界返回 `Number.POSITIVE_INFINITY`。 */
 export function bigMapHexDistance(
     rows: number,
     cols: number,
@@ -75,7 +75,7 @@ export function bigMapHexDistance(
     return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
 }
 
-/ 每层城池所在的环半径：个人层 / 军团层来自配置，战盟层与王座按比例内推。 */
+/** 每层城池所在的环半径：个人层 / 军团层来自配置，战盟层与王座按比例内推。 */
 export function bigMapCityRing(world: IBigMapWorldConfig, layer: BigMapCityLayer): number {
     switch (layer) {
         case BigMapCityLayer.Legion: return world.cityRing2;
@@ -85,7 +85,7 @@ export function bigMapCityRing(world: IBigMapWorldConfig, layer: BigMapCityLayer
     }
 }
 
-/ 地形权重：靠近中心的出生区保持可走，外围才长石头和水。 */
+/** 地形权重：靠近中心的出生区保持可走，外围才长石头和水。 */
 function terrainAt(seed: number, hexId: number, ring: number): BigMapTerrain {
     const roll = bigMapRandom(seed, hexId, 7);
     if (ring <= 2) return 'plain';
@@ -93,7 +93,7 @@ function terrainAt(seed: number, hexId: number, ring: number): BigMapTerrain {
     return roll < 0.5 ? 'plain' : roll < 0.72 ? 'forest' : roll < 0.9 ? 'rock' : 'water';
 }
 
-/ 把一个锚点扩成 `size` 格的连通块（BFS，只吃空格）。返回实际占到的格 + 剩余缺口。 */
+/** 把一个锚点扩成 `size` 格的连通块（BFS，只吃空格）。返回实际占到的格 + 剩余缺口。 */
 function claimFootprint(
     anchorHexId: number,
     size: number,
@@ -123,7 +123,7 @@ interface IPlacementContext {
     readonly ringOf: (hexId: number) => number;
 }
 
-/ 在指定环上按槽位均匀取点：`slot / slotCount` 是环上弧长比例，不吃随机，天然不重叠。 */
+/** 在指定环上按槽位均匀取点：`slot / slotCount` 是环上弧长比例，不吃随机，天然不重叠。 */
 function pickRingAnchor(context: IPlacementContext, ring: number, slot: number, slotCount: number): number {
     const circle: number[] = [];
     const total = context.rows * context.cols;
@@ -178,7 +178,7 @@ function placeCities(
     return { sites, byHex };
 }
 
-/ 复用原有环位/BFS 占格算法，为布局缺少的城池补位；已有实体作为保留格。 */
+/** 复用原有环位/BFS 占格算法，为布局缺少的城池补位；已有实体作为保留格。 */
 export function placeBigMapCities(config: IBigMapConfig, seed: number, reserved: ReadonlySet<number>): Map<number, IBigMapCitySite> {
     const rows = config.world.rows;
     const cols = config.world.cols;
@@ -187,7 +187,7 @@ export function placeBigMapCities(config: IBigMapConfig, seed: number, reserved:
         ringOf: (id) => bigMapHexDistance(rows, cols, center, id) }, seed).sites;
 }
 
-/ 历史离线城池的占格；新版取 `bigMapCamp.campSize`，布局模式仍保持原占格。 */
+/** 历史离线城池的占格；新版取 `bigMapCamp.campSize`，布局模式仍保持原占格。 */
 function cityFootprint(city: IBigMapCityConfig): number {
     return city.layer === BigMapCityLayer.Throne ? 6 : 4;
 }
@@ -317,10 +317,10 @@ function npcBaseName(index: number): string {
     return NPC_BASE_NAMES[index % NPC_BASE_NAMES.length];
 }
 
-/ 地形覆盖表：`hexId → terrain`。策划在编辑器里手改过的格子走这里，其余仍由种子决定。 */
+/** 地形覆盖表：`hexId → terrain`。策划在编辑器里手改过的格子走这里，其余仍由种子决定。 */
 export type BigMapTerrainOverride = ReadonlyMap<number, BigMapTerrain>;
 
-/ 格子层的构建产物（世界生成与布局重建共用）。 */
+/** 格子层的构建产物（世界生成与布局重建共用）。 */
 export interface IBigMapTileLayer {
     readonly tiles: readonly IBigMapWorldTile[];
     readonly tileById: Map<number, IBigMapWorldTile>;
@@ -328,7 +328,7 @@ export interface IBigMapTileLayer {
     readonly centerHexId: number;
 }
 
-/
+/**
  *只造格子层（地形 + 环号）。
  *
  *抽出来的唯一理由：世界有两条构建入口（种子生成 / 布局文件），地形算法只能有一份。
@@ -364,7 +364,7 @@ export function buildBigMapTiles(
     return { tiles, tileById, ringCounts, centerHexId };
 }
 
-/
+/**
  *生成整张大地图。纯函数：同一 `config + seed` 必得同一结果，可在测试里反复断言。
  *
  *这是「没有布局文件时」的兜底路径：离线调试档、单测夹具、以及 M1 之前的老存档都走它。
@@ -409,7 +409,7 @@ export function buildBigMapWorld(config: IBigMapConfig, seed = DEFAULT_BIGMAP_WO
     };
 }
 
-/ 格上有什么（建造/攻打/渲染拾取共用）。 */
+/** 格上有什么（建造/攻打/渲染拾取共用）。 */
 export function bigMapOccupantOf(world: IBigMapWorld, hexId: number, playerBaseHexId?: number):
     | { readonly kind: 'city'; readonly cityId: number }
     | { readonly kind: 'monster'; readonly instanceId: number }

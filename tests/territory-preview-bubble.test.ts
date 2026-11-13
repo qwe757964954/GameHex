@@ -23,6 +23,7 @@ const PAGE_SRC = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf
 
 const BLUE_FRAME = { name: 'frame_03' };
 const RED_FRAME = { name: 'frame_02' };
+const PVP_PORTRAIT = { name: 'pvp_portrait' };
 /** 虚影建筑帧：`applyIconPlacement` / `previewAnchorScale` 要读的四个字段全给齐。 */
 const GHOST_FRAME = {
     name: 'ghost_building',
@@ -54,6 +55,7 @@ interface RenderOptions {
     bindStage?: boolean;
     /** 红色底图没加载到的场景。 */
     noRedFrame?: boolean;
+    noPortrait?: boolean;
 }
 
 /** 跑真 `stationRenderOf`（VM 夹具的桩表在 helpers/territory-map-view-sandbox 里收口）。 */
@@ -74,6 +76,7 @@ function stationRenderOf(site: Site, opts: RenderOptions = {}): Record<string, a
             chestIcon: null,
             levelBubbleFrame: BLUE_FRAME,
             levelBubblePendingFrame: opts.noRedFrame ? undefined : RED_FRAME,
+            pvpBubblePortrait: opts.noPortrait ? null : PVP_PORTRAIT,
         },
         previewCells: opts.previewCells ?? [],
         siteOpenableCells: [site.cellId],
@@ -130,6 +133,22 @@ test('预告的异步据点写 PVP，没绑关卡也写（文案真源不看 sta
     });
     assert.equal(out.levelBubble, 'PVP');
     assert.equal(out.levelBubbleFrame, RED_FRAME);
+    assert.equal(out.levelBubblePortrait, PVP_PORTRAIT);
+});
+
+test('PVP 未通关显示头像，区域通关后恢复蓝色文字气泡，其他关卡不变', () => {
+    const site = stageSite({ type: 'asyncPvp' });
+    const pending = stationRenderOf(site, { unlocked: true });
+    assert.equal(pending.levelBubblePortrait, PVP_PORTRAIT);
+    assert.equal(pending.levelBubbleFrame, RED_FRAME);
+    const passed = stationRenderOf(site, { unlocked: true, passed: true });
+    assert.equal(passed.levelBubblePortrait, null);
+    assert.equal(passed.levelBubbleFrame, BLUE_FRAME);
+    assert.equal(passed.levelBubble, 'PVP');
+    assert.equal(stationRenderOf(stageSite(), { unlocked: true }).levelBubblePortrait, null);
+    assert.equal(stationRenderOf(site, { unlocked: true, noPortrait: true }).levelBubblePortrait, null);
+    assert.equal(stationRenderOf(site, { unlocked: true, noRedFrame: true }).levelBubblePortrait, null);
+    assert.equal(stationRenderOf(site, { unlocked: true, bindStage: false }).levelBubblePortrait, PVP_PORTRAIT);
 });
 
 test('已解锁 / 已通关走正常分支：不走预告标记，底图仍按 isAreaPassed 分色', () => {

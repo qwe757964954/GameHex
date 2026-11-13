@@ -1,7 +1,7 @@
 import { BIGMAP_MOVE_HINT } from '../application/BigMapEvents';
 import type { IBigMapPlotDetailView, IBigMapMonsterView } from '../application/BigMapViewState';
 
-/ 六边形六个顶点（相对格子中心，尖角朝上）。选中环 / 进度环 / 放置预判共用这一份。 */
+/** 六边形六个顶点（相对格子中心，尖角朝上）。选中环 / 进度环 / 放置预判共用这一份。 */
 export function bigMapHexCorners(width: number, height: number): readonly { readonly x: number; readonly y: number }[] {
     return [
         { x: width / 2, y: 0 },
@@ -13,7 +13,7 @@ export function bigMapHexCorners(width: number, height: number): readonly { read
     ];
 }
 
-/
+/**
  *建造进度环的折线点：沿六边形轮廓从「右顶点」顺时针走 `progress`（`0~1`）圈。
  *
  *纯几何、不碰 `Graphics` —— 这样进度环的覆盖比例能在 node 测试里直接断言，
@@ -53,38 +53,38 @@ export const BIGMAP_PRESENTATION_TEXT = {
     build: '建造',
     buildMenu: '建造目录',
     emptyPlot: '＋',
-    /
+    /**
      *选中建筑时名字牌的第二行（参考图口径：`科研中心` / `等级21` 两行，无底板）。
      *平时不显示名字牌，点一下才出 —— 所以这里是「读的时候需要的信息」，不是常显标签。
      */
     buildingLevel: '等级',
     upgrade: '升级',
     cancelBuild: '取消建造',
-    / 已建成建筑的次按钮：能收取就先给「收取」，收不了才给「移动」（同一颗按钮，不新增控件）。 */
+    /** 已建成建筑的次按钮：能收取就先给「收取」，收不了才给「移动」（同一颗按钮，不新增控件）。 */
     move: '移动',
     moveCancel: '取消移动',
     moveHint: BIGMAP_MOVE_HINT,
     emptyQueue: '暂无建造任务',
     queue: '建造队列',
-    / 队列条尾部提示：还差几条才到 `bigmapQueue.maxBuildQueue`（花货币解锁）。 */
+    /** 队列条尾部提示：还差几条才到 `bigmapQueue.maxBuildQueue`（花货币解锁）。 */
     queueLocked: '待解锁',
     stored: '可收取',
     harvest: '收取',
-    / 开战回包已到、战斗资源还在预加载：世界页留着并盖一层遮罩，别露出主界面的领地页。 */
+    /** 开战回包已到、战斗资源还在预加载：世界页留着并盖一层遮罩，别露出主界面的领地页。 */
     enteringBattle: '正在进入战斗…',
-    / 城池弹窗（蓝湖「城池弹窗3」）：增益效果段标题。 */
+    /** 城池弹窗（蓝湖「城池弹窗3」）：增益效果段标题。 */
     buffTitle: '增益效果',
-    / 弹窗底部那颗大按钮（设计稿写「进攻」，与旧面板的「攻打」是同一件事）。 */
+    /** 弹窗底部那颗大按钮（设计稿写「进攻」，与旧面板的「攻打」是同一件事）。 */
     attack: '进攻',
     cannotAttack: '不可进攻',
 } as const;
 
-/ 只有配置开放日时展示条件，不把配置天数当成剩余天数。 */
+/** 只有配置开放日时展示条件，不把配置天数当成剩余天数。 */
 export function formatBigMapCityOpening(openDay: number): string {
     return openDay > 0 ? `未开放\n开服第${openDay}天开放` : '未开放';
 }
 
-/
+/**
  *秒 → `mm:ss`（满 1 小时给 `h:mm:ss`）。
  *
  *原先界面上是裸 `${remainSeconds}s`（`120s`），超过一小时要玩家自己换算。
@@ -100,7 +100,7 @@ export function formatBigMapDuration(seconds: number): string {
     return hours > 0 ? `${hours}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/ 产量 → `1.2K/h`（< 1000 不带 K，整数不带小数点）。 */
+/** 产量 → `1.2K/h`（< 1000 不带 K，整数不带小数点）。 */
 export function formatBigMapRate(perHour: number): string {
     if (!Number.isFinite(perHour) || perHour <= 0) return '0/h';
     if (perHour < 1000) return `${Math.round(perHour)}/h`;
@@ -108,7 +108,7 @@ export function formatBigMapRate(perHour: number): string {
     return `${k >= 10 ? Math.round(k) : Math.round(k * 10) / 10}K/h`;
 }
 
-/
+/**
  *建筑详情正文（纯文本兜底 —— 结构化字段已经由 `IBigMapPlotDetailView` 提供，
  *新的贴底建筑卡直接读字段画控件，这个函数留给仍需一段文字的场合）。
  *

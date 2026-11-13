@@ -269,6 +269,8 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
         badge: { spriteFrame: 'stale', color: null },
         hero: { color: null, set spriteFrame(frame: unknown) { painted.push(frame); } },
         lock: { active: true },
+        lockVeil: { active: true },
+        upgradeArrow: { active: false },
         levelPlate: { active: true },
         levelLabel: { string: '' },
         onField: { active: true },
@@ -308,13 +310,13 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
 test('未解锁卡（0 级）整卡压暗 + 右上角挂锁，复用回已解锁卡时必须复原', () => {
     const View = loadCardViewClass();
     const view = new View();
-    /** 三张图各自收到的乘算色（`ChangeHeadItem` 同款做法：压暗靠 `Sprite.color`，不铺遮罩）。 */
-    const colors: Record<string, any> = {};
     Object.assign(view, {
-        face: { spriteFrame: null, set color(value: unknown) { colors.face = value; } },
-        badge: { spriteFrame: null, set color(value: unknown) { colors.badge = value; } },
-        hero: { spriteFrame: null, set color(value: unknown) { colors.hero = value; } },
+        face: { spriteFrame: null, color: null },
+        badge: { spriteFrame: null, color: null },
+        hero: { spriteFrame: null, color: null },
         lock: { active: false },
+        lockVeil: { active: false },
+        upgradeArrow: { active: false },
         levelPlate: { active: true },
         levelLabel: { string: '' },
         onField: { active: false },
@@ -325,20 +327,21 @@ test('未解锁卡（0 级）整卡压暗 + 右上角挂锁，复用回已解锁
 
     view.render(card('locked'), null, false, 0);
     assert.equal(view.lock.active, true, '0 级 = 未解锁，卡框右上角要挂锁');
+    assert.equal(view.lockVeil.active, true, '未解锁要开压暗遮罩（新版 yx_mask）');
+    assert.equal(view.upgradeArrow.active, false, '未解锁不提示可升级');
     assert.equal(view.levelPlate.active, false, '未解锁不显示等级底板（原有口径不变）');
-    const dim = colors.face;
-    assert.ok(dim && dim.r < 160 && dim.b < 160, `未解锁要压暗，实际 ${JSON.stringify(dim)}`);
-    assert.deepEqual(colors.badge, dim, '角标与卡面同一档压暗');
-    assert.deepEqual(colors.hero, dim, '立绘与卡面同一档压暗');
 
-    // 虚拟列表把同一个槽位复用给一张已解锁的卡：锁不能留着，颜色必须复原。
+    // 虚拟列表把同一个槽位复用给一张已解锁的卡：锁与遮罩都不能留着。
     view.render(card('open'), null, false, 3);
     assert.equal(view.lock.active, false, '已解锁的卡不能留着上一张卡的锁');
-    assert.equal(colors.face.r, 255, '已解锁要回到乘算白');
-    assert.equal(colors.face.g, 255);
-    assert.equal(colors.face.b, 255);
-    assert.equal(colors.badge.r, 255);
-    assert.equal(colors.hero.r, 255);
+    assert.equal(view.lockVeil.active, false, '已解锁要收起压暗遮罩');
+    assert.equal(view.levelPlate.active, true);
+
+    // 碎片够了且未满级 ⇒ 可升级箭头显形；满级则收起。
+    view.render(card('ready'), null, false, 3, { owned: 10, need: 10, maxed: false });
+    assert.equal(view.upgradeArrow.active, true, '碎片够了要提示可升级');
+    view.render(card('maxed'), null, false, 3, { owned: 10, need: 0, maxed: true });
+    assert.equal(view.upgradeArrow.active, false, '满级不再提示升级');
 });
 
 test('权威阵容提交后，快照的迟到模型不能覆盖新阵容', async () => {

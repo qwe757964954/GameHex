@@ -1,4 +1,4 @@
-/
+/**
  *据点状态（`SlgCampSimpleInfo` / `SlgCampInfo`）—— 纯 TS，零 `cc` 依赖。
  *
  *## 协议形状（2026-10-30 后端定稿）
@@ -30,15 +30,15 @@
 
 import { toIdString } from '../../net/RequestGuard';
 
-/ 一个据点的服务器状态。`opType`：0 = 尚未占领 / 1 = 已占领。 */
+/** 一个据点的服务器状态。`opType`：0 = 尚未占领 / 1 = 已占领。 */
 export interface IBigMapCampInfo {
     readonly campId: number;
     readonly opType: 0 | 1;
-    / 占领者玩家 id（`uint64` → 十进制字符串）；简略包或未占领时为空串。 */
+    /** 占领者玩家 id（`uint64` → 十进制字符串）；简略包或未占领时为空串。 */
     readonly occupyRoleId: string;
-    / 占领者名字；简略包或未占领时为空串。 */
+    /** 占领者名字；简略包或未占领时为空串。 */
     readonly occupyRoleName: string;
-    / 这条快照来自详情包（`SlgCampInfo`）。`false` = 只有 `opType` 可信。 */
+    /** 这条快照来自详情包（`SlgCampInfo`）。`false` = 只有 `opType` 可信。 */
     readonly detailed: boolean;
 }
 
@@ -55,7 +55,7 @@ export function isBigMapCampId(value: unknown): value is number {
     return typeof value === 'number' && Number.isInteger(value) && value > 0 && value <= 0xFFFFFFFF;
 }
 
-/
+/**
  *归一化据点回包。
  *
  *@param detailed `true` = 详情包（`SlgCampInfo`，带占领者），`false` = 简略包（只有 `opType`）。

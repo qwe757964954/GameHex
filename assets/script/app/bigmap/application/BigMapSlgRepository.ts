@@ -10,7 +10,7 @@ export type IBigMapSlgRequestName = 'CmdSlgActionUpdateReqMsg' | 'CmdSlgGameInfo
     | 'CmdSlgBuildReqMsg' | 'CmdSlgBuildUpgradeReqMsg' | 'CmdSlgBuildCancelReqMsg' | 'CmdSlgBuildMoveReqMsg'
     | 'CmdSlgBuildCollectReqMsg' | 'CmdSlgBuildUnlockQueueReqMsg';
 
-/ 请求体只承载标量与实例 ID 列表，批量协议（领取产出）用数组。 */
+/** 请求体只承载标量与实例 ID 列表，批量协议（领取产出）用数组。 */
 export type IBigMapSlgRequestBody = Readonly<Record<string, number | readonly number[]>>;
 
 export interface IBigMapSlgGateway {
@@ -27,7 +27,7 @@ export interface IBigMapSlgResult {
 
 const SLG_TEXT = {
     failed: '服务器未确认操作，请刷新后重试', loading: '正在同步基地信息', busy: '操作处理中，请稍候',
-    /
+    /**
      *首帧同步确实失败过（不是还在路上）时的文案。
      *
      *只用 `loading` 的话，玩家看到的是「正在同步基地信息」，等十秒也没变化，
@@ -38,7 +38,7 @@ const SLG_TEXT = {
     cancelled: '已取消建造或升级', moved: '建筑已移动', collected: '已领取产出', unlocked: '建造队列已解锁',
 } as const;
 
-/ 页级服务端状态。超时不重试写请求，不本地结算资源或完成队列。 */
+/** 页级服务端状态。超时不重试写请求，不本地结算资源或完成队列。 */
 export class BigMapSlgRepository {
     private info: IBigMapServerBuildInfo | null = null;
     private game: IBigMapServerGameInfo | null = null;
@@ -55,13 +55,13 @@ export class BigMapSlgRepository {
     private isBuildDirty = false;
     private actionRecoverAt: number | null = null;
     private nextPollAt = 0;
-    / 首帧同步是否确实失败过（区别于「还在路上」），决定 `write` 该说哪句话。 */
+    /** 首帧同步是否确实失败过（区别于「还在路上」），决定 `write` 该说哪句话。 */
     private hasSyncFailed = false;
-    / 回包被丢弃的诊断只打一次，避免 500ms 轮询刷屏。 */
+    /** 回包被丢弃的诊断只打一次，避免 500ms 轮询刷屏。 */
     private snapshotReported = false;
-    / 首次拿到可用快照时打一条摘要（之后不再打）。 */
+    /** 首次拿到可用快照时打一条摘要（之后不再打）。 */
     private firstSnapshotLogged = false;
-    / `实例 id → 已同步过的 finishAt`：倒计时到点只拉一次，避免对着同一完成时间反复请求。 */
+    /** `实例 id → 已同步过的 finishAt`：倒计时到点只拉一次，避免对着同一完成时间反复请求。 */
     private readonly syncedFinishAt = new Map<number, number>();
 
     constructor(private readonly gateway: IBigMapSlgGateway, private readonly config: IBigMapConfig,
@@ -83,14 +83,14 @@ export class BigMapSlgRepository {
     get actionRemainingSeconds(): number | null {
         return this.actionRecoverAt === null ? null : Math.max(0, Math.ceil(this.actionRecoverAt - this.now()));
     }
-    /
+    /**
      *我所处的城池 id（协议 `SlgGameInfo.toCampId`，0 = 未归属）。
      *
      *收到 game 包之前是 0 —— 调用方必须把 0 当「未知」而不是「没有城」，
      *「在不在势力范围内」的判定为此保留距离回退（见 `bigMapWithinCityRange`）。
      */
     get campId(): number { return this.game?.campId ?? 0; }
-    / 已击杀的最高野怪等级（协议 `SlgGameInfo.maxMonsterLevel`）。 */
+    /** 已击杀的最高野怪等级（协议 `SlgGameInfo.maxMonsterLevel`）。 */
     get maxClearedMonsterLevel(): number { return this.game?.maxMonsterLevel ?? 0; }
     projectBase(): IBigMapBaseState | null { return this.base; }
     serverInstanceId(id: number): number | null { return this.hasInstance(id) ? id : null; }
@@ -112,7 +112,7 @@ export class BigMapSlgRepository {
         return ok;
     }
 
-    /
+    /**
      *拉游戏信息（所处城池 / 最高野怪等级）。
      *
      *解析失败不清空已有值：坏回包只会让这次刷新返回 false，
@@ -145,7 +145,7 @@ export class BigMapSlgRepository {
         return this.buildTask;
     }
 
-    /
+    /**
      *快照合法但投影不成「可展示基地」—— 多半是表对不上，不是网络问题。
      *
      *`apply` 里两道关：合并校验（`normalizeBigMapBuildInfo`）与投影（`projectBigMapServerBase`），
@@ -188,7 +188,7 @@ export class BigMapSlgRepository {
         return applied;
     }
 
-    /
+    /**
      *快照被丢弃时，把「为什么」打到控制台。
      *
      *不写这条的话，`ready === false` 的表现是完全静默的：界面一句
@@ -231,7 +231,7 @@ export class BigMapSlgRepository {
         return true;
     }
 
-    /
+    /**
      *由 `BigMapController` 每 500ms 调一次（内部 5 秒节流），只负责行动力轮询。
      *
      *行动力是轮询的（2026-10-30 山猫口径）：`SlgGameActionInfo.nextRevertTime` 是
@@ -258,7 +258,7 @@ export class BigMapSlgRepository {
         this.syncFinishedQueue();
     }
 
-    /
+    /**
      *建造 / 升级 `finishTime` 到点 ⇒ 主动拉一次 `CmdSlgBuildInfoReqMsg`。
      *
      *服务端口径（2026-11-11）：「finishTime 倒计时结束要向服务器拉取一次，同步最新」。
@@ -325,7 +325,7 @@ export class BigMapSlgRepository {
         }, SLG_TEXT.moved);
     }
 
-    / 批量领取：服务端按实例列表一次结算，并回写这些建筑的权威状态。 */
+    /** 批量领取：服务端按实例列表一次结算，并回写这些建筑的权威状态。 */
     collect(instanceIds: readonly number[]): Promise<IBigMapSlgResult> {
         if (instanceIds.length === 0 || instanceIds.some((id) => !this.hasInstance(id))) return this.invalid();
         const requested = new Set(instanceIds);

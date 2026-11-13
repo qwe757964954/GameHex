@@ -89,7 +89,7 @@ export interface ICardArtConfig {
     /** 三张矩阵表合成后的稳定键 → 资源完整相对路径（不带扩展名 / `/spriteFrame`）。 */
     readonly paths: ReadonlyMap<ICardArtKey, string>;
     /**
-     * icon.json 解析器（`pvpCard.headIcon` → 头像 / 立绘），**不来自卡牌矩阵表**。
+     * icon.json 解析器（`pvpCard.headIcon` → 头像 / 立绘），不来自卡牌矩阵表。
      * 两套真源在这一处汇合：卡牌固定件取 `paths`，角色专属图取 `heroIcons`。
      */
     readonly heroIcons: IconArtResolver;

@@ -277,6 +277,23 @@ export class ZCUnitSystem {
             if (unit.stateTime >= definition.attackDuration) ZCCombatSystem.switchState(unit, 'idle');
             return;
         }
+        //  buff 类施法的**原地锁**（2026-11-13 用户口径：「释放 buff 类技能（回血，加伤害）时
+        //  要打断 walk，停止在原地（不影响攻击），匹配对应的特效或数字加成的动画播放时间
+        //  结束才继续」）。写法与 `dashRecoverUntil` 同一套，区别只有一处：
+        //  那个连索敌都不做，这里**保留出手** —— 括号里写着「不影响攻击」，
+        //  所以只把「挪窝」拿掉，射程内有目标、普攻 CD 到点就照常开打。
+        //  ⚠️ 放在 `attack` 分支之后：正在出拳就别去打断它，那一拳播完自然掉回 idle。
+        if (unit.castHoldUntil !== undefined) {
+            if (context.now() < unit.castHoldUntil) {
+                if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
+                if (context.targeting.current(unit) && context.targeting.isInAttackRange(unit)
+                    && context.now() >= unit.nextAttackAt) {
+                    this.startAttack(unit, context);
+                }
+                return;
+            }
+            unit.castHoldUntil = undefined;
+        }
         //  冲刺是这套普攻本身 ⇒ 能冲就冲，抢在「贴身挥拳 / 站定等冷却 / 追人」之前。
         if (this.tryStartDash(unit, dt, context)) return;
         if (unit.battleState === 'waitAttack') {

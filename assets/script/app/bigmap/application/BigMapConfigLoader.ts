@@ -6,7 +6,7 @@ import { applyBigMapScheduleOverrides } from '../model/BigMapCitySchedule';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { withBigMapCampCities } from '../model/BigMapCampWorld';
 
-/
+/**
  *从 `ConfigService` 读取 BigMap 表（含联机据点 bigMapCamp）并解析成强类型配置。
  *
  *读取走项目统一的 `getTable(name)`（运行时是 `RefUtil` 解压后的对象数组），
@@ -27,7 +27,7 @@ export async function loadBigMapConfig(config: ConfigService): Promise<IBigMapCo
     return attachBigMapResourceItemIcons(parsed, await readItemRows(config, parsed));
 }
 
-/
+/**
  *用 `gameConfig` 覆盖攻城时点。
  *
  *`gameConfig` 是全局表、不在 `BIGMAP_TABLE` 清单里，所以单独读一次；
@@ -45,7 +45,7 @@ async function applyScheduleOverrides(config: ConfigService, parsed: IBigMapConf
     return schedule === parsed.schedule ? parsed : { ...parsed, schedule };
 }
 
-/
+/**
  *读 `item` 表拿背包图标。表读不到 / 还没导（`item.json` 落后于 Excel）都不影响大地图打开 ——
  *退回空表，视图就用概念图。
  */
@@ -60,7 +60,7 @@ async function readItemRows(config: ConfigService, parsed: IBigMapConfig): Promi
     }
 }
 
-/ 给编辑器/单测用：直接把已经读好的表塞进来。 */
+/** 给编辑器/单测用：直接把已经读好的表塞进来。 */
 export function loadBigMapConfigFromTables(tables: BigMapRawTables): IBigMapConfig {
     return parseBigMapConfig(tables);
 }

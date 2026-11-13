@@ -16,6 +16,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as MapMarkerBadge from '../../assets/script/app/common/MapMarkerBadge';
 import * as TerritoryChestBubble from '../../assets/script/app/territory/model/TerritoryChestBubble';
+import * as TerritoryLevelBubble from '../../assets/script/app/territory/model/TerritoryLevelBubble';
 import * as TerritoryConditionBadge from '../../assets/script/app/territory/model/TerritoryConditionBadge';
 import * as TerritorySilverChestOpen from '../../assets/script/app/territory/model/TerritorySilverChestOpen';
 import * as TerritoryUiEvents from '../../assets/script/app/territory/application/TerritoryEvents';
@@ -196,6 +197,7 @@ export interface StationRenderContent {
     readonly badge: string;
     readonly levelBubble?: string;
     readonly levelBubbleFrame?: unknown;
+    readonly levelBubblePortrait?: unknown;
     /** 2026-11-11 预告关卡：未解锁条件格也要显示编号气泡。 */
     readonly previewBubble?: boolean;
     /** 预告气泡按虚影建筑抬升用的锚点帧（与 syncGhosts 同源）。 */
@@ -314,6 +316,7 @@ export function loadTerritoryStationModule(): Record<string, unknown> {
             // 宝箱气泡的底图尺寸 / 排版常量（2026-11-02 换 `frame_04` 时新增）⇒ 给**真模块**。
             // 抄一份常量会让「视图用的尺寸」和「用例钉的尺寸」各自漂。
             if (id.endsWith('/TerritoryChestBubble')) return TerritoryChestBubble;
+            if (id.endsWith('/TerritoryLevelBubble')) return TerritoryLevelBubble;
             // 「宝箱 icon + 价格行」的竖直排版（2026-11-10）⇒ 给**真模块**：
             // 抄一份公式会让「视图怎么摆」和「用例钉的位置」各自漂。
             if (id.endsWith('/TerritoryConditionBadge')) return TerritoryConditionBadge;

@@ -348,7 +348,7 @@ function prefabTransform(prefab: PrefabObject[], node: PrefabObject): PrefabObje
     return found!;
 }
 
-test('图标行虚拟列表：节奏 115px 复刻原 4 项，条目模板已合并图标、参数与接线对齐', () => {
+test('图标行虚拟列表：节奏 82px（40 图标 + 42 间距），条目模板已合并图标、参数与接线对齐', () => {
     const prefab = readPrefab(assetPath('ui/card/CardLineup.prefab'));
     const itemPrefab = readPrefab(assetPath('ui/card/CardLineupBond.prefab'));
     const itemMeta = JSON.parse(
@@ -407,14 +407,10 @@ test('图标行虚拟列表：节奏 115px 复刻原 4 项，条目模板已合�
     assert.equal(view.pixelAlign, true, '与项目其它列表一致（条目局部坐标本来就是整数，取整只影响滚动中的落点）');
 
     // ── 节奏 ────────────────────────────────────────────────────────────
-    // 源码 2292 行：stride = itemMainSize + spacing；条目 i（单行）落在
-    //   content 局部 x = headerSpacing + i*stride + itemMainSize*anchorX
-    // 原 Bond1..Bond4 的间距是 115 → spacing 必须是 73（42 + 73 = 115）。
-    // 踩过的坑：先填的 19.8 让 stride 只有 61.8，比条目自身的可见宽度（图标 42 + 数字
-    //   标签右伸到 +55）还小 → 数字直接压到下一个图标上，而且首屏会露出 7 项而不是 4 项。
+    // 蓝湖「卡牌阵容-新」：图标 40、步进 82（40 + 42），与新效果图统计条一致。
     assert.equal(Number(view.headerSpacing), 0);
     const stride = Number(view.spacing) + itemSize.width;
-    assert.equal(stride, 115, '条目节奏必须等于原 4 项的 115px');
+    assert.equal(stride, 82, '条目节奏必须等于新版设计统计条的 82px');
 
     // ── 起始对位 ─────────────────────────────────────────────────────────
     // BondList 锚点 x=0（左对齐）+ 静止时 content.x=0（横向模式 _boundsMax=0），
@@ -422,45 +418,36 @@ test('图标行虚拟列表：节奏 115px 复刻原 4 项，条目模板已合�
     const listTf = prefabTransform(prefab, list);
     assert.equal((listTf._anchorPoint as { x: number }).x, 0, 'BondList 必须左对齐，否则整条会随条目数漂移');
     const originX = (list._lpos as { x: number }).x;
-    // 原 Bond1..Bond4 记的是 -305.79 / -190.79 / -75.79（前三项逐位吻合）
+    // 新版统计条：BondList 左缘 -340、条目 40、步进 82。
     const pageX = (index: number) => Number((originX + index * stride + itemSize.width * itemAnchor.x).toFixed(2));
-    assert.equal(pageX(0), -305.79, '首项要站在原来 Bond1 的位置');
-    assert.equal(pageX(1), -190.79);
-    assert.equal(pageX(2), -75.79);
-    assert.equal(pageX(3), 39.21);
+    assert.equal(pageX(0), -320, '首项图标中心 = BondList 左缘 -340 + 20');
+    assert.equal(pageX(1), -238);
+    assert.equal(pageX(2), -156);
+    assert.equal(pageX(3), -74);
 
     // ── 视口与滚动 ───────────────────────────────────────────────────────
     // 源码 2468 行：等大小模式 content 主尺寸 = header + n*stride - spacing + footer。
     //  条目数是**动态**的（`visibleIconTallies` 滤掉 0 项），所以这里算的是
-    //  「8 个维度全命中」的**上界**，同时钉住玩家默认阵容的 5 项实况 —— 两个都要看，
-    //  不然会误以为每局都是 847 宽。
+    //  「8 个维度全命中」的**上界**，同时钉住玩家默认阵容的 5 项实况。
     const viewport = (listTf._contentSize as { width: number }).width;
     const listWidth = (count: number) => count * stride - Number(view.spacing);
-    assert.equal(listWidth(8), 847, '4 职业 + 4 阵营全命中时的上界');
-    assert.ok(listWidth(8) > viewport, '上界 847 装不进 476 → 列表确实要能横滑，虚拟列表没白做');
-    assert.equal(listWidth(8) - viewport, 371, '上界下的可滚动距离');
+    assert.equal(listWidth(8), 614, '4 职业 + 4 阵营全命中时的上界');
+    assert.ok(listWidth(8) > viewport, '上界 614 装不进 512 → 列表确实要能横滑');
+    assert.equal(listWidth(8) - viewport, 102, '上界下的可滚动距离');
 
-    // 玩家默认阵容实际只列 5 项（战士2 / 法师1 / 射手2 / 坦克3 + 花果7），
-    //  所以实际宽度是 502、只比视口多 26px。
-    assert.equal(listWidth(5), 502, '玩家默认阵容（5 项）的实际宽度');
-    assert.equal(listWidth(5) - viewport, 26, '只多 26px：能滑，但静止时最后一项会被切');
+    // 玩家默认阵容实际只列 5 项（战士2 / 法师1 / 射手2 / 坦克3 + 花果7）：
+    //  5 项 368 宽，装得进 512 视口，静止时不再切边。
+    assert.equal(listWidth(5), 368, '玩家默认阵容（5 项）的实际宽度');
+    assert.equal(listWidth(5) - viewport, -144, '5 项完整放进 512 视口');
 
-    // 视口区间 = BondList 局部 [0, viewport]，也就是 MidBar 的 [-326.79, 149.21]
-    //（右缘紧贴 TeamEdit 的左缘 157.08，中间只剩 7.87）——所以 476 就是这条图标条的可用宽度。
+    // 视口区间 = BondList 局部 [0, viewport]，也就是 MidBar 的 [-340, 172]
+    //（右缘接 TeamEdit 左缘 180，留 8px）。
     const localX = (index: number) => index * stride + itemSize.width * itemAnchor.x;
     const half = itemSize.width / 2;
-    assert.ok(localX(3) + half <= viewport, '第 4 项完整可见 —— 与原 Bond1..Bond4 的观感一致');
-
-    // 第 5 项（= 玩家满编时的**最后一项**）局部占 [460, 502]：被视口切掉 26px、只露 16px 宽。
-    //  这是「保 115 节奏」与「视口 476」两条同时成立时的必然结果，**不是错位**：
-    //    5 项按 115 节奏需要 4*115 + 42 = 502 宽；
-    //    而 stride 的可见跨度下界是 21（图标左缘）+ 55（数字标签右缘）= 76，
-    //    所以「5 项一个字都不切」要求 stride ≤ (476 - 42) / 4 = 108.5 —— 低于原来的 115。
-    //  两条路只能选一条（切半格 / 换节奏），此处按「节奏优先」钉住现状。
-    assert.equal(Number((localX(4) - half).toFixed(2)), 460);
-    assert.ok(localX(4) - half < viewport, '第 5 项压在视口边上');
-    assert.equal(Number((viewport - (localX(4) - half)).toFixed(2)), 16, '静止时第 5 项露 16px');
-    assert.ok(localX(4) + half > viewport, '但整项放不下，必须滑动才能看全');
+    assert.ok(localX(3) + half <= viewport, '第 4 项完整可见');
+    assert.equal(Number((localX(4) - half).toFixed(2)), 328);
+    assert.ok(localX(4) + half <= viewport, '第 5 项（满编最后一项）完整可见');
+    assert.equal(Number((localX(4) + half).toFixed(2)), 368);
 
     // ── 接线 ─────────────────────────────────────────────────────────────
     const page = prefab.find((entry) => 'iconList' in entry);

@@ -1,5 +1,6 @@
 import { ControllerBase, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
+import { reportGuideComplete } from '../../guide/application/GuideEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { ITerritoryNavigateBattlePayload, TerritoryModel, TerritoryModelOutput } from './TerritoryModel';
@@ -84,7 +85,16 @@ export class TerritoryController extends ControllerBase {
                 if (site) this.model.selectSite(site);
                 break;
             }
-            case 'randomTap': this.model.selectRandomResource(intent.cellId); break;
+            case 'randomTap': {
+                this.model.selectRandomResource(intent.cellId);
+                // 新手引导 2-1/3-1/4-1/7-1 的判据：设计案写「进入翻开动画 / 地块进入通关态」。
+                // 这里按「玩家点下这一格」上报 —— 精确到「服务端确认翻格成功」需要 Model 把
+                // `runCellWrite` 的完成回调暴露出来，属于后续接入项；当前口径下，
+                // 银币/相邻格不满足时 `selectRandomResource` 内部会 return，这次上报属于**误报**，
+                // 只会让引导提前一步，不会崩（引导后续会等 `popupClosed`）。
+                reportGuideComplete('tileFlipped');
+                break;
+            }
             case 'claimIdleRewards': void this.model.claimIdleRewards(this.options.now?.() ?? Date.now()); break;
             case 'sweepChapter': void this.model.sweepIdleRewards(intent.times); break;
             case 'chapter': this.model.switchChapter(intent.offset); break;

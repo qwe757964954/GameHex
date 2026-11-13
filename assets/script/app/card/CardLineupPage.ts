@@ -30,23 +30,23 @@ import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
-/** 上阵区一个站台的数据（`null` = 空位）。`frames = null` = 图还在路上，先画空台 + 等级。 */
+/** 一个站台要的数据；frames 为空表示图还没到，先画空台和等级。 */
 interface IPreparedSlot {
     readonly card: ZCDeckCard;
     readonly frames: ZCSlotFrames | null;
 }
 
-/** 站台图未就绪时喂给 `CardLineupSlot.render` 的空图：三项都缺、不得留上一轮的残留。 */
+/** 图没到时给站台的空图，不能沿用上一轮。 */
 const EMPTY_SLOT_FRAMES: ZCSlotFrames = { disc: null, hero: null, badge: null };
 
-/** 卡库一次提交要的数据：图**不在这儿**，由条目自己取（见 `commitPool`）。 */
+/** 卡库一次提交的数据；图由条目自己加载。 */
 interface IPreparedPool {
     readonly cards: readonly ZCDeckCard[];
     readonly fragments: ReadonlyMap<string, ZCCardFragmentProgress>;
     readonly deployedIds: ReadonlySet<string>;
 }
 
-/** 图标行一次提交要的数据：同理，图标由条目自取。 */
+/** 图标行一次提交的数据，图同样由条目自己取。 */
 interface IPreparedIcons {
     readonly items: readonly ZCCardTally[];
 }
@@ -55,30 +55,14 @@ interface IPreparedIcons {
 const SLOT_PREVIEWS_PER_FRAME = 2;
 
 /**
- * 「卡牌阵容」页面主控（`assets/resources/ui/card/CardLineup.prefab`）。
+ * 卡牌阵容页。版式都在 prefab 里，这里只管数据：拿阵型、备图、刷列表。
  *
- * 版式由 prefab 按设计稿压到 720×1280 摆好，本组件只做三件事：读配置 → 备图 → 灌数据。
- * 底部六格导航归 `MainTabHost` 管，本页没有 `BottomNav` 节点。
+ * TeamArea 的 8 个站台按子节点顺序排；CardGrid 和 BondList 是虚拟列表，
+ * 条目自己取图，所以别在页面里遍历它们的子节点找卡。
  *
- * 三个容器：
- *   - `TeamArea`：挂 `cc.Layout`（GRID / 4 列 / CONTAINER），8 个 `CardLineupSlot` 由它排；
- *     **顺序真源 = 子节点顺序**，别按坐标反推（见 `arenaSlots()`）。
- *   - `CardGrid`：卡库虚拟列表的视窗（挂 `cc.Mask`），条目模板 `CardLineupCard.prefab`，
- *     槽位由列表自建 —— 所以 `getComponentsInChildren(CardLineupCard)` 在本页取不到东西。
- *   - `MidBar/BondList`：横向虚拟列表，条目模板 `CardLineupBond.prefab`。
- *     条目 = 职业与阵营混排，**卡数为 0 的不进列表**（见 `visibleIconTallies`）。
- *
- * 数据来源：
- *   - 八卡 ← 服务端**选中阵型**（`CmdFormationInfo.select === 1`），经 `resolveSelectedDeck()`
- *     映射成卡；拿不到（未连接 / 失败 / 没有选中）才退回本地 `pvpCard.json` 的默认八卡。
- *     布阵面板保存会把阵型置为选中，所以关面板后本页要重刷（见 `onDeckSaved`）。
- *   - 卡库 ← `pvpCard.json` 全表排除金矿；按上阵、解锁与碎片状态排序。
- *   - 等级 / 上限 ← `CmdPvpHeroInfoListReqMsg` 按 `heroId` 关联 `pvpCard.id` + `cardLevelUp.json`。
- *   - 图标计数 ← 八卡按 `traits.attack`（职业）+ `traits.camp`（阵营）推导。
- *   - 羁绊百分比 ← `pvpBond.json` + `calculateDeckBonuses()`。
- *
- * 底部 `TabBar`（兵种 / 神器 + `Lock`）是静态的：本组件不接管选中态，也不给点击回填。
- * 顶部战力由仓库汇总当前上阵卡攻击力，随阵容和等级刷新。
+ * 阵型优先读服务端选中项，拿不到再退回本地 pvpCard.json 的默认八卡。
+ * 等级、上限、羁绊、战力分别来自英雄列表、cardLevelUp、pvpBond 和当前上阵卡。
+ * 底部页签是静态的，本页不接管选中态。
  */
 @ccclass('CardLineupPage')
 export class CardLineupPage extends Component {
@@ -89,20 +73,17 @@ export class CardLineupPage extends Component {
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
 
     /**
-     * 每次 `presentLineup` 自增。
-     *
-     * 快照与权威值会**交错**（快照那次还在等美术，权威值就回来了），没有这道门闩
-     * 就会出现「权威值先写、快照后到把它盖回旧阵容」。
+     * 快照和权威值会乱序回来，用这个版本号挡住旧快照，别让它把新阵容盖回去。
      */
     private presentRevision = 0;
 
-    /** 上阵区站台（顺序 = 节点树顺序 = Layout 排列顺序，下标 = 卡组下标）。取一次就够。 */
+    /** 上阵站台，顺序就是节点树顺序，下标对应卡组位置。 */
     private arenaSlotCache: CardLineupSlot[] | null = null;
 
-    /** 还没补上单位模型的站台：`commitSlots` 只画静态立绘，模型由 `flushPreviews` 逐帧补。 */
+    /** 还没补模型的上阵位：先画静态图，模型随后逐帧补。 */
     private pendingPreviews: Array<{ readonly slot: CardLineupSlot; readonly prefab: Prefab }> = [];
     private previewFlushScheduled = false;
-    /** 静态首屏提交后下一帧才启动模型加载，避免冷加载争抢 UI 图片的下载与解析。 */
+    /** 首屏静态图提交后，下一帧再开始加载模型，先别和 UI 图抢下载。 */
     private previewLoadTask: (() => void) | null = null;
 
     @property({ type: Label, tooltip: 'TopBar/QualityLabel：品质星下方小字' })
@@ -117,19 +98,18 @@ export class CardLineupPage extends Component {
     @property({ type: Label, tooltip: 'Banner/BondValueLabel：加成条右侧百分比' })
     bondValueLabel: Label = null;
 
-    @property({ type: Node, tooltip: 'TeamArea：站台容器（挂 cc.Layout GRID 4 列，8 个 CardLineupSlot 由它排）' })
+    @property({ type: Node, tooltip: 'TeamArea：8 个站台由 Grid Layout 排列' })
     teamArea: Node = null;
 
     @property({
         type: VirtualScrollView,
-        tooltip: 'MidBar/BondList：图标行虚拟列表（横向，条目模板 = ui/card/CardLineupBond）。\n' +
-            '列表参数全部绑在这个组件的 Inspector 上，代码只覆盖 renderItemFn + 总条数。',
+        tooltip: 'MidBar/BondList：职业/阵营图标行，横向虚拟列表',
     })
     iconList: VirtualScrollView = null;
 
     @property({
         type: VirtualScrollView,
-        tooltip: 'CardGrid 上的 VirtualScrollView（**直接绑组件**）：卡库列表的视窗；槽位由列表自己建',
+        tooltip: 'CardGrid 上的 VirtualScrollView：卡库列表视窗，槽位由列表自己建',
     })
     cardGrid: VirtualScrollView = null;
 
@@ -144,8 +124,7 @@ export class CardLineupPage extends Component {
 
     @property({
         type: Button,
-        tooltip: 'MidBar/TeamEdit 上的 cc.Button（**直接绑组件，不是节点**）。\n' +
-            '**必绑** —— 代码不判空、不按路径兜底；漏绑由 `card-lineup-ui-regression` 的 prefab 断言当场红。',
+        tooltip: 'MidBar/TeamEdit 的 cc.Button，必绑；漏绑回归测试会直接报错。',
     })
     teamEditButton: Button = null;
 
@@ -153,11 +132,8 @@ export class CardLineupPage extends Component {
     private heroLevels: ReadonlyMap<string, number> = new Map();
 
     /**
-     * 这一次刷新有没有真拿到后端英雄列表。
-     *
-     * `true` 时「不在列表里」= 玩家没有这张卡 → 等级按 0 显示；
-     * `false`（未连服 / 编辑器独立预览）时整页是离线态，退回 `fallbackLevel` 占位。
-     * 少了这个区分，卡库一改成全表就会把 36 张卡全显示成「3级」。
+     * 这次刷新有没有真拿到后端英雄列表。
+     * 拿到了，列表里没有就是 0 级；没拿到（离线或编辑器预览）才用 fallbackLevel。
      */
     private heroListKnown = false;
 
@@ -172,11 +148,7 @@ export class CardLineupPage extends Component {
     }
 
     /**
-     * 首屏两段式：**先本地快照、再权威值**。
-     *
-     * 快照（上次服务端确认过的阵容）能命中时，第一帧画的就是玩家自己的卡，网络回来只做
-     * 静默校正 —— 空窗从「假阵容」变成「旧阵容」。没快照（首次安装 / 过期 / 存坏）就
-     * 老老实实停在空台，等 `refresh()` 画真实阵容。
+     * 首屏先画本地快照，等权威值回来再校正。没有快照就停在空台，等 refresh。
      */
     private readonly onLineupRender = (event: ICardLineupRender): void => {
         if (event.owner === this) void this.presentLineup(event.data).catch(error => {
@@ -184,7 +156,7 @@ export class CardLineupPage extends Component {
         });
     };
 
-    /** 数据没到时的空台：8 个站台一律收起，不留任何「上一次渲染」的残留。 */
+    /** 数据还没到，先把 8 个站台收起来。 */
     private renderLoading(): void {
         for (const slot of this.arenaSlots()) slot.setEmpty();
     }
@@ -199,16 +171,13 @@ export class CardLineupPage extends Component {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
     }
 
-    /** 「队伍编辑」入口：字段直接绑 `cc.Button`，CLICK 仍挂在**节点**上（Button 自己没有 `on`）。 */
+    /** 队伍编辑按钮绑在 cc.Button 上，点击监听挂在节点上。 */
     private bindTeamEdit(): void {
         this.teamEditButton.node.on(Button.EventType.CLICK, this.onTeamEditClick, this);
     }
 
     /**
-     * 打开布阵面板。加载 / 层级 / 关闭都归 `PopupManager` 管，本页只发起。
-     *
-     *  保存结果不走回调：面板会派发 `CardLineupEvent.DeckSaved`，本页订阅后重刷
-     *  （`PopupDef.onClose` 只有一个 `reason`，装不下业务结果）。
+     * 打开布阵面板。保存结果不回调，面板发 DeckSaved，本页收到后自己重刷。
      */
     private onTeamEditClick(): void {
         EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'edit' });
@@ -217,15 +186,8 @@ export class CardLineupPage extends Component {
     refresh(): void { EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'refresh' }); }
 
     /**
-     * 页面唯一的写节点入口：只渲染，不取数。
-     *
-     * **一次原子提交**：三块内容（站台 / 卡库 / 图标行）先在 `prepare*` 里备齐**数据**，再同步写完，
-     * 最后写羁绊条。分头写会出现「站台已是新阵容、图标行还是旧值」，看起来就是页面抖两下。
-     *
-     *  图**不进这条关键路径**：站台 8 张图若已预热好就同步带上，没好就先画空台 + 等级、
-     *  由 `fillSlotArt` 后台补；卡库图与图标行图标由条目自取（见 `commitPool` / `commitIcons`）。
-     *  改之前三段都在 `Promise.all` 里等图，卡库 35 张 × 3 张图实测 817ms、
-     *  冷启动站台 8 张 26ms，整页被压到 800ms+ 空白 —— 而虚拟列表首屏只用得到十来个槽位。
+     * 页面统一写节点的地方，只渲染不取数。
+     * 站台、卡库、图标行先备数据再一起提交，避免三块各画一半造成闪动。
      */
     private async presentLineup(data: CardLineupData): Promise<void> {
         this.art = data.art;
@@ -233,9 +195,8 @@ export class CardLineupPage extends Component {
         this.cancelPreviewLoads();
         const deck = visibleLineupCards(data.deck);
         const cards = visibleLineupCards(data.catalog);
-        //  `deck` 为空有两种成因，必须分开（与 `presentBoard` 同款口径）：
-        //   ① 本地卡表没读到 → 保持空台；② 服务端说「选中阵型没上人」→ 渲染成空站台。
-        //  补 `!heroListKnown` 是因为快照路径的 `catalog` 也空，但那是**已知**的数据，不能当 ① 早退。
+        // deck 为空要分两种情况：本地表没读到就保持空台；服务端明确说没人上阵就渲染空站台。
+        // 快照路径 catalog 也是空，但 heroListKnown 能区分，不能一起提前 return。
         if (data.deck.length === 0 && data.catalog.length === 0 && !data.heroListKnown) {
             this.powerLabel.string = '--';
             console.warn('[CardLineupPage] 卡表未读到（deck / catalog 都为空且后端英雄列表不可用），保持空台');
@@ -245,12 +206,11 @@ export class CardLineupPage extends Component {
         this.heroLevels = data.heroLevels;
         const deployedIds = new Set(deck.map((card) => card.id));
 
-        //  三段**并发**跑：站台与图标行只依赖本地表，卡库要等权威数据（快照 catalog 为空时跳过）。
-        //  `tests/card-lineup-ui-regression.test.ts` 拿 `data.catalog.length > 0 ? this.preparePool`
-        //  这个源码形态钉住「快照 catalog 为空要跳过卡库」—— 别包一层函数把它藏起来。
+        // 三段并行：站台和图标只看本地表，卡库要等权威数据，快照的 catalog 为空就先跳过。
+        // 回归测试会按 data.catalog.length > 0 ? this.preparePool 的写法做断言，别包成函数。
         const [slots, pool, icons] = await Promise.all([
             this.prepareSlots(deck),
-            // 快照只负责「上阵八卡」这一块，卡库等权威数据再画（见 `loadLineupSnapshot`）。
+            // 快照只画上阵八卡，卡库等权威数据。
             data.catalog.length > 0 ? this.preparePool(cards, deployedIds) : Promise.resolve(null),
             this.prepareIcons(deck),
         ]);
@@ -268,10 +228,8 @@ export class CardLineupPage extends Component {
     // ========================================================================
 
     /**
-     * 站台图缓存（`id → 已就绪的三张图`）。
-     *
-     * 页面实例级，跨 `refresh` 复用；放着是为了让「预热已跑完」的第二次进页**同步**拿图，
-     * 不必再走一次异步补。生命周期跟页面走，不碰 `CardArtProvider` 的会话缓存。
+     * 站台图缓存，页面实例内跨刷新复用。
+     * 第二次进页如果预热已经跑完，这里能直接同步拿到图。
      */
     private readonly slotFrames = new Map<string, ZCSlotFrames>();
     private art: ICardArtConfig;
@@ -286,11 +244,7 @@ export class CardLineupPage extends Component {
     }
 
     /**
-     * **不再等图**：只把已经加载好的图带进提交，没好的留 `null` 由 `fillSlotArt` 后台补。
-     *
-     * 冷启动第一版这里要等 8 张站台图（实测 26ms）—— 切 tab 的 `prefetchHero` 其实已经
-     * 发了同样的请求，但冷启动资源下载来不及赶在点击前完成，于是首屏得等它剩下的那段。
-     * 现在改成「有就画、没有就先出等级牌」，26ms 从关键路径上彻底消失。
+     * 不再等图。已经加载好的就带上，没有的先留空，由 fillSlotArt 后台补。
      */
     private async prepareSlots(deck: readonly ZCDeckCard[]): Promise<ReadonlyArray<IPreparedSlot | null>> {
         const slots = this.arenaSlots();
@@ -315,9 +269,8 @@ export class CardLineupPage extends Component {
     /** 同步写 8 个站台：有卡就整格重画，没卡就收起（不留上一轮的残留）。 */
     private commitSlots(items: ReadonlyArray<IPreparedSlot | null>): void {
         const slots = this.arenaSlots();
-        // 新一轮提交同时作废上一轮的分帧计时器：只清队列会让 `previewFlushScheduled`
-        // 仍为 true，迟到模型到达时 `schedulePreviews()` 直接 return，而旧计时器可能已被
-        // 停用/解绑 ⇒ 模型永远补不上，且零报错。解除后由新模型自己重新注册。
+        // 新一轮提交要作废上一轮的分帧计时器。只清队列不够，previewFlushScheduled 还留着 true，
+        // 新模型会以为已经排过队，结果谁都不补。
         this.unschedule(this.flushPreviews);
         this.previewFlushScheduled = false;
         // 作废上一轮还没补完的模型（否则旧卡的模型会挂到新阵容的站台上）。
@@ -329,8 +282,7 @@ export class CardLineupPage extends Component {
                 continue;
             }
             slots[index].node.active = true;
-            //  先画静态立绘（**不传 `prefab`**），单位模型交给 `flushPreviews` 逐帧补：
-            //  八个 `sp.Skeleton` 实例化约 20ms，和整页数据挤在同一帧就是那一下卡顿。
+            // 先画静态立绘，模型交给 flushPreviews 分帧补，八个 Skeleton 一起上是会卡的。
             slots[index].render(item.card, item.frames ?? EMPTY_SLOT_FRAMES, this.levelOf(item.card));
             if (!item.frames) this.fillSlotArt(item.card, slots[index]);
         }
@@ -391,9 +343,9 @@ export class CardLineupPage extends Component {
     };
 
     /**
-     * 8 个站台，下标 = 卡组下标。**顺序取节点树顺序**。
+     * 8 个站台，下标 = 卡组下标。顺序取节点树顺序。
      *
-     *  `TeamArea` 挂 GRID Layout，它按子节点顺序排版 —— `_lpos` 是它的**产物**，
+     *  `TeamArea` 挂 GRID Layout，它按子节点顺序排版 —— `_lpos` 是它的产物，
      *  按坐标反推只会在原地绕一圈（兄弟顺序错了坐标也跟着错，救不回来）。
      */
     private arenaSlots(): readonly CardLineupSlot[] {
@@ -416,17 +368,17 @@ export class CardLineupPage extends Component {
     /**
      * 卡库：`CardGrid` 是虚拟列表（`VirtualScrollView`）的视窗，条目模板 = `CardLineupCard.prefab`。
      *
-     *  列表参数（行/列数、主副方向间距、缓冲、滚动风格…）**全部绑在 prefab 的 Inspector 上**
+     *  列表参数（行/列数、主副方向间距、缓冲、滚动风格…）全部绑在 prefab 的 Inspector 上
      * （项目约定：同一份配置不散在代码和 prefab 两处），代码只覆盖 `renderItemFn` + 总条数。
      *
-     *  ⚠️ 这里**只备数据**（碎片 + 排序），不再全量备图：35 张卡 × 3 张图实测 817ms，
+     *  这里只备数据（碎片 + 排序），不再全量备图：35 张卡 × 3 张图实测 817ms，
      *  而虚拟列表首屏只用得到十来个槽位 —— 全量备图是在为看不见的卡付首屏时间。
      *  图改由条目自取（`commitPool` 传 `this.loadPoolFrames`），已加载过的同步命中缓存。
      *
      *  条目来自 `pvpCard` 全表并排除金矿；碎片备齐后按状态、品质、等级、职业排序。
      */
     private async preparePool(cards: readonly ZCDeckCard[], deployedIds: ReadonlySet<string>): Promise<IPreparedPool> {
-        // 碎片进度（已持有/所需）**先取好**再进 `renderItemFn`：它是排序的分组依据
+        // 碎片进度（已持有/所需）先取好再进 `renderItemFn`：它是排序的分组依据
         // （已上阵 → 已解锁 → 解锁中 → 未拥有），不是可以后补的展示细节。
         const fragments = new Map<string, ZCCardFragmentProgress>();
         await Promise.all(cards.map(async (card) => {
@@ -447,7 +399,7 @@ export class CardLineupPage extends Component {
      * 卡库图缓存：`id → 已就绪的三张图`。
      *
      * 页面实例级（跨 `refresh` 复用，同 id 同图）；条目在虚拟列表里被复用 / 回收时，
-     * 再次滚回来能**同步**命中，不出现「先空白再出图」。
+     * 再次滚回来能同步命中，不出现「先空白再出图」。
      */
     private readonly poolFrames = new Map<string, ZCCardFrames>();
 
@@ -461,7 +413,7 @@ export class CardLineupPage extends Component {
     };
 
     /**
-     * 上一次提交给卡库的数据指纹。`null` = 从未提交过（**不能用空串**：纯金矿卡库的
+     * 上一次提交给卡库的数据指纹。`null` = 从未提交过（不能用空串：纯金矿卡库的
      * 指纹就是空串，那样会把「清空旧列表」误判成「没变化」而跳过 `refreshList`）。
      *
      * `refreshList` 会 `setTotalCount` → `_updateVisible(true)` 强制重画所有可见槽位；
@@ -479,7 +431,7 @@ export class CardLineupPage extends Component {
                 + `:${progress?.owned ?? 0}:${progress?.need ?? 0}:${progress?.maxed ? 1 : 0}`;
         }).join('|');
 
-        //  两个回调**每轮都要重绑**：它们闭包捕获本轮的 `cards`，不重绑的话滚动时
+        //  两个回调每轮都要重绑：它们闭包捕获本轮的 `cards`，不重绑的话滚动时
         //  槽位复用会拿上一轮的数组（甚至点开升级弹窗点到旧卡）。
         this.cardGrid.renderItemFn = (node, index) => {
             const card = cards[index];
@@ -524,9 +476,9 @@ export class CardLineupPage extends Component {
     }
 
     /**
-     * 图标行：驱动 `MidBar/BondList` 的**横向**虚拟列表。
+     * 图标行：驱动 `MidBar/BondList` 的横向虚拟列表。
      *
-     *  条目 = `visibleIconTallies(deck, art.lineup)` —— 职业与阵营混排、**卡数为 0 的维度不进列表**
+     *  条目 = `visibleIconTallies(deck, art.lineup)` —— 职业与阵营混排、卡数为 0 的维度不进列表
      *  （所以条数是变的：满编八卡通常 5 项左右，不是固定 8）。顺序即表内维度行序，
      *  以后要加维度只改 `PVP-卡牌美术.xlsx` 对应 sheet。
      *
@@ -534,7 +486,7 @@ export class CardLineupPage extends Component {
      *  （项目约定：同一份配置不散在代码和 prefab 两处），代码只覆盖 `renderItemFn` + 总条数。
      *
      *  与 `preparePool` 同款：条目数据先到就提交，图标由条目自取（`loadIconFrame`）。
-     *  `renderItemFn` 是**同步**回调，里面不能 `await`，`await` 因此在条目内部（带 token 防串图）。
+     *  `renderItemFn` 是同步回调，里面不能 `await`，`await` 因此在条目内部（带 token 防串图）。
      */
     private async prepareIcons(deck: readonly ZCDeckCard[]): Promise<IPreparedIcons> {
         const items = visibleIconTallies(deck, this.art.lineup);

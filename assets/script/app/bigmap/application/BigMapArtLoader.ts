@@ -15,7 +15,7 @@ import { toBigMapArtPath } from './BigMapArtCatalog';
 
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;
-    / 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
+    /** 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
     readonly tiledBackground: SpriteFrame | null;
     readonly ground: SpriteFrame | null;
     readonly groundVariants: readonly (SpriteFrame | null)[];
@@ -28,15 +28,15 @@ export interface IBigMapArt {
     readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
-    / 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
+    /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
     readonly plates: ReadonlyMap<IBigMapPlateKey, SpriteFrame | null>;
     readonly plateFlag: SpriteFrame | null;
-    / 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
+    /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
     readonly hud: ReadonlyMap<IBigMapHudUiKey, SpriteFrame | null>;
     readonly resources: ReadonlyMap<BigMapResType, SpriteFrame | null>;
 }
 
-/
+/**
  *只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
  *
  *@param resourceIcons 资源类型 → 背包道具图标路径（`item.icon`，来自 `bigmapResource.itemId`）。
@@ -101,7 +101,7 @@ export async function loadBigMapArt(
         load('bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
-    /
+    /**
      *表里配了 `baseBuildIcon` 但没加载到的（建筑 id:路径）。
      *
      * 单条未命中走 `quiet` 不打日志（整列没入库时 23 条会把真问题淹掉），

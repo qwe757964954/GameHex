@@ -14,7 +14,7 @@ for (const name of ['CardLineupCard', 'LineupSlot', 'LineupBoardCard', 'LineupBo
         const script = root._components.map(ref => items[ref.__id__]).find(item => !item.__type__.startsWith('cc.'));
         assert.equal('heroTransform' in script, false);
         assert.equal(sprite._sizeMode, 2);
-        const expectedScale = { CardLineupCard: 0.4, LineupSlot: 0.5, LineupBoardCard: 0.3, LineupBoardSlot: 0.4, CardUpgrade: 318 / 390 };
+        const expectedScale = { CardLineupCard: 0.57, LineupSlot: 0.65, LineupBoardCard: 0.3, LineupBoardSlot: 0.4, CardUpgrade: 318 / 390 };
         assert.equal(hero._lscale.x, expectedScale[name]);
         assert.equal(sprite._enabled, true);
         assert.equal(hero._active, true);

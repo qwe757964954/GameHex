@@ -7,7 +7,7 @@ export type { ZCFormation } from './FormationModel';
 export { normalizeFormation, normalizeFormations } from './FormationModel';
 
 /**
- * 阵型的**网络与缓存**层（数据模型与校验在 `FormationModel`，那是纯函数、可单测）。
+ * 阵型的网络与缓存层（数据模型与校验在 `FormationModel`，那是纯函数、可单测）。
  *
  * 对应协议 `CmdFormationInfoReqMsg` / `CmdFormationOpReqMsg`（见 `RequestFormationMsg.ts`）。
  */
@@ -19,12 +19,12 @@ export type FormationSaveResult =
     | { readonly kind: 'failed' };
 
 /**
- * 阵型请求的**硬超时**（毫秒）。
+ * 阵型请求的硬超时（毫秒）。
  *
  * 必须自己兜一个，因为 `GameNet.send` 只在「收到回包」或「断线」时兑现
  * （`NetSocket.onTimeOut()` 只在断线清心跳 / `ClearAllRequest()` 里被调用），
- * **没有按请求的超时**。于是「服务端不认这条消息、不回应」就 = 这个 Promise 永远悬着。
- * 布阵面板的数据加载被这样一条请求拖住会**整屏停在 prefab 占位外观**
+ * 没有按请求的超时。于是「服务端不认这条消息、不回应」就 = 这个 Promise 永远悬着。
+ * 布阵面板的数据加载被这样一条请求拖住会整屏停在 prefab 占位外观
  * （站台空、职业计数 0、卡池空白），2026-09-20 真机上就是这么炸的。
  *
  * 内网正常应答是毫秒级，所以这个值只是"不正常时尽快降级"的阈值，不是"给慢请求留的时间"。
@@ -32,13 +32,13 @@ export type FormationSaveResult =
 export const FORMATION_REQUEST_TIMEOUT_MS = 3000;
 
 /**
- * 阵型**保存**的硬超时（毫秒）。
+ * 阵型保存的硬超时（毫秒）。
  *
  * 同一条原因（`GameNet.send` 无按请求超时），但后果不同：保存是用户主动点的，
  * 页面会 `saving = true` 并禁用按钮、把文字改成「保存中…」——
- * 请求悬着就是**按钮永远卡在保存中、再也点不动**。所以这里也得兜。
+ * 请求悬着就是按钮永远卡在保存中、再也点不动。所以这里也得兜。
  *
- * 比读取给得宽：读取超时只是"这次先不看后端数据"，保存超时会**误报失败**
+ * 比读取给得宽：读取超时只是"这次先不看后端数据"，保存超时会误报失败
  * （服务端其实可能已经存了），要尽量避免，所以留出真实写入的时间。
  */
 export const FORMATION_SAVE_TIMEOUT_MS = 5000;
@@ -64,7 +64,7 @@ export interface FormationFetchOptions {
     /** 超时日志里的调用方名字，用来区分是哪个界面在等。 */
     readonly label?: string;
     /**
-     * 缓存新鲜期（毫秒）：`cachedFormations` 在此时长内**直接复用，不再发请求**。
+     * 缓存新鲜期（毫秒）：`cachedFormations` 在此时长内直接复用，不再发请求。
      *
      * 切 tab 时 `MainTabsComposition` 已经预取过一次（`prefetchHero`），页面自己再拉一遍
      * 就是两个一模一样的请求；而预取的那份就在几百毫秒之内，够新。
@@ -80,7 +80,7 @@ export interface FormationFetchOptions {
  * 返回 `null` 表示当前没有可用的后端数据（未连接、请求失败、超时）；空数组是服务端明确返回「一个阵型都没有」。
  * 并发调用合并成同一个请求（布阵弹窗反复开关时不会连发）。
  *
- * **本函数保证在 `FORMATION_REQUEST_TIMEOUT_MS` 内兑现**，绝不悬空 —— 调用方可以放心 await。
+ * 本函数保证在 `FORMATION_REQUEST_TIMEOUT_MS` 内兑现，绝不悬空 —— 调用方可以放心 await。
  */
 export function fetchFormations(options: FormationFetchOptions = {}): Promise<readonly ZCFormation[] | null> {
     const timeoutMs = Math.max(1, Math.round(options.timeoutMs ?? FORMATION_REQUEST_TIMEOUT_MS));
@@ -112,7 +112,7 @@ export function getCachedFormations(): readonly ZCFormation[] | null {
 /**
  * 把一份阵型写回本地缓存（保存成功后调用）。
  *
- * 保存响应（`CmdFormationOpRspMsg.info`）回的就是**操作后的阵型**，直接换掉缓存里那一条即可 ——
+ * 保存响应（`CmdFormationOpRspMsg.info`）回的就是操作后的阵型，直接换掉缓存里那一条即可 ——
  * 不补这一步的话，用户保存后马上切页签再切回来，看到的还是保存前的旧卡组。
  */
 export function applyFormation(formation: ZCFormation): void {
@@ -131,7 +131,7 @@ export function applyFormation(formation: ZCFormation): void {
  * 保存（覆盖）一个阵型。
  *
  * 客户端只负责「把整份阵型发上去」——合法性、上阵数量上限由服务端判定，
- * 所以这里**不做本地预校验**（除了挡住明显非法的 id，避免发一个服务端必然拒绝的包）。
+ * 所以这里不做本地预校验（除了挡住明显非法的 id，避免发一个服务端必然拒绝的包）。
  */
 export async function saveFormation(
     formationId: number,
@@ -162,7 +162,7 @@ export async function saveFormation(
 /**
  * 发保存请求。
  *
- *  `heroIds` 收 **mutable** 数组：`saveFormation` 已经过 `normalizeHeroIds()`（返回的
+ *  `heroIds` 收 mutable 数组：`saveFormation` 已经过 `normalizeHeroIds()`（返回的
  *  就是 `number[]`），而 proto 生成类型的 `heroId` 字段是 `number[]` ——
  *  这里再标 `readonly` 会撞 TS4104，而加一层拷贝只为过检查不值当。
  */
@@ -173,7 +173,7 @@ async function sendFormationOp(
 ): Promise<FormationSaveResult> {
     let response: CmdFormationOpRspMsg | null = null;
     try {
-        //  保存 = 保存**并**选中（`select = 1`）。
+        //  保存 = 保存并选中（`select = 1`）。
         //
         //  `CmdFormationInfo.select` 的口径是 `1 选中 / 0 没选中`（见 proto 与 `FormationModel`）。
         //  发 0 的话只是把卡存下来了，服务端记着的「出阵阵型」仍旧是别的那一条 ——
@@ -185,7 +185,7 @@ async function sendFormationOp(
         //
         //  切页签的「出战阵型」不走这里，走独立的 `CmdFormationSelectReqMsg`
         //  （`selectFormation` ← `LineupBoardController.switchPreset`）。两者分工：
-        //  **保存 = 存卡组并顺带置选中**，**切页签 = 只换选中、不动卡组**。
+        //  保存 = 存卡组并顺带置选中，切页签 = 只换选中、不动卡组。
         const ok = await GameNet.instance.send(new RequestFormationOp(
             { info: { formationId, heroId: heroIds, select: 1 } },
             caller,
@@ -215,13 +215,13 @@ async function sendFormationOp(
  * 选中协议是否已经在 `MessageId` 里登记过（只在缺失时提示一次）。
  *
  * `GameNet.createCmdClientData` 是按「协议名 → MessageId 编号」发请求的，编号来自
- * 服务端导出的 `protoCompiled.proto`。当前那份 MessageId 枚举里**只登记了**
+ * 服务端导出的 `protoCompiled.proto`。当前那份 MessageId 枚举里只登记了
  * `CmdFormationInfoRspMsg` / `CmdFormationOpRspMsg`，`CmdFormationSelectRspMsg`
  * 只有 message 定义、没有编号 —— 直接发会被判成「不存在协议 CmdFormationSelectReqMsg」，
  * 而且 `GameNet` 那条是 error 级日志，每次切页签刷一屏。
  *
  * 所以发送前先探测（同 `NewTreasureRepository.open` 对 `CmdNewTreasureOpenReqMsg` 的做法）：
- * 缺号就跳过，切页签只做本地同步。**服务端补号 + 重新导出 proto 后自动开始生效**，不用再改这里。
+ * 缺号就跳过，切页签只做本地同步。服务端补号 + 重新导出 proto 后自动开始生效，不用再改这里。
  */
 let selectProtocolWarned = false;
 function hasSelectProtocol(): boolean {
@@ -242,7 +242,7 @@ function hasSelectProtocol(): boolean {
  * 告诉服务端「当前出战的是这个阵型」，服务端会把其他阵型的 select 置 0，当前的置 1。
  * 成功后更新本地缓存的 selected 状态。
  *
- * **必须自己兜超时**：同 `saveFormation` —— `GameNet.send` 没有按请求的超时，
+ * 必须自己兜超时：同 `saveFormation` —— `GameNet.send` 没有按请求的超时，
  * 服务端不理这条消息的话 Promise 会一直悬着（布阵页的调用方在 await 它）。
  * 超时按失败返回，调用方的本地页签切换不回滚。
  */

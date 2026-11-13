@@ -11,6 +11,36 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
+
+test('巡逻表现：模型、标记、血条同移且幂等，地格不动，归零不影响后续建筑显隐', () => {
+    const { load, FakeNode } = loadViews();
+    const view = new (load('./ZCHexView').ZCHexView)();
+    view.node.setPosition(300, 500, 0);
+    view.iconSprite = { node: new FakeNode('badge'), enabled: true };
+    view.healthBar = { node: new FakeNode('hp') };
+    view.healthBar.node.setPosition(0, 60, 0);
+    const monster = new FakeNode('monster');
+    view.resourceUnitNodes.push(monster);
+    view.renderMonsterPatrol(0, 0);
+    const baseY = monster.position.y;
+    const badgeX = view.iconSprite.node.position.x;
+    const badgeY = view.iconSprite.node.position.y;
+    for (let i = 0; i < 2; i++) {
+        view.renderMonsterPatrol(80, -20);
+        assert.equal(monster.position.x, 80);
+        assert.equal(monster.position.y, baseY - 20);
+        assert.equal(view.iconSprite.node.position.x, badgeX + 80);
+        assert.equal(view.iconSprite.node.position.y, badgeY - 20);
+        assert.equal(view.healthBar.node.position.x, 80);
+        assert.equal(view.healthBar.node.position.y, 40);
+        assert.equal(view.node.position.x, 300);
+        assert.equal(view.node.position.y, 500);
+    }
+    view.renderMonsterPatrol(0, 0);
+    assert.equal(view.healthBar.node.position.y, 60);
+    assert.equal(view.iconSprite.enabled, true);
+    assert.equal(monster.active, true);
+});
 import {
     configureZCMap,
     ZCGameModel,

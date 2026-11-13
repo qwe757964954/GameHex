@@ -15,7 +15,7 @@ export class CardSkillListView extends Component {
     /**
      * 空态提示（主城 / 金矿这类没有技能的卡）。
      *
-     * 声明成 `Node` 而不是 `Label`：**组件类型的属性对序列化值要求更严** ——
+     * 声明成 `Node` 而不是 `Label`：组件类型的属性对序列化值要求更严 ——
      * 一旦 prefab 里存的是节点（或旧版本存的是别的类型），引擎反序列化会直接丢弃该字段，
      * 运行时读到 `undefined` 而不是抛错，只能等到用的时候才炸。节点引用则宽容得多。
      */
@@ -43,7 +43,7 @@ export class CardSkillListView extends Component {
 
     render(data: CardSkillListPresentation | null): void {
         this.bindRows();
-        //  绑定缺失（老 prefab / 手工拼装的实例）时整块跳过：技能区是**可选模块**，
+        //  绑定缺失（老 prefab / 手工拼装的实例）时整块跳过：技能区是可选模块，
         //  它挂了不该连带宿主弹窗一起打不开（`PopupBase.onOpen` 会把异常抛给上层）。
         if (!this.rowsRoot) return;
 

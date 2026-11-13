@@ -11,6 +11,11 @@ import { readFileSync } from 'node:fs';
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { MAP_MARKER_BUBBLE_HEIGHT } from '../assets/script/app/common/MapMarkerBadge';
+import {
+    TERRITORY_PVP_BUBBLE_WIDTH, TERRITORY_PVP_BUBBLE_HEIGHT,
+    TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE, TERRITORY_PVP_BUBBLE_PORTRAIT_Y,
+} from '../assets/script/app/territory/model/TerritoryLevelBubble';
 import {
     FakeButton,
     FakeColor,
@@ -18,6 +23,7 @@ import {
     FakeNode,
     FakeSprite,
     FakeUIOpacity,
+    FakeUITransform,
     attach,
     loadTerritoryStationModule,
     loadTerritoryStationView,
@@ -44,6 +50,34 @@ const VALUE_SCALE = STATION_MODULE.CONDITION_VALUE_SCALE as number;
 const GAP = STATION_MODULE.CONDITION_GAP as number;
 /** 图标节点未缩放时的可见宽（prefab `CaptionBg` 是 40×40，读不到就退回同一个兜底值）。 */
 const ICON_BASE_WIDTH = STATION_MODULE.CONDITION_ICON_WIDTH_FALLBACK as number;
+
+test('PVP 红框头像复用气泡，通关及池化后恢复文字、尺寸和点击', () => {
+    const { view, badge } = makeStationView();
+    const content = { site: {}, icon: { originalSize: { width: 128, height: 128 }, rect: { width: 128, height: 128 }, offset: { x: 0, y: 0 } },
+        levelBubble: 'PVP', levelBubbleFrame: {}, levelBubblePortrait: {},
+        caption: '', badge: '', tint: FakeColor.WHITE, interactive: true };
+    view.render(content);
+    const bubble = badge.parent;
+    const portrait = (view as unknown as { levelBubbleIcon: { node: FakeNode } }).levelBubbleIcon.node;
+    assert.equal(badge.active, false);
+    assert.equal(bubble.active, true);
+    assert.equal(bubble.getComponent(FakeSprite).type, FakeSprite.Type.SLICED);
+    assert.equal(bubble.getComponent(FakeUITransform).contentSize.width, TERRITORY_PVP_BUBBLE_WIDTH);
+    assert.equal(bubble.getComponent(FakeUITransform).contentSize.height, TERRITORY_PVP_BUBBLE_HEIGHT);
+    assert.equal(portrait.getComponent(FakeUITransform).contentSize.width, TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE);
+    assert.equal(portrait.position.y, TERRITORY_PVP_BUBBLE_PORTRAIT_Y);
+    assert.equal(portrait.getComponent(FakeSprite).spriteFrame, content.levelBubblePortrait);
+    stationEmitLog.length = 0;
+    bubble.emit(FakeButton.EventType.CLICK);
+    assert.equal(stationEmitLog.length, 1);
+    view.render({ ...content, hidden: true });
+    assert.equal(bubble.active, false);
+    view.render({ ...content, levelBubblePortrait: null });
+    assert.equal(badge.active, true);
+    assert.equal(portrait.active, false);
+    assert.equal(view.badgeLabel.string, 'PVP');
+    assert.equal(bubble.getComponent(FakeUITransform).contentSize.height, MAP_MARKER_BUBBLE_HEIGHT);
+});
 
 test('随机格等待期间不展示文字，重复渲染和失败恢复保持正确', () => {
     const { view, caption, text, captionLabel } = makeStationView();

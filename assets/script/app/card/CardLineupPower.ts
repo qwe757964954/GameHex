@@ -1,32 +1,9 @@
 /**
- * 「阵容战力」= 上阵卡牌的攻击力之和。**不 import cc，可单测**。
+ * 阵容战力 = 上阵卡攻击力之和，纯 TS，可单测。
  *
- * ## 口径（山猫 2026-11-06：「战力图标 = 阵容内攻击力总和」）
- *
- * ```
- * 战力 = Σ 每张上阵卡的 unitAttack
- * unitAttack = (pvpCard.unitAttack + cardLevelUp.attrList.attack 的加成) × 成长率
- * ```
- *
- * 即反馈里说的「卡牌基础属性 + 账号养成属性」：
- *   · **卡牌基础属性** ← `pvpCard.unitAttack`（表里的白值）；
- *   · **账号养成属性** ← 卡牌等级成长（`cardLevelUp.attrList` 的绝对值优先，
- *     没配时回落 `pvpUnitGrowth` 的 `attackFlat/attackRate`）。
- *
- * 两者怎么合、按哪个公式合，**一律复用 `CardDetailStats.computeDetailStats`** ——
- * 详情页六维里的「攻击」就是这个数，战力若另写一套算法，两处迟早对不上。
- *
- * ## 为什么不是老端 `ModelRole.getRoleAtk()`
- *
- * 老端那个方法最终调 `ModelTeam.GetTotalAtk()`，算的是**装备/禁军/技能的属性袋**
- * （塔防养成），跟卡牌阵容没有关系。它值得借鉴的是「**本地算、不向服务端要**」这一点：
- * 本项目同样全部读配置表 + 后端英雄等级缓存，一次网络请求都不发。
- * 移植到塔防那套口径的版本已经在 `role/RolePowerTable.ts`，别和本文件混用。
- *
- * ## 建筑卡
- *
- * 主城 / 金矿这类卡没有兵种（`unitId` 为空），`computeDetailStats` 会给 `unitAttack = 0`，
- * 于是它们对战力贡献 0 —— 这是对的，它们的价值在 `baseHp` / 产金，不在攻击。
+ * 单卡攻击 =（pvpCard.unitAttack + 等级成长加成）× 成长率。
+ * 这部分统一走 CardDetailStats.computeDetailStats，别在详情页和这里各算一套。
+ * 主城、金矿这类建筑卡没有兵种，攻击按 0，不影响战力。
  */
 
 import { computeDetailStats } from './CardDetailStats';
@@ -65,11 +42,8 @@ export function cardAttackOf(
 }
 
 /**
- * 战力文案：`1716` → `1716`、`15980` → `15.98K`、`1234567` → `1.23M`。
- *
- * 千位以下照原样（阵容战力大多是三位到四位，别把它缩写成一个 K 看不出变化）；
- * 万位起才缩写，保留两位并去掉尾随 0（`12.50K` → `12.5K`），与设计稿上 `15.98K` 的写法一致。
- * 非有限值 / 负数按 `0`。
+ * 战力显示：四位数以内原样输出，上万才缩成 K/M，保留两位并去掉尾零。
+ * 负数和非法值按 0。
  */
 export function formatPowerText(value: number): string {
     const num = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
@@ -80,10 +54,7 @@ export function formatPowerText(value: number): string {
 }
 
 /**
- * 阵容战力 = 上阵卡攻击力之和，取整。
- *
- * 非有限值（表里配了字符串 / 空行）按 0 计，不让一个坏行把整块战力变成 `NaN`。
- * 空阵容返回 0 —— 调用方按「还没拿到阵容」处理，不要显示成「战力 0」。
+ * 上阵卡攻击求和后取整。坏行按 0 计，避免 NaN；空阵容返回 0。
  */
 export function lineupAttackTotal(
     inputs: readonly ICardPowerInput[],

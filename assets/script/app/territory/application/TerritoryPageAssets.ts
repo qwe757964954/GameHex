@@ -3,6 +3,7 @@ import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
 import { TERRITORY_CHEST_BUBBLE_FRAME_PATH } from '../model/TerritoryChestBubble';
+import { TERRITORY_PVP_BUBBLE_PORTRAIT_PATH } from '../model/TerritoryLevelBubble';
 import {
     ART_ROOT,
     BUILDING_ART_ROOT,
@@ -37,6 +38,7 @@ export interface ITerritoryBattleArt {
      * 编号是这一格唯一的关卡标识）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
+    readonly pvpBubblePortrait?: SpriteFrame | null;
     /**
      * **宝箱提示气泡**专用的底图：`image/spawn-region/frame_04`（77×87 竖向水滴，尖朝下）。
      *
@@ -284,7 +286,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon] = await Promise.all([
+    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, pvpBubblePortrait] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // ⚠️ 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         //    用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -344,8 +346,9 @@ export async function loadTerritoryBattleArt(
         // 固定宝箱提示气泡里的体力图标（需求 2026-11-02）。与「宝箱开出的体力飞进资源栏」
         // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
+        loadFrame(assets, TERRITORY_PVP_BUBBLE_PORTRAIT_PATH),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales, pvpBubblePortrait };
 }
 
 /**

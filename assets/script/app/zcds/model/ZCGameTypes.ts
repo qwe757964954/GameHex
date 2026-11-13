@@ -324,6 +324,28 @@ export interface ZCUnitState {
      * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
      */
     trapReadyAt?: number;
+    /**
+     * **施法动作窗口**的截止时刻（秒，同 `boltReadyAt` 的绝对时间基准）。
+     *
+     * 2026-11-13 用户需求「角色在移动中，释放任意的主动技能都需要角色要播放攻击动作
+     * （当前已经是攻击动作就无需打断）」：任意一条主动车道**真放出去**的那一刻，
+     * `ZCSkillTriggerSystem` 写 `now + ZC_SKILL_CAST_ACTION_SECONDS`，表现层
+     * （`ZCUnitView` 的 `casting`）在这段时间里把片段换成攻击动作。
+     *
+     * 只管「播哪一段」：**不动 `battleState`、不挡移动、不挡攻击**，人还在跑，动作变成出拳。
+     * 缺省 undefined ⇒ 从来没施过法，任何既有单位行为逐字不变。
+     */
+    castActionUntil?: number;
+    /**
+     * **原地施法锁**的截止时刻（秒，同 `castActionUntil` 的绝对时间基准）。
+     *
+     * 只有 buff 类（`behaviorKey === 'self_cast'`：回血 / 加伤 / 吸血 / 闪避）才写，
+     * 对应同一句需求的下一半：「释放 buff 类技能时要打断 walk，停止在原地（不影响攻击）」。
+     * `ZCUnitSystem.updateUnit` 在锁定期内把单位按回 `idle` 原地站着，射程内有目标照样出拳 ——
+     * 与 `dashRecoverUntil`（冲刺后原地待机）同一套写法，区别是那个连索敌都不做。
+     * 缺省 undefined ⇒ 不锁，既有行为不变。
+     */
+    castHoldUntil?: number;
     /** 多点打击（`behaviorKey = 'random_strike'`，按 CD 触发）的下次可用时刻（秒）。 */
     strikeReadyAt?: number;
     /**
@@ -362,6 +384,14 @@ export interface ZCUnitState {
     blinkCloneY?: number;
 }
 
+export interface IZCMonsterPatrolState {
+    fromHexId: number;
+    toHexId: number;
+    startedAt: number;
+    durationSeconds: number;
+    pausedAt?: number;
+}
+
 export interface IZCNeutralFeatureState {
     claimed: boolean;
     gateId?: number;
@@ -382,6 +412,7 @@ export interface IZCNeutralFeatureState {
     awake?: boolean;
     targetUnitId?: number | null;
     nextAttackAt?: number;
+    patrol?: IZCMonsterPatrolState;
 }
 
 /** 逻辑层产生、视图层只读消费的短生命周期战斗表现事件。 */

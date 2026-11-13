@@ -29,9 +29,9 @@ function indexCards(source: PresetDeckSource): ReadonlyMap<string, ZCDeckCard> {
 }
 
 /**
- * 阵型 heroId 列表 → 卡；本地没有的 id **跳过**并告警。
+ * 阵型 heroId 列表 → 卡；本地没有的 id 跳过并告警。
  *
- * 🔴 跳过是「压缩」而不是「留空」：后面的卡会整体往前挪一格，于是**空出来的永远是最后那几格**。
+ * 跳过是「压缩」而不是「留空」：后面的卡会整体往前挪一格，于是空出来的永远是最后那几格。
  * 最常见的来源是主城（`2002`）—— 它是 `pvpCard` 的一行、后端当成"英雄"下发，
  * 但客户端 `isHqCard` 把它当建筑摘掉（`loadPvpCatalogCards` / `playerDeck` 都摘），
  * 所以只要某个阵型是老端口径存下来的（含主城），八卡就会只剩七张。

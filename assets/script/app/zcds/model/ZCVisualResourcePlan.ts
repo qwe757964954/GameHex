@@ -4,6 +4,9 @@ import { zcMissileFxOf } from './ZCCombatEffectFlight';
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, zcBlinkCastEffectPath } from './ZCBlinkCastFx';
 import { zcSelfAuraEffectPath } from './ZCSelfAuraFx';
 import { ZC_BOLT_EFFECT_PREFAB_PATH, zcBoltStrikeEffectPath } from './ZCBoltStrikeFx';
+import {
+    ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH, zcTrapEffectPath,
+} from './ZCTrapFx';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -83,6 +86,13 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     const boltUnits = new Set((adapters.skillPlans ?? [])
         .filter(plan => plan.enabled && zcBoltStrikeEffectPath(plan.behaviorKey))
         .map(plan => plan.unitId));
+    //  精密陷阱（`trap_place`，2026-11-12 科学家 103504）**有三条**路径，全部只登记在
+    //  `ZCTrapFx` 的代码常量里（行为技能在 `pvpSkill` 里没有造型槽）：
+    //  生成段 / 常驻段 / 爆炸段。漏收任何一条的后果都是静默的 —— 技能照常结算，
+    //  那一段美术凭空消失（生成段漏了是「陷阱直接跳出来」，爆炸段漏了是「踩了不掉血以外没反应」）。
+    const trapUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcTrapEffectPath(plan.behaviorKey))
+        .map(plan => plan.unitId));
     // 普攻、命中附加、强化与副轨技能都可能声明独立表现。
     const effects = new Set(units.flatMap(unit => [
         unit.attackProfile.effectPrefabPath,
@@ -96,6 +106,9 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         blinkUnits.has(unit.unitId) ? ZC_BLINK_CAST_EFFECT_PREFAB_PATH : null,
         selfAuraUnits.has(unit.unitId) ? zcSelfAuraEffectPath('self_aura', unit.unitId) : null,
         boltUnits.has(unit.unitId) ? ZC_BOLT_EFFECT_PREFAB_PATH : null,
+        trapUnits.has(unit.unitId) ? ZC_TRAP_SPAWN_PREFAB_PATH : null,
+        trapUnits.has(unit.unitId) ? ZC_TRAP_IDLE_PREFAB_PATH : null,
+        trapUnits.has(unit.unitId) ? ZC_TRAP_EXPIRE_PREFAB_PATH : null,
         //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight` 的
         //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面四个字段收不到。
         //  漏收的后果：`ZCGameLoader` 不加载 ⇒ `effectVisualPrefabs.get()` 返回 null

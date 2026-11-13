@@ -19,7 +19,7 @@ const MODE_FRAME_Y = -7.5;
 const MODE_ICON_SIZE = 79;
 const MODE_ICON_Y = 11.5;
 
-/ 持有页面预制体内部控件，负责渲染和输入；外部仅交付展示快照与资源。 */
+/** 持有页面预制体内部控件，负责渲染和输入；外部仅交付展示快照与资源。 */
 @ccclass('BigMapPageLayout')
 export class BigMapPageLayout extends Component {
     @property([Label]) private resourceLabels: Label[] = [];
@@ -35,7 +35,7 @@ export class BigMapPageLayout extends Component {
     @property(Button) private exploreButton: Button = null!;
     @property(Node) private queuePanel: Node = null!;
     @property(Label) private queueLabel: Label = null!;
-    /
+    /**
      *建造队列的槽位点（数量 = `bigmapQueue.maxBuildQueue`，当前 3）。
      *
      *以前队列只有一行文字「建造队列 1/1 · 粮食田→Lv.3 120s · 待解锁 1」——
@@ -45,7 +45,7 @@ export class BigMapPageLayout extends Component {
     //用 `Node[]` 而不是 `Sprite[]`：cc 的组件数组没法用 MCP 设（只支持 nodeArray），
     //而这三个槽位必须在 Inspector 里可见可换。Sprite 在 `refreshQueue` 里取，3 次 `getComponent` 可忽略。
     @property({ type: [Node] }) private queueSlotNodes: Node[] = [];
-    /
+    /**
      *基地建筑卡（非模态贴底卡）。
      *
      *取代原先「点建筑就弹居中 `BigMapInfoPopup`」：那张弹窗有暗底和空白接收层，
@@ -53,9 +53,9 @@ export class BigMapPageLayout extends Component {
      */
     @property(BigMapPlotCard) private plotCard: BigMapPlotCard = null!;
 
-    / 每个资源格的反馈驱动（懒建，与 resourceLabels 对齐）。 */
+    /** 每个资源格的反馈驱动（懒建，与 resourceLabels 对齐）。 */
     private resourceFeedback: BigMapResourceFeedback[] | null = null;
-    / 有没有反馈在播（没有就整段 update 直接返回，不逐帧空转）。 */
+    /** 有没有反馈在播（没有就整段 update 直接返回，不逐帧空转）。 */
     private resourceFeedbackActive = false;
 
     //仅保留输入所需的表现状态；初始化前不接收操作。
@@ -124,7 +124,7 @@ export class BigMapPageLayout extends Component {
         this.sendIntent({ kind: 'mode', mode: this.mode === 'world' ? 'base' : 'world' });
     }
 
-    / 固定尺寸、边距与资源均分由 prefab 的 Widget 管理。 */
+    /** 固定尺寸、边距与资源均分由 prefab 的 Widget 管理。 */
     private applyNavigationHeight(navigationHeight: number): void {
         this.node.getComponent(Widget).updateAlignment();
         const modeWidget = this.modeNode.getComponent(Widget);
@@ -143,7 +143,7 @@ export class BigMapPageLayout extends Component {
         }
     }
 
-    /
+    /**
      *驱动建筑卡：`null` = 收起。
      *
      *只在 `BigMapPage` 算好内容后调一次（每帧只写一遍节点），卡自己不持有 Controller。
@@ -159,7 +159,7 @@ export class BigMapPageLayout extends Component {
         this.buildMenuButton.node.active = mode === 'base';
         this.queuePanel.active = mode === 'base';
         //「探索」（野怪搜索）只在大地图出现（2026-11-11 用户口径：
-        //*「基地界面隐藏 搜索icon，搜索icon 只在大地图显示」*）—— 它找的是地图上的野怪，
+        //「基地界面隐藏 搜索icon，搜索icon 只在大地图显示」）—— 它找的是地图上的野怪，
         //基地界面既看不到野怪、也没有相机可定位，留着只会点出一句「附近没有可挑战的野怪」。
         this.exploreButton.node.active = mode === 'world';
         this.modeLabel.string = mode === 'world'
@@ -176,7 +176,7 @@ export class BigMapPageLayout extends Component {
         }
     }
 
-    /
+    /**
      *统一心跳：推进各资源格反馈。
      *
      *不用 tween：反馈驱动只记 elapsed，每帧向 MainResBarFeedback 纯函数要当帧值。
@@ -215,7 +215,7 @@ export class BigMapPageLayout extends Component {
         this.harvestButton.interactable = !data.ui.baseActionPending && data.canHarvest;
     }
 
-    / 反馈未在播时的常态资源文本：未知 / 恢复倒计时 / 美术态 K 值 / 纯色兜底全名。 */
+    /** 反馈未在播时的常态资源文本：未知 / 恢复倒计时 / 美术态 K 值 / 纯色兜底全名。 */
     private steadyResourceText(view: IBigMapResourceView, data: IBigMapViewState): string {
         const cap = Number.isFinite(view.cap) ? `/${Math.floor(view.cap)}` : '';
         const pending = view.pending > 0 ? `  +${view.pending}` : '';
@@ -229,7 +229,7 @@ export class BigMapPageLayout extends Component {
         return `${view.name} ${view.amount}${cap}${pending}`;
     }
 
-    /
+    /**
      *队列行：左边槽位点表达状态，右边文字只写「几条在用 + 在建什么」。
      *
      *槽位三态：未解锁（暗、满格）/ 建造中（亮、按 `progress` 填充）/ 空闲（中性、满格）。
@@ -262,7 +262,7 @@ export class BigMapPageLayout extends Component {
             : `${summary} · ${BIGMAP_PRESENTATION_TEXT.emptyQueue}`;
     }
 
-    /
+    /**
      *队列槽位节点。
      *
      *`@property` 是首选（Inspector 可换），但 MCP 设不进数组：`nodeArray` / 组件数组都试过，

@@ -63,10 +63,10 @@ export class LineupBoardController extends ControllerBase {
      * 空方案 / 半成品可在本地查看，不能同步为服务端的出战阵型。
      *
      * 满足门槛后按顺序走两步，顺序不能颠倒：
-     *  ① **切走前**：有未提交改动就先 `saveFormation`（协议口径是「保存并选中」）。
+     *  ① 切走前：有未提交改动就先 `saveFormation`（协议口径是「保存并选中」）。
      *     失败就停在原方案 —— 草稿和 dirty 都还在，玩家看到「保存失败」，
      *     而不是切过去、再切回来发现服务器上还是旧阵容。
-     *  ② **切换本身**：目标方案完整时，`CmdFormationSelectReqMsg` 把「出战阵型」指向新页签，卡组不动。
+     *  ② 切换本身：目标方案完整时，`CmdFormationSelectReqMsg` 把「出战阵型」指向新页签，卡组不动。
      *     没有它，服务端记着的仍是切走的那条（①的 select=1 正好指在它上面）。
      */
     private async switchPreset(index: number): Promise<void> {
@@ -107,10 +107,10 @@ export class LineupBoardController extends ControllerBase {
     }
 
     /**
-     * 保存当前方案（协议口径是「保存 **并** 选中」，见 `FormationService.sendFormationOp`）。
+     * 保存当前方案（协议口径是「保存 并 选中」，见 `FormationService.sendFormationOp`）。
      *
      * @param quietSuccess 成功时不提示「已保存」（切页签的自动提交用）
-     * @returns 服务端确认 **且** 请求期间没有新改动时才为 true —— 只有这种状态可以接着切页签，
+     * @returns 服务端确认 且 请求期间没有新改动时才为 true —— 只有这种状态可以接着切页签，
      *          否则切走会把保存期间新点的那几张卡留在内存里、显示成「已保存」。
      */
     private async submit(quietSuccess: boolean): Promise<boolean> {

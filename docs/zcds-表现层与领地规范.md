@@ -23,6 +23,7 @@
 | **战斗技能特效：锚点 / 层级 / 飞行段 / 朝向**（2026-11-02） | `ZCCombatEffectPlacement.ts` / `ZCCombatEffectFlight.ts`（均按 prefab 路径配）/ `ZCCombatEffectView.render` | `tests/zcds-combat-effect-placement.test.ts`、`tests/zcds-combat-effect-flight.test.ts` |
 | **冲刺（运动霸「拳击冲撞」）**（2026-11-02 接线） | `ZCUnitSystem`（`chargeSpeedScale` → `speedScale` + `unit.charging`）/ `ZCUnitTargeting.chargeSpeedScale` / `ZCUnitView` 动作切换 | `tests/zcds-charge.test.ts` |
 | **技能释放的触发范围（待触发闸门）**（2026-11-11，见 §13） | `ZCUnitTargeting.hasTargetInAttackRange` / `attackReachOf` → `IZCSkillTriggerContext.inAttackRange` / `attackReachOf` → `ZCSkillTriggerSystem.tick` | `tests/zcds-skill-trigger-range.test.ts`、`tests/zcds-skill-trigger.test.ts` |
+| **施法动作窗口 + buff 类原地锁**（2026-11-13，见 §18） | `ZCUnitCastAction.ts`（两条时长）/ `ZCSkillTriggerSystem.markCastAction` / `ZCUnitSystem.updateUnit`（`castHoldUntil` 分支）/ `ZCUnitView`（`casting` 进片段三元） | `tests/zcds-unit-cast-action.test.ts` |
 | **五雷轰顶 `bolt_strike` + 磁电冲击 `self_aura`（累计普攻）+ 软控麻痹 `numb`**（2026-11-11，见 §14） | `ZCSkillTriggerSystem.applyBoltStrike` / `applySelfAura`（`auraEvery`）/ `ZCAttackResolutionSystem.castBoltLine` / `ZCBoltStrikeFx.ts` / `ZCStatusSystem.attackBlockedOf` + `ZCUnitSystem.startAttack` | `tests/zcds-magdi-mushroom.test.ts`、`tests/zcds-skill-trigger.test.ts` |
 | 「冒险」领地页与台面中心对齐 | `TerritoryPresenter.ts` / `TerritoryMapView.cellCenter`、`applyIconPlacement` | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts` |
 | 敌方单位顶点色置灰 | `ZCUnitView.applyVisualTint` | `tests/zcds-unit-view-render.test.ts` |
@@ -545,6 +546,8 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
      - 引擎还没量过的那一帧（读到出厂宽 92）按**位数**估宽（`CONDITION_DIGIT_WIDTH = 9.5`，Arial 数字等宽 `0.556em`）。
      - ⚠️ 退出条件模式必须还原 `overflow` 与两个缩放：`CaptionLabel` 同时承担「名称底条」文案（那边靠 `SHRINK` 防超宽），且站点节点是**池化复用**的。
 - **判据**：`tests/territory-cell-center-align.test.ts`、`tests/territory-map-layout.test.ts`、`tests/territory-map-config.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-station-batching.test.ts`（间距恒 2px / 1·3·5 位数 / 出厂宽那一帧 / 退出模式还原）、`tmp/_territory_probe.mjs`。
+
+未通关的 PVP（`asyncPvp`）气泡显示玩家头像，复用 `icons/head/icon_hero_head_40018` 和红色九宫格 `frame_02`，尺寸 60×66、头像 46×46，隐藏 `PVP` 文字；已通关保持原有蓝色 `PVP` 气泡。预告承载格同样使用红框头像，头像或红框缺失时保留原文字气泡。普通关卡和宝箱布局不变，沿用原气泡的点击、定位、显隐与资源作用域。判据：`tests/territory-preview-bubble.test.ts`、`tests/territory-station-batching.test.ts`、`tests/territory-bubble-red-frame.test.ts`。
 
 ### 3.3 随机资源格「翻开」：原地快碎裂（2026-10-16）
 
@@ -5017,7 +5020,8 @@ boltDamageRate 1.6·2.0·2.5 / boltRadius 90` 在 `J-技能表`（`PVP技能配�
 正确写法是 `visualBaseOffsetY + castLift`，且 `attachVisual` / `detachVisual` 时要重置
 `appliedCastLift = Number.NaN`（下次 `render` 强制重写）。
 
-滞空期间播攻击动作：`attacking || charging || castLift > 0` ⇒ `attackClip`。
+滞空期间播攻击动作：`attacking || charging || castLift > 0 || casting` ⇒ `attackClip`
+（`casting` 是 2026-11-12 新增的**施法动作窗口**，见 §18）。
 单位坐标、索敌、受击判定全部不动 —— 「跳起来」只是视觉。
 
 ### 15.3 凤凰降临的三段伤害怎么落
@@ -5514,3 +5518,174 @@ if (!approaching) zone.remainingSeconds -= dt;       // ← 读秒与位移彻�
 | 接触即消失 | 只结算 1 次、区域与视觉同拍摘掉、之后不再复活 |
 | 没敌人时兜底 | 强制进快档、朝原方向、2 秒散场 |
 | 叠层登记 | `fx_火船` / 未登记 = `null` / 名字真在 prefab 根节点下 / `_active=false` |
+
+## 17. 科学家 68035「精密陷阱」103504：布置物车道 `trap_place`（2026-11-12）
+
+设计案第 175 行原话：「在原地坐标留下一个持续时间为 15/18/23 秒的陷阱，目标触碰到该陷阱会收到
+1 次伤害 200%/250%/300%，陷阱会爆炸范围 100px 圆形，造成 1 次额外的伤害，爆炸范围内所有敌人受到
+均等伤害 180%/220%/280%，陷阱达到指定的秒数后也会主动爆炸」。
+
+表里这三行此前是**占位**「轨道打击」（`{"damageRate":2.0/2.8/4.0}` + `statusId=stun_*`），本轮换成真技能，
+并新增第 ⑩ 条行为车道（`ZCSkillTriggerSystem.applyTrap` → `ZCAttackResolutionSystem.castTrap` →
+`ZCGroundZoneSystem.resolveContact / pushExpireVisual / resolveExpiry`）。
+
+### 17.1 为什么另起一条车道
+
+| 候选 | 为什么不合适 |
+| :--- | :--- |
+| `self_aura` | 那片区域挂在**自己身上**、按波次打人、还跟着人走；陷阱是**留在原地**、没有波次、只在两个时刻结算 |
+| `bolt_strike` | 那个锁目标落雷（伤害与目标位置绑定）；陷阱的落点与目标无关 |
+| `random_strike` | 那个「立刻打出去」；陷阱是「先欠着，等人来踩」 |
+| 直接塞进 `projectiles` | 那颗弹会飞、会撞；陷阱要停着等人，且要活 15~23 秒 |
+
+车道触发**只看** `trapCooldown`：缺这个键 ⇒ 整段静默返回（**不**打日志，除非该卡真的配了别的 `trap*` 键）。
+🔴 它**不看** `inAttackRange`（普攻射程闸门）—— 陷阱落在脚下，等目标进射程才落，
+会永远落在追兵身后、一辈子踩不到。
+
+### 17.2 三段口径
+
+| 时刻 | 判定 | 伤害 | 表现 |
+| :--- | :--- | :--- | :--- |
+| 施法（CD 10s 到点） | 落点 = 脚下（`trapForward` 缺省 0） | — | `科学家_陷阱_出现` 一次性 0.4s |
+| 被踩（每帧探 `contactRadius`） | 半径内**第一个**敌方单位 | `contactDamage` = 面板 × 200/250/300% | 立刻转下一行（陷阱消失） |
+| 引爆（踩中 / 到点，同一条通道） | `radius` 内**全部**敌人 | `expireDamage` = 面板 × 180/220/280%，**均等无递减** | `科学家_陷阱爆炸` 一次性 0.6s |
+
+- 触碰半径 50、爆炸半径 100（**表值 px**，代码 × `combatDistanceScale` 0.3 落世界坐标）：
+  屏上 76.9px / 153.75px —— 判定圈与美术同源（见 17.4），不存在「看着炸到了其实没打到」；
+- 🔴 **踩中 = 两笔**：触碰那一下 + 立刻引爆。设计案原文的「1 次伤害」与「1 次额外伤害」就是这两笔，
+  不是二选一；实现上就是 `resolveContact` 返回 true 后把 `remainingSeconds` 清零，交给既有的到期通道；
+- 暴击 / 克制按**放下那一刻**的当前目标算一次，两笔共用同一个乘数（陷阱是「灌注好能量的布置物」，
+  不是「每次有人踩就重新掷一次骰」）；
+- 常驻光环的 `visualDelaySeconds = 0.4s`：`start` 与 `idle` 是两段独立美术，同帧出场会**双影**。
+  延迟靠 `startedAt` 推到未来 + `durationSeconds` 同步加上这段（视图侧由 §14.9 的闸门挡住），
+  不需要任何「播完切下一段」的接龙代码。
+
+### 17.3 🔴 两个坑
+
+1. **`behaviorKey` 必须是 `trap_place`，而且必须三处齐**：
+   `ZCStatSchema.SKILL_BEHAVIORS` 白名单（漏了读表直接抛「未注册 behaviorKey」）+
+   `ZCSkillRuntime.register('trap_place')`（漏了参数进不了运行时）+
+   `ZCVisualResourcePlan` 按它筛出三个预制体（漏了**不报错**，技能照常结算、屏幕上一个像素都没有）。
+   注意这行**不是**该卡的 `unitId:pvpSkillId` 首行（首行是穿甲苔刺的 `skill_params`），
+   所以运行时里的 `behaviorKey` 仍是 `skill_params` —— 陷阱车道靠 `trapCooldown` 认领，不靠它。
+2. **触碰只打第一个**：同一帧两个人一起踩进来，也只由先到的那个引爆。全打一遍等于白送一份额外伤害，
+   与设计案「收到 1 次伤害」不符。
+
+### 17.4 三个预制体（`tools/build_scientist_trap_fx.py`）
+
+| 预制体 | 帧 | sample | wrapMode | 时长 | 烘焙缩放 / 画布 |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `科学家_陷阱/科学家_陷阱_出现` | `start00~11` 12 | 30 | 1（一次性） | 0.4s | 0.471626 / 167×61 |
+| `科学家_陷阱/科学家_陷阱` | `idle00~11` 12 | 12 | 2（循环） | 1.0s 一圈 | 0.471626 / 167×61 |
+| `科学家_陷阱爆炸/科学家_陷阱爆炸` | 18 | 30 | 1（一次性） | 0.6s | 0.613772 / 262×234 |
+
+- `start` 与 `idle` **共用同一个裁切框**、反算缩放的分母只看 idle 帧（`alpha > 60` 的可见宽 76.9px）；
+- 爆炸的 153.8px 正好等于「爆炸半径 100 × 2 × 0.76875」——**判定与美术同一个数**反推出来的；
+- 🔴 **必须三个 prefab**：`cc.AnimationClip` 的 `wrapMode` 管**整段**，做不出「先播一次再无限循环」；
+  `ZCCombatEffectView` 也只在 `mountVisual` 时播默认 clip，不会自己接龙；
+- 生成段的 `durationSeconds` 必须 ≥ 动画总长（0.4s），爆炸段同理（0.6s ≈ `ZC_TRAP_EXPIRE_SECONDS`）。
+
+### 17.5 配表与产物落点
+
+- 两份 JSON（`assets/remoteRef` / `doc/塔防数据配置/json/client`）的 `pvpSkillPlan` + `armySkillLevelUp`：
+  `tools/config/patch_scientist_trap.js`（幂等；自查「三档参数齐 / 无旧键 / 两份逐格一致 / `statusId` 已清空」）；
+- 源表 `J-技能表.xlsx / PVP技能配置`：`patch_magdi_skill_rows_excel.py 103504`（upsert 3 行）；
+- 源表 `K-卡牌升级.xlsx / 卡牌技能升级表` B/C：`patch_skill_k_desc_excel.py 103504`；
+- 技能设计案第 **175** 行：`patch_skill_design_scientist_trap.py`
+  （顺带修掉 G 列链号笔误 103503 → **103504**；K/L/M/N/O/P 从空补全，S 待规划 → 已实现）；
+- `modifierId` 94035041 / 42 / 43；`unlockHeroLevel` 1 / 20 / 25；`triggerEvent=active`、`skillKind=active_cd`；
+- `trapCooldown = 10` 抄的是设计案 **J 列**（不是惯例的 12）—— 这一格是数字格，读表时别只看文字格。
+
+新描述（卡片与技能案同一句）：
+
+> 冷却 10 秒：在脚下留下一个持续 15/18/23 秒的陷阱，敌人踩中立刻受到 200%/250%/300% 攻击力伤害并引爆；
+> 爆炸半径 100px，范围内所有敌人均等受到 180%/220%/280% 攻击力伤害（不递减）；无人踩中则到时自动引爆
+
+### 17.6 守卫（`tests/zcds-scientist-trap.test.ts`，13 条）
+
+| 条 | 钉什么 |
+| :--- | :--- |
+| 三档参数真值 | 15/18/23、200/250/300、180/220/280、CD 10、两半径 50/100、`trapForward 0` |
+| 旧占位清干净 | `skillName` 精密陷阱、`statusId` 必须为 null（不能白送 stun） |
+| 两份产物一致 | 7 个字段逐格对拍 |
+| 卡面同步 | `armySkillLevelUp.name/desc` 与 `pvpSkillPlan.desc` 逐字相同 |
+| 双登记 + 资源计划 | 白名单 / 注册表 / 三条路径都进 `effectPaths`；未登记的卡一条都不多收 |
+| 预制体落盘 | 12/12/18 帧、wrapMode 2/1/1、sample 12/30/30、时长常量同源 |
+| 放置 | 落点在脚下（目标在 900 远处也不偏）、两段伤害 60/54、`wavesLeft 0`、生成事件 0.4s |
+| 参数不全 | 缺任一参数 ⇒ `false`，一个区域都不建 |
+| 触碰 | 只打第一个、随后当场引爆、爆炸内的人吃 54、半径外 0 |
+| 到点自爆 | 没人踩也炸、范围内**每人都是满额 54** |
+| 延迟出场 | `startedAt = now + 0.4`、`durationSeconds = 0.4 + 剩余` |
+| 冷却 | 开局不立刻放、到点才放（射程闸门恒 false 照放）、被拒不推进 CD |
+
+## 18. 施法动作窗口与 buff 类原地锁（2026-11-13）
+
+> 用户口径：「角色使用技能的表现调整，当角色在移动中，释放任意的主动技能都需要角色要播放攻击动作
+> （当前已经是攻击动作就无需打断），释放 buff 类技能（回血，加伤害）时要打断 walk，停止在原地
+> （不影响攻击），匹配对应的特效或数字加成的动画播放时间结束才继续」。
+
+### 18.1 拆成两个字段，两件事互不耦合
+
+| 字段 | 谁写 | 谁读 | 语义 |
+| :--- | :--- | :--- | :--- |
+| `castActionUntil` | **所有**主动车道真放出去那一刻 | `ZCUnitView` 的 `casting` | 截止前把片段换成 `attackClip`。**不动 `battleState`、不挡移动、不挡攻击** |
+| `castHoldUntil` | 只有 `self_cast`（buff 类） | `ZCUnitSystem.updateUnit` | 截止前留在原地（`idle`），**但照样出拳** |
+
+两条时长都是 `0.5s`，收在 `assets/script/app/zcds/model/ZCUnitCastAction.ts`
+（`ZC_SKILL_CAST_ACTION_SECONDS` / `ZC_SELF_CAST_HOLD_SECONDS`，文件必须保持**无 `cc` 依赖**）。
+
+🔴 **不要拿 `selfCastSeconds` 当停顿时长。** 那是**增益持续秒**（4~8 秒），
+拿它来停就是「站桩半局」。同理「施法动作该多久」本质是**动画片段时长**，属于表现、不属于数值槽 ——
+与 `ZC_BLINK_CAST_EFFECT_SECONDS`（瞬间移动特效 0.75s）同一条理由。
+真要逐档不同再单独加参数，别顺手往 `pvpSkillPlan.skillParamJson` 里塞列（那张表三写）。
+
+### 18.2 只在「真放出去」之后写
+
+| 车道 | 写入点 | `hold` |
+| :--- | :--- | :--- |
+| `self_cast`（自愈 / 嗜血 / 迅击 / 狂暴） | `applySelfCast` 消费 CD 之后 | **true** |
+| `secondary`（副轨扇形） | `castSecondary` 返回 `true` | false |
+| `self_aura`（无尘禁土 / 喷射火焰） | `castSelfAura` 返回 `true` | false |
+| `bolt_strike`（五雷轰顶） | `castBolt` 返回 `true` | false |
+| `trap_place`（精密陷阱） | `castTrap` 返回 `true` | false |
+| `random_strike`（多点打击） | `strike()` 命中 > 0 时 | false |
+| `blink_strike`（移形换影） | `blinkTo` **之后**（落点播） | false |
+
+🔴 **待触发 / 被拒不写。** 那两条路径是「CD 保持就绪、下一帧再试」的每帧循环，
+写下去等于角色原地抖个不停。`tests/zcds-unit-cast-action.test.ts` 第 4 条钉住这件事。
+
+`self_aura` 刻意**不锁**：无尘禁土 / 喷射火焰本来就跟着人走（`auraFollow`），
+锁在原地会把「边跑边喷」变成站桩喷火 —— 那几个是有独立设计口径的，别一起改。
+
+### 18.3 `ZCUnitSystem` 的锁分支放在哪、为什么
+
+在 `attack` 分支**之后**、`tryStartDash` **之前**：
+
+- 放 `attack` 之后 ⇒ 「当前已经是攻击动作就无需打断」，正在播的那一拳照常播完再掉回 `idle`；
+- 放 `tryStartDash` 之前 ⇒ 锁定期内不许起冲（冲刺是普攻本身，会把人带走）；
+- 锁内的出手判据与 `idle` 分支同源（有目标 + 在射程内 + `now >= nextAttackAt` ⇒ `startAttack`），
+  对应括号里那句「不影响攻击」。
+
+写法照抄 `dashRecoverUntil`（冲刺后原地待机）。两者唯一的区别：那个连索敌都不做
+（「冷却期间静止在原地播待机动作」），这个**保留出手**。
+
+到期时 `castHoldUntil = undefined` 交回常规状态机；`castActionUntil` **不清零**——
+视图只做「`now < until`」的绝对比较，留着比清掉更安全（快照重放更确定）。
+
+🔴 视图那半句还多一个 `unit.battleState !== 'dead'`：自愈本来就常在残血时放，
+落地半秒内被打死的话，窗口没到期会让**尸体保持出拳姿势** —— 与 `unit.charging`
+「每帧先清、别把出拳姿势带进 idle」是同一类事故。
+
+### 18.4 守卫（`tests/zcds-unit-cast-action.test.ts`，9 条）
+
+| 条 | 钉什么 |
+| :--- | :--- |
+| 常量 | 两条都是 0.5、量级在 0.2~1.5 之间、`ZCUnitCastAction.ts` 无 `cc` 依赖 |
+| buff 类 | 出手时**同时**写两个字段；`selfCastSeconds = 0`（只回血）也要锁 |
+| 其余六条车道 | 都写 `castActionUntil`、`castHoldUntil` 一律 `undefined` |
+| 待触发 | 闸门关着 ⇒ 一个字段都不写；目标进范围当帧补写 |
+| 打断 walk | 锁内不调 `advanceTowardUnit`、`battleState` 压回 `idle` |
+| 到期恢复 | 字段清空、切回 `move`、下一帧真的开始挪 |
+| 不影响攻击 | 锁内射程内有目标 + CD 到点 ⇒ `attack`；CD 没到就站着等 |
+| 不打断出拳 | `attack` 分支在锁之前，`stateTime` 照常推进 |
+| 视图 + 快照 | `casting` 进了那条三元、重播判据只认 `attacking`、两个字段登记进 codec 白名单 |

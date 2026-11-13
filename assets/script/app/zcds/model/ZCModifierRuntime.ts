@@ -36,11 +36,32 @@ export interface ZCGeneralStarSelection {
     star: number;
 }
 
+/**
+ * 服务端下发的**增量**属性。
+ *
+ * 字段与 `app/battle/BattleStartModel` 的 `ZCBattleHeroModifier` 一致，这里重复声明是为了
+ * 不让 `zcds/model` 反向 import `app/battle`（structural 类型，调用方直接传即可）。
+ */
+export interface IZCServerStatModifier {
+    readonly statId: 'attack' | 'maxHp';
+    /** `add` 进 flat，`addRate` 进 rate（`-0.2` = -20%）。 */
+    readonly operation: 'add' | 'addRate';
+    readonly value: number;
+}
+
 /** client/server 交给战斗编译器的构筑快照；修改器 id 仍会在开战前经过 PVP 白名单。 */
 export interface ZCCombatBuildSelection {
     unitId: string;
     /** 服务端卡牌绝对属性；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。 */
     serverAttributes?: Readonly<Partial<Pick<ZCUnitDefinition, 'attack' | 'maxHp'>>>;
+    /**
+     * 服务端增量属性（`attack.add` / `attack.addRate`）。
+     *
+     * 与 {@link serverAttributes} 分工：那边是"最终绝对值"（override，priority 1000），
+     * 这里是"相对增/减"，priority 900 —— 同时到达时先算增量、再由绝对值定值。
+     * 走的是成长/技能同一条累加通道：`add` 累加后乘 `1 + addRate`。
+     */
+    serverModifiers?: readonly IZCServerStatModifier[];
     level?: number;
     /** 英雄养成等级：用于按 unlockHeroLevel 自动选择 J 表中的技能升级档。 */
     heroLevel?: number;
@@ -630,17 +651,30 @@ export function compileZCCombatBuild(
     append(selection.equipmentModifierIds, 'equipment');
     append(selection.gemModifierIds, 'gem');
     append(selection.skillModifierIds, 'skill');
-    if (selection.serverAttributes) {
+    if (selection.serverAttributes || selection.serverModifiers?.length) {
         const typedModifiers: ZCTypedModifier[] = [];
         for (const statId of ['attack', 'maxHp'] as const) {
-            const value = selection.serverAttributes[statId];
+            const value = selection.serverAttributes?.[statId];
             if (value === undefined) continue;
-            if (!Number.isFinite(value) || value < 0 || (statId === 'maxHp' && value === 0)) {
+            if (!Number.isFinite(value) || (statId === 'maxHp' && value === 0)) {
                 throw new Error(`[ZCModifierRuntime] 服务端英雄属性无效：${selection.unitId}:${statId}=${value}`);
             }
             typedModifiers.push({
                 sourceId: selection.unitId, sourceKind: 'server', targetUnitId: selection.unitId,
                 domain: 'unit', statId, operation: 'override', value, priority: 1000,
+            });
+        }
+        for (const modifier of selection.serverModifiers ?? []) {
+            if (!Number.isFinite(modifier.value)) {
+                throw new Error(`[ZCModifierRuntime] 服务端英雄增量属性无效：`
+                    + `${selection.unitId}:${modifier.statId}.${modifier.operation}=${modifier.value}`);
+            }
+            typedModifiers.push({
+                sourceId: selection.unitId, sourceKind: 'server', targetUnitId: selection.unitId,
+                domain: 'unit', statId: modifier.statId, operation: modifier.operation,
+                value: modifier.value,
+                //  低于 override：服务端绝对值仍压过增量，两者同时到达时增量先算、绝对值定值。
+                priority: 900,
             });
         }
         if (typedModifiers.length) result.push({
@@ -710,14 +744,19 @@ export function resolveZCUnitDefinition(
     loadouts: readonly ZCCompiledModifierLoadout[],
     rates?: IZCBattleRates,
 ): ZCUnitDefinition {
-    const server = loadouts.filter((loadout) => loadout.sourceKind === 'server');
-    const definition = resolveZCModifiedUnitDefinition(base, loadouts.filter((loadout) => loadout.sourceKind !== 'server'));
-    const scaled = !rates ? definition : {
+    const definition = resolveZCModifiedUnitDefinition(base, loadouts);
+    if (!rates) return definition;
+    const serverOverrides = loadouts
+        .filter((loadout) => loadout.sourceKind === 'server' && loadout.targetUnitId === base.unitId)
+        .flatMap((loadout) => loadout.typedModifiers)
+        .filter((modifier) => modifier.domain === 'unit' && modifier.operation === 'override');
+    return {
         ...definition,
-        attack: rates.attackRate === undefined ? definition.attack : definition.attack * rates.attackRate,
-        maxHp: rates.hpRate === undefined ? definition.maxHp : definition.maxHp * rates.hpRate,
+        attack: rates.attackRate === undefined || serverOverrides.some((modifier) => modifier.statId === 'attack')
+            ? definition.attack : definition.attack * rates.attackRate,
+        maxHp: rates.hpRate === undefined || serverOverrides.some((modifier) => modifier.statId === 'maxHp')
+            ? definition.maxHp : definition.maxHp * rates.hpRate,
     };
-    return server.length ? resolveZCModifiedUnitDefinition(scaled, server) : scaled;
 }
 
 /**

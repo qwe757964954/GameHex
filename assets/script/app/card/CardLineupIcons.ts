@@ -25,7 +25,10 @@ export function loadIconByArtPath(artPath: string): Promise<SpriteFrame | null> 
     return artCache.load(artPath);
 }
 
-/** 卡牌阵容页美术（`image/card`）：卡面 `common_img_kp_*`、站台 `kpzr_stage`、垫盘 `kpzr_di_*`。 */
+/**
+ * 阵容页旧版卡面 / 站台图（image/card）。
+ * 新版固定图在 CardArtProvider 里直接走 image/card_lineup，别再往这里加映射。
+ */
 export function loadLineupArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, CARD_ART_ROOT);
 }
@@ -36,12 +39,8 @@ export function loadCardDetailArt(name: string): Promise<SpriteFrame | null> {
 }
 
 /**
- * 营地雕像与职业图标（`icons/card`）：`camp_*` / `class_*` / `common_img_{职业}0*`。
- *
- *  这几类图**不在** `image/card` 里，用 `loadLineupArt` 取会静默返回 `null`
- * （只打一条 warn，界面留着 prefab 占位图）—— 2026-09-15 美术收编时踩过。
- * 2026-09-17（r172）美术又把它们从 `image/icon` 挪进了 `image/icon/card` 子目录，
- * 同样只表现为静默留白；根目录一律取 `ICON_ART_ROOT`，别再写死。
+ * 营地雕像和职业图标（icons/card）。这几类不在 image/card，
+ * 用 loadLineupArt 取只会静默拿空，根目录统一走 ICON_ART_ROOT。
  */
 export function loadIconArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, ICON_ART_ROOT);

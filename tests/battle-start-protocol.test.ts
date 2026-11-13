@@ -468,15 +468,52 @@ test('英雄附加属性按卡牌升级表归一化，坏值不覆盖合法值�
             { attrId: 'hp', value: '180' }, { attrId: 'attack', value: 'NaN' },
             { attrId: 'buildingHp', value: '-1' }, { attrId: 'maxHp', value: '' },
         ] },
-        { heroId: 102, attrs: [{ attrId: 'attack', value: '12.5' }] },
+        { heroId: 102, attrs: [
+            { attrId: 'attack', value: '-12.5' }, { attrId: 'maxHp', value: '-73.25' },
+            { attrId: 'buildingHp', value: '-175.75' },
+        ] },
+        { heroId: 104, attrs: [
+            { attrId: 'attack', value: '19.75' }, { attrId: 'maxHp', value: '0.5' },
+            { attrId: 'buildingHp', value: '175.25' },
+        ] },
         { heroId: 103, attrs: [{ attrId: 'maxHp', value: '0' }, { attrId: 'attack', value: 'Infinity' }] },
         { heroId: 0, attrs: [{ attrId: 'attack', value: '99' }] },
     ] });
     assert.deepEqual(normalizeBattleUnit(info as CmdBattleUnitInfo)?.heroAttrs, [
-        { heroId: 101, attributes: { maxHp: 180, attack: 0, buildingHp: 360 } },
-        { heroId: 102, attributes: { attack: 12.5 } },
+        { heroId: 101, attributes: { maxHp: 180, attack: 0, buildingHp: -1 } },
+        { heroId: 102, attributes: { attack: -12.5, maxHp: -73.25, buildingHp: -175.75 } },
+        { heroId: 104, attributes: { attack: 19.75, maxHp: 0.5, buildingHp: 175.25 } },
     ]);
     assert.deepEqual(normalizeBattleUnit(unit({ unitId: 1 }) as CmdBattleUnitInfo)?.heroAttrs, []);
+});
+
+test('英雄增量属性：statId.operation 归一到 modifiers，重复下发后覆盖前，表外 statId 仍丢弃', () => {
+    const info = unit({ unitId: 1, attrs: [
+        { heroId: 201, attrs: [
+            { attrId: 'attack.addRate', value: '-0.2' },
+            { attrId: 'maxHp.addRate', value: '-0.2' },
+            { attrId: 'attack.addRate', value: '-0.35' },
+        ] },
+        { heroId: 202, attrs: [
+            { attrId: 'attack', value: '120' },
+            { attrId: 'maxHp.add', value: '0' },
+            { attrId: 'attack.add', value: '11' },
+        ] },
+        { heroId: 203, attrs: [{ attrId: 'moveSpeed.addRate', value: '0.1' }] },
+    ] });
+    assert.deepEqual(normalizeBattleUnit(info as CmdBattleUnitInfo)?.heroAttrs, [
+        //  重复的 `attack.addRate` 只留最后一条，且保持首次出现的位置。
+        { heroId: 201, attributes: {}, modifiers: [
+            { statId: 'attack', operation: 'addRate', value: -0.35 },
+            { statId: 'maxHp', operation: 'addRate', value: -0.2 },
+        ] },
+        //  `maxHp.add = 0` 与 `maxHp = 0` 同样无意义 ⇒ 丢；`attack` 系列允许 0 / 负数。
+        { heroId: 202, attributes: { attack: 120 }, modifiers: [
+            { statId: 'attack', operation: 'add', value: 11 },
+        ] },
+        //  heroId 203 整条不出现：`moveSpeed.addRate` 不在服务端白名单（运行时只认 attack / maxHp），
+        //  不能退化成一条空属性记录去骗下游的 `hasServerAttrs`。
+    ]);
 });
 
 test('战斗单元归一化：campId 必需、heroId 去重且过滤非法', () => {

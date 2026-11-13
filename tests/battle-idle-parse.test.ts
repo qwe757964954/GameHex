@@ -6,7 +6,7 @@ import { runInNewContext } from 'node:vm';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { ScopedAssetCache } from '../assets/script/core/asset/ScopedAssetCache';
 
-function fixture() {
+function fixture(compileResult?: boolean) {
     class Prefab {}
     const paths = ['ui/game/ZCGameHUD', 'units/own/model', 'units/projectiles/effect'];
     const downloads: string[] = [];
@@ -30,7 +30,8 @@ function fixture() {
     const service = new Service({ preload: async (path: string) => { downloads.push(path); }, load: async (path: string) => {
         requests.push(path); active++; peak = Math.max(active, peak);
         await new Promise<void>(resolve => completions.push(resolve)); active--; return { path };
-    } }, { initialize: async () => {}, getTable: async () => [] });
+    } }, { initialize: async () => {}, getTable: async () => [] },
+        compileResult === undefined ? undefined : { ensureCompiled: async () => compileResult, reset() {} });
     return { Prefab, service, requests, downloads, complete() { for (const done of completions.splice(0)) done(); }, get peak() { return peak; } };
 }
 const flush = async () => { await new Promise(resolve => setTimeout(resolve, 35)); };
@@ -102,4 +103,17 @@ test('解析慢项不阻塞后续预下载，warmup 等解析链收尾后再释�
         f.complete(); await flush();
         assert.equal(f.requests.length, 2, '解析队列仍保持单通道推进');
     } finally { f.service.pauseWarmup(); f.complete(); await task; }
+});
+
+test('预编译确认会话失效后预热立即作废', async (t) => {
+    const f = fixture(false); t.after(() => f.service.clear()); await f.service.prepare();
+    const task = f.service.warmup();
+    try {
+        await flush();
+        assert.deepEqual(f.downloads, [], '会话已失效不该再拉预热清单');
+        assert.deepEqual(f.requests, [], '会话已失效不该再解析资源');
+    } finally {
+        f.service.pauseWarmup(); f.complete();
+        await Promise.race([task, new Promise<void>(resolve => { setTimeout(resolve, 50); })]);
+    }
 });

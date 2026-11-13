@@ -15,6 +15,10 @@ import {
 } from '../../../core/hex/ShakePresentation';
 import type { TerritorySite } from '../model/TerritoryMapConfig';
 import { territoryChestBubbleLayout } from '../model/TerritoryChestBubble';
+import {
+    TERRITORY_PVP_BUBBLE_WIDTH, TERRITORY_PVP_BUBBLE_HEIGHT,
+    TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE, TERRITORY_PVP_BUBBLE_PORTRAIT_Y,
+} from '../model/TerritoryLevelBubble';
 import type { ITerritoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import { TERRITORY_CONDITION_CHEST_SCALE, territoryConditionBlockLayout } from '../model/TerritoryConditionBadge';
 import {
@@ -235,6 +239,8 @@ export interface ITerritoryStationRender {
      */
     readonly levelBubbleIcon?: SpriteFrame | null;
     readonly levelBubbleFrame?: SpriteFrame | null;
+    /** 未通关 PVP：头像居中，隐藏编号文字，沿用气泡点击与生命周期。 */
+    readonly levelBubblePortrait?: SpriteFrame | null;
     /**
      * **预告关卡**的编号气泡（2026-11-11）。这一格仍是「未解锁」画法（`icon: null` +
      * `isCondition: true`），但气泡要照常显示 ⇒ `renderLevelBubble` 对这一支放宽
@@ -1133,7 +1139,8 @@ export class TerritoryStationView extends Component {
     private renderLevelBubble(content: ITerritoryStationRender): void {
         const text = content.levelBubble ?? '';
         const frame = content.levelBubbleFrame ?? null;
-        const iconFrame = content.levelBubbleIcon ?? null;
+        const portrait = content.levelBubblePortrait ?? null;
+        const iconFrame = portrait ?? content.levelBubbleIcon ?? null;
         this.levelBubbleAnchorFrame = content.levelBubbleAnchorFrame ?? null;
         // 需求 2026-11-02 第 3 条：播放「宝箱还没点我」跳动时**隐藏**它的提示气泡。
         // 判据走开关（`setHintBubbleSuppressed`），不是直接关节点 —— 站点每秒会被重画一次。
@@ -1152,9 +1159,9 @@ export class TerritoryStationView extends Component {
          * 尺寸与位置全读 `model/TerritoryChestBubble`，这里不许再写数字：
          * 换图时只要那张图的自然尺寸变了，`UITransform` / 图标 / 文字位置会一起跟着走。
          */
-        const chest = iconFrame ? territoryChestBubbleLayout() : null;
-        const bubbleWidth = chest ? chest.width : MAP_MARKER_BADGE_WIDTH;
-        const bubbleHeight = chest ? chest.height : MAP_MARKER_BUBBLE_HEIGHT;
+        const chest = !portrait && iconFrame ? territoryChestBubbleLayout() : null;
+        const bubbleWidth = portrait ? TERRITORY_PVP_BUBBLE_WIDTH : chest ? chest.width : MAP_MARKER_BADGE_WIDTH;
+        const bubbleHeight = portrait ? TERRITORY_PVP_BUBBLE_HEIGHT : chest ? chest.height : MAP_MARKER_BUBBLE_HEIGHT;
         if (visible && !this.levelBubble) {
             const parent = this.badgeLabel.node.parent;
             if (!parent) throw new Error('关卡气泡缺少角标层');
@@ -1195,13 +1202,13 @@ export class TerritoryStationView extends Component {
         if (bubbleTextColor && !this.badgeLabel.color.equals(bubbleTextColor)) {
             this.badgeLabel.color = bubbleTextColor;
         }
-        this.badgeLabel.node.active = visible;
+        this.badgeLabel.node.active = visible && !portrait;
         if (!bubble) return;
         bubble.node.active = visible;
         bubble.button.interactable = visible && content.interactive;
         if (!visible) return;
         if (bubble.sprite.spriteFrame !== frame) bubble.sprite.spriteFrame = frame;
-        this.applyLevelBubbleLayout(iconFrame);
+        this.applyLevelBubbleLayout(iconFrame, portrait !== null);
         this.applyLevelBubblePosition();
     }
 
@@ -1267,7 +1274,7 @@ export class TerritoryStationView extends Component {
      *
      * ⚠️ 图标取不到时（美术没到）**退回纯数字**：宁可少个图标，也不能让宝箱没有提示。
      */
-    private applyLevelBubbleLayout(iconFrame: SpriteFrame | null): void {
+    private applyLevelBubbleLayout(iconFrame: SpriteFrame | null, isPortrait = false): void {
         const bubble = this.levelBubble;
         if (!bubble) return;
         const icon = iconFrame ? this.ensureLevelBubbleIcon() : this.levelBubbleIcon;
@@ -1280,8 +1287,9 @@ export class TerritoryStationView extends Component {
         icon.node.active = true;
         const chest = territoryChestBubbleLayout();
         const iconTransform = icon.node.getComponent(UITransform);
-        if (iconTransform) iconTransform.setContentSize(chest.iconSize, chest.iconSize);
-        icon.node.setPosition(0, chest.iconY, 0);
+        const iconSize = isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE : chest.iconSize;
+        if (iconTransform) iconTransform.setContentSize(iconSize, iconSize);
+        icon.node.setPosition(0, isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y : chest.iconY, 0);
         this.badgeLabel.node.setPosition(0, chest.textY, 0);
     }
 

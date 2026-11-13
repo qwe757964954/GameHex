@@ -2,14 +2,14 @@ import { Color, Graphics, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 
 export const BIGMAP_SKIN_COLORS = {
     text: new Color(245, 233, 205),
-    / 名字牌描边（参考图口径：白字压一圈深边，沙地/建筑上都压得住）。 */
+    /** 名字牌描边（参考图口径：白字压一圈深边，沙地/建筑上都压得住）。 */
     nameOutline: new Color(34, 30, 24, 255),
     muted: new Color(189, 180, 161),
     gold: new Color(255, 202, 92),
     dark: new Color(41, 32, 21),
-    / @deprecated 压在地图沙地上只有 1.22:1（选中态等于看不见），改用 {@link selectOuter} 双环。 */
+    /** @deprecated 压在地图沙地上只有 1.22:1（选中态等于看不见），改用 {@link selectOuter} 双环。 */
     cyan: new Color(79, 216, 228),
-    /
+    /**
      *地图上「选中」的双环配色：外深内金。
      *
      *沙地底色 `(201,176,138)` 亮度高，亮色单环最高只能到 2.09:1（纯白），
@@ -18,20 +18,20 @@ export const BIGMAP_SKIN_COLORS = {
      */
     selectOuter: new Color(20, 18, 14, 210),
     selectInner: new Color(255, 202, 92, 255),
-    / 放置预判：可放（对沙地 3.87:1）/ 不可放（5.06:1）。都配 ✓/✕，不只靠颜色。 */
+    /** 放置预判：可放（对沙地 3.87:1）/ 不可放（5.06:1）。都配 ✓/✕，不只靠颜色。 */
     placeOk: new Color(24, 92, 40, 235),
     placeBad: new Color(122, 26, 26, 235),
-    / 选中底光（暖金压 25% —— 只是「亮了一点」，不参与对比度计算）。 */
+    /** 选中底光（暖金压 25% —— 只是「亮了一点」，不参与对比度计算）。 */
     glowFill: new Color(255, 226, 150, 64),
-    / 进度环底圈 / 已建部分 / 剩余不足 1 分钟。 */
+    /** 进度环底圈 / 已建部分 / 剩余不足 1 分钟。 */
     ringUnder: new Color(28, 24, 18, 150),
     ringDone: new Color(255, 202, 92, 255),
     ringUrgent: new Color(255, 140, 90, 255),
 };
 
-/
+/**
  *世界页「领地页 HUD 皮肤」的配色真源（2026-10-22 第二轮用户口径：
- **「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式」*，
+ * 「将世界玩法的 UI 风格改成领地玩法的 ui 风格，按钮的样式，题头底板的样式，弹窗样式」，
  *追问后确认走领地页顶部 HUD 那套：半透明深色卡 + 金线，而不是底部菜单栏的木牌）。
  *
  *数值是取色取出来的，不是估的 —— 见 `image/main/hud/hud_player_card.png`：
@@ -43,44 +43,44 @@ export const BIGMAP_SKIN_COLORS = {
  *这里只服务「浮在地图上的 HUD 面板」。两套不要互相改。
  */
 export const BIGMAP_HUD_COLORS = {
-    / 面板底（深板岩，90%）—— 透出一点地图，和领地页玩家卡同一个观感。 */
+    /** 面板底（深板岩，90%）—— 透出一点地图，和领地页玩家卡同一个观感。 */
     card: new Color(72, 73, 83, 232),
-    / 更深一档：队列条 / 次级条。 */
+    /** 更深一档：队列条 / 次级条。 */
     cardDeep: new Color(46, 47, 55, 240),
-    / 行 / 卡片底（比面板亮一档，压出层次）。 */
+    /** 行 / 卡片底（比面板亮一档，压出层次）。 */
     cardLight: new Color(92, 93, 104, 236),
-    / 描边（近黑 2px）—— `hud_player_card` 的边就是这个色。 */
+    /** 描边（近黑 2px）—— `hud_player_card` 的边就是这个色。 */
     rim: new Color(7, 7, 8, 255),
-    / 铜金细线（内圈 1px）—— 领地页的金色描边在暗底上的低饱和版。 */
+    /** 铜金细线（内圈 1px）—— 领地页的金色描边在暗底上的低饱和版。 */
     line: new Color(176, 138, 78, 170),
-    / 米白正文。 */
+    /** 米白正文。 */
     cream: new Color(238, 235, 214, 255),
     muted: new Color(178, 176, 168, 255),
-    / 标题 / 强调金。 */
+    /** 标题 / 强调金。 */
     gold: new Color(245, 201, 92, 255),
-    / 压金色按钮上的文字色（深棕，不用纯黑：纯黑在暖底上发脏）。 */
+    /** 压金色按钮上的文字色（深棕，不用纯黑：纯黑在暖底上发脏）。 */
     ink: new Color(48, 34, 22, 255),
-    /
+    /**
      *危险 / 消耗不足（只能用于浅底或图标）。
      *
      * 实测对比度：压 `cardDeep` 3.55:1、压 `cardLight` 只有 1.74:1，正文（需 ≥4.5）不合格。
      *深色卡上的「不足 / 锁定」文字一律用 {@link BIGMAP_HUD_COLORS.dangerText}。
      */
     danger: new Color(214, 96, 62, 255),
-    /
+    /**
      *深色卡上的「不足 / 锁定」正文色 —— `(255,205,190)` 在 `cardLight` 上 4.57:1、`card` 上 5.6:1。
      *
      *注意它读起来更像「提示」而不是「警告」：这是深底 UI 的固有限制 —— 深底上能达到 4.5 的
      *只有浅色，所以「不足」的警示由文案（差多少）+ 位置承担，不靠红。
      */
     dangerText: new Color(255, 205, 190, 255),
-    /
+    /**
      *深色卡上的次要文字 —— `(224,220,208)` 在 `cardLight` 上 4.76:1。
      *
      *原来的 `muted(178,176,168)` 压 `cardLight` 只有 3.00、压 `card` 4.11，正文全部不合格。
      */
     mutedText: new Color(224, 220, 208, 255),
-    / 弹窗暗底（与领地页 `TerritorySiteDetail` 的 `Dim` 同值：5,10,14,205）。 */
+    /** 弹窗暗底（与领地页 `TerritorySiteDetail` 的 `Dim` 同值：5,10,14,205）。 */
     scrim: new Color(5, 10, 14, 205),
 } as const;
 
@@ -99,7 +99,7 @@ export function fitBigMapSprite(sprite: Sprite, frame: SpriteFrame | null, width
     sprite.node.setPosition(x - frame.offset.x * scale, y - frame.offset.y * scale, 0);
 }
 
-/
+/**
  *画一块领地页 HUD 卡：近黑描边 → 深板岩底 → 铜金细线，三层叠出来。
  *
  *为什么手画而不是贴 `hud_player_card` 九宫：

@@ -62,7 +62,7 @@ export function zoomBigMapBaseCamera(
     });
 }
 
-/
+/**
  *最近格吸附：给摆放用，不需要像素级精度。
  *
  *`pickBigMapBasePlot` 是精确命中六边形，六边形之间天然有空隙 —— 点偏一点就返回 -1，

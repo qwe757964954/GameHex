@@ -173,7 +173,7 @@ test('★★★视图按「有没有 icon」切两套排版：水滴走上下两
     assert.ok(stationViewSource.includes('territoryChestBubbleLayout()'),
         '视图没读 `model/TerritoryChestBubble` 的排版常量');
     // icon 与数字**各自**水平居中：x 恒为 0（并排那套是 ±total/2，已删）。
-    assert.ok(stationViewSource.includes('icon.node.setPosition(0, chest.iconY, 0)'),
+    assert.ok(stationViewSource.includes('icon.node.setPosition(0, isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y : chest.iconY, 0)'),
         'icon 没按常量放到上半区');
     assert.ok(stationViewSource.includes('this.badgeLabel.node.setPosition(0, chest.textY, 0)'),
         '数字没按常量放到下半区');
@@ -204,8 +204,8 @@ test('★★气泡尺寸按底图走：高度不能被写死成胶囊的 45', ()
     const renderBody = stationViewSource.slice(renderAt, stationViewSource.indexOf('\n    private ', renderAt + 10));
     assert.ok(renderBody.includes('nodeTransform.setContentSize(bubbleWidth, bubbleHeight)'),
         '气泡节点尺寸必须在渲染时按当前底图刷新');
-    assert.ok(renderBody.includes('const chest = iconFrame ? territoryChestBubbleLayout() : null;'),
-        '两套排版的判据必须是「有没有 icon」，别另起一套开关');
+    assert.ok(renderBody.includes('const chest = !portrait && iconFrame ? territoryChestBubbleLayout() : null;'),
+        '宝箱排版按体力图标判定，PVP 头像使用独立布局');
 });
 
 test('★★数字字号要装得进水滴：行高 ≥ 字号，且字号有明显权重', () => {

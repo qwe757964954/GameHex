@@ -6,6 +6,7 @@ import {
     Node,
     Prefab,
     Sprite,
+    SpriteFrame,
 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
@@ -29,32 +30,11 @@ import { EventMgr } from '../../framework/event/EventMgr';
 const { ccclass, property } = _decorator;
 
 /**
- * 「布阵」面板（`assets/resources/ui/card/LineupBoard.prefab`）。
+ * 布阵弹窗，盖在卡牌阵容页上。
  *
- * 对应设计稿 `卡牌阵容_队伍编辑`（720×1610）—— 它是**盖在「卡牌阵容」页上的弹窗**：
- * 上半是上阵区（8 个站台 = 2 行 × 4），中间一行职业统计，下半是可上阵卡池（5 列 × 3 行），
- * 底部「品质加成 / 一键下阵 / 保存」。
- *
- * 版式全部由 prefab 按设计稿坐标摆好（容器 667×1048，居中于 720×1280），
- * 本组件负责输入与渲染，取数、草稿和保存由外部组合会话管理。
- *
- * 容器分工：
- *   - `arenaArea` 下的 `Slots` 挂 `cc.Layout`（GRID 4×2、cellSize 125×148、间距 25/6），
- *     8 个 `LineupBoardSlot` 实例由 Layout 自动排位，增删站台不用手算坐标；
- *   - `poolArea` 下的 `ClassRow` 挂 `cc.Layout`（HORIZONTAL、spacingX 50.5，
- *     容器宽 = 4×80 + 3×50.5 = 471.5），4 个 `LineupBoardClassItem` 实例由 Layout 自动排位；
- *   - `poolArea` 下的 `PoolList` 是 `VirtualScrollView` 虚拟列表（5 列，
- *     `itemPrefab = LineupBoardCard`），行节点运行时创建、滚出可视区即回收；
- *     卡池条数跟随后端英雄列表变化，**不用再动 prefab**；
- *   - 上阵区直接按节点树顺序填数据，与 Layout 的排列一致。
- *
- * 数据来源：
- *   - 各方案的上阵卡组       ← `CmdFormationInfoReqMsg`（`formations`），页签下标 i → `formationId = i + 1`；
- *                             没有后端数据（未连接/失败/编辑器预览）时所有页签都退回本地八卡
- *   - 卡池                   ← `CmdPvpHeroInfoListReqMsg` ∩ `pvpCard`，等级上限读 `cardLevelUp.json`
- *   - 保存                   ← 外部会话调用 `CmdFormationOpReqMsg`（整份阵型覆盖）
- *
- * 交互：点一下卡池里的卡即上阵到第一个空位（再点一下下阵），不再支持拖拽。
+ * 版式都在 LineupBoard.prefab：上阵区 4×2、中间职业统计、下面是 5 列卡池，
+ * 底部品质加成 / 一键下阵 / 保存。页面只管输入和渲染，取数、草稿、保存归外部会话。
+ * 阵型读 CmdFormationInfoReqMsg，卡池是后端英雄列表 ∩ pvpCard；点卡上阵，再点一下下阵。
  */
 @ccclass('LineupBoardPage')
 export class LineupBoardPage extends PopupBase implements IBoardCardHost {
@@ -115,11 +95,17 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     @property({ tooltip: '打开界面时自动读表补齐卡组（本页独立预览需要；正式流程里已经注入过就不会再读）' })
     autoLoadDecks = true;
 
-    @property({ tooltip: '页签「选中」底色（样式放 Inspector，代码不写死颜色）' })
+    @property({ tooltip: '页签没配图时的「选中」底色（新设计稿直接切 presetActiveFrame，正常走不到这里）' })
     presetActiveColor: Color = new Color(216, 178, 96, 255);
 
-    @property({ tooltip: '页签「未选中」底色' })
+    @property({ tooltip: '页签没配图时的「未选中」底色' })
     presetIdleColor: Color = new Color(92, 70, 48, 255);
+
+    @property({ type: SpriteFrame, tooltip: '页签「选中」图（新版橙色底板 bz_btn_02）' })
+    presetActiveFrame: SpriteFrame = null!;
+
+    @property({ type: SpriteFrame, tooltip: '页签「未选中」图（新版深灰底板 ba_btn_01）' })
+    presetIdleFrame: SpriteFrame = null!;
 
     @property({ tooltip: '保存成功后是否关闭面板（默认不关，方便连续改几个方案）' })
     closeAfterSave = false;
@@ -129,7 +115,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
     /**
      * 卡池数据 + 预先备好的美术。
-     * `VirtualScrollView.renderItemFn` 是**同步**回调（滚动中随时触发），
+     * `VirtualScrollView.renderItemFn` 是同步回调（滚动中随时触发），
      * 不能在里 await，所以美术必须在灌数据前全部缓存好。
      */
     private poolCards: readonly ZCDeckCard[] = [];
@@ -143,11 +129,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     private arenaSlotCache: LineupBoardSlot[] | null = null;
 
     /**
-     * 按「从上到下、从左到右」排同组实例（一行内 y 相同，所以先比 y 再比 x）。
-     *
-     * **只留给 `PresetRow` 用**：那 4 个布阵方案页签是**没有 Layout** 的手摆节点，坐标是唯一真源。
-     * 挂了 Layout 的容器（`Arena/Slots` / `ClassRow`）不要用这里 —— 它们的坐标就是 Layout 按
-     * 兄弟顺序算出来的，再按坐标排序等于原地转圈，顺序直接取节点树就行。
+     * 按从上到下、从左到右排同组节点，只给没挂 Layout 的 PresetRow 用。
+     * Arena/Slots、ClassRow 的顺序直接取节点树，别按坐标再排一遍。
      */
     private static gridOrder<T extends { node: Node }>(items: readonly T[]): T[] {
         return items.slice().sort((a, b) => {
@@ -163,7 +146,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         this.resetLabel.string = CARD_LINEUP_TEXTS.boardResetAll;
         this.saveLabel.string = CARD_LINEUP_TEXTS.boardSave;
 
-        //  CLICK 是挂在**节点**上的（Button 自身没有 on），别写成 button.on(...)。
+        //  CLICK 是挂在节点上的（Button 自身没有 on），别写成 button.on(...)。
         //  三个字段都直接声明成 `cc.Button`（Inspector 拖组件），所以不需要 getComponent。
         this.resetButton.node.on(Button.EventType.CLICK, this.onResetAll, this);
         this.saveButton.node.on(Button.EventType.CLICK, this.onSave, this);
@@ -210,11 +193,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     /**
-     * 上阵区 8 个站台，下标 = 卡组下标。**顺序直接取节点树顺序**。
-     *
-     * `Arena/Slots` 挂着 GRID Layout（cell 125×148、间距 25/6），它按**子节点顺序**从左上排到右下，
-     * 坐标就是它的产物 —— 再按坐标反推一遍顺序是原地转圈（兄弟顺序真错了，坐标也跟着错，
-     * 排序只会还原成同一个顺序，救不回来）。
+     * 上阵区 8 个站台，下标就是卡组下标。
+     * Slots 挂了 Grid Layout，这里直接取节点树顺序，不按坐标反推。
      */
     private arenaSlots(): readonly LineupBoardSlot[] {
         if (!this.arenaSlotCache) {
@@ -235,8 +215,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         }));
         if (scope.disposed || !this.alive || revision !== this.arenaRevision) return;
         for (let index = 0; index < slots.length; index += 1) {
-            // 站台实例是 prefab 预建的、长期存活；tapHost 每次刷新都重指一次，
-            // 与 applyPoolItem 里 `view.tapHost = this` 同一约定（节点复用后宿主不能悬空）。
+            // 站台会长期存活，但宿主每次刷新仍要重指，避免节点复用后悬空。
             slots[index].tapHost = this;
             const item = ready[index];
             if (!item) {
@@ -257,12 +236,8 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     /**
-     * 卡池：驱动 `Pool/PoolList` 的虚拟列表渲染。
-     *
-     * 行节点由 `VirtualScrollView` 创建 / 复用 / 回收，本方法只做两件事：
-     * **先把美术全部异步备好**，再交付一个**同步**的 `renderItemFn`
-     * （滚动中随时回调，不能在里面 await）。卡池内容来自后端英雄列表；是否
-     * 「已上阵」仍按当前八卡 id 集合判断。
+     * 卡池：驱动 PoolList 的虚拟列表。
+     * 先把图异步备好，再交同步的 renderItemFn；滚动回调里不能 await。
      */
     private async renderPool(pool: readonly ZCDeckCard[]): Promise<void> {
         if (pool === this.poolCards && this.poolArt.size > 0) { this.rerenderPoolItems(); return; }
@@ -276,8 +251,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
             art.set(card.id, await cardArtProvider.loadBoardCard(card, this.art));
         }));
 
-        //  预加载期间面板可能已经关了。必须在这里挡：节点一销毁，`poolList` 也会被释放，
-        // 再往下走就会往已释放的列表上写，把真正的原因盖掉。
+        // 预加载期间面板可能已经关了，节点销毁后 poolList 也没了，先在这挡一下。
         if (scope.disposed || !this.alive || revision !== this.poolRevision) return;
         this.poolArt = art;
 
@@ -292,7 +266,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     /**
-     * 把第 `index` 张卡灌进一个行节点（新建或回收来的）。**必须同步**。
+     * 把第 `index` 张卡灌进一个行节点（新建或回收来的）。必须同步。
      */
     private readonly applyPoolItem = (node: Node, index: number): void => {
         const card = this.poolCards[index];
@@ -306,8 +280,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     };
 
     /**
-     * 只重刷**当前可见**的卡（勾选态变化后用）。
-     * 虚拟列表外滚出可视区的行节点是回收复用的，不需要也不应该去改它们。
+     * 只刷当前可见的卡（勾选态变化后用），滚出可视区的行不用管。
      */
     private rerenderPoolItems(): void {
         const list = this.poolList;
@@ -326,9 +299,17 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         const items = this.classBar.getComponentsInChildren(LineupBoardClassItem);
         for (let index = 0; index < items.length; index += 1) {
             const cardClass = this.art.lineup.classes[index]?.id ?? ZC_CARD_CLASSES[index];
-            const { on } = await cardArtProvider.loadClassFrames(cardClass, this.art);
+            const tally = tallies[index] ?? null;
+            // 职业统计行用白色计数图标，不用卡牌栏的亮/暗两态。
+            const frame = await cardArtProvider.loadTallyFrames({
+                kind: 'class',
+                key: cardClass,
+                name: this.art.lineup.classes[index]?.name ?? '',
+                count: tally?.count ?? 0,
+                reached: tally?.reached ?? false,
+            }, this.art);
             if (scope.disposed || !this.alive || revision !== this.classRevision) return;
-            items[index].render(tallies[index] ?? null, on);
+            items[index].render(tally, frame);
         }
     }
 
@@ -350,7 +331,14 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         this.presetIndex = Math.max(0, Math.min(presets.length - 1, Math.round(index)));
         for (let i = 0; i < presets.length; i += 1) {
             const bg = presets[i].node.getComponent(Sprite);
-            bg.color = i === this.presetIndex ? this.presetActiveColor : this.presetIdleColor;
+            const active = i === this.presetIndex;
+            const frame = active ? this.presetActiveFrame : this.presetIdleFrame;
+            if (frame) {
+                bg.spriteFrame = frame;
+                bg.color = Color.WHITE;
+            } else {
+                bg.color = active ? this.presetActiveColor : this.presetIdleColor;
+            }
         }
     }
 

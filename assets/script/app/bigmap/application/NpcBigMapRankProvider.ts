@@ -1,4 +1,4 @@
-/
+/**
  *单机 / 离线档的榜单实现 —— 行为与「接服务器之前」等价（单人、无拥挤）。
  *
  *联机版应当平级再写一个 `RemoteBigMapRankProvider`（走 `ReqBigMapCityInfo`），

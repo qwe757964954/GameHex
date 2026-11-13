@@ -1,4 +1,4 @@
-/
+/**
  *存档结构 —— 纯数据 + 纯函数，不碰 `sys.localStorage`（引擎 I/O 在 application 适配器里）。
  *
  *存档必须能「坏」，所以读盘后一律走 `normalizeBigMapSave` 修一遍：
@@ -18,16 +18,16 @@ import { bigMapClampQueueUnlocked, bigMapPlotCenterHexId, createBigMapBaseState 
 import { createBigMapBattleProgress, type IBigMapBattleProgress } from './BigMapBattle';
 import type { IBigMapCityDayScore, IBigMapDaySnapshot } from './BigMapSnapshot';
 
-/ 存档版本：结构变更时 +1，`normalize` 里按版本补字段（v2 加当日快照）。 */
+/** 存档版本：结构变更时 +1，`normalize` 里按版本补字段（v2 加当日快照）。 */
 export const BIGMAP_SAVE_VERSION = 2;
 
 export interface IBigMapSaveData {
     readonly version: number;
     readonly base: IBigMapBaseState;
     readonly battle: IBigMapBattleProgress;
-    / 上次保存的逻辑秒（离线产出按它算）。 */
+    /** 上次保存的逻辑秒（离线产出按它算）。 */
     readonly savedAt: number;
-    / 最近一次当日战绩快照（22:00 定格）；没出过就是 `null`。 */
+    /** 最近一次当日战绩快照（22:00 定格）；没出过就是 `null`。 */
     readonly snapshot: IBigMapDaySnapshot | null;
 }
 
@@ -41,7 +41,7 @@ export function createBigMapSave(config: IBigMapConfig, now: number): IBigMapSav
     };
 }
 
-/
+/**
  *快照清洗：结构不对就整份丢掉（快照只是展示用，丢了不影响玩法进度）。
  *
  *注意别「部分保留」：半份快照会让「昨日战绩」出现缺城或名次错位，比没有更容易误导。
@@ -102,7 +102,7 @@ function sanitizeBuilding(
     };
 }
 
-/ 修档：不认识的东西一律丢，认识的字段一律夹到合法区间。 */
+/** 修档：不认识的东西一律丢，认识的字段一律夹到合法区间。 */
 export function normalizeBigMapSave(
     raw: unknown,
     config: IBigMapConfig,
@@ -215,7 +215,7 @@ export function normalizeBigMapSave(
     };
 }
 
-/ 序列化：只写必要字段，避免把整份配置/世界塞进存档。 */
+/** 序列化：只写必要字段，避免把整份配置/世界塞进存档。 */
 export function serializeBigMapSave(save: IBigMapSaveData): string {
     return JSON.stringify({
         version: save.version,
@@ -250,7 +250,7 @@ export function serializeBigMapSave(save: IBigMapSaveData): string {
     });
 }
 
-/ 反序列化：解析失败/版本不认识都退回新档，绝不抛错到界面。 */
+/** 反序列化：解析失败/版本不认识都退回新档，绝不抛错到界面。 */
 export function parseBigMapSave(
     text: string | null | undefined,
     config: IBigMapConfig,

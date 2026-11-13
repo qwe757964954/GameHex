@@ -23,6 +23,13 @@ import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
  */
 export const TERRITORY_ASYNC_PVP_BUBBLE_TEXT = 'PVP';
 
+/** 未通关 PVP 复用玩家头像与红色九宫格气泡，通关后恢复原编号牌。 */
+export const TERRITORY_PVP_BUBBLE_PORTRAIT_PATH = 'icons/head/icon_hero_head_40018/spriteFrame';
+export const TERRITORY_PVP_BUBBLE_WIDTH = 60;
+export const TERRITORY_PVP_BUBBLE_HEIGHT = 66;
+export const TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE = 46;
+export const TERRITORY_PVP_BUBBLE_PORTRAIT_Y = 3;
+
 /** 算文案只需要站点类型 / 是否绑了关卡，收窄到这两个字段就不必拖整个站点对象。 */
 export type TerritoryBubbleSite = Pick<TerritorySite, 'type'>;
 

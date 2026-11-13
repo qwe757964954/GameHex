@@ -631,6 +631,7 @@ export class TerritoryModel {
         background: null,
         levelBubbleFrame: null,
         levelBubblePendingFrame: null,
+        pvpBubblePortrait: null,
         // 宝箱提示气泡里的体力 icon（地图还没加载时页面会用这套空图，别让类型少一项）。
         staminaIcon: null,
         // 地皮三态（未通关 / 已通关 / **被前置卡住时置灰**）+ 四张「已解锁未通关」的格面框，

@@ -4,7 +4,7 @@ import test from 'node:test';
 import { compileZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { readFileSync, readdirSync } from 'node:fs';
 import { neutralResourceItemOf } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
-import { ZCNeutralFeatureSystem, isZCAwakeMonster } from '../assets/script/app/zcds/model/systems/ZCNeutralFeatureSystem';
+import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from '../assets/script/app/zcds/model/systems/ZCNeutralFeatureSystem';
 import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
@@ -15,7 +15,7 @@ import { ZCTileSystem } from '../assets/script/app/zcds/model/systems/ZCTileSyst
 import { ZCEconomySystem } from '../assets/script/app/zcds/model/systems/ZCEconomySystem';
 import { ZCCaptureSystem } from '../assets/script/app/zcds/model/systems/ZCCaptureSystem';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
-import type { ZCCombatTarget, ZCProjectileState, ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import type { ZCCombatTarget, ZCProjectileState, ZCHexState, ZCSnapshot } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCDamageSource } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import type { ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
@@ -59,7 +59,7 @@ test('常规随机池每张地图都投放趣味资源，源预设与发布资�
     }
 });
 
-function fixture(type = 7, param: Record<string, unknown> = gateParam, activateGate = true) {
+function fixture(type = 7, param: Record<string, unknown> = gateParam, activateGate = true, patrol = false) {
     loadPvpTables(tables);
     configureZCMap(JSON.parse(readFileSync('assets/resources/config/maps/normal.json', 'utf8')));
     const base = captureZCMatchConfig();
@@ -81,6 +81,9 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     const hex = state.hexes.find(hex => config.map.hexes[hex.id].playable && hex.owner === 'neutral'
         && config.map.hexes[hex.id].neighbors.length === 6);
     assert.ok(hex);
+    if (patrol) config.map.resourcePoints = [{ row: config.map.hexes[hex.id].row,
+        column: config.map.hexes[hex.id].column, groupId: 14001,
+        patrolCells: [hex.id, ...config.map.hexes[hex.id].neighbors] }];
     hex.neutralResourceId = 1400101;
     let clones = 0;
     const batches: number[] = [];
@@ -107,6 +110,111 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     });
     return { config, state, hex, system, unit, batches, structureHits, clones: () => clones };
 }
+
+test('野怪唤醒后按快照时间轴巡逻，遇敌暂停、离开后继续且不越出范围', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    const center = f.config.map.hexes[f.hex.id];
+    f.system.tick(f.state);
+    assert.equal(f.hex.neutralFeature.patrol, undefined, '沉睡时不巡逻');
+    f.hex.neutralFeature.awake = true;
+    f.system.tick(f.state);
+    const segment = f.hex.neutralFeature.patrol;
+    assert.ok(segment);
+    assert.ok(center.neighbors.includes(segment.toHexId));
+    f.state.elapsedSeconds = segment.startedAt + segment.durationSeconds / 2;
+    const position = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
+    const end = f.config.map.hexes[segment.toHexId];
+    assert.equal(position.x, (center.x + end.x) / 2);
+    assert.equal(position.y, (center.y + end.y) / 2);
+    const attacker = f.unit(1);
+    attacker.freeX = position.x; attacker.freeY = position.y;
+    f.state.units = [attacker];
+    f.system.tick(f.state);
+    assert.ok(attacker.hp < 100);
+    assert.equal(segment.pausedAt, f.state.elapsedSeconds);
+    f.state.elapsedSeconds += 3;
+    f.system.tick(f.state);
+    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), position);
+    f.state.units = [];
+    f.system.tick(f.state);
+    assert.equal(segment.pausedAt, undefined);
+    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), position);
+    for (let i = 0; i < 30; i += 1) {
+        f.state.elapsedSeconds += 2;
+        f.system.tick(f.state);
+        assert.ok(f.config.map.resourcePoints[0].patrolCells.includes(segment.toHexId));
+    }
+});
+
+test('巡逻受建筑阻塞时等待，清除后恢复；快照拒绝非法移动段', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    f.hex.neutralFeature.awake = true;
+    for (const id of f.config.map.hexes[f.hex.id].neighbors) f.state.hexes[id].building = 'tower';
+    f.system.tick(f.state);
+    assert.equal(f.hex.neutralFeature.patrol.toHexId, f.hex.id);
+    for (const id of f.config.map.hexes[f.hex.id].neighbors) f.state.hexes[id].building = 'none';
+    f.system.tick(f.state);
+    const segment = f.hex.neutralFeature.patrol;
+    assert.notEqual(segment.toHexId, f.hex.id);
+    assert.equal(ZCGameModel.isValidSnapshot(f.state, f.config), true);
+    const restored = JSON.parse(JSON.stringify(f.state));
+    f.system.initialize(restored);
+    f.state.elapsedSeconds = restored.elapsedSeconds = segment.durationSeconds / 2;
+    f.system.tick(f.state); f.system.tick(restored);
+    assert.deepEqual(f.state.hexes[f.hex.id].neutralFeature, restored.hexes[f.hex.id].neutralFeature);
+    const midpoint = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
+    f.state.hexes[segment.toHexId].wallHp = 10;
+    f.system.tick(f.state);
+    f.state.elapsedSeconds += 2;
+    f.system.tick(f.state);
+    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), midpoint, '行进途中出现城墙时暂停');
+    f.state.hexes[segment.toHexId].wallHp = 0;
+    f.system.tick(f.state);
+    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), midpoint, '解除阻塞时不瞬移');
+    for (const invalid of [{ toHexId: -1 }, { durationSeconds: -1 }, { startedAt: NaN }, { startedAt: f.state.elapsedSeconds + 1 }, { toHexId: f.config.map.homes[0] }]) {
+        const bad = JSON.parse(JSON.stringify(f.state));
+        Object.assign(bad.hexes[f.hex.id].neutralFeature.patrol, invalid);
+        assert.equal(ZCGameModel.isValidSnapshot(bad, f.config), false);
+    }
+});
+
+test('巡逻中的索敌、近战锁定和弹道共用当前位置，恢复一致且死亡只结算一次', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    f.hex.neutralFeature.awake = true;
+    f.system.tick(f.state);
+    f.state.elapsedSeconds = f.hex.neutralFeature.patrol.durationSeconds / 2;
+    const position = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
+    const model = new ZCGameModel(f.state, () => 0, f.config);
+    const access = model as unknown as {
+        state: ZCSnapshot;
+        unitTargeting: { acquire(unit: ZCUnitState): void; current(unit: ZCUnitState): ZCCombatTarget | null };
+        structureTargetOfHex(id: number, owner: 'player'): ZCCombatTarget | null;
+        damageBuilding(source: { owner: 'player' | 'enemy' }, hex: ZCHexState, damage: number): void;
+        projectileStructureTargets(projectile: { targetKind: 'unit'; targetId: number; owner: 'player' },
+            x: number, y: number, toX: number, toY: number, out: ZCCombatTarget[]): void;
+    };
+    const attacker = f.unit(1);
+    attacker.freeX = position.x; attacker.freeY = position.y;
+    access.unitTargeting.acquire(attacker);
+    assert.equal(attacker.targetBuildingHexId, f.hex.id);
+    const target = access.unitTargeting.current(attacker);
+    assert.equal(target.x, position.x); assert.equal(target.y, position.y);
+    assert.deepEqual(access.structureTargetOfHex(f.hex.id, 'player'), { ...target, cardId: null });
+    const out: ZCCombatTarget[] = [];
+    access.projectileStructureTargets({ targetKind: 'unit', targetId: -1, owner: 'player' },
+        position.x, position.y, position.x, position.y, out);
+    assert.ok(out.some(item => item.id === f.hex.id && item.x === position.x && item.y === position.y));
+    const restored = new ZCGameModel(model.exportSnapshot(), () => 0, f.config);
+    assert.deepEqual(restored.snapshot.hexes[f.hex.id].neutralFeature, model.snapshot.hexes[f.hex.id].neutralFeature);
+    const monster = access.state.hexes[f.hex.id];
+    const gold = access.state.goldByOwner.player;
+    access.damageBuilding({ owner: 'player' }, monster, monster.hp);
+    access.damageBuilding({ owner: 'enemy' }, monster, 100);
+    assert.equal(access.state.goldByOwner.player, gold + f.config.rules.killUnitGoldReward);
+    const reward = model.floatTexts.at(-1);
+    assert.equal(reward.x, position.x); assert.equal(reward.y, position.y);
+    assert.equal(access.structureTargetOfHex(f.hex.id, 'player'), null);
+});
 
 test('强化门按独立表引用，拒绝未知ID、重复效果和旧内联结构', () => {
     const card = findCatalogCard('68001');

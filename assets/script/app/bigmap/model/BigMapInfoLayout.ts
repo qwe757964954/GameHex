@@ -1,4 +1,4 @@
-/
+/**
  *世界页「目标详情」弹窗内部的居中竖排布局（纯函数、零 `cc`）。
  *
  *## 口径（2026-10-22 用户）
@@ -21,45 +21,45 @@
  *「三者的 x 都是 0」「正文不越过按钮」「图标与正文不重叠」「不截字（高度够）」。
  */
 
-/ 标题中心距卡片顶边的距离（含关闭按钮那一行的高度）。 */
+/** 标题中心距卡片顶边的距离（含关闭按钮那一行的高度）。 */
 export const BIGMAP_INFO_TITLE_TOP_GAP = 46;
-/ 标题中心到图标上沿的距离。 */
+/** 标题中心到图标上沿的距离。 */
 export const BIGMAP_INFO_ICON_GAP = 30;
-/ 图标下沿到正文上沿的距离。 */
+/** 图标下沿到正文上沿的距离。 */
 export const BIGMAP_INFO_ICON_BODY_GAP = 12;
-/ 按钮中心距卡片底边的距离（与领地页弹窗的「返回地图 / 开战」同一排法）。 */
+/** 按钮中心距卡片底边的距离（与领地页弹窗的「返回地图 / 开战」同一排法）。 */
 export const BIGMAP_INFO_ACTION_BOTTOM_GAP = 46;
-/ 有按钮时，正文下沿与卡片底边之间留多少（要让开按钮 + 描边）。 */
+/** 有按钮时，正文下沿与卡片底边之间留多少（要让开按钮 + 描边）。 */
 export const BIGMAP_INFO_BODY_BOTTOM_GAP_ACTIONS = 78;
-/ 没有按钮时（纯说明卡），正文可以再往下探一点。 */
+/** 没有按钮时（纯说明卡），正文可以再往下探一点。 */
 export const BIGMAP_INFO_BODY_BOTTOM_GAP_IDLE = 30;
-/ 正文左右各留多少（卡片内边距）。 */
+/** 正文左右各留多少（卡片内边距）。 */
 export const BIGMAP_INFO_PADDING_X = 28;
-/ 图标缩到这个高度以下就不显示（再小也读不出是什么，不如把空间给文字）。 */
+/** 图标缩到这个高度以下就不显示（再小也读不出是什么，不如把空间给文字）。 */
 export const BIGMAP_INFO_MIN_ICON_HEIGHT = 56;
-/ 正文最少给多高（一行半，保证不会缩成一条缝）。 */
+/** 正文最少给多高（一行半，保证不会缩成一条缝）。 */
 export const BIGMAP_INFO_MIN_BODY_HEIGHT = 40;
-/ 两颗按钮并排时的中心间距（各离中线 `±BIGMAP_INFO_ACTION_GAP`）。 */
+/** 两颗按钮并排时的中心间距（各离中线 `±BIGMAP_INFO_ACTION_GAP`）。 */
 export const BIGMAP_INFO_ACTION_GAP = 76;
 
-/ 一帧的排版输入。全部是卡片局部坐标下的尺寸（像素）。 */
+/** 一帧的排版输入。全部是卡片局部坐标下的尺寸（像素）。 */
 export interface IBigMapInfoLayoutInput {
     readonly panelWidth: number;
     readonly panelHeight: number;
-    / 正文行数（按 `\n` 切）；决定正文需要多高。 */
+    /** 正文行数（按 `\n` 切）；决定正文需要多高。 */
     readonly lines: number;
     readonly lineHeight: number;
-    / 「攻打」类主按钮这一帧是否可见。 */
+    /** 「攻打」类主按钮这一帧是否可见。 */
     readonly hasPrimary: boolean;
-    / 「定位 / 收取」类次按钮这一帧是否可见。 */
+    /** 「定位 / 收取」类次按钮这一帧是否可见。 */
     readonly hasSecondary: boolean;
-    / 图标的自然可见高度（按请求宽度铺开后的高度；`0` = 没有图标）。 */
+    /** 图标的自然可见高度（按请求宽度铺开后的高度；`0` = 没有图标）。 */
     readonly iconHeight: number;
 }
 
-/ 排版结果，视图照抄（`centerX` 恒为 0，留着这个字段是为了让"统一居中"可断言）。 */
+/** 排版结果，视图照抄（`centerX` 恒为 0，留着这个字段是为了让"统一居中"可断言）。 */
 export interface IBigMapInfoLayout {
-    / 竖排中线（恒 0）。标题 / 图标 / 正文 / 单颗按钮都摆在这条线上。 */
+    /** 竖排中线（恒 0）。标题 / 图标 / 正文 / 单颗按钮都摆在这条线上。 */
     readonly centerX: number;
     readonly titleY: number;
     readonly iconVisible: boolean;
@@ -71,11 +71,11 @@ export interface IBigMapInfoLayout {
     readonly actionY: number;
     readonly secondaryX: number;
     readonly primaryX: number;
-    / 正文是否因空间不足被压缩（高度 < 所需高度）⇒ 会截字。测试用来挡回归。 */
+    /** 正文是否因空间不足被压缩（高度 < 所需高度）⇒ 会截字。测试用来挡回归。 */
     readonly bodyClipped: boolean;
 }
 
-/
+/**
  *算出一帧的排版。
  *
  *顺序是先文字后图标：正文高度先按行数占住，剩下的余量才给图标；

@@ -17,43 +17,31 @@ import {
 import type { PvpHeroInfo } from './PvpHeroService';
 
 /**
- * 卡牌阵容页的数据供给。
+ * 阵容页的数据供给。
  *
- * 正常流程里卡组由 `ensureZCRuntimeCompiled()` 从整套 PVP 分表注入；但本页要能
- * **独立在编辑器预览**（那时战斗流程没跑过，`getPlayerDeck()` 是空的），
- * 所以这里补一条兜底：deck 为空时只读 `pvpCard` + `pvpBond` 两张分表并注入。
+ * 正常流程由运行时注入卡组；编辑器里战斗流程没跑过，getPlayerDeck() 是空的，
+ * 所以这里补一条兜底：deck 为空时读 pvpCard + pvpBond 注进去。
+ * 解析复用 ZCGameRuntimeConfig，别再写一套，否则同张表会出现两种口径。
  *
- * 解析**直接复用** `ZCGameRuntimeConfig` 的 `normalizeCardRow` / `parseCard` /
- * `parseBondRules`，不另写一套 —— 否则同一张表的字段口径会在两处漂移。
- * 特别是 `normalizeCardRow` 不能省：表里 `enabled` 是数字 `1`，而 `parseCard`
- * 判的是严格 `=== true`，漏掉它会让整张 pvpCard 被过滤空（且不报错）。
- *
- * 只做「取数」；加成条的文案 / 百分比换算在 `CardLineupTypes`（无引擎依赖，可单测）。
- *
- * 卡库两个口径别混（2026-09-18）：
- *   - `loadPvpCatalogCards()` —— **图鉴**：`pvpCard` 全表，阵容页的 `CardGrid` 用它；
- *   - `loadPvpHeroCards()`   —— **我的卡**：后端英雄列表 ∩ 卡表，布阵弹窗的卡池用它。
+ * 卡库和布阵卡池不是一回事：CardGrid 用全表图鉴，布阵只列玩家已有的卡。
  */
 
-/** 卡组行；deck 列已删除（2026-09-28），只保留 enabled。 */
+/** 卡组行，只有 enabled 这个本地字段。 */
 type ZCDeckRow = ZCDeckCard & { enabled: boolean };
 
-/** 读一张分表的全部行；表缺失时返回空数组。 */
+/** 读一张分表；表不存在就当空数组。 */
 async function readRows(table: string): Promise<unknown[]> {
     return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
 }
 
-/**
- * 把 pvpCard 的行解析成两套卡组；解析失败的行直接跳过（单行坏数据不该整页打不开）。
- *
- */
+/** 解析 pvpCard，坏行跳过，别让一行坏数据把整页卡住。 */
 function parseDecks(rows: unknown[]): { player: ZCDeckCard[]; enemy: ZCDeckCard[] } {
-    // deck/slot 列已删除（2026-09-28）：双方卡组由后端 unitInfos 下发。
-    // 本地只做编辑器预览 fallback：所有 enabled 非主城卡都当玩家卡，enemy 同 player。
+    // 本地只做编辑器预览：启用的非主城卡都算玩家卡，敌方复制一份。
     const player: ZCDeckCard[] = [];
     for (const row of rows) {
         let card: ZCDeckRow;
         try {
+            // normalizeCardRow 不能省：表里 enabled 是 1，parseCard 只认 === true。
             card = parseCard(normalizeCardRow(row));
         } catch (error) {
             console.warn('[CardLineupDecks] pvpCard 有一行解析失败，已跳过', error);
@@ -67,12 +55,8 @@ function parseDecks(rows: unknown[]): { player: ZCDeckCard[]; enemy: ZCDeckCard[
 }
 
 /**
- * 确保卡组与羁绊规则可用；返回玩家八卡。
- *
- * - 已经注入过（`getPlayerDeck()` 非空）→ 直接用，不再读表；
- * - 否则读 `pvpCard` + `pvpBond` 注入一次。
- *
- * 两张表都读不到时返回空数组，页面会保留 prefab 里的占位外观而不是报错。
+ * 保证卡组和羁绊规则可用，返回玩家八卡。
+ * 已经注入过就直接用；没有才读 pvpCard + pvpBond。两张表都读不到就返回空数组。
  */
 export async function ensureLineupDecks(): Promise<readonly ZCDeckCard[]> {
     if (getPlayerDeck().length > 0) return getPlayerDeck();
@@ -91,25 +75,15 @@ export async function ensureLineupDecks(): Promise<readonly ZCDeckCard[]> {
 }
 
 /**
- * 按后端英雄列表组装卡牌页下半区的卡库。
- *
- * 后端 `heroId` 与 `pvpCard.id` 使用同一套编号；显示顺序以卡表为准，避免服务端容器顺序
- * 改变时 UI 跳动。服务端返回但本地卡表不存在的 id 会被忽略并记录告警。
- *
- *  阵容页的卡库（`CardLineup/CardGrid`）**不再用它** —— 那里要用全表图鉴，
- * 见 `loadPvpCatalogCards()`。这里留给「布阵卡池」（`LineupBoardPage`）：那是个**可部署**
- * 的池子，只该列出玩家真正拥有的卡，口径与图鉴不同，别合并。
+ * 按后端英雄列表组装布阵卡池。顺序以卡表为准，避免服务端顺序一变 UI 就跳。
+ * 阵容页的 CardGrid 不用它，那里看全表图鉴。
  */
 export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<readonly ZCDeckCard[]> {
     const wanted = new Set(infos.map((info) => String(info.heroId)));
     const found = new Set<string>();
     /**
-     * 表里**存在**的 id（含下面被筛掉的主城）。
-     *
-     * 与 `found` 分开记的原因：告警问的是「后端给了、表里却没有」，而主城（`2002`）是
-     * **表里有、但不可上阵** —— 后端英雄列表里必然带着它。若直接拿 `found` 求差集，
-     * 每次进布阵页都会打一条 `["2002"]` 的「没有对应配置」，看着像丢了张卡，
-     * 实际只是被 `isHqCard` 正常筛掉了。
+     * 表里存在的 id，包括后面会被筛掉的主城。
+     * 告警只关心“后端给了、表里没有”，主城属于表里有但不可上阵，不能算缺配置。
      */
     const known = new Set<string>();
     const cards: ZCDeckCard[] = [];
@@ -126,9 +100,8 @@ export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<r
         }
     }
 
-    // `wanted` 是 Set：展开会被构建期降级成 `[].concat(set)` → unknown 变成 [Set]，
-    // 这条警告日志会打出一堆看不懂的东西。用 Array.from。
-    // 差集用 `known` 而不是 `found`：主城这类「表里有、但不可上阵」的卡不算缺配置。
+    // 别展开 Set，构建器会把它降级成 [].concat(set)，日志内容会变得没法看。
+    // 差集用 known，不用 found。
     const unknown = Array.from(wanted).filter((id) => !known.has(id));
     if (unknown.length > 0) {
         console.warn('[CardLineupDecks] 后端英雄在 pvpCard 中没有对应配置', unknown);
@@ -137,20 +110,9 @@ export async function loadPvpHeroCards(infos: readonly PvpHeroInfo[]): Promise<r
 }
 
 /**
- * 卡库（`CardLineup/CardGrid`）的数据源：**`pvpCard` 全表**，不看后端拥有关系。
- *
- * 与 `loadPvpHeroCards()` 的区别就是「图鉴」与「我的卡」：
- *   - 这里要能浏览 / 点开配置里配了的**每一张**卡（未拥有也看得见，等级显示 0 级）；
- *   - 后端英雄列表（`fetchPvpHeroInfos`）只负责两件事：填等级、标「已出战！」。
- *
- * 于是断网 / 后端列表为空时卡库照样是完整一屏，而不是只剩出战八张（旧行为）。
- *
- * 顺序**就是卡表顺序**（转表器按行走）：先「玩家默认」八张出战卡、再 PVE 敌方八张、
- * 最后是 20 张卡池卡 —— 顺序稳定，不随服务端返回顺序变化跳动。
- *
- *  主城（`type=5`）必须摘掉：它是场地固有建筑而不是卡（`isHqCard`，与 `loadPvpTables`
- * 同一道闸）。它是「玩家默认」的第一行，漏掉会在卡库里多出一张点不开的卡。
- * 其余建筑行（金矿 `type=1`）保留 —— 它是真能上阵的一张卡（`玩家默认` 里就有）。
+ * 卡库数据：pvpCard 全表，不看玩家有没有。
+ * 图鉴要能翻到配置里的每张卡，后端英雄列表只负责填等级和标出战中。
+ * 主城是场地建筑，不是卡，必须用 isHqCard 摘掉；金矿是能上阵的卡，保留。
  */
 export async function loadPvpCatalogCards(): Promise<readonly ZCDeckCard[]> {
     const cards: ZCDeckCard[] = [];
@@ -185,19 +147,14 @@ export async function loadPvpHeroLevelCaps(): Promise<ReadonlyMap<string, number
 }
 
 /**
- * 读 `cardLevelUp` 的**原始行**。
- *
- * 升级弹窗（`CardUpgradePage`）要用整行（消耗卡牌 id/数量、两种经验 id、
- * 经验数量），不能像 `loadPvpHeroLevelCaps()` 那样只抽出等级 —— 所以单独开一个入口，
- * 而不是把解析散到弹窗里：**取数口径只有一处**（同一张 `RefUtil` 表、
- * 同样先 `normalizeCardRow` 的口径由 `RefUtil` 负责）。
+ * 读 cardLevelUp 原始行。升级弹窗要用整行（消耗、两种经验），不要只抽等级。
  */
 export async function loadCardLevelUpRows(): Promise<readonly unknown[]> {
     return readRows('cardLevelUp');
 }
 
 /**
- * 读 `armySkillLevelUp` 的**原始行**（技能级的等级/解锁/描述都在这一张表里）。
+ * 读 `armySkillLevelUp` 的原始行（技能级的等级/解锁/描述都在这一张表里）。
  *
  * 与 `loadCardLevelUpRows` 同口径：只负责取数，聚合与判定在 `CardSkillList`（无引擎依赖、可单测）。
  */
@@ -206,7 +163,7 @@ export async function loadArmySkillLevelUpRows(): Promise<readonly unknown[]> {
 }
 
 /**
- * 读 `pvpCard` 里指定卡（按 id）的**原始行**；没有返回 `null`。
+ * 读 `pvpCard` 里指定卡（按 id）的原始行；没有返回 `null`。
  *
  * 详情页的六维属性要用 `unitMaxHp` / `unitAttack` 等未进 `ZCDeckCard` 的列，
  * 与 `loadCardLevelUpRows` 同一条「原始行」口径，不另写一套解析。
@@ -226,11 +183,8 @@ export async function loadPvpUnitGrowthRows(): Promise<readonly unknown[]> {
 }
 
 /**
- * 读 `pvpCard` 的**全部原始行**（一次读表，按 id 现查）。
- *
- * 与 `loadPvpCardRawRow` 的区别：那个是「一次拿一张」，阵容战力要连算 8 张，
- * 逐张调会读 8 遍整表。返回原样数组（含坏行），由调用方按 `String(row.id)` 建索引 ——
- * 这里不做过滤，保持与 `RefUtil` 一致的口径。
+ * 一次读回 pvpCard 全部原始行，调用方按 id 自己查。
+ * 战力要连算 8 张，逐张走 loadPvpCardRawRow 会反复读整表。
  */
 export async function loadPvpCardRawRows(): Promise<readonly Record<string, unknown>[]> {
     const rows: Record<string, unknown>[] = [];

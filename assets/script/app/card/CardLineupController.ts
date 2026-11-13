@@ -45,7 +45,7 @@ export class CardLineupController extends ControllerBase {
             const snapshot = this.options.repository.loadLineupSnapshot();
             if (snapshot) this.publish(snapshot);
         } catch (error) {
-            // 权威数据刷新统一报告配置错误。
+            // 配置错误统一由 refresh 上报，这里不重复报。
         }
     }
     async refresh(refreshFormations = true): Promise<void> {

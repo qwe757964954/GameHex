@@ -1,22 +1,22 @@
 /**
- * 卡牌技能列表（`armySkillLevelUp`）的解析与「升到第几级」的纯函数。**不 import cc，可单测**。
+ * 卡牌技能列表（`armySkillLevelUp`）的解析与「升到第几级」的纯函数。不 import cc，可单测。
  *
  * 表口径（`assets/remoteRef/armySkillLevelUp.json`，列存 `{k, v}`）：
- *   - `id`             技能编号，**与后端 `CmdPvpHeroSkillInfo.id` / 请求体 `skillId` 同一套编号**
+ *   - `id`             技能编号，与后端 `CmdPvpHeroSkillInfo.id` / 请求体 `skillId` 同一套编号
  *                      （例如豌豆游侠 68001 的 4 个技能 = 100101 / 100102 / 100103 / 100104）
- *   - `unlockarmylevel` 解锁所需**英雄等级**（0 = 一级就会）
+ *   - `unlockarmylevel` 解锁所需英雄等级（0 = 一级就会）
  *   - `skilllevel`     该技能的第几档（本项目里是 1 / 2 / 3，个别技能只有 1）
  *   - `armySkillType`  1 = 数值被动 / 2 = 行为被动（只影响展示，不影响升级）
  *   - `modfiy`         该档挂的修改器 id 列表（列名就是表里那个拼错的 `modfiy`，别改成 modify）
- *   - `name` / `desc`  技能名与**该档**的效果描述
+ *   - `name` / `desc`  技能名与该档的效果描述
  *
- * ⚠️ 一行 = 一个技能的**一个等级档**，不是「一个技能」。所以：
+ * 一行 = 一个技能的一个等级档，不是「一个技能」。所以：
  *   ① 技能列表必须按 `id` 聚合，直接 `map` 出来会有 400+ 条；
  *   ② 同一个 `id` 的 `name` 只在有名字的那几行出现（有的技能首行 `name` 为空），
  *      聚合时要「取第一个非空」，否则技能名会变成空串。
  *
- * ⚠️ 按钮是**两个一组**的「上一级 / 下一级」，不是「4 个按钮 = 4 个档位」：
- *   `CmdPvpHeroUpSkillReqMsg` 只带 `{ heroId, skillId }`，即**一次只能升一级**，
+ * 按钮是两个一组的「上一级 / 下一级」，不是「4 个按钮 = 4 个档位」：
+ *   `CmdPvpHeroUpSkillReqMsg` 只带 `{ heroId, skillId }`，即一次只能升一级，
  *   服务端自己决定升到哪一档。所以 UI 每行 4 个按钮 = 2 个技能 × 2 个方向。
  */
 
@@ -77,7 +77,7 @@ export function parseArmySkillLevelRow(value: unknown): ZCArmySkillLevelRow | nu
 /**
  * 建「技能 id → 聚合技能」。重复的 `(skillId, level)` 后值覆盖前值。
  *
- * `name` 取该技能**第一个非空**的名字：表里有些技能的某几行 `name` 是空的。
+ * `name` 取该技能第一个非空的名字：表里有些技能的某几行 `name` 是空的。
  */
 export function buildArmySkillTable(rows: readonly unknown[]): ZCArmySkillTable {
     const levels = new Map<number, Map<number, ZCArmySkillLevelRow>>();
@@ -112,7 +112,7 @@ export function buildArmySkillTable(rows: readonly unknown[]): ZCArmySkillTable 
     return table;
 }
 
-/** 按卡牌配置的 `skillList` 取技能，顺序**以配置为准**；缺失的 id 跳过并告警。 */
+/** 按卡牌配置的 `skillList` 取技能，顺序以配置为准；缺失的 id 跳过并告警。 */
 export function resolveCardSkills(
     table: ZCArmySkillTable,
     skillIds: readonly number[] | null | undefined,
@@ -136,7 +136,7 @@ export function resolveCardSkills(
  * 该技能当前是第几档。
  *
  * 后端 `skills` 里的 `level` 是「已升到第几档」；服务端没给（未拥有 / 老数据）时按
- * **第 1 档**算 —— 与 `armySkillLevelUp` 的 `skilllevel` 从 1 起、`unlockHeroLevel = 0`
+ * 第 1 档算 —— 与 `armySkillLevelUp` 的 `skilllevel` 从 1 起、`unlockHeroLevel = 0`
  * 会立刻生效的口径一致，0 会让「下一级」按钮指向一个不存在的档位。
  */
 export function resolveSkillLevel(skill: ZCArmySkill, levels: readonly PvpHeroSkillLevel[]): number {
@@ -159,7 +159,7 @@ export function skillMaxLevel(skill: ZCArmySkill): number {
 }
 
 /**
- * 该技能是否已满级 = **`level + 1` 这一档在表里不存在**。
+ * 该技能是否已满级 = `level + 1` 这一档在表里不存在。
  *
  * 与 `CardSkillPage.step` 的目标档算法（`target = level + 1`）保持同一口径：
  * 升级请求永远是「+1 级」，所以只要有 `level + 1` 就能升，没有就是满级。

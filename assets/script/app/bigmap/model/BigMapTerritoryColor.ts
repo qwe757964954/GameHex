@@ -1,4 +1,4 @@
-/
+/**
  *势力配色 —— 纯 TS，零 `cc` 依赖。
  *
  *口径（2026-10-21 用户要求）：每个城池占据的势力范围都要染色，相邻的势力必须不同色。
@@ -14,15 +14,15 @@
  *（`bigMapTerritoryOwnerOf`）。所以色板里不能再出现红族/绿族，否则归属和势力编号混在一起。
  */
 
-/ 一块势力范围（城池）。 */
+/** 一块势力范围（城池）。 */
 export interface ITerritoryColorRegion {
-    / 唯一 id（城池 id）。 */
+    /** 唯一 id（城池 id）。 */
     readonly id: number;
-    / 该势力占的格子。 */
+    /** 该势力占的格子。 */
     readonly hexIds: readonly number[];
 }
 
-/
+/**
  *势力归属类别（2026-10-28 用户口径）。
  *
  *- `self`：我占据的城池 → 整片范围染绿；
@@ -35,7 +35,7 @@ export interface ITerritoryColorRegion {
  */
 export type BigMapTerritoryOwner = 'self' | 'other' | 'neutral';
 
-/
+/**
  *一座城的势力范围该归属到哪一类颜色。
  *
  *@param mine    这座城就是「我所在的城」。联机档 = `SlgGameInfo.toCampId === cityId`；
@@ -50,11 +50,11 @@ export function bigMapTerritoryOwnerOf(mine: boolean, occupied: boolean): BigMap
     return occupied ? 'other' : 'neutral';
 }
 
-/
+/**
  *玩家基地该用哪一块势力色 —— 服务器 `SlgGameInfo.toCampId` 指向的城池就是基地所属势力。
  *
- *口径（2026-10-23 山猫）：*「染成所属城池的势力色，后端给城池 id，城池 id 在配置表，
- *地图会配置城池 id，从地图查找到，那个就是大地图的基地。」*
+ *口径（2026-10-23 山猫）：「染成所属城池的势力色，后端给城池 id，城池 id 在配置表，
+ *地图会配置城池 id，从地图查找到，那个就是大地图的基地。」
  *所以这里不自己算距离、不猜最近城，只做「拿 id 去色槽表里查」这一件事。
  *
  *@param campId 我所处的城池 id（0 = 未收到包 / 服务端明确未归属）
@@ -70,7 +70,7 @@ export function bigMapPlayerBaseColorSlot(
     return slot === undefined ? null : slot;
 }
 
-/
+/**
  *给每个势力分配一个色板下标（靠距离猜邻接，种子世界的兜底）。
  *
  *@param regions      势力集合（顺序无关，结果只跟几何关系有关）。
@@ -97,7 +97,7 @@ export function assignTerritoryColorSlots(
     return colorGraph(regions, neighbors, paletteSize);
 }
 
-/
+/**
  *给每个势力分配色板下标（用编辑器推导好的邻接表，有布局时的首选）。
  *
  *为什么优先这个：势力范围形状不规则、还会互相咬合，「锚点距离 ≤ N」这种几何近似必然有例外
@@ -119,7 +119,7 @@ export function assignTerritoryColorSlotsFromAdjacency(
     return colorGraph(regions, neighbors, paletteSize);
 }
 
-/
+/**
  *DSATUR 贪心着色（两个入口共用）。
  *
  *每次先染「已染邻居颜色种类最多」的那块（饱和度优先），平手再取邻居多的 ——

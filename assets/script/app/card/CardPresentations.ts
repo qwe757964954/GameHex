@@ -21,7 +21,7 @@ export interface LineupBoardPresentation extends LineupBoardData, LineupDraftSna
 /**
  * 从卡牌页打开升级弹窗时带的业务数据。
  *
- * **不带回调**：升级成功走 `CardLineupEvent.HeroUpgraded` 事件（见 `CardLineupEvents`），
+ * 不带回调：升级成功走 `CardLineupEvent.HeroUpgraded` 事件（见 `CardLineupEvents`），
  * 弹窗只负责「我升成功了」，不关心外面谁想听。
  */
 export interface ICardUpgradeOpenData {

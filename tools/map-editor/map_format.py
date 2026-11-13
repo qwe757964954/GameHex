@@ -99,6 +99,50 @@ def validate_preset(data, preset_id):
             raise ValueError("主城坐标不在地图内")
         homes.append({"row": home["row"], "column": home["column"]})
 
+    points = data.get("resourcePoints", [])
+    for point in points if isinstance(points, list) else []:
+        if not isinstance(point, dict) or "patrolCells" not in point:
+            continue
+        cells = point["patrolCells"]
+        if not isinstance(cells, list):
+            raise ValueError("巡逻范围必须是格子数组")
+        if not cells:
+            continue
+        if (type(point.get("row")) is not int or type(point.get("column")) is not int
+                or not 0 <= point["row"] < rows or not 0 <= point["column"] < columns):
+            raise ValueError("巡逻出生点坐标无效")
+        origin = point.get("row", -1) * columns + point.get("column", -1)
+        if any(type(cell) is not int or not 0 <= cell < rows * columns for cell in cells):
+            raise ValueError("巡逻范围含非法或越界格")
+        cell_set = set(cells)
+        if origin not in cell_set or len(cell_set) != len(cells):
+            raise ValueError("巡逻范围必须包含出生格且不能有重复格")
+        for cell in cells:
+            row, column = divmod(cell, columns)
+            if mirror_180:
+                source_row = rows - 1 - row if row >= rows // 2 else row
+                source_column = columns - 1 - column if row >= rows // 2 else column
+            else:
+                offset = rows - expected_rows
+                source_row = rows - 1 - row - offset if mirror_vertical and row < offset else row - offset
+                source_column = columns - 1 - column if version >= 3 and mirror_horizontal and column >= expected_columns else column
+            if (ascii_rows[source_row][source_column] == "."
+                    or any(home and home["row"] == row and home["column"] == column for home in homes)
+                    or any(isinstance(other, dict) and other is not point and other.get("row") == row and other.get("column") == column for other in points)):
+                raise ValueError("巡逻范围含虚空、主城或其他资源点")
+        seen, queue = {origin}, [origin]
+        for cell in queue:
+            row, column = divmod(cell, columns)
+            offsets = ((0, -1), (0, 1), (-1, 0), (1, 0), (-1, -1), (-1, 1)) if column & 1 else ((0, -1), (0, 1), (-1, 0), (1, 0), (1, -1), (1, 1))
+            for dr, dc in offsets:
+                nr, nc = row + dr, column + dc
+                adjacent = nr * columns + nc
+                if 0 <= nr < rows and 0 <= nc < columns and adjacent in cell_set and adjacent not in seen:
+                    seen.add(adjacent)
+                    queue.append(adjacent)
+        if seen != cell_set:
+            raise ValueError("巡逻范围必须连通")
+
     art = data.get("art")
     free_decor = art.get("freeDecor") if isinstance(art, dict) else None
     if free_decor is not None:

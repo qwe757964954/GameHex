@@ -1,4 +1,4 @@
-/
+/**
  *基地建造与资源产出 —— 纯规则，零 `cc` 依赖。
  *
  *覆盖文档「建造系统」一~七条 + 「玩家基地系统」的资源口径：
@@ -26,17 +26,17 @@ import {
 } from './BigMapTypes';
 import { bigMapBuildingUnlock, bigMapUpgradeUnlock, type IBigMapUnlockContext } from './BigMapUnlock';
 
-/ 建造区格 id：`row * plotCols + column`，与大地图格 id 分开编号。 */
+/** 建造区格 id：`row * plotCols + column`，与大地图格 id 分开编号。 */
 export function bigMapPlotHexId(row: number, column: number, plotCols: number): number {
     return row * plotCols + column;
 }
 
-/ 建造区中心格（主城默认位置）。行列是奇数，中心格唯一。 */
+/** 建造区中心格（主城默认位置）。行列是奇数，中心格唯一。 */
 export function bigMapPlotCenterHexId(plotRows: number, plotCols: number): number {
     return Math.floor(plotRows / 2) * plotCols + Math.floor(plotCols / 2);
 }
 
-/ 建造区内的邻居（复用对局的六边拓扑，保证与大地图观感一致）。 */
+/** 建造区内的邻居（复用对局的六边拓扑，保证与大地图观感一致）。 */
 export function bigMapPlotNeighbors(hexId: number, plotRows: number, plotCols: number): readonly number[] {
     return hexGridNeighborIds(hexId, plotRows, plotCols);
 }
@@ -45,7 +45,7 @@ function emptyRes(): Record<BigMapResType, number> {
     return { grain: 0, wood: 0, iron: 0, coin: 0, stamina: 0 };
 }
 
-/ 新号初始状态：资源取 `startAmount`，主城自动落在中心格（避免开局空场地寸步难行）。 */
+/** 新号初始状态：资源取 `startAmount`，主城自动落在中心格（避免开局空场地寸步难行）。 */
 export function createBigMapBaseState(config: IBigMapConfig, now: number): IBigMapBaseState {
     const res = emptyRes();
     for (const item of config.resources.values()) res[item.resType] = item.startAmount;
@@ -98,7 +98,7 @@ export function bigMapBuildingCount(state: IBigMapBaseState, buildingId: number)
     return state.buildings.filter((item) => item.buildingId === buildingId).length;
 }
 
-/
+/**
  *含排队中的数量上限口径。
  *
  *只数 `buildings` 会漏掉「3 个队列同时排 3 座同名建筑」的情况：
@@ -111,7 +111,7 @@ export function bigMapBuildingCountWithQueue(state: IBigMapBaseState, buildingId
     return bigMapBuildingCount(state, buildingId) + queued;
 }
 
-/ 资源栏上限：主城 `resCap` 控制建造三种资源；货币与行动力各有自己的上限。 */
+/** 资源栏上限：主城 `resCap` 控制建造三种资源；货币与行动力各有自己的上限。 */
 export function bigMapResCap(config: IBigMapConfig, state: IBigMapBaseState, res: BigMapResType): number {
     if (res === 'stamina') return config.stamina.staminaMax;
     if (res === 'coin') return Number.POSITIVE_INFINITY;
@@ -144,7 +144,7 @@ function occupyCells(
     return cells;
 }
 
-/
+/**
  *队列容量：初始 1 条，每建成一座「建造队列」功能建筑 +1，封顶 `maxBuildQueue`。
  *
  *由建筑反推而不是只信存档里的 `queueUnlocked` —— 存档字段会被脏数据写坏，
@@ -164,7 +164,7 @@ export interface IBigMapUnlockQueueResult {
     readonly state: IBigMapBaseState | null;
 }
 
-/
+/**
  *花货币解锁下一条建造队列（1→2 收 `queueUnlockCost2`，2→3 收 `queueUnlockCost3`）。
  *
  * 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁。
@@ -198,7 +198,7 @@ export function bigMapUnlockQueue(
     };
 }
 
-/ 建造区占位检查：返回被占用的格（含自己，升级时用 `ignoreInstanceId` 排除）。 */
+/** 建造区占位检查：返回被占用的格（含自己，升级时用 `ignoreInstanceId` 排除）。 */
 function occupiedPlotCells(state: IBigMapBaseState, ignoreInstanceId = 0): Set<number> {
     const cells = new Set<number>();
     for (const item of state.buildings) {
@@ -223,7 +223,7 @@ export function bigMapFreeQueueSlot(state: IBigMapBaseState): IBigMapQueueSlot |
     return null;
 }
 
-/ 摆放合法性：解锁 → 数量上限 → 建造区边界 → 占位 → 空闲队列 → 资源。 */
+/** 摆放合法性：解锁 → 数量上限 → 建造区边界 → 占位 → 空闲队列 → 资源。 */
 export function bigMapCanPlace(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -253,7 +253,7 @@ export function bigMapCanPlace(
     return { ok: true, reason: '' };
 }
 
-/
+/**
  *搬移合法性：建筑存在 → 目标格在建造区 → 目标格没被别的建筑 / 在建占位。
  *
  *与 `bigMapCanPlace` 的区别：不查解锁章节、数量上限、空闲队列和资源。
@@ -280,7 +280,7 @@ export function bigMapCanMove(
     return { ok: true, reason: '' };
 }
 
-/
+/**
  *搬移：只换 `hexId`，等级 / 存量 / 上次结算时刻原样带走 —— 搬一下不白送产出。
  *校验不过时把原状态原样返回（`ok=false`），调用方不必再判空。
  */
@@ -302,16 +302,16 @@ export function bigMapMove(
     };
 }
 
-/ 缺料一项：给界面直接渲染（带中文名与差额），不用再解析字符串。 */
+/** 缺料一项：给界面直接渲染（带中文名与差额），不用再解析字符串。 */
 export interface IBigMapMissingRes {
     readonly res: BigMapResType;
-    / 中文资源名（`bigmapResource.name`，缺表时退回 key）。 */
+    /** 中文资源名（`bigmapResource.name`，缺表时退回 key）。 */
     readonly label: string;
-    / 还差多少（向上取整，>= 1）。 */
+    /** 还差多少（向上取整，>= 1）。 */
     readonly amount: number;
 }
 
-/
+/**
  *建造 / 升级缺哪些资源、各差多少。
  *
  * 2026-11-11 之前这里是 `bigMapMissingRes` 直接拼 `` `${res} 差 ${n}` ``，
@@ -358,7 +358,7 @@ function payRes(
     };
 }
 
-/ 升级合法性：功能未解锁 → 满级 → 前置建筑等级 → 主城等级上限 → 资源 → 队列。 */
+/** 升级合法性：功能未解锁 → 满级 → 前置建筑等级 → 主城等级上限 → 资源 → 队列。 */
 export function bigMapCanUpgrade(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -410,7 +410,7 @@ function fillQueue(
     return state.queues.map((slot) => (slot.slotIndex === slotIndex ? { ...slot, ...patch } : slot));
 }
 
-/ 排队建造。扣资源在下单瞬间完成（取消只退 `cancelReturnRate`）。 */
+/** 排队建造。扣资源在下单瞬间完成（取消只退 `cancelReturnRate`）。 */
 export function bigMapStartBuild(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -442,7 +442,7 @@ export function bigMapStartBuild(
     };
 }
 
-/ 排队升级。 */
+/** 排队升级。 */
 export function bigMapStartUpgrade(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -474,7 +474,7 @@ export function bigMapStartUpgrade(
     };
 }
 
-/ 取消建造：按 `cancelReturnRate` 返还（配置 1.0 = 全退，本期就是全退）。 */
+/** 取消建造：按 `cancelReturnRate` 返还（配置 1.0 = 全退，本期就是全退）。 */
 export function bigMapCancelQueue(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -513,7 +513,7 @@ export function bigMapCancelQueue(
 
 //------------------------------------------------------------------ 结算
 
-/
+/**
  *时间推进：结算资源田累积 + 完成到期的建造队列。
  *
  *`now` 是逻辑秒（`Date.now()/1000` 或测试假的时钟），离线返回时直接传真实时间即可，
@@ -598,7 +598,7 @@ export function bigMapTick(
     return { state: next, completed };
 }
 
-/ 收获一块资源田（`stored → res`，并受资源栏上限截断）。 */
+/** 收获一块资源田（`stored → res`，并受资源栏上限截断）。 */
 export function bigMapHarvest(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -628,7 +628,7 @@ export function bigMapHarvest(
     };
 }
 
-/ 一键收获全部资源田（顶栏「收取」按钮）。 */
+/** 一键收获全部资源田（顶栏「收取」按钮）。 */
 export function bigMapHarvestAll(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -643,7 +643,7 @@ export function bigMapHarvestAll(
     return { state: next, gained };
 }
 
-/ 基地总产出（每小时），给界面显示「+x/时」。 */
+/** 基地总产出（每小时），给界面显示「+x/时」。 */
 export function bigMapProducePerHour(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -656,7 +656,7 @@ export function bigMapProducePerHour(
     return total;
 }
 
-/ 未收取的资源总量（顶栏红点用）。 */
+/** 未收取的资源总量（顶栏红点用）。 */
 export function bigMapPendingHarvest(
     config: IBigMapConfig,
     state: IBigMapBaseState,
@@ -669,7 +669,7 @@ export function bigMapPendingHarvest(
     return pending;
 }
 
-/ 建造资源是否够付某个等级的钱（界面置灰用，不产生副作用）。 */
+/** 建造资源是否够付某个等级的钱（界面置灰用，不产生副作用）。 */
 export function bigMapCanAfford(
     state: IBigMapBaseState,
     cost: { readonly costGrain: number; readonly costWood: number; readonly costIron: number },
@@ -681,12 +681,12 @@ export function bigMapCanAfford(
     });
 }
 
-/ 建筑展示名（视图直接用，省得每处都 get 一次配置）。 */
+/** 建筑展示名（视图直接用，省得每处都 get 一次配置）。 */
 export function bigMapBuildingName(config: IBigMapConfig, buildingId: number): string {
     return config.buildings.get(buildingId)?.name ?? '未知建筑';
 }
 
-/ 建筑配置（视图取图标/占格用）。 */
+/** 建筑配置（视图取图标/占格用）。 */
 export function bigMapBuildingConfig(
     config: IBigMapConfig,
     buildingId: number,

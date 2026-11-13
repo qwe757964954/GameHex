@@ -3,10 +3,10 @@ import { ZCCardTally } from './CardLineupTypes';
 
 const { ccclass, property } = _decorator;
 
-/** 条目自取图标的入口（页面不再等图标行备齐才提交列表）。 */
+/** 条目的图标加载入口。页面不再等整行图标备齐才提交。 */
 export type ZCTallyIconLoader = (item: ZCCardTally) => Promise<SpriteFrame | null>;
 
-/** 阵容中栏羁绊列表的单个「图标 + 数量」条目，由虚拟列表实例化复用。 */
+/** 羁绊条里的一项：图标 + 数量，虚拟列表复用。 */
 @ccclass('CardLineupBond')
 export class CardLineupBond extends Component {
     @property({ type: Sprite, tooltip: 'Icon：职业 / 阵营图标' })
@@ -19,14 +19,11 @@ export class CardLineupBond extends Component {
     private iconToken = 0;
 
     /**
-     * @param item null = 数字清 0
-     * @param icon null = **清空图标**
-     * @param loader 图标还没备好时由条目自己补；`icon` 已就绪则不调用。
+     * @param item 为空时数量显示 0。
+     * @param icon 为空时清掉旧图。
+     * @param loader 图还没到就交给条目自己补。
      *
-     *  图必须**无条件赋值**：本组件由虚拟列表创建 / 复用 / 回收，同一个槽位在滚动中会换成另一个
-     *  条目。写成有条件的写法时，"没有图的条目"会保留上一项的图 —— 阵营图标现在拿不到图
-     *  （见 `cardUiArt.camp`），于是职业格子滑过去之后阵营格子还顶着职业图标。
-     *  `this.icon` 是 `@property Sprite`（必绑），所以只判数据、不判组件。
+     * 图必须无条件赋值。槽位会被复用，只写“有图”的情况会把上一项的图标留下来。
      */
     render(item: ZCCardTally | null, icon: SpriteFrame | null, loader?: ZCTallyIconLoader): void {
         const token = ++this.iconToken;

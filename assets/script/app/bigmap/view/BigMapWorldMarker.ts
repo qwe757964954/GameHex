@@ -4,16 +4,16 @@ import { paintMapMarkerBadge } from '../../common/MapMarkerBadge';
 
 const { ccclass, property } = _decorator;
 
-/ 名条左端徽章中心相对条中心的横向偏移（设计稿「大地图3」：菱形/圆形徽章都落在 -70 附近）。 */
+/** 名条左端徽章中心相对条中心的横向偏移（设计稿「大地图3」：菱形/圆形徽章都落在 -70 附近）。 */
 const PLATE_BADGE_X = -70;
-/ 名条名字的左边缘相对条中心的横向偏移：`-宽/2 + 76`（设计稿两条口径一致，取中值 -24）。 */
+/** 名条名字的左边缘相对条中心的横向偏移：`-宽/2 + 76`（设计稿两条口径一致，取中值 -24）。 */
 const PLATE_NAME_X = -24;
-/ 名字到条右端的内边距。 */
+/** 名字到条右端的内边距。 */
 const PLATE_NAME_RIGHT_PAD = 10;
-/ 徽章数字框宽（两位数字 31px + 余量），超过用 `Overflow.SHRINK` 收。 */
+/** 徽章数字框宽（两位数字 31px + 余量），超过用 `Overflow.SHRINK` 收。 */
 const PLATE_LEVEL_WIDTH = 50;
 
-/
+/**
  *据点标记：建筑图 + 名条（徽章数字 + 名字）+ 其上的「谁占着」小旗 + 主城头像。
  *
  *布局口径（2026-11-02 蓝湖「大地图3」）：
@@ -27,22 +27,22 @@ const PLATE_LEVEL_WIDTH = 50;
 @ccclass('BigMapWorldMarker')
 export class BigMapWorldMarker extends Component {
     @property({ type: Sprite, group: '图标' }) icon: Sprite = null;
-    / 名条底图（蓝湖四张 `plate_*`）。字段名沿用 `badge`，历史原因：它原来是手画角标的底。 */
+    /** 名条底图（蓝湖四张 `plate_*`）。字段名沿用 `badge`，历史原因：它原来是手画角标的底。 */
     @property({ type: Sprite, group: '名条' }) private badge: Sprite = null;
-    / 徽章位数字（等级 / 关卡号）。 */
+    /** 徽章位数字（等级 / 关卡号）。 */
     @property({ type: Label, group: '名条' }) private label: Label = null;
-    / 条右侧的据点名。 */
+    /** 条右侧的据点名。 */
     @property({ type: Label, group: '名条' }) private nameLabel: Label = null;
-    / 名条的手画兜底底板：只在没贴图时显示。 */
+    /** 名条的手画兜底底板：只在没贴图时显示。 */
     @property({ type: Graphics, group: '名条' }) private badgeBackground: Graphics = null;
-    / 占据者（小旗 + 名字）整段；没有占据者时整段隐藏。 */
+    /** 占据者（小旗 + 名字）整段；没有占据者时整段隐藏。 */
     @property({ type: Node, group: '占据者' }) private occupantRoot: Node = null;
     @property({ type: Sprite, group: '占据者' }) private occupantFlag: Sprite = null;
     @property({ type: Label, group: '占据者' }) private occupantLabel: Label = null;
     @property({ type: Node, group: '玩家头像' }) private portraitRoot: Node = null;
     @property({ type: Sprite, group: '玩家头像' }) private portrait: Sprite = null;
 
-    /
+    /**
      *`render()` 算出的原始命中框（不含头像外扩）。
      *
      *头像会把命中框往上撑 120px（`setPortrait`）。撑的动作必须以这份基框为输入而不是
@@ -54,7 +54,7 @@ export class BigMapWorldMarker extends Component {
 
     get hitArea(): Omit<IBigMapMarkerHitArea, 'hexId'> { return this.markerLayout; }
 
-    /
+    /**
      *@param frame 建筑图（据点/野怪/主城）。
      *@param plate 名条贴图；`null` 时退回手画角标。
      *@param level 徽章位文字（等级 / 关卡号 / 空串）。
@@ -140,7 +140,7 @@ export class BigMapWorldMarker extends Component {
         this.occupantRoot.setPosition(0, (this.markerLayout.iconY ?? 0) + this.markerLayout.height / 2 - 6, 0);
     }
 
-    / 「这格是谁占的」小旗 + 名字：贴在建筑顶边，旗在左、名字在右。 */
+    /** 「这格是谁占的」小旗 + 名字：贴在建筑顶边，旗在左、名字在右。 */
     setOccupantFlag(frame: SpriteFrame | null): void {
         this.occupantFlag.spriteFrame = frame;
         this.occupantFlag.node.active = frame !== null;
@@ -153,7 +153,7 @@ export class BigMapWorldMarker extends Component {
         this.occupantLabel.node.setPosition(-84, 0, 0);
     }
 
-    /
+    /**
      *把「占据者」那一行改成状态行（名单玩家标记用它显示血量）。
      *
      *复用同一个 Label 而不是新增节点：玩家标记没有建筑图，`iconY + height/2` 落点会跟名条撞，

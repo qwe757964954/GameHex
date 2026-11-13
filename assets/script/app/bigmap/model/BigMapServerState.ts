@@ -21,7 +21,7 @@ export interface IBigMapServerBuildInfo {
     readonly unlockQueue: number;
 }
 
-/
+/**
  *游戏信息（`CmdSlgGameInfoRspMsg.info` / `SlgGameInfo`）—— 服务器权威的玩家宏观状态。
  *
  *2026-10-23 后端补的字段，客户端不再自己算：
@@ -34,7 +34,7 @@ export interface IBigMapServerGameInfo {
     readonly campId: number;
 }
 
-/ 边界归一化：两个字段都是 `required uint32`，缺一个就整包作废（不回退成 0 冒充成功）。 */
+/** 边界归一化：两个字段都是 `required uint32`，缺一个就整包作废（不回退成 0 冒充成功）。 */
 export function normalizeBigMapGameInfo(value: unknown): IBigMapServerGameInfo | null {
     const row = bigMapServerRecord(value);
     if (!row) return null;
@@ -52,7 +52,7 @@ export function bigMapServerUint(value: unknown): number | null {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff ? value : null;
 }
 
-/ 协议实例ID是正数uint32；边界拒绝旧Long/字符串和越界值，避免编码时静默截断。 */
+/** 协议实例ID是正数uint32；边界拒绝旧Long/字符串和越界值，避免编码时静默截断。 */
 export function bigMapServerInstanceId(value: unknown): number | null {
     const id = bigMapServerUint(value);
     return id !== null && id > 0 ? id : null;
@@ -117,10 +117,10 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
     return { builds, queues, unlockQueue };
 }
 
-/ 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
+/** 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
 export const BIGMAP_SERVER_POSITION_BASE = 1001;
 
-/
+/**
  *服务端 `position` → 客户端格索引。
  *
  *两套坐标系：
@@ -143,7 +143,7 @@ export function bigMapServerCellIndex(position: number, cellCount: number): numb
     return shifted >= 0 && shifted < cellCount ? shifted : -1;
 }
 
-/ uint32实例ID直接用于展示；联机基地不写入离线存档。 */
+/** uint32实例ID直接用于展示；联机基地不写入离线存档。 */
 export function projectBigMapServerBase(
     info: IBigMapServerBuildInfo, config: IBigMapConfig, now: number,
 ): IBigMapBaseState | null {

@@ -12,7 +12,7 @@ export class RequestSlgCampInfo extends RequestMsg<CmdSlgCampInfoReqMsg, CmdSlgC
     }
 }
 
-/
+/**
  *据点角色展示（r879 新增）：某座据点里当前有哪些角色、各自血量与所在格。
  *
  *与 `RequestSlgCampInfo`（据点状态：占领/开放/攻城）是两条独立协议，
@@ -24,7 +24,7 @@ export class RequestSlgCampRoleInfos extends RequestMsg<CmdSlgCampRoleInfosReqMs
     }
 }
 
-/
+/**
  *据点迁城（r882 新增）：把自己所在的据点挪到目标位置。
  *
  *与 `RequestSlgCampRoleInfos`（据点内角色）不是一回事，也与建筑搬移

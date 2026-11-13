@@ -13,7 +13,7 @@ export interface IBigMapInfoPopupContent {
     readonly secondary: { readonly text: string; readonly enabled: boolean } | null;
 }
 
-/ 野怪与基地建筑详情；生命周期、模态及空白关闭统一交给 PopupBase。 */
+/** 野怪与基地建筑详情；生命周期、模态及空白关闭统一交给 PopupBase。 */
 @ccclass('BigMapInfoPopup')
 export class BigMapInfoPopup extends PopupBase {
     static prefabPath = 'ui/bigmap/BigMapInfoPopup';

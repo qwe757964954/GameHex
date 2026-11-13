@@ -1,5 +1,6 @@
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
+import { zcMonsterPosition } from '../model/systems/ZCNeutralFeatureSystem';
 import type { IZCDeferredBattleArt } from '../application/ZCGamePreparedResources';
 import { EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import { buildHexGridLayout } from '../../../core/hex/HexGridLayout';
@@ -1030,6 +1031,14 @@ export class ZCGameRenderWorld {
         const now = this.visualTime(frame);
         for (const hex of frame.snapshot.hexes) {
             const feature = hex.neutralFeature;
+            if (feature?.patrol && !feature.claimed) {
+                const view = this.hexViews.get(this.hexEntityBySource.get(hex.id));
+                if (view) {
+                    const position = zcMonsterPosition(frame.mapConfig, hex, now, ZCGameRenderWorld.UNIT_POSITION_SCRATCH);
+                    const origin = frame.mapConfig.hexes[hex.id];
+                    view.renderMonsterPatrol(mapToViewX(position.x - origin.x), mapToViewY(position.y - origin.y));
+                }
+            }
             if (!feature?.claimed) continue;
             const entity = this.hexEntityBySource.get(hex.id);
             const view = this.hexViews.get(entity);

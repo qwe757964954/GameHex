@@ -14,6 +14,9 @@
  *   所以任何既有单位、既有技能的行为逐字不变；
  * - **不碰战斗节拍**：本系统既不推进 `stateTime`，也不改 `battleState` / `nextAttackAt`，
  *   连发弹走独立的 `sendBurstShot`，不会打乱普攻节拍与强化 CD；
+ *   唯一写下的「行为量」是 `castActionUntil` / `castHoldUntil` 两个**截止时刻**
+ *   （2026-11-13 施法动作需求）：前者只被表现层读去换动画片段，后者由单位系统读去
+ *   原地站定半秒 —— 都是「到点自动失效」，不需要任何收尾逻辑；
  * - **触发范围闸门**（2026-11-11 新增，见 `IZCSkillTriggerContext.inAttackRange`）：
  *   打人类的五条车道（副轨 / 自身光环 / 五雷轰顶 / 多点打击 / 移形换影）到点后还要「普攻射程内有目标」
  *   才真的放出去，否则进入**待触发**（readyAt 停在过去、一个字节都不消费），
@@ -27,6 +30,7 @@ import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
 import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
 import { ZCCombatEventType } from '../ZCCombatCatalog';
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, ZC_BLINK_CAST_EFFECT_SECONDS } from '../ZCBlinkCastFx';
+import { ZC_SELF_CAST_HOLD_SECONDS, ZC_SKILL_CAST_ACTION_SECONDS } from '../ZCUnitCastAction';
 import { zcMissileFxOf } from '../ZCCombatEffectFlight';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
@@ -66,6 +70,17 @@ export interface IZCSkillTriggerContext {
      * 与 `castSecondary` / `castSelfAura` / `strike` 同一条口径。
      */
     castBolt?(unit: ZCUnitState): boolean;
+    /**
+     * 精密陷阱到点布置（2026-11-12 科学家「精密陷阱」103504），由 `ZCGameModel` 转给
+     * `ZCAttackResolutionSystem.castTrap`。
+     *
+     * 返回 `false` ⇒ 参数不全（存活秒数 / 触碰或爆炸的半径与倍率有 0），此时**不要**消费 CD ——
+     * 与 `castSecondary` / `castSelfAura` / `castBolt` 同一条口径。
+     *
+     * ⚠️ 与上面三条不同，它**不需要**「普攻射程内有目标」这个闸门：陷阱是放在自己脚下的
+     * 布置类主动，冷却到点就该落，等目标进射程才落会让它永远踩在敌人身后。
+     */
+    castTrap?(unit: ZCUnitState): boolean;
     /**
      * 表值（与 `attackRange` 同一套 px 口径）→ 世界坐标的距离换算，即 `rules.combatDistanceScale`。
      *
@@ -243,6 +258,7 @@ export class ZCSkillTriggerSystem {
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
             this.applyBoltStrike(unit, params, now, context, release);
+            this.applyTrap(unit, params, now, context);
             this.applyRandomStrike(state, unit, params, now, context, release);
             this.applyBlinkStrike(state, unit, params, now, context, runtime, release);
             this.expireShield(unit, now);
@@ -251,6 +267,24 @@ export class ZCSkillTriggerSystem {
             if (this.applyLowHpGuard(state, unit, params, now, context)) statusChanged = true;
         }
         if (statusChanged) state.statusEffects = context.statusSystem.exportSnapshot();
+    }
+
+    /**
+     * 记下「这个单位刚刚真放了一次主动技能」（2026-11-13 用户需求）。
+     *
+     * 两条时长分开写、互不耦合（详见 `ZCUnitCastAction`）：
+     * - `castActionUntil` —— **所有**主动车道都写：表现层在这半秒里把片段换成攻击动作，
+     *   所以「移动中放技能」不会一路跑过去就完事，而是跑着出拳；
+     * - `castHoldUntil` —— 只有 buff 类（`hold = true`，即 `self_cast`）才写：
+     *   单位系统在锁定期内留原地，但不拦攻击。
+     *
+     * ⚠️ 只在**真放出去**之后调用（`castSecondary` / `castSelfAura` / `castBolt` / `castTrap`
+     * 返回 `true`、`strike` 命中 > 0、`blinkTo` 已经执行）。被拒 / 待触发时写下去，
+     * 会在「CD 没消费、下一帧再试」的循环里每帧刷一次动作窗口 —— 等于角色原地抖个不停。
+     */
+    private static markCastAction(unit: ZCUnitState, now: number, hold: boolean): void {
+        unit.castActionUntil = now + ZC_SKILL_CAST_ACTION_SECONDS;
+        if (hold) unit.castHoldUntil = now + ZC_SELF_CAST_HOLD_SECONDS;
     }
 
     /** ① 常驻被动状态：每个单位只挂一次（`passiveStatusApplied` 标记进快照）。 */
@@ -403,6 +437,7 @@ export class ZCSkillTriggerSystem {
         //  没打出去就不消费 CD —— 跑位途中别把这次机会转掉。
         if (!context.castSecondary(unit)) return;
         unit.secondaryReadyAt = now + cooldown;
+        this.markCastAction(unit, now, false);
     }
 
     /** ⑤ 低血护体：跌破阈值挂限时减伤；按 `lowHpCooldown` 做内置冷却（0 = 每场只触发一次）。 */
@@ -495,6 +530,10 @@ export class ZCSkillTriggerSystem {
         if (readyAt === undefined) { unit.selfCastReadyAt = now + cooldown; return false; }
         if (now < readyAt) return false;
         unit.selfCastReadyAt = now + cooldown;
+        //  施法动作 + 原地锁（2026-11-13 用户口径）：buff 类是唯一「打断 walk、停在原地」
+        //  的一类 —— 回血 / 加伤这些不出手的主动，人跑着放出来没人看得见效果。
+        //  ⚠️ 只有这条车道 `hold = true`：别的主动都是打人的，锁住会毁掉追击与走位。
+        this.markCastAction(unit, now, true);
 
         const seconds = Math.max(0, params?.selfCastSeconds ?? 0);
         const mods: ZCStatusStatMods = {};
@@ -663,6 +702,9 @@ export class ZCSkillTriggerSystem {
         if (!cast) return false;
         if (cooldown > 0) unit.auraReadyAt = now + cooldown;
         else unit.auraFiredCount = Math.max(0, Math.round(unit.completedAttackCount ?? 0));
+        //  施法动作（2026-11-13）：光环是「打人」的主动，只换动画片段、**不**原地锁住 ——
+        //  无尘禁土 / 喷射火焰本来就跟着人走，锁在原地会让喷火变成站桩。
+        this.markCastAction(unit, now, false);
 
         //  ② 光环期间的自身增伤。按「生效词缀签名」复用同一条状态定义（`selfCastStatusId`），
         //  避免每张卡每种数值都往状态系统里塞一条新定义。
@@ -760,6 +802,77 @@ export class ZCSkillTriggerSystem {
         }
         if (!cast) return;
         unit.boltReadyAt = now + cooldown;
+        this.markCastAction(unit, now, false);
+    }
+
+    // ────────────────────────────────────────── ⑩ 精密陷阱（2026-11-12）
+
+    /**
+     * ⑩ 精密陷阱（`behaviorKey = 'trap_place'`，科学家 68035 / 技能 103504）。
+     *
+     * 设计口径（技能设计案第 175 行）：「在**原地坐标**留下一个持续时间 15/18/23 秒的陷阱，
+     * 目标触碰会受到 1 次 200%/250%/300% 伤害，陷阱爆炸范围 100px 圆形，范围内所有敌人
+     * 受到**均等**的 180%/220%/280% 伤害，陷阱到点也会主动爆炸」。
+     *
+     * 与其它车道的分工：
+     *   · 不是 `self_aura`（那片区域在**自己身上**按波次打人、还跟着人走，这是**留在原地**、
+     *     没有波次、只在「被踩」与「到点」两个时刻各结算一次）；
+     *   · 不是 `bolt_strike`（那个锁目标落雷，这个是布置物）；
+     *   · 与 `random_strike` 的区别：那个是「立刻打出去」，这个是「先欠着，等人来踩」。
+     *
+     * 为什么**不看** `release`（普攻射程闸门）：陷阱放在自己脚下，落点与目标位置无关；
+     * 等敌人在射程内才落，会让陷阱永远落在追兵身后、一辈子踩不到。冷却到点就落。
+     *
+     * 参数：`trapCooldown` / `trapDuration` / `trapRadius` / `trapDamageRate` /
+     *       `trapExplodeRadius` / `trapExplodeDamageRate` / `trapForward`
+     *       （见 `castTrap` 的注释；距离是**表值 px**）。
+     */
+    private static applyTrap(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castTrap) return;
+        const cooldown = Math.max(0, params?.trapCooldown ?? 0);
+        if (!(cooldown > 0)) {
+            //  诊断⑩-a：**只有本卡确实配了 `trap*` 参数**才说话。
+            //  这条车道对每个单位每步都会过一遍（`castTrap` 是全局钩子），没有陷阱的卡
+            //  （大威天芦、磁电菇……）在这里本来就该静默返回；不加这个条件，
+            //  只要 `zcSkillCastWatched` 开着，别的卡就会被刷成「精密陷阱没有 trapCooldown」。
+            if (zcSkillCastWatched(unit.unitId)) {
+                const declared = !!params && Object.keys(params).some((key) => key.startsWith('trap'));
+                if (declared) {
+                    skillCastLogChanging(`trap-params:${unit.id}`, '触发',
+                        `${unit.unitId}#${unit.id} 精密陷阱没有 trapCooldown`
+                        + `（读到 ${params?.trapCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
+                }
+            }
+            return;
+        }
+        const readyAt = unit.trapReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `boltReadyAt` / `auraReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.trapReadyAt = now + cooldown;
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`trap-arm:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 精密陷阱冷却挂上：${now.toFixed(1)}s → `
+                    + `${(now + cooldown).toFixed(1)}s 首次可布置（cooldown=${cooldown}s）`);
+            }
+            return;
+        }
+        if (now < readyAt) return;
+        const cast = context.castTrap(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`trap-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 放下陷阱，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 放陷阱被拒（参数不全）⇒ 不消费 CD，下帧重试`);
+        }
+        if (!cast) return;
+        unit.trapReadyAt = now + cooldown;
+        //  施法动作（2026-11-13）：放下陷阱也算一次主动出手，蹲下摆一个是有必要的；
+        //  但**不**原地锁住 —— 陷阱是「放下就不管」，锁住只会拖慢下一次走位。
+        this.markCastAction(unit, now, false);
     }
 
     /**
@@ -839,6 +952,8 @@ export class ZCSkillTriggerSystem {
                         : `单位 ${unit.unitId}#${unit.id} 开火失败：搜索半径 ${options.radius.toFixed(1)} 内没有可用目标`
                         + `（包围盒内敌人不足 / 全在半径外）⇒ strike() 返回 0 ⇒ 冷却不推进，会每帧重试`);
             }
+            //  施法动作（2026-11-13）：打空了不算「出手」，不刷窗口 —— 否则每帧重试会原地抖。
+            if (hits > 0) this.markCastAction(unit, now, false);
             return hits > 0;
         };
         const windowSeconds = Math.max(0, params?.strikeSeconds ?? 0);
@@ -1047,6 +1162,8 @@ export class ZCSkillTriggerSystem {
             durationSeconds: ZC_BLINK_CAST_EFFECT_SECONDS,
         });
         context.blinkTo(unit, landX, landY);
+        //  施法动作（2026-11-13）：闪走之后在落点播半秒攻击动作；不锁原地（人已经被挪走了）。
+        this.markCastAction(unit, now, false);
         if (damageRate > 0) {
             context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
         }

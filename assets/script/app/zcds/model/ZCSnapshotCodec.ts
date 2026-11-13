@@ -221,6 +221,19 @@ export class ZCSnapshotCodec {
                     check(optional(feature.effect, v => oneOf(ZC_GATE_EFFECTS, v)), `${prefix}.effect`);
                     for (const key of ['readyAt', 'windowUntil', 'nextAttackAt', 'cooldownSeconds', 'startedAt', 'lineProgress', 'lineDamage', 'portalAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
                     check(optional(feature.awake, v => typeof v === 'boolean'), `${prefix}.awake`);
+                    if (feature.patrol !== undefined) {
+                        const patrol = feature.patrol;
+                        const cells = config.map.resourcePoints?.find(point => point.row * config.map.columns + point.column === hex.id)?.patrolCells;
+                        check(record(patrol), `${prefix}.patrol`);
+                        if (record(patrol)) {
+                            check(validHexId(patrol.fromHexId) && validHexId(patrol.toHexId)
+                                && !!cells?.includes(patrol.fromHexId) && !!cells.includes(patrol.toHexId)
+                                && (patrol.fromHexId === patrol.toHexId || config.map.hexes[patrol.fromHexId]?.neighbors.includes(patrol.toHexId)), `${prefix}.patrol.cells`);
+                            check(nonnegative(patrol.startedAt) && patrol.startedAt <= value.elapsedSeconds && nonnegative(patrol.durationSeconds)
+                                && (patrol.durationSeconds > 0 || patrol.fromHexId === patrol.toHexId), `${prefix}.patrol.time`);
+                            check(optional(patrol.pausedAt, v => nonnegative(v) && v >= patrol.startedAt && v <= value.elapsedSeconds), `${prefix}.patrol.pausedAt`);
+                        }
+                    }
                     check(optional(feature.mowerOwner, v => typeof v === 'string' && ownerSet.has(v)), `${prefix}.mowerOwner`);
                     check(optional(feature.usesRemaining, v => integer(v) && nonnegative(v)), `${prefix}.usesRemaining`);
                     check(optional(feature.gateId, v => integer(v) && Number(v) > 0), `${prefix}.gateId`);
@@ -323,7 +336,13 @@ export class ZCSnapshotCodec {
                 // 磁电冲击（磁电菇 101604，2026-11-11）：按累计普攻触发的上次计数。
                 'auraFiredCount',
                 // 五雷轰顶（磁电菇 68016，2026-11-11）：CD 截止。同一套口径。
-                'boltReadyAt']) {
+                'boltReadyAt',
+                // 精密陷阱（科学家 68035，2026-11-12）：CD 截止。同一套口径 ——
+                // 不还原的话读档回来会立刻在白送一个陷阱（`undefined` ⇒ 重新按 CD 起算）。
+                'trapReadyAt',
+                // 施法动作（2026-11-13 用户需求）：动作窗口截止 + buff 类原地锁截止。
+                // 两个都是「绝对时刻」，只影响表现与「这一秒能不能挪窝」，不进任何伤害算式。
+                'castActionUntil', 'castHoldUntil']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
             for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
@@ -428,6 +447,14 @@ export class ZCSnapshotCodec {
             check(optional(zone.hitStatusId, v => typeof v === 'string'), `${path}.hitStatusId`);
             check(optional(zone.hitStatusChance, v => nonnegative(v) && (v as number) <= 1), `${path}.hitStatusChance`);
             check(optional(zone.hitStatusSeconds, nonnegative), `${path}.hitStatusSeconds`);
+            //  2026-11-12 科学家「精密陷阱」103504：触碰半径 / 触碰伤害 / 死亡那一拍的表现 /
+            //  常驻视觉的延迟出场。四条都必须进快照 —— 少了 `contactRadius` 存档回来陷阱
+            //  就变成「摆着不响的装饰」，少了 `visualDelaySeconds` 常驻光环会在读档后提前出现。
+            check(optional(zone.contactRadius, nonnegative), `${path}.contactRadius`);
+            check(optional(zone.contactDamage, nonnegative), `${path}.contactDamage`);
+            check(optional(zone.expirePrefabPath, v => v === null || typeof v === 'string'), `${path}.expirePrefabPath`);
+            check(optional(zone.expireFxSeconds, nonnegative), `${path}.expireFxSeconds`);
+            check(optional(zone.visualDelaySeconds, nonnegative), `${path}.visualDelaySeconds`);
             check(optional(zone.waveMaxTargets, v => integer(v) && (v as number) >= 0), `${path}.waveMaxTargets`);
             //  2026-11-11 矩形判定（磁电菇「磁电冲击」101604）：两条半边长，都是正数世界 px。
             check(optional(zone.rectHalfLength, nonnegative), `${path}.rectHalfLength`);

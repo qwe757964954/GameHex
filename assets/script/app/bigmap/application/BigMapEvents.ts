@@ -10,12 +10,12 @@ export type BigMapIntent =
     | { readonly kind: 'worldTap' | 'plotTap'; readonly hexId: number }
     | { readonly kind: 'build'; readonly buildingKind: number }
     | { readonly kind: 'harvest'; readonly instanceId: number }
-    / 长按建筑：进入移建态（等效于卡片「移动」按钮，但不要求先选中）。 */
+    /** 长按建筑：进入移建态（等效于卡片「移动」按钮，但不要求先选中）。 */
     | { readonly kind: 'moveBegin'; readonly instanceId: number }
     | { readonly kind: 'visibleCamps'; readonly campIds: readonly number[] }
     | { readonly kind: 'mode'; readonly mode: 'world' | 'base' }
     | { readonly kind: 'primary' | 'secondary' | 'clear' | 'toggleBuildMenu' | 'closeBuildMenu' | 'harvestAll' }
-    / 「探索」：选中并定位到当前可挑战、距离玩家基地最近的野怪。 */
+    /** 「探索」：选中并定位到当前可挑战、距离玩家基地最近的野怪。 */
     | { readonly kind: 'searchMonster' | 'campRoles' };
 
 export interface IBigMapIntentEvent { readonly intent: BigMapIntent }

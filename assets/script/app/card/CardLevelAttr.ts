@@ -1,14 +1,14 @@
 /**
- * 卡牌等级属性（`cardLevelUp.attrList`）读取。**不 import cc，可单测**。
+ * 卡牌等级属性（`cardLevelUp.attrList`）读取。不 import cc，可单测。
  *
- * 与 `CardDetailStats` 里那套 `pvpUnitGrowth` 是**两套口径**，别混：
- *   - `attrList`：该等级的**绝对值**（Lv0 行 = 基础值，Lv50 = 满级值）；
- *   - `pvpUnitGrowth`：叠加在基础值上的 **flat/rate 增量**。
+ * 与 `CardDetailStats` 里那套 `pvpUnitGrowth` 是两套口径，别混：
+ *   - `attrList`：该等级的绝对值（Lv0 行 = 基础值，Lv50 = 满级值）；
+ *   - `pvpUnitGrowth`：叠加在基础值上的 flat/rate 增量。
  *
  * 本文件只做前者：把 attrs 解析成三项可直接用的数。没配 attrList 的卡返回 `null`，
  * 由调用方决定回落哪一套（详情页回落 `pvpUnitGrowth`，行为与引入本文件前一致）。
  *
- * `cardLevelUp.id` 与 `pvpCard.id` 是**同一个键**（都是 68001 这种卡牌 id），
+ * `cardLevelUp.id` 与 `pvpCard.id` 是同一个键（都是 68001 这种卡牌 id），
  * 所以详情页拿到的 cardId 可以直接查这张表，不需要经过 unitId 转换。
  */
 
@@ -26,7 +26,7 @@ export interface ZCCardLevelAttrs {
  * 表里 `statId` → 本结构字段。
  *
  * 只认这几个键：多写别名是为了容错（`hp` / `atk` / `buildHp` 都可能是手填变体），
- * 但**不认任意 statId** —— 认不得的键直接忽略，不猜数值。
+ * 但不认任意 statId —— 认不得的键直接忽略，不猜数值。
  */
 export const CARD_LEVEL_ATTR_STAT: Readonly<Record<string, keyof ZCCardLevelAttrs>> = {
     maxHp: 'maxHp',
@@ -98,14 +98,14 @@ export interface ZCCardBaseStats {
 }
 
 /**
- * 怪物卡按等级出属性 —— **不建怪物卡升级表**，只借卡牌曲线。
+ * 怪物卡按等级出属性 —— 不建怪物卡升级表，只借卡牌曲线。
  *
  *     maxHp     = 怪物卡 unitMaxHp  × 曲线倍率(level)
  *     attack    = 怪物卡 unitAttack × 曲线倍率(level)
  *     buildingHp= 怪物卡 baseHp     × 曲线倍率(level)
  *
  * 曲线来自 `measureLevelRates(cardLevelUp)`（见 `CardLevelCurve`），所以
- * **策划改卡牌成长表，怪物卡自动跟着变**，不存在第二份成长配置。
+ * 策划改卡牌成长表，怪物卡自动跟着变，不存在第二份成长配置。
  *
  * 该等级在曲线上没有采样（超出卡牌上限 / 表没配）⇒ `null`，由调用方决定
  * 是回落基础值还是拒绝出怪，不在这里兜底。

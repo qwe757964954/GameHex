@@ -149,6 +149,11 @@ export class ZCGroundZoneSystem {
             //  整段持有视觉：位置推完就把那条长效事件搬到新位置（必须在结算之前，
             //  这样「这一波伤害」和「画面上的小鹿」在同一拍、同一个坐标）。
             this.syncHoldVisual(state, zone);
+            //  ③ 触碰触发（2026-11-12 科学家「精密陷阱」103504）：敌方单位踩进 `contactRadius`
+            //  ⇒ 吃一次触碰伤害，整片区域**当场清零**，走下面既有的到期通道（爆炸 + 表现）。
+            //  放在波次结算之前：陷阱只有「踩响」和「到点自爆」两个时刻，没有周期性波次
+            //  （`wavesLeft = 0`），所以这个 `while` 对它本来是空转。
+            if (this.resolveContact(state, zone, context)) zone.remainingSeconds = 0;
             while (!approaching && zone.wavesLeft > 0 && now >= zone.nextWaveAt) {
                 this.resolveWave(state, zone, context);
                 zone.wavesLeft -= 1;
@@ -165,6 +170,9 @@ export class ZCGroundZoneSystem {
                 //  区域这一拍就没了（自然到点 / 打满名额提前散）⇒ 表现事件同步摘掉，
                 //  「冲刺结束后所有特效一起消失」不靠下一帧的事件裁剪兜底。
                 this.dropHoldVisual(state, zone);
+                //  死亡那一拍的一次性表现（2026-11-12 精密陷阱的「陷阱爆炸」）：必须在
+                //  `resolveExpiry` 之前推 —— 同一拍里「画面炸开」和「血条掉一截」才对得上。
+                this.pushExpireVisual(state, zone);
                 if ((zone.expireDamage ?? 0) > 0) this.resolveExpiry(state, zone, context);
             }
         }
@@ -383,6 +391,11 @@ export class ZCGroundZoneSystem {
             zone.visualEventId = undefined;
         }
         const id = state.nextCombatEventId++;
+        //  常驻表现推后出场（2026-11-12 精密陷阱）：`start` 与 `idle` 是两段独立美术，
+        //  同帧出场会双影。把 `startedAt` 推到未来、`durationSeconds` 同步加上这段延迟，
+        //  视图侧的 `zcCombatEffectEntered`（docs §14.9）就会等到点了才建节点 ——
+        //  不需要任何「播完切下一段」的接龙代码。缺省 0 ⇒ 立刻出现，既有区域一字不变。
+        const delay = Math.max(0, zone.visualDelaySeconds ?? 0);
         state.combatEvents.push({
             id,
             type: 'area',
@@ -403,8 +416,8 @@ export class ZCGroundZoneSystem {
             //  下游误以为「区域每帧都在打人」。
             damage: 0,
             empowered: true,
-            startedAt: state.elapsedSeconds,
-            durationSeconds: zone.remainingSeconds,
+            startedAt: state.elapsedSeconds + delay,
+            durationSeconds: delay + zone.remainingSeconds,
             //  入场「由小变大」：视图从 0 缓出到 1 再乘 prefab 烘焙缩放，
             //  所以「最终大小」仍然由 prefab 说了算，这里只补一段入场。
             growSeconds: zone.growSeconds,
@@ -426,6 +439,80 @@ export class ZCGroundZoneSystem {
         const index = state.combatEvents.findIndex((event) => event.id === id);
         if (index >= 0) state.combatEvents.splice(index, 1);
         zone.visualEventId = undefined;
+    }
+
+    /**
+     * 区域消失那一拍的一次性表现（2026-11-12 科学家「精密陷阱」103504 的「陷阱爆炸」）。
+     *
+     * 为什么只能在这里推：爆炸时刻由**踩上去的那一脚**决定，施法那一刻根本不知道，
+     * 所以「要播哪个预制体」只能存在区域上、死亡这一帧现推一条事件。
+     * 与 `dropHoldVisual` 的顺序不能反：先摘常驻光环、再炸，屏幕上不会出现
+     * 「爆炸和完整光环同帧并存」的那一帧。
+     *
+     * 没有配 `expirePrefabPath` 的区域（既有全部区域）在这里**一次都不碰**。
+     */
+    private static pushExpireVisual(state: IZCGroundZoneStepState, zone: ZCGroundZoneState): void {
+        const path = zone.expirePrefabPath;
+        if (!path) return;
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: 'area',
+            owner: zone.owner,
+            sourceUnitId: zone.sourceUnitId,
+            targetUnitId: null,
+            skillId: zone.skillId,
+            skillName: zone.skillName,
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: path,
+            fromX: zone.x,
+            fromY: zone.y,
+            toX: zone.x,
+            toY: zone.y,
+            radius: zone.radius,
+            //  纯表现：伤害由紧随其后的 `resolveExpiry` 结算。
+            damage: 0,
+            empowered: true,
+            startedAt: state.elapsedSeconds,
+            durationSeconds: Math.max(0.05, zone.expireFxSeconds ?? 0.5),
+            angleDegrees: zone.angleDegrees,
+            visualLiftPx: zone.visualLiftPx,
+        });
+    }
+
+    /**
+     * 触碰判定（2026-11-12 科学家「精密陷阱」103504）：半径内出现敌方单位 ⇒ 打他一下。
+     *
+     * 口径与设计案原文一致：「目标触碰到该陷阱会收到 1 次伤害」，**一次**、**单目标**，
+     * 随后整片区域当场清零（由调用方做）⇒ 既有的到期通道负责爆炸均摊伤害与表现。
+     *
+     * 为什么取「第一个踩进来的」而不是全部打一遍：踩响就是踩响，同一帧里两个人一起进来，
+     * 也只该由**先到的那个**引爆 —— 全打一遍等于白送一份额外伤害，与设计案不符。
+     *
+     * 取中心点判定（与 `zcGroundZoneReaches` 同口径），不加受击者体积：
+     * 陷阱的可见光环就是它的判定圈（`trapRadius` 与预制的屏上直径同源，见 `ZCTrapFx`）。
+     *
+     * 缺省（`contactRadius` undefined / 0）⇒ 直接返回 false，既有区域逐字不变。
+     */
+    private static resolveContact(state: IZCGroundZoneStepState, zone: ZCGroundZoneState,
+        context: IZCGroundZoneContext): boolean {
+        const contact = Math.max(0, zone.contactRadius ?? 0);
+        if (!(contact > 0)) return false;
+        const targetHexId = context.hexIdAt(zone.x, zone.y);
+        if (targetHexId === null) return false;
+        const radiusHex = Math.ceil(contact / context.hexStep) + 1;
+        for (const target of context.unitsInRadius(targetHexId, radiusHex)) {
+            if (target.owner === zone.owner || target.battleState === 'dead' || target.hp <= 0) continue;
+            const pos = context.unitPosition(target);
+            if (Math.hypot(pos.x - zone.x, pos.y - zone.y) > contact) continue;
+            const hitText = context.damageUnit(target, Math.max(0, zone.contactDamage ?? 0), {
+                owner: zone.owner, kind: 'unit', unitId: zone.sourceUnitId,
+                floatTextKind: zone.floatTextKind,
+            });
+            context.lifestealFromHit?.(zone.sourceUnitId, hitText);
+            return true;
+        }
+        return false;
     }
 
     /** 本波第 `hitIndex` 个目标的伤害：`damage × (1 - falloff)^hitIndex`（取整，与直伤同口径）。 */
@@ -516,7 +603,9 @@ export class ZCGroundZoneSystem {
         if (zone.slowRatio > 0 || statusChanged) state.statusEffects = context.exportStatusEffects();
     }
 
-    private static resolveExpiry(state: IZCGroundZoneStepState, zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {        const targetHexId = context.hexIdAt(zone.x, zone.y);
+    private static resolveExpiry(state: IZCGroundZoneStepState, zone: ZCGroundZoneState,
+        context: IZCGroundZoneContext): void {
+        const targetHexId = context.hexIdAt(zone.x, zone.y);
         if (targetHexId === null) return;
         const radiusHex = Math.ceil(zcGroundZoneBroadRadius(zone) / context.hexStep) + 1;
         for (const target of context.unitsInRadius(targetHexId, radiusHex)) {

@@ -140,15 +140,45 @@ test('ownerRatesOf：只保留服务端字段，不补缺失倍率', () => {
 
 test('服务端最终属性不再乘关卡倍率，缺失属性和其他单位仍走原计算', () => {
     const rates = { attackRate: 2, hpRate: 0.5 };
-    for (const serverAttributes of [{ attack: 19, maxHp: 73 }, { attack: 0 }, { maxHp: 73 }]) {
+    for (const serverAttributes of [
+        { attack: 19, maxHp: 73 }, { attack: 0 }, { maxHp: 73 },
+        { attack: -19, maxHp: -73 }, { attack: -0.5 }, { maxHp: -0.25 },
+        { attack: 19.75, maxHp: 0.5 }, { attack: -19.75, maxHp: -73.25 },
+    ]) {
         const loadouts = compileZCCombatBuild({ unitId: sampleUnit.unitId, serverAttributes }, [sampleUnit]);
         const actual = resolveZCUnitDefinition(sampleUnit, loadouts, rates);
         assert.equal(actual.attack, serverAttributes.attack ?? sampleUnit.attack * 2);
         assert.equal(actual.maxHp, serverAttributes.maxHp ?? sampleUnit.maxHp * 0.5);
+        const unscaled = resolveZCUnitDefinition(sampleUnit, loadouts);
+        assert.equal(unscaled.attack, serverAttributes.attack ?? sampleUnit.attack);
+        assert.equal(unscaled.maxHp, serverAttributes.maxHp ?? sampleUnit.maxHp);
         const other = resolveZCUnitDefinition(otherUnit, loadouts, rates);
         assert.equal(other.attack, otherUnit.attack * 2);
         assert.equal(other.maxHp, otherUnit.maxHp * 0.5);
     }
+    const attackOnly = compileZCCombatBuild({ unitId: sampleUnit.unitId, serverAttributes: { attack: 19 } }, [sampleUnit]);
+    assert.equal(resolveZCUnitDefinition({ ...sampleUnit, maxHp: 1 }, attackOnly, rates).maxHp, 0.5);
+});
+
+test('服务端增量属性走累加通道：addRate 按基础值打折、add 进 flat，override 仍最高', () => {
+    const loadouts = compileZCCombatBuild({
+        unitId: sampleUnit.unitId,
+        serverModifiers: [
+            { statId: 'attack', operation: 'addRate', value: -0.2 },
+            { statId: 'maxHp', operation: 'add', value: -10 },
+        ],
+    }, [sampleUnit]);
+    const actual = resolveZCUnitDefinition(sampleUnit, loadouts);
+    assert.equal(actual.attack, sampleUnit.attack * 0.8);
+    assert.equal(actual.maxHp, Math.max(1, sampleUnit.maxHp - 10));
+
+    //  绝对值与增量同时到达：增量先算、override 定值（priority 1000 > 900）。
+    const withOverride = compileZCCombatBuild({
+        unitId: sampleUnit.unitId,
+        serverAttributes: { attack: 42 },
+        serverModifiers: [{ statId: 'attack', operation: 'addRate', value: -0.2 }],
+    }, [sampleUnit]);
+    assert.equal(resolveZCUnitDefinition(sampleUnit, withOverride).attack, 42);
 });
 
 test('阵营倍率在普通成长之后相乘，不覆盖技能参数', () => {

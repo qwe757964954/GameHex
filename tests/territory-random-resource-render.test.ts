@@ -334,6 +334,7 @@ test('territory art loads the existing silver icon for random conditions', async
             }
             // 宝箱气泡底图 / 排版常量（2026-11-02 换 `frame_04`）⇒ 给真模块。
             if (id === '../model/TerritoryChestBubble') return territoryChestBubbleModule;
+            if (id === '../model/TerritoryLevelBubble') return territoryLevelBubbleModule;
             if (id === '../model/TerritoryChestHint') return {
                 TERRITORY_CHEST_HINT_SECONDS: 1.5,
                 territoryChestHintBounceOffset: () => 0,

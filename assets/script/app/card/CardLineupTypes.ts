@@ -4,16 +4,12 @@ import type { ICardLineupCatalog } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
 /**
- * 卡牌阵容界面视图契约与美术名映射。
- * 数据来自 pvpCard.json / pvpBond.json；维度名称、traits 归一化与列表排序权重来自
- * `PVP-卡牌美术.xlsx` 的 `name` / `sort` 列（`ICardArtConfig.lineup`）。
+ * 阵容页的视图契约和美术名映射。
+ * 数据来自 pvpCard/pvpBond，维度名称和排序权重来自 PVP-卡牌美术.xlsx 的 name/sort 列。
  */
 
 /**
- * 卡牌职业：战士 / 坦克 / 射手 / 法师。
- *
- * 这份数组是**编译期白名单**：表 `cardUiArtClass` 的行集合必须与它一致，
- * 少一行会在解析时报缺少映射，多一行报「未知职业」（`tests/card-art-config.test.ts` 双向核对）。
+ * 职业白名单：表 cardUiArtClass 必须和它对上，少一行或多一行都报错。
  */
 const CARD_CLASS_IDS = ['warrior', 'mage', 'archer', 'tank'] as const;
 export type ZCCardClass = (typeof CARD_CLASS_IDS)[number];
@@ -65,8 +61,7 @@ export function sortLineupCards(
 }
 
 /**
- * 卡牌阵营（traits.camp）：花果 / 蘑菇 / 盆栽 / 僵尸。与职业是两个维度。
- * 同样只保留一份字面量，类型由数组推导；表 `cardUiArtCamp` 的行集合必须与它一致。
+ * 阵营白名单，和职业是两个维度；表 cardUiArtCamp 必须对得上。
  */
 const CARD_CAMP_IDS = ['huaguo', 'mogu', 'penzai', 'jiangshi'] as const;
 export type ZCCardCamp = (typeof CARD_CAMP_IDS)[number];
@@ -108,11 +103,8 @@ export function tallyDeckClasses(deck: readonly ZCDeckCard[], lineup: ICardLineu
 }
 
 /**
- * 一份「完整阵容」：上阵数已达标，且 `ZC_CARD_RARITIES` 里每个品级至少一张。
- *
- * 布阵页切页签前用它决定要不要先把当前方案提交给服务器（见 `LineupBoardController.switchPreset`）。
- * 品级取 `ZCDeckCard.rarity`（`pvpCard.rarity` 归一化后的英文 id），不看美术表 ——
- * 表缺行不应该让「阵容是否完整」跟着变。
+ * 阵容是否完整：上阵数够，且每个品级至少一张。
+ * 只看 pvpCard.rarity，不看美术表，表缺行不该影响这个判断。
  */
 export function isCompleteLineup(deck: readonly ZCDeckCard[], slotLimit: number): boolean {
     if (deck.length < Math.max(1, Math.round(slotLimit))) return false;

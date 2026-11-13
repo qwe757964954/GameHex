@@ -13,12 +13,12 @@ export const CARD_LINEUP_TEXTS = {
     boardSaveOffline: '未连接服务器',
     boardSaveFailed: '保存失败',
     boardLoadFailed: '布阵数据加载失败，请重新打开',
-    onField: '已出战！',
+    onField: '出战中',
     progressSeparator: '/',
     navShops: '商店',
     navHero: '英雄',
     navRoles: '角色',
-    /** ⚠️ 2026-10-19 蓝湖改版后「领地」= 主城页（六边格地图），不再是角色主界面。 */
+    /** 蓝湖改版后「领地」指主城页，不是角色主界面。 */
     navTerritory: '领地',
     navChallenge: '挑战',
     navAlliance: '联盟',
@@ -44,16 +44,14 @@ export const CARD_LINEUP_TEXTS = {
     skillTitle: '技能升级',
     skillUpgradeSingle: '升级技能',
     skillTierSuffix: '阶',
-    /** ⚠️ 判据是 `heroLevel`（这张卡/英雄自己的等级），不是 `CmdRole.lv` 的「角色等级」。 */
+    /** 判的是英雄自己的等级，不是 CmdRole.lv 的角色等级。 */
     skillUnlockPrefix: '英雄等级',
     skillUnlockSuffix: '级解锁',
     skillActive: '主动',
     skillPassive: '被动',
     skillCooldown: '冷却：',
     skillSeconds: '秒',
-    /**
-     * 技能等级与升级目标统一使用设计稿的 Lv. 前缀。
-     */
+    /** 技能等级统一用设计稿的 Lv. 前缀。 */
     skillLevelPrefix: 'Lv.',
     /** 技能列表空的说法（主城 / 金矿这类没配技能的卡）。 */
     skillEmpty: '该卡没有技能',
@@ -91,10 +89,7 @@ export const CARD_LINEUP_TEXTS = {
     detailSkillNameSeparator: '：',
     /** 描述栏一条都没有时的占位（这些卡的技能描述整块还没配，见 armySkillLevelUp）。 */
     detailMilestoneEmpty: '暂无技能描述',
-    /**
-     * 升级奖励条的「全队暴击伤害」文案前缀（数值拼在后面，如 `升级增加全队暴击伤害：2%`）。
-     * 数值来自 `pvpSkillPlan` 的 109001 链，见 `CardDetailCritDamage`。
-     */
+    /** 升级奖励条的全队暴击伤害前缀，数值来自 pvpSkillPlan 109001 链。 */
     upgradeCritDamage: '升级增加全队暴击伤害：',
     /** 品质字（菱形中央）：品级中文名（普通/稀有/史诗/传说）。 */
     detailQualityPrefix: '',

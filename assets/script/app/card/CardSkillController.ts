@@ -141,7 +141,7 @@ export class CardSkillController extends ControllerBase {
         this.rows = skills.map((skill) => {
             const known = data.levels.some((item) => item.skillId === skill.skillId);
             const kept = previous.get(skill.skillId);
-            //  服务端**给了**等级才覆盖；没给就保留现有档位，避免刷新把刚升的档冲回第 1 档。
+            //  服务端给了等级才覆盖；没给就保留现有档位，避免刷新把刚升的档冲回第 1 档。
             const level = known ? resolveSkillLevel(skill, data.levels) : (kept ? kept.level : resolveSkillLevel(skill, []));
             return { skill, serverLevel: level, level };
         });

@@ -108,7 +108,11 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
         const item = getZCNeutralResourceCatalog().items.get(point.resourceId);
         if (!item || item.groupId !== point.groupId) throw new Error(`后端资源点配置不匹配：${point.groupId}/${point.resourceId}`);
         occupied.add(hexId);
-        return { row: point.row, column: point.column, groupId: point.groupId, section: sections?.[hexId] ?? 0 };
+        // 协议冻结点位和资源抽签，巡逻范围沿用同坐标、同组合的已校验地图元数据。
+        const patrolCells = map.resourcePoints?.find(local => local.row === point.row && local.column === point.column
+            && local.groupId === point.groupId)?.patrolCells;
+        return { row: point.row, column: point.column, groupId: point.groupId, section: sections?.[hexId] ?? 0,
+            ...(patrolCells?.length ? { patrolCells: [...patrolCells] } : {}) };
     });
     return Object.assign({}, map, {
         id: info.id, name: info.name, version: info.version, cityMode: needsSelection ? 'select' : 'fixed',
@@ -274,18 +278,24 @@ function compileOwnerLoadouts(
         //  星级不再进构筑（上游口径：星级表弃用）。`hasGeneral` 现在**只当「这张卡是不是老卡」的
         //  兜底判据**用，不再往构筑里塞 `generalStar` —— 老卡的数值已经整体挪到成长表里。
         const hasGeneral = catalogs.generalStars.has(`${generalId}:1`);
-        const serverAttributes = unit?.heroAttrs?.find((entry) => entry.heroId === generalId)?.attributes;
+        const heroAttrs = unit?.heroAttrs?.find((entry) => entry.heroId === generalId);
+        const serverAttributes = heroAttrs?.attributes;
+        const serverModifiers = heroAttrs?.modifiers;
+        //  ⚠️ 不能用 `serverAttributes` 的真假判：只下发增量属性（`attack.addRate`）时它是 `{}`，
+        //  `{}` 是 truthy ⇒ 会绕过下面的 continue 兜底，把没有任何数据的老卡也塞进编译器。
+        const hasServerAttrs = (serverAttributes !== undefined && Object.keys(serverAttributes).length > 0)
+            || (serverModifiers?.length ?? 0) > 0;
         //  技能计划与星级是**两件事**（2026-11-10）：`pvpSkillPlan.unlockHeroLevel` 比的是
         //  「兵种等级」（= `hero.level`），与 `generalStar` 有没有行完全无关。
         //  原来 `heroLevel` 只写在 `hasGeneral` 分支里 ⇒ 没有星级行的卡（68015~68035 这一批
         //  新卡，含 68025 大威天芦）**整份技能计划都编不出来**：`skillRuntime` 里没有
         //  `68025:30858`，`self_aura` 的 `auraCooldown` 无从读到，战场上既不放下光环、
         //  也不报任何错 —— 表现就是「技能一个都不放」。
-        //  同一个坑还有一半：`!hasGeneral && !serverAttributes` 直接 `continue`，
+        //  同一个坑还有一半：`!hasGeneral && !hasServerAttrs` 直接 `continue`，
         //  连成长和技能一起丢掉，所以这类卡连属性成长都不会生效。
         const skillPlanLevel = hero.level;
         const hasSkillPlan = selectZCSkillPlans(String(generalId), skillPlanLevel, catalogs).length > 0;
-        if (!hasGeneral && !serverAttributes && !hasSkillPlan) continue;
+        if (!hasGeneral && !hasServerAttrs && !hasSkillPlan) continue;
         try {
             const compiled = compileZCCombatBuild(Object.assign({
                 unitId: String(generalId),
@@ -299,6 +309,7 @@ function compileOwnerLoadouts(
                 //  （按品质分档：1→45 / 2→55 / 3→65 / 4→75），
                 //  见 `tools/config/patch_general_star_removal_growth.js`。
                 serverAttributes,
+                serverModifiers,
             }), config.units, catalogs);
             for (const loadout of compiled) loadouts.push(loadout);
         } catch (error) {

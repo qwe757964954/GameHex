@@ -85,6 +85,27 @@ async function putPreset(base: string, id: string, body: unknown): Promise<{ sta
     return { status: response.status, body: await response.json().catch(() => null) };
 }
 
+test('服务端保存巡逻范围不丢字段，并拒绝断连、越界和主城冲突', async () => {
+    await withServer(async base => {
+        const id = `patrol_test_${Date.now()}`;
+        const layout = JSON.parse(readFileSync('tests/fixtures/zcds-map-v3-neutral-2p.json', 'utf8'));
+        layout.id = id;
+        layout.resourcePoints = [{ row: 8, column: 5, groupId: 1, patrolCells: [104, 93] }];
+        try {
+            const saved = await putPreset(base, id, layout);
+            assert.equal(saved.status, 200, JSON.stringify(saved.body));
+            const loaded = JSON.parse(readFileSync(`tools/map-editor/presets/gamemap/${id}.json`, 'utf8'));
+            assert.deepEqual(loaded.resourcePoints[0].patrolCells, [93, 104]);
+            for (const cells of [[104], [93, 0], [93, -1], [93, 93], [93, 220], '93']) {
+                layout.resourcePoints[0].patrolCells = cells;
+                const rejected = await putPreset(base, id, layout);
+                assert.equal(rejected.status, 400);
+                assert.match(rejected.body.error, /巡逻/);
+            }
+        } finally { await fetch(`${base}/api/presets/${id}`, { method: 'DELETE' }); }
+    });
+});
+
 test('地图编辑器服务端：/bg 背景图路由读游戏同源贴图，且挡路径穿越', async () => {
     assert.ok(assetExists('image/zdbg1.jpg'), '★默认底图 zdbg1.jpg 必须存在（游戏与编辑器共用）');
     await withServer(async (base) => {

@@ -642,6 +642,9 @@ export class ZCHexView extends Component {
     private resourceUnitPrefabName = '';
     /** 本格当前挂着的骨骼节点（池化复用：格子 view 生命周期内只增不减，count 变小时多出来的隐藏）。 */
     private readonly resourceUnitNodes: Node[] = [];
+    private monsterOffsetX = 0;
+    private monsterOffsetY = 0;
+    private monsterBarBase: Vec3 | null = null;
     private readonly resourceUnitSkeletons: (sp.Skeleton | null)[] = [];
     /** 骨骼节点的缓存键：`unitId@数量` —— 变了才重建。 */
     private resourceUnitCache = '';
@@ -985,13 +988,13 @@ export class ZCHexView extends Component {
         const sprite = this.iconSprite;
         if (!sprite) return;
         if (!this.resourceIconRaised) {
-            sprite.node.setPosition(local.x, local.y, local.z);
+            sprite.node.setPosition(local.x + this.monsterOffsetX, local.y + this.monsterOffsetY, local.z);
             return;
         }
         const base = this.buildingLayer?.position;
         const worldX = this.node.position.x + (base?.x ?? 0);
         const worldY = this.node.position.y + (base?.y ?? 0);
-        sprite.node.setPosition(worldX + local.x, worldY + local.y, local.z);
+        sprite.node.setPosition(worldX + local.x + this.monsterOffsetX, worldY + local.y + this.monsterOffsetY, local.z);
         // Spine 容器抬到 ResourceLayer 后按资源图标落点 RESOURCE_ICON_POS 补偿。
         const spineRoot = this.artifactSpineRoot;
         if (spineRoot) {
@@ -1106,6 +1109,8 @@ export class ZCHexView extends Component {
     }
 
     render(presentation: Readonly<IZCHexPresentation>): void {
+        if ((!presentation.state.neutralFeature?.patrol || presentation.state.neutralFeature.claimed)
+            && (this.monsterOffsetX || this.monsterOffsetY)) this.renderMonsterPatrol(0, 0);
         const { state } = presentation;
         const now = presentation.now;
         // 建筑外观的类型倍率（金矿 110%）每拍按 `state.building` 刷新 —— 必须在下面那次
@@ -1820,10 +1825,20 @@ export class ZCHexView extends Component {
                 ? 'active' : state.neutralFeature?.readyAt > presentation.now ? 'cooling' : 'ready'}`;
     }
 
-    /**
-     * 一格一根血条，但一格上可能同时挂着城墙耐久和建筑耐久，按「当前能被打到的那样」取值：
-     * 详见 docs/ZCHexView设计决策.md §24。
-     */
+    renderMonsterPatrol(x: number, y: number): void {
+        this.monsterOffsetX = x;
+        this.monsterOffsetY = y;
+        for (let i = 0; i < this.resourceUnitNodes.length; i += 1) {
+            const node = this.resourceUnitNodes[i];
+            node.setPosition(x + (i - (this.resourceUnitNodes.length - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING,
+                y + ZCHexView.RESOURCE_UNIT_POS_Y, 0);
+        }
+        this.applyIconPosition(MONSTER_BADGE_POS);
+        if (!this.monsterBarBase) this.monsterBarBase = this.healthBar.node.position.clone();
+        this.healthBar.node.setPosition(this.monsterBarBase.x + x, this.monsterBarBase.y + y, this.monsterBarBase.z);
+    }
+
+    /** 一格共用一根血条，优先显示城墙耐久，其次建筑或野怪生命。 */
     private renderHealthBar(state: DeepReadonly<ZCHexState>, now: number): void {
         const bar = this.healthBar;
         // 旧存档 / 测试桩可能没有城墙字段，缺字段一律按「没有墙」处理。

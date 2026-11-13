@@ -27,7 +27,7 @@ import {
     type IBigMapCitySchedule,
 } from './BigMapCitySchedule';
 
-/
+/**
  *配置表名 —— 与 `assets/remoteRef/<名字>.json` 的文件名逐字一致。
  *
  *命名照全仓规范（`pvpCard.json` / `mapTerrian.json` 那一套）：英文 camelCase + `bigmap` 前缀。
@@ -59,12 +59,12 @@ export const BIGMAP_TABLE = {
 
 export type BigMapTableName = typeof BIGMAP_TABLE[keyof typeof BIGMAP_TABLE];
 
-/ 原始表集合：表名 → `{k,v}` 压缩载荷，或已经解压好的对象数组。 */
+/** 原始表集合：表名 → `{k,v}` 压缩载荷，或已经解压好的对象数组。 */
 export type BigMapRawTables = Readonly<Record<string, unknown>>;
 
 export type BigMapRow = Readonly<Record<string, unknown>>;
 
-/
+/**
  *把 `{"k":[...],"v":[[...]]}` 解压成对象数组；已经是对象数组时原样返回。
  *
  *客户端正常路径由 `RefUtil` 解压（`tryGetCompressKeyRefData`），这里再兜一层是为了
@@ -89,7 +89,7 @@ export function decompressBigMapRows(payload: unknown): readonly BigMapRow[] {
     return rows;
 }
 
-/ 取表：缺表直接抛错（配置缺失必须当场暴露，不能静默退化成空玩法）。 */
+/** 取表：缺表直接抛错（配置缺失必须当场暴露，不能静默退化成空玩法）。 */
 function table(tables: BigMapRawTables, name: BigMapTableName): readonly BigMapRow[] {
     const rows = decompressBigMapRows(tables[name]);
     if (rows.length === 0) throw new Error(`[BigMap] 配置表缺失或为空：${name}`);
@@ -114,7 +114,7 @@ function flag(row: BigMapRow, field: string): boolean {
     return int(row, field) !== 0;
 }
 
-/
+/**
  *取「两个候选字段里的第一个有值的」——策划表与早期推算表字段名不同
  *（`baseBuildSize` vs `occupyHex`、`baseBuildMaxNum` vs `maxOwnNum`），
  *两个都没有就用默认值。有值但非法仍然抛，不能把脏数据当成缺列。
@@ -128,14 +128,14 @@ function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue
     return defaultValue;
 }
 
-/ 缺失给 `defaultValue`，有值但非法抛错。 */
+/** 缺失给 `defaultValue`，有值但非法抛错。 */
 function optionalInt(row: BigMapRow, field: string, defaultValue = 0): number {
     const value = row[field];
     if (value === undefined || value === null || value === '') return defaultValue;
     return int(row, field);
 }
 
-/ `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
+/** `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
 function parsePreBuild(value: unknown): readonly { readonly id: number; readonly level: number }[] {
     let raw = value;
     if (typeof raw === 'string') {
@@ -155,7 +155,7 @@ function parsePreBuild(value: unknown): readonly { readonly id: number; readonly
     return result;
 }
 
-/ 资源类型白名单校验：配置里写错枚举会让产出直接消失，必须拦住。 */
+/** 资源类型白名单校验：配置里写错枚举会让产出直接消失，必须拦住。 */
 function resType(row: BigMapRow): BigMapResType {
     const value = text(row, 'resType') as BigMapResType;
     if (!BIGMAP_RES_ORDER.includes(value)) {
@@ -164,7 +164,7 @@ function resType(row: BigMapRow): BigMapResType {
     return value;
 }
 
-/
+/**
  *解析全部 BigMap 配置。
  *
  *校验集中在边界（契约先行）：id 唯一、等级连续、前置城池存在、名次连续、开放城池必须属于个人层。
@@ -253,7 +253,7 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     };
 }
 
-/
+/**
  *把 `item` 表里的图标并进资源定义：`bigmapResource.itemId → item.icon`。
  *
  *为什么要单独一步：`parseBigMapConfig` 是纯函数，只吃 bigmap 那 12 张表；而资源图标
@@ -290,7 +290,7 @@ export function attachBigMapResourceItemIcons(
     return { ...config, resourceIcons };
 }
 
-/
+/**
  *攻城日程：表里写 `"09:00"` 这种人类可读格式，这里折成当日秒并复用同一套校验。
  *
  *解析与校验放同一条链上（`parseBigMapClockTime` → `validateBigMapCitySchedule`），
@@ -411,7 +411,7 @@ function parseBuildingLevels(
     return byBuilding;
 }
 
-/
+/**
  *建筑产出（每等级每小时产量与累积上限）。
  *
  *两个来源，策划表优先：
@@ -690,7 +690,7 @@ function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX
     return readConfigInteger(row[field], `[BigMap] ${BIGMAP_TABLE.monster}[monsterId=${row.monsterId}].${field}`, min, max);
 }
 
-/
+/**
  *掉落数组解析 —— 据点与野怪共用（`firstReward` / `occupyReward` / `firstKillDropId` / `normalDropId`）。
  *
  *错误路径包含所属表、行标识及数组下标，避免据点掉落误报为野怪字段。

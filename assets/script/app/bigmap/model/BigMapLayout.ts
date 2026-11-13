@@ -1,4 +1,4 @@
-/
+/**
  *大地图布局文件（`assets/resources/config/bigmap-maps/*.json`）—— 纯 TS，零 `cc` 依赖。
  *
  *## 为什么需要它
@@ -41,16 +41,16 @@ import type {
     IBigMapWorld,
 } from './BigMapTypes';
 
-/ 布局文件标识（`kind` 字段），与领地地图的 `territoryChapter` 同性质。 */
+/** 布局文件标识（`kind` 字段），与领地地图的 `territoryChapter` 同性质。 */
 export const BIGMAP_LAYOUT_KIND = 'bigmapWorld';
 
-/ 结构版本。加字段不用改它（可选字段向后兼容），语义变化才 +1。 */
+/** 结构版本。加字段不用改它（可选字段向后兼容），语义变化才 +1。 */
 export const BIGMAP_LAYOUT_VERSION = 1;
 
-/ 允许的地形取值，`parseBigMapLayout` 用它挡脏数据。 */
+/** 允许的地形取值，`parseBigMapLayout` 用它挡脏数据。 */
 const TERRAINS: readonly BigMapTerrain[] = ['plain', 'forest', 'rock', 'water'];
 
-/
+/**
  *编辑器逻辑坐标 → 客户端渲染坐标的缩放，两个轴不一样。
  *
  *逻辑网格是 36×42（`HEX_GRID_LOGICAL_*`），渲染网格是 92.25×90（`HEX_GRID_VIEW_*`）——
@@ -73,38 +73,38 @@ export interface IBigMapLayoutCity {
     readonly cityId: number;
     readonly anchorHexId: number;
     readonly hexIds: readonly number[];
-    /
+    /**
      *落位时选的环号。
      *不能由格子几何反推：种子生成里有「目标环被占满就退一环」的兜底，
      *那时 `ring` 与实际距离不相等，反推会让往返对拍假红。
      */
     readonly ring: number;
-    /
+    /**
      *势力范围格子（透明色区）。
      *
      *由 Presenter 提供给地图染色与外轮廓；不进入存档或战斗规则。
      *战斗范围增益仍只走 `radiateCapacity` 距离判定。
      */
     readonly rangeHex: readonly number[];
-    / 相邻城池 id（编辑器按范围邻接自动推导，允许手改）。双向一致性由校验保证。 */
+    /** 相邻城池 id（编辑器按范围邻接自动推导，允许手改）。双向一致性由校验保证。 */
     readonly adjacentCityIds: readonly number[];
-    / 地图上显示的编号，如 `1-16`。 */
+    /** 地图上显示的编号，如 `1-16`。 */
     readonly label: string;
 }
 
-/ 出生区块：把若干格圈成一区，容量按辐射容量算（文档 `spawnCapRatio`）。 */
+/** 出生区块：把若干格圈成一区，容量按辐射容量算（文档 `spawnCapRatio`）。 */
 export interface IBigMapSpawnZone {
     readonly zoneId: number;
-    / 归属城池；0 = 未绑定任何城（仅作图用）。 */
+    /** 归属城池；0 = 未绑定任何城（仅作图用）。 */
     readonly cityId: number;
     readonly cells: readonly number[];
     readonly capacity: number;
 }
 
-/ 活动据点 / 挂机资源田 / 地图 BOSS 的落位（城池之外的静态点位）。 */
+/** 活动据点 / 挂机资源田 / 地图 BOSS 的落位（城池之外的静态点位）。 */
 export interface IBigMapLayoutPoint {
     readonly pointId: number;
-    / 1 = 城池（一般不用，城池走 cities）2 = 挂机资源田 3 = 地图 BOSS。 */
+    /** 1 = 城池（一般不用，城池走 cities）2 = 挂机资源田 3 = 地图 BOSS。 */
     readonly pointType: number;
     readonly hexIds: readonly number[];
     readonly openCron: string;
@@ -135,24 +135,24 @@ export interface IBigMapLayout {
     readonly worldName: string;
     readonly rows: number;
     readonly columns: number;
-    / 地形仍由种子生成（100×100 手摆 10000 格不现实），只有手改过的格子进 `terrainOverrides`。 */
+    /** 地形仍由种子生成（100×100 手摆 10000 格不现实），只有手改过的格子进 `terrainOverrides`。 */
     readonly terrainSeed: number;
     readonly terrainOverrides: readonly IBigMapLayoutTerrainOverride[];
     readonly cities: readonly IBigMapLayoutCity[];
     readonly monsters: readonly IBigMapLayoutMonster[];
-    / 空数组 = 该图不预置基地（联机版由服务器下发落点）。离线调试档才写。 */
+    /** 空数组 = 该图不预置基地（联机版由服务器下发落点）。离线调试档才写。 */
     readonly bases: readonly IBigMapLayoutBase[];
-    / 障碍 / 禁放格（不能摆城、怪、基地）。 */
+    /** 障碍 / 禁放格（不能摆城、怪、基地）。 */
     readonly blocked: readonly number[];
     readonly spawnZones: readonly IBigMapSpawnZone[];
     readonly points: readonly IBigMapLayoutPoint[];
-    / 自定义背景图资源名（相对 bundle 根、不带扩展名）。空串 = 无布局背景，废弃的荒地背景不再加载。旧前缀 `image/bigmap/` 由 `toBigMapArtPath()` 归一。 */
+    /** 自定义背景图资源名（相对 bundle 根、不带扩展名）。空串 = 无布局背景，废弃的荒地背景不再加载。旧前缀 `image/bigmap/` 由 `toBigMapArtPath()` 归一。 */
     readonly background: string;
 }
 
 export interface IBigMapExportOptions {
     readonly layoutVersion?: number;
-    /
+    /**
      *手改地形透传。
      *
      *`IBigMapWorld` 里只有最终地形，反推不出「哪几格是手改的」，所以导出时必须由调用方
@@ -160,7 +160,7 @@ export interface IBigMapExportOptions {
      *不传 = 整张图纯种子决定。
      */
     readonly terrainOverrides?: readonly IBigMapLayoutTerrainOverride[];
-    /
+    /**
      *底稿布局：`IBigMapWorld` 不承载的静态标注（城池 `rangeHex`/`adjacentCityIds`/`label`、
      *`blocked`/`spawnZones`/`points`）从它兜底。
      *
@@ -192,7 +192,7 @@ function readHexIds(value: unknown, field: string, total: number): number[] {
     return hexIds;
 }
 
-/ 可空的格子集合（势力范围 / 出生区块 / 障碍）：缺省给空数组，重复项静默去重。 */
+/** 可空的格子集合（势力范围 / 出生区块 / 障碍）：缺省给空数组，重复项静默去重。 */
 function readHexIdSet(value: unknown, field: string, total: number): number[] {
     if (value === undefined || value === null) return [];
     if (!Array.isArray(value)) fail(`${field} 必须是数组`);
@@ -201,7 +201,7 @@ function readHexIdSet(value: unknown, field: string, total: number): number[] {
     return [...seen];
 }
 
-/ 可空的整数集合（相邻城池 id 之类）：缺省空数组，重复去重、升序 —— 与 js 侧同口径，便于对拍。 */
+/** 可空的整数集合（相邻城池 id 之类）：缺省空数组，重复去重、升序 —— 与 js 侧同口径，便于对拍。 */
 function readIntSet(value: unknown, field: string): number[] {
     if (value === undefined || value === null) return [];
     if (!Array.isArray(value)) fail(`${field} 必须是数组`);
@@ -215,7 +215,7 @@ function readString(value: unknown, field: string): string {
     return value;
 }
 
-/
+/**
  *校验 + 归一化一份布局（丢弃未知字段，给出的返回对象可直接序列化回盘）。
  *
  *所有规则都在这里一次判完，`buildBigMapWorldFromLayout` 只做组装 ——
@@ -389,7 +389,7 @@ export function parseBigMapLayout(raw: unknown): IBigMapLayout {
     };
 }
 
-/
+/**
  *从已生成的世界反推一份布局。
  *
  * 地形只有最终值，所以 `terrainOverrides` 必须由调用方透传（见 `IBigMapExportOptions`）；
@@ -455,18 +455,18 @@ export function exportBigMapLayout(world: IBigMapWorld, options: IBigMapExportOp
     };
 }
 
-/ 布局与配置表的尺寸是否对得上（对不上就不是这张图，直接走种子兜底，别硬套）。 */
+/** 布局与配置表的尺寸是否对得上（对不上就不是这张图，直接走种子兜底，别硬套）。 */
 export function isBigMapLayoutCompatible(layout: IBigMapLayout, config: IBigMapConfig): boolean {
     return layout.rows === config.world.rows && layout.columns === config.world.cols;
 }
 
 export interface IBigMapLayoutResolution {
     readonly layout: IBigMapLayout | null;
-    / 不可用的原因（人话，直接进日志）。可用时为空串。 */
+    /** 不可用的原因（人话，直接进日志）。可用时为空串。 */
     readonly reason: string;
 }
 
-/
+/**
  *把磁盘上的原始 JSON 变成可用布局；不可用就返回 `null` + 原因。
  *
  *纯函数、零 `cc`，所以加载器（要 `JsonAsset`）和单测（不能碰引擎）能共用同一条判据。
@@ -489,7 +489,7 @@ export function resolveBigMapLayout(raw: unknown, config: IBigMapConfig): IBigMa
     return { layout, reason: '' };
 }
 
-/
+/**
  *用布局重建世界。
  *
  *这里只做外键校验（布局里的城/怪是否在配置表里），格位合法性已由 `parseBigMapLayout` 判完。

@@ -10,11 +10,11 @@ import { buildBigMapViewState, type IBigMapUiState, type IBigMapViewState } from
 import type { BigMapModel, IBigMapActionFeedback } from './BigMapModel';
 import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
-/ 「探索」两颗提示：没目标 / 定位成功（后半截由等级拼出来）。 */
+/** 「探索」两颗提示：没目标 / 定位成功（后半截由等级拼出来）。 */
 export const BIGMAP_SEARCH_MONSTER_EMPTY = '暂无可挑战的野怪';
 export const BIGMAP_SEARCH_MONSTER_FOUND = '已定位到';
 
-/
+/**
  *可见据点查询的最小间隔（毫秒）。
  *
  *视图按 150ms 防抖后上报「当前可见城池」，拖动是「停顿—拖—停顿」的，每停顿一次就报一批；
@@ -33,16 +33,16 @@ export interface IBigMapControllerOptions {
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
     readonly schedule?: (callback: () => void, milliseconds: number) => () => void;
-    / 毫秒时钟；默认 `Date.now`。可见据点查询的限速窗口按它算（测试注入可控时钟）。 */
+    /** 毫秒时钟；默认 `Date.now`。可见据点查询的限速窗口按它算（测试注入可控时钟）。 */
     readonly now?: () => number;
 }
 
-/ 唯一的事件编排入口：网络/Model/UI → 状态变更 → 展示事件。 */
+/** 唯一的事件编排入口：网络/Model/UI → 状态变更 → 展示事件。 */
 export class BigMapController extends ControllerBase {
     private started = false;
     private visibleCampIds: readonly number[] = [];
     private visibleCampRefreshPending = false;
-    / 上一轮可见据点查询的时间戳（限速用；`-Infinity` = 还没发过，首轮立即发）。 */
+    /** 上一轮可见据点查询的时间戳（限速用；`-Infinity` = 还没发过，首轮立即发）。 */
     private lastVisibleRefreshAt = -Infinity;
     private ui: { -readonly [K in keyof IBigMapUiState]: IBigMapUiState[K] } = {
         mode: 'world', selectedCityId: 0, selectedMonsterId: 0, selectedPlotHexId: -1, selectedBaseHexId: -1,
@@ -239,7 +239,7 @@ export class BigMapController extends ControllerBase {
         this.publish();
     }
 
-    /
+    /**
      *长按建筑进入移建态：不要求先选中，直接把 pendingMove 指向该实例。
      *
      *与卡片「移动」按钮（secondary）共用同一个 pendingMoveInstanceId，后续松手落点仍走
@@ -314,7 +314,7 @@ export class BigMapController extends ControllerBase {
         if (target) this.command({ kind: 'focusWorld', hexId: target.hexId });
     }
 
-    /
+    /**
      *选中态和「点地图上的野怪」走同一条路（`selectedMonsterId` + `focusWorld`），
      *所以定位完弹出来的详情面板、攻打按钮都是现成的，不用另开一套。
      */

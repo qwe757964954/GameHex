@@ -7,7 +7,8 @@
     "version": "3.8.8"
   },
   "scripts": {
-    "test": "tsx --test tests/**/*.test.ts",
+    "test": "node tools/verify/verify.mjs run",
+    "test:raw": "tsx --test \"tests/**/*.test.ts\"",
     "verify": "node tools/verify/verify.mjs check",
     "verify:full": "node tools/verify/verify.mjs full",
     "verify:route": "node tools/verify/verify.mjs route",

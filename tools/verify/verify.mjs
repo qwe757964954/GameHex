@@ -23,6 +23,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -153,6 +154,12 @@ function parseRows(lines) {
         tests: [...new Set(tests)],
       });
     }
+    // 🔴 不是「含 tests/ 的表格就是路由表」：2026-11-13 新增 `docs/agent/测试基线红清单.md`，
+    // 它每行都引用 `tests/*.test.ts`，被自动扫描当成 20 行路由表 —— 会让任意改动多跑一堆无关用例，
+    // 且语义完全错（它是「谁红了」，不是「改哪儿跑哪儿」）。
+    // 判据：真路由表的**路由键必须指向被测代码**（assets/ tools/ …），只引 tests/ 自身的不算。
+    const routesSource = rows.some((r) => r.keys.some((k) => !k.startsWith('tests/')));
+    if (!routesSource) continue;
     if (rows.length > best.length) best = rows;
   }
   return best;
@@ -328,9 +335,45 @@ function reverseTestIndex() {
 }
 
 /**
+ * 「源码文本 / 资源路径字面量」反向索引：`被引用的路径 → 引用它的 tests/*.test.ts`。
+ *
+ * 存在理由（2026-11-13 实测）：`reverseTestIndex` 只认 `import` 边，而工程里 113 个
+ * **源码文本结构守卫**和 68 个**资源/配置完整性**用例根本不 import 目标，而是
+ * `readFileSync('assets/script/app/bigmap/view/BigMapPage.ts', 'utf8')` 之后拿正则断言。
+ * import 图看不见这类引用 ⇒ 改动这些源文件时**一个用例都不跑**，判据报「零新增」是假绿。
+ *
+ * 量化（2026-11-13 用 `selectTests` 本身跑全量 866 个源文件实测，非另行估算）：
+ * import 传递可达 521 个（60.2%），并入字面量后 712 个（**82.2%**），
+ * 其中 **191 个只被字面量引用**（并入前完全漏跑，如 `BattleStartService.ts`）。
+ * 剩 154 个两者都不可达 —— 那是真的没有用例，不是索引问题。
+ *
+ * 只做单跳、不做传递闭包 —— 字面量本身就是直接引用，补闭包只会把选择集撑大。
+ * 命中偏多（注释里提到某路径也算）是可接受方向：多跑用例是安全侧，漏跑才是判据失效。
+ */
+const ASSET_LITERAL_RE = /(?:assets|tools)\/[A-Za-z0-9_\-.\\/]+\.(?:ts|mjs|json|prefab|meta|png|jpg)/g;
+
+let _pathRefs = null;
+function pathRefIndex() {
+  if (_pathRefs) return _pathRefs;
+  _pathRefs = new Map();
+  for (const test of listTestFiles()) {
+    let text = '';
+    try { text = fs.readFileSync(path.join(ROOT, test), 'utf8'); } catch { continue; }
+    for (const m of text.matchAll(ASSET_LITERAL_RE)) {
+      const key = norm(m[0]);
+      const list = _pathRefs.get(key) ?? [];
+      if (!list.includes(test)) list.push(test);
+      _pathRefs.set(key, list);
+    }
+  }
+  return _pathRefs;
+}
+
+/**
  * 兜底推导：规范表没命中时用来兜住，避免出现「改了文件但一个用例都不跑」。
  * 实测 23 个改动文件里只有 2 个能命中老路由表，没有兜底的话 diff 路由形同虚设。
  *   1) import 反向可达：谁（直接或间接）import 了它 ⇒ 跑那些用例（**主判据**）
+ *   1b) 路径字面量引用：谁把它当字符串读（源码文本守卫 / 资源校验）⇒ 跑那些用例
  *   2) 改动 tests/x.test.ts        → 跑它自己
  *   3) 改动 tests/ 下夹具/helper   → 跑所有 import 了它的用例
  *   4) 同名 manifestation：ZCUnitSystem.ts → tests/zcds-unit-system.test.ts
@@ -339,6 +382,7 @@ function reverseTestIndex() {
  * 🔴 顺序说明：老版本把「规范表文本匹配」当主判据，结果表一搬家就全掉到兜底。
  * 现在 **import 反向可达优先**（它是机械事实，不随文档措辞变化），规范表只作为
  * 「额外多跑」的补充（可能覆盖 import 图看不到的资源/配置改动）。
+ * 1b 是 2026-11-13 补的：只靠 import 图会让 274 个只被字面量引用的源文件永久漏跑。
  */
 const FEATURE_AUTORUN_LIMIT = 12;
 
@@ -379,20 +423,24 @@ function fallbackTests(file) {
 function selectTests(files) {
   const { rows: routes, ok: routeOk, sources } = parseRoutes();
   const reverse = reverseTestIndex();
+  const pathRefs = pathRefIndex();
   const picked = new Set();
   const wide = [];
   const hits = [];
   for (const f of files) {
     // 1) import 反向可达 —— 机械事实，文档怎么改都不失效
     const importers = reverse.get(norm(f)) ?? [];
+    // 1b) 路径字面量引用 —— 源码文本守卫 / 资源校验，import 图天生看不见
+    const refs = pathRefs.get(norm(f)) ?? [];
     // 2) 规范表 / 同名 / feature 前缀 —— 补充（覆盖 import 图看不到的配置与资源）
     const matched = routes.filter((r) => matchRoute(r, f));
     const fb = fallbackTests(f);
     const derived = Array.isArray(fb) ? fb : fb.tests;
     if (!Array.isArray(fb) && fb.wide.length) wide.push(...fb.wide);
 
-    hits.push({ file: f, importers, routes: matched.map((r) => r.title), fallback: derived });
+    hits.push({ file: f, importers, refs, routes: matched.map((r) => r.title), fallback: derived });
     for (const t of importers) picked.add(t);
+    for (const t of refs) picked.add(t);
     for (const t of derived) picked.add(t);
     for (const r of matched) for (const t of r.tests) picked.add(t);
   }
@@ -566,6 +614,33 @@ function saveBaseline(cur) {
   fs.mkdirSync(path.dirname(BASELINE), { recursive: true });
   fs.writeFileSync(BASELINE, JSON.stringify({ ts: new Date().toISOString(), ...cur }, null, 2), 'utf8');
 }
+
+/**
+ * 覆盖基线的留痕：谁、什么时候、把哪些红写进了快照、口径从多少变到多少。
+ *
+ * 没有这条记录时，「基线重算」是一个不可审计的单向动作：半天后没人说得清
+ * 某条红是被修复了，还是被 accept 吞掉了。日志用 append，不随快照覆盖丢失。
+ */
+function appendAcceptLog(cur, prev, addedFailures, addedTsc) {
+  // 可用 VERIFY_ACCEPT_LOG 指向别处：让「留痕逻辑」能在不覆盖真实快照的前提下被验证。
+  const log = process.env.VERIFY_ACCEPT_LOG || path.join(ROOT, 'tmp', 'verify', 'baseline-accept.log');
+  fs.mkdirSync(path.dirname(log), { recursive: true });
+  const who = (() => {
+    try { return os.userInfo().username; } catch { return 'unknown'; }
+  })();
+  const lines = [
+    `[${new Date().toISOString()}] baseline 覆盖 by ${who}`,
+    `  口径：${prev ? `${prev.summary?.tests ?? '?'} 用例 / ${prev.failures?.length ?? '?'} 失败 / tsc ${prev.tscTotal ?? '?'}` : '（无旧快照）'}`
+      + ` → ${cur.summary?.tests ?? '?'} 用例 / ${cur.failures.length} 失败 / tsc ${cur.tscTotal}`,
+    `  新增失败写入快照 ${addedFailures.length} 条${addedFailures.length ? '：' : ''}`,
+    ...addedFailures.map((n) => `    - ${n}`),
+    `  新增 tsc 写入快照 ${addedTsc.length} 条`,
+    '',
+  ];
+  fs.appendFileSync(log, lines.join('\n') + '\n', 'utf8');
+  return log;
+}
+
 function loadBaseline() {
   if (!fs.existsSync(BASELINE)) return null;
   try {
@@ -595,18 +670,137 @@ function baselineSentinelFiles() {
   return [...out].sort();
 }
 
+/** 失败用例名 → 包含它的 tests/*.test.ts（TAP 只给用例名，不给文件，只能反查）。 */
+function attributeFailures(names) {
+  const hits = new Map(names.map((n) => [n, []]));
+  const pending = new Set();
+  for (const n of names) {
+    // 整个文件跑挂时，TAP 的 `not ok` 名字是**文件路径**而不是用例名（如
+    // `tests\battle-runtime-controller.test.ts`）。按文本反查永远查不到 ——
+    // 这类必须直接认成「它自己就是那个文件」，否则红清单里会挂一堆「未定位」。
+    const m = /^tests[\\/].+\.test\.ts$/.exec(String(n).trim());
+    // TAP 名字里的路径可能是 `tests\\x.test.ts`（双反斜杠），归一后要再压掉重复斜杠，
+    // 否则表格里会出现 `tests//x.test.ts`。
+    const rel = m ? norm(String(n).trim()).replace(/\/{2,}/g, '/') : null;
+    if (rel && fs.existsSync(path.join(ROOT, rel))) { hits.set(n, [rel]); continue; }
+    pending.add(n);
+  }
+  for (const t of listTestFiles()) {
+    if (!pending.size) break;
+    let src;
+    try { src = fs.readFileSync(path.join(ROOT, t), 'utf8'); } catch { continue; }
+    for (const n of [...pending]) {
+      if (src.includes(n)) { hits.get(n).push(t); pending.delete(n); }
+    }
+  }
+  return hits;
+}
+
+/** 文件的最后一次入库时间（拿不到就回空串）。 */
+function lastChanged(file) {
+  const r = run(`svn info --show-item last-changed-date "${norm(file)}"`);
+  return r.status === 0 ? (r.stdout || '').trim() : '';
+}
+
+/**
+ * 单跑复核：把「整文件级失败」分成真红与分批噪声。
+ *
+ * 2026-11-13 实测：`battle-runtime-controller.test.ts` 在 60 文件一批的全量跑里
+ * 报 `not ok - tests\battle-runtime-controller.test.ts`（文件级，不是某条断言），
+ * 单跑却 26/26 全绿 —— 批次超时 / 资源竞争，不是代码坏了。
+ *
+ * 红清单如果不区分这两者，就会把采集噪声写成「13 条红」，然后没人认领、也没人能修。
+ * 单跑成本只有几秒（13 个文件量级），换来的是清单可信。
+ */
+function soloVerdicts(doneFiles) {
+  const out = new Map();
+  for (const f of doneFiles) {
+    const r = parseTestRun(run(testCommand(`"${norm(f)}"`), { timeout: FULL_TEST_TIMEOUT_MS }), '');
+    if (r.spawnFailed || !r.summaryOk) out.set(f, 'unknown');
+    else out.set(f, r.summary.fail === 0 ? 'solo-green' : 'solo-red');
+  }
+  return out;
+}
+
+/**
+ * 基线红清单：把「谁红了、红在哪个文件、是不是基线之后才出现的」落成可派工的表格。
+ *
+ * 存在理由：`baseline.json` 只有一个扁平的名字数组，97 条红没有 owner、没有归属域，
+ * 结果是「红在那儿挂着，没人认领，重算基线时被一次性吞掉」。清单把名字变成
+ * 「文件 + 是否基线新增 + 最后改动时间」，才谈得上分派。
+ *
+ * 默认重跑全量（清单必须反映当下，读旧基线等于自欺）。`--from-baseline` 只做离线归属，
+ * 用于不想等 2 分钟时快速看基线里那批红落在哪些文件。
+ */
+function printRedList(argv) {
+  const offline = argv.includes('--from-baseline');
+  let names;
+  let summary = null;
+  if (offline) {
+    const base = loadBaseline();
+    if (!base) { console.error('❌ 没有基线，无法离线归属'); return 2; }
+    names = base.failures ?? [];
+    summary = base.summary ?? null;
+  } else {
+    const t = runAllTests();
+    if (t.spawnFailed || !t.summaryOk) {
+      console.error('❌ 采集失败，红清单不可信（退出码 2）');
+      return 2;
+    }
+    names = t.failures;
+    summary = t.summary;
+  }
+
+  const base = loadBaseline();
+  const baseNames = new Set(offline ? [] : (base?.failures ?? []));
+  const attributed = attributeFailures(names);
+
+  // 只对「能定位到文件」的失败做单跑复核；定位不到的（名字是动态拼的）留给人工。
+  const filesToCheck = [...new Set([...attributed.values()].flat())];
+  const solo = offline ? new Map() : soloVerdicts(filesToCheck);
+
+  console.log(`# 测试基线红清单\n`);
+  console.log(`> 由 \`node tools/verify/verify.mjs reds${offline ? ' --from-baseline' : ''}\` 生成，勿手改数据行。`);
+  console.log(`> 归属（owner）列由人工填写；修完后重跑本命令，行会自动消失。\n`);
+  console.log(offline
+    ? `数据源：\`tmp/verify/baseline.json\`（离线归属，可能已过时，未做单跑复核）\n`
+    : `本次全量：${summary.tests} 条 / ${summary.pass} 通过 / **${summary.fail} 失败**\n`);
+  console.log('| # | 用例 | 所属测试文件 | 单跑复核 | 基线里有没有 | 文件最后入库 | owner |');
+  console.log('| --- | --- | --- | --- | --- | --- | --- |');
+  names.forEach((n, i) => {
+    const files = attributed.get(n) ?? [];
+    const fileCell = files.length ? files.map((f) => `\`${f}\``).join('<br>') : '⚠️ 未定位';
+    const verdict = (() => {
+      if (offline) return '—';
+      if (!files.length) return '—';
+      const vs = files.map((f) => solo.get(f));
+      if (vs.includes('solo-red')) return '单跑也红（**真红**）';
+      if (vs.every((v) => v === 'solo-green')) return '单跑绿（批跑噪声）';
+      return '未判定';
+    })();
+    const inBase = offline ? '—' : (baseNames.has(n) ? '有' : '**新增**');
+    const when = files.length ? (lastChanged(files[0]) || '—') : '—';
+    console.log(`| ${i + 1} | ${n} | ${fileCell} | ${verdict} | ${inBase} | ${when} | |`);
+  });
+  if (!names.length) console.log('| — | （无红色用例） | — | — | — | — | — |');
+  return 0;
+}
+
+
 // ---------------------------------------------------------------------- CLI
 
 function printRouteHits(sel, files) {
-  const uncovered = sel.hits.filter((h) => !h.importers.length && !h.routes.length && !h.fallback.length);
+  const covered = (h) => h.importers.length || (h.refs ?? []).length || h.routes.length || h.fallback.length;
+  const uncovered = sel.hits.filter((h) => !covered(h));
   console.log(`改动 ${files.length} 个文件\n`);
   for (const h of sel.hits) {
     console.log(`  ${norm(h.file)}`);
     if (h.importers.length) console.log(`      → import 可达：${h.importers.length} 个用例`);
+    if ((h.refs ?? []).length) console.log(`      → 路径字面量引用：${h.refs.length} 个用例（${h.refs.slice(0, 3).join(', ')}${h.refs.length > 3 ? ' …' : ''}）`);
     if (h.routes.length) console.log(`      → 规范路由：${h.routes.join(' / ')}`);
     if (h.fallback.length) console.log(`      → 推导：${h.fallback.join(', ')}`);
-    if (!h.importers.length && !h.routes.length && !h.fallback.length) {
-      console.log(`      → ⚠️ 完全无覆盖：无 import、无路由、无同名用例`);
+    if (!covered(h)) {
+      console.log(`      → ⚠️ 完全无覆盖：无 import、无字面量引用、无路由、无同名用例`);
     }
   }
   if (sel.wide.length) {
@@ -729,6 +923,40 @@ function runCli(argv) {
     return runGate(files);
   }
 
+  if (mode === 'reds') {
+    return printRedList(process.argv);
+  }
+
+  /**
+   * `run`：把全量用例跑一遍，只报结果、不比基线。
+   *
+   * 存在理由：`package.json` 原来的 `"test": "tsx --test tests/**\/*.test.ts"` 是**单进程**
+   * 跑 496 个文件，实测会挂住（本文件 `runBatchedTests` 注释记着 449 文件 23m39s 不返回）。
+   * 也就是说：文档推荐的第一条命令，恰好是唯一跑不完的那条。
+   * 分批后同样内容 133s 跑完，且每批独立进程 + 超时重试，不会半截数据冒充完整结果。
+   *
+   * 与 `check` / `full` 的区别：**不读也不写基线**，退出码只看「有没有失败用例」。
+   * 门禁语义留给 `check`（相对基线零新增）和 `gate`（多功能一键）。
+   */
+  if (mode === 'run') {
+    const t = runAllTests();
+    if (t.spawnFailed || !t.summaryOk) {
+      console.error('\n❌ 采集失败：批次未正常结束，本次结果不可信（退出码 2）');
+      if (t.spawnFailed) console.error(`   子进程未正常结束：exitCode=${t.exitCode}`);
+      else console.error(`   TAP 汇总缺失或不一致：${JSON.stringify(t.summary)}`);
+      console.error(`   命令：${t.cmd}`);
+      return 2;
+    }
+    console.log(`\n[verify] 全量 ${t.summary.tests} 条：${t.summary.pass} 通过 / ${t.summary.fail} 失败`);
+    t.failures.forEach((n) => console.log(`   ❌ ${n}`));
+    if (!t.summary.fail) {
+      console.log('\n✅ 全绿');
+      return 0;
+    }
+    console.log('\n⚠️ 有失败用例（本模式不比基线；判「有没有引入回归」请用 npm run verify）');
+    return 1;
+  }
+
   if (!['check', 'full', 'baseline'].includes(mode)) {
     console.error(`未知模式：${mode}`);
     return 2;
@@ -776,8 +1004,30 @@ function runCli(argv) {
   };
 
   if (mode === 'baseline') {
+    // 🔴 重算守护：baseline 无条件覆盖会把「这次新引入的回归」永久写进快照，
+    // 之后所有人看到的「相对基线零新增」都是假的。口径可比（全量↔全量）时，
+    // 只要新增失败 / 新增 tsc 就拒绝落盘，必须显式 VERIFY_BASELINE_ACCEPT=1 才覆盖。
+    const prev = loadBaseline();
+    const comparable = prev && prev.mode === cur.mode;
+    const addedFailures = comparable ? diff(cur.failures, prev.failures).added : [];
+    const addedTsc = comparable ? diff(cur.tsc, prev.tsc).added : [];
+    const accept = process.env.VERIFY_BASELINE_ACCEPT === '1';
+    if (comparable && (addedFailures.length || addedTsc.length) && !accept) {
+      console.error(`\n❌ 拒绝写入基线：相对旧快照新增 ${addedFailures.length} 条失败用例、${addedTsc.length} 条 tsc 错误`);
+      addedFailures.forEach((n) => console.error(`   ❌ ${n}`));
+      addedTsc.slice(0, 20).forEach((n) => console.error(`   ❌ ${n}`));
+      console.error('\n   若确认这些是「已接受的已知红」（例如新功能先带红入库），显式覆盖：');
+      console.error('      VERIFY_BASELINE_ACCEPT=1 node tools/verify/verify.mjs baseline');
+      console.error('   否则先修掉它们 —— 让基线吞掉回归，等于永久取消回归判据。');
+      return 1;
+    }
+    if (comparable && (addedFailures.length || addedTsc.length)) {
+      console.warn(`⚠️  已按 VERIFY_BASELINE_ACCEPT=1 覆盖：新增 ${addedFailures.length} 条失败 / ${addedTsc.length} 条 tsc 被写入基线`);
+    }
+    const acceptLog = appendAcceptLog(cur, prev, addedFailures, addedTsc);
     saveBaseline(cur);
     console.log(`\n✅ 基线已写入 ${norm(path.relative(ROOT, BASELINE))}`);
+    console.log(`   留痕追加至 ${norm(path.relative(ROOT, acceptLog))}`);
   console.log(`   失败用例 ${cur.failures.length} 条 · tsc ${cur.tscTotal} 条`);
     return 0;
   }
@@ -822,7 +1072,7 @@ function runCli(argv) {
   return bad === 0 ? 0 : 1;
 }
 
-export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm, changedFiles, runGate, writeGateReport, checkDefinitions, exportedNamesOf, testCommand, tapSummaryOk, parseTestRun, splitTestBatches, baselineSentinelFiles, runBatchedTests };
+export { runCli, printRouteHits, parseRoutes, parseRows, routeSources, matchRoute, selectTests, norm, changedFiles, runGate, writeGateReport, checkDefinitions, exportedNamesOf, testCommand, tapSummaryOk, parseTestRun, splitTestBatches, baselineSentinelFiles, runBatchedTests, attributeFailures, appendAcceptLog, soloVerdicts };
 
 // 直接 `node tools/verify/verify.mjs …` 才跑 CLI；被 import 时只导出（供用例断言）。
 const invokedDirectly = process.argv[1]

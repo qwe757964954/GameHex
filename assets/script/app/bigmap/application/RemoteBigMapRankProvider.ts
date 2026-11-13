@@ -4,7 +4,7 @@ import { RequestGetRank } from '../../generated/requestMsg/RequestRankMsg';
 import { CmdRankType } from '../../generated/netProto/CmdInterface';
 import type { IBigMapCityRankBoard, IBigMapCityRankEntry, IBigMapRankProvider } from '../model/BigMapRank';
 
-/ 城池伤害榜按城去重并串行查询，共用真实宿主，避免视野预取相互取消。 */
+/** 城池伤害榜按城去重并串行查询，共用真实宿主，避免视野预取相互取消。 */
 export class RemoteBigMapRankProvider implements IBigMapRankProvider {
     private isDisposed = false;
     private readonly pending = new Map<number, Promise<IBigMapCityRankBoard | null>>();

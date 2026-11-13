@@ -23,7 +23,7 @@ import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
 
-/
+/**
  *页面宿主 prefab（只装 `UITransform` + 四边 `Widget` + `UIOpacity` + `BigMapPage`，没有视觉节点）。
  *
  *以前这里是 `new Node` + 四个 `addComponent`：四边对齐、透明度、layer、页面组件全散在代码里，
@@ -43,7 +43,7 @@ import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 //顶栏资源数量走背包（`CmdItem` 缓存）：SLG 资源在服务端就是道具 18501~18505。
 import { readItemCounts } from '../../card/ItemBag';
 
-/
+/**
  *大世界入口（唯一一处把「配置 / 存档 / 冒险进度 / 页面」接起来的地方）。
  *
  *为什么单独放一层：`view/BigMapPage` 只接收展示快照，不知道配置从哪来、冒险进度
@@ -61,11 +61,11 @@ export class BigMapEntry {
     private root: Node | null = null;
     private model: BigMapModel | null = null;
     private controller: BigMapController | null = null;
-    / 页面组件（开战预加载失败时要通知它撤掉「正在进入」遮罩）。 */
+    /** 页面组件（开战预加载失败时要通知它撤掉「正在进入」遮罩）。 */
     private page: BigMapPage | null = null;
     private saveOwner: IBigMapSaveOwner | null = null;
     private configCache: IBigMapConfig | null = null;
-    / `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
+    /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
     private layoutCache: IBigMapLayout | null | undefined = undefined;
     private get context(): GameContext {
         const manager = ProcedureManager.instance;
@@ -76,9 +76,9 @@ export class BigMapEntry {
     private openRevision = 0;
     private stopBattleSwitch: (() => void) | null = null;
     private navigationRestore: (() => void) | null = null;
-    / 关闭回调（宿主注入；`close()` 时回调一次，用于把底栏高亮切回去）。 */
+    /** 关闭回调（宿主注入；`close()` 时回调一次，用于把底栏高亮切回去）。 */
     private onCloseCallback: (() => void) | null = null;
-    / 挂进宿主页时临时把 TopHud 提到最上层，关掉时还原它原来的兄弟序号。 */
+    /** 挂进宿主页时临时把 TopHud 提到最上层，关掉时还原它原来的兄弟序号。 */
     private hudRestore: { node: Node; index: number } | null = null;
 
     static shared(): BigMapEntry {
@@ -90,7 +90,7 @@ export class BigMapEntry {
         return !!this.root && this.root.isValid;
     }
 
-    /
+    /**
      *打开大世界页面。重复调用不会叠两层。
      *
      *两种挂法：
@@ -313,13 +313,13 @@ export class BigMapEntry {
         callback?.();
     }
 
-    / 配置解析一次就够（12 张表 + 世界生成都挺贵），后续开关复用。 */
+    /** 配置解析一次就够（12 张表 + 世界生成都挺贵），后续开关复用。 */
     private async ensureConfig(configs: ConfigService): Promise<IBigMapConfig> {
         if (!this.configCache) this.configCache = await loadBigMapConfig(configs);
         return this.configCache;
     }
 
-    /
+    /**
      *策划布局：有就用，没有就 null（Presenter 那边回退种子生成）。
      *
      *结果缓存到会话结束：布局跟客户端版本一起发（`assets/resources/config/bigmap-maps/`），
@@ -331,7 +331,7 @@ export class BigMapEntry {
         return this.layoutCache;
     }
 
-    /
+    /**
      *冒险进度（建筑 / 城池 / 野怪解锁的唯一依据）—— 服务端章节集合优先。
      *
      *真源是 `ChapterInfo.chapters`（`TerritoryChapterInfoRepository`）：`[1,2,3]` = 账号能进到第 3 章。
@@ -373,7 +373,7 @@ export class BigMapEntry {
         return owner?.roleId === current?.roleId && owner?.serverId === current?.serverId;
     }
 
-    /
+    /**
      *实例化页面宿主 prefab。
      *
      * 必须走 `AssetService` 而不是 `assetManager.loadBundle(BIGMAP_BUNDLE)`：bundle 的远程

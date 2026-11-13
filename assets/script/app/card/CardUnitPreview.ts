@@ -31,10 +31,10 @@ class CardUnitPreviewPlayer extends Component {
  * ── 体型（`pvpCard.prefabSize`）────────────────────────────────────────
  * 归一化把每个兵种都压到 `visibleHeight` 高，这在一张张卡片并排时是对的（站台等高对齐），
  * 但会把「这张卡的兵本来就比别的大」抹平：巨人卡和法师看起来一样高。所以再加一层
- * **按卡配的** `prefabSize`（与对局里 `ZCUnitView.applyVisualSize` 同一个系数、同一列表），
+ * 按卡配的 `prefabSize`（与对局里 `ZCUnitView.applyVisualSize` 同一个系数、同一列表），
  * 归一之后乘上去 —— 顺序不能反，反了就等于拿骨架 canvas 把策划的意图再抵消一次。
  *
- * 代价是 >1 的兵会**高过站台**（`previewHeight=120` 是基准，1.5 倍就画 180px）：这是刻意的，
+ * 代价是 >1 的兵会高过站台（`previewHeight=120` 是基准，1.5 倍就画 180px）：这是刻意的，
  * 体型差正是靠这个表达；真嫌顶到上一排，调站台的 `previewHeight` 整体缩，别回来加 clamp。
  */
 export class CardUnitPreview {

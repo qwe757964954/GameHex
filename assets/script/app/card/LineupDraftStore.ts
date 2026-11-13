@@ -15,7 +15,7 @@ export interface LineupDraftSnapshot {
  *
  *  每个「方案」对应一条后端阵型（`CmdFormationInfo.formationId`），页签下标 i → `formationId = i + 1`
  * （见 `formationIdOf`，也是 `LineupBoard.prefab` 的 `PresetRow` 上「1/2/3/4」四个 Label 的口径）。
- * 改建方案时**只改当前方案的草稿**，别的方案原样保留。
+ * 改建方案时只改当前方案的草稿，别的方案原样保留。
  */
 export class LineupDraftStore {
     private readonly presets: ZCDeckCard[][];

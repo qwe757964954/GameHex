@@ -52,10 +52,10 @@ test('加载器按后端英雄、召唤链与波次选模型，离线保持完�
             [1, { cardId: '92001', unitCount: 3 }],
         ]) }) },
         '../model/ZCGameRuntimeConfig': { isZCRuntimeCompiled: () => false, loadPvpTables() { configurationApplied = true; }, getPvpRuntimeRules: () => ({}) },
-        './ZCRuntimePrecompiler': { ensureZCRuntimeCompiled: async () => { configurationApplied = true; } },
-        '../model/ZCGameModel': { configureZCMap() { assert.equal(configurationApplied, true, '地图必须等本局配置应用后再配置'); }, getZCLocalPlayerCountOverride: () => 4,
+        './ZCRuntimePrecompiler': { ensureZCRuntimeCompiled: async () => { if (initialization) await initialization; configurationApplied = true; return true; } },
+        '../model/ZCMapConfig': { parseZCMap(map: unknown) { assert.equal(configurationApplied, true, '地图必须等本局配置应用后再解析'); return map; }, getZCLocalPlayerCountOverride: () => 4,
             isRandomMapCandidate: (_layout: unknown, count: unknown) => { counts.push(count); return true; } },
-        '../model/ZCMatchConfig': { captureZCMatchConfig: () => base },
+        '../model/ZCMatchConfig': { createZCMatchConfig: () => base, captureZCMatchConfig: () => base },
         '../model/ZCModifierRuntime': { getZCModifierCatalogs: () => ({ adapters: {
             skillPlans: [{ enabled: true, unitId: '68001', summonUnitId: '68002' }],
             textOverrides: new Map([['replacement', { enabled: true, statId: 'model', value: 'units/effects/probe/replacement' }], ['irrelevant', { enabled: true, statId: 'model', value: 'units/effects/probe/unused' }]]),

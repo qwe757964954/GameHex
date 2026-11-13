@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { IZCBattleRates } from './ZCMatchConfig';
 import { missileLog, ZC_MISSILE_DEBUG_HERO_LEVEL } from '../ZCMissileSkillDiagnostics';
@@ -158,7 +159,7 @@ function normalizeRows(value: unknown): Record<string, unknown>[] {
 }
 
 const EMPTY_ADAPTERS = parseZCModifierAdapterCatalogs({});
-let runtimeCatalogs: ZCModifierCatalogs = {
+const EMPTY_CATALOGS: ZCModifierCatalogs = {
     modifiers: new Map(),
     generalStars: new Map(),
     adapters: EMPTY_ADAPTERS,
@@ -177,13 +178,8 @@ export function parseZCModifierCatalogs(
     };
 }
 
-/** 仅由配置加载事务在全部表校验成功后提交，避免半加载状态。 */
-export function setZCModifierCatalogs(catalogs: ZCModifierCatalogs): void {
-    runtimeCatalogs = catalogs;
-}
-
 export function getZCModifierCatalogs(): ZCModifierCatalogs {
-    return runtimeCatalogs;
+    return ZC_RUNTIME_CONFIG.snapshot.modifierCatalogs ?? EMPTY_CATALOGS;
 }
 
 const ATTRIBUTE_TO_PATCH: Readonly<Record<string, keyof ZCUnitStatPatch>> = {
@@ -430,7 +426,7 @@ function compileIdsLoadout(
 export function compileZCGeneralStarLoadout(
     selection: ZCGeneralStarSelection,
     units: readonly ZCUnitDefinition[],
-    catalogs: ZCModifierCatalogs = runtimeCatalogs,
+    catalogs: ZCModifierCatalogs = getZCModifierCatalogs(),
 ): ZCCompiledModifierLoadout {
     const key = `${selection.generalId}:${selection.star}`;
     const row = catalogs.generalStars.get(key);
@@ -499,7 +495,7 @@ function compileGrowthLoadout(
 export function selectZCSkillPlans(
     unitId: string,
     heroLevel: number,
-    catalogs: ZCModifierCatalogs = runtimeCatalogs,
+    catalogs: ZCModifierCatalogs = getZCModifierCatalogs(),
 ): readonly ZCSkillPlanRecord[] {
     if (!Number.isSafeInteger(heroLevel) || heroLevel < 1) return [];
     const groups = new Map<number, ZCSkillPlanRecord[]>();
@@ -612,7 +608,7 @@ function compileSkillPlanLoadout(
 export function compileZCCombatBuild(
     selection: ZCCombatBuildSelection,
     units: readonly ZCUnitDefinition[],
-    catalogs: ZCModifierCatalogs = runtimeCatalogs,
+    catalogs: ZCModifierCatalogs = getZCModifierCatalogs(),
 ): readonly ZCCompiledModifierLoadout[] {
     assertUnit(selection.unitId, units);
     const result: ZCCompiledModifierLoadout[] = [];
@@ -708,19 +704,20 @@ function resolveZCModifiedUnitDefinition(
     return { ...definition, attackProfile, empoweredProfile };
 }
 
-/** 服务端倍率在成长、星级和技能属性编译后生效，不进入普通百分比加成。 */
+/** 关卡倍率作用于本地构筑；服务端最终属性最后覆盖，避免重复换算。 */
 export function resolveZCUnitDefinition(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
     rates?: IZCBattleRates,
 ): ZCUnitDefinition {
-    const definition = resolveZCModifiedUnitDefinition(base, loadouts);
-    if (!rates) return definition;
-    return {
+    const server = loadouts.filter((loadout) => loadout.sourceKind === 'server');
+    const definition = resolveZCModifiedUnitDefinition(base, loadouts.filter((loadout) => loadout.sourceKind !== 'server'));
+    const scaled = !rates ? definition : {
         ...definition,
         attack: rates.attackRate === undefined ? definition.attack : definition.attack * rates.attackRate,
         maxHp: rates.hpRate === undefined ? definition.maxHp : definition.maxHp * rates.hpRate,
     };
+    return server.length ? resolveZCModifiedUnitDefinition(scaled, server) : scaled;
 }
 
 /**

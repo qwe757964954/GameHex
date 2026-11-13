@@ -25,10 +25,10 @@ const BATTLE_LOAD_CONCURRENCY = 4;
 
 /**
  * 对局运行时预编译端口：由组合根注入，避免会话层静态依赖战斗模块（见公共预热守卫）。
- * ensureCompiled 在空闲期完成配置解压与编译；reset 在退出登录时复位编译标志。
+ * ensureCompiled 返回 false 表示会话已失效；reset 清除目录并使在途编译失效。
  */
 export interface IRuntimePrecompilePort {
-    ensureCompiled(): Promise<void>;
+    ensureCompiled(): Promise<boolean>;
     reset(): void;
 }
 
@@ -144,10 +144,11 @@ export class AppSessionAssetService implements SessionAssetService {
         const isCurrent = (): boolean => this.scope === scope && !scope.disposed && revision === this.warmRevision;
         const task = (async () => {
             // 空闲期先完成 PVP 运行时预编译（CPU 密集）；失败只告警，进对局时仍会兜底重编译。
-            await this.runtimePrecompiler?.ensureCompiled().catch((error) => {
+            const compiled = await this.runtimePrecompiler?.ensureCompiled().catch((error) => {
                 console.warn('[SessionAssets] PVP 运行时预编译失败', error);
             });
-            if (!isCurrent()) return;
+            // false = 会话已 reset、在途编译作废，预热清单不必再拉；失败与无端口仍按原路径兜底。
+            if (compiled === false || !isCurrent()) return;
             const plan = await this.loadWarmupPlan();
             if (!isCurrent()) return;
             const paths = plan.downloads;

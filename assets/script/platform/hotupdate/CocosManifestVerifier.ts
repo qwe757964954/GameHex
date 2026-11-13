@@ -7,17 +7,17 @@ import type {
 type VerifyHook = (payload: string, signature: string, keyId?: string) => boolean | Promise<boolean>;
 
 /**
- * 签名验证桥。
- *
- * 正式环境把纯 JS/原生 Ed25519 实现挂到 `globalThis.__CITY1001_VERIFY_HOT_UPDATE__`。
- * 在没有验签器时，只有显式开启 allowUnsignedManifests 的本地环境可以继续。
+ * 签名验证桥：正式环境把 Ed25519 实现挂到 globalThis.__CITY1001_VERIFY_HOT_UPDATE__。
+ * 没有验签器时，只有显式开启 allowUnsignedManifests 的环境可以继续。
  */
 export class CocosManifestVerifier implements IHotUpdateManifestVerifier {
     constructor(private readonly allowUnsignedManifests: boolean) { }
 
     async verify(pointer: IHotUpdateReleasePointer, manifest: IHotUpdateManifest): Promise<boolean> {
         if (!pointer.signature) return this.allowUnsignedManifests;
-        const hook = (globalThis as any).__CITY1001_VERIFY_HOT_UPDATE__ as VerifyHook | undefined;
+        const hook = (globalThis as {
+            __CITY1001_VERIFY_HOT_UPDATE__?: VerifyHook;
+        }).__CITY1001_VERIFY_HOT_UPDATE__;
         if (!hook) return this.allowUnsignedManifests;
         const payload = canonicalJson({
             pointer: {

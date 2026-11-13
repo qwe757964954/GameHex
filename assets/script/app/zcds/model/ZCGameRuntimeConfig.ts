@@ -1,14 +1,9 @@
 import {
-    getEnemyDeck, getPlayerDeck, hasUnitDefinition, setBondRules, setCardCatalog,
-    setCounterRules,
-    setRuntimeDecks,
-    setUnitCatalog,
+    getEnemyDeck, getPlayerDeck, hasUnitDefinition,
 } from './ZCCombatCatalog';
 import type { ZCLegacySkillEffectConfig } from './ZCLegacySkillEffect';
-import { setZCModifierCatalogs } from './ZCModifierRuntime';
-import { setZCNeutralResourceCatalog } from './ZCNeutralResourceGroup';
 import { compilePvpTables } from './ZCPvpConfigCompiler';
-import { setPvpTileRules } from './ZCPvpTileRules';
+import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 export { compilePvpTables } from './ZCPvpConfigCompiler';
 export {
     isHqCard, normalizeCardRow, parseBondRules, parseCard, parseCardCatalogRow, parseUnits
@@ -67,33 +62,26 @@ export interface ZCRuntimeRules {
     hqMaxHp: number;
 }
 
-/** 运行时全局规则；loadPvpTables 注入后才能取。 */
-let runtimeRules: Readonly<ZCRuntimeRules> | null = null;
-/** 旧客户端公式冻结表；loadPvpTables 注入。 */
-let legacySkillEffects: Readonly<ZCLegacySkillEffectConfig> | null = null;
-
-/** 运行时目录是否已完成编译安装；空闲期预编译与进对局复用同一标志。 */
-let runtimeCompiled = false;
-
 /** 运行时目录已就绪（getTable + compile + loadPvpTables 完成），进对局可直接复用。 */
 export function isZCRuntimeCompiled(): boolean {
-    return runtimeCompiled;
+    return ZC_RUNTIME_CONFIG.ready;
 }
 
 /** 退出登录时重置；下次进对局强制重新编译，避免跨会话复用旧配置。 */
 export function resetZCRuntime(): void {
-    runtimeCompiled = false;
+    ZC_RUNTIME_CONFIG.reset();
 }
 
 /** 取运行时全局规则；配置未加载（初始化失败路径）时抛错，不做内置兜底。 */
 export function getPvpRuntimeRules(): Readonly<ZCRuntimeRules> {
-    if (!runtimeRules) throw new Error('[ZCGameRuntimeConfig] PVP 全局配置未加载');
-    return runtimeRules;
+    const rules = ZC_RUNTIME_CONFIG.snapshot.rules;
+    if (!rules) throw new Error('[ZCGameRuntimeConfig] PVP 全局配置未加载');
+    return rules;
 }
 
 /** Frozen into each match together with the normal PVP tables. */
 export function getZCLegacySkillEffectConfig(): Readonly<ZCLegacySkillEffectConfig> {
-    return legacySkillEffects;
+    return ZC_RUNTIME_CONFIG.snapshot.legacySkillEffects ?? null;
 }
 
 /** 一张出战卡引用了「上不了场」的单位（单位表缺「单位预设」或「普攻技能ID」）。 */
@@ -167,17 +155,7 @@ export interface ZCPvpTables {
 /** 编译成功后一次性安装运行时目录；外部仍使用原入口。 */
 export function loadPvpTables(tables: ZCPvpTables): ZCConfigLoadResult {
     const compiled = compilePvpTables(tables);
-    setUnitCatalog(compiled.units);
-    setCardCatalog(new Map(compiled.cards.map((card) => [card.id, card])));
-    setRuntimeDecks(compiled.playerDeck, compiled.enemyDeck);
-    setCounterRules(compiled.counters);
-    setBondRules(compiled.bonds);
-    setPvpTileRules(compiled.tileConfigs, compiled.tileWeights, compiled.goldPity);
-    setZCNeutralResourceCatalog(compiled.neutralResources);
-    setZCModifierCatalogs(compiled.modifierCatalogs);
-    runtimeRules = compiled.rules;
-    legacySkillEffects = compiled.legacySkillEffects;
-    runtimeCompiled = true;
+    ZC_RUNTIME_CONFIG.install(compiled);
     return {
         schemaVersion: compiled.rules.schemaVersion,
         sourceSha256: compiled.rules.sourceSha256,

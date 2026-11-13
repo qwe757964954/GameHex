@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import { buildZCBattleEntry } from '../assets/script/app/zcds/application/ZCBattleEntryBuilder';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -13,7 +14,7 @@ import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { assetPath } from './helpers/asset-paths';
-import { compileZCNeutralResourceCatalog, setZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
+import { compileZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 
 function readRows(name: string): Array<Record<string, unknown>> {
@@ -115,9 +116,9 @@ test('自选地图的后端空出生点保留选点流程，并沿用服务端�
 
 test('后端资源编号直接进入对局，校验坐标和组合归属，不重新抽签', () => {
     const source = prepare(4);
-    setZCNeutralResourceCatalog(compileZCNeutralResourceCatalog([
+    ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: compileZCNeutralResourceCatalog([
         { id: 99001, groupId: 99, groupName: '测试', resourceType: 1, weight: 0, param: 10 },
-    ], new Map()));
+    ], new Map()) });
     try {
         const start = serverMapBattle(source);
         const cell = source.map.hexes.find(hex => hex.playable && !source.map.homes.includes(hex.id));
@@ -137,7 +138,7 @@ test('后端资源编号直接进入对局，校验坐标和组合归属，不�
         assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /资源点配置不匹配/);
         start.mapInfo.resourcePoints[0].column = source.map.columns;
         assert.throws(() => buildZCClientCombatConfig(source, start, 'self'), /资源点位置无效/);
-    } finally { setZCNeutralResourceCatalog(null); }
+    } finally { ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: undefined }); }
 });
 
 test('后端出生点缺失、重复、越界和未知 unitId 均拒绝开局', () => {
@@ -432,16 +433,16 @@ test('服务端英雄属性覆盖本地成长后参与战斗，建筑血量与�
     assert.deepEqual(result.skipped, []);
     const runtime = compileZCMatchRuntime(result.config);
     const player = runtime.effectiveDefinitions.player.get('68001');
-    assert.equal(player?.attack, 246);
-    assert.equal(player?.maxHp, 394.5);
+    assert.equal(player?.attack, 123);
+    assert.equal(player?.maxHp, 789);
     assert.ok(player);
     const game = new ZCGameModel(null, () => .1, result.config);
     const spawned: ZCUnitState | null = Reflect.get(game, 'spawnUnit').call(game, 'player',
         result.config.playerDeck.find((card) => card.unitId === '68001'), 1, result.config.map.playerHomeId);
     assert.ok(spawned);
-    assert.equal(spawned.maxHp, 395);
+    assert.equal(spawned.maxHp, 789);
     assert.equal(ZCCombatSystem.unitDamage(spawned, player, runtime.deckBonuses.player, 1,
-        { ...result.config.rules, combatDamageMultiplier: 1 }), 246);
+        { ...result.config.rules, combatDamageMultiplier: 1 }), 123);
     assert.equal(runtime.effectiveDefinitions.enemy.get('68001')?.attack, 0);
     const withoutAttrs = compileZCMatchRuntime(buildZCClientCombatConfig(source, {
         ...remote, units: remote.units.map((unit) => ({ ...unit, heroAttrs: [], buffs: [] })),

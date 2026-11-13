@@ -6,12 +6,12 @@ import { BATTLE_BUNDLE } from '../../../core/asset/BundleCatalog';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { findCatalogCard, getAllUnitDefinitions, setCardRarityMeta, ZC_ATTACK_TRAITS } from '../model/ZCCombatCatalog';
 import type { ZCAttackTrait, ZCUnitId } from '../model/ZCCombatCatalog';
-import { configureZCMap, getZCLocalPlayerCountOverride, isRandomMapCandidate } from '../model/ZCGameModel';
-import type { ZCMapLayout } from '../model/ZCGameModel';
-import { getPvpRuntimeRules, isZCRuntimeCompiled } from '../model/ZCGameRuntimeConfig';
+import { parseZCMap, getZCLocalPlayerCountOverride, isRandomMapCandidate } from '../model/ZCMapConfig';
+import type { ZCMapLayout } from '../model/ZCMapConfig';
+import { getPvpRuntimeRules } from '../model/ZCGameRuntimeConfig';
 import { getZCModifierCatalogs } from '../model/ZCModifierRuntime';
-import { captureZCMatchConfig } from '../model/ZCMatchConfig';
-import type { ZCMatchConfig } from '../model/ZCMatchConfig';
+import { captureZCMatchConfig, createZCMatchConfig } from '../model/ZCMatchConfig';
+import type { ZCMatchConfig, ZCMatchMap } from '../model/ZCMatchConfig';
 import { decorFramePath, GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME, ARTIFACT_CLAIM_BURST_ART_ROOT, HEX_FLIP_PULSE_ART_ROOT, HEX_GROUND_GLOW_ART_ROOT, MAP_RESOURCE_ART_ROOT, SPAWN_REGION_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
@@ -74,7 +74,7 @@ type IZCShellPrefabs = Pick<IZCGamePreparedResources,
  * ProcedureManager 释放传入的 ResourceScope，加载器无需了解页面生命周期。
  */
 export class ZCGameLoader {
-    private selectedMap: ZCMapLayout | null = null;
+    private selectedMap: ZCMatchMap | null = null;
 
     constructor(
         private readonly resources: Pick<IControllerResources, 'assets' | 'configs'>,
@@ -88,7 +88,7 @@ export class ZCGameLoader {
 
     async prepare(scope?: ResourceScope, battle?: ZCBattleStart | null, waveCardIds: readonly number[] = []): Promise<IZCGamePreparedResources> {
         const startedAt = Date.now();
-        // 文件读取不依赖战斗表；地图筛选与 configure 仍在本局配置应用后执行。
+        // 文件读取不依赖战斗表；地图筛选与解析 仍在本局配置应用后执行。
         const mapFiles = this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
         // 配置较慢或先失败时，提前失败的地图请求也必须立即有人处理拒绝。
         void mapFiles.catch(() => {});
@@ -101,7 +101,7 @@ export class ZCGameLoader {
         if (!mapReady) throw new Error(`地图目录中没有可用配置：${this.mapDirectory}`);
         const mapReadyAt = Date.now();
         if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] 地图准备 ${mapReadyAt - configReadyAt}ms`);
-        const baseMatchConfig = captureZCMatchConfig(undefined, { allowUnresolvedSelect: true });
+        const baseMatchConfig = captureZCMatchConfig(createZCMatchConfig(this.selectedMap), { allowUnresolvedSelect: true });
         const { heroIds, modifiers } = this.buildVisualInputs(battle, waveCardIds, baseMatchConfig);
         // 后补机制只依赖 scope 做资源归属与取消检查，不依赖 battle；
         // PVE 本地局（battle=null）同样首帧快进，特效、序列帧与装饰在首帧后补齐。
@@ -330,6 +330,7 @@ export class ZCGameLoader {
 
     /** 加载候选地图并跳过损坏项；全部无效时返回 false。 */
     async loadRandomMap(scope?: ResourceScope, battlePlayerCount?: 2 | 3 | 4, mapFiles?: Promise<JsonAsset[]>, mapInfo?: Readonly<CmdPvpMapInfo>): Promise<boolean> {
+        this.selectedMap = null;
         let maps: JsonAsset[];
         try {
             maps = await (mapFiles ?? this.resources.assets.loadDir(this.mapDirectory, JsonAsset, { scope, priority: BATTLE_ENTRY_PRIORITY }));
@@ -346,8 +347,7 @@ export class ZCGameLoader {
             if (matches.length !== 1) throw new Error(`后端地图不存在或不唯一：${mapInfo.id} v${mapInfo.version}`);
             const layout = matches[0].json as ZCMapLayout;
             if (!isRandomMapCandidate(layout, battlePlayerCount)) throw new Error(`后端地图人数或模式不匹配：${mapInfo.id}`);
-            configureZCMap(layout);
-            this.selectedMap = layout;
+            this.selectedMap = parseZCMap(layout);
             return true;
         }
         if (!maps.length) {
@@ -368,7 +368,7 @@ export class ZCGameLoader {
         }
         while (candidates.length) {
             // 加权抽样：select 图按倍数放大权重，fixed 图权重 1。
-            // 上一张 configure 失败被 splice 后，剩余候选重算权重——失败的是哪类图不影响剩余加权。
+            // 上一张解析失败被 splice 后，剩余候选重算权重——失败的是哪类图不影响剩余加权。
             const weights = candidates.map((asset) =>
                 (asset.json as ZCMapLayout | null)?.cityMode === 'select'
                     ? ZC_SPAWN_SELECTION_WEIGHT
@@ -383,8 +383,7 @@ export class ZCGameLoader {
             const [asset] = candidates.splice(index, 1);
             const layout = asset.json as ZCMapLayout;
             try {
-                configureZCMap(layout);
-                this.selectedMap = layout;
+                this.selectedMap = parseZCMap(layout);
                 return true;
             } catch (cause) {
                 if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameLoader] 跳过无效地图：${asset.name}`, cause);
@@ -547,11 +546,9 @@ export class ZCGameLoader {
     }
 
     private async loadPvpRuntimeConfig(scope?: ResourceScope): Promise<void> {
-        // 登录会话空闲期已预编译：运行时目录已安装，进对局直接复用，零同步 CPU。
-        if (isZCRuntimeCompiled()) return;
-        await this.resources.configs.initialize();
+        // 共享会话任务可继续完成；本局取消只拦截后续地图和资源准备。
+        const ready = await ensureZCRuntimeCompiled(this.resources.configs);
         this.checkActive(scope);
-        await ensureZCRuntimeCompiled(this.resources.configs);
-        this.checkActive(scope);
+        if (!ready) throw new Error('会话配置加载已取消');
     }
 }

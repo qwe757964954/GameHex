@@ -1,10 +1,9 @@
+import { ZC_RUNTIME_CONFIG } from '../zcds/model/ZCRuntimeConfigStore';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import {
     calculateDeckBonuses,
     getBondRules,
     getPlayerDeck,
-    setBondRules,
-    setRuntimeDecks,
     ZCDeckBonuses,
     ZCDeckCard,
 } from '../zcds/model/ZCCombatCatalog';
@@ -20,7 +19,7 @@ import type { PvpHeroInfo } from './PvpHeroService';
 /**
  * 卡牌阵容页的数据供给。
  *
- * 正常流程里卡组由 `ZCGame.loadPvpTables()` 从整套 PVP 分表注入；但本页要能
+ * 正常流程里卡组由 `ensureZCRuntimeCompiled()` 从整套 PVP 分表注入；但本页要能
  * **独立在编辑器预览**（那时战斗流程没跑过，`getPlayerDeck()` 是空的），
  * 所以这里补一条兜底：deck 为空时只读 `pvpCard` + `pvpBond` 两张分表并注入。
  *
@@ -78,14 +77,16 @@ function parseDecks(rows: unknown[]): { player: ZCDeckCard[]; enemy: ZCDeckCard[
 export async function ensureLineupDecks(): Promise<readonly ZCDeckCard[]> {
     if (getPlayerDeck().length > 0) return getPlayerDeck();
 
+    const revision = ZC_RUNTIME_CONFIG.revision;
     const [cardRows, bondRows] = await Promise.all([readRows('pvpCard'), readRows('pvpBond')]);
+    if (ZC_RUNTIME_CONFIG.revision !== revision) return getPlayerDeck();
     const { player, enemy } = parseDecks(cardRows);
     if (player.length === 0) {
         console.warn('[CardLineupDecks] pvpCard 未读到启用卡牌，页面将保持占位外观');
         return [];
     }
-    setRuntimeDecks(player, enemy);
-    if (getBondRules().length === 0 && bondRows.length > 0) setBondRules(parseBondRules(bondRows));
+    ZC_RUNTIME_CONFIG.updateCatalogs({ playerDeck: player, enemyDeck: enemy,
+        bonds: getBondRules().length === 0 && bondRows.length > 0 ? parseBondRules(bondRows) : getBondRules() });
     return player;
 }
 

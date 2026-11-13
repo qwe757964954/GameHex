@@ -146,8 +146,8 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
             // 兵团类资源项要产的兵从完整目录预加载：桩里给空目录（本用例不测那条分支）。
             getZCNeutralResourceCatalog: () => ({ items: new Map() }),
         },
-        '../model/ZCGameModel': {
-            configureZCMap: (map: { id: string }) => configuredMaps.push(map.id),
+        '../model/ZCMapConfig': {
+            parseZCMap: (map: { id: string }) => { configuredMaps.push(map.id); return map; },
             // `loadRandomMap` 的随机池判据（新增依赖，桩里缺符号会在调用时抛 TypeError）。
             getZCLocalPlayerCountOverride: () => null,
             isRandomMapCandidate: (layout: { playerCount?: number; cityMode?: string } | null) => {
@@ -159,7 +159,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         '../model/ZCGameRuntimeConfig': {
             // 本用例验证首次进对局的完整加载：未预编译，故返回 false，走 getTable + loadPvpTables。
             isZCRuntimeCompiled: () => false,
-            loadPvpTables: () => { pvpTablesLoaded = true; },
+            loadPvpTables: () => { pvpTablesLoaded = true; return true; },
             // 跨表引用闸（assertDeckUnitsPlayable / findUndeployableDeckCards）已整体移除，
             // 改为构建期工具 tools/pvp_card_check.py 校验，预加载期不再做这条检查。
             // `loadArtifactIconFrame` 用它取神器图标名（真源 = `pvpArtifact` 第一行的 `icon`）。
@@ -167,9 +167,9 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         },
         './ZCRuntimePrecompiler': {
             // 预编译模块内部会安装运行时表；桩里复用同一注入效果，保证后续断言顺序不变。
-            ensureZCRuntimeCompiled: async () => { pvpTablesLoaded = true; },
+            ensureZCRuntimeCompiled: async () => { pvpTablesLoaded = true; return true; },
         },
-        '../model/ZCMatchConfig': {
+        '../model/ZCMatchConfig': { createZCMatchConfig: (map: unknown) => ({ map }),
             captureZCMatchConfig: (_source: unknown, options: { allowUnresolvedSelect?: boolean }) => {
                 assert.equal(pvpTablesLoaded, true, '配置快照必须在 PVP 表注入后创建');
                 assert.equal(configuredMaps.at(-1), 'preloaded-map', '快照必须包含本次加载的地图');

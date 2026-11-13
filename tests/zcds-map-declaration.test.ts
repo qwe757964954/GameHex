@@ -7,7 +7,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCGameModel';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import {
-    resolveZCMapZoom, ZC_MAP_ZOOM_MAX, ZC_MAP_ZOOM_MIN,
+    parseZCMap, resolveZCMapZoom, ZC_MAP_ZOOM_MAX, ZC_MAP_ZOOM_MIN,
 } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { assetPath } from './helpers/asset-paths';
@@ -29,6 +29,33 @@ loadPvpTables(tables);
 const MAP_DIRECTORY = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8')
     .match(/MAP_DIRECTORY = '([^']+)'/)![1];
 const legacyLayout = JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout;
+
+test('纯地图解析返回独立数据，不改写当前地图或输入', () => {
+    configureZCMap(legacyLayout);
+    const current = captureZCMatchConfig();
+    const input = { ...legacyLayout, id: 'independent-map' };
+    const before = JSON.stringify(input);
+    const parsed = parseZCMap(input);
+    assert.equal(parsed.id, 'independent-map');
+    assert.equal(JSON.stringify(input), before);
+    assert.equal(captureZCMatchConfig().map.id, current.map.id);
+    assert.deepEqual(parsed.hexes, current.map.hexes);
+    parseZCMap({ ...input, id: 'another-map' });
+    assert.equal(parsed.id, 'independent-map');
+    assert.throws(() => parseZCMap({ ...input, rows: 0 }), /地图/);
+    assert.equal(captureZCMatchConfig().map.id, current.map.id);
+});
+
+test('已捕获配置复用冻结快照，外部冻结对象仍复制隔离', () => {
+    configureZCMap(legacyLayout);
+    const frozen = captureZCMatchConfig();
+    assert.strictEqual(captureZCMatchConfig(frozen), frozen);
+    const external = Object.freeze({ ...frozen, rules: { ...frozen.rules } });
+    const captured = captureZCMatchConfig(external);
+    assert.notStrictEqual(captured, external);
+    assert.notStrictEqual(captured.rules, external.rules);
+    assert.equal(Object.isFrozen(captured.rules), true);
+});
 
 /** 与 tests/zcds-neutral-map.test.ts 同一张几何：8 行 × 6 列、上下镜像、四角虚空。 */
 const BASE_ASCII = ['NNNNNN', '######', '######', '.####.'];

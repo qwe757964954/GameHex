@@ -27,24 +27,24 @@ import {
     type IBigMapCitySchedule,
 } from './BigMapCitySchedule';
 
-/**
- * 配置表名 —— 与 `assets/remoteRef/<名字>.json` 的文件名**逐字一致**。
+/
+ *配置表名 —— 与 `assets/remoteRef/<名字>.json` 的文件名逐字一致。
  *
- * 命名照全仓规范（`pvpCard.json` / `mapTerrian.json` 那一套）：英文 camelCase + `bigmap` 前缀。
- * 中文名只留在策划 Excel 的 sheet 名与 `tools/config/gen_bigmap_tables.TITLES` 里给人看
- * —— 表名写中文会让 eSon 导出中文文件名（用户 2026-10-20 明确要求不要）。
+ *命名照全仓规范（`pvpCard.json` / `mapTerrian.json` 那一套）：英文 camelCase + `bigmap` 前缀。
+ *中文名只留在策划 Excel 的 sheet 名与 `tools/config/gen_bigmap_tables.TITLES` 里给人看
+ *—— 表名写中文会让 eSon 导出中文文件名（用户 2026-10-20 明确要求不要）。
  *
- * 格式沿用项目既有的 `{"k":[字段...],"v":[[值...]]}` 压缩表（`RefUtil` 解压成对象数组）。
+ *格式沿用项目既有的 `{"k":[字段...],"v":[[值...]]}` 压缩表（`RefUtil` 解压成对象数组）。
  */
 export const BIGMAP_TABLE = {
     world: 'bigmapWorld',
     schedule: 'bigmapSchedule',
-    // 🔴 建筑/升级走**策划表**（`DM-建筑配置.xlsx` → `baseBuilding.json` / `DM-建筑升级.xlsx`
-    // → `baseBuildingLevel.json`），早年 `gen_bigmap_tables.py` 推算的 `bigmapBuilding*`
-    // 是另一套 id（8 个建筑 vs 策划 23 个），服务端只认策划表 ⇒ 建造请求会打错建筑。
+    // 建筑/升级走策划表（`DM-建筑配置.xlsx` → `baseBuilding.json` / `DM-建筑升级.xlsx`
+    //→ `baseBuildingLevel.json`），早年 `gen_bigmap_tables.py` 推算的 `bigmapBuilding*`
+    //是另一套 id（8 个建筑 vs 策划 23 个），服务端只认策划表 ⇒ 建造请求会打错建筑。
     building: 'baseBuilding',
     buildingLevel: 'baseBuildingLevel',
-    // 旧产出表保留读取，但产出**优先**从 `baseBuildingLevel` 的 resType/producePerHour/produceCap 取。
+    //旧产出表保留读取，但产出优先从 `baseBuildingLevel` 的 resType/producePerHour/produceCap 取。
     produce: 'bigmapBuildingProduce',
     resource: 'bigmapResource',
     queue: 'bigmapQueue',
@@ -59,16 +59,16 @@ export const BIGMAP_TABLE = {
 
 export type BigMapTableName = typeof BIGMAP_TABLE[keyof typeof BIGMAP_TABLE];
 
-/** 原始表集合：表名 → `{k,v}` 压缩载荷，或已经解压好的对象数组。 */
+/ 原始表集合：表名 → `{k,v}` 压缩载荷，或已经解压好的对象数组。 */
 export type BigMapRawTables = Readonly<Record<string, unknown>>;
 
 export type BigMapRow = Readonly<Record<string, unknown>>;
 
-/**
- * 把 `{"k":[...],"v":[[...]]}` 解压成对象数组；已经是对象数组时原样返回。
+/
+ *把 `{"k":[...],"v":[[...]]}` 解压成对象数组；已经是对象数组时原样返回。
  *
- * 客户端正常路径由 `RefUtil` 解压（`tryGetCompressKeyRefData`），这里再兜一层是为了
- * **测试**能直接读盘上的 JSON —— 判据与运行时走同一条归一化入口，避免「测试绿、真机炸」。
+ *客户端正常路径由 `RefUtil` 解压（`tryGetCompressKeyRefData`），这里再兜一层是为了
+ *测试能直接读盘上的 JSON —— 判据与运行时走同一条归一化入口，避免「测试绿、真机炸」。
  */
 export function decompressBigMapRows(payload: unknown): readonly BigMapRow[] {
     if (Array.isArray(payload)) {
@@ -89,7 +89,7 @@ export function decompressBigMapRows(payload: unknown): readonly BigMapRow[] {
     return rows;
 }
 
-/** 取表：缺表直接抛错（配置缺失必须**当场**暴露，不能静默退化成空玩法）。 */
+/ 取表：缺表直接抛错（配置缺失必须当场暴露，不能静默退化成空玩法）。 */
 function table(tables: BigMapRawTables, name: BigMapTableName): readonly BigMapRow[] {
     const rows = decompressBigMapRows(tables[name]);
     if (rows.length === 0) throw new Error(`[BigMap] 配置表缺失或为空：${name}`);
@@ -114,10 +114,10 @@ function flag(row: BigMapRow, field: string): boolean {
     return int(row, field) !== 0;
 }
 
-/**
- * 取「两个候选字段里的第一个有值的」——策划表与早期推算表字段名不同
- * （`baseBuildSize` vs `occupyHex`、`baseBuildMaxNum` vs `maxOwnNum`），
- * 两个都没有就用默认值。**有值但非法仍然抛**，不能把脏数据当成缺列。
+/
+ *取「两个候选字段里的第一个有值的」——策划表与早期推算表字段名不同
+ *（`baseBuildSize` vs `occupyHex`、`baseBuildMaxNum` vs `maxOwnNum`），
+ *两个都没有就用默认值。有值但非法仍然抛，不能把脏数据当成缺列。
  */
 function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue: number): number {
     for (const field of [primary, fallback]) {
@@ -128,14 +128,14 @@ function pickInt(row: BigMapRow, primary: string, fallback: string, defaultValue
     return defaultValue;
 }
 
-/** 缺失给 `defaultValue`，有值但非法抛错。 */
+/ 缺失给 `defaultValue`，有值但非法抛错。 */
 function optionalInt(row: BigMapRow, field: string, defaultValue = 0): number {
     const value = row[field];
     if (value === undefined || value === null || value === '') return defaultValue;
     return int(row, field);
 }
 
-/** `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
+/ `baseBuildingLevel.preBuild`：`[{buildId,buildLevel}]`，可能是 JSON 字符串。 */
 function parsePreBuild(value: unknown): readonly { readonly id: number; readonly level: number }[] {
     let raw = value;
     if (typeof raw === 'string') {
@@ -155,7 +155,7 @@ function parsePreBuild(value: unknown): readonly { readonly id: number; readonly
     return result;
 }
 
-/** 资源类型白名单校验：配置里写错枚举会让产出直接消失，必须拦住。 */
+/ 资源类型白名单校验：配置里写错枚举会让产出直接消失，必须拦住。 */
 function resType(row: BigMapRow): BigMapResType {
     const value = text(row, 'resType') as BigMapResType;
     if (!BIGMAP_RES_ORDER.includes(value)) {
@@ -164,11 +164,11 @@ function resType(row: BigMapRow): BigMapResType {
     return value;
 }
 
-/**
- * 解析全部 BigMap 配置。
+/
+ *解析全部 BigMap 配置。
  *
- * 校验集中在边界（契约先行）：id 唯一、等级连续、前置城池存在、名次连续、开放城池必须属于个人层。
- * 任何一条不满足都抛错 —— 这些错误在运行时是「玩法静默不工作」，越早炸越好定位。
+ *校验集中在边界（契约先行）：id 唯一、等级连续、前置城池存在、名次连续、开放城池必须属于个人层。
+ *任何一条不满足都抛错 —— 这些错误在运行时是「玩法静默不工作」，越早炸越好定位。
  */
 export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     const world = parseWorld(table(tables, BIGMAP_TABLE.world)[0]);
@@ -190,8 +190,8 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     const levelRows = table(tables, BIGMAP_TABLE.buildingLevel);
     const levels = parseBuildingLevels(levelRows, buildings);
 
-    // 资源表要先于产出表：`baseBuildingLevel.resType` 存的是**背包道具 id**（18501 粮食…），
-    // 要按 `bigmapResource.itemId` 反查成 grain/wood/iron/coin。
+    //资源表要先于产出表：`baseBuildingLevel.resType` 存的是背包道具 id（18501 粮食…），
+    //要按 `bigmapResource.itemId` 反查成 grain/wood/iron/coin。
     const resources = new Map<BigMapResType, IBigMapResConfig>();
     for (const row of table(tables, BIGMAP_TABLE.resource)) {
         const item = parseResource(row);
@@ -247,21 +247,21 @@ export function parseBigMapConfig(tables: BigMapRawTables): IBigMapConfig {
     return {
         world, schedule, buildings, levels, produce, resources, queue,
         cities, camps, cityLevels, ranks, scoreRule, monsters, stamina, mainBuildingId,
-        // 背包道具图标要读 `item` 表，那条链在 loader 上（`attachBigMapResourceItemIcons`）；
-        // 这里保持纯函数，先给空表 —— 视图查不到就退回概念图。
+        //背包道具图标要读 `item` 表，那条链在 loader 上（`attachBigMapResourceItemIcons`）；
+        //这里保持纯函数，先给空表 —— 视图查不到就退回概念图。
         resourceIcons: new Map(),
     };
 }
 
-/**
- * 把 `item` 表里的图标并进资源定义：`bigmapResource.itemId → item.icon`。
+/
+ *把 `item` 表里的图标并进资源定义：`bigmapResource.itemId → item.icon`。
  *
- * 为什么要单独一步：`parseBigMapConfig` 是纯函数，只吃 bigmap 那 12 张表；而资源图标
- * 现在跟背包道具共用一份图（用户 2026-10-26 口径：「大地图顶部资源 18501..18505 走背包的」），
- * 读 `item` 表属于「配置加载编排」的活，放 loader 侧才不破坏纯函数。
+ *为什么要单独一步：`parseBigMapConfig` 是纯函数，只吃 bigmap 那 12 张表；而资源图标
+ *现在跟背包道具共用一份图（用户 2026-10-26 口径：「大地图顶部资源 18501..18505 走背包的」），
+ *读 `item` 表属于「配置加载编排」的活，放 loader 侧才不破坏纯函数。
  *
- * `item.icon` 为空（例如策划还没配图）⇒ 这一项不进来，视图退回
- * `image/concept/sprites/<resType>` 概念图，不会出现空图标。
+ *`item.icon` 为空（例如策划还没配图）⇒ 这一项不进来，视图退回
+ *`image/concept/sprites/<resType>` 概念图，不会出现空图标。
  */
 export function attachBigMapResourceItemIcons(
     config: IBigMapConfig,
@@ -290,14 +290,14 @@ export function attachBigMapResourceItemIcons(
     return { ...config, resourceIcons };
 }
 
-/**
- * 攻城日程：表里写 `"09:00"` 这种人类可读格式，这里折成当日秒并**复用同一套校验**。
+/
+ *攻城日程：表里写 `"09:00"` 这种人类可读格式，这里折成当日秒并复用同一套校验。
  *
- * 解析与校验放同一条链上（`parseBigMapClockTime` → `validateBigMapCitySchedule`），
- * 保证「表写错」和「代码里手写常量写错」炸在同一个地方。
+ *解析与校验放同一条链上（`parseBigMapClockTime` → `validateBigMapCitySchedule`），
+ *保证「表写错」和「代码里手写常量写错」炸在同一个地方。
  *
- * 对外导出是为了让单测能**只读 `bigmapSchedule` 一张表**验日程与兜底常量是否一致 ——
- * 走整包 `parseBigMapConfig` 时，任何别的表坏了都会把这条守卫带红，判据就不干净了。
+ *对外导出是为了让单测能只读 `bigmapSchedule` 一张表验日程与兜底常量是否一致 ——
+ *走整包 `parseBigMapConfig` 时，任何别的表坏了都会把这条守卫带红，判据就不干净了。
  */
 export function parseBigMapCitySchedule(row: BigMapRow): IBigMapCitySchedule {
     const schedule: IBigMapCitySchedule = {
@@ -306,8 +306,8 @@ export function parseBigMapCitySchedule(row: BigMapRow): IBigMapCitySchedule {
         lockAt: parseBigMapClockTime(text(row, 'lockTime'), 'lockTime'),
         settleAt: parseBigMapClockTime(text(row, 'settleTime'), 'settleTime'),
         snapshotAt: parseBigMapClockTime(text(row, 'snapshotTime'), 'snapshotTime'),
-        // 表里有这一列就用；没有（首版）先 0，真正的值由 `gameConfig.bigMapReFreshRankStopTime`
-        // 在 `applyBigMapScheduleOverrides` 里覆盖进来。
+        //表里有这一列就用；没有（首版）先 0，真正的值由 `gameConfig.bigMapReFreshRankStopTime`
+        //在 `applyBigMapScheduleOverrides` 里覆盖进来。
         crossDayStopMinutes: optionalInt(row, 'crossDayStopMinutes', 0),
     };
     validateBigMapCitySchedule(schedule);
@@ -336,8 +336,8 @@ function parseWorld(row: BigMapRow): IBigMapWorldConfig {
 }
 
 function parseBuilding(row: BigMapRow): IBigMapBuildingConfig {
-    // 策划表：`baseBuildSize` / `baseBuildMaxNum` / `unlockType` + `unlockParam`；
-    // 早期推算表：`occupyHex` / `maxOwnNum` / `unlockChapter`。两套都认。
+    //策划表：`baseBuildSize` / `baseBuildMaxNum` / `unlockType` + `unlockParam`；
+    //早期推算表：`occupyHex` / `maxOwnNum` / `unlockChapter`。两套都认。
     const unlockType = optionalInt(row, 'unlockType', 1);
     const unlockParam = optionalInt(row, 'unlockParam', 0);
     const kind = num(row, 'baseBuildType');
@@ -358,15 +358,15 @@ function parseBuilding(row: BigMapRow): IBigMapBuildingConfig {
         initialCellId: initialCellId || null,
         occupyHex: Math.max(1, pickInt(row, 'baseBuildSize', 'occupyHex', 1)),
         maxOwnNum: Math.max(1, pickInt(row, 'baseBuildMaxNum', 'maxOwnNum', 1)),
-        // 章节解锁时章节号写在 `unlockParam`；其它解锁方式（赛季天数 / 积分购买）没有章节。
+        //章节解锁时章节号写在 `unlockParam`；其它解锁方式（赛季天数 / 积分购买）没有章节。
         unlockChapter: unlockType === 1 ? Math.max(0, unlockParam)
             : Math.max(0, optionalInt(row, 'unlockChapter', 0)),
         unlockType: unlockType > 0 ? unlockType : 1,
         unlockParam: Math.max(0, unlockParam),
         queueType: Math.max(1, optionalInt(row, 'queueType', 1)),
         sort: int(row, 'sort'),
-        // 缺列按「可移动」处理（早期推算表没这一列，行为与搬移上线时一致）。
-        canMove: pickInt(row, 'canMove', 'canMove', 1) !== 0,
+        //缺列按「可移动」处理（早期推算表没这一列，行为与搬移上线时一致）。
+        canMove: optionalInt(row, 'canMove', 1) !== 0,
         info: text(row, 'baseBuildInfo'),
     };
 }
@@ -391,7 +391,7 @@ function parseBuildingLevels(
             buildTime: int(row, 'buildTime'),
             maxOtherLevel: int(row, 'maxOtherLevel'),
             resCap: int(row, 'resCap'),
-            // 策划表这列是**数组**（`[]`），旧表是千分比数字；数组一律按 0 处理。
+            //策划表这列是数组（`[]`），旧表是千分比数字；数组一律按 0 处理。
             attrBonus: Array.isArray(row.attrBonus) ? 0 : optionalInt(row, 'attrBonus', 0),
         };
         if (!buildings.has(item.id)) throw new Error(`[BigMap] 建筑升级表引用了不存在的建筑 ${item.id}`);
@@ -401,7 +401,7 @@ function parseBuildingLevels(
         if (item.buildTime < 0) throw new Error(`[BigMap] 建筑 ${item.id} 等级 ${item.level} 耗时非法`);
         levels.set(item.level, item);
     }
-    // 等级必须从 1 连续排到 max，否则「升到 L+1」会查不到配置。
+    //等级必须从 1 连续排到 max，否则「升到 L+1」会查不到配置。
     for (const [id, levels] of byBuilding) {
         const max = Math.max(...levels.keys());
         for (let level = 1; level <= max; level += 1) {
@@ -411,13 +411,13 @@ function parseBuildingLevels(
     return byBuilding;
 }
 
-/**
- * 建筑产出（每等级每小时产量与累积上限）。
+/
+ *建筑产出（每等级每小时产量与累积上限）。
  *
- * 两个来源，**策划表优先**：
- * - `baseBuildingLevel` 的 `resType`（**背包道具 id** 18501/18502/18503/18504，0 = 不产）
- *   + `producePerHour` + `produceCap` —— 策划把产出并进了升级表；
- * - 早期独立的 `bigmapBuildingProduce`（`resType` 是 grain/wood 字符串），只在上面一行产出都没有时兜底。
+ *两个来源，策划表优先：
+ *- `baseBuildingLevel` 的 `resType`（背包道具 id 18501/18502/18503/18504，0 = 不产）
+ *  + `producePerHour` + `produceCap` —— 策划把产出并进了升级表；
+ *- 早期独立的 `bigmapBuildingProduce`（`resType` 是 grain/wood 字符串），只在上面一行产出都没有时兜底。
  */
 function parseProduce(
     levelRows: readonly BigMapRow[],
@@ -470,7 +470,7 @@ function parseProduce(
     return byBuilding;
 }
 
-// 缺列的资源表仍须连接背包；图标、余额与建筑产出共用归一后的身份。
+//缺列的资源表仍须连接背包；图标、余额与建筑产出共用归一后的身份。
 const BIGMAP_RESOURCE_ITEM_IDS: Readonly<Record<BigMapResType, number>> = {
     grain: 18501, wood: 18502, iron: 18503, coin: 18504, stamina: 18505,
 };
@@ -487,7 +487,7 @@ function parseResource(row: BigMapRow): IBigMapResConfig {
     };
 }
 
-// 新版队列表不再提供这三列；保留现有预览时长与建造区布局，联机结算仍走服务端。
+//新版队列表不再提供这三列；保留现有预览时长与建造区布局，联机结算仍走服务端。
 const BIGMAP_QUEUE_CLIENT_DEFAULTS = { offlineMaxHours: 8, plotRows: 5, plotCols: 5 } as const;
 
 function queueClientInt(row: BigMapRow, field: keyof typeof BIGMAP_QUEUE_CLIENT_DEFAULTS): number {
@@ -504,11 +504,11 @@ function parseQueue(row: BigMapRow): IBigMapQueueConfig {
         cancelReturnRate: Math.min(1, Math.max(0, num(row, 'cancelReturnRate'))),
         offlineMaxHours: queueClientInt(row, 'offlineMaxHours'),
         upgradeUnlockChapter: Math.max(1, int(row, 'upgradeUnlockChapter')),
-        plotRows: Math.max(3, queueClientInt(row, 'plotRows')),
-        plotCols: Math.max(3, queueClientInt(row, 'plotCols')),
+        plotRows: queueClientInt(row, 'plotRows'),
+        plotCols: queueClientInt(row, 'plotCols'),
     };
     if (queue.initBuildQueue > queue.maxBuildQueue) throw new Error('[BigMap] 初始队列数大于上限');
-    if (queueClientInt(row, 'plotRows') < 3 || queueClientInt(row, 'plotCols') < 3
+    if (queue.plotRows < 3 || queue.plotCols < 3
         || queue.plotRows > 20 || queue.plotCols > 20) {
         throw new Error('[BigMap] 建造区行列必须在3～20之间');
     }
@@ -534,7 +534,7 @@ function parseCity(row: BigMapRow, cityLevels: ReadonlyMap<number, IBigMapCityLe
     const level = cityLevels.get(cityLevel);
     const available = flag(row, 'available');
     const layer = int(row, 'layer');
-    // 本期只做「纯玩家个人战斗」，联盟/战盟层配置成 available = 0；反过来开放层必须是个人层。
+    //本期只做「纯玩家个人战斗」，联盟/战盟层配置成 available = 0；反过来开放层必须是个人层。
     if (available && layer !== 1) {
         throw new Error(`[BigMap] 城池 ${int(row, 'cityId')} 开放但层级不是个人层（本期未做联盟/战盟）`);
     }
@@ -546,7 +546,7 @@ function parseCity(row: BigMapRow, cityLevels: ReadonlyMap<number, IBigMapCityLe
         cityLevel,
         unlockChapter: int(row, 'unlockChapter'),
         openDay: int(row, 'openDay'),
-        // 城池表没填行动力时退回等级表，保证「攻打一定消耗」不被 0 绕过。
+        //城池表没填行动力时退回等级表，保证「攻打一定消耗」不被 0 绕过。
         staminaCost: int(row, 'staminaCost') || level.staminaCost,
         defenseHp: int(row, 'defenseHp') || level.defenseHp,
         radiateCapacity: Math.max(1, int(row, 'radiateCapacity')),
@@ -633,7 +633,7 @@ function parseCamp(row: BigMapRow): IBigMapCampConfig {
         warScoreReset: campInt(row, 'warScoreReset', 0, Number.MAX_SAFE_INTEGER),
         buffGroupIds: campIds(row, 'buffGroupId'),
         buffEffectIds: campIds(row, 'buffEffectId'),
-        // 2026-10-30：单个 `firstRewardId` 换成两列掉落数组（首占 / 占领）。
+        //2026-10-30：单个 `firstRewardId` 换成两列掉落数组（首占 / 占领）。
         firstReward: parseDropList(row, 'firstReward', BIGMAP_TABLE.camp),
         occupyReward: parseDropList(row, 'occupyReward', BIGMAP_TABLE.camp),
         buffConNum: campInt(row, 'buffConNum', 0),
@@ -668,7 +668,7 @@ function parseMonster(row: BigMapRow): IBigMapMonsterConfig {
             offlineBattle: null,
         };
     }
-    // 兼容旧版离线配置；等离线模拟与对应存档退役后删除，不为新版表补造旧战斗数值。
+    //兼容旧版离线配置；等离线模拟与对应存档退役后删除，不为新版表补造旧战斗数值。
     return {
         ...common,
         occupyHex: Math.max(1, int(row, 'occupyHex')),
@@ -690,11 +690,11 @@ function monsterInt(row: BigMapRow, field: string, min: number, max = Number.MAX
     return readConfigInteger(row[field], `[BigMap] ${BIGMAP_TABLE.monster}[monsterId=${row.monsterId}].${field}`, min, max);
 }
 
-/**
- * 掉落数组解析 —— **据点与野怪共用**（`firstReward` / `occupyReward` / `firstKillDropId` / `normalDropId`）。
+/
+ *掉落数组解析 —— 据点与野怪共用（`firstReward` / `occupyReward` / `firstKillDropId` / `normalDropId`）。
  *
- * 错误路径包含所属表、行标识及数组下标，避免据点掉落误报为野怪字段。
- * 非数组直接抛：空数组是合法事实（没配奖励），字段缺失/写成对象则是配表事故。
+ *错误路径包含所属表、行标识及数组下标，避免据点掉落误报为野怪字段。
+ *非数组直接抛：空数组是合法事实（没配奖励），字段缺失/写成对象则是配表事故。
  */
 function parseDropList(row: BigMapRow, field: string, tableName: BigMapTableName): readonly IBigMapDrop[] {
     const path = `[BigMap] ${tableName}[id=${row.campId ?? row.monsterId}].${field}`;

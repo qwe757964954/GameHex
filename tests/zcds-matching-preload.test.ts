@@ -621,7 +621,7 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
         '../model/ZCGameResourcePlan': resourcePlan,
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
-        '../model/ZCMatchConfig': { captureZCMatchConfig: () => ({ map: {}, playerDeck: [], enemyDeck: [] }) },
+        '../model/ZCMatchConfig': { createZCMatchConfig: (map: unknown) => ({ map }), captureZCMatchConfig: () => ({ map: {}, playerDeck: [], enemyDeck: [] }) },
         '../model/ZCModifierRuntime': { getZCModifierCatalogs: () => ({ adapters: { textOverrides: new Map(), skillPlans: [] } }) },
         '../ZCDCLogSwitch': { ZCDC_LOG_WARNINGS: false },
         cc: { JsonAsset: class {}, Prefab: class {}, Material: class { initialize(): void {} } },
@@ -634,8 +634,8 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
         '../model/ZCCombatCatalog': { setCardRarityMeta() {}, getAllUnitDefinitions: () => [{ unitId: 'test', prefabPath: 'visual/unit', attackProfile: { effectPrefabPath: 'visual/effect' } }] },
         // `isRandomMapCandidate` 是 `loadRandomMap` 的随机池判据：桩里缺符号会在调用时
         // 抛 TypeError（跟被测行为无关）。替身与真实实现同口径。
-        '../model/ZCGameModel': {
-            configureZCMap: () => configured++,
+        '../model/ZCMapConfig': {
+            parseZCMap: (map: unknown) => { configured++; return map; },
             getZCLocalPlayerCountOverride: () => null,
             isRandomMapCandidate: (layout: { playerCount?: number; cityMode?: string } | null, requestedPlayerCount?: number) => {
                 const count = layout?.playerCount ?? 2;
@@ -658,7 +658,7 @@ function loaderFixture(assets: any, configs = { initialize: async () => {}, getT
         },
         './ZCRuntimePrecompiler': {
             // 预编译模块内部安装运行时表；桩里复用同一注入计数，取消用例在 checkActive 处即拦截。
-            ensureZCRuntimeCompiled: async () => injected++,
+            ensureZCRuntimeCompiled: async () => { await configs.initialize(); injected++; return true; },
         },
     };
     const context = { exports: {} as any, require: (name: string) => dependencies[name], console: { info() {}, error() {}, warn() {} } };
@@ -713,7 +713,7 @@ test('取消后迟到的地图加载不能覆盖当前地图配置', async () =>
     assert.equal(fixture.configured, 0);
 });
 
-test('配置初始化期间取消，不继续读表或注入过期配置', async () => {
+test('对局取消后不发布地图，共享会话预编译仍可完成', async () => {
     const initialization = deferred<void>(); let tablesRead = 0;
     const fixture = loaderFixture({ load: async () => ({}), loadDir: async () => [] }, {
         initialize: () => initialization.promise, getTable: async () => { tablesRead++; return []; },
@@ -722,7 +722,8 @@ test('配置初始化期间取消，不继续读表或注入过期配置', async
     const ready = fixture.loader.prepare(scope);
     scope.dispose(); initialization.resolve();
     await assert.rejects(ready, /取消/);
-    assert.equal(tablesRead, 0); assert.equal(fixture.injected, 0);
+    assert.equal(tablesRead, 0); assert.equal(fixture.injected, 1);
+    assert.equal(fixture.configured, 0);
 });
 
 test('直接进入已取消或已释放的战斗流程不启动资源加载', async () => {

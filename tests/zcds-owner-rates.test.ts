@@ -7,7 +7,7 @@ import { getAllUnitDefinitions, type ZCUnitDefinition } from '../assets/script/a
 import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import type { ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
-import { resolveZCUnitDefinition } from '../assets/script/app/zcds/model/ZCModifierRuntime';
+import { compileZCCombatBuild, resolveZCUnitDefinition } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import {
     ownerRatesOf,
@@ -136,6 +136,19 @@ test('ownerRatesOf：只保留服务端字段，不补缺失倍率', () => {
     // key 常量与协议里的拼写必须一致（拼错 = 永远匹配不上，零报错）
     assert.equal(ZC_BATTLE_RATE_KEYS.attack, 'levelAttackRatio');
     assert.equal(ZC_BATTLE_RATE_KEYS.hp, 'levelHpRatio');
+});
+
+test('服务端最终属性不再乘关卡倍率，缺失属性和其他单位仍走原计算', () => {
+    const rates = { attackRate: 2, hpRate: 0.5 };
+    for (const serverAttributes of [{ attack: 19, maxHp: 73 }, { attack: 0 }, { maxHp: 73 }]) {
+        const loadouts = compileZCCombatBuild({ unitId: sampleUnit.unitId, serverAttributes }, [sampleUnit]);
+        const actual = resolveZCUnitDefinition(sampleUnit, loadouts, rates);
+        assert.equal(actual.attack, serverAttributes.attack ?? sampleUnit.attack * 2);
+        assert.equal(actual.maxHp, serverAttributes.maxHp ?? sampleUnit.maxHp * 0.5);
+        const other = resolveZCUnitDefinition(otherUnit, loadouts, rates);
+        assert.equal(other.attack, otherUnit.attack * 2);
+        assert.equal(other.maxHp, otherUnit.maxHp * 0.5);
+    }
 });
 
 test('阵营倍率在普通成长之后相乘，不覆盖技能参数', () => {

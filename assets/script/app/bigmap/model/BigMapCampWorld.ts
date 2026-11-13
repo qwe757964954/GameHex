@@ -3,7 +3,7 @@ import type { IBigMapCityConfig, IBigMapConfig } from './BigMapTypes';
 import type { IBigMapLayout, IBigMapLayoutCity } from './BigMapLayout';
 import { placeBigMapCities } from './BigMapWorld';
 
-/** 正式城池身份由 DM 表提供。旧表仅保留离线预览数值；正式开战/结算仍由服务端处理。 */
+/ 正式城池身份由 DM 表提供。旧表仅保留离线预览数值；正式开战/结算仍由服务端处理。 */
 export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
     const camps = Array.from(config.camps.values()).sort((a, b) => a.campId - b.campId);
     const levels = Array.from(config.cityLevels.values()).sort((a, b) => a.level - b.level);
@@ -15,9 +15,9 @@ export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
         const level = levels.filter((item) => item.level <= camp.chapter).pop() ?? levels[0];
         cities.set(camp.campId, {
             cityId: camp.campId, name: camp.name, layer: camp.occupyType,
-            // `bigMapCamp` 表里的行**就是**本期开放的据点，层级差异由 `occupyType` 表达。
-            // ⚠️ 不能写成 `occupyType === 1`：表里 81 座有 58 座是军团层（2）、1 座王座层（4），
-            // 按个人层卡会把它们全判成「未开放」（2026-10-30 反馈）。
+            //`bigMapCamp` 表里的行就是本期开放的据点，层级差异由 `occupyType` 表达。
+            // 不能写成 `occupyType === 1`：表里 81 座有 58 座是军团层（2）、1 座王座层（4），
+            //按个人层卡会把它们全判成「未开放」（2026-10-30 反馈）。
             available: true, cityLevel: level.level,
             unlockChapter: camp.chapter, openDay: camp.openDay, staminaCost: camp.staminaCost,
             defenseHp: legacy?.defenseHp ?? level.defenseHp,
@@ -30,9 +30,9 @@ export function withBigMapCampCities(config: IBigMapConfig): IBigMapConfig {
     return { ...config, cities };
 }
 
-/** 保留有效锚点、怪物与基地；新增城池复用原环位算法，重新分配相连且不重叠的势力范围。 */
+/ 保留有效锚点、怪物与基地；新增城池复用原环位算法，重新分配相连且不重叠的势力范围。 */
 export function completeBigMapCampLayout(config: IBigMapConfig, layout: IBigMapLayout): IBigMapLayout {
-    // bigMap 的编辑器 ID 为 2001~2081，标签记录正式 campId；映射身份时保留手工几何。
+    //bigMap 的编辑器 ID 为 2001~2081，标签记录正式 campId；映射身份时保留手工几何。
     const ids = new Map(layout.cities.map((city) => [city.cityId,
         config.cities.has(city.cityId) ? city.cityId
             : config.cities.has(Number(city.label)) ? Number(city.label) : city.cityId]));
@@ -68,7 +68,7 @@ export function completeBigMapCampLayout(config: IBigMapConfig, layout: IBigMapL
     for (const owner of regions) for (const id of owner.city.hexIds) {
         owners.set(id, owner); owner.rangeHex.push(id); queue.push({ id, owner });
     }
-    // 多源 BFS：同距离由城池 ID 兜底，格子只归属一次，各城范围从自己的占格连通扩展。
+    //多源 BFS：同距离由城池 ID 兜底，格子只归属一次，各城范围从自己的占格连通扩展。
     for (let cursor = 0; cursor < queue.length; cursor++) {
         const { id, owner } = queue[cursor];
         for (const next of hexGridNeighborIds(id, layout.rows, layout.columns)) {

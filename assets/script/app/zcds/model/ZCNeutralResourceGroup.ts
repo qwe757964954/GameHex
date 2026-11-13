@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 /**
  * 中立资源组合（表 `neutralResourceGroup`，策划表 `PVP-中立资源配置.xlsx / 中立资源组合`）。
  *
@@ -109,7 +110,6 @@ export interface ZCNeutralResourceCatalog {
 
 const EMPTY_CATALOG: ZCNeutralResourceCatalog = { groups: new Map(), items: new Map() };
 
-let catalog: ZCNeutralResourceCatalog = EMPTY_CATALOG;
 
 /** 表未加载时的空目录（用例与初始化失败路径共用）。 */
 export function emptyZCNeutralResourceCatalog(): ZCNeutralResourceCatalog {
@@ -182,14 +182,9 @@ export function compileZCNeutralResourceCatalog(
     return { groups, items };
 }
 
-/** 装进运行时（`loadPvpTables` 调一次；传空 = 清空）。 */
-export function setZCNeutralResourceCatalog(value: ZCNeutralResourceCatalog | null): void {
-    catalog = value ?? EMPTY_CATALOG;
-}
-
 /** 当前目录（用例断言用，业务代码请用下面的窄接口）。 */
 export function getZCNeutralResourceCatalog(): ZCNeutralResourceCatalog {
-    return catalog;
+    return ZC_RUNTIME_CONFIG.snapshot.neutralResources ?? EMPTY_CATALOG;
 }
 
 /** 表现键：兵种 / 充能 / 兵营 / Buff 由类型固定，宝箱与金矿看 `icon`。 */
@@ -392,13 +387,13 @@ function requireCard(
 /** 取组合；未知 groupId 返回 null（地图配错时由编辑器侧拦，运行时不当成崩溃）。 */
 export function neutralResourceGroupOf(groupId: number | null | undefined): ZCNeutralResourceGroup | null {
     if (!Number.isInteger(groupId)) return null;
-    return catalog.groups.get(groupId as number) ?? null;
+    return getZCNeutralResourceCatalog().groups.get(groupId as number) ?? null;
 }
 
 /** 取资源项；`null` / 未知 id 返回 null（调用侧不必判空两层）。 */
 export function neutralResourceItemOf(itemId: number | null | undefined): ZCNeutralResourceItem | null {
     if (!Number.isInteger(itemId)) return null;
-    return catalog.items.get(itemId as number) ?? null;
+    return getZCNeutralResourceCatalog().items.get(itemId as number) ?? null;
 }
 
 /** 表现键；未知 id 返回 null（视图据此不画图标）。 */

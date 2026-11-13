@@ -4,7 +4,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
-import { configureZCMap, isRandomMapCandidate, ZC_MAP_ID } from '../assets/script/app/zcds/model/ZCGameModel';
+import { parseZCMap, isRandomMapCandidate, ZC_MAP_ID } from '../assets/script/app/zcds/model/ZCMapConfig';
 import * as artPaths from '../assets/script/app/ArtPaths';
 import { assetPath } from './helpers/asset-paths';
 
@@ -44,8 +44,8 @@ function makeGame(
         cc,
         '../model/ZCCombatCatalog': {},
         // 沙箱直接复用真实候选判据，避免测试替身与 2/3/4 人随机规则漂移。
-        '../model/ZCGameModel': {
-            configureZCMap,
+        '../model/ZCMapConfig': {
+            parseZCMap,
             getZCLocalPlayerCountOverride: () => requestedPlayerCount,
             isRandomMapCandidate,
         },
@@ -53,7 +53,7 @@ function makeGame(
         // ZCGameLoader 从 ArtPaths 取资源目录常量；不映射会解构出 undefined.HEX_GROUND_GLOW_ART_ROOT
         '../../ArtPaths': artPaths,
     };
-    const context = { exports: {} as { ZCGameLoader: new (resources: unknown, mapDirectory: string, random: () => number, playerCountOverride?: 2 | 3 | 4) => { loadRandomMap(): Promise<boolean> } },
+    const context = { exports: {} as { ZCGameLoader: new (resources: unknown, mapDirectory: string, random: () => number, playerCountOverride?: 2 | 3 | 4) => { selectedMap: { id: string }; loadRandomMap(): Promise<boolean> } },
         require: (name: string) => dependencies[name],
         console: { info() {}, warn() {}, error() {} } };
     runInNewContext(code, context);
@@ -98,22 +98,23 @@ test('每局从地图资源目录按权重随机选一张图，每张图都有�
         const { game, loaded } = makeGame([midpoint]);
         assert.equal(await game.loadRandomMap(), true, asset.name);
         assert.deepEqual(loaded, [MAP_DIRECTORY]);
-        assert.equal(ZC_MAP_ID, asset.name, asset.name);
+        assert.equal(game.selectedMap.id, asset.name, asset.name);
     }
 });
 
 test('目录里只剩 3 / 4 人图时也能本地开局', async () => {
     assert.ok(multiMaps.length > 0, '地图目录里应已有多人图，否则这条用例失去意义');
     for (const asset of multiMaps) {
-        assert.equal(await makeGame([0], [asset]).game.loadRandomMap(), true, asset.name);
-        assert.equal(ZC_MAP_ID, asset.name);
+        const { game } = makeGame([0], [asset]);
+        assert.equal(await game.loadRandomMap(), true, asset.name);
+        assert.equal(game.selectedMap.id, asset.name);
     }
 });
 
 test('多人图排在候选首位时可以直接被抽中', async () => {
     const { game } = makeGame([0], [...multiMaps, ...soloMaps]);
     assert.equal(await game.loadRandomMap(), true);
-    assert.equal(ZC_MAP_ID, multiMaps[0].name);
+    assert.equal(game.selectedMap.id, multiMaps[0].name);
 });
 
 test('本地人数覆盖可以固定只抽 3 人或 4 人地图', async () => {
@@ -122,7 +123,7 @@ test('本地人数覆盖可以固定只抽 3 人或 4 人地图', async () => {
         assert.ok(expected, `缺少 ${count} 人地图`);
         const { game } = makeGame([0], assets, count);
         assert.equal(await game.loadRandomMap(), true);
-        assert.equal(ZC_MAP_ID, expected.name);
+        assert.equal(game.selectedMap.id, expected.name);
     }
 });
 
@@ -130,13 +131,13 @@ test('调用方显式人数优先于全局覆盖，领地 PVE 可固定双人地
     const expected = assets.find((asset) => playerCountOf(asset) === 2)!;
     const { game } = makeGame([0], assets, 4, 2);
     assert.equal(await game.loadRandomMap(), true);
-    assert.equal(ZC_MAP_ID, expected.name);
+    assert.equal(game.selectedMap.id, expected.name);
 });
 
 test('随机抽到无效地图时继续尝试，目录为空则停止初始化', async () => {
     const { game } = makeGame([0, 0], [{ name: 'broken', json: {} }, assets[0]]);
     assert.equal(await game.loadRandomMap(), true);
-    assert.equal(ZC_MAP_ID, assets[0].name);
+    assert.equal(game.selectedMap.id, assets[0].name);
     assert.equal(await makeGame([], []).game.loadRandomMap(), false);
 });
 
@@ -150,5 +151,16 @@ test('自选主城地图已参与随机选图', async () => {
     };
     const { game } = makeGame([0], [pending, assets[0]]);
     assert.equal(await game.loadRandomMap(), true);
-    assert.equal(ZC_MAP_ID, pending.name);
+    assert.equal(game.selectedMap.id, pending.name);
+});
+
+test('两个 Loader 分别持有地图，加载不会改写共享地图', async () => {
+    const sharedId = ZC_MAP_ID;
+    const first = makeGame([0], [assets[0]]).game;
+    const second = makeGame([0], [assets[1]]).game;
+    await first.loadRandomMap();
+    await second.loadRandomMap();
+    assert.equal(first.selectedMap.id, assets[0].name);
+    assert.equal(second.selectedMap.id, assets[1].name);
+    assert.equal(ZC_MAP_ID, sharedId);
 });

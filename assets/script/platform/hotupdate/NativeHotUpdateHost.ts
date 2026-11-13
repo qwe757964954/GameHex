@@ -31,16 +31,9 @@ export interface INativeAssetsManager {
     setVersionCompareHandle?(handle: ((left: string, right: string) => number) | null): void;
     setMaxConcurrentTask?(task: number): void;
     /**
-     * 🔴 **只能传 manifestUrl 一个参数。**
-     *
-     * 引擎（3.8 `native.AssetsManager`）有两个重载：
-     *   1. `loadLocalManifest(manifestUrl: string): boolean`
-     *   2. `loadLocalManifest(localManifest: Manifest, storagePath: string): boolean`
-     * 重载 2 的第一个参数是 **`Manifest` 对象**。传路径字符串会被引擎当 `Manifest*`
-     * 解引用 ⇒ **同步 SIGSEGV（fault addr 0x0、无 JS 栈）**。已实测踩过。
-     *
-     * 这里刻意**不声明** `storagePath` 参数：它已在 `new AssetsManager('', storagePath)`
-     * 里给过，而引擎 `loadLocalManifest` 的第 1 步就是「Reset storage path」到该值。
+     * 只能传 manifestUrl 一个参数。引擎另一个重载首参是 Manifest 对象，
+     * 传路径字符串会被当 Manifest* 解引用，同步 SIGSEGV（实测，无 JS 栈）。
+     * storagePath 已在构造器里给过，引擎载入时会重置到该值。
      */
     loadLocalManifest(manifest: string): boolean;
     getLocalManifest(): INativeAssetsManagerManifest | null;
@@ -68,17 +61,15 @@ export interface INativeAssetsManagerEnvironment {
 }
 
 /**
- * 原生环境端口。
- *
- * 把 jsb / localStorage / game.restart 全部挡在这个接口后面，业务编排
- * （`NativeHotUpdateRuntime`）才能在没有引擎的环境里被单测覆盖。
+ * 原生环境端口：把 jsb/localStorage/game.restart 挡在接口后面，
+ * 编排器才能在没有引擎的环境里被单测覆盖。
  */
 export interface INativeHotUpdateHost {
     readonly supported: boolean;
     readonly environment: INativeAssetsManagerEnvironment;
-    /** 应用可写目录下的热更缓存目录，**必须以 `/` 结尾**（与引擎的 `_temp/` 约定对齐）。 */
+    /** 应用可写目录下的热更缓存目录，必须以 / 结尾（对齐引擎 _temp/ 约定）。 */
     resolveStoragePath(dirName: string): string;
-    /** 定位随包 project.manifest；`override` 为配置里显式指定的绝对路径。 */
+    /** 定位随包 project.manifest；override 为配置里显式指定的绝对路径。 */
     resolveLocalManifestPath(override?: string): string | null;
     readTextFile(path: string): string | null;
     fileExists(path: string): boolean;
@@ -90,15 +81,10 @@ export interface INativeHotUpdateHost {
     writePersistedClientVersion(version: string): void;
     removeDirectory(path: string): void;
     /**
- * 🔴 **刻意不接受 `versionCompareHandle`。**
- *
- * 引擎会在 `onSuccess → parseVersion()` 里**同步调用**这个 handle，而那条链位于
- * `onFileTaskSuccess` 回调上 = **原生下载线程**。传 JS 函数进去就是跨线程调 JS
- * ⇒ 同步 SIGSEGV（实测 `SEGV_MAPERR`、`fault addr 0xd5e4` 固定偏移、Thread-2）。
- *
- * 详见 `HotUpdateNativePlan.ts` 里已删除的 `buildNativeVersionCompare` 处的说明。
- * 版本比较走引擎默认 `cmpVersion`，全序比较放在 JS 侧的 `compareReleaseVersion`。
- */
+     * 刻意不接受 versionCompareHandle：引擎在原生下载线程上同步调用它，
+     * 传 JS 函数就是跨线程调 JS，同步 SIGSEGV。版本比较走引擎默认 cmpVersion，
+     * 全序比较放在 JS 侧的 compareReleaseVersion。
+     */
 createAssetsManager(storagePath: string): INativeAssetsManager | null;
     restartGame(delayMs: number): void;
     info(message: string): void;
@@ -112,10 +98,8 @@ function getRuntime(): Record<string, any> | null {
 }
 
 /**
- * Cocos 原生（Android/iOS）实现。
- *
- * 注意：注入到 main.js 的片段用的是 `window.jsb`，而 TS 里 `native` 命名空间只能 import，
- * 所以这里统一走 `globalThis.jsb`，两边指向同一份绑定。
+ * Cocos 原生实现。main.js 注入片段用 window.jsb，native 命名空间只能 import，
+ * 这里统一走 globalThis.jsb，两边指向同一份绑定。
  */
 export class CocosNativeHotUpdateHost implements INativeHotUpdateHost {
     private readonly jsb = getRuntime();
@@ -125,33 +109,19 @@ export class CocosNativeHotUpdateHost implements INativeHotUpdateHost {
     }
 
     /**
-     * 引擎事件 / 状态常量表。
-     *
-     * 🔴 **取值路径必须走 `native.EventAssetsManager`，不能只读全局 `jsb`。**
-     *
-     * 引擎 `cocos/native-binding/index.ts` 里 `EventAssetsManager` 声明在
-     * `native` 命名空间下，且原文注明「全局 `jsb` 对象已废弃，推荐用 `cc` 导出的
-     * `native`，且 `native` 是 `jsb` 的**子集**」⇒ `jsb.EventAssetsManager`
-     * 可能**根本不存在**。
-     *
-     * 原实现只读 `jsb` 且每个常量都带 `?? 0/1/2/…` 的**猜测兜底值**：
-     * 取不到时全部常量退化成 0~9 的连续假值，与引擎真实事件码错位 ⇒
-     * `checkUpdate()` 派发的每个事件都匹配不上 ⇒ Promise 永不 resolve，
-     * 而引擎的下载线程还在继续派发事件（原生侧没有任何 JS 栈可读）。
-     * **猜测兜底在这里等于把静默失效做成崩溃。**
-     *
-     * 现在：多路探测（`native` → `jsb` → `AssetsManager` 命名空间），
-     * 且**取不到就抛错**，绝不猜。
+     * 常量按 native → jsb → AssetsManager 三路探测。EventAssetsManager 声明在
+     * native 命名空间下，全局 jsb 可能没有；取不到就抛错，猜测值会让事件码
+     * 全部错位、Promise 永不 resolve，且失败点在无栈的原生回调里。
      */
     get environment(): INativeAssetsManagerEnvironment {
         const candidates: Record<string, unknown>[] = [];
-        // ① 官方推荐路径：cc 导出的 native
+        // cc 导出的 native（官方推荐）
         const nativeNS = (native as unknown as Record<string, unknown> | undefined)?.EventAssetsManager;
         if (nativeNS) candidates.push(nativeNS as Record<string, unknown>);
-        // ② 旧版全局 jsb（保留兼容，但不作为唯一来源）
+        // 旧版全局 jsb
         const jsbNS = this.jsb?.EventAssetsManager;
         if (jsbNS) candidates.push(jsbNS as Record<string, unknown>);
-        // ③ 有些版本挂在 AssetsManager 下
+        // 部分版本挂在 AssetsManager 下
         const managerNS = this.jsb?.AssetsManager;
         if (managerNS) candidates.push(managerNS as Record<string, unknown>);
 
@@ -160,7 +130,7 @@ export class CocosNativeHotUpdateHost implements INativeHotUpdateHost {
                 const value = source[key];
                 if (typeof value === 'number') return value;
             }
-            // 🔴 不猜：猜出来的常量会让事件匹配全部失配，且失败点在无栈的原生回调里。
+            // 不猜：假常量会让事件匹配全部失配，且失败点在无栈的原生回调里。
             throw new Error(
                 `[NativeHotUpdate] 读不到引擎常量 ${key}；已尝试 native.EventAssetsManager /`
                 + ' jsb.EventAssetsManager / jsb.AssetsManager 三处。'
@@ -261,11 +231,8 @@ export class CocosNativeHotUpdateHost implements INativeHotUpdateHost {
         const AssetsManager = this.jsb?.AssetsManager;
         if (!AssetsManager) return null;
         try {
-            // 第一个参数留空：`init()` 里 `if (!manifestUrl.empty()) loadLocalManifest(...)`
-            // 会跳过，随包清单由后面显式 `loadLocalManifest(url)` 载入。
-            // 远端地址由随包清单里的 remoteManifestUrl 决定。
-            // ⚠️ **不要加第三个参数（版本比较 handle）**：它会在原生下载线程上被调用，
-            // 传 JS 函数就是跨线程调 JS ⇒ SIGSEGV。
+            // 首参留空让 init 跳过自动载入，随包清单由后面显式 loadLocalManifest 载入；
+            // 远端地址取随包清单里的 remoteManifestUrl。不要加第三个参数，理由见接口注释。
             return new AssetsManager('', storagePath);
         } catch (error) {
             this.warn('创建 AssetsManager 失败', error);

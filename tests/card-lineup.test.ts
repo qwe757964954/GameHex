@@ -1,3 +1,6 @@
+import * as combatCatalog from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import * as runtimeConfig from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import { cardArtConfig } from './helpers/card-art-config';
 /** 卡牌解析、固定阵容的职业/阵营计数与羁绊展示。线上卡库与预览取数另验真实实现。 */
 import assert from 'node:assert/strict';
@@ -20,8 +23,6 @@ import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
 import {
     calculateDeckBonuses,
     cardTypeToBuilding,
-    setBondRules,
-    setRuntimeDecks,
     ZCCardType,
     ZCDeckBonuses,
     ZCDeckCard,
@@ -510,8 +511,8 @@ test('加成条百分比只累加倍率型效果，金币收入不进百分比',
 
 test('真实 pvpBond + 固定八卡夹具算出两条生效羁绊与 16.00% 合计', () => {
     const { player, enemy } = buildFixtureDecks();
-    setRuntimeDecks(player, enemy as never);
-    setBondRules(parseBondRules(readPvpRef('pvpBond')));
+    ZC_RUNTIME_CONFIG.updateCatalogs({ playerDeck: player, enemyDeck: enemy as never,
+        bonds: parseBondRules(readPvpRef('pvpBond')) });
 
     // 玩家八卡：七个兵营全是「花果」，攻击标签 射手2 / 坦克2 / 法师1 / 战士2
     const bonuses = calculateDeckBonuses(player);
@@ -576,4 +577,36 @@ test('编辑器预览读取真实卡表，跳过主城、禁用与损坏行，�
     assert.deepEqual(Array.from(enemy, (card) => card.id), expected.map((card) => card.id));
     assert.notEqual(player, enemy);
     assert.equal(warnings.length, 1);
+});
+
+test('阵容预览迟到结果不能在 reset 后重新发布目录', async () => {
+    for (const change of ['reset', 'install', 'appearance']) {
+        ZC_RUNTIME_CONFIG.reset();
+        const completions: Array<(rows: unknown[]) => void> = [];
+        const dependencies: Record<string, unknown> = {
+            '../zcds/model/ZCRuntimeConfigStore': { ZC_RUNTIME_CONFIG },
+            '../zcds/model/ZCCombatCatalog': combatCatalog,
+            '../zcds/model/ZCGameRuntimeConfig': runtimeConfig,
+            '../../framework/ref/RefUtil': { RefUtil: { instance: {
+                getRefAllAsync: () => new Promise(resolve => completions.push(resolve)),
+            } } },
+        };
+        const context = { exports: {} as { ensureLineupDecks(): Promise<readonly ZCDeckCard[]> },
+            require: (name: string) => dependencies[name], console };
+        const code = ts.transpileModule(readFileSync('assets/script/app/card/CardLineupDecks.ts', 'utf8'), {
+            compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+        }).outputText;
+        runInNewContext(code, context);
+        const pending = context.exports.ensureLineupDecks();
+        if (change === 'appearance') combatCatalog.setCardRarityMeta([]);
+        else ZC_RUNTIME_CONFIG.reset();
+        if (change === 'install') ZC_RUNTIME_CONFIG.updateCatalogs({ playerDeck: buildFixtureDecks().player });
+        const current = ZC_RUNTIME_CONFIG.snapshot;
+        completions[0](readPvpRef('pvpCard'));
+        completions[1](readPvpRef('pvpBond'));
+        assert.deepEqual(await pending, combatCatalog.getPlayerDeck());
+        if (change === 'appearance') assert.ok(combatCatalog.getPlayerDeck().length > 0);
+        else assert.strictEqual(ZC_RUNTIME_CONFIG.snapshot, current);
+    }
+    ZC_RUNTIME_CONFIG.reset();
 });

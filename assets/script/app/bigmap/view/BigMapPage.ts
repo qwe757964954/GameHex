@@ -22,7 +22,7 @@ import { BigMapPageLayout } from './BigMapPageLayout';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapRenderEvent, type IBigMapViewCommandEvent } from '../application/BigMapEvents';
 
-const { ccclass, property } = _decorator;
+const { ccclass } = _decorator;
 
 type BigMapMode = 'world' | 'base';
 
@@ -33,10 +33,10 @@ const FOOTER_HEIGHT = 88;
 const BIGMAP_PAGE_PREFAB_PATH = 'ui/bigmap/BigMapPage';
 const BIGMAP_WORLD_PREFAB_PATH = 'ui/bigmap/BigMapWorldView';
 
-/**
- * 大世界页面：地图铺满浏览区，目标详情点选时浮出；建造菜单仅基地模式显示。
+/
+ *大世界页面：地图铺满浏览区，目标详情点选时浮出；建造菜单仅基地模式显示。
  *
- * 负责页面装配、世界地图与详情弹窗流程；预制体内部渲染和输入交给 BigMapPageLayout。
+ *负责页面装配、世界地图与详情弹窗流程；预制体内部渲染和输入交给 BigMapPageLayout。
  */
 @ccclass('BigMapPage')
 export class BigMapPage extends Component {
@@ -45,22 +45,22 @@ export class BigMapPage extends Component {
     private mode: BigMapMode = 'world';
     private navigationHeight = FOOTER_HEIGHT;
     private controllerResources: IControllerResources = null;
-    // 资源域由 Controller 释放，可能早于 Cocos 帧末销毁；两者都约束 await 后的结果。
+    //资源域由 Controller 释放，可能早于 Cocos 帧末销毁；两者都约束 await 后的结果。
     private get artScope(): ResourceScope { return this.controllerResources.scope; }
 
     private layout: BigMapPageLayout = null;
     private worldView: BigMapWorldView = null;
-    /**
-     * 城池弹窗（`PopupBase` 子类，走 PopupManager 栈）。命中时**懒打开**，之后复用同一实例；
-     * 野怪 / 地块详情走 BigMapInfoPopup。
+    /
+     *城池弹窗（`PopupBase` 子类，走 PopupManager 栈）。命中时懒打开，之后复用同一实例；
+     *野怪 / 地块详情走 BigMapInfoPopup。
      */
     private cityPopupOpened = false;
     private infoPopupOpening = false;
     private infoPopupRevision = 0;
     private infoPopupContent: IBigMapInfoPopupContent | null = null;
-    /** `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
+    / `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
     private buildMenuOpening = false;
-    /** 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
+    / 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
     private focusedCityId = 0;
 
     private art: IBigMapArt | null = null;
@@ -69,14 +69,14 @@ export class BigMapPage extends Component {
     private selectedCityId = 0;
     private selectedMonsterId = 0;
     private selectedPlotHexId = -1;
-    /** 搬移态：非 0 时点空地 = 把这栋建筑搬过去（协议 `CmdSlgBuildMoveReqMsg`）。 */
+    / 搬移态：非 0 时点空地 = 把这栋建筑搬过去（协议 `CmdSlgBuildMoveReqMsg`）。 */
     private pendingMoveInstanceId = 0;
     private baseActionPending = false;
     private playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null;
     private playerPortrait: SpriteFrame | null = null;
     private readonly rolePortraits = new Map<string, SpriteFrame | null>();
 
-    /** 由入口交付初始快照，之后只响应展示事件。 */
+    / 由入口交付初始快照，之后只响应展示事件。 */
     async initialize(data: IBigMapViewState, resources: IControllerResources, background = '', navigationHeight = FOOTER_HEIGHT,
         playerPortraitLoader: ((scope: ResourceScope) => Promise<SpriteFrame | null>) | null = null): Promise<void> {
         this.controllerResources = resources;
@@ -158,7 +158,7 @@ export class BigMapPage extends Component {
         this.layout.setArt(art);
     }
 
-    // -------------------------------------------------------------- 构建
+    //-------------------------------------------------------------- 构建
 
     private get size(): { width: number; height: number } {
         const size = view.getVisibleSize();
@@ -179,7 +179,7 @@ export class BigMapPage extends Component {
         this.applyMode();
     }
 
-    /** 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
+    / 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
     private worldAreaRect(width: number, height: number): { x: number; y: number; width: number; height: number } {
         const left = -width / 2 + 12;
         const right = width / 2 - 12;
@@ -192,7 +192,7 @@ export class BigMapPage extends Component {
         const rect = this.worldAreaRect(width, height);
         const node = this.worldView.node;
         node.setPosition(new Vec3(rect.x, rect.y, 0));
-        // 先交付已加载的贴图，避免 build 把整张世界逐格画成 Graphics 后又立即清空重画。
+        //先交付已加载的贴图，避免 build 把整张世界逐格画成 Graphics 后又立即清空重画。
         if (this.art) this.worldView.setArt(this.art);
         this.worldView.build(data, rect.width, rect.height);
     }
@@ -202,13 +202,13 @@ export class BigMapPage extends Component {
         this.layout.buildBase(data, rect);
     }
 
-    // -------------------------------------------------------------- 模式切换
+    //-------------------------------------------------------------- 模式切换
 
     private applyMode(): void {
         this.worldView.node.active = this.mode === 'world';
     }
 
-    // -------------------------------------------------------------- 交互
+    //-------------------------------------------------------------- 交互
 
     private sendIntent(intent: BigMapIntent): void {
         if (this.ready && !this.enteringBattle) EventMgr.instance.emit(BigMapUiEvent.Intent, { intent });
@@ -243,7 +243,7 @@ export class BigMapPage extends Component {
         this.refreshAll(data);
     }
 
-    // -------------------------------------------------------------- 刷新
+    //-------------------------------------------------------------- 刷新
 
     private refreshAll(data: IBigMapViewState): void {
         this.loadRolePortraits(data);
@@ -253,11 +253,11 @@ export class BigMapPage extends Component {
         this.worldView.render(data);
     }
 
-    /**
-     * 建造目录：`buildMenuVisible` 一开就打开弹窗，一关就关掉。
+    /
+     *建造目录：`buildMenuVisible` 一开就打开弹窗，一关就关掉。
      *
-     * 走 `PopupBase`（`BigMapBuildMenuPopup`）而不是页面内节点：
-     * 遮罩、点空白关闭、栈顺序、关闭原因全部由基类接管，页面这边只剩「什么时候开」。
+     *走 `PopupBase`（`BigMapBuildMenuPopup`）而不是页面内节点：
+     *遮罩、点空白关闭、栈顺序、关闭原因全部由基类接管，页面这边只剩「什么时候开」。
      */
     private refreshBuildMenu(data: IBigMapViewState): void {
         const shouldOpen = data.ui.mode === 'base' && data.ui.buildMenuVisible;
@@ -273,13 +273,13 @@ export class BigMapPage extends Component {
         this.buildMenuOpening = true;
         void BigMapBuildMenuPopup.open({
             userData: content,
-            // 点空白只让弹窗自己收掉，页面状态里的 `buildMenuVisible` 还是 true ⇒
-            // 下一次 500ms `tick → publish` 会按「该开」再弹回来。所以把用户主动收起
-            // 翻译成意图，让 model 的可见性跟着关。
+            //点空白只让弹窗自己收掉，页面状态里的 `buildMenuVisible` 还是 true ⇒
+            //下一次 500ms `tick → publish` 会按「该开」再弹回来。所以把用户主动收起
+            //翻译成意图，让 model 的可见性跟着关。
             onClose: (reason) => {
-                // `Force` 是页面自己在收（切模式 / 状态已经变了），model 那边早就关过了；
-                // 其余（点空白、点了某一行、关闭按钮）都是用户主动关 —— 状态必须跟着关，
-                // 否则下一次 500ms `tick → publish` 会把弹窗原样再弹回来。
+                //`Force` 是页面自己在收（切模式 / 状态已经变了），model 那边早就关过了；
+                //其余（点空白、点了某一行、关闭按钮）都是用户主动关 —— 状态必须跟着关，
+                //否则下一次 500ms `tick → publish` 会把弹窗原样再弹回来。
                 if (reason === PopupCloseReason.Force) return;
                 if (this.isValid) this.sendIntent({ kind: 'closeBuildMenu' });
             },
@@ -287,12 +287,12 @@ export class BigMapPage extends Component {
             this.buildMenuOpening = false;
             if (!popup || !this.isValid) return;
             const now = this.data;
-            // 打开期间状态已经变了（关页 / 退出基地 / 又点了一次「建造」）⇒ 立刻收掉，别留个孤儿弹窗。
+            //打开期间状态已经变了（关页 / 退出基地 / 又点了一次「建造」）⇒ 立刻收掉，别留个孤儿弹窗。
             if (!now || now.ui.mode !== 'base' || !now.ui.buildMenuVisible) popup.close(PopupCloseReason.Force);
         });
     }
 
-    /** 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
+    / 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
     private buildMenuRows(data: IBigMapViewState): IBigMapBuildMenuRow[] {
         const rows: IBigMapBuildMenuRow[] = data.buildMenu.map((entry) => ({
             kind: entry.kind,
@@ -304,7 +304,7 @@ export class BigMapPage extends Component {
             nameMuted: !entry.unlocked,
             detailDanger: !entry.unlocked || !entry.affordable,
         }));
-        // 解锁队列固定排最后一行（与目录的「你还能再开一条队列」语义一致）。
+        //解锁队列固定排最后一行（与目录的「你还能再开一条队列」语义一致）。
         const unlock = data.queueUnlock;
         rows.push({
             kind: BIGMAP_QUEUE_ROW_KIND,
@@ -321,19 +321,19 @@ export class BigMapPage extends Component {
         if (this.enteringBattle) {
             this.closeInfoPopup();
             this.closeCityPopup();
-            // 开战遮罩盖上来时，贴底卡也得收 —— 否则它压在遮罩下面露出半个角。
+            //开战遮罩盖上来时，贴底卡也得收 —— 否则它压在遮罩下面露出半个角。
             this.layout.renderPlotCard(null);
             return;
         }
         this.refreshInfoContent(data);
     }
 
-    /**
-     * 显示 / 复用城池弹窗。
+    /
+     *显示 / 复用城池弹窗。
      *
-     * 弹窗是 `PopupBase` 子类、由 `PopupManager` 管生命周期，所以这里只做两件事：
-     * 已经有实例就**直接复渲染**（不重复压栈），没有才 `open`。
-     * 首次 `open` 要读预制体、有一帧延迟 —— 可接受，且打开后一直复用。
+     *弹窗是 `PopupBase` 子类、由 `PopupManager` 管生命周期，所以这里只做两件事：
+     *已经有实例就直接复渲染（不重复压栈），没有才 `open`。
+     *首次 `open` 要读预制体、有一帧延迟 —— 可接受，且打开后一直复用。
      */
     private showCityPopup(city: IBigMapCityView): void {
         const content = this.buildCityPopupContent(city);
@@ -343,7 +343,7 @@ export class BigMapPage extends Component {
             this.cityPopupOpened = true;
             return;
         }
-        // `open` 是异步的（要读预制体），期间 `get` 仍返回 null ⇒ 不挡住的话每次 refresh 都会再压一层。
+        //`open` 是异步的（要读预制体），期间 `get` 仍返回 null ⇒ 不挡住的话每次 refresh 都会再压一层。
         if (this.cityPopupOpened) return;
         this.cityPopupOpened = true;
         void BigMapCityPopup.open({ userData: content }).then((popup) => {
@@ -360,18 +360,18 @@ export class BigMapPage extends Component {
         });
     }
 
-    /** 关掉城池弹窗（没开着时是空操作）。`Force` = 由页面侧主动收，不算用户点空白。 */
+    / 关掉城池弹窗（没开着时是空操作）。`Force` = 由页面侧主动收，不算用户点空白。 */
     private closeCityPopup(): void {
         if (!this.cityPopupOpened) return;
         this.cityPopupOpened = false;
         PopupManager.inst.closeByClass(BigMapCityPopup, PopupCloseReason.Force);
     }
 
-    /**
-     * 城池 → 弹窗展示数据。
+    /
+     *城池 → 弹窗展示数据。
      *
-     * 排行榜来自当前城池快照；增益效果：`bigMapCamp` 表只有 `buffConNum` / `buffRate` 两个数值 + 一句 `campDesc`，
-     *   没有逐条 buff 文案，先填 `campDesc` 一条（第二条自动隐藏）。
+     *排行榜来自当前城池快照；增益效果：`bigMapCamp` 表只有 `buffConNum` / `buffRate` 两个数值 + 一句 `campDesc`，
+     *  没有逐条 buff 文案，先填 `campDesc` 一条（第二条自动隐藏）。
      */
     private buildCityPopupContent(city: IBigMapCityView): IBigMapCityPopupContent {
         const desc = city.campConfig?.desc ?? city.desc;
@@ -398,8 +398,8 @@ export class BigMapPage extends Component {
     }
 
     private refreshInfoContent(data: IBigMapViewState): void {
-        // 基地建筑一律走**贴底卡**（非模态，地图不下线）；野怪 / 迁城确认仍走居中 InfoPopup。
-        // 每帧只写一遍：`buildPlotCardContent` 返回 null 就是收起。
+        //基地建筑一律走贴底卡（非模态，地图不下线）；野怪 / 迁城确认仍走居中 InfoPopup。
+        //每帧只写一遍：`buildPlotCardContent` 返回 null 就是收起。
         this.layout.renderPlotCard(this.buildPlotCardContent(data));
         const city = this.mode === 'world' && this.selectedCityId !== 0 ? data.cities.get(this.selectedCityId) : null;
         if (city && data.ui.campRolesVisible) {
@@ -434,14 +434,14 @@ export class BigMapPage extends Component {
         else this.closeInfoPopup();
     }
 
-    /**
-     * 建筑卡内容。
+    /
+     *建筑卡内容。
      *
-     * 与原先 `BigMapInfoPopup` 的 base 分支是同一套语义（主按钮 = 升级 / 取消建造，
-     * 次按钮 = 收取 / 移动），只是**不再塞进模态弹窗**，并且正文换成带产量对比的版本。
+     *与原先 `BigMapInfoPopup` 的 base 分支是同一套语义（主按钮 = 升级 / 取消建造，
+     *次按钮 = 收取 / 移动），只是不再塞进模态弹窗，并且正文换成带产量对比的版本。
      */
     private buildPlotCardContent(data: IBigMapViewState): IBigMapPlotCardContent | null {
-        // 用页面自己的 `mode`（`render` 里从 `ui.mode` 同步过来），与 `buildInfoPopupContent` 同口径。
+        //用页面自己的 `mode`（`render` 里从 `ui.mode` 同步过来），与 `buildInfoPopupContent` 同口径。
         if (this.mode !== 'base' || this.selectedPlotHexId < 0) return null;
         const detail = data.plotDetails.get(this.selectedPlotHexId);
         if (!detail) return null;
@@ -518,16 +518,16 @@ export class BigMapPage extends Component {
         if (feedback.message) Toast.show(feedback.message);
     }
 
-    /**
-     * 头像预取：地图上每个玩家标记都要头像（榜单榜首 + 名单里全部角色）。
+    /
+     *头像预取：地图上每个玩家标记都要头像（榜单榜首 + 名单里全部角色）。
      *
-     * `rolePortraits` 兼作"已发起"的登记表（先写 `null` 占位），所以每帧全量扫一遍不会重复发请求；
-     * 新进视野的据点名单到达后，下一帧自然补上。
+     *`rolePortraits` 兼作"已发起"的登记表（先写 `null` 占位），所以每帧全量扫一遍不会重复发请求；
+     *新进视野的据点名单到达后，下一帧自然补上。
      */
     private loadRolePortraits(data: IBigMapViewState): void {
         for (const city of data.cities.values()) {
             const avatarIds = [city.rankEntries.find((row) => row.rank === 1)?.avatarId];
-            // 2026-11-11：名单角色已按 `pos` 摆在地图上 ⇒ 全员头像都要，不能只加载弹窗当前那位。
+            //2026-11-11：名单角色已按 `pos` 摆在地图上 ⇒ 全员头像都要，不能只加载弹窗当前那位。
             for (const role of city.campRoles) avatarIds.push(role.avatarId);
             for (const avatarId of avatarIds) {
                 if (!avatarId || this.rolePortraits.has(avatarId)) continue;

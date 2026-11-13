@@ -1,9 +1,9 @@
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { configureZCMap, ZCGameModel, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
 import { loadPvpTables, ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
-import { setCardCatalog } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { captureZCMatchConfig, ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { resolveZCMapResources } from '../assets/script/app/zcds/model/ZCSpawnSelection';
 import type { ZCHexState } from '../assets/script/app/zcds/model/ZCGameTypes';
@@ -413,7 +413,7 @@ test('兵力奖励卡查不到时不产兵也不抛错（配置填错 id 的兜�
         const { game, hexId } = resourceScene(match, 'player');
         // 卡目录置空 ⇒ 模拟「奖励卡没下发」。发奖读的是常量表的 rewardCardId，
         // 取卡走 findCatalogCard ⇒ 查不到就必须静默不产兵，而不是把整局对局打挂。
-        setCardCatalog(new Map());
+        ZC_RUNTIME_CONFIG.updateCatalogs({ cardCatalog: new Map() });
         try {
             const before = game.snapshot.units.length;
             assert.doesNotThrow(() => game.developHex(hexId));

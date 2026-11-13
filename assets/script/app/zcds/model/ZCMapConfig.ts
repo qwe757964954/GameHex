@@ -1,5 +1,6 @@
 /** 地图 JSON 校验、分区 / 镜像配对与六边形棋盘构建；不依赖对局规则。 */
 import { hexGridLogicalPoint } from '../../../core/hex/HexGridLayout';
+import type { ZCMatchMap } from './ZCMatchConfig';
 
 export const ZC_OWNER_ORDER = ['player', 'enemy', 'enemy2', 'enemy3'] as const;
 export type ZCOwner = typeof ZC_OWNER_ORDER[number];
@@ -347,10 +348,7 @@ export let ZC_MAP_SPACING: Readonly<Required<ZCMapSpacing>> = {
 /** 美术配置；未配置时为空对象。 */
 export let ZC_MAP_ART: Readonly<ZCMapArt> = {};
 
-let mapOwners: ZCFaction[] = [];
-let mapSections: ZCSection[] = [];
-/** 地形拓扑与阵营分离：虚空和中立格都无主，只有后者可通行。 */
-let mapPlayable: boolean[] = [];
+let mapOwners: readonly ZCFaction[] = [];
 
 /**
  * 邻居方向（offset 坐标：dq = column、dr = row）。
@@ -366,11 +364,6 @@ const DIRECTIONS: ReadonlyArray<readonly [number, number]> = [
 const DIRECTIONS_ODD: ReadonlyArray<readonly [number, number]> = [
     [0, -1], [1, -1], [1, 0], [0, 1], [-1, -1], [-1, 0],
 ];
-
-/** 平顶六边形网格：offset 坐标即轴向坐标（q=column、r=row）。 */
-function axialFromOffset(column: number, row: number): { q: number; r: number } {
-    return { q: column, r: row };
-}
 
 /**
  * 地图分区 → 战斗阵营。战斗侧仍是两方：1 区＝本局玩家视角的己方，2~4 区＝敌方。
@@ -411,23 +404,24 @@ function buildSectionMirrorTable(
     return table;
 }
 
-function createHexConfig(): ZCHexConfig[] {
+function createHexConfig(rows: number, columns: number, playable: readonly boolean[]): ZCHexConfig[] {
     const byAxial = new Map<string, number>();
     const configs: ZCHexConfig[] = [];
-    for (let row = 0; row < ZC_MAP_ROWS; row += 1) {
-        for (let column = 0; column < ZC_MAP_COLUMNS; column += 1) {
-            const id = row * ZC_MAP_COLUMNS + column;
-            const { q, r } = axialFromOffset(column, row);
-            const point = hexGridLogicalPoint(row, column, ZC_MAP_ROWS, ZC_MAP_COLUMNS);
+    for (let row = 0; row < rows; row += 1) {
+        for (let column = 0; column < columns; column += 1) {
+            const id = row * columns + column;
+            const q = column;
+            const r = row;
+            const point = hexGridLogicalPoint(row, column, rows, columns);
             byAxial.set(`${q},${r}`, id);
             configs.push({
                 id, column, row, q, r,
                 // 旧快照保存连续逻辑坐标，沿用取整口径；视图在布局入口补偿固定原点偏移。
                 x: Math.round(point.x),
                 y: Math.round(point.y),
-                mirrorId: (ZC_MAP_ROWS - 1 - row) * ZC_MAP_COLUMNS + (ZC_MAP_COLUMNS - 1 - column),
+                mirrorId: (rows - 1 - row) * columns + (columns - 1 - column),
                 neighbors: [],
-                playable: mapPlayable[id] === true,
+                playable: playable[id] === true,
             });
         }
     }
@@ -435,7 +429,7 @@ function createHexConfig(): ZCHexConfig[] {
         const dirs = (config.column & 1) ? DIRECTIONS_ODD : DIRECTIONS;
         config.neighbors = config.playable ? dirs
             .map(([dq, dr]) => byAxial.get(`${config.q + dq},${config.r + dr}`))
-            .filter((id): id is number => id !== undefined && mapPlayable[id]) : [];
+            .filter((id): id is number => id !== undefined && playable[id]) : [];
     }
     return configs;
 }
@@ -452,7 +446,7 @@ export let ZC_MAP_ZOOM_MIN = ZC_MAP_ZOOM_MIN_DEFAULT;
 export let ZC_MAP_ZOOM_MAX = ZC_MAP_ZOOM_MAX_DEFAULT;
 
 /** 载入编辑器地图；格子 id 仍按 row * columns + column，虚空保留 id 但不可通行。 */
-export function configureZCMap(layout: ZCMapLayout): void {
+export function parseZCMap(layout: ZCMapLayout): ZCMatchMap {
     const rows = layout?.rows;
     const columns = layout?.columns;
     const version = layout?.version ?? 1;
@@ -856,6 +850,8 @@ export function configureZCMap(layout: ZCMapLayout): void {
     const playerIds = owners.flatMap((owner, id) => owner === ZCOwner.Player ? [id] : []);
     const enemyIds = owners.flatMap((owner, id) => owner === ZCOwner.Enemy ? [id] : []);
 
+    let resolvedPlayerHomeId = -1;
+    let resolvedEnemyHomeId = -1;
     const mirrorIds = Array.from({ length: owners.length }, (_, id) => id);
     const mirrorCellId = (row: number, column: number): number => {
         const mirrorRow = mirrorVertical || mirror180 ? rows - 1 - row : row;
@@ -925,8 +921,8 @@ export function configureZCMap(layout: ZCMapLayout): void {
                 mirrorIds[id] = candidate;
             }
         }
-        ZC_PLAYER_HOME_ID = hasHome ? homeId(layout.playerHome, 1) : -1;
-        ZC_ENEMY_HOME_ID = hasHome ? homeId(layout.enemyHome, 2) : -1;
+        resolvedPlayerHomeId = hasHome ? homeId(layout.playerHome, 1) : -1;
+        resolvedEnemyHomeId = hasHome ? homeId(layout.enemyHome, 2) : -1;
     } else {
         // ---- v3 / 多人图：几何镜像 + 分区配对 ------------------------------------
         for (let id = 0; id < owners.length; id += 1) {
@@ -941,31 +937,43 @@ export function configureZCMap(layout: ZCMapLayout): void {
                 throw new Error('镜像地图的分区归属必须按镜像关系成对');
             }
         }
-        ZC_PLAYER_HOME_ID = hasHome ? homes[0] : -1;
-        ZC_ENEMY_HOME_ID = hasHome && homes.length > 1 ? homes[1] : -1;
+        resolvedPlayerHomeId = hasHome ? homes[0] : -1;
+        resolvedEnemyHomeId = hasHome && homes.length > 1 ? homes[1] : -1;
     }
 
-    mapOwners = owners;
-    mapSections = sections;
-    mapPlayable = playable;
-    ZC_MAP_ROWS = rows;
-    ZC_MAP_COLUMNS = columns;
-    ZC_INITIAL_TERRITORY = playerIds.length;
-    ZC_MAP_ID = typeof layout.id === 'string' && layout.id ? layout.id : 'custom';
-    ZC_MAP_PLAYER_COUNT = playerCount;
-    ZC_MAP_CITY_MODE = cityMode;
-    ZC_MAP_ZOOM_MIN = zoom.min;
-    ZC_MAP_ZOOM_MAX = zoom.max;
-    ZC_MAP_SECTIONS = sections;
-    ZC_MAP_HOMES = homes;
-    ZC_MAP_REGIONS = regions;
-    ZC_MAP_HOME_CANDIDATES = homeCandidates;
-    ZC_MAP_RESOURCE_POINTS = resourcePoints;
-    ZC_MAP_SPACING = { homeMinDistance, resourceMinDistance };
-    ZC_MAP_ART = art;
-    const configs = createHexConfig();
-    for (const config of configs) config.mirrorId = mirrorIds[config.id];
-    ZC_HEX_CONFIG = configs;
+    const hexes = createHexConfig(rows, columns, playable);
+    for (const hex of hexes) hex.mirrorId = mirrorIds[hex.id];
+    return {
+        id: typeof layout.id === 'string' && layout.id ? layout.id : 'custom',
+        rows, columns, playerHomeId: resolvedPlayerHomeId, enemyHomeId: resolvedEnemyHomeId,
+        playerCount, cityMode, sections, homes, regions, homeCandidates, resourcePoints,
+        spacing: { homeMinDistance, resourceMinDistance }, art,
+        zoomMin: zoom.min, zoomMax: zoom.max, hexes, owners,
+    };
+}
+
+/** 旧离线工具入口；正式 Loader 直接消费 parseZCMap 的返回值。 */
+export function configureZCMap(layout: ZCMapLayout): void {
+    const map = parseZCMap(layout);
+    mapOwners = map.owners;
+    ZC_MAP_ROWS = map.rows;
+    ZC_MAP_COLUMNS = map.columns;
+    ZC_INITIAL_TERRITORY = map.owners.filter(owner => owner === ZCOwner.Player).length;
+    ZC_MAP_ID = map.id;
+    ZC_MAP_PLAYER_COUNT = map.playerCount;
+    ZC_MAP_CITY_MODE = map.cityMode;
+    ZC_MAP_ZOOM_MIN = map.zoomMin;
+    ZC_MAP_ZOOM_MAX = map.zoomMax;
+    ZC_MAP_SECTIONS = map.sections;
+    ZC_MAP_HOMES = map.homes;
+    ZC_MAP_REGIONS = map.regions;
+    ZC_MAP_HOME_CANDIDATES = map.homeCandidates;
+    ZC_MAP_RESOURCE_POINTS = map.resourcePoints;
+    ZC_MAP_SPACING = map.spacing;
+    ZC_MAP_ART = map.art;
+    ZC_PLAYER_HOME_ID = map.playerHomeId;
+    ZC_ENEMY_HOME_ID = map.enemyHomeId;
+    ZC_HEX_CONFIG = map.hexes;
 }
 
 export function getZCMapOwner(id: number): ZCFaction {
@@ -974,5 +982,5 @@ export function getZCMapOwner(id: number): ZCFaction {
 
 /** 该格的分区归属；0 = 不属于任何分区。 */
 export function getZCMapSection(id: number): ZCSection {
-    return mapSections[id];
+    return ZC_MAP_SECTIONS[id];
 }

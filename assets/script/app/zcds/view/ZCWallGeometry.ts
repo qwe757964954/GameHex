@@ -1,4 +1,4 @@
-import { ZC_HEX_CONFIG, type ZCFaction, type ZCHexConfig } from '../model/ZCGameModel';
+import type { ZCFaction, ZCHexConfig } from '../model/ZCMapConfig';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
 import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 
@@ -120,7 +120,7 @@ export function wallAxisTransform(
  * 每帧重绘墙砖时复用。`setMap`（换局）或 `clear`（销毁）时清空缓存。
  */
 export class ZCWallGeometry {
-    private map: readonly ZCHexConfig[] = ZC_HEX_CONFIG;
+    private map: readonly ZCHexConfig[] = [];
     private readonly cache = new Map<number, ReadonlyArray<ZCWallSegmentGeometry>>();
 
     /** 换局换地图时更新底图并清空缓存（不同地图的邻居/坐标不同）。 */

@@ -28,15 +28,9 @@ export interface INativeHotUpdateDependencies {
 }
 
 /**
- * 原生（Android / iOS）全构建目录热更新编排器。
- *
- * 分工：**文件的逐个 md5 比对、下载、断点续传、失败重试全部交给引擎的
- * native.AssetsManager**；本类只负责控制面——拉取 latest.json、灰度与最低版本门槛、
- * 签名策略、把随包 project.manifest 交给引擎、把热更缓存目录前置进搜索路径，
- * 最后重启游戏让新脚本生效。
- *
- * 为什么必须重启：更新下来的 `src/chunks/*.js` 覆盖的是已经被 SystemJS 执行过的模块，
- * 不重启的话新类会和旧实例混在一起，场景与 Bundle 配置也不会重新读取。
+ * 原生全构建目录热更编排器。文件 md5 比对、下载、断点续传交给引擎 AssetsManager，
+ * 本类只管控制面：latest.json、灰度与版本门槛、验签、搜索路径前置和重启。
+ * 必须重启：新下载的 js 覆盖的是已执行过的模块，不重启会新旧实例混用。
  */
 export class NativeHotUpdateRuntime {
     private readonly now: () => number;
@@ -173,8 +167,7 @@ export class NativeHotUpdateRuntime {
         const manager = this.manager;
         const manifest = manager ? manager.getLocalManifest() : null;
         const declared = manifest && typeof manifest.getSearchPaths === 'function' ? manifest.getSearchPaths() : [];
-        // 官方语义：getSearchPaths() 里带的是更新后的搜索路径（至少含缓存目录）。
-        // 万一引擎版本不同导致它为空，就直接用缓存目录兜底——否则新脚本不会被加载。
+        // 引擎版本差异导致路径为空时用缓存目录兜底，否则新脚本不会被加载。
         const hotPaths = declared && declared.length ? declared : [this.storagePath];
         const merged = prependSearchPaths(host.readSearchPaths(), hotPaths);
         host.applySearchPaths(merged);
@@ -191,10 +184,8 @@ export class NativeHotUpdateRuntime {
     }
 
     /**
-     * 拉取并校验 latest.json。
-     *
-     * `stop` = 流程到此结束（门槛不过 / 校验不通过 / 首装强制远端但拿不到控制文件）；
-     * `plan: null` = 控制文件不可用但有随包清单可自举，继续走官方原生流程。
+     * 拉取并校验 latest.json。stop = 门槛不过或校验失败，流程结束；
+     * plan: null = 控制文件不可用，靠随包清单自举继续。
      */
     private async loadPlan(
         config: IHotUpdateConfig,
@@ -267,7 +258,7 @@ export class NativeHotUpdateRuntime {
         return { kind: 'plan', plan };
     }
 
-    /** 准备 AssetsManager：随包清单 + 版本比较函数 + 校验回调。 */
+    /** 准备 AssetsManager：载入随包清单、设置并发，不注册 JS 回调。 */
     private prepareManager(config: IHotUpdateConfig): INativeHotUpdateResult | null {
         const host = this.dependencies.host;
         const localManifestPath = host.resolveLocalManifestPath(config.localManifestPath);
@@ -280,22 +271,9 @@ export class NativeHotUpdateRuntime {
         }
         if (this.plan) this.assertPlanMatchesLocalManifest(localManifestPath, this.plan);
 
-        // 🔴 **绝不能把 JS 比较器交给引擎。**
-        // 引擎 `Manifest::versionGreaterOrEquals` 原文：
-        //     if (handle) { greater = handle(localVersion, bVersion) >= 0; }
-        // 这个 `handle` 是我们在 `new AssetsManager(..., handle)` 时传进去的 **JS 函数**，
-        // 而调用它的是 `parseVersion()` —— 位于 `onFileTaskSuccess` 回调链上，即
-        // **原生下载线程**。JS 引擎不在那个线程上 ⇒ 跨线程调用 JS ⇒ 同步 SIGSEGV
-        // （真机实测：`si_code=1 SEGV_MAPERR`、`fault addr 0xd5e4` 固定偏移、Thread-2）。
-        //
-        // 崩溃发生在 `checkUpdate()` **同步返回之后约 0.4 秒**（网络往返），
-        // 现场没有任何 JS 栈可读。
-        //
-        // 引擎自带的默认比较（`cmpVersion`）是 `sscanf("%d.%d.%d.%d")` 逐段比较，
-        // 解析不了就 `strcmp`。我们的 releaseId 是 `YYYYMMDD-HHMMSS-<平台>`，
-        // 走 `strcmp` 的字典序恰好等价于时间戳顺序 ⇒ 够用。
-        // 真正的 release-stamp 全序比较放在 JS 侧（`loadPlan` 里的 compareReleaseVersion），
-        // 那是在主线程上调的，不存在跨线程问题。
+        // 不能把 JS 比较器交给引擎：它在原生下载线程上被同步调用，跨线程调 JS 会 SIGSEGV。
+        // releaseId 是时间戳格式，引擎默认 cmpVersion 走 strcmp 的字典序即时间顺序，够用；
+        // 全序比较放在主线程的 compareReleaseVersion。
         const manager = host.createAssetsManager(this.storagePath);
         if (!manager) {
             return {
@@ -304,25 +282,14 @@ export class NativeHotUpdateRuntime {
                 message: '无法创建原生热更新管理器（AssetsManager 不可用）',
             };
         }
-        // ⚠️ **故意不注册 `setVerifyCallback`。**
-        // 它和 `VersionCompareHandle` 是同一类陷阱：引擎在 `onSuccess()` 里调它，
-        // 而 `onSuccess` 位于 `onFileTaskSuccess` 链上 = **原生下载线程** ⇒ 跨线程调 JS。
-        // 引擎对 `_verifyCallback` 的默认值就是「放行」，且本工程没有 md5 桥
-        // （`__CITY1001_HOT_UPDATE_MD5__` 未实现，见 verifyDownloadedAsset 的说明），
-        // 注册一个恒返回 true 的 JS 回调**没有任何收益，只有跨线程风险**。
-        // 等真的要接 md5 桥时，必须改成原生侧校验，或先验证该回调所在线程。
+        // 故意不注册校验回调：同样在下载线程上调用，且引擎默认放行，本工程又没有
+        // md5 桥，注册恒 true 的 JS 回调零收益。接 md5 桥时必须走原生侧校验。
         const concurrency = config.nativeMaxConcurrentTask;
         if (typeof concurrency === 'number' && concurrency > 0 && manager.setMaxConcurrentTask) {
             manager.setMaxConcurrentTask(concurrency);
         }
-        // 🔴 **必须只传 manifestUrl 一个参数。**
-        // 引擎（3.8 `native.AssetsManager`）有两个重载：
-        //   1. `loadLocalManifest(manifestUrl: string)`
-        //   2. `loadLocalManifest(localManifest: Manifest, storagePath: string)`
-        // 重载 2 的第一个参数是 **Manifest 对象**，传路径字符串进去会被当 `Manifest*`
-        // 解引用 ⇒ **同步 SIGSEGV（fault addr 0x0、无 JS 栈、Thread-2）**。
-        // 存储路径不必再传：它已在 `new AssetsManager('', storagePath)` 里给过，
-        // 引擎 `loadLocalManifest` 的第 1 步就是「Reset storage path」到该值。
+        // 只传 manifestUrl 一个参数：另一个重载首参是 Manifest 对象，传字符串会
+        // 被当 Manifest* 解引用，同步 SIGSEGV。存储路径已在构造器里给过。
         if (!manager.loadLocalManifest(localManifestPath)) {
             return {
                 status: 'failed',
@@ -332,19 +299,15 @@ export class NativeHotUpdateRuntime {
         }
         this.manager = manager;
         host.info(`随包清单：${localManifestPath}；缓存目录：${this.storagePath}`);
-        // 这行是**崩溃取证哨兵**：真机一旦在这里之前 SIGSEGV，说明崩在 prepareManager
-        // 内部（loadLocalManifest / createAssetsManager）；打出来则范围已推进到 checkUpdate 之后。
+        // 取证哨兵：这行打出来说明 prepareManager 已走完，崩溃点在 checkUpdate 之后。
         host.info(`热更管理器就绪：versionCompare=${config.nativeVersionCompare ?? 'release-stamp'}；`
             + `远端=${this.plan ? this.plan.remoteManifestUrl : '(随包清单)'}`);
         return null;
     }
 
     /**
-     * 控制文件与随包清单指向不同远端时只告警不阻断。
-     *
-     * 客户端实际用的是**随包清单里的 remoteManifestUrl**（引擎会优先取缓存目录里更新过的清单），
-     * 因为只有这样才能复用已下载文件、避免每次启动全量重下。这里做一次交叉核对，
-     * 用来暴露"渠道清单没跟着 release 走"这类发布事故。
+     * 交叉核对随包清单与 latest.json 的远端地址，不一致只告警。
+     * 实际生效的是随包清单（才能复用已下载文件），核对用来暴露串渠道的发布事故。
      */
     private assertPlanMatchesLocalManifest(localManifestPath: string, plan: IHotUpdateNativePlan): void {
         const host = this.dependencies.host;
@@ -373,10 +336,8 @@ export class NativeHotUpdateRuntime {
             manager.setEventCallback((event: INativeAssetsManagerEvent) => {
                 const code = event.getEventCode();
                 if (code === environment.UPDATE_PROGRESSION) {
-                    // 检查阶段也要下载 620KB 完整清单（5073 条 assets），首次安装实测约 27 秒。
-                    // 这段时间过去完全没有反馈，看起来就是卡死 —— 这里把字节数写进文案。
-                    // 注意进度条走不通：原生层的 percent/bytes 不会传到 IHotUpdateProgress
-                    // （那边只认 completed/total），所以只能体现在文字上。
+                    // 检查阶段要下完整清单，首装耗时较长，把字节数写进文案避免像卡死；
+                    // 原生 percent 不进应用进度契约，只能体现在文字上。
                     const downloaded = event.getDownloadedBytes?.() ?? 0;
                     const total = event.getTotalBytes?.() ?? 0;
                     if (total > 0) {
@@ -392,8 +353,7 @@ export class NativeHotUpdateRuntime {
                     return;
                 }
                 if (code === environment.UPDATE_FINISHED) {
-                    // 原生空差异修复会在检查阶段直接完成更新，仍需保存搜索路径并重启。
-                    // 不再调用 update()：此时引擎已经处于 UP_TO_DATE。
+                    // 空差异修复在检查阶段直接完成，引擎已处于 UP_TO_DATE，不再调 update。
                     host.info('检查阶段已完成更新，准备保存搜索路径并重启');
                     resolve('updated');
                     return;
@@ -408,11 +368,10 @@ export class NativeHotUpdateRuntime {
                     reject(new Error(describeEvent(event, '检查更新失败')));
                 }
             });
-            // 哨兵 A：打出来 = 已进入 checkUpdate 的同步段（它会走 downloadVersion 启动后台下载）
+            // 取证哨兵：两条日志框定 checkUpdate 的同步段，崩溃点在其后的下载线程回调。
             host.info('checkUpdate 调用前');
             try {
                 manager.checkUpdate();
-                // 哨兵 B：打出来 = checkUpdate 同步段安全返回，崩溃在其后的**下载线程回调**里
                 host.info('checkUpdate 同步返回');
             } catch (error) {
                 host.info('checkUpdate 同步抛错');
@@ -436,11 +395,10 @@ export class NativeHotUpdateRuntime {
             manager.setEventCallback((event: INativeAssetsManagerEvent) => {
                 const code = event.getEventCode();
                 if (code === environment.UPDATE_PROGRESSION) {
-                    // ⚠️ 这些事件方法用 `?.` 取，不要用 `!` 断言：引擎不同版本的
-                    // `EventAssetsManager` 暴露的方法可能不全，断言等于在**原生回调线程**
-                    // 上直接抛 TypeError，而那条链没有 JS 栈可读，只会看到 SIGSEGV。
+                    // 事件方法保持可选链：不同版本暴露的方法可能不全，断言会在无栈的
+                    // 原生回调线程上抛 TypeError。
                     const message = event.getMessage?.();
-                    // Creator 3.8.8 的事件返回 0~1，应用层进度契约使用 0~100。
+                    // 引擎返回 0~1，应用层进度契约用 0~100。
                     const ratio = event.getPercent?.();
                     const fileRatio = event.getPercentByFile?.();
                     onProgress?.({
@@ -478,11 +436,8 @@ export class NativeHotUpdateRuntime {
     }
 
     /**
-     * 下载后校验回调。
-     *
-     * 引擎不提供纯 JS 的 md5，正式包应把原生/JS 实现的 md5 桥挂到
-     * `globalThis.__CITY1001_HOT_UPDATE_MD5__`；没有桥时只能放行并记日志
-     * （与官方范例一致：md5 是否校验由业务决定，但**校验不了不能假装校验过了**）。
+     * md5 桥挂在 globalThis.__CITY1001_HOT_UPDATE_MD5__；没有桥时放行，
+     * 校验不了不能假装校验过了。
      */
     private verifyDownloadedAsset(path: string, asset: unknown): boolean {
         const compressed = !!(asset && typeof asset === 'object' && (asset as { compressed?: boolean }).compressed);
@@ -503,18 +458,13 @@ export class NativeHotUpdateRuntime {
         return true;
     }
 
-    /**
-     * 大版本升级后清理旧缓存。
-     *
-     * 引擎/大版本更替时 `src/cocos-js/cc.js` 与 C++ 底层可能不匹配，官方建议整包更新；
-     * 万一没有整包，至少别让旧缓存盖住新包。
-     */
+    /** 大版本更替时底层可能不匹配，清掉旧缓存，别让它盖住新包。 */
     private resetCacheOnClientVersionChange(config: IHotUpdateConfig): void {
         const host = this.dependencies.host;
         const previous = host.readPersistedClientVersion();
         if (previous && previous !== config.clientVersion) {
             host.removeDirectory(this.storagePath);
-            // 只清"待恢复的搜索路径"标记，不动已生效的搜索路径——main.js 下次会重新读。
+            // 只清待恢复的搜索路径标记，已生效的路径留给 main.js 下次重读。
             host.clearPersistedSearchPaths();
             host.info(`客户端版本 ${previous} → ${config.clientVersion}，已清理热更缓存`);
         }

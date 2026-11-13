@@ -157,6 +157,8 @@ export interface ZCMatchConfig {
     configHash?: string;
 }
 
+const CAPTURED_CONFIGS = new WeakSet<ZCMatchConfig>();
+
 function freezeData<T>(value: T): T {
     if (value && typeof value === 'object') {
         for (const child of Object.values(value)) freezeData(child);
@@ -185,24 +187,11 @@ function translateStatusBehavior(item: ZCStatusConfigRecord): ZCStatusBehavior {
     }
 }
 
-/** 拷贝并冻结本局配置，之后的全局配置加载不会影响正在进行的对局。 */
-export function captureZCMatchConfig(
-    source?: ZCMatchConfig,
-    options?: { allowUnresolvedSelect?: boolean },
-): ZCMatchConfig {
+/** 从共享只读目录构筑本局数据；地图由 Loader 独立解析，不写共享地图。 */
+export function createZCMatchConfig(map: ZCMatchMap): ZCMatchConfig {
     const adapters = getZCModifierCatalogs().adapters;
-    const config: ZCMatchConfig = source ?? {
-        map: {
-            id: ZC_MAP_ID, rows: ZC_MAP_ROWS, columns: ZC_MAP_COLUMNS,
-            playerHomeId: ZC_PLAYER_HOME_ID, enemyHomeId: ZC_ENEMY_HOME_ID,
-            playerCount: ZC_MAP_PLAYER_COUNT, cityMode: ZC_MAP_CITY_MODE,
-            sections: ZC_HEX_CONFIG.map((hex) => getZCMapSection(hex.id)),
-            homes: ZC_MAP_HOMES, regions: ZC_MAP_REGIONS, homeCandidates: ZC_MAP_HOME_CANDIDATES,
-            resourcePoints: ZC_MAP_RESOURCE_POINTS,
-            spacing: ZC_MAP_SPACING, art: ZC_MAP_ART,
-            zoomMin: ZC_MAP_ZOOM_MIN, zoomMax: ZC_MAP_ZOOM_MAX,
-            hexes: ZC_HEX_CONFIG, owners: ZC_HEX_CONFIG.map((hex) => getZCMapOwner(hex.id)),
-        },
+    return {
+        map,
         rules: getPvpRuntimeRules(), playerDeck: getPlayerDeck(), enemyDeck: getEnemyDeck(),
         units: getAllUnitDefinitions(), bonds: getBondRules(), counters: getCounterRules(),
         tiles: getPvpTileConfigs(), tileWeights: getPvpTileTypeWeights(), goldPity: getAllRandomGoldPity(),
@@ -222,12 +211,31 @@ export function captureZCMatchConfig(
         legacySkillEffects: getZCLegacySkillEffectConfig(),
         configHash: adapters.configHash,
     };
+}
+
+/** 外部输入复制隔离；本模块创建的冻结快照可安全复用。 */
+export function captureZCMatchConfig(
+    source?: ZCMatchConfig,
+    options?: { allowUnresolvedSelect?: boolean },
+): ZCMatchConfig {
+    const config = source ?? createZCMatchConfig({
+        id: ZC_MAP_ID, rows: ZC_MAP_ROWS, columns: ZC_MAP_COLUMNS,
+        playerHomeId: ZC_PLAYER_HOME_ID, enemyHomeId: ZC_ENEMY_HOME_ID,
+        playerCount: ZC_MAP_PLAYER_COUNT, cityMode: ZC_MAP_CITY_MODE,
+        sections: ZC_HEX_CONFIG.map((hex) => getZCMapSection(hex.id)),
+        homes: ZC_MAP_HOMES, regions: ZC_MAP_REGIONS, homeCandidates: ZC_MAP_HOME_CANDIDATES,
+        resourcePoints: ZC_MAP_RESOURCE_POINTS,
+        spacing: ZC_MAP_SPACING, art: ZC_MAP_ART,
+        zoomMin: ZC_MAP_ZOOM_MIN, zoomMax: ZC_MAP_ZOOM_MAX,
+        hexes: ZC_HEX_CONFIG, owners: ZC_HEX_CONFIG.map((hex) => getZCMapOwner(hex.id)),
+    });
     if (!config.map.hexes.length) throw new Error('地图配置未加载');
     // 自选主城地图不产出主城坐标（ZC_PLAYER_HOME_ID / ZC_ENEMY_HOME_ID = -1），只允许
     // ZCGame 的选点预备阶段显式放行；正式建模仍要求已解析为 fixed，避免 -1 向下游泄漏。
     if (config.map.cityMode === 'select' && !options?.allowUnresolvedSelect) {
         throw new Error('自选主城地图需要先完成开局选点，当前尚不支持直接开局');
     }
+    if (CAPTURED_CONFIGS.has(config)) return config;
     const normalized: ZCMatchConfig = {
         ...config,
         modifiers: config.modifiers ?? { player: [], enemy: [] },
@@ -238,7 +246,9 @@ export function captureZCMatchConfig(
         },
         configHash: config.configHash ?? 'legacy',
     };
-    return freezeData(JSON.parse(JSON.stringify(normalized)) as ZCMatchConfig);
+    const captured = freezeData(JSON.parse(JSON.stringify(normalized)) as ZCMatchConfig);
+    CAPTURED_CONFIGS.add(captured);
+    return captured;
 }
 
 /** 客户端组装开局参数的唯一入口：只传武将 id/星级，不直接拼 modifier id。 */

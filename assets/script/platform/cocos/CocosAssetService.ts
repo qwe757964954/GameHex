@@ -6,11 +6,11 @@ import { reportDeadSpriteFrames } from './SpriteFrameGuard';
 
 const RESOURCES_BUNDLE = 'resources';
 
-/** 未显式指定 bundle 时按路径前缀路由（命中分包表走对应 bundle，否则首包 resources）。 */
+/** 未显式指定 bundle 时按路径前缀路由，命中分包表走对应 bundle，否则走首包。 */
 const resolveBundle = (path: string, options: AssetLoadOptions): string | undefined =>
     options.bundle ?? bundleForPath(path);
 
-/** Creator 3.8 AssetManager 的唯一业务适配入口。 */
+/** Creator 3.8 AssetManager 的业务适配入口。 */
 export class CocosAssetService implements AssetService {
     private pendingReleases: Asset[] = [];
     private releaseScheduled = false;
@@ -19,8 +19,7 @@ export class CocosAssetService implements AssetService {
         const bundle = await loadAssetBundle(resolveBundle(path, options));
         if (options.scope?.disposed) return;
         await new Promise<void>((resolve, reject) => {
-            // preload 预设每帧只派发2项，仍在途时会给共享下载队列留下低速调度。
-            // 根预下载并发由调用方限制；保持低优先级与仅下载语义，使用标准下载节奏。
+            // default 预设只下载不解析，绕开 preload 预设每帧 2 项的低速调度；并发由调用方限制。
             assetManager.preloadAny({ path, bundle: bundle.name, priority: options.priority ?? -1 },
                 { preset: 'default' }, (error: Error | null) => error ? reject(error) : resolve());
         });
@@ -45,17 +44,9 @@ export class CocosAssetService implements AssetService {
 
     async has<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<boolean> {
         const bundle = await loadAssetBundle(resolveBundle(path, options));
-        try {
-            // getInfoWithPath 查 bundle 构建索引（config.json 的 paths），不触发实际下载/反序列化。
-            // Creator 3.8 的 Bundle 标准方法；防御性调用，方法缺失/异常时放行给 load 报真实错误。
-            const getInfo = (bundle as unknown as {
-                getInfoWithPath?: (p: string, t?: unknown) => { uuid: string } | null;
-            }).getInfoWithPath;
-            if (typeof getInfo !== 'function') return true; // 平台不支持预检 → 放行给 load
-            return getInfo(path, type) != null;
-        } catch {
-            return true;
-        }
+        // 只查 bundle 构建索引，不触发下载或反序列化。
+        const assetType = type as unknown as typeof Asset;
+        return bundle.getInfoWithPath(path, assetType) != null;
     }
 
     async loadDir<T>(path: string, type: AssetType<T>, options: AssetLoadOptions = {}): Promise<T[]> {
@@ -66,7 +57,7 @@ export class CocosAssetService implements AssetService {
                     reject(error);
                     return;
                 }
-                resolve((values ?? []) as unknown as T[]);
+                resolve(values as unknown as T[]);
             };
             const assetType = type as unknown as typeof Asset;
             if (options.priority === undefined) bundle.loadDir(path, assetType, callback);
@@ -93,9 +84,7 @@ export class CocosAssetService implements AssetService {
             this.pendingReleases = [];
             this.releaseScheduled = false;
             for (const retained of releases) retained.decRef();
-            // 🔴 临时探针（2026-11-03）：释放之后扫一遍场景，把"还挂着已释放贴图"的 Sprite
-            //    按节点路径点名并置空，避免整屏崩在 `Batcher2D`（见 `SpriteFrameGuard`）。
-            //    只有这一批里**真的有 SpriteFrame** 才扫：预制体 / JSON 释放时不值得走一遍场景树。
+            // 临时探针：本批含 SpriteFrame 时扫场景，把挂着已释放贴图的 Sprite 点名置空（见 SpriteFrameGuard）。
             if (releases.some((asset) => asset instanceof SpriteFrame)) {
                 reportDeadSpriteFrames(`释放 ${releases.length} 个资源后`);
             }

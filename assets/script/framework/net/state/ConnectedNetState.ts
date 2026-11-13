@@ -1,6 +1,5 @@
 import { TDic } from "../../collection/TDic";
 import { FW } from "../../FW";
-import { AppendMessage } from "../AppendMessage";
 import { NetSocket } from "../NetSocket";
 import { NetworkRequest } from "../NetworkRequest";
 import { BaseNetState } from "./BaseNetState";

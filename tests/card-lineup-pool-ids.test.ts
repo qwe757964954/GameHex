@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 /**
  * 布阵卡池（`loadPvpHeroCards`）的「缺配置」告警口径。
  *
@@ -53,6 +54,7 @@ function loadDecksModule(): { module: Decks; warnings: unknown[][] } {
             if (id.endsWith('framework/ref/RefUtil')) {
                 return { RefUtil: { instance: { getRefAllAsync: async (table: string) => rows[table] ?? [] } } };
             }
+            if (id.endsWith('ZCRuntimeConfigStore')) return { ZC_RUNTIME_CONFIG };
             if (id.endsWith('ZCCombatCatalog')) return Catalog;
             if (id.endsWith('ZCGameRuntimeConfig')) return RuntimeConfig;
             throw new Error(`未预料的依赖：${id}`);

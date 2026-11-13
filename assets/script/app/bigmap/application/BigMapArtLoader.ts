@@ -15,7 +15,7 @@ import { toBigMapArtPath } from './BigMapArtCatalog';
 
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;
-    /** 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
+    / 世界坐标连续平铺底图；缺失时回退布局背景，地皮仍独立绘制。 */
     readonly tiledBackground: SpriteFrame | null;
     readonly ground: SpriteFrame | null;
     readonly groundVariants: readonly (SpriteFrame | null)[];
@@ -28,25 +28,25 @@ export interface IBigMapArt {
     readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
-    /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
+    / 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
     readonly plates: ReadonlyMap<IBigMapPlateKey, SpriteFrame | null>;
     readonly plateFlag: SpriteFrame | null;
-    /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
+    / 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
     readonly hud: ReadonlyMap<IBigMapHudUiKey, SpriteFrame | null>;
     readonly resources: ReadonlyMap<BigMapResType, SpriteFrame | null>;
 }
 
-/**
- * 只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
+/
+ *只装配表现资源；世界视图优先连续底图，缺图时回退 JSON 背景；地图坐标和规则只来自布局链。
  *
- * @param resourceIcons 资源类型 → **背包道具图标路径**（`item.icon`，来自 `bigmapResource.itemId`）。
- *   有就走背包那份图，没有 / 加载失败退回 `image/concept/sprites/<resType>` 概念图。
- * @param buildingConfigs 基地建筑配置。**优先用表里的 `baseBuildIcon`**（`building.icon`），
- *   没配 / 加载失败才退回通用建筑图（`BIGMAP_BASE_FALLBACK_ART`）。
+ *@param resourceIcons 资源类型 → 背包道具图标路径（`item.icon`，来自 `bigmapResource.itemId`）。
+ *  有就走背包那份图，没有 / 加载失败退回 `image/concept/sprites/<resType>` 概念图。
+ *@param buildingConfigs 基地建筑配置。优先用表里的 `baseBuildIcon`（`building.icon`），
+ *  没配 / 加载失败才退回通用建筑图（`BIGMAP_BASE_FALLBACK_ART`）。
  *
- *   ⚠️ 2026-11-06 之前这里写死「只按类型使用现有图片，baseBuildIcon 不接入加载」——
- *   而 `bigmapBuilding.json` 当时**根本没有这一列**，所以两层都退概念图，玩家看到的是
- *   同一张通用图。现在链路已经接通，策划在表里补上 `baseBuildIcon` 之后无需改代码即生效。
+ *   2026-11-06 之前这里写死「只按类型使用现有图片，baseBuildIcon 不接入加载」——
+ *  而 `bigmapBuilding.json` 当时根本没有这一列，所以两层都退概念图，玩家看到的是
+ *  同一张通用图。现在链路已经接通，策划在表里补上 `baseBuildIcon` 之后无需改代码即生效。
  */
 export async function loadBigMapArt(
     assets: AssetService,
@@ -61,12 +61,12 @@ export async function loadBigMapArt(
             const framePath = `${path}/spriteFrame`;
             const options = { scope, bundle: bundleForPath(path) };
             if (scope.disposed) return null;
-            // ⚠️ 这里原来 `has()` 为 false 时**静默 return null**，日志里什么都看不到 ——
-            // 排查「美术没显示」时会被误导成「加载没问题」。未命中必须留痕。
+            // 这里原来 `has()` 为 false 时静默 return null，日志里什么都看不到 ——
+            //排查「美术没显示」时会被误导成「加载没问题」。未命中必须留痕。
             //
-            // `quiet` 只给**表驱动且可能整列未入库**的入口用（`baseBuildIcon`）：那一列现在
-            // 23 座建筑都还没出图，逐条 warn 会在每次进大地图刷一屏、把真正的缺失淹掉。
-            // 这类「配了但图还没进库」属于**预期状态**，静默回退概念图即可。
+            //`quiet` 只给表驱动且可能整列未入库的入口用（`baseBuildIcon`）：那一列现在
+            //23 座建筑都还没出图，逐条 warn 会在每次进大地图刷一屏、把真正的缺失淹掉。
+            //这类「配了但图还没进库」属于预期状态，静默回退概念图即可。
             if (!(await assets.has(framePath, SpriteFrame, options))) {
                 if (!quiet) console.warn(`[BigMap] 资源未命中（has=false）：${framePath} bundle=${options.bundle}`);
                 return null;
@@ -82,7 +82,7 @@ export async function loadBigMapArt(
     const requests = new Map<string, Promise<SpriteFrame | null>>();
     const load = (rawPath: string, quiet = false): Promise<SpriteFrame | null> => {
         if (scope.disposed) return Promise.resolve(null);
-        // 归一化放在**去重之前**：同一张图新旧两种写法只加载一次。
+        //归一化放在去重之前：同一张图新旧两种写法只加载一次。
         const path = toBigMapArtPath(rawPath);
         const existing = requests.get(path);
         if (existing) return existing;
@@ -101,55 +101,55 @@ export async function loadBigMapArt(
         load('bigMapBG'),
     ]);
     const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
-    /**
-     * 表里配了 `baseBuildIcon` 但没加载到的（建筑 id:路径）。
+    /
+     *表里配了 `baseBuildIcon` 但没加载到的（建筑 id:路径）。
      *
-     * ⚠️ 单条未命中走 `quiet` 不打日志（整列没入库时 23 条会把真问题淹掉），
-     * 但**必须汇总留一条**：否则「读表了但全回退概念图」这种状态在日志里完全不可见，
-     * 排查时只能靠猜（2026-11-06 就是踩了这个 —— 用户说"还是旧资源"，而日志一片干净）。
+     * 单条未命中走 `quiet` 不打日志（整列没入库时 23 条会把真问题淹掉），
+     *但必须汇总留一条：否则「读表了但全回退概念图」这种状态在日志里完全不可见，
+     *排查时只能靠猜（2026-11-06 就是踩了这个 —— 用户说"还是旧资源"，而日志一片干净）。
      */
     const missedIcons: string[] = [];
     const buildingTask = Promise.all(Array.from(buildingConfigs.values()).map(async (building) => {
-        // ① 表里的 `baseBuildIcon` 优先：它才是「这座建筑长什么样」的唯一真源。
-        //    路径口径与 `campIcon` 一致（相对 resources / bundle 内路径），统一过 `load`
-        //    ⇒ 旧前缀归一、按 bundle 路由、命中检查都在一处，不另写一套加载分支。
+        //① 表里的 `baseBuildIcon` 优先：它才是「这座建筑长什么样」的唯一真源。
+        //   路径口径与 `campIcon` 一致（相对 resources / bundle 内路径），统一过 `load`
+        //   ⇒ 旧前缀归一、按 bundle 路由、命中检查都在一处，不另写一套加载分支。
         if (building.icon) {
             const frame = await load(building.icon, true);
             if (frame) return [building.id, frame] as const;
             missedIcons.push(`${building.id}:${building.icon}`);
         }
-        // ② 没配 / 图还没入库 ⇒ 退回一张通用建筑图。
-        //    2026-11-12 删掉了按 `baseBuildType` 对 8 张概念图的旧兜底（那 8 张已随新美术删库），
-        //    现在只有 71017 会走到这里。
+        //② 没配 / 图还没入库 ⇒ 退回一张通用建筑图。
+        //   2026-11-12 删掉了按 `baseBuildType` 对 8 张概念图的旧兜底（那 8 张已随新美术删库），
+        //   现在只有 71017 会走到这里。
         return [building.id, await load(BIGMAP_BASE_FALLBACK_ART)] as const;
     }));
     const campTask = Promise.all(Array.from(campConfigs.values()).map(async (camp) => (
-        // `campIcon` 现在还是概念占位图（8 张），按据点段换成新美术；
-        // 换成真实图名后 `worldCampArtFor` 原样返回，不用再动这里。
+        //`campIcon` 现在还是概念占位图（8 张），按据点段换成新美术；
+        //换成真实图名后 `worldCampArtFor` 原样返回，不用再动这里。
         [camp.campId, camp.iconPath ? await load(worldCampArtFor(camp.iconPath, camp.campId)) : null] as const
     )));
     const hudTask = Promise.all(BIGMAP_HUD_UI_KEYS.map(async (key) => {
-        // 按钮的九宫边 / 圆角走各自 `.png.meta` 的导入设置，不在这里覆写 ——
-        // 覆写会和导入设置打架，改一次图就错一次（`btn_quick_fight` 本来就没有九宫边）。
+        //按钮的九宫边 / 圆角走各自 `.png.meta` 的导入设置，不在这里覆写 ——
+        //覆写会和导入设置打架，改一次图就错一次（`btn_quick_fight` 本来就没有九宫边）。
         const frame = await load(BIGMAP_HUD_UI_FILES[key]);
         return [key, frame] as const;
     }));
     const resourceTask = Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => {
-        // 背包道具图标优先：`item.icon` 是相对 resources 的路径（`icons/item/xxx`），
-        // `load` 补 `/spriteFrame`，bundle 由 `BundleCatalog` 路由到 `main-pages`。
+        //背包道具图标优先：`item.icon` 是相对 resources 的路径（`icons/item/xxx`），
+        //`load` 补 `/spriteFrame`，bundle 由 `BundleCatalog` 路由到 `main-pages`。
         const itemIcon = resourceIcons.get(key);
         if (itemIcon) {
             const frame = await load(itemIcon);
             if (frame) return [key, frame] as const;
         }
-        // 没配 itemId / 表还没导 / 图缺失 ⇒ 退回大地图自己的概念图，绝不留空图标。
-        // `stamina` 那张图在 `image/concept/ui/` 下（不在 sprites），2026-11-12 起单独直读。
+        //没配 itemId / 表还没导 / 图缺失 ⇒ 退回大地图自己的概念图，绝不留空图标。
+        //`stamina` 那张图在 `image/concept/ui/` 下（不在 sprites），2026-11-12 起单独直读。
         return [key, key === 'stamina' ? await load(BIGMAP_STAMINA_ART) : await sprite(key)] as const;
     }));
     const baseTask = Promise.all([
         load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('rocks'), sprite('grass'),
     ]);
-    // 名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
+    //名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
         [key, await load(BIGMAP_PLATE_FILES[key])] as const
     )));

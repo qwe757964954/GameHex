@@ -1,4 +1,5 @@
-﻿/**
+import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
+/**
  * 《占城大师》战斗卡牌目录。
  * 人物与基础数值裁剪自 client 的 army/general/monster 表，规则层按三分钟竖屏对局缩放。
  */
@@ -249,16 +250,12 @@ export interface ZCDeckCard {
     skillIds?: readonly number[];
 }
 
-/** 本地 PVP 卡牌目录；正式对局会按后端阵容收窄英雄卡，并保留系统卡。 */
-let playerDeck: readonly ZCDeckCard[] = [];
-let enemyDeck: readonly ZCDeckCard[] = [];
-
 export function getPlayerDeck(): readonly ZCDeckCard[] {
-    return playerDeck;
+    return ZC_RUNTIME_CONFIG.snapshot.playerDeck ?? [];
 }
 
 export function getEnemyDeck(): readonly ZCDeckCard[] {
-    return enemyDeck;
+    return ZC_RUNTIME_CONFIG.snapshot.enemyDeck ?? [];
 }
 
 /**
@@ -269,10 +266,10 @@ export function getEnemyDeck(): readonly ZCDeckCard[] {
  */
 export function getCardBuildIcon(cardId: string | null | undefined): string {
     if (!cardId) return '';
-    for (const card of playerDeck) {
+    for (const card of getPlayerDeck()) {
         if (card.id === cardId) return card.buildIcon ?? '';
     }
-    for (const card of enemyDeck) {
+    for (const card of getEnemyDeck()) {
         if (card.id === cardId) return card.buildIcon ?? '';
     }
     return '';
@@ -299,7 +296,9 @@ const DEFAULT_CARD_RARITY_META: readonly ZCCardRarityMeta[] = [
 ];
 
 /** 已按 `sort` 升序排列，`rarityRank` / `rarityOfTier` 依赖这个不变量。 */
-let rarityMeta: readonly ZCCardRarityMeta[] = DEFAULT_CARD_RARITY_META;
+function rarityMetadata(): readonly ZCCardRarityMeta[] {
+    return ZC_RUNTIME_CONFIG.snapshot.rarityMeta ?? DEFAULT_CARD_RARITY_META;
+}
 
 /**
  * 注入品级元数据（`CardRepository.loadArtConfig()` 与 `ZCGameLoader` 解析三表后调用）。
@@ -307,21 +306,21 @@ let rarityMeta: readonly ZCCardRarityMeta[] = DEFAULT_CARD_RARITY_META;
  */
 export function setCardRarityMeta(source: readonly ZCCardRarityMeta[]): void {
     if (source.length === 0) {
-        rarityMeta = DEFAULT_CARD_RARITY_META;
+        ZC_RUNTIME_CONFIG.updateCatalogs({ rarityMeta: DEFAULT_CARD_RARITY_META });
         return;
     }
     const merged = new Map<ZCCardRarity, ZCCardRarityMeta>(DEFAULT_CARD_RARITY_META.map((meta) => [meta.id, meta]));
     for (const meta of source) if (meta.name) merged.set(meta.id, meta);
-    rarityMeta = Array.from(merged.values()).sort((a, b) => a.sort - b.sort);
+    ZC_RUNTIME_CONFIG.updateCatalogs({ rarityMeta: Array.from(merged.values()).sort((a, b) => a.sort - b.sort) });
 }
 
 /** 当前品级元数据（`sort` 升序），卡牌侧读它做列表排序。 */
 export function cardRarityMeta(): readonly ZCCardRarityMeta[] {
-    return rarityMeta;
+    return rarityMetadata();
 }
 
 export function rarityDisplayName(rarity: ZCCardRarity): string {
-    return rarityMeta.find((meta) => meta.id === rarity)?.name ?? '';
+    return rarityMetadata().find((meta) => meta.id === rarity)?.name ?? '';
 }
 
 /**
@@ -331,14 +330,16 @@ export function rarityDisplayName(rarity: ZCCardRarity): string {
  * 绿(3)→1、蓝(2)→2、紫(1)→3、金(0)→4。表里改权重，档位自动跟随，无需第二张表。
  */
 export function rarityRank(rarity: ZCCardRarity): number {
-    const index = rarityMeta.findIndex((meta) => meta.id === rarity);
-    return index < 0 ? 0 : rarityMeta.length - index;
+    const metadata = rarityMetadata();
+    const index = metadata.findIndex((meta) => meta.id === rarity);
+    return index < 0 ? 0 : metadata.length - index;
 }
 
 /** 对局档位（1..4）→ 品级 id；越界返回 undefined。 */
 export function rarityOfTier(tier: number): ZCCardRarity | undefined {
-    const index = rarityMeta.length - tier;
-    return index >= 0 && index < rarityMeta.length ? rarityMeta[index].id : undefined;
+    const metadata = rarityMetadata();
+    const index = metadata.length - tier;
+    return index >= 0 && index < metadata.length ? metadata[index].id : undefined;
 }
 
 export function rarityNameOfTier(tier: number): string {
@@ -365,14 +366,12 @@ export interface ZCCounterRule {
     damageMultiplier: number;
 }
 
-let counterRules: readonly ZCCounterRule[] = [];
-
 export function getCounterRules(): readonly ZCCounterRule[] {
-    return counterRules;
+    return ZC_RUNTIME_CONFIG.snapshot.counters ?? [];
 }
 
 /** 四维任一形成克制时取最高倍率；金矿不参与。 */
-export function cardCounterMultiplier(attacker?: ZCDeckCard, defender?: ZCDeckCard, rules = counterRules): number {
+export function cardCounterMultiplier(attacker?: ZCDeckCard, defender?: ZCDeckCard, rules = getCounterRules()): number {
     if (!attacker?.traits || !defender?.traits) return 1;
     const a = attacker.traits;
     const d = defender.traits;
@@ -412,18 +411,12 @@ export interface ZCBondRule {
     effectValue: number;
 }
 
-let bondRules: readonly ZCBondRule[] = [];
-
-export function setBondRules(rules: readonly ZCBondRule[]): void {
-    bondRules = rules;
-}
-
 export function getBondRules(): readonly ZCBondRule[] {
-    return bondRules;
+    return ZC_RUNTIME_CONFIG.snapshot.bonds ?? [];
 }
 
 /** 由八卡阵容按 pvpBond 规则实时计算羁绊。 */
-export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = bondRules): ZCDeckBonuses {
+export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBondRules()): ZCDeckBonuses {
     const cards = deck.filter((card) => card.traits);
     const count = (key: keyof ZCCardTraits, value: string) => cards.filter((card) => card.traits?.[key] === value).length;
     const result: ZCDeckBonuses = {
@@ -450,23 +443,6 @@ export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = bondRu
 }
 
 //#region PVP 单位目录
-/** 单位目录按 unitId 索引，只装可上场行（配了 Prefab 与普攻技能；建筑行跳过）。 */
-let unitCatalog: ReadonlyMap<ZCUnitId, ZCUnitDefinition> | null = null;
-
-/**
- * 全量卡目录：按 `pvpCard.id` 索引，**装所有 enabled 行**（含主城、含不在任何一方卡组里的行）。
- *
- *  为什么不能只用 `ZCGameModel.cardById`：它查的是「四方卡组的并集」，而正式局的卡组由后端
- *  `CmdStartBattleRspMsg.unitInfos` 收窄（见 `ZCClientCombatConfig.buildBattleDeck`）。
- * 中立资源点的奖励卡（表 `neutralResource.rewardCardId`，如 68001豌豆游侠）是**配置指定**的，
- * 不保证在任何人本次上场的卡组里 —— 所以必须有一份不收窄的全量目录给它查。
- */
-let cardCatalog: ReadonlyMap<string, ZCDeckCard> | null = null;
-
-export function setUnitCatalog(value: ReadonlyMap<ZCUnitId, ZCUnitDefinition> | null): void {
-    unitCatalog = value;
-}
-
 /**
  * 查全量卡目录。
  *
@@ -475,29 +451,16 @@ export function setUnitCatalog(value: ReadonlyMap<ZCUnitId, ZCUnitDefinition> | 
  */
 export function findCatalogCard(cardId: string | null | undefined): ZCDeckCard | null {
     if (!cardId) return null;
-    return cardCatalog?.get(String(cardId)) ?? null;
-}
-
-export function setCardCatalog(value: ReadonlyMap<string, ZCDeckCard> | null): void {
-    cardCatalog = value;
-}
-
-export function setRuntimeDecks(player: readonly ZCDeckCard[], enemy: readonly ZCDeckCard[]): void {
-    playerDeck = player;
-    enemyDeck = enemy;
-}
-
-export function setCounterRules(rules: readonly ZCCounterRule[]): void {
-    counterRules = [...rules];
+    return ZC_RUNTIME_CONFIG.snapshot.cardCatalog?.get(String(cardId)) ?? null;
 }
 
 export function hasUnitDefinition(unitId: ZCUnitId): boolean {
-    return unitCatalog?.has(unitId) === true;
+    return ZC_RUNTIME_CONFIG.snapshot.units?.has(unitId) === true;
 }
 
 /** 取单位定义：数值/Prefab 由 pvpCard 单位列提供，技能由 pvpSkill 提供。不完整时抛错，不兜底。 */
 export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
-    const definition = unitCatalog?.get(unitId);
+    const definition = ZC_RUNTIME_CONFIG.snapshot.units?.get(unitId);
     if (!definition || definition.maxHp == null || definition.attack == null || !definition.prefabPath || !definition.attackProfile) {
         throw new Error(`[ZCCombatCatalog] 单位 ${unitId} 的 PVP 配置不完整`);
     }
@@ -506,6 +469,6 @@ export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
 
 /** 全部可上场单位定义，供批量加载 Prefab。 */
 export function getAllUnitDefinitions(): ZCUnitDefinition[] {
-    return unitCatalog ? Array.from(unitCatalog.values()) : [];
+    return Array.from(ZC_RUNTIME_CONFIG.snapshot.units?.values() ?? []);
 }
 //#endregion

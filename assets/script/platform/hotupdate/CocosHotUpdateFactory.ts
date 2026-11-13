@@ -7,10 +7,7 @@ import { CocosManifestVerifier } from './CocosManifestVerifier';
 import { CocosNativeHotUpdateHost } from './NativeHotUpdateHost';
 import { NativeHotUpdateRuntime } from './NativeHotUpdateRuntime';
 
-/**
- * 产出资源热更编排器所需的平台适配器集合，不装配编排器本身。
- * 编排器属 app 层业务，platform 只实现 core 端口。
- */
+/** 产出热更编排器所需的平台适配器集合，不装配编排器本身；编排器属 app 层，platform 只实现 core 端口。 */
 export function createCocosHotUpdateDependencies(
     network: NetworkTransport,
     config: IHotUpdateConfig,
@@ -25,10 +22,8 @@ export function createCocosHotUpdateDependencies(
 }
 
 /**
- * 原生全构建目录热更（官方 native.AssetsManager 方案）。
- *
- * 只在 Android / iOS 生效；Web 与小游戏由 `createCocosHotUpdateDependencies` 那条
- * 远程 Bundle 路径负责（那边解决的是包体而非脚本热更）。
+ * 原生全构建目录热更（官方 native.AssetsManager 方案），只在 Android/iOS 生效。
+ * Web 与小游戏走上一条远程 Bundle 路径，解决的是包体而非脚本热更。
  */
 export function createNativeHotUpdateRuntime(
     network: NetworkTransport,
@@ -44,10 +39,7 @@ export function createNativeHotUpdateRuntime(
     });
 }
 
-/**
- * 原生路径的验签：改成校验 latest.json 本身（v1 是校验 pointer + manifest 两份，
- * 原生方案的 project.manifest 由引擎自己拉，客户端不代管）。
- */
+/** 原生路径验签改为只校验 latest.json：v1 校验 pointer+manifest 两份，project.manifest 由引擎自己拉。 */
 function createSignatureVerifier(
     config: IHotUpdateConfig,
 ): ((plan: IHotUpdateNativePlan) => Promise<boolean>) | undefined {

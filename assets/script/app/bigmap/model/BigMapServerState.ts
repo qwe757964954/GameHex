@@ -21,20 +21,20 @@ export interface IBigMapServerBuildInfo {
     readonly unlockQueue: number;
 }
 
-/**
- * 游戏信息（`CmdSlgGameInfoRspMsg.info` / `SlgGameInfo`）—— **服务器权威的玩家宏观状态**。
+/
+ *游戏信息（`CmdSlgGameInfoRspMsg.info` / `SlgGameInfo`）—— 服务器权威的玩家宏观状态。
  *
- * 2026-10-23 后端补的字段，客户端不再自己算：
- * - `campId`（协议 `toCampId`）：**我所处的城池 id**。0 = 尚未归属任何城池。
- *   「基地在不在城池势力范围内」以后只认它，不再用 `radiateCapacity` 距离猜。
- * - `monsterLevel`（协议 `maxMonsterLevel`）：已击杀的最高野怪等级，喂野怪逐级解锁。
+ *2026-10-23 后端补的字段，客户端不再自己算：
+ *- `campId`（协议 `toCampId`）：我所处的城池 id。0 = 尚未归属任何城池。
+ *  「基地在不在城池势力范围内」以后只认它，不再用 `radiateCapacity` 距离猜。
+ *- `monsterLevel`（协议 `maxMonsterLevel`）：已击杀的最高野怪等级，喂野怪逐级解锁。
  */
 export interface IBigMapServerGameInfo {
     readonly maxMonsterLevel: number;
     readonly campId: number;
 }
 
-/** 边界归一化：两个字段都是 `required uint32`，缺一个就整包作废（不回退成 0 冒充成功）。 */
+/ 边界归一化：两个字段都是 `required uint32`，缺一个就整包作废（不回退成 0 冒充成功）。 */
 export function normalizeBigMapGameInfo(value: unknown): IBigMapServerGameInfo | null {
     const row = bigMapServerRecord(value);
     if (!row) return null;
@@ -52,7 +52,7 @@ export function bigMapServerUint(value: unknown): number | null {
     return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff ? value : null;
 }
 
-/** 协议实例ID是正数uint32；边界拒绝旧Long/字符串和越界值，避免编码时静默截断。 */
+/ 协议实例ID是正数uint32；边界拒绝旧Long/字符串和越界值，避免编码时静默截断。 */
 export function bigMapServerInstanceId(value: unknown): number | null {
     const id = bigMapServerUint(value);
     return id !== null && id > 0 ? id : null;
@@ -86,10 +86,10 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
     const row = bigMapServerRecord(value);
     if (!row) return null;
     const unlockQueue = bigMapServerUint(row.unlockQueue);
-    // 🔴 `0` 是**合法值**（还没解锁任何建造队列），不能拿 `!unlockQueue` 当"字段缺失"。
-    // 之前写成 `!unlockQueue` 时，服务端首次下发 `unlockQueue = 0` 会让整包被拒 ⇒
-    // `info` 永远 null ⇒ `ready` 永远 false ⇒ 建造请求一帧都不发，界面只剩
-    // 「正在同步基地信息」（2026-11-11 用户反馈）。
+    // `0` 是合法值（还没解锁任何建造队列），不能拿 `!unlockQueue` 当"字段缺失"。
+    //之前写成 `!unlockQueue` 时，服务端首次下发 `unlockQueue = 0` 会让整包被拒 ⇒
+    //`info` 永远 null ⇒ `ready` 永远 false ⇒ 建造请求一帧都不发，界面只剩
+    //「正在同步基地信息」（2026-11-11 用户反馈）。
     if (unlockQueue === null || !Array.isArray(row.builds) || !Array.isArray(row.queues)) return null;
     const builds: IBigMapServerBuild[] = [];
     const queues: IBigMapServerQueue[] = [];
@@ -117,24 +117,24 @@ export function normalizeBigMapBuildInfo(value: unknown): IBigMapServerBuildInfo
     return { builds, queues, unlockQueue };
 }
 
-/** 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
+/ 策划表 `baseBuilding.basebuildPositon` 的起始值（1001 起，共 23 个「初始位置 id」）。 */
 export const BIGMAP_SERVER_POSITION_BASE = 1001;
 
-/**
- * 服务端 `position` → 客户端格索引。
+/
+ *服务端 `position` → 客户端格索引。
  *
- * **两套坐标系**：
- * - 客户端布局是 `0 .. plotRows*plotCols-1`（`buildBigMapBaseLayout` 按行列算出，5×5=25 格）；
- * - 策划表 `baseBuilding.basebuildPositon` 是 `1001 ~ 1023` 的「初始位置 id」。
+ *两套坐标系：
+ *- 客户端布局是 `0 .. plotRows*plotCols-1`（`buildBigMapBaseLayout` 按行列算出，5×5=25 格）；
+ *- 策划表 `baseBuilding.basebuildPositon` 是 `1001 ~ 1023` 的「初始位置 id」。
  *
- * 2026-11-11 实测服务端下发的是后者：`buildingId=71001 position=1001` ⇒
- * `position >= 25` ⇒ `projectBigMapServerBase` 整份快照被拒 ⇒ `ready` 永远 false ⇒
- * 建造请求一帧都不发（界面只显示「正在同步基地信息」）。
+ *2026-11-11 实测服务端下发的是后者：`buildingId=71001 position=1001` ⇒
+ *`position >= 25` ⇒ `projectBigMapServerBase` 整份快照被拒 ⇒ `ready` 永远 false ⇒
+ *建造请求一帧都不发（界面只显示「正在同步基地信息」）。
  *
- * 这里在**协议边界**做一次归一：`< cellCount` 原样用，`>= 1001` 的减 1001。
- * ⚠️ 正解是服务端改成下发格索引 —— `CmdSlgBuildReqMsg.position` 本来就是 0..24，
- * 两端必须同一套；服务端改完后 `position < cellCount` 直接命中，这段自然不再生效。
- * 返回 `-1` 表示越界（既不是格索引也不是合法位置 id），调用方按坏数据处理。
+ *这里在协议边界做一次归一：`< cellCount` 原样用，`>= 1001` 的减 1001。
+ * 正解是服务端改成下发格索引 —— `CmdSlgBuildReqMsg.position` 本来就是 0..24，
+ *两端必须同一套；服务端改完后 `position < cellCount` 直接命中，这段自然不再生效。
+ *返回 `-1` 表示越界（既不是格索引也不是合法位置 id），调用方按坏数据处理。
  */
 export function bigMapServerCellIndex(position: number, cellCount: number): number {
     if (!Number.isInteger(position) || position < 0 || !Number.isInteger(cellCount) || cellCount <= 0) return -1;
@@ -143,7 +143,7 @@ export function bigMapServerCellIndex(position: number, cellCount: number): numb
     return shifted >= 0 && shifted < cellCount ? shifted : -1;
 }
 
-/** uint32实例ID直接用于展示；联机基地不写入离线存档。 */
+/ uint32实例ID直接用于展示；联机基地不写入离线存档。 */
 export function projectBigMapServerBase(
     info: IBigMapServerBuildInfo, config: IBigMapConfig, now: number,
 ): IBigMapBaseState | null {
@@ -156,7 +156,7 @@ export function projectBigMapServerBase(
         hexId: bigMapServerCellIndex(build.position, cellCount), stored: 0, lastTickAt: now,
     }));
     const queues = Array.from({ length: config.queue.maxBuildQueue }, (_, slotIndex) => {
-        // 协议队列编号 1 起，视图槽位下标 0 起；所有转换集中在这里。
+        //协议队列编号 1 起，视图槽位下标 0 起；所有转换集中在这里。
         const queue = info.queues.find((entry) => entry.queueId === slotIndex + 1);
         const build = queue ? info.builds.find((entry) => entry.instanceId === queue.instanceId) : null;
         const targetLevel = build ? (build.state === 1 ? Math.max(1, build.level) : build.level + 1) : 0;

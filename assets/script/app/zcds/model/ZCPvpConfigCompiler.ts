@@ -59,8 +59,9 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     if (!hqCard) throw new Error('pvpCard 缺少已启用的主城卡');
     // deck/slot 列已删除（2026-09-28）：双方卡组由后端 CmdStartBattleRspMsg.unitInfos 下发，
     // 本地 pvpCard 只提供数值模板。这里保留全量 enabled 卡作为 fallback（后端未给 heroIds 时用）。
-    const playerDeck = cards.filter((card) => !isHqCard(card));
-    const enemyDeck = cards.filter((card) => !isHqCard(card));
+    // 编译期双方共用同一份只读 fallback 卡池（readonly 共享安全）；PVE 敌方定制在
+    // ZCBattleEntryBuilder 里单独替换 enemyDeck，不影响这里的 playerDeck。
+    const fallbackDeck = cards.filter((card) => !isHqCard(card));
     const skillRows = (tables.pvpSkill ?? []).map((row) => ({
         ...row,
         effectKey: refNullable(row.effectKey),
@@ -197,7 +198,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     };
 
     return {
-        cards, playerDeck, enemyDeck, units, counters, bonds,
+        cards, playerDeck: fallbackDeck, enemyDeck: fallbackDeck, units, counters, bonds,
         tileConfigs, tileWeights, goldPity, modifierCatalogs, neutralResources,
         legacySkillEffects: nextLegacySkillEffects, rules: nextRules,
     };

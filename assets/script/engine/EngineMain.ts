@@ -1,5 +1,5 @@
 
-import { view, macro, assetManager, SpriteFrame, Rect, director } from 'cc';
+import { view, macro, assetManager, director } from 'cc';
 import * as env from 'cc/env';
 
 export type saveType = boolean | string | number;
@@ -352,14 +352,6 @@ export class EngineMain {
         EngineMain.fpsFrameRate = fpsFrameRate
         EngineMain.saveLocalStorage(EngineMain.fpsFrameRateKey, fpsFrameRate)
         return fpsFrameRate
-    }
-
-    public static newGImageByTexture2D(texture2D: any, rect: any) {
-        // FGUI 已剔除：构建 SpriteFrame 并直接返回，业务层用 cc.Sprite 渲染
-        let spf = new SpriteFrame();
-        spf.texture = texture2D;
-        spf.rect = new Rect(rect.x, rect.y, rect.w, rect.h);
-        return spf;
     }
 
     public static getTotalFrames() {

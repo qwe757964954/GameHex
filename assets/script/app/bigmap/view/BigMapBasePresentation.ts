@@ -30,7 +30,7 @@ export function buildBigMapBaseLayout(
     const paintOrder = Array.from(points.entries()).sort(([, first], [, second]) => (
         second.y - first.y || first.x - second.x
     )).map(([hexId]) => hexId);
-    // 原图四周是装饰区；格面与建筑顶部均留在中央54%范围内。
+    //原图四周是装饰区；格面与建筑顶部均留在中央54%范围内。
     const mapSize = Math.max(1600, source.width / 0.54, (source.height + 280) / 0.54);
     return { points, tileWidth: BIGMAP_TILE_WIDTH, tileHeight: BIGMAP_TILE_HEIGHT, scale, paintOrder, mapSize };
 }
@@ -62,14 +62,14 @@ export function zoomBigMapBaseCamera(
     });
 }
 
-/**
- * 最近格吸附：给**摆放**用，不需要像素级精度。
+/
+ *最近格吸附：给摆放用，不需要像素级精度。
  *
- * `pickBigMapBasePlot` 是精确命中六边形，六边形之间天然有空隙 —— 点偏一点就返回 -1，
- * 玩家「明明点了那个格子」却什么都没发生（2026-11-11 反馈：找不到放置位置）。
- * 摆放是「选落点」，吸到最近格更符合直觉。
+ *`pickBigMapBasePlot` 是精确命中六边形，六边形之间天然有空隙 —— 点偏一点就返回 -1，
+ *玩家「明明点了那个格子」却什么都没发生（2026-11-11 反馈：找不到放置位置）。
+ *摆放是「选落点」，吸到最近格更符合直觉。
  *
- * `tolerance` 之外返回 -1（点在整张基地图外，不该当作"放在这里"）。
+ *`tolerance` 之外返回 -1（点在整张基地图外，不该当作"放在这里"）。
  */
 export function bigMapNearestPlot(layout: IBigMapBaseLayout, x: number, y: number, tolerance: number): number {
     if (!Number.isFinite(x) || !Number.isFinite(y) || !(tolerance > 0)) return -1;

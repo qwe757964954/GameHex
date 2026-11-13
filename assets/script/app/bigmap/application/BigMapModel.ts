@@ -1,10 +1,10 @@
-/**
- * 大世界 Model —— 把「配置 + 世界 + 存档 + 冒险进度」粘起来，只吐**视图数据**与动作结果。
+/
+ *大世界 Model —— 把「配置 + 世界 + 存档 + 冒险进度」粘起来，只吐视图数据与动作结果。
  *
- * 分层口径（见 `AGENTS.md`）：
- * - `model/` 里全是纯规则，不知道 lodash/引擎/UI 存在；
- * - 这里负责时序（tick）、持久化（经 `IBigMapStorage` 端口）、把规则结果翻译成界面能直接画的结构；
- * - Controller 处理意图与外部事件；View 只接收 Controller 投影的展示快照。
+ *分层口径（见 `AGENTS.md`）：
+ *- `model/` 里全是纯规则，不知道 lodash/引擎/UI 存在；
+ *- 这里负责时序（tick）、持久化（经 `IBigMapStorage` 端口）、把规则结果翻译成界面能直接画的结构；
+ *- Controller 处理意图与外部事件；View 只接收 Controller 投影的展示快照。
  */
 import {
     BIGMAP_RES_ORDER,
@@ -93,7 +93,7 @@ import {
     type IBigMapDaySnapshot,
 } from '../model/BigMapSnapshot';
 
-/** 存储端口（`sys.localStorage` 由 application 适配器注入，Presenter 不 import 引擎）。 */
+/ 存储端口（`sys.localStorage` 由 application 适配器注入，Presenter 不 import 引擎）。 */
 export interface IBigMapStorage {
     read(key: string): string | null;
     write(key: string, value: string): void;
@@ -103,49 +103,49 @@ export interface IBigMapModelDeps {
     readonly config: IBigMapConfig;
     readonly storage: IBigMapStorage;
     readonly saveKey: string;
-    /** 冒险已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径）。 */
+    / 冒险已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径）。 */
     readonly adventureChapter: () => number;
-    /**
-     * 背包快照（道具 id → 数量）。**由入口注入**，不在这里 import `ItemBag` ——
-     * 那条链经 `CacheMgr` 一路拖进 `cc`，会把本来能裸跑单测的 Presenter 绑死引擎。
-     * 不注入（离线 / 预览态）时顶栏继续用存档 `base.res`。
+    /
+     *背包快照（道具 id → 数量）。由入口注入，不在这里 import `ItemBag` ——
+     *那条链经 `CacheMgr` 一路拖进 `cc`，会把本来能裸跑单测的 Presenter 绑死引擎。
+     *不注入（离线 / 预览态）时顶栏继续用存档 `base.res`。
      */
     readonly itemCounts?: () => ReadonlyMap<string, number>;
     readonly now: () => number;
-    /** 世界种子，缺省用默认值；改它等于换一张地图。 */
+    / 世界种子，缺省用默认值；改它等于换一张地图。 */
     readonly seed?: number;
-    /**
-     * 开服天数（1 起，开服当天 = 1）。
+    /
+     *开服天数（1 起，开服当天 = 1）。
      *
-     * **不传 = 服务器还没下发，不做开服控制**（2026-10-30 山猫口径：「先打开待服务器有，再做控制」）。
-     * 协议 `SlgGameInfo` 目前没有这个字段；等后端补上后，`BigMapEntry` 在这里传值即自动生效。
+     *不传 = 服务器还没下发，不做开服控制（2026-10-30 山猫口径：「先打开待服务器有，再做控制」）。
+     *协议 `SlgGameInfo` 目前没有这个字段；等后端补上后，`BigMapEntry` 在这里传值即自动生效。
      */
     readonly openDay?: number;
-    /**
-     * 策划布局（`BigMapLayoutLoader` 产出）。缺省 / `null` = 按种子生成世界。
-     * 传了就**布局优先**：城池/野怪/基地的落位全部以它为准。
+    /
+     *策划布局（`BigMapLayoutLoader` 产出）。缺省 / `null` = 按种子生成世界。
+     *传了就布局优先：城池/野怪/基地的落位全部以它为准。
      */
     readonly layout?: IBigMapLayout | null;
-    /** 城池榜单来源（联机 = 服务器；缺省 = 本地 NPC 模拟）。 */
+    / 城池榜单来源（联机 = 服务器；缺省 = 本地 NPC 模拟）。 */
     readonly rankProvider?: IBigMapRankProvider;
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
     readonly selfRoleId?: string;
-    /** 发起服务端战斗并通过 GameRoute 导航；不得回退本地结算。 */
+    / 发起服务端战斗并通过 GameRoute 导航；不得回退本地结算。 */
     readonly startBattle?: (battleType: IZCSlgBattleType, targetConfigId: number, isCurrent: () => boolean) => Promise<IBigMapActionFeedback>;
 }
 
-/**
- * 世界实例：**布局优先，种子兜底**。
+/
+ *世界实例：布局优先，种子兜底。
  *
- * `resolveBigMapLayout` 已经做过解析与尺寸校验，这里再 try/catch 一次是给「绕过 loader
- * 直接塞进来」的调用方（单测、调试台）兜底 —— 建世界失败不该让大世界白屏。
+ *`resolveBigMapLayout` 已经做过解析与尺寸校验，这里再 try/catch 一次是给「绕过 loader
+ *直接塞进来」的调用方（单测、调试台）兜底 —— 建世界失败不该让大世界白屏。
  */
-/**
- * 建造目录的组名：`粮食田-1` → `粮食田`、`装饰雕像1` → `装饰雕像`。
+/
+ *建造目录的组名：`粮食田-1` → `粮食田`、`装饰雕像1` → `装饰雕像`。
  *
- * 策划表 `baseBuilding` 每座田一个 id、名字带序号；建造目录按类合并展示，
- * 这里只剥尾部序号，不改表里的真实名字（详情面板仍显示「粮食田-1」）。
+ *策划表 `baseBuilding` 每座田一个 id、名字带序号；建造目录按类合并展示，
+ *这里只剥尾部序号，不改表里的真实名字（详情面板仍显示「粮食田-1」）。
  */
 function groupName(name: string): string {
     const trimmed = name.replace(/[-_\s]*\d+$/, '').trim();
@@ -167,7 +167,7 @@ function createBigMapWorldInstance(
     return buildBigMapWorld(config, seed);
 }
 
-// ------------------------------------------------------------------ 视图数据
+//------------------------------------------------------------------ 视图数据
 
 export interface IBigMapResourceView {
     readonly amountKnown?: boolean;
@@ -186,23 +186,23 @@ export interface IBigMapPlotCellView {
     readonly instanceId: number;
     readonly buildingId: number;
     readonly name: string;
-    /**
-     * 这块地产什么（`baseBuildingLevel.resType` 反查出来的资源类型）；非资源田为 null。
+    /
+     *这块地产什么（`baseBuildingLevel.resType` 反查出来的资源类型）；非资源田为 null。
      *
-     * 以前 view 里硬编码 `{71002:grain,71003:wood,71004:iron,71005:coin}` ——
-     * 策划表里 71002~71006 **全是粮食田**，硬编码会把粮食田-2 画成木材图标。
+     *以前 view 里硬编码 `{71002:grain,71003:wood,71004:iron,71005:coin}` ——
+     *策划表里 71002~71006 全是粮食田，硬编码会把粮食田-2 画成木材图标。
      */
     readonly resType: BigMapResType | null;
     readonly level: number;
     readonly stored: number;
-    /** 站位预览色：空闲 / 已占 / 正在建造。 */
+    / 站位预览色：空闲 / 已占 / 正在建造。 */
     readonly slot: 'empty' | 'building' | 'constructing';
     readonly remainSeconds: number;
-    /** 建造/升级进度 `0~1`；不在施工时为 0（进度环直接读它，不用再去 `plotDetails` 里翻）。 */
+    / 建造/升级进度 `0~1`；不在施工时为 0（进度环直接读它，不用再去 `plotDetails` 里翻）。 */
     readonly progress: number;
 }
 
-/** 升级前置的一行（界面直接渲染「木材田 Lv.1 ✓/✗」）。 */
+/ 升级前置的一行（界面直接渲染「木材田 Lv.1 ✓/✗」）。 */
 export interface IBigMapPlotPreBuildView {
     readonly buildingId: number;
     readonly name: string;
@@ -226,42 +226,42 @@ export interface IBigMapPlotDetailView {
     readonly queueSlotIndex: number;
     readonly remainSeconds: number;
     readonly progress: number;
-    /**
-     * 产量对比 —— 「升级到底换来什么」的唯一数据来源。
+    /
+     *产量对比 —— 「升级到底换来什么」的唯一数据来源。
      *
-     * ⚠️ 2026-11-11 之前这组字段**根本没 expose**：`bigmapProduce` 表（`producePerHour` /
-     * `produceCap` / `resType`）早就加载进 `config.produce`，但 `plotDetail` 只吐三种成本
-     * + 建造时长，界面只能写一句「提升建筑等级与发展能力」。补上之后建筑卡与升级详情
-     * 不用再动配表，直接就能画「1.2K/h → 1.5K/h　+0.3K/h」。
+     * 2026-11-11 之前这组字段根本没 expose：`bigmapProduce` 表（`producePerHour` /
+     *`produceCap` / `resType`）早就加载进 `config.produce`，但 `plotDetail` 只吐三种成本
+     *+ 建造时长，界面只能写一句「提升建筑等级与发展能力」。补上之后建筑卡与升级详情
+     *不用再动配表，直接就能画「1.2K/h → 1.5K/h　+0.3K/h」。
      *
-     * `level = 0`（建造中的格子）时 `produceNow` 为 0。
+     *`level = 0`（建造中的格子）时 `produceNow` 为 0。
      */
     readonly produceNow: number;
     readonly produceNext: number;
     readonly produceCap: number;
-    /** 该建筑产出的资源类型；非产出建筑为空串。 */
+    / 该建筑产出的资源类型；非产出建筑为空串。 */
     readonly resType: BigMapResType | '';
-    /** 已存 / 上限，`0~1`；上限为 0 时固定 0。 */
+    / 已存 / 上限，`0~1`；上限为 0 时固定 0。 */
     readonly storedRatio: number;
-    /** 升级后给的属性加成（千分比，50 = +5%）；无该字段时为 0。 */
+    / 升级后给的属性加成（千分比，50 = +5%）；无该字段时为 0。 */
     readonly attrBonus: number;
-    /** 「立即完成」消耗的大地图货币；0 = 该等级不支持秒完成。 */
+    / 「立即完成」消耗的大地图货币；0 = 该等级不支持秒完成。 */
     readonly instantCost: number;
     readonly preBuild: readonly IBigMapPlotPreBuildView[];
-    /** 还差哪些资源（结构化，逐项标红用）；够付时为空数组。 */
+    / 还差哪些资源（结构化，逐项标红用）；够付时为空数组。 */
     readonly missing: readonly IBigMapMissingRes[];
 }
 
 export interface IBigMapBuildEntryView {
-    /**
-     * **下一次要建的建筑 id**（不是"这一行是哪栋"）。
+    /
+     *下一次要建的建筑 id（不是"这一行是哪栋"）。
      *
-     * 策划表 `baseBuilding` 里每座田各占一个 id（粮食田 71002~71006 五座），
-     * 建造目录按 `kind` 合并成一行（「粮食田 1/5」），点一次就把这一组里
-     * 下一座没建满的 id 发出去。`0` = 这一组已经建满。
+     *策划表 `baseBuilding` 里每座田各占一个 id（粮食田 71002~71006 五座），
+     *建造目录按 `kind` 合并成一行（「粮食田 1/5」），点一次就把这一组里
+     *下一座没建满的 id 发出去。`0` = 这一组已经建满。
      */
     readonly buildingId: number;
-    /** 分组键（= `baseBuildType`）；行点击按它回查菜单，避免用建过的旧 id。 */
+    / 分组键（= `baseBuildType`）；行点击按它回查菜单，避免用建过的旧 id。 */
     readonly kind: number;
     readonly name: string;
     readonly unlocked: boolean;
@@ -284,9 +284,9 @@ export interface IBigMapQueueView {
     readonly remainSeconds: number;
     readonly totalSeconds: number;
     readonly progress: number;
-    /**
-     * 还没解锁的槽位（`slotIndex >= queueUnlocked`）：只用于显示「上限是几条、还能解锁几条」，
-     * 不能排任务。`bigmapQueue.maxBuildQueue` 就是靠这里在界面上体现出来的。
+    /
+     *还没解锁的槽位（`slotIndex >= queueUnlocked`）：只用于显示「上限是几条、还能解锁几条」，
+     *不能排任务。`bigmapQueue.maxBuildQueue` 就是靠这里在界面上体现出来的。
      */
     readonly locked: boolean;
 }
@@ -307,45 +307,45 @@ export interface IBigMapCityView {
     readonly desc: string;
     readonly hexId: number;
     readonly distance: number;
-    /** 本次攻打的预览值（未开放/已占领时为 0）。 */
+    / 本次攻打的预览值（未开放/已占领时为 0）。 */
     readonly previewDamage: number;
     readonly previewWarScore: number;
     readonly inRange: boolean;
     readonly damageCutPct: number;
-    /**
-     * 这座城就是我**所处**的城（服务器 `SlgGameInfo.toCampId`）。
+    /
+     *这座城就是我所处的城（服务器 `SlgGameInfo.toCampId`）。
      *
-     * 与 `isServerCamp`（这座城有没有接服务器据点协议）不是一回事，别混。
+     *与 `isServerCamp`（这座城有没有接服务器据点协议）不是一回事，别混。
      */
     readonly isPlayerCamp: boolean;
-    /**
-     * 这座城的势力范围该刷哪一类颜色（2026-10-28 用户口径）：
-     * `self` = 我的城（绿）/ `other` = 其他玩家的城（红）/ `neutral` = 无主（按色板上色）。
+    /
+     *这座城的势力范围该刷哪一类颜色（2026-10-28 用户口径）：
+     *`self` = 我的城（绿）/ `other` = 其他玩家的城（红）/ `neutral` = 无主（按色板上色）。
      *
-     * 视图只管「拿颜色填满这片地」，归属判定留在模型层（`bigMapTerritoryOwnerOf`）：
-     * 联机档「被占」与「我占的」是两件事，不能靠 `state` 一句话判掉。
+     *视图只管「拿颜色填满这片地」，归属判定留在模型层（`bigMapTerritoryOwnerOf`）：
+     *联机档「被占」与「我占的」是两件事，不能靠 `state` 一句话判掉。
      */
     readonly territoryOwner: BigMapTerritoryOwner;
-    /** 当前攻城日程阶段（顶栏/详情面板显示「可攻打 / 已锁榜 / 休战」）。 */
+    / 当前攻城日程阶段（顶栏/详情面板显示「可攻打 / 已锁榜 / 休战」）。 */
     readonly phase: BigMapCityPhase;
-    /** 现在能不能打（= 已开放 + 日程放行）；`attackReason` 是打不了的具体原因。 */
+    / 现在能不能打（= 已开放 + 日程放行）；`attackReason` 是打不了的具体原因。 */
     readonly canAttack: boolean;
     readonly attackReason: string;
-    /** 玩家在这座城的当前名次（喂名次系数；没刷新过榜单时按「独自一人」算 = 1）。 */
+    / 玩家在这座城的当前名次（喂名次系数；没刷新过榜单时按「独自一人」算 = 1）。 */
     readonly playerRank: number;
-    /** 同时在打的人数（喂拥挤系数）。 */
+    / 同时在打的人数（喂拥挤系数）。 */
     readonly attackerCount: number;
     readonly topWarScore: number;
     readonly rankEntries: IBigMapCityRankBoard['entries'];
-    /** 只有联机入口注入 Repository；预览与旧离线测试保留原有数据链路。 */
+    / 只有联机入口注入 Repository；预览与旧离线测试保留原有数据链路。 */
     readonly isServerCamp: boolean;
     readonly campInfo: IBigMapCampInfo | null;
     readonly campDetailStatus: 'idle' | 'loading' | 'ready' | 'failed';
-    /**
-     * 据点内角色（`CmdSlgCampRoleInfosRspMsg`，r879）。空数组 = 查过、确实没人。
+    /
+     *据点内角色（`CmdSlgCampRoleInfosRspMsg`，r879）。空数组 = 查过、确实没人。
      *
-     * 与 `campDetailStatus` **各自独立**：据点状态和角色列表是两条协议，
-     * 一条失败不该把另一条也标成失败（`campRolesStatus` 单独记）。
+     *与 `campDetailStatus` 各自独立：据点状态和角色列表是两条协议，
+     *一条失败不该把另一条也标成失败（`campRolesStatus` 单独记）。
      */
     readonly campRoles: readonly IBigMapCampRoleInfo[];
     readonly campRolesStatus: BigMapCampRoleStatus;
@@ -356,9 +356,9 @@ export interface IBigMapMonsterView {
     readonly monsterId: number;
     readonly name: string;
     readonly level: number;
-    /**
-     * 已通关的最高野怪等级（联机取服务器 `SlgGameInfo.maxMonsterLevel` 与本地进度的较大者）。
-     * 逐级解锁早就吃它，但界面一直没显示 —— 玩家看不到「打到第几级了」。
+    /
+     *已通关的最高野怪等级（联机取服务器 `SlgGameInfo.maxMonsterLevel` 与本地进度的较大者）。
+     *逐级解锁早就吃它，但界面一直没显示 —— 玩家看不到「打到第几级了」。
      */
     readonly clearedLevel: number;
     readonly hexId: number;
@@ -372,17 +372,17 @@ export interface IBigMapMonsterView {
     readonly attackReason: string;
 }
 
-/** 建造队列解锁状态（给 UI 显示「解锁第 2 条 · 货币 120」）。 */
+/ 建造队列解锁状态（给 UI 显示「解锁第 2 条 · 货币 120」）。 */
 export interface IBigMapQueueUnlockInfo {
     readonly current: number;
     readonly max: number;
-    /** 下一条的价格（已满时为 0）。 */
+    / 下一条的价格（已满时为 0）。 */
     readonly cost: number;
     readonly canUnlock: boolean;
     readonly reason: string;
 }
 
-/** 动作结果：`message` 直接丢给 toast，`ok=false` 时是失败原因。 */
+/ 动作结果：`message` 直接丢给 toast，`ok=false` 时是失败原因。 */
 export interface IBigMapActionFeedback {
     readonly ok: boolean;
     readonly message: string;
@@ -395,21 +395,21 @@ export class BigMapModel {
     private data: IBigMapSaveData;
     private version = 0;
     private readonly listeners = new Set<() => void>();
-    /** 城池榜单缓存：`cityId → board`。只在 `refreshCityRank` 里写，视图同步读。 */
+    / 城池榜单缓存：`cityId → board`。只在 `refreshCityRank` 里写，视图同步读。 */
     private readonly rankBoards = new Map<number, IBigMapCityRankBoard>();
     private readonly deps: IBigMapModelDeps;
     private readonly territories: readonly ITerritoryColorRegion[];
     private isDisposed = false;
     private isStartingBattle = false;
     private readonly campDetailStatuses = new Map<number, IBigMapCityView['campDetailStatus']>();
-    /** 角色列表的查询状态（与据点状态分开记，见 `IBigMapCityView.campRoles`）。 */
+    / 角色列表的查询状态（与据点状态分开记，见 `IBigMapCityView.campRoles`）。 */
     private readonly campRoleStatuses = new Map<number, IBigMapCityView['campRolesStatus']>();
-    /**
-     * 格 id → 据点 id 的**预建反查表**（角色广播只带 `pos`，不带 campId）。
+    /
+     *格 id → 据点 id 的预建反查表（角色广播只带 `pos`，不带 campId）。
      *
-     * 用 Map 而不是每次遍历 `territories`：攻击事件可能一秒来好几条，
-     * 每条都跑一遍「几十座城 × 每城几十格」的 includes 就是白烧 CPU。
-     * 同格被多座城声明时以**先声明者**为准（`set` 不覆盖已有键）。
+     *用 Map 而不是每次遍历 `territories`：攻击事件可能一秒来好几条，
+     *每条都跑一遍「几十座城 × 每城几十格」的 includes 就是白烧 CPU。
+     *同格被多座城声明时以先声明者为准（`set` 不覆盖已有键）。
      */
     private readonly campIdByHex = new Map<number, number>();
 
@@ -436,12 +436,12 @@ export class BigMapModel {
             this.applyBase(empty);
             return;
         }
-        // 进页面先补一次离线结算，再落盘（否则「离线 8 小时」要等第一次操作才生效）。
+        //进页面先补一次离线结算，再落盘（否则「离线 8 小时」要等第一次操作才生效）。
         this.tick(false);
         this.persist();
     }
 
-    /** Controller 在仓库变更后提交服务端事实；Model 不自行订阅外部事件。 */
+    / Controller 在仓库变更后提交服务端事实；Model 不自行订阅外部事件。 */
     syncServerBase(): void {
         if (this.isDisposed) return;
         const base = this.deps.slgRepository?.projectBase();
@@ -467,7 +467,7 @@ export class BigMapModel {
             && !(this.deps.campRepository?.rolesOf(campId) ?? []).some((role) => role.pos === pos);
     }
 
-    // -------------------------------------------------------------- 基础访问
+    //-------------------------------------------------------------- 基础访问
 
     get world(): IBigMapWorld {
         return this.worldInstance;
@@ -481,17 +481,17 @@ export class BigMapModel {
         return this.data.battle;
     }
 
-    /** 主城建筑 id（视图给主城换特殊底色时用）。 */
+    / 主城建筑 id（视图给主城换特殊底色时用）。 */
     get mainBuildingId(): number {
         return this.config.mainBuildingId;
     }
 
-    /** 某个建造区格子上「正在建造」的建筑名（空串 = 该格没有在建工程）。 */
-    /**
-     * 在建格对应的建筑 id（建造中的格**不在** `base.buildings` 里，只存在于队列）。
+    / 某个建造区格子上「正在建造」的建筑名（空串 = 该格没有在建工程）。 */
+    /
+     *在建格对应的建筑 id（建造中的格不在 `base.buildings` 里，只存在于队列）。
      *
-     * `projectBigMapServerBase` 只把 `state !== 1` 的建筑放进基地，在建的那座在 `queues` ——
-     * 于是「建造中显示什么图」只能从这里反查。查不到返回 0，调用方退回脚手架图。
+     *`projectBigMapServerBase` 只把 `state !== 1` 的建筑放进基地，在建的那座在 `queues` ——
+     *于是「建造中显示什么图」只能从这里反查。查不到返回 0，调用方退回脚手架图。
      */
     buildingIdOfQueueAt(hexId: number): number {
         const slot = this.data.base.queues.find((item) => (
@@ -524,7 +524,7 @@ export class BigMapModel {
         return this.deps.slgRepository?.initialize() ?? Promise.resolve(true);
     }
 
-    /** 视图订阅用：任何会改变显示结果的操作都会 +1。 */
+    / 视图订阅用：任何会改变显示结果的操作都会 +1。 */
     get refreshVersion(): number {
         return this.version;
     }
@@ -536,9 +536,9 @@ export class BigMapModel {
 
     get unlockContext(): IBigMapUnlockContext {
         const context = bigMapUnlockContextOf(this.data.battle, this.deps.adventureChapter(), this.deps.openDay);
-        // 联机档的本地存档是空的，`occupiedCityIds` 恒为空集 ⇒ 城池链会断在第一个前置城上，
-        // 表现为「章节够了但所有城都未解锁」。用「客户端刷到过的已占据点」补一个下界
-        // （服务器不下发全量归属，所以只能是下界，不是全服占领表）。
+        //联机档的本地存档是空的，`occupiedCityIds` 恒为空集 ⇒ 城池链会断在第一个前置城上，
+        //表现为「章节够了但所有城都未解锁」。用「客户端刷到过的已占据点」补一个下界
+        //（服务器不下发全量归属，所以只能是下界，不是全服占领表）。
         const serverOccupied = this.deps.campRepository?.occupiedCampIds() ?? [];
         const merged = serverOccupied.length === 0 ? context : {
             ...context,
@@ -546,31 +546,31 @@ export class BigMapModel {
         };
         const server = this.deps.slgRepository;
         if (!server) return merged;
-        // 联机版只认服务器击杀进度，避免本地进度放行服务器尚未解锁的野怪。
+        //联机版只认服务器击杀进度，避免本地进度放行服务器尚未解锁的野怪。
         return {
             ...merged,
             maxClearedMonsterLevel: server.maxClearedMonsterLevel,
         };
     }
 
-    /**
-     * 我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知 / 未归属）。
+    /
+     *我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知 / 未归属）。
      *
-     * 势力范围判定只认它（见 `bigMapWithinCityRange`）；离线档恒 0 ⇒ 仍走距离，行为不变。
+     *势力范围判定只认它（见 `bigMapWithinCityRange`）；离线档恒 0 ⇒ 仍走距离，行为不变。
      */
     get playerCampId(): number {
         return this.deps.slgRepository?.campId ?? 0;
     }
 
-    /**
-     * 玩家基地在大地图上的格 —— **服务器 `toCampId` 那座城的锚点**。
+    /
+     *玩家基地在大地图上的格 —— 服务器 `toCampId` 那座城的锚点。
      *
-     * 口径（2026-10-23 山猫确认）：*「玩家基地就固定在 `toCampId` 那座城的锚点上」*。
-     * 所以位置也认服务器，不再用布局档里的 `bases[].isPlayer` 那格当唯一真源 ——
-     * 布局档只在「还没收到包 / 未归属 / 该城不在地图上」时兜底。
+     *口径（2026-10-23 山猫确认）：*「玩家基地就固定在 `toCampId` 那座城的锚点上」*。
+     *所以位置也认服务器，不再用布局档里的 `bases[].isPlayer` 那格当唯一真源 ——
+     *布局档只在「还没收到包 / 未归属 / 该城不在地图上」时兜底。
      *
-     * ⚠️ 城锚点同时是城池的占格（`cityByHex`），基地钉上去后与城图标同格；
-     * 点击仍按 `bigMapOccupantOf` 的「城优先」返回城池详情，基地入口走模式木牌。
+     * 城锚点同时是城池的占格（`cityByHex`），基地钉上去后与城图标同格；
+     *点击仍按 `bigMapOccupantOf` 的「城优先」返回城池详情，基地入口走模式木牌。
      */
     get playerBaseHexId(): number {
         const campId = this.playerCampId;
@@ -582,9 +582,9 @@ export class BigMapModel {
         return this.deps.adventureChapter();
     }
 
-    /**
-     * 资源类型 → 背包道具图标路径（`item.icon`）。没配 itemId / 图标为空时是空表，
-     * 视图退回 `image/concept/sprites/<resType>` 概念图。
+    /
+     *资源类型 → 背包道具图标路径（`item.icon`）。没配 itemId / 图标为空时是空表，
+     *视图退回 `image/concept/sprites/<resType>` 概念图。
      */
     get resourceIcons(): ReadonlyMap<BigMapResType, string> {
         return this.config.resourceIcons;
@@ -598,12 +598,12 @@ export class BigMapModel {
         return this.config.camps;
     }
 
-    /**
-     * 叫一声「解锁依据可能变了」，让视图重算一遍。
+    /
+     *叫一声「解锁依据可能变了」，让视图重算一遍。
      *
-     * 冒险章节集合是登录后**并行**拉的（`TerritoryChapterInfoRepository.refresh()`），
-     * 世界页开得比它早时，回包到达那一刻 Presenter 自己察觉不到 —— 建筑解锁会停在旧章节，
-     * 直到下次重进页面。入口那边在回包后调用本方法补一次刷新。
+     *冒险章节集合是登录后并行拉的（`TerritoryChapterInfoRepository.refresh()`），
+     *世界页开得比它早时，回包到达那一刻 Presenter 自己察觉不到 —— 建筑解锁会停在旧章节，
+     *直到下次重进页面。入口那边在回包后调用本方法补一次刷新。
      */
     refreshUnlockContext(): void {
         this.emit();
@@ -629,9 +629,9 @@ export class BigMapModel {
         this.data = { ...this.data, battle };
     }
 
-    // -------------------------------------------------------------- 时间推进
+    //-------------------------------------------------------------- 时间推进
 
-    /** 结算时间差（产出 / 队列 / 行动力）并顺手补当日快照。 */
+    / 结算时间差（产出 / 队列 / 行动力）并顺手补当日快照。 */
     tick(notify = true): void {
         if (this.isServerBase) {
             if (notify) this.emit();
@@ -641,14 +641,14 @@ export class BigMapModel {
         this.applyBase(result.state);
         const snapshotted = this.refreshDaySnapshot();
         if (result.completed.length > 0 || snapshotted) this.persist();
-        // 快照是「玩家没操作也会发生」的状态变化，必须自己触发重绘。
+        //快照是「玩家没操作也会发生」的状态变化，必须自己触发重绘。
         if (notify || snapshotted) this.emit();
     }
 
-    /**
-     * 过了 22:00（或次日开战前）就定格一份当日战绩快照；同一天只出一份。
+    /
+     *过了 22:00（或次日开战前）就定格一份当日战绩快照；同一天只出一份。
      *
-     * 只用**确定性**的输入（战功 + 榜单名次 + 日程），所以离线补算与在线结算结果一致。
+     *只用确定性的输入（战功 + 榜单名次 + 日程），所以离线补算与在线结算结果一致。
      */
     private refreshDaySnapshot(): boolean {
         const now = this.deps.now();
@@ -658,7 +658,7 @@ export class BigMapModel {
             now,
             this.data.battle,
             (cityId) => {
-                // 当刻现算，不依赖「玩家是否点开过这座城」——否则名次会随点没点过而变。
+                //当刻现算，不依赖「玩家是否点开过这座城」——否则名次会随点没点过而变。
                 try {
                     return buildBigMapCityRankBoard(this.config, cityId, this.data.battle.cityWarScore[cityId] ?? 0)
                         .playerRank;
@@ -671,27 +671,27 @@ export class BigMapModel {
         return true;
     }
 
-    /** 最近一次当日战绩快照（没出过就是 `null`）。 */
+    / 最近一次当日战绩快照（没出过就是 `null`）。 */
     daySnapshot(): IBigMapDaySnapshot | null {
         return this.data.snapshot;
     }
 
-    // -------------------------------------------------------------- 资源栏
+    //-------------------------------------------------------------- 资源栏
 
-    /**
-     * 顶栏资源。
+    /
+     *顶栏资源。
      *
-     * 🔴 联机态的数量来自**背包**（`CmdItem` 缓存，道具 18501~18505），不是 SLG 存档：
-     * 协议里 `SlgGameInfo` 只有 `maxMonsterLevel` / `toCampId`，**没有任何资源余额字段** ——
-     * 资源在服务端就是背包道具（收取 `CmdSlgBuildCollectReqMsg` 也回 `tlCmdGoods`）。
-     * 以前这里一律 `amountKnown = false`，顶栏 5 个格子全显示 `—`（2026-10-26 用户反馈）。
+     * 联机态的数量来自背包（`CmdItem` 缓存，道具 18501~18505），不是 SLG 存档：
+     *协议里 `SlgGameInfo` 只有 `maxMonsterLevel` / `toCampId`，没有任何资源余额字段 ——
+     *资源在服务端就是背包道具（收取 `CmdSlgBuildCollectReqMsg` 也回 `tlCmdGoods`）。
+     *以前这里一律 `amountKnown = false`，顶栏 5 个格子全显示 `—`（2026-10-26 用户反馈）。
      *
-     * 离线 / 预览态没有背包，继续读存档 `base.res`。
+     *离线 / 预览态没有背包，继续读存档 `base.res`。
      */
     resourceBar(): readonly IBigMapResourceView[] {
         const pending = bigMapPendingHarvest(this.config, this.data.base);
         const perHour = bigMapProducePerHour(this.config, this.data.base);
-        // 背包快照只取一次（读一次遍历整个 `CmdItem` 缓存）。
+        //背包快照只取一次（读一次遍历整个 `CmdItem` 缓存）。
         const bag = this.isServerBase ? this.deps.itemCounts?.() ?? null : null;
         return BIGMAP_RES_ORDER.map((type) => {
             const config = this.config.resources.get(type);
@@ -699,20 +699,20 @@ export class BigMapModel {
             const fromBag = bag !== null && itemId > 0;
             const amount = fromBag
                 ? Math.max(0, bag.get(String(itemId)) ?? 0)
-                // ⚠️ 行动力走 `base.stamina`（会随攻打消耗、随时间恢复），不是资源包里的
-                // `res.stamina`（那只是「初始值」的展示位）。两者同名字段，别串了。
+                // 行动力走 `base.stamina`（会随攻打消耗、随时间恢复），不是资源包里的
+                //`res.stamina`（那只是「初始值」的展示位）。两者同名字段，别串了。
                 : type === 'stamina'
                     ? Math.floor(this.data.base.stamina)
                     : Math.floor(this.data.base.res[type]);
             return {
-                // 联机态只有真从背包读到才算「已知」：没注入 / 没配 itemId 时仍显示 `—`，
-                // 不能拿存档里的 0 冒充真实余额。
+                //联机态只有真从背包读到才算「已知」：没注入 / 没配 itemId 时仍显示 `—`，
+                //不能拿存档里的 0 冒充真实余额。
                 amountKnown: !this.isServerBase || (bag !== null && itemId > 0),
                 type,
                 name: config?.name ?? type,
                 amount,
-                // 背包没有「仓库上限」概念（上限是 SLG 自己的 resCap）：给 NaN，
-                // 顶栏就不会拼 `/800` 这种对不上的数字。
+                //背包没有「仓库上限」概念（上限是 SLG 自己的 resCap）：给 NaN，
+                //顶栏就不会拼 `/800` 这种对不上的数字。
                 cap: fromBag ? Number.NaN : bigMapResCap(this.config, this.data.base, type),
                 pending: Math.floor(pending[type]),
                 perHour: perHour[type],
@@ -720,11 +720,11 @@ export class BigMapModel {
         });
     }
 
-    /**
-     * 建造队列的解锁状态。
+    /
+     *建造队列的解锁状态。
      *
-     * 🔴 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、**付费解锁** ——
-     * 所以队列数量只看存档 `queueUnlocked`，与建了哪些建筑无关。
+     * 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁 ——
+     *所以队列数量只看存档 `queueUnlocked`，与建了哪些建筑无关。
      */
     queueUnlockInfo(): IBigMapQueueUnlockInfo {
         const current = bigMapClampQueueUnlocked(this.config, this.data.base.queueUnlocked);
@@ -745,7 +745,7 @@ export class BigMapModel {
         };
     }
 
-    /** 花货币解锁下一条建造队列。 */
+    / 花货币解锁下一条建造队列。 */
     unlockBuildQueue(): IBigMapActionFeedback {
         if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
         const result = bigMapUnlockQueue(this.config, this.data.base);
@@ -763,7 +763,7 @@ export class BigMapModel {
         return bigMapAttackPower(this.config, this.data.base);
     }
 
-    // -------------------------------------------------------------- 建造区
+    //-------------------------------------------------------------- 建造区
 
     plotCells(): readonly IBigMapPlotCellView[] {
         const rows = this.config.queue.plotRows;
@@ -791,8 +791,8 @@ export class BigMapModel {
                     stored: Math.floor(instance?.stored ?? 0),
                     slot: queue && !instance ? 'constructing' : instance ? 'building' : 'empty',
                     remainSeconds: queue ? Math.max(0, Math.ceil(queue.finishAt - this.deps.now())) : 0,
-                    // 进度环直接读格子（不读 `plotDetails`）：详情是"选中才有"，
-                    // 而进度环要在一屏所有在建格子上同时画。
+                    //进度环直接读格子（不读 `plotDetails`）：详情是"选中才有"，
+                    //而进度环要在一屏所有在建格子上同时画。
                     progress: queue
                         ? Math.max(0, Math.min(1, 1 - Math.max(0, queue.finishAt - this.deps.now())
                             / Math.max(1, queue.finishAt - queue.startAt)))
@@ -803,14 +803,14 @@ export class BigMapModel {
         return views;
     }
 
-    /**
-     * 摆放候选：现在有哪些空格能放下 `buildingId`（`0` = 不在摆放态，返回空）。
+    /
+     *摆放候选：现在有哪些空格能放下 `buildingId`（`0` = 不在摆放态，返回空）。
      *
-     * 原先摆建筑只有一个 Toast + 所有空格画同一道细边 —— 玩家不知道"到底能放哪"，
-     * 只能一格一格试错。这里把 `bigMapCanPlace` 逐个空格跑一遍，界面据此上绿 / 红。
+     *原先摆建筑只有一个 Toast + 所有空格画同一道细边 —— 玩家不知道"到底能放哪"，
+     *只能一格一格试错。这里把 `bigMapCanPlace` 逐个空格跑一遍，界面据此上绿 / 红。
      *
-     * ⚠️ **只是预判**：联机时真伪由服务端裁决（`isServerBase`），
-     * 所以界面文案不能说"一定可以"，点击之后仍要处理失败回包。
+     * 只是预判：联机时真伪由服务端裁决（`isServerBase`），
+     *所以界面文案不能说"一定可以"，点击之后仍要处理失败回包。
      */
     placeableHexIds(buildingId: number): readonly number[] {
         if (buildingId === 0) return [];
@@ -826,11 +826,11 @@ export class BigMapModel {
         return ids;
     }
 
-    /**
-     * 移建态逐格试错：把 `bigMapCanMove` 对每个空格跑一遍，界面据此上绿 / 红。
+    /
+     *移建态逐格试错：把 `bigMapCanMove` 对每个空格跑一遍，界面据此上绿 / 红。
      *
-     * 与 {@link placeableHexIds} 不同，这里入参是 instanceId（移动的是已存在的建筑实例）。
-     * 原格被 `bigMapCanMove` 判 false，不会出现在结果里；只看空格，不重复资源校验。
+     *与 {@link placeableHexIds} 不同，这里入参是 instanceId（移动的是已存在的建筑实例）。
+     *原格被 `bigMapCanMove` 判 false，不会出现在结果里；只看空格，不重复资源校验。
      */
     moveableHexIds(instanceId: number): readonly number[] {
         if (instanceId === 0) return [];
@@ -858,8 +858,8 @@ export class BigMapModel {
             ? bigMapCanUpgrade(this.config, this.data.base, this.unlockContext, instance.instanceId, !this.isServerBase)
             : { ok: false, reason: '建造中' };
         const remainSeconds = queue ? Math.max(0, Math.ceil(queue.finishAt - now)) : 0;
-        // 产量：`level = 0`（建造中的格子）取不到本级，`produceNow` 落在 0 上，
-        // 界面据此显示「建成后 1.2K/h」而不是拿下一级冒充当前。
+        //产量：`level = 0`（建造中的格子）取不到本级，`produceNow` 落在 0 上，
+        //界面据此显示「建成后 1.2K/h」而不是拿下一级冒充当前。
         const produceNow = this.config.produce.get(buildingId)?.get(level);
         const produceNext = this.config.produce.get(buildingId)?.get(targetLevel);
         const produceCap = produceNow?.produceCap ?? produceNext?.produceCap ?? 0;
@@ -892,16 +892,16 @@ export class BigMapModel {
         };
     }
 
-    /**
-     * 建造目录：按 `baseBuildType`（kind）**合并同名**成一行。
+    /
+     *建造目录：按 `baseBuildType`（kind）合并同名成一行。
      *
-     * 策划表每座田一个 id（粮食田 71002~71006、木材田 71007~71011…），
-     * 照 23 行铺出去面板放不下、玩家也分不清"粮食田-1/-2"。
-     * 所以一行代表一类：`count` = 这类已建总数，`maxOwnNum` = 这类可用 id 数之和，
-     * `buildingId` = **下一座**该建的 id（建满为 0）。
+     *策划表每座田一个 id（粮食田 71002~71006、木材田 71007~71011…），
+     *照 23 行铺出去面板放不下、玩家也分不清"粮食田-1/-2"。
+     *所以一行代表一类：`count` = 这类已建总数，`maxOwnNum` = 这类可用 id 数之和，
+     *`buildingId` = 下一座该建的 id（建满为 0）。
      *
-     * 解锁按「组里还有未建满且已解锁的成员」判：只要还有一座能建就算解锁；
-     * 全都锁着时把第一条锁的原因带出去（玩家看到的是"通关冒险第 N 章解锁"）。
+     *解锁按「组里还有未建满且已解锁的成员」判：只要还有一座能建就算解锁；
+     *全都锁着时把第一条锁的原因带出去（玩家看到的是"通关冒险第 N 章解锁"）。
      */
     buildMenu(): readonly IBigMapBuildEntryView[] {
         const context = this.unlockContext;
@@ -929,7 +929,7 @@ export class BigMapModel {
                     if (!lockedReason) lockedReason = unlock.reason;
                     continue;
                 }
-                // 这一组里第一座「还没建满且已解锁」的 id 就是要建的那座。
+                //这一组里第一座「还没建满且已解锁」的 id 就是要建的那座。
                 nextId = member.id;
             }
             const cost = this.config.levels.get(nextId || head.id)?.get(1);
@@ -952,16 +952,16 @@ export class BigMapModel {
         return rows;
     }
 
-    /** 建筑升级入口是否已解锁（第 3 章），界面据此给「升级」按钮置灰。 */
+    / 建筑升级入口是否已解锁（第 3 章），界面据此给「升级」按钮置灰。 */
     upgradeUnlocked(): boolean {
         return bigMapUpgradeUnlock(this.config, this.unlockContext).unlocked;
     }
 
-    /**
-     * 队列槽位：**按 `bigmapQueue.maxBuildQueue` 全部返回**，未解锁的标 `locked`。
+    /
+     *队列槽位：按 `bigmapQueue.maxBuildQueue` 全部返回，未解锁的标 `locked`。
      *
-     * 以前是 `slice(0, queueUnlocked)` —— 界面只看得见已解锁的那几条，玩家根本不知道
-     * 「上限是 3 条、还能解锁 2 条」，等于 `maxBuildQueue` 这列只在建造目录那一行生效。
+     *以前是 `slice(0, queueUnlocked)` —— 界面只看得见已解锁的那几条，玩家根本不知道
+     *「上限是 3 条、还能解锁 2 条」，等于 `maxBuildQueue` 这列只在建造目录那一行生效。
      */
     queues(): readonly IBigMapQueueView[] {
         const now = this.deps.now();
@@ -985,7 +985,7 @@ export class BigMapModel {
         });
     }
 
-    // -------------------------------------------------------------- 动作：建造
+    //-------------------------------------------------------------- 动作：建造
 
     startBuild(hexId: number, buildingId: number): IBigMapActionFeedback {
         if (this.isServerBase) return { ok: false, message: '请通过服务端提交操作' };
@@ -1047,8 +1047,8 @@ export class BigMapModel {
         if (!repository) return this.startBuild(hexId, buildingId);
         const check = bigMapCanPlace(this.config, this.base, this.unlockContext, buildingId, hexId, false);
         if (!check.ok) {
-            // 预检拦在这里的话，`CmdSlgBuildReqMsg` 一样不会发 —— 而且界面上只闪一句 reason。
-            // 留下日志才能区分「规则不让建」和「服务端没同步上来」。
+            //预检拦在这里的话，`CmdSlgBuildReqMsg` 一样不会发 —— 而且界面上只闪一句 reason。
+            //留下日志才能区分「规则不让建」和「服务端没同步上来」。
             console.warn(`[BigMap] 建造预检未通过（${buildingId}@${hexId}）：${check.reason}`);
             return { ok: false, message: check.reason };
         }
@@ -1081,7 +1081,7 @@ export class BigMapModel {
             this.emit();
             return { ok: true, message: '建筑已移动' };
         }
-        // 服务端只管「实例 + 目标格」，本地先把这一层的合法位置拦掉，避免白发一次请求。
+        //服务端只管「实例 + 目标格」，本地先把这一层的合法位置拦掉，避免白发一次请求。
         const check = bigMapCanMove(this.config, this.data.base, instanceId, hexId);
         if (!check.ok) return { ok: false, message: check.reason };
         const id = repository.serverInstanceId(instanceId);
@@ -1102,7 +1102,7 @@ export class BigMapModel {
         if (!repository) return { ok: false, message: '建筑尚未同步' };
         const ids = this.base.buildings.filter((build) => this.isResourceBuilding(build.buildingId)).map((build) => build.instanceId);
         if (ids.length === 0) return { ok: false, message: '暂无可收取建筑' };
-        // 协议已支持批量领取，一次结算，避免逐栋串行写请求。
+        //协议已支持批量领取，一次结算，避免逐栋串行写请求。
         return repository.collect(ids);
     }
 
@@ -1114,7 +1114,7 @@ export class BigMapModel {
     canCollectBuilding(buildingId: number): boolean { return this.isServerBase && this.serverBaseReady && this.isResourceBuilding(buildingId); }
     private isResourceBuilding(buildingId: number): boolean { return !!this.config.produce.get(buildingId)?.size; }
 
-    /** 点击建造区某格：建造中 → 取消；已建 → 升级；空 → 返回空（让界面进入摆放模式）。 */
+    / 点击建造区某格：建造中 → 取消；已建 → 升级；空 → 返回空（让界面进入摆放模式）。 */
     tapPlotCell(hexId: number): IBigMapActionFeedback {
         const instance = this.data.base.buildings.find((item) => item.hexId === hexId);
         if (instance) return this.startUpgrade(instance.instanceId);
@@ -1125,20 +1125,20 @@ export class BigMapModel {
         return { ok: false, message: '空位：先从建造列表选一座建筑' };
     }
 
-    // -------------------------------------------------------------- 动作：战斗
+    //-------------------------------------------------------------- 动作：战斗
 
     async refreshVisibleCamps(campIds: readonly number[]): Promise<void> {
         if (this.isDisposed || !this.deps.campRepository) return;
         const ids = campIds.filter((id) => this.worldInstance.cities.has(id));
         const repository = this.deps.campRepository;
-        // 口径（2026-11-11 山猫）：*「据点名单要跟据点信息一样，滑动的时候请求，然后把玩家摆放在
-        // 对应的 `pos`」* —— 地图上每个角色都落在自己那一格，没有名单就没有标记，所以阵容/状态
-        // 两条协议在**同一次视野刷新**里一起发。
+        //口径（2026-11-11 山猫）：*「据点名单要跟据点信息一样，滑动的时候请求，然后把玩家摆放在
+        //对应的 `pos`」* —— 地图上每个角色都落在自己那一格，没有名单就没有标记，所以阵容/状态
+        //两条协议在同一次视野刷新里一起发。
         //
-        // 流量由 `refreshRolesFor` 的两把闸门压住，不需要在这里再拆包：
-        // ① 每城走 `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口，窗口内不重发；
-        // ② 在途复用详情路径的 `roles:<id>` 锁，「拖到某城 + 同时点开它」只有一条请求。
-        // 长拖一次因此收敛成「新进视野的城各一条 RoleInfos」，与 Simple 的整批凑一起。
+        //流量由 `refreshRolesFor` 的两把闸门压住，不需要在这里再拆包：
+        //① 每城走 `BIGMAP_CAMP_REFRESH_SECONDS` 新鲜窗口，窗口内不重发；
+        //② 在途复用详情路径的 `roles:<id>` 锁，「拖到某城 + 同时点开它」只有一条请求。
+        //长拖一次因此收敛成「新进视野的城各一条 RoleInfos」，与 Simple 的整批凑一起。
         await Promise.all([
             ...ids.filter((id) => this.deps.rankProvider && !this.rankBoards.has(id))
                 .map((id) => this.refreshCityRank(id)),
@@ -1147,8 +1147,8 @@ export class BigMapModel {
             }),
             repository.refreshRolesFor(ids).then((loaded) => {
                 if (this.isDisposed || !loaded) return;
-                // 预取到名单就把状态推到 ready：否则「滑动进来过的城」打开驻守面板，
-                // 空名单会一直显示「加载中」（没人 ≠ 没查过）。
+                //预取到名单就把状态推到 ready：否则「滑动进来过的城」打开驻守面板，
+                //空名单会一直显示「加载中」（没人 ≠ 没查过）。
                 for (const id of ids) {
                     if (repository.rolesOf(id) !== null) this.campRoleStatuses.set(id, 'ready');
                 }
@@ -1161,8 +1161,8 @@ export class BigMapModel {
         const repository = this.deps.campRepository;
         if (this.isDisposed) return;
         if (!repository) return;
-        // 早退必须**逐条留痕**：这里以前是一行 `if (...) return`，点据点没反应时完全看不出
-        // 卡在哪一条（2026-10-30 排查「没看到发 CmdSlgCampInfoReqMsg」时踩的）。
+        //早退必须逐条留痕：这里以前是一行 `if (...) return`，点据点没反应时完全看不出
+        //卡在哪一条（2026-10-30 排查「没看到发 CmdSlgCampInfoReqMsg」时踩的）。
         if (!this.worldInstance.cities.has(campId)) {
             console.warn(`[BigMap] 据点 ${campId} 不在这张地图的城池里，跳过详情查询`,
                 `已知城池数=${this.worldInstance.cities.size}`);
@@ -1173,8 +1173,8 @@ export class BigMapModel {
         this.campDetailStatuses.set(campId, 'loading');
         this.campRoleStatuses.set(campId, rolesCached ? 'ready' : 'loading');
         this.emit();
-        // 两条协议并行：据点状态（占领/开放）与角色列表互不依赖，
-        // 串行会把详情面板的等待时间翻倍，且任一条失败不该拖住另一条。
+        //两条协议并行：据点状态（占领/开放）与角色列表互不依赖，
+        //串行会把详情面板的等待时间翻倍，且任一条失败不该拖住另一条。
         const [detailLoaded, rolesLoaded] = await Promise.all([
             repository.refreshDetail([campId], force),
             rolesCached ? Promise.resolve(true) : repository.refreshRoles(campId, force),
@@ -1185,19 +1185,19 @@ export class BigMapModel {
         this.emit();
     }
 
-    /**
-     * 迁城：把 `campId` 这个据点挪到 `pos`（`CmdSlgCampMoveReqMsg`，r882）。
+    /
+     *迁城：把 `campId` 这个据点挪到 `pos`（`CmdSlgCampMoveReqMsg`，r882）。
      *
-     * **成功后必须三处一起重拉**，缺一处就是"迁了但界面还停在上一个城"：
-     *   ① `SlgGameInfo.toCampId` —— 「我在哪座城」的唯一真源，它变了基地锚点/势力范围/距离全跟着变；
-     *   ② 据点状态（占领/开放）—— 迁出/迁入会改两边的 opType/state；
-     *   ③ 据点内角色列表 —— 自己这一条会从旧城消失、出现在新城。
+     *成功后必须三处一起重拉，缺一处就是"迁了但界面还停在上一个城"：
+     *  ① `SlgGameInfo.toCampId` —— 「我在哪座城」的唯一真源，它变了基地锚点/势力范围/距离全跟着变；
+     *  ② 据点状态（占领/开放）—— 迁出/迁入会改两边的 opType/state；
+     *  ③ 据点内角色列表 —— 自己这一条会从旧城消失、出现在新城。
      *
-     * 离线（无 `campRepository`）直接拒：迁城没有本地兜底 —— 本地挪一个"城"对服务端毫无意义，
-     * 下次拉 GameInfo 就会被打回原形。
+     *离线（无 `campRepository`）直接拒：迁城没有本地兜底 —— 本地挪一个"城"对服务端毫无意义，
+     *下次拉 GameInfo 就会被打回原形。
      *
-     * @param campId 据点 id
-     * @param pos 目标位置（协议"下标"；客户端不做换算，谁选的格谁负责）
+     *@param campId 据点 id
+     *@param pos 目标位置（协议"下标"；客户端不做换算，谁选的格谁负责）
      */
     async requestMoveCamp(campId: number, pos: number): Promise<IBigMapActionFeedback> {
         if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
@@ -1206,7 +1206,7 @@ export class BigMapModel {
         const oldCampId = this.playerCampId;
         const result = await repository.moveCamp(campId, pos);
         if (this.isDisposed) return { ok: false, message: BIGMAP_CAMP_MOVE_TEXT.disposed };
-        // 未确认也重拉：超时并不代表服务端没有迁城，写请求不能靠重发恢复。
+        //未确认也重拉：超时并不代表服务端没有迁城，写请求不能靠重发恢复。
         void this.deps.slgRepository?.refreshGame(true);
         if (oldCampId > 0 && oldCampId !== campId) void this.refreshCampDetail(oldCampId, true);
         void this.refreshCampDetail(campId, true);
@@ -1225,17 +1225,17 @@ export class BigMapModel {
         this.deps.rankProvider?.dispose?.();
     }
 
-    /**
-     * 当前攻城日程 —— 视图每帧直接读它（幂等），不自己算时间。
+    /
+     *当前攻城日程 —— 视图每帧直接读它（幂等），不自己算时间。
      *
-     * 日程来自 `bigmapSchedule` 表（`config.schedule`），代码里不写 `21:00` 这种字面量；
-     * 时钟走 `deps.now()` 端口（联机版换服务器校准秒即可），所以这里不出现 `Date.now()`。
+     *日程来自 `bigmapSchedule` 表（`config.schedule`），代码里不写 `21:00` 这种字面量；
+     *时钟走 `deps.now()` 端口（联机版换服务器校准秒即可），所以这里不出现 `Date.now()`。
      */
     cityTimeline(): IBigMapCityTimeline {
         return bigMapCityTimeline(this.config.schedule, this.deps.now());
     }
 
-    /** 某座城当前的榜单（未刷新过就是「只有你」的兜底榜，绝不返回 null）。 */
+    / 某座城当前的榜单（未刷新过就是「只有你」的兜底榜，绝不返回 null）。 */
     cityRankBoard(cityId: number): IBigMapCityRankBoard {
         const cached = this.rankBoards.get(cityId);
         if (cached) return cached;
@@ -1244,10 +1244,10 @@ export class BigMapModel {
         return buildSoloRankBoard(cityId, this.data.battle.cityWarScore[cityId] ?? 0);
     }
 
-    /**
-     * 刷新某座城的榜单 —— 进入视野/详情/排行页时调，缓存并通知重绘。
+    /
+     *刷新某座城的榜单 —— 进入视野/详情/排行页时调，缓存并通知重绘。
      *
-     * 联机失败保留旧榜；离线样本仍回退到 NPC 榜。退出后不应用异步结果。
+     *联机失败保留旧榜；离线样本仍回退到 NPC 榜。退出后不应用异步结果。
      */
     async refreshCityRank(cityId: number): Promise<void> {
         if (this.isDisposed || !this.config.cities.has(cityId)) return;
@@ -1267,12 +1267,12 @@ export class BigMapModel {
         this.emit();
     }
 
-    /**
-     * 联机据点「能不能打」。
+    /
+     *联机据点「能不能打」。
      *
-     * 协议（2026-10-30）只给 `opType`，**没有** `开放 / 攻城中 / 结算中` ——
-     * 所以判据拆成两段：服务器定「有没有人占」，日程定「现在能不能打」。
-     * 两段都必须过，缺一段就会出现「按钮亮着但服务端拒绝」或「到了开放时间还是灰的」。
+     *协议（2026-10-30）只给 `opType`，没有 `开放 / 攻城中 / 结算中` ——
+     *所以判据拆成两段：服务器定「有没有人占」，日程定「现在能不能打」。
+     *两段都必须过，缺一段就会出现「按钮亮着但服务端拒绝」或「到了开放时间还是灰的」。
      */
     private resolveCampAttackReason(
         campId: number,
@@ -1284,7 +1284,7 @@ export class BigMapModel {
         if (!this.config.camps.has(campId)) return BIGMAP_BATTLE_TEXT.campMissing;
         if (!this.deps.startBattle) return BIGMAP_CAMP_QUERY_TEXT.attackUnavailable;
         if (!info) {
-            // 详情查询与开战是独立协议；查询失败不能让开战入口永久不可用，资格以开战回包为准。
+            //详情查询与开战是独立协议；查询失败不能让开战入口永久不可用，资格以开战回包为准。
             return this.campDetailStatuses.get(campId) === 'failed' ? '' : BIGMAP_CAMP_QUERY_TEXT.pending;
         }
         if (info.opType === 1) return BIGMAP_BATTLE_TEXT.campOccupied;
@@ -1299,19 +1299,19 @@ export class BigMapModel {
         const playerCampId = this.playerCampId;
         const campInfo = this.deps.campRepository?.get(cityId) ?? null;
         const camp = this.config.camps.get(cityId);
-        // 一次快照只认一个时刻：日程在这里取一次，往下（能不能打 / 阶段文案 / gate）全部复用同一份。
-        // 分两次取 `now()` 时，跨过秒边界会让同一座城的「能不能打」和「阶段文案」来自两个时刻
-        // （详见 `cityTimeline`）。
+        //一次快照只认一个时刻：日程在这里取一次，往下（能不能打 / 阶段文案 / gate）全部复用同一份。
+        //分两次取 `now()` 时，跨过秒边界会让同一座城的「能不能打」和「阶段文案」来自两个时刻
+        //（详见 `cityTimeline`）。
         const timeline = this.cityTimeline();
         const campAttackReason = this.resolveCampAttackReason(cityId, campInfo, timeline);
-        // 联机档（有 `campInfo`）**只认 `opType`**：服务器能把这座据点下发出来，就说明它已开放，
-        // 未占领即可打；「现在能不能打」由 `resolveCampAttackReason` 再叠日程判。
-        // ⚠️ 这里**不能**先判 `city.available`：那是「本期开放哪一层」的配置开关，
-        // `withBigMapCampCities` 只把 `occupyType = 1`（个人层）标成可用，而 `bigMapCamp` 表里
-        // 81 座据点有 58 座是军团层（`occupyType = 2`）—— 先判它会把服务器明确下发的据点
-        // 全打成「未开放」（2026-10-30 反馈「点所有玩家据点都是未开放」），图标灰、点进去没内容。
-        // 早期协议的 `state`（0=未开放/1=开放/2=攻城中/3=结算中）已于 2026-10-30 移除，
-        // 不要为它留兼容分支：两套真源同时存在时必然打架。
+        //联机档（有 `campInfo`）只认 `opType`：服务器能把这座据点下发出来，就说明它已开放，
+        //未占领即可打；「现在能不能打」由 `resolveCampAttackReason` 再叠日程判。
+        // 这里不能先判 `city.available`：那是「本期开放哪一层」的配置开关，
+        //`withBigMapCampCities` 只把 `occupyType = 1`（个人层）标成可用，而 `bigMapCamp` 表里
+        //81 座据点有 58 座是军团层（`occupyType = 2`）—— 先判它会把服务器明确下发的据点
+        //全打成「未开放」（2026-10-30 反馈「点所有玩家据点都是未开放」），图标灰、点进去没内容。
+        //早期协议的 `state`（0=未开放/1=开放/2=攻城中/3=结算中）已于 2026-10-30 移除，
+        //不要为它留兼容分支：两套真源同时存在时必然打架。
         const state = campInfo
             ? (campInfo.opType === 1 ? 'occupied' : 'open')
             : bigMapCityState(city, context);
@@ -1329,9 +1329,9 @@ export class BigMapModel {
             )
             : null;
         const isPlayerCamp = playerCampId > 0 && cityId === playerCampId;
-        // 归属（2026-10-28）：联机档「已占领」只是「有人占了」，是不是我还要看 `toCampId`；
-        // 离线档没有 `toCampId`，本地进度里的「已占领」就是我打的，直接算己方 ——
-        // 不这么分，单机档一占城就会把整片地刷成「别人的红」。
+        //归属（2026-10-28）：联机档「已占领」只是「有人占了」，是不是我还要看 `toCampId`；
+        //离线档没有 `toCampId`，本地进度里的「已占领」就是我打的，直接算己方 ——
+        //不这么分，单机档一占城就会把整片地刷成「别人的红」。
         const territoryOwner = bigMapTerritoryOwnerOf(
             isPlayerCamp || (!this.deps.campRepository && state === 'occupied'),
             state === 'occupied',
@@ -1409,15 +1409,15 @@ export class BigMapModel {
         };
     }
 
-    /**
-     * 「探索」：挑当前可挑战、距离玩家基地最近的野怪。
+    /
+     *「探索」：挑当前可挑战、距离玩家基地最近的野怪。
      *
-     * 「打得了」直接复用 `monsterView().canAttack`（那一处已经把「是否解锁 / 是否在刷新 /
-     * 是否正在开战 / 依赖是否就绪」四层判定都收进去了）—— 这里不另写一套口径，
-     * 否则两处判定迟早漂移，出现「探索能定位、点进去却打不了」。
+     *「打得了」直接复用 `monsterView().canAttack`（那一处已经把「是否解锁 / 是否在刷新 /
+     *是否正在开战 / 依赖是否就绪」四层判定都收进去了）—— 这里不另写一套口径，
+     *否则两处判定迟早漂移，出现「探索能定位、点进去却打不了」。
      *
-     * 同距离取 `instanceId` 最小的，保证同一份数据每次挑到同一只。
-     * 返回 `null` = 一只都打不了（全锁 / 全在刷新 / 正在开战）。
+     *同距离取 `instanceId` 最小的，保证同一份数据每次挑到同一只。
+     *返回 `null` = 一只都打不了（全锁 / 全在刷新 / 正在开战）。
      */
     bestMonsterToFarm(): IBigMapMonsterView | null {
         if (this.isStartingBattle || this.isDisposed) return null;
@@ -1474,22 +1474,22 @@ export class BigMapModel {
     }
 
     attackCity(cityId: number): IBigMapActionFeedback {
-        // 当前协议只有查询，不能用本地结算冒充服务器攻城成功。
+        //当前协议只有查询，不能用本地结算冒充服务器攻城成功。
         if (this.deps.campRepository) return { ok: false, message: BIGMAP_CAMP_QUERY_TEXT.attackUnavailable };
         const city = this.config.cities.get(cityId);
         const view = this.cityView(cityId);
         if (!city || !view) return { ok: false, message: '城池不存在' };
-        // 日程是**唯一入口**：休战/结算期即使城池开放也不许打，否则「锁榜后还能刷战功」。
+        //日程是唯一入口：休战/结算期即使城池开放也不许打，否则「锁榜后还能刷战功」。
         if (!view.canAttack) return { ok: false, message: view.attackReason || '当前无法攻城' };
         const outcome = bigMapAttackCity(
             this.config, this.data.base, this.data.battle, city, view.distance,
             {
                 adventureChapter: this.deps.adventureChapter(),
                 openDay: this.deps.openDay,
-                // 名次 / 拥挤系数用当前榜单的真值，不再恒等于 1。
+                //名次 / 拥挤系数用当前榜单的真值，不再恒等于 1。
                 attackers: view.attackerCount,
                 rank: view.playerRank,
-                // 势力范围只认服务器下发的「所处城池」，与预览用同一判据。
+                //势力范围只认服务器下发的「所处城池」，与预览用同一判据。
                 playerCampId: this.playerCampId,
             },
         );
@@ -1499,7 +1499,7 @@ export class BigMapModel {
         this.applyBase(outcome.base);
         this.applyBattle(outcome.progress);
         this.persist();
-        // 战功变了名次就变：同步重算一次本地榜（联机时再让 provider 覆盖成服务器真值）。
+        //战功变了名次就变：同步重算一次本地榜（联机时再让 provider 覆盖成服务器真值）。
         this.rankBoards.set(
             cityId,
             buildBigMapCityRankBoard(this.config, cityId, this.data.battle.cityWarScore[cityId] ?? 0),
@@ -1528,9 +1528,9 @@ export class BigMapModel {
         return { ok: true, message: `造成 ${outcome.preview?.damage ?? 0} 伤害` };
     }
 
-    // -------------------------------------------------------------- 便捷查询
+    //-------------------------------------------------------------- 便捷查询
 
-    /** 玩家基地到某格的距离（界面显示「距离 x 格」）。基地位置见 `playerBaseHexId`。 */
+    / 玩家基地到某格的距离（界面显示「距离 x 格」）。基地位置见 `playerBaseHexId`。 */
     distanceFromBase(hexId: number): number {
         return bigMapHexDistance(
             this.worldInstance.rows, this.worldInstance.cols,
@@ -1538,12 +1538,12 @@ export class BigMapModel {
         );
     }
 
-    /** 主城建筑实例（建造区中心那座），给「主城」按钮用。 */
+    / 主城建筑实例（建造区中心那座），给「主城」按钮用。 */
     mainInstanceId(): number {
         return bigMapMainBuilding(this.config, this.data.base)?.instanceId ?? 0;
     }
 
-    /** 重置存档（调试面板用；正式版不给玩家入口）。 */
+    / 重置存档（调试面板用；正式版不给玩家入口）。 */
     resetSave(): IBigMapActionFeedback {
         if (this.isServerBase) return { ok: false, message: '联机基地不能重置本地存档' };
         const fresh = parseBigMapSave(null, this.config, this.deps.now()).save;

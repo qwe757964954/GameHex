@@ -8,7 +8,7 @@ import {
     RequestSlgCampSimpleInfo,
 } from './RequestBigMapCampMsg';
 
-/** 复用游戏服 socket 与消息队列，不在 feature 内另开连接。 */
+/ 复用游戏服 socket 与消息队列，不在 feature 内另开连接。 */
 export class GameNetBigMapCampGateway implements IBigMapCampGateway {
     private isDisposed = false;
 
@@ -56,8 +56,8 @@ export class GameNetBigMapCampGateway implements IBigMapCampGateway {
             this,
             (rsp) => { response = rsp; },
         );
-        // 迁城是**写操作**：重发可能真的执行两次（服务端按先到先得或直接拒），
-        // 与「领取/建造」同一口径 —— 关掉超时重发与重连恢复，失败只让上层重拉事实。
+        //迁城是写操作：重发可能真的执行两次（服务端按先到先得或直接拒），
+        //与「领取/建造」同一口径 —— 关掉超时重发与重连恢复，失败只让上层重拉事实。
         request.allowRetry = false;
         const expiresAt = Date.now() + 5000;
         request.canSend = () => !this.isDisposed && this.isOwnerCurrent() && Date.now() < expiresAt;

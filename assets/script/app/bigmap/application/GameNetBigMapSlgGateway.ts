@@ -7,13 +7,13 @@ import {
     RequestSlgBuildCancel, RequestSlgBuildMove, RequestSlgBuildCollect, RequestSlgBuildUnlockQueue,
 } from './RequestBigMapSlgMsg';
 
-/**
- * 同一类拦截只吼一次。
+/
+ *同一类拦截只吼一次。
  *
- * 🔴 为什么必须留下这条日志：`request` 在「没连上 / 存档已切换」时返回 `null`，
- * `BigMapSlgRepository.request` 把它当超时吞掉，最终界面只显示一句
- * 「正在同步基地信息」——**请求根本没发出去，但界面看起来像在等回包**。
- * 2026-11-11 用户反馈「放置时提示正在同步、服务器没收到请求」，就是被这层静默挡住的。
+ * 为什么必须留下这条日志：`request` 在「没连上 / 存档已切换」时返回 `null`，
+ *`BigMapSlgRepository.request` 把它当超时吞掉，最终界面只显示一句
+ *「正在同步基地信息」——请求根本没发出去，但界面看起来像在等回包。
+ *2026-11-11 用户反馈「放置时提示正在同步、服务器没收到请求」，就是被这层静默挡住的。
  */
 const warnedOnce = new Set<string>();
 function warnBlocked(reason: string): void {
@@ -22,7 +22,7 @@ function warnBlocked(reason: string): void {
     console.warn(`[BigMap] SLG 请求被拦下（${reason}），基地信息拉不到 ⇒ 建造/升级会一直提示「正在同步基地信息」`);
 }
 
-/** 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
+/ 复用现有 Socket、缓存与广播分发；页面生命周期由 Repository 管理。 */
 export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
     private isDisposed = false;
     constructor(private readonly isOwnerCurrent: () => boolean) {}
@@ -50,7 +50,7 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
             if (!value) throw new Error('[SLG] 非法建筑实例 ID');
             return value;
         };
-        /** 批量领取的实例列表：空数组、越界或非数字都拒绝，不编码截断。 */
+        / 批量领取的实例列表：空数组、越界或非数字都拒绝，不编码截断。 */
         const ids = (): number[] => {
             const raw = body.buildInstIds;
             if (!Array.isArray(raw) || raw.length === 0) throw new Error('[SLG] 非法建筑实例 ID');
@@ -83,8 +83,8 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
         request.allowRetry = name === 'CmdSlgGameInfoReqMsg' || name === 'CmdSlgActionUpdateReqMsg'
             || name === 'CmdSlgBuildInfoReqMsg';
         const sent = await net.send(request, false);
-        // 发送失败（协议未注册 / 通道关闭）同样要留痕，否则表现和「没连上」一模一样：
-        // 一切静默，界面只剩「正在同步基地信息」。
+        //发送失败（协议未注册 / 通道关闭）同样要留痕，否则表现和「没连上」一模一样：
+        //一切静默，界面只剩「正在同步基地信息」。
         if (!sent) warnBlocked(`发送失败 ${name}`);
         return sent && !this.isDisposed && this.isOwnerCurrent() ? response : null;
     }

@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from '../../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 /**
  * 中立资源组合表的**测试夹具**。
  *
@@ -10,7 +11,6 @@
  */
 import {
     compileZCNeutralResourceCatalog,
-    setZCNeutralResourceCatalog,
     type ZCNeutralResourceCatalog,
 } from '../../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 
@@ -39,13 +39,13 @@ export function installZCNeutralTestCatalog(
     gates: ReadonlyArray<Record<string, unknown>> = [],
 ): ZCNeutralResourceCatalog {
     const catalog = compileZCNeutralResourceCatalog(rows, TEST_CARDS as never, gates);
-    setZCNeutralResourceCatalog(catalog);
+    ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: catalog });
     return catalog;
 }
 
 /** 清空目录（用例之间相互隔离，避免上一个用例装进来的表泄漏）。 */
 export function clearZCNeutralTestCatalog(): void {
-    setZCNeutralResourceCatalog(null);
+    ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: undefined });
 }
 
 /** 资源项 id 的具名常量：用例里写 `ZC_TEST_ITEM.UnitCap` 比写 1300401 好读。 */

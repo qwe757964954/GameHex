@@ -57,7 +57,6 @@ import { toIdString, withTimeout } from '../net/RequestGuard';
 import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
 import { resolveRewardIconRef } from '../activity/LayerActivityArt';
 import {
-    CL_COUNTDOWN_LEAD_MS,
     buyCountOf,
     celebrationIdOf,
     configOfRankType,
@@ -67,7 +66,6 @@ import {
     enabledOf,
     limitBuyTextOf,
     myRankTextOf,
-    numAbbrOf,
     parseConfigRows,
     parsePayChannelRows,
     parseRankRows,
@@ -79,7 +77,6 @@ import {
     pricingOf,
     propertyWantTextOf,
     rankReachedOf,
-    rankSegmentOf,
     rankTextOf,
     rankTimeOf,
     ranksOf,

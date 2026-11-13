@@ -4,16 +4,16 @@ import { parseBigMapLayout, isBigMapLayoutCompatible, type IBigMapLayout } from 
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { completeBigMapCampLayout } from '../model/BigMapCampWorld';
 
-/**
- * 大地图**布局文件**的加载器（唯一允许碰 `cc` 的布局入口）。
+/
+ *大地图布局文件的加载器（唯一允许碰 `cc` 的布局入口）。
  *
- * 与 `TerritoryChapterLoader` 同一套口径：`AssetService` 加载、拿不到就返回 `null`，
- * 由调用方（`BigMapModel`）回退种子生成。**任何异常都不向外抛** —— 策划把图配错
- * 最多是「回到默认地图」，不能把大世界整个打不开。
+ *与 `TerritoryChapterLoader` 同一套口径：`AssetService` 加载、拿不到就返回 `null`，
+ *由调用方（`BigMapModel`）回退种子生成。任何异常都不向外抛 —— 策划把图配错
+ *最多是「回到默认地图」，不能把大世界整个打不开。
  *
- * 世界 1 使用策划布局 `config/bigmap-maps/bigMap`，尺寸以该布局为准。
- * 其余世界沿用 `config/bigmap-maps/world_<worldId 两位>`。
- * 不走配置表额外加列：多一列就多一处「导表漏填导致整图不见」的静默失效点。
+ *世界 1 使用策划布局 `config/bigmap-maps/bigMap`，尺寸以该布局为准。
+ *其余世界沿用 `config/bigmap-maps/world_<worldId 两位>`。
+ *不走配置表额外加列：多一列就多一处「导表漏填导致整图不见」的静默失效点。
  */
 export const BIGMAP_LAYOUT_DIR = 'config/bigmap-maps';
 
@@ -28,8 +28,8 @@ export async function loadBigMapLayout(
 ): Promise<IBigMapLayout | null> {
     const path = bigMapLayoutPath(config.world.worldId);
     try {
-        // `has` 先探一下：Cocos 对未进构建索引的路径抛的是
-        // 「Bundle resources doesn't contain xxx」，很容易被当成「资源丢了」去查半天。
+        //`has` 先探一下：Cocos 对未进构建索引的路径抛的是
+        //「Bundle resources doesn't contain xxx」，很容易被当成「资源丢了」去查半天。
         if (!(await assets.has(path, JsonAsset))) {
             console.log(`[BigMap] 没有布局文件，按种子生成世界：${path}`);
             return null;
@@ -40,7 +40,7 @@ export async function loadBigMapLayout(
             console.warn(`[BigMap] 布局世界 ID 不一致，回退种子生成：${path}`);
             return null;
         }
-        // bigMap 的 100×100 是正式地图尺寸；补齐城池也必须使用同一坐标系。
+        //bigMap 的 100×100 是正式地图尺寸；补齐城池也必须使用同一坐标系。
         const layoutConfig = config.world.worldId === 1
             ? { ...config, world: { ...config.world, rows: layout.rows, cols: layout.columns } }
             : config;

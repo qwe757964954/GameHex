@@ -104,7 +104,7 @@ export interface ZCBattleHero {
 
 export interface ZCBattleHeroAttrs {
     readonly heroId: number;
-    /** 与 cardLevelUp.attrList 同口径的绝对值，缺失项保留客户端计算结果。 */
+    /** 服务端最终绝对值，不再乘关卡倍率；缺失项保留客户端计算结果。 */
     readonly attributes: Readonly<Partial<ZCCardLevelAttrs>>;
 }
 

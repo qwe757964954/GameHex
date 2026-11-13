@@ -9,28 +9,28 @@ import {
     resBarSpendFx,
 } from '../../main/MainResBarFeedback';
 
-/** 飘字描边宽度（px）：飘字悬在资源卡上方，白字需要一圈黑边压住。 */
+/ 飘字描边宽度（px）：飘字悬在资源卡上方，白字需要一圈黑边压住。 */
 const FLOAT_OUTLINE_WIDTH = 2;
-/** 飘字起点离资源格上沿的间隙（px）。 */
+/ 飘字起点离资源格上沿的间隙（px）。 */
 const FLOAT_GAP = 2;
 
-/** 资源整数 → 顶部栏紧凑文本（≥1000 用一位小数 K），常态与反馈滚动共用同一口径。 */
+/ 资源整数 → 顶部栏紧凑文本（≥1000 用一位小数 K），常态与反馈滚动共用同一口径。 */
 export function formatBigMapResourceAmount(amount: number): string {
     const value = Math.floor(Number.isFinite(amount) ? amount : 0);
     return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : `${value}`;
 }
 
-/**
- * 大地图顶部单个资源格的反馈驱动（普通类，非组件）。
+/
+ *大地图顶部单个资源格的反馈驱动（普通类，非组件）。
  *
- * 大地图资源条只有 Value Label（没有主界面 Slot 的 icon / plus / 底色节点），
- * 无法直接复用 {@link MainResBarSlot}，但所有曲线（命中 / 扣除 / 飘字）都直接调用
- * `MainResBarFeedback` 的纯函数，这里只做「记 elapsed → 取 fx → 写 Label」，不重复算法。
+ *大地图资源条只有 Value Label（没有主界面 Slot 的 icon / plus / 底色节点），
+ *无法直接复用 {@link MainResBarSlot}，但所有曲线（命中 / 扣除 / 飘字）都直接调用
+ *`MainResBarFeedback` 的纯函数，这里只做「记 elapsed → 取 fx → 写 Label」，不重复算法。
  *
- * 与主界面 Slot 的关键差异：本类在 sync 时直接持有原始 amount 整数（Label 文本带 K 后缀，
- * 无法可靠反解析），滚动从 / 到都用原始整数，落文本时再走 K 格式化。
+ *与主界面 Slot 的关键差异：本类在 sync 时直接持有原始 amount 整数（Label 文本带 K 后缀，
+ *无法可靠反解析），滚动从 / 到都用原始整数，落文本时再走 K 格式化。
  *
- * 不用 tween：只记 hitElapsed / spendElapsed，由 Layout 的 update 统一推进。
+ *不用 tween：只记 hitElapsed / spendElapsed，由 Layout 的 update 统一推进。
  */
 export class BigMapResourceFeedback {
     private readonly label: Label;
@@ -41,18 +41,18 @@ export class BigMapResourceFeedback {
     private readonly baseB: number;
     private readonly baseA: number;
 
-    // 增加：命中（labelScale + 数字滚动）
+    //增加：命中（labelScale + 数字滚动）
     private hitElapsed = -1;
     private hitFrom = 0;
     private hitTo = 0;
-    // 扣除：白闪 + 跳动 + 再扣 + 飘字
+    //扣除：白闪 + 跳动 + 再扣 + 飘字
     private spendElapsed = -1;
     private spendFrom = 0;
     private spendTo = 0;
     private spendAmount = 0;
-    /** 数字后缀（体力的 /上限；其余为空），起播时锁定，滚动期间原样拼回。 */
+    / 数字后缀（体力的 /上限；其余为空），起播时锁定，滚动期间原样拼回。 */
     private suffix = '';
-    /** 上一次落定的原始整数（首帧 / 未知后为 null）。 */
+    / 上一次落定的原始整数（首帧 / 未知后为 null）。 */
     private settledAmount: number | null = null;
 
     private floatNode: Node | null = null;
@@ -70,7 +70,7 @@ export class BigMapResourceFeedback {
         this.baseG = color?.g ?? 255;
         this.baseB = color?.b ?? 255;
         this.baseA = color?.a ?? 255;
-        // 飘字节点由 prefab 预置在 Value 节点下（SpendFloat），缺了就降级为不飘字。
+        //飘字节点由 prefab 预置在 Value 节点下（SpendFloat），缺了就降级为不飘字。
         const floatNode = label.node.getChildByName('SpendFloat');
         this.floatNode = floatNode;
         this.floatLabel = floatNode?.getComponent(Label) ?? null;
@@ -80,10 +80,10 @@ export class BigMapResourceFeedback {
         return this.hitElapsed >= 0 || this.spendElapsed >= 0;
     }
 
-    /**
-     * 每次 render 同步该资源：检测 amount 变化并起播；返回 true = 反馈在播、Label 由本类接管。
+    /
+     *每次 render 同步该资源：检测 amount 变化并起播；返回 true = 反馈在播、Label 由本类接管。
      *
-     * amountKnown=false（联机余额未知）不起播并重置基线；首帧只建立基线，不演。
+     *amountKnown=false（联机余额未知）不起播并重置基线；首帧只建立基线，不演。
      */
     sync(view: IBigMapResourceView): boolean {
         if (view.amountKnown === false) {
@@ -103,7 +103,7 @@ export class BigMapResourceFeedback {
         return true;
     }
 
-    /** 逐帧推进两条互斥时间轴；true = 还在播。 */
+    / 逐帧推进两条互斥时间轴；true = 还在播。 */
     step(dt: number): boolean {
         const safe = Number.isFinite(dt) && dt > 0 ? dt : 0;
         let busy = false;
@@ -126,7 +126,7 @@ export class BigMapResourceFeedback {
         return busy;
     }
 
-    /** 立刻中止（切页 / 重置）：复原节点并收起飘字。 */
+    / 立刻中止（切页 / 重置）：复原节点并收起飘字。 */
     cancel(): void {
         this.cancelHit();
         this.cancelSpend();
@@ -211,13 +211,13 @@ export class BigMapResourceFeedback {
         this.label.color = new Color(this.baseR, this.baseG, this.baseB, this.baseA);
     }
 
-    /** 配置 prefab 预置的上方飘字（与 Value 平级），首次使用照抄 Value 排版并加描边。 */
+    / 配置 prefab 预置的上方飘字（与 Value 平级），首次使用照抄 Value 排版并加描边。 */
     private prepareFloat(): void {
         const node = this.floatNode;
         const floatLabel = this.floatLabel;
-        // 旧 prefab 没预置飘字节点：静默降级，不影响白闪/滚动主反馈。
+        //旧 prefab 没预置飘字节点：静默降级，不影响白闪/滚动主反馈。
         if (!node || !floatLabel) return;
-        // 飘字挂在 Value 下，用 Value 局部坐标：水平居中(0)，起点在 Value 上沿 + 间隙。
+        //飘字挂在 Value 下，用 Value 局部坐标：水平居中(0)，起点在 Value 上沿 + 间隙。
         const valueTransform = this.label.node.getComponent(UITransform);
         this.floatStartY = (valueTransform ? valueTransform.height / 2 : 0) + FLOAT_GAP;
         this.floatX = 0;

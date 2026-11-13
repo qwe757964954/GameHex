@@ -339,7 +339,6 @@ export class CardUpgradePage extends PopupBase {
 
     private renderHeader(data: ICardUpgradeViewState): void {
         const card = data.data.card;
-        const texts = CARD_LINEUP_TEXTS;
         this.nameLabel.string = card?.name ?? data.cardId;
         if (card) {
             const lineup = data.lineup;
@@ -389,7 +388,6 @@ export class CardUpgradePage extends PopupBase {
     // ------------------------------------------------------------------
 
     private renderDetail(detail: CardDetailPresentation | null): void {
-        const texts = CARD_LINEUP_TEXTS;
         if (!detail) {
             for (const label of this.statValueLabels().values()) label.string = '--';
             for (const label of this.statGainLabels().values()) label.string = '';

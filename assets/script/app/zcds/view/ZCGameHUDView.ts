@@ -12,7 +12,7 @@ import type { ZCOwner } from '../model/ZCMapConfig';
 // 迟早有一天两边对不上，而"哪边是对的"从表现上看不出来。
 import { ZC_MAP_ZOOM_MAX_DEFAULT, ZC_MAP_ZOOM_MIN_DEFAULT } from '../model/ZCMapConfig';
 import { getPlayerDeck } from '../model/ZCCombatCatalog';
-import { ZC_HEX_CONFIG } from '../model/ZCGameModel';
+import type { ZCHexConfig } from '../model/ZCMapConfig';
 import { mapToViewX, mapToViewY, ZC_HEX_VIEW_WIDTH, ZC_HEX_VIEW_HEIGHT, ZC_MAP_PRESENTATION_SCALE } from './ZCGameViewUtil';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
@@ -985,14 +985,19 @@ private fillPlayerRow(node: Node, index: number): void {
         background.setPosition((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0);
     }
 
-    private get mapBounds(): { minX: number; maxX: number; minY: number; maxY: number } {
-        const xs = ZC_HEX_CONFIG.map((hex) => mapToViewX(hex.x));
-        const ys = ZC_HEX_CONFIG.map((hex) => mapToViewY(hex.y));
-        return {
-            minX: Math.min(...xs) - ZC_HEX_VIEW_WIDTH / 2,
-            maxX: Math.max(...xs) + ZC_HEX_VIEW_WIDTH / 2,
-            minY: Math.min(...ys) - ZC_HEX_VIEW_HEIGHT / 2,
-            maxY: Math.max(...ys) + ZC_HEX_VIEW_HEIGHT / 2,
+    private mapBounds: { minX: number; maxX: number; minY: number; maxY: number } = null!;
+
+    /** 几何来自本局快照；换图时计算一次，相机拖动直接复用。 */
+    setMap(hexes: readonly ZCHexConfig[]): void {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const hex of hexes) {
+            const x = mapToViewX(hex.x), y = mapToViewY(hex.y);
+            minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+        }
+        this.mapBounds = {
+            minX: minX - ZC_HEX_VIEW_WIDTH / 2, maxX: maxX + ZC_HEX_VIEW_WIDTH / 2,
+            minY: minY - ZC_HEX_VIEW_HEIGHT / 2, maxY: maxY + ZC_HEX_VIEW_HEIGHT / 2,
         };
     }
 

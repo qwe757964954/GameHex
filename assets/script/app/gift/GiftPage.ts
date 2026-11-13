@@ -11,7 +11,6 @@ import {
 } from './GiftArt';
 import { giftRepository } from './GiftRepository';
 import type { IGiftRepository, IGiftSnapshot } from './GiftRepository';
-import { GiftLingYuView } from './GiftLingYuView';
 import type { IGiftShopRowView } from './GiftShopRow';
 import { GiftSpecialView } from './GiftSpecialView';
 import type { IGiftSubTabFrames } from './GiftSpecialView';

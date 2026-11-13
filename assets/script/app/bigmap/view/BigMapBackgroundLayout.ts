@@ -5,7 +5,7 @@ export interface IBigMapBackgroundLayout {
     readonly height: number;
 }
 
-/** 整纹理边界固定在世界坐标中，扩缩覆盖范围时不会改变平铺相位。 */
+/ 整纹理边界固定在世界坐标中，扩缩覆盖范围时不会改变平铺相位。 */
 export function bigMapBackgroundLayout(
     viewportWidth: number, viewportHeight: number, zoom: number,
     cameraX: number, cameraY: number, tileWidth: number, tileHeight: number,

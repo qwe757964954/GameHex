@@ -1,8 +1,9 @@
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { compileZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { readFileSync, readdirSync } from 'node:fs';
-import { setZCNeutralResourceCatalog, neutralResourceItemOf } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
+import { neutralResourceItemOf } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { ZCNeutralFeatureSystem, isZCAwakeMonster } from '../assets/script/app/zcds/model/systems/ZCNeutralFeatureSystem';
 import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -71,9 +72,9 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     const featureParam = type === 7 ? { gateIds: gates.map(gate => gate.id) }
         : type === 8 ? { damageRate: 1, speed: 2, ...param }
         : type === 9 ? { range: 6, uses: 3, cooldownSeconds: 8, ...param } : param;
-    setZCNeutralResourceCatalog(compileZCNeutralResourceCatalog([
+    ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: compileZCNeutralResourceCatalog([
         { groupId: 14001, id: 1400101, groupName: '测试资源', resourceType: type, weight: 10000, param: featureParam },
-    ], new Map([[card.id, card]]), gates));
+    ], new Map([[card.id, card]]), gates) });
     const config = { ...base, map: { ...base.map, resolvedResources: [] },
         rules: { ...base.rules, enemyAiIntervalSeconds: 10000 } };
     const state = ZCSnapshotCodec.createInitialState(config);

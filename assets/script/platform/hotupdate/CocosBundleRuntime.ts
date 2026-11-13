@@ -59,7 +59,7 @@ export class CocosBundleRuntime implements IHotUpdateBundleRuntime {
         if (existing) assetManager.removeBundle(existing);
 
         const bundle = await new Promise<AssetManager.Bundle>((resolve, reject) => {
-            (assetManager.loadBundle as any)(url, { version }, (error: Error | null, value?: AssetManager.Bundle) => {
+            assetManager.loadBundle(url, { version }, (error: Error | null, value?: AssetManager.Bundle) => {
                 if (error || !value) {
                     reject(error || new Error(`远端 Bundle 加载失败：${name}`));
                     return;
@@ -67,10 +67,9 @@ export class CocosBundleRuntime implements IHotUpdateBundleRuntime {
                 resolve(value);
             });
         });
-        const actualName = (bundle as any).name as string | undefined;
-        if (actualName && actualName !== name) {
+        if (bundle.name !== name) {
             assetManager.removeBundle(bundle);
-            throw new Error(`Bundle 名称不匹配：期望 ${name}，实际 ${actualName}`);
+            throw new Error(`Bundle 名称不匹配：期望 ${name}，实际 ${bundle.name}`);
         }
         this.loadedVersions.set(name, version);
         return bundle;

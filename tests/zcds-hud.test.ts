@@ -181,7 +181,6 @@ function createHud(
         '../../../vscrollview/VScrollView': { VirtualScrollView: class {} },
         '../../HeadArt': { HeadArt: { loadHeadFrame: async () => headFrameResult } },
         '../model/ZCCombatCatalog': { getPlayerDeck: () => [{ name: '测试卡' }] },
-        '../model/ZCGameModel': { ZC_HEX_CONFIG: hexes },
         // R22 相机：HUD 的倍率**默认值**直接从模型层取（`ZC_MAP_ZOOM_*_DEFAULT`），
         // 所以这是**值导入**、不是 `import type`，夹具必须给（不给会在 require 期断言炸掉）。
         '../model/ZCMapConfig': loadPureModule('assets/script/app/zcds/model/ZCMapConfig.ts'),
@@ -194,6 +193,7 @@ function createHud(
     const context = { exports: {} as any, require: (name: string) => { assert.ok(name in dependencies, name); return dependencies[name]; } };
     runInNewContext(code, context);
     const hud = new context.exports.ZCGameHUDView();
+    hud.setMap(hexes);
     hud.mapViewport = new FakeNode();
     hud.mapLayer = new FakeNode();
     // 铺底大图：`fitMapBackground` 现在走 prefab 绑定的 `mapBackground`（不再按名找子节点）。
@@ -1072,4 +1072,16 @@ test('没注入倍率区间时走模型层的缺省 0.6/1.2（不写死第二份
         hudModule.ZC_MAP_HOME_CENTER_OFFSET_Y, 100,
         '「主城位于中心点下方100px」的偏移量导出给用例读，别把 100 钉进断言里',
     );
+});
+
+test('HUD 地图边界按实例注入并缓存，不依赖共享地图', () => {
+    const { hud } = createHud();
+    hud.setMap([{ x: 10, y: 20 }, { x: 50, y: 80 }]);
+    const first = hud.mapBounds;
+    assert.strictEqual(hud.mapBounds, first);
+    const another = createHud().hud;
+    another.setMap([{ x: -500, y: -700 }]);
+    assert.strictEqual(hud.mapBounds, first);
+    hud.setMap([{ x: 100, y: 200 }]);
+    assert.notStrictEqual(hud.mapBounds, first);
 });

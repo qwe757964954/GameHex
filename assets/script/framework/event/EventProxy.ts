@@ -1,6 +1,5 @@
 import { ScriptObject } from '../base/ScriptObject';
 import { TMap } from '../collection/TMap';
-import { Log } from '../log/Log';
 import { Utils } from '../utils/Utils';
 
 /*

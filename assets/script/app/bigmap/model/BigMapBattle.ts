@@ -1,17 +1,17 @@
-/**
- * 攻城 / 野怪战斗结算 —— **纯规则，零 `cc` 依赖**。
+/
+ *攻城 / 野怪战斗结算 —— 纯规则，零 `cc` 依赖。
  *
- * 本期是「纯玩家个人战斗」版：没有联盟、没有战盟、没有实时 PVP，
- * 所以这里把文档里那一大套「多人混战 + 名次系数」简化成**单人 + NPC 竞争者**的可算版本：
+ *本期是「纯玩家个人战斗」版：没有联盟、没有战盟、没有实时 PVP，
+ *所以这里把文档里那一大套「多人混战 + 名次系数」简化成单人 + NPC 竞争者的可算版本：
  *
- * ```
- * 伤害   = (基础攻击 + 主城等级加成) × 势力范围系数（不在范围内 −20%）
- * 战功   = 边际递减(伤害) × 城池战功倍率 × 名次系数 × 拥挤系数
- * 城防   = 城池 defenseHp 逐次扣减；打穿 且 战功 ≥ minOccupyWarScore ⇒ 占领
- * ```
+ *```
+ *伤害   = (基础攻击 + 主城等级加成) × 势力范围系数（不在范围内 −20%）
+ *战功   = 边际递减(伤害) × 城池战功倍率 × 名次系数 × 拥挤系数
+ *城防   = 城池 defenseHp 逐次扣减；打穿 且 战功 ≥ minOccupyWarScore ⇒ 占领
+ *```
  *
- * 所有公式都写成**可复现的纯函数**并在 `docs/bigmap-系统实现说明.md` §2 记了推算口径，
- * 改数值只需改 `bigmapCityLevel` / `bigmapScoreRule`，不用动代码。
+ *所有公式都写成可复现的纯函数并在 `docs/bigmap-系统实现说明.md` §2 记了推算口径，
+ *改数值只需改 `bigmapCityLevel` / `bigmapScoreRule`，不用动代码。
  */
 import {
     BigMapQueueState,
@@ -25,7 +25,7 @@ import {
 import { bigMapMonsterUnlock, bigMapWithinCityRange, type IBigMapUnlockContext } from './BigMapUnlock';
 import { bigMapResCap } from './BigMapBase';
 
-/** 主城 1 级的基础攻城伤害；每升 1 级 +180（主城等级是唯一的「战力」来源）。 */
+/ 主城 1 级的基础攻城伤害；每升 1 级 +180（主城等级是唯一的「战力」来源）。 */
 export const BIGMAP_BASE_ATTACK = 420;
 export const BIGMAP_ATTACK_PER_MAIN_LEVEL = 180;
 export const BIGMAP_MONSTER_BATTLE_UNAVAILABLE = '野怪战斗尚未接入';
@@ -36,24 +36,24 @@ export const BIGMAP_BATTLE_TEXT = {
     unavailable: '当前无法进入战斗',
     campMissing: '据点未配置战斗',
     campUnavailable: '当前据点不可攻打',
-    /** 服务器 `SlgCampSimpleInfo.opType = 1`：已有玩家占领，本场不可再打。 */
+    / 服务器 `SlgCampSimpleInfo.opType = 1`：已有玩家占领，本场不可再打。 */
     campOccupied: '该据点已被占领',
     monsterMissing: '野怪不存在',
     monsterUnavailable: '当前野怪不可挑战',
 } as const;
 
-/** 玩家在大地图上的战斗进度（存档的一部分，与基地状态分开存，互不干扰）。 */
+/ 玩家在大地图上的战斗进度（存档的一部分，与基地状态分开存，互不干扰）。 */
 export interface IBigMapBattleProgress {
-    /** cityId → 剩余城防。缺省视为满血（`defenseHp`）。 */
+    / cityId → 剩余城防。缺省视为满血（`defenseHp`）。 */
     readonly cityHp: Readonly<Record<number, number>>;
-    /** cityId → 本轮累计战功（用于占领判定与界面进度条）。 */
+    / cityId → 本轮累计战功（用于占领判定与界面进度条）。 */
     readonly cityWarScore: Readonly<Record<number, number>>;
-    /** 野怪实例 id → 本轮累计战功（与城池分开记，避免 id 空间混淆）。 */
+    / 野怪实例 id → 本轮累计战功（与城池分开记，避免 id 空间混淆）。 */
     readonly monsterWarScore: Readonly<Record<number, number>>;
     readonly occupiedCityIds: readonly number[];
-    /** 野怪实例 id → 剩余血量。缺省视为满血。 */
+    / 野怪实例 id → 剩余血量。缺省视为满血。 */
     readonly monsterHp: Readonly<Record<number, number>>;
-    /** 野怪实例 id → 可再次挑战的时刻（逻辑秒）。 */
+    / 野怪实例 id → 可再次挑战的时刻（逻辑秒）。 */
     readonly monsterRespawnAt: Readonly<Record<number, number>>;
     readonly clearedMonsterLevel: number;
     readonly totalWarScore: number;
@@ -72,11 +72,11 @@ export function createBigMapBattleProgress(): IBigMapBattleProgress {
     };
 }
 
-/** 战斗进度 → 解锁判定需要的上下文（把两套状态粘起来，避免调用方自己拼）。 */
+/ 战斗进度 → 解锁判定需要的上下文（把两套状态粘起来，避免调用方自己拼）。 */
 export function bigMapUnlockContextOf(
     progress: IBigMapBattleProgress,
     adventureChapter: number,
-    /** 开服天数；`undefined` = 服务器还没下发，不做开服控制（见 `IBigMapUnlockContext.openDay`）。 */
+    / 开服天数；`undefined` = 服务器还没下发，不做开服控制（见 `IBigMapUnlockContext.openDay`）。 */
     openDay?: number,
 ): IBigMapUnlockContext {
     return {
@@ -87,29 +87,29 @@ export function bigMapUnlockContextOf(
     };
 }
 
-/** 单次攻打预览：界面在按下去之前就能显示「伤害 / 战功 / 消耗 / 是否在范围内」。 */
+/ 单次攻打预览：界面在按下去之前就能显示「伤害 / 战功 / 消耗 / 是否在范围内」。 */
 export interface IBigMapAttackPreview {
     readonly staminaCost: number;
     readonly damage: number;
     readonly warScore: number;
-    /** 基地是否在城池势力范围内；不在时伤害按配置削减。 */
+    / 基地是否在城池势力范围内；不在时伤害按配置削减。 */
     readonly inRange: boolean;
-    /** 伤害削减百分点（0 表示没有惩罚），界面用它显示「伤害 -20%」。 */
+    / 伤害削减百分点（0 表示没有惩罚），界面用它显示「伤害 -20%」。 */
     readonly damageCutPct: number;
 }
 
-/** 主城等级 → 大地图攻击力。 */
+/ 主城等级 → 大地图攻击力。 */
 export function bigMapAttackPower(config: IBigMapConfig, base: IBigMapBaseState): number {
     const main = base.buildings.find((item) => item.buildingId === config.mainBuildingId);
     const level = Math.max(1, main?.level ?? 1);
     return BIGMAP_BASE_ATTACK + (level - 1) * BIGMAP_ATTACK_PER_MAIN_LEVEL;
 }
 
-/**
- * 伤害转战功的**边际递减**：`cap × (1 − e^(−damage/cap))`。
+/
+ *伤害转战功的边际递减：`cap × (1 − e^(−damage/cap))`。
  *
- * 直线上限会让「堆一次超高伤害」直接吃满战功，文档要求递减，所以用指数饱和：
- * 伤害 = cap 时拿到约 63%，伤害 = 3×cap 时约 95%。
+ *直线上限会让「堆一次超高伤害」直接吃满战功，文档要求递减，所以用指数饱和：
+ *伤害 = cap 时拿到约 63%，伤害 = 3×cap 时约 95%。
  */
 export function bigMapMarginalWarScore(damage: number, cap: number): number {
     if (damage <= 0) return 0;
@@ -117,7 +117,7 @@ export function bigMapMarginalWarScore(damage: number, cap: number): number {
     return safeCap * (1 - Math.exp(-damage / safeCap));
 }
 
-/** 名次系数：1..10 取 `bigmapRank`，第 11 名起每降一名扣 `rankExtendStepPct`，有下限。 */
+/ 名次系数：1..10 取 `bigmapRank`，第 11 名起每降一名扣 `rankExtendStepPct`，有下限。 */
 export function bigMapRankCoeff(config: IBigMapConfig, rank: number): number {
     const table = config.ranks;
     const index = Math.max(1, Math.round(rank));
@@ -127,9 +127,9 @@ export function bigMapRankCoeff(config: IBigMapConfig, rank: number): number {
     return pct / 100;
 }
 
-/**
- * 拥挤系数：同一座城围攻的人越多，单次战功越低（抑制「一窝蜂」）。
- * `crowdBase = 0.5`、`crowdK = 0.5` 时：1 人 = 1.0，3 人 ≈ 0.68，10 人 ≈ 0.51。
+/
+ *拥挤系数：同一座城围攻的人越多，单次战功越低（抑制「一窝蜂」）。
+ *`crowdBase = 0.5`、`crowdK = 0.5` 时：1 人 = 1.0，3 人 ≈ 0.68，10 人 ≈ 0.51。
  */
 export function bigMapCrowdCoeff(config: IBigMapConfig, attackers: number): number {
     const { crowdBase, crowdK } = config.scoreRule;
@@ -137,7 +137,7 @@ export function bigMapCrowdCoeff(config: IBigMapConfig, attackers: number): numb
     return crowdBase + (1 - crowdBase) * Math.exp(-crowdK * (count - 1));
 }
 
-/** 攻城预览（不扣任何东西，纯算数）。 */
+/ 攻城预览（不扣任何东西，纯算数）。 */
 export function bigMapCityAttackPreview(
     config: IBigMapConfig,
     base: IBigMapBaseState,
@@ -154,39 +154,39 @@ export function bigMapCityAttackPreview(
     ));
     const warScore = Math.round(
         bigMapMarginalWarScore(damage, config.scoreRule.marginalDamageCap)
-        * config.cityLevels.get(city.cityLevel).warScoreRate
-        * bigMapRankCoeff(config, rank)
-        * bigMapCrowdCoeff(config, attackers),
+        *config.cityLevels.get(city.cityLevel).warScoreRate
+        *bigMapRankCoeff(config, rank)
+        *bigMapCrowdCoeff(config, attackers),
     );
     return { staminaCost: city.staminaCost, damage, warScore, inRange, damageCutPct: cutPct };
 }
 
-/** 一次攻打的完整结果。`progress` / `base` 为空表示前置检查没过（此时不改任何状态）。 */
+/ 一次攻打的完整结果。`progress` / `base` 为空表示前置检查没过（此时不改任何状态）。 */
 export interface IBigMapAttackOutcome {
     readonly ok: boolean;
     readonly reason: string;
     readonly preview: IBigMapAttackPreview | null;
     readonly base: IBigMapBaseState | null;
     readonly progress: IBigMapBattleProgress | null;
-    /** 本次打穿城防（第一次把血量打到 0）。 */
+    / 本次打穿城防（第一次把血量打到 0）。 */
     readonly breached: boolean;
-    /** 本次完成占领。 */
+    / 本次完成占领。 */
     readonly occupied: boolean;
-    /** 占领 / 击杀掉落。 */
+    / 占领 / 击杀掉落。 */
     readonly reward: Readonly<Partial<Record<BigMapResType, number>>>;
 }
 
-/** 攻城的外部条件（服务器下发的部分）。 */
+/ 攻城的外部条件（服务器下发的部分）。 */
 export interface IBigMapAttackOptions {
-    /** 冒险已通关章节数。 */
+    / 冒险已通关章节数。 */
     readonly adventureChapter: number;
-    /** 开服天数（1 起）。**不传 = 服务器还没下发，不做开服控制**。 */
+    / 开服天数（1 起）。不传 = 服务器还没下发，不做开服控制。 */
     readonly openDay?: number;
-    /** 同城围攻人数，缺省 1（单机版恒为 1）。 */
+    / 同城围攻人数，缺省 1（单机版恒为 1）。 */
     readonly attackers?: number;
-    /** 玩家当前名次，缺省 1。 */
+    / 玩家当前名次，缺省 1。 */
     readonly rank?: number;
-    /** 我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知/未归属 ⇒ 回退距离判定）。 */
+    / 我所处的城池 id（服务器 `SlgGameInfo.toCampId`，0 = 未知/未归属 ⇒ 回退距离判定）。 */
     readonly playerCampId?: number;
 }
 
@@ -213,15 +213,15 @@ function addRes(
     return { ...base, res };
 }
 
-/**
- * 攻打城池。
+/
+ *攻打城池。
  *
- * 一轮打完（`defenseHp <= 0`）时**不会自动占领**：还要战功达到
- * `bigmapCityLevel.minOccupyWarScore`，对应文档里「打穿只是第一步，站住才算占领」。
+ *一轮打完（`defenseHp <= 0`）时不会自动占领：还要战功达到
+ *`bigmapCityLevel.minOccupyWarScore`，对应文档里「打穿只是第一步，站住才算占领」。
  *
- * ⚠️ 这里刻意**不接 `IBigMapUnlockContext`**：解锁上下文里的 `occupiedCityIds` 必须与
- * `progress` 完全一致，两处各自维护迟早会不一致（前置城池判定就会错）。所以只接
- * 「章节 / 开服天数」两个标量，占领集合一律从 `progress` 现取。
+ * 这里刻意不接 `IBigMapUnlockContext`：解锁上下文里的 `occupiedCityIds` 必须与
+ *`progress` 完全一致，两处各自维护迟早会不一致（前置城池判定就会错）。所以只接
+ *「章节 / 开服天数」两个标量，占领集合一律从 `progress` 现取。
  */
 export function bigMapAttackCity(
     config: IBigMapConfig,
@@ -234,11 +234,11 @@ export function bigMapAttackCity(
     const openDay = options.openDay;
     const attackers = options.attackers ?? 1;
     const rank = options.rank ?? 1;
-    // 未开放 / 未解锁 / 已占领 都不允许再打。
+    //未开放 / 未解锁 / 已占领 都不允许再打。
     if (!city.available) return fail('该城池本期未开放');
     if (progress.occupiedCityIds.includes(city.cityId)) return fail('该城池已占领');
     if (options.adventureChapter < city.unlockChapter) return fail(`通关冒险第 ${city.unlockChapter} 章解锁`);
-    // 没拿到开服天数（`undefined`）就先不控制 —— 与 `bigMapCityUnlock` 同一口径。
+    //没拿到开服天数（`undefined`）就先不控制 —— 与 `bigMapCityUnlock` 同一口径。
     if (openDay !== undefined && openDay < city.openDay) return fail(`开服第 ${city.openDay} 天开放`);
     if (city.prevCityId !== 0 && !progress.occupiedCityIds.includes(city.prevCityId)) {
         return fail('需先占领前置城池');
@@ -273,7 +273,7 @@ export function bigMapAttackCity(
         progress: {
             ...progress,
             cityHp: { ...progress.cityHp, [city.cityId]: occupied ? city.defenseHp : hpAfter },
-            // 占领后战功清零重新计（下一轮归属争夺用），没占领则继续累加。
+            //占领后战功清零重新计（下一轮归属争夺用），没占领则继续累加。
             cityWarScore: { ...progress.cityWarScore, [city.cityId]: occupied ? 0 : warScoreTotal },
             occupiedCityIds: occupied
                 ? [...progress.occupiedCityIds, city.cityId]
@@ -288,7 +288,7 @@ export function bigMapAttackCity(
     };
 }
 
-/** 野怪预览：伤害 / 战功 / 行动力，规则与攻城一致但不吃势力范围惩罚。 */
+/ 野怪预览：伤害 / 战功 / 行动力，规则与攻城一致但不吃势力范围惩罚。 */
 export function bigMapMonsterAttackPreview(
     config: IBigMapConfig,
     base: IBigMapBaseState,
@@ -299,17 +299,17 @@ export function bigMapMonsterAttackPreview(
     const damage = Math.max(1, Math.round(bigMapAttackPower(config, base)));
     const warScore = Math.round(
         bigMapMarginalWarScore(damage, config.scoreRule.marginalDamageCap)
-        * bigMapRankCoeff(config, rank),
+        *bigMapRankCoeff(config, rank),
     );
     void monster;
     return { staminaCost: monster.staminaCost, damage, warScore, inRange: true, damageCutPct: 0 };
 }
 
-/**
- * 攻打野怪。
+/
+ *攻打野怪。
  *
- * 击杀后：发奖、记 `clearedMonsterLevel`（逐级解锁的唯一来源）、按 `respawnSeconds` 计时刷新。
- * 刷新期间再点会拿到 `ok: false`，界面据此显示倒计时。
+ *击杀后：发奖、记 `clearedMonsterLevel`（逐级解锁的唯一来源）、按 `respawnSeconds` 计时刷新。
+ *刷新期间再点会拿到 `ok: false`，界面据此显示倒计时。
  */
 export function bigMapAttackMonster(
     config: IBigMapConfig,
@@ -373,7 +373,7 @@ export function bigMapAttackMonster(
     };
 }
 
-/** 城池剩余城防百分比（界面进度条）。 */
+/ 城池剩余城防百分比（界面进度条）。 */
 export function bigMapCityHpRatio(
     progress: IBigMapBattleProgress,
     city: IBigMapCityConfig,
@@ -382,7 +382,7 @@ export function bigMapCityHpRatio(
     return Math.max(0, Math.min(1, hp / Math.max(1, city.defenseHp)));
 }
 
-/** 野怪剩余血量百分比。 */
+/ 野怪剩余血量百分比。 */
 export function bigMapMonsterHpRatio(
     config: IBigMapConfig,
     progress: IBigMapBattleProgress,
@@ -396,12 +396,12 @@ export function bigMapMonsterHpRatio(
     return Math.max(0, Math.min(1, hp / Math.max(1, offline.defenseHp)));
 }
 
-/** 建造队列是否空闲（攻城与建造互不阻塞，这里只给界面做「有队列正在跑」的角标）。 */
+/ 建造队列是否空闲（攻城与建造互不阻塞，这里只给界面做「有队列正在跑」的角标）。 */
 export function bigMapHasActiveQueue(base: IBigMapBaseState): boolean {
     return base.queues.some((slot) => slot.state === BigMapQueueState.Building);
 }
 
-/** 城池占位（供界面算「基地到城池」的距离时取锚点）。 */
+/ 城池占位（供界面算「基地到城池」的距离时取锚点）。 */
 export function bigMapCityAnchor(citySite: IBigMapCitySite): number {
     return citySite.anchorHexId;
 }

@@ -42,7 +42,6 @@ export class LoginController extends ControllerBase {
     private agreed = false;
     private showPassword = false;
     /** 注册后自动登录时保存账号密码，避免重复输入 */
-    private pendingAutoLogin: { account: string; password: string } | null = null;
 
     constructor(context: IControllerContext, private readonly options: ILoginControllerOptions) {
         super(context, 'login');
@@ -165,13 +164,11 @@ export class LoginController extends ControllerBase {
 
             // 注册成功后自动登录，无需用户再点一次
             if (event.kind === 'register') {
-                this.pendingAutoLogin = { account, password: event.password };
                 this.options.feedback.tip('注册成功，正在自动登录…');
                 const autoLoginResult = await this.options.service.login(account, event.password);
                 if (this.isDisposed) return;
                 if (!autoLoginResult.ok) {
                     this.options.feedback.tip(autoLoginResult.reason || '自动登录失败，请手动登录');
-                    this.pendingAutoLogin = null;
                     return;
                 }
                 entering = true;

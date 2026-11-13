@@ -1,68 +1,68 @@
-/**
- * 城池攻城日程 —— **纯规则，零 `cc` 依赖、零 `Date`**。
+/
+ *城池攻城日程 —— 纯规则，零 `cc` 依赖、零 `Date`。
  *
- * 文档口径：「所有时间均走配置，服务器统一定时切换，客户端只读倒计时」。
- * 所以这里只做一件事：把「当前时刻」翻译成一个**阶段 + 三个动作判据 + 距下一阶段的秒数**，
- * 视图每帧 `render(resolve(...))` 即可（`AGENTS.md`：渲染幂等，不许在 view 里累加计时器）。
+ *文档口径：「所有时间均走配置，服务器统一定时切换，客户端只读倒计时」。
+ *所以这里只做一件事：把「当前时刻」翻译成一个阶段 + 三个动作判据 + 距下一阶段的秒数，
+ *视图每帧 `render(resolve(...))` 即可（`AGENTS.md`：渲染幂等，不许在 view 里累加计时器）。
  *
- * ```
- * 00:00 ─────── 09:00 ─────────────── 21:00 ── 21:10 ────── 21:30 ─────── 次日 09:00
- *   closed      │      prepare          │  locked  │  settling  │   closed
- *               └ 可宣战 / 可打分 ──────┘ └ 停计分 ┘ └ 停攻+结算 ┘
- *   ↑ 00:00 ± crossDayStopMinutes 也是禁攻窗口（`bigMapReFreshRankStopTime`，首版 60 ⇒ 23:00~01:00）
- * ```
+ *```
+ *00:00 ─────── 09:00 ─────────────── 21:00 ── 21:10 ────── 21:30 ─────── 次日 09:00
+ *  closed      │      prepare          │  locked  │  settling  │   closed
+ *              └ 可宣战 / 可打分 ──────┘ └ 停计分 ┘ └ 停攻+结算 ┘
+ *  ↑ 00:00 ± crossDayStopMinutes 也是禁攻窗口（`bigMapReFreshRankStopTime`，首版 60 ⇒ 23:00~01:00）
+ *```
  *
- * 四个时点的真源：`bigmapSchedule` 表（`openTime/lockTime/settleTime/snapshotTime`），
- * 其中 `settleTime/snapshotTime` 会被 `gameConfig` 的 `bigMapStartCountRankTime` /
- * `bigMapRankRewardTime` 覆盖（见 `applyBigMapScheduleOverrides`），跨天禁攻只来自 `gameConfig`。
+ *四个时点的真源：`bigmapSchedule` 表（`openTime/lockTime/settleTime/snapshotTime`），
+ *其中 `settleTime/snapshotTime` 会被 `gameConfig` 的 `bigMapStartCountRankTime` /
+ *`bigMapRankRewardTime` 覆盖（见 `applyBigMapScheduleOverrides`），跨天禁攻只来自 `gameConfig`。
  *
- * ⚠️ 两个刻意的边界口径（文档未明写，等策划定稿前先按这套走，改这里即可）：
- * 1. **锁榜后仍可攻城，但不再计分** —— `canAttack` 覆盖 `prepare` + `locked`，`canScore` 只有 `prepare`；
- * 2. **归属随攻击即时变更**（沿用现有 `BigMapBattle` 实现），不是等到 `settling` 才切，
- *    所以这里不提供 `canChangeOwner`，免得两处真源。
+ * 两个刻意的边界口径（文档未明写，等策划定稿前先按这套走，改这里即可）：
+ *1. 锁榜后仍可攻城，但不再计分 —— `canAttack` 覆盖 `prepare` + `locked`，`canScore` 只有 `prepare`；
+ *2. 归属随攻击即时变更（沿用现有 `BigMapBattle` 实现），不是等到 `settling` 才切，
+ *   所以这里不提供 `canChangeOwner`，免得两处真源。
  *
- * 日程**真源是 `bigmapSchedule` 表**（`openTime/lockTime/settleTime/snapshotTime` 写 `"HH:MM"`），
- * `parseBigMapConfig` 把它解析成 `IBigMapConfig.schedule`；本文件的
- * `DEFAULT_BIGMAP_CITY_SCHEDULE` 只给测试夹具和兜底用。
+ *日程真源是 `bigmapSchedule` 表（`openTime/lockTime/settleTime/snapshotTime` 写 `"HH:MM"`），
+ *`parseBigMapConfig` 把它解析成 `IBigMapConfig.schedule`；本文件的
+ *`DEFAULT_BIGMAP_CITY_SCHEDULE` 只给测试夹具和兜底用。
  */
 
 const SECONDS_PER_DAY = 86400;
 
-/** 攻城日程的四个阶段。 */
+/ 攻城日程的四个阶段。 */
 export type BigMapCityPhase = 'closed' | 'prepare' | 'locked' | 'settling';
 
-/**
- * 日程表 —— 一天内的四个切换时点（均为**当日秒**）。
+/
+ *日程表 —— 一天内的四个切换时点（均为当日秒）。
  *
- * `utcOffsetSeconds` 是「本地时区相对 UTC 的偏移」，因为注入的时钟是 `Date.now()/1000`
- * （UTC 秒），而 09:00 / 21:00 是玩家眼里的本地时间。东八区 = `8 * 3600`。
- * 联机版应由服务器下发，客户端不自己算 —— 改系统时区不该影响结算。
+ *`utcOffsetSeconds` 是「本地时区相对 UTC 的偏移」，因为注入的时钟是 `Date.now()/1000`
+ *（UTC 秒），而 09:00 / 21:00 是玩家眼里的本地时间。东八区 = `8 * 3600`。
+ *联机版应由服务器下发，客户端不自己算 —— 改系统时区不该影响结算。
  *
- * 真源 = `bigmapSchedule` 表（客户端由 `parseBigMapConfig` 解析进来），
- * `DEFAULT_BIGMAP_CITY_SCHEDULE` 只是**测试夹具与兜底**，不要拿它当配置用。
+ *真源 = `bigmapSchedule` 表（客户端由 `parseBigMapConfig` 解析进来），
+ *`DEFAULT_BIGMAP_CITY_SCHEDULE` 只是测试夹具与兜底，不要拿它当配置用。
  */
 export interface IBigMapCitySchedule {
-    /** 本地时区偏移（秒），东八区 = 28800。 */
+    / 本地时区偏移（秒），东八区 = 28800。 */
     readonly utcOffsetSeconds: number;
-    /** 开放宣战/攻城（当日秒）。 */
+    / 开放宣战/攻城（当日秒）。 */
     readonly openAt: number;
-    /** 锁榜：停止计分（当日秒）。 */
+    / 锁榜：停止计分（当日秒）。 */
     readonly lockAt: number;
-    /** 停止攻城（当日秒），`gameConfig.bigMapStartCountRankTime` 覆盖它。 */
+    / 停止攻城（当日秒），`gameConfig.bigMapStartCountRankTime` 覆盖它。 */
     readonly settleAt: number;
-    /** 结算完成、下发排行奖励（当日秒），`gameConfig.bigMapRankRewardTime` 覆盖它。 */
+    / 结算完成、下发排行奖励（当日秒），`gameConfig.bigMapRankRewardTime` 覆盖它。 */
     readonly snapshotAt: number;
-    /**
-     * 跨天排行结算前后的**禁攻半径**（分钟）：每天 `00:00 ± 该值` 之内不可攻城。
+    /
+     *跨天排行结算前后的禁攻半径（分钟）：每天 `00:00 ± 该值` 之内不可攻城。
      *
-     * 来源 `gameConfig.bigMapReFreshRankStopTime`（首版 60 ⇒ 23:00~01:00）。
-     * 它与每日开放窗口是**两条独立约束**：正常 21:10 就停攻了，这条在窗口被拉长
-     * （赛季 / 活动改 `openTime`）时才起作用 —— 所以不能因为「当前被前一条覆盖」就不实现。
+     *来源 `gameConfig.bigMapReFreshRankStopTime`（首版 60 ⇒ 23:00~01:00）。
+     *它与每日开放窗口是两条独立约束：正常 21:10 就停攻了，这条在窗口被拉长
+     *（赛季 / 活动改 `openTime`）时才起作用 —— 所以不能因为「当前被前一条覆盖」就不实现。
      */
     readonly crossDayStopMinutes: number;
 }
 
-/** 兜底日程（与 `bigmapSchedule` 表首版同值）：测试夹具用，运行时以配置为准。 */
+/ 兜底日程（与 `bigmapSchedule` 表首版同值）：测试夹具用，运行时以配置为准。 */
 export const DEFAULT_BIGMAP_CITY_SCHEDULE: IBigMapCitySchedule = {
     utcOffsetSeconds: 8 * 3600,
     openAt: 9 * 3600,
@@ -72,7 +72,7 @@ export const DEFAULT_BIGMAP_CITY_SCHEDULE: IBigMapCitySchedule = {
     crossDayStopMinutes: 60,
 };
 
-/** 阶段中文名（界面直接用；放这里是为了「改文案不用翻 view」）。 */
+/ 阶段中文名（界面直接用；放这里是为了「改文案不用翻 view」）。 */
 export const BIGMAP_CITY_PHASE_LABEL: Readonly<Record<BigMapCityPhase, string>> = {
     closed: '休战',
     prepare: '可攻打',
@@ -80,36 +80,36 @@ export const BIGMAP_CITY_PHASE_LABEL: Readonly<Record<BigMapCityPhase, string>> 
     settling: '结算中',
 };
 
-/** 某一时刻的攻城时间轴快照 —— 视图只读它，不自己判断时间。 */
+/ 某一时刻的攻城时间轴快照 —— 视图只读它，不自己判断时间。 */
 export interface IBigMapCityTimeline {
     readonly phase: BigMapCityPhase;
-    /** 当日秒（0 ~ 86399.999，已叠加时区偏移）。 */
+    / 当日秒（0 ~ 86399.999，已叠加时区偏移）。 */
     readonly secondsOfDay: number;
-    /** 距下一阶段切换的秒数（`closed` 段的下一阶段是次日 09:00）。 */
+    / 距下一阶段切换的秒数（`closed` 段的下一阶段是次日 09:00）。 */
     readonly remainSeconds: number;
-    /** 能否发起攻城（`prepare` + `locked`，且不在跨天结算禁攻窗口内）。 */
+    / 能否发起攻城（`prepare` + `locked`，且不在跨天结算禁攻窗口内）。 */
     readonly canAttack: boolean;
-    /** 攻城是否计入当日战功（只有 `prepare`）。 */
+    / 攻城是否计入当日战功（只有 `prepare`）。 */
     readonly canScore: boolean;
-    /**
-     * 是否处在「跨天排行结算」禁攻窗口（`00:00 ± crossDayStopMinutes`）。
+    /
+     *是否处在「跨天排行结算」禁攻窗口（`00:00 ± crossDayStopMinutes`）。
      *
-     * 与 `phase` 正交：阶段照常显示，但这一位为真时任何阶段都不许攻城。
+     *与 `phase` 正交：阶段照常显示，但这一位为真时任何阶段都不许攻城。
      */
     readonly crossDayLock: boolean;
 }
 
-/**
- * 日程合法性校验 —— 时间必须同一天内严格递增（允许相邻相等，表示该阶段被省略）。
+/
+ *日程合法性校验 —— 时间必须同一天内严格递增（允许相邻相等，表示该阶段被省略）。
  *
- * 配置写错时直接抛错：日程错一天，全服玩家的战功和归属都错，绝不能静默退化。
- * `parseBigMapConfig` 解析 `bigmapSchedule` 时也走这里，保证「表和代码同一套校验」。
+ *配置写错时直接抛错：日程错一天，全服玩家的战功和归属都错，绝不能静默退化。
+ *`parseBigMapConfig` 解析 `bigmapSchedule` 时也走这里，保证「表和代码同一套校验」。
  */
 export function validateBigMapCitySchedule(schedule: IBigMapCitySchedule): void {
     if (!Number.isFinite(schedule.utcOffsetSeconds)) {
         throw new Error(`[BigMap] 攻城日程时区偏移非法：${schedule.utcOffsetSeconds}`);
     }
-    // 半天是上限：`00:00 ± 720 分钟` 会把整天铺满，等于「永远不许攻城」，必然是配错。
+    //半天是上限：`00:00 ± 720 分钟` 会把整天铺满，等于「永远不许攻城」，必然是配错。
     if (!Number.isFinite(schedule.crossDayStopMinutes)
         || schedule.crossDayStopMinutes < 0 || schedule.crossDayStopMinutes >= 720) {
         throw new Error(`[BigMap] 跨天禁攻分钟非法（0~719）：${schedule.crossDayStopMinutes}`);
@@ -134,11 +134,11 @@ export function validateBigMapCitySchedule(schedule: IBigMapCitySchedule): void 
     }
 }
 
-/**
- * 把配置表里的 `"09:00"` 折成当日秒（32400）。
+/
+ *把配置表里的 `"09:00"` 折成当日秒（32400）。
  *
- * 表里用字符串是为了策划能直接看懂；这里必须**严格**校验，否则 `"9:0"` / `"25:00"`
- * 这类脏值会静默变成 0 点或 90 分钟，日程整体错位而没有任何报错。
+ *表里用字符串是为了策划能直接看懂；这里必须严格校验，否则 `"9:0"` / `"25:00"`
+ *这类脏值会静默变成 0 点或 90 分钟，日程整体错位而没有任何报错。
  */
 export function parseBigMapClockTime(text: string, field = 'time'): number {
     const matched = /^(\d{1,2}):(\d{2})$/.exec(text.trim());
@@ -151,18 +151,18 @@ export function parseBigMapClockTime(text: string, field = 'time'): number {
     return hour * 3600 + minute * 60;
 }
 
-/** 把任意秒数折进 `[0, 86400)`（含负数，测试夹具会用到负时间戳）。 */
+/ 把任意秒数折进 `[0, 86400)`（含负数，测试夹具会用到负时间戳）。 */
 function wrapDay(seconds: number): number {
     const rest = seconds % SECONDS_PER_DAY;
     return rest < 0 ? rest + SECONDS_PER_DAY : rest;
 }
 
-/**
- * 取某一时刻的攻城时间轴。
+/
+ *取某一时刻的攻城时间轴。
  *
- * @param schedule 日程表（运行时来自 `IBigMapConfig.schedule`，即 `bigmapSchedule` 表）
- * @param nowSeconds 逻辑秒 —— 必须来自注入的时钟端口（`Date.now()/1000` 或服务器校准秒），
- *   **不要在 model 里直接 `Date.now()`**，否则改系统时间就能刷战功。
+ *@param schedule 日程表（运行时来自 `IBigMapConfig.schedule`，即 `bigmapSchedule` 表）
+ *@param nowSeconds 逻辑秒 —— 必须来自注入的时钟端口（`Date.now()/1000` 或服务器校准秒），
+ *  不要在 model 里直接 `Date.now()`，否则改系统时间就能刷战功。
  */
 export function bigMapCityTimeline(
     schedule: IBigMapCitySchedule,
@@ -193,8 +193,8 @@ export function bigMapCityTimeline(
         nextAt = schedule.openAt + SECONDS_PER_DAY;
     }
 
-    // 跨天排行结算禁攻窗口：`00:00 ± crossDayStopMinutes`。跨零点 ⇒ 拆成「当日开头」与
-    // 「当日末尾」两段，不能只判一头（只判开头会让 23:30 照样能打）。
+    //跨天排行结算禁攻窗口：`00:00 ± crossDayStopMinutes`。跨零点 ⇒ 拆成「当日开头」与
+    //「当日末尾」两段，不能只判一头（只判开头会让 23:30 照样能打）。
     const stopHalf = Math.max(0, schedule.crossDayStopMinutes) * 60;
     const crossDayLock = stopHalf > 0
         && (secondsOfDay < stopHalf || secondsOfDay >= SECONDS_PER_DAY - stopHalf);
@@ -209,17 +209,17 @@ export function bigMapCityTimeline(
     };
 }
 
-/** 「现在能不能打这座城」的结论：`reason` 为空串表示可以打。 */
+/ 「现在能不能打这座城」的结论：`reason` 为空串表示可以打。 */
 export interface IBigMapCityAttackGate {
     readonly canAttack: boolean;
     readonly reason: string;
 }
 
-/**
- * 把「城池解锁态」与「日程阶段」合成一个界面可直接用的结论。
+/
+ *把「城池解锁态」与「日程阶段」合成一个界面可直接用的结论。
  *
- * 顺序刻意按「玩家最想先知道的那条」排：未开放 → 未解锁 → 已占领 → 已攻破 → 日程。
- * 行动力 / 战力这些**战斗层**判据不在这里，由 `BigMapBattle` 给，避免两处真源。
+ *顺序刻意按「玩家最想先知道的那条」排：未开放 → 未解锁 → 已占领 → 已攻破 → 日程。
+ *行动力 / 战力这些战斗层判据不在这里，由 `BigMapBattle` 给，避免两处真源。
  */
 export function bigMapCityAttackGate(
     state: 'locked' | 'open' | 'breached' | 'occupied' | 'unavailable',
@@ -229,8 +229,8 @@ export function bigMapCityAttackGate(
     if (state === 'locked') return { canAttack: false, reason: '尚未解锁' };
     if (state === 'occupied') return { canAttack: false, reason: '已占领' };
     if (state === 'breached') return { canAttack: false, reason: '已攻破，等待结算' };
-    // 跨天禁攻排在阶段之前：此时阶段可能是「可攻打」（窗口被拉长时），
-    // 先报阶段会让玩家看到「可攻打 · 但打不了」。
+    //跨天禁攻排在阶段之前：此时阶段可能是「可攻打」（窗口被拉长时），
+    //先报阶段会让玩家看到「可攻打 · 但打不了」。
     if (timeline.crossDayLock) return { canAttack: false, reason: '跨天排行结算中，暂不可攻城' };
     if (!timeline.canAttack) {
         const label = BIGMAP_CITY_PHASE_LABEL[timeline.phase];
@@ -239,7 +239,7 @@ export function bigMapCityAttackGate(
     return { canAttack: true, reason: '' };
 }
 
-/** `gameConfig` 里的 `[时, 分]` 数组 → 当日秒；认不出返回 `null`（不抛，覆盖层要能降级）。 */
+/ `gameConfig` 里的 `[时, 分]` 数组 → 当日秒；认不出返回 `null`（不抛，覆盖层要能降级）。 */
 export function parseBigMapClockPair(value: unknown): number | null {
     if (Array.isArray(value) && value.length >= 2) {
         const hour = Number(value[0]);
@@ -258,7 +258,7 @@ export function parseBigMapClockPair(value: unknown): number | null {
     return null;
 }
 
-/** `gameConfig.bigMapReFreshRankStopTime`（分钟）→ 合法整数；越界 / 认不出返回 `null`。 */
+/ `gameConfig.bigMapReFreshRankStopTime`（分钟）→ 合法整数；越界 / 认不出返回 `null`。 */
 export function parseBigMapStopMinutes(value: unknown): number | null {
     const minutes = typeof value === 'string' ? Number(value.trim()) : value;
     if (typeof minutes !== 'number' || !Number.isFinite(minutes)) return null;
@@ -266,18 +266,18 @@ export function parseBigMapStopMinutes(value: unknown): number | null {
     return Math.floor(minutes);
 }
 
-/**
- * 用 `gameConfig` 的三个大地图时间点覆盖 `bigmapSchedule` 表值（2026-10-30 协议变更）。
+/
+ *用 `gameConfig` 的三个大地图时间点覆盖 `bigmapSchedule` 表值（2026-10-30 协议变更）。
  *
- * | `gameConfig.key` | 值 | 落到哪 |
- * | --- | --- | --- |
- * | `bigMapStartCountRankTime` | `[21,10]` | `settleAt`（停止攻城） |
- * | `bigMapRankRewardTime` | `[21,30]` | `snapshotAt`（结算完成、下发排行奖励） |
- * | `bigMapReFreshRankStopTime` | `60` | `crossDayStopMinutes`（跨天禁攻半径） |
+ *| `gameConfig.key` | 值 | 落到哪 |
+ *| --- | --- | --- |
+ *| `bigMapStartCountRankTime` | `[21,10]` | `settleAt`（停止攻城） |
+ *| `bigMapRankRewardTime` | `[21,30]` | `snapshotAt`（结算完成、下发排行奖励） |
+ *| `bigMapReFreshRankStopTime` | `60` | `crossDayStopMinutes`（跨天禁攻半径） |
  *
- * **降级口径**：`bigmapSchedule` 表本身写错仍然直接抛（错一天全服战功都错）；
- * 但这里是「另一张表的后配覆盖」，写错不该让整个大地图打不开 —— 校验不过就
- * `console.warn` 并退回表值。缺键 / 缺值同样退回表值，不猜默认。
+ *降级口径：`bigmapSchedule` 表本身写错仍然直接抛（错一天全服战功都错）；
+ *但这里是「另一张表的后配覆盖」，写错不该让整个大地图打不开 —— 校验不过就
+ *`console.warn` 并退回表值。缺键 / 缺值同样退回表值，不猜默认。
  */
 export function applyBigMapScheduleOverrides(
     schedule: IBigMapCitySchedule,

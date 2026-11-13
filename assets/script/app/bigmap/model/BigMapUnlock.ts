@@ -1,16 +1,16 @@
-/**
- * 大世界解锁链 —— **纯规则，零 `cc` 依赖**。
+/
+ *大世界解锁链 —— 纯规则，零 `cc` 依赖。
  *
- * 本期只有一条主链（用户 2026-10-17 明确的核心目标）：
+ *本期只有一条主链（用户 2026-10-17 明确的核心目标）：
  *
- * ```
- * 冒险关卡通关 ──┬─→ 基地建筑解锁（主城 1 章 / 资源田 2 章 / 货币田 3 章 / 科技树 4 章 / 功能建筑 5 章 / 装饰小玩法）
- *               └─→ 城池解锁（章节 + 开服天数 + 前置城池已占领，三重条件）
- * 野怪通关等级 ──→ 更高级野怪解锁（逐级，攻 5 级需先通关 4 级）
- * ```
+ *```
+ *冒险关卡通关 ──┬─→ 基地建筑解锁（主城 1 章 / 资源田 2 章 / 货币田 3 章 / 科技树 4 章 / 功能建筑 5 章 / 装饰小玩法）
+ *              └─→ 城池解锁（章节 + 开服天数 + 前置城池已占领，三重条件）
+ *野怪通关等级 ──→ 更高级野怪解锁（逐级，攻 5 级需先通关 4 级）
+ *```
  *
- * 所有判定都做成**纯函数 + 返回原因**，界面直接拿 `reason` 显示「未解锁：需通关第 3 章」，
- * 避免「按钮灰着但不知道为啥」。
+ *所有判定都做成纯函数 + 返回原因，界面直接拿 `reason` 显示「未解锁：需通关第 3 章」，
+ *避免「按钮灰着但不知道为啥」。
  */
 import {
     BigMapCityLayer,
@@ -21,28 +21,28 @@ import {
     type IBigMapMonsterConfig,
 } from './BigMapTypes';
 
-/** 解锁判定需要的玩家进度快照。 */
+/ 解锁判定需要的玩家进度快照。 */
 export interface IBigMapUnlockContext {
-    /** 冒险玩法已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径：0 表示一章都没过）。 */
+    / 冒险玩法已通关章节数（`TerritorySaveStoreAdapter.loadLastChapter` 的口径：0 表示一章都没过）。 */
     readonly adventureChapter: number;
-    /**
-     * 开服天数（1 起，开服当天 = 1）。
+    /
+     *开服天数（1 起，开服当天 = 1）。
      *
-     * ⚠️ **可选**：`undefined` = 服务器还没下发这个字段，此时**不参与任何解锁判定**
-     * （2026-10-30 山猫口径：「开服天数先打开，待服务器有，再做控制」）。
-     * 协议 `SlgGameInfo` 目前只有 `maxMonsterLevel` / `toCampId`，没有开服天数 ——
-     * 等后端补字段后，只要 `BigMapEntry` 把 `deps.openDay` 传进来就自动生效，不用回来改判定。
+     * 可选：`undefined` = 服务器还没下发这个字段，此时不参与任何解锁判定
+     *（2026-10-30 山猫口径：「开服天数先打开，待服务器有，再做控制」）。
+     *协议 `SlgGameInfo` 目前只有 `maxMonsterLevel` / `toCampId`，没有开服天数 ——
+     *等后端补字段后，只要 `BigMapEntry` 把 `deps.openDay` 传进来就自动生效，不用回来改判定。
      */
     readonly openDay?: number;
-    /** 已占领的城池 id 集合。 */
+    / 已占领的城池 id 集合。 */
     readonly occupiedCityIds: ReadonlySet<number>;
-    /** 已通关的最高野怪等级（0 = 一只都没打）。 */
+    / 已通关的最高野怪等级（0 = 一只都没打）。 */
     readonly maxClearedMonsterLevel: number;
 }
 
 export interface IBigMapUnlockResult {
     readonly unlocked: boolean;
-    /** 未解锁时的展示文案；已解锁为空串。 */
+    / 未解锁时的展示文案；已解锁为空串。 */
     readonly reason: string;
 }
 
@@ -52,17 +52,17 @@ export function bigMapLocked(reason: string): IBigMapUnlockResult {
     return { unlocked: false, reason };
 }
 
-/** 建筑解锁 —— **唯一来源是冒险章节通关**（用户要求）。 */
+/ 建筑解锁 —— 唯一来源是冒险章节通关（用户要求）。 */
 export function bigMapBuildingUnlock(
     building: IBigMapBuildingConfig,
     context: IBigMapUnlockContext,
 ): IBigMapUnlockResult {
-    // 策划表 `baseBuilding.unlockType`：1=章节 / 2=赛季开始天数 / 3=赛季小玩法积分购买。
-    // ⚠️ 只有 type=1 才有 `unlockChapter`；type=2/3 的章节号是 0，**不能**直接拿去比 ——
-    // 否则「装饰雕像（积分购买）」会因 0 > adventureChapter 为假而被当成已解锁。
+    //策划表 `baseBuilding.unlockType`：1=章节 / 2=赛季开始天数 / 3=赛季小玩法积分购买。
+    // 只有 type=1 才有 `unlockChapter`；type=2/3 的章节号是 0，不能直接拿去比 ——
+    //否则「装饰雕像（积分购买）」会因 0 > adventureChapter 为假而被当成已解锁。
     if (building.unlockType === 2) {
         const day = Math.max(0, building.unlockParam);
-        // 同样：没拿到开服天数（`undefined`）就先放行，等服务器有字段再控制。
+        //同样：没拿到开服天数（`undefined`）就先放行，等服务器有字段再控制。
         if (context.openDay !== undefined && context.openDay < day) {
             return bigMapLocked(`开服第 ${day} 天解锁`);
         }
@@ -77,7 +77,7 @@ export function bigMapBuildingUnlock(
     return OK;
 }
 
-/** 在基地建造列表里，当前进度下可见（已解锁）的建筑，按 `sort` 升序。 */
+/ 在基地建造列表里，当前进度下可见（已解锁）的建筑，按 `sort` 升序。 */
 export function bigMapUnlockedBuildings(
     config: IBigMapConfig,
     context: IBigMapUnlockContext,
@@ -87,7 +87,7 @@ export function bigMapUnlockedBuildings(
         .sort((a, b) => a.sort - b.sort || a.id - b.id);
 }
 
-/** 「建筑升级」功能本身也要解锁：文档写「第 1 章解锁主城，通过第 {3} 章后解锁建筑升级」。 */
+/ 「建筑升级」功能本身也要解锁：文档写「第 1 章解锁主城，通过第 {3} 章后解锁建筑升级」。 */
 export function bigMapUpgradeUnlock(config: IBigMapConfig, context: IBigMapUnlockContext): IBigMapUnlockResult {
     const chapter = config.queue.upgradeUnlockChapter;
     if (context.adventureChapter < chapter) {
@@ -96,12 +96,12 @@ export function bigMapUpgradeUnlock(config: IBigMapConfig, context: IBigMapUnloc
     return OK;
 }
 
-/**
- * 城池解锁：`available`（本期开放层）→ 已占领 → 章节 → 开服天数 → 前置城池。
+/
+ *城池解锁：`available`（本期开放层）→ 已占领 → 章节 → 开服天数 → 前置城池。
  *
- * ⚠️ **联机档不以这个函数判「可不可打」**：服务器 `SlgCampSimpleInfo` 只给
- * `opType`（有没有人占），能下发说明该据点已开放，未占领即可打 —— 判据在
- * `BigMapModel.cityView` / `resolveCampAttackReason`。这里只服务离线档与回退路径。
+ * 联机档不以这个函数判「可不可打」：服务器 `SlgCampSimpleInfo` 只给
+ *`opType`（有没有人占），能下发说明该据点已开放，未占领即可打 —— 判据在
+ *`BigMapModel.cityView` / `resolveCampAttackReason`。这里只服务离线档与回退路径。
  */
 export function bigMapCityState(city: IBigMapCityConfig, context: IBigMapUnlockContext): BigMapCityState {
     if (!city.available) return 'unavailable';
@@ -109,15 +109,15 @@ export function bigMapCityState(city: IBigMapCityConfig, context: IBigMapUnlockC
     return bigMapCityUnlock(city, context).unlocked ? 'open' : 'locked';
 }
 
-/** 城池未解锁的具体原因（按「最容易被玩家理解」的顺序报告，一次只说一条）。 */
+/ 城池未解锁的具体原因（按「最容易被玩家理解」的顺序报告，一次只说一条）。 */
 export function bigMapCityUnlock(city: IBigMapCityConfig, context: IBigMapUnlockContext): IBigMapUnlockResult {
     if (!city.available) return bigMapLocked('联盟 / 战盟玩法本期未开放');
     if (context.adventureChapter < city.unlockChapter) {
         return bigMapLocked(`通关冒险第 ${city.unlockChapter} 章解锁`);
     }
-    // 开服天数没拿到（`undefined`）就**不控制**，城池按章节 / 前置城池放行 ——
-    // 服务器还没下发这个字段，先打开（2026-10-30 山猫口径）。字段到位后自动生效。
-    // 文案按「1 起、开服当天 = 1」写，与 `bigMapCamp.openDay` 的配表和详情面板保持一致。
+    //开服天数没拿到（`undefined`）就不控制，城池按章节 / 前置城池放行 ——
+    //服务器还没下发这个字段，先打开（2026-10-30 山猫口径）。字段到位后自动生效。
+    //文案按「1 起、开服当天 = 1」写，与 `bigMapCamp.openDay` 的配表和详情面板保持一致。
     if (context.openDay !== undefined && context.openDay < city.openDay) {
         return bigMapLocked(`开服第 ${city.openDay} 天开放`);
     }
@@ -127,11 +127,11 @@ export function bigMapCityUnlock(city: IBigMapCityConfig, context: IBigMapUnlock
     return OK;
 }
 
-/**
- * 下一个「值得打」的城池：优先同环已开放且未占领，其次更低等级。
+/
+ *下一个「值得打」的城池：优先同环已开放且未占领，其次更低等级。
  *
- * 用于界面上的「主线指引」箭头 —— 纯玩家个人层的解锁是 4 条并行链，
- * 没有唯一目标，给个确定性排序比让玩家自己在 25 座城里找更靠谱。
+ *用于界面上的「主线指引」箭头 —— 纯玩家个人层的解锁是 4 条并行链，
+ *没有唯一目标，给个确定性排序比让玩家自己在 25 座城里找更靠谱。
  */
 export function bigMapNextTargetCity(
     config: IBigMapConfig,
@@ -143,14 +143,14 @@ export function bigMapNextTargetCity(
     return open.length > 0 ? open[0] : null;
 }
 
-/** 野怪逐级通关；新表等级减一为前置等级，旧表使用 preLevel。 */
+/ 野怪逐级通关；新表等级减一为前置等级，旧表使用 preLevel。 */
 export function bigMapMonsterUnlock(
     monster: IBigMapMonsterConfig,
     context: IBigMapUnlockContext,
 ): IBigMapUnlockResult {
     if (monster.battle) {
         if (monster.battle.unlockType !== 0) return bigMapLocked('野怪解锁条件待服务端确认');
-        // unlockType=0 只表示没有额外配表条件，逐级挑战仍受最高击杀等级约束。
+        //unlockType=0 只表示没有额外配表条件，逐级挑战仍受最高击杀等级约束。
         const preLevel = monster.level - 1;
         if (preLevel > context.maxClearedMonsterLevel) {
             return bigMapLocked(`需先通关 ${preLevel} 级野怪`);
@@ -165,17 +165,17 @@ export function bigMapMonsterUnlock(
     return OK;
 }
 
-/**
- * 攻打城池前的「势力范围」检查 —— 文档规定：
- * 基地不在城池势力范围内时，攻城伤害 −{offRangeDamageCutPct}%。
+/
+ *攻打城池前的「势力范围」检查 —— 文档规定：
+ *基地不在城池势力范围内时，攻城伤害 −{offRangeDamageCutPct}%。
  *
- * **判据（2026-10-23 后端补 `SlgGameInfo.toCampId` 后改口径）**：
- * - 有服务器下发的 `toCampId`（`> 0`）时，**它就是唯一真源** —— 在不在范围内 = 是不是我这座城；
- *   不再用几何距离近似（`radiateCapacity` 是配置半径，与服务器实际划的势力范围不是一回事）。
- * - `toCampId === 0` 表示「还没收到包 / 尚未归属」，此时才回退 `radiateCapacity` 距离判定。
+ *判据（2026-10-23 后端补 `SlgGameInfo.toCampId` 后改口径）：
+ *- 有服务器下发的 `toCampId`（`> 0`）时，它就是唯一真源 —— 在不在范围内 = 是不是我这座城；
+ *  不再用几何距离近似（`radiateCapacity` 是配置半径，与服务器实际划的势力范围不是一回事）。
+ *- `toCampId === 0` 表示「还没收到包 / 尚未归属」，此时才回退 `radiateCapacity` 距离判定。
  *
- * 这里只回答「在不在范围内」，削减数值由战斗模型取配置；
- * 这样界面能分开展示「距离过远，伤害 -20%」，而不是把这个惩罚藏在伤害数字里。
+ *这里只回答「在不在范围内」，削减数值由战斗模型取配置；
+ *这样界面能分开展示「距离过远，伤害 -20%」，而不是把这个惩罚藏在伤害数字里。
  */
 export function bigMapWithinCityRange(
     city: IBigMapCityConfig,
@@ -186,7 +186,7 @@ export function bigMapWithinCityRange(
     return hexDistance <= city.radiateCapacity;
 }
 
-/** 城池层级的展示名（线框图左上角标签用）。 */
+/ 城池层级的展示名（线框图左上角标签用）。 */
 export function bigMapCityLayerName(layer: BigMapCityLayer): string {
     switch (layer) {
         case BigMapCityLayer.Legion: return '军团';

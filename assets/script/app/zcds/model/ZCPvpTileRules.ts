@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 import { ZCCardRarity, ZCCardType, ZCDeckCard } from './ZCCombatCatalog';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 
@@ -86,19 +87,15 @@ export interface ZCPvpTileConfig {
     setCountLimit: number;
 }
 
-/** 地块配置由 pvpTile.json 注入（setPvpTileRules）；未加载配置时为空对象。 */
-let tileConfigs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>> =
+const EMPTY_TILE_CONFIGS: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>> =
     {} as Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
 
 export function getPvpTileConfigs(): Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>> {
-    return tileConfigs;
+    return ZC_RUNTIME_CONFIG.snapshot.tileConfigs ?? EMPTY_TILE_CONFIGS;
 }
 
-/** 全类型随机地块的金色保底抽数由 pvpPity.json 注入；未加载配置时为 0。 */
-let allRandomGoldPity = 0;
-
 export function getAllRandomGoldPity(): number {
-    return allRandomGoldPity;
+    return ZC_RUNTIME_CONFIG.snapshot.goldPity ?? 0;
 }
 
 export interface ZCPvpTileTypeWeight {
@@ -116,21 +113,8 @@ export interface ZCPvpTileTypeWeight {
  *
  * 2026-11-10 起不再有独立的「基础阵容权重随机表」(`pvpBaseTeamWeight`)。
  */
-let tileTypeWeights: readonly ZCPvpTileTypeWeight[] = [];
-
 export function getPvpTileTypeWeights(): readonly ZCPvpTileTypeWeight[] {
-    return tileTypeWeights;
-}
-
-/** 注入地块、生成权重与保底表解析出的规则；消费方通过 get* 读取。 */
-export function setPvpTileRules(
-    configs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>,
-    weights: readonly ZCPvpTileTypeWeight[],
-    goldPity: number,
-): void {
-    tileConfigs = configs;
-    tileTypeWeights = weights;
-    allRandomGoldPity = goldPity;
+    return ZC_RUNTIME_CONFIG.snapshot.tileWeights ?? [];
 }
 
 export interface ZCPvpDrawResult {

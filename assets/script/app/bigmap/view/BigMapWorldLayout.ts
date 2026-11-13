@@ -4,20 +4,20 @@ import {
 } from '../../../core/hex/HexGridLayout';
 import { bigMapHash } from '../model/BigMapWorld';
 
-/**
- * 大地图地块的格宽 / 格高。
+/
+ *大地图地块的格宽 / 格高。
  *
- * 2026-11-02 山猫口径：*「按当前的宽度，地块没跟上」* —— 建筑图标放大到设计稿原尺寸
- * （城池 235 / 基地 148 / 野怪 121）之后，147×96 的格子显得过小，建筑像浮在小格子上。
- * 这里把格子按**城池宽度对齐**：一格 = 235 宽，高按平顶六边形 147:96 的比例取 154。
+ *2026-11-02 山猫口径：*「按当前的宽度，地块没跟上」* —— 建筑图标放大到设计稿原尺寸
+ *（城池 235 / 基地 148 / 野怪 121）之后，147×96 的格子显得过小，建筑像浮在小格子上。
+ *这里把格子按城池宽度对齐：一格 = 235 宽，高按平顶六边形 147:96 的比例取 154。
  *
- * 世界地形使用连续背景与透明格，旧的六张沙地切图已停用。
- * 战斗 / 冒险场景走 `HexGridLayout` 的 130×119，**不受这里影响**。
+ *世界地形使用连续背景与透明格，旧的六张沙地切图已停用。
+ *战斗 / 冒险场景走 `HexGridLayout` 的 130×119，不受这里影响。
  */
 export const BIGMAP_TILE_WIDTH = 235;
-/**
- * 高度**由宽度按原稿 147:96 反算**，不取整 —— 平顶六边形共边的前提就是宽高比固定，
- * 取整（153 或 154）会让相邻格出现 1~2px 的缝或重叠。
+/
+ *高度由宽度按原稿 147:96 反算，不取整 —— 平顶六边形共边的前提就是宽高比固定，
+ *取整（153 或 154）会让相邻格出现 1~2px 的缝或重叠。
  */
 export const BIGMAP_TILE_HEIGHT = BIGMAP_TILE_WIDTH * 96 / 147;
 export const BIGMAP_COLUMN_STEP = BIGMAP_TILE_WIDTH * 0.75;
@@ -93,40 +93,40 @@ export interface IBigMapMarkerHitArea {
 }
 
 export const BIGMAP_MARKER_ICON_LIFT = 24;
-/** 建筑脚底到格子中心的下沉量：`iconY = height/2 - 16` ⇒ 建筑底边恒在 `-16`。 */
+/ 建筑脚底到格子中心的下沉量：`iconY = height/2 - 16` ⇒ 建筑底边恒在 `-16`。 */
 export const BIGMAP_MARKER_FOOT_LIFT = 16;
-/**
- * 名条命中框的兜底尺寸（设计稿「大地图3」里最大的那张：202×56）。
+/
+ *名条命中框的兜底尺寸（设计稿「大地图3」里最大的那张：202×56）。
  *
- * 真正的尺寸**按贴图来**（`bigMapMarkerLayout` 的入参）：名条有四张，
- * 野怪/关卡 202×56、玩家占领 193×54，写死一档会让小那张左右各多出 4.5px 的误点区。
+ *真正的尺寸按贴图来（`bigMapMarkerLayout` 的入参）：名条有四张，
+ *野怪/关卡 202×56、玩家占领 193×54，写死一档会让小那张左右各多出 4.5px 的误点区。
  */
 export const BIGMAP_MARKER_BADGE_WIDTH = 202;
 export const BIGMAP_MARKER_BADGE_HEIGHT = 56;
-/**
- * 名条落点：**压在建筑下方**，顶边与建筑底边（`-16`）齐平 —— 设计稿里三者
- * （野怪 `title_01` / 关卡 `title_02` / 玩家 `title_03/04`）都是紧贴建筑底边，重叠 0~5px。
+/
+ *名条落点：压在建筑下方，顶边与建筑底边（`-16`）齐平 —— 设计稿里三者
+ *（野怪 `title_01` / 关卡 `title_02` / 玩家 `title_03/04`）都是紧贴建筑底边，重叠 0~5px。
  *
- * ⚠️ 2026-11-02 前这里是**建筑上方**的编号牌（`mapMarkerBadgeY(height - 16)`）；
- * 蓝湖稿把名条挪到了建筑下方，这个方向变化同时影响 `pickBigMapMarker` 与视口裁剪。
+ * 2026-11-02 前这里是建筑上方的编号牌（`mapMarkerBadgeY(height - 16)`）；
+ *蓝湖稿把名条挪到了建筑下方，这个方向变化同时影响 `pickBigMapMarker` 与视口裁剪。
  */
 export const BIGMAP_MARKER_BADGE_Y = -(BIGMAP_MARKER_FOOT_LIFT + BIGMAP_MARKER_BADGE_HEIGHT / 2);
 
-/**
- * 建筑图标的宽度（蓝湖「大地图3」原稿**实测**，高度按贴图比例自动算）。
+/
+ *建筑图标的宽度（蓝湖「大地图3」原稿实测，高度按贴图比例自动算）。
  *
- * 原稿：城池（马戏团）235×232、基地/据点（树桩）148×160、野怪（骨门）121×129。
- * 图标底部固定在格中心下方 `BIGMAP_MARKER_FOOT_LIFT` 处，所以放大是**向上长**，
- * 名条不会被推走（`badgeY` 只吃 `FOOT_LIFT` 和自身高度）。
+ *原稿：城池（马戏团）235×232、基地/据点（树桩）148×160、野怪（骨门）121×129。
+ *图标底部固定在格中心下方 `BIGMAP_MARKER_FOOT_LIFT` 处，所以放大是向上长，
+ *名条不会被推走（`badgeY` 只吃 `FOOT_LIFT` 和自身高度）。
  *
- * ⚠️ 这三个数值比格子（147×96）大不少，是**设计稿的意图**：城池要盖住上方一格。
- * 点选热区会随之变大（`pickBigMapMarker` 用 `height/2` 判），相邻标记边缘可能互相覆盖。
+ * 这三个数值比格子（147×96）大不少，是设计稿的意图：城池要盖住上方一格。
+ *点选热区会随之变大（`pickBigMapMarker` 用 `height/2` 判），相邻标记边缘可能互相覆盖。
  */
 export const BIGMAP_MARKER_CITY_WIDTH = 235;
 export const BIGMAP_MARKER_BASE_WIDTH = 148;
 export const BIGMAP_MARKER_MONSTER_WIDTH = 121;
 
-/** 脚底固定在台面，名条压在建筑下方，显示与点击共用坐标。 */
+/ 脚底固定在台面，名条压在建筑下方，显示与点击共用坐标。 */
 export function bigMapMarkerLayout(
     width: number,
     height: number,
@@ -190,7 +190,7 @@ export function visibleBigMapHexes(layout: IHexGridLayout, rows: number, columns
         const rowEnd = Math.min(rows - 1, Math.floor((top.y - bounds.bottom + BIGMAP_TILE_HEIGHT / 2) / BIGMAP_ROW_STEP));
         for (let row = rowStart; row <= rowEnd; row += 1) visible.push(row * columns + column);
     }
-    // 下方地块的侧壁最后绘制，与公共六边形布局的绘制顺序一致。
+    //下方地块的侧壁最后绘制，与公共六边形布局的绘制顺序一致。
     return visible.sort((a, b) => {
         const pa = layout.points.get(a);
         const pb = layout.points.get(b);

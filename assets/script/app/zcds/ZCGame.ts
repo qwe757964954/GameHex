@@ -363,6 +363,7 @@ export class ZCGame extends Component {
         // gameVS 是嵌套实例引用，走根 PrefabInfo 的 targetOverrides）⇒ 不再 `|| addComponent` 兜底：
         // 那个分支永远走不到，真掉组件时反而会静默补一个空视图。
         this.hudView = hud.getComponent(ZCGameHUDView);
+        this.hudView.setMap(setupConfig.map.hexes);
         // HUD 的神器按钮原先显示 prefab 硬绑的通用图（`image/gameui/zd_faqi.png`），
         // 与本局携带的神器无关 ⇒ 棋盘显示剑、HUD 显示石锤。这里喂同一份已加载的帧。
         // ⚠️ 自选地图局**不遮蔽这个按钮**：它显示的是玩家自己的神器，不是地图里的随机资源

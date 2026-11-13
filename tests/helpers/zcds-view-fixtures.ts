@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from '../../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { runInNewContext } from 'node:vm';
@@ -213,6 +214,7 @@ export function loadViews() {
     }
     const cache: Record<string, any> = {
         cc,
+        './ZCRuntimeConfigStore': { ZC_RUNTIME_CONFIG },
         '../model/ZCGameModel': { ZC_HEX_CONFIG, ZC_SIMULATION_STEP_SECONDS: 0.05 },
         // 视图直接值导入 `ZC_OWNER_ORDER`（横幅落位按席位次序排格）。`load` 只认 `./X`
         // 这种同层相对名，`../model/ZCMapConfig` 会落到 `zcds/ui/` 那个兜底分支去读不存在的文件，

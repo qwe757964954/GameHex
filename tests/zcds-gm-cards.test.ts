@@ -1,3 +1,4 @@
+import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -6,7 +7,7 @@ import { runInNewContext } from 'node:vm';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import { configureZCMap, ZCGameModel, type ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
-import { getPlayerDeck, getEnemyDeck, setCardCatalog } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import { getPlayerDeck, getEnemyDeck } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 
@@ -23,7 +24,7 @@ const config = captureZCMatchConfig();
 const baseCard = getPlayerDeck().find(card => card.unitId);
 assert.ok(baseCard);
 const forcedCard = { ...baseCard, id: '999001', name: 'GM测试卡' };
-setCardCatalog(new Map([...getPlayerDeck(), ...getEnemyDeck(), forcedCard].map(card => [card.id, card])));
+ZC_RUNTIME_CONFIG.updateCatalogs({ cardCatalog: new Map([...getPlayerDeck(), ...getEnemyDeck(), forcedCard].map(card => [card.id, card])) });
 
 function fixture() {
     const game = new ZCGameModel(null, () => 0.1, config);

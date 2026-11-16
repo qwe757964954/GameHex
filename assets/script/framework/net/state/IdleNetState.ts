@@ -1,4 +1,3 @@
-import { NetworkRequest } from "../NetworkRequest";
 import { BaseNetState } from "./BaseNetState";
 
 export class IdleNetState extends BaseNetState {

@@ -14,21 +14,21 @@ export interface ZCClientCombatConfigResult {
 }
 
 export interface ZCClientCombatConfigOptions {
-    /** 仅供 ZCGame 的开局选点阶段使用；正式建模前仍必须解析成 fixed。 */
+    /** 仅供 ZCGame 的开局选点阶段使用；正式建模前仍必须解析成 fixed。*/
     readonly allowUnresolvedSelect?: boolean;
 }
 
 const ZC_MAX_BATTLE_HERO_CARDS = 8;
 
-/** 服务端 buff 的乘数键；仅作用于对应阵营成长后的单位属性。 */
+/** 服务端 buff 的乘数键；仅作用于对应阵营成长后的单位属性。*/
 export const ZC_BATTLE_RATE_KEYS = {
-    /** 攻击倍率。 */
+    /** 攻击倍率。*/
     attack: 'levelAttackRatio',
-    /** 生命倍率。 */
+    /** 生命倍率。*/
     hp: 'levelHpRatio',
 } as const;
 
-/** 将服务端字段投影为阵营倍率，不读取本地关卡配置，也不补缺失字段。 */
+/** 将服务端字段投影为阵营倍率，不读取本地关卡配置，也不补缺失字段。*/
 export function ownerRatesOf(unit: ZCBattleUnit | undefined): IZCBattleRates | undefined {
     if (!unit) return undefined;
     const hp = battleBuffRatio(unit.buffs, ZC_BATTLE_RATE_KEYS.hp);
@@ -66,7 +66,7 @@ function battleUnitsByOwner(
     return result;
 }
 
-/** homes 下标是地图席位，unitId 才是参战身份；同时转换分区，保证玩家视角与出生点一致。 */
+/** homes 下标是地图席位，unitId 才是参战身份；同时转换分区，保证玩家视角与出生点一致。*/
 function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undefined, selfRoleId?: string): ZCMatchConfig['map'] {
     const info = battle?.mapInfo;
     const map = config.map;
@@ -130,7 +130,7 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
     });
 }
 
-/** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。 */
+/** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。*/
 function buildBattleDeck(
     source: readonly ZCDeckCard[],
     heroes: readonly ZCBattleHero[],
@@ -234,7 +234,7 @@ function defaultHeroes(config: ZCMatchConfig, owner: ZCOwner): ZCBattleHero[] {
 /**
  * 将开始战斗回包中的多方单元映射到本地四个 owner。玩家优先按 roleId 识别；
  * 未命中时退回 campId 最小者。只有无服务端对局的本地模式使用默认卡组，空阵容与缺席位均不补英雄。
- */
+*/
 export function clientHeroIdsByOwner(
     config: ZCMatchConfig,
     battle: ZCBattleStart | null | undefined,
@@ -250,10 +250,10 @@ export function clientHeroIdsByOwner(
  * `pvpUnitGrowth` 从 1 级起（1 级 flat 全 0，数值等于卡牌基础值），而卡牌等级从 0 起，
  * 所以 0 级按 1 级取 —— 保住「已解锁未升级」这一档，取到的仍是基础值。
  *
- * 表里没有该等级（这类卡还没配成长）时**不传 level**：退回只吃技能档位与星级，
+ * 表里没有该等级（这类卡还没配成长）时不传 level：退回只吃技能档位与星级，
  * 行为与引入等级成长之前完全一致。这里必须判空，不能交给 `compileGrowthLoadout`
  * 抛错 —— 那里的异常会被上层记成 skipped，把这只武将的技能和星级一起丢掉。
- */
+*/
 function growthSelectionOf(
     catalogs: ZCModifierCatalogs,
     generalId: number,
@@ -275,20 +275,20 @@ function compileOwnerLoadouts(
     const loadouts: ZCCompiledModifierLoadout[] = [];
     for (const hero of heroes) {
         const generalId = hero.heroId;
-        //  星级不再进构筑（上游口径：星级表弃用）。`hasGeneral` 现在**只当「这张卡是不是老卡」的
-        //  兜底判据**用，不再往构筑里塞 `generalStar` —— 老卡的数值已经整体挪到成长表里。
+        //  星级不再进构筑（上游口径：星级表弃用）。`hasGeneral` 现在只当「这张卡是不是老卡」的
+        //  兜底判据用，不再往构筑里塞 `generalStar` —— 老卡的数值已经整体挪到成长表里。
         const hasGeneral = catalogs.generalStars.has(`${generalId}:1`);
         const heroAttrs = unit?.heroAttrs?.find((entry) => entry.heroId === generalId);
         const serverAttributes = heroAttrs?.attributes;
         const serverModifiers = heroAttrs?.modifiers;
-        //  ⚠️ 不能用 `serverAttributes` 的真假判：只下发增量属性（`attack.addRate`）时它是 `{}`，
+        //   不能用 `serverAttributes` 的真假判：只下发增量属性（`attack.addRate`）时它是 `{}`，
         //  `{}` 是 truthy ⇒ 会绕过下面的 continue 兜底，把没有任何数据的老卡也塞进编译器。
         const hasServerAttrs = (serverAttributes !== undefined && Object.keys(serverAttributes).length > 0)
             || (serverModifiers?.length ?? 0) > 0;
-        //  技能计划与星级是**两件事**（2026-11-10）：`pvpSkillPlan.unlockHeroLevel` 比的是
+        //  技能计划与星级是两件事（2026-11-10）：`pvpSkillPlan.unlockHeroLevel` 比的是
         //  「兵种等级」（= `hero.level`），与 `generalStar` 有没有行完全无关。
         //  原来 `heroLevel` 只写在 `hasGeneral` 分支里 ⇒ 没有星级行的卡（68015~68035 这一批
-        //  新卡，含 68025 大威天芦）**整份技能计划都编不出来**：`skillRuntime` 里没有
+        //  新卡，含 68025 大威天芦）整份技能计划都编不出来：`skillRuntime` 里没有
         //  `68025:30858`，`self_aura` 的 `auraCooldown` 无从读到，战场上既不放下光环、
         //  也不报任何错 —— 表现就是「技能一个都不放」。
         //  同一个坑还有一半：`!hasGeneral && !hasServerAttrs` 直接 `continue`，
@@ -300,9 +300,9 @@ function compileOwnerLoadouts(
             const compiled = compileZCCombatBuild(Object.assign({
                 unitId: String(generalId),
             }, growthSelectionOf(catalogs, generalId, hero.level), {
-                //  ⚠️ 必须无条件传：`compileZCCombatBuild` 只在 `heroLevel != null` 时才去编技能计划。
+                //   必须无条件传：`compileZCCombatBuild` 只在 `heroLevel != null` 时才去编技能计划。
                 heroLevel: skillPlanLevel,
-                //  ⚠️ 星级表（`generalStar`）2026-11-10 起**弃用且不再参与构筑**：
+                //   星级表（`generalStar`）2026-11-10 起弃用且不再参与构筑：
                 //  上游已经明确「星级表弃用、技能数值只用修改器表」，所以这里不再传
                 //  `generalStar`（原来传 `star: 1` 只是让老卡白吃一条星级加成）。
                 //  老卡因此少掉的那部分固定攻击，已经折算进 `pvpUnitGrowth.attackFlat`
@@ -326,7 +326,7 @@ function compileOwnerLoadouts(
 /**
  * 正式客户端开局构筑入口。后端阵容收敛为本局英雄卡池并编译修改器，系统卡继续来自
  * client/remoteRef；尚未完成行为移植的武将会被显式记录为 skipped，不会拖垮整局战斗。
- */
+*/
 export function buildZCClientCombatConfig(
     source: ZCMatchConfig,
     battle: ZCBattleStart | null | undefined,

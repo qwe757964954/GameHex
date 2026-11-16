@@ -25,7 +25,8 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 > `sever` 是仓库既有拼写（与 `tools/config/export_tafang.mjs` 一致），不是 `server` 的笔误。
 > 策划目录不是 Cocos 资源目录，**不生成 `.meta`**。
 > 不写策划 `client`：那是 eSon 配表中间目录，写进去会被 `ref_compress_json.py` 扫进
-> `assets/remoteRef` 形成冗余副本。
+> `assets/remoteRef` 形成冗余副本。`presets_io.publish()` 会拒绝落在 `client` 下的落点，
+> 并在每次发布时顺手清掉 `client` 里同名的历史遗留副本（`--dry-run` 只报告不删）。
 
 发布前会检查地图尺寸、初始格、固定站点、前置依赖、站点重叠、随机候选格和资源字段；站点数量不是 10 个只提示 warning，不阻断保存。校验只跑一次，两份产物按字节相同。
 
@@ -33,6 +34,8 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 右侧“批量设置固定资源奖励”可输入一个正整数奖励 ID，一键覆盖当前地图全部固定资源格的 `rewardId`。该操作可一次撤销，仍需 Ctrl+S 保存；其他类型站点不受影响。
 
 客户端静态模型位于 `assets/script/app/territory/model/TerritoryMapConfig.ts`。玩家占据、探索中、停用等进度状态不写进静态地图 JSON，应由后续 `TerritoryProgress` 运行时模型保存。
+
+巡逻宝箱：选择左侧“巡逻宝箱”工具绘制，或把所选站点类型改为“巡逻宝箱”，在右侧填写逗号分隔的战斗 ID（例如 `10001,10002,10003`）。切换格子、校验、保存或导出时会提交当前战斗 ID 输入；改变站点类型后点击“应用站点”。JSON 使用 `type: "patrolChest"` 和数字数组 `battleIds: [10001, 10002, 10003]`，保留填写顺序；允许编辑中暂时留空，保存/发布时必须至少有一个正整数 ID。普通站点仍使用原有 `configId`。本次仅提供编辑、发布和客户端静态解析，战斗 ID 的运行时选择与宝箱奖励规则另行接入。
 
 ### 随机站点的逐格建筑 ID（2026-10-27 批量填充）
 

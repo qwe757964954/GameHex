@@ -46,7 +46,6 @@ export class Pool<T, T1 = any, T2 = any, T3 = any, T4 = any, T5 = any, T6 = any>
     */
     constructor(fCreate: () => T, fDestroy: (ret: T) => void, fGet?: (t: T, p1?: T1, p2?: T2, p3?: T3, p4?: T4, p5?: T5, p6?: T6) => void, fReturn?: (ret: T) => boolean, retainCount: number = 10) {
         super()
-        let t = this
         this._createCount = 0;
         this.fCreate = fCreate
         this.fDestroy = fDestroy

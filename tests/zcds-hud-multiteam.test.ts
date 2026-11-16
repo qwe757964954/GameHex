@@ -35,6 +35,24 @@ test('TopInfoPanel keeps time and a centered ScoreLayout', () => {
         ['Score1', 'Score2', 'Score3', 'Score4']);
 });
 
+test('计时秒表贴在药丸左端，不压住时间文字', () => {
+    const time = nodeNamed('time')!;
+    const icon = nodeNamed('icon_time')!;
+    const label = nodeNamed('timeLab')!;
+    const timeSize = uiOf(time)!._contentSize;
+    const iconSize = uiOf(icon)!._contentSize;
+    const labelSize = uiOf(label)!._contentSize;
+    //  设计稿 8e042e77：药丸 131×48 贴左 21，秒表 44×53 贴左 11（中心 33），文字框 66..129。
+    //  秒表中心只比药丸左缘多 12px，看起来是「挂在药丸左端」；之前 x=0 让秒表落在药丸正中，直接压住 "2:56"。
+    const pillLeft = time._lpos.x - timeSize.width / 2;
+    const iconCenterX = time._lpos.x + icon._lpos.x;
+    assert.equal(iconCenterX - pillLeft, 12, '秒表中心应在药丸左端内侧 12px，而不是药丸正中');
+    const iconRight = iconCenterX + iconSize.width / 2;
+    const labelLeft = time._lpos.x + label._lpos.x - labelSize.width / 2;
+    assert.ok(iconRight <= labelLeft + 4,
+        `秒表右缘 ${iconRight} 不能压到文字左缘 ${labelLeft}`);
+});
+
 test('★★★旧的三个两方版实例必须已删除（LeftPlayer / RightPlayer / GameVS）', () => {
     // 留着会让"两方"和"多席位"两套同时渲染 —— 而且它们的节点尺寸是随手给的，
     // 会以奇怪的位置出现在新顶栏上。

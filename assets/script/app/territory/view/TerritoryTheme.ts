@@ -1,3 +1,5 @@
+import { TERRITORY_STATION_STATE, type TerritorySiteState } from '../application/TerritoryViewState';
+export { TERRITORY_STATION_STATE, type TerritorySiteState } from '../application/TerritoryViewState';
 import { Color } from 'cc';
 import type { TerritorySiteType } from '../model/TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
@@ -55,22 +57,6 @@ export const TERRITORY_COLORS = {
     // 状态表达交给「哪张地皮 + 哪个格面框」，见 `TerritoryMapView.paintHexes`。
     mapLabelText: new Color(62, 43, 30, 255),
 } as const;
-
-/**
- * 站点界面状态的命名常量（**唯一事实源**：`TerritorySiteState` 由它推导）。
- *
- * ⚠️ 禁止写 `'owned'` / `state === 'exploring'` 这类裸字面量——状态改名或拼错时
- * 字面量比较会静默失配，走本表则编译期就暴露。
- */
-export const TERRITORY_STATION_STATE = {
-    owned: 'owned',
-    exploring: 'exploring',
-    available: 'available',
-    locked: 'locked',
-} as const;
-
-/** 站点在界面上的四种状态（判定在渲染层，颜色只在这里映射）。 */
-export type TerritorySiteState = typeof TERRITORY_STATION_STATE[keyof typeof TERRITORY_STATION_STATE];
 
 /** 站点底条颜色。 */
 export function territoryStationTint(state: TerritorySiteState): Color {

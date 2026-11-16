@@ -3,18 +3,18 @@
  *
  * 依据：skillAttrModifier映射清单_20260918.md（19 个未注册 type 的映射判定）。
  * 职责：把 ZCModifierEngine 输出的 ZCModifierCommand（字符串 type + 自由 data）
- *       翻译成占城强类型 effect（判别联合），供消费方（ZCGameModel 对局启动 / 状态系统）直接消费。
+ * 翻译成占城强类型 effect（判别联合），供消费方（ZCGameModel 对局启动 / 状态系统）直接消费。
  *
  * 设计约束：
- * - **纯函数**：不读表、不碰引擎状态，可单测；中文名 → 单位/卡 id 的解析通过
- *   resolvers 注入（占城 pvpCard 的 name 列在运行时由接入方提供）。
- * - **一条命令可产出多条 effect**：如「添加主公技」按拍板双落点产出 heroSkill + artifactSkill；
- *   「添加召唤物」产出 addUnit + 召唤物定时消失的 addStatus。
- * - **可忽略项显式落 'ignored'**：不静默丢弃，给 reason 可审计。
+ * - 纯函数：不读表、不碰引擎状态，可单测；中文名 → 单位/卡 id 的解析通过
+ * resolvers 注入（占城 pvpCard 的 name 列在运行时由接入方提供）。
+ * - 一条命令可产出多条 effect：如「添加主公技」按拍板双落点产出 heroSkill + artifactSkill；
+ * 「添加召唤物」产出 addUnit + 召唤物定时消失的 addStatus。
+ * - 可忽略项显式落 'ignored'：不静默丢弃，给 reason 可审计。
  * - 已注册的「修改属性 / 替换属性」不经过这里（引擎直接处理），但 classify 覆盖检查仍统计它们。
  *
  * 本文件只依赖 TS 标准库 + ZCModifierEngine 的类型，不依赖 Cocos API。
- */
+*/
 
 import type { ZCModifierCommand } from './ZCModifierEngine';
 
@@ -39,7 +39,7 @@ export type ZCMappedEffectKind =
 
 export interface ZCMappedEffectBase {
     kind: ZCMappedEffectKind;
-    /** 来源 modifier id（skillAttrModifier 行 id），全链路溯源。 */
+    /** 来源 modifier id（skillAttrModifier 行 id），全链路溯源。*/
     modifierId: number;
     notes?: string;
 }
@@ -49,12 +49,12 @@ export type ZCMappedEffect =
     | (ZCMappedEffectBase & { kind: 'cardToPool'; cardName: string })
     | (ZCMappedEffectBase & {
           kind: 'addUnit';
-          /** 占城单位 id（= pvpCard 卡行的 `unitId`）；resolvers 无法解析时为 undefined。 */
+          /** 占城单位 id（= pvpCard 卡行的 `unitId`）；resolvers 无法解析时为 undefined。*/
           unitId?: string;
           unitName?: string;
-          /** 招募数量（旧表「招募」键）。 */
+          /** 招募数量（旧表「招募」键）。*/
           count?: number;
-          /** 旧表「技能」id 列表（30011 等，供接入方挂 ZCAttackProfile 用）。 */
+          /** 旧表「技能」id 列表（30011 等，供接入方挂 ZCAttackProfile 用）。*/
           skillIds?: readonly number[];
       })
     | (ZCMappedEffectBase & { kind: 'useInitialCard'; cardName: string })
@@ -79,9 +79,9 @@ export type ZCMappedEffect =
 
 
 export interface ZCModifierResolvers {
-    /** 中文兵种/单位名 → pvpCard 的 `unitId`（如 '冰法师' → '68011'）；返回 undefined 表示未解析。 */
+    /** 中文兵种/单位名 → pvpCard 的 `unitId`（如 '冰法师' → '68011'）；返回 undefined 表示未解析。*/
     unitIdByName?: (name: string) => string | undefined;
-    /** 中文卡名 → pvpCard.id；返回 undefined 表示未解析。 */
+    /** 中文卡名 → pvpCard.id；返回 undefined 表示未解析。*/
     cardIdByName?: (name: string) => string | undefined;
 }
 
@@ -109,7 +109,7 @@ function asObject(value: unknown): Record<string, unknown> {
         : {};
 }
 
-/** 保留 kind 字面量类型，使展开后的对象可赋值给 ZCMappedEffect 联合对应成员。 */
+/** 保留 kind 字面量类型，使展开后的对象可赋值给 ZCMappedEffect 联合对应成员。*/
 function base<K extends ZCMappedEffectKind>(cmd: ZCModifierCommand, kind: K): ZCMappedEffectBase & { kind: K } {
     return { kind, modifierId: cmd.modifierId };
 }
@@ -123,7 +123,7 @@ function base<K extends ZCMappedEffectKind>(cmd: ZCModifierCommand, kind: K): ZC
  *
  * @param cmd ZCModifierEngine 输出的命令（type 未注册 → commands；已注册 type 不会走到这）。
  * @param resolvers 中文名 → 占城 id 的解析器（可缺省；缺省时 unitId/cardId 为 undefined，由接入方补）。
- */
+*/
 export function mapModifierCommand(
     cmd: ZCModifierCommand,
     resolvers: ZCModifierResolvers = {},
@@ -292,14 +292,14 @@ export type ZCModifierCoverageStatus = 'registered' | 'mapped' | 'ignored' | 'un
 export interface ZCModifierCoverageEntry {
     type: string;
     status: ZCModifierCoverageStatus;
-    /** ignored 时的理由 / mapped 时的 effect kind 集合。 */
+    /** ignored 时的理由 / mapped 时的 effect kind 集合。*/
     detail: string;
 }
 
 /**
  * 闭环检查：把表里出现的 type 集合过一遍，返回每个 type 的实现状态。
  * 接入方（启动阶段）调用：表中出现 'unknown' → 报错；'mapped/registered' → 已实现；'ignored' → 显式忽略。
- */
+*/
 export function classifyModifierTypes(typesInTable: readonly string[]): ZCModifierCoverageEntry[] {
     const seen = new Set<string>();
     const entries: ZCModifierCoverageEntry[] = [];
@@ -352,7 +352,7 @@ export function classifyModifierTypes(typesInTable: readonly string[]): ZCModifi
     return entries;
 }
 
-/** 便捷检查：表里 type 集合中是否存在未覆盖项。 */
+/** 便捷检查：表里 type 集合中是否存在未覆盖项。*/
 export function hasUncoveredModifierTypes(entries: readonly ZCModifierCoverageEntry[]): boolean {
     return entries.some((entry) => entry.status === 'unknown');
 }

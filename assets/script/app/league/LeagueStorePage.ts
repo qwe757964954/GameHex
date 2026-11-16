@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
  * 「联盟商店」弹窗（老端 `play/LayerLeagueStore`，`ui/League/LeagueStore`）。
  *
@@ -100,6 +102,7 @@ export class LeagueStorePage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
+        EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
         const button = this.closeButton?.getComponent(Button);
         if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueStore] CloseBtn 上没有 cc.Button，点击不会生效');
@@ -112,10 +115,12 @@ export class LeagueStorePage extends PopupBase {
     }
 
     protected onClose(): void {
+        this.busy = false;
         this.revision += 1;
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         super.onDestroy();
     }
@@ -216,12 +221,7 @@ export class LeagueStorePage extends PopupBase {
             return;
         }
         if (!this.beginWrite()) return;
-        try {
-            const result = await this.repository.buyStoreGoods(view.id, this);
-            await this.afterWrite(result);
-        } finally {
-            this.busy = false;
-        }
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'store', id: view.id } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -240,6 +240,15 @@ export class LeagueStorePage extends PopupBase {
         this.busy = true;
         return true;
     }
+
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
+        if (event.owner !== this) return;
+        try {
+            await this.afterWrite(event.status);
+        } finally {
+            this.busy = false;
+        }
+    };
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {

@@ -1,3 +1,4 @@
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -88,7 +89,7 @@ function stationRenderOf(site: Site, opts: RenderOptions = {}): Record<string, a
             isAreaPassed: () => opts.passed ?? false,
         },
     };
-    return (view as any).stationRenderOf(site, input) as Record<string, any>;
+    return stationRenderWithProjection(view)(site, input) as Record<string, any>;
 }
 
 // ============================================================
@@ -240,9 +241,7 @@ test('★预告判据四条同处一源，且与 syncGhosts 的「只画有 buil
     assert.ok(at > 0, '要能定位预告判据');
     const block = MAP_VIEW_SRC.slice(at, MAP_VIEW_SRC.indexOf('return {', at));
     assert.match(block, /\(input\.previewCells \?\? \[\]\)\.includes\(site\.cellId\)/);
-    for (const type of ['stage', 'boss', 'asyncPvp']) {
-        assert.match(block, new RegExp(`TERRITORY_SITE_TYPE\\.${type}`), `${type} 必须在预告名单里`);
-    }
+    assert.match(block, /station\.battle/, '战斗类型来自发布帧的共享投影');
     assert.match(block, /!!site\.buildingId/, '只有虚影承载格才挂气泡');
     assert.match(block, /territoryLevelBubbleText\(site, stage\) !== undefined/, '要有文案才挂');
     assert.match(block, /this\.stationIconOf\(site, stage, input\.art\)/, '锚点帧与虚影同源');

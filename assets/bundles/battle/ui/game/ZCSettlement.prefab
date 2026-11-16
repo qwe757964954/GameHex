@@ -5384,6 +5384,9 @@
       },
       {
         "__id__": 229
+      },
+      {
+        "__id__": 240
       }
     ],
     "_prefab": {
@@ -5865,5 +5868,24 @@
     "fileId": "eaw3nuSkGNXcuT7RmmT8jn",
     "instance": null,
     "targetOverrides": null
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "4e91dbcae0d24654861154"
+  },
+  {
+    "__type__": "616cdS59ZtIN5DOHmb9GgL7",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 218
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 239
+    },
+    "key": "BattleResult/BtnOk",
+    "_id": ""
   }
 ]

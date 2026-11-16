@@ -9,7 +9,7 @@ export const cellIdAt = hexIdAt;
 
 export const TERRITORY_MAP_KIND = 'territoryChapter';
 export const TERRITORY_VERSION = 1;
-export const TERRITORY_SITE_TYPES = Object.freeze(['stage', 'boss', 'asyncPvp', 'fixedResource', 'bonus']);
+export const TERRITORY_SITE_TYPES = Object.freeze(['stage', 'boss', 'asyncPvp', 'fixedResource', 'bonus', 'patrolChest']);
 
 const ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 const SITE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
@@ -140,6 +140,12 @@ export function normalizeTerritoryMap(data, fallbackId) {
     const unlock = normalizeUnlock(raw.unlock, label, issues, defaults);
     if (unlock.requiredCells.includes(cellId)) issues.push(`${label}.unlock.requiredCells cannot contain its own cellId`);
     const hasRewardId = raw.rewardId !== undefined;
+    if (type === 'patrolChest') {
+      if (!Array.isArray(raw.battleIds) || !raw.battleIds.length
+        || !raw.battleIds.every((id) => Number.isSafeInteger(id) && id > 0)) {
+        issues.push(`${label}.battleIds must be a non-empty array of positive integers`);
+      }
+    } else if (raw.battleIds !== undefined) issues.push(`${label}.battleIds is only valid for patrolChest sites`);
     if (hasRewardId && type !== 'fixedResource') issues.push(`${label}.rewardId is only valid for fixedResource sites`);
     if (hasRewardId && (!Number.isInteger(raw.rewardId) || raw.rewardId <= 0)) {
       issues.push(`${label}.rewardId must be a positive integer`);
@@ -149,6 +155,7 @@ export function normalizeTerritoryMap(data, fallbackId) {
       type,
       cellId,
       footprint,
+      ...(type === 'patrolChest' && Array.isArray(raw.battleIds) ? { battleIds: [...raw.battleIds] } : {}),
       ...(stringValue(raw.configId, `${label}.configId`, issues) !== undefined ? { configId: raw.configId } : {}),
       ...(stringValue(raw.buildingId, `${label}.buildingId`, issues) !== undefined ? { buildingId: raw.buildingId } : {}),
       ...(hasRewardId && type === 'fixedResource' && Number.isInteger(raw.rewardId) && raw.rewardId > 0 ? { rewardId: raw.rewardId } : {}),

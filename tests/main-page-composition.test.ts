@@ -45,6 +45,7 @@ function fixture() {
         CardRepository: { cardRepository: { loadArtConfig: async () => ({}), loadLineupSnapshot: () => null, loadLineup: async () => { loads++; return { heroLevels: new Map() }; } } },
         RoleRepository: { roleRepository: { load: () => new Promise(resolve => pendingRoles.push(resolve)) } },
         FW: { FW: { showTip() {} } },
+        GuideComposition: { GuideComposition: class { dispose() {} } },
     };
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },

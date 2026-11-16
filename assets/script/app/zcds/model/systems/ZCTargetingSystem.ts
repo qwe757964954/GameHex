@@ -15,7 +15,7 @@ export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition
     readonly preferUnitTargets?: (unit: ZCUnitState) => boolean;
 }
 
-/** 每局独占的 BFS 工作区；访问标记避免每次创建 Set/Map。 */
+/** 每局独占的 BFS 工作区；访问标记避免每次创建 Set/Map。*/
 export class ZCPathWorkspace {
     readonly queue: number[] = [];
     readonly visited: Uint32Array;
@@ -27,21 +27,21 @@ export class ZCPathWorkspace {
     }
 }
 
-/** `findPathStep` 的入参：BFS 起点、目标判定、邻居图、可入判定与排序。 */
+/** `findPathStep` 的入参：BFS 起点、目标判定、邻居图、可入判定与排序。*/
 export interface IZCPathStepOptions {
     readonly start: number;
     readonly isGoal: (id: number) => boolean;
     readonly neighborsOf: (id: number) => readonly number[];
     readonly canEnter: (id: number) => boolean;
-    /** 邻居排序分值（小者先搜）；`neighborsAreRanked` 为 true 时不使用。 */
+    /** 邻居排序分值（小者先搜）；`neighborsAreRanked` 为 true 时不使用。*/
     readonly rank: (id: number) => number;
-    /** 传入则复用工作区、零分配；省略时走一次性 Set/Map。 */
+    /** 传入则复用工作区、零分配；省略时走一次性 Set/Map。*/
     readonly workspace?: ZCPathWorkspace;
-    /** `neighborsOf` 返回的邻居是否已按 rank 排好（true 时跳过每格排序）。 */
+    /** `neighborsOf` 返回的邻居是否已按 rank 排好（true 时跳过每格排序）。*/
     readonly neighborsAreRanked?: boolean;
 }
 
-/** 索敌排序、射程和通用 BFS；不持有对局状态。 */
+/** 索敌排序、射程和通用 BFS；不持有对局状态。*/
 export class ZCTargetingSystem {
     static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {
         const definition = context.effectiveDefinition(unit);
@@ -98,13 +98,9 @@ export class ZCTargetingSystem {
     }
 
     /**
-     * 冲刺触发距离（世界坐标）。
-     *
-     * 与 `attackReach` 的差别只有一处：**不走「射程 > 100 打 9 折」那条**。
-     * 那条是给远程投掷体算视觉落点的，冲刺距离纯粹是「跑到哪儿开始加速」，
-     * 打 9 折只会让冲锋莫名其妙提前 10%。碰撞半径照旧补上 —— 否则贴身时
-     * 「距离 ≤ 射程」和「距离 ≤ 冲刺距离」会给出互相矛盾的答案。
-     */
+     * 冲刺触发距离。与 `attackReach` 的区别是不走「射程 > 100 打 9 折」那条，
+     * 碰撞半径照旧补上，避免贴身时两套距离口径互相矛盾。
+    */
     static chargeReach(chargeDistance: number, targetBodyRadius: number, distanceScale: number): number {
         return (chargeDistance + targetBodyRadius) * distanceScale;
     }

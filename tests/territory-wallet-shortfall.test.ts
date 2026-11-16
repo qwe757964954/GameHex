@@ -1,3 +1,4 @@
+import { mapInputWithProjection } from './helpers/territory-map-view-sandbox';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -83,10 +84,10 @@ test('大额消耗按安全整数比较，不会因为浮点/科学计数法判�
 // ============================================================
 
 test('★★★未解锁格的银币数字：只看银币（体力不足不许染红）', () => {
-    const source = read(MAP_VIEW_PATH);
-    const start = source.indexOf('const short = territoryUnlockShortfall(input.wallet, site.unlock);');
+    const source = read('assets/script/app/territory/application/TerritoryViewState.ts');
+    const start = source.indexOf('const short = territoryUnlockShortfall(state.wallet, site.unlock);');
     assert.ok(start > 0, '条件格没接 `territoryUnlockShortfall` ⇒ 需求未落地');
-    const body = source.slice(start, source.indexOf('conditionTextColor:', start));
+    const body = source.slice(start, source.indexOf('staminaShort:', start));
     assert.match(body, /short\.silver/, '银币数字必须看 `short.silver`');
     assert.ok(!/short\.stamina(?!\s*\|\|)/.test(body.replace(/!\s*short\.stamina/g, '')),
         '银币数字不得由「体力不足」直接染红');
@@ -96,7 +97,7 @@ test('★★★未解锁格的银币数字：只看银币（体力不足不许�
         source.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)'));
     assert.ok(!/conditionTextColor: isOpenable &&/.test(render),
         '条件格颜色不许再只由 `isOpenable` 决定');
-    assert.match(render, /!isOpenable && !short\.stamina/,
+    assert.match(source, /!openable && !short\.stamina/,
         '「不可开」仍然染红，但必须排除「原因就是体力不足」那一种');
 });
 
@@ -105,7 +106,7 @@ test('★★★宝箱气泡的体力数字：只认 `stamina`', () => {
     const start = source.indexOf('levelBubbleTextColor: showHintBubble');
     assert.ok(start > 0, '宝箱气泡没接 `levelBubbleTextColor` ⇒ 体力不足时数字不会变红');
     const tail = source.slice(start, start + 300);
-    assert.match(tail, /territoryUnlockShortfall\(input\.wallet, site\.unlock\)\.stamina/,
+    assert.match(tail, /station\.staminaShort/,
         '体力那颗必须用 `.stamina`');
     assert.ok(!/\.silver/.test(tail), '体力数字不得被银币影响');
 });
@@ -183,7 +184,7 @@ test('★★★未解锁站点格：银币不够红 / 体力不够但银币够 �
     };
     const render = (wallet: { silver: number; stamina: number }, openable: boolean): Record<string, unknown> => {
         rendered.clear();
-        mapView.syncStations({
+        mapView.syncStations(mapInputWithProjection({
             map: { startCellId: 0, sites: [site], defaults: { staminaCost: 1 } },
             layout: { points: new Map([[1, { x: 10, y: 20 }]]) },
             revealedCells: [1],
@@ -195,7 +196,7 @@ test('★★★未解锁站点格：银币不够红 / 体力不够但银币够 �
             progress: { isCellUnlocked: () => false, isOwned: () => false },
             art: { randomSilverIcon: silverIcon },
             wallet,
-        });
+        }));
         return rendered.get(1) ?? {};
     };
 

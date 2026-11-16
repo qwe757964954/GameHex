@@ -1,4 +1,5 @@
-import { instantiate, Prefab, type Node } from 'cc';
+import { GuideComposition } from '../guide/GuideComposition';
+import type { Node } from 'cc';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
 import { CardLineupPage } from '../../card/CardLineupPage';
@@ -22,13 +23,8 @@ import { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { TerritoryEntry } from '../../territory/application/TerritoryEntry';
 import { FW } from '../../../framework/FW';
 import { TerritoryHeroProgressSource } from './TerritoryHeroProgressSource';
-import { GuideController } from '../../guide/application/GuideController';
-import { loadGuideDialog, loadGuidePortraits, loadGuideSteps } from '../../guide/application/GuideLoader';
-import { createGuideSaveStore } from '../../guide/application/GuideStorageAdapter';
-import { GuideDialogView } from '../../guide/ui/GuideDialogView';
+import { reportGuideComplete } from '../../guide/application/GuideEvents';
 
-/** 引导对话层 prefab（`assets/bundles/main-pages/ui/Guide/GuideDialog.prefab`）。 */
-const GUIDE_DIALOG_PREFAB = 'ui/Guide/GuideDialog';
 
 interface IPageLifecycle {
     readonly ready: () => void;
@@ -65,80 +61,10 @@ export class MainPageComposition extends ControllerBase {
         if (main) main.initialize(this.resources);
         this.territoryView = root.getComponentInChildren(MainTerritoryMap);
         if (this.territoryView) this.mountTerritory(this.territoryView, main);
-        this.mountGuide();
+        const guide = new GuideComposition(this.context, this.root, 'main', this.territoryView);
+        this.own(() => guide.dispose());
     }
 
-    /**
-     * 挂新手引导。
-     *
-     * 异步是因为要等 `guideStep` 表加载；主界面每次从战斗回来都会重建组合层，
-     * 而 `GuideProgress` 从存档恢复，所以重复启动是幂等的（不会重放已完成的步）。
-     *
-     * 表缺失 / 配置断链 ⇒ `start()` 返回 false，本次不做引导，主界面照常可用。
-     */
-    private mountGuide(): void {
-        void this.startGuide();
-    }
-
-    private async startGuide(): Promise<void> {
-        const steps = await loadGuideSteps();
-        // await 之后组合层可能已经被销毁（切页 / 退出对局），必须判。
-        if (this.isDisposed || steps.length === 0) return;
-
-        const view = await this.createGuideView();
-        if (!view) return;
-        if (this.isDisposed) { view.node.destroy(); return; }
-
-        // 台词与立绘并行取；任一缺失只让对应表现空着（Loader 内部已兜底）。
-        const [{ groups }, frames] = await Promise.all([
-            loadGuideDialog(),
-            loadGuidePortraits(this.resources),
-        ]);
-        if (this.isDisposed) { view.node.destroy(); return; }
-        view.initialize(groups, frames);
-
-        const controller = new GuideController(this.context, {
-            store: createGuideSaveStore(),
-            steps,
-            view: { render: (state, advance) => view.render(state, advance) },
-            failed: reportMainPageFailure,
-        });
-        if (!controller.start()) {
-            view.node.destroy();
-            controller.dispose();
-            return;
-        }
-        this.own(() => controller.dispose());
-    }
-
-    /**
-     * 实例化对话层，挂到主界面根节点末尾（兄弟序最大 = 盖在所有页面之上）。
-     *
-     * 初始 `active = false`：没启动 / 已走完引导时不能遮挡主界面，
-     * 显隐由 `GuideDialogView.render / hide` 自己管。
-     */
-    private async createGuideView(): Promise<GuideDialogView | null> {
-        try {
-            const prefab = await this.resources.assets.load(GUIDE_DIALOG_PREFAB, Prefab, { scope: this.resources.scope });
-            if (!prefab) {
-                console.warn('[MainPageComposition] 引导 prefab 加载失败，本次不做引导');
-                return null;
-            }
-            const node = instantiate(prefab);
-            node.active = false;
-            this.root.addChild(node);
-            const view = node.getComponent(GuideDialogView);
-            if (!view) {
-                console.warn('[MainPageComposition] 引导 prefab 上缺少 GuideDialogView');
-                node.destroy();
-                return null;
-            }
-            return view;
-        } catch (error) {
-            reportMainPageFailure(error);
-            return null;
-        }
-    }
     private registerPage(owner: object, controller: Pick<ControllerBase, 'dispose'>, lifecycle: IPageLifecycle): void {
         this.own(() => controller.dispose());
         this.pages.set(owner, lifecycle);
@@ -184,7 +110,13 @@ export class MainPageComposition extends ControllerBase {
             failed: reportMainPageFailure,
             popups: {
                 openEditor: () => { void LineupBoardPage.open(); },
-                openUpgrade: (unit, level) => { void CardUpgradePage.open({ userData: { card: unit, cardId: unit.id, level } satisfies ICardUpgradeOpenData }); }
+                openUpgrade: (unit, level) => {
+                    // 新手引导 6-2「选中态生效」：玩家点选了一张卡（表现为打开它的升级页）。
+                    // 表里的判据是 `cardSelected:68001`，这里只上报「选了哪张」，由 Controller 比对参数
+                    // —— 别把 68001 写进这里，换英雄就得改代码。
+                    reportGuideComplete('cardSelected', unit.id);
+                    void CardUpgradePage.open({ userData: { card: unit, cardId: unit.id, level } satisfies ICardUpgradeOpenData });
+                }
             },
         });
     }

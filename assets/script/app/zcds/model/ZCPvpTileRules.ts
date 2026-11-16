@@ -6,9 +6,9 @@ import type { ZCMatchConfig } from './ZCMatchConfig';
  * PVP 可开发地块的五种类别。
  *
  * 取值 = `pvpTile.json` 的 `id` 列（2026-10-13 从英文名改为数字）。
- * 代码里**一律用 `ZCPvpTileType.*` 常量**，不写裸数字 —— 存档（`ZCSnapshot`）里存的就是这些 id，
+ * 代码里一律用 `ZCPvpTileType.*` 常量，不写裸数字 —— 存档（`ZCSnapshot`）里存的就是这些 id，
  * 改值等于改存档格式。
- */
+*/
 export const ZCPvpTileType = {
     AllRandom: 10001,
     BarracksCommon: 10002,
@@ -18,54 +18,54 @@ export const ZCPvpTileType = {
 } as const;
 export type ZCPvpTileType = (typeof ZCPvpTileType)[keyof typeof ZCPvpTileType];
 
-/** 五种地块类型枚举，供运行时配置完整性校验使用（程序逻辑，非策划数值）。 */
+/** 五种地块类型枚举，供运行时配置完整性校验使用（程序逻辑，非策划数值）。*/
 export const ZC_PVP_TILE_TYPES: readonly ZCPvpTileType[] = Object.values(ZCPvpTileType);
 
 /**
- * 一个抽取集合包含的地块数 —— 口径是**每侧** 20 个地块（= 20 个镜像对，全场 40 格）。
+ * 一个抽取集合包含的地块数 —— 口径是每侧 20 个地块（= 20 个镜像对，全场 40 格）。
  *
  * 集合按「处理侧可玩格 id 升序」每 20 个切一批（与地形位置无关，可复现）；
- * `pvpBaseTeamWeight.setCountLimit` 在**每个集合内独立**计数。
+ * `pvpBaseTeamWeight.setCountLimit` 在每个集合内独立计数。
  * 2026-11-10 之前是整半场一个计数器，半场格数超过上限之和时金矿会被溢出兜底填到上限的数倍。
- */
+*/
 export const ZC_PVP_TILE_SET_SIZE = 20;
 
-/** 抽牌结果品级：`empty` 是「抽空/空地」，其余是卡牌品级 id。 */
+/** 抽牌结果品级：`empty` 是「抽空/空地」，其余是卡牌品级 id。*/
 export type ZCPvpDrawRarity = 'empty' | ZCCardRarity;
 
-/** 参与权重调整的品级（`empty` 不算品级，不参与）。 */
+/** 参与权重调整的品级（`empty` 不算品级，不参与）。*/
 export const ZC_PVP_RARITY_KEYS: readonly ZCCardRarity[] = ['green', 'blue', 'purple', 'gold'];
 
 /**
- * 关卡 `levelInfo.gradeProModifier`：品级 → 权重**乘数**。
+ * 关卡 `levelInfo.gradeProModifier`：品级 → 权重乘数。
  *
  * 表里实况是 `{ blue: 3, green: 2 }`（190 关）与空对象（17 关）。口径：
  *
- * - 缺省 / `0` / 非正数 / 非数字 ⇒ 该品级乘数 **1**（表说明的「0 = 没变化」）；
- * - 乘完在**非空品级内部**归一（见 `applyPvpRarityModifier`），所以 `empty` 的空手率不变，
- *   绿蓝抬升的份额由紫金（及彼此）分摊 —— 金卡占比被动下降。
+ * - 缺省 / `0` / 非正数 / 非数字 ⇒ 该品级乘数 1（表说明的「0 = 没变化」）；
+ * - 乘完在非空品级内部归一（见 `applyPvpRarityModifier`），所以 `empty` 的空手率不变，
+ * 绿蓝抬升的份额由紫金（及彼此）分摊 —— 金卡占比被动下降。
  *
- * 只给 **NPC 席位**用：玩家的抽卡始终是 `pvpTile.rarityWeights` 原表。
- */
+ * 只给 NPC 席位用：玩家的抽卡始终是 `pvpTile.rarityWeights` 原表。
+*/
 export type ZCPvpRarityModifier = Readonly<Partial<Record<ZCCardRarity, number>>>;
 
 /**
  * 单个席位在本局的抽卡规则（关卡难度旋钮）。
  *
- * 目前两项都只由 **NPC 席位**使用：玩家恒传 `null`，即「原表权重 + 保留金色保底」。
+ * 目前两项都只由 NPC 席位使用：玩家恒传 `null`，即「原表权重 + 保留金色保底」。
  * 判定归属放在模型层（`ZCGameModel.buildDevelopmentContext().drawRulesOf`），
  * 抽卡内核只负责「拿到什么规则就怎么算」，不判断谁是 NPC。
- */
+*/
 export interface ZCPvpSeatDrawRules {
-    /** 品级权重乘数（`levelInfo.gradeProModifier`）；缺省 / 空 ⇒ 走原表。 */
+    /** 品级权重乘数（`levelInfo.gradeProModifier`）；缺省 / 空 ⇒ 走原表。*/
     rarityModifier?: ZCPvpRarityModifier | null;
     /**
      * 是否允许「全类型随机」的金色保底；缺省 `true`。
      *
-     * **NPC 传 `false`**：保底本质是给玩家的体验补偿（连续 N 次不出金就必送一张），
+     * NPC 传 `false`：保底本质是给玩家的体验补偿（连续 N 次不出金就必送一张），
      * 对 AI 就等于「无论关卡多难，隔固定次数必得金卡」，会把关卡难度拉平；
      * 且它绕过 `rarityWeights`，与本关的 `gradeProModifier` 目的直接冲突。
-     */
+    */
     goldPity?: boolean;
 }
 
@@ -74,16 +74,16 @@ export interface ZCPvpTileConfig {
     name: string;
     price: number;
     rarityWeights: Readonly<Record<ZCPvpDrawRarity, number>>;
-    /** 该地块能抽到的卡类型（数字：1=金矿/2=兵营/3=防御塔…）；留空时按 `type` 走内置默认。 */
+    /** 该地块能抽到的卡类型（数字：1=金矿/2=兵营/3=防御塔…）；留空时按 `type` 走内置默认。*/
     eligibleCardTypes?: readonly ZCCardType[];
     /**
      * 生成权重（`pvpTile.weight`，2026-11-10 从已废弃的「基础阵容权重随机表」并入）。
      * 玩家阵容变化时按此权重随机抽取地块类型；`0` / 非正数 ⇒ 该类型不参与抽取。
-     */
+    */
     weight: number;
-    /** 初始生成（主城邻格）阶段该类型个数上限（**半场**口径，不含保底格）；`0` = 不限。 */
+    /** 初始生成（主城邻格）阶段该类型个数上限（半场口径，不含保底格）；`0` = 不限。*/
     initialCountLimit: number;
-    /** 同一集合（每侧 20 个地块）内该类型个数上限（不含保底格）；`0` = 不限。 */
+    /** 同一集合（每侧 20 个地块）内该类型个数上限（不含保底格）；`0` = 不限。*/
     setCountLimit: number;
 }
 
@@ -101,9 +101,9 @@ export function getAllRandomGoldPity(): number {
 export interface ZCPvpTileTypeWeight {
     type: ZCPvpTileType;
     weight: number;
-    /** 初始生成（主城邻格）阶段该类型个数上限。 */
+    /** 初始生成（主城邻格）阶段该类型个数上限。*/
     initialCountLimit: number;
-    /** 同一集合（每侧 20 个地块，见 `ZC_PVP_TILE_SET_SIZE`）内该类型个数上限（不含保底格）。 */
+    /** 同一集合（每侧 20 个地块，见 `ZC_PVP_TILE_SET_SIZE`）内该类型个数上限（不含保底格）。*/
     setCountLimit: number;
 }
 
@@ -112,7 +112,7 @@ export interface ZCPvpTileTypeWeight {
  * `weight / initialCountLimit / setCountLimit`）；未加载配置时为空数组。
  *
  * 2026-11-10 起不再有独立的「基础阵容权重随机表」(`pvpBaseTeamWeight`)。
- */
+*/
 export function getPvpTileTypeWeights(): readonly ZCPvpTileTypeWeight[] {
     return ZC_RUNTIME_CONFIG.snapshot.tileWeights ?? [];
 }
@@ -133,10 +133,10 @@ function clampRandom(value: number): number {
  * 在「未被排除」的类型里按权重抽一个。
  *
  * `excludedTypes` 由调用方按 `setCountLimit` / `initialCountLimit` 算好（见 `createPvpTileTypes`）。
- * **全部类型都被排除时**（单集合上限之和小于该集合格数，属配表问题）按权重在全部带权类型里溢出：
+ * 全部类型都被排除时（单集合上限之和小于该集合格数，属配表问题）按权重在全部带权类型里溢出：
  * 溢出份额与权重同比例，不会因为某个类型上限低就被反复硬填 —— 旧实现「挑当前数量最少」会把
  * 金矿（上限 3）一路填到 18 个/半场，那正是「一局多个金矿」的成因。
- */
+*/
 export function selectPvpTileType(
     random: () => number = Math.random,
     weights?: readonly ZCPvpTileTypeWeight[],
@@ -160,10 +160,10 @@ export function selectPvpTileType(
  * 按本局地图、保底和权重配置生成整张 PVP 地图的地块类型。
  *
  * 计数口径（2026-11-10 起，见 `ZC_PVP_TILE_SET_SIZE`）：
- * - **集合** = 每侧 20 个地块（= 20 个镜像对，全场 40 格），按处理侧可玩格 id 升序切批；
- *   `setCountLimit` 在每个集合内**独立**计数，集合格数超过上限时不再溢出硬填。
- * - **金矿保底**（阶段 1a）完全独立：既不检查也不占用 `setCountLimit` / `initialCountLimit` 名额。
- */
+ * - 集合 = 每侧 20 个地块（= 20 个镜像对，全场 40 格），按处理侧可玩格 id 升序切批；
+ * `setCountLimit` 在每个集合内独立计数，集合格数超过上限时不再溢出硬填。
+ * - 金矿保底（阶段 1a）完全独立：既不检查也不占用 `setCountLimit` / `initialCountLimit` 名额。
+*/
 export function createPvpTileTypes(random: () => number, config: ZCMatchConfig): ZCPvpTileType[] {
     const hexes = config.map.hexes;
     const playerHomeId = config.map.playerHomeId;
@@ -214,13 +214,13 @@ export function createPvpTileTypes(random: () => number, config: ZCMatchConfig):
     const bump = (counts: Map<ZCPvpTileType, number>, type: ZCPvpTileType): void => {
         counts.set(type, (counts.get(type) ?? 0) + 1);
     };
-    /** 只写类型（保底用）：不进任何计数器。 */
+    /** 只写类型（保底用）：不进任何计数器。*/
     const place = (processId: number, type: ZCPvpTileType): void => {
         result[processId] = type;
         result[hexes[processId].mirrorId] = type;
     };
 
-    /** 该格所在集合／初始阶段是否已用满名额（`limit = 0` 表示不限）。 */
+    /** 该格所在集合／初始阶段是否已用满名额（`limit = 0` 表示不限）。*/
     const excludedFor = (processId: number, initial: boolean): Set<ZCPvpTileType> => {
         const counts = countsOf(processId);
         const excluded = new Set<ZCPvpTileType>();
@@ -238,13 +238,13 @@ export function createPvpTileTypes(random: () => number, config: ZCMatchConfig):
         }
         return excluded;
     };
-    /** 名额是否还抽得出类型；抽不出就说明这批格该交给阶段 2。 */
+    /** 名额是否还抽得出类型；抽不出就说明这批格该交给阶段 2。*/
     const hasRoom = (excluded: ReadonlySet<ZCPvpTileType>): boolean => weights.some((entry) => (
         entry.weight > 0 && Number.isFinite(entry.weight) && !excluded.has(entry.type)
     ));
 
     // 阶段 1a：金矿保底 —— 每个席位各保底 `initialGuaranteedMine` 个，只在自己的主城邻格里挑。
-    // **完全独立于集合限制**：不查 `setCountLimit`，也不占用集合／初始名额。
+    // 完全独立于集合限制：不查 `setCountLimit`，也不占用集合／初始名额。
     const guaranteedPerHome = Math.max(0, Math.floor(rules.initialGuaranteedMine));
     const claimed = new Set<number>();
     for (const homeId of homeIds) {
@@ -293,14 +293,14 @@ export function createPvpTileTypes(random: () => number, config: ZCMatchConfig):
     return result;
 }
 
-/** 乘数：非正数 / 非数字一律按 1（表说明「0 = 没变化」），避免 0 把品级直接抹掉。 */
+/** 乘数：非正数 / 非数字一律按 1（表说明「0 = 没变化」），避免 0 把品级直接抹掉。*/
 function rarityFactor(value: number | undefined): number {
     const factor = Number(value);
     return Number.isFinite(factor) && factor > 0 ? factor : 1;
 }
 
 /**
- * 把关卡 `gradeProModifier` 乘进品质权重，**只在非空品级内部归一**。
+ * 把关卡 `gradeProModifier` 乘进品质权重，只在非空品级内部归一。
  *
  * 归一方式（这是本字段最容易接错的地方）：
  *
@@ -308,15 +308,15 @@ function rarityFactor(value: number | undefined): number {
  * 2. 乘完得 `scaled = Σ w·factor`；
  * 3. 每个品级再 `*= base / scaled`。
  *
- * 于是 `Σ(调整后非空品级) === base`，**`empty` 的空手率一分不动** —— 抬升绿蓝挤掉的是
+ * 于是 `Σ(调整后非空品级) === base`，`empty` 的空手率一分不动 —— 抬升绿蓝挤掉的是
  * 紫金与彼此，不会顺手把「全类型随机」那 0.7 的空手率也一起吃掉（若整体归一，
  * 空手率会掉到 0.636，等于白送 NPC 三成开发次数，超出策划配置的本意）。
  *
  * 边界：
- * - 无调整项 / 全是 1 ⇒ **原对象原样返回**（调用方可以按引用比较，也省一次分配）；
+ * - 无调整项 / 全是 1 ⇒ 原对象原样返回（调用方可以按引用比较，也省一次分配）；
  * - 该地块本来没有绿/蓝（如「兵营-高级」紫 0.9 金 0.1）⇒ 乘完仍为 0，结果与不调整一致 ——
- *   乘数只能放大已有份额，造不出一张本池里不存在品级的卡。
- */
+ * 乘数只能放大已有份额，造不出一张本池里不存在品级的卡。
+*/
 export function applyPvpRarityModifier(
     weights: Readonly<Record<ZCPvpDrawRarity, number>>,
     modifier?: ZCPvpRarityModifier | null,
@@ -347,9 +347,9 @@ export function applyPvpRarityModifier(
  * 按品级配置抽牌：先抽空/品级，再从命中品级的本局卡池中等概率选一张。
  *
  * @param seatRules 该席位的关卡规则（`levelInfo.gradeProModifier` + 是否保留金色保底）。
- *   **只由 NPC 席位**传入（见 `ZCDevelopmentSystem.develop` 的 `drawRulesOf`）；
- *   玩家传 `null` ⇒ 原表权重 + 正常保底。
- */
+ * 只由 NPC 席位传入（见 `ZCDevelopmentSystem.develop` 的 `drawRulesOf`）；
+ * 玩家传 `null` ⇒ 原表权重 + 正常保底。
+*/
 export function drawPvpTile(
     deck: readonly ZCDeckCard[],
     tileType: ZCPvpTileType,

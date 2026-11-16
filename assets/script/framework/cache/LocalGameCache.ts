@@ -32,13 +32,6 @@ export class LocalGameCache extends GameCache {
      * @param obj  缓存对象
      */
     addOrUpdate(obj: any): void {
-        // let key = this.hashKey(obj)
-        // let old = this.dictionary.get(key)
-        // if (old != null) {
-        // 	this.update(key, obj)
-        // } else {
-        // 	this.dictionary.set(key, obj);
-        // }
     }
 
     /**
@@ -46,25 +39,6 @@ export class LocalGameCache extends GameCache {
      * @param data 缓存对象
      */
     update(key: any, val: any): void {
-        // let oldObj = this.dictionary.get(key)
-        // let changeFieldMap = {};
-        // if (oldObj == null) {
-        // 	return
-        // }
-
-        // let oldOne;
-        // let newOne;
-        // for (let fieldNumber of this.fieldDictionary.keys) {
-        // 	let field = this.fieldDictionary.get(fieldNumber);
-        // 	oldOne = oldObj[field.name];
-        // 	newOne = obj[field.name];
-        // 	oldObj[field.name] = newOne;
-        // 	if(oldOne != newOne){
-        // 		changeFieldMap[field.name] = newOne;
-        // 	}else{
-        // 		delete changeFieldMap[field.name];
-        // 	}
-        // }
         this.dictionary.set(key, val);
     }
 

@@ -320,9 +320,12 @@ test('★固定与随机资源点的回包都携带奖励明细，弹窗由成�
     assert.match(PRESENTER_SRC, /isUnlocked && result\.rewards\?\.length/);
     // 发奖要带上「来自哪一格」：飘字落点用（挂机产出没有来源格 ⇒ 不传，页面回落到起始格）。
     assert.match(PRESENTER_SRC, /showRewards\(result\.rewards, site\.cellId\)/);
-    // 随机格是「解锁即发奖」，没有开箱这一步 ⇒ 必须显式带 `{ chest: false }`，
+    // 随机格是「解锁即发奖」，没有开箱这一步 ⇒ 常规分支必须显式带 `{ chest: false }`，
     // 否则页面会按缺省（`chest !== false`）误播一次开箱表演（需求 2026-10-22 §1）。
-    assert.match(PRESENTER_SRC, /showRewards\(result\.rewards, cellId, \{ chest: false \}\)/);
+    assert.match(PRESENTER_SRC, /\{ chest: false \}/, '常规随机格仍不弹窗（2026-10-22 §1）');
+    // 2026-11-13 新手引导 2-2：**本账号第一格**例外，走 `{ popup: true }` 弹奖励窗（含初始阵容）。
+    // 只破这一格，之后仍按上面的 `{ chest: false }`。
+    assert.match(PRESENTER_SRC, /firstCellEver\s*\?\s*\{ popup: true \}/, '首次翻格弹奖励窗（引导 2-2）');
 });
 
 test('★随机格成功不再弹「已开启」轻提示（会和奖励弹窗抢同一时刻）', () => {

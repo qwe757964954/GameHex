@@ -11,7 +11,7 @@ export type ZCArtifactActivation =
     | { ok: true }
     | { ok: false; reason: 'cooldown' | 'not-ready' };
 
-/** 神器充能、存储、冷却和激活状态机；伤害目标由模型编排层提供。 */
+/** 神器的存量、充能、冷却和冻结；打谁由模型编排层决定，这里只管状态。*/
 export class ZCArtifactSystem {
     static normalize(state: ZCArtifactState, rules: Readonly<ZCRuntimeRules>): void {
         state.artifactReadyUses = Number.isFinite(state.artifactReadyUses)

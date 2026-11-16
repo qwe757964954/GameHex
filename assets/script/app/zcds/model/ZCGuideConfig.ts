@@ -1,6 +1,6 @@
 import { BUILDING_ART_ROOT, GAMEUI_ART_ROOT, spriteFramePath } from '../../ArtPaths';
 
-/** 奖励品级：来自 `guide` 表的中文 key（`'空'` = 无品级）；卡牌品级是另一套英文 id（见 `ZCCardRarity`）。 */
+/** 奖励品级：来自 `guide` 表的中文 key（`'空'` = 无品级）；卡牌品级是另一套英文 id（见 `ZCCardRarity`）。*/
 export type ZCGuideRarity = '空' | '绿' | '蓝' | '紫' | '金';
 
 export interface ZCGuideReward {
@@ -34,7 +34,7 @@ const DEFAULT_PARAMS: Readonly<ZCGuideParams> = {
 /**
  * 图标键到资源路径的唯一映射；具体加载由 application 层负责。
  *
- *  键名必须与 `remoteRef/zcGuide.json` 的 `icon` 列逐一对上（表里写了没登记的键 =
+ * 键名必须与 `remoteRef/zcGuide.json` 的 `icon` 列逐一对上（表里写了没登记的键 =
  * 静默无图标；登记了但磁盘没图会使指南加载失败）。
  *
  * 「兵营」取 `barracks-default`：r361（2026-09-28）美术重做兵营外观时删掉了通用的
@@ -42,18 +42,18 @@ const DEFAULT_PARAMS: Readonly<ZCGuideParams> = {
  * 无 `buildIcon` 时的通用兵营外观就是 `barracks-default`（同 `ZCGameRenderWorld.resolveBuildingFrame`
  * 与 `TerritoryPage` 的口径）。
  *
- * 「防御塔」原本登记 `tower-icon`，同一批被删且**没有替代图**（塔在地图上走
+ * 「防御塔」原本登记 `tower-icon`，同一批被删且没有替代图（塔在地图上走
  * `ZCHexView.BUILDING_SYMBOLS` 的「塔」字符，没有专属贴图，`resolveBuildingFrame`
  * 对 tower 直接返回 null）；表里当前也没有防御塔条目，故整条移除。
  * 日后要在表里加防御塔，先让美术往 `image/buildings/` 补图再登记回来。
- */
+*/
 const GUIDE_ICON_PATHS = {
     金矿: spriteFramePath(BUILDING_ART_ROOT, 'mine'),
     兵营: spriteFramePath(BUILDING_ART_ROOT, 'barracks-default'),
     问号: spriteFramePath(GAMEUI_ART_ROOT, 'icon_question'),
 } as const;
 
-/** 表里登记过的 icon 键；调用方与测试都用它做收窄，写错键名会直接编译不过。 */
+/** 表里登记过的 icon 键；调用方与测试都用它做收窄，写错键名会直接编译不过。*/
 export type ZCGuideIconKey = keyof typeof GUIDE_ICON_PATHS;
 
 export function getGuideIconPath(icon: string): string | null {

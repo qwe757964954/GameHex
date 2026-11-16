@@ -18,18 +18,18 @@ import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSet
 /**
  * 投降（提前退出）的确认文案。
  *
- * 需求（11-4 测试包反馈「【战斗】投降功能」）原本写「提前结束需要 **2 次确认**」，
+ * 需求（11-4 测试包反馈「【战斗】投降功能」）原本写「提前结束需要 2 次确认」，
  * 11-09 曾按「同一个框点两次」实现（`CommonTips.confirmAgainText` 上膛文案）。
- * 山猫 2026-11-11 实机确认：**只留一次确认** —— 点「确定」直接结算，不再上膛。
+ * 山猫 2026-11-11 实机确认：只留一次确认 —— 点「确定」直接结算，不再上膛。
  *
- * 所以这里**不传** `confirmAgainText`。`CommonTips` 上的「点两次」能力保留（缺省不生效），
+ * 所以这里不传 `confirmAgainText`。`CommonTips` 上的「点两次」能力保留（缺省不生效），
  * 但投降不再使用；别在没确认需求前加回来，否则按钮会变成「再次确认」、看起来像第二层弹窗。
- */
+*/
 const RETREAT_CONFIRM = {
     content: '你确定放弃当前对局，提前退出嘛？', sureText: '确定', cancelText: '取消',
 } as const;
 
-/** 每局唯一的规则编排入口；组件只提供帧脉冲及展示端口。 */
+/** 每局唯一的规则编排入口；组件只提供帧脉冲及展示端口。*/
 export class ZCBattleRuntimeController extends ControllerBase {
     private model: ZCGameModel | null = null;
     private selection: ZCSpawnSelection | null = null;
@@ -39,13 +39,13 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private hints = true;
     private stopShowcase: (() => void) | null = null;
     private readonly popups = new Map<'guide' | 'damage' | 'rank' | 'retreat', IZCBattlePopup>();
-    /** 投降确认进行中（await 期间连点不能叠出第二个确认框）。 */
+    /** 投降确认进行中（await 期间连点不能叠出第二个确认框）。*/
     private retreating = false;
     private damagePopup: IZCDamageStatsPopup | null = null;
     private damageOpening = false;
     private readonly pendingUnitArt = new Set<string>();
     private readonly loadedUnitArt = new Set<string>();
-    /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。 */
+    /** 特效美术按需补载：在飞的（path → Promise）与已到货的（路径集合）。*/
     private readonly pendingEffectArt = new Map<string, Promise<void>>();
     private readonly loadedEffectArt = new Set<string>();
     get currentModel(): ZCGameModel | null { return this.model; }
@@ -168,14 +168,14 @@ export class ZCBattleRuntimeController extends ControllerBase {
         finally { this.pendingUnitArt.delete(unitId); }
     }
     /**
-     * 特效美术按需补载（与 {@link onRequestUnitArt} 同型，缺口在**特效**那条链上）。
+     * 特效美术按需补载（与 {@link onRequestUnitArt} 同型，缺口在特效那条链上）。
      *
      * 本局特效清单由 `buildZCVisualResourcePlan(heroIds)` 按后端英雄名单过滤 ⇒ 兵营产兵 /
-     * 波次兵 / GM 临时加的兵不在名单里，它们的普攻与技能特效路径**一条都不会被加载**。
-     * 单位模型早就有这条补载，特效侧一直空着 ⇒ 那两类兵的子弹**永久**消失，且连「加载失败」
+     * 波次兵 / GM 临时加的兵不在名单里，它们的普攻与技能特效路径一条都不会被加载。
+     * 单位模型早就有这条补载，特效侧一直空着 ⇒ 那两类兵的子弹永久消失，且连「加载失败」
      * 都不会报（压根没被要求加载）。派发方 `ZCGameRenderWorld` 在第一次取不到时发一次，
      * 到货后由它下一帧补挂（{@link IZCBattleView.applyEffectPrefab}）。
-     */
+    */
     private onRequestEffectArt({ owner, path }: IZCRequestEffectArtIntent): void {
         if (owner !== this.view || this.isDisposed || !path) return;
         if (this.loadedEffectArt.has(path) || this.pendingEffectArt.has(path)) return;
@@ -228,10 +228,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
         EventMgr.instance.emit(ZCGameUiEvent.DebugAddGoldResult, { message: result.message });
     }
     /**
-     * 投降 = **一次确认**才结算。
+     * 投降 = 一次确认才结算。
      *
      * 取消 / 点空白关闭都直接返回，不产生任何对局副作用；`retreating` 挡住连点。
-     */
+    */
     private async onRetreat(): Promise<void> {
         if (this.isDisposed || this.phase.isSettled || this.retreating) return;
         this.retreating = true;
@@ -249,7 +249,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
      *
      * 弹窗句柄存进 `popups`，退出对局时 `closePopups` 会关它 ⇒ `answered` 兑现 `false`，
      * 这里就自然不会再往下走（不需要额外的 disposed 竞速）。
-     */
+    */
     private async askRetreat(step: IZCBattleConfirmOptions): Promise<boolean> {
         const popup = await this.services.popups.confirm(step);
         if (!popup) return false;

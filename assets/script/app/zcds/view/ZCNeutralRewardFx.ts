@@ -12,101 +12,101 @@ import type { ZCNeutralReward } from '../model/ZCGameTypes';
 /**
  * 中立资源获取特效（2026-10-20 需求；2026-11-04 恢复金币飞行口径）。
  *
- *   · 金币（金币堆 / 宝箱）：一把金币从格子**飞向 HUD 金币栏 `CoinPanel`**，落地后
- *     「+N」在金币栏上方升起并淡出；
- *   · 神器（神器充能）：格心**原地炸一下**蓝色爆炸（18 帧序列帧），同时神器图标从格子
- *     **飞向神器按钮**，落地小幅放大后淡出；
- *   · 金矿：走「建筑被开发」的激活动画（模型推 `hexActivation`），不进本类；
- *   · 兵力：直接产兵、走出生表现，不进本类。
+ * · 金币（金币堆 / 宝箱）：一把金币从格子飞向 HUD 金币栏 `CoinPanel`，落地后
+ * 「+N」在金币栏上方升起并淡出；
+ * · 神器（神器充能）：格心原地炸一下蓝色爆炸（18 帧序列帧），同时神器图标从格子
+ * 飞向神器按钮，落地小幅放大后淡出；
+ * · 金矿：走「建筑被开发」的激活动画（模型推 `hexActivation`），不进本类；
+ * · 兵力：直接产兵、走出生表现，不进本类。
  *
- * ## 金币落点为什么必须是 `CoinPanel`
+ * 金币落点为什么必须是 `CoinPanel`
  *
  * 2026-10-26 曾把金币改成「格心就地喷发」（曲线在 `model/ZCNeutralBurst`）并删掉 HUD 挂点，
  * 但视图金币分支仍按旧口径读 `targets.goldCounter` ⇒ `null` ⇒ 整条 `continue`，
- * 实机上金币**一条都没播、零报错**。2026-11-04 用户口径明确「金币粒子飞到金币栏
+ * 实机上金币一条都没播、零报错。2026-11-04 用户口径明确「金币粒子飞到金币栏
  * `ZCGameHUD` / `CoinPanel`」⇒ 恢复飞行曲线，落点由 `ZCGameRenderWorld` 把
  * `BottomInfoPanel/CoinPanel` 的世界坐标换算成 overlay 局部坐标后传进来。
  *
- * ⚠️ 目标是**整个 CoinPanel 面板**，不是 `GoldLabel` / `coin` 子图标：面板中心才是
- *    「金币栏」的视觉重心。节点没绑 / 没进场景 ⇒ `coinPanel` 为 `null` ⇒ 金币不播，
- *    排查先看 `ZCGameHUDView.coinPanel` 的 prefab 绑定。
+ * 目标是整个 CoinPanel 面板，不是 `GoldLabel` / `coin` 子图标：面板中心才是
+ * 「金币栏」的视觉重心。节点没绑 / 没进场景 ⇒ `coinPanel` 为 `null` ⇒ 金币不播，
+ * 排查先看 `ZCGameHUDView.coinPanel` 的 prefab 绑定。
  *
- * `model/ZCNeutralBurst` 那份喷发曲线**当前不接线**（保留备用），事件时长与视图都按
+ * `model/ZCNeutralBurst` 那份喷发曲线当前不接线（保留备用），事件时长与视图都按
  * 本文件的飞行 / 读数时间轴走 —— 别再按它那份需求注释把 HUD 落点删掉。
  *
- * 与 `TerritoryGainBurst` 同一套口径：**纯类、非 Component、逐帧 `render`、禁 tween**，
+ * 与 `TerritoryGainBurst` 同一套口径：纯类、非 Component、逐帧 `render`、禁 tween，
  * 曲线全部写成可复现的纯函数（同一 seed 每帧结果一致），节点在构造时建好、动画里只写
  * position / scale / opacity。
  *
- * 坐标口径：入参 `start` / `target` 都是 **host（全屏演出层）局部坐标**，由渲染层把
+ * 坐标口径：入参 `start` / `target` 都是 host（全屏演出层）局部坐标，由渲染层把
  * 格子世界坐标 / HUD 节点世界坐标换算过来；本类只管在 host 下的局部位移。
- */
+*/
 export const ZC_NEUTRAL_REWARD_COIN_SIZE = 34;
-/** 每颗金币在起点附近的最大随机偏移（px，双轴）。 */
+/** 每颗金币在起点附近的最大随机偏移（px，双轴）。*/
 export const ZC_NEUTRAL_REWARD_COIN_JITTER_PX = 14;
-/** 飞行弧线的上抬量（px，贝塞尔控制点在起终点中点正上方）。 */
+/** 飞行弧线的上抬量（px，贝塞尔控制点在起终点中点正上方）。*/
 export const ZC_NEUTRAL_REWARD_ARC_PX = 42;
-/** 金币落地后的淡出时长（秒）。 */
+/** 金币落地后的淡出时长（秒）。*/
 export const ZC_NEUTRAL_REWARD_COIN_FADE_SECONDS = 0.12;
-/** 「+N」上飘的总抬升（px）。 */
+/** 「+N」上飘的总抬升（px）。*/
 export const ZC_NEUTRAL_REWARD_RISE_LIFT_PX = 40;
 export const ZC_NEUTRAL_REWARD_LABEL_FONT_SIZE = 26;
 export const ZC_NEUTRAL_REWARD_LABEL_WIDTH = 160;
 export const ZC_NEUTRAL_REWARD_LABEL_HEIGHT = 36;
 export const ZC_NEUTRAL_REWARD_ARTIFACT_SIZE = 40;
-/** 神器落地后的淡出时长（秒）。 */
+/** 神器落地后的淡出时长（秒）。*/
 export const ZC_NEUTRAL_REWARD_ARTIFACT_FADE_SECONDS = 0.2;
-/** 神器落地时的小幅放大（相对 1）。 */
+/** 神器落地时的小幅放大（相对 1）。*/
 export const ZC_NEUTRAL_REWARD_ARTIFACT_POP = 0.35;
 /**
  * 神器领取爆炸的播放帧率（`image/effects/artifact_claim_burst` 原稿 24fps）。
  *
- * 18 帧 ÷ 24fps = **0.75s**，正好落在这条事件的存活窗（≈1.4s）里：
+ * 18 帧 ÷ 24fps = 0.75s，正好落在这条事件的存活窗（≈1.4s）里：
  * 爆炸先炸，神器图标同时起飞，收尾时两样都已经收干净。
- */
+*/
 export const ZC_ARTIFACT_CLAIM_BURST_FPS = 24;
 /**
  * 爆炸在屏上的边长（px）。
  *
- * 🔴 2026-10-27 用户口径「缩小成 0.6，不超过一个单元格」⇒ 150 → **90**（0.6 × 150）。
- * 一格顶面是 `core/hex/HexGridLayout` 的 **123×90**、整块地砖脚印 130×119
- * （`ZCGameHex.prefab` 的 `TileBackground`），90 稳在**一格之内**（0.73 个顶面宽），
- * 美术四周还带留白 ⇒ 屏上真正看得见的那团雾约 **0.6 个格子**，
+ * 2026-10-27 用户口径「缩小成 0.6，不超过一个单元格」⇒ 150 → 90（0.6 × 150）。
+ * 一格顶面是 `core/hex/HexGridLayout` 的 123×90、整块地砖脚印 130×119
+ * （`ZCGameHex.prefab` 的 `TileBackground`），90 稳在一格之内（0.73 个顶面宽），
+ * 美术四周还带留白 ⇒ 屏上真正看得见的那团雾约 0.6 个格子，
  * 不会盖住邻格的资源图标与造价数字。
  *
- * ⚠️ 这个值**只决定屏上大小**，与图片像素无关（`Sprite` 是 `CUSTOM` + `trim=false`，
+ * 这个值只决定屏上大小，与图片像素无关（`Sprite` 是 `CUSTOM` + `trim=false`，
  * 按 `UITransform` 拉满）。当前序列帧为 90×90、四周留白很足 ——
  * 别拿「图多大」当「显示多大」，也别为了"把画面补回来"把这里放大。
  * 更别再按 220 算比例：那是 2026-10-26 之前的旧值。
  *
- * 🔴🔴 **220 / 150 / 90 三次改动在屏上全都没生效过**（2026-10-27 二次返工才查出来）：
+ * 220 / 150 / 90 三次改动在屏上全都没生效过（2026-10-27 二次返工才查出来）：
  * `createSprite` 里「先赋 `spriteFrame`、后设 `sizeMode = CUSTOM`」的顺序，
- * 让引擎在赋图那一刻按 TRIMMED 把 `contentSize` 回写成**原图 300×300**，之后再设 CUSTOM
- * **不会把尺寸还回来** ⇒ 用户看到的永远是 300（≈2.4 格），所以他两次都说"没改小"。
+ * 让引擎在赋图那一刻按 TRIMMED 把 `contentSize` 回写成原图 300×300，之后再设 CUSTOM
+ * 不会把尺寸还回来 ⇒ 用户看到的永远是 300（≈2.4 格），所以他两次都说"没改小"。
  * 现在 `createSprite` 已改成「先 CUSTOM → 再赋图 → 最后兜一次 setContentSize」，
- * 90 才真的落到屏上。**判据是 `tests/zcds-artifact-claim-burst.test.ts` 里那条赋值顺序断言**
+ * 90 才真的落到屏上。判据是 `tests/zcds-artifact-claim-burst.test.ts` 里那条赋值顺序断言
  * —— 只断言 `contentSize` 是假绿（夹具的 Sprite 桩不模拟这条引擎行为）。
  *
  * 🟢 问号状态（`ArtifactHexSpine`：六边形底 + 问号指示器，prefab 里 168×166.8，走 Spine 循环动画）
- * **不随这里变** —— 2026-10-27 明确要求「问号状态下的特效大小保持不变」。
- */
+ * 不随这里变 —— 2026-10-27 明确要求「问号状态下的特效大小保持不变」。
+*/
 export const ZC_ARTIFACT_CLAIM_BURST_SIZE = 90;
 /**
  * 收尾淡出时长（秒）。
  *
- * 末两帧原图已经基本透明，这一段只负责**防硬切**：万一换了一套尾帧不透明的图，
+ * 末两帧原图已经基本透明，这一段只负责防硬切：万一换了一套尾帧不透明的图，
  * 也不会出现「啪一下没了」。
- */
+*/
 export const ZC_ARTIFACT_CLAIM_BURST_FADE_SECONDS = 0.1;
 
-/** 一次爆炸的总时长（秒）= `frameCount / FPS`；帧数非正 ⇒ `0`（不播）。 */
+/** 一次爆炸的总时长（秒）= `frameCount / FPS`；帧数非正 ⇒ `0`（不播）。*/
 export function artifactClaimBurstTotalSeconds(frameCount: number): number {
     if (!Number.isFinite(frameCount) || frameCount <= 0) return 0;
     return Math.floor(frameCount) / ZC_ARTIFACT_CLAIM_BURST_FPS;
 }
 
 export interface IZCArtifactClaimBurstFrame {
-    /** 该帧在序列里的下标；`visible=false` 时为 `-1`。 */
+    /** 该帧在序列里的下标；`visible=false` 时为 `-1`。*/
     readonly index: number;
     readonly opacity: number;
     readonly visible: boolean;
@@ -117,8 +117,8 @@ export interface IZCArtifactClaimBurstFrame {
  * 末 `ZC_ARTIFACT_CLAIM_BURST_FADE_SECONDS` 线性淡出。
  *
  * 纯函数（同一个 `now` 每帧结果一致）—— 视图只按它写 `spriteFrame` / `opacity`，
- * **不许**在节点上另叠 tween 或靠 `dt` 累加。
- */
+ * 不许在节点上另叠 tween 或靠 `dt` 累加。
+*/
 export function artifactClaimBurstFrame(
     frameCount: number,
     startedAt: number,
@@ -137,13 +137,13 @@ export function artifactClaimBurstFrame(
     return { index, opacity, visible: true };
 }
 
-/** 确定性的伪随机（[0,1)）：同一 (seed, salt) 每帧可复现，不依赖 `Math.random()`。 */
+/** 确定性的伪随机（[0,1)）：同一 (seed, salt) 每帧可复现，不依赖 `Math.random()`。*/
 function pseudoRandom(seed: number, salt: number): number {
     const raw = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
     return raw - Math.floor(raw);
 }
 
-/** 事件级种子 + 序号 → 该颗金币的起点抖动（px）。 */
+/** 事件级种子 + 序号 → 该颗金币的起点抖动（px）。*/
 export function neutralRewardJitter(seed: number, index: number): { x: number; y: number } {
     return {
         x: (pseudoRandom(seed, index * 2) - 0.5) * 2 * ZC_NEUTRAL_REWARD_COIN_JITTER_PX,
@@ -151,7 +151,7 @@ export function neutralRewardJitter(seed: number, index: number): { x: number; y
     };
 }
 
-/** 二次贝塞尔弧线上的点：起 → 目标，控制点在两点中点正上方 `ARC_PX`（轻微拱起）。 */
+/** 二次贝塞尔弧线上的点：起 → 目标，控制点在两点中点正上方 `ARC_PX`（轻微拱起）。*/
 export function neutralRewardArcPoint(
     start: Readonly<{ x: number; y: number }>,
     target: Readonly<{ x: number; y: number }>,
@@ -166,7 +166,7 @@ export function neutralRewardArcPoint(
     };
 }
 
-/** 某颗金币的弧线点（起点带该颗自己的抖动）。 */
+/** 某颗金币的弧线点（起点带该颗自己的抖动）。*/
 export function neutralRewardCoinPoint(
     seed: number,
     index: number,
@@ -190,9 +190,9 @@ export interface IZCNeutralRewardCoinFrame {
  * 第 `index` 颗金币在 `now` 的表现帧。
  *
  * 时间轴（错峰出发）：`local = now - startedAt - index × STAGGER`；
- * 飞行段 `[0, FLY)` 走弧线、整体收缩；到达后 `[FLY, FLY + FADE)` **位置冻在落点**、
+ * 飞行段 `[0, FLY)` 走弧线、整体收缩；到达后 `[FLY, FLY + FADE)` 位置冻在落点、
  * 线性淡出（与领地喷发「落地后位置冻结」同一口径）。
- */
+*/
 export function neutralRewardCoinFrame(
     seed: number,
     index: number,
@@ -219,9 +219,9 @@ export interface IZCNeutralRewardRiseFrame {
 }
 
 /**
- * 「+N」在 `now` 的表现帧：等**最后一颗金币到达**才开始，`[0, RISE)` 内
+ * 「+N」在 `now` 的表现帧：等最后一颗金币到达才开始，`[0, RISE)` 内
  * `easeOutCubic` 向上飘 `RISE_LIFT_PX`，前 15% 淡入、后 30% 淡出。
- */
+*/
 export function neutralRewardRiseFrame(startedAt: number, now: number): IZCNeutralRewardRiseFrame {
     const labelStart = ZC_NEUTRAL_REWARD_FLY_SECONDS
         + ZC_NEUTRAL_REWARD_COIN_STAGGER * (ZC_NEUTRAL_REWARD_COIN_COUNT - 1);
@@ -247,7 +247,7 @@ export interface IZCNeutralRewardArtifactFrame {
 /**
  * 神器图标在 `now` 的表现帧：飞行段 `[0, FLY)` 走弧线（前 15% 淡入）；
  * 落地后 `[FLY, FLY + FADE)` 位置冻在落点、小幅放大（`ARTIFACT_POP`）并淡出。
- */
+*/
 export function neutralRewardArtifactFrame(
     startedAt: number,
     now: number,
@@ -276,7 +276,7 @@ export function neutralRewardArtifactFrame(
  *
  * `coinPanel` = `ZCGameHUD/BottomInfoPanel/CoinPanel` 面板中心（金币落点）；
  * `artifactSlot` = `ArtifactButton`（神器落点）。
- */
+*/
 export interface IZCNeutralRewardFxTargets {
     readonly coinPanel: Readonly<{ x: number; y: number }> | null;
     readonly artifactSlot: Readonly<{ x: number; y: number }> | null;
@@ -303,16 +303,16 @@ interface IZCNeutralRewardFxEntry {
     readonly artifact: Sprite | null;
     readonly artifactNode: Node | null;
     readonly artifactOpacity: UIOpacity | null;
-    /** 神器领取的格心爆炸（序列帧）；没配帧 / 非神器事件时为 `null`。 */
+    /** 神器领取的格心爆炸（序列帧）；没配帧 / 非神器事件时为 `null`。*/
     readonly burst: Sprite | null;
     readonly burstNode: Node | null;
     readonly burstOpacity: UIOpacity | null;
 }
 
-/** 事件 id → 表现条目；事件被模型 `prune` 摘掉那一帧，条目节点销毁。 */
+/** 事件 id → 表现条目；事件被模型 `prune` 摘掉那一帧，条目节点销毁。*/
 export class ZCNeutralRewardFx {
     private readonly entries = new Map<number, IZCNeutralRewardFxEntry>();
-    /** 本帧存活事件 id 的复用集合（`render` 逐帧对齐用，见 `renderFloatTexts` 同口径）。 */
+    /** 本帧存活事件 id 的复用集合（`render` 逐帧对齐用，见 `renderFloatTexts` 同口径）。*/
     private readonly activeIds = new Set<number>();
 
     constructor(
@@ -324,14 +324,14 @@ export class ZCNeutralRewardFx {
          *
          * 空数组 ⇒ 这一层整条跳过（神器图标照常飞），不报错。缺省空数组是为了让只关心
          * 金币 / 飞行曲线的用例不必构造这套帧。
-         */
+        */
         private burstFrames: readonly SpriteFrame[] = [],
     ) {}
 
-    /** 仅改变后续领取事件的资源；既有事件继续使用原 startedAt，不重播。 */
+    /** 仅改变后续领取事件的资源；既有事件继续使用原 startedAt，不重播。*/
     setBurstFrames(frames: readonly SpriteFrame[]): void { this.burstFrames = frames; }
 
-    /** 当前存活的条目数（用例断言「建了多少个特效」用）。 */
+    /** 当前存活的条目数（用例断言「建了多少个特效」用）。*/
     get size(): number {
         return this.entries.size;
     }
@@ -342,7 +342,7 @@ export class ZCNeutralRewardFx {
      * @param events 本帧存活的中立资源领取事件（`frame.neutralRewards`）。
      * @param now 与模型共用的对局时钟（`visualTime`）。
      * @param resolveStart 格子中心 → host 局部坐标；格子视图不在场景里时返回 null（跳过）。
-     */
+    */
     render(
         events: readonly Readonly<ZCNeutralReward>[],
         now: number,
@@ -359,7 +359,7 @@ export class ZCNeutralRewardFx {
             }
         }
         for (const event of events) {
-            // 非玩家领取不播飞行：金币 / 神器目标都在**玩家自己的** HUD 上（2026-10-20 口径）。
+            // 非玩家领取不播飞行：金币 / 神器目标都在玩家自己的 HUD 上（2026-10-20 口径）。
             if (event.owner !== ZCOwner.Player) continue;
             const kind = this.kindOf(event.itemId);
             if (!kind) continue;
@@ -377,7 +377,7 @@ export class ZCNeutralRewardFx {
         }
     }
 
-    /** 销毁全部条目（换局 / 渲染世界销毁时调，避免节点跨局泄漏）。 */
+    /** 销毁全部条目（换局 / 渲染世界销毁时调，避免节点跨局泄漏）。*/
     clear(): void {
         for (const entry of this.entries.values()) {
             if (entry.root.isValid) entry.root.destroy();
@@ -385,7 +385,7 @@ export class ZCNeutralRewardFx {
         this.entries.clear();
     }
 
-    /** 哪种资源播哪种飞行（按资源项的**表现键**判）；其余（建筑激活 / 兵力出生）不在本类。 */
+    /** 哪种资源播哪种飞行（按资源项的表现键判）；其余（建筑激活 / 兵力出生）不在本类。*/
     private kindOf(itemId: number): 'gold' | 'artifact' | null {
         const visual = neutralResourceVisualOf(itemId);
         if (visual === ZCNeutralResourceVisual.Gold || visual === ZCNeutralResourceVisual.Chest) return 'gold';
@@ -430,7 +430,7 @@ export class ZCNeutralRewardFx {
             if (this.burstFrames.length > 0) {
                 const burstView = this.createSprite(root, this.burstFrames[0], ZC_ARTIFACT_CLAIM_BURST_SIZE);
                 burstView.node.name = 'ArtifactClaimBurst';
-                // 位置钉死格心（**不**跟飞行图标走）：爆炸是「这一格被领取」的落点标记。
+                // 位置钉死格心（不跟飞行图标走）：爆炸是「这一格被领取」的落点标记。
                 burstView.node.setPosition(start.x, start.y, 0);
                 burst = burstView.sprite;
                 burstNode = burstView.node;
@@ -471,22 +471,22 @@ export class ZCNeutralRewardFx {
     /**
      * 建一个「无 prefab、纯代码」的 Sprite 节点，屏上边长恒为 `size`。
      *
-     * 🔴 **顺序铁律：`sizeMode` 必须先设成 CUSTOM，再赋 `spriteFrame`，最后再兜一遍
-     *    `setContentSize`**。`Sprite._sizeMode` 出厂是 `TRIMMED`（引擎 `sprite.ts`：
-     *    `protected _sizeMode = SizeMode.TRIMMED`），`spriteFrame` 的 setter 会走
-     *    `_applySpriteFrame() → _applySpriteSize()`，TRIMMED 分支直接
-     *    `setContentSize(frame.rect.width, frame.rect.height)` —— 把节点尺寸回写成**原图尺寸**；
-     *    而 `sizeMode = CUSTOM` 的 setter 只在 **非 CUSTOM** 时才重算，**不会把尺寸还回来**。
+     * 顺序铁律：`sizeMode` 必须先设成 CUSTOM，再赋 `spriteFrame`，最后再兜一遍
+     * `setContentSize`。`Sprite._sizeMode` 出厂是 `TRIMMED`（引擎 `sprite.ts`：
+     * `protected _sizeMode = SizeMode.TRIMMED`），`spriteFrame` 的 setter 会走
+     * `_applySpriteFrame() → _applySpriteSize()`，TRIMMED 分支直接
+     * `setContentSize(frame.rect.width, frame.rect.height)` —— 把节点尺寸回写成原图尺寸；
+     * 而 `sizeMode = CUSTOM` 的 setter 只在 非 CUSTOM 时才重算，不会把尺寸还回来。
      *
-     *    所以旧写法（先赋图、后 CUSTOM）里 `transform.setContentSize(size, size)` 是**死代码**：
-     *    · 爆炸 `artifact_claim_burst` 原图 **300×300** ⇒ 一直画 300px（用户口径"没改小"的真因），
-     *      常量从 220 → 150 → 90 三次都没落到屏上；
-     *    · 神器图标原图最大 **655×557** ⇒ 飞行图标一直是原图大小，从没按 40px 画过；
-     *    · 金币 `34` 也从没生效（原图 43×43）。
+     * 所以旧写法（先赋图、后 CUSTOM）里 `transform.setContentSize(size, size)` 是死代码：
+     * · 爆炸 `artifact_claim_burst` 原图 300×300 ⇒ 一直画 300px（用户口径"没改小"的真因），
+     * 常量从 220 → 150 → 90 三次都没落到屏上；
+     * · 神器图标原图最大 655×557 ⇒ 飞行图标一直是原图大小，从没按 40px 画过；
+     * · 金币 `34` 也从没生效（原图 43×43）。
      *
-     *    仓库里同一条坑：`app/gm/GMManager.ts`（"旧代码里写的 104×44 从来没生效过"）、
-     *    `app/activity/ActivityProgressBox.ts`（"不关掉这个回写，render() 每次换脸都会把尺寸冲回 100"）。
-     */
+     * 仓库里同一条坑：`app/gm/GMManager.ts`（"旧代码里写的 104×44 从来没生效过"）、
+     * `app/activity/ActivityProgressBox.ts`（"不关掉这个回写，render() 每次换脸都会把尺寸冲回 100"）。
+    */
     private createSprite(
         root: Node,
         frame: SpriteFrame | null,
@@ -497,12 +497,12 @@ export class ZCNeutralRewardFx {
         node.layer = root.layer;
         const transform = node.getComponent(UITransform) ?? node.addComponent(UITransform);
         const sprite = node.addComponent(Sprite);
-        // ① 先关掉「按贴图回写尺寸」，`trim` 也一起关：CUSTOM 下尺寸只认 contentSize。
+        // 1. 先关掉「按贴图回写尺寸」，`trim` 也一起关：CUSTOM 下尺寸只认 contentSize。
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         sprite.trim = false;
-        // ② 再赋图 —— 此刻 `_applySpriteSize()` 走的是 CUSTOM 分支，不会动 contentSize。
+        // 2. 再赋图 —— 此刻 `_applySpriteSize()` 走的是 CUSTOM 分支，不会动 contentSize。
         sprite.spriteFrame = frame;
-        // ③ 最后兜一遍：万一将来有人在中间插了改 sizeMode 的代码，尺寸仍归这里说了算。
+        // 3. 最后兜一遍：万一将来有人在中间插了改 sizeMode 的代码，尺寸仍归这里说了算。
         transform.setContentSize(size, size);
         const opacity = node.addComponent(UIOpacity);
         opacity.opacity = 0;
@@ -580,9 +580,9 @@ export class ZCNeutralRewardFx {
     /**
      * 推进格子中心那套爆炸序列帧；返回它此刻是否可见。
      *
-     * 只换 `spriteFrame` + 写 `UIOpacity`：**不建 tween、不播 `cc.Animation`**，
+     * 只换 `spriteFrame` + 写 `UIOpacity`：不建 tween、不播 `cc.Animation`，
      * 帧序号由纯函数 `artifactClaimBurstFrame` 从 (startedAt, now) 推出来。
-     */
+    */
     private stepBurst(entry: IZCNeutralRewardFxEntry, now: number): boolean {
         if (!entry.burst || !entry.burstNode || !entry.burstOpacity) return false;
         const frame = artifactClaimBurstFrame(this.burstFrames.length, entry.startedAt, now);

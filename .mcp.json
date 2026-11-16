@@ -1,7 +1,8 @@
 {
   "mcpServers": {
-    "cocos-mcp": {
-      "url": "http://127.0.0.1:3000/mcp"
+    "funplay-cocos-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:23148/mcp/project/644af1bc1c3b8c68dbd10723/"
     },
     "lanhu-mcp": {
       "command": "D:\\City1001\\tools\\lanhu-mcp\\venv\\Scripts\\python.exe",

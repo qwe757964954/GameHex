@@ -89,6 +89,7 @@ def process_json_file(file_name, iscompress):
 small_list = get_list_from_file(os.path.join(SCRIPT_DIR, "small.txt"))
 exclude_list = get_list_from_file(os.path.join(SCRIPT_DIR, "exclude.txt"))
 nocompressed_list = get_list_from_file(os.path.join(SCRIPT_DIR, "nocompressed.txt"))
+unused_list = get_list_from_file(os.path.join(SCRIPT_DIR, "unused_client_tables.txt"))
 
 os.makedirs(client_config_path, exist_ok=True)
 
@@ -111,6 +112,16 @@ for file_name in os.listdir(config_path):
         if selected_table and name != selected_table:
             continue
         if name in exclude_list:
+            continue
+        if name in unused_list:
+            # 客户端未使用的表：源 JSON 仍可能由 Excel 导出到 doc/client，
+            # 这里统一阻断拷贝，并清掉工程内上一次遗留的 json 与 Cocos meta。
+            output_path = os.path.join(client_config_path, file_name)
+            for suffix in ("", ".meta"):
+                stale_path = output_path + suffix
+                if os.path.isfile(stale_path):
+                    os.remove(stale_path)
+            small.pop(name, None)
             continue
        
         iscompress = name not in nocompressed_list

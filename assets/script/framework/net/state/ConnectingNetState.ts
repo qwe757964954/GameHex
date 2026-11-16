@@ -1,6 +1,5 @@
 import { Timer } from "../../utils/Timer";
 import { ToolSet } from "../../utils/Toolset";
-import { NetworkRequest } from "../NetworkRequest";
 import { BaseNetState } from "./BaseNetState";
 
 export class ConnectingNetState extends BaseNetState {

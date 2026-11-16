@@ -94,19 +94,15 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
     }
 
     async claimDay(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult> {
-        let applied = false;
         const msg = new RequestRechargeDailyGetReward({ id: round, day }, caller, (rsp) => {
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
-            applied = true;
         });
         return this.sendClaim(msg);
     }
 
     async claimAcc(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult> {
-        let applied = false;
         const msg = new RequestRechargeDailyGetAccReward({ id: round, day }, caller, (rsp) => {
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
-            applied = true;
         });
         return this.sendClaim(msg);
     }

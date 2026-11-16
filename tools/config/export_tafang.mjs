@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { printValidationResult, validateSkillPipeline } from './validate_skill_pipeline.mjs';
 import { projectSkillPlan } from './project_skill_plan.mjs';
+import { readUnusedClientTables, removeUnusedClientTables } from './client_table_exclusions.mjs';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
 const repositoryRoot = resolve(scriptDirectory, '..', '..');
@@ -242,6 +243,14 @@ function exportWithEson(options, tempDirectory) {
     if (options.noPublish) {
         console.log('[导表] --no-publish：临时目录内已完成导出与校验，未发布任何 JSON / 未生成客户端引用。');
         return;
+    }
+    // 先清理临时目录与 doc/client 的客户端未使用表，再发布和生成引用，
+    // 避免 eSon 从源 Excel 重新生成的表被 copyJsonTree 带回。
+    const unusedClientTables = readUnusedClientTables();
+    removeUnusedClientTables(stageClientDirectory, unusedClientTables);
+    removeUnusedClientTables(resolve(options.jsonDirectory, 'client'), unusedClientTables);
+    if (unusedClientTables.length > 0) {
+        console.log(`[导表] 已排除客户端未使用表 ${unusedClientTables.length} 张：${unusedClientTables.join(', ')}`);
     }
     copyJsonTree(stageClientDirectory, resolve(options.jsonDirectory, 'client'));
     copyJsonTree(stageServerDirectory, resolve(options.jsonDirectory, 'sever'));

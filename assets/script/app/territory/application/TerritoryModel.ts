@@ -30,7 +30,7 @@ import type {
     TerritoryMapConfig,
     TerritorySite,
 } from '../model/TerritoryMapConfig';
-import { configureTerritoryMap, TERRITORY_SITE_TYPE, TERRITORY_SILVER_CHEST_REWARD_ID } from '../model/TerritoryMapConfig';
+import { configureTerritoryMap, isTerritoryBattleSite, TERRITORY_SITE_TYPE, TERRITORY_SILVER_CHEST_REWARD_ID } from '../model/TerritoryMapConfig';
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
@@ -381,6 +381,7 @@ export interface ITerritoryLevelDrop {
 
 /** 「关卡界面」呈现数据（蓝湖「关卡界面」设计稿）。 */
 export interface ITerritoryLevelInfoContent {
+    readonly levelId: number | null;
     readonly title: string;
     /** 有没有「敌军提示」可看（没有就隐藏右上角感叹号，别让玩家点出一个空面板）。 */
     readonly hasTip: boolean;
@@ -822,15 +823,23 @@ export class TerritoryModel {
         return target.site.cellId;
     }
 
-    selectSite(site: TerritorySite): void {
-        if (this.loadingPushes || this.pendingRandomResourceCells.size > 0) return;
+    /**
+     * 点击一个普通站点（关卡 / 首领 / 异步据点 / 资源点）。
+     *
+     * @returns **这次点击是否被受理**（`false` = 在途 / 未 reveal / 被防连点拦掉）。
+     *   注意是"已受理"不是"已成功"：解锁、开战都是异步发请求。
+     *   新手引导 5-1 用它决定要不要上报 `siteTap` —— 拿不到这个返回值就会在
+     *   "点了没反应的格子"上误推进。
+     */
+    selectSite(site: TerritorySite): boolean {
+        if (this.loadingPushes || this.pendingRandomResourceCells.size > 0) return false;
         // 先行换号：**点哪个格子**就是玩家的最新意图，哪怕这一格还没露出 / 点不动。
         // 在途的旧回包必须作废（否则会出现「点 A 在途 → 点了点不动的 B → A 的回包把界面解锁了」）。
         // 同一格连点是 no-op，所以「连点同一格仍要记账」的那两条用例不受影响。
         this.beginInteraction(site.cellId);
         if (!this.progress || !this.map
-            || !territoryRevealedCells(this.map, this.progress, this.previewCellsNow()).includes(site.cellId)) return;
-        if (this.isBattleSite(site) && this.pendingFixedResourceCells.has(site.cellId)) return;
+            || !territoryRevealedCells(this.map, this.progress, this.previewCellsNow()).includes(site.cellId)) return false;
+        if (this.isBattleSite(site) && this.pendingFixedResourceCells.has(site.cellId)) return false;
         // 关卡、首领和异步据点统一先解锁展示建筑；已解锁后再次点击打开各自详情。
         //
         // 🔴 2026-10-15 口径（山猫）：「点建筑就开始」是**所有关卡**的行为，不是 327/328 的特例。
@@ -874,17 +883,17 @@ export class TerritoryModel {
                 //     别在 `handleUnlockThenBattle` 里再判一遍（两处判据迟早不一致）。
                 if (this.levelAutoStart && lockedStage && this.isAutoStartSite(site)) {
                     void this.handleUnlockThenBattle(site, lockedStage);
-                    return;
+                    return true;
                 }
                 void this.handleUnlockOnly(site, TERRITORY_TEXTS.stageUnlocked);
-                return;
+                return true;
             }
             // 已解锁（或区域已通关）才弹窗：异步据点展示侦查/战斗，其余展示关卡界面。
             this.detailSite = site;
             this.detailStage = this.stageByCell.get(site.cellId) ?? null;
             this.levelTipOpen = false;
             this.emitStateChange();
-            return;
+            return true;
         }
         // 只剩**资源点**走「解锁 → 通关」（`CmdCityChapterPassCellReqMsg`）。
         // 关卡（`stage` / `boss`）已在上面那条分支 return 掉 —— 给关卡发通关会被服务端
@@ -894,22 +903,51 @@ export class TerritoryModel {
             this.detailStage = null;
             this.emitStateChange();
             void this.handleUnlockThenPass(site, TERRITORY_TWO_STEP_TEXTS.fixedResource);
-            return;
+            return true;
         }
         this.detailSite = site;
         this.detailStage = this.stageByCell.get(site.cellId) ?? null;
         this.emitStateChange();
+        return true;
     }
 
-    /** 点随机格直接开启；资源校验、失败提示和防连点统一由开启流程处理。 */
-    selectRandomResource(cellId: number): void {
+    /**
+     * 点随机资源格：校验通过就发起翻格。
+     *
+     * @returns **这一下有没有真的开始翻**（`false` = 在途 / 不是候选格 / 银币·体力·相邻格不满足 / 已开启）。
+     *   新手引导 2-1/3-1/4-1/7-1 用它决定要不要上报 `tileFlipped`；原先无条件上报会让
+     *   "钱不够点一下"也算翻了一格。
+     */
+    selectRandomResource(cellId: number): boolean {
         if (this.loadingPushes || this.busyCount > 0 || this.pendingRandomResourceCells.size > 0
-            || !this.map?.randomSites?.candidateCells.includes(cellId)) return;
+            || !this.map?.randomSites?.candidateCells.includes(cellId)) return false;
+        // 资源 / 相邻格 / 已开启的校验提前到入口：`openRandomResourceCell` 里还会再判一次（幂等），
+        // 但那一次发生在"已经开始翻"之后，拿不到结果给调用方。
+        if (!this.tryRandomResourceOpen(cellId)) return false;
         this.beginInteraction(cellId);
         this.detailSite = null;
         this.detailStage = null;
         this.emitStateChange();
         void this.openRandomResourceCell(cellId);
+        return true;
+    }
+
+    /**
+     * 随机格开启校验（条件 + 失败提示）。
+     *
+     * 抽出来是为了让 `selectRandomResource`（给引导返回值）和 `openRandomResourceCell`
+     * （真正发请求前的最后一道闸）共用同一份判据，避免两处迟早不一致。
+     */
+    private tryRandomResourceOpen(cellId: number): boolean {
+        const check = this.randomResourceOpenCheck(cellId);
+        if (check.ok) return true;
+        if ('reason' in check && check.reason !== 'alreadyOpen' && check.reason !== 'notCandidate') {
+            const reason = check.reason === 'silver' ? TERRITORY_TEXTS.silverNotEnough
+                : check.reason === 'stamina' ? TERRITORY_TEXTS.staminaNotEnough
+                    : TERRITORY_TEXTS.randomNeedsNeighbor;
+            this.showTip(reason);
+        }
+        return false;
     }
 
     closeDetail(): void {
@@ -1337,9 +1375,7 @@ export class TerritoryModel {
 
     /** 走「解锁 → 开战」的站点类型：关卡 / 首领 / 异步据点（资源点与纯装饰不算）。 */
     private isBattleSite(site: TerritorySite): boolean {
-        return site.type === TERRITORY_SITE_TYPE.stage
-            || site.type === TERRITORY_SITE_TYPE.boss
-            || site.type === TERRITORY_SITE_TYPE.asyncPvp;
+        return isTerritoryBattleSite(site);
     }
 
     /**
@@ -1389,16 +1425,9 @@ export class TerritoryModel {
         const map = this.map;
         const progress = this.progress;
         if (!map || !progress) return;
-        const check = this.randomResourceOpenCheck(cellId);
-        if (!check.ok) {
-            if ('reason' in check && check.reason !== 'alreadyOpen' && check.reason !== 'notCandidate') {
-                const reason = check.reason === 'silver' ? TERRITORY_TEXTS.silverNotEnough
-                    : check.reason === 'stamina' ? TERRITORY_TEXTS.staminaNotEnough
-                        : TERRITORY_TEXTS.randomNeedsNeighbor;
-                this.showTip(reason);
-            }
-            return;
-        }
+        // 与入口共用同一份判据（见 `tryRandomResourceOpen`）：入口已经判过一次，
+        // 这里再判是为了覆盖"请求排队期间状态变了"的情况，不会重复弹提示。
+        if (!this.tryRandomResourceOpen(cellId)) return;
         await this.runCellWrite(
             cellId, this.pendingRandomResourceCells, null,
             async () => {
@@ -1420,6 +1449,11 @@ export class TerritoryModel {
                 // 地块才会立即变草地（`img_land_01`），与已领取的固定资源点同口径。
                 // 注意不进 pendingPasses —— 随机格永不发 CmdCityChapterPassCellReqMsg。
                 const openedCellIds = result.unlockedCellIds ?? [cellId];
+                // 首次翻格（本账号一个格子都还没有）⇒ 这次走**奖励弹窗**而不是"只喷资源"。
+                // 依据：新手引导 2-2 要求「全屏黑 60% + 奖励弹窗置顶（含初始阵容）+ 点收下关闭」，
+                // 而随机格的默认口径是 `{ chest: false }`（解锁即发奖、不弹窗，2026-10-26 §3）。
+                // 只在**第一格**破例，后续翻格仍按原口径走喷资源。
+                const firstCellEver = progress.ownedCells.length === 0;
                 progress.markCellsUnlocked(openedCellIds);
                 progress.markCellsPassed(openedCellIds);
                 this.persistProgress();
@@ -1433,7 +1467,9 @@ export class TerritoryModel {
                 // ⚠️ `{ chest: false }` 同时还意味着**不弹奖励窗**（2026-10-26 §3）：
                 //    随机池发的是道具（非钱包类），走 `settleRewards` 会被全部判进 `popup`。
                 if (result.rewards?.length) {
-                    this.showRewards(result.rewards, cellId, { chest: false });
+                    // `{ popup: true }` ⇒ 直接 `FW.ShowReward`（不走宝箱开箱动画）。
+                    // 引导 2-2 要的是"弹窗"，不是"开箱表演"。
+                    this.showRewards(result.rewards, cellId, firstCellEver ? { popup: true } : { chest: false });
                 }
             },
         );
@@ -2249,9 +2285,11 @@ export class TerritoryModel {
      */
     async claimIdleRewards(now: number): Promise<void> {
         if (this.loadingPushes || !this.chapter) return;
+        const loadId = this.loadId;
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyIdleReward);
         try {
             const result = await this.ports.gateway.claimIdleReward(this.ports.lifecycleHost);
+            if (loadId !== this.loadId) return;
             if (result.ok) {
                 if (result.idleTimeSeconds > 0) this.applyServerIdleTime(result.idleTimeSeconds);
                 if (result.rewards.length) this.showRewards(result.rewards, null, { popup: true });
@@ -2294,9 +2332,11 @@ export class TerritoryModel {
             return;
         }
         const chapterId = this.map.chapterId;
+        const loadId = this.loadId;
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busySweep);
         try {
             const result = await this.ports.gateway.sweep(chapterId, target.site.cellId, times, this.ports.lifecycleHost);
+            if (loadId !== this.loadId) return;
             if (!result.ok) {
                 // `'reason' in` 而不是 `!result.ok` —— 本工程 `strictNullChecks` 关闭，
                 // 字面量 `false` 会 widen 成 `boolean`，直接读 `result.reason` 报 TS2339。
@@ -2553,6 +2593,7 @@ export class TerritoryModel {
         const unlocked = !!progress && !!site
             && (progress.isCellUnlocked(site.cellId) || passed);
         return {
+            levelId: stage?.levelId ?? null,
             title,
             // 敌军列表为空 ⇒ 感叹号藏起来（点了只会弹一个空框）
             hasTip: !!stage && stage.enemies.length > 0,

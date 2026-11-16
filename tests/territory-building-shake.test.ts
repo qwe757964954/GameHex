@@ -1,3 +1,4 @@
+import { mapInputWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 /**
  * 冒险（领地）**建筑生成抖动 + 建筑展示滞后**（钉钉需求 row14，2026-10-16）：
@@ -452,7 +453,7 @@ function makeMapView() {
         shakes,
         setPlaying: (value: boolean) => { playing = value; },
         syncFlip: (input: unknown) => (mapView as { syncFlip: (i: unknown) => void }).syncFlip(input),
-        syncStations: (input: unknown) => (mapView as { syncStations: (i: unknown) => void }).syncStations(input),
+        syncStations: (input: unknown) => (mapView as { syncStations: (i: unknown) => void }).syncStations(mapInputWithProjection(input)),
     };
 }
 
@@ -618,7 +619,7 @@ test('★★★buildSize 按 buildId 传到渲染入参（查不到一律 1，�
     withScale.art.buildScales = new Map([[69006, 1.5]]);
     const a = makeMapView();
     a.syncFlip(withScale);
-    a.syncStations(withScale);
+    a.syncStations(mapInputWithProjection(withScale));
     assert.equal(a.rendered[a.rendered.length - 1].iconScale, 1.5,
         'buildSize=1.5 必须传到站点的 iconScale');
 
@@ -627,7 +628,7 @@ test('★★★buildSize 按 buildId 传到渲染入参（查不到一律 1，�
     const b = makeMapView();
     const noScale = flipInput(true);
     b.syncFlip(noScale);
-    b.syncStations(noScale);
+    b.syncStations(mapInputWithProjection(noScale));
     assert.equal(b.rendered[b.rendered.length - 1].iconScale, 1,
         '查不到倍率必须兜底成 1');
 });

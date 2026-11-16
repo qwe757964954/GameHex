@@ -5,7 +5,7 @@ import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import type { ZCPveDefenceWave } from '../model/ZCMatchConfig';
 import { buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
 
-/** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。 */
+/** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。*/
 export function buildZCBattleReturnParams(entry: Pick<IZCGameEntry, 'slgBattleType' | 'pveContext'>) {
     const pve = entry.pveContext;
     return entry.slgBattleType ? { initialTab: 'world' }
@@ -19,7 +19,7 @@ export function resolveZCBattlePlayerCount(params?: ZCGameEntryParams): 2 | 3 | 
     return count;
 }
 
-/** 纯构筑：不修改预加载配置，不捕获存档服务或控制器回调。 */
+/** 纯构筑：不修改预加载配置，不捕获存档服务或控制器回调。*/
 export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: ZCGameEntryParams): IZCGameEntry {
     const battle = entry?.battle ?? null;
     const pve = entry?.pve;
@@ -28,7 +28,7 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     const requestedEnemyCards = new Set((pve?.enemyCardIds ?? []).map(String));
     // 本地关卡名单仅供离线使用；提前裁剪会让正式回包中的英雄在构筑前就被丢掉。
     //
-    // 🔴 例外是**塔防（首领）关**：它拿到 `battle` 也必须裁，否则「触发 npcCard 卡组」形同虚设 ——
+    //  例外是塔防（首领）关：它拿到 `battle` 也必须裁，否则「触发 npcCard 卡组」形同虚设 ——
     //    整份敌方卡池（36 张）全上，羁绊 / 卡组加成按整池算，`extraCards.enemy → npcTeam.npcCard`
     //    那套配置根本读不到（用户 2026-11-07）。塔防的敌人只有出怪表里的怪 + 首领，不靠玩家式英雄，
     //    裁掉不会丢服务端阵容：出怪卡由 `pveDefence.cards` 兜底查表，见 `ZCMatchRuntimeCompiler`。
@@ -87,11 +87,11 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         playerAvatars = { player: self?.avatarId ?? '', enemy: foe?.avatarId ?? '' };
         // 对局内排行榜按 2~4 席逐行渲染，必须把全量档案随 entry 一起交接。
         // `buildSeatProfiles` 返回 Map：release 构建会把 `[...map]` 降级成 `[].concat(map)`，
-        // 而 concat 不展开迭代器 ⇒ 变成 `[Map]` ⇒ `new Map([[Map]])` 的**值是 undefined**
+        // 而 concat 不展开迭代器 ⇒ 变成 `[Map]` ⇒ `new Map([[Map]])` 的值是 undefined
         // ⇒ HUD 里 `profile.headKey` 崩，整局停在空白（报错点在 setSeatProfiles，真凶在这行）。
-        // ⚠️ 展开源是**函数返回值**，不是 `.keys()/.values()/.entries()`，正则判据容易漏。
+        //  展开源是函数返回值，不是 `.keys()/.values()/.entries()`，正则判据容易漏。
         seatProfiles = Array.from(buildSeatProfiles(battle.units, selfRoleId ?? null));
-        // 战斗统计要按**服务端单元 id** 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
+        // 战斗统计要按服务端单元 id 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
         seatUnitIds = Array.from(buildSeatUnitIds(battle.units, selfRoleId ?? null));
     }
     return {

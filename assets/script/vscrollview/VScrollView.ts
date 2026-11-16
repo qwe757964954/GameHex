@@ -1704,7 +1704,6 @@ export class VirtualScrollView extends Component {
 
   public scrollToPosition(targetPos: number, animate = false, duration?: number, onComplete?: () => void) {
     if (this._runOrQueueAfterStart(() => this.scrollToPosition(targetPos, animate, duration, onComplete))) return;
-    const target = this._isVertical() ? this._boundsMin : this._boundsMax;
     this._scrollToPosition(targetPos, animate, duration, onComplete);
   }
 
@@ -2583,8 +2582,6 @@ export class VirtualScrollView extends Component {
 
       for (let i = 0; i < this.totalCount; i++) {
         const itemStart = this._prefixPositions[i];
-        const itemSize = this._itemSizes[i];
-        const itemCenter = itemStart + itemSize / 2;
         const dist = Math.abs(searchPos - itemStart);
 
         if (dist < minDist) {

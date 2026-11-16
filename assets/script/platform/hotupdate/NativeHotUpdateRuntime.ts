@@ -435,29 +435,6 @@ export class NativeHotUpdateRuntime {
         });
     }
 
-    /**
-     * md5 桥挂在 globalThis.__CITY1001_HOT_UPDATE_MD5__；没有桥时放行，
-     * 校验不了不能假装校验过了。
-     */
-    private verifyDownloadedAsset(path: string, asset: unknown): boolean {
-        const compressed = !!(asset && typeof asset === 'object' && (asset as { compressed?: boolean }).compressed);
-        if (compressed) return true;
-        const bridge = (globalThis as unknown as { __CITY1001_HOT_UPDATE_MD5__?: (file: string) => string }).__CITY1001_HOT_UPDATE_MD5__;
-        if (!bridge) return true;
-        const expected = (asset as { md5?: string } | null)?.md5;
-        if (!expected) return true;
-        try {
-            const actual = bridge(path);
-            if (actual && actual !== expected) {
-                this.dependencies.host.warn(`资源 md5 校验失败：${path}（期望 ${expected}，实际 ${actual}）`);
-                return false;
-            }
-        } catch (error) {
-            this.dependencies.host.warn(`资源 md5 校验异常：${path}`, error);
-        }
-        return true;
-    }
-
     /** 大版本更替时底层可能不匹配，清掉旧缓存，别让它盖住新包。 */
     private resetCacheOnClientVersionChange(config: IHotUpdateConfig): void {
         const host = this.dependencies.host;

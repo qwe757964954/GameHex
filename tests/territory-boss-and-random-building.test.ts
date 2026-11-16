@@ -133,7 +133,8 @@ test('★★1002 子类型：格子战斗/宝箱战斗 battleParams = [子类型
 
 test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝不能发通关请求', () => {
     const src = readFileSync(PRESENTER_PATH, 'utf8');
-    const select = memberOf(src, 'selectSite(site: TerritorySite): void');
+    // 2026-11-13：`selectSite` 改为返回「是否受理」（boolean），锚点跟着改；守卫逻辑不变。
+    const select = memberOf(src, 'selectSite(site: TerritorySite): boolean');
     // ⚠️ 必剥注释：`selectSite` 上方的说明会**复述旧写法**
     //    （「早前这里只有 bossStage?.isBoss || isTerritoryTwoStepCell(...)」），
     //    不剥 ⇒ 旧口径被注释复活成**假绿**（规则 104 的同款陷阱）。
@@ -145,7 +146,8 @@ test('★★所有战斗站点（stage/boss/asyncPvp）都走开战流程，绝�
     // ① 分流入口认 `isBattleSite`；② 那个方法的类型集合必须**恰好**是 stage/boss/asyncPvp。
     assert.match(code, /if \(this\.isBattleSite\(site\)\)/,
         '战斗站点必须按类型分流，不再认 cellId 名单');
-    const battleSite = codeOf(memberOf(src, 'private isBattleSite(site: TerritorySite): boolean'));
+    assert.match(codeOf(memberOf(src, 'private isBattleSite(site: TerritorySite): boolean')), /return isTerritoryBattleSite\(site\)/);
+    const battleSite = codeOf(readFileSync('assets/script/app/territory/model/TerritoryMapConfig.ts', 'utf8'));
     for (const type of ['stage', 'boss', 'asyncPvp']) {
         assert.ok(battleSite.includes(`TERRITORY_SITE_TYPE.${type}`),
             `isBattleSite 必须涵盖 ${type}（漏一个就是「点了没反应」且零报错）`);
@@ -251,7 +253,7 @@ test('★★art.randomResource 已无渲染消费者 —— 留字段但要写�
 test('★★★★关卡/首领/异步据点没配buildingId 必须 return null，不许回退到 type 图', () => {
     const src = readFileSync(VIEW_PATH, 'utf8');
     const start = src.indexOf('private stationIconOf');
-    const end = src.indexOf('private stateOf', start);
+    const end = src.indexOf('private buildScaleOf', start);
     assert.ok(start > 0 && end > start, 'stationIconOf 要能定位');
     const fn = src.slice(start, end);
     // 🔴 剥注释后再比位置 —— 注释里也出现了 `TERRITORY_SITE_ART` 字样，
@@ -264,7 +266,7 @@ test('★★★★关卡/首领/异步据点没配buildingId 必须 return null�
     //    视觉上仍是「一片区域到处是建筑」，且零报错。
     // 🔴 2026-10-16 山猫「异步战点也要跟 Boss 一样，通关 / 解锁都是有建筑 id 才显示建筑」
     //    ⇒ `asyncPvp` 并入本名单（chapter_01 的 16 个异步据点只有 4 个配了 69002）。
-    assert.match(code, /if\s*\(site\.type === TERRITORY_SITE_TYPE\.stage \|\| site\.type === TERRITORY_SITE_TYPE\.boss \|\| site\.type === TERRITORY_SITE_TYPE\.asyncPvp\) return null;/,
+    assert.match(code, /if\s*\(isTerritoryBattleSite\(site\)\) return null;/,
         'stage/boss/asyncPvp 没配 buildingId 时必须直接 return null（不能落到 TERRITORY_SITE_ART 回退）');
     // 反向守卫：`asyncPvp` **不许**从这条早退里掉队 —— 掉了就是「异步据点又回到按 type 取图」，
     // 症状是没配 id 的 12 个异步据点全部长成同一个敌方主城外观（零报错）。
@@ -314,7 +316,7 @@ test('★★★同一 configId 区域内，配了 buildingId 的站点恰好一�
 test('★★关卡/首领的 type 建筑图在无 buildingId 时不再被使用（stage 图已被兜底路径覆盖）', () => {
     const src = readFileSync(VIEW_PATH, 'utf8');
     const start = src.indexOf('private stationIconOf');
-    const end = src.indexOf('private stateOf', start);
+    const end = src.indexOf('private buildScaleOf', start);
     const fn = src.slice(start, end);
     // `stage?.isBoss` 分支仍留着：asyncPvp/fixedResource 理论上可绑到 isBoss 的 stage，
     // 它不受「关卡才严格」这条新口径影响（山猫 2026-10-12 只点了 stage + boss）。

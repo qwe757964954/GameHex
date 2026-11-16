@@ -10,12 +10,7 @@ export interface IZCOutcomeContext {
     homeId(owner: ZCOwner): number;
 }
 
-/**
- * 塔防 BOSS 波进度（由模型按出怪账本给出）。
- *
- * - `spawned`：BOSS 波已经出来过（含「提前拆 boss 建筑直接召出末波」那条捷径）；
- * - `alive`：BOSS 波里还有活着的单位（BOSS 波可能多于一只，全部清空才算击败）。
- */
+/** 塔防 BOSS 波进度：spawned 表示已出场，alive 表示还有活口（多只 BOSS 需全部清掉）。*/
 export interface IZCDefenceBossState {
     readonly spawned: boolean;
     readonly alive: boolean;
@@ -25,18 +20,13 @@ export interface IZCOutcomeResult {
     readonly status: Exclude<ZCGameStatus, 'playing'>;
     readonly reason: string;
     /**
-     * **真正的胜方**（`draw` 时为 `null`）。
-     *
-     * 为什么不能靠 `status` 反推：`status` 是**以我方视角**的二值（victory / defeat），
-     * 4 人局里「我方出局」既可能是 2 号红方赢，也可能是 4 号紫方赢，两者 status 都是 `defeat`。
-     * 结算胜利扫场要按**胜方本色**铺地（2026-10-28 用户口径「结算胜利动画的颜色应该对应
-     * 胜利玩家的颜色」），红方色铺在紫方赢的局上就是错的 —— 所以身份必须在这里定下来，
-     * 不能留给视图猜。
-     */
+     * 真正的胜方（平局为 `null`）。`status` 只是我方视角的二值，4 人局无法反推是谁赢；
+     * 结算扫场要按胜方本色铺地，所以身份必须在这里定下来。
+    */
     readonly winner: ZCOwner | null;
 }
 
-/** 结算四项的排序优先级（领地 → 主城血量 → 兵种数量 → 兵种总血量）。 */
+/** 结算四项的排序优先级（领地 → 主城血量 → 兵种数量 → 兵种总血量）。*/
 const OUTCOME_FIELDS: ReadonlyArray<{ key: keyof ZCScoreBreakdown; label: string }> = [
     { key: 'territory', label: '占领地块' },
     { key: 'mainCityHp', label: '主城血量' },
@@ -44,7 +34,7 @@ const OUTCOME_FIELDS: ReadonlyArray<{ key: keyof ZCScoreBreakdown; label: string
     { key: 'totalUnitHp', label: '兵种总血量' },
 ];
 
-/** 两份结算数据按 `OUTCOME_FIELDS` 逐项比；0 = 四项完全相同。 */
+/** 两份结算数据按 `OUTCOME_FIELDS` 逐项比；0 = 四项完全相同。*/
 function compareScores(left: ZCScoreBreakdown, right: ZCScoreBreakdown): number {
     for (const field of OUTCOME_FIELDS) {
         if (left[field.key] !== right[field.key]) return left[field.key] - right[field.key];
@@ -52,7 +42,7 @@ function compareScores(left: ZCScoreBreakdown, right: ZCScoreBreakdown): number 
     return 0;
 }
 
-/** Reads the current match snapshot and returns a result; committing it remains the model's job. */
+/** 只读快照给出结算结果；写入对局状态由模型负责。*/
 export class ZCOutcomeSystem {
     static scoreFor(state: IZCOutcomeState, owner: ZCOwner, homeId: number): ZCScoreBreakdown {
         const units = state.units.filter((unit) => unit.owner === owner && unit.battleState !== 'dead');
@@ -77,10 +67,8 @@ export class ZCOutcomeSystem {
                 // 塔防失败没有「PvP 胜方」，扫场仍按敌方色铺（= 现存行为），显式写出来免得被当成漏填。
                 return { status: 'defeat', reason: '塔防失败：我方主城领地已失守。', winner: ZCOwner.Enemy };
             }
-            // 🔴 只有**击败 BOSS** 才算赢（用户 2026-11-07）：中间波次清空、甚至把敌方主城拆了都不算，
-            // 否则「提前摧毁 boss 建筑 → 跳过中间波次 → 直接召出 BOSS」这条捷径就变成了跳过 BOSS 取胜。
-            // `defenceBoss` 由模型按账本给出（BOSS 波是否出场、是否还有活口）；没传时退回旧口径
-            // （全部波次出完 + 场上无敌人），只在单测直接调本方法时才会走到。
+            // 只有击败 BOSS 才算赢：中间波次清空、甚至拆掉敌方主城都不算，否则“提前拆 boss 建筑”
+            // 就成了跳过 BOSS 的捷径。`defenceBoss` 由模型按账本给出，缺省时退回旧口径。
             const boss = defenceBoss ?? {
                 spawned: nextDefenceWaveIndex >= context.pveDefence.waves.length,
                 alive: state.units.some((unit) => unit.owner !== ZCOwner.Player && unit.battleState !== 'dead'),
@@ -95,9 +83,8 @@ export class ZCOutcomeSystem {
             return { status: 'victory', reason: '强攻胜利：全部对手的已开发地块归零！', winner: ZCOwner.Player };
         }
         if (developedCount(ZCOwner.Player) === 0) {
-            // 我方被打光 ⇒ 胜方是**还站着的那个人**（不是写死的 2 号席）。4 人局里可能是
-            // `enemy` / `enemy2` / `enemy3`，靠 `developedCount > 0` 过滤出一个子集再比四项。
-            // 走 `checkOutcome` 走到这里时至少有一个对手还有地（上面那条已经排除了全归零）。
+            // 我方被打光：胜方是还站着的那个人，4 人局里可能是任意一个敌方席位。
+            // 走到这里时至少还有一个对手有地（全归零那条已经先返回了）。
             const survivors = this.rankOwners(
                 state,
                 context.activeOwners.filter((owner) => owner !== ZCOwner.Player && developedCount(owner) > 0),
@@ -113,7 +100,7 @@ export class ZCOutcomeSystem {
         return this.compareScores(state, context);
     }
 
-    /** 按 `scoreFor` 给一批席位打分（顺序保持传入顺序，供 `leaderOf` 做稳定排序）。 */
+    /** 按 `scoreFor` 给一批席位打分（顺序保持传入顺序，供 `leaderOf` 做稳定排序）。*/
     private static rankOwners(
         state: IZCOutcomeState,
         owners: readonly ZCOwner[],
@@ -122,7 +109,7 @@ export class ZCOutcomeSystem {
         return owners.map((owner) => ({ owner, score: this.scoreFor(state, owner, context.homeId(owner)) }));
     }
 
-    /** 四项比较后的头名与「与之全等」的席位（`tied.length > 1` ⇒ 平局）。 */
+    /** 四项比较后的头名与「与之全等」的席位（`tied.length > 1` ⇒ 平局）。*/
     private static leaderOf(
         entries: ReadonlyArray<{ owner: ZCOwner; score: ZCScoreBreakdown }>,
     ): { best: { owner: ZCOwner; score: ZCScoreBreakdown }; tied: Array<{ owner: ZCOwner; score: ZCScoreBreakdown }> } {
@@ -146,7 +133,7 @@ export class ZCOutcomeSystem {
         return {
             status: won ? 'victory' : 'defeat',
             reason: `${won ? '结算胜利' : '结算失败'}：${ownerName}按${decisive?.label ?? '综合数据'}领先。`,
-            // 分数局要按**领先的那一方**上色，而不是「我方输 ⇒ 一律红方色」。
+            // 分数局要按领先的那一方上色，而不是「我方输 ⇒ 一律红方色」。
             winner: best.owner,
         };
     }

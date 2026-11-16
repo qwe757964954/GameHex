@@ -1,6 +1,8 @@
-import { _decorator, Label, Node, tween, Vec3 } from 'cc';
+import { _decorator, Label, Node, Tween, tween, Vec3 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { FW } from '../../framework/FW';
 import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
 import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
@@ -80,10 +82,14 @@ export class ShowRewardPage extends PopupBase {
     }
 
     protected async onOpen(userData?: IShowRewardParams): Promise<void> {
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
         this.entries = [];
         this.frames = [];
         this.playedAni.clear();
         this.isGold = !!userData?.isGold;
+        // 起手态必须在任何 await 之前写好：弹窗节点在 onOpen 前已 active，
+        // 若等查表 / 加载图（100ms+）后才缩，玩家会先看到一帧全尺寸面板与标题再弹回去。
+        this.prepareEnterAnimation();
 
         const goods = parseCmdGoodsList(userData?.goods);
         if (goods.length === 0) {
@@ -123,6 +129,7 @@ export class ShowRewardPage extends PopupBase {
         this.playedAni.clear();
         this.isGold = false;
         // 不做「奖励飞向背包」收尾动画，见类注释。
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
     }
 
     // ============================================================
@@ -213,14 +220,38 @@ export class ShowRewardPage extends PopupBase {
     }
 
     /**
+     * 入场起手态（幂等）：面板 (1,0.3)、标题隐藏 (1,0.46)、提示条隐藏，并停掉上一轮残留补间。
+     *
+     * 🔴 必须在 `onOpen` 的**第一个 await 之前**调用：弹窗节点在 onOpen 前已经 active，
+     * 等查表 / 加载图再缩会先露出一帧全尺寸面板 + 标题，再弹回去 —— 看起来就是「飘 / 抖」。
+     */
+    private prepareEnterAnimation(): void {
+        if (this.panelBg) {
+            Tween.stopAllByTarget(this.panelBg);
+            this.panelBg.setScale(1, 0.3, 1);
+        }
+        if (this.titleImage) {
+            Tween.stopAllByTarget(this.titleImage);
+            this.titleImage.active = false;
+            this.titleImage.setScale(1, 0.46, 1);
+        }
+        for (const node of [this.hintBg, this.hintLabel?.node ?? null]) {
+            if (!node) continue;
+            Tween.stopAllByTarget(node);
+            node.active = false;
+        }
+    }
+
+    /**
      * 入场动画（FGUI t0，帧/60fps）：底框 0 帧 scale(1,0.3)、5 帧弹入；
      * 标题 3 帧、提示条 4 帧出现。
      * 引擎坑：inactive 节点首次起 tween 会被 ActionManager 永久 paused，而激活动作写在
      * 同一 tween 的 call 里 ⇒ 死锁。正解：延迟用 scheduleOnce，先 active=true 再起 tween。
      */
     private playEnterAnimation(): void {
+        this.prepareEnterAnimation();
+
         if (this.panelBg) {
-            this.panelBg.setScale(1, 0.3, 1);
             tween(this.panelBg)
                 .to(framesToSeconds(5), { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
                 .start();
@@ -228,8 +259,6 @@ export class ShowRewardPage extends PopupBase {
 
         // 隐藏 + 延迟不能写成同一 tween 的 delay+call（见上方引擎坑）；scheduleOnce 到点先激活再起 tween。
         if (this.titleImage) {
-            this.titleImage.active = false;
-            this.titleImage.setScale(1, 0.46, 1);
             this.scheduleOnce(() => {
                 if (!this.alive || !this.titleImage) return;
                 this.titleImage.active = true;

@@ -21,7 +21,7 @@ export interface IZCLegacyCombatContext {
     applyLegacyKnockback(target: ZCUnitState, source: ZCUnitState, distance: number): void;
 }
 
-/** Resolves legacy effect formulas and status applications for the current match. */
+/** 旧版技能效果公式与状态施加的结算。*/
 export class ZCLegacyCombatSystem {
     static evaluateSkill(source: ZCUnitState, effectKeys: readonly string[],
         target: ZCCombatTarget, isCritical: boolean, context: IZCLegacyCombatContext): ZCLegacySkillEvaluation {
@@ -33,8 +33,7 @@ export class ZCLegacyCombatSystem {
         const configured = context.legacyAttributes(source.owner).get(source.unitId) ?? {};
         const attributes: Record<string, unknown> = {
             ...configured,
-            // The old runtime injected these values dynamically from the battle role.
-            // Here they use the current owner/unit/tier/status-adjusted PVP attack.
+            // 旧运行时从战斗角色动态注入这两个值；这里改用当前 owner/unit/品级/状态修正后的 PVP 攻击力。
             角色攻击力: baseAttack,
             基础攻击力: baseAttack,
         };
@@ -77,7 +76,7 @@ export class ZCLegacyCombatSystem {
         let changed = false;
         for (const buff of buffs) {
             const legacyType = context.legacyConfig()?.buffTypes[buff.legacyKey] ?? '';
-            if (legacyType === '牵引') continue; // handled on the caster at launch
+            if (legacyType === '牵引') continue; // 牵引由施法者在出手时处理
             if (legacyType === '击退') {
                 if (source) context.applyLegacyKnockback(target, source, legacyNumber(buff.params['击退距离']));
                 continue;

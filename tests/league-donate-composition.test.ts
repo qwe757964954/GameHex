@@ -8,7 +8,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueDonateController } from '../assets/script/app/league/LeagueDonateController';
 import { LeagueDonateModel } from '../assets/script/app/league/LeagueDonateModel';
 import { LeagueDonateEvent, type ILeagueDonateViewState } from '../assets/script/app/league/LeagueDonateEvents';
-import type { ILeagueDonateSnapshot, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
+import type { ILeagueDonateSnapshot, ILeagueRewardResult, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
 import { createControllerContext } from './helpers/controller-context';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
@@ -136,7 +136,7 @@ function harness() {
     const { createLeagueDonatePopupComposition } = load<{
         createLeagueDonatePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
     }>(COMPOSITION_TS, {
-        FW: { FW: { showTip: (text: string) => tips.push(text) } },
+        FW: { FW: { showTip: (text: string) => tips.push(text), ShowReward: () => {} } },
         CommonTips: { CommonTips: { open: ({ userData }: { userData: { content: string; onSure: () => void } }) => {
             confirms.push(userData); return Promise.resolve();
         } } },
@@ -147,8 +147,8 @@ function harness() {
         LeagueRepository: {
             leagueRepository: {
                 loadDonate: () => new Promise<ILeagueDonateSnapshot>(resolve => loadCalls.push({ resolve })),
-                requestDonate: (adv: boolean, caller: object) => new Promise<LeagueRequestResult>(resolve =>
-                    donateCalls.push({ adv, caller, resolve })),
+                requestDonate: (adv: boolean, caller: object) => new Promise<ILeagueRewardResult>(resolve =>
+                    donateCalls.push({ adv, caller, resolve: status => resolve({ status, rewards: [] }) })),
             },
         },
         GameNet: { GameNet: { instance: { removeCaller: (caller: object) => cancelled.push(caller) } } },
@@ -229,7 +229,7 @@ test('factory 只认捐献页；真实端口接线，关闭取消 caller，缓�
         EventMgr.instance.emit(LeagueDonateEvent.Intent, { owner: view, kind: 'coin' });
         assert.equal(h.confirms.length, 1);
         assert.equal(h.donateCalls.length, 2);
-        assert.equal(h.tips.length, 1);
+        assert.equal(h.tips.length, 2, '捐献成功提示 + 次数用完提示');
         h.host.close(view);
         assert.deepEqual(h.cancelled, h.donateCalls.map(call => call.caller));
     } finally { h.host.dispose(); }

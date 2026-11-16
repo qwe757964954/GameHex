@@ -1,0 +1,131 @@
+import { instantiate, Prefab, type Node } from 'cc';
+import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { GuideController, type IGuideViewState } from '../../guide/application/GuideController';
+import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
+import { PopupManager } from '../../../framework/ui/PopupManager';
+import { ShowRewardPage } from '../../showReward/ShowRewardPage';
+import { loadGuideDialog, loadGuidePortraits, loadGuideSteps } from '../../guide/application/GuideLoader';
+import { createGuideSaveStore } from '../../guide/application/GuideStorageAdapter';
+import { GameNetGuideGateway } from '../../guide/application/GuideGateway';
+import { GuideDialogView } from '../../guide/ui/GuideDialogView';
+import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
+import { MainTab, MainTabHost } from '../../main/MainTabHost';
+import type { MainTerritoryMap } from '../../main/MainTerritoryMap';
+import { FW } from '../../../framework/FW';
+
+const GUIDE_DIALOG_PREFAB = 'ui/Guide/GuideDialog';
+
+/** 主界面与章节战斗复用同一装配逻辑，进度继续由 GuideController 和存档持有。 */
+export class GuideComposition extends ControllerBase {
+    constructor(private readonly context: IControllerContext, private readonly root: Node,
+        private readonly phase: 'main' | 'battle', private readonly territoryView: MainTerritoryMap | null = null) {
+        super(context, 'guide-composition');
+        void this.startGuide().catch(reportGuideFailure);
+    }
+
+    private async startGuide(): Promise<void> {
+        const steps = await loadGuideSteps();
+        // await 之后组合层可能已经被销毁（切页 / 退出对局），必须判。
+        if (this.isDisposed || steps.length === 0) return;
+
+        const view = await this.createGuideView();
+        if (!view) return;
+        if (this.isDisposed) { view.node.destroy(); return; }
+
+        // 台词与立绘并行取；任一缺失只让对应表现空着（Loader 内部已兜底）。
+        const [{ groups }, frames] = await Promise.all([
+            loadGuideDialog(),
+            loadGuidePortraits(this.resources),
+        ]);
+        if (this.isDisposed) { view.node.destroy(); return; }
+        view.initialize(groups, frames);
+
+        // 奖励可能由其它功能打开，也可能早于引导完成加载；统一按弹窗实例暂停。
+        const rewards = new Set(PopupManager.inst.openedPopups.filter(popup => popup instanceof ShowRewardPage));
+        let latestState: IGuideViewState | null = null;
+        const render = (state: IGuideViewState): void => {
+            latestState = state;
+            const battleFocus = state.focusNode.startsWith('Battle/') || state.focusNode.startsWith('BattleResult/');
+            if (rewards.size > 0 || (!state.finished && battleFocus !== (this.phase === 'battle'))) view.hide();
+            else view.render(state);
+        };
+        this.listen(VIEW_LIFECYCLE, ({ owner, phase }: IViewLifecycle) => {
+            if (!(owner instanceof ShowRewardPage)) return;
+            if (phase === 'enabled') rewards.add(owner);
+            else if (phase === 'disabled' || phase === 'destroyed') rewards.delete(owner);
+            else return;
+            if (latestState) render(latestState);
+        });
+
+        const controller = new GuideController(this.context, {
+            store: createGuideSaveStore(),
+            steps,
+            gateway: new GameNetGuideGateway(),
+            view: { owner: view, render },
+            // 引导奖励出口。
+            // ⚠️ 客户端**没有本地发奖通道**：钱包与背包都是服务端权威（`refreshWalletFromServer`），
+            //    GM 的 addItem 也是走 `RequestSystemGm` 发到服务器。所以这里只能用通用奖励弹窗
+            //    把「应得」展示出来，并留一条 warn 标明尚未入账 —— 真入账需要一条
+            //    「引导奖励领取」协议（`client_proto` 里目前没有）。
+            //    进度侧不受影响：`grantedSteps` 已经记账，协议补齐后可用 stepId 幂等补发。
+            grant: (rewards, stepId) => {
+                FW.ShowReward(rewards.map((reward) => ({
+                    resId: reward.resId,
+                    number: reward.number,
+                })) as unknown as CmdGoods[]);
+                console.warn(`[Guide] 步骤 ${stepId} 的 ${rewards.length} 项奖励已展示，但尚未入账（缺引导奖励协议）`);
+            },
+            failed: reportGuideFailure,
+        });
+        if (!controller.start()) {
+            view.node.destroy();
+            controller.dispose();
+            return;
+        }
+        this.own(() => controller.dispose());
+        if (this.phase === 'battle') controller.notify('battleEntered');
+    }
+
+    private async createGuideView(): Promise<GuideDialogView | null> {
+        try {
+            const prefab = await this.resources.assets.load(GUIDE_DIALOG_PREFAB, Prefab, { scope: this.resources.scope });
+            if (this.isDisposed) return null;
+            if (!prefab) {
+                console.warn('[GuideComposition] 引导 prefab 加载失败，本次不做引导');
+                return null;
+            }
+            const node = instantiate(prefab);
+            node.active = false;
+            // 焦点会落在导航栏与弹窗里，覆盖层不能局限在当前 tab 的内容节点下。
+            const canvas = this.root.scene.getChildByName('Canvas');
+            canvas.addChild(node);
+            this.own(() => node.destroy());
+            const view = node.getComponent(GuideDialogView);
+            if (view) {
+                view.setFocusProvider(key => {
+                    if (key === 'Main/CardEntry') {
+                        const tab = canvas.getComponentInChildren(MainTabHost)?.getGuideTabNode(MainTab.Hero);
+                        return tab ? { node: tab, shape: 'rect' } : null;
+                    }
+                    const mapNode = this.territoryView?.getGuideFocusNode(key) ?? null;
+                    if (mapNode) return { node: mapNode, shape: 'hex' };
+                    let anchor: GuideFocusAnchor | null = null;
+                    for (const item of canvas.getComponentsInChildren(GuideFocusAnchor)) {
+                        if (item.key === key && item.node.activeInHierarchy && (!anchor || item.shownAt > anchor.shownAt)) anchor = item;
+                    }
+                    return anchor ? { node: anchor.node, shape: 'rect' } : null;
+                });
+            }
+            if (!view) {
+                console.warn('[GuideComposition] 引导 prefab 上缺少 GuideDialogView');
+                node.destroy();
+                return null;
+            }
+            return view;
+        } catch (error) {
+            reportGuideFailure(error);
+            return null;
+        }
+    }
+}
+function reportGuideFailure(error: unknown): void { console.warn('[GuideComposition]', error); }

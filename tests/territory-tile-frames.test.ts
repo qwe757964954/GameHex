@@ -1,3 +1,5 @@
+import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -172,6 +174,7 @@ function loadMapView() {
             };
             // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
             if (id === '../model/TerritoryMapConfig') return {
+                isTerritoryBattleSite,
                 TERRITORY_SITE_TYPE: {
                     stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
                     fixedResource: 'fixedResource', bonus: 'bonus',
@@ -301,9 +304,7 @@ test('章节战斗站点气泡显示章节-关卡（连字符不留空格），�
     const View = loadMapView();
     const view = new View();
     Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
-    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
-        levelBubble?: string; levelBubbleFrame?: unknown; isCondition?: boolean;
-    } }).stationRenderOf.bind(view);
+    const render = stationRenderWithProjection(view);
     let unlocked = true;
     const input = {
         stageByCell: new Map([[1, { chapterId: 3, stage: 12 }]]),
@@ -351,9 +352,7 @@ test('气泡底图按「通没通过」二选一：未通关红、已通关蓝�
     const View = loadMapView();
     const view = new View();
     Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
-    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
-        levelBubbleFrame?: unknown;
-    } }).stationRenderOf.bind(view);
+    const render = stationRenderWithProjection(view);
     const blue = { name: 'frame_03' };
     const red = { name: 'frame_02' };
     let passed = false;
@@ -380,9 +379,7 @@ test('已通关的关卡仍然可点（要能打开领地关卡信息弹窗）',
     const View = loadMapView();
     const view = new View();
     Object.assign(view, { stationIconOf: () => ({ name: 'building' }), stateOf: () => 'available' });
-    const render = (view as unknown as { stationRenderOf(site: unknown, input: unknown): {
-        interactive?: boolean;
-    } }).stationRenderOf.bind(view);
+    const render = stationRenderWithProjection(view);
     const base = (pending: boolean) => ({
         stageByCell: new Map([[1, { chapterId: 1, stage: 3 }]]),
         art: { randomSilverIcon: {}, levelBubbleFrame: { name: 'frame_01' },

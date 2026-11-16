@@ -13,7 +13,7 @@
 | `assets/bundles/main-pages/ui/card/LineupSlot.prefab` | 站台 151×204：`Stage` 151×63、`Disc` 117×31、`Hero` 256×256 scale 0.65、`Meta` 下 `ClassBadge` 36×36 + `LevelLabel`（22px）。 |
 | `assets/bundles/main-pages/ui/card/CardLineupCard.prefab` | 卡条目 169×230：`Face` 160×223、`HeroShadow`、`Hero` scale 0.57、`ClassBadge` 40×40、`OnField`、`LevelPlate`、`Progress`、`UpgradeArrow`、`LockVeil`、`Lock`。 |
 | `assets/bundles/main-pages/ui/card/CardLineupBond.prefab` | 羁绊条目 40×40：`Icon` 40×40 + `CountLabel`（20px，右伸）。 |
-| `assets/script/app/card/CardArtProvider.ts` | 新增阵容页固定图映射：站台光效按职业、职业角标、统计条职业/阵营图标、卡面品质框；`loadLineupSlot` / `loadLineupCard` / `loadTallyFrames` 切新图。布阵页 `loadBoardSlot` / `loadBoardCard` 未改。 |
+| `assets/script/app/card/CardArtProvider.ts` | 新增阵容页固定图映射：站台光效按职业、职业角标、统计条职业/阵营图标、卡面品质框；`loadLineupSlot` / `loadLineupCard` / `loadTallyFrames` 切新图。布阵页取图改走表内 `badge`（新 `yx_zhiye_*`），立绘统一走 `headIcon`。 |
 | `assets/script/app/card/CardLineupCard.ts` | 新增 `lockVeil` / `upgradeArrow` 绑定；未解锁改为 `yx_mask` 遮罩显隐 + 锁标，不再用 `Sprite.color` 乘算压暗；碎片够且未满级显示可升级箭头。 |
 | `assets/script/app/card/CardLineupTexts.ts` | `onField` 文案「已出战！」→「出战中」。 |
 | `assets/bundles/main-pages/image/card/common_img_kp_01..04.png` | 用品质框 `yx_kp_01..04` 覆盖（160×223），UUID 不变，卡面绑定不变。 |
@@ -22,7 +22,7 @@
 | `assets/script/core/asset/BundleCatalog.ts` | `main-pages` 分包目录登记新增 `image/card_lineup`，否则 `bundleForPath` 会把它当首包 `resources`，运行时 `Bundle resources doesn't contain ...`。 |
 | 测试 | `card-lineup-ui-regression` / `card-head-view` / `card-lineup-loading` / `card-lineup` / `card-art-dedup` / `bundle-scope` 同步新版式与取图断言。 |
 
-未改：`CardLineupPage.ts` 的分页、排序、上阵/下阵、碎片进度、数据绑定与交互；`CardLineupSlot.ts`、`CardLineupBond.ts`；布阵页 prefab 与取图。
+未改：`CardLineupPage.ts` 的分页、排序、上阵/下阵、碎片进度、数据绑定与交互；`CardLineupSlot.ts`、`CardLineupBond.ts`；布阵页 prefab 版式。
 
 ## 2. 资源映射
 

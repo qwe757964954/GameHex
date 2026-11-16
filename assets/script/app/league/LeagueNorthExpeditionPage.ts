@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
  * 「北伐中原（联合战线）」主面板 —— 老端 `play/LayerLeagueNorthernExpedition.ts`，
  * prefab `ui/League/LeagueNorthExpedition`。
@@ -192,6 +194,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
+        EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
         this.bind(this.backButton, this.onBackClick);
         this.bind(this.helpButton, () => openLeagueHelp(LEAGUE_NORTH_HELP_ID));
         this.bind(this.rankButton, () => void LeagueNorthRankPage.open({}));
@@ -210,11 +213,13 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     }
 
     protected onClose(): void {
+        this.busy = false;
         this.revision += 1;
         this.stopTick();
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         this.stopTick();
         super.onDestroy();
@@ -385,11 +390,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         if (!snapshot) return;
         if (!this.ensureOpen()) return;
         if (!this.beginWrite()) return;
-        try {
-            await this.afterWrite(await this.repository.requestSweep(this));
-        } finally {
-            this.busy = false;
-        }
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'sweep' } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -423,6 +424,15 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         this.busy = true;
         return true;
     }
+
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
+        if (event.owner !== this) return;
+        try {
+            await this.afterWrite(event.status);
+        } finally {
+            this.busy = false;
+        }
+    };
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {

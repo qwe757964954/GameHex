@@ -13032,6 +13032,9 @@
       },
       {
         "__id__": 542
+      },
+      {
+        "__id__": 618
       }
     ],
     "_prefab": {
@@ -15150,5 +15153,24 @@
     "instance": null,
     "targetOverrides": null,
     "nestedPrefabInstanceRoots": null
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "6805b4ae70b242f88b1090"
+  },
+  {
+    "__type__": "616cdS59ZtIN5DOHmb9GgL7",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 525
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 617
+    },
+    "key": "CardDetail/BtnUpgrade",
+    "_id": ""
   }
 ]

@@ -31,9 +31,17 @@ export const TERRITORY_SITE_TYPE = {
     asyncPvp: 'asyncPvp',
     fixedResource: 'fixedResource',
     bonus: 'bonus',
+    patrolChest: 'patrolChest',
 } as const;
 
 export type TerritorySiteType = typeof TERRITORY_SITE_TYPE[keyof typeof TERRITORY_SITE_TYPE];
+
+/** 所有可发起战斗的站点，交互、区域进度与渲染共用。 */
+export function isTerritoryBattleSite(site: Pick<TerritorySite, 'type'>): boolean {
+    return site.type === TERRITORY_SITE_TYPE.stage
+        || site.type === TERRITORY_SITE_TYPE.boss
+        || site.type === TERRITORY_SITE_TYPE.asyncPvp;
+}
 
 /** 全量类型数组（配表解析校验用；顺序 = 表内声明顺序，由常量表推导，不是第二份字面量）。 */
 export const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
@@ -72,6 +80,8 @@ export interface TerritorySite {
     cellId: number;
     footprint: number[];
     configId?: string;
+    /** 巡逻宝箱可配置的战斗 ID，保留配置顺序。 */
+    battleIds?: number[];
     buildingId?: string;
     /** `PVP-关卡` 的关卡地图格子奖励表 ID，仅固定资源点使用。 */
     rewardId?: number;
@@ -334,6 +344,15 @@ function parseSite(
     };
     if (typeof raw.configId === 'string' && raw.configId) site.configId = raw.configId;
     if (typeof raw.buildingId === 'string' && raw.buildingId) site.buildingId = raw.buildingId;
+    if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
+        assert(Array.isArray(raw.battleIds) && raw.battleIds.length > 0
+            && raw.battleIds.every((id) => Number.isSafeInteger(id) && id > 0),
+            `sites[${index}].battleIds must be a non-empty array of positive integers`);
+        site.battleIds = [...raw.battleIds];
+    } else {
+        assert(raw.battleIds === undefined,
+            `sites[${index}].battleIds is only valid for patrolChest sites`);
+    }
     if (raw.rewardId !== undefined) {
         assert(site.type === TERRITORY_SITE_TYPE.fixedResource,
             `sites[${index}].rewardId is only valid for fixedResource sites`);

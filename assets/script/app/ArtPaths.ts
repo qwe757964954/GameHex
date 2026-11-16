@@ -64,7 +64,7 @@ export const CARD_ART_ROOT = `${ART_ROOT}/card`;
 /** 卡牌详情页整套透明切图（面板 / 六边形 / 图标 / 按钮）。 */
 export const CARD_DETAIL_ART_ROOT = `${ART_ROOT}/carddetail`;
 
-/** 卡牌阵容 / 布阵页图标：营地雕像与职业角标。 */
+/** 卡牌阵容 / 布阵页图标：职业角标。 */
 export const ICON_ART_ROOT = `icons/card`;
 
 /** 布阵卡池卡框。 */
@@ -149,6 +149,78 @@ export const TERRITORY_ART_ROOT = `${ART_ROOT}/territory`;
  *  现在改用独立的开盖宝箱图（`zw_0005`）。
  */
 export const TERRITORY_CHEST_ART_ROOT = `${ART_ROOT}/territory/chest`;
+
+/**
+ * 「领地宝箱开启」奖励页切图（蓝湖「宝箱开启」设计稿，画布 720×1610，**7 张**）。
+ *
+ *  切图都是 xhdpi `sliceScale = 2` 导出的 **1:1 设计像素**，用的时候不要再乘缩放：
+ *   `bg` 720×1610（整屏渐变底）、`chest` 282×277（开启态灰橙金属箱，透明底）、
+ *   `card_01..04` 139×185（橙 / 紫 / 绿 / 蓝四色卡框）、`band` 122×29（数量底条，黑 + alpha≈117）。
+ *
+ *  ⚠️ 卡框是**整图**不是九宫格（`trimType: none`、不留 border）：换图时别改成 SLICED，
+ *  否则 3px 亮边会被拉成柱子。命名 `01..04` 是设计稿原序（橙/紫/绿/蓝），
+ *  与工程品质序（1 白…5 橙…8 将）**不是**一回事，映射见 `TerritoryChestOpenArt`。
+ */
+export const TERRITORY_CHEST_OPEN_ART_ROOT = `${ART_ROOT}/territory/chest_open`;
+
+/**
+ * 「宝箱开启」整屏底图的目录 = `image/` 根。
+ *
+ * ⚠️ 720×1610 超过 `image/territory` 自动图集的 1024 页高，放进 `territory/chest_open/`
+ * 构建期会被切图（`tests/auto-atlas-capacity.test.ts` C4 直接红）。`image/` 根按规范
+ * 禁止放 pac（`docs/AI架构与代码规范.md` §7.3.2），天然是「不进图集的大图区」——
+ * `bg_main`（同样 720×1610）也在这里。别为了路径整齐把它挪回宝箱目录。
+ */
+export const TERRITORY_CHEST_OPEN_BG_ART_ROOT = ART_ROOT;
+
+/**
+ * 「宝箱开启」弹窗的 7 张切图名：`bg` 在 `TERRITORY_CHEST_OPEN_BG_ART_ROOT`，
+ * 其余 6 张在 `TERRITORY_CHEST_OPEN_ART_ROOT`（随 `image/territory` 的 auto-atlas 合批）。
+ * 统一用 `chestOpenArtPathOf` 拼路径，别自己拼。
+ */
+export const TERRITORY_CHEST_OPEN_ARTS = {
+    bg: 'bg_chest_open',
+    chest: 'chest_open_chest',
+    band: 'chest_open_card_band',
+    frameOrange: 'chest_open_card_01',
+    framePurple: 'chest_open_card_02',
+    frameGreen: 'chest_open_card_03',
+    frameBlue: 'chest_open_card_04',
+} as const;
+
+/**
+ * 「获得英雄」全屏展示页切图（蓝湖「获得英雄」设计稿，画布 720×1610，**8 张**）。
+ *
+ *  切图是 xhdpi `sliceScale = 2` 导出的 **1:1 设计像素**，不要再乘缩放：
+ *  `bg` 720×1610（橙色放射底图，放在 `image/` 根，**不进图集**）、
+ *  `rays` 690×690（卡后光效）、`title` 326×54（「获得传说英雄!」标题是**导出图**不是文字）、
+ *  `plate` 252×51（名牌底）、`shadow` 302×68（英雄影子）、`shard` 53×52（碎片图标）、
+ *  `barBg` 270×42 / `barFill` 255×27（碎片进度条底与填充）。
+ *
+ *  ⚠️ 英雄立绘**不在这 8 张里**：设计稿那个 421×426 的 `yedanzhanshi` 是工程内同一份
+ *  Spine 骨架（`skel/椰蛋战士`），由 `HeroObtainPage` 运行时挂 `CardUnitPreview` 播 idle。
+ */
+export const HERO_OBTAIN_ART_ROOT = `${ART_ROOT}/hero_obtain`;
+/** 整屏底图目录 = `image/` 根（720×1610 超过 `image/hero_obtain` 图集页高，进图集会被切）。 */
+export const HERO_OBTAIN_BG_ART_ROOT = ART_ROOT;
+
+export const HERO_OBTAIN_ARTS = {
+    bg: 'bg_hero_obtain',
+    rays: 'hdyx_guang',
+    title: 'hdyx_title',
+    plate: 'hdyx_xxk_di',
+    shadow: 'hdyx_yinying',
+    shard: 'hdyx_icon_suipian',
+    barBg: 'hdyx_progress_bg',
+    barFill: 'hdyx_progress_01',
+} as const;
+
+/** 切图名 → resources 路径（`bg` 在 `image/` 根，其余在 `image/hero_obtain/`）。 */
+export function heroObtainArtPathOf(name: typeof HERO_OBTAIN_ARTS[keyof typeof HERO_OBTAIN_ARTS]): string {
+    return name === HERO_OBTAIN_ARTS.bg
+        ? `${HERO_OBTAIN_BG_ART_ROOT}/${name}`
+        : `${HERO_OBTAIN_ART_ROOT}/${name}`;
+}
 
 /**
  * 章节地图的**未解锁云**（覆盖没露出来的格位）。

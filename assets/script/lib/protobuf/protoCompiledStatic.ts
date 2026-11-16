@@ -55744,6 +55744,297 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdGameViewClickRspMsg";
 };
 return CmdGameViewClickRspMsg;
 })();
+cmd.CmdFunctionGuideInfo = (function() {
+function CmdFunctionGuideInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdFunctionGuideInfo.prototype.funcId = 0;
+CmdFunctionGuideInfo.prototype.step1 = 0;
+CmdFunctionGuideInfo.prototype.step2 = 0;
+CmdFunctionGuideInfo.create = function create(properties) {
+return new CmdFunctionGuideInfo(properties);
+};
+CmdFunctionGuideInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.funcId);
+writer.uint32(  16).uint32(message.step1);
+writer.uint32(  24).uint32(message.step2);
+return writer;
+};
+CmdFunctionGuideInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.funcId = reader.uint32();
+break;
+}
+case 2: {
+message.step1 = reader.uint32();
+break;
+}
+case 3: {
+message.step2 = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("funcId"))
+throw $util.ProtocolError("missing required 'funcId'", { instance: message });
+if (!message.hasOwnProperty("step1"))
+throw $util.ProtocolError("missing required 'step1'", { instance: message });
+if (!message.hasOwnProperty("step2"))
+throw $util.ProtocolError("missing required 'step2'", { instance: message });
+return message;
+};
+CmdFunctionGuideInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfo";
+};
+return CmdFunctionGuideInfo;
+})();
+cmd.CmdFunctionGuideInfoReqMsg = (function() {
+function CmdFunctionGuideInfoReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdFunctionGuideInfoReqMsg.prototype.funcId = 0;
+CmdFunctionGuideInfoReqMsg.create = function create(properties) {
+return new CmdFunctionGuideInfoReqMsg(properties);
+};
+CmdFunctionGuideInfoReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.funcId);
+return writer;
+};
+CmdFunctionGuideInfoReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.funcId = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("funcId"))
+throw $util.ProtocolError("missing required 'funcId'", { instance: message });
+return message;
+};
+CmdFunctionGuideInfoReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg";
+};
+return CmdFunctionGuideInfoReqMsg;
+})();
+cmd.CmdFunctionGuideInfoRspMsg = (function() {
+function CmdFunctionGuideInfoRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdFunctionGuideInfoRspMsg.prototype.infos = null;
+CmdFunctionGuideInfoRspMsg.create = function create(properties) {
+return new CmdFunctionGuideInfoRspMsg(properties);
+};
+CmdFunctionGuideInfoRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.encode(message.infos, writer.uint32(  10).fork(), q + 1).ldelim();
+return writer;
+};
+CmdFunctionGuideInfoRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.infos = $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("infos"))
+throw $util.ProtocolError("missing required 'infos'", { instance: message });
+return message;
+};
+CmdFunctionGuideInfoRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg";
+};
+return CmdFunctionGuideInfoRspMsg;
+})();
+cmd.CmdFunctionGuideUpdateReqMsg = (function() {
+function CmdFunctionGuideUpdateReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdFunctionGuideUpdateReqMsg.prototype.info = null;
+CmdFunctionGuideUpdateReqMsg.create = function create(properties) {
+return new CmdFunctionGuideUpdateReqMsg(properties);
+};
+CmdFunctionGuideUpdateReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+$root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.encode(message.info, writer.uint32(  10).fork(), q + 1).ldelim();
+return writer;
+};
+CmdFunctionGuideUpdateReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.info = $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("info"))
+throw $util.ProtocolError("missing required 'info'", { instance: message });
+return message;
+};
+CmdFunctionGuideUpdateReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg";
+};
+return CmdFunctionGuideUpdateReqMsg;
+})();
+cmd.CmdFunctionGuideUpdateRspMsg = (function() {
+function CmdFunctionGuideUpdateRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdFunctionGuideUpdateRspMsg.prototype.succ = 0;
+CmdFunctionGuideUpdateRspMsg.create = function create(properties) {
+return new CmdFunctionGuideUpdateRspMsg(properties);
+};
+CmdFunctionGuideUpdateRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.succ);
+return writer;
+};
+CmdFunctionGuideUpdateRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.succ = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("succ"))
+throw $util.ProtocolError("missing required 'succ'", { instance: message });
+return message;
+};
+CmdFunctionGuideUpdateRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg";
+};
+return CmdFunctionGuideUpdateRspMsg;
+})();
 cmd.MessageId = (function() {
 const valuesById = {}, values = Object.create(valuesById);
 values[valuesById[1731012380] = "CmdTakeDayChallengeActRewardRspMsg"] = 1731012380;
@@ -55860,6 +56151,8 @@ values[valuesById[827208359] = "CmdFuBenEnterRspMsg"] = 827208359;
 values[valuesById[1528771729] = "CmdFuBenDailyGetRewardRspMsg"] = 1528771729;
 values[valuesById[427584667] = "CmdFuBenBuyTimesRspMsg"] = 427584667;
 values[valuesById[1878627949] = "CmdFuBenSweepRspMsg"] = 1878627949;
+values[valuesById[1416382725] = "CmdFunctionGuideInfoRspMsg"] = 1416382725;
+values[valuesById[799066198] = "CmdFunctionGuideUpdateRspMsg"] = 799066198;
 values[valuesById[510764152] = "CmdFundGetInfoRspMsg"] = 510764152;
 values[valuesById[1902555017] = "CmdFundGetRewardRspMsg"] = 1902555017;
 values[valuesById[1855584437] = "CmdTakeGameCircleRewardRspMsg"] = 1855584437;

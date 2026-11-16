@@ -36,7 +36,7 @@ export interface IZCBattleSessionInput {
     readonly params?: ZCGameEntryParams;
     readonly battle?: Promise<ZCBattleStart | null>;
 }
-/** 组合层返回的运行期归属句柄；会话先持有，再启动，最后统一释放。 */
+/** 组合层返回的运行期归属句柄；会话先持有，再启动，最后统一释放。*/
 export interface IZCBattleRuntimeController {
     start(entry: IZCGameEntry, resources: IControllerResources): void;
     dispose(): void;
@@ -46,7 +46,7 @@ export interface IZCBattleRuntimeOptions<T extends IZCBattleRuntime> {
     readonly createRuntimeController: (runtime: T, entry: IZCGameEntry, resources: IControllerResources) => IZCBattleRuntimeController;
 }
 
-/** 单局会话拥有对局阶段、运行期与显示资源；流程取消、初始化失败和正常离开走同一收尾路径。 */
+/** 单局会话拥有对局阶段、运行期与显示资源；流程取消、初始化失败和正常离开走同一收尾路径。*/
 export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBase {
     private phase: ZCBattlePhase = ZCBattlePhase.Idle;
     private runtime: T | null = null;
@@ -99,7 +99,7 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         return this.transition(ZCBattlePhase.Playing, ZCBattlePhase.SettlementPresentation);
     }
 
-    /** 撤退可从 playing 直接进入结算；正常终局从演出阶段进入。 */
+    /** 撤退可从 playing 直接进入结算；正常终局从演出阶段进入。*/
     openSettlement(): boolean {
         if (this.phase === ZCBattlePhase.Playing) {
             return this.transition(ZCBattlePhase.Playing, ZCBattlePhase.Settlement);

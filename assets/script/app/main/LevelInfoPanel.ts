@@ -4,11 +4,13 @@ import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { RewardItemView, type IRewardItemData } from '../common/RewardItemView';
 import { TerritoryUiEvent } from '../territory/application/TerritoryEvents';
+import { GuideFocusAnchor } from '../guide/ui/GuideFocusAnchor';
 
 const { ccclass, property } = _decorator;
 
 /** 「关卡界面」内容。 */
 export interface ILevelInfoContent {
+    readonly levelId: number | null;
     readonly title: string;
     /** 有没有敌军提示（false ⇒ 隐藏右上角感叹号）。 */
     readonly hasTip: boolean;
@@ -55,6 +57,7 @@ export interface ILevelInfoContent {
  */
 @ccclass('LevelInfoPanel')
 export class LevelInfoPanel extends PopupBase {
+    @property(GuideFocusAnchor) guideAnchor: GuideFocusAnchor = null!;
     /** ⚠️ 目录名必须与磁盘一致（`assets/resources/ui/main/`）。 */
     static prefabPath = 'ui/main/LevelInfoPanel';
 
@@ -121,6 +124,7 @@ export class LevelInfoPanel extends PopupBase {
      * 所以「点另一个关卡」要直接改内容，不能靠再 open 一次。
      */
     applyContent(content: ILevelInfoContent): void {
+        this.guideAnchor.key = content.levelId === null ? '' : `LevelList/Item_${content.levelId}`;
         this.titleLabel.string = content.title;
         // 没有敌军提示就把感叹号藏起来（点空白仍可关闭）
         this.hintButton.node.active = content.hasTip;

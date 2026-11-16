@@ -117,7 +117,7 @@ test('篮球天才：三路友军光环各占一个槽位（整卡共用一份�
     assert.deepEqual(slots, [0, 1, 2], '三条光环必须落在 0/1/2 三个不同槽位');
 });
 
-test('科学家 26 级：穿透 / 处决 / 暴击三路词缀都进了 statPatch', () => {
+test('科学家 26 级：穿透 / 暴击两路词缀进了 statPatch，处决已从卡牌链路移除', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const loadout = compileZCCombatBuild({
@@ -129,9 +129,10 @@ test('科学家 26 级：穿透 / 处决 / 暴击三路词缀都进了 statPatch
     assert.equal(patch.attackSpeedPct, 22);
     assert.equal(patch.damageRatePct, 46);
     assert.equal(patch.critRatePct, 36);
-    // 103502 的处决走 skillParamJson（unit 域没有 executeChance）
+    //  2026-11-14 口径：处决只留给其他养成系统，卡牌链路（`pvpSkillPlan`）不再带 executeChance。
     const plan = loadout!.skillPlans.find((row) => row.skillChainId === 103502 && row.skillLevel === 3);
-    assert.equal(plan?.skillParams?.executeChance, 0.55);
+    assert.ok(plan, '103502 三档必须仍在计划里');
+    assert.equal(plan?.skillParams?.executeChance, undefined, '卡牌链路已移除处决');
 });
 
 test('眩晕状态必须写进 control 列，否则 controlOf 读不到', () => {

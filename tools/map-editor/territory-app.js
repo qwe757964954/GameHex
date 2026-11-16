@@ -226,7 +226,7 @@ function zoomAt(event, factor) {
 }
 
 function iconColor(type) {
-  return ({ stage: '#2563eb', boss: '#dc2626', asyncPvp: '#9333ea', fixedResource: '#ca8a04', bonus: '#0891b2', start: '#16a34a', candidate: '#d97706' })[type] || '#334155';
+  return ({ stage: '#2563eb', boss: '#dc2626', asyncPvp: '#9333ea', fixedResource: '#ca8a04', bonus: '#0891b2', patrolChest: '#ea580c', start: '#16a34a', candidate: '#d97706' })[type] || '#334155';
 }
 
 function createMarker({ id, type, cx, cy, label }) {
@@ -249,7 +249,7 @@ function createMarker({ id, type, cx, cy, label }) {
   } else if (type === 'fixedResource') {
     const coin = document.createElementNS(NS, 'circle'); coin.setAttribute('class', 'icon-glyph'); coin.setAttribute('cx', String(cx)); coin.setAttribute('cy', String(cy - 9)); coin.setAttribute('r', '4'); coin.setAttribute('fill', 'none'); group.appendChild(coin);
     const mark = document.createElementNS(NS, 'text'); mark.textContent = '$'; mark.setAttribute('x', String(cx)); mark.setAttribute('y', String(cy - 9)); group.appendChild(mark);
-  } else if (type === 'bonus') {
+  } else if (type === 'bonus' || type === 'patrolChest') {
     const gift = document.createElementNS(NS, 'path'); gift.setAttribute('class', 'icon-glyph'); gift.setAttribute('d', `M${cx - 5},${cy - 10}h10v8h-10zM${cx},${cy - 10}v8m-6,-5h12`); gift.setAttribute('fill', 'none'); group.appendChild(gift);
   } else if (type === 'start') {
     const home = document.createElementNS(NS, 'path'); home.setAttribute('class', 'icon-glyph'); home.setAttribute('d', `M${cx - 5},${cy - 8}l5,-5 5,5v6h-10z`); group.appendChild(home);
@@ -574,6 +574,32 @@ function setField(id, value) {
 
 function syncRewardField(type) {
   $('fixedResourceRewardField').hidden = type !== 'fixedResource';
+  $('patrolBattleIdsField').hidden = type !== 'patrolChest';
+  $('configIdField').hidden = type === 'patrolChest';
+}
+
+function readPatrolBattleIds() {
+  const text = $('battleIds').value.trim();
+  if (!text) return [];
+  const ids = text.split(/[,，\s]+/).map(Number);
+  if (!ids.length || !ids.every((id) => Number.isSafeInteger(id) && id > 0)) {
+    message('巡逻宝箱战斗 ID 必须是逗号分隔的正整数，至少填写一个');
+    $('battleIds').focus();
+    return null;
+  }
+  return ids;
+}
+
+function applyPatrolBattleIdsFromForm() {
+  const site = siteAtCell(selectedCell);
+  if (!site || site.type !== 'patrolChest') return true;
+  const ids = readPatrolBattleIds();
+  if (!ids) return false;
+  if (JSON.stringify(site.battleIds) === JSON.stringify(ids)) return true;
+  commit();
+  site.battleIds = ids;
+  markErrorsStale();
+  return true;
 }
 
 function applyRewardIdFromForm() {
@@ -709,6 +735,7 @@ function syncForm() {
   if (!site) return;
   setField('siteId', site.id); setField('siteType', site.type); setField('configId', site.configId || ''); setField('buildingId', site.buildingId || '');
   setField('rewardId', site.rewardId ?? '');
+  setField('battleIds', (site.battleIds || []).join(','));
   syncRewardField(site.type);
   setField('requiredCells', site.unlock.requiredCells.join(',')); setField('unlockType', site.unlock.unlockType || 'combatPower'); setField('unlockValue', site.unlock.unlockValue ?? site.unlock.combatPower ?? 0); setField('silverCost', site.unlock.silverCost); setField('exploreSeconds', site.unlock.exploreSeconds); setField('staminaCost', site.unlock.staminaCost);
 }
@@ -729,7 +756,7 @@ function releaseCell(cell) {
 
 function addSite(cell, type) {
   map.sites = map.sites.filter((site) => site.cellId !== cell);
-  map.sites.push({ id: `${type}_${map.sites.length + 1}`, type, cellId: cell, footprint: [cell], configId: `${type}_${cell}`, unlock: { requiredCells: [map.startCellId], unlockType: 'combatPower', unlockValue: map.defaults.combatPower ?? 0, silverCost: map.defaults.silverCost, exploreSeconds: map.defaults.exploreSeconds, staminaCost: map.defaults.staminaCost } });
+  map.sites.push({ id: `${type}_${map.sites.length + 1}`, type, cellId: cell, footprint: [cell], ...(type === 'patrolChest' ? { battleIds: [] } : { configId: `${type}_${cell}` }), unlock: { requiredCells: [map.startCellId], unlockType: 'combatPower', unlockValue: map.defaults.combatPower ?? 0, silverCost: map.defaults.silverCost, exploreSeconds: map.defaults.exploreSeconds, staminaCost: map.defaults.staminaCost } });
   selectedCell = cell;
 }
 
@@ -820,6 +847,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
   if (cell < 0) return;
   if (!applyRewardIdFromForm()) return;
   applyRandomBuildingIdFromForm();
+  if (!applyPatrolBattleIdsFromForm()) return;
   const cells = brushRadius > 0 ? neighborCells(Math.floor(cell / map.columns), cell % map.columns, brushRadius) : [cell];
   if (mode === 'select') { selectedCell = cell; if (!skipRender) render(); return; }
   if (!skipCommit) commit();
@@ -850,6 +878,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
 
 function buildJSON() {
   applyRandomBuildingIdFromForm();
+  if (!applyPatrolBattleIdsFromForm()) throw new Error('巡逻宝箱战斗 ID 无效');
   const value = snapshot();
   value.id = $('mapId').value.trim(); value.chapterId = Number($('chapterId').value); value.name = $('mapName').value.trim() || value.id; value.rows = Number($('rows').value); value.columns = Number($('columns').value); value.background = $('background').value.trim();
   value.randomSites = { ...value.randomSites, triggerSilver: Number($('triggerSilver').value), rewardPoolId: $('rewardPoolId').value.trim(), maxActive: Number($('maxActive').value) };
@@ -1003,12 +1032,15 @@ document.querySelectorAll('input[name="brushRadius"]').forEach((radio) => radio.
     $('tools').addEventListener('click', (event) => { const button = event.target.closest('button'); if (!button) return; mode = button.dataset.mode; if (mode !== 'format') formatSource = null; document.querySelectorAll('#tools button').forEach((item) => item.classList.toggle('active', item === button)); $('toolStatus').textContent = `当前工具：${button.textContent}`; });
 $('siteType').addEventListener('change', () => syncRewardField($('siteType').value));
 $('rewardId').addEventListener('change', applyRewardIdFromForm);
+$('battleIds').addEventListener('change', applyPatrolBattleIdsFromForm);
 $('randomBuildingId').addEventListener('change', () => { if (applyRandomBuildingIdFromForm()) { render(); message(selectedCell == null ? '' : `已设置格子 ${selectedCell} 的建筑 ID，按 Ctrl+S 保存`); } });
 $('applyBatchRewardId').addEventListener('click', applyBatchRewardId);
 $('applySite').addEventListener('click', () => {
   const site = siteAtCell(selectedCell);
   if (!site) return;
   const type = $('siteType').value;
+  const battleIds = type === 'patrolChest' ? readPatrolBattleIds() : null;
+  if (type === 'patrolChest' && !battleIds) return;
   const rewardText = $('rewardId').value.trim();
   const rewardId = rewardText === '' ? null : Number(rewardText);
   if (type === 'fixedResource' && rewardId !== null && (!Number.isInteger(rewardId) || rewardId <= 0)) {
@@ -1019,7 +1051,8 @@ $('applySite').addEventListener('click', () => {
   commit();
   site.id = $('siteId').value.trim();
   site.type = type;
-  site.configId = $('configId').value.trim();
+  if (type === 'patrolChest') { site.battleIds = battleIds; delete site.configId; }
+  else { site.configId = $('configId').value.trim(); delete site.battleIds; }
   site.buildingId = $('buildingId').value.trim();
   if (type === 'fixedResource' && rewardId !== null) site.rewardId = rewardId;
   else delete site.rewardId;

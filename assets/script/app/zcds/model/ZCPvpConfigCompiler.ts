@@ -34,7 +34,7 @@ export interface IZCPvpCompiledConfig {
     readonly bonds: readonly ZCBondRule[];
     readonly tileConfigs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
     readonly tileWeights: readonly ZCPvpTileTypeWeight[];
-    /** 中立资源组合目录（`neutralResourceGroup` 表）；表缺失时为空目录。 */
+    /** 中立资源组合目录（`neutralResourceGroup` 表）；表缺失时为空目录。*/
     readonly neutralResources: ZCNeutralResourceCatalog;
     readonly goldPity: number;
     readonly modifierCatalogs: ReturnType<typeof parseZCModifierCatalogs>;
@@ -42,7 +42,7 @@ export interface IZCPvpCompiledConfig {
     readonly rules: Readonly<ZCRuntimeRules>;
 }
 
-/** 校验并编译当前 PVP 分表；任何字段失败都不会污染运行时配置。 */
+/** 校验并编译当前 PVP 分表；任何字段失败都不会污染运行时配置。*/
 export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     const global = kvToObject(tables.pvpGlobal);
     const schemaVersion = typeof global.schemaVersion === 'number' ? global.schemaVersion : 2;
@@ -90,8 +90,8 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         referencedLegacyKeys,
     );
 
-    //  合表后单位属性内联在卡行上（2026-09-20 起 `pvpUnit` 表已下线）：直接用**原始卡行**
-    // 建单位目录。不能复用上面那份 `cards` —— 那是过滤后的**出战卡**，
+    //  合表后单位属性内联在卡行上（2026-09-20 起 `pvpUnit` 表已下线）：直接用原始卡行
+    // 建单位目录。不能复用上面那份 `cards` —— 那是过滤后的出战卡，
     // 而卡池里的兵种同样要能上场（抽到卡池卡 → 进卡组 → 出兵）。
     const units = parseUnits((tables.pvpCard ?? []).map(normalizeCardRow), skills);
     const modifierCatalogs = parseZCModifierCatalogs(
@@ -107,7 +107,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         },
     );
 
-    // 中立资源组合：引用的卡牌必须在**本局编译出来的**卡目录里（含建筑卡）。
+    // 中立资源组合：引用的卡牌必须在本局编译出来的卡目录里（含建筑卡）。
     //  表缺失 ⇒ 空目录（资源点不会出资源，但不会让整局起不来）；表在但配错 ⇒ 编译期抛。
     const neutralResources = compileZCNeutralResourceCatalog(
         tables.neutralResourceGroup ?? [],
@@ -146,7 +146,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         sourceSha256: 'remoteRef',
         matchDurationSeconds: globalNumber(global, 'matchDurationSeconds'),
         initialGold: globalNumber(global, 'initialGold'),
-        // 主城收入：卡表「主城」行的 `buildDigGoldNum`（每次产金数量，**固定值不随品级**）
+        // 主城收入：卡表「主城」行的 `buildDigGoldNum`（每次产金数量，固定值不随品级）
         // 与 `goldDigTime`（产金周期）。缺值时退回 `PVP-全局` 的 hqIncome*。
         hqIncomeAmount: (hqCard.buildDigGoldNum ?? 0) > 0
             ? hqCard.buildDigGoldNum!
@@ -159,12 +159,12 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         artifactMaxStored: number(artifact.maxStored, 'pvpArtifact[].maxStored'),
         artifactName: text(artifact.name, 'pvpArtifact[].name'),
         /**
-         * 本局神器的图标名（`pvpArtifact[].icon`，如「霜封冰刃」），**不带目录、不带后缀**。
+         * 本局神器的图标名（`pvpArtifact[].icon`，如「霜封冰刃」），不带目录、不带后缀。
          *
-         *  渲染层按 `image/artifact/<icon>` 拼路径去 `resources.load`（与 `pvpCard.icon` 同一口径，
-         *  规则 137）。中立资源点「神器充能」图标要显示**玩家当前携带的这件神器**，
+         * 渲染层按 `image/artifact/<icon>` 拼路径去 `resources.load`（与 `pvpCard.icon` 同一口径，
+         * 规则 137）。中立资源点「神器充能」图标要显示玩家当前携带的这件神器，
          * 用的就是这个字段 —— 换神器（改表的第一行）后图标会自动跟着变。
-         */
+        */
         artifactIcon: text(artifact.icon, 'pvpArtifact[].icon'),
         artifactCooldownSeconds: number(artifact.cooldownSeconds, 'pvpArtifact[].cooldownSeconds', 0, true),
         artifactFreezeSeconds: number(artifact.effectSeconds, 'pvpArtifact[].effectSeconds', 0, true),

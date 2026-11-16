@@ -1,3 +1,4 @@
+import * as territoryViewStateModule from '../assets/script/app/territory/application/TerritoryViewState';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -69,6 +70,7 @@ function loadTheme(): IThemeExports {
                 territoryChestHintCell: () => null,
                 territoryPrerequisiteChestCell: () => null,
             };
+            if (id === '../application/TerritoryViewState') return territoryViewStateModule;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

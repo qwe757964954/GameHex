@@ -155,6 +155,10 @@ export class MainTabHost extends Component {
         }
     }
 
+    getGuideTabNode(tab: MainTab): Node | null {
+        return this.navItems.find(item => item.tabType === tab)?.node ?? null;
+    }
+
     private renderNavItem(item: TabButton, type: number, selected: boolean): void {
         const entry = mainTabItem(type);
         if (!entry) {

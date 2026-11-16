@@ -10,7 +10,7 @@ import { assetPath } from './helpers/asset-paths';
  *
  * 用户原话：「战斗中，所有的法师职业的普通攻击子弹特效改小比例成70%」。
  * 追问后定的两条边界（用户亲选）：
- *  1. 共用的 prefab **照缩、接受连带** —— 冰锥（泰兰德也用）、雷电（萨尔也用）跟着变小；
+ *  1. 共用的 prefab **照缩、接受连带** —— 冰锥（泰兰德也用）、雷电（磁电菇也用）跟着变小；
  *  2. 阿尔萨斯虽在 `traits.attack === '法师'` 里，但普攻 `mode === 'melee'`（践踏环，不是子弹），
  *     **跳过不动**。
  *
@@ -110,11 +110,11 @@ const MELEE_MAGE = { unitId: 68015, name: '阿尔萨斯', skillId: 30241, prefab
 /**
  * 被连带的**非法师**单位（用户已知情接受）：
  * 水手菇（旧名「冰冻菇」）的 30261 就是弩兵普攻（冰锥），雷蕉的 30231 就是雷法师普攻，
- * 这两个技能同时被射手毒箭蘑菇（旧名「泰兰德」）、战士萨尔引用。哪天要拆成专属 prefab，这条会先红。
+ * 这两个技能同时被射手毒箭蘑菇（旧名「泰兰德」）、战士磁电菇（原萨尔）引用。哪天要拆成专属 prefab，这条会先红。
  */
 const COLLATERAL = [
     { unitId: 68017, name: '毒箭蘑菇', role: '射手', skillId: 30261, sharedBy: '水手菇' },
-    { unitId: 68016, name: '萨尔', role: '战士', skillId: 30231, sharedBy: '雷蕉' },
+    { unitId: 68016, name: '磁电菇', role: '战士', skillId: 30231, sharedBy: '雷蕉' },
 ];
 
 const prefabFile = (prefab: string): string => `${prefab}.prefab`;
@@ -231,7 +231,7 @@ test('④ 光束（镭射飞龙）：只缩粗细，x 恒 1 —— 长度由每�
         'applyBeamStretch 必须把宽度作为绝对值写入 scaleY（覆盖 prefab 的 0.7）');
 });
 
-test('⑤ 连带影响是**已知取舍**：冰锥/雷电同时被泰兰德、萨尔用着，他们也一起变小了', () => {
+test('⑤ 连带影响是**已知取舍**：冰锥/雷电同时被泰兰德、磁电菇（原萨尔）用着，他们也一起变小了', () => {
     const cards = readRows('pvpCard');
     const skills = readRows('pvpSkill');
     for (const victim of COLLATERAL) {

@@ -24,7 +24,7 @@ const DETAIL_QUALITY_ART = {
  *
  * 这三组图不随品级/阵营矩阵表走，也不再由 `cardUiArt*.json` 提供：
  * 站台光效按**职业**四色、卡/站台角标按职业、统计条按职业+阵营。
- * 只改阵容页的取图，布阵页（`loadBoardSlot` / `loadBoardCard`）继续用表内路径。
+ * 布阵页的角标改走 `cardUiArtClass.badge`（已切到 `yx_zhiye_*`），立绘两页统一走 `headIcon`。
  */
 const LINEUP_SLOT_GLOW: Record<ZCCardClass, string> = {
     warrior: 'image/card_lineup/yx_img_guang_01',
@@ -51,11 +51,6 @@ const LINEUP_TALLY_ICON: Record<string, string> = {
     'camp.penzai': 'icons/card/common_img_pz',
 };
 
-export interface CardClassFrames {
-    readonly on: SpriteFrame | null;
-    readonly off: SpriteFrame | null;
-}
-
 /**
  * 卡牌图组合器。这里不做请求缓存，单图去重交给 SpriteFrameCache。
  */
@@ -64,7 +59,7 @@ export class CardArtProvider {
         const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
             this.loadPath(LINEUP_SLOT_GLOW[cardClass]),
-            this.loadHeroArt(card, art, `hero.${cardClass}`),
+            this.loadHeroArt(card, art),
             this.loadPath(LINEUP_CLASS_BADGE[cardClass]),
         ]).then(([disc, hero, badge]) => ({ disc, hero, badge }));
     }
@@ -73,7 +68,7 @@ export class CardArtProvider {
         const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
             this.load(art, `face.${card.rarity}`),
-            this.loadHeroArt(card, art, `hero.${cardClass}`),
+            this.loadHeroArt(card, art),
             this.loadPath(LINEUP_CLASS_BADGE[cardClass]),
         ]).then(([face, hero, badge]) => ({ face, hero, badge }));
     }
@@ -82,7 +77,7 @@ export class CardArtProvider {
         const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
             this.load(art, `disc.${card.rarity}`),
-            this.loadHeroArt(card, art, `boardHero.${cardClass}`),
+            this.loadHeroArt(card, art),
             this.load(art, `badge.${cardClass}`),
         ]).then(([disc, hero, badge]) => ({ disc, hero, badge }));
     }
@@ -91,45 +86,33 @@ export class CardArtProvider {
         const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
             this.load(art, `frame.${card.rarity}`),
-            this.loadHeroArt(card, art, `boardHero.${cardClass}`),
+            this.loadHeroArt(card, art),
             this.load(art, `badge.${cardClass}`),
         ]).then(([frame, hero, badge]) => ({ frame, hero, badge }));
     }
 
     /**
-     * 立绘优先用配置里的 headIcon，经 icon.json 找到 cardHead 图；缺图再退回职业立绘。
+     * 立绘统一用配置里的 headIcon，经 icon.json 找到 cardHead 图；
+     * 缺专属图时退回 `boardHero` 的 cardHead 占位，不再加载职业雕像。
      */
-    private loadHeroArt(
-        card: ZCDeckCard,
-        art: ICardArtConfig,
-        fallback: ICardArtKey,
-    ): Promise<SpriteFrame | null> {
+    private loadHeroArt(card: ZCDeckCard, art: ICardArtConfig): Promise<SpriteFrame | null> {
+        const cardClass = resolveCardClass(card, art.lineup);
+        const fallback = () => this.load(art, `boardHero.${cardClass}`);
         const target = card.headIcon ? art.heroIcons.resolve(card.headIcon) : null;
-        return target
-            ? loadIconByArtPath(`${target.root}/${target.art}`).then(frame => frame ?? this.load(art, fallback))
-            : this.load(art, fallback);
+        if (!target) return fallback();
+        return loadIconByArtPath(`${target.root}/${target.art}`).then(frame => frame ?? fallback());
     }
 
-    loadClassFrames(cardClass: ZCCardClass, art: ICardArtConfig): Promise<CardClassFrames> {
-        return Promise.all([
-            this.load(art, `iconOn.${cardClass}`),
-            this.load(art, `iconOff.${cardClass}`),
-        ]).then(([on, off]) => ({ on, off }));
-    }
-
-    /** 职业与阵营分别查图；阵容页先走新版固定图，缺映射才退回矩阵表。 */
-    loadTallyFrames(item: ZCCardTally, art: ICardArtConfig): Promise<SpriteFrame | null> {
-        const fixed = LINEUP_TALLY_ICON[`${item.kind}.${item.key}`];
-        if (fixed) return this.loadPath(fixed);
-        const key = `${item.kind === 'class' ? 'iconOn' : 'camp'}.${item.key}` as ICardArtKey;
-        return this.load(art, key);
+    /** 职业筛选按钮的亮/暗两态已随旧图标下线，入口只保留统计条固定图。 */
+    loadTallyFrames(item: ZCCardTally): Promise<SpriteFrame | null> {
+        return this.loadPath(LINEUP_TALLY_ICON[`${item.kind}.${item.key}`]);
     }
 
     loadDetail(card: ZCDeckCard | null, art: ICardArtConfig): Promise<ICardDetailArt> {
         if (!card) return Promise.resolve({ hero: null, diamond: null, classTag: null });
         const cardClass = resolveCardClass(card, art.lineup);
         return Promise.all([
-            this.loadHeroArt(card, art, `hero.${cardClass}`),
+            this.loadHeroArt(card, art),
             loadCardDetailArt(`identity/icon_quality_${DETAIL_QUALITY_ART[card.rarity]}`),
             loadCardDetailArt(`identity/icon_class_${cardClass}`),
         ]).then(([hero, diamond, classTag]) => ({ hero, diamond, classTag }));

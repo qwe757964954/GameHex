@@ -1,3 +1,5 @@
+import { mapInputWithProjection } from './helpers/territory-map-view-sandbox';
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -142,7 +144,7 @@ test('画法：兄弟格上不出现银币价格 / 编号气泡 / 建筑，但�
     const silverIcon = { name: 'silver icon' };
     const render = (unlockedCells: readonly number[]) => {
         rendered.clear();
-        mapView.syncStations({
+        mapView.syncStations(mapInputWithProjection({
             map: { startCellId: 0, sites, defaults: { staminaCost: 5 }, randomSites: { candidateCells: [] } },
             layout: { points: new Map([[327, { x: 0, y: 0 }], [328, { x: 10, y: 10 }]]) },
             revealedCells: [327, 328],
@@ -163,7 +165,7 @@ test('画法：兄弟格上不出现银币价格 / 编号气泡 / 建筑，但�
                 levelBubbleFrame: { name: 'blue bubble' },
                 levelBubblePendingFrame: { name: 'red bubble' },
             },
-        });
+        }));
     };
 
     // ① 未解锁：建筑格「银币 + 30」；**兄弟格一个 UI 都不画**
@@ -205,9 +207,7 @@ test('画法：不传 mutedCells 时行为与本改动之前逐格相同', () =>
         stationRenderOf: (site: unknown, input: unknown) => Record<string, unknown>;
     };
     const mapView = new MapView();
-    const render = (mapView as unknown as {
-        stationRenderOf: (site: unknown, input: unknown) => Record<string, unknown>;
-    }).stationRenderOf.bind(mapView);
+    const render = stationRenderWithProjection(mapView);
     const content = render(site('stage', 327, { configId: '10001' }), {
         stageByCell: new Map(), siteOpenableCells: [327], pendingFixedResourceCells: [],
         progress: { isCellUnlocked: () => false, isOwned: () => false, explorationAt: () => 0,

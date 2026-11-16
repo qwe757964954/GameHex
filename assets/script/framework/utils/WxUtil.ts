@@ -367,14 +367,7 @@ export class WxUtil {
             if (res && res.userInfo && (!res.errMsg || !(res.errMsg.indexOf('auth deny') > -1 || res.errMsg.indexOf('auth denied') > -1 || res.errMsg.indexOf('auth cancel') > -1))) {
                 // RoleModel.getInstance().setWXUserInfo(res.userInfo)
                 // WxSdkBase._instance.playerName = res.userInfo.nickName
-                // var nickName = userInfo.nickName
                 userData = res
-                // var nickName = userInfo.nickName
-                // var avatarUrl = userInfo.avatarUrl
-                // var gender = userInfo.gender //性别 0：未知、1：男、2：女
-                // var province = userInfo.province
-                // var city = userInfo.city
-                // var country = userInfo.country
                 console.log("wx授权成功")
                 console.log(res.userInfo)
             } else {

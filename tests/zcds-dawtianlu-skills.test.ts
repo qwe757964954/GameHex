@@ -165,7 +165,9 @@ test('68025 没有 binding 行时，102504 的四条参数仍进得到 skillRunt
     assert.equal(skill!.parameters.pierceFalloff, 0.5);
     assert.equal(skill!.parameters.projectileLifeSeconds, 3, '2026-11-10：4 → 3 秒');
     // 同 key 的另一条链（102502 裂变暴击）的溅射参数不能被挤掉。
-    assert.equal(skill!.parameters.splashDamageRate, 0.48);
+    //  2026-11-14 多目标递减：基准 0.48 → 0.32（三档 20/26/32%，都低于普攻），第 2 个目标起 ×0.7。
+    assert.equal(skill!.parameters.splashDamageRate, 0.32);
+    assert.equal(skill!.parameters.splashFalloff, 0.3);
     // 102503 无尘禁土的参数也并进同一份 runtime（`aura*` 与 `damageRate` 不撞键）。
     assert.equal(skill!.parameters.auraCooldown, 15);
     assert.equal(skill!.parameters.auraSeconds, 8, 'III 级持续 8 秒');

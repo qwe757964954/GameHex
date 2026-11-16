@@ -6,46 +6,46 @@ import { ZCOwner } from '../model/ZCMapConfig';
  * 对局 HUD 左侧的玩家行（设计稿条目 308×88）。
  *
  * 三处「按席位」（由 `owner` 决定，不再用行号）：
- *  1. 圆盘图：`player → zd_txk_01`，`enemy/2/3 → zd_txk_02/03/04`；
- *  2. 圆盘/头像尺寸两档：我方 88/74，其余三席 77/66（必须跟着换，否则小图被撑或圆环只剩 1.5px）；
- *  3. 名字颜色：取 `zcFactionColor(owner)`（工程「席位色」唯一真源；设计稿四行都是深藏青，
- *     按席位配色是产品要求，便于把行和棋盘上的颜色对上）。
- */
+ * 1. 圆盘图：`player → zd_txk_01`，`enemy/2/3 → zd_txk_02/03/04`；
+ * 2. 圆盘/头像尺寸两档：我方 88/74，其余三席 77/66（必须跟着换，否则小图被撑或圆环只剩 1.5px）；
+ * 3. 名字颜色：取 `zcFactionColor(owner)`（工程「席位色」唯一真源；设计稿四行都是深藏青，
+ * 按席位配色是产品要求，便于把行和棋盘上的颜色对上）。
+*/
 const { ccclass, property } = _decorator;
 
-/** 一行的渲染数据。字段都可空 —— 空就是"这一行没有这个信息"。 */
+/** 一行的渲染数据。字段都可空 —— 空就是"这一行没有这个信息"。*/
 export interface IHudPlayerRowData {
-    /** 席位（决定圆盘图、两处尺寸与名字颜色）。 */
+    /** 席位（决定圆盘图、两处尺寸与名字颜色）。*/
     readonly owner: ZCOwner;
-    /** 玩家名（空串则什么都不显示）。 */
+    /** 玩家名（空串则什么都不显示）。*/
     readonly name: string;
-    /** 头像帧（`icons/head` 已加载好的 SpriteFrame；null 则保留 prefab 默认）。 */
+    /** 头像帧（`icons/head` 已加载好的 SpriteFrame；null 则保留 prefab 默认）。*/
     readonly head: SpriteFrame | null;
-    /** 兵力文字 `14/100`；`null` 表示这一行不显示兵力（只有我方那一行显示）。 */
+    /** 兵力文字 `14/100`；`null` 表示这一行不显示兵力（只有我方那一行显示）。*/
     readonly unitText: string | null;
-    /** 两个 buff 的帧（null 各自隐藏）。 */
+    /** 两个 buff 的帧（null 各自隐藏）。*/
     readonly buffA: SpriteFrame | null;
     readonly buffB: SpriteFrame | null;
     /**
-     * 该玩家**已被击杀**（地块清零）⇒ 头像与席位圆盘压黑（2026-10-27 需求）。
+     * 该玩家已被击杀（地块清零）⇒ 头像与席位圆盘压黑（2026-10-27 需求）。
      * 只改颜色，不改名字色：名字仍按席位色，「这是谁」不会因为出局而丢失。
-     */
+    */
     readonly dead: boolean;
     /**
      * 是否展示「基础信息」三件套：头像（`HeadFrame`）、名字（`NameText`）、兵力（`Info/UnitIcon`+`UnitText`）。
      *
      * 缺省 `true`。守城（塔防）局传 `false`：那一局没有 PVP 席位概念，只要波次与首领信息，
      * 玩家行只留壳（buff 位保留）。传 `false` 时兵力那组一律不显示，`unitText` 不再生效。
-     */
+    */
     readonly basicInfoVisible?: boolean;
 }
 
 @ccclass('ZCGameHudPlayerRow')
 export class ZCGameHudPlayerRow extends Component {
-    /** 我方圆盘/头像边长（设计稿 88×88 与头像 74×74）。 */
+    /** 我方圆盘/头像边长（设计稿 88×88 与头像 74×74）。*/
     private static readonly SELF_DISC_SIZE = 88;
     private static readonly SELF_HEAD_SIZE = 74;
-    /** 其余三席的圆盘/头像边长（77×77 与 66×66）。 */
+    /** 其余三席的圆盘/头像边长（77×77 与 66×66）。*/
     private static readonly OTHER_DISC_SIZE = 77;
     private static readonly OTHER_HEAD_SIZE = 66;
 
@@ -92,15 +92,15 @@ export class ZCGameHudPlayerRow extends Component {
     /**
      * 上一次写进去的「已出局」状态（`null` = 还没写过）。
      *
-     * 颜色是乘进顶点色的：每帧重写同一个值也会把材质标脏，所以只在**状态翻转**时写一次。
+     * 颜色是乘进顶点色的：每帧重写同一个值也会把材质标脏，所以只在状态翻转时写一次。
      * 行节点由虚拟列表复用，缓存与节点上实际颜色永远同步（一起被复用、一起被重写）。
-     */
+    */
     private appliedDead: boolean | null = null;
 
     /**
      * 全量赋值（列表刷新每帧调）。条目复用（虚拟列表回收），字段必须显式写、
      * 不能"没变就跳过"，否则残留上一席的显示。
-     */
+    */
     render(data: IHudPlayerRowData): void {
         // 圆盘：图与尺寸都按席位换。
         const frame = this.discOf(data.owner);
@@ -149,7 +149,7 @@ export class ZCGameHudPlayerRow extends Component {
         if (data.buffB) this.buffB.spriteFrame = data.buffB;
     }
 
-    /** 席位 → 圆盘图。 */
+    /** 席位 → 圆盘图。*/
     private discOf(owner: ZCOwner): SpriteFrame | null {
         if (owner === ZCOwner.Player) return this.disc01;
         if (owner === ZCOwner.Enemy) return this.disc02;

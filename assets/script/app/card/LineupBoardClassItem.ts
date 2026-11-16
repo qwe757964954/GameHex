@@ -6,9 +6,12 @@ const { ccclass, property } = _decorator;
 /**
  * 布阵面板「职业统计行」里的一项：一枚职业图标 + 一个数量。
  *
- * 与页面的 `CardLineupBond` 差一层：页面那套每项要画两枚图标（木条上方灰态 +
- * 条内亮态），布阵这里的行只有一枚（设计稿 `卡牌阵容_队伍编辑` 上就是「图标 + 2」），
- * 所以不复用 —— 复用会多出一个永远为空的 `iconOff` 绑定。
+ * 不复用页面的 `CardLineupBond`：两者虽然都画「图标 + 数量」，但条目数据与取图方式不同 ——
+ * 页面项是 `ZCCardTally`（职业/阵营混排，支持 `loader` 延迟补图并用 token 丢弃迟到结果）；
+ * 这里只有职业（`ZCClassTally`），图标由 `LineupBoardPage` 预先加载好再传入。
+ *
+ * ⚠️ 页面项历史上曾按「木条上方灰态 + 条内亮态」画两枚图，现已简化为单枚 `Icon`
+ * （`CardLineupBond.prefab` 只剩 Icon / CountLabel 两个子节点），别再照着旧结构找 `iconOff`。
  */
 @ccclass('LineupBoardClassItem')
 export class LineupBoardClassItem extends Component {

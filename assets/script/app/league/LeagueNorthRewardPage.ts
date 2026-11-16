@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
  * 「北伐中原 · 奖励」弹窗 —— 老端 `play/LayerLeagueNorthernExpeditionReward.ts`，
  * prefab `ui/League/LeagueNorthReward`。
@@ -113,6 +115,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
+        EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
         const closeBtn = this.closeButton?.getComponent(Button);
         if (closeBtn) closeBtn.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueNorthReward] CloseBtn 上没有 cc.Button，点击不会生效');
@@ -137,10 +140,12 @@ export class LeagueNorthRewardPage extends PopupBase {
     }
 
     protected onClose(): void {
+        this.busy = false;
         this.revision += 1;
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         super.onDestroy();
     }
@@ -260,13 +265,17 @@ export class LeagueNorthRewardPage extends PopupBase {
     private async onClaim(view: ILeagueNorthRewardRowView): Promise<void> {
         if (this.busy) return;
         this.busy = true;
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent);
+    }
+
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
+        if (event.owner !== this) return;
         try {
-            const result = await this.repository.requestTaskReward(view.resId, this);
-            await this.afterWrite(result);
+            await this.afterWrite(event.status);
         } finally {
             this.busy = false;
         }
-    }
+    };
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新，本端自己拉）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {

@@ -1,5 +1,4 @@
 import { ScriptObject } from "../base/ScriptObject";
-const assert = console.assert;
 
 export function injectField(clazzOrAlias: string) {
     return function (prototype: any, fieldName: string) {
@@ -171,7 +170,7 @@ export class Container extends ScriptObject {
             }
         }
 
-        for (const [clazz, obj] of this.collectClassMap) {
+        for (const [, obj] of this.collectClassMap) {
             this.inject(obj);
         }
     }

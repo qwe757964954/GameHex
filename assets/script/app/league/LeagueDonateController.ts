@@ -5,10 +5,11 @@ import {
     type ILeagueDonateViewState,
 } from './LeagueDonateEvents';
 import type { LeagueDonateModel } from './LeagueDonateModel';
-import type { ILeagueRepository, LeagueRequestResult } from './LeagueRepository';
+import type { ILeagueRepository, ILeagueRewardResult } from './LeagueRepository';
 import {
     fillLeagueText,
     LEAGUE_DONATE_CONFIRM,
+    LEAGUE_DONATE_SUCCESS,
     LEAGUE_TIP_AD_DONATE_LIMIT,
     LEAGUE_TIP_DONATE_LIMIT,
     LEAGUE_TIP_FAILED,
@@ -23,6 +24,7 @@ export interface ILeagueDonateControllerOptions {
     readonly view: { readonly render: (state: ILeagueDonateViewState) => void };
     readonly feedback: {
         readonly tip: (text: string) => void;
+        readonly reward: (goods: CmdGoods[]) => void;
         /** 二次确认框端口；回调由控制器自己给，视图不持有控制器。 */
         readonly confirm: (content: string, onSure: () => void) => void;
     };
@@ -149,13 +151,15 @@ export class LeagueDonateController extends ControllerBase {
     }
 
     /** 写完后按三态收口；成功则重读一次。关闭后的回包一律丢弃。 */
-    private async afterWrite(result: LeagueRequestResult): Promise<void> {
+    private async afterWrite(result: ILeagueRewardResult): Promise<void> {
         if (this.isDisposed) return;
-        if (result === 'ok') {
+        if (result.status === 'ok') {
+            this.options.feedback.tip(LEAGUE_DONATE_SUCCESS);
+            if (result.rewards.length > 0) this.options.feedback.reward(result.rewards);
             await this.reload();
             return;
         }
-        this.options.feedback.tip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        this.options.feedback.tip(result.status === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
     /** 防连点：写操作在飞时直接拒掉。 */

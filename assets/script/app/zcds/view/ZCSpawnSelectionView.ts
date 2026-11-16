@@ -5,26 +5,26 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
-/** 倒计时总时长（秒），进度条按它归一化。 */
+/** 倒计时总时长（秒），进度条按它归一化。*/
 const COUNTDOWN_SECONDS = 10;
 
 /**
- * 顶栏文案的**两个** y（同一 prefab 的两态）：
- * 选择态是**三行式**（① 倒计时数字 ② 标题 ③ 进度条），标题落在第二行；
- * 等待态数字与进度条都收掉、只剩这一行字，回到**垂直居中**。
- */
+ * 顶栏文案的两个 y（同一 prefab 的两态）：
+ * 选择态是三行式（1. 倒计时数字 2. 标题 3. 进度条），标题落在第二行；
+ * 等待态数字与进度条都收掉、只剩这一行字，回到垂直居中。
+*/
 export const SPAWN_HINT_PICKING_Y = -9;
 export const SPAWN_HINT_CENTER_Y = 0;
 
 /**
- * 视图只**派发意图事件**（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）：
+ * 视图只派发意图事件（{@link ZCGameUiEvent}，在 {@link events} 上 `emit`）：
  * 「确认落点」「切换提示显隐」由控制器 `ZCGame` 订阅后处理。
- */
+*/
 
 /**
  * 自选主城（落点选择）阶段的常驻 HUD：顶部信息带 + 绿勾 + 左下「收回提示」+ 吐司。
  *
- * 节点树、尺寸、静态样式与**全部美术引用**都声明在 `ZCSpawnSelection.prefab` 里
+ * 节点树、尺寸、静态样式与全部美术引用都声明在 `ZCSpawnSelection.prefab` 里
  * （蓝湖「落点选择」稿，画布 720×1610，切图 1:1 落在 `image/gameui/`），代码只按状态刷
  * 「文案 / 数字 / 进度 / 显隐 / 染色」。
  *
@@ -32,31 +32,31 @@ export const SPAWN_HINT_CENTER_Y = 0;
  *
  * | | 选择态（落点选择） | 等待态（落点选择2） |
  * |---|---|---|
- * | 倒计时数字（第一行，48 号） | 显示 @ +35 | **隐藏** |
+ * | 倒计时数字（第一行，48 号） | 显示 @ +35 | 隐藏 |
  * | 标题（第二行，30 号） | 「选择己方主城位置」@ -9 | 「等待其他玩家」@ 0（居中） |
- * | 进度条（第三行） | 显示 @ -46 | **隐藏** |
- * | 绿勾 | 显示 | **隐藏** |
+ * | 进度条（第三行） | 显示 @ -46 | 隐藏 |
+ * | 绿勾 | 显示 | 隐藏 |
  * | 左下「收回提示」 | 显示 | 显示 |
- */
+*/
 @ccclass('ZCSpawnSelectionView')
 export class ZCSpawnSelectionView extends Component {
     
-    /** 吐司停留时长（秒）。 */
+    /** 吐司停留时长（秒）。*/
     private static readonly TOAST_VISIBLE_SECONDS = 1.8;
 
-    /** 顶栏文案只有两条（设计稿「落点选择」/「落点选择2」各一条）。 */
+    /** 顶栏文案只有两条（设计稿「落点选择」/「落点选择2」各一条）。*/
     private static readonly SPAWN_HINT_TEXTS: Readonly<Record<'picking' | 'waiting', string>> = {
         picking: '选择己方主城位置',
         waiting: '等待其他玩家',
     };
 
-    /** 倒计时 ≤ 该秒数时数字转红。 */
+    /** 倒计时 ≤ 该秒数时数字转红。*/
     private static readonly SPAWN_URGENT_SECONDS = 3;
 
-    /** 倒计时 / 确认勾染色（沿用旧客户端配色）。 */
+    /** 倒计时 / 确认勾染色（沿用旧客户端配色）。*/
     private static readonly WHITE = new Color(255, 255, 255, 255);
     private static readonly URGENT = new Color(235, 92, 92, 255);
-    /** 绿勾三态（设计稿只画了「可确认」，另两态靠染色表达，原因一律由吐司说明）。 */
+    /** 绿勾三态（设计稿只画了「可确认」，另两态靠染色表达，原因一律由吐司说明）。*/
     private static readonly CONFIRM_READY = new Color(255, 255, 255, 255);
     private static readonly CONFIRM_INVALID = new Color(176, 96, 96, 255);
     private static readonly CONFIRM_IDLE = new Color(128, 136, 150, 255);

@@ -16,21 +16,11 @@ export interface IZCDevelopmentContext extends Pick<IZCModelServices, 'rules' | 
     goldOf(owner: ZCOwner): number;
     setGold(owner: ZCOwner, amount: number): void;
     /**
-     * 中立资源奖励**已入袋**那一拍的表现通知（金币 / 充能 / 产兵 / 建建筑任一发生即回调一次）。
-     *
-     * 通知发生在 `neutralResourceId` 被清空**之前**（`grantNeutralResourceReward` 内部），
-     * 快照里那一格还是「带资源的格子」—— 渲染层要靠 hexId + 资源项播飞行特效，
-     * 而领取后的快照里这两个信息都不在了，所以必须在发奖拍补齐。
-     */
+     * 中立资源奖励入袋当拍的通知（金币/充能/产兵/建建筑任一发生回调一次）。
+     * 必须在 `neutralResourceId` 清空前发出：渲染层要靠 hexId + 资源项播飞行特效。
+    */
     onNeutralReward?(hexId: number, itemId: number, owner: ZCOwner, item: ZCNeutralResourceItem): void;
-    /**
-     * 该席位翻地块抽卡要套用的关卡规则（品质权重乘数 + 是否保留金色保底）。
-     *
-     * **按 owner 判定放在模型层**：本系统只管「拿到什么规则就怎么算」，不判断谁是 NPC ——
-     * 目前 `ZCGameModel` 只对非玩家席返回 `{ rarityModifier, goldPity: false }`，
-     * 玩家恒为 `null`（原表权重 + 正常金色保底）。
-     * 缺省 / 返回 `null` ⇒ 不调整、保留保底。
-     */
+    /** 该席位翻地块的抽卡规则；缺省或返回 `null` 时用原表权重并保留金色保底。*/
     drawRulesOf?(owner: ZCOwner): ZCPvpSeatDrawRules | null;
 }
 
@@ -42,17 +32,16 @@ export interface IZCDevelopmentResult {
     readonly pityTriggered: boolean;
 }
 
-/** Resolves paid development and neutral-resource acquisition against one match snapshot. */
+/** 付费开发与中立资源领取的结算。*/
 export class ZCDevelopmentSystem {
     static develop(state: ZCSnapshot, owner: ZCOwner, hex: ZCHexState, deck: readonly ZCDeckCard[],
         config: ZCMatchConfig, random: () => number, context: IZCDevelopmentContext,
         forcedCard: ZCDeckCard | null = null): IZCDevelopmentResult {
         hex.captureOwner = null;
         hex.captureSeconds = 0;
-        // The tile is acquired even when the draw is empty or produces a non-buildable card.
+        // 抽卡为空或抽到不可建造的卡时，地块仍然归开发方。
         if (hex.owner === 'neutral') hex.owner = owner;
-        // 资源格正常走「相邻自动领取」（`canDevelopFor` 拦住了付费开发），这里只兜住直接调用的路径：
-        // 若这格恰好带着「金矿 / 兵营」类资源，领取即把建筑立起来，不再额外抽卡（否则一格两座建筑）。
+        // 资源格正常走「相邻自动领取」，这里只兜直接调用的路径：领到金矿/兵营就直接立建筑，不再抽卡。
         const granted = this.grantNeutralResourceReward(state, owner, hex, context);
         if (granted) hex.neutralResourceId = null;
         const tileType = hex.tileType || tileTypeFromLegacyHex(hex);
@@ -92,7 +81,7 @@ export class ZCDevelopmentSystem {
     }
 
     static captureEmptyTile(hex: ZCHexState, owner: ZCOwner): { changed: boolean; terrainChanged: boolean } {
-        // Walking control transfers the tile without clearing its resource marker or granting the reward.
+        // 走位占领只换归属，不清资源标记、不发奖励。
         if (hex.building !== 'none') return { changed: false, terrainChanged: false };
         const isRuins = hex.state === 'ruins';
         if (hex.owner === owner && !isRuins) return { changed: false, terrainChanged: false };
@@ -136,30 +125,23 @@ export class ZCDevelopmentSystem {
             const item = this.grantNeutralResourceReward(state, claimant, hex, context);
             // 组合项是「金矿 / 兵营」时，领到即在该格立起那座建筑（属性按领取方养成，未拥有按 1 级）。
             if (item) grantNeutralBuilding(state, claimant, hex, item, context);
-            // Clearing the marker is the single-use guard and hides the resource icon.
+            // 清空标记同时充当一次性守卫，并让资源图标消失。
             hex.neutralResourceId = null;
             onClaim(hex.id, itemId);
         }
     }
 
     /**
-     * 发奖：按**资源项**的类型分派。
+     * 发奖：宝箱给金币、神器充能给充能点、兵团直接产兵；金矿/兵营只发通知，建筑由调用方接着立。
+     * 战斗 Buff 暂不改属性（表里权重为 0，抽不到；真抽到也不静默改数值）。
      *
-     *  · 宝箱（1）→ 金币；神器充能（4）→ 充能点；
-     *  · 兵团（3）→ 直接产 N 个该卡的兵（走既有 `spawnUnit` 的 `born` 流程）；
-     *  · 金矿（2）/ 兵营（5）→ 不在本方法里建建筑（调用方接着调 `grantNeutralBuilding`），
-     *    这里只把「事件通知」发出去，保证建筑激活动画与其它奖励同拍；
-     *  · 战斗Buff（6）→ 目前只发通知、不改属性（J 表光环 Buff 的落地规则待策划定稿，
-     *    表里这两行的权重为 0，正常配置抽不到；真抽到了也不会静默改数值）。
-     *
-     * @returns 抽中的资源项（`null` = 这格没有可识别的资源项：未配表 / 已被领走）
-     */
+     * @returns 抽中的资源项；`null` 表示这格没有可识别的资源项。
+    */
     private static grantNeutralResourceReward(state: ZCSnapshot, owner: ZCOwner,
         hex: ZCHexState, context: IZCDevelopmentContext): ZCNeutralResourceItem | null {
         const item = neutralResourceItemOf(hex.neutralResourceId);
         if (!item) return null;
-        // 表现通知先于「清空标记」发出：`onNeutralReward` 的消费方（模型）要靠 hexId +
-        // 资源项对齐视图，领取后的快照里这两样都不在了。
+        // 表现通知先于「清空标记」发出：消费方要靠 hexId + 资源项对齐视图。
         context.onNeutralReward?.(hex.id, item.id, owner, item);
         if (item.gold > 0) context.setGold(owner, context.goldOf(owner) + item.gold);
         if (item.artifactCharge > 0) {
@@ -167,7 +149,7 @@ export class ZCDevelopmentSystem {
             ZCArtifactSystem.normalize(state, context.rules);
         }
         if (!item.cardId || item.unitCount <= 0) return item;
-        // Reward cards come from the full catalog, not the match's restricted deck.
+        // 奖励卡从完整卡表取，不受本局卡组限制。
         const card = findCatalogCard(item.cardId);
         if (!card?.unitId) return item;
         for (let i = 0; i < item.unitCount; i += 1) {
@@ -179,12 +161,9 @@ export class ZCDevelopmentSystem {
 }
 
 /**
- * 把「金矿 / 兵营」组合项原地立成一座建筑。
- *
- *  ⚠️ 品级固定 1 级：资源点不经过抽卡，没有品级概念；表说明「未拥有按 1 级计算」，
- *  拥有养成时由 `ZCUnitGrowth` / 卡牌养成在取属性那侧接管，这里只落基础耐久。
- *  @returns 是否真的立起了建筑（卡被删 / 类型对不上时为 false）
- */
+ * 把「金矿 / 兵营」组合项原地立成建筑。资源点不经过抽卡，品级固定 1 级。
+ * @returns 是否真的立起（卡被删或类型对不上时为 false）
+*/
 function grantNeutralBuilding(
     state: ZCSnapshot, owner: ZCOwner, hex: ZCHexState, item: ZCNeutralResourceItem, context: IZCDevelopmentContext,
 ): boolean {

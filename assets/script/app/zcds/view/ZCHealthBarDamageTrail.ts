@@ -4,17 +4,17 @@ import {
     healthBarDamageTrailWidth,
 } from './ZCGameViewUtil';
 
-/** 白条颜色：纯白不透明 —— 压在黑色底框上才一眼看出「这一段已经没了」。 */
+/** 白条颜色：纯白不透明 —— 压在黑色底框上才一眼看出「这一段已经没了」。*/
 const DAMAGE_TRAIL_COLOR = new Color(255, 255, 255, 255);
-/** 窄到这个值以下就直接收手：省一次 `clear` + 一次 draw call，肉眼也看不出这一丝白。 */
+/** 窄到这个值以下就直接收手：省一次 `clear` + 一次 draw call，肉眼也看不出这一丝白。*/
 const DAMAGE_TRAIL_MIN_WIDTH = 0.5;
-/** 读不到填充高时的兜底（与蓝湖稿 8 高同值；只在 prefab 没写 UITransform 时用得上）。 */
+/** 读不到填充高时的兜底（与蓝湖稿 8 高同值；只在 prefab 没写 UITransform 时用得上）。*/
 const DAMAGE_TRAIL_FALLBACK_HEIGHT = 8;
-/** 同一块画布的名字：单位回池 / 地块复用后靠它判断「是不是自己那一份」。 */
+/** 同一块画布的名字：单位回池 / 地块复用后靠它判断「是不是自己那一份」。*/
 const DAMAGE_TRAIL_NODE_NAME = 'ZCDamageTrail';
 
 /**
- * 血条扣血白条（2026-10-27 需求）：被扣掉的那一段先显示成白色，**0.13s 内从右往左缩短消失**，
+ * 血条扣血白条（2026-10-27 需求）：被扣掉的那一段先显示成白色，0.13s 内从右往左缩短消失，
  * 露出黑色底框。
  *
  * 单位条（`ZCUnitView`）与城墙/建筑条（`ZCHexView`）共用这一份实现 —— 两边都是
@@ -22,23 +22,23 @@ const DAMAGE_TRAIL_NODE_NAME = 'ZCDamageTrail';
  *
  * 三条设计约束，改之前先读：
  *
- * 1. **白条是「被扣掉的那段」，不是「旧血量」**：左缘钉在填充条的**当前右缘**上，
- *    右缘是「扣血前那条边」。所以宽度收窄时只有右缘往左走 —— 正是需求要的方向。
- * 2. **纯函数时间轴**：只记 `startedAt`，每帧按 `now - startedAt` 算宽度（同 `ZCNeutralRewardFx`），
- *    不建 tween、不按 `dt` 累加，掉帧也不会跑偏。
- * 3. **画布懒建、只建一次**：`Graphics` 挂在 `HealthBar` 的**第一个子节点**上（垫在填充条下面），
- *    这样「白条左缘」与「填充右缘」重合处的亚像素重叠永远由填充条盖住，不会出现白条吃掉一点血。
- */
+ * 1. 白条是「被扣掉的那段」，不是「旧血量」：左缘钉在填充条的当前右缘上，
+ * 右缘是「扣血前那条边」。所以宽度收窄时只有右缘往左走 —— 正是需求要的方向。
+ * 2. 纯函数时间轴：只记 `startedAt`，每帧按 `now - startedAt` 算宽度（同 `ZCNeutralRewardFx`），
+ * 不建 tween、不按 `dt` 累加，掉帧也不会跑偏。
+ * 3. 画布懒建、只建一次：`Graphics` 挂在 `HealthBar` 的第一个子节点上（垫在填充条下面），
+ * 这样「白条左缘」与「填充右缘」重合处的亚像素重叠永远由填充条盖住，不会出现白条吃掉一点血。
+*/
 export class ZCHealthBarDamageTrail {
     private node: Node | null = null;
     private graphics: Graphics | null = null;
-    /** 上一帧的比例：**比例变小**就是这一帧挨了打（血量回升 / 换阵营不会起白条）。 */
+    /** 上一帧的比例：比例变小就是这一帧挨了打（血量回升 / 换阵营不会起白条）。*/
     private lastRatio = Number.NaN;
-    /** 扣血前的那条边（比例），白条的右缘。 */
+    /** 扣血前的那条边（比例），白条的右缘。*/
     private fromRatio = 0;
     private startedAt = Number.NaN;
 
-    /** 复用 / 换局复位：单位回池后第一帧满血，绝不能带着上一条命的白条。 */
+    /** 复用 / 换局复位：单位回池后第一帧满血，绝不能带着上一条命的白条。*/
     reset(): void {
         this.lastRatio = Number.NaN;
         this.fromRatio = 0;
@@ -47,11 +47,11 @@ export class ZCHealthBarDamageTrail {
     }
 
     /**
-     * 每帧喂一次当前比例。返回 **`true` = 这一帧还画着白条**（调用方据此决定下一帧还要不要来）。
+     * 每帧喂一次当前比例。返回 `true` = 这一帧还画着白条（调用方据此决定下一帧还要不要来）。
      *
      * `bar.node.active` 由调用方（血量窗口）决定；本类只负责「该不该画、画多宽」，
      * 父节点隐藏时子节点自然不显示，所以这里不重复判可见性。
-     */
+    */
     render(bar: ProgressBar | null, progress: number, now: number): boolean {
         const previous = this.lastRatio;
         const ratio = Number.isFinite(progress) ? Math.max(0, Math.min(1, progress)) : 0;
@@ -99,9 +99,9 @@ export class ZCHealthBarDamageTrail {
     }
 
     /**
-     * 懒建画布。判活看**节点**而不是 `Graphics`：与 `ZCGameRenderWorld.ensureHintOutlineGraphics`
+     * 懒建画布。判活看节点而不是 `Graphics`：与 `ZCGameRenderWorld.ensureHintOutlineGraphics`
      * 同一口径（组件的 `isValid` 在池化节点上不可靠）。
-     */
+    */
     private ensureGraphics(parent: Node): Graphics | null {
         if (this.node && this.node.isValid === true && this.node.parent === parent) {
             return this.graphics;
@@ -120,7 +120,7 @@ export class ZCHealthBarDamageTrail {
         return graphics;
     }
 
-    /** 收手：清空路径并关掉画布（重复调用幂等，别每帧都写）。 */
+    /** 收手：清空路径并关掉画布（重复调用幂等，别每帧都写）。*/
     private hide(): void {
         const node = this.node;
         const graphics = this.graphics;

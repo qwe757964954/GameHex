@@ -39,9 +39,6 @@ interface IMainEntryParams {
 export class ProcedureMain extends ProcedureBase {
     public static __cname: string = 'ProcedureMain';
 
-    /** 预加载得到的 MainRoot 预制体。 */
-    private mainPrefab: Prefab | null = null;
-
     /** 当前主界面节点实例（登录预加载阶段提前挂载，切出时销毁）。 */
     private mainNode: Node | null = null;
     private mainComposition: MainTabsComposition | null = null;
@@ -59,7 +56,6 @@ export class ProcedureMain extends ProcedureBase {
         try {
             const prefab = await this.assets.load(MAIN_ROOT_URL, Prefab, { scope: context ? context.resources : undefined });
             if (context && context.cancelled) return;
-            this.mainPrefab = prefab;
             this.reportProgress(MAIN_ROOT_PROGRESS, '正在准备主城…');
 
             const node = instantiate(prefab);
@@ -133,7 +129,6 @@ export class ProcedureMain extends ProcedureBase {
             this.mainNode = null;
         }
         this.mainOpacity = null;
-        this.mainPrefab = null;
     }
 
     onPreloadCancelled(): void {

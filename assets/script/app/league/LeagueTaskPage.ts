@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
  * 「联盟任务」弹窗（老端 `play/LayerLeagueTask`，`ui/League/LeagueTask`）。
  *
@@ -162,6 +164,7 @@ export class LeagueTaskPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
+        EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
         const button = this.closeButton?.getComponent(Button);
         if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         else console.warn('[LeagueTask] CloseBtn 上没有 cc.Button，点击不会生效');
@@ -181,10 +184,12 @@ export class LeagueTaskPage extends PopupBase {
     }
 
     protected onClose(): void {
+        this.busy = false;
         this.revision += 1;
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         super.onDestroy();
     }
@@ -356,12 +361,7 @@ export class LeagueTaskPage extends PopupBase {
     /** 点「领取」—— 老端 `btn_get.onClick` 只有一句 `RequestTaskReward(ref.resId)`。 */
     private async claim(view: ILeagueTaskRowView): Promise<void> {
         if (!this.beginWrite()) return;
-        try {
-            const result = await this.repository.requestTaskReward(view.resId, this);
-            await this.afterWrite(result);
-        } finally {
-            this.busy = false;
-        }
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent);
     }
 
     /**
@@ -407,12 +407,7 @@ export class LeagueTaskPage extends PopupBase {
     private async onBoxClick(view: ILeagueTaskBoxView): Promise<void> {
         if (view.state === 'canReward') {
             if (!this.beginWrite()) return;
-            try {
-                const result = await this.repository.requestTaskProgressReward(LeagueUnionTaskType.leagueTask, this);
-                await this.afterWrite(result);
-            } finally {
-                this.busy = false;
-            }
+            EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'progress', subType: LeagueUnionTaskType.leagueTask } } satisfies ILeagueRewardIntent);
             return;
         }
         if (view.state === 'locked') this.showReward(view);
@@ -455,6 +450,15 @@ export class LeagueTaskPage extends PopupBase {
         this.busy = true;
         return true;
     }
+
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
+        if (event.owner !== this) return;
+        try {
+            await this.afterWrite(event.status);
+        } finally {
+            this.busy = false;
+        }
+    };
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {

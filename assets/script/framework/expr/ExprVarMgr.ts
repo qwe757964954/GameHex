@@ -11,14 +11,12 @@ import { ExprVarBase } from "./ExprVarBase";
 export class ExprVarMgr extends ScriptObject {
     static __cname: string = "ExprVarMgr";
 
-    private exprMgr: ExprMgr
     private tmVar = new Map<TExprHash, ExprVarBase>() //HashMap
     private tmVarClass = new Map<TExprVarName, Class<ExprVarBase>>()
     private toolSet: ToolSet
 
     constructor(exprMgr: ExprMgr) {
         super()
-        this.exprMgr = exprMgr
         this.toolSet = ToolSet.createToolSet()
     }
 

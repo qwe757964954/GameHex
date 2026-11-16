@@ -125,11 +125,8 @@ export class ConnectedNetState extends BaseNetState {
                 rspData = protoMgr.decodeDataById(messageId, data.subarray(lastIndex, splits[i]))
                 lastIndex = splits[i]
 
-                let receiveTip: string;
                 if (protoMgr.isBro(messageId)) {
-                    receiveTip = "receiveBroMsg: " + rspMsgName
                 } else if (protoMgr.isCacheApp(messageId)) {
-                    receiveTip = "receiveCacheApp: " + rspMsgName
                 } else {
                     if (networkRequest != null) {
                         let messageName = networkRequest.messageName
@@ -159,12 +156,6 @@ export class ConnectedNetState extends BaseNetState {
                 msgEventProxy.execute(rspMsgName, rspData, this.socket.socketName)
                 //msgEventProxy.dispatchEvent("receive", rspMsgName, this.socket.socketName)
 
-                // if (!receiveTip && rspMsgName != "CmdSystemSyncTimeRspMsg") {
-                //     receiveTip = "receive: " + rspMsgName + " " + clientIndex;
-                // }
-                // if (receiveTip) {
-                //     this.log(receiveTip)
-                // }
             }
         } else {
             let tip: string;

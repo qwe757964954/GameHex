@@ -30,26 +30,26 @@ const BATTLE_DEFERRED_PRIORITY = 10;
 const DEFERRED_ART_YIELD_MS = 16;
 const COMMON_EFFECT_DIRECTORY = 'units/effects';
 
-/** 建筑外观帧目录（buildIcon 指向的图片都在此目录）。 */
+/** 建筑外观帧目录（buildIcon 指向的图片都在此目录）。*/
 const BUILDING_DIRECTORY = 'image/buildings';
 
-/** 城墙砖帧目录（按方向：up/down/rightUp/rightDown）。 */
+/** 城墙砖帧目录（按方向：up/down/rightUp/rightDown）。*/
 const WALL_TILE_DIRECTORY = 'image/buildings/walls';
-/** 城墙砖接缝 shader（按各透视砖端帽范围取内部颜色覆盖交叉描边，保持原 alpha）。 */
+/** 城墙砖接缝 shader（按各透视砖端帽范围取内部颜色覆盖交叉描边，保持原 alpha）。*/
 const WALL_TILE_EFFECT_URL = 'shaders/wall-tile';
 /**
- * 兵种**整体外轮廓**的放大副本 shader（`shaders/unit-outline-copy.effect`）。
+ * 兵种整体外轮廓的放大副本 shader（`shaders/unit-outline-copy.effect`）。
  *
  * 口径 = 顺着整只角色外形（所有散件拼出来的边缘）的描边：同一份美术 prefab 放大 8%、
  * 只画不透明像素，排在角色后面。
- */
+*/
 const UNIT_OUTLINE_COPY_EFFECT_URL = 'shaders/unit-outline-copy';
 /**
  * 神器图标目录（`pvpArtifact[].icon`，如「霜封冰刃」）。
  *
- *  中立资源点里「神器充能」那格的图标要显示**玩家本局携带的那件神器**，而不是写死一张图；
- *  图名来自表，目录在这里拼 —— 与 `pvpCard.icon` / `unitPrefabPath` 同一口径（规则 137）。
- */
+ * 中立资源点里「神器充能」那格的图标要显示玩家本局携带的那件神器，而不是写死一张图；
+ * 图名来自表，目录在这里拼 —— 与 `pvpCard.icon` / `unitPrefabPath` 同一口径（规则 137）。
+*/
 const ARTIFACT_DIRECTORY = 'image/artifact';
 
 /**
@@ -59,7 +59,7 @@ const ARTIFACT_DIRECTORY = 'image/artifact';
  * 池里有 N 张 fixed + M 张 select 时，select 图命中概率 = K·M / (N + K·M)。
  * 当前池：11 fixed + 1 select，K=11 ⇒ select 图命中 = 11/(11+11) = 50%。
  * 后续增删 fixed 图时比例会漂移；想保持 50% 就把 K 改成 fixed 图数量。
- */
+*/
 const ZC_SPAWN_SELECTION_WEIGHT = 11;
 
 type IZCShellPrefabs = Pick<IZCGamePreparedResources,
@@ -72,7 +72,7 @@ type IZCShellPrefabs = Pick<IZCGamePreparedResources,
  *
  * 它完成配置注入、地图选择和显示资源准备，但不持有任何场景节点。流程取消时，
  * ProcedureManager 释放传入的 ResourceScope，加载器无需了解页面生命周期。
- */
+*/
 export class ZCGameLoader {
     private selectedMap: ZCMatchMap | null = null;
 
@@ -83,7 +83,7 @@ export class ZCGameLoader {
         private readonly playerCountOverride?: 2 | 3 | 4,
     ) {}
 
-    /** 仅用于 battle 独占资源；共享目录与配表路径交给 AssetService 按归属路由。 */
+    /** 仅用于 battle 独占资源；共享目录与配表路径交给 AssetService 按归属路由。*/
     private readonly battleOptions = (scope?: ResourceScope, priority = BATTLE_ENTRY_PRIORITY): AssetLoadOptions => ({ scope, bundle: BATTLE_BUNDLE, priority });
 
     async prepare(scope?: ResourceScope, battle?: ZCBattleStart | null, waveCardIds: readonly number[] = []): Promise<IZCGamePreparedResources> {
@@ -328,7 +328,7 @@ export class ZCGameLoader {
         finally { if (ZCDC_LOG_DIAGNOSTICS) console.info(`[BattleLoading] ${label}等待 ${Math.max(0, Date.now() - startedAt)}ms`); }
     }
 
-    /** 加载候选地图并跳过损坏项；全部无效时返回 false。 */
+    /** 加载候选地图并跳过损坏项；全部无效时返回 false。*/
     async loadRandomMap(scope?: ResourceScope, battlePlayerCount?: 2 | 3 | 4, mapFiles?: Promise<JsonAsset[]>, mapInfo?: Readonly<CmdPvpMapInfo>): Promise<boolean> {
         this.selectedMap = null;
         let maps: JsonAsset[];
@@ -414,25 +414,25 @@ export class ZCGameLoader {
         return { units, effects, effectPaths: plan.effectPaths };
     }
 
-    /** 中立资源图标由本局 scope 持有。 */
+    /** 中立资源图标由本局 scope 持有。*/
     private async loadNeutralResourceFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = await this.resources.assets.loadDir(MAP_RESOURCE_ART_ROOT, SpriteFrame, this.battleOptions(scope));
         return new Map(frames.map(frame => [frame.name, frame]));
     }
 
-    /** 按图片名索引建筑外观帧。 */
+    /** 按图片名索引建筑外观帧。*/
     private async loadBuildingFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = await this.resources.assets.loadDir(BUILDING_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
         return new Map(frames.filter(frame => !!frame?.name).map(frame => [frame.name, frame]));
     }
 
-    /** 自选主城阶段用问号遮蔽中立资源。 */
+    /** 自选主城阶段用问号遮蔽中立资源。*/
     private async loadUnknownResourceFrame(scope?: ResourceScope): Promise<SpriteFrame> {
         const path = spriteFramePath(GAMEUI_ART_ROOT, NEUTRAL_RESOURCE_UNKNOWN_ICON_NAME);
         return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
     }
 
-    /** 加载本局神器图标，未配置神器时返回 null。 */
+    /** 加载本局神器图标，未配置神器时返回 null。*/
     private async loadArtifactIconFrame(scope?: ResourceScope): Promise<SpriteFrame | null> {
         // 图名真源= `pvpArtifact` 第一行的 `icon` 列（已拍进 rules.artifactIcon）。
         const iconName = getPvpRuntimeRules().artifactIcon;
@@ -441,19 +441,19 @@ export class ZCGameLoader {
             return null;
         }
         //  必须走 `spriteFramePath` 补 `/spriteFrame` 后缀 —— Cocos 把每张 png 导成
-        // SpriteFrame **子资源**，裸路径（`image/artifact/霜封冰刃`）在bundle 里查不到，
+        // SpriteFrame 子资源，裸路径（`image/artifact/霜封冰刃`）在bundle 里查不到，
         // 报错形态是 `Bundle resources doesn't contain ...`（不是 404，容易误判成「美术没交图」）。
         const path = spriteFramePath(ARTIFACT_DIRECTORY, iconName);
         return this.resources.assets.load(path, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
     }
 
-    /** 金币飞行使用单枚 coin_icon，与格子资源金币图标一致。 */
+    /** 金币飞行使用单枚 coin_icon，与格子资源金币图标一致。*/
     private async loadGoldCoinFrame(scope?: ResourceScope): Promise<SpriteFrame> {
         const path = spriteFramePath(MAP_RESOURCE_ART_ROOT, 'coin_icon');
         return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
     }
 
-    /** 前区红色气泡，中后区绿色气泡。 */
+    /** 前区红色气泡，中后区绿色气泡。*/
     private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames> {
         const frames = await this.loadSortedSpriteFrames(SPAWN_REGION_ART_ROOT, scope);
         const green = frames.find(frame => frame.name === 'frame_01');
@@ -462,7 +462,7 @@ export class ZCGameLoader {
         return { front: red, mid: green, back: green };
     }
 
-    /** 只取 Prefab 类型，动画与裸帧由 prefab 依赖加载；中毒不登记为职业受击。 */
+    /** 只取 Prefab 类型，动画与裸帧由 prefab 依赖加载；中毒不登记为职业受击。*/
     private async loadCommonEffects(scope?: ResourceScope, priority = BATTLE_ENTRY_PRIORITY) {
         const prefabs = await this.resources.assets.loadDir(COMMON_EFFECT_DIRECTORY, Prefab, this.battleOptions(scope, priority));
         const byName = new Map(prefabs.map(prefab => [prefab.name, prefab]));
@@ -480,13 +480,13 @@ export class ZCGameLoader {
         };
     }
 
-    /** 按方向加载城墙砖帧。 */
+    /** 按方向加载城墙砖帧。*/
     private async loadWallFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = await this.resources.assets.loadDir(WALL_TILE_DIRECTORY, SpriteFrame, { scope, priority: BATTLE_ENTRY_PRIORITY });
         return new Map(frames.filter(frame => !!frame?.name).map(frame => [frame.name, frame]));
     }
 
-    /** 按墙砖透视端帽范围融合接缝，保持原 alpha。 */
+    /** 按墙砖透视端帽范围融合接缝，保持原 alpha。*/
     private async loadWallMaterial(scope?: ResourceScope): Promise<Material> {
         const effect = await this.resources.assets.load(WALL_TILE_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
         this.checkActive(scope);
@@ -495,12 +495,12 @@ export class ZCGameLoader {
         return material;
     }
 
-    /** 兵种整体外轮廓（放大副本）。 */
+    /** 兵种整体外轮廓（放大副本）。*/
     private async loadUnitOutlineCopyEffect(scope?: ResourceScope): Promise<EffectAsset> {
         return this.resources.assets.load(UNIT_OUTLINE_COPY_EFFECT_URL, EffectAsset, { scope, priority: BATTLE_ENTRY_PRIORITY });
     }
 
-    /** 序列帧按文件名排序。 */
+    /** 序列帧按文件名排序。*/
     private async loadSortedSpriteFrames(
         directory: string,
         scope?: ResourceScope,
@@ -510,22 +510,22 @@ export class ZCGameLoader {
         return frames.filter(frame => !!frame?.name).sort((a, b) => a.name.localeCompare(b.name));
     }
 
-    /** 加载地块抬起后的底部发光序列帧。 */
+    /** 加载地块抬起后的底部发光序列帧。*/
     private loadHexGroundGlowFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
         return this.loadSortedSpriteFrames(HEX_GROUND_GLOW_ART_ROOT, scope);
     }
 
-    /** 加载翻格脉冲呼吸序列帧。 */
+    /** 加载翻格脉冲呼吸序列帧。*/
     private loadHexPulseFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
         return this.loadSortedSpriteFrames(HEX_FLIP_PULSE_ART_ROOT, scope);
     }
 
-    /** 加载「神器充能」领取时的格心爆炸序列帧。 */
+    /** 加载「神器充能」领取时的格心爆炸序列帧。*/
     private loadArtifactClaimBurstFrames(scope?: ResourceScope): Promise<SpriteFrame[]> {
         return this.loadSortedSpriteFrames(ARTIFACT_CLAIM_BURST_ART_ROOT, scope);
     }
 
-    /** 仅加载本局地图声明的装饰，资源生命周期交给当前流程。 */
+    /** 仅加载本局地图声明的装饰，资源生命周期交给当前流程。*/
     private async loadDecorFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const names = new Set<string>();
         for (const item of this.selectedMap?.art?.freeDecor ?? []) {
@@ -540,7 +540,7 @@ export class ZCGameLoader {
         return frames;
     }
 
-    /** 资源加载的取消由 AssetService 处理；这里只守住配置写入、资源创建与结果发布。 */
+    /** 资源加载的取消由 AssetService 处理；这里只守住配置写入、资源创建与结果发布。*/
     private checkActive(scope?: ResourceScope): void {
         if (scope?.disposed) throw new Error('对局预加载已取消');
     }

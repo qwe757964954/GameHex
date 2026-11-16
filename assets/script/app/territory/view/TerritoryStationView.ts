@@ -653,7 +653,6 @@ export class TerritoryStationView extends Component {
      */
     private applyIconPlacement(): void {
         const offsets = this.localOffsets;
-        const node = this.iconSprite.node;
         const frame = this.iconSprite.spriteFrame;
         if (!offsets) return;
         const nodeSize = this.iconTransform.contentSize;

@@ -1,3 +1,4 @@
+import { isTerritoryBattleSite } from '../../assets/script/app/territory/model/TerritoryMapConfig';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -9,6 +10,29 @@ import * as territoryLevelBubbleModule from '../../assets/script/app/territory/m
 import * as territoryNodeUIModule from '../../assets/script/app/territory/model/TerritoryNodeUI';
 import * as territoryPreviewCinemaModule from '../../assets/script/app/territory/model/TerritoryPreviewCinema';
 import * as territoryUnlockTransitionModule from '../../assets/script/app/territory/model/TerritoryUnlockTransition';
+import { buildTerritoryStationStates } from '../../assets/script/app/territory/application/TerritoryViewState';
+
+/** 旧渲染夹具使用最小进度桩；仍由真实投影生成 Controller 提供的发布数据。 */
+export function mapInputWithProjection(input: any): any {
+    if (input.stationStates) return input;
+    const progress = input.progress;
+    return { ...input, stationStates: buildTerritoryStationStates({
+        ...input,
+        progress: {
+            isCellUnlocked: id => progress.isCellUnlocked(id),
+            isOwned: id => progress.isOwned(id),
+            isAreaPassed: id => progress.isAreaPassed?.(id) ?? false,
+            isDisabled: id => progress.isDisabled?.(id) ?? false,
+            explorationAt: id => progress.explorationAt?.(id) ?? null,
+            checkUnlock: (id, power) => progress.checkUnlock?.(id, power) ?? { ok: true },
+        },
+    }) };
+}
+
+export function stationRenderWithProjection(view: any): (...args: any[]) => any {
+    return (site, input, ...args) => view.stationRenderOf(site,
+        mapInputWithProjection({ ...input, map: { ...input.map, sites: [site] } }), ...args);
+}
 
 /**
  * 把 `TerritoryMapView.ts` 装进 `vm` 沙箱（桩表**只此一份**）。
@@ -121,6 +145,7 @@ export function loadTerritoryMapViewClass(): any {
         };
         // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
         if (id === '../model/TerritoryMapConfig') return {
+            isTerritoryBattleSite,
             TERRITORY_SITE_TYPE: {
                 stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
                 fixedResource: 'fixedResource', bonus: 'bonus',

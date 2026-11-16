@@ -8,7 +8,7 @@ import {
 } from '../model/ZCGuideConfig';
 import type { ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
 
-/** 点击指南时加载后交给弹窗的只读展示数据。 */
+/** 点开指南后交给弹窗的只读数据。*/
 export interface IZCGuidePreparedContent {
     readonly entries: readonly ZCGuideEntry[];
     readonly params: ZCGuideParams;
@@ -16,8 +16,8 @@ export interface IZCGuidePreparedContent {
 }
 
 /**
- * 指南的应用层加载器。配置和图标都归属当前对局 ResourceScope，Popup 只负责同步展示。
- */
+ * 指南加载器。配置和图标都挂在当前对局的 ResourceScope 上，弹窗只管同步展示。
+*/
 export class ZCGuideLoader {
     constructor(
         private readonly resources: Pick<IControllerResources, 'assets' | 'configs'>,
@@ -43,12 +43,14 @@ export class ZCGuideLoader {
         entries: readonly ZCGuideEntry[],
         scope?: ResourceScope,
     ): Promise<ReadonlyMap<string, SpriteFrame>> {
-        const keys = Array.from(new Set(entries.map((entry) => entry.icon)))
-            .filter((key) => getGuideIconPath(key) !== null);
+        const iconPaths = new Map<string, string>();
+        for (const entry of entries) {
+            const path = getGuideIconPath(entry.icon);
+            if (path) iconPaths.set(entry.icon, path);
+        }
+
         const frames = new Map<string, SpriteFrame>();
-        await Promise.all(keys.map(async (key) => {
-            const path = getGuideIconPath(key);
-            if (!path) return;
+        await Promise.all(Array.from(iconPaths, async ([key, path]) => {
             const frame = await this.resources.assets.load(path, SpriteFrame, { scope });
             this.checkActive(scope);
             frames.set(key, frame);

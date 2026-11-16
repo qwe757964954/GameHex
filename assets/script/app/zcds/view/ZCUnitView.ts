@@ -17,15 +17,15 @@ export interface IZCUnitPresentation {
     definition: Readonly<ZCUnitDefinition>;
     x: number;
     y: number;
-    /** 表现时间（秒），用于判断血条是否还在「被攻击后 3 秒」的显示窗口内。 */
+    /** 表现时间（秒），用于判断血条是否还在「被攻击后 3 秒」的显示窗口内。*/
     now: number;
     /**
-     * 施法期间把美术整体上抬多少（**屏上 px**，2026-11-11 麻辣铁锅「喷射火焰」102603
+     * 施法期间把美术整体上抬多少（屏上 px，2026-11-11 麻辣铁锅「喷射火焰」102603
      * 「播放攻击动画时，角色上移 30px，触发特效时，角色在空中循环播放攻击动作」）。
      *
      * 来源是地面区域的 `casterLiftPx`（`self_aura` 施法者整段悬空）——
      * 缺省 0 ⇒ 不抬，所有既有单位行为逐字不变。
-     */
+    */
     castLiftPx?: number;
 }
 
@@ -36,14 +36,14 @@ export interface IZCUnitPresentation {
  * 连同 `VisualRoot`、`HealthBar` 两个容器节点都声明在 `ZCGameUnit.prefab` 里 ——
  * 这里不再 `getChildByName` 兜底，也不为「旧场景」现建 `VisualRoot`：
  * 那种兼容分支只会让一个「Inspector 全空」的视图静默存活。
- */
+*/
 @ccclass('ZCUnitView')
 export class ZCUnitView extends Component {
     /**
      * 各席位兜底色块的阵营色。
      * 原在 `ZCTheme.zcOwnerEdgeColor` 导出，但全工程唯一消费类是 ZCUnitView ——
      * 按 §6.2 第 12 条内聚为私有静态；颜色仍读共享主题 `ZC_CLIENT_COLORS`，不复制值。
-     */
+    */
     private static readonly OWNER_EDGE_COLOR: Readonly<Record<ZCOwner, Color>> = {
         player: ZC_CLIENT_COLORS.playerEdge,
         enemy: ZC_CLIENT_COLORS.enemyEdge,
@@ -51,42 +51,42 @@ export class ZCUnitView extends Component {
         enemy3: ZC_CLIENT_COLORS.enemy3Edge,
     };
 
-    /** 当前兵种画布的脚底位于视觉根节点下方 45.7px；单位根节点本身代表逻辑脚点。 */
+    /** 当前兵种画布的脚底位于视觉根节点下方 45.7px；单位根节点本身代表逻辑脚点。*/
     private static readonly UNIT_VISUAL_CENTER_FROM_FOOT_Y = 45.7;
 
     /**
-     * 「视觉容器相对单位逻辑脚点」的 Y 偏移，按**资产形态**分两套：
-     * 序列帧（`units/**`）内容原点在画布中心 ⇒ +45.7；spine（`skel/**`）骨架原点≈脚底 ⇒ 0。
+     * 「视觉容器相对单位逻辑脚点」的 Y 偏移，按资产形态分两套：
+     * 序列帧（`units/`）内容原点在画布中心 ⇒ +45.7；spine（`skel/`）骨架原点≈脚底 ⇒ 0。
      * 混用的症状是 spine 单位整体浮空 45.7px，不报错、只有肉眼能发现。
-     */
+    */
     private static readonly UNIT_VISUAL_OFFSET_FRAME = ZCUnitView.UNIT_VISUAL_CENTER_FROM_FOOT_Y;
     private static readonly UNIT_VISUAL_OFFSET_SPINE = 0;
 
     /**
      * 阵亡后的美术染色。序列帧走 `Sprite.color`、spine 走 `Skeleton.color`，
      * setter 内部是拷贝，共享这一个实例安全。
-     */
+    */
     private static readonly UNIT_DEAD_TINT = new Color(135, 135, 135, 190);
     /**
      * 其他玩家（非我方席位）单位的暗色叠加色（#828282）。
      *
-     * 与阵亡灰同一机制：走顶点色**相乘**（`Sprite.color` / `Skeleton.color`），
+     * 与阵亡灰同一机制：走顶点色相乘（`Sprite.color` / `Skeleton.color`），
      * 保留原画色相、整体压暗成灰调。乘 0.51 灰而不是 0（全黑），是为了还看得出体积与明暗。
-     */
+    */
     private static readonly OTHER_PLAYER_TINT = new Color(0x82, 0x82, 0x82, 255);
 
     /**
      * 顶点色染色的三种状态（`applyVisualTint`）。
      *
      * 用枚举值而不是 `boolean`：这一态同时承载「我方原色 / 其他玩家取灰 / 阵亡」，
-     * 折成布尔就表达不了「其他玩家**且**阵亡」该走哪一档。优先级：阵亡 > 其他玩家 > 原色
+     * 折成布尔就表达不了「其他玩家且阵亡」该走哪一档。优先级：阵亡 > 其他玩家 > 原色
      *（阵亡的 alpha 190 已经在表达「躺下」，再叠一层灰没有额外信息）。
-     */
+    */
     private static readonly TINT_WHITE = 0;
     private static readonly TINT_OTHER_PLAYER = 1;
     private static readonly TINT_DEAD = 2;
 
-    /** 兜底色块的尺寸（没有可用美术 prefab 时）。 */
+    /** 兜底色块的尺寸（没有可用美术 prefab 时）。*/
     private static readonly FOOT_SIZE_HERO = 46;
     private static readonly FOOT_SIZE_UNIT = 34;
     private static readonly FALLBACK_RADIUS_HERO = 13;
@@ -96,25 +96,25 @@ export class ZCUnitView extends Component {
      * spine 骨架 canvas 高 → 目标「等效画布高」（69.4），给 spine 单位定缩放。
      * 实测口径（2026-09-24，`tmp/_spine_unit_scale.mjs`）：spine 可见高/骨架 canvas 高 = 0.970，
      * 要对齐序列帧可见高 67.27 ⇒ 目标 canvas 高 69.4。
-     */
+    */
     private static readonly SPINE_CANVAS_TARGET_HEIGHT = 69.4;
     /**
      * 「整体外轮廓」副本的放大倍数。
      *
-     * 副本绕**脚点**放大 ⇒ 脚底基本不动、越往上外扩越多（69px 高的兵头顶约 5px、脚底 ≈0），
-     * 正是站在地上的角色该有的样子。用**倍数**而不是固定像素：材质全局共用，而各兵种骨架的
+     * 副本绕脚点放大 ⇒ 脚底基本不动、越往上外扩越多（69px 高的兵头顶约 5px、脚底 ≈0），
+     * 正是站在地上的角色该有的样子。用倍数而不是固定像素：材质全局共用，而各兵种骨架的
      * canvas 高差一个数量级（292~916），只有比例口径能让一套值通吃。
-     */
+    */
     private static readonly OUTLINE_COPY_SCALE = 1.08;
 
-    /** 朝向判定的死区滞回阈值（避免在 ~90°/270° 附近微调角度时每帧左右闪烁翻转）。 */
+    /** 朝向判定的死区滞回阈值（避免在 ~90°/270° 附近微调角度时每帧左右闪烁翻转）。*/
     private static readonly FACING_HYSTERESIS_COS = 0.15;
 
     /**
      * 取骨架的动画名表（用于探测 idle / move / attack 到底叫什么）。
      * 必须走 `getRuntimeData()`：`sp.Skeleton.findAnimation()` 依赖 `onLoad` 后的 `_skeleton`，
      * `initialize()` 紧跟 `instantiate()` 调用，探测会静默返回空表。
-     */
+    */
     private static spineAnimationNames(skeleton: sp.Skeleton): readonly string[] {
         const runtime = skeleton.skeletonData?.getRuntimeData(true);
         return (runtime?.animations ?? []).map((animation) => animation.name);
@@ -123,13 +123,13 @@ export class ZCUnitView extends Component {
     /**
      * 「首屏清单里没有这个兵的美术」要说一声（2026-11-02 运动霸 68033）。
      *
-     * 这条路径原本**一条日志都没有**：`ZCGameLoader` 的告警只覆盖「load 抛了」，覆盖不到
+     * 这条路径原本一条日志都没有：`ZCGameLoader` 的告警只覆盖「load 抛了」，覆盖不到
      * 「压根没被要求加载」（`heroIds` 过滤 / GM 工具临时加兵），于是「美术没交图」「表配错路径」
      * 「预加载漏了」三种故障在战场上长得一模一样 —— 都是一个「将」字占位色块。
      *
-     * 缺图意图由运行控制器按需补载，所以这里只留一行 **info**
+     * 缺图意图由运行控制器按需补载，所以这里只留一行 info
      * （一次/兵种，静态集合跨局去重），把 `prefabPath` 打出来便于对表；补载真失败由控制器告警。
-     */
+    */
     private static readonly reportedMissingPrefabs = new Set<string>();
 
     private static reportMissingPrefab(definition: Readonly<ZCUnitDefinition>): void {
@@ -142,7 +142,7 @@ export class ZCUnitView extends Component {
     /**
      * 骨架的 canvas 高度（设计单位），用来算 spine 单位的缩放。
      * 必须走 `getRuntimeData()`，不能读美术 prefab 上的 `UITransform`（尺寸不可信）。
-     */
+    */
     private static spineCanvasHeight(skeleton: sp.Skeleton): number {
         const runtime = skeleton.skeletonData?.getRuntimeData(true);
         return runtime?.height ?? 0;
@@ -188,10 +188,10 @@ export class ZCUnitView extends Component {
     // 单位根节点现在是逻辑脚点，VisualRoot 上移 45.7px 后，美术脚底正好落在原点；
     // 头顶相对脚点约 +69~+74，所以血条放在 +80（离头顶 6~11）。
     // 尺寸取蓝湖「多队伍」稿：外框 76×17（内容区 72×12），填充 8 高、左右各内缩 4。
-    // 2026-10-26 表现层调整：**高度按原稿不动**，宽度统一缩到原稿的 80%
+    // 2026-10-26 表现层调整：高度按原稿不动，宽度统一缩到原稿的 80%
     // （76 → 60.8、86 → 68.8）。战场里单位挨得近，原宽的条会互相糊在一起、
     // 也比角色本体宽；缩 20% 后仍能读出比例，头顶也清爽。
-    // 宽度必须改**这里**而不是只改 prefab：`renderHealthBar` 是「脚本值变了才写 prefab」，
+    // 宽度必须改这里而不是只改 prefab：`renderHealthBar` 是「脚本值变了才写 prefab」，
     // 只改 prefab 会在第一帧渲染时被下面的字段值覆写回原宽。
     @property({ group: '状态条', tooltip: '普通单位血条外框宽度（原稿 76 的 80%）' })
     barWidth = 60.8;
@@ -213,56 +213,56 @@ export class ZCUnitView extends Component {
 
     private visualNode: Node | null = null;
     private visualPrefab: Prefab | null = null;
-    /** 出生时没有美术 ⇒ 已经向控制器发过补载请求（别每帧重发，控制器侧也会按兵种去重）。 */
+    /** 出生时没有美术 ⇒ 已经向控制器发过补载请求（别每帧重发，控制器侧也会按兵种去重）。*/
     private deferredPrefabRequested = false;
     private visualAnimation: Animation | null = null;
     private visualSprite: Sprite | null = null;
-    /** 非 null = 这条兵种美术是 spine（`resources/skel/**`），动作走 `setAnimation` 而不是 `Animation`。 */
+    /** 非 null = 这条兵种美术是 spine（`resources/skel/**`），动作走 `setAnimation` 而不是 `Animation`。*/
     private visualSkeleton: sp.Skeleton | null = null;
     /**
-     * 整体外轮廓 = **同一份美术 prefab 的第二个实例**（放大 `OUTLINE_COPY_SCALE`、
+     * 整体外轮廓 = 同一份美术 prefab 的第二个实例（放大 `OUTLINE_COPY_SCALE`、
      * 只画不透明像素，排在美术后面 ⇒ 大出来的那一圈就是顺着角色外形的描边）。
      *
      * 不声明进 `ZCGameUnit.prefab`：它和 `visualNode` 一样是「按兵种不同」的美术实例，
      * 进 prefab 反而要按兵种各建一份；这里与 `attachVisual` 同一条路径 `instantiate`。
      * 只有 spine 美术有整体外形可描 —— 序列帧（`units/**`）不建副本。
-     */
+    */
     private outlineCopyMaterial: Material | null = null;
     private outlineCopyNode: Node | null = null;
     private outlineCopySkeleton: sp.Skeleton | null = null;
     private readonly outlineCopyScale = new Vec3(1, 1, 1);
-    /** 美术每真正起播一次动画 +1；副本只在代次变化时 `setAnimation`（见 `syncOutlineCopyClip`）。 */
+    /** 美术每真正起播一次动画 +1；副本只在代次变化时 `setAnimation`（见 `syncOutlineCopyClip`）。*/
     private outlineClipEpoch = 0;
     private outlineSyncedEpoch = -1;
     private appliedOutlineCopyOwner: ZCOwner | null = null;
     /**
-     * prefab 自带的缩放 × spine canvas 归一系数（**不含** `prefabSize`）。
+     * prefab 自带的缩放 × spine canvas 归一系数（不含 `prefabSize`）。
      *
      * 拆成两层是因为二者来源不同：这里是「资产客观事实」（美术 prefab 上写了多少、
      * 骨架 canvas 多大），`prefabSize` 是「策划的表现意图」。意图变了不该逼着重建节点。
-     */
+    */
     private visualAssetScale = new Vec3(1, 1, 1);
-    /** 表里的等比缩放系数（`pvpCard.prefabSize`）；见 `applyVisualSize`。 */
+    /** 表里的等比缩放系数（`pvpCard.prefabSize`）；见 `applyVisualSize`。*/
     private visualSize = 1;
-    /** 实际写进节点的缩放 = `visualAssetScale` × `visualSize`。朝向翻转在 render 里另乘。 */
+    /** 实际写进节点的缩放 = `visualAssetScale` × `visualSize`。朝向翻转在 render 里另乘。*/
     private visualBaseScale = new Vec3(1, 1, 1);
     private idleClip = '';
     private moveClip = '';
     private attackClip = '';
     private currentClip = '';
     private lastAttackCount = -1;
-    /** 上一次写进 prefab 的血条尺寸（-1 = 还没写过）。血条尺寸只在变化时写，见 renderHealthBar。 */
+    /** 上一次写进 prefab 的血条尺寸（-1 = 还没写过）。血条尺寸只在变化时写，见 renderHealthBar。*/
     private barAppliedWidth = -1;
     private barAppliedHeight = -1;
-    /** 上一次 render 到的血量；null = 这条命还没看过（第一次渲染只记录，不算挨打）。 */
+    /** 上一次 render 到的血量；null = 这条命还没看过（第一次渲染只记录，不算挨打）。*/
     private observedHp: number | null = null;
     private barAppliedHp: number | null = null;
     private barAppliedMaxHp: number | null = null;
     private barAppliedOwner: ZCOwner | null = null;
     private barAppliedOffsetY = Number.NaN;
-    /** 扣血白条（被扣掉那段先变白、0.13s 从右往左收没）。纯类，无 tween，见 ZCHealthBarDamageTrail。 */
+    /** 扣血白条（被扣掉那段先变白、0.13s 从右往左收没）。纯类，无 tween，见 ZCHealthBarDamageTrail。*/
     private readonly damageTrail = new ZCHealthBarDamageTrail();
-    /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。 */
+    /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。*/
     private lastDamagedAt: number | null = null;
     private fallbackKey = -1;
     private fallbackGateScale = 1;
@@ -274,43 +274,43 @@ export class ZCUnitView extends Component {
      *
      * 原先每帧 `setScale(new Vec3(...))`，46 个单位 × 60 帧 = 每秒近 3 千个短命对象，
      * 正是 AGENTS.md 明令禁止的「update 路径分配临时对象」——表现为 GC 尖刺、
-     * 帧时间忽高忽低。这里改成复用实例，**并且值没变就不写**（setScale 会触发引擎侧
+     * 帧时间忽高忽低。这里改成复用实例，并且值没变就不写（setScale 会触发引擎侧
      * 变换脏标记，没必要的写入本身也花钱）。
-     */
+    */
     private readonly visualScale = new Vec3(1, 1, 1);
     private appliedVisualScaleX = Number.NaN;
     private appliedVisualScaleY = Number.NaN;
     private lastFacing: 1 | -1 = 1;
     private appliedTint = -1;
     /**
-     * `visualRoot` 的**基准** y 偏移（`attachVisual` 按骨架 / 序列帧各给一个）与当前已写入的悬空高度。
+     * `visualRoot` 的基准 y 偏移（`attachVisual` 按骨架 / 序列帧各给一个）与当前已写入的悬空高度。
      *
-     * 悬空高度**叠加在基准上**、不覆盖：`visualRoot` 的 y 是「美术相对脚下原点的摆位」，
+     * 悬空高度叠加在基准上、不覆盖：`visualRoot` 的 y 是「美术相对脚下原点的摆位」，
      * 直接把 y 写成 30 会让序列帧兵整体往下跳一截（它们的基准是负值）。
      * 值没变就不写 —— 与 `appliedVisualScaleX` 同一条理由（setPosition 也置脏标记）。
-     */
+    */
     private visualBaseOffsetY = 0;
     private appliedCastLift = Number.NaN;
-    /** 出生抖动起点（表现时间，秒）；null = 没在抖。建筑生成单位时由渲染层设一次。 */
+    /** 出生抖动起点（表现时间，秒）；null = 没在抖。建筑生成单位时由渲染层设一次。*/
     private spawnShakeStartedAt: number | null = null;
 
-    /** 整体外轮廓（放大副本）的材质；null ⇒ 不出轮廓。 */
+    /** 整体外轮廓（放大副本）的材质；null ⇒ 不出轮廓。*/
     setOutlineCopyMaterial(material: Material | null): void {
         this.outlineCopyMaterial = material;
         if (this.outlineCopySkeleton) this.outlineCopySkeleton.customMaterial = material;
     }
 
     /**
-     * 建筑生成单位时调一次：播**原地抖动**（Y 轴拉 110% 回落、再 X 轴拉 110% 回落）。
+     * 建筑生成单位时调一次：播原地抖动（Y 轴拉 110% 回落、再 X 轴拉 110% 回落）。
      *
      * 只记起点、不建 tween：`render` 每帧按 `now - spawnShakeStartedAt` 反推抖动缩放，
      * 与工程「按进度计算、不留补间残影」的惯例一致。同一单位重复调用只是把起点刷新（重播）。
-     */
+    */
     playSpawnShake(now: number): void {
         this.spawnShakeStartedAt = now;
     }
 
-    /** 当前宿主注入的本局只读资源表；独立预览未注入时使用占位表现。 */
+    /** 当前宿主注入的本局只读资源表；独立预览未注入时使用占位表现。*/
     private presentationArt: IZCBattlePresentationArt | null = null;
     private presentationOwner: object | null = null;
 
@@ -339,12 +339,12 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 取这个兵种的美术 prefab；取不到就**向控制器要一次补载**（同一兵种只发一次）。
+     * 取这个兵种的美术 prefab；取不到就向控制器要一次补载（同一兵种只发一次）。
      *
      * 为什么不能只靠 `initialize` 那一刻：首屏清单是按后端英雄名单生成的，GM 工具临时加兵、
      * 召唤链/波次漏登记的兵都不在里面 ⇒ 出生时必然取不到。补载是异步的，到货后由
      * {@link attachDeferredVisual} 在下一帧 `render` 里接上。
-     */
+    */
     private resolveVisual(definition: Readonly<ZCUnitDefinition>): Prefab | null {
         const prefab = this.presentationArt?.unitVisualPrefabs.get(definition.unitId) ?? null;
         if (prefab) return prefab;
@@ -361,9 +361,9 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 把一份美术**真挂上去**：`initialize` 与「补载到货」共用这一段，避免两处顺序漂移
+     * 把一份美术真挂上去：`initialize` 与「补载到货」共用这一段，避免两处顺序漂移
      * （`attachVisual` 建子树+建轮廓副本 → 写缩放 → 探测动作名 → 起播 idle）。
-     */
+    */
     private mountVisual(prefab: Prefab): void {
         this.visualPrefab = prefab;
         this.attachVisual(prefab);
@@ -375,7 +375,7 @@ export class ZCUnitView extends Component {
     /**
      * 补载到货：挂上美术。不动节点、不动单位状态（hp / 血条 / 抖动窗口都不重来），
      * `renderFallback` 的指纹含 `visualNode` 有无 ⇒ 下一段会隐藏「将」字占位色块。
-     */
+    */
     private attachDeferredVisual(definition: Readonly<ZCUnitDefinition>): void {
         const prefab = this.resolveVisual(definition);
         if (!prefab) return;
@@ -463,12 +463,12 @@ export class ZCUnitView extends Component {
 
     /**
      * 建「整体外轮廓」副本：同一份美术 prefab 的第二个实例，同动画、放大 `OUTLINE_COPY_SCALE`、
-     * 只画不透明像素（`shaders/unit-outline-copy`），排在美术**后面** ⇒ 大出来的那一圈 = 描边。
+     * 只画不透明像素（`shaders/unit-outline-copy`），排在美术后面 ⇒ 大出来的那一圈 = 描边。
      *
      * 子序：美术先在 `attachVisual` 里占 0（那时它是独子），副本后到会把它挤到 1 ⇒
      * 最终 `[副本, 美术]`。改这里的下标要同步改 `attachVisual` 里那一行，否则副本会盖到角色身上
      * （整只兵变成一个色块）。
-     */
+    */
     private attachOutlineCopy(prefab: Prefab): void {
         const copy = instantiate(prefab);
         copy.setParent(this.visualRoot);
@@ -482,7 +482,7 @@ export class ZCUnitView extends Component {
         if (!skeleton) throw new Error('ZCUnitView 轮廓副本：美术 prefab 里找不到 sp.Skeleton');
         skeleton.node.layer = this.node.layer;
         skeleton.customMaterial = this.outlineCopyMaterial;
-        // shader 按**预乘**口径输出（见 effect 顶部注释）；这里把口径钉死，别依赖美术 prefab 上的勾选。
+        // shader 按预乘口径输出（见 effect 顶部注释）；这里把口径钉死，别依赖美术 prefab 上的勾选。
         skeleton.premultipliedAlpha = true;
         this.outlineCopyNode = copy;
         this.outlineCopySkeleton = skeleton;
@@ -530,7 +530,7 @@ export class ZCUnitView extends Component {
             else if (cos > ZCUnitView.FACING_HYSTERESIS_COS) this.lastFacing = 1;
             const facing = this.lastFacing;
 
-            // 施法悬空（2026-11-11 麻辣铁锅 102603「角色上移 30px」）：只抬**美术根节点**，
+            // 施法悬空（2026-11-11 麻辣铁锅 102603「角色上移 30px」）：只抬美术根节点，
             // 不动单位坐标 —— 判定 / 索敌 / 格子占用都还在脚下那个点上。
             // 叠加在 `visualBaseOffsetY` 上（不是覆盖），见那个字段的注释。
             const castLift = presentation.castLiftPx ?? 0;
@@ -576,13 +576,13 @@ export class ZCUnitView extends Component {
             // 悬空施法（`castLift > 0`）也播攻击动作，理由同 `charging`：设计案要求
             // 「触发特效时，角色在空中循环播放攻击动作」。spine 的 `setAnimation(0, name, true)`
             // 本身就是循环，这里只需要把片段选对。
-            // **施法动作窗口**（2026-11-13 用户需求）：「角色在移动中，释放任意的主动技能
+            // 施法动作窗口（2026-11-13 用户需求）：「角色在移动中，释放任意的主动技能
             // 都需要角色要播放攻击动作（当前已经是攻击动作就无需打断）」——
             // 主动技能落地那半秒里即使 `battleState` 还是 `move`，也切成攻击动作，
             // 否则边走边放技能看起来就是「一路小跑过去顺手扔了个雷」。
             // 已经是 `attack` 状态时本来就落在这条三元的前半段，窗口不会打断它：
             // 下面 `attackRestarted` 只认 `attacking`，不会把正在播的那一拳拉回第 0 帧。
-            //  ⚠️ `battleState !== 'dead'` 不能省：自愈这种 buff 本来就常在残血时放，
+            //   `battleState !== 'dead'` 不能省：自愈这种 buff 本来就常在残血时放，
             //  落地半秒内被打死的话，窗口没到期会让尸体保持出拳姿势 —— 与 `unit.charging`
             //  那条「每帧先清、别把出拳姿势带进 idle」是同一类事故。
             const casting = unit.castActionUntil !== undefined && now < unit.castActionUntil
@@ -606,7 +606,7 @@ export class ZCUnitView extends Component {
     /**
      * 整体外轮廓：只给「非我方席位 + 没阵亡 + 有 spine 外形可描」的单位显示。
      * 材质缺失（effect 没加载成功）时整层关掉，不影响其余表现。
-     */
+    */
     private renderOutline(unit: Readonly<ZCUnitState>): void {
         const copy = this.outlineCopyNode;
         const skeleton = this.outlineCopySkeleton;
@@ -631,10 +631,10 @@ export class ZCUnitView extends Component {
     /**
      * 把副本的动画对齐到美术当前那一拍。
      *
-     * 只在**代次变化**（或刚恢复显示）时 `setAnimation`：它会让轨道从头计时，每帧调一次等于副本永远停在第一帧。
+     * 只在代次变化（或刚恢复显示）时 `setAnimation`：它会让轨道从头计时，每帧调一次等于副本永远停在第一帧。
      * 起播后同步主骨架当前的 `trackTime`，确保任何时刻激活副本都能与本体严丝合缝地锁相。
      * `setAnimation` 返回 null = 骨架还没就绪（与 `playClip` 同一条自愈路径）⇒ 不记代次，下一帧再来。
-     */
+    */
     private syncOutlineCopyClip(): void {
         const skeleton = this.outlineCopySkeleton;
         if (!skeleton || !this.currentClip || this.outlineSyncedEpoch === this.outlineClipEpoch) return;
@@ -650,9 +650,9 @@ export class ZCUnitView extends Component {
      * 把 `visualAssetScale`（资产客观缩放）与 `visualSize`（策划配的 `pvpCard.prefabSize`）
      * 相乘写进 `visualBaseScale`，并立刻刷到节点上。
      *
-     * **为什么要拆成两层而不是直接在 `initialize` 里乘一次**：
+     * 为什么要拆成两层而不是直接在 `initialize` 里乘一次：
      * 节点是对象池复用的，`initialize` 有一条「同一个 prefab 直接复用美术子树」的早退分支。
-     * 如果系数只在建节点时算一次，那条早退分支就会沿用**上一次**的系数 ——
+     * 如果系数只在建节点时算一次，那条早退分支就会沿用上一次的系数 ——
      * 表里把某个兵的 `prefabSize` 从 1 改成 1.2，复用同一个 prefab 的另一个单位时
      * 就会带着错的尺寸渲染，且不报错。拆开后早退分支重算一次即可自愈。
      *
@@ -660,7 +660,7 @@ export class ZCUnitView extends Component {
      * 反过来的话 spine 单位会被自己的 canvas 高再抵消一次策划的意图。
      *
      * 复用同一个 `Vec3` 实例写入 —— 每帧/每次都 `new Vec3` 是 AGENTS.md 明令禁止的短命对象。
-     */
+    */
     private applyVisualSize(): void {
         const asset = this.visualAssetScale;
         const size = this.visualSize;
@@ -673,10 +673,10 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 副本缩放 = 美术缩放 × `OUTLINE_COPY_SCALE` —— **唯一写入口**（`applyVisualSize` 与 `render`
+     * 副本缩放 = 美术缩放 × `OUTLINE_COPY_SCALE` —— 唯一写入口（`applyVisualSize` 与 `render`
      * 的朝向分支都走它）。必须与美术同朝向：副本是整只角色放大后的剪影，朝向反了描边会
      * 从角色的另一侧"长出来"，人马分离。
-     */
+    */
     private applyOutlineCopyScale(scaleX: number, scaleY: number): void {
         const copy = this.outlineCopyNode;
         if (!copy) return;
@@ -689,17 +689,17 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 血条：一格一根，尺寸按英雄/普通两档，**只在尺寸变化时写一次**。
+     * 血条：一格一根，尺寸按英雄/普通两档，只在尺寸变化时写一次。
      *
      * - 尺寸只在变化时写，绝不能每帧写 —— 这是「打一下血条先短一下、下一帧又变回满血」的根因。
      *
      * 引擎 `ProgressBar._updateBarStatus` 有两个陷阱：
-     *   ① totalLength / progress 的 setter 都在「值没变」时直接 return，不会重算；
-     *   ② 重算时 宽度 = totalLength × progress，高度取填充条**当时**的 contentSize。
+     * 1. totalLength / progress 的 setter 都在「值没变」时直接 return，不会重算；
+     * 2. 重算时 宽度 = totalLength × progress，高度取填充条当时的 contentSize。
      * 老代码每次 render 都先把填充条 contentSize 写回 (width, height)（本意只想改高度）：
      * 宽度被抹成满条之后，紧接着的 totalLength / progress 双双因为值没变而早退、
      * 不再重算 → 满血前的那一帧看起来"闪"了一下，下一帧就停在满条（颜色仍按 ratio 走）。
-     */
+    */
     private renderHealthBar(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>, now: number): void {
         const width = definition.hero ? this.barWidthHero : this.barWidth;
         const height = this.barHeight;
@@ -708,21 +708,21 @@ export class ZCUnitView extends Component {
             this.barAppliedHeight = height;
             // 填充条比外框窄一圈：外框是「槽」（17 高），填充是槽里那条（8 高、左右各内缩 4）。
             const fillWidth = width - this.barFillInset * 2;
-            // 先用「陷阱②」决定顺序：先写尺寸再设 totalLength，反了高度会停在 prefab 的旧值。
+            // 先用「陷阱2.」决定顺序：先写尺寸再设 totalLength，反了高度会停在 prefab 的旧值。
             const barSprite = this.healthBar.barSprite;
             if (barSprite) barSprite.node.getComponent(UITransform).setContentSize(fillWidth, this.barFillHeight);
             this.healthBar.node.getComponent(UITransform).setContentSize(width, height);
             // 填充条锚点是 (0, 0.5)，靠 position 把左缘对齐到外框内沿（与引擎 _initBarSprite 同一算法）。
             this.healthBar.barSprite?.node.setPosition(-width / 2 + this.barFillInset, 0, 0);
             this.healthBar.totalLength = fillWidth;
-            // 「陷阱①」：普通单位的 fillWidth 恰好等于 prefab 的 52.8 → 上一行也会因「值没变」早退，
+            // 「陷阱1.」：普通单位的 fillWidth 恰好等于 prefab 的 52.8 → 上一行也会因「值没变」早退，
             // 宽度就停在刚写进去的满条上。用一个越界值空写一次，逼 totalLength 必定重算
             // （同一次 render 内同步完成，中间态不会被绘制）。
             this.healthBar.totalLength = fillWidth + 1;
             this.healthBar.totalLength = fillWidth;
         }
         // 血条 Y 必须跟着 `prefabSize` 一起缩放：美术放大后头顶也跟着升
-        // （基准 +69~+74，×1.2 就是 +83~+89），而条固定在 +80 就会**陷进脑袋里**。
+        // （基准 +69~+74，×1.2 就是 +83~+89），而条固定在 +80 就会陷进脑袋里。
         // 宽度不缩 —— 血条宽是「可读性」规格（56/64），跟着美术体型缩到 45 会读不出比例。
         const barOffsetY = this.barOffsetY * this.visualSize * (unit.gateScale ?? 1);
         if (barOffsetY !== this.barAppliedOffsetY) {
@@ -747,7 +747,7 @@ export class ZCUnitView extends Component {
             && unit.battleState !== 'dead'
             && isHealthBarVisible(this.lastDamagedAt, now);
         if (this.healthBar.node.active !== isVisible) this.healthBar.node.active = isVisible;
-        // 扣血白条：被扣掉的那段先变白、0.13s 从右往左缩没。**只看比例**（不回看 hp），
+        // 扣血白条：被扣掉的那段先变白、0.13s 从右往左缩没。只看比例（不回看 hp），
         // 所以「换了个体但血量一样」不会误起白条；放在可见性之后，白条从血条亮起的那一帧开始计时。
         this.damageTrail.render(this.healthBar, healthBarRatio(unit.hp, unit.maxHp), now);
     }
@@ -755,9 +755,9 @@ export class ZCUnitView extends Component {
     /**
      * 没有可用美术 prefab 时的兜底：white 色块 + 「兵 / 弓 / 将」字。
      * 形态与归属没变就不重复赋值（`fallbackKey` 是这三者的指纹）。
-     */
+    */
     private renderFallback(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>): void {
-        // 指纹用**位掩码**而不是模板字符串：这段每帧每单位都会跑，
+        // 指纹用位掩码而不是模板字符串：这段每帧每单位都会跑，
         // `${a}|${b}|${c}` 每次都新建一个字符串（46 单位 × 60 帧 ≈ 2800 个/秒），
         // 而它只是拿来判"要不要重画"。四个因子各占一位，够用且零分配。
         const key = (this.visualNode ? 1 : 0)
@@ -783,7 +783,7 @@ export class ZCUnitView extends Component {
         this.fallbackLabel.string = definition.hero ? '将' : definition.attackRange > 100 ? '弓' : '兵';
     }
 
-    /** 把美术色复位成原色（复用节点换形态时，上一条命的阵亡灰 / 其他玩家的灰都必须清掉）。 */
+    /** 把美术色复位成原色（复用节点换形态时，上一条命的阵亡灰 / 其他玩家的灰都必须清掉）。*/
     private resetVisualTint(): void {
         this.appliedTint = -1;
         this.applyVisualTint(ZCUnitView.TINT_WHITE);
@@ -793,9 +793,9 @@ export class ZCUnitView extends Component {
      * 只给「手上真有的那一种渲染组件」上色。
      *
      * 序列帧单位有 `Sprite`、spine 单位有 `Skeleton`，二者互斥 —— 写成
-     * `if (sprite) sprite.color = …` 而不带 `else` 时，spine 单位**永远不会变色**：
+     * `if (sprite) sprite.color = …` 而不带 `else` 时，spine 单位永远不会变色：
      * 阵亡不灰、其他玩家的兵不灰，都看不出区别（不报错、逻辑也没问题，纯表现缺失）。
-     */
+    */
     private applyVisualTint(tint: number): void {
         if (this.appliedTint === tint) return;
         const color = tint === ZCUnitView.TINT_DEAD ? ZCUnitView.UNIT_DEAD_TINT
@@ -813,10 +813,10 @@ export class ZCUnitView extends Component {
             // spine 走轨道 0。名字在 `initialize` 里已用骨架的动画名表探测过，正常不会触发
             // 引擎那条「动画不存在」的 warn（`logID 7509`）。
             //
-            // 但 `setAnimation` 在骨架还没走完 `onLoad`（`this._skeleton` 为 null）时**返回 null
-            // 且不生效**（引擎源码：`skeleton ? findAnimation(name) : null` → `logID(7509)` → return）。
-            // 而 `initialize()` 是在 `instantiate()` 之后**立刻**调用的，赶不上骨架就绪。
-            // 所以**只在真播上时写 `currentClip`**：没写的话，下一帧 `render()` 会再试一次（自愈）；
+            // 但 `setAnimation` 在骨架还没走完 `onLoad`（`this._skeleton` 为 null）时返回 null
+            // 且不生效（引擎源码：`skeleton ? findAnimation(name) : null` → `logID(7509)` → return）。
+            // 而 `initialize()` 是在 `instantiate()` 之后立刻调用的，赶不上骨架就绪。
+            // 所以只在真播上时写 `currentClip`：没写的话，下一帧 `render()` 会再试一次（自愈）；
             // 写早了则 `currentClip === name` 会让它永远早退 —— 单位定格在 prefab 的 `defaultAnimation` 上
             // （豌豆射手 / 外卖僵尸 的 defaultAnimation 是 `die` ⇒ 一出生就躺下，且一条错都不报）。
             if (this.visualSkeleton.setAnimation(0, name, true)) {

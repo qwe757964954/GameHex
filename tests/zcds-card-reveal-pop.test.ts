@@ -54,6 +54,7 @@ function createView() {
     const loaded = { exports: {} as Record<string, any> };
     new Function('require', 'module', 'exports', compiled)((name: string) => {
         if (name === 'cc') return cc;
+        if (name === '../../guide/ui/GuideFocusAnchor') return { GuideFocusAnchor: class {} };
         // 淡出起点必须取自真源：地块回场时机与它同值（见 `ZC_CARD_FADE_START_PROGRESS`）。
         if (name === '../model/ZCBattlePresentationQueue') return { ZC_CARD_FADE_START_PROGRESS };
         if (name === '../../procedure/ProcedureGame') return { ProcedureGame: { current: null } };
@@ -80,6 +81,7 @@ function createView() {
     const node = makeNode();
     const luckNode = makeNode();
 
+    view.guideAnchor = { key: '', shownAt: 0 };
     view.cardOpacity = new UIOpacity();
     view.luckOpacityComp = new UIOpacity();
     node.components.push(view.cardOpacity);
@@ -191,4 +193,17 @@ test('没有评语的卡（luckText 为空）评语恒隐；池复用不留上�
     const bare = { ...reveal(0), luckText: '' } as never;
     view.render(bare, 0.5);
     assert.equal(luckOpacity(), 0, '无评语时自身透明度压到 0（sprite 也已 disabled）');
+});
+
+test('抽卡焦点只属于玩家当前可见的卡，复用为敌方、未开始或已结束时清空', () => {
+    const { view } = createView();
+    view.render(reveal(0) as never, 0.4);
+    assert.equal(view.guideAnchor.key, 'Battle/DrawnCard');
+    assert.equal(view.guideAnchor.shownAt, 0);
+    view.render({ ...reveal(0), owner: 'enemy' } as never, 0.4);
+    assert.equal(view.guideAnchor.key, '');
+    view.render(reveal(20) as never, 0.4);
+    assert.equal(view.guideAnchor.key, '');
+    view.render(reveal(0) as never, ZC_CARD_REVEAL_SECONDS);
+    assert.equal(view.guideAnchor.key, '');
 });

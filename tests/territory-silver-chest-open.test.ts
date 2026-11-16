@@ -220,7 +220,7 @@ test('页面：银币宝箱不进 playChestOpen，奖励当场结算（不挂动
     assert.ok(at > 0, 'presentRewards 里要有银币宝箱分支');
     const body = PAGE_SRC.slice(at, PAGE_SRC.indexOf('const tier =', at));
     assert.match(body, /playSilverChestOpen\(cellId\)/);
-    assert.match(body, /settleRewards\(rewards, cellId, false\)/,
+    assert.match(body, /settleRewards\(rewards, cellId\)/,
         '这次没有飞出图标带 +N，银币要照常飘字');
     assert.doesNotMatch(body, /playChestOpen|playChestThenSettle|territoryChestTierOfRewards|chest_seq/,
         '不许碰卡牌宝箱的三档表演 / 黄箱子开盖补帧');

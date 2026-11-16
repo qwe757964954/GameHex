@@ -5,7 +5,6 @@ import { TerritoryUiEvent, TerritoryViewEvent } from '../territory/application/T
 import type { ITerritoryCommandEvent, ITerritoryRenderEvent } from '../territory/application/TerritoryEvents';
 import { findHighestPassedTerritoryLevel } from '../territory/model/TerritoryStageBinding';
 import { TerritoryChapterInfoRepository } from '../territory/application/TerritoryChapterInfoRepository';
-import { CommonTips } from '../common/CommonTips';
 import { routedLoad } from '../common/RoutedResource';
 import { MonthCardGiftPage } from '../monthcard/MonthCardGiftPage';
 import { HJ_COST_ICON_PATH, hjSharedPath } from './HangArt';

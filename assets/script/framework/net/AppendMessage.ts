@@ -33,13 +33,6 @@ export class AppendMessage {
     }
 
     private static cmdCacheAppMsg(cmdCacheAppMsg, rspMsgName: string, messageName?: string) {
-        let tlCmdCacheOperaterList: any[] = cmdCacheAppMsg.tlCmdCacheOperaterList;
-        // let item;
-        // let cacheMgr = FW.CacheMgr;
-        // for (let i = 0, len = tlCmdCacheOperaterList.length; i < len; i++) {
-        //     item = tlCmdCacheOperaterList[i];
-        //     cacheMgr.handleCmdCacheOperaterList(item, rspMsgName, messageName);
-        // }
     }
 
     private static add(appendMsgId: number, appendFun: Function) {

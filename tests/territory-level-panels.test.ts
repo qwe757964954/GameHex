@@ -345,6 +345,7 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     for (const key of ['titleLabel', 'objectiveLabel', 'occupyLabel', 'recommendLabel', 'fightLabel', 'fightCostLabel']) {
         panel[key] = labelStub();
     }
+    panel.guideAnchor = { key: '' };
     panel.fightCostRoot = nodeStub();
     // 费用图标（`BtnPrimary/CostIcon`）：2026-10-28 起由 `applyContent` 按 `staminaIcon` 现贴，
     // 不许再靠 prefab 里焊死的硬币图 ⇒ 这里必须桩出 `spriteFrame` 与 `node.active`。
@@ -363,13 +364,14 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     assert.equal(typeof panel.dropList.renderItemFn, 'function', 'renderItemFn 必须在 onInit 里装上');
 
     panel.applyContent({
-        title: '2-2关卡标题', hasTip: true, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        levelId: 10001, title: '2-2关卡标题', hasTip: true, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [{ frame: {}, icon: {}, amount: 8 }, { frame: {}, icon: {}, amount: 75 }],
         recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
         staminaIcon: { name: '体力' } as never,
     });
     assert.equal(panel.hintButton.node.active, true, '有敌军提示 ⇒ 感叹号显示');
     assert.equal(panel.titleLabel.string, '2-2关卡标题');
+    assert.equal(panel.guideAnchor.key, 'LevelList/Item_10001');
     assert.equal(panel.occupyLabel.string, '【征收】+6 硬币');
     assert.deepEqual(counts, [2], '条数 = 掉落数量（不再固定 3 格）');
     assert.equal(panel.recommendLabel.node.active, false, '没有推荐文案时整行隐藏');
@@ -402,7 +404,7 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
 
     // 没敌军 ⇒ 感叹号藏起来（别让玩家点出空面板）
     panel.applyContent({
-        title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        levelId: 10001, title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
         staminaIcon: { name: '体力' } as never,
     });
@@ -411,7 +413,7 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
     // 免费关卡（staminaCost 0）⇒ 数字清空、底与图标一起藏
     // （`CostIcon` 是 `BtnPrimary` 的直接子节点，不跟着 `fightCostRoot.active` 关，必须单独判）。
     panel.applyContent({
-        title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        levelId: 10001, title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 0,
         staminaIcon: { name: '体力' } as never,
     });
@@ -421,7 +423,7 @@ test('关卡界面组件：掉落交给虚拟列表（先 active 再 setTotalCou
 
     // 图没加载到（`staminaIcon: null`）⇒ 只少图标，数字照常显示
     panel.applyContent({
-        title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
+        levelId: 10001, title: '2-2关卡标题', hasTip: false, objective: '第一名成功通过关卡', occupy: '【征收】+6 硬币',
         drops: [], recommend: '', fightCaption: '开始战斗', fightEnabled: true, staminaCost: 10,
         staminaIcon: null,
     });

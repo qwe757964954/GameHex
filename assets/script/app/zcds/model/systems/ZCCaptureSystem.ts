@@ -8,29 +8,25 @@ import { neutralResourceItemOf, ZCNeutralResourceType } from '../ZCNeutralResour
 
 type Occupants = Partial<Record<ZCOwner, number>>;
 
-/** 脚点轨迹采样间距；远小于六边形边长，避免高移速单位一拍跨格时漏记。 */
+/** 脚点轨迹采样间距；远小于六边形边长，避免高移速单位一拍跨格时漏记。*/
 const FOOTPRINT_SAMPLE_STEP = 2;
 
 /**
- * 空地占领状态机。
- *
- * - `freeX/freeY` 是小兵脚点；本拍脚点轨迹经过的格都会参与本拍控制；
- * - 双方同时驻留时暂停；无人时衰减；原地块所属方会更快清除敌方进度；
- * - 多兵提供有限加速；目标格需要与主城连通领地相邻；
- * - 建筑、未击破城墙不参与驻留占领；废墟格已放开，可被驻留易手。
- */
+ * 空地占领状态机：按脚点轨迹统计驻留，双方同格暂停，无人衰减，原地块所属方加速清进度。
+ * 建筑、未破城墙、怪物/号角格不参与；废墟可被单一阵营经过直接易手。
+*/
 export class ZCCaptureSystem {
     private readonly occupants = new Map<number, Occupants>();
-    /** 驻留计数对象池：每帧归还复用，替代为每个有兵格新建 `{}`。 */
+    /** 驻留计数对象池，跨帧复用。*/
     private readonly occupantsPool: Occupants[] = [];
-    /** 脚点拆成两个平行 Map，替代每单位每帧一个 `[x, y]` 临时数组。 */
+    /** 脚点用两个平行 Map 存，避免每单位每帧建临时数组。*/
     private readonly previousFootX = new Map<number, number>();
     private readonly previousFootY = new Map<number, number>();
-    /** 帧内补给缓存 + 回收池：Set 和 BFS 队列跨帧复用，每帧只清空内容。 */
+    /** 帧内补给缓存 + 回收池，每帧只清空内容。*/
     private readonly supplied = new Map<ZCOwner, Set<number>>();
     private readonly supplyPool: Set<number>[] = [];
     private readonly supplyQueue: number[] = [];
-    /** [ZCCapture] 临时诊断节流计数（随诊断代码一起删）。 */
+    /** [ZCCapture] 临时诊断节流计数（随诊断代码一起删）。*/
     private diagStep = 0;
 
     constructor(
@@ -39,7 +35,7 @@ export class ZCCaptureSystem {
         private readonly rules: Readonly<ZCRuntimeRules>,
     ) {}
 
-    /** 在移动和战斗结算前记录脚点，update 时用来覆盖本拍完整位移轨迹。 */
+    /** 在移动和战斗结算前记录脚点，update 时用来覆盖本拍完整位移轨迹。*/
     beginStep(units: readonly ZCUnitState[]): void {
         this.previousFootX.clear();
         this.previousFootY.clear();
@@ -65,9 +61,7 @@ export class ZCCaptureSystem {
                 continue;
             }
             const occupants = this.occupants.get(hex.id);
-            // 标量扫描替代 `ZC_OWNER_ORDER.map(...).filter(...)`：
-            // 下游只用到「驻留阵营数」与「第一个阵营及其人数」，原写法每格要造
-            // 1 个数组 + 4 个对象字面量 + 2 个闭包，是全帧最大的短命对象来源。
+            // 标量扫描替代 map/filter：下游只要「驻留阵营数」和「第一个阵营及人数」。
             let presentCount = 0;
             let firstOwner: ZCOwner = ZC_OWNER_ORDER[0];
             let firstCount = 0;
@@ -80,8 +74,7 @@ export class ZCCaptureSystem {
                 presentCount += 1;
             }
 
-            // 废墟：一方小兵经过即变成该方占有（双方同格争夺时不归属），不累计驻留时间；
-            // 即使废墟已经归属该方，经过也要把废墟「激活」成占有地（废墟图消失）。
+            // 废墟：单一阵营经过即归其所有，不累计时间；双方同格不归属。
             if (hex.state === 'ruins') {
                 if (presentCount === 1) {
                     capture(hex, firstOwner);
@@ -132,16 +125,9 @@ export class ZCCaptureSystem {
         if (ZCDC_LOG_DIAGNOSTICS) this.diagUncaptured(state);
     }
 
-    /**
-     * [ZCCapture] 临时诊断：有本机玩家的兵、格子却还不是本机的，逐格报出命中的拦截原因
-     * （不可占 / 争夺 / 无补给 / 换手）。用来区分「判据挡住的」与「只是没累积够」。
-     *
-     * 🔴 挂在 `ZCDC_LOG_DIAGNOSTICS`（统一开关，默认关）后面：它每 60 拍扫全盘，
-     * 一局能刷几百行，开着会把真问题埋掉。定位完把本方法 + `diagStep` 整块删掉即可。
-     */
+    /** [ZCCapture] 临时诊断：逐格报出我方有兵却未占领的拦截原因。定位完连同 diagStep 一起删。 */
     private diagUncaptured(state: ZCSnapshot): void {
-        // 🔴 守卫写在**方法内**而不是只靠调用点：调用点守卫一旦有人新增第二个调用点就会漏，
-        // 早退形态让本方法整体变成诊断体（`zcds-log-switch` 判据认这两种形态）。
+        // 方法内早退守卫：新增调用点也不会漏掉开关，同时满足日志开关判据。
         if (!ZCDC_LOG_DIAGNOSTICS) return;
         this.diagStep += 1;
         if (this.diagStep % 60 !== 0) return;
@@ -187,9 +173,9 @@ export class ZCCaptureSystem {
     }
 
     /**
-     * 统计脚点轨迹经过的格。同一单位可能在一拍内经过多个格，但每格只贡献一个兵力计数。
-     * 单拍轨迹是直线、六边形是凸多边形，因此格 ID 只需连续去重，不必为每个单位分配 Set。
-     */
+     * 统计脚点轨迹经过的格。同一单位一拍内可能经过多格，但每格只计一次兵力。
+     * 单拍轨迹是直线、六边形是凸多边形，格 ID 只需连续去重。
+    */
     private collectFootprints(units: readonly ZCUnitState[]): void {
         for (const counts of this.occupants.values()) {
             // 赋 undefined 而非 delete：保住 hidden class，且 `?? 0` 与诊断读值都与改前一致。
@@ -220,7 +206,7 @@ export class ZCCaptureSystem {
         }
     }
 
-    /** 手写循环替代 `neighbors.some(id => ...)`，去掉每格一个闭包。 */
+    /** 手写循环替代 `neighbors.some(id => ...)`，去掉每格一个闭包。*/
     private hasSuppliedNeighbor(hexId: number, owner: ZCOwner): boolean {
         const supplied = this.supplied.get(owner);
         if (!supplied) return false;

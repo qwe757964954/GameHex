@@ -712,6 +712,17 @@ test('D3｜入场动效：PanelBg / TitleImage 缩放 + Hint 延迟显示，全�
     assert.ok(!/to\(0\.0\d+,/.test(PAGE_SRC), '不要手写秒数，请用 framesToSeconds');
 });
 
+test('D3b｜首帧不许闪全尺寸：入场起手态必须在 onOpen 的第一个 await 之前写好', () => {
+    const src = stripComments(PAGE_SRC);
+    const prepCall = src.indexOf('this.prepareEnterAnimation()');
+    const openStart = src.indexOf('protected async onOpen');
+    const firstAwait = src.indexOf('await', openStart);
+    assert.ok(prepCall > 0, '缺 prepareEnterAnimation() 调用');
+    assert.ok(openStart > 0 && firstAwait > openStart, 'onOpen 里应有 await');
+    assert.ok(prepCall > openStart && prepCall < firstAwait,
+        '起手态必须早于任何 await —— 否则加载期间弹窗先露一帧全尺寸，再缩回去重播 ⇒ 闪/跳');
+});
+
 test('D4｜音效走 `FW.playSound`，key 来自 `showRewardSoundKey(isGold)`', () => {
     assert.ok(/FW\.playSound\(showRewardSoundKey\(this\.isGold\)\)/.test(PAGE_SRC));
     assert.ok(/import \{ FW \}/.test(PAGE_SRC));

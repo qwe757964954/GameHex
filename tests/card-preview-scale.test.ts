@@ -180,7 +180,7 @@ test('B1 系数真的乘进了节点缩放；复用同 prefab 换卡时必须按
     const plain = visual.scale.y;
     assert.ok(Math.abs(plain - 120 / (941 * 0.97)) < 1e-9, `归一系数不对：${plain}`);
 
-    // 同一份 prefab 被另一张卡复用（萨满 = 萨尔 / 雷蕉，体型按卡不同）⇒ 早退分支也要重写
+    // 同一份 prefab 被另一张卡复用（萨满 = 磁电菇 / 雷蕉，体型按卡不同）⇒ 早退分支也要重写
     preview.show(prefab, 1.5);
     assert.ok(Math.abs(visual.scale.y / plain - 1.5) < 1e-9,
         `复用同 prefab 时也必须按新体型缩放，实际比值 ${visual.scale.y / plain}`);

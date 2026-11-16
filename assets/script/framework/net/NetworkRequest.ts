@@ -26,7 +26,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     /**服务器时间 */
     public serverTime: number;
     /**异步 */
-    public promise: Promise<boolean>;
+    public promise: Promise<boolean> & { cancel?: () => void };
     /**成功回调 */
     public resolve: Function;
     /**失败回调 */
@@ -132,6 +132,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
             };
             if (caller && owners) stopOwner = owners.addCallerCleanup(caller, () => this.cancel());
         });
+        this.promise.cancel = () => this.cancel();
     }
 
     /** 只解除回调与等待；已发请求的响应仍由传输层消费公共缓存。 */

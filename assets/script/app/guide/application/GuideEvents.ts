@@ -23,6 +23,17 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 export const GuideEvent = {
     /** 业务侧上报「某步的完成判定达成了」。payload = `IGuideCompletePayload`。 */
     Complete: 'guide:complete',
+    /** 对话组播放完后点击；owner + stepId 限定当前展示实例与步骤。 */
+    Advance: 'guide:advance',
+} as const;
+
+export interface IGuideAdvancePayload {
+    readonly owner: object;
+    readonly stepId: string;
+}
+
+export const GuideDebugEvent = {
+    ForceSkip: 'guide:debug-force-skip',
 } as const;
 
 export interface IGuideCompletePayload {

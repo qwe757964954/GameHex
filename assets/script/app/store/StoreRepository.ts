@@ -220,6 +220,15 @@ function asRow(raw: unknown): Record<string, unknown> | null {
     return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
 }
 
+/** 按 `id` 扫一张表，返回第一行命中的原始行；无该 id 时返回 `null`。 */
+async function findRowById(table: string, id: number): Promise<Record<string, unknown> | null> {
+    for (const raw of await readRows(table)) {
+        const row = asRow(raw);
+        if (row && Number(row.id) === id) return row;
+    }
+    return null;
+}
+
 /**
  * 读 `CmdRole` 的**第一行**（持有量都从这一行取）。
  *
@@ -273,23 +282,20 @@ class RuntimeStoreRepository implements IStoreRepository {
     // ---------- 读表 ----------
 
     async readGemBox(id: number): Promise<IStoreGemBoxRow | null> {
-        for (const raw of await readRows(TABLE_GEM_BOX)) {
-            const row = asRow(raw);
-            if (!row || Number(row.id) !== id) continue;
-            return {
-                id: Number(row.id) || 0,
-                priceType: Number(row.priceType) || 0,
-                cost: Number(row.cost) || 0,
-                priceType3: Number(row.priceType3) || 0,
-                cost3: Number(row.cost3) || 0,
-                cost2: Number(row.cost2) || 0,
-                quality: Number(row.quality) || 0,
-                quality2: Number(row.quality2) || 0,
-                rewards: parseRewardRows(row.rewards),
-                rareRewards: parseRewardRows(row.rareRewards),
-            };
-        }
-        return null;
+        const row = await findRowById(TABLE_GEM_BOX, id);
+        if (!row) return null;
+        return {
+            id: Number(row.id) || 0,
+            priceType: Number(row.priceType) || 0,
+            cost: Number(row.cost) || 0,
+            priceType3: Number(row.priceType3) || 0,
+            cost3: Number(row.cost3) || 0,
+            cost2: Number(row.cost2) || 0,
+            quality: Number(row.quality) || 0,
+            quality2: Number(row.quality2) || 0,
+            rewards: parseRewardRows(row.rewards),
+            rareRewards: parseRewardRows(row.rareRewards),
+        };
     }
 
     async readGoldShop(id: number): Promise<IShopCostRow | null> {
@@ -301,34 +307,28 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async readGuanKaGift(id: number): Promise<IStoreGuanKaGiftRow | null> {
-        for (const raw of await readRows(TABLE_GUANKA_GIFT)) {
-            const row = asRow(raw);
-            if (!row || Number(row.id) !== id) continue;
-            return {
-                id: Number(row.id) || 0,
-                level: Number(row.level) || 0,
-                cost: Number(row.cost) || 0,
-                priceType: Number(row.priceType) || 0,
-                limit: Number(row.limit) || 0,
-            };
-        }
-        return null;
+        const row = await findRowById(TABLE_GUANKA_GIFT, id);
+        if (!row) return null;
+        return {
+            id: Number(row.id) || 0,
+            level: Number(row.level) || 0,
+            cost: Number(row.cost) || 0,
+            priceType: Number(row.priceType) || 0,
+            limit: Number(row.limit) || 0,
+        };
     }
 
     private async readShopRow(table: string, id: number): Promise<IShopCostRow | null> {
-        for (const raw of await readRows(table)) {
-            const row = asRow(raw);
-            if (!row || Number(row.id) !== id) continue;
-            return {
-                id: Number(row.id) || 0,
-                cost: Number(row.cost) || 0,
-                priceType: Number(row.priceType) || 0,
-                freeTimes: Number(row.freeTimes) || 0,
-                adTimes: Number(row.adTimes) || 0,
-                limit: Number(row.limit) || 0,
-            };
-        }
-        return null;
+        const row = await findRowById(table, id);
+        if (!row) return null;
+        return {
+            id: Number(row.id) || 0,
+            cost: Number(row.cost) || 0,
+            priceType: Number(row.priceType) || 0,
+            freeTimes: Number(row.freeTimes) || 0,
+            adTimes: Number(row.adTimes) || 0,
+            limit: Number(row.limit) || 0,
+        };
     }
 
     // ---------- 读缓存 ----------

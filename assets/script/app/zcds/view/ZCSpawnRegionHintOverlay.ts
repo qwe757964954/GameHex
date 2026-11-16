@@ -9,7 +9,7 @@ const BUBBLE_TEXT = new Color(255, 255, 255, 255);
  * 气泡切图是「圆角矩形主体（94×36）+ 右下角小尾巴（9px）」一张整图：
  * 九宫格拉伸后主体中心比节点中心高约 5px。Label 以节点中心为基准会相对主体
  * 偏下，所以整体上移这个值对齐「可见主体」，不按含尾巴的整图居中。
- */
+*/
 const BUBBLE_TEXT_CENTER_OFFSET_Y = 5;
 const DEPTH_LABEL: Readonly<Record<IZCSpawnRegionHint['depth'], string>> = {
     front: '前区',
@@ -21,7 +21,7 @@ const DEPTH_LABEL: Readonly<Record<IZCSpawnRegionHint['depth'], string>> = {
  * 各纵深的九宫格气泡底图；对应切图 = `image/spawn-region/frame_0X`
  * （`frame_02` 红 = 前区，`frame_01` 绿 = 中/后区，见 `SPAWN_REGION_ART_ROOT`）。
  * 帧缺失时该纵深回退 Graphics 色块（旧样式），不阻断选点流程。
- */
+*/
 export interface IZCSpawnRegionHintFrames {
     readonly front: SpriteFrame | null;
     readonly mid: SpriteFrame | null;
@@ -31,14 +31,14 @@ export interface IZCSpawnRegionHintFrames {
 interface ISpawnRegionBubble {
     node: Node;
     label: Label;
-    /** 有贴图帧时非空（SLICED 九宫格底）；否则回退 Graphics 色块。 */
+    /** 有贴图帧时非空（SLICED 九宫格底）；否则回退 Graphics 色块。*/
     sprite: Sprite | null;
     graphics: Graphics | null;
     depth: IZCSpawnRegionHint['depth'] | null;
     hintLabel: string | null;
 }
 
-/** Board-local, non-interactive region hints that sit above the hex layer. */
+/** Board-local, non-interactive region hints that sit above the hex layer.*/
 export class ZCSpawnRegionHintOverlay {
     private readonly root = new Node('SpawnRegionHints');
     private readonly bubbles: ISpawnRegionBubble[] = [];

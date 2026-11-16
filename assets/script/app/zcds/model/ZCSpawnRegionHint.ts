@@ -11,7 +11,10 @@ export interface IZCSpawnRegionHint {
     y: number;
 }
 
-/** Resolve own-region labels into board-local anchors using the rendered cell positions. */
+/**
+ * 自选出生点的区域提示：取本区域内已渲染格位的平均坐标，作为标签锚点。
+ * 只处理当前 section 的区域；没有可用格位的区域直接跳过。
+*/
 export function resolveZCSpawnRegionHints(
     regions: readonly ZCMapRegion[],
     cellPositions: ReadonlyMap<number, Readonly<{ x: number; y: number }>>,
@@ -21,14 +24,14 @@ export function resolveZCSpawnRegionHints(
     for (const region of regions) {
         if (region.section !== section || region.cells.length === 0) continue;
 
-        let xTotal = 0;
-        let yTotal = 0;
+        let sumX = 0;
+        let sumY = 0;
         let count = 0;
         for (const cell of region.cells) {
             const position = cellPositions.get(cell);
             if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) continue;
-            xTotal += position.x;
-            yTotal += position.y;
+            sumX += position.x;
+            sumY += position.y;
             count += 1;
         }
         if (count === 0) continue;
@@ -37,8 +40,8 @@ export function resolveZCSpawnRegionHints(
         hints.push({
             depth: region.depth,
             label: ZC_TENDENCY_TEXT[tendency],
-            x: xTotal / count,
-            y: yTotal / count,
+            x: sumX / count,
+            y: sumY / count,
         });
     }
     return hints;

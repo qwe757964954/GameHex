@@ -25,6 +25,8 @@ import { finishBattle, BATTLE_RESULT_WIN, BATTLE_RESULT_LOSE } from '../../battl
 import { GameNet } from '../../net/GameNet';
 import { resolveCmdGoodsFrames } from '../../showReward/RewardFrames';
 import { ZC_BATTLE_EVENTS, type IZCBattleReturnToMain, type IZCBattleShowTip } from '../../zcds/application/ZCBattleEvents';
+import { GuideComposition } from '../guide/GuideComposition';
+import { reportGuideComplete } from '../../guide/application/GuideEvents';
 
 /** Cocos 运行期、资源服务和存档适配器只在组合边界装配。 */
 export class BattleComposition extends ControllerBase {
@@ -56,8 +58,13 @@ export class BattleComposition extends ControllerBase {
         this.returnParams = buildZCBattleReturnParams(entry);
         const settlement = this.createSettlementController(view, entry, resources);
         try {
-            return new ZCBattleRuntimeController(this.context, view, settlement,
+            const runtime = new ZCBattleRuntimeController(this.context, view, settlement,
                 createBattleRuntimeServices(view, resources), this.controller);
+            if (entry.pveContext?.levelId === 10001) {
+                const guide = new GuideComposition(this.context, this.host, 'battle');
+                this.own(() => guide.dispose());
+            }
+            return runtime;
         } catch (error) {
             try { settlement.dispose(); }
             catch (cleanupError) { console.error('[BattleComposition] 装配失败后的结算清理失败', cleanupError); }
@@ -70,6 +77,7 @@ export class BattleComposition extends ControllerBase {
     }
     private onReturnToMain({ owner }: IZCBattleReturnToMain): void {
         if (!this.controller.current || owner !== this.controller.current) return;
+        reportGuideComplete('backToMap');
         ProcedureManager.navigate(GameRoute.Main, this.returnParams);
     }
     private onShowTip({ owner, message }: IZCBattleShowTip): void {

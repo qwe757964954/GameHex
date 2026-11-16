@@ -731,24 +731,14 @@ test('页面接线：加载**补帧序列** + 销毁时停播（漏了就是「�
     assert.ok(src.includes('territoryChestTierOfRewards'), '档位必须由 model 判，不在页面 if');
 });
 
-test('页面接线：图标飞向资源栏 + 落地回调（漏掉就是「图标乱飞、资源栏不跳」）', () => {
+test('页面接线：领地宝箱不再前置地图表演（奖励页即开箱表现）', () => {
     const src = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
     const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    // ① 接线必须在 `playChestOpen` **之前**：落点是 play() 第一帧就要用的
-    assert.match(body, /this\.wireRewardCatch\(rewards\);/, '开箱前要把资源栏接上');
-    assert.ok(
-        body.indexOf('this.wireRewardCatch(rewards);') < body.indexOf('this.mapView.playChestOpen('),
-        '接线必须排在 playChestOpen 前面（接晚了第一批图标按默认落点飞，表现为"飞到屏幕中间"）',
-    );
-    // ② resId → key → 那一格中心 → 覆盖层局部坐标
-    assert.match(body, /territoryWalletResKeyOf\(resId\)/, 'resId → key 只走 model 那个纯函数');
-    assert.match(body, /setRewardCatchWorldPoint\(resId, bar\.slotWorldPositionOf\(key\)\)/,
-        '落点必须是那一格的**世界坐标**，由视图换算（页面算不准缩放/安全区）');
-    // ③ 落地 → 那一格跳动 + 闪光
-    assert.match(body, /bar\.playGainFeedback\(key, amount\)/, '落地回调要击中所属的那一格');
-    // ④ 找栏只许从本节点往上问：商城 / 天赋页内嵌同一个公共件，从场景根搜会命中被盖住的那份
-    assert.match(body, /getComponentInChildren\(ResBar\)/, '要按类型找本页那条资源栏');
-    assert.match(body, /scope = scope\.parent/, '必须逐层往上问，不许 getComponentInChildren 从根搜');
+    // 旧的「飞图标 + 播 chest_seq + 回调弹页」这一整条链路已下线：
+    // 页面本身画着开启态宝箱与整批奖励，再前置一段世界表演等于同一件事播两遍。
+    assert.doesNotMatch(body, /this\.wireRewardCatch\(rewards\)/, '不再给开箱表演接线');
+    assert.doesNotMatch(body, /playChestThenSettle/, '不再先播地图开箱');
+    assert.match(body, /this\.presentChestRewards\(rewards\);/, '宝箱这一路直接进奖励页');
 });
 
 test('视图接线：换帧走 model，别在视图里再算一条时间轴', () => {

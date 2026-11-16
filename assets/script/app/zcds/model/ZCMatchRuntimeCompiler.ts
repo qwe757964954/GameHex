@@ -20,11 +20,11 @@ export interface IZCMatchRuntime {
     /**
      * 2026-10-13 新增的 9 种 statId 的累加值（暴击/弹幕/连击/产兵）。
      * 它们不在 `ZCUnitDefinition` 上（没有基础值），只能按 `owner × unitId` 索引后在战斗结算处查。
-     */
+    */
     readonly unitStatPatches: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>>;
 }
 
-/** 本局静态目录只从已冻结配置派生，不读取全局表也不消费随机数。 */
+/** 本局静态目录只从已冻结配置派生，不读取全局表也不消费随机数。*/
 export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatchRuntime {
     const deckFor = (owner: ZCOwner): readonly ZCDeckCard[] => config.ownerDecks?.[owner]
         ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
@@ -71,7 +71,7 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
                 }
                 if (runtimes.has(key) || !plan.behaviorKey) continue;
                 const compiled = skillRegistry.compile({ ...plan, targetUnitId: loadout.targetUnitId } as never, typed);
-                //  2026-10-30：**没有 `pvpSkillBinding` 行的技能也只有这里一条路**。
+                //  2026-10-30：没有 `pvpSkillBinding` 行的技能也只有这里一条路。
                 //  `compile` 只从 skill 域修饰器汇聚参数，看不见计划行自己的 `skillParamJson`；
                 //  原来的写法把它整份丢掉，表现是「表里填了 pierceCount / statusEveryNAttacks、运行时读不到」。
                 //  因为 `merge*` 在上面只对「已存在的 runtime」生效，新建这条分支必须自己把参数合进来。
@@ -83,9 +83,9 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
             }
         }
         skillRuntime[owner] = runtimes;
-        //  诊断②：本局建出来的技能运行时里到底有什么参数。
-        //  `auraCooldown` / `pierceCount` 这类键**只可能**从 `pvpSkillPlan.skillParamJson` 并进来，
-        //  这里看不到就说明构筑期已经把整卡跳过了（诊断①会同时给出原因）。
+        //  诊断2.：本局建出来的技能运行时里到底有什么参数。
+        //  `auraCooldown` / `pierceCount` 这类键只可能从 `pvpSkillPlan.skillParamJson` 并进来，
+        //  这里看不到就说明构筑期已经把整卡跳过了（诊断1.会同时给出原因）。
         for (const runtime of runtimes.values()) {
             if (!zcSkillCastWatched(runtime.unitId)) continue;
             skillCastLog('运行时', `${owner} ${runtime.unitId}:${runtime.skillId}`
@@ -114,9 +114,9 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
  * 把一条计划行的「参数 + 状态」并进已存在的技能运行时（2026-10-29）。
  *
  * - 返回 `null` ⇒ 没有可合并的东西（调用方按原逻辑继续）；
- * - 参数**叠加**在旧参数之上（同名覆盖），状态只在计划声明了才覆盖 ——
- *   这样 100103（命中减速）与 100104（连发参数）可以共用一个 `unitId:pvpSkillId`。
- */
+ * - 参数叠加在旧参数之上（同名覆盖），状态只在计划声明了才覆盖 ——
+ * 这样 100103（命中减速）与 100104（连发参数）可以共用一个 `unitId:pvpSkillId`。
+*/
 function mergeSkillPlanIntoRuntime(
     existing: ZCSkillRuntimeDefinition | undefined,
     plan: ZCSkillPlanRecord,

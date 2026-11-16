@@ -17,7 +17,7 @@ export type ZCSnapshotLoadResult =
     | { ok: true; snapshot: ZCSnapshot }
     | { ok: false; errors: readonly string[] };
 
-/** 存档的校验、version 4 字段迁移和独立拷贝。 */
+/** 存档的校验、version 4 字段迁移和独立拷贝。*/
 function createTypeCounts(): Record<ZCCardType, number> {
     return {
         [ZCCardType.Mine]: 0,
@@ -41,7 +41,7 @@ function ownerTypeCounts(owners: readonly ZCOwner[]): ZCSnapshot['builtTypeCount
  *
  * `value` 是 `unknown`（快照来自存档 / 网络，不可信），所以不带类型收窄、只做布尔判定；
  * 取值集合一律来自 `ZCGameTypes` 的 `as const` 数组，别在调用处再手写一份字面量数组。
- */
+*/
 function oneOf(values: readonly string[], value: unknown): boolean {
     return typeof value === 'string' && values.includes(value);
 }
@@ -51,7 +51,7 @@ export class ZCSnapshotCodec {
      * 旧存档曾允许的占领进度上限；只用于读档兼容校验，不再参与玩法判定。
      * 原在 `systems/ZCCaptureSystem.ts` 导出，但唯一消费方是本 codec ——
      * 按 §6.2 第 12 条内聚为私有静态。
-     */
+    */
     private static readonly LEGACY_CAPTURE_MAX_SECONDS = 1;
 
     static createInitialState(match: ZCMatchConfig, random: () => number = Math.random): ZCSnapshot {
@@ -79,7 +79,7 @@ export class ZCSnapshotCodec {
         });
         const hexes: ZCHexState[] = match.map.hexes.map((config) => {
             const neutralResourceId = resolvedResources.get(config.id) ?? null;
-            //  这里**不再**按「与主城相邻」预置解锁（2026-10-08）。
+            //  这里不再按「与主城相邻」预置解锁（2026-10-08）。
             //   旧逻辑会把贴主城的资源格直接置成 `developed` + `developmentResolved`，
             //   于是它永远进不了 `ZCGameModel.claimAdjacentNeutralResources` 的自动领取循环
             //   ⇒ 奖励一次都不发（这正是「翻了没获取」的历史成因之一）。
@@ -317,7 +317,7 @@ export class ZCSnapshotCodec {
             for (const key of ['targetWallHexId', 'targetBuildingHexId']) check(optional(unit[key], reference), `${path}.${key}`);
             for (const key of ['targetUnitId', 'hatredUnitId']) check(optional(unit[key], (v) => v === null || integer(v) && (v as number) > 0), `${path}.${key}`);
             //  末七项是 2026-10-29 新增（连发 / 单体盾到期 / 低血护体 / 常驻被动）。
-            //  ⚠️ 新增的单位可选数值字段必须**登记进这个数组**，否则回放校验会把脏值放过去。
+            //   新增的单位可选数值字段必须登记进这个数组，否则回放校验会把脏值放过去。
             for (const key of ['stateTime', 'nextAttackAt', 'waitUntil', 'hatredUntil', 'deathRemoveAt', 'completedAttackCount', 'empoweredReadyAt',
                 'secondaryReadyAt',
                 'shieldExpireAt', 'burstShotsLeft', 'burstNextAt', 'burstInterval', 'burstDamageRate', 'lowHpGuardFiredAt',
@@ -381,6 +381,7 @@ export class ZCSnapshotCodec {
             check(optional(projectile.executeChance, v => nonnegative(v) && (v as number) <= 1), `${path}.executeChance`);
             check(optional(projectile.criticalHit, v => typeof v === 'boolean'), `${path}.criticalHit`);
             check(optional(projectile.splashRadius, nonnegative), `${path}.splashRadius`);
+            check(optional(projectile.splashFalloff, v => nonnegative(v) && (v as number) <= 1), `${path}.splashFalloff`);
             check(optional(projectile.legacyBuffs, (value) => Array.isArray(value) && value.every((buff) =>
                 record(buff) && typeof buff.legacyKey === 'string' && record(buff.params)
     && optional(buff.sourceAttack, nonnegative))), `${path}.legacyBuffs`);
@@ -547,7 +548,7 @@ export class ZCSnapshotCodec {
         if (!Number.isFinite(snapshot.nextCombatEventId)) snapshot.nextCombatEventId = 1;
     }
 
-    /** 兼容功能开发期生成的 version 4 本地快照。 */
+    /** 兼容功能开发期生成的 version 4 本地快照。*/
     private static normalizePvpTiles(state: ZCSnapshot, config: ZCMatchConfig): void {
         const owners = ownersForPlayerCount(config.map.playerCount ?? 2);
         const snapshot = state as ZCSnapshot & { allRandomNonGoldDraws?: OwnerNumberRecord };
@@ -602,7 +603,7 @@ export class ZCSnapshotCodec {
         }
     }
 
-    /** 旧双人快照迁移为按席位记录；双人兼容字段始终作为 player/enemy 的权威值。 */
+    /** 旧双人快照迁移为按席位记录；双人兼容字段始终作为 player/enemy 的权威值。*/
     private static normalizeOwners(state: ZCSnapshot, config: ZCMatchConfig): void {
         const owners = ownersForPlayerCount(config.map.playerCount ?? 2);
         state.drawCursor ??= ownerNumbers(owners);

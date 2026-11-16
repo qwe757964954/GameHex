@@ -69,9 +69,9 @@ test('routedLoad：命中分包且 bundle 已加载 → 直接走 bundle.load，
         load: (p, t, cb) => { calls.push(`bundle.load:main-pages:${p}`); cb(null, { path: p }); },
     });
     const { routedLoad } = load('assets/script/app/common/RoutedResource.ts', deps);
-    const result = await new Promise((resolve) => routedLoad('icons/card/camp_archer/spriteFrame', class {}, (e, a) => resolve({ e, a })));
-    assert.deepEqual(calls, ['getBundle:main-pages', 'bundle.load:main-pages:icons/card/camp_archer/spriteFrame']);
-    assert.equal(result.e, null); assert.equal(result.a.path, 'icons/card/camp_archer/spriteFrame');
+    const result = await new Promise((resolve) => routedLoad('icons/card/yx_zhiye_ss/spriteFrame', class {}, (e, a) => resolve({ e, a })));
+    assert.deepEqual(calls, ['getBundle:main-pages', 'bundle.load:main-pages:icons/card/yx_zhiye_ss/spriteFrame']);
+    assert.equal(result.e, null); assert.equal(result.a.path, 'icons/card/yx_zhiye_ss/spriteFrame');
 });
 
 test('routedLoad：命中分包且 bundle 未加载 → loadBundle 成功后加载；已加载后走缓存', async () => {

@@ -6,9 +6,9 @@ const { ccclass, property } = _decorator;
 /**
  * 波次徽标的排版结果。
  *
- *  这三块文字**必须带描边**：这一版面板没有深色底板，白字是直接压在地图沙地上的
+ * 这三块文字必须带描边：这一版面板没有深色底板，白字是直接压在地图沙地上的
  * （设计稿渲染图里沙地亮度 230+，纯白字不加描边糊成一片）。
- */
+*/
 export interface IZCHudBossWaveText {
     text: string;
     fontSize: number;
@@ -16,15 +16,15 @@ export interface IZCHudBossWaveText {
     outlineWidth: number;
 }
 
-/** 波次徽标字号（设计稿文字框 109×32、白核高 29.9 ⇒ fontSize ≈ 32）。 */
+/** 波次徽标字号（设计稿文字框 109×32、白核高 29.9 ⇒ fontSize ≈ 32）。*/
 const ZC_BOSS_WAVE_FONT_SIZE = 32;
-/** 倍率徽标字号（设计稿 `X4` 白核 26.5×16.1 ⇒ fontSize ≈ 22）。 */
-/** 黑描边宽度（设计稿白核四周实测 2~3px）。 */
+/** 倍率徽标字号（设计稿 `X4` 白核 26.5×16.1 ⇒ fontSize ≈ 22）。*/
+/** 黑描边宽度（设计稿白核四周实测 2~3px）。*/
 const ZC_BOSS_LABEL_OUTLINE_WIDTH = 3;
 
-/** 波次徽标：`第4/8波`（设计稿这一帧就这一行，不再塞「下 Ns / 敌 M」）。 */
+/** 波次徽标：`第4/8波`（设计稿这一帧就这一行，不再塞「下 Ns / 敌 M」）。*/
 export function formatZCDefenceWaveText(progress: Readonly<ZCDefenceWaveProgress>): IZCHudBossWaveText {
-    //  徽标**常驻**（2026-11-09 用户：波次数字信息要从第一波开始一直挂着）：
+    //  徽标常驻（2026-11-09 用户：波次数字信息要从第一波开始一直挂着）：
     //  第 1 波还没出场时 `spawnedWaves` 是 0，直接显示「第0/8波」很怪，钳到 1 起。
     const spawned = Math.max(1, Math.min(progress.spawnedWaves, progress.totalWaves));
     return {
@@ -35,27 +35,27 @@ export function formatZCDefenceWaveText(progress: Readonly<ZCDefenceWaveProgress
     };
 }
 
-/** 血量倍率 → `X4`（整数不带小数点，与设计稿一致）；非法值退回 `X1`。 */
+/** 血量倍率 → `X4`（整数不带小数点，与设计稿一致）；非法值退回 `X1`。*/
 export function formatZCDefenceHpRate(hpRate: number): string {
     if (!Number.isFinite(hpRate) || hpRate <= 0) return 'X1';
     return `X${Number.isInteger(hpRate) ? hpRate : Number(hpRate.toFixed(2))}`;
 }
 
 /**
- * 波次怪守城（塔防）模式左上角的**首领条**：骷髅 + `第4/8波` + 首领头像框 + 名字 + 红血条 + `X4`。
+ * 波次怪守城（塔防）模式左上角的首领条：骷髅 + `第4/8波` + 首领头像框 + 名字 + 红血条 + `X4`。
  *
  * 几何、尺寸与全部美术都在 `ZCBossPanel.prefab` 里（蓝湖「BOSS」稿，画布 720×1610，切片 1:1），
  * 代码只按数据刷「文案 / 头像 / 血量比例」。面板整体由 `ZCGame` 在守城局实例化并注入数据
  * （与 `ZCSpawnSelection` 同一条路子：`ZCGameLoader` 预加载 → `ZCGame` 实例化）。
  *
- * 两块文案的格式化（`formatZCDefenceWaveText` / `formatZCDefenceHpRate`）**就放在本文件**：
+ * 两块文案的格式化（`formatZCDefenceWaveText` / `formatZCDefenceHpRate`）就放在本文件：
  * 它们只服务这一块面板（合并前在 `ZCDefenceWaveText.ts`，2026-10-13 山猫让合进来删掉那个模块）。
  *
  * 数据口径（山猫 2026-10-13 定）：
- *  · 血条 = **本波剩余总血量 / 本波总血量**（按波聚合，不是取某只代表怪）
- *  · `X{n}` = 该波的**血量倍率**（`wave.hpRate`）
- *  · 头像与名字 = **当前波**（`currentWaveId`）那波的怪
- */
+ * · 血条 = 本波剩余总血量 / 本波总血量（按波聚合，不是取某只代表怪）
+ * · `X{n}` = 该波的血量倍率（`wave.hpRate`）
+ * · 头像与名字 = 当前波（`currentWaveId`）那波的怪
+*/
 @ccclass('ZCHudBossPanel')
 export class ZCHudBossPanel extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'WaveText：第N/M波（白字黑描边，压在沙地上）' })
@@ -76,12 +76,12 @@ export class ZCHudBossPanel extends Component {
     /**
      * 当前波的头像 / 名字 / 总血条显隐，普通波与 BOSS 波共用。
      *
-     * 波次徽标（`IconBoss` + `WaveText`）不在这里控制：它从第一波起**常驻**（2026-11-09 用户）。
+     * 波次徽标（`IconBoss` + `WaveText`）不在这里控制：它从第一波起常驻（2026-11-09 用户）。
      * 三处引用都取自本组件已绑定的 Inspector 引用，不需要在 prefab 上再加容器节点：
-     *  · 头像 = `Portrait`（`Icon` 是它的子节点）
-     *  · 名字 = `BossName`
-     *  · 血条 = `Bar`（`Fill` / `Rate` 的父节点）
-     */
+     * · 头像 = `Portrait`（`Icon` 是它的子节点）
+     * · 名字 = `BossName`
+     * · 血条 = `Bar`（`Fill` / `Rate` 的父节点）
+    */
     setBossBarVisible(visible: boolean): void {
         this.portraitIcon.node.active = visible;
         this.nameLabel.node.active = visible;
@@ -93,7 +93,7 @@ export class ZCHudBossPanel extends Component {
      * 全量赋值（每次渲染都会被调）。
      *
      * 头像帧异步取得；切波尚未加载时清空旧图，避免把上一波的怪当作当前波。
-     */
+    */
     render(progress: Readonly<ZCDefenceWaveProgress>, name: string, portrait: SpriteFrame | null): void {
         const wave = formatZCDefenceWaveText(progress);
         this.waveLabel.string = wave.text;

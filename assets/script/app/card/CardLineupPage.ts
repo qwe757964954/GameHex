@@ -499,7 +499,7 @@ export class CardLineupPage extends Component {
     private readonly loadIconFrame = (item: ZCCardTally): Promise<SpriteFrame | null> => {
         const key = `${item.kind}|${item.key}`;
         if (this.iconFrames.has(key)) return Promise.resolve(this.iconFrames.get(key) ?? null);
-        return cardArtProvider.loadTallyFrames(item, this.art).then((frame) => {
+        return cardArtProvider.loadTallyFrames(item).then((frame) => {
             this.iconFrames.set(key, frame);
             return frame;
         });

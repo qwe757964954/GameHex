@@ -7,6 +7,8 @@ import { GameNet } from '../net/GameNet';
 import { GMUtils } from './GMUtils';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { ZCGameUiEvent, type IZCDebugDrawCardResult } from '../zcds/view/ZCGameHudEvents';
+import { HeroObtainPage } from '../card/view/HeroObtainPage';
+import { HERO_OBTAIN_DEMO_USER_DATA } from '../card/HeroObtainData';
 
 /** GM 指令项（对齐 client 的 { gm, desc } 结构）。 */
 export interface GMCommandDef {
@@ -96,6 +98,17 @@ export class GMCommandTable {
         this.registerLocal('hideLog', () => {
             Log.hideLog();
             GMCommandTable.tip('已关闭打印（console.log/info/debug/trace）');
+        });
+
+        // 「获得英雄」展示页（预览 / 调动画用）：heroObtain [英雄ID] [当前碎片] [所需碎片]
+        this.registerLocal('heroObtain', (args) => {
+            const heroId = args[1] && /^\d+$/.test(args[1]) ? Number(args[1]) : HERO_OBTAIN_DEMO_USER_DATA.heroId;
+            const current = args[2] && /^\d+$/.test(args[2]) ? Number(args[2]) : 53;
+            const max = args[3] && /^\d+$/.test(args[3]) ? Number(args[3]) : 53;
+            void HeroObtainPage.open({
+                userData: { heroId, progressCurrent: current, progressMax: max },
+            });
+            GMCommandTable.tip(`打开「获得英雄」展示页 heroId=${heroId} ${current}/${max}`);
         });
 
         // log <名字>：切换 framework/log/Log 对应实例的开关（对齐 client 的 log 指令）

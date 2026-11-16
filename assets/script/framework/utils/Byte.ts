@@ -118,8 +118,8 @@ export class Byte {
         return this._rUTF(this.getUint16());
     }
     _rUTF(len: number): string {
-        var v = "", max = this._pos_ + len, c = 0, c2 = 0, c3 = 0, f = String.fromCharCode;
-        var u = this._u8d_, i = 0;
+        var max = this._pos_ + len, c = 0, c2 = 0, c3 = 0, f = String.fromCharCode;
+        var u = this._u8d_;
         var strs = [];
         var n = 0;
         strs.length = 1000;
@@ -138,7 +138,6 @@ export class Byte {
                 c3 = u[this._pos_++];
                 strs[n++] = f(((c & 0x0F) << 18) | ((c2 & 0x7F) << 12) | ((c3 << 6) & 0x7F) | (u[this._pos_++] & 0x7F));
             }
-            i++;
         }
         strs.length = n;
         return strs.join('');
@@ -420,7 +419,7 @@ export class Byte {
     }
     readCustomString(len: number): string {
         var v = "", ulen = 0, c = 0, c2 = 0, f = String.fromCharCode;
-        var u = this._u8d_, i = 0;
+        var u = this._u8d_;
         while (len > 0) {
             c = u[this._pos_];
             if (c < 0x80) {

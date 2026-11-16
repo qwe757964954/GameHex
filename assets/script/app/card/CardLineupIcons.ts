@@ -6,7 +6,6 @@ import {
     CARD_HEAD_ART_ROOT,
     COMMON_ART_ROOT,
     FRAME_ART_ROOT,
-    ICON_ART_ROOT,
 } from '../ArtPaths';
 
 /** 卡牌图标归会话缓存；资源目录由本模块负责。 */
@@ -36,14 +35,6 @@ export function loadLineupArt(name: string): Promise<SpriteFrame | null> {
 /** 卡牌详情页切图（`image/carddetail`）：面板 / 六边形 / 品质菱形 / 图标 / 按钮。 */
 export function loadCardDetailArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, CARD_DETAIL_ART_ROOT);
-}
-
-/**
- * 营地雕像和职业图标（icons/card）。这几类不在 image/card，
- * 用 loadLineupArt 取只会静默拿空，根目录统一走 ICON_ART_ROOT。
- */
-export function loadIconArt(name: string): Promise<SpriteFrame | null> {
-    return loadArt(name, ICON_ART_ROOT);
 }
 
 /** 专属角色图与兵种头像统一归 `icons/cardHead`，共用其自动图集。 */

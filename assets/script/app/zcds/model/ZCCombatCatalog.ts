@@ -2,22 +2,22 @@ import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 /**
  * 《占城大师》战斗卡牌目录。
  * 人物与基础数值裁剪自 client 的 army/general/monster 表，规则层按三分钟竖屏对局缩放。
- */
+*/
 
-/** 单位标识 = pvpCard.json 卡行 unitId 列。一律以表 id 为准，客户端不自带兵种命名。 */
+/** 单位标识 = pvpCard.json 卡行 unitId 列。一律以表 id 为准，客户端不自带兵种命名。*/
 export type ZCUnitId = string;
 
 /**
  * 技能强化（大招）触发方式，值域与 pvpSkillBinding.trigger 一致。
  * 两种节拍都要能配：每 N 次普攻 / 每 X 秒。
- */
+*/
 export const ZCSkillTrigger = {
     everyNAttacks: 'every_n_attacks',
     everySeconds: 'every_seconds',
 } as const;
 export type ZCSkillTrigger = typeof ZCSkillTrigger[keyof typeof ZCSkillTrigger];
 
-/** 出手方式 / 战斗事件类型：近战 · 弹道 · 范围（`ZCAttackProfile.mode` 与 `ZCCombatEvent.type` 共用）。 */
+/** 出手方式 / 战斗事件类型：近战 · 弹道 · 范围（`ZCAttackProfile.mode` 与 `ZCCombatEvent.type` 共用）。*/
 export const ZCCombatEventType = {
     Melee: 'melee',
     Projectile: 'projectile',
@@ -25,7 +25,7 @@ export const ZCCombatEventType = {
 } as const;
 export type ZCCombatEventType = typeof ZCCombatEventType[keyof typeof ZCCombatEventType];
 
-/** 普攻档案。逻辑层消费技能 id/命中/强化计数，表现层消费特效 Prefab。 */
+/** 普攻档案。逻辑层消费技能 id/命中/强化计数，表现层消费特效 Prefab。*/
 export interface ZCAttackProfile {
     skillId: number;
     name: string;
@@ -40,49 +40,49 @@ export interface ZCAttackProfile {
     /**
      * 副技能行（2026-11-04，椰蛋战士「横扫」100502）。
      *
-     * 一条普攻行只有 `empoweredSkillId` 这**一个**强化槽，而 68005 同时有两条主动
+     * 一条普攻行只有 `empoweredSkillId` 这一个强化槽，而 68005 同时有两条主动
      * （横扫 CD 8s / 暴风每 5 次普攻）。强化槽留给「累计次数」那条（暴风），
      * 冷却那条从本字段指向自己的技能行，由 `ZCSkillTriggerSystem` 的副轨单独推进。
      *
      * 留空 = 没有副轨，`ZCAttackResolutionSystem.castFanSkill` 整段不执行。
-     */
+    */
     secondarySkillId?: number;
-    /** 强化触发方式；留空按次数。 */
+    /** 强化触发方式；留空按次数。*/
     trigger?: ZCSkillTrigger;
-    /** trigger=every_seconds 的时间间隔（秒）。 */
+    /** trigger=every_seconds 的时间间隔（秒）。*/
     cooldown?: number;
-    /** 伤害倍率：最终伤害 = 基准伤害 × 本值；普攻/技能行各自携带。 */
+    /** 伤害倍率：最终伤害 = 基准伤害 × 本值；普攻/技能行各自携带。*/
     damageRate?: number;
     effectPrefabPath?: string;
     /**
      * 冲刺（2026-10-31，运动霸「拳击冲撞」203301）。
      *
-     * 「距敌多近开始冲」= **设定 px**，与 `attackRange` 同一套数（都要乘
+     * 「距敌多近开始冲」= 设定 px，与 `attackRange` 同一套数（都要乘
      * `rules.combatDistanceScale` 才是世界坐标）。留空 = 这个技能不冲刺。
-     * 判据是「到当前目标的距离 ≤ `chargeDistance`」，**不做滞回**：一出这个距离就回到普通速度，
+     * 判据是「到当前目标的距离 ≤ `chargeDistance`」，不做滞回：一出这个距离就回到普通速度，
      * 因为冲刺只在接近段有意义，进射程后状态机本来就切成 idle / attack 了。
-     */
+    */
     chargeDistance?: number;
     /**
-     * 冲刺阶段的**移速**倍率（4 = 四倍速）。`chargeDistance` 生效期间乘在各条移动推进上，
-     * 与 `moveSpeed`、卡组加成、冰冻减速**相乘**（不是覆盖），所以「被冻住时冲锋」仍然慢。
+     * 冲刺阶段的移速倍率（4 = 四倍速）。`chargeDistance` 生效期间乘在各条移动推进上，
+     * 与 `moveSpeed`、卡组加成、冰冻减速相乘（不是覆盖），所以「被冻住时冲锋」仍然慢。
      * 留空 / 1 = 不加速；< 1 会被 `optionalPositiveNumber` 之外的守卫挡掉（见 parser）。
-     */
+    */
     chargeSpeedScale?: number;
     /**
-     * 命中时**额外**播一次的表现（pvpSkill「命中附加特效」）。只影响表现、不参与伤害，
+     * 命中时额外播一次的表现（pvpSkill「命中附加特效」）。只影响表现、不参与伤害，
      * 由 `ZCAttackResolutionSystem` 在真正的命中事件之后补一条 `area` 事件，
      * 落在受击点、走地面层（`zcCombatEffectLayerOf('area') = 'ground'`）。
      * 运动霸用 `重骑兵_践踏` 当「气浪」—— 项目里没有名为「气浪」的美术资源。
-     */
+    */
     impactEffectPrefabPath?: string;
-    /** area 持续秒数；0=一次性。 */
+    /** area 持续秒数；0=一次性。*/
     durationSeconds?: number;
     waves?: number;
     slowRatio?: number;
-    /** 命中单位后施加的状态 id（pvpStatus.statusId）；不填=不施加。直伤/弹道命中均生效。 */
+    /** 命中单位后施加的状态 id（pvpStatus.statusId）；不填=不施加。直伤/弹道命中均生效。*/
     onHitStatusId?: string;
-    /** 旧客户端公式组（兼容旧配置；由 skillView.hurt / exHurt 解析而来）。 */
+    /** 旧客户端公式组（兼容旧配置；由 skillView.hurt / exHurt 解析而来）。*/
     legacyEffectKeys?: readonly string[];
 }
 
@@ -105,23 +105,23 @@ export interface ZCUnitDefinition {
     /**
      * 兵种美术的等比缩放系数（`pvpCard.prefabSize`，策划按美术实际体量配 0.8~1.2）。
      *
-     * **必填、解析层永远给值**（表里留空按 1 兜底）：它直接乘进战场单位的美术缩放，
+     * 必填、解析层永远给值（表里留空按 1 兜底）：它直接乘进战场单位的美术缩放，
      * 缺省成可选会让每个消费方都要写一遍 `?? 1`，而漏一处就是「有的兵放大、有的兵没放大」。
      *
-     *  与 `SPINE_CANVAS_TARGET_HEIGHT`（`ZCUnitView`）**不是同一个东西**：
-     * 那是把 spine 骨架 canvas 归一到序列帧画布的**技术性**补偿（每个 spine 都不同），
-     * 这里是策划给的**表现性**系数（在归一之后叠加）。两者相乘，顺序不能反。
-     */
+     * 与 `SPINE_CANVAS_TARGET_HEIGHT`（`ZCUnitView`）不是同一个东西：
+     * 那是把 spine 骨架 canvas 归一到序列帧画布的技术性补偿（每个 spine 都不同），
+     * 这里是策划给的表现性系数（在归一之后叠加）。两者相乘，顺序不能反。
+    */
     prefabSize: number;
     attackProfile: ZCAttackProfile;
-    /** 强化那击对应技能行档案；未配置强化时 undefined。 */
+    /** 强化那击对应技能行档案；未配置强化时 undefined。*/
     empoweredProfile?: ZCAttackProfile;
     /**
      * 副技能行档案（`attackProfile.secondarySkillId` 指过去的那一行）；没配副轨时 undefined。
      *
      * 只给 `ZCAttackResolutionSystem.castFanSkill` 取表现路径 / 半径 / 名字用 ——
-     * 它的**数值**一律走技能计划行的 `skillParamJson`（三档不同），不读这里的 `damageRate`。
-     */
+     * 它的数值一律走技能计划行的 `skillParamJson`（三档不同），不读这里的 `damageRate`。
+    */
     secondaryProfile?: ZCAttackProfile;
 }
 
@@ -130,7 +130,7 @@ export interface ZCUnitDefinition {
  * 城墙是边的属性（wallHp），不占 hex.building。
  *
  * 能量名用英文（不用中文 key），中文只留在 `ZC_CARD_TYPE_NAMES` 里作文案。
- */
+*/
 export const ZCCardType = {
     Mine: 1,
     Barracks: 2,
@@ -140,7 +140,7 @@ export const ZCCardType = {
 } as const;
 export type ZCCardType = (typeof ZCCardType)[keyof typeof ZCCardType];
 
-/** 卡类型 → 中文名；仅用于玩家可见文案。 */
+/** 卡类型 → 中文名；仅用于玩家可见文案。*/
 export const ZC_CARD_TYPE_NAMES = {
     [ZCCardType.Mine]: '金矿',
     [ZCCardType.Barracks]: '兵营',
@@ -151,14 +151,14 @@ export const ZC_CARD_TYPE_NAMES = {
 
 export type ZCCardBuilding = 'mine' | 'barracks' | 'tower' | 'hq';
 
-/** 集合判定而非区间：加/删类型自动跟随，不用同步上界。 */
+/** 集合判定而非区间：加/删类型自动跟随，不用同步上界。*/
 const ZC_CARD_TYPE_VALUES: ReadonlySet<number> = new Set(Object.values(ZCCardType));
 
 export function isZCCardType(value: unknown): value is ZCCardType {
     return typeof value === 'number' && ZC_CARD_TYPE_VALUES.has(value);
 }
 
-/** 卡类型 → 建筑类型；城墙不落地，返回 null。 */
+/** 卡类型 → 建筑类型；城墙不落地，返回 null。*/
 export function cardTypeToBuilding(type: ZCCardType): ZCCardBuilding | null {
     if (type === ZCCardType.Wall) return null;
     if (type === ZCCardType.Mine) return 'mine';
@@ -170,9 +170,9 @@ export function cardTypeToBuilding(type: ZCCardType): ZCCardBuilding | null {
 /**
  * 品级 id（英文，与 `PVP-卡牌美术.xlsx` 品级 sheet 首列一致）；`pvpCard.rarity` 里仍是数字 1..4。
  *
- * 这里是**唯一**一份字面量：类型由它推导，卡牌侧 `CardLineupTypes` 直接 re-export 这个数组，
+ * 这里是唯一一份字面量：类型由它推导，卡牌侧 `CardLineupTypes` 直接 re-export 这个数组，
  * 不再各存一份 id 集合。顺序取展示序（金→绿），对局档位不看顺序，而是由表 `sort` 反推（见 `rarityRank`）。
- */
+*/
 const RARITY_IDS = ['gold', 'purple', 'blue', 'green'] as const;
 export type ZCCardRarity = (typeof RARITY_IDS)[number];
 export const ZC_CARD_RARITIES: readonly ZCCardRarity[] = RARITY_IDS;
@@ -183,9 +183,9 @@ export const ZC_CARD_RARITIES: readonly ZCCardRarity[] = RARITY_IDS;
  * 值是 `pvpCard.traits` 的原文，也是 `PVP-卡牌美术.xlsx` 职业 / 阵营 sheet 的 `name` 列；
  * 表里改词表时这里、`pvpCounter`、`pvpBond` 三处一起改（守卫见 `tests/card-dimensions-single-source.test.ts`）。
  *
- * 顺序即**受击特效目录**的约定顺序（`<职业>受击`）：`ZCGameLoader` 与 `ZCGameResourcePlan`
+ * 顺序即受击特效目录的约定顺序（`<职业>受击`）：`ZCGameLoader` 与 `ZCGameResourcePlan`
  * 直接遍历这份数组拼路径，别在别处再手写一遍这四个中文。
- */
+*/
 const ATTACK_TRAIT_IDS = ['射手', '战士', '法师', '坦克'] as const;
 export type ZCAttackTrait = (typeof ATTACK_TRAIT_IDS)[number];
 export const ZC_ATTACK_TRAITS: readonly ZCAttackTrait[] = ATTACK_TRAIT_IDS;
@@ -207,46 +207,46 @@ export interface ZCDeckCard {
     /**
      * 本卡产出兵种的引用。只有兵营卡填，建筑卡必须留空
      * （findUnplayableDeckCards 用 unitId==null 认建筑卡）。
-     */
+    */
     unitId?: ZCUnitId;
-    /** 本卡兵种的 resources 预制体路径；阵容上阵预览与对局使用同一资产。 */
+    /** 本卡兵种的 resources 预制体路径；阵容上阵预览与对局使用同一资产。*/
     unitPrefabPath?: string;
     /**
      * 本卡兵种美术的等比缩放（`pvpCard.prefabSize`；表里留空 ⇒ 1）。
      *
-     * 只给**表现层**的预览用：阵容页站台按它体现「这张卡的兵有多大」，否则所有兵种都被
+     * 只给表现层的预览用：阵容页站台按它体现「这张卡的兵有多大」，否则所有兵种都被
      * 归一到同一个高度、看不出体型差。对局里同一个系数由 `ZCUnitView.applyVisualSize`
      * 乘在美术节点上 —— 两边同源（同一列），别在预览这边另立一套数值。
-     */
+    */
     prefabSize?: number;
     traits?: ZCCardTraits;
     buildSeconds?: number;
     cycleSeconds?: number;
-    /** 建筑耐久基础值，与 unitId 指向的兵种血量无关。 */
+    /** 建筑耐久基础值，与 unitId 指向的兵种血量无关。*/
     baseHp?: number;
     cycleBaseValue?: number;
-    /** 每品级追加的建筑耐久。 */
+    /** 每品级追加的建筑耐久。*/
     cyclePerTierValue?: number;
-    /** 建筑每次产金数量（固定值，不随品级变）。 */
+    /** 建筑每次产金数量（固定值，不随品级变）。*/
     buildDigGoldNum?: number;
     /**
      * 卡牌头像，值是 icon.json 图标名（不是资源名）。
      * 包名决定目录（兵种头像 cardHead / 玩家头像 head），用 HeadArt.loadHeadIconFrame 加载。
      * 留空 = 暂无头像。
-     */
+    */
     headIcon?: string;
     /**
      * 建筑外观图名（`resources/image/buildings` 下的图片名，不含扩展名）。
      * 兵营/主城的专属外观；留空由视图按建筑类型回退通用图。
-     */
+    */
     buildIcon?: string;
     /**
      * 该卡的技能编号列表（`pvpCard.skillList`，顺序即 UI 顺序）。
      *
      * 编号与后端 `CmdPvpHeroSkillInfo.id` / 技能升级请求体的 `skillId` 同一套，
      * 技能名与各档解锁等级在 `armySkillLevelUp`（见 `card/CardSkillList`）。
-     * 留空 = 这张卡没有技能（主城 / 金矿），**不是**"还没加载"。
-     */
+     * 留空 = 这张卡没有技能（主城 / 金矿），不是"还没加载"。
+    */
     skillIds?: readonly number[];
 }
 
@@ -263,7 +263,7 @@ export function getEnemyDeck(): readonly ZCDeckCard[] {
  *
  * 只查当前本地卡牌目录（玩家 / PVE 敌方）；未配 buildIcon 或卡不在目录中返回空串，
  * 由视图按建筑类型回退通用图。
- */
+*/
 export function getCardBuildIcon(cardId: string | null | undefined): string {
     if (!cardId) return '';
     for (const card of getPlayerDeck()) {
@@ -278,16 +278,16 @@ export function getCardBuildIcon(cardId: string | null | undefined): string {
 /**
  * 品级元数据，与表 `cardUiArtRarity` 的 `rarity / name / sort` 三列同形。
  *
- * `sort` 是列表展示权重（0 最前）；对局里的**品级档位**（1=绿 … 4=金，用于建筑耐久与产出加成）
+ * `sort` 是列表展示权重（0 最前）；对局里的品级档位（1=绿 … 4=金，用于建筑耐久与产出加成）
  * 由它在表里的反序位置派生（`rarityRank`），代码不再单独维护一份 rank 常量 —— 改表 `sort`，档位自动跟随。
- */
+*/
 export interface ZCCardRarityMeta {
     readonly id: ZCCardRarity;
     readonly name: string;
     readonly sort: number;
 }
 
-/** 表尚未加载时（纯 model 单测、无 UI 配置的场景）的兜底，与 `cardUiArtRarity` 现值一致。 */
+/** 表尚未加载时（纯 model 单测、无 UI 配置的场景）的兜底，与 `cardUiArtRarity` 现值一致。*/
 const DEFAULT_CARD_RARITY_META: readonly ZCCardRarityMeta[] = [
     { id: 'gold', name: '传说', sort: 0 },
     { id: 'purple', name: '史诗', sort: 1 },
@@ -295,7 +295,7 @@ const DEFAULT_CARD_RARITY_META: readonly ZCCardRarityMeta[] = [
     { id: 'green', name: '普通', sort: 3 },
 ];
 
-/** 已按 `sort` 升序排列，`rarityRank` / `rarityOfTier` 依赖这个不变量。 */
+/** 已按 `sort` 升序排列，`rarityRank` / `rarityOfTier` 依赖这个不变量。*/
 function rarityMetadata(): readonly ZCCardRarityMeta[] {
     return ZC_RUNTIME_CONFIG.snapshot.rarityMeta ?? DEFAULT_CARD_RARITY_META;
 }
@@ -303,7 +303,7 @@ function rarityMetadata(): readonly ZCCardRarityMeta[] {
 /**
  * 注入品级元数据（`CardRepository.loadArtConfig()` 与 `ZCGameLoader` 解析三表后调用）。
  * 未提到的品级沿用兜底；空数组回退整张兜底表，不留残值。
- */
+*/
 export function setCardRarityMeta(source: readonly ZCCardRarityMeta[]): void {
     if (source.length === 0) {
         ZC_RUNTIME_CONFIG.updateCatalogs({ rarityMeta: DEFAULT_CARD_RARITY_META });
@@ -314,7 +314,7 @@ export function setCardRarityMeta(source: readonly ZCCardRarityMeta[]): void {
     ZC_RUNTIME_CONFIG.updateCatalogs({ rarityMeta: Array.from(merged.values()).sort((a, b) => a.sort - b.sort) });
 }
 
-/** 当前品级元数据（`sort` 升序），卡牌侧读它做列表排序。 */
+/** 当前品级元数据（`sort` 升序），卡牌侧读它做列表排序。*/
 export function cardRarityMeta(): readonly ZCCardRarityMeta[] {
     return rarityMetadata();
 }
@@ -328,14 +328,14 @@ export function rarityDisplayName(rarity: ZCCardRarity): string {
  *
  * `sort` 越大越靠后（金 0 最前、绿 3 最后），所以档位 = `长度 - 位序`：
  * 绿(3)→1、蓝(2)→2、紫(1)→3、金(0)→4。表里改权重，档位自动跟随，无需第二张表。
- */
+*/
 export function rarityRank(rarity: ZCCardRarity): number {
     const metadata = rarityMetadata();
     const index = metadata.findIndex((meta) => meta.id === rarity);
     return index < 0 ? 0 : metadata.length - index;
 }
 
-/** 对局档位（1..4）→ 品级 id；越界返回 undefined。 */
+/** 对局档位（1..4）→ 品级 id；越界返回 undefined。*/
 export function rarityOfTier(tier: number): ZCCardRarity | undefined {
     const metadata = rarityMetadata();
     const index = metadata.length - tier;
@@ -347,7 +347,7 @@ export function rarityNameOfTier(tier: number): string {
     return rarity ? rarityDisplayName(rarity) : '';
 }
 
-/** 问号地块运气评语，按品级；蓝品级刻意无文案（all-random 抽不到蓝卡）。 */
+/** 问号地块运气评语，按品级；蓝品级刻意无文案（all-random 抽不到蓝卡）。*/
 export const ZC_LUCK_TEXTS: Readonly<Record<number, string>> = {
     1: '小有收获',
     3: '大吉大利',
@@ -370,7 +370,7 @@ export function getCounterRules(): readonly ZCCounterRule[] {
     return ZC_RUNTIME_CONFIG.snapshot.counters ?? [];
 }
 
-/** 四维任一形成克制时取最高倍率；金矿不参与。 */
+/** 四维任一形成克制时取最高倍率；金矿不参与。*/
 export function cardCounterMultiplier(attacker?: ZCDeckCard, defender?: ZCDeckCard, rules = getCounterRules()): number {
     if (!attacker?.traits || !defender?.traits) return 1;
     const a = attacker.traits;
@@ -404,7 +404,7 @@ export interface ZCBondRule {
     id: string;
     name: string;
     trait: keyof ZCCardTraits;
-    /** 目标标签值；'any' = 任一相同标签计数。 */
+    /** 目标标签值；'any' = 任一相同标签计数。*/
     target: string;
     threshold: number;
     effectType: ZCBondEffectType;
@@ -415,7 +415,7 @@ export function getBondRules(): readonly ZCBondRule[] {
     return ZC_RUNTIME_CONFIG.snapshot.bonds ?? [];
 }
 
-/** 由八卡阵容按 pvpBond 规则实时计算羁绊。 */
+/** 由八卡阵容按 pvpBond 规则实时计算羁绊。*/
 export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBondRules()): ZCDeckBonuses {
     const cards = deck.filter((card) => card.traits);
     const count = (key: keyof ZCCardTraits, value: string) => cards.filter((card) => card.traits?.[key] === value).length;
@@ -446,9 +446,9 @@ export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBon
 /**
  * 查全量卡目录。
  *
- *  取不到返回 `null`（**不抛错**）：奖励发放是玩法表现，查不到卡就不发这一项，
- *  不该让整局对局崩在领奖那一刻。配置真错了要靠 `pvp_card_check.py` 那类守卫暴露，不靠这里。
- */
+ * 取不到返回 `null`（不抛错）：奖励发放是玩法表现，查不到卡就不发这一项，
+ * 不该让整局对局崩在领奖那一刻。配置真错了要靠 `pvp_card_check.py` 那类守卫暴露，不靠这里。
+*/
 export function findCatalogCard(cardId: string | null | undefined): ZCDeckCard | null {
     if (!cardId) return null;
     return ZC_RUNTIME_CONFIG.snapshot.cardCatalog?.get(String(cardId)) ?? null;
@@ -458,7 +458,7 @@ export function hasUnitDefinition(unitId: ZCUnitId): boolean {
     return ZC_RUNTIME_CONFIG.snapshot.units?.has(unitId) === true;
 }
 
-/** 取单位定义：数值/Prefab 由 pvpCard 单位列提供，技能由 pvpSkill 提供。不完整时抛错，不兜底。 */
+/** 取单位定义：数值/Prefab 由 pvpCard 单位列提供，技能由 pvpSkill 提供。不完整时抛错，不兜底。*/
 export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
     const definition = ZC_RUNTIME_CONFIG.snapshot.units?.get(unitId);
     if (!definition || definition.maxHp == null || definition.attack == null || !definition.prefabPath || !definition.attackProfile) {
@@ -467,7 +467,7 @@ export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
     return definition;
 }
 
-/** 全部可上场单位定义，供批量加载 Prefab。 */
+/** 全部可上场单位定义，供批量加载 Prefab。*/
 export function getAllUnitDefinitions(): ZCUnitDefinition[] {
     return Array.from(ZC_RUNTIME_CONFIG.snapshot.units?.values() ?? []);
 }

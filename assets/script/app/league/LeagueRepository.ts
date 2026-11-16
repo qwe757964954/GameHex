@@ -35,7 +35,6 @@
  * （读 800ms / 写 5000ms），`catch` 一律返 `'failed'` —— 绝不把 Promise 悬着。
  */
 
-import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
 import type { IActivityGoodsInfo as ILeagueGoodsInfo } from '../activity/LayerActivityTable';
@@ -183,7 +182,6 @@ import {
     LEAGUE_DONATE_COIN_PREFIX,
     LEAGUE_DONATE_COUNT_PREFIX,
     LEAGUE_DONATE_EXP_PREFIX,
-    LEAGUE_DONATE_SUCCESS,
     LEAGUE_GOODS_COUNT_SEP,
 } from './LeagueTexts';
 
@@ -270,6 +268,12 @@ export interface ILeagueSnapshot {
 
 /** 请求结果：三态，页面据此决定提示文案。 */
 export type LeagueRequestResult = 'ok' | 'offline' | 'failed';
+
+/** 奖励响应只携带数据，由会话控制器决定是否展示。 */
+export interface ILeagueRewardResult {
+    readonly status: LeagueRequestResult;
+    readonly rewards: CmdGoods[];
+}
 
 // ============================================================
 // P4 三个面板各自的快照
@@ -620,10 +624,9 @@ export interface ILeagueRepository {
      * ⚠️ 老端 `requestBuy` 里那段 `if (id == 1) { … gemBox … }` 是**宝石商店**专用的价格改写，
      *    只在 `StoreType.gemBox` 下才走。**联盟商店不走那一支** ⇒ 本端不移植那段。
      *
-     * ★ **成功（`'ok'`）时本方法自己会弹「获得奖励」**（消费响应里的 `tlCmdGoods`
-     *   ⇒ `FW.ShowReward`）。调用方**不要**再弹一次。
+     * 成功时返回奖励明细，Controller 展示一次。
      */
-    buyStoreGoods(id: number, caller?: object): Promise<LeagueRequestResult>;
+    buyStoreGoods(id: number, caller?: object): Promise<ILeagueRewardResult>;
 
     /** 捐献快照（读 `gameConfig` 6 键 + `CmdRoleUnion` + `roleProperty`，**不发包**）。 */
     loadDonate(): Promise<ILeagueDonateSnapshot>;
@@ -631,15 +634,14 @@ export interface ILeagueRepository {
     /**
      * 捐献（`adv = true` 走广告，需外部先确认真放完了广告）。
      *
-     * ★ **成功（`rsp.ret === true`）时本方法自己会** `FW.showTip('捐献成功')` +
-     *   `FW.ShowReward(...)` 弹「获得物品」窗。调用方**不要**再弹一次。
+     * 成功时返回配置奖励，Controller 显示成功提示与奖励。
      *
      * ⚠️ `CmdUnionDonateRspMsg` **只有 `ret`、没有奖励字段** —— 奖励是**本地**按
      *    `gameConfig` 的 `unionDonateGainCoin` / `unionDonateGainExp` 算出来的
      *    （老端 `ModelLeague.showCommonDonateReward`，它的 `adv` 形参**根本没用到**）。
      *    所以两个数在 `loadDonate()` 时缓存（`donateGain`），`requestDonate` 直接取用。
      */
-    requestDonate(adv: boolean, caller?: object): Promise<LeagueRequestResult>;
+    requestDonate(adv: boolean, caller?: object): Promise<ILeagueRewardResult>;
 
     /** 砍价快照（读 `unionDiscount` + `CmdUnionActivity` + `CmdUnionMember` + `CmdRoleUnion`，**不发包**）。 */
     loadDiscount(): Promise<ILeagueDiscountSnapshot>;
@@ -647,10 +649,9 @@ export interface ILeagueRepository {
     /**
      * 砍价 / 购买（`buy = true` 即购买）。
      *
-     * ★ **`buy = true` 成功时会自己弹「获得奖励」**（消费响应的 `tlCmdGoods` ⇒ `FW.ShowReward`）；
-     *   砍价（`buy = false`）无奖励、不弹。调用方不要自己再弹一次。
+     * 返回响应奖励；普通砍价没有奖励，购买成功由 Controller 展示。
      */
-    requestBargain(buy: boolean, caller?: object): Promise<LeagueRequestResult>;
+    requestBargain(buy: boolean, caller?: object): Promise<ILeagueRewardResult>;
 
     /** 拉活动列表（`type` 取 `LeagueACT_TYPE`；数据由 `CmdUnionActivity` 推送落地）。 */
     requestActList(type: number, caller?: object): Promise<LeagueRequestResult>;
@@ -674,9 +675,9 @@ export interface ILeagueRepository {
      *    所以「能领」的判据是 `rewardState === 1`（见 `LeagueTable.leagueTaskStateOf`），
      *    不是 `>= 1`。领完服务端把 `rewardState` 推到 `2`（`REWARDED`）。
      *
-     * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
+     * 成功时返回响应奖励，由 Controller 展示一次。
      */
-    requestTaskReward(resId: number, caller?: object): Promise<LeagueRequestResult>;
+    requestTaskReward(resId: number, caller?: object): Promise<ILeagueRewardResult>;
 
     /**
      * 任务「看广告」跳过 —— `CmdRoleWatchAdvertReqMsg { type: 14, id: resId }`
@@ -694,9 +695,9 @@ export interface ILeagueRepository {
      *    `CmdRoleUnion.todayTaskGetProgressCount` 自己推进到下一个宝箱。
      *    所以调用点不能「按点中的那个箱子」传参，只能传 `LeagueUnionTaskType.leagueTask`。
      *
-     * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
+     * 成功时返回响应奖励，由 Controller 展示一次。
      */
-    requestTaskProgressReward(subType: number, caller?: object): Promise<LeagueRequestResult>;
+    requestTaskProgressReward(subType: number, caller?: object): Promise<ILeagueRewardResult>;
 
     // ============================================================
     // P6：北伐中原（主面板 + 排行 / 奖励两个子页）
@@ -729,9 +730,9 @@ export interface ILeagueRepository {
     /**
      * 扫荡（`CmdUnionActSweepReqMsg { type: 2 }`）。
      *
-     * ★ **成功时会自己弹「获得奖励」**（`rsp.ret` + `tlCmdGoods` ⇒ `FW.ShowReward`）。调用方别再弹。
+     * 成功时返回响应奖励，由 Controller 展示一次。
      */
-    requestSweep(caller?: object): Promise<LeagueRequestResult>;
+    requestSweep(caller?: object): Promise<ILeagueRewardResult>;
 }
 
 /** 请求超时（与好友 / 礼包 / 首充同口径：读 800ms / 写 5000ms）。 */
@@ -1036,20 +1037,20 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * ★ 老端第 4 个参数就是 `showReward`，响应回调里
      *   `if (showReward && rsp.tlCmdGoods?.length > 0) → CtrlAlert.openLayerShowReward2(config)`
      *   （`switch (storeType)` 里联盟走 `default` ⇒ 不需要额外按钮配置）。
-     *   本工程等价物 = `FW.ShowReward(tlCmdGoods)` → `ShowRewardPage`（「获得奖励」弹窗）。
+     *   本工程由 Controller 消费返回奖励并展示 ShowRewardPage。
      *   ⚠️ 曾经这里把响应整个丢掉、只回三态 ⇒ **买成功却不弹「获得奖励」**（用户报的缺陷）。
      */
-    async buyStoreGoods(id: number, caller?: object): Promise<LeagueRequestResult> {
+    async buyStoreGoods(id: number, caller?: object): Promise<ILeagueRewardResult> {
         const goodsId = Number.isFinite(id) ? Math.trunc(id) : 0;
-        if (goodsId <= 0) return 'failed';
-        return this.sendWithResponse<CmdShopBuyRspMsg>(
+        if (goodsId <= 0) return { status: 'failed', rewards: [] };
+        return this.sendWithRewards<CmdShopBuyRspMsg>(
             (onRsp) => new RequestShopBuy({
                 id: goodsId,
                 cmdShopType: LEAGUE_SHOP_TYPE_UNION,
                 buyTimes: 1,
             } as any, caller, onRsp),
             // ⚠️ `CmdShopBuyRspMsg` **没有 `ret`**（见 Cmd.d.ts）⇒ 只能按奖励列表是否为空判
-            (rsp) => { if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
+            (rsp) => rsp.tlCmdGoods ?? [],
         );
     }
 
@@ -1097,31 +1098,21 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    async requestDonate(adv: boolean, caller?: object): Promise<LeagueRequestResult> {
-        return this.sendWithResponse<CmdUnionDonateRspMsg>(
+    async requestDonate(adv: boolean, caller?: object): Promise<ILeagueRewardResult> {
+        return this.sendWithRewards<CmdUnionDonateRspMsg>(
             (onRsp) => new RequestUnionDonate({ adv: adv === true } as any, caller, onRsp),
-            // 老端 `ModelLeague.RequestLeagueDonate`：
-            //   `if (rsp.ret) { FW.showTip(FW.G_W("DONATE_SUCCESS")); this.showCommonDonateReward(adv); }`
-            // ⚠️ 少了这一段 = 「捐献成功既没提示、也不弹获得物品的窗」（用户报的缺陷）。
             (rsp) => {
-                if (!rsp?.ret) return;
-                FW.showTip(LEAGUE_DONATE_SUCCESS);
+                if (!rsp.ret) return null;
                 const gain = this.donateGain;
                 if (!gain) {
-                    // 理论上到不了（页面 `onOpen` 必先 `loadDonate()`）；宁可只提示，也不弹 0 的假奖励。
-                    console.warn('[League] 捐献奖励数未就绪（loadDonate 还没跑过？），跳过「获得物品」弹窗');
-                    return;
+                    console.warn('[League] 捐献奖励数未就绪，跳过奖励明细');
+                    return [];
                 }
-                // ⚠️ 老端 `showCommonDonateReward` **不区分 adv** —— 它那个 `adv` 形参压根没用，
-                //    两条路都是 `[{ unionCoin, gainCoin }, { unionContri, gainExp }]`。
-                //
-                // `CmdGoods` 在 proto 里是 `{ resId: Long; number: string }`（uint64 ⇒ 可能是 Long），
-                // 而弹窗侧 `parseCmdGoodsList` 走 `toCount` 容错收敛（number / string 都认）⇒
-                // 这里按 proto 的形状给（数量用字符串），只是要过一次 `Long` 的类型断言。
-                FW.ShowReward([
+                // 协议不返回物品，沿用已加载配置；广告与金币捐献奖励相同。
+                return [
                     { resId: LEAGUE_UNION_COIN_RES_ID, number: String(gain.coin) },
                     { resId: LEAGUE_UNION_CONTRI_RES_ID, number: String(gain.exp) },
-                ] as unknown as CmdGoods[]);
+                ] as unknown as CmdGoods[];
             },
         );
     }
@@ -1213,14 +1204,14 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 砍价 / 购买（`buy = true` 即购买）。
      *
      * ★ `buy = true`（真买）时服务端把成交物放在响应的 `tlCmdGoods` 里 ——
-     *   老端 `ModelLeague.RequestUnionBargain`：`if (rsp.ret && rsp.tlCmdGoods) FW.ShowReward(...)`。
+     *   响应成功才返回物品，展示由会话 Controller 负责。
      *   砍价（`buy = false`）没有奖励 ⇒ 回调自然空跑。
      *   ⚠️ 同一个方法两种语义，**不能**因为「砍价不弹」就整条不接。
      */
-    async requestBargain(buy: boolean, caller?: object): Promise<LeagueRequestResult> {
-        return this.sendWithResponse<CmdUnionBargainRspMsg>(
+    async requestBargain(buy: boolean, caller?: object): Promise<ILeagueRewardResult> {
+        return this.sendWithRewards<CmdUnionBargainRspMsg>(
             (onRsp) => new RequestUnionBargain({ buy: buy === true } as any, caller, onRsp),
-            (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
+            (rsp) => rsp.ret ? rsp.tlCmdGoods ?? [] : null,
         );
     }
 
@@ -1275,13 +1266,12 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    async requestTaskReward(resId: number, caller?: object): Promise<LeagueRequestResult> {
+    async requestTaskReward(resId: number, caller?: object): Promise<ILeagueRewardResult> {
         const id = Number.isFinite(resId) ? Math.trunc(resId) : 0;
-        if (id <= 0) return 'failed';
-        // ★ 老端 `ModelLeague.RequestTaskReward`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
-        return this.sendWithResponse<CmdTaskUnionGetRewardRspMsg>(
+        if (id <= 0) return { status: 'failed', rewards: [] };
+        return this.sendWithRewards<CmdTaskUnionGetRewardRspMsg>(
             (onRsp) => new RequestTaskUnionGetReward({ resId: id } as any, caller, onRsp),
-            (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
+            (rsp) => rsp.ret ? rsp.tlCmdGoods ?? [] : null,
         );
     }
 
@@ -1294,13 +1284,12 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         ));
     }
 
-    async requestTaskProgressReward(subType: number, caller?: object): Promise<LeagueRequestResult> {
+    async requestTaskProgressReward(subType: number, caller?: object): Promise<ILeagueRewardResult> {
         const value = Number.isFinite(subType) ? Math.trunc(subType) : 0;
-        if (value <= 0) return 'failed';
-        // ★ 老端 `ModelLeague.RequestTaskUnionGetProgressReward`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
-        return this.sendWithResponse<CmdTaskUnionGetProgressRewardRspMsg>(
+        if (value <= 0) return { status: 'failed', rewards: [] };
+        return this.sendWithRewards<CmdTaskUnionGetProgressRewardRspMsg>(
             (onRsp) => new RequestTaskUnionGetProgressReward({ subType: value } as any, caller, onRsp),
-            (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
+            (rsp) => rsp.ret ? rsp.tlCmdGoods ?? [] : null,
         );
     }
 
@@ -1430,13 +1419,12 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return this.send(() => new RequestUnionActDrum({ type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller));
     }
 
-    async requestSweep(caller?: object): Promise<LeagueRequestResult> {
-        // ★ 老端 `ModelLeague.RequestUnionActSweep`：`if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`
-        return this.sendWithResponse<CmdUnionActSweepRspMsg>(
+    async requestSweep(caller?: object): Promise<ILeagueRewardResult> {
+        return this.sendWithRewards<CmdUnionActSweepRspMsg>(
             (onRsp) => new RequestUnionActSweep(
                 { type: LeagueACT_TYPE.NORTHERN_EXPEDITION } as any, caller, onRsp,
             ),
-            (rsp) => { if (rsp?.ret && rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods); },
+            (rsp) => rsp.ret ? rsp.tlCmdGoods ?? [] : null,
         );
     }
 
@@ -1657,26 +1645,17 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         }
     }
 
-    /**
-     * 与 {@link send} 同口径（离线 / 超时 / 异常三态），**额外把响应交给 `onResponse` 消费**。
-     *
-     * ★ 为什么必须有这个东西：`send()` **把响应整个丢掉了** ——
-     *   而联盟有一整类请求的**唯一产物就在响应里**（`tlCmdGoods` = 本次获得的奖励）。
-     *   丢掉它 = 「服务端发了奖、客户端不弹窗」，而且**一句错都不报**。
-     *   老端对应的是 `ModelLeague.RequestXxx` 里那一串
-     *   `if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`。
-     *   ⚠️ 本工程这条曾整片缺失（商店 / 砍价 / 任务领奖 / 任务进度奖 / 北伐扫荡
-     *   —— 全被 `tests/reward-popup-wiring.test.ts` 点名过），别再用 `send()` 发这类请求。
-     *
-     * ⚠️ **`applied` 闸**：只有真收到响应才算 `'ok'`。
-     *   `net.send` 的 `true` 只代表「包发出去了」，不代表服务端回了。
-     *   可靠性依据：`NetworkRequest.resolve(rsp)` 是**先** `fCallback(rsp)`、**再** `resolve(true)`
-     *   （见 `framework/net/NetworkRequest.ts`），所以 `await` 回来时 `applied` 已经落定。
-     *   同口径先例：`GiftRepository.buyGift`。
-     *
-     * @param make       收到 `onRsp` 后构造请求（把它作为 `RequestMsg` 的第 3 个参数传进去）
-     * @param onResponse 消费响应；**只在真收到响应时调用**
-     */
+    private async sendWithRewards<Rsp>(
+        make: (onRsp: (rsp: Rsp) => void) => unknown,
+        rewardsOf: (rsp: Rsp) => CmdGoods[] | null,
+    ): Promise<ILeagueRewardResult> {
+        let rewards: CmdGoods[] | null = null;
+        const status = await this.sendWithResponse(make, rsp => { rewards = rewardsOf(rsp); });
+        if (status !== 'ok') return { status, rewards: [] };
+        return rewards === null ? { status: 'failed', rewards: [] } : { status: 'ok', rewards };
+    }
+
+    /** 保留响应数据；离线、超时和异常都收口为请求状态。 */
     private async sendWithResponse<Rsp>(
         make: (onRsp: (rsp: Rsp) => void) => unknown,
         onResponse: (rsp: Rsp) => void,

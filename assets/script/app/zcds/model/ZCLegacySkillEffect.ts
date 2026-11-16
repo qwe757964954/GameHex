@@ -4,7 +4,7 @@
  * Formula strings are data, not JavaScript.  This module deliberately uses a
  * small expression parser instead of eval/new Function so exported Excel data
  * cannot access globals or execute arbitrary code.
- */
+*/
 
 export interface ZCLegacySkillEffectRow {
     condition: string;
@@ -16,21 +16,21 @@ export interface ZCLegacySkillEffectConfig {
     attributes: Readonly<Record<string, unknown>>;
     effectsByKey: Readonly<Record<string, readonly ZCLegacySkillEffectRow[]>>;
     buffDefaults: Readonly<Record<string, Readonly<Record<string, unknown>>>>;
-    /** legacy skillBuff key -> old Client handler type. */
+    /** legacy skillBuff key -> old Client handler type.*/
     buffTypes: Readonly<Record<string, string>>;
-    /** legacy skillBuff key -> pvpStatus.statusId */
+    /** legacy skillBuff key -> pvpStatus.statusId*/
     legacyStatusIds: Readonly<Record<string, string>>;
 }
 
 export interface ZCLegacyBuffApplication {
     legacyKey: string;
     params: Readonly<Record<string, unknown>>;
-    /** Frozen at cast time so DOT attribution/damage survives source removal and reconnect. */
+    /** Frozen at cast time so DOT attribution/damage survives source removal and reconnect.*/
     sourceAttack: number;
 }
 
 export interface ZCLegacySkillEvaluation {
-    /** True when at least one active `基础伤害` row supplied the attack damage. */
+    /** True when at least one active `基础伤害` row supplied the attack damage.*/
     hasDamageFormula: boolean;
     damage: number;
     range?: number;
@@ -296,7 +296,7 @@ function applyBinary(op: string, left: Eval, right: Eval, scope: Scope): unknown
     }
 }
 
-/** Compile a formula once. Exported for focused validator/tests. */
+/** Compile a formula once. Exported for focused validator/tests.*/
 export function compileZCLegacyExpression(source: string): Eval {
     const normalized = source.trim();
     const cached = EXPRESSION_CACHE.get(normalized);
@@ -325,7 +325,7 @@ export class ZCLegacyAttributeBag {
         return this.rng();
     }
 
-    /** Legacy Utils.randomInt is inclusive at both ends. */
+    /** Legacy Utils.randomInt is inclusive at both ends.*/
     randomInt(min: number, max: number): number {
         const low = Math.ceil(Math.min(min, max));
         const high = Math.floor(Math.max(min, max));
@@ -486,7 +486,7 @@ function list(value: unknown): string[] {
     return [String(value).trim()].filter(Boolean);
 }
 
-/** Attach skillView.hurt/exHurt effect keys to the PVP normal/empowered profiles. */
+/** Attach skillView.hurt/exHurt effect keys to the PVP normal/empowered profiles.*/
 export function parseZCLegacySkillViewBindings(
     value: unknown,
     empoweredByNormal?: ReadonlyMap<number, number | undefined>,

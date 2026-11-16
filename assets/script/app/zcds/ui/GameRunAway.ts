@@ -21,7 +21,7 @@ export interface GameRunAwayOptions {
     readonly showReturn?: boolean;
 }
 
-/** 本局逐玩家统计；数据由运行控制器推送，点击内容外空白关闭。 */
+/** 本局逐玩家统计；数据由运行控制器推送，点击内容外空白关闭。*/
 @ccclass('GameRunAway')
 export class GameRunAway extends PopupBase {
     static prefabPath = 'ui/game/GameRunAway';

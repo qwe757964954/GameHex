@@ -3,7 +3,7 @@
  *
  * 这里保留旧表的「一个 id 对应多条 modify」语义：属性型修改立即写入属性包，
  * 结构/行为型修改转换成命令，交给后续占城技能系统逐项实现。
- */
+*/
 
 export type ZCModifierType =
     | '卡牌进卡池'
@@ -34,7 +34,7 @@ export type ZCModifierType =
 
 export interface ZCModifierOperation {
     type: ZCModifierType;
-    /** 旧表大多数是对象；`添加兵种buff列表` 等少数类型直接使用数组。 */
+    /** 旧表大多数是对象；`添加兵种buff列表` 等少数类型直接使用数组。*/
     data: unknown;
 }
 
@@ -91,7 +91,7 @@ function asOperations(value: unknown): ZCModifierOperation[] {
     });
 }
 
-/** 合并 J 表中相同 id 的多行，保持首次出现的 id 顺序和每行 modify 顺序。 */
+/** 合并 J 表中相同 id 的多行，保持首次出现的 id 顺序和每行 modify 顺序。*/
 export function mergeSkillAttrModifierRows(rows: readonly Record<string, unknown>[]): Map<number, ZCModifierRecord> {
     const result = new Map<number, ZCModifierRecord>();
     for (const row of rows) {
@@ -129,7 +129,7 @@ export function indexGeneralStarRows(rows: readonly Record<string, unknown>[]): 
     return result;
 }
 
-/** 可注册占城专用处理器；未注册的旧行为会保留成命令，不会静默丢失。 */
+/** 可注册占城专用处理器；未注册的旧行为会保留成命令，不会静默丢失。*/
 export class ZCModifierExecutor {
     private readonly handlers = new Map<string, ZCModifierHandler>();
 
@@ -176,7 +176,7 @@ export class ZCModifierExecutor {
     }
 }
 
-/** 执行武将指定星级的出战修改器与升星影响数据。 */
+/** 执行武将指定星级的出战修改器与升星影响数据。*/
 export function executeGeneralStarModifiers(
     generalId: number,
     star: number,

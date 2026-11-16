@@ -12,7 +12,7 @@ export interface IZCStatusResolutionContext extends Pick<IZCModelServices, 'stat
     presentHeal(unit: ZCUnitState, amount: number): void;
 }
 
-/** Advances status effects against one match snapshot. Cross-system damage and presentation stay in the caller. */
+/** 推进状态效果；跨系统的伤害与表现由调用方处理。*/
 export class ZCStatusResolutionSystem {
     private readonly alive = new Map<string, ZCUnitState>();
     private readonly aliveIds: string[] = [];
@@ -44,7 +44,7 @@ export class ZCStatusResolutionSystem {
                 if (statusSystem.hasAny(unitId)) previousMaxHp.set(unit.id, context.effectiveDefinition(unit).maxHp);
             }
             ZCStatusResolutionSystem.tickLegacyTraction(dt, alive, tractionSources, context);
-            // An effect due on its expiry frame settles before the status loses its final duration.
+            // 到期帧的事件先结算，再移除最后一秒持续时间。
             for (const event of statusSystem.collectPeriodicEvents(state.elapsedSeconds, this.periodicEvents)) {
                 ZCStatusResolutionSystem.resolvePeriodicEvent(event, context);
             }

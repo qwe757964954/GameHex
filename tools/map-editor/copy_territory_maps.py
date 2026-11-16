@@ -40,6 +40,9 @@ def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
     targets = [TARGET / f"{path.stem}.json", *(directory / f"{path.stem}.json" for directory in DOC_TARGETS)]
     if not dry_run:
         presets_io.publish(targets, payload)
+    note = presets_io.purge_client_copy(path.name, dry_run)
+    if note:
+        warnings = [*warnings, note]
     return targets, warnings
 
 

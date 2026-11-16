@@ -60,11 +60,8 @@ export class ExprMgr extends ScriptObject {
         tlChanged.length = 0
         for (let expr of tlDirtyExpr) {
             let result = expr.GetResult()
-            let lr = expr.GetLastResult()
-            // if (result !== lr) {
                 expr.SetLastResult(result)
                 tlChanged.push(expr)
-            // }
         }
         //清空脏数据
         tlDirtyExpr.clear()

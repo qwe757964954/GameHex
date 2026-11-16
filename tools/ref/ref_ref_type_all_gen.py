@@ -30,6 +30,20 @@ if len(sys.argv) > 2:
         raise ValueError('用法: ref_ref_type_all_gen.py <JSON目录> [--table 表名]')
     selected_table = sys.argv[3]
 
+def get_list_from_file(file_name):
+    result = []
+    try:
+        with open(file_name, 'r', encoding='utf-8') as file:
+            for line in file:
+                line = line.strip()
+                if line:
+                    result.append(line)
+    except FileNotFoundError:
+        print(f"未找到文件: {file_name}")
+    return result
+
+unused_list = get_list_from_file(os.path.join(SCRIPT_DIR, "unused_client_tables.txt"))
+
 begin_content = ""
 end_content = ""
 
@@ -155,6 +169,9 @@ try:
                         continue
 
                     filename,ext = os.path.splitext(file)
+                    if filename in unused_list:
+                        print(f"跳过客户端未使用表 {ref_json_path}")
+                        continue
                     ref_data[filename] = json_data
     else:
         print(f"目录 {search_dir} 不存在。")

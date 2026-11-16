@@ -4,11 +4,12 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { LeagueDonateController } from '../assets/script/app/league/LeagueDonateController';
 import { LeagueDonateModel } from '../assets/script/app/league/LeagueDonateModel';
 import { LeagueDonateEvent, type ILeagueDonateIntent, type ILeagueDonateViewState } from '../assets/script/app/league/LeagueDonateEvents';
-import type { ILeagueDonateSnapshot, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
+import type { ILeagueDonateSnapshot, ILeagueRewardResult, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
 import type { IActivityGoodsInfo } from '../assets/script/app/activity/LayerActivityTable';
 import {
     fillLeagueText,
     LEAGUE_DONATE_CONFIRM,
+    LEAGUE_DONATE_SUCCESS,
     LEAGUE_TIP_AD_DONATE_LIMIT,
     LEAGUE_TIP_DONATE_LIMIT,
     LEAGUE_TIP_FAILED,
@@ -54,6 +55,7 @@ function fixture() {
     const owner = {};
     const states: ILeagueDonateViewState[] = [];
     const tips: string[] = [], cancelled: object[] = [];
+    const rewards: CmdGoods[][] = [];
     const confirms: Array<{ content: string; onSure: () => void }> = [];
     const loadCalls: ILoadCall[] = [], donateCalls: IDonateCall[] = [];
     const adPlays: Array<{ resolve: (watched: boolean) => void; reject: (error: Error) => void }> = [];
@@ -62,13 +64,14 @@ function fixture() {
         owner, model,
         repository: {
             loadDonate: () => new Promise<ILeagueDonateSnapshot>((resolve, reject) => loadCalls.push({ resolve, reject })),
-            requestDonate: (adv, caller) => new Promise<LeagueRequestResult>((resolve, reject) => {
-                donateCalls.push({ adv, caller: caller as object, resolve, reject });
+            requestDonate: (adv, caller) => new Promise<ILeagueRewardResult>((resolve, reject) => {
+                donateCalls.push({ adv, caller: caller as object, resolve: status => resolve({ status, rewards: status === 'ok' ? [{ resId: 11, number: '300' }] as unknown as CmdGoods[] : [] }), reject });
             }),
         },
         view: { render: state => states.push({ ...state }) },
         feedback: {
             tip: text => tips.push(text),
+            reward: goods => rewards.push(goods),
             confirm: (content, onSure) => confirms.push({ content, onSure }),
         },
         ads: { play: () => new Promise<boolean>((resolve, reject) => adPlays.push({ resolve, reject })) },
@@ -78,7 +81,7 @@ function fixture() {
     const emit = (kind: 'free' | 'coin', target: object = owner) =>
         EventMgr.instance.emit(LeagueDonateEvent.Intent, { owner: target, kind } as ILeagueDonateIntent);
     return {
-        owner, model, controller, states, tips, cancelled, confirms,
+        owner, model, controller, states, tips, rewards, cancelled, confirms,
         loadCalls, donateCalls, adPlays, emit,
         get busy() { return states[states.length - 1]?.busy ?? false; },
     };
@@ -222,10 +225,11 @@ test('费用变化：写成功后重读快照，新次数 / 新钱数上屏', as
         h.loadCalls[1].resolve(next); await flush();
         assert.equal(h.states[h.states.length - 1].snapshot, next);
         assert.equal(h.busy, false);
-        assert.deepEqual(h.tips, []);
+        assert.deepEqual(h.tips, [LEAGUE_DONATE_SUCCESS]);
+        assert.equal(h.rewards.length, 1);
         // 新快照里钱不够 ⇒ 再点金币走第二道关
         h.emit('coin');
-        assert.deepEqual(h.tips, [fillLeagueText(LEAGUE_TIP_NOT_ENOUGH_TEMPLATE, '金币')]);
+        assert.deepEqual(h.tips, [LEAGUE_DONATE_SUCCESS, fillLeagueText(LEAGUE_TIP_NOT_ENOUGH_TEMPLATE, '金币')]);
         assert.equal(h.donateCalls.length, 1);
     } finally { h.controller.dispose(); }
 });

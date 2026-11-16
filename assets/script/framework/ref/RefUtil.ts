@@ -104,9 +104,6 @@ export class RefUtil extends ScriptObject {
         if (resName == "idConfig") {
             FW.LWX.log("加载IDConfig")
         }
-        if ("roleProperty" == resName) {
-            let c = 0
-        }
         let data = this.getAssetData(resName)
         if (data == null) {
             data = await this.loadRefAsset(resName)

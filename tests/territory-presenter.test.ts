@@ -972,6 +972,7 @@ interface HarnessOptions {
     gateway?: ReturnType<typeof createFakeGateway>;
     store?: ReturnType<typeof createFakeStore>;
     serverWallet?: () => TerritoryWallet | null;
+    writeServerIdleTimeSeconds?: (seconds: number) => void;
 }
 
 function createHarness(options: HarnessOptions = {}) {
@@ -986,6 +987,7 @@ function createHarness(options: HarnessOptions = {}) {
         store: store.store,
         walletSeed: (): TerritoryWallet => ({ silver: 10000, stamina: 100 }),
         readServerWallet: () => (options.serverWallet ? options.serverWallet() : null),
+        writeServerIdleTimeSeconds: options.writeServerIdleTimeSeconds,
         availableChapters: options.chapters ?? [1],
     };
     const presenter = new TerritoryModel(ports);
@@ -2835,6 +2837,65 @@ test('征收走协议：tlCmdGoods 原样弹窗、idleTime 覆盖起点、不再
     assert.equal(h.presenter.state.idleRewardStartedAt, serverIdleSeconds * 1000,
         'idleTime 是新的挂机起点，UI 计时必须从它算');
 });
+
+test('领奖在宿主退出后收到成功结果，不再改写账号挂机时间', async () => {
+    let reply: (result: TerritoryIdleRewardResult) => void = () => {};
+    const gateway = createFakeGateway();
+    gateway.gateway.claimIdleReward = () => new Promise(resolve => { reply = resolve; });
+    const idleWrites: number[] = [];
+    const h = createHarness({ gateway, writeServerIdleTimeSeconds: seconds => idleWrites.push(seconds) });
+    h.presenter.start();
+    await flush();
+    const pending = h.presenter.claimIdleRewards(Date.now());
+    h.presenter.dispose();
+    reply({ ok: true, idleTimeSeconds: 1700000000, rewards: [{ resId: 7, amount: 10 }] });
+    await pending;
+    assert.deepEqual(idleWrites, []);
+    assert.deepEqual(h.rewards, []);
+    assert.equal(h.busy.filter(item => item.busy).length, h.busy.filter(item => !item.busy).length);
+});
+
+for (const operation of ['claim', 'sweep'] as const) {
+    for (const success of [true, false]) {
+        test(`${operation} 切章后丢弃迟到${success ? '成功' : '失败'}，不向新章节发奖或提示`, async () => {
+            let reply: (result: TerritoryIdleRewardResult) => void = () => {};
+            const gateway = createFakeGateway();
+            const request = () => new Promise<TerritoryIdleRewardResult>(resolve => { reply = resolve; });
+            if (operation === 'claim') gateway.gateway.claimIdleReward = request;
+            else gateway.gateway.sweep = request;
+            const loader = createFakeLoader();
+            loader.loader.load = async chapterId => ({ ...bundle,
+                mapJson: { ...mapJson, chapterId },
+                campaign: { ...bundle.campaign, stages: [{ ...stage, chapterId }] },
+            });
+            const idleWrites: number[] = [];
+            const store = createFakeStore({ ownedCells: [1] });
+            store.store.loadLastChapter = () => 2;
+            const h = createHarness({ gateway, loader, chapters: [1, 2], store,
+                writeServerIdleTimeSeconds: seconds => idleWrites.push(seconds) });
+            try {
+                h.presenter.start();
+                await flush();
+                const pending = operation === 'claim'
+                    ? h.presenter.claimIdleRewards(Date.now()) : h.presenter.sweepIdleRewards(20);
+                h.presenter.selectChapter(1);
+                await flush();
+                assert.equal(h.presenter.state.map?.chapterId, 1);
+                const tips = h.tips.length;
+                const settled = h.storeCalls.settleIdle;
+                reply(success
+                    ? { ok: true, idleTimeSeconds: 1700000000, rewards: [{ resId: 7, amount: 10 }] }
+                    : { ok: false, reason: 'offline' });
+                await pending;
+                assert.deepEqual(idleWrites, []);
+                assert.deepEqual(h.rewards, []);
+                assert.equal(h.tips.length, tips);
+                assert.equal(h.storeCalls.settleIdle, settled);
+                assert.equal(h.busy.filter(item => item.busy).length, h.busy.filter(item => !item.busy).length);
+            } finally { h.presenter.dispose(); }
+        });
+    }
+}
 
 test('★★★★真机口径：只打通 328，点 309 解锁后必须立刻发开战协议', async () => {
     // 山猫 2026-10-15 真机：cellId 309（关卡 2、有建筑 69004）点下去**一个协议都不发**，

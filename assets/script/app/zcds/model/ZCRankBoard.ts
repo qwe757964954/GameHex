@@ -1,13 +1,13 @@
 /**
- * 对局内排行榜（蓝湖「排行榜」设计稿）的**纯 TS 数据层**。
+ * 对局内排行榜（蓝湖「排行榜」设计稿）的纯 TS 数据层。
  *
- * ## 这是「对局内」排行，不是章节榜
+ * 这是「对局内」排行，不是章节榜
  *
- *  别跟 `celebration` 的开服冲榜搞混：那一套走 `CmdGetRankReqMsg` 查服务端
- * （`CelebrationRepository.requestRank`），指标是战力；本模块**不发任何网络请求** ——
+ * 别跟 `celebration` 的开服冲榜搞混：那一套走 `CmdGetRankReqMsg` 查服务端
+ * （`CelebrationRepository.requestRank`），指标是战力；本模块不发任何网络请求 ——
  * 数据全部来自本局模型 `ZCGameModel`（`owners` + `territoryCount`）。
  *
- * ## 数据源（三处，都已存在，本模块只是读）
+ * 数据源（三处，都已存在，本模块只是读）
  *
  * | 需要 | 来源 |
  * |---|---|
@@ -15,65 +15,65 @@
  * | 每方占了几格 | `ZCGameModel.territoryCountOf(owner)` |
  * | 席位的名字 / 头像 | `seatProfiles` —— `ZCGame` 从后端 `battle.units` 建的映射 |
  *
- * ##  「比赛中…」态是设计稿的一部分，不是异常
+ * 「比赛中…」态是设计稿的一部分，不是异常
  *
  * 设计稿 4 行里第 3、4 行右侧是 `di_02` + 一行提示文字，而不是地块数字。
- * 那是**本局还没打下来的席位**：对局进行中，地块数随时会变，
+ * 那是本局还没打下来的席位：对局进行中，地块数随时会变，
  * 提前把数字画出来等于给玩家一个会跳变的承诺。所以统一走
  * {@link IRankSeat.isPlaying} —— 它为 true 时渲染层显示 `di_02` + 文案，
- * 且**地块数一律不显示**（不是显示 0）。
+ * 且地块数一律不显示（不是显示 0）。
  *
- * ## 排序口径
+ * 排序口径
  *
- * 地块数**降序**；同分时按 `ZCOwner` 的席位序（`player` → `enemy` → `enemy2` → `enemy3`），
- * 保证「同分时排在一起」且**顺序稳定** —— 不稳定会让虚拟列表每帧重排、行闪烁。
+ * 地块数降序；同分时按 `ZCOwner` 的席位序（`player` → `enemy` → `enemy2` → `enemy3`），
+ * 保证「同分时排在一起」且顺序稳定 —— 不稳定会让虚拟列表每帧重排、行闪烁。
  *
- * 规则 78：**禁 import `cc`**，因此本文件可在 Node 下直接单测。
- */
+ * 规则 78：禁 import `cc`，因此本文件可在 Node 下直接单测。
+*/
 
 import { ZCOwner } from './ZCMapConfig';
 import { ownerForSection } from './ZCMapConfig';
 import { toCount } from '../../net/RequestGuard';
 
-/** 一条排行数据。 */
+/** 一条排行数据。*/
 export interface IRankSeat {
     readonly owner: ZCOwner;
-    /** 名次，从 1 开始。 */
+    /** 名次，从 1 开始。*/
     readonly rank: number;
     readonly name: string;
-    /** 头像资源路径（`icons/head` 下的键；空串 = 还没取到，渲染层留默认）。 */
+    /** 头像资源路径（`icons/head` 下的键；空串 = 还没取到，渲染层留默认）。*/
     readonly headKey: string;
-    /** 已占领地块数。 `isPlaying` 为 true 时**不要显示它**。 */
+    /** 已占领地块数。 `isPlaying` 为 true 时不要显示它。*/
     readonly territoryCount: number;
-    /** 是否是"比赛中"（设计稿的 `di_02` 提示态）。 */
+    /** 是否是"比赛中"（设计稿的 `di_02` 提示态）。*/
     readonly isPlaying: boolean;
     /**
-     * 是不是**本机玩家自己**这一席（`owner === ZCOwner.Player`）。
+     * 是不是本机玩家自己这一席（`owner === ZCOwner.Player`）。
      *
      * 2026-11-11 需求：「排行榜的黄色底框只是代表玩家，玩家第几名，就在第几名显示」。
      * 改前渲染层用的是 `rank === 1` ⇒ 黄色高亮底 `phb_list_01` 恒贴第一行，
-     * 玩家排第 2 时高亮的是别人。判据必须回到**席位身份**，与名次无关。
+     * 玩家排第 2 时高亮的是别人。判据必须回到席位身份，与名次无关。
      *
      * 单独存成字段而不是让渲染层再判一次 `owner === ZCOwner.Player`：
      * 行的 `render` 只认 `IRankSeat`，「谁是玩家」的口径与排序/席位分配保持一致
      * （`assignSeatUnits` 已把本机钉进 `player` 槽），不要在两处各写一份。
-     */
+    */
     readonly isSelf: boolean;
 }
 
-/** 席位档案：名字 + 头像。由 `ZCGame` 持有，本模块只读。 */
+/** 席位档案：名字 + 头像。由 `ZCGame` 持有，本模块只读。*/
 export interface IRankSeatProfile {
     readonly name: string;
     readonly headKey: string;
 }
 
-/** 一局的席位档案表（键 = `ZCOwner`）。 */
+/** 一局的席位档案表（键 = `ZCOwner`）。*/
 export type RankSeatProfiles = ReadonlyMap<ZCOwner, IRankSeatProfile>;
 
-/** 「比赛中…」提示文案。 */
+/** 「比赛中…」提示文案。*/
 export const RANK_PLAYING_TEXT = '比赛中…';
 
-/** 兜底席位名（后端没给名字时）。按席位序，与 `ZCOWNER_ORDER` 一致。 */
+/** 兜底席位名（后端没给名字时）。按席位序，与 `ZCOWNER_ORDER` 一致。*/
 export const RANK_FALLBACK_NAMES: Readonly<Record<ZCOwner, string>> = {
     player: '我方',
     enemy: '敌方',
@@ -86,7 +86,7 @@ export const RANK_FALLBACK_NAMES: Readonly<Record<ZCOwner, string>> = {
  *
  * 导出成独立函数是为了让「排序稳定性」能被单测直接钉住，
  * 不必再起一个 model 才能验（规则 78：本文件不 import `cc`）。
- */
+*/
 export function compareRankSeats(a: IRankSeat, b: IRankSeat): number {
     if (b.territoryCount !== a.territoryCount) return b.territoryCount - a.territoryCount;
     return RANK_SEAT_ORDER.indexOf(a.owner) - RANK_SEAT_ORDER.indexOf(b.owner);
@@ -95,10 +95,10 @@ export function compareRankSeats(a: IRankSeat, b: IRankSeat): number {
 /**
  * 席位序（与 `ZC_OWNER_ORDER` 保持一致）。
  *
- *  自己另存一份而**不 import `ZC_OWNER_ORDER`**：那个常量在 `ZCMapConfig` 里，
+ * 自己另存一份而不 import `ZC_OWNER_ORDER`：那个常量在 `ZCMapConfig` 里，
  * 而 `zcds-view-fixtures` 的 `load` 只认 `./X`，跨到 `../model/…` 的值导入会落进
  * 兜底分支报 ENOENT（规则 167）。这里复制一份并在单测里断言两者一致。
- */
+*/
 export const RANK_SEAT_ORDER: readonly ZCOwner[] = [ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
 
 /**
@@ -107,9 +107,9 @@ export const RANK_SEAT_ORDER: readonly ZCOwner[] = [ZCOwner.Player, ZCOwner.Enem
  * @param owners 本局参赛席位（`model.owners`）
  * @param territoryCountOf 取某方已占领地块数（`model.territoryCountOf`）
  * @param profiles 席位档案；缺项时用 {@link RANK_FALLBACK_NAMES} + 空头像
- * @param finished 对局是否已结束。**进行中**的席位标 `isPlaying`（设计稿的提示态）。
+ * @param finished 对局是否已结束。进行中的席位标 `isPlaying`（设计稿的提示态）。
  * @returns 按名次升序的排行（名次从 1 开始）
- */
+*/
 export function buildRankSeats(
     owners: readonly ZCOwner[],
     territoryCountOf: (owner: ZCOwner) => number,
@@ -124,7 +124,7 @@ export function buildRankSeats(
             name: profile?.name || RANK_FALLBACK_NAMES[owner],
             headKey: profile?.headKey ?? '',
             territoryCount: count,
-            //  整局结束后一律给真值 —— 「比赛中」是**对局进行中**的语义，
+            //  整局结束后一律给真值 —— 「比赛中」是对局进行中的语义，
             // 结算界面还写「比赛中」是错的。
             isPlaying: !finished && count === 0,
             //  黄色高亮底代表「这是你」，与名次无关（2026-11-11 需求）。
@@ -138,52 +138,52 @@ export function buildRankSeats(
 /**
  * 席位分配的最小输入：只要 `campId`（定席位）和 `roleId`（认自己）。
  * 名字 / 头像 / `unitId` 都是可选，由两个派生函数各取所需。
- */
+*/
 interface ISeatCandidate {
     readonly campId: number;
     readonly roleId: string;
 }
 
 /**
- * 后端席位 → `ZCOwner` 的**唯一**分配逻辑（`buildSeatProfiles` 与 `buildSeatUnitIds` 共用）。
+ * 后端席位 → `ZCOwner` 的唯一分配逻辑（`buildSeatProfiles` 与 `buildSeatUnitIds` 共用）。
  *
- * ##  为什么必须抽出来共用
+ * 为什么必须抽出来共用
  *
  * 排行榜要「名字/头像」、战斗统计要「服务端 `unitId`」，两件事都要求
- * 「哪个席位是 `player`」的答案**逐字一致**。各写一份分配逻辑，只要有一处改了
+ * 「哪个席位是 `player`」的答案逐字一致。各写一份分配逻辑，只要有一处改了
  * （比如少掉「先把自己钉进 player 槽」那步），就会出现「排行榜显示我是第 2 名、
- * 但伤害算在第 1 名头上」这种**零报错**的错账。
+ * 但伤害算在第 1 名头上」这种零报错的错账。
  *
- * ## 席位映射（原实现逐字保留）
+ * 席位映射（原实现逐字保留）
  *
  * 老实现（`ProcedureGame` 早期版本）是 `sorted[0]` 当自己、`sorted[1]` 当对手：
  * 本机若不在 `campId = 1`，两槽会整体错位；3~4 人局更是直接丢掉后两席。
  * 现在的口径是「roleId 认自己 + 其余按 campId 顺序填空槽」。
  *
- * `campId`（1~4）经 `ownerForSection` 转 `ZCOwner`。**不能用下标硬凑** ——
+ * `campId`（1~4）经 `ownerForSection` 转 `ZCOwner`。不能用下标硬凑 ——
  * `campId` 缺 1 时下标会整体错位（`ownerForSection` 已做 `>= 1` 校验，非法值返 `null` 跳过）。
  *
- *  **不能**直接 `ownerForSection(campId)` 后再把"自己"那档改写成 `player`：
+ * 不能直接 `ownerForSection(campId)` 后再把"自己"那档改写成 `player`：
  * 自己若在 campId=2，`ownerForSection(2)` 给 enemy，而 campId=1 那位会给 player
- * ⇒ 两个都写 `player` 键，后者覆盖前者，**敌方凭空消失一档**（实测踩过，用例 14 抓到的）。
+ * ⇒ 两个都写 `player` 键，后者覆盖前者，敌方凭空消失一档（实测踩过，用例 14 抓到的）。
  *
- * 正解：**先把自己钉进 `player` 槽并从待分配里摘掉**，其余席位按 campId 顺序
- * 取 `RANK_SEAT_ORDER` 里**尚未被占用**的槽 —— 槽位与席位一一对应，
+ * 正解：先把自己钉进 `player` 槽并从待分配里摘掉，其余席位按 campId 顺序
+ * 取 `RANK_SEAT_ORDER` 里尚未被占用的槽 —— 槽位与席位一一对应，
  * 且"自己永远是 player"与"其余按序"两条规则不打架。
  *
  * @param units 后端席位（函数内按 campId 排序，不依赖调用方顺序）
  * @param selfRoleId 自己的 roleId；用来把「我方」标成 `player` 槽（否则第 1 席未必是自己）
- * @returns 键 = `ZCOwner`，值 = 该席位的后端单元；`campId` 非法的席位**跳过**
- */
+ * @returns 键 = `ZCOwner`，值 = 该席位的后端单元；`campId` 非法的席位跳过
+*/
 function assignSeatUnits<T extends ISeatCandidate>(
     units: readonly T[],
     selfRoleId: string | null,
 ): Map<ZCOwner, T> {
     const assigned = new Map<ZCOwner, T>();
     //  两道过滤/排序，缺一不可：
-    //   ① 校验 `campId` 合法（1~4）—— 非法席位**跳过**，不猜它属于谁。
+    //   1. 校验 `campId` 合法（1~4）—— 非法席位跳过，不猜它属于谁。
     //      少了这步：`campId=0/9` 的脏数据会被当成合法席位塞进槽位（实测）。
-    //   ② 按 campId 升序 —— 结果表的插入序稳定，不依赖调用方传入顺序。
+    //   2. 按 campId 升序 —— 结果表的插入序稳定，不依赖调用方传入顺序。
     const sorted = units
         .filter((unit) => ownerForSection(unit.campId) !== null)
         .sort((a, b) => a.campId - b.campId);
@@ -207,12 +207,12 @@ function assignSeatUnits<T extends ISeatCandidate>(
  * 两槽昵称不够承载 3~4 人局的排行榜；完整档案随单局 entry 交接。
  * HUD 顶部与传说卡横幅只显示两栏所以看不出来，但排行榜要按 2~4 席逐行渲染。
  *
- * 席位归属见 {@link assignSeatUnits}（**唯一**分配逻辑）。
+ * 席位归属见 {@link assignSeatUnits}（唯一分配逻辑）。
  *
  * @param units 后端席位（已按 campId 排序最佳，函数内也会再排一次保证确定性）
  * @param selfRoleId 自己的 roleId；用来把「我方」标成 `player` 槽（否则第 1 席未必是自己）
- * @returns 键 = `ZCOwner` 的档案表；`campId` 非法的席位**跳过**（不猜它属于谁）
- */
+ * @returns 键 = `ZCOwner` 的档案表；`campId` 非法的席位跳过（不猜它属于谁）
+*/
 export function buildSeatProfiles(
     units: readonly { readonly campId: number; readonly roleId: string; readonly name: string; readonly avatarId: string }[],
     selfRoleId: string | null,
@@ -226,14 +226,14 @@ export function buildSeatProfiles(
 }
 
 /**
- * 由「后端下发的席位」建**服务端单元 id** 表（键 = `ZCOwner`）。
+ * 由「后端下发的席位」建服务端单元 id 表（键 = `ZCOwner`）。
  *
  * 只给战斗统计（`CmdBattleStatisticsInfo.unitId`）用：服务端靠这个 id 把伤害归属到单元，
- * 填 0 就等于把所有人的伤害堆进同一个桶。席位归属与 {@link buildSeatProfiles} **同一份逻辑**
+ * 填 0 就等于把所有人的伤害堆进同一个桶。席位归属与 {@link buildSeatProfiles} 同一份逻辑
  * （{@link assignSeatUnits}），所以两边不会漂。
  *
  * 缺字段（本地局 / 老回包没带 `unitId`）收敛成 0 —— 那是「不知道」，不是「0 号单元」。
- */
+*/
 export function buildSeatUnitIds(
     units: readonly { readonly campId: number; readonly roleId: string; readonly unitId?: unknown }[],
     selfRoleId: string | null,
@@ -249,9 +249,9 @@ export function buildSeatUnitIds(
 /**
  * 名次徽章资源键（设计稿的 `icon_01 / icon_02 / icon_03`）。
  *
- * 前三名有专属奖章图，第四名及以后**没有图** —— 返回空串，
+ * 前三名有专属奖章图，第四名及以后没有图 —— 返回空串，
  * 渲染层要退化成纯数字文本，不能拿第 3 张图糊过去。
- */
+*/
 export function rankBadgeKeyOf(rank: number): string {
     if (rank === 1) return 'icon_01';
     if (rank === 2) return 'icon_02';
@@ -260,12 +260,12 @@ export function rankBadgeKeyOf(rank: number): string {
 }
 
 /**
- * 行底板资源键：**本机玩家自己那一行**用高亮底 `phb_list_01`，其余共用 `phb_list_02`。
+ * 行底板资源键：本机玩家自己那一行用高亮底 `phb_list_01`，其余共用 `phb_list_02`。
  *
  * 2026-11-11 改口径：入参从 `rank` 换成 `isSelf`。
  * 原实现 `rank === 1 ? 'phb_list_01' : 'phb_list_02'` 把「第一个」当成「我」——
  * 玩家排第 2 时黄底仍贴在第 1 名身上。名次徽章（`icon_01/02/03`）才按名次走，两者别混。
- */
+*/
 export function rowBackgroundKeyOf(isSelf: boolean): string {
     return isSelf ? 'phb_list_01' : 'phb_list_02';
 }

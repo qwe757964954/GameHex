@@ -46,10 +46,10 @@ export interface ZCSpawnActionResult {
  * 它不创建战斗快照，因此选点耗时不会进入单局时长。所有 AI 与资源抽取都消费调用方
  * 注入的同一随机源，服务端种子仍能完整复现「选点 + 正式对局」。
  *
- * 玩家一进来就带一个**默认落点**（`defaultHexFor`，通常 = 地图声明的默认主城）：
+ * 玩家一进来就带一个默认落点（`defaultHexFor`，通常 = 地图声明的默认主城）：
  * 需求要求「进入时在该位置展示基地建筑模型 + 高亮周边 6 格」，没有落点就无从展示。
  * 所以玩家侧的 `selectedHexId` 在构造后即非空，「请先选择落点」只对没预置的 AI 生效。
- */
+*/
 export class ZCSpawnSelection {
     private readonly owners: readonly ZCOwner[];
     private readonly resourceByHex = new Map<number, ZCMapResourcePoint>();
@@ -57,7 +57,7 @@ export class ZCSpawnSelection {
     private readonly aiConfirmAt = new Map<ZCOwner, number>();
     private readonly homeRegionCells = new Map<number, Set<number>>();
     private readonly usesDepthRegionsForHomeSelection: boolean;
-    /** 地图自己画了分区（`sections` 出现非 0）时以地图为准，没画才按布局推导半区。 */
+    /** 地图自己画了分区（`sections` 出现非 0）时以地图为准，没画才按布局推导半区。*/
     private readonly hasPaintedSections: boolean;
     private elapsed = 0;
     private remaining = ZC_SPAWN_SELECTION_SECONDS;
@@ -98,9 +98,9 @@ export class ZCSpawnSelection {
         for (const owner of this.owners) {
             if (!this.legalHexes(owner, false).length) throw new Error(`${owner} 所属分区没有合法出生格`);
         }
-        // 玩家一进选点阶段就要**看到自己的基地**（需求：「进入时在该位置展示基地建筑模型」），
+        // 玩家一进选点阶段就要看到自己的基地（需求：「进入时在该位置展示基地建筑模型」），
         // 所以这里直接把落点预置到默认位置 —— 不是"没选"，而是"已预选默认位置"。
-        //  只预置**玩家**：给 AI 也预置会让 `autoConfirm` 不再摇随机格，
+        //  只预置玩家：给 AI 也预置会让 `autoConfirm` 不再摇随机格，
         // 从而错开整局唯一那条随机源的消耗次序（AI 确认时机 / 资源点抽取全部跟着漂）。
         this.states.player.selectedHexId = this.defaultHexFor(ZCOwner.Player);
     }
@@ -119,12 +119,12 @@ export class ZCSpawnSelection {
     isResourcePoint(hexId: number): boolean { return this.resourceByHex.has(hexId); }
 
     /**
-     * 该席位**当前落点**相邻的六边形格子（选点阶段把基地周围高亮成深蓝用的）。
+     * 该席位当前落点相邻的六边形格子（选点阶段把基地周围高亮成深蓝用的）。
      *
-     * 返回地图上**真实存在**的邻格：贴着地图边缘的落点只有 3~4 个，往里才是 6 个
+     * 返回地图上真实存在的邻格：贴着地图边缘的落点只有 3~4 个，往里才是 6 个
      * —— 需求写的「相邻的 6 个」是内圈的满值，边缘格没有第 6 个邻格可指。
      * 地图关系只由 `map.hexes[].neighbors` 给出，渲染层别自己按行列推。
-     */
+    */
     baseNeighborIds(owner: ZCOwner): readonly number[] {
         const hexId = this.states[owner]?.selectedHexId ?? null;
         if (hexId === null) return [];
@@ -136,7 +136,7 @@ export class ZCSpawnSelection {
      *
      * 一旦确认（或选点阶段整体结束）就不再是「正在选」，玩家点【确认位置】后
      * 高亮与按钮要一起收掉（需求 4：「退出选基地模式，基地落定，高亮消失」）。
-     */
+    */
     isPlacing(owner: ZCOwner): boolean {
         const state = this.states[owner];
         return !this.completed && state !== undefined
@@ -144,11 +144,11 @@ export class ZCSpawnSelection {
     }
 
     /**
-     * 资源点在选点阶段的**预览资源项 id**（组内权重最高者）。
+     * 资源点在选点阶段的预览资源项 id（组内权重最高者）。
      *
-     *  选点阶段还没抽签（抽签在 `resolveZCMapResources` 一局只做一次），所以只能拿
-     *  「最可能的那个」显示图标；与旧实现「取池里权重最高的资源」同口径。
-     */
+     * 选点阶段还没抽签（抽签在 `resolveZCMapResources` 一局只做一次），所以只能拿
+     * 「最可能的那个」显示图标；与旧实现「取池里权重最高的资源」同口径。
+    */
     resourceItemIdAt(hexId: number): number | null {
         const point = this.resourceByHex.get(hexId);
         if (!point) return null;
@@ -158,7 +158,7 @@ export class ZCSpawnSelection {
     /**
      * 该格属于哪个分区（1 ~ playerCount）。地图自己画了分区就以地图为准；没有画时按布局
      * 推导半区（`defaultZCSectionAt`，与地图编辑器同口径）。返回 0 = 不属于任何分区。
-     */
+    */
     regionSectionOf(hexId: number): ZCSection {
         const painted = this.map.sections?.[hexId] ?? 0;
         if (painted > 0) return painted;
@@ -170,19 +170,19 @@ export class ZCSpawnSelection {
         );
     }
 
-    /** 该格的半区归属席位；`null` = 不属于任何分区。选点界面按它给双方半区着色。 */
+    /** 该格的半区归属席位；`null` = 不属于任何分区。选点界面按它给双方半区着色。*/
     regionOwnerOf(hexId: number): ZCOwner | null {
         const section = this.regionSectionOf(hexId);
         return section >= 1 && section <= this.owners.length ? this.owners[section - 1] : null;
     }
 
-    /** 该格是否落在**别的玩家**的半区里 —— 这种格一律不能放主城。 */
+    /** 该格是否落在别的玩家的半区里 —— 这种格一律不能放主城。*/
     private outsideOwnRegion(owner: ZCOwner, hexId: number): boolean {
         const section = this.regionSectionOf(hexId);
         return section !== 0 && section !== this.owners.indexOf(owner) + 1;
     }
 
-    /** 当前格对该席位是否可选；确认后的其他主城会即时形成 R4 禁用面。 */
+    /** 当前格对该席位是否可选；确认后的其他主城会即时形成 R4 禁用面。*/
     invalidReason(owner: ZCOwner, hexId: number): string | null {
         const hex = this.map.hexes[hexId];
         if (!hex?.playable) return '该位置不可通行';
@@ -276,15 +276,15 @@ export class ZCSpawnSelection {
     }
 
     /**
-     * 该席位的**默认落点**（进选点阶段就摆出来的那一座基地）。
+     * 该席位的默认落点（进选点阶段就摆出来的那一座基地）。
      *
      * 优先用地图声明的默认主城（`homes` 下标对应分区，与 `autoConfirm` 的兜底同源）——
      * 自选图的 `homes` 就是策划摆好的「默认位置」，镜头落点 `buildPlayerHomeFocus` 也读它。
-     * 地图没声明（或声明的那格被资源点 / 分区规则否掉）时退到本席位候选集的**第一格**。
+     * 地图没声明（或声明的那格被资源点 / 分区规则否掉）时退到本席位候选集的第一格。
      *
-     *  退路必须**确定**，不能摇随机数：整局只有一条随机源，在这里多消耗一次会把
+     * 退路必须确定，不能摇随机数：整局只有一条随机源，在这里多消耗一次会把
      * AI 的确认时机与资源点抽取的次序整体错开（表现是「换个默认落点，资源就变了」）。
-     */
+    */
     private defaultHexFor(owner: ZCOwner): number | null {
         const declared = this.map.homes?.[this.owners.indexOf(owner)];
         if (declared !== undefined && declared !== null && declared >= 0
@@ -352,7 +352,7 @@ export class ZCSpawnSelection {
         return resolveZCMapResources(this.map, this.random);
     }
 
-    /** 按地图邻接关系做 BFS；虚空造成的绕路也会被正确计入。 */
+    /** 按地图邻接关系做 BFS；虚空造成的绕路也会被正确计入。*/
     private hexDistance(fromId: number, toId: number): number {
         if (fromId === toId) return 0;
         const seen = new Set<number>([fromId]);
@@ -380,7 +380,7 @@ export class ZCSpawnSelection {
 
 /**
  * 在对局开始时冻结地图资源点的抽取结果。固定主城和自选主城共用，避免资源点只在选点流程中生效。
- */
+*/
 export function resolveZCMapResources(map: ZCMatchMap, random: () => number): ZCMapResolvedResource[] {
     if (map.resolvedResources !== undefined) return map.resolvedResources.map(point => ({ ...point }));
     const resolved: ZCMapResolvedResource[] = [];
@@ -416,7 +416,7 @@ function depthForZCResource(map: ZCMatchMap, hexId: number): ZCDepth | undefined
 }
 
 
-/** 把选点结果冻结进正式对局配置；从这一刻起地图按 fixed 模式进入战斗模型。 */
+/** 把选点结果冻结进正式对局配置；从这一刻起地图按 fixed 模式进入战斗模型。*/
 export function resolveZCSpawnMatchConfig(
     source: ZCMatchConfig,
     result: ZCSpawnSelectionResult,

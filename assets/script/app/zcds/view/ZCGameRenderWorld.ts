@@ -24,6 +24,7 @@ import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
 import { ZCHexView } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { reportGuideComplete } from '../../guide/application/GuideEvents';
 import type { ZCSpawnSelection } from '../model/ZCSpawnSelection';
 import { resolveZCSpawnRegionHints } from '../model/ZCSpawnRegionHint';
 import type { IZCSpawnRegionHint } from '../model/ZCSpawnRegionHint';
@@ -75,38 +76,38 @@ import { zcFactionColor, zcTowardWhite } from './ZCTheme';
 
 type ZCRenderEntityKind = 'hex' | 'unit' | 'effect' | 'float' | 'cardReveal' | 'legendBanner';
 
-/** 旧测试 frame 缺 `neutralRewards` 字段时的共享空数组（渲染层只读，永不修改）。 */
+/** 旧测试 frame 缺 `neutralRewards` 字段时的共享空数组（渲染层只读，永不修改）。*/
 const EMPTY_NEUTRAL_REWARDS: readonly Readonly<ZCNeutralReward>[] = [];
 
 /**
- * 一条技能特效路径「第一次取不到美术」之后，等多久还没到货才值得**告警**（战斗秒）。
+ * 一条技能特效路径「第一次取不到美术」之后，等多久还没到货才值得告警（战斗秒）。
  *
  * 不能一取不到就 warn：渐进局首帧 `effectVisualPrefabs` 必然是空 Map，后补 job 还要排十几个
  * 才轮到特效 ⇒ 一开局就刷一屏「技能特效美术取不到」全是假告警（2026-11-04 用户截图里就是它）。
  * 3s 足够覆盖后补队列 + 一次按需补载；超过它还没到，才是真故障（没交图 / 路径错 / 加载失败）。
- */
+*/
 const EFFECT_ART_MISSING_WARN_SECONDS = 3;
 
 /**
  * 开局「点击金矿」提示挂在哪一类格子上。
  *
- *   - `tile`：**金矿地块**（`tileType = mine`，格上画 `icon_jk` + 造价）—— 玩家开局看到的那一圈里
- *     「金矿图标 + 50」就是它。这是「点击金矿」的主口径：点它就是开发金矿。
- *   - `resource`：**中立金矿资源点**（格上站的就是一堆金子）—— 有些地图的金矿是资源点而不是地块类型。
- */
+ * - `tile`：金矿地块（`tileType = mine`，格上画 `icon_jk` + 造价）—— 玩家开局看到的那一圈里
+ * 「金矿图标 + 50」就是它。这是「点击金矿」的主口径：点它就是开发金矿。
+ * - `resource`：中立金矿资源点（格上站的就是一堆金子）—— 有些地图的金矿是资源点而不是地块类型。
+*/
 type ZCHintTargetKind = 'tile' | 'resource';
 
-/** 这一格是不是「金矿地块」（`icon_jk` + 造价那种）。 */
+/** 这一格是不是「金矿地块」（`icon_jk` + 造价那种）。*/
 function isMineTile(hex: Readonly<{ state: Readonly<{ tileType: number | null }> }>): boolean {
     return hex.state.tileType === ZCPvpTileType.Mine;
 }
 
-/** 这一格是不是「中立金矿资源点」（格上站的就是金矿）。 */
+/** 这一格是不是「中立金矿资源点」（格上站的就是金矿）。*/
 function isMineResource(hex: Readonly<{ state: Readonly<{ neutralResourceId?: number | null }> }>): boolean {
     return neutralResourceVisualOf(hex.state.neutralResourceId) === ZCNeutralResourceVisual.Mine;
 }
 
-/** 提示目标是否还值得提示：地块类看「还能不能开发」，资源类看「资源还在不在」。 */
+/** 提示目标是否还值得提示：地块类看「还能不能开发」，资源类看「资源还在不在」。*/
 function hintTargetStillValid(
     hex: Readonly<{ canDevelop: boolean; state: Readonly<{ tileType: number | null; neutralResourceId?: number | null }> }>,
     kind: ZCHintTargetKind,
@@ -117,15 +118,15 @@ function hintTargetStillValid(
 /**
  * 找开局要提示的那一格金矿，以及它属于哪一类。没有就返回 `null`。
  *
- * 优先级按「玩家点了算不算数」排：先找**现在就能开发的金矿地块**（开局那圈，点下去立刻变成
+ * 优先级按「玩家点了算不算数」排：先找现在就能开发的金矿地块（开局那圈，点下去立刻变成
  * 己方金矿），再退到中立金矿资源点。
  *
- * ⚠️ 2026-10-26 修：原来只认 `neutralResourceId` 的金矿 **资源点**，但「金矿」在这套地图里
- * 主要表现成 **地块类型**（`tileType = mine` ⇒ 画 `icon_jk` + 造价），玩家的原话「初始生成的
+ * 2026-10-26 修：原来只认 `neutralResourceId` 的金矿 资源点，但「金矿」在这套地图里
+ * 主要表现成 地块类型（`tileType = mine` ⇒ 画 `icon_jk` + 造价），玩家的原话「初始生成的
  * 金矿图标」指的正是它 —— 于是描边一直挂在一个地图上根本不存在的目标上，一格都没闪过。
  *
- * ⚠️ 只在通道**第一次**找到目标时调一次（之后缓存 id），不做每帧全盘 find。
- */
+ * 只在通道第一次找到目标时调一次（之后缓存 id），不做每帧全盘 find。
+*/
 function findMineHintTarget(
     hexesById: ReadonlyMap<number, Readonly<{
         canDevelop: boolean;
@@ -145,9 +146,9 @@ function findMineHintTarget(
  * 本帧「最近一次开发点击」的脉冲起点（秒）；没有激活事件返回 null。
  *
  * 用途只有一个：给新点亮邻格的生成动画当锚点（需求 2026-10-26「与地块脉冲同步」）。
- * 同一拍通常只有一个激活事件；玩家在 1.856s 内连点两格时取**最新**那个 —— 刚好是
+ * 同一拍通常只有一个激活事件；玩家在 1.856s 内连点两格时取最新那个 —— 刚好是
  * 正在点亮邻格的那一次。
- */
+*/
 function latestHexActivationStartedAt(activations: readonly Readonly<ZCHexActivation>[]): number | null {
     let latest: number | null = null;
     for (const activation of activations) {
@@ -164,18 +165,18 @@ interface ZCIdentityComponent {
 /**
  * `unitPosition` 的复用返回值，以及每帧传给 `ZCUnitView.render` 的复用 presentation。
  *
- * 两者都是**每帧每单位**各用一次、用完即弃（视图同步解构取字段，不持有引用），
+ * 两者都是每帧每单位各用一次、用完即弃（视图同步解构取字段，不持有引用），
  * 所以单例复用一个 scratch 是安全的。原先两处都返回新对象 / 新字面量，
- * 46 个单位 × 60 帧 ≈ **5500 个短命对象/秒**，直接违反 AGENTS.md
+ * 46 个单位 × 60 帧 ≈ 5500 个短命对象/秒，直接违反 AGENTS.md
  * 「禁止在 update 里创建临时数组/对象」，表现为 GC 尖刺与帧时间抖动。
- */
+*/
 // 类型从 `ZCUnitView.render` 的签名反推，避免为了一个 scratch 再引一个类型导入。
 // 视图侧的 `IZCUnitPresentation` 字段是 readonly（对外 immutability），
-// 这里用 `-readonly` 剥掉：scratch 是**内部复用缓冲**，不交给任何调用方持有。
+// 这里用 `-readonly` 剥掉：scratch 是内部复用缓冲，不交给任何调用方持有。
 type ZCUnitPresentation = Parameters<ZCUnitView['render']>[0];
 
-/** 已落位的格子：中心坐标 + 地块视图 + 节点（建格与「重置落位」两处共用）。 */
-/** 描边模式：正式对局 / 选点阶段（两者底色口径不同，见 `redrawSharedOutline`）。 */
+/** 已落位的格子：中心坐标 + 地块视图 + 节点（建格与「重置落位」两处共用）。*/
+/** 描边模式：正式对局 / 选点阶段（两者底色口径不同，见 `redrawSharedOutline`）。*/
 type ZCOutlineMode = 'battle' | 'spawn';
 
 interface ZCPlacedHex {
@@ -196,128 +197,128 @@ interface ZCRenderWorldOptions {
     /**
      * Board layer order comes from ZCGameBoard.prefab; the wall layer is inserted after OutlineLayer.
      * Resource icons use ResourceLayer because neighboring hex sprites overlap and can cover them.
-     */
+    */
     board: Node;
     wallLayer: Node;
     hexPrefab: Prefab;
     unitPrefab: Prefab | null;
     unitVisualPrefabs: ReadonlyMap<ZCUnitId, Prefab>;
-    /** image/buildings 下的建筑外观帧（按图片名索引）；缺失时视图回退 prefab 绑定图。 */
+    /** image/buildings 下的建筑外观帧（按图片名索引）；缺失时视图回退 prefab 绑定图。*/
     buildingFrames?: ReadonlyMap<string, SpriteFrame>;
-    /** image/walls 下的城墙砖帧（up/down/rightUp/rightDown）；缺失时回退 wall prefab 通用墙砖。 */
+    /** image/walls 下的城墙砖帧（up/down/rightUp/rightDown）；缺失时回退 wall prefab 通用墙砖。*/
     wallFrames?: ReadonlyMap<string, SpriteFrame>;
     /**
      * 城墙砖接缝材质（`shaders/wall-tile.effect` 实例：连接端暗线用砖内颜色覆盖）。
      * 材质保持墙砖原 alpha，避免重叠不足时露出地块；缺失（null/undefined）时使用默认材质。
-     */
+    */
     wallMaterial?: Material | null;
-    /** 所有非己方 Spine 共享的**整体外轮廓**（放大副本）effect；缺省 ⇒ 只关闭该表现。 */
+    /** 所有非己方 Spine 共享的整体外轮廓（放大副本）effect；缺省 ⇒ 只关闭该表现。*/
     unitOutlineCopyEffect?: EffectAsset | null;
     /**
-     * 地块抬起后**原位地面**的底部发光序列帧（`image/effects/hex_ground_glow`，已按帧序）。
+     * 地块抬起后原位地面的底部发光序列帧（`image/effects/hex_ground_glow`，已按帧序）。
      * 缺省 / 空数组 ⇒ 不画光（其余表现不受影响）。
-     */
+    */
     hexGroundGlowFrames?: readonly SpriteFrame[];
     /**
-     * 翻格脉冲段的**序列帧**（`image/effects/hex_pulse_seq`，已按帧序，5 帧）。
+     * 翻格脉冲段的序列帧（`image/effects/hex_pulse_seq`，已按帧序，5 帧）。
      * 缺省 / 空数组 ⇒ 脉冲段只剩「原地缩没」，其余表现不受影响。
-     */
+    */
     hexPulseFrames?: readonly SpriteFrame[];
     /**
-     * 「神器充能」被领取那一刻、**格心原地炸开**的序列帧
+     * 「神器充能」被领取那一刻、格心原地炸开的序列帧
      * （`image/effects/artifact_claim_burst`，已按帧序，18 帧）。
      *
      * 缺省 / 空数组 ⇒ 这一层表现整条跳过（神器图标照常飞向神器栏），不影响对局。
-     */
+    */
     artifactClaimBurstFrames?: readonly SpriteFrame[];
     effectPrefab: Prefab | null;
     effectVisualPrefabs: ReadonlyMap<string, Prefab>;
     allowGenericEffects?: boolean;
     floatTextPrefab: Prefab | null;
-    /** 抽卡小卡牌 prefab；缺失时只少一层表现，不影响对局。 */
+    /** 抽卡小卡牌 prefab；缺失时只少一层表现，不影响对局。*/
     cardRevealPrefab?: Prefab | null;
-    /** 传说卡出场横幅 prefab；缺失时只少一层表现，不影响对局。 */
+    /** 传说卡出场横幅 prefab；缺失时只少一层表现，不影响对局。*/
     legendBannerPrefab?: Prefab | null;
     /**
      * 全屏演出层（HUD 根节点）。
      *
-     *  传说卡横幅弹在**屏幕正中**，所以不能挂 `mapLayer` —— 那是可滚动 `ScrollView` 的 content，
+     * 传说卡横幅弹在屏幕正中，所以不能挂 `mapLayer` —— 那是可滚动 `ScrollView` 的 content，
      * 横幅会跟着拖动跑、还会被 `view` 的 Mask 裁掉。挂在这里的子节点序末尾即「压在所有 HUD 之上」。
-     */
+    */
     overlayLayer: Node;
     /**
      * 本局携带神器的图标帧（`image/artifact/<pvpArtifact[].icon>`）。
      *
-     *  中立资源点「神器充能」格显示它（而不是中文字）。缺失时那一格退回文字兜底。
-     *  由 `ZCGameLoader` 预加载、随 `IZCGamePreparedResources` 一路传进来。
-     */
+     * 中立资源点「神器充能」格显示它（而不是中文字）。缺失时那一格退回文字兜底。
+     * 由 `ZCGameLoader` 预加载、随 `IZCGamePreparedResources` 一路传进来。
+    */
     artifactIconFrame?: SpriteFrame | null;
     /**
-     * **自选地图局**中立资源格的占位图（`image/gameui/whh`，金色问号）。
+     * 自选地图局中立资源格的占位图（`image/gameui/whh`，金色问号）。
      *
-     *  `cityMode: 'select'` 时这盘的中立资源是进游戏才随机的 ⇒ 选点阶段不能让玩家
-     *  看出哪格是宝箱 / 金矿 / 金币 / 神器点，一律盖问号（见 `ZCHexView` 的
+     * `cityMode: 'select'` 时这盘的中立资源是进游戏才随机的 ⇒ 选点阶段不能让玩家
+     * 看出哪格是宝箱 / 金矿 / 金币 / 神器点，一律盖问号（见 `ZCHexView` 的
      * `hideNeutralResourceLabel` 分支）。缺省 ⇒ 退回"只显示地块图标"（旧表现）。
-     */
+    */
     unknownResourceFrame?: SpriteFrame | null;
     neutralResourceFrames?: ReadonlyMap<string, SpriteFrame>;
     /**
      * 飞向 HUD 金币栏的那把金币贴图（`image/map-resource/coin_icon`）。
      *
-     * 🔴 缺省 ⇒ 金币节点照建、曲线照跑，但 `Sprite` 没有 `spriteFrame` **屏上什么都不画**
-     *    （不是"透明图"），只剩「+N」读数可见。排查「金币没动画」先看这个有没有加载到。
-     */
+     * 缺省 ⇒ 金币节点照建、曲线照跑，但 `Sprite` 没有 `spriteFrame` 屏上什么都不画
+     * （不是"透明图"），只剩「+N」读数可见。排查「金币没动画」先看这个有没有加载到。
+    */
     goldCoinFrame?: SpriteFrame | null;
     /**
      * 自选主城区域气泡底图（`image/spawn-region/frame_01` 绿 / `frame_02` 红，九宫格）。
      * 缺省 ⇒ 气泡回退 Graphics 色块（旧样式），不影响选点。
-     */
+    */
     spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
     /**
      * HUD 金币栏面板（`BottomInfoPanel/CoinPanel`）：金币粒子的目标挂点；缺省 ⇒ 不播金币飞行。
      *
-     * ⚠️ 必须是**面板**节点，不是 `GoldLabel` / `coin` 子图标 —— 用户口径（2026-11-04）
-     *    「金币粒子飞到金币栏 `ZCGameHUD` `CoinPanel`」。绑错 / 没绑 ⇒ `overlayLocalOf`
-     *    返回 `null` ⇒ 金币事件整条 `continue`，零报错。
-     */
+     * 必须是面板节点，不是 `GoldLabel` / `coin` 子图标 —— 用户口径（2026-11-04）
+     * 「金币粒子飞到金币栏 `ZCGameHUD` `CoinPanel`」。绑错 / 没绑 ⇒ `overlayLocalOf`
+     * 返回 `null` ⇒ 金币事件整条 `continue`，零报错。
+    */
     coinPanelNode?: Node | null;
-    /** HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。 */
+    /** HUD 神器按钮（`BottomInfoPanel/ArtifactButton`）：神器飞行的目标挂点；缺省 ⇒ 不播神器飞行。*/
     artifactButtonNode?: Node | null;
-    /** 场景装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。 */
+    /** 场景装饰条目 prefab（`sizeMode=CUSTOM` + 不裁边烘在它身上）；缺失时只少一层表现。*/
     decorPrefab?: Prefab | null;
     /**
      * 单位出生特效 prefab（`units/effects/出生特效`，老客户端 `兵种生成` 那套：
      * 16 帧 @8fps = 2.0s，原始像素 208×376 × `_lscale 0.4`）。
      *
-     *  缺失时为 `null` —— 单位照常出现，只是少一层出生表现。
-     *  时长不写死：播放一次所需时间从 clip 读（见 `spawnFxDuration`），改帧率不会让特效提前消失。
-     */
+     * 缺失时为 `null` —— 单位照常出现，只是少一层出生表现。
+     * 时长不写死：播放一次所需时间从 clip 读（见 `spawnFxDuration`），改帧率不会让特效提前消失。
+    */
     spawnFxPrefab?: Prefab | null;
     /**
-     * 单位**阵亡特效** prefab（`units/effects/死亡特效`，13 帧 @12fps）。
+     * 单位阵亡特效 prefab（`units/effects/死亡特效`，13 帧 @12fps）。
      *
-     *  挂在**阵亡单位自己的节点下**（与出生特效同一套 `host` 范式），所以人物倒下时特效
-     *  跟着一起走、不用另算坐标。prefab 自带 `cc.Animation` + `playOnLoad`。
-     *  缺失时为 `null` —— 阵亡退回"只有染灰 + alpha 190"。
-     */
+     * 挂在阵亡单位自己的节点下（与出生特效同一套 `host` 范式），所以人物倒下时特效
+     * 跟着一起走、不用另算坐标。prefab 自带 `cc.Animation` + `playOnLoad`。
+     * 缺失时为 `null` —— 阵亡退回"只有染灰 + alpha 190"。
+    */
     deathFxPrefab?: Prefab | null;
     /**
-     * 建筑**被拆掉**时的白烟雾爆炸（`units/effects/建筑死亡特效`，4 帧 @12fps）。
+     * 建筑被拆掉时的白烟雾爆炸（`units/effects/建筑死亡特效`，4 帧 @12fps）。
      *
-     *  建筑 HP 归零那一步地块会直接转 `ruins`，快照里看不出「刚被打掉」——
-     *  所以由模型发一条一次性的 `buildingDestructions` 通知，这里按 hexId 取格心播一次。
-     *  缺失时为 `null`：建筑照常变废墟，只是少这团烟。
-     */
+     * 建筑 HP 归零那一步地块会直接转 `ruins`，快照里看不出「刚被打掉」——
+     * 所以由模型发一条一次性的 `buildingDestructions` 通知，这里按 hexId 取格心播一次。
+     * 缺失时为 `null`：建筑照常变废墟，只是少这团烟。
+    */
     buildingDestroyFxPrefab?: Prefab | null;
     /**
-     * 受击特效 prefab，按**攻击方职业**索引（`units/effects/受击特效/<职业>受击`）。
+     * 受击特效 prefab，按攻击方职业索引（`units/effects/受击特效/<职业>受击`）。
      *
-     *  挂在 `mapLayer` 上（不是宿主节点）：受击是"贴在被打者身上的一下闪白"，
-     *  而被打单位可能在同一帧被移除 —— 挂宿主会导致特效跟着消失，只闪半下。
-     *  坐标每帧按 `hitFx.x / y` 写，不依赖宿主存活。
+     * 挂在 `mapLayer` 上（不是宿主节点）：受击是"贴在被打者身上的一下闪白"，
+     * 而被打单位可能在同一帧被移除 —— 挂宿主会导致特效跟着消失，只闪半下。
+     * 坐标每帧按 `hitFx.x / y` 写，不依赖宿主存活。
      *
-     *   `get(trait)` 拿不到就是"这个职业没交资源" ⇒ **跳过这一下**，不猜默认职业。
-     */
+     * `get(trait)` 拿不到就是"这个职业没交资源" ⇒ 跳过这一下，不猜默认职业。
+    */
     hitFxPrefabs?: ReadonlyMap<ZCAttackTrait, Prefab>;
     wallPrefab: Prefab | null;
 }
@@ -326,13 +327,13 @@ interface ZCRenderWorldOptions {
  * Small render-only ECS. Domain state stays in ZCGameModel; each visual object is
  * an entity composed from identity + scene-node + one prefab view component.
  * Systems reconcile the immutable model snapshot into those components.
- */
+*/
 export class ZCGameRenderWorld {
 
     /**
      * 阵营的稳定序号 —— 只用于共享轮廓的「内容探针」（把 `ZCFaction` 压成一个数字好比对）。
-     *  顺序变了会导致探针数值错位；追加新阵营时**只许往后加**。
-     */
+     * 顺序变了会导致探针数值错位；追加新阵营时只许往后加。
+    */
     private static readonly FACTION_ORDER: readonly ZCFaction[] = ['neutral', ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3];
     private static readonly SWEEP_PULSE_STYLES = ZCGameRenderWorld.FACTION_ORDER.map(owner =>
         Array.from({ length: ZC_VICTORY_SWEEP_PULSE_LEVELS + 1 }, (_, level) => ({
@@ -343,7 +344,7 @@ export class ZCGameRenderWorld {
     /**
      * 触发传说卡出场横幅的品级。`rarityRank` 把 `gold` 排到档位 4（`rarityNameOfTier(4)` 叫「传说」），
      * 也是设计稿那四组横幅上写死的「传说卡牌」。
-     */
+    */
     private static readonly LEGEND_BANNER_TIER = 4;
 
     /**
@@ -352,12 +353,12 @@ export class ZCGameRenderWorld {
      * 每帧每单位各用一次、用完即弃（视图同步解构取字段，不持有引用），单例复用安全；
      * 原先返回新对象，46 个单位 × 60 帧 ≈ 2700 个短命对象/秒，直接违反 AGENTS.md
      * 「禁止在 update 里创建临时数组/对象」，表现为 GC 尖刺与帧时间抖动。
-     */
+    */
     private static readonly UNIT_POSITION_SCRATCH = { x: 0, y: 0 };
 
     /**
      * 每帧传给 `ZCUnitView.render` 的复用 presentation（与位置 scratch 同口径，见上）。
-     */
+    */
     private static readonly UNIT_PRESENTATION_SCRATCH: { -readonly [K in keyof ZCUnitPresentation]: ZCUnitPresentation[K] } = {
         unit: null as never,
         definition: null as never,
@@ -379,20 +380,20 @@ export class ZCGameRenderWorld {
      * 整盘共享的领地轮廓画布（`ZCGameBoard.prefab` 的 `OutlineLayer` 上那个 `cc.Graphics`）。
      *
      * 2026-10-08：从「每格一个 `cc.Graphics`」合并到这一个。`cc.Graphics` 走引擎
-     * `commitModel`，既不合批**又是断批点**，所以一格一个的真实代价约**6 DC/格**
+     * `commitModel`，既不合批又是断批点，所以一格一个的真实代价约6 DC/格
      * （实测 200 格 = 1228 DC）。合并后上限 1 DC，且地块底图不再被切段。
-     */
+    */
     private outlineGraphics: Graphics | null = null;
     /**
      * 中立资源图标专属的棋盘级图层（`ZCGameBoard.prefab` 的 `ResourceLayer`）。
      *
      * 地块整图 130×119、格距只有 92.25×90 ⇒ 相邻格整图互相重叠，后画的整格盖先画的。
      * 资源图标节点 128×128 比地块顶面 123×90 还大，压在格节点里伸进邻格的那一段就会被
-     * 邻格整图沿**格边线**切掉。抬到这一层之后没有地块能盖它。
+     * 邻格整图沿格边线切掉。抬到这一层之后没有地块能盖它。
      *
      * `null`（prefab 还没这一层 / 取不到）⇒ 视图不抬层、图标留在 `BuildingLayer`：
      * 表现退回修之前的样子，但不崩。层序事实仍以 prefab 为准（见 `options.board` 的注释）。
-     */
+    */
     private resourceLayer: Node | null = null;
     /**
      * 共享轮廓的「内容探针」与「上次已画快照」，两个复用数组做逐项比对。
@@ -400,36 +401,37 @@ export class ZCGameRenderWorld {
      * 存在的理由：`Graphics.clear()` + 重新 stroke 会重建整盘渲染数据，而 `renderStatic`
      * 每 0.15s 就要跑一次 —— 不比对就等于每 0.15s 白上传一次。
      * 见 `redrawSharedOutline`。
-     */
+    */
     private readonly outlineProbe: number[] = [];
     private readonly outlineDrawn: number[] = [];
     private readonly unitViews = new Map<number, ZCUnitView>();
     /**
-     * 一次性表现件（出生光柱 / 受击闪白 / 阵亡特效）统一由特效池管理，**不进 ECS**。
+     * 一次性表现件（出生光柱 / 受击闪白 / 阵亡特效）统一由特效池管理，不进 ECS。
      *
      * 它们都是「本地一次性动画」，不来自模型快照、不参与网络同步，按时间轴回收就够
      * （塞进 ECS 只会让 `removeEntity` 多一条分支）。挂点差异（出生光柱挂单位节点跟随、
      * 受击/阵亡挂 mapLayer 与宿主存活解耦）与去重/回收判据都在 `ZCEffectPool` 内。
-     */
+    */
     private effectVisualPrefabs: ReadonlyMap<string, Prefab>;
     private readonly effectPool: ZCEffectPool;
     private readonly effectViews = new Map<number, ZCCombatEffectView>();
-    /** 导弹诊断⑤：已经打印过首帧状态的实体（一条事件一行，跟着事件 id 走）。 */
+    /** 导弹诊断5.：已经打印过首帧状态的实体（一条事件一行，跟着事件 id 走）。*/
     private readonly missileDiagFrameLogged = new Set<number>();
-    /** 「这条技能特效路径一直没取到美术」已经警告过（一路径一条，避免每帧刷屏）。 */
+    /** 「这条技能特效路径一直没取到美术」已经警告过（一路径一条，避免每帧刷屏）。*/
     private readonly missingEffectArtWarned = new Set<string>();
     /**
-     * 「这条技能特效路径还没取到美术」已经**请求过按需补载**（一路径一次）。
+     * 「这条技能特效路径还没取到美术」已经请求过按需补载（一路径一次）。
      *
-     * 与 {@link missingEffectArtWarned} 分开是必须的：请求要在**第一次**取不到时就发（否则第一发
+     * 与 {@link missingEffectArtWarned} 分开是必须的：请求要在第一次取不到时就发（否则第一发
      * 子弹早飞完了），但告警要等到「补载也该到货了」还没到才发 —— 否则渐进局里首帧必然刷一堆
      * 假告警（后补 job 本来就还没轮到这条路径）。
-     */
+    */
     private readonly missingEffectArtRequested = new Set<string>();
-    /** 每条路径**第一次**取不到美术的时刻（战斗秒）；配合 {@link missingEffectArtWarned} 判超时。 */
+    /** 每条路径第一次取不到美术的时刻（战斗秒）；配合 {@link missingEffectArtWarned} 判超时。*/
     private readonly missingEffectArtSince = new Map<string, number>();
     private readonly floatTextViews = new Map<number, ZCFloatTextView>();
     private readonly cardRevealViews = new Map<number, ZCCardRevealView>();
+    private readonly shownPlayerCardReveals = new Set<number>();
     private readonly legendBannerViews = new Map<number, ZCGameLegendBannerView>();
     private readonly hexEntityBySource = new Map<number, number>();
     private readonly unitEntityBySource = new Map<number, number>();
@@ -440,24 +442,24 @@ export class ZCGameRenderWorld {
     /**
      * 中立资源获取特效（格心喷发金币 / 神器飞向神器按钮）。
      *
-     * 与飘字同型：按事件 id 对齐、新增即建、事件过期即销毁；只对**玩家**领取播（神器目标
+     * 与飘字同型：按事件 id 对齐、新增即建、事件过期即销毁；只对玩家领取播（神器目标
      * 在玩家 HUD 上，金币是"我拿到了多少"）。挂在 `options.overlayLayer`（HUD 根）下，
      * 坐标由渲染层换算。缺帧 ⇒ 特效类内部静默跳过，不影响对局。
-     */
+    */
     private readonly neutralRewardFx: ZCNeutralRewardFx;
-    /** 棋盘上的纯表现装饰节点；不属于 ECS，销毁时显式清理。 */
+    /** 棋盘上的纯表现装饰节点；不属于 ECS，销毁时显式清理。*/
     private readonly decorNodes: Node[] = [];
     /**
      * 被提升到棋盘 overlay 层的挂件节点（建筑剪影 / 血条 / 冷却圈）。
      *
-     * `setParent` 到 `BuildingOverlay` / `CooldownOverlay` 之后它们**脱离地块节点子树**，
+     * `setParent` 到 `BuildingOverlay` / `CooldownOverlay` 之后它们脱离地块节点子树，
      * `destroy()` 里遍历 `this.scene` 收不到 —— 这里显式登记，销毁时一并摘掉（见 `destroy`）。
-     */
+    */
     private readonly reparentedNodes: Node[] = [];
     private readonly pool = new ZCNodePool<Node>();
     private readonly pooledEntityKeys = new Map<number, string>();
     private readonly unitIds = new Set<number>();
-    /** 本帧「悬空施法」单位 → 屏上抬升高度（源：地面区域的 `casterLiftPx`）。每帧重建。 */
+    /** 本帧「悬空施法」单位 → 屏上抬升高度（源：地面区域的 `casterLiftPx`）。每帧重建。*/
     private readonly castLiftByUnit = new Map<number, number>();
     private readonly effectIds = new Set<number>();
     private readonly effectStates: Array<Readonly<ZCCombatEvent> | Readonly<ZCProjectileState>> = [];
@@ -469,7 +471,7 @@ export class ZCGameRenderWorld {
      *
      * 抖动状态本身存在 `ZCHexView` 上（起点 + 因子），这里只维护「哪些格子还要每帧推」。
      * 建筑产兵时由 `renderUnitEntity` 入队，播完（`advanceBuildingShake` 返回 false）出队。
-     */
+    */
     private readonly buildingShakeHexes = new Set<number>();
     /**
      * 正在播「新点亮邻格生成动画」的格子（hexId 集合，平时为空）。
@@ -477,7 +479,7 @@ export class ZCGameRenderWorld {
      * 与 `buildingShakeHexes` 同一套机制：状态存在 `ZCHexView` 上（起点 + 曲线），
      * 渲染世界只维护「哪些格子还要每帧推」——`renderHexSystem` 静态刷新时入队，
      * `advanceDevelopableSpawn` 返回 false（播完）时出队。
-     */
+    */
     private readonly developableSpawnHexes = new Set<number>();
     /**
      * 血条正在播「扣血白条」的地块（hexId 集合，平时为空）。
@@ -488,64 +490,64 @@ export class ZCGameRenderWorld {
      *
      * 单位条不用进这个集合：`ZCUnitView.renderHealthBar` 由 `renderUnitSystem` 每帧调，
      * 白条天然逐帧。只有地块条需要在动的时候把它从 0.15s 的节流里「捞」出来。
-     */
+    */
     private readonly healthBarTrailHexes = new Set<number>();
 
 
     /**
-     * 兵种 id → idle 立绘缓存，**传说横幅**的回退链用（见 `resolveLegendArt` ② / `resolveUnitFrame`）。
+     * 兵种 id → idle 立绘缓存，传说横幅的回退链用（见 `resolveLegendArt` 2. / `resolveUnitFrame`）。
      *
-     *   惰性填充，**不在构造期预扫** `options.unitVisualPrefabs`：视图测试会直接
+     * 惰性填充，不在构造期预扫 `options.unitVisualPrefabs`：视图测试会直接
      * `new ZCGameRenderWorld({...})` 并塞手写的 options 桩，构造期遍历那张表会在桩上抛
-     * `prefabs is not iterable`，把飘字/单位这些**与卡牌毫不相干**的用例一起带崩。
+     * `prefabs is not iterable`，把飘字/单位这些与卡牌毫不相干的用例一起带崩。
      *
-     *  小卡牌（`ZCCardRevealView`）2026-10-12 起**不再**用它 —— 卡面走角色卡牌图。
-     */
+     * 小卡牌（`ZCCardRevealView`）2026-10-12 起不再用它 —— 卡面走角色卡牌图。
+    */
     private readonly unitFrames = new Map<string, SpriteFrame>();
     private map: readonly ZCHexConfig[] = [];
-    /** 本局各资源点抽中的资源项（`hexId → itemId`）；建视图时按格取兵团骨骼用。 */
+    /** 本局各资源点抽中的资源项（`hexId → itemId`）；建视图时按格取兵团骨骼用。*/
     private resourceItemByHex = new Map<number, number>();
-    /** The spawn-confirm button is borrowed from the HUD; ZCGame owns its lifecycle. */
+    /** The spawn-confirm button is borrowed from the HUD; ZCGame owns its lifecycle.*/
     private spawnConfirmButton: Node | null = null;
-    /** 城墙每格六条边的几何（按 hexId 缓存，随地图固定）。 */
+    /** 城墙每格六条边的几何（按 hexId 缓存，随地图固定）。*/
     private readonly wallGeometry = new ZCWallGeometry();
-    /** 墙砖渲染器：节点池、材质帧槽、全盘 y 排序、接缝编码全部内聚于此（墙砖不进 ECS scene）。 */
+    /** 墙砖渲染器：节点池、材质帧槽、全盘 y 排序、接缝编码全部内聚于此（墙砖不进 ECS scene）。*/
     private readonly wallRenderer: ZCWallRenderer;
     private readonly unitInterpolator = new ZCUnitRenderInterpolator();
     /**
      * 结算扫场动画模块。纯表现层，不回写模型。
-     * 步号表按「离起点那一侧隔了几行」分层、**整行共用一个步号**（我方从下往上 /
+     * 步号表按「离起点那一侧隔了几行」分层、整行共用一个步号（我方从下往上 /
      * 其他玩家从上往下），每铺到一格就把那格的 `ZCHexView.sweepOwner` 设成胜利方；
      * 铺满前再从起点推回去、把深饱和色回正成阵营当前色（row8）。
-     */
+    */
     private readonly sweep: ZCVictorySweep;
     /**
      * 开局「归属扩散」波：主城 + 周围邻格的底色从中立观感逐个换成归属色。
-     * 纯表现层，不回写模型 —— 归属在开局那一刻就已经分配好了，这里只决定它**何时**显示。
-     */
+     * 纯表现层，不回写模型 —— 归属在开局那一刻就已经分配好了，这里只决定它何时显示。
+    */
     private readonly claimWave: ZCClaimWave;
     /**
-     * 开局「点击金矿」提示的**共享画布**：惰性建在棋盘最上层 `CooldownOverlay` 上，整局复用一份。
+     * 开局「点击金矿」提示的共享画布：惰性建在棋盘最上层 `CooldownOverlay` 上，整局复用一份。
      *
      * 为什么不画在格子自带的 `TerritoryOutline` 上（2026-10-15 row10 的旧做法）：那份 Graphics
      * 和地块同层，相邻格的底色与建筑会按绘制顺序盖掉提示线 —— 用户 2026-10-26 截图里线被切掉
-     * 半圈，要求「描边需要覆盖在最上层」。抬到棋盘**最后一个图层**（prefab 子节点序：…、
+     * 半圈，要求「描边需要覆盖在最上层」。抬到棋盘最后一个图层（prefab 子节点序：…、
      * `BuildingOverlay`、`CooldownOverlay`）⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。
      *
      * 代价仍是 6 条边、一格一画布变成一份共享画布（比 per-cell 更省）。
-     */
+    */
     private hintOutlineNode: Node | null = null;
     private hintOutlineGraphics: Graphics | null = null;
-    /** 上一次写进提示画布的透明度（`0` = 没开）；2% 死区靠它挡噪声，`Graphics` 上读不到。 */
+    /** 上一次写进提示画布的透明度（`0` = 没开）；2% 死区靠它挡噪声，`Graphics` 上读不到。*/
     private hintOutlineAlpha = 0;
     /**
      * 提示目标的 hexId（`null` = 还没找到 / 已经收手）。
      *
-     * 2026-10-26 起提示要**一直呼吸到金矿被点**，所以"每帧全盘 find 金矿"不能再用：
+     * 2026-10-26 起提示要一直呼吸到金矿被点，所以"每帧全盘 find 金矿"不能再用：
      * 找到一次就缓存 id，之后每帧只查这一格还值不值得提示（`hexesById` 一跳）。
-     */
+    */
     private hintTargetHexId: number | null = null;
-    /** 缓存的目标属于哪一类（地块 / 资源点）—— 判"还值不值得提示"的判据依赖它。 */
+    /** 缓存的目标属于哪一类（地块 / 资源点）—— 判"还值不值得提示"的判据依赖它。*/
     private hintTargetKind: ZCHintTargetKind = 'tile';
     /**
      * 提示通道是否已经收工（目标被点掉 / 对局结束 / 换局复位）。
@@ -553,19 +555,19 @@ export class ZCGameRenderWorld {
      * 收工后整条通道直接返回：目标被点掉之后 `renderDynamic` 仍然每帧都在跑，
      * 不结账就等于整局白扫一遍。
      *
-     * ⚠️ 「这一刻还没找到目标」**不能**结账：开局头几帧（归属扩散波还没铺完）目标格的
+     * 「这一刻还没找到目标」不能结账：开局头几帧（归属扩散波还没铺完）目标格的
      * `canDevelop` 还没翻成 true，一收手就再也起不来 —— 这正是 2026-10-26 那次
      * 「描边呼吸看不到」的成因之一。
-     */
+    */
     private hintOutlineSettled = false;
-    /** 整体外轮廓（放大副本）材质；所有非己方 Spine 共用一份，靠顶点色区分阵营。 */
+    /** 整体外轮廓（放大副本）材质；所有非己方 Spine 共用一份，靠顶点色区分阵营。*/
     private readonly unitOutlineCopyMaterial: Material | null;
 
-    /** 新事件每次 acquire 都重新 initialize，已池化的通用壳也会使用最新专属 Prefab。 */
+    /** 新事件每次 acquire 都重新 initialize，已池化的通用壳也会使用最新专属 Prefab。*/
     applyDeferredArt(art: IZCDeferredBattleArt): void {
-        //  🔴 后补美术是**补丁**：`art.effectVisualPrefabs` 从空 Map 起步、逐个 job 往里加。
+        //   后补美术是补丁：`art.effectVisualPrefabs` 从空 Map 起步、逐个 job 往里加。
         //  原来这里是 `= art.effectVisualPrefabs` 直接替换 ⇒ 第一个 job（翻格脉冲，不带 prefab）
-        //  一回来就把首帧已加载的**技能特效 prefab 全冲掉**，之后靠后续 job 慢慢补。
+        //  一回来就把首帧已加载的技能特效 prefab 全冲掉，之后靠后续 job 慢慢补。
         //  与 `ZCEffectPool.setArt` 同一口径：只加不降级。
         if (art.effectVisualPrefabs.size) {
             const prefabs = new Map(this.effectVisualPrefabs);
@@ -637,11 +639,11 @@ export class ZCGameRenderWorld {
     /**
      * 选点阶段传 ZCMatchMap（无 model），按 select 地图的 playable 格建实体；
      * 正式战斗传入明确的地图配置，按该 map 建实体。
-     */
+    */
     initialize(mapConfig: ZCMatchMap): void {
         this.clearSpawnRegionHints();
         // 兵种帧一次算好：`unitVisualPrefabs` 整局不变 ⇒ 下面 `resolveUnitFrame` 必然命中，不必再判缓存。
-        // ⚠️ prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
+        //  prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
         for (const [unitId, prefab] of this.options.unitVisualPrefabs) {
             const frame = prefab?.data?.getComponentInChildren(Sprite)?.spriteFrame ?? null;
             if (frame) this.unitFrames.set(unitId, frame);
@@ -668,7 +670,7 @@ export class ZCGameRenderWorld {
         const water = this.boardLayer('MapWater');
         const hexLayer = this.boardLayer('HexLayer');
         // 共享轮廓层（整盘一个 `cc.Graphics`，见 `ZCOutlineLayer`）。
-        //  prefab 上必须挂 `cc.Graphics`：不挂则整层**零报错地什么都不画**。
+        //  prefab 上必须挂 `cc.Graphics`：不挂则整层零报错地什么都不画。
         this.outlineGraphics = this.boardLayer('OutlineLayer').getComponent(Graphics) ?? null;
         const outlineLayer = this.boardLayer('OutlineLayer');
         // 中立资源图标层（2026-10-14 加）。不带 `!` 断言：棋盘 prefab 万一还没补这一层，
@@ -693,7 +695,7 @@ export class ZCGameRenderWorld {
             // 视图组件与它的 @property 都在 ZCGameHex.prefab 上绑好了 —— 不再 `|| addComponent` 兜底：
             // 那个分支永远走不到，真掉组件时反而会悄悄补一个空视图（Inspector 引用全 null，表现全无）。
             const view = node.getComponent(ZCHexView);
-            //  点击**只派发意图**（带 `hexId`），处理方由控制器订阅 —— 渲染世界不再收上层回调。
+            //  点击只派发意图（带 `hexId`），处理方由控制器订阅 —— 渲染世界不再收上层回调。
             view.initialize(() => EventMgr.instance.emit(ZCGameUiEvent.HexClick, config.id));
             // 建筑专属外观解析整局不变，新建视图时喂一次（与 unit frame resolver 同口径）。
             view.setBuildingFrameResolver((cardId, building, owner) => this.resolveBuildingFrame(cardId, building));
@@ -721,7 +723,7 @@ export class ZCGameRenderWorld {
             view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
             view.setNeutralResourceFrames(this.options.neutralResourceFrames ?? null);
             // 兵团资源点（表现键 `unit_cap`）按组合项站 N 个中立待机兵：卡 id + 数量来自
-            // 该格**抽中的资源项**（`neutralResourceGroup`），所以逐格喂、不能共用一份。
+            // 该格抽中的资源项（`neutralResourceGroup`），所以逐格喂、不能共用一份。
             this.injectResourceUnits(view, config.id);
             const entityId = this.createEntity('hex', config.id, node);
             this.hexViews.set(entityId, view);
@@ -736,21 +738,21 @@ export class ZCGameRenderWorld {
         for (let index = 0; index < placed.length; index += 1) {
             placed[index].node.setSiblingIndex(index);
         }
-        // 城墙砖层（`ZCGameWallLayer.prefab` 的实例，由 `ZCGame` 交进来）夹在**轮廓层之上**、
+        // 城墙砖层（`ZCGameWallLayer.prefab` 的实例，由 `ZCGame` 交进来）夹在轮廓层之上、
         // 装饰与建筑之下：墙线要压过地块底图与领地轮廓，但建筑要压过墙线。
         //
         //  锚点必须是 `OutlineLayer` 而不是 `HexLayer`：`OutlineLayer` 是共享轮廓的 Graphics
-        // （2026-10-08 加在 HexLayer 之后）。按 `HexLayer + 1` 插会把城墙塞到轮廓**之下** ——
+        // （2026-10-08 加在 HexLayer 之后）。按 `HexLayer + 1` 插会把城墙塞到轮廓之下 ——
         // 墙砖压在轮廓线上，视觉上像"轮廓从墙里穿出来"。锚点跟着"地块之上最靠下的那层"走。
         this.options.wallLayer.setParent(this.options.board);
         this.options.wallLayer.setSiblingIndex(outlineLayer.getSiblingIndex() + 1);
         //  上面这一插会把后面的层整体后移一位：`ResourceLayer` 于是从「轮廓之后」变成
-        // 「**墙线之后**」⇒ 资源图标压得过墙砖。这是有意的 —— 图标是内容标记，
+        // 「墙线之后」⇒ 资源图标压得过墙砖。这是有意的 —— 图标是内容标记，
         // 被墙线切一半比压住墙线难看得多；别为了「墙永远最上」把锚点改成 `ResourceLayer + 1`。
         this.attachBuildingOverlay(placed, this.boardLayer('BuildingOverlay'));
         this.attachCooldownOverlay(placed, this.boardLayer('CooldownOverlay'));
         this.cacheSpawnRegionHints(mapConfig);
-        // 提示通道是**每局一次**的：换局后重新找一次金矿（提示要一直呼吸到被点，没有窗口），
+        // 提示通道是每局一次的：换局后重新找一次金矿（提示要一直呼吸到被点，没有窗口），
         // 上一局挂过的格（视图可能已经随地图重建销毁）也要松手。
         this.hintTargetHexId = null;
         this.hintTargetKind = 'tile';
@@ -763,16 +765,16 @@ export class ZCGameRenderWorld {
         }
     }
 
-    /** 按名取 `ZCGameBoard.prefab` 里声明的图层 —— 结构在那里，代码不自己拼层。 */
+    /** 按名取 `ZCGameBoard.prefab` 里声明的图层 —— 结构在那里，代码不自己拼层。*/
     private boardLayer(name: string): Node {
         return this.options.board.getChildByName(name);
     }
 
     /**
-     * 把建筑剪影从地块节点里**提升**到独立一层（`ZCGameBoard` 的 `BuildingOverlay`）：
+     * 把建筑剪影从地块节点里提升到独立一层（`ZCGameBoard` 的 `BuildingOverlay`）：
      * 地块底图按地图顺序绘制、城墙整体压在地块之上，建筑再抬一层才不会让相邻格的墙线
      * 切过主城、矿场、兵营或防御塔。层本身来自 prefab，这里只搬节点。
-     */
+    */
     private attachBuildingOverlay(
         placed: ReadonlyArray<ZCPlacedHex>,
         overlay: Node,
@@ -793,7 +795,7 @@ export class ZCGameRenderWorld {
         }
     }
 
-    /** 同理把生命条与冷却圈抬到最上层（`CooldownOverlay`），高于城墙及建筑本体。 */
+    /** 同理把生命条与冷却圈抬到最上层（`CooldownOverlay`），高于城墙及建筑本体。*/
     private attachCooldownOverlay(
         placed: ReadonlyArray<ZCPlacedHex>,
         overlay: Node,
@@ -824,7 +826,7 @@ export class ZCGameRenderWorld {
 
     /**
      * 将自由装饰铺到 prefab 的常驻 `DecorLayer`。调用方提供帧；重复调用会先清空旧节点。
-     */
+    */
     installDecor(
         placements: readonly ZCDecorPlacement[],
         frames: ReadonlyMap<string, SpriteFrame>,
@@ -846,7 +848,7 @@ export class ZCGameRenderWorld {
             node.setRotationFromEuler(0, 0, item.rotation ?? 0);
             node.setScale(item.flipX ? -1 : 1, item.flipY ? -1 : 1, 1);
             // 尺寸由 UITransform 定死。与地图编辑器 `<image preserveAspectRatio="xMidYMid meet">`
-            // 同口径：在 `item.width × item.height` 框内**等比缩放进框**，而不是 CUSTOM 拉伸 ——
+            // 同口径：在 `item.width × item.height` 框内等比缩放进框，而不是 CUSTOM 拉伸 ——
             // 宽高比与图原始比例不一致时（旧数据、非等比手动缩放），拉伸会让游戏里变形、
             // 编辑器预览却正常。宽高等于原图时 fit = 1，正好 1:1。配它的 `sizeMode = CUSTOM`
             // 也烘在 prefab 里：默认的 TRIMMED 会按 SpriteFrame 自己重算尺寸，把这个 fit 吃掉。
@@ -863,7 +865,7 @@ export class ZCGameRenderWorld {
         }
     }
 
-    /** 摘掉棋盘上的装饰。重开局 / 退出对局 / 换地图都必须调，否则上一张图的装饰留在棋盘上。 */
+    /** 摘掉棋盘上的装饰。重开局 / 退出对局 / 换地图都必须调，否则上一张图的装饰留在棋盘上。*/
     clearDecor(): void {
         for (const node of this.decorNodes) {
             if (node.isValid) node.destroy();
@@ -876,7 +878,7 @@ export class ZCGameRenderWorld {
         this.renderDynamic(frame, events);
     }
 
-    /** 自选出生点阶段的棋盘表现；该阶段尚未创建 ZCGameModel。 */
+    /** 自选出生点阶段的棋盘表现；该阶段尚未创建 ZCGameModel。*/
     renderSpawnSelection(selection: ZCSpawnSelection, hintsVisible: boolean): void {
         const snapshot = selection.snapshot;
         const selectedByHex = this.spawnSelectedByHex;
@@ -905,7 +907,7 @@ export class ZCGameRenderWorld {
         for (const config of selection.map.hexes) {
             sectionOwnerByHex.set(config.id, (selection.regionOwnerOf(config.id) ?? 'neutral') as ZCFaction);
         }
-        // 已选/已确认主城的邻格：归属到自选方。这一份**只管领地底色与轮廓**（`ownerForHex`），
+        // 已选/已确认主城的邻格：归属到自选方。这一份只管领地底色与轮廓（`ownerForHex`），
         // 不再是「基地邻格」的表现来源 —— 需求 1 要的那 6 格深蓝高亮是下面单独一位
         // （`homeHighlight`），而且只给我方，不给 AI 的基地（三方同为深蓝会分不清是谁的圈）。
         const homeNeighborOwner = this.spawnHomeNeighborOwner;
@@ -923,7 +925,7 @@ export class ZCGameRenderWorld {
             selection.map.hexes, this.spawnOwnerForHex, this.spawnBoundaryMasks);
         const selectedHexId = playerSelection !== null
             && selection.invalidReason(ZCOwner.Player, playerSelection) === null ? playerSelection : null;
-        // 我方基地的 6 格高亮：**只在「我方还在选点」期间**给。`isPlacing` 一转 false（玩家点了
+        // 我方基地的 6 格高亮：只在「我方还在选点」期间给。`isPlacing` 一转 false（玩家点了
         // 【确认位置】）高亮就没了、按钮也收起来 —— 需求 4「基地落定，高亮消失」。注意整体阶段
         // 此时可能还没结束（要等 AI 确认），所以判据用 `isPlacing` 而不是 `snapshot.finished`。
         // 邻格取法统一在 `ZCSpawnSelection.baseNeighborIds` 里（自己别再拼一份 neighbors）。
@@ -980,14 +982,14 @@ export class ZCGameRenderWorld {
     /**
      * 选点阶段的【确认位置】按钮：定位到基地正下方 `SPAWN_BASE_CONFIRM_ROW_OFFSET` 格，随基地走。
      *
-     *  坐标口径与地块完全一致（`mapToViewX/Y` 的棋盘层局部坐标）—— 按钮已被 `ZCGame` 改挂到
-     *  `mapLayer` 下，和基地建筑同层同缩放，所以「2 格间距」在世界坐标里恒成立，不随地图缩放漂移。
+     * 坐标口径与地块完全一致（`mapToViewX/Y` 的棋盘层局部坐标）—— 按钮已被 `ZCGame` 改挂到
+     * `mapLayer` 下，和基地建筑同层同缩放，所以「2 格间距」在世界坐标里恒成立，不随地图缩放漂移。
      *
-     *  只有**我方正在选点**时才显示：玩家一确认（`isPlacing(ZCOwner.Player)` 转 false，尽管整体阶段
-     *  要等我方与 AI 都确认才结束）按钮就收起来 —— 需求 4「点击【确认位置】后退出选基地模式」。
-     *  显隐之外的一切（绿勾染色、点击回调）仍归 `ZCSpawnSelectionView`，这里**不**重复管，
-     *  避免同一个按钮出现两套判据。
-     */
+     * 只有我方正在选点时才显示：玩家一确认（`isPlacing(ZCOwner.Player)` 转 false，尽管整体阶段
+     * 要等我方与 AI 都确认才结束）按钮就收起来 —— 需求 4「点击【确认位置】后退出选基地模式」。
+     * 显隐之外的一切（绿勾染色、点击回调）仍归 `ZCSpawnSelectionView`，这里不重复管，
+     * 避免同一个按钮出现两套判据。
+    */
     private renderSpawnConfirmButton(baseHexId: number | null): void {
         const node = this.spawnConfirmButton;
         if (!node || !node.isValid) return;
@@ -1001,13 +1003,13 @@ export class ZCGameRenderWorld {
         node.setPosition(point.x, point.y, 0);
     }
 
-    /** 低频（0.15s 节流）地块与城墙刷新：城墙只随地形版本变化重绘，不必每帧跑。 */
+    /** 低频（0.15s 节流）地块与城墙刷新：城墙只随地形版本变化重绘，不必每帧跑。*/
     renderStatic(frame: ZCGameRenderFrame): void {
         this.renderHexSystem(frame);
         this.wallRenderer.render(frame);
     }
 
-    /** 逻辑仍为 20 Hz，连续坐标在相邻逻辑帧间插值。 */
+    /** 逻辑仍为 20 Hz，连续坐标在相邻逻辑帧间插值。*/
     renderDynamic(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
         this.renderUnitSystem(frame);
         this.renderEffectSystem(frame);
@@ -1075,14 +1077,14 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 中立资源获取特效（金币 / 神器飞向 HUD 栏位）**每帧**推进。
+     * 中立资源获取特效（金币 / 神器飞向 HUD 栏位）每帧推进。
      *
      * 为什么单开一条：飞行只有 0.6s ~ 1.5s，走 `renderStatic` 的 0.15s 节流会一顿一顿
      * （与飘字 / 激活 / 抖动同一批「必须逐帧」的通道对齐）。
      *
      * 只消费 `frame.neutralRewards`（模型在发奖那一拍入队）；事件被模型 `prune` 摘掉后
      * 特效类在同一帧销毁对应节点。金矿（激活）、兵力（出生）不进这条通道。
-     */
+    */
     private renderNeutralRewards(frame: ZCGameRenderFrame): void {
         // 旧测试手搓的 frame 没有 `neutralRewards` 字段（该字段 2026-10-20 才加）——
         // 拿不到就按「本帧无事件」处理，而不是 `undefined.length` 崩掉。
@@ -1096,7 +1098,7 @@ export class ZCGameRenderWorld {
         });
     }
 
-    /** 格子世界坐标 → 全屏演出层局部坐标；格子视图不在场景里返回 null（跳过该事件）。 */
+    /** 格子世界坐标 → 全屏演出层局部坐标；格子视图不在场景里返回 null（跳过该事件）。*/
     private neutralRewardStartLocal(hexId: number): { x: number; y: number } | null {
         const entityId = this.hexEntityBySource.get(hexId);
         if (entityId === undefined) return null;
@@ -1105,7 +1107,7 @@ export class ZCGameRenderWorld {
         return this.overlayLocalOf(node);
     }
 
-    /** 节点世界坐标 → 全屏演出层（overlayLayer）局部坐标；节点/图层不可用返回 null。 */
+    /** 节点世界坐标 → 全屏演出层（overlayLayer）局部坐标；节点/图层不可用返回 null。*/
     private overlayLocalOf(node: Node | null): { x: number; y: number } | null {
         if (!node?.isValid) return null;
         const overlay = this.options.overlayLayer;
@@ -1117,27 +1119,27 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 开局「点击金矿」提示：给金矿那一格套一圈整体描边**一直呼吸到它被点**（需求 2026-10-26）。
+     * 开局「点击金矿」提示：给金矿那一格套一圈整体描边一直呼吸到它被点（需求 2026-10-26）。
      *
      * 旧口径（2026-10-15 row10）只闪 4 个周期（4.4s）就自动收手 —— 玩家进对局慢一拍 /
      * 先看了别处，提示就已经消失，等于没提示。现在改成：
-     *  - 曲线没有窗口（`zcNeutralHintAlpha` 只要 `elapsed >= 0` 就一直 `1 ↔ 0.15` 呼吸）；
-     *  - **什么时候收手只看"还能不能点"**：目标被开发 / 被领走（地块不再 `canDevelop`、
-     *    资源点不再是金矿）或对局已经结束（结算演出，提示不该压在胜利扫场上）⇒ 收掉描边并结账
-     *    （`hintOutlineSettled`），之后不再每帧查。
+     * - 曲线没有窗口（`zcNeutralHintAlpha` 只要 `elapsed >= 0` 就一直 `1 ↔ 0.15` 呼吸）；
+     * - 什么时候收手只看"还能不能点"：目标被开发 / 被领走（地块不再 `canDevelop`、
+     * 资源点不再是金矿）或对局已经结束（结算演出，提示不该压在胜利扫场上）⇒ 收掉描边并结账
+     * （`hintOutlineSettled`），之后不再每帧查。
      *
-     * 目标口径 2026-10-26 修：优先**金矿地块**（`tileType = mine`，画 `icon_jk` + 造价 ——
-     * 开局那圈里的「金矿图标 + 50」），退而求其次才是中立金矿**资源点**。原来只认资源点，
+     * 目标口径 2026-10-26 修：优先金矿地块（`tileType = mine`，画 `icon_jk` + 造价 ——
+     * 开局那圈里的「金矿图标 + 50」），退而求其次才是中立金矿资源点。原来只认资源点，
      * 而这张图的金矿表现成地块类型 ⇒ 目标永远找不到，描边一格都没闪过。见 `findMineHintTarget`。
      *
      * 目标 id 只在第一次找到之后缓存（`hintTargetHexId`），不做每帧全盘 find ——
      * 提示现在是"整局常驻到被点"，`renderDynamic` 又是每帧都跑的。
      *
-     * 绘制落点：**棋盘最上层的共享画布**（`ensureHintOutlineGraphics`），不在格子自带的
+     * 绘制落点：棋盘最上层的共享画布（`ensureHintOutlineGraphics`），不在格子自带的
      * `TerritoryOutline` 上 —— 那份会被邻格底色与建筑盖掉半圈。
      *
-     * ⚠️ 必须挂在 `renderDynamic` 上：呼吸要 60fps，走 `renderStatic` 的 0.15s 节流会变成频闪。
-     */
+     * 必须挂在 `renderDynamic` 上：呼吸要 60fps，走 `renderStatic` 的 0.15s 节流会变成频闪。
+    */
     private renderNeutralHint(frame: ZCGameRenderFrame): void {
         if (this.hintOutlineSettled) return;
         // 对局已经结束（结算演出 / 扫场）⇒ 直接收手：提示是给"还能点"的阶段用的，
@@ -1150,7 +1152,7 @@ export class ZCGameRenderWorld {
         if (this.hintTargetHexId === null) {
             const found = findMineHintTarget(frame.hexesById);
             if (found === null) {
-                // 这一帧还没找到目标 —— **不结账**，下一帧继续找（开局头几帧 `canDevelop`
+                // 这一帧还没找到目标 —— 不结账，下一帧继续找（开局头几帧 `canDevelop`
                 // 还没翻成 true，一收手就再也起不来）。
                 this.renderHintOutline(null, 0);
                 return;
@@ -1168,16 +1170,16 @@ export class ZCGameRenderWorld {
             return;
         }
         const alpha = zcNeutralHintAlpha(this.visualTime(frame));
-        // `alpha <= 0`（时间非法）时先别画，但**不结账**：下一帧还能正常呼吸。
+        // `alpha <= 0`（时间非法）时先别画，但不结账：下一帧还能正常呼吸。
         this.renderHintOutline(this.hintTargetHexId, alpha);
     }
 
     /**
      * 把提示描边推到目标格（`hexId = null` / `alpha <= 0` ⇒ 收掉）。
      *
-     * 唯一写这份共享画布的入口。画布**位置跟着格心走**（`_lpos = 0` 时顶点口径才和领地轮廓
+     * 唯一写这份共享画布的入口。画布位置跟着格心走（`_lpos = 0` 时顶点口径才和领地轮廓
      * 对齐），透明度只变 < 2% 时连 `Graphics` 都不碰。
-     */
+    */
     private renderHintOutline(hexId: number | null, alpha: number): void {
         const graphics = this.ensureHintOutlineGraphics();
         const node = this.hintOutlineNode;
@@ -1201,15 +1203,15 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 提示画布（惰性建在棋盘**最上层** `CooldownOverlay` 上，整局复用）。
+     * 提示画布（惰性建在棋盘最上层 `CooldownOverlay` 上，整局复用）。
      *
      * 图层顺序见 `ZCGameBoard.prefab` 的子节点序：`MapWater / HexLayer / OutlineLayer /
      * ResourceLayer / DecorLayer / BuildingOverlay / CooldownOverlay`。挂最后一层并在
      * `setParent` 时追加到子节点序末尾 ⇒ 一定压在所有地块、城墙、资源图标、建筑与冷却环之上。
      * 城墙层是运行时插到 `OutlineLayer + 1` 的，也在它之下。
-     */
+    */
     private ensureHintOutlineGraphics(): Graphics | null {
-        // 判活看**节点**：画布是节点的子组件，节点没了组件必然一起失效；反过来只查组件
+        // 判活看节点：画布是节点的子组件，节点没了组件必然一起失效；反过来只查组件
         // 在自己的桩/老版本上不一定有 `isValid`，会每帧重建一份画布。
         const alive = this.hintOutlineNode?.isValid === true ? this.hintOutlineGraphics : null;
         if (alive) return alive;
@@ -1232,7 +1234,7 @@ export class ZCGameRenderWorld {
         return graphics;
     }
 
-    /** hexId → 地块视图（两跳查表 + 缺表兜底，散在几处就迟早有一处漏判 undefined）。 */
+    /** hexId → 地块视图（两跳查表 + 缺表兜底，散在几处就迟早有一处漏判 undefined）。*/
     private hexViewOf(hexId: number): ZCHexView | null {
         const entityId = this.hexEntityBySource.get(hexId);
         if (entityId === undefined) return null;
@@ -1252,14 +1254,14 @@ export class ZCGameRenderWorld {
      * 给某一格的建筑登记一次抖动（见 `ZCHexView.playBuildingShake`）。
      *
      * 三个来源共用它：
-     *  · **产兵**（需求 row5）：兵营 `spawnClocks` 走到 `recruitIntervalSeconds` 就产一批兵，
-     *    那批新兵首次出现在快照的帧正是「倒计时结束」这一拍（调用点在 `renderUnitEntity` 的
-     *    `isBirth` 分支）。一波多只新兵同帧出生 ⇒ 每只都登记一次、起点相同 ⇒ 建筑只抖一下。
-     *  · **产金**（需求 row12 / row13）：主城 / 金矿的金币倒计时结束时模型推来一条通知，
-     *    由 `renderBuildingShakes` 取走后再调这里。
+     * · 产兵（需求 row5）：兵营 `spawnClocks` 走到 `recruitIntervalSeconds` 就产一批兵，
+     * 那批新兵首次出现在快照的帧正是「倒计时结束」这一拍（调用点在 `renderUnitEntity` 的
+     * `isBirth` 分支）。一波多只新兵同帧出生 ⇒ 每只都登记一次、起点相同 ⇒ 建筑只抖一下。
+     * · 产金（需求 row12 / row13）：主城 / 金矿的金币倒计时结束时模型推来一条通知，
+     * 由 `renderBuildingShakes` 取走后再调这里。
      *
      * 取不到视图（换图 / 换局）就当没发生 —— 抖动是纯表现，不值得为它兜错。
-     */
+    */
     private triggerBuildingShake(hexId: number, now: number): void {
         const view = this.hexViewOf(hexId);
         if (!view) return;
@@ -1269,7 +1271,7 @@ export class ZCGameRenderWorld {
 
     /**
      * 每帧推进所有正在抖的建筑（挂 `renderDynamic`，与单位 / 卡牌同拍），
-     * 并先**取走**本帧模型攒下的产金抖动通知。
+     * 并先取走本帧模型攒下的产金抖动通知。
      *
      * 为什么单开一条：`renderHexSystem` 挂在 `renderStatic` 上、由 `ZCGame.update` 按 0.15s 节流，
      * 而抖动只有 2 × `SPAWN_SHAKE_PHASE_SECONDS` = 0.24s —— 6.7fps 根本播不出「先 Y 后 X」。
@@ -1277,7 +1279,7 @@ export class ZCGameRenderWorld {
      *
      * 抖动通知由 `ZCGame` 在本帧显式取走后传入：抖动不幂等，攒着不取
      * 或者取两遍就会一直重头抖。起点用这口与单位 / 卡牌共用的时钟（通知本身不带时间）。
-     */
+    */
     private renderBuildingShakes(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
         const shakes = events.buildingShakes;
         if (!shakes.length && !this.buildingShakeHexes.size) return;
@@ -1291,14 +1293,14 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 每帧推进建筑摧毁特效，并**取走**本帧模型攒下的「建筑被打掉」通知。
+     * 每帧推进建筑摧毁特效，并取走本帧模型攒下的「建筑被打掉」通知。
      *
      * 挂着 `renderDynamic`（与单位 / 卡牌同拍）：烟雾只活 `clip.duration`（4 帧 @12fps ≈ 0.33s），
      * 走 `renderStatic` 的 0.15s 节流会漏掉帧、看着像掉帧爆炸。
      *
-     * ⚠️ 回收必须写在「有无通知」的判空**之前** —— 不然没有新拆楼的那些帧就永远不回收，
+     * 回收必须写在「有无通知」的判空之前 —— 不然没有新拆楼的那些帧就永远不回收，
      * 播完的烟雾节点会一直挂在 mapLayer 上。
-     */
+    */
     private renderBuildingDestructions(frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
         const now = this.visualTime(frame);
         this.effectPool.recycleBuildingDestroyFx(now);
@@ -1321,7 +1323,7 @@ export class ZCGameRenderWorld {
      * 而每格自己的换色过渡只有 `ZC_CLAIM_WAVE_FADE_SECONDS = 0.1s` —— 6.7fps 会把它压成
      * 一帧硬切，看不到"过渡"。这里逐格写色（`ZCClaimWave` 内部会跳过没变化的格，所以
      * 每格整段只写十来次），平时不在播就只多一次 `active` 判断。
-     */
+    */
     private renderTerritoryClaimWave(frame: ZCGameRenderFrame): void {
         if (!this.claimWave.active) return;
         this.claimWave.advance(this.visualTime(frame));
@@ -1330,9 +1332,9 @@ export class ZCGameRenderWorld {
     /**
      * 抽卡小卡牌：与飘字同一套「按 id 对齐、新增即建、过期即回收」的池化写法。
      *
-     *   必须**每帧**刷（同 renderFloatTexts）：卡牌只活 2 秒多，跟棋盘重建的
+     * 必须每帧刷（同 renderFloatTexts）：卡牌只活 2 秒多，跟棋盘重建的
      * 0.15s 节流会一卡一卡。
-     */
+    */
     renderCardReveals(frame: ZCGameRenderFrame): void {
         // 全局缺 prefab ⇒ 整条通道不生效，方法开头就退（循环内 return 会截断后续实体渲染）。
         const cardRevealPrefab = this.options.cardRevealPrefab;
@@ -1344,9 +1346,12 @@ export class ZCGameRenderWorld {
             if (activeIds.has(sourceId)) continue;
             this.removeEntity(entityId);
             this.cardRevealEntityBySource.delete(sourceId);
+            if (this.shownPlayerCardReveals.delete(sourceId)) reportGuideComplete('cardRevealFinished');
         }
         for (const reveal of frame.cardReveals) {
             let entityId = this.cardRevealEntityBySource.get(reveal.id);
+            if (reveal.owner === 'player' && this.visualTime(frame) >= reveal.startedAt) this.shownPlayerCardReveals.add(reveal.id);
+            else this.shownPlayerCardReveals.delete(reveal.id);
             if (!entityId) {
                 const node = this.pool.acquire('cardReveal', () => instantiate(cardRevealPrefab));
                 this.attachToMapLayer(node);
@@ -1368,15 +1373,15 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 传说卡出场横幅：与小卡牌**同源**（都读渲染帧的卡牌事件），只筛出金卡（tier 4）。
+     * 传说卡出场横幅：与小卡牌同源（都读渲染帧的卡牌事件），只筛出金卡（tier 4）。
      *
-     *  为什么不再建一条模型层队列：横幅要展示的东西（owner / 卡名 / 兵种 / 时长）与小卡牌逐字相同，
+     * 为什么不再建一条模型层队列：横幅要展示的东西（owner / 卡名 / 兵种 / 时长）与小卡牌逐字相同，
      * 多一条队列就多一处会跟 `pushCardReveal` 脱节的状态。这里按 id 对齐的池化写法与
      * `renderCardReveals` 完全一致，只是换了挂载层与对象池 key。
      *
-     *   挂**全屏层**而不是 `mapLayer`：横幅的落位按本局人数在屏幕上等分（横向跟着人数变），
-     *  跟着棋盘滚动 / 被 view 的 Mask 裁掉都不对。
-     */
+     * 挂全屏层而不是 `mapLayer`：横幅的落位按本局人数在屏幕上等分（横向跟着人数变），
+     * 跟着棋盘滚动 / 被 view 的 Mask 裁掉都不对。
+    */
     renderLegendBanners(frame: ZCGameRenderFrame): void {
         // 全局缺 prefab ⇒ 整条通道不生效，方法开头就退（循环内 return 会截断后续横幅渲染）。
         const prefab = this.options.legendBannerPrefab;
@@ -1424,13 +1429,13 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 横幅竖排均分的落位上下文：本局人数 + 全屏层**宽高**。
+     * 横幅竖排均分的落位上下文：本局人数 + 全屏层宽高。
      *
-     *  竖排的每格高 = 层**高** / 人数（见 `ZCGameLegendBannerView.bannerHeightOf`），
-     *  所以层高是落位与高度的唯一真源；层宽只用于**滑入动画的起止位置**
-     *  （弹出方式保持原来的横向滑入）。都取 `overlayLayer` 的 `UITransform`（HUD 根就是全屏），
-     *  拿不到就返回 0 —— 视图会回退到设计稿 720×1280（工程 `designResolution`）。
-     */
+     * 竖排的每格高 = 层高 / 人数（见 `ZCGameLegendBannerView.bannerHeightOf`），
+     * 所以层高是落位与高度的唯一真源；层宽只用于滑入动画的起止位置
+     * （弹出方式保持原来的横向滑入）。都取 `overlayLayer` 的 `UITransform`（HUD 根就是全屏），
+     * 拿不到就返回 0 —— 视图会回退到设计稿 720×1280（工程 `designResolution`）。
+    */
     private legendBannerPlacement(frame: ZCGameRenderFrame): {
         readonly playerCount: number;
         readonly viewWidth: number;
@@ -1448,18 +1453,18 @@ export class ZCGameRenderWorld {
     /**
      * 注入 / 摘除选点阶段的【确认位置】按钮节点。
      *
-     *  进 `startSpawnSelection`、出 `finishSpawnSelection` / `shutdown` —— 都是 `ZCGame` 调
-     *  （借出时注入、归还时摘除）。摘除时必须显式置 `null`：`Node.destroy()` 当帧 `isValid`
-     *  仍为 true，只靠下面的 `isValid` 守卫会多写一帧坐标到一个正在销毁的节点上。
-     */
+     * 进 `startSpawnSelection`、出 `finishSpawnSelection` / `shutdown` —— 都是 `ZCGame` 调
+     * （借出时注入、归还时摘除）。摘除时必须显式置 `null`：`Node.destroy()` 当帧 `isValid`
+     * 仍为 true，只靠下面的 `isValid` 守卫会多写一帧坐标到一个正在销毁的节点上。
+    */
     setSpawnConfirmButton(node: Node | null): void {
         this.spawnConfirmButton = node;
     }
 
     /**
-     * 卡面帧到齐后**补刷已经弹出来**的横幅与小卡牌（帧表本身在控制器上，视图按 id 现取）。
+     * 卡面帧到齐后补刷已经弹出来的横幅与小卡牌（帧表本身在控制器上，视图按 id 现取）。
      * 卡视图要作废内容键，否则它缓存着"当时没有卡面图"的那一帧、会一直停在建筑图上。
-     */
+    */
     refreshLegendCardArt(): void {
         for (const view of this.legendBannerViews.values()) {
             if (view.isValid) view.setArtResolver((item) => this.resolveLegendArt(item));
@@ -1469,38 +1474,38 @@ export class ZCGameRenderWorld {
         }
     }
 
-    /** 横幅使用阵容页的专属立绘 / 职业占位；资源尚未到货时回退兵种或建筑图。 */
+    /** 横幅使用阵容页的专属立绘 / 职业占位；资源尚未到货时回退兵种或建筑图。*/
     private resolveLegendArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
         const cardArt = this.options.presentationArt.legendRoleArtFrames.get(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
-        // ② 老链：兵种 idle 立绘。
+        // 2. 老链：兵种 idle 立绘。
         if (reveal.unitId) {
             const frame = this.resolveUnitFrame(reveal.unitId);
             if (frame) return frame;
         }
-        // ③ 建筑图（金矿 / 主城这类没有头像也没有产出兵种的卡）。
+        // 3. 建筑图（金矿 / 主城这类没有头像也没有产出兵种的卡）。
         return this.resolveBuildingFrame(reveal.cardId, reveal.building);
     }
 
     /**
      * 本帧快照（描边染色用）。与 `UNIT_PRESENTATION_SCRATCH` 同口径：复用字段，
      * 不在调用点新建闭包／对象。
-     */
+    */
     private territoryFrame: ZCGameRenderFrame | null = null;
 
-    /** 逐格归属的稳定引用（整局一份，每帧直接传）。 */
+    /** 逐格归属的稳定引用（整局一份，每帧直接传）。*/
     private readonly ownerForHex = this.territoryOwnerForHex.bind(this);
 
     /**
-     * 逐格归属：领地**底图与描边共用同一处实现**（分开算就会出现「底图一个色、轮廓另一个色」）。
+     * 逐格归属：领地底图与描边共用同一处实现（分开算就会出现「底图一个色、轮廓另一个色」）。
      *
-     *  ① 扫场期间用胜利方覆盖真实归属（纯表现层，不回写模型）；
-     *  ② 中立且可开发的格子按可开发方染色。
+     * 1. 扫场期间用胜利方覆盖真实归属（纯表现层，不回写模型）；
+     * 2. 中立且可开发的格子按可开发方染色。
      *
-     *  2026-10-26 起不再有「按住窗」这一层：新点亮邻格的图标 / 价格在点击那一拍就跟脉冲一起
-     *  出现（生成动画只做缩放 + 淡入，不改归属），所以描边与图标天然同帧 —— row9 的
-     *  「描边不许比图标先变色」由「同一处判据 + 同一次静态刷新」保证。
-     */
+     * 2026-10-26 起不再有「按住窗」这一层：新点亮邻格的图标 / 价格在点击那一拍就跟脉冲一起
+     * 出现（生成动画只做缩放 + 淡入，不改归属），所以描边与图标天然同帧 —— row9 的
+     * 「描边不许比图标先变色」由「同一处判据 + 同一次静态刷新」保证。
+    */
     private territoryOwnerForHex(id: number): ZCFaction {
         const sweepOwner = this.sweep.ownerForHex(id);
         if (sweepOwner) return sweepOwner;
@@ -1512,10 +1517,10 @@ export class ZCGameRenderWorld {
 
     /**
      * 选点阶段的逐格归属 / 选中集合 / 解锁格 / 基地邻格高亮 / 边界掩码 ——
-     * 全是 `renderSpawnSelection` **每帧复用**的工作集（该方法被 `ZCGame.update` 每帧驱动）：
+     * 全是 `renderSpawnSelection` 每帧复用的工作集（该方法被 `ZCGame.update` 每帧驱动）：
      * 先 `clear` 再重填，禁止每帧 `new`。`spawnHomeNeighborOwner` / `spawnSectionOwnerByHex`
      * 同时由 `resolveSpawnOwnerForHex` 只读。
-     */
+    */
     private readonly spawnHomeNeighborOwner = new Map<number, ZCOwner>();
     private readonly spawnSectionOwnerByHex = new Map<number, ZCFaction>();
     private readonly spawnSelectedByHex = new Map<number, { owner: ZCOwner; confirmed: boolean }>();
@@ -1523,10 +1528,10 @@ export class ZCGameRenderWorld {
     private readonly spawnPlayerBaseNeighbors = new Set<number>();
     private readonly spawnBoundaryMasks = new Map<number, number>();
 
-    /** 选点侧的逐格归属（稳定引用，整局一份）。 */
+    /** 选点侧的逐格归属（稳定引用，整局一份）。*/
     private readonly spawnOwnerForHex = this.resolveSpawnOwnerForHex.bind(this);
 
-    /** 选点：已选/已确认主城的邻格 → 该方，其次区域归属，最后中立。 */
+    /** 选点：已选/已确认主城的邻格 → 该方，其次区域归属，最后中立。*/
     private resolveSpawnOwnerForHex(id: number): ZCFaction {
         return this.spawnHomeNeighborOwner.get(id)
             ?? this.spawnSectionOwnerByHex.get(id)
@@ -1536,23 +1541,23 @@ export class ZCGameRenderWorld {
     /**
      * 兵种 id → 该兵种的 idle 立绘（带缓存），小卡牌卡面用。
      *
-     *  单位视觉 Prefab 的形状是约定死的：1 个节点 + 1 个 `cc.Sprite`，`spriteFrame` 静态绑到
+     * 单位视觉 Prefab 的形状是约定死的：1 个节点 + 1 个 `cc.Sprite`，`spriteFrame` 静态绑到
      * `units/<兵种>/atlas/<兵种>-idle_0`（实测 28 个兵种全部如此），所以 `initialize` 时直接从
      * 模板节点读组件即可，不必另建「兵种 → 图路径」表 —— 多一张表就多一处会跟美术改路径脱节的地方。
      *
-     *  取不到就当这个兵种没有立绘，卡面回退建筑图；连 `unitVisualPrefabs` 不是 Map
-     *  （视图测试的 options 桩就是普通对象）也算取不到，绝不抛错。
-     */
+     * 取不到就当这个兵种没有立绘，卡面回退建筑图；连 `unitVisualPrefabs` 不是 Map
+     * （视图测试的 options 桩就是普通对象）也算取不到，绝不抛错。
+    */
     private resolveUnitFrame(unitId: string): SpriteFrame | null {
         return this.unitFrames.get(unitId) ?? null;
     }
 
-    /** 地块、卡牌和横幅共用同一份本局建筑选图规则。 */
+    /** 地块、卡牌和横幅共用同一份本局建筑选图规则。*/
     private resolveBuildingFrame(cardId: string | null, building: string): SpriteFrame | null {
         return zcBuildingArt(this.options.presentationArt, cardId, building);
     }
 
-    /** 飘字使用连续表现时间，过期节点进入有界复用池。 */
+    /** 飘字使用连续表现时间，过期节点进入有界复用池。*/
     renderFloatTexts(frame: ZCGameRenderFrame): void {
         // 全局缺 prefab ⇒ 整条通道不生效，方法开头就退（循环内 return 会截断后续飘字渲染）。
         const floatTextPrefab = this.options.floatTextPrefab;
@@ -1589,15 +1594,15 @@ export class ZCGameRenderWorld {
     /**
      * 受击特效：与飘字同一套「按 id 对齐、新增即建、过期即回收」的池化写法。
      *
-     *  必须**每帧**刷（不能跟棋盘重建的 0.15s 节流）：受击总共只有 0.15s，
-     *  一卡一卡会看到「闪一下、消失、再闪一下」。
+     * 必须每帧刷（不能跟棋盘重建的 0.15s 节流）：受击总共只有 0.15s，
+     * 一卡一卡会看到「闪一下、消失、再闪一下」。
      *
      * 播放 / 回收 / 挂点（挂 mapLayer、不挂被打单位）/ 棋盘坐标换算都在 `ZCEffectPool` 内。
-     */
+    */
     renderHitFxs(frame: ZCGameRenderFrame): void {
         const now = this.visualTime(frame);
         this.effectPool.recycleHitFx(now);
-        // 🔴 走 `syncHitFx` 而不是逐个 `playHitFx`：`frame.hitFxs` 是模型层**整条存活队列**
+        //  走 `syncHitFx` 而不是逐个 `playHitFx`：`frame.hitFxs` 是模型层整条存活队列
         // （0.15s 内每帧都在），逐帧重新 `play()` 会把动画 seek 回第 0 帧
         // ⇒ 受击特效「停顿在角色身上、播不动」（2026-10-16 山猫反馈）。
         this.effectPool.syncHitFx(frame.hitFxs, now);
@@ -1636,6 +1641,7 @@ export class ZCGameRenderWorld {
         this.effectViews.clear();
         this.floatTextViews.clear();
         this.cardRevealViews.clear();
+        this.shownPlayerCardReveals.clear();
         this.legendBannerViews.clear();
         this.hexEntityBySource.clear();
         this.unitEntityBySource.clear();
@@ -1685,16 +1691,16 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 地块激活表现（开发成功后的「Y 上移 + 翻转」）**每帧**推进。
+     * 地块激活表现（开发成功后的「Y 上移 + 翻转」）每帧推进。
      *
      * 为什么单开一条：`renderHexSystem` 挂在 `renderStatic` 上、由 `ZCGame.update`
      * 按 0.15s 节流 —— 6.7fps 播不出翻面，会一卡一卡（卡牌 / 特效 / 飘字都在
      * `renderDynamic` 里每帧刷，这里对齐它们）。
      *
-     * 只遍历**当前有激活事件**的格子，平时队列为空 ⇒ 零开销。事件过期由模型侧
+     * 只遍历当前有激活事件的格子，平时队列为空 ⇒ 零开销。事件过期由模型侧
      * `prune` 摘掉，摘掉那一刻这里不再调它 ⇒ 要复位的话靠 `ZCHexView.render` 的
      * 0.15s 兜底（同一条 `applyActivationFx`，幂等）。
-     */
+    */
     private renderHexActivations(frame: ZCGameRenderFrame): void {
         const activations = frame.hexActivations;
         if (!activations.length) return;
@@ -1747,13 +1753,13 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 新点亮邻格的**生成动画**（需求 2026-10-26：「新格子的生成动画和地块脉冲动画同步播放」）
+     * 新点亮邻格的生成动画（需求 2026-10-26：「新格子的生成动画和地块脉冲动画同步播放」）
      * 每帧推进。
      *
      * 为什么单开一条：`renderHexSystem` 挂在 `renderStatic` 上（0.15s 节流），生成动画只有
      * `ZC_HEX_NEIGHBOR_SPAWN_SECONDS`（0.5s）—— 走静态刷新只剩 3~4 帧，"长大"会变成"跳大"。
      * 队列平时为空 ⇒ 零开销；视图没了（换图 / 换局）也当播完处理。
-     */
+    */
     private renderDevelopableSpawns(frame: ZCGameRenderFrame): void {
         if (!this.developableSpawnHexes.size) return;
         const now = this.visualTime(frame);
@@ -1764,15 +1770,15 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 地块血条的**扣血白条**每帧推进（需求 2026-10-27：「被扣掉那段变白、0.13s 从右往左缩没」）。
+     * 地块血条的扣血白条每帧推进（需求 2026-10-27：「被扣掉那段变白、0.13s 从右往左缩没」）。
      *
      * 为什么单开一条：白条只有 `HEALTH_BAR_DAMAGE_TRAIL_SECONDS`（0.13s），而
      * `renderHexSystem` 挂在 `renderStatic` 上（0.15s 节流）—— 留在静态刷新里会「闪一帧就没」，
      * 甚至一帧都看不到。与 `renderDevelopableSpawns` 完全同一套机制：集合平时为空 ⇒ 零开销。
      *
-     * ⚠️ 这条通道**不读模型**：`advanceHealthBarTrail` 只用 `ZCHexView` 缓存的
+     * 这条通道不读模型：`advanceHealthBarTrail` 只用 `ZCHexView` 缓存的
      * `lastBarRatio` + 时间轴重算宽度，不碰 `ProgressBar`、不改血量，纯表现。
-     */
+    */
     private renderHealthBarTrails(frame: ZCGameRenderFrame): void {
         if (!this.healthBarTrailHexes.size) return;
         const now = this.visualTime(frame);
@@ -1783,18 +1789,18 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 把整盘领地轮廓汇总到 `OutlineLayer` 的**单个** `cc.Graphics` 上。
+     * 把整盘领地轮廓汇总到 `OutlineLayer` 的单个 `cc.Graphics` 上。
      *
      * 逐边描线的判据（`boundaryMask` 的 bit 含义）全在 `buildTerritoryBoundaryMasks` 里，
-     * 这里只负责把同一份 mask 画到共享画布上，**不碰判据**。
+     * 这里只负责把同一份 mask 画到共享画布上，不碰判据。
      *
      * 复用 `ownerForHex` + `boundaryMasks`（与地块底图染色同一套口径），保证
      * 「底图颜色」和「轮廓颜色」永远一致 —— 分成两处算就会在某帧对不上。
      *
      * 调用点：`renderHexSystem`（正式对局）和 `renderSpawnSelection`（选点阶段）。
-     * 两者都只在**内容变化**时被调（见各自的 `contentKey` / 选点状态机），
+     * 两者都只在内容变化时被调（见各自的 `contentKey` / 选点状态机），
      * 不是每帧。`ZCHexView` 不再挂载逐格轮廓画布。
-     */
+    */
     private redrawSharedOutline(
         //  具名类型用现成的 `ZCHexConfig`（两个调用点传的就是它）—— 不再内联形状、
         // 也不套 `Readonly<…>`（元素字段没人改，那层包装只是噪音；数组本身仍是只读视图）。
@@ -1805,11 +1811,11 @@ export class ZCGameRenderWorld {
     ): void {
         //  逐格归属按 `mode` 选一份现成的具名实现（原先由调用点各传一个内联闭包进来）。
         const ownerForHex = mode === 'spawn' ? this.spawnOwnerForHex : this.ownerForHex;
-        //  prefab 上 `OutlineLayer` 必须挂 `cc.Graphics`。这里**不崩**而是直接不画 ——
+        //  prefab 上 `OutlineLayer` 必须挂 `cc.Graphics`。这里不崩而是直接不画 ——
         // 崩掉会让整个对局开不起来（`renderHexSystem` 是地块系统的入口），而"轮廓没画"
         // 是个能靠肉眼立刻发现的视觉缺陷。宁可少画也不要整局打不开。
         if (!this.outlineGraphics) return;
-        // 先比内容，**没变就连 Graphics 都不碰**。
+        // 先比内容，没变就连 Graphics 都不碰。
         // `renderStatic` 是 0.15s 一次的低频刷新，而 `Graphics.clear()` + 重新 stroke
         // 会重建整个渲染数据（顶点缓冲上传）。绝大多数刷新里归属没变（只是血条/飘字在动），
         // 无条件重建等于每 0.15s 白upload 一次整盘轮廓。
@@ -1877,20 +1883,20 @@ export class ZCGameRenderWorld {
         flushOutlineSegments(this.outlineGraphics);
     }
 
-    /** 换局 / 换地图时强制下一次重画：探针缓冲跨局残留会让首帧沿用上一局的轮廓。 */
+    /** 换局 / 换地图时强制下一次重画：探针缓冲跨局残留会让首帧沿用上一局的轮廓。*/
     invalidateSharedOutline(): void {
         this.outlineDrawn.length = 0;
         this.outlineProbe.length = 0;
     }
 
     /**
-     * 开始结算扫场：建步号表，**但一格都不染**。幂等 —— 已在播时忽略。
+     * 开始结算扫场：建步号表，但一格都不染。幂等 —— 已在播时忽略。
      * 返回 false 表示这一盘没有可染的格子（全是虚空），调用方别等它。
      *
      * 起手不留亮格（`litStep = -1`，等第一次 `advanceVictorySweep` 才推到 0）是故意的：
      * 镜头要先拉远到看得见整盘，如果这里就把起手那一格染上，玩家在原视角下会先看到
      * 屏幕边上莫名变了一格、几百毫秒后镜头才动 —— 顺序反了。
-     */
+    */
     startVictorySweep(frame: ZCGameRenderFrame, winner: ZCOwner): boolean {
         const wasActive = this.sweep.active;
         const started = this.sweep.start(this.map, winner);
@@ -1899,12 +1905,12 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 推进扫场。返回 **true = 还在播**，调用方要继续等、先别弹结算。
+     * 推进扫场。返回 true = 还在播，调用方要继续等、先别弹结算。
      *
      * 只在「点亮到新的一格」时才重画：整盘 200 来格的 spriteFrame 赋值，每帧无条件
      * 刷会白白吃掉结算这几秒。逐格后重画频率高了一档，但 `ZCHexView.render` 自己用
      * `contentKey` 挡掉了无变化的格，实际只有刚跨过边界的那一两格会真的换图。
-     */
+    */
     advanceVictorySweep(frame: ZCGameRenderFrame, dt: number): boolean {
         if (this.sweep.advance(dt)) this.renderHexSystem(frame);
         return this.sweep.isPlaying;
@@ -1913,26 +1919,26 @@ export class ZCGameRenderWorld {
     /**
      * 中止扫场并把所有格子还原成真实归属的底色。
      * 重开一局、退出对局都要调 —— 否则下一局的格子会带着上一局胜利方的颜色出场。
-     */
+    */
     clearVictorySweep(): void {
         this.sweep.clear();
         for (const view of this.hexViews.values()) view.setSweepOwner(null);
     }
 
     /**
-     * 开始播「开局归属扩散」波：两座主城各自为圆心，把**中立格**的底色从选点阶段铺的
+     * 开始播「开局归属扩散」波：两座主城各自为圆心，把中立格的底色从选点阶段铺的
      * 半区色逐个换成战斗底色（半径越来越大、越往外越快）。
      *
      * 调用点在选点确认、正式对局建好之后（`ZCGame.finishSpawnSelection`）—— 那一刻模型里
-     * 的主城与邻格**已经归属好了**（它们不入波，一帧直接到位），而整盘底色还停在选点观感上。
+     * 的主城与邻格已经归属好了（它们不入波，一帧直接到位），而整盘底色还停在选点观感上。
      *
      * `selection` 只为取「这一格属于哪个半区」：那份分区口径（地图画的分区 / 按布局推导）
-     * 全在 `ZCSpawnSelection.regionOwnerOf` 里，这里不自己拼第二份。⚠️ 必须在调用方把
-     * `spawnSelection` 置空**之前**调（`finishSpawnSelection` 里那个局部 `selection` 仍有效）。
+     * 全在 `ZCSpawnSelection.regionOwnerOf` 里，这里不自己拼第二份。 必须在调用方把
+     * `spawnSelection` 置空之前调（`finishSpawnSelection` 里那个局部 `selection` 仍有效）。
      *
      * 返回 `false` = 这一盘没有要染的格（没有主城 / 主城全是中立 / 查不到半区），调用方不必等。
      * 幂等 —— 已在播时直接返回 true，重复调用不会重排时间表。
-     */
+    */
     startTerritoryClaimWave(frame: ZCGameRenderFrame, selection: ZCSpawnSelection): boolean {
         const map = frame.mapConfig;
         if (!map?.homes?.length) return false;
@@ -1956,7 +1962,7 @@ export class ZCGameRenderWorld {
     /**
      * 中止扩散波并把所有格交还常规渲染。
      * 重开一局、退出对局都要调 —— 否则下一局的格子会带着上一局中途的过渡色出场。
-     */
+    */
     clearTerritoryClaimWave(): void {
         this.claimWave.clear();
     }
@@ -2010,7 +2016,7 @@ export class ZCGameRenderWorld {
             view.setOutlineCopyMaterial(this.unitOutlineCopyMaterial);
             // 第二个参数是卡表 `pvpCard.prefabSize`（美术等比缩放，解析层永远给值、
             // 表里留空按 1）。 从 `definition` 取、不是从 prefab 取：同一个 prefab
-            // 可能被多张卡共用（女猎手/泰兰德、冰法师/吉安娜…），体型是**按卡**配的。
+            // 可能被多张卡共用（女猎手/泰兰德、冰法师/吉安娜…），体型是按卡配的。
             // 注入本局资源表；尺寸仍读取 definition.prefabSize。
             view.setPresentationArt(this.options.presentationArt, this.options.owner);
             view.initialize(definition);
@@ -2040,30 +2046,30 @@ export class ZCGameRenderWorld {
             presentation.y = mapToViewY(from.y + (unit.freeY - from.y) * progress) + portalFlightLift(progress);
         }
         this.unitViews.get(entityId)?.render(presentation);
-        // 出生光柱挂到**单位节点**下（不是 mapLayer 的兄弟），这样它自动跟着插值后的位置走。
+        // 出生光柱挂到单位节点下（不是 mapLayer 的兄弟），这样它自动跟着插值后的位置走。
         if (isBirth) {
             this.effectPool.playSpawnFx(this.scene.get(entityId).node, presentation.now);
             // 新兵自己原地抖一下（Y 拉 110% 回落、再 X 拉 110% 回落）。
             this.unitViews.get(entityId)?.playSpawnShake(presentation.now);
-            // 生成它的**建筑**也抖一下（需求 2026-10-15 row5）：兵营产兵倒计时结束时，
+            // 生成它的建筑也抖一下（需求 2026-10-15 row5）：兵营产兵倒计时结束时，
             // 建筑模型（根下的 BuildingIcon）同样「先 Y 后 X」抖一次。
             //
-            // 判据用「出生单位的 `sourceHexId` 这一格的建筑是不是**兵营**」，不用「有没有冷却环」——
-            // 主城 / 金矿也有环（收入 / 产出），而这条路要的是**产兵**建筑抖；
+            // 判据用「出生单位的 `sourceHexId` 这一格的建筑是不是兵营」，不用「有没有冷却环」——
+            // 主城 / 金矿也有环（收入 / 产出），而这条路要的是产兵建筑抖；
             // 主城 / 金矿的抖动走的是产金那条表现事件，两者别混。
             const barracksHexId = unit.portalFlight?.barracksHexId ?? unit.sourceHexId;
             if (frame.hexesById.get(barracksHexId)?.state.building === 'barracks') {
                 this.triggerBuildingShake(barracksHexId, presentation.now);
             }
         }
-        // 阵亡特效：**判死那一帧**播，坐标取 `presentation.x/y`（视图坐标，已含插值）。
+        // 阵亡特效：判死那一帧播，坐标取 `presentation.x/y`（视图坐标，已含插值）。
         // 挂 mapLayer 不挂宿主、按 unitId 去重只播一次 —— 口径都在 `ZCEffectPool.playDeathFx`。
         if (unit.battleState === 'dead') {
             this.effectPool.playDeathFx(presentation.x, presentation.y, unit.id, this.visualTime(frame));
         }
     }
 
-    /** 选点结束后抽签结果才落定；复用棋盘时须在首次战斗渲染前补齐兵团绑定。 */
+    /** 选点结束后抽签结果才落定；复用棋盘时须在首次战斗渲染前补齐兵团绑定。*/
     syncResolvedResources(resources: readonly ZCMapResolvedResource[]): void {
         this.resourceItemByHex.clear();
         for (const resource of resources) this.resourceItemByHex.set(resource.hexId, resource.itemId);
@@ -2077,9 +2083,9 @@ export class ZCGameRenderWorld {
      * 把「兵团」资源点要站的骨骼喂给地块视图。
      *
      * 卡 id 与数量逐格取自该格抽中的资源项（`neutralResourceGroup` 的 `param.resId` / `param.value`）；
-     * 骨骼 prefab 走既有 `unitVisualPrefabs`（已随首屏预加载），**不额外加载**。
+     * 骨骼 prefab 走既有 `unitVisualPrefabs`（已随首屏预加载），不额外加载。
      * 不是兵团项 / 卡没单位 prefab ⇒ 喂 `null`，视图退回图标或文字兜底而不是留空格。
-     */
+    */
     private injectResourceUnits(view: ZCHexView, hexId: number): void {
         const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
         view.setGateCooldownSeconds(item?.feature?.cooldownSeconds ?? 0);
@@ -2094,7 +2100,7 @@ export class ZCGameRenderWorld {
         view.setResourceUnits(cardId ?? '', prefab, monster ? 1 : item?.unitCount ?? 0);
     }
 
-    /** 卡 id → unitId。卡表里两者同值，但别假设：用目录反查，查不到就按同值兜一次。 */
+    /** 卡 id → unitId。卡表里两者同值，但别假设：用目录反查，查不到就按同值兜一次。*/
     private unitIdOfCard(cardId: string): ZCUnitId | null {
         const card = findCatalogCard(cardId);
         return card ? (card.unitId as ZCUnitId) : (cardId as ZCUnitId);
@@ -2122,12 +2128,12 @@ export class ZCGameRenderWorld {
     }
 
     /**
-     * 动态对象挂到 `mapLayer` 的**末尾**（新建即置顶）并继承其 layer。
+     * 动态对象挂到 `mapLayer` 的末尾（新建即置顶）并继承其 layer。
      *
      * 三处调用点（卡牌揭示 / 飘字 / 单位）都是「池里取出来 → 挂到棋盘层」的同一步，
      * 顺序固定：先 `setParent`（此时 `children.length` 才包含本节点）→ 置顶 → 同步 layer。
      * 地面特效不走这里（要插到棋盘之后，见 `zcCombatEffectSiblingIndex`）。
-     */
+    */
     private attachToMapLayer(node: Node): void {
         node.setParent(this.options.mapLayer);
         node.setSiblingIndex(this.options.mapLayer.children.length - 1);
@@ -2141,13 +2147,13 @@ export class ZCGameRenderWorld {
         const activeIds = this.effectIds;
         activeIds.clear();
         this.effectStates.length = 0;
-        //  🔴 「还没到点」的事件**整条不建节点**（2026-11-12 五雷轰顶「逐道出现」）。
+        //   「还没到点」的事件整条不建节点（2026-11-12 五雷轰顶「逐道出现」）。
         //
-        //  `startedAt` 允许落在**未来**：`ZCAttackResolutionSystem.castBoltLine` 一口气推 5 条
+        //  `startedAt` 允许落在未来：`ZCAttackResolutionSystem.castBoltLine` 一口气推 5 条
         //  `area` 事件，只靠 `startedAt = now + index × boltInterval` 排先后（判伤
         //  `nextWaveAt` 也各自错开）。这里原来无条件 `acquire` + `initialize`，而
         //  `initialize → mountVisual` 会立刻 `animation.stop()/play(默认 clip)` ⇒ 5 道雷在
-        //  **同一帧全部亮起、动画同拍**，`ZCCombatEffectView.render` 又把负进度钳成 0
+        //  同一帧全部亮起、动画同拍，`ZCCombatEffectView.render` 又把负进度钳成 0
         //  ⇒ 用户看到的就是「视觉上同时出现」（2026-11-12 第三次反馈；间隔改 0.15s 只改到了判伤）。
         //  到点后才建节点：出现时刻自然逐道错开，动画也从第 0 帧起播。
         const now = this.visualTime(frame);
@@ -2176,11 +2182,11 @@ export class ZCGameRenderWorld {
                 const key = `effect:${event.effectPrefabPath ?? ''}`;
                 const node = this.pool.acquire(key, () => instantiate(effectPrefab));
                 node.setParent(this.options.mapLayer);
-                // 层序：**地面区域特效要压在所有角色之下**（2026-10-30「形成火焰在脚底的视角」）。
+                // 层序：地面区域特效要压在所有角色之下（2026-10-30「形成火焰在脚底的视角」）。
                 // `mapLayer` 里没有「单位层」这种容器，单位 / 飘字 / 卡牌 / 受击特效全是平铺的兄弟节点，
-                // 规则是「新建就置顶」= 谁后创建谁在上 ⇒ 地面特效必须**显式插队到棋盘之后**，
+                // 规则是「新建就置顶」= 谁后创建谁在上 ⇒ 地面特效必须显式插队到棋盘之后，
                 // 靠创建顺序会出现"角色晚一帧出生就把火盖回去"的抖动。
-                // 2026-11-07：`area` 里也会出现**生物本体**（鹿神守护的小鹿），按路径登记了例外，
+                // 2026-11-07：`area` 里也会出现生物本体（鹿神守护的小鹿），按路径登记了例外，
                 // 所以走 `zcCombatEffectLayerOfPath`；未登记路径的结果与只看事件类型逐字相同。
                 node.setSiblingIndex(zcCombatEffectSiblingIndex(
                     zcCombatEffectLayerOfPath(event.type, event.effectPrefabPath),
@@ -2198,14 +2204,14 @@ export class ZCGameRenderWorld {
                 const view = node.getComponent(ZCCombatEffectView);
                 view.initialize(event.effectPrefabPath ? this.effectVisualPrefabs.get(event.effectPrefabPath) || null : null,
                     !!this.options.allowGenericEffects && !!event.effectPrefabPath,
-                    //  光束类特效（镭射飞龙）按**路径**认：同一份美术被普攻与「镭射死光」共用，
+                    //  光束类特效（镭射飞龙）按路径认：同一份美术被普攻与「镭射死光」共用，
                     //  配一次两条都对；见 `ZCBeamEffect`。
                     event.effectPrefabPath);
                 entityId = this.createEntity('effect', event.id, node);
                 this.pooledEntityKeys.set(entityId, key);
                 this.effectViews.set(entityId, view);
                 this.effectEntityBySource.set(event.id, entityId);
-                //  诊断④：导弹特效节点建出来的这一拍，本局特效清单里到底有没有这份美术。
+                //  诊断4.：导弹特效节点建出来的这一拍，本局特效清单里到底有没有这份美术。
                 if (event.effectPrefabPath && event.effectPrefabPath.includes('导弹')) {
                     missileLog('视图', `创建导弹特效节点 #${event.id}（${event.type}）`
                         + ` prefab=${this.effectVisualPrefabs.get(event.effectPrefabPath)?.name ?? '取不到（走按需补载）'}`
@@ -2221,7 +2227,7 @@ export class ZCGameRenderWorld {
                 this.resolveMissingEffectArt(view, event.effectPrefabPath, now);
             }
             view?.render(event, now, projectile, alpha);
-            //  诊断⑤：首帧渲染后的**节点真实状态**（挂上了却在屏幕外 / 缩放 0 / 子节点不激活，
+            //  诊断5.：首帧渲染后的节点真实状态（挂上了却在屏幕外 / 缩放 0 / 子节点不激活，
             //  三种都表现为「看不见」而日志一片安静）。
             if (view && event.effectPrefabPath?.includes('导弹') && !this.missileDiagFrameLogged.has(event.id)) {
                 this.missileDiagFrameLogged.add(event.id);
@@ -2241,19 +2247,19 @@ export class ZCGameRenderWorld {
     /**
      * 特效美术「到货即挂」＋「没在清单就按需补载」，两个缺口合在这一个入口。
      *
-     * 它们在战场上的表现**完全一样**（子弹整段飞行只剩一条 18px 通用短线，或彻底不可见），
+     * 它们在战场上的表现完全一样（子弹整段飞行只剩一条 18px 通用短线，或彻底不可见），
      * 但成因不同，必须分别处理：
      *
-     * 1. **后补没挂**：渐进局首帧 `effectVisualPrefabs` 是空 Map，节点以 `visualNode === null`
-     *    建出来，而本方法所在的渲染循环原来只在建节点那一刻调一次 `initialize` ⇒ 后补 job 到货
-     *    也没有任何人再挂。（2026-11-04 上午）
-     * 2. **压根没被要求加载**：本局特效清单由 `buildZCVisualResourcePlan(heroIds)` 按后端英雄
-     *    名单过滤，兵营产兵 / 波次兵 / GM 临时加的兵不在名单里 ⇒ 路径一条都没进清单，后补也
-     *    永远不会到货。单位模型早就有同型的按需补载（`ZCUnitView.resolveVisual` → `RequestUnitArt`），
-     *    特效侧一直空着 —— 所以那两类兵的子弹是**永久**消失，且连「加载失败」都不报。
-     *    （2026-11-04 下午：`ZCUnitView` 已报「兵种 68022 不在首屏美术清单里」，同一只兵的
-     *    `磁电菇_子弹攻击` / `雷法师_武将闪电` 两条特效路径也同时取不到，就是这条。）
-     */
+     * 1. 后补没挂：渐进局首帧 `effectVisualPrefabs` 是空 Map，节点以 `visualNode === null`
+     * 建出来，而本方法所在的渲染循环原来只在建节点那一刻调一次 `initialize` ⇒ 后补 job 到货
+     * 也没有任何人再挂。（2026-11-04 上午）
+     * 2. 压根没被要求加载：本局特效清单由 `buildZCVisualResourcePlan(heroIds)` 按后端英雄
+     * 名单过滤，兵营产兵 / 波次兵 / GM 临时加的兵不在名单里 ⇒ 路径一条都没进清单，后补也
+     * 永远不会到货。单位模型早就有同型的按需补载（`ZCUnitView.resolveVisual` → `RequestUnitArt`），
+     * 特效侧一直空着 —— 所以那两类兵的子弹是永久消失，且连「加载失败」都不报。
+     * （2026-11-04 下午：`ZCUnitView` 已报「兵种 68022 不在首屏美术清单里」，同一只兵的
+     * `磁电菇_子弹攻击` / `雷法师_武将闪电` 两条特效路径也同时取不到，就是这条。）
+    */
     private resolveMissingEffectArt(view: ZCCombatEffectView, path: string, now: number): void {
         const late = this.effectVisualPrefabs.get(path);
         if (late) { view.attachVisualPrefab(late); return; }
@@ -2262,7 +2268,7 @@ export class ZCGameRenderWorld {
             this.missingEffectArtSince.set(path, now);
             if (!this.missingEffectArtRequested.has(path)) {
                 this.missingEffectArtRequested.add(path);
-                //  请求在**第一次**取不到时就发（此刻正有一发子弹在飞，晚一帧就飞完了）；
+                //  请求在第一次取不到时就发（此刻正有一发子弹在飞，晚一帧就飞完了）；
                 //  控制器去重（pending / loaded 两个集合），失败也不会反复重试打网络。
                 EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: this.options.owner, path });
                 if (ZCDC_LOG_DIAGNOSTICS) console.info(`[ZCGameRenderWorld] 本局特效清单里没有这条美术，已按需补载：${path}`);
@@ -2279,9 +2285,9 @@ export class ZCGameRenderWorld {
     /**
      * 按需补载到货：把 prefab 并进本局特效表，下一次 {@link resolveMissingEffectArt} 就会挂上。
      *
-     * 只做**表内合并**，不直接找节点挂：同一路径此刻可能有好几发子弹在飞（AOE 弹幕），
+     * 只做表内合并，不直接找节点挂：同一路径此刻可能有好几发子弹在飞（AOE 弹幕），
      * 由各自的渲染循环在下一帧统一补挂，避免这里找不到节点、或在销毁中的节点上操作。
-     */
+    */
     applyEffectPrefab(path: string, prefab: Prefab): void {
         if (!path || !prefab) return;
         if (this.effectVisualPrefabs.get(path) === prefab) return;

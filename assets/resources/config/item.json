@@ -777,8 +777,8 @@
     "useType": 1,
     "type": 1,
     "quality": 4,
-    "icon": "icons/hero/tx_icon_MB_JXK_SHOUREN",
-    "iconPath": "icons/hero/tx_icon_MB_JXK_SHOUREN"
+    "icon": "",
+    "iconPath": ""
   },
   "10402": {
     "id": 10402,
@@ -788,8 +788,8 @@
     "useType": 1,
     "type": 1,
     "quality": 5,
-    "icon": "icons/hero/tx_icon_MB_JXK_YUREN",
-    "iconPath": "icons/hero/tx_icon_MB_JXK_YUREN"
+    "icon": "",
+    "iconPath": ""
   },
   "10403": {
     "id": 10403,
@@ -799,8 +799,8 @@
     "useType": 1,
     "type": 1,
     "quality": 6,
-    "icon": "icons/hero/tx_icon_MB_JXK_KULOU",
-    "iconPath": "icons/hero/tx_icon_MB_JXK_KULOU"
+    "icon": "",
+    "iconPath": ""
   },
   "10404": {
     "id": 10404,

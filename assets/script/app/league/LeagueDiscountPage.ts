@@ -1,3 +1,5 @@
+import { EventMgr } from '../../framework/event/EventMgr';
+import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
  * 「每日砍价」弹窗（老端 `play/LayerLeagueDiscount`，`ui/League/LeagueDiscount`）。
  *
@@ -213,6 +215,7 @@ export class LeagueDiscountPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
+        EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
         if (this.discountList) this.discountList.renderItemFn = (node, index) => this.renderRow(node, index);
         this.bindClick(this.saleButton, () => void this.onSale(), 'BtnSale');
         this.bindClick(this.buyButton, () => void this.onBuy(), 'BtnBuy');
@@ -225,11 +228,13 @@ export class LeagueDiscountPage extends PopupBase {
     }
 
     protected onClose(): void {
+        this.busy = false;
         this.revision += 1;
         this.stopCountdown();
     }
 
     onDestroy(): void {
+        EventMgr.instance.offTarget(this);
         this.revision += 1;
         // ⚠️ 不用手动 off() 事件（节点销毁时引擎会清），但定时器必须自己停：
         //    销毁期 `unschedule` 只碰调度器、不碰已销毁节点，是安全的。
@@ -473,12 +478,7 @@ export class LeagueDiscountPage extends PopupBase {
     /** 发一次砍价（`buy=false`）或购买（`buy=true`）。 */
     private async sendBargain(buy: boolean): Promise<void> {
         if (!this.beginWrite()) return;
-        try {
-            const result = await this.repository.requestBargain(buy, this);
-            await this.afterWrite(result);
-        } finally {
-            this.busy = false;
-        }
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'bargain', buy } } satisfies ILeagueRewardIntent);
     }
 
     /** 「金币」—— 从 `roleProperty` 表取 `resId=10` 那行的 `name`，取不到退回空串。 */
@@ -516,6 +516,15 @@ export class LeagueDiscountPage extends PopupBase {
         this.busy = true;
         return true;
     }
+
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
+        if (event.owner !== this) return;
+        try {
+            await this.afterWrite(event.status);
+        } finally {
+            this.busy = false;
+        }
+    };
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {

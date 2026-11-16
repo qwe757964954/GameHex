@@ -226,11 +226,11 @@ test('固定八卡夹具按 traits.attack 推出职业计数 战士2 / 法师1 /
         ],
     );
 
-    // 四职业各自使用对应的营地雕像
-    assert.equal(cardArtConfig.paths.get('hero.warrior'), 'icons/card/camp_warrior');
-    assert.equal(cardArtConfig.paths.get('hero.tank'), 'icons/card/camp_tank');
-    assert.equal(cardArtConfig.paths.get('hero.archer'), 'icons/card/camp_archer');
-    assert.equal(cardArtConfig.paths.get('hero.mage'), 'icons/card/camp_mage');
+    // 四职业各自使用对应的新版职业角标
+    assert.equal(cardArtConfig.paths.get('badge.warrior'), 'icons/card/yx_zhiye_zs');
+    assert.equal(cardArtConfig.paths.get('badge.tank'), 'icons/card/yx_zhiye_tk');
+    assert.equal(cardArtConfig.paths.get('badge.archer'), 'icons/card/yx_zhiye_ss');
+    assert.equal(cardArtConfig.paths.get('badge.mage'), 'icons/card/yx_zhiye_fs');
 
     // 品级是中文色名（表里是 1/2/3/4）
     assert.deepEqual([...new Set(player.map((card) => card.rarity))].sort(), ['green', 'blue', 'purple', 'gold'].sort() as never);
@@ -266,13 +266,13 @@ test('图标行 8 项 = 4 职业 + 4 阵营（阵营按 traits.camp 算，顺序
     assert.equal(resolveCardCamp({ ...noTraits, traits: { camp: '没这个阵营' } } as unknown as ZCDeckCard, cardArtConfig.lineup), null,
         '认不出的 camp 取值不落默认档（宁可空着，也不要瞎归一类）');
 
-    // 四个阵营均有独立图标，不与职业图标混用。
-    const campOn = ZC_CARD_CAMPS.map((camp) => cardArtConfig.paths.get(`camp.${camp}`));
-    assert.equal(campOn.length, 4);
-    assert.ok(campOn.every((name) => typeof name === 'string' && name.length > 0));
-    assert.equal(new Set(campOn).size, campOn.length);
-    const classOn = ZC_CARD_CLASSES.map((cardClass) => cardArtConfig.paths.get(`iconOn.${cardClass}`));
-    assert.equal(campOn.filter((name) => classOn.includes(name)).length, 0, '阵营与职业不能共用同一张图');
+    // 四个阵营均有新版统计条图标，不与职业角标混用。
+    const campIcons = ['common_img_hg', 'common_img_mg', 'common_img_pz', 'common_img_js'];
+    assert.equal(new Set(campIcons).size, 4);
+    for (const icon of campIcons) assert.ok(assetPath(`icons/card/${icon}.png`), icon);
+    const classBadges = ZC_CARD_CLASSES.map((cardClass) => cardArtConfig.paths.get(`badge.${cardClass}`));
+    assert.equal(new Set(classBadges).size, 4);
+    assert.equal(classBadges.filter((path) => campIcons.some((icon) => path?.endsWith(icon))).length, 0, '阵营与职业不能共用同一张图');
 });
 
 test('图标行只列卡数 > 0 的维度（0 项不进虚拟列表）', () => {

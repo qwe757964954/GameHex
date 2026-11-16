@@ -388,7 +388,7 @@ export class BattleTokenPage extends PopupBase {
             qualityOf: (resId) => goodsOf(snapshot, resId)?.quality ?? 1,
             iconOf: (resId) => this._rewardIcon(resId),
             frameOf: (quality) => this._frames.get(qualityFrameName(quality)) ?? null,
-            onTake: (order, index, resId) => { void this._takeReward(order, index, resId); },
+            onTake: (order, index, resId) => { void this._takeReward(index, resId); },
         };
 
         // 两个列表都接上（显隐另算）—— 只挂一次回调（规则 55）
@@ -544,7 +544,7 @@ export class BattleTokenPage extends PopupBase {
         if (this.tabBar) this.tabBar.setPosition(this.tabBar.position.x, -584 + bottomOffset, this.tabBar.position.z);
     }
 
-    private async _takeReward(order: number, index: number, resId: number): Promise<void> {
+    private async _takeReward(index: number, resId: number): Promise<void> {
         if (this._busy || !this._snapshot) return;
         this._busy = true;
         try {

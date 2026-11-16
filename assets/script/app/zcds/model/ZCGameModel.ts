@@ -15,38 +15,27 @@ import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig } from './ZCMat
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
 
-/** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。 */
+/** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。*/
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
 export const ZC_MAX_TICK_SECONDS = 5;
 /**
- * NPC 翻地块间隔的**下限**（秒），`openGrideTime` 的守卫值。
- *
- * 表里 `openGrideTime` 是「关卡翻地块频率」，策划想调快就填更小的数（用户 2026-11-11）。
- * 旧实现拿全局 `enemyAiIntervalSeconds`（2.8s）当下限，**1~2.7 秒的配置会被静默抬回 2.8**，
- * 调快等于没配。这里改成固定 1 秒下限：小于 1 秒按 1 秒算（再小就是逐帧翻格，AI 会失去节奏，
- * 也不符合「两次点击之间的最小间隔」这个语义）。
- */
+ * NPC 翻地块间隔下限（秒），`openGrideTime` 的守卫值；低于 1 秒按 1 秒算。
+ * 旧实现拿全局 2.8s 当下限，1~2.7 秒的配置会被静默抬回去。
+*/
 export const ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS = 1;
 /**
  * 塔防怪物体型的缩放上限。
  *
- * `defenceModWave.monsterSize` 当**倍率**用（1 = 原尺寸，2 = 两倍），这里只做防御性封顶：
+ * `defenceModWave.monsterSize` 当倍率用（1 = 原尺寸，2 = 两倍），这里只做防御性封顶：
  * 策划手滑写成 20 时不至于把整个棋盘糊住。
- */
+*/
 export const ZC_DEFENCE_MONSTER_SCALE_MAX = 2.5;
 const EMPTY_CONNECTED_DEVELOPED_HEXES: readonly number[] = [];
 
 /**
- * `defenceModWave.monsterSize` → 单位模型缩放倍率。
- *
- * 口径（2026-11-09 用户：出怪表的「怪物体型」没用上、BOSS 模型太小）：
- *  · `1` = 普通体型，**不缩放**（与改动前逐字一致）；
- *  · `2` = BOSS 体型，放大一倍；更大的值按表走，封顶 {@link ZC_DEFENCE_MONSTER_SCALE_MAX}；
- *  · 缺省 / 0 / 负数 / 非数字 ⇒ 1（老存档、老配置不加尺寸）。
- *
- * 值直接当倍率用（不再另设「档位 → 倍率」映射表）：策划想调大小只改表里那一个数，
- * 客户端不需要跟着改常量。
- */
+ * `defenceModWave.monsterSize` → 单位模型缩放倍率：1 = 原始，2 = BOSS 两倍，封顶 MAX。
+ * 缺省/0/负数/非数字按 1；值直接当倍率，不再另设档位映射表。
+*/
 export function defenceMonsterScale(monsterSize: number | null | undefined): number {
     const size = Number(monsterSize);
     if (!Number.isFinite(size) || size <= 1) return 1;
@@ -168,78 +157,52 @@ import type {
 
 /** 《占城大师》PVE 对局纯逻辑层，不依赖 Cocos API。
  * 棋盘解析在 ZCMapConfig，状态结构在 ZCGameTypes，地块生成与抽取规则在 ZCPvpTileRules。
- */
+*/
 
 export const ZC_UNIT_CAP = 100;
 /**
  * 上报的帧事件操作码（协议 `CmdBattleFrameInfo.op`）：1=翻格、2=释放技能、4=出生点。
  * （协议还有 3=聊天，客户端没有战斗内聊天，不采集。）
- */
+*/
 const FRAME_OP_DEVELOP = 1;
 const FRAME_OP_SKILL = 2;
 const FRAME_OP_SPAWN = 4;
-/** 城墙耐久来自本局规则的 wallMaxHp（PVP-全局表）。 */
+/** 城墙耐久来自本局规则的 wallMaxHp（PVP-全局表）。*/
 
-/** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。 */
+/** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。*/
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 /**
  * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
  *
  * 格距 36×42、格内切半径约 21 ⇒ 取 8 能保证一帧的飞行段不会被"跳格"漏掉，
  * 而每帧最多也只多算 2~3 个点（`hexIdAt` 是 3×3 邻域查表，代价可控）。
- */
+*/
 const STRUCTURE_SAMPLE_STEP = 8;
-/** 伤害飘字存活时长（秒）。 */
+/** 伤害飘字存活时长（秒）。*/
 const FLOAT_TEXT_DAMAGE_SECONDS = 0.85;
 /**
- * 金币飘字存活时长（秒）。
- *
- * 2026-10-23 由 **1.1 → 0.62**：金币不再是"慢慢往上飘 1.1 秒"，而是「落到地上 → 停一下 →
- * 迅速缩小消失」（曲线见 `ZCGameViewUtil.floatTextGoldDrop`，三段比例 30% / 15% / 55%）。
- * 1.1s 摊到"缩小"这一段只剩 0.6s，读起来是"慢慢缩小"；0.62s 才配得上用户要的"迅速消失"。
- * 三段实秒数：掉落 0.19s、停住 0.09s、缩没 0.34s。
- */
+ * 金币掉落飘字存活时长（秒）；曲线见 `floatTextGoldDrop`（掉落 30% / 停顿 15% / 缩小 55%）。
+ * 0.62s 才配得上「迅速缩小消失」的手感，拉长会变回慢慢缩小。
+*/
 const FLOAT_TEXT_GOLD_SECONDS = 0.62;
 /**
- * 建筑产金飘字（主城 / 金矿的周期产出）的存活时长（秒）。
- *
- * 2026-10-27 与击杀掉落**拆开**：掉落是"迅速收掉"（0.62s），产出是"亮一下给你看"
- * —— 金币 icon 与数字要从建筑顶部往上升 50px 再淡出，0.62s 里 50px 会像被弹出去。
- * 0.9s 的实秒分配：上升 0.63s（走完 50px）、之后 0.27s 停在顶端淡出
- * （曲线见 `ZCGameViewUtil.floatTextGoldRise`，上升段 70%、30% 起淡出）。
- */
+ * 建筑产金飘字存活时长（秒）：上升 50px 再淡出，0.9s 分成上升 0.63s、顶端淡出 0.27s。
+ * 与击杀掉落的 0.62s 拆开，两者表现不同。
+*/
 const FLOAT_TEXT_GOLD_INCOME_SECONDS = 0.9;
 /**
- * 受击特效的存活时长（秒）= **表现总时长**。
- *
- * 2026-10-17 山猫「所有职业受击效果总时长固定 0.15s」后重定：**0.8 → 0.15**。
- * 这个数同时决定两件事，两边必须同值：
- *  - **队列保留时长**：`hitFxQueue` 到点就出队（视图层的「已播过」去重记录也跟着清）；
- *  - **拿不到 clip 时的兜底**：prefab 被改坏、连 `defaultClip` 都没有时按它回收。
- *
- * 正常路径的播放时长**由视图层锁定**：`ZCEffectPool.HIT_FX_TARGET_SECONDS = 0.15`
- * 用 `AnimationState.speed = clip.duration / 0.15` 把整段 clip 压进 0.15s
- * （美术真值仍是「帧数/18fps」：射手 0.4444s、法师 0.7222s）。
- *
- * 🔴 **改这个数必须同步改 `HIT_FX_TARGET_SECONDS`**（`tests/zcds-hit-fx.test.ts` 有断言钉住两者）。
- * 历史上这里写过 1.2 / 0.8 两版「留余量」的值 —— 现在两边同值，不需要余量了：
- * 队列比动画长出来的那一段，就是「播完了还杵着」的空窗。
- */
+ * 受击特效存活时长（秒），队列保留时长与拿不到 clip 时的兜底共用这个值。
+ * 正常播放由 `ZCEffectPool.HIT_FX_TARGET_SECONDS` 压到 0.15s，两处必须同值
+ * （`tests/zcds-hit-fx.test.ts` 有断言）；多出来的部分就是「播完还杵着」的空窗。
+*/
 const HIT_FX_SECONDS = 0.15;
 /**
- * 出兵落点相对兵营中心的偏移半径（逻辑单位）。
- *
- * 形如「半个格距」：新兵从兵营本体旁边冒出来，但**不压**在兵营图标中心。
- *
- * 为什么不是正好 21（行距 42 的一半）：同列相邻两格的中心正好相距一个行距，
- * 中点在 21 处 —— 那是**本格与同列邻格的公共边**。`ZCMapGeometry.hexIdAt`
- * 先取最近中心再判格内，落在公共边上时两边等距，归属由扫描顺序决定（实测会判给
- * 上邻格）。退 1 个逻辑单位（≈ 2.5 视图像素，肉眼看不出来）即可严格落在本格内：
- * 对角邻格中心距 √(36²+21²) ≈ 41.7，其平分线在 20.84，所以 20 在**任意角度**都安全。
- */
+ * 出兵落点相对兵营中心的偏移半径（逻辑单位），取 20 而不是行距一半的 21。
+ * 21 正好压在相邻格的公共边上，归属会判给上邻格；退 1 后任意角度都落在本格内。
+*/
 const SPAWN_OFFSET_RADIUS = HEX_GRID_LOGICAL_ROW_STEP / 2 - 1;
 
-/** HUD 只读的塔防进度，不进入战斗快照；恢复时可由配置、时间与存活单位重新推导。 */
+/** HUD 只读的塔防进度，不进入战斗快照；恢复时可由配置、时间与存活单位重新推导。*/
 export interface ZCDefenceWaveProgress {
     totalWaves: number;
     spawnedWaves: number;
@@ -248,23 +211,23 @@ export interface ZCDefenceWaveProgress {
     secondsUntilNextWave: number | null;
     aliveEnemies: number;
     /**
-     * 当前波（`currentWaveId` 那一波）**剩余的总血量**（蓝湖「BOSS」稿的血条填充）。
+     * 当前波（`currentWaveId` 那一波）剩余的总血量（蓝湖「BOSS」稿的血条填充）。
      *
      * 「按波聚合」而不是取某只代表怪：设计稿那条红条压着一整波怪，怪死一只条掉一截。
-     */
+    */
     currentWaveHp: number;
-    /** 当前波的**总血量上限**（生成那一刻固定下来，与剩余量同减才不会被"分母也跟着掉"骗到）。 */
+    /** 当前波的总血量上限（生成那一刻固定下来，与剩余量同减才不会被"分母也跟着掉"骗到）。*/
     currentWaveMaxHp: number;
-    /** 当前敌方服务端生命倍率（HUD 上显示成 `X4` 那类）。 */
+    /** 当前敌方服务端生命倍率（HUD 上显示成 `X4` 那类）。*/
     currentWaveHpRate: number;
-    /** 当前波用的卡 id（HUD 用它取首领头像与名字）；该波没生成过单位时为 null。 */
+    /** 当前波用的卡 id（HUD 用它取首领头像与名字）；该波没生成过单位时为 null。*/
     currentWaveCardId: string | null;
     /**
-     * 当前波是不是 **BOSS 波**。
+     * 当前波是不是 BOSS 波。
      *
      * HUD 那条大血条（`ZCBossPanel`）只在它为真时展示；普通小怪只有头顶血条。
      * 判据：`wave.isBoss`；表里没填时按「最后一波」兜底（口径见 `projectDefenceWaves`）。
-     */
+    */
     currentWaveIsBoss: boolean;
 }
 
@@ -273,22 +236,22 @@ export class ZCGameModel {
     private state: ZCSnapshot;
     private debugDraw: { card: ZCDeckCard; remaining: number } | null = null;
     private readonly debugCards = new Map<string, ZCDeckCard>();
-    /** 服务端完成战斗接口需要的操作记录，随结算 commands 一起上报。 */
+    /** 服务端完成战斗接口需要的操作记录，随结算 commands 一起上报。*/
     readonly frameEvents: Array<{ frameId: number; owner: ZCOwner; op: number; params: number[] }> = [];
     private readonly config: ZCMatchConfig;
     private readonly activeOwners: readonly ZCOwner[];
     private readonly geometry: ZCMapGeometry;
-    /** 弹道找结构目标时复用（每次调用开头清空），避免每帧每弹道新建 Set。 */
+    /** 弹道找结构目标时复用（每次调用开头清空），避免每帧每弹道新建 Set。*/
     private readonly structureHexScratch = new Set<number>();
     private readonly captureSystem: ZCCaptureSystem;
-    /** 模型能力表：各系统 context 从这里取子集，见 `IZCModelServices`。 */
+    /** 模型能力表：各系统 context 从这里取子集，见 `IZCModelServices`。*/
     private readonly services: IZCModelServices;
     private readonly movement: ZCMovementSystem;
     private readonly economyContext: ZCEconomyContext;
     private readonly definitions: ReadonlyMap<string, ZCUnitDefinition>;
-    /** 静态技能/星级修正按阵营隔离并预计算，tick 内不再分配临时对象。 */
+    /** 静态技能/星级修正按阵营隔离并预计算，tick 内不再分配临时对象。*/
     private readonly effectiveDefinitions: Record<ZCOwner, ReadonlyMap<string, ZCUnitDefinition>>;
-    /** 2026-10-13 新增 9 种 statId 的累加值（暴击/弹幕/连击/产兵）；不在 `ZCUnitDefinition` 上，按 owner × unitId 索引。 */
+    /** 2026-10-13 新增 9 种 statId 的累加值（暴击/弹幕/连击/产兵）；不在 `ZCUnitDefinition` 上，按 owner × unitId 索引。*/
     private readonly unitStatPatches: Partial<Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>> = {};
     private readonly cards: Record<ZCOwner, ReadonlyMap<string, ZCDeckCard>>;
     private readonly skillRuntime: Record<ZCOwner, ReadonlyMap<string, ZCSkillRuntimeDefinition>>;
@@ -369,70 +332,54 @@ export class ZCGameModel {
     private readonly pveDefence: Readonly<ZCPveDefenceConfig> | null;
     private readonly outcomeContext: IZCOutcomeContext;
     /**
-     * NPC（本地 AI 席位）**两次翻地块之间的最小间隔**（秒）。
-     *
-     * 口径（2026-11-11 用户确认）：
-     * - `openGrideTime` 是「战斗中每个 NPC 点地块的频率」，**只压 NPC**，玩家翻格不受影响；
-     * - 它约束的是「两次点击之间的间距」，**计时从第一次翻格之后才开始**（首格不被拖后，
-     *   见 `restoreOrCreateState` 的 `aiClock` 预置）；
-     * - 守卫值 `max(ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS, openGrideTime)`，下限 **1 秒**
-     *   （旧实现拿全局 2.8s 当下限，1~2.7 秒的配置会被静默抬回去，策划调快直接失效）；
-     * - `0` / 缺省 ⇒ 不额外限速，仍按全局 `enemyAiIntervalSeconds` 走。
-     */
+     * NPC 两次翻地块的最小间隔（秒）：只约束 NPC，玩家翻格不受影响；
+     * 计时从第一次翻格之后开始，首格不被拖后。取值 max(下限 1s, openGrideTime)；
+     * 0 / 缺省表示不额外限速，仍走全局 `enemyAiIntervalSeconds`。
+    */
     private readonly aiDevelopIntervalSeconds: number;
     /**
      * `levelInfo.gradeProModifier`：NPC 席位翻地块抽卡的品质权重乘数。
      *
-     * **玩家席位永远不套用**（`drawRulesOf` 里按 `owner === ZCOwner.Player` 拦截）：
+     * 玩家席位永远不套用（`drawRulesOf` 里按 `owner === ZCOwner.Player` 拦截）：
      * 这是关卡难度旋钮，压的是 NPC 抽卡质量，不是改全局地块表。
      * `null` ⇒ 本关没配（塔防关卡、以及空对象的 17 关）。
-     */
+    */
     private readonly npcRarityModifier: ZCPvpRarityModifier | null;
     private nextDefenceWaveIndex = 0;
     /**
-     * 本局**真正的胜方**（`draw` / 未定 = `null`），由 `ZCOutcomeSystem` 判定后写入。
-     *
-     * `status` 只有 playing / victory / defeat 三态，而且是以**我方视角**分的 ——
-     * 4 人局里"我方出局"可能是 2 号红方赢、也可能是 4 号紫方赢，两者 status 都是 `defeat`。
-     * 结算胜利扫场要按**胜方本色**铺地，靠 status 反推就只能一律铺成 2 号色（2026-10-28 用户报的 bug）。
-     *
-     * ⚠️ 刻意**不写进 `ZCSnapshot`**（与 `floatTexts` / `hitFxs` 同一口径）：它是纯表现用的
-     * 一次性结论，混进快照要牵动 `version` 与存档兼容。快照里已经有 `status` + `hexes`，
-     * 需要复盘时按同一套规则重算即可。
-     */
+     * 本局真正的胜方（draw/未定 = null），由 `ZCOutcomeSystem` 写入。
+     * `status` 只分我方视角的胜负，4 人局里无法反推是哪一方赢，结算铺地要靠这个字段。
+     * 刻意不进快照：纯表现用的一次性结论，复盘时按同一套规则重算。
+    */
     private matchWinner: ZCOwner | null = null;
     /**
-     * 每波**生成过**的单位 id 与本波总血量上限（键 = 波序，与 `nextDefenceWaveIndex` 同序）。
+     * 每波生成过的单位 id 与本波总血量上限（键 = 波序，与 `nextDefenceWaveIndex` 同序）。
      *
-     * 塔防 HUD 那条「本波剩余 / 本波总」的血条要一个**不会跟着死亡往下掉**的分母 ⇒ 总血量必须在
+     * 塔防 HUD 那条「本波剩余 / 本波总」的血条要一个不会跟着死亡往下掉的分母 ⇒ 总血量必须在
      * 生成那一刻记下来（`spawnUnit` 里应用了服务端倍率与卡组加成，事后算不回来）。
      * 只记 id 不记对象引用：单位死亡后会被 `removeDeadUnits` 摘掉，活着查不到就按 0 计。
-     */
+    */
     private readonly defenceWaveLedger: Array<{ ids: number[]; maxHp: number }> = [];
-    /** 本局有效伤害统计；重开清零，存档恢复从零统计。 */
+    /** 本局有效伤害统计；重开清零，存档恢复从零统计。*/
     private readonly damageDealt: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
-    /** 每方「承受伤害」累计值；只给对局结算页（GameRunAway）读，不进快照。 */
+    /** 每方「承受伤害」累计值；只给对局结算页（GameRunAway）读，不进快照。*/
     private readonly damageTaken: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
 
     /**
-     * 建成的兵营「首批兵」延迟生成队列。
-     *
-     * 开格那拍兵营若已完工，首批兵不能立刻冒出来 —— 地块正播「脉冲 + 缩没」的收场动画，
-     * 单位当帧出现会跟它抢镜。卡牌靠 `startedAt` 推到收场之后（有「未开始」态），
-     * 单位是实体、没有这种态，只能把生成本身推迟（见 `ZC_CARD_START_SECONDS`）。
-     * 建造中完工那条路径（`constructionComplete`）没有激活表现，不经过这里。
-     */
+     * 建成的兵营「首批兵」延迟生成队列：开格动画期间单位不能提前站上来。
+     * 建造中完工那条路径没有激活表现，不经过这里。
+    */
     private readonly deferredBarracksSpawns: Array<{ atSeconds: number; hexId: number }> = [];
 
     private readonly presentation = new ZCBattlePresentationQueue();
 
     /**
-     * `random` 是**整局唯一的随机源**：初始地块分布（`ZCSnapshotCodec.createInitialState`
+     * `random` 是整局唯一的随机源：初始地块分布（`ZCSnapshotCodec.createInitialState`
      * → `createPvpTileTypes`）、抽地块与金币保底（`drawPvpTile`）、AI 选格、单位出生抖动
      * 全部走它。正式对局由服务端种子播种 —— `ZCGame.createGame` 传的就是
      * `ZCSeededRandom.createSeededRandom(seed)`；缺省 `Math.random` 供离线对局、
      * 编辑器里单独挂载与单测使用（行为与接入种子之前逐位一致）。
-     */
+    */
     constructor(snapshot?: ZCSnapshot | null, random: () => number = Math.random, config?: ZCMatchConfig) {
         this.random = random;
         this.config = captureZCMatchConfig(config);
@@ -441,16 +388,16 @@ export class ZCGameModel {
         for (const definition of this.config.statusDefinitions ?? []) this.statusSystem.register(definition);
         this.rules = this.config.rules;
         this.pveDefence = this.config.pveDefence?.waves.length ? this.config.pveDefence : null;
-        //  关卡「翻地块频率」只做**限速**：AI 原本 2.8s 一拍，关卡要求 18s 就按 18s 走。
+        //  关卡「翻地块频率」只做限速：AI 原本 2.8s 一拍，关卡要求 18s 就按 18s 走。
         //  0 表示「够钱就翻」⇒ 不额外压，保持全局节奏。
         const openGrideTime = Number(this.config.openGrideTime);
-        //  关卡「翻地块频率」= NPC 两次点地块的**最小间隔**，可上可下：表里填 1~2.7 秒同样生效，
+        //  关卡「翻地块频率」= NPC 两次点地块的最小间隔，可上可下：表里填 1~2.7 秒同样生效，
         //  只有小于 1 秒才会被压到 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`（旧实现用全局 2.8s 当下限，
         //  等于只能变慢、不能变快，策划调快会被静默吞掉）。0 = 不额外限速，按全局节奏。
         this.aiDevelopIntervalSeconds = Number.isFinite(openGrideTime) && openGrideTime > 0
             ? Math.max(ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS, openGrideTime)
             : this.rules.enemyAiIntervalSeconds;
-        //  关卡「抽卡品质权重乘数」：**只给 NPC 席位**。空对象等同于没配，早期就归一成 null，
+        //  关卡「抽卡品质权重乘数」：只给 NPC 席位。空对象等同于没配，早期就归一成 null，
         //  免得每一拍抽卡都白跑一次乘算。
         const gradeProModifier = this.config.gradeProModifier;
         this.npcRarityModifier = gradeProModifier && Object.keys(gradeProModifier).length > 0
@@ -509,7 +456,7 @@ export class ZCGameModel {
 
     // 构造期装配：目标字段均为 readonly，只能在 constructor 内赋值，故此处返回后由调用方装配。
     //
-    // ⚠️ 各 context 会重复声明 unitPosition / effectiveDefinition / units 等能力，**不要合并成统一能力表**。
+    //  各 context 会重复声明 unitPosition / effectiveDefinition / units 等能力，不要合并成统一能力表。
     // 重复是有意的类型收窄，彼此并不等价：
     //   · `IZCStatusResolutionContext.effectiveUnitDefinition` 只返回 Pick<ZCUnitDefinition,'attack'|'maxHp'>
     //     （状态系统只读这两个字段，实测只出现 attack×3 / maxHp×2）；其 `damageUnit` 返回 void（不产生飘字）。
@@ -551,7 +498,7 @@ export class ZCGameModel {
             applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
             exportStatusEffects: () => this.statusSystem.exportSnapshot(),
             //  命中挂状态的概率掷骰（2026-11-11 磁电菇「五雷轰顶」的 30% 麻痹）：
-            //  必须走**对局种子随机**，`Math.random` 会让回放/快照重算给出不同的控制结果。
+            //  必须走对局种子随机，`Math.random` 会让回放/快照重算给出不同的控制结果。
             random: this.services.random,
             //  区域波次的吸血（2026-11-04）：区域上下文只有「谁打的 + 这一跳掉多少」，
             //  这里补回源单位，转给普攻同一条 applyLifesteal（比例取法完全同源）。
@@ -596,21 +543,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 弹道消失的同一拍，补一条**定格光束**的表现事件（镭射飞龙）。
-     *
-     * 2026-11-03 需求：「朝着目标发射一条逐渐延长的射线，触碰到第一个敌人时就会停止延长，
-     * 造成 1 次伤害，特效缓慢变透消失，0.18s 内消失」。
-     *
-     * 前两句本来就是既有行为（长度只跟弹头走、命中即回收，所以「不再伸长」是天然的）；
-     * 缺的是最后那句 —— 弹道被摘掉的同时整条光柱也消失了，看着像「闪一下」。
-     *
-     * 这里补的是一条 `beamHold` 事件：`from` / `to` 取**出手点 / 命中点**（弹道被丢弃前
-     * 已经被 `ZCProjectileSystem` 钉在接触点上，所以落点精确，不靠猜），
-     * 寿命 = 配表里登记的淡出秒数，视图据此按满长画、逐帧压透明度。
-     *
-     * 不结算任何伤害 —— 伤害在弹道命中那一拍已经结完了；这条事件也不参与任何碰撞，
-     * 它只是 `state.combatEvents` 里的一段表演。
-     */
+     * 弹道消失同一拍补一条定格光束事件（镭射飞龙）：命中后光柱不跟着弹道一起消失。
+     * `from`/`to` 取出手点与命中点，寿命取配表淡出秒数，视图按满长画、逐帧压透明度。
+     * 不结算伤害、不参与碰撞，只是 `state.combatEvents` 里的一段表演。
+    */
     private lingerBeam(projectile: Readonly<ZCProjectileState>): void {
         //  追踪导弹到点（没撞到人、飞到头）：在末端播爆炸，而不是光束淡出。
         if (projectile.impactEffectPrefabPath) {
@@ -755,11 +691,11 @@ export class ZCGameModel {
                 const center = this.hexCenter(hexId);
                 this.grantGold(owner, amount, center.x, center.y,
                     FLOAT_TEXT_GOLD_INCOME_SECONDS, 'goldincome');
-                // 🔴 需求 2026-10-15 row12 / row13：「建筑生成金币的倒计时结束也播放一次
+                //  需求 2026-10-15 row12 / row13：「建筑生成金币的倒计时结束也播放一次
                 //【建筑生成单位动画】」「基地和金矿建筑生成金币时，也播放一次建筑的抖动效果，
                 // 效果和已经做好的【建筑生成单位角色】动画一致」。
                 //
-                // 挂在这里而不是 `grantGold` 里面：那条私有路径**击杀 / 拆建筑奖励**也走
+                // 挂在这里而不是 `grantGold` 里面：那条私有路径击杀 / 拆建筑奖励也走
                 //（它们没有"建筑在产金币"这回事，没有建筑该抖）。而 `economyContext.grantGold`
                 // 的调用点只有两处、正好就是需求的这两个对象：主城（`context.homeId(owner)`）
                 // 与金矿（`mine.id`）—— 见 `ZCEconomySystem.tickIncome`。
@@ -769,7 +705,7 @@ export class ZCGameModel {
             },
             constructionComplete: (hex) => {
                 // 兵营建成出首批兵（数量 = 卡表 cycleBaseValue），产兵倒计时随后才从 0 起跑。
-                // ⚠️ 与「开格即完工」那条路同一条推迟口径：建造期短于脉冲段的兵营，
+                //  与「开格即完工」那条路同一条推迟口径：建造期短于脉冲段的兵营，
                 // 建成那一刻水波纹还没扩完 ⇒ 兵不能顶着波纹站上来。
                 this.scheduleFirstBarracksUnit(hex.id);
             },
@@ -842,13 +778,13 @@ export class ZCGameModel {
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
             //  副轨主动（横扫）：走独立的扇形结算，不推进普攻节拍与强化 CD。
             castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
-            //  自身光环（大威天芦「无尘禁土」102503）：在**本体脚下**开一片跟随本体的周期伤害区域。
+            //  自身光环（大威天芦「无尘禁土」102503）：在本体脚下开一片跟随本体的周期伤害区域。
             //  与副轨/强化互不干涉 —— 它有自己的 `auraReadyAt`，不推进普攻节拍。
             castSelfAura: (unit) => ZCAttackResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext),
             //  五雷轰顶（磁电菇 101603）：沿「目标 → 背朝向」排开 3/4/5 道雷，每道独立结算。
             //  与副轨 / 光环同样不推进普攻节拍，用自己的 `boltReadyAt`。
             castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
-            //  精密陷阱（科学家 103504）：在**自己原地**留一个陷阱，踩响或到点各炸一次。
+            //  精密陷阱（科学家 103504）：在自己原地留一个陷阱，踩响或到点各炸一次。
             //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
             //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
@@ -871,7 +807,7 @@ export class ZCGameModel {
             inAttackRange: (unit) => this.unitTargeting.hasTargetInAttackRange(unit),
             //  触发范围本身：给多点打击 / 移形换影的搜索半径封顶，只压不抬。
             attackReachOf: (unit) => this.unitTargeting.attackReachOf(unit),
-            //  技能**自己的**触发距离（2026-11-12 用户口径）：喷火 102603 要「小于普攻距离、
+            //  技能自己的触发距离（2026-11-12 用户口径）：喷火 102603 要「小于普攻距离、
             //  与特效 350px 对齐」⇒ 最近目标还在 350 表值 px 之外时待触发，不消费 CD。
             nearestEnemyDistance: (unit) => this.unitTargeting.nearestEnemyDistance(unit),
         };
@@ -884,7 +820,7 @@ export class ZCGameModel {
             this.state = restored.snapshot;
         } else {
             this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
-            //  `openGrideTime` 约束的是「两次点击之间的最小间隔」，**计时从第一次翻格之后开始**（用户 2026-11-11）：
+            //  `openGrideTime` 约束的是「两次点击之间的最小间隔」，计时从第一次翻格之后开始（用户 2026-11-11）：
             //  新建快照时把 AI 时钟预置成一个完整间隔，第一次 `advance` 立刻给一拍（NPC 有钱且
             //  有相邻可翻格就当场动第一格），之后每 `aiDevelopIntervalSeconds` 秒一拍。
             //  若从 0 起算，这一列就变成了「开局干等 N 秒」的首刀延迟 —— 配 18 秒要等 18 秒才动，语义不符。
@@ -932,7 +868,7 @@ export class ZCGameModel {
         return this.state;
     }
 
-    /** 生成本帧供表现层读取的投影；规则派生值在模型边界一次性计算。 */
+    /** 生成本帧供表现层读取的投影；规则派生值在模型边界一次性计算。*/
     createRenderFrame(): ZCGameRenderFrame {
         return {
             snapshot: this.state,
@@ -943,7 +879,7 @@ export class ZCGameModel {
                 ? Math.max(0, Math.min(1, (this.state.pendingSeconds ?? 0) / ZC_SIMULATION_STEP_SECONDS))
                 : 1,
             owners: this.activeOwners,
-            // 胜方身份随帧下发：结算扫场要按**胜方本色**铺地。为 null（未定 / 平局）时
+            // 胜方身份随帧下发：结算扫场要按胜方本色铺地。为 null（未定 / 平局）时
             // 视图按 status 兜底，见 `ZCGame.beginVictorySweep`。
             winner: this.matchWinner,
             hexesById: this.hexRenderMap ??= this.buildHexRenderMap(),
@@ -971,7 +907,7 @@ export class ZCGameModel {
         return hexesById;
     }
 
-    /** 一次性表现通知的唯一消费入口；由对局编排层取走后交给动态渲染。 */
+    /** 一次性表现通知的唯一消费入口；由对局编排层取走后交给动态渲染。*/
     drainPresentationEvents(): ZCBattlePresentationEvents {
         return {
             buildingShakes: this.presentation.drainBuildingShakes(),
@@ -982,7 +918,7 @@ export class ZCGameModel {
     get terrainRevision(): number { return this.topologyRevision; }
     get mapConfig(): ZCMatchConfig['map'] { return this.config.map; }
     definitionForUnit(id: string): ZCUnitDefinition { return this.unitDefinition(id); }
-    /** UI/调试读取本局最终属性；基础目录仍可用 definitionForUnit 查询。 */
+    /** UI/调试读取本局最终属性；基础目录仍可用 definitionForUnit 查询。*/
     effectiveDefinitionForUnit(owner: ZCOwner, id: string): ZCUnitDefinition {
         return this.effectiveUnitDefinitionFor(owner, id);
     }
@@ -1002,17 +938,17 @@ export class ZCGameModel {
      * 双方累计伤害（造成 / 承受），供对局结算页 GameRunAway 读取。
      * 刻意不写进 ZCSnapshot：结算数据只在本局生命周期内有效，混进快照会牵动
      * `version` 和存档兼容，收益不成正比。
-     */
+    */
     get damageStats(): Readonly<Record<ZCOwner, { readonly dealt: number; readonly taken: number }>> {
         return Object.fromEntries(this.activeOwners.map((owner) => [owner, {
             dealt: this.damageDealt[owner], taken: this.damageTaken[owner],
         }])) as Record<ZCOwner, { readonly dealt: number; readonly taken: number }>;
     }
 
-    /** 当前存活的飘字（Old Client 战斗文本 / 金币增长），视图每帧只读消费。 */
+    /** 当前存活的飘字（Old Client 战斗文本 / 金币增长），视图每帧只读消费。*/
     get floatTexts(): readonly Readonly<ZCFloatText>[] { return this.presentation.floatTexts; }
 
-    /** 当前存活的受击特效（按攻击方职业选 prefab），视图每帧只读消费。 */
+    /** 当前存活的受击特效（按攻击方职业选 prefab），视图每帧只读消费。*/
     get hitFxs(): readonly Readonly<ZCHitFx>[] { return this.presentation.hitFxs; }
 
     private pushFloatText(input: Omit<IZCFloatTextOptions, 'now'>): ZCFloatText | null {
@@ -1026,10 +962,10 @@ export class ZCGameModel {
     /**
      * 本局实际参赛的席位（人数 = `length`，2~4）。
      *
-     *  视图层要按人数分格摆位（传说卡出场横幅竖向均分屏高，见
-     *  `ZCGameLegendBannerView.layoutYOf` 与 `bannerHeightOf`），
-     *  而 `activeOwners` 本身是私有的 —— 这里只开一个只读出口，不外泄可写引用。
-     */
+     * 视图层要按人数分格摆位（传说卡出场横幅竖向均分屏高，见
+     * `ZCGameLegendBannerView.layoutYOf` 与 `bannerHeightOf`），
+     * 而 `activeOwners` 本身是私有的 —— 这里只开一个只读出口，不外泄可写引用。
+    */
     get owners(): readonly ZCOwner[] {
         return this.activeOwners;
     }
@@ -1044,14 +980,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 给某一方加金币（含飘字）。
-     *
-     * `kind` 决定**表现走哪条路**（2026-10-27 用户口径：建筑产金与击杀掉落的动画必须区分开）：
-     * · `'goldincome'` —— 建筑**产出**（主城 / 金矿）：coin + 数字从建筑顶部升起 50px 并淡出；
-     * · `'gold'` —— 击杀 / 拆建筑的**掉落**（缺省）：原地掉落 → 缩小消失，无数字。
-     * ⚠️ 缺省值是 `'gold'` 是刻意的：两个"掉落"调用点不该因为漏传参数就变成产金表现，
-     *    而产金只有一个调用点（`economyContext.grantGold`），显式写清更不容易接错。
-     */
+     * 给某一方加金币（含飘字）。`kind` 决定表现：`'goldincome'` 建筑产出（升起 50px + 数字），
+     * `'gold'` 击杀/拆建筑掉落（原地缩小消失，无数字）。
+     * 缺省取 `'gold'`，避免掉落调用点漏传参数变成产金表现。
+    */
     private grantGold(
         owner: ZCOwner, amount: number, x: number, y: number, floatSeconds: number,
         kind: 'gold' | 'goldincome' = 'gold',
@@ -1067,13 +999,13 @@ export class ZCGameModel {
         return hex.neutralFeature?.patrol ? zcMonsterPosition(this.config.map, hex, this.state.elapsedSeconds) : config;
     }
 
-    /** null 表示无时限；塔防只由清空全部波次或我方主城失守结束。 */
+    /** null 表示无时限；塔防只由清空全部波次或我方主城失守结束。*/
     get remainingSeconds(): number | null {
         if (this.pveDefence) return null;
         return Math.max(0, this.state.durationSeconds - this.state.elapsedSeconds);
     }
 
-    /** 塔防 HUD 的当前波次、下波倒计时与剩余敌人数；普通对局返回 null。 */
+    /** 塔防 HUD 的当前波次、下波倒计时与剩余敌人数；普通对局返回 null。*/
     get defenceWaveProgress(): Readonly<ZCDefenceWaveProgress> | null {
         if (!this.pveDefence) return null;
         const current = this.nextDefenceWaveIndex > 0
@@ -1111,12 +1043,12 @@ export class ZCGameModel {
      *
      * 先认表里的 `isBoss`（`monsterType=3`），表里没填时按「每组最后一波」兜底 ——
      * 与 `projectDefenceWaves` 同一口径，保证 HUD、胜负判定、配置投影说的是同一件事。
-     */
+    */
     private isBossWave(index: number): boolean {
         return index === this.defenceBossWaveIndex();
     }
 
-    /** BOSS 波序号；表里有标 `isBoss` 就认它，没有就按「最后一波」。无塔防 ⇒ -1。 */
+    /** BOSS 波序号；表里有标 `isBoss` 就认它，没有就按「最后一波」。无塔防 ⇒ -1。*/
     private defenceBossWaveIndex(): number {
         const waves = this.pveDefence?.waves;
         if (!waves?.length) return -1;
@@ -1131,7 +1063,7 @@ export class ZCGameModel {
      *
      * 胜负判定只认它（「只有击败 BOSS 才算胜利」）：中间波次清空不再算赢。
      * 单位在死亡动画结束后会被摘掉，查不到按已死计。
-     */
+    */
     private defenceBossState(): { spawned: boolean; alive: boolean } {
         const defence = this.pveDefence;
         const index = this.defenceBossWaveIndex();
@@ -1143,7 +1075,7 @@ export class ZCGameModel {
                 const unit = this.units.byId.get(id);
                 return !!unit && unit.battleState !== 'dead';
             })
-            // ⚠️ 账本只活在内存里，快照恢复后是空的：这时按「场上还有没有 BOSS 波那张卡的怪」兜底，
+            //  账本只活在内存里，快照恢复后是空的：这时按「场上还有没有 BOSS 波那张卡的怪」兜底，
             // 不能因为账本没了就把 BOSS 判成已死（否则读档即胜利）。残留的小怪若与 BOSS 同卡，
             // 会把胜利拖到清完为止 —— 宁可晚赢，也不能没打 BOSS 就赢。
             : this.state.units.some((unit) => unit.owner !== ZCOwner.Player
@@ -1157,15 +1089,8 @@ export class ZCGameModel {
     }
 
     /**
-     * 某席位当前占了几格（对局内排行榜用）。
-     *
-     * ⚠️ 排行榜要按 `2~4` 个席位逐个取数（见 `model/ZCRankBoard`），
-     * 而 `playerTerritoryCount` / `enemyTerritoryCount` 只能覆盖"我方"与"敌方合计"，
-     * `territoryCount` 本身是私有的 ⇒ 这里开一个**按 owner 取**的只读出口。
-     *
-     * 与上面两个 getter 的区别：**不合并**。`enemyTerritoryCount` 在 3~4 人局里
-     * 是把 enemy2/enemy3 加在一起，排行榜要的是**每一席各自的数**。
-     */
+     * 某席位当前占了几格，排行榜按席位逐个取数用；与 `enemyTerritoryCount` 不同，不合并。
+    */
     territoryCountOf(owner: ZCOwner): number {
         return this.territoryCount(owner);
     }
@@ -1196,7 +1121,7 @@ export class ZCGameModel {
         return this.rules.unitCapPerSide;
     }
 
-    /** 建筑建造/工作周期的圆形进度条数据。 */
+    /** 建筑建造/工作周期的圆形进度条数据。*/
     buildingCooldown(hexId: number): ZCBuildingCooldownState | null {
         const hex = this.hex(hexId);
         if (!hex || hex.building === 'none') return null;
@@ -1215,7 +1140,7 @@ export class ZCGameModel {
         return ZCOutcomeSystem.scoreFor(this.state, ZCOwner.Player, this.homeId(ZCOwner.Player));
     }
 
-    /** 从指定已开发格出发，返回同阵营六方向相邻的完整连通块；抽空格也算已开发。 */
+    /** 从指定已开发格出发，返回同阵营六方向相邻的完整连通块；抽空格也算已开发。*/
     connectedDevelopedHexIds(hexId: number): readonly number[] {
         const cached = this.connectedDevelopedCache.get(hexId);
         if (cached) return cached;
@@ -1251,9 +1176,9 @@ export class ZCGameModel {
     /**
      * 某一方能否开发这一格 —— 玩家点击（`ZCGame.onHexClick`）与敌方 AI 共用这一处判据。
      *
-     * 己方格是老口径；**中立格也能开发，且开发即宣告归属**（`developFor` 里落 owner）：
+     * 己方格是老口径；中立格也能开发，且开发即宣告归属（`developFor` 里落 owner）：
      * 只要它与本方的已开发锚点相邻。等于给「派兵走过去占领」补了一条「花钱买地」的路。
-     */
+    */
     canDevelopFor(owner: ZCOwner, hexId: number): boolean {
         return ZCTileSystem.canDevelopFor(this.state, this.config.map, hexId, owner);
     }
@@ -1268,7 +1193,7 @@ export class ZCGameModel {
         return this.success(`已给自己增加 ${amount} 对局金币`);
     }
 
-    /** GM 覆盖本局后续我方抽卡；不改卡组、金币费用或 AI 抽卡。 */
+    /** GM 覆盖本局后续我方抽卡；不改卡组、金币费用或 AI 抽卡。*/
     setDebugDrawCard(cardId: string, count: number): ZCActionResult {
         if (this.state.status !== 'playing') return this.fail('本局已经结束。');
         if (!Number.isSafeInteger(count) || count <= 0) return this.fail('翻格次数必须为正整数。');
@@ -1383,9 +1308,9 @@ export class ZCGameModel {
         this.refreshTileStates();
         //  塔防局同样要跑 NPC 翻地（2026-11-09）：NPC 靠翻地块解锁新的怪物卡牌，
         //  早前这里用 `!this.pveDefence` 整段跳过 ⇒ 红方棋盘从开局起一格都不动。
-        //  节奏：时钟从**第一次翻格之后**起算（新建快照时预置成一个完整间隔，见 `restoreOrCreateState`），
+        //  节奏：时钟从第一次翻格之后起算（新建快照时预置成一个完整间隔，见 `restoreOrCreateState`），
         //  每步最多给一拍，所以同一席位两次翻格的间隔 ≥ `aiDevelopIntervalSeconds`。
-        //  ⚠️ 这里每步只减一次、只跑一拍 `runEnemyAI`（多的部分累加到下一步）—— 一帧内不补拍；
+        //   这里每步只减一次、只跑一拍 `runEnemyAI`（多的部分累加到下一步）—— 一帧内不补拍；
         //  实时间隔 ≥ 1 秒、步长 0.05 秒，永远补不到第二拍。
         this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
         if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
@@ -1453,30 +1378,17 @@ export class ZCGameModel {
         this.refreshTileStates();
     }
 
-    /** 旧战斗测试从此入口直接触发出手；测试迁到独立攻击夹具后可删除。 */
+    /** 旧战斗测试从此入口直接触发出手；测试迁到独立攻击夹具后可删除。*/
     private sendAttack(unit: ZCUnitState): void {
         ZCAttackResolutionSystem.sendAttack(this.state, unit, this.attackResolutionContext);
     }
 
     /**
-     * 弹道这一轮的**结构候选**（墙体 / 建筑），写进 `out`。
-     *
-     * 2026-11-06 需求：「单位角色子弹攻击如果是只造成一次伤害的，只会伤害接触的单位
-     * （角色 / 城墙 / 建筑），不会穿透」。
-     *
-     * 改前只查**锁定格**，而且 `targetKind === 'unit'` 直接 `null` ⇒ 子弹锁定敌人时
-     * 城墙 / 建筑**完全不参与判定**，于是出现了「子弹穿过城墙上打到里面单位」。
-     * 现在两路都给：
-     *  ① 锁定格：打墙 / 打楼 / 追踪导弹钉在格上的既有口径原样保留；
-     *  ② 飞行段经过的每一格：墙体是沿格边围一圈的，所以「进入该格」≈「撞到墙」。
-     *
-     * **目标所在的格不算障碍**：子弹的终点就是那个单位，它脚下的那一圈墙属于"它的保护壳"，
-     * 不是子弹路上的障碍 —— 否则站在城墙 / 主城里的单位在破墙之前完全免疫远程，
-     * PVE 防御关的怪（刷在敌方主城格）会直接变成打不到。真正要拦的是**中途**的格。
-     *
-     * 谁先被碰到交给 `ZCProjectileSystem` 用扫掠 t 比较（与单位同一套连续碰撞），
-     * 本方法只负责「路上有哪些结构」，不做圆判定。
-     */
+     * 弹道这一轮的结构候选（墙体/建筑），写进 `out`。
+     * 两路来源：锁定格（打墙/打楼/追踪导弹的既有口径）+ 飞行段经过的每一格。
+     * 目标所在格不算障碍，否则站在城墙里的单位破墙前完全免疫远程；真正要拦的是中途的格。
+     * 谁先被碰到交给 `ZCProjectileSystem` 用扫掠 t 比较，本方法只列候选。
+    */
     private projectileStructureTargets(
         projectile: Readonly<ZCProjectileState>,
         fromX: number, fromY: number, toX: number, toY: number,
@@ -1485,7 +1397,7 @@ export class ZCGameModel {
         out.length = 0;
         const seen = this.structureHexScratch;
         seen.clear();
-        //  ① 锁定格（子弹原本要打的那一格）—— 与改前逐字一致。
+        //  1. 锁定格（子弹原本要打的那一格）—— 与改前逐字一致。
         if (projectile.targetKind !== 'unit') {
             const locked = this.structureTargetOfHex(projectile.targetId, projectile.owner);
             if (locked) { out.push(locked); seen.add(locked.id); }
@@ -1502,7 +1414,7 @@ export class ZCGameModel {
             const target = this.units.byId.get(projectile.targetId);
             if (target) targetHexId = this.geometry.hexIdAt(target.freeX, target.freeY) ?? -1;
         }
-        //  ② 飞行段扫过的格。段很短（一帧只飞十几个逻辑 px），采样点通常 1~3 个。
+        //  2. 飞行段扫过的格。段很短（一帧只飞十几个逻辑 px），采样点通常 1~3 个。
         const dx = toX - fromX;
         const dy = toY - fromY;
         const samples = Math.max(1, Math.ceil(Math.hypot(dx, dy) / STRUCTURE_SAMPLE_STEP));
@@ -1516,7 +1428,7 @@ export class ZCGameModel {
         }
     }
 
-    /** 单格 → 结构目标；`null` = 这格对这颗子弹没有可打的结构（己方 / 中立 / 无墙无楼）。 */
+    /** 单格 → 结构目标；`null` = 这格对这颗子弹没有可打的结构（己方 / 中立 / 无墙无楼）。*/
     private structureTargetOfHex(hexId: number, owner: ZCOwner): ZCCombatTarget | null {
         const hex = this.hex(hexId);
         if (!hex) return null;
@@ -1582,7 +1494,7 @@ export class ZCGameModel {
         return ZCLegacyCombatSystem.applySelfBuffs(this.state, source, buffs, this.legacyCombatContext);
     }
 
-    /** Old repel moves away from the sender by the configured world-space distance. */
+    /** Old repel moves away from the sender by the configured world-space distance.*/
     private applyLegacyKnockback(target: ZCUnitState, source: ZCUnitState, rawDistance: number): void {
         const amount = Math.abs(rawDistance) * this.rules.combatDistanceScale;
         if (!(amount > 0)) return;
@@ -1600,7 +1512,7 @@ export class ZCGameModel {
         this.displaceUnit(target, dx * amount, dy * amount);
     }
 
-    /** Forced movement stays on playable cells and invalidates the old path target. */
+    /** Forced movement stays on playable cells and invalidates the old path target.*/
     private displaceUnit(unit: ZCUnitState, dx: number, dy: number): void {
         if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) return;
         const current = this.unitPosition(unit);
@@ -1669,18 +1581,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 按**攻击方职业**推一条受击特效（山猫 2026-10-15 拍板）。
-     *
-     * 三道门，任一不满足就**不播**（都是"少一层表现"，绝不阻塞结算）：
-     * ① `applied > 0` —— 伤害被 0 抵消（无敌/已死）时不该闪；
-     * ② 攻击方有 `attackerTrait` —— 建筑/ 神器伤害压根没有攻击方单位（`source.unitId` 为空），
-     *    职业查不到就不播，**不要**猜一个默认职业；
-     * ③ 渲染层有对应 prefab —— 这一条由渲染层自己判（`options.hitFxPrefabs.get(trait)` 为空即跳过），
-     *    模型层不感知资源，避免"美术没交就整个特效系统崩"。
-     *
-     * ⚠️ **坐标取的是打完这一下之后的 `position`**：与飘字同源，两者必须对齐在同一帧同一位置，
-     * 否则闪白和飘字会错开半个身位。
-     */
+     * 按攻击方职业推一条受击特效。三道门任一不满足就跳过：applied > 0、能查到职业、
+     * 渲染层有对应 prefab（资源判定留给渲染层，模型不感知）。
+     * 坐标取打完这一下之后的 position，与飘字同源同帧。
+    */
     private pushHitFx(
         target: ZCUnitState,
         applied: number,
@@ -1695,7 +1599,7 @@ export class ZCGameModel {
             trait,
             owner: target.owner,
             surface: 'unit',
-            // 受击特效跟着**被打的那只**的体型走（2026-10-31）。取不到定义就按 1（= 烘焙原样），
+            // 受击特效跟着被打的那只的体型走（2026-10-31）。取不到定义就按 1（= 烘焙原样），
             // 绝不因为查不到而把闪白缩成 0。
             targetScale: this.definitions.get(target.unitId)?.prefabSize ?? 1,
             x: position.x,
@@ -1706,30 +1610,21 @@ export class ZCGameModel {
 
     /**
      * 攻击方职业 = 其卡牌 `traits.attack`。
-     *
-     * 🔴 **两级 id 一定要分清（这里曾是个「一次都不播」的真bug）**：
-     *  - `source.unitId` 是**单位实例 id** = `ZCGameModel.state.nextUnitId`（从 1 严格递增）；
-     *  - `ZCUnitState.unitId` 才是**卡牌 unitId**（`pvpCard.unitId`，与卡同值，如 68001）；
-     *  - `cards[owner]` 的键是**卡牌 id**（`card.id`，同样 68001）。
-     * 曾经直接 `cards[owner].get(String(source.unitId))` ⇒ 拿实例 id 去查卡表，**永远查不到**
-     * ⇒ 受击特效一次都没播出来（表现为「完全看不到」，不报错）。
-     * 正确链路：**实例 id → `units.byId` → 实例的 `cardId` → 卡表 → `traits.attack`**。
-     *
-     * 为什么要在这里反查而不是在伤害源头直接填：近战 / 投射物 / 区域 / 地面区域四条路径各自
-     * 构造 `ZCDamageSource`，只有这里能保证「一条都不漏」。取不到（无 unitId / 实例已被移除 /
-     * 卡表没这条）返回 `undefined`，由调用方决定不播。
-     */
+     * 注意两级 id：`source.unitId` 是实例 id，`ZCUnitState.unitId` 才是卡牌 id；
+     * 正确链路是实例 id → units.byId → cardId → 卡表 → traits.attack。
+     * 取不到返回 undefined，由调用方决定不播。
+    */
     private traitOfAttacker(source: ZCDamageSource): ZCAttackTrait | undefined {
         return this.traitOfAttackerUnitId(source.unitId);
     }
 
     /**
-     * 攻击方**实例 id** → 职业。
+     * 攻击方实例 id → 职业。
      *
      * 单独拆一层的原因：单位受击走的是 `ZCDamageSource`（只有 `unitId`），
-     * 而城墙 / 建筑的伤害入口 `context.damageWall/damageBuilding` 拿到的是**出手单位的本体**
+     * 而城墙 / 建筑的伤害入口 `context.damageWall/damageBuilding` 拿到的是出手单位的本体
      * （`ZCUnitState`，`id` 才是实例 id）。两处共用同一段查表，别各写一份。
-     */
+    */
     private traitOfAttackerUnitId(unitId: number | undefined): ZCAttackTrait | undefined {
         if (unitId === undefined) return undefined;
         const attacker = this.units.byId.get(unitId);
@@ -1744,21 +1639,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 建筑 / 城墙的受击特效（2026-11-06 需求）。
-     *
-     * 原话：「建筑单位或城墙单位受到攻击时，也要播放对应的职业的受击特效，
-     * 比如城墙被战士职业角色攻击，在城墙图片的中心坐标点播放战士受击」。
-     *
-     * 与打单位那条（{@link pushHitFx}）**同一套判据**：按**攻击方职业**选特效、`applied <= 0` 不播。
-     * 三处不同：
-     *  ① 攻击方是 `ZCUnitState` 本体（`damageWall/damageBuilding` 传的就是出手单位）而不是
-     *    `ZCDamageSource`，所以职业走 {@link traitOfAttackerUnitId}；
-     *  ② 锚点 = 该格**格心**（与飘字同源）。「建筑图比格心高 15.65px」属于视图口径，
-     *    由渲染层按 `surface` 补，模型不碰视图像素；
-     *  ③ `targetScale` 固定 1 —— 结构物没有 `pvpCard.prefabSize` 意义上的「模型缩放」
-     *    （建筑外观大小由 `ZCGameHex.prefab` 的 `BuildingIcon` 与卡面图标定），
-     *    拿兵种的 `prefabSize` 当房子的大小是错的。
-     */
+     * 建筑/城墙的受击特效：按攻击方职业选特效，applied <= 0 不播。
+     * 与打单位那条同判据，区别是攻击方直接是 `ZCUnitState`（走 traitOfAttackerUnitId）、
+     * 锚点取该格格心（视图再按 surface 补高度）、targetScale 固定 1。
+    */
     private pushStructureHitFx(
         attackerUnitId: number | undefined,
         defender: ZCFaction,
@@ -1850,7 +1734,7 @@ export class ZCGameModel {
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
         //  建筑受击特效：锚点仍是格心，视图按 `surface = 'building'` 抬到建筑图中心
         //  （`ZCGameHex.prefab` 的 `BuildingIcon` 在 +15.65px）—— 2026-11-06 需求。
-        //  `defender` 必须在伤害结算**之前**抓（拆掉那一拍 `building.owner` 已被改成攻方）。
+        //  `defender` 必须在伤害结算之前抓（拆掉那一拍 `building.owner` 已被改成攻方）。
         this.pushStructureHitFx(unit.id, defender, result.applied, center, 'building');
         if (!result.killed) return;
         if (summonsDefenceBoss) this.spawnDueDefenceWaves(true);
@@ -1896,7 +1780,7 @@ export class ZCGameModel {
         }
     }
 
-    /** 选点结束、正式模型建立后记录各方最终出生格；重复通知不重复入队。 */
+    /** 选点结束、正式模型建立后记录各方最终出生格；重复通知不重复入队。*/
     recordSpawnSelection(): void {
         for (const owner of this.activeOwners) {
             if (this.frameEvents.some((event) => event.op === FRAME_OP_SPAWN && event.owner === owner)) continue;
@@ -1905,13 +1789,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 记一条战斗帧事件（随 `CmdFinishBattleReqMsg.commands` 上报，供服务端校验 / 回放）。
-     *
-     * `op` 口径由协议 `CmdBattleFrameInfo` 定死：**1=翻格（`params`=[格子 id]）、
-     * 2=释放技能（`params`=[技能位置]，无位置就不传）、4=出生点（`params`=[格子 id]）**。
-     * 保留操作方 owner，结算时由控制器映射到开战回包的战斗单元 unitId。
-     * `frameId` 沿用毫秒时间戳的既有口径（协议注释写「帧 id」，但那会改变已经在上报的格式，未动）。
-     */
+     * 记一条战斗帧事件（随 `CmdFinishBattleReqMsg.commands` 上报）。
+     * `op`：1=翻格、2=释放技能、4=出生点，`params` 带格子 id 或技能位置。
+     * `frameId` 沿用毫秒时间戳口径；保留操作方 owner，结算时映射到战斗单元 id。
+    */
     private pushFrameEvent(owner: ZCOwner, op: number, params: number[]): void {
         this.frameEvents.push({ frameId: Math.round(this.state.elapsedSeconds * 1000), owner, op, params });
     }
@@ -1927,7 +1808,7 @@ export class ZCGameModel {
         }
         this.tileStatesDirty = true;
         this.invalidateTerrain();
-        // 收场表现属于「开发这件事本身」，与**抽到什么无关**：
+        // 收场表现属于「开发这件事本身」，与抽到什么无关：
         // 全类型随机格（问号，25 费）的 `empty` 权重是 0.7 ⇒ 七成是空手。
         // 把 `pushHexActivation` 留在 `!result.card` / `!result.building` 两个 return
         // 之后，这些格子点下去既不收场也不出卡，观感就是「点了没反应」。
@@ -1935,7 +1816,7 @@ export class ZCGameModel {
         // `hasCardReveal` 决定收场段之后怎么接 —— 没有卡牌时视图把「整格隐藏」换成原地缩回来
         // （隐藏段是给卡牌独占视线的，没卡牌就会露出棋盘底）。
         // 脉冲染色跟着「抽到的卡」走（2026-10-19）：没抽到卡时传 0（视图按绿处理）。
-        // ⚠️ 抽到卡但建不上（`!result.building`）时仍有品阶 —— 用户要的是「对应获得的卡牌品阶」，
+        //  抽到卡但建不上（`!result.building`）时仍有品阶 —— 用户要的是「对应获得的卡牌品阶」，
         // 与 `hasCardReveal`（有没有卡牌揭示）不是同一个判据。
         this.pushHexActivation(hex.id, result.building !== null, result.card ? rarityRank(result.card.rarity) : 0);
         if (!result.card) {
@@ -1970,24 +1851,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 开格后的兵营首批兵：**推迟到点击动画全部播完再生成**（`ZC_CARD_START_SECONDS`
-     * = 脉冲 ∥ 缩没的合段 = 0.7s，也就是卡牌弹出的那一刻）。
-     *
-     * 开格这拍三件事同源 —— `pushCardReveal` / `pushHexActivation` / 首批兵。
-     * 前两者靠 `startedAt` 落在未来就能「先不可见」，单位不行（它是实体），
-     * 所以只能推迟生成本身，否则单位会在水波纹还在扩、地块还在缩的时候就站在格子上。
-     *
-     * 到这里的**两条路**观感要求一样（缩没段地块小到 0.1，兵会看着像浮在半空）：
-     *  - **开格即完工**（绝大多数兵营卡，`developHex` 里判 `constructionRemainingSeconds <= 0`）：
-     *    激活刚刚开始 ⇒ 剩余就是整段点击动画；
-     *  - **建造中建成**（下面的 `constructionComplete` 回调）：建造期**短于**点击动画的兵营
-     *    会在水波还没扩完时就落地 ⇒ 同样要推迟，且只推迟**剩下的那一小段**。
-     *
-     * 🔴 锚点必须是 `ZC_CARD_START_SECONDS`：单位是**独立节点**、不随格子的「整格隐藏」一起隐藏，
-     * 唯一能盖住它的东西是随后弹出的卡牌 —— 所以必须等到卡牌真正弹出的那一刻再出兵。
-     *
-     * 建造期长于点击动画的兵营算出 0 ⇒ 立即出兵（不该因为别处的表现多等一轮）。
-     */
+     * 开格后的兵营首批兵：推迟到点击动画播完再生成，锚 `ZC_CARD_START_SECONDS`。
+     * 卡牌与地块能靠 `startedAt` 先不可见，单位是实体，只能推迟生成。
+     * 开格即完工推迟整段；建造中建成只推迟剩余那一小段；算出 0 就立即出兵。
+    */
     private scheduleFirstBarracksUnit(hexId: number): void {
         const remaining = this.remainingHexPresentationSeconds(hexId);
         if (remaining <= 0) {
@@ -2000,7 +1867,7 @@ export class ZCGameModel {
         });
     }
 
-    /** 本格激活的**点击动画（脉冲 ∥ 缩没）**还剩多少秒（不在激活期 / 已播完 ⇒ 0）。 */
+    /** 本格激活的点击动画（脉冲 ∥ 缩没）还剩多少秒（不在激活期 / 已播完 ⇒ 0）。*/
     private remainingHexPresentationSeconds(hexId: number): number {
         const activation = this.activationOf(hexId);
         if (!activation) return 0;
@@ -2013,7 +1880,7 @@ export class ZCGameModel {
      * 生成前不额外校验：`ZCEconomySystem.spawnFirstBarracksUnit` 已自查
      * （还是兵营 / 非中立 / 卡还配着兵 / 建筑在运行），中途被拆了自然跳过。
      * 队列通常为空，空则直接返回、不分配。
-     */
+    */
     private flushDeferredBarracksSpawns(): void {
         if (!this.deferredBarracksSpawns.length) return;
         const now = this.state.elapsedSeconds;
@@ -2026,7 +1893,7 @@ export class ZCGameModel {
         for (const spawn of pending) this.deferredBarracksSpawns.push(spawn);
     }
 
-    /** 生成一个单位；拆城触发的末波 Boss 可越过兵力上限，避免跳波后 Boss 被吞掉。 */
+    /** 生成一个单位；拆城触发的末波 Boss 可越过兵力上限，避免跳波后 Boss 被吞掉。*/
     private spawnUnit(
         owner: ZCOwner,
         card: ZCDeckCard,
@@ -2080,7 +1947,7 @@ export class ZCGameModel {
         };
         this.units.register(unit);
         this.state.units.push(unit);
-        //  诊断⑥：镭射飞龙真的上场了没。没有这一行 ⇒ 后面所有 `[模型]` 日志都不会出现，
+        //  诊断6.：镭射飞龙真的上场了没。没有这一行 ⇒ 后面所有 `[模型]` 日志都不会出现，
         //  与「技能没触发」是两件事（这张卡是兵营卡，要先翻格建出来才会产兵）。
         if (unit.unitId === '68010') {
             missileLog('模型', `镭射飞龙上场：#${unit.id} owner=${unit.owner} hp=${maxHp}`
@@ -2120,7 +1987,7 @@ export class ZCGameModel {
         return clone;
     }
 
-    /** 到配置时间或已出怪物全部被击退时，在敌方主城生成下一波；首波只按时间。 */
+    /** 到配置时间或已出怪物全部被击退时，在敌方主城生成下一波；首波只按时间。*/
     private spawnDueDefenceWaves(forceLastWave = false): void {
         if (!this.pveDefence) return;
         if (forceLastWave) {
@@ -2138,7 +2005,7 @@ export class ZCGameModel {
             this.nextDefenceWaveIndex += 1;
             // 提前出怪后不能再按 elapsedSeconds 推导进度，存档必须记下实际波序。
             this.state.nextDefenceWaveIndex = this.nextDefenceWaveIndex;
-            // 先占位再生成：波序与账本下标必须**逐位对齐**，中途 `continue` 也不能错位。
+            // 先占位再生成：波序与账本下标必须逐位对齐，中途 `continue` 也不能错位。
             const ledger = { ids: [] as number[], maxHp: 0 };
             this.defenceWaveLedger[this.nextDefenceWaveIndex - 1] = ledger;
             const card = this.cardById(ZCOwner.Enemy, wave.cardId);
@@ -2252,7 +2119,7 @@ export class ZCGameModel {
         else if (owner === ZCOwner.Enemy) this.state.enemyGold = normalized;
     }
 
-    /** 从当前位置选择最近的仍在局内的敌方主城，供 3/4 人单位自由行军。 */
+    /** 从当前位置选择最近的仍在局内的敌方主城，供 3/4 人单位自由行军。*/
     private goalHomeId(owner: ZCOwner, fromHexId: number): number {
         const candidates = this.activeOwners
             .filter((candidate) => candidate !== owner && this.developedCount(candidate) > 0)
@@ -2276,7 +2143,7 @@ export class ZCGameModel {
         if (!this.tileStatesDirty) return;
         ZCTileSystem.refresh(this.state, this.config.map);
         this.tileStatesDirty = false;
-        // ⚠️ 必须**在 refresh 之后**判断：邻接关系依赖「上一轮算出来的 state」，
+        //  必须在 refresh 之后判断：邻接关系依赖「上一轮算出来的 state」，
         //    先判就会慢一拍（第一片资源点要等到下一次脏刷新才入袋）。
         this.claimAdjacentNeutralResources();
     }
@@ -2296,16 +2163,10 @@ export class ZCGameModel {
     }
 
     /**
-     * 中立资源奖励入袋的表现通知入口（`onNeutralReward` 的落地实现）。
-     *
-     * 按需求把「哪种资源播什么效果」收敛在模型这一处：
-     *   · 金矿 / 兵营 → **只播「建筑被开发」激活**（见 `claimAdjacentNeutralResources`），
-     *     不播金币飞行 —— 需求口径「金矿沿用建筑被开发效果」；
-     *   · 宝箱 / 金币类 → 入队金币飞行事件（视图播「飞向金币栏 + 上飘 +N」）；
-     *   · 神器充能 → 入队神器飞行事件（视图播「飞向神器栏」）；
-     *   · 兵团 → 直接产兵、走出生表现，无飞行事件。
-     * 其余（无实际入账金额）一律不入队，避免空特效。
-     */
+     * 中立资源奖励入袋的表现入口：按资源类型收敛在这里。
+     * 金矿/兵营播建筑激活，宝箱/金币入队金币飞行，神器充能入队神器飞行，兵团直接产兵。
+     * 无实际入账金额一律不入队，避免空特效。
+    */
     private pushNeutralReward(hexId: number, itemId: number, owner: ZCOwner,
         item: ZCNeutralResourceItem): void {
         if (isZCNeutralResourceBuilding(item)) return;
@@ -2332,7 +2193,7 @@ export class ZCGameModel {
         this.matchWinner = winner;
     }
 
-    /** 本局胜方（`draw` / 未定 = `null`）。结算扫场用它上色，见 `matchWinner` 的说明。 */
+    /** 本局胜方（`draw` / 未定 = `null`）。结算扫场用它上色，见 `matchWinner` 的说明。*/
     get winner(): ZCOwner | null {
         return this.matchWinner;
     }
@@ -2362,7 +2223,7 @@ export class ZCGameModel {
         return this.units.count(owner);
     }
 
-    /** 收集以 hexId 为中心、格距不超过 radiusHex 的所有单位（含中心格），供索敌/塔/溅射邻域查询。 */
+    /** 收集以 hexId 为中心、格距不超过 radiusHex 的所有单位（含中心格），供索敌/塔/溅射邻域查询。*/
     private unitsInRadius(hexId: number, radiusHex: number): ZCUnitState[] {
         const collected: ZCUnitState[] = [];
         const key = `${hexId}:${radiusHex}`;

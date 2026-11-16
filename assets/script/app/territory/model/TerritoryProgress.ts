@@ -1,4 +1,4 @@
-import { TerritoryMapConfig, TerritorySite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import { TerritoryMapConfig, TerritorySite, isTerritoryBattleSite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 
 /** 发起探索前回给 UI 的报价。 */
@@ -370,8 +370,7 @@ export class TerritoryProgress {
         const byCell = new Map<number, string>();
         const byConfig = new Map<string, number[]>();
         for (const peer of this.map.sites) {
-            const isBattleSite = peer.type === TERRITORY_SITE_TYPE.stage || peer.type === TERRITORY_SITE_TYPE.boss || peer.type === TERRITORY_SITE_TYPE.asyncPvp;
-            if (!isBattleSite) continue;
+            if (!isTerritoryBattleSite(peer)) continue;
             const configId = peer.configId;
             if (typeof configId !== 'string' || !/^\d+$/.test(configId)) continue;
             byCell.set(peer.cellId, configId);

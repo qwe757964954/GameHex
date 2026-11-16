@@ -9,6 +9,7 @@ from unittest.mock import patch
 SCRIPT_DIR = Path(__file__).resolve().parents[1] / 'tools' / 'map-editor'
 sys.path.insert(0, str(SCRIPT_DIR))
 import copy_territory_maps as publisher
+import presets_io
 
 
 class CopyTerritoryMapsTests(unittest.TestCase):
@@ -45,6 +46,59 @@ class CopyTerritoryMapsTests(unittest.TestCase):
                                        server / 'chapter_01.json'])
             self.assertFalse(resources.exists())
             self.assertFalse(server.exists())
+
+    def test_refuses_to_publish_into_planner_client(self):
+        """护栏：落点落在策划 client 下必须报错，而不是悄悄生成 remoteRef 副本。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            client = root / 'doc' / 'json' / 'client'
+            server = root / 'sever'
+            with patch.object(publisher, 'TARGET', client), patch.object(
+                publisher, 'DOC_TARGETS', (server,)
+            ), patch.object(presets_io, 'DOC_CLIENT_DIR', client):
+                with self.assertRaises(ValueError):
+                    publisher.copy_one(publisher.SOURCE / 'chapter_01.json', False)
+
+            self.assertFalse(client.exists())
+            self.assertFalse(server.exists())
+
+    def test_purges_stale_client_copy(self):
+        """自愈：client 里历史遗留的同名布局，发布时顺手删掉（含 .meta）。"""
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            client = root / 'doc' / 'json' / 'client'
+            resources = root / 'resources'
+            server = root / 'sever'
+            client.mkdir(parents=True)
+            stale = client / 'chapter_01.json'
+            stale.write_text('{"stale":true}', encoding='utf-8')
+            stale_meta = client / 'chapter_01.json.meta'
+            stale_meta.write_text('{}', encoding='utf-8')
+            with patch.object(publisher, 'TARGET', resources), patch.object(
+                publisher, 'DOC_TARGETS', (server,)
+            ), patch.object(presets_io, 'DOC_CLIENT_DIR', client):
+                _targets, warnings = publisher.copy_one(publisher.SOURCE / 'chapter_01.json', False)
+
+            self.assertFalse(stale.exists())
+            self.assertFalse(stale_meta.exists())
+            self.assertTrue(any('removed stale client copy' in item for item in warnings))
+
+    def test_dry_run_reports_stale_client_copy_without_deleting(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            client = root / 'doc' / 'json' / 'client'
+            resources = root / 'resources'
+            server = root / 'sever'
+            client.mkdir(parents=True)
+            stale = client / 'chapter_01.json'
+            stale.write_text('{"stale":true}', encoding='utf-8')
+            with patch.object(publisher, 'TARGET', resources), patch.object(
+                publisher, 'DOC_TARGETS', (server,)
+            ), patch.object(presets_io, 'DOC_CLIENT_DIR', client):
+                _targets, warnings = publisher.copy_one(publisher.SOURCE / 'chapter_01.json', True)
+
+            self.assertTrue(stale.exists())
+            self.assertTrue(any('would remove stale client copy' in item for item in warnings))
 
 
 if __name__ == '__main__':

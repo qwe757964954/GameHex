@@ -1,3 +1,4 @@
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -255,19 +256,19 @@ test('★★★固定宝箱格可激活才传宝箱图标；关卡格同分支�
     };
     const closed = { unlock: { silverCost: 10, staminaCost: 1 } };
 
-    const fixed = mapView.stationRenderOf(
+    const fixed = stationRenderWithProjection(mapView)(
         { id: 'fixedResource_1', type: 'fixedResource', cellId: 305, ...closed }, input);
     assert.equal(fixed.isCondition, true, '前置满足 ⇒ 走「可激活」条件分支');
     assert.equal(fixed.conditionChestIcon, 'chest-icon', '宝箱格可激活 ⇒ 价格行之上加一颗宝箱');
     assert.equal(fixed.caption, '10', '银币数字照旧（用户：除了银币 icon + 数字外，新增宝箱 icon）');
 
-    const stage = mapView.stationRenderOf(
+    const stage = stationRenderWithProjection(mapView)(
         { id: 'stage_1', type: 'stage', cellId: 328, configId: '10001', ...closed }, input);
     assert.equal(stage.isCondition, true, '关卡格也走同一个条件分支');
     assert.equal(stage.conditionChestIcon, null, '关卡格不许长出宝箱图标');
 
     // 美术没交图 ⇒ 传 null，退回旧版只有价格行（不阻断）。
-    const noChestArt = mapView.stationRenderOf(
+    const noChestArt = stationRenderWithProjection(mapView)(
         { id: 'fixedResource_2', type: 'fixedResource', cellId: 306, ...closed },
         { ...input, art: { randomSilverIcon: 'silver-icon' } });
     assert.equal(noChestArt.conditionChestIcon, null);

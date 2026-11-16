@@ -10,6 +10,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
 import type { TerritoryModel, TerritoryModelOutput, ITerritoryViewState } from '../assets/script/app/territory/application/TerritoryModel';
 import { TerritoryUiEvent, TerritoryViewEvent } from '../assets/script/app/territory/application/TerritoryEvents';
+import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
 
 function harness() {
     const calls: unknown[] = [];
@@ -21,7 +22,7 @@ function harness() {
         onOutput(listener: typeof output) { output = listener; return () => { calls.push('unsub'); output = () => {}; }; },
         start() { calls.push('start'); }, dispose() { calls.push('dispose'); },
         selectRandomResource(id: number) { calls.push(['random', id]); },
-        selectSite(site: unknown) { calls.push(['site', site]); },
+        selectSite(site: unknown) { calls.push(['site', site]); return true; },
         closeDetail() { calls.push('close'); }, requestBattle() { calls.push('battle'); },
         fastTick(now: number) { calls.push(['fast', now]); }, slowTick(now: number) { calls.push(['slow', now]); },
         refreshWalletFromServer() { calls.push('wallet'); },
@@ -56,6 +57,32 @@ test('征收意图只交给当前控制器，并使用控制器时钟', () => {
     const count = h.calls.length;
     EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'claimIdleRewards' } });
     assert.equal(h.calls.length, count);
+});
+
+test('可翻固定宝箱受理后报告翻地，关卡仍报告关卡点击，拒绝或已开启的宝箱不推进', () => {
+    const h = harness();
+    const fixed = { cellId: 348, type: 'fixedResource' };
+    const stage = { cellId: 327, type: 'stage' };
+    Object.assign(h.model.state, { map: { sites: [fixed, stage] }, siteOpenableCells: [348] });
+    let accepted = true;
+    h.model.selectSite = () => accepted;
+    const events: string[] = [];
+    const listener = {};
+    EventMgr.instance.on(GuideEvent.Complete, payload => events.push(payload.cond), listener);
+    const tap = (cellId: number) => EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'siteTap', cellId } });
+    try {
+        h.controller.start();
+        tap(348);
+        assert.deepEqual(events, ['tileFlipped']);
+        tap(327);
+        assert.deepEqual(events, ['tileFlipped', 'siteTap']);
+        accepted = false;
+        tap(348);
+        Object.assign(h.model.state, { siteOpenableCells: [] });
+        accepted = true;
+        tap(348);
+        assert.deepEqual(events, ['tileFlipped', 'siteTap']);
+    } finally { h.controller.dispose(); EventMgr.instance.offTarget(listener); }
 });
 
 test('扫荡意图把倍率原样透传给 Model（`times` 是协议里唯一决定扣多少体力的字段）', () => {

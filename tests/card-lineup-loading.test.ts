@@ -265,6 +265,7 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
     const View = loadCardViewClass();
     const view = new View();
     Object.assign(view, {
+        guideAnchor: { key: '' },
         face: { spriteFrame: 'stale', color: null },
         badge: { spriteFrame: 'stale', color: null },
         hero: { color: null, set spriteFrame(frame: unknown) { painted.push(frame); } },
@@ -283,6 +284,7 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
     view.render(card('a'), null, false, 1, undefined, () => first.promise);
     assert.equal(view.face.spriteFrame, null, '图没到必须先清空，不能留着上一张的卡面');
     view.render(card('b'), null, false, 1, undefined, () => second.promise);
+    assert.equal(view.guideAnchor.key, 'CardList/Card_b', '虚拟槽位复用后焦点标识必须同步换卡');
 
     first.resolve({ face: 'A', hero: 'A', badge: 'A' });
     await settle();
@@ -298,6 +300,7 @@ test('卡库条目迟到图不能贴到复用了槽位的另一张卡上，且�
     // （Sprite/Label/ProgressBar 赋同值也标脏）。短路又不能把 loader 刚补上的图清掉。
     const paintedAfter = painted.length;
     view.render(card('b'), null, false, 1, undefined, () => second.promise);
+    assert.equal(view.guideAnchor.key, 'CardList/Card_b', '虚拟槽位复用后焦点标识必须同步换卡');
     assert.equal(painted.length, paintedAfter, '相同输入不得重复标脏');
     assert.equal(view.face.spriteFrame, 'B', '短路后已补上的图要留在槽位上');
 
@@ -311,6 +314,7 @@ test('未解锁卡（0 级）整卡压暗 + 右上角挂锁，复用回已解锁
     const View = loadCardViewClass();
     const view = new View();
     Object.assign(view, {
+        guideAnchor: { key: '' },
         face: { spriteFrame: null, color: null },
         badge: { spriteFrame: null, color: null },
         hero: { spriteFrame: null, color: null },

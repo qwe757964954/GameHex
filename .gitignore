@@ -24,6 +24,7 @@ node_modules/
 .idea/
 
 # Local tooling state and generated review artifacts
+.claude/
 .codegraph/
 .codex-artifacts/
 .codex-tmp/

@@ -1,3 +1,4 @@
+import { LeagueRewardController } from '../assets/script/app/league/LeagueRewardController';
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
@@ -83,6 +84,8 @@ test('real composition owns one controller per opening, cancels old caller and i
     const { createLeaguePopupComposition } = load<{
         createLeaguePopupComposition: (context: ReturnType<typeof createControllerContext>, view: object) => IPopupComposition | null;
     }>('assets/script/app/bootstrap/LeaguePopupComposition.ts', {
+        ...Object.fromEntries(['LeagueStorePage', 'LeagueDiscountPage', 'LeagueTaskPage', 'LeagueNorthRewardPage', 'LeagueNorthExpeditionPage'].map(name => [name, { [name]: class {} }])),
+        LeagueRewardController: { LeagueRewardController },
         LeagueEditPage: { LeagueEditPage: Page }, LeagueEditModel: { LeagueEditModel }, LeagueEditController: { LeagueEditController },
         FW: { FW: { showTip: (text: string) => tips.push(text) } },
         GameNet: { GameNet: { instance: { removeCaller: (caller: object) => cancelled.push(caller) } } },

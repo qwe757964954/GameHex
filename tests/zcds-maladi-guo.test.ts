@@ -44,9 +44,14 @@ const SCREEN_PX_PER_LOGIC_PX = 0.3 * 2.5625;
 //  这一套的并集最左缘 68 只由第 1~2 帧的起势火苗贡献（占 5% 时长），整段 clip 的中位左缘是 238 ——
 //  按并集钉尾部，95% 的时间里火焰实体从 238 才开始，屏上就空出 (238−68)/2 = 85px，
 //  正是用户截图里「目标在右侧时起始位置离角色很远」。
-const SPRAY_TAIL_SRC_PX = 238;                            // 各帧可见左缘的中位数（源 px）
-const SPRAY_TIP_SRC_PX = 659;                             // 最右缘（源 px）
-const SPRAY_VISIBLE_SPAN_PX = (SPRAY_TIP_SRC_PX - SPRAY_TAIL_SRC_PX) / 2;   // 421 源 px ÷ DOWNSCALE 2 = 210.5 画布 px
+//
+//  🔴 2026-11-13 第十三轮换美术：旧的 18 张 `146-1-attack_*`（845×615）整套删掉，
+//  换成 `ph_00~ph_13`（519×437，轴线拉平成水平），循环段从「11~17」改成「ph_03~ph_09」。
+//  帧序 = ph_00~ph_09 一遍 + ph_03~ph_09 × 4 = 38 帧；ph_10~ph_13 是**收火**帧，不进 clip
+//  （单 clip 只有一个 wrapMode，播不出「先循环再收火」，塞进去会一秒三闪）。
+const SPRAY_TAIL_SRC_PX = 50;                             // 各帧可见左缘的中位数（源 px）
+const SPRAY_TIP_SRC_PX = 415;                             // 最右缘（源 px）
+const SPRAY_VISIBLE_SPAN_PX = (SPRAY_TIP_SRC_PX - SPRAY_TAIL_SRC_PX) / 2;   // 365 源 px ÷ DOWNSCALE 2 = 182.5 画布 px
 //  🔴 2026-11-12 第七轮：距离反过来定长度 —— 用户口径「触发距离应该小于普通攻击的距离，
 //  和特效的 350px 范围相匹配，只有敌人处于 350px 这个距离才会被攻击」。
 //  普攻 `unitAttackRange` 550（折后 495），喷火只在 350 以内放 ⇒ 缩放 = 350×0.76875 ÷ 210.5。
@@ -121,7 +126,10 @@ test('102602 吸养根须：字段名是 splashDamageRate（设计案写的 expl
         const leech = planOf(rows, 102602);
         assert.equal(leech.length, 3);
         assert.deepEqual(leech.map((row) => Number(row.value)), [0.3, 0.4, 0.5], 'lifestealRate');
-        assert.deepEqual(leech.map((row) => paramsOf(row).splashDamageRate), [0.2, 0.28, 0.36]);
+        assert.deepEqual(leech.map((row) => paramsOf(row).splashDamageRate), [0.2, 0.26, 0.32],
+            '2026-11-14 多目标递减：溅射基准压到 20/26/32%（都低于普攻 100%）');
+        assert.deepEqual(leech.map((row) => paramsOf(row).splashFalloff), [0.3, 0.3, 0.3],
+            '同一爆点第 2 个目标起每次 ×0.7');
         assert.deepEqual(leech.map((row) => paramsOf(row).splashRadius), [38, 46, 55],
             '设计案没写溅射半径，沿用配表既有值（同磁电菇 101601 档）');
         for (const row of leech) {
@@ -324,36 +332,39 @@ test('特效三件套：喷射火焰 / 爆炸龙卷 / 凤凰弹 都齐备，且�
     assert.ok(phoenix.node._lscale.x > 0);
 });
 
-test('喷射火焰：39 帧 / sample 12 / 一次性播完 3.25s，350px 定长度、尾部钉在施法者脚下、尖端压在矩形最远缘', () => {
+test('喷射火焰：38 帧 / sample 12 / 一次性播完 3.167s，350px 定长度、尾部钉在施法者脚下、尖端压在矩形最远缘', () => {
     const dir = fxDir('麻辣铁锅_喷射火焰');
     const clip = animParts(dir, '麻辣铁锅_喷射火焰');
     const prefab = prefabParts(dir, '麻辣铁锅_喷射火焰');
     const frames = clip._tracks[0]._channel._curve._values;
 
-    //  帧序 = 原 18 帧 + 「循环帧 11~17」× 3 = 39 帧（设计案：「当需要延长时间时使用循环帧 11-17」）
-    assert.equal(frames.length, 39);
+    //  帧序 = ph_00~ph_09 一遍 + 「循环帧 ph_03~ph_09」× 4 = 38 帧
+    //  （设计案 2026-11-13：「使用新的特效图片 ph_00~ph_13，循环帧改为 ph_03~ph_09」）
+    assert.equal(frames.length, 38);
     assert.equal(clip.sample, 12);
     assert.equal(clip.wrapMode, 1, '一次性播完，停在末帧（由区域到期整体摘掉）');
-    assert.equal(clip._duration, 3.25);
+    assert.ok(Math.abs(clip._duration - 38 / 12) < 1e-6, `时长应为 38/12 = 3.1667s（实际 ${clip._duration}）`);
     assert.ok(clip._duration > 3, '必须比光环的 3 秒略长，否则动画会「停在最后一帧上僵住」');
-    //  第 19 帧起进入循环段：帧 11 的 uuid 与第 1 帧之后第一次出现的循环首帧相同
-    assert.deepEqual(frames.slice(0, 18).map((item) => item.__uuid__).length, 18);
-    assert.notEqual(frames[17].__uuid__, frames[18].__uuid__, '第 19 帧是循环段的第一帧（原第 11 帧）');
-    assert.equal(frames[18].__uuid__, frames[25].__uuid__, '循环段 7 帧一圈');
+    //  前 10 帧是 ph_00~ph_09（点火 + 稳定），第 11 帧起进入循环段、首帧 = ph_03
+    assert.equal(new Set(frames.slice(0, 10).map((item) => item.__uuid__)).size, 10, '前 10 帧互不相同');
+    assert.notEqual(frames[9].__uuid__, frames[10].__uuid__, '第 11 帧是循环段的第一帧（ph_03）');
+    assert.equal(frames[10].__uuid__, frames[3].__uuid__, '循环段首帧 = 第 4 帧（ph_03）');
+    assert.equal(frames[17].__uuid__, frames[3].__uuid__, '循环段 7 帧一圈（ph_03~ph_09）');
+    assert.ok(!frames.some((item) => item.__uuid__ === undefined), '每一帧都要有 spriteFrame 引用');
 
-    //  ── 尺寸与摆位（2026-11-12 第七轮重算：距离定长度）──
+    //  ── 尺寸与摆位（2026-11-13 重算：新美术 519×437，可见长 365 源 px）──
     //  画布 = 原图裁切后的一半（`sizeMode 0` 自定义尺寸、`trimType none` ⇒ 1 画布 px = 2 源图 px）。
-    //  裁切左边跟着**稳态尾部**走（226 源 px），所以画布只剩 222 宽 —— 那 170 源 px 的透明空档不再打进图集。
+    //  裁切左边跟着**稳态尾部**走（38 源 px），所以画布只剩 194 宽 —— 那 170 源 px 的透明空档不再打进图集。
     const canvas = prefab.ui._contentSize;
-    assert.equal(canvas.width, 222);
-    assert.equal(canvas.height, 168);
+    assert.equal(canvas.width, 194);
+    assert.equal(canvas.height, 186);
 
-    //  ① 缩放**反算**：可见长度 210.5 画布 px 要变成 350 逻辑 px（= 屏上 269.06px）
-    //     ⇒ 缩放 1.278207。不再是第五轮那个「自然尺寸 1」。
+    //  ① 缩放**反算**：可见长度 182.5 画布 px 要变成 350 逻辑 px（= 屏上 269.06px）
+    //     ⇒ 缩放 1.474315。不再是第五轮那个「自然尺寸 1」。
     const scale = prefab.node._lscale.x;
     assert.ok(Math.abs(scale - SPRAY_SCALE) < 1e-6,
         `缩放必须是 ${SPRAY_SCALE.toFixed(6)}（实际 ${scale.toFixed(6)}）`);
-    assert.ok(Math.abs(SPRAY_VISIBLE_SPAN_PX - 210.5) < 1e-9);
+    assert.ok(Math.abs(SPRAY_VISIBLE_SPAN_PX - 182.5) < 1e-9);
 
     //  ② 触发距离 = 350 逻辑 px（用户口径），**必须小于普攻射程**（550 表值，折后 495）。
     assert.equal(SPRAY_REACH_LOGIC_PX, 350);
@@ -361,8 +372,8 @@ test('喷射火焰：39 帧 / sample 12 / 一次性播完 3.25s，350px 定长�
     assert.equal(SPRAY_AURA_FORWARD, 175);
 
     //  ③ 锚点：宿主节点摆在**矩形中心**（= 身前 175 逻辑 px = 屏上 134.531px）上，
-    //     `_lpos` 是**本地偏移**（跟着宿主旋转）。画布锚点 0.5 ⇒ 左边缘在本地 −111×scale。
-    //     稳态尾部在源 x=238 → 裁切框左边 226 ⇒ 画布 x = (238−226)/2 = 6。
+    //     `_lpos` 是**本地偏移**（跟着宿主旋转）。画布锚点 0.5 ⇒ 左边缘在本地 −97×scale。
+    //     稳态尾部在源 x=50 → 裁切框左边 38 ⇒ 画布 x = (50−38)/2 = 6。
     const halfWidth = canvas.width / 2;
     const centerScreenX = SPRAY_AURA_FORWARD * SCREEN_PX_PER_LOGIC_PX;  // 判定圆心 = 宿主节点位置
     const tailLocalX = (6 - halfWidth) * scale;                          // 可见左缘 = 火焰尾部
@@ -373,12 +384,11 @@ test('喷射火焰：39 帧 / sample 12 / 一次性播完 3.25s，350px 定长�
     //  ④ 尾部 **本地 y 必须是 0**：宿主每帧 `setRotationFromEuler(朝向)`，本地 +y 会变成
     //     「垂直于火焰的侧移」—— 只有 0 才在任何朝向下都贴着施法者。
     //     竖直抬到头部由 `auraVisualLiftPx = 97` 在视图层 `mapToViewY` 之后补。
-    //     尾部窗 alpha 重心在画布 y=73（自上而下），锚点 0.5 ⇒ 相对中心是本地 +11×scale，
-    //     所以 `_lpos.y = −11×scale` 正好把它按回本地 y=0。
-    const tailLocalY = (canvas.height / 2 - 73) * scale;
-    assert.ok(Math.abs(tailLocalY - 11 * scale) < 1e-6);
-    assert.ok(Math.abs(prefab.node._lpos.y + 11 * scale) < 1e-3,
-        `根节点 _lpos.y 必须是 −${(11 * scale).toFixed(3)}（实际 ${prefab.node._lpos.y.toFixed(3)}）`);
+    //     尾部窗 alpha 重心在源 y=287、裁切框顶 61 ⇒ 画布 y=113（自上而下），锚点 0.5
+    //     ⇒ 相对中心是本地 −20×scale，所以 `_lpos.y = +20×scale` 正好把它按回本地 y=0。
+    const tailLocalY = (canvas.height / 2 - 113) * scale;
+    assert.ok(Math.abs(prefab.node._lpos.y - 20 * scale) < 1e-3,
+        `根节点 _lpos.y 必须是 +${(20 * scale).toFixed(3)}（实际 ${prefab.node._lpos.y.toFixed(3)}）`);
     assert.ok(Math.abs(prefab.node._lpos.y + tailLocalY) < 1e-3,
         `尾部本地 y 必须为 0（实际 ${(prefab.node._lpos.y + tailLocalY).toFixed(3)}）`);
 

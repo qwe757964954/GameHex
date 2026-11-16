@@ -71,7 +71,7 @@ export class MainTabsComposition extends ControllerBase {
             const deck = visibleLineupCards(snapshot.deck);
             await Promise.all([
                 ...deck.map(card => cardArtProvider.loadLineupSlot(card, art)),
-                ...visibleIconTallies(deck, art.lineup).map(item => cardArtProvider.loadTallyFrames(item, art)),
+                ...visibleIconTallies(deck, art.lineup).map(item => cardArtProvider.loadTallyFrames(item)),
             ]);
         } catch (error) { console.warn('[MainTabsComposition] 卡牌首屏图片预取失败', error); }
     }

@@ -1,6 +1,5 @@
 import { view, Size, Vec2 as CocosVec2, Vec4 } from 'cc';
 import { EngineMain } from "../../engine/EngineMain";
-import { Vec2 } from "../../engine/Vec2";
 
 export class Utils {
     public static __cname: string = "Utils";

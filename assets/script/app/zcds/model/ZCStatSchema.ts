@@ -9,7 +9,7 @@ import { ZCControlKind, ZCStatusRefreshPolicy } from './ZCStatusEffect';
 //  （那边本来就 import 本文件）。字段定义在那边，这里只用来标注 statPatch 的形状。
 import type { ZCUnitStatPatch } from './ZCModifierRuntime';
 
-/** PVP 运行时允许出现的稳定属性 id；禁止把任意中文键直接带进战斗循环。 */
+/** PVP 运行时允许出现的稳定属性 id；禁止把任意中文键直接带进战斗循环。*/
 export type ZCStatId =
     | 'attack'
     | 'maxHp'
@@ -36,7 +36,7 @@ export type ZCStatId =
     | 'bannerCritRate'
     | 'empoweredEvery'
     //  2026-11-04 椰蛋战士「生命汲取」（100503）：造成伤害的 N% 转回自身生命。
-    //  与 `damageRate` 的差别：那个改的是**打出去多少**，这个改的是**打完回多少**，
+    //  与 `damageRate` 的差别：那个改的是打出去多少，这个改的是打完回多少，
     //  所以不能共用一个键 —— 否则「伤害 +10%」的卡会顺手变成「吸血 10%」。
     | 'lifestealRate'
     //  以下 9 种对应 `pvpAttrMap` 里 `sourceUnit !== 'text'` 的数值属性（2026-10-13 表补齐）。
@@ -100,7 +100,7 @@ export const ZCModifierSourceKind = {
 } as const;
 export type ZCModifierSourceKind = (typeof ZCModifierSourceKind)[keyof typeof ZCModifierSourceKind];
 
-/** 技能状态机模式：`ZCSkillBinding` 与 `ZCSkillRuntime` 共用的唯一真源。 */
+/** 技能状态机模式：`ZCSkillBinding` 与 `ZCSkillRuntime` 共用的唯一真源。*/
 export const ZCSkillStateMode = {
     None: 'none',
     Counter: 'counter',
@@ -137,7 +137,7 @@ export interface ZCModifierOverride {
     modifierId: number;
     legacyKey: string;
     targetUnitId?: string;
-    /** 养成方案；留空 = 通用，对所有方案生效。同一 modifierId + legacyKey 可按方案各给一套值。 */
+    /** 养成方案；留空 = 通用，对所有方案生效。同一 modifierId + legacyKey 可按方案各给一套值。*/
     sourceKind?: ZCModifierSourceKind;
     domain: ZCModifierDomain;
     statId: ZCStatId;
@@ -188,7 +188,7 @@ export interface ZCSkillBinding {
     stateMode: ZCSkillStateMode;
     parameterKey?: string;
     parameterStatId?: ZCStatId;
-    /** 命中时挂给被打者的状态（`on_hit_status`）或开局挂给自己的常驻状态（`passive_status`）。 */
+    /** 命中时挂给被打者的状态（`on_hit_status`）或开局挂给自己的常驻状态（`passive_status`）。*/
     statusId?: string;
     enabled: boolean;
 }
@@ -200,7 +200,7 @@ export const ZCSkillProgressionMode = {
 } as const;
 export type ZCSkillProgressionMode = (typeof ZCSkillProgressionMode)[keyof typeof ZCSkillProgressionMode];
 
-/** J-技能表/PVP技能配置的一行。它既可提供被动数值，也可声明命中状态等行为参数。 */
+/** J-技能表/PVP技能配置的一行。它既可提供被动数值，也可声明命中状态等行为参数。*/
 export interface ZCSkillPlanRecord {
     enabled: boolean;
     modifierId: number;
@@ -225,15 +225,9 @@ export interface ZCSkillPlanRecord {
     cooldown?: number;
     maxTriggers?: number;
     /**
-     * 技能数值参数（2026-10-29）。键名与 `ZCAttackResolutionSystem` 读的
-     * `skillRuntime.parameters` 完全一致（`projectileCount` / `damageRate` /
-     * `burstCount` / `burstSeconds` / `selfShieldRatio` / `shieldSeconds` /
-     * `lowHpThreshold` / `lowHpReducePct` / `lowHpSeconds` / `lowHpCooldown`）。
-     *
-     * 为什么需要它：`skillRuntime.parameters` 原本只能由 `domain='skill'` 的修改器喂，
-     * 而计划行的 `statId/operation/value` 一律进 `domain='unit'`，所以「机关枪 3/5/7 发」
-     * 这类**按等级变化的技能参数**此前没有落点。留空 ⇒ 空对象，既有行为不变。
-     */
+     * 技能数值参数，键名与 `skillRuntime.parameters` 一致
+     * （projectileCount / damageRate / burstCount / lowHp* 等）。留空 ⇒ 空对象。
+    */
     skillParams?: Readonly<Record<string, number>>;
 }
 
@@ -248,13 +242,13 @@ export interface ZCStatusConfigRecord {
     handlerKey: string;
     statMods: Readonly<Record<string, number>>;
     enabled: boolean;
-    /** periodic handler 每周期百分比（1 = 1%）；仅 periodic_damage/heal 使用。 */
+    /** periodic handler 每周期百分比（1 = 1%）；仅 periodic_damage/heal 使用。*/
     periodicAmountPct?: number;
-    /** periodic 结算基准。 */
+    /** periodic 结算基准。*/
     periodicBasis?: 'targetMaxHp' | 'senderAttack';
-    /** periodic 单次封顶 = 施加者攻击力 × 倍数。 */
+    /** periodic 单次封顶 = 施加者攻击力 × 倍数。*/
     periodicCapMultiplier?: number;
-    /** 硬控类别（stun/freeze/paralysis/blind）；非空时单位受控。 */
+    /** 硬控类别（stun/freeze/paralysis/blind）；非空时单位受控。*/
     control?: ZCControlKind;
 }
 
@@ -284,7 +278,7 @@ export interface ZCStatBreakdown {
 
 export interface ZCModifierAdapterCatalogs {
     attrMap: ReadonlyMap<string, ZCAttributeMapping>;
-    /** 文本覆盖按技能绑定进入攻击档案，不进入数值修正器。 */
+    /** 文本覆盖按技能绑定进入攻击档案，不进入数值修正器。*/
     textAttrMap: ReadonlyMap<string, ZCTextAttributeMapping>;
     overrides: ReadonlyMap<string, ZCModifierOverride>;
     textOverrides: ReadonlyMap<string, ZCTextModifierOverride>;
@@ -301,8 +295,8 @@ export interface ZCModifierAdapterTables {
      * 支持两种输入：
      * 1. 单属性行：legacyKey + targetUnitId + domain/statId/operation/value；
      * 2. 多属性行：targetUnitIds + valuesJson。valuesJson 优先使用 `statId.operation`
-     *    字段选择器（如 attack.add / attack.addRate），同时兼容旧中文 legacyKey。
-     */
+     * 字段选择器（如 attack.add / attack.addRate），同时兼容旧中文 legacyKey。
+    */
     pvpModifierOverride?: readonly Record<string, unknown>[];
     pvpUnitGrowth?: readonly Record<string, unknown>[];
     pvpSkillBinding?: readonly Record<string, unknown>[];
@@ -331,13 +325,13 @@ const SKILL_BEHAVIORS = new Set([
     //  2026-10-29：只带数据、不带结算的两条（见 ZCSkillRuntimeRegistry 构造函数注释）。
     'skill_params', 'passive_status',
     //  2026-11-04 椰蛋战士「暴风」（100504）：强化那一击的收招阶段不改打当前目标，
-    //  而是从施法者朝目标抛出 N 个**会移动**的地面区域（见 ZCAttackResolutionSystem 的 zone 分支）。
+    //  而是从施法者朝目标抛出 N 个会移动的地面区域（见 ZCAttackResolutionSystem 的 zone 分支）。
     'on_cast_end_spawn_zone',
     //  2026-10-30 僵尸「共生信号」系列（103001 / 103002 / 103003）：以施法者为圆心、
-    //  给半径内同阵营友军挂一个**随本体移动**的常驻增益状态（见 `ZCSkillTriggerSystem.applyTeamAura`）。
-    //  和 `passive_status` 分开：那个把状态挂给**自己**，这个是挂给**周围的友军**。
+    //  给半径内同阵营友军挂一个随本体移动的常驻增益状态（见 `ZCSkillTriggerSystem.applyTeamAura`）。
+    //  和 `passive_status` 分开：那个把状态挂给自己，这个是挂给周围的友军。
     'team_aura',
-    //  2026-10-30「第二个主动」：冷却到点给**自己**开一段限时增益，可选带自愈 / 友军治疗 / 净化。
+    //  2026-10-30「第二个主动」：冷却到点给自己开一段限时增益，可选带自愈 / 友军治疗 / 净化。
     //  为什么不做成强化槽或副轨：一条普攻行只有「一强化 + 一副轨（扇形伤害）」两个出手位，
     //  而这类技能既不出弹也不打人，走的是 `ZCSkillTriggerSystem.applySelfCast` 自己的 CD。
     'self_cast',
@@ -348,7 +342,7 @@ const SKILL_BEHAVIORS = new Set([
     //  两端各结算一次伤害，原位可选留一个到时爆炸的分身。
     //  见 `ZCSkillTriggerSystem.applyBlinkStrike`；位移落点走 `ZCMovementSystem.placeAt`。
     'blink_strike',
-    //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在施法者脚下开一片**跟随本体**的
+    //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在施法者脚下开一片跟随本体的
     //  周期伤害区域（每秒一波，持续 N 秒）。见 `ZCSkillTriggerSystem.applySelfAura` +
     //  `ZCAttackResolutionSystem.castSelfAura`；结算复用 `ZCGroundZoneSystem`（`followUnitId`）。
     'self_aura',
@@ -436,12 +430,8 @@ function hasConfiguredValue(value: unknown): boolean {
 
 /**
  * `pvpSkillPlan.skillParamJson` → 技能数值参数。
- *
- * 留空 / 空串 ⇒ `undefined`（**不是**空对象）：调用方据此判断「这一档没有额外参数」，
- * 避免把空对象合并进 `skillRuntime.parameters` 时覆盖掉别的档位。
- * 键名不做白名单校验 —— 参数名是 `ZCAttackResolutionSystem` 与表之间的约定，
- * 写错的效果是「参数没人读」，与白名单外抛错相比更容易在调表时发现。
- */
+ * 留空/空串返回 undefined；键名不做白名单，写错只是没人读。
+*/
 function parseSkillParams(value: unknown, path: string): Readonly<Record<string, number>> | undefined {
     if (!hasConfiguredValue(value)) return undefined;
     const raw = readConfigObject(jsonValue(value, path), `[ZCStatSchema] ${path}`);
@@ -506,7 +496,7 @@ function overrideKey(modifierId: number, legacyKey: string, targetUnitId = '', s
 /**
  * 覆盖查找的回落顺序：单位+方案 → 单位通用 → 全单位+方案 → 全单位通用。
  * 于是「一个 modifierId 对应多个养成方案」只需按方案多写几行，未写方案的旧数据行为不变。
- */
+*/
 export function findZCModifierOverride(
     catalogs: ZCModifierAdapterCatalogs,
     modifierId: number,
@@ -554,7 +544,7 @@ function stableHash(value: unknown): string {
     return hash.toString(16).padStart(8, '0');
 }
 
-/** 两份映射是否等价（忽略 `priority`/`min`/`max` 这类可能按技能微调的字段之外的核心部分）。 */
+/** 两份映射是否等价（忽略 `priority`/`min`/`max` 这类可能按技能微调的字段之外的核心部分）。*/
 function sameMapping(left: ZCAttributeMapping, right: ZCAttributeMapping): boolean {
     return left.domain === right.domain
         && left.statId === right.statId
@@ -565,7 +555,7 @@ function sameMapping(left: ZCAttributeMapping, right: ZCAttributeMapping): boole
         && left.handlerKey === right.handlerKey;
 }
 
-/** 解析并严格校验五张 PVP 适配表；失败时不应提交到全局运行时。 */
+/** 解析并严格校验五张 PVP 适配表；失败时不应提交到全局运行时。*/
 export function parseZCModifierAdapterCatalogs(
     tables: ZCModifierAdapterTables,
     modifiers: ReadonlyMap<number, ZCModifierRecord> = new Map(),
@@ -626,7 +616,7 @@ export function parseZCModifierAdapterCatalogs(
             throw new Error(`[ZCStatSchema] ${path} min 不能大于 max`);
         }
         //  同 `legacyKey` 允许重复出现：表里同一属性会按技能各复制一份（2348 行只有 2132 个不同 key）。
-        //  内容完全一致时是**冗余拷贝**，覆盖即可；内容不一致说明两条适配规则打架，必须当场报出。
+        //  内容完全一致时是冗余拷贝，覆盖即可；内容不一致说明两条适配规则打架，必须当场报出。
         const previous = attrMap.get(legacyKey);
         if (textAttrMap.has(legacyKey) || (previous && !sameMapping(previous, mapping))) {
             throw new Error(`[ZCStatSchema] legacyKey 重复且映射不一致：${legacyKey}（见 ${path}）`);
@@ -962,7 +952,7 @@ const UNIT_STAT_IDS: readonly ZCStatId[] = [
  * 2026-10-13 新增的 8 种 statId → `ZCUnitStatPatch` 字段。
  * 第二个是 `addRate` 的去处（`null` = 该 statId 没有百分数口径）。
  * 已有的 8 种不在这里 —— 它们由 `typedToLegacyPatch` 负责。
- */
+*/
 export const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyof ZCUnitStatPatch | null]>> = {
     critRate: ['critRatePct', null],
     critDamage: ['critDamagePct', null],
@@ -973,13 +963,13 @@ export const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyo
     recruitMaxNum: ['recruitMaxNumFlat', null],
     singleRecruitNum: ['singleRecruitNumFlat', null],
     singleRecruitLegionCount: ['singleRecruitLegionCountFlat', null],
-    //  2026-11-04：`add` 直接写比例（0.02 = 2%），**不要**写成 2 —— 这个字段是比例不是百分数，
+    //  2026-11-04：`add` 直接写比例（0.02 = 2%），不要写成 2 —— 这个字段是比例不是百分数，
     //  与 `critRatePct` 那批「20 = +20%」的口径不同。`addRate` 在这里没有意义
     //  （rate 分支要乘 `baseValue`，而它没有基础值 ⇒ 恒 0）。
     lifestealRate: ['lifestealRate', null],
 };
 
-/** 把一次结算出的 statId 明细折成 `ZCUnitStatPatch`；空 patch 不写键（下游按缺省走）。 */
+/** 把一次结算出的 statId 明细折成 `ZCUnitStatPatch`；空 patch 不写键（下游按缺省走）。*/
 function foldStatPatch(
     statId: ZCStatId,
     flat: number,
@@ -1012,7 +1002,7 @@ function clampStat(statId: ZCStatId, value: number): number {
     }
 }
 
-/** 按固定层级计算单位定义，同时生成 UI 可直接消费的基础值/绿色加成明细。 */
+/** 按固定层级计算单位定义，同时生成 UI 可直接消费的基础值/绿色加成明细。*/
 export function applyZCTypedUnitModifiers(
     base: ZCUnitDefinition,
     modifiers: readonly ZCTypedModifier[],

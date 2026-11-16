@@ -31,18 +31,16 @@ import { HeadArt } from '../HeadArt';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ZC_BATTLE_EVENTS } from './application/ZCBattleEvents';
 import { createIconLoader, type IIconLoader } from '../common/SpriteFrameCache';
-import { resolveCardClass } from '../card/CardLineupTypes';
-import type { ICardArtConfig } from '../card/CardArtConfig';
 
 const { ccclass } = _decorator;
 
 /**
  * 对局地图资源目录（相对 `resources/`）。
  *
- *  全工程唯一的路径来源：`tests/**` 与 `tools/map-editor/copy_maps.py` 都从本文件
- * 解析这一行。挪动地图目录时只改这里，**不要**在别处再硬编码一份 —— 之前地图从
+ * 全工程唯一的路径来源：`tests/**` 与 `tools/map-editor/copy_maps.py` 都从本文件
+ * 解析这一行。挪动地图目录时只改这里，不要在别处再硬编码一份 —— 之前地图从
  * `config/zcds/maps` 挪到 `config/maps` 时，正是靠各处硬编码的副本把这个常量漏掉了。
- */
+*/
 export const MAP_DIRECTORY = 'config/maps';
 
 export type { IZCGamePreparedResources } from './application/ZCGamePreparedResources';
@@ -52,7 +50,7 @@ export type { IZCGameEntry } from './application/ZCGameEntry';
 /**
  * Battle presentation adapter, mounted by BattleComposition with externally owned resources.
  * Runtime controllers advance the model; presentation entities live in ZCGameRenderWorld.
- */
+*/
 @ccclass('ZCGame')
 export class ZCGame extends Component {
     get dragMoved(): boolean { return this.hudView.dragMoved; }
@@ -115,12 +113,12 @@ export class ZCGame extends Component {
     private renderWorld: ZCGameRenderWorld | null = null;
     private spawnSelectionView: ZCSpawnSelectionView | null = null;
     /**
-     * 从选点 HUD「借出来」的绿色【确认位置】按钮及其**原位信息**。
+     * 从选点 HUD「借出来」的绿色【确认位置】按钮及其原位信息。
      *
-     *  节点就是 `ZCSpawnSelection.prefab/ConfirmSpawn`（绿勾 `btn_gou.png`），选点期间被挪到
-     *  `hudView.mapLayer` 下跟着基地走，选点结束/退出对局时按这里记的 parent/兄弟序/坐标
-     *  原样塞回去再随 HUD 一起销毁。非 null 即代表「按钮正在外面漂着」。
-     */
+     * 节点就是 `ZCSpawnSelection.prefab/ConfirmSpawn`（绿勾 `btn_gou.png`），选点期间被挪到
+     * `hudView.mapLayer` 下跟着基地走，选点结束/退出对局时按这里记的 parent/兄弟序/坐标
+     * 原样塞回去再随 HUD 一起销毁。非 null 即代表「按钮正在外面漂着」。
+    */
     private spawnConfirmBorrow: {
         node: Node;
         parent: Node;
@@ -133,15 +131,15 @@ export class ZCGame extends Component {
     /**
      * 本局角色卡面图（卡表 `headIcon` → `icons/cardHead/**`）；异步加载，整局一份。
      * 视图通过注入的本局只读资源表按 id 取图。
-     */
+    */
     private readonly legendCardArtFrames: Map<string, SpriteFrame> = new Map();
-    /** 横幅使用阵容页立绘；与地块翻牌的 headIcon 分开，资源仍归本局作用域。 */
+    /** 横幅使用阵容页立绘；与地块翻牌的 headIcon 分开，资源仍归本局作用域。*/
     private readonly legendRoleArtFrames = new Map<string, SpriteFrame>();
-    /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。 */
+    /** 本局玩家头像帧（owner → `images/head` 那套）；异步加载，拿不到就只显示头像环。*/
     private readonly legendPortraitFrames: Map<string, SpriteFrame> = new Map();
-    /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。 */
+    /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。*/
     private bossPanel: ZCHudBossPanel | null = null;
-    /** 波次怪的头像帧（键 = 卡 id）；与名字一起喂给首领条，异步填、拿不到就留空框。 */
+    /** 波次怪的头像帧（键 = 卡 id）；与名字一起喂给首领条，异步填、拿不到就留空框。*/
     private readonly bossPortraits: Map<string, SpriteFrame> = new Map();
     private readonly bossNames: Map<string, string> = new Map();
     private get leaving(): boolean { return this.stopped || !this.isValid; }
@@ -162,7 +160,7 @@ export class ZCGame extends Component {
         catch (error) { this.shutdown(); throw error; }
     }
 
-    /** 帧事件 payload 复用：EventMgr 同步派发，唯一监听者只解构取 owner/dt，不持有引用。 */
+    /** 帧事件 payload 复用：EventMgr 同步派发，唯一监听者只解构取 owner/dt，不持有引用。*/
     private readonly framePayload: { owner: ZCGame; dt: number } = { owner: this, dt: 0 };
 
     update(dt: number): void {
@@ -172,24 +170,24 @@ export class ZCGame extends Component {
 
 
     /**
-     * 胜负已定：用**现有地块资源**播一段「胜利方扫场」再弹结算 —— 镜头先由 HUD 拉远
-     * 居中看全局（**镜头动画本身不变**，row8 原文「镜头放大的动画保持不变」），再整行把地块
-     * 铺成胜利方的**深饱和**色、铺过两行就从起点推回去回正成阵营**当前色**，
+     * 胜负已定：用现有地块资源播一段「胜利方扫场」再弹结算 —— 镜头先由 HUD 拉远
+     * 居中看全局（镜头动画本身不变，row8 原文「镜头放大的动画保持不变」），再整行把地块
+     * 铺成胜利方的深饱和色、铺过两行就从起点推回去回正成阵营当前色，
      * 回正收手后再有一道亮线沿同一方向扫过（线条脉冲）。
      * （方向：我方从下往上 / 其他玩家从上往下，见 `buildVictorySweepPlan`）。
-     * **起手不染色**，见 `ZCGameRenderWorld.startVictorySweep`。
+     * 起手不染色，见 `ZCGameRenderWorld.startVictorySweep`。
      *
-     * 放在结算分支的**入口**、每帧都调（幂等，已经在播就直接返回）：胜负不一定是
+     * 放在结算分支的入口、每帧都调（幂等，已经在播就直接返回）：胜负不一定是
      * `tick` 判出来的，服务端下发的快照、掉线判负也会把它置成非 playing —— 绑死在
      * 「tick 刚判负那一帧」的话，这些路径就静默没有扫场了。
      *
-     * 返回**是否要走这段演出**：平局没有胜利方、整盘没有可染的格子，都返回 false，
+     * 返回是否要走这段演出：平局没有胜利方、整盘没有可染的格子，都返回 false，
      * 调用方直接弹结算别等。撤退不走这里，由运行控制器直接发起结算。
-     */
+    */
     private beginVictorySweep(frame: ZCGameRenderFrame): boolean {
         const status = frame.snapshot.status;
         if (status !== 'victory' && status !== 'defeat') return false;
-        // 🔴 用**模型判定的胜方**，不要拿 status 反推：status 只有 victory / defeat 两态，
+        //  用模型判定的胜方，不要拿 status 反推：status 只有 victory / defeat 两态，
         // 而 4 人局里"我方出局"可能是 2 号红方、也可能是 4 号紫方赢 —— 反推会把紫方赢的局
         // 铺成红方色（2026-10-28 用户报的就是这个）。
         // 兜底只在模型没给胜方时用（例如恢复一份已经结束的快照，`checkOutcome` 不会重判）：
@@ -206,14 +204,14 @@ export class ZCGame extends Component {
     /**
      * 流程退出时先销毁视图，再释放资源，避免等待组件的延迟销毁。
      *
-     *  **幂等**靠本实例 `stopped` 标记：`ProcedureGame.onLeave` 显式调一次，紧接着的
+     * 幂等靠本实例 `stopped` 标记：`ProcedureGame.onLeave` 显式调一次，紧接着的
      * `destroy()` → `onDestroy` 会再调一次，第二次直接早退。别把这个闸门删掉（会重复销毁）。
      *
-     *  ⚠️ 下面几处 `?.` **不要按「createGame 都建好了」删掉**：本函数还要在**半成品节点**上收尾 ——
-     * `initialize` 的 catch 会在 `createGame` **中途抛错**时调它，而 `hudView` / `renderWorld`
+     * 下面几处 `?.` 不要按「createGame 都建好了」删掉：本函数还要在半成品节点上收尾 ——
+     * `initialize` 的 catch 会在 `createGame` 中途抛错时调它，而 `hudView` / `renderWorld`
      * 是 createGame 中段才 new 的，那时可能还没建。删掉的话收尾自己会抛
      * `Cannot read properties of null`，把真正的抛错原因盖掉（进不去对局时只能看到这个假错）。
-     */
+    */
     shutdown(): void {
         if (this.stopped) return;
         this.stopped = true;
@@ -248,13 +246,13 @@ export class ZCGame extends Component {
     /**
      * 传说卡横幅右上角的玩家头像。
      *
-     *  头像要过 head/icon 表 + 控制器 AssetService 才拿得到，是**异步**的；而 `createGame` 是同步路径
+     * 头像要过 head/icon 表 + 控制器 AssetService 才拿得到，是异步的；而 `createGame` 是同步路径
      * （首帧必须在这一帧画出来），所以这里 fire-and-forget：拿到就注入解析器，拿不到就只留
-     * 四个玩家色的头像环 —— 少一枚头像不影响这次演出，**不**阻断对局。
+     * 四个玩家色的头像环 —— 少一枚头像不影响这次演出，不阻断对局。
      *
-     *  注入时机晚于横幅弹出也没关系：`ZCGameRenderWorld.setLegendPortraitResolver` 会连同
+     * 注入时机晚于横幅弹出也没关系：`ZCGameRenderWorld.setLegendPortraitResolver` 会连同
      * 已经弹出来的横幅一起刷新。
-     */
+    */
     private loadLegendPortraits(): void {
         const avatars = this.playerAvatars;
         if (!avatars) return;
@@ -266,7 +264,7 @@ export class ZCGame extends Component {
             // 随后同步置 null）⇒ 两者在每个 await 边界上恒等，多写一个对象判空只是重复判据。
             if (this.leaving) return;
             if (!player && !enemy) return;
-            // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷**已经弹出来**的横幅。
+            // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷已经弹出来的横幅。
             const portraits = new Map<string, SpriteFrame>();
             if (player) portraits.set(ZCOwner.Player, player);
             if (enemy) portraits.set(ZCOwner.Enemy, enemy);
@@ -278,21 +276,21 @@ export class ZCGame extends Component {
     /**
      * 本局展示图预扫：地块翻牌保留卡表 headIcon，横幅使用阵容页专属立绘 / 职业占位。
      *
-     *  口径与 `loadLegendPortraits` 完全一致：卡面图要过 icon 表 + 控制器 AssetService，是**异步**的，
-     *  而 `createGame` 是同步路径（首帧必须画出来）⇒ 这里 fire-and-forget；拿到就注入解析器
-     *  （`ZCGameRenderWorld.setLegendCardArtResolver` 会连同已弹出的横幅与小卡牌一起补刷），
-     *  一张都拿不到就保留回退链，**不阻断对局**。
+     * 口径与 `loadLegendPortraits` 完全一致：卡面图要过 icon 表 + 控制器 AssetService，是异步的，
+     * 而 `createGame` 是同步路径（首帧必须画出来）⇒ 这里 fire-and-forget；拿到就注入解析器
+     * （`ZCGameRenderWorld.setLegendCardArtResolver` 会连同已弹出的横幅与小卡牌一起补刷），
+     * 一张都拿不到就保留回退链，不阻断对局。
      *
-     *   预扫**本局全部卡池**而不是等翻牌那一刻再按需加载：解析必须是**同步命中**，
-     *  否则会先闪一帧回退图（兵种 idle / 建筑图）再换成卡面图。
+     * 预扫本局全部卡池而不是等翻牌那一刻再按需加载：解析必须是同步命中，
+     * 否则会先闪一帧回退图（兵种 idle / 建筑图）再换成卡面图。
      *
-     *   卡池口径必须与模型 `ZCGameModel.deckFor` **逐条对齐**：那边是
-     *  `ownerDecks?.[owner] ?? (player ? playerDeck : enemyDeck)`，正式对局会经
-     *  `ZCClientCombatConfig` 按后端各席位阵容构筑牌组 ⇒
-     *  这里若只扫全局 `getPlayerDeck()/getEnemyDeck()`，那些局会一张卡面都取不到，
-     *  然后每张卡都刷「没有角色卡面图」的日志。宁可多扫，不可漏扫。
-     */
-    private loadLegendCardArt(art: ICardArtConfig): void {
+     * 卡池口径必须与模型 `ZCGameModel.deckFor` 逐条对齐：那边是
+     * `ownerDecks?.[owner] ?? (player ? playerDeck : enemyDeck)`，正式对局会经
+     * `ZCClientCombatConfig` 按后端各席位阵容构筑牌组 ⇒
+     * 这里若只扫全局 `getPlayerDeck()/getEnemyDeck()`，那些局会一张卡面都取不到，
+     * 然后每张卡都刷「没有角色卡面图」的日志。宁可多扫，不可漏扫。
+    */
+    private loadLegendCardArt(): void {
         const config = this.matchConfig;
         const decks: ReadonlyArray<readonly ZCDeckCard[]> = (config ? ZC_OWNER_ORDER.map((owner) => (
             config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
@@ -303,21 +301,13 @@ export class ZCGame extends Component {
                 cards.set(card.id, card);
             }
         }
-        const loadIcon = this.loadIcon;
         void Promise.all(Array.from(cards.values()).map(async (card) => {
             // 立绘真源 = pvpCard.headIcon（icon.json 解析到 icons/cardHead 资源名）；
-            // 无 headIcon 或缺图时回退职业雕像，与列表条目同一条解析链。
-            const heroFrame = card.headIcon
+            // 没配或缺图就不挂立绘，不再拿矩阵表的职业雕像兜底。
+            const frame = card.headIcon
                 ? await this.loadHeadIconFrame(card.headIcon).catch(() => null)
                 : null;
-            let role = heroFrame;
-            if (!role) {
-                if (this.leaving) return { cardId: card.id, frame: heroFrame, role: null };
-                const path = art.paths.get(`hero.${resolveCardClass(card, art.lineup)}`);
-                const cut = path.lastIndexOf('/');
-                role = await loadIcon(path.slice(cut + 1), path.slice(0, cut)).catch(() => null);
-            }
-            return { cardId: card.id, frame: heroFrame, role };
+            return { cardId: card.id, frame, role: frame };
         })).then((entries) => {
             //  同上：`leaving` 已经盖住「renderWorld 被收走」这件事。
             if (this.leaving) return;
@@ -340,15 +330,15 @@ export class ZCGame extends Component {
     /**
      * 特效美术按需补载到货 → 交给渲染世界合并进本局特效表（下一帧由它补挂到在飞的特效节点上）。
      *
-     * 为什么不在这里持一份 Map：渲染世界会因为后补 job 而**整体换掉** `effectVisualPrefabs`
+     * 为什么不在这里持一份 Map：渲染世界会因为后补 job 而整体换掉 `effectVisualPrefabs`
      * 的快照（`applyDeferredArt` 里 `new Map([...])`），视图侧留一份引用必然指向旧表 ⇒ 合到幽灵里。
      * 唯一持有者就是渲染世界，入口也只有它一个。
-     */
+    */
     applyEffectPrefab(path: string, prefab: Prefab): void {
         this.renderWorld?.applyEffectPrefab(path, prefab);
     }
 
-    /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。 */
+    /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。*/
     private createGame(prepared: IZCGamePreparedResources, model: IZCBattleRenderModel | null, selection: ZCSpawnSelection | null): void {
         const entryMatchConfig = this.matchConfig;
         if (!entryMatchConfig) throw new Error('ZCGame.initialize 缺少本局配置快照');
@@ -366,7 +356,7 @@ export class ZCGame extends Component {
         this.hudView.setMap(setupConfig.map.hexes);
         // HUD 的神器按钮原先显示 prefab 硬绑的通用图（`image/gameui/zd_faqi.png`），
         // 与本局携带的神器无关 ⇒ 棋盘显示剑、HUD 显示石锤。这里喂同一份已加载的帧。
-        // ⚠️ 自选地图局**不遮蔽这个按钮**：它显示的是玩家自己的神器，不是地图里的随机资源
+        //  自选地图局不遮蔽这个按钮：它显示的是玩家自己的神器，不是地图里的随机资源
         //   （2026-10-23 首次改错成"自选局用问号"，已回退）。
         this.hudView.setArtifactFrame(prepared.artifactIconFrame);
         // 开局镜头停在我方主城那一格，而不是整盘中心（3 / 4 人图的整盘中心落在几块领地
@@ -382,7 +372,7 @@ export class ZCGame extends Component {
         const selectingSpawn = (setupConfig.map.cityMode ?? 'fixed') === 'select';
         this.hudView.initialize({ deferMapIntro: selectingSpawn });
         if (this.seatProfiles.size > 0) {
-            // 名字 + 头像一起交给 HUD（多队伍改造后按**席位**渲染，不再是「我方/敌方」两槽）。
+            // 名字 + 头像一起交给 HUD（多队伍改造后按席位渲染，不再是「我方/敌方」两槽）。
             this.hudView.setSeatProfiles(this.seatProfiles);
         }
         // 棋盘图层容器：水面 / 地块 / 装饰 / 建筑 / 状态条五层的结构与层序都在这个 prefab 里，
@@ -456,7 +446,7 @@ export class ZCGame extends Component {
             wallPrefab: prepared.wallPrefab,
         });
         this.loadLegendPortraits();
-        this.loadLegendCardArt(prepared.cardArtConfig);
+        this.loadLegendCardArt();
         this.loadDefenceBossArt();
         if (selection) {
             this.renderWorld.initialize(setupConfig.map);
@@ -494,7 +484,7 @@ export class ZCGame extends Component {
         director.once(Director.EVENT_AFTER_DRAW, afterDraw);
     }
 
-    /** 从 `art.freeDecor` 铺纯表现装饰；不依赖模型，也不参与格子规则。 */
+    /** 从 `art.freeDecor` 铺纯表现装饰；不依赖模型，也不参与格子规则。*/
     private installMapDecor(map: ZCMatchMap, decorFrames: ReadonlyMap<string, SpriteFrame>): void {
         this.renderWorld.installDecor(
             buildDecorPlacements(map.art?.freeDecor, (art) => {
@@ -522,21 +512,21 @@ export class ZCGame extends Component {
 
 
     /**
-     * 把 HUD 上那颗绿色对勾【确认位置】按钮**借**到棋盘层，让它跟着基地走。
+     * 把 HUD 上那颗绿色对勾【确认位置】按钮借到棋盘层，让它跟着基地走。
      *
-     *   是「借用」不是新建：需求 2 要的按钮就是 `ZCSpawnSelection.prefab/ConfirmSpawn`
-     *  （`btn_gou.png` 绿勾）。`ZCSpawnSelectionView` 已经在按选点合法性给它染色
-     *  （`CONFIRM_INVALID/READY/IDLE`）、在「等待其他玩家」期间隐藏它，并把 `TOUCH_END`
-     *  接到 `actions.confirm()` —— 这些语义全部沿用，本方法只做两件事：换父级 + 关 Widget。
-     *  所以这里**不要**再实例化一个自己的按钮（2026-10-15 已删掉手画的
-     *  `ui/game/ZCSpawnBaseConfirm`）：两套按钮会各有一套染色/显隐判据，必然分叉。
+     * 是「借用」不是新建：需求 2 要的按钮就是 `ZCSpawnSelection.prefab/ConfirmSpawn`
+     * （`btn_gou.png` 绿勾）。`ZCSpawnSelectionView` 已经在按选点合法性给它染色
+     * （`CONFIRM_INVALID/READY/IDLE`）、在「等待其他玩家」期间隐藏它，并把 `TOUCH_END`
+     * 接到 `actions.confirm()` —— 这些语义全部沿用，本方法只做两件事：换父级 + 关 Widget。
+     * 所以这里不要再实例化一个自己的按钮（2026-10-15 已删掉手画的
+     * `ui/game/ZCSpawnBaseConfirm`）：两套按钮会各有一套染色/显隐判据，必然分叉。
      *
-     *   关 Widget 这一步不能省：按钮在选点 HUD 里靠 `cc.Widget`（水平居中 + 底边 200px）
-     *  钉在屏幕底部，换到棋盘层后 Widget 仍会每帧按那套对齐规则把它拽回去，跟逐帧写的
-     *  基地坐标打架 —— 表现为按钮卡在屏幕底部纹丝不动。
-     */
+     * 关 Widget 这一步不能省：按钮在选点 HUD 里靠 `cc.Widget`（水平居中 + 底边 200px）
+     * 钉在屏幕底部，换到棋盘层后 Widget 仍会每帧按那套对齐规则把它拽回去，跟逐帧写的
+     * 基地坐标打架 —— 表现为按钮卡在屏幕底部纹丝不动。
+    */
     private borrowSpawnConfirmButton(): void {
-        //  这里不判「按钮 / 父级是否存在」：`confirmButton` 是 `ZCSpawnSelection.prefab` 上的**必填引用**
+        //  这里不判「按钮 / 父级是否存在」：`confirmButton` 是 `ZCSpawnSelection.prefab` 上的必填引用
         //（`ZCSpawnSelectionView` 声明 `Node = null!`），而本方法唯一的调用点是刚 `instantiate + setParent`
         // 完的 `startSpawnSelection` ⇒ 节点必然有效、也必然有父级。真掉绑定就该在这里炸，别静默不借。
         const button = this.spawnSelectionView.confirmButton;
@@ -558,12 +548,12 @@ export class ZCGame extends Component {
     /**
      * 归还【确认位置】按钮：放回 `ZCSpawnSelection` 预制里的原位，恢复 Widget。
      *
-     *  选点结束与退出对局都要调，而且必须在 `spawnSelectionView.node.destroy()` **之前**调 ——
-     *  按钮此刻挂在棋盘层下，不送回去它就不会跟着选点 HUD 一起销毁，会永久留在地图上。
+     * 选点结束与退出对局都要调，而且必须在 `spawnSelectionView.node.destroy()` 之前调 ——
+     * 按钮此刻挂在棋盘层下，不送回去它就不会跟着选点 HUD 一起销毁，会永久留在地图上。
      *
-     *  顺手把世界层里的引用置 `null`：`Node.destroy()` 当帧 `isValid` 仍为 true，
-     *  不置空会多写一帧坐标到正在销毁的节点上。
-     */
+     * 顺手把世界层里的引用置 `null`：`Node.destroy()` 当帧 `isValid` 仍为 true，
+     * 不置空会多写一帧坐标到正在销毁的节点上。
+    */
     private restoreSpawnConfirmButton(): void {
         const borrow = this.spawnConfirmBorrow;
         this.spawnConfirmBorrow = null;
@@ -583,15 +573,15 @@ export class ZCGame extends Component {
     }
 
     /**
-     * 守城（塔防）局的波次面板：**按需实例化**，非守城局直接销毁。
+     * 守城（塔防）局的波次面板：按需实例化，非守城局直接销毁。
      *
-     * 面板上两拨东西的生命周期**不同**（2026-11-09 用户）：
-     *  · 波次徽标（`IconBoss` + `第N/M波`）**常驻**，从第一波起一直挂着；
-     *  · 当前波生成后，普通波与 BOSS 波都显示头像 / 名字 / 总血条。
+     * 面板上两拨东西的生命周期不同（2026-11-09 用户）：
+     * · 波次徽标（`IconBoss` + `第N/M波`）常驻，从第一波起一直挂着；
+     * · 当前波生成后，普通波与 BOSS 波都显示头像 / 名字 / 总血条。
      *
      * 头像与名字按 `currentWaveCardId` 查 `loadDefenceBossArt()` 预扫好的表（解析必须同步命中，
      * 否则会先闪一帧空框再换成怪图）；`render` 每帧全量赋值，面板侧不做增量。
-     */
+    */
     private renderBossPanel(model: IZCBattleRenderModel): void {
         const progress = model.defenceWaveProgress;
         if (!progress) {
@@ -624,8 +614,8 @@ export class ZCGame extends Component {
      * 波次怪可能来自任一参战席位或完整卡牌目录；按与单位模型一致的卡 id 收集头像与名字。
      *
      * 头像走卡表 `headIcon`，异步加载完再落表；
-     * 一张都拿不到就留空框，**不阻断对局**。
-     */
+     * 一张都拿不到就留空框，不阻断对局。
+    */
     private loadDefenceBossArt(): void {
         const config = this.matchConfig;
         const decks: ReadonlyArray<readonly ZCDeckCard[]> = [getEnemyDeck()].concat(config ? ZC_OWNER_ORDER.map((owner) => (

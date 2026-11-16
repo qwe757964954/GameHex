@@ -9,9 +9,9 @@ import { isZCAwakeMonster, zcMonsterPosition } from './ZCNeutralFeatureSystem';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
 
-/** 冲刺撞到的那个对象：`x/y` 是最早接触点（冲刺停在这里）。 */
+/** 冲刺撞到的那个对象：`x/y` 是最早接触点（冲刺停在这里）。*/
 export interface IZCDashHit {
-    /** `unit` = 撞到敌方单位；`wall` / `building` = 撞到城墙 / 建筑（同一个地块 id）。 */
+    /** `unit` = 撞到敌方单位；`wall` / `building` = 撞到城墙 / 建筑（同一个地块 id）。*/
     readonly kind: 'unit' | 'wall' | 'building';
     readonly id: number;
     readonly x: number;
@@ -26,7 +26,7 @@ export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometr
     baseDefinition(id: string): ZCUnitDefinition;
 }
 
-/** 每局独占的单位索敌、射程和寻路缓存。 */
+/** 每局独占的单位索敌、射程和寻路缓存。*/
 export class ZCUnitTargeting implements IZCUnitTargeting {
     private readonly pathWorkspace: ZCPathWorkspace;
     private readonly rankedNeighbors = new Map<number, readonly (readonly number[])[]>();
@@ -46,7 +46,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.stepCache.delete(id);
     }
 
-    /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。 */
+    /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。*/
     acquire(unit: ZCUnitState): void {
         const target = ZCTargetingSystem.acquire(unit, this.context.targeting);
         unit.targetUnitId = null;
@@ -57,7 +57,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         else if (target?.kind === 'building') unit.targetBuildingHexId = target.id;
     }
 
-    /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。 */
+    /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。*/
     refreshPriorityTarget(unit: ZCUnitState): boolean {
         if (!this.context.targeting.preferUnitTargets?.(unit)
             || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
@@ -103,23 +103,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }
 
     /**
-     * 「触发范围」闸门：**普攻射程内有没有可打的目标**（2026-11-11 用户口径）。
-     *
-     * 技能到点之后不立刻释放，先过这道闸门：范围内一个敌人都没有 ⇒ 待触发
-     * （冷却保持就绪、不消费），直到目标走进普攻射程才真正放出去。
-     *
-     * 与 `isInAttackRange` 的区别：那个只认**当前锁定的那个目标** —— 锁敌是 RTS 式仇恨锁，
-     * 目标完全可能在半张图外正往这边跑，`current()` 照样返回它。这里问的是「身边有没有人能打」，
-     * 所以不依赖锁敌：锁定的目标就在范围内就直接返回（最常见的一条路，不扫全场），
-     * 否则才按 `acquire` + `isInAttackRange` 同一套判据扫一遍敌我单位。
-     *
-     * 判据与普攻完全同源（`attackReach`：射程 ≤100 补身体半径、>100 打九折，再乘
-     * `combatDistanceScale`），且 `effectiveDefinition` 已经把 `attackRangePct` 算进去 ——
-     * 攻击距离 buff 会同步放大触发范围，不会出现「普攻够得着、技能说没目标」。
-     *
-     * 城墙 / 建筑只认**已锁定的那个**：地块不在 `units` 里，全场遍历一遍地块表太贵，
-     * 而攻城时它一定被 `targetWallHexId` / `targetBuildingHexId` 锁着。
-     */
+     * 触发范围闸门：普攻射程内是否有可打目标。锁定的目标在范围内直接返回，否则再扫一遍。
+     * 判据与普攻同源（attackReach 含 attackRangePct 与 combatDistanceScale）。
+     * 城墙/建筑只认已锁定的目标，不遍历地块表。
+    */
     hasTargetInAttackRange(unit: ZCUnitState): boolean {
         const locked = this.current(unit);
         if (locked && this.isInAttackRange(unit)) return true;
@@ -137,31 +124,18 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }
 
     /**
-     * 当前普攻射程（世界 px）：技能自带的搜索半径**封顶**到它为止。
-     *
-     * 只压不抬：毒箭蘑菇 `strikeRadius = 252`（约 75.6px）本来就比普攻近，
-     * 封顶后仍是 252；镭射飞龙 `strikeRadius = 1100`（330px）、魔术师
-     * `blinkSearchRadius = 600`（180px）这类超出普攻的，一律压到普攻射程。
-     *
-     * 身体半径取**自己**的（与 `castFanSkill` 算扇形半径时同一条口径），
-     * 这样「近战 45 + 身体 24」与普攻 `attackReach` 给的是同一个数。
-     */
+     * 当前普攻射程（世界 px），技能搜索半径封顶用；只压不抬。
+     * 身体半径取自己的，与 `attackReach` 给同一个数。
+    */
     attackReachOf(unit: ZCUnitState): number {
         const definition = this.context.effectiveDefinition(unit);
         return this.attackReach(definition, definition.bodyRadius);
     }
 
     /**
-     * 最近的敌对单位到本体的距离（世界 px，中心到中心）。没有可打的目标 ⇒ `Infinity`。
-     *
-     * 给「技能自己的触发距离」用（2026-11-12 用户口径，喷火 102603）：技能到点后如果最近的
-     * 敌人还在 350 表值 px 之外，就**待触发**、不消费 CD —— 避免「普攻射程 550 一到点就喷、
-     * 火焰却只够 350」这种打空气的释放。
-     *
-     * 判据与 `hasTargetInAttackRange` 同源：同一套敌人集合，同样过滤「不会飞 / 打不到空中」。
-     * 但这里**不补身体半径、不打九折** —— 用户说的是「敌人处于 350px 这个距离」，
-     * 量的是两个单位中心的直线距离。
-     */
+     * 最近敌对单位的中心距离，没有目标返回 Infinity；给技能自己的触发距离用。
+     * 不补身体半径、不打九折，量的是两个单位中心。
+    */
     nearestEnemyDistance(unit: ZCUnitState): number {
         const definition = this.context.effectiveDefinition(unit);
         const from = this.context.unitPosition(unit);
@@ -178,7 +152,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         return nearest;
     }
 
-    /** 滞回脱离判定：目标移出 reach * 1.3 后才重新追击。 */
+    /** 滞回脱离判定：目标移出 reach * 1.3 后才重新追击。*/
     isOutOfAttackRange(unit: ZCUnitState): boolean {
         const target = this.current(unit);
         if (!target) return true;
@@ -188,18 +162,9 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }
 
     /**
-     * 本帧的冲刺倍率 / 冲刺门槛。
-     *
-     * 返回 **≥ 1** 的倍数：没配冲刺、没有目标、还没进入 `chargeDistance` 一律返回 1，
-     * 所以调用点可以直接乘、不需要再判空。
-     *
-     * 2026-11-02 起它不再只是「移速倍率」，`> 1` 等于**可以起冲**：`ZCUnitSystem` 用它当
-     * 冲刺的门槛条件之一（另外两条是「有目标」「本次攻击冷却已就绪」）。
-     * 2026-11-03 起城墙 / 建筑目标也走冲刺，所以这里不再区分目标种类。
-     *
-     * 为什么不缓存成单位状态：这是「当前距离」的纯函数，缓一次就要在处理「目标换人 /
-     * 目标瞬移 / 单位被击退」时挨个失效，而每帧算一次只是一次 `hypot`。
-     */
+     * 本帧冲刺倍率：没配冲刺/没目标/未进入 chargeDistance 都返回 1，调用点可直接乘。
+     * > 1 同时作为 `ZCUnitSystem` 的起冲门槛。每帧一次 hypot，不缓存。
+    */
     chargeSpeedScale(unit: ZCUnitState): number {
         const profile = this.context.effectiveDefinition(unit).attackProfile;
         const distance = profile.chargeDistance;
@@ -213,24 +178,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }
 
     /**
-     * 冲刺这一步**会撞到的第一个东西**（线段上最先接触的那个）。
-     *
-     * 2026-11-02「冲刺改成真·撞击」：用户拍板的命中对象是「路径上第一个进碰撞圈的敌人」，
-     * 而不是「只认锁定目标」—— 冲锋撞到谁算谁，与画面上看到的一致。
-     *
-     * 2026-11-03 起**城墙 / 建筑也算**（用户口径「城墙 / 建筑目标也需要走冲刺，撞到就停止」）：
-     * 结构静止不动，但冲上去一样要停在它面前、结算一次普攻，所以和单位共用同一条扫掠判定。
-     * 结构只在**它是当前锁定目标**时才参与 —— 冲锋路过一面墙不该被它截住，
-     * 那面墙本身也已经由 `dashStep` 的「进不了敌方墙格」兜住了。
-     *
-     * 判定用线段扫掠圆，半径取**自己的近战 reach**（`attackReach`），而不是双方
-     * `bodyRadius` 求和：`bodyRadius` 是给弹道算「贴脸」用的（表里常是 0/6px，换算到世界
-     * 坐标才 0~1.8），拿它当冲撞判定会变成「必须精确踩到对方脚心」，画面上看就是反复穿人。
-     * 近战 reach 本来就是「手心够得到哪儿」，与冲撞的直觉一致；改 `attackRange` 时冲撞手感
-     * 会跟着走，不会多出第二套互不相干的手感参数。
-     *
-     * 返回 `null` ⇒ 这一步没撞到东西，继续冲。
-     */
+     * 冲刺路径上第一个碰撞：线段扫掠圆，撞到谁算谁；城墙/建筑只在它是当前锁定目标时参与。
+     * 半径用自己的近战 reach（attackReach），不用双方 bodyRadius 求和——后者是弹道贴脸口径。
+     * 返回 null 表示这一步没撞到，继续冲。
+    */
     dashFirstHit(unit: ZCUnitState, fromX: number, fromY: number, toX: number, toY: number): IZCDashHit | null {
         const definition = this.context.baseDefinition(unit.unitId);
         const from = { x: fromX, y: fromY };

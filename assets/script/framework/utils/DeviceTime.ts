@@ -14,7 +14,6 @@ export class DeviceTime extends ScriptObject{
     }
 
     private _updateClass:UpdateClass;
-    private running:boolean = false
     private delta:number
     private last:number
     private totalTime:number
@@ -25,10 +24,8 @@ export class DeviceTime extends ScriptObject{
             this._updateClass = _updateClass
         }
         this.last = this.getTotalTime()
-        this.running = true
     }
     stop(){
-        this.running = false
         if(this._updateClass){
             let _updateClass = this._updateClass
             this._updateClass = null

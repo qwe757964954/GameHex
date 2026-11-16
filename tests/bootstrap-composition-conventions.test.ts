@@ -22,7 +22,7 @@ test('bootstrap lifecycle entry points delegate controller/model construction to
     assert.deepEqual(
         files.filter(file => file.endsWith('Composition.ts')).map(file => file.split('/').pop()).sort(),
         [
-            'BattleComposition.ts', 'CardPopupComposition.ts', 'LeagueCreatePopupComposition.ts',
+            'BattleComposition.ts', 'CardPopupComposition.ts', 'GuideComposition.ts', 'LeagueCreatePopupComposition.ts',
             'LeagueDonatePopupComposition.ts', 'LeaguePopupComposition.ts', 'LoginComposition.ts',
             'MainPageComposition.ts', 'MainTabsComposition.ts', 'MatchingComposition.ts',
             'PostLoginComposition.ts',

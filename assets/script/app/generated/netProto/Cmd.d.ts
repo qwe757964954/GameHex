@@ -6227,6 +6227,38 @@
 
     
 
+    declare class CmdFunctionGuideInfo {
+        funcId: number;
+        step1: number;
+        step2: number;
+    }
+
+    
+
+    declare class CmdFunctionGuideInfoReqMsg {
+        funcId: number;
+    }
+
+    
+
+    declare class CmdFunctionGuideInfoRspMsg {
+        infos: CmdFunctionGuideInfo;
+    }
+
+    
+
+    declare class CmdFunctionGuideUpdateReqMsg {
+        info: CmdFunctionGuideInfo;
+    }
+
+    
+
+    declare class CmdFunctionGuideUpdateRspMsg {
+        succ: number;
+    }
+
+    
+
     declare enum MessageId {
         CmdTakeDayChallengeActRewardRspMsg = 1731012380,
         CmdTakeDayActProgressRewardRspMsg = 381806326,
@@ -6342,6 +6374,8 @@
         CmdFuBenDailyGetRewardRspMsg = 1528771729,
         CmdFuBenBuyTimesRspMsg = 427584667,
         CmdFuBenSweepRspMsg = 1878627949,
+        CmdFunctionGuideInfoRspMsg = 1416382725,
+        CmdFunctionGuideUpdateRspMsg = 799066198,
         CmdFundGetInfoRspMsg = 510764152,
         CmdFundGetRewardRspMsg = 1902555017,
         CmdTakeGameCircleRewardRspMsg = 1855584437,
@@ -7541,6 +7575,11 @@ declare type MessageProtoName =
 | "CmdSlgBuildInfoBroMsg"
 | "CmdGameViewClickReqMsg"
 | "CmdGameViewClickRspMsg"
+| "CmdFunctionGuideInfo"
+| "CmdFunctionGuideInfoReqMsg"
+| "CmdFunctionGuideInfoRspMsg"
+| "CmdFunctionGuideUpdateReqMsg"
+| "CmdFunctionGuideUpdateRspMsg"
 | "ClientCmdData"
 | "CmdCache"
 | "CmdCacheField"
@@ -7828,6 +7867,8 @@ declare type ReqMsgProtoName =
 | "CmdSlgBuildCollectReqMsg"
 | "CmdSlgBuildUnlockQueueReqMsg"
 | "CmdGameViewClickReqMsg"
+| "CmdFunctionGuideInfoReqMsg"
+| "CmdFunctionGuideUpdateReqMsg"
 
 declare interface protoCacheGen{CmdActivity:{c:CmdActivity, c_k:CmdActivity_Key}
 CmdRole:{c:CmdRole, c_k:CmdRole_Key}

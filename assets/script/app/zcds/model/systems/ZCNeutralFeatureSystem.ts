@@ -24,7 +24,7 @@ export function isZCAwakeMonster(hex: Readonly<ZCHexState>): boolean {
         && hex.neutralFeature?.awake === true && hex.hp > 0;
 }
 
-/** 身份仍是出生格；战斗与渲染共享这一段逻辑时间轴。 */
+/** 身份仍是出生格；战斗与渲染共享这一段逻辑时间轴。*/
 export function zcMonsterPosition(
     map: Pick<ZCMatchMap, 'hexes'>,
     hex: { readonly id: number; readonly neutralFeature?: { readonly claimed?: boolean; readonly patrol?: Readonly<IZCMonsterPatrolState> } },
@@ -41,7 +41,7 @@ export function zcMonsterPosition(
     return result;
 }
 
-/** 每局实例；资源的可恢复状态保存在格子快照，脚点仅缓存本逻辑拍。 */
+/** 每局实例；资源的可恢复状态保存在格子快照，脚点仅缓存本逻辑拍。*/
 export class ZCNeutralFeatureSystem {
     private readonly previous = new Map<number, { x: number; y: number }>();
     private readonly geometry: ZCMapGeometry;
@@ -201,7 +201,7 @@ export class ZCNeutralFeatureSystem {
         feature.lineProgress = progress;
     }
 
-    /** 每批只选一次出生格；出口兵营、普通兵团奖励和路过的单位不再传送。 */
+    /** 每批只选一次出生格；出口兵营、普通兵团奖励和路过的单位不再传送。*/
     spawnHex(state: ZCSnapshot, barracks: ZCHexState): IZCBarracksSpawn {
         if ((this.map.playerCount ?? 2) !== 2 || barracks.owner === 'neutral') return { hexId: barracks.id };
         const entrance = state.hexes.find(hex => hex.owner === barracks.owner && hex.neutralFeature?.claimed

@@ -19,7 +19,7 @@ export class FSM<K extends string, V extends FSMState<K>> extends ScriptObject {
     destroy() {
         let tmState = this.tmState
         if (tmState) {
-            for (let [k, v] of tmState) {
+            for (let [, v] of tmState) {
                 v.destroy();
             }
             tmState.clear();

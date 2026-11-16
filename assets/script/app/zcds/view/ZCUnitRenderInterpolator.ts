@@ -18,7 +18,7 @@ export interface IZCUnitRenderTime {
     readonly snapshot: Readonly<{ elapsedSeconds: number }>;
 }
 
-/** 单位逻辑采样点之间的纯表现插值；长帧、回退时间和实体回收都不会跨段插值。 */
+/** 单位逻辑采样点之间的插值；长帧、时间回退和实体回收都不跨段插。*/
 export class ZCUnitRenderInterpolator {
     private readonly samples = new Map<number, IZCUnitRenderSample>();
     private readonly position = { x: 0, y: 0 };
@@ -29,19 +29,18 @@ export class ZCUnitRenderInterpolator {
         currentX = unit.freeX,
         currentY = unit.freeY,
     ): Readonly<{ x: number; y: number }> {
-        const x = currentX;
-        const y = currentY;
         const time = frame.snapshot.elapsedSeconds;
         let sample = this.samples.get(unit.id);
         if (!sample || time < sample.time) {
-            sample = { time, fromX: x, fromY: y, x, y };
+            sample = { time, fromX: currentX, fromY: currentY, x: currentX, y: currentY };
             this.samples.set(unit.id, sample);
         } else if (time !== sample.time) {
             const continuous = time - sample.time <= frame.simulationStepSeconds + 1e-9;
-            sample.fromX = continuous ? sample.x : x;
-            sample.fromY = continuous ? sample.y : y;
-            sample.x = x;
-            sample.y = y;
+            // 超过一个逻辑帧就当跳变，从当前位置重新起段，避免拉出一条长线。
+            sample.fromX = continuous ? sample.x : currentX;
+            sample.fromY = continuous ? sample.y : currentY;
+            sample.x = currentX;
+            sample.y = currentY;
             sample.time = time;
         }
         const alpha = frame.interpolationAlpha;

@@ -30,29 +30,29 @@ import {
     type ZCTypedModifier,
 } from './ZCStatSchema';
 
-/** 客户端只需提供武将和星级；旧表的具体 modifier id 不向普通业务层泄漏。 */
+/** 客户端只需提供武将和星级；旧表的具体 modifier id 不向普通业务层泄漏。*/
 export interface ZCGeneralStarSelection {
     generalId: number;
     star: number;
 }
 
 /**
- * 服务端下发的**增量**属性。
+ * 服务端下发的增量属性。
  *
  * 字段与 `app/battle/BattleStartModel` 的 `ZCBattleHeroModifier` 一致，这里重复声明是为了
  * 不让 `zcds/model` 反向 import `app/battle`（structural 类型，调用方直接传即可）。
- */
+*/
 export interface IZCServerStatModifier {
     readonly statId: 'attack' | 'maxHp';
-    /** `add` 进 flat，`addRate` 进 rate（`-0.2` = -20%）。 */
+    /** `add` 进 flat，`addRate` 进 rate（`-0.2` = -20%）。*/
     readonly operation: 'add' | 'addRate';
     readonly value: number;
 }
 
-/** client/server 交给战斗编译器的构筑快照；修改器 id 仍会在开战前经过 PVP 白名单。 */
+/** client/server 交给战斗编译器的构筑快照；修改器 id 仍会在开战前经过 PVP 白名单。*/
 export interface ZCCombatBuildSelection {
     unitId: string;
-    /** 服务端卡牌绝对属性；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。 */
+    /** 服务端卡牌绝对属性；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。*/
     serverAttributes?: Readonly<Partial<Pick<ZCUnitDefinition, 'attack' | 'maxHp'>>>;
     /**
      * 服务端增量属性（`attack.add` / `attack.addRate`）。
@@ -60,10 +60,10 @@ export interface ZCCombatBuildSelection {
      * 与 {@link serverAttributes} 分工：那边是"最终绝对值"（override，priority 1000），
      * 这里是"相对增/减"，priority 900 —— 同时到达时先算增量、再由绝对值定值。
      * 走的是成长/技能同一条累加通道：`add` 累加后乘 `1 + addRate`。
-     */
+    */
     serverModifiers?: readonly IZCServerStatModifier[];
     level?: number;
-    /** 英雄养成等级：用于按 unlockHeroLevel 自动选择 J 表中的技能升级档。 */
+    /** 英雄养成等级：用于按 unlockHeroLevel 自动选择 J 表中的技能升级档。*/
     heroLevel?: number;
     generalStar?: ZCGeneralStarSelection;
     equipmentModifierIds?: readonly number[];
@@ -71,7 +71,7 @@ export interface ZCCombatBuildSelection {
     skillModifierIds?: readonly number[];
 }
 
-/** 兼容旧消费方的聚合补丁；新代码应优先读取 typedModifiers / breakdown。 */
+/** 兼容旧消费方的聚合补丁；新代码应优先读取 typedModifiers / breakdown。*/
 export interface ZCUnitStatPatch {
     attackFlat?: number;
     attackPct?: number;
@@ -91,43 +91,37 @@ export interface ZCUnitStatPatch {
      * 与 `attackPct` 的区别：攻击力会抬高面板、也会被其它按攻击力算的公式二次吃到；
      * 这个只在伤害结算处相乘一次，面板不变（设计案 100402 要求的「伤害倍率而非攻击力」）。
      * 缺省 0 ⇒ 乘 1，既有单位行为逐字不变。
-     */
+    */
     damageRatePct?: number;
     /**
-     * 伤害转生命的比例（2026-11-04，椰蛋战士「生命汲取」100503）。0.02 = 造成伤害的 2% 回血。
-     *
-     * **比例不是百分数**：与上面那批 `xxxPct`（20 = +20%）口径不同，表里 `operation = add`、
-     * `value = 0.02` 就是这个字段。为什么不做成 `addRate`：`addRate` 走 `foldStatPatch` 的
-     * `rate * baseValue` 分支，而它没有基础值 ⇒ 恒 0（同 2026-10-13 那批的约束）。
-     *
-     * 结算口径：按 `damageUnit` 真正扣掉的血量（`applied`）反算，不是面板伤害 ——
-     * 打护盾 / 溢出 / 被 0 抵消时不该凭空回血。缺省 0 ⇒ 整段不执行，既有单位行为逐字不变。
-     */
+     * 伤害转生命的比例（0.02 = 造成伤害的 2% 回血），比例不是百分数。
+     * 按 `damageUnit` 实际扣血（applied）反算，护盾/溢出/零伤害不回血。缺省 0 ⇒ 不生效。
+    */
     lifestealRate?: number;
     //  以下 10 种对应 `pvpAttrMap` 里 2026-10-13 补齐的数值属性。带 Pct 的一律是「百分数整数」（20 = +20%）。
-    /** 暴击率修正（20 = +20% 暴击率）；直接进 `criticalMultiplier` 判定。 */
+    /** 暴击率修正（20 = +20% 暴击率）；直接进 `criticalMultiplier` 判定。*/
     critRatePct?: number;
-    /** 暴击伤害修正（50 = +50% 暴伤）。 */
+    /** 暴击伤害修正（50 = +50% 暴伤）。*/
     critDamagePct?: number;
-    /** 弹幕数量修正（正=多几发）；最终发数 = profile 弹数 + 本值，下限 1。 */
+    /** 弹幕数量修正（正=多几发）；最终发数 = profile 弹数 + 本值，下限 1。*/
     bulletNumFlat?: number;
-    /** 多弹道的角度均分跨度（度）。缺省 0 = 不做扇形展开，行为与改造前逐字一致。 */
+    /** 多弹道的角度均分跨度（度）。缺省 0 = 不做扇形展开，行为与改造前逐字一致。*/
     bulletAngleFlat?: number;
-    /** 一次普攻的**额外**连击段数（2 = 共打三段）；只加伤害，不重复触发处决 / 状态。 */
+    /** 一次普攻的额外连击段数（2 = 共打三段）；只加伤害，不重复触发处决 / 状态。*/
     multiHitFlat?: number;
-    /** 产兵间隔修正（秒，正=更慢）；最终间隔不小于 `rules.spawnMinimumSeconds`。 */
+    /** 产兵间隔修正（秒，正=更慢）；最终间隔不小于 `rules.spawnMinimumSeconds`。*/
     recruitCdFlat?: number;
-    /** 产兵间隔百分比修正（20 = 间隔 +20%，即更慢）。 */
+    /** 产兵间隔百分比修正（20 = 间隔 +20%，即更慢）。*/
     recruitCdPct?: number;
-    /** 单次产兵数量修正（正=多产几个）。 */
+    /** 单次产兵数量修正（正=多产几个）。*/
     singleRecruitNumFlat?: number;
-    /** 单次产兵的军团数修正（与单次数量叠加，山猫 2026-10-13 定）。 */
+    /** 单次产兵的军团数修正（与单次数量叠加，山猫 2026-10-13 定）。*/
     singleRecruitLegionCountFlat?: number;
-    /** 单个兵营的产兵总量上限；缺省 = 走 `rules.unitCapPerSide`。 */
+    /** 单个兵营的产兵总量上限；缺省 = 走 `rules.unitCapPerSide`。*/
     recruitMaxNumFlat?: number;
 }
 
-/** 旧表属性操作方式：覆盖 或 累加。 */
+/** 旧表属性操作方式：覆盖 或 累加。*/
 export const ZCLegacyOperationMode = {
     Add: 'add',
     Replace: 'replace',
@@ -147,12 +141,12 @@ export interface ZCCompiledModifierLoadout {
     targetUnitId: string;
     appliedModifierIds: readonly number[];
     rawAttributes: Readonly<Record<string, unknown>>;
-    /** Flattened in modifier-id order; preserves old modifyList replace/add semantics across loadouts. */
+    /** Flattened in modifier-id order; preserves old modifyList replace/add semantics across loadouts.*/
     legacyAttributeOperations?: readonly ZCLegacyAttributeOperation[];
     statPatch: Readonly<ZCUnitStatPatch>;
     typedModifiers: readonly ZCTypedModifier[];
     textModifiers?: readonly ZCTextAttackModifier[];
-    /** 本次构筑实际选中的技能计划行；战斗层据此挂命中状态/未来事件被动。 */
+    /** 本次构筑实际选中的技能计划行；战斗层据此挂命中状态/未来事件被动。*/
     skillPlans: readonly ZCSkillPlanRecord[];
     breakdown: readonly ZCStatBreakdown[];
     effects: readonly ZCMappedEffect[];
@@ -227,7 +221,7 @@ const ATTRIBUTE_TO_PATCH: Readonly<Record<string, keyof ZCUnitStatPatch>> = {
     攻击命中时间: 'attackHitTimeFlat',
 };
 
-/** 无 PVP 适配表时的兼容入口，供旧测试/旧回放继续读取百分数整数口径。 */
+/** 无 PVP 适配表时的兼容入口，供旧测试/旧回放继续读取百分数整数口径。*/
 export function compileZCUnitStatPatch(attributes: Readonly<Record<string, unknown>>): {
     statPatch: ZCUnitStatPatch;
     unsupportedAttributes: string[];
@@ -263,14 +257,14 @@ function typedToLegacyPatch(modifiers: readonly ZCTypedModifier[]): ZCUnitStatPa
             //  伤害倍率（`damageRate`）只接受 addRate：它是「最终结算乘 1 + N%」，
             //  没有对应的绝对值语义（`add` 会变成「+0.1 点伤害」，没有意义）。
             case 'damageRate': if (rate) add('damageRatePct', item.value * 100); break;
-            //  吸血比例（2026-11-04）：**只接受 add**，值就是比例本身（0.02 = 2%）。
+            //  吸血比例（2026-11-04）：只接受 add，值就是比例本身（0.02 = 2%）。
             //  与 `damageRate` 相反 —— 那边只接受 addRate 是因为它没有基础值、用的是百分数口径。
             case 'lifestealRate': if (!rate) add('lifestealRate', item.value); break;
             default: {
                 //  扩展的 11 个 statId（`critRate` / `critDamage` / `bulletNum` / `bulletAngle` /
                 //  `attackCount` / `recruit*`，2026-10-30 补）：它们没有基础值，映射表在
                 //  `ZCStatSchema.STAT_TO_PATCH`，`applyZCTypedUnitModifiers` 早就在用它，
-                //  但这个 switch 是**第二套**折表逻辑、当时漏了这批 —— 结果是
+                //  但这个 switch 是第二套折表逻辑、当时漏了这批 —— 结果是
                 //  「pvpSkillPlan 里填了 bulletNum / critRate，运行时读不到」。
                 const entry = STAT_TO_PATCH[item.statId];
                 if (!entry) break;
@@ -443,7 +437,7 @@ function compileIdsLoadout(
     };
 }
 
-/** 把客户端的武将/星级选择编译成本局冻结配置。 */
+/** 把客户端的武将/星级选择编译成本局冻结配置。*/
 export function compileZCGeneralStarLoadout(
     selection: ZCGeneralStarSelection,
     units: readonly ZCUnitDefinition[],
@@ -512,7 +506,7 @@ function compileGrowthLoadout(
     };
 }
 
-/** 按英雄等级选择每条技能链的生效档：replace/branch 取最高档，accumulate 累计所有已解锁档。 */
+/** 按英雄等级选择每条技能链的生效档：replace/branch 取最高档，accumulate 累计所有已解锁档。*/
 export function selectZCSkillPlans(
     unitId: string,
     heroLevel: number,
@@ -543,10 +537,10 @@ function compileSkillPlanLoadout(
     catalogs: ZCModifierCatalogs,
 ): ZCCompiledModifierLoadout | null {
     const unit = assertUnit(unitId, units);
-    //  诊断/验证①：101003「追踪导弹」三档门槛是 9 / 18 / 24 级（`unlockHeroLevel`）。
+    //  诊断/验证1.：101003「追踪导弹」三档门槛是 9 / 18 / 24 级（`unlockHeroLevel`）。
     //  等级不够时 `selectZCSkillPlans` 直接过滤掉整条链 ⇒ 运行时没有 `strikeRadius` 参数
     //  ⇒ 战场上一枚导弹都不会有，而配表看起来「明明配了」。
-    //  `ZC_MISSILE_DEBUG_HERO_LEVEL` 只抬 68010 的**技能计划筛选**等级（成长仍按真实等级），
+    //  `ZC_MISSILE_DEBUG_HERO_LEVEL` 只抬 68010 的技能计划筛选等级（成长仍按真实等级），
     //  用于低等级账号验证导弹美术/弹道，默认应改回 0。
     const planLevel = unitId === '68010' && ZC_MISSILE_DEBUG_HERO_LEVEL > 0
         ? Math.max(heroLevel, ZC_MISSILE_DEBUG_HERO_LEVEL)
@@ -558,8 +552,8 @@ function compileSkillPlanLoadout(
             + ` | 命中技能链 ${skillPlans.map(row => `${row.skillChainId}@Lv${row.skillLevel}`).join(' ') || '（空）'}`
             + ` | 含 101003 追踪导弹？${skillPlans.some(row => row.skillChainId === 101003)}`);
     }
-    //  诊断①：构筑期快照。这条一打出来就能判断「是等级没到」还是「参数没进运行时」。
-    //  `因等级未解锁` 那段只列**表里确实配了、但这一级还没到**的链 —— 空的就说明不是等级问题。
+    //  诊断1.：构筑期快照。这条一打出来就能判断「是等级没到」还是「参数没进运行时」。
+    //  `因等级未解锁` 那段只列表里确实配了、但这一级还没到的链 —— 空的就说明不是等级问题。
     if (zcSkillCastWatched(unitId)) {
         const locked = catalogs.adapters.skillPlans
             .filter(row => row.enabled && row.unitId === unitId && row.unlockHeroLevel > planLevel)
@@ -625,7 +619,7 @@ function compileSkillPlanLoadout(
     };
 }
 
-/** 将 client/server 的等级、升星、装备、宝石构筑编译成只读的本局修正。 */
+/** 将 client/server 的等级、升星、装备、宝石构筑编译成只读的本局修正。*/
 export function compileZCCombatBuild(
     selection: ZCCombatBuildSelection,
     units: readonly ZCUnitDefinition[],
@@ -706,7 +700,7 @@ function resolveLegacyPatch(base: ZCUnitDefinition, loadouts: readonly ZCCompile
     };
 }
 
-/** 将同一单位命中的静态修正合并为有效定义；绝不修改全局单位目录。 */
+/** 将同一单位命中的静态修正合并为有效定义；绝不修改全局单位目录。*/
 function resolveZCModifiedUnitDefinition(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
@@ -738,7 +732,7 @@ function resolveZCModifiedUnitDefinition(
     return { ...definition, attackProfile, empoweredProfile };
 }
 
-/** 关卡倍率作用于本地构筑；服务端最终属性最后覆盖，避免重复换算。 */
+/** 关卡倍率作用于本地构筑；服务端最终属性最后覆盖，避免重复换算。*/
 export function resolveZCUnitDefinition(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
@@ -762,9 +756,9 @@ export function resolveZCUnitDefinition(
 /**
  * 与 `resolveZCUnitDefinition` 同输入，额外返回 2026-10-13 新增的 9 种 statId 所累加出的 patch。
  *
- * 拆成并列是因为这 9 种**不在 `ZCUnitDefinition` 上**（没有基础值），只能以 patch 形式传给战斗结算。
+ * 拆成并列是因为这 9 种不在 `ZCUnitDefinition` 上（没有基础值），只能以 patch 形式传给战斗结算。
  * 已有 8 种（attack/maxHp/…）不在这里——它们已经改过 `definition`。
- */
+*/
 export function resolveZCUnitStatPatch(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
@@ -777,17 +771,9 @@ export function resolveZCUnitStatPatch(
 }
 
 /**
- * 全队共享暴击伤害（2026-11-10）。
- *
- * `critDamage`（折成 `critDamagePct`）与暴击率**不是同一类属性**：
- * 暴击率是逐单位各自累加的；暴击伤害是 **owner 级唯一值** ——
- * 阵容里每张卡 `pvpSkillPlan` 的「全队暴击伤害增幅」（`skillChainId 109001`）都加进同一个池子，
- * 池子汇总之后再写回该 owner 的**每一个单位**。于是任何一张卡打出暴击，
- * 用的都是这同一个「全队暴击伤害」比例，而不是只有它自己那几行。
- *
- * 入参是 `compileZCMatchRuntime` 建好的 owner 卡池 patch 表（键 = unitId）。
- * 汇总为 0 时原样返回，没配这条属性的卡组结算路径逐字不变。
- */
+ * 全队共享暴击伤害：每张卡的「全队暴击伤害增幅」汇入 owner 级同一个池，
+ * 再写回该 owner 的每个单位。入参是卡池 patch 表，汇总为 0 时原样返回。
+*/
 export function shareLineupCritDamage(
     patches: ReadonlyMap<string, ZCUnitStatPatch>,
 ): ReadonlyMap<string, ZCUnitStatPatch> {
@@ -801,7 +787,7 @@ export function shareLineupCritDamage(
     return shared;
 }
 
-/** UI/调试使用：返回最终属性的基础值、各层修正和来源。 */
+/** UI/调试使用：返回最终属性的基础值、各层修正和来源。*/
 export function getZCUnitStatBreakdown(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],

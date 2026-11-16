@@ -6,22 +6,22 @@ const { ccclass, property, disallowMultiple } = _decorator;
 const SELF_BACKGROUND = new Color(38, 57, 79, 255);
 const OTHER_BACKGROUND = new Color(53, 43, 40, 255);
 
-/** 伤害统计中的一行数据；最大值由父面板统一计算，保证各行可比较。 */
+/** 伤害统计中的一行数据；最大值由父面板统一计算，保证各行可比较。*/
 export interface RunAwayPlayerInfo {
     owner: ZCOwner;
     name: string;
     headSpriteFrame: SpriteFrame | null;
-    /** 造成伤害。 */
+    /** 造成伤害。*/
     damage: number;
-    /** 承受伤害。 */
+    /** 承受伤害。*/
     damageTaken: number;
-    /** 伤害列的统一最大值；省略时以本行数值为上限。 */
+    /** 伤害列的统一最大值；省略时以本行数值为上限。*/
     maxDamage?: number;
-    /** 承伤列的统一最大值；省略时以本行数值为上限。 */
+    /** 承伤列的统一最大值；省略时以本行数值为上限。*/
     maxDamageTaken?: number;
 }
 
-/** RunAwayPlayerItem.prefab 的展示组件，不执行撤退或对局结算。 */
+/** RunAwayPlayerItem.prefab 的展示组件，不执行撤退或对局结算。*/
 @ccclass('RunAwayPlayerItem')
 @disallowMultiple
 export class RunAwayPlayerItem extends Component {
@@ -53,7 +53,7 @@ export class RunAwayPlayerItem extends Component {
     @property(Node)
     selfBadge: Node = null!;
 
-    /** 刷新昵称、头像及伤害数据；空头像会清理上一位玩家的图片。 */
+    /** 刷新昵称、头像及伤害数据；空头像会清理上一位玩家的图片。*/
     public refresh(info: Readonly<RunAwayPlayerInfo>): void {
         const damage = this.normalize(info.damage);
         const damageTaken = this.normalize(info.damageTaken);
@@ -68,7 +68,7 @@ export class RunAwayPlayerItem extends Component {
         this.damageTakenProgress.progress = this.ratio(damageTaken, info.maxDamageTaken ?? damageTaken);
     }
 
-    /** 列表项回收或面板清空时调用。 */
+    /** 列表项回收或面板清空时调用。*/
     public clear(): void {
         this.refresh({ owner: 'player', name: '', headSpriteFrame: null, damage: 0, damageTaken: 0 });
     }

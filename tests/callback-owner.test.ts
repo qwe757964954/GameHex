@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
 import { TMap } from '../assets/script/framework/collection/TMap';
+import { withTimeout } from '../assets/script/app/net/RequestGuard';
 
 function load<T>(path: string, name: string): new () => T {
     const exported: Record<string, new () => T> = {};
@@ -94,6 +95,41 @@ interface IRequest {
     reject(message: string): void;
     packageRequest(index: number, data: Uint8Array, msg: object, loading: boolean, callbacks?: IProxy): void;
 }
+
+test('请求超时只取消本次回调，同宿主其他请求和公共事件继续工作', async () => {
+    const Request = load<IRequest>('assets/script/framework/net/NetworkRequest.ts', 'NetworkRequest');
+    const Proxy = load<IProxy>('assets/script/framework/event/EventProxy.ts', 'EventProxy');
+    const callbacks = new Proxy();
+    const owner = {};
+    const seen: string[] = [];
+    callbacks.addListener('change', owner, () => seen.push('event'));
+    const make = (tag: string) => {
+        const request = new Request();
+        request.packageRequest(1, new Uint8Array(), {
+            caller: owner, fCallback: () => seen.push(tag), fErrorCallback: () => seen.push(tag),
+            getReqMsgProtoName: () => 'TestReqMsg', allowRetry: true,
+        }, false, callbacks);
+        return request;
+    };
+    const expired = make('expired');
+    const active = make('active');
+    assert.equal(await withTimeout(expired.promise, 0, () => false), false);
+    assert.equal(await Promise.race([expired.promise, Promise.resolve('pending')]), false);
+    expired.resolve({});
+    active.resolve({});
+    callbacks.execute('change');
+    assert.deepEqual(seen, ['active', 'event']);
+});
+
+test('超时后的迟到失败不会再次执行 fallback', async () => {
+    let reject!: (reason: Error) => void;
+    let calls = 0;
+    const pending = new Promise<boolean>((_resolve, fail) => { reject = fail; });
+    assert.equal(await withTimeout(pending, 0, () => { calls++; return false; }), false);
+    reject(new Error('late'));
+    await Promise.resolve();
+    assert.equal(calls, 1);
+});
 
 test('解除宿主立即取消请求 Promise，迟到成功与失败回包均不再调用它', async () => {
     const Request = load<IRequest>('assets/script/framework/net/NetworkRequest.ts', 'NetworkRequest');

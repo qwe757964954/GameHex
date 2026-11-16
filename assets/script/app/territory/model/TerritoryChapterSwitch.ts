@@ -85,12 +85,6 @@ function easeOut(x: number): number {
     return 1 - (1 - value) * (1 - value);
 }
 
-/** 缓入（前慢后快）：旧图被"带"着走，越走越快。 */
-function easeIn(x: number): number {
-    const value = clamp01(x);
-    return value * value;
-}
-
 /** `cover` 段进度（0~1）；非法入参按 0。 */
 export function territoryChapterSwitchCoverProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;

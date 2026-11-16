@@ -242,18 +242,6 @@ export class GameCacheMgr extends ScriptObject {
     }
 
     /**
-     * 
-     * @param cacheName 缓存名称
-     */
-    // getAll(cacheName: string) {
-    // 	let cache = this.cacheDictionary.get(cacheName);
-    // 	if (cache != null) {
-    // 		return cache.getAll();
-    // 	}
-    // 	return null;
-    // }
-
-    /**
      * 清除某个缓存
      * @param cacheName 缓存名称
      */
@@ -308,17 +296,6 @@ export class GameCacheMgr extends ScriptObject {
             gameCache.eventProxy.removeCallerListener(caller);
         }
     }
-
-    /**模仿网络缓存数据,本地也可以创建数据缓存 */
-    // getLocalCache(cacheName: string): LocalGameCache {
-    //     let cacheDictionary = this.cacheDictionary
-    //     let cache: LocalGameCache = cacheDictionary.get(cacheName);
-    //     if (cache == null) {
-    //         cache = new LocalGameCache(cacheName);
-    //         cacheDictionary.set(cacheName, cache);
-    //     }
-    //     return cache;
-    // }
 
     /**
      * 协议数据描述(协议字段名字,字段类型,字段位置)
@@ -416,31 +393,4 @@ export class GameCacheMgr extends ScriptObject {
         return null
     }
 
-    //处理缓存数据
-    // parseCacheData(cmdCacheAppMsg: any) {
-    //     let tlCmdCache = []
-    //     if (cmdCacheAppMsg != null) {
-    //         let cmdCacheOperaterList = cmdCacheAppMsg.cmdCacheOperaterList;
-    //         if (cmdCacheOperaterList) {
-    //             let tlCmdCacheOperater = cmdCacheOperaterList.tlCmdCacheOperater;
-    //             let cacheEnum = cmdCacheOperaterList.cacheEnum;
-    //             let cacheName = this.keyNameMap.get(cacheEnum);
-    //             let proto = ProtoMgr.get().protoCoder
-    //             for (let cmdCacheOperater of tlCmdCacheOperater) {
-    //                 let tlData = cmdCacheOperater.tlData;
-    //                 if (tlData == null || tlData.length <= 0) {
-    //                     return
-    //                 }
-    //                 for (let data of tlData) {
-    //                     let cmdCache = proto.decodeDataByName(cacheName, data);
-    //                     if (cmdCache) {
-    //                         tlCmdCache.push(cmdCache)
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //     }
-    //     return tlCmdCache
-    // }
 }

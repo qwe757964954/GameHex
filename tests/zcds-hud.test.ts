@@ -765,8 +765,14 @@ test('HUD prefab 的直接引用与嵌套组件引用完整且没有旧字段', 
     assert.equal(data[artifactCountNode._parent.__id__], artifactButtonNode);
     const baseSprite = data.find((o: any) => o.__type__ === 'cc.Sprite' && data[o.node?.__id__] === artifactButtonNode);
     const progressSprite = data.find((o: any) => o.__type__ === 'cc.Sprite' && data[o.node?.__id__] === artifactProgressNode);
-    assert.equal(baseSprite._spriteFrame.__uuid__, '9ef09ba7-9265-485d-96fa-b971d1a5bc39@f9941');
-    assert.equal(progressSprite._spriteFrame.__uuid__, '22abdb6f-a24c-49d2-b5e2-6f42047a48a3@f9941');
+    // 2026-11-13 按蓝湖「多队伍」设计稿替换为设计稿切图：
+    //   底环 `artifact_ring_bg`（暗色，119×119）/ 进度环 `jindutiao_01`（黄色，109×109）。
+    // ⚠️ 底环必须是**独立文件**：`jindutiao_bg`（76×17、九宫格 6/6/8/8）是单位血条底槽，
+    //    被 `ZCGameUnit` / `ZCGameHex` 引用，直接覆盖它会把血条一起改坏。
+    assert.equal(baseSprite._spriteFrame.__uuid__, 'd9617a06-02ba-4635-96cc-b512ff34ea6c@f9941');
+    assert.notEqual(baseSprite._spriteFrame.__uuid__, 'c259abc1-2774-41a9-80da-53fbbba0071c@f9941',
+        '★底环不能复用血条底槽 jindutiao_bg（ZCGameUnit / ZCGameHex 也在用）');
+    assert.equal(progressSprite._spriteFrame.__uuid__, 'd5c69f90-8aa4-4c24-8cc0-66ea05fe7a1c@f9941');
     assert.equal(progressSprite._type, 3, '充能层必须使用 FILLED Sprite');
     assert.equal(progressSprite._fillType, 2, '充能层必须使用 RADIAL 填充');
     assert.ok(data.some((o: any) => o.__type__ === 'cc.Label' && data[o.node?.__id__] === artifactCountNode));

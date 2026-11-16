@@ -43,7 +43,7 @@ function optionalNumber(value: unknown, field: string): number | undefined {
 function assetPath(value: unknown, field: string): string | undefined {
     if (value === null || value === undefined || value === '') return undefined;
     if (typeof value !== 'string') throw new Error(field + ' 必须是资源路径字符串');
-    // 收口到 `/`：Cocos 的 bundle 路由只认正斜杠，`skel\豌豆射手\豌豆射手` 会被当成**单个文件名**
+    // 收口到 `/`：Cocos 的 bundle 路由只认正斜杠，`skel\豌豆射手\豌豆射手` 会被当成单个文件名
     // 报 "Bundle resources doesn't contain …"（Windows 上 existsSync 却照样为真，本地测不出来）。
     // 源头的表守卫仍然不许写 `\`（`tests/pvp-card-unit-columns.test.ts` 第一条用例），
     // 这里是给已经下发出去的错表兜底，保证下游拿到的路径一定是 `/`。
@@ -65,14 +65,14 @@ function optionalPositiveNumber(value: unknown, field: string): number | undefin
 }
 
 /**
- * 兵种美术的等比缩放系数（`pvpCard.prefabSize`）：留空 = **1**（不缩放）。
+ * 兵种美术的等比缩放系数（`pvpCard.prefabSize`）：留空 = 1（不缩放）。
  *
  * 为什么不用 `optionalPositiveNumber`：那个把 `0` 当「未配置」，而缩放系数取 0 的后果是
- * **单位在战场上凭空消失**（scale 全 0 ⇒ 什么都画不出来，且不报错）。
+ * 单位在战场上凭空消失（scale 全 0 ⇒ 什么都画不出来，且不报错）。
  * 这里显式区分两件事 —— 空 ⇒ 1（策划没配，用默认）；填了非正数 ⇒ 抛错（配错了，当场炸）。
  *
  * 值域不设上限：将来真要出「巨人」卡（2~3 倍）时不必再改解析层。
- */
+*/
 function parsePrefabSize(value: unknown, field: string): number {
     if (value === null || value === undefined || value === '') return 1;
     return number(value, field);
@@ -108,7 +108,7 @@ function parseCardRarity(value: unknown): ZCCardRarity {
     throw new Error('cards[].rarity 必须是 1=green、2=blue、3=purple、4=gold');
 }
 
-/** 数字形式的 type（配表里部读到数字或字符串都要过这关）——从枚举派生，加类型不用同步。 */
+/** 数字形式的 type（配表里部读到数字或字符串都要过这关）——从枚举派生，加类型不用同步。*/
 const CARD_TYPE_DIGITS = new RegExp('^[' + Object.values(ZCCardType).join('') + ']$');
 const CARD_TYPE_RANGE_HINT = Object.values(ZCCardType)
     .map((type) => `${type}=${ZC_CARD_TYPE_NAMES[type]}`)
@@ -146,9 +146,9 @@ function parseCardCycleSeconds(raw: Record<string, unknown>, type: ZCCardType): 
 /**
  * `pvpCard.skillList`：该卡的技能编号列表（顺序即 UI 顺序）。
  *
- * 留空 / null ⇒ 空数组（主城、金矿这种没有技能的卡）；**非法项跳过而不抛错** ——
+ * 留空 / null ⇒ 空数组（主城、金矿这种没有技能的卡）；非法项跳过而不抛错 ——
  * 技能号是展示用数据，一个脏 id 不该让整张卡（乃至整个卡表）解析失败。
- */
+*/
 function parseSkillIds(value: unknown, field: string): number[] {
     if (value === null || value === undefined || value === '') return [];
     if (!Array.isArray(value)) {
@@ -177,21 +177,21 @@ function parseCardTypeList(value: unknown, field: string): ZCCardType[] {
 }
 
 /**
- * 主城是**场地固有建筑**，不是能打出去的卡。
+ * 主城是场地固有建筑，不是能打出去的卡。
  *
  * 它必须留在 `PVP-卡牌` 里 —— 转表器只导出首列 `deck` 非空的行，所以现表把它挂在
  * `玩家默认` slot=0（不与任何「卡组」概念冲突，只是让它能被导出来）。
- * 但**所有卡组消费方都必须把它摘掉**：漏掉任何一处，「玩家默认」就会被数成 9 张 ——
- * `loadPvpTables` 的 `!== 8` 校验会让**整局进不去**，卡牌阵容页则会多出一个站台。
+ * 但所有卡组消费方都必须把它摘掉：漏掉任何一处，「玩家默认」就会被数成 9 张 ——
+ * `loadPvpTables` 的 `!== 8` 校验会让整局进不去，卡牌阵容页则会多出一个站台。
  *
  * 两处消费方（`loadPvpTables` 与卡牌阵容页 `CardLineupDecks.parseDecks`）都走这里，
  * 别再各写一份 `type !== ZCCardType.Hq` —— 那正是会悄悄漂移的地方。
- */
+*/
 export function isHqCard(card: { type: ZCCardType }): boolean {
     return card.type === ZCCardType.Hq;
 }
 
-/** 解析一行 pvpCard；配置编译与卡牌阵容页共用。 */
+/** 解析一行 pvpCard；配置编译与卡牌阵容页共用。*/
 export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
     const raw = object(value, 'cards[]');
     const field = `pvpCard[id=${String(raw.id)}]`;
@@ -212,7 +212,7 @@ export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
         traits: parseTraits(raw.traits),
         buildSeconds: optionalNumber(raw.buildSeconds, field + '.buildSeconds'),
         cycleSeconds: parseCardCycleSeconds(raw, type),
-        // 建筑耐久：基础值必填 —— 它是建筑血量的**唯一来源**（表缺这列会在这里立刻炸，
+        // 建筑耐久：基础值必填 —— 它是建筑血量的唯一来源（表缺这列会在这里立刻炸，
         // 而不是变成一碰就碎的 0 血建筑）。品级系数与产金数量缺省 0。
         baseHp: number(raw.baseHp, field + '.baseHp'),
         cyclePerTierValue: optionalNumber(raw.cyclePerTierValue, field + '.cyclePerTierValue'),
@@ -234,7 +234,7 @@ export function parseCard(value: unknown): ZCDeckCard & { enabled: boolean } {
  *
  * 卡池行没有 `deck`，不能直接走只服务于出战卡组的 `parseCard()`；这里补一个仅用于
  * 校验的内部组名，复用完全相同的字段解析口径，返回值不会把该组名暴露给消费方。
- */
+*/
 export function parseCardCatalogRow(value: unknown): ZCDeckCard & { enabled: boolean } {
     const normalized = normalizeCardRow(value);
     const parsed = parseCard({
@@ -270,7 +270,7 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             //  副技能行（2026-11-04）：一条普攻行只有一个强化槽，第二条主动挂这里。
             secondarySkillId: optionalPositiveNumber(raw.secondarySkillId, `skills.${skillId}.secondarySkillId`),
             // 留空 = 按次数（`empoweredEvery`）；`'every_seconds'` 才走 CD。值域校验在 `optionalTrigger` 里，
-            // 写错拼写会**直接抛错**而不是静默回落 —— 触发方式是决定战斗节拍的东西，静默回落最难查。
+            // 写错拼写会直接抛错而不是静默回落 —— 触发方式是决定战斗节拍的东西，静默回落最难查。
             trigger: optionalTrigger(raw.trigger, `skills.${skillId}.trigger`),
             cooldown: optionalPositiveNumber(raw.cooldown, `skills.${skillId}.cooldown`),
             // 伤害倍率：留空 = 1（普攻行一律留空，只有武将技行填）。`optionalPositiveNumber`
@@ -296,31 +296,31 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
 /**
  * `pvpCard` 一行 → 单位定义，按 `unitId` 建目录。
  *
- *  **2026-09-20 合表**：`PVP-单位.xlsx` 已并入 `PVP-卡牌.xlsx`，单位属性内联在卡行上
- *  （列名统一加 `unit` 前缀：`unitMaxHp` / `unitAttack` / `unitPrefabPath` …）。
- *  两表原本是**严格 1:1**（35 卡 ↔ 35 单位，无一对多），所以内联零冗余；
- *  同时从根本上消灭了旧口径「卡 id 与单位 id 同值」那个跨表约定 ——
- *  它靠两表行序一致来维系，实际却因两表排序规则不同而在 **35 行里错位 29 行**
- *  （卡面写铜须、数值与立绘来自近卫半人马）。没有 join 就没有 join 错。
+ * 2026-09-20 合表：`PVP-单位.xlsx` 已并入 `PVP-卡牌.xlsx`，单位属性内联在卡行上
+ * （列名统一加 `unit` 前缀：`unitMaxHp` / `unitAttack` / `unitPrefabPath` …）。
+ * 两表原本是严格 1:1（35 卡 ↔ 35 单位，无一对多），所以内联零冗余；
+ * 同时从根本上消灭了旧口径「卡 id 与单位 id 同值」那个跨表约定 ——
+ * 它靠两表行序一致来维系，实际却因两表排序规则不同而在 35 行里错位 29 行
+ * （卡面写铜须、数值与立绘来自近卫半人马）。没有 join 就没有 join 错。
  *
- * - `unitId` = 「本行产出的兵种」的引用：**兵种卡**填本行卡自己的 id（1:1 期间恒等）。
- *   将来若出现「多张卡共用一个兵种」，把它指向另一卡行的 id 即可 —— 变成同表自引用，
- *   仍然不需要外部表。
+ * - `unitId` = 「本行产出的兵种」的引用：兵种卡填本行卡自己的 id（1:1 期间恒等）。
+ * 将来若出现「多张卡共用一个兵种」，把它指向另一卡行的 id 即可 —— 变成同表自引用，
+ * 仍然不需要外部表。
  * - 建筑卡（主城/金矿）没有单位列，两项都空 → 跳过。
- *    建筑行的 `unitId` **必须留空**：`parseCard` 不判空、`findUnplayableDeckCards` 以
- *   `unitId == null` 认建筑卡（`if (!card.unitId) continue;`），填上会把建筑当成
- *   「引用了不存在单位的出战卡」，让 `assertDeckUnitsPlayable()` 在预加载期抛错、整局进不去。
- *   它们不需要单位：建筑耐久来自 `baseHp`（`+ 品级 × cyclePerTierValue`），
- *   城墙走 `PVP-全局.wallMaxHp`。
+ * 建筑行的 `unitId` 必须留空：`parseCard` 不判空、`findUnplayableDeckCards` 以
+ * `unitId == null` 认建筑卡（`if (!card.unitId) continue;`），填上会把建筑当成
+ * 「引用了不存在单位的出战卡」，让 `assertDeckUnitsPlayable()` 在预加载期抛错、整局进不去。
+ * 它们不需要单位：建筑耐久来自 `baseHp`（`+ 品级 × cyclePerTierValue`），
+ * 城墙走 `PVP-全局.wallMaxHp`。
  * - `spawnSeconds` 取 `soilderAddTime` —— 合表后「产兵间隔」只剩这一个来源。
- *   原 `pvpUnit.spawnSeconds` 是与它语义重复的僵尸列（35 行里 34 行数值不同，
- *   且因 `cycleSeconds` 优先取 `soilderAddTime` 而**几乎永不生效**），已随表废弃。
+ * 原 `pvpUnit.spawnSeconds` 是与它语义重复的僵尸列（35 行里 34 行数值不同，
+ * 且因 `cycleSeconds` 优先取 `soilderAddTime` 而几乎永不生效），已随表废弃。
  * - 「碰撞半径」还在调优，允许留空 → 按 0 处理。
- *   注意 `bodyRadius = 0` 会让**攻击距离 ≤ 100** 的近战单位少算对方的碰撞半径
- *   （见 `ZCGameModel.unitAttackReach`），调优完成后策划补上即可。
+ * 注意 `bodyRadius = 0` 会让攻击距离 ≤ 100 的近战单位少算对方的碰撞半径
+ * （见 `ZCGameModel.unitAttackReach`），调优完成后策划补上即可。
  *
  * 导出仅为单测直接喂合成行，业务侧一律走 `loadPvpTables`。
- */
+*/
 export function parseUnits(
     cardRows: unknown,
     skills: ReadonlyMap<number, ZCAttackProfile>,
@@ -339,7 +339,7 @@ export function parseUnits(
         if (result.has(unitId)) throw new Error(`pvpCard[].unitId 重复：${unitId}`);
         const attackProfile = skills.get(skillId);
         if (!attackProfile) throw new Error(`pvpCard.${label}.unitSkillId 未在 PVP 技能表中定义：${skillId}`);
-        // 强化那一击的技能行（36000 段）。**缺失就当场抛**：否则「每 N 次普攻打一次技能特效」
+        // 强化那一击的技能行（36000 段）。缺失就当场抛：否则「每 N 次普攻打一次技能特效」
         // 会退化成静默播普攻特效 —— 表填了、代码没报错、只是永远看不到技能。
         const empoweredProfile = attackProfile.empoweredSkillId
             ? skills.get(attackProfile.empoweredSkillId)
@@ -377,7 +377,7 @@ export function parseUnits(
             canAttackAir: refBool(raw.unitCanAttackAir) ?? false,
             hero: refBool(raw.unitHero) ?? false,
             prefabPath,
-            // 美术等比缩放：表里留空按 1（不缩放）。**填了 0 或负数直接抛** ——
+            // 美术等比缩放：表里留空按 1（不缩放）。填了 0 或负数直接抛 ——
             // 那会让单位在战场上凭空消失或上下翻转，比报错难查得多。
             prefabSize: parsePrefabSize(raw.prefabSize, `pvpCard.${label}.prefabSize`),
             attackProfile,
@@ -422,7 +422,7 @@ export function parseTileConfigs(value: unknown): Readonly<Record<ZCPvpTileType,
     return result;
 }
 
-/** 地块生成权重表：直接由 `pvpTile` 每行派生（权重/初始上限/集合上限都挂在地块行上）。 */
+/** 地块生成权重表：直接由 `pvpTile` 每行派生（权重/初始上限/集合上限都挂在地块行上）。*/
 export function parseTileWeights(
     configs: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>,
 ): ZCPvpTileTypeWeight[] {
@@ -435,12 +435,12 @@ export function parseTileWeights(
 }
 
 /**
- * 克制表：维度列写的是**中文维度名**，这里翻译成 `ZCCardTraits` 的键。
+ * 克制表：维度列写的是中文维度名，这里翻译成 `ZCCardTraits` 的键。
  *
  * 2026-09-16 起只有「攻击 / 阵营」两维（`PVP-克制羁绊` 同步精简），
  * 旧的「情绪 / 植物」两维连同词表一起废弃 —— 若表里再出现，
  * 会在这里抛错（宁可进不去对局，也不要静默变成一条永不生效的死规则）。
- */
+*/
 export function parseCounterRules(value: unknown): ZCCounterRule[] {
     const traits: Record<string, keyof ZCCardTraits> = { 攻击: 'attack', 阵营: 'camp' };
     return array(value, 'combat.counters').map((item) => {
@@ -457,7 +457,7 @@ export function parseCounterRules(value: unknown): ZCCounterRule[] {
     });
 }
 
-/** 解析 pvpBond 全表；配置编译与卡牌阵容页共用。 */
+/** 解析 pvpBond 全表；配置编译与卡牌阵容页共用。*/
 export function parseBondRules(value: unknown): ZCBondRule[] {
     const bondTraits: ReadonlySet<string> = new Set(['attack', 'camp']);
     const bondEffects: ReadonlySet<string> = new Set(['unitHp', 'unitAttack', 'spawnInterval', 'moveSpeed', 'income', 'towerAttack']);
@@ -479,19 +479,19 @@ export function parseBondRules(value: unknown): ZCBondRule[] {
     });
 }
 
-/** 转表 int 0/1 → bool；非 0/1 时原样返回（用于容错）。 */
+/** 转表 int 0/1 → bool；非 0/1 时原样返回（用于容错）。*/
 export function refBool(value: unknown): boolean | undefined {
     if (value === 1 || value === '1' || value === true) return true;
     if (value === 0 || value === '0' || value === false) return false;
     return undefined;
 }
 
-/** 转表空串 → null；其余原样返回。 */
+/** 转表空串 → null；其余原样返回。*/
 export function refNullable(value: unknown): unknown {
     return value === '' ? null : value;
 }
 
-/** kv 数组 [{key, value}] → 对象 { key: value }。 */
+/** kv 数组 [{key, value}] → 对象 { key: value }。*/
 export function kvToObject(kv: Array<{ key: string; value: unknown }> | undefined): Record<string, unknown> {
     const result: Record<string, unknown> = {};
     for (const entry of kv ?? []) result[entry.key] = entry.value;
@@ -501,19 +501,19 @@ export function kvToObject(kv: Array<{ key: string; value: unknown }> | undefine
 /**
  * `pvpCard` 一行 → 归一化后的原始行（ref 里的 `1/0`、空串等换成运行时值）。
  *
- *  **必须先过这一步再交给 `parseCard`**：`parseCard` 的 `enabled` 判的是严格
+ * 必须先过这一步再交给 `parseCard`：`parseCard` 的 `enabled` 判的是严格
  * `raw.enabled === true`，而 remoteRef 表里下发的是数字 `1`
  * （`enabled: refBool(row.enabled) ?? false` 就是为了把它变成布尔）。
  * 漏掉归一化会让 `.filter((card) => card.enabled)` 把整张表清空 ——
- * 而且**不报错**，只表现为「卡组为空、页面保留占位外观」。
+ * 而且不报错，只表现为「卡组为空、页面保留占位外观」。
  *
  * `loadPvpTables` 与卡牌阵容页（`CardLineupDecks`）共用本函数，
  * 避免同一张表的字段口径在两处漂移。
- */
+*/
 export function normalizeCardRow(row: unknown): Record<string, unknown> {
     const raw = object(row, 'pvpCard[]');
-    //  2026-09-20 起表里 `id` 是**整数**（`2002` / `68001`），而工程运行时的 id 一律按
-    // **字符串**走（`hex.cardId`、存档、后端 `heroId` 关联都靠 `String()` 对齐）。
+    //  2026-09-20 起表里 `id` 是整数（`2002` / `68001`），而工程运行时的 id 一律按
+    // 字符串走（`hex.cardId`、存档、后端 `heroId` 关联都靠 `String()` 对齐）。
     // 所以这里就把类型归一掉，别让下游拿到 `number | string` 混合：
     // `id` 缺失时会退回 `name`（字符串），那就是混合的来源。
     //  保持「缺失即缺失」——`null` 不转成 `'null'`，留给 `parseCard` 的 `text()` 抛错，
@@ -521,7 +521,7 @@ export function normalizeCardRow(row: unknown): Record<string, unknown> {
     const id = refNullable(raw.id) ?? raw.name;
     return {
         ...raw,
-        //  转表器**不会生成 `id`** —— `PVP-卡牌.xlsx` 里没有这一列，导出什么列就是什么列。
+        //  转表器不会生成 `id` —— `PVP-卡牌.xlsx` 里没有这一列，导出什么列就是什么列。
         // 而抽卡、`hex.cardId`、存档都按 `id` 走，缺了会整局卡在「cards[].id 必须是非空字符串」。
         // 缺列时退回 `name`（同一卡组内名字唯一），策划补上 `id` 列后自动以表为准。
         id: id == null ? id : String(id),

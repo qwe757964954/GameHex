@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
+import { withTimeout } from '../assets/script/app/net/RequestGuard';
 
 function load(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -134,7 +135,7 @@ test('已发送请求取消后迟到回包仍更新公共缓存，等待保持�
     const request = h.makeRequest();
     const pending = request.promise;
     h.state.addNetworkRequest(request);
-    request.cancel();
+    await withTimeout(pending, 0, () => false);
     assert.equal(await pending, false);
     Object.assign(h.socket, { protoMgr: {
         decode: () => ({ clientIndex: 1, result: true, cmdCaches: [{}], messageIds: [1], splits: [0], data: new Uint8Array() }),
@@ -144,6 +145,41 @@ test('已发送请求取消后迟到回包仍更新公共缓存，等待保持�
     assert.equal(h.cacheUpdates(), 1);
     assert.equal(await pending, false);
     assert.equal(h.sent(), 1);
+});
+
+test('GameNet send 和 sendNow 保留真实请求取消能力，编码失败仍以 Promise 拒绝', async () => {
+    const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
+        name.endsWith('/ScriptObject') ? { ScriptObject: class {} } : {}).NetworkRequest;
+    const Proxy = { addCallerCleanup: () => () => {} };
+    interface IGameNet {
+        send(msg: object): Promise<boolean> & { cancel?: () => void };
+        sendNow(msg: object): Promise<boolean> & { cancel?: () => void };
+    }
+    const GameNet = load('assets/script/app/net/GameNet.ts', (name) => {
+        if (name.endsWith('/NetworkRequest')) return { NetworkRequest: Request };
+        if (name.endsWith('/NetSocket')) return { NetSocket: { msgEventProxy: Proxy } };
+        if (name.endsWith('/ScriptObject')) return { ScriptObject: class { log() {} error() {} } };
+        if (name.endsWith('/FW')) return { FW: { ignoreShowloadingNet: [] } };
+        return {};
+    }).GameNet as new () => IGameNet;
+    const net = new GameNet();
+    let queued: IRequest | null = null;
+    Object.assign(net, { _netSocket: { addNetworkRequest: (request: IRequest) => { queued = request; return true; } },
+        _protoMgr: { getMessageId: () => 1, encode: () => new Uint8Array() } });
+    for (const method of ['send', 'sendNow'] as const) {
+        const pending = net[method]({ getReqMsgProtoName: () => 'TestReqMsg', allowRetry: true });
+        assert.equal(typeof pending.cancel, 'function');
+        assert.equal(await withTimeout(pending, 0, () => false), false);
+        assert.equal(queued!.allowRetry, false);
+        assert.equal(await pending, false);
+    }
+    Object.assign(net, { _netSocket: { addNetworkRequest: (request: IRequest) => { queued = request; return false; } } });
+    const retryable = net.sendNow({ getReqMsgProtoName: () => 'TestReqMsg', allowRetry: true });
+    assert.equal(queued!.allowRetry, true, '暂时发送失败时保留传输层默认重试，直到到达请求期限');
+    assert.equal(await withTimeout(retryable, 0, () => false), false);
+    assert.equal(queued!.allowRetry, false);
+    Object.assign(net, { _protoMgr: { getMessageId: () => 0 } });
+    await assert.rejects(net.send({ getReqMsgProtoName: () => 'UnknownReqMsg' }), /协议编码失败/);
 });
 
 test('recived 日志带「发出 → 回包」的耗时，没有对应请求的推送包标 push', () => {

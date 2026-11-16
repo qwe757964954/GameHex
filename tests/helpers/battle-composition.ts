@@ -1,3 +1,4 @@
+import { reportGuideComplete } from '../../assets/script/app/guide/application/GuideEvents';
 import { ZC_BATTLE_EVENTS } from '../../assets/script/app/zcds/application/ZCBattleEvents';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -37,6 +38,8 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
     dependencies['../zcds/application/ZCBattlePreparation'] = loadBattlePreparation({ ...dependencies, './ZCBattleEntryBuilder': builder });
     return loadModule('assets/script/app/bootstrap/battle/BattleComposition.ts', name => {
         if (name in overrides) return overrides[name];
+        if (name.endsWith('/GuideComposition')) return { GuideComposition: class { dispose() {} } };
+        if (name.endsWith('/GuideEvents')) return { reportGuideComplete };
         if (name === 'cc') return { Prefab: class Prefab {} };
         if (name.endsWith('/BundleCatalog')) return { bundleForPath };
         if (name.endsWith('/ControllerBase')) return { ControllerBase };

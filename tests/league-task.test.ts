@@ -1115,9 +1115,9 @@ test('E2 ⚠️ 列表不发请求：只读缓存（`CmdTask`）+ 两个领奖�
     const code = readFileSync(PAGE_TS, 'utf8');
     assert.ok(code.includes('this.repository.loadTask()'), '面板应通过 repository.loadTask() 取数');
     assert.ok(!/Request[A-Za-z]*Task[Ll]ist/.test(code), '联盟任务**没有**独立的列表请求（= 通用任务缓存）');
-    assert.ok(code.includes('this.repository.requestTaskReward('), '点「领取」应发领奖请求');
+    assert.ok(code.includes("action: { kind: 'task', resId: view.resId }"), '点「领取」应发领奖请求');
     // ⚠️ 领宝箱的请求体**只有 subType**，没有宝箱 id
-    assert.ok(/requestTaskProgressReward\(LeagueUnionTaskType\.leagueTask/.test(code),
+    assert.ok(/kind: 'progress', subType: LeagueUnionTaskType\.leagueTask/.test(code),
         '领宝箱要传 `LeagueUnionTaskType.leagueTask`（不是 `view.id`）');
     assert.ok(!/requestTaskProgressReward\([^)]*view\.id/.test(code), '别把宝箱 id 塞进请求体');
 });
@@ -1143,11 +1143,11 @@ test('E4 防连点 + 写后三态收口（`ok` 重读、`offline` / 其它各给
     assert.ok(code.includes("if (result === 'ok')"), 'afterWrite 应按 `ok` 重读一次');
     assert.ok(code.includes('LEAGUE_TIP_OFFLINE') && code.includes('LEAGUE_TIP_FAILED'),
         'offline / failed 各给一条提示，不许静默');
-    // 三个写操作（领奖 / 看广告 / 领宝箱）都要过门，且都要 finally 复位
+    // 三个意图共用页面刷新锁；领奖共用完成出口，广告保留独立 finally。
     const gates = code.match(/if \(!this\.beginWrite\(\)\) return;/g) ?? [];
     assert.equal(gates.length, 3, `三个写操作都要过防连点门，实得 ${gates.length} 处`);
     const resets = code.match(/this\.busy = false;/g) ?? [];
-    assert.equal(resets.length, 3, `三处 finally 都要复位 busy，实得 ${resets.length} 处`);
+    assert.equal(resets.length, 3, `领奖完成、广告 finally 与关窗都要复位 busy，实得 ${resets.length} 处`);
 });
 
 test('E5 宝箱点击三支 + 浮框定位（`reward.y = box.y + 105`）+ 「前往」只提示不关面板', () => {
@@ -1155,7 +1155,7 @@ test('E5 宝箱点击三支 + 浮框定位（`reward.y = box.y + 105`）+ 「前
     // 三支：可领取 ⇒ 发包；不可领取 ⇒ 弹浮框；已领取 ⇒ 什么都不做
     assert.ok(/view\.state === 'canReward'/.test(code), '缺「可领取」分支');
     assert.ok(/view\.state === 'locked'/.test(code), '缺「不可领取」分支（要弹浮框）');
-    assert.ok(/requestTaskProgressReward\(LeagueUnionTaskType\.leagueTask, this\)/.test(code));
+    assert.ok(/kind: 'progress', subType: LeagueUnionTaskType\.leagueTask/.test(code));
     const boxClick = code.slice(code.indexOf('private async onBoxClick('), code.indexOf('private showReward('));
     assert.ok(boxClick.includes('this.showReward(view)'), '「不可领取」点下去要弹浮框');
     assert.ok(!/state === 'rewarded'[\s\S]{0,200}request/.test(boxClick), '「已领取」不该发任何包');
@@ -1207,9 +1207,9 @@ test('E6 LeagueRepository：`loadTask` 只读缓存、`progressValue = min(done,
 
     // 两个领奖请求：非法参数直接 `failed`，不发空包
     const rewardAt = repo.indexOf('async requestTaskReward(');
-    assert.ok(/if \(id <= 0\) return 'failed';/.test(repo.slice(rewardAt, rewardAt + 400)));
+    assert.ok(/if \(id <= 0\) return \{ status: 'failed', rewards: \[\] \};/.test(repo.slice(rewardAt, rewardAt + 400)));
     const progressAt = repo.indexOf('async requestTaskProgressReward(');
-    assert.ok(/if \(value <= 0\) return 'failed';/.test(repo.slice(progressAt, progressAt + 400)));
+    assert.ok(/if \(value <= 0\) return \{ status: 'failed', rewards: \[\] \};/.test(repo.slice(progressAt, progressAt + 400)));
     assert.ok(repo.includes('RequestTaskUnionGetReward') && repo.includes('RequestTaskUnionGetProgressReward'));
 });
 

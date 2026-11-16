@@ -140,7 +140,7 @@ test('Repository 合并配置请求，失败后可重试，成功后只复用已
     assert.equal(reads, 8, '两次尝试各读四张表，缓存命中不再读表');
 });
 
-test('详情品质与职业使用新版切图，专属立绘缺失时回退注入的配置路径', async () => {
+test('详情品质与职业使用新版切图，专属立绘缺失时回退布阵占位立绘', async () => {
     const requested: string[] = [];
     const { CardArtProvider: Provider } = runtime<{ CardArtProvider: new () => CardArtProvider }>('CardArtProvider', {
         './CardLineupTypes': cardTypes,
@@ -153,17 +153,17 @@ test('详情品质与职业使用新版切图，专属立绘缺失时回退注�
     const art = parseCardArtConfig(readCardArtTables(), [{ key: '专属图', path: 'ui://图标_兵种_头像/missing' }]);
     const card = { id: '1', rarity: 'green', traits: { attack: '法师' }, headIcon: '专属图' } as ZCDeckCard;
     const result = await provider.loadDetail(card, art);
-    assert.equal(result.hero, art.paths.get('hero.mage'));
+    assert.equal(result.hero, art.paths.get('boardHero.mage'));
     assert.equal(result.diamond, 'identity/icon_quality_uncommon');
     assert.equal(result.classTag, 'identity/icon_class_mage');
     assert.ok(requested.includes('icons/cardHead/missing'));
     const tables = readCardArtTables();
     const different = parseCardArtConfig({
         ...tables,
-        cardClass: tables.cardClass.map((row: any) => (row.class === 'mage' ? { ...row, hero: 'icons/card/另一个占位' } : row)),
+        cardClass: tables.cardClass.map((row: any) => (row.class === 'mage' ? { ...row, boardHero: 'icons/card/另一个占位' } : row)),
     }, []);
     assert.equal((await provider.loadDetail(card, different)).hero, 'icons/card/另一个占位');
-    assert.equal((await provider.loadDetail(card, art)).hero, art.paths.get('hero.mage'), '不同宿主的配置不能串用');
+    assert.equal((await provider.loadDetail(card, art)).hero, art.paths.get('boardHero.mage'), '不同宿主的配置不能串用');
     for (const [rarity, file] of Object.entries({ gold: 'legendary', purple: 'epic', blue: 'rare', green: 'uncommon' })) {
         const frames = await provider.loadDetail({ ...card, rarity } as ZCDeckCard, art);
         assert.equal(frames.diamond, `identity/icon_quality_${file}`);

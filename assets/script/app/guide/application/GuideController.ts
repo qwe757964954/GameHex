@@ -26,10 +26,10 @@
  */
 
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
-import { EventMgr } from '../../../framework/event/EventMgr';
 import { CardLineupEvent } from '../../card/CardLineupEvents';
-import { GuideEvent } from './GuideEvents';
-import type { IGuideCompletePayload } from './GuideEvents';
+import { GuideDebugEvent, GuideEvent } from './GuideEvents';
+import type { IGuideAdvancePayload, IGuideCompletePayload } from './GuideEvents';
+import type { IGuideGateway } from './GuideGateway';
 import type { GuideProgress } from '../model/GuideProgress';
 import type { GuideSaveStore } from '../model/GuideSaveStore';
 import { restoreGuideProgress } from '../model/GuideSaveStore';
@@ -71,14 +71,11 @@ export interface IGuideControllerOptions {
     readonly store: GuideSaveStore;
     /** 已解析的步骤表（`parseGuideSteps` 的结果，行序即执行序）。 */
     readonly steps: readonly GuideStep[];
-    /**
-     * 状态出口。
-     *
-     * `advance` 是给 View 的「台词播完、再点一次」回调 —— View 拿到它就等于拿到
-     * 「以 click 完成本步」的许可；不传则点击不推进（翻地 / 升级这类步走业务事件）。
-     */
+    readonly gateway?: IGuideGateway;
+    /** 展示实例与只读状态出口；点击推进经 GuideEvent.Advance 回传。 */
     readonly view?: {
-        readonly render: (state: IGuideViewState, advance: () => void) => void;
+        readonly owner: object;
+        readonly render: (state: IGuideViewState) => void;
     };
     /** 发奖出口。省略时只打日志。 */
     readonly grant?: (rewards: readonly GuideReward[], stepId: string) => void;
@@ -87,20 +84,13 @@ export interface IGuideControllerOptions {
     readonly now?: () => number;
 }
 
-/** 调试 / 运营用的引导事件名（不进正式玩家路径）。 */
-export const GuideDebugEvent = {
-    /** 强制跳过整条引导。 */
-    ForceSkip: 'guide:debug-force-skip',
-} as const;
-
 export class GuideController extends ControllerBase {
     private progress: GuideProgress | null = null;
     private firstRun = false;
-    /** 给 View 的点击推进回调；绑定一次，避免每次 publish 造新闭包。 */
-    private readonly onViewAdvance = (): void => { this.notify('click'); };
 
     constructor(context: IControllerContext, private readonly options: IGuideControllerOptions) {
         super(context, 'guide');
+        if (options.gateway) this.own(() => options.gateway.dispose());
     }
 
     /** 当前步 id；空串 = 未启动或已结束。调试 / 埋点用。 */
@@ -120,20 +110,26 @@ export class GuideController extends ControllerBase {
      */
     start(): boolean {
         if (this.progress) return true;
-        // 联调逃生口：任意位置点 `GuideDebugEvent.ForceSkip` 就能跳过整条引导。
-        this.listen(GuideDebugEvent.ForceSkip, this.onForceSkip);
-
-        // 「完成判定」两个来源：
-        //  ① 通用通道 `GuideEvent.Complete`（业务侧调 `reportGuideComplete`）；
-        //  ② 已有的强事件（卡牌升级成功），直接订阅，业务侧零改动。
-        this.listen(GuideEvent.Complete, this.onCompleteReported);
-        this.listen(CardLineupEvent.HeroUpgraded, this.onHeroUpgraded);
         try {
             const saved = this.options.store.load();
             const progress = restoreGuideProgress(this.options.store, this.options.steps, saved);
             if (!progress) return false;
             this.progress = progress;
             this.firstRun = saved === null;
+
+            // 🔴 订阅必须放在「确认要跑引导」之后。
+            //    `restoreGuideProgress` 返回 null（配置断链 / 空表）时会提前 return，
+            //    若订阅写在最前面，那一次失败也会把三组监听挂在 `EventMgr` 上；
+            //    下次 `start()` 再挂一遍 ⇒ 同一个上报被处理多次。`notify` 虽然幂等
+            //    （cursor 校验），但日志翻倍、`grant` 会被重复调用，排查时非常误导。
+            // 联调逃生口：`GuideDebugEvent.ForceSkip` 可跳过整条引导。
+            this.listen(GuideDebugEvent.ForceSkip, this.onForceSkip);
+            // 完成判定两路：① 通用通道；② 卡牌升级的既有强事件（业务侧零改动）。
+            this.listen(GuideEvent.Complete, this.onCompleteReported);
+            this.listen(GuideEvent.Advance, this.onAdvance);
+            this.listen(CardLineupEvent.HeroUpgraded, this.onHeroUpgraded);
+            // 联调阶段只观察原始进度，不假定后端的「当前 / 已完成」约定。
+            if (this.options.gateway) void this.options.gateway.load().catch(error => this.report(error));
             // 引导只有十几步，低频日志；这条是"链路真的起来了"的唯一证据 ——
             // 没有它，真机上「没启动」和「启动了但 View 没显示」完全无法区分。
             console.log(`[Guide] 启动 · step=${progress.current?.stepId ?? '(结束)'} · firstRun=${this.firstRun} · completed=${progress.completedSteps.length} · granted=${progress.grantedSteps.length}`);
@@ -167,6 +163,7 @@ export class GuideController extends ControllerBase {
         console.log(`[Guide] 完成 ${step.stepId}(${step.flowName}) → ${result.next?.stepId ?? '(结束)'} · 奖励 ${result.rewards.length} 项`);
         this.grantRewards(result.rewards, step.stepId);
         this.persist();
+        this.syncProgress(step.stepId);
         this.publish();
         return true;
     }
@@ -185,6 +182,7 @@ export class GuideController extends ControllerBase {
             console.log(`[Guide] 强制跳过整条引导 · 补发 ${rewards.length} 项奖励`);
             this.grantRewards(rewards, 'force-skip');
             this.persist();
+            this.syncProgress(this.options.steps[this.options.steps.length - 1].stepId);
             this.publish();
             return true;
         } catch (error) {
@@ -202,6 +200,7 @@ export class GuideController extends ControllerBase {
             console.log(`[Guide] 跳过剩余步骤 · 补发 ${rewards.length} 项奖励`);
             this.grantRewards(rewards, 'skip');
             this.persist();
+            this.syncProgress(this.options.steps[this.options.steps.length - 1].stepId);
             this.publish();
             return true;
         } catch (error) {
@@ -265,7 +264,7 @@ export class GuideController extends ControllerBase {
             try {
                 // 点击推进只对 click 步有效；`notify` 内部还会校验「是不是当前步」，
                 // 所以 View 拿着过期状态晚一步回调也是安全的。
-                this.options.view.render(state, this.onViewAdvance);
+                this.options.view.render(state);
             } catch (error) {
                 this.report(error);
             }
@@ -275,6 +274,16 @@ export class GuideController extends ControllerBase {
     }
 
     private readonly onForceSkip = (): void => { this.skipAll(); };
+
+    private readonly onAdvance = (payload: IGuideAdvancePayload): void => {
+        const view = this.options.view;
+        if (!view || payload?.owner !== view.owner || payload.stepId !== this.currentStepId) return;
+        this.notify('click');
+    };
+
+    private syncProgress(stepId: string): void {
+        if (this.options.gateway) void this.options.gateway.update(stepId).catch(error => this.report(error));
+    }
 
     /** 通用通道：业务侧 `reportGuideComplete(cond, arg?)`。 */
     private readonly onCompleteReported = (payload: IGuideCompletePayload): void => {

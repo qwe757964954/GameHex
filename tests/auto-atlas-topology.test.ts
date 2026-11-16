@@ -83,9 +83,11 @@ test('T1 每个散图目录树都在某份 auto-atlas 覆盖内（白名单只�
     );
     const imageRootPngs = (filesOf.get('assets/resources/image') ?? []).filter((name) => name.endsWith('.png'));
     // 根目录**不允许**放 pac（规范 §7.3.2 第 2 条严禁），所以这里天然是「不进图集」区：
-    // 尺寸超过图集页的大背景就往这儿放（`bg_main` 720×1610 就是为此从 `image/matching/` 挪来的）。
+    // 尺寸超过图集页的大背景就往这儿放（`bg_main` 720×1610 就是为此从 `image/matching/` 挪来的；
+    // 2026-11-13 同理登记 `bg_chest_open` 720×1610 —— 它原在 `image/territory/chest_open/`，
+    // 会超出该图集 1024 页高被构建期切图）。
     // `pkzr_bg_01/02` 是历史遗留散图，当前无任何引用。
-    assert.equal(imageRootPngs.length, 3,
+    assert.equal(imageRootPngs.length, 4,
         'image 根下只应放大图（不进图集）与历史散图；普通碎图要归进子目录分类');
 });
 

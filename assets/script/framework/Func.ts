@@ -385,7 +385,7 @@ export class Func {
         if (!obj) {
             return true
         }
-        for (let n in obj) {
+        for (let n in obj) { void n;
             return false
         }
         return true

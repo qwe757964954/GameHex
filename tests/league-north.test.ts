@@ -765,7 +765,7 @@ test('E3 主面板三颗按钮的闸：擂鼓判 `todayDrumTimes`、扫荡/挑�
         '北境帮助按钮应打开 leaguefb01 帮助');
     // 两个写操作（擂鼓 / 扫荡）各过防连点门并 finally 复位
     assert.equal((code.match(/if \(!this\.beginWrite\(\)\) return;/g) ?? []).length, 2);
-    assert.equal((code.match(/this\.busy = false;/g) ?? []).length, 2);
+    assert.equal((code.match(/this\.busy = false;/g) ?? []).length, 3);
 });
 
 test('E4 主面板：两个入口各开一个子页 + 每秒刷时间（`schedule` / `unschedule` 配对）', () => {
@@ -811,7 +811,7 @@ test('E6 奖励页：切页签**不发包**（两档一次读全），领奖走 
     assert.ok(!/loadNorthReward|repository\./.test(onTab), '切页签不该再发请求（两档一次读全）');
     assert.ok(onTab.includes('this.presentRows()'), '切页签要重铺列表');
     // 领奖
-    assert.ok(code.includes('this.repository.requestTaskReward(view.resId, this)'), '点「领取」应发领奖请求');
+    assert.ok(code.includes("action: { kind: 'task', resId: view.resId }"), '点「领取」应发领奖请求');
     assert.ok(/if \(this\.busy\) return;/.test(code), '领奖要防连点');
     // 页签红点
     // ⚠️ 页签是**嵌套实例** ⇒ `tabLeague`/`tabRole` 这两个 `@property` 绑的是 **Node 壳**，

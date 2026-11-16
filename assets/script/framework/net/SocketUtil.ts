@@ -3,10 +3,6 @@
 // 部分android浏览器中没有slice方法(subarray共用内存,slice新内存新对象)
 if (!Uint8Array.prototype.slice) {
     Uint8Array.prototype.slice = function (begin: number, end?: number) {
-        // return new Uint8Array(this).subarray(...arg);
-        // let u = new Uint8Array(end - begin)
-        // u.set(this.subarray(begin, end));
-        // return u;
         return new Uint8Array(this.subarray(begin, end));
     }
 };
@@ -54,12 +50,6 @@ export class SocketUtil {
     protected protocols?: string | string[];
 
     private callback: (msgType: SocketEvent, errMsg: string, retData?: any) => void;
-
-    // 心跳
-    private _heartbeatCallback: () => boolean;
-    setHeartbeatCallback(callback: () => boolean) {
-        this._heartbeatCallback = callback
-    }
 
     /**
      * 不再缓存服务端发来的数据，如果传输的数据为字符串格式，建议设置为true，减少二进制转换消耗。
@@ -123,11 +113,6 @@ export class SocketUtil {
     // }
 
     // private _addInputPosition: number;
-    /**
-    *用来发送和接收数据的 <code>Byte</code> 类。
-    */
-    private _byteClass: any;
-
     /**默认超时 */
     // private static readonly defTimeout = 5000;
 
@@ -172,26 +157,11 @@ export class SocketUtil {
 
         t.ws = null;
 
-        // t._addInputPosition = 0;
         t.disableInput = false;
 
         t._connected = false;
 
-        //
-        // t._byteClass = Byte;
-        // t._input = null;
-        // t._output = null;
-        // t._endian = null;
-        // t.endian = SocketUtil.BIG_ENDIAN;
         t.isLittleEndian = false;
-
-        // if (t._byteClass) {
-        //     t._output = new t._byteClass();
-        //     t._output.isLittleEndian = t.isLittleEndian;
-
-        //     t._input = new t._byteClass();
-        //     t._input.isLittleEndian = t.isLittleEndian;
-        // }
     }
 
     // 连接前要先检查当前是否有正在连接的socket,要先停止
@@ -225,7 +195,6 @@ export class SocketUtil {
         t.binaryType = binaryType
         t.protocols = protocols
         t.callback = callback
-        t._heartbeatCallback = heartbeatCallback
     }
 
     connect(): () => boolean {
@@ -460,7 +429,6 @@ export class SocketUtil {
      * 发送数据到服务器。
      * @param data 需要发送的数据，可以是String或者ArrayBuffer。
      */
-    // send(data: string | ArrayBufferLike | Blob | ArrayBufferView) {
     send(data: Uint8Array, checkBufferedAmount = true) {
         if (!data) {
             console.error("socket send data null:", data);
@@ -754,16 +722,12 @@ export class SocketUtil {
         let t = this;
         t.clearCallback();
         t.callback = null;
-        t._heartbeatCallback = null;
-        // t.stopTimeout();
         t.closeSocket();
 
         t._connected = false;
         t.clearByte();
         t._input = null;
         t._output = null;
-        // t._endian = null;
-        t._byteClass = null;
 
         t.url = null
         t.binaryType = null

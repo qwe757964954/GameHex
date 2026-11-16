@@ -1,14 +1,14 @@
 import { zcMissileFxPaths } from './ZCCombatEffectFlight';
 import { ZC_ATTACK_TRAITS } from './ZCCombatCatalog';
 
-/** 战斗外壳路径唯一声明；预热只取公共子集，不构筑任何对局状态。 */
+/** 战斗外壳路径的唯一声明；预热只取公共子集，不构筑任何对局状态。*/
 export const ZC_BATTLE_SHELL_PATHS = {
     // 棋盘图层顺序由 prefab 子节点声明。
     hud: 'ui/game/ZCGameHUD', board: 'ui/game/ZCGameBoard', hex: 'ui/game/ZCGameHex',
     unit: 'ui/game/ZCGameUnit', effect: 'ui/game/ZCGameEffect', wall: 'ui/game/ZCGameWall',
     wallLayer: 'ui/game/ZCGameWallLayer', floatText: 'ui/game/ZCGameFloatText',
     cardReveal: 'ui/game/ZCGameCardReveal', legendBanner: 'ui/game/ZCGameLegendBanner',
-    // 装饰 Sprite 的 CUSTOM 尺寸和不裁边配置由 prefab 声明。
+    // 装饰 Sprite 的 CUSTOM 尺寸和不裁边由 prefab 声明。
     decor: 'ui/game/ZCGameDecor', spawnSelection: 'ui/game/ZCSpawnSelection', bossPanel: 'ui/game/ZCBossPanel',
 } as const;
 
@@ -25,26 +25,29 @@ export const ZC_BATTLE_DOWNLOAD_PREFABS = [
     ZC_BATTLE_SHELL_PATHS.wallLayer, ZC_BATTLE_SHELL_PATHS.floatText,
 ] as const;
 
-const ZC_BATTLE_COMMON_FX_PREFABS: readonly string[] = Array.of<string>(
+const coreFxPaths: string[] = [
     ZC_BATTLE_FX_PATHS.spawn, ZC_BATTLE_FX_PATHS.death, ZC_BATTLE_FX_PATHS.buildingDestroy,
-).concat(ZC_ATTACK_TRAITS.map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`));
+];
+const ZC_BATTLE_COMMON_FX_PREFABS: readonly string[] = coreFxPaths.concat(
+    ZC_ATTACK_TRAITS.map(trait => `${ZC_BATTLE_FX_PATHS.hitDirectory}/${trait}受击/${trait}受击`),
+);
 
 export const ZC_BATTLE_COMMON_PREFABS: readonly string[] = Array.from<string>(ZC_BATTLE_DOWNLOAD_PREFABS).concat(
     [ZC_BATTLE_SHELL_PATHS.cardReveal, ZC_BATTLE_SHELL_PATHS.legendBanner, ZC_BATTLE_SHELL_PATHS.decor],
     ZC_BATTLE_COMMON_FX_PREFABS,
 );
 
-/** 只从表字段收集下载路径；不创建卡牌、地图或对局状态。 */
+/** 只从表字段收集下载路径，不创建卡牌、地图或对局状态。*/
 export function buildZCBattleWarmupPaths(
     cards: readonly unknown[], skills: readonly unknown[], overrides: readonly unknown[],
 ): readonly string[] {
-    // 先保留 8 个首帧核心外壳，再准备单位和可后补的特效。
     const paths = new Set<string>(ZC_BATTLE_DOWNLOAD_PREFABS);
     const add = (value: unknown): void => {
         if (typeof value === 'string' && value.trim()) paths.add(value.trim().replace(/\\/g, '/'));
     };
     const rowOf = (value: unknown): Record<string, unknown> | null =>
         value !== null && typeof value === 'object' ? value as Record<string, unknown> : null;
+
     for (const value of cards) {
         const row = rowOf(value);
         if (row && row.enabled === 1) add(row.unitPrefabPath);
@@ -54,28 +57,23 @@ export function buildZCBattleWarmupPaths(
     }
     for (const value of skills) {
         const row = rowOf(value);
-        if (row) {
-            add(row.effectPrefabPath);
-            //  命中附加表现（运动霸 203301「气浪」）：与 `ZCGameLoader` 的 effectPaths 同源，
-            //  两处都要收，否则「预下载清单里有、实战加载里没有」或反过来，都会让气浪首战缺席。
-            add(row.impactEffectPrefabPath);
-        }
+        if (!row) continue;
+        add(row.effectPrefabPath);
+        // 命中附加表现（运动霸 203301「气浪」）要和 ZCGameLoader 的 effectPaths 收在同一份清单，
+        // 少一处就会出现「预下载有、实战没有」或者反过来。
+        add(row.impactEffectPrefabPath);
     }
     for (const value of overrides) {
         const row = rowOf(value);
         if (row && row.enabled === 1 && row.statId === 'model') add(row.value);
     }
-    //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight.MISSILE_FX_BY_UNIT`
-    //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面的表扫描收不到。与 effectPaths 同源两处都要收：
-    //  预热清单里没有只会让导弹首战现加载（慢一拍），但漏了实战清单则是彻底消失。
-    for (const fx of zcMissileFxPaths()) {
-        paths.add(fx);
-    }
+    // 追踪导弹的弹体/爆炸路径只在 ZCCombatEffectFlight.MISSILE_FX_BY_UNIT 里登记，
+    // pvpSkill 任何一行都不带，表扫描收不到，所以这里单独补一遍。
+    for (const fx of zcMissileFxPaths()) paths.add(fx);
     return Array.from(paths);
 }
 
-
-/** 单通道静默解析只覆盖公共外壳与单位模型，弹道仍按本局阵容取用。 */
+/** 静默解析只覆盖公共外壳和单位模型，弹道仍按本局阵容取。*/
 export function buildZCBattleParsePaths(cards: readonly unknown[]): readonly string[] {
     return buildZCBattleWarmupPaths(cards, [], []).filter(path => !path.startsWith('units/projectiles/'));
 }

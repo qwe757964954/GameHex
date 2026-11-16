@@ -691,7 +691,7 @@ test('E2 商店的购买三分支：售罄 → 提示；不够 → `{货币名}�
     const src = strip(read(STORE_PAGE_TS));
     assert.ok(/soldOut[\s\S]{0,200}?FW\.showTip\(LEAGUE_STORE_SOLD_OUT\)/.test(src));
     assert.ok(/!view\.enough[\s\S]{0,200}?notEnoughTip/.test(src));
-    assert.ok(src.includes('buyStoreGoods(view.id'));
+    assert.ok(src.includes("action: { kind: 'store', id: view.id }"));
     // ⚠️ 不存在二次确认（老端商店是直接发包）
     assert.ok(!src.includes('CommonTips'), '商店不该弹确认框');
 });
@@ -699,8 +699,9 @@ test('E2 商店的购买三分支：售罄 → 提示；不够 → `{货币名}�
 test('E2b 商店：买成功后要消费响应里的 `tlCmdGoods` ⇒ 弹「获得奖励」（老端第 4 参 showReward=true）', () => {
     const src = strip(read(REPO_TS));
     // 老端 `ModelStore.requestBuy(id, StoreType.League, false, true)` 的 `true` 就是这个开关
-    assert.ok(/FW\.ShowReward\(rsp\.tlCmdGoods\)/.test(src),
-        'buyStoreGoods 的响应回调里必须 FW.ShowReward（否则买成功不弹「获得奖励」）');
+    assert.ok(/sendWithRewards<CmdShopBuyRspMsg>/.test(src));
+    assert.ok(/\(rsp\) => rsp\.tlCmdGoods \?\? \[\]/.test(src), '商店响应没有 ret，直接返回奖励');
+    assert.ok(!src.includes('FW.ShowReward'), 'Repository 不展示奖励');
     // 必须把回调**真的传进** `RequestShopBuy` 的第 3 个参数：`sendWithResponse` 的 `make` 形参收到
     // `onRsp` 后原样塞进去。只 import FW、或只写一个没人引用的回调，都不算。
     assert.ok(/\(onRsp\) => new RequestShopBuy\(\{[\s\S]{0,260}?caller, onRsp\)/.test(src),
@@ -714,7 +715,7 @@ test('E2b 商店：买成功后要消费响应里的 `tlCmdGoods` ⇒ 弹「获�
     );
     // 未连接就地返回 offline，别把 state 弄成 ok
     assert.ok(/if \(!net\?\.isConnected\) return 'offline'/.test(src));
-    // ⚠️ 弹窗只由 repository 弹一次；页面不许再弹一遍
+    // ⚠️ 弹窗由 Controller 展示一次；页面不许再弹一遍
     assert.ok(!strip(read(STORE_PAGE_TS)).includes('FW.ShowReward'), '页面不要再弹一次，避免双弹');
 });
 
@@ -730,7 +731,7 @@ test('E2c 砍价 / 任务领奖 / 任务进度奖 / 北伐扫荡 都已接弹窗
         const at = src.indexOf(`new ${request}(`);
         assert.ok(at > 0, `${request} 的构造点必须存在`);
         const near = src.slice(at, at + 400);
-        assert.ok(near.includes('FW.ShowReward') && near.includes('tlCmdGoods'),
+        assert.ok(near.includes('rsp.ret ? rsp.tlCmdGoods ?? [] : null'),
             `${request} 的响应必须被消费并 FW.ShowReward（否则给了奖励却不弹「获得奖励」）`);
     }
 
@@ -751,11 +752,12 @@ test('E2d 捐献：响应 `ret` 为真 ⇒ 「捐献成功」提示 + 本地算�
     const src = strip(read(REPO_TS));
     // 老端 `ModelLeague.RequestLeagueDonate`：
     //   `if (rsp.ret) { FW.showTip(FW.G_W("DONATE_SUCCESS")); this.showCommonDonateReward(adv); }`
-    assert.ok(/sendWithResponse<CmdUnionDonateRspMsg>/.test(src),
+    assert.ok(/sendWithRewards<CmdUnionDonateRspMsg>/.test(src),
         'requestDonate 必须消费响应（原来走 `this.send` 把响应整个丢掉 ⇒ 既无提示也无奖励窗）');
-    assert.ok(/if \(!rsp\?\.ret\) return;/.test(src), '只有 `ret` 为真才算成功');
-    assert.ok(/FW\.showTip\(LEAGUE_DONATE_SUCCESS\)/.test(src), '成功要有「捐献成功」提示');
-    assert.ok(/FW\.ShowReward\(\[/.test(src), '成功要弹「获得物品」窗');
+    assert.ok(/if \(!rsp\.ret\) return null;/.test(src), '只有 `ret` 为真才算成功');
+    const controller = read('assets/script/app/league/LeagueDonateController.ts');
+    assert.ok(controller.includes('feedback.tip(LEAGUE_DONATE_SUCCESS)'), '控制器展示成功提示');
+    assert.ok(controller.includes('feedback.reward(result.rewards)'), '控制器展示返回奖励');
     assert.ok(src.includes('LEAGUE_UNION_COIN_RES_ID') && src.includes('LEAGUE_UNION_CONTRI_RES_ID'),
         '奖励两件 = 联盟金币(11) + 联盟贡献(13)');
 
@@ -771,7 +773,7 @@ test('E2d 捐献：响应 `ret` 为真 ⇒ 「捐献成功」提示 + 本地算�
     assert.ok(read(TEXTS_TS).includes("export const LEAGUE_DONATE_SUCCESS = '捐献成功';"));
     assert.equal(LEAGUE_DONATE_SUCCESS, '捐献成功');
 
-    // ⚠️ 弹窗 / 提示只由 repository 弹一次；页面不许再弹一遍（避免双弹）
+    // ⚠️ 弹窗 / 提示由 Controller 展示一次；页面不许再弹一遍（避免双弹）
     assert.ok(!strip(read(DONATE_PAGE_TS)).includes('FW.ShowReward'), '页面不要自己再弹奖励窗');
 });
 
@@ -821,7 +823,7 @@ test('E7 砍价：购买三道关 + 确认框填**现价**，砍价发 `buy=fals
     assert.ok(/LEAGUE_DISCOUNT_BUY_CONFIRM, view\.priceNow\)/.test(src), '⚠️ 填现价，不是原价');
     assert.ok(src.includes('sendBargain(false)'), '「砍价」= RequestUnionBargain(false)');
     assert.ok(src.includes('sendBargain(true)'), '「购买」= RequestUnionBargain(true)');
-    assert.ok(src.includes('requestBargain(buy, this)'));
+    assert.ok(src.includes("action: { kind: 'bargain', buy }"));
 });
 
 test('E8 砍价：`状态` 三页 = 两颗按钮显隐 + 购买按钮置灰（只染色、不关交互）', () => {

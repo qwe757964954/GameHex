@@ -119592,6 +119592,638 @@ $root.com = (function() {
                     return CmdGameViewClickRspMsg;
                 })();
 
+                cmd.CmdFunctionGuideInfo = (function() {
+
+                    /**
+                     * Properties of a CmdFunctionGuideInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdFunctionGuideInfo
+                     * @property {number} funcId CmdFunctionGuideInfo funcId
+                     * @property {number} step1 CmdFunctionGuideInfo step1
+                     * @property {number} step2 CmdFunctionGuideInfo step2
+                     */
+
+                    /**
+                     * Constructs a new CmdFunctionGuideInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdFunctionGuideInfo.
+                     * @implements ICmdFunctionGuideInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfo=} [properties] Properties to set
+                     */
+                    function CmdFunctionGuideInfo(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdFunctionGuideInfo funcId.
+                     * @member {number} funcId
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @instance
+                     */
+                    CmdFunctionGuideInfo.prototype.funcId = 0;
+
+                    /**
+                     * CmdFunctionGuideInfo step1.
+                     * @member {number} step1
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @instance
+                     */
+                    CmdFunctionGuideInfo.prototype.step1 = 0;
+
+                    /**
+                     * CmdFunctionGuideInfo step2.
+                     * @member {number} step2
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @instance
+                     */
+                    CmdFunctionGuideInfo.prototype.step2 = 0;
+
+                    /**
+                     * Creates a new CmdFunctionGuideInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} CmdFunctionGuideInfo instance
+                     */
+                    CmdFunctionGuideInfo.create = function create(properties) {
+                        return new CmdFunctionGuideInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdFunctionGuideInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdFunctionGuideInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} message CmdFunctionGuideInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdFunctionGuideInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.funcId);
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.step1);
+                        writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.step2);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdFunctionGuideInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} CmdFunctionGuideInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdFunctionGuideInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.funcId = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    message.step1 = reader.uint32();
+                                    break;
+                                }
+                            case 3: {
+                                    message.step2 = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("funcId"))
+                            throw $util.ProtocolError("missing required 'funcId'", { instance: message });
+                        if (!message.hasOwnProperty("step1"))
+                            throw $util.ProtocolError("missing required 'step1'", { instance: message });
+                        if (!message.hasOwnProperty("step2"))
+                            throw $util.ProtocolError("missing required 'step2'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdFunctionGuideInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdFunctionGuideInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfo";
+                    };
+
+                    return CmdFunctionGuideInfo;
+                })();
+
+                cmd.CmdFunctionGuideInfoReqMsg = (function() {
+
+                    /**
+                     * Properties of a CmdFunctionGuideInfoReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdFunctionGuideInfoReqMsg
+                     * @property {number} funcId CmdFunctionGuideInfoReqMsg funcId
+                     */
+
+                    /**
+                     * Constructs a new CmdFunctionGuideInfoReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdFunctionGuideInfoReqMsg.
+                     * @implements ICmdFunctionGuideInfoReqMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfoReqMsg=} [properties] Properties to set
+                     */
+                    function CmdFunctionGuideInfoReqMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdFunctionGuideInfoReqMsg funcId.
+                     * @member {number} funcId
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg
+                     * @instance
+                     */
+                    CmdFunctionGuideInfoReqMsg.prototype.funcId = 0;
+
+                    /**
+                     * Creates a new CmdFunctionGuideInfoReqMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfoReqMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg} CmdFunctionGuideInfoReqMsg instance
+                     */
+                    CmdFunctionGuideInfoReqMsg.create = function create(properties) {
+                        return new CmdFunctionGuideInfoReqMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdFunctionGuideInfoReqMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg} message CmdFunctionGuideInfoReqMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdFunctionGuideInfoReqMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.funcId);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdFunctionGuideInfoReqMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg} CmdFunctionGuideInfoReqMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdFunctionGuideInfoReqMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.funcId = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("funcId"))
+                            throw $util.ProtocolError("missing required 'funcId'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdFunctionGuideInfoReqMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdFunctionGuideInfoReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfoReqMsg";
+                    };
+
+                    return CmdFunctionGuideInfoReqMsg;
+                })();
+
+                cmd.CmdFunctionGuideInfoRspMsg = (function() {
+
+                    /**
+                     * Properties of a CmdFunctionGuideInfoRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdFunctionGuideInfoRspMsg
+                     * @property {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} infos CmdFunctionGuideInfoRspMsg infos
+                     */
+
+                    /**
+                     * Constructs a new CmdFunctionGuideInfoRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdFunctionGuideInfoRspMsg.
+                     * @implements ICmdFunctionGuideInfoRspMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfoRspMsg=} [properties] Properties to set
+                     */
+                    function CmdFunctionGuideInfoRspMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdFunctionGuideInfoRspMsg infos.
+                     * @member {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} infos
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg
+                     * @instance
+                     */
+                    CmdFunctionGuideInfoRspMsg.prototype.infos = null;
+
+                    /**
+                     * Creates a new CmdFunctionGuideInfoRspMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideInfoRspMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg} CmdFunctionGuideInfoRspMsg instance
+                     */
+                    CmdFunctionGuideInfoRspMsg.create = function create(properties) {
+                        return new CmdFunctionGuideInfoRspMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdFunctionGuideInfoRspMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg} message CmdFunctionGuideInfoRspMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdFunctionGuideInfoRspMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.encode(message.infos, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdFunctionGuideInfoRspMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg} CmdFunctionGuideInfoRspMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdFunctionGuideInfoRspMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.infos = $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("infos"))
+                            throw $util.ProtocolError("missing required 'infos'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdFunctionGuideInfoRspMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdFunctionGuideInfoRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideInfoRspMsg";
+                    };
+
+                    return CmdFunctionGuideInfoRspMsg;
+                })();
+
+                cmd.CmdFunctionGuideUpdateReqMsg = (function() {
+
+                    /**
+                     * Properties of a CmdFunctionGuideUpdateReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdFunctionGuideUpdateReqMsg
+                     * @property {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} info CmdFunctionGuideUpdateReqMsg info
+                     */
+
+                    /**
+                     * Constructs a new CmdFunctionGuideUpdateReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdFunctionGuideUpdateReqMsg.
+                     * @implements ICmdFunctionGuideUpdateReqMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideUpdateReqMsg=} [properties] Properties to set
+                     */
+                    function CmdFunctionGuideUpdateReqMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdFunctionGuideUpdateReqMsg info.
+                     * @member {com.xkhy.tafang.cmd.CmdFunctionGuideInfo} info
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg
+                     * @instance
+                     */
+                    CmdFunctionGuideUpdateReqMsg.prototype.info = null;
+
+                    /**
+                     * Creates a new CmdFunctionGuideUpdateReqMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideUpdateReqMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg} CmdFunctionGuideUpdateReqMsg instance
+                     */
+                    CmdFunctionGuideUpdateReqMsg.create = function create(properties) {
+                        return new CmdFunctionGuideUpdateReqMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdFunctionGuideUpdateReqMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg} message CmdFunctionGuideUpdateReqMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdFunctionGuideUpdateReqMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.encode(message.info, writer.uint32(/* id 1, wireType 2 =*/10).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdFunctionGuideUpdateReqMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg} CmdFunctionGuideUpdateReqMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdFunctionGuideUpdateReqMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.info = $root.com.xkhy.tafang.cmd.CmdFunctionGuideInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("info"))
+                            throw $util.ProtocolError("missing required 'info'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdFunctionGuideUpdateReqMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdFunctionGuideUpdateReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideUpdateReqMsg";
+                    };
+
+                    return CmdFunctionGuideUpdateReqMsg;
+                })();
+
+                cmd.CmdFunctionGuideUpdateRspMsg = (function() {
+
+                    /**
+                     * Properties of a CmdFunctionGuideUpdateRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdFunctionGuideUpdateRspMsg
+                     * @property {number} succ CmdFunctionGuideUpdateRspMsg succ
+                     */
+
+                    /**
+                     * Constructs a new CmdFunctionGuideUpdateRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdFunctionGuideUpdateRspMsg.
+                     * @implements ICmdFunctionGuideUpdateRspMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideUpdateRspMsg=} [properties] Properties to set
+                     */
+                    function CmdFunctionGuideUpdateRspMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdFunctionGuideUpdateRspMsg succ.
+                     * @member {number} succ
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg
+                     * @instance
+                     */
+                    CmdFunctionGuideUpdateRspMsg.prototype.succ = 0;
+
+                    /**
+                     * Creates a new CmdFunctionGuideUpdateRspMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdFunctionGuideUpdateRspMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg} CmdFunctionGuideUpdateRspMsg instance
+                     */
+                    CmdFunctionGuideUpdateRspMsg.create = function create(properties) {
+                        return new CmdFunctionGuideUpdateRspMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdFunctionGuideUpdateRspMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg} message CmdFunctionGuideUpdateRspMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdFunctionGuideUpdateRspMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.succ);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdFunctionGuideUpdateRspMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg} CmdFunctionGuideUpdateRspMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdFunctionGuideUpdateRspMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.succ = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("succ"))
+                            throw $util.ProtocolError("missing required 'succ'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdFunctionGuideUpdateRspMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdFunctionGuideUpdateRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdFunctionGuideUpdateRspMsg";
+                    };
+
+                    return CmdFunctionGuideUpdateRspMsg;
+                })();
+
                 /**
                  * MessageId enum.
                  * @name com.xkhy.tafang.cmd.MessageId
@@ -119710,6 +120342,8 @@ $root.com = (function() {
                  * @property {number} CmdFuBenDailyGetRewardRspMsg=1528771729 CmdFuBenDailyGetRewardRspMsg value
                  * @property {number} CmdFuBenBuyTimesRspMsg=427584667 CmdFuBenBuyTimesRspMsg value
                  * @property {number} CmdFuBenSweepRspMsg=1878627949 CmdFuBenSweepRspMsg value
+                 * @property {number} CmdFunctionGuideInfoRspMsg=1416382725 CmdFunctionGuideInfoRspMsg value
+                 * @property {number} CmdFunctionGuideUpdateRspMsg=799066198 CmdFunctionGuideUpdateRspMsg value
                  * @property {number} CmdFundGetInfoRspMsg=510764152 CmdFundGetInfoRspMsg value
                  * @property {number} CmdFundGetRewardRspMsg=1902555017 CmdFundGetRewardRspMsg value
                  * @property {number} CmdTakeGameCircleRewardRspMsg=1855584437 CmdTakeGameCircleRewardRspMsg value
@@ -120042,6 +120676,8 @@ $root.com = (function() {
                     values[valuesById[1528771729] = "CmdFuBenDailyGetRewardRspMsg"] = 1528771729;
                     values[valuesById[427584667] = "CmdFuBenBuyTimesRspMsg"] = 427584667;
                     values[valuesById[1878627949] = "CmdFuBenSweepRspMsg"] = 1878627949;
+                    values[valuesById[1416382725] = "CmdFunctionGuideInfoRspMsg"] = 1416382725;
+                    values[valuesById[799066198] = "CmdFunctionGuideUpdateRspMsg"] = 799066198;
                     values[valuesById[510764152] = "CmdFundGetInfoRspMsg"] = 510764152;
                     values[valuesById[1902555017] = "CmdFundGetRewardRspMsg"] = 1902555017;
                     values[valuesById[1855584437] = "CmdTakeGameCircleRewardRspMsg"] = 1855584437;

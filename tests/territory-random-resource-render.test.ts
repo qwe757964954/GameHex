@@ -1,3 +1,5 @@
+import { mapInputWithProjection } from './helpers/territory-map-view-sandbox';
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -28,7 +30,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     const silverIcon = { name: 'silver icon' };
     const randomBuilding = { name: 'random building' };
     let opened = false;
-    mapView.syncStations({
+    mapView.syncStations(mapInputWithProjection({
         map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
             randomSites: { candidateCells: [4, 5], triggerSilver: 399 } },
         layout: { points: new Map([[4, { x: 10, y: 20 }], [5, { x: 30, y: 40 }]]) },
@@ -37,7 +39,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
         pendingRandomResourceCells: [],
         progress: { isCellUnlocked: () => opened },
         art: { randomSilverIcon: silverIcon, randomResource: randomBuilding },
-    });
+    }));
     assert.equal(rendered.size, 1);
     assert.equal(rendered.get(4)?.icon, null);
     assert.equal(rendered.get(4)?.conditionIcon, silverIcon);
@@ -45,14 +47,14 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     assert.equal(rendered.get(4)?.conditionTextColor, 'white');
     assert.equal(rendered.get(4)?.caption, '399');
     assert.equal(rendered.get(4)?.interactive, true);
-    mapView.syncStations({
+    mapView.syncStations(mapInputWithProjection({
         map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
             randomSites: { candidateCells: [4, 5], triggerSilver: 399 } },
         layout: { points: new Map([[4, { x: 10, y: 20 }]]) },
         randomResourceOpenableCells: [4], revealedCells: [4], pendingRandomResourceCells: [4],
         progress: { isCellUnlocked: () => false },
         art: { randomSilverIcon: silverIcon, randomResource: randomBuilding },
-    });
+    }));
     assert.equal(rendered.get(4)?.isLoading, true);
     assert.equal(rendered.get(4)?.caption, '');
     assert.equal(rendered.get(4)?.interactive, false);
@@ -61,7 +63,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
     // 4 号格配了 69006、5 号格**没配** ⇒ 前者显示对应建筑、后者只显示绿色地块（icon = null）。
     // 早期断言的是「开启后一律显示那张固定建筑图」（`art.randomResource`），已作废。
     const perCellBuilding = { name: '69006 building' };
-    mapView.syncStations({
+    mapView.syncStations(mapInputWithProjection({
         map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
             randomSites: { candidateCells: [4, 5], triggerSilver: 399, buildingIds: { 4: '69006' } } },
         layout: { points: new Map([[4, { x: 10, y: 20 }], [5, { x: 30, y: 40 }]]) },
@@ -71,7 +73,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
         // 不Number 归一就是查不到 ⇒ 表现为「配了 id 但外观没变」，零报错。
         art: { randomSilverIcon: silverIcon, randomResource: randomBuilding,
             buildFrames: new Map([[69006, perCellBuilding]]) },
-    });
+    }));
     assert.equal(rendered.get(4)?.icon, perCellBuilding,
         '配了 buildingIds 的开启格显示该格自己的建筑（键经Number 归一后查表）');
     assert.equal(rendered.get(4)?.interactive, false);
@@ -85,7 +87,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
 
     // 没配 buildingIds 的开启格 ⇒ **绿色地块、没有建筑图**（山猫 2026-10-10 口径）。
     opened = true;
-    mapView.syncStations({
+    mapView.syncStations(mapInputWithProjection({
         map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
             randomSites: { candidateCells: [4, 5], triggerSilver: 399 } },
         layout: { points: new Map([[4, { x: 10, y: 20 }], [5, { x: 30, y: 40 }]]) },
@@ -93,15 +95,13 @@ test('locked sites show only the silver icon and amount, and random sites hide t
         // 两格都已开启（要验的是「没配 id 的**开启**格长什么样」）
         progress: { isCellUnlocked: () => true },
         art: { randomSilverIcon: silverIcon, randomResource: randomBuilding, buildFrames: new Map() },
-    });
+    }));
     assert.equal(rendered.get(5)?.icon, null, '没配建筑 id 的开启格不画建筑');
     assert.equal(rendered.get(5)?.tint, 'cleared', '它表现为绿色地块（已通关色调）');
 
     const fixedSite = { id: 'fixed', type: 'fixedResource', cellId: 1,
         unlock: { silverCost: 10, staminaCost: 1 } };
-    const renderFixed = (mapView as unknown as {
-        stationRenderOf: (site: unknown, input: unknown) => Record<string, unknown>;
-    }).stationRenderOf.bind(mapView);
+    const renderFixed = stationRenderWithProjection(mapView);
     const fixedArt = { fixedResource: { name: 'chest' }, randomSilverIcon: silverIcon };
     const locked = renderFixed(fixedSite, {
         stageByCell: new Map(), siteOpenableCells: [1], pendingFixedResourceCells: [], art: fixedArt,
@@ -166,9 +166,7 @@ test('locked sites show only the silver icon and amount, and random sites hide t
         defaults: { staminaCost: 5 },
         randomSites: { candidateCells: [], triggerSilver: 0 },
     };
-    const renderDependent = (mapView as unknown as {
-        stationRenderOf: (site: unknown, input: unknown) => Record<string, unknown>;
-    }).stationRenderOf.bind(mapView);
+    const renderDependent = stationRenderWithProjection(mapView);
     const prereqInput = {
         map: prereqFixedMap, stageByCell: new Map(), siteOpenableCells: [2],
         pendingFixedResourceCells: [], art: fixedArt,
@@ -405,7 +403,7 @@ test('★★★银币不够 ⇒ 银币数字红；体力不够（银币够）⇒
     /** 4 号格：银币 399 / 体力 5（`defaults.staminaCost`）。`openable` 由调用方按"这一格能不能开"给。 */
     const render = (wallet: { silver: number; stamina: number }, openable: boolean): unknown => {
         rendered.clear();
-        mapView.syncStations({
+        mapView.syncStations(mapInputWithProjection({
             map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
                 randomSites: { candidateCells: [4], triggerSilver: 399 } },
             layout: { points: new Map([[4, { x: 10, y: 20 }]]) },
@@ -415,7 +413,7 @@ test('★★★银币不够 ⇒ 银币数字红；体力不够（银币够）⇒
             progress: { isCellUnlocked: () => false },
             art: { randomSilverIcon: silverIcon },
             wallet,
-        });
+        }));
         return rendered.get(4)?.conditionTextColor;
     };
 
@@ -451,7 +449,7 @@ test('a lock-blocked cell hides both the silver icon and the amount', () => {
         render(content: Record<string, unknown>) { rendered.set(target.cellId, content); },
     });
     const silverIcon = { name: 'silver icon' };
-    mapView.syncStations({
+    mapView.syncStations(mapInputWithProjection({
         map: { startCellId: 0, sites: [], defaults: { staminaCost: 5 },
             randomSites: { candidateCells: [4, 5], triggerSilver: 399 } },
         layout: { points: new Map([[4, { x: 10, y: 20 }], [5, { x: 30, y: 40 }]]) },
@@ -462,7 +460,7 @@ test('a lock-blocked cell hides both the silver icon and the amount', () => {
         pendingRandomResourceCells: [],
         progress: { isCellUnlocked: () => false },
         art: { randomSilverIcon: silverIcon },
-    });
+    }));
     // 能开的格照旧：银币图标 + 数量。
     assert.equal(rendered.get(4)?.isCondition, true);
     assert.equal(rendered.get(4)?.caption, '399');

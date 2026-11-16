@@ -132,6 +132,9 @@ python tools/map-editor/copy_bigmap_maps.py --id world_01
 tools\map-editor\copy-bigmap-maps.bat --id world_01
 ```
 
+发布不会写策划 `json/client`（写了会被 `ref_compress_json.py` 抄成 `assets/remoteRef` 副本）：
+`publish()` 对 client 落点直接报错，并会清掉 `client` 里同名的历史遗留（`--dry-run` 只报告）。
+
 校验规则只有一份权威实现（`BigMapLayout.parseBigMapLayout`），python 侧通过
 `npx tsx tools/map-editor/validate_bigmap_layout.ts <file>` 调它 —— 不在 python 里抄第二份。
 

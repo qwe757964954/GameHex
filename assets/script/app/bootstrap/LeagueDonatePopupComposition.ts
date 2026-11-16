@@ -32,6 +32,7 @@ class LeagueDonatePopupComposition implements IPopupComposition {
             view: { render: state => this.view.render(state) },
             feedback: {
                 tip: text => FW.showTip(text),
+                reward: goods => FW.ShowReward(goods),
                 // 老端带「不再提示」勾选框，本端恒问（复用 CommonTips，无勾选框）。
                 confirm: (content, onSure) => {
                     void CommonTips.open({ userData: { content, onSure } });

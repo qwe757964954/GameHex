@@ -13,7 +13,7 @@ export interface IZCVisualDependency {
     readonly details: unknown;
 }
 
-/** 只识别目录中真实存在的单位 ID，保守保留技能、召唤和替换模型传递依赖。 */
+/** 只识别目录中真实存在的单位 ID，保守保留技能、召唤和替换模型传递依赖。*/
 export function resolveZCVisualUnitIds(
     knownIds: readonly string[],
     heroIds: readonly number[],
@@ -45,14 +45,14 @@ type ZCVisualLoadout = Pick<ZCCompiledModifierLoadout, 'targetUnitId'> & {
     readonly textModifiers?: readonly { readonly statId: string; readonly value: string }[];
 };
 
-/** 纯计算本局模型与特效清单；不加载资源，不读取全局目录。 */
+/** 纯计算本局模型与特效清单；不加载资源，不读取全局目录。*/
 export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     all: readonly T[],
     adapters: {
         readonly skillPlans?: readonly {
             readonly enabled: boolean;
             readonly unitId: string;
-            /** 行为键：只有它能让「施法瞬间」这类**代码级**表现被认出来（见 `ZCBlinkCastFx`）。 */
+            /** 行为键：只有它能让「施法瞬间」这类代码级表现被认出来（见 `ZCBlinkCastFx`）。*/
             readonly behaviorKey?: string;
         }[];
         readonly textOverrides: ReadonlyMap<string, { readonly enabled: boolean; readonly statId: string; readonly value: string }>;
@@ -67,7 +67,7 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         loadouts.map(item => ({ unitId: item.targetUnitId, details: item })),
     ].flat());
     const units = required ? all.filter(unit => required.has(unit.unitId)) : all;
-    //  移形换影（`blink_strike`，2026-11-07）：施法瞬间在**本体位置**闪的那张
+    //  移形换影（`blink_strike`，2026-11-07）：施法瞬间在本体位置闪的那张
     //  「瞬间移动特效」，路径只登记在代码常量里（行为技能在 `pvpSkill` 里没有造型槽），
     //  所以下面那四个字段一个都收不到 —— 与追踪导弹同一类问题。
     //  漏收的后果：`ZCGameLoader` 不加载 ⇒ 技能照常结算、屏幕上一次闪都没有、且不报错。
@@ -86,7 +86,7 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     const boltUnits = new Set((adapters.skillPlans ?? [])
         .filter(plan => plan.enabled && zcBoltStrikeEffectPath(plan.behaviorKey))
         .map(plan => plan.unitId));
-    //  精密陷阱（`trap_place`，2026-11-12 科学家 103504）**有三条**路径，全部只登记在
+    //  精密陷阱（`trap_place`，2026-11-12 科学家 103504）有三条路径，全部只登记在
     //  `ZCTrapFx` 的代码常量里（行为技能在 `pvpSkill` 里没有造型槽）：
     //  生成段 / 常驻段 / 爆炸段。漏收任何一条的后果都是静默的 —— 技能照常结算，
     //  那一段美术凭空消失（生成段漏了是「陷阱直接跳出来」，爆炸段漏了是「踩了不掉血以外没反应」）。
@@ -98,8 +98,8 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         unit.attackProfile.effectPrefabPath,
         unit.attackProfile.impactEffectPrefabPath,
         unit.empoweredProfile?.effectPrefabPath,
-        //  强化那一击的**命中爆炸**（2026-11-11 麻辣铁锅「凤凰降临」102604 的
-        //  `麻辣铁锅_爆炸龙卷`）。放在**武将技行**上（36182）而不是普攻行，
+        //  强化那一击的命中爆炸（2026-11-11 麻辣铁锅「凤凰降临」102604 的
+        //  `麻辣铁锅_爆炸龙卷`）。放在武将技行上（36182）而不是普攻行，
         //  只收 `attackProfile` 那一份会漏掉它 ⇒ 命中照样结算、屏幕上不炸。
         unit.empoweredProfile?.impactEffectPrefabPath,
         unit.secondaryProfile?.effectPrefabPath,

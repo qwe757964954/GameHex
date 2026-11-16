@@ -11,7 +11,7 @@ from typing import Any
 
 TERRITORY_MAP_KIND = "territoryChapter"
 TERRITORY_VERSION = 1
-SITE_TYPES = {"stage", "boss", "asyncPvp", "fixedResource", "bonus"}
+SITE_TYPES = {"stage", "boss", "asyncPvp", "fixedResource", "bonus", "patrolChest"}
 ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
@@ -185,6 +185,15 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
                     issues.append(f"{label}.{optional} must be a string")
                 else:
                     site[optional] = raw[optional]
+        if site_type == "patrolChest":
+            battle_ids = raw.get("battleIds")
+            if (not isinstance(battle_ids, list) or not battle_ids
+                    or not all(_is_int(value) and 0 < value <= 9007199254740991 for value in battle_ids)):
+                issues.append(f"{label}.battleIds must be a non-empty array of positive integers")
+            else:
+                site["battleIds"] = list(battle_ids)
+        elif "battleIds" in raw:
+            issues.append(f"{label}.battleIds is only valid for patrolChest sites")
         if "rewardId" in raw:
             if site_type != "fixedResource":
                 issues.append(f"{label}.rewardId is only valid for fixedResource sites")

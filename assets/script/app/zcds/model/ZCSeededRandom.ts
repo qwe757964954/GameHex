@@ -1,12 +1,11 @@
 /**
  * 服务端种子 → 确定性随机源。
- * 按十进制字符串逐字符混合（xmur3 + sfc32），全程 32 位整数运算，
- * 引擎与 Node 逐位一致。零引擎依赖，可单测。
- */
+ * xmur3 打散种子、sfc32 出数，全程 32 位整数，Node 和引擎逐位一致；不依赖 cc。
+*/
 
 const UINT32_RANGE = 4294967296;
 
-/** 十进制字符串 → 4 个 32 位种子（xmur3）。 */
+/** 十进制字符串 → 4 个 32 位种子（xmur3）。*/
 function seedWords(text: string): readonly [number, number, number, number] {
     let h = 1779033703 ^ text.length;
     for (let i = 0; i < text.length; i += 1) {
@@ -24,8 +23,8 @@ function seedWords(text: string): readonly [number, number, number, number] {
 
 /**
  * 种子 → () => number（[0,1)），sfc32。
- * 空 / 缺省种子返回 Math.random（离线对局、编辑器预览不受影响）。
- */
+ * 空 / 缺省种子直接回 Math.random，离线对局和编辑器预览不受影响。
+*/
 export function createSeededRandom(seed: string | null | undefined): () => number {
     const text = typeof seed === 'string' ? seed.trim() : '';
     if (!text) return Math.random;

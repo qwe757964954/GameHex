@@ -3392,6 +3392,9 @@
       },
       {
         "__id__": 164
+      },
+      {
+        "__id__": 207
       }
     ],
     "_prefab": {
@@ -5264,7 +5267,10 @@
     "fightCostLabel": {
       "__id__": 157
     },
-    "_id": ""
+    "_id": "",
+    "guideAnchor": {
+      "__id__": 207
+    }
   },
   {
     "__type__": "cc.CompPrefabInfo",
@@ -5281,5 +5287,24 @@
     "fileId": "4a6I/yEhdGz6p1CENLBbFg",
     "instance": null,
     "targetOverrides": null
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "719c59d061ad49bd84a762"
+  },
+  {
+    "__type__": "616cdS59ZtIN5DOHmb9GgL7",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 135
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 206
+    },
+    "key": "",
+    "_id": ""
   }
 ]

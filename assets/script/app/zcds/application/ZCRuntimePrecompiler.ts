@@ -3,7 +3,7 @@ import { compilePvpTables } from '../model/ZCPvpConfigCompiler';
 import { ZC_RUNTIME_CONFIG } from '../model/ZCRuntimeConfigStore';
 import type { ZCPvpTables } from '../model/ZCGameRuntimeConfig';
 
-/** 进入对局所需的全部 PVP 分表；空闲期预编译与进对局加载共用此清单。 */
+/** 进对局要用的全部 PVP 分表；空闲期预编译和进对局加载共用这份清单。*/
 export const ZC_RUNTIME_TABLE_NAMES = [
     'pvpGlobal',
     'pvpArtifact',
@@ -31,9 +31,7 @@ export const ZC_RUNTIME_TABLE_NAMES = [
     'skillBuff',
 ] as const;
 
-/**
- * 并发调用复用同一配置任务；会话 reset 后旧结果返回 false，不安装到新会话。
- */
+/** 并发调用共用同一个配置任务；会话 reset 后旧结果返回 false，不会装进新会话。*/
 export function ensureZCRuntimeCompiled(configs: ConfigService): Promise<boolean> {
     return ZC_RUNTIME_CONFIG.ensure(async () => {
         await configs.initialize();

@@ -213,15 +213,16 @@ test('数字没变不弹；结束态（finished）不弹', () => {
 test('领先格数字加大加粗，失去领先还原；数值不变不重复写字样', () => {
     const { slot, harness } = createSlot();
     const value = slot.value as { fontSize: number; lineHeight: number; isBold: boolean };
+    // 2026-11-13 按蓝湖「多队伍」设计稿对齐：普通格 32、领先格 36（行高沿用 39 / 44）。
     slot.render({ value: 3, finished: false, leading: false });
-    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [28, 39, false], '普通格保持出厂字样');
+    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [32, 39, false], '普通格保持出厂字样');
     slot.render({ value: 3, finished: false, leading: true });
-    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [32, 44, true], '领先格加大加粗');
+    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [36, 44, true], '领先格加大加粗');
     slot.render({ value: 3, finished: false, leading: true });
-    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [32, 44, true], '状态不变不重写');
+    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [36, 44, true], '状态不变不重写');
     harness.step(1);
     slot.render({ value: 2, finished: false, leading: false });
-    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [28, 39, false], '失去领先还原');
+    assert.deepEqual([value.fontSize, value.lineHeight, value.isBold], [32, 39, false], '失去领先还原');
 });
 
 test('动画中途领先状态翻转：从当前尺寸反向起步，不跳变', () => {

@@ -1,0 +1,76 @@
+
+jjg.png
+size: 396,396
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+hg
+  rotate: false
+  xy: 2, 178
+  size: 197, 214
+  orig: 197, 214
+  offset: 0, 0
+  index: -1
+lizi
+  rotate: false
+  xy: 2, 21
+  size: 14, 14
+  orig: 16, 16
+  offset: 1, 1
+  index: -1
+pz
+  rotate: true
+  xy: 345, 241
+  size: 43, 44
+  orig: 43, 44
+  offset: 0, 0
+  index: -1
+st
+  rotate: false
+  xy: 201, 280
+  size: 121, 112
+  orig: 121, 112
+  offset: 0, 0
+  index: -1
+tou
+  rotate: false
+  xy: 2, 37
+  size: 223, 139
+  orig: 223, 139
+  offset: 0, 0
+  index: -1
+wq
+  rotate: true
+  xy: 201, 195
+  size: 83, 142
+  orig: 83, 142
+  offset: 0, 0
+  index: -1
+wq1
+  rotate: true
+  xy: 227, 126
+  size: 67, 165
+  orig: 67, 165
+  offset: 0, 0
+  index: -1
+wq2
+  rotate: false
+  xy: 227, 9
+  size: 64, 115
+  orig: 64, 115
+  offset: 0, 0
+  index: -1
+yyf
+  rotate: false
+  xy: 324, 328
+  size: 68, 64
+  orig: 68, 64
+  offset: 0, 0
+  index: -1
+zyf
+  rotate: true
+  xy: 324, 286
+  size: 40, 54
+  orig: 40, 54
+  offset: 0, 0
+  index: -1

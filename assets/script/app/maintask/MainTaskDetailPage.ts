@@ -1,5 +1,6 @@
 import { _decorator, Button, Label, Node } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
+import { reportGuideComplete } from '../guide/application/GuideEvents';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { Toast } from '../common/Toast';
 import { RewardItemView } from '../common/RewardItemView';
@@ -105,6 +106,10 @@ export class MainTaskDetailPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
+        // 新手引导 8-1「面板关闭」：主线任务详情页是本端唯一会上报 `popupClosed` 的面板。
+        // ⚠️ 这个名字是通用的 —— 以后别的弹窗也要上报关闭时，改成带参（如 `panelClosed:maintask`），
+        //    否则会和 8-1 串味。
+        reportGuideComplete('popupClosed');
         // 让在途的 load / present 直接作废（它们醒来时页面已经关了）。
         this.loadRevision += 1;
         this.snapshot = null;

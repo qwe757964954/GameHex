@@ -2,21 +2,14 @@ import type { ZCFloatText, ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '..
 import type { ZCStatusApplyOptions, ZCStatusSystemSnapshot } from '../ZCStatusEffect';
 import type { IZCModelServices } from './ZCModelServices';
 
-/** 判定形状只关心这几列，抽出签名好测。 */
+/** 判定形状只关心这几列，抽出签名好测。*/
 type IZCZoneShape = Pick<ZCGroundZoneState,
     'x' | 'y' | 'radius' | 'rectHalfLength' | 'rectHalfHeight' | 'angleDegrees'>;
 
 /**
- * 区域是否覆盖到世界坐标 `(x, y)`。
- *
- * 两种形状，二选一：
- * - **圆**（缺省）：`hypot(dx, dy) <= radius`，所有既有区域逐字不变；
- * - **矩形**（`rectHalfHeight > 0` 才启用，2026-11-11 磁电冲击 101604）：
- *   `|dx| <= 半长 && |dy| <= 半宽`。半长缺省跟随 `radius`。
- *
- * 有 `angleDegrees` 时先把点**转回区域本地系**再判（旋转对圆没意义，所以只在矩形分支做）。
- * 矩形与美术用同一个角度：`area` 事件 `from == to`，视图自己算不出朝向，角度由模型给。
- */
+ * 区域是否覆盖世界坐标 (x, y)：圆用半径，矩形用半长/半宽（rectHalfHeight > 0 才启用）。
+ * 有 angleDegrees 时先把点转回区域本地系；旋转只对矩形有意义。
+*/
 export function zcGroundZoneReaches(zone: IZCZoneShape, x: number, y: number): boolean {
     const halfHeight = zone.rectHalfHeight ?? 0;
     if (halfHeight > 0) {
@@ -41,10 +34,10 @@ export function zcGroundZoneReaches(zone: IZCZoneShape, x: number, y: number): b
 /**
  * 粗筛半径（走格子索引 `unitsInRadius(hexId, radiusHex)` 那一层）。
  *
- * 矩形取**外接圆**半径：粗筛只负责别漏人，真正的形状由 `zcGroundZoneReaches` 收口。
+ * 矩形取外接圆半径：粗筛只负责别漏人，真正的形状由 `zcGroundZoneReaches` 收口。
  * 漏了这一步的话，横向 360 的矩形会被当成半径 180 的圆去筛 —— 正好够用；但 L3 的
  * 半长仍是 `radius`（200）时也对，所以这里是保险而不是必需。
- */
+*/
 export function zcGroundZoneBroadRadius(zone: IZCZoneShape): number {
     const halfHeight = zone.rectHalfHeight ?? 0;
     if (!(halfHeight > 0)) return zone.radius;
@@ -62,46 +55,32 @@ export interface IZCGroundZoneContext extends Pick<IZCModelServices, 'unitPositi
     /**
      * 概率掷骰（0~1，2026-11-11 磁电菇「五雷轰顶」的 30% 麻痹）。
      *
-     * 必须用**对局种子随机**（`services.random`），不能用 `Math.random` —— 否则回放/快照
+     * 必须用对局种子随机（`services.random`），不能用 `Math.random` —— 否则回放/快照
      * 重算会在同一拍给出不同的控制结果。声明成可选：只跑区域结算的轻量上下文
      * （单测 / 工具）不掷骰，缺省按「没中」处理。
-     */
+    */
     random?(): number;
     /**
-     * 区域伤害的吸血（2026-11-04 椰蛋战士「生命汲取」100503）。
-     *
-     * 区域结算这一步拿不到 `IZCAttackResolutionContext`（没有 skillRuntime / statPatches /
-     * effectiveDefinition），所以只把「谁打的 + 这一跳实际掉多少」丢回去，让模型找回源单位、
-     * 转给 `ZCAttackResolutionSystem.applyLifesteal` —— 比例取法与普攻完全同源，
-     * 不在这里另算一套。
-     *
-     * `hitText` 是 `damageUnit` 的返回值（`value` = `result.applied`），
-     * 护盾全吃 / 溢出 / 已死都会是 0 或 null，此时不回血。
-     * **源单位已经阵亡时模型侧直接跳过**：区域还在天上飞、人已经没了，不该继续吸。
-     *
-     * 声明成可选是为了「只跑区域结算」的轻量上下文（单测、工具）不必凭空凑一个攻击上下文；
-     * 正式对局里 `ZCGameModel.buildGroundZoneContext` 一定会给，缺了只是不吸血、不会报错。
-     */
+     * 区域伤害的吸血回调：把「源单位 + 这一跳实际掉血」丢回模型，比例与普攻同源。
+     * `hitText` 为 damageUnit 返回值（护盾全吃/溢出/已死时为 0 或 null，不回血）。
+     * 可选：轻量上下文（单测/工具）可不给，缺了只是不吸血。
+    */
     lifestealFromHit?(sourceUnitId: number, hitText: ZCFloatText | null): void;
     /**
      * 按 `unit.id` 取单位（2026-11-07 鹿神守护的两段式移动：接近阶段要追着目标走）。
      *
      * 声明成可选：只跑区域结算的轻量上下文（单测 / 工具）不必凑一个单位索引。
      * 缺了的表现是「追不到目标 ⇒ 就地转冲刺」，不会抛，也不会把区域卡在接近段。
-     */
+    */
     unitById?(id: number): ZCUnitState | undefined;
 }
 
 /**
- * 慢档（赶路）播的骨架动画名（2026-11-07 鹿神守护 103405）。
- *
- * `魔术师召唤鹿` 这份骨架里只有三段动画：`idle` / `move` / `attack`（Spine 3.8 二进制里
- * 三个长度前缀串直接可读）。美术那一段「走」就叫 `move`，**没有单独的 `walk`** ——
- * 需求里的「播放 walk 动画」落到这份资源上就是它。名字写在这里而不是配表：
- * `skillParamJson` 只有数值槽，装不下字符串。
- */
+ * 赶路档播放的骨架动画名。`魔术师召唤鹿` 骨架只有 idle/move/attack，`move` 就是那段走。
+ * 名字写死在这里，因为 skillParamJson 只装数值。
+*/
 const ZONE_APPROACH_ANIMATION = 'move';
-/** 快档（提速扑击）播的骨架动画名（同上）。 */
+/** 快档（提速扑击）播的骨架动画名（同上）。*/
 const ZONE_SPRINT_ANIMATION = 'attack';
 
 /**
@@ -110,13 +89,13 @@ const ZONE_SPRINT_ANIMATION = 'attack';
  * 只在「原目标阵亡 / 丢失」那几帧用一次，结果按 `(格, 半径)` 缓存（`unitsInRadius` 自己缓存），
  * 所以这里可以给得宽松些：600 世界 px = 2000 表值 px ≈ 4.4 个格高，够跨过整条战线。
  * 与 `sprintRange` 取大值 —— 快档转段距离本来就更远时不能被换目标半径卡住。
- */
+*/
 const ZONE_RETARGET_RANGE = 600;
 
 type IZCGroundZoneStepState = Pick<ZCSnapshot,
     'elapsedSeconds' | 'groundZones' | 'combatEvents' | 'nextCombatEventId' | 'statusEffects'>;
 
-/** 持续区域只处理已创建的 zone；模型保留技能出手与创建 zone 的编排。 */
+/** 持续区域只处理已创建的 zone；模型保留技能出手与创建 zone 的编排。*/
 export class ZCGroundZoneSystem {
     static tick(state: IZCGroundZoneStepState, dt: number, context: IZCGroundZoneContext): void {
         const zones = state.groundZones;
@@ -127,7 +106,7 @@ export class ZCGroundZoneSystem {
         let write = 0;
         for (let read = 0; read < zones.length; read++) {
             const zone = zones[read];
-            //  ① 追踪推进（2026-11-12 鹿神守护改成「会追踪的子弹」）。
+            //  1. 追踪推进（2026-11-12 鹿神守护改成「会追踪的子弹」）。
             //  返回 true = 位移已经由追踪逻辑接管，这里不能再按 `moveVelocity` 推一遍。
             const chased = this.advanceChase(zone, dt, now, context);
             if (!chased) {
@@ -137,20 +116,20 @@ export class ZCGroundZoneSystem {
                     zone.y += (zone.moveVelocityY ?? 0) * dt;
                 }
             }
-            //  ② 读秒：只有**过了慢档**才开始。
+            //  2. 读秒：只有过了慢档才开始。
             //  小鹿走过去的那几秒是「赶路」不是「技能在读秒」，否则走 4 秒 > 存活 2 秒，
             //  人还没到区域就没了。
             const approaching = this.isApproaching(zone);
             if (!approaching) zone.remainingSeconds -= dt;
             //  「跟随本体」的光环（2026-11-09 无尘禁土 102503）：每帧把圆心拍回施法者身上。
-            //  放在位移之后 —— 同时配了速度和跟随的话，跟随是**绝对落点**，
+            //  放在位移之后 —— 同时配了速度和跟随的话，跟随是绝对落点，
             //  应当盖掉这一帧的位移（否则会「一边跟着人走、一边还在往外飘」）。
             this.followCaster(zone, context);
             //  整段持有视觉：位置推完就把那条长效事件搬到新位置（必须在结算之前，
             //  这样「这一波伤害」和「画面上的小鹿」在同一拍、同一个坐标）。
             this.syncHoldVisual(state, zone);
-            //  ③ 触碰触发（2026-11-12 科学家「精密陷阱」103504）：敌方单位踩进 `contactRadius`
-            //  ⇒ 吃一次触碰伤害，整片区域**当场清零**，走下面既有的到期通道（爆炸 + 表现）。
+            //  3. 触碰触发（2026-11-12 科学家「精密陷阱」103504）：敌方单位踩进 `contactRadius`
+            //  ⇒ 吃一次触碰伤害，整片区域当场清零，走下面既有的到期通道（爆炸 + 表现）。
             //  放在波次结算之前：陷阱只有「踩响」和「到点自爆」两个时刻，没有周期性波次
             //  （`wavesLeft = 0`），所以这个 `while` 对它本来是空转。
             if (this.resolveContact(state, zone, context)) zone.remainingSeconds = 0;
@@ -180,24 +159,11 @@ export class ZCGroundZoneSystem {
     }
 
     /**
-     * 「追踪」推进（2026-11-12 魔术师「鹿神守护」103405 改成「会追踪的子弹」）。
-     *
-     * 需求原话：「小鹿应该是类似子弹一样的效果，只是一个会追踪目标的子弹……前半段移速慢（70px），
-     * 贴近目标后的移速快（140PX，同步在小鹿身上覆盖火船特效），当原目标死亡后，小鹿会转向新目标，
-     * 接触到任意目标后造成伤害，子弹消失」。
-     *
-     * 所以它**不是**「锁定方向撞出去的冲刺」，而是一颗两档速度的追踪弹：
-     *
-     * | 档位 | 触发 | 速度 | 动画 | 叠层 | 读秒 / 结算 |
-     * | :-- | :-- | :-- | :-- | :-- | :-- |
-     * | 慢档 | 出生 | `approachSpeed` | `move` | 灭 | 不读秒、不结算 |
-     * | 快档 | 距目标 ≤ `sprintRange` | `sprintSpeed` | `attack` | **亮（火船）** | 每 `waveInterval` 一波 |
-     *
-     * 两档都**每帧重算方向**：目标会走位，锁死出生朝向就会出现「小鹿沿着直线飞到空地上」。
-     *
-     * 返回 `true` = **位移已由本方法推进**（调用方不能再按 `moveVelocity` 推第二遍）。
-     * 没有配 `approachSpeed` 的区域直接返回 `false`，行为与改前逐字相同。
-     */
+     * 追踪推进：两档速度的追踪弹。慢档出生用 approachSpeed + move 动画，不结算；
+     * 距目标 ≤ sprintRange 切快档 sprintSpeed + attack 动画，每 waveInterval 结算一波。
+     * 每帧重算方向，目标走位不会让弹道飞到空地。
+     * 返回 true = 位移已由本方法推进，调用方不要再按 moveVelocity 推第二遍。
+    */
     private static advanceChase(
         zone: ZCGroundZoneState,
         dt: number,
@@ -207,7 +173,7 @@ export class ZCGroundZoneSystem {
         const slowSpeed = Math.max(0, zone.approachSpeed ?? 0);
         if (!(slowSpeed > 0)) return false;
 
-        //  ① 目标：原目标还活着就继续追，死了 / 丢了就改追最近的敌人（追踪弹的核心行为）。
+        //  1. 目标：原目标还活着就继续追，死了 / 丢了就改追最近的敌人（追踪弹的核心行为）。
         let target = zone.approachTargetId === undefined
             ? undefined : context.unitById?.(zone.approachTargetId);
         if (!this.isChaseable(target)) {
@@ -215,7 +181,7 @@ export class ZCGroundZoneSystem {
             zone.approachTargetId = target ? target.id : undefined;
         }
 
-        //  ② 档位：切快档只发生一次，之后 `sprinting` 恒 true（主循环据此开始读秒）。
+        //  2. 档位：切快档只发生一次，之后 `sprinting` 恒 true（主循环据此开始读秒）。
         let fast = zone.sprinting === true;
         zone.visualAnimation = fast ? ZONE_SPRINT_ANIMATION : ZONE_APPROACH_ANIMATION;
 
@@ -265,20 +231,15 @@ export class ZCGroundZoneSystem {
         return true;
     }
 
-    /** 这个单位还值得追吗（活着、还没死透）。 */
+    /** 这个单位还值得追吗（活着、还没死透）。*/
     private static isChaseable(unit: ZCUnitState | undefined | null): unit is ZCUnitState {
         return !!unit && unit.hp > 0 && unit.battleState !== 'dead';
     }
 
     /**
-     * 换目标：在区域当前位置附近找**最近的活着的敌人**（2026-11-12 鹿神守护）。
-     *
-     * 只用上下文已有的格子索引（`hexIdAt` + `unitsInRadius`），不线性扫全表 ——
-     * 与 `resolveWave` 的粗筛同一套路径。找不到就返回 `undefined`，由调用方走「沿原方向飞」。
-     *
-     * 搜索半径取 `max(sprintRange, ZONE_RETARGET_RANGE)`：快档转段距离比默认搜索半径更远时，
-     * 不能因为半径不够就漏掉本该能追上的目标。
-     */
+     * 换目标：在区域当前位置附近找最近的活敌人，找不到返回 undefined。
+     * 搜索半径取 max(sprintRange, ZONE_RETARGET_RANGE)，避免快档转段时漏目标。
+    */
     private static nearestChaseTarget(
         zone: ZCGroundZoneState,
         context: IZCGroundZoneContext,
@@ -302,7 +263,7 @@ export class ZCGroundZoneSystem {
         return best;
     }
 
-    /** 现在是不是还在慢档赶路（配了追踪且尚未提速）。 */
+    /** 现在是不是还在慢档赶路（配了追踪且尚未提速）。*/
     private static isApproaching(zone: ZCGroundZoneState): boolean {
         return Math.max(0, zone.approachSpeed ?? 0) > 0 && zone.sprinting !== true;
     }
@@ -310,32 +271,20 @@ export class ZCGroundZoneSystem {
     /**
      * 切入快档：开始读秒 + 第一波立刻结算。
      *
-     * `nextWaveAt` 必须**重置成 now**：慢档一个波次都没结算，它可能停在出生那一刻，
+     * `nextWaveAt` 必须重置成 now：慢档一个波次都没结算，它可能停在出生那一刻，
      * 重置之前那个 `while (now >= nextWaveAt)` 会在切换的这一帧把攒下的波次一口气全打出来。
      * 速度 / 方向由 `advanceChase` 每帧写，这里不碰 —— 追踪弹换目标后方向要跟着变。
-     */
+    */
     private static enterSprint(zone: ZCGroundZoneState, now: number): void {
         zone.sprinting = true;
         zone.nextWaveAt = now;
     }
 
     /**
-     * 「跟随本体」：把区域圆心拍回施法者的当前坐标（2026-11-09 大威天芦「无尘禁土」102503）。
-     *
-     * 判定与表现都吃区域自己的 `x/y`（`resolveWave` 用 `hexIdAt`、`syncHoldVisual` 抄进事件），
-     * 所以**只改这两个数**就够，不需要额外维护「光环跟谁走」的第二份状态。
-     *
-     * 2026-11-12 追加（磁电菇「磁电冲击」101604「跟随角色一起移动，固定在角色身前」）：
-     * 给了 `followForward` 就落到「本体 + 朝向前移」，并且**同时刷新 `angleDegrees`** ——
-     * 落点沿朝向偏、矩形却朝旧角度的话，中心与光束方向会立刻错开。`followForward` 缺省 0
-     * ⇒ 圆心跳回本体，无尘禁土那一类行为逐字不变。
-     *
-     * 三种退化都保持「把剩下的波次在原地打完」：
-     * · `followUnitId` 缺省 —— 整段不执行（全部既有区域行为逐字不变）；
-     * · 上下文没给 `unitById`（只跑结算的单测 / 工具）—— 保持最后位置；
-     * · 施法者已阵亡 —— 光环是「本体携带」的，人没了不该继续输出，但也没必要提前掐掉
-     *   已经放出来的这一片（它自己会按 `remainingSeconds` 到期）。
-     */
+     * 跟随本体：把圆心拍回施法者当前坐标；给了 followForward 就落到「本体 + 朝向前移」，
+     * 并同时刷新 angleDegrees，避免矩形还朝旧角度。
+     * 施法者阵亡或上下文缺 unitById 时保持最后位置，剩余波次照常打完。
+    */
     private static followCaster(zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {
         const unitId = zone.followUnitId;
         if (unitId === undefined) return;
@@ -348,7 +297,7 @@ export class ZCGroundZoneSystem {
             zone.y = pos.y;
             return;
         }
-        //  朝前固定距离：朝向取**美术朝向**（`facingRadians` 在每次 `startAttack` 时对齐当前目标），
+        //  朝前固定距离：朝向取美术朝向（`facingRadians` 在每次 `startAttack` 时对齐当前目标），
         //  不是「指向目标」——目标可能在背后、也可能中途换人，玩家看到的「身前」是角色的正面。
         const radians = caster.facingRadians;
         zone.x = pos.x + Math.cos(radians) * forward;
@@ -359,10 +308,10 @@ export class ZCGroundZoneSystem {
     /**
      * 把「整段持有」的表现事件搬到区域当前位置（2026-11-07 鹿神守护）。
      *
-     * 事件在区域的第一拍建出来，`durationSeconds` 直接取区域**当时的剩余寿命** ——
+     * 事件在区域的第一拍建出来，`durationSeconds` 直接取区域当时的剩余寿命 ——
      * 两边之后按同一个 dt 往回收，所以到点必然同拍消失，不需要在 tick 里再对时。
      * 早期退化（事件被外部裁掉 / 快照还原后 id 失效）直接重建一条，不抛。
-     */
+    */
     private static syncHoldVisual(state: IZCGroundZoneStepState, zone: ZCGroundZoneState): void {
         if (!zone.holdVisual || !zone.effectPrefabPath) return;
         if (!(zone.remainingSeconds > 0.0001)) return;
@@ -432,7 +381,7 @@ export class ZCGroundZoneSystem {
         zone.visualEventId = id;
     }
 
-    /** 摘掉「整段持有」的表现事件（区域消散时调一次）。 */
+    /** 摘掉「整段持有」的表现事件（区域消散时调一次）。*/
     private static dropHoldVisual(state: IZCGroundZoneStepState, zone: ZCGroundZoneState): void {
         const id = zone.visualEventId;
         if (id === undefined) return;
@@ -442,15 +391,9 @@ export class ZCGroundZoneSystem {
     }
 
     /**
-     * 区域消失那一拍的一次性表现（2026-11-12 科学家「精密陷阱」103504 的「陷阱爆炸」）。
-     *
-     * 为什么只能在这里推：爆炸时刻由**踩上去的那一脚**决定，施法那一刻根本不知道，
-     * 所以「要播哪个预制体」只能存在区域上、死亡这一帧现推一条事件。
-     * 与 `dropHoldVisual` 的顺序不能反：先摘常驻光环、再炸，屏幕上不会出现
-     * 「爆炸和完整光环同帧并存」的那一帧。
-     *
-     * 没有配 `expirePrefabPath` 的区域（既有全部区域）在这里**一次都不碰**。
-     */
+     * 区域消失当拍的一次性表现（如陷阱爆炸）；爆炸时刻由踩中决定，只能在这时推事件。
+     * 先摘常驻光环再炸，避免爆炸与完整光环同帧并存。没配路径的区域不碰。
+    */
     private static pushExpireVisual(state: IZCGroundZoneStepState, zone: ZCGroundZoneState): void {
         const path = zone.expirePrefabPath;
         if (!path) return;
@@ -481,19 +424,10 @@ export class ZCGroundZoneSystem {
     }
 
     /**
-     * 触碰判定（2026-11-12 科学家「精密陷阱」103504）：半径内出现敌方单位 ⇒ 打他一下。
-     *
-     * 口径与设计案原文一致：「目标触碰到该陷阱会收到 1 次伤害」，**一次**、**单目标**，
-     * 随后整片区域当场清零（由调用方做）⇒ 既有的到期通道负责爆炸均摊伤害与表现。
-     *
-     * 为什么取「第一个踩进来的」而不是全部打一遍：踩响就是踩响，同一帧里两个人一起进来，
-     * 也只该由**先到的那个**引爆 —— 全打一遍等于白送一份额外伤害，与设计案不符。
-     *
-     * 取中心点判定（与 `zcGroundZoneReaches` 同口径），不加受击者体积：
-     * 陷阱的可见光环就是它的判定圈（`trapRadius` 与预制的屏上直径同源，见 `ZCTrapFx`）。
-     *
-     * 缺省（`contactRadius` undefined / 0）⇒ 直接返回 false，既有区域逐字不变。
-     */
+     * 触碰判定：半径内出现敌方单位就打一下，整片区域随即清零，由到期通道结算爆炸。
+     * 只取第一个踩进来的目标（同帧多人也只算先到的那个），按中心点判定。
+     * contactRadius 缺省/0 ⇒ 直接返回 false，既有区域不变。
+    */
     private static resolveContact(state: IZCGroundZoneStepState, zone: ZCGroundZoneState,
         context: IZCGroundZoneContext): boolean {
         const contact = Math.max(0, zone.contactRadius ?? 0);
@@ -515,7 +449,7 @@ export class ZCGroundZoneSystem {
         return false;
     }
 
-    /** 本波第 `hitIndex` 个目标的伤害：`damage × (1 - falloff)^hitIndex`（取整，与直伤同口径）。 */
+    /** 本波第 `hitIndex` 个目标的伤害：`damage × (1 - falloff)^hitIndex`（取整，与直伤同口径）。*/
     private static waveDamage(zone: ZCGroundZoneState, falloff: number, hitIndex: number): number {
         if (!(falloff > 0) || hitIndex <= 0) return zone.damage;
         return Math.max(1, Math.round(zone.damage * Math.pow(1 - falloff, hitIndex)));
@@ -523,7 +457,7 @@ export class ZCGroundZoneSystem {
 
     private static resolveWave(state: IZCGroundZoneStepState, zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {
         let statusChanged = false;
-        //  「整段持有视觉」的区域已经有一条跟着自己走的长效事件，这里**不再**逐波推视觉 ——
+        //  「整段持有视觉」的区域已经有一条跟着自己走的长效事件，这里不再逐波推视觉 ——
         //  否则同一只小鹿身后会再叠出一串 0.15s 的残影（2026-11-07 鹿神守护）。
         //  伤害结算照旧走下面整段，一条都不少。
         if (!zone.holdVisual) {
@@ -560,11 +494,11 @@ export class ZCGroundZoneSystem {
         const radiusHex = Math.ceil(zcGroundZoneBroadRadius(zone) / context.hexStep) + 1;
         //  逐目标递减（2026-11-06「鹿神守护」103405）：第 k 个被命中的目标吃
         //  `damage × (1 - damageFalloff)^k`，k 从 0 起。缺省 0 ⇒ 恒等于原伤害。
-        //  递减**只按本波内的命中顺序**算，不跨波累计 —— 移动区域的 `hitUnitIds` 保证
+        //  递减只按本波内的命中顺序算，不跨波累计 —— 移动区域的 `hitUnitIds` 保证
         //  同一个敌人只会出现在一波里，跨波累计没有意义。
         const falloff = Math.max(0, Math.min(1, zone.damageFalloff ?? 0));
         //  每波目标上限（2026-11-11 磁电冲击：每波最多打 5 个）。与 `maxHits` 不同 ——
-        //  这个**每波重新计数**，同一个敌人下一波照样能再吃，区域也不会提前散场。
+        //  这个每波重新计数，同一个敌人下一波照样能再吃，区域也不会提前散场。
         const waveCap = Math.max(0, Math.round(zone.waveMaxTargets ?? 0));
         let hitIndex = 0;
         for (const target of context.unitsInRadius(targetHexId, radiusHex)) {
@@ -589,7 +523,7 @@ export class ZCGroundZoneSystem {
                 context.ensureSlowStatus(id, -zone.slowRatio * 100, 1);
                 context.applyStatus(target, id, { at: state.elapsedSeconds, durationSeconds: 1 });
             }
-            //  命中挂状态（2026-11-11 磁电菇「五雷轰顶」101603）：每波**每个**被打到的敌人
+            //  命中挂状态（2026-11-11 磁电菇「五雷轰顶」101603）：每波每个被打到的敌人
             //  各自判一次概率。`random` 缺省 ⇒ 一律不挂（轻量上下文 / 单测里不掷骰）。
             const statusChance = Math.max(0, Math.min(1, zone.hitStatusChance ?? 0));
             if (zone.hitStatusId && statusChance > 0 && (context.random?.() ?? 1) < statusChance) {

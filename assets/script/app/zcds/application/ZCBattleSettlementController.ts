@@ -7,17 +7,17 @@ import type { IZCSettlementOptions, IZCSettlementReward } from '../ui/ZCSettleme
 
 export interface IZCBattlePopup {
     close(reason?: 'manual' | 'force'): void;
-    /** 弹窗被玩家关掉后兑现（点空白 / 关闭按钮 / 被强制关掉都算）。没有这个语义时省略。 */
+    /** 弹窗被玩家关掉后兑现（点空白 / 关闭按钮 / 被强制关掉都算）。没有这个语义时省略。*/
     readonly whenClosed?: Promise<void>;
     /**
      * 询问类弹窗（确认框）的作答：确定 `true`，取消 / 点空白 / 被 `close()` 一律 `false`。
      *
      * 没有作答语义的弹窗不提供本字段；调用方拿不到时按「没确认」处理。
-     */
+    */
     readonly answered?: Promise<boolean>;
 }
 
-/** 结算前的排行榜数据（`ZCGameRankBoard` 的入参）。 */
+/** 结算前的排行榜数据（`ZCGameRankBoard` 的入参）。*/
 export interface IZCBattleSettlementRank {
     readonly seats: readonly IRankSeat[];
     readonly profiles: RankSeatProfiles;
@@ -30,11 +30,11 @@ export interface IZCBattleSettlementRequest {
     readonly statistics: readonly CmdBattleStatisticsInfo[];
     readonly battleType: number | null;
     /**
-     * 结算前的排行榜（**≥3 人局才有**，`<3` 人或数据缺失时给 `null`）。
+     * 结算前的排行榜（≥3 人局才有，`<3` 人或数据缺失时给 `null`）。
      *
      * 需求（11-4 测试包反馈）：多人结算先展示排行榜、再展示奖励界面。
      * 判定放在调用方（运行期控制器按 `model.owners.length`），这里只负责「有就弹、关掉再结算」。
-     */
+    */
     readonly rank: IZCBattleSettlementRank | null;
 }
 export interface IZCBattleSettlementServices {
@@ -48,7 +48,7 @@ export interface IZCBattleSettlementServices {
     };
     readonly popup: {
         open(options: IZCSettlementOptions): Promise<IZCBattlePopup | null>;
-        /** 结算前的排行榜弹窗（复用 `ui/game/ZCGameRankBoard`）。 */
+        /** 结算前的排行榜弹窗（复用 `ui/game/ZCGameRankBoard`）。*/
         openRank(seats: readonly IRankSeat[], profiles: RankSeatProfiles): Promise<IZCBattlePopup | null>;
     };
     readonly flow: {
@@ -57,7 +57,7 @@ export interface IZCBattleSettlementServices {
     failed(error: unknown): void;
 }
 
-/** 结算编排只依赖服务契约，自身持有请求、弹窗和退订句柄。 */
+/** 结算编排只依赖服务契约，自身持有请求、弹窗和退订句柄。*/
 export class ZCBattleSettlementController extends ControllerBase {
     private started = false;
     private popup: IZCBattlePopup | null = null;
@@ -65,12 +65,12 @@ export class ZCBattleSettlementController extends ControllerBase {
     private opening = false;
     private returning = false;
     private stopSwitch: (() => void) | null = null;
-    /** 结算前的排行榜弹窗（玩家读完关掉才继续弹结算页）。 */
+    /** 结算前的排行榜弹窗（玩家读完关掉才继续弹结算页）。*/
     private rankPopup: IZCBattlePopup | null = null;
     /**
      * 关停信号：`present` 里在等排行榜关掉，玩家可能直接退局 ⇒ dispose 时必须让这个 await 落定，
      * 否则整条结算流程悬着，谁也不会再推进（表现为「撤退后再也弹不出结算」）。
-     */
+    */
     private readonly disposed: Promise<void>;
     private resolveDisposed: () => void = () => {};
     constructor(context: IControllerContext, private readonly services: IZCBattleSettlementServices,
@@ -93,7 +93,7 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (result && this.host.hasPveContext) {
             EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: this.host.owner, victory: result.code === 1 });
         }
-        // 需求：≥3 人局的结算**先排行榜、后奖励**。排行榜是「看过就关」的信息页，
+        // 需求：≥3 人局的结算先排行榜、后奖励。排行榜是「看过就关」的信息页，
         // 它没关之前不加载奖励、也不弹结算页（否则两页叠在一起，玩家看不到排行榜）。
         await this.presentRank(request.rank);
         if (this.isDisposed) return;
@@ -108,11 +108,11 @@ export class ZCBattleSettlementController extends ControllerBase {
         await this.open();
     }
     /**
-     * 弹结算前的排行榜并**等玩家关掉**。
+     * 弹结算前的排行榜并等玩家关掉。
      *
      * 三个出口都必须落定：弹窗打开失败（null）、玩家关掉（`whenClosed`）、本局被 dispose。
      * 少一个就是整条结算流程卡死 —— 而且是零报错的（`await` 永远不返回）。
-     */
+    */
     private async presentRank(rank: IZCBattleSettlementRank | null): Promise<void> {
         if (!rank || rank.seats.length < 3) return;
         const popup = await this.services.popup.openRank(rank.seats, rank.profiles);

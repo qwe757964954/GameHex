@@ -4934,6 +4934,33 @@ message CmdGameViewClickRspMsg {
   required uint32 succ = 1;      //1成功
 }
 
+// 功能引导信息
+message CmdFunctionGuideInfo {
+   required uint32 funcId = 1;//功能id 1新手引导
+   required uint32 step1  = 2;//步骤1
+   required uint32 step2  = 3;//步骤2
+}
+
+// 请求功能引导信息
+message CmdFunctionGuideInfoReqMsg {
+   required uint32 funcId = 1;//功能id 1新手引导
+}
+
+// 响应功能引导信息
+message CmdFunctionGuideInfoRspMsg {
+    required CmdFunctionGuideInfo infos = 1;
+}
+
+// 请求功能引导信息
+message CmdFunctionGuideUpdateReqMsg {
+    required CmdFunctionGuideInfo info = 1;
+}
+
+// 响应功能引导信息
+message CmdFunctionGuideUpdateRspMsg {
+    required uint32 succ = 1;//1成功
+}
+
 // 游戏接口ID类型枚举
 enum MessageId {
 	CmdTakeDayChallengeActRewardRspMsg = 1731012380; //领取每日挑战活动奖励
@@ -5050,6 +5077,8 @@ enum MessageId {
 	CmdFuBenDailyGetRewardRspMsg = 1528771729; //获取副本每日奖励
 	CmdFuBenBuyTimesRspMsg = 427584667; //购买副本次数请求
 	CmdFuBenSweepRspMsg = 1878627949; //副本扫荡请求
+    CmdFunctionGuideInfoRspMsg = 1416382725; //请求功能引导信息
+    CmdFunctionGuideUpdateRspMsg = 799066198; //请求功能引导信息	
 	CmdFundGetInfoRspMsg = 510764152; //请求信息
 	CmdFundGetRewardRspMsg = 1902555017; //领取奖励
 	CmdTakeGameCircleRewardRspMsg = 1855584437; //领取游戏圈任务奖励

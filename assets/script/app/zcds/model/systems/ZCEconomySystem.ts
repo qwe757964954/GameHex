@@ -27,7 +27,7 @@ export interface ZCEconomyContext extends Pick<IZCModelServices, 'rules' | 'bonu
         portalHexId?: number, barracksHexId?: number): void;
 }
 
-/** 建筑建造、周期推进、主城和金矿收入、兵营产兵规则。 */
+/** 建筑建造、周期推进、主城和金矿收入、兵营产兵规则。*/
 export class ZCEconomySystem {
     static tickConstruction(state: ZCSnapshot, dt: number, context: ZCEconomyContext): void {
         for (const hex of state.hexes) {
@@ -43,14 +43,7 @@ export class ZCEconomySystem {
         while (state.incomeClock >= rules.hqIncomeIntervalSeconds) {
             state.incomeClock -= rules.hqIncomeIntervalSeconds;
             for (const owner of context.owners) {
-                // 🔴 主城收入必须**先确认主城还在**（需求 2026-10-29：「形成废墟的建筑不会再生产金币」）。
-                //
-                // 这里原来是**无条件**给每一方发钱、并且把金币飘字挂在 `homeId(owner)` 上 ——
-                // 主城被打成废墟（`building = 'none'` + `state = 'ruins'` + `hp = 0`）之后，
-                // 只要这一方还有别的建筑（`developedCount > 0`，对局没有结束），这段循环照跑，
-                // 于是**废墟格上每一拍都飘一次「金币 + 数字」、还带着建筑抖动**，看起来就是
-                // 「废墟还在产金币」。金矿那条下面本来就有 `building !== 'mine'` 兜着，
-                // 只有主城这一路漏了判断（它的来源不是 `state.hexes` 里的建筑，而是 `homeId`）。
+                // 主城收入先确认主城还在：废墟不再产金币，也不再飘字。
                 const homeId = context.homeId(owner);
                 if (!this.isIncomeSource(this.hexById(state, homeId), 'hq')) continue;
                 context.grantGold(owner, rules.hqIncomeAmount + context.bonuses(owner).incomeBonus * rules.hqIncomeIntervalSeconds,
@@ -127,30 +120,20 @@ export class ZCEconomySystem {
     }
 
     static isBuildingOperational(hex: ZCHexState): boolean {
-        // 「有一栋建筑且它在运转」—— 废墟两条都占反：`building = 'none'`、`state = 'ruins'`。
-        // `state` 那一半是**冗余保险**：`damageBuilding` 会同时改这两个字段，但存档 / 回放里
-        // 只留下 `state = 'ruins'` 而 `building` 被补回旧值的脏数据不该重新开始产出。
+        // 有建筑且未成废墟、未在施工。`state` 判断是脏存档的保险。
         return hex.building !== 'none' && hex.state !== 'ruins'
             && hex.hp > 0 && hex.constructionRemainingSeconds <= 0;
     }
 
-    /**
-     * 这一格现在是不是「某类正在运转的**产出**建筑」—— `tickIncome` 的主城与金矿两条路共用它
-     * （兵营 / 箭塔只判 `isBuildingOperational`，它们不产金币）。
-     *
-     * `hex` 允许 `undefined`（`homeId` 是配置里查出来的 id，快照残缺时可能查不到格子）
-     * —— 查不到就是**没有产出**，不是「照发」。
-     */
+    /** 这一格是不是某类正在运转的产出建筑；`hex` 缺失视为没有产出。*/
     private static isIncomeSource(hex: ZCHexState | undefined, kind: ZCHexState['building']): hex is ZCHexState {
         return !!hex && hex.building === kind && this.isBuildingOperational(hex);
     }
 
     /**
-     * 按 id 取格。
-     *
-     * `state.hexes` 是**按 id 稠密排列**的（`id === 下标`，虚空也保留），所以绝大多数情况
-     * 一次下标就够；`find` 只是兜住「快照经过裁剪 / 重排」这类不该发生但也不该崩的情况。
-     */
+     * 按 id 取格。`state.hexes` 按 id 稠密排列，绝大多数情况一次下标就够；
+     * `find` 只兜住快照被裁剪/重排的异常情况。
+    */
     private static hexById(state: ZCSnapshot, hexId: number): ZCHexState | undefined {
         const direct = state.hexes[hexId];
         if (direct && direct.id === hexId) return direct;
@@ -169,10 +152,8 @@ export class ZCEconomySystem {
         resolveUnit: ZCUnitDefinitionResolver,
     ): number {
         if (hex.building === 'barracks') {
-            //  单位定义**延迟求值**：`soilderAddTime`（= card.cycleSeconds）就是产兵间隔，
-            // 只有它缺失时才回落到单位表的 `spawnSeconds`。
-            // 原来的写法无条件先 `resolveUnit(...)`，等于让每一次 tick 都强依赖「单位可上场」——
-            // 卡表引用了单位表里还没配好「预设 / 普攻技能」的行时，第一个 tick 就抛错（对局瞬间崩）。
+            // 产兵间隔优先取 card.cycleSeconds，缺失才回落到单位表的 spawnSeconds；
+            // 单位定义延迟求值，避免卡表引用未配好的行时第一个 tick 就崩。
             const cycle = card.cycleSeconds || (card.unitId ? resolveUnit(card.unitId).spawnSeconds : 8);
             return Math.max(
                 rules.spawnMinimumSeconds,
@@ -229,7 +210,7 @@ export class ZCEconomySystem {
             .reduce((total, hex) => {
                 const card = hex.cardId ? resolveCard(owner, hex.cardId) : undefined;
                 if (!card) return total;
-                // 每次产金数量：卡表 `buildDigGoldNum`，**固定值不随品级变化**。
+                // 每次产金数量：卡表 `buildDigGoldNum`，固定值不随品级变化。
                 const amount = card.buildDigGoldNum ?? 0;
                 return total + amount / cycleSeconds(hex, card);
             }, 0);

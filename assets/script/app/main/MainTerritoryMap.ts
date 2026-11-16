@@ -1,3 +1,4 @@
+import { HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT } from '../../core/hex/HexGridLayout';
 import {
     _decorator,
     Component,
@@ -39,12 +40,8 @@ import {
     splitTerritoryRewards,
     TERRITORY_SILVER_RES_ID,
     TERRITORY_STAMINA_RES_ID,
-    territoryWalletResKeyOf,
 } from '../territory/model/TerritoryResourceGain';
-import {
-    territoryChestTierOfRewards,
-    type TerritoryChestTier,
-} from '../territory/model/TerritoryChestTier';
+import { territoryChestTierOfRewards } from '../territory/model/TerritoryChestTier';
 import { TERRITORY_CHEST_OPEN_FRAMES } from '../territory/model/TerritoryChestAnimation';
 import type { ITerritoryChestIconEntry } from '../territory/view/TerritoryChestView';
 import {
@@ -107,6 +104,7 @@ import {
 } from '../territory/model/TerritoryChapterSwitch';
 import { TERRITORY_TEXTS } from '../territory/application/TerritoryTexts';
 import { TerritoryMapView } from '../territory/view/TerritoryMapView';
+import { TerritoryChestOpenPage } from '../territory/view/TerritoryChestOpenPage';
 import {
     acquireIntroHud,
     applyIntroHud,
@@ -141,7 +139,7 @@ import { LoadingPopup } from '../common/LoadingPopup';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { TerritoryUiEvent, TerritoryViewEvent, type TerritoryIntent,
     type ITerritoryRenderEvent, type ITerritoryCommandEvent } from '../territory/application/TerritoryEvents';
-import type { ITerritoryRenderState } from '../territory/application/TerritoryViewState';
+import { guideMapFocusCells, type ITerritoryRenderState } from '../territory/application/TerritoryViewState';
 
 const { ccclass, property } = _decorator;
 /**
@@ -1479,6 +1477,7 @@ export class MainTerritoryMap extends Component {
         }
         // 数据就绪即挂 tick（进入页面/切章后只需一次；加载中 state.ready=false 不会走到这里）。
         const resetScroll = state.chapterId !== this.lastRenderedChapter;
+        if (resetScroll) this.guideFocusCell = null;
         this.lastRenderedChapter = state.chapterId;
         this.lastRenderedChapterCleared = state.chapterCleared;
 
@@ -1492,6 +1491,7 @@ export class MainTerritoryMap extends Component {
             // ⚠️ 这些格**已经含在** `revealedCells` 里，这份只是"哪几格要画虚影"。
             previewCells: state.previewCells,
             siteOpenableCells: state.siteOpenableCells,
+            stationStates: state.stationStates,
             // 锁标只认「结构性阻塞」（前置没打通 / 随机格四周没开），见 `ITerritoryViewState.lockBlockedCells`。
             lockBlockedCells: state.lockBlockedCells,
             stageByCell: state.stageByCell,
@@ -1602,6 +1602,7 @@ export class MainTerritoryMap extends Component {
 
     private levelInfoContentOf(content: ITerritoryLevelInfoContent): ILevelInfoContent {
         return {
+            levelId: content.levelId,
             title: content.title,
             hasTip: content.hasTip,
             objective: content.objective,
@@ -1915,6 +1916,41 @@ export class MainTerritoryMap extends Component {
      * 钱包类资源（银币 / 体力）此时**不再叠 `+N` 飘字** —— 飞出图标的 `+N` 已经是那次反馈，
      * 再飘一遍是同一件事说两次。
      */
+    private guideFocusKey = '';
+    private guideFocusCell: number | null = null;
+
+    /** 优先保持当前可见的焦点格；布局或滚动使它离屏时重新选择。 */
+    getGuideFocusNode(focusNode: string): Node | null {
+        const state = this.state;
+        const view = this.mapView;
+        if (!state || !view || !this.mapScrollView) return null;
+        const candidates = guideMapFocusCells(focusNode, state);
+        const previousCell = this.guideFocusKey === focusNode ? this.guideFocusCell : null;
+        this.guideFocusKey = focusNode;
+        this.guideFocusCell = null;
+        const viewport = this.mapScrollView.node.getComponent(UITransform);
+        const local = new Vec3();
+        let bestDistance = Infinity;
+        for (const cellId of candidates) {
+            const node = view.getGuideCellNode(cellId);
+            if (!node || !node.activeInHierarchy) continue;
+            viewport.convertToNodeSpaceAR(node.worldPosition, local);
+            if (Math.abs(local.x) > viewport.width / 2 - HEX_GRID_FACE_WIDTH / 2
+                || Math.abs(local.y) > viewport.height / 2 - HEX_GRID_FACE_HEIGHT / 2) continue;
+            // 首帧 Widget / 初始定位尚未落定，不能永久缓存已经移出视口的格子。
+            if (cellId === previousCell) {
+                this.guideFocusCell = cellId;
+                return node;
+            }
+            const distance = Math.hypot(local.x, local.y);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                this.guideFocusCell = cellId;
+            }
+        }
+        return this.guideFocusCell === null ? null : view.getGuideCellNode(this.guideFocusCell);
+    }
+
     private presentRewards(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
         originCellId?: number | null,
@@ -1951,15 +1987,20 @@ export class MainTerritoryMap extends Component {
         //    `playResourceGain`，非钱包类走奖励窗），否则玩家点开箱子什么都看不到。
         if (presentation?.silverChest === true) {
             if (cellId !== null && cellId >= 0) this.mapView.playSilverChestOpen(cellId);
-            this.settleRewards(rewards, cellId, false);
+            this.settleRewards(rewards, cellId);
             return;
         }
         const tier = cellId !== null && cellId >= 0 ? territoryChestTierOfRewards(rewards) : null;
         if (!tier) {
-            this.settleRewards(rewards, cellId, false);
+            this.settleRewards(rewards, cellId);
             return;
         }
-        void this.playChestThenSettle(tier, cellId as number, rewards);
+        // 领地宝箱 ⇒ **进流程先弹**「宝箱开启」奖励页。
+        //
+        // 页面自己画着开启态宝箱 + 整批奖励，就是这一路的开箱成品表现；旧的地图内
+        // `chest_seq_*` 三档表演（木质藤蔓箱，美术与本页金属箱不一致）不再前置 ——
+        // 否则玩家要先看完整段过场才看得到奖励，同一件事还播两遍。
+        this.presentChestRewards(rewards);
     }
 
     /**
@@ -2124,82 +2165,29 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 取齐图标 → 播开箱 → 播完结算。
+     * 开箱表演结束 ⇒ 弹「宝箱开启」奖励页（蓝湖「宝箱开启」设计稿）。
      *
-     * ⚠️ 图标是**异步**取的（`roleProperty` 表 + `AssetService`），所以这里必须 await 之后再 `play`；
-     *   取不到图（表里没登记 / 美术缺失）只是那枚图标是空的，**动画照播**、奖励照发。
+     * 与 `settleRewards` 的分工：
+     *  · 这一路**整批**奖励都由全屏奖励页承载（含银币 / 体力）—— 设计稿的卡本身画了
+     *    `+4095` / `+3` 的货币样式，再走 `settleRewards` 会二次弹 `FW.ShowReward`；
+     *  · 银币宝箱（`silverChest`，另一套 `coinBox` 表演）/ 随机格（`chest:false`）/
+     *    挂机征收（`popup:true`）都不走这里，保持原样。
      */
-    private async playChestThenSettle(
-        tier: TerritoryChestTier,
-        cellId: number,
-        rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
-    ): Promise<void> {
-        const entries = await this.collectRewardIcons(rewards);
-        if (!this.isValid) return;
-        // 🔴 必须在 `playChestOpen` **之前**接线：落点是 `play()` 第一帧就要用的，
-        //    接晚了第一批图标会先按默认落点飞出去（表现为"飞到屏幕中间"）。
-        this.wireRewardCatch(rewards);
-        const started = this.mapView.playChestOpen(cellId, tier, entries, () => {
-            if (this.isValid) this.settleRewards(rewards, cellId, true);
-        });
-        // 没播起来（格子不在视口 / 覆盖层没建起来）⇒ 立刻结算，绝不能把奖励吞掉。
-        if (!started) this.settleRewards(rewards, cellId, true);
-    }
-
-    /**
-     * 把「奖励图标飞进资源栏 / 英雄按钮 → 那一格跳动 / 按钮受击抖动」这条链接上。
-     *
-     * ## 两条目标（2026-11-10 扩展）
-     *
-     * ```
-     * 7 / 9（钱包类） → territoryWalletResKeyOf → ResBar.slotWorldPositionOf → 顶部资源栏
-     * 其余（碎片/经验） → findHeroTabButton → 图标节点世界坐标 → 底部「英雄」按钮
-     * 世界坐标 → 覆盖层    TerritoryMapView.setRewardCatchWorldPoint（矩阵换算留在视图）
-     * ```
-     *
-     * 🔴 用户口径「**只改碎片经验**」：银币 / 体力必须继续飞顶部资源栏并触发数字跳动，
-     *    否则钱包涨了玩家看不见。非钱包类以前没有登记落点 ⇒ 全部回落到「屏幕顶部中央」
-     *    堆成一团（2026-11-10 截图红框），现在统一改道到英雄按钮。
-     *
-     * ## 为什么回调里再算一次 key
-     * `TerritoryChestView` 的回调只给 `(resId, amount)` —— 它不知道资源栏 / 底栏长什么样，
-     * 也不该知道。`resId → 目标` 是玩法口径，两次都走同一组纯函数，不缓存第二份映射。
-     */
-    private wireRewardCatch(
+    private presentChestRewards(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
     ): void {
-        const bar = this.findResBar();
-        const heroButton = this.findHeroTabButton();
-        const heroWorld = this.heroTabWorldPositionOf(heroButton);
-        this.mapView.clearRewardCatchPoints();
-        for (const reward of rewards) {
-            const resId = Number(reward?.resId);
-            if (!Number.isFinite(resId) || resId <= 0) continue;
-            const key = territoryWalletResKeyOf(resId);
-            if (key) {
-                // `null`（那一格没显示 / 取不到变换）= 清掉这一种资源的专属落点，回落默认。
-                if (bar) this.mapView.setRewardCatchWorldPoint(resId, bar.slotWorldPositionOf(key));
-            } else if (heroWorld) {
-                this.mapView.setRewardCatchWorldPoint(resId, heroWorld);
-            }
-        }
-        this.mapView.setRewardLandedHandler((resId, amount) => {
-            const key = territoryWalletResKeyOf(resId);
-            if (key) {
-                if (bar?.isValid) bar.playGainFeedback(key, amount);
-                return;
-            }
-            // 非钱包类落在英雄按钮上 ⇒ 按钮播「被砸一下」的抖动（core 那条先 Y 后 X 脉冲）。
-            if (heroButton?.isValid && isTerritoryHeroRewardResId(resId)) {
-                heroButton.playHitFeedback();
-            }
+        if (!rewards.length) return;
+        void TerritoryChestOpenPage.open({
+            userData: {
+                goods: rewards.map((reward) => ({ resId: reward.resId, number: reward.amount })),
+            },
         });
     }
 
     /**
      * 找底栏「英雄」按钮：逐层往上问 `MainTabHost`，再按 `tabType` 精确定位。
      *
-     * 🔴 与 {@link findResBar} 同一个「不许从场景根搜」的理由：底栏在 `MainRoot` 层、
+     * 🔴 与「找本页资源栏」同一个理由：底栏在 `MainRoot` 层、
      *    与 `Content` 平级，逐层往上问保证拿到的是**本页那一栏**。按 `tabType` 而不是
      *    「第 2 个子节点」—— 七格顺序是排版，不是契约。
      */
@@ -2227,22 +2215,6 @@ export class MainTerritoryMap extends Component {
         const transform = icon.node.getComponent(UITransform);
         if (!transform) return null;
         return transform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
-    }
-
-    /**
-     * 找**本页**那条资源栏：从本节点逐层往上问 `getComponentInChildren`。
-     *
-     * 🔴 不许从场景根搜 —— 商城 / 天赋页内嵌的是**同一个** `common/ResBar` 公共件，
-     * 从根搜很容易先命中被弹窗盖住的那一份，图标就飞到一个看不见的格子里去了。
-     */
-    private findResBar(): ResBar | null {
-        let scope: typeof this.node | null = this.node;
-        while (scope) {
-            const bar = scope.getComponentInChildren(ResBar);
-            if (bar?.isValid) return bar;
-            scope = scope.parent;
-        }
-        return null;
     }
 
     /**
@@ -2343,17 +2315,17 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 结算：钱包类走飘字（`suppressGain` 时跳过）、其余走奖励弹窗。
+     * 结算：钱包类走飘字，其余走 `FW.ShowReward`。
      *
-     *  `suppressGain = true` 只会出现在「刚播完开箱」这一路：那时飞出图标已经带过 `+N`。
+     * ⚠️ 领地宝箱（{@link presentChestRewards}）**不**走这里：它的整批奖励（含货币）由
+     *    「宝箱开启」全屏页承载，见那边的说明。
      */
     private settleRewards(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
         originCellId: number | null,
-        suppressGain: boolean,
     ): void {
         const { gains, popup } = splitTerritoryRewards(rewards);
-        if (gains.length && !suppressGain) {
+        if (gains.length) {
             const map = this.state?.map ?? null;
             const cellId = originCellId ?? map?.startCellId;
             if (cellId !== undefined && cellId !== null && cellId >= 0) {

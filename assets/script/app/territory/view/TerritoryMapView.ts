@@ -45,7 +45,7 @@ import {
     territoryMapContentShiftY,
 } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
-import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import { isTerritoryBattleSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import {
     TERRITORY_CHEST_HINT_SECONDS,
     territoryChestHintBounceOffset,
@@ -106,7 +106,7 @@ import {
     territoryStationTint,
     territoryUnboundTint,
 } from './TerritoryTheme';
-import type { TerritorySiteState } from './TerritoryTheme';
+import type { ITerritoryStationState } from '../application/TerritoryViewState';
 
 const { ccclass, property } = _decorator;
 
@@ -306,6 +306,7 @@ const TERRITORY_SITE_ART: Readonly<Record<TerritorySiteType, TerritorySiteArtKey
     asyncPvp: 'asyncPvp',
     fixedResource: 'fixedResource',
     bonus: 'bonus',
+    patrolChest: 'fixedResource',
 };
 
 /**
@@ -436,6 +437,7 @@ interface ITerritoryChestCameraBase {
 
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
+    readonly stationStates: ReadonlyMap<number, ITerritoryStationState>;
     readonly map: TerritoryMapConfig;
     readonly layout: ITerritoryMapLayout;
     readonly art: ITerritoryMapArt;
@@ -2759,6 +2761,33 @@ export class TerritoryMapView extends Component {
         return { x: point.x, y: point.y + HEX_GRID_CONTENT_LIFT };
     }
 
+    // ───────── 引导光圈用的只读查询（不改任何渲染状态） ─────────
+
+    /** 已建出来的格子 id（按渲染顺序）。引导按「第一个还没拥有的」挑焦点。 */
+    getCellIds(): readonly number[] {
+        return [...this.hexNodes.keys()];
+    }
+
+    /** 引导跟随真实格节点，位置与缩放仍由地图唯一维护。 */
+    getGuideCellNode(cellId: number): Node | null {
+        return this.hexNodes.get(cellId) ?? null;
+    }
+
+    /**
+     * 某格的世界坐标；这格还没建出来（不在本屏 / 被裁剪）⇒ `null`。
+     *
+     * 只读：不创建节点、不改渲染状态。引导光圈靠它叠到地块上。
+     */
+    getCellWorldPosition(cellId: number): Vec3 | null {
+        const node = this.hexNodes.get(cellId);
+        if (!node || !node.isValid) return null;
+        // 🔴 必须先刷世界矩阵：地图是分帧建格的，刚 create 出来的节点 `_worldMatrix` 还是脏的，
+        //    直接读 `worldPosition` 会拿到**内容层局部坐标**（实测过：算出来的光圈位置是
+        //    (-646, 1424)，整个跑到屏幕外）。`updateWorldTransform()` 会把父链一起算到位。
+        node.updateWorldTransform();
+        return node.worldPosition.clone();
+    }
+
     private createHex(cellId: number): Node {
         const node = new Node(`Hex_${cellId}`);
         node.layer = this.gridLayer.layer;
@@ -3850,8 +3879,8 @@ export class TerritoryMapView extends Component {
         mutedCells: ReadonlySet<number> = EMPTY_CELL_SET,
     ): ITerritoryStationRender {
         const stage = input.stageByCell.get(site.cellId) ?? null;
-        const isOpened = input.progress.isCellUnlocked(site.cellId)
-            || input.progress.isOwned(site.cellId);
+        const station = input.stationStates.get(site.cellId);
+        const isOpened = station.opened;
         // 🔴 同一节点的「非建筑格」：**任何状态都不画任何 UI**（用户 2026-11-10：
         //    「和 boss 关卡是同一个节点的地块都不显示 UI，只有建筑虚影上显示 UI
         //     （锁住的 icon 或者是银币 icon + 数字）」）。
@@ -3862,7 +3891,7 @@ export class TerritoryMapView extends Component {
         //    ⚠️ `interactive` 保持原样：这些格照样能点、照样扣银币解锁（§3.28「保留可点，照常解锁」），
         //       消耗数字由点击后的确认弹窗承担。
         if (mutedCells.has(site.cellId)) {
-            const mutedPending = input.pendingFixedResourceCells.includes(site.cellId);
+            const mutedPending = station.pending;
             return {
                 site,
                 icon: null,
@@ -3875,23 +3904,8 @@ export class TerritoryMapView extends Component {
             };
         }
         if (!isOpened) {
-            const isOpenable = input.siteOpenableCells.includes(site.cellId);
-            const isPending = input.pendingFixedResourceCells.includes(site.cellId);
-            // 🔴 「前置没完成」这一种**不在这里表达**（2026-11-09 用户：「前置地块未解锁，展示的
-            //    也是锁 icon，不是银币 + 显示红色的 UI」）。
-            //    这里原先还有一条「前置宝箱已解锁但没领取 ⇒ 银币数字染红」（山猫 2026-10-21），
-            //    那是**没有锁**的红字：玩家看到一片红价格，读成"钱不够"，而不是"先把宝箱点了"。
-            //    现已上移到模型侧（`TerritoryProgress.isPrerequisitePending`）⇒ 进 `lockBlockedCells`
-            //    ⇒ 画锁 + `isCondition = false` 摘掉整条价格（见 `syncStations` 的 `locked`）。
-            // 🔴 「银币数字什么时候红」（用户 2026-11-03：「体力不足或银币不足时，**对应的**
-            //    数字 UI 显示红色」）——两个来源：
-            //    ① 银币**确实**不够（`territoryCostShort`，两项各判各的）；
-            //    ② 这格开不了，但**不是因为体力** —— 战力不够这类情况底条已是红，
-            //       数字跟着红是旧的读法（保留）。⊂ 体力不足这一种**排除掉**：
-            //       那是体力那颗数字的事，把银币染红等于告诉玩家"钱不够"，他会去攒错东西。
-            const short = territoryUnlockShortfall(input.wallet, site.unlock);
-            const silverRed = short.silver
-                || (!isOpenable && !short.stamina);
+            const isOpenable = station.openable;
+            const isPending = station.pending;
             // 🔴 2026-11-11 用户：「预告关卡节点，展示气泡提示（红色未通过的状态）」。
             //   提前披露只改可见性 —— 这一格仍然走「未解锁」的锁 / 价格画法，气泡是**额外叠上去的**，
             //   绝不因此放宽解锁、扣费、开战判据（模型侧 `territoryRevealedCells` 的口径一个字没动）。
@@ -3902,9 +3916,7 @@ export class TerritoryMapView extends Component {
             //     ④ 能算出气泡文案（asyncPvp 恒 `PVP`，其余要绑到 campaign 行才有 `章节-关卡`）。
             //   ⇒ 一关 footprint 有 5~10 格，只有承载格挂一颗，不会满屏 `1-1`（§3.28 同口径）。
             const isPreviewBattleSite = (input.previewCells ?? []).includes(site.cellId)
-                && (site.type === TERRITORY_SITE_TYPE.stage
-                    || site.type === TERRITORY_SITE_TYPE.boss
-                    || site.type === TERRITORY_SITE_TYPE.asyncPvp)
+                && station.battle
                 && !!site.buildingId
                 && territoryLevelBubbleText(site, stage) !== undefined;
             // 站点自身 `icon` 必须是 null（未解锁不画实心建筑），但气泡要抬到**虚影建筑**顶上：
@@ -3925,7 +3937,7 @@ export class TerritoryMapView extends Component {
                 conditionChestIcon: site.type === TERRITORY_SITE_TYPE.fixedResource
                     ? input.art.chestIcon ?? null
                     : null,
-                conditionTextColor: silverRed
+                conditionTextColor: station.silverRed
                     ? TERRITORY_COLORS.randomConditionText : TERRITORY_COLORS.randomAvailableText,
                 // 预告关卡的红色编号气泡：文案复用 `model/TerritoryLevelBubble`，底图固定取
                 // 「未通关」红 `frame_02`（这一格本来就没通过）；红图缺失照旧回退蓝图，别让编号消失。
@@ -3946,8 +3958,8 @@ export class TerritoryMapView extends Component {
             };
         }
         if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
-            const claimed = input.progress.isOwned(site.cellId);
-            const pending = input.pendingFixedResourceCells.includes(site.cellId);
+            const claimed = station.owned;
+            const pending = station.pending;
             // 🔴 需求 2026-11-02 第 1 条：固定奖励宝箱挂一个**气泡提示**（样式同「章节」那颗：
             //   同一张 `levelBubbleFrame` 蓝底、同一套圆角与尾巴），内容是**体力 icon + 消耗数**。
             //   第 2 条：同屏只留一只 ⇒ 只有 `chestHintCell` 那一格给气泡，其余格传空。
@@ -3972,7 +3984,7 @@ export class TerritoryMapView extends Component {
                 //    只给气泡这一支，且只在气泡真的显示时才算 —— 其余格没有体力数字可染。
                 //    ⚠️ 不要拿 `claimed` / `isOpenable` 判：这是"付不起"的提示，不是"被打了"的状态色。
                 levelBubbleTextColor: showHintBubble
-                    && territoryUnlockShortfall(input.wallet, site.unlock).stamina
+                    && station.staminaShort
                     ? TERRITORY_COLORS.randomConditionText : undefined,
                 // 已领取（已通关）的固定资源点不再显示解锁消耗，用「已通关」绿与「可领取」区分开。
                 tint: claimed ? TERRITORY_COLORS.cleared : territoryStationTint(TERRITORY_STATION_STATE.available),
@@ -3985,11 +3997,11 @@ export class TerritoryMapView extends Component {
         // 判定必须与 `TerritoryModel.selectSite` 的关卡分支**同口径**（都是站点类型），
         // 之前两边都写的是「两步式名单 [327,328] 或 isBoss」⇒ 只有关卡 1 会长这样、能点下有反应，
         // 其余关卡外观照旧却已经不可点 ⇒ 「外观说能打、点了没反应」。
-        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) {
+        if (station.battle) {
             const isAsyncPvp = site.type === TERRITORY_SITE_TYPE.asyncPvp;
             if (isAsyncPvp && !stage) {
-                const isUnlocked = input.progress.isCellUnlocked(site.cellId);
-                const isOwned = input.progress.isOwned(site.cellId);
+                const isUnlocked = station.unlocked;
+                const isOwned = station.owned;
                 return {
                     site,
                     icon: this.stationIconOf(site, null, input.art),
@@ -4000,7 +4012,7 @@ export class TerritoryMapView extends Component {
                         ? input.art.pvpBubblePortrait ?? null : null,
                     caption: '',
                     tint: isUnlocked ? territoryBossTint()
-                        : isOwned ? TERRITORY_COLORS.owned : territoryStationTint(this.stateOf(site, input)),
+                        : isOwned ? TERRITORY_COLORS.owned : territoryStationTint(station.phase),
                     badge: '',
                     interactive: !isUnlocked && !isOwned,
                 };
@@ -4008,8 +4020,8 @@ export class TerritoryMapView extends Component {
             // 🔴 **区域口径**（2026-10-12）：327 与 328 同 `configId=10001`、打同一关卡
             //   ⇒ 任一格通关，整片都算已通关（山猫「327/328 算一起的」）。
             //   只查查询态、不动 `owned` 存储 —— 见 `TerritoryProgress.isAreaPassed` 注释。
-            const claimed = input.progress.isAreaPassed(site.cellId);
-            const pending = input.pendingFixedResourceCells.includes(site.cellId);
+            const claimed = station.areaPassed;
+            const pending = station.pending;
             return {
                 site,
                 icon: this.stationIconOf(site, stage, input.art),
@@ -4030,8 +4042,8 @@ export class TerritoryMapView extends Component {
                 caption: '',
                 // 已通关不再显示解锁消耗，用「已通关」绿区分开（与 fixedResource 同口径）。
                 tint: claimed ? TERRITORY_COLORS.cleared
-                    : isAsyncPvp && input.progress.isCellUnlocked(site.cellId)
-                        ? territoryBossTint() : territoryStationTint(this.stateOf(site, input)),
+                    : isAsyncPvp && station.unlocked
+                        ? territoryBossTint() : territoryStationTint(station.phase),
                 badge: '',
                 // 🔴 2026-10-28 用户：「点击已通过的关卡也可以打开【领地关卡信息弹窗】」。
                 // 原来这里写的是 `claimed ? isAsyncPvp : true` —— 打完的 `stage`/`boss` 直接不可点，
@@ -4047,14 +4059,14 @@ export class TerritoryMapView extends Component {
                 site,
                 icon: this.stationIconOf(site, null, input.art),
                 caption: '',
-                tint: input.progress.isOwned(site.cellId)
+                tint: station.owned
                     ? TERRITORY_COLORS.owned
                     : territoryUnboundTint(site.type),
                 badge: '',
                 interactive: true,
             };
         }
-        const state = this.stateOf(site, input);
+        const state = station.phase;
         return {
             site,
             icon: this.stationIconOf(site, stage, input.art),
@@ -4110,7 +4122,7 @@ export class TerritoryMapView extends Component {
         //   ⇒ `asyncPvp` 从「按 type 取图」并入本名单。chapter_01 的 16 个异步据点里只有 4 个配了
         //   `buildingId=69002` ⇒ 其余 12 个不再画建筑，只留格面框 + 「异步据点」文案。
         //   连带 `TerritorySiteType` 的 type 回退现在**只服务 `fixedResource` / `bonus`**。
-        if (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp) return null;
+        if (isTerritoryBattleSite(site)) return null;
         if (stage?.isBoss) return art.boss ?? art.stage;
         return art[TERRITORY_SITE_ART[site.type]] ?? art.stage;
     }
@@ -4129,13 +4141,5 @@ export class TerritoryMapView extends Component {
         return Number.isFinite(scale) && (scale as number) > 0 ? (scale as number) : 1;
     }
 
-    private stateOf(site: TerritorySite, input: ITerritoryMapRenderInput): TerritorySiteState {
-        if (input.progress.isOwned(site.cellId)) return TERRITORY_STATION_STATE.owned;
-        if (input.progress.explorationAt(site.cellId)) return TERRITORY_STATION_STATE.exploring;
-        // 战力传 `MAX_SAFE_INTEGER`：地图上只区分「资源 / 前置够不够」，
-        // 战力门槛留给点开详情后的开战按钮去判（与旧实现同一口径）。
-        return input.progress.checkUnlock(site.cellId, Number.MAX_SAFE_INTEGER).ok
-            ? TERRITORY_STATION_STATE.available
-            : TERRITORY_STATION_STATE.locked;
-    }
+
 }

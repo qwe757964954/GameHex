@@ -1,6 +1,7 @@
 import { _decorator, Color, Component, Label, Node, ProgressBar, Sprite, SpriteFrame } from 'cc';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
+import { GuideFocusAnchor } from '../guide/ui/GuideFocusAnchor';
 
 const { ccclass, property } = _decorator;
 
@@ -35,6 +36,7 @@ export interface ZCCardFragmentProgress {
  */
 @ccclass('CardLineupCard')
 export class CardLineupCard extends Component {
+    @property(GuideFocusAnchor) guideAnchor: GuideFocusAnchor = null!;
     @property({ type: Sprite, tooltip: 'Face：卡面底图' })
     face: Sprite = null;
 
@@ -103,6 +105,7 @@ export class CardLineupCard extends Component {
         progress?: ZCCardFragmentProgress,
         loader?: ZCCardArtLoader,
     ): void {
+        this.guideAnchor.key = `CardList/Card_${card.id}`;
         const normalizedLevel = Math.max(0, Math.round(level ?? 0));
         const owned = Math.max(0, Math.round(progress?.owned ?? this.fallbackOwned));
         const need = Math.max(0, Math.round(progress?.need ?? this.fallbackNeed));

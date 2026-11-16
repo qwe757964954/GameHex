@@ -4,8 +4,7 @@ import { ZC_CARD_CAMPS, ZC_CARD_CLASSES, ZC_CARD_RARITIES, type ZCCardCamp, type
 
 export type ICardArtKey =
     | `${'face' | 'disc' | 'frame' | 'diamond'}.${ZCCardRarity}`
-    | `${'badge' | 'iconOn' | 'iconOff' | 'hero' | 'boardHero'}.${ZCCardClass}`
-    | `camp.${ZCCardCamp}`;
+    | `${'badge' | 'boardHero'}.${ZCCardClass}`;
 
 /**
  * 表内品级 id 与运行时 `ZCCardRarity` 同一套英文值（gold/purple/blue/green），无需映射。
@@ -25,14 +24,15 @@ export const CARD_ART_TABLES = {
 export interface ICardArtTableRows {
     /** `cardUiArtRarity`：rarity + face / disc / frame / diamond */
     readonly rarity: readonly unknown[];
-    /** `cardUiArtClass`：class + badge / iconOn / iconOff / hero / boardHero */
+    /** `cardUiArtClass`：class + badge / boardHero */
     readonly cardClass: readonly unknown[];
-    /** `cardUiArtCamp`：camp + icon */
+    /** `cardUiArtCamp`：camp + name（阵营图标改由阵容页固定图提供，表内不再存路径） */
     readonly camp: readonly unknown[];
 }
 
 /**
- * 表必须齐全的键清单：品级 × 4 类图 + 职业 × 5 类图 + 全部阵营。
+ * 表必须齐全的键清单：品级 × 4 类图 + 职业 × 2 类图。
+ * 阵营行只提供名称 / traits 反查，不再对应图片键。
  * 单一来源，测试与文档直接引用它，不再各自硬编码数量。
  */
 function buildRequiredCardArtKeys(): ICardArtKey[] {
@@ -41,9 +41,8 @@ function buildRequiredCardArtKeys(): ICardArtKey[] {
         for (const kind of ['face', 'disc', 'frame', 'diamond'] as const) keys.push(`${kind}.${rarity}`);
     }
     for (const cardClass of ZC_CARD_CLASSES) {
-        for (const kind of ['badge', 'iconOn', 'iconOff', 'hero', 'boardHero'] as const) keys.push(`${kind}.${cardClass}`);
+        for (const kind of ['badge', 'boardHero'] as const) keys.push(`${kind}.${cardClass}`);
     }
-    for (const camp of ZC_CARD_CAMPS) keys.push(`camp.${camp}`);
     return keys;
 }
 
@@ -86,7 +85,7 @@ export interface ICardLineupCatalog {
 }
 
 export interface ICardArtConfig {
-    /** 三张矩阵表合成后的稳定键 → 资源完整相对路径（不带扩展名 / `/spriteFrame`）。 */
+    /** 品级 / 职业两张矩阵表合成后的稳定键 → 资源完整相对路径（不带扩展名 / `/spriteFrame`）。 */
     readonly paths: ReadonlyMap<ICardArtKey, string>;
     /**
      * icon.json 解析器（`pvpCard.headIcon` → 头像 / 立绘），不来自卡牌矩阵表。
@@ -177,7 +176,7 @@ export function parseCardArtConfig(tables: ICardArtTableRows, iconRows: readonly
         if (seenClassSort.has(sort)) throw new Error(`${table} sort 重复：${cardClass}=${sort}`);
         seenClassSort.add(sort);
         classes.push({ id: cardClass as ZCCardClass, name, sort });
-        for (const kind of ['badge', 'iconOn', 'iconOff', 'hero', 'boardHero'] as const) {
+        for (const kind of ['badge', 'boardHero'] as const) {
             paths.set(`${kind}.${cardClass}` as ICardArtKey, readPath(row, kind, table, `${kind}.${cardClass}`));
         }
     }
@@ -198,7 +197,10 @@ export function parseCardArtConfig(tables: ICardArtTableRows, iconRows: readonly
         if (seenCampName.has(name)) throw new Error(`${table} name 重复：${name}（traits 归一化会歧义）`);
         seenCampName.add(name);
         camps.push({ id: camp as ZCCardCamp, name });
-        paths.set(`camp.${camp}` as ICardArtKey, readPath(row, 'icon', table, `camp.${camp}`));
+    }
+    if (camps.length !== ZC_CARD_CAMPS.length) {
+        const missing = ZC_CARD_CAMPS.find(camp => !camps.some(row => row.id === camp));
+        throw new Error(`cardUiArtCamp 缺少映射：camp.${missing}`);
     }
 
     for (const key of REQUIRED_CARD_ART_KEYS) if (!paths.has(key)) throw new Error(`cardUiArt 缺少映射：${key}`);

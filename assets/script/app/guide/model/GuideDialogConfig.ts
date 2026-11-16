@@ -120,7 +120,7 @@ export function groupGuideDialogLines(
         else groups.set(line.group, [line]);
     }
     for (const bucket of groups.values()) {
-        bucket.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
+        bucket.sort((a, b) => a.order - b.order || a.id - b.id);
     }
     return groups;
 }

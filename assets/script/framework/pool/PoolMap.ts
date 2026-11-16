@@ -53,7 +53,7 @@ export class PoolMap<T, K extends string | number = string> extends ScriptObject
 
     /**销毁前先全部回池 */
     destroy() {
-        for (let [k, v] of this.tmPool) {
+        for (let [, v] of this.tmPool) {
             if (v) {
                 v.destroy()
             }
@@ -69,7 +69,7 @@ export class PoolMap<T, K extends string | number = string> extends ScriptObject
     public returnAllToPool(name?: K, callback?: (v: T) => boolean, caller?: any) {
         if (name == null) {
             if (this.tmPool) {
-                for (let [k, v] of this.tmPool) {
+                for (let [, v] of this.tmPool) {
                     if (v && v.returnAllToPool != null) {
                         v.returnAllToPool(callback, caller)
                     }
@@ -85,7 +85,7 @@ export class PoolMap<T, K extends string | number = string> extends ScriptObject
 
     public clear(retainCount?: number, name?: K) {
         if (name == null) {
-            for (let [k, v] of this.tmPool) {
+            for (let [, v] of this.tmPool) {
                 if (v) {
                     v.clear(retainCount)
                 }
@@ -108,7 +108,7 @@ export class PoolMap<T, K extends string | number = string> extends ScriptObject
 
     isEmpty() {
         let count = 0;
-        for (let [k, v] of this.tmPool) {
+        for (let [, v] of this.tmPool) {
             if (v) {
                 count = count + v.getCountAll();
             }

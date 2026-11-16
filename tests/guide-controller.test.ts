@@ -14,6 +14,8 @@ import { reportGuideComplete } from '../assets/script/app/guide/application/Guid
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import type { IGuideViewState } from '../assets/script/app/guide/application/GuideController';
+import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
+import type { IGuideGateway } from '../assets/script/app/guide/application/GuideGateway';
 import { parseGuideSteps } from '../assets/script/app/guide/model/GuideStepConfig';
 import type { GuideReward, GuideStep } from '../assets/script/app/guide/model/GuideStepConfig';
 import {
@@ -42,6 +44,7 @@ function makeController(roleId: string, overrides: {
     failed?: (error: unknown) => void;
     now?: () => number;
     storage?: ReturnType<typeof createMemoryGuideStorage>;
+    gateway?: IGuideGateway;
 } = {}) {
     const store = new GuideSaveStore(
         { roleId, serverId: 's1' },
@@ -52,7 +55,8 @@ function makeController(roleId: string, overrides: {
     const controller = new GuideController(CONTEXT, {
         store,
         steps: overrides.steps ?? STEPS,
-        view: { render: (state) => { states.push(state); overrides.view?.(state); } },
+        gateway: overrides.gateway,
+        view: { owner: states, render: (state) => { states.push(state); overrides.view?.(state); } },
         grant: (rewards, stepId) => {
             granted.push({ stepId, rewards });
             overrides.grant?.(rewards, stepId);
@@ -62,6 +66,28 @@ function makeController(roleId: string, overrides: {
     });
     return { controller, store, states, granted };
 }
+
+test('章节战斗从进入、当前抽卡展示结束到结算返回，按实际事件续接', () => {
+    const { controller } = makeController('battle-focus-flow');
+    try {
+        controller.start();
+        for (const step of STEPS) {
+            if (step.stepId === '5-2') break;
+            const [name, arg] = step.completeCond.split(':');
+            assert.equal(controller.notify(name, arg), true);
+        }
+        assert.equal(controller.currentStepId, '5-2');
+        assert.equal(controller.notify('siteTap'), false);
+        assert.equal(controller.notify('battleEntered'), true);
+        assert.equal(controller.currentStepId, '5-3');
+        assert.equal(controller.notify('deploy'), false);
+        assert.equal(controller.notify('cardRevealFinished'), true);
+        assert.equal(controller.currentStepId, '5-4');
+        assert.equal(controller.notify('click'), false);
+        assert.equal(controller.notify('backToMap'), true);
+        assert.equal(controller.currentStepId, '6-1');
+    } finally { controller.dispose(); }
+});
 
 test('启动：首次进入发布第 1 步，firstRun 为真', () => {
     const { controller, states } = makeController('c-start');
@@ -127,8 +153,8 @@ test('发奖：完成带奖励的步时把清单交给 grant 出口', () => {
     assert.equal(controller.currentStepId, '2-2');
     assert.equal(granted.length, 0);
 
-    // 2-2 完成时发 3 条
-    assert.equal(controller.notify('popupClosed'), true);
+    // 2-2 完成时发 3 条（判据已改为 click：奖励弹窗关闭后玩家点对话条推进）
+    assert.equal(controller.notify('click'), true);
     assert.equal(granted.length, 1);
     assert.equal(granted[0].stepId, '2-2');
     assert.deepEqual(granted[0].rewards.map((r) => `${r.resId}x${r.number}`), ['7x10', '3x15', '18003x3']);
@@ -148,7 +174,7 @@ test('发奖抛错不阻塞推进（记账在前，失败只上报）', () => {
     controller.notify('tileFlipped');
     assert.equal(controller.currentStepId, '2-2');
 
-    assert.equal(controller.notify('popupClosed'), true);
+    assert.equal(controller.notify('click'), true);
     assert.equal(controller.currentStepId, '3-1');   // 进度照常前进
     assert.equal(errors.length, 1);
     controller.dispose();
@@ -237,6 +263,46 @@ test('未启动时 notify / skip 安全返回 false', () => {
     controller.dispose();
 });
 
+test('点击意图只接受当前展示实例和当前步骤，旧步骤与退出后的事件不能推进', () => {
+    const { controller, states } = makeController('c-scoped-advance');
+    controller.start();
+    EventMgr.instance.emit(GuideEvent.Advance, { owner: {}, stepId: '1-1' });
+    assert.equal(controller.currentStepId, '1-1');
+    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    assert.equal(controller.currentStepId, '1-2');
+    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    assert.equal(controller.currentStepId, '1-2');
+    controller.dispose();
+    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-2' });
+    assert.equal(controller.currentStepId, '1-2');
+});
+
+test('查询结果暂不覆盖本地进度，只有真实推进才上报已完成步骤，退出释放网关', async () => {
+    const updates: string[] = [];
+    let reads = 0;
+    let disposed = false;
+    const gateway: IGuideGateway = {
+        load: async () => { reads++; return { funcId: 1, step1: 8, step2: 1 }; },
+        update: async id => { updates.push(id); return false; },
+        dispose: () => { disposed = true; },
+    };
+    const { controller } = makeController('c-sync', { gateway });
+    controller.start();
+    await Promise.resolve();
+    assert.equal(reads, 1);
+    assert.equal(controller.currentStepId, '1-1');
+    controller.notify('tileFlipped');
+    assert.deepEqual(updates, []);
+    controller.notify('click');
+    controller.notify('click');
+    assert.deepEqual(updates, ['1-1', '1-2']);
+    assert.equal(controller.currentStepId, '1-3');
+    controller.skipAll();
+    assert.equal(updates[updates.length - 1], STEPS[STEPS.length - 1].stepId);
+    controller.dispose();
+    assert.equal(disposed, true);
+});
+
 test('完成判定通道：业务侧 reportGuideComplete 命中当前步才推进', () => {
     const { controller } = makeController('c-report');
     controller.start();
@@ -287,5 +353,67 @@ test('卡牌升级：已有的 HeroUpgraded 自动转成 cardLevelUp:<heroId>', 
     // heroId 正确：推进
     EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: 68001, level: 1 });
     assert.equal(controller.currentStepId, '7-1');
+    controller.dispose();
+});
+
+test('ViewState 带 completeCond：只有 click 步才允许「点对话条推进」', () => {
+    const { controller, states } = makeController('c-cond');
+    controller.start();
+    assert.equal(states[0].stepId, '1-1');
+    assert.equal(states[0].completeCond, 'click');       // 1-1 吃点击
+
+    controller.notify('click');                          // 1-1 完成
+    controller.notify('click');                          // 1-2 完成
+    controller.notify('click');                          // 1-3 完成 → 2-1
+    assert.equal(controller.currentStepId, '2-1');
+    const last = states[states.length - 1];
+    assert.equal(last.stepId, '2-1');
+    // 2-1 要 tileFlipped：View 必须看到非 click 而**不接**推进，否则会被对话条误推
+    assert.equal(last.completeCond, 'tileFlipped');
+    assert.equal(last.requireAction, 'click');           // 注意：动作是点击，但判据不是
+    controller.dispose();
+});
+
+test('2-2 的判据是 click（工程没有翻地奖励弹窗的关闭信号）', () => {
+    const { controller } = makeController('c-22');
+    controller.start();
+    let guard = 0;
+    while (controller.currentStepId !== '2-2' && guard++ < 8) {
+        const step = STEPS.find((s) => s.stepId === controller.currentStepId);
+        assert.ok(step);
+        const [name, arg] = step.completeCond.split(':');
+        controller.notify(name, arg);
+    }
+    assert.equal(controller.currentStepId, '2-2');
+    const step = STEPS.find((s) => s.stepId === '2-2');
+    assert.ok(step);
+    assert.equal(step.completeCond, 'click', '2-2 若是 popupClosed，View 点了也不会推进 → 卡死');
+    assert.equal(controller.notify('click'), true);
+    assert.equal(controller.currentStepId, '3-1');
+    controller.dispose();
+});
+
+test('5-1 点地图关卡格，5-2 必须实际进入战斗后才完成', () => {
+    const s51 = STEPS.find((step) => step.stepId === '5-1');
+    assert.ok(s51);
+    // 关卡列表入口不存在 ⇒ 判据换成 siteTap（点地图上的关卡格）
+    assert.equal(s51.completeCond, 'siteTap');
+    // full 遮罩会让 Blocker 全屏、把地图点击吃掉 ⇒ 必须 hole
+    assert.equal(s51.maskType, 'hole', '5-1 若是 full，玩家点关卡格会被全屏点击区吞掉');
+
+    const s52 = STEPS.find((step) => step.stepId === '5-2');
+    assert.ok(s52);
+    // 由战斗组合层在挂载引导后上报，重复点击关卡格不能误推进。
+    assert.equal(s52.completeCond, 'battleEntered');
+});
+
+test('配置不可用时重复 start()：返回 false、不抛、不推进', () => {
+    const { controller } = makeController('c-resub', { steps: [] });
+    for (let i = 0; i < 3; i++) assert.equal(controller.start(), false);
+    // 没有进度 ⇒ 任何上报都不该触发推进（订阅也不该被挂上）
+    reportGuideComplete('click');
+    EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: 68001, level: 1 });
+    assert.equal(controller.currentStepId, '');
+    assert.equal(controller.isFinished, true);
     controller.dispose();
 });

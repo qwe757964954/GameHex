@@ -24,7 +24,7 @@ import { assetPath } from './helpers/asset-paths';
 const STAGE_BRANCH_ANCHOR = '\n        if (site.type === ';
 
 /** Presenter / View 两侧必须**逐字相同**的关卡分支条件（站点类型走命名常量，禁字面量）。 */
-const STAGE_BRANCH = "site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp";
+const STAGE_BRANCH = "station.battle";
 
 const MAP_VIEW_SRC = readFileSync(
     'assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
@@ -45,7 +45,7 @@ function codeOf(src: string): string {
 }
 
 test('★★★关卡由**站点类型**判定：Presenter 与 View 同口径，且不再有任何 cellId 名单', () => {
-    assert.match(PRESENTER_SRC, new RegExp(`if \\(${STAGE_BRANCH}\\)`),
+    assert.match(PRESENTER_SRC, /if \(this\.isBattleSite\(site\)\)/,
         'Presenter 的 selectSite 必须按站点类型分流（= 「点建筑就打」对所有关卡成立）');
     assert.match(MAP_VIEW_SRC, new RegExp(`if \\(${STAGE_BRANCH}\\)`),
         'View 的 stationRenderOf 必须用同一条件（否则「外观能打、点了没反应」）');
@@ -100,7 +100,7 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
     assert.match(body, /interactive: !pending/,
         '已通关的关卡也要能点（打开信息弹窗）；只有请求在途时禁掉');
     // 解锁中（pendingFixedResourceCells）与 fixedResource 同一转圈通道。
-    assert.match(body, /pendingFixedResourceCells\.includes\(site\.cellId\)/,
+    assert.match(body, /const pending = station\.pending/,
         '解锁请求进行中要复用 pending 转圈通道');
 });
 
@@ -117,7 +117,7 @@ test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocke
     const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
     assert.match(body, /const isAsyncPvp = site\.type === TERRITORY_SITE_TYPE\.asyncPvp/);
-    assert.match(body, /isAsyncPvp && input\.progress\.isCellUnlocked\(site\.cellId\)[\s\S]*?territoryBossTint\(\)/,
+    assert.match(body, /isAsyncPvp && station\.unlocked[\s\S]*?territoryBossTint\(\)/,
         'unlocked async PvP station should use the danger tint');
     assert.match(body, /if \(isAsyncPvp && !stage\)[\s\S]*?interactive: !isUnlocked && !isOwned/,
         '缺失战斗配置时仍保留交互限制');
@@ -199,7 +199,7 @@ test('建筑图仍由 stationIconOf 决定，移除仅为兜底文字使用的�
     assert.doesNotMatch(src, /hasBuildingArt|isPlainTwoStep/);
     // 单一真源：stationIconOf 里没有第二个「返回 null」的早退。
     const iconAt = src.indexOf('private stationIconOf(');
-    const iconFn = src.slice(iconAt, src.indexOf('private stateOf(', iconAt));
+    const iconFn = src.slice(iconAt, src.indexOf('private buildScaleOf(', iconAt));
     assert.equal((iconFn.match(/return null;/g) ?? []).length, 1,
         'stationIconOf 只应有一个「不画图」的早退（stage/boss 无 buildingId）');
 });
@@ -208,9 +208,9 @@ test('★★★同区域共享通关：claimed 走 isAreaPassed，不是 isOwned
     // 山猫原话：「327 与 328 configId 一样，都是打同一关卡，327 328 就算一起的」。
     const renderAt = MAP_VIEW_SRC.indexOf(`if (${STAGE_BRANCH})`);
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n        if (!stage)', renderAt));
-    assert.match(body, /const claimed = input\.progress\.isAreaPassed\(site\.cellId\);/,
+    assert.match(body, /const claimed = station\.areaPassed;/,
         '关卡分支的已通关判定必须走区域口径（否则打 327 后 328 还显示「可通关」）');
-    assert.ok(!/const claimed = input\.progress\.isOwned\(site\.cellId\);/.test(body),
+    assert.ok(!/const claimed = station\.owned;/.test(body),
         '不能退回单格 isOwned —— 那正是本次要修的现象');
 });
 
@@ -229,7 +229,7 @@ test('★★isAreaPassed 只在查询态扩散，绝不把同区域格子写进 
     // areaPeers 的范围：stage/boss/asyncPvp 且 configId 相同的才算同区域。
     const peersAt = progress.indexOf('areaPeers(cellId: number)');
     const peers = progress.slice(peersAt, progress.indexOf('isAreaPassed(cellId: number)', peersAt));
-    assert.match(peers, /peer\.type === TERRITORY_SITE_TYPE\.stage \|\| peer\.type === TERRITORY_SITE_TYPE\.boss \|\| peer\.type === TERRITORY_SITE_TYPE\.asyncPvp/,
+    assert.match(peers, /isTerritoryBattleSite\(peer\)/,
         '只有战斗类站点参与同区域（fixedResource 同 configId 有 3 格，绝不能算一起）');
     assert.match(peers, /typeof configId !== 'string' \|\| !\/\^\\d\+\$\/\.test\(configId\)/,
         'configId 必须是非空数字串才算同一片区域');

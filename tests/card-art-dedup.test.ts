@@ -157,14 +157,20 @@ test('布阵缺少专属图时复用 cardHead 角色，职业角标仍走图标�
     const card = { id: 'no-dedicated-art', rarity: 'green', traits: { attack: '法师' } } as Parameters<typeof provider.loadBoardSlot>[0];
     await provider.loadBoardSlot(card, cardArtConfig);
     await provider.loadBoardCard(card, cardArtConfig);
+    const campIcons = {
+        huaguo: 'common_img_hg',
+        mogu: 'common_img_mg',
+        penzai: 'common_img_pz',
+        jiangshi: 'common_img_js',
+    } as const;
     for (const key of cardTypes.ZC_CARD_CAMPS) {
         const item = { kind: 'camp' as const, key, name: key, count: 1, reached: true };
-        await provider.loadTallyFrames(item, cardArtConfig);
-        await provider.loadTallyFrames(item, cardArtConfig);
-        assert.ok(existsSync(assetPath(`${cardArtConfig.paths.get(`camp.${key}`)}.png`)), key);
+        await provider.loadTallyFrames(item);
+        await provider.loadTallyFrames(item);
+        assert.ok(existsSync(assetPath(`icons/card/${campIcons[key]}.png`)), key);
     }
     assert.deepEqual(heroRequests, ['jiezhanshi', 'jiezhanshi']);
-    assert.deepEqual(iconRequests, ['class_mage', 'class_mage',
+    assert.deepEqual(iconRequests, ['yx_zhiye_fs', 'yx_zhiye_fs',
         'common_img_hg', 'common_img_hg',
         'common_img_mg', 'common_img_mg',
         'common_img_pz', 'common_img_pz',

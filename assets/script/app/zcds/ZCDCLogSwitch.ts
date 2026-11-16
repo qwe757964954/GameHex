@@ -1,25 +1,13 @@
-/**
- * ZCDC 日志开关（2026-10-15）。
- *
- */
+// zcds 的日志总闸。所有 console.* 都得挂在这几个常量后面，tests/zcds-log-switch.test.ts 会扫。
+
+/** 逐帧 / 高频诊断。默认关，排查时临时改 true。*/
 export const ZCDC_LOG_DIAGNOSTICS = false;
 
-/** 加载失败 / 资源缺失 / 配置缺失告警；默认开，定位完可以不关（它不打在每帧路径上）。 */
+/** 加载失败、资源或配置缺失的告警。正式包里也开着，别挂到每帧路径上。*/
 export const ZCDC_LOG_WARNINGS = true;
 
-/**
- * 追踪导弹（镭射飞龙 68010）专项诊断；默认开，**定位完改回 false**。
- *
- * 为什么不并进 `ZCDC_LOG_DIAGNOSTICS`：那一个一开会把整局所有逐帧诊断一起刷屏，
- * 而这条只需要盯一个技能（每 12s 几行，频率极低），分开才看得清。
- * 用的还是同一个 `[导弹诊断]` 前缀，控制台过滤这 6 个字即可。
- */
+/** 镭射飞龙 68010 追踪导弹专项，控制台过滤 [导弹诊断]。定位完改回 false。*/
 export const ZCDC_LOG_MISSILE = true;
 
-/**
- * 技能释放链路专项诊断（`[技能诊断]` 前缀，2026-11-10）。
- *
- * 只打 `ZCSkillCastDiagnostics.ZC_SKILL_CAST_WATCH_UNITS` 里的卡，所以即使开着也不会刷屏。
- * 排查完把关注名单清空，或把这里改回 `false`。
- */
+/** 技能释放链路专项，只打 ZC_SKILL_CAST_WATCH_UNITS 里的卡，前缀 [技能诊断]。*/
 export const ZCDC_LOG_SKILL_CAST = true;

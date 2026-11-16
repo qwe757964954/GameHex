@@ -81,20 +81,6 @@ export class HttpRequest {
 
         http.open(method, url, true);
 
-        // if(AppCustomData.instance.isEdit() && AppCustomData.instance.isNeiWang() && EngineMain.isBrowser && EngineMain.isPC){
-        //     let handleEvent = (e)=>{
-        //         console.log( `http ${e.type}: ${e.loaded} bytes transferred\n`);
-        //     }
-
-        //     let xhr = http
-        //     xhr.addEventListener("loadstart", handleEvent);
-        //     xhr.addEventListener("load", handleEvent);
-        //     xhr.addEventListener("loadend", handleEvent);
-        //     xhr.addEventListener("progress", handleEvent);
-        //     xhr.addEventListener("error", handleEvent);
-        //     xhr.addEventListener("abort", handleEvent);
-        // }
-
         http.ontimeout = function (e) {
             console.error("ontimeout", url);
             // _this.error("ontimeout");

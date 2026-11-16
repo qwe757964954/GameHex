@@ -2,7 +2,7 @@ import type { ZCFaction, ZCHexConfig } from '../model/ZCMapConfig';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
 import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 
-/** 完整墙显示六边；新击破的墙只隐藏命中的一边；旧版整墙已毁状态保持全隐藏。 */
+/** 完整墙显示六边；新击破的墙只隐藏命中的一边；旧版整墙已毁状态保持全隐藏。*/
 export function shouldRenderWallEdge(
     wall: Readonly<{ wallHp: number; wallBreachedEdge?: number | null }>,
     edge: number,
@@ -16,19 +16,19 @@ export function shouldRenderWallEdge(
  * diagonal edges. Scale by opaque sprite-body length and extend each end by 6px; equal-length
  * edges must use equal scales. Offsets align the tile's top-face seam to the edge. Left edges
  * mirror their right-side pair; both horizontal edges use `up`. `renderWallSystem` sorts by screen y.
- */
+*/
 export interface ZCWallTileSpec {
     art: string;
     flip: boolean;
     angle: number;
     scale: number;
-    /** 墙砖图片自身从一端指向另一端的局部轴；斜墙的主体方向烘焙在图片里，不是局部 x。 */
+    /** 墙砖图片自身从一端指向另一端的局部轴；斜墙的主体方向烘焙在图片里，不是局部 x。*/
     axisX: number;
     axisY: number;
-    /** 图中心相对边中点的墙层偏移（让砖顶面中线对齐六边形边），单位像素。 */
+    /** 图中心相对边中点的墙层偏移（让砖顶面中线对齐六边形边），单位像素。*/
     offsetX: number;
     offsetY: number;
-    /** leftWidth, rightWidth, leftSampleInset, rightSampleInset（墙砖轴向 0..1）。 */
+    /** leftWidth, rightWidth, leftSampleInset, rightSampleInset（墙砖轴向 0..1）。*/
     joinProfile: readonly [number, number, number, number];
 }
 
@@ -64,10 +64,10 @@ export const WALL_TILE_EDGES: ReadonlyArray<ZCWallTileSpec> = [
  * Sprite 顶点色 alpha 给 wall-tile.effect 传 2-bit 连接标记：bit0=局部左端、bit1=局部右端。
  * 四个状态正好落在 0/85/170/255，shader 用 `round(alpha * 3)` 无损还原。
  * blue 同样用四档编码墙砖帧槽位；阵营染色保留在 red/green，shader 用 green 还原 blue。
- */
+*/
 const WALL_ENDPOINT_KEY_SCALE = 100;
 
-/** Minimum cosine for matching an edge to a neighbor; false matches reach 0.737, valid matches >= 0.951. */
+/** Minimum cosine for matching an edge to a neighbor; false matches reach 0.737, valid matches >= 0.951.*/
 const WALL_EDGE_NEIGHBOR_MIN_ALIGNMENT = 0.85;
 
 export function wallEndpointOwnerKey(owner: ZCFaction, x: number, y: number): string {
@@ -81,7 +81,7 @@ export function wallEndpointOwnerKey(owner: ZCFaction, x: number, y: number): st
  * Cocos simple assembler 的四角顺序固定为 left-bottom / right-bottom /
  * left-top / right-top；先逆解局部 x/y，再投影到墙砖自身轴向。不能从
  * `a_position` 推局部坐标：UI 批处理会在进 shader 前把它写成世界坐标。
- */
+*/
 export function wallAxisTransform(
     frame: Readonly<{ uv: readonly number[] }>,
     axisX: number,
@@ -118,12 +118,12 @@ export function wallAxisTransform(
  *
  * 结果按 hexId 缓存：几何只取决于地图声明（邻居、坐标），同一局内不变，
  * 每帧重绘墙砖时复用。`setMap`（换局）或 `clear`（销毁）时清空缓存。
- */
+*/
 export class ZCWallGeometry {
     private map: readonly ZCHexConfig[] = [];
     private readonly cache = new Map<number, ReadonlyArray<ZCWallSegmentGeometry>>();
 
-    /** 换局换地图时更新底图并清空缓存（不同地图的邻居/坐标不同）。 */
+    /** 换局换地图时更新底图并清空缓存（不同地图的邻居/坐标不同）。*/
     setMap(map: readonly ZCHexConfig[]): void {
         this.map = map;
         this.cache.clear();
@@ -136,12 +136,12 @@ export class ZCWallGeometry {
     /**
      * 计算某格六条边的几何（端点、中点、角度、长度、朝外的邻格 id）。
      *
-     *  这是 flat-top 六边形，顶点在左右（angle 0/π）。
-     * 顶点取 `ZC_OUTLINE_HEX_POINTS`（与轮廓层**同一份**几何），而不是在这里
+     * 这是 flat-top 六边形，顶点在左右（angle 0/π）。
+     * 顶点取 `ZC_OUTLINE_HEX_POINTS`（与轮廓层同一份几何），而不是在这里
      * 另写一套 `R·cos/R·sin` 圆参数化 —— 正六边形下两者等价，但写死的那份
      * 不会跟着地块尺寸变，墙砖就会画到格子外面（零报错）。
      * 法线取该边中点的方向（角平分），与逐边描线同一套。
-     */
+    */
     edges(hexId: number): ReadonlyArray<ZCWallSegmentGeometry> {
         const cached = this.cache.get(hexId);
         if (cached) return cached;

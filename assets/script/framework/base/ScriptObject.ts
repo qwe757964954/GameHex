@@ -58,7 +58,6 @@ export abstract class ScriptObject implements destroyable {
         t.destroyed = true
         
         t.onDestroy()
-        t.showDestroyValueLog()
     }
 
     destroyWrap(): void {
@@ -127,32 +126,4 @@ export abstract class ScriptObject implements destroyable {
 
     /**编辑期间输出log */
     public static editLog: boolean;
-    private showDestroyValueLog() {
-        if (ScriptObject.editLog) {
-            let t = this;
-            // 属性清除检测,防止内存泄露
-            for (let k in t) {
-                let v = t[k]
-                if (v != null) {
-                    if (k == "_log") {
-                    } else {
-                        let k_type = typeof (v);
-                        if (k_type == "boolean" || k_type == "string" || k_type == "number") {
-                            // t.log("对象销毁,属性没清除: ", k, k_type, v)
-                        } else {
-                            if (k_type == "function") {
-                                // let kLower = k.toLowerCase()
-                                // if (kLower.indexOf("runcallback") >= 0) {
-                                // } else if (k.indexOf("_") >= 0 || kLower.indexOf("callback") >= 0 || kLower.indexOf("func") >= 0) {
-                                //     t.error("对象销毁,函数没清除: ", k, k_type, v)
-                                // }
-                            } else {
-                                // t.error("对象销毁,属性没清除: ", k, k_type, v)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 }

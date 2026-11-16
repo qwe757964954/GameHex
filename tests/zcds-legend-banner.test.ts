@@ -4,10 +4,9 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as cardTypes from '../assets/script/app/card/CardLineupTypes';
-import { CARD_HEAD_ART_ROOT, ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
+import { CARD_HEAD_ART_ROOT } from '../assets/script/app/ArtPaths';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
-import { cardArtConfig } from './helpers/card-art-config';
 
 const PREFAB_PATH = assetPath('ui/game/ZCGameLegendBanner.prefab');
 // ⚠️ 横幅美术从 `image/gameui/legend` 搬到了 `image/legend`（gameui 目录清理时随批迁出），
@@ -184,7 +183,7 @@ test('视图按owner 选四色底板与头像环，立绘**等比放大到横幅
     assert.equal(view.ringSprite.spriteFrame, view.ringEnemy2);
     assert.equal(view.headSprite.spriteFrame, portrait);
     assert.equal(view.nameLabel.string, '吐豌豆骑手');
-    // 立绘**等比放大**到横幅立绘区（2026-11-02「萨尔等旧角色，模型也要匹配 banner 的高度」）：
+    // 立绘**等比放大**到横幅立绘区（2026-11-02「磁电菇（原「萨尔」）等旧角色，模型也要匹配 banner 的高度」）：
     // 256 见方的卡面 ⇒ scale = 280/256；x / y 同一个系数（方形原图不许被拉扁）。
     // ⚠️ 2026-10-10 那版「不缩放、就用 256×256」已作废 —— 84 见方的老头像在 417 高的横幅里
     // 只占 20%，正是这次反馈的画面。
@@ -223,11 +222,11 @@ function pngSize(filePath: string): { width: number; height: number } {
 }
 
 /**
- * 2026-11-02 需求：「萨尔等旧角色，模型也要匹配 banner 的高度，放大对应的模型让它与 UI 等高」。
+ * 2026-11-02 需求：「磁电菇（原「萨尔」）等旧角色，模型也要匹配 banner 的高度，放大对应的模型让它与 UI 等高」。
  *
  * 横幅左格取的是**卡面静态图**（`resolveLegendArt` ①），而 `cardHead` 目录里同时躺着两种
  * 画布规格：新的本地卡面 256×256、旧角色走的老头像 84×84。`sizeMode = RAW` 会把节点
- * 直接定成画布尺寸 ⇒ 84 那批在 417 高的横幅里只占 20%，截图里萨尔小得像个图标。
+ * 直接定成画布尺寸 ⇒ 84 那批在 417 高的横幅里只占 20%，截图里磁电菇（原萨尔）小得像个图标。
  *
  * 判据三条：
  *  ① 不论哪档画布，`画布高 × scale` 恒等于 `LEGEND_ROLE_TARGET_HEIGHT`（视觉等高）；
@@ -269,7 +268,7 @@ test('立绘按画布规格等比缩放：旧方形图与 390×300 阵容图等�
     view.setArtResolver(() => art);
     const reveal = (id: number, cardId: string): Raw => ({
         id, cardId, owner: 'player', building: 'barracks', tier: 4,
-        cardName: '萨尔', unitId: null, luckText: '', hexId: 1,
+        cardName: '磁电菇', unitId: null, luckText: '', hexId: 1,
         x: 0, y: 0, startedAt: 0, durationSeconds: 2.2,
     });
     view.render(reveal(1, '68016'), 0.5);
@@ -811,7 +810,7 @@ test('横幅优先取阵容角色立绘，取不到才回退兵种 / 建筑', ()
 
 test('ZCGame 分别注入阵容立绘与翻牌头像，横幅只读阵容立绘表', () => {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
-    assert.match(source, /this\.loadLegendCardArt\(prepared\.cardArtConfig\);/, '预扫必须使用本局已加载的卡牌美术配置');
+    assert.match(source, /this\.loadLegendCardArt\(\);/, '预扫只按 headIcon 解析立绘，不再使用矩阵表兜底');
     assert.match(source, /card\.headIcon/, '键要从卡表 `headIcon` 取（不是资源名）');
     assert.match(source, /loadHeadIconFrame\(/, '翻牌头像继续走既有 headIcon 加载链');
     assert.match(source, /cardArtFrames: this\.legendCardArtFrames/, '本局预扫表通过只读资源契约注入展示层');
@@ -831,7 +830,7 @@ function buildArtHost(cards: readonly Raw[]): Raw {
         require: (id: string) => {
             if (id === 'cc') return { Component: class { isValid = true; }, _decorator: { ccclass: () => (value: unknown) => value } };
             if (id === '../card/CardLineupTypes') return cardTypes;
-            if (id === '../ArtPaths') return { CARD_HEAD_ART_ROOT, ICON_ART_ROOT };
+            if (id === '../ArtPaths') return { CARD_HEAD_ART_ROOT };
             if (id === './model/ZCCombatCatalog') return { getPlayerDeck: () => cards, getEnemyDeck: () => [] };
             if (id === './model/ZCMapConfig') return { ZC_OWNER_ORDER: ['player', 'enemy'], ZCOwner: { Player: 'player' } };
             return {};
@@ -842,7 +841,7 @@ function buildArtHost(cards: readonly Raw[]): Raw {
     return host;
 }
 
-test('横幅预扫复用阵容立绘与职业占位，翻牌仍保留 headIcon，缺图不阻断其他卡', async () => {
+test('横幅预扫复用阵容立绘，缺 headIcon / 缺图的卡不回退雕像，也不阻断其他卡', async () => {
     const cards = [
         { id: '68001', headIcon: 'old-head', traits: { attack: '战士' } },
         { id: 'missing', traits: { attack: '法师' } },
@@ -850,13 +849,9 @@ test('横幅预扫复用阵容立绘与职业占位，翻牌仍保留 headIcon�
     ];
     const host = buildArtHost(cards);
     const requests: string[] = [];
-    const frames = new Map<string, object>();
     host.iconLoader = async (name: string, root: string) => {
         requests.push(`${root}/${name}`);
-        if (name === 'camp_tank') throw new Error('职业图缺');
-        const frame = { name };
-        frames.set(name, frame);
-        return frame;
+        throw new Error('不应再加载职业雕像');
     };
     const head = { name: 'old-head' };
     host.loadHeadIconFrame = async (icon: string) => {
@@ -865,12 +860,12 @@ test('横幅预扫复用阵容立绘与职业占位，翻牌仍保留 headIcon�
     };
     let refreshes = 0;
     host.renderWorld.refreshLegendCardArt = () => { refreshes++; };
-    host.loadLegendCardArt(cardArtConfig);
+    host.loadLegendCardArt();
     await new Promise<void>(resolve => setImmediate(resolve));
-    // 立绘真源 = headIcon（icon.json 解析）；无 headIcon / 头像缺 → 回退职业雕像。
-    assert.deepEqual(requests, [`${ICON_ART_ROOT}/camp_mage`, `${ICON_ART_ROOT}/camp_tank`]);
+    // 立绘真源 = headIcon（icon.json 解析）；职业雕像兜底已下线。
+    assert.deepEqual(requests, []);
     assert.equal(host.legendRoleArtFrames.get('68001'), head);
-    assert.equal(host.legendRoleArtFrames.get('missing'), frames.get('camp_mage'));
+    assert.equal(host.legendRoleArtFrames.has('missing'), false);
     assert.equal(host.legendRoleArtFrames.has('68002'), false);
     assert.equal(host.legendCardArtFrames.get('68001'), head);
     assert.equal(refreshes, 1);
@@ -881,7 +876,7 @@ test('离场后到货的横幅立绘不回填、不刷新视图', async () => {
     let complete: (frame: object) => void = () => {};
     host.iconLoader = () => new Promise<object>(resolve => { complete = resolve; });
     host.renderWorld.refreshLegendCardArt = () => assert.fail('离场后不应刷新');
-    host.loadLegendCardArt(cardArtConfig);
+    host.loadLegendCardArt();
     host.stopped = true;
     complete({ name: 'late-art' });
     await new Promise<void>(resolve => setImmediate(resolve));

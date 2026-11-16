@@ -262,10 +262,6 @@ class EventHelp {
                 let eventListener = tlEventListenerTemp[i]
                 if (!eventListener.destroyed) {
                     eventListener.execute(p1, p2, p3, p4, p5, p6)
-                    // if (eventListener.autoremove) {
-                    // t.destroyEventListener(eventListener)
-                    // t.remove(eventListener.callback, eventListener.caller)
-                    // }
                     // --可能在执行listener的过程中回调执行了remove，所以需要检测一次是否退出
                     if (t.destroyed) {
                         t.executing = false
@@ -307,16 +303,6 @@ class EventHelp {
                 this.tlEventListener.push(eventListener)
             }
             this.addTmEventListener(eventListener)
-
-            // if (caller != null) {
-            //     let num = this._tmEventCaller.get(caller)
-            //     if (num == null) {
-            //         num = 1
-            //     } else {
-            //         num++;
-            //     }
-            //     this._tmEventCaller.set(caller, num)
-            // }
 
             return eventListener
         } else {

@@ -56,9 +56,14 @@ def main():
     for file in files:
         target = TARGET / file.name
         sever_path = SEVER_TARGET / file.name
+        # 与 bigmap / territory 同一道护栏：对局地图也不许落进策划 client。
+        presets_io.assert_no_client_targets([target, sever_path])
         if args.dry_run:
             print(f"将拷贝 {file.name} → {target}")
             print(f"将同步 {file.name} → {sever_path}")
+            note = presets_io.purge_client_copy(file.name, True)
+            if note:
+                print(note)
             continue
         shutil.copyfile(file, target)
         meta = Path(str(target) + ".meta")
@@ -70,6 +75,9 @@ def main():
             }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # 策划 sever 目录只写 JSON，不生成 .meta（与 bigmap / territory 发布口径一致）。
         shutil.copyfile(file, sever_path)
+        note = presets_io.purge_client_copy(file.name)
+        if note:
+            print(note)
         print(f"已拷贝 {file.name}")
 
 

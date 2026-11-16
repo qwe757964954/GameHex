@@ -1,5 +1,5 @@
 import { ZCCardType, ZC_CARD_RARITIES } from '../zcds/model/ZCCombatCatalog';
-import type { ZCCardRarity, ZCDeckBonuses, ZCDeckCard, ZCCardTraits } from '../zcds/model/ZCCombatCatalog';
+import type { ZCCardRarity, ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import type { ICardLineupCatalog } from './CardArtConfig';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 
@@ -137,18 +137,6 @@ export function tallyDeckIcons(deck: readonly ZCDeckCard[], lineup: ICardLineupC
 /** 列表实际显示条目：滤掉卡数为 0 的。条目数跟着阵容变，不能写死。 */
 export function visibleIconTallies(deck: readonly ZCDeckCard[], lineup: ICardLineupCatalog): ZCCardTally[] {
     return tallyDeckIcons(deck, lineup).filter((item) => item.count > 0);
-}
-
-/** 一条羁绊展示数据。 */
-export interface ZCBondLine {
-    id: string;
-    name: string;
-    condition: string;
-    effect: string;
-    active: boolean;
-    matched: number;
-    threshold: number;
-    trait: keyof ZCCardTraits;
 }
 
 /** 倍率型效果才进百分比合计；金币收入是绝对值。 */

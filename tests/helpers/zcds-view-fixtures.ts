@@ -293,7 +293,10 @@ export function loadViews() {
         if (viewName) {
             const View = context.exports[viewName];
             context.exports[viewName] = class extends View {
-                constructor() { super(); this.setPresentationArt(presentationArt, presentationOwner); }
+                constructor() {
+                    super(); this.setPresentationArt(presentationArt, presentationOwner);
+                    if (viewName === 'ZCCardRevealView') this.guideAnchor = new (load('../../guide/ui/GuideFocusAnchor').GuideFocusAnchor)();
+                }
             };
         }
         if (name === './ZCGameRenderWorld') {

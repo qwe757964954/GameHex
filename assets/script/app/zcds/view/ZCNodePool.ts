@@ -1,4 +1,4 @@
-/** 有界节点池；停用时保留子节点，离开场景时统一销毁。 */
+/** 按 key 分桶的节点池。停用只置 inactive 留着复用，池满或 destroy() 时才真销毁。*/
 export class ZCNodePool<T extends { active: boolean; isValid: boolean; destroy(): unknown }> {
     private readonly buckets = new Map<string, T[]>();
     private size = 0;

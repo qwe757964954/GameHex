@@ -59,10 +59,7 @@ export class BigMapEntry {
     private static instance: BigMapEntry | null = null;
 
     private root: Node | null = null;
-    private model: BigMapModel | null = null;
     private controller: BigMapController | null = null;
-    /** 页面组件（开战预加载失败时要通知它撤掉「正在进入」遮罩）。 */
-    private page: BigMapPage | null = null;
     private saveOwner: IBigMapSaveOwner | null = null;
     private configCache: IBigMapConfig | null = null;
     /** `undefined` = 还没加载过；`null` = 加载过但没有可用布局。两者必须区分，否则会反复读盘。 */
@@ -240,10 +237,8 @@ export class BigMapEntry {
             const navigation = options?.navigation;
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
-            this.model = model;
             this.controller = controller;
             controller.start();
-            this.page = page;
             this.onCloseCallback = options?.onClose ?? null;
             //基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
             // `initialize()` 失败时不会 reject（`request` 内部把异常吞成 null），
@@ -300,9 +295,7 @@ export class BigMapEntry {
         this.controller?.dispose();
         if (this.root?.isValid) this.root.destroy();
         this.root = null;
-        this.model = null;
         this.controller = null;
-        this.page = null;
         this.saveOwner = null;
         const hud = this.hudRestore;
         this.hudRestore = null;

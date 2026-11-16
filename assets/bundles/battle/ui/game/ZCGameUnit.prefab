@@ -886,6 +886,9 @@
     "fallback": {
       "__id__": 7
     },
+    "fallbackTransform": {
+      "__id__": 5
+    },
     "fallbackLabel": {
       "__id__": 13
     },
@@ -914,10 +917,7 @@
     "barFillHeight": 8,
     "barFillInset": 4,
     "barOffsetY": 80,
-    "_id": "",
-    "fallbackTransform": {
-      "__id__": 5
-    }
+    "_id": ""
   },
   {
     "__type__": "cc.CompPrefabInfo",

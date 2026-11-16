@@ -44,36 +44,36 @@ export interface ZCMatchMap {
     enemyHomeId: number;
     hexes: readonly ZCHexConfig[];
     owners: readonly ZCFaction[];
-    /** 地图声明的对局人数（= 分区数）；缺省 2。第 1 席为本机玩家，其余席位为本地 AI。 */
+    /** 地图声明的对局人数（= 分区数）；缺省 2。第 1 席为本机玩家，其余席位为本地 AI。*/
     playerCount?: ZCPlayerCount;
-    /** 主城模式；缺省 'fixed'。'select' 表示主城由开局选点产生，地图不产出坐标。 */
+    /** 主城模式；缺省 'fixed'。'select' 表示主城由开局选点产生，地图不产出坐标。*/
     cityMode?: ZCCityMode;
-    /** 每格的分区归属；0 = 不属于任何分区（可通行时即中立格）。 */
+    /** 每格的分区归属；0 = 不属于任何分区（可通行时即中立格）。*/
     sections?: readonly ZCSection[];
-    /** 固定主城模式下各方主城格 id（下标 0 = 1 区）；自选主城模式为空。 */
+    /** 固定主城模式下各方主城格 id（下标 0 = 1 区）；自选主城模式为空。*/
     homes?: readonly number[];
-    /** 各方前 / 中 / 后区域；未圈画时为空。 */    regions?: readonly ZCMapRegion[];
-    /** 旧版自选主城候选格；仅在地图没有前 / 中 / 后区域时用于兼容读取。 */
+    /** 各方前 / 中 / 后区域；未圈画时为空。*/    regions?: readonly ZCMapRegion[];
+    /** 旧版自选主城候选格；仅在地图没有前 / 中 / 后区域时用于兼容读取。*/
     homeCandidates?: readonly ZCMapHomeCandidates[];
-    /** 资源点位（开局据此抽中立资源）；无点位时为空。 */
+    /** 资源点位（开局据此抽中立资源）；无点位时为空。*/
     resourcePoints?: readonly ZCMapResourcePoint[];
-    /** 选点结束后从各点位资源池抽出的本局结果。 */
+    /** 选点结束后从各点位资源池抽出的本局结果。*/
     resolvedResources?: readonly ZCMapResolvedResource[];
-    /** 可调间距参数（已补默认值）。 */
+    /** 可调间距参数（已补默认值）。*/
     spacing?: Readonly<Required<ZCMapSpacing>>;
-    /** 美术配置。 */
+    /** 美术配置。*/
     art?: Readonly<ZCMapArt>;
     /**
      * 局内镜头的倍率范围（R22 相机：「每个地图配置对应的最大和最小倍率」）。
      *
-     *  真源是地图 JSON 的 `zoomMin` / `zoomMax`，经 `resolveZCMapZoom` 补默认值后带到这里，
-     *  由 `ZCGame` 交给 HUD。缺省 `0.6 / 1.2`。
-     */
+     * 真源是地图 JSON 的 `zoomMin` / `zoomMax`，经 `resolveZCMapZoom` 补默认值后带到这里，
+     * 由 `ZCGame` 交给 HUD。缺省 `0.6 / 1.2`。
+    */
     zoomMin?: number;
     zoomMax?: number;
 }
 
-/** 领地塔防的确定性出怪计划；由关卡表投影，随本局配置一起冻结。 */
+/** 领地塔防的确定性出怪计划；由关卡表投影，随本局配置一起冻结。*/
 export interface ZCPveDefenceWave {
     waveId: number;
     showAtSeconds: number;
@@ -83,38 +83,38 @@ export interface ZCPveDefenceWave {
     /**
      * BOSS 波（`defenceModWave.monsterType=3`，即每组最后一波）。
      *
-     * 两处消费：HUD 那条**大血条**只在 BOSS 波显示（普通小怪只有头顶血条）；
+     * 两处消费：HUD 那条大血条只在 BOSS 波显示（普通小怪只有头顶血条）；
      * 胜负判定只认「BOSS 已出场且被清空」。缺省 `undefined` ⇒ 用「最后一波」兜底。
-     */
+    */
     isBoss?: boolean;
     /**
      * 怪物体型（`defenceModWave.monsterSize`）：`1` 普通 / `2` BOSS 体型。
      *
-     * 直接当**模型缩放倍率**用（见 `defenceMonsterScale`）：1 = 保持 prefab 原尺寸，
+     * 直接当模型缩放倍率用（见 `defenceMonsterScale`）：1 = 保持 prefab 原尺寸，
      * 2 = 放大一倍。缺省 / ≤1 ⇒ 不缩放，等价于历史行为。
-     */
+    */
     monsterSize?: number;
 }
 
 export interface ZCPveDefenceConfig {
     waves: readonly ZCPveDefenceWave[];
-    /** 波次卡资料随本局冻结，仅供战斗查表，不参与抽卡与羁绊。 */
+    /** 波次卡资料随本局冻结，仅供战斗查表，不参与抽卡与羁绊。*/
     cards?: readonly ZCDeckCard[];
 }
 
-/** 服务端下发的阵营倍率；缺失字段不修改对应属性。 */
+/** 服务端下发的阵营倍率；缺失字段不修改对应属性。*/
 export interface IZCBattleRates {
     readonly hpRate?: number;
     readonly attackRate?: number;
 }
 
-/** 只包含数据，允许测试、机器人模拟和回放注入独立的配置版本。 */
+/** 只包含数据，允许测试、机器人模拟和回放注入独立的配置版本。*/
 export interface ZCMatchConfig {
     map: ZCMatchMap;
     rules: Readonly<ZCRuntimeRules>;
     playerDeck: readonly ZCDeckCard[];
     enemyDeck: readonly ZCDeckCard[];
-    /** 正式多方对局的逐 owner 卡池；旧配置缺省时仍按 playerDeck / enemyDeck 兼容。 */
+    /** 正式多方对局的逐 owner 卡池；旧配置缺省时仍按 playerDeck / enemyDeck 兼容。*/
     ownerDecks?: Readonly<Partial<Record<ZCOwner, readonly ZCDeckCard[]>>>;
     units: readonly ZCUnitDefinition[];
     bonds: readonly ZCBondRule[];
@@ -122,29 +122,29 @@ export interface ZCMatchConfig {
     tiles: Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
     tileWeights: readonly ZCPvpTileTypeWeight[];
     goldPity: number;
-    /** 客户端选定武将/星级后编译出的本局修正；缺省表示本局不启用旧表修正。 */
+    /** 客户端选定武将/星级后编译出的本局修正；缺省表示本局不启用旧表修正。*/
     modifiers?: Readonly<Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>>>;
-    /** 独立于英雄成长和技能参数，在单位静态属性编译完成后相乘。 */
+    /** 独立于英雄成长和技能参数，在单位静态属性编译完成后相乘。*/
     ownerRates?: Readonly<Partial<Record<ZCOwner, IZCBattleRates>>>;
-    /** 本局冻结的技能行为绑定与状态定义，不在战斗中读取全局表。 */
+    /** 本局冻结的技能行为绑定与状态定义，不在战斗中读取全局表。*/
     skillBindings?: readonly ZCSkillBinding[];
     statusDefinitions?: readonly ZCStatusEffectDef[];
-    /** Old-client formulas frozen at match start; absent/empty keeps fixed pvpSkill damage fallback. */
+    /** Old-client formulas frozen at match start; absent/empty keeps fixed pvpSkill damage fallback.*/
     legacySkillEffects?: Readonly<ZCLegacySkillEffectConfig>;
-    /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。 */
+    /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。*/
     pveDefence?: Readonly<ZCPveDefenceConfig>;
     /**
-     * `levelInfo.openGrideTime`：NPC **两次点地块之间的最小间隔**（秒，0 = 按全局节奏）。
+     * `levelInfo.openGrideTime`：NPC 两次点地块之间的最小间隔（秒，0 = 按全局节奏）。
      *
-     * 只约束 **NPC（本地 AI 席位）翻地块的速度**，可快可慢：AI 的开发间隔取
-     * `max(1, openGrideTime)`（下限 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`，**不是**全局 2.8s ——
+     * 只约束 NPC（本地 AI 席位）翻地块的速度，可快可慢：AI 的开发间隔取
+     * `max(1, openGrideTime)`（下限 `ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`，不是全局 2.8s ——
      * 旧实现拿 `rules.enemyAiIntervalSeconds` 当下限，填 1~2.7 秒会被静默抬回去）。
-     * 计时**从第一次翻格之后**起算，见 `ZCGameModel.advance`。
+     * 计时从第一次翻格之后起算，见 `ZCGameModel.advance`。
      * 缺省 / 0 ⇒ 不额外限速（旧行为）。与领地格子「探索中」时长无关。
-     */
+    */
     openGrideTime?: number;
     /**
-     * `levelInfo.gradeProModifier`：**NPC 席位**翻地块抽卡的品质权重乘数（玩家不受影响）。
+     * `levelInfo.gradeProModifier`：NPC 席位翻地块抽卡的品质权重乘数（玩家不受影响）。
      *
      * 谁套用由 `ZCGameModel.buildDevelopmentContext().drawRulesOf` 决定 ——
      * `owner === Player` 一律 `null`，其余席位给 `{ rarityModifier: 这一份, goldPity: false }`
@@ -152,7 +152,7 @@ export interface ZCMatchConfig {
      * 乘一层再归一（见 `applyPvpRarityModifier`）：绿蓝抬升的份额从紫金分走，`empty` 空手率不变。
      *
      * 缺省 / 空对象 ⇒ 不调整（塔防关卡与未配该列的关卡都走这条）。
-     */
+    */
     gradeProModifier?: ZCPvpRarityModifier;
     configHash?: string;
 }
@@ -167,7 +167,7 @@ function freezeData<T>(value: T): T {
     return value;
 }
 
-/** 把 pvpStatus 的 handlerKey 翻译成状态系统可执行的行为钩子（不再退化成 custom 死代码）。 */
+/** 把 pvpStatus 的 handlerKey 翻译成状态系统可执行的行为钩子（不再退化成 custom 死代码）。*/
 function translateStatusBehavior(item: ZCStatusConfigRecord): ZCStatusBehavior {
     switch (item.handlerKey) {
         case 'none':
@@ -187,7 +187,7 @@ function translateStatusBehavior(item: ZCStatusConfigRecord): ZCStatusBehavior {
     }
 }
 
-/** 从共享只读目录构筑本局数据；地图由 Loader 独立解析，不写共享地图。 */
+/** 从共享只读目录构筑本局数据；地图由 Loader 独立解析，不写共享地图。*/
 export function createZCMatchConfig(map: ZCMatchMap): ZCMatchConfig {
     const adapters = getZCModifierCatalogs().adapters;
     return {
@@ -213,7 +213,7 @@ export function createZCMatchConfig(map: ZCMatchMap): ZCMatchConfig {
     };
 }
 
-/** 外部输入复制隔离；本模块创建的冻结快照可安全复用。 */
+/** 外部输入复制隔离；本模块创建的冻结快照可安全复用。*/
 export function captureZCMatchConfig(
     source?: ZCMatchConfig,
     options?: { allowUnresolvedSelect?: boolean },
@@ -251,7 +251,7 @@ export function captureZCMatchConfig(
     return captured;
 }
 
-/** 客户端组装开局参数的唯一入口：只传武将 id/星级，不直接拼 modifier id。 */
+/** 客户端组装开局参数的唯一入口：只传武将 id/星级，不直接拼 modifier id。*/
 export function withZCGeneralStarSelections(
     source: ZCMatchConfig,
     selections: Partial<Record<ZCOwner, readonly ZCGeneralStarSelection[]>>,

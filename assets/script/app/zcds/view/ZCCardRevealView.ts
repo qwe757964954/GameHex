@@ -4,53 +4,55 @@ import type { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CARD_FADE_START_PROGRESS } from '../model/ZCBattlePresentationQueue';
 import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
+import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
 import { zcBuildingArt, elasticPopScale, mapToViewX, mapToViewY, POP_FROM_SCALE } from './ZCGameViewUtil';
 
 const { ccclass, property } = _decorator;
 
 /**
- * 翻牌小卡牌的**整体 UI 缩放**（2026-11-11 需求：「展示的小牌 UI 整体放大 125%」）。
+ * 翻牌小卡牌的整体 UI 缩放（2026-11-11 需求：「展示的小牌 UI 整体放大 125%」）。
  *
  * 为什么不写进 `ZCGameCardReveal.prefab` 的根 `_lscale`：`render` 每帧按弹跳曲线
- * `setScale` 写**绝对**值，prefab 上的值一帧就被覆盖（同 `BUILDING_ICON_SCALE` 的口径）。
- * 乘在这里 = 卡框 / 卡面 / 卡名 / 运气评语**一起**放大，弹跳曲线的相对幅度不变
+ * `setScale` 写绝对值，prefab 上的值一帧就被覆盖（同 `BUILDING_ICON_SCALE` 的口径）。
+ * 乘在这里 = 卡框 / 卡面 / 卡名 / 运气评语一起放大，弹跳曲线的相对幅度不变
  * （0.2 → 1.2 → 0.92 → 1 变成 0.25 → 1.5 → 1.15 → 1.25）。
- */
+*/
 export const ZC_CARD_REVEAL_UI_SCALE = 1.25;
 
 /**
  * 「抽到卡牌」的小卡牌表现，由 `ZCGameCardReveal.prefab` 拥有。
  *
- * 和 `ZCFloatTextView` / `ZCCombatEffectView` 一样是**按进度计算**、不是 tween：
+ * 和 `ZCFloatTextView` / `ZCCombatEffectView` 一样是按进度计算、不是 tween：
  * 每帧重算，切流程 / 暂停 / 快照回放都不会留下补间残影；过期回收由渲染层按 id 对齐完成
  * （`ZCGameRenderWorld.renderCardReveals`）。
  *
  * 卡框由 prefab 绑定；建筑图由渲染层按卡表 `buildIcon` 注入解析，
  * 本脚本只负责「选哪张图 + 文字 + 位移 / 缩放 / 透明度」。
  *
- * 时间结构（2026-10-15 定）：`startedAt` 之前**整卡不渲染**，到点才出现并**立刻**开始变大 ——
+ * 时间结构（2026-10-15 定）：`startedAt` 之前整卡不渲染，到点才出现并立刻开始变大 ——
  * 卡牌的起点是「地块收场段结束」那一刻（`ZCBattlePresentationQueue.pushCardReveal`），
  * 中间没有「可见但不动」的等待段。
- */
+*/
 @ccclass('ZCCardRevealView')
 export class ZCCardRevealView extends Component {
+    @property(GuideFocusAnchor) guideAnchor: GuideFocusAnchor = null!;
     
     /**
      * 弹出段占整张卡牌生命周期的比例（2.4s ⇒ 0.24s）：这段时间内走完
      * `elasticPopScale` 的「0.2 → 1.2 → 0.92 → 1」。
-     */
+    */
     private static readonly POP_PROGRESS = 0.1;
 
     /**
      * 运气评语（小有收获！/ 大吉大利！/ 欧皇降临！）相对卡牌出现的延迟（秒）：
      * 略慢于生成动画 —— 卡牌先蹦出来、评语随后补上，节奏感比同时出现强。
-     * 淡出**不走**这条延迟：评语跟整卡同一个根 UIOpacity 级联，和卡牌同一时刻消失。
-     */
+     * 淡出不走这条延迟：评语跟整卡同一个根 UIOpacity 级联，和卡牌同一时刻消失。
+    */
     private static readonly LUCK_DELAY_SECONDS = 0.13;
-    /** 评语出现的淡入时长（秒）：很短，只是不让字硬切出现。 */
+    /** 评语出现的淡入时长（秒）：很短，只是不让字硬切出现。*/
     private static readonly LUCK_FADE_IN_SECONDS = 0.08;
 
-    /** 卡名字色固定白；深浅对比靠 prefab 里那条深色描边。 */
+    /** 卡名字色固定白；深浅对比靠 prefab 里那条深色描边。*/
     private static readonly CARD_NAME_COLOR = new Color(255, 255, 255, 255);
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Frame：品级卡框（按品级换图）。设计稿 103x126，底部有一条 27px 深色横条承载卡名' })
@@ -101,16 +103,16 @@ export class ZCCardRevealView extends Component {
     @property({ group: '卡牌表现', tooltip: '从哪个进度开始淡出（0~1）。 与 ZCBattlePresentationQueue.ZC_CARD_FADE_START_PROGRESS 同值 —— 地块正是在这一刻原尺寸回场' })
     fadeStartProgress = ZC_CARD_FADE_START_PROGRESS;
 
-    /** 上一次 render 到的卡面组合（建筑 | 品级 | 阵营 | 兵种 | 两行文案）；没变就跳过选图选字，只在首帧与换卡时写。 */
+    /** 上一次 render 到的卡面组合（建筑 | 品级 | 阵营 | 兵种 | 两行文案）；没变就跳过选图选字，只在首帧与换卡时写。*/
     private contentKey = '';
-    /** 有没有运气评语切图可显（上方那行只由它决定）。 */
+    /** 有没有运气评语切图可显（上方那行只由它决定）。*/
     private hasLuckText = false;
     @property({ type: UIOpacity, group: '节点引用', tooltip: '根节点：整卡淡出级联到所有子节点' })
     cardOpacity: UIOpacity = null!;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: 'LuckSprite：评语延迟淡入，淡出仍随根节点级联' })
     luckOpacityComp: UIOpacity = null!;
-    /** 异步资源到货后作废内容键，下次 render 从本局只读资源表重新选图。 */
+    /** 异步资源到货后作废内容键，下次 render 从本局只读资源表重新选图。*/
     invalidateArt(): void {
         // 卡面图是异步加载的，可能晚于小卡牌弹出才到 —— 不作废内容键，那条卡会一直停在建筑图上。
         this.contentKey = '';
@@ -123,14 +125,17 @@ export class ZCCardRevealView extends Component {
     render(reveal: Readonly<ZCCardReveal>, now: number): void {
         const duration = Math.max(0.001, reveal.durationSeconds);
         const elapsedSeconds = now - reveal.startedAt;
-        // 「未开始」＝还在等前置的**地块收场段**走完（`startedAt` 落在未来）。
+        this.guideAnchor.key = reveal.owner === 'player' && elapsedSeconds >= 0 && elapsedSeconds < duration
+            ? 'Battle/DrawnCard' : '';
+        this.guideAnchor.shownAt = reveal.startedAt;
+        // 「未开始」＝还在等前置的地块收场段走完（`startedAt` 落在未来）。
         //
-        //  这段**必须整卡不渲染**，不能只把进度 clamp 到 0：进度 0 对应 `popScale = 0.2`
-        // 且 alpha 满 —— 那就是一张小卡**可见却一动不动**地干等，读作「卡牌卡住了」。
+        //  这段必须整卡不渲染，不能只把进度 clamp 到 0：进度 0 对应 `popScale = 0.2`
+        // 且 alpha 满 —— 那就是一张小卡可见却一动不动地干等，读作「卡牌卡住了」。
         // 需求方口径（2026-10-15）：「卡牌生成阶段不需要等待静止不动的阶段，
         // 出现小卡后马上播放卡片变大的动画」⇒ 出现的那一刻就是开始变大的那一刻。
         //
-        // 写**绝对** active（不是缩成 0 留着占一次绘制），与建筑 `buildingPopScale = 0` 同一套惯例。
+        // 写绝对 active（不是缩成 0 留着占一次绘制），与建筑 `buildingPopScale = 0` 同一套惯例。
         if (elapsedSeconds < 0) {
             this.node.active = false;
             return;
@@ -138,9 +143,9 @@ export class ZCCardRevealView extends Component {
         this.node.active = true;
         const progress = Math.min(1, elapsedSeconds / duration);
         this.renderContent(reveal);
-        // 世界定位一律由**根节点**承担（和 ZCUnitView / ZCFloatTextView 同惯例），
+        // 世界定位一律由根节点承担（和 ZCUnitView / ZCFloatTextView 同惯例），
         // 子节点只做局部偏移；两处都写绝对坐标会让卡牌跑到两倍远处。
-        // 卡牌**整段原地不动**（不像飘字那样边飘边升）：位置只由格心 + offsetY 决定，
+        // 卡牌整段原地不动（不像飘字那样边飘边升）：位置只由格心 + offsetY 决定，
         // 弹出与淡出都叠在同一个点上，观众视线不用跟着跑。
         this.node.setPosition(
             mapToViewX(reveal.x),
@@ -158,16 +163,16 @@ export class ZCCardRevealView extends Component {
      * 生成动画曲线（进度式）：弹出段内把 `progress / POP_PROGRESS` 喂给共用的
      * `elasticPopScale`（`popScale` → 1.2 → 0.92 → 1）。
      *
-     *  **不要在这里另写一条曲线**：建筑生成（`ZCHexView` 的建筑段）用的就是同一条
+     * 不要在这里另写一条曲线：建筑生成（`ZCHexView` 的建筑段）用的就是同一条
      * —— 需求要求两处「节奏类似」，共用才不会再分开跑。POP 段之外本函数恒为 1
      * （卡牌的整体 125% 在 `render` 里另乘，不进这条共用曲线，否则建筑那边也会跟着变大）。
-     */
+    */
     private popScaleAt(progress: number): number {
         const t = progress / ZCCardRevealView.POP_PROGRESS;
         return t >= 1 ? 1 : elasticPopScale(t, this.popScale);
     }
 
-    /** 卡框 / 卡面 / 两行文案只在换卡时写一次；每帧只动位置、缩放与透明度。 */
+    /** 卡框 / 卡面 / 两行文案只在换卡时写一次；每帧只动位置、缩放与透明度。*/
     private renderContent(reveal: Readonly<ZCCardReveal>): void {
         const key = `${reveal.cardId}|${reveal.building}|${reveal.tier}|${reveal.owner}|${reveal.unitId ?? ''}|${reveal.cardName}|${reveal.luckText}`;
         if (key === this.contentKey) return;
@@ -186,14 +191,14 @@ export class ZCCardRevealView extends Component {
         }
     }
 
-    /** 尾段整体淡出：根节点 UIOpacity 的 opacity 级联到整棵子树，一个组件管住全部子节点。 */
+    /** 尾段整体淡出：根节点 UIOpacity 的 opacity 级联到整棵子树，一个组件管住全部子节点。*/
     private applyAlpha(progress: number, elapsedSeconds: number): void {
         const fade = progress <= this.fadeStartProgress
             ? 1
             : Math.max(0, 1 - (progress - this.fadeStartProgress) / (1 - this.fadeStartProgress));
         this.cardOpacity.opacity = Math.round(255 * fade);
         // 运气评语延迟出现（LUCK_DELAY_SECONDS，略慢于生成动画），出现后保持 1 ——
-        // 之后的淡出**只由根节点 UIOpacity 级联承担**，所以文字和卡牌消失时间必然一致。
+        // 之后的淡出只由根节点 UIOpacity 级联承担，所以文字和卡牌消失时间必然一致。
         // 池复用/无评语时写 0，避免上一张卡的可见态残留。
         const luck = this.luckOpacityComp;
         if (!this.hasLuckText) {
@@ -211,7 +216,7 @@ export class ZCCardRevealView extends Component {
         sprite.enabled = frame !== null;
     }
 
-    /** 卡框选图：资源点优先用灰蓝专用框（表达「资源点」而非品级），缺图退回按品级。 */
+    /** 卡框选图：资源点优先用灰蓝专用框（表达「资源点」而非品级），缺图退回按品级。*/
     private frameFor(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
         if (reveal.building === 'mine' && this.resourceFrame) return this.resourceFrame;
         return this.frameForTier(reveal.tier);
@@ -227,7 +232,7 @@ export class ZCCardRevealView extends Component {
         }
     }
 
-    /** 卡面主图优先角色图；金矿已确定使用建筑图，缺角色图不再告警。 */
+    /** 卡面主图优先角色图；金矿已确定使用建筑图，缺角色图不再告警。*/
     private frameForArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
         const cardArt = this.presentationArt?.cardArtFrames.get(reveal.cardId) ?? null;
         if (cardArt) return cardArt;
@@ -242,10 +247,10 @@ export class ZCCardRevealView extends Component {
     }
 
     /**
-     * 建筑类型的通用外观兜底（**只在注入的解析器给不出图时**才走）。
-     *  没有 `hq` 分支：主城卡被 `isHqCard` 从牌堆过滤（`ZCGameRuntimeConfig.ts:672`），
+     * 建筑类型的通用外观兜底（只在注入的解析器给不出图时才走）。
+     * 没有 `hq` 分支：主城卡被 `isHqCard` 从牌堆过滤（`ZCGameRuntimeConfig.ts:672`），
      * `pushCardReveal` 永远拿不到 `building === 'hq'`。
-     */
+    */
     private frameForBuilding(building: ZCBuildingType, _owner: ZCOwner): SpriteFrame | null {
         switch (building) {
             case 'mine': return this.mineFrame;
@@ -256,7 +261,7 @@ export class ZCCardRevealView extends Component {
     /**
      * 运气评语切图，按品级；蓝品级（2）暂借绿品级那张（美术只导了 3 张）。
      * 美术补出蓝评语切图后把 `case 2` 拆成独立字段即可（卡框 `frameForTier` 的 `case 2` 别一起动）。
-     */
+    */
     private luckTextFrameForTier(tier: number): SpriteFrame | null {
         switch (tier) {
             case 1:

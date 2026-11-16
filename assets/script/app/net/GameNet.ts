@@ -301,12 +301,12 @@ export class GameNet extends ScriptObject {
     // ========================================================================
 
     /** 入队发送（依次发出）。 */
-    send<CmdReqMsg, CmdRspMsg>(reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>, needLoading: boolean = true): Promise<boolean> {
+    send<CmdReqMsg, CmdRspMsg>(reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>, needLoading: boolean = true): Promise<boolean> & { cancel?: () => void } {
         return this.pushRequest(reqMsg, needLoading, false);
     }
 
     /** 立即发送（插队，登录这类必须优先的请求用这个）。 */
-    sendNow<CmdReqMsg, CmdRspMsg>(reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>, needLoading: boolean = true): Promise<boolean> {
+    sendNow<CmdReqMsg, CmdRspMsg>(reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>, needLoading: boolean = true): Promise<boolean> & { cancel?: () => void } {
         return this.pushRequest(reqMsg, needLoading, true);
     }
 
@@ -314,7 +314,7 @@ export class GameNet extends ScriptObject {
         reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>,
         needLoading: boolean,
         sendNow: boolean,
-    ): Promise<boolean> {
+    ): Promise<boolean> & { cancel?: () => void } {
         const netSocket = this._netSocket;
         const protoMgr = this._protoMgr;
         if (netSocket == null || protoMgr == null) {
@@ -330,20 +330,24 @@ export class GameNet extends ScriptObject {
             needLoading = false;
         }
 
-        return new Promise<boolean>((resolve, reject) => {
+        let request: NetworkRequest<CmdReqMsg, CmdRspMsg> | null = null;
+        try {
             const data = this.createCmdClientData(messageName, reqMsg.cmdReqMsg);
             if (data == null) {
-                reject(new Error('协议编码失败：' + messageName));
-                return;
+                return Promise.reject(new Error('协议编码失败：' + messageName));
             }
-            const request = new NetworkRequest<CmdReqMsg, CmdRspMsg>();
+            request = new NetworkRequest<CmdReqMsg, CmdRspMsg>();
             request.packageRequest(this._clientIndex, data, reqMsg, needLoading, this.callbackOwners);
-            request.promise.then(resolve).catch(reject);
+            const pending = request.promise;
             const isOK = netSocket.addNetworkRequest(request, sendNow);
             if (!isOK) {
                 this.error('send add fail: ' + request.messageName + ' ' + request.index);
             }
-        });
+            return pending;
+        } catch (error) {
+            request?.cancel();
+            return Promise.reject(error);
+        }
     }
 
     /** 组装 ClientCmdData —— 与源工程 app/net/Net.ts 的 createCmdClientData 一致。 */

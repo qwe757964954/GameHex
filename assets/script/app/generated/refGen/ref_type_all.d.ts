@@ -13,23 +13,6 @@ type IRefactivity_plan=number
 interface refGen{activity:IRefactivity}
 
 
-interface IRefactivityOpen extends IRefBase
-{
-resId:number
-activityResId:number
-openType:number
-startTime:string
-endTime:string
-}
-type IRefactivityOpen_resId=number
-type IRefactivityOpen_activityResId=number
-type IRefactivityOpen_openType=number
-type IRefactivityOpen_startTime=string
-type IRefactivityOpen_endTime=string
-
-interface refGen{activityOpen:IRefactivityOpen}
-
-
 interface IRefactivityTab extends IRefBase
 {
 id:number
@@ -77,9 +60,9 @@ bindHead:any[]
 sortId:number
 armyId:number
 iconKaPai:string
-head:string
 quality:number
 model:string
+head?:string
 }
 type IRefadvisor_id=number
 type IRefadvisor_resId=number
@@ -88,129 +71,11 @@ type IRefadvisor_bindHead=any[]
 type IRefadvisor_sortId=number
 type IRefadvisor_armyId=number
 type IRefadvisor_iconKaPai=string
-type IRefadvisor_head=string
 type IRefadvisor_quality=number
 type IRefadvisor_model=string
+type IRefadvisor_head=string
 
 interface refGen{advisor:IRefadvisor}
-
-
-interface IRefadvisorStar extends IRefBase
-{
-id:number
-star:number
-costItemID:number
-costItemNum:number
-skillIcon:string
-skillName:string
-desc:string
-modify:any[]
-impactData:any[]
-cardId?:number
-}
-type IRefadvisorStar_id=number
-type IRefadvisorStar_star=number
-type IRefadvisorStar_costItemID=number
-type IRefadvisorStar_costItemNum=number
-type IRefadvisorStar_skillIcon=string
-type IRefadvisorStar_skillName=string
-type IRefadvisorStar_desc=string
-type IRefadvisorStar_modify=any[]
-type IRefadvisorStar_impactData=any[]
-type IRefadvisorStar_cardId=number
-
-interface refGen{advisorStar:IRefadvisorStar}
-
-
-interface IRefapprentice extends IRefBase
-{
-id:number
-roleLevel:number
-name:string
-icon:string
-}
-type IRefapprentice_id=number
-type IRefapprentice_roleLevel=number
-type IRefapprentice_name=string
-type IRefapprentice_icon=string
-
-interface refGen{apprentice:IRefapprentice}
-
-
-interface IRefapprenticeLevel extends IRefBase
-{
-level:number
-consumeId:number
-number:number
-attack:number
-}
-type IRefapprenticeLevel_level=number
-type IRefapprenticeLevel_consumeId=number
-type IRefapprenticeLevel_number=number
-type IRefapprenticeLevel_attack=number
-
-interface refGen{apprenticeLevel:IRefapprenticeLevel}
-
-
-interface IRefarmy extends IRefBase
-{
-id:number
-resId:number
-costItemID:number
-name:string
-isShow:number
-model:string
-iconKaPai:string
-armyType:string
-icon:string
-hp:number
-atk:number
-spd:number
-recruit:number
-cd:number
-max:number
-attackRange:number
-findRange:number
-attackPriority:number
-attackType:number
-isFly:number
-unlock:number
-order:number
-prototypeSize:number
-showSize:number
-shadowSize:any[]
-desc1?:string
-hp_rate?:any[]
-}
-type IRefarmy_id=number
-type IRefarmy_resId=number
-type IRefarmy_costItemID=number
-type IRefarmy_name=string
-type IRefarmy_isShow=number
-type IRefarmy_model=string
-type IRefarmy_iconKaPai=string
-type IRefarmy_armyType=string
-type IRefarmy_icon=string
-type IRefarmy_hp=number
-type IRefarmy_atk=number
-type IRefarmy_spd=number
-type IRefarmy_recruit=number
-type IRefarmy_cd=number
-type IRefarmy_max=number
-type IRefarmy_attackRange=number
-type IRefarmy_findRange=number
-type IRefarmy_attackPriority=number
-type IRefarmy_attackType=number
-type IRefarmy_isFly=number
-type IRefarmy_unlock=number
-type IRefarmy_order=number
-type IRefarmy_prototypeSize=number
-type IRefarmy_showSize=number
-type IRefarmy_shadowSize=any[]
-type IRefarmy_desc1=string
-type IRefarmy_hp_rate=any[]
-
-interface refGen{army:IRefarmy}
 
 
 interface IRefarmyLevel extends IRefBase
@@ -288,25 +153,6 @@ type IRefarmySkin_model=string
 interface refGen{armySkin:IRefarmySkin}
 
 
-interface IRefarmySkinStar extends IRefBase
-{
-id:number
-star:number
-costItemID:number
-costItemNum:number
-desc:string
-modify:any[]
-}
-type IRefarmySkinStar_id=number
-type IRefarmySkinStar_star=number
-type IRefarmySkinStar_costItemID=number
-type IRefarmySkinStar_costItemNum=number
-type IRefarmySkinStar_desc=string
-type IRefarmySkinStar_modify=any[]
-
-interface refGen{armySkinStar:IRefarmySkinStar}
-
-
 interface IRefartifact extends IRefBase
 {
 id:number
@@ -343,35 +189,6 @@ type IRefartifactLevel_costGold=number
 type IRefartifactLevel_entryValue1=number
 
 interface refGen{artifactLevel:IRefartifactLevel}
-
-
-interface IRefartifactStar extends IRefBase
-{
-id:number
-rarity:number
-cost0:any
-cost1:any
-cost2:any
-desc1:string
-desc2:string
-desc3:string
-modify1:any[]
-modify2:any[]
-modify3:any[]
-}
-type IRefartifactStar_id=number
-type IRefartifactStar_rarity=number
-type IRefartifactStar_cost0=any
-type IRefartifactStar_cost1=any
-type IRefartifactStar_cost2=any
-type IRefartifactStar_desc1=string
-type IRefartifactStar_desc2=string
-type IRefartifactStar_desc3=string
-type IRefartifactStar_modify1=any[]
-type IRefartifactStar_modify2=any[]
-type IRefartifactStar_modify3=any[]
-
-interface refGen{artifactStar:IRefartifactStar}
 
 
 interface IRefaudioConfig extends IRefBase
@@ -457,25 +274,6 @@ type IRefbaseBuildingLevel_produceCap=number
 interface refGen{baseBuildingLevel:IRefbaseBuildingLevel}
 
 
-interface IRefbattleModel extends IRefBase
-{
-key:string
-model:string
-collisionType:number
-prototypeSizeX:number
-prototypeSizeY?:number
-angle?:number
-}
-type IRefbattleModel_key=string
-type IRefbattleModel_model=string
-type IRefbattleModel_collisionType=number
-type IRefbattleModel_prototypeSizeX=number
-type IRefbattleModel_prototypeSizeY=number
-type IRefbattleModel_angle=number
-
-interface refGen{battleModel:IRefbattleModel}
-
-
 interface IRefbattleTokenConfig extends IRefBase
 {
 key:string
@@ -519,19 +317,6 @@ type IRefbattleTokenReward_level=number
 type IRefbattleTokenReward_reward=any[]
 
 interface refGen{battleTokenReward:IRefbattleTokenReward}
-
-
-interface IRefbfPersonRankAward extends IRefBase
-{
-id:number
-rank:any[]
-reward:any[]
-}
-type IRefbfPersonRankAward_id=number
-type IRefbfPersonRankAward_rank=any[]
-type IRefbfPersonRankAward_reward=any[]
-
-interface refGen{bfPersonRankAward:IRefbfPersonRankAward}
 
 
 interface IRefbfUnionRankAward extends IRefBase
@@ -951,27 +736,6 @@ type IRefbuild_buildSize=number
 interface refGen{build:IRefbuild}
 
 
-interface IRefbuySta extends IRefBase
-{
-id:number
-buyTimes:number
-payType:number
-resId:number
-numbers:any[]
-iconKey:string
-rewards:any[]
-}
-type IRefbuySta_id=number
-type IRefbuySta_buyTimes=number
-type IRefbuySta_payType=number
-type IRefbuySta_resId=number
-type IRefbuySta_numbers=any[]
-type IRefbuySta_iconKey=string
-type IRefbuySta_rewards=any[]
-
-interface refGen{buySta:IRefbuySta}
-
-
 interface IRefcardLevelUp extends IRefBase
 {
 id:number
@@ -999,17 +763,6 @@ type IRefcardLevelUp_skillList=any[]
 type IRefcardLevelUp_modifyDesc=string
 
 interface refGen{cardLevelUp:IRefcardLevelUp}
-
-
-interface IRefcardUiArt extends IRefBase
-{
-key:string
-path:string
-}
-type IRefcardUiArt_key=string
-type IRefcardUiArt_path=string
-
-interface refGen{cardUiArt:IRefcardUiArt}
 
 
 interface IRefcardUiArtCamp extends IRefBase
@@ -1159,19 +912,6 @@ type IRefcelebrationTarget_rewards=any[]
 interface refGen{celebrationTarget:IRefcelebrationTarget}
 
 
-interface IRefchapterAttrAddition extends IRefBase
-{
-stuckDay:number
-attrStr:any[]
-nextDay:number
-}
-type IRefchapterAttrAddition_stuckDay=number
-type IRefchapterAttrAddition_attrStr=any[]
-type IRefchapterAttrAddition_nextDay=number
-
-interface refGen{chapterAttrAddition:IRefchapterAttrAddition}
-
-
 interface IRefchapterName extends IRefBase
 {
 chapterId:number
@@ -1183,44 +923,6 @@ type IRefchapterName_chapterTitle=string
 type IRefchapterName_chapterName=string
 
 interface refGen{chapterName:IRefchapterName}
-
-
-interface IRefchapterRankAward extends IRefBase
-{
-id:number
-type:number
-text:string
-reward:any[]
-}
-type IRefchapterRankAward_id=number
-type IRefchapterRankAward_type=number
-type IRefchapterRankAward_text=string
-type IRefchapterRankAward_reward=any[]
-
-interface refGen{chapterRankAward:IRefchapterRankAward}
-
-
-interface IRefciFu extends IRefBase
-{
-level:number
-cifu:number
-rmb:number
-times:number
-rewards:any[]
-name:any[]
-icon:any[]
-desc:any[]
-}
-type IRefciFu_level=number
-type IRefciFu_cifu=number
-type IRefciFu_rmb=number
-type IRefciFu_times=number
-type IRefciFu_rewards=any[]
-type IRefciFu_name=any[]
-type IRefciFu_icon=any[]
-type IRefciFu_desc=any[]
-
-interface refGen{ciFu:IRefciFu}
 
 
 interface IRefdayChallengeActTask extends IRefBase
@@ -1288,19 +990,6 @@ type IRefdefenceModWave_restMonsterNum=number
 type IRefdefenceModWave_monsterType=number
 
 interface refGen{defenceModWave:IRefdefenceModWave}
-
-
-interface IRefdefenceWaveReward extends IRefBase
-{
-startId:number
-order:number
-waveRewards:any[]
-}
-type IRefdefenceWaveReward_startId=number
-type IRefdefenceWaveReward_order=number
-type IRefdefenceWaveReward_waveRewards=any[]
-
-interface refGen{defenceWaveReward:IRefdefenceWaveReward}
 
 
 interface IRefequip extends IRefBase
@@ -1399,21 +1088,6 @@ type IRefequipRank_add3=number
 interface refGen{equipRank:IRefequipRank}
 
 
-interface IRefequipResonance extends IRefBase
-{
-id:number
-quality:number
-qualityname:string
-addDamagePer:number
-}
-type IRefequipResonance_id=number
-type IRefequipResonance_quality=number
-type IRefequipResonance_qualityname=string
-type IRefequipResonance_addDamagePer=number
-
-interface refGen{equipResonance:IRefequipResonance}
-
-
 interface IRefequipType extends IRefBase
 {
 type:number
@@ -1444,70 +1118,6 @@ type IReffirstRechargeNew_rewards2=any[]
 type IReffirstRechargeNew_rewards3=any[]
 
 interface refGen{firstRechargeNew:IReffirstRechargeNew}
-
-
-interface IReffirstRechargeShop extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-interval:number
-}
-type IReffirstRechargeShop_id=number
-type IReffirstRechargeShop_desc=string
-type IReffirstRechargeShop_rewards=any[]
-type IReffirstRechargeShop_priceType=number
-type IReffirstRechargeShop_cost=number
-type IReffirstRechargeShop_interval=number
-
-interface refGen{firstRechargeShop:IReffirstRechargeShop}
-
-
-interface IReffundPlan extends IRefBase
-{
-type:number
-stage:number
-resId:number
-order:number
-openCostItemResId:number
-openCostItemNum:number
-rewardPlan:number
-}
-type IReffundPlan_type=number
-type IReffundPlan_stage=number
-type IReffundPlan_resId=number
-type IReffundPlan_order=number
-type IReffundPlan_openCostItemResId=number
-type IReffundPlan_openCostItemNum=number
-type IReffundPlan_rewardPlan=number
-
-interface refGen{fundPlan:IReffundPlan}
-
-
-interface IReffundReward extends IRefBase
-{
-plan:number
-level:number
-reward:any[]
-}
-type IReffundReward_plan=number
-type IReffundReward_level=number
-type IReffundReward_reward=any[]
-
-interface refGen{fundReward:IReffundReward}
-
-
-interface IRefgameCircleConfig extends IRefBase
-{
-likeNum:number
-likeReward:any[]
-}
-type IRefgameCircleConfig_likeNum=number
-type IRefgameCircleConfig_likeReward=any[]
-
-interface refGen{gameCircleConfig:IRefgameCircleConfig}
 
 
 interface IRefgameConfig extends IRefBase
@@ -1812,25 +1422,6 @@ type IRefguanka_attrRate=number
 interface refGen{guanka:IRefguanka}
 
 
-interface IRefguanka1 extends IRefBase
-{
-type:number
-order:number
-time:number
-tlRate:any[]
-tlMonsterNum:any[]
-attrRate:number
-}
-type IRefguanka1_type=number
-type IRefguanka1_order=number
-type IRefguanka1_time=number
-type IRefguanka1_tlRate=any[]
-type IRefguanka1_tlMonsterNum=any[]
-type IRefguanka1_attrRate=number
-
-interface refGen{guanka1:IRefguanka1}
-
-
 interface IRefguankaChapter extends IRefBase
 {
 chapter:number
@@ -1846,60 +1437,6 @@ type IRefguankaChapter_star=number
 type IRefguankaChapter_pool=number
 
 interface refGen{guankaChapter:IRefguankaChapter}
-
-
-interface IRefguankaFBconfig extends IRefBase
-{
-id:number
-instanceType:number
-name:string
-total:number
-jump?:any[]
-help:string
-desc?:string
-goods?:any[]
-systemId?:number
-rankType:number
-time?:any[]
-}
-type IRefguankaFBconfig_id=number
-type IRefguankaFBconfig_instanceType=number
-type IRefguankaFBconfig_name=string
-type IRefguankaFBconfig_total=number
-type IRefguankaFBconfig_jump=any[]
-type IRefguankaFBconfig_help=string
-type IRefguankaFBconfig_desc=string
-type IRefguankaFBconfig_goods=any[]
-type IRefguankaFBconfig_systemId=number
-type IRefguankaFBconfig_rankType=number
-type IRefguankaFBconfig_time=any[]
-
-interface refGen{guankaFBconfig:IRefguankaFBconfig}
-
-
-interface IRefguankaFbType extends IRefBase
-{
-guanKaType:number
-battleType:number
-showInstanceName:number
-selectCardType:number
-showLevel:number
-completeTime:number
-showPreviewReward?:number
-showHurt?:number
-bossCrazeTime?:number
-}
-type IRefguankaFbType_guanKaType=number
-type IRefguankaFbType_battleType=number
-type IRefguankaFbType_showInstanceName=number
-type IRefguankaFbType_selectCardType=number
-type IRefguankaFbType_showLevel=number
-type IRefguankaFbType_completeTime=number
-type IRefguankaFbType_showPreviewReward=number
-type IRefguankaFbType_showHurt=number
-type IRefguankaFbType_bossCrazeTime=number
-
-interface refGen{guankaFbType:IRefguankaFbType}
 
 
 interface IRefguankaGift extends IRefBase
@@ -1921,71 +1458,6 @@ type IRefguankaGift_limit=number
 type IRefguankaGift_discount=number
 
 interface refGen{guankaGift:IRefguankaGift}
-
-
-interface IRefguankaHitLv extends IRefBase
-{
-instanceType:number
-Leve:number
-hit:number
-}
-type IRefguankaHitLv_instanceType=number
-type IRefguankaHitLv_Leve=number
-type IRefguankaHitLv_hit=number
-
-interface refGen{guankaHitLv:IRefguankaHitLv}
-
-
-interface IRefguankaLV extends IRefBase
-{
-instanceType:number
-battleLeve:number
-hpRate:number
-atkRate:number
-hitRate:number
-}
-type IRefguankaLV_instanceType=number
-type IRefguankaLV_battleLeve=number
-type IRefguankaLV_hpRate=number
-type IRefguankaLV_atkRate=number
-type IRefguankaLV_hitRate=number
-
-interface refGen{guankaLV:IRefguankaLV}
-
-
-interface IRefguankaMarch extends IRefBase
-{
-id:number
-order:number
-time:number
-monsterId:number
-battlezoom:number
-num:number
-unit:number
-height:number
-hpRate:number
-atkRate:number
-levelExp:number
-nextOrderMonsterNum:number
-nextOrderNeedTime:number
-skillroulettenum?:number
-}
-type IRefguankaMarch_id=number
-type IRefguankaMarch_order=number
-type IRefguankaMarch_time=number
-type IRefguankaMarch_monsterId=number
-type IRefguankaMarch_battlezoom=number
-type IRefguankaMarch_num=number
-type IRefguankaMarch_unit=number
-type IRefguankaMarch_height=number
-type IRefguankaMarch_hpRate=number
-type IRefguankaMarch_atkRate=number
-type IRefguankaMarch_levelExp=number
-type IRefguankaMarch_nextOrderMonsterNum=number
-type IRefguankaMarch_nextOrderNeedTime=number
-type IRefguankaMarch_skillroulettenum=number
-
-interface refGen{guankaMarch:IRefguankaMarch}
 
 
 interface IRefguankaReward extends IRefBase
@@ -2037,84 +1509,6 @@ type IRefguankaReward_idleRewards=any[]
 interface refGen{guankaReward:IRefguankaReward}
 
 
-interface IRefguankaReward1 extends IRefBase
-{
-level:number
-guanKaType:number
-marchId:number
-hpRate:number
-atkRate:number
-tlMonster:any[]
-tlBoss:any[]
-buff:any
-guankaHp:number
-battleTime:number
-}
-type IRefguankaReward1_level=number
-type IRefguankaReward1_guanKaType=number
-type IRefguankaReward1_marchId=number
-type IRefguankaReward1_hpRate=number
-type IRefguankaReward1_atkRate=number
-type IRefguankaReward1_tlMonster=any[]
-type IRefguankaReward1_tlBoss=any[]
-type IRefguankaReward1_buff=any
-type IRefguankaReward1_guankaHp=number
-type IRefguankaReward1_battleTime=number
-
-interface refGen{guankaReward1:IRefguankaReward1}
-
-
-interface IRefguankaReward2 extends IRefBase
-{
-level:number
-stage:number
-guanKaType:number
-tlMonster:any[]
-tlBoss:any[]
-buff:any
-guankaHp:number
-battleTime:number
-}
-type IRefguankaReward2_level=number
-type IRefguankaReward2_stage=number
-type IRefguankaReward2_guanKaType=number
-type IRefguankaReward2_tlMonster=any[]
-type IRefguankaReward2_tlBoss=any[]
-type IRefguankaReward2_buff=any
-type IRefguankaReward2_guankaHp=number
-type IRefguankaReward2_battleTime=number
-
-interface refGen{guankaReward2:IRefguankaReward2}
-
-
-interface IRefguankaSkillLevelUp extends IRefBase
-{
-type:number
-level:number
-exp:number
-}
-type IRefguankaSkillLevelUp_type=number
-type IRefguankaSkillLevelUp_level=number
-type IRefguankaSkillLevelUp_exp=number
-
-interface refGen{guankaSkillLevelUp:IRefguankaSkillLevelUp}
-
-
-interface IRefguankaStar extends IRefBase
-{
-pool:number
-star:number
-starDesc:string
-reward:any[]
-}
-type IRefguankaStar_pool=number
-type IRefguankaStar_star=number
-type IRefguankaStar_starDesc=string
-type IRefguankaStar_reward=any[]
-
-interface refGen{guankaStar:IRefguankaStar}
-
-
 interface IRefguards extends IRefBase
 {
 id:number
@@ -2152,69 +1546,6 @@ type IRefguards_head=string
 type IRefguards_rmb=number
 
 interface refGen{guards:IRefguards}
-
-
-interface IRefguardsLevel extends IRefBase
-{
-level:number
-costItemId:number
-costNum:number
-costGold:number
-entryValue1:number
-entryValue2:number
-entryValue3:number
-}
-type IRefguardsLevel_level=number
-type IRefguardsLevel_costItemId=number
-type IRefguardsLevel_costNum=number
-type IRefguardsLevel_costGold=number
-type IRefguardsLevel_entryValue1=number
-type IRefguardsLevel_entryValue2=number
-type IRefguardsLevel_entryValue3=number
-
-interface refGen{guardsLevel:IRefguardsLevel}
-
-
-interface IRefguardsRank extends IRefBase
-{
-id:number
-qualityLevel:number
-quality:number
-rarity:number
-cost:number
-qualityName:string
-skillOpen:any[]
-inherit:number
-entryName1:number
-entryName2:number
-entryName3:number
-}
-type IRefguardsRank_id=number
-type IRefguardsRank_qualityLevel=number
-type IRefguardsRank_quality=number
-type IRefguardsRank_rarity=number
-type IRefguardsRank_cost=number
-type IRefguardsRank_qualityName=string
-type IRefguardsRank_skillOpen=any[]
-type IRefguardsRank_inherit=number
-type IRefguardsRank_entryName1=number
-type IRefguardsRank_entryName2=number
-type IRefguardsRank_entryName3=number
-
-interface refGen{guardsRank:IRefguardsRank}
-
-
-interface IRefguoGuanZJConfig extends IRefBase
-{
-id:number
-stage:number
-rewards:any[]
-}
-type IRefguoGuanZJConfig_id=number
-type IRefguoGuanZJConfig_stage=number
-type IRefguoGuanZJConfig_rewards=any[]
-
-interface refGen{guoGuanZJConfig:IRefguoGuanZJConfig}
 
 
 interface IRefhead extends IRefBase
@@ -2257,35 +1588,6 @@ type IRefheroSkill_skill=number
 type IRefheroSkill_iconKaPai=string
 
 interface refGen{heroSkill:IRefheroSkill}
-
-
-interface IRefheroSkillLevel extends IRefBase
-{
-id:number
-level:number
-costItemID:number
-costItemNum:number
-modify:any[]
-impactData:any[]
-skillIcon:string
-skillName:string
-desc:string
-attribute:string
-Value:number
-}
-type IRefheroSkillLevel_id=number
-type IRefheroSkillLevel_level=number
-type IRefheroSkillLevel_costItemID=number
-type IRefheroSkillLevel_costItemNum=number
-type IRefheroSkillLevel_modify=any[]
-type IRefheroSkillLevel_impactData=any[]
-type IRefheroSkillLevel_skillIcon=string
-type IRefheroSkillLevel_skillName=string
-type IRefheroSkillLevel_desc=string
-type IRefheroSkillLevel_attribute=string
-type IRefheroSkillLevel_Value=number
-
-interface refGen{heroSkillLevel:IRefheroSkillLevel}
 
 
 interface IReficon extends IRefBase
@@ -2485,76 +1787,6 @@ type IReflevelMapGrideReward_rewardGroup=any[]
 interface refGen{levelMapGrideReward:IReflevelMapGrideReward}
 
 
-interface IReflimitedTimeBundle extends IRefBase
-{
-id:number
-condition:number
-param1:number
-param2:number
-guanqia:number
-rewards:any[]
-interval:number
-limitType:number
-limit:number
-desc:string
-rmb:number
-}
-type IReflimitedTimeBundle_id=number
-type IReflimitedTimeBundle_condition=number
-type IReflimitedTimeBundle_param1=number
-type IReflimitedTimeBundle_param2=number
-type IReflimitedTimeBundle_guanqia=number
-type IReflimitedTimeBundle_rewards=any[]
-type IReflimitedTimeBundle_interval=number
-type IReflimitedTimeBundle_limitType=number
-type IReflimitedTimeBundle_limit=number
-type IReflimitedTimeBundle_desc=string
-type IReflimitedTimeBundle_rmb=number
-
-interface refGen{limitedTimeBundle:IReflimitedTimeBundle}
-
-
-interface IReflimitTimeCard extends IRefBase
-{
-resId:number
-name:string
-type:number
-buyCostCoinNum:number
-continueDays:number
-}
-type IReflimitTimeCard_resId=number
-type IReflimitTimeCard_name=string
-type IReflimitTimeCard_type=number
-type IReflimitTimeCard_buyCostCoinNum=number
-type IReflimitTimeCard_continueDays=number
-
-interface refGen{limitTimeCard:IReflimitTimeCard}
-
-
-interface IReflockMonsterLevel extends IRefBase
-{
-level:number
-firstPassRewards:any[]
-boxRewards:any[]
-}
-type IReflockMonsterLevel_level=number
-type IReflockMonsterLevel_firstPassRewards=any[]
-type IReflockMonsterLevel_boxRewards=any[]
-
-interface refGen{lockMonsterLevel:IReflockMonsterLevel}
-
-
-interface IReflockMonsterRefreshCost extends IRefBase
-{
-refreshNum:number
-cost:number
-}
-type IReflockMonsterRefreshCost_refreshNum=number
-type IReflockMonsterRefreshCost_cost=number
-
-interface refGen{lockMonsterRefreshCost:IReflockMonsterRefreshCost}
-
-
 interface IReflottery extends IRefBase
 {
 id:number
@@ -2598,135 +1830,6 @@ type IReflottery_limit=number
 type IReflottery_battletokenType=number
 
 interface refGen{lottery:IReflottery}
-
-
-interface IReflotteryshop1 extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-limitType:number
-limitDesc:string
-freeTimes:number
-adTimes:number
-limit:number
-}
-type IReflotteryshop1_id=number
-type IReflotteryshop1_desc=string
-type IReflotteryshop1_rewards=any[]
-type IReflotteryshop1_priceType=number
-type IReflotteryshop1_cost=number
-type IReflotteryshop1_limitType=number
-type IReflotteryshop1_limitDesc=string
-type IReflotteryshop1_freeTimes=number
-type IReflotteryshop1_adTimes=number
-type IReflotteryshop1_limit=number
-
-interface refGen{lotteryshop1:IReflotteryshop1}
-
-
-interface IReflotteryshop2 extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-limitType:number
-limitDesc:string
-freeTimes:number
-adTimes:number
-limit:number
-}
-type IReflotteryshop2_id=number
-type IReflotteryshop2_desc=string
-type IReflotteryshop2_rewards=any[]
-type IReflotteryshop2_priceType=number
-type IReflotteryshop2_cost=number
-type IReflotteryshop2_limitType=number
-type IReflotteryshop2_limitDesc=string
-type IReflotteryshop2_freeTimes=number
-type IReflotteryshop2_adTimes=number
-type IReflotteryshop2_limit=number
-
-interface refGen{lotteryshop2:IReflotteryshop2}
-
-
-interface IReflotteryshop3 extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-limitType:number
-limitDesc:string
-freeTimes:number
-adTimes:number
-limit:number
-}
-type IReflotteryshop3_id=number
-type IReflotteryshop3_desc=string
-type IReflotteryshop3_rewards=any[]
-type IReflotteryshop3_priceType=number
-type IReflotteryshop3_cost=number
-type IReflotteryshop3_limitType=number
-type IReflotteryshop3_limitDesc=string
-type IReflotteryshop3_freeTimes=number
-type IReflotteryshop3_adTimes=number
-type IReflotteryshop3_limit=number
-
-interface refGen{lotteryshop3:IReflotteryshop3}
-
-
-interface IReflotteryshop4 extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-limitType:number
-limitDesc:string
-freeTimes:number
-adTimes:number
-limit:number
-}
-type IReflotteryshop4_id=number
-type IReflotteryshop4_desc=string
-type IReflotteryshop4_rewards=any[]
-type IReflotteryshop4_priceType=number
-type IReflotteryshop4_cost=number
-type IReflotteryshop4_limitType=number
-type IReflotteryshop4_limitDesc=string
-type IReflotteryshop4_freeTimes=number
-type IReflotteryshop4_adTimes=number
-type IReflotteryshop4_limit=number
-
-interface refGen{lotteryshop4:IReflotteryshop4}
-
-
-interface IReflotterytask extends IRefBase
-{
-resId:number
-subType:number
-targetType:number
-param:any
-reward:any[]
-name:string
-goto:number
-}
-type IReflotterytask_resId=number
-type IReflotterytask_subType=number
-type IReflotterytask_targetType=number
-type IReflotterytask_param=any
-type IReflotterytask_reward=any[]
-type IReflotterytask_name=string
-type IReflotterytask_goto=number
-
-interface refGen{lotterytask:IReflotterytask}
 
 
 interface IRefmapconfig extends IRefBase
@@ -2787,21 +1890,6 @@ type IRefmL_key=string
 type IRefmL_name=string
 
 interface refGen{mL:IRefmL}
-
-
-interface IRefmodelRef extends IRefBase
-{
-key:string
-battlePath:string
-path:string
-effectTime?:number
-}
-type IRefmodelRef_key=string
-type IRefmodelRef_battlePath=string
-type IRefmodelRef_path=string
-type IRefmodelRef_effectTime=number
-
-interface refGen{modelRef:IRefmodelRef}
 
 
 interface IRefmonster extends IRefBase
@@ -3058,25 +2146,6 @@ type IRefneutralResourceGroup_icon=string
 interface refGen{neutralResourceGroup:IRefneutralResourceGroup}
 
 
-interface IRefnewTreasureBoxCardPool extends IRefBase
-{
-cardBoxID:number
-poolType:number
-cardBoxItemID:any[]
-heroNumRange:string
-heroDrawMax:number
-heroWeight:number
-}
-type IRefnewTreasureBoxCardPool_cardBoxID=number
-type IRefnewTreasureBoxCardPool_poolType=number
-type IRefnewTreasureBoxCardPool_cardBoxItemID=any[]
-type IRefnewTreasureBoxCardPool_heroNumRange=string
-type IRefnewTreasureBoxCardPool_heroDrawMax=number
-type IRefnewTreasureBoxCardPool_heroWeight=number
-
-interface refGen{newTreasureBoxCardPool:IRefnewTreasureBoxCardPool}
-
-
 interface IRefnewTreasureBoxConfig extends IRefBase
 {
 cardBoxID:number
@@ -3089,6 +2158,7 @@ cardBoxLimitNumber:string
 cardBoxProtectTimes:number
 protectPoolDraw:string
 cardBoxName:string
+cardBoxIconName:string
 }
 type IRefnewTreasureBoxConfig_cardBoxID=number
 type IRefnewTreasureBoxConfig_cardBoxOpenTime=number
@@ -3100,33 +2170,9 @@ type IRefnewTreasureBoxConfig_cardBoxLimitNumber=string
 type IRefnewTreasureBoxConfig_cardBoxProtectTimes=number
 type IRefnewTreasureBoxConfig_protectPoolDraw=string
 type IRefnewTreasureBoxConfig_cardBoxName=string
+type IRefnewTreasureBoxConfig_cardBoxIconName=string
 
 interface refGen{newTreasureBoxConfig:IRefnewTreasureBoxConfig}
-
-
-interface IRefnewTreasureBoxQueueConfig extends IRefBase
-{
-lineId:number
-lineBattleChapter:any[]
-lineCon:number
-lineTriggerType:number
-triggerValue:number
-triggerTimes:number
-lineOrder:number
-lineRandom:number
-lineBox:any[]
-}
-type IRefnewTreasureBoxQueueConfig_lineId=number
-type IRefnewTreasureBoxQueueConfig_lineBattleChapter=any[]
-type IRefnewTreasureBoxQueueConfig_lineCon=number
-type IRefnewTreasureBoxQueueConfig_lineTriggerType=number
-type IRefnewTreasureBoxQueueConfig_triggerValue=number
-type IRefnewTreasureBoxQueueConfig_triggerTimes=number
-type IRefnewTreasureBoxQueueConfig_lineOrder=number
-type IRefnewTreasureBoxQueueConfig_lineRandom=number
-type IRefnewTreasureBoxQueueConfig_lineBox=any[]
-
-interface refGen{newTreasureBoxQueueConfig:IRefnewTreasureBoxQueueConfig}
 
 
 interface IRefnpcTeam extends IRefBase
@@ -3244,72 +2290,6 @@ type IRefplotCard_complete=number
 interface refGen{plotCard:IRefplotCard}
 
 
-interface IRefplotDialogue extends IRefBase
-{
-id:number
-order:number
-roleId:number
-content:string
-offset:any[]
-next:number
-modify:any[]
-}
-type IRefplotDialogue_id=number
-type IRefplotDialogue_order=number
-type IRefplotDialogue_roleId=number
-type IRefplotDialogue_content=string
-type IRefplotDialogue_offset=any[]
-type IRefplotDialogue_next=number
-type IRefplotDialogue_modify=any[]
-
-interface refGen{plotDialogue:IRefplotDialogue}
-
-
-interface IRefplotGuanka extends IRefBase
-{
-level:number
-boss:number
-contentId:number
-offset:any[]
-}
-type IRefplotGuanka_level=number
-type IRefplotGuanka_boss=number
-type IRefplotGuanka_contentId=number
-type IRefplotGuanka_offset=any[]
-
-interface refGen{plotGuanka:IRefplotGuanka}
-
-
-interface IRefprivilegeMonthCardInfo extends IRefBase
-{
-resId:number
-privilege:any[]
-buyReward:any[]
-dayReward:any[]
-}
-type IRefprivilegeMonthCardInfo_resId=number
-type IRefprivilegeMonthCardInfo_privilege=any[]
-type IRefprivilegeMonthCardInfo_buyReward=any[]
-type IRefprivilegeMonthCardInfo_dayReward=any[]
-
-interface refGen{privilegeMonthCardInfo:IRefprivilegeMonthCardInfo}
-
-
-interface IRefproDesc extends IRefBase
-{
-key:string
-desc1:string
-desc2:string
-qualityColour1:number
-}
-type IRefproDesc_key=string
-type IRefproDesc_desc1=string
-type IRefproDesc_desc2=string
-type IRefproDesc_qualityColour1=number
-
-interface refGen{proDesc:IRefproDesc}
-
-
 interface IRefpvpArtifact extends IRefBase
 {
 artifactId:number
@@ -3345,35 +2325,6 @@ type IRefpvpArtifact_remark=string
 interface refGen{pvpArtifact:IRefpvpArtifact}
 
 
-interface IRefpvpArtifactAscend extends IRefBase
-{
-id:number
-level:number
-costItemID:number
-costItemNum:number
-modify:any[]
-impactData:any[]
-skillIcon:string
-skillName:string
-desc:string
-attribute:string
-Value:number
-}
-type IRefpvpArtifactAscend_id=number
-type IRefpvpArtifactAscend_level=number
-type IRefpvpArtifactAscend_costItemID=number
-type IRefpvpArtifactAscend_costItemNum=number
-type IRefpvpArtifactAscend_modify=any[]
-type IRefpvpArtifactAscend_impactData=any[]
-type IRefpvpArtifactAscend_skillIcon=string
-type IRefpvpArtifactAscend_skillName=string
-type IRefpvpArtifactAscend_desc=string
-type IRefpvpArtifactAscend_attribute=string
-type IRefpvpArtifactAscend_Value=number
-
-interface refGen{pvpArtifactAscend:IRefpvpArtifactAscend}
-
-
 interface IRefpvpAttrMap extends IRefBase
 {
 legacyKey:string
@@ -3405,25 +2356,25 @@ interface refGen{pvpAttrMap:IRefpvpAttrMap}
 
 interface IRefpvpBond extends IRefBase
 {
-id:string
-name:string
 condition:string
-threshold:number
 effect:string
-trait:string
-target:string
 effectType:string
 effectValue:number
+id:string
+name:string
+target:string
+threshold:number
+trait:string
 }
-type IRefpvpBond_id=string
-type IRefpvpBond_name=string
 type IRefpvpBond_condition=string
-type IRefpvpBond_threshold=number
 type IRefpvpBond_effect=string
-type IRefpvpBond_trait=string
-type IRefpvpBond_target=string
 type IRefpvpBond_effectType=string
 type IRefpvpBond_effectValue=number
+type IRefpvpBond_id=string
+type IRefpvpBond_name=string
+type IRefpvpBond_target=string
+type IRefpvpBond_threshold=number
+type IRefpvpBond_trait=string
 
 interface refGen{pvpBond:IRefpvpBond}
 
@@ -3665,7 +2616,7 @@ unitId:string
 skillChainId:number
 skillName:string
 skillLevel:number
-unlockHeroLevel:number
+unlockHeroLevel?:number
 skillKind:string
 passiveScope:string
 progressionMode:string
@@ -3835,48 +2786,6 @@ type IRefpvpUnitGrowth_enabled=number
 interface refGen{pvpUnitGrowth:IRefpvpUnitGrowth}
 
 
-interface IRefqingShen extends IRefBase
-{
-id:number
-rewards:any[]
-priceType:number
-cost:number
-cost2:number
-rewards2:any[]
-rewards3:any[]
-desc:string
-tittle:string
-limit:number
-}
-type IRefqingShen_id=number
-type IRefqingShen_rewards=any[]
-type IRefqingShen_priceType=number
-type IRefqingShen_cost=number
-type IRefqingShen_cost2=number
-type IRefqingShen_rewards2=any[]
-type IRefqingShen_rewards3=any[]
-type IRefqingShen_desc=string
-type IRefqingShen_tittle=string
-type IRefqingShen_limit=number
-
-interface refGen{qingShen:IRefqingShen}
-
-
-interface IRefrechargeContinuityGift extends IRefBase
-{
-round:number
-days:number
-rewards:any[]
-finishRewards:any[]
-}
-type IRefrechargeContinuityGift_round=number
-type IRefrechargeContinuityGift_days=number
-type IRefrechargeContinuityGift_rewards=any[]
-type IRefrechargeContinuityGift_finishRewards=any[]
-
-interface refGen{rechargeContinuityGift:IRefrechargeContinuityGift}
-
-
 interface IRefrechargeDaily extends IRefBase
 {
 round:number
@@ -3941,23 +2850,6 @@ type IRefresourceShop_limit=number
 interface refGen{resourceShop:IRefresourceShop}
 
 
-interface IRefrewardClientPool extends IRefBase
-{
-contentId:number
-resId:number
-desc:string
-tlSetParam:any[]
-tlAddParam:any[]
-}
-type IRefrewardClientPool_contentId=number
-type IRefrewardClientPool_resId=number
-type IRefrewardClientPool_desc=string
-type IRefrewardClientPool_tlSetParam=any[]
-type IRefrewardClientPool_tlAddParam=any[]
-
-interface refGen{rewardClientPool:IRefrewardClientPool}
-
-
 interface IRefroleProperty extends IRefBase
 {
 resId:number
@@ -3987,43 +2879,6 @@ type IRefroleProperty_icon=string
 type IRefroleProperty_isbig=number
 
 interface refGen{roleProperty:IRefroleProperty}
-
-
-interface IRefsecretRealmAttr extends IRefBase
-{
-type:number
-attr:any[]
-attrDesc:string
-}
-type IRefsecretRealmAttr_type=number
-type IRefsecretRealmAttr_attr=any[]
-type IRefsecretRealmAttr_attrDesc=string
-
-interface refGen{secretRealmAttr:IRefsecretRealmAttr}
-
-
-interface IRefsecretRealmLevel extends IRefBase
-{
-type:number
-level:number
-firstPassRewards:any[]
-}
-type IRefsecretRealmLevel_type=number
-type IRefsecretRealmLevel_level=number
-type IRefsecretRealmLevel_firstPassRewards=any[]
-
-interface refGen{secretRealmLevel:IRefsecretRealmLevel}
-
-
-interface IRefsecretRealmRefreshCost extends IRefBase
-{
-refreshNum:number
-cost:number
-}
-type IRefsecretRealmRefreshCost_refreshNum=number
-type IRefsecretRealmRefreshCost_cost=number
-
-interface refGen{secretRealmRefreshCost:IRefsecretRealmRefreshCost}
 
 
 interface IRefserverRank extends IRefBase
@@ -4146,44 +3001,6 @@ type IRefshiMengBattleConfig_buff=any[]
 interface refGen{shiMengBattleConfig:IRefshiMengBattleConfig}
 
 
-interface IRefsigninTask extends IRefBase
-{
-resId:number
-type:number
-day:number
-round:number
-typeName:string
-name:string
-targetType:number
-param:any
-reward:any[]
-}
-type IRefsigninTask_resId=number
-type IRefsigninTask_type=number
-type IRefsigninTask_day=number
-type IRefsigninTask_round=number
-type IRefsigninTask_typeName=string
-type IRefsigninTask_name=string
-type IRefsigninTask_targetType=number
-type IRefsigninTask_param=any
-type IRefsigninTask_reward=any[]
-
-interface refGen{signinTask:IRefsigninTask}
-
-
-interface IRefskillAdditionBuff extends IRefBase
-{
-id:number
-buffType:string
-buffParam:any
-}
-type IRefskillAdditionBuff_id=number
-type IRefskillAdditionBuff_buffType=string
-type IRefskillAdditionBuff_buffParam=any
-
-interface refGen{skillAdditionBuff:IRefskillAdditionBuff}
-
-
 interface IRefskillAttr extends IRefBase
 {
 id:number
@@ -4232,44 +3049,6 @@ type IRefskillAttrModifier_armyTalent=any
 interface refGen{skillAttrModifier:IRefskillAttrModifier}
 
 
-interface IRefskillBook extends IRefBase
-{
-id:number
-skillId:number
-level:number
-modify?:any[]
-modifyDesc?:string
-display:number
-tlShowAttr:any[]
-attr:any[]
-}
-type IRefskillBook_id=number
-type IRefskillBook_skillId=number
-type IRefskillBook_level=number
-type IRefskillBook_modify=any[]
-type IRefskillBook_modifyDesc=string
-type IRefskillBook_display=number
-type IRefskillBook_tlShowAttr=any[]
-type IRefskillBook_attr=any[]
-
-interface refGen{skillBook:IRefskillBook}
-
-
-interface IRefskillBookLevel extends IRefBase
-{
-level:number
-gold:number
-itemNumber:number
-denseRoll:number
-}
-type IRefskillBookLevel_level=number
-type IRefskillBookLevel_gold=number
-type IRefskillBookLevel_itemNumber=number
-type IRefskillBookLevel_denseRoll=number
-
-interface refGen{skillBookLevel:IRefskillBookLevel}
-
-
 interface IRefskillBuff extends IRefBase
 {
 key:string
@@ -4315,58 +3094,6 @@ type IRefskillEffectDamageType_value=number
 type IRefskillEffectDamageType_name=string
 
 interface refGen{skillEffectDamageType:IRefskillEffectDamageType}
-
-
-interface IRefskillEffectShow extends IRefBase
-{
-key:string
-effects:any[]
-}
-type IRefskillEffectShow_key=string
-type IRefskillEffectShow_effects=any[]
-
-interface refGen{skillEffectShow:IRefskillEffectShow}
-
-
-interface IRefskillLevelUP extends IRefBase
-{
-id:number
-name:string
-cardType:number
-skillId?:number
-icon:string
-desc:string
-modify:any[]
-times:number
-auto:number
-hp:number
-huchiKaPai:any[]
-needKaPai:any[]
-pro:number
-career:number
-careerLevel:number
-level:number
-tipsDesc?:string
-}
-type IRefskillLevelUP_id=number
-type IRefskillLevelUP_name=string
-type IRefskillLevelUP_cardType=number
-type IRefskillLevelUP_skillId=number
-type IRefskillLevelUP_icon=string
-type IRefskillLevelUP_desc=string
-type IRefskillLevelUP_modify=any[]
-type IRefskillLevelUP_times=number
-type IRefskillLevelUP_auto=number
-type IRefskillLevelUP_hp=number
-type IRefskillLevelUP_huchiKaPai=any[]
-type IRefskillLevelUP_needKaPai=any[]
-type IRefskillLevelUP_pro=number
-type IRefskillLevelUP_career=number
-type IRefskillLevelUP_careerLevel=number
-type IRefskillLevelUP_level=number
-type IRefskillLevelUP_tipsDesc=string
-
-interface refGen{skillLevelUP:IRefskillLevelUP}
 
 
 interface IRefskillType extends IRefBase
@@ -4491,79 +3218,6 @@ type IRefspiritAnimal_attrList=any[]
 interface refGen{spiritAnimal:IRefspiritAnimal}
 
 
-interface IRefspiritAnimalBox extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-ticketDrawResId:number
-ticketDrawCostNum:number
-freeTimes:number
-smallBaodi:number
-bigBaodi:number
-limit:number
-normalDrawResId:number
-normalOneDrawCostNum:number
-normalTenDrawCostNum:number
-firstDrawResId:number
-processBox:any
-priceType:number
-cost:number
-}
-type IRefspiritAnimalBox_id=number
-type IRefspiritAnimalBox_desc=string
-type IRefspiritAnimalBox_rewards=any[]
-type IRefspiritAnimalBox_ticketDrawResId=number
-type IRefspiritAnimalBox_ticketDrawCostNum=number
-type IRefspiritAnimalBox_freeTimes=number
-type IRefspiritAnimalBox_smallBaodi=number
-type IRefspiritAnimalBox_bigBaodi=number
-type IRefspiritAnimalBox_limit=number
-type IRefspiritAnimalBox_normalDrawResId=number
-type IRefspiritAnimalBox_normalOneDrawCostNum=number
-type IRefspiritAnimalBox_normalTenDrawCostNum=number
-type IRefspiritAnimalBox_firstDrawResId=number
-type IRefspiritAnimalBox_processBox=any
-type IRefspiritAnimalBox_priceType=number
-type IRefspiritAnimalBox_cost=number
-
-interface refGen{spiritAnimalBox:IRefspiritAnimalBox}
-
-
-interface IRefspiritAnimalLevel extends IRefBase
-{
-level:number
-spiritAnimalAtk:number
-levelUpCost:any[]
-}
-type IRefspiritAnimalLevel_level=number
-type IRefspiritAnimalLevel_spiritAnimalAtk=number
-type IRefspiritAnimalLevel_levelUpCost=any[]
-
-interface refGen{spiritAnimalLevel:IRefspiritAnimalLevel}
-
-
-interface IRefspiritAnimalStep extends IRefBase
-{
-step:number
-spiritAnimalAtk:number
-roleAtk:number
-wallAddHp:number
-star:number
-quality:number
-desc:string
-}
-type IRefspiritAnimalStep_step=number
-type IRefspiritAnimalStep_spiritAnimalAtk=number
-type IRefspiritAnimalStep_roleAtk=number
-type IRefspiritAnimalStep_wallAddHp=number
-type IRefspiritAnimalStep_star=number
-type IRefspiritAnimalStep_quality=number
-type IRefspiritAnimalStep_desc=string
-
-interface refGen{spiritAnimalStep:IRefspiritAnimalStep}
-
-
 interface IRefspiritAnimalType extends IRefBase
 {
 animalId:number
@@ -4601,59 +3255,6 @@ type IRefspiritAnimalType_atkSpacing=number
 type IRefspiritAnimalType_atkRange=number
 
 interface refGen{spiritAnimalType:IRefspiritAnimalType}
-
-
-interface IRefssjjRankAward extends IRefBase
-{
-id:number
-rank:any[]
-reward:any[]
-}
-type IRefssjjRankAward_id=number
-type IRefssjjRankAward_rank=any[]
-type IRefssjjRankAward_reward=any[]
-
-interface refGen{ssjjRankAward:IRefssjjRankAward}
-
-
-interface IRefswjjShop extends IRefBase
-{
-id:number
-desc:string
-rewards:any[]
-priceType:number
-cost:number
-limitType:number
-limitDesc:string
-freeTimes:number
-adTimes:number
-limit:number
-}
-type IRefswjjShop_id=number
-type IRefswjjShop_desc=string
-type IRefswjjShop_rewards=any[]
-type IRefswjjShop_priceType=number
-type IRefswjjShop_cost=number
-type IRefswjjShop_limitType=number
-type IRefswjjShop_limitDesc=string
-type IRefswjjShop_freeTimes=number
-type IRefswjjShop_adTimes=number
-type IRefswjjShop_limit=number
-
-interface refGen{swjjShop:IRefswjjShop}
-
-
-interface IRefsystemDesc extends IRefBase
-{
-key:string
-name:string
-desc:string
-}
-type IRefsystemDesc_key=string
-type IRefsystemDesc_name=string
-type IRefsystemDesc_desc=string
-
-interface refGen{systemDesc:IRefsystemDesc}
 
 
 interface IReftaskMain extends IRefBase
@@ -4804,21 +3405,6 @@ type IRefunionShop_limit=number
 interface refGen{unionShop:IRefunionShop}
 
 
-interface IRefvaluableMonthCardInfo extends IRefBase
-{
-resId:number
-privilege:any[]
-buyReward:any[]
-dayReward:any[]
-}
-type IRefvaluableMonthCardInfo_resId=number
-type IRefvaluableMonthCardInfo_privilege=any[]
-type IRefvaluableMonthCardInfo_buyReward=any[]
-type IRefvaluableMonthCardInfo_dayReward=any[]
-
-interface refGen{valuableMonthCardInfo:IRefvaluableMonthCardInfo}
-
-
 interface IRefviewtype extends IRefBase
 {
 resId:number
@@ -4847,29 +3433,6 @@ type IRefwall_istupo=number
 interface refGen{wall:IRefwall}
 
 
-interface IRefwallSkillLevel extends IRefBase
-{
-id:number
-level:number
-itemId:number
-number:number
-modify:any[]
-openSkills:number
-icon:string
-desc:string
-}
-type IRefwallSkillLevel_id=number
-type IRefwallSkillLevel_level=number
-type IRefwallSkillLevel_itemId=number
-type IRefwallSkillLevel_number=number
-type IRefwallSkillLevel_modify=any[]
-type IRefwallSkillLevel_openSkills=number
-type IRefwallSkillLevel_icon=string
-type IRefwallSkillLevel_desc=string
-
-interface refGen{wallSkillLevel:IRefwallSkillLevel}
-
-
 interface IRefwallType extends IRefBase
 {
 type:number
@@ -4895,57 +3458,6 @@ type IRefwallType_modify=any[]
 type IRefwallType_modify2=any[]
 
 interface refGen{wallType:IRefwallType}
-
-
-interface IRefwaveReward extends IRefBase
-{
-chapter:number
-order:number
-waveRewards:any[]
-}
-type IRefwaveReward_chapter=number
-type IRefwaveReward_order=number
-type IRefwaveReward_waveRewards=any[]
-
-interface refGen{waveReward:IRefwaveReward}
-
-
-interface IRefworkShop extends IRefBase
-{
-id:number
-name:string
-itemId:number
-number:number
-openBarrier:number
-help:string
-}
-type IRefworkShop_id=number
-type IRefworkShop_name=string
-type IRefworkShop_itemId=number
-type IRefworkShop_number=number
-type IRefworkShop_openBarrier=number
-type IRefworkShop_help=string
-
-interface refGen{workShop:IRefworkShop}
-
-
-interface IRefworkShopLevel extends IRefBase
-{
-level:number
-produceTime:number
-number:number
-upLevelTime:number
-consumeGem:number
-openBarriers:any[]
-}
-type IRefworkShopLevel_level=number
-type IRefworkShopLevel_produceTime=number
-type IRefworkShopLevel_number=number
-type IRefworkShopLevel_upLevelTime=number
-type IRefworkShopLevel_consumeGem=number
-type IRefworkShopLevel_openBarriers=any[]
-
-interface refGen{workShopLevel:IRefworkShopLevel}
 
 
 interface IRefzcGuide extends IRefBase
@@ -4978,7 +3490,7 @@ type IRefzcGuideParams_key=string
 type IRefzcGuideParams_value=string
 
 interface refGen{zcGuideParams:IRefzcGuideParams}
-type TRefName="activity.json"|"activityOpen.json"|"activityTab.json"|"ad.json"|"advisor.json"|"advisorStar.json"|"apprentice.json"|"apprenticeLevel.json"|"army.json"|"armyLevel.json"|"armySkillLevelUp.json"|"armySkin.json"|"armySkinStar.json"|"artifact.json"|"artifactLevel.json"|"artifactStar.json"|"audioConfig.json"|"baseBuilding.json"|"baseBuildingLevel.json"|"battleModel.json"|"battleTokenConfig.json"|"battleTokenPlan.json"|"battleTokenReward.json"|"bfPersonRankAward.json"|"bfUnionRankAward.json"|"bigmapBuilding.json"|"bigmapBuildingLevel.json"|"bigmapBuildingProduce.json"|"bigMapCamp.json"|"bigmapCity.json"|"bigmapCityLevel.json"|"bigmapMonster.json"|"bigmapQueue.json"|"bigmapRank.json"|"bigmapResource.json"|"bigmapSchedule.json"|"bigmapScoreRule.json"|"bigmapStamina.json"|"bigmapWorld.json"|"bigNum.json"|"build.json"|"buySta.json"|"cardLevelUp.json"|"cardUiArt.json"|"cardUiArtCamp.json"|"cardUiArtClass.json"|"cardUiArtRarity.json"|"celebrationConfig.json"|"celebrationRank.json"|"celebrationShop.json"|"celebrationTarget.json"|"chapterAttrAddition.json"|"chapterName.json"|"chapterRankAward.json"|"ciFu.json"|"dayChallengeActTask.json"|"dayChallengeActTaskProgress.json"|"defenceModWave.json"|"defenceWaveReward.json"|"equip.json"|"equipLevel.json"|"equipLib.json"|"equipRank.json"|"equipResonance.json"|"equipType.json"|"firstRechargeNew.json"|"firstRechargeShop.json"|"fundPlan.json"|"fundReward.json"|"gameCircleConfig.json"|"gameConfig.json"|"gem.json"|"gemAttribute.json"|"gemBox.json"|"gemQuality.json"|"gemShop.json"|"general.json"|"generalStar.json"|"giftShop.json"|"goldShop.json"|"grade.json"|"guanka.json"|"guanka1.json"|"guankaChapter.json"|"guankaFBconfig.json"|"guankaFbType.json"|"guankaGift.json"|"guankaHitLv.json"|"guankaLV.json"|"guankaMarch.json"|"guankaReward.json"|"guankaReward1.json"|"guankaReward2.json"|"guankaSkillLevelUp.json"|"guankaStar.json"|"guards.json"|"guardsLevel.json"|"guardsRank.json"|"guoGuanZJConfig.json"|"head.json"|"heroSkill.json"|"heroSkillLevel.json"|"icon.json"|"idConfig.json"|"interactReward.json"|"item.json"|"itemBox.json"|"itemBoxPro.json"|"itemCraft.json"|"itemType.json"|"level.json"|"levelInfo.json"|"levelMapGrideReward.json"|"limitedTimeBundle.json"|"limitTimeCard.json"|"lockMonsterLevel.json"|"lockMonsterRefreshCost.json"|"lottery.json"|"lotteryshop1.json"|"lotteryshop2.json"|"lotteryshop3.json"|"lotteryshop4.json"|"lotterytask.json"|"mapconfig.json"|"mapTerrian.json"|"matchTips.json"|"mL.json"|"modelRef.json"|"monster.json"|"monsterCard.json"|"monsterSkillType.json"|"monthCardActPlan.json"|"neutralEnhanceGate.json"|"neutralResourceGroup.json"|"newTreasureBoxCardPool.json"|"newTreasureBoxConfig.json"|"newTreasureBoxQueueConfig.json"|"npcTeam.json"|"open.json"|"openGridReward.json"|"payChannel.json"|"plotCard.json"|"plotDialogue.json"|"plotGuanka.json"|"privilegeMonthCardInfo.json"|"proDesc.json"|"pvpArtifact.json"|"pvpArtifactAscend.json"|"pvpAttrMap.json"|"pvpBond.json"|"pvpCard.json"|"pvpCounter.json"|"pvpGlobal.json"|"pvpModifierOverride.json"|"pvpPity.json"|"pvpSkill.json"|"pvpSkillBinding.json"|"pvpSkillPlan.json"|"pvpStatus.json"|"pvpTile.json"|"pvpTileGen.json"|"pvpTileGenParams.json"|"pvpUnitGrowth.json"|"qingShen.json"|"rechargeContinuityGift.json"|"rechargeDaily.json"|"rechargeGiftActPlan.json"|"refToCodeEnum.json"|"resourceShop.json"|"rewardClientPool.json"|"roleProperty.json"|"secretRealmAttr.json"|"secretRealmLevel.json"|"secretRealmRefreshCost.json"|"serverRank.json"|"sevenDayPoint.json"|"sevenDayShop.json"|"sevenDayTask.json"|"share.json"|"shiMengBattleConfig.json"|"signinTask.json"|"skillAdditionBuff.json"|"skillAttr.json"|"skillAttrModifier.json"|"skillBook.json"|"skillBookLevel.json"|"skillBuff.json"|"skillEffect.json"|"skillEffectDamageType.json"|"skillEffectShow.json"|"skillLevelUP.json"|"skillType.json"|"skillView.json"|"skin.json"|"spiritAnimal.json"|"spiritAnimalBox.json"|"spiritAnimalLevel.json"|"spiritAnimalStep.json"|"spiritAnimalType.json"|"ssjjRankAward.json"|"swjjShop.json"|"systemDesc.json"|"taskMain.json"|"taskType.json"|"taskUnion.json"|"taskUnionProgress.json"|"unionDiscount.json"|"unionLevel.json"|"unionOfficial.json"|"unionShop.json"|"valuableMonthCardInfo.json"|"viewtype.json"|"wall.json"|"wallSkillLevel.json"|"wallType.json"|"waveReward.json"|"workShop.json"|"workShopLevel.json"|"zcGuide.json"|"zcGuideParams.json"
+type TRefName="activity.json"|"activityTab.json"|"ad.json"|"advisor.json"|"armyLevel.json"|"armySkillLevelUp.json"|"armySkin.json"|"artifact.json"|"artifactLevel.json"|"audioConfig.json"|"baseBuilding.json"|"baseBuildingLevel.json"|"battleTokenConfig.json"|"battleTokenPlan.json"|"battleTokenReward.json"|"bfUnionRankAward.json"|"bigmapBuilding.json"|"bigmapBuildingLevel.json"|"bigmapBuildingProduce.json"|"bigMapCamp.json"|"bigmapCity.json"|"bigmapCityLevel.json"|"bigmapMonster.json"|"bigmapQueue.json"|"bigmapRank.json"|"bigmapResource.json"|"bigmapSchedule.json"|"bigmapScoreRule.json"|"bigmapStamina.json"|"bigmapWorld.json"|"bigNum.json"|"build.json"|"cardLevelUp.json"|"cardUiArtCamp.json"|"cardUiArtClass.json"|"cardUiArtRarity.json"|"celebrationConfig.json"|"celebrationRank.json"|"celebrationShop.json"|"celebrationTarget.json"|"chapterName.json"|"dayChallengeActTask.json"|"dayChallengeActTaskProgress.json"|"defenceModWave.json"|"equip.json"|"equipLevel.json"|"equipLib.json"|"equipRank.json"|"equipType.json"|"firstRechargeNew.json"|"gameConfig.json"|"gem.json"|"gemAttribute.json"|"gemBox.json"|"gemQuality.json"|"gemShop.json"|"general.json"|"generalStar.json"|"giftShop.json"|"goldShop.json"|"grade.json"|"guanka.json"|"guankaChapter.json"|"guankaGift.json"|"guankaReward.json"|"guards.json"|"head.json"|"heroSkill.json"|"icon.json"|"idConfig.json"|"interactReward.json"|"item.json"|"itemBox.json"|"itemBoxPro.json"|"itemCraft.json"|"itemType.json"|"level.json"|"levelInfo.json"|"levelMapGrideReward.json"|"lottery.json"|"mapconfig.json"|"mapTerrian.json"|"matchTips.json"|"mL.json"|"monster.json"|"monsterCard.json"|"monsterSkillType.json"|"monthCardActPlan.json"|"neutralEnhanceGate.json"|"neutralResourceGroup.json"|"newTreasureBoxConfig.json"|"npcTeam.json"|"open.json"|"openGridReward.json"|"payChannel.json"|"plotCard.json"|"pvpArtifact.json"|"pvpAttrMap.json"|"pvpBond.json"|"pvpCard.json"|"pvpCounter.json"|"pvpGlobal.json"|"pvpModifierOverride.json"|"pvpPity.json"|"pvpSkill.json"|"pvpSkillBinding.json"|"pvpSkillPlan.json"|"pvpStatus.json"|"pvpTile.json"|"pvpTileGen.json"|"pvpTileGenParams.json"|"pvpUnitGrowth.json"|"rechargeDaily.json"|"rechargeGiftActPlan.json"|"refToCodeEnum.json"|"resourceShop.json"|"roleProperty.json"|"serverRank.json"|"sevenDayPoint.json"|"sevenDayShop.json"|"sevenDayTask.json"|"share.json"|"shiMengBattleConfig.json"|"skillAttr.json"|"skillAttrModifier.json"|"skillBuff.json"|"skillEffect.json"|"skillEffectDamageType.json"|"skillType.json"|"skillView.json"|"skin.json"|"spiritAnimal.json"|"spiritAnimalType.json"|"taskMain.json"|"taskType.json"|"taskUnion.json"|"taskUnionProgress.json"|"unionDiscount.json"|"unionLevel.json"|"unionOfficial.json"|"unionShop.json"|"viewtype.json"|"wall.json"|"wallType.json"|"zcGuide.json"|"zcGuideParams.json"
 
-type TRefName2="activity"|"activityOpen"|"activityTab"|"ad"|"advisor"|"advisorStar"|"apprentice"|"apprenticeLevel"|"army"|"armyLevel"|"armySkillLevelUp"|"armySkin"|"armySkinStar"|"artifact"|"artifactLevel"|"artifactStar"|"audioConfig"|"baseBuilding"|"baseBuildingLevel"|"battleModel"|"battleTokenConfig"|"battleTokenPlan"|"battleTokenReward"|"bfPersonRankAward"|"bfUnionRankAward"|"bigmapBuilding"|"bigmapBuildingLevel"|"bigmapBuildingProduce"|"bigMapCamp"|"bigmapCity"|"bigmapCityLevel"|"bigmapMonster"|"bigmapQueue"|"bigmapRank"|"bigmapResource"|"bigmapSchedule"|"bigmapScoreRule"|"bigmapStamina"|"bigmapWorld"|"bigNum"|"build"|"buySta"|"cardLevelUp"|"cardUiArt"|"cardUiArtCamp"|"cardUiArtClass"|"cardUiArtRarity"|"celebrationConfig"|"celebrationRank"|"celebrationShop"|"celebrationTarget"|"chapterAttrAddition"|"chapterName"|"chapterRankAward"|"ciFu"|"dayChallengeActTask"|"dayChallengeActTaskProgress"|"defenceModWave"|"defenceWaveReward"|"equip"|"equipLevel"|"equipLib"|"equipRank"|"equipResonance"|"equipType"|"firstRechargeNew"|"firstRechargeShop"|"fundPlan"|"fundReward"|"gameCircleConfig"|"gameConfig"|"gem"|"gemAttribute"|"gemBox"|"gemQuality"|"gemShop"|"general"|"generalStar"|"giftShop"|"goldShop"|"grade"|"guanka"|"guanka1"|"guankaChapter"|"guankaFBconfig"|"guankaFbType"|"guankaGift"|"guankaHitLv"|"guankaLV"|"guankaMarch"|"guankaReward"|"guankaReward1"|"guankaReward2"|"guankaSkillLevelUp"|"guankaStar"|"guards"|"guardsLevel"|"guardsRank"|"guoGuanZJConfig"|"head"|"heroSkill"|"heroSkillLevel"|"icon"|"idConfig"|"interactReward"|"item"|"itemBox"|"itemBoxPro"|"itemCraft"|"itemType"|"level"|"levelInfo"|"levelMapGrideReward"|"limitedTimeBundle"|"limitTimeCard"|"lockMonsterLevel"|"lockMonsterRefreshCost"|"lottery"|"lotteryshop1"|"lotteryshop2"|"lotteryshop3"|"lotteryshop4"|"lotterytask"|"mapconfig"|"mapTerrian"|"matchTips"|"mL"|"modelRef"|"monster"|"monsterCard"|"monsterSkillType"|"monthCardActPlan"|"neutralEnhanceGate"|"neutralResourceGroup"|"newTreasureBoxCardPool"|"newTreasureBoxConfig"|"newTreasureBoxQueueConfig"|"npcTeam"|"open"|"openGridReward"|"payChannel"|"plotCard"|"plotDialogue"|"plotGuanka"|"privilegeMonthCardInfo"|"proDesc"|"pvpArtifact"|"pvpArtifactAscend"|"pvpAttrMap"|"pvpBond"|"pvpCard"|"pvpCounter"|"pvpGlobal"|"pvpModifierOverride"|"pvpPity"|"pvpSkill"|"pvpSkillBinding"|"pvpSkillPlan"|"pvpStatus"|"pvpTile"|"pvpTileGen"|"pvpTileGenParams"|"pvpUnitGrowth"|"qingShen"|"rechargeContinuityGift"|"rechargeDaily"|"rechargeGiftActPlan"|"refToCodeEnum"|"resourceShop"|"rewardClientPool"|"roleProperty"|"secretRealmAttr"|"secretRealmLevel"|"secretRealmRefreshCost"|"serverRank"|"sevenDayPoint"|"sevenDayShop"|"sevenDayTask"|"share"|"shiMengBattleConfig"|"signinTask"|"skillAdditionBuff"|"skillAttr"|"skillAttrModifier"|"skillBook"|"skillBookLevel"|"skillBuff"|"skillEffect"|"skillEffectDamageType"|"skillEffectShow"|"skillLevelUP"|"skillType"|"skillView"|"skin"|"spiritAnimal"|"spiritAnimalBox"|"spiritAnimalLevel"|"spiritAnimalStep"|"spiritAnimalType"|"ssjjRankAward"|"swjjShop"|"systemDesc"|"taskMain"|"taskType"|"taskUnion"|"taskUnionProgress"|"unionDiscount"|"unionLevel"|"unionOfficial"|"unionShop"|"valuableMonthCardInfo"|"viewtype"|"wall"|"wallSkillLevel"|"wallType"|"waveReward"|"workShop"|"workShopLevel"|"zcGuide"|"zcGuideParams"
+type TRefName2="activity"|"activityTab"|"ad"|"advisor"|"armyLevel"|"armySkillLevelUp"|"armySkin"|"artifact"|"artifactLevel"|"audioConfig"|"baseBuilding"|"baseBuildingLevel"|"battleTokenConfig"|"battleTokenPlan"|"battleTokenReward"|"bfUnionRankAward"|"bigmapBuilding"|"bigmapBuildingLevel"|"bigmapBuildingProduce"|"bigMapCamp"|"bigmapCity"|"bigmapCityLevel"|"bigmapMonster"|"bigmapQueue"|"bigmapRank"|"bigmapResource"|"bigmapSchedule"|"bigmapScoreRule"|"bigmapStamina"|"bigmapWorld"|"bigNum"|"build"|"cardLevelUp"|"cardUiArtCamp"|"cardUiArtClass"|"cardUiArtRarity"|"celebrationConfig"|"celebrationRank"|"celebrationShop"|"celebrationTarget"|"chapterName"|"dayChallengeActTask"|"dayChallengeActTaskProgress"|"defenceModWave"|"equip"|"equipLevel"|"equipLib"|"equipRank"|"equipType"|"firstRechargeNew"|"gameConfig"|"gem"|"gemAttribute"|"gemBox"|"gemQuality"|"gemShop"|"general"|"generalStar"|"giftShop"|"goldShop"|"grade"|"guanka"|"guankaChapter"|"guankaGift"|"guankaReward"|"guards"|"head"|"heroSkill"|"icon"|"idConfig"|"interactReward"|"item"|"itemBox"|"itemBoxPro"|"itemCraft"|"itemType"|"level"|"levelInfo"|"levelMapGrideReward"|"lottery"|"mapconfig"|"mapTerrian"|"matchTips"|"mL"|"monster"|"monsterCard"|"monsterSkillType"|"monthCardActPlan"|"neutralEnhanceGate"|"neutralResourceGroup"|"newTreasureBoxConfig"|"npcTeam"|"open"|"openGridReward"|"payChannel"|"plotCard"|"pvpArtifact"|"pvpAttrMap"|"pvpBond"|"pvpCard"|"pvpCounter"|"pvpGlobal"|"pvpModifierOverride"|"pvpPity"|"pvpSkill"|"pvpSkillBinding"|"pvpSkillPlan"|"pvpStatus"|"pvpTile"|"pvpTileGen"|"pvpTileGenParams"|"pvpUnitGrowth"|"rechargeDaily"|"rechargeGiftActPlan"|"refToCodeEnum"|"resourceShop"|"roleProperty"|"serverRank"|"sevenDayPoint"|"sevenDayShop"|"sevenDayTask"|"share"|"shiMengBattleConfig"|"skillAttr"|"skillAttrModifier"|"skillBuff"|"skillEffect"|"skillEffectDamageType"|"skillType"|"skillView"|"skin"|"spiritAnimal"|"spiritAnimalType"|"taskMain"|"taskType"|"taskUnion"|"taskUnionProgress"|"unionDiscount"|"unionLevel"|"unionOfficial"|"unionShop"|"viewtype"|"wall"|"wallType"|"zcGuide"|"zcGuideParams"
 

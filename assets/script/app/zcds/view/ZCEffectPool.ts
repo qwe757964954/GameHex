@@ -8,19 +8,19 @@ import { ZCNodePool } from './ZCNodePool';
 import { ZC_PORTAL_FLIGHT_SECONDS } from '../model/ZCBattlePresentationQueue';
 import { HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT, HEX_GRID_CONTENT_LIFT } from '../../../core/hex/HexGridLayout';
 
-/** 资源在构造前准备好；对象池、挂载层和资源的所有权归调用方。 */
+/** 资源在构造前准备好；对象池、挂载层和资源的所有权归调用方。*/
 export interface IZCEffectPoolDeps {
-    /** 对象池（复用 hitFx / deathFx / spawnFx 节点）。 */
+    /** 对象池（复用 hitFx / deathFx / spawnFx 节点）。*/
     readonly pool: ZCNodePool<Node>;
-    /** 特效挂载的父节点（mapLayer）。 */
+    /** 特效挂载的父节点（mapLayer）。*/
     readonly mapLayer: Node;
     readonly spawnFxPrefab: Prefab | null;
     readonly deathFxPrefab: Prefab | null;
-    /** 建筑被拆掉时那团白烟雾（`units/effects/建筑死亡特效`）。缺失则这层表现直接跳过。 */
+    /** 建筑被拆掉时那团白烟雾（`units/effects/建筑死亡特效`）。缺失则这层表现直接跳过。*/
     readonly buildingDestroyFxPrefab: Prefab | null;
     readonly allowGenericHitFx?: boolean;
     readonly hitFxPrefabs: ReadonlyMap<ZCAttackTrait, Prefab>;
-    /** 棋盘坐标 → 视图坐标换算（命中特效用）。 */
+    /** 棋盘坐标 → 视图坐标换算（命中特效用）。*/
     mapToViewX: (x: number) => number;
     mapToViewY: (y: number) => number;
 }
@@ -52,43 +52,43 @@ interface BuildingDestroyFxEntry {
 }
 
 /**
- * 出生特效的**目标总时长**（秒）—— 2026-10-19 用户口径两改：
- * 先是「播放速度加快，动画总时长缩短成 80%」（2.0s → 1.6s），紧接着「再加速，1.6s → **1.25s**」。
+ * 出生特效的目标总时长（秒）—— 2026-10-19 用户口径两改：
+ * 先是「播放速度加快，动画总时长缩短成 80%」（2.0s → 1.6s），紧接着「再加速，1.6s → 1.25s」。
  *
- * 🔴 与受击特效的 `HIT_FX_TARGET_SECONDS` 同一套做法：**锁总时长**，播放倍速由
- * `clip.duration / 目标时长` 反推（美术原速 2.0s ⇒ speed **1.6×**；24 帧 / sample 12 = 2.0s）。
- * 只动 `AnimationState.speed`，**不改资产的 `_duration`** —— 那是「帧数 / sample」的美术真值，
+ * 与受击特效的 `HIT_FX_TARGET_SECONDS` 同一套做法：锁总时长，播放倍速由
+ * `clip.duration / 目标时长` 反推（美术原速 2.0s ⇒ speed 1.6×；24 帧 / sample 12 = 2.0s）。
+ * 只动 `AnimationState.speed`，不改资产的 `_duration` —— 那是「帧数 / sample」的美术真值，
  * 改它等于把后半段关键帧直接丢掉（曲线时间戳不会跟着重排）。
  *
- * ⚠️ 回收点必须用**加速后**的时长（= 本值）：wrapMode 是 once，动画播完 `Normal` 会停在末帧，
+ * 回收点必须用加速后的时长（= 本值）：wrapMode 是 once，动画播完 `Normal` 会停在末帧，
  * 仍按 2.0s 回收就多出 0.75s 冻在最后一帧的残影。
- * ⚠️ 拿不到 clip 时（prefab 被改坏）也按本值挂着 —— 那种情况下没有动画可播，只是个占位时长。
- */
+ * 拿不到 clip 时（prefab 被改坏）也按本值挂着 —— 那种情况下没有动画可播，只是个占位时长。
+*/
 const SPAWN_FX_TARGET_SECONDS = 1.25;
 /**
  * 阵亡特效拿不到 clip 时的兜底显示时长（秒）。
  * 正常路径从 `clip.duration` 读（死亡特效 13 帧 @12fps = 1.0833s）；仅在 prefab 损坏时兜底。
- */
+*/
 const DEATH_FX_FALLBACK_DURATION = 1.1;
 /**
  * 建筑摧毁特效拿不到 clip 时的兜底时长（秒）。
  * 正常路径从 `clip.duration` 读（4 帧 @12fps = 0.3333s）；仅在 prefab 损坏时兜底。
- */
+*/
 const BUILDING_DESTROY_FX_FALLBACK_DURATION = 0.35;
 /**
- * 受击特效的**固定总时长**（秒）—— 2026-10-17 需求「所有职业受击效果总时长固定 0.15s」。
+ * 受击特效的固定总时长（秒）—— 2026-10-17 需求「所有职业受击效果总时长固定 0.15s」。
  *
- * 🔴 **加速只动 `AnimationState.speed`，不改资产**：四条 anim 的 `_duration` 仍是
+ * 加速只动 `AnimationState.speed`，不改资产：四条 anim 的 `_duration` 仍是
  * 「帧数 / 18fps」的美术真值（射手 0.4444s、法师 0.7222s），播放时把 speed 设成
  * `clip.duration / 0.15` 把整段压进 0.15s。美术以后改帧数/帧率，总时长照样锁死，
- * 不用回头改这里；反过来若把 0.4444 改到 anim 里，那是**截断**不是加速 ——
+ * 不用回头改这里；反过来若把 0.4444 改到 anim 里，那是截断不是加速 ——
  * 曲线关键帧的时间戳按原 clip 长度排布，缩短 duration 等于把后半段帧直接丢掉。
  *
  * 为什么不改 `state.duration` / `clip.duration`：同上，关键帧时间戳不会跟着重排。
  * 为什么不走 `play(name, startTime)`：3.8.8 的签名只有 `play(name?)`，没有第二参。
  * `speed` 只在 `AnimationState.initialize()` 里从 `clip.speed` 取一次，`play()` / `stop()`
  * 都不重置它 ⇒ 每次播放重算同一个值是安全且幂等的（节点池化复用也不会累乘）。
- */
+*/
 const HIT_FX_TARGET_SECONDS = 0.15;
 const GENERIC_HIT_SIZE = 48;
 const GENERIC_HIT_RADIUS = 15;
@@ -101,64 +101,64 @@ const GENERIC_HIT_LINE_WIDTH = 3;
  * - 命中特效：挂 mapLayer、自己算坐标，与宿主存活无关
  * - 阵亡特效：挂 mapLayer、按 unitId 去重只播一次
  * - 出生光柱：挂单位节点下，跟随宿主插值移动
- */
+*/
 export class ZCEffectPool {
     private readonly portalFxNodes = new Map<number, { node: Node; startedAt: number }>();
     private readonly spawnFxNodes: SpawnFxEntry[] = [];
     private readonly hitFxNodes: HitFxEntry[] = [];
     private readonly deathFxNodes: DeathFxEntry[] = [];
     private readonly buildingDestroyFxNodes: BuildingDestroyFxEntry[] = [];
-    /** 阵亡去重：单位在快照里消失后 renderUnitSystem 还会再走几帧，不去重会连播好几个。 */
+    /** 阵亡去重：单位在快照里消失后 renderUnitSystem 还会再走几帧，不去重会连播好几个。*/
     private readonly deadFxPending = new Set<number>();
     /**
-     * 受击去重：**已经播过的**那几条 fx（存**对象引用**，不存 `fx.id`）。
+     * 受击去重：已经播过的那几条 fx（存对象引用，不存 `fx.id`）。
      *
-     * 🔴 不去重会**停顿**（2026-10-16 山猫「受击会停顿在角色上」）：模型层的 `hitFxQueue` 是
-     * **按帧判定过期**的（`now >= startedAt + durationSeconds` 才出队），而渲染世界每帧把
-     * **整条队列**送进来 ⇒ 同一个 fx 至少在队列里出现两帧。每帧对它 `animation.play()` 一次，
-     * 而 `play()` → `AnimationState.onPlay()` → `setTime(0)` **无条件把动画 seek 回 0**
+     * 不去重会停顿（2026-10-16 山猫「受击会停顿在角色上」）：模型层的 `hitFxQueue` 是
+     * 按帧判定过期的（`now >= startedAt + durationSeconds` 才出队），而渲染世界每帧把
+     * 整条队列送进来 ⇒ 同一个 fx 至少在队列里出现两帧。每帧对它 `animation.play()` 一次，
+     * 而 `play()` → `AnimationState.onPlay()` → `setTime(0)` 无条件把动画 seek 回 0
      * （真引擎实测：每 tick 重播 ⇒ 8 帧只出现第 0 帧；只播一次 ⇒ 8 帧全出）⇒ 动画被钉死在
      * 起始帧，看着就是一坨静止的特效。
      *
-     * 🔴 **2026-10-17 起队列与动画同为 0.15s，去重依然必需**：0.15s 在 60fps 下是 9 帧、
+     * 2026-10-17 起队列与动画同为 0.15s，去重依然必需：0.15s 在 60fps 下是 9 帧、
      * 30fps 下也有 4~5 帧，同一个 fx 一定被推进来好几帧。别因为"两边时长相等"就把这一层删掉。
      *
      * 两个约束：
-     *  - 记录必须**保留到 fx 从模型队列消失**（不是到动画播完）：否则"已播完但还在队列"的那几帧
-     *    会把它**重播一次**（快闪两下）；
-     *  - 用**对象引用**而不是 `fx.id`：模型层 `nextHitFxId` 换局会**从 1 重新开始**，存 id 会让
-     *    新局第一个特效被上一局的记录挡掉（见 `ZCBattlePresentationQueue.reset`）。
-     */
+     * - 记录必须保留到 fx 从模型队列消失（不是到动画播完）：否则"已播完但还在队列"的那几帧
+     * 会把它重播一次（快闪两下）；
+     * - 用对象引用而不是 `fx.id`：模型层 `nextHitFxId` 换局会从 1 重新开始，存 id 会让
+     * 新局第一个特效被上一局的记录挡掉（见 `ZCBattlePresentationQueue.reset`）。
+    */
     private readonly hitFxPlayed = new Set<Readonly<ZCHitFx>>();
     /**
-     * 受击特效 prefab 的**烘焙基准缩放**（键 = 池的 key，如 `hitFx:法师`）。
+     * 受击特效 prefab 的烘焙基准缩放（键 = 池的 key，如 `hitFx:法师`）。
      *
      * 2026-10-31「各类受击特效需要匹配受击目标的模型大小」之后，节点缩放不再是死的：
-     * 实际写入 = **本表里的烘焙基准 × `zcHitFxScale(fx.targetScale)`**。
+     * 实际写入 = 本表里的烘焙基准 × `zcHitFxScale(fx.targetScale)`。
      *
-     * 🔴 为什么要存基准、而不是在节点当前缩放上乘：节点是**池化复用**的，
+     * 为什么要存基准、而不是在节点当前缩放上乘：节点是池化复用的，
      * 第二次播放时它的 `scale` 已经是「基准 × 上一个目标的体型」，再乘一遍就成了平方
-     * （打到第 N 只会缩成离谱的值）。所以每次都必须**从基准重算绝对值**。
+     * （打到第 N 只会缩成离谱的值）。所以每次都必须从基准重算绝对值。
      *
      * 基准在 `instantiate` 那一瞬间读一次就固定：它是 prefab 根的 `_lscale`，
      * 四类还不一样（射手 0.12418 / 战士 0.29333 / 法师 0.05593 / 坦克 & 中毒 0.07098），
      * 直接写 `setScale(系数)` 会把美术那份意图抹平。存成普通对象而不是 `Vec3`：
      * 这里只要三个数，没必要为每个 key 留一个引擎对象。
-     */
+    */
     private readonly hitFxBakedScales = new Map<string, { x: number; y: number; z: number }>();
-    /** `syncHitFx` 的暂存：本帧模型队列里还活着的 fx（用来摘掉 `hitFxPlayed` 里的过期项）。 */
+    /** `syncHitFx` 的暂存：本帧模型队列里还活着的 fx（用来摘掉 `hitFxPlayed` 里的过期项）。*/
     private readonly hitFxAlive = new Set<Readonly<ZCHitFx>>();
     /**
      * 已经报过「这个职业没有受击 prefab」的 trait。
      *
-     * 🔴 2026-11-04 补：这一条原来是**完全静默的 return**（"少一层表现，绝不阻塞结算"是本意），
+     * 2026-11-04 补：这一条原来是完全静默的 return（"少一层表现，绝不阻塞结算"是本意），
      * 代价是「美术交了图、代码也接了，但资源没打进包 / 加载失败」这种情形在游戏里表现为
-     * **法师受击一次都没出现，而控制台干干净净** —— 只能靠翻代码猜。
+     * 法师受击一次都没出现，而控制台干干净净 —— 只能靠翻代码猜。
      * 现在按职业各报一次（`console.warn`）：
-     *  - 有这条 warn ⇒ 问题在**加载侧**（`ZCGameLoader.loadCommonEffects` 没拿到 prefab）；
-     *  - 没有这条 warn 但依然看不到 ⇒ 问题在**渲染侧**（层级 / 尺寸 / 时长 / 被单位挡住）。
+     * - 有这条 warn ⇒ 问题在加载侧（`ZCGameLoader.loadCommonEffects` 没拿到 prefab）；
+     * - 没有这条 warn 但依然看不到 ⇒ 问题在渲染侧（层级 / 尺寸 / 时长 / 被单位挡住）。
      * 只报一次，不会每帧刷屏。
-     */
+    */
     private readonly hitFxMissingWarned = new Set<string>();
 
     private art: Pick<IZCEffectPoolDeps, 'spawnFxPrefab' | 'deathFxPrefab' | 'buildingDestroyFxPrefab' | 'hitFxPrefabs'>;
@@ -166,20 +166,20 @@ export class ZCEffectPool {
     constructor(private readonly deps: IZCEffectPoolDeps) { this.art = deps; }
 
     /**
-     * 应用后补美术。**按字段合并，不是整对象替换**。
+     * 应用后补美术。按字段合并，不是整对象替换。
      *
-     * 🔴 2026-11-04 修正（这条 bug 的表象是「法师受击一次都不出现」）：
+     * 2026-11-04 修正（这条 bug 的表象是「法师受击一次都不出现」）：
      * `ZCGameLoader.createDeferredArt` 的初始壳是
      * `spawnFxPrefab/deathFxPrefab/buildingDestroyFxPrefab = null`、`hitFxPrefabs = 空 Map`，
      * 每跑完一个 job 才 `{...art, ...patch}` 并 `onUpdate`。原来这里是 `this.art = art` 直接替换 ——
-     * 于是**第一个 job（翻格脉冲，不带任何 prefab）一回来，就把首帧已经准备好的**
-     * 受击 / 出生 / 死亡 / 建筑摧毁 prefab **全部冲成空 / null**，之后要等各自那个 job 跑完
+     * 于是第一个 job（翻格脉冲，不带任何 prefab）一回来，就把首帧已经准备好的
+     * 受击 / 出生 / 死亡 / 建筑摧毁 prefab 全部冲成空 / null，之后要等各自那个 job 跑完
      * 才慢慢补回来。受击四组在 job 队列里排第 2~5 位，职业靠后的（法师是第 3 个）回来得最晚；
      * 期间任何一次提前退出（离场 / 换局 / 某个 job 抛错被吞）就永久停在残缺状态。
      *
-     * 合并规则：`null` / `undefined` 视为「这次还没加载好」，**不覆盖**已有值；
+     * 合并规则：`null` / `undefined` 视为「这次还没加载好」，不覆盖已有值；
      * Map 走「旧 + 新」，新条目覆盖同名键。这样补丁只能加，不能降级。
-     */
+    */
     setArt(patch: typeof this.art): void {
         const current = this.art;
         const hitFx = patch.hitFxPrefabs;
@@ -212,7 +212,7 @@ export class ZCEffectPool {
 
     /**
      * 每帧调用：回收所有播完的特效。
-     */
+    */
     update(now: number): void {
         this.recycleSpawnFx(now);
         this.recycleHitFx(now);
@@ -220,11 +220,11 @@ export class ZCEffectPool {
     }
 
     /**
-     * 播放本帧仍然存活的受击特效 —— **幂等**：同一个 fx 对象只播一次。
+     * 播放本帧仍然存活的受击特效 —— 幂等：同一个 fx 对象只播一次。
      *
-     * 渲染世界每帧把模型层的**整条存活队列**送进来（队列按 `durationSeconds` 逐帧判过期），
+     * 渲染世界每帧把模型层的整条存活队列送进来（队列按 `durationSeconds` 逐帧判过期），
      * 所以去重必须在这一层做。见 `hitFxPlayed` 的注释：不去重 = 每帧 `play()` 把动画钉死在第 0 帧。
-     */
+    */
     syncHitFx(fxs: readonly Readonly<ZCHitFx>[], now: number): void {
         this.hitFxAlive.clear();
         for (const fx of fxs) this.hitFxAlive.add(fx);
@@ -243,18 +243,18 @@ export class ZCEffectPool {
      * 播放受击闪白特效。
      * 挂 mapLayer 而不挂被打单位：被打的单位可能在同一帧被击杀移除，挂宿主会跟着一起没了。
      *
-     * ⚠️ **渲染循环里别直接调它** —— 同一个 fx 会跨很多帧一直躺在模型队列里，逐个直接调会让
+     * 渲染循环里别直接调它 —— 同一个 fx 会跨很多帧一直躺在模型队列里，逐个直接调会让
      * 动画每帧被 seek 回 0。走 `syncHitFx`。
      *
-     * 尺寸（需求「统一缩小 0.7」）**不在这里手写**：烘在 prefab 根的 `_lscale` 里。
-     * 2026-10-31 起再叠一层「跟着被打的体型走」—— 写入的是**烘焙基准 × `fx.targetScale`**，
+     * 尺寸（需求「统一缩小 0.7」）不在这里手写：烘在 prefab 根的 `_lscale` 里。
+     * 2026-10-31 起再叠一层「跟着被打的体型走」—— 写入的是烘焙基准 × `fx.targetScale`，
      * 每次从基准重算（见 `hitFxBakedScales`），不在节点当前缩放上累乘。
      * 同 `playDeathFx` 的坑 —— 累乘会在池化复用下逐次缩水。
-     */
+    */
     playHitFx(fx: Readonly<ZCHitFx>, now: number): void {
         const prefab = this.art.hitFxPrefabs.get(fx.trait);
         // 这个职业没交资源 ⇒ 跳过这一下（不猜默认职业，也不复用别的职业的闪白）。
-        // 但**必须留下痕迹**：见 `hitFxMissingWarned` 的注释，一行静默 return 会让「资源没打进包」
+        // 但必须留下痕迹：见 `hitFxMissingWarned` 的注释，一行静默 return 会让「资源没打进包」
         // 表现为「特效没做出来」，下一步只能猜。
         if (!prefab && !this.hitFxMissingWarned.has(fx.trait)) {
             this.hitFxMissingWarned.add(fx.trait);
@@ -273,7 +273,7 @@ export class ZCEffectPool {
         node.setParent(this.deps.mapLayer);
         node.setSiblingIndex(this.deps.mapLayer.children.length - 1);
         node.layer = this.deps.mapLayer.layer;
-        // 尺寸：烘焙基准 × 目标体型（`pvpCard.prefabSize`）。**每次播放都按绝对值重写**，
+        // 尺寸：烘焙基准 × 目标体型（`pvpCard.prefabSize`）。每次播放都按绝对值重写，
         // 不读 node 当前的 scale —— 那是上一次（可能另一个体型）用完剩下的结果。
         const baked = this.hitFxBakedScales.get(key);
         if (baked) {
@@ -298,7 +298,7 @@ export class ZCEffectPool {
             // ⇒ 先 `clear()`（stop 掉残留状态）再 `state.play()` ⇒ `setTime(0)` 从第 0 帧重走，
             // 不会先闪一帧旧画面。（不用额外 `stop()`：duration 为 0 时 crossFade 必定 clear。）
             animation.play(clip.name);
-            // 🔴 统一压到 0.15s：把整段 clip 的播放速率抬到 `clip.duration / 0.15`。
+            //  统一压到 0.15s：把整段 clip 的播放速率抬到 `clip.duration / 0.15`。
             const state = animation.getState(clip.name);
             if (state) state.speed = clip.duration / HIT_FX_TARGET_SECONDS;
         }
@@ -306,9 +306,9 @@ export class ZCEffectPool {
             node,
             prefabKey: key,
             startedAt: now,
-            // 🔴 回收点必须跟着**加速后**的时长走，不能再用 `clip.duration`：
+            //  回收点必须跟着加速后的时长走，不能再用 `clip.duration`：
             // 动画已被压到 0.15s，却还按 0.4444s 回收 ⇒ 后 0.29s 是 Normal(只播一遍) 定住的末帧，
-            // 看着就是「闪完了还剩一坨东西杵在角色身上」—— 正是需求①要消掉的定格。
+            // 看着就是「闪完了还剩一坨东西杵在角色身上」—— 正是需求1.要消掉的定格。
             // 拿不到 clip（prefab 损坏）时才退回模型层给的兜底时长。
             duration: !prefab || clip ? HIT_FX_TARGET_SECONDS : fx.durationSeconds,
         });
@@ -319,8 +319,8 @@ export class ZCEffectPool {
      *
      * 从「废墟 spr 直接切过来」那一帧起补一层交代：建筑消失得有个爆点，否则就是凭空变废墟。
      * 尺寸烘在 prefab 根的 `_lscale`（195×195 @ 0.5641 ⇒ 屏上 110px，与受击 / 出生同基准），
-     * 这里**不写 scale**，只写位置 —— 与 `playHitFx` 同一套口径（池化复用下写 scale 会逐次缩水）。
-     */
+     * 这里不写 scale，只写位置 —— 与 `playHitFx` 同一套口径（池化复用下写 scale 会逐次缩水）。
+    */
     playBuildingDestroyFx(x: number, y: number, hexId: number, now: number): void {
         const prefab = this.art.buildingDestroyFxPrefab;
         if (!prefab) return;
@@ -349,12 +349,12 @@ export class ZCEffectPool {
      * 播放阵亡特效。按 unitId 去重，同一次阵亡只播一次。
      * 挂 mapLayer、不挂宿主：宿主 0.45s 后就被移除，挂它身上会中途消失。
      *
-     *  ⚠️ **显示大小不在这里改**：尺寸烘在 prefab 根的 `_lscale`（535×1092 @ 0.16448 ⇒ 屏上 88×179.6）。
-     *  反馈「缩小成 0.8」= 把这个数整体乘 0.8，改的是 prefab 不是代码。
-     *  在这里 `setScale` 会 ① 覆盖掉美术烘焙值（同 `playSpawnFx` 的坑，改了"没效果"还不报错），
-     *  ② 节点是**池化复用**的 —— 每次播放乘一次会逐次缩水。
-     *  位置反而是唯一必须在这里写的：`x/y` 来自模型快照，prefab 的 `_lpos` 是 (0,0,0)。
-     */
+     * 显示大小不在这里改：尺寸烘在 prefab 根的 `_lscale`（535×1092 @ 0.16448 ⇒ 屏上 88×179.6）。
+     * 反馈「缩小成 0.8」= 把这个数整体乘 0.8，改的是 prefab 不是代码。
+     * 在这里 `setScale` 会 1. 覆盖掉美术烘焙值（同 `playSpawnFx` 的坑，改了"没效果"还不报错），
+     * 2. 节点是池化复用的 —— 每次播放乘一次会逐次缩水。
+     * 位置反而是唯一必须在这里写的：`x/y` 来自模型快照，prefab 的 `_lpos` 是 (0,0,0)。
+    */
     playDeathFx(x: number, y: number, unitId: number, now: number): void {
         const prefab = this.art.deathFxPrefab;
         if (!prefab) return;
@@ -381,13 +381,13 @@ export class ZCEffectPool {
     /**
      * 播放出生光柱。挂单位节点下，跟随宿主插值移动。
      *
-     *  **刻意不写 `setPosition`/`setScale`**：垂直落位与缩放都烘在 prefab 的 `_lpos`/`_lscale`
+     * 刻意不写 `setPosition`/`setScale`：垂直落位与缩放都烘在 prefab 的 `_lpos`/`_lscale`
      * 里（美术对着真机调的，比如把光柱重心从头顶压到胸口）。这里 `setPosition(0,0,0)` 会直接
      * 覆盖掉它，表现为「改了 prefab 完全没效果」且不报错。池化复用天然保留上一次的 `_lpos`。
      *
-     *  **播放速度**：整段 clip 压进 `SPAWN_FX_TARGET_SECONDS`（1.25s，speed = 1.6×），
+     * 播放速度：整段 clip 压进 `SPAWN_FX_TARGET_SECONDS`（1.25s，speed = 1.6×），
      * 存活时长同步用这个目标值。
-     */
+    */
     playSpawnFx(host: Node, now: number): void {
         const prefab = this.art.spawnFxPrefab;
         if (!prefab) return;
@@ -411,7 +411,7 @@ export class ZCEffectPool {
                 node,
                 host,
                 startedAt: now,
-                // 🔴 回收点 = 加速后的总时长（不是 clip 原速，见 `SPAWN_FX_TARGET_SECONDS` 的说明）。
+                //  回收点 = 加速后的总时长（不是 clip 原速，见 `SPAWN_FX_TARGET_SECONDS` 的说明）。
                 duration: SPAWN_FX_TARGET_SECONDS,
             });
             return;
@@ -428,19 +428,19 @@ export class ZCEffectPool {
     /**
      * 单位实体被移除时，摘掉挂在它身上的出生特效。
      * 不摘的话光柱会跟着宿主进池，直到计时到了才消失 —— 表现为「人没了原地还立着光柱」。
-     */
+    */
     detachSpawnFxOf(host: Node): void {
         for (let i = this.spawnFxNodes.length - 1; i >= 0; i--) {
             if (this.spawnFxNodes[i].host === host) this.recycleSpawnFxEntry(i);
         }
     }
 
-    /** 阵亡单位已从快照移除后，清掉去重记录。 */
+    /** 阵亡单位已从快照移除后，清掉去重记录。*/
     clearDeadFxPending(unitId: number): void {
         this.deadFxPending.delete(unitId);
     }
 
-    /** 入口和出口独立开合，同格同批只播一次，不改地块次数/冷却圆环。 */
+    /** 入口和出口独立开合，同格同批只播一次，不改地块次数/冷却圆环。*/
     playPortalFx(hexId: number, x: number, y: number, startedAt: number, frame: SpriteFrame): void {
         const existing = this.portalFxNodes.get(hexId);
         if (existing) {
@@ -477,7 +477,7 @@ export class ZCEffectPool {
         }
     }
 
-    /** 清空所有特效（换局 / destroy 时调用）。 */
+    /** 清空所有特效（换局 / destroy 时调用）。*/
     clear(): void {
         for (const entry of this.portalFxNodes.values()) {
             entry.node.removeFromParent();
@@ -515,12 +515,12 @@ export class ZCEffectPool {
     }
 
     /**
-     * 销毁所有**正在播放**的特效节点（渲染世界 `destroy()` 时调用）。
+     * 销毁所有正在播放的特效节点（渲染世界 `destroy()` 时调用）。
      *
-     * 与 `clear()` 的区别：这里**直接 destroy、不回池** —— 调用方紧接着会
+     * 与 `clear()` 的区别：这里直接 destroy、不回池 —— 调用方紧接着会
      * `pool.destroy()` 销毁整个对象池，回池没有意义。在播节点此刻不在池里，
      * 必须显式 destroy，否则会泄漏到下一局。
-     */
+    */
     destroy(): void {
         for (const entry of this.portalFxNodes.values()) entry.node.destroy();
         this.portalFxNodes.clear();
@@ -543,7 +543,7 @@ export class ZCEffectPool {
         this.deadFxPending.clear();
     }
 
-    /** 回收播完的出生特效。 */
+    /** 回收播完的出生特效。*/
     recycleSpawnFx(now: number): void {
         for (let i = this.spawnFxNodes.length - 1; i >= 0; i--) {
             const entry = this.spawnFxNodes[i];
@@ -555,10 +555,10 @@ export class ZCEffectPool {
     /**
      * 把第 index 条出生特效摘下来回池 —— 播完、或它的宿主单位已经没了。
      *
-     *  **回池前必须 `removeFromParent`**：光柱是单位节点的子节点，而单位节点自己也在池里
-     * （key = `unit:<unitId>`）。不摘就等于把光柱塞进别人的子树，池复用时它会跟着一个**完全
-     * 无关的单位**一起被 setParent 到新父节点，光柱凭空出现在地图中间。
-     */
+     * 回池前必须 `removeFromParent`：光柱是单位节点的子节点，而单位节点自己也在池里
+     * （key = `unit:<unitId>`）。不摘就等于把光柱塞进别人的子树，池复用时它会跟着一个完全
+     * 无关的单位一起被 setParent 到新父节点，光柱凭空出现在地图中间。
+    */
     private recycleSpawnFxEntry(index: number): void {
         const entry = this.spawnFxNodes[index];
         this.spawnFxNodes.splice(index, 1);
@@ -567,7 +567,7 @@ export class ZCEffectPool {
         this.deps.pool.release('spawnFx', entry.node);
     }
 
-    /** 回收播完的受击特效。 */
+    /** 回收播完的受击特效。*/
     recycleHitFx(now: number): void {
         for (let i = this.hitFxNodes.length - 1; i >= 0; i -= 1) {
             const entry = this.hitFxNodes[i];
@@ -580,7 +580,7 @@ export class ZCEffectPool {
         }
     }
 
-    /** 回收播完的阵亡特效。 */
+    /** 回收播完的阵亡特效。*/
     recycleDeathFx(now: number): void {
         for (let i = this.deathFxNodes.length - 1; i >= 0; i -= 1) {
             const entry = this.deathFxNodes[i];
@@ -596,7 +596,7 @@ export class ZCEffectPool {
         }
     }
 
-    /** 回收播完的建筑摧毁特效（与 `recycleDeathFx` 同口径）。 */
+    /** 回收播完的建筑摧毁特效（与 `recycleDeathFx` 同口径）。*/
     recycleBuildingDestroyFx(now: number): void {
         for (let i = this.buildingDestroyFxNodes.length - 1; i >= 0; i -= 1) {
             const entry = this.buildingDestroyFxNodes[i];

@@ -16,14 +16,14 @@ export interface ZCSkillRuntimeDefinition {
      * 开局常驻状态（`behaviorKey === 'passive_status'`）。
      *
      * 与 `statusId` 分开是因为两者生效时机不同：`statusId` 是「命中时挂给被打的人」，
-     * 这个是在单位出生后挂给**自己**、且不过期。合成一个字段会让
+     * 这个是在单位出生后挂给自己、且不过期。合成一个字段会让
      * `ZCAttackResolutionSystem.sendAttack` 里的 `skillRuntime?.statusId ?? profile.onHitStatusId`
      * 把常驻被动误当成命中减益打到敌人身上。
-     */
+    */
     passiveStatusId?: string;
 }
 
-/** 允许把 `pvpSkillPlan` 行直接喂进注册表：计划没有 `legacySkillId`，只借行为/参数/状态三样。 */
+/** 允许把 `pvpSkillPlan` 行直接喂进注册表：计划没有 `legacySkillId`，只借行为/参数/状态三样。*/
 export interface ZCSkillRuntimePlanLike {
     pvpSkillId: number;
     targetUnitId: string;
@@ -38,7 +38,7 @@ export interface ZCSkillRuntimePlanLike {
  * 技能行为注册表只接受显式处理器。旧 skillEffect 的数值公式由
  * ZCLegacySkillEffect 的受限解释器执行；它不会在这里注册任意脚本行为。
  * counter 适用于“每 N 次攻击”；只有带前摇/引导/打断阶段的技能才使用 cast-fsm。
- */
+*/
 export class ZCSkillRuntimeRegistry {
     private readonly handlers = new Map<string, ZCSkillStateMode>();
 
@@ -74,9 +74,9 @@ export class ZCSkillRuntimeRegistry {
         //  同样只带数据 —— 推进在 `ZCSkillTriggerSystem.applyBlinkStrike`，位移由组合根
         //  转给 `ZCMovementSystem.placeAt`，伤害复用 `ZCAttackResolutionSystem.strikeTargets`。
         this.register('blink_strike', 'none');
-        //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在**自己脚下**开一片
-        //  **跟着本体走**的周期伤害区域（大拳那一套是「打出去」，这个是「裹在身上」）。
-        //  与 `periodic_damage` 不是一回事：那个 handler 挂在状态上、只结算**承载者自己**
+        //  2026-11-09 大威天芦「无尘禁土」（102503）：冷却到点在自己脚下开一片
+        //  跟着本体走的周期伤害区域（大拳那一套是「打出去」，这个是「裹在身上」）。
+        //  与 `periodic_damage` 不是一回事：那个 handler 挂在状态上、只结算承载者自己
         //  掉血（自伤 DoT），而这里要的是「半径内所有敌人每秒掉一次」。
         //  与 `team_aura` 也不是一回事：那个给友军挂增益状态，不打人。
         //  推进在 `ZCSkillTriggerSystem.applySelfAura`，结算复用 `ZCGroundZoneSystem`。
@@ -85,7 +85,7 @@ export class ZCSkillRuntimeRegistry {
         //  每道雷独立判伤、独立掷麻痹。推进在 `ZCSkillTriggerSystem.applyBoltStrike`，
         //  落点与结算在 `ZCAttackResolutionSystem.castBoltLine`（每道雷 = 一个「一波」地面区域）。
         this.register('bolt_strike', 'none');
-        //  2026-11-12 科学家「精密陷阱」（103504）：冷却到点**在自己脚下**留一个陷阱，
+        //  2026-11-12 科学家「精密陷阱」（103504）：冷却到点在自己脚下留一个陷阱，
         //  敌人踩上去（或到点）就炸。「放下就不管」的一次性布置，没有持续状态机。
         //  推进在 `ZCSkillTriggerSystem.applyTrap`，摆放与表现路径在
         //  `ZCAttackResolutionSystem.castTrap`，结算复用 `ZCGroundZoneSystem`
@@ -109,7 +109,7 @@ export class ZCSkillRuntimeRegistry {
     /**
      * 同一技能允许多行 parameterKey。每行只消费自己声明的旧字段，避免同一武将的
      * 火船撞击/爆炸、冰雕冻结/消失伤害等参数互相覆盖。
-     */
+    */
     compileBindings(
         bindings: readonly ZCSkillBinding[],
         modifiers: readonly ZCTypedModifier[],
@@ -167,7 +167,7 @@ export class ZCSkillRuntimeRegistry {
     }
 }
 
-/** 从绑定行/计划行上取两种状态 id；`passive_status` 走常驻槽，其余走命中槽。 */
+/** 从绑定行/计划行上取两种状态 id；`passive_status` 走常驻槽，其余走命中槽。*/
 function runtimeStatusOf(binding: ZCSkillBinding): Pick<ZCSkillRuntimeDefinition, 'statusId' | 'passiveStatusId'> {
     const statusId = typeof binding.statusId === 'string' && binding.statusId.trim()
         ? binding.statusId.trim() : undefined;

@@ -55,12 +55,12 @@ function assertUsesArtPaths(source: string, hint: string): void {
 /**
  * 卡牌阵容 / 布阵两页用到的图分三个根目录，**不能一律按 `image/card` 找**：
  *   - `image/card`：卡面、站台底座、品级垫盘；
- *   - `icons/card`：营地雕像（`camp_*`）、职业角标（`class_*`）、中栏图标；
+ *   - `icons/card`：职业角标（`yx_zhiye_*`）；
  *   - `icons/cardHead`：角色立绘与兵种头像；
  *   - `image/frame`：布阵卡池卡框（`common_img_pzk_*`）。
  *
- *  2026-09-15 美术收编时 `camp_*` / `class_*` 从 `card` 挪到了 `icon`，但代码里
- * 仍旧统一走 `loadLineupArt`（只认 `CARD_ART_ROOT`）→ 立绘与角标**一直静默留白**
+ *  2026-09-15 美术收编时 `class_*` 从 `card` 挪到了 `icon`，但代码里
+ * 仍旧统一走 `loadLineupArt`（只认 `CARD_ART_ROOT`）→ 角标**一直静默留白**
  * （`resources.load` 只打一条 warn），这条用例是当时唯一的报警点。
  */
 test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {
@@ -68,11 +68,9 @@ test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {
         const cut = path.lastIndexOf('/');
         assertSpriteExists(path.slice(0, cut), path.slice(cut + 1), key);
     }
-    const heroes = ZC_CARD_CLASSES.map(key => cardArtConfig.paths.get(`hero.${key}`));
-    assert.equal(new Set(heroes).size, ZC_CARD_CLASSES.length);
-    for (const key of ZC_CARD_CLASSES) {
-        assert.notEqual(cardArtConfig.paths.get(`boardHero.${key}`), cardArtConfig.paths.get(`hero.${key}`));
-    }
+    const badges = ZC_CARD_CLASSES.map(key => cardArtConfig.paths.get(`badge.${key}`));
+    assert.equal(new Set(badges).size, ZC_CARD_CLASSES.length);
+    assert.equal(badges.filter(path => path?.includes('/camp_')).length, 0, '立绘不再走职业雕像');
 });
 
 /** 用 vm 读取主城底栏文案配置，避免加载 Cocos runtime。 */
@@ -156,6 +154,21 @@ test('匹配页图标按「页面大图 / 信息条小图标」分两个根目�
     assertUsesArtPaths(readFileSync('assets/script/app/common/SpriteFrameCache.ts', 'utf8'), '公共图标加载器');
     assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchPlayerItem.ts', 'utf8'), 'MatchPlayerItem');
     assertUsesArtPaths(readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8'), 'ProcedureMatching');
+});
+
+/**
+ * 2026-11-13 清理：`icon_05` / `char_01` / `char_02` 全工程无引用（无按名加载、无配置表、
+ * 无 prefab/scene 的 UUID 硬绑），已归档到 `art-cleanup/icons-matching/archive`
+ * （连同 `.meta` 一起保留，UUID 不变，可直接拷回原目录恢复）。
+ *
+ * 信息条只吃 `icon_01~04`（`MATCH_STAT_TYPES` 四条），别再往这个目录补"备用图"：
+ * 多一张既不会被加载，又会被打进 `auto-atlas`。
+ */
+test('匹配页目录不再放回已退役的占位图', () => {
+    for (const name of ['icon_05', 'char_01', 'char_02']) {
+        // 负向断言用 assetExists（assetPath 找不到会直接抛，那是正向读取的口径）。
+        assert.equal(assetExists(`${MATCH_ICON_ART_ROOT}/${name}.png`), false, `${name} 已退役，别放回 ${MATCH_ICON_ART_ROOT}`);
+    }
 });
 
 /**

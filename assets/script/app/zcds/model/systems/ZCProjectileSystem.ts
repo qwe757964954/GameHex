@@ -8,36 +8,28 @@ export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDe
     units: readonly ZCUnitState[];
     distanceScale: number;
     /**
-     * 这一轮扫掠段（`from…to`）**可能碰到**的结构目标（墙体 / 建筑），写进 `out`（调用方每轮清空）。
-     *
-     * 2026-11-06 需求：「单位角色子弹攻击如果是只造成一次伤害的，只会伤害接触的单位
-     * （角色 / 城墙 / 建筑），不会穿透」⇒ 结构不再只看「子弹锁定的那一格」，
-     * 而是按**实际飞过的格子**给候选，圆判定仍在本系统里做（与单位同一套连续碰撞）。
-     * 一次给多个候选是因为一帧的飞行段可能跨格，谁先被碰到由 `t` 最小者决定。
-     */
+     * 本轮扫掠段（`from…to`）可能碰到的墙体/建筑，写进 `out`（调用方每轮清空）。
+     * 一帧可能跨格，给多个候选，谁先被碰到由命中比例 `t` 最小者决定。
+    */
     structureTargets(
         projectile: ZCProjectileState,
         fromX: number, fromY: number, toX: number, toY: number,
         out: ZCCombatTarget[],
     ): void;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
-    /**
-     * 这颗弹道**这一帧就要消失**（命中后被丢弃 / 到点没打到东西）时的回调。
-     * 可选：不接就与改前逐字一致。目前唯一的消费者是「定格光束」。
-     */
+    /** 弹道本帧消失（命中或被丢弃）时的回调；可选，目前用于定格光束。*/
     linger?(projectile: ZCProjectileState): void;
 }
 
-/** 线段扫掠圆：返回第一次接触的位置比例，双方重叠时为 0。保留原导出签名给 ZCUnitTargeting 与测试用。 */
+/** 线段扫掠圆：返回第一次接触的位置比例，双方重叠时为 0。保留原导出签名给 ZCUnitTargeting 与测试用。*/
 export function sweptCircleHit(from: Point, to: Point, center: Point, radius: number): number | null {
     return sweptCircleHitScalars(to.x - from.x, to.y - from.y, from.x - center.x, from.y - center.y, radius);
 }
 
 /**
- * 零分配标量版：把 3 个 Point 入参摊成 4 个 number。
- * 热路径（每弹道 × 每候选 × 每穿透轮）直接调它，不再每候选新建 3 个对象。
- * 运算顺序与 sweptCircleHit 逐字一致，保证不同帧率下的浮点结果不变。
- */
+ * 零分配标量版：热路径直接调用，避免每个候选新建 3 个 Point。
+ * 运算顺序与 `sweptCircleHit` 一致，保证浮点结果不变。
+*/
 export function sweptCircleHitScalars(dx: number, dy: number, fx: number, fy: number, radius: number): number | null {
     const c = fx * fx + fy * fy - radius * radius;
     if (c <= 0) return 0;
@@ -50,19 +42,19 @@ export function sweptCircleHitScalars(dx: number, dy: number, fx: number, fy: nu
     return t >= 0 && t <= 1 ? t : null;
 }
 
-/** 每局独占；空间网格先过滤候选，再做双方相对运动的连续碰撞。 */
+/** 每局独占；空间网格先过滤候选，再做双方相对运动的连续碰撞。*/
 export class ZCProjectileSystem {
     private step = 0;
     private readonly starts = new Map<number, Point & { step: number }>();
-    /** 数值 key（zigzag + Cantor 配对，单射），替代原来的 `${x}:${y}` 字符串。 */
+    /** 数值 key（zigzag + Cantor 配对，单射），替代原来的 `${x}:${y}` 字符串。*/
     private readonly cells = new Map<number, ZCUnitState[]>();
-    /** 空桶回收池：每帧把上一帧的桶还回来复用，Map 只保留本帧活跃格子。 */
+    /** 空桶回收池：每帧把上一帧的桶还回来复用，Map 只保留本帧活跃格子。*/
     private readonly bucketPool: ZCUnitState[][] = [];
     private readonly candidates = new Set<ZCUnitState>();
-    /** 每弹道复用，替代 `new Set(projectile.hitUnitIds ?? [])`。 */
+    /** 每弹道复用，替代 `new Set(projectile.hitUnitIds ?? [])`。*/
     private readonly hitIds = new Set<number>();
     private readonly wideUnits: ZCUnitState[] = [];
-    /** 每轮复用的结构候选（墙体 / 建筑），由 `context.structureTargets` 填。 */
+    /** 每轮复用的结构候选（墙体 / 建筑），由 `context.structureTargets` 填。*/
     private readonly structures: ZCCombatTarget[] = [];
     private readonly cellSize = 42;
 
@@ -94,8 +86,7 @@ export class ZCProjectileSystem {
         if (!hasActive) return;
 
         this.wideUnits.length = 0;
-        // 【泄漏修复】原实现只 `bucket.length = 0`、从不删 key：格子 key 随单位移动单调累积，
-        // 长对局里 cells 无界增长，且每帧还要遍历全部历史桶。这里清空 Map + 桶回池复用。
+        // 原来的实现只清空桶、不删 key，格子 key 会随单位移动无界增长；这里清空 Map 并回收桶。
         for (const bucket of this.cells.values()) {
             bucket.length = 0;
             this.bucketPool.push(bucket);
@@ -240,7 +231,7 @@ export class ZCProjectileSystem {
         this.step = 0;
     }
 
-    /** 计算并缓存本帧格子范围；用 4 个标量判断替代 `[...].every(...)` 的临时数组。 */
+    /** 计算并缓存本帧格子范围；用 4 个标量判断替代 `[...].every(...)` 的临时数组。*/
     private cellBounds(x1: number, y1: number, x2: number, y2: number, radius: number): boolean {
         const minX = Math.floor((Math.min(x1, x2) - radius) / this.cellSize);
         const maxX = Math.floor((Math.max(x1, x2) + radius) / this.cellSize);
@@ -259,12 +250,12 @@ export class ZCProjectileSystem {
     /**
      * 两个 int16 格坐标打包进一个 int32：结果恒为 V8 小整数（Smi），不产生堆对象。
      * 用位运算而非算术乘除，避免 `/` 结果被装箱成 HeapNumber 反而制造 GC 垃圾。
-     */
+    */
     private cellKey(x: number, y: number): number {
         return ((x & 0xffff) << 16) | (y & 0xffff);
     }
 
-    /** 索引阶段：把单位放进它扫过的每个格子。内联双层循环，零闭包、零字符串。 */
+    /** 索引阶段：把单位放进它扫过的每个格子。内联双层循环，零闭包、零字符串。*/
     private indexUnitCells(unit: ZCUnitState, x1: number, y1: number, x2: number, y2: number, radius: number): boolean {
         if (!this.cellBounds(x1, y1, x2, y2, radius)) return false;
         for (let x = this.boundMinX; x <= this.boundMaxX; x++) {
@@ -282,7 +273,7 @@ export class ZCProjectileSystem {
         return true;
     }
 
-    /** 候选阶段：把弹道扫过格子里的单位收进 candidates。桶不存在时直接跳过，不再 `?? []`。 */
+    /** 候选阶段：把弹道扫过格子里的单位收进 candidates。桶不存在时直接跳过，不再 `?? []`。*/
     private collectCellCandidates(x1: number, y1: number, x2: number, y2: number, radius: number): boolean {
         if (!this.cellBounds(x1, y1, x2, y2, radius)) return false;
         for (let x = this.boundMinX; x <= this.boundMaxX; x++) {

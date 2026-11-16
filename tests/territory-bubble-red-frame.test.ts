@@ -1,3 +1,4 @@
+import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -214,7 +215,7 @@ function stationRenderOf(opts: { preview?: boolean; unlocked?: boolean; passed?:
         footprint: [213, 214], unlock: { silverCost: 35, staminaCost: 1, requiredCells: [] },
     };
     const stage = { chapterId: 2, stage: 10, isBoss: true };
-    return (view as any).stationRenderOf(site, {
+    return stationRenderWithProjection(view)(site, {
         stageByCell: new Map([[213, stage]]),
         art: { randomSilverIcon: {}, chestIcon: null,
             levelBubbleFrame: BLUE_FRAME, levelBubblePendingFrame: RED_FRAME },

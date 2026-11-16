@@ -188,7 +188,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
 
     const loader = new context.exports.ZCGameLoader({ assets: assetService, configs: configService }, mapDirectory);
     const prepared = await loader.prepare();
-    assert.equal(prepared.cardArtConfig.paths.get('hero.mage'), cardArtConfig.paths.get('hero.mage'));
+    assert.equal(prepared.cardArtConfig.paths.get('badge.mage'), cardArtConfig.paths.get('badge.mage'));
 
     assert.equal(prepared.baseMatchConfig.map.id, 'preloaded-map', '冻结配置快照随预加载结果移交');
     assert.equal(prepared.baseMatchConfig.configHash, 'loader-snapshot');

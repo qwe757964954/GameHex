@@ -205,6 +205,33 @@ const hasWiring = (text: string, rewardFields: string[]): boolean =>
 /** MVC repositories return rewards; verify every consumer and the actual view outlet. */
 function hasDelegatedWiring(request: string, file: string, scope: string): boolean {
     const read = (path: string) => sources.get(join(APP_ROOT, path)) ?? '';
+    const league: Record<string, { kind: string; pages: string[]; method: string }> = {
+        RequestShopBuy: { kind: 'store', pages: ['LeagueStorePage'], method: 'buyStoreGoods' },
+        RequestUnionBargain: { kind: 'bargain', pages: ['LeagueDiscountPage'], method: 'requestBargain' },
+        RequestTaskUnionGetReward: { kind: 'task', pages: ['LeagueTaskPage', 'LeagueNorthRewardPage'], method: 'requestTaskReward' },
+        RequestTaskUnionGetProgressReward: { kind: 'progress', pages: ['LeagueTaskPage'], method: 'requestTaskProgressReward' },
+        RequestUnionActSweep: { kind: 'sweep', pages: ['LeagueNorthExpeditionPage'], method: 'requestSweep' },
+    };
+    const reward = league[request];
+    if (reward && file === join(APP_ROOT, 'league/LeagueRepository.ts')) {
+        const repository = read('league/LeagueRepository.ts');
+        const controller = read('league/LeagueRewardController.ts');
+        const composition = read('bootstrap/LeaguePopupComposition.ts');
+        return scope.includes('sendWithRewards<') && scope.includes('rsp.tlCmdGoods')
+            && repository.includes("{ status: 'ok', rewards }")
+            && controller.includes(`case '${reward.kind}': return repository.${reward.method}(`)
+            && controller.includes("if (this.isDisposed) return;")
+            && controller.includes('feedback.reward(result.rewards)')
+            && composition.includes('new LeagueRewardController(')
+            && composition.includes('reward: goods => FW.ShowReward(goods)')
+            && reward.pages.every(name => {
+                const view = read(`league/${name}.ts`);
+                return composition.includes(`view instanceof ${name}`)
+                    && view.includes(`kind: '${reward.kind}'`)
+                    && view.includes('EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action:')
+                    && view.includes('EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this)');
+            });
+    }
     if (request === 'RequestSlgBuildCollect'
         && file === join(APP_ROOT, 'bigmap/application/GameNetBigMapSlgGateway.ts')) {
         const repository = read('bigmap/application/BigMapSlgRepository.ts');

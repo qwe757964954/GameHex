@@ -22,12 +22,12 @@ const { ccclass, property } = _decorator;
  * 普通飘字是「快进慢出」：前 entranceProgress 完成入场（位移 + 缩放），之后线性淡出并带少量同向漂移，
  * 曲线真源在 ZCGameViewUtil.floatTextEntrance / floatTextFade / floatTextDrift。
  *
- * 金币是例外，而且**分两条完全相反的路**（`ZCFloatTextKind` 已按来处拆开）：
+ * 金币是例外，而且分两条完全相反的路（`ZCFloatTextKind` 已按来处拆开）：
  * · `gold`（击杀 / 拆建筑的掉落）—— `floatTextGoldDrop`：无数字，硬币从角色中心上方落到地面、
- *   停一下、原地缩小消失；不使用 riseDistance / driftDistance / popScale。
- * · `goldincome`（主城 / 金矿的产出）—— `floatTextGoldRise`：**有数字**，硬币 + 数字一起从
- *   **建筑顶部**往上升 50px 并淡出。锚点仍是格心，建筑高度由 FLOAT_TEXT_GOLD_INCOME_TOP_PX 补。
- */
+ * 停一下、原地缩小消失；不使用 riseDistance / driftDistance / popScale。
+ * · `goldincome`（主城 / 金矿的产出）—— `floatTextGoldRise`：有数字，硬币 + 数字一起从
+ * 建筑顶部往上升 50px 并淡出。锚点仍是格心，建筑高度由 FLOAT_TEXT_GOLD_INCOME_TOP_PX 补。
+*/
 @ccclass('ZCFloatTextView')
 export class ZCFloatTextView extends Component {
     private static readonly NORMAL_DAMAGE_COLOR = new Color(255, 255, 255, 255);
@@ -39,7 +39,7 @@ export class ZCFloatTextView extends Component {
     private static readonly MISS_COLOR = new Color(120, 205, 255, 255);
     private static readonly GOLD_COLOR = new Color(255, 198, 45, 255);
 
-    /** 按 kind 取色：穷举表，缺 key 会编译失败（新增 kind 必须补色）。 */
+    /** 按 kind 取色：穷举表，缺 key 会编译失败（新增 kind 必须补色）。*/
     private static readonly FLOAT_TEXT_COLOR_BY_KIND: Readonly<Record<ZCFloatTextKind, Color>> = {
         damage: ZCFloatTextView.NORMAL_DAMAGE_COLOR,
         critical: ZCFloatTextView.CRITICAL_COLOR,
@@ -52,23 +52,23 @@ export class ZCFloatTextView extends Component {
         goldincome: ZCFloatTextView.GOLD_COLOR,
     };
 
-    /** 连续伤害按中、左、右交替排布；五条轨道正好收在 98px 兵种画布宽度内。 */
+    /** 连续伤害按中、左、右交替排布；五条轨道正好收在 98px 兵种画布宽度内。*/
     private static readonly DAMAGE_LANES = [0, -1, 1, -2, 2] as const;
-    /** 数值压缩档位（千/百万/十亿/万亿 → 后缀）。 */
+    /** 数值压缩档位（千/百万/十亿/万亿 → 后缀）。*/
     private static readonly COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
         [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K'],
     ];
-    /** 暴击 / 秒杀的大字号；其余普通字号。 */
+    /** 暴击 / 秒杀的大字号；其余普通字号。*/
     private static readonly EMPHASIS_FONT_SIZE = 34;
     private static readonly DEFAULT_FONT_SIZE = 30;
     /**
      * 前缀字号 = 数字字号 × 该比例。数字只占 0.72em 大写高、汉字占 0.95em，
      * 取 0.5 后视觉高度约 0.66；要再贴近「一半高」只改此值。
-     */
+    */
     private static readonly PREFIX_FONT_RATIO = 0.5;
-    /** 前缀与数字的水平间距：前缀描边会各吃掉 1px，间距过小会贴成整体。 */
+    /** 前缀与数字的水平间距：前缀描边会各吃掉 1px，间距过小会贴成整体。*/
     private static readonly PREFIX_GAP = 6;
-    /** 连续伤害的三行轨道：行距、每行额外的下坠量、中心/两侧摇摆幅度。 */
+    /** 连续伤害的三行轨道：行距、每行额外的下坠量、中心/两侧摇摆幅度。*/
     private static readonly DAMAGE_ROW_STEP = 30;
     private static readonly DAMAGE_ROW_DROP_EXTRA = 6;
     private static readonly DAMAGE_ROW_SWAY_CENTER = 4;
@@ -77,21 +77,21 @@ export class ZCFloatTextView extends Component {
     /**
      * 金币掉落段内的自转圈数（屏幕平面内）。图标尺寸（30×30）在 prefab 的 GoldIcon 上定，
      * 本文件只管位置 / 自转 / 透明度。
-     */
+    */
     private static readonly GOLD_ICON_SPINS = 1;
     /**
      * 产金飘字里硬币的半边长（prefab GoldIcon 30×30 的一半）。
-     * 只有 `goldincome` 用得上：它**有数字**，硬币要压在数字左侧，不能像 `gold` 那样居中重叠。
-     */
+     * 只有 `goldincome` 用得上：它有数字，硬币要压在数字左侧，不能像 `gold` 那样居中重叠。
+    */
     private static readonly GOLD_ICON_HALF_SIZE = 15;
-    /** 产金飘字里硬币与数字的横向间距（数字描边各吃 1px，再小会贴成整体）。 */
+    /** 产金飘字里硬币与数字的横向间距（数字描边各吃 1px，再小会贴成整体）。*/
     private static readonly GOLD_ICON_TEXT_GAP = 4;
-    /** Text 宽度上限：contentSize 自适应有一帧延迟，读到出厂值 240 时用兜底宽度。 */
+    /** Text 宽度上限：contentSize 自适应有一帧延迟，读到出厂值 240 时用兜底宽度。*/
     private static readonly TEXT_WIDTH_MAX = 200;
-    /** 宽度读不到时的兜底宽度（按 3 个字符数字估算）。 */
+    /** 宽度读不到时的兜底宽度（按 3 个字符数字估算）。*/
     private static readonly TEXT_WIDTH_FALLBACK = 40;
 
-    /** 数值压缩：千/百万/十亿/万亿 → K/M/B/T 后缀。 */
+    /** 数值压缩：千/百万/十亿/万亿 → K/M/B/T 后缀。*/
     private static compactBattleNumber(value: number): string {
         const rounded = Math.max(0, Math.ceil(value));
         for (const [limit, suffix] of ZCFloatTextView.COMPACT_UNITS) {
@@ -102,13 +102,13 @@ export class ZCFloatTextView extends Component {
         return String(rounded);
     }
 
-    /** 飘字文案拆成「前缀 + 数值」两段（前缀用独立小字号 Label，见 renderPrefix）。 */
+    /** 飘字文案拆成「前缀 + 数值」两段（前缀用独立小字号 Label，见 renderPrefix）。*/
     private static battleText(text: Readonly<ZCFloatText>): { prefix: string; value: string } {
         const value = ZCFloatTextView.compactBattleNumber(text.value);
         switch (text.kind) {
             // 金币无文字，只剩硬币图标，连 + 也不拼。
             case 'gold': return { prefix: '', value: '' };
-            // 建筑产金**有数字**（用户口径「金币 icon 和对应的数字 UI」），+ 号标"到账"。
+            // 建筑产金有数字（用户口径「金币 icon 和对应的数字 UI」），+ 号标"到账"。
             // 与 gold 的差别不只是显示与否：那条是掉落物，数字会跟掉落物抢地面，藏掉更干净。
             case 'goldincome': return { prefix: '', value: `+${value}` };
             // 治疗保留 + 号，标的是「加」语义。
@@ -142,7 +142,7 @@ export class ZCFloatTextView extends Component {
     /**
      * 已废弃，仅为兼容 prefab 序列化值保留（删属性会在 prefab 上产生未知属性警告）。
      * 金币掉落高度改由 ZCGameViewUtil.FLOAT_TEXT_GOLD_DROP_PX 决定。
-     */
+    */
     @property({ group: '数值表现', tooltip: '（已废弃）原金币上飘距离；金币现改为掉落原地，见 FLOAT_TEXT_GOLD_DROP_PX' })
     riseDistance = 46;
 
@@ -164,26 +164,26 @@ export class ZCFloatTextView extends Component {
     /**
      * 「快进慢出」分界：前这么久完成入场（位移 + 缩放），之后淡出；
      * 缺省值与 FLOAT_TEXT_ENTRANCE_PROGRESS 同源。
-     */
+    */
     @property({ group: '数值表现', tooltip: '入场段占比（0~1）：前这么久完成位移 + 缩放，之后淡出' })
     entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS;
 
-    /** 慢出段收尾漂移距离：沿入场方向再走一点，避免静止淡出的死板感。 */
+    /** 慢出段收尾漂移距离：沿入场方向再走一点，避免静止淡出的死板感。*/
     @property({ group: '数值表现', tooltip: '慢出段的收尾漂移距离（像素）：伤害继续下沉 / 金币继续上飘' })
     driftDistance = FLOAT_TEXT_DRIFT_DISTANCE;
 
-    /** 复用的取色缓存：Label.color 的 setter 会拷贝，同一条飘字不会互相串色。 */
+    /** 复用的取色缓存：Label.color 的 setter 会拷贝，同一条飘字不会互相串色。*/
     private readonly tint = new Color();
-    /** 金币图标的 UIOpacity（懒取）：Label.color.a 只作用于 Label，独立 Sprite 需单独同步淡出。 */
+    /** 金币图标的 UIOpacity（懒取）：Label.color.a 只作用于 Label，独立 Sprite 需单独同步淡出。*/
     private goldIconOpacity: UIOpacity | null = null;
 
     /**
      * `gold`（击杀 / 拆建筑掉落）的落点高度 = 兵种画布中心（单位根节点是逻辑脚点，
      * 画布中心在其上方约 49px，取 offsetY=26 只到下半身）。
      *
-     * ⚠️ 只服务 `gold`。建筑产金（`goldincome`）的基准是**建筑顶部**，不走这里 ——
+     * 只服务 `gold`。建筑产金（`goldincome`）的基准是建筑顶部，不走这里 ——
      * 见 `FLOAT_TEXT_GOLD_INCOME_TOP_PX`。
-     */
+    */
     private get goldCenterY(): number {
         return this.damageTargetSize * 0.5;
     }
@@ -199,7 +199,7 @@ export class ZCFloatTextView extends Component {
         this.textLabel.fontSize = fontSize;
         // 金币两种各走自己的曲线（掉落 / 产金，方向相反），其余走「快进慢出」，互不干扰。
         const gold = text.kind === 'gold' ? floatTextGoldDrop(progress) : null;
-        // 建筑产金走**相反**的上升曲线（只向上）。两个分支互斥，同时只会有一条非 null。
+        // 建筑产金走相反的上升曲线（只向上）。两个分支互斥，同时只会有一条非 null。
         const goldIncome = text.kind === 'goldincome' ? floatTextGoldRise(progress) : null;
         const enter = floatTextEntrance(progress, this.entranceProgress);
         // 淡出系数：金币（两种都算）用自己的，其余走 floatTextFade。
@@ -212,7 +212,7 @@ export class ZCFloatTextView extends Component {
         // 每帧绝对赋值 enabled：节点来自对象池，复用会残留上一次状态。
         if (this.goldIcon) {
             this.goldIcon.enabled = gold !== null || goldIncome !== null;
-            // 掉落：硬币压在落点上自转一圈。产金：硬币不自转，让到数字左侧 —— 这条**有数字**，
+            // 掉落：硬币压在落点上自转一圈。产金：硬币不自转，让到数字左侧 —— 这条有数字，
             // 居中重叠会把「+16」的加号盖掉。
             if (gold) this.renderGoldIcon(gold.spin, fade);
             else if (goldIncome) this.renderGoldIcon(0, fade, this.goldIncomeIconX);
@@ -226,9 +226,9 @@ export class ZCFloatTextView extends Component {
             return;
         }
         if (goldIncome) {
-            // 建筑产金：数字保持可见（applyColor 已按 fade 写过 enabled），硬币与数字**同组**上浮
+            // 建筑产金：数字保持可见（applyColor 已按 fade 写过 enabled），硬币与数字同组上浮
             // —— 硬币是 Text 的子节点，所以移动父节点就等于两个一起动，不需要各算一遍。
-            // ⚠️ 基准是**建筑顶部**（格心 + FLOAT_TEXT_GOLD_INCOME_TOP_PX），不是角色中心；
+            //  基准是建筑顶部（格心 + FLOAT_TEXT_GOLD_INCOME_TOP_PX），不是角色中心；
             //    上升量全程 >= 0，所以这条飘字只会往上走。
             this.textLabel.node.setPosition(
                 0, FLOAT_TEXT_GOLD_INCOME_TOP_PX + goldIncome.rise, 0);
@@ -262,7 +262,7 @@ export class ZCFloatTextView extends Component {
      * 前缀用独立小字号 Label：单条 Label 只有一个字号，无法满足「前缀只有数字一半高」。
      * 前缀挂在 Text 下自动继承位置与缩放；水平位置按数字实际宽度反推（前缀宽度按字数×字号算，
      * 不读 UITransform，避免一帧延迟）。每帧绝对赋值 active：对象池复用会残留可见性。
-     */
+    */
     private renderPrefix(prefix: string, fontSize: number, fade: number): void {
         const label = this.prefixLabel;
         if (!label) return;
@@ -284,10 +284,10 @@ export class ZCFloatTextView extends Component {
     /**
      * 金币图标的落位与透明度。
      *
-     * `x` 默认 0 = **居中压在落点上**（`gold` 掉落：没有数字可对齐，再按文字宽度往左偏只会让硬币凭空偏左）；
+     * `x` 默认 0 = 居中压在落点上（`gold` 掉落：没有数字可对齐，再按文字宽度往左偏只会让硬币凭空偏左）；
      * `goldincome` 传数字左缘再往左半个硬币宽 —— 那条有数字，硬币要在左边排成一排。
      * 自转只在掉落段（两种情况都用的 `spin`，产金传 0）。
-     */
+    */
     private renderGoldIcon(spin: number, fade: number, x = 0): void {
         const icon = this.goldIcon;
         if (!icon) return;
@@ -300,7 +300,7 @@ export class ZCFloatTextView extends Component {
     /**
      * 产金飘字里硬币的横向位置：数字左缘再往左 `间距 + 半硬币`。
      * 数字宽度读 `UITransform`（overflow=NONE 时由 Label 按文字内容刷新，有一帧延迟，见 readTextWidth）。
-     */
+    */
     private get goldIncomeIconX(): number {
         return -(this.readTextWidth() * 0.5
             + ZCFloatTextView.GOLD_ICON_TEXT_GAP
@@ -310,7 +310,7 @@ export class ZCFloatTextView extends Component {
     /**
      * 数字 Label 实际宽度：overflow=NONE 时 contentSize 自适应但有一帧延迟，
      * 读到出厂值 240 时退回兜底宽度。
-     */
+    */
     private readTextWidth(): number {
         const width = this.textLabel.node.getComponent(UITransform)?.width ?? 0;
         return width > 0 && width <= ZCFloatTextView.TEXT_WIDTH_MAX
@@ -326,7 +326,7 @@ export class ZCFloatTextView extends Component {
         return this.goldIconOpacity;
     }
 
-    /** 按 kind 取色 + 尾段淡出，返回本帧 alpha 系数（0~1）供金币图标同步。 */
+    /** 按 kind 取色 + 尾段淡出，返回本帧 alpha 系数（0~1）供金币图标同步。*/
     private applyColor(text: Readonly<ZCFloatText>, progress: number, fadeOverride: number | null = null): number {
         const base = ZCFloatTextView.FLOAT_TEXT_COLOR_BY_KIND[text.kind];
         // 金币有自己的淡出曲线，其余走 floatTextFade。

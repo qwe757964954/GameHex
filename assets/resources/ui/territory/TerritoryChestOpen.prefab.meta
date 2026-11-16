@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "a5d41dfe-5e3e-0f42-7d53-ae919102af5f",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "TerritoryChestOpen",
+    "hasIcon": false
+  }
+}

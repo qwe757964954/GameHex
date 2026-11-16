@@ -28,11 +28,11 @@ export interface ZCRuntimeRules {
     artifactMaxStored: number;
     artifactName: string;
     /**
-     * 本局神器的图标名（`pvpArtifact[].icon`，如「霜封冰刃」），**不带目录与后缀**。
+     * 本局神器的图标名（`pvpArtifact[].icon`，如「霜封冰刃」），不带目录与后缀。
      *
-     *  渲染层按 `image/artifact/<icon>` 拼路径加载（规则 137）；中立资源点「神器充能」
-     *  格的图标显示的就是玩家携带的这件神器，所以换神器后格子图标会自动跟着变。
-     */
+     * 渲染层按 `image/artifact/<icon>` 拼路径加载（规则 137）；中立资源点「神器充能」
+     * 格的图标显示的就是玩家携带的这件神器，所以换神器后格子图标会自动跟着变。
+    */
     artifactIcon: string;
     artifactCooldownSeconds: number;
     artifactFreezeSeconds: number;
@@ -56,35 +56,35 @@ export interface ZCRuntimeRules {
     captureRequireSupply: boolean;
     killUnitGoldReward: number;
     destroyBuildingGoldReward: number;
-    /** 每个席位在自己主城邻格里的金矿保底个数（`ZCPvpTileRules.createPvpTileTypes` 阶段 1a）。 */
+    /** 每个席位在自己主城邻格里的金矿保底个数（`ZCPvpTileRules.createPvpTileTypes` 阶段 1a）。*/
     initialGuaranteedMine: number;
     wallMaxHp: number;
     hqMaxHp: number;
 }
 
-/** 运行时目录已就绪（getTable + compile + loadPvpTables 完成），进对局可直接复用。 */
+/** 运行时目录已就绪（getTable + compile + loadPvpTables 完成），进对局可直接复用。*/
 export function isZCRuntimeCompiled(): boolean {
     return ZC_RUNTIME_CONFIG.ready;
 }
 
-/** 退出登录时重置；下次进对局强制重新编译，避免跨会话复用旧配置。 */
+/** 退出登录时重置；下次进对局强制重新编译，避免跨会话复用旧配置。*/
 export function resetZCRuntime(): void {
     ZC_RUNTIME_CONFIG.reset();
 }
 
-/** 取运行时全局规则；配置未加载（初始化失败路径）时抛错，不做内置兜底。 */
+/** 取运行时全局规则；配置未加载（初始化失败路径）时抛错，不做内置兜底。*/
 export function getPvpRuntimeRules(): Readonly<ZCRuntimeRules> {
     const rules = ZC_RUNTIME_CONFIG.snapshot.rules;
     if (!rules) throw new Error('[ZCGameRuntimeConfig] PVP 全局配置未加载');
     return rules;
 }
 
-/** Frozen into each match together with the normal PVP tables. */
+/** Frozen into each match together with the normal PVP tables.*/
 export function getZCLegacySkillEffectConfig(): Readonly<ZCLegacySkillEffectConfig> {
     return ZC_RUNTIME_CONFIG.snapshot.legacySkillEffects ?? null;
 }
 
-/** 一张出战卡引用了「上不了场」的单位（单位表缺「单位预设」或「普攻技能ID」）。 */
+/** 一张出战卡引用了「上不了场」的单位（单位表缺「单位预设」或「普攻技能ID」）。*/
 export interface ZCUnplayableDeckCard {
     cardId: string;
     cardName: string;
@@ -92,13 +92,13 @@ export interface ZCUnplayableDeckCard {
 }
 
 /**
- * 出战卡 → 单位 的引用完整性：列出所有引用了**不可上场单位**的出战卡。
+ * 出战卡 → 单位 的引用完整性：列出所有引用了不可上场单位的出战卡。
  *
  * 合表后（2026-09-20）单位列内联在卡行上，「卡引用的单位」就是它自己那一行。
- * 缺口的形态因此变成：某个**兵种卡行两项单位列都没配**（被 `parseUnits` 当建筑卡跳过），
- * 而这张卡却在出战卡组里 —— 场面会在**第一次出兵**时抛「本局单位有效属性不存在」，
+ * 缺口的形态因此变成：某个兵种卡行两项单位列都没配（被 `parseUnits` 当建筑卡跳过），
+ * 而这张卡却在出战卡组里 —— 场面会在第一次出兵时抛「本局单位有效属性不存在」，
  * 报错点离原因很远。所以由这里提前一次性汇总。
- */
+*/
 export function findUnplayableDeckCards(): ZCUnplayableDeckCard[] {
     const missing: ZCUnplayableDeckCard[] = [];
     const seen = new Set<string>();
@@ -112,7 +112,7 @@ export function findUnplayableDeckCards(): ZCUnplayableDeckCard[] {
     return missing;
 }
 
-/** 当前 remoteRef 中的 PVP 分表。 */
+/** 当前 remoteRef 中的 PVP 分表。*/
 export interface ZCPvpTables {
     pvpGlobal?: Array<{ key: string; value: unknown }>;
     pvpArtifact?: Array<Record<string, unknown>>;
@@ -132,9 +132,9 @@ export interface ZCPvpTables {
     /**
      * 中立资源组合（`PVP-中立资源配置.xlsx / 中立资源组合`）。
      *
-     *  地图资源点只写 `groupId`，组内按 `weight` 抽一个资源项 —— 见 `ZCNeutralResourceGroup`。
-     *  旧表 `neutralResource`（PVP-地块 / 中立资源 sheet）已于 2026-10-26 下线。
-     */
+     * 地图资源点只写 `groupId`，组内按 `weight` 抽一个资源项 —— 见 `ZCNeutralResourceGroup`。
+     * 旧表 `neutralResource`（PVP-地块 / 中立资源 sheet）已于 2026-10-26 下线。
+    */
     neutralResourceGroup?: Array<Record<string, unknown>>;
     neutralEnhanceGate?: Array<Record<string, unknown>>;
     skillAttrModifier?: Array<Record<string, unknown>>;
@@ -145,14 +145,14 @@ export interface ZCPvpTables {
     pvpSkillBinding?: Array<Record<string, unknown>>;
     pvpStatus?: Array<Record<string, unknown>>;
     pvpSkillPlan?: Array<Record<string, unknown>>;
-    /** Old-client tables kept as the Excel-authoring compatibility surface. */
+    /** Old-client tables kept as the Excel-authoring compatibility surface.*/
     skillAttr?: Array<Record<string, unknown>>;
     skillView?: Array<Record<string, unknown>>;
     skillEffect?: Array<Record<string, unknown>>;
     skillBuff?: Array<Record<string, unknown>>;
 }
 
-/** 编译成功后一次性安装运行时目录；外部仍使用原入口。 */
+/** 编译成功后一次性安装运行时目录；外部仍使用原入口。*/
 export function loadPvpTables(tables: ZCPvpTables): ZCConfigLoadResult {
     const compiled = compilePvpTables(tables);
     ZC_RUNTIME_CONFIG.install(compiled);

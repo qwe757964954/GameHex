@@ -277,15 +277,7 @@ export class World extends ScriptObject {
             }
         }
 
-  //      let error:number[]
         for(let id of overtimeSet){
-            // let diff = now - overtimeMap.get(id)
-            // if(diff > CACHE_OVERTIME){
-            //     error = error || []
-            //     error.push(id)
-            //     error.push(this.tmOccupyCaller.get(id) || 0)
-            // }
-
             let occupy = this.getEntityOccupy(id)
             if(occupy > 0){
                 continue

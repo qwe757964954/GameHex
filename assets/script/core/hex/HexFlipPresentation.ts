@@ -158,7 +158,8 @@ export const HEX_FLIP_IDLE_FX: Readonly<IZCHexFlipFx> = {
 };
 
 /** `progress` 一律 clamp 到 [0,1]：超时的激活事件与负进度都按边界处理。实现归位 `core/math/Scalar`。 */
-export { clamp01 } from '../math/Scalar';
+import { clamp01 } from '../math/Scalar';
+export { clamp01 };
 
 function makeShrinkFx(tileLift: number, tileScale: number): IZCHexFlipFx {
     return {

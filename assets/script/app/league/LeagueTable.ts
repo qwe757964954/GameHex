@@ -1,5 +1,5 @@
 import type { IRewardAmount } from '../../core/types/Reward';
-import { ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
+import { GUANKA_REWARD_TABLE, ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 /**
  * 联盟主页入口与配置表归一化纯函数，不 import cc。
  * 六个入口按 LEAGUE_ENTRANCES 顺序接事件；landed 表示面板是否已落地。
@@ -2391,7 +2391,7 @@ export function buildLeagueTaskBoxViews(
 // `RequestGetRank` 类即可（与 `RequestRoleWatchAdvert` 一样，跨域协议就近收在 `RequestLeagueMsg`）。
 
 /** 表名（老端 `Ref.RefMgrguankaReward` / `Ref.RefMgrmonster` / `Ref.RefMgrbfUnionRankAward`）。 */
-export const LEAGUE_GUANKA_REWARD_TABLE = 'guankaReward';
+export const LEAGUE_GUANKA_REWARD_TABLE = GUANKA_REWARD_TABLE;
 export const LEAGUE_MONSTER_TABLE = 'monster';
 export const LEAGUE_UNION_RANK_AWARD_TABLE = 'bfUnionRankAward';
 

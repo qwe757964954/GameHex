@@ -521,7 +521,13 @@ export class ZCStatusSystem {
 
     // ---- 聚合 ----
 
-    /** 聚合单位全部状态的数值修正（flat 相加、pct 相加；返回 0/缺省 的键不写出）。*/
+    /**
+     * 聚合单位全部状态的数值修正（flat 相加、pct 相加；返回 0/缺省 的键不写出）。
+     *
+     * **返回值是缓存中的共享只读对象，调用方不得修改字段。** 同一版本内多次调用返回同一引用；
+     * 需要派生态（如 effectiveDefinition 的临时覆盖）时，请读取字段后自建新对象，不要就地改 `mods`。
+     * `Object.freeze` 在缓存生成时执行一次，版本失效后由下一次调用重建。
+     */
     statModsOf(unitId: string): ZCStatusStatMods {
         const revision = this.revisionOf(unitId);
         const cached = this.statModsCache.get(unitId);
@@ -540,6 +546,7 @@ export class ZCStatusSystem {
                 count += 1;
             }
         }
+        Object.freeze(result);
         this.statModsCache.set(unitId, { revision, mods: result, count });
         return result;
     }

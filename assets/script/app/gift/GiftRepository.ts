@@ -10,7 +10,7 @@ import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     GIFT_SHOP_TYPE,
     normalizePaidChannelIds,
@@ -22,6 +22,9 @@ import {
 import type { IGiftItemInfo, IGiftShopRow, IPayChannelRow } from './GiftTable';
 import { RequestGiftShopBuy } from './RequestGiftMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { PAY_CHANNEL_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /** 一次界面刷新要的全部数据。 */
 export interface IGiftSnapshot {
     readonly shops: readonly IGiftShopRow[];
@@ -35,7 +38,7 @@ export interface IGiftSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type GiftRequestResult = 'ok' | 'offline' | 'failed';
+export type GiftRequestResult = INetRequestStatus;
 
 export interface IGiftRepository {
     /** 读表 + 读缓存，组装一次快照；不发任何请求。 */
@@ -45,7 +48,6 @@ export interface IGiftRepository {
 }
 
 /** 请求超时（与首充 / 七日同口径：写 5000ms）。 */
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -79,8 +81,8 @@ export class RuntimeGiftRepository implements IGiftRepository {
     async load(): Promise<IGiftSnapshot> {
         const [shopRows, payRows, itemRows] = await Promise.all([
             readRows('giftShop'),
-            readRows('payChannel'),
-            readRows('item'),
+            readRows(PAY_CHANNEL_TABLE),
+            readRows(ITEM_TABLE),
         ]);
 
         return {
@@ -93,9 +95,6 @@ export class RuntimeGiftRepository implements IGiftRepository {
     }
 
     async buyGift(id: number, caller?: object): Promise<GiftRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdShopBuyRspMsg): void => {
             // 已购次数由服务端另推 CmdShop，这里只展示本次获得的物品。
@@ -103,24 +102,16 @@ export class RuntimeGiftRepository implements IGiftRepository {
             applied = true;
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(
-                    new RequestGiftShopBuy(
-                        { id, cmdShopType: GIFT_SHOP_TYPE as CmdShopType, buyTimes: 1 },
-                        caller,
-                        callback,
-                    ),
-                    false,
-                ),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Gift] 购买礼包失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestGiftShopBuy(
+                { id, cmdShopType: GIFT_SHOP_TYPE as CmdShopType, buyTimes: 1 },
+                caller,
+                callback,
+            ),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Gift' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 }

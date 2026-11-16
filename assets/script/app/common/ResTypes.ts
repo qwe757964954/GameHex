@@ -16,7 +16,7 @@ import {
     spriteFramePathOf,
 } from '../ArtPaths';
 import { toCount } from '../../core/value/Coerce';
-import { asRow } from '../../core/table/RowParse';
+import { asRow, parseRowsToMap } from '../../core/table/RowParse';
 import {
     ITEM_TABLE as CORE_ITEM_TABLE,
     OPEN_TABLE as CORE_OPEN_TABLE,
@@ -222,20 +222,16 @@ export interface IItemRefRow {
 
 /** `item` 全表 → `resId` → 展示字段；同 resId 后写覆盖（与 activity 口径一致）。 */
 export function parseItemRows(rows: readonly unknown[]): Map<number, IResGoodsInfo> {
-    const map = new Map<number, IResGoodsInfo>();
-    for (const raw of rows ?? []) {
-        const row = asRow(raw);
-        if (!row) continue;
+    return parseRowsToMap(rows, (row) => {
         const resId = toCount(row.resId);
-        if (resId <= 0) continue;
-        map.set(resId, {
+        if (resId <= 0) return null;
+        return {
             name: typeof row.name === 'string' ? row.name : '',
             quality: toCount(row.quality),
             icon: typeof row.icon === 'string' ? row.icon : '',
             iconIsPath: true,
-        });
-    }
-    return map;
+        };
+    }, (one) => one.resId, { keep: 'last' });
 }
 
 /** `roleProperty` 全表 → `resId` → 展示字段；同 resId 后写覆盖。 */

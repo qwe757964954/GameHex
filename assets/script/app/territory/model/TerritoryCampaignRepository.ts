@@ -12,6 +12,7 @@ import {
     readTerritoryLevelAutoStart,
 } from './TerritoryCampaignConfig';
 
+import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../../core/config/TableNames';
 /** 把 RefUtil 返回的 unknown[] 收成强类型行表；表名对不上时给空数组而不是崩。 */
 function asRows<T>(value: unknown): T[] {
     return Array.isArray(value) ? (value as T[]) : [];
@@ -31,8 +32,8 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
         RefUtil.instance.getRefAllAsync('npcTeam'),
         RefUtil.instance.getRefAllAsync('pvpCard'),
         RefUtil.instance.getRefAllAsync('defenceModWave'),
-        RefUtil.instance.getRefAllAsync('item'),
-        RefUtil.instance.getRefAllAsync('roleProperty'),
+        RefUtil.instance.getRefAllAsync(ITEM_TABLE),
+        RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),
         RefUtil.instance.getRefAllAsync('gameConfig'),
     ]);
     const resourceRows = asRows<TerritoryResourceRow>(items).concat(asRows<TerritoryResourceRow>(roleProperties));

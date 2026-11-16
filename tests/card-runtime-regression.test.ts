@@ -12,6 +12,7 @@ import * as descMarkup from '../assets/script/app/card/CardSkillDescMarkup';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import { CardPopupEvent } from '../assets/script/app/card/CardPopupEvents';
 import * as resTypes from '../assets/script/app/common/ResTypes';
+import * as tableNames from '../assets/script/core/config/TableNames';
 import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
@@ -674,6 +675,7 @@ test('技能仓库区分角色货币和背包材料，同时按英雄读取技�
         './ItemBag': { createItemCounter: () => (id: string) => id === '10300' ? 5 : 99 },
         '../main/MainRoleRow': { readRoleRow: () => ({ gold: 5500 }) },
         '../common/ResTypes': resTypes,
+        '../../core/config/TableNames': tableNames,
         '../net/RequestGuard': requestGuard,
         '../itemdetail/ItemDetailRepository': { itemDetailRepository: { loadItemRow: async (id: number) => {
             assert.notEqual(id, 7, '银币来自角色资源表，不查询道具表');

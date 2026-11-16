@@ -1149,16 +1149,10 @@ test('D2 ⚠️ 三张缓存都走 `CacheMgr`（服务端会推），**不自己
     assert.ok(/private\s+(readonly\s+)?messages|chatStore|Map<string/.test(REPO_CODE), '消息要存在内存里');
 });
 
-test('D3 ⚠️ 写请求必须 `withTimeout` + 离线早退 + `catch` 返 failed（否则服务端不回就永悬）', () => {
-    assert.ok(REPO_CODE.includes('withTimeout('), '必须 withTimeout');
-    assert.ok(REPO_CODE.includes('net.isConnected'), '离线要早退');
-    assert.ok(REPO_CODE.includes(`return 'offline'`), '离线返回 offline（不是 failed，提示文案不同）');
-    assert.ok(/catch\s*\(/.test(REPO_CODE), 'catch 不能省');
-    const read = /const READ_TIMEOUT_MS = (\d+)/.exec(REPO_SRC);
-    const write = /const WRITE_TIMEOUT_MS = (\d+)/.exec(REPO_SRC);
-    assert.ok(read && write, '读 / 写超时常量必须都在');
-    assert.equal(Number(read![1]), 800);
-    assert.equal(Number(write![1]), 5000);
+test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
+    assert.ok(REPO_CODE.includes('sendGameRequest(GameNet.instance'), '必须走公共发包壳');
+    assert.ok(REPO_CODE.includes(`tag: 'Chat'`), '必须带 Chat tag');
+    assert.ok(REPO_SRC.includes(`import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '超时常量走公共真源');
     // 给测试用的导出（避免测试里硬编码）
     assert.ok(REPO_SRC.includes('export const CHAT_READ_TIMEOUT_MS'));
     assert.ok(REPO_SRC.includes('export const CHAT_WRITE_TIMEOUT_MS'));

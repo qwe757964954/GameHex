@@ -16,6 +16,7 @@ import { ROLE_BAG_TAB_KINDS, buildEquipSlotPlan, buildRoleNavs, sortBagEntries }
 import { totalAttackOf } from './RolePowerTable';
 import type { IEquipLevelRow, IEquipPowerPart, IEquipRankRow, ISkillAttrModifierRow } from './RolePowerTable';
 
+import { ITEM_TABLE } from '../../core/config/TableNames';
 /** 宝石「镶嵌中」锁定阈值：GemLockState.wear = 2（lock / wearLock 也算已镶嵌）。 */
 const GEM_LOCK_WEAR = 2;
 
@@ -329,7 +330,7 @@ class RoleRepository {
      * 图标走 item.icon 的 resources 相对路径（与宝石/装备的 icon.json 通道不同）。
      */
     private async readItemBag(): Promise<IRoleBagEntry[]> {
-        const itemRows = await RefUtil.instance.getRefAllAsync('item');
+        const itemRows = await RefUtil.instance.getRefAllAsync(ITEM_TABLE);
         const itemByResId = indexBy(itemRows as Array<Record<string, unknown>>, 'resId');
         const counts = await readItemCounts();
 

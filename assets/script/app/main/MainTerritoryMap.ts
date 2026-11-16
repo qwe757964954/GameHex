@@ -141,6 +141,7 @@ import { TerritoryUiEvent, TerritoryViewEvent, type TerritoryIntent,
     type ITerritoryRenderEvent, type ITerritoryCommandEvent } from '../territory/application/TerritoryEvents';
 import { guideMapFocusCells, type ITerritoryRenderState } from '../territory/application/TerritoryViewState';
 
+import { ICON_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
 /**
  * 顶部 HUD（个人信息框 + 好友 / 邮件 / 排行榜 / 邀请）的节点名。
@@ -1650,7 +1651,7 @@ export class MainTerritoryMap extends Component {
             .map((enemy) => enemy.headIcon)
             .filter((path) => path !== '' && !this.levelTipIcons.has(path));
         if (missing.length === 0) return;
-        const resolver = createIconArtResolver(await this.refRows<IconRow>('icon'));
+        const resolver = createIconArtResolver(await this.refRows<IconRow>(ICON_TABLE));
         if (!this.isValid || revision !== this.levelTipRevision) return;
         await Promise.all(missing.map(async (path) => {
             const target = resolver.resolve(path);

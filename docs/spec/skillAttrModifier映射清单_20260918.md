@@ -1,6 +1,6 @@
 # skillAttrModifier 未注册 type 映射清单
 
-> 状态：2026-09-18 盘点快照。用于追溯当时的表数据与未注册 type；仍被 `zcds-legacy-skill-runtime.md` 等文档引用。配表或引擎变化后先复核，不把本文当当前配表真源。
+> 状态：2026-09-18 盘点快照。实际引用为 `assets/script/app/zcds/model/ZCModifierMapper.ts:4` 的代码注释，以及 `docs/agent/目录组织与根目录治理方案.md`、`docs/agent/过期内容清理与优化方案.md` 的目录/清理索引；未被现行规范正文引用。按 90 天时点记录保留口径，保留至 2026-12-17 后再评估归档。配表或引擎变化后先复核，不把本文当当前配表真源。
 
 - 日期：2026-09-18
 - 工程：D:\City1001\Demo3.8（Cocos Creator 3.8.8）

@@ -1,12 +1,12 @@
 # 大地图野怪改用骨骼模型 · 生产级方案
 
 > 状态：**方案（未实施）** · 日期 2026-11-11
-> 代码：`assets/script/app/bigmap/` · 配置：`assets/remoteRef/bigmapMonster.json`（源 `D:/City1001/doc/塔防数据配置/DM-野怪配置.xlsx`）
+> 代码：`assets/script/app/bigmap/` · 配置：`assets/remoteRef/bigmapMonster.json`（源 xlsx 未入库）
 > 本文只做设计；每一步落地后再按 §8 的顺序验证。
 
 ---
 
-## 0. 结论先行（五条，含反直觉的）
+## 0. 结论（五条，含反直觉项）
 
 1. **「工程现有的骨骼模型」= `assets/resources/skel/*` 下 30 个角色 Spine**。
    `assets/bundles/battle/units/*` 那 7 个（九头蛇 / 剑圣 / 女猎手 / 玛法 / 萨满 / 阿尔萨斯 / 驭兽师）是

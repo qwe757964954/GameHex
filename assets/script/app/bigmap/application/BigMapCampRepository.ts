@@ -11,6 +11,7 @@ import {
     type IBigMapCampMoveResult,
 } from '../model/BigMapCampMove';
 
+import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
 export interface IBigMapCampGateway {
     dispose?(): void;
     fetchSimple(campIds: readonly number[]): Promise<unknown>;
@@ -28,7 +29,6 @@ export interface IBigMapCampGateway {
 }
 
 export const BIGMAP_CAMP_REFRESH_SECONDS = 5;
-const READ_TIMEOUT_MS = 5000;
 
 /** 页面级缓存：不落盘，销毁后所有迟到回包失效；网络实现由入口注入。 */
 export class BigMapCampRepository {

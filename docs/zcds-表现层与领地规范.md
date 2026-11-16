@@ -336,7 +336,7 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
   美术的正面画在哪个方向。美术 150×61，**亮白弧顶在右、速度线拖在左** ⇒ 正面就是 `+X` ⇒ 填 **`0`**
   （转角 = 弹道方向本身）。
 - ⚠️ **别改回 90**。2026-11-02 第一轮曾按「长轴的法线朝目标」登记 `90`，实战截图里箭头变成
-  **侧着飞**（正面朝上、敌人却在右边，见 `tmp/_crescent_shot_4x.png`），用户要求「顺时针再旋转 90°」
+  **侧着飞**（正面朝上、敌人却在右边；当时的实测截图不入库），用户要求「顺时针再旋转 90°」
   —— 顺时针 = 负方向，`90 → 0` 正好 90°。判据只有一条：**明亮的弧顶那一头必须冲着目标**。
 - 美术正面若画在 `+Y`（朝上），填 `-90`；一句话记法：**正面朝右填 0，正面朝上填 -90，逆时针为正**。
   - 转角算式 `zcCombatEffectFacingDegrees(弹道角, flight)` 是纯函数；弹道角**必须用视图坐标**算
@@ -372,7 +372,7 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
 - ⚠️ 已知取舍：这张图的**汇聚点不在画布中心**（偏左约 37px），所以绕节点中心旋转时「出拳点」会以
   半径 ~40px 绕着角色转。气刃本身 114×128（视图 px）比近战射程（45×0.3 ≈ 13.5 世界 px）大一圈，
   所以观感上仍盖得住目标；若要彻底校正，得把 `消灭学霸_普攻.prefab` 里 `offset` 节点的 `_lpos`
-  调到 `(80, 21)`（让汇聚点落到节点原点）—— 那是改美术摆位，未做。对照图：`tmp/sport-attack-facing.png`。
+  调到 `(80, 21)`（让汇聚点落到节点原点）—— 那是改美术摆位，未做。当时对照截图不入库。
 
 ### 1.11 冲刺（运动霸「拳击冲撞」）：**真·撞击**，撞到才算伤害；冲刺＝普攻本身（2026-11-03）
 
@@ -1139,7 +1139,7 @@ node.setPosition(mapX - shiftX, mapY - shiftY + anchorLiftY, mapZ);
 
 #### 四、第二轮的取舍：谁留、谁退回居中
 
-用户按**逐图对位图**验收（`docs/章节地图装饰建筑对位-线上规则.png`，`python tools/preview_decor_alignment.py rules`）：
+用户按**逐图对位图**验收；对位图由 `python tools/preview_decor_alignment.py rules` 生成，输出不入库：
 
 | buildId | 素材 | buildSize | 验收 | 现在 |
 | :-- | :-- | :-- | :-- | :-- |
@@ -2197,7 +2197,7 @@ TerritoryStationView.renderLevelBubble() → 覆盖 badgeLabel.color
 
 **为什么 112 高还嫌大**：上面那个「洞 532×122」是**整体等比**换算的结果。引擎实际走
 九宫格、`spriteFrame.insetTop/Bottom = 32` 是**按 1:1** 画的，洞的真实可见高度只有
-约 112 —— 和序号块一样高。实测 `tmp/_cur_row1.png`（引擎真实渲染）里：
+约 112 —— 和序号块一样高。引擎真实渲染的临时实测截图不入库，读数为：
 
 | 量的是什么 | 截图读数 | 结论 |
 | :-- | :-- | :-- |
@@ -3087,7 +3087,7 @@ python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + �
 > 追问后定稿：「**如果是未解锁，那么整个关卡节点就只有建筑虚影上显示锁住的 icon，
 > 如果是可激活，那么只有建筑虚影显示银币和数值 UI，不会出现锁和银币同时存在的情况**。」
 
-#### 先说结论：不是脏数据
+#### 结论：不是脏数据
 
 那 7 格是配置里固定的同一条 `configId`（`10005`）：`213` 有建筑，周围 6 格是同关空地，
 六边形邻接关系正好是「中心 + 6 邻格」。但**前置本来就不同**：
@@ -4280,7 +4280,7 @@ async function loadFrame(assets: AssetService, path: string): Promise<SpriteFram
 
 ## 8. 点击脉冲：5 帧美术序列（2026-10-19 换美术，旧着色器整条退役）
 
-- **这套是唯一实现**：`assets/resources/image/effects/hex_pulse_seq/hex_pulse_0..4.png`（320×320 透明底），
+- **这套是唯一实现**：`assets/bundles/battle/image/effects/hex_pulse_seq/hex_pulse_0..4.png`（320×320 透明底），
   由 `ZCGameLoader` 扫目录按名排序注入 → `ZCGameRenderWorld` → `ZCHexView.setHexPulseFrames`。
 - 🔴 **落地的图被处理过（本体压到 35% 不透明度）**：美术原稿中心那块六边形是**实心不透明**的
   （画的是「地块本体」参考色 `#D9CDE2`），5 帧都带着它。直接盖到地块上会把整块地皮盖成淡紫、播完再弹回
@@ -4310,7 +4310,7 @@ async function loadFrame(assets: AssetService, path: string): Promise<SpriteFram
   文件和 effect **还留在盘上**做对照，但**代码不再加载**（`ZCGameLoader` 已删 `loadHexPulseMaterial`）。
   想回退先把 `HEX_FLIP_PULSE_ART_ROOT` 指回 `effects/hex_pulse` 并恢复那条材质链 —— 别只改一半。
 - **判据**：`tests/zcds-hex-activation.test.ts`（`pulseFrame` 等宽推进 / 播完退场 / 对齐缩放恒定 / 旧材质链已删）。
-  本体透明度属于美术产物，靠 `tools/gen_hex_pulse_layer.py` 写出的 `_preview_dark.png` / `_preview_tile.png` 肉眼验收。
+  本体透明度属于美术产物，靠 `tools/gen_hex_pulse_layer.py` 写出的 `_preview_dark.png` / `_preview_tile.png` 肉眼验收（预览输出不入库）。
 
 ## 9. 体验反馈专项（row8~row13）：结算扫场 / 描边同步 / 金矿提示 / 横幅扇入 / 产金抖动
 

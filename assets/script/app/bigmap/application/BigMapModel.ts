@@ -723,7 +723,7 @@ export class BigMapModel {
     /**
      *建造队列的解锁状态。
      *
-     * 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁 ——
+     * 文档口径（`docs/design/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁 ——
      *所以队列数量只看存档 `queueUnlocked`，与建了哪些建筑无关。
      */
     queueUnlockInfo(): IBigMapQueueUnlockInfo {

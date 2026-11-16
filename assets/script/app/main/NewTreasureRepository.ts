@@ -1,7 +1,7 @@
 import { FW } from '../../framework/FW';
 import { RequestMsg } from '../../framework/net/RequestMsg';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, withTimeout } from '../net/RequestGuard';
 import { GameNet } from '../net/GameNet';
 import {
     CHEST_DETAIL_REWARD_SLOTS,
@@ -20,13 +20,12 @@ import {
     type IResPropertyRow,
 } from '../common/ResTypes';
 
+import { READ_TIMEOUT_MS_SLOW as READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 type Result = 'ok' | 'offline' | 'failed' | 'protocol-missing' | 'busy';
 type TreasureInfo = CmdNewTreasureInfo;
 type ChestChangeListener = (slots: readonly IChestSlotData[]) => void;
 
 const BOX_NAME_PREFIX = '宝箱';
-const READ_TIMEOUT_MS = 3000;
-const WRITE_TIMEOUT_MS = 5000;
 const TREASURE_BROADCAST = 'CmdNewTreasureInfoBroMsg';
 
 class RequestNewTreasureInfoList extends RequestMsg<CmdNewTreasureInfoListReqMsg, CmdNewTreasureInfoListRspMsg> {
@@ -305,13 +304,7 @@ export class NewTreasureRepository {
     }
 
     private async send<Req, Rsp>(request: RequestMsg<Req, Rsp>, timeoutMs: number): Promise<Result> {
-        try {
-            const sent = await withTimeout(GameNet.instance.send(request, false), timeoutMs, () => false);
-            return sent ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[NewTreasure] 宝箱操作失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, () => request, { timeoutMs, tag: 'NewTreasure' });
     }
 
     private async withPendingAction(index: number, action: string, perform: () => Promise<Result>): Promise<Result> {

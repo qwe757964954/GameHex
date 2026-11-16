@@ -1046,11 +1046,12 @@ test('物品 G1｜Repository 走的是真缓存与新协议（不是占位实现
     assert.ok(/getTlCmdTask\(/.test(mt), '必须读 CmdTask 缓存');
     assert.ok(/getRefAllAsync\('taskMain'\)|'taskMain'/.test(mt), '必须读 taskMain 表');
     assert.ok(/RequestTakeMainTaskReward/.test(mt), '领奖必须发真协议');
-    assert.ok(/GameNet/.test(mt) && /isConnected/.test(mt), '离线必须早退（否则要等超时 5s 才报错）');
-    assert.ok(/withTimeout/.test(mt), '写请求必须带超时');
+    assert.ok(/sendGameRequest\(/.test(mt) && /GameNet\.instance/.test(mt), '必须走公共发包壳（离线 / 超时 / catch 统一收口）');
+    assert.ok(/tag: 'MainTask'/.test(mt), '必须带 MainTask tag');
 
     const id = stripComments(readFileSync('assets/script/app/itemdetail/ItemDetailRepository.ts', 'utf8'));
-    for (const table of ['item', 'viewtype', 'itemCraft']) {
+    assert.ok(id.includes('ITEM_TABLE'), 'ItemDetailRepository 没读 item 表');
+    for (const table of ['viewtype', 'itemCraft']) {
         assert.ok(id.includes(`'${table}'`), `ItemDetailRepository 没读 ${table} 表`);
     }
     assert.ok(/accessRefsOf/.test(id), '途径必须走「文案 + id 成对」的转换');

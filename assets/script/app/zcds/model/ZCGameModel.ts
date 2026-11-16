@@ -32,6 +32,15 @@ export const ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS = 1;
 export const ZC_DEFENCE_MONSTER_SCALE_MAX = 2.5;
 const EMPTY_CONNECTED_DEVELOPED_HEXES: readonly number[] = [];
 
+/** 投影对象的内部可变版本：对外仍经 `ZCGameRenderHex` 的只读视图暴露。*/
+interface ZCMutableRenderHex {
+    state: DeepReadonly<ZCHexState>;
+    canDevelop: boolean;
+    cooldown: DeepReadonly<ZCBuildingCooldownState> | null;
+    activation: DeepReadonly<ZCHexActivation> | null;
+    connectedDevelopedHexIds: readonly number[];
+}
+
 /**
  * `defenceModWave.monsterSize` → 单位模型缩放倍率：1 = 原始，2 = BOSS 两倍，封顶 MAX。
  * 缺省/0/负数/非数字按 1；值直接当倍率，不再另设档位映射表。
@@ -284,7 +293,10 @@ export class ZCGameModel {
     private tileStatesDirty = true;
     private topologyRevision = 0;
     private readonly connectedDevelopedCache = new Map<number, readonly number[]>();
-    private hexRenderMap: ReadonlyMap<number, ZCGameRenderHex> | null = null;
+    private hexRenderMap: Map<number, ZCMutableRenderHex> | null = null;
+    /** 席位→格数缓存：HUD 一帧要取 4 个席位的数，不逐席位过滤全盘。*/
+    private readonly territoryCounts = new Map<ZCOwner, number>();
+    private territoryCountsReady = false;
     private readonly unitContext: IZCUnitContext;
     private readonly groundZoneContext: IZCGroundZoneContext;
     private readonly attackResolutionContext: IZCAttackResolutionContext;
@@ -304,7 +316,7 @@ export class ZCGameModel {
             geometry: this.services.geometry,
             statusSystem: this.services.statusSystem,
             random: this.services.random,
-            currentTarget: (unit) => this.unitTargeting.current(unit),
+            currentTarget: (unit, out?) => this.unitTargeting.current(unit, out),
             effectiveDefinition: this.services.effectiveDefinition,
             evaluateLegacySkill: (unit, keys, target, critical) => this.evaluateLegacySkill(unit, keys, target, critical),
             applyLegacySelfBuffs: (unit, buffs) => this.applyLegacySelfBuffs(unit, buffs),
@@ -828,6 +840,8 @@ export class ZCGameModel {
     }
 
     private restoreOrCreateState(snapshot?: ZCSnapshot | null): void {
+        this.territoryCountsReady = false;
+        this.territoryCounts.clear();
         if (snapshot != null) {
             const restored = ZCSnapshotCodec.decode(snapshot, this.config);
             if (restored.ok === false) throw new Error(`无效对局快照：${restored.errors.join(', ')}`);
@@ -897,7 +911,7 @@ export class ZCGameModel {
             // 胜方身份随帧下发：结算扫场要按胜方本色铺地。为 null（未定 / 平局）时
             // 视图按 status 兜底，见 `ZCGame.beginVictorySweep`。
             winner: this.matchWinner,
-            hexesById: this.hexRenderMap ??= this.buildHexRenderMap(),
+            hexesById: this.refreshHexRenderMap(),
             unitDefinitionsById: this.definitions,
             floatTexts: this.presentation.floatTexts,
             hitFxs: this.presentation.hitFxs,
@@ -908,16 +922,32 @@ export class ZCGameModel {
     }
 
     // 逻辑步和同步业务操作才改变这些派生值；不足一步的显示帧只更新插值余量。
-    private buildHexRenderMap(): Map<number, ZCGameRenderHex> {
-        const hexesById = new Map<number, ZCGameRenderHex>();
+    /**
+     * 原地刷新地块投影。
+     *
+     * 规则派生值（canDevelop / cooldown / activation / connectedDevelopedHexIds）仍按每帧实际状态算，
+     * 但 Map 与每格对象只建一次：否则 20 Hz 逻辑步会反复分配 200 个对象 + 一条 Map，
+     * 投影对象本身是只读输出，调用方不会持有可变引用。
+    */
+    private refreshHexRenderMap(): ReadonlyMap<number, ZCGameRenderHex> {
+        const hexesById = this.hexRenderMap ??= new Map<number, ZCMutableRenderHex>();
         for (const state of this.state.hexes) {
-            hexesById.set(state.id, {
-                state,
-                canDevelop: this.canPlayerDevelop(state.id),
-                cooldown: this.buildingCooldown(state.id),
-                activation: this.activationOf(state.id),
-                connectedDevelopedHexIds: this.connectedDevelopedHexIds(state.id),
-            });
+            let entry = hexesById.get(state.id);
+            if (!entry) {
+                entry = {
+                    state,
+                    canDevelop: false,
+                    cooldown: null,
+                    activation: null,
+                    connectedDevelopedHexIds: [],
+                };
+                hexesById.set(state.id, entry);
+            }
+            entry.state = state;
+            entry.canDevelop = this.canPlayerDevelop(state.id);
+            entry.cooldown = this.buildingCooldown(state.id);
+            entry.activation = this.activationOf(state.id);
+            entry.connectedDevelopedHexIds = this.connectedDevelopedHexIds(state.id);
         }
         return hexesById;
     }
@@ -1267,6 +1297,8 @@ export class ZCGameModel {
     reset(): void {
         this.debugDraw = null;
         this.debugCards.clear();
+        this.territoryCountsReady = false;
+        this.territoryCounts.clear();
         this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
         // 同 `restoreOrCreateState`：新开一局，AI 时钟预置成一个完整间隔，首格不被 openGrideTime 拖后。
         this.state.aiClock = this.aiDevelopIntervalSeconds;
@@ -1295,15 +1327,22 @@ export class ZCGameModel {
     }
 
     private advance(dt: number): void {
-        this.hexRenderMap = null;
         this.captureSystem.beginStep(this.state.units);
         this.neutralFeatures.beginStep(this.state);
         this.state.elapsedSeconds = Math.round((this.state.elapsedSeconds + dt) * 1e9) / 1e9;
         this.flushDeferredBarracksSpawns();
         this.spawnDueDefenceWaves();
-        this.state.combatEvents = this.state.combatEvents.filter((event) => (
-            this.state.elapsedSeconds < event.startedAt + event.durationSeconds
-        ));
+        // 原地压缩过期战斗事件：不能每步 filter 出一条新数组（20 Hz 稳定垃圾）。
+        const combatEvents = this.state.combatEvents;
+        let write = 0;
+        for (let read = 0; read < combatEvents.length; read += 1) {
+            const event = combatEvents[read];
+            if (this.state.elapsedSeconds < event.startedAt + event.durationSeconds) {
+                if (write !== read) combatEvents[write] = event;
+                write += 1;
+            }
+        }
+        combatEvents.length = write;
         this.presentation.prune(this.state.elapsedSeconds);
         ZCArtifactSystem.tick(this.state, dt);
         this.statusResolutionSystem.tick(this.state, dt, this.statusResolutionContext);
@@ -1370,10 +1409,19 @@ export class ZCGameModel {
             const key = this.cycleKey(tower);
             this.state.spawnClocks[key] = Math.min(interval, (this.state.spawnClocks[key] || 0) + dt);
             if (this.state.spawnClocks[key] < interval) continue;
-            const target = this.unitsInRadius(tower.id, this.rules.towerRangeHex)
-                .filter((unit) => unit.battleState !== 'dead' && unit.owner !== tower.owner)
-                .sort((a, b) => this.geometry.distance(tower.id, a.sourceHexId) - this.geometry.distance(tower.id, b.sourceHexId)
-                    || a.id - b.id)[0];
+            // 塔每次开火只取最近的一个目标：不要 filter + sort 两条中间数组，
+            // 直接扫描范围桶并保留最小距离（同距离按 id 稳定）。
+            let target: ZCUnitState | null = null;
+            let targetDistance = Number.POSITIVE_INFINITY;
+            const candidates = this.unitsInRadius(tower.id, this.rules.towerRangeHex);
+            for (const unit of candidates) {
+                if (unit.battleState === 'dead' || unit.owner === tower.owner) continue;
+                const distance = this.geometry.distance(tower.id, unit.sourceHexId);
+                if (distance < targetDistance || (distance === targetDistance && target && unit.id < target.id)) {
+                    target = unit;
+                    targetDistance = distance;
+                }
+            }
             if (!target) continue;
             const targetCard = this.cardById(target.owner, target.cardId);
             this.state.spawnClocks[key] -= interval;
@@ -1433,7 +1481,7 @@ export class ZCGameModel {
         //  2. 飞行段扫过的格。段很短（一帧只飞十几个逻辑 px），采样点通常 1~3 个。
         const dx = toX - fromX;
         const dy = toY - fromY;
-        const samples = Math.max(1, Math.ceil(Math.hypot(dx, dy) / STRUCTURE_SAMPLE_STEP));
+        const samples = Math.max(1, Math.ceil(Math.sqrt(dx * dx + dy * dy) / STRUCTURE_SAMPLE_STEP));
         for (let index = 0; index <= samples; index += 1) {
             const t = index / samples;
             const hexId = this.geometry.hexIdAt(fromX + dx * t, fromY + dy * t);
@@ -1517,7 +1565,7 @@ export class ZCGameModel {
         const from = this.unitPosition(source);
         const current = this.unitPosition(target);
         let dx = current.x - from.x, dy = current.y - from.y;
-        const length = Math.hypot(dx, dy);
+        const length = Math.sqrt(dx * dx + dy * dy);
         if (length <= 1e-9) {
             dx = Math.cos(source.facingRadians);
             dy = Math.sin(source.facingRadians);
@@ -1690,6 +1738,7 @@ export class ZCGameModel {
         if (!this.pveDefence && this.developedCount(owner) === 0) return;
         const result = ZCDevelopmentSystem.captureEmptyTile(hex, owner);
         if (!result.changed) return;
+        this.territoryCountsReady = false;
         this.tileStatesDirty = true;
         if (result.terrainChanged) this.invalidateTerrain();
     }
@@ -1760,6 +1809,7 @@ export class ZCGameModel {
             for (const hex of this.state.hexes) {
                 if (hex.owner === defender) {
                     hex.owner = 'neutral';
+                    this.territoryCountsReady = false;
                     hex.developmentResolved = false;
                 }
                 if (hex.captureOwner === defender) {
@@ -1818,6 +1868,8 @@ export class ZCGameModel {
         const forced = owner === ZCOwner.Player ? this.debugDraw : null;
         const result = ZCDevelopmentSystem.develop(
             this.state, owner, hex, this.deckFor(owner), this.config, this.random, this.developmentContext, forced?.card ?? null);
+        // 开发/领地的归属和邻接资源领取都会改 owner，缓存交给 refreshTileStates 统一失效。
+        this.territoryCountsReady = false;
         if (forced && result.card === forced.card && result.building) {
             forced.remaining -= 1;
             if (forced.remaining === 0) this.debugDraw = null;
@@ -2206,6 +2258,8 @@ export class ZCGameModel {
         //  必须在 refresh 之后判断：邻接关系依赖「上一轮算出来的 state」，
         //    先判就会慢一拍（第一片资源点要等到下一次脏刷新才入袋）。
         this.claimAdjacentNeutralResources();
+        // 邻接资源领取可能改多格 owner，统一在这里失效一次。
+        this.territoryCountsReady = false;
     }
 
     private claimAdjacentNeutralResources(): void {
@@ -2268,7 +2322,14 @@ export class ZCGameModel {
     }
 
     private territoryCount(owner: ZCOwner): number {
-        return this.state.hexes.filter((hex) => hex.owner === owner).length;
+        if (!this.territoryCountsReady) {
+            this.territoryCounts.clear();
+            for (const hex of this.state.hexes) {
+                this.territoryCounts.set(hex.owner, (this.territoryCounts.get(hex.owner) ?? 0) + 1);
+            }
+            this.territoryCountsReady = true;
+        }
+        return this.territoryCounts.get(owner) ?? 0;
     }
 
     private developedCount(owner: ZCOwner): number {

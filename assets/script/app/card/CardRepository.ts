@@ -56,6 +56,7 @@ import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
 import { readRoleRow } from '../main/MainRoleRow';
 import { toCount } from '../net/RequestGuard';
 
+import { ICON_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 export interface CardLineupData {
     /** 当前上阵卡攻击力合计；快照或权威数据未就绪时不提供。 */
     readonly power?: number;
@@ -161,7 +162,7 @@ export class RuntimeCardRepository implements ICardRepository {
                 RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.rarity),
                 RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.cardClass),
                 RefUtil.instance.getRefAllAsync(CARD_ART_TABLES.camp),
-                RefUtil.instance.getRefAllAsync('icon'),
+                RefUtil.instance.getRefAllAsync(ICON_TABLE),
             ]).then(([rarity, cardClass, camp, icons]) => {
                 const art = parseCardArtConfig({
                     rarity: rarity ?? [],
@@ -382,7 +383,7 @@ export class RuntimeCardRepository implements ICardRepository {
     async loadSkillList(heroId: number): Promise<CardSkillListData> {
         const [rows, plans, properties] = await Promise.all([
             loadArmySkillLevelUpRows(), RefUtil.instance.getRefAllAsync('pvpSkillPlan'),
-            RefUtil.instance.getRefAllAsync('roleProperty'),
+            RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),
         ]);
         const table = buildArmySkillTable(rows);
         const info = getCachedPvpHeroInfo(heroId);

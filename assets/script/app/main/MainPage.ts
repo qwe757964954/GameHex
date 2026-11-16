@@ -50,6 +50,7 @@ import { resolveQuickFindGate } from './QuickFindGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
 
+import { OPEN_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
 
 /**
@@ -295,14 +296,14 @@ export class MainPage extends Component {
      * 策划换关卡 / 换条件类型都不用动客户端。
      *
      * 一次读表判两个：两处各读一遍会让「表没进缓存」时并发拉两次
-     * `getRefAllAsync('open')`，也会让两边的进/退时序不一致。
+     * `getRefAllAsync(OPEN_TABLE)`，也会让两边的进/退时序不一致。
      *
      * 表没进缓存时走异步：`getRefAll` 返回 `undefined` 才是"没缓存"，不能当成"表里没这一行"。
      */
     private refreshOpenGates(): void {
         let rows: readonly EntranceVisibleRow[] | null = null;
         try {
-            rows = (RefUtil.instance.getRefAll('open') ?? null) as readonly EntranceVisibleRow[] | null;
+            rows = (RefUtil.instance.getRefAll(OPEN_TABLE) ?? null) as readonly EntranceVisibleRow[] | null;
         } catch (error) {
             console.warn('[MainPage] 读 open 表缓存失败', error);
         }
@@ -316,7 +317,7 @@ export class MainPage extends Component {
     private async loadOpenTableThenGates(): Promise<void> {
         let rows: readonly EntranceVisibleRow[] | null = null;
         try {
-            rows = (await RefUtil.instance.getRefAllAsync('open')) as readonly EntranceVisibleRow[];
+            rows = (await RefUtil.instance.getRefAllAsync(OPEN_TABLE)) as readonly EntranceVisibleRow[];
         } catch (error) {
             console.warn('[MainPage] 拉 open 表失败，战斗宝箱 / 快速寻敌先不显示', error);
         }

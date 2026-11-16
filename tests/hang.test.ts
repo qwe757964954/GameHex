@@ -1624,16 +1624,16 @@ test('⚠️ `CmdBattleSweepReqMsg` 在 proto 源里**没有 `times`** ⇒ 请�
 test('Repository：8 张表一次读完，状态读 `CacheMgr`（**不自存快照**）', () => {
     const repository = src('HangRepository.ts');
     for (const table of [
-        'guankaReward',
-        'interactReward',
-        'gameConfig',
-        'item',
-        'roleProperty',
-        'monthCardActPlan',
-        'payChannel',
-        'ad',
+        'GUANKA_REWARD_TABLE',
+        "'interactReward'",
+        "'gameConfig'",
+        'ITEM_TABLE',
+        'ROLE_PROPERTY_TABLE',
+        "'monthCardActPlan'",
+        'PAY_CHANNEL_TABLE',
+        "'ad'",
     ]) {
-        assert.match(repository, new RegExp(`readRows\\('${table}'\\)`), `没读 ${table} 表`);
+        assert.match(repository, new RegExp(`readRows\\(${table.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)`), `没读 ${table} 表`);
     }
     assert.match(repository, /CacheMgr\.instance\.getTlCmdRole\(\)/);
     assert.match(repository, /CacheMgr\.instance\.getTlCmdRoleInteractInfo\(\)/);
@@ -1652,18 +1652,14 @@ test('Repository：8 张表一次读完，状态读 `CacheMgr`（**不自存快�
     assert.match(repository, /tlCmdAdvert/);
 });
 
-test('⚠️ 三条请求都必须 `withTimeout` + 离线早退 + `catch` 返结果（否则永悬）', () => {
+test('⚠️ 三条请求都必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     const repository = src('HangRepository.ts');
-    // 三条：claimReward / sweep / watchAd
-    const earlyReturns = repository.match(/if \(!net\.isConnected\) return 'offline';/g) ?? [];
-    assert.equal(earlyReturns.length, 3, '三条请求都要离线早退');
-    const timeouts = repository.match(/withTimeout\(/g) ?? [];
-    assert.equal(timeouts.length, 3, '三条请求都要 withTimeout');
-    const catches = repository.match(/catch \(error\)/g) ?? [];
-    assert.ok(catches.length >= 3, '三条请求都要 catch');
+    // 三条：claimReward / sweep / watchAd（+ import 一次）
+    const sends = repository.match(/sendGameRequest\(/g) ?? [];
+    assert.equal(sends.length, 3, '三条请求都要走公共发包壳');
+    assert.match(repository, /tag: 'Hang'/);
     assert.match(repository, /HJ_READ_TIMEOUT_MS = READ_TIMEOUT_MS/);
-    assert.match(repository, /const READ_TIMEOUT_MS = 800;/);
-    assert.match(repository, /const WRITE_TIMEOUT_MS = 5000;/);
+    assert.match(repository, /import \{ READ_TIMEOUT_MS, WRITE_TIMEOUT_MS \} from '\.\.\/net\/Timeouts';/);
     // watchAd 走 `RequestRoleWatchAdvert`（不是本模块的 RequestHangMsg）
     assert.match(repository, /new RequestRoleWatchAdvert\(\{ type \}, caller, callback\)/);
     assert.match(repository, /import \{ RequestRoleWatchAdvert \} from '\.\.\/generated\/requestMsg\/RequestRoleMsg';/);

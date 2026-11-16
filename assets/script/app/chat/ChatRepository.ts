@@ -16,7 +16,7 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString } from '../net/RequestGuard';
 import {
     ChatChannel,
     chatKey,
@@ -40,6 +40,8 @@ import {
     RequestTeamRecruitInit,
 } from './RequestChatMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { GUANKA_REWARD_TABLE } from '../../core/config/TableNames';
 /** 某个频道的某一页。 */
 export interface IChatPageData {
     readonly channel: number;
@@ -109,8 +111,6 @@ export interface IChatRepository {
 }
 
 /** 请求超时（与礼包 / 好友同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 已读时间的 `localStorage` 键前缀（后接 roleId）。 */
 const READ_KEY_PREFIX = 'chatReadedData';
@@ -237,7 +237,7 @@ export class RuntimeChatRepository implements IChatRepository {
      */
     private async resolveStageName(row: IRecruitRow): Promise<string> {
         try {
-            const reward = await RefUtil.instance.getRefAsync('guankaReward', 'level', row.battleId) as
+            const reward = await RefUtil.instance.getRefAsync(GUANKA_REWARD_TABLE, 'level', row.battleId) as
                 { chapter?: unknown; stage?: unknown } | null;
             const chapter = Number((reward?.chapter as number) ?? 0);
             const stage = Number((reward?.stage as number) ?? 0);
@@ -444,15 +444,7 @@ export class RuntimeChatRepository implements IChatRepository {
 
     /** 统一的发包 + 三态收口（离线早退 / `withTimeout` / `catch` 返 failed）。 */
     private async send(make: () => any, timeoutMs: number): Promise<ChatRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(net.send(make(), false), timeoutMs, () => false);
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Chat] 请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, make, { timeoutMs, tag: 'Chat' });
     }
 }
 

@@ -18,6 +18,8 @@
  *   领取状态看 `accTakenIds[day-1]`；累计进度看 `accDay`。
  */
 
+import type { IRewardAmount } from '../../core/types/Reward';
+
 // ============================================================
 // 输入
 // ============================================================
@@ -32,10 +34,7 @@ export const RECHARGE_DAILY_STATE = {
 } as const;
 
 /** 表里一条奖励（resId + 数量）。 */
-export interface IRechargeDailyReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type IRechargeDailyReward = IRewardAmount;
 
 /** rechargeDaily 表一行。 */
 export interface IRechargeDailyRow {

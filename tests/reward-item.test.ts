@@ -303,6 +303,10 @@ test('奖励资源详情支持 roleProperty 名称、说明和图标，item 配�
         if (name.endsWith('/RefUtil')) return { RefUtil: { instance: {
             getRefAllAsync: async table => tables[table] ?? [], getRefAsync: async () => null,
         } } };
+        if (name.endsWith('/TableRead')) return {
+            readRefRowsSafe: async (ref, table) => ref.getRefAllAsync(table) ?? [],
+        };
+        if (name.endsWith('/TableNames')) return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty' };
         if (name.endsWith('/ResTypes')) return resTypes;
         if (name === './ItemDetailTable') return itemDetailTable;
         return {};

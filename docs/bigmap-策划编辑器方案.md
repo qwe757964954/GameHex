@@ -2,7 +2,7 @@
 
 > 状态：主体已落地。编辑器在 `tools/map-editor/bigmap.html`，布局读写与校验见 [`bigmap-布局格式.md`](bigmap-布局格式.md)，线上地图为 `assets/resources/config/bigmap-maps/`。本文保留职责边界、决策依据与未采用的备选做法；工具行为以当前代码和 `bigmap-layout` / `bigmap-format` 测试为准。
 
-> 需求源：《植物大地图系统》（`docs/bigmap-系统落地方案.md` §5.3、§7）
+> 需求源：《植物大地图系统》（`docs/design/bigmap-系统落地方案.md` §5.3、§7）
 > 现有编辑器：`tools/map-editor/`（关卡 `index.html`+`app.js`｜领地 `territory.html`+`territory-app.js` 994 行｜保存服务 `server.mjs` 582 行｜格式校验 `territory_format.py` 319 行｜发布 `copy_territory_maps.py` 76 行）
 
 ---

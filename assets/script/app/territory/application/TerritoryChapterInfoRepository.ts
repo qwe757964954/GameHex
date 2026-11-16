@@ -3,6 +3,7 @@ import { GameNet } from '../../net/GameNet';
 import { withTimeout, toCount } from '../../net/RequestGuard';
 import { RequestCityChapterInfo } from './RequestTerritoryChapterInfoMsg';
 
+import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
 /**
  * 占城（领地）账号级章节汇总 Repository（进程级单例）。
  *
@@ -18,7 +19,6 @@ export interface ITerritoryChapterInfo {
 }
 
 /** 读超时：与单章格子 Req 同一档（5s）；登录后并行发，不阻塞主流程。 */
-const READ_TIMEOUT_MS = 5000;
 
 /** localStorage key 前缀（与 `TerritorySaveStore` 同 namespace 口径）。 */
 const STORAGE_KEY = 'territory.chapterInfo.v1';

@@ -37,6 +37,7 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
         if (name === '../common/ResTypes') return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty',
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '' };
         if (name === '../net/RequestGuard') return requestGuard;
+        if (name === '../net/Timeouts') return { READ_TIMEOUT_MS_SLOW: 3000, WRITE_TIMEOUT_MS: 5000 };
         if (name === '../../framework/FW') return { FW: {} };
         if (name === '../../framework/net/RequestMsg') return { RequestMsg: RequestStub };
         if (name === '../../framework/ref/RefUtil') return { RefUtil: { instance: {

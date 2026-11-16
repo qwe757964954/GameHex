@@ -12,6 +12,7 @@ import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from './ShowRewardTable';
 import type { IRewardEntry } from './ShowRewardTable';
 
+import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /**
  * `CmdGoods` → **可直接渲染的帧**（品质框 + 图标）。
  *
@@ -40,8 +41,8 @@ export interface IRewardGoodsTables {
  */
 export async function loadRewardGoodsTables(configs?: IControllerResources['configs']): Promise<IRewardGoodsTables> {
     const [itemRows, resourceRows] = await Promise.all([
-        configs ? configs.getTable('item') : RefUtil.instance.getRefAllAsync('item'),
-        configs ? configs.getTable('roleProperty') : RefUtil.instance.getRefAllAsync('roleProperty'),
+        configs ? configs.getTable(ITEM_TABLE) : RefUtil.instance.getRefAllAsync(ITEM_TABLE),
+        configs ? configs.getTable(ROLE_PROPERTY_TABLE) : RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),
     ]);
     return {
         items: parseItemRows(itemRows ?? []),

@@ -27,21 +27,31 @@
  */
 export type EventBusHandler = (payload?: any) => void;
 
+type EventBusListener = { handler: EventBusHandler; target: unknown; active: boolean };
+
 export class EventBus<E extends number | string = string> {
-    private readonly handlers = new Map<E, Array<{ handler: EventBusHandler; target: unknown }>>();
+    private readonly handlers = new Map<E, EventBusListener[]>();
 
     /** 订阅（幂等）：同一 (事件, 函数, target) 只留一份。 */
     on(event: E, handler: EventBusHandler, target?: unknown): void {
         const list = this.handlers.get(event) ?? [];
         if (list.some((item) => item.handler === handler && item.target === target)) return;
-        this.handlers.set(event, [...list, { handler, target }]);
+        this.handlers.set(event, [...list, { handler, target, active: true }]);
     }
 
     /** 注销（同一 (事件, 函数, target) 才移除；不存在时静默返回）。 */
     off(event: E, handler: EventBusHandler, target?: unknown): void {
         const list = this.handlers.get(event);
         if (!list) return;
-        const kept = list.filter((item) => item.handler !== handler || item.target !== target);
+        let changed = false;
+        for (const item of list) {
+            if (item.handler === handler && item.target === target) {
+                item.active = false;
+                changed = true;
+            }
+        }
+        if (!changed) return;
+        const kept = list.filter((item) => item.active);
         if (kept.length > 0) this.handlers.set(event, kept);
         else this.handlers.delete(event);
     }
@@ -54,7 +64,15 @@ export class EventBus<E extends number | string = string> {
      */
     offTarget(target: unknown): void {
         for (const [event, list] of [...this.handlers]) {
-            const kept = list.filter((item) => item.target !== target);
+            let changed = false;
+            for (const item of list) {
+                if (item.target === target) {
+                    item.active = false;
+                    changed = true;
+                }
+            }
+            if (!changed) continue;
+            const kept = list.filter((item) => item.active);
             if (kept.length > 0) this.handlers.set(event, kept);
             else this.handlers.delete(event);
         }
@@ -63,13 +81,15 @@ export class EventBus<E extends number | string = string> {
     /**
      * 订阅变化时替换数组，派发直接持有当前快照，回调增删不改变本轮范围。
      * （本次新增监听延后到下次；已解绑的监听立即停止，即使还在遍历副本中）。
+     *
+     * `on/off` 替换数组，旧快照里的记录用 `active` 标记是否已被解绑；派发只读这个标记，
+     * 不再对每个 handler 做 `Map.get` + `includes`（监听多时那会是 O(n²)）。
      */
     emit(event: E, payload?: any): void {
         const list = this.handlers.get(event);
         if (!list) return;
         for (const item of list) {
-            const current = this.handlers.get(event);
-            if (current === list || current?.includes(item)) item.handler.call(item.target, payload);
+            if (item.active) item.handler.call(item.target, payload);
         }
     }
 }

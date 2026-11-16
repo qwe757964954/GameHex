@@ -23,7 +23,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString } from '../net/RequestGuard';
 import {
     friendFingerprint,
     IFriendConfig,
@@ -56,6 +56,7 @@ import {
     RequestFriendSendEndOneKey,
 } from './RequestFriendMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面刷新要的全部数据。 */
 export interface IFriendSnapshot {
     /** 「好友列表」页签（`CmdFriend` 缓存）。 */
@@ -121,7 +122,6 @@ export interface IFriendRepository {
 }
 
 /** 写请求超时（与礼包 / 首充 / 七日同口径）。 */
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张配置表的全部行；表缺失（`getRefAllAsync` 可能返回 undefined）时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -317,15 +317,7 @@ export class RuntimeFriendRepository implements IFriendRepository {
 
     /** 统一的发包 + 三态收口。 */
     private async send(make: () => any): Promise<FriendRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(net.send(make(), false), WRITE_TIMEOUT_MS, () => false);
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Friend] 请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Friend' });
     }
 
     /** 读一张表，并把本地补丁叠上去（指纹变了就丢补丁，见文件头）。 */

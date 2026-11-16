@@ -21,7 +21,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     CMD_COMMON_STATE,
     canClaimOf,
@@ -40,6 +40,8 @@ import type { IMainTaskRow, IMainTaskState } from './MainTaskTable';
 import { GET_HERO_TEXTS, MAIN_TASK_TEXTS } from './MainTaskTexts';
 import { RequestTakeMainTaskReward } from './RequestMainTaskMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 「10级领取」HUD 一次刷新要的全部数据。 */
 export interface IHeroTaskSnapshot {
     /** `taskMain` 表里有没有 `targetType = 99` 那行。 */
@@ -75,7 +77,7 @@ export interface IHeroTaskSnapshot {
 }
 
 /** 一个奖励格 —— `item` / `roleProperty` 表解析后的形状（详情弹窗的 `list_item` 用）。 */
-export interface IRewardEntry {
+export interface IMainTaskRewardEntry {
     /** 物品 `resId`。 */
     readonly resId: number;
     /** 数量（表里 `reward[].number`）。 */
@@ -121,7 +123,7 @@ export interface IMainTaskSnapshot {
     /** 主界面入口两行文案：`${title}\n(${value}/${max})`（老端 `lab_task`）。 */
     readonly entryLabel: string;
     /** 奖励列表（每个都带 `item` 表解析出来的名字 / 图标 / 品质）。 */
-    readonly rewards: readonly IRewardEntry[];
+    readonly rewards: readonly IMainTaskRewardEntry[];
     /** `CmdCommonState`。 */
     readonly rewardState: number;
     /** 进度文案 `(4/5)`。 */
@@ -144,7 +146,6 @@ export interface IMainTaskSnapshot {
 export type MainTaskRequestResult = INetRequestStatus;
 
 /** 领奖超时（写请求口径：5000ms）。 */
-const WRITE_TIMEOUT_MS = 5000;
 
 export interface IMainTaskRepository {
     /** 读表 + 读缓存，组装「10级领取」快照；**不发请求**。任何时候都兑现。 */
@@ -231,11 +232,11 @@ function taskStateMap(rows: readonly unknown[]): Map<number, IMainTaskState> {
  * 两张都查不到不是异常（表里没配 / 未登录 / 孤儿 id），返回只有 id + 数量的条目；
  * 调用方按「画品质框不画图标」降级。
  */
-async function resolveRewardItem(resId: number, count: number): Promise<IRewardEntry> {
-    const fallback: IRewardEntry = { resId, number: count, name: '', icon: '', iconIsPath: true, quality: 1 };
+async function resolveRewardItem(resId: number, count: number): Promise<IMainTaskRewardEntry> {
+    const fallback: IMainTaskRewardEntry = { resId, number: count, name: '', icon: '', iconIsPath: true, quality: 1 };
     if (!(resId > 0)) return fallback;
     try {
-        const item = await RefUtil.instance.getRefAsync('item', 'resId', resId);
+        const item = await RefUtil.instance.getRefAsync(ITEM_TABLE, 'resId', resId);
         if (item && typeof item === 'object') {
             const r = item as Record<string, unknown>;
             const q = Number(r.quality);
@@ -248,7 +249,7 @@ async function resolveRewardItem(resId: number, count: number): Promise<IRewardE
                 quality: Number.isFinite(q) && q > 0 ? q : 1,
             };
         }
-        const prop = await RefUtil.instance.getRefAsync('roleProperty', 'resId', resId);
+        const prop = await RefUtil.instance.getRefAsync(ROLE_PROPERTY_TABLE, 'resId', resId);
         if (prop && typeof prop === 'object') {
             const r = prop as Record<string, unknown>;
             const q = Number(r.quality);
@@ -383,26 +384,15 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
 
     async claim(resId: number, caller?: object): Promise<MainTaskRequestResult> {
         if (!Number.isFinite(resId) || resId <= 0) return 'failed';
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
-        try {
-            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
-            // HUD 会卡在「已点但没反应」的状态再也不刷新。
-            const sent = await withTimeout(
-                net.send(new RequestTakeMainTaskReward(
-                    { resId },
-                    caller,
-                    (rsp) => FW.ShowReward(rsp?.tlCmdGoods ?? []),
-                ), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[MainTask] 领取英雄任务奖励失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(
+            GameNet.instance,
+            () => new RequestTakeMainTaskReward(
+                { resId },
+                caller,
+                (rsp) => FW.ShowReward(rsp?.tlCmdGoods ?? []),
+            ),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'MainTask' },
+        );
     }
 }
 

@@ -23,6 +23,9 @@ import {
 import type { IRechargeActivityInfo, IRechargeTotalPageView } from './RechargeActivityTable';
 import { RequestTakeRechargeGiftActReward } from './RequestRechargeActivityMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ITEM_TABLE } from '../../core/config/TableNames';
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /** 一次界面快照。 */
 export interface IRechargeActivitySnapshot {
     /** 页签 `id` → 该页签的视图。 */
@@ -34,7 +37,7 @@ export interface IRechargeActivitySnapshot {
     readonly hasRedDot: boolean;
 }
 
-export type RechargeActivityRequestResult = 'ok' | 'offline' | 'failed';
+export type RechargeActivityRequestResult = INetRequestStatus;
 
 export interface IRechargeActivityRepository {
     /** 读表 + 读缓存，组装一次快照；不发请求。 */
@@ -43,7 +46,6 @@ export interface IRechargeActivityRepository {
     claim(activityId: number, rechargeProcess: number, caller?: object): Promise<RechargeActivityRequestResult>;
 }
 
-const WRITE_TIMEOUT_MS = 5000;
 
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
@@ -63,7 +65,7 @@ export class RuntimeRechargeActivityRepository implements IRechargeActivityRepos
             readRows('activityTab'),
             readRows('activity'),
             readRows('rechargeGiftActPlan'),
-            readRows('item'),
+            readRows(ITEM_TABLE),
         ]);
 
         const tabMap = parseRechargeTabRows(tabRows);

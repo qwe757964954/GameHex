@@ -38,7 +38,7 @@ import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     BT_CFG_LEVEL_UP_COST,
     BT_CFG_MAX_LEVEL,
@@ -59,6 +59,8 @@ import {
     RequestBattleTokenTakeReward,
 } from './RequestBattleTokenMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 一个档位的服务器状态（老端 `VOBattleToken` 的界面所需子集）。 */
 export interface IPlanState {
     /** 该档位开没开。 */
@@ -124,8 +126,6 @@ export interface IBattleTokenRepository {
 }
 
 /** 请求超时（与首充 / 七日 / 礼包同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -173,7 +173,7 @@ function readState(type: number): ITokenState {
 
 /** 读 `payChannel` 全表 → `id` → 金额。表缺失时返回空 Map（价格文案退化成空串）。 */
 async function readPayChannels(): Promise<ReadonlyMap<number, number>> {
-    const rows = await readRows('payChannel');
+    const rows = await readRows(PAY_CHANNEL_TABLE);
     const map = new Map<number, number>();
     for (const raw of rows) {
         if (!raw || typeof raw !== 'object') continue;
@@ -192,8 +192,8 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
             readRows('battleTokenPlan'),
             readRows('battleTokenReward'),
             readRows('battleTokenConfig'),
-            readRows('item'),
-            readRows('roleProperty'),
+            readRows(ITEM_TABLE),
+            readRows(ROLE_PROPERTY_TABLE),
             readPayChannels(),
         ]);
 
@@ -219,26 +219,17 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
 
     /** 开通档位：先发业务前置请求；`ret === true` 才是「服务端同意开通」。 */
     async openPlan(resId: number, payChannelId: number, caller?: object): Promise<BattleTokenRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let ret: boolean | null = null;
         const callback = (rsp: any): void => {
             ret = !!(rsp && rsp.ret);
         };
 
-        try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
-            const sent = await withTimeout(
-                net.send(new RequestBattleTokenOpen({ resId }, caller, callback), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[BattleToken] 开通档位失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestBattleTokenOpen({ resId }, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'BattleToken' },
+        );
+        if (status !== 'ok') return status;
         // `ret === false` ⇒ 服务端说这一档已经开过了（老端此时静默）
         if (ret === false) return 'rejected';
         // 道具付费由游戏服在 Open 请求中直接扣除；只有人民币档继续走中心服支付。
@@ -248,53 +239,34 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
 
     /** 领取奖励。 */
     async takeReward(type: number, resId: number, level: number, caller?: object): Promise<BattleTokenRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdBattleTokenTakeRewardRspMsg): void => {
             FW.ShowReward(rsp?.tlReward ?? []);
             applied = true;
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(
-                    new RequestBattleTokenTakeReward(
-                        { takeAll: true, resId, level, type },
-                        caller,
-                        callback,
-                    ),
-                    false,
-                ),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[BattleToken] 领取奖励失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestBattleTokenTakeReward(
+                { takeAll: true, resId, level, type },
+                caller,
+                callback,
+            ),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'BattleToken' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 
     /** 重置战令。 */
     async reset(caller?: object): Promise<BattleTokenRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
-        try {
-            const sent = await withTimeout(
-                net.send(new RequestBattleTokenReset({}, caller, () => { applied = true; }), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[BattleToken] 重置战令失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestBattleTokenReset({}, caller, () => { applied = true; }),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'BattleToken' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 }

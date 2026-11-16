@@ -9,6 +9,7 @@
  * - 档位行排序为已领取沉底，其余按 `rechargeProcess` 升序。
  */
 
+import type { IRewardAmount } from '../../core/types/Reward';
 // ============================================================
 // 常量
 // ============================================================
@@ -44,10 +45,7 @@ export interface IRechargeActPlanRow {
 }
 
 /** 一条奖励。 */
-export interface IRechargeReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type IRechargeReward = IRewardAmount;
 
 /** `activityTab` 表一行。 */
 export interface IRechargeTabRow {

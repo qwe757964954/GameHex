@@ -31,9 +31,12 @@ import type { IZCSpawnRegionHint } from '../model/ZCSpawnRegionHint';
 import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
     ZCBuildingType,
+    type DeepReadonly,
+    type ZCBuildingCooldownState,
     type ZCCombatEvent,
     type ZCCardReveal,
     type ZCHexActivation,
+    type ZCHexState,
     type ZCNeutralReward,
     type ZCProjectileState,
     type ZCUnitState,
@@ -437,6 +440,30 @@ export class ZCGameRenderWorld {
     private readonly shownPlayerCardReveals = new Set<number>();
     private readonly legendBannerViews = new Map<number, ZCGameLegendBannerView>();
     private readonly hexEntityBySource = new Map<number, number>();
+    /** 静态帧复用的边界掩码容器；`buildTerritoryBoundaryMasks` 支持 out。*/
+    private readonly boundaryMasks = new Map<number, number>();
+    /** 静态帧复用的地块渲染入参对象，避免每格每次静态刷新都新建 9 字段对象。*/
+    private readonly hexRenderArgs: {
+        state: DeepReadonly<ZCHexState>;
+        canDevelop: boolean;
+        playerGold: number;
+        cooldown: Readonly<ZCBuildingCooldownState> | null;
+        now: number;
+        hideNeutralResourceLabel: boolean;
+        boundaryMask: number;
+        activation: Readonly<ZCHexActivation> | null;
+        developPulseStartedAt: number | null;
+    } = {
+        state: null as unknown as DeepReadonly<ZCHexState>,
+        canDevelop: false,
+        playerGold: 0,
+        cooldown: null,
+        now: 0,
+        hideNeutralResourceLabel: false,
+        boundaryMask: 0,
+        activation: null,
+        developPulseStartedAt: null,
+    };
     private readonly unitEntityBySource = new Map<number, number>();
     private readonly effectEntityBySource = new Map<number, number>();
     private readonly floatTextEntityBySource = new Map<number, number>();
@@ -1728,8 +1755,9 @@ export class ZCGameRenderWorld {
         // 本帧「刚开发成功」那次点击的脉冲起点：新点亮邻格的生成动画锚它才与脉冲同步
         // （模型在点击那一拍就翻了 `canDevelop`，而地块只按 0.15s 节流刷新）。
         const developPulseStartedAt = latestHexActivationStartedAt(frame.hexActivations);
-        const boundaryMasks = buildTerritoryBoundaryMasks(this.map, this.ownerForHex);
+        const boundaryMasks = buildTerritoryBoundaryMasks(this.map, this.ownerForHex, this.boundaryMasks);
         this.redrawSharedOutline(this.map, boundaryMasks);
+        const renderArgs = this.hexRenderArgs;
         for (const state of frame.snapshot.hexes) {
             const entityId = this.hexEntityBySource.get(state.id);
             if (!entityId) continue;
@@ -1737,17 +1765,16 @@ export class ZCGameRenderWorld {
             if (!hex) continue;
             const view = this.hexViews.get(entityId);
             if (!view) continue;
-            view.render({
-                state,
-                canDevelop: hex.canDevelop,
-                playerGold: frame.snapshot.playerGold,
-                cooldown: hex.cooldown,
-                now,
-                hideNeutralResourceLabel: frame.mapConfig.cityMode === 'select',
-                boundaryMask: boundaryMasks.get(state.id) ?? 0,
-                activation: hex.activation,
-                developPulseStartedAt,
-            });
+            renderArgs.state = state;
+            renderArgs.canDevelop = hex.canDevelop;
+            renderArgs.playerGold = frame.snapshot.playerGold;
+            renderArgs.cooldown = hex.cooldown;
+            renderArgs.now = now;
+            renderArgs.hideNeutralResourceLabel = frame.mapConfig.cityMode === 'select';
+            renderArgs.boundaryMask = boundaryMasks.get(state.id) ?? 0;
+            renderArgs.activation = hex.activation;
+            renderArgs.developPulseStartedAt = developPulseStartedAt;
+            view.render(renderArgs);
             // 刚点亮 ⇒ 挂进逐帧集合；播完或本来就没在播 ⇒ 出队（集合平时为空，判断极廉价）。
             if (view.isDevelopableSpawning()) this.developableSpawnHexes.add(state.id);
             else if (this.developableSpawnHexes.size) this.developableSpawnHexes.delete(state.id);

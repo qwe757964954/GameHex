@@ -37,6 +37,7 @@ import type {
     IItemRow,
 } from './ItemDetailTable';
 
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 /** 一次界面刷新要的全部数据。 */
 export interface IItemDetailSnapshot {
     /** 物品行；item 未命中时读取 roleProperty，两表均未命中为 null。 */
@@ -90,7 +91,7 @@ async function readQualityNameCsv(): Promise<string> {
 class ItemDetailRepositoryImpl implements IItemDetailRepository {
     async load(resId: number, owned: number): Promise<IItemDetailSnapshot> {
         const [itemRows, viewTypeRows, craftRows, qualityCsv] = await Promise.all([
-            readRows('item'),
+            readRows(ITEM_TABLE),
             readRows('viewtype'),
             readRows('itemCraft'),
             readQualityNameCsv(),
@@ -103,7 +104,7 @@ class ItemDetailRepositoryImpl implements IItemDetailRepository {
         let row = items.get(resId) ?? null;
         if (!row) {
             // item 未命中时按 roleProperty 兜底（货币、体力这类资源条目）。
-            const properties = await readRows('roleProperty');
+            const properties = await readRows(ROLE_PROPERTY_TABLE);
             const raw = properties.find(value => value && typeof value === 'object'
                 && Number((value as Record<string, unknown>).resId) === resId);
             if (raw) {
@@ -130,7 +131,7 @@ class ItemDetailRepositoryImpl implements IItemDetailRepository {
     }
 
     async loadItemRow(resId: number): Promise<IItemRow | null> {
-        const rows = await readRows('item');
+        const rows = await readRows(ITEM_TABLE);
         return parseItemRows(rows).get(resId) ?? null;
     }
 }

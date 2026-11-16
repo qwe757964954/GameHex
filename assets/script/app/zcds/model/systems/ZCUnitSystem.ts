@@ -8,7 +8,7 @@ import type { IZCDashHit } from './ZCUnitTargeting';
 export interface IZCUnitTargeting {
     acquire(unit: ZCUnitState): void;
     refreshPriorityTarget?(unit: ZCUnitState): boolean;
-    current(unit: ZCUnitState): ZCCombatTarget | null;
+    current(unit: ZCUnitState, out?: ZCCombatTarget): ZCCombatTarget | null;
     isInAttackRange(unit: ZCUnitState): boolean;
     isOutOfAttackRange(unit: ZCUnitState): boolean;
     /** 普攻射程内是否已有可打目标；缺省视为不设闸门。*/

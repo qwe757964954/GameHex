@@ -21,13 +21,16 @@ import {
     RequestRechargeDailyGetReward,
 } from './RequestRechargeDailyMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ITEM_TABLE } from '../../core/config/TableNames';
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /** 一次界面快照。 */
 export interface IRechargeDailySnapshot {
     readonly rounds: readonly IRechargeDailyRoundView[];
     readonly items: ReadonlyMap<number, { readonly quality: number; readonly icon: string }>;
 }
 
-export type RechargeDailyRequestResult = 'ok' | 'offline' | 'failed';
+export type RechargeDailyRequestResult = INetRequestStatus;
 
 export interface IRechargeDailyRepository {
     /** 读表 + 读缓存，组装一次快照；不发请求。 */
@@ -38,7 +41,6 @@ export interface IRechargeDailyRepository {
     claimAcc(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult>;
 }
 
-const WRITE_TIMEOUT_MS = 5000;
 
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
@@ -59,7 +61,7 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
     async load(): Promise<IRechargeDailySnapshot> {
         const [rowArr, itemRows] = await Promise.all([
             readRows('rechargeDaily'),
-            readRows('item'),
+            readRows(ITEM_TABLE),
         ]);
 
         const rows = parseRechargeDailyRows(rowArr);

@@ -261,6 +261,18 @@ export class TerritoryCloudView {
     private fillOccupied: ReadonlySet<number> = new Set<number>();
     /** `MapLayer`（`CloudKeepOut` 的父节点）—— 云洞层每帧对齐它的世界变换。 */
     private mapLayer: Node | null = null;
+    /** 缓存 `mapLayer` 的 `UITransform`：只在换层时查一次，帧内不再 `getComponent`。*/
+    private pocketMapNode: Node | null = null;
+    private pocketMapTransform: UITransform | null = null;
+    private readonly pocketOffsetScratch = new Vec3();
+    private readonly pocketWorldScratch = new Vec3();
+    private pocketAppliedShift = Number.NaN;
+    private pocketWorldX = Number.NaN;
+    private pocketWorldY = Number.NaN;
+    private pocketWorldZ = Number.NaN;
+    private pocketScaleX = Number.NaN;
+    private pocketScaleY = Number.NaN;
+    private pocketScaleZ = Number.NaN;
     /**
      * 内容层偏移（= `TerritoryMapView.applyContentShift` 真正写进 `GridLayer` 的那个 y）。
      *
@@ -353,6 +365,8 @@ export class TerritoryCloudView {
         // `_createGraphics` 就不会改它的颜色 ⇒ `fill()` 会画出一块**白色实心**的多边形。
         graphics.fillColor = this.keepOutFill;
         this.mapLayer = parent;
+        this.pocketMapNode = null;
+        this.pocketMapTransform = null;
         this.keepOut = keepOut;
         this.keepOutMask = mask;
         this.keepOutGraphics = graphics;
@@ -444,6 +458,15 @@ export class TerritoryCloudView {
         pocket.setSiblingIndex(page.children.length - 1);
         pocket.addComponent(UITransform);
         this.pocketNode = pocket;
+        this.pocketMapNode = null;
+        this.pocketMapTransform = null;
+        this.pocketAppliedShift = Number.NaN;
+        this.pocketWorldX = Number.NaN;
+        this.pocketWorldY = Number.NaN;
+        this.pocketWorldZ = Number.NaN;
+        this.pocketScaleX = Number.NaN;
+        this.pocketScaleY = Number.NaN;
+        this.pocketScaleZ = Number.NaN;
         // 云洞层是独立顶层节点 ⇒ 它自己层内"影子在前"就够（同层没有别的云体）。
         this.pocketShadowGroup = this.createShadowGroup(pocket);
     }
@@ -1390,19 +1413,48 @@ export class TerritoryCloudView {
         const map = this.mapLayer;
         if (!pocket?.isValid || !map?.isValid || !this.pocketCells.size) return;
         const shift = this.contentShiftY;
-        const transform = map.getComponent(UITransform);
-        const world = transform
-            ? transform.convertToWorldSpaceAR(new Vec3(0, shift, 0))
-            : null;
-        if (world) {
-            pocket.setWorldPosition(world.x, world.y, world.z);
+        if (this.pocketMapNode !== map) {
+            this.pocketMapNode = map;
+            this.pocketMapTransform = map.getComponent(UITransform);
+        }
+        const transform = this.pocketMapTransform;
+        let world = this.pocketWorldScratch;
+        if (transform) {
+            this.pocketOffsetScratch.x = 0;
+            this.pocketOffsetScratch.y = shift;
+            this.pocketOffsetScratch.z = 0;
+            world = transform.convertToWorldSpaceAR(this.pocketOffsetScratch, this.pocketWorldScratch);
         } else {
             // 拿不到 `UITransform`（prefab 结构被改 / 用例桩）时按纯平移降级：宁可差一个缩放系数，
             // 也不要整层掉下去 150。
             const scaleY = map.worldScale?.y ?? 1;
-            pocket.setWorldPosition(map.worldPosition.x, map.worldPosition.y + shift * scaleY, map.worldPosition.z);
+            world.x = map.worldPosition.x;
+            world.y = map.worldPosition.y + shift * scaleY;
+            world.z = map.worldPosition.z;
         }
-        pocket.setWorldScale(map.worldScale);
+        if (this.pocketAppliedShift !== shift || this.pocketWorldX !== world.x
+            || this.pocketWorldY !== world.y || this.pocketWorldZ !== world.z) {
+            this.pocketAppliedShift = shift;
+            this.pocketWorldX = world.x;
+            this.pocketWorldY = world.y;
+            this.pocketWorldZ = world.z;
+            pocket.setWorldPosition(world.x, world.y, world.z);
+        }
+        if (this.pocketAppliedShift !== shift || this.pocketWorldX !== world.x
+            || this.pocketWorldY !== world.y || this.pocketWorldZ !== world.z) {
+            this.pocketAppliedShift = shift;
+            this.pocketWorldX = world.x;
+            this.pocketWorldY = world.y;
+            this.pocketWorldZ = world.z;
+            pocket.setWorldPosition(world.x, world.y, world.z);
+        }
+        const scale = map.worldScale;
+        if (this.pocketScaleX !== scale.x || this.pocketScaleY !== scale.y || this.pocketScaleZ !== scale.z) {
+            this.pocketScaleX = scale.x;
+            this.pocketScaleY = scale.y;
+            this.pocketScaleZ = scale.z;
+            pocket.setWorldScale(scale.x, scale.y, scale.z);
+        }
     }
 
     // ============================================================

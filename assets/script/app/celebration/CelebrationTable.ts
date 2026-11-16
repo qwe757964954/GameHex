@@ -1,4 +1,4 @@
-import type { IRewardAmount } from '../../core/types/Reward';
+import type { IRewardAmount, IRewardGoodsInfo } from '../../core/types/Reward';
 /**
  * 开服庆典的判定口径（老端 `VOCelebration` / `LayerOSRankUI` / `LayerOSRankDetailUI`）。
  * 与 `HangTable` / `GiftTable` / `SevenDayTable` 一样不 import 任何模块，判定逻辑可以直接在 Node 里跑单测；
@@ -150,16 +150,10 @@ export interface ICelebrationShopPricing {
 /**
  * 一件道具 / 货币的展示信息。
  *
- * 字段与 `activity/LayerActivityTable.IActivityGoodsInfo` 完全一致：本文件不能 import 那个接口，
- * 但结构相同，`Map<IActivityGoodsInfo>` 可以直接赋给 `ReadonlyMap<ICelebrationGoodsInfo>`。
+ * 与 activity 的 `IActivityGoodsInfo`、`common` 的资源行共用 core 的 `IRewardGoodsInfo` 形状，
+ * `Map<IActivityGoodsInfo>` 可以直接赋给 `ReadonlyMap<ICelebrationGoodsInfo>`。
  */
-export interface ICelebrationGoodsInfo {
-    readonly name: string;
-    readonly quality: number;
-    readonly icon: string;
-    /** `icon` 是否已经是资源路径（`item` 表 true / `roleProperty` 表 false）。 */
-    readonly iconIsPath: boolean;
-}
+export type ICelebrationGoodsInfo = IRewardGoodsInfo;
 
 /** 一次刷新要的全部数据。 */
 export interface ICelebrationSnapshot {

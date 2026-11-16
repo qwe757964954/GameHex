@@ -2,7 +2,7 @@ import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type {ZCCombatTarget, ZCUnitState} from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
-import { sweptCircleHit } from './ZCProjectileSystem';
+import { sweptCircleHitScalars } from './ZCProjectileSystem';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
 import { isZCAwakeMonster, zcMonsterPosition } from './ZCNeutralFeatureSystem';
@@ -16,6 +16,13 @@ export interface IZCDashHit {
     readonly id: number;
     readonly x: number;
     readonly y: number;
+}
+
+interface IZCMutableDashHit {
+    kind: 'unit' | 'wall' | 'building';
+    id: number;
+    x: number;
+    y: number;
 }
 
 export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometry' | 'effectiveDefinition' | 'unitPosition' | 'hex' | 'hasExposedWall'> {
@@ -34,6 +41,15 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     private readonly stepCache = new Map<number, {
         atHex: number; goalHex: number; targetX: number; targetY: number; bodyRadius: number; step: number | null;
     }>();
+    /** 每单位一块索敌结果 scratch：同拍多次 `current()` 不再造字面量。跨调用持有时由调用方传 out。*/
+    private readonly targetScratch = new Map<number, ZCCombatTarget>();
+    private readonly selfPosition = { x: 0, y: 0 };
+    private readonly targetPosition = { x: 0, y: 0 };
+    private readonly candidatePosition = { x: 0, y: 0 };
+    private readonly dashHitScratch: IZCMutableDashHit = { kind: 'unit', id: 0, x: 0, y: 0 };
+    private dashNearest = Infinity;
+    private dashBestId = Infinity;
+    private dashHit = false;
 
     constructor(private readonly context: IZCUnitTargetingContext) {
         this.pathWorkspace = new ZCPathWorkspace(context.map.hexes.length);
@@ -49,6 +65,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     removeUnit(id: number): void {
         this.stepCache.delete(id);
+        this.targetScratch.delete(id);
     }
 
     /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。*/
@@ -74,35 +91,65 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         return true;
     }
 
-    current(unit: ZCUnitState): ZCCombatTarget | null {
+    current(unit: ZCUnitState, out?: ZCCombatTarget): ZCCombatTarget | null {
         if (unit.targetUnitId !== null) {
             const target = this.context.units.get(unit.targetUnitId) ?? null;
             if (!target || target.battleState === 'dead' || target.hp <= 0 || target.owner === unit.owner) return null;
             const definition = this.context.baseDefinition(target.unitId);
             if (!this.context.baseDefinition(unit.unitId).canAttackAir && definition.flying) return null;
-            const position = this.context.unitPosition(target);
-            return { kind: 'unit', id: target.id, x: position.x, y: position.y, bodyRadius: definition.bodyRadius, cardId: target.cardId };
+            const result = out ?? this.scratchFor(unit);
+            const position = this.context.unitPosition(target, this.targetPosition);
+            result.kind = 'unit';
+            result.id = target.id;
+            result.x = position.x;
+            result.y = position.y;
+            result.bodyRadius = definition.bodyRadius;
+            result.cardId = target.cardId;
+            return result;
         }
         if (unit.targetWallHexId !== null) {
             const hex = this.context.hex(unit.targetWallHexId);
             if (!hex || hex.owner === unit.owner || !this.context.hasExposedWall(hex)) return null;
             const config = this.context.map.hexes[hex.id];
-            return { kind: 'wall', id: hex.id, x: config.x, y: config.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: null };
+            const result = out ?? this.scratchFor(unit);
+            result.kind = 'wall';
+            result.id = hex.id;
+            result.x = config.x;
+            result.y = config.y;
+            result.bodyRadius = STRUCTURE_TARGET_BODY_RADIUS;
+            result.cardId = null;
+            return result;
         }
         if (unit.targetBuildingHexId !== null) {
             const hex = this.context.hex(unit.targetBuildingHexId);
             if (!hex || (!isZCAwakeMonster(hex) && (hex.owner === 'neutral' || hex.owner === unit.owner || hex.building === 'none')) || hex.hp <= 0
                 || hex.wallHp > 0) return null;
-            const position = zcMonsterPosition(this.context.map, hex, this.context.targeting.now);
-            return { kind: 'building', id: hex.id, x: position.x, y: position.y, bodyRadius: STRUCTURE_TARGET_BODY_RADIUS, cardId: hex.cardId };
+            const result = out ?? this.scratchFor(unit);
+            const position = zcMonsterPosition(this.context.map, hex, this.context.targeting.now, this.targetPosition);
+            result.kind = 'building';
+            result.id = hex.id;
+            result.x = position.x;
+            result.y = position.y;
+            result.bodyRadius = STRUCTURE_TARGET_BODY_RADIUS;
+            result.cardId = hex.cardId;
+            return result;
         }
         return null;
+    }
+
+    private scratchFor(unit: ZCUnitState): ZCCombatTarget {
+        let scratch = this.targetScratch.get(unit.id);
+        if (!scratch) {
+            scratch = { kind: 'unit', id: 0, x: 0, y: 0, bodyRadius: 0, cardId: null };
+            this.targetScratch.set(unit.id, scratch);
+        }
+        return scratch;
     }
 
     isInAttackRange(unit: ZCUnitState): boolean {
         const target = this.current(unit);
         if (!target) return false;
-        const from = this.context.unitPosition(unit);
+        const from = this.context.unitPosition(unit, this.selfPosition);
         const reach = this.attackReach(this.context.effectiveDefinition(unit), target.bodyRadius);
         return ZCTargetingSystem.isInRange(from, target, reach);
     }
@@ -116,14 +163,14 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const locked = this.current(unit);
         if (locked && this.isInAttackRange(unit)) return true;
         const definition = this.context.effectiveDefinition(unit);
-        const from = this.context.unitPosition(unit);
+        const from = this.context.unitPosition(unit, this.selfPosition);
         for (const other of this.context.units.values()) {
             if (other.id === unit.id || other.owner === unit.owner) continue;
             if (other.battleState === 'dead' || other.hp <= 0) continue;
             const otherDefinition = this.context.baseDefinition(other.unitId);
             if (otherDefinition.flying && !definition.canAttackAir) continue;
             const reach = this.attackReach(definition, otherDefinition.bodyRadius);
-            if (ZCTargetingSystem.isInRange(from, this.context.unitPosition(other), reach)) return true;
+            if (ZCTargetingSystem.isInRange(from, this.context.unitPosition(other, this.candidatePosition), reach)) return true;
         }
         return false;
     }
@@ -143,15 +190,17 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     */
     nearestEnemyDistance(unit: ZCUnitState): number {
         const definition = this.context.effectiveDefinition(unit);
-        const from = this.context.unitPosition(unit);
+        const from = this.context.unitPosition(unit, this.selfPosition);
         let nearest = Number.POSITIVE_INFINITY;
         for (const other of this.context.units.values()) {
             if (other.id === unit.id || other.owner === unit.owner) continue;
             if (other.battleState === 'dead' || other.hp <= 0) continue;
             const otherDefinition = this.context.baseDefinition(other.unitId);
             if (otherDefinition.flying && !definition.canAttackAir) continue;
-            const position = this.context.unitPosition(other);
-            const distance = Math.hypot(position.x - from.x, position.y - from.y);
+            const position = this.context.unitPosition(other, this.candidatePosition);
+            const dx = position.x - from.x;
+            const dy = position.y - from.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
             if (distance < nearest) nearest = distance;
         }
         return nearest;
@@ -161,7 +210,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     isOutOfAttackRange(unit: ZCUnitState): boolean {
         const target = this.current(unit);
         if (!target) return true;
-        const from = this.context.unitPosition(unit);
+        const from = this.context.unitPosition(unit, this.selfPosition);
         const reach = this.attackReach(this.context.effectiveDefinition(unit), target.bodyRadius);
         return ZCTargetingSystem.isOutOfRange(from, target, reach);
     }
@@ -178,8 +227,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const target = this.current(unit);
         if (!target) return 1;
         const reach = ZCTargetingSystem.chargeReach(distance, target.bodyRadius, this.context.combatDistanceScale);
-        const from = this.context.unitPosition(unit);
-        return Math.hypot(from.x - target.x, from.y - target.y) <= reach ? scale : 1;
+        const from = this.context.unitPosition(unit, this.selfPosition);
+        const dx = from.x - target.x;
+        const dy = from.y - target.y;
+        return Math.sqrt(dx * dx + dy * dy) <= reach ? scale : 1;
     }
 
     /**
@@ -189,39 +240,49 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     */
     dashFirstHit(unit: ZCUnitState, fromX: number, fromY: number, toX: number, toY: number): IZCDashHit | null {
         const definition = this.context.baseDefinition(unit.unitId);
-        const from = { x: fromX, y: fromY };
-        const to = { x: toX, y: toY };
-        let hit: IZCDashHit | null = null;
-        let nearest = Infinity;
-        const consider = (kind: IZCDashHit['kind'], id: number, center: { x: number; y: number }, bodyRadius: number): void => {
-            const t = sweptCircleHit(from, to, center, this.attackReach(definition, bodyRadius));
-            if (t === null) return;
-            // 同一个 t 上有多人（挤成一团）时取 id 小的，保证回放可复现。
-            if (t > nearest || (t === nearest && id >= (hit?.id ?? Infinity))) return;
-            nearest = t;
-            hit = { kind, id, x: fromX + (toX - fromX) * t, y: fromY + (toY - fromY) * t };
-        };
+        const dx = toX - fromX;
+        const dy = toY - fromY;
+        this.dashNearest = Infinity;
+        this.dashBestId = Infinity;
+        this.dashHit = false;
 
         for (const other of this.context.units.values()) {
             if (other.id === unit.id || other.owner === unit.owner) continue;
             if (other.battleState === 'dead' || other.hp <= 0) continue;
             const otherDefinition = this.context.baseDefinition(other.unitId);
             if (otherDefinition.flying && !definition.canAttackAir) continue;
-            consider('unit', other.id, this.context.unitPosition(other), otherDefinition.bodyRadius);
+            this.considerDashCandidate(definition, 'unit', other.id, this.context.unitPosition(other, this.candidatePosition),
+                otherDefinition.bodyRadius, fromX, fromY, dx, dy);
         }
 
         //  城墙 / 建筑：`current()` 已经把「还是不是合法目标」判完了（墙拆了、建筑没了都会返回 null）。
         const structure = this.current(unit);
         if (structure && structure.kind !== 'unit') {
-            consider(structure.kind, structure.id, structure, structure.bodyRadius);
+            this.considerDashCandidate(definition, structure.kind, structure.id, structure, structure.bodyRadius, fromX, fromY, dx, dy);
         }
-        return hit;
+        return this.dashHit ? this.dashHitScratch : null;
+    }
+
+    /** 冲刺扫掠的单候选判定；结果写进实例 scratch，避免每个候选建 `consider` 闭包。*/
+    private considerDashCandidate(definition: ZCUnitDefinition, kind: IZCDashHit['kind'], id: number, center: { x: number; y: number },
+        bodyRadius: number, fromX: number, fromY: number, dx: number, dy: number): void {
+        const t = sweptCircleHitScalars(dx, dy, fromX - center.x, fromY - center.y, this.attackReach(definition, bodyRadius));
+        if (t === null) return;
+        // 同一个 t 上有多人（挤成一团）时取 id 小的，保证回放可复现。
+        if (t > this.dashNearest || (t === this.dashNearest && id >= this.dashBestId)) return;
+        this.dashNearest = t;
+        this.dashBestId = id;
+        this.dashHit = true;
+        this.dashHitScratch.kind = kind;
+        this.dashHitScratch.id = id;
+        this.dashHitScratch.x = fromX + dx * t;
+        this.dashHitScratch.y = fromY + dy * t;
     }
 
     face(unit: ZCUnitState): void {
         const target = this.current(unit);
         if (!target) return;
-        const from = this.context.unitPosition(unit);
+        const from = this.context.unitPosition(unit, this.selfPosition);
         const raw = Math.atan2(target.y - from.y, target.x - from.x);
         unit.facingRadians = Math.round(raw / (Math.PI / 4)) * (Math.PI / 4);
     }
@@ -241,8 +302,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const reach = this.attackReach(this.context.baseDefinition(unit.unitId), target.bodyRadius);
         const step = this.findPathStep(unit, (id) => {
             const config = this.context.map.hexes[id];
-            return (target.kind === 'unit' && id === destinationId)
-                || Math.hypot(config.x - target.x, config.y - target.y) <= reach;
+            if (target.kind === 'unit' && id === destinationId) return true;
+            const dx = config.x - target.x;
+            const dy = config.y - target.y;
+            return Math.sqrt(dx * dx + dy * dy) <= reach;
         }, destinationId);
         this.stepCache.set(unit.id, {
             atHex: unit.sourceHexId, goalHex: destinationId,

@@ -64,6 +64,8 @@ import {
     RequestTakeDayChallengeActReward,
 } from './RequestActivityMsg';
 
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 采集一次界面要的全部数据。 */
 export interface IActivitySnapshot {
     /** 已按「可领取 → 未完成 → 已领取」排好序的任务行。 */
@@ -106,7 +108,6 @@ export interface IActivityRepository {
 }
 
 /** 写请求超时（规则 22：读 800 / 写 5000）。 */
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 缓存表名（`protoCache.json` 里的 key，也是 `GameCache` 的名字）。 */
 const ACTIVITY_CACHE = 'CmdActivity';
@@ -150,9 +151,9 @@ export class RuntimeActivityRepository implements IActivityRepository {
             readRows('dayChallengeActTaskProgress'),
             readRows('activityTab'),
             readRows('activity'),
-            readRows('item'),
+            readRows(ITEM_TABLE),
             // 货币 / 属性类奖励（银币 / 金币 / 活跃度…）不在这张表里就没有图标可画
-            readRows('roleProperty'),
+            readRows(ROLE_PROPERTY_TABLE),
         ]);
 
         const tables = parseTaskRows(taskRows);

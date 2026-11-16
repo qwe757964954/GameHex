@@ -712,8 +712,8 @@ const ROUTE_SRC = readSource('assets/script/app/main/MainEntranceRoute.ts');
 const LIST_SRC = readSource('assets/script/app/main/MainEntranceList.ts');
 
 test('D1 三张表都读了，`item` 表不能漏（漏了奖励格全不出图且不报错）', () => {
-    for (const table of ['giftShop', 'payChannel', 'item']) {
-        assert.ok(REPO_SRC.includes(`'${table}'`), `GiftRepository 没读表 ${table}`);
+    for (const table of ['giftShop', 'PAY_CHANNEL_TABLE', 'ITEM_TABLE']) {
+        assert.ok(REPO_SRC.includes(table), `GiftRepository 没读表 ${table}`);
     }
 });
 
@@ -730,13 +730,11 @@ test('D2 ⚠️ 已购次数走 `CacheMgr.getCmdShop(5)`，**不自己存快照*
     );
 });
 
-test('D3 ⚠️ 写请求必须 withTimeout + 离线早退 + catch 返 failed（否则服务端不回就永悬）', () => {
-    assert.ok(REPO_SRC.includes('withTimeout'), '必须包 withTimeout');
-    assert.ok(REPO_SRC.includes('WRITE_TIMEOUT_MS'), '写超时');
-    assert.ok(REPO_SRC.includes('!net.isConnected'), '离线要早退，不能把请求挂出去');
-    assert.ok(REPO_SRC.includes('catch'), '必须 catch');
-    assert.ok(REPO_SRC.includes("return 'failed'"), '失败要返 failed 而不是抛出去');
-    assert.ok(REPO_SRC.includes("return 'offline'"));
+test('D3 ⚠️ 写请求必须走 sendGameRequest（超时 / 离线 / catch 统一收口）', () => {
+    assert.ok(REPO_SRC.includes('sendGameRequest('), '必须走公共发包壳');
+    assert.ok(REPO_SRC.includes('GameNet.instance'), '必须向真实网络实例发包');
+    assert.ok(REPO_SRC.includes("tag: 'Gift'"), '必须带 Gift tag');
+    assert.ok(REPO_SRC.includes(`from '../net/Timeouts'`), '写超时走公共真源');
 });
 
 test('D4 `CmdShopBuy` 请求参数：`cmdShopType` 用常量，次数 1', () => {

@@ -50,4 +50,4 @@ python tools/slice_bigmap_art.py --sprites <建筑图集.png> --details <资源�
 - 对 `BigMapPage.ts` 及其依赖执行定向 TypeScript 检查通过。
 - `python tools/pvp_card_check.py` 通过。
 - Cocos 浏览器预览使用隔离的内存存档验证完整素材加载、底部导航及真实点击放置建造。截图中的多个已建建筑来自预览夹具，不写入玩家存档。
-- 预览产物保存在 `.codex-tmp/bigmap-art-integration/`。未做真机包验证；原登录页的远程配置 CORS/代理问题不在此次修改范围。
+- 预览产物保存在 `outputs/bigmap-art-integration-20261021/`。未做真机包验证；原登录页的远程配置 CORS/代理问题不在此次修改范围。

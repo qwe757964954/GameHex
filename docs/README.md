@@ -9,7 +9,7 @@
 | `docs/*.md` | 跨模块专题的当前规范、实现说明和操作流程（bigmap、zcds、章节地图、构建、协议等） | 随功能维护；被新实现取代后归档 |
 | `agent/` | 协作规范、路由表、审查标准、测试基线与版本库约定 | 长期维护；规则改动同步路由和验证 |
 | `design/` | 在用方案、迁移清单、代码优化清单及配套 csv | 方案落地后保留 30 天，再归档 |
-| `spec/` | 业务规格、跨端规则、映射表和 docx | 需求有效期内保留 |
+| `spec/` | 业务规格、跨端规则、映射表和 docx | 需求有效期内保留；带日期的盘点快照按 90 天口径保留 |
 | `reports/` | 一次性审计、扫描和验证报告 | 时点记录保留 90 天，再归档 |
 | `history/` | 已失效或被取代的文档 | 永久保留，只维护索引 |
 | `ops/` | 打包、热更新、环境等操作流程 | 随流程版本维护 |
@@ -26,16 +26,19 @@
 | 视图事件、按钮、caller、异步、池化、渲染 | [AI架构与代码规范.md](AI架构与代码规范.md) §2.1、§2.2、§3 | [开发细则](agent/开发细则.md) 对应条目 |
 | 引用、类型、命名、风格 | [开发细则](agent/开发细则.md) | 不再查其他文档的同类规则 |
 | MVC 职责、Page 与组合层 | [MVC设计规范](agent/MVC设计规范.md) | 架构规范对应模块 |
+| 架构迁移进度、哪些模块尚未迁移 | [design/工程架构迁移清单.md](design/工程架构迁移清单.md) | 只按清单判断范围，不把“已实施”当全工程完成 |
 | 单例、共享服务、状态作用域 | [单例与状态作用域](agent/单例与状态作用域.md) | — |
-| Prefab、Sprite、Spine、导表 | [AI架构与代码规范.md](AI架构与代码规范.md) §5、§7.3 | [开发细则](agent/开发细则.md) 只补类型与命名 |
+| Prefab、Sprite、Spine、导表 | [AI架构与代码规范.md](AI架构与代码规范.md) §5、§7.3 | — |
 | 定位某功能相关的规格与最小测试集 | [规范路由与最小验证](agent/规范路由与最小验证.md) | 只按行定位，不把路由表当业务要求 |
 | 代码审查、基线红归属、报告格式 | [代码审查规范](agent/代码审查规范.md) | [测试基线红清单](agent/测试基线红清单.md)、[审查报告模板](agent/审查报告模板.md) |
 | 提交、分支、版本库操作 | [版本库约定](agent/版本库约定.md) | — |
 | 大地图当前实现 | [bigmap-系统实现说明.md](bigmap-系统实现说明.md) | 布局格式见 [bigmap-布局格式.md](bigmap-布局格式.md) |
-| 大地图剩余范围与早期决策 | [bigmap-系统落地方案.md](bigmap-系统落地方案.md) | 与实现说明冲突时以当前实现和协议为准 |
+| 大地图剩余范围与早期决策 | [bigmap-系统落地方案.md](design/bigmap-系统落地方案.md) | 与实现说明冲突时以当前实现和协议为准 |
 | 大地图基地、编辑器 | [bigmap-基地建筑交互改进方案.md](bigmap-基地建筑交互改进方案.md)、[bigmap-策划编辑器方案.md](bigmap-策划编辑器方案.md) | 按各文状态头区分已做与待做 |
 | 对局、领地、章节地图表现 | [zcds-表现层与领地规范.md](zcds-表现层与领地规范.md) | 章节地图实现见 [章节地图动画与点击反馈实现说明.md](章节地图动画与点击反馈实现说明.md) |
-| 对局子系统（捕获、投射物、匹配、联机、性能、旧技能） | `zcds-capture.md`、`zcds-projectiles.md`、`zcds-matching-preload.md`、`zcds-local-multiplayer.md`、`zcds-performance.md`、`zcds-legacy-skill-runtime.md` | 按文件名定位 |
+| 对局子系统（捕获、投射物、匹配、联机、性能、旧技能） | [zcds-capture.md](zcds-capture.md)、[zcds-projectiles.md](zcds-projectiles.md)、[zcds-matching-preload.md](zcds-matching-preload.md)、[zcds-local-multiplayer.md](zcds-local-multiplayer.md)、[zcds-performance.md](zcds-performance.md)、[zcds-legacy-skill-runtime.md](zcds-legacy-skill-runtime.md) | 按文件名定位 |
+| 对局 HUD、六边形视图决策、趣味中立资源 | [ZCGameHUD.md](ZCGameHUD.md)、[ZCHexView设计决策.md](ZCHexView设计决策.md)、[zcds-趣味中立资源.md](zcds-趣味中立资源.md) | — |
+| 卡牌阵容蓝湖改版 | [CardLineup蓝湖改版说明.md](CardLineup蓝湖改版说明.md) | — |
 | 协议与跨端规则 | [slg-协议接入说明.md](slg-协议接入说明.md) | 跨端资源规则见 [spec/领地随机资源跨端规则.md](spec/领地随机资源跨端规则.md) |
 | 构建、热更新、MCP、微信包体 | [热更新方案.md](热更新方案.md)、[ops/一键打包安卓+热更新流程.html](ops/一键打包安卓+热更新流程.html)、[MCP接入指南.md](MCP接入指南.md)、[wechatgame-构建与包体.md](wechatgame-构建与包体.md) | — |
 | 追溯旧参数、旧实现 | [history/README.md](history/README.md) | 只作参考，不升级为当前要求 |

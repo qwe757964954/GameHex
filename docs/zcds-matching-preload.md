@@ -45,7 +45,7 @@ matchSlotCount(room, serverUnits) = clamp(max(room ?? 0, serverUnits, 2), 2, MAT
 
 布局验算（`ITEM_HEIGHT` 160 + `ITEM_GAP` 38，块心 `ITEMS_CENTER_Y` 37）：4 条时上沿 +414、
 下沿 −340；`StatusLabel` 在 +469、`TipTitle` 在 −426 ⇒ 上下都还留 55 / 86px，2/3 条更宽松
-（三档对照图：`docs/匹配界面-人数适配.png`）。
+（三档对照图由上述布局算式直接得出，截图未入库）。
 
 验证：`npx tsx --test tests/matching-participants.test.ts tests/matching-artifact-icon.test.ts tests/matching-controller.test.ts`。
 

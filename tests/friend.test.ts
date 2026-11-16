@@ -1207,15 +1207,11 @@ test('D2 ⚠️ 三张表都走 `CacheMgr`（服务端会推），**不自己存
     assert.ok(REPO_CODE.includes('private readonly appliedIds = new Set<string>()'));
 });
 
-test('D3 ⚠️ 写请求必须 `withTimeout` + 离线早退 + `catch` 返 failed（否则服务端不回就永悬）', () => {
-    assert.ok(REPO_CODE.includes('withTimeout('), '必须 withTimeout');
-    assert.ok(REPO_CODE.includes('net.isConnected'), '离线要早退');
-    assert.ok(REPO_CODE.includes(`return 'offline'`), '离线返回 offline（不是 failed，提示文案不同）');
-    assert.ok(/catch\s*\(/.test(REPO_CODE), 'catch 不能省');
-    // 写请求必须有超时；常量与导出都给测试用（避免测试里硬编码）
-    const write = /const WRITE_TIMEOUT_MS = (\d+)/.exec(REPO_SRC);
-    assert.ok(write, '写超时常量必须存在');
-    assert.equal(Number(write![1]), 5000);
+test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
+    assert.ok(REPO_CODE.includes('sendGameRequest(GameNet.instance'), '必须走公共发包壳');
+    assert.ok(REPO_CODE.includes(`tag: 'Friend'`), '必须带 Friend tag');
+    assert.ok(REPO_SRC.includes(`import { WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '写超时走公共真源');
+    // 给测试用的导出（避免测试里硬编码）
     assert.ok(REPO_SRC.includes('export const FRIEND_WRITE_TIMEOUT_MS'));
 });
 

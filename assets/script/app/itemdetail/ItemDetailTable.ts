@@ -1,6 +1,6 @@
 /**
  * 物品详情（老端 `LayerRolrItemDetail`，FGUI `组件_角色_道具详情.xml`）的判定口径与解析
- * —— 零 import 纯函数层，`tests/itemdetail.test.ts` 直接 import。
+ * —— 纯函数层，只依赖 core 的表行骨架，`tests/itemdetail.test.ts` 直接 import。
  *
  * 页面里带 `cc` 的部分不能进这里：链上出现 `import ... from 'cc'` 会让整组用例静默失效。
  *
@@ -14,6 +14,8 @@
  *
  * 前 7 档同色系（quality 3 = 优秀 = 蓝 = blue），第 8 档只有物品框有（`pzk_11`「将」）。
  */
+
+import { parseRowsToMap } from '../../core/table/RowParse';
 
 // ============================================================
 // 品质
@@ -148,12 +150,7 @@ export function parseItemRow(raw: unknown): IItemRow | null {
 
 /** `item` 全表 → `resId → IItemRow`。 */
 export function parseItemRows(rows: readonly unknown[]): Map<number, IItemRow> {
-    const out = new Map<number, IItemRow>();
-    for (const raw of rows) {
-        const row = parseItemRow(raw);
-        if (row) out.set(row.resId, row);
-    }
-    return out;
+    return parseRowsToMap(rows, parseItemRow, (one) => one.resId, { keep: 'last' });
 }
 
 // ============================================================

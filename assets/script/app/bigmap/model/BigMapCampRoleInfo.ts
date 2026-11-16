@@ -30,6 +30,7 @@
 
 import { toCount, toIdString } from '../../net/RequestGuard';
 import { isBigMapCampId } from './BigMapCampInfo';
+import { isUint32, clampUint32 } from '../../../core/math/Scalar';
 
 /** 据点内的一个角色（一个玩家在某个格子上的驻守/占领记录）。 */
 export interface IBigMapCampRoleInfo {
@@ -47,8 +48,6 @@ export interface IBigMapCampRoleInfo {
     /** 旧快照可缺省；最新协议归一化始终提供建筑等级。 */
     readonly buildLevel?: number;
 }
-
-const UINT32_MAX = 0xffffffff;
 
 /** 角色列表的查询状态（与据点状态 `campDetailStatus` 分开，两条独立协议）。 */
 export type BigMapCampRoleStatus = 'idle' | 'loading' | 'ready' | 'failed';
@@ -79,14 +78,14 @@ export function formatBigMapCampRoleDetail(role: IBigMapCampRoleInfo): string {
 
 /** 格子 id：整数且落在 uint32 内（0 合法）。 */
 function isHexId(value: unknown): value is number {
-    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= UINT32_MAX;
+    return isUint32(value);
 }
 
 /** 血量：uint32 非负整数。 */
 function normalizeHp(value: unknown): number {
     const num = toCount(value);
     if (!Number.isFinite(num) || num < 0) return 0;
-    return Math.min(UINT32_MAX, Math.floor(num));
+    return clampUint32(num);
 }
 
 /**

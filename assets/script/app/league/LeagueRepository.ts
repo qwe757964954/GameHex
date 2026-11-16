@@ -11,7 +11,7 @@ import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as ILeagueGoodsInfo } from '../common/ResTypes';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString, withTimeout } from '../net/RequestGuard';
 import {
     buildLeagueCostView,
     findLeagueProperty,
@@ -156,6 +156,7 @@ import {
     LEAGUE_GOODS_COUNT_SEP,
 } from './LeagueTexts';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 联盟商店的档位号（`CmdShopType.union = 8`）。 */
 export { LEAGUE_SHOP_TYPE_UNION };
 /** 联盟活动类型（`LeagueACT_TYPE`）。 */
@@ -697,8 +698,6 @@ export interface ILeagueRepository {
 }
 
 /** 请求超时（与好友 / 礼包 / 首充同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读缓存里一张表；拿不到返回空数组（**不抛**）。 */
 function readCacheRows(
@@ -1576,16 +1575,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
 
     /** 统一的发包 + 三态收口。 */
     private async send(make: () => any): Promise<LeagueRequestResult> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return 'offline';
-        try {
-            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
-            const sent = await withTimeout(net.send(make(), false), WRITE_TIMEOUT_MS, () => false);
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[League] 请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
     }
 
     private async sendWithRewards<Rsp>(

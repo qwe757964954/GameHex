@@ -1,3 +1,5 @@
+import { COMMON_ART_ROOT } from '../../ArtPaths';
+
 /**
  *bundle 内旧前缀 —— 2026-11-04 `assets/bundles/bigmap/image/bigmap/` 整目录上提成
  *`assets/bundles/bigmap/image/`，bundle 内路径少了一层 `bigmap`。
@@ -134,7 +136,7 @@ export const BIGMAP_PLATE_FILES: Readonly<Record<IBigMapPlateKey, string>> = {
 export const BIGMAP_PLATE_FLAG_FILE = `${BIGMAP_CONCEPT_ROOT}/ui/plate_flag`;
 
 /** 通用 UI 图根目录 —— 与领地页（`TerritoryPageAssets`）同一个 `image/common`。 */
-export const BIGMAP_COMMON_ART_ROOT = 'image/common';
+export const BIGMAP_COMMON_ART_ROOT = COMMON_ART_ROOT;
 
 /** 主城页 HUD / 按钮的根目录（`快速寻敌` 那颗大金钮就在这）。 */
 export const BIGMAP_MAIN_CITY_ART_ROOT = 'image/main/city';

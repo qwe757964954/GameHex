@@ -48,6 +48,7 @@ import {
     RequestTakeMonthCardReward,
 } from './RequestMonthCardMsg';
 
+import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 请求结果：三态，页面据此决定提示文案。 */
 export type MonthCardRequestResult = INetRequestStatus;
 
@@ -88,9 +89,9 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
     async load(nowMs: number = Date.now()): Promise<IMonthCardGiftSnapshot> {
         const [planRows, payRows, roleRows, itemRows, activityRows] = await Promise.all([
             readRows('monthCardActPlan'),
-            readRows('payChannel'),
-            readRows('roleProperty'),
-            readRows('item'),
+            readRows(PAY_CHANNEL_TABLE),
+            readRows(ROLE_PROPERTY_TABLE),
+            readRows(ITEM_TABLE),
             readRows('activity'),
         ]);
 

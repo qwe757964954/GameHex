@@ -14,6 +14,7 @@ import { ROLE_TEXTS } from './RoleTexts';
 import { MilitiaTalentItem } from './MilitiaTalentItem';
 import type { IMilitiaTalentCell, IMilitiaTalentDetail, IMilitiaTalentSnapshot, MilitiaTalentState } from './MilitiaTypes';
 
+import { ITEM_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
 
 /**
@@ -312,7 +313,7 @@ export class MilitiaTalentPage extends PopupBase {
 
     /** 取一行 item（走 `RefUtil`，与背包同一张表）。 */
     private async itemRowOf(itemId: number): Promise<{ icon?: string } | null> {
-        const row = await RefUtil.instance.getRefAsync('item', 'resId', itemId);
+        const row = await RefUtil.instance.getRefAsync(ITEM_TABLE, 'resId', itemId);
         return (row as { icon?: string } | null) ?? null;
     }
 

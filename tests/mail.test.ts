@@ -840,13 +840,13 @@ test('D2 ⚠️ 4 个协议类名与老端一致（改一个字母就是静默�
     }
 });
 
-test('D3 ⚠️ 写请求必须 `withTimeout` + 离线早退 + `catch` 收口（否则服务端不回就永悬）', () => {
+test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     const text = src('MailRepository.ts');
-    assert.ok(text.includes('withTimeout'), 'Repository 没有用 withTimeout');
-    assert.ok(/MAIL_READ_TIMEOUT_MS\s*=\s*800/.test(text), '读超时口径 800ms');
-    assert.ok(/MAIL_WRITE_TIMEOUT_MS\s*=\s*5000/.test(text), '写超时口径 5000ms');
-    assert.ok(text.includes("'offline'"), '缺离线早退（返回 offline 态）');
-    assert.ok(text.includes("'failed'"), '缺失败态');
+    assert.ok(text.includes('sendGameRequest(GameNet.instance'), 'Repository 没走公共发包壳');
+    assert.ok(text.includes("tag: 'Mail'"), '必须带 Mail tag');
+    assert.ok(text.includes(`import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '超时常量走公共真源');
+    assert.ok(/MAIL_READ_TIMEOUT_MS\s*=\s*READ_TIMEOUT_MS/.test(text), '读超时导出必须复用公共真源');
+    assert.ok(/MAIL_WRITE_TIMEOUT_MS\s*=\s*WRITE_TIMEOUT_MS/.test(text), '写超时导出必须复用公共真源');
     assert.ok(text.includes('reset()'), 'Repository 必须有 reset（换号 / 重登要清本地快照）');
 });
 

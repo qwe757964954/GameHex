@@ -83,6 +83,7 @@ import {
     LEAGUE_UNION_MEMBER_PREFIX,
 } from '../assets/script/app/league/LeagueTexts';
 import { assetPath } from './helpers/asset-paths';
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../assets/script/app/net/Timeouts';
 
 // ============================================================
 // 常量 / 工具
@@ -679,16 +680,14 @@ test('C8 ⚠️ 搜索缓存**独立存放**，不补写进 `CmdUnion` 缓存表
 });
 
 test('C9 读 / 写超时常量与好友同口径（800 / 5000）', () => {
-    const read = REPO_SRC.match(/const READ_TIMEOUT_MS = (\d+)/);
-    const write = REPO_SRC.match(/const WRITE_TIMEOUT_MS = (\d+)/);
-    assert.ok(read && write, '读 / 写超时常量必须都在');
-    assert.equal(Number(read![1]), 800);
-    assert.equal(Number(write![1]), 5000);
+    const read = REPO_SRC.match(/import \{ READ_TIMEOUT_MS, WRITE_TIMEOUT_MS \} from '\.\.\/net\/Timeouts';/);
+    assert.ok(read, '超时常量必须从公共真源导入');
+    assert.equal(READ_TIMEOUT_MS, 800);
+    assert.equal(WRITE_TIMEOUT_MS, 5000);
     assert.ok(REPO_SRC.includes('export const LEAGUE_READ_TIMEOUT_MS'));
     assert.ok(REPO_SRC.includes('export const LEAGUE_WRITE_TIMEOUT_MS'));
-    // 必须 withTimeout：`GameNet.send` 没有按请求的超时
-    assert.ok(REPO_SRC.includes('withTimeout(net.send(make(), false)'), '发包必须兜硬超时');
-    assert.ok(REPO_SRC.includes(`if (!net?.isConnected) return 'offline'`), '离线早退');
+    // 必须走 `sendGameRequest`：超时 / 离线 / catch 统一收口
+    assert.ok(REPO_SRC.includes('sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS'), '发包必须兜硬超时');
 });
 
 test('C10 ⚠️ `unionOfficial` 表名与磁盘文件一致', () => {

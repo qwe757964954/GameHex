@@ -1570,8 +1570,8 @@ test('Repository：状态走 `CacheMgr.getCmdBattleToken(type)`，**不自存快
     assert.match(repository, /tlTakeLevel/);
     // `undefined` ⇒ null（字段缺失）与 `[]`（给了空数组）语义不同 —— 这条注释丢了说明有人改回单标量
     assert.match(repository, /字段缺失/);
-    // 读表走 RefUtil（与其它活动一致）
-    assert.match(repository, /RefUtil\.instance\.getRefAllAsync\(table\)/);
+    // 读表走公共 `readRefRows`（与其它活动一致）
+    assert.match(repository, /readRefRows\(RefUtil\.instance, table\)/);
     assert.match(repository, /'battleTokenPlan'/);
     assert.match(repository, /'battleTokenReward'/);
     assert.match(repository, /'battleTokenConfig'/);
@@ -1581,12 +1581,11 @@ test('Repository：状态走 `CacheMgr.getCmdBattleToken(type)`，**不自存快
     assert.match(repository, /'payChannel'/);
 });
 
-test('⚠️ 三条请求都必须 `withTimeout` + 离线早退 + `catch` 返结果（否则永悬）', () => {
+test('⚠️ 三条请求都必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     const repository = src('BattleTokenRepository.ts');
-    const sends = repository.match(/await withTimeout\(/g) ?? [];
+    const sends = repository.match(/sendGameRequest\(/g) ?? [];
     assert.equal(sends.length, 3, '开通 / 领奖 / 重置三条各一次 —— 少一条就会永悬（规则 22）');
-    assert.match(repository, /const READ_TIMEOUT_MS = 800;/);
-    assert.match(repository, /const WRITE_TIMEOUT_MS = 5000;/);
+    assert.match(repository, /import \{ READ_TIMEOUT_MS, WRITE_TIMEOUT_MS \} from '\.\.\/net\/Timeouts';/);
     assert.match(repository, /BT_READ_TIMEOUT_MS = READ_TIMEOUT_MS/);
     assert.match(repository, /BT_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS/);
     // 结果类型四态（`rejected` = 服务端 ret === false）

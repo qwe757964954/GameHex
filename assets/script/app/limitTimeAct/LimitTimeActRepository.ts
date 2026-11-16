@@ -28,7 +28,7 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     findLimitTimeMeta,
     parseActConfig,
@@ -47,6 +47,7 @@ import {
     RequestActivityLimitTimeTake,
 } from './RequestLimitTimeActMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 请求结果：三态（对齐 MonthCardGift 的口径）。 */
 export type LimitTimeRequestResult = INetRequestStatus;
 
@@ -67,8 +68,6 @@ export interface ILimitTimeActRepository {
 }
 
 /** 读请求超时。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 生产环境 Repository。 */
 export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
@@ -126,42 +125,28 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
     }
 
     private async fetchJson(meta: ILimitTimeActMeta): Promise<unknown> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return null;
         let content: string | null = null;
-        try {
-            const ok = await withTimeout(
-                net.send(new RequestActivityJson(
-                    { activityId: meta.id, tlJsonName: meta.jsonNames as string[] },
-                    undefined,
-                    (rsp) => { content = rsp?.content ?? null; },
-                ), false),
-                READ_TIMEOUT_MS,
-                () => false,
-            );
-            if (!ok) return null;
-        } catch (error) {
-            console.warn('[LimitTimeAct] 拉活动配置失败', error);
-            return null;
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestActivityJson(
+                { activityId: meta.id, tlJsonName: meta.jsonNames as string[] },
+                undefined,
+                (rsp) => { content = rsp?.content ?? null; },
+            ),
+            { timeoutMs: READ_TIMEOUT_MS, tag: 'LimitTimeAct' },
+        );
+        if (status !== 'ok') return null;
         return content;
     }
 
     private async fetchInfo(): Promise<ILimitTimeActData | null> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return null;
         let rsp: unknown = null;
-        try {
-            const ok = await withTimeout(
-                net.send(new RequestActivityLimitTimeInfo({}, undefined, (r) => { rsp = r; }), false),
-                READ_TIMEOUT_MS,
-                () => false,
-            );
-            if (!ok) return null;
-        } catch (error) {
-            console.warn('[LimitTimeAct] 拉限时活动数据失败', error);
-            return null;
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestActivityLimitTimeInfo({}, undefined, (r) => { rsp = r; }),
+            { timeoutMs: READ_TIMEOUT_MS, tag: 'LimitTimeAct' },
+        );
+        if (status !== 'ok') return null;
         return parseActData(rsp);
     }
 
@@ -175,28 +160,20 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
 
     /** `reqActivityLimitTimeTake` 的公共壳：离线早退、超时兜底、响应覆盖内存缓存。 */
     private async take(type: number, resId: number, caller?: object): Promise<LimitTimeRequestResult> {
-        const net = GameNet.instance;
-        if (!net || !net.isConnected) return 'offline';
-
         let rsp: CmdActivityLimitTimeTakeRspMsg | null = null;
-        try {
-            const ok = await withTimeout(
-                net.send(new RequestActivityLimitTimeTake(
-                    { resId, type },
-                    caller,
-                    (r) => {
-                        rsp = r;
-                        FW.ShowReward(r?.tlCmdGoods ?? []);
-                    },
-                ), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (!ok) return 'failed';
-        } catch (error) {
-            console.warn('[LimitTimeAct] 领取 / 购买请求失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestActivityLimitTimeTake(
+                { resId, type },
+                caller,
+                (r) => {
+                    rsp = r;
+                    FW.ShowReward(r?.tlCmdGoods ?? []);
+                },
+            ),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'LimitTimeAct' },
+        );
+        if (status !== 'ok') return status;
         if (!rsp) return 'failed';
         // 响应里带更新后的状态，原地覆盖内存缓存（不用再拉一次）。
         this.data = parseActData(rsp);

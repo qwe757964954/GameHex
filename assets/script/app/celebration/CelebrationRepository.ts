@@ -28,7 +28,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString } from '../net/RequestGuard';
 import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
 import { resolveRewardIconRef } from '../activity/LayerActivityArt';
 import {
@@ -76,6 +76,8 @@ import { CL_TEXTS } from './CelebrationTexts';
 import { RequestCelebrationBuyShop, RequestCelebrationGetTargetReward } from './RequestCelebrationMsg';
 import { RequestGetRank } from '../generated/requestMsg/RequestRankMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 // 判定与格式化都在零 import 的 `CelebrationTable`，这里转出一部分，页面只 import 本文件。
 export { CL_NOT_IN_RANK, buyCountOf, numAbbrOf, purchaseStateOf } from './CelebrationTable';
 export type {
@@ -101,8 +103,6 @@ export type CelebrationRequestResult = INetRequestStatus;
 export type CelebrationBuyResult = CelebrationRequestResult | 'pay';
 
 /** 请求超时（与全家族同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -184,9 +184,9 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             readRows('celebrationTarget'),
             readRows('celebrationRank'),
             readRows('celebrationShop'),
-            readRows('payChannel'),
-            readRows('item'),
-            readRows('roleProperty'),
+            readRows(PAY_CHANNEL_TABLE),
+            readRows(ITEM_TABLE),
+            readRows(ROLE_PROPERTY_TABLE),
         ]);
 
         const configs = parseConfigRows(configRaw);
@@ -242,9 +242,6 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
 
     /** 领取庆典目标奖励。`id` 是 `celebrationConfig.id`，不是 rankType（见 `RequestCelebrationMsg`）。 */
     async claimTargetReward(id: number, subId: number, caller?: object): Promise<CelebrationRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdCelebrationGetTargetRewardRspMsg): void => {
             // 老端 `ModelCelebration` 也是这么调的。`FW.ShowReward` 是可注入的全局出口（组合根接成
@@ -254,18 +251,12 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             applied = true;
         };
 
-        try {
-            // `GameNet.send` 没有按请求的超时，服务端不回就永悬，必须包一层。
-            const sent = await withTimeout(
-                net.send(new RequestCelebrationGetTargetReward({ id, subId }, caller, callback), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Celebration] 领取庆典目标奖励失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestCelebrationGetTargetReward({ id, subId }, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Celebration' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 
@@ -277,9 +268,6 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
      * 「钱够不够」的前置校验归页面（要弹框、要读 UI），Repository 不做。
      */
     async buyShopGoods(id: number, subId: number, caller?: object): Promise<CelebrationBuyResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         let needPay = false;
         const callback = (rsp: CmdCelebrationBuyShopGoodsRspMsg): void => {
@@ -291,17 +279,12 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             applied = true;
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(new RequestCelebrationBuyShop({ id, subId }, caller, callback), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Celebration] 购买庆典商品失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestCelebrationBuyShop({ id, subId }, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Celebration' },
+        );
+        if (status !== 'ok') return status;
         if (needPay) return 'pay';
         return applied ? 'ok' : 'failed';
     }
@@ -318,9 +301,6 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         unionId: string,
         caller?: object,
     ): Promise<ICelebrationRankDetail | null> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return null;
-
         let result: ICelebrationRankDetail | null = null;
         const callback = (rsp: CmdGetRankRspMsg): void => {
             const info = rsp?.rankInfo;
@@ -332,22 +312,12 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             };
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(
-                    // `unionId` 是 Long，protobufjs 的 fromObject 认十进制字符串；直接传 number
-                    // 在超过 MAX_SAFE_INTEGER 时会静默丢精度。
-                    new RequestGetRank({ rankType: rankType as CmdRankType, showNum, unionId }, caller, callback),
-                    false,
-                ),
-                READ_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return null;
-        } catch (error) {
-            console.warn('[Celebration] 查详细排名失败', error);
-            return null;
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestGetRank({ rankType: rankType as CmdRankType, showNum, unionId }, caller, callback),
+            { timeoutMs: READ_TIMEOUT_MS, tag: 'Celebration' },
+        );
+        if (status !== 'ok') return null;
         return result;
     }
 }

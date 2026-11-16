@@ -34,7 +34,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, withTimeout } from '../net/RequestGuard';
 import {
     RequestCodeExchange,
     RequestRoleChangeImg,
@@ -51,6 +51,8 @@ import {
 } from './PlayerInfoTable';
 import type { IOtherEquipEntry } from './PlayerInfoTable';
 
+import { READ_TIMEOUT_MS_SLOW as READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { HEAD_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 「自己」一名玩家的展示数据。 */
 export interface IPlayerInfoSnapshot {
     /** 是不是自己（决定 `btn_rename` 等「仅自己可见」节点的显隐）。 */
@@ -111,9 +113,7 @@ export interface IOtherInfoResult {
 }
 
 /** 写请求超时（与 `MainTaskRepository` / `FriendRepository` 同口径）。 */
-const WRITE_TIMEOUT_MS = 5000;
 /** 读请求超时（比写短，界面要尽快出空态）。 */
-const READ_TIMEOUT_MS = 3000;
 
 /** 空快照（缓存读不到时用）。 */
 const EMPTY_SNAPSHOT: IPlayerInfoSnapshot = {
@@ -331,7 +331,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
     async loadHeads(ownedResIds?: ReadonlySet<number> | readonly number[] | null): Promise<readonly IHeadEntry[]> {
         let rows: readonly Record<string, unknown>[] = [];
         try {
-            rows = readTable(await RefUtil.instance.getRefAllAsync('head'));
+            rows = readTable(await RefUtil.instance.getRefAllAsync(HEAD_TABLE));
         } catch (error) {
             console.warn('[PlayerInfo] 读 head 表失败', error);
         }
@@ -373,7 +373,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         // 改名卡图标：`item` 表的 `icon` 就是**相对 `assets/resources/` 的路径**，直接用。
         let itemIconPath = '';
         try {
-            const items = readTable(await RefUtil.instance.getRefAllAsync('item'));
+            const items = readTable(await RefUtil.instance.getRefAllAsync(ITEM_TABLE));
             const row = items.find((r) => toNumber(r.resId, 0) === itemId);
             itemIconPath = toText(row?.icon);
         } catch (error) {
@@ -384,7 +384,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         let coinResId = FALLBACK_RENAME_COST.coinResId;
         let coinName = '';
         try {
-            const props = readTable(await RefUtil.instance.getRefAllAsync('roleProperty'));
+            const props = readTable(await RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE));
             const row = props.find((r) => toText(r.key) === 'coin');
             coinResId = toNumber(row?.resId, coinResId);
             coinName = toText(row?.icon);
@@ -470,17 +470,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
 
     /** 统一的发包 + 三态收口（与 `FriendRepository.send` / `MainTaskRepository.claim` 同款）。 */
     private async send(make: () => any): Promise<PlayerInfoRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            // ⚠️ 必须 `withTimeout`：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
-            //    界面会卡在「已点但没反应」的状态再也不刷新。
-            const sent = await withTimeout(net.send(make(), false), WRITE_TIMEOUT_MS, () => false);
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[PlayerInfo] 请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'PlayerInfo' });
     }
 }
 

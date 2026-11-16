@@ -877,8 +877,8 @@ test('Repository：状态内存持有（不走 CacheMgr）+ 四表并发读 + �
     for (const table of ['sevenDayTask', 'sevenDayShop', 'sevenDayPoint', 'item']) {
         assert.match(repository, new RegExp(`['"]${table}['"]`), `没读到 ${table} 表`);
     }
-    // `GameNet.send` 没有按请求的超时 → 不兜就永远悬着，面板停在占位外观
-    assert.match(repository, /withTimeout\(/);
+    // `GameNet.send` 没有按请求的超时 → 统一走公共发包壳，否则面板停在占位外观
+    assert.match(repository, /sendGameRequest\(/);
     assert.match(repository, /READ_TIMEOUT_MS/);
     assert.match(repository, /WRITE_TIMEOUT_MS/);
     // uint64 一律走字符串（经 number 会超 2^53 静默丢精度）

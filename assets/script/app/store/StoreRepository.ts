@@ -16,7 +16,7 @@ import { readRefRows } from '../common/TableRead';
 import { RequestShopBuy } from '../net/RequestShopMsg';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import { countItem } from '../card/ItemBag';
 import { rolePropertyAmount } from '../league/LeagueTable';
 import { RequestRoleGuanKaGiftBuy, RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
@@ -53,6 +53,7 @@ export type StoreRequestResult = INetRequestStatus;
 
 import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 const TABLE_GEM_BOX = 'gemBox';
 const TABLE_GOLD_SHOP = 'goldShop';
 const TABLE_RESOURCE_SHOP = 'resourceShop';
@@ -61,8 +62,6 @@ const TABLE_ROLE_PROPERTY = ROLE_PROPERTY_TABLE;
 const TABLE_ITEM = ITEM_TABLE;
 const TABLE_AD = 'ad';
 
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 // 行类型
 
@@ -329,37 +328,23 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async watchAd(type: number, caller?: object): Promise<StoreRequestResult> {
-        if (!GameNet.instance.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(
-                GameNet.instance.send(new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
-                    if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
-                }), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Store] 看广告请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(
+            GameNet.instance,
+            () => new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
+                if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
+            }),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
+        );
     }
 
     async buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult> {
-        if (!GameNet.instance.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(
-                GameNet.instance.send(new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
-                    if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
-                }), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Store] 买礼包请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(
+            GameNet.instance,
+            () => new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
+                if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
+            }),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
+        );
     }
 
     pay(payChannelId: number): void {
@@ -373,26 +358,19 @@ class RuntimeStoreRepository implements IStoreRepository {
         buyTimes: number,
         caller?: object,
     ): Promise<StoreRequestResult> {
-        if (!GameNet.instance.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(
-                GameNet.instance.send(new RequestShopBuy(
-                    { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
-                    caller,
-                    (rsp: CmdShopBuyRspMsg) => {
-                        if (rsp?.tlCmdGoods?.length) {
-                            FW.ShowReward(rsp.tlCmdGoods, { isGold: cmdShopType === STORE_SHOP_TYPE.gold });
-                        }
-                    },
-                ), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Store] 商店购买请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(
+            GameNet.instance,
+            () => new RequestShopBuy(
+                { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
+                caller,
+                (rsp: CmdShopBuyRspMsg) => {
+                    if (rsp?.tlCmdGoods?.length) {
+                        FW.ShowReward(rsp.tlCmdGoods, { isGold: cmdShopType === STORE_SHOP_TYPE.gold });
+                    }
+                },
+            ),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
+        );
     }
 }
 

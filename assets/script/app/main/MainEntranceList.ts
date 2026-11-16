@@ -42,6 +42,7 @@ import {
 import type { EntrancePlayerState } from './MainEntranceVisible';
 import { isLevelPassed } from './BattleLevelPassed';
 
+import { OPEN_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
 
 /** 入口图标落地目录（icon.json ui://图标_主界面/…）。 */
@@ -149,7 +150,7 @@ export class MainEntranceList extends Component {
         if (this.loading) return;
         this.loading = true;
         try {
-            const openRows = (await RefUtil.instance.getRefAllAsync('open')) as OpenRowLike[];
+            const openRows = (await RefUtil.instance.getRefAllAsync(OPEN_TABLE)) as OpenRowLike[];
 
             const state = await this.resolvePlayerState();
             const byRefId = indexOpenRowsByRefId(openRows);

@@ -25,6 +25,7 @@ import { buildZCVisualResourcePlan } from '../model/ZCVisualResourcePlan';
 import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
 import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from '../../card/CardArtConfig';
 
+import { ICON_TABLE } from '../../../core/config/TableNames';
 const BATTLE_ENTRY_PRIORITY = 100;
 const BATTLE_DEFERRED_PRIORITY = 10;
 const DEFERRED_ART_YIELD_MS = 16;
@@ -229,7 +230,7 @@ export class ZCGameLoader {
             this.resources.configs.getTable(CARD_ART_TABLES.rarity),
             this.resources.configs.getTable(CARD_ART_TABLES.cardClass),
             this.resources.configs.getTable(CARD_ART_TABLES.camp),
-            this.resources.configs.getTable('icon'),
+            this.resources.configs.getTable(ICON_TABLE),
         ]);
         this.checkActive(scope);
         const art = parseCardArtConfig({ rarity: rarity ?? [], cardClass: cardClass ?? [], camp: camp ?? [] }, icons);

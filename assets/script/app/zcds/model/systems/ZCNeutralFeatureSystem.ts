@@ -182,6 +182,8 @@ export class ZCNeutralFeatureSystem {
         if (feature.lineProgress >= line.length) return;
         const progress = Math.min(line.length, (state.elapsedSeconds - feature.startedAt) * config.speed);
         const end = Math.min(line.length - 1, Math.floor(progress));
+        // 本拍要读很多次命中集合：先建 Set，避免每个单位都线性扫 `hitUnitIds`。
+        const hitUnitIds = new Set(feature.hitUnitIds);
         // 覆盖本拍扫过的整段；每个单位只受伤一次，伤害结算后再判断能否占地。
         for (let i = Math.floor(feature.lineProgress); i <= end; i += 1) {
             const hex = state.hexes[line[i]];
@@ -192,7 +194,8 @@ export class ZCNeutralFeatureSystem {
             }
             for (const unit of state.units) {
                 if (unit.owner === feature.mowerOwner || unit.hp <= 0 || unit.battleState === 'dead'
-                    || feature.hitUnitIds.includes(unit.id) || this.geometry.hexIdAt(unit.freeX, unit.freeY) !== hex.id) continue;
+                    || hitUnitIds.has(unit.id) || this.geometry.hexIdAt(unit.freeX, unit.freeY) !== hex.id) continue;
+                hitUnitIds.add(unit.id);
                 feature.hitUnitIds.push(unit.id);
                 this.context.damageUnit(unit, feature.lineDamage, feature.mowerOwner);
             }
@@ -219,13 +222,13 @@ export class ZCNeutralFeatureSystem {
             if (unit.owner === barracks.owner || unit.hp <= 0 || unit.battleState === 'dead') continue;
             const id = this.geometry.hexIdAt(unit.freeX, unit.freeY);
             if (id === null || this.geometry.distance(entrance.id, id) > config.range) continue;
-            const distance = Math.hypot(unit.freeX - origin.x, unit.freeY - origin.y);
+            const distance = Math.sqrt((unit.freeX - origin.x) ** 2 + (unit.freeY - origin.y) ** 2);
             if (distance < best) { target = unit; best = distance; }
         }
         const owners = ownersForPlayerCount(2);
         const home = this.map.hexes[this.map.homes[owners.findIndex(owner => owner !== barracks.owner)]];
         const goal = target ? { x: target.freeX, y: target.freeY } : home;
-        const distance = Math.hypot(goal.x - origin.x, goal.y - origin.y);
+        const distance = Math.sqrt((goal.x - origin.x) ** 2 + (goal.y - origin.y) ** 2);
         const ratio = distance > 0 ? target ? 1 : config.range * HEX_GRID_LOGICAL_ROW_STEP / distance : 0;
         const x = origin.x + (goal.x - origin.x) * ratio;
         const y = origin.y + (goal.y - origin.y) * ratio;
@@ -234,7 +237,7 @@ export class ZCNeutralFeatureSystem {
         for (const point of this.map.hexes) {
             if (!point.playable || this.geometry.distance(entrance.id, point.id) > config.range
                 || state.hexes[point.id].building !== 'none') continue;
-            const d = Math.hypot(point.x - x, point.y - y);
+            const d = Math.sqrt((point.x - x) ** 2 + (point.y - y) ** 2);
             if (d < best) { exit = point.id; best = d; }
         }
         feature.portalExitId = exit;
@@ -282,7 +285,7 @@ export class ZCNeutralFeatureSystem {
             if (unit.battleState === 'born') continue;
             if (gate.insideUnitIds.includes(unit.id)) continue;
             const from = this.previous.get(unit.id) ?? { x: unit.freeX, y: unit.freeY };
-            const samples = Math.max(1, Math.ceil(Math.hypot(unit.freeX - from.x, unit.freeY - from.y) / 2));
+            const samples = Math.max(1, Math.ceil(Math.sqrt((unit.freeX - from.x) ** 2 + (unit.freeY - from.y) ** 2) / 2));
             let touched = atHex === hex.id;
             for (let sample = 0; !touched && sample <= samples; sample += 1) {
                 touched = this.geometry.hexIdAt(from.x + (unit.freeX - from.x) * sample / samples,
@@ -362,14 +365,14 @@ export class ZCNeutralFeatureSystem {
         const inRange = (unit: ZCUnitState) => unit.hp > 0 && unit.battleState !== 'dead'
             && (definition.canAttackAir || !this.context.definition(unit).flying)
             && (feature.patrol
-                ? Math.round(Math.hypot(unit.freeX - center.x, unit.freeY - center.y) / HEX_GRID_LOGICAL_ROW_STEP)
+                ? Math.round(Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2) / HEX_GRID_LOGICAL_ROW_STEP)
                 : this.geometry.distance(hex.id, this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId)) <= config.attackRange;
         let target = state.units.find(unit => unit.id === feature.targetUnitId && inRange(unit));
         if (!target) {
             let best = Infinity;
             for (const unit of state.units) {
                 if (!inRange(unit)) continue;
-                const distance = Math.hypot(unit.freeX - center.x, unit.freeY - center.y);
+                const distance = Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2);
                 if (distance < best) { target = unit; best = distance; }
             }
             feature.targetUnitId = target?.id ?? null;
@@ -407,6 +410,6 @@ export class ZCNeutralFeatureSystem {
         const from = this.map.hexes[patrol.fromHexId];
         const to = this.map.hexes[patrol.toHexId];
         patrol.startedAt = state.elapsedSeconds;
-        patrol.durationSeconds = Math.hypot(to.x - from.x, to.y - from.y) / speed;
+        patrol.durationSeconds = Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2) / speed;
     }
 }

@@ -18,6 +18,7 @@ import { readTerritoryGrantedRewards } from '../model/TerritoryGrantedReward';
 import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
 import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
 
+import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
 /**
  * 占城（领地）· 服务端数据端口。
  *
@@ -81,7 +82,6 @@ export type TerritoryIdleRewardResult =
 
 
 /** 读超时：与服务端断连时不能让领地页一直转圈。 */
-const READ_TIMEOUT_MS = 5000;
 
 /**
  * 从 rsp 里读 `repeated uint32 cellId` 数组。

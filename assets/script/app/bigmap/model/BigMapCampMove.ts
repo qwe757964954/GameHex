@@ -33,8 +33,7 @@
 
 import { toCount } from '../../net/RequestGuard';
 import { isBigMapCampId } from './BigMapCampInfo';
-
-const UINT32_MAX = 0xffffffff;
+import { isUint32 } from '../../../core/math/Scalar';
 
 /**
  *迁城类型 —— 对应 `CmdSlgCampMoveReqMsg.moveType`。
@@ -78,7 +77,7 @@ export const BIGMAP_CAMP_MOVE_TEXT = {
 
 /** `pos` 是 `uint32`；0 合法（同建造 `position=0` 口径），只拒负数/小数/超界。 */
 export function isBigMapCampPos(value: unknown): value is number {
-    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= UINT32_MAX;
+    return isUint32(value);
 }
 
 /** 迁城请求参数校验；不合法返回 `null`（调用方直接拒发，不浪费一次往返）。 */

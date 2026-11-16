@@ -62,6 +62,9 @@ function amount(value: unknown): number {
 }
 
 function clone<T>(value: T): T {
+    // 存档里都是 JSON 可序列化的普通对象/数组：优先 structuredClone（不生成中间字符串），
+    // 旧环境没有它时退回 JSON 往返，保持原有语义。
+    if (typeof structuredClone === 'function') return structuredClone(value);
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
@@ -176,7 +179,7 @@ export class TerritorySaveStore {
                             (cell): cell is number => Number.isSafeInteger(cell) && cell >= 0,
                         ) }
                         : {}),
-                    ...(parsed.battle ? { battle: clone(parsed.battle) } : {}),
+                    ...(parsed.battle ? { battle: parsed.battle } : {}),
                 };
             } catch (error) {
                 console.warn(`[TerritorySaveStore] 章节 ${chapterId} 存档损坏，已重建`, error);

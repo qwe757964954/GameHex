@@ -25,7 +25,7 @@ import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { toCount, toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
 import {
     deriveCurDay,
     deriveEndTimeMs,
@@ -52,6 +52,8 @@ import {
     RequestSevenDayTakeTaskReward,
 } from './RequestSevenDayMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ITEM_TABLE } from '../../core/config/TableNames';
 /** 一次界面刷新要的全部数据。 */
 export interface ISevenDaySnapshot {
     readonly tasks: readonly ISevenDayTaskRow[];
@@ -89,8 +91,6 @@ export interface ISevenDayRepository {
 }
 
 /** 请求超时（与首充同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -163,7 +163,7 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
             readRows('sevenDayTask'),
             readRows('sevenDayShop'),
             readRows('sevenDayPoint'),
-            readRows('item'),
+            readRows(ITEM_TABLE),
         ]);
 
         const tasks = parseTaskRows(taskRows);
@@ -189,23 +189,14 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
     }
 
     async refreshFromServer(caller?: object): Promise<boolean> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return false;
-        try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
-            //    界面会卡在「加载中」再也不刷新（连线失败也一样）。
-            const sent = await withTimeout(
-                net.send(new RequestSevenDayInfo({}, caller, (rsp) => {
-                    this.applyServerInfo(rsp?.cmdSevenDayInfo);
-                }), false),
-                READ_TIMEOUT_MS,
-                () => false,
-            );
-            return sent === true;
-        } catch (error) {
-            console.warn('[SevenDay] 拉取活动信息失败', error);
-            return false;
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestSevenDayInfo({}, caller, (rsp) => {
+                this.applyServerInfo(rsp?.cmdSevenDayInfo);
+            }),
+            { timeoutMs: READ_TIMEOUT_MS, tag: 'SevenDay' },
+        );
+        return status === 'ok';
     }
 
     async claimTaskReward(day: number, caller?: object): Promise<SevenDayRequestResult> {
@@ -234,9 +225,6 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
         build: (cb: (rsp: any) => void) => unknown,
         label: string,
     ): Promise<SevenDayRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: any): void => {
             if (rsp) {
@@ -247,17 +235,12 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
             }
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(build(callback) as any, false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn(`[SevenDay] ${label}请求失败`, error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => build(callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: `SevenDay:${label}` },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 

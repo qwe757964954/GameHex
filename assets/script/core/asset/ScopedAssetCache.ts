@@ -23,6 +23,8 @@ interface IAssetCacheEntry {
 /** 只复用资产请求；调用方租约与缓存保留期共同决定底层作用域的寿命。 */
 export class ScopedAssetCache implements AssetService {
     private readonly entries: IAssetCacheEntry[] = [];
+    /** cache key → 构造器 → 条目；命中不再线性扫描 `entries`。*/
+    private readonly entriesByKey = new Map<string, Map<unknown, IAssetCacheEntry>>();
     private hits = 0;
     private misses = 0;
     private readonly loadQueue: ResourceLoadQueue | null;
@@ -57,8 +59,8 @@ export class ScopedAssetCache implements AssetService {
         if (!options.scope || options.scope.disposed) return false;
         this.prune();
         const key = this.cacheKey('asset', path, options);
-        if (this.entries.length >= this.options.maxEntries
-            && !this.entries.some(entry => entry.key === key && entry.type === type)) return false;
+        const cached = this.entriesByKey.get(key)?.has(type) ?? false;
+        if (this.entries.length >= this.options.maxEntries && !cached) return false;
         await this.load(path, type, options);
         return true;
     }
@@ -73,13 +75,15 @@ export class ScopedAssetCache implements AssetService {
 
     prune(): void {
         const now = this.now();
-        for (const entry of this.entries.slice()) {
+        // 倒序遍历就地删除：不复制 `entries.slice()`，每帧预热/加载路径少一条临时数组。
+        for (let index = this.entries.length - 1; index >= 0; index -= 1) {
+            const entry = this.entries[index];
             if (entry.users === 0 && now - entry.lastUsed >= this.options.idleMs) this.retire(entry);
         }
     }
 
     clear(): void {
-        for (const entry of this.entries.slice()) this.retire(entry);
+        for (let index = this.entries.length - 1; index >= 0; index -= 1) this.retire(this.entries[index]);
     }
 
     private acquire<T>(kind: string, path: string, type: unknown, options: AssetLoadOptions,
@@ -91,12 +95,16 @@ export class ScopedAssetCache implements AssetService {
         if (!caller) return this.dispatch(undefined, load, () => options.priority ?? 0);
         this.prune();
         const key = this.cacheKey(kind, path, options);
-        let entry = this.entries.find(item => item.key === key && item.type === type);
+        let entry = this.entriesByKey.get(key)?.get(type);
         if (entry) { this.hits++; entry.priority = Math.max(entry.priority, options.priority ?? 0); }
         else {
             this.misses++;
             if (this.entries.length >= this.options.maxEntries) {
-                const idle = this.entries.filter(item => item.users === 0).sort((a, b) => a.lastUsed - b.lastUsed)[0];
+                let idle: IAssetCacheEntry | null = null;
+                for (const item of this.entries) {
+                    if (item.users > 0) continue;
+                    if (!idle || item.lastUsed < idle.lastUsed) idle = item;
+                }
                 if (idle) this.retire(idle);
                 else return Promise.resolve().then(() => this.dispatch(caller, load, () => options.priority ?? 0));
             }
@@ -104,6 +112,7 @@ export class ScopedAssetCache implements AssetService {
             const created: IAssetCacheEntry = { key, type, scope, task: Promise.resolve(), users: 0, priority: options.priority ?? 0, lastUsed: this.now(), retired: false };
             // 先发布条目，再派发底层操作；重复调用始终接管同一个 Promise。
             this.entries.push(created);
+            this.indexEntry(created);
             created.task = Promise.resolve().then(() => this.dispatch(scope, load, () => created.priority, () => created.users > 0)).catch(error => {
                 this.retire(created);
                 scope.dispose();
@@ -126,13 +135,28 @@ export class ScopedAssetCache implements AssetService {
     }
 
     private cacheKey(kind: string, path: string, options: AssetLoadOptions): string {
-        return JSON.stringify([kind, options.bundle ?? bundleForPath(path) ?? RESOURCES_BUNDLE, path]);
+        // 内部缓存键只用于查表：避免每次 acquire 都 JSON.stringify 一条三元素数组。
+        return `${kind}\u0000${options.bundle ?? bundleForPath(path) ?? RESOURCES_BUNDLE}\u0000${path}`;
+    }
+
+    private indexEntry(entry: IAssetCacheEntry): void {
+        let bucket = this.entriesByKey.get(entry.key);
+        if (!bucket) {
+            bucket = new Map<unknown, IAssetCacheEntry>();
+            this.entriesByKey.set(entry.key, bucket);
+        }
+        bucket.set(entry.type, entry);
     }
 
     private retire(entry: IAssetCacheEntry): void {
         entry.retired = true;
         const index = this.entries.indexOf(entry);
         if (index >= 0) this.entries.splice(index, 1);
+        const bucket = this.entriesByKey.get(entry.key);
+        if (bucket?.get(entry.type) === entry) {
+            bucket.delete(entry.type);
+            if (bucket.size === 0) this.entriesByKey.delete(entry.key);
+        }
         if (entry.users === 0) entry.scope.dispose();
     }
 

@@ -39,7 +39,7 @@ export interface IZCAttackResolutionContext extends Pick<IZCModelServices, 'rule
     readonly statPatches: Readonly<Partial<Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>>>;
     readonly deckBonuses: Readonly<Record<ZCOwner, ZCDeckBonuses>>;
     readonly unitById: ReadonlyMap<number, ZCUnitState>;
-    currentTarget(unit: ZCUnitState): ZCCombatTarget | null;
+    currentTarget(unit: ZCUnitState, out?: ZCCombatTarget): ZCCombatTarget | null;
     evaluateLegacySkill(source: ZCUnitState, keys: readonly string[], target: ZCCombatTarget, critical: boolean): ZCLegacySkillEvaluation;
     applyLegacySelfBuffs(source: ZCUnitState, buffs: readonly ZCLegacyBuffApplication[]): readonly ZCLegacyBuffApplication[];
     tryExecuteUnit(target: ZCUnitState, chance: number | undefined, owner: ZCOwner, sourceId: number, precedingText?: ZCFloatText | null): void;
@@ -1113,8 +1113,14 @@ export class ZCAttackResolutionSystem {
 
     private static prepareAttack(state: ZCSnapshot, unit: ZCUnitState, context: IZCAttackResolutionContext): IZCPreparedAttack | null {
         unit.attackHitDone = true;
-        const target = context.currentTarget(unit);
-        if (!target) return null;
+        const rawTarget = context.currentTarget(unit);
+        if (!rawTarget) return null;
+        // `currentTarget` 返回的是每单位复用的 scratch；prepared attack 会跨后续结算/弹道使用，
+        // 必须先拍成独立快照，否则同单位下一拍索敌会把这里的目标改掉。
+        const target: ZCCombatTarget = {
+            kind: rawTarget.kind, id: rawTarget.id, x: rawTarget.x, y: rawTarget.y,
+            bodyRadius: rawTarget.bodyRadius, cardId: rawTarget.cardId,
+        };
         const definition = context.effectiveDefinition(unit);
         const patch = this.unitStatPatchOf(unit, context);
         const profile = definition.attackProfile;

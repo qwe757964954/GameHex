@@ -6,6 +6,7 @@ import { applyBigMapScheduleOverrides } from '../model/BigMapCitySchedule';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { withBigMapCampCities } from '../model/BigMapCampWorld';
 
+import { ITEM_TABLE } from '../../../core/config/TableNames';
 /**
  *从 `ConfigService` 读取 BigMap 表（含联机据点 bigMapCamp）并解析成强类型配置。
  *
@@ -53,7 +54,7 @@ async function readItemRows(config: ConfigService, parsed: IBigMapConfig): Promi
     const usesItem = Array.from(parsed.resources.values()).some((res) => res.itemId > 0);
     if (!usesItem) return [];
     try {
-        return await config.getTable('item');
+        return await config.getTable(ITEM_TABLE);
     } catch (error) {
         console.warn('[BigMapConfigLoader] 背包道具表读取失败，资源图标退回概念图', error);
         return [];

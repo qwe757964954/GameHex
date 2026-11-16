@@ -35,7 +35,7 @@ import { FW } from '../../framework/FW';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { GameNet } from '../net/GameNet';
-import { toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString } from '../net/RequestGuard';
 import {
     IMailConfig,
     IMailDetail,
@@ -54,6 +54,8 @@ import {
     RequestMailTakeReward,
 } from './RequestMailMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 一次界面刷新要的全部数据。 */
 export interface IMailSnapshot {
     /** 排序后的邮件列表（`sortMails`：未处理的置顶、同组新的在前）。 */
@@ -96,8 +98,8 @@ export interface IMailRepository {
 }
 
 /** 请求超时（与好友 / 礼包 / 首充 / 七日同口径：读 800ms / 写 5000ms）。 */
-export const MAIL_READ_TIMEOUT_MS = 800;
-export const MAIL_WRITE_TIMEOUT_MS = 5000;
+export const MAIL_READ_TIMEOUT_MS = READ_TIMEOUT_MS;
+export const MAIL_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;
 
 /** 读一张表；表缺失 / 读失败返回空数组（**不抛**，也不 reject）。 */
 async function readTable(name: string): Promise<readonly unknown[]> {
@@ -131,8 +133,8 @@ export class RuntimeMailRepository implements IMailRepository {
     async load(caller?: object): Promise<IMailSnapshot> {
         const [configRows, itemRows, propRows] = await Promise.all([
             readTable('gameConfig'),
-            readTable('item'),
-            readTable('roleProperty'),
+            readTable(ITEM_TABLE),
+            readTable(ROLE_PROPERTY_TABLE),
         ]);
 
         // 首次进来还没拉过列表 ⇒ 拉一次（拿到之前先给空列表，不阻塞界面）
@@ -235,15 +237,7 @@ export class RuntimeMailRepository implements IMailRepository {
      * 必须 `withTimeout`：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
      */
     private async send(make: () => any, timeoutMs: number): Promise<MailRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(net.send(make(), false), timeoutMs, () => false);
-            return sent === true ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[Mail] 请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance, make, { timeoutMs, tag: 'Mail' });
     }
 }
 

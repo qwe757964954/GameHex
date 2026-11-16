@@ -10,6 +10,7 @@ import { ICON_PACKAGE_ART_ROOT } from '../ArtPaths';
 import { loadPvpCardRawRow } from './CardLineupDecks';
 import { parseCardCatalogRow } from '../zcds/model/ZCGameRuntimeConfig';
 
+import { ICON_TABLE } from '../../core/config/TableNames';
 export interface IHeroObtainUserData {
     /** `pvpCard.id`（如 68005 椰蛋战士）；给了才会读表补名字 / 立绘 / 徽标。 */
     readonly heroId?: number | string;
@@ -68,7 +69,7 @@ function artPathOfIconUrl(url: string): string | null {
 /** 读 `icon` 表，把 `兵种_头像_*` 换成 `icons/cardHead/*`；查不到返回 null。 */
 async function headIconPathOf(name: string): Promise<string | null> {
     if (!name) return null;
-    const rows = await RefUtil.instance.getRefAllAsync('icon') as readonly Record<string, unknown>[];
+    const rows = await RefUtil.instance.getRefAllAsync(ICON_TABLE) as readonly Record<string, unknown>[];
     for (const row of rows) {
         if (textOf(row.key) !== name.trim()) continue;
         return artPathOfIconUrl(textOf(row.path));

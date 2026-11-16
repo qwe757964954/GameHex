@@ -164,7 +164,7 @@ export interface IBigMapUnlockQueueResult {
 /**
  *花货币解锁下一条建造队列（1→2 收 `queueUnlockCost2`，2→3 收 `queueUnlockCost3`）。
  *
- * 文档口径（`docs/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁。
+ * 文档口径（`docs/design/bigmap-系统落地方案.md` §2「建造 · 队列」）：3 队列、付费解锁。
  *所以队列数量不来自建筑 —— 历史上是「建成 71007 建造队列就 +1」，与文档冲突，已移除；
  *存档 `queueUnlocked` 是唯一真源，只由这里改。
  */

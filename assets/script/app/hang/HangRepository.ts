@@ -11,7 +11,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     HJ_INTERACT_STATE_DONE,
     HJ_PASSED_STAR,
@@ -53,6 +53,8 @@ import { RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
 import { HJ_TEXTS, hjFormat } from './HangTexts';
 import { RequestBattleSweep, RequestHangGetReward } from './RequestHangMsg';
 
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
+import { GUANKA_REWARD_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 福利月卡特权 `type`：无限次快速扫荡（老端 `PrivilegeType.NoCountSweep = 4`）。 */
 export const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
 
@@ -192,8 +194,6 @@ export interface IHangRepository {
 }
 
 /** 请求超时（与首充 / 七日 / 礼包 / 战令同口径：读 800ms / 写 5000ms）。 */
-const READ_TIMEOUT_MS = 800;
-const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
@@ -437,13 +437,13 @@ function readAdUsed(): number {
 export class RuntimeHangRepository implements IHangRepository {
     async load(nowMs: number = Date.now()): Promise<IHangSnapshot> {
         const [guankaRaw, interactRaw, configRaw, itemRaw, resRaw, planRaw, payRaw, adRaw] = await Promise.all([
-            readRows('guankaReward'),
+            readRows(GUANKA_REWARD_TABLE),
             readRows('interactReward'),
             readRows('gameConfig'),
-            readRows('item'),
-            readRows('roleProperty'),
+            readRows(ITEM_TABLE),
+            readRows(ROLE_PROPERTY_TABLE),
             readRows('monthCardActPlan'),
-            readRows('payChannel'),
+            readRows(PAY_CHANNEL_TABLE),
             readRows('ad'),
         ]);
 
@@ -502,9 +502,6 @@ export class RuntimeHangRepository implements IHangRepository {
 
     /** 领取挂机奖励：`CmdHangGetRewardReqMsg`（无请求参数）。 */
     async claimReward(caller?: object): Promise<HangRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdHangGetRewardRspMsg): void => {
             // 老端 `ModelHang.requestHangGetReward`：`FW.ShowReward(rsp.tlCmdGoods)` + `FW.showTip(ModelWorkShop_1)`。
@@ -515,18 +512,12 @@ export class RuntimeHangRepository implements IHangRepository {
             applied = true;
         };
 
-        try {
-            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
-            const sent = await withTimeout(
-                net.send(new RequestHangGetReward({}, caller, callback), false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Hang] 领取挂机奖励失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestHangGetReward({}, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 
@@ -540,29 +531,18 @@ export class RuntimeHangRepository implements IHangRepository {
      * Repository 不替页面做这两个判断（它要弹框 / 要读 UI），只负责发请求。
      */
     async sweep(level: number, type: number = HJ_SWEEP_TYPE_CHAPTER, caller?: object): Promise<HangRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdBattleSweepRspMsg): void => {
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
             applied = true;
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(
-                    new RequestBattleSweep({ level, type }, caller, callback),
-                    false,
-                ),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Hang] 快速征收失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestBattleSweep({ level, type }, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 
@@ -573,9 +553,6 @@ export class RuntimeHangRepository implements IHangRepository {
      * 这个请求本身就是「加一次广告次数」的凭据，裸发等于白送。
      */
     async watchAd(type: number = HJ_AD_TYPE_SWEEP, caller?: object): Promise<HangRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-
         let applied = false;
         const callback = (rsp: CmdRoleWatchAdvertRspMsg): void => {
             // 老端会 `FW.ShowReward(rsp.tlCmdGoods)`；扫荡这类广告通常没有 goods。
@@ -583,20 +560,12 @@ export class RuntimeHangRepository implements IHangRepository {
             applied = true;
         };
 
-        try {
-            const sent = await withTimeout(
-                net.send(
-                    new RequestRoleWatchAdvert({ type }, caller, callback),
-                    false,
-                ),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[Hang] 看广告请求失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(
+            GameNet.instance,
+            () => new RequestRoleWatchAdvert({ type }, caller, callback),
+            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
+        );
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 }

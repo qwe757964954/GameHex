@@ -15,6 +15,7 @@ import {
     createHeadArtResolver, createIconArtResolver, loadHeadById, loadIconByKey,
 } from './HeadArtModel';
 
+import { HEAD_TABLE, ICON_TABLE } from '../core/config/TableNames';
 interface HeadArtTables {
     readonly head: HeadArtResolver;
     readonly icon: IconArtResolver;
@@ -28,7 +29,7 @@ interface HeadArtTables {
  */
 export class HeadArt {
     /** 头像解析依赖的两张远程表。 */
-    private static readonly TABLES = ['head', 'icon'] as const;
+    private static readonly TABLES = [HEAD_TABLE, ICON_TABLE] as const;
 
     /** 头像 SpriteFrame 缓存（键 = `根目录/资源名`）。 */
     private static readonly spriteCache = createRoutedSpriteFrameCache('HeadArt');

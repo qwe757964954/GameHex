@@ -1,5 +1,7 @@
 # 开服庆典（celebration）代码整理改动清单
 
+> 状态：改动记录（2026-11）。记录本轮已执行整理，供追溯；当前代码为准，不作为待办。
+
 范围：`assets/script/app/celebration` 下 16 个 `.ts`；不含 prefab / 生成脚本 / 测试夹具。
 
 约束：不改功能逻辑；删符号前先全仓确认无引用；不动工作区里其它模块已有的未提交改动（`gift`、`chat`、`itemdetail`、`firstRecharge`、`friend`、`common`、`bootstrap` 等）。
@@ -68,7 +70,7 @@
 | 删 `clFormat`（基线 L158） | 与 `CelebrationTable` 的模板函数重复，全仓无调用 | 重复实现，留两份会漂移 |
 | 删 `CelebrationTextKey`（基线 L148） | 类型别名，全仓无引用 | 死类型 |
 | 删 8 条文案（基线 L62/65/66/67/85/113/115/131） | `title`、`tabTarget`、`tabRank`、`tabShop`、`myRankFallback`、`rankPrefix`、`rankSuffix`、`soldOutTip` | 全仓无消费：页签名走 prefab 图，名次前后缀已硬编码在 `rankTextOf`，售罄是 `n41` 图不是文案；保留只会让人误以为有登记表在用 |
-| 保留段 | FGUI 静态文案 + `mL.json` 7 条；「多钱」错别字、半角冒号照抄并注明 | `tests/celebration.test.ts` 对本表做对账；照抄是刻意口径 |
+| 保留段 | FGUI 静态文案 + `mL.json` 7 条；「多钱」错别字、半角冒号照抄并注明 | `celebration.test.ts` 对本表做对账；照抄是刻意口径 |
 | 文件头 | 三类出处压成 5 行 | 注释规范 |
 
 ### 2.4 `CelebrationViewState.ts`
@@ -87,7 +89,7 @@
 | L336 `osRankTextColor` | 删 `?? OS_RANK_TEXT_COLORS.other` 兜底 | 参数是 `ECelebrationRankSegment` 三值，`Record` 已全覆盖，兜底不可达 |
 | L298 `OS_RANK_TEXT_COLORS` | 键从字符串 `'first' / 'secondThird' / 'other'` 改为枚举 `ECelebrationRankSegment` | 与 `rankSegmentOf` 返回值直接对接，删掉 `OSRankItem` 里的字符串映射表 |
 | L228 `celebrationNeededArtPaths` | 参数类型 `IActivityGoodsInfo` → `ICelebrationGoodsInfo` | 入参来自庆典快照，用本模块的快照契约；两者结构相同，仅类型来源 |
-| 图条注释 | 保留每个 key 的尺寸 / 九宫值（`tests/celebration.test.ts` 的 B1/F1 要双向对账），删掉「⚠️」「必须是」等叙述 | 对账需要事实，不需要语气词 |
+| 图条注释 | 保留每个 key 的尺寸 / 九宫值（`celebration.test.ts` 的 B1/F1 要双向对账），删掉「⚠️」「必须是」等叙述 | 对账需要事实，不需要语气词 |
 
 ### 2.6 `CelebrationFrames.ts`
 
@@ -175,15 +177,15 @@
 | `CelebrationFrames.iconOf` 的 `resId <= 0` 前置判断 | 保留在 `rewardIconRefOf` 内 | 0 / 负数不是合法资源 id，提前短路 |
 | `OSArtStrip.itemHeight` `@property` | 保留 | 只用于对齐 prefab 里的设计值；排布读 `UITransform` 高度，删掉会丢设计稿锚点 |
 | `CelebrationViewState` 单独成文件 | 保留 | 三个映射要被 Node 用例直接 import，带 `cc` 的文件进不了测试环境 |
-| `OSArtStrip` / `OSShopItem` / `OSTargetItem` 的 re-export | 保留 | `tests/celebration.test.ts` 从这些文件 import 状态映射，删了会断测试 |
+| `OSArtStrip` / `OSShopItem` / `OSTargetItem` 的 re-export | 保留 | `celebration.test.ts` 从这些文件 import 状态映射，删了会断测试 |
 
 ## 五、验证结果
 
 | 命令 | 结果 |
 |---|---|
 | `npx tsc --noEmit -p tsconfig.json` | celebration 目录 0 错误；全仓仅剩 2 条既有错误：`bigmap/application/BigMapConfigLoader.ts(25,106)`、`gift/GiftPage.ts(242,20)`，均未触碰 |
-| `npx tsx --test tests/celebration.test.ts` | 46 pass / 0 fail |
-| `npx tsx --test tests/view-intent-events.test.ts tests/callback-owner.test.ts` | 11 pass / 0 fail（按钮 / 意图守卫） |
+| `npx tsx --test celebration.test.ts` | 46 pass / 0 fail |
+| `npx tsx --test view-intent-events.test.ts callback-owner.test.ts` | 11 pass / 0 fail（按钮 / 意图守卫） |
 | `npm run verify:defs` | 2 个跨文件引用，0 缺失定义 |
 | `npm run verify:hygiene` | `root hygiene OK: 8 个白名单文件` |
 | `npm run verify:route` | 推导出的 3 个用例来自工作区其它模块的既有改动，与本次 celebration 改动无关 |

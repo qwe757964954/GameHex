@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 「好友」的数据端口：缓存 + 配置表 + 网络请求。
  *
@@ -80,7 +81,7 @@ export interface IFriendSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type FriendRequestResult = 'ok' | 'offline' | 'failed';
+export type FriendRequestResult = INetRequestStatus;
 
 export interface IFriendRepository {
     /** 读缓存 + 读表，组装一次快照；不发任何请求。 */

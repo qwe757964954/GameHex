@@ -41,7 +41,7 @@ import {
     qualityFrameLevel,
     QUALITY_FRAME_NAMES,
     QUALITY_FRAME_ROOT,
-} from '../activity/LayerActivityArt';
+} from '../common/QualityFrameArt';
 
 /** 一次预加载的结果句柄；所有取值方法都是**同步**的。 */
 export interface ILeagueRewardArt {

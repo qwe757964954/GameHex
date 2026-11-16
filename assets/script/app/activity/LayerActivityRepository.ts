@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 「活动 → 每日任务」的数据端口 —— **表 + 服务器缓存 + 网络请求** 三合一的 Repository。
  *
@@ -86,7 +87,7 @@ export interface IActivitySnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type ActivityRequestResult = 'ok' | 'offline' | 'failed' | 'noInstance';
+export type ActivityRequestResult = INetRequestStatus | 'noInstance';
 
 export interface IActivityRepository {
     /** 读表 + 读缓存，组装一次快照；**不发请求**。 */

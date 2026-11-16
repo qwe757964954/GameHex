@@ -51,8 +51,8 @@ import {
     parseRewardRows,
 } from './BattleTokenTable';
 import type { ILevelRow, IPlanRow, IRewardRow } from './BattleTokenTable';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import {
     RequestBattleTokenOpen,
     RequestBattleTokenReset,

@@ -3,10 +3,18 @@
  * 所有路径都相对 resources，加载前确认大小写；九宫格图必须按 SLICED 使用。
  */
 
-import { RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT, spriteFramePath } from '../ArtPaths';
+import {
+    ACTIVITY_ART_ROOT,
+    COMMON_ART_ROOT,
+    FIRST_RECHARGE_ART_ROOT,
+    FRIEND_ART_ROOT,
+    HANG_ART_ROOT as ART_HANG_ROOT,
+    RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT,
+    spriteFramePath,
+} from '../ArtPaths';
 
 /** 征收自有图目录（运行时相对 `resources` 的路径）。 */
-export const HJ_ART_ROOT = 'image/hang';
+export const HJ_ART_ROOT = ART_HANG_ROOT;
 
 /**
  * 征收自有图（`key` → 文件名，不含扩展名）。
@@ -105,23 +113,23 @@ export function hjArtRef(key: HangArtKey): { root: string; name: string } {
 // 跨模块复用（md5 同源，不另存第二份）
 
 /** 弹窗底板 626×903（九宫 `129,128,123,36`）。 */
-export const HJ_SHARED_PANEL_BG = { root: 'image/friend', name: 'fd_panel_bg' } as const;
+export const HJ_SHARED_PANEL_BG = { root: FRIEND_ART_ROOT, name: 'fd_panel_bg' } as const;
 /** 弹窗标题底条 344×81（九宫 `171,20,16,40`，居中挂在弹窗顶部、上半截露在弹窗外面）。 */
-export const HJ_SHARED_PANEL_TITLE = { root: 'image/firstRecharge', name: 'title_brown' } as const;
+export const HJ_SHARED_PANEL_TITLE = { root: FIRST_RECHARGE_ART_ROOT, name: 'title_brown' } as const;
 /** 「快速征收」按钮底图 224×79（**非**九宫；FGUI `TY_btn23` 没有 `scale9grid`）。 */
-export const HJ_SHARED_BTN_SWEEP = { root: 'image/friend', name: 'fd_tab_off' } as const;
+export const HJ_SHARED_BTN_SWEEP = { root: FRIEND_ART_ROOT, name: 'fd_tab_off' } as const;
 /** 「领取」按钮底图（`颜色=1` 橙，九宫 `14,11,4,12`）。 */
-export const HJ_SHARED_BTN_GOLD = { root: 'image/friend', name: 'fd_btn_gold' } as const;
+export const HJ_SHARED_BTN_GOLD = { root: FRIEND_ART_ROOT, name: 'fd_btn_gold' } as const;
 /** 「领取」按钮底图（`颜色=0` 蓝，九宫 `15,11,4,9`）—— 本轮用不到，留着备切换。 */
-export const HJ_SHARED_BTN_DARK = { root: 'image/friend', name: 'fd_btn_dark' } as const;
+export const HJ_SHARED_BTN_DARK = { root: FRIEND_ART_ROOT, name: 'fd_btn_dark' } as const;
 /** 弹窗关闭键 60×60（**非**九宫）。 */
-export const HJ_SHARED_CLOSE = { root: 'image/activity', name: 'act_btn_close' } as const;
+export const HJ_SHARED_CLOSE = { root: ACTIVITY_ART_ROOT, name: 'act_btn_close' } as const;
 /** 普通红点（圆点）。 */
-export const HJ_SHARED_RED_DOT = { root: 'image/common', name: 'cm_red_dot' } as const;
+export const HJ_SHARED_RED_DOT = { root: COMMON_ART_ROOT, name: 'cm_red_dot' } as const;
 /** 数字红点（椭圆底 + 数字）。 */
-export const HJ_SHARED_RED_DOT_NUM = { root: 'image/common', name: 'cm_red_dot_num' } as const;
+export const HJ_SHARED_RED_DOT_NUM = { root: COMMON_ART_ROOT, name: 'cm_red_dot_num' } as const;
 /** 「新」角标红点。 */
-export const HJ_SHARED_RED_DOT_NEW = { root: 'image/common', name: 'cm_red_dot_new' } as const;
+export const HJ_SHARED_RED_DOT_NEW = { root: COMMON_ART_ROOT, name: 'cm_red_dot_new' } as const;
 
 /** 复用的 `{root,name}` → `resources.load` 路径。 */
 export function hjSharedPath(ref: { root: string; name: string }): string {
@@ -162,7 +170,7 @@ export {
 } from '../common/QualityFrameArt';
 
 /**
- * 奖励图标的两支分流 —— **转发 `LayerActivityArt.resolveRewardIconRef`**。
+ * 奖励图标的两支分流 —— **转发 `common/RewardIcon.resolveRewardIconRef`**。
  *
  * 为什么必须转发而不是自己判：奖励里混着两类东西。
  *
@@ -173,4 +181,4 @@ export {
  *
  * 只处理 `item` 那一支的症状：奖励格**只剩品质框、没有图标**（静默降级、不报错）。
  */
-export { resolveRewardIconRef as hjResolveRewardIconRef } from '../activity/LayerActivityArt';
+export { resolveRewardIconRef as hjResolveRewardIconRef } from '../common/RewardIcon';

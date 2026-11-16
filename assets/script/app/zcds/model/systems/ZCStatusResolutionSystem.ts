@@ -28,7 +28,9 @@ export class ZCStatusResolutionSystem {
         try {
             const statusIds = statusSystem.unitIdsWithStatuses(this.statusIds);
             if (statusIds.length === 0) {
-                state.statusEffects = statusSystem.exportSnapshot();
+                if (statusSystem.isDirty() || state.statusEffects == null) {
+                    state.statusEffects = statusSystem.exportSnapshot();
+                }
                 return;
             }
             for (const unit of state.units) {
@@ -54,7 +56,9 @@ export class ZCStatusResolutionSystem {
                 if (before == null) continue;
                 ZCStatusResolutionSystem.rescaleUnitMaxHp(unit, before, context.effectiveDefinition(unit).maxHp);
             }
-            state.statusEffects = statusSystem.exportSnapshot();
+            if (statusSystem.isDirty() || state.statusEffects == null) {
+                state.statusEffects = statusSystem.exportSnapshot();
+            }
         } finally {
             alive.clear();
             aliveIds.length = 0;

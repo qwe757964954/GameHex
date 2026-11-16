@@ -8,8 +8,16 @@
  * 登录的关闭按钮、通用头像底与标题带都直接引各自目录。
  */
 
+import {
+    CHAT_ART_ROOT as ART_CHAT_ROOT,
+    FIRST_RECHARGE_ART_ROOT,
+    FRIEND_ART_ROOT,
+    GAMEUI_ART_ROOT,
+    LOGIN_ART_ROOT,
+} from '../ArtPaths';
+
 /** 聊天自有图目录（不带 `resources/` 前缀）。 */
-export const CHAT_ART_ROOT = 'image/chat';
+export const CHAT_ART_ROOT = ART_CHAT_ROOT;
 
 /** 表情图名前缀（`ct_emoji_<n>`）。 */
 export const CHAT_EMOJI_PREFIX = 'ct_emoji_';
@@ -32,29 +40,29 @@ export const CHAT_ART_JOIN_BTN = 'ct_join_btn';
 export const CHAT_ART_CLOSE_02 = 'ct_close_02';
 
 /** 复用外模块的图（目录 + 图名分开给，加载时要两个参数）。 */
-export const CHAT_SHARED_HEAD_BOX_ROOT = 'image/friend';
+export const CHAT_SHARED_HEAD_BOX_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_HEAD_BOX_NAME = 'fd_row_bg';
-export const CHAT_SHARED_POPUP_BG_ROOT = 'image/friend';
+export const CHAT_SHARED_POPUP_BG_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_POPUP_BG_NAME = 'fd_panel_bg';
-export const CHAT_SHARED_HEAD_FRAME_ROOT = 'image/gameui';
+export const CHAT_SHARED_HEAD_FRAME_ROOT = GAMEUI_ART_ROOT;
 export const CHAT_SHARED_HEAD_FRAME_NAME = 'img_Touxiang_01';
-export const CHAT_SHARED_TITLE_BG_ROOT = 'image/firstRecharge';
+export const CHAT_SHARED_TITLE_BG_ROOT = FIRST_RECHARGE_ART_ROOT;
 export const CHAT_SHARED_TITLE_BG_NAME = 'title_brown';
 
 /** 弹窗右上「关闭」按钮：与好友弹窗同一个 FGUI 模板，直接复用那张图。 */
-export const CHAT_SHARED_CLOSE_ROOT = 'image/login';
+export const CHAT_SHARED_CLOSE_ROOT = LOGIN_ART_ROOT;
 export const CHAT_SHARED_CLOSE_NAME = '公用_按钮_关闭01';
 
 /**
  * 页签两态底图：与好友模块同一张图（FGUI 模板同源），页签组件类也复用
  * `FriendTabButton`（见 `ChatPage`）。
  */
-export const CHAT_SHARED_TAB_ROOT = 'image/friend';
+export const CHAT_SHARED_TAB_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_TAB_ON = 'fd_tab_on';
 export const CHAT_SHARED_TAB_OFF = 'fd_tab_off';
 
 /** 「发送」按钮底图：复用好友模块的金色按钮（FGUI `按钮_公用_9Gone` 同款）。 */
-export const CHAT_SHARED_SEND_ROOT = 'image/friend';
+export const CHAT_SHARED_SEND_ROOT = FRIEND_ART_ROOT;
 export const CHAT_SHARED_SEND_NAME = 'fd_btn_gold';
 
 /** 九宫格图名 → 所在目录（要按图名去核 `.png.meta` 的边框）。 */

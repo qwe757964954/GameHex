@@ -2,7 +2,7 @@
 
 - 设计基准：蓝湖「卡牌阵容-新」`image_id=255ed6a4-160d-478e-9cad-fdac5f8df4a1`（pid `36a56744-56d2-4ae3-8952-870725ae4055`，snapshot `053d68c820bb5f2bf46cab42559e0d7c`），画布 720×1610，sliceScale=2。
 - 品质框基准：蓝湖「品质框」`image_id=c15fdc2c-6b8d-4bd9-b7a1-4436f856a146`，画布 771×500。
-- 切图来源：`C:\Users\hedao\Downloads\卡牌阵容-新_slices\mipmap-xhdpi`、`C:\Users\hedao\Downloads\品质框_slices\mipmap-xhdpi`。
+- 切图来源：蓝湖导出的 `mipmap-xhdpi` 切图（临时下载目录，未入库）。
 - 运行时口径：设计 720×1610 映射到工程 720×1280；顶部钉顶、`CardGrid` 拉伸、`TabBar` 钉底（见文末待确认项）。
 
 ## 1. 改动摘要

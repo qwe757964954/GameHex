@@ -7,6 +7,8 @@
  */
 
 import { territoryHexStaggerDelays } from './TerritoryHexStagger';
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
 
 /** 单格换色总时长（秒）。 */
 export const TERRITORY_HEX_RECOLOR_SECONDS = 0.36;
@@ -49,17 +51,6 @@ export interface ITerritoryHexRecolorCell {
     readonly cellId: number;
     readonly x: number;
     readonly y: number;
-}
-
-function clamp01(value: number): number {
-    if (!(value > 0)) return 0;
-    return value > 1 ? 1 : value;
-}
-
-/** 起手快、落位慢 —— 「长出来」的手感（与生成动画同一个缓动，两套动画才像一家人）。 */
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
 }
 
 /**

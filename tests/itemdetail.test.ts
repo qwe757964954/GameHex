@@ -660,8 +660,9 @@ test('物品 D1｜ItemDetail 根是 720×1280，挂了页面脚本，且没有 `
         !rects.has('CloseBtn'),
         'FGUI 原稿没有关闭按钮 —— 加了就与设计稿分叉（关闭靠点空白，见 PopupBase.closeOnBlank）',
     );
-    // 同理：`ItemDetailPage.closeButton` 允许未绑（`bindButton` 首行 `if (!node) return;`）
-    assert.ok(/if \(!node\) return;/.test(stripComments(PAGE_SRC)), 'bindButton 必须能接住未绑定的节点');
+    // 同理：`ItemDetailPage.closeButton` 允许未绑（`bindButton` 兼容壳首行 `if (!node) return;`）
+    const CLICK_HELPER_SRC = readFileSync('assets/script/app/common/ClickBinding.ts', 'utf8');
+    assert.ok(/if \(!node\) return;/.test(stripComments(CLICK_HELPER_SRC)), 'bindButton 必须能接住未绑定的节点');
 });
 
 test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算', () => {
@@ -870,9 +871,11 @@ const HUD_PREFAB = loadPrefab(MT_PREFAB);
 const ID_PREFAB_OBJ = loadPrefab(ID_PREFAB);
 
 test('物品 E1｜三个按钮走「有 `cc.Button` 用 CLICK，否则 TOUCH_END」分流（规则 81b）', () => {
-    assert.ok(/getComponent\(Button\)/.test(PAGE_SRC), 'bindButton 没有做 Button 存在性判定');
-    assert.ok(/Button\.EventType\.CLICK/.test(PAGE_SRC));
-    assert.ok(/Node\.EventType\.TOUCH_END/.test(PAGE_SRC));
+    const helper = stripComments(readFileSync('assets/script/app/common/ClickBinding.ts', 'utf8'));
+    assert.ok(/getComponent\(Button\)/.test(helper), 'bindButton 没有做 Button 存在性判定');
+    assert.ok(/Button\.EventType\.CLICK/.test(helper));
+    assert.ok(/Node\.EventType\.TOUCH_END/.test(helper));
+    assert.ok(/bindButtonCompat/.test(stripComments(PAGE_SRC)), '页面应委托 common/ClickBinding');
 
     // 反向守卫：prefab 里凡是被 `Button.EventType.CLICK` 绑的节点，必须真有 cc.Button。
     // 三个按钮在 prefab 上都挂了 cc.Button ⇒ 走 CLICK 是对的。

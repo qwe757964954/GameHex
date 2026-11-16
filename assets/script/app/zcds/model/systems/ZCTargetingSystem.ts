@@ -7,6 +7,7 @@ export interface ZCPoint { readonly x: number; readonly y: number }
 export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
 
 export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition' | 'effectiveDefinition' | 'hasExposedWall'> {
+    readonly baseDefinition: (id: string) => ZCUnitDefinition;
     readonly now: number;
     readonly units: readonly ZCUnitState[];
     readonly hexes: readonly ZCHexState[];
@@ -54,7 +55,7 @@ export class ZCTargetingSystem {
         if (unit.hatredUnitId !== null && context.now <= unit.hatredUntil) {
             const hater = context.unitById(unit.hatredUnitId);
             if (hater && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
-                && (definition.canAttackAir || !context.effectiveDefinition(hater).flying)) {
+                && (definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)) {
                 // 仇恨目标进入同一候选池；保留旧逻辑的距离排序语义。
                 const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, candidatePosition));
                 if (distance < bestDistance || (distance === bestDistance && hater.id < bestId)) {
@@ -64,7 +65,7 @@ export class ZCTargetingSystem {
         }
         for (const candidate of context.units) {
             if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
-            if (!definition.canAttackAir && context.effectiveDefinition(candidate).flying) continue;
+            if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
             const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, candidatePosition));
             if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
                 bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;

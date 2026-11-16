@@ -1,5 +1,7 @@
 # gift 目录代码优化改动清单
 
+> 状态：改动记录（2026-11）。记录本轮已执行整理与测试改动，供追溯；当前代码为准，不作为待办。
+
 ## 1. 范围与结论
 
 - 目标目录：`assets/script/app/gift`
@@ -94,7 +96,7 @@ git diff --check -- assets/script/app/gift tests/gift.test.ts
 |---|---|---|
 | 文件头 | 压缩老端图表明细与 `⚠️` 话术，保留“原稿有意拉伸、CUSTOM 尺寸”这条真实陷阱 | 避免注释比代码长 |
 | `GIFT_SUB_TAB_ART` | `once` 注释压缩为“416 未开启、无图” | 与 `open.json` 及资源目录一致 |
-| `GIFT_RES_ICON_ART` | 注释改为“资源档图标映射，以 `roleProperty.json` 为准” | `tests/res-types.test.ts` 逐条校验 |
+| `GIFT_RES_ICON_ART` | 注释改为“资源档图标映射，以 `roleProperty.json` 为准” | `res-types.test.ts` 逐条校验 |
 | `giftResIconPath` | 删除 | 全仓无引用；调用方只用 `giftResIconRef` |
 | `QUALITY_FRAME_*` / `qualityFrameLevel` re-export | 删除未使用的转发，保留实际使用的 `QUALITY_FRAME_NAMES`、`qualityFrameName` | 减少 re-export 噪音；`GiftPage` 只用命名/取值 |
 | `resolveItemIconPath` / `IGiftIconRef` re-export | 删除；`resolveItemIconRef` 改为文件顶部内部 import | 外部没有通过这些别名引用；仍保留 `resolveGiftIconRef` 对外入口 |
@@ -174,7 +176,7 @@ git diff --check -- assets/script/app/gift tests/gift.test.ts
 | `qualityFrameOf` 薄包装 | 删除，直接调用 `qualityFrameOfRes` | 只有一处调用，包装没有语义增量 |
 | `loadIconFrames` | `items` 改为必填，删除 `snapshot` 回退；用 `Set` 去重；`resId <= 0` 过滤明确；首处调用补传 `snapshot.items` | 两个充值页的数据源与当前快照不同，回退会把错表传进来；补传是修复调用点 |
 | `tabButtons` / `alive` | 删除 `.slice()`；`alive` 简化为 `this.node.isValid` | 排序前复制无意义；节点有效性直接判断 |
-| `onPayChannel` | **保留** | 当前无调用方，但 `GiftLingYuView.onPay` 是预留回调，`tests/gift.test.ts` D7 锁定 `GIFT_TEXTS.payMissing`；见 4.3 |
+| `onPayChannel` | **保留** | 当前无调用方，但 `GiftLingYuView.onPay` 是预留回调，`gift.test.ts` D7 锁定 `GIFT_TEXTS.payMissing`；见 4.3 |
 | 大页签底部注释 | 删除“底部两张底图”的孤立注释 | 与实际 3 个页签不符 |
 
 #### `GiftSpecialView.ts`

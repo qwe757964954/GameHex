@@ -588,8 +588,12 @@ test('C1 每个请求类的 proto 名与 `Cmd.d.ts` 一致（改一个字母就�
         RequestRoleWatchAdvert: 'CmdRoleWatchAdvertReqMsg',
     };
     for (const [cls, proto] of Object.entries(EXPECT)) {
-        assert.ok(MSG_SRC.includes(`export class ${cls} `), `缺请求类 ${cls}`);
-        assert.ok(MSG_SRC.includes(`return '${proto}'`), `${cls} 的 proto 名必须是 '${proto}'`);
+        // RequestRoleWatchAdvert 已归位 generated；联盟文件只保留 re-export。
+        const source = cls === 'RequestRoleWatchAdvert'
+            ? readFileSync('assets/script/app/generated/requestMsg/RequestRoleMsg.ts', 'utf8')
+            : MSG_SRC;
+        assert.ok(source.includes(`export class ${cls} `), `缺请求类 ${cls}`);
+        assert.ok(new RegExp(`return ['"]${proto}['"]`).test(source), `${cls} 的 proto 名必须是 '${proto}'`);
     }
 });
 

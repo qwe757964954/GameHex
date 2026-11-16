@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 「聊天」的数据端口 —— 内存消息流 + 缓存 + 网络请求三合一。
  *
@@ -72,7 +73,7 @@ export interface IChatSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type ChatRequestResult = 'ok' | 'offline' | 'failed';
+export type ChatRequestResult = INetRequestStatus;
 
 export interface IChatRepository {
     /** 读内存 + 读缓存，组装一次快照；不发任何请求。 */

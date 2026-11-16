@@ -1,4 +1,6 @@
 import { TERRITORY_SILVER_RES_ID, TERRITORY_STAMINA_RES_ID } from './TerritoryIdleReward';
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01 } from '../../../core/math/Scalar';
 
 /**
  * 领地资源点与挂机奖励的表现分流。
@@ -172,9 +174,8 @@ export interface ITerritoryGainFx {
     readonly opacity: number;
 }
 
-function easeOutCubic(t: number): number {
-    const p = Math.min(1, Math.max(0, t));
-    return 1 - (1 - p) * (1 - p) * (1 - p);
+function easeOutCubicClamped(t: number): number {
+    return easeOutCubic(clamp01(t));
 }
 
 /**
@@ -187,16 +188,16 @@ function easeOutCubic(t: number): number {
 export function territoryGainFx(elapsed: number): ITerritoryGainFx | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= TERRITORY_GAIN_SECONDS) return null;
     const progress = elapsed / TERRITORY_GAIN_SECONDS;
-    const offsetY = TERRITORY_GAIN_RISE_PX * easeOutCubic(progress);
+    const offsetY = TERRITORY_GAIN_RISE_PX * easeOutCubicClamped(progress);
     if (progress < TERRITORY_GAIN_ENTRANCE_RATIO) {
-        const entrance = easeOutCubic(progress / TERRITORY_GAIN_ENTRANCE_RATIO);
+        const entrance = easeOutCubicClamped(progress / TERRITORY_GAIN_ENTRANCE_RATIO);
         const scale = TERRITORY_GAIN_FROM_SCALE
             + (TERRITORY_GAIN_POP_SCALE - TERRITORY_GAIN_FROM_SCALE) * entrance;
         return { offsetY, scale, opacity: 1 };
     }
     const fade = (progress - TERRITORY_GAIN_ENTRANCE_RATIO) / (1 - TERRITORY_GAIN_ENTRANCE_RATIO);
     const scale = TERRITORY_GAIN_POP_SCALE
-        + (1 - TERRITORY_GAIN_POP_SCALE) * easeOutCubic(fade);
+        + (1 - TERRITORY_GAIN_POP_SCALE) * easeOutCubicClamped(fade);
     return { offsetY, scale, opacity: 1 - fade * fade };
 }
 

@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 「邮件」的数据端口 —— **配置表 + 本地快照 + 网络请求** 三合一的 Repository。
  *
@@ -31,8 +32,8 @@
 
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { GameNet } from '../net/GameNet';
 import { toIdString, withTimeout } from '../net/RequestGuard';
 import {
@@ -67,7 +68,7 @@ export interface IMailSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type MailRequestResult = 'ok' | 'offline' | 'failed';
+export type MailRequestResult = INetRequestStatus;
 
 /**
  * 批量领取的结果。

@@ -24,6 +24,9 @@
  *  · 抖动一律确定性（本文件根本不需要抖动 —— 反馈是单次脉冲）。
  */
 
+import { easeOutCubic } from '../../core/math/Easing';
+import { clamp01Finite } from '../../core/math/Scalar';
+
 /** 单格跳动（图标弹一下 + 数字滚动）的总时长（秒）。 */
 export const RES_BAR_HIT_SECONDS = 0.46;
 
@@ -52,18 +55,6 @@ export interface IResBarHitFx {
     readonly countRatio: number;
 }
 
-/** `0..1` 夹紧（脏 `elapsed` 不产出 NaN 几何）。 */
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
-}
-
-/** `EaseOutCubic`：起手快、收尾稳（数字滚动用它，最后几十点不会拖）。 */
-function easeOutCubic(t: number): number {
-    const inv = 1 - clamp01(t);
-    return 1 - inv * inv * inv;
-}
-
 /**
  * 单格跳动在 `elapsed` 秒时的状态；`null` = 这一格没有反馈在播（视图据此复原）。
  *
@@ -76,11 +67,11 @@ function easeOutCubic(t: number): number {
 export function resBarHitFx(elapsed: number): IResBarHitFx | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= RES_BAR_HIT_SECONDS) return null;
     const progress = elapsed / RES_BAR_HIT_SECONDS;
-    const pop = Math.sin(Math.PI * clamp01(progress / RES_BAR_HIT_POP_SPAN));
+    const pop = Math.sin(Math.PI * clamp01Finite(progress / RES_BAR_HIT_POP_SPAN));
     return {
         iconScale: 1 + RES_BAR_HIT_ICON_POP * pop,
         labelScale: 1 + RES_BAR_HIT_LABEL_POP * pop,
-        countRatio: easeOutCubic(progress),
+        countRatio: easeOutCubic(clamp01Finite(progress)),
     };
 }
 
@@ -189,9 +180,9 @@ export function resBarSpendFx(elapsed: number): IResBarSpendFx | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= RES_BAR_SPEND_SECONDS) return null;
     const hold = RES_BAR_SPEND_HOLD_SECONDS;
     // ① 定格段的单峰弹跳：`sin(π · p)`，p=0 与 p=1（= HOLD 那一刻）都恰好 0。
-    const pop = elapsed < hold ? Math.sin(Math.PI * clamp01(elapsed / hold)) : 0;
+    const pop = elapsed < hold ? Math.sin(Math.PI * clamp01Finite(elapsed / hold)) : 0;
     // ② 扣减：HOLD 之前一步都不走（这就是「跳动**再**扣除」）。
-    const countProgress = elapsed <= hold ? 0 : clamp01((elapsed - hold) / (RES_BAR_SPEND_SECONDS - hold));
+    const countProgress = elapsed <= hold ? 0 : clamp01Finite((elapsed - hold) / (RES_BAR_SPEND_SECONDS - hold));
     return {
         iconScale: 1 + RES_BAR_SPEND_ICON_POP * pop,
         labelScale: 1 + RES_BAR_SPEND_LABEL_POP * pop,
@@ -206,11 +197,11 @@ export function resBarSpendFx(elapsed: number): IResBarSpendFx | null {
 function resBarSpendWhiteStrength(elapsed: number): number {
     if (!(elapsed >= 0) || elapsed >= RES_BAR_SPEND_FLASH_SECONDS) return 0;
     if (elapsed < RES_BAR_SPEND_FLASH_RISE_SECONDS) {
-        return clamp01(elapsed / RES_BAR_SPEND_FLASH_RISE_SECONDS);
+        return clamp01Finite(elapsed / RES_BAR_SPEND_FLASH_RISE_SECONDS);
     }
     const fadeStart = RES_BAR_SPEND_FLASH_SECONDS - RES_BAR_SPEND_FLASH_FADE_SECONDS;
     if (elapsed <= fadeStart) return 1;
-    return clamp01((RES_BAR_SPEND_FLASH_SECONDS - elapsed) / RES_BAR_SPEND_FLASH_FADE_SECONDS);
+    return clamp01Finite((RES_BAR_SPEND_FLASH_SECONDS - elapsed) / RES_BAR_SPEND_FLASH_FADE_SECONDS);
 }
 
 /**
@@ -221,7 +212,7 @@ function resBarSpendWhiteStrength(elapsed: number): number {
  */
 function resBarSpendBlinkAlpha(elapsed: number): number {
     if (!(elapsed >= 0) || elapsed >= RES_BAR_SPEND_FLASH_SECONDS) return 1;
-    const p = clamp01(elapsed / RES_BAR_SPEND_FLASH_SECONDS);
+    const p = clamp01Finite(elapsed / RES_BAR_SPEND_FLASH_SECONDS);
     const wave = Math.abs(Math.sin(RES_BAR_SPEND_BLINKS * Math.PI * p));
     return 1 - (1 - RES_BAR_SPEND_BLINK_MIN_ALPHA) * wave;
 }
@@ -236,7 +227,7 @@ export function resBarSpendFlashColor(
     base: readonly [number, number, number],
     strength: number,
 ): [number, number, number] {
-    const t = clamp01(strength);
+    const t = clamp01Finite(strength);
     const from = [toChannel(base?.[0]), toChannel(base?.[1]), toChannel(base?.[2])];
     return [
         Math.round(from[0] + (RES_BAR_SPEND_FLASH[0] - from[0]) * t),
@@ -284,12 +275,12 @@ export interface IResBarSpendFloatFx {
  */
 export function resBarSpendFloatFx(elapsed: number): IResBarSpendFloatFx | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= RES_BAR_SPEND_FLOAT_SECONDS) return null;
-    const p = clamp01(elapsed / RES_BAR_SPEND_FLOAT_SECONDS);
+    const p = clamp01Finite(elapsed / RES_BAR_SPEND_FLOAT_SECONDS);
     return {
         rise: easeOutCubic(p) * RES_BAR_SPEND_FLOAT_RISE,
         alpha: p <= RES_BAR_SPEND_FLOAT_FADE_FROM
             ? 1
-            : clamp01((1 - p) / (1 - RES_BAR_SPEND_FLOAT_FADE_FROM)),
+            : clamp01Finite((1 - p) / (1 - RES_BAR_SPEND_FLOAT_FADE_FROM)),
     };
 }
 
@@ -355,5 +346,5 @@ export function formatResBarCountText(base: IResBarCountText, value: number): st
 export function resBarCountValue(from: number, to: number, ratio: number): number {
     const start = Number.isFinite(from) ? from : 0;
     const end = Number.isFinite(to) ? to : 0;
-    return Math.round(start + (end - start) * clamp01(ratio));
+    return Math.round(start + (end - start) * clamp01Finite(ratio));
 }

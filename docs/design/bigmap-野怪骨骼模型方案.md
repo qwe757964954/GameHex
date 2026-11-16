@@ -66,7 +66,7 @@ IBigMapViewState.monsters ──> BigMapWorldView.refresh()
 | 既有件 | 位置 | 能复用哪一点 | 不能照搬的地方 |
 | --- | --- | --- | --- |
 | `ZCUnitView` spine 分支 | `app/zcds/view/ZCUnitView.ts` | 骨架归一：`spineCanvasHeight()` + `SPINE_VISIBLE_RATIO=0.970`；`Skeleton.color` 染色 | 它连带描边副本、序列帧混用、对局席位逻辑，太重 |
-| `CardUnitPreview` | `app/card/CardUnitPreview.ts` | 「实例化 prefab → 找 Skeleton → 校验有没有 idle → 归一缩放 → 脚点对齐」这一整套判断 | 它 `addComponent(CardUnitPreviewPlayer)`，而 `bigmap/view` **源码守卫禁止 `addComponent`**（`tests/bigmap-world-prefab.test.ts:103`） |
+| `CardUnitPreview` | `app/card/CardUnitPreview.ts` | 「实例化 prefab → 找 Skeleton → 校验有没有 idle → 归一缩放 → 脚点对齐」这一整套判断 | 它 `addComponent(CardUnitPreviewPlayer)`，而 `bigmap/view` **源码守卫禁止 `addComponent`**（`bigmap-world-prefab.test.ts:103`） |
 | `CardUnitPreviewAssets` | `app/card/CardUnitPreviewAssets.ts` | 「按路径缓存 Promise」的模式 | 它不接 `ResourceScope`，大世界必须能随页面释放 |
 
 ---
@@ -165,7 +165,7 @@ IBigMapViewState.monsters ──> BigMapWorldView.refresh()
 | 方案 | 做法 | 优点 | 代价 | 结论 |
 | --- | --- | --- | --- | --- |
 | A | **让 `monsterModel` 填 `skel/<角色>/<角色>`** | 不加列；字段中文名「野怪模型资源」与语义一致；`parseMonster` 已有 `modelPath` 无需改配置层 | 要策划改 34 行数据；`monsterHeaIcon` 恢复成头像用途 | ✅ **推荐** |
-| B | 新增一列 `monsterPrefab` | 老数据零迁移 | 一表两列都叫「模型」；导表/服务端下游要同步加列；`tests/bigmap-latest-monster-config.test.ts:29` 的 `deepEqual` 要改 | 备选 |
+| B | 新增一列 `monsterPrefab` | 老数据零迁移 | 一表两列都叫「模型」；导表/服务端下游要同步加列；`bigmap-latest-monster-config.test.ts:29` 的 `deepEqual` 要改 | 备选 |
 | C | 客户端内置映射，表不动 | 立即可见效果；不阻塞策划 | 长期双真源 | 只做**过渡层** |
 
 ### 3.2 落地口径（A + C 组合，分三步收敛）
@@ -337,14 +337,16 @@ export function bigMapMonsterVisualScale(size: number): number;   // 1 → 1.0, 
 
 ### 7.1 新增
 
+> `bigmap-monster-model-key.test.ts` 与 `bigmap-monster-visual.test.ts` 尚未创建；两条会在落地时新增，当前仓库只有 `bigmap-world-prefab.test.ts` 的既有模板守卫。
+
 | 用例 | 钉住什么 |
 | --- | --- |
-| `tests/bigmap-monster-model-key.test.ts`（新） | `bigMapMonsterModelKey`：`skel/` 合法走表值；`icons/...` 走内置表；两者都没有返回 `null`；脏路径（`skel/a`／`skel/a/b/c`／空串）不通过 |
+| `bigmap-monster-model-key.test.ts`（新） | `bigMapMonsterModelKey`：`skel/` 合法走表值；`icons/...` 走内置表；两者都没有返回 `null`；脏路径（`skel/a`／`skel/a/b/c`／空串）不通过 |
 | 同上 | 内置映射**覆盖布局里出现的全部 20 个 id**（读 `bigMap.json` 的 `monsters` 反查，不是硬编码 20） |
 | 同上 | 内置映射的每个路径**在磁盘上真实存在**（`assets/resources/skel/<名>/<名>.prefab`），防止名字打错静默回退 |
-| `tests/bigmap-world-prefab.test.ts`（加） | `MarkerTemplate/MonsterVisual` 存在、`layer=33554432`、`active=false`、`anchor=(0.5,0)`、**无渲染组件**、已绑到 `monsterVisual` |
+| `bigmap-world-prefab.test.ts`（加） | `MarkerTemplate/MonsterVisual` 存在、`layer=33554432`、`active=false`、`anchor=(0.5,0)`、**无渲染组件**、已绑到 `monsterVisual` |
 | 同上（加反向） | 源码仍不含 `new Node(` / `addComponent(` / `destroyAllChildren`；`syncMonsterVisuals` 不在 `update` 里 |
-| `tests/bigmap-monster-visual.test.ts`（新） | 有模型的野怪 `icon.node.active === false` 且宿主 active；无模型的两者相反；聚焦态两者都关 |
+| `bigmap-monster-visual.test.ts`（新） | 有模型的野怪 `icon.node.active === false` 且宿主 active；无模型的两者相反；聚焦态两者都关 |
 
 ### 7.2 必过的既有用例（改到就红，别指望「跑全绿」）
 
@@ -369,7 +371,7 @@ export function bigMapMonsterVisualScale(size: number): number;   // 1 → 1.0, 
 
 | 步 | 内容 | 验证 | 可回滚性 |
 | --- | --- | --- | --- |
-| 1 | `model/BigMapMonsterArt.ts` + `bigMapMonsterModelKey` + 内置映射 + 单测 | `npx tsx --test tests/bigmap-monster-model-key.test.ts` | 纯新增，零影响 |
+| 1 | `model/BigMapMonsterArt.ts` + `bigMapMonsterModelKey` + 内置映射 + 单测 | `npx tsx --test bigmap-monster-model-key.test.ts` | 纯新增，零影响 |
 | 2 | `application/BigMapMonsterArt.ts`（Prefab 加载 + scope） | 单测桩 + 真机日志 | 纯新增 |
 | 3 | **MCP 改 `BigMapWorldTemplates.prefab`**：加 `MonsterVisual` + 绑字段 | `bigmap-world-prefab.test.ts` + 编辑器内看层级 | prefab 单文件，`svn revert` 即回 |
 | 4 | `BigMapWorldMarker` 加 `monsterVisual` / `setMonsterHost` / `setVisualTint` | 同上 + `bigmap-marker-portrait-hittest` | 代码级可回滚 |

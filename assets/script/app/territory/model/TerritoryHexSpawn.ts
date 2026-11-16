@@ -7,6 +7,8 @@
  */
 
 import { territoryHexStaggerDelays } from './TerritoryHexStagger';
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
 
 /** 单格生成时长（秒）。 */
 export const TERRITORY_HEX_SPAWN_SECONDS = 0.4;
@@ -119,17 +121,6 @@ export interface ITerritoryHexSpawnCell {
     readonly cellId: number;
     readonly x: number;
     readonly y: number;
-}
-
-function clamp01(value: number): number {
-    if (!(value > 0)) return 0;
-    return value > 1 ? 1 : value;
-}
-
-/** `easeOutCubic`：起手快、落位慢 —— 「长出来」的手感（`easeIn` 会读成"慢慢鼓起"）。 */
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
 }
 
 /**

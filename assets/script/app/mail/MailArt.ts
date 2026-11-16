@@ -9,10 +9,10 @@ import {
     QUALITY_FRAME_ROOT,
     qualityFrameLevel,
     qualityFrameName,
-    resolveRewardIconRef,
-} from '../activity/LayerActivityArt';
-import { rewardGoodsOf } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
+} from '../common/QualityFrameArt';
+import { resolveRewardIconRef } from '../common/RewardIcon';
+import { rewardGoodsOf } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { MAIL_STATE_READ, MAIL_STATE_TAKEN, MAIL_STATE_UNREAD } from './MailTable';
 
 /** 本模块自有美术的目录（不含 `resources/` 前缀；`loadArt(name, root)` 用）。 */

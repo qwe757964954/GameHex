@@ -10,6 +10,9 @@
  */
 
 import { TERRITORY_CHEST_TIER, type TerritoryChestTier } from './TerritoryChestTier';
+import { hashNoise01 as chestNoise } from '../../../core/math/DeterministicNoise';
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
 
 /**
  * 开盖补帧数，对应美术目录中的 `chest_seq_0…N-1`。
@@ -539,12 +542,6 @@ export function territoryChestEndSeconds(spec: ITerritoryChestSpec, flyCount = s
 // 缓动
 // ============================================================
 
-/** `0..1` 夹紧（脏 `t` 不产出 NaN 几何）。 */
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
-}
-
 /**
  * 窗口端点的浮点容差。
  *
@@ -563,11 +560,6 @@ function phase(t: number, start: number, seconds: number): number | null {
     const local = (t - start) / seconds;
     if (local >= 1 - PHASE_EPSILON) return 1;
     return local < 0 ? 0 : local;
-}
-
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
 }
 
 function easeInQuad(p: number): number {
@@ -834,15 +826,7 @@ export function territoryChestCameraFx(
  * 同一 `(seed, index, salt)` 必须给出同一个偏移，否则单测无法验证判据、池化复用无法复现。
  * 视觉上的「每次不一样」由调用方每次开箱换一个 seed 提供。
  */
-function chestNoise(seed: number, index: number, salt: number): number {
-    let h = Math.imul(seed | 0, 0x27d4eb2d)
-        ^ Math.imul(index + 1, 0x9e3779b1)
-        ^ Math.imul(salt + 1, 0x85ebca6b);
-    h = (h ^ (h >>> 15)) | 0;
-    h = Math.imul(h, 0x2545f491);
-    h = (h ^ (h >>> 13)) | 0;
-    return (h >>> 0) / 4294967296;
-}
+/** 同一 `(seed, index, salt)` 的确定性噪声由 `core/math/DeterministicNoise` 提供。 */
 
 /** 喷泉粒子的重力（px/s²）与出射档位（规格「60°~100° 扇形、初速 600~900」）。 */
 export const TERRITORY_CHEST_FOUNTAIN_GRAVITY = 1400;

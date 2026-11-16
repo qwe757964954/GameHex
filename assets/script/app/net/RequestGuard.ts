@@ -2,8 +2,44 @@
  * 网络请求的通用守卫工具，纯函数、零引擎依赖，Node 单测可直接 import。
  */
 import { toCount, toIdString, toPositiveInt } from '../../core/value/Coerce';
+import { WRITE_TIMEOUT_MS } from './Timeouts';
 
 export { toCount, toIdString, toPositiveInt };
+
+/** 网络发送端口（不依赖 GameNet，便于 Node 单测注入）。 */
+export interface IGameSendPort {
+    readonly isConnected: boolean;
+    send(message: unknown, cache: boolean): Promise<boolean>;
+}
+
+/** 网络请求三态；与 `core/types/NetResult` 同口径。 */
+export type GameRequestStatus = 'ok' | 'offline' | 'failed';
+
+/**
+ * 统一「离线判定 → 发送 → 硬超时 → 三态」壳；响应回调仍由 `make()` 创建的消息对象持有。
+ * 超时默认 5000ms（写请求口径）；读请求传 `timeoutMs`。
+ */
+export async function sendGameRequest(
+    net: IGameSendPort | null | undefined,
+    make: () => unknown,
+    options?: {
+        readonly timeoutMs?: number;
+        readonly tag?: string;
+    },
+): Promise<GameRequestStatus> {
+    if (!net?.isConnected) return 'offline';
+    try {
+        const sent = await withTimeout(
+            net.send(make(), false),
+            options?.timeoutMs ?? WRITE_TIMEOUT_MS,
+            () => false,
+        );
+        return sent === true ? 'ok' : 'failed';
+    } catch (error) {
+        console.warn(`[${options?.tag ?? 'Request'}] 请求失败`, error);
+        return 'failed';
+    }
+}
 
 /**
  * 给一个 Promise 兜**硬超时**：`ms` 内没兑现就用 `fallback()` 顶上，**保证一定兑现**。

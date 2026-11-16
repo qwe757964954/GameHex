@@ -7,8 +7,8 @@ import { SpriteFrame } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
 import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from './ShowRewardTable';
 import type { IRewardEntry } from './ShowRewardTable';
 

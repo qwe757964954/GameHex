@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 商城的数据与网络端口。页面只依赖 StoreActions；购买规则在 StoreCostTable；
  * 静态展示内容在 StoreShopTable。
@@ -12,7 +13,7 @@
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { RequestMsg } from '../../framework/net/RequestMsg';
+import { RequestShopBuy } from '../net/RequestShopMsg';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
 import { withTimeout } from '../net/RequestGuard';
@@ -28,12 +29,8 @@ import type {
 
 // 协议
 
-/** 通用商店购买（`CmdShopBuyReqMsg`）。 */
-export class RequestShopBuy extends RequestMsg<CmdShopBuyReqMsg, CmdShopBuyRspMsg> {
-    getReqMsgProtoName(): ReqMsgProtoName {
-        return 'CmdShopBuyReqMsg';
-    }
-}
+/** 通用商店购买统一在 `net/RequestShopMsg`，旧导出名保留。 */
+export { RequestShopBuy };
 
 /**
  * 商城用到的 `CmdShopType` 档位（数值对齐 proto 枚举，见文件头第二节）。
@@ -50,16 +47,18 @@ export const STORE_SHOP_TYPE = {
 } as const;
 
 /** 请求结果三态（与 `LeagueRequestResult` / `HangRequestResult` 同口径）。 */
-export type StoreRequestResult = 'ok' | 'offline' | 'failed';
+export type StoreRequestResult = INetRequestStatus;
 
 // 表名与超时
+
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 
 const TABLE_GEM_BOX = 'gemBox';
 const TABLE_GOLD_SHOP = 'goldShop';
 const TABLE_RESOURCE_SHOP = 'resourceShop';
 const TABLE_GUANKA_GIFT = 'guankaGift';
-const TABLE_ROLE_PROPERTY = 'roleProperty';
-const TABLE_ITEM = 'item';
+const TABLE_ROLE_PROPERTY = ROLE_PROPERTY_TABLE;
+const TABLE_ITEM = ITEM_TABLE;
 const TABLE_AD = 'ad';
 
 const READ_TIMEOUT_MS = 800;

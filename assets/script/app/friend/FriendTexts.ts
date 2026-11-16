@@ -8,13 +8,11 @@
  * 占位统一用 `{0}`，由 `formatText` 替换（不引老端带框架依赖的 `StringUtil`）。
  */
 
+import { formatPlaceholders } from '../../core/text/Placeholder';
+
 /** `{0}` / `{1}` 顺序替换；缺参保留原样（便于一眼看出漏传）。 */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
-    return template.replace(/\{(\d+)\}/g, (whole, indexText: string) => {
-        const index = Number(indexText);
-        const value = args[index];
-        return value === undefined || value === null ? whole : String(value);
-    });
+    return formatPlaceholders(template, args, { missing: 'keep', nullish: 'keep' });
 }
 
 /** 三个页签的标题（顺序 = `FRIEND_TAB_KEYS` 的顺序）。 */

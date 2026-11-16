@@ -17,6 +17,7 @@ import {
     type HexGridPoint,
 } from '../../../core/hex/HexGridLayout';
 import type { TerritoryMapConfig } from './TerritoryMapConfig';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
 
 /** 消散总时长（秒）。 */
 export const TERRITORY_CLOUD_DISSOLVE_SECONDS = 0.5;
@@ -436,11 +437,6 @@ export function territoryCloudKeepOutPoints(
         out.push({ x: current.x + mx * gap, y: current.y + my * gap });
     }
     return out;
-}
-
-function clamp01(value: number): number {
-    if (!(value > 0)) return 0;
-    return value > 1 ? 1 : value;
 }
 
 /** 消散某一帧的姿态。视图照着写节点，不再做二次换算。 */

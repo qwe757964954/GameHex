@@ -104,13 +104,21 @@ test('索敌候选循环只记标量，不为每个更优候选分配对象或�
     assert.doesNotMatch(body, /=>|best\s*=\s*\{/);
 });
 
+test('索敌飞行判定只读基础定义，不触发每候选 effective 计算', () => {
+    const source = readFileSync('assets/script/app/zcds/model/systems/ZCTargetingSystem.ts', 'utf8');
+    const body = methodBody(source,
+        'static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {');
+    assert.match(body, /context\.baseDefinition\(hater\.unitId\)\.flying/);
+    assert.match(body, /context\.baseDefinition\(candidate\.unitId\)\.flying/);
+});
+
 test('状态快照只在脏时重导出：removeDeadUnits 不得每步无条件深拷贝', () => {
     const source = readFileSync('assets/script/app/zcds/model/ZCGameModel.ts', 'utf8');
     const body = methodBody(source, 'private removeDeadUnits(): void {');
     assert.match(body, /if \(this\.statusSystem\.isDirty\(\)/,
         '状态快照导出必须受 isDirty 条件保护，避免每逻辑步全量深拷贝');
-    assert.doesNotMatch(body, /this\.state\.statusEffects = this\.statusSystem\.exportSnapshot\(\);/,
-        '不得保留无条件导出快照');
+    assert.doesNotMatch(body, /state\.units\.length = write;\s*this\.state\.statusEffects/,
+        '不得在压缩单位表后无条件导出快照');
 });
 
 test('状态结算只在脏或缺失快照时导出', () => {

@@ -1,3 +1,4 @@
+import type { IRewardAmount } from '../../core/types/Reward';
 /**
  * 七日狂欢的数据口径 —— **纯逻辑，除 `core` 纯函数外不 import 任何东西，可在 Node 单测里直接跑**。
  *
@@ -22,15 +23,13 @@
  *   ⚠️ 恢复页签时必须**同时**把 `RowView` 的顶边从 392 退回 450（页签栏占 382..450，否则列表压住它）。
  */
 
+import { parseRows, parseRowsToMap } from '../../core/table/RowParse';
 import { parseRewardAmounts } from '../../core/table/RewardRows';
 import { DAY_MS, startOfDay } from '../../core/time/TimeMs';
 import { clamp01Finite } from '../../core/math/Scalar';
 
 /** 一条奖励：`{ resId, number }`。 */
-export interface ISevenDayReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type ISevenDayReward = IRewardAmount;
 
 /** 配置表 `sevenDayTask` 的一行（归一化后）。 */
 export interface ISevenDayTaskRow {
@@ -231,39 +230,20 @@ export function parseItemRow(value: unknown): ISevenDayItemInfo | null {
 
 /** 批量解析 `item` 表（重复 resId 只留第一条）。 */
 export function parseItemRows(rows: readonly unknown[]): Map<number, ISevenDayItemInfo> {
-    const out = new Map<number, ISevenDayItemInfo>();
-    for (const row of rows) {
-        const parsed = parseItemRow(row);
-        if (parsed && !out.has(parsed.resId)) out.set(parsed.resId, parsed);
-    }
-    return out;
+    return parseRowsToMap(rows, parseItemRow, (one) => one.resId, { keep: 'first' });
 }
 
 /** 批量解析（跳过非法行）。 */
 export function parseTaskRows(rows: readonly unknown[]): ISevenDayTaskRow[] {
-    const out: ISevenDayTaskRow[] = [];
-    for (const row of rows) {
-        const parsed = parseTaskRow(row);
-        if (parsed) out.push(parsed);
-    }
-    return out;
+    return parseRows(rows, parseTaskRow);
 }
 
 export function parseShopRows(rows: readonly unknown[]): ISevenDayShopRow[] {
-    const out: ISevenDayShopRow[] = [];
-    for (const row of rows) {
-        const parsed = parseShopRow(row);
-        if (parsed) out.push(parsed);
-    }
-    return out;
+    return parseRows(rows, parseShopRow);
 }
 
 export function parsePointRows(rows: readonly unknown[]): ISevenDayPointRow[] {
-    const out: ISevenDayPointRow[] = [];
-    for (const row of rows) {
-        const parsed = parsePointRow(row);
-        if (parsed) out.push(parsed);
-    }
+    const out = parseRows(rows, parsePointRow);
     // 宝箱按积分升序 —— 老端直接用表序（表本身就是升序），这里排一次更稳。
     out.sort((a, b) => a.point - b.point);
     return out;

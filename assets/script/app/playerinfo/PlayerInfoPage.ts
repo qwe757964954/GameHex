@@ -1,3 +1,4 @@
+import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -161,13 +162,7 @@ export class PlayerInfoPage extends PopupBase {
      * 形态的按钮迁过来**有** `cc.Button`，绑 `TOUCH_END` 会绕过 `interactable`。按实际组件分流。
      */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
+        bindButtonCompat(node, handler, this);
     }
 
     // ============================================================
@@ -200,27 +195,15 @@ export class PlayerInfoPage extends PopupBase {
      * 接平台头像加载器时只需改这里。
      */
     private async loadHeadFrameOf(snapshot: IPlayerInfoSnapshot): Promise<SpriteFrame | null> {
-        const direct = await this.loadHeadFrameBy(String(snapshot.img));
+        const directId = String(snapshot.img);
+    const direct = directId ? await HeadArt.loadHeadFrame(directId) : null;
         if (direct || !snapshot.platformImg) return direct;
 
         const heads = await this.repo.loadHeads();
         const first = heads.find((entry) => entry.id > 0);
-        return first ? this.loadHeadFrameBy(String(first.id)) : null;
-    }
-
-    /**
-     * `head` 表 `resId` → 图。
-     * 走 `HeadArt.loadHeadFrame`（`head.json → icon.json → icons/head/<资源名>` 两级映射，
-     * 且该函数**内部已 catch**，表读不到只 warn 不会抛）。
-     */
-    private async loadHeadFrameBy(resId: string): Promise<SpriteFrame | null> {
-        if (!resId) return null;
-        try {
-            return await HeadArt.loadHeadFrame(resId);
-        } catch (error) {
-            console.warn('[PlayerInfo] 头像图加载失败', resId, error);
-            return null;
-        }
+        if (!first) return null;
+        const firstId = String(first.id);
+        return firstId ? HeadArt.loadHeadFrame(firstId) : null;
     }
 
     // ---------- 铺界面 ----------

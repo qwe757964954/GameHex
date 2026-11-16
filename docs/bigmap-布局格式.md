@@ -201,8 +201,8 @@ npx tsx tools/map-editor/gen_bigmap_preset.ts world_01 12345   # 换种子
 
 | 期 | 状态 | 交付 |
 | --- | --- | --- |
-| **M1 布局驱动闭环** | ✅ | 格式 + `parseBigMapLayout` + `exportBigMapLayout` + `buildBigMapWorldFromLayout` + 往返对拍（`tests/bigmap-layout.test.ts` 10 条）+ 预设生成器 |
-| **M2 编辑器** | ✅ | `bigmap.html` / `bigmap-app.js`、`formats/bigmap-format.js`（编辑器 + server 共用校验）、`server.mjs` 的 `/api/bigmap-*`、发布对账、`copy_bigmap_maps.py`；`tests/bigmap-format.test.ts` 7 条对拍（js ↔ ts、六边邻居 1600 格逐格） |
+| **M1 布局驱动闭环** | ✅ | 格式 + `parseBigMapLayout` + `exportBigMapLayout` + `buildBigMapWorldFromLayout` + 往返对拍（`bigmap-layout.test.ts` 10 条）+ 预设生成器 |
+| **M2 编辑器** | ✅ | `bigmap.html` / `bigmap-app.js`、`formats/bigmap-format.js`（编辑器 + server 共用校验）、`server.mjs` 的 `/api/bigmap-*`、发布对账、`copy_bigmap_maps.py`；`bigmap-format.test.ts` 7 条对拍（js ↔ ts、六边邻居 1600 格逐格） |
 | **M3 策略层** | ✅ | 出生区块工具 + 泊松容量模拟（`poissonSpawnPoints`，六边三着色贴住 n/3 上界）、背景图、截图 PNG（2×）、城池清单 CSV |
 | **M4 运行时接入** | ✅ | `application/BigMapLayoutLoader.ts`（`AssetService` 读 `config/bigmap-maps/world_<id>`）+ `model/BigMapLayout.resolveBigMapLayout`（纯函数降级判据）+ `BigMapPresenter` 的 `layout` 依赖 + `ProcedureBootstrap` 注入；`tools/map-editor/verify_bigmap_world.ts` 校验「布局 vs 种子」差异 |
 

@@ -22,6 +22,7 @@
 
 import { toCount } from '../net/RequestGuard';
 import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { taskPhaseRank } from '../common/TaskOrder';
 import {
     TASK_STATE_FINISH,
     TASK_STATE_REWARDED,
@@ -262,12 +263,7 @@ export function sortTasksForDisplay(
     tasks: readonly ILimitTimeTaskRow[],
     states: readonly ILimitTimeTaskState[],
 ): ILimitTimeTaskRow[] {
-    const rankOf = (task: ILimitTimeTaskRow): number => {
-        const phase = taskPhaseOf(task, states);
-        if (phase === 'claimable') return 0;
-        if (phase === 'taken') return 2;
-        return 1;
-    };
+    const rankOf = (task: ILimitTimeTaskRow): number => taskPhaseRank(taskPhaseOf(task, states));
     return (tasks ?? []).slice().sort((a, b) => rankOf(a) - rankOf(b) || a.sort - b.sort || a.resId - b.resId);
 }
 

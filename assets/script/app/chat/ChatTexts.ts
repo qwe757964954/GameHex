@@ -50,12 +50,11 @@ export const CHAT_TEXTS = {
     deleteOk: '已删除',
 } as const;
 
+import { formatPlaceholders } from '../../core/text/Placeholder';
+
 /** 富文本占位替换（`{0}` / `{1}` …）；同一占位出现多次要全部替换。 */
 export function formatText(template: string, ...args: (string | number)[]): string {
-    return template.replace(/\{(\d+)\}/g, (_placeholder, index) => {
-        const value = args[Number(index)];
-        return value === undefined ? '' : String(value);
-    });
+    return formatPlaceholders(template, args, { missing: 'empty', nullish: 'string' });
 }
 
 /** 频道名；越界返回空串，不抛。 */

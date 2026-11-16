@@ -5,6 +5,9 @@
  * 绿色光圈与蓝色圆环各 0.3s。曲线独立成纯函数，视图只负责写入节点。
  */
 
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
+
 /** 按压回弹总时长（秒，规格 0.18）。 */
 export const TERRITORY_TAP_PRESS_SECONDS = 0.18;
 /** 按压回弹的三个关键倍率：先压到 94%，再弹到 102%，最后落回 100%。 */
@@ -23,16 +26,6 @@ export const TERRITORY_TAP_RING_FROM = 0.4;
 export const TERRITORY_TAP_RING_TO = 1.4;
 /** 蓝色圆环的基准半径（像素）。 */
 export const TERRITORY_TAP_RING_RADIUS = 26;
-
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
-}
-
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
-}
 
 /**
  * 按压缩放倍率；`elapsed` 超出时长返回 `null`（调用方复位成 1）。

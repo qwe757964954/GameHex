@@ -5,6 +5,8 @@
  * 保持后在地图移交前复位，避免带着放大的 content 计算滚动边界。
  */
 
+import { easeOutCubic } from '../../../core/math/Easing';
+
 /** 过场总时长（秒），页面延迟跳战斗也用它。 */
 export const TERRITORY_BATTLE_APPROACH_SECONDS = 1.2;
 /** 推到位用时（秒）。 */
@@ -24,11 +26,6 @@ export interface ITerritoryBattleApproachFx {
     readonly focus: number;
     /** 过场是否已播完。 */
     readonly done: boolean;
-}
-
-function easeOutCubic(p: number): number {
-    const inv = 1 - p;
-    return 1 - inv * inv * inv;
 }
 
 function easeInQuad(p: number): number {

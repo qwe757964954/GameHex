@@ -1,3 +1,5 @@
+import type { IRewardAmount } from '../../core/types/Reward';
+import { ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 /**
  * 联盟主页入口与配置表归一化纯函数，不 import cc。
  * 六个入口按 LEAGUE_ENTRANCES 顺序接事件；landed 表示面板是否已落地。
@@ -1345,7 +1347,7 @@ export const LEAGUE_UNION_COIN_RES_ID = 11;
 export const LEAGUE_UNION_CONTRI_RES_ID = 13;
 
 /** `roleProperty` 分表名（`assets/remoteRef/roleProperty.json`，货币 / 属性类资源的图标与字段名）。 */
-export const LEAGUE_PROPERTY_TABLE = 'roleProperty';
+export const LEAGUE_PROPERTY_TABLE = CORE_ROLE_PROPERTY_TABLE;
 
 /** 道具表（`item`，奖励图标「直通 `resources/` 路径」的那一支）。 */
 export const LEAGUE_ITEM_TABLE = 'item';
@@ -1539,10 +1541,7 @@ export function leagueCreateBannerIndexOf(selectedIndex: number): number {
 // P4 公用：奖励条目 + `gameConfig` 的 P4 键
 
 /** 一条奖励（`unionShop.rewards[]` / `unionDiscount.rewards[]` 的单元）。 */
-export interface ILeagueReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type ILeagueReward = IRewardAmount;
 
 /**
  * 解析一条奖励数组。丢弃 `resId` 或 `number` 解析不出整数的脏项。

@@ -11,3 +11,6 @@ export interface IResGoodsInfo {
     readonly icon: string;
     readonly iconIsPath: boolean;
 }
+
+/** 方案中的历史命名；与 IResGoodsInfo 同形。 */
+export type IRewardGoodsInfo = IResGoodsInfo;

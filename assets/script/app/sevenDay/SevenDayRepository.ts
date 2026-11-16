@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 七日狂欢的数据端口 —— **表 + 服务器状态 + 网络请求** 三合一的 Repository。
  *
@@ -70,7 +71,7 @@ export interface ISevenDaySnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type SevenDayRequestResult = 'ok' | 'offline' | 'failed';
+export type SevenDayRequestResult = INetRequestStatus;
 
 export interface ISevenDayRepository {
     /** 读表 + 读内存状态，组装一次快照；**不发请求**。 */

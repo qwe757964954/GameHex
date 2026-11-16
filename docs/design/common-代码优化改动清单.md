@@ -1,5 +1,7 @@
 # app/common 代码优化改动清单
 
+> 状态：改动记录（2026-11）。记录本轮已执行改动与净减行数，供追溯；当前代码为准，不作为待办。
+
 范围：`assets/script/app/common`（16 个 `.ts`）。目标：去 AI 生成痕迹、删冗余、按项目规范统一命名/格式/注释/结构；不改功能逻辑。
 
 结论先行：改动 14 个文件，`SpriteFrameCache.ts` 与 `RewardItemEvents.ts` 复核后保持原样；净减约 488 行（+477 / −965），其中绝大多数是注释与重复防御。另同步修正 `tests/common-tips-double-confirm.test.ts` 第 34 行的接口名正则（仅名字，断言强度未变）。

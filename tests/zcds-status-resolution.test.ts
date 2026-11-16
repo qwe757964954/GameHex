@@ -64,6 +64,23 @@ test('状态到期当拍仍结算最后一次周期伤害，随后移除状态�
     assert.deepEqual(events, ['damage:10']);
 });
 
+test('状态为空且快照已存在时，结算步不重复导出快照', () => {
+    const { state, statusSystem, context, resolution } = setup([]);
+    state.statusEffects = { nextUid: 1, units: [] };
+    const original = statusSystem.exportSnapshot.bind(statusSystem);
+    let exports = 0;
+    statusSystem.exportSnapshot = () => {
+        exports += 1;
+        return original();
+    };
+    try {
+        resolution.tick(state, 1, context);
+        assert.equal(exports, 0, '无状态变化时不应重写快照');
+    } finally {
+        statusSystem.exportSnapshot = original;
+    }
+});
+
 test('周期治疗只呈现实际回复量，状态过期后按生命比例恢复上限', () => {
     const target = unit(2, 'player', 0, 90);
     target.maxHp = 200;

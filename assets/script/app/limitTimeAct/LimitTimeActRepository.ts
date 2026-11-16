@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 「限时活动」的数据端口 —— **后台活动缓存 + 服务端下发配置 + 网络请求** 三合一。
  *
@@ -47,7 +48,7 @@ import {
 } from './RequestLimitTimeActMsg';
 
 /** 请求结果：三态（对齐 MonthCardGift 的口径）。 */
-export type LimitTimeRequestResult = 'ok' | 'offline' | 'failed';
+export type LimitTimeRequestResult = INetRequestStatus;
 
 export interface ILimitTimeActRepository {
     /**

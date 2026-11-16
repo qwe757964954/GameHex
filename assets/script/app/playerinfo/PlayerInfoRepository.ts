@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 个人信息五弹窗 + 设置面板的**数据端口**。
  *
@@ -40,7 +41,7 @@ import {
     RequestRoleChangeName,
     RequestRoleInfoView,
 } from '../generated/requestMsg/RequestRoleMsg';
-import { RESOURCE_ICON_ART_ROOT } from '../activity/LayerActivityArt';
+import { RESOURCE_ICON_ART_ROOT } from '../ArtPaths';
 import { equipPartOf, normalizeEquipRows } from '../role/RoleTable';
 import type { IEquipRow } from '../role/RoleTable';
 import {
@@ -101,7 +102,7 @@ export interface IHeadEntry {
 }
 
 /** 写请求结果：三态。 */
-export type PlayerInfoRequestResult = 'ok' | 'offline' | 'failed';
+export type PlayerInfoRequestResult = INetRequestStatus;
 
 /** 读请求结果（他人信息需要回包体）。 */
 export interface IOtherInfoResult {

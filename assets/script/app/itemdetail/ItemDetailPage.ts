@@ -1,3 +1,4 @@
+import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform, Widget } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -204,14 +205,8 @@ export class ItemDetailPage extends PopupBase {
      * 那种节点绑 `CLICK` 是死按钮；而 `<component>` 形态迁过来带 `cc.Button`，
      * 绑 `TOUCH_END` 又会绕过 `interactable`。所以按节点上有没有 `cc.Button` 分流。
      */
-    private bindButton(node: Node | null, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
+    private bindButton(node: Node | null | undefined, handler: () => void): void {
+        bindButtonCompat(node, handler, this);
     }
 
     /** 无条件写 `active`，避免复用实例时残留上一件物品的显隐。 */

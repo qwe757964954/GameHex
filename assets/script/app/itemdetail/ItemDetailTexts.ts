@@ -46,14 +46,12 @@ export const ITEM_DETAIL_TEXTS = {
     infoQualityLine: '品质：{0}',
 } as const;
 
+import { formatPlaceholders } from '../../core/text/Placeholder';
+
 /**
  * 占位符格式化（`{0}` / `{1}` …），只支持顺序替换。
- * 与 `CelebrationTexts.formatText` 同款 —— 别引 `StringUtil`，那会把 `cc` 拉进零依赖层。
+ * 缺参保留、null 转字符串的差异由 `core/text/Placeholder` 统一。
  */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
-    let out = template;
-    for (let index = 0; index < args.length; index += 1) {
-        out = out.split(`{${index}}`).join(String(args[index]));
-    }
-    return out;
+    return formatPlaceholders(template, args, { missing: 'keep', nullish: 'string' });
 }

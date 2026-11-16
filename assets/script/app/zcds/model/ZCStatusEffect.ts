@@ -273,6 +273,11 @@ export class ZCStatusSystem {
     /** unitId（ZCUnitId 字符串）→ 该单位的全部状态实例（按施加顺序）。*/
     private readonly instances = new Map<string, ZCStatusInstance[]>();
     private nextUid = 1;
+    /** 状态实例或剩余时间发生变化后置位；快照读取方在取用时才重新物化。*/
+    private dirty = false;
+    /** 属性版本：只有层数/实例变化才自增，剩余时间变化不影响属性。*/
+    private readonly revisions = new Map<string, number>();
+    private readonly statModsCache = new Map<string, { revision: number; mods: ZCStatusStatMods; count: number }>();
 
     
 
@@ -299,6 +304,17 @@ export class ZCStatusSystem {
 
     // ---- 实例管理 ----
 
+    /** 属性变更版本；剩余时间刷新不调用，避免无意义的 effectiveDefinition 失效。*/
+    private bump(unitId: string): void {
+        this.revisions.set(unitId, this.revisionOf(unitId) + 1);
+        this.statModsCache.delete(unitId);
+    }
+
+    private forget(unitId: string): void {
+        this.revisions.delete(unitId);
+        this.statModsCache.delete(unitId);
+    }
+
     apply(unitId: string, defId: string, options: ZCStatusApplyOptions = {}): ZCStatusApplyResult {
         const def = this.defs.get(defId);
         if (!def) return { applied: false, reason: 'unknown-def' };
@@ -312,6 +328,7 @@ export class ZCStatusSystem {
             const maxStacks = options.maxStacks ?? def.maxStacks ?? DEFAULT_MAX_STACKS;
             const nextStacks = Math.min(maxStacks, existing.stacks + addStacks);
             if (nextStacks <= 0) return { applied: false, reason: 'max-stacks' };
+            const previousStacks = existing.stacks;
             existing.stacks = nextStacks;
             const refreshPolicy = def.refreshPolicy ?? (def.refreshOnReapply === false ? 'keep' : 'refresh');
             const durationSeconds = options.durationSeconds ?? def.durationSeconds;
@@ -331,6 +348,8 @@ export class ZCStatusSystem {
                 existing.remainingSeconds = Math.max(...timers);
             }
             existing.appliedAt = at;
+            this.dirty = true;
+            if (existing.stacks !== previousStacks) this.bump(unitId);
             return { applied: true };
         }
 
@@ -349,6 +368,8 @@ export class ZCStatusSystem {
                 : undefined,
         });
         this.instances.set(unitId, current);
+        this.bump(unitId);
+        this.dirty = true;
         return { applied: true };
     }
 
@@ -360,18 +381,27 @@ export class ZCStatusSystem {
         if (next.length === current.length) return false;
         if (next.length) this.instances.set(unitId, next);
         else this.instances.delete(unitId);
+        this.bump(unitId);
+        this.dirty = true;
         return true;
     }
 
-    removeAll(unitId: string): void {
+    /** 移除单位上的全部状态；返回是否实际删除。*/
+    removeAll(unitId: string): boolean {
+        if (!this.instances.has(unitId)) return false;
         this.instances.delete(unitId);
+        this.forget(unitId);
+        this.dirty = true;
+        return true;
     }
 
     /** 推进过期结算：所有有限时长状态按 dt 衰减，到期移除。*/
     tick(unitIds: readonly string[], dt: number): void {
+        let changed = false;
         for (const unitId of unitIds) {
             const current = this.instances.get(unitId);
             if (!current) continue;
+            let statsChanged = false;
             // 双指针原地压缩：不建收集数组、不建链式中间数组与闭包，也不把剩余层数摊成临时参数列表。
             // 快照由 cloneStatusInstance 深拷贝数组，复用同一个数组引用不会串到历史快照。
             let write = 0;
@@ -388,18 +418,31 @@ export class ZCStatusSystem {
                         if (remaining > maxRemaining) maxRemaining = remaining;
                     }
                     timers.length = timerWrite;
+                    if (inst.stacks !== timerWrite) statsChanged = true;
                     inst.stacks = timerWrite;
+                    changed = true;
                     if (timerWrite === 0) continue;
                     inst.remainingSeconds = maxRemaining;
                 } else if (inst.remainingSeconds != null) {
                     inst.remainingSeconds -= dt;
+                    changed = true;
                     if (inst.remainingSeconds <= 0) continue;
                 }
                 current[write++] = inst;
             }
+            if (write !== current.length) {
+                changed = true;
+                statsChanged = true;
+            }
             current.length = write;
-            if (write === 0) this.instances.delete(unitId);
+            if (write === 0) {
+                this.instances.delete(unitId);
+                changed = true;
+                statsChanged = true;
+            }
+            if (statsChanged) this.bump(unitId);
         }
+        if (changed) this.dirty = true;
     }
 
     /**
@@ -409,6 +452,7 @@ export class ZCStatusSystem {
     */
     collectPeriodicEvents(now: number, events: ZCPeriodicEvent[] = []): ZCPeriodicEvent[] {
         events.length = 0;
+        let changed = false;
         for (const [unitId, instances] of this.instances) {
             for (const inst of instances) {
                 const def = this.defs.get(inst.defId);
@@ -446,10 +490,12 @@ export class ZCStatusSystem {
                         });
                     }
                     inst.lastFiredAt = nextAt;
+                    changed = true;
                     nextAt += intervalSeconds;
                 }
             }
         }
+        if (changed) this.dirty = true;
         return events;
     }
 
@@ -465,6 +511,8 @@ export class ZCStatusSystem {
             uid: this.nextUid++,
             sourceUnitId: instance.sourceUnitId === sourceId ? targetId : instance.sourceUnitId,
         })));
+        this.bump(targetId);
+        this.dirty = true;
     }
 
     stacksOf(unitId: string, defId: string): number {
@@ -475,7 +523,11 @@ export class ZCStatusSystem {
 
     /** 聚合单位全部状态的数值修正（flat 相加、pct 相加；返回 0/缺省 的键不写出）。*/
     statModsOf(unitId: string): ZCStatusStatMods {
+        const revision = this.revisionOf(unitId);
+        const cached = this.statModsCache.get(unitId);
+        if (cached && cached.revision === revision) return cached.mods;
         const result: ZCStatusStatMods = {};
+        let count = 0;
         for (const inst of this.instancesOf(unitId)) {
             const def = this.defs.get(inst.defId);
             if (!def?.statMods) continue;
@@ -485,9 +537,17 @@ export class ZCStatusSystem {
                 if (value == null || value === 0) continue;
                 const scaled = value * inst.stacks;
                 result[key] = (result[key] ?? 0) + scaled;
+                count += 1;
             }
         }
+        this.statModsCache.set(unitId, { revision, mods: result, count });
         return result;
+    }
+
+    /** 与 `statModsOf` 共用缓存；调用方只判断有无修正时用它，避免 `Object.keys`。*/
+    statModsCountOf(unitId: string): number {
+        this.statModsOf(unitId);
+        return this.statModsCache.get(unitId)?.count ?? 0;
     }
 
     /**
@@ -540,21 +600,41 @@ export class ZCStatusSystem {
         return out;
     }
 
+    /** 是否存在尚未写入 state.statusEffects 的状态变更；exportSnapshot 后清零。*/
+    isDirty(): boolean {
+        return this.dirty;
+    }
+
+    /** 单位属性版本；层数/实例变化时自增，剩余时间刷新保持不变。*/
+    revisionOf(unitId: string): number {
+        return this.revisions.get(unitId) ?? 0;
+    }
+
     exportSnapshot(): ZCStatusSystemSnapshot {
-        return {
-            nextUid: this.nextUid,
-            units: Array.from(this.instances.entries())
-                .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
-                .map(([unitId, instances]) => ({
-                    unitId,
-                    instances: instances.map(cloneStatusInstance),
-                })),
-        };
+        const rows = Array.from(this.instances.entries());
+        rows.sort((left, right) => {
+            const a = Number(left[0]);
+            const b = Number(right[0]);
+            return Number.isFinite(a) && Number.isFinite(b)
+                ? a - b
+                : left[0].localeCompare(right[0], undefined, { numeric: true });
+        });
+        const units: Array<{ unitId: string; instances: ZCStatusInstance[] }> = [];
+        for (const [unitId, instances] of rows) {
+            const cloned: ZCStatusInstance[] = [];
+            for (const instance of instances) cloned.push(cloneStatusInstance(instance));
+            units.push({ unitId, instances: cloned });
+        }
+        this.dirty = false;
+        return { nextUid: this.nextUid, units };
     }
 
     restore(snapshot?: ZCStatusSystemSnapshot | null): void {
         this.instances.clear();
         this.nextUid = 1;
+        this.revisions.clear();
+        this.statModsCache.clear();
+        this.dirty = true;
         if (!snapshot) return;
         const errors = ZCStatusSystem.snapshotErrors(snapshot);
         if (errors.length) throw new Error(`[ZCStatusSystem] 无效状态快照：${errors.join(', ')}`);

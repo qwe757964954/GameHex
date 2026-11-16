@@ -271,6 +271,8 @@ export function loadViews() {
             './EventBus': 'assets/script/framework/event/EventBus.ts',
             './EventMgr': 'assets/script/framework/event/EventMgr.ts',
             './ZCNeutralBurst': 'assets/script/app/zcds/model/ZCNeutralBurst.ts',
+            // P2-6 把 sin 噪声下沉到 core 后，view/model 里的相对路径别名。
+            '../math/Scalar': 'assets/script/core/math/Scalar.ts',
         };
         const relative = name.replace(/^\.\//, '');
         const viewPath = join('assets/script/app/zcds/view', `${relative}.ts`);

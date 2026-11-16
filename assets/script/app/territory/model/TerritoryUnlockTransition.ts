@@ -5,6 +5,9 @@
  * 使用缩放而非透明度，保留按文本宽度算好的排版，也不与建筑的生成透明度语义冲突。
  */
 
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
+
 /** 两段动画总时长（秒）。 */
 export const TERRITORY_UNLOCK_TRANSITION_SECONDS = 1;
 
@@ -52,17 +55,7 @@ export function territoryUnlockPriceScale(elapsedSeconds: number): number {
     return TERRITORY_UNLOCK_PRICE_PEAK + (1 - TERRITORY_UNLOCK_PRICE_PEAK) * easeOutCubic(k);
 }
 
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
-}
-
 function easeInCubic(p: number): number {
     const x = clamp01(p);
     return x * x * x;
-}
-
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
 }

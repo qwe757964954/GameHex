@@ -1,5 +1,7 @@
 # 策划地图编辑器 · 大地图（BigMap）方案
 
+> 状态：主体已落地。编辑器在 `tools/map-editor/bigmap.html`，布局读写与校验见 [`bigmap-布局格式.md`](bigmap-布局格式.md)，线上地图为 `assets/resources/config/bigmap-maps/`。本文保留职责边界、决策依据与未采用的备选做法；工具行为以当前代码和 `bigmap-layout` / `bigmap-format` 测试为准。
+
 > 需求源：《植物大地图系统》（`docs/bigmap-系统落地方案.md` §5.3、§7）
 > 现有编辑器：`tools/map-editor/`（关卡 `index.html`+`app.js`｜领地 `territory.html`+`territory-app.js` 994 行｜保存服务 `server.mjs` 582 行｜格式校验 `territory_format.py` 319 行｜发布 `copy_territory_maps.py` 76 行）
 
@@ -220,7 +222,7 @@ tools\map-editor\copy-bigmap-maps.bat --id world_01     # 策划双击用
 
 | 期 | 内容 | 判据 | 依赖 |
 | --- | --- | --- | --- |
-| **M1 只读闭环**（先做，2~3 天） | 定格式；`buildBigMapWorldFromLayout()`；种子世界→导出布局 JSON；布局→重建世界；对拍测试 | `tests/bigmap-layout.test.ts` 全绿；**现有 49 条测试一条不改** | 无（纯客户端 0 服务端依赖） |
+| **M1 只读闭环**（先做，2~3 天） | 定格式；`buildBigMapWorldFromLayout()`；种子世界→导出布局 JSON；布局→重建世界；对拍测试 | `bigmap-layout.test.ts` 全绿；**现有 49 条测试一条不改** | 无（纯客户端 0 服务端依赖） |
 | **M2 可编辑** | `bigmap.html`+`bigmap-app.js`：城池落位/多格形状/势力范围刷/野怪/相邻推导/分块渲染/校验 | 手工摆完 74 座城，保存→发布→游戏内位置一致 | M1 |
 | **M3 策略层** | 出生区块+容量模拟+泊松盘预览、障碍、背景、截图导出、CSV 清单 | 策划独立完成一张图不改代码 | M2 |
 | **M4 打通** | `copy_bigmap_maps.py` 三产物 + 对账 + `.bat`；服务端读同一份布局 | 服务端与客户端读同一份 JSON，坐标逐格一致 | M2 |

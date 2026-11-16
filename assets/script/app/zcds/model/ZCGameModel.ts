@@ -231,6 +231,17 @@ export interface ZCDefenceWaveProgress {
     currentWaveIsBoss: boolean;
 }
 
+interface ZCEffectiveDefinitionCacheEntry {
+    readonly revision: number;
+    readonly inherited: ZCUnitState['inheritedStats'];
+    readonly gateSize: ZCUnitState['gateSize'];
+    readonly gateScale: ZCUnitState['gateScale'];
+    readonly gateMove: ZCUnitState['gateMoveMultiplier'];
+    readonly gateAttackSpeed: ZCUnitState['gateAttackSpeedMultiplier'];
+    readonly gateDamage: ZCUnitState['gateDamageMultiplier'];
+    readonly def: ZCUnitDefinition;
+}
+
 export class ZCGameModel {
     private readonly neutralFeatures: ZCNeutralFeatureSystem;
     private state: ZCSnapshot;
@@ -259,6 +270,8 @@ export class ZCGameModel {
     private readonly legacyAttributes: Record<ZCOwner, ReadonlyMap<string, Readonly<Record<string, unknown>>>>;
     private readonly units = new ZCUnitRegistry();
     private readonly statusSystem = new ZCStatusSystem();
+    /** 按单位状态版本 + 门/继承字段缓存 effectiveDefinition，避免每次候选/攻击重算。*/
+    private readonly effectiveCache = new Map<number, ZCEffectiveDefinitionCacheEntry>();
     private readonly projectileSystem = new ZCProjectileSystem();
     private readonly statusResolutionSystem = new ZCStatusResolutionSystem();
     private readonly projectileContext: ZCProjectileContext;
@@ -523,6 +536,7 @@ export class ZCGameModel {
             unitPosition: this.services.unitPosition,
             hexPosition: (id) => this.hexCenter(id),
             preferUnitTargets: (unit) => !!this.pveDefence && unit.owner === ZCOwner.Player,
+            baseDefinition: (id) => this.unitDefinition(id),
             effectiveDefinition: this.services.effectiveDefinition,
             hasExposedWall: this.services.hasExposedWall,
         };
@@ -835,6 +849,7 @@ export class ZCGameModel {
         }
         this.registerDynamicSnapshotStatuses();
         this.statusSystem.restore(this.state.statusEffects);
+        this.effectiveCache.clear();
         this.state.statusEffects = this.statusSystem.exportSnapshot();
         for (const unit of this.state.units) this.units.register(unit);
         this.neutralFeatures.initialize(this.state);
@@ -1257,6 +1272,7 @@ export class ZCGameModel {
         this.state.aiClock = this.aiDevelopIntervalSeconds;
         this.neutralFeatures.initialize(this.state);
         this.statusSystem.restore(this.state.statusEffects);
+        this.effectiveCache.clear();
         this.state.statusEffects = this.statusSystem.exportSnapshot();
         this.tileStatesDirty = true;
         this.units.clear();
@@ -2040,6 +2056,18 @@ export class ZCGameModel {
     }
 
     private effectiveUnitDefinition(unit: ZCUnitState): ZCUnitDefinition {
+        const revision = this.statusSystem.revisionOf(String(unit.id));
+        const cached = this.effectiveCache.get(unit.id);
+        if (cached
+            && cached.revision === revision
+            && cached.gateSize === unit.gateSize
+            && cached.gateScale === unit.gateScale
+            && cached.gateMove === unit.gateMoveMultiplier
+            && cached.gateAttackSpeed === unit.gateAttackSpeedMultiplier
+            && cached.gateDamage === unit.gateDamageMultiplier
+            && ZCGameModel.sameInheritedStats(cached.inherited, unit.inheritedStats)) {
+            return cached.def;
+        }
         const definition = this.effectiveUnitDefinitionFor(unit.owner, unit.unitId);
         const original = unit.inheritedStats ? { ...definition, ...unit.inheritedStats } : definition;
         const base = unit.gateSize ? {
@@ -2049,18 +2077,47 @@ export class ZCGameModel {
             attack: original.attack * (unit.gateDamageMultiplier ?? 1),
             prefabSize: original.prefabSize * (unit.gateScale ?? 1),
         } : original;
-        const mods = this.statusSystem.statModsOf(String(unit.id));
-        if (!Object.keys(mods).length) return base;
-        const attackDuration = base.attackDuration;
-        return {
-            ...base,
-            attack: Math.max(0, (base.attack + (mods.attackFlat ?? 0)) * Math.max(0, 1 + (mods.attackPct ?? 0) / 100)),
-            maxHp: Math.max(1, base.maxHp * Math.max(0.01, 1 + (mods.maxHpPct ?? 0) / 100)),
-            moveSpeed: Math.max(0, base.moveSpeed * Math.max(0, 1 + (mods.moveSpeedPct ?? 0) / 100)),
-            attackRange: Math.max(0, base.attackRange * Math.max(0, 1 + (mods.attackRangePct ?? 0) / 100)),
-            attackInterval: Math.max(0.01, base.attackInterval * Math.max(0.01, 1 - (mods.attackIntervalPct ?? 0) / 100)),
-            attackHitTime: Math.min(attackDuration, base.attackHitTime),
-        };
+        const modCount = this.statusSystem.statModsCountOf(String(unit.id));
+        let def: ZCUnitDefinition;
+        if (!modCount) {
+            def = base;
+        } else {
+            const mods = this.statusSystem.statModsOf(String(unit.id));
+            const attackDuration = base.attackDuration;
+            def = {
+                ...base,
+                attack: Math.max(0, (base.attack + (mods.attackFlat ?? 0)) * Math.max(0, 1 + (mods.attackPct ?? 0) / 100)),
+                maxHp: Math.max(1, base.maxHp * Math.max(0.01, 1 + (mods.maxHpPct ?? 0) / 100)),
+                moveSpeed: Math.max(0, base.moveSpeed * Math.max(0, 1 + (mods.moveSpeedPct ?? 0) / 100)),
+                attackRange: Math.max(0, base.attackRange * Math.max(0, 1 + (mods.attackRangePct ?? 0) / 100)),
+                attackInterval: Math.max(0.01, base.attackInterval * Math.max(0.01, 1 - (mods.attackIntervalPct ?? 0) / 100)),
+                attackHitTime: Math.min(attackDuration, base.attackHitTime),
+            };
+        }
+        this.effectiveCache.set(unit.id, {
+            revision,
+            inherited: unit.inheritedStats,
+            gateSize: unit.gateSize,
+            gateScale: unit.gateScale,
+            gateMove: unit.gateMoveMultiplier,
+            gateAttackSpeed: unit.gateAttackSpeedMultiplier,
+            gateDamage: unit.gateDamageMultiplier,
+            def,
+        });
+        return def;
+    }
+
+    private static sameInheritedStats(
+        left: ZCUnitState['inheritedStats'],
+        right: ZCUnitState['inheritedStats'],
+    ): boolean {
+        if (left === right) return true;
+        if (!left || !right) return false;
+        return left.attack === right.attack
+            && left.moveSpeed === right.moveSpeed
+            && left.attackInterval === right.attackInterval
+            && left.attackRange === right.attackRange
+            && left.bodyRadius === right.bodyRadius;
     }
 
     private effectiveUnitDefinitionFor(owner: ZCOwner, id: string): ZCUnitDefinition {
@@ -2075,13 +2132,16 @@ export class ZCGameModel {
             if (unit.battleState === 'dead' && unit.deathRemoveAt <= this.state.elapsedSeconds) {
                 this.units.remove(unit);
                 this.statusSystem.removeAll(String(unit.id));
+                this.effectiveCache.delete(unit.id);
                 this.unitTargeting.removeUnit(unit.id);
             } else {
                 this.state.units[write++] = unit;
             }
         }
         this.state.units.length = write;
-        this.state.statusEffects = this.statusSystem.exportSnapshot();
+        if (this.statusSystem.isDirty() || this.state.statusEffects == null) {
+            this.state.statusEffects = this.statusSystem.exportSnapshot();
+        }
     }
 
     private moveUnitToHex(unit: ZCUnitState, hexId: number): void {

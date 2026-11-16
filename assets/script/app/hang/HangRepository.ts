@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 挂机数据端口：表、CmdRole 缓存和网络请求。
  * 数据每次从 CacheMgr / protoCache 现读，不另存快照；没有「拉取挂机数据」的请求。
@@ -45,9 +46,9 @@ export {
     sweepTimesOf,
     sweepUsedOf,
 } from './HangTable';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
-import { resolveRewardIconRef } from '../activity/LayerActivityArt';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
+import { resolveRewardIconRef } from '../common/RewardIcon';
 import { RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
 import { HJ_TEXTS, hjFormat } from './HangTexts';
 import { RequestBattleSweep, RequestHangGetReward } from './RequestHangMsg';
@@ -170,7 +171,7 @@ export interface IHangSnapshot extends IHjSnapshotView {
  * 与战令 / 礼包同口径：`offline` = 未连服务器（**早退，不发请求**）、
  * `failed` = 发了但超时 / 异常 / 没回包。
  */
-export type HangRequestResult = 'ok' | 'offline' | 'failed';
+export type HangRequestResult = INetRequestStatus;
 
 export interface IHangRepository {
     /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
@@ -632,7 +633,7 @@ export function goodsOf(snapshot: IHangSnapshot, resId: number): IActivityGoodsI
 /**
  * 奖励图标的两支分流解析；解析不出返回 `null`（奖励格降级成只画品质框）。
  *
- * **不要**自己判 `item` / `roleProperty` —— 走 `LayerActivityArt.resolveRewardIconRef`
+ * **不要**自己判 `item` / `roleProperty` —— 走 `common/RewardIcon.resolveRewardIconRef`
  * （本模块自己那份转发在 `HangArt.hjResolveRewardIconRef`）。
  */
 export function rewardIconRefOf(snapshot: IHangSnapshot, resId: number): { root: string; name: string } | null {

@@ -13,6 +13,8 @@
  *           + `自定义组件/组件_活动_进度宝箱.xml` + `组件_活动_宝箱item.xml`（进度宝箱）
  */
 
+import { fguiTopLeftToCocos } from '../../core/layout/FguiLayout';
+
 export const ACTIVITY_CANVAS_WIDTH = 720;
 export const ACTIVITY_CANVAS_HEIGHT = 1280;
 
@@ -21,20 +23,8 @@ export interface ILayoutPoint {
     readonly y: number;
 }
 
-/** FGUI 左上角坐标 → Cocos 节点中心坐标。 */
-export function fguiTopLeftToCocos(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    parentW: number = ACTIVITY_CANVAS_WIDTH,
-    parentH: number = ACTIVITY_CANVAS_HEIGHT,
-): ILayoutPoint {
-    return {
-        x: x + width / 2 - parentW / 2,
-        y: parentH / 2 - y - height / 2,
-    };
-}
+/** FGUI 左上角坐标 → Cocos 节点中心坐标；实现归位 `core/layout/FguiLayout`。 */
+export { fguiTopLeftToCocos };
 
 // ============================================================
 // 周活跃进度条（父容器 = `ProgressStrip`，606×92，画布坐标 (36, 279)）

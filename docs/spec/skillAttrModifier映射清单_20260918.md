@@ -1,5 +1,7 @@
 # skillAttrModifier 未注册 type 映射清单
 
+> 状态：2026-09-18 盘点快照。用于追溯当时的表数据与未注册 type；仍被 `zcds-legacy-skill-runtime.md` 等文档引用。配表或引擎变化后先复核，不把本文当当前配表真源。
+
 - 日期：2026-09-18
 - 工程：D:\City1001\Demo3.8（Cocos Creator 3.8.8）
 - 范围：`assets/script/app/zcds/model/ZCModifierEngine.ts`（数值修改器引擎）+ `assets/remoteRef/skillAttrModifier.json`（表数据）

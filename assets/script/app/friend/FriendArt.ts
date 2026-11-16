@@ -19,8 +19,15 @@
  * 30×30 的图当 `_type = 1` 且边框为 0 用着，给它配边框会顺手改掉登录界面。
  */
 
+import {
+    COMMON_ART_ROOT,
+    FRIEND_ART_ROOT as ART_FRIEND_ROOT,
+    LOGIN_ART_ROOT,
+    SEVEN_DAY_ART_ROOT,
+} from '../ArtPaths';
+
 /** 好友自有图目录（`loadArt(name, FRIEND_ART_ROOT)` 用；不带 `resources/` 前缀）。 */
-export const FRIEND_ART_ROOT = 'image/friend';
+export const FRIEND_ART_ROOT = ART_FRIEND_ROOT;
 
 /** 静态图名（`FRIEND_ART_ROOT` 下）。 */
 export const FRIEND_ART_ROW_BG = 'fd_row_bg';
@@ -40,11 +47,11 @@ export const FRIEND_ART_CHECK_BG = 'fd_check_bg';
 export const FRIEND_ART_INPUT_BG = 'fd_input_bg';
 
 /** 复用新端现有路径的 3 张（各自所在的目录 + 图名）。 */
-export const FRIEND_SHARED_CLOSE_ROOT = 'image/login';
+export const FRIEND_SHARED_CLOSE_ROOT = LOGIN_ART_ROOT;
 export const FRIEND_SHARED_CLOSE_NAME = '公用_按钮_关闭01';
-export const FRIEND_SHARED_CHECK_ROOT = 'image/sevenDay';
+export const FRIEND_SHARED_CHECK_ROOT = SEVEN_DAY_ART_ROOT;
 export const FRIEND_SHARED_CHECK_NAME = 'sd_check';
-export const FRIEND_SHARED_RED_DOT_ROOT = 'image/common';
+export const FRIEND_SHARED_RED_DOT_ROOT = COMMON_ART_ROOT;
 export const FRIEND_SHARED_RED_DOT_NAME = 'cm_red_dot';
 
 /**

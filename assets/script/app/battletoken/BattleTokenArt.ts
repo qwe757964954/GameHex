@@ -207,5 +207,5 @@ export function btSpriteType(artName: string): number {
  * ⚠️ 战令的奖励与消耗**几乎全是 `roleProperty` 档**（银币 7 / 体力 9 / 金币 10），
  * 只走 `item` 那一支会让奖励格**只剩品质框、不报错**。
  */
-export { resolveRewardIconRef } from '../activity/LayerActivityArt';
-export type { IActivityGoodsInfo as IBattleTokenGoodsInfo } from '../activity/LayerActivityTable';
+export { resolveRewardIconRef } from '../common/RewardIcon';
+export type { IResGoodsInfo as IBattleTokenGoodsInfo } from '../common/ResTypes';

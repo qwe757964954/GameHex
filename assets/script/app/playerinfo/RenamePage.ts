@@ -1,3 +1,4 @@
+import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -186,13 +187,7 @@ export class RenamePage extends PopupBase {
      * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
      */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
+        bindButtonCompat(node, handler, this);
     }
 
     // ============================================================

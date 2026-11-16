@@ -3,6 +3,8 @@
  */
 
 import { RequestMsg } from '../../framework/net/RequestMsg';
+import { RequestShopBuy } from '../net/RequestShopMsg';
+import { RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
 
 // 查询（4 条全量拉 + 1 条搜索）
 
@@ -138,11 +140,8 @@ export class RequestUnionBargain extends RequestMsg<CmdUnionBargainReqMsg, CmdUn
  * `cmdShopType` 是 **proto 枚举**（`CmdShopType`），不是老端的 `StoreType` ——
  * 两者数值重合（联盟都是 8），但类型不同，调用点请用 `LEAGUE_SHOP_TYPE_UNION`。
  */
-export class RequestShopBuy extends RequestMsg<CmdShopBuyReqMsg, CmdShopBuyRspMsg> {
-    getReqMsgProtoName(): ReqMsgProtoName {
-        return 'CmdShopBuyReqMsg';
-    }
-}
+/** 联盟商店购买复用通用商店协议；旧导出名保留。 */
+export { RequestShopBuy };
 
 /** 联盟商店在 `CmdShopType` / `CmdShop` 缓存里的档位号（老端 `StoreType.League = 8`）。 */
 export const LEAGUE_SHOP_TYPE_UNION = 8;
@@ -174,12 +173,8 @@ export class RequestUnionActSweep extends RequestMsg<CmdUnionActSweepReqMsg, Cmd
     }
 }
 
-/** 观看广告（协议本身属角色域 `CmdRoleWatchAdvertReqMsg`，老端放在联盟文件里，这里保持同位）。 */
-export class RequestRoleWatchAdvert extends RequestMsg<CmdRoleWatchAdvertReqMsg, CmdRoleWatchAdvertRspMsg> {
-    getReqMsgProtoName(): ReqMsgProtoName {
-        return 'CmdRoleWatchAdvertReqMsg';
-    }
-}
+/** 观看广告（协议本身属角色域）—— 保留旧导出名，实体归位 generated。 */
+export { RequestRoleWatchAdvert };
 
 // 联盟任务（P5）
 

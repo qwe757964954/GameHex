@@ -54,7 +54,7 @@ test('Targeting 系统独立计算射程与确定性 BFS 首步', () => {
 
 test('索敌复用坐标输出时保持原点、ID 平局、空中筛选和单位优先规则', () => {
     const makeUnit = (id: number, x: number, owner = 'enemy') => ({
-        id, freeX: x, freeY: 0, owner, hp: 100, battleState: 'idle', hatredUnitId: null,
+        id, unitId: String(id), freeX: x, freeY: 0, owner, hp: 100, battleState: 'idle', hatredUnitId: null,
     } as ZCUnitState);
     const source = makeUnit(1, 100, 'player');
     const candidates = [makeUnit(3, 120), makeUnit(2, 80), makeUnit(5, 100), makeUnit(4, 100, 'player')];
@@ -62,6 +62,7 @@ test('索敌复用坐标输出时保持原点、ID 平局、空中筛选和单�
     const wall = { id: 1, owner: 'enemy', wallHp: 100, hp: 100, building: 'none' } as ZCHexState;
     const context: ZCTargetingContext = {
         now: 1, units: candidates, hexes: [], unitById: () => hater,
+        baseDefinition: (id) => ({ canAttackAir: false, flying: id === '5' } as ZCUnitDefinition),
         effectiveDefinition: (unit) => ({ canAttackAir: false, flying: unit.id === 5 } as ZCUnitDefinition),
         unitPosition: (unit, result = { x: 0, y: 0 }) => { result.x = unit.freeX; result.y = unit.freeY; return result; },
         hexPosition: () => ({ x: 120, y: 0 }), hasExposedWall: () => true,

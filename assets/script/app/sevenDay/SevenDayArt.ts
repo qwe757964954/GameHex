@@ -3,7 +3,9 @@
  * item.icon 已是 resources 资源路径（icons/分类/文件名），直接解析。
  */
 
-export const SEVEN_DAY_ART_ROOT = 'image/sevenDay';
+import { SEVEN_DAY_ART_ROOT as ART_SEVEN_DAY_ROOT } from '../ArtPaths';
+
+export const SEVEN_DAY_ART_ROOT = ART_SEVEN_DAY_ROOT;
 
 /** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
 export {

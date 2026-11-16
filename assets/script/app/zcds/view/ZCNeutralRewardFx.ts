@@ -8,6 +8,7 @@ import {
 } from '../model/ZCBattlePresentationQueue';
 import { neutralResourceVisualOf, ZCNeutralResourceVisual } from '../model/ZCNeutralResourceGroup';
 import type { ZCNeutralReward } from '../model/ZCGameTypes';
+import { sinNoise01 as pseudoRandom } from '../../../core/math/DeterministicNoise';
 
 /**
  * 中立资源获取特效（2026-10-20 需求；2026-11-04 恢复金币飞行口径）。
@@ -138,10 +139,7 @@ export function artifactClaimBurstFrame(
 }
 
 /** 确定性的伪随机（[0,1)）：同一 (seed, salt) 每帧可复现，不依赖 `Math.random()`。*/
-function pseudoRandom(seed: number, salt: number): number {
-    const raw = Math.sin(seed * 12.9898 + salt * 78.233) * 43758.5453;
-    return raw - Math.floor(raw);
-}
+/** 确定性伪随机由 `core/math/DeterministicNoise.sinNoise01` 提供。 */
 
 /** 事件级种子 + 序号 → 该颗金币的起点抖动（px）。*/
 export function neutralRewardJitter(seed: number, index: number): { x: number; y: number } {

@@ -1,3 +1,5 @@
+import type { IRewardAmount } from '../../core/types/Reward';
+import { clamp01Finite } from '../../core/math/Scalar';
 /**
  * 「活动 → 每日任务」的数据口径 —— **纯逻辑，不 import `cc`，可在 Node 单测里直接跑**。
  *
@@ -31,8 +33,9 @@
  */
 
 import { toCount } from '../net/RequestGuard';
-import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { taskPhaseRank } from '../common/TaskOrder';
 import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../common/ResTypes';
+import { parseRewardAmounts } from '../../core/table/RewardRows';
 import type { IResGoodsInfo } from '../common/ResTypes';
 
 export { parseItemRows, parseRolePropertyRows, rewardGoodsOf };
@@ -46,10 +49,7 @@ export const ACTIVITY_STATE_FINISH = 1;
 export const ACTIVITY_STATE_REWARDED = 2;
 
 /** 一条奖励：`{ resId, number }`。 */
-export interface IActivityReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type IActivityReward = IRewardAmount;
 
 /** `dayChallengeActTask` 的一行（归一化后）。 */
 export interface IActivityTaskRow {
@@ -341,12 +341,7 @@ export function sortTasksForDisplay(
     tasks: readonly IActivityTaskRow[],
     state: IActivityServerState,
 ): IActivityTaskRow[] {
-    const rankOf = (task: IActivityTaskRow): number => {
-        const phase = taskPhaseOf(task, state);
-        if (phase === 'claimable') return 0;
-        if (phase === 'taken') return 2;
-        return 1;
-    };
+    const rankOf = (task: IActivityTaskRow): number => taskPhaseRank(taskPhaseOf(task, state));
     return (tasks ?? []).slice().sort((a, b) => rankOf(a) - rankOf(b) || a.order - b.order);
 }
 
@@ -388,19 +383,14 @@ export function lastBoxCost(rows: readonly IActivityProgressRow[]): number {
 /** 一个宝箱在进度条上的位置（`0..1`）。 */
 export function chestRatioOf(row: IActivityProgressRow, costMax: number): number {
     if (!(costMax > 0)) return 0;
-    return clamp01(row.cost / costMax);
+    return clamp01Finite(row.cost / costMax);
 }
 
 /** 进度条填充比例（`0..1`）：当前积分 / 最高档门槛。 */
 export function barRatioOf(state: IActivityServerState, rows: readonly IActivityProgressRow[]): number {
     const max = lastBoxCost(rows);
     if (!(max > 0)) return 0;
-    return clamp01(state.coin / max);
-}
-
-function clamp01(value: number): number {
-    if (!Number.isFinite(value) || value <= 0) return 0;
-    return value >= 1 ? 1 : value;
+    return clamp01Finite(state.coin / max);
 }
 
 // ============================================================

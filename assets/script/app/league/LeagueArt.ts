@@ -29,9 +29,16 @@
  * 这两个模块本身**不 import `cc`**（纯表/纯函数）⇒ 本文件仍保持引擎无关，单测可直连。
  */
 
-import { RESOURCE_ICON_ART_ROOT, resolveRewardIconRef } from '../activity/LayerActivityArt';
-import { rewardGoodsOf } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
+import {
+    COMMON_ART_ROOT,
+    LEAGUE_ART_ROOT as ART_LEAGUE_ROOT,
+    MAIN_ICON_ART_ROOT,
+    RESOURCE_ICON_ART_ROOT,
+    SEVEN_DAY_ART_ROOT,
+} from '../ArtPaths';
+import { resolveRewardIconRef } from '../common/RewardIcon';
+import { rewardGoodsOf } from '../common/ResTypes';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 // **只 import 类型**：`LeagueTable` 反向 import 本文件的 `LeagueButtonColor`，
 // 两边都是 `import type` ⇒ 编译后**双向都消失**，运行期没有环。
 // （若哪天改成 `import { … }` 取值，就真的成环了 —— esbuild/tsx 下未必立刻炸，
@@ -39,7 +46,7 @@ import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
 import type { LeagueTaskBoxState } from './LeagueTable';
 
 /** 联盟自有图目录（`loadArt(name, LEAGUE_ART_ROOT)` 用；不带 `resources/` 前缀）。 */
-export const LEAGUE_ART_ROOT = 'image/league';
+export const LEAGUE_ART_ROOT = ART_LEAGUE_ROOT;
 
 /** 整屏背景（FGUI `loader bg`，720×1742，刻意比 720×1280 的画布高，用来盖住长屏）。 */
 export const LEAGUE_ART_BG = 'lm_bg01';
@@ -116,7 +123,7 @@ export const LEAGUE_ART_PROGRESS_FILL = 'bar_bg_01_hong';
 // 底部三个页签的图标（在**主界面图标目录** `icons/main/`，已随主界面导入）
 
 /** 页签图标所在的资源目录（`loadArt(name, LEAGUE_TAB_ICON_ROOT)`）。 */
-export const LEAGUE_TAB_ICON_ROOT = 'icons/main';
+export const LEAGUE_TAB_ICON_ROOT = MAIN_ICON_ART_ROOT;
 
 /** 三个页签（FGUI `按钮_大厅页签` 的 `类型` controller：0=详情 / 1=动态 / 2=全服联盟）。 */
 export const LEAGUE_HALL_TAB_ARTS: readonly {
@@ -209,7 +216,7 @@ export function leagueBannerColorName(colorIndex: number): string {
  * 见 `ui/common/CommonTips.prefab`），所以这里**跨模块取图**，走 `loadCommonArt`
  * 而不是本模块的 `loadArt`。
  */
-export const LEAGUE_POPUP_ART_ROOT = 'image/common';
+export const LEAGUE_POPUP_ART_ROOT = COMMON_ART_ROOT;
 
 /**
  * 弹窗**真底板**（公用0 `panel_window_01_9gong.png`，394×307，九宫格 `129,128,123,36`）。
@@ -227,7 +234,7 @@ export const LEAGUE_POPUP_ART_ROOT = 'image/common';
 export const LEAGUE_ART_POPUP_BOARD = 'panel_window_01_9gong';
 
 /** 真底板所在的资源目录（`image/league`，不是 `image/common`）。 */
-export const LEAGUE_POPUP_BOARD_ROOT = 'image/league';
+export const LEAGUE_POPUP_BOARD_ROOT = LEAGUE_ART_ROOT;
 
 /** 弹窗标题条（公用 `title_01`，600×66）。 */
 export const LEAGUE_ART_POPUP_TITLE_BG = 'title_01';
@@ -352,7 +359,7 @@ export const LEAGUE_ART_BTN_JOIN = 'TY_btn06';
 export const LEAGUE_ART_CHECK_BG = 'shaixuan_dikuang';
 
 /** 勾选框**对勾**所在的资源目录（`image/sevenDay`，**跨模块复用**）。 */
-export const LEAGUE_SHARED_CHECK_ROOT = 'image/sevenDay';
+export const LEAGUE_SHARED_CHECK_ROOT = SEVEN_DAY_ART_ROOT;
 
 /**
  * 勾选框对勾图名（`sd_check`，32×33，**无**九宫格 ⇒ SIMPLE）。
@@ -469,7 +476,7 @@ export const LEAGUE_ART_CREATE_NAME_BG = LEAGUE_ART_INPUT_BG;
  * **不能**走 `image/league`：`roleProperty.icon` 存的是 FGUI 组件名（`图标_幻灵玉`），
  * 不是相对 `resources` 的路径 —— 见 `LeagueTable` 的 `buildLeagueCostView`。
  */
-export const LEAGUE_COST_ICON_ROOT = 'icons/resource';
+export const LEAGUE_COST_ICON_ROOT = RESOURCE_ICON_ART_ROOT;
 
 // P4 三面板（商店 / 捐献 / 砍价）用图
 

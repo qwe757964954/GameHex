@@ -12,13 +12,11 @@
  * 由 `formatText` 替换 —— 与本模块其余文案同一口径。
  */
 
+import { formatPlaceholders } from '../../core/text/Placeholder';
+
 /** `{0}` / `{1}` 顺序替换；缺参保留原样（便于一眼看出漏传）。 */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
-    return template.replace(/\{(\d+)\}/g, (whole, indexText: string) => {
-        const index = Number(indexText);
-        const value = args[index];
-        return value === undefined || value === null ? whole : String(value);
-    });
+    return formatPlaceholders(template, args, { missing: 'keep', nullish: 'keep' });
 }
 
 /** 两个弹窗的标题（老端都是 `FW.G_W("MAIL_TITLE")`）。 */

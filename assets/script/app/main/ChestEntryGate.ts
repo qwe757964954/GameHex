@@ -68,6 +68,8 @@ import {
     isEntranceRowVisible,
 } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
+import { easeOutCubic } from '../../core/math/Easing';
+import { clamp01Finite } from '../../core/math/Scalar';
 
 // ============================================================
 // 常量
@@ -381,17 +383,7 @@ export function chestEntryPopScale(elapsedSeconds: number): number {
     if (!Number.isFinite(elapsedSeconds) || elapsedSeconds <= 0) return 0;
     if (elapsedSeconds >= CHEST_ENTRY_POP_SECONDS) return 1;
     const p = elapsedSeconds / CHEST_ENTRY_POP_SECONDS;
-    if (p < POP_RISE_PORTION) return CHEST_ENTRY_POP_OVERSHOOT * easeOutCubic(p / POP_RISE_PORTION);
+    if (p < POP_RISE_PORTION) return CHEST_ENTRY_POP_OVERSHOOT * easeOutCubic(clamp01Finite(p / POP_RISE_PORTION));
     const fall = (p - POP_RISE_PORTION) / (1 - POP_RISE_PORTION);
-    return CHEST_ENTRY_POP_OVERSHOOT + (1 - CHEST_ENTRY_POP_OVERSHOOT) * easeOutCubic(fall);
-}
-
-function easeOutCubic(p: number): number {
-    const x = clamp01(p);
-    return 1 - (1 - x) * (1 - x) * (1 - x);
-}
-
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    return value < 0 ? 0 : value > 1 ? 1 : value;
+    return CHEST_ENTRY_POP_OVERSHOOT + (1 - CHEST_ENTRY_POP_OVERSHOOT) * easeOutCubic(clamp01Finite(fall));
 }

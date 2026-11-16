@@ -1,5 +1,8 @@
 # Territory Presenter 重构切分方案
 
+> 状态：已归档（2026-11-16）。切分已落地，但实现中的 Presenter 后来拆成 Model + Controller；现行职责见 `docs/zcds-表现层与领地规范.md` §3 与 `docs/agent/MVC设计规范.md`。
+> 归档原因：设计命名已被当前实现取代，仅保留拆分过程与测试迁移记录。
+
 > 范围：
 > `assets/script/app/territory`
 > 目标：把
@@ -516,10 +519,10 @@ export class TerritoryPage extends Component {
 
 | 步骤 | 内容                                                                    | 验证                                                                                                         |
 | -- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 0  | 重构 `TerritoryMapConfig.configureTerritoryMap` + 补 map-config 测试（§3.0） | `npx tsx --test tests/territory-map-config.test.ts`                                                        |
+| 0  | 重构 `TerritoryMapConfig.configureTerritoryMap` + 补 map-config 测试（§3.0） | `npx tsx --test territory-map-config.test.ts`                                                        |
 | 1  | 新增 `TerritoryChapterLoader` + `TerritorySaveStoreAdapter`（暂不接线）       | `npx tsc --noEmit -p tsconfig.json`（新增文件零类型错误）                                                             |
-| 2  | 新增 `TerritoryPresenter.ts` + `tests/territory-presenter.test.ts`      | `npx tsx --test tests/territory-presenter.test.ts`                                                         |
-| 3  | 重写 `TerritoryPage.ts` 接线（§3.1）                                        | 先跑 §3.2 两个守卫：`npx tsx --test tests/territory-page-split.test.ts tests/territory-page-current-json.test.ts` |
+| 2  | 新增 `TerritoryPresenter.ts` + `territory-presenter.test.ts`      | `npx tsx --test territory-presenter.test.ts`                                                         |
+| 3  | 重写 `TerritoryPage.ts` 接线（§3.1）                                        | 先跑 §3.2 两个守卫：`npx tsx --test territory-page-split.test.ts territory-page-current-json.test.ts` |
 | 4  | 更新守卫断言与 §7.3.5 文档                                                     | `npm test` 全量                                                                                              |
 | 5  | 编辑器 / 真机回归（清单见 §6）                                                    | 人工冒烟                                                                                                       |
 

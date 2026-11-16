@@ -1,5 +1,8 @@
 # 基地建筑交互改进方案（对标《向僵尸开炮》征途基地）
 
+> 状态：部分落地（2026-11-11 起分批实施）。已完成项与判据见 §9，剩余项见 §9「未完成（下一批）」；现行代码以 `assets/script/app/bigmap/` 为准，整体实现见 [`bigmap-系统实现说明.md`](bigmap-系统实现说明.md)。
+> 本文保留交互规格、竞品对照与落地取舍；未完成项不因写作时间自动生效。
+
 > 依据：本仓 `bigmap/` 现有实现（2026-11-11 读码）+《向僵尸开炮》征途基地的实际界面结构
 > （玩家攻略「长按建筑可拖动重摆放」、拆解文与实战截图 OCR：`Lv.1 猎场 / 剩余储量 1200000(100%) / 采集时间 04:19:44`、
 > `源能塔加成 → 打怪出征速度 +2.00%`、`建筑详情 → 等级/盟友帮助次数/战力 逐级对照`、`9千/h`、底部「家园 / 世界」平级页签）。
@@ -29,7 +32,7 @@
 | --- | --- | --- | --- |
 | ① | 选中描边换 `#FFF0C8`，「对沙地 3.9:1」 | 实测 **1.84:1**。沙地 `(201,176,138)` 亮度高，**亮色系任何颜色都到不了 3:1**（纯白也只有 2.09:1） | 色值方案整体作废，改**双环**：深色外环 `(20,18,14)` **8.96:1** + 暖金内环做语感。已实现 |
 | ② | 危险字 `#FF8A6B`「4.6:1」、次要字 `#C8C4B8`「4.8:1」 | 实测 **2.83:1** / **3.74:1**（都在 `cardLight` 上） | 改 `dangerText(255,205,190)` **4.57:1**、`mutedText(224,220,208)` **4.76:1**。已实现 |
-| ③ | 「文案改版会打 `tests/bigmap-format.test.ts`」 | 那个文件是**布局格式 js↔ts 对拍**，与建筑文案无关 | 真正受影响的是 `bigmap-base-render` / `bigmap-base-view` 的**模块桩**（它们把 `BigMapPresentationText` 整个 mock 掉了）。已改为引用真实纯函数 |
+| ③ | 「文案改版会打 `bigmap-format.test.ts`」 | 那个文件是**布局格式 js↔ts 对拍**，与建筑文案无关 | 真正受影响的是 `bigmap-base-render` / `bigmap-base-view` 的**模块桩**（它们把 `BigMapPresentationText` 整个 mock 掉了）。已改为引用真实纯函数 |
 | ④ | 「L1 建筑卡照搬 `BigMapCityPopup`」 | `BigMapCityPopup` 是 `PopupBase` 子类，自带 `__BlankClose` 空白接收层 + 暗底，**会挡住地图点击**，与「非模态、地图可见」直接冲突 | 只复用它的 **Widget 排布思路**（贴底 + 四边对齐 + 代码零 `setContentSize`），卡本身必须是 `BigMapPageLayout` 下的普通节点 |
 
 另外两处执行层面的修正：
@@ -317,10 +320,10 @@ readonly missing: readonly { res: BigMapResType; amount: number }[];
 
 | 项 | 改动落点 | 判据 |
 | --- | --- | --- |
-| 进基地不再弹主城模态 | `BigMapController.switchMode` | `tests/bigmap-controller.test.ts`「切到基地只把镜头对准主城、不自动选中」 |
+| 进基地不再弹主城模态 | `BigMapController.switchMode` | `bigmap-controller.test.ts`「切到基地只把镜头对准主城、不自动选中」 |
 | 选中双环（8.96:1） | `BigMapSkin` `selectOuter/selectInner`、`BigMapBaseView.strokeHex` | `bigmap-base-render` / `bigmap-base-view` |
 | 选中底光 + 建造进度环 | prefab `PlotTemplate/Glow`、`PlotTemplate/ProgressRing` + `BigMapBasePlot.glow/progressRing` + `BigMapBaseView.renderGlow/renderProgressRing` | 同上；`bigMapHexCorners` / `buildBigMapProgressPolyline` 为纯几何，可单测 |
-| 详情补 6 组字段 | `IBigMapPlotDetailView`：`produceNow/Next/Cap`、`resType`、`storedRatio`、`attrBonus`、`instantCost`、`preBuild`、`missing`；`BigMapModel.plotDetail` | `tests/bigmap-plot-detail.test.ts`（5 条） |
+| 详情补 6 组字段 | `IBigMapPlotDetailView`：`produceNow/Next/Cap`、`resType`、`storedRatio`、`attrBonus`、`instantCost`、`preBuild`、`missing`；`BigMapModel.plotDetail` | `bigmap-plot-detail.test.ts`（5 条） |
 | 缺料结构化，干掉英文 key | `bigMapMissingResList`（`BigMapBase.ts`）+ `bigMapMissingRes` 改中文 | 同上「缺料是结构化清单而不是一句英文 key」 |
 | reason 玩家语 | 「主城 Lv.1 才能升到 Lv.3」 | `bigmap-base.test.ts` 改为口径守卫 |
 | 详情正文改版 | `formatBigMapPlotDetail` + `formatBigMapDuration` + `formatBigMapRate` | `bigmap-plot-detail`「升级要能看到产量对比」 |

@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 主线任务（主界面「10级领取」HUD）的数据端口。
  *
@@ -140,7 +141,7 @@ export interface IMainTaskSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type MainTaskRequestResult = 'ok' | 'offline' | 'failed';
+export type MainTaskRequestResult = INetRequestStatus;
 
 /** 领奖超时（写请求口径：5000ms）。 */
 const WRITE_TIMEOUT_MS = 5000;

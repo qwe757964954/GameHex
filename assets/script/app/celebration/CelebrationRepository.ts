@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 开服庆典的数据端口（老端 `LayerOSRankUI` / `LayerOSRankDetailUI` + FGUI 包「开服冲榜」）。
  *
@@ -94,7 +95,7 @@ export type {
 export const CL_TAB_COUNT = 3;
 
 /** 请求结果 —— 与挂机 / 战令 / 礼包同口径。 */
-export type CelebrationRequestResult = 'ok' | 'offline' | 'failed';
+export type CelebrationRequestResult = INetRequestStatus;
 
 /** 买商品的结果：多了「服务端说这一单要走支付 SDK」这一支。 */
 export type CelebrationBuyResult = CelebrationRequestResult | 'pay';

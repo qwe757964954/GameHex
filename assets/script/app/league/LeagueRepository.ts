@@ -1,3 +1,4 @@
+import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 联盟数据端口：缓存表、配置表、搜索缓存和网络请求。
  * 服务端已推的表每次 load 现读 CacheMgr；搜索结果不进 CmdUnion 表，避免污染当前联盟。
@@ -6,8 +7,8 @@
 
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import type { IActivityGoodsInfo as ILeagueGoodsInfo } from '../activity/LayerActivityTable';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import type { IResGoodsInfo as ILeagueGoodsInfo } from '../common/ResTypes';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
 import { toIdString, withTimeout } from '../net/RequestGuard';
@@ -237,7 +238,7 @@ export interface ILeagueSnapshot {
 }
 
 /** 请求结果：三态，页面据此决定提示文案。 */
-export type LeagueRequestResult = 'ok' | 'offline' | 'failed';
+export type LeagueRequestResult = INetRequestStatus;
 
 /** 奖励响应只携带数据，由会话控制器决定是否展示。 */
 export interface ILeagueRewardResult {

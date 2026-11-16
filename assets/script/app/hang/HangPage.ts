@@ -1,5 +1,4 @@
 import { _decorator, Button, Label, Node, ProgressBar, SpriteFrame, UITransform } from 'cc';
-import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { POPUP_BLANK_CATCHER, PopupBase } from '../../framework/ui/PopupBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { TerritoryUiEvent, TerritoryViewEvent } from '../territory/application/TerritoryEvents';
@@ -45,6 +44,8 @@ import { HangRewardSlot } from './HangRewardSlot';
 import { HangSweepButton } from './HangSweepButton';
 
 const { ccclass, property } = _decorator;
+
+const TICK_SECONDS = 1;
 
 /**
  * 征收主控，挂在 Hang.prefab 根节点。

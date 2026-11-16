@@ -1,13 +1,13 @@
 import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { loadArt, loadFrameArt } from '../card/CardLineupIcons';
+import { loadArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import {
-    QUALITY_FRAME_NAMES,
     qualityFrameName,
     resolveItemIconRef,
 } from './SevenDayArt';
 import { sevenDayRepository } from './SevenDayRepository';
+import { loadQualityFrameMap } from '../common/QualityFrameLoader';
 import type { ISevenDayRepository, ISevenDaySnapshot, SevenDayRequestResult } from './SevenDayRepository';
 import { SevenDayDayTab } from './SevenDayDayTab';
 import { SevenDayPageTab } from './SevenDayPageTab';
@@ -620,11 +620,7 @@ export class SevenDayPage extends PopupBase {
     private async loadQualityFrames(): Promise<Map<string, SpriteFrame>> {
         const cached = this.qualityFrames;
         if (cached) return cached;
-        const frames = new Map<string, SpriteFrame>();
-        await Promise.all(QUALITY_FRAME_NAMES.map(async (name) => {
-            const frame = await loadFrameArt(name);
-            if (frame) frames.set(name, frame);
-        }));
+        const frames = await loadQualityFrameMap();
         this.qualityFrames = frames;
         return frames;
     }

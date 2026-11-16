@@ -1,3 +1,4 @@
+import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -135,13 +136,7 @@ export class ChangeHeadPage extends PopupBase {
      * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
      */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
+        bindButtonCompat(node, handler, this);
     }
 
     // ============================================================
@@ -190,18 +185,8 @@ export class ChangeHeadPage extends PopupBase {
      */
     private async loadFrameOf(entry: IHeadEntry): Promise<SpriteFrame | null> {
         if (entry.id === PLATFORM_HEAD_ID) return null;
-        return this.loadHeadFrameBy(String(entry.id));
-    }
-
-    /** `head` 表 `resId` → 图（走 `head.json → icon.json → icons/head/<资源名>` 两级映射，内部已 catch）。 */
-    private async loadHeadFrameBy(resId: string): Promise<SpriteFrame | null> {
-        if (!resId) return null;
-        try {
-            return await HeadArt.loadHeadFrame(resId);
-        } catch (error) {
-            console.warn('[PlayerInfo] 头像图加载失败', resId, error);
-            return null;
-        }
+        const id = String(entry.id);
+        return id ? HeadArt.loadHeadFrame(id) : null;
     }
 
     // ---------- 铺界面 ----------

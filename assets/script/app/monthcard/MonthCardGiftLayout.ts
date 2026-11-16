@@ -4,6 +4,8 @@
  * prefab 数字必须与此文件对得上。
  */
 
+import { fguiAnchorToCocos, fguiTopLeftToCocos } from '../../core/layout/FguiLayout';
+
 /** 条目本体尺寸。 */
 export const MONTHCARD_ENTRY_WIDTH = 633;
 export const MONTHCARD_ENTRY_HEIGHT = 380;
@@ -22,33 +24,8 @@ export interface ILayoutPoint {
     readonly y: number;
 }
 
-/** FGUI 左上角坐标 → Cocos 节点中心坐标。 */
-export function fguiTopLeftToCocos(
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    parentW: number,
-    parentH: number,
-): ILayoutPoint {
-    return {
-        x: x + width / 2 - parentW / 2,
-        y: parentH / 2 - y - height / 2,
-    };
-}
-
-/** FGUI 带 anchor 的枢轴点坐标 → Cocos 中心坐标。 */
-export function fguiAnchorToCocos(
-    pivotX: number,
-    pivotY: number,
-    parentW: number,
-    parentH: number,
-): ILayoutPoint {
-    return {
-        x: pivotX - parentW / 2,
-        y: parentH / 2 - pivotY,
-    };
-}
+/** FGUI 坐标换算实现归位 `core/layout/FguiLayout`；旧导出名保留。 */
+export { fguiAnchorToCocos, fguiTopLeftToCocos };
 
 // ============================================================
 // 条目内部各元素坐标（父容器 = 条目 633×380）

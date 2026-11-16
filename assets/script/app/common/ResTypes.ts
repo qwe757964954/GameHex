@@ -17,6 +17,11 @@ import {
 } from '../ArtPaths';
 import { toCount } from '../../core/value/Coerce';
 import { asRow } from '../../core/table/RowParse';
+import {
+    ITEM_TABLE as CORE_ITEM_TABLE,
+    OPEN_TABLE as CORE_OPEN_TABLE,
+    ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE,
+} from '../../core/config/TableNames';
 import type { IResGoodsInfo } from '../../core/types/Reward';
 
 export type { IResGoodsInfo };
@@ -25,13 +30,13 @@ export type { IResGoodsInfo };
 export const RES_BAR_MAX_SLOTS = 3;
 
 /** `roleProperty` 表名（`RefUtil` 的 `resName`，不带后缀）。 */
-export const ROLE_PROPERTY_TABLE = 'roleProperty';
+export const ROLE_PROPERTY_TABLE = CORE_ROLE_PROPERTY_TABLE;
 
 /** `open.json` 的表名（`RefBase._RefMgropen` / `RefMgrBase('open')`）。 */
-export const OPEN_TABLE = 'open';
+export const OPEN_TABLE = CORE_OPEN_TABLE;
 
 /** `item` 表名（`resShowType` 里那些不是 `roleProperty` 的 id 落这张表）。 */
-export const ITEM_TABLE = 'item';
+export const ITEM_TABLE = CORE_ITEM_TABLE;
 
 /** 继承链最深几层（防表里配出环）。老端只有一层 `preResId`，这里放宽到 8 层够用。 */
 const MAX_PRE_DEPTH = 8;

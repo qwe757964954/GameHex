@@ -1,3 +1,4 @@
+import type { IRewardAmount } from '../../core/types/Reward';
 /**
  * 「限时活动」三页签（每日任务 / 每日礼包 / 限购）的类型定义。
  *
@@ -22,10 +23,7 @@ export const TASK_STATE_FINISH = 1;
 export const TASK_STATE_REWARDED = 2;
 
 /** 一条奖励（配置里 `{ resId, number }`）。 */
-export interface ILimitTimeReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type ILimitTimeReward = IRewardAmount;
 
 /** 每日任务的一行（`limitTimeTask`，服务端下发）。 */
 export interface ILimitTimeTaskRow {

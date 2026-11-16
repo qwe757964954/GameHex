@@ -1,3 +1,7 @@
+import { hashNoise01 as burstNoise } from '../../../core/math/DeterministicNoise';
+import { easeOutCubic } from '../../../core/math/Easing';
+import { clamp01 } from '../../../core/math/Scalar';
+
 /**
  * 对局棋盘「中立资源奖励」的格心喷发曲线（纯函数、零 `cc`）。
  *
@@ -121,19 +125,10 @@ export function zcNeutralBurstTotalSeconds(count: number = ZC_NEUTRAL_BURST_COUN
  * 否则单测无法验证倒锥判据，池化复用也无法复现问题。视觉上的「随机」由调用方
  * 每次喷发换一个 seed 提供。
 */
-function burstNoise(seed: number, index: number, salt: number): number {
-    let h = Math.imul(seed | 0, 0x27d4eb2d)
-        ^ Math.imul(index + 1, 0x9e3779b1)
-        ^ Math.imul(salt + 1, 0x85ebca6b);
-    h = (h ^ (h >>> 15)) | 0;
-    h = Math.imul(h, 0x2545f491);
-    h = (h ^ (h >>> 13)) | 0;
-    return (h >>> 0) / 4294967296;
-}
+/** 同一 `(seed, index, salt)` 的确定性噪声由 `core/math/DeterministicNoise` 提供。 */
 
-function easeOutCubic(t: number): number {
-    const p = Math.min(1, Math.max(0, t));
-    return 1 - (1 - p) * (1 - p) * (1 - p);
+function easeOutCubicClamped(t: number): number {
+    return easeOutCubic(clamp01(t));
 }
 
 /** 单枚粒子的出射参数（一次喷发内恒定，逐帧只需要时间）。*/
@@ -278,15 +273,15 @@ export interface IZCNeutralBurstLabel {
 export function zcNeutralBurstLabelFrame(elapsed: number): IZCNeutralBurstLabel | null {
     if (!Number.isFinite(elapsed) || elapsed < 0 || elapsed >= ZC_NEUTRAL_BURST_LABEL_SECONDS) return null;
     const progress = elapsed / ZC_NEUTRAL_BURST_LABEL_SECONDS;
-    const offsetY = ZC_NEUTRAL_BURST_LABEL_RISE_PX * easeOutCubic(progress);
+    const offsetY = ZC_NEUTRAL_BURST_LABEL_RISE_PX * easeOutCubicClamped(progress);
     if (progress < ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO) {
-        const entrance = easeOutCubic(progress / ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO);
+        const entrance = easeOutCubicClamped(progress / ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO);
         const scale = ZC_NEUTRAL_BURST_LABEL_FROM_SCALE
             + (ZC_NEUTRAL_BURST_LABEL_POP_SCALE - ZC_NEUTRAL_BURST_LABEL_FROM_SCALE) * entrance;
         return { offsetY, scale, opacity: 1 };
     }
     const fade = (progress - ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO) / (1 - ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO);
     const scale = ZC_NEUTRAL_BURST_LABEL_POP_SCALE
-        + (1 - ZC_NEUTRAL_BURST_LABEL_POP_SCALE) * easeOutCubic(fade);
+        + (1 - ZC_NEUTRAL_BURST_LABEL_POP_SCALE) * easeOutCubicClamped(fade);
     return { offsetY, scale, opacity: 1 - fade * fade };
 }

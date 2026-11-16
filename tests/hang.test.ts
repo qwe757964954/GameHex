@@ -1778,13 +1778,13 @@ test('⚠️ 预加载集合 = 「界面会 `_setFrame()` 的每一处」（漏�
 
 test('⚠️ 奖励图标两支分流必须转发 `resolveRewardIconRef`，**不许自己判** `item` / `roleProperty`', () => {
     const art = src('HangArt.ts');
-    assert.match(art, /export \{ resolveRewardIconRef as hjResolveRewardIconRef \} from '\.\.\/activity\/LayerActivityArt';/);
+    assert.match(art, /export \{ resolveRewardIconRef as hjResolveRewardIconRef \} from '\.\.\/common\/RewardIcon';/);
     const repository = src('HangRepository.ts');
-    assert.match(repository, /import \{ resolveRewardIconRef \} from '\.\.\/activity\/LayerActivityArt';/);
+    assert.match(repository, /import \{ resolveRewardIconRef \} from '\.\.\/common\/RewardIcon';/);
     assert.match(repository, /return resolveRewardIconRef\(goodsOf\(snapshot, resId\)\);/);
-    // 唯一入口在 `LayerActivityArt.ts`（曾经在 `LayerActivityTable.ts` 里找错过）
+    // 唯一入口在 `common/RewardIcon.ts`
     const layerArt = readFileSync('assets/script/app/activity/LayerActivityArt.ts', 'utf8');
-    assert.match(layerArt, /export function resolveRewardIconRef/);
+    assert.match(layerArt, /resolveRewardIconRef[\s\S]*from '\.\.\/common\/RewardIcon'/);
 });
 
 test('页面：切页只换图 / 换数据，**不重建节点**；到 MAX 就停表', () => {

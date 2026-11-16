@@ -29,6 +29,7 @@ export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometr
 /** 每局独占的单位索敌、射程和寻路缓存。*/
 export class ZCUnitTargeting implements IZCUnitTargeting {
     private readonly pathWorkspace: ZCPathWorkspace;
+    private readonly targetingContext: ZCTargetingContext;
     private readonly rankedNeighbors = new Map<number, readonly (readonly number[])[]>();
     private readonly stepCache = new Map<number, {
         atHex: number; goalHex: number; targetX: number; targetY: number; bodyRadius: number; step: number | null;
@@ -36,6 +37,10 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     constructor(private readonly context: IZCUnitTargetingContext) {
         this.pathWorkspace = new ZCPathWorkspace(context.map.hexes.length);
+        // 测试/旧上下文可能只在外层提供 baseDefinition；构造时补一次，避免索敌每帧拼上下文。
+        this.targetingContext = context.targeting.baseDefinition
+            ? context.targeting
+            : { ...context.targeting, baseDefinition: context.baseDefinition };
     }
 
     invalidateTerrain(): void {
@@ -48,7 +53,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。*/
     acquire(unit: ZCUnitState): void {
-        const target = ZCTargetingSystem.acquire(unit, this.context.targeting);
+        const target = ZCTargetingSystem.acquire(unit, this.targetingContext);
         unit.targetUnitId = null;
         unit.targetWallHexId = null;
         unit.targetBuildingHexId = null;
@@ -61,7 +66,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     refreshPriorityTarget(unit: ZCUnitState): boolean {
         if (!this.context.targeting.preferUnitTargets?.(unit)
             || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
-        const target = ZCTargetingSystem.acquire(unit, this.context.targeting, true);
+        const target = ZCTargetingSystem.acquire(unit, this.targetingContext, true);
         if (!target) return false;
         unit.targetUnitId = target.id;
         unit.targetWallHexId = null;

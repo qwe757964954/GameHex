@@ -1,5 +1,7 @@
 # 聊天模块代码整理报告（`assets/script/app/chat`）
 
+> 状态：时点整理报告（日期未注明，2026-11-16 文档整理时核对路径）。记录本轮行为零变更的整理结果；当前代码为准。
+
 整理范围：`assets/script/app/chat` 目录下全部 13 个 `.ts`（`ChatPage` / `ChatTable` / `ChatRepository` / `ChatArt` / `ChatTexts` / `RequestChatMsg` / `ChatBubble` / `ChatPrivateBubble` / `ChatRecruitRow` / `ChatPrivateHead` / `ChatAtRow` / `ChatEmojiItem` / `ChatEntryButton`）及其同名 `.meta`；`.meta` 未改。
 硬约束：**行为零变更** —— 对外导出的名字与值不变、prefab 绑定路径不变、事件订阅不变。
 

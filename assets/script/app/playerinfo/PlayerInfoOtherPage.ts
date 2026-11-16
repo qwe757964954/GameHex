@@ -1,3 +1,4 @@
+import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -193,13 +194,7 @@ export class PlayerInfoOtherPage extends PopupBase {
      * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
      */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        if (!node) return;
-        const button = node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, handler, this);
-            return;
-        }
-        node.on(Node.EventType.TOUCH_END, handler, this);
+        bindButtonCompat(node, handler, this);
     }
 
     // ============================================================
@@ -240,20 +235,11 @@ export class PlayerInfoOtherPage extends PopupBase {
         this.applyFriends(friends);
 
         // 图先 await 完再铺（与 `PlayerInfoPage.reload` 同一口径）。
-        this.headFrame = await this.loadHeadFrameBy(String(other.snapshot.img));
+        const id = String(other.snapshot.img);
+        this.headFrame = id ? await HeadArt.loadHeadFrame(id) : null;
         if (!this.alive || revision !== this.loadRevision) return;
 
         this.present(other.snapshot);
-    }
-
-    private async loadHeadFrameBy(resId: string): Promise<SpriteFrame | null> {
-        if (!resId) return null;
-        try {
-            return await HeadArt.loadHeadFrame(resId);
-        } catch (error) {
-            console.warn('[PlayerInfo] 头像图加载失败', resId, error);
-            return null;
-        }
     }
 
     // ---------- 铺界面 ----------

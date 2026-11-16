@@ -1,3 +1,4 @@
+import type { IRewardAmount } from '../../core/types/Reward';
 /**
  * 开服庆典的判定口径（老端 `VOCelebration` / `LayerOSRankUI` / `LayerOSRankDetailUI`）。
  * 与 `HangTable` / `GiftTable` / `SevenDayTable` 一样不 import 任何模块，判定逻辑可以直接在 Node 里跑单测；
@@ -16,6 +17,9 @@
  */
 
 import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { parseRows } from '../../core/table/RowParse';
+import { parsePayChannelBaseRows } from '../common/PayChannelRows';
+import type { IPayChannelBaseRow } from '../common/PayChannelRows';
 
 // ============================================================
 // 类型与枚举
@@ -54,10 +58,7 @@ export enum ECelebrationRankSegment {
 export type CelebrationPayBranch = 'rmb' | 'cost';
 
 /** 一条奖励（`rewards` / `rewards1` / `rewards2` 的元素）。 */
-export interface ICelebrationReward {
-    readonly resId: number;
-    readonly number: number;
-}
+export type ICelebrationReward = IRewardAmount;
 
 /** `celebrationConfig` 一行。 */
 export interface ICelebrationConfigRow {
@@ -107,13 +108,8 @@ export interface ICelebrationShopRow {
     readonly discount: number;
 }
 
-/** `payChannel` 里本模块用的两个字段。 */
-export interface ICelebrationPayChannelRow {
-    readonly id: number;
-    readonly name: string;
-    /** 真实金额（元）。 */
-    readonly rmb: number;
-}
+/** `payChannel` 里本模块用的字段；公共解析见 `common/PayChannelRows`。 */
+export type ICelebrationPayChannelRow = IPayChannelBaseRow;
 
 /** 服务器下发的庆典状态（`CmdCelebrationInfo`）。 */
 export interface ICelebrationServerState {
@@ -251,17 +247,7 @@ function asRow(raw: unknown): Record<string, unknown> | null {
 }
 
 /** 逐行洗表：非对象行跳过，`build` 返回 `null` 也算无效行。 */
-function parseRows<T>(values: unknown, build: (row: Record<string, unknown>) => T | null): T[] {
-    if (!Array.isArray(values)) return [];
-    const out: T[] = [];
-    for (const raw of values) {
-        const row = asRow(raw);
-        if (!row) continue;
-        const built = build(row);
-        if (built) out.push(built);
-    }
-    return out;
-}
+/** 逐行洗表：非对象行跳过，`build` 返回 `null` 也算无效行。实现归位 `core/table/RowParse`。 */
 
 // ============================================================
 // 洗表
@@ -336,13 +322,9 @@ export function parseShopRows(values: unknown): ICelebrationShopRow[] {
     });
 }
 
-/** 洗 `payChannel` 里本模块用的两个字段。 */
+/** 洗 `payChannel` 公共字段；本模块只保留旧导出名。 */
 export function parsePayChannelRows(values: unknown): ICelebrationPayChannelRow[] {
-    return parseRows(values, (r) => {
-        const id = toCount(r.id);
-        if (id <= 0) return null;
-        return { id, name: toText(r.name), rmb: toCount(r.rmb) };
-    });
+    return parsePayChannelBaseRows(values);
 }
 
 /**

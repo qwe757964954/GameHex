@@ -259,9 +259,7 @@ assets/script/app/bigmap/
   这类数据用 `tools/map-editor/gen_bigmap_ranges.ts` 补算（加权 Voronoi + 连通性修补 + 邻接推导）。
   线上 `world_01` 已用它重算：25 座城、1445/1600 格有主、每城 30~88 格、全部单块、邻接度 3~7。
 
-![势力染色改前改后对比](bigmap-territory-color-preview.png)
-
-补算势力范围（改完布局记得跑一次 `verify_bigmap_world` 确认没碰坏别的东西）：
+补算势力范围（改完布局跑一次 `verify_bigmap_world`，确认没碰坏别的东西）：
 
 ```
 npx tsx tools/map-editor/gen_bigmap_ranges.ts                    # 处理线上 world_01 并写回
@@ -306,9 +304,7 @@ npx tsx tools/map-editor/verify_bigmap_world.ts                  # 校验布局�
 5. **颜色不许写第二份数值**：`BIGMAP_HUD_COLORS.card/rim` 必须等于 `hud_player_card` 的实测色，
    `scrim` 必须等于领地弹窗 `Dim`（测试直接读 prefab JSON 比对），改一边另一边就会红。
 
-改前改后（① 深铁顶栏 ② HUD 卡＋金钮 ③ 弹窗居中模态）：
-
-![世界页 UI 换 HUD 皮肤](世界页HUD皮肤-改前改后.png)
+改前改后（① 深铁顶栏 ② HUD 卡＋金钮 ③ 弹窗居中模态；示意图已不在仓库内，按下表验收）。
 
 重新生成这张图（只出图，不动游戏代码）：
 
@@ -348,9 +344,7 @@ python tools/preview_world_ui_hud.py
 脏输入不出 NaN，外加源码反向守卫（禁 `this.size.width / 2 + 80`、禁 `fitBigMapSprite(this.infoThumbnail`、
 必须有 `verticalAlign = CENTER`、必须有 `refreshInfo` 拆分）。
 
-改前改后（① 老排法三样各偏 ② 据点 3 行 ③ 城池 9 行图标让位；橙虚线 = 卡片中线）：
-
-![世界页详情弹窗居中竖排](世界页详情弹窗-居中竖排-改前改后.png)
+改前改后（① 老排法三样各偏 ② 据点 3 行 ③ 城池 9 行图标让位；橙虚线 = 卡片中线；示意图已不在仓库内，按下列断言验收）。
 
 ```
 npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigmap_info_layout.py
@@ -426,7 +420,7 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
    所以 `ProcedureMain.onLeave` 销毁 Main 时带不走它 —— 它必须自己关，但关早了就露底；
 4. 露出来的正好是 `MainTabHost.currentTab`，而 `defaultTab = MainTab.Territory`。
 
-冷加载实测 25s 量级（`docs/领地与大地图开战加载优化验证.md`），所以这中间有足够长的时间
+冷加载实测 25s 量级（`docs/reports/领地与大地图开战加载优化验证.md`），所以这中间有足够长的时间
 看到领地页 —— 就是用户说的现象。
 
 **修法**：世界页留到流程真正切走，中间盖遮罩。

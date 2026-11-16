@@ -5,6 +5,8 @@
  * 只有玩家点章节按钮才播放，自动换章不会触发这段演出。
  */
 
+import { clamp01Finite } from '../../../core/math/Scalar';
+
 /** 相机先行段时长（秒），云层尚未出现。 */
 export const TERRITORY_CHAPTER_SWITCH_LEAD_SECONDS = 0.1;
 
@@ -30,33 +32,28 @@ export function territoryChapterSwitchTotalSeconds(): number {
         + TERRITORY_CHAPTER_SWITCH_REVEAL_SECONDS;
 }
 
-function clamp01(value: number): number {
-    if (!(value > 0)) return 0;
-    return value > 1 ? 1 : value;
-}
-
 /** 缓出（前快后慢）。 */
 function easeOut(x: number): number {
-    const value = clamp01(x);
+    const value = clamp01Finite(x);
     return 1 - (1 - value) * (1 - value);
 }
 
 /** `cover` 段进度（0~1）；非法入参按 0。 */
 export function territoryChapterSwitchCoverProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-    return clamp01(elapsed / TERRITORY_CHAPTER_SWITCH_COVER_SECONDS);
+    return clamp01Finite(elapsed / TERRITORY_CHAPTER_SWITCH_COVER_SECONDS);
 }
 
 /** `lead` 段进度；非法入参按 0。 */
 export function territoryChapterSwitchLeadProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-    return clamp01(elapsed / TERRITORY_CHAPTER_SWITCH_LEAD_SECONDS);
+    return clamp01Finite(elapsed / TERRITORY_CHAPTER_SWITCH_LEAD_SECONDS);
 }
 
 /** `reveal` 段进度（0~1）；非法入参按 0。 */
 export function territoryChapterSwitchRevealProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-    return clamp01(elapsed / TERRITORY_CHAPTER_SWITCH_REVEAL_SECONDS);
+    return clamp01Finite(elapsed / TERRITORY_CHAPTER_SWITCH_REVEAL_SECONDS);
 }
 
 /**
@@ -82,14 +79,14 @@ export function territoryChapterSwitchSinkDistance(rise: number): number {
 
 /** `lead` 段地图 y 偏移，easeOut 从 0 到下沉距离。 */
 export function territoryChapterSwitchSinkOffset(progress: number, rise: number): number {
-    const offset = territoryChapterSwitchSinkDistance(rise) * easeOut(clamp01(progress));
+    const offset = territoryChapterSwitchSinkDistance(rise) * easeOut(clamp01Finite(progress));
     return offset === 0 ? 0 : offset;
 }
 
 /** `reveal` 段地图 y 偏移，从 `rise` 落回 0。 */
 export function territoryChapterSwitchRevealOffset(progress: number, rise: number): number {
     const value = Number.isFinite(rise) && rise > 0 ? rise : 0;
-    return value * (1 - easeOut(clamp01(progress)));
+    return value * (1 - easeOut(clamp01Finite(progress)));
 }
 
 /** 新章已画上来才允许揭幕，避免在旧图上播落位。 */

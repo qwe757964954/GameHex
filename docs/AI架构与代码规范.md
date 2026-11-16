@@ -1,21 +1,13 @@
-# AI 架构与代码规范（全局总纲）
+# 架构与代码规范（全局总纲）
 
-> **定位与适用范围**：
-> - 本文档是 Cocos Creator 3.8 + TypeScript 项目的**全局架构、工程实现、Prefab 规范与美术配表工具链总纲**。
-> - 日常开发与 AI 会话入口摘要见根目录 [AGENTS.md](../AGENTS.md)；对局表现层（`app/zcds/view`）与「冒险」领地页（`app/territory`）的详细规格（原 §7.3.3 ~ §7.3.11）已拆分为独立文档 [docs/zcds-表现层与领地规范.md](zcds-表现层与领地规范.md)。
+> 适用范围：Cocos Creator 3.8 + TypeScript 项目的分层、运行时、Prefab 与资源工具链。
+> 日常入口和风险分级见 [AGENTS.md](../AGENTS.md)；对局表现层与领地页的详细规格见 [zcds-表现层与领地规范.md](zcds-表现层与领地规范.md)。
 
-## 1. 开发工作流与导航约定
+## 1. 开发工作流
 
-1. **先定边界再动手**：修改代码前，先确认需求所属的 feature、流程（`Procedure*`）、数据真源（Model / Repository）与资源生命周期，禁止仅凭文件名猜测。
-2. **优先使用 Codegraph**：仓库存在 `.codegraph/` 时，先通过 `codegraph explore` 追踪符号定义、调用链与关联单测，定位后再打开目标文件，避免大范围盲目搜索。
-3. **工作区安全**：下刀前检查 `git status` / `svn status`；严禁覆盖、格式化或回退与当前任务无关的用户改动；严禁手改 `library/`、`temp/`、`build/`、`native/` 及生成产物。
-4. **复用既有设施**：优先复用工程内已有的 Presenter 模式、端口定义、文本常量表、`AssetService` 加载器与测试夹具（Test Fixtures），禁止平行造轮子。
+先确认需求所属 feature、流程（`Procedure*`）、数据真源（Model / Repository）与资源生命周期，再定位实现。工作区检查、Codegraph 使用、用户改动保护和按风险选择流程见 [AGENTS.md](../AGENTS.md)「工作方式」「按风险选择流程」。
 
-### 1.1 工程约束、业务规格与历史说明
-
-- 本文规定分层、依赖、生命周期与验证方式，不替代功能决策。业务规格仅在对应任务中读取；历史参数、旧范围与修复记录仅供追溯，不能升级为全工程永久禁令。
-- Agent 不自行添加未确认的业务需求。本次明确要求改变的行为，应同步修改实现、配置与相关测试，不以旧参数或旧测试拒绝变更；无关行为沿用现状。
-- 当前需求与协议、资源或规格冲突时，先核实可执行契约并说明差异；目标仍不明确时再询问。需求变更不自动改变服务端能力，也不能只改单侧契约。
+工程约束、业务规格与历史记录的边界同样以 [AGENTS.md](../AGENTS.md)「工程约束与业务需求」为准：本文只规定实现方式，不新增业务需求；旧参数、旧范围不自动升级为当前要求。
 
 ## 2. 分层架构与依赖硬约束
 
@@ -93,7 +85,7 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
 - 单轮业务响应由本轮 Model/Controller 直接持有；跨流程使用明确 entry params，不能读取全局“最近结果”反推当前轮次。匹配的权威开战回包与预加载对象必须一起移交，未移交资源随匹配退出释放。
 - 业务控制器与展示资源租约需按职责区分。只有加载图标、渲染样式的公共组件，不因类名出现 Controller 就机械拆出业务 Model。
 - 最小验证：`npx tsx --test tests/flow-architecture.test.ts tests/login-controller.test.ts tests/login-root-lifecycle.test.ts tests/matching-controller.test.ts tests/matching-server-readiness.test.ts tests/zcds-matching-preload.test.ts tests/view-intent-events.test.ts tests/callback-owner.test.ts`。
-- 后续迁移清单与边界见 [工程架构迁移清单](工程架构迁移清单.md)。清单中的“待迁移”不表示已经实现。
+- 后续迁移清单与边界见 [工程架构迁移清单](design/工程架构迁移清单.md)。清单中的“待迁移”不表示已经实现。
 
 ### 2.1.1 释放即解除事件，不在同步回调重复判断 disposed（2026-10-30）
 
@@ -195,27 +187,9 @@ GameNet.instance.removeCaller(this);
 - **单例与共享服务**：允许生命周期内确实唯一的共享服务使用单例；优先复用既有 EventMgr / CacheMgr / PopupManager 等入口，不因单例形式重构稳定实现。新增时明确唯一性、初始化归属、状态作用域与必要的重置/释放策略；core 的纯度边界仍有效，详见[单例与状态作用域](agent/单例与状态作用域.md)。
 - **业务状态归属**：页面、对局、实体状态默认由相应宿主持有实例；共享会话服务须处理切账号/退出/重开。禁止无归属的全局或 static 暂存，以及借单例绕过分层。跨流程传值优先使用 entry params / context；必要的临时桥接须单次消费、读取即清空，并配套验证。
 
-## 4. 命名、类型与代码风格规范
+## 4. 命名、类型与代码风格
 
-- **文件与类**：`PascalCase` 且文件名与导出类名严格同名；一个文件只承担一个清晰职责，禁止 `Utils.ts`、`Common.ts`、`Manager.ts` 等大杂烩收容箱。
-- **接口与类型**：`PascalCase` 且**强制以 `I` 开头**（`I` 必须在最前，如 `IMailRepository`、`IZCSnapshot`，禁止写成 `ZCISnapshot`）；枚举成员 `PascalCase`；常量 `UPPER_SNAKE_CASE`。
-- **变量与函数**：`camelCase`；布尔值以 `is / has / can` 开头；私有属性用 `private` + `camelCase`，**严禁使用 C# 风格的 `m_` 前缀**。函数名须体现动作意图（`load…`、`build…`、`present…`、`handle…`），禁用 `doIt`、`data`、`temp`。
-- **模块前缀**：对局玩法 `zcds` 内的类统一以 `ZC` 开头；全仓严禁拼音命名。
-- **TypeScript 严格性**：4 空格缩进、单引号、显式分号；纯类型依赖强制使用 `import type`；接口与入参优先标 `readonly`（除非如 `drainBuildingShakes` 需内部替换数组引用）；用 `unknown` 替代 `any`；Cocos Inspector 必填引用标 `null!`，可空引用显式标 `| null`，严禁用 `as any` 或静默 `?.` 掩盖绑定缺失。
-- **注释原则**：注释只解释**业务原因、Cocos 引擎陷阱、数学不变式或兼容分支的删除条件**，严禁复述代码字面逻辑。
-- **单例访问点必须非空，调用点不许写 `?.`**：`EventMgr.instance` / `CacheMgr.instance` / `PopupManager.inst` 一律声明成**非空类型**；构造不出来（场景里既没有 `Popup` 节点也没有 Canvas 这类初始化错误）就让 getter **直接 throw**，不要 `console.error + return null` 把判断推给每个调用点。
-  - 调用点写 `Xxx.inst.doThing()`，**不写 `inst?.`、也不写 `if (!mgr) { console.error(...); return; }`** —— 这类兜底把「管理器没初始化」降级成「点了没反应」，是典型的静默失效；让它抛出来才能定位。
-  - `?.` 只留给**真的可能为空**的查询：`PopupManager.inst.get(SomePanel)?.close()`（弹窗没开）、`GMManager.inst`（GM 面板未加载即无，允许 `| null`）。
-  - 判据：`grep -rn "\.inst?\." assets/script --include=*.ts` 与 `grep -rn "instance?\." assets/script --include=*.ts` 均为 0。
-- **组件查询与引用取用禁止 `!.`**：工程 `strict: false`（`strictNullChecks` 关闭），`getComponent(X)` / `getChildByName()` / `getComponentInChildren()` 的返回类型**看起来非空** ⇒ 写 `!` 只是把真实可能为 null 的值断言成非空，`tsc` 又不会再拦，崩溃从编译期挪到运行期。口径：
-  - prefab 焊死的组件（`itemPrefab` 上的 `XxxView`、`@property` 已绑定的引用）属**不变量** ⇒ 直接 `.` 取用，**不写 `!`、也不加 `if (!x) return` 这种只为消音的判断**（配错了要炸出来，静默跳过会让错误变成「点了没反应」）。
-  - 真可空（外部数据、显式 `| null` 的字段、按名字取的 `getComponent('XxxItem')`）⇒ 显式判空窄化或 `?.`，不用 `!` 糊。
-  - 已有的判空若保留，必须是**真的能取不到**（如遍历 `content.children` 时靠 `dataIndex` 先筛出池化槽位），不能是「怕它不在」。
-  - 判据：`grep -rn "[A-Za-z0-9_)]!\." assets/script --include=*.ts` 恒为 0 命中（注释里讲解该规则的地方除外）。
-- **`@property` 绑死的引用直接用，不判空**：prefab 上已绑定的 `Node` / `Sprite` / `Label` / 自定义组件属**不变量** ⇒ 一律 `this.xxx.active` / `.string` / `.node` 直接取，**不写 `if (this.xxx)` / `this.xxx?.` / `if (this.xxx && …)`**。判空只会把「prefab 掉了组件」降级成「点了没反应」，查不出根因。
-  - 「绑没绑」不靠直觉：读对应 prefab —— 找 `__type__` 等于该脚本 cid 的对象，看字段的 `__id__` 是否指向真实对象。公共组件常在一个 prefab 上挂**多个实例**，必须逐个核（如 `LeagueAdButton` 在 `LeagueDonate.prefab` 有 `BtnFree` / `BtnBuy` 两处，7 个字段都要存在）。
-  - **例外（判空要留）**：① 字段 tooltip / 注释明写「可选 / 老端兼容 / 接口先留好」；② 同一脚本被多个 prefab 复用、并非每个都绑；③ 动态实例或第三方层级的 `getComponent` 查询缓存（固定 prefab 引用应改为 Inspector 绑定，见 §5）；④ 入参本身可为 `null`（`setCostIcon(frame: SpriteFrame | null)` 里的 `if (!frame) return` 是语义，不是冗余）。
-  - 存量与判据：按「`@property` 字段名 × `if (this.x)` / `this.x?.` 形态」扫全仓，2026-10-30 为 **558 处 / 122 个文件**（Top：`OSRankPage` 29、`LeagueHallPage` 28、`HangPage` 19、`OSShopItem` 17、`BattleTokenPage` 17）。**不要一把梭**：按模块清，每清一个文件先把它的所有 prefab 实例对完账，再改用例护栏。
+见 [开发细则](agent/开发细则.md)「引用与类型」「命名与风格」「代码风格与交付」。本节不维护第二份；规则调整只改该文件。
 
 ## 5. Cocos Creator 预制体（Prefab）与静默陷阱守卫
 
@@ -273,7 +247,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
    - 唯一硬约束是 `assets/resources/<unitPrefabPath>.prefab` 真实存在且通过 `tools/pvp_card_check.py`。**改目录名或挪位置必须同步改卡表**；仅改卡牌显示文案则无需动目录。
 
 ### 7.3.3 ~ 7.3.11 对局表现层与领地专项规范（已拆分独立维护）
-为保持主架构文档轻量清晰，原 §7.3.3 ~ §7.3.11 的完整规格说明与回归测试判据已统一收拢至 [docs/zcds-表现层与领地规范.md](https://www.google.com/search?q=.%2Fzcds-%E8%A1%A8%E7%8E%B0%E5%B1%82%E4%B8%8E%E9%A2%86%E5%9C%B0%E8%A7%84%E8%8C%83.md)，章节映射如下：
+为保持主架构文档轻量清晰，原 §7.3.3 ~ §7.3.11 的完整规格说明与回归测试判据已统一收拢至 [docs/zcds-表现层与领地规范.md](zcds-表现层与领地规范.md)，章节映射如下：
 - **原 §7.3.3**（棋盘图层、地块/建筑/特效缩放、资源抬层、地块激活脉冲∥缩没、出生与产金抖动、邻格延迟、城墙排序）➔ 见专项规范 **§1、§8、§9.5**
 - **原 §7.3.4**（金卡「传说卡出场横幅」`ZCGameLegendBanner` 与扇入动画）➔ 见专项规范 **§2、§9.4**
 - **原 §7.3.5**（「冒险」领地页 `TerritoryPage` 职责切分、Presenter 纯度与台面中心对齐）➔ 见专项规范 **§3**

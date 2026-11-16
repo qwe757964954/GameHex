@@ -1,3 +1,6 @@
+import { sinNoise01 as coverNoise } from '../../../core/math/DeterministicNoise';
+import { clamp01Finite } from '../../../core/math/Scalar';
+
 /**
  * 进入关卡战斗或匹配界面的整页过场（纯函数，零 cc）。
  *
@@ -258,20 +261,15 @@ export interface ITerritoryBattleIntroFx {
     readonly navigate: boolean;
 }
 
-function clamp01(value: number): number {
-    if (!(value > 0)) return 0;
-    return value > 1 ? 1 : value;
-}
-
 /** 缓入（前慢后快）—— 散开、地块淡出都用它：先咬住画面，再一下甩掉。 */
 function easeIn(x: number): number {
-    const value = clamp01(x);
+    const value = clamp01Finite(x);
     return value * value;
 }
 
 /** 缓出（前快后慢）—— 云合拢用它：起手就明显在收，尾段收住不抖。 */
 function easeOut(x: number): number {
-    const value = clamp01(x);
+    const value = clamp01Finite(x);
     return 1 - (1 - value) * (1 - value);
 }
 
@@ -285,18 +283,18 @@ function easeOut(x: number): number {
  */
 export function territoryBattleIntroOutProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-    return clamp01(elapsed / TERRITORY_BATTLE_INTRO_OUT_SECONDS);
+    return clamp01Finite(elapsed / TERRITORY_BATTLE_INTRO_OUT_SECONDS);
 }
 
 /** 把 `out` 段进度（0~1）换算成一帧姿态。`done` 在 `progress >= 1` 时为真。 */
 export function territoryBattleIntroOutFxAt(progress: number): ITerritoryBattleIntroFx {
-    const p = clamp01(progress);
-    const fadeFrom = clamp01(TERRITORY_BATTLE_INTRO_UI_FADE_FROM);
+    const p = clamp01Finite(progress);
+    const fadeFrom = clamp01Finite(TERRITORY_BATTLE_INTRO_UI_FADE_FROM);
     const coverSpan = TERRITORY_BATTLE_INTRO_COVER_SPREAD - 1;
     const cellSpan = 1 - TERRITORY_BATTLE_INTRO_CELL_SCALE;
     return {
         uiPush: easeIn(p),
-        uiOpacity: p <= fadeFrom ? 1 : 1 - clamp01((p - fadeFrom) / (1 - fadeFrom)),
+        uiOpacity: p <= fadeFrom ? 1 : 1 - clamp01Finite((p - fadeFrom) / (1 - fadeFrom)),
         cellScale: 1 - cellSpan * easeOut(p),
         cellOpacity: 1 - easeIn(p),
         coverSpread: TERRITORY_BATTLE_INTRO_COVER_SPREAD - coverSpan * easeOut(p),
@@ -325,7 +323,7 @@ export function territoryBattleIntroHoldFx(): ITerritoryBattleIntroFx {
 /** `in` 段的进度（0~1）。 */
 export function territoryBattleIntroInProgress(elapsed: number): number {
     if (!Number.isFinite(elapsed) || elapsed <= 0) return 0;
-    return clamp01(elapsed / TERRITORY_BATTLE_INTRO_IN_SECONDS);
+    return clamp01Finite(elapsed / TERRITORY_BATTLE_INTRO_IN_SECONDS);
 }
 
 /**
@@ -341,10 +339,10 @@ export function territoryBattleIntroInProgress(elapsed: number): number {
  * `navigate` 在 `progress >= TERRITORY_BATTLE_INTRO_NAVIGATE_RATIO` 时为真。
  */
 export function territoryBattleIntroInFxAt(progress: number): ITerritoryBattleIntroFx {
-    const p = clamp01(progress);
+    const p = clamp01Finite(progress);
     const eased = easeIn(p);
     const coverSpan = TERRITORY_BATTLE_INTRO_COVER_SPREAD - 1;
-    const ratio = clamp01(TERRITORY_BATTLE_INTRO_NAVIGATE_RATIO);
+    const ratio = clamp01Finite(TERRITORY_BATTLE_INTRO_NAVIGATE_RATIO);
     return {
         uiPush: 1,
         uiOpacity: 0,
@@ -406,10 +404,7 @@ export interface ITerritoryBattleIntroCover {
  * （同一场过场播两遍不一样会读成"地图在抖"），用例也才能逐值断言。
  * `sin` 取小数是经典做法，纯函数、零状态、跨平台一致（engine 的 `sin` 是 IEEE754 实现）。
  */
-function coverNoise(a: number, b: number): number {
-    const raw = Math.sin(a * 12.9898 + b * 78.233) * 43758.5453;
-    return raw - Math.floor(raw);
-}
+/** 同一 `(a, b)` 的确定性噪声由 `core/math/DeterministicNoise.sinNoise01` 提供。 */
 
 /**
  * 铺满整个视口（含 {@link TERRITORY_BATTLE_INTRO_COVER_MARGIN} 余量）的**云层**。
@@ -483,10 +478,10 @@ export function territoryBattleIntroCoverPuffs(
  */
 export function territoryBattleIntroCoverAlpha(cover: ITerritoryBattleIntroCover, release: number): number {
     if (!cover) return 0;
-    const base = Number.isFinite(cover.alpha) ? clamp01(cover.alpha) : 0;
+    const base = Number.isFinite(cover.alpha) ? clamp01Finite(cover.alpha) : 0;
     if (!Number.isFinite(release) || release <= 0) return base;
-    const delay = Number.isFinite(cover.delay) ? clamp01(cover.delay) : 0;
-    const local = delay >= 1 ? 1 : clamp01((release - delay) / (1 - delay));
+    const delay = Number.isFinite(cover.delay) ? clamp01Finite(cover.delay) : 0;
+    const local = delay >= 1 ? 1 : clamp01Finite((release - delay) / (1 - delay));
     return base * (1 - easeIn(local));
 }
 

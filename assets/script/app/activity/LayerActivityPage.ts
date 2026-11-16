@@ -1,6 +1,6 @@
 import { _decorator, Button, Color, instantiate, Label, Node, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { loadArt, loadFrameArt } from '../card/CardLineupIcons';
+import { loadArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import {
     ACTIVITY_ART_NAMES,
@@ -9,11 +9,11 @@ import {
     ACTIVITY_TITLE_ART_ROOT,
     boxArtKey,
     buttonArtKey,
-    QUALITY_FRAME_NAMES,
     qualityFrameName,
     resolveRewardIconRef,
 } from './LayerActivityArt';
 import { activityRepository } from './LayerActivityRepository';
+import { loadQualityFrameMap } from '../common/QualityFrameLoader';
 import type { ActivityRequestResult, IActivityRepository, IActivitySnapshot } from './LayerActivityRepository';
 import { gotoActivityTask } from './ActivityJump';
 import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
@@ -623,11 +623,7 @@ export class LayerActivityPage extends PopupBase {
     private async loadQualityFrames(): Promise<Map<string, SpriteFrame>> {
         const cached = this.qualityFrames;
         if (cached) return cached;
-        const frames = new Map<string, SpriteFrame>();
-        await Promise.all(QUALITY_FRAME_NAMES.map(async (name) => {
-            const frame = await loadFrameArt(name);
-            if (frame) frames.set(name, frame);
-        }));
+        const frames = await loadQualityFrameMap();
         this.qualityFrames = frames;
         return frames;
     }

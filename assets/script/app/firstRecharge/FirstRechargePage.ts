@@ -6,9 +6,7 @@ import { CacheMgr } from '../net/CacheMgr';
 import { QUALITY_FRAME_NAMES } from './FirstRechargeArt';
 import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
 import { FirstRechargeDayRow } from './FirstRechargeDayRow';
-import {
-    firstRechargeRepository,
-} from './FirstRechargeRepository';
+import { firstRechargeRepository } from './FirstRechargeRepository';
 import type { IFirstRechargeRepository, IFirstRechargeSnapshot } from './FirstRechargeRepository';
 import { FirstRechargeTierTab } from './FirstRechargeTierTab';
 import {
@@ -18,13 +16,13 @@ import {
     tierRedDotOf,
     visibleTierIndexes,
 } from './FirstRechargeTable';
-import type { IFirstRechargeReward, IFirstRechargeTier } from './FirstRechargeTable';
+import type { IFirstRechargeTier } from './FirstRechargeTable';
 import { FIRST_RECHARGE_TEXTS } from './FirstRechargeTexts';
 
 const { ccclass, property } = _decorator;
 
 /**
- * 「首充礼包」（新首充）弹窗（`assets/resources/ui/FirstRecharge/FirstRecharge.prefab`）。
+ * 「首充礼包」（新首充）弹窗（`assets/bundles/main-pages/ui/FirstRecharge/FirstRecharge.prefab`）。
  *
  * 版面照搬 FGUI 包「新首充」（`zarts/.../assets/新首充/组件/组件_新首充.xml`），
  * 效果图基准 = 同目录 `设计图/首充标注.jpg`：
@@ -35,56 +33,56 @@ const { ccclass, property } = _decorator;
  *
  *  **分层**（与 `CardUpgradePage` 同一套）：
  *    数据与判定  `FirstRechargeTable`（纯函数）+ `FirstRechargeRepository`（表 / 缓存 / 请求）
- *    版面公式    `FirstRechargeLayout`（纯函数 —— 横排可变宽，`cc.Layout` 表达不了）
+ *    版面        `DayList` / `SlotBar` 的 `cc.Layout` 定间距与居中；日牌宽度见 `FirstRechargeDayRow.applyLayout`
  *    子视图      `FirstRechargeTierTab`（一档）、`FirstRechargeDayRow`（一天，内含 `FirstRechargeSlot`）
  *    本类        只做「取数 → 铺到子视图」和「点击 → 发请求 → 重新取数」
  *
  *  项目约定：**样式与布局全在 prefab 的 Inspector 上**（含全部美术引用，不再运行时 `resources.load`）；
- *  只有「随数据变化的尺寸」才在代码里算 —— 也就是 `FirstRechargeLayout` 那三条公式。
+ *  代码只算「随数据变化的尺寸」，目前只有日牌宽度一项。
  */
 @ccclass('FirstRechargePage')
 export class FirstRechargePage extends PopupBase {
     /**
-     * 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。
+     * 弹窗预制体在 `main-pages` bundle 下的路径（`PopupManager` 用它加载）。
      *
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/FirstRecharge/`，F 与 R 大写）：
+     * ⚠️ 目录名**必须**与磁盘一致（`assets/bundles/main-pages/ui/FirstRecharge/`，F 与 R 大写）：
      * Android / iOS 的热更新 zip 内路径**大小写敏感**，写成 `ui/firstRecharge/...`
-     * 在编辑器里照样能跑（Windows 不敏感），真机上才会 `resources.load` 失败变空弹窗。
+     * 在编辑器里照样能跑（Windows 不敏感），真机上才会加载失败变空弹窗。
      */
     static prefabPath = 'ui/FirstRecharge/FirstRecharge';
 
     @property({ type: Label, tooltip: 'UnitName：压名牌上的兵种名（如「兽人民兵」）' })
-    unitNameLabel: Label = null;
+    unitNameLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: Node, tooltip: 'TierBar：档位栏（下面挂 4 个 FirstRechargeTierTab）' })
-    tierBar: Node = null;
+    tierBar: Node = null!;
 
     @property({ type: Node, tooltip: 'DayList：天数列表（下面挂 3 个 FirstRechargeDayRow）' })
-    dayList: Node = null;
+    dayList: Node = null!;
 
     @property({ type: Node, tooltip: 'BtnBuy：底部按钮（挂 cc.Button）' })
-    buyButton: Node = null;
+    buyButton: Node = null!;
 
     @property({ type: Label, tooltip: 'BtnBuy/Label：按钮文案' })
-    buyLabel: Label = null;
+    buyLabel: Label = null!;
 
     @property({ type: RedDot, tooltip: 'BtnBuy/RedDot：可领取红点（默认隐藏）' })
-    buyRedDot: RedDot = null;
+    buyRedDot: RedDot = null!;
 
     @property({ type: Label, tooltip: 'Hint：底板里的副标题，异常时被离线 / 失败提示顶掉' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
     @property({ type: Color, tooltip: '提示文字：异常态颜色；正常态取 prefab Label 颜色' })
     hintErrorColor: Color = new Color(226, 88, 74, 255);
 
-    /** 数据端口；测试可替换（`repository` 只读，用 `setRepository` 换）。 */
+    /** 数据端口；测试用 `setRepository` 注入替身。 */
     private repo: IFirstRechargeRepository = firstRechargeRepository;
 
-    private closeAction: Button = null;
-    private buyAction: Button = null;
+    /** 底部按钮的 cc.Button（`BtnBuy` 上的组件），渲染时写 `interactable`。 */
+    private buyAction: Button = null!;
 
     /** 提示文字正常态颜色：从 prefab Label 上取。 */
     private readonly hintIdleColor = new Color();
@@ -111,9 +109,8 @@ export class FirstRechargePage extends PopupBase {
         this.subtitle = this.hintLabel.string;
 
         //  CLICK 挂在**节点**上（Button 自身没有 on）—— 与 `CardUpgradePage` 同一写法。
-        this.closeAction = this.closeButton.getComponent(Button);
         this.buyAction = this.buyButton.getComponent(Button);
-        this.closeAction.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.closeButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.buyAction.node.on(Button.EventType.CLICK, this.onBuyClick, this);
 
         for (const tab of this.tierTabs) {
@@ -127,11 +124,7 @@ export class FirstRechargePage extends PopupBase {
         this.setHint('');
         // 对齐老端 VOFirstRechargeNewBag.OnChanged：支付完成/领奖后服务端更新缓存时自动重绘。
         // 支付是异步链路，不能只依赖点击购买后的那次立即 reload（那时通常还没发货）。
-        CacheMgr.instance.setEventUpdate(
-            'CmdFirstRechargeNew',
-            this,
-            this.onFirstRechargeCacheUpdate,
-        );
+        CacheMgr.instance.setEventUpdate('CmdFirstRechargeNew', this, this.onFirstRechargeCacheUpdate);
         // 打开时向服务端要一次最新状态；连不上就跳过（继续用缓存渲染，不弹错）。
         await this.repo.refreshFromServer(this);
         if (!this.alive) return;
@@ -139,11 +132,7 @@ export class FirstRechargePage extends PopupBase {
     }
 
     protected onClose(): void {
-        CacheMgr.instance.removeEventUpdate(
-            'CmdFirstRechargeNew',
-            this,
-            this.onFirstRechargeCacheUpdate,
-        );
+        CacheMgr.instance.removeEventUpdate('CmdFirstRechargeNew', this, this.onFirstRechargeCacheUpdate);
         // 作废尚未完成的读表/贴图任务，避免缓存复用后旧结果覆盖下一次打开。
         this.loadRevision += 1;
         this.presentRevision += 1;
@@ -151,7 +140,6 @@ export class FirstRechargePage extends PopupBase {
     }
 
     private readonly onFirstRechargeCacheUpdate = (): void => {
-        if (!this.alive) return;
         void this.reload();
     };
 
@@ -242,8 +230,8 @@ export class FirstRechargePage extends PopupBase {
      * 不清空 —— 空白比"上一档的名字"更安全（切档时不会闪一下旧档的兵种名）。
      */
     private presentHeadline(tier: IFirstRechargeTier, snapshot: IFirstRechargeSnapshot): void {
-        const resId = tier.days[0]?.[0]?.resId;
-        const name = resId === undefined ? '' : snapshot.items.get(resId)?.name ?? '';
+        const resId = tier.days[0]?.[0]?.resId ?? 0;
+        const name = snapshot.items.get(resId)?.name ?? '';
         if (name.length === 0) return;
         this.unitNameLabel.string = name;
         const texts = FIRST_RECHARGE_TEXTS;
@@ -256,7 +244,7 @@ export class FirstRechargePage extends PopupBase {
         const tabs = this.tierTabs;
         for (let index = 0; index < tabs.length; index++) {
             const tier = tiers[index];
-            if (!tier || visible.indexOf(index) < 0) {
+            if (!tier || !visible.includes(index)) {
                 tabs[index].hide();
                 continue;
             }
@@ -274,7 +262,7 @@ export class FirstRechargePage extends PopupBase {
         const texts = FIRST_RECHARGE_TEXTS;
         const state = buttonStateOf(snapshot.states.get(tier.id), snapshot.now);
         if (state === 'buy') {
-            this.buyLabel.string = `${texts.buyPrefix}${tier.price}`;
+            this.buyLabel.string = this.priceText(tier);
         } else {
             this.buyLabel.string = state === 'claim' ? texts.claim : texts.taken;
         }
@@ -345,7 +333,7 @@ export class FirstRechargePage extends PopupBase {
             return;
         }
         if (result === 'failed') {
-            this.setHint(FIRST_RECHARGE_TEXTS.failed, true);
+            this.setHint(texts.failed, true);
             this.presentBuyButton(tier, snapshot);
             return;
         }
@@ -357,7 +345,7 @@ export class FirstRechargePage extends PopupBase {
     // 工具
     // ============================================================
 
-    /** 底部按钮当前处于哪一态（`onBuyClick` 用它决定发哪个请求）。 */
+    /** 当前选中的档位；选中 id 没对上表里的任何一档时回落到第一档。 */
     private selectedTier(tiers: readonly IFirstRechargeTier[]): IFirstRechargeTier | undefined {
         return tiers.find((tier) => tier.id === this.selectedTierId) ?? tiers[0];
     }
@@ -394,7 +382,7 @@ export class FirstRechargePage extends PopupBase {
         const frames = new Map<number, SpriteFrame>();
         const wanted = new Map<number, string>();
         for (const rewards of tier.days) {
-            for (const reward of rewards as readonly IFirstRechargeReward[]) {
+            for (const reward of rewards) {
                 if (wanted.has(reward.resId)) continue;
                 const iconPath = items.get(reward.resId)?.icon;
                 if (iconPath) wanted.set(reward.resId, iconPath);

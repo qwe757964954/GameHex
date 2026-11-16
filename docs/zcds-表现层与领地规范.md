@@ -119,6 +119,7 @@ mapLayer（= ZCGameHUD.prefab 的 content）
 
 ### 1.2 地块图标缩放、中立资源抬层与落点
 
+- 资源格初始化时保留全类型随机开发类型及其配置价格；资源标记清除后若仍可开发（如击败野怪），显示问号与价格，与既有抽卡规则一致。普通资源领取后仍按原规则标记为已开发，不再次收费。回归：`tests/zcds-neutral-features.test.ts`。
 - **地块与建筑图标缩放由代码唯一决定（只改 Prefab `_lscale` 会被静默覆盖）**：
   - `iconSprite` 同时承载地块类型图标（`icon_jk/by/wh/em`）与中立资源点图标，唯一缩放写入口为 `ZCHexView.renderContent`：类型图标写 `TILE_ICON_SCALE = 0.8`，资源图标按 `resourceIconScale` 缩放到格子边长。
   - 割草机静态使用 `map-resource/extension` 的左右镜像（朝左下）；运行时由 `renderMower` 按路线方向切换右上、右下、上、下四张图，左侧方向镜像右侧图，按当前帧尺寸等比缩放。启动帧及末段均取路线方向，不以当前位移是否为零判断。

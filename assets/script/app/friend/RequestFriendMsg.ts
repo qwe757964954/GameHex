@@ -1,23 +1,17 @@
 /**
- * 「好友」的 14 个请求封装 —— 与老端 `generated/requestMsg/RequestFriendsMsg.ts` 一一对应。
+ * 「好友」的 14 个请求封装，与老端 `generated/requestMsg/RequestFriendsMsg.ts` 一一对应。
  *
- * 为什么不照抄老端文件：Demo3.8 的 `ReqMsgProtoName` 是**从 proto 重新生成**的
- * （`assets/script/app/generated/netProto/Cmd.d.ts` 7130~7143 行），
- * 老端那份的键名与这里是同一套（`CmdFriendsApplyReqMsg` …），所以逐个重建即可，
- * 顺带把老端拼错的类名（`RequestdFriendAgreeOneKey` / `RequestdFriendRefreshSuggest`）
- * **保留原样** —— 保持可对照，改名会让「老端有没有这个调用」的检索失效。
+ * 三个类名里的 `Requestd…`（同意 / 拒绝 / 刷新推荐）是老端原有的拼写，有意保留 ——
+ * 改名会让「老端有没有这个调用」的检索失效。
  *
- * ⚠️ 「能不能发」的判据是 **`MessageId` 里有没有登记对应的 `<Base>RspMsg`**
- *   （`Cmd.d.ts` 5832~5845 行）。本轮实测 14 个 **全部登记**，
- *   另有 8 个 `…BroMsg` 推送（6011~6018 行）—— 推送侧由 `FriendRepository.listen()` 接。
+ * 请求体口径照 `Cmd.d.ts`，不照老端 TS 的形参类型：
+ *   申请 / 通过 / 拒绝 / 领取 / 赠送 / 拉黑 / 移出黑名单：`{ targetId: Long }`
+ *   删除好友：`{ targetId: Long[] }`（唯一一个批量请求体）
+ *   搜索：`{ targetId: Long, targetName: string }`（按名搜时 id 传 0）
+ *   一键领取 / 一键赠送 / 一键同意 / 一键拒绝 / 刷新推荐：`{}`
  *
- * ⚠️ 请求体字段口径（照抄 `Cmd.d.ts`，别照抄老端 TS 的形参类型）：
- *   | 请求 | 请求体 |
- *   |---|---|
- *   | 申请 / 通过 / 拒绝 / 领取 / 赠送 / 拉黑 / 移除黑名单 | `{ targetId: Long }` |
- *   | 删除好友 | `{ targetId: Long[] }` ← **数组**（唯一一个批量） |
- *   | 搜索 | `{ targetId: Long, targetName: string }`（按名搜时 id 传 0） |
- *   | 一键领取 / 一键赠送 / 一键同意 / 一键拒绝 / 刷新推荐 | `{}`（空请求体） |
+ * 这些请求对应的 Rsp 都在 `MessageId` 里登记了，但回带的数据不会另外推给客户端；
+ * 需要落地的字段由 `FriendRepository.localPatches` 打本地补丁。
  */
 
 import { RequestMsg } from '../../framework/net/RequestMsg';

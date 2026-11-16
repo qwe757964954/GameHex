@@ -1,25 +1,12 @@
 /**
- * 红点（FGUI `组件_公用_红点` / `com_rd`）的**状态判定唯一入口**。
+ * 红点（FGUI `组件_公用_红点` / `com_rd`）的状态判定唯一入口。
  *
- * **零 import 纯函数** —— 可被 Node 用例直接 import（依赖链上禁出现 `cc`）。
- * 落到节点上的事全在 `RedDot.ts`，本文件只回答「给一个计数 + 一个类型，该显示成什么样」。
+ * 零 import 纯函数，Node 用例可直接 import（依赖链上禁止出现 `cc`）；
+ * 落到节点上的事全在 `RedDot.ts`，这里只回答「计数 + 类型该显示成什么样」。
  *
- * ## 与老端 `GObjRD` 的对齐
- * 来源：`client/assets/script/app/game/fguiExtend/GObjRD.ts`
- * ```
- * OnRDUpdate(rdNum, rdType?, icon?)            // rdNum: boolean | number
- *   rdNum == null              → 0             // 老端显式把 null 当 0
- *   typeof rdNum == 'boolean'  → rdNum && 1 || 0
- *   rdNum <= 0                 → setSelectedPage('是否显示红点', '不显示')
- *   否则                       → 按 '红点类型' 显示
- *                                 数字红点 → title.setText(rdNum)
- *                                 普通红点 → icon.SetSpine('reddot')   ← 红点闪闪，**不是**静态图
- *                                 （新红点走 FGUI 的 gearIcon，直接换 loader 的 url）
- * ```
- * 注意「普通红点」在老端是 **spine 动画**（`resources/塔防/spine/reddot`，动画名 `anmation`，
- * 上游拼写就少一个 i），FGUI XML 里那个 `公用_图标_红点.png` 只是**默认 gearIcon 的静态值**，
- * 运行时代码会把它换成 spine。所以本模块的状态里 `showSpine` 与 `artKey` 是**两个字段**：
- * 有 spine 就播动画，spine 不可用时回退到静态图（不留白）。
+ * 对齐老端 `GObjRD.OnRDUpdate`：`null` 当 0；`boolean` 转 1/0；`≤ 0` 不显示；
+ * 数字红点写数字；普通红点播 spine（`skel/reddot`，动画名 `anmation`，上游拼写就少一个 i）。
+ * 所以 `showSpine` 与 `artKey` 是两个字段：有 spine 播动画，spine 不可用时回退静态图。
  */
 
 /** FGUI `红点类型` 控制器的页序 —— **下标即类型号，别改顺序**（改了就与老端素材/行为错位）。 */
@@ -56,11 +43,8 @@ export interface IRedDotState {
 const HIDDEN: IRedDotState = { visible: false, artKey: null, showSpine: false, text: '' };
 
 /**
- * 计数归一化 —— 复刻老端那两行。
- *
- * ⚠️ 老端的 `rdNum` 是 **`boolean | number`**：调用点大量写的是 `OnRDUpdate(1)` / `OnRDUpdate(0)`
- * / `OnRDUpdate(data.hasRD)`（布尔）。两种都要接得住，否则布尔进到 `<= 0` 比较里
- * `true <= 0` 恒为 false ⇒ 红点永远显示。
+ * 计数归一化。老端的 `rdNum` 允许 `boolean`：调用点常写 `OnRDUpdate(data.hasRD)`，
+ * 必须转成 1/0，否则 `true <= 0` 恒为 false，红点会一直显示。
  */
 export function normalizeRedDotCount(count: number | boolean | null | undefined): number {
     if (count === null || count === undefined) return 0;

@@ -1,13 +1,6 @@
 /**
- * 每日充值的数据端口 —— 表 + 服务器缓存 + 领奖请求。
- *
- * 与 `GiftRepository` 同一套分层：页面只依赖本接口，判定全在 `RechargeDailyTable`（纯函数）。
- *
- * 数据来源：
- *   ① 配置表 `rechargeDaily`（走 RefUtil）；
- *   ② 服务器缓存 `CmdRechargeDaily`（服务端主动推，收包时已写进 GameCache）；
- *   ③ 配置表 `item`（奖励格品质 + 图标）；
- *   ④ 请求 `CmdRechargeDailyGetReward`（按天领）/ `CmdRechargeDailyGetAccReward`（累计领）。
+ * 每日充值的数据端口：读取 `rechargeDaily` 表、`CmdRechargeDaily` 缓存和 `item` 表，
+ * 并发送单日/累计奖励的领取请求。
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -21,10 +14,7 @@ import {
     parseRechargeDailyRows,
     readRoundProgresses,
 } from './RechargeDailyTable';
-import type {
-    IRechargeDailyReward,
-    IRechargeDailyRoundView,
-} from './RechargeDailyTable';
+import type { IRechargeDailyRoundView } from './RechargeDailyTable';
 import {
     RequestRechargeDailyGetAccReward,
     RequestRechargeDailyGetReward,
@@ -33,16 +23,14 @@ import {
 /** 一次界面快照。 */
 export interface IRechargeDailySnapshot {
     readonly rounds: readonly IRechargeDailyRoundView[];
-    /** resId → 物品展示信息（品质 + 图标路径）。 */
     readonly items: ReadonlyMap<number, { readonly quality: number; readonly icon: string }>;
-    readonly now: number;
 }
 
 export type RechargeDailyRequestResult = 'ok' | 'offline' | 'failed';
 
 export interface IRechargeDailyRepository {
     /** 读表 + 读缓存，组装一次快照；不发请求。 */
-    load(nowMs?: number): Promise<IRechargeDailySnapshot>;
+    load(): Promise<IRechargeDailySnapshot>;
     /** 领某档某天的每日奖励。 */
     claimDay(round: number, day: number, caller?: object): Promise<RechargeDailyRequestResult>;
     /** 领某档累计第 day 天的奖励。 */
@@ -69,7 +57,7 @@ function readCmd(): unknown {
 }
 
 export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository {
-    async load(nowMs: number = Date.now()): Promise<IRechargeDailySnapshot> {
+    async load(): Promise<IRechargeDailySnapshot> {
         const [rowArr, itemRows] = await Promise.all([
             readRows('rechargeDaily'),
             readRows('item'),
@@ -78,18 +66,14 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
         const rows = parseRechargeDailyRows(rowArr);
         const progresses = readRoundProgresses(readCmd());
 
-        // 按 round 去重，每档一档视图；表里出现过的 round 都要（哪怕缓存空）。
-        const roundSet = new Set<number>();
-        for (const row of rows) roundSet.add(row.round);
-        const rounds: IRechargeDailyRoundView[] = [];
-        for (const round of Array.from(roundSet).sort((a, b) => a - b)) {
-            rounds.push(buildRoundView(round, rows, progresses.get(round)));
-        }
+        // 表里出现的每个 round 都要生成视图，即使缓存为空。
+        const rounds = Array.from(new Set(rows.map((row) => row.round)))
+            .sort((a, b) => a - b)
+            .map((round) => buildRoundView(round, rows, progresses.get(round)));
 
         return {
             rounds,
             items: parseRechargeItemMap(itemRows),
-            now: nowMs,
         };
     }
 
@@ -128,6 +112,3 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
 }
 
 export const rechargeDailyRepository: IRechargeDailyRepository = new RuntimeRechargeDailyRepository();
-
-// 保留类型引用，避免被 tree-shake 误判未用。
-export type { IRechargeDailyReward };

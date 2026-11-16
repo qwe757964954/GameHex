@@ -88,6 +88,31 @@ test('完整卡库为空时不跳到虚构卡牌', async () => {
         assert.equal(h.states.at(-1).cardId, '1');
     } finally { h.finish(); }
 });
+
+test('详情首屏数据未就绪时连点切卡无效，就绪后仍可正常切换', async () => {
+    const h = upgradeFixture();
+    const art = deferred<ICardDetailArt>(), status = deferred<ReturnType<typeof upgradeStatus>>();
+    let navigation = 0;
+    h.repository.loadDetailArt = () => art.promise;
+    h.repository.loadUpgradeStatus = () => status.promise;
+    h.repository.loadDetailNavigation = async () => {
+        navigation++;
+        return { catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true };
+    };
+    try {
+        const opening = h.controller.start();
+        h.intent('next'); h.intent('previous');
+        assert.equal(navigation, 0);
+        art.resolve({ hero: null, diamond: null, classTag: null }); await tick();
+        h.intent('next'); h.intent('submit');
+        assert.equal(navigation, 0);
+        assert.equal(h.calls, 0);
+        status.resolve(upgradeStatus()); await opening;
+        h.intent('next'); h.intent('next'); await tick();
+        assert.equal(navigation, 1);
+        assert.equal(h.states.at(-1).cardId, '2');
+    } finally { h.finish(); }
+});
 function upgradeFixture() {
     const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];

@@ -740,7 +740,6 @@ test('D3 ⚠️ 写请求必须 withTimeout + 离线早退 + catch 返 failed（
     assert.ok(REPO_SRC.includes('catch'), '必须 catch');
     assert.ok(REPO_SRC.includes("return 'failed'"), '失败要返 failed 而不是抛出去');
     assert.ok(REPO_SRC.includes("return 'offline'"));
-    assert.ok(REPO_SRC.includes('GIFT_READ_TIMEOUT_MS'), '读超时要能读出来给测试对账');
 });
 
 test('D4 `CmdShopBuy` 请求参数：`cmdShopType` 用常量，次数 1', () => {

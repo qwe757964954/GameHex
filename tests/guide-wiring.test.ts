@@ -9,7 +9,7 @@
  *   2-1/3-1/4-1/7-1 → tileFlipped    ← TerritoryController 的 randomTap
  *   5-1/5-2         → siteTap        ← TerritoryController 的 siteTap
  *   6-1             → pageOpened:card ← GuideComposition（英雄卡牌页）
- *   6-2             → cardSelected:<id> ← MainPageComposition.openUpgrade
+ *   6-2             → cardSelected:<id> ← CardPopupComposition 的实际就绪快照
  *   6-3             → cardLevelUp:<id>  ← Controller 直接订阅 HeroUpgraded
  *   8-1             → popupClosed    ← MainTaskDetailPage.onClose
  */
@@ -43,10 +43,17 @@ test('6-1：英雄卡牌页的引导启动后核对页面，队伍编辑弹窗�
 });
 
 test('6-2：选中卡牌上报 cardSelected:<cardId>，不得硬编码 id', () => {
-    const src = read('assets/script/app/bootstrap/main/MainPageComposition.ts');
-    assert.match(src, /reportGuideComplete\('cardSelected', unit\.id\)/);
+    const src = read('assets/script/app/bootstrap/card/CardPopupComposition.ts');
+    assert.match(src, /state\.phase === 'ready'[\s\S]*reportGuideComplete\('cardSelected', state\.cardId\)/);
+    assert.doesNotMatch(read('assets/script/app/bootstrap/main/MainPageComposition.ts'), /reportGuideComplete\('cardSelected'/);
     // 硬编码 68001 等于把判据搬进代码：表里换英雄后代码不会跟着变
     assert.doesNotMatch(src, /reportGuideComplete\('cardSelected',\s*68001\)/);
+});
+
+test('卡牌详情开关报告生命周期，误开详情的引导暂停和恢复有真实入口', () => {
+    const src = read('assets/script/app/card/CardUpgradePage.ts');
+    assert.match(src, /protected onOpen\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'enabled' \}\)/);
+    assert.match(src, /protected onClose\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'disabled' \}\)/);
 });
 
 test('8-1：主线任务详情页关闭上报 popupClosed', () => {

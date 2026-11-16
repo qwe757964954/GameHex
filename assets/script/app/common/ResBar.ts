@@ -4,11 +4,10 @@ import { CacheMgr } from '../net/CacheMgr';
 import { readRoleRow } from '../main/MainRoleRow';
 import { MainResBarSlot } from '../main/MainResBarSlot';
 import { buildResBarSlots, buildResBarView } from '../main/MainResBarTypes';
-import {RES_BAR_FLASH_PEAK_ALPHA, resBarFlashFx} from '../main/MainResBarFeedback';
+import { RES_BAR_FLASH_PEAK_ALPHA, resBarFlashFx } from '../main/MainResBarFeedback';
 import {
     IItemRefRow,
     IOpenRefRow,
-    IResBarCell,
     IResPropertyRow,
     ITEM_TABLE,
     OPEN_TABLE,
@@ -25,73 +24,27 @@ const { ccclass, property } = _decorator;
 const GLOW_RADIUS = 12;
 /** 闪光描边宽度（像素）。 */
 const GLOW_LINE_WIDTH = 3;
-/** 闪光比格子外扩多少（像素）：不外扩会像"贴在格子上的一块白纸"。 */
+/** 闪光比格子外扩多少（像素）：不外扩会像贴在格子上的一块白纸。 */
 const GLOW_PADDING = 8;
 
 /**
- * 顶部**货币条**（`ui/common/ResBar`，552×106，老端 `组件_资源栏` 的 `组件_资源信息` 部分）。
+ * 顶部货币条（`ui/common/ResBar`，552×106），对应老端 `组件_资源栏` 的 `组件_资源信息` 部分。
+ * 玩家信息块归 `MainResBar`；这里只管货币格，竞技页 HUD 也用同一份嵌套实例。
  *
- * ## 与 `MainResBar` 的分工（不是两份实现）
+ * 接入二选一：
+ * - `openRefId`（推荐）：读 `open.json` 的 `resShowType`，改表不用改客户端；
+ * - `resKeys`：逗号分隔的 `roleProperty.key`，用于没有 open.json 条目的临时页。
+ * `openRefId > 0` 时以表为准，解析不出来才回退 `resKeys`。
  *
- * 老端 `组件_资源栏` 是**常驻层**（`LayerMainResources`，`UIOrder.ResourceUI`），一整条里含两块：
+ * 宿主一律用嵌套 prefab 实例接入，只覆盖 `resKeys` / `openRefId`，不要把公共件节点抄一份。
+ * 三格都绑在公共件内部，`keys` 少于槽位数时多出来的格子 `render(null)` 整格隐藏 ——
+ * 格数与加号只看 keys，不看数据是否到位。
  *
- *  | 块 | 内容 | 本工程 |
- *  |---|---|---|
- *  | `组件_玩家信息` 463×106 | 头像 / 昵称 / LV / uid / 经验条 | `MainResBar`（挂在竞技页 `ArenaRoot/ResBarLayer`，属主界面 HUD） |
- *  | `组件_资源信息` × N（132×40） | 图标 + 数值 + 加号 | **本组件** |
+ * keys 用字符串而不是数组：MCP 设不了数组属性，而这几项配置要落在 prefab 实例上。
  *
- * 二级页（民兵天赋 / 武将 / 军师…）顶部要的是「**这一页关心的那两三种货币**」，
- * 不需要把玩家信息块塞进全屏弹窗 ⇒ 抽成只管货币的通用件。
- *
- * ⚠️ 2026-09-29：**竞技页 HUD 那条也换成本组件了** —— 在 `ArenaRoot/ResBarLayer` 下挂一份
- * **嵌套 prefab 实例**（`ResBarLayer/ResBar`），`MainResBar` 只留玩家信息块。两边共用同一份
- * 数据层（`MainResBarTypes`）与槽组件（`MainResBarSlot`），HUD 不再自带一套货币渲染
- * （否则同一份 CmdRole 会被两条链路各写一遍）。
- *
- * ## 接入方式（二选一）
- *
- * | 属性 | 什么时候用 | 来源 |
- * |---|---|---|
- * | `openRefId` | **推荐**。填 `open.json` 的 `refId`（天赋页 = 18） | 策划表 `resShowType` —— 改表不用改客户端 |
- * | `resKeys` | 临时页 / 没有 `open.json` 条目时兜底 | prefab 上手填，逗号分隔（`coin,gold`） |
- *
- * `openRefId > 0` 时以**表**为准，解析不出来（表未落地 / 该行没配）才回退 `resKeys`。
- *
- * ⚠️ 宿主一律用**嵌套实例**（`cc.PrefabInstance`）接入，只覆盖 `_name` / `_lpos` /
- * `resKeys`（或 `openRefId`）三项；**不许把公共件的节点抄一份到宿主里** —— 那样改公共件
- * 不会穿透宿主，等于每个宿主私有一份。
- *
- * ## 槽位绑定（`slot0` / `slot1` / `slot2`）
- *
- * 绑定落在**公共件内部**（三格都绑），宿主只覆盖 `resKeys`：
- *
- * | 宿主 | `resKeys` | 效果 |
- * |---|---|---|
- * | 民兵天赋页（3 格） | `coin,gold`（或走 `openRefId=18`） | 三格中前两格出图，第 3 格整格隐藏 |
- * | 竞技页 HUD（3 格容器） | **`gold,end`**（2026-10-26） | 银币 + 体力两格出图，第 3 格整格隐藏 |
- * | 商城（2 格） | `gold,gem` | 第 3 格整格隐藏（`render(null)`） |
- *
- * 槽位顺序 = 从左到右渲染顺序 = `openRefId` 的 `resShowType` / `resKeys` 顺序；
- * **keys 比宿主格子少时多出来的格子整格隐藏**（规则 140：格数只看 keys，不看数据可用性）。
- * 每个槽是 `MainResBarSlot`，它的 `plus`（补货加号）按数据显隐 —— 只有体力格会亮。
- *
- * ## 为什么 keys 写成字符串而不是数组
- *
- * MCP 工具**设不了数组属性**（写单值会把数组写坏成 `{__id__:N}`，旧版 Cocos MCP 的已知缺陷），
- * 数组只能在 Inspector 里手填；而「哪几种货币」是要**落在 prefab 实例上**的配置 ⇒
- * 用逗号分隔字符串，prefab 里可覆盖、代码里零分支。
- *
- * ## 图标与数值各自的口径
- *
- * - **图标**：`roleProperty` 真表 → `icons/resource/<icon>`（与 `resolveRewardIconRef` 同源）。
- *   表读不到时落 `ResTypes.FALLBACK_RES_ICON_ART` 兜底白名单。
- * - **数值**：`CmdRole` 缓存（`readRoleRow()`，服务端权威）；缓存没落地时按 `0` 显示。
- * - **格数 / 加号**：只看 keys —— **不许**跟数据可用性绑定（规则 140）。
- *
- * ## 自驱动
- *
- * `onLoad` 里读一次并订阅 `CmdRole` 缓存更新（服务器推资源变化 ⇒ 自动重写数值）。
- * 宿主**不需要**持有本组件的引用，嵌进页面就能用。
+ * 图标取 `roleProperty` 真表（`icons/resource/<icon>`，读不到走兜底白名单）；数值读
+ * `CmdRole` 缓存（`readRoleRow`），缓存没落地时按 0 显示。`onLoad` 订阅缓存更新后自驱动，
+ * 宿主不需要持有本组件引用。
  */
 @ccclass('ResBar')
 export class ResBar extends Component {
@@ -99,49 +52,36 @@ export class ResBar extends Component {
     @property(UITransform) barTransform: UITransform = null!;
     @property(Widget) barWidget: Widget = null!;
     @property({ type: MainResBarSlot, tooltip: 'Res0：第 1 格（顺序 = openRefId 的 resShowType / resKeys）' })
-    slot0: MainResBarSlot = null;
+    slot0: MainResBarSlot = null!;
 
     @property({ type: MainResBarSlot, tooltip: 'Res1：第 2 格' })
-    slot1: MainResBarSlot = null;
+    slot1: MainResBarSlot = null!;
 
     @property({ type: MainResBarSlot, tooltip: 'Res2：第 3 格（keys 不足 3 个时整格隐藏）' })
-    slot2: MainResBarSlot = null;
+    slot2: MainResBarSlot = null!;
 
     /**
-     * `open.json` 的 `refId`（**首选**）：填了就读该行的 `resShowType` 决定显示哪几格。
-     *
-     * 例：民兵天赋 `refId=18` ⇒ `resShowType=[10,7]` ⇒ `coin,gold` 两格。
-     * `0` = 不读表，用下面的 `resKeys`。
+     * `open.json` 的 `refId`（首选）：填了就读该行的 `resShowType`。
+     * 例：民兵天赋 `refId=18` ⇒ `resShowType=[10,7]` ⇒ `coin,gold` 两格；`0` = 用 `resKeys`。
      */
     @property({ type: CCInteger, tooltip: 'openRefId：open.json 的 refId（如天赋页 18）；0 = 用 resKeys' })
     openRefId = 0;
 
-    /**
-     * 展示哪几种资源（**逗号分隔**的 `roleProperty.key`，顺序 = 从左到右）。
-     *
-     * 只在 `openRefId` 为 0（或表里解析不出）时生效。
-     * 老端 `open.json` 的 `resShowType` 是数字（`roleProperty` 枚举：6 gem / 7 gold / 9 end / 10 coin…），
-     * 这里用 `key` 是因为 `CmdRole` 缓存的字段名就是 `key`（`gold` / `coin` / …）。
-     */
+    /** 展示哪几种资源：逗号分隔的 `roleProperty.key`，顺序即从左到右；`openRefId` 解析失败时兜底。 */
     @property({ tooltip: 'resKeys：逗号分隔的 roleProperty 名（如 coin,gold）；openRefId>0 时作兜底' })
     resKeys = 'coin,gold';
 
     /** 防止 `reload` 重入（缓存落地 / 资源变化都可能触发）。 */
     private loading = false;
 
-    /**
-     * 上一次 `reload` 真正画出来的资源键（顺序 = 从左到右）。
-     *
-     * 反馈要按 key 找格子（`playGainFeedback('gold', 120)`），而 prefab 上的
-     * `slot0/1/2` 只有位置没有语义 ⇒ 必须记住这次渲染的 `keys`。
-     */
+    /** 上一次 `reload` 真正画出来的资源键（顺序 = 从左到右），反馈按 key 找格子。 */
     private keys: readonly string[] = [];
 
-    /** 闪光的绘制层（懒建；`null` = 还没建/建不起来）。只有一层 ⇒ 同帧只可能有一格在闪。 */
+    /** 闪光的绘制层（懒建；`null` = 还没建/建不起来）。只有一层，同帧只可能有一格在闪。 */
     private glow: Graphics | null = null;
     /** 本帧闪光的时间轴（`< 0` = 没在闪）。 */
     private flashElapsed = -1;
-    /** 闪光覆盖的区域（**本组件局部坐标**，已含外扩留白）。 */
+    /** 闪光覆盖的区域（本组件局部坐标，已含外扩留白）。 */
     private glowRect = { x: 0, y: 0, width: 0, height: 0 };
     /** 有没有反馈在播（没有就整段 `update` 直接返回，不逐帧空转）。 */
     private feedbackActive = false;
@@ -161,12 +101,10 @@ export class ResBar extends Component {
     }
 
     /**
-     * 读表 + 读缓存 → 逐格渲染。失败降级，**不抛**。
+     * 读表 + 读缓存 → 逐格渲染。失败降级，不抛。
      *
-     * ⚠️ **格数 / 图标 / 加号只看 keys，不看数据是否到位**：
-     * 拿不到 `CmdRole`（登录前 / 缓存未落地）时照旧按 `keys` 摆出骨架（数值 `0`），
-     * 只多一条 warn —— 否则会退回 prefab 默认值（三格全亮、加号全在），
-     * 二级页顶部平白多出一格带加号的空货币格，且**一句错都不报**（规则 140）。
+     * 拿不到 `CmdRole`（登录前 / 缓存未落地）时照旧按 keys 摆骨架（数值 0），只多一条 warn；
+     * 否则会退回 prefab 默认值（三格全亮、加号全在）。
      */
     async reload(): Promise<void> {
         if (this.loading) return;
@@ -180,13 +118,10 @@ export class ResBar extends Component {
             if (!this.isValid) return;
             if (!view) console.warn('[ResBar] 拿不到 CmdRole 缓存（登录前 / 缓存未落地），数值按 0 显示');
             const slots = view?.slots ?? buildResBarSlots(keys, iconOf);
-            // 槽位数 = keys 数（1~3）：宿主**绑几格就渲染几格**（见 `hostSlots()`）。
-            // keys 少于槽位时（如 3 格宿主只配了 2 个货币）多出来的传 null ⇒ 那一格整格隐藏。
             this.hostSlots().forEach((slot, i) => {
                 const cell = slots[i];
-                // 扣除了就演一次「白色闪烁 + 跳动 + 再扣 + 上方飘 -N」（2026-11-02，2026-11-03 去掉红色）。
-                // ⚠️ 必须在 `render` **之前**调：那一刻 label 上还是扣前的值，
-                //    `render` 会把新值塞进待落地暂存，两条时间线的口径才对得上。
+                // 扣除反馈必须在 render 之前调：那一刻 label 上还是扣前的值，
+                // render 会把新值塞进待落地暂存，两条时间线才对得上。
                 const spent = cell ? slot.spendDeltaOf(cell.valueText) : 0;
                 if (cell && spent > 0) {
                     slot.playSpendFeedback(spent, cell.valueText);
@@ -207,14 +142,7 @@ export class ResBar extends Component {
         }
     }
 
-    /**
-     * 宿主实际绑了几个格子（1~3，顺序 = `Res0` / `Res1` / `Res2`）。
-     *
-     * ⚠️ 现在三个宿主都用**同一个公共件实例** ⇒ 三格都绑，`keys` 不足时多出来的格子传 `null`
-     * 整格隐藏（商城 2 格就是这么做的）。「绑空」这条路仍然合法 —— 谁把公共件改成只有 2 格的
-     * 私有件，`slot2` 就该留空，`filter` 会跳过它。
-     * 规则 109 管的是「绑错了不许静默」，与「合法地不绑」是两回事。
-     */
+    /** 宿主实际绑了几个格子（1~3，顺序 = Res0 / Res1 / Res2）；没绑的槽位跳过。 */
     private hostSlots(): readonly MainResBarSlot[] {
         return [this.slot0, this.slot1, this.slot2].filter((slot): slot is MainResBarSlot => !!slot);
     }
@@ -224,40 +152,29 @@ export class ResBar extends Component {
     // ============================================================
 
     /**
-     * 逐帧推进反馈（**唯一心跳**：单格的弹跳 / 数字滚动都由这里驱动）。
+     * 逐帧推进反馈（唯一心跳：单格的弹跳 / 数字滚动都由这里驱动）。
      *
-     * 为什么不让 `MainResBarSlot` 自己挂 `update`：一条栏可能三格同时在跳
-     * （银币 + 体力 + 其它），三个组件各自 `update` 只是多三次空转；
-     * 而且闪光**只有一层 `Graphics`**、又是全栏一处时序 ⇒ 收在本组件最省；
-     * 时序收在一处，也不会出现「闪光收尾了、数字还在滚」。
-     *
-     * ⚠️ 不用 tween（规则 106/247）：全是「记起点 + 向纯函数要当帧值」。
+     * 一条栏可能三格同时在跳，闪光又只有一层 Graphics，所以时序统一收在本组件，
+     * 不会出现「闪光收尾了、数字还在滚」。全部是「记起点 + 向纯函数要当帧值」，不建 tween。
      */
     update(dt: number): void {
         if (!this.feedbackActive) return;
         let busy = false;
-        if (this.slot0 && this.slot0.step(dt)) busy = true;
-        if (this.slot1 && this.slot1.step(dt)) busy = true;
-        if (this.slot2 && this.slot2.step(dt)) busy = true;
+        if (this.slot0) busy = this.slot0.step(dt) || busy;
+        if (this.slot1) busy = this.slot1.step(dt) || busy;
+        if (this.slot2) busy = this.slot2.step(dt) || busy;
         if (this.stepFlash(dt)) busy = true;
         this.feedbackActive = busy;
     }
 
     /**
-     * 某一格**被奖励击中**：图标弹一下 + 数字从「原值」滚到「新值」+ **那一格**闪光。
+     * 某一格被奖励击中：图标弹一下 + 数字从原值滚到新值 + 那一格闪光。
+     * 只闪命中的那一格 —— 闪整条会让「宝箱只给体力时银币格跟着亮」，看不出涨的是哪个。
      *
-     * ⚠️ 2026-10-26 改口径：原先闪**整条栏**，用户反馈「宝箱只给体力时，银币格跟着一起亮，
-     * 看不出到底涨的是哪个」⇒ 现在只闪命中的那一格，别的格纹丝不动。
-     *
-     * @param key    `roleProperty.key`（`gold` 银币 / `end` 体力 …）。
-     *               **不在本条栏的 `keys` 里 ⇒ 静默跳过**（合法配置：HUD 只显示两种资源，
-     *               领地随机格发的道具本来就没有对应的格子）。
-     * @param amount 这次增加了多少（数字滚动的起点 = 当前值 - amount）。
-     *               **`<= 0` / 非有限数 ⇒ 整段跳过**（没涨就没反馈，别让格子弹一下却没变化）。
+     * @param key    `roleProperty.key`；不在本条栏的 keys 里就静默跳过（合法配置：HUD 只显示两种资源）。
+     * @param amount 增加了多少；`<= 0` / 非有限数整段跳过（没涨就别让格子弹一下却没变化）。
      */
     playGainFeedback(key: string, amount: number): void {
-        // `amount <= 0`（脏数据 / 该资源在这批奖励里配了 0）= **没涨** ⇒ 连闪都不该闪。
-        // 开箱奖励是配表来的，0 值行确实存在；不拦的话会出现「这一格亮了一下、数字没动」。
         if (!Number.isFinite(amount) || amount <= 0) return;
         const slot = this.slotOfKey(key);
         if (!slot) return;
@@ -267,21 +184,14 @@ export class ResBar extends Component {
     }
 
     /**
-     * 某一格**被扣除**：数字**白色闪烁** + 跳一下，**跳完才**把数字扣下去；
-     * 同时这一格上方飘一条 `-N`（2026-11-02 需求，2026-11-03 按用户改口径去掉红色）。
+     * 某一格被扣除：数字白色闪烁 + 跳一下，跳完才把数字扣下去，同时上方飘一条 `-N`。
      *
-     * ## 为什么这个方法通常**不用**你调
+     * 通常不用手动调：`CmdRole` 数值变小后，`reload` 里逐格比对 `spendDeltaOf` 会自动演一遍，
+     * 覆盖所有扣除来源。手动调只用于「值已落地、但不会再走 render」的边角，且必须在扣完之后调，
+     * 否则会先滚到一个还没扣的数再弹回来。
      *
-     * `CmdRole` 的数值变小 ⇒ `reload` 里逐格比对 `spendDeltaOf` 就会自动演一遍。
-     * 这条自动路才是主路：它覆盖**所有**扣除来源（挑战扣体力、商城买东西、GM 改值…），
-     * 不需要每个花钱的地方各自记得调一次（漏一处就少一处反馈，而且零报错）。
-     *
-     * 手动调只用于「值已经落地、但不会再走 `render`」的边角（例如本页自己扣本地钱包、
-     * `CmdRole` 不跟着变）。⚠️ 调用时机必须是**值已经扣完之后** —— 与 `playGainFeedback`
-     * 同一个前提，否则会先滚到一个"还没扣"的数再弹回来。
-     *
-     * @param key    `roleProperty.key`；不在本条栏的 `keys` 里 ⇒ 静默跳过。
-     * @param amount 扣了多少（`<= 0` / 非有限数 ⇒ 整段跳过）。
+     * @param key    `roleProperty.key`；不在本条栏的 keys 里就静默跳过。
+     * @param amount 扣了多少（`<= 0` / 非有限数整段跳过）。
      */
     playSpendFeedback(key: string, amount: number): void {
         if (!Number.isFinite(amount) || amount <= 0) return;
@@ -292,11 +202,8 @@ export class ResBar extends Component {
     }
 
     /**
-     * 闪光：**传了槽位只闪那一格**，不传才闪整条（兼容旧调用，本工程目前只有单格这一种用法）。
-     *
-     * 复用的场景：`playGainFeedback` 每次都会调一次，所以连续两次命中**只重启时间轴**，
-     * 不会叠出两层光（`Graphics` 只有一个，重画即覆盖）；连续命中**不同格**时，
-     * 后一次直接改写 `glowRect`，光会跳到新格上 —— 这比"两格同时亮"更符合"哪格涨了闪哪格"。
+     * 闪光：传了槽位只闪那一格，不传才闪整条（兼容旧调用）。
+     * 连续命中只重启同一条时间轴，Graphics 重画即覆盖，不会叠出两层光。
      */
     flash(target?: MainResBarSlot | null): void {
         if (!this.isValid) return;
@@ -311,10 +218,8 @@ export class ResBar extends Component {
     }
 
     /**
-     * 某一格的**世界坐标中心**（宝箱图标要飞到这里）。
-     *
-     * 返回 `null` = 这一格没显示 / 找不到变换 —— 调用方保持原落点，
-     * 不要拿 `(0,0)` 顶替（那会让整串图标飞到页面正中，比"不飞"更怪）。
+     * 某一格的世界坐标中心（宝箱图标要飞到这里）。
+     * 返回 `null` = 这一格没显示 / 找不到变换，调用方保持原落点，别拿 (0,0) 顶替。
      */
     slotWorldPositionOf(key: string): Vec3 | null {
         const slot = this.slotOfKey(key);
@@ -324,7 +229,7 @@ export class ResBar extends Component {
         return transform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
     }
 
-    /** `key` → 宿主上的具体格子（顺序 = `reload` 时的 `keys` 顺序）。 */
+    /** `key` → 宿主上的具体格子（顺序 = `reload` 时的 keys 顺序）。 */
     private slotOfKey(key: string): MainResBarSlot | null {
         const index = this.keys.indexOf(key);
         if (index < 0) return null;
@@ -336,15 +241,17 @@ export class ResBar extends Component {
         this.flashElapsed += Number.isFinite(dt) && dt > 0 ? dt : 0;
         if (resBarFlashFx(this.flashElapsed) === null) {
             this.flashElapsed = -1;
-            this.glow?.clear();
-            if (this.glow) this.glow.node.active = false;
+            if (this.glow) {
+                this.glow.clear();
+                this.glow.node.active = false;
+            }
             return false;
         }
         this.applyFlash();
         return true;
     }
 
-    /** 画一帧闪光（`alpha` 由时间轴给出；没有光层就直接返回）。 */
+    /** 画一帧闪光（alpha 由时间轴给出；没有光层就直接返回）。 */
     private applyFlash(): void {
         const glow = this.glow;
         if (!glow) return;
@@ -355,11 +262,11 @@ export class ResBar extends Component {
         if (strength <= 0) return;
         const rect = this.glowRect;
         const alpha = Math.round(strength * RES_BAR_FLASH_PEAK_ALPHA * 255);
-        // 填充：暖白。刻意**不满不刺眼** —— 它是"确认",不是"白屏"，峰值只到 42%。
+        // 填充暖白、峰值只到 42%：它是「确认」，不是白屏。
         glow.fillColor = new Color(255, 241, 206, alpha);
         glow.roundRect(rect.x, rect.y, rect.width, rect.height, GLOW_RADIUS);
         glow.fill();
-        // 描边：比填充亮一档，边缘才读得出「这一格亮了一下」的轮廓。
+        // 描边比填充亮一档，边缘才读得出轮廓。
         glow.lineWidth = GLOW_LINE_WIDTH;
         glow.strokeColor = new Color(255, 252, 236, Math.min(255, Math.round(alpha * 1.9)));
         glow.roundRect(rect.x, rect.y, rect.width, rect.height, GLOW_RADIUS);
@@ -367,11 +274,8 @@ export class ResBar extends Component {
     }
 
     /**
-     * 建（或复用）闪光绘制层：本节点下一个 `Graphics` 子节点，**排在最后**（画在图标之上）。
-     *
-     * 为什么现画而不是 prefab 里放一张九宫格：闪光没有美术资源、也不需要被策划调参
-     * （颜色/透明度全在 `MainResBarFeedback` 与本节常量里），而 `Graphics` 现画是
-     * 全工程做"无资源光效"的既有姿势（见 `TerritoryChestView` 的光柱 / 星光）。
+     * 建（或复用）闪光绘制层：本节点下一个 `Graphics` 子节点，排在最后（画在图标之上）。
+     * 闪光没有美术资源、也不需要策划调参，现画与全工程其它无资源光效一致。
      */
     private ensureGlow(): Graphics | null {
         if (this.glow?.isValid) return this.glow;
@@ -379,7 +283,7 @@ export class ResBar extends Component {
         if (!host) return null;
         const node = new Node('FeedbackGlow');
         node.layer = this.node.layer;
-        // 自适应 Layout 只排列资源格，闪光留在格内并保持货币条坐标原点。
+        // 自适应 Layout 只排列资源格；闪光留在格内并保持货币条坐标原点。
         node.setParent(this.slotsLayout.enabled ? this.hostSlots()[0].node : this.node);
         node.addComponent(UITransform);
         node.setSiblingIndex(node.parent.children.length - 1);
@@ -391,14 +295,11 @@ export class ResBar extends Component {
     /**
      * 闪光覆盖范围（本组件局部坐标）。
      *
-     * - `target` 有值 ⇒ **只算那一格**的框 + 外扩（本轮口径：哪格涨了闪哪格）。
-     * - `target` 为 `null` ⇒ **所有显示中的格子**的包围盒 + 外扩（整条闪，老口径，留作兼容）。
+     * - 传 `target` ⇒ 只算那一格 + 外扩（哪格涨了闪哪格）。
+     * - 传 `null` ⇒ 所有显示中格子的包围盒 + 外扩（整条闪，老口径，留作兼容）。
      *
-     * 为什么不直接用本节点的 `552×106`：那是三格容器的框，而上层宿主只显示 2 格时
-     * 第 3 格的位置是空的 —— 照框画会在右侧糊一大片没有内容的亮块。
-     *
-     * ⚠️ `target` 不可见 / 没有变换时**返回 `null`（不闪）**，绝不回退成整条 ——
-     * 那正是本轮要修的病（银币格跟着体力格一起亮）。
+     * 不直接用本节点 552×106：那是三格容器的框，宿主只显示 2 格时右侧是空的，
+     * 照框画会糊出一片没有内容的亮块。target 不可见 / 没有变换时返回 `null`，绝不回退成整条。
      */
     private computeGlowRect(
         target: MainResBarSlot | null,
@@ -415,7 +316,7 @@ export class ResBar extends Component {
             if (!transform) continue;
             const size = transform.contentSize;
             const anchor = transform.anchorPoint;
-            // 换算到**本节点**坐标系（槽位直接挂在 ResBar 下，但仍用变换求，避免以后再套一层）
+            // 换算到本节点坐标系（槽位直接挂在 ResBar 下，但仍用变换求，避免以后再套一层）
             const center = this.toLocal(node.worldPosition);
             minX = Math.min(minX, center.x - size.width * anchor.x);
             minY = Math.min(minY, center.y - size.height * anchor.y);
@@ -423,12 +324,11 @@ export class ResBar extends Component {
             maxY = Math.max(maxY, center.y + size.height * (1 - anchor.y));
         }
         if (!Number.isFinite(minX) || !Number.isFinite(maxX)) return null;
-        const pad = GLOW_PADDING;
         return {
-            x: minX - pad,
-            y: minY - pad,
-            width: Math.max(1, maxX - minX + pad * 2),
-            height: Math.max(1, maxY - minY + pad * 2),
+            x: minX - GLOW_PADDING,
+            y: minY - GLOW_PADDING,
+            width: Math.max(1, maxX - minX + GLOW_PADDING * 2),
+            height: Math.max(1, maxY - minY + GLOW_PADDING * 2),
         };
     }
 
@@ -440,28 +340,23 @@ export class ResBar extends Component {
     }
 
     /**
-     * 读 `roleProperty`（图标真源）、`open`（格数真源）、`item`（区分"道具格 / 查不到的格"）。
-     * 表读不到不抛 —— 走兜底白名单 + `resKeys`，界面上照旧有东西（规则 140）。
+     * 读 `roleProperty`（图标真源）、`open`（格数真源）、`item`（区分「道具格 / 查不到的格」）。
+     * 表读不到不抛，走兜底白名单 + resKeys，界面上照旧有东西。
      */
     private async readTables(): Promise<
         [readonly IResPropertyRow[] | null, readonly IOpenRefRow[] | null, readonly IItemRefRow[] | null]
     > {
         const fromOpen = this.openRefId > 0;
-        const [propRows, openRows, itemRows] = await Promise.all([
-            this.readTable(ROLE_PROPERTY_TABLE),
-            fromOpen ? this.readTable(OPEN_TABLE) : Promise.resolve(null),
-            fromOpen ? this.readTable(ITEM_TABLE) : Promise.resolve(null),
+        return Promise.all([
+            this.readTable<IResPropertyRow>(ROLE_PROPERTY_TABLE),
+            fromOpen ? this.readTable<IOpenRefRow>(OPEN_TABLE) : null,
+            fromOpen ? this.readTable<IItemRefRow>(ITEM_TABLE) : null,
         ]);
-        return [
-            propRows as readonly IResPropertyRow[] | null,
-            openRows as readonly IOpenRefRow[] | null,
-            itemRows as readonly IItemRefRow[] | null,
-        ];
     }
 
-    private async readTable(name: string): Promise<readonly unknown[] | null> {
+    private async readTable<T>(name: string): Promise<readonly T[] | null> {
         try {
-            return (await RefUtil.instance.getRefAllAsync(name)) ?? null;
+            return ((await RefUtil.instance.getRefAllAsync(name)) as readonly T[] | null) ?? null;
         } catch (error) {
             console.warn(`[ResBar] ${name} 表读取失败，走兜底口径`, error);
             return null;
@@ -471,10 +366,9 @@ export class ResBar extends Component {
     /**
      * 显示哪几格 + 每格图标：`openRefId`（真源）优先，解析不出来才用 `resKeys`。
      *
-     * ⚠️ `resShowType` 里的 id 可能落在**两张表**上（老端 `GetGoodsTypeByResId` 的两支）：
-     * `roleProperty`（货币 / 属性，数值在 `CmdRole`）与 `item`（道具，数值在背包）。
-     * 本组件目前只画 `roleProperty` 那一支 —— `item` / 查不到的格子**跳过并留一条 warn**，
-     * 而不是画个 0 假装有数据（要接道具格得先有背包数据源）。
+     * `resShowType` 的 id 可能落在 `roleProperty`（货币 / 属性，数值在 CmdRole）或
+     * `item`（道具，数值在背包）两张表上。本组件只画 `roleProperty` 那一支，
+     * item / 查不到的格子跳过并 warn，不画个 0 假装有数据（接道具格得先有背包数据源）。
      */
     private resolveCells(
         openRows: readonly IOpenRefRow[] | null,
@@ -482,9 +376,8 @@ export class ResBar extends Component {
         itemRows: readonly IItemRefRow[] | null,
     ): { keys: readonly string[]; iconByKey: ReadonlyMap<string, string> } {
         const iconByKey = new Map<string, string>();
-        let cells: readonly IResBarCell[] | null = null;
         if (this.openRefId > 0) {
-            cells = resolveResBarCells(this.openRefId, openRows, propRows, itemRows);
+            const cells = resolveResBarCells(this.openRefId, openRows, propRows, itemRows);
             const usable = cells.filter((cell) => cell.kind === 'roleProperty' && cell.key !== '');
             if (usable.length === 0 && cells.length === 0) {
                 console.warn(

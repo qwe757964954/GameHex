@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 2,
+  "skillId": "cocos-mcp-workflow",
+  "skillName": "funplay-cocos-mcp-workflow",
+  "templateVersion": 4,
+  "templateHash": "80d0dda747fe5ed422d851db7b550af6802bfe61289f915a4ff1b95b2c059f5a",
+  "installedHash": "80d0dda747fe5ed422d851db7b550af6802bfe61289f915a4ff1b95b2c059f5a",
+  "files": {
+    "SKILL.md": {
+      "templateHash": "80d0dda747fe5ed422d851db7b550af6802bfe61289f915a4ff1b95b2c059f5a",
+      "installedHash": "80d0dda747fe5ed422d851db7b550af6802bfe61289f915a4ff1b95b2c059f5a"
+    },
+    "references/project-readiness.md": {
+      "templateHash": "e5fb0ffc4320f6b108cc0f852124b7dd3f6f0acadd9c5d552a3f58f8ddf3b141",
+      "installedHash": "e5fb0ffc4320f6b108cc0f852124b7dd3f6f0acadd9c5d552a3f58f8ddf3b141"
+    },
+    "references/project-identity-and-input.md": {
+      "templateHash": "5d2e1490645031a8fe16fb43526f3749002b723c45b656f1ea4925c1ec5d6daa",
+      "installedHash": "5d2e1490645031a8fe16fb43526f3749002b723c45b656f1ea4925c1ec5d6daa"
+    }
+  },
+  "extensionVersion": "0.7.2",
+  "updatedAt": "2026-11-16T06:17:49.375Z"
+}

@@ -7,11 +7,13 @@ import { ControllerBase } from '../assets/script/framework/controller/Controller
 import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
+import { GuideEvent, reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
 function fixture(waitForDialogs = false, existingReward = false, page: 'battle' | 'card' | 'territory' = 'battle', existingGoal = false) {
     class ShowRewardPage {}
+    class CardUpgradePage { guideCardId = ''; }
     let goalRequests = 0, goalCancels = 0, goalCancelled = false;
     let finishGoal!: () => void;
     class MainTaskDetailPage {
@@ -45,6 +47,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         { key: 'Battle/DrawnCard', shownAt: 9, node: { activeInHierarchy: false } },
         { key: 'Battle/DrawnCard', shownAt: 4, node: { activeInHierarchy: true } },
         { key: 'CardList/Card_68001', shownAt: 0, node: { activeInHierarchy: true } },
+        { key: 'CardDetail/BtnUpgrade', shownAt: 0, node: { activeInHierarchy: true } },
     ];
     const view = {
         node: { destroy() { destroys++; } },
@@ -67,6 +70,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         GuideDialogView: { GuideDialogView: class {} }, GuideFocusAnchor: { GuideFocusAnchor: class {} },
         MainTabHost: { MainTabHost: class {}, MainTab: { Hero: 'hero' } }, FW: { FW: {} },
         CardLineupPage: { CardLineupPage },
+        CardUpgradePage: { CardUpgradePage }, GuideEvents: { GuideEvent },
         ViewLifecycle: { VIEW_LIFECYCLE }, PopupManager: { PopupManager: { inst: {
             openedPopups,
             get: (type: new () => object) => openedPopups.find(popup => popup instanceof type) ?? null,
@@ -88,12 +92,24 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         assert.ok(value, `unbound import: ${path}`);
         return value;
     } });
-    const canvas = { addChild() {}, getComponentsInChildren: () => anchors };
+    const cardTab = {};
+    const canvas = { addChild() {}, getComponentsInChildren: () => anchors,
+        getComponentInChildren: () => ({ getGuideTabNode: () => cardTab }) };
     const composition = new exports.GuideComposition(createControllerContext(), {
         scene: { getChildByName: () => canvas },
         getComponent: (type: unknown) => page === 'card' && type === CardLineupPage ? new CardLineupPage() : null,
     }, page === 'battle' ? 'battle' : 'main') as ControllerBase;
-    return { composition, anchors, notifications, revealedCards, ShowRewardPage, firstReward,
+    return { composition, anchors, notifications, revealedCards, cardTab, ShowRewardPage, firstReward,
+        openCard(id: string) {
+            const popup = new CardUpgradePage(); popup.guideCardId = id;
+            openedPopups.push(popup);
+            EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'enabled' });
+            return popup;
+        },
+        closeCard(popup: CardUpgradePage) {
+            openedPopups.splice(openedPopups.indexOf(popup), 1);
+            EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'destroyed' });
+        },
         finishGoal: () => finishGoal(), goalCounts: () => ({ requests: goalRequests, cancels: goalCancels, opened: openedPopups.includes(goalPopup) }),
         reopenGoalManually: () => { openedPopups.splice(openedPopups.indexOf(goalPopup), 1, new MainTaskDetailPage()); },
         finishDialogs: () => finishDialogs({ groups: new Map() }),
@@ -101,6 +117,57 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         renderedFocus: () => renderedFocus,
         counts: () => ({ destroys, starts, stops, hidden, rendered }) };
 }
+
+test('连点误开的卡牌详情不会挡住选卡引导；关闭后恢复，正确卡就绪才显示升级引导', async () => {
+    const f = fixture(false, false, 'card');
+    try {
+        await tick();
+        const select = { finished: false, focusNode: 'CardList/Card_68001', completeCond: 'cardSelected:68001' };
+        const upgrade = { finished: false, focusNode: 'CardDetail/BtnUpgrade', completeCond: 'cardLevelUp:68001' };
+        f.render(select);
+        const wrong = f.openCard('68012');
+        const count = f.counts().rendered;
+        reportGuideComplete('cardSelected', '68012');
+        assert.equal(f.counts().rendered, count, '错误卡牌在前台时暂停引导，允许返回');
+        f.closeCard(wrong);
+        assert.equal(f.renderedFocus(), select.focusNode);
+        const loading = f.openCard('');
+        f.render(upgrade);
+        const waiting = f.counts().rendered;
+        loading.guideCardId = '68001';
+        reportGuideComplete('cardSelected', '68001');
+        assert.equal(f.counts().rendered, waiting + 1);
+        assert.equal(f.focus(upgrade.focusNode)?.node, f.anchors[4].node);
+        loading.guideCardId = '68012';
+        reportGuideComplete('cardSelected', '68012');
+        assert.equal(f.counts().rendered, waiting + 1, '详情变成另一张卡时不能继续指向它的升级按钮');
+        f.closeCard(loading);
+        assert.equal(f.focus(upgrade.focusNode)?.node, f.anchors[3].node, '旧进度或误关详情后可重新选目标卡');
+        assert.deepEqual(f.revealedCards, ['68001']);
+    } finally { f.composition.dispose(); }
+});
+
+test('快速打开的详情早于引导加载完成时，按已就绪的实际卡牌补报选中', async () => {
+    const f = fixture(true, false, 'card');
+    try {
+        f.openCard('68001');
+        await tick();
+        assert.deepEqual(f.notifications, []);
+        f.finishDialogs(); await tick();
+        assert.deepEqual(f.notifications, ['pageOpened:card', 'cardSelected:68001']);
+    } finally { f.composition.dispose(); }
+});
+
+test('重登落在领地页时，选卡或升级旧进度先指向英雄入口，不用空焦点封住页面', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        for (const focusNode of ['CardList/Card_68001', 'CardDetail/BtnUpgrade']) {
+            f.render({ finished: false, focusNode, completeCond: 'cardLevelUp:68001' });
+            assert.equal(f.focus(focusNode)?.node, f.cardTab);
+        }
+    } finally { f.composition.dispose(); }
+});
 
 test('收尾步骤自动打开主线面板，重复渲染不重复请求，退出取消本会话打开的面板', async () => {
     const f = fixture(false, false, 'territory');

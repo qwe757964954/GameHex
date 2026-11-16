@@ -1,12 +1,11 @@
 /**
- * 「聊天 · 艾特」弹窗列表里的一行（`240×116`）。
+ * 「聊天 · 艾特」弹窗列表里的一行（240×116）。
  *
- * 真源 = FGUI `聊天/组件/组件_聊天_艾特项.xml` —— **一个 controller 都没有**，几何全静态
- * （写在 prefab 里）。节点结构：
+ * 节点结构（对齐 FGUI `组件_聊天_艾特项`，一个 controller 都没有，几何全静态）：
  *
  * ```
- * ChatAtRow (240×116)
- * ├─ Bg     Sprite  fd_row_bg（九宫格，= FGUI `frame_Zhikuang06`）
+ * ChatAtRow
+ * ├─ Bg     Sprite  fd_row_bg（九宫格）
  * ├─ Head   Node    scale 0.7
  * │   ├─ Frame Sprite img_Touxiang_01
  * │   └─ Icon  Sprite 运行时按 img 加载
@@ -14,8 +13,7 @@
  * └─ Server Label   区服名
  * ```
  *
- * 数据来源：老端 `onAtClick` 用**好友列表**（`VOFriendBag`），
- * Demo3.8 走 `CacheMgr.getTlCmdFriend()`（好友模块已在用同一张缓存）。
+ * 数据来源是好友列表（与好友模块同一张 `CmdFriend` 缓存）。
  */
 
 import { _decorator, Component, Label, Node, Sprite } from 'cc';
@@ -51,8 +49,7 @@ export class ChatAtRow extends Component {
      * 铺一行。
      *
      * @param name     玩家名
-     * @param server   区服名（老端 `ModelServer.getServerInfo(selectServerId).name`，
-     *                 查不到时**直接显示 id** —— 老端原文 `serverInfo ? serverInfo.name : selectServerId`）
+     * @param server   区服名（本工程没有区服表，调用方按老端 fallback 传区服 id）
      * @param avatarId 头像 id
      */
     render(name: string, server: string, avatarId: string): void {

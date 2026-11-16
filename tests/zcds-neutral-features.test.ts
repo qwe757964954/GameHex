@@ -6,6 +6,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { neutralResourceItemOf } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from '../assets/script/app/zcds/model/systems/ZCNeutralFeatureSystem';
 import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
+import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { ZCGameModel, configureZCMap } from '../assets/script/app/zcds/model/ZCGameModel';
@@ -342,7 +343,9 @@ test('野怪锁定首个目标，失效后换最近单位，脱战不回血', ()
 
 test('真实模型睡眠怪免伤，唤醒后远程弹道可命中且击杀只发一次既有奖励', () => {
     const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 });
-    const model = new ZCGameModel(f.state, () => 0, f.config);
+    const config = { ...f.config, map: { ...f.config.map,
+        resolvedResources: [{ hexId: f.hex.id, itemId: f.hex.neutralResourceId }] } };
+    const model = new ZCGameModel(null, () => 0, config);
     const access = model as unknown as {
         state: typeof f.state;
         damageBuilding(unit: Pick<ZCUnitState, 'owner'>, hex: ZCHexState, damage: number): void;
@@ -371,6 +374,9 @@ test('真实模型睡眠怪免伤，唤醒后远程弹道可命中且击杀只�
     access.damageBuilding({ owner: 'player' }, monster, hp * 2);
     access.damageBuilding({ owner: 'enemy' }, monster, hp * 2);
     assert.equal(monster.neutralResourceId, null);
+    assert.equal(monster.tileType, ZCPvpTileType.AllRandom,
+        '真实开局的怪物被击败后保留问号类型，不能只剩默认价格');
+    assert.equal(monster.developmentCost, config.tiles[ZCPvpTileType.AllRandom].price);
     assert.equal(access.state.goldByOwner.player, gold + f.config.rules.killUnitGoldReward);
     assert.equal(probe(), null);
 });

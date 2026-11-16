@@ -24,16 +24,6 @@ export interface IFirstRechargeReward {
     readonly number: number;
 }
 
-/** 配置表 `firstRechargeNew` 的一行（原样，未归一化）。 */
-export interface IFirstRechargeRow {
-    readonly id: number;
-    readonly rmb: number;
-    readonly desc: string;
-    readonly rewards1?: unknown;
-    readonly rewards2?: unknown;
-    readonly rewards3?: unknown;
-}
-
 /** 归一化后的一档礼包。 */
 export interface IFirstRechargeTier {
     readonly id: number;
@@ -161,7 +151,7 @@ export function buildTiers(
         seen.add(id);
         const rmb = Number(row.rmb);
         const payChannelId = Number.isSafeInteger(rmb) && rmb > 0 ? rmb : 0;
-        const price = payChannelId > 0 ? Number(priceOf(payChannelId)) : 0;
+        const price = payChannelId > 0 ? priceOf(payChannelId) : 0;
         tiers.push({
             id,
             rmb: payChannelId,

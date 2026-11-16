@@ -1,35 +1,15 @@
 /**
- * 「聊天」的数据端口 —— **内存消息流 + 缓存 + 网络请求** 三合一的 Repository。
+ * 「聊天」的数据端口 —— 内存消息流 + 缓存 + 网络请求三合一。
  *
  * 与 `FriendRepository` / `GiftRepository` 同一套分层：页面只依赖本文件的接口，
  * 判定逻辑全在 `ChatTable`（纯函数、可单测）。
  *
- * ## 数据来源（**与 friend/gift 最大的差异：不依赖策划表**）
+ * 消息为什么不走 `GameCache`：`protoCache.json` 里只有 `CmdChatRole`，没有
+ * `CmdChatMsg`，服务端不会把聊天记录写进缓存。消息流只有两个来源 ——
+ * `InitRsp` 回一整页、`BroMsg` 推一条，都只在报文里，所以自己存内存。
  *
- * | 来源 | 内容 | 走哪 |
- * |---|---|---|
- * | `CmdChatInitRspMsg.list` | 某频道某一页的历史 | 请求回来**自己存内存**（见下） |
- * | `CmdChatBroMsg` | 服务端**广播**的新消息 | `GameNet.addEvent('CmdChatBroMsg', …)` |
- * | `CmdChatRole` 缓存 | 私聊对象列表（`tlKey = roleId`） | `CacheMgr.getTlCmdChatRole()` |
- * | `CmdUnion` 缓存 | 判「是否入盟」→ 联盟页签显隐 | `CacheMgr.getTlCmdUnion()` |
- * | `localStorage` | 已读时间戳 `chatReadedData<roleId>` | 本类自己读 (老端 `ModelChat`) |
- *
- * ## 为什么消息**必须自己存**（不能像 friend 那样每次现读缓存）
- *
- * `assets/resources/config/protoCache.json` 里**只有** `CmdChatRole`，**没有** `CmdChat` / `CmdChatMsg`
- * ⇒ 服务端不会把聊天记录写进 `GameCache`（否则聊天记录会跟着离线协议全量下发）。
- * 所以消息流只有两个来源：① `InitRsp` 回来一次；② `BroMsg` 推一条 —— 都**只在报文里**，
- * 老端 `ModelChat._chatData` 同样是纯内存。
- *
- * ## 老端 `ChatData` 的两种写入语义（逐字照抄，别改）
- *
- * - `parseInitData`：**整页覆盖** `list`（第 1 页 = 最新一页）；
- * - `parseBroMsg`：**push 追加**一条（并在 key 不存在时补建）。
- *
- * ## 一处退化
- *
- * 已读时间老端用 `ModelTime.getMillisecondServerTime()`（服务端时钟）；Demo3.8 没有该时间源
- * ⇒ 用 `Date.now()`。差异只在「客户端时钟偏移」，不影响「有没有新消息」的判定方向。
+ * 两处退化（原因都在对应方法上）：入盟判据退化成「缓存里有联盟行」，
+ * 已读时间退化成 `Date.now()`（没有服务端时钟）。
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -46,6 +26,7 @@ import {
     IChatRole,
     IRecruitRow,
     isPrivateChannel,
+    nextPrivateRoleId,
     normalizeMessage,
     normalizeMessages,
     normalizeRecruits,
@@ -58,7 +39,7 @@ import {
     RequestTeamRecruitInit,
 } from './RequestChatMsg';
 
-/** 某个频道的某一页（老端 `ChatInfoData`）。 */
+/** 某个频道的某一页。 */
 export interface IChatPageData {
     readonly channel: number;
     /** 私聊 / 联盟的对象 id；其它频道恒 0。 */
@@ -67,27 +48,20 @@ export interface IChatPageData {
     readonly list: readonly IChatMessage[];
 }
 
-/** 一条招募信息 + 已经解析好的「关卡名」（招募项要直接往 Label 上写）。 */
+/** 一条招募信息 + 解析好的关卡名（招募项要直接往 Label 上写）。 */
 export interface IRecruitView extends IRecruitRow {
-    /**
-     * 关卡名，形如 `1-1-藏宝海湾`。
-     *
-     * 老端 `LayerChat.renderApplyListItem`：
-     *   `guankaReward[battleId].{chapter,stage}` → `guankaChapter[chapter].chapterName`
-     *   → `GetInstanceName(...).replace('-', '-<stage>')`
-     * 查不到任何一环时退回 `第<chapter%10000>层`（老端 `GetInstanceName` 的 `default`）。
-     */
+    /** 关卡名，形如 `1-3藏宝海湾`；查不到任何一环时退回 `第N层`。 */
     readonly stageName: string;
 }
 
 /** 一次界面刷新要的全部数据。 */
 export interface IChatSnapshot {
     readonly selfId: string;
-    /** 私聊对象列表（已过滤掉自己与 `roleId < 1e4` 的系统播报）。 */
+    /** 私聊对象列表（已过滤自己与系统播报）。 */
     readonly heads: readonly IChatRole[];
     /** 当前选中的私聊对象 id（拿不到时为空串）。 */
     readonly selectedRoleId: string;
-    /** 是否已入盟（决定联盟页签显不显示）。 */
+    /** 是否已入盟（决定联盟页签显隐）。 */
     readonly joinedUnion: boolean;
     /** 当前频道当前页（没有则 `list` 为空）。 */
     readonly page: IChatPageData;
@@ -101,7 +75,7 @@ export interface IChatSnapshot {
 export type ChatRequestResult = 'ok' | 'offline' | 'failed';
 
 export interface IChatRepository {
-    /** 读内存 + 读缓存，组装一次快照；**不发任何请求**。 */
+    /** 读内存 + 读缓存，组装一次快照；不发任何请求。 */
     load(channel: number, selectedRoleId: string): Promise<IChatSnapshot>;
 
     /** 拉某频道某页。`id` 私聊 / 联盟才非 0。 */
@@ -113,6 +87,11 @@ export interface IChatRepository {
     /** 删掉一个私聊对象。 */
     delTarget(roleId: string, caller?: object): Promise<ChatRequestResult>;
 
+    /** 这个频道的这一页是否已经拉过（页面据此决定要不要补发 `Init`）。 */
+    isInited(channel: number, id: number): boolean;
+    /** 招募列表是否已经拉过。 */
+    isRecruitsFetched(): boolean;
+
     /** 接广播（`CmdChatBroMsg`）。同一 `caller` 重复调用只生效一次。 */
     listen(caller: object, onMessage: (channel: number, id: number) => void): void;
     /** 断开广播监听。 */
@@ -122,7 +101,7 @@ export interface IChatRepository {
     readTimeOf(roleId: string): number;
     /** 标记某私聊对象已读（内存 + 待存盘）。 */
     markRead(roleId: string): void;
-    /** 把待存的已读时间写进 `localStorage`（老端在 `LayerChat.exit` 调）。 */
+    /** 把待存的已读时间写进 `localStorage`（关界面时调）。 */
     saveRead(): void;
     /** 登出时清干净（内存 + 已读缓存标记）。 */
     reset(): void;
@@ -132,7 +111,7 @@ export interface IChatRepository {
 const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 
-/** 已读时间的 `localStorage` 键前缀（老端 `chatReadedData` + roleId）。 */
+/** 已读时间的 `localStorage` 键前缀（后接 roleId）。 */
 const READ_KEY_PREFIX = 'chatReadedData';
 
 /** 内存里的一条频道数据（`list` 可变 —— `BroMsg` 要 push）。 */
@@ -170,28 +149,27 @@ function writeStorage(key: string, value: Record<string, number>): void {
 
 /** 生产环境 Repository。 */
 export class RuntimeChatRepository implements IChatRepository {
-    /** 各频道的内存消息流（`chatKey` -> 页数据）。**服务端不推、也不在缓存表里**。 */
+    /** 各频道的内存消息流（`chatKey` -> 页数据）；服务端不推，也不在缓存表里。 */
     private readonly pages = new Map<string, IMutablePage>();
 
-    /** 已经发过 `Init` 的频道集合（老端 `LayerChat.initMap`，每频道只拉 1 页）。 */
+    /** 已经发过 `Init` 的页（每页只拉一次）。 */
     private readonly inited = new Set<string>();
 
-    /** 招募列表原始行（`CmdTeamRecruitInitRspMsg` 只在 Rsp 里，没有推送、也不在缓存表里）。 */
+    /** 招募列表原始行（只随 `CmdTeamRecruitInitRspMsg` 回来，没有推送也没有缓存）。 */
     private recruitsRaw: unknown[] = [];
 
-    /** 已经拉过招募列表（老端 `initMap` 对频道 0 同样只拉一次）。 */
     private recruitsFetched = false;
 
     /** `battleType_battleId` -> 关卡名（查表结果缓存，避免每次 `load` 重查）。 */
     private readonly stageNames = new Map<string, string>();
 
-    /** 已读时间（`roleId -> 毫秒`）。懒加载 `localStorage`。 */
+    /** 已读时间（`roleId -> 毫秒`）。首次使用时从 `localStorage` 载入。 */
     private readed: Record<string, number> | null = null;
 
     /** 已读有改动、还没落盘。 */
     private readDirty = false;
 
-    /** 广播监听：一个 caller 一个回调（`GameNet.addEvent` 的键）。 */
+    /** 广播监听：一个 caller 一个回调。 */
     private readonly listeners = new Map<object, (channel: number, id: number) => void>();
 
     /** 已注册的广播分发器（只注册一次）。 */
@@ -204,9 +182,7 @@ export class RuntimeChatRepository implements IChatRepository {
     async load(channel: number, selectedRoleId: string): Promise<IChatSnapshot> {
         const selfId = this.selfId();
         const heads = filterPrivateHeads(this.cachedChatRoles(), selfId);
-        const selected = selectedRoleId && heads.some((h) => h.roleId === selectedRoleId)
-            ? selectedRoleId
-            : (heads.length > 0 ? heads[0].roleId : '');
+        const selected = nextPrivateRoleId(heads, selectedRoleId);
         const key = chatKey(channel, isPrivateChannel(channel) ? Number(selected || 0) : 0);
         return {
             selfId,
@@ -219,12 +195,10 @@ export class RuntimeChatRepository implements IChatRepository {
         };
     }
 
-    /** 某个频道是否已经拉过（页面据此决定要不要发 `Init`）。 */
     isInited(channel: number, id: number): boolean {
         return this.inited.has(chatKey(channel, id));
     }
 
-    /** 招募列表是否已经拉过。 */
     isRecruitsFetched(): boolean {
         return this.recruitsFetched;
     }
@@ -253,14 +227,12 @@ export class RuntimeChatRepository implements IChatRepository {
     }
 
     /**
-     * 查两张表拼关卡名（老端 `LayerChat.renderApplyListItem` 的三步）。
+     * 查两张表拼关卡名。
      *
-     * ⚠️ `guankaReward` 的索引字段是 **`level`**，老端把 `battleId` 直接当 `level` 传
-     *    （`Ref.RefMgrguankaReward.getRef("level", data.battleId)`）—— 照抄，别自作聪明换字段。
-     * ⚠️ `guankaChapter` 的索引字段是 `chapter`，值是 `chapterName`（形如 `1-藏宝海湾`）。
-     * ⚠️ 老端还有个 `equipInstance(4)` 分支查 `shiMengBattleConfig`（按 `guankaId`）；
-     *    该表在 Demo3.8 存在但招募里从没见 battleType=4 的队伍落地过，
-     *    这里**只做 1 号分支 + 兜底**，其余一律走 `第N层` —— 不假装支持。
+     * `guankaReward` 的索引字段是 `level`，老端把 `battleId` 直接当 `level` 传；
+     * `guankaChapter` 的索引字段是 `chapter`，值是形如 `1-藏宝海湾` 的章节名。
+     * 老端还有 `battleType=4` 的独立分支，本工程没有该类型的队伍落地过，
+     * 这里只做章节关卡 + 兜底。
      */
     private async resolveStageName(row: IRecruitRow): Promise<string> {
         try {
@@ -302,7 +274,7 @@ export class RuntimeChatRepository implements IChatRepository {
         return '';
     }
 
-    /** 私聊对象原始行（`CmdChatRole` 缓存）。拿不到返回空数组，**不抛**。 */
+    /** 私聊对象原始行（`CmdChatRole` 缓存）。拿不到返回空数组，不抛。 */
     private cachedChatRoles(): unknown[] {
         try {
             return CacheMgr.instance.getTlCmdChatRole() ?? [];
@@ -313,16 +285,16 @@ export class RuntimeChatRepository implements IChatRepository {
     }
 
     /**
-     * 是否入盟 —— `CmdUnion` 缓存里有自己加入的联盟就为真。
+     * 是否入盟 —— `CmdUnion` 缓存里有联盟行就为真。
      *
-     * ⚠️ Demo3.8 **没有联盟业务模块**（老端走 `ModelLeague.IsJoinedLeague()`），
-     *    这里退化成「缓存里有没有联盟行」。没有数据时联盟页签隐藏（与老端默认一致）。
+     * 本工程没有联盟业务模块，这是「有数据就显示、没有就隐藏」的退化判据。
      */
     private joinedUnion(): boolean {
         try {
             const rows = CacheMgr.instance.getTlCmdUnion() ?? [];
             return rows.length > 0;
-        } catch {
+        } catch (error) {
+            console.warn('[Chat] 读 CmdUnion 缓存失败', error);
             return false;
         }
     }
@@ -344,10 +316,7 @@ export class RuntimeChatRepository implements IChatRepository {
 
     markRead(roleId: string): void {
         if (!roleId) return;
-        const map = this.readedMap();
-        const now = Date.now();
-        if (map[roleId] === now) return;
-        map[roleId] = now;
+        this.readedMap()[roleId] = Date.now();
         this.readDirty = true;
     }
 
@@ -368,7 +337,7 @@ export class RuntimeChatRepository implements IChatRepository {
         this.stageNames.clear();
         this.readed = null;
         this.readDirty = false;
-        for (const caller of this.listeners.keys()) this.unlisten(caller);
+        for (const caller of [...this.listeners.keys()]) this.unlisten(caller);
     }
 
     // ============================================================
@@ -393,16 +362,16 @@ export class RuntimeChatRepository implements IChatRepository {
     /** `CmdChatBroMsg { channel, id, content: CmdChatMsgClient }`。 */
     private onBroadcast(raw: any): void {
         const channel = Number(raw?.channel ?? 0);
-        const msg = normalizeMessage(raw?.content);
-        if (!msg) return;
-        // 私聊的对象 id 在 `msg.id` 上；其它频道恒 0（`chatKey` 也只有私聊吃 id）
+        const message = normalizeMessage(raw?.content);
+        if (!message) return;
+        // 私聊的对象 id 在 `id` 上；其它频道恒 0
         const objectId = Number(toIdString(raw?.id) || 0);
         const key = chatKey(channel, objectId);
         const hit = this.pages.get(key);
         if (hit) {
-            hit.list.push(msg);
+            hit.list.push(message);
         } else {
-            this.pages.set(key, { channel, id: objectId, page: 1, list: [msg] });
+            this.pages.set(key, { channel, id: objectId, page: 1, list: [message] });
         }
         for (const fn of this.listeners.values()) fn(channel, objectId);
     }
@@ -417,16 +386,15 @@ export class RuntimeChatRepository implements IChatRepository {
             { channel, page, id: id ? String(id) : '0' } as never,
             caller,
             (rsp: any) => {
-                const list = normalizeMessages(rsp?.list);
-                // ⚠️ Rsp 里回的 channel/id 才是真源（服务端可能纠正请求里的值）——
-                //    按 Rsp 落 key，否则 `load` 会读不到刚拉回来的那一页。
+                // Rsp 回的 channel / id 才是真源（服务端可能纠正请求里的值），
+                // 按 Rsp 落 key，否则 `load` 读不到刚拉回来的那一页。
                 const rspChannel = Number(rsp?.channel ?? channel);
                 const rspId = Number(toIdString(rsp?.id) || 0);
                 this.pages.set(chatKey(rspChannel, rspId), {
                     channel: rspChannel,
                     id: rspId,
                     page: Number(rsp?.page ?? page),
-                    list,
+                    list: normalizeMessages(rsp?.list),
                 });
             },
         ), READ_TIMEOUT_MS);
@@ -435,8 +403,8 @@ export class RuntimeChatRepository implements IChatRepository {
     /**
      * 拉招募列表。
      *
-     * ⚠️ 只有这一包能发 —— 同族的 `CmdTeamRecruitSend` / `CmdTeamRecruitJoin` 都要求
-     *    `attr: CmdBattleRoleAttr`（战前属性快照），Demo3.8 造不出来（详见 `RequestChatMsg.ts`）。
+     * 只有这一包能发：同族的 `CmdTeamRecruitSend` / `CmdTeamRecruitJoin` 都要求
+     * `attr: CmdBattleRoleAttr`（战前属性快照），本工程造不出来。
      */
     async initRecruits(caller?: object): Promise<ChatRequestResult> {
         this.recruitsFetched = true;
@@ -450,7 +418,7 @@ export class RuntimeChatRepository implements IChatRepository {
     }
 
     async sendMessage(channel: number, id: number, content: string, caller?: object): Promise<ChatRequestResult> {
-        const text = (content ?? '').trim();
+        const text = content.trim();
         if (!text) return 'failed';
         return this.send(() => new RequestChatSend(
             { channel, content: text, id: id ? String(id) : '0' } as never,
@@ -465,7 +433,7 @@ export class RuntimeChatRepository implements IChatRepository {
             { id } as never,
             caller,
             () => {
-                // 本地同步把消息流也删掉，别等下一次 `load` 才发现对象没了
+                // 本地同步删掉消息流，别等下一次 `load` 才发现对象没了
                 const key = chatKey(ChatChannel.Private, Number(id));
                 this.pages.delete(key);
                 this.inited.delete(key);
@@ -489,22 +457,6 @@ export class RuntimeChatRepository implements IChatRepository {
 
 export const chatRepository: IChatRepository = new RuntimeChatRepository();
 
-/** 读一次超时常量给测试用（避免测试里硬编码 800/5000）。 */
+/** 读 / 写超时常量（测试据此断言口径，避免硬编码）。 */
 export const CHAT_READ_TIMEOUT_MS = READ_TIMEOUT_MS;
 export const CHAT_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;
-export const CHAT_READ_KEY_PREFIX = READ_KEY_PREFIX;
-
-/** 供页面判「要不要补发 Init」用（`IChatRepository` 不暴露内存细节）。 */
-export function isChannelInited(repo: unknown, channel: number, id: number): boolean {
-    const r = repo as { isInited?: (c: number, i: number) => boolean };
-    return typeof r.isInited === 'function' ? r.isInited(channel, id) : false;
-}
-
-/** 供页面判「要不要补发招募请求」用。 */
-export function isRecruitsFetched(repo: unknown): boolean {
-    const r = repo as { isRecruitsFetched?: () => boolean };
-    return typeof r.isRecruitsFetched === 'function' ? r.isRecruitsFetched() : false;
-}
-
-/** 频道枚举 re-export（页面 `import { ChatChannel } from './ChatRepository'` 即可，不必再从 `ChatTable` 取）。 */
-export { ChatChannel };

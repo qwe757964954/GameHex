@@ -1,31 +1,24 @@
 /**
- * 「聊天 · 私聊」左侧的**联系人头像项**（`117×146`）—— 频道 3（私聊）专用。
+ * 「聊天 · 私聊」左侧的联系人头像项（117×146）—— 频道 3 专用。
  *
- * 真源 = FGUI `聊天/组件/组件_聊天_私聊头像.xml`。节点结构：
+ * 节点结构（对齐 FGUI `组件_聊天_私聊头像`）：
  *
  * ```
- * ChatPrivateHead (117×146)
- * ├─ Bg        Sprite   fd_row_bg（九宫格，= FGUI `frame_Zhikuang06`）
- * ├─ Head      Node     scale 0.7（FGUI `scale="0.7,0.7"`）
- * │   ├─ Frame Sprite   img_Touxiang_01（头像框）
+ * ChatPrivateHead
+ * ├─ Bg        Sprite   fd_row_bg（九宫格）
+ * ├─ Head      Node     scale 0.7
+ * │   ├─ Frame Sprite   img_Touxiang_01
  * │   └─ Icon  Sprite   运行时按 img 加载
  * ├─ Name      Label
  * └─ RemoveBtn Button   右上角「删除」（ct_close_02，scale 0.5）
  * ```
  *
- * ## 两个刻意的「不落地」
+ * 两处刻意不落地：FGUI 的 `选中` 控制器那块矩形是全透明，选中态本来就没有可见表现，
+ * 因此不建空节点、也不自己发明高亮；`com_rd` 未读红点按「红点统一后面做」的既定口径
+ * 暂不放节点（判据见 `ChatTable.hasUnread`）。
  *
- * ① FGUI 的 `选中` 控制器 + `n91` 矩形：那个矩形 `lineColor/fillColor` 都是 `#ffffff00`
- *    —— **完全透明**，也就是「选中态在这个组件里本来就没有可见表现」。
- *    本项目**不建这个空节点**（一个永远不渲染的节点只会让后来人去找它的开关），
- *    也不自己发明一套高亮。要加高亮时再按 FGUI 补图。
- * ② `com_rd` 红点（未读）：按既定口径「红点统一后面做」，这里不放节点。
- *
- * ## 点击：为什么删除按钮要自己截断冒泡
- *
- * 整项可点（老端 `headList.onClickHead` 是**列表项**点击）⇒ 触摸会从删除按钮冒泡到本节点。
- * 不截断的症状是「点删除 → 对象删了，同时又把它选中了一次」。
- * Cocos 的冒泡顺序是 子 → 父 ⇒ 在子节点的 TOUCH_END 里 `propagationStopped = true` 即可拦住。
+ * 删除按钮要自己截断冒泡：整项都可点，触摸会从删除按钮冒泡到本节点，
+ * 不截断就会出现「对象删了，同时又把它选中了一次」。
  */
 
 import { _decorator, Component, Label, EventTouch, Node, Sprite } from 'cc';
@@ -59,7 +52,7 @@ export class ChatPrivateHead extends Component {
         this.removeButton.on(Node.EventType.TOUCH_END, this.onRemoveTouch, this);
     }
 
-    /** 铺一行（**绝对赋值**：空 `avatarId` 会清帧，不留上一行的头像）。 */
+    /** 铺一行（绝对赋值：空 `avatarId` 会清帧，不留上一行的头像）。 */
     render(name: string, avatarId: string): void {
         this.nameLabel.string = name;
         this.avatar?.apply(avatarId);
@@ -75,7 +68,7 @@ export class ChatPrivateHead extends Component {
     }
 
     private onRemoveTouch(event: EventTouch): void {
-        // 拦住冒泡，否则「点删除」会顺带把这一项选中（顺序：子 → 父）
+        // 拦住冒泡，否则「点删除」会顺带把这一项选中（冒泡顺序：子 → 父）
         event.propagationStopped = true;
         this.onRemove?.();
     }
@@ -85,13 +78,3 @@ export class ChatPrivateHead extends Component {
         this.avatar = null;
     }
 }
-
-// ============================================================
-// 未接项：`com_rd` 未读红点
-// ============================================================
-//
-// 老端 `renderHeadListItem` 里
-//   `(item.tm("com_rd") as GObjRD).OnRDUpdate(this.ModelChat.hasNewChat(data.roleId))`
-// 判据本身在 `ChatTable.hasUnread`（已实现、有单测），红点**节点**按既定口径「统一后面做」
-// 暂不落地。几何备好：`com_rd` 在 FGUI 里是 `xy="6,12"`，红点组件 `组件_公用_红点` —— 
-// 相对父中心 (58.5, 73)，红点中心 ≈ (58.5-6-w/2, 73-12-h/2)，补时按实际图尺寸算。

@@ -1,18 +1,10 @@
 /**
- * 「领取体力」列表里的**一行** —— `564×133`。
+ * 「领取体力」列表里的一行（节点对应 FGUI `好友/组件/组件_领取粮草项`）。
  *
- * 结构逐节点对齐 FGUI `好友/组件/组件_领取粮草项.xml`。与 `FriendRow` 的差别：
- *   · **没有 `展示删除界面` controller** ⇒ 无勾选框、无删除模式位移；
- *   · 头像框 `n71` 在 `(36,24)` 且带 `aspect="true"`，`icon` 仍是 **50×50**（在 `(76,64)`）；
- *   · 等级标签在 `(27,15)`；玩家名 `(146,34)` / 战力 `(146,65)`（各差 1px，逐值保留）；
- *   · 右侧上方是 **`粮草数`**（`(540,14)`，`pivot="1,0"` 右上角对齐，**81 宽**，
- *     比 `FriendRow` 的 `时长` 宽 37px），文案 `体力数:{0}`；
- *   · 右侧是**一个**金色按钮 `btn`(414,43) 文案「领取」。
+ * 与 `FriendRow` 的差别：没有删除模式（无勾选框、无位移）；右侧多一列「体力数:N」
+ * —— 这一列只有本行有，`IFriendRowView.endNumText` 的唯一消费者就是本组件。
  *
- * ⚠️ 「粮草数」这一列**只有本行有** —— `FriendRow` / `FriendApplyRow` 上都没有对应节点。
- *    所以 `IFriendRowView.endNumText` 的**唯一消费者就是本组件**；另外两个行组件忽略它。
- *    空串 = 整块隐藏（本行数据一定可领，所以实际总会带上文案，但保留这条守则：
- *    虚拟列表 clone 复用下，**每一处都要绝对赋值**，条件式赋值会让上一行的数字串过来）。
+ * 空串要连节点一起关掉：虚拟列表 clone 复用，条件式赋值会把上一行的数字串过来。
  */
 
 import { _decorator, Button, Component, Label, Node, Sprite } from 'cc';
@@ -47,10 +39,10 @@ export class FriendGetEndRow extends Component {
     @property({ type: Label, tooltip: 'EndNum：右侧「体力数:N」（右对齐，空串时整块隐藏）' })
     endNumLabel: Label = null;
 
-    @property({ type: Node, tooltip: 'ActionBtn：领取按钮（金色底图，`颜色,1`）' })
+    @property({ type: Node, tooltip: 'ActionBtn：领取按钮（金色底图）' })
     actionButton: Node = null;
 
-    /** 点击回调，**由宿主在每次铺行时重设**（虚拟列表复用节点，只能靠 index 认行）。 */
+    /** 点击回调由宿主在每次铺行时重设（虚拟列表复用节点，只能靠 index 认行）。 */
     onAction: (() => void) | null = null;
 
     private avatar: FriendAvatarLoader | null = null;
@@ -62,16 +54,12 @@ export class FriendGetEndRow extends Component {
 
     /** 铺一行（所有状态绝对赋值）。 */
     render(view: IFriendRowView): void {
-        if (!this.background) {
-            const own = this.getComponent(Sprite);
-            if (own) this.background = own;
-        }
         this.lvLabel.string = view.level;
         this.nameLabel.string = view.name;
         this.powerLabel.string = view.powerText;
         this.avatar?.apply(view.avatarId);
 
-        // 体力数：空串要连节点一起关掉（否则上一行的数字会留在这一行）
+        // 体力数：空串要连节点一起关掉，否则上一行的数字会留在这一行。
         this.endNumLabel.string = view.endNumText;
         this.endNumLabel.node.active = view.endNumText.length > 0;
     }

@@ -3,39 +3,27 @@ import { _decorator, Button, Component, Sprite, SpriteFrame } from 'cc';
 const { ccclass, property } = _decorator;
 
 /**
- * 「超值礼包」页里的**一个子页签**（159×64）。
+ * 「超值礼包」页的一个子页签。
  *
- * 结构对齐 FGUI `礼包/组件/子页面/超值礼包子页面/组件_礼包_超值礼包页签.xml`：
- *   - `n0` / `n1` 两张底图（未选 / 选中，`gearDisplay` 按 `选中` 控制器切）
- *   - `img_tittle`：标题**图**（`gearIcon` 按 `tabName` 切，5 张 + 默认）
- *   - `com_rd`：红点
- *
- * ⚠️ 标题用的是**美术文字图**（`gf_tab_daily` / `gf_tab_week` / `gf_tab_month`），
- * 不是 Label。图与名字一一对应（`mr.png` = 每日、`zc.png` = 周常、`yd.png` = 月度），
- * 空串标题会画出一块空白底 —— 所以 `render()` 拿不到标题图时**不切**，保留上一帧。
+ * 标题使用美术文字图，不是 Label；拿不到标题图时保留 prefab 当前图。
  */
 @ccclass('GiftSubTab')
 export class GiftSubTab extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底图（未选 / 选中两张切换）' })
-    bg: Sprite = null;
+    bg: Sprite = null!;
 
-    @property({ type: Sprite, tooltip: 'TitleArt：标题图（保留上一帧，拿不到不切）' })
-    titleArt: Sprite = null;
+    @property({ type: Sprite, tooltip: 'TitleArt：标题图' })
+    titleArt: Sprite = null!;
 
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
-    button: Button = null;
+    button: Button = null!;
 
-    /** 本页签在列表里的下标（宿主 `bind` 时写入）。 */
+    /** 本页签在列表里的下标，由宿主 `bind` 写入。 */
     private index = 0;
 
     private clickHandler: ((index: number) => void) | null = null;
 
     protected onLoad(): void {
-        if (!this.button) {
-            const own = this.getComponent(Button);
-            if (own) this.button = own;
-        }
-        // 监听挂**节点自己**上（模板实例各自绑一次）。
         this.button.node.on(Button.EventType.CLICK, this.emitClick, this);
     }
 

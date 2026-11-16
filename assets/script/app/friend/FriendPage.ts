@@ -1,35 +1,17 @@
 /**
- * 「好友」弹窗（老端 `LayerFriend`，`assets/resources/ui/Friend/Friend.prefab`）。
+ * 「好友」弹窗（`assets/bundles/main-pages/ui/Friend/Friend.prefab`）。
  *
- * ## 版面（真源 = FGUI `好友/组件/组件_好友.xml`，720×1280）
+ * 层序：`PanelBg → RowView → 各按钮 → TabBar → 各文本`。列表必须排在按钮之前 ——
+ * 反过来按钮会被列表的 Mask 裁掉，而且收不到触摸（单测看不出来，只有真机才能发现）。
  *
- * 三块：**弹窗框**（`组件_公共弹窗_新`：底板 / 标题飘带 / 关闭钮 / 标题）、
- * **可滚动列表**（`list` 78,309 564×592 `lineGap=10`）、**两排底部按钮 + 三个页签**。
+ * 三个页签的显隐收在 `FriendTable.resolveFriendLayout()` 的 17 个开关里，本类只负责按开关
+ * 写 `active` / 文案 / 底图；漏一条不会报错，只会让按钮出现在错误的页签下。
  *
- * ⚠️ **层序**（`_children` 序 = 渲染序）：`PanelBg → RowView → 各按钮 → TabBar → 各文本`。
- *    列表必须排在按钮**之前** —— 反过来按钮会被列表的 `cc.Mask` 裁掉、且收不到触摸
- *    （这是本项目栽过的坑：单测看不出来，只有端到端探针能逮）。
- *
- * ## 三个页签的版面由一个纯函数算
- *
- * 15 条 `gearDisplay` / `gearDisplay2` 收进 `FriendTable.resolveFriendLayout()`（17 个开关），
- * 本类只负责「按开关写 `active` / 文案 / 底图」。漏掉一条**不会报错**，
- * 只会让按钮出现在错误的页签下 —— 所以那 17 个开关有独立的单测表。
- *
- * ## 数据与分层
- *
- *   判定 / 文案 / 美术   `FriendTable`（纯函数）/ `FriendTexts` / `FriendArt`
- *   取数与请求        `FriendRepository`（缓存 + `gameConfig` + 15 条协议）
- *   行              `FriendRow`（三页签共用一份，对齐老端 `setSelectedIndex("页签", …)`）
- *   本类            「取数 → 预加载两帧 → 组装视图模型 → 铺界面」+「点击 → 发请求 → 重新取数」
- *
- * ## 两条静默失效的时序铁律（本类已按正解写）
- *
- * ① `rowList.renderItemFn` **只在 `onInit` 里绑一次**，回调按 `index` 现取 `this.rows[index]`
- *    —— 回调里禁闭包捕获本趟数据，否则「点第 3 行删掉第 1 个」。
- * ② **异步预加载必须在铺行之前 `await` 完**，但预加载的内容**不能**依赖 `this.rows`
- *    （那一刻它是上一帧的行）。本类只预加载两帧页签底图，与行无关，天然安全；
- *    图标（头像）由每一行自己的 `FriendAvatarLoader` 异步补，不参与这一趟。
+ * 两条时序约束：
+ *   1. `rowList.renderItemFn` 只在 `onInit` 里绑一次，回调按 `index` 现取 `this.rows[index]`
+ *      —— 回调里不能闭包捕获本趟数据，否则「点第 3 行删掉的是第 1 个」。
+ *   2. 异步预加载要在铺行之前 `await` 完，且预加载内容不能依赖 `this.rows`。这里只预加载
+ *      页签 / 按钮底图，与行无关；头像由每行的 `FriendAvatarLoader` 自己异步补。
  */
 
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame } from 'cc';
@@ -50,12 +32,12 @@ import {
     FRIEND_TAB_KEYS,
     FriendTab,
     IFriendRowView,
-    IFriendRowTexts,
     parseSearch,
     resolveFriendLayout,
     rowsOfTab,
 } from './FriendTable';
 import {
+    formatText,
     FRIEND_BTN_APPLY_LIST,
     FRIEND_BTN_GET_END,
     FRIEND_BTN_REFRESH,
@@ -63,11 +45,11 @@ import {
     FRIEND_BTN_REMOVE_MODE_BACK,
     FRIEND_BTN_REMOVE_ONE_KEY,
     FRIEND_BTN_SEND_ONE_KEY,
-    FRIEND_COUNT_TEMPLATE,
     FRIEND_BLACK_COUNT_TEMPLATE,
+    FRIEND_COUNT_TEMPLATE,
+    FRIEND_REMOVE_SELECT_TEMPLATE,
     FRIEND_ROW_TEXTS,
     FRIEND_SEND_TIMES_TEMPLATE,
-    FRIEND_REMOVE_SELECT_TEMPLATE,
     FRIEND_TAB_LABELS,
     FRIEND_TIP_APPLY_OK,
     FRIEND_TIP_CANT_SEARCH_SELF,
@@ -87,19 +69,18 @@ import {
 const { ccclass, property } = _decorator;
 
 /**
- * 聊天模块是否可用 —— **Demo3.8 没有**（老端走聊天服 + `ModelTeam`）。
+ * 聊天模块是否可用 —— Demo3.8 没有（老端走聊天服 + `ModelTeam`）。
  *
- * 传 `false` 时 `buildFriendRowView` 把「私聊」按钮整块隐藏（而**不是**置灰）：
- * 置灰会让人以为「有这功能、只是当前不可用」，隐藏才是「本版本没这功能」的正确表达。
+ * `false` 时 `buildFriendRowView` 把「私聊」按钮整块隐藏而不是置灰：置灰会让人以为
+ * 「有这功能、只是当前不可用」，隐藏才是「本版本没这功能」的正确表达。
  */
 const FRIEND_CHAT_AVAILABLE = false;
 
 @ccclass('FriendPage')
 export class FriendPage extends PopupBase {
     /**
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/Friend/`，F 大写）：
-     * Android / iOS 热更新 zip 内的路径**大小写敏感**，写成 `ui/friend/...`
-     * 在 Windows 编辑器里照样能跑，真机上才会 `resources.load` 失败、变成一个空弹窗。
+     * 目录名必须与磁盘一致（`assets/resources/ui/Friend/`，F 大写）：热更新 zip 内的路径
+     * 大小写敏感，写成 `ui/friend/...` 在 Windows 编辑器里能跑、真机上 `resources.load` 失败。
      */
     static prefabPath = 'ui/Friend/Friend';
 
@@ -177,16 +158,14 @@ export class FriendPage extends PopupBase {
     /** 数据端口；测试可注入替身。 */
     private repo: IFriendRepository = friendRepository;
 
-    /** 最近一次快照。 */
     private snapshot: IFriendSnapshot | null = null;
 
-    /** 当前页签。 */
-    private tab: FriendTab = FriendTab.list;
+    private tab: FriendTab = FriendTab.List;
 
     /** 是否在「批量删除」模式（只影响页签 0）。 */
     private deleteMode = false;
 
-    /** 勾选中的好友 id（批量删除用）。 */
+    /** 勾选中的好友 id。 */
     private readonly checked = new Set<string>();
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
@@ -195,7 +174,7 @@ export class FriendPage extends PopupBase {
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
 
-    /** 一个请求还没回来时忽略后续点击（避免连点发两次）。 */
+    /** 请求未返回时忽略后续点击，避免连点发两次。 */
     private busy = false;
 
     /** 每次取数 / 换页签递增，用来作废在飞的异步结果。 */
@@ -212,8 +191,7 @@ export class FriendPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        const close = this.closeButton.getComponent(Button);
-        close?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.bind(this.closeButton, this.onCloseClick);
 
         const tabs = this.tabButtons;
         for (let index = 0; index < tabs.length; index++) {
@@ -228,13 +206,13 @@ export class FriendPage extends PopupBase {
         this.bind(this.applyListButton, this.onApplyListClick);
         this.bind(this.searchButton, this.onSearchClick);
 
-        // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
+        // 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
         this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {
         this.busy = false;
-        this.tab = FriendTab.list;
+        this.tab = FriendTab.List;
         this.deleteMode = false;
         this.checked.clear();
         this.searchInput.string = '';
@@ -271,9 +249,8 @@ export class FriendPage extends PopupBase {
         if (!this.alive || revision !== this.revision) return;
         this.snapshot = snapshot;
 
-        // 「添加好友」页签进来时若还没有推荐列表，顺手拉一次（老端同款：
-        // 首次切到该页签 ⇒ `requetRefreshSuggest`）。
-        if (this.tab === FriendTab.add && snapshot.suggestRows.length === 0) {
+        // 「添加好友」页签进来时还没有推荐列表就顺手拉一次。
+        if (this.tab === FriendTab.Add && snapshot.suggestRows.length === 0) {
             const result = await this.repo.refreshSuggest(this);
             if (!this.alive || revision !== this.revision) return;
             if (result === 'ok') {
@@ -283,12 +260,12 @@ export class FriendPage extends PopupBase {
             }
         }
 
-        // 两帧页签底图 + 两张按钮底图先备好，再铺界面（避免「先出框后补图」的闪烁）。
+        // 底图先备好再铺界面，避免「先出框后补图」的闪烁。
         await this.loadStaticFrames();
         if (!this.alive || revision !== this.revision) return;
 
-        // ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        //    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
+        // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
@@ -324,10 +301,8 @@ export class FriendPage extends PopupBase {
         // ---- 17 个开关 + 文案（全部绝对赋值） ----
         this.batchRemoveButton.active = layout.showBatchRemove;
         this.batchRemoveLabel.string = layout.batchRemoveText;
-        const gold = this.buttonFrames?.gold ?? null;
-        const dark = this.buttonFrames?.dark ?? null;
-        const batchFrame = layout.batchRemoveGold ? gold : dark;
-        if (batchFrame) this.batchRemoveBackground.spriteFrame = batchFrame;
+        const frames = this.buttonFrames;
+        if (frames) this.batchRemoveBackground.spriteFrame = layout.batchRemoveGold ? frames.gold : frames.dark;
 
         this.sendOneKeyButton.active = layout.showSendOneKey;
         this.sendOneKeyLabel.string = FRIEND_BTN_SEND_ONE_KEY;
@@ -364,15 +339,12 @@ export class FriendPage extends PopupBase {
                 continue;
             }
             tabs[index].node.active = true;
-            tabs[index].render(FRIEND_TAB_LABELS[index] ?? def, index === this.tab, frames?.off ?? null, frames?.on ?? null);
+            tabs[index].render(FRIEND_TAB_LABELS[index], index === this.tab, frames?.off ?? null, frames?.on ?? null);
         }
     }
 
     /**
-     * 组装并铺列表。
-     *
-     * ⚠️ 行数据在 `refreshList` **之前**已经算完（下面那个 `for` 是同步的）——
-     *    这条顺序就是「异步预加载禁读 `this.rows`」那条铁律的正解形态。
+     * 组装并铺列表。行数据必须在 `refreshList` 之前算完（异步预加载读不到 `this.rows`）。
      */
     private presentRows(snapshot: IFriendSnapshot): void {
         const source = {
@@ -381,14 +353,13 @@ export class FriendPage extends PopupBase {
             blackRows: snapshot.blackRows,
         };
         const data = rowsOfTab(this.tab, source);
-        const texts = this.rowTexts();
 
         const views: IFriendRowView[] = [];
         const ids: string[] = [];
         for (let index = 0; index < data.length; index++) {
             const row = data[index];
             ids.push(row.id);
-            views.push(buildFriendRowView(this.tab, row, texts, {
+            views.push(buildFriendRowView(this.tab, row, FRIEND_ROW_TEXTS, {
                 nowMs: snapshot.now,
                 deleteMode: this.deleteMode,
                 checked: this.checked.has(row.id),
@@ -406,7 +377,7 @@ export class FriendPage extends PopupBase {
         this.rowList.scrollToTop(false);
     }
 
-    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）。 */
+    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendRow);
         if (!row) return;
@@ -436,15 +407,15 @@ export class FriendPage extends PopupBase {
 
     private async onRowAction(id: string): Promise<void> {
         if (this.busy) return;
-        if (this.tab === FriendTab.black) {
+        if (this.tab === FriendTab.Black) {
             await this.runRequest(this.repo.blackRemove(id, this), FRIEND_TIP_REMOVE_BLACK_OK);
             return;
         }
-        if (this.tab === FriendTab.add) {
+        if (this.tab === FriendTab.Add) {
             await this.runRequest(this.repo.apply(id, this), FRIEND_TIP_APPLY_OK);
             return;
         }
-        // 好友列表：次数用完时**只提示不置灰**（老端 `onItemBtnClick` 第一句判断）
+        // 好友列表：次数用完时只提示、不置灰。
         const left = this.snapshot?.leftSendTimes ?? 0;
         if (!canSendMore(left)) {
             FW.showTip(FRIEND_TIP_SEND_MAX);
@@ -462,8 +433,7 @@ export class FriendPage extends PopupBase {
     /**
      * 勾选 / 取消勾选（只在删除模式下有用）。
      *
-     * ⚠️ 这里**不重铺整个列表**（`refreshList` 会把滚动位置复位到顶部，
-     * 用户勾到第 8 个人时会突然弹回第 1 个）—— 只重渲染那一行 + 刷计数。
+     * 这里不重铺整个列表 —— `refreshList` 会把滚动位置复位到顶部，勾到第 8 个人时会弹回第 1 个。
      */
     private onRowCheck(id: string): void {
         if (!this.deleteMode) return;
@@ -471,9 +441,8 @@ export class FriendPage extends PopupBase {
         else this.checked.add(id);
         this.refreshCheckedRow(id);
 
-        const snapshot = this.snapshot;
-        if (snapshot) {
-            this.removeCountLabel.string = FRIEND_REMOVE_SELECT_TEMPLATE.replace('{0}', String(this.checked.size));
+        if (this.snapshot) {
+            this.removeCountLabel.string = formatText(FRIEND_REMOVE_SELECT_TEMPLATE, this.checked.size);
         }
     }
 
@@ -481,10 +450,10 @@ export class FriendPage extends PopupBase {
         const snapshot = this.snapshot;
         const index = this.rowIds.indexOf(id);
         if (!snapshot || index < 0) return;
-        const row = snapshot.friendRows.find((item) => item.id === id) ?? snapshot.blackRows.find((item) => item.id === id);
+        const row = snapshot.friendRows.find((item) => item.id === id);
         if (!row) return;
 
-        const view = buildFriendRowView(FriendTab.list, row, this.rowTexts(), {
+        const view = buildFriendRowView(this.tab, row, FRIEND_ROW_TEXTS, {
             nowMs: snapshot.now,
             deleteMode: this.deleteMode,
             checked: this.checked.has(id),
@@ -495,8 +464,8 @@ export class FriendPage extends PopupBase {
         this.rows[index] = view;
 
         const node = this.rowList.getItemByIndex(index);
-        const component = node?.getComponent(FriendRow);
-        if (component) component.render(view);
+        const item = node?.getComponent(FriendRow);
+        if (item) item.render(view);
     }
 
     // ============================================================
@@ -535,7 +504,7 @@ export class FriendPage extends PopupBase {
 
     private async onRemoveOneKeyClick(): Promise<void> {
         if (this.checked.size === 0) {
-            FW.showTip(FRIEND_REMOVE_SELECT_TEMPLATE.replace('{0}', '0'));
+            FW.showTip(formatText(FRIEND_REMOVE_SELECT_TEMPLATE, 0));
             return;
         }
         await this.runRequest(this.repo.remove(Array.from(this.checked), this), FRIEND_TIP_DELETE_OK);
@@ -543,15 +512,7 @@ export class FriendPage extends PopupBase {
     }
 
     private async onRefreshClick(): Promise<void> {
-        const result = await this.repo.refreshSuggest(this);
-        if (!this.alive) return;
-        if (result !== 'ok') {
-            FW.showTip(result === 'offline' ? FRIEND_TIP_OFFLINE : FRIEND_TIP_REQUEST_FAILED);
-            return;
-        }
-        await this.reload();
-        if (!this.alive) return;
-        if ((this.snapshot?.suggestRows.length ?? 0) === 0) FW.showTip(FRIEND_TIP_REFRESH_EMPTY);
+        await this.requestSuggestList(this.repo.refreshSuggest(this));
     }
 
     private async onApplyListClick(): Promise<void> {
@@ -570,7 +531,12 @@ export class FriendPage extends PopupBase {
             FW.showTip(FRIEND_TIP_CANT_SEARCH_SELF);
             return;
         }
-        const result = await this.repo.search(parsed, this);
+        await this.requestSuggestList(this.repo.search(parsed, this));
+    }
+
+    /** 「换一批」与搜索共用的收尾：成功后刷新列表，列表为空给提示。 */
+    private async requestSuggestList(task: Promise<FriendRequestResult>): Promise<void> {
+        const result = await task;
         if (!this.alive) return;
         if (result !== 'ok') {
             FW.showTip(result === 'offline' ? FRIEND_TIP_OFFLINE : FRIEND_TIP_REQUEST_FAILED);
@@ -615,15 +581,9 @@ export class FriendPage extends PopupBase {
         }
     }
 
-    /** 行文案包（唯一来源 `FriendTexts`；三个行组件共用同一份）。 */
-    private rowTexts(): IFriendRowTexts {
-        return FRIEND_ROW_TEXTS;
-    }
-
-    /** 底部三个页签（按 x 排序 —— `_children` 序 ≠ 视觉序）。 */
+    /** 底部三个页签（按 x 排序 —— 子节点序不等于视觉序）。 */
     private get tabButtons(): FriendTabButton[] {
         return this.tabBar.getComponentsInChildren(FriendTabButton)
-            .slice()
             .sort((a, b) => a.node.position.x - b.node.position.x);
     }
 

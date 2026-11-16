@@ -4,7 +4,7 @@
  * 分层（与 `FirstRechargeRepository` 同一套）：
  *   判定口径   `FirstRechargeTrigger`（纯函数，无 `cc`，可单测）
  *   本文件     「读表 / 读缓存 / 读写本地跨天戳 / 调弹窗管理器」这些必须碰引擎的活
- *   触发入口   `MainTabHost.onLoad`（= 进主界面，对齐老端 `TabFight.init()`）
+ *   触发入口   `MainTabsComposition`（主界面页签就绪后，对齐老端 `TabFight.init()`）
  *
  * 老端的对应物：
  *   `TabFight.init()`（判定 + 开界面）+ `VORole.GetIsNewDay()/SaveToday()`（跨天戳）
@@ -81,11 +81,6 @@ export function notifyLevelBattleResult(level: number, result: number, star: num
     };
 }
 
-/** 读当前待处理的战绩（测试 / 调试用）。 */
-export function peekLevelBattleResult(): IFirstRechargeBattleResult {
-    return lastBattleResult;
-}
-
 /** 清零 —— 与老端 `TabFight.init()` 末尾那三行同义。 */
 function clearLevelBattleResult(): void {
     lastBattleResult = EMPTY_BATTLE_RESULT;
@@ -120,7 +115,7 @@ function isLevelPassed(level: number): boolean {
  * 也就不会误弹。
  */
 export async function getMaxChallengeLevel(): Promise<number> {
-    let rows: unknown[] = [];
+    let rows: unknown[];
     try {
         rows = (await RefUtil.instance.getRefAllAsync(GUANKA_REWARD_TABLE)) ?? [];
     } catch (error) {
@@ -152,9 +147,14 @@ function currentRoleId(): string {
     }
 }
 
+/** 本地存档 key：`LocalRoleData-{roleId}`（与老端 `VORole` 同 key）。 */
+function localSaveKey(roleId: string): string {
+    return [LOCAL_SAVE_KEY_PREFIX, roleId].join('-');
+}
+
 /** 打开本地存档并读出跨天戳（读不到算 `0` = 从没记过）。 */
 function readSavedDayStart(roleId: string): number {
-    const cache = new LocalCache<IFirstRechargeLocalSave>([LOCAL_SAVE_KEY_PREFIX, roleId].join('-'));
+    const cache = new LocalCache<IFirstRechargeLocalSave>(localSaveKey(roleId));
     try {
         cache.Load();
         const data = cache.Get();
@@ -169,7 +169,7 @@ function readSavedDayStart(roleId: string): number {
 
 /** 写回「今天弹过了」。写失败只告警，不回滚（最坏是下次进主界面再弹一次）。 */
 function saveToday(roleId: string, nowMs: number): void {
-    const cache = new LocalCache<IFirstRechargeLocalSave>([LOCAL_SAVE_KEY_PREFIX, roleId].join('-'));
+    const cache = new LocalCache<IFirstRechargeLocalSave>(localSaveKey(roleId));
     try {
         cache.Load();
         const data = cache.Get();
@@ -208,8 +208,7 @@ export interface IFirstRechargeCheckOutcome {
  *
  * ⚠️ 本函数**永不 reject**（调用方多半是 `void x().then(...)`，抛出去就是 unhandled rejection）。
  */
-export async function checkFirstRechargeOnEnterMain(caller?: unknown): Promise<IFirstRechargeCheckOutcome> {
-    let outcome: IFirstRechargeCheckOutcome = { reason: 'none', maxChallengeLevel: 1, opened: false };
+export async function checkFirstRechargeOnEnterMain(caller?: object): Promise<IFirstRechargeCheckOutcome> {
     try {
         const roleId = currentRoleId();
         const nowMs = Date.now();
@@ -230,22 +229,21 @@ export async function checkFirstRechargeOnEnterMain(caller?: unknown): Promise<I
                 `[FirstRecharge] 自动弹出：原因=${reason}，关卡进度=${maxChallengeLevel}，结果=${opened ? '已打开' : '未打开'}`,
             );
         }
-        outcome = { reason, maxChallengeLevel, opened };
+        return { reason, maxChallengeLevel, opened };
     } catch (error) {
         // 兜底：任何一步炸了都不该把主界面流程带崩。
         console.warn('[FirstRecharge] 自动弹出检查失败', error);
+        return { reason: 'none', maxChallengeLevel: 1, opened: false };
     } finally {
         clearLevelBattleResult();
     }
-    return outcome;
 }
 
 /** 调弹窗管理器拉起首充弹窗。加载失败返回 `false`（不抛）。 */
-async function openFirstRecharge(caller?: unknown): Promise<boolean> {
-    const manager = PopupManager.inst;
+async function openFirstRecharge(caller?: object): Promise<boolean> {
     try {
         // 默认同类单实例：已经开着时 `openAsync` 会返回现有实例，不会重复弹。
-        const popup = await manager.openAsync(FirstRechargePage, { layer: PopupLayer.NORMAL, userData: caller });
+        const popup = await PopupManager.inst.openAsync(FirstRechargePage, { layer: PopupLayer.NORMAL, userData: caller });
         return popup != null;
     } catch (error) {
         console.warn('[FirstRecharge] 打开首充弹窗失败', error);

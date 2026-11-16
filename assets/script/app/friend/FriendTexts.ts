@@ -1,20 +1,15 @@
 /**
- * 「好友」模块的全部文案 —— **改文案只动这一个文件**。
+ * 「好友」模块里由代码写进控件的文案 —— 改文案只动这一个文件。来源是老端 FGUI 的
+ * `Button title` / `text` 字面量与语言表键。
  *
- * 来源（逐条可回溯）：
- *   · FGUI `好友/组件/组件_好友.xml` 的 `Button title` / `text` 字面量
- *   · FGUI `好友/组件/弹窗_好友_申请列表.xml` / `弹窗_好友_领取粮草.xml` 同款
- *   · 老端 `FW.G_W("XXX")` 的语言表键（在注释里标出原键名，便于以后接多语言）
+ * prefab 上静态的那部分（三个弹窗标题、搜索框 prompt、行内「私聊」按钮文案）留在 prefab，
+ * 这里不再抄一份：代码不消费的常量改了也不会生效，只会误导。
  *
- * ⚠️ 老端靠 `StringUtil.format(模板, 参数)` 做占位；这里保留 `{0}` 形式，
- *   由 `formatText` 替换，**不引老端的 StringUtil**（它带框架依赖）。
+ * 占位统一用 `{0}`，由 `formatText` 替换（不引老端带框架依赖的 `StringUtil`）。
  */
 
-/** 带 `{0}` 占位符的文案。 */
-export type FriendTextTemplate = string;
-
 /** `{0}` / `{1}` 顺序替换；缺参保留原样（便于一眼看出漏传）。 */
-export function formatText(template: FriendTextTemplate, ...args: readonly (string | number)[]): string {
+export function formatText(template: string, ...args: readonly (string | number)[]): string {
     return template.replace(/\{(\d+)\}/g, (whole, indexText: string) => {
         const index = Number(indexText);
         const value = args[index];
@@ -22,13 +17,8 @@ export function formatText(template: FriendTextTemplate, ...args: readonly (stri
     });
 }
 
-/** 三个页签的标题（`FriendTab` 的顺序 = `FRIEND_TAB_KEYS` 的顺序）。 */
+/** 三个页签的标题（顺序 = `FRIEND_TAB_KEYS` 的顺序）。 */
 export const FRIEND_TAB_LABELS: readonly string[] = ['好友列表', '添加好友', '黑名单'];
-
-/** 三个弹窗的标题栏（老端 `LayerFriend_Text` / `LayerFriend_Text_1` / `LayerFriend_Text_2`）。 */
-export const FRIEND_TITLE = '好友';
-export const FRIEND_APPLY_TITLE = '好友申请';
-export const FRIEND_GET_END_TITLE = '领取体力';
 
 /** 主容器底部 / 右上角的按钮文案（FGUI `Button title` 原值）。 */
 export const FRIEND_BTN_REMOVE_MODE = '批量删除';
@@ -62,9 +52,6 @@ export const FRIEND_ROW_BUTTON_TEXT: Readonly<Record<string, string>> = {
     remove: '移除',
 };
 
-/** 好友行里的两个「按钮」：私聊（仅好友列表页签）。 */
-export const FRIEND_BTN_CHAT = '私聊';
-
 /** 计数类文案（老端 `FRIEND_NUM` / `BLACK_LIST`）。 */
 export const FRIEND_COUNT_TEMPLATE = '好友数：{0}/{1}';
 export const FRIEND_BLACK_COUNT_TEMPLATE = '黑名单：{0}/{1}';
@@ -85,20 +72,15 @@ export const FRIEND_END_NUM_TEMPLATE = '体力数:{0}';
 /** 行的主按钮（领取体力弹窗的行）。 */
 export const FRIEND_ROW_GET_END_TEXT = '领取';
 
-/** 搜索框占位（FGUI `label_player` 的 `prompt`）。 */
-export const FRIEND_SEARCH_PROMPT = '请输入玩家名称';
-
 /** 顶部提示。 */
 export const FRIEND_TIP_SEND_MAX = '今日赠送次数已用完';
 export const FRIEND_TIP_GET_MAX = '今日领取次数已用完';
 export const FRIEND_TIP_CANT_SEARCH_SELF = '不能搜索自己';
 export const FRIEND_TIP_NOT_FRIEND = '还不是好友，无法私聊';
 /**
- * 私聊按钮点不动时的提示 —— **Demo3.8 没有聊天模块**（老端走 `ModelTeam` / 聊天服）。
- *
- * 与「有聊天模块」的区别很重要：老端的私聊按钮**会显示**（`页签=0` 且不在删除模式），
- * 这里 `chatAvailable = false` ⇒ 按钮**根本不显示**（见 `buildFriendRowView` 的 `showChat`）。
- * 所以本条提示只在这行按钮被别处打开时才用得上，留着是为了**不静默**（点不动必须有回音）。
+ * 私聊点不动时的提示。Demo3.8 没有聊天模块，`chatAvailable = false` ⇒ 私聊按钮根本不显示
+ * （见 `buildFriendRowView` 的 `showChat`），这条只在这行按钮被别处打开时才用得上 ——
+ * 留着是为了点不动也有回音，不静默。
  */
 export const FRIEND_TIP_CHAT_MISSING = '聊天功能暂未开放';
 /** 搜索框空着就点了搜索。 */
@@ -119,16 +101,11 @@ export const FRIEND_TIP_REQUEST_FAILED = '操作失败，请稍后再试';
 export const FRIEND_TIP_OFFLINE = '网络未连接，操作未生效';
 
 /**
- * 「行文案包」—— `FriendTable.IFriendRowTexts` 需要的 9 条**结构等价**常量。
+ * 行文案包 —— `FriendTable.IFriendRowTexts` 需要的 9 条。
  *
- * 为什么是常量而不是一个 `buildRowTexts()` 函数：三个页面（主容器 / 申请列表 / 领取体力）
- * 每一次铺行都要它，函数调用没有额外信息量。
- *
- * 为什么不写成 `: IFriendRowTexts`（直接标类型）：那会让本文件 import `FriendTable` ——
- * 依赖方向就成了「文案 → 判定」，而 `FriendTable` 的注释里明确写了它**不引** `FriendTexts`
- * 的 `formatText` 就是为了保住这条单向边。这里靠**结构相等**（同名字段、同类型）满足
- * 类型检查：页面 `rowTexts(): IFriendRowTexts { return FRIEND_ROW_TEXTS; }` 能直接过编译，
- * 两边谁改了字段名，编译当场报错（不会静默少一个文案）。
+ * 不写成 `: IFriendRowTexts`：那会让本文件 import `FriendTable`，依赖方向就成了「文案 → 判定」，
+ * 而 `FriendTable` 刻意不引 `FriendTexts` 正是为了保住这条单向边。这里靠结构相等满足类型检查，
+ * 谁改了字段名，编译当场报错，不会静默少一条文案。
  */
 export const FRIEND_ROW_TEXTS = {
     gift: FRIEND_ROW_BUTTON_TEXT.gift,

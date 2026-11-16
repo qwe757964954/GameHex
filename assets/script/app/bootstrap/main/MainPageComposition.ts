@@ -23,7 +23,6 @@ import { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { TerritoryEntry } from '../../territory/application/TerritoryEntry';
 import { FW } from '../../../framework/FW';
 import { TerritoryHeroProgressSource } from './TerritoryHeroProgressSource';
-import { reportGuideComplete } from '../../guide/application/GuideEvents';
 
 
 interface IPageLifecycle {
@@ -111,11 +110,8 @@ export class MainPageComposition extends ControllerBase {
             popups: {
                 openEditor: () => { void LineupBoardPage.open(); },
                 openUpgrade: (unit, level) => {
-                    // 新手引导 6-2「选中态生效」：玩家点选了一张卡（表现为打开它的升级页）。
-                    // 表里的判据是 `cardSelected:68001`，这里只上报「选了哪张」，由 Controller 比对参数
-                    // —— 别把 68001 写进这里，换英雄就得改代码。
-                    reportGuideComplete('cardSelected', unit.id);
-                    void CardUpgradePage.open({ userData: { card: unit, cardId: unit.id, level } satisfies ICardUpgradeOpenData });
+                    void CardUpgradePage.open({ userData: { card: unit, cardId: unit.id, level } satisfies ICardUpgradeOpenData })
+                        .catch(reportMainPageFailure);
                 }
             },
         });

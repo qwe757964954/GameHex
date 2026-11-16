@@ -15,6 +15,7 @@ import { GameNet } from '../../net/GameNet';
 import { LoadingPopup } from '../../common/LoadingPopup';
 import { Toast } from '../../common/Toast';
 import { CARD_LINEUP_TEXTS } from '../../card/CardLineupTexts';
+import { reportGuideComplete } from '../../guide/application/GuideEvents';
 
 /** PopupManager owns this session; pages only expose rendering and serialized configuration. */
 class CardPopupComposition implements IPopupComposition {
@@ -39,13 +40,21 @@ class CardPopupComposition implements IPopupComposition {
     }
     private createUpgradeController(view: CardUpgradePage, userData: ICardUpgradeOpenData): CardUpgradeController {
         const model = new CardUpgradeModel(userData);
+        let selectedCardId = '';
         return new CardUpgradeController(this.context, {
             owner: view,
             model,
             repository: cardRepository,
             failed: reportCardPopupFailure,
             view: {
-                render: state => view.render(state),
+                render: state => {
+                    view.render(state);
+                    // 同类弹窗会合并打开请求，只有实际显示且数据就绪的卡牌才算选中。
+                    if (state.phase === 'ready' && state.cardId !== selectedCardId) {
+                        selectedCardId = state.cardId;
+                        reportGuideComplete('cardSelected', state.cardId);
+                    }
+                },
             },
             loading: {
                 beginLoading: () => {

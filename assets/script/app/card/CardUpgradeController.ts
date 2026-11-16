@@ -90,7 +90,7 @@ export class CardUpgradeController extends ControllerBase {
         if (event.owner !== this.options.owner || this.switching) return;
         if (event.kind === 'submit') { void this.submit(); return; }
         const { model } = this.options;
-        if (model.snapshot.phase === 'submitting') return;
+        if (model.snapshot.phase === 'loading' || model.snapshot.phase === 'submitting') return;
         if (event.kind === 'previous' || event.kind === 'next') {
             void this.switchDetail(event.kind === 'previous' ? -1 : 1);
             return;

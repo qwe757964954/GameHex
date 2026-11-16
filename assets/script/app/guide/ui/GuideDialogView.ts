@@ -508,6 +508,7 @@ export class GuideDialogView extends Component {
             if (this.npcNode) this.npcNode.active = false;
             const frame = loaded as SpriteFrame;
             sprite.node.active = true;
+            sprite.enabled = true;
             sprite.spriteFrame = frame;
             // 尺寸由代码统一控制，必须用 CUSTOM；TRIMMED 会在换图时把节点拉回原图尺寸。
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
@@ -518,7 +519,9 @@ export class GuideDialogView extends Component {
         }
 
         sprite.spriteFrame = null;
-        sprite.node.active = false;
+        // 骨骼挂在同一宿主下，只关静图组件，不能关掉父节点。
+        sprite.enabled = false;
+        sprite.node.active = true;
         const npc = this.ensureNpc(loaded as Prefab);
         npc.active = true;
     }

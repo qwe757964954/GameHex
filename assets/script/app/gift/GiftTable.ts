@@ -1,35 +1,12 @@
 /**
- * 礼包（`LayerGift`）的数据口径 —— **纯逻辑，不 import 任何东西，可在 Node 单测里直接跑**。
+ * 礼包商店的数据口径。纯函数、无引擎依赖，可直接在 Node 单测中运行。
  *
- * 移植自老客户端：
- *   - 配置表 `giftShop`（56 行，`assets/remoteRef/giftShop.json`）
- *   - 配置表 `payChannel`（484 行，其中 `isShow === 1` 的只有 6 行 = 灵玉直冲页的元宝档位）
- *   - 服务器 `CmdShop`（`cmdShopType = 5 = gift`，走 `protoCache`，服务端会推）
- *   - 判定 `client/.../model/gift/ModelGift.ts` + `ctrl/main/gift/SubTab/SubTabSpecialGiftBase.ts`
- *     + `ctrl/main/gift/TabGiftLingYu.ts`
+ * 关键约定：
+ * - `giftShop.type` 决定子页签；`desc` 是商品名，`title` 只是分组名。
+ * - `priceType = 10` 对应 `roleProperty.coin`，界面统一称“幻灵玉”。
+ * - `item` 表主键是 `resId`；货币档 7/8/9/10 的图走 `image/main/resbar`。
  *
- * ## 四条口径说明（都是实测得来，别凭直觉改） *
- * ① **`type` 就是老端的 `GiftType`**：`1 = day` / `2 = week` / `3 = month` / `4 = once`，
- *    与 `giftShop.type` 逐行对得上（8 / 7 / 15 / 26 行）。它决定「超值礼包」页里属于哪个子页签。
- * ② **行标题用 `desc`，不是 `title`**：`title` 全表只有 9 行有值（每个 type 的首行 = 分组名，
- *    如 `id=1 title=每日福利`），而 FGUI 的 `lb_title` 绑的是 `refGiftShop.desc`（56 行全有）。
- *    拿 `title` 当商品名会得到一屏空白。
- * ③ **`priceType = 10` = `roleProperty.coin`**，所以 `cost` 是**扣该货币**，
- *    购买走 `CmdShopBuy`（不是走支付 SDK —— 支付 SDK 只在 `payChannel` 那条链上）。
- *    ⚠️ 老端把这栏叫「元宝」，Demo3.8 里 `coin` 的图标是 `图标_幻灵玉`（`image/main/resbar`）
- *    ⇒ 一律按「**幻灵玉**」称呼，别再写「元宝」。
- * ④ **`item` 表主键是 `resId`，不是 `id`**；且 `7/8/9/10`（铜币/洗练石/体力/幻灵玉）这类
- *    `roleProperty` 档**根本不在 `item` 表里**，它们的图要从 `image/main/resbar/` 取。
- *    用 `id` 查 `item` 表不会报错，只是 389 行全部 MISSING、奖励格静默不出图。
- *
- * ## 与老端**刻意不同**的一处
- *
- * 老端 `TabGiftSpecial.InitTabList()` 里子页签名是**硬编码数组**
- * `["每日礼包","周常礼包","月度礼包","连充礼包","元宝礼包","月卡礼包"]`，然后按
- * `ModelSystem` 的可见性过滤。这里改成 **`GIFT_SUB_TAB_ORDER`（开启集，照新项目
- * `open.json` 的 413/414/415）+ `giftShop` 表实际有数据** 两个条件取交集 ⇒
- * 「策划表里没配的档位不会冒出空页签」，也省掉整套 `SystemId` 体系。
- * 以后要开 `416`（终身礼包），往 `GIFT_SUB_TAB_ORDER` 里加 `GIFT_TYPE_ONCE` 即可。
+ * 子页签由 `GIFT_SUB_TAB_ORDER` 与表内实际数据取交集，不跟随表行顺序。
  */
 
 /** 一条奖励：`{ resId, number }`。 */
@@ -51,7 +28,7 @@ export interface IGiftShopRow {
     /** 商品名 —— 行标题显示的就是它。 */
     readonly desc: string;
     readonly rewards: readonly IGiftReward[];
-    /** 货币 `resId`；`10` = 元宝（`roleProperty.coin`）。 */
+    /** 货币 `resId`；`10` = 幻灵玉（`roleProperty.coin`）。 */
     readonly priceType: number;
     /** 实付数量；`0` = 免费。 */
     readonly cost: number;
@@ -94,12 +71,9 @@ export const GIFT_TYPE_MONTH = 3;
 export const GIFT_TYPE_ONCE = 4;
 
 /**
- * 「超值礼包」页里**开启**的子页签（按 `type` 号，顺序 = 显示顺序）。
+ * 「超值礼包」页开启的子页签（按 `type` 排序）。
  *
- * 来源是新项目 `open.json` 里 `preResId = 409` 的行：
- *   `413 SubTabDailyGift`(开) / `414 SubTabWeekGift`(开) / `415 SubTabMonthGift`(开)
- *   / `416 SubTabOnceGift`(关，`roleLevel >= 9999`) / `417 SubTabContinuityGift`(关，同上)。
- * 只列开启的三个；`listSubTabs()` 还会再跟 `giftShop` 实际数据取交集。
+ * `416` 终身礼包、`417` 连充礼包在 `open.json` 中未开启，因此不列入。
  */
 export const GIFT_SUB_TAB_ORDER: readonly number[] = [
     GIFT_TYPE_DAILY,
@@ -133,9 +107,9 @@ export function giftSubTabOf(type: number): IGiftSubTab | null {
 }
 
 /**
- * 算出实际要显示的子页签：`GIFT_SUB_TAB_ORDER` 里**表中有数据**的那些。
+ * 实际显示的子页签：`GIFT_SUB_TAB_ORDER` 中表内有数据的项。
  *
- * 排序恒按 `GIFT_SUB_TAB_ORDER`（不是表里的行序），这样策划调表行序不会让页签乱跳。
+ * 顺序固定按 `GIFT_SUB_TAB_ORDER`，不随配置表行序变化。
  */
 export function listSubTabs(rows: readonly IGiftShopRow[]): readonly IGiftSubTab[] {
     const present = new Set<number>();
@@ -226,7 +200,7 @@ export function parseGiftShopRows(rows: readonly unknown[]): readonly IGiftShopR
 }
 
 /** 解析 `payChannel` 一行；`id` / `rmb` 非法时返回 `null`。 */
-export function parsePayChannelRow(raw: unknown): IPayChannelRow | null {
+function parsePayChannelRow(raw: unknown): IPayChannelRow | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
 
@@ -261,17 +235,14 @@ export function parsePayChannelRows(rows: readonly unknown[]): readonly IPayChan
 }
 
 /**
- * 灵玉直冲页要显示的档位 —— **只留 `isShow === 1`**，并按 `rmb` 升序。
- *
- * ⚠️ `payChannel` 有 484 行，但 `isShow` 只有 6 行是 `1`（其余是 `undefined`）。
- * 不过滤会排出 484 张卡。老端 `TabGiftLingYu.UpdateView()` 就是 `if (item.isShow == 1)`。
+ * 灵玉直冲页要显示的档位：只留 `isShow === 1`，按 `rmb` 升序。
+ * `payChannel` 有数百行，但 `isShow` 只有 6 行为 `1`。
  */
 export function visiblePayChannels(
     rows: readonly IPayChannelRow[],
 ): readonly IPayChannelRow[] {
     return rows
         .filter((row) => row.isShow === 1)
-        .slice()
         .sort((a, b) => a.rmb - b.rmb || a.id - b.id);
 }
 
@@ -293,11 +264,8 @@ export function giftShopStateOf(row: IGiftShopRow, buyTimes: number): GiftShopSt
 }
 
 /**
- * 折扣文案；`discount <= 0` 或 `>= 10` 时返回空串（= 不显示折扣角标）。
- *
- * 实测 `giftShop.discount` 取值是 `0 / 1 / 2 / 3 / 4 / 5 / 6 / 7`（十分制的「几折」），
- * 所以 `1折 ~ 7折` 都会显示 —— 别按「只有 1/3/5 三种」去写死。
- * 把 `>= 10` 也当无折扣是防御性的（万一以后按百分制填 `50`）。
+ * 折扣文案；`discount <= 0` 或 `>= 10` 时返回空串。
+ * 表内取值为 `0~7`，`1~7` 都应显示。
  */
 export function discountTextOf(discount: number): string {
     if (!Number.isFinite(discount)) return '';
@@ -313,10 +281,7 @@ export function limitTextOf(buyTimes: number, limit: number): string {
 }
 
 /**
- * 商品行排序：**还能买的排前面**，同组内按 `id` 升序。
- *
- * 照 `SubTabSpecialGiftBase.UpdateList()` 的权重：`haveA != haveB` 时先出「还有货」的，
- * 否则 `id` 小的在前（老端用 `weightA - weightB`）。
+ * 商品行排序：还能买的在前，同组按 `id` 升序。
  */
 export function sortGiftRows(
     rows: readonly IGiftShopRow[],
@@ -371,11 +336,9 @@ export function normalizeShopGoods(shop: unknown): ReadonlyMap<number, number> {
 // ============================================================
 
 /**
- * `item` 表里礼包用得到的两列。
+ * `item` 表里礼包用得到的字段。
  *
- * ⚠️ 主键列叫 **`resId`**，不是 `id`（`giftShop.json` / `payChannel.json` 用 `id`，
- * `item.json` 用 `resId`）—— 拿 `id` 去查会 389 行**全部 MISSING**、且不报错，
- * 表现只是「奖励格全都不出图」。
+ * 主键列是 `resId`，不是 `id`。用错列不会报错，只会让奖励格全部查不到图。
  */
 export interface IGiftItemInfo {
     readonly resId: number;
@@ -386,7 +349,7 @@ export interface IGiftItemInfo {
 }
 
 /** 解析 `item` 表一行；`resId` 非法时返回 `null`。 */
-export function parseGiftItemRow(raw: unknown): IGiftItemInfo | null {
+function parseGiftItemRow(raw: unknown): IGiftItemInfo | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
     const resId = asNumber(row.resId);
@@ -409,19 +372,13 @@ export function parseGiftItemRows(rows: readonly unknown[]): ReadonlyMap<number,
     return out;
 }
 
-/**
- * `priceType` 的货币 id —— `10` = `roleProperty.coin`。
- *
- * ⚠️ 老端把这栏叫「元宝」，Demo3.8 的 `MainResBarTypes.RES_BAR_ICON_ART.coin` 已经把
- * `coin` 的图标定成 `图标_幻灵玉` ⇒ 界面上一律称「**幻灵玉**」，别再写「元宝」。
- */
+/** `priceType` 的货币 id：`10` = `roleProperty.coin`，界面称“幻灵玉”。 */
 export const GIFT_CURRENCY_RES_ID = 10;
 
 /**
- * 界面要单独备图的货币 / 资源档（这几个 **不在 `item` 表里**，`roleProperty` 枚举的自有档）。
+ * 需要单独取图的货币档：灵石 / 铜币 / 体力 / 幻灵玉。
  *
- * `6` 灵石 / `7` 铜币 / `9` 体力 / `10` 幻灵玉，图在 `image/main/resbar/`（见 `GiftArt`）。
- * `8`（洗练石）在工程里**没有任何图**，奖励格会降级成「只画品质框」。
+ * 这些档位不在 `item` 表中，图统一放在 `image/main/resbar/`。
  */
 export const GIFT_RESOURCE_ICON_IDS: readonly number[] = [6, 7, 9, 10];
 
@@ -523,16 +480,16 @@ export function collectGiftRewardResIds(rows: readonly IGiftShopRow[]): readonly
 }
 
 /**
- * 大页签定义（照新项目 `open.json` 里 `preResId = 103` 的**开启**行）。
+ * 大页签定义。
  *
- *   `409` 超值礼包（`order = 1`）/ `412` 灵玉直冲（`order = 4`）
- *   `411` 晶石兑换 未开（`roleLevel >= 9999` + `condition = close`）⇒ 界面没做，不登记。
- *
- * 键是路由用的 `key`，文案在 `GiftTexts`（本文件不碰文案）。
+ * `special` 对应 `open.json` 的 409；`total` / `daily` 是充值活动页，不在该表中，
+ * `resId` 记 `0`。
  */
+export type GiftMainTabKey = 'special' | 'total' | 'daily';
+
 export interface IGiftMainTab {
-    readonly key: 'special' | 'total' | 'daily';
-    /** `open.json` 里的 `resId`（留痕，方便和策划表对账）。 */
+    readonly key: GiftMainTabKey;
+    /** `open.json` 中的 `resId`；非入口页为 `0`。 */
     readonly resId: number;
 }
 

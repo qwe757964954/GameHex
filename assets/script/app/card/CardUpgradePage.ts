@@ -10,6 +10,7 @@ import { CardDetailHexSlot } from './CardDetailHexSlot';
 import { CardDetailMilestoneRow } from './CardDetailMilestoneRow';
 import { CardPopupEvent } from './CardPopupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
+import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
 import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
 import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
@@ -221,6 +222,7 @@ export class CardUpgradePage extends PopupBase {
 
     /** 描述栏当前落点与卡牌身份，用来判断「要不要重新滚」，避免刷新时把阅读位置顶掉。 */
     private renderedCardId = '';
+    get guideCardId(): string { return this.hasRenderedStatus ? this.renderedCardId : ''; }
     private milestoneKey = '';
 
     /** 经验材料图标当前显示的是哪件道具、持有多少（点图标开「道具信息」用）。 */
@@ -259,10 +261,14 @@ export class CardUpgradePage extends PopupBase {
 
     protected onOpen(): void {
         this.hasRenderedStatus = false;
+        this.renderedCardId = '';
+        this.previousButton.interactable = false;
+        this.nextButton.interactable = false;
         this.setUpgradeEnabled(false);
         this.heroSprite.spriteFrame = null;
         this.qualitySprite.spriteFrame = null;
         this.tagClassSprite.spriteFrame = null;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
     }
 
     private readonly onSkillClick = (): void => {
@@ -306,7 +312,7 @@ export class CardUpgradePage extends PopupBase {
         this.renderHeader(data);
         this.levelBigLabel.string = String(data.level);
         this.levelTransitionLabel.string = `${CARD_LINEUP_TEXTS.detailTabLevel} ${data.level}`;
-        const navigating = data.phase !== 'submitting';
+        const navigating = data.phase !== 'loading' && data.phase !== 'submitting';
         this.previousButton.interactable = navigating;
         this.nextButton.interactable = navigating;
         this.renderDetail(data.detail);
@@ -625,5 +631,6 @@ export class CardUpgradePage extends PopupBase {
         this.preview = null;
         this.previewAssets = null;
         this.heroKey = null;
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
     }
 }

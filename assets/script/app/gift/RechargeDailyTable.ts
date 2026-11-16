@@ -239,15 +239,3 @@ export function dailyButtonKey(state: RechargeDailyState): RechargeDailyButtonKe
             return 'locked';
     }
 }
-
-/**
- * 该档（round）有没有可领的奖励 —— 老端 `VORechargeDaily.hasRd(round)`，页签红点用它。
- *
- * 老端口径是「每个 `takenIds`/`accTakenIds` 里等于 `canReward(2)` 就亮」，等价于
- * 「有任一行的状态是 `canReward`」。累计格那边老端误用了 `GetTakenStateByDay`（按天而不是按累计），
- * 这里按语义纠正成「未领取 且 累计达标」，见 `accRewards` 的组装（`accProgress` 已 clamp 到总天数）。
- */
-export function roundHasClaimable(view: IRechargeDailyRoundView): boolean {
-    if (view.days.some((day) => day.state === RECHARGE_DAILY_STATE.canReward)) return true;
-    return view.accRewards.some((acc) => !acc.taken && view.accProgress >= acc.days);
-}

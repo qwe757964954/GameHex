@@ -7,36 +7,29 @@ const LABEL_COLOR_OFF = new Color(255, 255, 255, 255);
 const BACKGROUND_COLOR = new Color(255, 255, 255, 255);
 
 /**
- * 礼包面板底部的**大页签按钮**（120×111，照着 FGUI `共用组件/组件/底菜单/按钮_首页_菜单.xml` 的尺寸）。
+ * 礼包面板底部的大页签按钮。
  *
- * 简化点（与新项目「面板内自绘」的既有范式一致，见 `SevenDayPageTab`）：
- *   - FGUI 那个组件靠 `类型` 控制器的 `gearIcon` 切一整套主界面底菜单图标；这里**不用图标**，
- *     只用底图 + Label 文案 —— 礼包面板里只有两个页签，再引一套主界面图标包不划算。
- *   - 选中态复用主页的金色 `nav_sel`，未选中不铺独立底板；宿主通过资源帧传入。
+ * 只使用底图和 Label，不引入主界面菜单图标；选中态复用主页的 `nav_sel` 底图。
  */
 @ccclass('GiftTabButton')
 export class GiftTabButton extends Component {
     @property({ type: Sprite, tooltip: 'Bg：底图（选中 / 未选切换）' })
-    bg: Sprite = null;
+    bg: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Label：页签文案' })
-    label: Label = null;
+    label: Label = null!;
 
     @property({ type: Button, tooltip: 'Button：本节点上的 cc.Button' })
-    button: Button = null;
+    button: Button = null!;
 
     @property({ type: SpriteFrame, tooltip: '选中态底板（主页同款 city/nav_sel）' })
-    selectedFrame: SpriteFrame = null;
+    selectedFrame: SpriteFrame = null!;
 
     private index = 0;
 
     private clickHandler: ((index: number) => void) | null = null;
 
     protected onLoad(): void {
-        if (!this.button) {
-            const own = this.getComponent(Button);
-            if (own) this.button = own;
-        }
         this.button.node.on(Button.EventType.CLICK, this.emitClick, this);
     }
 
@@ -45,12 +38,12 @@ export class GiftTabButton extends Component {
         this.clickHandler = clickHandler;
     }
 
-    /** 文案 + 主页同款选中态；空文案保留 prefab 上的静态名称。 */
+    /** 文案 + 选中态；空文案保留 prefab 上的静态名称。 */
     render(text: string, selected: boolean): void {
-        if (text && this.label) this.label.string = text;
+        if (text) this.label.string = text;
         this.bg.spriteFrame = selected ? this.selectedFrame : null;
         this.bg.color = BACKGROUND_COLOR;
-        if (this.label) this.label.color = selected ? LABEL_COLOR_ON : LABEL_COLOR_OFF;
+        this.label.color = selected ? LABEL_COLOR_ON : LABEL_COLOR_OFF;
     }
 
     private emitClick(): void {

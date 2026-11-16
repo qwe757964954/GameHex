@@ -1,20 +1,16 @@
 /**
- * 「聊天 · 表情」弹窗列表里的一个格子（`60×61`）—— 44 个格子共用。
+ * 「聊天 · 表情」弹窗列表里的一个格子（60×61）—— 44 个格子共用。
  *
- * 真源 = FGUI `聊天/组件/组件_聊天_表情项.xml`（只有一个 loader）：
+ * 节点结构（对齐 FGUI `组件_聊天_表情项`，只有一个 loader）：
  *
  * ```
- * ChatEmojiItem (60×61)
+ * ChatEmojiItem
  * └─ Icon  Sprite   ct_emoji_<N>
  * ```
  *
- * ## 为什么是「宿主预加载 44 帧 + 传进来」，不是每格自己异步加载
- *
- * 表情是**虚拟列表**的行：`renderItemFn` 只绑一次、按 `index` 现取。
- * 若每格自己 `resources.load`，就会重演「异步结果落到已被复用的节点上」那类
- * 静默串图（同 `FriendAvatar` 文件头说的坑）。
- * 44 张又小、又在同一个 auto-atlas ⇒ 宿主一次性 `Promise.all` 预加载、
- * 在 `present()` **之前** `await` 完（虚拟列表铁律②），这里只做同步赋值。
+ * 表情是虚拟列表的行：44 张又小、又在同一个 auto-atlas，由宿主一次性预加载、
+ * 在铺行之前 `await` 完，这里只做同步赋值。每格自己异步加载会重演
+ * 「结果落到已被复用的节点上」那类静默串图。
  */
 
 import { _decorator, Component, Node, Sprite, SpriteFrame } from 'cc';
@@ -33,9 +29,7 @@ export class ChatEmojiItem extends Component {
         this.node.on(Node.EventType.TOUCH_END, this.emitPick, this);
     }
 
-    /**
-     * 铺一格。`frame` 为 `null` 时**清空帧**（不能留着上一格的图 —— 复用节点最容易漏这处）。
-     */
+    /** 铺一格。`frame` 为 `null` 时清空帧 —— 复用节点最容易漏这一处。 */
     render(frame: SpriteFrame | null): void {
         this.icon.spriteFrame = frame;
     }

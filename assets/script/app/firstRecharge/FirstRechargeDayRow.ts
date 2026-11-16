@@ -28,10 +28,10 @@ export interface IFirstRechargeDayRowData {
  *     ├─ `DayLabel`  「第一天」（25px `#ffe2bb`，牌内水平居中）
  *     └─ `SlotBar`   一排奖励格（`FirstRechargeSlot`，76×76，间距 5）
  *
- *  **牌宽与格子位置是运行时算的，不在 prefab 上固定** —— 因为一天有几条奖励是**数据**定的
+ *  **牌宽是运行时算的，不在 prefab 上写死** —— 一天有几条奖励是**数据**定的
  *  （`config/firstRechargeNew.json` 是 `[3,2,2]`：第 1 天 3 条 → 269 宽，第 2/3 天各 2 条 → 186 宽）。
  *  老客户端靠 FairyGUI 的 `autoItemSize` 干这事，Cocos 的 `cc.Layout` 只支持等宽格子，
- *  所以公式收在 `FirstRechargeLayout`（纯函数、有单测），本类只负责把结果写到节点上。
+ *  所以日牌宽度按 `SlotBar` 的 Layout 结果算（见 `applyLayout`），本类只负责把结果写到节点上。
  *
  *  ⚠️ 「横排」意味着**不能用 `position.y` 判断第几天**：宿主 `FirstRechargePage` 按 `position.x` 排。
  *
@@ -41,10 +41,10 @@ export interface IFirstRechargeDayRowData {
 @ccclass('FirstRechargeDayRow')
 export class FirstRechargeDayRow extends Component {
     @property({ type: Label, tooltip: 'DayLabel：第几天，如「第1天」' })
-    dayLabel: Label = null;
+    dayLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'SlotBar：奖励格容器（下面挂 3 个 FirstRechargeSlot）' })
-    slotBar: Node = null;
+    slotBar: Node = null!;
 
     @property({ tooltip: '日牌宽度相对 SlotBar 的左右留白' })
     platePaddingX = 30;
@@ -101,6 +101,6 @@ export class FirstRechargeDayRow extends Component {
     private applyLayout(): void {
         const bar = this.slotBar.getComponent(UITransform);
         const plate = this.node.getComponent(UITransform);
-        if (bar && plate) plate.setContentSize(bar.width + this.platePaddingX, plate.height);
+        plate.setContentSize(bar.width + this.platePaddingX, plate.height);
     }
 }

@@ -1,12 +1,8 @@
 /**
- * 礼包界面文案 —— **唯一出口**。
+ * 礼包界面文案的唯一出口。
  *
- * 约定见 `SevenDayTexts`：子组件通过参数收文案，自己不造字符串；
- * 只有页面持有本表。改文案只改这里。
- *
- * ⚠️ `empty` / `offline` / `failed` 三档是**降级文案**，不是占位符 ——
- * 离线时礼包列表照样能画（`giftShop` 是本地表），只是已购次数全 0；
- * 真正连不上的是「购买」这个动作，所以提示挂在按钮点击之后。
+ * 子组件通过参数接收文案，只有页面持有本表。`empty` / `offline` / `failed`
+ * 是列表降级提示，不是占位符。
  */
 
 export const GIFT_TEXTS = {
@@ -41,27 +37,19 @@ export const GIFT_TEXTS = {
     /** 首充翻倍角标。 */
     firstBuyDouble: '首充翻倍',
     /**
-     * 商品货币名 —— `priceType = 10` = `roleProperty.coin`。
-     * ⚠️ 老端叫「元宝」，Demo3.8 的图标是 `图标_幻灵玉` ⇒ 统一「幻灵玉」。
-     * 只在**拿不到货币图标**时才会被拼进按钮文案（见 `giftBuyButtonOf`）。
+     * 商品货币名。`priceType = 10` 对应 `roleProperty.coin`，界面显示“幻灵玉”。
+     * 仅在拿不到货币图标时拼进按钮文案。
      */
     currency: '幻灵玉',
-    /**
-     * 灵玉直冲页点购买时的提示 —— 真实支付走老端的 `SDKMgr.pay`，
-     * Demo3.8 没有支付 SDK，按既定范式打到业务前置为止（这里连前置请求都没有）。
-     */
+    /** 灵玉直冲页尚未接入支付时的提示。 */
     payMissing: '支付功能尚未接入',
 };
 
 /**
- * 「累计充值 / 每日充值」两页的文案 —— 与 `GIFT_TEXTS` 一样是**唯一出口**。
+ * 「累计充值 / 每日充值」两页的文案。
  *
- * 分开放是因为这两页属于**活动体系**（数据来自 `CmdActivity` / `CmdRechargeDaily`），
- * 与超值礼包 / 灵玉直冲（`giftShop` / `payChannel`）不是一条链；合成一个对象以后更难对账。
- *
- * ⚠️ 四档时间/天数的模板照抄老端语言表（`mL.json` 的 `LayerFirstRecharge_Day_NUM_2` /
- * `LayerFirstRecharge_ReWard_2`），**别自己改写**：
- *   `累计{0}天` / `第{0}天充值获取{1}金币`
+ * 这两页属于活动体系，数据来自 `CmdActivity` / `CmdRechargeDaily`，与 `GIFT_TEXTS`
+ * 分开维护，便于和对应配置表对账。
  */
 export const RECHARGE_TEXTS = {
     // ---- 页签 ----
@@ -111,22 +99,12 @@ export const RECHARGE_TEXTS = {
      * 也不假装成功**，明确给一条提示（规则：不静默失败）。
      */
     gotoMissing: '充值入口尚未接入',
-
-    /**
-     * ⚠️ **FGUI 原稿里的 `文本_倒计时`（`n2`，"活动倒计时:2天09:02:00"）本轮不落地。**
-     *
-     * 理由：① 老端**没有任何代码**填它（`TabGiftEveryDay` / `LayerGift` 里都搜不到），
-     * 显示的是一串永不变化的**设计占位文本**；② Demo3.8 的每日充值走 `CmdRechargeDaily`，
-     * 结构里**没有活动结束时间**（`endTime` 只在 `CmdActivity` 上，那是活动体系的另一条链）。
-     * ⇒ 加了就是假数据，纯视觉噪声。等这条链拿到结束时间再补（届时要当心别写成死值）。
-     */
-    dailyCountdownOmitted: '',
 };
 
 /** 按 `{0}` / `{1}` 占位符填参数；缺参数的位置原样保留。 */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
     return template.replace(/\{(\d+)\}/g, (whole, index) => {
         const value = args[Number(index)];
-        return value === undefined || value === null ? whole : String(value);
+        return value === undefined ? whole : String(value);
     });
 }

@@ -1,45 +1,12 @@
 /**
- * **资源 / 货币口径的唯一出口**（零引擎依赖，规则 78 —— 判定逻辑可被 Node 用例 import）。
+ * 资源 / 货币口径的唯一出口（零引擎依赖，可被 Node 用例直接 import）。
  *
- * ## 为什么要有这个文件（2026-09-29）
+ * 真源是 `roleProperty.json`：`resId` / `key` / `name` / `icon`（FGUI 裸组件名）/ `quality`。
+ * 本文件负责「数字 ↔ key ↔ 图标名」互查，以及 `open.json` 决定「显示哪几格」：
+ * 自己有 `resShowType` 就用自己，否则沿 `preResId` 继承（老端 `GetTlShowType` 口径）。
+ * 图标目录由 `ArtPaths` + `resIconRoot` 解析，视觉装配仍走既有 `resolveRewardIconRef` 链路。
  *
- * 「某一种货币长什么样」在工程里曾经**手抄了三份**，而且目录也分两套：
- *
- * | # | 位置 | 形态 | 目录 |
- * |---|---|---|---|
- * | ① | `main/MainResBarTypes.RES_BAR_ICON_ART` | 按 `key` 手抄 5 条 | `image/main/resbar/` |
- * | ② | `gift/GiftArt.GIFT_RES_ICON_ART` | 按 `resId` 手抄 4 条 | `image/main/resbar/` |
- * | ③ | **真源** `assets/remoteRef/roleProperty.json` | `resId` / `key` / `name` / `icon` | —— |
- *
- * 而「图标怎么装配」工程里**早就有一个唯一入口**：`activity/LayerActivityArt.resolveRewardIconRef`
- * （老端 `ModelGoods.GetGoodsIconKeyByRefId` 的两支）——`item` 表直通路径 / `roleProperty` 表落
- * `icons/resource/<icon>`（**3 条例外见下面的 `ROLE_PROPERTY_ICON_ROOT_OVERRIDE`**，统一由
- * `resIconRoot()` 解析），被 `hang` / `gift` / `celebration` / `battletoken` / `league` / `showReward` 共用。
- *
- * ⚠️ 于是「顶部货币条」当时**长出了第二套目录**：`image/main/resbar/` 里那 5 张货币图有 4 张
- * 与 `icons/resource/` **同一份文件（同 md5）**。两份图 + 三份映射，改一个货币要动四个地方。
- *
- * ⇒ 本文件把「数字 ↔ `key` ↔ 图标名」收敛成一处，并把「显示哪几格」的来源统一到
- *   **`open.json.resShowType`**（老端口径，见 `ModelSystem.GetTlShowType`）。
- *   视觉与装配仍交给 `resolveRewardIconRef` 那条既有链路，本文件**不碰 cc**。
- *
- * ## 真源字段（`roleProperty.json`，17 行）
- *
- * | 字段 | 含义 | 例子 |
- * |---|---|---|
- * | `resId` | `open.json.resShowType` 里写的那个数字 | `10` |
- * | `key` | `CmdRole` 缓存的字段名（`buildResBarView` 靠它取值） | `coin` |
- * | `name` | 中文名（提示文案用） | `金币` |
- * | `icon` | **FGUI 裸组件名**（不是路径！） | `图标_幻灵玉` |
- * | `quality` | 品质（奖励格描边用） | `3` |
- *
- * ## 「哪几格」的真源与继承
- *
- * `open.json` 每条页面/弹窗都有 `resShowType`（`refId=18` 天赋 ⇒ `[10,7]`）。老端
- * `ModelSystem.GetTlShowType()` 的完整规则是：**自己有 `resShowType` 就用自己**；
- * 否则**继承 `preResId` 指向的那个系统**。工程里 `resShowType` 基本都填了，但 `preResId`
- * 仍在表里（如 `TabSkill` `preResId=2`），所以这里实现成 `resolveResBarKeys(refId, …)`
- * 一次到位，页面只填一个 `refId`。
+ * 手抄映射只作登录前兜底（`FALLBACK_RES_ICON_ART`），表落地后以表为准。
  */
 import {
     COMMON_ICON_ART_ROOT as ART_COMMON_ICON_ROOT,
@@ -83,11 +50,8 @@ export interface IOpenRefRow {
 }
 
 /**
- * `key` → 图标名 **兜底表**。
- *
- * ⚠️ 只在 `roleProperty` 表读不到（登录前 / 表未落地）时用。真源是表，不是这里 ——
- *  `tests/res-types.test.ts` 会逐条比对这张表与 `roleProperty.json`，表改了而这里没跟
- *  ⇒ 用例红（防住"手抄表悄悄漂移"这条老坑）。
+ * `key` → 图标名兜底表。只在 `roleProperty` 表读不到（登录前 / 表未落地）时用。
+ * 真源是表：`tests/res-types.test.ts` 会拿这张表与 `roleProperty.json` 逐条比对，防止手抄漂移。
  */
 export const FALLBACK_RES_ICON_ART: Readonly<Record<string, string>> = {
     gold: '图标_铜币',
@@ -98,45 +62,24 @@ export const FALLBACK_RES_ICON_ART: Readonly<Record<string, string>> = {
 };
 
 /**
- * 通用图标目录（`icons/common`）：`item` 表里**按路径直通**的那些图落这里，
- * `roleProperty` 也有少量（见下面的例外表）。
- *
- * ⚠️ 值转发 `ArtPaths.COMMON_ICON_ART_ROOT` —— 别写成 `ArtPaths.COMMON_ART_ROOT`
- * （那是 `image/common`，通用底图与按钮，**不是图标目录**，名字像但不是一个东西）。
+ * 通用图标目录（`icons/common`）：`item` 表按路径直通的图，以及少量 `roleProperty` 图标。
+ * 值转发 `ArtPaths.COMMON_ICON_ART_ROOT`；别写成 `ArtPaths.COMMON_ART_ROOT`（那是 `image/common`，
+ * 通用底图与按钮，不是图标目录，名字像但不是一个东西）。
  */
 export const COMMON_ICON_ART_ROOT = ART_COMMON_ICON_ROOT;
 
 /**
- * `roleProperty` 里**不落 `icons/resource/`** 的裸名图标 —— 必须逐名覆盖，不能猜。
+ * `roleProperty` 里不落 `icons/resource/` 的裸名图标，必须逐名覆盖，不能猜。
  *
- * ## 为什么不能猜
+ * 老端 `icon` 是 FGUI 资源名，由 FGUI 包查找定位，名字里不含目录；本端把图平铺到
+ * `resources/image|icons/*`，所以「这个名字当初拷进哪个目录」只能查实盘：
+ *   - `icons/common/`：图标_联盟贡献、图标_补天神石；
+ *   - `image/main/resbar/`：图标_经验值；
+ *   - 其余默认 `icons/resource/`。
  *
- * 老端的 `roleProperty.icon` 是 **FGUI 资源名**，由 FGUI 的**包查找**去定位
- * （`ModelGoods.GetGoodsIconKeyByRefId` → `ref.icon` → FGUI loader 自己解析），
- * 名字里**不含目录信息**。本端把 FGUI 图平铺到了 `resources/image|icons/*`，
- * 「这个名字当初被拷进了哪个目录」就只能查实盘。
- *
- * ## 实测口径（`roleProperty` 全 17 行、11 行有 `icon`）
- *
- * | 落在哪 | 张数 | 例子 |
- * |---|---|---|
- * | `icons/resource/`（默认） | **8** | 银币 7 / 洗炼石 8 / 幻灵玉 10 / 联盟金币 11 / 活跃度 15 … |
- * | `icons/common/` | **2** | 联盟贡献 13 `图标_联盟贡献`、补天神石 14 `图标_补天神石` |
- * | `image/main/resbar/` | **1** | 经验值 3 `图标_经验值` |
- *
- * ⚠️ **只认 `icons/resource` 的症状**：这 3 张图**静默**加载失败（加载器只 `console.warn`、
- * 返回 `null` ⇒ 奖励格只剩品质框、弹窗里少一格图），不报错、不崩 —— 端到端探针量
- * 「格子有没有图标」才逮得到。实测就是用户报的
- * `[ArtIcons] 图标加载失败：icons/resource/图标_联盟贡献`（联盟捐献的奖励格）。
- *
- * ⚠️ **为什么是「覆盖表」而不是把这 3 张图再拷一份到 `icons/resource/`**：
- *    `item` 表里同名的图已经在 `icons/common/`（`item.json` 的 `图标_联盟贡献` 存的是
- *    路径 `icons/common/图标_联盟贡献`）⇒ 再拷一份就是**同内容两个 uuid**，
- *    以后谁改了哪份说不清（同内容两份资源在 Cocos 里就是两个 uuid）。
- *
- * ⚠️ **有防锈测试**：`tests/league-store-donate-discount.test.ts` 的 B11 会拿
- *    `assets/remoteRef/roleProperty.json` **现算**每个 `icon` 的实盘位置，与这里逐条对齐；
- *    美术挪了目录 / 表里新增了例外，用例立刻红。
+ * 只认 `icons/resource` 的症状是这 3 张图静默加载失败（加载器只 warn 并返回 null），
+ * 奖励格只剩品质框。`tests/league-store-donate-discount.test.ts` 会拿真表现算实盘位置，
+ * 与这张表逐条对齐；美术挪目录或表里新增例外，用例立刻红。
  */
 export const ROLE_PROPERTY_ICON_ROOT_OVERRIDE: Readonly<Record<string, string>> = {
     '图标_联盟贡献': COMMON_ICON_ART_ROOT,
@@ -237,15 +180,12 @@ export function resShowTypeOf(row: IOpenRefRow | null | undefined): readonly num
 }
 
 /**
- * `refId` → 货币条要显示的 `key` 列表（**顺序即从左到右**）。
+ * `refId` → 货币条要显示的 `key` 列表（顺序即从左到右）。
  *
- * 规则与老端 `ModelSystem.GetTlShowType()` 对齐：
- *   ① 自己的 `resShowType` 非空 ⇒ 用它；
- *   ② 否则继承 `preResId` 指向的系统（递归，`MAX_PRE_DEPTH` 封顶）；
- *   ③ 都没有 ⇒ 空数组（页面货币条整条不显示，而不是瞎给三格）。
- *
- * 查不到 `key` 的 `resId`（表里还没登记的新货币）**跳过** —— 没有 `key` 就取不到数值，
- * 硬占一格只会显示 0。用 `unmappedResIds()` 可以把这些 id 列出来催表。
+ * 规则对齐老端 `ModelSystem.GetTlShowType()`：自己的 `resShowType` 非空就用它；
+ * 否则沿 `preResId` 继承（递归，`MAX_PRE_DEPTH` 封顶）；都没有返回空数组。
+ * 查不到 `key` 的 `resId` 跳过 —— 没有 key 就取不到数值，硬占一格只会显示 0；
+ * 用 `resolveResBarCells` + `unknownResIds` 可以把这些格子列出来催表。
  */
 export function resolveResBarRefIds(
     refId: unknown,
@@ -339,26 +279,15 @@ export function resBarCellOfRefId(
 }
 
 /**
- * {@link IResBarCell} → **可交给 `AssetService.load` 的装配路径**（已带 `/spriteFrame`）；
- * 解析不出（`kind = unknown` / 表里没填 `icon`）返回空串。
+ * {@link IResBarCell} → 可交给 `AssetService.load` 的装配路径（已带 `/spriteFrame`）；
+ * 解析不出（kind = unknown / 表里没填 icon）返回空串。
  *
- * ## 为什么必须有这一层（2026-10-26 的现场）
+ * 两种 icon 的拼法不同：`roleProperty` 是 FGUI 裸名，拼 `spriteFramePath(resIconRoot(name), name)`；
+ * `item` 是相对某个 bundle 的路径（如 `icons/item/图标_兵书弓兵`），拼 `spriteFramePathOf(path)`。
+ * 少拼 `/spriteFrame` 会报 `Bundle resources doesn't contain …`（不是 404）；
+ * 把 item 图当 resources 相对路径则静默返回 null，表现是飘字 / 喷发颗粒没有图标。
  *
- * `roleProperty.icon` 是 **FGUI 裸名**、`item.icon` 是 **相对某个 bundle 的路径**，
- * 两者的拼法**不同**，而且 `item` 那支的图**不在 `resources` 里**：
- *
- * | 来源 | `icon` 存的 | 拼法 | 落在哪个 bundle |
- * |---|---|---|---|
- * | `roleProperty` | `图标_铜币` | `spriteFramePath(resIconRoot(name), name)` | `resources`（例外见覆盖表） |
- * | `item` | `icons/item/图标_兵书弓兵` | `spriteFramePathOf(path)`（幂等补后缀） | **`main-pages`**（`BundleCatalog` 里登记的 `icons/item` 等目录） |
- *
- * 少拼 `/spriteFrame` 的症状是 `Bundle resources doesn't contain …`（**不是 404**，极易
- * 误判成「美术没交图」）；把 `item` 的图当成 `resources` 相对路径的症状是**静默返回 null**
- * —— 领地随机格奖励的飘字没有图标、喷发 12 颗全是空 sprite（喷发与飘字共用同一批 frame），
- * 看起来就是「粒子动画丢了」。端到端只有量「颗粒有没有画面」才逮得到。
- *
- * ⚠️ bundle 路由**不在这里做**：`CocosAssetService` 按路径前缀查 `BundleCatalog.bundleForPath`
- * 自动选 bundle，所以这里只给**全名**，调用方一句 `load(路径, SpriteFrame)` 即可。
+ * bundle 路由不在这里做：`CocosAssetService` 按路径前缀查 `BundleCatalog` 自动选 bundle。
  */
 export function resBarIconSpritePath(cell: IResBarCell | null | undefined): string {
     const name = textOf(cell?.icon);

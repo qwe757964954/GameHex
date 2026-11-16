@@ -1,56 +1,18 @@
 /**
- * 「聊天」弹窗（老端 `LayerChat`，`assets/resources/ui/Chat/Chat.prefab`）。
+ * 「聊天」弹窗（老端 `LayerChat`，prefab `ui/Chat/Chat`）。
  *
- * ## 版面（真源 = FGUI `聊天/组件/组件_聊天_界面.xml`，720×1280）
+ * 分为三块列表：公共频道消息（页签 1/2/4）、招募列表（页签 0）、
+ * 私聊消息 + 联系人（页签 3）；底部输入条、表情弹窗与艾特弹窗按页签显隐。
  *
- * ```
- * Chat (720×1280)
- * ├─ PanelBg / TitleBg / Title / CloseBtn     共用弹窗框（`组件_公共弹窗_新`）
- * ├─ BottomBg        n90  黑色九宫底（页签 0/2/4）
- * ├─ RowView         消息列表（页签 1/2/4 且有数据）
- * ├─ Empty          n63「暂无聊天」（数据=空）
- * ├─ TabBar          5 个频道页签（横滚）
- * ├─ ApplyList       招募列表（页签 0）
- * ├─ PrivateList     私聊消息（页签 3）
- * ├─ HeadList        私聊联系人（页签 3）
- * ├─ SilentLabel    n98「该频道不可发言」（页签 0）
- * ├─ PrivateBottomBg n106 黑色九宫底（页签 3 且有数据）
- * ├─ InputBar        n75 输入条（页签 2/4：底图 / 输入框 / 表情 / 艾特 / 发送）
- * ├─ PrivateInputBar n105 输入条（页签 3 且有数据）
- * ├─ Mask            按钮_遮罩（表情 / 艾特弹窗打开时）
- * ├─ EmojiPopup      表情弹窗（44 格）
- * └─ AtPopup         艾特弹窗（好友列表）
- * ```
+ * FGUI 的 `数据` / `页签` / `显示表情` / `艾特弹窗` 四个 controller 统一收进
+ * `presentChannel()`：每个受控节点一行绝对赋值。漏一条不报错，只会让某个控件
+ * 出现在错误的页签下，所以 `tests/chat.test.ts` 对这张开关表有单独断言。
  *
- * ## 四个 controller 在 Cocos 里的等价物
- *
- * FGUI 的 `数据` / `页签` / `显示表情` / `艾特弹窗` 四个 controller（共 15 条
- * `gearDisplay` / `gearDisplay2`）全部收进 `presentChannel()` 一个方法：
- * 每个受控节点一行 `active = ...` 的**绝对赋值**。
- * 漏掉一条**不会报错**，只会让某个控件出现在错误的页签下 —— 所以那张表在
- * `tests/chat.test.ts` 里有独立的开关断言。
- *
- * ⚠️ `gearDisplay2` 的 `condition`：`0` = 与（AND）、`1` = 或（OR）。
- *    最容易漏的是 `按钮_遮罩`（`condition="1"` = **或**）：
- *    写成「与」的话遮罩只在两个弹窗同时打开时才亮 —— 而它们永远不会同时开 ⇒ 遮罩永不生效
- *    （点空白关不掉弹窗，且**不报错**）。
- *
- * ## 两条静默失效的时序铁律（本类已按正解写）
- *
- * ① 7 个列表的 `renderItemFn` **只在 `onInit` 里绑一次**，回调按 `index` 现取
- *    `this.xxxRows[index]` —— 回调里禁闭包捕获本趟数据，否则「点第 3 行删掉第 1 个」。
- * ② **异步预加载必须在铺行之前 `await` 完**，且预加载内容**不能**依赖 `this.xxxRows`
- *    （那一刻它是上一帧的行）。本类预加载的是「页签两态底图 + 44 张表情帧」，
- *    与行无关，天然安全；头像由行组件自己的 `FriendAvatarLoader` 异步补。
- *
- * ## 层序（`_children` 序 = 渲染序，照抄 FGUI 的 displayList）
- *
- * `PanelBg → BottomBg → RowView → Empty → TabBar → ApplyList → PrivateList → HeadList
- *  → SilentLabel → PrivateBottomBg → InputBar → PrivateInputBar → Mask → EmojiPopup → AtPopup`
- *
- * ⚠️ 三个列表必须排在 `TabBar` **之前**（FGUI 原稿如此）：页签在列表之下，
- *    列表的 `cc.Mask` 不会把页签裁掉、页签也收得到触摸。
- *    （本项目栽过这条：只改几何不改层序 ⇒ 页签被裁、点不动，单测看不出来。）
+ * 两条时序约束：
+ * ① 7 个列表的 `renderItemFn` 只在 `onInit` 里绑一次，回调按 `index` 现取当前行
+ *   （闭包捕获本趟数据会导致「点第 3 行删掉第 1 个」）。
+ * ② 异步预加载必须在铺行之前 `await` 完；这里预加载的是页签底图与 44 张表情帧，
+ *   与行数据无关，天然安全。头像由行组件自己的 `FriendAvatarLoader` 异步补。
  */
 
 import { _decorator, Button, EditBox, Label, Node, SpriteFrame } from 'cc';
@@ -72,18 +34,21 @@ import { ChatEmojiItem } from './ChatEmojiItem';
 import { ChatPrivateBubble } from './ChatPrivateBubble';
 import { ChatPrivateHead } from './ChatPrivateHead';
 import { ChatRecruitRow } from './ChatRecruitRow';
-import { chatRepository, isChannelInited, isRecruitsFetched } from './ChatRepository';
+import { chatRepository } from './ChatRepository';
 import type { IChatRepository, IChatSnapshot, IRecruitView } from './ChatRepository';
 import {
     atTag,
+    canSpeak,
     ChatChannel,
     CHAT_DEFAULT_CHANNEL,
     CHAT_THEATER_HEAD_ID,
     channelsFor,
+    EMOJI_COUNT,
     emojiTags,
     IChatMessage,
     IChatRole,
     isPrivateChannel,
+    isReadonlyChannel,
     isSelfMessage,
     isSelfRecruit,
     isSystemRoleId,
@@ -96,22 +61,11 @@ import { CacheMgr } from '../net/CacheMgr';
 
 const { ccclass, property } = _decorator;
 
-/**
- * 页签**组件类**直接复用好友模块的 `FriendTabButton`。
- *
- * 理由：两者的 FGUI 模板是**同一个**（`共用组件/组件/页签/组件_弹窗_页签.xml`，160×72）。
- * 模板同源再落一份实现 ⇒ 两份会各自漂移（本项目在「编辑器与客户端两份实现必须同改」上
- * 已经吃过亏）。`FriendTabButton` 的 `bind(index, handler)` / `render(text, selected, off, on)`
- * 接口本来就与业务无关，直接拿来用。
- */
-type ChatTabLike = FriendTabButton;
-
 @ccclass('ChatPage')
 export class ChatPage extends PopupBase {
     /**
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/Chat/`，C 大写）：
-     * Android / iOS 热更新 zip 内的路径**大小写敏感**，写成 `ui/chat/...`
-     * 在 Windows 编辑器里照样能跑，真机上才会 `resources.load` 失败、变成一个空弹窗。
+     * 目录名必须与磁盘一致（`ui/Chat/Chat`，C 大写）：热更新包内路径对大小写敏感，
+     * 写错时编辑器照跑，真机 `resources.load` 失败后只剩一个空弹窗。
      */
     static prefabPath = 'ui/Chat/Chat';
 
@@ -206,7 +160,7 @@ export class ChatPage extends PopupBase {
     /** 本次实际渲染出来的页签频道（联盟可能是动态追加的）。 */
     private channels: ChatChannel[] = [];
 
-    /** 本趟列表数据（`renderItemFn` 按 index **现取**，禁闭包捕获）。 */
+    /** 本趟列表数据（`renderItemFn` 按 index 现取，禁闭包捕获）。 */
     private messageRows: readonly IChatMessage[] = [];
     private recruitRows: readonly IRecruitView[] = [];
     private privateRows: readonly IChatMessage[] = [];
@@ -230,9 +184,7 @@ export class ChatPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        const close = this.closeButton.getComponent(Button);
-        close?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-
+        this.bind(this.closeButton, this.onCloseClick);
         this.bind(this.maskButton, this.onMaskClick);
         this.bind(this.atButton, this.onAtClick);
         this.bind(this.emojiButton, this.onEmojiClick);
@@ -240,7 +192,7 @@ export class ChatPage extends PopupBase {
         this.bind(this.sendButton, () => void this.onSendClick());
         this.bind(this.privateSendButton, () => void this.onSendClick());
 
-        // ⚠️ 7 个回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）
+        // 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）
         this.tabList.renderItemFn = (node, index) => this.renderTabNode(node, index);
         this.rowList.renderItemFn = (node, index) => this.renderMessageNode(node, index);
         this.applyList.renderItemFn = (node, index) => this.renderRecruitNode(node, index);
@@ -253,10 +205,9 @@ export class ChatPage extends PopupBase {
     /**
      * 打开。
      *
-     * `userData`（都可省）：
-     *   `{ channel?: number, roleId?: string | number }`
-     * —— 主界面按钮在有新消息时带 `channel` / `speaker` 进来（老端 `gotoChat` 同款）。
-     * 注意**私聊 id 必须转成字符串**（`uint64` ⇒ `toIdString` 口径），传数字会被 `Long` 吃掉精度。
+     * `userData`（都可省）：`{ channel?: number, roleId?: string | number }`。
+     * 主界面按钮在有新消息时带 `channel` / `speaker` 进来；私聊 id 必须转成字符串
+     * （`uint64` 传数字会被 `Long` 吃掉精度）。
      */
     protected async onOpen(userData?: any): Promise<void> {
         this.busy = false;
@@ -266,9 +217,7 @@ export class ChatPage extends PopupBase {
         this.channel = Number.isInteger(channel) && channel >= 0 && channel <= ChatChannel.Union
             ? (channel as ChatChannel)
             : CHAT_DEFAULT_CHANNEL;
-        this.privateRoleId = userData?.roleId === undefined || userData?.roleId === null
-            ? ''
-            : String(userData.roleId);
+        this.privateRoleId = String(userData?.roleId ?? '');
 
         this.closeSubPopup();
         this.repo.listen(this, () => void this.onBroadcast());
@@ -277,7 +226,7 @@ export class ChatPage extends PopupBase {
 
     protected onClose(): void {
         this.repo.unlisten(this);
-        // 老端 `LayerChat.exit`：关界面时把已读时间落盘
+        // 关界面时把已读时间落盘
         this.repo.saveRead();
         // 关掉后在飞的异步结果一律作废（否则会往已回收的 Label 上写）
         this.revision += 1;
@@ -304,7 +253,7 @@ export class ChatPage extends PopupBase {
         let snapshot = await this.repo.load(this.channel, this.privateRoleId);
         if (!this.alive || revision !== this.revision) return;
 
-        // 首进该频道 ⇒ 补拉一页（老端 `initMap`：每频道只拉一次）
+        // 首进该频道 ⇒ 补拉一页（每页只拉一次）
         if (this.shouldInitChannel(snapshot)) {
             const id = isPrivateChannel(this.channel) ? Number(snapshot.selectedRoleId || 0) : 0;
             const result = await this.repo.initChannel(this.channel, id, 1, this);
@@ -314,8 +263,8 @@ export class ChatPage extends PopupBase {
             if (!this.alive || revision !== this.revision) return;
         }
 
-        // 招募是**另一条协议**（`CmdTeamRecruitInitReqMsg`），同样每个会话只拉一次
-        if (this.channel === ChatChannel.Recruit && !isRecruitsFetched(this.repo)) {
+        // 招募是另一条协议，同样每个会话只拉一次
+        if (this.channel === ChatChannel.Recruit && !this.repo.isRecruitsFetched()) {
             const result = await this.repo.initRecruits(this);
             if (!this.alive || revision !== this.revision) return;
             if (result === 'offline') FW.showTip(CHAT_TEXTS.offline);
@@ -326,12 +275,12 @@ export class ChatPage extends PopupBase {
         this.privateRoleId = snapshot.selectedRoleId;
         this.snapshot = snapshot;
 
-        // 静态帧 + 表情帧先备好，再铺界面（避免「先出框后补图」的闪烁）
+        // 静态帧先备好再铺界面，避免「先出框后补图」的闪烁
         await this.loadStaticFrames();
         if (!this.alive || revision !== this.revision) return;
 
-        // ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        //    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+        // ⇒ 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，表现为列表空白。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
@@ -341,12 +290,12 @@ export class ChatPage extends PopupBase {
     /** 这个频道要不要补发一次 `Init`。 */
     private shouldInitChannel(snapshot: IChatSnapshot): boolean {
         if (isPrivateChannel(this.channel)) {
-            // 老端 `if (privateRoleid > 0 && !initMap.get(...))` —— 没对象就不发
+            // 没有私聊对象就不发
             const id = Number(snapshot.selectedRoleId || 0);
             if (id <= 0) return false;
-            return !isChannelInited(this.repo, this.channel, id);
+            return !this.repo.isInited(this.channel, id);
         }
-        return !isChannelInited(this.repo, this.channel, 0);
+        return !this.repo.isInited(this.channel, 0);
     }
 
     private present(): void {
@@ -358,40 +307,36 @@ export class ChatPage extends PopupBase {
     }
 
     /**
-     * 四个 controller 的等价物（**唯一入口**，全部绝对赋值）。
+     * 四个 controller 的等价物（唯一入口，全部绝对赋值）。
      *
-     * ⚠️ `数据` 在本类按**实际能显示几条**算（`hasDataOf`），与老端有一处**有意偏离**：
-     *    老端私聊分支用的是**未过滤**的 `VOChatRoleBag.GetBagAsArray().length`
-     *    （`LayerChat.upDateHeadList` 里的那句 `setSelectedPage("数据", data && data.length > 0 ...)`），
-     *    而列表用的是过滤后的 `others`。⇒ 若服务端只推了自己一条，老端会「数据=有 + 空列表」。
-     *    这里统一用过滤后的条数，语义是「这一页有没有内容」，不会出现空列表。
+     * `数据` 按「实际能显示几条」算：私聊用过滤后的联系人条数，不用服务端原始条数，
+     * 避免出现「数据=有 + 空列表」的形态。
      */
     private presentChannel(snapshot: IChatSnapshot): void {
         const channel = this.channel;
         const hasData = this.hasDataOf(snapshot);
 
-        // n90：页签 0/2/4
+        // n90 黑色九宫底：页签 0/2/4
         this.bottomBg.active = channel === ChatChannel.Recruit
             || channel === ChatChannel.World
             || channel === ChatChannel.Union;
-        // n63：数据=空
         this.emptyLabel.string = CHAT_TEXTS.empty;
         this.emptyLabel.node.active = !hasData;
-        // n98：页签 0（招募不可发言）
-        this.silentLabel.active = channel === ChatChannel.Recruit;
+        this.silentLabel.active = isReadonlyChannel(channel);
 
-        // n75 输入条：页签 2/4；其中的「艾特」自身是 pages=1,2,4 ⇒ 交集 = 2/4
-        this.inputBar.active = channel === ChatChannel.World || channel === ChatChannel.Union;
-        this.atButton.active = channel === ChatChannel.World || channel === ChatChannel.Union;
-        this.setPlaceholder(this.inputBox, CHAT_TEXTS.inputPrompt);
+        // 公共输入条只在 2/4 出现；艾特按钮虽是 1/2/4，但它挂在输入条里，实际也只在 2/4 可见
+        const publicInput = canSpeak(channel) && !isPrivateChannel(channel);
+        this.inputBar.active = publicInput;
+        this.atButton.active = publicInput;
+        this.inputBox.placeholder = CHAT_TEXTS.inputPrompt;
 
-        // n106 + n105：页签 3 且 数据=有（没对象时连输入框都不给）
+        // n106 + n105：页签 3 且有数据（没对象时连输入框都不给）
         const privateReady = isPrivateChannel(channel) && hasData;
         this.privateBottomBg.active = privateReady;
         this.privateInputBar.active = privateReady;
-        this.setPlaceholder(this.privateInputBox, CHAT_TEXTS.inputPrompt);
+        this.privateInputBox.placeholder = CHAT_TEXTS.inputPrompt;
 
-        // 换频道就清输入（老端 `refreshView` 第一句就是清两个输入框）
+        // 换频道就清输入
         this.inputBox.string = '';
         this.privateInputBox.string = '';
     }
@@ -420,12 +365,13 @@ export class ChatPage extends PopupBase {
         if (showMessages) {
             this.messageRows = snapshot.page.list;
             this.rowList.refreshList(this.messageRows as IChatMessage[]);
-            // 老端 `list.scrollPane.scrollBottom()` —— 进来先看到最新一条
+            // 进来先看到最新一条
             this.rowList.scrollToBottom(false);
         }
 
-        this.applyList.node.active = hasData && channel === ChatChannel.Recruit;
-        if (this.applyList.node.active) {
+        const showApply = hasData && channel === ChatChannel.Recruit;
+        this.applyList.node.active = showApply;
+        if (showApply) {
             this.recruitRows = snapshot.recruits;
             this.applyList.refreshList(this.recruitRows as IRecruitView[]);
             this.applyList.scrollToTop(false);
@@ -445,18 +391,18 @@ export class ChatPage extends PopupBase {
     }
 
     // ============================================================
-    // 行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）
+    // 行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）
     // ============================================================
 
     private renderTabNode(node: Node, index: number): void {
-        const button = node.getComponent(FriendTabButton) as ChatTabLike | null;
+        const button = node.getComponent(FriendTabButton);
         const channel = this.channels[index];
         if (!button || channel === undefined) {
             node.active = false;
             return;
         }
         node.active = true;
-        // ⚠️ 每次都要重设 index（节点会被复用到别的下标）
+        // 节点会被复用到别的下标，每次都要重设 index
         button.bind(index, (clicked) => void this.onTabClick(clicked));
         button.render(
             channelTitle(channel),
@@ -475,13 +421,12 @@ export class ChatPage extends PopupBase {
             return;
         }
         node.active = true;
-        const selfId = this.snapshot?.selfId ?? '';
-        // 战区整块换成系统头像（老端 `if (selectType === CHAT_CHANNEL_THEATER) headIcon = 70003`）
+        // 战区整块换成系统头像（说话人自带的是玩家头像，对系统播报无意义）
         const avatarId = this.channel === ChatChannel.Theater
             ? CHAT_THEATER_HEAD_ID
             : message.speaker.img;
         bubble.render(
-            isSelfMessage(message, selfId),
+            isSelfMessage(message, this.selfId),
             message.speaker.name,
             parseEmoji(message.content, emojiRichSrc),
             avatarId,
@@ -497,9 +442,8 @@ export class ChatPage extends PopupBase {
             return;
         }
         node.active = true;
-        const selfId = this.snapshot?.selfId ?? '';
         bubble.render(
-            isSelfMessage(message, selfId),
+            isSelfMessage(message, this.selfId),
             message.speaker.name,
             parseEmoji(message.content, emojiRichSrc),
             message.speaker.img,
@@ -515,15 +459,15 @@ export class ChatPage extends PopupBase {
             return;
         }
         node.active = true;
-        const selfId = this.snapshot?.selfId ?? '';
-        row.onJoin = () => this.dispatchIndex(index, (i) => this.onRecruitJoin(i));
-        row.onHead = () => this.dispatchIndex(index, (i) => this.onPlayerInfo(this.recruitRows[i]?.roleId ?? ''));
+        row.onJoin = () => this.onRecruitJoin(index);
+        // 头像点击带的是本行渲染时的 roleId（不是按下标重取，避免列表变短后取到别人的 id）
+        row.onHead = () => this.onPlayerInfo(view.roleId);
         row.render(
             view.name,
             view.stageName,
             formatText(CHAT_TEXTS.powerTemplate, view.power),
             view.img,
-            isSelfRecruit(view, selfId),
+            isSelfRecruit(view, this.selfId),
             CHAT_TEXTS.joinTeam,
         );
     }
@@ -537,23 +481,22 @@ export class ChatPage extends PopupBase {
             return;
         }
         node.active = true;
-        row.onSelect = () => this.dispatchIndex(index, (i) => void this.onHeadSelect(i));
-        row.onRemove = () => this.dispatchIndex(index, (i) => void this.onHeadRemove(i));
+        row.onSelect = () => void this.onHeadSelect(index);
+        row.onRemove = () => void this.onHeadRemove(index);
         row.render(view.name, view.img);
     }
 
     private renderEmojiNode(node: Node, index: number): void {
         const item = node.getComponent(ChatEmojiItem);
         if (!item) return;
-        const frame = this.emojiFrames[index] ?? null;
         if (index >= this.emojiFrames.length) {
             item.hide();
             return;
         }
         node.active = true;
         item.onPick = () => this.onEmojiPick(index);
-        // ⚠️ 绝对赋值：`null` 也要写（否则复用的节点会留着上一格的图）
-        item.render(frame);
+        // 绝对赋值：`null` 也要写，否则复用的节点会留着上一格的图
+        item.render(this.emojiFrames[index]);
     }
 
     private renderAtNode(node: Node, index: number): void {
@@ -565,14 +508,9 @@ export class ChatPage extends PopupBase {
             return;
         }
         node.active = true;
-        row.onPick = () => this.dispatchIndex(index, (i) => this.onAtPick(i));
-        row.render(view.name, this.serverNameOf(view), view.img);
-    }
-
-    /** 回调里 `index` 可能已经越界（列表刚变短）—— 取不到就什么都不做。 */
-    private dispatchIndex(index: number, action: (index: number) => void): void {
-        if (index < 0) return;
-        action(index);
+        row.onPick = () => this.onAtPick(index);
+        // 本工程没有区服表，按老端 fallback 直接显示区服 id
+        row.render(view.name, String(view.selectServerId), view.img);
     }
 
     // ============================================================
@@ -596,14 +534,13 @@ export class ChatPage extends PopupBase {
 
         const isPrivate = isPrivateChannel(this.channel);
         const input = isPrivate ? this.privateInputBox : this.inputBox;
-        const content = (input?.string ?? '').trim();
+        const content = input.string.trim();
         if (!content) {
             FW.showTip(CHAT_TEXTS.emptyInput);
             return;
         }
 
-        // ⚠️ 老端在这里 `await this.SDKMgr.checkMessage(content, true)`；
-        //    Demo3.8 **没有 SDK 层** ⇒ 本轮不做任何过滤（不假装校验过）。
+        // 老端在这里走平台 SDK 校验敏感词；本工程没有 SDK 层，本轮不做过滤
         this.busy = true;
         try {
             const id = isPrivate ? Number(this.privateRoleId || 0) : 0;
@@ -628,11 +565,11 @@ export class ChatPage extends PopupBase {
         this.emojiList.refreshList(emojiTags());
     }
 
-    /** 老端：往**两个**输入框都追加 `[:N]`。 */
+    /** 表情插进两个输入框（哪条输入条可见由页签决定）。 */
     private onEmojiPick(index: number): void {
         const tag = `[:${index}]`;
-        this.inputBox.string = `${this.inputBox.string ?? ''}${tag}`;
-        this.privateInputBox.string = `${this.privateInputBox.string ?? ''}${tag}`;
+        this.inputBox.string += tag;
+        this.privateInputBox.string += tag;
     }
 
     private onAtClick(): void {
@@ -646,8 +583,8 @@ export class ChatPage extends PopupBase {
     private onAtPick(index: number): void {
         const row = this.atRows[index];
         if (!row) return;
-        // 老端只往**公共频道**输入框追加，并且顺手关掉弹窗
-        this.inputBox.string = `${this.inputBox.string ?? ''}${atTag(row.name)}`;
+        // 只往公共频道输入框追加，并顺手关掉弹窗
+        this.inputBox.string += atTag(row.name);
         this.closeSubPopup();
     }
 
@@ -655,7 +592,7 @@ export class ChatPage extends PopupBase {
         this.closeSubPopup();
     }
 
-    /** 关掉表情 / 艾特弹窗 + 遮罩（老端 `closeInfo()`）。 */
+    /** 关掉表情 / 艾特弹窗 + 遮罩。 */
     private closeSubPopup(): void {
         this.emojiPopup.active = false;
         this.atPopup.active = false;
@@ -689,17 +626,13 @@ export class ChatPage extends PopupBase {
     /**
      * 招募「点击加入」。
      *
-     * ⚠️ **本轮发不出这一包**：老端 `ModelTeam.RequestTeamJoin(roleId, true)` 最终发的是
-     *    `CmdTeamReplyInviteReqMsg{ inviteId, agree, attr }`，其中 `attr: CmdBattleRoleAttr`
-     *    是**战前属性快照**（卡组 + 属性 + 改造列表）；Demo3.8 全工程没有一处构造过它
-     *    （卡牌养成 / 战力结算体系尚未接入）⇒ 如实提示，**不假装加入了队伍**。
-     *    「自己不能加入自己」这条**本地判据仍然生效**（老端 `onClickJoin` 第一句）。
+     * 这一包目前发不出去：老端入队要带战前属性快照（`CmdBattleRoleAttr`），
+     * 本工程尚未接入该体系，所以只做本地判据 —— 「不能加入自己的队伍」。
      */
     private onRecruitJoin(index: number): void {
         const row = this.recruitRows[index];
         if (!row) return;
-        const selfId = this.snapshot?.selfId ?? '';
-        if (isSelfRecruit(row, selfId)) {
+        if (isSelfRecruit(row, this.selfId)) {
             FW.showTip(CHAT_TEXTS.cannotJoinSelf);
             return;
         }
@@ -707,9 +640,7 @@ export class ChatPage extends PopupBase {
     }
 
     /**
-     * 点头像看资料 —— Demo3.8 没有 `CtrlPlayer.openOtherPlayerInfo` 对应的界面。
-     *
-     * 但「`roleId < 1e4` 是系统播报、不可查看」这条判据**照抄老端**（`onClickPlayerInfo`）。
+     * 点头像看资料：本工程没有对应界面；系统播报（`roleId < 1e4`）先按老端判据拦一道。
      */
     private onPlayerInfo(roleId: string): void {
         if (!roleId) return;
@@ -725,10 +656,9 @@ export class ChatPage extends PopupBase {
     // ============================================================
 
     /**
-     * 服务端推了一条新消息（`CmdChatBroMsg`）。
+     * 服务端推了一条新消息。
      *
-     * 老端是「任何频道的广播都 `refreshView()`」—— 别偷懒只刷当前频道，
-     * 否则私聊对象列表里的未读红点永远不更新（本轮红点未接，但刷新口径照抄）。
+     * 任何频道的广播都要整页刷新，否则私聊联系人列表的未读状态不会更新。
      */
     private async onBroadcast(): Promise<void> {
         if (!this.alive) return;
@@ -749,7 +679,7 @@ export class ChatPage extends PopupBase {
         }
         if (this.emojiFrames.length === 0) {
             this.emojiFrames = await Promise.all(
-                emojiTags().map((tag) => loadArt(emojiArtName(Number(tag)), CHAT_ART_ROOT)),
+                Array.from({ length: EMOJI_COUNT }, (_, index) => loadArt(emojiArtName(index), CHAT_ART_ROOT)),
             );
         }
     }
@@ -764,19 +694,8 @@ export class ChatPage extends PopupBase {
         }
     }
 
-    /**
-     * 区服名。
-     *
-     * 老端 `ModelServer.getServerInfo(selectServerId).name`；Demo3.8 **没有区服表**
-     * （`assets/remoteRef` 下只有 `serverRank`）⇒ 按老端自己的 fallback 显示 id：
-     * `serverInfo ? serverInfo.name : selectServerId`。
-     */
-    private serverNameOf(row: IChatRole): string {
-        return String(row.selectServerId);
-    }
-
-    private setPlaceholder(box: EditBox, text: string): void {
-        if (box) box.placeholder = text;
+    private get selfId(): string {
+        return this.snapshot?.selfId ?? '';
     }
 
     private onCloseClick(): void {
@@ -784,9 +703,9 @@ export class ChatPage extends PopupBase {
     }
 
     private bind(node: Node, handler: () => void): void {
-        const button = node?.getComponent(Button);
+        const button = node.getComponent(Button);
         if (!button) {
-            console.warn(`[Chat] ${node?.name ?? '?'} 上没有 cc.Button，点击不会生效`);
+            console.warn(`[Chat] ${node.name} 上没有 cc.Button，点击不会生效`);
             return;
         }
         button.node.on(Button.EventType.CLICK, handler, this);

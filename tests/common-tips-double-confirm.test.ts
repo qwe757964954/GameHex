@@ -31,7 +31,7 @@ test('通用提示框支持「点两次才算确认」，缺省不传时仍是�
 
 test('每次打开重置上膛状态（实例复用不能带着上一轮的状态）', () => {
     assert.match(tips, /private armed = false;/, '要有上膛状态');
-    assert.match(tips, /private apply\(options: CommonTipsOptions\): void \{[\s\S]{0,160}this\.armed = false;/,
+    assert.match(tips, /private apply\(options: ICommonTipsOptions\): void \{[\s\S]{0,160}this\.armed = false;/,
         'apply 里必须重置，否则复用实例第二次打开一进来就是「再点一次」');
 });
 

@@ -1,26 +1,12 @@
 /**
- * 「好友」列表里的**一行** —— 三个页签共用（`564×133`）。
+ * 「好友」列表里的一行，三个页签共用一份（节点对应 FGUI `好友/组件/组件_好友项`）。
  *
- * 结构逐节点对齐 FGUI `好友/组件/组件_好友项.xml`。**为什么三个页签共用一份**：
- * 老端也是这么做的 —— `LayerFriend.renderListItem` 里对同一个 item 调
- * `item.setSelectedIndex("页签", this.selectIndex)`，靠 `页签` controller 的 `gearDisplay`
- * 切「私聊 / 时长 / 勾选」的显隐，主按钮文案由代码按页签改写。
+ * 共用靠 `页签` controller 的 `gearDisplay` 切显隐，代码只改主按钮文案：
+ * 「私聊」和「时长」只在好友列表页签显示，「勾选」只在好友列表的删除模式显示，
+ * 主按钮文案按页签是「赠送 / 已赠送」「申请 / 已申请」「移除」。
  *
- * | FGUI 节点 | 本节点 | 页签 0（好友列表） | 页签 1（添加好友） | 页签 2（黑名单） |
- * |---|---|---|---|---|
- * | `n70` 行底框 | `Bg` | 显示 | 显示 | 显示 |
- * | `n71` 头像框 | `HeadFrame` | 显示 | 显示 | 显示 |
- * | `icon` | `Icon` | 头像 | 头像 | 头像 |
- * | `n73` / `文本_等级` | `LvTag` / `Lv` | 显示 | 显示 | 显示 |
- * | `玩家名` / `战力` | `Name` / `Power` | 显示 | 显示 | 显示 |
- * | `按钮_私聊` | `ChatBtn` | **显示** | 隐藏 | 隐藏 |
- * | `btn` | `ActionBtn` | 赠送/已赠送 | 申请/已申请 | 移除 |
- * | `时长` | `Duration` | **显示** | 隐藏 | 隐藏 |
- * | `按钮_勾选` | `CheckBtn` (+`Mark`) | **删除模式才显示** | 隐藏 | 隐藏 |
- *
- * ⚠️ 整行会被虚拟列表 **clone 复用** ⇒ `render()` 里每一处都要**绝对赋值**
- *   （记忆规则 10：条件式赋值会让上一行的状态串到下一行）。
- *   最容易漏的两处：`Duration`（页签 1/2 必须写空串 + 关节点）与 `CheckBtn/Mark`。
+ * 整行会被虚拟列表 clone 复用，`render()` 里每一处都要绝对赋值 —— 条件式赋值会让上一行
+ * 的状态串到下一行。最容易漏的是 `Duration`（非好友列表页签必须写空串并关节点）和 `CheckBtn/Mark`。
  */
 
 import { _decorator, Button, Color, Component, Label, Node, Sprite, Vec3 } from 'cc';
@@ -54,11 +40,9 @@ export class FriendRow extends Component {
     powerLabel: Label = null;
 
     /**
-     * 「头像框 / 头像 / 等级标签 / 等级数字 / 玩家名 / 战力」这一组的容器
-     * （= FGUI `组件_好友项` 的 `group n80`）。
+     * 左侧一组节点的容器（头像框 / 头像 / 等级标签 / 等级数字 / 玩家名 / 战力）。
      *
-     * 只有它一个节点会随删除模式移动（`rowGroupPosition`），组内的 6 个节点坐标**不变** ——
-     * 对齐 FGUI 的 `gearXY`：那个 controller 作用在组上，不作用在成员上。
+     * 只有它随删除模式移动（对齐 FGUI 的 `gearXY`：controller 作用在组上，组内 6 个节点坐标不变）。
      */
     @property({ type: Node, tooltip: 'Group：左侧那一组（删除模式下整组右移 43、下移 6）' })
     shiftGroup: Node = null;
@@ -88,9 +72,9 @@ export class FriendRow extends Component {
     checkMark: Node = null;
 
     /**
-     * 三个回调，**由宿主在每次铺行时重设**（`FriendPage.renderRow`）。
+     * 三个回调，由宿主在每次铺行时重设（`FriendPage.renderRow`）。
      *
-     * ⚠️ 不能在 `render()` 里绑监听：同一个实例会被复用到别的下标，
+     * 不能在 `render()` 里绑监听：同一个实例会被复用到别的下标，
      * 回调里必须按 index 现取当前行，否则会「点第 3 行删掉第 1 个」。
      */
     onAction: (() => void) | null = null;
@@ -104,7 +88,7 @@ export class FriendRow extends Component {
 
     protected onLoad(): void {
         this.avatar = new FriendAvatarLoader(() => this.icon);
-        this.normalGroupPosition = this.shiftGroup?.position.clone() ?? null;
+        this.normalGroupPosition = this.shiftGroup.position.clone();
         this.deleteGroupAnchor = this.node.getChildByName('DeleteGroupAnchor');
         this.actionButton.on(Button.EventType.CLICK, this.emitAction, this);
         this.chatButton.on(Button.EventType.CLICK, this.emitChat, this);
@@ -121,27 +105,24 @@ export class FriendRow extends Component {
         this.powerLabel.string = view.powerText;
         this.avatar?.apply(view.avatarId);
 
-        // 时长（页签 1/2 写空串并关节点 —— 漏了会把好朋友的在线状态带到陌生人那行）
+        // 时长：非好友列表页签写空串并关节点，漏了会把好友的在线状态带到陌生人那一行。
         this.durationLabel.string = view.durationText;
         this.durationLabel.node.active = view.durationText.length > 0;
 
-        // 私聊（Demo3.8 没有聊天模块，宿主传 `chatAvailable=false` ⇒ 一律不显示）
+        // 私聊（Demo3.8 没有聊天模块，宿主传 `chatAvailable = false`，一律不显示）
         this.chatButton.active = view.showChat;
 
         // 删除模式下整组右移 43、下移 6：两档位置都在 prefab（默认位置 + DeleteGroupAnchor）
-        if (this.shiftGroup) {
-            const target = view.showCheck ? this.deleteGroupAnchor?.position : this.normalGroupPosition;
-            if (target) this.shiftGroup.setPosition(target.x, target.y, 0);
-        }
+        const target = view.showCheck ? this.deleteGroupAnchor?.position : this.normalGroupPosition;
+        if (target) this.shiftGroup.setPosition(target.x, target.y, 0);
 
-        // 主按钮：文案 + 置灰 + 可点性 + 显隐，四样都要绝对赋值
+        // 主按钮：文案 / 置灰 / 可点性 / 显隐，四样都要绝对赋值
         // （删除模式下 FGUI 把 `btn` 整块藏掉，留着会和勾选框挤在一起）
         this.actionButton.active = view.showAction;
         this.actionLabel.string = view.actionText;
         this.actionLabel.color = color;
-        if (this.actionBackground) this.actionBackground.color = color;
-        const button = this.actionButton.getComponent(Button);
-        if (button) button.interactable = view.actionEnabled;
+        this.actionBackground.color = color;
+        this.actionButton.getComponent(Button).interactable = view.actionEnabled;
 
         // 勾选框 + 对勾
         this.checkButton.active = view.showCheck;

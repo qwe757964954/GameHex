@@ -1,25 +1,15 @@
 /**
- * 一条聊天消息（频道 1/2/4 的消息列表用）—— **一个模板内含左右两套子树**。
+ * 一条聊天消息（频道 1/2/4 的消息列表用）—— 一个模板内含左右两套子树。
  *
- * 真源 = FGUI `聊天/组件/组件_聊天_left.xml`（530×112）/ `组件_聊天_right.xml`（530×114）。
+ * 老端按「是不是自己发的」逐项换模板；本工程的虚拟列表按项换模板要开
+ * `useDynamicSize` + `getItemTypeIndexFn`，代价是把尺寸采样一整套逻辑拉进来。
+ * 这里改用等价且更稳的形态：模板固定一个，内部放 `Left` / `Right` 两套子树，
+ * `render()` 按 `isSelf` 切 `active`（与 `FriendRow` 靠 active 切页签形态同款）。
  *
- * ## 为什么是「一个模板 + 两套子树切 active」，不是「两个模板」
- *
- * 老端靠 `list.initVirtualList(..., getListItemResource)` 按「是不是自己发的」**逐项换模板**
- * （`ui://聊天/组件_聊天_right` / `_left`）。
- * Demo3.8 的 `VirtualScrollView` 要按项换模板，必须开 **`useDynamicSize`（不等大小模式）
- * + `getItemTypeIndexFn`**（`VScrollView.ts:1128` 的硬校验）—— 那条路径在本工程没有先例，
- * 且它同时会把「尺寸采样 / 动态槽位」一整套逻辑拉进来。
- *
- * 这里改用**等价但更稳**的形态：模板固定一个，内部放 `Left` / `Right` 两套子树，
- * `render()` 按 `isSelf` 切 `active`。与 `FriendRow`（一个模板 + 靠 active 切页签形态）同款机制。
- *
- * ## 三处必须绝对赋值（虚拟列表 clone 复用）
- *
- * ① `leftGroup/rightGroup.active`；
- * ② 两边的文案都写（只写当前那套的话，切回来后是上一行的残留）；
- * ③ 头像：`FriendAvatarLoader` 的 `appliedId` 去重会挡住「同一 id 换到另一套子树」，
- *    所以在**左右切换时**要 `invalidate()`（见 `render`）。
+ * 虚拟列表会 clone 复用节点，所以三处必须绝对赋值：
+ * ① `leftGroup` / `rightGroup.active`；② 两边文案都写（只写当前那套的话，
+ * 切回来会留着上一行的残留）；③ 左右切换时 `invalidate()` 头像加载 ——
+ * `FriendAvatarLoader.appliedId` 的去重会挡住「同一 id 换到另一套子树」。
  */
 
 import { _decorator, Component, Label, Node, RichText, Sprite } from 'cc';
@@ -38,7 +28,7 @@ export class ChatBubble extends Component {
     @property({ type: Label, tooltip: 'Left/Name：玩家名' })
     leftName: Label = null;
 
-    @property({ type: RichText, tooltip: 'Left/Msg：正文（**必须 RichText**，表情与艾特靠它）' })
+    @property({ type: RichText, tooltip: 'Left/Msg：正文（必须是 RichText，表情与艾特都靠它）' })
     leftMsg: RichText = null;
 
     @property({ type: Node, tooltip: 'Right：自己发的（530×114）' })
@@ -50,7 +40,7 @@ export class ChatBubble extends Component {
     @property({ type: Label, tooltip: 'Right/Name：玩家名' })
     rightName: Label = null;
 
-    @property({ type: RichText, tooltip: 'Right/Msg：正文（**必须 RichText**）' })
+    @property({ type: RichText, tooltip: 'Right/Msg：正文（必须是 RichText）' })
     rightMsg: RichText = null;
 
     private avatar: FriendAvatarLoader | null = null;
@@ -67,11 +57,11 @@ export class ChatBubble extends Component {
      *
      * @param isSelf   是不是我自己发的（决定左 / 右子树）
      * @param name     玩家名
-     * @param rich     **已展开**的富文本串（`ChatTable.parseEmoji` 处理过），本类不再碰标记
+     * @param rich     已展开的富文本串（`ChatTable.parseEmoji` 处理过），本类不再碰标记
      * @param avatarId 头像 id（空串 = 清帧）
      */
     render(isSelf: boolean, name: string, rich: string, avatarId: string): void {
-        // 左右切换 ⇒ 头像落到了另一棵子树上，必须作废旧的在途结果（否则新那套永远留白）
+        // 左右切换后头像落到另一棵子树上，必须作废旧的在途结果（否则新那套永远留白）
         if (this.lastSelf !== isSelf) {
             this.lastSelf = isSelf;
             this.avatar?.invalidate();

@@ -1,39 +1,14 @@
 /**
- * 「领取体力」弹窗（老端 `LayerFriendGetEnd`，`assets/resources/ui/Friend/FriendGetEnd.prefab`）。
+ * 「领取体力」弹窗（`assets/bundles/main-pages/ui/Friend/FriendGetEnd.prefab`）。
  *
- * ## 版面（真源 = FGUI `好友/组件/弹窗_好友_领取粮草.xml`，720×1280）
+ * 由 `FriendPage.onGetEndClick` 打开（那一层已先判过 `leftGetTimes`）；关掉时
+ * `PopupManager` 给主容器补发 reveal，主容器重新取数。本弹窗每次打开也重新取数。
  *
- *   popBg  (346,182) pivot 0.5,0  626×882      ← `组件_公共弹窗_新`，标题「领取体力」
- *   list   (64,254) 564×638       `defaultItem` = `组件_领取粮草项`
- *   文本_赠送次数 (332,917) pivot 0.5,0  155×29  右对齐「今日还可领取N次」
- *   按钮_一键领取 (256,952) 150×70  `颜色,1`（金色）
+ * 列表口径与主容器三页签不同：只取好友列表里 `todayReceive && !todayTake` 的人
+ * （`FriendTable.pickGetEndRows`），行内「体力数:N」的 N 取 `gameConfig.friendAddEndPerTime`。
  *
- * ⚠️ 老端在这个类里有两条 `ALIGN_OFFSET_X = 14` / `ALIGN_OFFSET_Y = 9`，把整个 window 从
- *    `(346,182)` 挪到与主容器 `(360,191)` 重合。**Demo3.8 不需要** —— prefab 里直接按
- *    `(360,191)` 摆好（对齐逻辑属于老端窗口管理器的补丁，不是版面本身）。
- *
- * ⚠️ 本弹窗在 FGUI 里**没有** `全面屏适配` 节点、**没有** controller（对照申请列表弹窗是有
- *    `数据` controller 的）⇒ 也就没有「空列表」这一态：`list.update(...)` 是无条件调的。
- *    这里保持一致 —— 没有数据时列表就是空的，「一键领取」照旧显示（点了会得到 0 条的效果，
- *    但**不会静默**：`leftGetTimes <= 0` 时点它会给提示，见下）。
- *
- * ## 数据来源（只来自好友列表，**不是**主容器三页签的口径）
- *
- * 列表 = `FriendTable.pickGetEndRows(snapshot.friendRows)`
- *      = `todayReceive && !todayTake` 的人（老端 `ModelFriend.getGetEndList()`）。
- * 行内「体力数:N」的 N = `gameConfig.friendAddEndPerTime`（老端 `getAddEndNum()`）。
- *
- * ## 与主容器的关系
- *
- * 由 `FriendPage.onGetEndClick` 打开（那一层已经先判过 `leftGetTimes`）。关掉时
- * `PopupManager._refreshCover()` 给主容器补发 `onReveal` ⇒ 主容器重新取数。
- * 本弹窗自己每次打开也重新取数。
- *
- * ## 一处**有意偏离**老端
- *
- * 老端 `onClickGetEnd` / `onClickGetEndOneKey` 的前置条件是 `getLeftGetTimes() <= 0 则 return`
- * —— **静默返回**（点了什么都不发生）。这里改成弹提示 `FRIEND_TIP_GET_MAX`：
- * 「次数用完」是用户需要知道的信息，不应该靠界面不动来表达。
+ * 这里没有「空列表」这一态：prefab 里没有 `数据` controller，没有数据时列表就是空的，
+ * 「一键领取」照旧显示 —— 但次数用完时点它会弹提示，而不是像老端那样静默 return。
  */
 
 import { _decorator, Button, Label, Node } from 'cc';
@@ -60,8 +35,8 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendGetEndPage')
 export class FriendGetEndPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/Friend/`）—— 热更新 zip 内路径大小写敏感，
-     * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
+     * 目录名大小写必须与磁盘一致（`ui/Friend/`）：热更新 zip 内路径大小写敏感，
+     * 在 Windows 编辑器里怎么写都能跑，真机上 `resources.load` 才会失败。
      */
     static prefabPath = 'ui/Friend/FriendGetEnd';
 
@@ -91,7 +66,7 @@ export class FriendGetEndPage extends PopupBase {
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
 
-    /** 一个请求还没回来时忽略后续点击。 */
+    /** 请求未返回时忽略后续点击。 */
     private busy = false;
 
     /** 每次取数递增，用来作废在飞的异步结果。 */
@@ -102,12 +77,10 @@ export class FriendGetEndPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        const close = this.closeButton.getComponent(Button);
-        close?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-
+        this.bind(this.closeButton, this.onCloseClick);
         this.bind(this.getEndOneKeyButton, this.onGetEndOneKeyClick);
 
-        // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
+        // 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
         this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
@@ -140,8 +113,8 @@ export class FriendGetEndPage extends PopupBase {
         if (!this.alive || revision !== this.revision) return;
         this.snapshot = snapshot;
 
-        // ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        //    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
+        // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
@@ -156,15 +129,14 @@ export class FriendGetEndPage extends PopupBase {
         this.timesLabel.string = formatText(FRIEND_GET_END_TIMES_TEMPLATE, snapshot.leftGetTimes);
 
         const data = pickGetEndRows(snapshot.friendRows);
-        const texts = FRIEND_ROW_TEXTS;
         const views: IFriendRowView[] = [];
         const ids: string[] = [];
         for (let index = 0; index < data.length; index++) {
             const row = data[index];
             ids.push(row.id);
-            // `kind = 'take'`：主按钮固定「领取」、不置灰，并带上「体力数:N」那一列 ——
-            // `endNum` 就是这次能领到的数量（老端 `getAddEndNum()` = `friendAddEndPerTime`）。
-            views.push(buildFriendRowView('take', row, texts, {
+            // `kind = 'take'`：主按钮固定「领取」、不置灰，并带上「体力数:N」那一列，
+            // N 就是这次能领到的数量。
+            views.push(buildFriendRowView('take', row, FRIEND_ROW_TEXTS, {
                 nowMs: snapshot.now,
                 deleteMode: false,
                 checked: false,
@@ -181,7 +153,7 @@ export class FriendGetEndPage extends PopupBase {
         this.rowList.scrollToTop(false);
     }
 
-    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）。 */
+    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendGetEndRow);
         if (!row) return;
@@ -211,11 +183,7 @@ export class FriendGetEndPage extends PopupBase {
         this.closeByButton();
     }
 
-    /**
-     * 领取某个好友的体力。
-     *
-     * ⚠️ 次数用完时**弹提示**而不是静默返回（老端是 `return`，见文件头「有意偏离」）。
-     */
+    /** 领取某个好友的体力；次数用完时弹提示，不静默返回。 */
     private async onGetEnd(id: string): Promise<void> {
         if (!this.hasLeftGetTimes()) {
             FW.showTip(FRIEND_TIP_GET_MAX);

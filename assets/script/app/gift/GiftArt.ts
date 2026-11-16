@@ -1,22 +1,13 @@
 /**
- * 礼包（`LayerGift`）美术口径。
+ * 礼包美术资源口径。图片位于 `image/gift`，文件名统一 `gf_` 前缀。
  *
- * 图都落在 `assets/resources/image/gift/`（19 张，从老端 FGUI 的
- * `礼包/图片` + `公用0/图片` 里挑出来重命名，口径与 `image/sevenDay/` 一致：去中文 + 模块前缀）。
- *
- * ⚠️ 三张图**原图尺寸 ≠ FGUI 显示尺寸**，是原稿有意的拉伸，别按原图比例推常量：
- *   | 图 | 原图 | FGUI 显示 |
- *   |---|---|---|
- *   | `gf_panel_bg` | 597×585 | **597×852**（纵向拉 1.456×） |
- *   | `gf_bottom_bar` | 992×212 | 720×120 |
- *   | `gf_subtab_on/off` | 198×71 | 159×64 |
- * 所以 Sprite 一律 `sizeMode = CUSTOM(0)`，节点尺寸由 prefab 写死（见 `tmp/gen_gift.mjs`）。
- *
- * 礼包组件**没有任何九宫**（XML 里 `scale9grid` 一个都没出现），`trim` 也一律关。
+ * `gf_panel_bg`、`gf_bottom_bar`、`gf_subtab_on/off` 在原稿中被有意拉伸，
+ * Sprite 使用 CUSTOM 尺寸，节点大小由 prefab 固定；不要按原图比例反推。
  */
 
 import { spriteFramePath } from '../ArtPaths';
 import { resIconRoot } from '../common/ResTypes';
+import { resolveItemIconRef } from '../sevenDay/SevenDayArt';
 
 /** 礼包美术目录（运行时时相对 `resources` 的路径）。 */
 export const GIFT_ART_ROOT = 'image/gift';
@@ -65,27 +56,19 @@ export const GIFT_ART_NAMES: Readonly<Record<string, string>> = {
     iconStone: 'gf_icon_stone',
 };
 
-/** 子页签 `artKey` → 标题图 key（与 `GiftTable.giftSubTabOf` 的 `artKey` 对齐）。 */
+/** 子页签 `artKey` → 标题图 key，与 `GiftTable.giftSubTabOf` 对齐。 */
 export const GIFT_SUB_TAB_ART: Readonly<Record<string, string>> = {
     daily: 'tabDaily',
     week: 'tabWeek',
     month: 'tabMonth',
-    // ⚠️ `once`（终身礼包）**故意不映射** —— `open.json` 里 `416` 是关的（`roleLevel >= 9999`），
-    //    工程里也没有 `gf_tab_once` 这张图。真要开 `416` 得先补图 + 补这里。
+    // `once` 未映射：416 未开启，工程里也没有对应标题图。
 };
 
 /**
- * `roleProperty` 资源档 → 图标名（按 `resId` 索引，礼包自己的展示需求）。
+ * `roleProperty` 资源档 → 图标名。
  *
- * 这几个 id **不在 `item` 表里**（`item.resId` 查不到），`icon` 存的是 FGUI 裸组件名
- * ⇒ 落 `ArtPaths.RESOURCE_ICON_ART_ROOT`（`icons/resource/<名>`）。命名口径与
- * `MainResBarTypes.RES_BAR_ICON_ART` 一致（`coin` = 幻灵玉，**别再叫元宝**）。
- *
- * ⚠️ 映射内容以 `assets/remoteRef/roleProperty.json` 的 `icon` 列为真源，
- * `tests/res-types.test.ts` 会逐条比对（手抄表漂移 = 用例红）。
- *
- * `8`（洗炼石）**原先缺图**已降级；`icons/resource/图标_洗炼石.png` 现在是有的
- * ⇒ 2026-09-29 补上，不再走「只画品质框」的降级。
+ * 这些 id 不在 `item` 表中，图位于 `icons/resource/`。内容以 `roleProperty.json`
+ * 的 `icon` 列为准，`tests/res-types.test.ts` 会逐条校验。
  */
 export const GIFT_RES_ICON_ART: Readonly<Record<number, string>> = {
     6: '图标_灵石',
@@ -95,17 +78,11 @@ export const GIFT_RES_ICON_ART: Readonly<Record<number, string>> = {
     10: '图标_幻灵玉',
 };
 
-/** 取一个资源档的加载参数；没有对应图时返回 `null`（调用方隐藏图标节点）。 */
+/** 取一个资源档图标的加载参数；没有对应图时返回 `null`。 */
 export function giftResIconRef(resId: number): { readonly root: string; readonly name: string } | null {
     const name = GIFT_RES_ICON_ART[resId];
     if (!name) return null;
     return { root: resIconRoot(name), name };
-}
-
-/** 取一个资源档图标的装配路径；没有对应图时返回 `null`。 */
-export function giftResIconPath(resId: number): string | null {
-    const ref = giftResIconRef(resId);
-    return ref ? spriteFramePath(ref.root, ref.name) : null;
 }
 
 /** `priceType` / `roleProperty.coin` 的货币图标（购买按钮 + 灵玉卡中间那张）。 */
@@ -114,14 +91,8 @@ export function giftCurrencyIconRef(): { readonly root: string; readonly name: s
     return { root: resIconRoot(name), name };
 }
 
-/** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
-export {
-    QUALITY_FRAME_ROOT,
-    QUALITY_FRAME_LEVELS,
-    QUALITY_FRAME_NAMES,
-    qualityFrameLevel,
-    qualityFrameName,
-} from '../common/QualityFrameArt';
+/** 品质框定义在 `common/QualityFrameArt`。 */
+export { QUALITY_FRAME_NAMES, qualityFrameName } from '../common/QualityFrameArt';
 
 /** 取某个礼包美术图的装配路径；`key` 未知时返回 `null`。 */
 export function giftArtPath(key: string): string | null {
@@ -131,20 +102,7 @@ export function giftArtPath(key: string): string | null {
 }
 
 /**
- * 道具图标口径 —— **与七日狂欢完全一致**（同一套 `item.icon` 路径直通 + `icons/` 前缀判定）。
- * 这里转出去，是为了让礼包模块不直接依赖 sevenDay 目录。
- */
-import { resolveItemIconPath, resolveItemIconRef } from '../sevenDay/SevenDayArt';
-export { resolveItemIconPath, resolveItemIconRef };
-export type { ISevenDayIconRef as IGiftIconRef } from '../sevenDay/SevenDayArt';
-
-/**
- * 取一个奖励 `resId` 的图标加载参数 —— **两级兜底**，顺序不能反：
- *   ① `item` 表查得到 ⇒ 用 `item.icon`（绝大多数据道具）；
- *   ② 查不到（`7/8/9/10` 这类 `roleProperty` 货币档）⇒ 走 `image/main/resbar`。
- *
- * `item` 表里 `icon` 解析不出（老格式裸组件名）时**也会**继续往下兜底 ——
- * 因为 `resId` 有可能同时也是资源档 id。
+ * 道具图标口径与七日狂欢一致，直接复用其 `item.icon` 解析。
  */
 export function resolveGiftIconRef(
     item: { readonly icon: string } | undefined,

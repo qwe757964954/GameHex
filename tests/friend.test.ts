@@ -183,14 +183,14 @@ test('A2 四个页签的主按钮语义：list 跟 todaySend / add 跟 applied /
     assert.deepEqual(blackRowButton(), { key: 'remove', gray: false });
 
     // 收口入口 `rowButtonOf` 与三个分支逐个一致
-    assert.deepEqual(rowButtonOf(FriendTab.list, row({ todaySend: true }), false), { key: 'gifted', gray: true });
-    assert.deepEqual(rowButtonOf(FriendTab.add, row(), true), { key: 'applied', gray: true });
-    assert.deepEqual(rowButtonOf(FriendTab.black, row(), true), { key: 'remove', gray: false });
+    assert.deepEqual(rowButtonOf(FriendTab.List, row({ todaySend: true }), false), { key: 'gifted', gray: true });
+    assert.deepEqual(rowButtonOf(FriendTab.Add, row(), true), { key: 'applied', gray: true });
+    assert.deepEqual(rowButtonOf(FriendTab.Black, row(), true), { key: 'remove', gray: false });
 });
 
 /** 局部包装：`applyRowButton` 名字与「页签 add」太像，读起来容易串。 */
 function applyRowButton2(applied: boolean) {
-    return rowButtonOf(FriendTab.add, row(), applied);
+    return rowButtonOf(FriendTab.Add, row(), applied);
 }
 
 test('A3 ⚠️ `canSendMore` 是 `> 0` —— 与 `gray` **不是一回事**（次数用完≠置灰）', () => {
@@ -199,7 +199,7 @@ test('A3 ⚠️ `canSendMore` 是 `> 0` —— 与 `gray` **不是一回事**（
     assert.equal(canSendMore(-1), false);
 
     // 同一个「未赠送」行：`gray=false` 但次数为 0 时 `actionEnabled=false`
-    const view = buildFriendRowView(FriendTab.list, row({ todaySend: false }), TEXTS, options({ leftSendTimes: 0 }));
+    const view = buildFriendRowView(FriendTab.List, row({ todaySend: false }), TEXTS, options({ leftSendTimes: 0 }));
     assert.equal(view.actionGray, false, '按钮不置灰');
     assert.equal(view.actionEnabled, false, '但点不动');
 });
@@ -235,9 +235,9 @@ test('A6 `sentCount` / `takenCount` 与 `usedTimesOf` 的分页签口径', () =>
     assert.equal(sentCount(rows), 2);
     assert.equal(takenCount(rows), 1, '只数「收到且已领」的');
     // 列表页签看赠送、其它页签看领取
-    assert.equal(usedTimesOf(FriendTab.list, rows), 2);
-    assert.equal(usedTimesOf(FriendTab.add, rows), 1);
-    assert.equal(usedTimesOf(FriendTab.black, rows), 1);
+    assert.equal(usedTimesOf(FriendTab.List, rows), 2);
+    assert.equal(usedTimesOf(FriendTab.Add, rows), 1);
+    assert.equal(usedTimesOf(FriendTab.Black, rows), 1);
 });
 
 test('A7 `countOfMax` / `countText`：负数与 NaN 一律收成 0（不写进界面）', () => {
@@ -297,9 +297,9 @@ test('A11 `rowsOfTab`：三个页签各取各的数据源（页面不散落 swit
         suggestRows: [row({ id: 's' })],
         blackRows: [row({ id: 'b' })],
     };
-    assert.deepEqual(rowsOfTab(FriendTab.list, source).map((r) => r.id), ['f']);
-    assert.deepEqual(rowsOfTab(FriendTab.add, source).map((r) => r.id), ['s']);
-    assert.deepEqual(rowsOfTab(FriendTab.black, source).map((r) => r.id), ['b']);
+    assert.deepEqual(rowsOfTab(FriendTab.List, source).map((r) => r.id), ['f']);
+    assert.deepEqual(rowsOfTab(FriendTab.Add, source).map((r) => r.id), ['s']);
+    assert.deepEqual(rowsOfTab(FriendTab.Black, source).map((r) => r.id), ['b']);
 });
 
 test('A12 `normalizeFriendRow`：`Long` 形状归一化成十进制字符串；认不出 id ⇒ null', () => {
@@ -412,7 +412,7 @@ test('A17 `readFriendCounters`：字段缺失给 `null`（交给调用方退回�
 test('A18 ⚠️ `buildFriendRowView` 的 list 分支：置灰 / 可点 / 在线文案 / 删除模式两块显隐', () => {
     const me = row({ name: '甲', level: 9, power: '12345', avatarId: '77', online: true });
 
-    const normal = buildFriendRowView(FriendTab.list, me, TEXTS, options());
+    const normal = buildFriendRowView(FriendTab.List, me, TEXTS, options());
     assert.equal(normal.actionText, '赠送');
     assert.equal(normal.actionGray, false);
     assert.equal(normal.actionEnabled, true);
@@ -424,17 +424,17 @@ test('A18 ⚠️ `buildFriendRowView` 的 list 分支：置灰 / 可点 / 在线
     assert.equal(normal.showCheck, false);
     assert.equal(normal.endNumText, '', '只有「领取体力」弹窗的行才有体力数');
 
-    const gifted = buildFriendRowView(FriendTab.list, row({ todaySend: true }), TEXTS, options());
+    const gifted = buildFriendRowView(FriendTab.List, row({ todaySend: true }), TEXTS, options());
     assert.equal(gifted.actionText, '已赠送');
     assert.equal(gifted.actionGray, true);
     assert.equal(gifted.actionEnabled, false);
 
     // 战力空串 ⇒ '0'（不是「战力：」后面空着）
-    assert.equal(buildFriendRowView(FriendTab.list, row({ power: '' }), TEXTS, options()).powerText, '战力：0');
+    assert.equal(buildFriendRowView(FriendTab.List, row({ power: '' }), TEXTS, options()).powerText, '战力：0');
     // 离线给时长文案
     assert.equal(
         buildFriendRowView(
-            FriendTab.list,
+            FriendTab.List,
             row({ online: false, lastOfflineMs: 10_000_000 - 3_600_000 }),
             TEXTS,
             options({ nowMs: 10_000_000 }),
@@ -443,7 +443,7 @@ test('A18 ⚠️ `buildFriendRowView` 的 list 分支：置灰 / 可点 / 在线
     );
 
     // ---- 删除模式：主按钮**整块隐藏** + 勾选框出现 + 私聊隐藏（FGUI `gearDisplay`） ----
-    const deleting = buildFriendRowView(FriendTab.list, me, TEXTS, options({ deleteMode: true, checked: true }));
+    const deleting = buildFriendRowView(FriendTab.List, me, TEXTS, options({ deleteMode: true, checked: true }));
     assert.equal(deleting.showAction, false, 'FGUI `btn` 的 gearDisplay 展示删除界面=0');
     assert.equal(deleting.actionText, '赠送', '文案字段仍然给（节点只是隐藏）');
     assert.equal(deleting.showCheck, true);
@@ -451,26 +451,26 @@ test('A18 ⚠️ `buildFriendRowView` 的 list 分支：置灰 / 可点 / 在线
     assert.equal(deleting.showChat, false);
 
     // ---- 没有聊天模块时「私聊」根本不显示（有意偏离④） ----
-    assert.equal(buildFriendRowView(FriendTab.list, me, TEXTS, options({ chatAvailable: false })).showChat, false);
+    assert.equal(buildFriendRowView(FriendTab.List, me, TEXTS, options({ chatAvailable: false })).showChat, false);
     // 非好友列表页签永远不显示私聊（`页签=0` 这个条件）
-    assert.equal(buildFriendRowView(FriendTab.add, me, TEXTS, options()).showChat, false);
+    assert.equal(buildFriendRowView(FriendTab.Add, me, TEXTS, options()).showChat, false);
 });
 
 test('A19 `buildFriendRowView`：add / black / take 三个分支的按钮与显示差异', () => {
     const me = row();
 
-    const add = buildFriendRowView(FriendTab.add, me, TEXTS, options({ applied: false }));
+    const add = buildFriendRowView(FriendTab.Add, me, TEXTS, options({ applied: false }));
     assert.equal(add.actionText, '申请');
     assert.equal(add.actionGray, false);
     assert.equal(add.actionEnabled, true);
     assert.equal(add.showAction, true, '申请列表项没有「展示删除界面」controller ⇒ 一直显示');
     assert.equal(add.durationText, '', '在线时长只有好友列表页签显示');
     assert.equal(
-        buildFriendRowView(FriendTab.add, me, TEXTS, options({ applied: true })).actionText,
+        buildFriendRowView(FriendTab.Add, me, TEXTS, options({ applied: true })).actionText,
         '已申请',
     );
 
-    const black = buildFriendRowView(FriendTab.black, row({ todaySend: true }), TEXTS, options({ leftSendTimes: 0 }));
+    const black = buildFriendRowView(FriendTab.Black, row({ todaySend: true }), TEXTS, options({ leftSendTimes: 0 }));
     assert.equal(black.actionText, '移除');
     assert.equal(black.actionGray, false);
     assert.equal(black.actionEnabled, true, '黑名单行不看赠送次数');
@@ -510,7 +510,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     };
 
     // ---- 页签 0 · 非删除模式 ----
-    const list = resolveFriendLayout({ ...base, tab: FriendTab.list, deleteMode: false });
+    const list = resolveFriendLayout({ ...base, tab: FriendTab.List, deleteMode: false });
     assert.deepEqual(list, {
         showFriendCount: true,
         friendCountText: '好友数：3/50',
@@ -532,7 +532,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     });
 
     // ---- 页签 0 · 删除模式：一键赠送/领取 换成 一键删除；文案与颜色都切 ----
-    const deleting = resolveFriendLayout({ ...base, tab: FriendTab.list, deleteMode: true });
+    const deleting = resolveFriendLayout({ ...base, tab: FriendTab.List, deleteMode: true });
     assert.equal(deleting.showSendTimes, false, '赠送次数文案在删除模式隐藏');
     assert.equal(deleting.showRemoveCount, true);
     assert.equal(deleting.batchRemoveText, '返回');
@@ -543,7 +543,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     assert.equal(deleting.showFriendCount, true, '好友数不受删除模式影响');
 
     // ---- 页签 1 · 添加好友 ----
-    const add = resolveFriendLayout({ ...base, tab: FriendTab.add, deleteMode: false });
+    const add = resolveFriendLayout({ ...base, tab: FriendTab.Add, deleteMode: false });
     assert.equal(add.showFriendCount, false);
     assert.equal(add.showRefresh, true);
     assert.equal(add.showApplyList, true);
@@ -552,7 +552,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     assert.equal(add.showSendOneKey, false);
 
     // ---- 页签 2 · 黑名单 ----
-    const black = resolveFriendLayout({ ...base, tab: FriendTab.black, deleteMode: false });
+    const black = resolveFriendLayout({ ...base, tab: FriendTab.Black, deleteMode: false });
     assert.equal(black.showBlackCount, true);
     assert.equal(black.blackCountText, '黑名单：1/20');
     assert.equal(black.showFriendCount, false);
@@ -560,7 +560,7 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
     assert.equal(black.showRefresh, false);
 
     // 每个页签都恰好有一组「按钮」可见（防漏配成「哪个页签都没按钮」）
-    for (const tab of [FriendTab.list, FriendTab.add, FriendTab.black]) {
+    for (const tab of [FriendTab.List, FriendTab.Add, FriendTab.Black]) {
         const one = resolveFriendLayout({ ...base, tab, deleteMode: false });
         assert.ok(one.showBatchRemove || one.showRefresh || one.showBlackCount);
     }
@@ -569,9 +569,9 @@ test('A21 ⚠️ `resolveFriendLayout`：三页签 × 删除模式，17 个开�
 test('A22 页签常量与枚举一致（`FRIEND_TAB_COUNT` 是 prefab 里页签数的判据）', () => {
     assert.deepEqual(FRIEND_TAB_KEYS, ['list', 'add', 'black']);
     assert.equal(FRIEND_TAB_COUNT, 3);
-    assert.equal(FriendTab.list, 0);
-    assert.equal(FriendTab.add, 1);
-    assert.equal(FriendTab.black, 2);
+    assert.equal(FriendTab.List, 0);
+    assert.equal(FriendTab.Add, 1);
+    assert.equal(FriendTab.Black, 2);
     assert.deepEqual([...FRIEND_TAB_LABELS], ['好友列表', '添加好友', '黑名单']);
     assert.equal(FRIEND_TAB_LABELS.length, FRIEND_TAB_COUNT, '文案条数必须等于页签数');
 });
@@ -1212,14 +1212,10 @@ test('D3 ⚠️ 写请求必须 `withTimeout` + 离线早退 + `catch` 返 faile
     assert.ok(REPO_CODE.includes('net.isConnected'), '离线要早退');
     assert.ok(REPO_CODE.includes(`return 'offline'`), '离线返回 offline（不是 failed，提示文案不同）');
     assert.ok(/catch\s*\(/.test(REPO_CODE), 'catch 不能省');
-    // 读 / 写两档超时，写必须比读长
-    const read = /const READ_TIMEOUT_MS = (\d+)/.exec(REPO_SRC);
+    // 写请求必须有超时；常量与导出都给测试用（避免测试里硬编码）
     const write = /const WRITE_TIMEOUT_MS = (\d+)/.exec(REPO_SRC);
-    assert.ok(read && write, '读 / 写超时常量必须都在');
-    assert.equal(Number(read![1]), 800);
+    assert.ok(write, '写超时常量必须存在');
     assert.equal(Number(write![1]), 5000);
-    // 给测试用的导出（避免测试里硬编码）
-    assert.ok(REPO_SRC.includes('export const FRIEND_READ_TIMEOUT_MS'));
     assert.ok(REPO_SRC.includes('export const FRIEND_WRITE_TIMEOUT_MS'));
 });
 
@@ -1313,7 +1309,7 @@ test('D9 头像加载走 `HeadArt` 的唯一入口，不自己拼路径（拼错
     assert.ok(!AVATAR_SRC.includes('resources.load('), '不要绕过唯一入口自己 load');
     // 两道保护：同一 id 不重复加载 / 换 id 后在途结果作废
     assert.ok(AVATAR_SRC.includes('generation'), '必须有 generation 作废旧结果（否则虚拟列表复用会串头像）');
-    assert.ok(AVATAR_SRC.includes('if (this.appliedId === id) return'), '同 id 直接返回（不能先递增再判等）');
+    assert.ok(AVATAR_SRC.includes('if (this.appliedId === avatarId) return'), '同 id 直接返回（不能先递增再判等）');
 });
 
 test('D10 ⚠️ 入口白名单**两处**都要登记（漏一处：入口不弹面板或弹了没内容）', () => {

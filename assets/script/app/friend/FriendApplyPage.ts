@@ -1,32 +1,16 @@
 /**
- * 「好友申请」弹窗（老端 `LayerFriendApply`，`assets/resources/ui/Friend/FriendApply.prefab`）。
+ * 「好友申请」弹窗（`assets/bundles/main-pages/ui/Friend/FriendApply.prefab`）。
  *
- * ## 版面（真源 = FGUI `好友/组件/弹窗_好友_申请列表.xml`，720×1280）
+ * 由 `FriendPage.onApplyListClick` 打开；关掉时 `PopupManager` 会给主容器补发 reveal，
+ * 主容器 `onReveal` 重新取数（同意 / 拒绝后好友数会变）。本弹窗每次打开也重新取数。
  *
- *   popBg  (346,182) pivot 0.5,0  626×882        ← `组件_公共弹窗_新`，标题「好友申请」
- *   list   (64,254) 564×638       overflow=scroll，`defaultItem` = `组件_申请列表项`
- *   按钮_一键拒绝 (148,952) 150×70  `颜色,0`（深色）
- *   按钮_一键同意 (378,952) 150×70  `颜色,1`（金色）
- *   n63「暂无申请」(293,522) pivot 0.5,0  84×29
- *
- * ## 与主容器的关系
- *
- * 由 `FriendPage.onApplyListClick` 打开。关掉时 `PopupManager._refreshCover()` 会给主容器
- * 补发 `_internalReveal()` ⇒ 主容器 `onReveal` 重新取数（同意 / 拒绝后好友数会变）。
- * 本弹窗自己也**每次打开都重新取数**（它是最上层，没有「被盖住」这件事）。
- *
- * ## 两处**有意偏离**老端（都写在 `present()` 里）
- *
- * ① 老端 `refreshView` 用 `com.setSelectedPage("数据", datas.length>0?"有":"空")`，
- *    「空」那一支会把 **list 一起隐藏**。这里**不隐藏 list 节点**，只 `refreshList([])` ——
- *    `VirtualScrollView` 的槽位是在 `start()` 里建的，节点被隐藏过再复用（`PopupManager`
- *    会回收节点）时 `start()` 不会重跑，一隐藏就等于把「槽位已建好」这个前提打掉，
- *    下次有数据进来会铺在一堆不存在的槽位上（**不报错，列表空白**）。
- *    列表节点本身没有底图 / 装饰，留着不影响观感。
- * ② 老端两个一键按钮的前置条件是 `getLeftGetTimes() <= 0 则 return` —— 这是从「领取粮草」
- *    复制过来的（申请列表跟「今日领取次数」没有任何关系，是**老端的 bug**）。
- *    这里不抄它：只要列表里有数据就发请求（没数据时两个按钮本来就隐藏）。
- *    不静默：请求结果照常走三态提示。
+ * 两处有意不跟老端：
+ *   1. 老端空态会把 list 节点一起隐藏。这里只 `refreshList([])`，不动 list 的 active ——
+ *      `VirtualScrollView` 的槽位在 `start()` 里建，节点被 `PopupManager` 回收并隐藏后再复用
+ *      不会重跑 `start()`，一隐藏就等于把「槽位已建好」的前提打掉，下次有数据会铺在
+ *      不存在的槽位上（不报错，列表空白）。
+ *   2. 老端两个一键按钮的前置条件写的是「今日领取次数 <= 0 则 return」（从「领取粮草」复制来的，
+ *      申请列表跟领取次数无关）。这里只要列表有数据就发请求，没数据时按钮本来就隐藏。
  */
 
 import { _decorator, Button, Label, Node } from 'cc';
@@ -55,8 +39,8 @@ const { ccclass, property } = _decorator;
 @ccclass('FriendApplyPage')
 export class FriendApplyPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/Friend/`）—— 热更新 zip 内路径大小写敏感，
-     * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
+     * 目录名大小写必须与磁盘一致（`ui/Friend/`）：热更新 zip 内路径大小写敏感，
+     * 在 Windows 编辑器里怎么写都能跑，真机上 `resources.load` 才会失败。
      */
     static prefabPath = 'ui/Friend/FriendApply';
 
@@ -92,7 +76,7 @@ export class FriendApplyPage extends PopupBase {
     /** 与 `rows` 下标一一对应的 id（回调靠它认行）。 */
     private rowIds: string[] = [];
 
-    /** 一个请求还没回来时忽略后续点击。 */
+    /** 请求未返回时忽略后续点击。 */
     private busy = false;
 
     /** 每次取数递增，用来作废在飞的异步结果。 */
@@ -103,13 +87,11 @@ export class FriendApplyPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        const close = this.closeButton.getComponent(Button);
-        close?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-
+        this.bind(this.closeButton, this.onCloseClick);
         this.bind(this.refuseOneKeyButton, this.onRefuseOneKeyClick);
         this.bind(this.agreeOneKeyButton, this.onAgreeOneKeyClick);
 
-        // ⚠️ 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
+        // 回调只在 onInit 接一次（放 onOpen 会随每次打开重复叠加）。
         this.applyList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
@@ -142,8 +124,8 @@ export class FriendApplyPage extends PopupBase {
         if (!this.alive || revision !== this.revision) return;
         this.snapshot = snapshot;
 
-        // ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        //    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
+        // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
@@ -157,8 +139,8 @@ export class FriendApplyPage extends PopupBase {
         const data = snapshot.applyRows;
         const hasData = data.length > 0;
 
-        // 老端 `setSelectedPage("数据", hasData ? "有" : "空")`
-        // ⚠️ 只切按钮 / 空态文案，**不动 list 节点本身的 active**（原因见文件头 ①）。
+        // 有数据时显示两个一键按钮，没有时显示「暂无申请」。
+        // 只切按钮 / 空态文案，不动 list 节点本身的 active（原因见文件头）。
         this.refuseOneKeyButton.active = hasData;
         this.agreeOneKeyButton.active = hasData;
         this.refuseOneKeyLabel.string = FRIEND_BTN_REFUSE_ONE_KEY;
@@ -166,15 +148,14 @@ export class FriendApplyPage extends PopupBase {
         this.emptyLabel.string = FRIEND_APPLY_EMPTY;
         this.emptyLabel.node.active = !hasData;
 
-        const texts = FRIEND_ROW_TEXTS;
         const views: IFriendRowView[] = [];
         const ids: string[] = [];
         for (let index = 0; index < data.length; index++) {
             const row = data[index];
             ids.push(row.id);
-            // `kind = add`：主按钮语义是「申请 / 已申请」—— `FriendApplyRow` 不消费这几个字段，
-            // 但等级 / 名字 / 战力 / 头像要，所以仍走同一个纯函数拿一份结构完整的视图模型。
-            views.push(buildFriendRowView(FriendTab.add, row, texts, {
+            // `kind = Add`：`FriendApplyRow` 不消费按钮语义，但等级 / 名字 / 战力 / 头像要，
+            // 所以仍走同一个纯函数拿一份结构完整的视图模型。
+            views.push(buildFriendRowView(FriendTab.Add, row, FRIEND_ROW_TEXTS, {
                 nowMs: snapshot.now,
                 deleteMode: false,
                 checked: false,
@@ -186,12 +167,12 @@ export class FriendApplyPage extends PopupBase {
         this.rows = views;
         this.rowIds = ids;
 
-        // 申请列表不长，但换过数据后仍要回顶（拒掉最后一条后再收到新申请时不会停在越界位置）
+        // 申请列表不长，但换过数据后仍要回顶（拒掉最后一条后再收到新申请时不会停在越界位置）。
         this.applyList.refreshList(views);
         this.applyList.scrollToTop(false);
     }
 
-    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）。 */
+    /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendApplyRow);
         if (!row) return;

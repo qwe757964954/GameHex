@@ -13,7 +13,7 @@
   "executeJavascriptSafetyChecks": true,
   "autostart": true,
   "maxInteractionLogEntries": 50,
-  "lastClientTargetId": "claude_code",
+  "lastClientTargetId": "codebuddy",
   "activeToolProfileName": "",
   "savedToolProfiles": [],
   "language": "auto"

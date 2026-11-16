@@ -1,23 +1,14 @@
 /**
- * 好友行头像的加载器 —— 三个行组件（`FriendRow` / `FriendApplyRow` / `FriendGetEndRow`）共用。
+ * 好友行头像的加载器，三个行组件共用。
  *
- * ## 为什么要单独一个类，而不是每行组件里写一遍
+ * 头像加载是异步的，而行会被虚拟列表 clone 复用 —— 同一份节点几帧内可能先后表示
+ * 「第 1 行」和「第 5 行」。不加保护的话，第 1 行的头像加载完会落到已经复用成第 5 行的
+ * 节点上，界面不报错，只是「谁先加载完谁赢」。两道保护：
+ *   1. `appliedId` —— 同一个 id 不重复加载（同一行重渲染也就零成本）；
+ *   2. `generation` —— 每次换 id 递增，回调对不上就丢弃（在途的旧结果不许落地）。
  *
- * 头像加载是**异步**的，而行是**虚拟列表 clone 复用**的：同一份节点会在几帧内先后表示
- * 「第 1 行」和「第 5 行」。若不加保护，第 1 行的头像会在加载完成后落到已经复用成第 5 行的
- * 那个节点上 —— 界面**不报错**，只是**头像串行**（谁先加载完谁赢）。这是记忆里
- * 「对象池复用必须绝对赋值」那条规则的异步版本。
- *
- * 保护用两道：
- *   ① `appliedId` —— 同一个 id 不重复加载（也顺带把「同一行重渲染」变成零成本）；
- *   ② `generation` —— 每次换 id 递增；回调里对不上就丢弃（在途的旧结果不许落地）。
- *
- * ## 取图口径
- *
- * `CmdFriend.img` 是**头像 id**（老端 `ModelPlayer.GetPlayerIcon(info.img)` →
- * `head.json` 按 `resId` 查 → `icon`），对应新端的 `HeadArt.loadHeadFrame(avatarId)`
- * —— 那是「头像 id → SpriteFrame」的唯一入口（两层查表 + 包名分流都在它里面）。
- * 不要自己拼路径：`icon.json` 的目录由**包名**决定，拼错会静默留白。
+ * 取图统一走 `HeadArt.loadHeadFrame`：`CmdFriend.img` 是头像 id，不要自己拼路径
+ * （`icon.json` 的目录由包名决定，拼错只会静默留白）。
  */
 
 import { Sprite } from 'cc';
@@ -26,8 +17,8 @@ import { HeadArt } from '../HeadArt';
 /**
  * 一个头像槽位。
  *
- * ⚠️ 用法是「每次渲染都调 `apply(row.avatarId)`」——**绝对赋值**，不是增量。
- *    空串会**清空帧**（无头像时只留框，不能留着上一行的图）。
+ * 用法是每次渲染都调 `apply(row.avatarId)`（绝对赋值，不是增量）：
+ * 空串会清空帧 —— 无头像时只留框，不能留着上一行的图。
  */
 export class FriendAvatarLoader {
     /** 当前已生效 / 正在加载的 id。 */
@@ -40,26 +31,25 @@ export class FriendAvatarLoader {
 
     /** 铺一次头像。`avatarId` 空串 = 清空。 */
     apply(avatarId: string): void {
-        const id = typeof avatarId === 'string' ? avatarId : '';
-        // 同一个 id 直接返回：既省一次加载，也**不会**误伤正在路上的那次加载
+        // 同一个 id 直接返回：既省一次加载，也不会误伤正在路上的那次加载
         // （若先递增 generation 再判等，会把同 id 的在途结果作废 ⇒ 永久留白）
-        if (this.appliedId === id) return;
-        this.appliedId = id;
+        if (this.appliedId === avatarId) return;
+        this.appliedId = avatarId;
 
         const sprite = this.getSprite();
         if (!sprite || !sprite.isValid) return;
-        if (!id) {
+        if (!avatarId) {
             sprite.spriteFrame = null;
             return;
         }
 
         const generation = ++this.generation;
         const previous = sprite.spriteFrame;
-        void HeadArt.loadHeadFrame(id).then((frame) => {
+        void HeadArt.loadHeadFrame(avatarId).then((frame) => {
             // 组件已销毁 / 期间又换了 id ⇒ 丢弃
             if (generation !== this.generation) return;
             if (!sprite.isValid) return;
-            if (this.appliedId !== id) return;
+            if (this.appliedId !== avatarId) return;
             if (frame) {
                 sprite.spriteFrame = frame;
                 return;

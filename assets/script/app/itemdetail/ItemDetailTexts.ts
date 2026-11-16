@@ -1,13 +1,11 @@
 /**
- * 物品详情 + 10级领取的**全部文案**（唯一出口）。
+ * 物品详情 + 10级领取的全部文案（唯一出口）。
  *
- * 与 `RoleTexts` / `CelebrationTexts` 同一口径：改文案只动这一处，页面脚本里**不许**
- * 出现中文字符串字面量（单测会扫源码文本）。
+ * 与 `RoleTexts` / `CelebrationTexts` 同一口径：改文案只动这一处，页面脚本里不写中文字面量。
  *
- * 静态文案的真源 = FGUI XML 的 `text="…"` 属性：
- *   · `组件_角色_道具详情.xml`：`品质:` / `数量:` / `道具说明` / `内容` / `获取途径` / `前往` / `合成`
- *   · `组件_主界面_领取武将.xml`：`10级领取`（`n5`）
- *   · `组件_角色_道具详情_项.xml`：`商店`（`lab`，运行时被途径文案覆盖）
+ * 静态文案的真源是 FGUI XML 的 `text="…"`：
+ *   组件_角色_道具详情.xml —— 品质: / 数量: / 道具说明 / 内容 / 获取途径 / 前往 / 合成
+ *   组件_主界面_领取武将.xml —— 10级领取（`n5`）
  */
 
 /** 物品详情（`ui/ItemDetail/ItemDetail`）。 */
@@ -22,11 +20,11 @@ export const ITEM_DETAIL_TEXTS = {
     contentTitle: '内容',
     /** 获取途径标题（FGUI `n23` 的 `获取途径`）。 */
     accessTitle: '获取途径',
-    /** 有内容可使用时按钮文案（FGUI `btn_go` 的 `Button title="前往"`）。 */
+    /** 有内容可使用时按钮文案（`btn_go`）。 */
     goBtn: '前往',
-    /** 无内容可使用时按钮文案（FGUI `btn_go1` 的 `Button title="前往"`）。 */
+    /** 无内容可使用时按钮文案（`btn_go1`）。 */
     goBtn1: '前往',
-    /** 合成按钮（FGUI `btn_compos` 的 `Button title="合成"`）。 */
+    /** 合成按钮文案（`btn_compos`）。 */
     composBtn: '合成',
     /** 表里查不到这个 `resId` 时的兜底物品名。 */
     unknownName: '未知物品',
@@ -36,7 +34,7 @@ export const ITEM_DETAIL_TEXTS = {
     noAccess: '暂无获取途径',
     /** 「前往」目标没接线时的宿主提示（跳转链路本工程未接）。 */
     jumpNotWired: '跳转未接入',
-    /** 合成的提示（本工程只做入口，未接合成弹窗）。 */
+    /** 合成按钮的提示（本工程只做入口，未接合成弹窗）。 */
     composNotWired: '合成未接入',
 
     // ---------- 「道具信息」弹窗（蓝湖 720×1610「道具信息」稿）----------
@@ -49,13 +47,13 @@ export const ITEM_DETAIL_TEXTS = {
 } as const;
 
 /**
- * 占位符格式化（`{0}` / `{1}` …）。只支持顺序替换 —— 与 `CelebrationTexts.formatText` 同款，
- * 别引 `StringUtil`（那会把 `cc` 拉进零依赖层）。
+ * 占位符格式化（`{0}` / `{1}` …），只支持顺序替换。
+ * 与 `CelebrationTexts.formatText` 同款 —— 别引 `StringUtil`，那会把 `cc` 拉进零依赖层。
  */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
     let out = template;
-    for (let i = 0; i < args.length; i += 1) {
-        out = out.split(`{${i}}`).join(String(args[i]));
+    for (let index = 0; index < args.length; index += 1) {
+        out = out.split(`{${index}}`).join(String(args[index]));
     }
     return out;
 }

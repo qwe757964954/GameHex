@@ -68,11 +68,12 @@ function parseItemInfo(value: unknown): IFirstRechargeItemInfo | null {
     const row = value as Record<string, unknown>;
     const resId = Number(row.resId);
     if (!Number.isSafeInteger(resId) || resId <= 0) return null;
+    const quality = Number(row.quality);
     return {
         resId,
         name: typeof row.name === 'string' ? row.name : '',
         icon: typeof row.icon === 'string' ? row.icon : '',
-        quality: Number.isFinite(Number(row.quality)) ? Number(row.quality) : 1,
+        quality: Number.isFinite(quality) ? quality : 1,
     };
 }
 
@@ -102,15 +103,11 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
      * 缓存为空是**正常情况**（没连服 / 没买过）—— 返回空 Map，界面按「全部未购买」渲染，
      * 不要当成错误，也别在这里发请求（`load()` 会被预览页频繁调用）。
      */
-    readStates(): Map<number, IFirstRechargeState> {
-        const buckets = CacheMgr.instance.getTlCmdFirstRechargeNew();
-        if (buckets.length === 0) return new Map<number, IFirstRechargeState>();
+    private readStates(): Map<number, IFirstRechargeState> {
         const infos: unknown[] = [];
-        for (const bucket of buckets) {
+        for (const bucket of CacheMgr.instance.getTlCmdFirstRechargeNew()) {
             const list = bucket?.infos;
             if (!list) continue;
-            // 不用 `push(...list)`：实参展开在 release 构建会降级成 `apply`，
-            // 虽然对真数组成立，但这里没有性能诉求，显式循环更不容易被后来人改坏。
             for (const info of list) infos.push(info);
         }
         return buildStateMap(infos);

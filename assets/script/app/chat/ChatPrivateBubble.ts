@@ -1,17 +1,12 @@
 /**
- * 一条**私聊**消息（频道 3 的 `privateList` 用）—— 与 `ChatBubble` 同构，只是几何不同。
+ * 一条私聊消息（频道 3 的 `privateList` 用）—— 与 `ChatBubble` 同构，只是几何不同。
  *
- * 真源 = FGUI `聊天/组件/组件_聊天_私聊left.xml`（425×143）/ `组件_聊天_私聊right.xml`（425×113）。
+ * 私聊的四个元素几何与公共频道完全不同（气泡 320×84 vs 373×53），模板宽度也不同
+ * （425 vs 530）；合成一份只能把几何搬进代码，违反「样式与布局全在 prefab」。
+ * 所以按同款形态再落一份，保证「每个列表一个模板」。
  *
- * ## 为什么不复用 `ChatBubble`
- *
- * 私聊的四个元素几何与公共频道**完全不同**（气泡 320×84 vs 373×53），
- * 且模板宽度也不同（425 vs 530）—— 合成一份只能把几何搬进代码，
- * 那就违反了「样式与布局全在 prefab 上」。这里按同款形态再落一份，
- * 换来的是「每个列表一个模板」这条简单规则（见 `ChatBubble` 文件头）。
- *
- * ⚠️ 私聊的右气泡特别窄（`bg` 89×54、`msg` 54×32）—— 那是 FGUI 原稿如此
- * （短消息气泡自适应后的模样），**不是笔误**，别「顺手改大」。
+ * 私聊右气泡特别窄（`bg` 89×54、`msg` 54×32）是 FGUI 原稿（短消息气泡自适应后的模样），
+ * 不是笔误。
  */
 
 import { _decorator, Component, Label, Node, RichText, Sprite } from 'cc';
@@ -30,7 +25,7 @@ export class ChatPrivateBubble extends Component {
     @property({ type: Label, tooltip: 'Left/Name：玩家名' })
     leftName: Label = null;
 
-    @property({ type: RichText, tooltip: 'Left/Msg：正文（**必须 RichText**）' })
+    @property({ type: RichText, tooltip: 'Left/Msg：正文（必须是 RichText）' })
     leftMsg: RichText = null;
 
     @property({ type: Node, tooltip: 'Right：我发的（425×113）' })
@@ -42,11 +37,12 @@ export class ChatPrivateBubble extends Component {
     @property({ type: Label, tooltip: 'Right/Name：玩家名' })
     rightName: Label = null;
 
-    @property({ type: RichText, tooltip: 'Right/Msg：正文（**必须 RichText**）' })
+    @property({ type: RichText, tooltip: 'Right/Msg：正文（必须是 RichText）' })
     rightMsg: RichText = null;
 
     private avatar: FriendAvatarLoader | null = null;
 
+    /** 上一次铺的是不是自己发的（用于判「要不要作废头像加载」）。 */
     private lastSelf: boolean | null = null;
 
     protected onLoad(): void {
@@ -71,6 +67,7 @@ export class ChatPrivateBubble extends Component {
         this.avatar?.apply(avatarId);
     }
 
+    /** 整行藏掉（列表数据不足时由宿主调用）。 */
     hide(): void {
         this.node.active = false;
     }

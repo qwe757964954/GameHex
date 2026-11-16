@@ -1,15 +1,14 @@
 import { RequestMsg } from '../../framework/net/RequestMsg';
 
 /**
- * 首充礼包（新首充）的网络请求，移植自老客户端
- * `client/assets/script/app/generated/requestMsg/RequestFirstRechargeMsg.ts`。
+ * 首充礼包（新首充）的网络请求。
  *
  *  协议体（见 `assets/script/app/generated/netProto/Cmd.d.ts`）：
  *    CmdFirstRechargesBuyReqMsg    { id }        → CmdFirstRechargesBuyRspMsg    { ret }
  *    CmdFirstRechargeRewardReqMsg  { id, day }  → CmdFirstRechargeRewardRspMsg  { ret, tlCmdGoods }
  *    CmdFirstRechargeOpenReqMsg    {}            → CmdFirstRechargeOpenRspMsg    {}
  *
- *  ⚠️ `id` 的口径不一致，别想当然：
+ *  `id` 的口径不一致，别想当然：
  *   - **买入**用的 `id` 是 `firstRechargeNew.rmb`（= `payChannel.id`，也就是支付渠道 id）——
  *     老客户端 `RequestFirstRechargeBuy` 里写的是 `{ id: ref.rmb }`；
  *   - **领奖**用的 `id` 是 `firstRechargeNew.id`（档位 id）。

@@ -28,31 +28,19 @@ export interface IItemInfoOpenParams {
 /**
  * 「道具信息」弹窗 —— 蓝湖「道具信息」稿（720×1610，面板 470×659）。
  *
- * 版面（自上而下，全部烘在 prefab 上）：
- *   蓝色标题区：物品名 / 物品格 / 类型 / 品质
- *   米色正文区：「道具说明」+ 说明文字 / 「获取途径」+ 途径行（预建 4 行，按条数收放）
+ * 版面自上而下：蓝色标题区（物品名 / 物品格 / 类型 / 品质）、
+ * 正文区（「道具说明」+ 说明文字、「获取途径」+ 途径行）。途径行是 prefab 预建 4 行，按条数收放。
  *
- * ## 与 `ItemDetailPage` 的关系
+ * 与 `ItemDetailPage` 是两个不同设计稿的弹窗：那个是老端 FGUI「组件_角色_道具详情」
+ * （品质缎带 / 数量行 / 内容格 / 合成·前往），本类是新版紧凑稿（无内容格、无按钮、固定高度）。
+ * 数据端口共用 itemdetail 模块，物品格用公共 `RewardItemView`，这里只做「取数 → 铺界面」。
  *
- * 两个**不同**的设计稿、两个弹窗：
- *   · `ItemDetailPage`  —— 老端 FGUI「组件_角色_道具详情」（品质缎带 / 数量行 / 内容格 / 合成·前往）
- *   · 本类             —— 新版紧凑稿（无内容格、无按钮，面板固定高度）
- * 数据端口走 itemdetail 模块（同一套表），**物品格用公共 `RewardItemView`**
- * （`ui/common/RewardItem.prefab`：品质框 + 图标 + 数量的解析与加载都在组件里），
- * 这里只做「取数 → 铺界面」。
- *
- * ## 入口
- *
- * 卡牌详情页底部的**经验材料图标**（`CardUpgradePage` 的 `ExpIcon`）点击打开，
- * `resId` 就是那颗图标当前显示的那件道具（通用经验没配图时是兵种经验）。
- *
- * ## 点击
- *
- * 途径行点了只走「跳转未接入」提示（与 `ItemDetailPage.jumpTo` 同一口径）——
- * 本工程还没有 `CtrlJumpView`，不假装跳成功。空白处点击由 `PopupBase` 兜底关闭。
+ * 入口是 `CardUpgradePage` 的 `ExpIcon`（经验材料图标），`resId` 即图标当前显示的道具。
+ * 途径行点击只提示「跳转未接入」——本工程还没有 `CtrlJumpView`，不假装跳成功。
  */
 @ccclass('ItemInfoPage')
 export class ItemInfoPage extends PopupBase {
+    /** 弹窗预制体在 resources 下的路径（目录名大小写须与磁盘一致，真机才不炸）。 */
     static prefabPath = 'ui/ItemInfo/ItemInfo';
 
     @property({ group: '头部', type: Label, tooltip: 'NameLabel：物品名（蓝色标题区左上，白字描边）' })
@@ -93,10 +81,8 @@ export class ItemInfoPage extends PopupBase {
     /**
      * 公共奖励格的 resources 路径。
      *
-     * 走**运行时加载**而不是 Inspector 绑 Prefab：本弹窗在 `main-pages` 包，
-     * 奖励格在 `resources` 包，绑死就是跨包资源引用（构建期可能重复打包）。
-     * `UIResources.loadAsync` 内部就是 `resources.load('ui/common/RewardItem', Prefab)`
-     * 再套缓存 / bundle 判定，别绕过它直接裸调。
+     * 走运行时加载而不是 Inspector 绑 Prefab：本弹窗在 `main-pages` 包，奖励格在 `resources` 包，
+     * 绑死就是跨包引用（构建期可能重复打包）。`UIResources.loadAsync` 内部会套缓存 / bundle 判定。
      */
     private static readonly REWARD_ITEM_PATH = 'ui/common/RewardItem';
 
@@ -105,8 +91,7 @@ export class ItemInfoPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        //  行是 prefab 预建的固定节点（下标恒定），所以监听只在这里绑一次，
-        //  点击时按 index 现取 `accessRefs[index]` —— 行会被不同物品复用，闭包捕获数据必错。
+        // 行是 prefab 预建的固定节点（下标恒定），监听只绑一次，点击时按 index 现取数据。
         this.rows.forEach((row, index) => {
             row.node.on(Button.EventType.CLICK, () => this.onAccessClick(index), this);
         });
@@ -116,11 +101,9 @@ export class ItemInfoPage extends PopupBase {
     /**
      * 运行时加载公共奖励格并实例化到 `Goods` 宿主下。
      *
-     * 尺寸走**根 scale**（96 → 100），位置按宿主左上锚点居中；
-     * **关掉实例自己的 Button** —— `RewardItemView` 的点击会 emit `REWARD_ITEM_DETAIL_INTENT`，
-     * 那是「点奖励格开老道具详情」的全局链路，本弹窗的主物品格按老口径**不可点**。
-     *
-     * 加载失败只打错误、不抛：弹窗其余部分（文字/途径）照常显示，别为了一个格子把整个弹窗卡死。
+     * 尺寸走根 `scale`（96 → 100），别改根 `contentSize`：内部 Frame / Icon / Num 都按 96 烘死。
+     * 实例自己的 Button 要关掉 —— `RewardItemView` 的点击会发「开老道具详情」的全局意图，
+     * 而本弹窗的主物品格按老口径不可点。加载失败只打错误：其余文字 / 途径照常显示。
      */
     private createRewardView(): void {
         const host = this.goodsHost;
@@ -130,11 +113,10 @@ export class ItemInfoPage extends PopupBase {
         }
         this.rewardLoading = (async () => {
             const prefab = await UIResources.loadAsync(ItemInfoPage.REWARD_ITEM_PATH);
-            //  加载期间弹窗可能已关闭/销毁（节点没了就别碰）
+            // 加载期间弹窗可能已关闭 / 销毁。
             if (!prefab || !host.isValid || !this.node?.isValid) return;
             const node = instantiate(prefab);
             node.parent = host;
-            //  尺寸走**根 scale**（96 → 100），别改根 `contentSize`：内部 Frame/Icon/Num 都按 96 烘死。
             const scale = ITEM_INFO_REWARD_SLOT_SIZE / ITEM_INFO_REWARD_ITEM_SIZE;
             node.setScale(scale, scale, 1);
             node.setPosition(ITEM_INFO_REWARD_SLOT_SIZE / 2, -ITEM_INFO_REWARD_SLOT_SIZE / 2, 0);
@@ -146,14 +128,14 @@ export class ItemInfoPage extends PopupBase {
     }
 
     protected async onOpen(userData?: IItemInfoOpenParams): Promise<void> {
-        this.resId = userData && Number.isFinite(userData.resId) ? userData.resId : 0;
-        this.ownedNumber = userData && Number.isFinite(userData.number) ? (userData.number as number) : 0;
+        this.resId = Number.isFinite(userData?.resId) ? userData.resId : 0;
+        this.ownedNumber = Number.isFinite(userData?.number) ? userData.number : 0;
         this.accessRefs = [];
         await this.reload();
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        // 让在途的 load / present 作废（它们醒来时页面已经关了）
+        // 让在途的 load / present 作废。
         this.revision += 1;
         this.accessRefs = [];
         for (const row of this.rows) row.hide();
@@ -164,7 +146,7 @@ export class ItemInfoPage extends PopupBase {
         this.repo = repository;
     }
 
-    /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
+    /** 弹窗还活着吗（异步回来时可能已被关掉）。 */
     private get alive(): boolean {
         return !!this.node && this.node.isValid && this.isPopupOpen;
     }
@@ -172,7 +154,6 @@ export class ItemInfoPage extends PopupBase {
     /** prefab 预建的途径行（按 `_children` 序，不按 active 过滤）。 */
     private get rows(): ItemInfoRow[] {
         const out: ItemInfoRow[] = [];
-        if (!this.rowsRoot) return out;
         for (const child of this.rowsRoot.children) {
             const row = child.getComponent(ItemInfoRow);
             if (row) out.push(row);
@@ -200,7 +181,7 @@ export class ItemInfoPage extends PopupBase {
     private presentTexts(snapshot: IItemDetailSnapshot): void {
         const texts = ITEM_DETAIL_TEXTS;
         const row = snapshot.row;
-        // 无条件写（同一实例会被不同物品复用，条件赋值会留下上一件物品的文案）
+        // 同一实例会被不同物品复用，全部无条件写。
         this.nameLabel.string = row && row.name ? row.name : texts.unknownName;
         const typeName = itemTypeNameOf(row?.type ?? 0);
         this.typeLabel.string = typeName ? formatText(texts.infoTypeLine, typeName) : '';
@@ -209,13 +190,11 @@ export class ItemInfoPage extends PopupBase {
     }
 
     /**
-     * 铺主物品格 —— 走**公共奖励格** `RewardItemView`。
+     * 铺主物品格 —— 走公共奖励格 `RewardItemView`。
      *
-     * 宿主只给「物品 id + 数量」：品质框档位、图标路径、加载与失败重试全在组件里，
-     * 这边不再 `loadQualityFrameArt` / `loadItemIconArt`（两处各写一遍就是第二份真源）。
-     * 数量 `<= 0` 时组件自己把数字写成空串（与老 `GoodsBox` 口径一致）。
-     *
-     * 格子是运行时加载的 ⇒ 先等 `rewardLoading`（首帧就绪后就只是 await 一个已完成的 Promise）。
+     * 宿主只给「物品 id + 数量」，品质框档位、图标路径、加载与失败重试都在组件里，
+     * 这边不再各写一遍品质框 / 图标的加载（那就是第二份真源）。
+     * 格子是运行时加载的，先等 `rewardLoading`，首帧就绪后只是 await 一个已完成的 Promise。
      */
     private presentGoods(snapshot: IItemDetailSnapshot): void {
         const revision = this.revision;
@@ -229,7 +208,7 @@ export class ItemInfoPage extends PopupBase {
     private presentAccess(snapshot: IItemDetailSnapshot): void {
         const texts = ITEM_DETAIL_TEXTS;
         const rows = this.rows;
-        // 途径查不到时给一行占位（留空列表看着像界面坏了）；占位行不可点、不画箭头。
+        // 途径查不到时给一行占位（空列表看着像界面坏了），占位行不可点、不画箭头。
         const refs: IItemAccessRef[] = snapshot.accessRefs.length > 0
             ? snapshot.accessRefs.slice(0, rows.length)
             : [{ resId: 0, text: texts.noAccess }];
@@ -252,16 +231,15 @@ export class ItemInfoPage extends PopupBase {
 
     /** 底板高度跟随 RowsRoot 的 Layout 容器高度（两者同一坐标系，锚点都在上沿）。 */
     private applyRowsHeight(): void {
-        const layout = this.rowsRoot?.getComponent(Layout);
-        layout?.updateLayout();
-        const rows = this.rowsRoot?.getComponent(UITransform);
-        const plate = this.rowsPlate?.getComponent(UITransform);
-        if (rows && plate) plate.setContentSize(plate.width, rows.height);
+        this.rowsRoot.getComponent(Layout).updateLayout();
+        const rows = this.rowsRoot.getComponent(UITransform);
+        const plate = this.rowsPlate.getComponent(UITransform);
+        plate.setContentSize(plate.width, rows.height);
     }
 
     private onAccessClick(index: number): void {
         const ref = this.accessRefs[index];
-        // 占位行的 resId 是 0，不跳（否则点了没反应还以为卡了）
+        // 占位行的 resId 是 0，不跳（否则点了没反应还以为卡了）。
         if (!ref || ref.resId <= 0) return;
         console.log(`[ItemInfo] 跳转 ${ref.resId}：${ITEM_DETAIL_TEXTS.jumpNotWired}`);
         Toast.show(ITEM_DETAIL_TEXTS.jumpNotWired);

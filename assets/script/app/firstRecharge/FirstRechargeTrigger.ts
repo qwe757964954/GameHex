@@ -43,7 +43,7 @@ export function resolveFirstRechargeTrigger(input: IFirstRechargeTriggerInput): 
     return 'none';
 }
 
-/** 只有 newDay 分支要标记"今天弹过了"。 */
+/** 只有跨天保底那支要记「今天弹过了」。 */
 export function shouldMarkNewDay(reason: FirstRechargeTriggerReason): boolean {
     return reason === 'newDay';
 }
@@ -88,7 +88,6 @@ export function deriveMaxChallengeLevel(
     return Math.min(maxLevel, normalLevels.length);
 }
 
-/** 跨天判定：今天 0 点 ≠ 上次记录的 0 点。 */
 export function isNewDay(savedDayStartMs: number, nowMs: number): boolean {
     const today = startOfDayMs(nowMs);
     return today !== savedDayStartMs;

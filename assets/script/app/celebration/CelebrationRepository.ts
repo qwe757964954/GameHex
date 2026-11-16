@@ -1,51 +1,25 @@
 /**
- * 开服庆典（老端 `LayerOSRankUI` / `LayerOSRankDetailUI` + FGUI 包「开服冲榜」）的数据端口
- * —— **表 + 服务器状态 + 网络请求** 三合一的 Repository。
+ * 开服庆典的数据端口（老端 `LayerOSRankUI` / `LayerOSRankDetailUI` + FGUI 包「开服冲榜」）。
  *
- * 与 `HangRepository` / `GiftRepository` / `SevenDayRepository` / `BattleTokenRepository`
- * 同一套分层：页面只依赖本文件，判定逻辑全在 `CelebrationTable`（零 import 纯函数、可单测），
- * 本文件只负责「把数据搬进来 + 把请求发出去」。
+ * 与 `HangRepository` / `GiftRepository` / `SevenDayRepository` 一套分层：页面只依赖本文件，
+ * 判定逻辑都在零 import 的 `CelebrationTable`，这里只负责读表、读缓存、发请求。
  *
- * ## 数据来源
+ * 数据来源：
+ * - `celebrationConfig`（压缩表）：`rankType` ↔ `id`、`name`、`goto`、`tips`
+ * - `celebrationTarget` / `celebrationRank` / `celebrationShop`：目标门槛与奖励、排名奖档、限时特惠商品
+ * - `payChannel`：`celebrationShop.rmb` → 真实金额
+ * - `item` / `roleProperty`：奖励与货币图标（经 `resolveRewardIconRef` 分流）
+ * - `CacheMgr.getTlCmdCelebrationInfo()`：进度值与已领 / 已购次数
+ * - `CacheMgr.getTlCmdRankItem()`：活动时间窗（秒）
  *
- * | # | 来源 | 用途 |
- * |---|---|---|
- * | ① | `celebrationConfig`（**压缩表** `{k,v,c}`，11 行） | `rankType` ↔ `id`、`name`（战力口径名）、`targetGroupId`、`goto`、`tips` |
- * | ② | `celebrationTarget` | 庆典目标各档的 `count`（门槛值）+ `rewards` |
- * | ③ | `celebrationRank` | 排名奖档 `start~end`（名次区间）+ `count`（战力要求）+ `rewards1/2` |
- * | ④ | `celebrationShop` | 限时特惠商品 `rmb`（=`payChannel.id`）/ `costType` / `costCount` / `limit` / `price` / `discount` |
- * | ⑤ | `payChannel` | `celebrationShop.rmb` → 真实金额（元） |
- * | ⑥ | `item` + `roleProperty` | 奖励格 / 货币图标的图标（**两支分流**，唯一入口 `resolveRewardIconRef`） |
- * | ⑦ | `CacheMgr.getTlCmdCelebrationInfo()` | `curValue`（当前进度值）+ `targetInfos`（已领档）+ `shopInfos`（已购次数） |
- * | ⑧ | `CacheMgr.getTlCmdRankItem()` | 活动时间窗（`startTime` / `endTime` / `showEndTime`，**秒**） |
+ * `CmdCelebrationInfo` / `CmdRankItem` 都在 `protoCache.json` 登记着，服务端会推，`GameNet` 收包时写进缓存，
+ * 所以 `load()` 每次现读，不自己存快照。庆典没有「查询」请求，缓存空就按空渲染，不要造一个假请求。
+ * 只有详细排名要查：`CmdGetRankReqMsg`，见 `requestRank()`。
  *
- * ## 走 `CacheMgr`，不自己存快照
+ * `server.id` 是 rankType，`config.id` 才是过滤三张子表的键，两者混用不会报错、只是列表全空。
  *
- * `CmdCelebrationInfo` / `CmdRankItem` 都在 `assets/resources/config/protoCache.json` 里登记着
- * （实测核对过：`CmdCelebrationInfo` 的 `tlKey = ["id"]`，`CmdRankItem` 的 `tlKey = ["type"]`）
- * ⇒ 服务端会推，`GameNet` 收包时已写进 `GameCache`。所以每次 `load()` 现读，**不要自己存一份**。
- *
- * ## 没有「拉取庆典数据」的请求
- *
- * `Cmd.d.ts` 里庆典只有两个请求：`GetTargetReward` / `BuyShopGoods`（**没有"查询"**）。
- * 缓存为空 = 服务端还没推 / 离线 ⇒ 界面按空渲染，**不要造一个假请求**
- * （与 `HangRepository` 的「没有拉取挂机数据的请求」同一处置）。
- *
- * 但**详细排名**有查询：`CmdGetRankReqMsg{rankType, showNum, unionId}`
- * （`CmdGetRankRspMsg = 345265589`，已登记）。那一支在 `CelebrationRepository.requestRank()`。
- *
- * ## `server.id` 是 **rankType**、`config.id` 才是过滤键
- *
- * 见 `CelebrationTable` 文件头。这里只强调落地点：`pickActiveServer()` 返回的 `s.id`
- * 拿去 `configOfRankType()`；反查出来的 `celebrationIdOf()` 拿去过滤三张子表。
- * 两者混用**不报错、只是三个列表全空**。
- *
- * ## 支付链路只到「业务前置请求」
- *
- * 老端 `ModelCelebration.RequestCelebrationBuyShop` 的顺序是：
- * `rsp.canRmb === true` ⇒ `SDKMgr.pay(rmb, "common", 0)`；否则 `FW.ShowReward(rsp.tlCmdGoods)`。
- * Demo3.8 没有支付 SDK（与礼包 / 首充 / 月卡 / 战令同一处置）⇒ 请求照发，拿到 `canRmb`
- * 之后**只把结果交回页面**，由页面提示「支付暂未接入」，**不假装成功**。
+ * 支付链路只做到业务前置请求：老端拿到 `rsp.canRmb === true` 后走 `SDKMgr.pay`，本工程没有支付 SDK，
+ * 因此把结果原样交回页面提示「支付暂未接入」，不假装成功。
  */
 
 import { FW } from '../../framework/FW';
@@ -77,7 +51,6 @@ import {
     propertyWantTextOf,
     rankReachedOf,
     rankTextOf,
-    rankTimeOf,
     ranksOf,
     rdOf,
     saleTextOf,
@@ -87,13 +60,10 @@ import {
     targetsOf,
 } from './CelebrationTable';
 import type {
-    CelebrationPayBranch,
     ECelebrationTargetRewardType,
-    ICelebrationConfigRow,
     ICelebrationGoodsInfo,
     ICelebrationRankRow,
     ICelebrationRankTime,
-    ICelebrationReward,
     ICelebrationServerState,
     ICelebrationShopPricing,
     ICelebrationShopRow,
@@ -104,26 +74,8 @@ import { CL_TEXTS } from './CelebrationTexts';
 import { RequestCelebrationBuyShop, RequestCelebrationGetTargetReward } from './RequestCelebrationMsg';
 import { RequestGetRank } from '../generated/requestMsg/RequestRankMsg';
 
-// 判定 / 格式化全在 `CelebrationTable`（零 import 纯函数 ⇒ 可单测），这里只做**转发**，
-// 让页面的 `import { … } from './CelebrationRepository'` 一行不用改。
-export {
-    CL_COUNTDOWN_LEAD_MS,
-    CL_NOT_IN_RANK,
-    buyCountOf,
-    celebrationIdOf,
-    configOfRankType,
-    countdownHmsOf,
-    countdownOffsetOf,
-    numAbbrOf,
-    purchaseStateOf,
-    rankActiveOf,
-    rankReachedOf,
-    rankSegmentOf,
-    rankTextOf,
-    realRmbOf,
-    saleTextOf,
-    stateBySubId,
-} from './CelebrationTable';
+// 判定与格式化都在零 import 的 `CelebrationTable`，这里转出一部分，页面只 import 本文件。
+export { CL_NOT_IN_RANK, buyCountOf, numAbbrOf, purchaseStateOf } from './CelebrationTable';
 export type {
     CelebrationPayBranch,
     ICelebrationConfigRow,
@@ -135,7 +87,7 @@ export type {
     ICelebrationShopRow,
     ICelebrationSnapshot,
     ICelebrationTargetRow,
-};
+} from './CelebrationTable';
 
 /** 三个页签的个数（FGUI 控制器 `页签` 的页数）。 */
 export const CL_TAB_COUNT = 3;
@@ -143,7 +95,7 @@ export const CL_TAB_COUNT = 3;
 /** 请求结果 —— 与挂机 / 战令 / 礼包同口径。 */
 export type CelebrationRequestResult = 'ok' | 'offline' | 'failed';
 
-/** 买商品的结果：多了「服务端说这次要走支付 SDK」这一支。 */
+/** 买商品的结果：多了「服务端说这一单要走支付 SDK」这一支。 */
 export type CelebrationBuyResult = CelebrationRequestResult | 'pay';
 
 /** 请求超时（与全家族同口径：读 800ms / 写 5000ms）。 */
@@ -176,13 +128,12 @@ function readRankTimes(): Map<number, ICelebrationRankTime> {
 }
 
 /**
- * 取**自己的 roleId**（十进制字符串）。
+ * 取自己的 roleId（十进制字符串）。
  *
- * 只给详细排名的 `CmdGetRankReqMsg.unionId` 用 —— ⚠️ 那个字段名叫 union 但老端传的是
- * 自己 roleId（`ModelRole.GetRole().GetCmd().id`），**不是公会 id**（见 `requestRank`）。
- *
- * `CmdRole` 是单行表，`getTlCmdRole()` 拿到的数组取第一行即可（与 `FriendRepository.readRole`
- * / `HangRepository` 同一处置）。读不到返回空串：服务端照样回包，只是 `myRank` 为空。
+ * 只给详细排名的 `CmdGetRankReqMsg.unionId` 用：那个字段名沿用协议里的 union，老端传的是
+ * 自己的 roleId（`ModelRole.GetRole().GetCmd().id`），不是公会 id。
+ * `CmdRole` 是单行表，取第一行即可（与 `FriendRepository.readRole` / `HangRepository` 同一处置）；
+ * 读不到返回空串，服务端照样回包，只是 `myRank` 为空。
  */
 export function celebrationSelfRoleId(): string {
     try {
@@ -215,17 +166,13 @@ export interface ICelebrationRankDetail {
 }
 
 export interface ICelebrationRepository {
-    /** 读表 + 读缓存，组装一次快照；**不发任何请求**。 */
+    /** 读表 + 读缓存，组装一次快照；不发任何请求。 */
     load(nowMs?: number): Promise<ICelebrationSnapshot>;
     /** 领取庆典目标奖励（`CmdCelebrationGetTargetRewardReqMsg`，返回 `tlCmdGoods`）。 */
     claimTargetReward(id: number, subId: number, caller?: object): Promise<CelebrationRequestResult>;
     /** 购买限时特惠商品（`CmdCelebrationBuyShopGoodsReqMsg`）。 */
     buyShopGoods(id: number, subId: number, caller?: object): Promise<CelebrationBuyResult>;
-    /**
-     * 查详细排名（`CmdGetRankReqMsg`）。
-     *
-     * 与另两个不同：**这是查询**，回包才有数据 ⇒ 读超时用 800ms（不是 5000）。
-     */
+    /** 查详细排名（`CmdGetRankReqMsg`）；这是查询，回包才有数据，读超时用 800ms。 */
     requestRank(rankType: number, showNum: number, unionId: string, caller?: object): Promise<ICelebrationRankDetail | null>;
 }
 
@@ -247,13 +194,11 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         const ranks = parseRankRows(rankRaw);
         const shops = parseShopRows(shopRaw);
 
-        // ---- 选中哪一份庆典（老端 `VOCelebrationBag.GetFirstOne`）----
         const rankTimes = readRankTimes();
         const server = pickActiveServer(readServers(), rankTimes, nowMs);
 
-        // ⚠️ 没有活跃 server 时**仍然**给一个 rankType / config：
-        //    否则 `configs[0]` 一张表都读不到，页面连表头都画不出来（离线预览 / 新号）。
-        //    但 `enabled` 仍为 false（见 enabledOf） ⇒ 入口 / 面板不显示，与老端一致。
+        // 没有活跃 server 时仍给一个 rankType / config，否则页面连表头都画不出来（离线预览 / 新号）。
+        // `enabled` 此时仍为 false，入口和面板不显示，与老端一致。
         const fallbackRankType = configs.length > 0 ? configs[0].rankType : 0;
         const rankType = server ? server.id : fallbackRankType;
         const config = configOfRankType(configs, rankType);
@@ -266,7 +211,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             (subId) => stateBySubId(targets, celebrationId, subId, curValue, targetInfos),
         );
 
-        const rankTime = rankTimeOf(rankTimes, rankType);
+        const rankTime = rankTimes.get(rankType) ?? null;
         const endTimeMs = rankTime ? rankTime.endTimeMs : 0;
 
         return {
@@ -295,27 +240,22 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         };
     }
 
-    /** 领取庆典目标奖励。⚠️ `id` 是 `celebrationConfig.id`，不是 `rankType`（见 `RequestCelebrationMsg`）。 */
+    /** 领取庆典目标奖励。`id` 是 `celebrationConfig.id`，不是 rankType（见 `RequestCelebrationMsg`）。 */
     async claimTargetReward(id: number, subId: number, caller?: object): Promise<CelebrationRequestResult> {
         const net = GameNet.instance;
         if (!net.isConnected) return 'offline';
 
         let applied = false;
         const callback = (rsp: CmdCelebrationGetTargetRewardRspMsg): void => {
-            // 老端 `ModelCelebration` L72：`FW.ShowReward(rsp.tlCmdGoods)` —— 与老端同一条路
-            // （那层 Model 也是这么调的）。之前这里只置 `applied`、奖励明细被整个丢掉。
-            //
-            // ⚠️ 关于「Repository 不碰 UI」：这里调的 `FW.ShowReward` 是**可注入的全局出口**
-            //    （`FW.showReward`，由组合根接成 `ShowRewardPage.open`），本文件**没有** import
-            //    任何视图类、也不 import `cc` —— 与「页面自己 `Toast.show`」那条约定不冲突。
-            // ⚠️ 空数组时 `ShowRewardPage` 会自己 `close()`，所以这里不判空 —— 判空反而会漏掉
-            //    「响应到了但 `ts` 里确实没有 goods」这种情况（老端是 `length <= 0` 就 unload）。
+            // 老端 `ModelCelebration` 也是这么调的。`FW.ShowReward` 是可注入的全局出口（组合根接成
+            // `ShowRewardPage.open`），本文件不 import 视图类也不 import cc，与「页面自己 Toast」那条约定不冲突。
+            // 空数组时 `ShowRewardPage` 会自己关闭，这里不判空。
             FW.ShowReward(rsp?.tlCmdGoods ?? []);
             applied = true;
         };
 
         try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
+            // `GameNet.send` 没有按请求的超时，服务端不回就永悬，必须包一层。
             const sent = await withTimeout(
                 net.send(new RequestCelebrationGetTargetReward({ id, subId }, caller, callback), false),
                 WRITE_TIMEOUT_MS,
@@ -332,11 +272,9 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
     /**
      * 购买限时特惠商品。
      *
-     * 返回 `'pay'` = 服务端说「这一单要走支付 SDK」（`rsp.canRmb === true`）。
-     * Demo3.8 没有 SDK ⇒ 页面提示 `CL_TEXTS.payUnavailable`，**不谎报成功**。
-     *
-     * ⚠️ 老端在发请求**之前**还会做一次「够不够钱」的前置校验（`CheckHaveEnoughCost`），
-     * 那是页面的事（要弹框 / 要读 UI），Repository 不替它做。
+     * 返回 `'pay'` 表示服务端要求走支付 SDK（`rsp.canRmb === true`），由页面提示
+     * `CL_TEXTS.payUnavailable`，不谎报成功。
+     * 「钱够不够」的前置校验归页面（要弹框、要读 UI），Repository 不做。
      */
     async buyShopGoods(id: number, subId: number, caller?: object): Promise<CelebrationBuyResult> {
         const net = GameNet.instance;
@@ -371,8 +309,8 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
     /**
      * 查详细排名（`CmdGetRankReqMsg`）。
      *
-     * ⚠️ `unionId` 老端传的是**自己的 roleId**（`ModelRole.GetRole().GetCmd().id`），
-     * 不是公会 id —— 形参名沿用了协议字段名。传空串服务端也能回，只是 `myRank` 为空。
+     * `unionId` 老端传的是自己的 roleId，不是公会 id，形参名沿用了协议字段名；
+     * 传空串服务端也能回，只是 `myRank` 为空。
      */
     async requestRank(
         rankType: number,
@@ -397,14 +335,9 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
         try {
             const sent = await withTimeout(
                 net.send(
-                    // ⚠️ `unionId` 是 `Long` ⇒ 用十进制字符串进。protobufjs 的 `fromObject`
-                    //    对 long 字段走 `Long.fromValue(value)`，认字符串；直接传 number
-                    //    在超过 `Number.MAX_SAFE_INTEGER` 时会**静默丢精度**（规则 23）。
-                    new RequestGetRank(
-                        { rankType: rankType as CmdRankType, showNum, unionId: unionId as any },
-                        caller,
-                        callback,
-                    ),
+                    // `unionId` 是 Long，protobufjs 的 fromObject 认十进制字符串；直接传 number
+                    // 在超过 MAX_SAFE_INTEGER 时会静默丢精度。
+                    new RequestGetRank({ rankType: rankType as CmdRankType, showNum, unionId }, caller, callback),
                     false,
                 ),
                 READ_TIMEOUT_MS,
@@ -419,12 +352,11 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
     }
 }
 
-/** `CmdRankRole` → 裁剪视图（读不到 0 / 空串，不抛）。 */
+/** `CmdRankRole` → 裁剪视图（读不到给 0 / 空串，不抛）。 */
 function toRankEntry(role: CmdRankRole | null | undefined): ICelebrationRankEntry {
     if (!role) return { rank: 0, roleName: '', power: 0, usedSkinResId: 0 };
     return {
-        // ⚠️ `rank` 可能是 `-1`（未上榜）—— **不要**在 `toRankEntry` 里抹成 0，
-        //    否则 `CL_NOT_IN_RANK` 那条分支永远走不到（界面把未上榜显示成「第0名」）。
+        // `rank` 可能是 -1（未上榜），不要在这里抹成 0，否则 `CL_NOT_IN_RANK` 那条分支永远走不到。
         rank: Number(role.rank) || 0,
         roleName: typeof role.roleName === 'string' ? role.roleName : '',
         power: toLongNumber(role.value),
@@ -435,9 +367,8 @@ function toRankEntry(role: CmdRankRole | null | undefined): ICelebrationRankEntr
 /**
  * `Long` / `number` / `string` → number；认不出返回 0。
  *
- * ⚠️ 不能 `Number(long)` —— protobufjs 的 `Long` 转 number 会得到 `NaN`
- * （`Long` 没有 `valueOf` 到 number 的路径），`NaN` 参与算术会静默污染整条链路
- * （战力显示 `NaN`、名次判 `NaN === -1` 恒 false）。
+ * 不能直接 `Number(long)`：protobufjs 的 `Long` 走不到 number，会得到 `NaN`，
+ * 之后战力显示 `NaN`、名次判 `NaN === -1` 恒 false。
  */
 function toLongNumber(value: unknown): number {
     if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -458,11 +389,11 @@ function toLongNumber(value: unknown): number {
 export const celebrationRepository: ICelebrationRepository = new RuntimeCelebrationRepository();
 
 // ============================================================
-// 快照上的便捷查询（要文案模板的那几个留在这里 ——
-// 「判定进 Table、文案包装留 Repository」是家族约定，对齐 `HangRepository.adCountTextOf`）
+// 快照上的便捷查询
+// 判定进 Table，带文案模板的包装留在这里（对齐 `HangRepository.adCountTextOf`）。
 // ============================================================
 
-/** 庆典目标项的描述（`{0}达到{1}`）；`config` 缺失时属性名退到 `''`。 */
+/** 庆典目标项的描述（`{0}达到{1}`）；`config` 缺失时属性名退到空串。 */
 export function targetDescTextOf(snapshot: ICelebrationSnapshot, row: ICelebrationTargetRow): string {
     const name = snapshot.config ? snapshot.config.name : '';
     return conditionTextOf(name, row.count, CL_TEXTS.conditionText0);
@@ -475,7 +406,7 @@ export function rankConditionTextOf(snapshot: ICelebrationSnapshot, row: ICelebr
 }
 
 /** 庆典目标页表头（`config.name + 要求`）；`config` 缺失时退到 FGUI 设计期初值。 */
-export function propertyWantTextOf_(snapshot: ICelebrationSnapshot): string {
+export function targetHeaderTextOf(snapshot: ICelebrationSnapshot): string {
     if (!snapshot.config) return CL_TEXTS.colConditionFallback;
     return propertyWantTextOf(snapshot.config.name, CL_TEXTS.conditionTitle);
 }
@@ -491,12 +422,12 @@ export function myRankValueTextOf(rank: number): string {
 }
 
 /** 限购文案（`限购{0}/{1}`）。 */
-export function limitBuyTextOf_(snapshot: ICelebrationSnapshot, row: ICelebrationShopRow): string {
+export function shopLimitTextOf(snapshot: ICelebrationSnapshot, row: ICelebrationShopRow): string {
     return limitBuyTextOf(buyCountOf(snapshot.server, row.subId), row.limit, CL_TEXTS.limitSaleTemplate);
 }
 
 /** 折扣文案（`5折`）。 */
-export function saleTextOf_(row: ICelebrationShopRow): string {
+export function shopSaleTextOf(row: ICelebrationShopRow): string {
     return saleTextOf(row.discount, CL_TEXTS.discountSuffix);
 }
 
@@ -512,11 +443,6 @@ export function countdownTextOf(snapshot: ICelebrationSnapshot, nowMs?: number):
     return `${countdownHmsOf(offset)}${CL_TEXTS.countdownSuffix}`;
 }
 
-/** 排名项的第一份奖励（老端 `renderRankListItem` 取 `data.rewards2[0]`）。 */
-export function firstReward2Of(row: ICelebrationRankRow): ICelebrationReward | null {
-    return row.rewards2.length > 0 ? row.rewards2[0] : null;
-}
-
 /** 奖励的展示信息（`item` 优先，回落 `roleProperty`；都查不到返回 `null`）。 */
 export function goodsOf(snapshot: ICelebrationSnapshot, resId: number): ICelebrationGoodsInfo | null {
     return snapshot.items.get(resId) ?? snapshot.resources.get(resId) ?? null;
@@ -524,9 +450,7 @@ export function goodsOf(snapshot: ICelebrationSnapshot, resId: number): ICelebra
 
 /**
  * 奖励图标的两支分流解析；解析不出返回 `null`（奖励格降级成只画品质框）。
- *
- * ⚠️ **不要**自己判 `item` / `roleProperty` —— 走 `LayerActivityArt.resolveRewardIconRef`
- * （唯一入口，与挂机 / 活动 / 礼包同一条）。
+ * 统一走 `LayerActivityArt.resolveRewardIconRef`，不要自己判 `item` / `roleProperty`。
  */
 export function rewardIconRefOf(
     snapshot: ICelebrationSnapshot,
@@ -549,7 +473,7 @@ export function targetStateOf(
     return stateBySubId(snapshot.targets, snapshot.celebrationId, row.subId, snapshot.curValue, infos);
 }
 
-/** 排名档是否已达标（老端 `enough`；够不够「显示为已达标」那一页）。 */
-export function rankReached(snapshot: ICelebrationSnapshot, row: ICelebrationRankRow): boolean {
+/** 排名档是否已达标（老端 `enough`，驱动「已达标」那一页的颜色）。 */
+export function isRankReached(snapshot: ICelebrationSnapshot, row: ICelebrationRankRow): boolean {
     return rankReachedOf(snapshot.curValue, row.count);
 }

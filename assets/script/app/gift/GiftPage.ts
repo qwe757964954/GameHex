@@ -36,118 +36,80 @@ import {
     listSubTabs,
     sortGiftRows,
 } from './GiftTable';
-import type { IGiftShopRow } from './GiftTable';
+import type { IGiftShopRow, GiftMainTabKey } from './GiftTable';
 import { GIFT_TEXTS, RECHARGE_TEXTS } from './GiftTexts';
 
 const { ccclass, property } = _decorator;
 
-/** 底部大页签的两张底图（首次加载后缓存在实例上；两张图不会变）。 */
 /**
- * 「礼包」弹窗（`LayerGift`，`assets/resources/ui/Gift/Gift.prefab`）。
+ * 「礼包」弹窗，对应 `assets/resources/ui/Gift/Gift.prefab`。
  *
- * ## 版面
- *
- * 老端的 FGUI 包「礼包」把「导航条」和「页面」拆成了两层组件：
- *   - `组件_礼包_主界面.xml` = 底部导航（返回按钮 + 一排大页签 + 底板），**没有页面容器**；
- *   - `组件_礼包_超值礼包.xml` / `组件_礼包_灵玉礼包.xml` = 整屏页面，由 `LayerGift` 叠上去。
- * 本工程把它合成**一整个 prefab**：`PageRoot`（页面容器）在 `_children` 里排在底部条**之前**
- * ⇒ 页面滚动内容会被底部条盖住，与老端的层序一致。
- *
- * ## 页签口径（**刻意不同于老端代码**）
- *
- * 老端 `LayerGift.InitTabProxy()` 开的是「超值礼包 / 每日充值 / 累计充值」，而新项目
- * `open.json`（客户端真正读的表，`preResId = 103`）开的是：
- *   `409 超值礼包`(order 1) / `411 晶石兑换`(order 3，`roleLevel >= 9999` **关**) / `412 灵玉直冲`(order 4)
- * ⇒ **按 `open.json` 落地**：只做「超值礼包 + 灵玉直冲」两个页签（见 `GIFT_MAIN_TABS`）。
- * 每日充值 / 累计充值在老端依赖 `rechargeDaily` + `VOActivity` 体系，本轮不移植。
- *
- * ## 分层
- *
- *   数据与判定  `GiftTable`（纯函数、可单测）+ `GiftRepository`（表 / 缓存 / 请求）
- *   子视图      `GiftSpecialView`（超值礼包页）、`GiftLingYuView`（灵玉直冲页）、
- *               `GiftShopRow`（商品行）、`GiftLingYuCard`（档位卡）、`GiftSubTab` / `GiftTabButton`（页签）
- *   本类        只做「取数 → 预加载图 → 组装视图模型 → 铺界面」和「点击 → 发请求 → 重新取数」
- *
- * 项目约定：**样式与布局全在 prefab 的 Inspector 上**；只有「随数据变化的东西」
- * （行数、按钮三态、角标显隐）才在代码里算。静态美术（底板 / 装饰 / 底部条）直接写在 prefab 上，
- * 这里只加载「由数据决定」的那几张（品质框、道具 / 货币图标、子页签底 + 标题图、页签底图）。
+ * 页面容器 `PageRoot` 下包含超值礼包、累计充值和每日充值三页，底部页签切换。
+ * 静态布局全部在 prefab 上；本类只负责取数、加载随数据变化的图片、组装视图模型，
+ * 以及把点击转成仓库请求后重新取数。
  */
 @ccclass('GiftPage')
 export class GiftPage extends PopupBase {
-    /**
-     * 弹窗预制体在 resources 下的路径。
-     *
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/Gift/`，G 大写）：
-     * Android / iOS 的热更新 zip 内路径**大小写敏感**，写成 `ui/gift/...`
-     * 在编辑器里照样能跑（Windows 不敏感），真机上才会 `resources.load` 失败变空弹窗。
-     */
+    /** 弹窗在 resources 下的路径；目录名大小写在真机上敏感。 */
     static prefabPath = 'ui/Gift/Gift';
 
     @property({ type: Node, tooltip: 'BackBtn：左下返回按钮（挂 cc.Button）' })
-    backButton: Node = null;
+    backButton: Node = null!;
 
-    @property({ type: Node, tooltip: 'TabBar：底部大页签栏（挂 2 个 GiftTabButton）' })
-    tabBar: Node = null;
+    @property({ type: Node, tooltip: 'TabBar：底部大页签栏（挂 3 个 GiftTabButton）' })
+    tabBar: Node = null!;
 
-    @property({ type: Node, tooltip: 'PageRoot：页面容器（下挂 SpecialPage / LingYuPage，同一时刻只开一个）' })
-    pageRoot: Node = null;
+    @property({ type: Node, tooltip: 'PageRoot：页面容器' })
+    pageRoot: Node = null!;
 
     @property({ type: GiftSpecialView, tooltip: 'PageRoot/SpecialPage：超值礼包页' })
-    specialView: GiftSpecialView = null;
+    specialView: GiftSpecialView = null!;
 
+    /** prefab 中该字段留空，`ensureViews()` 按节点名从 `PageRoot` 查找。 */
     @property({ type: Node, tooltip: 'PageRoot/RechargeTotalPage：累计充值页' })
-    totalViewNode: Node = null;
+    totalViewNode: Node | null = null;
 
+    /** prefab 中该字段留空，`ensureViews()` 按节点名从 `PageRoot` 查找。 */
     @property({ type: Node, tooltip: 'PageRoot/DailyPage：每日充值页' })
-    dailyViewNode: Node = null;
+    dailyViewNode: Node | null = null;
 
     @property({ type: Label, tooltip: 'Hint：提示行（空配置 / 离线 / 操作失败 / 购买成功）' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
     /** 数据端口；测试可替换。 */
     private repo: IGiftRepository = giftRepository;
 
-    /** 当前快照（表 + 商店已购次数 + item 表 + 已购档位）。 */
     private snapshot: IGiftSnapshot | null = null;
 
-    /** 当前选中的大页签。 */
-    private selectedTab: 'special' | 'total' | 'daily' = 'special';
+    private selectedTab: GiftMainTabKey = 'special';
 
-    /** 当前选中的子页签（`giftShop.type`）；`0` = 还没定（取第一个）。 */
+    /** 当前子页签（`giftShop.type`）；`0` 表示尚未选择。 */
     private selectedType = 0;
 
-    /** 当前选中的「每日充值」档位（`rechargeDaily.round`）。 */
     private selectedDailyRound = 1;
 
-    /** 当前选中的「累计充值」页签（`RechargeActivityTable.RECHARGE_TAB.*`）。 */
     private selectedTotalTab: number = RECHARGE_TAB.base;
 
-    /**
-     * 两个充值页的组件（在 `ensureViews()` 里解析出来）。
-     *
-     * ⚠️ 走 `getComponent(类)` 而不是 `getComponent('类名' as any)`：前者是类型化的
-     * （改了回调签名编译期就报），后者只是字符串查表、写错了运行时才 `undefined`。
-     * prefab 上的真源是 `totalViewNode` / `dailyViewNode` 这两个 Node 引用，不另存组件引用。
-     */
+    /** 两个充值页的组件；在 `ensureViews()` 中解析。 */
     private dailyView: RechargeDailyView | null = null;
 
     private totalView: RechargeTotalView | null = null;
 
     private busy = false;
 
-    /** 每次「取数 / 换页签」递增，用来丢弃过期的异步结果。 */
+    /** 每次取数或换页签时递增，用于丢弃过期异步结果。 */
     private revision = 0;
 
-    /** 品质框（4 张固定图），首次用到后缓存 —— 与档位无关，不用每次重载。 */
+    /** 品质框缓存（4 张固定图）。 */
     private qualityFrames: Map<string, SpriteFrame> | null = null;
 
-    /** 子页签底图 + 标题图（固定几张），首次用到后缓存。 */
+    /** 子页签底图和标题图缓存。 */
     private subTabFrames: IGiftSubTabFrames | null = null;
 
-    /** `resId` → 图标（道具图标 + 货币图标共用一张表）。 */
+    /** `resId` → 图标，道具和货币共用。 */
     private readonly iconFrames = new Map<number, SpriteFrame>();
 
-    /** 确认**没有图**的 `resId`（负缓存，避免每次刷新都重试）。 */
+    /** 确认无图的 `resId`，避免每次刷新重复加载。 */
     private readonly missingIcons = new Set<number>();
 
     // ============================================================
@@ -156,15 +118,13 @@ export class GiftPage extends PopupBase {
 
     protected onInit(): void {
         this.ensureViews();
-        const back = this.backButton.getComponent(Button);
-        back?.node.on(Button.EventType.CLICK, this.onBackClick, this);
+        this.backButton.on(Button.EventType.CLICK, this.onBackClick, this);
 
         const tabs = this.tabButtons;
         for (let index = 0; index < tabs.length; index++) {
             tabs[index].bind(index, (clicked) => this.onTabClick(clicked));
         }
 
-        // 子视图只回调，不碰网络 / 不碰数据（取数全在本类）。
         this.specialView.onSelectType = (type) => void this.onSelectType(type);
         this.specialView.onBuy = (id) => void this.onBuyGift(id);
         this.bindRechargeViews();
@@ -201,7 +161,7 @@ export class GiftPage extends PopupBase {
     }
 
     protected onClose(): void {
-        // 关掉后在飞的异步结果一律作废（否则会往已回收的 Label 上写）。
+        // 关闭后使所有在途请求失效。
         this.revision += 1;
     }
 
@@ -229,8 +189,7 @@ export class GiftPage extends PopupBase {
             this.presentEmpty();
             return;
         }
-        // 固定几张图先备好（品质框 / 子页签底 + 标题 / 大页签底 / 灵玉按钮底）——
-        // 一次性加载完再铺界面，避免「先出框后补图」的闪烁。
+        // 先把固定图加载完，避免界面先出现空框再补图。
         await this.preloadStaticFrames();
         if (!this.alive || revision !== this.revision) return;
         await this.present(revision);
@@ -250,7 +209,6 @@ export class GiftPage extends PopupBase {
 
         if (isSpecial) await this.presentSpecial(snapshot, revision);
         else if (isDaily) await this.presentDaily(revision);
-        // `selectedTab` 只有三个取值 ⇒ 非 special / daily 就是 total（不用再判一次）。
         else await this.presentTotal(revision);
     }
 
@@ -281,7 +239,7 @@ export class GiftPage extends PopupBase {
         // ⚠️ 必须**额外带上货币档 `GIFT_CURRENCY_RES_ID`**：购买按钮左侧那颗图标不在
         //    `row.rewards` 里，只按奖励 resId 预加载会让 `buildRowView` 永远取不到它 ⇒
         //    所有付费按钮静默降级成「60幻灵玉」而不是「60 + 图标」。
-        await this.loadIconFrames(collectGiftRewardResIds(rows).concat(GIFT_CURRENCY_RES_ID));
+        await this.loadIconFrames(collectGiftRewardResIds(rows).concat(GIFT_CURRENCY_RES_ID), snapshot.items);
         if (!this.alive || revision !== this.revision) return;
 
         const qualityFrames = this.qualityFrames;
@@ -319,19 +277,10 @@ export class GiftPage extends PopupBase {
             showIcon: buy.showIcon,
             currencyFrame,
             rewards: row.rewards.map((reward) => ({
-                qualityFrame: this.qualityFrameOf(snapshot, reward.resId, qualityFrames),
+                qualityFrame: this.qualityFrameOfRes(snapshot.items, reward.resId, qualityFrames),
                 iconFrame: this.iconFrames.get(reward.resId) ?? null,
             })),
         };
-    }
-
-    /** 奖励 `resId` → 品质框（「超值礼包」页用的薄包装）。 */
-    private qualityFrameOf(
-        snapshot: IGiftSnapshot,
-        resId: number,
-        qualityFrames: Map<string, SpriteFrame>,
-    ): SpriteFrame | null {
-        return this.qualityFrameOfRes(snapshot.items, resId, qualityFrames);
     }
 
     /** 奖励 `resId` → 品质框；`item` 表查不到时按品质 1 取框。 */
@@ -345,12 +294,7 @@ export class GiftPage extends PopupBase {
         return qualityFrames.get(qualityFrameName(quality)) ?? null;
     }
 
-    /**
-     * 一个奖励格的图。
-     *
-     * ⚠️ **逐格**给（`qualityFrame` + `iconFrame` 配对）—— 一行里几个奖励品质可以不同，
-     * 传「一个框给所有格」会出现「第 3 格的框是第 1 格的品质」这种静默错。
-     */
+    /** 奖励格的品质框和图标必须逐格配对，不能整行复用同一个框。 */
     private slotFrameOf(
         items: ReadonlyMap<number, { readonly quality: number; readonly icon: string }>,
         resId: number,
@@ -362,12 +306,7 @@ export class GiftPage extends PopupBase {
         };
     }
 
-    /**
-     * 兜底：@property 没拖到时从 `pageRoot` 下自动找；顺带把两个页面组件解析出来。
-     *
-     * ⚠️ 组件用 `getComponent(类)`（类型化）取 —— 不额外存一份 prefab 引用，
-     *    `totalViewNode` / `dailyViewNode` 就是真源。
-     */
+    /** `@property` 未绑定时从 `PageRoot` 按节点名查找，并解析两个充值页组件。 */
     private ensureViews(): void {
         if (!this.totalViewNode && this.pageRoot) {
             this.totalViewNode = this.pageRoot.getChildByName('RechargeTotalPage');
@@ -382,20 +321,12 @@ export class GiftPage extends PopupBase {
             this.dailyView = this.dailyViewNode.getComponent(RechargeDailyView);
         }
     }
+
     // ============================================================
     // 累计充值页
     // ============================================================
 
-    /**
-     * 铺「累计充值」页。
-     *
-     * 数据全在 `rechargeActivityRepository`（活动体系：`CmdActivity` 缓存 + `activityTab` /
-     * `activity` / `rechargeGiftActPlan` 三张表），判定在 `RechargeActivityTable`（纯函数）。
-     * 本类只组装视图模型。
-     *
-     * ⚠️ 图标必须在 `present()` **之前** await 完：行渲染是同步的，边渲染边加载会先闪一帧
-     *   上一行的图（`VScrollView` 回收残影同款缺陷）。
-     */
+    /** 铺「累计充值」页；图标需在 `view.present()` 前加载完，避免行渲染时闪空图。 */
     private async presentTotal(revision: number): Promise<void> {
         const view = this.totalView;
         if (!view) return;
@@ -461,10 +392,8 @@ export class GiftPage extends PopupBase {
     // ============================================================
 
     /**
-     * 铺「每日充值」页（表 `rechargeDaily` + 专属缓存 `CmdRechargeDaily`）。
-     *
-     * ⚠️ 同 `presentTotal`：图标要在 `present()` 之前 await 完；且 await 之后别读上一趟的
-     *   视图状态（那次结果可能已经被换档位 / 关面板作废）。
+     * 铺「每日充值」页（`rechargeDaily` 表 + `CmdRechargeDaily` 缓存）。
+     * 图标同样要在 `view.present()` 前加载完。
      */
     private async presentDaily(revision: number): Promise<void> {
         const view = this.dailyView;
@@ -521,9 +450,6 @@ export class GiftPage extends PopupBase {
             rows,
         });
     }
-    // ============================================================
-    // 灵玉直冲页
-    // ============================================================
 
     // ============================================================
     // 交互
@@ -621,14 +547,7 @@ export class GiftPage extends PopupBase {
         await this.reload();
     }
 
-    /**
-     * 灵玉档位卡的购买按钮。
-     *
-     * ⚠️ 老端走 `SDKMgr.pay(ref.id, "common", 0)`（真实支付），Demo3.8 **没有支付 SDK**
-     *   ⇒ 按既定范式（`FirstRechargeRepository` / `MonthCardGiftRepository`）**不发请求、
-     *   也不假装成功**，明确给一条提示（规则：不静默失败）。
-     */
-    /** 每日充值领奖（day=true 领累计奖励）。 */
+    /** 每日充值领奖；`isAcc` 为真时领累计奖励，否则领单日奖励。 */
     private async onClaimDailyReward(round: number, day: number, isAcc: boolean): Promise<void> {
         if (this.busy) return;
         this.busy = true;
@@ -644,6 +563,7 @@ export class GiftPage extends PopupBase {
         }
     }
 
+    /** 灵玉档位购买入口；支付链路尚未接入，仅提示。 */
     private onPayChannel(_id: number): void {
         this.setHint(GIFT_TEXTS.payMissing, true);
     }
@@ -697,24 +617,21 @@ export class GiftPage extends PopupBase {
     /**
      * 预加载一批 `resId` 的图标。
      *
-     * 两级来源（见 `GiftArt.resolveGiftIconRef`）：`item.icon` 优先，查不到再走
-     * `image/main/resbar` 的货币 / 资源档图。都拿不到的记进负缓存，之后不再重试。
-     *
-     * `items` 传本次数据源的 `item` 表 —— 两个充值页的 item 表来自各自的 repository
-     * （`this.snapshot` 在这个页面可能还是空的 / 是「超值礼包」页的那份）。
+     * `item.icon` 优先，查不到再走 `image/main/resbar`；仍无图则记入负缓存。
+     * `items` 使用调用方传入的 item 表，因为两个充值页的数据源与当前 `snapshot` 不同。
      */
     private async loadIconFrames(
         resIds: readonly number[],
-        items: ReadonlyMap<number, { readonly quality: number; readonly icon: string }> | null = null,
+        items: ReadonlyMap<number, { readonly quality: number; readonly icon: string }>,
     ): Promise<void> {
-        const itemTable = items ?? this.snapshot?.items ?? new Map<number, { readonly quality: number; readonly icon: string }>();
         const wanted: { readonly resId: number; readonly root: string; readonly name: string }[] = [];
+        const seen = new Set<number>();
         for (const resId of resIds) {
-            // `0` = 宝箱那行没有奖励（`reward === null`）占位，跳过。
-            if (!resId) continue;
+            // 0 是「宝箱没有奖励」的占位值。
+            if (resId <= 0 || seen.has(resId)) continue;
+            seen.add(resId);
             if (this.iconFrames.has(resId) || this.missingIcons.has(resId)) continue;
-            if (wanted.some((item) => item.resId === resId)) continue;
-            const ref = resolveGiftIconRef(itemTable.get(resId), resId);
+            const ref = resolveGiftIconRef(items.get(resId), resId);
             if (ref) wanted.push({ resId, root: ref.root, name: ref.name });
             else this.missingIcons.add(resId);
         }
@@ -733,10 +650,9 @@ export class GiftPage extends PopupBase {
         return loadArt(name, GIFT_ART_ROOT);
     }
 
-    /** 大页签（按 x 排序 —— `_children` 序 ≠ 视觉序）。 */
+    /** 大页签按 x 坐标排序，`_children` 顺序不等于视觉顺序。 */
     private get tabButtons(): GiftTabButton[] {
         return this.tabBar.getComponentsInChildren(GiftTabButton)
-            .slice()
             .sort((a, b) => a.node.position.x - b.node.position.x);
     }
 
@@ -769,15 +685,15 @@ export class GiftPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.node.isValid;
     }
 }
 
-/** 提示文字颜色（与首充 / 七日同一口径：正常棕 / 异常红）。 */
+/** 提示文字颜色：正常棕色，错误红色。 */
 const GIFT_HINT_IDLE = new Color(176, 168, 150, 255);
 const GIFT_HINT_ERROR = new Color(226, 88, 74, 255);
 
-/** 「累计充值」页两个页签的文案（唯一出口 `GiftTexts.RECHARGE_TEXTS`）。 */
+/** 「累计充值」页两个页签的文案。 */
 const TOTAL_TAB_LABELS: ReadonlyMap<number, string> = new Map<number, string>([
     [RECHARGE_TAB.base, RECHARGE_TEXTS.tabTotal],
     [RECHARGE_TAB.advanced, RECHARGE_TEXTS.tabAdvanced],

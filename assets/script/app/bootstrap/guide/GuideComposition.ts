@@ -11,6 +11,8 @@ import { GuideDialogView } from '../../guide/ui/GuideDialogView';
 import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
 import { MainTab, MainTabHost } from '../../main/MainTabHost';
 import { CardLineupPage } from '../../card/CardLineupPage';
+import { CardUpgradePage } from '../../card/CardUpgradePage';
+import { GuideEvent, type IGuideCompletePayload } from '../../guide/application/GuideEvents';
 import { MainTaskDetailPage } from '../../maintask/MainTaskDetailPage';
 import type { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { FW } from '../../../framework/FW';
@@ -19,6 +21,7 @@ const GUIDE_DIALOG_PREFAB = 'ui/Guide/GuideDialog';
 
 /** 主界面与章节战斗复用同一装配逻辑，进度继续由 GuideController 和存档持有。 */
 export class GuideComposition extends ControllerBase {
+    private latestState: IGuideViewState | null = null;
     constructor(private readonly context: IControllerContext, private readonly root: Node,
         private readonly phase: 'main' | 'battle', private readonly territoryView: MainTerritoryMap | null = null) {
         super(context, 'guide-composition');
@@ -44,7 +47,7 @@ export class GuideComposition extends ControllerBase {
 
         // 奖励可能由其它功能打开，也可能早于引导完成加载；统一按弹窗实例暂停。
         const rewards = new Set(PopupManager.inst.openedPopups.filter(popup => popup instanceof ShowRewardPage));
-        let latestState: IGuideViewState | null = null;
+        const cardDetails = new Set(PopupManager.inst.openedPopups.filter(popup => popup instanceof CardUpgradePage));
         let ownsMainGoal = false;
         let mainGoal: MainTaskDetailPage | null = null;
         this.own(() => {
@@ -53,9 +56,11 @@ export class GuideComposition extends ControllerBase {
             }
         });
         const render = (state: IGuideViewState): void => {
-            latestState = state;
+            this.latestState = state;
             const battleFocus = state.focusNode.startsWith('Battle/') || state.focusNode.startsWith('BattleResult/');
-            if (rewards.size > 0 || (!state.finished && battleFocus !== (this.phase === 'battle'))) view.hide();
+            const requiredCard = /^cardLevelUp:(\d+)$/.exec(state.completeCond)?.[1];
+            const otherCard = [...cardDetails].some(popup => state.focusNode !== 'CardDetail/BtnUpgrade' || popup.guideCardId !== requiredCard);
+            if (rewards.size > 0 || otherCard || (!state.finished && battleFocus !== (this.phase === 'battle'))) view.hide();
             else {
                 view.render(state);
                 if (!state.finished && state.focusNode === 'Popup/MainGoal'
@@ -77,11 +82,15 @@ export class GuideComposition extends ControllerBase {
             }
         };
         this.listen(VIEW_LIFECYCLE, ({ owner, phase }: IViewLifecycle) => {
-            if (!(owner instanceof ShowRewardPage)) return;
-            if (phase === 'enabled') rewards.add(owner);
-            else if (phase === 'disabled' || phase === 'destroyed') rewards.delete(owner);
+            const popups: Set<object> | null = owner instanceof ShowRewardPage ? rewards : owner instanceof CardUpgradePage ? cardDetails : null;
+            if (!popups) return;
+            if (phase === 'enabled') popups.add(owner);
+            else if (phase === 'disabled' || phase === 'destroyed') popups.delete(owner);
             else return;
-            if (latestState) render(latestState);
+            if (this.latestState) render(this.latestState);
+        });
+        this.listen(GuideEvent.Complete, (event: IGuideCompletePayload) => {
+            if (event.cond === 'cardSelected' && this.latestState) render(this.latestState);
         });
 
         const controller = new GuideController(this.context, {
@@ -113,6 +122,8 @@ export class GuideComposition extends ControllerBase {
         if (this.phase === 'battle') controller.notify('battleEntered');
         // 切页会重建引导；加载完成后按实际页面补报，避免错过页面 ready 事件。
         else if (this.root.getComponent(CardLineupPage)) controller.notify('pageOpened', 'card');
+        const detail = PopupManager.inst.get(CardUpgradePage);
+        if (detail?.guideCardId) controller.notify('cardSelected', detail.guideCardId);
     }
 
     private async createGuideView(): Promise<GuideDialogView | null> {
@@ -132,6 +143,14 @@ export class GuideComposition extends ControllerBase {
             const view = node.getComponent(GuideDialogView);
             if (view) {
                 view.setFocusProvider(key => {
+                    // 详情被误关或重登恢复时，依次找回英雄页、目标卡、升级按钮。
+                    if ((key.startsWith('CardList/') || key === 'CardDetail/BtnUpgrade') && !PopupManager.inst.get(CardUpgradePage)) {
+                        if (!this.root.getComponent(CardLineupPage)) key = 'Main/CardEntry';
+                        else if (key === 'CardDetail/BtnUpgrade') {
+                            const cardId = /^cardLevelUp:(\d+)$/.exec(this.latestState?.completeCond ?? '')?.[1];
+                            if (cardId) key = `CardList/Card_${cardId}`;
+                        }
+                    }
                     if (key === 'Main/CardEntry') {
                         const tab = canvas.getComponentInChildren(MainTabHost)?.getGuideTabNode(MainTab.Hero);
                         return tab ? { node: tab, shape: 'rect' } : null;

@@ -93,7 +93,9 @@ export class ZCSnapshotCodec {
             // 主城耐久：卡表「主城」行（`baseHp + 品级1×cyclePerTierValue`），已拍进 rules。
             const maxHp = isHome ? rules.hqMaxHp : 0;
             const wallMaxHp = isHome ? rules.wallMaxHp : 0;
-            const tileType = isHome || neutralResourceId !== null || !config.playable ? null : tileTypes[config.id];
+            // 资源标记清除后仍可开发，保留与既有抽卡回退一致的全类型随机类型。
+            const tileType = isHome || !config.playable ? null
+                : neutralResourceId !== null ? ZCPvpTileType.AllRandom : tileTypes[config.id];
             return {
                 id: config.id,
                 owner,

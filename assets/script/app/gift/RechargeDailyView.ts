@@ -47,52 +47,25 @@ export interface IRechargeDailyPresentData {
 }
 
 /**
- * 「每日充值」页（`Gift.prefab` 的 `DailyPage`）。
+ * 「每日充值」页。
  *
- * 版面照 FGUI `礼包/组件/子页面/每日充值页面/组件_礼包_每日充值.xml`：
- *   顶部静态提示条 + 「60 档 / 300 档」两个页签 + 顶部累计进度条（其上叠 3 个累计阶段格）
- *   + 可滚动的每日行列表。
- *
- * ## 与 FGUI 原稿的三处差异（都是「原稿没声明 / 声明了但老端不填」）
- *
- * ① 顶部进度条的文本：原稿给它挂了 `controller="显示进度文本,1"`（= 页名「否」）⇒ **不显示文本**，
- *    只有**行内**那个进度条（未挂 controller，用组件默认 `selected="0"` = 「是」）才显示 `v/m`。
- *    → prefab 里 `DailyTopProgress/Value` 已置为隐藏，别再打开。
- * ② `文本_倒计时`（`n2`，"活动倒计时:…"）**不做**：老端无代码填它，且 `CmdRechargeDaily`
- *    结构里没有结束时间（见 `GiftTexts.RECHARGE_TEXTS.dailyCountdownOmitted`）。
- * ③ 红点（`com_rd`）不接：项目统一后面做，本轮不建永远不可见的空节点。
- *
- * ## 分层
- *
- * 取数 / 判定 / 文案全在 `RechargeDailyTable`（纯函数）+ `GiftRepository`；本类只做
- * 「把视图模型铺到子视图」并把点击**回调**给宿主。子视图自己不碰网络。
- *
- * ⚠️ 列表用项目自带虚拟列表：`List/content/RowTemplate` 是它的模板节点（规则 8 的造型）。
- *   两个铁律（`VScrollView` 会静默失效、单测测不出）：
- *   ① `renderItemFn` **只绑一次** ⇒ 回调里必须按 `index` **现取** `this.rowViews[index]`，
- *      禁闭包捕获本趟入参（捕获的症状 = 点第 3 行领到第 1 行的奖励）；
- *   ② 异步预加载必须在 `present()` **之前** await 完，且那时别读 `this.rowViews`（还是上一帧的）。
+ * 顶部为档位页签、累计进度条和三个阶段格，下方是每日行虚拟列表。
+ * 顶部进度条不显示文本；`CmdRechargeDaily` 没有结束时间，因此不显示倒计时。
+ * 本类只铺视图模型，点击通过回调交给宿主。
  */
 @ccclass('RechargeDailyView')
 export class RechargeDailyView extends Component {
-    /**
-     * `Tab60` / `Tab300`：两个档位页签。
-     *
-     * ⚠️ FGUI 原稿里 `tab_0` / `tab_1` 是**页面节点的直接子节点**（没有 TabBar 容器），
-     * prefab 照搬 ⇒ 这里直接收两个节点，不套父容器。
-     * ⚠️ 顺序按 `x` 现排（`_children` 序 ≠ 视觉序）。
-     */
     @property({ type: [Node], tooltip: 'Tab60/Tab300：两个档位页签（按 x 排序）' })
     roundTabs: Node[] = [];
 
     @property({ type: RechargeProgressBar, tooltip: 'DailyTopProgress：顶部累计进度条' })
-    topProgress: RechargeProgressBar = null;
+    topProgress: RechargeProgressBar = null!;
 
     @property({ type: [RechargeDailyStage], tooltip: 'Reward0/1/2：顶部三个累计阶段格' })
     stages: RechargeDailyStage[] = [];
 
     @property({ type: VirtualScrollView, tooltip: 'List：每日行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null;
+    rowList: VirtualScrollView = null!;
 
     /** 换档位（回传 `rechargeDaily.round`）。 */
     onSwitchRound: ((round: number) => void) | null = null;
@@ -103,51 +76,35 @@ export class RechargeDailyView extends Component {
     /** 领顶部累计奖励（点阶段格触发）。 */
     onClaimAcc: ((round: number, day: number) => void) | null = null;
 
-    /**
-     * 行内「去充值 / 前往」按钮。
-     *
-     * ⚠️ 与 `onClaimAcc` **不是**一回事：`goto` 态是「已解锁但没充够」⇒ 老端跳商店；
-     *    累计奖励是点**顶部阶段格**领的（两条完全不同的路径，别合流）。
-     */
+    /** 行内「去充值」按钮，与累计奖励领取是两条路径。 */
     onGoto: ((round: number) => void) | null = null;
 
-    /** 当前行（`renderItemFn` 按 index 现取，不能闭包捕获）。 */
-    private rowViews: readonly IRechargeDailyRowPresent[] = [];
+    /** 当前行；`renderItemFn` 按索引实时读取。 */
+    private rowViews: IRechargeDailyRowPresent[] = [];
 
-    /** 当前阶段格（固定 3 个；回调里按 index 现取）。 */
     private stageViews: readonly IRechargeDailyStagePresent[] = [];
 
-    /** 页签顺序（点击时按 index 现取，不能捕获）。 */
+    /** 页签顺序，点击时按索引读取。 */
     private rounds: readonly number[] = [];
 
-    /** 当前档位。 */
     private selectedRound = 0;
 
-    /** `renderItemFn` 只需绑一次（长驻回调）。 */
-    private rowRendererBound = false;
-
-    /**
-     * 页签的选中 / 未选中底图 —— 直接从 prefab 上那两个页签的 `cc.Sprite` 里**取**，
-     * 不去异步加载（`Tab60` 上烤的是选中图 `ZB_btn01`、`Tab300` 上是未选中图 `ZB_btn02`）。
-     */
+    /** 页签底图直接从 prefab 现有 Sprite 上取，不异步加载。 */
     private tabOnFrame: SpriteFrame | null = null;
 
     private tabOffFrame: SpriteFrame | null = null;
 
     protected onLoad(): void {
         this.captureTabFrames();
-        // ⚠️ `roundTabs` 里装的就是 Node 本身（不是子组件）⇒ 直接 `node.on`，没有第二层 `.node`。
         const tabs = this.tabs;
         for (let index = 0; index < tabs.length; index++) {
             tabs[index].on(Button.EventType.CLICK, () => this.emitSwitch(index), this);
         }
 
-        // 阶段格也是固定 3 个（不虚拟化）⇒ 回调绑一次，动作按 index 现取当趟的视图模型。
         for (let index = 0; index < this.stages.length; index++) {
-            const stage = this.stages[index];
-            if (!stage) continue;
-            stage.onAction = () => this.emitClaimAcc(index);
+            this.stages[index].onAction = () => this.emitClaimAcc(index);
         }
+        this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     /** 铺一次页面（页签 + 顶部进度 + 累计格 + 行列表）。 */
@@ -209,22 +166,19 @@ export class RechargeDailyView extends Component {
     // ============================================================
 
     private presentTop(data: IRechargeDailyPresentData): void {
-        if (!this.topProgress) return;
-        // 顶部条**不带文本**（原稿 `显示进度文本` 页名「否」）⇒ 第三个参数不传。
+        // 顶部进度条不显示文本。
         this.topProgress.render(data.accProgress, data.accTotal);
     }
 
     private presentStages(stages: readonly IRechargeDailyStagePresent[]): void {
         this.stageViews = Array.from(stages);
         for (let index = 0; index < this.stages.length; index++) {
-            const stage = this.stages[index];
-            if (!stage) continue;
             const view = stages[index];
             if (!view) {
-                stage.hide();
+                this.stages[index].hide();
                 continue;
             }
-            stage.render(view.label, view.state, view.qualityFrame, view.iconFrame);
+            this.stages[index].render(view.label, view.state, view.qualityFrame, view.iconFrame);
         }
     }
 
@@ -241,32 +195,20 @@ export class RechargeDailyView extends Component {
     // ============================================================
 
     private presentRows(rows: readonly IRechargeDailyRowPresent[]): void {
-        // ⚠️ 视图模型整体换掉，`renderItemFn` 里按 index **现取**（长驻回调，禁闭包捕获）
         this.rowViews = Array.from(rows);
-
-        const list = this.rowList;
-        if (!list) return;
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            list.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
-        list.refreshList(this.rowViews as unknown[]);
-        // 换档位后回到顶部（两档天数不同，不复位会停在「内容变短后的越界位置」）。
-        list.scrollToTop(false);
+        this.rowList.refreshList(this.rowViews);
+        // 换档位后回到顶部，避免短列表停在上一档的越界位置。
+        this.rowList.scrollToTop(false);
     }
 
-    /** 虚拟列表的行渲染（槽位被 clone 复用 → 每次都按当前 `rowViews` 重铺）。 */
+    /** 虚拟列表行渲染；槽位会被复用，每次按当前索引重铺。 */
     private renderRow(node: Node, index: number): void {
         const view = node.getComponent(RechargeDailyRow);
-        if (!view) return;
-
-        // 回调按 **index 现取** `rowViews[index]`，不能闭包捕获 —— 同一个实例会复用到别的下标。
         view.onAction = () => {
             const row = this.rowViews[index];
             if (!row) return;
             const round = this.selectedRound;
             if (row.buttonKey === 'claim') this.onClaimDay?.(round, row.days);
-            // `goto` = 没充够 ⇒ 老端跳商店，**不是**领累计奖（累计奖走顶部阶段格）。
             else if (row.buttonKey === 'goto') this.onGoto?.(round);
         };
 
@@ -290,13 +232,7 @@ export class RechargeDailyView extends Component {
         return formatText(RECHARGE_TEXTS.dailyAccDay, days);
     }
 
-    /**
-     * 档位页签文案（`round` → 「60档」/「300档」）。
-     *
-     * 老端 `TabGiftEveryDay.getRound()` 就是 `selectIndex === 0 ? 1 : 2` 的硬编码
-     * （页签文案写在 FGUI 上，只有两档）⇒ 这里同样按 `round` 查表，不做「{0}档」拼装
-     * （表里出现第三档时页签会是空串 —— 与老端一致，不是静默编造一个文案）。
-     */
+    /** 档位页签文案；仅有两档，未知档位返回空串。 */
     static roundLabel(round: number): string {
         if (round === 1) return RECHARGE_TEXTS.tabDailyRound1;
         if (round === 2) return RECHARGE_TEXTS.tabDailyRound2;
@@ -309,7 +245,7 @@ export class RechargeDailyView extends Component {
     }
 }
 
-/** 四态按钮文案（唯一出口 `GiftTexts.RECHARGE_TEXTS`，子组件不造字符串）。 */
+/** 按钮四态文案。 */
 const RECHARGE_DAILY_BUTTON_TEXTS: IRechargeDailyButtonTexts = {
     locked: RECHARGE_TEXTS.dailyLocked,
     goto: RECHARGE_TEXTS.dailyGoto,

@@ -1,4 +1,4 @@
-/** 首充礼包固定文案。带 {0} 的模板由调用方 replace。 */
+/** 首充礼包固定文案：前后缀直接拼接，不含占位符。 */
 export const FIRST_RECHARGE_TEXTS = {
     title: '首充礼包',
     gainPrefix: '获得限定皮肤：',

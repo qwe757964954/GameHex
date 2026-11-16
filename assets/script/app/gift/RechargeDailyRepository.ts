@@ -4,6 +4,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { parseRechargeItemMap } from './RechargeItemMap';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
@@ -39,9 +40,7 @@ export interface IRechargeDailyRepository {
 
 const WRITE_TIMEOUT_MS = 5000;
 
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** 读 CmdRechargeDaily 第一行；拿不到返回 null。 */
 function readCmd(): unknown {

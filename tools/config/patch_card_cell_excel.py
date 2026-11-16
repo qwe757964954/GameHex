@@ -18,7 +18,7 @@ from sync_treant_excel import (  # noqa: E402
 
 PATH = os.path.join(ROOT, 'PVP-卡牌.xlsx')
 MEMBER = 'xl/worksheets/sheet1.xml'
-BACKUP = 'C:/Users/Administrator/AppData/Local/Temp/tft_backup'
+BACKUP = os.path.join(os.environ.get('TEMP') or os.environ.get('TMP') or os.getcwd(), 'tft_backup')
 
 # 卡表列顺序（表头第 5 行的字段名，A 起算）。与 pvpCard.json 的键一一对应。
 CARD_COLUMNS = [

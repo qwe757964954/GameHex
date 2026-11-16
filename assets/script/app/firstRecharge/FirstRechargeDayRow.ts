@@ -33,7 +33,7 @@ export interface IFirstRechargeDayRowData {
  *  老客户端靠 FairyGUI 的 `autoItemSize` 干这事，Cocos 的 `cc.Layout` 只支持等宽格子，
  *  所以日牌宽度按 `SlotBar` 的 Layout 结果算（见 `applyLayout`），本类只负责把结果写到节点上。
  *
- *  ⚠️ 「横排」意味着**不能用 `position.y` 判断第几天**：宿主 `FirstRechargePage` 按 `position.x` 排。
+ *  「横排」意味着**不能用 `position.y` 判断第几天**：宿主 `FirstRechargePage` 按 `position.x` 排。
  *
  *  格子数量按配置来：多出来的槽位必须显式 `hide()`，否则上一档的数据会残留在槽位上
  *  （列表复用类 bug 的经典形态）。
@@ -52,11 +52,9 @@ export class FirstRechargeDayRow extends Component {
     /**
      * 行内的奖励格，**按 x 从左到右**排序 —— 渲染顺序契约与设计稿一致。
      *
-     *  ⚠️ 必须用 `getComponentsInChildren`：`getComponents` 只查**本节点自己**
-     *  （引擎 `Node.getComponents` 的语义是 "all components of given type **in the node**"），
-     *  而 `SlotBar` 自己身上一个 `FirstRechargeSlot` 都没有 → 返回空数组、整行静默空着。
-     *  顺带一条：`getComponentsInChildren` 遍历 `_children` 时**不过滤 active**，
-     *  所以被 `hide()` 掉的格子仍在列表里，下标不会错位。
+     *  必须用 `getComponentsInChildren`：`getComponents` 只查本节点，`SlotBar` 上并没有
+     *  `FirstRechargeSlot`，用错会静默返回空数组。它遍历 `_children` 不过滤 active，
+     *  所以被 `hide()` 掉的格子仍占下标，不会错位。
      */
     private get slots(): FirstRechargeSlot[] {
         return this.slotBar.getComponentsInChildren(FirstRechargeSlot)
@@ -81,7 +79,6 @@ export class FirstRechargeDayRow extends Component {
             const reward = data.rewards[index];
             const item = data.items.get(reward.resId);
             slot.node.active = true;
-            //  品质框与图标都必须由宿主**预加载好**再进来（见 `FirstRechargeSlot.render`）
             slot.render(
                 data.iconFrames.get(reward.resId) ?? null,
                 item ? data.qualityFrames.get(qualityFrameName(item.quality)) ?? null : null,

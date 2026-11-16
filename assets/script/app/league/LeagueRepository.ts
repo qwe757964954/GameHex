@@ -5,6 +5,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
 import type { IActivityGoodsInfo as ILeagueGoodsInfo } from '../activity/LayerActivityTable';
 import { CacheMgr } from '../net/CacheMgr';
@@ -1629,6 +1630,4 @@ export const LEAGUE_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;
 export { LeagueEditType };
 
 /** 读一张分表（`remoteRef`）；表缺失时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);

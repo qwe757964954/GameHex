@@ -15,7 +15,11 @@ import {
     spriteFramePath,
     spriteFramePathOf,
 } from '../ArtPaths';
-import { toCount } from '../net/RequestGuard';
+import { toCount } from '../../core/value/Coerce';
+import { asRow } from '../../core/table/RowParse';
+import type { IResGoodsInfo } from '../../core/types/Reward';
+
+export type { IResGoodsInfo };
 
 /** 顶部货币条最多几格（老端 `组件_资源栏` 里 `组件_资源信息` 的摆位上限）。 */
 export const RES_BAR_MAX_SLOTS = 3;
@@ -209,6 +213,51 @@ export interface IItemRefRow {
     readonly name?: unknown;
     readonly icon?: unknown;
     readonly quality?: unknown;
+}
+
+/** `item` 全表 → `resId` → 展示字段；同 resId 后写覆盖（与 activity 口径一致）。 */
+export function parseItemRows(rows: readonly unknown[]): Map<number, IResGoodsInfo> {
+    const map = new Map<number, IResGoodsInfo>();
+    for (const raw of rows ?? []) {
+        const row = asRow(raw);
+        if (!row) continue;
+        const resId = toCount(row.resId);
+        if (resId <= 0) continue;
+        map.set(resId, {
+            name: typeof row.name === 'string' ? row.name : '',
+            quality: toCount(row.quality),
+            icon: typeof row.icon === 'string' ? row.icon : '',
+            iconIsPath: true,
+        });
+    }
+    return map;
+}
+
+/** `roleProperty` 全表 → `resId` → 展示字段；同 resId 后写覆盖。 */
+export function parseRolePropertyRows(rows: readonly unknown[]): Map<number, IResGoodsInfo> {
+    const map = new Map<number, IResGoodsInfo>();
+    for (const raw of rows ?? []) {
+        const row = asRow(raw);
+        if (!row) continue;
+        const resId = toCount(row.resId);
+        if (resId <= 0) continue;
+        map.set(resId, {
+            name: typeof row.name === 'string' ? row.name : '',
+            quality: toCount(row.quality),
+            icon: typeof row.icon === 'string' ? row.icon : '',
+            iconIsPath: false,
+        });
+    }
+    return map;
+}
+
+/** 一个奖励 `resId` 的展示信息：`item` 表优先，查不到再回落 `roleProperty`。 */
+export function rewardGoodsOf(
+    resId: number,
+    items: ReadonlyMap<number, IResGoodsInfo>,
+    resources: ReadonlyMap<number, IResGoodsInfo>,
+): IResGoodsInfo | null {
+    return items.get(resId) ?? resources.get(resId) ?? null;
 }
 
 /**

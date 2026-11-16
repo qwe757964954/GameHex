@@ -36,7 +36,6 @@ import {
     discountTextOf,
     GIFT_CURRENCY_RES_ID,
     GIFT_MAIN_TABS,
-    GIFT_RESOURCE_ICON_IDS,
     GIFT_SHOP_TYPE,
     GIFT_SUB_TAB_ORDER,
     GIFT_TYPE_DAILY,
@@ -154,9 +153,8 @@ test('A5 `parseGiftShopRow` 在 `desc` 为空时判非法（行标题唯一来�
     assert.equal(parseGiftShopRow(null), null);
     assert.equal(parseGiftShopRow('nope' as unknown), null);
 
-    // `title` 与 `desc` 都在时，两个字段各存各的（标题口径由 UI 层决定用 desc）
+    // 行标题只取 `desc`；表里的 `title` 是分组名，不参与商品行展示
     const both = parseGiftShopRow({ ...base, title: '表里标题', desc: '展示标题' });
-    assert.equal(both?.title, '表里标题');
     assert.equal(both?.desc, '展示标题');
 });
 
@@ -365,8 +363,7 @@ test('B3 大页签在 prefab 上绑定主页同款金色选中底板', () => {
     }
 });
 
-test('B4 ⚠️ `roleProperty` 货币档的图标：五档都有图（`8` 洗炼石 2026-09-29 补上）', () => {
-    assert.deepEqual(GIFT_RESOURCE_ICON_IDS, [6, 7, 9, 10]);
+test('B4 `roleProperty` 资源档图标映射（`8` 洗炼石 2026-09-29 补图）', () => {
     assert.equal(GIFT_RES_ICON_ART[10], '图标_幻灵玉', 'coin 的图标是幻灵玉，别再叫元宝');
     // ⚠️ 2026-09-29：`icons/resource/图标_洗炼石.png` 已存在（旧断言「整工程没有这张图」过时），
     //    8 不再降级成「只画品质框」。映射真源 = `roleProperty.json` 的 `icon` 列。
@@ -777,9 +774,8 @@ test('D7 ⚠️ 灵玉直冲只提示「支付功能尚未接入」，不静默�
 
 test('E1 文案表键齐全（页面只从这里取字，别处不许造字符串）', () => {
     const keys = [
-        'title', 'tabSpecial', 'tabLingYu', 'tabJingShi', 'free', 'buy', 'soldOut',
-        'empty', 'loading', 'offline', 'failed', 'buyOk', 'limitSale', 'discount',
-        'firstBuyDouble', 'currency', 'payMissing',
+        'free', 'empty', 'offline', 'failed', 'buyOk', 'limitSale',
+        'discount', 'currency', 'payMissing',
     ] as const;
     for (const key of keys) {
         assert.equal(typeof GIFT_TEXTS[key], 'string', `缺文案键：${key}`);

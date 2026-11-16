@@ -2,12 +2,14 @@
  * 礼包商店的数据口径。纯函数、无引擎依赖，可直接在 Node 单测中运行。
  *
  * 关键约定：
- * - `giftShop.type` 决定子页签；`desc` 是商品名，`title` 只是分组名。
+ * - `giftShop.type` 决定子页签；`desc` 是商品名，表里的 `title` 只是分组名，解析时丢弃。
  * - `priceType = 10` 对应 `roleProperty.coin`，界面统一称“幻灵玉”。
- * - `item` 表主键是 `resId`；货币档 7/8/9/10 的图走 `image/main/resbar`。
+ * - `item` 表主键是 `resId`；货币/资源档 6~10 的图走 `image/main/resbar`。
  *
  * 子页签由 `GIFT_SUB_TAB_ORDER` 与表内实际数据取交集，不跟随表行顺序。
  */
+
+import { formatText, GIFT_TEXTS } from './GiftTexts';
 
 /** 一条奖励：`{ resId, number }`。 */
 export interface IGiftReward {
@@ -21,10 +23,6 @@ export interface IGiftShopRow {
     readonly id: number;
     /** `1` 每日 / `2` 周常 / `3` 月度 / `4` 终身（= 老端 `GiftType`）。 */
     readonly type: number;
-    /** 二级分组；**只有 `type = 4`（终身）用**（`1..6` = 六个系别）。其余恒 `1`。 */
-    readonly type2: number;
-    /** 分组名（只有每个 `type` 的首行有值，如「每日福利」）；**不是商品名**。 */
-    readonly title: string;
     /** 商品名 —— 行标题显示的就是它。 */
     readonly desc: string;
     readonly rewards: readonly IGiftReward[];
@@ -178,8 +176,6 @@ export function parseGiftShopRow(raw: unknown): IGiftShopRow | null {
     return {
         id,
         type,
-        type2: asNumber(row.type2, 1),
-        title: asString(row.title),
         desc,
         rewards: parseRewards(row.rewards),
         priceType: asNumber(row.priceType),
@@ -270,14 +266,14 @@ export function giftShopStateOf(row: IGiftShopRow, buyTimes: number): GiftShopSt
 export function discountTextOf(discount: number): string {
     if (!Number.isFinite(discount)) return '';
     if (discount <= 0 || discount >= 10) return '';
-    return `${discount}折`;
+    return formatText(GIFT_TEXTS.discount, discount);
 }
 
 /** 限购文案；`limit <= 0` 时返回空串（= 不限购，不显示）。 */
 export function limitTextOf(buyTimes: number, limit: number): string {
     if (!Number.isFinite(limit) || limit <= 0) return '';
     const bought = Number.isFinite(buyTimes) && buyTimes > 0 ? buyTimes : 0;
-    return `限购 ${bought}/${limit}`;
+    return formatText(GIFT_TEXTS.limitSale, bought, limit);
 }
 
 /**
@@ -374,13 +370,6 @@ export function parseGiftItemRows(rows: readonly unknown[]): ReadonlyMap<number,
 
 /** `priceType` 的货币 id：`10` = `roleProperty.coin`，界面称“幻灵玉”。 */
 export const GIFT_CURRENCY_RES_ID = 10;
-
-/**
- * 需要单独取图的货币档：灵石 / 铜币 / 体力 / 幻灵玉。
- *
- * 这些档位不在 `item` 表中，图统一放在 `image/main/resbar/`。
- */
-export const GIFT_RESOURCE_ICON_IDS: readonly number[] = [6, 7, 9, 10];
 
 // ============================================================
 // 展示组合（纯函数，页面直接拿去铺 UI）

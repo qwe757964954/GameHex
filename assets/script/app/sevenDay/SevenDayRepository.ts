@@ -20,6 +20,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -91,9 +92,7 @@ const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /**
  * 创角时间（毫秒）。读不到返回 `0` —— 此时 `deriveCurDay` 会退化成「第 1 天」，

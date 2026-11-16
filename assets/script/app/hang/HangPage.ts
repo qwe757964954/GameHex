@@ -1,4 +1,5 @@
 import { _decorator, Button, Label, Node, ProgressBar, SpriteFrame, UITransform } from 'cc';
+import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { POPUP_BLANK_CATCHER, PopupBase } from '../../framework/ui/PopupBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { TerritoryUiEvent, TerritoryViewEvent } from '../territory/application/TerritoryEvents';
@@ -50,8 +51,6 @@ const { ccclass, property } = _decorator;
  * onOpen 走 reload：读表和缓存、预加载图标、渲染静态内容、刷时间和按钮；之后每秒只刷进度和时间。
  * 三个静默降级点：sweepTimes 读不到按 0、月卡状态读不到按未持卡、预加载漏图只留白不报错。
  */
-const TICK_SECONDS = 1;
-
 /**
  * 广告**播放**能力是否可用。
  *

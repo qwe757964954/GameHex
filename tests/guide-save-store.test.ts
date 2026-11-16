@@ -20,6 +20,7 @@ import {
     GUIDE_SAVE_KEY_PREFIX,
     GUIDE_SAVE_VERSION,
     GuideSaveStore,
+    remoteCursorToData,
     restoreGuideProgress,
 } from '../assets/script/app/guide/model/GuideSaveStore';
 import type { GuideProgressData } from '../assets/script/app/guide/model/GuideProgress';
@@ -218,6 +219,70 @@ test('restoreGuideProgress：配置坏掉时返回 null（本次不引导），�
     const store = new GuideSaveStore(owner('bad-config'), createMemoryGuideStorage());
     const broken = parseGuideSteps([{ stepId: '1-1', triggerType: 'firstLogin', nextStep: '9-9' }]);
     assert.equal(restoreGuideProgress(store, broken), null);
+});
+
+test('远端游标：0/0 与表外 stepId 都按「无进度」处理', () => {
+    assert.equal(remoteCursorToData({ funcId: 1, step1: 0, step2: 0 }, STEPS), null);
+    assert.equal(remoteCursorToData({ funcId: 1, step1: 9, step2: 9 }, STEPS), null);
+});
+
+test('远端游标：按「最后已完成步」展开成完成前缀与下一步', () => {
+    const first = remoteCursorToData({ funcId: 1, step1: 1, step2: 1 }, STEPS);
+    assert.ok(first);
+    assert.equal(first.currentStepId, '1-2');
+    assert.deepEqual(first.completedSteps, ['1-1']);
+
+    const middle = remoteCursorToData({ funcId: 1, step1: 6, step2: 3 }, STEPS);
+    assert.ok(middle);
+    assert.equal(middle.currentStepId, '7-1');
+    assert.equal(middle.completedSteps.length, 14);
+});
+
+test('远端游标：最后一步展开为已结束', () => {
+    const last = remoteCursorToData({ funcId: 1, step1: 8, step2: 1 }, STEPS);
+    assert.ok(last);
+    assert.equal(last.currentStepId, '');
+    assert.equal(last.completedSteps.length, STEPS.length);
+    assert.equal(last.skipped, false);
+});
+
+test('远端校正：领先时采用并落盘，startedAt 保留首次时间', () => {
+    const store = new GuideSaveStore(owner('remote-ahead'), createMemoryGuideStorage());
+    store.save(dataOf({ currentStepId: '1-2', completedSteps: ['1-1'] }), 1000);
+
+    assert.equal(store.applyRemoteCursor({ funcId: 1, step1: 2, step2: 2 }, STEPS, 2000), true);
+    const saved = store.load();
+    assert.ok(saved);
+    assert.equal(saved.currentStepId, '3-1');
+    assert.equal(saved.completedSteps.length, 5);
+    assert.equal(saved.startedAt, 1000);
+    assert.equal(saved.updatedAt, 2000);
+});
+
+test('远端校正：落后时保留本地进度，不倒退', () => {
+    const store = new GuideSaveStore(owner('remote-behind'), createMemoryGuideStorage());
+    store.save(dataOf({
+        currentStepId: '3-1',
+        completedSteps: ['1-1', '1-2', '1-3', '2-1', '2-2'],
+    }), 1000);
+
+    assert.equal(store.applyRemoteCursor({ funcId: 1, step1: 1, step2: 1 }, STEPS, 2000), false);
+    const saved = store.load();
+    assert.ok(saved);
+    assert.equal(saved.currentStepId, '3-1');
+    assert.equal(saved.updatedAt, 1000);
+});
+
+test('远端校正：本地为空时用远端前缀恢复', () => {
+    const store = new GuideSaveStore(owner('remote-cold'), createMemoryGuideStorage());
+    assert.equal(store.load(), null);
+
+    assert.equal(store.applyRemoteCursor({ funcId: 1, step1: 6, step2: 3 }, STEPS, 500), true);
+    const saved = store.load();
+    assert.ok(saved);
+    assert.equal(saved.currentStepId, '7-1');
+    assert.equal(saved.completedSteps.length, 14);
+    assert.equal(saved.startedAt, 500);
 });
 
 test('端到端：推进 5 步 → 存档 → 重启恢复 → 继续走到结束', () => {

@@ -49,9 +49,6 @@
         "__id__": 94
       },
       {
-        "__id__": 130
-      },
-      {
         "__id__": 138
       },
       {
@@ -1081,7 +1078,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -640,
+      "y": -240,
       "z": 0
     },
     "_lrot": {
@@ -1121,8 +1118,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 650,
-      "height": 940
+      "width": 340,
+      "height": 460
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2317,6 +2314,9 @@
       },
       {
         "__id__": 119
+      },
+      {
+        "__id__": 130
       }
     ],
     "_active": true,
@@ -2334,7 +2334,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -448,
+      "y": -380,
       "z": 0
     },
     "_lrot": {
@@ -2425,7 +2425,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 660,
-      "height": 154
+      "height": 184
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2520,7 +2520,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": -170,
-      "y": 82,
+      "y": 97,
       "z": 0
     },
     "_lrot": {
@@ -2656,7 +2656,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": -292,
-      "y": 92,
+      "y": 107,
       "z": 0
     },
     "_lrot": {
@@ -2792,7 +2792,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": -170,
-      "y": 82,
+      "y": 97,
       "z": 0
     },
     "_lrot": {
@@ -2951,7 +2951,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -2,
+      "y": 12,
       "z": 0
     },
     "_lrot": {
@@ -3017,11 +3017,11 @@
     "__prefab": {
       "__id__": 123
     },
-    "_lineHeight": 42,
+    "_lineHeight": 38,
     "_string": "看到那个鼓起来的土包没？\n<color=#FFD129>点它</color>——就当敲我脑门。",
     "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_fontSize": 28,
+    "_fontSize": 27,
     "_fontColor": {
       "__type__": "cc.Color",
       "r": 255,
@@ -3071,7 +3071,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 660,
-      "height": 154
+      "height": 184
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -3101,7 +3101,7 @@
     "_left": 0,
     "_right": 0,
     "_top": 0,
-    "_bottom": 115,
+    "_bottom": 168,
     "_horizontalCenter": 0,
     "_verticalCenter": 0,
     "_isAbsLeft": true,
@@ -3139,7 +3139,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
-      "__id__": 1
+      "__id__": 94
     },
     "_children": [],
     "_active": true,
@@ -3159,8 +3159,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 0,
-      "y": -348,
+      "x": 223,
+      "y": -63,
       "z": 0
     },
     "_lrot": {
@@ -3200,8 +3200,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 360,
-      "height": 44
+      "width": 170,
+      "height": 30
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -3231,18 +3231,18 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 255,
-      "g": 217,
-      "b": 70,
+      "r": 239,
+      "g": 212,
+      "b": 148,
       "a": 255
     },
     "_string": "点击继续 ▼",
-    "_horizontalAlign": 1,
+    "_horizontalAlign": 2,
     "_verticalAlign": 1,
     "_actualFontSize": 22,
-    "_fontSize": 22,
+    "_fontSize": 20,
     "_fontFamily": "Arial",
-    "_lineHeight": 36,
+    "_lineHeight": 28,
     "_overflow": 1,
     "_enableWrapText": true,
     "_font": null,
@@ -3294,12 +3294,12 @@
     "__prefab": {
       "__id__": 136
     },
-    "_alignFlags": 20,
+    "_alignFlags": 36,
     "_target": null,
     "_left": 0,
-    "_right": 0,
+    "_right": 22,
     "_top": 0,
-    "_bottom": 270,
+    "_bottom": 14,
     "_horizontalCenter": 0,
     "_verticalCenter": 0,
     "_isAbsLeft": true,
@@ -3754,7 +3754,8 @@
         "__id__": 10
       }
     ],
-    "_id": ""
+    "_id": "",
+    "portraitHeight": 460
   },
   {
     "__type__": "cc.CompPrefabInfo",

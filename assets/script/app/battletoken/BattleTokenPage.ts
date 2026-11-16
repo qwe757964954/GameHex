@@ -1,4 +1,5 @@
 import { _decorator, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { routedLoad } from '../common/RoutedResource';
@@ -53,8 +54,6 @@ import { TabButton } from '../common/TabButton';
 const { ccclass, property } = _decorator;
 
 /** 倒计时刷新间隔（秒）。 */
-const TICK_SECONDS = 1;
-
 /**
  * 战令主控 —— 挂在 `assets/resources/ui/BattleToken/BattleToken.prefab` 的根节点上。
  *

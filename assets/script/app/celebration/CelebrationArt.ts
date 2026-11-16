@@ -95,12 +95,12 @@ export const OS_ART_NAMES = {
     barBg: 'common/cu_bb_img03',
 };
 
-/** `OS_ART_NAMES` 的全部 key（生成器与单测做「有没有漏摆」的反向对账）。 */
+/** `OS_ART_NAMES` 的全部 key（单测做「有没有漏摆」的反向对账）。 */
 export const OS_ART_ALL_KEYS = Object.keys(OS_ART_NAMES);
 
 /**
  * 需要 `Sprite._type = SLICED` 的图，即 `.meta` 里任意一条 border 非 0。
- * 这份名单不是第二真源，`tmp/gen_osrank.mjs` 会与 `.meta` 对账，不一致直接 fail。
+ * 这份名单不是第二真源，`tests/celebration.test.ts` 的 F1 会与 `.meta` 对账。
  */
 export const OS_ART_SLICED = new Set<string>([
     'titleBg',      // titlebg                    border 228,18,247,19

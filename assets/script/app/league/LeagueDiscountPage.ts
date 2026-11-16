@@ -5,6 +5,7 @@ import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompleti
  * 有意偏离老端：砍价和购买共用状态三页显隐；打开时串行拉活动列表和联盟详情。
  */
 
+import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { _decorator, Button, Color, Graphics, Label, Node, Sprite, UITransform } from 'cc';
 import { FW } from '../../framework/FW';
 import { CommonTips } from '../common/CommonTips';
@@ -60,8 +61,6 @@ const STRIKE_FALLBACK_W = 100;
 const STRIKE_FALLBACK_H = 3;
 
 /** 倒计时刷新间隔（老端 `toolSet.addTimer(1000, …)`）。 */
-const TICK_SECONDS = 1;
-
 @ccclass('LeagueDiscountPage')
 export class LeagueDiscountPage extends PopupBase {
     /**

@@ -1,6 +1,9 @@
 /**
  * 网络请求的通用守卫工具，纯函数、零引擎依赖，Node 单测可直接 import。
  */
+import { toCount, toIdString, toPositiveInt } from '../../core/value/Coerce';
+
+export { toCount, toIdString, toPositiveInt };
 
 /**
  * 给一个 Promise 兜**硬超时**：`ms` 内没兑现就用 `fallback()` 顶上，**保证一定兑现**。
@@ -32,61 +35,4 @@ export function withTimeout<T>(promise: Promise<T> & { cancel?: () => void }, ms
         // 原 Promise 若 reject 也走同一个 fallback，调用方永远不会收到 reject。
         void promise.then(finish, fail);
     });
-}
-
-/**
- * `Long` / `string` / `number` → **十进制字符串**；认不出来返回空串。
- *
- * 用于 `uint64` 这类 id 字段：protobufjs 开了 `--force-long`，运行时拿到的是
- * `Long` 对象（`{low, high, unsigned}`），直接 `String()` 会得到 `"1234"` 或 `"[object Object]"`，
- * 取决于 protobufjs 版本与 `configure()` 设置 —— 不能赌。工程内 id 一律走字符串口径。
- *
- * 走字符串而不是 number：`uint64` 超过 `Number.MAX_SAFE_INTEGER` 时 `toNumber()` 会静默丢精度。
- */
-export function toIdString(value: unknown): string {
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
-    if (value && typeof value === 'object') {
-        const long = value as { toString?: () => string; low?: number; high?: number };
-        // protobufjs 的 Long 覆盖了 toString()，且带 `unsigned` 标记；
-        // 但普通对象也有默认 toString（返回 "[object Object]"），所以先用 low/high 判断形状。
-        if (typeof long.low === 'number' && typeof long.high === 'number') {
-            if (typeof long.toString === 'function') {
-                const text = long.toString();
-                if (text && text !== '[object Object]') return text;
-            }
-            return String(long.high * 4294967296 + (long.low >>> 0));
-        }
-        if (typeof long.toString === 'function') {
-            const text = long.toString();
-            if (text && text !== '[object Object]') return text;
-        }
-    }
-    return '';
-}
-
-/** `Long` / `string` / `number` → 有限数值；认不出来返回 0。用于 `uint32` 这类计数/资质字段。 */
-export function toCount(value: unknown): number {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-    }
-    if (value && typeof value === 'object') {
-        const long = value as { toNumber?: () => number; low?: number; high?: number };
-        if (typeof long.low === 'number' && typeof long.high === 'number') {
-            return long.high * 4294967296 + (long.low >>> 0);
-        }
-        if (typeof long.toNumber === 'function') {
-            const parsed = long.toNumber();
-            return Number.isFinite(parsed) ? parsed : 0;
-        }
-    }
-    return 0;
-}
-
-/** 正整数字段（各种 `uint32` 的 id 都是这个口径）；非法返回 `null`。 */
-export function toPositiveInt(value: unknown): number | null {
-    const num = toCount(value);
-    return Number.isSafeInteger(num) && num > 0 ? num : null;
 }

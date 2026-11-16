@@ -65,7 +65,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         ControllerBase: { ControllerBase },
         GuideController: { GuideController: FakeGuideController },
         GuideLoader: { loadGuideSteps: async () => [{}], loadGuideDialog: () => dialogs, loadGuidePortraits: async () => new Map() },
-        GuideStorageAdapter: { createGuideSaveStore: () => ({}) },
+        GuideStorageAdapter: { createGuidePersistence: () => ({ store: {}, outbox: {} }) },
         GuideGateway: { GameNetGuideGateway: class {} },
         GuideDialogView: { GuideDialogView: class {} }, GuideFocusAnchor: { GuideFocusAnchor: class {} },
         MainTabHost: { MainTabHost: class {}, MainTab: { Hero: 'hero' } }, FW: { FW: {} },

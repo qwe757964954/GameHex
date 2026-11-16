@@ -10,21 +10,21 @@
 //   ② `unitAttackHitTime` = 总时长 × 40%（用户口径「伤害帧取攻击动画总时长的 40% 位置」）；
 //   ③ 攻击间隔 `unitAttackInterval` 不动 —— 那是平衡值，改它等于改 DPS。
 //
-// 两个刻意不动的例外：
+// 一个刻意不动的例外：
 //   · 68033 运动霸：冲刺就是它的普攻，节拍由 0.7s（冲锋 + 原地待机）决定，
-//     攻击动作在冲刺期循环播放，不存在被砍断的问题，改时长反而会把冲锋节奏拉长；
-//   · 68030 篮球天才：动作 1.933s 比间隔 1.8s 长，改完后实际出手间隔会被动作长度顶到 1.933s
-//     （−7% 输出）。要完全对上 1.8s 只能把动作砍回 1.8s，与本次目标冲突，先按「动作播完整」优先。
+//     攻击动作在冲刺期循环播放，不存在被砍断的问题，改时长反而会把冲锋节奏拉长。
 //
 // 三处同值（表源 + 导出产物 + 运行时打包态）：
 //   ① doc/塔防数据配置/PVP-卡牌.xlsx（Z / AA 列，由 patch_attack_anim_excel.py 负责）
 //   ② doc/塔防数据配置/json/client/pvpCard.json（转表产物，紧凑行数组）
 //   ③ assets/remoteRef/pvpCard.json（运行时，列存 {k,v,c}）
 const { readTable, writeTable } = require('./ref_table_io.js');
+const nodePath = require('node:path');
 
+const CITY_ROOT = nodePath.resolve(__dirname, '..', '..', '..');
 const TABLES = [
-    'D:/Alan/Project/POW/doc/塔防数据配置/json/client/pvpCard.json',
-    'assets/remoteRef/pvpCard.json',
+    nodePath.join(CITY_ROOT, 'doc', '塔防数据配置', 'json', 'client', 'pvpCard.json'),
+    nodePath.join(__dirname, '..', '..', 'assets', 'remoteRef', 'pvpCard.json'),
 ];
 
 // 卡 id → 实测 attack 动作总时长（秒）。来源：spine .skel 的 attack 动画 duration
@@ -58,8 +58,8 @@ const MEASURED = {
     68026: 0.6666667, // 麻辣铁锅
     68027: 0.5333333, // 爆锤莲王
     68028: 1.3, // 饥饿战士
-    68029: 1.2333333, // 金发统领
-    68030: 1.9333333, // 篮球天才（见文件头例外②）
+    68029: 1.5, // 金发统领（2026-11-16 美术更新）
+    68030: 0.7333333, // 篮球天才（2026-11-16 美术更新）
     68031: 1.3, // 艺术家
     68032: 1.5, // 吉他手
     68034: 1.3333333, // 哈利波特(魔术师)

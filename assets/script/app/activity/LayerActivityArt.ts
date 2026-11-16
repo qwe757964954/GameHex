@@ -29,9 +29,7 @@ import {
     RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT,
     spriteFramePath,
 } from '../ArtPaths';
-import { resolveItemIconPath, resolveItemIconRef } from '../sevenDay/SevenDayArt';
-import { resIconRoot } from '../common/ResTypes';
-import type { ActivityBoxPhase, IActivityGoodsInfo } from './LayerActivityTable';
+import type { ActivityBoxPhase } from './LayerActivityTable';
 
 /** 活动美术目录（相对 `resources` 的路径）。 */
 export const ACTIVITY_ART_ROOT = 'image/activity';
@@ -123,56 +121,27 @@ export {
     qualityFrameName,
 } from '../common/QualityFrameArt';
 
-/**
- * 道具图标口径 —— **`item` 那一支与七日狂欢完全一致**（资源路径直通 + 只认 `icons/` 前缀）。
- * 转出去是为了让活动模块不直接依赖 sevenDay 目录。
- *
- * ⚠️ 这只是**两支**里的一支，奖励图标请统一走 `resolveRewardIconRef`。
- */
-export { resolveItemIconPath, resolveItemIconRef };
-export type { ISevenDayIconRef as IActivityIconRef } from '../sevenDay/SevenDayArt';
+/** 奖励图标实现已归位到 `common/RewardIcon`；这里保留旧路径，调用方可继续 import activity。 */
+export {
+    resolveItemIconPath,
+    resolveItemIconRef,
+    resolveRewardIconRef,
+} from '../common/RewardIcon';
+export type { IItemIconRef as IActivityIconRef } from '../common/RewardIcon';
 
 /**
  * 资源类道具（货币 / 属性，`roleProperty` 表）的图标目录。
  *
- * ⚠️ 值转发 `ArtPaths.RESOURCE_ICON_ART_ROOT`（**唯一真源**）——别在这里写字面量：
- * 同值常量曾经散在 `HangArt` / `GiftArt` 与若干注释里，"改一处漏一处"。
+ * ⚠️ 值转发 `ArtPaths.RESOURCE_ICON_ART_ROOT`（**唯一真源**）——别在这里写字面量。
  */
 export const RESOURCE_ICON_ART_ROOT = ART_RESOURCE_ICON_ROOT;
 
 /**
  * `roleProperty` 里**不落 `icons/resource/`** 的裸名图标例外表 + 通用图标目录。
- *
- * ⚠️ 定义已搬到 `common/ResTypes.ts`（资源口径**唯一出口**，`resIconRoot()` 同口径），
- * 这里只**转发**保留对外 import 面 —— 别在本文件重新写一份（覆盖表有 B11 防锈用例）。
+ * 定义在 `common/ResTypes.ts`（资源口径唯一出口），这里只转发保留对外 import 面。
  */
 export {
     COMMON_ICON_ART_ROOT,
     ROLE_PROPERTY_ICON_ROOT_OVERRIDE,
+    resIconRoot,
 } from '../common/ResTypes';
-export { resIconRoot };
-
-/**
- * 一条奖励的展示信息 → 装配用 `{ root, name }`；解析不出返回 `null`（奖励格降级成只画品质框）。
- *
- * ⚠️ **奖励的图标必须走这个函数，不能只走 `resolveItemIconRef`。**
- * 每日任务的奖励里混着两类东西（老端 `ModelGoods.GetGoodsIconKeyByRefId` 也是这么分流的两支）：
- *
- * | 来源 | 举例 | `icon` 存的是 | 怎么解析 |
- * |---|---|---|---|
- * | `item` 表（`iconIsPath = true`） | 图纸 / 升级石 | **相对 `resources` 的路径** `icons/item/xxx` | 直通，且只认 `icons/` 前缀 |
- * | `roleProperty` 表（`iconIsPath = false`） | 银币 7 / 洗炼石 8 / 金币 10 / **活跃度 15** | FGUI 组件名 `图标_活跃度` | 默认 `icons/resource/<name>`，**例外查 `ROLE_PROPERTY_ICON_ROOT_OVERRIDE`** |
- *
- * 只处理 `item` 那一支时的症状：5 条任务 × 2 个奖励 = 10 个格子，其中 8 个**只剩品质框、
- * 没有图标**（每条任务都奖励 40 活跃度，所以几乎每行都缺）—— 静默降级、不报错，只有端到端
- * 探针量「奖励格 icon 有没有加载出来」才逮得到。
- *
- * ⚠️ `roleProperty` 那 4 张图（铜币 / 洗炼石 / 幻灵玉 / 活跃度）原本不在工程里，
- * 是从 zarts `UIIcon/assets/图标/道具/` 拷进来的；`活跃度.png` 进来时按 `icon.json` 的 key
- * 改名成 `图标_活跃度.png`，与另外三张的命名口径对齐。
- */
-export function resolveRewardIconRef(info: IActivityGoodsInfo | null): { root: string; name: string } | null {
-    if (!info || !info.icon) return null;
-    if (info.iconIsPath) return resolveItemIconRef(info.icon);
-    return { root: resIconRoot(info.icon), name: info.icon };
-}

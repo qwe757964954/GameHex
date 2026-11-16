@@ -15,6 +15,8 @@
  * 四张庆典表都是压缩表（`{k,v,c}`），解压由 `RefUtil` 的 `RefAsset` 完成，所以下面的 `parseXxxRows` 只洗对象行。
  */
 
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+
 // ============================================================
 // 类型与枚举
 // ============================================================
@@ -237,18 +239,9 @@ export function toText(value: unknown): string {
     return '';
 }
 
-/** 洗一条奖励数组（`{resId, number}`），`resId <= 0` 的项丢掉。 */
+/** 洗一条奖励数组（`{resId, number}`），`resId <= 0` 的项丢掉；number=0 保留（庆典的「仅展示」条目）。 */
 export function parseRewards(raw: unknown): ICelebrationReward[] {
-    if (!Array.isArray(raw)) return [];
-    const out: ICelebrationReward[] = [];
-    for (const entry of raw) {
-        if (!entry || typeof entry !== 'object') continue;
-        const r = entry as Record<string, unknown>;
-        const resId = toCount(r.resId);
-        if (resId <= 0) continue;
-        out.push({ resId, number: toCount(r.number) });
-    }
-    return out;
+    return parseRewardAmounts(raw, { minNumber: 0 });
 }
 
 /** 一行原始数据的对象视图；不是对象返回 `null`。 */

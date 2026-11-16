@@ -6,11 +6,9 @@
  *   本文件     「读表 / 读缓存 / 读写本地跨天戳 / 调弹窗管理器」这些必须碰引擎的活
  *   触发入口   `MainTabsComposition`（主界面页签就绪后，对齐老端 `TabFight.init()`）
  *
- * 老端的对应物：
- *   `TabFight.init()`（判定 + 开界面）+ `VORole.GetIsNewDay()/SaveToday()`（跨天戳）
- *   + `ModelChapterNew.GetMaxChallengeLevel()`（关卡进度）+ `TF_LayerBattleWin/Fail`（写战绩）。
+ * 老端对应 `TabFight.init()`（判定 + 开界面）；跨天戳与关卡进度分别来自 `VORole` / `ModelChapterNew`。
  *
- *  ⚠️ **唯一对外入口是 `checkFirstRechargeOnEnterMain()`**，别在别处重复实现判定 ——
+ *  **唯一对外入口是 `checkFirstRechargeOnEnterMain()`**，别在别处重复实现判定 ——
  *  触发条件、跨天戳的读写、战绩的清零三者必须成对出现，散开写必出"同一天弹两次"或"永远不弹"。
  */
 
@@ -51,18 +49,12 @@ interface IFirstRechargeLocalSave {
     lastLoginDayTime?: number;
 }
 
-// ============================================================
-// 上一场关卡战斗的结果（对齐老端 `ModelRole.lastBattleResult`）
-// ============================================================
-
 /**
- * 模块级的「上一场关卡战斗结果」。
+ * 模块级的「上一场关卡战斗结果」（对齐老端 `ModelRole.lastBattleResult`）。
  *
- * ⚠️ **PVE 关卡战斗在 Demo3.8 还没接**（现在只有 `ZC_BATTLE_TYPE_PVP = 1001`）。
+ * **PVE 关卡战斗在 Demo3.8 还没接**（现在只有 `ZC_BATTLE_TYPE_PVP = 1001`）。
  * 关卡结算落地后，在结算入口调 `notifyLevelBattleResult(level, 1, star)`（胜利）
  * 或 `notifyLevelBattleResult(level, 0, 0)`（失败）即可接上，本文件不用改。
- *
- * 老端写这个值的地方是 `TF_LayerBattleWin.ts` / `TF_LayerBattleFail.ts`。
  */
 let lastBattleResult: IFirstRechargeBattleResult = EMPTY_BATTLE_RESULT;
 
@@ -81,21 +73,16 @@ export function notifyLevelBattleResult(level: number, result: number, star: num
     };
 }
 
-/** 清零 —— 与老端 `TabFight.init()` 末尾那三行同义。 */
+/** 清零待处理的关卡战绩（老端同样在判定结束时无条件清零）。 */
 function clearLevelBattleResult(): void {
     lastBattleResult = EMPTY_BATTLE_RESULT;
 }
 
-// ============================================================
-// 关卡进度
-// ============================================================
-
 /**
  * 某一关是否已通关 —— `CmdBattleLevel.star >= 1`。
  *
- * 老端走的是 `VOBattleChapter.GetStageIsClean(stage)`（按章-关查）；Demo3.8 的缓存
- * 直接按 `level` 存一行 `CmdBattleLevel { level, star, takeStar, battleTime, buyTimes }`，
- * 所以「star 至少 1」就是通关的同义口径。
+ * Demo3.8 的缓存按 `level` 存一行 `CmdBattleLevel { level, star, takeStar, battleTime, buyTimes }`，
+ * 所以「star 至少 1」就是通关口径（老端按章-关查 `GetStageIsClean`）。
  */
 function isLevelPassed(level: number): boolean {
     try {
@@ -132,10 +119,6 @@ export async function getMaxChallengeLevel(): Promise<number> {
 
     return deriveMaxChallengeLevel(allRows, isLevelPassed);
 }
-
-// ============================================================
-// 跨天戳（本地存档）
-// ============================================================
 
 /** 取本机玩家的 roleId；拿不到就退回 `unknown`（此时跨天戳退化成"全局一份"）。 */
 function currentRoleId(): string {
@@ -184,10 +167,6 @@ function saveToday(roleId: string, nowMs: number): void {
     }
 }
 
-// ============================================================
-// 唯一对外入口
-// ============================================================
-
 /** 一次检查的结果（日志 / 测试用，业务不需要处理）。 */
 export interface IFirstRechargeCheckOutcome {
     readonly reason: FirstRechargeTriggerReason;
@@ -206,7 +185,7 @@ export interface IFirstRechargeCheckOutcome {
  *   3. **无论弹没弹，最后都把战绩清零** —— 老端无条件清零，
  *      否则同一场战斗的结果会在每次进主界面时被重复消费。
  *
- * ⚠️ 本函数**永不 reject**（调用方多半是 `void x().then(...)`，抛出去就是 unhandled rejection）。
+ * 本函数**永不 reject**（调用方多半是 `void x().then(...)`，抛出去就是 unhandled rejection）。
  */
 export async function checkFirstRechargeOnEnterMain(caller?: object): Promise<IFirstRechargeCheckOutcome> {
     try {

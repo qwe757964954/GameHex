@@ -49,7 +49,7 @@ test('查询与更新使用真实协议名、嵌套字段及请求归属，并�
         return true;
     });
     assert.equal(JSON.stringify(await h.gateway.load()), JSON.stringify({ funcId: 1, step1: 2, step2: 1 }));
-    assert.equal(await h.gateway.update('2-2'), true);
+    assert.equal(await h.gateway.update('2-2'), 'ok');
     assert.deepEqual(sent.map(r => r.getReqMsgProtoName()), ['CmdFunctionGuideInfoReqMsg', 'CmdFunctionGuideUpdateReqMsg']);
     assert.equal(JSON.stringify(sent[0].cmdReqMsg), '{"funcId":1}');
     assert.equal(JSON.stringify(sent[1].cmdReqMsg), '{"info":{"funcId":1,"step1":2,"step2":2}}');
@@ -81,26 +81,32 @@ test('快速推进等待查询结束，再按序更新，退出后取消在途�
     assert.equal(sent[1].canSend?.(), false);
     sent[1].fCallback({ succ: 1 });
     finish(false);
-    assert.equal(await first, false);
-    assert.equal(await second, false);
+    assert.equal(await first, 'retry');
+    assert.equal(await second, 'retry');
     assert.equal(sent.length, 2);
 });
 
-test('查询校验 funcId/uint32；succ 非 1、断线和异常均返回失败', async () => {
+test('查询：0/0 视为从未开始，不返回可校正的游标', async () => {
+    const h = harness(async r => { r.fCallback({ infos: { funcId: 1, step1: 0, step2: 0 } }); return true; });
+    assert.equal(await h.gateway.load(), null);
+    h.gateway.dispose();
+});
+
+test('查询校验 funcId/uint32；succ 非 1、断线和异常均返回可重试', async () => {
     for (const infos of [null, { funcId: 2, step1: 0, step2: 0 }, { funcId: 1, step1: -1, step2: 0 }, { funcId: 1, step1: 1.5, step2: 1 }]) {
         const h = harness(async r => { r.fCallback({ infos }); return true; });
         assert.equal(await h.gateway.load(), null);
         h.gateway.dispose();
     }
     const h = harness(async r => { r.fCallback({ succ: 0 }); return true; });
-    assert.equal(await h.gateway.update('2-1'), false);
-    for (const id of ['skip', '', '0-0', '-1-1', '4294967296-1']) assert.equal(await h.gateway.update(id), false);
+    assert.equal(await h.gateway.update('2-1'), 'retry');
+    for (const id of ['skip', '', '0-0', '-1-1', '4294967296-1']) assert.equal(await h.gateway.update(id), 'invalid');
     h.net.isConnected = false;
     assert.equal(await h.gateway.load(), null);
-    assert.equal(await h.gateway.update('2-1'), false);
+    assert.equal(await h.gateway.update('2-1'), 'retry');
     const failing = harness(async () => { throw new Error('offline'); });
     assert.equal(await failing.gateway.load(), null);
-    assert.equal(await failing.gateway.update('2-1'), false);
+    assert.equal(await failing.gateway.update('2-1'), 'retry');
     h.gateway.dispose();
     failing.gateway.dispose();
 });

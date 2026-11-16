@@ -31,6 +31,12 @@
  */
 
 import { toCount } from '../net/RequestGuard';
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../common/ResTypes';
+import type { IResGoodsInfo } from '../common/ResTypes';
+
+export { parseItemRows, parseRolePropertyRows, rewardGoodsOf };
+export type { IResGoodsInfo as IActivityGoodsInfo };
 
 /** `activity.type`：每日挑战。 */
 export const DAY_CHALLENGE_ACT_TYPE = 1001;
@@ -76,23 +82,6 @@ export interface IActivityTabRow {
     readonly types: readonly number[];
     readonly desc: string;
     readonly key: string;
-}
-
-/**
- * 奖励展示要用的字段 —— `item` 表与 `roleProperty` 表**统一成这一个形状**。
- *
- * ⚠️ 两张表的 `icon` 列**语义不一样**，`iconIsPath` 就是用来区分它们的：
- *   - `item`：存的是**相对 `assets/resources/` 的资源路径**（`icons/item/图标_兵书随机`，规则 56）
- *     ⇒ `iconIsPath = true`；
- *   - `roleProperty`：**没迁过**，存的还是 FGUI 组件名（`图标_活跃度`）⇒ `iconIsPath = false`，
- *     落到 `icons/resource/<name>`（见 `LayerActivityArt.resolveRewardIconRef`）。
- */
-export interface IActivityGoodsInfo {
-    readonly name: string;
-    readonly quality: number;
-    readonly icon: string;
-    /** `icon` 是否已经是资源路径（见上面的说明）。 */
-    readonly iconIsPath: boolean;
 }
 
 /** 一条任务的服务器状态（`CmdDayChallengeTask`）。 */
@@ -143,17 +132,7 @@ function asRow(raw: unknown): Record<string, unknown> | null {
 
 /** 读一条奖励数组；非法条目跳过。 */
 export function parseRewards(raw: unknown): IActivityReward[] {
-    const out: IActivityReward[] = [];
-    if (!Array.isArray(raw)) return out;
-    for (const item of raw) {
-        const row = asRow(item);
-        if (!row) continue;
-        const resId = toCount(row.resId);
-        const number = toCount(row.number);
-        if (resId <= 0 || number <= 0) continue;
-        out.push({ resId, number });
-    }
-    return out;
+    return parseRewardAmounts(raw);
 }
 
 /** `dayChallengeActTask` 全表 → 归一化行（按 `order` 升序）。 */
@@ -232,70 +211,6 @@ export function parseTabRows(rows: readonly unknown[]): IActivityTabRow[] {
     return out;
 }
 
-/**
- * `item` 全表 → `resId` → 展示字段。
- *
- * ⚠️ `item.icon` 现在存的是**相对 `assets/resources/` 的资源路径**（规则 56）⇒ `iconIsPath = true`。
- * 解析交给 `LayerActivityArt.resolveRewardIconRef`（只认 `icons/` 前缀）。这里只搬字段。
- */
-export function parseItemRows(rows: readonly unknown[]): Map<number, IActivityGoodsInfo> {
-    const map = new Map<number, IActivityGoodsInfo>();
-    for (const raw of rows ?? []) {
-        const row = asRow(raw);
-        if (!row) continue;
-        const resId = toCount(row.resId);
-        if (resId <= 0) continue;
-        map.set(resId, {
-            name: typeof row.name === 'string' ? row.name : '',
-            quality: toCount(row.quality),
-            icon: typeof row.icon === 'string' ? row.icon : '',
-            iconIsPath: true,
-        });
-    }
-    return map;
-}
-
-/**
- * `roleProperty` 全表 → `resId` → 展示字段（**货币 / 属性类**，`item` 表里没有它们）。
- *
- * 老端这一类走 `ModelGoods.GetGoodsIconKeyByRefId` 的 `GoodsType.playerAtt` 分支
- * （`RefMgrroleProperty.getRef("resId", refId).icon`）。每日任务的奖励里就混着它们：
- * 银币 7 / 洗炼石 8 / 金币 10 / **活跃度 15（每条任务都奖励它）**。
- * 只搬 `item` 那一支的话，10 个奖励格里 8 个会**只剩品质框、没有图标**。
- *
- * ⚠️ `roleProperty.icon` 还是 FGUI 组件名（`图标_活跃度`），**不是**资源路径 ⇒ `iconIsPath = false`。
- */
-export function parseRolePropertyRows(rows: readonly unknown[]): Map<number, IActivityGoodsInfo> {
-    const map = new Map<number, IActivityGoodsInfo>();
-    for (const raw of rows ?? []) {
-        const row = asRow(raw);
-        if (!row) continue;
-        const resId = toCount(row.resId);
-        if (resId <= 0) continue;
-        map.set(resId, {
-            name: typeof row.name === 'string' ? row.name : '',
-            quality: toCount(row.quality),
-            icon: typeof row.icon === 'string' ? row.icon : '',
-            iconIsPath: false,
-        });
-    }
-    return map;
-}
-
-/**
- * 一个奖励 `resId` 的展示信息：`item` 表优先，查不到再回落 `roleProperty`。
- *
- * 等价于老端 `ModelGoods.GetGoodsIconKeyByRefId` 的两支分流（`playerAtt` 走 `roleProperty`，
- * 其余 `CreateGoods(resId).GetIconKey()` 走 `item`）。两张表都查不到返回 `null`，
- * 调用方按「品质 1 + 只画品质框」降级。
- */
-export function rewardGoodsOf(
-    resId: number,
-    items: ReadonlyMap<number, IActivityGoodsInfo>,
-    resources: ReadonlyMap<number, IActivityGoodsInfo>,
-): IActivityGoodsInfo | null {
-    return items.get(resId) ?? resources.get(resId) ?? null;
-}
 
 /** 取「每日任务」那个页签（`tlType` 含 1001）；没有返回 `null`。 */
 export function findDayChallengeTab(tabs: readonly IActivityTabRow[]): IActivityTabRow | null {

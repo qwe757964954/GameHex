@@ -1,5 +1,6 @@
 import { ZC_RUNTIME_CONFIG } from '../zcds/model/ZCRuntimeConfigStore';
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import {
     calculateDeckBonuses,
     getBondRules,
@@ -30,9 +31,7 @@ import type { PvpHeroInfo } from './PvpHeroService';
 type ZCDeckRow = ZCDeckCard & { enabled: boolean };
 
 /** 读一张分表；表不存在就当空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** 解析 pvpCard，坏行跳过，别让一行坏数据把整页卡住。 */
 function parseDecks(rows: unknown[]): { player: ZCDeckCard[]; enemy: ZCDeckCard[] } {

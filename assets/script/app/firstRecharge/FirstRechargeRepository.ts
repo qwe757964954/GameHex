@@ -9,7 +9,7 @@
  *   ② 服务器状态 `CmdFirstRechargeNew.infos`（网关卡按 `protoCache` 建的缓存，走 `CacheMgr`）；
  *   ③ 请求 `CmdFirstRechargesBuy / CmdFirstRechargeReward / CmdFirstRechargeOpen`。
  *
- *  ⚠️ `CmdFirstRechargeNew` 这张表的形状很特别（见 `CacheMgrGen` 上的长注释）：
+ *  `CmdFirstRechargeNew` 这张表的形状很特别（见 `CacheMgrGen` 上的长注释）：
  *  它按**内容**分桶，`getTlCmdFirstRechargeNew()` 通常只有 1 条，拿到之后要再取 `.infos`。
  *  别去 `getCmdFirstRechargeNew({infos: ...})` 按字段查 —— 那条路按设计就取不到。
  */
@@ -157,11 +157,8 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
                 new RequestFirstRechargeReward(
                     { id, day },
                     caller,
-                    // 老端 `ModelFirstRecharge` L65：`if (rsp.tlCmdGoods) FW.ShowReward(rsp.tlCmdGoods)`。
-                    // 之前只认 `ret`、奖励明细被丢掉；现在走同一条全局出口。
-                    // ⚠️ `FW.ShowReward` 是可注入的全局出口（组合根接成 `ShowRewardPage.open`），
-                    //    本文件不 import 任何视图类、不 import `cc`（同 `CelebrationRepository` 的说明）。
-                    // ⚠️ 老端**有**那层 `if (rsp.tlCmdGoods)` 判空，这里照抄（与本文件 `ret` 的口径一致）。
+                    // 老端：`if (rsp.tlCmdGoods) FW.ShowReward(...)`，判空照抄。
+                    // FW 是可注入出口（组合根接 `ShowRewardPage.open`），本文件不 import 视图 / `cc`。
                     (rsp) => {
                         ret = rsp?.ret === true;
                         const goods = rsp?.tlCmdGoods;

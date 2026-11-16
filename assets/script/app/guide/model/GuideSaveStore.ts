@@ -6,6 +6,7 @@
 
 import { GuideProgress } from './GuideProgress';
 import type { GuideProgressData } from './GuideProgress';
+import { GUIDE_STEP_END } from './GuideStepConfig';
 import type { GuideStep } from './GuideStepConfig';
 
 /** 存档 schema 版本。字段结构变了就 +1，并在 {@link GuideSaveStore.load} 里加迁移。 */
@@ -14,7 +15,7 @@ export const GUIDE_SAVE_VERSION = 1;
 /** 存档 key 前缀（含版本）；后面拼命名空间。 */
 export const GUIDE_SAVE_KEY_PREFIX = 'guide.progress.v1';
 
-/** 存储端口。只要求这两个方法，方便单测塞内存实现、将来换服务端。 */
+/** 存储端口。引擎侧由 GuideStorageAdapter 注入 `sys.localStorage`；单测注入内存实现。 */
 export interface IGuideStorage {
     getItem(key: string): string | null;
     setItem(key: string, value: string): void;
@@ -26,6 +27,18 @@ export interface IGuideSaveOwner {
     readonly serverId: string;
 }
 
+/** 服务端回包的功能引导游标；`0/0` 表示建号后尚未开始（契约待后端确认）。 */
+export interface IGuideRemoteCursor {
+    readonly funcId: number;
+    readonly step1: number;
+    readonly step2: number;
+}
+
+/** 账号级 key 后缀；存档与待发队列共用同一口径，避免两套 key 规则。 */
+export function guideOwnerKeySuffix(owner: IGuideSaveOwner): string {
+    return `server:${encodeURIComponent(owner.serverId)}:role:${encodeURIComponent(owner.roleId)}`;
+}
+
 /** 落盘的完整结构。字段只增不改 —— 删字段要升 {@link GUIDE_SAVE_VERSION}。 */
 export interface GuideSaveData {
     readonly version: number;
@@ -35,10 +48,10 @@ export interface GuideSaveData {
     readonly grantedSteps: readonly string[];
     readonly skipped: boolean;
     /**
-     * 首次进入引导的毫秒时间戳，0 表示未知。判 firstLogin 用它，而不是看存档是否存在。
+     * 首次进入引导的毫秒时间戳，0 表示未知。仅落盘保留；`firstRun` 以存档是否存在判定。
      */
     readonly startedAt: number;
-    /** 最近一次写入时间戳；接服务端后用于两边取新。 */
+    /** 最近一次写入时间戳，仅落盘与排查；远端取新走游标，不看它。 */
     readonly updatedAt: number;
 }
 
@@ -73,7 +86,7 @@ export class GuideSaveStore {
             throw new Error('引导存档缺少角色或区服身份');
         }
         this.key = owner
-            ? `${GUIDE_SAVE_KEY_PREFIX}.server:${encodeURIComponent(owner.serverId)}:role:${encodeURIComponent(owner.roleId)}`
+            ? `${GUIDE_SAVE_KEY_PREFIX}.${guideOwnerKeySuffix(owner)}`
             : `${GUIDE_SAVE_KEY_PREFIX}.preview`;
         // 预览态不落盘：编辑器里跑出来的进度不该污染真账号。
         this.storage = owner ? storage : null;
@@ -114,14 +127,19 @@ export class GuideSaveStore {
         return true;
     }
 
-    /** 清存档。只给调试 / 回归用，正常流程不该调 —— 清了会重跑一遍强制引导。 */
-    clear(): void {
-        GuideSaveStore.memoryFallback.delete(this.key);
-        try {
-            this.storage?.setItem(this.key, '');
-        } catch {
-            // 清不掉就清不掉：下次 save 会整份覆盖。
-        }
+    /**
+     * 用服务端游标校正本地存档。只有远端更靠后时才写入，返回是否真的前进。
+     * 落后、相等、游标非法都返回 false 且不改动本地，避免远端丢包把进度打回。
+     */
+    applyRemoteCursor(cursor: IGuideRemoteCursor | null, steps: readonly GuideStep[], now: number = Date.now()): boolean {
+        const remote = remoteCursorToData(cursor, steps);
+        if (!remote) return false;
+        const existing = this.load();
+        const merged = mergeSave(existing, remote, now);
+        // updatedAt 每次都会刷新，只有进度字段变化才算前进。
+        if (existing && hasSameProgress(existing, merged)) return false;
+        this.writeRaw(JSON.stringify(merged));
+        return true;
     }
 
     private readRaw(): string | null {
@@ -169,6 +187,33 @@ export function restoreGuideProgress(
         console.error('[GuideSaveStore] 引导配置不可用，本次跳过引导', error);
         return null;
     }
+}
+
+/**
+ * 把服务端游标还原成步骤存档。
+ *
+ * 口径按「最后已完成步」：`(2,2)` ⇒ 已完成到 2-2、下一步 3-1。
+ * 若后端确认存的是「当前待做步」，只改这一个函数。
+ * 游标不在当前表里（表热更后编号变了）返回 null，交给本地存档继续。
+ */
+export function remoteCursorToData(
+    cursor: IGuideRemoteCursor | null,
+    steps: readonly GuideStep[],
+): GuideProgressData | null {
+    if (!cursor || (cursor.step1 === 0 && cursor.step2 === 0)) return null;
+    const stepId = `${cursor.step1}-${cursor.step2}`;
+    const index = steps.findIndex((step) => step.stepId === stepId);
+    if (index < 0) return null;
+
+    const next = steps[index].nextStep;
+    if (next !== GUIDE_STEP_END && !steps.some((step) => step.stepId === next)) return null;
+
+    return {
+        currentStepId: next === GUIDE_STEP_END ? '' : next,
+        completedSteps: steps.slice(0, index + 1).map((step) => step.stepId),
+        grantedSteps: [],
+        skipped: false,
+    };
 }
 
 // 内部：结构校验与合并
@@ -251,4 +296,18 @@ function mergeSave(
         startedAt: existing?.startedAt && existing.startedAt > 0 ? existing.startedAt : now,
         updatedAt: now,
     };
+}
+
+/** 只比较进度字段（忽略 updatedAt），用于判断远端校正是否真的前进了。 */
+function hasSameProgress(a: GuideSaveData, b: GuideSaveData): boolean {
+    return a.currentStepId === b.currentStepId
+        && a.skipped === b.skipped
+        && sameIds(a.completedSteps, b.completedSteps)
+        && sameIds(a.grantedSteps, b.grantedSteps);
+}
+
+function sameIds(a: readonly string[], b: readonly string[]): boolean {
+    if (a.length !== b.length) return false;
+    const known = new Set(a);
+    return b.every((id) => known.has(id));
 }

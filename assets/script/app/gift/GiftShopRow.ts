@@ -40,9 +40,6 @@ export interface IGiftShopRowView {
  */
 @ccclass('GiftShopRow')
 export class GiftShopRow extends Component {
-    @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，`gf_row_bg`）' })
-    background: Sprite = null!;
-
     @property({ type: Label, tooltip: 'Title：商品名（`giftShop.desc`）' })
     titleLabel: Label = null!;
 

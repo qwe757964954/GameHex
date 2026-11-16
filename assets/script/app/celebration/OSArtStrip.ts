@@ -36,7 +36,7 @@ export class OSArtStrip extends Component {
     @property({ tooltip: '条目显示宽（庆典目标 84 / 庆典排名 72.24 = 84×0.86）' })
     itemWidth: number = OS_REWARD_NATIVE_W;
 
-    @property({ tooltip: '条目原生高（生成器对账用，不参与横向排布）' })
+    @property({ tooltip: '条目原生高（只对齐设计稿 84×85，排布用节点 UITransform 高度）' })
     itemHeight: number = OS_REWARD_NATIVE_H;
 
     @property({ tooltip: '列距（FGUI colGap：庆典目标 7 / 庆典排名 6.02 = 7×0.86）' })

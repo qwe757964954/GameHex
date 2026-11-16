@@ -16,6 +16,7 @@ import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import type { IGuideViewState } from '../assets/script/app/guide/application/GuideController';
 import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
 import type { IGuideGateway } from '../assets/script/app/guide/application/GuideGateway';
+import { GuideSyncOutbox } from '../assets/script/app/guide/model/GuideSyncOutbox';
 import { parseGuideSteps } from '../assets/script/app/guide/model/GuideStepConfig';
 import type { GuideReward, GuideStep } from '../assets/script/app/guide/model/GuideStepConfig';
 import {
@@ -37,6 +38,9 @@ const STEPS: GuideStep[] = parseGuideSteps(RAW.v.map((row) => {
 /** Controller 不碰 resources，空 context 足够；类型上照 IControllerContext 收。 */
 const CONTEXT = {} as IControllerContext;
 
+/** 让 `then` / `await` 链与新开的 drain 循环跑完（微任务清空需要一次宏任务）。 */
+const tick = (): Promise<void> => new Promise(resolve => { setTimeout(resolve, 0); });
+
 function makeController(roleId: string, overrides: {
     steps?: readonly GuideStep[];
     view?: (state: IGuideViewState) => void;
@@ -44,6 +48,7 @@ function makeController(roleId: string, overrides: {
     failed?: (error: unknown) => void;
     now?: () => number;
     storage?: ReturnType<typeof createMemoryGuideStorage>;
+    outbox?: GuideSyncOutbox;
     gateway?: IGuideGateway;
 } = {}) {
     const store = new GuideSaveStore(
@@ -56,6 +61,7 @@ function makeController(roleId: string, overrides: {
         store,
         steps: overrides.steps ?? STEPS,
         gateway: overrides.gateway,
+        outbox: overrides.outbox,
         view: { owner: states, render: (state) => { states.push(state); overrides.view?.(state); } },
         grant: (rewards, stepId) => {
             granted.push({ stepId, rewards });
@@ -277,13 +283,13 @@ test('点击意图只接受当前展示实例和当前步骤，旧步骤与退�
     assert.equal(controller.currentStepId, '1-2');
 });
 
-test('查询结果暂不覆盖本地进度，只有真实推进才上报已完成步骤，退出释放网关', async () => {
+test('只有真实推进才上报已完成步骤，退出释放网关', async () => {
     const updates: string[] = [];
     let reads = 0;
     let disposed = false;
     const gateway: IGuideGateway = {
-        load: async () => { reads++; return { funcId: 1, step1: 8, step2: 1 }; },
-        update: async id => { updates.push(id); return false; },
+        load: async () => { reads++; return null; },
+        update: async id => { updates.push(id); return 'ok'; },
         dispose: () => { disposed = true; },
     };
     const { controller } = makeController('c-sync', { gateway });
@@ -415,5 +421,184 @@ test('配置不可用时重复 start()：返回 false、不抛、不推进', () 
     EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: 68001, level: 1 });
     assert.equal(controller.currentStepId, '');
     assert.equal(controller.isFinished, true);
+    controller.dispose();
+});
+
+test('远端领先：本地先出首帧，查询回来校正到远端游标', async () => {
+    let resolveLoad: ((value: CmdFunctionGuideInfo | null) => void) | null = null;
+    const gateway: IGuideGateway = {
+        load: () => new Promise(resolve => { resolveLoad = resolve; }),
+        update: async () => 'ok',
+        dispose: () => {},
+    };
+    const { controller, states } = makeController('c-remote-ahead', { gateway });
+    controller.start();
+    assert.equal(states.length, 1);
+    assert.equal(states[0].stepId, '1-1');
+
+    resolveLoad({ funcId: 1, step1: 2, step2: 2 });
+    await tick();
+    assert.equal(controller.currentStepId, '3-1');
+    assert.equal(states.length, 2);
+    assert.equal(states[1].stepId, '3-1');
+    assert.equal(states[1].isFirstRun, false);
+    controller.dispose();
+});
+
+test('远端落后：本地已推进时回包不倒退', async () => {
+    let resolveLoad: ((value: CmdFunctionGuideInfo | null) => void) | null = null;
+    const gateway: IGuideGateway = {
+        load: () => new Promise(resolve => { resolveLoad = resolve; }),
+        update: async () => 'ok',
+        dispose: () => {},
+    };
+    const { controller, states } = makeController('c-remote-behind', { gateway });
+    controller.start();
+    controller.notify('click');
+    controller.notify('click');
+    assert.equal(controller.currentStepId, '1-3');
+    const published = states.length;
+
+    resolveLoad({ funcId: 1, step1: 1, step2: 1 });
+    await tick();
+    assert.equal(controller.currentStepId, '1-3');
+    assert.equal(states.length, published);
+    controller.dispose();
+});
+
+test('远端 0/0 未开始：不校正，firstRun 仍为真，也不产生上报', async () => {
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        // 实测：全新账号首次查询就是 {funcId:1, step1:0, step2:0}。
+        load: async () => ({ funcId: 1, step1: 0, step2: 0 }),
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, states } = makeController('c-remote-empty', { gateway });
+    controller.start();
+    await tick();
+    assert.equal(controller.currentStepId, '1-1');
+    assert.equal(states.length, 1);
+    assert.equal(states[0].isFirstRun, true);
+    // 本地也无档 ⇒ 没有可迁移的进度，不该凭空补推。
+    assert.deepEqual(updates, []);
+    controller.dispose();
+});
+
+test('待发补发：上次会话遗留的待发项在启动时发出并出队', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-start', serverId: 's1' }, storage);
+    outbox.push('1-1', 900);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-outbox-start', { storage, outbox, gateway });
+    controller.start();
+    await tick();
+    assert.deepEqual(updates, ['1-1']);
+    assert.equal(outbox.head(), null);
+    controller.dispose();
+});
+
+test('发送失败保留待发项，下次推进按 FIFO 重试', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-retry', serverId: 's1' }, storage);
+    let fail = true;
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => { updates.push(id); return fail ? 'retry' : 'ok'; },
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-outbox-retry', { storage, outbox, gateway });
+    controller.start();
+    await tick();
+    controller.notify('click');
+    await tick();
+    assert.deepEqual(updates, ['1-1']);
+    assert.equal(outbox.head()?.stepId, '1-1');
+
+    fail = false;
+    controller.notify('click');
+    await tick();
+    assert.deepEqual(updates, ['1-1', '1-1', '1-2']);
+    assert.equal(outbox.head(), null);
+    controller.dispose();
+});
+
+test('远端校正后裁掉已完成的待发项，避免重复补发', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-prune', serverId: 's1' }, storage);
+    outbox.push('1-1', 900);
+    outbox.push('1-2', 950);
+    let resolveLoad: ((value: CmdFunctionGuideInfo | null) => void) | null = null;
+    const gateway: IGuideGateway = {
+        load: () => new Promise(resolve => { resolveLoad = resolve; }),
+        update: async () => 'ok',
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-outbox-prune', { storage, outbox, gateway });
+    controller.start();
+
+    resolveLoad({ funcId: 1, step1: 2, step2: 2 });
+    await tick();
+    assert.equal(controller.currentStepId, '3-1');
+    assert.equal(outbox.size, 0);
+    controller.dispose();
+});
+
+test('老玩家迁移：服务端无游标而本地有进度时，启动把最后完成步补推上去', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-migrate', serverId: 's1' }, storage);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        // 0/0 与查询失败都表现为 null；这两种情况都该把本地进度补推，服务端取更大即可。
+        load: async () => null,
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-migrate', { storage, outbox, gateway });
+    const lastDone = STEPS.findIndex((step) => step.stepId === '6-3');
+    assert.ok(lastDone >= 0);
+    store.save({
+        currentStepId: '7-1',
+        completedSteps: STEPS.slice(0, lastDone + 1).map((step) => step.stepId),
+        grantedSteps: [],
+        skipped: false,
+    }, 900);
+    controller.start();
+    await tick();
+    assert.deepEqual(updates, ['6-3']);
+    assert.equal(outbox.size, 0);
+    controller.dispose();
+});
+
+test('远端落后于本地：启动时补推最后完成步，服务端不会永久卡在旧游标', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-remote-behind-sync', serverId: 's1' }, storage);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        // 服务端只收到 1-3，本地已走到 5-1（完成到 4-1）。
+        load: async () => ({ funcId: 1, step1: 1, step2: 3 }),
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-remote-behind-sync', { storage, outbox, gateway });
+    const done4 = STEPS.findIndex((step) => step.stepId === '4-1');
+    assert.ok(done4 >= 0);
+    store.save({
+        currentStepId: '5-1',
+        completedSteps: STEPS.slice(0, done4 + 1).map((step) => step.stepId),
+        grantedSteps: [],
+        skipped: false,
+    }, 900);
+    controller.start();
+    await tick();
+    // 不倒退、只补推：一步 4-1 在「最后已完成」语义下等价整条前缀。
+    assert.equal(controller.currentStepId, '5-1');
+    assert.deepEqual(updates, ['4-1']);
     controller.dispose();
 });

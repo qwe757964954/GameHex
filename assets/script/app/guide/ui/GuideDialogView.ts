@@ -17,6 +17,7 @@ import {
     Node,
     Prefab,
     RichText,
+    sp,
     Sprite,
     SpriteFrame,
     UITransform,
@@ -49,6 +50,7 @@ const IDLE_ADVANCE_SECONDS = 8;
 /** 遮罩不透明度：设计案「全屏半透明黑 60%」= 153，取整 150；hole 步降到 40% 把注意力留给焦点区。 */
 const FULL_MASK_ALPHA = 150;
 const HOLE_MASK_ALPHA = 100;
+const PORTRAIT_DIALOG_GAP = 48;
 
 @ccclass('GuideDialogView')
 export class GuideDialogView extends Component {
@@ -56,7 +58,7 @@ export class GuideDialogView extends Component {
     portraitNode: Node = null!;
 
     @property({ group: '立绘', tooltip: '立绘显示高度；宽度按原图比例计算' })
-    portraitHeight = 700;
+    portraitHeight = 460;
 
     @property({ type: Node, group: '对话条', tooltip: 'DialogBox：底部对话条容器' })
     dialogBox: Node = null!;
@@ -296,6 +298,8 @@ export class GuideDialogView extends Component {
         const dialogMoved = this.dialogWidget.bottom !== dialogBottom;
         this.dialogWidget.bottom = dialogBottom;
         if (changed || dialogMoved) this.layoutBlocker(this.currentMaskType);
+        this.portraitNode.setPosition(0, dialogBottom - this.hostTransform.height / 2
+            + this.dialogTransform.height + PORTRAIT_DIALOG_GAP, 0);
     }
 
     /** 四块 Sprite 拼出真实透亮的焦点孔；按钮消费孔外输入，孔内交给原控件。 */
@@ -348,7 +352,10 @@ export class GuideDialogView extends Component {
         this.blockerTransform.setContentSize(this.hostTransform.width, this.hostTransform.height);
     }
 
-    private readonly onLayoutChanged = (): void => { this.layoutBlocker(this.currentMaskType); };
+    private readonly onLayoutChanged = (): void => {
+        this.placeFocusRing();
+        this.layoutBlocker(this.currentMaskType);
+    };
 
     private onDebugSkipTap(): void {
         const now = Date.now();
@@ -533,7 +540,7 @@ export class GuideDialogView extends Component {
     }
 
     /**
-     * 建骨骼立绘，只建一次。缩放按骨骼 UITransform 高度反推到 portraitHeight，
+     * 建骨骼立绘，只建一次。按实际骨骼的显示框等比缩放并对齐脚点，
      * 拿不到高度时按 1 处理并告警。
      */
     private ensureNpc(prefab: Prefab): Node {
@@ -546,11 +553,13 @@ export class GuideDialogView extends Component {
         host.addChild(node);
         node.setPosition(0, 0, 0);
 
-        const transform = node.getComponent(UITransform);
+        const skeleton = node.getComponentInChildren(sp.Skeleton);
+        const transform = skeleton ? skeleton.node.getComponent(UITransform) : node.getComponent(UITransform);
         const rawHeight = transform ? transform.height : 0;
         if (rawHeight > 0) {
             const scale = this.portraitHeight / rawHeight;
             node.setScale(scale, scale, 1);
+            node.setPosition(0, skeleton ? transform.anchorY * this.portraitHeight : 0, 0);
             console.log(`[GuideDialog] 骨骼立绘 ${prefab.name} · 原始高 ${rawHeight} · scale ${scale.toFixed(2)}`);
         } else {
             console.warn('[GuideDialog] 骨骼立绘没有 UITransform 高度，缩放按 1 处理（可能偏小）');

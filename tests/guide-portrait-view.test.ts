@@ -18,15 +18,18 @@ class PortraitNode {
     parent: PortraitNode | null = null;
     children: PortraitNode[] = [];
     scale = 1;
-    transform = { height: 200, setContentSize() {} };
+    positionY = 0;
+    skeleton: { node: PortraitNode } | null = null;
+    transform = { height: 200, anchorY: 0.5, setContentSize() {} };
     get activeInHierarchy(): boolean { return this.active && (!this.parent || this.parent.activeInHierarchy); }
     addChild(node: PortraitNode) { node.parent = this; this.children.push(node); }
     getComponent() { return this.transform; }
-    setPosition() {}
+    getComponentInChildren() { return this.skeleton; }
+    setPosition(_x: number, y: number) { this.positionY = y; }
     setScale(value: number) { this.scale = value; }
 }
 
-function fixture() {
+function fixture(withSkeleton = false) {
     const exports: { PortraitView?: new () => {
         applyPortrait(speaker: string): void;
         hidePortrait(): void;
@@ -35,8 +38,19 @@ function fixture() {
     runInNewContext(ts.transpileModule(`exports.PortraitView = class { ${methods.map(node => node.getText(source)).join('\n')} };`, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console, getGuidePortraitAsset,
-        UITransform: class {}, Sprite: { SizeMode: { CUSTOM: 0 } },
-        instantiate: () => { instances++; return new PortraitNode(); },
+        UITransform: class {}, Sprite: { SizeMode: { CUSTOM: 0 } }, sp: { Skeleton: class {} },
+        instantiate: () => {
+            instances++;
+            const node = new PortraitNode();
+            if (withSkeleton) {
+                const visual = new PortraitNode();
+                visual.transform.height = 916;
+                visual.transform.anchorY = 0.028;
+                node.addChild(visual);
+                node.skeleton = { node: visual };
+            }
+            return node;
+        },
     });
     const node = new PortraitNode();
     const sprite = { node, enabled: true, spriteFrame: null, sizeMode: 0 };
@@ -65,6 +79,17 @@ test('豌豆骨骼的父节点保持激活，静图与骨骼反复切换都可�
         assert.equal(f.host.npcNode?.scale, 3.5);
     }
     assert.equal(f.instances(), 1);
+});
+
+test('豌豆按实际骨骼显示框缩放，脚点不落入对话框，不借用外层预制体的空白尺寸', () => {
+    const f = fixture(true);
+    f.host.portraitHeight = 460;
+    f.host.applyPortrait('豌豆游侠');
+    const bone = f.host.npcNode;
+    assert.ok(bone);
+    assert.equal(bone.scale, 460 / 916);
+    assert.ok(Math.abs(bone.positionY - 916 * 0.028 * bone.scale) < 1e-9);
+    assert.equal(bone.activeInHierarchy, true);
 });
 
 test('高亮步骤隐藏立绘，恢复普通对话后骨骼和静图均可重新显示；缺资源不留空白框', () => {

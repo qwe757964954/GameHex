@@ -1,11 +1,9 @@
 /**
  * 首充礼包（新首充）的数据口径 —— **纯逻辑，不 import `cc`，可在 Node 单测里直接跑**。
  *
- * 移植自老客户端 `client/assets/script/app/game/`：
+ * 移植自老客户端 `ModelFirstRecharge`（判定）+ `LayerFirstRechargeUI`（界面）。数据来源：
  *   - 配置表  `firstRechargeNew`（4 档，每档 3 天奖励）+ `payChannel`（rmb → 实付金额）
  *   - 服务器  `CmdFirstRechargeNew.infos[]`，每项 `{ id, active, activeTime, takenIds }`
- *   - 判定    `ModelFirstRecharge.IsRewarded / CanReward / GetRewardDay / GetRdByTab`
- *   - 界面    `LayerFirstRechargeUI.UpdateView / refreshSelect`（tab 显示规则、按钮文案）
  *
  * 老客户端里这些判定散在 `ModelFirstRecharge`（依赖 DI 容器、TimeUtil、ModelMgr）里，
  * 没法单测。这里全部收敛成**传参的纯函数**：

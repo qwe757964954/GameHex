@@ -6,6 +6,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -47,9 +48,7 @@ export interface IGiftRepository {
 const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** 读 `CmdShop`（礼包商店）缓存；拿不到时返回空 Map。 */
 function readBuyTimes(): ReadonlyMap<number, number> {

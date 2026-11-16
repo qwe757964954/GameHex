@@ -13,7 +13,7 @@ const method = view.members.find(node => ts.isMethodDeclaration(node) && node.na
 const exports: { place?: (this: object) => void } = {};
 runInNewContext(ts.transpileModule(`exports.place = class { ${method.getText(source)} }.prototype.placeFocusRing;`, {
     compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS },
-}).outputText, { exports, guideDialogBottom, HEX_GRID_CONTENT_LIFT: 0 });
+}).outputText, { exports, guideDialogBottom, HEX_GRID_CONTENT_LIFT: 0, PORTRAIT_DIALOG_GAP: 48 });
 
 function fixture(x: number, y: number) {
     const point = () => ({ x: 0, y: 0, z: 0, set(x: number, y: number, z: number) { Object.assign(this, { x, y, z }); } });
@@ -25,7 +25,7 @@ function fixture(x: number, y: number) {
         hostTransform: { width: 720, height: 1560, convertToNodeSpaceAR: (p: object, out: object) => Object.assign(out, p) },
         focusWidth: 108, focusHeight: 160, focusClips: [] as object[], focusKey: 'Main/CardEntry',
         focusCorner: point(), focusWorld: point(), focusLocal: point(), focusEdgeWorld: point(), clipCenter: point(), clipCorner: point(),
-        focusRing: node(), focusHand: node(), mapHint: node(), dimNode: node(), dialogBox: node(), blockerNode: node(),
+        focusRing: node(), focusHand: node(), mapHint: node(), dimNode: node(), dialogBox: node(), blockerNode: node(), portraitNode: node(),
         focusMasks: [node(), node(), node(), node()], hintTransform: { width: 250 }, dialogTransform: { height: 154 },
         defaultDialogBottom: 115, dialogWidget: { bottom: 115 }, queue: [{}], currentMaskType: 'full',
         layoutFocusMasks() {}, layoutBlocker() {},

@@ -1,5 +1,5 @@
 /**
- * 七日狂欢的数据口径 —— **纯逻辑，不 import 任何东西，可在 Node 单测里直接跑**。
+ * 七日狂欢的数据口径 —— **纯逻辑，除 `core` 纯函数外不 import 任何东西，可在 Node 单测里直接跑**。
  *
  * 移植自老客户端：
  *   - 配置表 `sevenDayTask`（69 行）/ `sevenDayShop`（21 行）/ `sevenDayPoint`（5 行）
@@ -21,6 +21,10 @@
  *   留着是为了「将来要恢复页签」时不用重写；开关见 `SevenDayPage.SHOW_PAGE_TAB_BAR`。
  *   ⚠️ 恢复页签时必须**同时**把 `RowView` 的顶边从 392 退回 450（页签栏占 382..450，否则列表压住它）。
  */
+
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { DAY_MS, startOfDay } from '../../core/time/TimeMs';
+import { clamp01Finite } from '../../core/math/Scalar';
 
 /** 一条奖励：`{ resId, number }`。 */
 export interface ISevenDayReward {
@@ -111,8 +115,6 @@ export const SEVEN_DAY_TARGET_FIGHT = 8;
  */
 export const SEVEN_DAY_TASK_TYPE = 2;
 
-const DAY_MS = 86400000;
-
 /** 服务器状态为空时的快照（没连服 / 刚进游戏）。 */
 export const EMPTY_SEVEN_DAY_STATE: ISevenDayServerState = {
     point: 0,
@@ -136,16 +138,7 @@ function asString(value: unknown, fallback: string = ''): string {
 
 /** 解析 `[{ resId, number }]` 形状的奖励数组；非法项跳过。 */
 function parseRewards(value: unknown): ISevenDayReward[] {
-    if (!Array.isArray(value)) return [];
-    const out: ISevenDayReward[] = [];
-    for (const item of value) {
-        if (!item || typeof item !== 'object') continue;
-        const row = item as Record<string, unknown>;
-        const resId = asNumber(row.resId, 0);
-        if (resId <= 0) continue;
-        out.push({ resId, number: asNumber(row.number, 0) });
-    }
-    return out;
+    return parseRewardAmounts(value, { minNumber: 0 });
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -282,9 +275,7 @@ export function parsePointRows(rows: readonly unknown[]): ISevenDayPointRow[] {
 
 /** 某个时刻所在自然日的 0 点（本地时区）。 */
 export function dayStartOf(ms: number): number {
-    const d = new Date(ms);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
+    return startOfDay(ms);
 }
 
 /**
@@ -528,21 +519,14 @@ export function boxProgressOf(
 ): number {
     const box = boxes[index];
     if (!box || box.point <= 0) return 0;
-    if (index === 0) return clamp01(currentPoint / box.point);
+    if (index === 0) return clamp01Finite(currentPoint / box.point);
     const last = boxes[index - 1];
-    if (!last) return clamp01(currentPoint / box.point);
+    if (!last) return clamp01Finite(currentPoint / box.point);
     if (currentPoint < last.point) return 0;
     if (currentPoint >= box.point) return 1;
     const span = box.point - last.point;
     if (span <= 0) return currentPoint >= box.point ? 1 : 0;
-    return clamp01((currentPoint - last.point) / span);
-}
-
-function clamp01(value: number): number {
-    if (!Number.isFinite(value)) return 0;
-    if (value < 0) return 0;
-    if (value > 1) return 1;
-    return value;
+    return clamp01Finite((currentPoint - last.point) / span);
 }
 
 /** 天数按钮是否解锁（第 `day` 天 `<=` 今天）。 */

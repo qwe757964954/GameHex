@@ -9,6 +9,10 @@
 
 import { spriteFramePath } from '../ArtPaths';
 import { FALLBACK_RES_ICON_ART, resIconRoot } from '../common/ResTypes';
+import { SECONDS_PER_DAY } from '../../core/time/TimeMs';
+
+/** 旧路径保留；时间转换实现已归位到 `core/time/TimeMs`。 */
+export { startOfDay, toMillis } from '../../core/time/TimeMs';
 
 /** 一条特权。 */
 export interface IMonthCardGiftPrivilege {
@@ -114,41 +118,14 @@ export const MONTH_CARD_ACT_TYPE_2 = 1006;
 // 工具函数
 // ============================================================
 
-/** Long / string / number 统一成毫秒；非法值返回 0。 */
-export function toMillis(value: unknown): number {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-        const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : 0;
-    }
-    if (value && typeof value === 'object') {
-        const long = value as { toNumber?: () => number; low?: number; high?: number };
-        if (typeof long.toNumber === 'function') {
-            const parsed = long.toNumber();
-            return Number.isFinite(parsed) ? parsed : 0;
-        }
-        if (typeof long.low === 'number' && typeof long.high === 'number') {
-            return long.high * 4294967296 + (long.low >>> 0);
-        }
-    }
-    return 0;
-}
-
-/** 本地时区当天 0 点（毫秒）。 */
-export function startOfDay(timeMs: number): number {
-    const date = new Date(timeMs);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
-}
-
 /**
  * 剩余时长展示：
  * > 1 天显示整天数，≤ 1 天显示 hh:mm:ss。
  */
 export function formatRemain(remainMs: number): { readonly day: string; readonly isDayUnit: boolean } {
     const totalSeconds = Math.floor(Math.max(0, remainMs) / 1000);
-    if (totalSeconds > 86400) {
-        return { day: String(Math.floor(totalSeconds / 86400)), isDayUnit: true };
+    if (totalSeconds > SECONDS_PER_DAY) {
+        return { day: String(Math.floor(totalSeconds / SECONDS_PER_DAY)), isDayUnit: true };
     }
     const hh = Math.floor(totalSeconds / 3600);
     const mm = Math.floor((totalSeconds % 3600) / 60);

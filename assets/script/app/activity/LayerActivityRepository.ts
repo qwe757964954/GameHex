@@ -34,6 +34,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -110,9 +111,7 @@ const WRITE_TIMEOUT_MS = 5000;
 const ACTIVITY_CACHE = 'CmdActivity';
 
 /** 读一张分表的全部行；表缺失时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** 读缓存里的 `CmdActivity` 全表；缓存不可用时返回空数组（不抛）。 */
 function readActivityCmds(): readonly unknown[] {

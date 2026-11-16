@@ -18,6 +18,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRowsSafe } from '../common/TableRead';
 import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
 import {
     accessRefsOf,
@@ -68,15 +69,8 @@ export interface IItemDetailRepository {
     loadItemRow(resId: number): Promise<IItemRow | null>;
 }
 
-/** 读一张分表的全部行；表缺失 / 未加载时返回空数组。 */
-async function readRows(table: string): Promise<readonly unknown[]> {
-    try {
-        return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-    } catch (error) {
-        console.warn(`[ItemDetail] 读配置表 ${table} 失败`, error);
-        return [];
-    }
-}
+/** 读一张分表的全部行；表缺失 / 未加载时返回空数组（失败降级并 warn）。 */
+const readRows = (table: string): Promise<unknown[]> => readRefRowsSafe(RefUtil.instance, table, 'ItemDetail');
 
 /**
  * 品质名 CSV（`gameConfig.qualityname`）。

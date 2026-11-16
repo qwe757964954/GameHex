@@ -19,6 +19,7 @@
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
 import { toIdString, withTimeout } from '../net/RequestGuard';
@@ -122,9 +123,7 @@ export interface IFriendRepository {
 const WRITE_TIMEOUT_MS = 5000;
 
 /** 读一张配置表的全部行；表缺失（`getRefAllAsync` 可能返回 undefined）时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** 读缓存里一张表的全部行。缓存访问异常时只告警，不向上抛。 */
 function readCacheRows(table: 'CmdFriend' | 'CmdFriendApply' | 'CmdFriendBlack'): unknown[] {

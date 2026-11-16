@@ -1,96 +1,16 @@
-import { toCount } from '../net/RequestGuard';
-import { resolveRewardIconRef } from '../activity/LayerActivityArt';
-import type { IActivityGoodsInfo } from '../activity/LayerActivityTable';
-
 /**
- * 「获得奖励」弹窗纯口径层（零 `cc`）：网格几何、排序、图标解析、帧换算，
- * 便于 Node 单测直接 import 做回归。
+ * 「获得奖励」弹窗纯口径层（零 `cc`）。
+ * 奖励归一化 / 排序 / 图标路径 / 展示数据已归位到 `common/RewardEntries`；
+ * 本文件保留旧导出名，调用方与既有测试不需要改 import 路径。
  */
-
-// ============================================================
-// 数据形状
-// ============================================================
-
-/**
- * 一条奖励（proto CmdGoods 口径）。刻意不引用 Cmd.d.ts：服务端 number 是 uint64
- * （解出来是 Long），直接当 number 会得到 [object Object]；用结构类型 + toCmdGoods 归一化。
- */
-export interface ICmdGoodsLike {
-    readonly resId: number;
-    readonly number: number;
-}
-
-/** 收敛后的奖励展示数据。 */
-export interface IRewardEntry {
-    readonly resId: number;
-    /** 数量（`0` 不显示数量）。 */
-    readonly number: number;
-    /** item.quality；两表都查不到为 `1`（降级最低档品质框，不抛错）。 */
-    readonly quality: number;
-    /** 图标相对 assets/resources/ 的路径；解析不出为 `''`（只画品质框）。 */
-    readonly iconPath: string;
-}
-
-/** 原始一行 → ICmdGoodsLike；resId<=0 / 形状不对返回 null（丢弃，不抛错）。 */
-export function toCmdGoods(raw: unknown): ICmdGoodsLike | null {
-    if (!raw || typeof raw !== 'object') return null;
-    const row = raw as Record<string, unknown>;
-    const resId = toCount(row.resId);
-    if (resId <= 0) return null;
-    return { resId, number: toCount(row.number) };
-}
-
-/** 一串原始奖励 → 归一化列表（丢掉落不出来的）。 */
-export function parseCmdGoodsList(raw: unknown): ICmdGoodsLike[] {
-    const out: ICmdGoodsLike[] = [];
-    if (!Array.isArray(raw)) return out;
-    for (const one of raw) {
-        const goods = toCmdGoods(one);
-        if (goods) out.push(goods);
-    }
-    return out;
-}
-
-// ============================================================
-// 排序 / 图标解析
-// ============================================================
-
-/**
- * 奖励排序（老端口径）：品质降序，同品质按 resId 升序。
- * 同品质比 resId、不比数量（同物不同数量不该改顺序）；品质解析不出退化为 1、排最后。
- */
-export function sortRewardEntries(entries: readonly IRewardEntry[]): IRewardEntry[] {
-    return [...entries].sort((a, b) => (b.quality - a.quality) || (a.resId - b.resId));
-}
-
-/**
- * 图标路径（相对 assets/resources/），解析不出返回 ''。
- * 必须走 resolveRewardIconRef 两支分流：item 表 icon 存 resources 路径（直通）；
- * roleProperty 表 icon 存 FGUI 组件名（落 icons/resource/<name>）。
- * 只走 item 一支 ⇒ 货币格只剩品质框、无图标（静默降级）。
- */
-export function rewardIconPathOf(info: IActivityGoodsInfo | null): string {
-    const ref = resolveRewardIconRef(info);
-    return ref ? `${ref.root}/${ref.name}` : '';
-}
-
-/**
- * 一条奖励 → 展示数据；两表都查不到返回「品质 1 + 无图标」安全降级（老端 GetQuality 兜底也是 1）。
- * item 表优先（与 LayerActivityTable / BattleTokenRepository 同口径）。
- */
-export function rewardEntryOf(
-    goods: ICmdGoodsLike,
-    items: ReadonlyMap<number, IActivityGoodsInfo>,
-    resources: ReadonlyMap<number, IActivityGoodsInfo>,
-): IRewardEntry {
-    const info = items.get(goods.resId) ?? resources.get(goods.resId) ?? null;
-    return {
-        resId: goods.resId,
-        number: goods.number,
-        quality: info ? info.quality : 1,
-        iconPath: rewardIconPathOf(info),
-    };
-}
+export {
+    parseCmdGoodsList,
+    rewardEntryOf,
+    rewardIconPathOf,
+    sortRewardEntries,
+    toCmdGoods,
+} from '../common/RewardEntries';
+export type { ICmdGoodsLike, IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
 
 // ============================================================
 // 动画时间轴

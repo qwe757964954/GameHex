@@ -6,24 +6,10 @@
  */
 
 export const GIFT_TEXTS = {
-    /** 面板标题。 */
-    title: '礼包',
-    /** 大页签：超值礼包。 */
-    tabSpecial: '超值礼包',
-    /** 大页签：灵玉直冲。 */
-    tabLingYu: '灵玉直冲',
-    /** 大页签：晶石兑换（open.json 里 `roleLevel >= 9999`，当前不显示，先留文案）。 */
-    tabJingShi: '晶石兑换',
     /** 商品行按钮：免费。 */
     free: '免费',
-    /** 商品行按钮：购买（后面跟价格数字）。 */
-    buy: '购买',
-    /** 已售罄角标。 */
-    soldOut: '已售罄',
     /** 列表为空。 */
     empty: '暂无可购买的商品',
-    /** 加载中。 */
-    loading: '加载中…',
     /** 离线提示。 */
     offline: '网络未连接，请稍后再试',
     /** 通用失败。 */
@@ -34,8 +20,6 @@ export const GIFT_TEXTS = {
     limitSale: '限购 {0}/{1}',
     /** 折扣模板，`{0}` = 折扣数（如 `5` → 「5折」）。 */
     discount: '{0}折',
-    /** 首充翻倍角标。 */
-    firstBuyDouble: '首充翻倍',
     /**
      * 商品货币名。`priceType = 10` 对应 `roleProperty.coin`，界面显示“幻灵玉”。
      * 仅在拿不到货币图标时拼进按钮文案。
@@ -82,11 +66,6 @@ export const RECHARGE_TEXTS = {
     dailyRowTitle: '第{0}天充值获取{1}金币',
     /** 阶段格下方天数。老端语言表 `LayerFirstRecharge_Day_NUM_2` = `累计{0}天`。 */
     dailyAccDay: '累计{0}天',
-    /**
-     * 顶部静态提示（FGUI 原稿 `n8` 的静态文本，老端代码不填 ⇒ 就是这句）。
-     * 口径：只有**商店金币**的充值才计入每日充值额度，直接支付不算。
-     */
-    dailyHint: '仅商店金币的充值会计入额度',
     /** 按钮：未解锁。 */
     dailyLocked: '未解锁',
     /** 按钮：去充值（已解锁但没充够 ⇒ 老端跳商店）。 */

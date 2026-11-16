@@ -3,8 +3,6 @@
  * item.icon 已是 resources 资源路径（icons/分类/文件名），直接解析。
  */
 
-import { spriteFramePath } from '../ArtPaths';
-
 export const SEVEN_DAY_ART_ROOT = 'image/sevenDay';
 
 /** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
@@ -15,41 +13,13 @@ export {
     qualityFrameName,
 } from '../common/QualityFrameArt';
 
-export interface ISevenDayIconRef {
-    readonly root: string;
-    readonly name: string;
-}
+export type { IItemIconRef as ISevenDayIconRef } from '../common/RewardIcon';
 
-/** 人工白名单（优先级高于路径直通），当前为空。 */
-export const SEVEN_DAY_ITEM_ICON_MAP: ReadonlyMap<string, ISevenDayIconRef> = new Map<
-    string,
-    ISevenDayIconRef
->([]);
-
-export const SEVEN_DAY_ICON_PATH_ROOT = 'icons';
-
-/**
- * 把资源路径形态的 icon 拆成加载参数。
- * 只认 icons/ 前缀；老格式裸名返回 null。
- */
-export function splitIconPath(iconPath: string): ISevenDayIconRef | null {
-    if (!iconPath.startsWith(`${SEVEN_DAY_ICON_PATH_ROOT}/`)) return null;
-    const slash = iconPath.lastIndexOf('/');
-    const root = iconPath.slice(0, slash);
-    const name = iconPath.slice(slash + 1);
-    if (!root || !name) return null;
-    return { root, name };
-}
-
-/** 取道具图标加载参数；解析不出返回 null（调用方隐藏图标节点）。 */
-export function resolveItemIconRef(iconKey: string): ISevenDayIconRef | null {
-    if (!iconKey) return null;
-    const mapped = SEVEN_DAY_ITEM_ICON_MAP.get(iconKey);
-    if (mapped) return mapped;
-    return splitIconPath(iconKey);
-}
-
-export function resolveItemIconPath(iconKey: string): string | null {
-    const ref = resolveItemIconRef(iconKey);
-    return ref ? spriteFramePath(ref.root, ref.name) : null;
-}
+/** 旧导出名保留；实现已归位到 `common/RewardIcon`。 */
+export {
+    ITEM_ICON_ALIASES as SEVEN_DAY_ITEM_ICON_MAP,
+    ITEM_ICON_PATH_ROOT as SEVEN_DAY_ICON_PATH_ROOT,
+    splitIconPath,
+    resolveItemIconRef,
+    resolveItemIconPath,
+} from '../common/RewardIcon';

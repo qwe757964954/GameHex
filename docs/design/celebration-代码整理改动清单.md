@@ -15,7 +15,7 @@
 | `CelebrationTexts.ts` | 删 `clFormat`、`CelebrationTextKey` 与 8 条无引用文案；保留照抄口径说明 | +29/-113 |
 | `CelebrationViewState.ts` | 只压注释（去掉规则编号、模板句式），代码未动 | +14/-36 |
 | `CelebrationArt.ts` | 文件头压缩；`osRankTextColor` 删不可达兜底；纠正 `osQualityFrameLevel` 的错误注释 | +87/-141 |
-| `CelebrationFrames.ts` | 删 `preloadPaths` / `requestedPaths` / `size` / `_requested`；`iconOf` 去掉重复查表；引用计数按实例对称 | +60/-95 |
+| `CelebrationFrames.ts` | 删 `preloadPaths` / `requestedPaths` / `size` / `_requested` / `artOf`；`iconOf` 去掉重复查表；引用计数按实例对称 | +60/-95 |
 | `OSArtStrip.ts` | 空奖励分支复用 `hide()`；去掉 `UITransform` 判空与高度兜底 | +23/-42 |
 | `OSRewardSlot.ts` | 注释压缩，`render` 保持全量赋值 | +16/-44 |
 | `OSRankItem.ts` | 删 `osSegmentOf` / `collectSprites` / `OS_RANK_SEGMENT_NAMES`；名次分段直接用枚举颜色表 | +30/-72 |
@@ -23,7 +23,7 @@
 | `OSRankEntryButton.ts` | 删空 `onDestroy`；点击改绑 `this.node`；文件头压缩 | +15/-79 |
 | `OSTabButton.ts` | 删 `button.node` 中转；三个可选回调改必填；文件头压缩 | +26/-54 |
 | `OSShopItem.ts` | 删 `_buySprites` 包装与重复的 `costIcon.node.active` 赋值；点击改 `Button.EventType.CLICK` | +52/-77 |
-| `OSTargetItem.ts` | 同上（点击常量、回调必填、去掉重复节点状态写入）；类注释归位 | +34/-62 |
+| `OSTargetItem.ts` | 点击改用 `Button.EventType.CLICK`、回调改必填、类注释归位 | +34/-62 |
 | `OSRankPage.ts` | 倒计时重复赋值抽 `_refreshCountdown`；`_listOfTab` / `_countOfTab` 去不可达分支；注释压缩 | +97/-185 |
 | `OSRankRankDetailPage.ts` | `CL_EMPTY_RANK_ENTRY` 上移并取消导出；未上榜用 `CL_NOT_IN_RANK` | +30/-46 |
 | `RequestCelebrationMsg.ts` | 文件头压缩，协议事实保留 | +14/-27 |
@@ -87,7 +87,7 @@
 | L336 `osRankTextColor` | 删 `?? OS_RANK_TEXT_COLORS.other` 兜底 | 参数是 `ECelebrationRankSegment` 三值，`Record` 已全覆盖，兜底不可达 |
 | L298 `OS_RANK_TEXT_COLORS` | 键从字符串 `'first' / 'secondThird' / 'other'` 改为枚举 `ECelebrationRankSegment` | 与 `rankSegmentOf` 返回值直接对接，删掉 `OSRankItem` 里的字符串映射表 |
 | L228 `celebrationNeededArtPaths` | 参数类型 `IActivityGoodsInfo` → `ICelebrationGoodsInfo` | 入参来自庆典快照，用本模块的快照契约；两者结构相同，仅类型来源 |
-| 图条注释 | 保留每个 key 的尺寸 / 九宫值（`tmp/gen_osrank.mjs` 要双向对账），删掉「⚠️」「必须是」等叙述 | 对账需要事实，不需要语气词 |
+| 图条注释 | 保留每个 key 的尺寸 / 九宫值（`tests/celebration.test.ts` 的 B1/F1 要双向对账），删掉「⚠️」「必须是」等叙述 | 对账需要事实，不需要语气词 |
 
 ### 2.6 `CelebrationFrames.ts`
 
@@ -105,7 +105,7 @@
 | 文件 / 位置 | 改动 | 依据 |
 |---|---|---|
 | `OSArtStrip.ts` L51 | `count === 0` 的 3 行隐藏逻辑改调 `hide()` | 与 L89 `hide()` 完全重复 |
-| `OSArtStrip.ts` L60 | `const host = getComponent(UITransform); host ? host.height : this.itemHeight` → 直接 `this.getComponent(UITransform).height` | 奖励条节点必有 `UITransform`（prefab 结构已确认）；`itemHeight` 只在这条兜底里被读，`@property` 保留是给生成器对账（tooltip 已注明“不参与横向排布”） |
+| `OSArtStrip.ts` L60 | `const host = getComponent(UITransform); host ? host.height : this.itemHeight` → 直接 `this.getComponent(UITransform).height` | 奖励条节点必有 `UITransform`；`itemHeight` 只在这条兜底里被读，`@property` 保留只为对齐 prefab 设计值（tooltip 已改成“排布用 UITransform 高度”） |
 | `OSArtStrip.ts` 文件头 | 注释压缩，保留 `Mask` 裁剪 / 缩放加在条目上的原因 | 注释规范 |
 | `OSRankItem.ts` 删 `osSegmentOf` / `collectSprites` / `OS_RANK_SEGMENT_NAMES` | 全仓无引用；分段文案与颜色改用 `rankSegmentOf` + 枚举颜色表 | `osSegmentOf` 用 `row` 算分段，`render` 里已有 `start/end`；`collectSprites` 只是 `[frame, icon]` 的包装 |
 | `OSRankItem.ts` L78 `toColor` | 参数直接收 `OsRgb` 元组，不再接受 `undefined` | 颜色表三值全覆盖，`undefined` 路径不可达 |
@@ -173,7 +173,7 @@
 | `OSRankPage.rankDetailRedDot` 等恒 false 写入 | 保留 | 同上是 prefab 节点存在、口径为“永不点亮” |
 | `CelebrationTexts` 的「多钱」、半角冒号 | 照抄 | 原文案对账，单测锁了这些字面量 |
 | `CelebrationFrames.iconOf` 的 `resId <= 0` 前置判断 | 保留在 `rewardIconRefOf` 内 | 0 / 负数不是合法资源 id，提前短路 |
-| `OSArtStrip.itemHeight` `@property` | 保留 | tooltip 注明“生成器对账用”，`tmp/gen_osrank.mjs` 会读；代码排布用 `UITransform` 高度 |
+| `OSArtStrip.itemHeight` `@property` | 保留 | 只用于对齐 prefab 里的设计值；排布读 `UITransform` 高度，删掉会丢设计稿锚点 |
 | `CelebrationViewState` 单独成文件 | 保留 | 三个映射要被 Node 用例直接 import，带 `cc` 的文件进不了测试环境 |
 | `OSArtStrip` / `OSShopItem` / `OSTargetItem` 的 re-export | 保留 | `tests/celebration.test.ts` 从这些文件 import 状态映射，删了会断测试 |
 

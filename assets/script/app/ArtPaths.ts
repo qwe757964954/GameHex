@@ -11,6 +11,17 @@ export const ART_ROOT = 'image';
 /** 主界面常驻图：底部导航、木牌底。 */
 export const MAIN_ART_ROOT = `${ART_ROOT}/main`;
 
+/** 跨 feature 复用的页面/组件大图根目录；新增时只在这里写真源。 */
+export const HANG_ART_ROOT = `${ART_ROOT}/hang`;
+export const CHAT_ART_ROOT = `${ART_ROOT}/chat`;
+export const LEAGUE_ART_ROOT = `${ART_ROOT}/league`;
+export const FRIEND_ART_ROOT = `${ART_ROOT}/friend`;
+export const FIRST_RECHARGE_ART_ROOT = `${ART_ROOT}/firstRecharge`;
+export const ACTIVITY_ART_ROOT = `${ART_ROOT}/activity`;
+export const LOGIN_ART_ROOT = `${ART_ROOT}/login`;
+export const SEVEN_DAY_ART_ROOT = `${ART_ROOT}/sevenDay`;
+export const MAIN_ICON_ART_ROOT = `icons/main`;
+
 /**
  * **主城底栏（2026-10-19 蓝湖改版）** —— 七格的图标 + 选中底板 + 底条。
  *

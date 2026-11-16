@@ -5,7 +5,7 @@ import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewL
 import { PopupManager } from '../../../framework/ui/PopupManager';
 import { ShowRewardPage } from '../../showReward/ShowRewardPage';
 import { loadGuideDialog, loadGuidePortraits, loadGuideSteps } from '../../guide/application/GuideLoader';
-import { createGuideSaveStore } from '../../guide/application/GuideStorageAdapter';
+import { createGuidePersistence } from '../../guide/application/GuideStorageAdapter';
 import { GameNetGuideGateway } from '../../guide/application/GuideGateway';
 import { GuideDialogView } from '../../guide/ui/GuideDialogView';
 import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
@@ -93,8 +93,10 @@ export class GuideComposition extends ControllerBase {
             if (event.cond === 'cardSelected' && this.latestState) render(this.latestState);
         });
 
+        const { store, outbox } = createGuidePersistence();
         const controller = new GuideController(this.context, {
-            store: createGuideSaveStore(),
+            store,
+            outbox,
             steps,
             gateway: new GameNetGuideGateway(),
             view: { owner: view, render },

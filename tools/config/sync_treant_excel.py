@@ -26,7 +26,8 @@ import shutil
 import zipfile
 from xml.sax.saxutils import escape
 
-ROOT = 'D:/Alan/Project/POW/doc/塔防数据配置'
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..',
+                                    'doc', '塔防数据配置'))
 CLIENT_JSON = os.path.join(ROOT, 'json', 'client')
 
 # ---------------------------------------------------------------- 列顺序（与表头一致）

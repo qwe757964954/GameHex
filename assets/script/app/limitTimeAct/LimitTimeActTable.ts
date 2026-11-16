@@ -21,6 +21,7 @@
  */
 
 import { toCount } from '../net/RequestGuard';
+import { parseRewardAmounts } from '../../core/table/RewardRows';
 import {
     TASK_STATE_FINISH,
     TASK_STATE_REWARDED,
@@ -50,17 +51,7 @@ export type LimitTimeGoodsPhase = 'buyable' | 'soldout';
 
 /** 解析一条奖励数组；非法条目跳过。 */
 export function parseRewards(raw: unknown): ILimitTimeReward[] {
-    const out: ILimitTimeReward[] = [];
-    if (!Array.isArray(raw)) return out;
-    for (const item of raw) {
-        if (!item || typeof item !== 'object') continue;
-        const row = item as Record<string, unknown>;
-        const resId = toCount(row.resId);
-        const number = toCount(row.number);
-        if (resId <= 0 || number <= 0) continue;
-        out.push({ resId, number });
-    }
-    return out;
+    return parseRewardAmounts(raw);
 }
 
 /** `limitTimeTask` 全表 → 归一化行（按 `sort` 升序）。 */

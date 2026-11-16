@@ -37,15 +37,16 @@ const { ccclass, property } = _decorator;
  *    子视图      `FirstRechargeTierTab`（一档）、`FirstRechargeDayRow`（一天，内含 `FirstRechargeSlot`）
  *    本类        只做「取数 → 铺到子视图」和「点击 → 发请求 → 重新取数」
  *
- *  项目约定：**样式与布局全在 prefab 的 Inspector 上**（含全部美术引用，不再运行时 `resources.load`）；
- *  代码只算「随数据变化的尺寸」，目前只有日牌宽度一项。
+ *  样式与布局全在 prefab：底板 / 字体 / 品质框图名由 Inspector 绑定；
+ *  道具图标与品质框贴图仍按物品表 `icon` 路径运行时加载（`loadIconFrames` / `loadQualityFrames`）。
+ *  代码只算「随数据变化的尺寸」——目前只有日牌宽度一项。
  */
 @ccclass('FirstRechargePage')
 export class FirstRechargePage extends PopupBase {
     /**
      * 弹窗预制体在 `main-pages` bundle 下的路径（`PopupManager` 用它加载）。
      *
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/bundles/main-pages/ui/FirstRecharge/`，F 与 R 大写）：
+     * 目录名**必须**与磁盘一致（`assets/bundles/main-pages/ui/FirstRecharge/`，F 与 R 大写）：
      * Android / iOS 的热更新 zip 内路径**大小写敏感**，写成 `ui/firstRecharge/...`
      * 在编辑器里照样能跑（Windows 不敏感），真机上才会加载失败变空弹窗。
      */
@@ -89,7 +90,7 @@ export class FirstRechargePage extends PopupBase {
 
     /** 当前快照（表 + 服务器状态 + 道具表）。 */
     private snapshot: IFirstRechargeSnapshot | null = null;
-    /** 当前选中的档位 **id**（不是下标 —— 与老客户端 `_selectIndex` 同口径）。 */
+    /** 当前选中的档位 id。老端 `_selectIndex` 存下标；这里存 id，隐藏档位时不会下标漂移。 */
     private selectedTierId = 0;
     /** 正在发请求，期间按钮不可点。 */
     private busy = false;
@@ -104,11 +105,11 @@ export class FirstRechargePage extends PopupBase {
 
     protected onInit(): void {
         this.hintIdleColor.set(this.hintLabel.color);
-        //  Hint 是「副标题 + 错误提示」两用的：先把 prefab 上的静态文案记下来当正常态，
-        //  `setHint('')` 就是"恢复副标题"。数据到位后 `presentHeadline()` 会换成真实兵种名。
+        // Hint 是「副标题 + 错误提示」两用的：先把 prefab 上的静态文案记下来当正常态，
+        // `setHint('')` 就是"恢复副标题"。数据到位后 `presentHeadline()` 会换成真实兵种名。
         this.subtitle = this.hintLabel.string;
 
-        //  CLICK 挂在**节点**上（Button 自身没有 on）—— 与 `CardUpgradePage` 同一写法。
+        // CLICK 挂在**节点**上（Button 自身没有 on）—— 与 `CardUpgradePage` 同一写法。
         this.buyAction = this.buyButton.getComponent(Button);
         this.closeButton.getComponent(Button).node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.buyAction.node.on(Button.EventType.CLICK, this.onBuyClick, this);
@@ -148,10 +149,6 @@ export class FirstRechargePage extends PopupBase {
         this.repo = repository;
     }
 
-    // ============================================================
-    // 取数与渲染
-    // ============================================================
-
     private async reload(): Promise<void> {
         const revision = ++this.loadRevision;
         const snapshot = await this.repo.load();
@@ -186,7 +183,7 @@ export class FirstRechargePage extends PopupBase {
             return;
         }
 
-        //  图标与品质框必须先 **await 完**再铺界面：`FirstRechargeSlot.render` 是同步的，
+        // 图标与品质框必须先 **await 完**再铺界面：`FirstRechargeSlot.render` 是同步的，
         // 在里面现加载会在切档时先闪一帧上一档的图（`VScrollView` 回收残影同款缺陷）。
         const [qualityFrames, frames] = await Promise.all([
             this.loadQualityFrames(),
@@ -196,7 +193,7 @@ export class FirstRechargePage extends PopupBase {
 
         const state = snapshot.states.get(tier.id);
         const rows = this.dayRows;
-        //  三天**横排**：DayList 的 cc.Layout 负责间距与整排居中，DayRow 自己按奖励数改宽。
+        // 三天**横排**：DayList 的 cc.Layout 负责间距与整排居中，DayRow 自己按奖励数改宽。
         for (let index = 0; index < rows.length; index++) {
             const day = index + 1;
             const rewards = tier.days[index] ?? [];
@@ -281,10 +278,6 @@ export class FirstRechargePage extends PopupBase {
         this.setHint(FIRST_RECHARGE_TEXTS.empty, true);
     }
 
-    // ============================================================
-    // 交互
-    // ============================================================
-
     private onTierClick(tab: FirstRechargeTierTab): void {
         const snapshot = this.snapshot;
         if (!snapshot) return;
@@ -319,7 +312,7 @@ export class FirstRechargePage extends PopupBase {
         this.setHint('');
 
         const claimDay = claimableDayOf(state, snapshot.now);
-        //  买入用 `tier.rmb`（支付渠道 id），领奖用 `tier.id`（档位 id）—— 口径不同，别统一。
+        // 买入用 `tier.rmb`（支付渠道 id），领奖用 `tier.id`（档位 id）—— 口径不同，别统一。
         const result = claimDay > 0
             ? await this.repo.claim(tier.id, claimDay, this)
             : await this.repo.buy(tier.rmb, this);
@@ -341,10 +334,6 @@ export class FirstRechargePage extends PopupBase {
         await this.reload();
     }
 
-    // ============================================================
-    // 工具
-    // ============================================================
-
     /** 当前选中的档位；选中 id 没对上表里的任何一档时回落到第一档。 */
     private selectedTier(tiers: readonly IFirstRechargeTier[]): IFirstRechargeTier | undefined {
         return tiers.find((tier) => tier.id === this.selectedTierId) ?? tiers[0];
@@ -357,7 +346,7 @@ export class FirstRechargePage extends PopupBase {
     /**
      * 档位 tab，**按 x 从左到右**排序（`_children` 顺序 ≠ 视觉顺序）。
      *
-     *  ⚠️ 必须 `getComponentsInChildren`：引擎 `Node.getComponents` 只查**本节点自己**
+     *  必须 `getComponentsInChildren`：引擎 `Node.getComponents` 只查**本节点自己**
      *  （"all components of given type in the node"），而 `TierBar` 身上没有 tab 组件，
      *  用错会返回 `[]` —— 表现为「界面全空但一条报错都没有」。`DayList` / `SlotBar` 同理。
      */

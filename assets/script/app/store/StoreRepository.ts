@@ -11,6 +11,7 @@
 
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readRefRows } from '../common/TableRead';
 import { RequestMsg } from '../../framework/net/RequestMsg';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -161,9 +162,7 @@ function toSeconds(value: unknown): number {
 }
 
 /** 读一张分表（`remoteRef`）；表缺失时返回空数组。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 function asRow(raw: unknown): Record<string, unknown> | null {
     return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;

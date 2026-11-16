@@ -26,20 +26,22 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-    ITEM_INFO_MAX_ROWS,
     ITEM_INFO_PANEL_HEIGHT,
     ITEM_INFO_PANEL_WIDTH,
-    ITEM_INFO_PLATE_WIDTH,
     ITEM_INFO_REWARD_ITEM_SIZE,
     ITEM_INFO_REWARD_SLOT_SIZE,
+    itemTypeNameOf,
+} from '../assets/script/app/itemdetail/ItemInfoTable';
+import {
+    ITEM_INFO_MAX_ROWS,
+    ITEM_INFO_PLATE_WIDTH,
     ITEM_INFO_ROWS_PAD,
     ITEM_INFO_ROW_GAP,
     ITEM_INFO_ROW_HEIGHT,
     ITEM_INFO_ROW_WIDTH,
     itemInfoRowCountOf,
     itemInfoRowsHeightOf,
-    itemTypeNameOf,
-} from '../assets/script/app/itemdetail/ItemInfoTable';
+} from './fixtures/iteminfo-layout';
 import { ITEM_DETAIL_TEXTS, formatText } from '../assets/script/app/itemdetail/ItemDetailTexts';
 
 const ITEM_INFO_PREFAB = 'assets/bundles/main-pages/ui/ItemInfo/ItemInfo.prefab';

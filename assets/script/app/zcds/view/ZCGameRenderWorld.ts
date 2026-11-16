@@ -30,6 +30,7 @@ import { resolveZCSpawnRegionHints } from '../model/ZCSpawnRegionHint';
 import type { IZCSpawnRegionHint } from '../model/ZCSpawnRegionHint';
 import type { ZCMatchMap } from '../model/ZCMatchConfig';
 import {
+    ZCBuildingType,
     type ZCCombatEvent,
     type ZCCardReveal,
     type ZCHexActivation,
@@ -274,6 +275,8 @@ interface ZCRenderWorldOptions {
      * 缺省 ⇒ 气泡回退 Graphics 色块（旧样式），不影响选点。
     */
     spawnRegionFrames?: IZCSpawnRegionHintFrames | null;
+    /** 区域气泡 prefab；缺省 ⇒ 气泡不显示（不再在运行期用常量拼节点）。*/
+    spawnRegionHintPrefab?: Prefab | null;
     /**
      * HUD 金币栏面板（`BottomInfoPanel/CoinPanel`）：金币粒子的目标挂点；缺省 ⇒ 不播金币飞行。
      *
@@ -942,6 +945,7 @@ export class ZCGameRenderWorld {
             this.spawnRegionHintOverlay = new ZCSpawnRegionHintOverlay(
                 this.boardLayer('CooldownOverlay'),
                 this.options.spawnRegionFrames ?? null,
+                this.options.spawnRegionHintPrefab ?? null,
             );
         }
         this.spawnRegionHintOverlay.render(
@@ -1350,7 +1354,8 @@ export class ZCGameRenderWorld {
         }
         for (const reveal of frame.cardReveals) {
             let entityId = this.cardRevealEntityBySource.get(reveal.id);
-            if (reveal.owner === 'player' && this.visualTime(frame) >= reveal.startedAt) this.shownPlayerCardReveals.add(reveal.id);
+            if (reveal.owner === 'player' && reveal.building !== ZCBuildingType.Mine
+                && this.visualTime(frame) >= reveal.startedAt) this.shownPlayerCardReveals.add(reveal.id);
             else this.shownPlayerCardReveals.delete(reveal.id);
             if (!entityId) {
                 const node = this.pool.acquire('cardReveal', () => instantiate(cardRevealPrefab));

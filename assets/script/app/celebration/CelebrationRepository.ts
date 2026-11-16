@@ -19,34 +19,33 @@
  * | ⑦ | `CacheMgr.getTlCmdCelebrationInfo()` | `curValue`（当前进度值）+ `targetInfos`（已领档）+ `shopInfos`（已购次数） |
  * | ⑧ | `CacheMgr.getTlCmdRankItem()` | 活动时间窗（`startTime` / `endTime` / `showEndTime`，**秒**） |
  *
- * ## ⚠️ 走 `CacheMgr`，不自己存快照
+ * ## 走 `CacheMgr`，不自己存快照
  *
  * `CmdCelebrationInfo` / `CmdRankItem` 都在 `assets/resources/config/protoCache.json` 里登记着
  * （实测核对过：`CmdCelebrationInfo` 的 `tlKey = ["id"]`，`CmdRankItem` 的 `tlKey = ["type"]`）
  * ⇒ 服务端会推，`GameNet` 收包时已写进 `GameCache`。所以每次 `load()` 现读，**不要自己存一份**。
  *
- * ## ⚠️ 没有「拉取庆典数据」的请求
+ * ## 没有「拉取庆典数据」的请求
  *
  * `Cmd.d.ts` 里庆典只有两个请求：`GetTargetReward` / `BuyShopGoods`（**没有"查询"**）。
  * 缓存为空 = 服务端还没推 / 离线 ⇒ 界面按空渲染，**不要造一个假请求**
  * （与 `HangRepository` 的「没有拉取挂机数据的请求」同一处置）。
  *
- * ⚠️ 但**详细排名**有查询：`CmdGetRankReqMsg{rankType, showNum, unionId}`
+ * 但**详细排名**有查询：`CmdGetRankReqMsg{rankType, showNum, unionId}`
  * （`CmdGetRankRspMsg = 345265589`，已登记）。那一支在 `CelebrationRepository.requestRank()`。
  *
- * ## 🔴 `server.id` 是 **rankType**、`config.id` 才是过滤键
+ * ## `server.id` 是 **rankType**、`config.id` 才是过滤键
  *
  * 见 `CelebrationTable` 文件头。这里只强调落地点：`pickActiveServer()` 返回的 `s.id`
  * 拿去 `configOfRankType()`；反查出来的 `celebrationIdOf()` 拿去过滤三张子表。
  * 两者混用**不报错、只是三个列表全空**。
  *
- * ## ⚠️ 支付链路只到「业务前置请求」
+ * ## 支付链路只到「业务前置请求」
  *
  * 老端 `ModelCelebration.RequestCelebrationBuyShop` 的顺序是：
  * `rsp.canRmb === true` ⇒ `SDKMgr.pay(rmb, "common", 0)`；否则 `FW.ShowReward(rsp.tlCmdGoods)`。
  * Demo3.8 没有支付 SDK（与礼包 / 首充 / 月卡 / 战令同一处置）⇒ 请求照发，拿到 `canRmb`
  * 之后**只把结果交回页面**，由页面提示「支付暂未接入」，**不假装成功**。
- * 见 `CL_PAY_SDK_AVAILABLE`。
  */
 
 import { FW } from '../../framework/FW';
@@ -146,15 +145,6 @@ export type CelebrationRequestResult = 'ok' | 'offline' | 'failed';
 
 /** 买商品的结果：多了「服务端说这次要走支付 SDK」这一支。 */
 export type CelebrationBuyResult = CelebrationRequestResult | 'pay';
-
-/**
- * Demo3.8 是否接了支付 SDK。
- *
- * 老端 `SDKMgr.pay(...)`；本工程**没有**（礼包 / 首充 / 月卡 / 战令同一处置）。
- * 恒 `false`：`buyShopGoods()` 拿到 `canRmb === true` 时返回 `'pay'`，
- * 由页面提示 `CL_TEXTS.payUnavailable`，**不谎报成功**。
- */
-export const CL_PAY_SDK_AVAILABLE = false;
 
 /** 请求超时（与全家族同口径：读 800ms / 写 5000ms）。 */
 const READ_TIMEOUT_MS = 800;
@@ -467,10 +457,6 @@ function toLongNumber(value: unknown): number {
 
 export const celebrationRepository: ICelebrationRepository = new RuntimeCelebrationRepository();
 
-/** 读一次超时常量给测试用（避免测试里硬编码 800/5000）。 */
-export const CL_READ_TIMEOUT_MS = READ_TIMEOUT_MS;
-export const CL_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;
-
 // ============================================================
 // 快照上的便捷查询（要文案模板的那几个留在这里 ——
 // 「判定进 Table、文案包装留 Repository」是家族约定，对齐 `HangRepository.adCountTextOf`）
@@ -526,11 +512,6 @@ export function countdownTextOf(snapshot: ICelebrationSnapshot, nowMs?: number):
     return `${countdownHmsOf(offset)}${CL_TEXTS.countdownSuffix}`;
 }
 
-/** 奖励行用的奖励条（目标项 / 排名项各取一支；查不到返回空数组）。 */
-export function rewardsOfTarget(row: ICelebrationTargetRow): readonly ICelebrationReward[] {
-    return row.rewards;
-}
-
 /** 排名项的第一份奖励（老端 `renderRankListItem` 取 `data.rewards2[0]`）。 */
 export function firstReward2Of(row: ICelebrationRankRow): ICelebrationReward | null {
     return row.rewards2.length > 0 ? row.rewards2[0] : null;
@@ -571,9 +552,4 @@ export function targetStateOf(
 /** 排名档是否已达标（老端 `enough`；够不够「显示为已达标」那一页）。 */
 export function rankReached(snapshot: ICelebrationSnapshot, row: ICelebrationRankRow): boolean {
     return rankReachedOf(snapshot.curValue, row.count);
-}
-
-/** 商品卡的分支（`rmb` / `cost`；页面驱动 `buyType` 用）。 */
-export function shopBranchOf(snapshot: ICelebrationSnapshot, row: ICelebrationShopRow): CelebrationPayBranch {
-    return shopPricingOf(snapshot, row).branch;
 }

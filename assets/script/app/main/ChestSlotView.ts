@@ -4,17 +4,6 @@ import { CHEST_EVENTS } from './ChestEvents';
 import { ChestSlotAction, ChestSlotState, IChestSlotData, chestActionCaption } from './ChestTypes';
 
 const { ccclass, property } = _decorator;
-const CHEST_SPEED_UP_TEXT_SPACING = 2;
-const CHEST_SPEED_UP_ICON_WIDTH = 28;
-const CHEST_SPEED_UP_ICON_GAP = 4;
-const CHEST_BUTTON_LABEL_WIDTH = 94;
-const CHEST_CLOCK_WIDTH = 26;
-const CHEST_TIMER_GAP = 4;
-const CHEST_TIME_TEXT_MAX_WIDTH = 107;
-const CHEST_TIME_TEXT_HEIGHT = 24;
-const CHEST_PROGRESS_X = 15;
-const CHEST_COUNTING_CLOCK_X = -57;
-const CHEST_PROGRESS_SCALE_X = 0.78;
 
 /**
  * 宝箱**单格**（`ui/main/ChestSlot.prefab`）。
@@ -73,6 +62,15 @@ export class ChestSlotView extends Component {
     @property({ type: Node, tooltip: 'Btn/SpeedUpIcon：加速按钮的视频图标' })
     speedUpIcon: Node = null;
 
+    @property({ tooltip: '加速态图标与文案之间的间距' })
+    speedUpIconGap = 4;
+
+    @property({ tooltip: '加速态文案的字间距' })
+    speedUpTextSpacing = 2;
+
+    @property({ group: '布局', tooltip: '等待态时钟与时长之间的间距' })
+    timerGap = 4;
+
     /** 三张卡底 + 三张按钮底，由 `ChestBar` 在装配时灌进来。 */
     private static cardFrames: { blue: SpriteFrame | null; gold: SpriteFrame | null; empty: SpriteFrame | null } =
         { blue: null, gold: null, empty: null };
@@ -83,6 +81,16 @@ export class ChestSlotView extends Component {
     private dataIndex = -1;
     /** 这一格现在能不能点。**门闩用布尔字段**，不拿「回调有没有值」当门闩（规范 §2.1）。 */
     private actionEnabled = false;
+    /** 时间文本的测量上限：来自 prefab 的 UITransform。 */
+    private timeTextMaxWidth = 0;
+    private timeTextMaxHeight = 0;
+    private timeTextBaseX = 0;
+    /** 倒计时态时钟的基准 x；首帧从 prefab 读取，等待态改过后切回来必须复原。 */
+    private clockBaseX = 0;
+    /** 时钟图标宽度；首帧从 prefab 的 UITransform 读取。 */
+    private clockWidth = 0;
+    /** 按钮文案的宽度上限：来自 prefab 的 UITransform。 */
+    private btnLabelWidth = 0;
 
     /** 由宿主一次性注入美术（三张卡底 / 三张按钮底）。 */
     static setArt(
@@ -94,6 +102,12 @@ export class ChestSlotView extends Component {
     }
 
     onLoad(): void {
+        this.timeTextMaxWidth = this.timeTextTransform.width;
+        this.timeTextMaxHeight = this.timeTextTransform.height;
+        this.timeTextBaseX = this.timeText.node.position.x;
+        this.clockBaseX = this.clock.position.x;
+        this.clockWidth = this.clock.getComponent(UITransform).width;
+        this.btnLabelWidth = this.btnLabel.node.getComponent(UITransform).width;
         // cc.Button 会停止触摸事件冒泡，必须监听实际按钮的 CLICK。
         this.btn.node.on(Button.EventType.CLICK, this.handleAction, this);
         // 🔴 2026-11-09 用户：「点击整个宝箱都会打开宝箱详情弹窗」——
@@ -141,11 +155,9 @@ export class ChestSlotView extends Component {
         if (this.costLabel) this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
         this.btnLabel.isBold = true;
-        this.btnLabel.spacingX = isSpeedUp ? CHEST_SPEED_UP_TEXT_SPACING : 0;
+        this.btnLabel.spacingX = isSpeedUp ? this.speedUpTextSpacing : 0;
         this.layoutButtonLabel(isSpeedUp);
 
-        this.timeBg.setPosition(CHEST_PROGRESS_X, 0, 0);
-        this.timeBg.setScale(CHEST_PROGRESS_SCALE_X, 1, 1);
         if (this.timer.active) {
             const total = data.totalSeconds > 0 ? data.totalSeconds : 1;
             const ratio = Math.max(0, Math.min(1, 1 - data.remainSeconds / total));
@@ -153,17 +165,21 @@ export class ChestSlotView extends Component {
             this.timeText.string = isCounting
                 ? ChestSlotView.formatCountdown(data.remainSeconds)
                 : ChestSlotView.formatRemain(data.totalSeconds);
-            let textWidth = CHEST_TIME_TEXT_MAX_WIDTH;
+            let textWidth = this.timeTextMaxWidth;
             if (isUnactivated) {
                 // h/m/s 文本长短不同，按本帧真实字宽将图标和文字整体居中。
                 this.timeText.overflow = Label.Overflow.NONE;
                 this.timeText.updateRenderData(true);
-                textWidth = Math.min(this.timeTextTransform.width, CHEST_TIME_TEXT_MAX_WIDTH);
+                textWidth = Math.min(this.timeTextTransform.width, this.timeTextMaxWidth);
             }
             this.timeText.overflow = Label.Overflow.SHRINK;
-            this.timeTextTransform.setContentSize(textWidth, CHEST_TIME_TEXT_HEIGHT);
-            this.clock.setPosition(isCounting ? CHEST_COUNTING_CLOCK_X : -(textWidth + CHEST_TIMER_GAP) / 2, 0, 0);
-            this.timeText.node.setPosition(isCounting ? CHEST_PROGRESS_X : (CHEST_CLOCK_WIDTH + CHEST_TIMER_GAP) / 2, 0, 0);
+            this.timeTextTransform.setContentSize(textWidth, this.timeTextMaxHeight);
+            // 两种排版：等待态「时钟 + 时长」整体居中；倒计时态胶囊 + 文案，时钟回到 prefab
+            // 的左侧位（等待态把它改写过，切回来必须复原，否则图标会叠在胶囊上）。
+            this.clock.setPosition(
+                isCounting ? this.clockBaseX : -(textWidth + this.timerGap) / 2, 0, 0);
+            this.timeText.node.setPosition(
+                isCounting ? this.timeTextBaseX : (this.clockWidth + this.timerGap) / 2, 0, 0);
         }
     }
 
@@ -185,12 +201,13 @@ export class ChestSlotView extends Component {
             return;
         }
         const textWidth = Math.min(
-            this.btnLabel.string.length * this.btnLabel.fontSize + CHEST_SPEED_UP_TEXT_SPACING,
-            CHEST_BUTTON_LABEL_WIDTH,
+            this.btnLabel.string.length * this.btnLabel.fontSize + this.speedUpTextSpacing,
+            this.btnLabelWidth,
         );
-        const left = -(CHEST_SPEED_UP_ICON_WIDTH + CHEST_SPEED_UP_ICON_GAP + textWidth) / 2;
-        this.speedUpIcon.setPosition(left + CHEST_SPEED_UP_ICON_WIDTH / 2, 0, 0);
-        labelNode.setPosition(left + CHEST_SPEED_UP_ICON_WIDTH + CHEST_SPEED_UP_ICON_GAP + textWidth / 2, 0, 0);
+        const iconWidth = this.speedUpIcon.getComponent(UITransform).width;
+        const left = -(iconWidth + this.speedUpIconGap + textWidth) / 2;
+        this.speedUpIcon.setPosition(left + iconWidth / 2, 0, 0);
+        labelNode.setPosition(left + iconWidth + this.speedUpIconGap + textWidth / 2, 0, 0);
     }
 
     /**

@@ -1,17 +1,11 @@
 /**
- * 阵型（布阵方案）的数据模型与边界校验 —— 纯函数、零引擎依赖。
- *
- *  `FormationService` 负责网络与缓存，本文件只回答「这份数据能不能用」。
- *  拆开的原因不是洁癖：`FormationService` 经 `GameNet` 拉进 `cc`，在 Node 单测里
- *  import 就炸，而校验规则恰恰是最需要被用例锁住的部分
- *  （服务端少回一个字段、id 回成 0 或字符串，都不该把整块面板带崩）。
+ * 阵型的数据模型与边界校验，纯函数、零引擎依赖。
+ * FormationService 负责网络与缓存，本文件只回答这份数据能不能用。
  */
 
 /**
- * 经过边界校验的阵型。
- *
- * `heroIds` 与 `pvpCard.id` / 后端英雄 `heroId` 同一套编号；工程内卡 id 一律走字符串，
- * 所以与卡表对齐时用 `String(heroId)`（见 `LineupPresets.buildPresetDecks`）。
+ * 经过边界校验的阵型。heroIds 与 pvpCard.id、后端英雄 heroId 同一套编号，
+ * 与卡表对齐时用 String(heroId)。
  */
 export interface ZCFormation {
     readonly formationId: number;
@@ -29,8 +23,7 @@ export function normalizeFormation(info: CmdFormationInfo | null | undefined): Z
 }
 
 /**
- * 整份列表的边界校验：逐条过滤非法项，按 `formationId` 去重（后出现的覆盖前值），再按 id 升序。
- * 升序是给「页签下标 → formationId」的映射用的，不要改成保持原顺序。
+ * 整份列表逐条校验，按 formationId 去重后升序。升序供页签下标映射使用。
  */
 export function normalizeFormations(infos: CmdFormationInfoRspMsg['infos']): readonly ZCFormation[] {
     const result = new Map<number, ZCFormation>();
@@ -65,31 +58,4 @@ export function normalizeHeroIds(heroIds: readonly number[] | null | undefined):
 export function toPositiveInt(value: unknown): number | null {
     const num = Number(value);
     return Number.isSafeInteger(num) && num > 0 ? num : null;
-}
-
-/**
- * 给一个 Promise 兜硬超时：`ms` 内没兑现就用 `fallback()` 顶上，保证一定兑现。
- *
- * 为什么必须有它：`GameNet.send` 只在「收到回包」或「断线」时兑现（`NetSocket.onTimeOut()`
- * 只在断线清心跳 / `ClearAllRequest()` 里被调用），没有按请求的超时 —— 服务端不认识
- * 某条消息、干脆不回应时，那个 Promise 会永远悬着。若把它放进 `Promise.all` 做数据加载，
- * 整个面板就停在 prefab 占位外观（站台空、计数 0、列表空白），而且离线跑不出来
- * （离线时请求根本不发），只在连真服时才炸 —— 2026-09-20 就这么炸过一次。
- *
- * 放纯模块里是为了能被单测覆盖：`FormationService` 经 `GameNet` 拉进 `cc`，Node 里 import 不了。
- */
-export function withTimeout<T>(promise: Promise<T>, ms: number, fallback: () => T): Promise<T> {
-    return new Promise<T>((resolve) => {
-        let settled = false;
-        let timer: ReturnType<typeof setTimeout> | null = null;
-        const finish = (value: T): void => {
-            if (settled) return;
-            settled = true;
-            if (timer !== null) clearTimeout(timer);
-            resolve(value);
-        };
-        timer = setTimeout(() => finish(fallback()), Math.max(0, ms));
-        // 原 Promise 若 reject 也走同一个 fallback，调用方永远不会收到 reject。
-        void promise.then(finish, () => finish(fallback()));
-    });
 }

@@ -334,6 +334,7 @@ test('任务详情按当前奖励渲染公共框，复用清理多余格，旧�
         if (name === 'cc') return { Button: { EventType: { CLICK: 'click' } },
             _decorator: { ccclass: () => value => value, property: () => () => {} } };
         if (name.endsWith('/PopupBase')) return { PopupBase: class {} };
+        if (name.endsWith('/GuideEvents')) return { reportGuideComplete() {} };
         return {};
     } });
     const page = new exports.MainTaskDetailPage();

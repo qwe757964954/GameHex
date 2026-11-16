@@ -1,17 +1,7 @@
 /**
- * 「联盟」主页 —— 判定 / 映射的**纯函数表**（不 import `cc`，可脱离引擎单测）。
- *
- * 主页本体（`组件_联盟_主界面.xml`，720×1280）只有一条交互：**六个入口按钮**。
- * 每个入口对应老端 `CtrlLeague` 的一个 `Open*` 方法 / 一个 `play/LayerLeague*.ts`。
- * 本文件把「节点名 → 老端入口」钉成一张表，页面类只负责「按表接事件」。
- *
- * ## 为什么要有这张表（而不是在页面类里写 switch）
- *
- * 六个入口里有 5 个的目标面板**尚未移植**。老端的做法是「点谁开谁」，
- * 而这版必须能表达「这个入口已经通了 / 还没通」——
- * 表里带 `landed` 开关，页面类据此决定「开面板」还是「提示未开放」。
- * 这样每落地一个子面板只需要把对应行的 `landed` 改成 `true` + 接上面板类，
- * 不用回头改页面逻辑（`MainTabHost` 的 4 个空 tab 也是同一套思路）。
+ * 联盟主页入口与配置表归一化纯函数，不 import cc。
+ * 六个入口按 LEAGUE_ENTRANCES 顺序接事件；landed 表示面板是否已落地。
+ * 配置表读取用 toInt 保留 NaN，避免把缺格当成合法 0。
  */
 
 import { toIdString } from '../net/RequestGuard';
@@ -27,9 +17,9 @@ import {
     LEAGUE_STORE_LIMIT_TEMPLATE,
     fillLeagueText,
 } from './LeagueTexts';
-// ⚠️ `StringUtil` 是**零引擎依赖**的纯工具类（`framework/utils/StringUtil.ts` 一个 import 都没有）
-//    ⇒ 引它不会破坏本文件的「不 import `cc`、可脱离引擎单测」这条底线。
-//    北伐要用的两个：`formatNumberToZH`（伤害 / 进度）与 `numAbbr`（盟内伤害榜的 `2.1M` 缩写）。
+// `StringUtil` 是**零引擎依赖**的纯工具类（`framework/utils/StringUtil.ts` 一个 import 都没有）
+// ⇒ 引它不会破坏本文件的「不 import `cc`、可脱离引擎单测」这条底线。
+// 北伐要用的两个：`formatNumberToZH`（伤害 / 进度）与 `numAbbr`（盟内伤害榜的 `2.1M` 缩写）。
 import { StringUtil } from '../../framework/utils/StringUtil';
 
 /** 老端 `CtrlLeague` 的入口方法名（用作稳定标识，不参与展示）。 */
@@ -110,9 +100,9 @@ export function pendingLeagueEntrances(): readonly ILeagueEntrance[] {
  * FGUI 四个入口按钮组件（`主界面/按钮_联盟_红|棕|蓝|玩法标题.xml`）里那颗都叫 `com_rd`；
  * 本端统一改名 `RedDot`（与 `ui/common/RedDot.prefab` 的根同名，便于 `getChildByName`）。
  *
- * ⚠️ 契约：`League.prefab` 里**六个**入口按钮下各挂一个 `ui/common/RedDot.prefab` 的嵌套实例，
- *    名字 `RedDot`（初始显隐不重要 —— `LeaguePage.applyEntranceRedDots()` 每次绝对赋值）。
- *    重命名时必须同步本常量与 `LeaguePage` 的查找。
+ * 契约：`League.prefab` 里**六个**入口按钮下各挂一个 `ui/common/RedDot.prefab` 的嵌套实例，
+ * 名字 `RedDot`（初始显隐不重要 —— `LeaguePage.applyEntranceRedDots()` 每次绝对赋值）。
+ * 重命名时必须同步本常量与 `LeaguePage` 的查找。
  */
 export const LEAGUE_ENTRANCE_RED_DOT = 'RedDot';
 
@@ -128,9 +118,9 @@ export const LEAGUE_ENTRANCE_RED_DOT = 'RedDot';
  * | 联合战线 | `hasNorthernExpeditionRD()` = 挑战红点 ∪ 奖励红点 | `north`（**真做**，P6） |
  * | 联盟捐献 | `hasDonateRD()` = `ModelRole.GetAdvertRestTimes(AdType.unionDonate) > 0` —— 依赖**未迁移**的广告子系统 | `none` |
  *
- * ⚠️ 三条 `'task'` / `'discount'` / `'north'` 判据都要求**已入盟**
- *    （老端 `RDLeague.OnComputeResult()` 里先判 `ModelLeague.HasUnion()`）
- *    —— 那层闸在 `LeagueRepository.loadLeagueEntryRedDots()` 里，本表只管「哪个入口吃哪条字段」。
+ * 三条 `'task'` / `'discount'` / `'north'` 判据都要求**已入盟**
+ * （老端 `RDLeague.OnComputeResult()` 里先判 `ModelLeague.HasUnion()`）
+ * —— 那层闸在 `LeagueRepository.loadLeagueEntryRedDots()` 里，本表只管「哪个入口吃哪条字段」。
  */
 export type LeagueEntranceRedDotSource = 'none' | 'discount' | 'task' | 'north';
 
@@ -144,9 +134,7 @@ export const LEAGUE_ENTRANCE_RED_DOT_SOURCE: Readonly<Record<LeagueEntranceKey, 
     LayerLeagueDonate: 'none',
 };
 
-// ============================================================
 // 信息条（旗帜 + 名称 / 等级 / 成员数）
-// ============================================================
 
 /** 主页 prefab 里信息条相关节点的名字（页面类按名取，避免一堆 Inspector 绑定）。 */
 export const LEAGUE_INFO_NODES = {
@@ -172,9 +160,7 @@ export const LEAGUE_INFO_PLACEHOLDER = {
     memberCount: '成员:26/46',
 } as const;
 
-// ============================================================
 // 等级预览（配置表 `remoteRef/unionLevel.json`）
-// ============================================================
 
 /** 表名（`assets/remoteRef/unionLevel.json`，老端 `Ref.RefMgrunionLevel`）。 */
 export const LEAGUE_UNION_LEVEL_TABLE = 'unionLevel';
@@ -232,7 +218,7 @@ export function leagueMaxExp(rows: readonly ILeagueUnionLevelRow[], level: numbe
 /**
  * 宽松取整（`remoteRef` 导出的数字列可能以字符串落盘 —— 同 MEMORY 里 PVP 表的既有做法）。
  *
- * ⚠️ **缺失值必须给 `NaN`、不能给 `0`**：`Number(null)` 是 `0`、`Number('')` 也是 `0`，
+ * **缺失值必须给 `NaN`、不能给 `0`**：`Number(null)` 是 `0`、`Number('')` 也是 `0`，
  * 而这两者在配置表里都是「这一格没填」。若收敛成 `0`，`parseXxx` 的 `Number.isFinite` 守卫
  * 就会把**空行当成值是 0 的合法行**放进结果 —— 例如 `unionOfficial` 里多出一条
  * `position = 0` 的假职位，`resolveLeagueMemberActions(0, …)` 于是能查到一份「全 false」的权限，
@@ -248,8 +234,8 @@ function toInt(value: unknown): number {
 /**
  * `toInt` 的「带兜底」版本：解析不出就返回 `fallback`（不返回 `NaN`）。
  *
- * ⚠️ P4 的这几张表里有**合法的 0**（`freeTimes` / `adTimes` 全表都是 0；`unionDiscount` 的
- *    `minPrice` 也可能是 0）⇒ 不能像 `unionLevel` 那样「解析不出就丢整行」。
+ * P4 的这几张表里有**合法的 0**（`freeTimes` / `adTimes` 全表都是 0；`unionDiscount` 的
+ * `minPrice` 也可能是 0）⇒ 不能像 `unionLevel` 那样「解析不出就丢整行」。
  */
 function intOr(value: unknown, fallback: number): number {
     const n = toInt(value);
@@ -311,7 +297,7 @@ export function parseUnionLevelRows(raw: unknown): ILeagueUnionLevelRow[] {
  * 行视图模型 = 老端口径：`addCount = 本级上限 − 上一级上限`，**找不到上一级就用本级上限**
  * （老端 `RefMgrunionLevel.getRef("level", refId - 1)` 返回空时的分支）。
  *
- * ⚠️ 老端是按 **level** 查上一级（`refId - 1`），不是按数组下标 —— 表里级别不连续时
+ * 老端是按 **level** 查上一级（`refId - 1`），不是按数组下标 —— 表里级别不连续时
  * 两者不等价。这里照老端按 level 查。
  */
 export function buildLeagueLevelViews(
@@ -332,9 +318,7 @@ export function buildLeagueLevelViews(
     });
 }
 
-// ============================================================
 // 职位权限（配置表 `remoteRef/unionOfficial.json`）
-// ============================================================
 
 /** 表名（老端 `Ref.RefMgrunionOfficial`）。 */
 export const LEAGUE_UNION_OFFICIAL_TABLE = 'unionOfficial';
@@ -342,7 +326,7 @@ export const LEAGUE_UNION_OFFICIAL_TABLE = 'unionOfficial';
 /**
  * 职位 id（老端 `LeagueOfficalType`）。
  *
- * ⚠️ 这是**协议字段** `CmdUnionMember.position` 的取值，与配置表的 `position` 列同域 ——
+ * 这是**协议字段** `CmdUnionMember.position` 的取值，与配置表的 `position` 列同域 ——
  * 别和「数组下标」搞混。
  */
 export const LeaguePosition = {
@@ -398,7 +382,7 @@ function toIntList(value: unknown): number[] {
  * 解析 `unionOfficial`；`position` 解析不出整数、或 `position < 1` 的脏行**丢弃**
  * （按 `position` 升序）。
  *
- * ⚠️ `position >= 1` 是硬门槛：`0` 在协议域里表示「未入盟 / 没有职位」，
+ * `position >= 1` 是硬门槛：`0` 在协议域里表示「未入盟 / 没有职位」，
  * 让一条 `position = 0` 的行进表，等于凭空造出一份「存在但全 false」的权限。
  */
 export function parseLeagueOfficialRows(raw: unknown): ILeagueOfficialRow[] {
@@ -434,7 +418,7 @@ export function officialPowersMap(rows: readonly ILeagueOfficialRow[]): Map<numb
  * ```ts
  * let myvo = ModelLeague.GetMyMember();        // 我的成员对象
  * myvo.CanBeXxx(targetOffical)                  // targetOffical = 目标成员的 position
- *   ⇒ RefMgrunionOfficial.getRef("position", **我的** position).xxx.indexOf(target) > -1
+ * ⇒ RefMgrunionOfficial.getRef("position", **我的** position).xxx.indexOf(target) > -1
  * ```
  *
  * 即「**我的职位**能不能对**目标职位**做这件事」，两边都是 `position` 值。
@@ -478,9 +462,7 @@ export function canEditUnion(myPosition: number, powers: ReadonlyMap<number, ILe
     return powers.get(myPosition)?.canEdit === true;
 }
 
-// ============================================================
 // 缓存行归一化（`CmdUnion` / `CmdUnionMember` / `CmdUnionLogs` / `CmdUnionApplys`）
-// ============================================================
 
 /** 宽松字符串（`Long` / number / string 都收敛成字符串；空值给 `''`）。 */
 function toText(value: unknown, fallback = ''): string {
@@ -706,9 +688,7 @@ export function normalizeLeagueApplies(raw: readonly unknown[] | null | undefine
     return out;
 }
 
-// ============================================================
 // 时间文案（老端 `TimeUtil.timeSec2HMSStr3` / `time2String2`）
-// ============================================================
 
 /** `{0}` / `{1}` / `{2}` 顺序替换（本文件不 import `LeagueTexts` 的同一个函数，避免表→文案反向依赖）。 */
 function fillText(template: string, ...values: readonly (string | number)[]): string {
@@ -740,14 +720,14 @@ export interface ILeagueOfflineTexts {
  *
  * 三档与缩放口径：
  * ```
- * h = floor(秒 / 3600)          // ⚠️ **总**小时，不是 24 进制的小时位
+ * h = floor(秒 / 3600)          //  **总**小时，不是 24 进制的小时位
  * day = floor(h / 24); hour = h % 24; m = floor((秒 - h*3600) / 60)
  * day > 0 → "{day}天 {hour}小时 {m}分前"     // day **不补零**
  * hour > 0 → "{hour}小时 {m}分前"            // hour / m **两位补零**
  * 其余     → "{m}分前"                       // m **两位补零**
  * ```
  *
- * ⚠️ `online === true` 或 `lastOfflineTimeMs === 0` ⇒ 直接「在线」（老端的第一个分支，
+ * `online === true` 或 `lastOfflineTimeMs === 0` ⇒ 直接「在线」（老端的第一个分支，
  * 不是「0 分钟前」）。
  */
 export function leagueOfflineText(
@@ -770,7 +750,7 @@ export function leagueOfflineText(
 /**
  * 动态行的时刻文案 —— 老端 `TimeUtil.time2String2(cmd.time)` = `MM/DD HH:mm:ss`。
  *
- * ⚠️ 入参是**毫秒**（老端 `time2Date` 直接 `new Date(time)`）。`0` / 非法值 → `''`
+ * 入参是**毫秒**（老端 `time2Date` 直接 `new Date(time)`）。`0` / 非法值 → `''`
  * （老端 `time2Date` 会把负数夹成 0 ⇒ 1970 年，那显然不是想要的；这里给空串更安全）。
  */
 export function formatLeagueLogTime(timeMs: number): string {
@@ -779,9 +759,7 @@ export function formatLeagueLogTime(timeMs: number): string {
     return `${pad2(date.getMonth() + 1)}/${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
 }
 
-// ============================================================
 // 行视图模型（行组件只负责「上屏」，文案全在这里拼好）
-// ============================================================
 
 /** 动态行的视图模型。 */
 export interface ILeagueLogView {
@@ -810,7 +788,7 @@ export interface ILeagueLogTexts {
  * else                                      format(ALLIANCE_DYNAMIC_MESSAGE3, cmd.name)          // 成员{0}退出联盟
  * ```
  *
- * ⚠️ 第二档判的是 `opPosition == 1`（**盟主**操作的才是「请出」）；副盟主踢人走第三档
+ * 第二档判的是 `opPosition == 1`（**盟主**操作的才是「请出」）；副盟主踢人走第三档
  * 「退出联盟」—— 属老端的分支写法，照搬。
  */
 export function buildLeagueLogViews(
@@ -917,9 +895,9 @@ export interface ILeagueUnionView {
     /**
      * 联系微信号（**裸值，不带前缀**）。
      *
-     * ⚠️ 全服行自己**不显示**这一列 —— 它是给「点行开联盟信息」那条链路带的
-     *    （`LeagueInfoPage` 的 `微信号：` 那行）。放在这里是为了让「行 → 详情」传的是
-     *    **同一个不可变视图对象**，不必让列表再留一份 `ILeagueUnionRow` 原始行。
+     * 全服行自己**不显示**这一列 —— 它是给「点行开联盟信息」那条链路带的
+     * （`LeagueInfoPage` 的 `微信号：` 那行）。放在这里是为了让「行 → 详情」传的是
+     * **同一个不可变视图对象**，不必让列表再留一份 `ILeagueUnionRow` 原始行。
      */
     readonly wxChat: string;
     /** 联盟宣言（同 `wxChat`：行不显示，详情要用）。 */
@@ -962,9 +940,7 @@ export function buildMemberCountText(prefix: string, count: number, maxCount: nu
     return `${prefix}${count}/${maxCount}`;
 }
 
-// ============================================================
 // 联盟信息（`ui/League/LeagueInfo`）
-// ============================================================
 
 /** 「联盟信息」弹窗的视图模型（7 行文字 + 旗帜色，全部拼好）。 */
 export interface ILeagueInfoView {
@@ -1009,8 +985,8 @@ export interface ILeagueInfoTexts extends ILeagueUnionTexts {
  * | `comp_dec.content` | `cmd.declaration` |
  * | `league_banner` | 按 `cmd.icon` 选「颜色」页 |
  *
- * ⚠️ `lab_user` 走的是 `count` / `maxCount` 两个**协议字段**（不是成员列表长度）——
- *    老端同此，且 `cmd` 为空时整块面板直接 `showTip + unload`（`buildLeagueInfoView` 返回 `null`）。
+ * `lab_user` 走的是 `count` / `maxCount` 两个**协议字段**（不是成员列表长度）——
+ * 老端同此，且 `cmd` 为空时整块面板直接 `showTip + unload`（`buildLeagueInfoView` 返回 `null`）。
  */
 export function buildLeagueInfoView(
     union: ILeagueUnionRow | null | undefined,
@@ -1054,9 +1030,7 @@ export function buildLeagueInfoViewFromUnionView(
     };
 }
 
-// ============================================================
 // 联盟管理（`ui/League/LeagueMgr`）
-// ============================================================
 
 /** 「联盟管理」弹窗的视图模型。 */
 export interface ILeagueMgrView {
@@ -1069,9 +1043,9 @@ export interface ILeagueMgrView {
     /**
      * 联系微信号（**裸值，不带前缀**）。
      *
-     * ⚠️ 与 `wxText` 并存不是冗余：`wxText` 是**上屏**用的（带「微信号：」前缀），
-     *    而点微信号开编辑框时老端传的是 `cmd.wxChat`（**裸值**）——
-     *    拿 `wxText` 去当输入框初值会把前缀一起编辑掉。
+     * 与 `wxText` 并存不是冗余：`wxText` 是**上屏**用的（带「微信号：」前缀），
+     * 而点微信号开编辑框时老端传的是 `cmd.wxChat`（**裸值**）——
+     * 拿 `wxText` 去当输入框初值会把前缀一起编辑掉。
      */
     readonly wxChat: string;
     /** 联盟宣言（进 `DecBox/content`）。 */
@@ -1091,8 +1065,8 @@ export type ILeagueMgrTexts = Pick<ILeagueInfoTexts, 'idPrefix' | 'contactPrefix
  * `league_name` / `league_id` / `league_wx` / `comp_dec.content` / `comp_notice.content` /
  * `league_banner`（按 `cmd.icon`）/ `按钮_勾选.selected = cmd.autoJoin`。
  *
- * ⚠️ 老端**没有**给 `league_lv` / `league_leader` 赋值 —— 这张面板上也没有这两个节点
- *    （只有联盟信息那张有），别顺手抄过来。
+ * 老端**没有**给 `league_lv` / `league_leader` 赋值 —— 这张面板上也没有这两个节点
+ * （只有联盟信息那张有），别顺手抄过来。
  *
  * `union` 为空（未入盟 / 还没推回来）⇒ 返回 `null`，页面据此走老端的 `unload()` 分支。
  */
@@ -1131,9 +1105,7 @@ export function leagueMgrPage(canApprove: boolean): 0 | 1 {
     return canApprove ? 1 : 0;
 }
 
-// ============================================================
 // 申请列表（`ui/League/LeagueApplyList`）
-// ============================================================
 
 /** 申请行的视图模型（行组件只负责「上屏」，文案全在这里拼好）。 */
 export interface ILeagueApplyView {
@@ -1181,8 +1153,8 @@ export function buildLeagueApplyViews(rows: readonly ILeagueApplyRow[]): ILeague
  *
  * ```ts
  * async RequestLeagueApproveJoinOneKey() {
- *     if (!this.nowApplyArr || this.nowApplyArr.length == 0) return;   // ← 这里
- *     await this.ModelMgr.ModelLeague.RequestLeagueApproveJoinOneKey(true);
+ * if (!this.nowApplyArr || this.nowApplyArr.length == 0) return;   // ← 这里
+ * await this.ModelMgr.ModelLeague.RequestLeagueApproveJoinOneKey(true);
  * }
  * ```
  *
@@ -1193,21 +1165,19 @@ export function canApproveAll(rows: readonly ILeagueApplyRow[] | readonly ILeagu
     return rows.length > 0;
 }
 
-// ============================================================
 // 全服页签：列表与搜索（老端 `ModelLeague.GetCmdUnionListBySearch` / `GetCanBeJoinList`）
-// ============================================================
 
 /**
  * 全服列表 —— 老端口径：
  *
  * ```ts
  * GetCmdUnionListBySearch(search) {
- *     if (searchCacheDict.has(search)) return [searchCacheDict.get(search)];  // 搜到过 ⇒ 只显示那一个
- *     return VOUnionBag.GetBagAsArray().map(vo => vo.GetCmd());                // 否则显示全部
+ * if (searchCacheDict.has(search)) return [searchCacheDict.get(search)];  // 搜到过 ⇒ 只显示那一个
+ * return VOUnionBag.GetBagAsArray().map(vo => vo.GetCmd());                // 否则显示全部
  * }
  * ```
  *
- * ⚠️ 缓存键是**搜索输入的字符串本身**（不是解析后的 id）—— 输 `"123"` 搜到后，
+ * 缓存键是**搜索输入的字符串本身**（不是解析后的 id）—— 输 `"123"` 搜到后，
  * 只要输入框里还是 `"123"` 就只显示那一个；一旦改动输入框（哪怕只加一个空格），
  * 就落回「全部」。老端就是这么写的，照搬（否则「搜完再改字，列表不回来」）。
  */
@@ -1228,14 +1198,13 @@ export const LEAGUE_QUICK_JOIN_LIMIT = 5;
  * static isPositiveInteger(str: string): boolean { return /^[0-9]\d*$/.test(str); }
  * ```
  *
- * ⚠️ 名字叫 positive 但正则**允许 `"0"` 与 `"007"`**（`[0-9]` 与 `\d` 等价）。老端就是这样，
- *    移植保真优先 —— 别顺手改成 `[1-9]\d*`，否则「输 0 会被清空」这种老端没有的行为会冒出来。
- *    FGUI 那边还叠了一层 `restrict="[0-9]"`（输入阶段就滤掉非数字），这里只兜「粘贴」等旁路。
+ * 名字叫 positive 但正则**允许 `"0"` 与 `"007"`**（`[0-9]` 与 `\d` 等价）。老端就是这样，
+ * 移植保真优先 —— 别顺手改成 `[1-9]\d*`，否则「输 0 会被清空」这种老端没有的行为会冒出来。
+ * FGUI 那边还叠了一层 `restrict="[0-9]"`（输入阶段就滤掉非数字），这里只兜「粘贴」等旁路。
  */
 export function isLeagueSearchId(text: string): boolean {
     return /^[0-9]\d*$/.test(text);
 }
-
 
 /**
  * 「可快速加入」的联盟 id —— 老端 `GetCanBeJoinList`：
@@ -1277,10 +1246,7 @@ export function findMyUnion(
     return null;
 }
 
-
-// ============================================================
 // 加入联盟（`ui/League/LeagueJoin`）
-// ============================================================
 
 /**
  * 搜索框输入的非数字字符过滤 —— 老端 `TabLeagueJoin.onInputTextChange()`：
@@ -1304,14 +1270,14 @@ export function sanitizeLeagueSearchInput(text: string): string {
  *
  * ```ts
  * GetCanBeJoinList(search) {
- *     if (this.searchCacheDict.has(search)) return [this.searchCacheDict.get(search).id]; // ①
- *     // ② 否则全量里挑 autoJoin && count < maxCount，最多 5 条
+ * if (this.searchCacheDict.has(search)) return [this.searchCacheDict.get(search).id]; // ①
+ * // ② 否则全量里挑 autoJoin && count < maxCount，最多 5 条
  * }
  * ```
  *
- * ⚠️ ① 支**不查 `autoJoin`、也不查满没满** —— 搜索命中的那一个直接点名加入。
- *    漏掉这一支的症状：搜到一个没开「允许快速加入」的盟，点「快速加入」提示「没有可加入的联盟」，
- *    而老端是能进的。所以这里必须把 `cached` 一起传进来，不能只调 `pickQuickJoinUnionIds`。
+ * ① 支**不查 `autoJoin`、也不查满没满** —— 搜索命中的那一个直接点名加入。
+ * 漏掉这一支的症状：搜到一个没开「允许快速加入」的盟，点「快速加入」提示「没有可加入的联盟」，
+ * 而老端是能进的。所以这里必须把 `cached` 一起传进来，不能只调 `pickQuickJoinUnionIds`。
  */
 export function pickQuickJoinIdsFor(
     rows: readonly ILeagueUnionRow[],
@@ -1322,9 +1288,7 @@ export function pickQuickJoinIdsFor(
     return pickQuickJoinUnionIds(rows, limit);
 }
 
-// ============================================================
 // 创建联盟（`ui/League/LeagueCreate`）
-// ============================================================
 
 /**
  * 可选旗帜色的个数 —— 老端 `LayerLeagueCreat.arr = [0,1,2,3,4,5,6,7]`。
@@ -1356,9 +1320,9 @@ export const LEAGUE_CREATE_COST_RES_ID = 10;
  * - 面板 `itemIcon`（`updateView` 同上）；
  * - 砍价购买扣的货币（`onBuy` 里 `{ resId: roleProperty.coin, number: priceNow }`）。
  *
- * ⚠️ 与 `LEAGUE_CREATE_COST_RES_ID` **同值同物**（那个名字是创建页的历史命名）。
- *    故意保留两个名字：各自的注释才能写清「老端这一处写的是哪个枚举」，
- *    合并成一个「中立名」会让两处调用点都失去这份出处（本文件里同类别名不止这一对）。
+ * 与 `LEAGUE_CREATE_COST_RES_ID` **同值同物**（那个名字是创建页的历史命名）。
+ * 故意保留两个名字：各自的注释才能写清「老端这一处写的是哪个枚举」，
+ * 合并成一个「中立名」会让两处调用点都失去这份出处（本文件里同类别名不止这一对）。
  */
 export const LEAGUE_COIN_RES_ID = 10;
 
@@ -1370,10 +1334,10 @@ export const LEAGUE_COIN_RES_ID = 10;
  * | `LEAGUE_UNION_COIN_RES_ID` | 11 | `unionCoin` | **联盟银币** | `图标_联盟银币` |
  * | `LEAGUE_UNION_CONTRI_RES_ID` | 13 | `unionContri` | 联盟贡献 | `图标_联盟贡献` |
  *
- * ⚠️ **`resId=11` 的 `name` 是「联盟银币」，不是「联盟金币」** —— 捐献面板上那句
- *    「联盟金币*300」来自**语言表** `ALLIANCE_GOLD_COIN`（`mL.json` id=382），
- *    跟这张表的 `name` **不是同一个来源**。落了 prefab 的静态文案/文案常量要用语言表那份，
- *    这两条常量只用来**取图标**。别拿 `name` 去上屏。
+ * **`resId=11` 的 `name` 是「联盟银币」，不是「联盟金币」** —— 捐献面板上那句
+ * 「联盟金币*300」来自**语言表** `ALLIANCE_GOLD_COIN`（`mL.json` id=382），
+ * 跟这张表的 `name` **不是同一个来源**。落了 prefab 的静态文案/文案常量要用语言表那份，
+ * 这两条常量只用来**取图标**。别拿 `name` 去上屏。
  */
 export const LEAGUE_UNION_COIN_RES_ID = 11;
 
@@ -1420,10 +1384,10 @@ export function leagueCreateCost(
 /**
  * `roleProperty` 表的行（**只取消耗展示要用的那几列**）。
  *
- * ⚠️ `icon` 在本表里存的是 **FGUI 组件名**（`图标_幻灵玉`），不是相对 `resources` 的路径
- *    ⇒ 取图要落 `icons/resource/<icon>`（同 `LayerActivityTable` 的 `iconIsPath = false` 口径）。
- * ⚠️ `key` 同时是 **`CmdRole` 上的字段名**（老端 `ModelGoods.GetGoodsNumberByRefId`
- *    对 `playerAtt` 类就是 `voRole.GetRolePropertyNum(ref.key)`）⇒ 持有量按它取。
+ * `icon` 在本表里存的是 **FGUI 组件名**（`图标_幻灵玉`），不是相对 `resources` 的路径
+ * ⇒ 取图要落 `icons/resource/<icon>`（同 `LayerActivityTable` 的 `iconIsPath = false` 口径）。
+ * `key` 同时是 **`CmdRole` 上的字段名**（老端 `ModelGoods.GetGoodsNumberByRefId`
+ * 对 `playerAtt` 类就是 `voRole.GetRolePropertyNum(ref.key)`）⇒ 持有量按它取。
  */
 export interface ILeaguePropertyRow {
     readonly resId: number;
@@ -1473,9 +1437,9 @@ export function findLeagueProperty(
  * 老端 `ModelGoods.GetGoodsNumberByRefId` 的 `playerAtt` 支：`voRole.GetRolePropertyNum(ref.key)`。
  * `CmdRole.coin` / `gold` 是**十进制字符串**（可能超 2^53）、`end` / `unionCoin` 等是 number ⇒ 两种都收。
  *
- * ⚠️ 返回 `{ text, value }`：`text` 保留原始串（大数显示不失真），`value` 是给「够不够」比大小用的
- *    近似数值。老端对 `isbig` 的数额走 `BigNum.shortNum`，本端没有 big-number 库 ⇒ 直接显示原始数字
- *    （**有意简化**，见 `ILeagueCostView` 的说明）。
+ * 返回 `{ text, value }`：`text` 保留原始串（大数显示不失真），`value` 是给「够不够」比大小用的
+ * 近似数值。老端对 `isbig` 的数额走 `BigNum.shortNum`，本端没有 big-number 库 ⇒ 直接显示原始数字
+ * （**有意简化**，见 `ILeagueCostView` 的说明）。
  */
 export function rolePropertyAmount(row: unknown, key: string): { text: string; value: number } {
     if (!row || typeof row !== 'object' || !key) return { text: '0', value: 0 };
@@ -1520,9 +1484,9 @@ export interface ILeagueCostView {
  * return hasNum >= needNum;
  * ```
  *
- * ⚠️ **有意简化**：老端对 `isbig` 的资源（金币就是）会走 `BigNum.shortNum` 把 100000 缩成 `10K`
- *    那种写法；本工程没有 big-number 库 ⇒ 这里显示**原始数字**。
- *    金币 100 这种量级两端口径一致；只有持有量上万时字面会变长（数值本身不失真）。
+ * **有意简化**：老端对 `isbig` 的资源（金币就是）会走 `BigNum.shortNum` 把 100000 缩成 `10K`
+ * 那种写法；本工程没有 big-number 库 ⇒ 这里显示**原始数字**。
+ * 金币 100 这种量级两端口径一致；只有持有量上万时字面会变长（数值本身不失真）。
  */
 export function buildLeagueCostView(
     property: ILeaguePropertyRow | null | undefined,
@@ -1554,8 +1518,8 @@ export function buildLeagueCostView(
  * if (!labName || labName == "***") return;
  * ```
  *
- * ⚠️ 老端**不 trim**（`" "` 能过）—— 保真照搬，别顺手加 `.trim()`，
- *    否则「空格名被拒」这种老端没有的行为会冒出来。
+ * 老端**不 trim**（`" "` 能过）—— 保真照搬，别顺手加 `.trim()`，
+ * 否则「空格名被拒」这种老端没有的行为会冒出来。
  */
 export function isLeagueNameUsable(name: string): boolean {
     return !!name && name !== LEAGUE_EDIT_REJECTED_PLACEHOLDER;
@@ -1572,9 +1536,7 @@ export function leagueCreateBannerIndexOf(selectedIndex: number): number {
     return Math.min(Math.max(index, 0), LEAGUE_CREATE_BANNER_COUNT - 1);
 }
 
-// ============================================================
 // P4 公用：奖励条目 + `gameConfig` 的 P4 键
-// ============================================================
 
 /** 一条奖励（`unionShop.rewards[]` / `unionDiscount.rewards[]` 的单元）。 */
 export interface ILeagueReward {
@@ -1585,9 +1547,9 @@ export interface ILeagueReward {
 /**
  * 解析一条奖励数组。丢弃 `resId` 或 `number` 解析不出整数的脏项。
  *
- * ⚠️ 老端是 `rewards[0]` / `rewards[1]` **按下标硬取**（`LayerLeagueDiscount.updateView`）。
- *    本端保留数组形态，取用点自己按下标取 —— 表里少一项时出来是 `undefined`，
- *    与老端「下标越界拿到 undefined」同一后果（调用点必须判）。
+ * 老端是 `rewards[0]` / `rewards[1]` **按下标硬取**（`LayerLeagueDiscount.updateView`）。
+ * 本端保留数组形态，取用点自己按下标取 —— 表里少一项时出来是 `undefined`，
+ * 与老端「下标越界拿到 undefined」同一后果（调用点必须判）。
  */
 export function parseLeagueRewards(raw: unknown): ILeagueReward[] {
     if (!Array.isArray(raw)) return [];
@@ -1671,9 +1633,7 @@ export function parseLeagueP4Config(rows: readonly unknown[]): ILeagueP4Config {
     };
 }
 
-// ============================================================
 // 联盟商店（`ui/League/LeagueStore`，配置表 `remoteRef/unionShop.json`）
-// ============================================================
 
 /** 表名（老端 `Ref.RefMgrunionShop`）。 */
 export const LEAGUE_UNION_SHOP_TABLE = 'unionShop';
@@ -1681,9 +1641,9 @@ export const LEAGUE_UNION_SHOP_TABLE = 'unionShop';
 /**
  * `unionShop.json` 的一行（列名见表的 `k`：`id,desc,rewards,priceType,cost,limitType,limitDesc,freeTimes,adTimes,limit`）。
  *
- * ⚠️ 字段名与老端 `IRefunionShop` 逐一对齐 —— **别去掉 `limitType` / `freeTimes` / `adTimes`**：
- *    现网 9 行里 `limitType` 有 1 / 2 两档（每日 / 每周），`freeTimes` / `adTimes` 全 0，
- *    看着像没用的列，实际是「限购类型」的语义来源。
+ * 字段名与老端 `IRefunionShop` 逐一对齐 —— **别去掉 `limitType` / `freeTimes` / `adTimes`**：
+ * 现网 9 行里 `limitType` 有 1 / 2 两档（每日 / 每周），`freeTimes` / `adTimes` 全 0，
+ * 看着像没用的列，实际是「限购类型」的语义来源。
  */
 export interface ILeagueUnionShopRow {
     readonly id: number;
@@ -1695,8 +1655,8 @@ export interface ILeagueUnionShopRow {
      * 货币的 `roleProperty` 下标 —— **现网 9 行只用两档**：
      * `11`（`unionCoin` 联盟银币，1~7 行）与 `12`（`unionGold` 联盟金币，8~9 行，钥匙类）。
      *
-     * ⚠️ 与捐献的「扣金币（`coin`=10）」**不是同一套**：商店扣的是联盟内部货币。
-     *    取值一律按 `roleProperty` 表的 `resId` 直接查（图标 / 名字 / 持有量都靠它）。
+     * 与捐献的「扣金币（`coin`=10）」**不是同一套**：商店扣的是联盟内部货币。
+     * 取值一律按 `roleProperty` 表的 `resId` 直接查（图标 / 名字 / 持有量都靠它）。
      */
     readonly priceType: number;
     /** 单价。 */
@@ -1779,11 +1739,11 @@ export interface ILeagueStoreRowDeps {
  * btn_buy.grayed = !canbuy;
  * ```
  *
- * ⚠️ 限购进度按老端口径是 **`limit - buyTimes`**（剩余 / 上限），不是「已购 / 上限」。
- * ⚠️ `buyTimes` 会被**钳到 `limit`**（服务端超卖过时 `limit - buyTimes` 会变负，负号上屏很怪）。
- * ⚠️ 剩余量再 `max(0, …)` 兜一层：`limit` 没配（= 0）时老端会打出 `不限购:-5/0` 这种负号串
- *    （现网 9 行 `limit` 都 ≥ 2，走不到），本端把它压成 `0` —— 这是本函数**唯一的**偏离，
- *    其余（`limit − buyTimes` 的方向、`limit=0` 不判售罄）都照老端。
+ * 限购进度按老端口径是 **`limit - buyTimes`**（剩余 / 上限），不是「已购 / 上限」。
+ * `buyTimes` 会被**钳到 `limit`**（服务端超卖过时 `limit - buyTimes` 会变负，负号上屏很怪）。
+ * 剩余量再 `max(0, …)` 兜一层：`limit` 没配（= 0）时老端会打出 `不限购:-5/0` 这种负号串
+ * （现网 9 行 `limit` 都 ≥ 2，走不到），本端把它压成 `0` —— 这是本函数**唯一的**偏离，
+ * 其余（`limit − buyTimes` 的方向、`limit=0` 不判售罄）都照老端。
  */
 export function buildLeagueStoreRowViews(
     rows: readonly ILeagueUnionShopRow[],
@@ -1821,8 +1781,8 @@ export function buildLeagueStoreRowViews(
  *
  * ```ts
  * for (let ref of RefMgrunionShop.getRefAll()) {
- *     let enough = CheckHaveEnoughCostAndOpenAlert([{resId: ref.priceType, number: ref.cost}], false)
- *     if (enough) { let buyTimes = …; if (buyTimes < ref.limit) return true }
+ * let enough = CheckHaveEnoughCostAndOpenAlert([{resId: ref.priceType, number: ref.cost}], false)
+ * if (enough) { let buyTimes = …; if (buyTimes < ref.limit) return true }
  * }
  * ```
  *
@@ -1835,8 +1795,8 @@ export function hasLeagueStoreRedDot(views: readonly ILeagueStoreRowView[]): boo
 /**
  * 从 `CmdShopGoods` 行里取某个商品的已购次数。
  *
- * ⚠️ `CmdShop` 是**按 `cmdShopType` 归档**的（`CmdShop_Key { cmdShopType }`），
- *    本函数只认它自己的 `tlCmdShopGoods[].id` —— 调用方负责先取对 `cmdShopType`。
+ * `CmdShop` 是**按 `cmdShopType` 归档**的（`CmdShop_Key { cmdShopType }`），
+ * 本函数只认它自己的 `tlCmdShopGoods[].id` —— 调用方负责先取对 `cmdShopType`。
  */
 export function leagueShopBuyTimesOf(rows: readonly unknown[] | null | undefined, id: number): number {
     if (!Array.isArray(rows)) return 0;
@@ -1851,9 +1811,7 @@ export function leagueShopBuyTimesOf(rows: readonly unknown[] | null | undefined
     return 0;
 }
 
-// ============================================================
 // 每日砍价（`ui/League/LeagueDiscount`，配置表 `remoteRef/unionDiscount.json`）
-// ============================================================
 
 /** 表名（老端 `Ref.RefMgrunionDiscount`）。 */
 export const LEAGUE_UNION_DISCOUNT_TABLE = 'unionDiscount';
@@ -1901,14 +1859,14 @@ export interface ILeagueDiscountRowView {
  *
  * ```ts
  * for (let item of cmd.tlCmdUnionActInfo) {
- *     let member = VOUnionMemberBag.GetMemberByRoleId(item.roleId);
- *     if (member) listCmds.push(item);        // ← 查不到成员的**整条丢掉**
+ * let member = VOUnionMemberBag.GetMemberByRoleId(item.roleId);
+ * if (member) listCmds.push(item);        // ← 查不到成员的**整条丢掉**
  * }
  * list.update(listCmds);
  * lab_user_count.setText(UNION_ACTIVE_COUNT.replace("{0}", listCmds.length));  // ← 用过滤后的条数
  * ```
  *
- * ⚠️ `{0}` 填的是**过滤后**的条数（不是原始条数）；成员表还没推下来时会显示 0 人。
+ * `{0}` 填的是**过滤后**的条数（不是原始条数）；成员表还没推下来时会显示 0 人。
  */
 export function buildLeagueDiscountRows(
     actInfo: readonly unknown[] | null | undefined,
@@ -1961,8 +1919,8 @@ export interface ILeagueDiscountView {
  * com.setSelectedPage("状态", canBeSale() ? "砍价" : (canBuy() ? "购买" : "已购买"))
  * ```
  *
- * ⚠️ 老端 `updateView` 里那个 `saleNum` **只统计了全部 `tlCmdUnionActInfo`**（不过滤成员），
- *    而列表只展示过滤后的行 —— 两者刻意不同，别"统一"。
+ * 老端 `updateView` 里那个 `saleNum` **只统计了全部 `tlCmdUnionActInfo`**（不过滤成员），
+ * 而列表只展示过滤后的行 —— 两者刻意不同，别"统一"。
  */
 export function buildLeagueDiscountView(
     row: ILeagueUnionDiscountRow | null | undefined,
@@ -2013,10 +1971,10 @@ export function leagueDiscountPageIndex(
 /**
  * 秒 → `HH:MM:SS`（`day > 0` 时前缀 `N天`）—— 老端 `TimeUtil.timeSec2HMSStr2` 逐句复刻。
  *
- * ⚠️ 是 `Math.floor` 取整（老端 `timeSec2HMS` 内部就是 floor），**不是** `ceil` ——
- *    与挂机的 `timeMillisecond2HMSStr`（那个是 ceil）**不是同一个函数**，别互相抄。
- * ⚠️ `lerp <= 0` 时调用点要显示 `00:00:00`（老端 `updateTime` 的显式分支），本函数对 0
- *    也会输出 `00:00:00`，但**负数**会输出 `00:00:00`（钳零），别指望它报错。
+ * 是 `Math.floor` 取整（老端 `timeSec2HMS` 内部就是 floor），**不是** `ceil` ——
+ * 与挂机的 `timeMillisecond2HMSStr`（那个是 ceil）**不是同一个函数**，别互相抄。
+ * `lerp <= 0` 时调用点要显示 `00:00:00`（老端 `updateTime` 的显式分支），本函数对 0
+ * 也会输出 `00:00:00`，但**负数**会输出 `00:00:00`（钳零），别指望它报错。
  */
 export function formatLeagueCountdown(seconds: number): string {
     const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
@@ -2044,22 +2002,22 @@ export function canLeagueBuyBargain(todayBuyBargainTimes: number, bargainBuyCoun
  *
  * ```ts
  * hasDiscountRD(): boolean {
- *     return roleUnion.GetCmd().todayBargainTimes
- *         < this.Ref.RefMgrgameConfig.getRef("key", "unionBargainBuyCount").value;
+ * return roleUnion.GetCmd().todayBargainTimes
+ * < this.Ref.RefMgrgameConfig.getRef("key", "unionBargainBuyCount").value;
  * }
  * ```
  *
- * ⚠️ 与面板内 `btn_sale.组件_红点` 用的是**同一个表达式**（`canLeagueBargain`）——
- *    老端两处各写了一遍，这里收成一处：本函数就是 `canLeagueBargain` 的语义别名，
- *    有了新名字之后调用点能看出「这是入口红点，不是按钮可用态」。
+ * 与面板内 `btn_sale.组件_红点` 用的是**同一个表达式**（`canLeagueBargain`）——
+ * 老端两处各写了一遍，这里收成一处：本函数就是 `canLeagueBargain` 的语义别名，
+ * 有了新名字之后调用点能看出「这是入口红点，不是按钮可用态」。
  *
  * 另外三条入口红点**恒关**（各自原因写在 `LeaguePage` / `LEAGUE_ENTRANCE_RED_DOT_SOURCE`）：
- *   - 捐献 `hasDonateRD()` = `ModelRole.GetAdvertRestTimes(AdType.unionDonate) > 0` —— 依赖**未迁移**的广告子系统；
- *   - 商店 `hasStoreRD()` —— 老端 `TabLeagueMain.updateRD()` 里那两行**是注释掉的**（`RDLeague` 里也注释掉了）；
- *   - 大厅 —— 老端 `TabLeagueMain.updateRD()` 里**没有** `btn_hall`。
+ * - 捐献 `hasDonateRD()` = `ModelRole.GetAdvertRestTimes(AdType.unionDonate) > 0` —— 依赖**未迁移**的广告子系统；
+ * - 商店 `hasStoreRD()` —— 老端 `TabLeagueMain.updateRD()` 里那两行**是注释掉的**（`RDLeague` 里也注释掉了）；
+ * - 大厅 —— 老端 `TabLeagueMain.updateRD()` 里**没有** `btn_hall`。
  *
- * ⚠️「任务」（P5 `hasLeagueTaskRedDot()`）与「联合战线」（P6 `hasLeagueNorthRedDot()`）
- *    的红点**都已真做**，**不在**上面这三条恒关之列。
+ * 「任务」（P5 `hasLeagueTaskRedDot()`）与「联合战线」（P6 `hasLeagueNorthRedDot()`）
+ * 的红点**都已真做**，**不在**上面这三条恒关之列。
  */
 export function hasLeagueDiscountRedDot(todayBargainTimes: number, bargainBuyCount: number): boolean {
     return canLeagueBargain(todayBargainTimes, bargainBuyCount);
@@ -2073,28 +2031,26 @@ export function hasLeagueDiscountRedDot(todayBargainTimes: number, bargainBuyCou
  * ```
  *
  * ⇒ 协议里的 `CmdUnionActivity.resetTime` 是**本轮开始时刻**（`todayZeroTimestamp`，**毫秒**），
- *    真正的截止时刻 = `resetTime + 1 天`。倒计时按截止时刻算（`updateTime` 里 `resetTime - now`）。
+ * 真正的截止时刻 = `resetTime + 1 天`。倒计时按截止时刻算（`updateTime` 里 `resetTime - now`）。
  *
- * ⚠️ 老端那行是 **ms + ms**（`S_DayTime * 1000`）；本端 `resetTimeSec` 已经是**秒**
- *    （Repository 里 `/1000` 折过）⇒ 页面用**本常量**（86400 秒）而不是 `S_DayTime * 1000`。
- *    两边算出来是同一个截止时刻，别把 `* 1000` 也照抄过来（会变成 24 万小时）。
+ * 老端那行是 **ms + ms**（`S_DayTime * 1000`）；本端 `resetTimeSec` 已经是**秒**
+ * （Repository 里 `/1000` 折过）⇒ 页面用**本常量**（86400 秒）而不是 `S_DayTime * 1000`。
+ * 两边算出来是同一个截止时刻，别把 `* 1000` 也照抄过来（会变成 24 万小时）。
  *
- * ⚠️ 别把它折进 `buildLeagueDiscountView`：那个纯函数只忠实搬运协议字段，
- *    加一天是**展示口径**，由页面决定（`LeagueDiscountPage` 的 `deadlineSec`）。
+ * 别把它折进 `buildLeagueDiscountView`：那个纯函数只忠实搬运协议字段，
+ * 加一天是**展示口径**，由页面决定（`LeagueDiscountPage` 的 `deadlineSec`）。
  */
 export const LEAGUE_DISCOUNT_RESET_DAY_SECONDS = 86400;
 
-// ============================================================
 // 联盟任务（`ui/League/LeagueTask`，表 `remoteRef/taskUnion.json` + `taskUnionProgress.json`）
-// ============================================================
 //
 // 老端真源：`play/LayerLeagueTask.ts` + `model/league/ModelLeague.hasTaskRD/hasTaskHeadRewardRD`
-//          + `model/vo/Other/VOLeagueTask.ts`（任务 VO：`GetValue/GetMaxValue/IsUnDone/CanBeReward/Rewarded`）。
+// + `model/vo/Other/VOLeagueTask.ts`（任务 VO：`GetValue/GetMaxValue/IsUnDone/CanBeReward/Rewarded`）。
 //
-// ⚠️ **任务列表没有独立请求**（分期方案 §2 的「唯一待核项」已核）：
-//    老端 `VOLeagueTaskBag.GetCacheName()` 返回 `"CmdTask"` ⇒ 联盟任务就是**通用任务缓存**
-//    按 `taskUnion` 表的 `resId` 反查（`GetVOByTaskId` 是**线性遍历** `CmdTask` 缓存）。
-//    所以本端 `loadLeagueTask()` 只读 `getTlCmdTask()`，**不发任何包**。
+// **任务列表没有独立请求**（分期方案 §2 的「唯一待核项」已核）：
+// 老端 `VOLeagueTaskBag.GetCacheName()` 返回 `"CmdTask"` ⇒ 联盟任务就是**通用任务缓存**
+// 按 `taskUnion` 表的 `resId` 反查（`GetVOByTaskId` 是**线性遍历** `CmdTask` 缓存）。
+// 所以本端 `loadLeagueTask()` 只读 `getTlCmdTask()`，**不发任何包**。
 
 /** 表名（老端 `Ref.RefMgrtaskUnion` / `Ref.RefMgrtaskUnionProgress`）。 */
 export const LEAGUE_TASK_UNION_TABLE = 'taskUnion';
@@ -2103,8 +2059,8 @@ export const LEAGUE_TASK_PROGRESS_TABLE = 'taskUnionProgress';
 /**
  * `EnumUnionTaskType`（老端 `model/vo/Other/VOLeague.ts`）。
  *
- * ⚠️ 三档都要（不是只留 `LeagueTask`）：`taskUnion` 表里 `subType` 是**多档混排**的，
- *    过滤时漏掉任何一个都会把别的模块的任务错当联盟任务铺进列表。
+ * 三档都要（不是只留 `LeagueTask`）：`taskUnion` 表里 `subType` 是**多档混排**的，
+ * 过滤时漏掉任何一个都会把别的模块的任务错当联盟任务铺进列表。
  */
 export const LeagueUnionTaskType = {
     /** 联盟任务（本面板唯一要的）。 */
@@ -2190,8 +2146,8 @@ export function parseTaskUnionProgressRows(raw: unknown): ILeagueTaskProgressRow
  * 任务状态 —— 老端 `VOLeagueTask` 的三个判定收敛成一个枚举。
  *
  * 映射自协议 `CmdCommonState`：`UNDONE = 0` / `FINISH = 1` / `REWARDED = 2`。
- * ⚠️ 协议里 `FINISH` 的语义是「**可领奖**」（不是「已完成」）—— 老端 `CanBeReward()` 就是判它。
- *    直接拿 `CmdCommonState` 的名字读代码极易误解，故本端起别名。
+ * 协议里 `FINISH` 的语义是「**可领奖**」（不是「已完成」）—— 老端 `CanBeReward()` 就是判它。
+ * 直接拿 `CmdCommonState` 的名字读代码极易误解，故本端起别名。
  */
 export type LeagueTaskState = 'undone' | 'canReward' | 'rewarded';
 
@@ -2257,9 +2213,9 @@ export function buildLeagueTaskRowView(
  *
  * ```ts
  * refArray.sort((a, b) => {
- *     if (taskVoA.CanBeReward() || taskVoB.CanBeReward()) return taskVoA.CanBeReward() ? -1 : 1;
- *     if (taskVoA.Rewarded()   || taskVoB.Rewarded())   return taskVoA.Rewarded()   ?  1 : -1;
- *     return 0;
+ * if (taskVoA.CanBeReward() || taskVoB.CanBeReward()) return taskVoA.CanBeReward() ? -1 : 1;
+ * if (taskVoA.Rewarded()   || taskVoB.Rewarded())   return taskVoA.Rewarded()   ?  1 : -1;
+ * return 0;
  * });
  * ```
  *
@@ -2290,8 +2246,8 @@ export function buildLeagueTaskRowViews(
  * lab_count.setText(done);                 // ↑ `lab_count` 只显示 done（不带分母）
  * ```
  *
- * ⚠️ 分母是**有 VO 的任务数**（`total`），不是表里全部任务数 —— 表里有任务但服务端还没下发 VO 时，
- *    分母会小于表行数。照抄表行数会让进度条永远不满。
+ * 分母是**有 VO 的任务数**（`total`），不是表里全部任务数 —— 表里有任务但服务端还没下发 VO 时，
+ * 分母会小于表行数。照抄表行数会让进度条永远不满。
  */
 export function leagueTaskProgress(
     rows: readonly ILeagueTaskUnionRow[],
@@ -2341,13 +2297,13 @@ export function leagueTaskBoxState(
  *
  * ```ts
  * hasTaskRD() {
- *     // ① 有任务可领
- *     for (const ref of taskUnion.filter(t => t.subType == LeagueTask)) {
- *         const vo = VOLeagueTaskBag.GetVOByTaskId(ref.resId);
- *         if (vo && vo.CanBeReward()) return true;
- *     }
- *     // ② 或进度宝箱可领
- *     return this.hasTaskHeadRewardRD();
+ * // ① 有任务可领
+ * for (const ref of taskUnion.filter(t => t.subType == LeagueTask)) {
+ * const vo = VOLeagueTaskBag.GetVOByTaskId(ref.resId);
+ * if (vo && vo.CanBeReward()) return true;
+ * }
+ * // ② 或进度宝箱可领
+ * return this.hasTaskHeadRewardRD();
  * }
  * ```
  *
@@ -2392,8 +2348,8 @@ export interface ILeagueTaskBoxView {
  * 里程碑也写死在节点名里；本端改成从 `taskUnionProgress` 表遍历生成 ⇒
  * 运营把宝箱改成 4 档时界面跟着多一个（老端得改代码）。
  *
- * ⚠️ 面板上只建了 **3 个**宝箱节点（对齐 FGUI 原稿）—— 表里超过 3 行时多出来的会被
- *    面板丢掉（见 `LeagueTaskPage.renderBoxes` 的说明），不会错位。
+ * 面板上只建了 **3 个**宝箱节点（对齐 FGUI 原稿）—— 表里超过 3 行时多出来的会被
+ * 面板丢掉（见 `LeagueTaskPage.renderBoxes` 的说明），不会错位。
  */
 export function buildLeagueTaskBoxViews(
     progressRows: readonly ILeagueTaskProgressRow[],
@@ -2408,15 +2364,13 @@ export function buildLeagueTaskBoxViews(
     }));
 }
 
-// ============================================================
 // 北伐中原（`ui/League/LeagueNorthExpedition` + 排行 / 奖励两个子页）
-// ============================================================
 //
 // 老端真源：
-//   `play/LayerLeagueNorthernExpedition.ts`（主面板）
-//   `play/LayerLeagueNorthernExpeditionRank.ts`（排行，2 页签）
-//   `play/LayerLeagueNorthernExpeditionReward.ts`（奖励，2 页签）
-//   `model/league/ModelLeague.hasNorthernExpedition*RD()`（红点三判据）
+// `play/LayerLeagueNorthernExpedition.ts`（主面板）
+// `play/LayerLeagueNorthernExpeditionRank.ts`（排行，2 页签）
+// `play/LayerLeagueNorthernExpeditionReward.ts`（奖励，2 页签）
+// `model/league/ModelLeague.hasNorthernExpedition*RD()`（红点三判据）
 //
 // ## 数据来源（三张**服务端推**的 + 四张配置表）
 //
@@ -2429,7 +2383,7 @@ export function buildLeagueTaskBoxViews(
 // | `bfUnionRankAward` | 排名 → 奖励区间（`rank: [min, max]`） |
 // | `gameConfig` | 6 个键（见 `ILeagueNorthConfig`） |
 //
-// ## ⚠️ 排行是**通用排行协议**，不是联盟协议
+// ##  排行是**通用排行协议**，不是联盟协议
 //
 // 老端 `LayerLeagueNorthernExpeditionRank.requestRankInfo()` 发的是 `RequestGetRank`
 // （`generated/requestMsg/RequestRankMsg.ts`），`rankType` 两档：**24 = 联盟榜 / 22 = 盟内榜**
@@ -2465,9 +2419,7 @@ export const LEAGUE_NORTH_REWARD_SUB_TYPE: Readonly<Record<LeagueNorthRewardTab,
     role: LeagueUnionTaskType.leagueRoleDamage, // 3
 };
 
-// ------------------------------------------------------------
 // `gameConfig` 的 6 个北伐键
-// ------------------------------------------------------------
 
 /**
  * 北伐用到的 6 个 `gameConfig` 键（老端 `Ref.RefMgrgameConfig.getRef("key", …)`）。
@@ -2565,11 +2517,11 @@ export function parseLeagueNorthConfig(rows: readonly unknown[]): ILeagueNorthCo
  * 当前小时是否在活动开放时段内 —— 老端那段
  * `if (timelist[0] > now || now > timelist[1]) { showTip(...); return; }`。
  *
- * ⚠️ 老端用 `new Date().getHours()`（**本地时区的小时**，0~23）⇒ 本函数也收 0~23 的小时数，
- *    由调用点用 `new Date().getHours()` 取（`LeagueNorthExpeditionPage` 里现取，
- *    这样单测可以直接喂任意小时、不用 mock 时间）。
- * ⚠️ 边界口径照抄老端：`start > now` **或** `now > end` 都算关（即 `[start, end]` **闭区间**，
- *    `now === end` 那一刻仍算开）。
+ * 老端用 `new Date().getHours()`（**本地时区的小时**，0~23）⇒ 本函数也收 0~23 的小时数，
+ * 由调用点用 `new Date().getHours()` 取（`LeagueNorthExpeditionPage` 里现取，
+ * 这样单测可以直接喂任意小时、不用 mock 时间）。
+ * 边界口径照抄老端：`start > now` **或** `now > end` 都算关（即 `[start, end]` **闭区间**，
+ * `now === end` 那一刻仍算开）。
  */
 export function isLeagueNorthOpen(nowHour: number, config: ILeagueNorthConfig): boolean {
     if (!Number.isFinite(nowHour)) return false;
@@ -2581,9 +2533,7 @@ export function leagueNorthOpenHourText(config: ILeagueNorthConfig): string {
     return fillLeagueText(LEAGUE_NORTH_OPEN_HOUR_TEMPLATE, config.openHourStart, config.openHourEnd);
 }
 
-// ------------------------------------------------------------
 // `CmdUnionActivity` → 活动视图
-// ------------------------------------------------------------
 
 /** `CmdUnionActInfo` 的一行（`roleId` / `times` / `value`）。 */
 export interface ILeagueActInfoRow {
@@ -2602,8 +2552,8 @@ export function parseLeagueActInfos(raw: unknown): ILeagueActInfoRow[] {
         out.push({
             roleId: toIdString(box.roleId),
             times: toCount(box.times),
-            // ⚠️ `value` 在 proto 里是 `Long` ⇒ 不能 `value as number`（会得到对象再变 NaN）；
-            //    走 `toCount` 的 `Number(value)`（`Long#valueOf()` 给出 number）。
+            // `value` 在 proto 里是 `Long` ⇒ 不能 `value as number`（会得到对象再变 NaN）；
+            // 走 `toCount` 的 `Number(value)`（`Long#valueOf()` 给出 number）。
             value: toCount(box.value),
         });
     }
@@ -2631,9 +2581,9 @@ export interface ILeagueActivityView {
 /**
  * `CmdUnionActivity` → 视图。`null` / 缺 `type` 时返回 `null`（调用点按「活动未开」处理）。
  *
- * ⚠️ `resetTime` 在 proto 里是 `Long`（**毫秒**，服务端写的是今日零点时间戳）⇒
- *    这里 `/1000` 折成秒，**与 `LeagueRepository.toSecFromMs` 同一口径**
- *    （老端是先 ms 再加 `S_DayTime * 1000`、再除 1000 回来，两次换算等价）。
+ * `resetTime` 在 proto 里是 `Long`（**毫秒**，服务端写的是今日零点时间戳）⇒
+ * 这里 `/1000` 折成秒，**与 `LeagueRepository.toSecFromMs` 同一口径**
+ * （老端是先 ms 再加 `S_DayTime * 1000`、再除 1000 回来，两次换算等价）。
  */
 export function parseLeagueActivity(raw: unknown): ILeagueActivityView | null {
     if (!raw || typeof raw !== 'object') return null;
@@ -2656,9 +2606,9 @@ export function parseLeagueActivity(raw: unknown): ILeagueActivityView | null {
 /**
  * 毫秒型 `Long` 字段 → 秒（`parseLeagueActivity` 专用）。
  *
- * ⚠️ 与 `LeagueRepository.toSecFromMs` 同一个坑（`Number(long)` 在 protobufjs 上是 `NaN`）——
- *    本文件是**纯函数表**、不能 import Repository（那边会 import 本文件），所以就地再写一份，
- *    两处都用 `toInt` 的 `Number(value)` 口径（`Long#valueOf()` 给 number）。
+ * 与 `LeagueRepository.toSecFromMs` 同一个坑（`Number(long)` 在 protobufjs 上是 `NaN`）——
+ * 本文件是**纯函数表**、不能 import Repository（那边会 import 本文件），所以就地再写一份，
+ * 两处都用 `toInt` 的 `Number(value)` 口径（`Long#valueOf()` 给 number）。
  */
 function toSecFromMsField(value: unknown): number {
     const n = toInt(value);
@@ -2674,8 +2624,8 @@ export function leagueActSelfStats(
     let value = 0;
     if (!act || !selfRoleId) return { times, value };
     for (const info of act.infos) {
-        // ⚠️ 老端是 `item.roleId == role.GetCmd().roleId`（**宽松相等**，proto 的 `Long` 与 number
-        //    混比在那边能过）。本端两边都归一成十进制串，再做 `===`。
+        // 老端是 `item.roleId == role.GetCmd().roleId`（**宽松相等**，proto 的 `Long` 与 number
+        // 混比在那边能过）。本端两边都归一成十进制串，再做 `===`。
         if (info.roleId !== selfRoleId) continue;
         times += info.times;
         value += info.value;
@@ -2683,9 +2633,7 @@ export function leagueActSelfStats(
     return { times, value };
 }
 
-// ------------------------------------------------------------
 // boss（`guankaReward` → `monster`）
-// ------------------------------------------------------------
 
 /** `guankaReward` 的一行（只留北伐要的两列）。 */
 export interface ILeagueGuanKaRow {
@@ -2740,9 +2688,9 @@ export function parseLeagueMonsterRows(raw: unknown): ILeagueMonsterView[] {
  * com.tm("lab_monster").setText(monster.name);
  * ```
  *
- * ⚠️ **中间任何一环落空都要返回 `null`**（老端在这里会**直接抛** —— `getRef` 返回空壳、
- *    再取 `.tlBoss` 就崩了）。本端返回 `null`，面板把名字留空（活动没开时 `id` 是 0，
- *    查不到任何关卡，这条路径是常态而不是异常）。
+ * **中间任何一环落空都要返回 `null`**（老端在这里会**直接抛** —— `getRef` 返回空壳、
+ * 再取 `.tlBoss` 就崩了）。本端返回 `null`，面板把名字留空（活动没开时 `id` 是 0，
+ * 查不到任何关卡，这条路径是常态而不是异常）。
  */
 export function leagueNorthBossOf(
     guanKaRows: readonly ILeagueGuanKaRow[],
@@ -2755,9 +2703,7 @@ export function leagueNorthBossOf(
     return monsters.find((m) => m.id === stage.bossId) ?? null;
 }
 
-// ------------------------------------------------------------
 // 排行页（`ui/League/LeagueNorthRank`）
-// ------------------------------------------------------------
 
 /** `CmdRankRole` 的归一视图。 */
 export interface ILeagueRankRow {
@@ -2832,8 +2778,8 @@ export function parseUnionRankAwardRows(raw: unknown): ILeagueUnionRankAwardRow[
 /**
  * 名次 → 奖励区间（老端 `getRefByRank(rank)`：`rank >= min && rank <= max`）。
  *
- * ⚠️ `-1`（未上榜）**永远查不到**（没有任何区间会覆盖负数）⇒ 返回 `null`、两颗物品框藏起来，
- *    与老端 `else { com_goods.visible = false; … }` 一致。
+ * `-1`（未上榜）**永远查不到**（没有任何区间会覆盖负数）⇒ 返回 `null`、两颗物品框藏起来，
+ * 与老端 `else { com_goods.visible = false; … }` 一致。
  */
 export function leagueRankRewardOf(
     rows: readonly ILeagueUnionRankAwardRow[],
@@ -2878,11 +2824,11 @@ export function buildLeagueNorthRankRowView(
     const award = leagueRankRewardOf(awardRows, row.rank);
     return {
         rank: row.rank,
-        // ⚠️ 老端 `setText(data.rank || 0)` —— `-1 || 0` 得到 `0`，但**另一行**又写
-        //    `rank.lab` = `data.rank`（`-1`）。`组件_联盟_北伐中原_排名` 的 `标签` 控制器
-        //    按 `data.rank == -1 ? "未上榜" : "第一名"` 切页 ⇒ 显示「未上榜」那页，
-        //    `lab` 根本不显示。所以这里 `rank` 列只在**上榜**时给数字，未上榜给空串
-        //    （比老端那个会被盖住的 `0` 更贴近实际渲染）。
+        // 老端 `setText(data.rank || 0)` —— `-1 || 0` 得到 `0`，但**另一行**又写
+        // `rank.lab` = `data.rank`（`-1`）。`组件_联盟_北伐中原_排名` 的 `标签` 控制器
+        // 按 `data.rank == -1 ? "未上榜" : "第一名"` 切页 ⇒ 显示「未上榜」那页，
+        // `lab` 根本不显示。所以这里 `rank` 列只在**上榜**时给数字，未上榜给空串
+        // （比老端那个会被盖住的 `0` 更贴近实际渲染）。
         rankText: row.rank > 0 ? String(row.rank) : '',
         leagueName: row.roleName,
         powerText: StringUtil.formatNumberToZH(row.value),
@@ -2902,9 +2848,7 @@ export function buildLeagueNorthRankRowViews(
     return rows.map((row) => buildLeagueNorthRankRowView(row, awardRows));
 }
 
-// ------------------------------------------------------------
 // 奖励页（`ui/League/LeagueNorthReward`）
-// ------------------------------------------------------------
 
 /** `taskUnion` 里北伐奖励页的两档 `subType`（老端 `[LeagueDamage, LeagueRoleDamage]`）。 */
 export const LEAGUE_NORTH_REWARD_SUB_TYPES: readonly number[] = [
@@ -2915,8 +2859,8 @@ export const LEAGUE_NORTH_REWARD_SUB_TYPES: readonly number[] = [
 /**
  * 解析 `taskUnion.json` 里 `subType ∈ {2, 3}` 的行（**P5 的 `parseTaskUnionRows` 只留 1**）。
  *
- * ⚠️ 与 P5 那条**不能合并**：P5 的任务面板只认 `subType = 1`，奖励页只认 `2 / 3`。
- *    合并成「全部都留」会让 P5 的任务列表多出 25 行伤害任务。
+ * 与 P5 那条**不能合并**：P5 的任务面板只认 `subType = 1`，奖励页只认 `2 / 3`。
+ * 合并成「全部都留」会让 P5 的任务列表多出 25 行伤害任务。
  */
 export function parseNorthTaskUnionRows(raw: unknown): ILeagueTaskUnionRow[] {
     const out: ILeagueTaskUnionRow[] = [];
@@ -2960,10 +2904,10 @@ export interface ILeagueNorthRewardRowView {
 /**
  * 一条奖励行 → 视图。
  *
- * ⚠️ 老端 `render()` 是三处**松散**取值，有一处会炸：
- *    `let titleStr = ref.name.replace("{count}", ref.param.count)` —— `param` 缺失时抛；
- *    `progress.value = (now / ref.param.count) * 100` —— 分母 0 ⇒ `Infinity`。
- *    本端：缺 `param` ⇒ `targetCount = 0`；分母 0 ⇒ 比例 0（进度条不满也不 NaN）。
+ * 老端 `render()` 是三处**松散**取值，有一处会炸：
+ * `let titleStr = ref.name.replace("{count}", ref.param.count)` —— `param` 缺失时抛；
+ * `progress.value = (now / ref.param.count) * 100` —— 分母 0 ⇒ `Infinity`。
+ * 本端：缺 `param` ⇒ `targetCount = 0`；分母 0 ⇒ 比例 0（进度条不满也不 NaN）。
  */
 export function buildLeagueNorthRewardRowView(
     row: ILeagueTaskUnionRow,
@@ -2975,9 +2919,9 @@ export function buildLeagueNorthRewardRowView(
     const ratio = maxValue > 0 ? Math.max(0, Math.min(1, now / maxValue)) : 0;
     return {
         resId: row.resId,
-        // ⚠️ 任务名用的是 **`{count}`** 占位（不是 `fillLeagueText` 的 `{0}`）——
-        //    老端 `ref.name.replace("{count}", ref.param.count)`，别拿 `fillLeagueText` 填
-        //    （那个只认 `{数字}`，会把名字原样吐回来，界面上就残留着 `{count}`）。
+        // 任务名用的是 **`{count}`** 占位（不是 `fillLeagueText` 的 `{0}`）——
+        // 老端 `ref.name.replace("{count}", ref.param.count)`，别拿 `fillLeagueText` 填
+        // （那个只认 `{数字}`，会把名字原样吐回来，界面上就残留着 `{count}`）。
         nameText: row.name.replace('{count}', String(maxValue)),
         reward: row.reward[0] ?? null,
         now,
@@ -2997,11 +2941,11 @@ export function buildLeagueNorthRewardRowView(
  * if (taskVoA.Rewarded()   || taskVoB.Rewarded())   return taskVoA.Rewarded()   ?  1 : -1;
  * return 0;
  * ```
- * ⚠️ 老端这里**会抛**：`taskVoA` 可能 `undefined`（`GetVOByTaskId` 查不到），
- *    第一句就 `Cannot read properties of undefined`。本端按「无 VO = 未完成」兜底
- *    （与 `buildLeagueTaskRowView` 的口径一致）。
- * ⚠️ 老端**没有**用显式 rank + 稳定排序 —— 本端补上（同 `buildLeagueTaskRowViews` 的处置），
- *    否则同档内的顺序会依赖 V8 的实现细节。
+ * 老端这里**会抛**：`taskVoA` 可能 `undefined`（`GetVOByTaskId` 查不到），
+ * 第一句就 `Cannot read properties of undefined`。本端按「无 VO = 未完成」兜底
+ * （与 `buildLeagueTaskRowView` 的口径一致）。
+ * 老端**没有**用显式 rank + 稳定排序 —— 本端补上（同 `buildLeagueTaskRowViews` 的处置），
+ * 否则同档内的顺序会依赖 V8 的实现细节。
  */
 export function buildLeagueNorthRewardRowViews(
     rows: readonly ILeagueTaskUnionRow[],
@@ -3025,9 +2969,7 @@ export function northRewardRowsOf(
     return rows.filter((row) => row.subType === subType);
 }
 
-// ------------------------------------------------------------
 // 红点（老端 `ModelLeague.hasNorthernExpedition{Challenge,Reward}RD`）
-// ------------------------------------------------------------
 
 /**
  * 「挑战」红点 —— 老端 `hasNorthernExpeditionChallengeRD()`：
@@ -3038,8 +2980,8 @@ export function northRewardRowsOf(
  * return count < RefMgrgameConfig.getRef("key", "unionBFZYEnterMaxCount").value;
  * ```
  *
- * ⚠️ **活动不存在时返回 `false`**（老端第一句就 `if (!act) return false`）——
- *    别写成「没活动就没打过 ⇒ 次数 0 < 上限 ⇒ 恒亮」。
+ * **活动不存在时返回 `false`**（老端第一句就 `if (!act) return false`）——
+ * 别写成「没活动就没打过 ⇒ 次数 0 < 上限 ⇒ 恒亮」。
  */
 export function hasLeagueNorthChallengeRedDot(
     act: ILeagueActivityView | null,
@@ -3055,8 +2997,8 @@ export function hasLeagueNorthChallengeRedDot(
  * 某一档「奖励」红点 —— 老端 `hasNorthernExpeditionReward(subType)`：
  * 该档任务里**任意一条**处于「可领取」就亮。
  *
- * ⚠️ 老端那句 `let taskVo = …GetVOByTaskId(ref.resId); if (taskVo && taskVo.CanBeReward())`
- *    有 `taskVo &&` 守 —— 与 P5 的 `hasLeagueTaskRedDot` 同口径（无 VO 不算可领）。
+ * 老端那句 `let taskVo = …GetVOByTaskId(ref.resId); if (taskVo && taskVo.CanBeReward())`
+ * 有 `taskVo &&` 守 —— 与 P5 的 `hasLeagueTaskRedDot` 同口径（无 VO 不算可领）。
  */
 export function hasLeagueNorthRewardRedDot(
     rows: readonly ILeagueTaskUnionRow[],
@@ -3075,9 +3017,9 @@ export function hasLeagueNorthRewardRedDot(
 /**
  * **入口红点** —— 老端 `hasNorthernExpeditionRD()` = 挑战 ∪ 两档奖励（三个判据的并）。
  *
- * ⚠️ 「必须已入盟」那道闸**不在本函数里**：老端 `RDLeague.OnComputeResult()` 第一句就是
- *    `if (!IsJoinedLeague()) return 0`（同 P4/P5 两条入口红点的处置），
- *    由 `LeagueRepository.loadLeagueEntryRedDots()` 统一兜。
+ * 「必须已入盟」那道闸**不在本函数里**：老端 `RDLeague.OnComputeResult()` 第一句就是
+ * `if (!IsJoinedLeague()) return 0`（同 P4/P5 两条入口红点的处置），
+ * 由 `LeagueRepository.loadLeagueEntryRedDots()` 统一兜。
  */
 export function hasLeagueNorthRedDot(
     act: ILeagueActivityView | null,
@@ -3091,9 +3033,7 @@ export function hasLeagueNorthRedDot(
         || hasLeagueNorthRewardRedDot(rows, cmds, 'role');
 }
 
-// ------------------------------------------------------------
 // 主面板文案（老端 `updateView()` / `updateTime()` 里那几串）
-// ------------------------------------------------------------
 
 /**
  * 「英雄共鸣」那一行的属性加成文案 —— 老端
@@ -3125,8 +3065,8 @@ export function leagueNorthTimesText(config: ILeagueNorthConfig, used: number): 
  * let lerp = (buffend - now) / 1000;   // ≤ 0 ⇒ "00:00:00"
  * ```
  *
- * ⚠️ 入参 `addBuffTimeMs` 是**毫秒**（协议原值），`nowMs` 也是毫秒 ⇒ 单位自洽。
- *    返回值钳到 `>= 0`（老端靠 `if (lerp <= 0) "00:00:00"` 兜，本端直接钳）。
+ * 入参 `addBuffTimeMs` 是**毫秒**（协议原值），`nowMs` 也是毫秒 ⇒ 单位自洽。
+ * 返回值钳到 `>= 0`（老端靠 `if (lerp <= 0) "00:00:00"` 兜，本端直接钳）。
  */
 export function leagueNorthBuffRemainSec(
     config: ILeagueNorthConfig,
@@ -3155,8 +3095,8 @@ export function leagueNorthResetRemainSec(resetTimeSec: number, nowMs: number): 
 /**
  * 秒 → `HH:MM:SS`（老端 `TimeUtil.timeSec2HMSStr4(lerp)`）。
  *
- * ⚠️ 老端那个 `timeSec2HMSStr4` 的名字容易读成「带毫秒」，实际是**四段补零**
- *    （`StringUtil.paddingNum` 到 2 位）⇒ 输出恒为 `HH:MM:SS`。
+ * 老端那个 `timeSec2HMSStr4` 的名字容易读成「带毫秒」，实际是**四段补零**
+ * （`StringUtil.paddingNum` 到 2 位）⇒ 输出恒为 `HH:MM:SS`。
  */
 export function leagueNorthHms(seconds: number): string {
     const total = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;

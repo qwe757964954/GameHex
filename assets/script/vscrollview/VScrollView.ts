@@ -342,6 +342,11 @@ export class VirtualScrollView extends Component {
   })
   public spacing: number = 0;
 
+  /** 模板 item 的主方向尺寸（onLoad 时从模板 UITransform 读取）。 */
+  public get itemHeight(): number {
+    return this.itemMainSize;
+  }
+
   @property({
     displayName: '头部间距',
     tooltip: '列表头部的额外间距（纵向为顶部，横向为左侧）',

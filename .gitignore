@@ -46,3 +46,15 @@ __pycache__/
 
 .tmpwork/
 
+#//////////////////////////
+# Local test assets (never commit)
+#//////////////////////////
+/assets/__layout_test/
+/assets/__layout_test.meta
+
+#//////////////////////////
+# Local run logs (never commit)
+#//////////////////////////
+*.log
+/logs/archive/
+

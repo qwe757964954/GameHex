@@ -57,39 +57,38 @@ export class OSRankRankDetailPage extends PopupBase {
     static prefabPath = 'ui/Celebration/OSRankRankDetail';
 
     @property({ type: VirtualScrollView, tooltip: 'List：排行列表（FGUI `list`，item = `OSRankDetailRow`）' })
-    list: VirtualScrollView = null;
+    list: VirtualScrollView = null!;
 
     @property({ type: OSDetailRow, tooltip: 'HeroRow：自己那一行（FGUI `heroItem`，**不在列表里**，见文件头）' })
-    heroRow: OSDetailRow = null;
+    heroRow: OSDetailRow = null!;
 
     @property({ type: Label, tooltip: 'ColPower：表头第三格（FGUI `lab_key`，运行时被 `rankKey` 覆盖）' })
-    colPower: Label = null;
+    colPower: Label = null!;
 
     @property({ type: Node, tooltip: 'PopBg/CloseBtn：关闭按钮（FGUI `按钮_关闭`）' })
-    closeBtn: Node = null;
+    closeBtn: Node = null!;
 
     /** 本次拿到的排行行（`renderItemFn` 按 index 现取，规则 55）。 */
     private _rows: readonly ICelebrationRankEntry[] = [];
 
     protected onInit(): void {
-        this.closeBtn?.on('click', this._onClose, this);
-        // ⚠️ `renderItemFn` **只绑一次**；数据由 `_rows` 按 index 现取。
-        if (this.list) this.list.renderItemFn = this._renderRow;
+        this.closeBtn.on('click', this._onClose, this);
+        this.list.renderItemFn = this._renderRow;
     }
 
     protected async onOpen(userData?: IOsRankDetailParams): Promise<void> {
         const rankType = Number(userData?.rankType) || 0;
         const rankKey = typeof userData?.rankKey === 'string' ? userData.rankKey : '';
-        if (this.colPower) this.colPower.string = rankKey;
+        this.colPower.string = rankKey;
 
-        // 先把两处清空 —— 回包不来就停在空态，**不留上一轮的值**（弹窗是多开复用的）。
+        // 先把两处清空 —— 回包不来就停在空态，不留上一轮的值（弹窗是多开复用的）。
         this._rows = [];
-        if (this.heroRow) this.heroRow.render(CL_EMPTY_RANK_ENTRY);
+        this.heroRow.render(CL_EMPTY_RANK_ENTRY);
 
         const detail = await celebrationRepository.requestRank(
             rankType,
             CL_DETAIL_SHOW_NUM,
-            // ⚠️ 形参叫 `unionId`，老端传的是**自己的 roleId** —— 见 `RequestRankMsg` 文件头。
+            // 形参叫 unionId，但老端传的是自己的 roleId。
             celebrationSelfRoleId(),
             this,
         );
@@ -100,16 +99,13 @@ export class OSRankRankDetailPage extends PopupBase {
         }
 
         this._rows = detail.list;
-        if (this.heroRow) this.heroRow.render(detail.myRank);
+        this.heroRow.render(detail.myRank);
 
-        // `VirtualScrollView` 的槽位在它自己的 `start()` 里建，而 `onOpen` 早于 `start()`
-        // ⇒ 不等一帧 `setTotalCount` 会让列表**一片空白**（规则 86）。
+        // VirtualScrollView 的槽位在 start() 里建，onOpen 早于 start()，需要等一帧。
         if (!await this.nextPopupFrame()) return;
         if (!this.isValid || !this.node.isValid) return;
-        const list = this.list;
-        if (!list || !list.node.isValid) return;
-        list.setTotalCount(this._rows.length);
-        list.scrollToTop(false);
+        this.list.setTotalCount(this._rows.length);
+        this.list.scrollToTop(false);
     }
 
     private _onClose(): void {

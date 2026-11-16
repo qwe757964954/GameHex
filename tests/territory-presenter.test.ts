@@ -42,6 +42,7 @@ import type {
     TerritoryWriteResult,
 } from '../assets/script/app/territory/application/TerritoryCellRepository';
 import { emptyCellState } from '../assets/script/app/territory/model/TerritoryCellBitSet';
+import { configureTerritoryMap, territoryNeighbors } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { assetPath } from './helpers/asset-paths';
 
 interface IBattlePageProbe {
@@ -1266,33 +1267,49 @@ test('old nonadjacent random placement moves beside owned territory', async () =
     assert.deepEqual(h.presenter.state.randomResourceOpenableCells, []);
 });
 
-test('published random candidate 346 unlocks directly beside 326 and 347', async () => {
+test('published random candidate opens from an adjacent cell and unlocks directly', async () => {
     const publishedMap = JSON.parse(readFileSync(
         assetPath('config/territory-maps/chapter_01.json'), 'utf8'));
+    const published = configureTerritoryMap(publishedMap);
+    const siteCells = new Set<number>();
+    for (const site of published.sites) for (const cell of site.footprint) siteCells.add(cell);
+    let target = -1;
+    let neighbor = -1;
+    for (const candidate of published.randomSites?.candidateCells ?? []) {
+        const free = territoryNeighbors(candidate, published)
+            .find((cell) => cell !== published.startCellId && !siteCells.has(cell));
+        if (free !== undefined) {
+            target = candidate;
+            neighbor = free;
+            break;
+        }
+    }
+    assert.ok(target >= 0 && neighbor >= 0,
+        'chapter_01 至少要有一个能从相邻空格开启的随机候选格');
     const h = createHarness({
         loader: createFakeLoader({ ...bundle, mapJson: publishedMap }),
         gateway: createFakeGateway({ fetch: {
             ok: true,
             state: { levelChapter: 1, rewardState: 0,
-                unlockCells: [326, 347, 348, 367], passCells: [367] },
+                unlockCells: [neighbor, published.startCellId], passCells: [published.startCellId] },
         } }),
         store: createFakeStore({ silver: 3000, stamina: 1551 }),
     });
     h.presenter.start();
     await flush();
-    assert.ok(h.presenter.state.randomResourceOpenableCells.includes(346));
+    assert.ok(h.presenter.state.randomResourceOpenableCells.includes(target));
     // 点格直接开启，不经过详情面板。
-    h.presenter.selectRandomResource(346);
+    h.presenter.selectRandomResource(target);
     await flush();
     assert.equal(h.presenter.state.detail.open, false);
-    assert.deepEqual(h.gatewayCalls.unlockedCells, [346]);
+    assert.deepEqual(h.gatewayCalls.unlockedCells, [target]);
     assert.deepEqual(h.gatewayCalls.passedCells, []);
-    assert.equal(h.presenter.state.progress?.isCellUnlocked(346), true);
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(target), true);
     // 随机格解锁即通关：地块立即进入已占领（绿色 mapOwned），且不产生通关请求。
-    assert.equal(h.presenter.state.progress?.isOwned(346), true);
+    assert.equal(h.presenter.state.progress?.isOwned(target), true);
     assert.deepEqual(h.presenter.state.progress?.pendingPassCells, []);
     // 已开的格子再点不发第二次请求。
-    h.presenter.selectRandomResource(346);
+    h.presenter.selectRandomResource(target);
     await flush();
     assert.equal(h.gatewayCalls.unlock, 1);
 });
@@ -1777,26 +1794,26 @@ test('fixed resource unlocks first and passes only on the next click', async () 
     const h = createHarness({
         loader: createFakeLoader({ ...bundle, mapJson: publishedMap }),
         gateway: createFakeGateway({ fetch: {
-            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367] },
+            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [346, 347, 367], passCells: [367] },
         } }),
     });
     h.presenter.start();
     await flush();
-    const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 347)!;
-    assert.ok(h.presenter.state.revealedCells.includes(347));
+    const site = h.presenter.state.map!.sites.find((entry) => entry.cellId === 326)!;
+    assert.ok(h.presenter.state.revealedCells.includes(326));
     h.presenter.selectSite(site);
     await flush();
-    assert.deepEqual(h.gatewayCalls.unlockedCells, [347]);
+    assert.deepEqual(h.gatewayCalls.unlockedCells, [326]);
     assert.deepEqual(h.gatewayCalls.passedCells, []);
-    assert.equal(h.presenter.state.progress?.isCellUnlocked(347), true);
-    assert.equal(h.presenter.state.progress?.isOwned(347), false);
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(326), true);
+    assert.equal(h.presenter.state.progress?.isOwned(326), false);
     h.presenter.selectSite(site);
     await flush();
-    assert.deepEqual(h.gatewayCalls.passedCells, [347]);
-    assert.equal(h.presenter.state.progress?.isOwned(347), true);
+    assert.deepEqual(h.gatewayCalls.passedCells, [326]);
+    assert.equal(h.presenter.state.progress?.isOwned(326), true);
     h.presenter.selectSite(site);
     await flush();
-    assert.deepEqual(h.gatewayCalls.passedCells, [347]);
+    assert.deepEqual(h.gatewayCalls.passedCells, [326]);
 });
 
 test('two-step stage 327 unlocks and starts the battle on the first click, later clicks open the panel', async () => {
@@ -1930,24 +1947,52 @@ test('fixed resource needs its configured silver and stamina before unlock', asy
 test('distant random candidate remains hidden until an adjacent cell opens', async () => {
     const publishedMap = JSON.parse(readFileSync(
         assetPath('config/territory-maps/chapter_01.json'), 'utf8'));
+    const published = configureTerritoryMap(publishedMap);
+    const candidates = published.randomSites?.candidateCells ?? [];
+    const siteCells = new Set<number>();
+    for (const site of published.sites) for (const cell of site.footprint) siteCells.add(cell);
+    const startNeighbors = new Set(territoryNeighbors(published.startCellId, published));
+    let target = -1;
+    let bridge = -1;
+    let anchor = -1;
+    for (const candidate of candidates) {
+        if (startNeighbors.has(candidate)) continue;
+        const targetNeighbors = new Set(territoryNeighbors(candidate, published));
+        for (const next of targetNeighbors) {
+            if (!candidates.includes(next) || startNeighbors.has(next)) continue;
+            const free = territoryNeighbors(next, published).find((cell) =>
+                cell !== published.startCellId && cell !== candidate
+                && !targetNeighbors.has(cell) && !siteCells.has(cell));
+            if (free !== undefined) {
+                target = candidate;
+                bridge = next;
+                anchor = free;
+                break;
+            }
+        }
+        if (target >= 0) break;
+    }
+    assert.ok(target >= 0 && bridge >= 0 && anchor >= 0,
+        'chapter_01 至少要有一组“隐藏候选格 + 可开启的桥接候选格”');
     const h = createHarness({
         loader: createFakeLoader({ ...bundle, mapJson: publishedMap }),
         gateway: createFakeGateway({ fetch: {
-            ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [367], passCells: [367] },
+            ok: true, state: { levelChapter: 1, rewardState: 0,
+                unlockCells: [anchor, published.startCellId], passCells: [published.startCellId] },
         } }),
     });
     h.presenter.start();
     await flush();
-    // 346 是主城 367 的左上斜邻居，开局即揭示；386 是第二圈格（与 367 不相邻），保持隐藏。
-    assert.equal(h.presenter.state.revealedCells.includes(346), true);
-    assert.equal(h.presenter.state.revealedCells.includes(386), false);
-    h.presenter.selectRandomResource(386);
+    // 目标格与起始格 / 锚点都不相邻，开局保持隐藏。
+    assert.equal(h.presenter.state.revealedCells.includes(target), false);
+    assert.equal(h.presenter.state.revealedCells.includes(bridge), true);
+    h.presenter.selectRandomResource(target);
     await flush();
     assert.equal(h.gatewayCalls.unlock, 0);
-    // 解锁主城邻居 387 后，其六边邻居 386 被揭示。
-    h.presenter.selectRandomResource(387);
+    // 解锁桥接格后，其六边邻居目标格被揭示。
+    h.presenter.selectRandomResource(bridge);
     await flush();
-    assert.equal(h.presenter.state.revealedCells.includes(386), true);
+    assert.equal(h.presenter.state.revealedCells.includes(target), true);
 });
 
 test('closeDetail closes the open panel', async () => {

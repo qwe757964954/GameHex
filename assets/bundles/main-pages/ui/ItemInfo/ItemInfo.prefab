@@ -1819,6 +1819,9 @@
     "_components": [
       {
         "__id__": 157
+      },
+      {
+        "__id__": 177
       }
     ],
     "_prefab": {
@@ -1827,7 +1830,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 218.5,
-      "y": -13,
+      "y": 0,
       "z": 0
     },
     "_lrot": {
@@ -4287,5 +4290,43 @@
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "ZdfMFEs5SjHFfvbvhU7yOA"
+  },
+  {
+    "__type__": "cc.Layout",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 68
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 178
+    },
+    "_resizeMode": 1,
+    "_layoutType": 2,
+    "_cellSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_startAxis": 0,
+    "_paddingLeft": 0,
+    "_paddingRight": 0,
+    "_paddingTop": 13,
+    "_paddingBottom": 13,
+    "_spacingX": 0,
+    "_spacingY": 11,
+    "_verticalDirection": 1,
+    "_horizontalDirection": 0,
+    "_constraint": 0,
+    "_constraintNum": 0,
+    "_affectedByScale": false,
+    "_isAlign": false,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "layout_iteminfo_rows_01"
   }
 ]

@@ -35,112 +35,49 @@ import type { TerritoryChestTier } from '../model/TerritoryChestTier';
 import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
 
 /**
- * 章节宝箱开箱的**表现层**（三档共用一套节点，参数走 `model/TerritoryChestAnimation`）。
+ * 章节宝箱开箱的表现层，三档共用一套节点，参数来自 `model/TerritoryChestAnimation`。
  *
- * ## prefab 与代码的分工（2026-10-28 改；2026-11-03 FlySlot 模板化）
- *
- * 节点树 + `Graphics` / `Sprite` / `UIOpacity` 全在 `ui/territory/TerritoryChest.prefab` 里
- * （页面 instantiate 后把根节点传进来）—— 在 Inspector 里看得见、能对着设计稿调层级。
- * 代码只负责**每帧重画**：光柱 / 彩虹 / 光条 / 星光的形状是 `Graphics` 现画的，本来就序列化不了。
- * 池化槽位数量按奖励总量变（5 / 15 / 30）：
- *  - `Fly/FlySlot` 是 prefab 里的**模板**（active=false，图标 + 数量 Label + 描边全在预制体配），
- *    代码 `ensureFlySlots` 只实例化 + 按奖励量布局；
- *  - `FountainSlot_*` 仍由代码建（没有需要序列化的静态表现）。
- *
- * 早前这套层级是构造函数里 `new Node` + `addComponent` 拼出来的，当时给的理由是
- * 「宝箱补帧换图、光效全是 Graphics 现画、图标按 resId 注入 ⇒ 都不适合塞进 prefab」——
- * 前两条讲的是**绘制**、第三条讲的是**内容注入**，都不构成「结构不能进 prefab」的理由：
- * 结构一直是固定这十来个节点。
- *
- * ## 层级（子节点顺序 = 渲染序，越靠后越在上）
- *
- * ```
- * Root                      页面坐标系（不随地图滚动）
- * ├── Backdrop   暗角 / 压暗（只有强档会亮；弱 / 中档推镜但不压暗）
- * ├── Stage      镜头层（倍率按奖励总量 1.08 / 1.35 / 2.3 ⇒ 推近不影响飞向栏位的图标）
- * │   ├── Beam     光柱（只有中档）——2026-10-23 起放进镜头层，跟着一起放大
- * │   ├── Rainbow  彩虹光束（只有强档）
- * │   ├── Chest    宝箱（Chest 收动画缩放 / ChestArt 收基准缩放，两张一张图换帧）
- * │   ├── Stars    星光（Graphics 一批画完，不用 40 个节点）
- * │   ├── Rays     金色放射光条
- * │   ├── Glow     箱口光晕
- * │   └── Fountain 喷泉图标（复用资源图，池化）
- * └── Fly        飞向顶部栏的奖励图标 + 数量（页面坐标系 ⇒ 不跟着镜头缩放）
- * ```
- *
- * ## 🔴 三条层级不变量（2026-10-29 用户：「打开宝箱的特效应该在宝箱的上层，
- *    奖励资源的 icon 的下层显示，现在被宝箱遮挡了」）
- *
- *  1. **`Chest` 必须排在 `Stars` / `Rays` / `Glow` 之前**。这三样都是「从箱口炸出来」的，
- *     画在箱子后面时过半形状被 84×67 的箱体吃掉 —— 实机就是用户说的「被宝箱遮挡」。
- *     它们在 `prefab` 里的**兄弟序就是这个需求本身**，改顺序 = 改需求，单测
- *     `territory-chest-layer-order` 直接读 prefab 断言。
- *  2. **`Fountain` 必须是 `Stage` 的最后一个孩子**（奖励图标压在全部光效之上）：
- *     玩家最先要读到的是"拿到了什么"，光效盖住图标就是本末倒置。
- *  3. **`Beam` / `Rainbow` 留在 `Chest` 之后（即箱体**下方**），这是刻意的不对称**：
- *     它们是从箱口一直铺到屏幕顶的**背景光**（光柱在箱口那一段宽 36px、alpha 到 235），
- *     挪到箱子前面会把箱体中央糊成一片白 —— 「光从箱子后面射出来」才是对的。
- *     别为了"统一"把这一条也翻过来。
- *
- * ⚠️ 2026-10-23 起**镜头是"真镜头"**（用户：「相机推进的实际效果应该是地块和宝箱同时放大，
- *   而不是只有宝箱放大，且放大的同时需要保证宝箱的坐标点在屏幕的中央」）：
- *   · 本类只负责**覆盖层这一半**（缩放 + 把宝箱挪到屏幕中心，见 `applyCamera` 的 `focus`）；
- *   · **地图那一半**由 `TerritoryMapView` 通过 `setCameraHook` 每帧收 `(scale, focus)`
- *     自己缩放 `MapLayer` —— 两边必须同帧同值，否则地块和宝箱会"各走各的"；
- *   · 光柱 / 彩虹因此必须挂在 `Stage` 下（挂 Root 的话宝箱挪到中央后，光柱还留在原格）。
- *
- * ⚠️ 2026-10-23 起**没有「白光爆点」这一层**（用户：「移除宝箱打开的圆形闪光特效」）：
- *   原来的 `Flash` 是 12 个同心圆叠出来的径向白闪（峰值半径 204px，等于半个屏幕的白），
- *   开箱的"亮"现在只由**放射光条 + 箱口光晕 + 星光**承担。
- *   别再把它加回来 —— 单测 `territory-chest-animation` 有一条反向断言盯着视图里不许出现 `Flash`。
- *
- * ## 坐标
- *
- * `play(origin)` 的 `origin` 是**页面坐标系**里「被点格子的台面中心」——
- * 由 `TerritoryMapView` 用 `UITransform.convertToNodeSpaceAR` 从格子的世界坐标换算，
- * 本类不碰 ScrollView、不自己推算布局。
- *
- * ⚠️ **origin 对着的是箱子的「视觉中心」**，不是补帧图那块 142×156 画布的中心：
- *   画布上方留了箱盖张开的 44px，画布中心比箱子中心高 21px，补偿见
- *   `TERRITORY_CHEST_ART_METRICS` 与 `chestAnchorX/Y`。少这一下就会和地图上静止那只错位。
- *
- * ⚠️ 全程不建 tween：本类被页面复用，`step(dt)` 由 `TerritoryMapView.update` 推进；
- *   `stop()` 只把时钟置 -1 并收起节点（同 `TerritoryGainBurst` 的池化契约）。
+ * prefab 承载固定结构（暗角、镜头层、光效、喷泉与飞行槽位），代码只做每帧重绘：
+ * Graphics 光效无法序列化，飞行槽位按奖励量实例化。
+ * 节点顺序即渲染序：箱体之前的星光/光条/光晕不能被箱子遮住，喷泉位于 Stage 最上层；
+ * 光柱与彩虹留在箱体之后，作为从箱口射出的背景光。
+ * 镜头推进时本类负责覆盖层，地图缩放由 TerritoryMapView 通过 camera hook 同步。
+ * 本类被页面复用，step(dt) 由地图视图推进，不创建 tween。
  */
 
 /**
  * 表演里的宝箱**可见宽**（像素）—— 与地图格子上那只静止宝箱**同宽**。
  *
- * ## 口径（2026-10-22 用户：「动画的节点大小需要与原宝箱静止状态的大小相近，坐标点保持一致」）
+ * 口径「动画的节点大小需要与原宝箱静止状态的大小相近，坐标点保持一致」
  *
- *   · 静止态（`territory_fixed_resource_v1`，可见 `143×113` 画布归一后）= **84 × 66.4**；
- *   · 表演用补帧图闭合帧（可见 `138×110`）按本常量归一 = **84 × 67.0**。
- *   两者差 0.6px ⇒ 点击那一刻箱子「原地变身」，看不出换过图。
+ * · 静止态（`territory_fixed_resource_v1`，可见 `143×113` 画布归一后）= **84 × 66.4**；
+ * · 表演用补帧图闭合帧（可见 `138×110`）按本常量归一 = **84 × 67.0**。
+ * 两者差 0.6px ⇒ 点击那一刻箱子「原地变身」，看不出换过图。
  *
- *  ⚠️ 别再按「比地块建筑大一圈」取值。曾经是**可见高 132**（≈ 可见宽 117），
- *    比静止态大 1.4 倍，实机读作「点一下箱子突然弹大一圈」—— 那正是这次要修的问题。
+ * 别再按「比地块建筑大一圈」取值。曾经是**可见高 132**（≈ 可见宽 117），
+ * 比静止态大 1.4 倍，实机读作「点一下箱子突然弹大一圈」—— 那正是这次要修的问题。
  *
- *  ⚠️ 复用的是 `TerritoryStationView.BUILDING_VISIBLE_WIDTH`（不是抄一个 84）：
- *    以后调建筑大小，宝箱跟着一起变，两者不会飘。**这里的"轻微放大"不由常量承担**，
- *    由弹出过冲（`TERRITORY_CHEST_POP_OVERSHOOT = 1.15`）承担 —— 静止帧严格 1:1。
+ * 复用的是 `TerritoryStationView.BUILDING_VISIBLE_WIDTH`（不是抄一个 84）：
+ * 以后调建筑大小，宝箱跟着一起变，两者不会飘。**这里的"轻微放大"不由常量承担**，
+ * 由弹出过冲（`TERRITORY_CHEST_POP_OVERSHOOT = 1.15`）承担 —— 静止帧严格 1:1。
  */
 const CHEST_VISIBLE_WIDTH = BUILDING_VISIBLE_WIDTH;
 
 /**
  * 飞向资源栏的粒子**基准边长**（像素，放大前）。
  *
- *  与下面的 `FLY_ICON_SCALE` 一起决定实际边长：`44 × 1.35 = 59.4`。
+ * 与下面的 `FLY_ICON_SCALE` 一起决定实际边长：`44 × 1.35 = 59.4`。
  */
 const FLY_ICON_BASE_SIZE = 44;
 
 /**
- * 飞行粒子的放大倍数 —— **1.35**（2026-10-23 用户：「奖励飞向资源栏：粒子大小放大 1.35 倍」）。
+ * 飞行粒子的放大倍数 —— **1.35**「奖励飞向资源栏：粒子大小放大 1.35 倍」。
  *
- * ## 为什么只改 `setContentSize`、不改 `applyFly` 里的 `setScale`
+ * 只改 `setContentSize`、不改 `applyFly` 里的 `setScale`
  *
- *  `applyFly` 每帧写的是 `slot.node.setScale(fx.scale, fx.scale, 1)` —— 那是**飞行过程的**缩放
- *  （起飞 1:1、到终点前收到 0.3 假装被吸入）。基准尺寸只能写在节点的 `UITransform` 上，
- *  两者相乘才是屏幕上的真实大小；把 1.35 混进 `fx.scale` 里，飞行的"收小"就会被一起放大。
+ * `applyFly` 每帧写的是 `slot.node.setScale(fx.scale, fx.scale, 1)` —— 那是**飞行过程的**缩放
+ * （起飞 1:1、到终点前收到 0.3 假装被吸入）。基准尺寸只能写在节点的 `UITransform` 上，
+ * 两者相乘才是屏幕上的真实大小；把 1.35 混进 `fx.scale` 里，飞行的"收小"就会被一起放大。
  */
 const FLY_ICON_SCALE = 1.35;
 
@@ -174,8 +111,8 @@ export interface ITerritoryChestIconEntry {
 /**
  * 宝箱**补帧序列**（`chest_seq_0 … chest_seq_N-1`，同为 142×156）。
  *
- *  第 0 张 = 完全闭合（就是地图格子上显示的那只宝箱），最后一张 = 完全开盖（`zw_0005`）。
- *  中间帧由 `tools/gen_chest_open_frames.py` 离线烘焙 —— 两张成品图之间没有可插值的姿态参数。
+ * 第 0 张 = 完全闭合（就是地图格子上显示的那只宝箱），最后一张 = 完全开盖（`zw_0005`）。
+ * 中间帧由 `tools/gen_chest_open_frames.py` 离线烘焙 —— 两张成品图之间没有可插值的姿态参数。
  */
 export interface ITerritoryChestArt {
     /** 按 `0 … N-1` 排好的帧；空数组 / 长度 1 都合法（长度 1 = 只有一张，等于不换帧）。 */
@@ -242,9 +179,9 @@ export class TerritoryChestView {
     /**
      * **按资源 id 分开的落点**（页面坐标系）。没登记的资源回落到 {@link catchX}/{@link catchY}。
      *
-     * 为什么必须分资源：一批奖励里同时有银币（`resId 7`）和体力（`resId 9`）时，
+     * 一批奖励里同时有银币（`resId 7`）和体力（`resId 9`）时，
      * 它们该分别落进资源栏的第 1 格和第 2 格 —— 共用一落点就是「两种图标全砸在同一格」，
-     * 玩家看不出哪一格涨了（2026-10-26 需求）。
+     * 玩家看不出哪一格涨了。
      */
     private readonly catchPoints = new Map<number, { x: number; y: number }>();
     /** 某一枚图标**落进资源栏**的回调（页面据此让那一格跳一下 + **那一格**闪光，别的格不动）。 */
@@ -258,8 +195,8 @@ export class TerritoryChestView {
     /**
      * 可见区中心 → 画布中心的落位补偿（屏幕像素，由 `applyChestFrames` 按缩放算好）。
      *
-     *  补帧图的画布比闭合箱子高出「箱盖张开的那截」，画布中心因此比箱子的视觉中心高 21px
-     *  （见 `TERRITORY_CHEST_ART_METRICS`）。不补就会看到箱子沉在格子里、和静止态错位。
+     * 补帧图的画布比闭合箱子高出「箱盖张开的那截」，画布中心因此比箱子的视觉中心高 21px
+     * （见 `TERRITORY_CHEST_ART_METRICS`）。不补就会看到箱子沉在格子里、和静止态错位。
      */
     private chestAnchorX = 0;
     private chestAnchorY = 0;
@@ -287,9 +224,9 @@ export class TerritoryChestView {
     /**
      * 镜头**地图侧**的出口（由 `TerritoryMapView` 注入）。
      *
-     *  本类只管覆盖层这一半（宝箱 + 光效），地块归地图 —— 两边必须同帧同值，
-     *  否则就是 2026-10-23 用户看到的问题：「只有宝箱放大、地块不动」。
-     *  每帧 `applyCamera` 调一次；`stop()` 额外调 `(1, 0)` 把地图还原。
+     * 本类只管覆盖层这一半（宝箱 + 光效），地块归地图 —— 两边必须同帧同值，
+     * 否则就是 看到的问题：「只有宝箱放大、地块不动」。
+     * 每帧 `applyCamera` 调一次；`stop()` 额外调 `(1, 0)` 把地图还原。
      */
     private cameraHook: ((scale: number, focus: number) => void) | null = null;
     /**
@@ -305,19 +242,19 @@ export class TerritoryChestView {
      * 真源是 `territoryChestCameraZoomOf`，在 `play()` 里与 `flyCount` 用**同一个 `total`** 算出来
      * （两个函数各判各的档，但输入必须是同一个值 —— 分成两次累加迟早会飘）。
      *
-     * ⚠️ 这不是参数表里的 `spec.cameraZoom`（那三档都是 2.3，现在只是上限 / 兜底）。
-     *   每帧必须把它传给 `territoryChestCameraFx` 的第三个参数，否则弱档也会按 2.3 推。
+     * 这不是参数表里的 `spec.cameraZoom`（那三档都是 2.3，现在只是上限 / 兜底）。
+     * 每帧必须把它传给 `territoryChestCameraFx` 的第三个参数，否则弱档也会按 2.3 推。
      */
     private cameraZoom = 1;
 
     /**
      * @param root `ui/territory/TerritoryChest.prefab` 的实例（页面 instantiate 后传进来）；
-     *   节点树、`Graphics` / `Sprite` / `UIOpacity` 全在 prefab 里，本类只取引用 + 每帧重画。
+     * 节点树、`Graphics` / `Sprite` / `UIOpacity` 全在 prefab 里，本类只取引用 + 每帧重画。
      *
-     *   ⚠️ 早前这套层级是构造函数里 `new Node` + `addComponent` 一个个拼出来的（理由写在类头
-     *   「为什么不是 prefab」）—— 那样在 Inspector 里看不见结构、改不了层级，也没法在设计稿
-     *   对照时打开。现在改成 prefab：**结构归 prefab，绘制归代码**（`Graphics` 每帧 clear + 重画，
-     *   本来也序列化不了）。
+     * 早前这套层级是构造函数里 `new Node` + `addComponent` 一个个拼出来的（理由写在类头
+     * 「不采用 prefab 的原因」）—— 那样在 Inspector 里看不见结构、改不了层级，也没法在设计稿
+     * 对照时打开。现在改成 prefab：**结构归 prefab，绘制归代码**（`Graphics` 每帧 clear + 重画，
+     * 本来也序列化不了）。
      */
     constructor(root: Node, size: { width: number; height: number }) {
         this.size = { width: Math.max(1, size.width), height: Math.max(1, size.height) };
@@ -330,7 +267,7 @@ export class TerritoryChestView {
 
         this.backdrop = requireGraphics(root, 'Backdrop', width, height);
         this.stage = root.getChildByName('Stage');
-        // 光柱 / 彩虹挂在**镜头层**里（2026-10-23）：镜头推近时宝箱会被挪到屏幕中央，
+        // 光柱 / 彩虹挂在**镜头层**里：镜头推近时宝箱会被挪到屏幕中央，
         // 这两样要是留在 Root，就会与箱子脱开、杵在原格上。它们本来就是"从箱口射出来"的，
         // 跟着箱子一起放大才对。
         this.beam = requireGraphics(this.stage, 'Beam', width, height);
@@ -343,12 +280,12 @@ export class TerritoryChestView {
         // 挂在 `Chest` 而不是 `ChestArt` 上：光晕/爆点这些兄弟节点各自算 alpha，
         // 分成两层写会出现「箱子已经没了、光晕还亮着」。
         this.chestOpacity = this.chest.getComponent(UIOpacity);
-        // 一张图换帧（2026-10-22）：不再拆箱体/箱盖 —— 闭合与开盖是两张成品图，
+        // 一张图换帧：不再拆箱体/箱盖 —— 闭合与开盖是两张成品图，
         // 中间帧由 `tools/gen_chest_open_frames.py` 烘焙，运行时只按帧号换 `spriteFrame`。
         //
-        // ⚠️ 缩放要分两层：`Chest` 收**动画**缩放（弹出 / 蓄力挤压），`ChestArt` 收**基准**缩放
-        //   （把美术缩到 `CHEST_VISIBLE_WIDTH`）。合成一层的话 `applyChest` 每帧写死
-        //   `setScale(fx.scale, …)` 会把基准覆盖掉，宝箱瞬间缩成 1:1 像素。
+        // 缩放要分两层：`Chest` 收**动画**缩放（弹出 / 蓄力挤压），`ChestArt` 收**基准**缩放
+        // （把美术缩到 `CHEST_VISIBLE_WIDTH`）。合成一层的话 `applyChest` 每帧写死
+        // `setScale(fx.scale, …)` 会把基准覆盖掉，宝箱瞬间缩成 1:1 像素。
         this.chestArt = this.chest.getChildByName('ChestArt');
         this.chestSprite = this.chestArt.getComponent(Sprite);
         this.chestTransform = this.chestArt.getComponent(UITransform);
@@ -382,7 +319,7 @@ export class TerritoryChestView {
      * 与 {@link setCatchPoint} 的关系：这里是**优先**的，没登记的资源才回落到全局落点。
      * 页面在 `play()` 之前按「银币 → 第 1 格 / 体力 → 第 2 格」各登记一次即可。
      *
-     * ⚠️ 每次开箱前页面会重算一遍（资源栏位置可能随安全区变化），所以本方法只覆盖不累加。
+     * 每次开箱前页面会重算一遍（资源栏位置可能随安全区变化），所以本方法只覆盖不累加。
      */
     setCatchPointOf(resId: number, x: number, y: number): void {
         const id = Number(resId);
@@ -424,9 +361,9 @@ export class TerritoryChestView {
     /**
      * 注入**镜头地图侧**的出口（`TerritoryMapView` 在建本视图时调一次）。
      *
-     *  每帧收到 `(scale, focus)`，收到就要把地图摆到与宝箱一致的位置 ——
-     *  具体怎么摆由地图自己决定（它才知道 ScrollView 与 `MapLayer` 的关系）。
-     *  传 `null` 解绑（页面销毁时）。
+     * 每帧收到 `(scale, focus)`，收到就要把地图摆到与宝箱一致的位置 ——
+     * 具体怎么摆由地图自己决定（它才知道 ScrollView 与 `MapLayer` 的关系）。
+     * 传 `null` 解绑（页面销毁时）。
      */
     setCameraHook(hook: ((scale: number, focus: number) => void) | null): void {
         this.cameraHook = hook;
@@ -435,7 +372,7 @@ export class TerritoryChestView {
     /**
      * 播一次开箱。
      *
-     * @param tier   档位（由 `territoryChestTierOfRewards` 判出来，本类不判）
+     * @param tier 档位（由 `territoryChestTierOfRewards` 判出来，本类不判）
      * @param origin 页面坐标系里的**箱口位置**（被点格子的台面中心）
      * @param rewards 这一批奖励（用于喷泉 / 飞出的图标与数量）
      * @param onDone 播完回调（页面用它接奖励弹窗；被 `stop()` 打断时**不回调**）
@@ -449,8 +386,8 @@ export class TerritoryChestView {
         this.spec = TERRITORY_CHEST_SPECS[tier];
         this.rewards = rewards;
         // 累计**这批奖励的总量**（脏值跳过），下面两条都只吃它：
-        //  · 飞行粒子数：≤50 → 5、≤500 → 15、>500 → 30（2026-10-23）
-        //  · 镜头推近倍率：≤50 → 1.08、≤500 → 1.35、>500 → 2.3（2026-10-23 同日追加）
+        // · 飞行粒子数：≤50 → 5、≤500 → 15、>500 → 30
+        // · 镜头推近倍率：≤50 → 1.08、≤500 → 1.35、>500 → 2.3（同日追加）
         // 两者与档位无关 —— 档位管"演多大"，这两个管"拿了多少"。
         let total = 0;
         for (const reward of rewards) {
@@ -492,11 +429,11 @@ export class TerritoryChestView {
         // 落地通知必须**在停播判断之前**：最后几枚图标是在收尾段落地的，
         // 放到 `stop()` 之后再判就永远收不到（资源栏那一格不会跳）。
         this.fireLandings(this.elapsed);
-        // ⚠️ 停播看 `territoryChestEndSeconds` 而不是 `totalSeconds`：
-        //   那个数 = 最后一枚奖励落袋 + settleSeconds + fadeOutSeconds。
-        //   用 `totalSeconds` 的话，参数表一旦比这条线长，屏幕上就多一段
-        //   「奖励拿完了、开着的空箱子还杵着」（2026-10-22 用户：停止的时间太长）。
-        //   ⚠️ 必须带上 `flyCount`：粒子数按奖励总量能到 30，用表里的 4/6/8 会把后面那串切掉。
+        // 停播看 `territoryChestEndSeconds` 而不是 `totalSeconds`：
+        // 那个数 = 最后一枚奖励落袋 + settleSeconds + fadeOutSeconds。
+        // 用 `totalSeconds` 的话，参数表一旦比这条线长，屏幕上就多一段
+        // 「奖励拿完了、开着的空箱子还杵着」（停止的时间太长）。
+        // 必须带上 `flyCount`：粒子数按奖励总量能到 30，用表里的 4/6/8 会把后面那串切掉。
         if (this.elapsed >= territoryChestEndSeconds(spec, this.flyCount)) {
             const done = this.onDone;
             this.stop();
@@ -513,14 +450,14 @@ export class TerritoryChestView {
     /**
      * 推进「落地通知」：哪些资源的第一枚图标已经飞到资源栏了。
      *
-     * ## 为什么按**到达时刻**判，而不是看 `territoryChestFlyFx` 返回 null
+     * 按**到达时刻**判，而不是看 `territoryChestFlyFx` 返回 null
      *
-     *  `fx` 到终点就返回 `null`，靠它判到达要记住「上一帧还在、这一帧没了」——
-     *  那是逐帧累加，掉帧 / 暂停都会漏。{@link territoryChestFlyArriveAt} 把隐式窗口写成了
-     *  显式时刻，`elapsed` 一过就触发，天然幂等（配合 `landedResIds`）。
+     * `fx` 到终点就返回 `null`，靠它判到达要记住「上一帧还在、这一帧没了」——
+     * 那是逐帧累加，掉帧 / 暂停都会漏。{@link territoryChestFlyArriveAt} 把隐式窗口写成了
+     * 显式时刻，`elapsed` 一过就触发，天然幂等（配合 `landedResIds`）。
      *
-     * ⚠️ 图标按 `rewards` **轮流取**（30 枚 / 2 条奖励 = 各 15 枚），所以同一资源在
-     *   `flyCount` 里会出现多次 —— 只在**第一枚**（下标最小、时刻最早）通知一次。
+     * 图标按 `rewards` **轮流取**（30 枚 / 2 条奖励 = 各 15 枚），所以同一资源在
+     * `flyCount` 里会出现多次 —— 只在**第一枚**（下标最小、时刻最早）通知一次。
      */
     private fireLandings(t: number): void {
         const handler = this.onLanded;
@@ -578,7 +515,7 @@ export class TerritoryChestView {
             0,
         );
         this.chest.setScale(fx.scale, fx.scale * fx.scaleY, 1);
-        // 「开盖」= 换帧（需求 2026-10-22 §2）：第 0 张闭合 → 最后一张全开。
+        // 「开盖」= 换帧（§2）：第 0 张闭合 → 最后一张全开。
         this.applyChestFrame(territoryChestOpenFrame(spec, t));
     }
 
@@ -598,12 +535,12 @@ export class TerritoryChestView {
         const fx = territoryChestCameraFx(spec, t, this.cameraZoom);
         this.cameraFocus = fx.focus;
         // 缩放要绕「箱口」而不是屏幕中心，否则推镜时宝箱会漂走；**同时**视角中心要从格心
-        // 挪到屏幕中心（2026-10-23 用户：「放大的同时需要保证宝箱的坐标点在屏幕的中央」）。
+        // 挪到屏幕中心「放大的同时需要保证宝箱的坐标点在屏幕的中央」。
         //
-        //  宝箱在 stage 里位于 `origin`，所以它的页面坐标 = `k × origin + stagePos`。
-        //  要求它等于 `origin × (1 - focus)`（focus 0 → 原位，1 → 屏幕中心 0,0），解得：
-        //      stagePos = origin × (1 - focus - k)
-        //  校验：focus=0/k=1 ⇒ stagePos=0（与改动前完全一致）；focus=1/k=本次倍率 ⇒ 宝箱落在 (0,0)。
+        // 宝箱在 stage 里位于 `origin`，所以它的页面坐标 = `k × origin + stagePos`。
+        // 要求它等于 `origin × (1 - focus)`（focus 0 → 原位，1 → 屏幕中心 0,0），解得：
+        // stagePos = origin × (1 - focus - k)
+        // 校验：focus=0/k=1 ⇒ stagePos=0（与改动前完全一致）；focus=1/k=本次倍率 ⇒ 宝箱落在 (0,0)。
         const shift = 1 - fx.focus - fx.scale;
         this.stage.setScale(fx.scale, fx.scale, 1);
         this.stage.setPosition(this.origin.x * shift, this.origin.y * shift, 0);
@@ -702,17 +639,17 @@ export class TerritoryChestView {
         }
     }
 
-    // ⚠️ 原本这里还有一个 `applyFlash`（白光爆点：12 个同心白圆叠出的径向闪光）。
-    //   2026-10-23 用户「移除宝箱打开的圆形闪光特效」⇒ 整层摘掉，连同 model 的
-    //   `flashStart / flashSeconds / flashPeak` 与 `territoryChestFlashAlpha` 一起删了，
-    //   不是把 alpha 调 0（留个 0 的窗口以后一定会被人"顺手改回来"）。
+    // 原本这里还有一个 `applyFlash`（白光爆点：12 个同心白圆叠出的径向闪光）。
+    // 「移除宝箱打开的圆形闪光特效」⇒ 整层摘掉，连同 model 的
+    // `flashStart / flashSeconds / flashPeak` 与 `territoryChestFlashAlpha` 一起删了，
+    // 不是把 alpha 调 0（留个 0 的窗口以后一定会被人"顺手改回来"）。
 
     private applyGlow(spec: ITerritoryChestSpec, t: number): void {
         const g = this.glow;
         g.clear();
         // 光晕跟着「开盖之后」走：开盖前没有，甩开的过程中亮起，之后一直亮到收尾。
-        // ⚠️ 判据是**时间**不是箱盖角度：箱盖现在是「甩一下再回正到 0°」，
-        //   拿角度当判据会在回正那一刻把光晕关掉（等于开完箱箱口就暗了）。
+        // 判据是**时间**不是箱盖角度：箱盖现在是「甩一下再回正到 0°」，
+        // 拿角度当判据会在回正那一刻把光晕关掉（等于开完箱箱口就暗了）。
         const openRatio = spec.lidSeconds > 0
             ? Math.max(0, Math.min(1, (t - spec.lidStart) / spec.lidSeconds))
             : (t >= spec.lidStart ? 1 : 0);
@@ -845,8 +782,8 @@ export class TerritoryChestView {
     /**
      * 注入帧后量一次尺寸（所有帧同画布，只用第一张有图的帧量）。
      *
-     *  ⚠️ 缺图不是错误：`frames` 为空时只是 `chestSprite` 没图（光效照常播），
-     *  与「资源加载失败只少一项」的既有口径一致。
+     * 缺图不是错误：`frames` 为空时只是 `chestSprite` 没图（光效照常播），
+     * 与「资源加载失败只少一项」的既有口径一致。
      */
     private applyChestFrames(): void {
         const frames = this.art.frames;
@@ -870,8 +807,8 @@ export class TerritoryChestView {
         }
         this.chestSprite.enabled = true;
         // 基准缩放只在 `ChestArt` 上写一次（`Chest` 那层留给每帧的动画缩放）。
-        // ⚠️ 归一用**可见宽**（不是画布高）：画布高随箱盖张开的空间变化，按它归一
-        //   会把箱子算大 1.4 倍（见 `CHEST_VISIBLE_WIDTH` 的口径说明）。
+        // 归一用**可见宽**（不是画布高）：画布高随箱盖张开的空间变化，按它归一
+        // 会把箱子算大 1.4 倍（见 `CHEST_VISIBLE_WIDTH` 的口径说明）。
         const placement = territoryChestPlacement(TERRITORY_CHEST_ART_METRICS, CHEST_VISIBLE_WIDTH, width, height);
         this.chestTransform.setContentSize(width, height);
         this.chestArt.setScale(placement.scale, placement.scale, 1);
@@ -907,7 +844,7 @@ export class TerritoryChestView {
     }
 
     private ensureFlySlots(count: number): void {
-        // 粒子边长 = 基准 × 1.35（2026-10-23 用户：「粒子大小放大 1.35 倍」）⇒ 44 → 59.4。
+        // 粒子边长 = 基准 × 1.35「粒子大小放大 1.35 倍」⇒ 44 → 59.4。
         // 只写在这里（UITransform），不碰 `applyFly` 的 `setScale` —— 那是飞行过程的收小。
         const size = FLY_ICON_BASE_SIZE * FLY_ICON_SCALE;
         while (this.flySlots.length < count) {
@@ -945,8 +882,8 @@ export class TerritoryChestView {
      * 暗角 / 压暗（只有强档会传非 0）。
      *
      * 没有渐变贴图：画**一圈圈由外向内变淡的矩形描边**近似径向暗角。
-     * ⚠️ 必须用 `stroke`（环带）而不是 `fill`（实心矩形）：实心矩形层层叠加时
-     *   **越靠中心叠得越多**，结果是中心最黑、边缘最亮 —— 正好相反。
+     * 必须用 `stroke`（环带）而不是 `fill`（实心矩形）：实心矩形层层叠加时
+     * **越靠中心叠得越多**，结果是中心最黑、边缘最亮 —— 正好相反。
      */
     private drawVignette(alpha: number): void {
         const g = this.backdrop;

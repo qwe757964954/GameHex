@@ -50,8 +50,6 @@ import {
     countText,
     FRIEND_CONFIG_DEFAULTS,
     FRIEND_CONFIG_KEYS,
-    FRIEND_ROW_GROUP_DELETE,
-    FRIEND_ROW_GROUP_NORMAL,
     FRIEND_TAB_COUNT,
     FRIEND_TAB_KEYS,
     formatDuration,
@@ -70,7 +68,6 @@ import {
     readFriendCounters,
     resolveFriendLayout,
     rowButtonOf,
-    rowGroupPosition,
     rowsOfTab,
     sendTimesOf,
     sentCount,
@@ -78,6 +75,11 @@ import {
     usedTimesOf,
     FriendTab,
 } from '../assets/script/app/friend/FriendTable';
+import {
+    FRIEND_ROW_GROUP_DELETE,
+    FRIEND_ROW_GROUP_NORMAL,
+    rowGroupPosition,
+} from './fixtures/friend-row-layout';
 import {
     FRIEND_ART_ROOT,
     FRIEND_ART_SLICED,

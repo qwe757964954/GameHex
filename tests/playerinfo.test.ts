@@ -20,13 +20,15 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import {
+    writeFailText,
+} from '../assets/script/app/playerinfo/PlayerInfoTable';
+import {
     HEAD_ITEM_SLOT_COUNT,
     HEAD_ITEM_STEP_X,
     HEAD_ITEM_STEP_Y,
     headContentHeight,
     headSlotOffset,
-    writeFailText,
-} from '../assets/script/app/playerinfo/PlayerInfoTable';
+} from './fixtures/playerinfo-head-layout';
 import { PLAYER_INFO_TEXTS } from '../assets/script/app/playerinfo/PlayerInfoTexts';
 import { assetPath } from './helpers/asset-paths';
 

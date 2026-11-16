@@ -1,18 +1,25 @@
 import { _decorator, Component, Node, sys, UITransform, view, Widget } from 'cc';
 
 const { ccclass, property } = _decorator;
-const MAIN_HUD_EDGE_MARGIN = 16;
-const MAIN_HUD_LONG_SCREEN_TOP = 131;
-const MAIN_HUD_STANDARD_ASPECT = 1280 / 720;
+export interface IMainHudTopConfig {
+    readonly edgeMargin: number;
+    readonly longScreenTop: number;
+    readonly standardAspect: number;
+}
 
 /** 普通屏贴顶；长屏使用额外高度留白，安全区较大时以安全区为准。 */
-export function resolveMainHudTop(width: number, height: number, safeTop: number): number {
-    const extraHeight = Math.max(0, height - width * MAIN_HUD_STANDARD_ASPECT);
+export function resolveMainHudTop(
+    width: number,
+    height: number,
+    safeTop: number,
+    config: IMainHudTopConfig,
+): number {
+    const extraHeight = Math.max(0, height - width * config.standardAspect);
     const longScreenInset = Math.min(
-        MAIN_HUD_LONG_SCREEN_TOP - MAIN_HUD_EDGE_MARGIN,
+        config.longScreenTop - config.edgeMargin,
         extraHeight / 2,
     );
-    return MAIN_HUD_EDGE_MARGIN + Math.max(longScreenInset, safeTop);
+    return config.edgeMargin + Math.max(longScreenInset, safeTop);
 }
 
 /** 顶栏整体适配，子节点保持蓝湖稿内的相对位置。 */
@@ -23,6 +30,15 @@ export class MainHudLayout extends Component {
 
     @property({ type: Widget, tooltip: 'TopHud 的顶部对齐组件' })
     topHudWidget: Widget = null;
+
+    @property({ group: '安全区', tooltip: '普通屏顶边距' })
+    edgeMargin = 16;
+
+    @property({ group: '安全区', tooltip: '长屏最大顶部留白' })
+    longScreenTop = 131;
+
+    @property({ group: '安全区', tooltip: '标准设计宽高比（1280/720）' })
+    standardAspect = 1280 / 720;
 
     onEnable(): void {
         this.viewport.node.on(Node.EventType.SIZE_CHANGED, this.applyLayout, this);
@@ -42,7 +58,11 @@ export class MainHudLayout extends Component {
         const safeArea = sys.getSafeAreaRect(false);
         const safeTop = Math.max(0, visible.height - safeArea.y - safeArea.height)
             * this.viewport.height / visible.height;
-        this.topHudWidget.top = resolveMainHudTop(this.viewport.width, this.viewport.height, safeTop);
+        this.topHudWidget.top = resolveMainHudTop(this.viewport.width, this.viewport.height, safeTop, {
+            edgeMargin: this.edgeMargin,
+            longScreenTop: this.longScreenTop,
+            standardAspect: this.standardAspect,
+        });
         this.topHudWidget.updateAlignment();
     }
 }

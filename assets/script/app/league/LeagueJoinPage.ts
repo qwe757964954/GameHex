@@ -1,57 +1,8 @@
 import { EventMgr } from '../../framework/event/EventMgr';
 import { LeagueTabEvent } from './LeagueTabEvents';
 /**
- * 「加入联盟」页（老端 `TabLeagueJoin`，`ui/League/LeagueJoin`）——**「未入盟」态的整页**。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/加入联盟/组件_联盟_加入联盟.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `bg`（loader，`ui://…m` = `lianmeng_bg02`） | (0,0) **720×1280** | `Bg` |
- * | `n19` `lm_kj_pic08`（**无 size ⇒ 原尺寸 720×502**） | (0,0) | `Frame` |
- * | `n20` `frame_Dikuang03` | (0,498) 720×650 | `Board` |
- * | `list_league`（`overflow=scroll`，`SingleColumn`+`autoResizeItem`） | (59,657) **614×345** | `LeagueListView`（虚拟列表） |
- * | `comp_search`（公用 `组件_联盟_查询`） | (97,535) 569×111 | `Search`（+ `SearchBg` / `InputBg` / `Input` / `Placeholder` / `Text` / `BtnSearch`） |
- * | `btn_creat`（`按钮_公共_通用`，`TY_btn23`） | (115,1024) 224×79 | `BtnCreate` |
- * | `btn_join`（`按钮_公共_通用`，`TY_btn20`） | (393,1020) 224×79 | `BtnQuickJoin` |
- *
- * `n13` / `n14`（`组件_通用_全面屏适配`）与 `n18`（一块半透明 `graph`）**不落节点**：
- * 前者是 FGUI 的长屏适配壳（本端由 `cc.Widget` / 全屏 bg 承担），后者是 `GGraph`，不产生子控件。
- *
- * ## 渲染序：`Board` 在 `Frame` **之后**、`Search` 在 `Board` 之后
- *
- * FGUI `displayList` 的序是 `bg → n19 → n20 → list_league → comp_search → 两按钮`
- * ⇒ 底板盖住顶部装饰框的下缘、查询框与列表又盖在底板上。**照抄**，别按「背景该在底下」的直觉调换。
- *
- * ## 本页**不继承 `PopupBase`**（重要）
- *
- * FGUI 里它是**页签内容**（`GameTabUI`），不是弹窗：没有标题条、也没有「点空白关闭」。
- * 本端由容器页 `LeagueTabPage`（`ui/League/LeagueTab`）按 `IsJoinedLeague` 实例化到自身之下
- * ⇒ 拿不到 `PopupManager` 的 `_openContext`，`nextPopupFrame()` 会恒返回 `false`
- * （见 `PopupBase` 的实现）——所以这里用 `director.once(EVENT_AFTER_UPDATE)` 自己等一帧。
- *
- * ## 老端行为（`TabLeagueJoinUI`）与移植取舍
- *
- * 1. **`initAsync` 先拉一次列表**：`await ModelLeague.RequestLeagueList()`，
- *    `init()` 里挂 `VORoleUnionBag` / `VOUnionBag` 的 `OnChanged → updateView`。
- *    本端同样的两件事：`start()` 里拉一次（`requestList`），回来后按缓存铺行；
- *    「推送驱动」在本端**没有等价物**（`GameCacheMgr` 不发变更事件），
- *    所以除开页拉取外，**每次写操作成功后再拉一次**（见 `afterWrite`）。
- * 2. **查询框**：`fgui.Event.TEXT_CHANGE` → 非正整数就 `setText("")`；点查询 → `RequestLeagueSearch(text)` 再 `updateView()`。
- *    本端 `EditBox` 用 `'text-changed'` 事件（同 `LeagueHallPage.onSearchTextChanged`）。
- * 3. **快速加入**：`GetCanBeJoinList(inputText)` 为空 ⇒ `showTip(LEAGUE_NO_JOINABLE)` **且不发包**；
- *    否则 `RequestLeagueJoin(arr)`。⚠️ 该方法**命中搜索缓存时直接点名那一个**（不查 `autoJoin`）
- *    ⇒ 必须走 `pickQuickJoinIdsFor(rows, cached)`，别只调 `pickQuickJoinUnionIds`。
- * 4. **点行 → 开「联盟信息」**：`CtrlLeague.OpenLayerLeagueInfo(vo)`。
- *    传的是**行视图对象本身**（搜索结果不在缓存表里，见 `LeagueRepository` 类头）。
- * 5. **「创建联盟」→ 开 `LeagueCreate`**（老端 `OpenLayerLeagueCreat`）。
- *
- * ## 本端有意增补
- *
- * - `busy` 防连点（老端没有）：`join` 是写请求、走 5s 超时，连点会重复发包。
- *   同 `LeagueApplyListPage.beginWrite()` 的性质。
- * - `onJoined` 回敲容器：老端靠 `CmdRoleUnion` 的**推送**让容器页 `updateView` 切页；
- *   本端没有推送事件，只能由「写成功」这条链路主动通知（见 `LeagueTabPage.refreshAfterJoin`）。
+ * 加入联盟页，未入盟态的整页内容，不继承 PopupBase。
+ * 支持搜索、快速加入和创建入口；快速加入命中搜索缓存时直接点名那一个联盟。
  */
 
 import { _decorator, Button, Component, director, Director, EditBox, Label, Node } from 'cc';
@@ -98,7 +49,7 @@ const JOIN_ROW_TEXTS = {
 @ccclass('LeagueJoinPage')
 export class LeagueJoinPage extends Component {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感。
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感。
      * 本页由 `LeagueTabPage` 通过 `@property(Prefab)` 实例化，这个常量主要给测试 /
      * 文档引用（与其它页面同口径）。
      */
@@ -140,9 +91,7 @@ export class LeagueJoinPage extends Component {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onLoad(): void {
         this.bindButtons();
@@ -150,10 +99,10 @@ export class LeagueJoinPage extends Component {
     }
 
     /**
-     * ⚠️ 必须 `start()` 而不是 `onLoad()`：`VirtualScrollView` 挂在本节点**子节点**上，
-     *    引擎的激活顺序是「根 → 子」⇒ `onLoad` 那一刻子节点的槽位还没建。
-     *    （同 `CardLineupPage.start()`；`LeagueHallPage` 因为有 `PopupBase.onOpen` 更晚，
-     *    用 `nextPopupFrame()` 再等一帧。）
+     * 必须 `start()` 而不是 `onLoad()`：`VirtualScrollView` 挂在本节点**子节点**上，
+     * 引擎的激活顺序是「根 → 子」⇒ `onLoad` 那一刻子节点的槽位还没建。
+     * （同 `CardLineupPage.start()`；`LeagueHallPage` 因为有 `PopupBase.onOpen` 更晚，
+     * 用 `nextPopupFrame()` 再等一帧。）
      */
     protected start(): void {
         this.applyStaticTexts();
@@ -165,9 +114,7 @@ export class LeagueJoinPage extends Component {
         GameNet.instance.removeCaller(this);
     }
 
-    // ============================================================
     // 接线
-    // ============================================================
 
     private bindButtons(): void {
         if (this.buttonsBound) return;
@@ -200,9 +147,7 @@ export class LeagueJoinPage extends Component {
         if (placeholder && !placeholder.string) placeholder.string = LEAGUE_HALL_SEARCH_PROMPT;
     }
 
-    // ============================================================
     // 取数
-    // ============================================================
 
     /** 数据端口（单测 / 探针可换成内存桩）。 */
     protected get repository(): ILeagueRepository {
@@ -238,8 +183,8 @@ export class LeagueJoinPage extends Component {
     /**
      * 铺列表。
      *
-     * ⚠️ 列表在本节点的**子节点**上，本组件的 `start()` 早于它的槽位建立 ⇒ 必须再等一帧。
-     *    监听挂在全局 `Director` 上（不依赖本组件的调度），与 `PopupOpenContext.nextFrame()` 同口径。
+     * 列表在本节点的**子节点**上，本组件的 `start()` 早于它的槽位建立 ⇒ 必须再等一帧。
+     * 监听挂在全局 `Director` 上（不依赖本组件的调度），与 `PopupOpenContext.nextFrame()` 同口径。
      */
     private async deferRefresh(): Promise<void> {
         await nextFrame();
@@ -270,9 +215,7 @@ export class LeagueJoinPage extends Component {
         row.applyBanner(frame, token);
     }
 
-    // ============================================================
     // 查询
-    // ============================================================
 
     /** 查询框输入：非正整数就地清空（老端 `onInputTextChange` 逐字照搬）。 */
     private onSearchTextChanged(): void {
@@ -301,9 +244,7 @@ export class LeagueJoinPage extends Component {
         this.present(snapshot.unions);
     }
 
-    // ============================================================
     // 快速加入 / 创建
-    // ============================================================
 
     /**
      * 「快速加入」—— 老端 `onClickJoin()`：
@@ -342,9 +283,9 @@ export class LeagueJoinPage extends Component {
     /**
      * 点列表某一行 ⇒ 开「联盟信息」。
      *
-     * ⚠️ 传的是**行视图对象本身**，不是 id：列表里的 `CmdUnion` 可能来自
-     *    `RequestUnionSearch` 的 Rsp，而 `LeagueRepository` **刻意不**把搜索结果写进
-     *    缓存表（免得抢「我所在的联盟」那个 `tlKey`）⇒ 详情面板回缓存查是查不到的。
+     * 传的是**行视图对象本身**，不是 id：列表里的 `CmdUnion` 可能来自
+     * `RequestUnionSearch` 的 Rsp，而 `LeagueRepository` **刻意不**把搜索结果写进
+     * 缓存表（免得抢「我所在的联盟」那个 `tlKey`）⇒ 详情面板回缓存查是查不到的。
      */
     private onRowClick(_node: Node, index: number): void {
         const view = this.rows[index];
@@ -352,9 +293,7 @@ export class LeagueJoinPage extends Component {
         void LeagueInfoPage.open({ userData: { union: view } });
     }
 
-    // ============================================================
     // 收尾
-    // ============================================================
 
     /** 防连点：写操作在飞时直接拒掉。 */
     private beginWrite(): boolean {

@@ -66,7 +66,7 @@ const { ccclass, property } = _decorator;
 @ccclass('OSRankEntryButton')
 export class OSRankEntryButton extends Component {
     @property({ type: Node, tooltip: 'RedDot：红点占位（老端 `开服冲榜.组件_红点`，值 = `GetRd()`）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     protected onLoad(): void {
         // ⚠️ 监听挂在**节点**上（`cc.Button` 的 click 本来就是 `node.emit` 出来的）。
@@ -114,6 +114,6 @@ export class OSRankEntryButton extends Component {
         //    一旦写成「只在翻转时写」，首次 `false === 缓存初值` 就会短路。
         //    代价可忽略：`cc.Node.active` 的 setter 自己会早退。
         this.node.active = snapshot.enabled;
-        if (this.redDot) this.redDot.active = snapshot.rd !== 0;
+        this.redDot.active = snapshot.rd !== 0;
     }
 }

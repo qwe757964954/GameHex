@@ -1,23 +1,23 @@
 /**
  * 「邮件」的 4 个请求封装 —— 与老端 `generated/requestMsg/RequestMailMsg.ts` 一一对应。
  *
- * ⚠️ 「能不能发」的判据是 **`MessageId` 里有没有登记对应的 `<Base>RspMsg`**
- *   （`assets/script/app/generated/netProto/Cmd.d.ts` 5883~5886 行）。本轮实测 4 个**全部登记**：
+ * 「能不能发」的判据是 **`MessageId` 里有没有登记对应的 `<Base>RspMsg`**
+ * （`assets/script/app/generated/netProto/Cmd.d.ts` 5883~5886 行）。本轮实测 4 个**全部登记**：
  *
- *   ```
- *   CmdMailListRspMsg       = 319013138
- *   CmdMailReadRspMsg       = 546189302
- *   CmdMailDeleteRspMsg     = 172353567
- *   CmdMailTakeRewardRspMsg = 555367350
- *   ```
+ * ```
+ * CmdMailListRspMsg       = 319013138
+ * CmdMailReadRspMsg       = 546189302
+ * CmdMailDeleteRspMsg     = 172353567
+ * CmdMailTakeRewardRspMsg = 555367350
+ * ```
  *
- * ⚠️ 请求体字段口径（照抄 `Cmd.d.ts`，别照抄老端 TS 的形参类型）：
- *   | 请求 | 请求体 | 说明 |
- *   |---|---|---|
- *   | 列表 | `{}` | 空请求体（老端 `let mgr: CmdMailListReqMsg = {}`） |
- *   | 读取（看详情） | `{ id: Long }` | **单数** |
- *   | 删除 | `{ id: Long[] }` | **数组**（一键删除 / 单封删除共用） |
- *   | 领取奖励 | `{ id: Long[] }` | **数组**（一键领取 / 单封领取共用） |
+ * 请求体字段口径（照抄 `Cmd.d.ts`，别照抄老端 TS 的形参类型）：
+ * | 请求 | 请求体 | 说明 |
+ * |---|---|---|
+ * | 列表 | `{}` | 空请求体（老端 `let mgr: CmdMailListReqMsg = {}`） |
+ * | 读取（看详情） | `{ id: Long }` | **单数** |
+ * | 删除 | `{ id: Long[] }` | **数组**（一键删除 / 单封删除共用） |
+ * | 领取奖励 | `{ id: Long[] }` | **数组**（一键领取 / 单封领取共用） |
  */
 
 import { RequestMsg } from '../../framework/net/RequestMsg';

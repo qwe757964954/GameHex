@@ -96,11 +96,12 @@ function createChestSlotView() {
     const view = new exports.ChestSlotView() as ChestSlotView & Record<string, unknown>;
     const blue = { name: 'blue' };
     const gold = { name: 'gold' };
-    const timerNode = () => ({ active: false, position: { x: 0, y: 0 }, scale: { x: 1, y: 1 },
+    const timerNode = (x = 0, scaleX = 1) => ({ active: false, position: { x, y: 0 }, scale: { x: scaleX, y: 1 },
         setPosition(x: number, y: number) { this.position = { x, y }; },
         setScale(x: number, y: number) { this.scale = { x, y }; },
+        getComponent: () => ({ width: 26 }),
     });
-    const timeTextTransform = { width: 74, setContentSize(width: number, _height: number) { this.width = width; } };
+    const timeTextTransform = { width: 74, height: 24, setContentSize(width: number, _height: number) { this.width = width; } };
     const timeText = { string: '', overflow: 0, node: timerNode(), updateRenderData() {
         timeTextTransform.width = this.string.length * 9;
     } };
@@ -119,12 +120,13 @@ function createChestSlotView() {
         active: false,
         position: { x: -43 },
         setPosition(x: number, _y: number) { this.position = { x }; },
+        getComponent: () => ({ width: 28 }),
     };
     Object.assign(view, {
         card: { spriteFrame: null },
         timer: { active: false },
-        timeBg: timerNode(),
-        clock: timerNode(),
+        timeBg: timerNode(15, 0.78),
+        clock: timerNode(-57),
         timeTextTransform,
         timeFill: { fillRange: 0 },
         timeText,
@@ -133,7 +135,8 @@ function createChestSlotView() {
         emptyLabel: { node: { active: false } },
         cost: { active: false },
         costLabel: { string: '' },
-        btn: { spriteFrame: null, node: { active: true } },
+        btn: { spriteFrame: null, node: { active: true, on: () => undefined } },
+        node: { on: () => undefined },
         btnLabel,
         speedUpIcon,
     });
@@ -141,6 +144,8 @@ function createChestSlotView() {
         { blue, gold, empty: { name: 'empty' } } as never,
         { gold: { name: 'gold-button' }, blue: { name: 'blue-button' }, green: { name: 'green-button' } } as never,
     );
+    // 普通尺寸 / 字宽上限 / 时钟基准都来自 prefab：走真实 onLoad 缓存，别在测试里另抄一份。
+    (view as unknown as { onLoad(): void }).onLoad();
     return view;
 }
 

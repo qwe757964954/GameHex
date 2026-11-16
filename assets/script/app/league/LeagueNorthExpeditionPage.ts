@@ -1,52 +1,8 @@
 import { EventMgr } from '../../framework/event/EventMgr';
 import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
- * 「北伐中原（联合战线）」主面板 —— 老端 `play/LayerLeagueNorthernExpedition.ts`，
- * prefab `ui/League/LeagueNorthExpedition`。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/副本/北伐中原/组件_联盟_北伐中原.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `bg`（`lianmeng_bg03`） | (0,0) 720×1280 | `Bg` |
- * | `n24` 标题金边横幅（`zg_pic02`）+ `n25` boss 名 | (171,35) 362×112 / (229,69) 250×46 | `TitleBanner` / `MonsterLabel` |
- * | `n27` 活动剩余时间 | (163,139) 360×36 | `EndTimeLabel` |
- * | `n1` 木纹外板（`panel_window_02_9gong`） | (0,543) **720×660** | `Board`（九宫格） |
- * | `n3` 羊皮纸内框（`frame_01_9gong`） | (19,624) **680×545** | `InnerFrame`（九宫格） |
- * | `n2` 木牌标题（`zg_pic03`）+ `n7` 「战况」 | (172,516) 359×93 / (274,530) 144×69 | `BoardTitle` / `SectionTitle` |
- * | `n49` 属性区底板（`frame_Zhikuang04`） | (64,748) 600×187 | `AttrBg` |
- * | `n17` 五行属性（`组件_联盟_北伐中原文本`，`layout=vt lineGap=2`） | (60,749) 600×35 ×5 | `Attr*` 五组（各 `Title` + `Value`） |
- * | `n48` 英雄共鸣底板（`frame_Zhikuang05`） | (64,660) 600×87 | `BuffBg` |
- * | `n21` 「英雄共鸣」+ `n19` 帮助 + `n22` 擂鼓 | (89,685) / (258,680) / (524,678) | `BuffTitle` / `HelpBtn` / `DrumBtn` |
- * | `n50` 今日挑战奖励底板 + `n9` 标题 | (66,939) 600×87 / (86,966) | `DailyBg` / `DailyTitle` |
- * | `n35` / `n36` 两个物品框（`com_goods`，scale 0.6） | (456,945) / (534,945) | `DailySlot0` / `DailySlot1` |
- * | `n6` 挑战次数 | (434,1021) 155×36 | `TimesLabel` |
- * | `n5` / `n4` 挑战 / 扫荡 | (397,1055) / (112,1056) 224×79 | `ChallengeBtn` / `SweepBtn` |
- * | `n53` / `n52` 左侧奖励 / 排行入口（`ph` / `jl`） | (29,200) / (29,302) 90×100 | `RewardBtn` / `RankBtn` |
- * | `n44` 奖励入口红点 | (73,196) 30×30 | `RewardRedDot`（`RedDot` 实例） |
- * | `n54` 底部底栏（`diban_BG`）+ `按钮_返回` | (0,1160) / (0,1164) | `BottomBg` / `BackBtn` |
- *
- * ## 老端行为与移植取舍
- *
- * 1. **进面板发一条包**：`initAsync()` 里 `RequestActList(NORTHERN_EXPEDITION)` ⇒ 本端
- *    `onOpen` 先发一次、再 `loadNorthExpedition()` 读缓存（同 P4 三面板的口径）。
- * 2. **每秒刷时间**：老端 `enter()` 里 `toolSet.addTimer(1000, this.updateTime, this)`
- *    ⇒ 本端用 `schedule(..., 1)` + `onClose` 里 `unschedule`（见 `onClose`）。
- * 3. **三颗按钮**：
- *    - 擂鼓 ⇒ `todayDrumTimes >= unionBFZYDrumMaxCount` 就提示，否则 `RequestUnionActDrum`
- *    - 扫荡 ⇒ 先判开放时段，再 `RequestUnionActSweep`
- *    - 挑战 ⇒ 先判开放时段，再弹北境帮助说明（PVE 副本战斗本端尚未接入，不伪造战斗、不发包）
- * 4. **boss 半身像（`iconHalf`）不渲染**：老端 `SetUrlByModel(model + "npc")` 走的是模型立绘系统，
- *    Demo3.8 没迁（`resources/image/` 下没有任何怪物立绘）⇒ 整节点隐藏，**不画空框**。
- *    boss **名字**照常显示（`guankaReward` + `monster` 两张表都在）。
- * 5. **帮助按钮**：老端 `CtrlAlert.OpenHelpe("leaguefb01")`；本端用 `openLeagueHelp(LEAGUE_NORTH_HELP_ID)` 弹静态帮助说明。
- *
- * ## 本端有意增补
- *
- * - `busy` 防连点（老端没有）：擂鼓 / 扫荡都是**写请求**、走 5s 超时，连点会重复发包
- *   （同 `LeagueStorePage.beginWrite()`）。
- * - 属性区的 5 行是**静态标题 + 运行时数值**：设计稿里那串「攻击+1」「1680/17000」都是占位，
- *   数值全在 `present()` 里覆盖（同 P5 对 `lab_jump` 的处置）。
+ * 北伐中原主面板。进入拉活动列表，每秒刷剩余时间。
+ * 擂鼓和扫荡是写请求，挑战只弹帮助说明，boss 半身像未迁不画空框。
  */
 
 import { _decorator, Button, Label, Node } from 'cc';
@@ -100,7 +56,7 @@ const CHALLENGE_RED_DOT_PATH = 'ChallengeBtn/RedDot';
 @ccclass('LeagueNorthExpeditionPage')
 export class LeagueNorthExpeditionPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上 `resources.load` 失败、开出一个空面板。
      */
     static prefabPath = 'ui/League/LeagueNorthExpedition';
@@ -129,11 +85,11 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     /**
      * `ChallengeBtn/RedDot`：「挑战」按钮上的红点 —— 老端 `按钮_挑战.组件_红点`。
      *
-     * ⚠️ 绑 **`Node`** 而不是 `RedDot`：红点是 `ui/common/RedDot.prefab` 的**嵌套实例**，
-     *    它内部的 `RedDot` 组件存在**被引用 prefab 的文件里**、不在本 prefab 里 ⇒
-     *    「外层脚本 → 实例内部组件」的引用**过不了序列化**（存盘会落成 `null`、静默失效）。
-     *    实例的**根节点**是序列化在本文件里的 shell ⇒ 绑节点可行，运行时 `getComponent` 取。
-     *    （同口径：`rewardRedDot` / `LeagueDiscountPage.saleRedDot` / `LeagueStoreRow.redDot`。）
+     * 绑 **`Node`** 而不是 `RedDot`：红点是 `ui/common/RedDot.prefab` 的**嵌套实例**，
+     * 它内部的 `RedDot` 组件存在**被引用 prefab 的文件里**、不在本 prefab 里 ⇒
+     * 「外层脚本 → 实例内部组件」的引用**过不了序列化**（存盘会落成 `null`、静默失效）。
+     * 实例的**根节点**是序列化在本文件里的 shell ⇒ 绑节点可行，运行时 `getComponent` 取。
+     * （同口径：`rewardRedDot` / `LeagueDiscountPage.saleRedDot` / `LeagueStoreRow.redDot`。）
      */
     @property({ type: Node, tooltip: 'ChallengeBtn/RedDot：「挑战」按钮上的红点（还有挑战次数）' })
     challengeRedDot: Node = null;
@@ -189,9 +145,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     /** 秒表是否已挂（`onClose` 要按它决定 `unschedule`）。 */
     private ticking = false;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
@@ -225,9 +179,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数 / 铺数据
-    // ============================================================
 
     /** 弹窗标题（本面板是整屏面板、标题在图里，这里只给探针一个稳定标识）。 */
     static get titleText(): string {
@@ -319,9 +271,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         }
     }
 
-    // ============================================================
     // 时间（每秒）
-    // ============================================================
 
     private startTick(): void {
         if (this.ticking) return;
@@ -339,8 +289,8 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     /**
      * 每秒刷「Buff 剩余时间」与「活动剩余时间」。
      *
-     * ⚠️ 两行的口径都在 `LeagueTable` 的纯函数里（`leagueNorthBuffRemainSec` /
-     *    `leagueNorthResetRemainSec` / `leagueNorthHms`）—— 本方法只负责"现在几点"。
+     * 两行的口径都在 `LeagueTable` 的纯函数里（`leagueNorthBuffRemainSec` /
+     * `leagueNorthResetRemainSec` / `leagueNorthHms`）—— 本方法只负责"现在几点"。
      */
     private readonly tick = (): void => {
         const snapshot = this.snapshot;
@@ -362,16 +312,14 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         }
     };
 
-    // ============================================================
     // 交互
-    // ============================================================
 
     /** 「擂鼓」：次数用尽 ⇒ 提示；否则发 `CmdUnionActDrumReqMsg`。 */
     private async onDrumClick(): Promise<void> {
         const snapshot = this.snapshot;
         if (!snapshot) return;
-        // ⚠️ 量的是 `CmdRoleUnion.todayDrumTimes`（服务端权威），**不是** `selfTimes`
-        //    （那是挑战次数）。老端：`now >= unionBFZYDrumMaxCount` ⇒ 提示。
+        // 量的是 `CmdRoleUnion.todayDrumTimes`（服务端权威），**不是** `selfTimes`
+        // （那是挑战次数）。老端：`now >= unionBFZYDrumMaxCount` ⇒ 提示。
         if (snapshot.todayDrumTimes >= snapshot.config.drumMaxCount) {
             FW.showTip(LEAGUE_NORTH_DRUM_LIMIT);
             return;
@@ -444,9 +392,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     private onBackClick(): void {
         this.closeByButton();

@@ -44,25 +44,25 @@ export type { IOsTargetNodeState } from './CelebrationViewState';
 @ccclass('OSTargetItem')
 export class OSTargetItem extends Component {
     @property({ type: Label, tooltip: 'Desc：`{战力口径}达到{N}`（FGUI `lab_desc`）' })
-    desc: Label = null;
+    desc: Label = null!;
 
     @property({ type: OSArtStrip, tooltip: 'RewardList：横向奖励条（FGUI `list`）' })
-    strip: OSArtStrip = null;
+    strip: OSArtStrip = null!;
 
     @property({ type: Node, tooltip: 'ClaimBtn：领取按钮（FGUI `按钮_领取`，`状态` 页 id `1`）' })
-    claimBtn: Node = null;
+    claimBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'ClaimBtn/RedDot：老端**常亮**（见文件头）' })
-    claimRedDot: Node = null;
+    claimRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'GoBtn：前往按钮（FGUI `按钮_前往`，`状态` 页 id `0`）' })
-    goBtn: Node = null;
+    goBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'GoBtn/RedDot：老端从不点亮 ⇒ 恒隐藏' })
-    goRedDot: Node = null;
+    goRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'ClaimedMark：已领取印章（FGUI `n35`，`状态` 页 id `2`）' })
-    claimedMark: Node = null;
+    claimedMark: Node = null!;
 
     /**
      * 领取回调 —— **由宿主在每次铺行时重设**（`OSRankPage.renderTargetRow`）。
@@ -81,8 +81,8 @@ export class OSTargetItem extends Component {
         // ⚠️ 这两个按钮在 FGUI 里是**真 `<component>` 按钮**（`按钮_公共_多颜色_二级_变暗狂欢`），
         //    迁过来有 `cc.Button`。若哪天换成 `loader`，必须改 `Node.EventType.TOUCH_END`
         //    （规则 81b：`<loader>` 只有 `cc.Sprite`，CLICK 永远不会 emit，点了毫无反应且不报错）。
-        this.claimBtn?.on('click', this._emitClaim, this);
-        this.goBtn?.on('click', this._emitGoto, this);
+        this.claimBtn.on('click', this._emitClaim, this);
+        this.goBtn.on('click', this._emitGoto, this);
     }
 
     private _emitClaim(): void {
@@ -99,19 +99,18 @@ export class OSTargetItem extends Component {
      * ⚠️ 每一处状态都**绝对赋值**（规则 10）—— 行会被 clone 复用。
      */
     render(snapshot: ICelebrationSnapshot, row: ICelebrationTargetRow, frames: CelebrationFrames): void {
-        if (this.desc) this.desc.string = targetDescTextOf(snapshot, row);
+        this.desc.string = targetDescTextOf(snapshot, row);
 
         const state = targetStateOf(snapshot, row);
         const flags = osTargetNodeState(state);
-        // 🔴 显隐**无条件写**（规则 82）：prefab 会照原稿烘出非零默认值，
-        //    「只在翻转时写」会让首次 `新值 === 缓存初值` 短路，永久停在错的初始态。
-        if (this.claimBtn) this.claimBtn.active = flags.claimVisible;
-        if (this.goBtn) this.goBtn.active = flags.goVisible;
-        if (this.claimedMark) this.claimedMark.active = flags.claimedVisible;
-        // 老端：领取按钮的红点**常亮**、前往按钮的红点**从不点亮**（见文件头）。
-        if (this.claimRedDot) this.claimRedDot.active = flags.claimVisible;
-        if (this.goRedDot) this.goRedDot.active = false;
+        // 显隐无条件写，避免首次「新值 === prefab 初值」短路。
+        this.claimBtn.active = flags.claimVisible;
+        this.goBtn.active = flags.goVisible;
+        this.claimedMark.active = flags.claimedVisible;
+        // 老端：领取按钮的红点常亮、前往按钮的红点从不点亮。
+        this.claimRedDot.active = flags.claimVisible;
+        this.goRedDot.active = false;
 
-        if (this.strip) this.strip.render(snapshot, row.rewards, frames);
+        this.strip.render(snapshot, row.rewards, frames);
     }
 }

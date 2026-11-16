@@ -45,6 +45,8 @@ import {
     qualityNameOf,
     qualityTitleStepOf,
     typeStateOf,
+} from '../assets/script/app/itemdetail/ItemDetailTable';
+import {
     itemDetailLayoutOf,
     ID_LIST_BUTTON_GAP,
     ID_CONTENT_BLOCK_HEIGHT,
@@ -53,7 +55,7 @@ import {
     ID_PANEL_TOP,
     ID_ROW_GAP,
     ID_ROW_HEIGHT,
-} from '../assets/script/app/itemdetail/ItemDetailTable';
+} from './fixtures/itemdetail-layout';
 import type { IItemCraftRow, IViewTypeRow } from '../assets/script/app/itemdetail/ItemDetailTable';
 import { ITEM_DETAIL_TEXTS, formatText } from '../assets/script/app/itemdetail/ItemDetailTexts';
 import {
@@ -679,8 +681,8 @@ test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
         ['CountText',  [288, 420, 88, 34]],    // lab_count
         ['CountLabel', [207, 419, 70, 34]],    // n11「数量:」
         ['NameText',   [204, 284, 311, 44]],   // lab_name
-        ['BtnGo',      [280, 1012, 160, 60]],
-        ['BtnGo1',     [280, 1014, 160, 60]],
+        ['PanelBg/BtnGo',      [280, 1012, 160, 60]],
+        ['PanelBg/BtnGo1',     [280, 1014, 160, 60]],
         ['DescTitle',  [260, 456, 199, 39]],   // n13
         ['DescBg',     [127, 495, 466, 61]],   // n16  tycb_pt
         ['DescText',   [149, 509, 418, 29]],   // lab_desc
@@ -688,7 +690,7 @@ test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
         ['ContentBar', [125, 590, 469, 117]],  // list_ctx  flow_vt + vAlign=middle
         ['AccessTitle', [260, 707, 199, 44]],  // n23「获取途径」
         ['AccessList', [125, 751, 469, 253]],  // list  overflow=scroll, lineGap 17
-        ['BtnCompos',  [280, 1014, 160, 60]],
+        ['PanelBg/BtnCompos',  [280, 1014, 160, 60]],
     ];
     for (const [name, rect] of cases) {
         assertRect(rects.get(name), fguiRect(...rect), name);
@@ -762,11 +764,11 @@ test('物品 D5｜三个按钮的底图统一换成 `cu_ty_btn21`（FGUI 控制�
         }
         return undefined;
     };
-    for (const name of ['BtnGo', 'BtnGo1', 'BtnCompos']) {
+    for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.equal(plateOf(name), green, `${name} 的底板不是 btn2Green（FGUI 三个按钮都用「颜色=1」绿档）`);
     }
     // 按钮上必须有 cc.Button（决定 `bindButton` 走 CLICK 还是 TOUCH_END）
-    for (const name of ['BtnGo', 'BtnGo1', 'BtnCompos']) {
+    for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.ok(compOf(prefab, rects.get(name)!.id, 'cc.Button'), `${name} 上没有 cc.Button`);
     }
 });
@@ -875,7 +877,7 @@ test('物品 E1｜三个按钮走「有 `cc.Button` 用 CLICK，否则 TOUCH_END
     // 反向守卫：prefab 里凡是被 `Button.EventType.CLICK` 绑的节点，必须真有 cc.Button。
     // 三个按钮在 prefab 上都挂了 cc.Button ⇒ 走 CLICK 是对的。
     const rects = collectRects(ID_PREFAB_OBJ);
-    for (const name of ['BtnGo', 'BtnGo1', 'BtnCompos']) {
+    for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.ok(
             compOf(ID_PREFAB_OBJ, rects.get(name)!.id, 'cc.Button'),
             `${name} 没有 cc.Button —— bindButton 会退化成 TOUCH_END（灰态也能点）`,
@@ -1124,8 +1126,9 @@ test('物品 G5｜奖励物 18014 在 item 表里有名字 / 品质 / 图标，�
 });
 
 test('物品 G6｜HUD 的图与物品详情**同源**（同一份缓存，不开第二套）', () => {
-    const art = readFileSync('assets/script/app/maintask/MainTaskArt.ts', 'utf8');
-    assert.ok(/ItemDetailArtLoader\.loadIdArtByRel|同源/.test(art), 'MainTaskArt 的注释里应当说明与 ItemDetail 同源');
+    const entry = readFileSync('assets/script/app/maintask/GetHeroEntry.ts', 'utf8');
+    assert.ok(/from '\.\.\/itemdetail\/ItemDetailArtLoader'/.test(entry),
+        'HUD 领取入口必须复用 ItemDetailArtLoader 的缓存');
     const hud = stripComments(HUD_SRC);
     assert.ok(/loadQualityFrameArt\(/.test(hud) && /loadItemIconArt\(/.test(hud));
     assert.ok(!/resources\.load\(/.test(hud), 'HUD 不该自己 resources.load —— 图必须走 ItemDetailArtLoader 的缓存（规则 81）');

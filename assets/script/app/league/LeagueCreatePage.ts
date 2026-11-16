@@ -1,72 +1,6 @@
 /**
- * 「创建联盟」弹窗（老端 `LayerLeagueCreat`，`ui/League/LeagueCreate`）—— 只有**未入盟**态才可达。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/加入联盟/组件_联盟_创建联盟.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `popBg`（公用 `组件_公共弹窗_新`，标题「创建联盟」） | (40,343) **640×593** | `PopupBg` + `TitleBg` + `TitleDeco` + `Title` + `CloseBtn` |
- * | `btn_creat`（`按钮_联盟_消耗按钮`，`TY_btn21` 300×130） | (211,723) | `BtnCreate`（+ `Bar` / `Submit` / `Cost`） |
- * | `n8` 输入框底板 `frame_shurukuang` | (172,614) 376×50 | `NameBg` |
- * | `lab_leagueName`（`input="true"`，24px） | (177,622) 366×34 | `NameInput`（`cc.EditBox`） |
- * | `list_banner`（`flow_vt` + `scroll=horizontal`，`defaultItem` = `组件_联盟_旗帜` 179×196） | (98,408) **544×206** | `BannerListView`（横向虚拟列表） |
- * | `按钮_勾选`（`<Button checked="true"/>` ⇒ 默认**已勾**） | (92,666) 50×50 | `QuickJoinBox`（+ `Box` / `Check`） |
- * | `n10`「允许快速加入」 | (137,674) 172×34 | `QuickJoinLabel` |
- *
- * 渲染序 = FGUI `displayList` 序（`popBg → btn_creat → n8 → lab → list → 勾选 → n10`），
- * 骨架（条 / 字 / 闭钮）按本工程既有口径紧跟在 `PopupBg` 之后。
- * 板根的 y 偏移见下（**593 是奇数** ⇒ 板中心 639.5）。
- *
- * ## 板根 y = +0.5、条 = 284.5、字 / 闭钮 = 287
- *
- * `popBg` 640×593 @ (40,343) ⇒ 板中心 = 343 + 296.5 = **639.5**（不是 640）
- * ⇒ 画布中心 640 − 639.5 = **0.5**（复刻 FGUI 绝对画布坐标，不是「摆到几何正中」）。
- * 骨架再叠加该偏移（`组件_公共弹窗_新` 里 `xy` 是**相对板**的：条距顶边 12.5、字 / 闭钮距顶边 10）
- * ⇒ 条 `0.5 + 296.5 − 12.5 = 284.5`、字 / 闭钮 `0.5 + 296.5 − 10 = 287`。
- * （与等级预览 0.5/440.5/443、申请列表 0/340.5/343、编辑信息 0.5/206.5/209、管理 −34.5/442.5/445 同解算。）
- *
- * ## 横向列表（`list_banner`）—— 本工程**第一张横向虚拟列表**
- *
- * FGUI 是 `flow_vt` + `scroll=horizontal` + `colGap=1`、`autoResizeItem` 缺省（= false，
- * 见 `tmp/_fgui_bin.mjs` 对已发布 bin 的取证）⇒ 8 个 179×196 的旗帜**一列一个**、
- * 横向滚动，`colGap=1` ⇒ 步长 180。
- *
- * `VirtualScrollView` 的横向分支（`_layoutSingleSlot` 的 `else`）把 item 放在
- * `x = idx·(itemMain + spacing) + itemMain·anchorX`、`y = 0`（`gridCount === 1`）。
- * 也就是说 item 从 **content 的锚点往 +x 方向长**、在 y 方向居中 ⇒
- * **content / 列表节点的锚点都必须是 `(0, 0.5)`**（锚点在左中），
- * 否则第一张旗会跑到列表中线右边去。纵向那批用 `(0.5, 1)` 是同一个道理
- * （item 往 −y 方向长 ⇒ 锚点在顶部）。
- *
- * ## MVC 归属（2026-11-09 迁移）
- *
- * 本类**只做展示与意图派发**：`onInit` 绑一次事件、emit 带 `owner` 的
- * `LeagueCreateEvent.Intent`；`render(state)` 按控制器推来的状态绝对赋值。
- * 名字守卫、费用复读、防连点、发包、成功后通知容器都在
- * `LeagueCreateController` / `LeagueCreateModel`，会话由外部
- * `LeagueCreatePopupComposition` 每次打开新建、关闭释放。
- * 创建成功改发 `LeagueTabEvent.Joined`（按 owner），不再由本页持有容器回调。
- *
- * ## 老端行为与移植取舍
- *
- * 1. **`selectIndex` 默认 0**（老端字段初值），`arr = [0..7]` ⇒ 传出去的就是颜色下标本身
- *    （`LeagueTable.leagueCreateBannerIndices()`）。
- * 2. **点旗只刷选中态**：老端 `onItemClick` 改 `selectIndex` 后调 `list.updateShowItem()`
- *    —— 注释里明确写了**不用** `refreshVirtualList()`（它走 `callLater`，下一帧整表重排，
- *    在横向列表上点了容易看不到反馈）。本端对应 `VirtualScrollView.getItemByIndex()`
- *    逐槽改「选中外框」的显隐（`repaintBanners`），不重跑 `renderItemFn`。
- * 3. **旗面按「颜色下标」换图**（FGUI `gearIcon controller="颜色"`，不是染色）；
- *    选中外框 = `gearDisplay controller="选中"`。8 张图**一次性预载**（`bannerFrames`）
- *    ⇒ `renderItemFn` 变成**纯同步**，槽位复用不会闪（同 `LeaguePage.applyBannerColor` 的口径）。
- * 4. **消耗**：`creatCost = { resId: roleProperty.coin, number: gameConfig.unionCreateCost }`
- *    ⇒ 交给 `ILeagueRepository.createCost()`（读表 + 读缓存，不发包），
- *    上屏口径照 `ViewConsumeItemOne.updateByConsume`：`lab_has` 两态换色、`lab_need` 恒一色。
- * 5. **`lab_leagueName` 是多行输入**（FGUI 没写 `singleLine`，同 `LeagueEditPage` 的判据）
- *    ⇒ 两个 label 锚点 `(0,1)` + `lpos` = 框左上角，正文开 `enableWrapText`。
- *    FGUI 该节点**没写 `maxLength`**（FGUI 语义 0 = 不限），但 cocos 的 `cc.EditBox` 会把 `0`
- *    原样透传给原生 `maxlength=0` —— **一个字符都打不进去**，而且不报错。
- *    ⇒ prefab 里落的是 **20**（联盟名的合理上限；老端只做违禁词校验、不截断，
- *    超长由服务端 `UNION_NAME_TOO_LONG` 兜）。加入页的 id 查询框同理取 **19**（Long 的十进制上限）。
+ * 创建联盟弹窗，仅未入盟状态可达。旗帜横向列表按颜色下标换图。
+ * 名字长度上限 20，费用和校验交给 LeagueRepository / LeagueCreateController。
  */
 
 import { _decorator, Button, Color, EditBox, Label, Node, Sprite, SpriteFrame } from 'cc';
@@ -109,7 +43,7 @@ const BANNER_COLOR_ICON = 'ColorIcon';
 @ccclass('LeagueCreatePage')
 export class LeagueCreatePage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueCreate';
@@ -153,13 +87,11 @@ export class LeagueCreatePage extends PopupBase {
     /** 每次取数递增，用来作废在飞的展示资源加载。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     /**
      * 按钮 / 列表回调在 `onInit` 里接一次即可：`PopupBase._inited` 保证每实例只跑一次
-     * （`if (!this._inited)`），所以「只绑一次」的布尔门闩已删（2026-10-30）。
+     * （`if (!this._inited)`），所以「只绑一次」的布尔门闩已删。
      */
     protected onInit(): void {
         const close = this.closeButton?.getComponent(Button);
@@ -187,8 +119,8 @@ export class LeagueCreatePage extends PopupBase {
         if (!this.alive) return;
 
         const revision = ++this.revision;
-        // ⚠️ 列表槽位在 `VirtualScrollView.start()` 里建，而 `onOpen` 早于它
-        //    ⇒ 必须让出一帧再 `refreshList`，否则落在「槽位还没建」的空档（表现为列表空白）。
+        // 列表槽位在 `VirtualScrollView.start()` 里建，而 `onOpen` 早于它
+        // ⇒ 必须让出一帧再 `refreshList`，否则落在「槽位还没建」的空档（表现为列表空白）。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
         this.present();
@@ -203,9 +135,7 @@ export class LeagueCreatePage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 意图派发（只带原文 / 下标 / 勾选态，不带回调）
-    // ============================================================
 
     private emitName(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
@@ -237,9 +167,7 @@ export class LeagueCreatePage extends PopupBase {
         });
     }
 
-    // ============================================================
     // 渲染（控制器推来的状态一律绝对赋值）
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -274,9 +202,7 @@ export class LeagueCreatePage extends PopupBase {
         this.bannerList.refreshList(this.bannerIndices);
     }
 
-    // ============================================================
     // 消耗项上屏
-    // ============================================================
 
     /**
      * 消耗项上屏 —— 老端 `ViewConsumeItemOne.updateByConsume()`：
@@ -288,7 +214,7 @@ export class LeagueCreatePage extends PopupBase {
      * ```
      *
      * `足够` controller 落成的是 `lab_has` 的两套字色（`gearColor`）；
-     * ⚠️ `lab_need` **没有** gearColor ⇒ 两态都保持 `#e6e5d9` / `#181614`（别顺手也染红）。
+     * `lab_need` **没有** gearColor ⇒ 两态都保持 `#e6e5d9` / `#181614`（别顺手也染红）。
      */
     private applyCost(cost: ILeagueCostView): void {
         if (this.costHasLabel) {
@@ -337,9 +263,7 @@ export class LeagueCreatePage extends PopupBase {
         if (label.enableOutline) label.outlineColor = new Color(stroke[0], stroke[1], stroke[2], 255);
     }
 
-    // ============================================================
     // 旗帜列表
-    // ============================================================
 
     /**
      * 铺一行的旗帜（**纯同步**：8 张图已在 `onOpen` 里预载完）。
@@ -375,25 +299,21 @@ export class LeagueCreatePage extends PopupBase {
         }
     }
 
-    // ============================================================
     // 勾选框
-    // ============================================================
 
     /** 当前是否勾了「允许快速加入」（老端读 `按钮_勾选` 的 `selected`）。 */
     get quickJoinSelected(): boolean {
         return this.quickJoinCheck?.active === true;
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     /**
      * 静态文案（FGUI 就是静态 `title` / `text`，prefab 已写好，这里只兜「空」）。
      *
-     * ⚠️ 「允许快速加入」在 FGUI 里是**面板上的独立文本 `n10`**（`组件_联盟_勾选` 自带的
-     *    `title` 是空的、`autoClearText`）⇒ 它是 `QuickJoinBox` 的**兄弟**、不是后代，
-     *    `getComponentInChildren` 找不到它（会静默空转）⇒ 必须按兄弟名取。
+     * 「允许快速加入」在 FGUI 里是**面板上的独立文本 `n10`**（`组件_联盟_勾选` 自带的
+     * `title` 是空的、`autoClearText`）⇒ 它是 `QuickJoinBox` 的**兄弟**、不是后代，
+     * `getComponentInChildren` 找不到它（会静默空转）⇒ 必须按兄弟名取。
      */
     private applyStaticTexts(): void {
         setLabelIfEmpty(this.costButton, LEAGUE_CREATE_SUBMIT);

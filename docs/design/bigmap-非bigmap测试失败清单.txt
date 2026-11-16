@@ -1,0 +1,73 @@
+# 非 bigmap 测试失败清单（2026-11-16）
+
+来源：451 个非 bigmap 测试文件分 8 批运行，5508 用例 / 5437 通过 / 71 失败；下列 69 条为 31 个失败文件逐文件隔离重跑后仍可复现的失败名（battle-runtime-controller、zcds-spawn-frame-report 两个批跑噪声已剔除）。
+
+single-activity.test.ts.log	not ok 1 - A. FGUI 左上角 → Cocos 中心坐标（含父容器尺寸参数）
+single-activity.test.ts.log	not ok 5 - A. ⚠️ 奖励格：350 宽的容器只装得下 3 格 —— 真数据最多 2 格所以没暴露
+single-activity.test.ts.log	not ok 6 - A. 行内各元素的框都落在行模板 679×190 内
+single-activity.test.ts.log	not ok 7 - A. ⚠️ 标题飘带：FGUI 的 scale 没写 pivot ⇒ 必须按左上角缩放
+single-activity.test.ts.log	not ok 8 - A. 标题框比 FGUI 的 206 宽 —— 否则 4/5 条任务名会被 SHRINK 缩到 13~17px
+single-activity.test.ts.log	not ok 12 - B. 任务行：prefab 摆位 == layout 常量
+single-activity.test.ts.log	not ok 45 - D. ⚠️ 数量版面与行内格共用同一条公式（k = 0.9 ⇒ 字号 22）
+single-auto-atlas-topology.test.ts.log	not ok 1 - T1 每个散图目录树都在某份 auto-atlas 覆盖内（白名单只有 Spine 与 image 根）
+single-auto-atlas-topology.test.ts.log	not ok 2 - T2 严禁父子目录同时放 pac（子目录贴图会被重复打包）
+single-card-detail-layout.test.ts.log	not ok 21 - 技能格子按列表索引复用，切卡后点击当前技能，空态清空列表
+single-card-upgrade.test.ts.log	not ok 15 - 卡牌名称：表里每行都带名，且与卡牌表 pvpCard 完全一致
+single-chest-bar.test.ts.log	not ok 7 - C7 蓝卡计时条保留时钟图标，时间文字与图标同排
+single-chest-detail-panel.test.ts.log	not ok 5 - 宝箱详情「打开」按钮：两行态坐标与按钮中线对齐，代码常量不许和 prefab 脱节
+single-chest-detail-panel.test.ts.log	not ok 7 - 弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时走轻量入口且到点才可点
+single-chest-detail-speed-up.test.ts.log	not ok 4 - 加速态：换绿底 + 显示播放 icon + 文案与 icon 整组居中（倒计时胶囊不动）
+single-chest-detail-speed-up.test.ts.log	not ok 5 - 解锁 / 开启态：还原黄色底、隐藏播放 icon、文案回到设计稿 x=4
+single-chest-detail-speed-up.test.ts.log	not ok 6 - ★ 点「解锁」后的轻量刷新会整颗按钮同步切态，不是只改倒计时
+single-component-destroy-off-guard.test.ts.log	not ok 1 - onDestroy 里只允许对 this.node / 全局 input 摘监听，别的节点必须有 isValid 守卫
+single-itemdetail.test.ts.log	not ok 24 - 物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算
+single-itemdetail.test.ts.log	not ok 27 - 物品 D5｜三个按钮的底图统一换成 `cu_ty_btn21`（FGUI 控制器覆写 `颜色=1`）
+single-itemdetail.test.ts.log	not ok 33 - 物品 E1｜三个按钮走「有 `cc.Button` 用 CLICK，否则 TOUCH_END」分流（规则 81b）
+single-itemdetail.test.ts.log	not ok 53 - 物品 H1｜面板高度随获取途径行数收，3 行及以上与 prefab 静态值一致
+single-itemdetail.test.ts.log	not ok 54 - 物品 H2｜行数为 0 / 非法值时按 1 行算（不会算出负高度）
+single-itemdetail.test.ts.log	not ok 55 - 物品 H3｜按钮两颗「前往」的 2px 原差值保持不变
+single-itemdetail.test.ts.log	not ok 56 - 物品 H4｜「内容」区没有东西时整块上移 151，面板同步收缩
+single-iteminfo.test.ts.log	not ok 1 - A1 底板高度公式：设计稿两行 = 151（与蓝湖稿底板完全一致）
+single-iteminfo.test.ts.log	not ok 2 - A2 行数非法/越界都不炸：至少 1 行、最多预建行数
+single-iteminfo.test.ts.log	not ok 3 - A3 面板/底板/行 的宽度关系：底板包住行、面板包住底板
+single-iteminfo.test.ts.log	not ok 14 - D5 版面几何：面板 470×659、底板 437×151、标题线左右各 157×13
+single-maintask.test.ts.log	not ok 45 - E12 详情弹窗的槽位常量与 prefab 几何一致（110 / 4 列 / 442×266）
+single-new-treasure.test.ts.log	not ok 9 - 卡面区分未激活、倒计时中、到期可开三种状态
+single-new-treasure.test.ts.log	not ok 10 - 未激活时隐藏进度并居中闹钟时长，激活后切换时分秒及左侧闹钟，复用时恢复
+single-new-treasure.test.ts.log	not ok 12 - 开启与开始战斗使用相同加粗字形，槽位状态切换后不退回细字重描边
+single-new-treasure.test.ts.log	not ok 14 - ★★★还没开始等 ⇒ 金色「解锁」；等完了 ⇒ 绿色「开启」（两种状态不许再共用一套）
+single-no-set-spread-in-release-build.test.ts.log	not ok 1 - assets/script 不得对 Set/Map 用 [...x] 展开
+single-playerinfo.test.ts.log	not ok 4 - ★ 8 个槽位的位置 = headSlotOffset()（4 列 / 步进 131.4 / 128.7）
+single-playerinfo.test.ts.log	not ok 5 - 几何常量：步进 = (123 + gap) × 0.9，槽位 = 4 × 2
+single-playerinfo.test.ts.log	not ok 6 - headContentHeight：按行算，最后一行不留 lineGap
+single-playerinfo.test.ts.log	not ok 7 - headSlotOffset 越界不炸（负数 / 非法值当 0）
+single-reward-item.test.ts.log	not ok 10 - 任务详情按当前奖励渲染公共框，复用清理多余格，旧请求和关窗后的结果不能覆盖
+single-seven-day.test.ts.log	not ok 74 - prefab 生成器同步红点与长屏布局配置（重生成不能回退）
+single-showreward.test.ts.log	not ok 22 - C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×1，且无 MissingScript
+single-showreward.test.ts.log	not ok 33 - 同一奖励重复渲染不打断闪光与星点，换槽位才恢复已播终态
+single-showreward.test.ts.log	not ok 42 - F4｜反向守卫：`HeadGridList` 的死回调 + 错误滚动模型都不许回归
+single-store.test.ts.log	not ok 1 - D:\\City1001\\Demo3.8\\tests\\store.test.ts
+single-zcds-config-validator.test.ts.log	not ok 1 - 技能导表校验覆盖老 Client 四表引用链
+single-zcds-config-validator.test.ts.log	not ok 7 - 技能表的 id 列必须是数字：字符串化就拦在导表产物上
+single-zcds-hud-layout-regression.test.ts.log	not ok 2 - Score 自身绘制九宫格底图，并按领先状态改变真实尺寸
+single-zcds-hud-multiteam.test.ts.log	not ok 9 - unique leader receives the larger size
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 1 - 首次 render 直接落位，不播放尺寸补间（开局不演）
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 2 - 失败方变领先：放大补间 0.25s / backOut + 整格弹跳，逐帧插值到 110×77
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 3 - 领先方变失败：缩小补间 0.2s / quadInOut，缩回那格不弹跳
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 7 - 领先格数字加大加粗，失去领先还原；数值不变不重复写字样
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 8 - 动画中途领先状态翻转：从当前尺寸反向起步，不跳变
+single-zcds-hud-score-slot-size-tween.test.ts.log	not ok 9 - onDisable 停掉补间并归位缩放；重新激活后同状态 render 直接落位
+single-zcds-log-switch.test.ts.log	not ok 1 - zcds 每一条 console 日志都必须落在统一开关（ZCDC_LOG_*）作用域内
+single-zcds-magdi-mushroom.test.ts.log	not ok 1 - pvpStatus：新增软控 numb，只禁攻击 + 移速 −50%，不挂任何硬控
+single-zcds-maladi-guo.test.ts.log	not ok 2 - 102602 吸养根须：字段名是 splashDamageRate（设计案写的 explosionDamageRate 是错的）
+single-zcds-maladi-guo.test.ts.log	not ok 5 - 102604 的「每 8 次普攻」落在 pvpSkill 30181 的强化槽上，武将技指向新的 36182
+single-zcds-model.test.ts.log	not ok 33 - remoteRef 与转表产物逐格一致：运行时读 remoteRef、用例读 doc 目录，两份必须互校
+single-zcds-multi-target-falloff.test.ts.log	not ok 5 - 多弹：4 张卡的 bulletNum 行都带 bulletFalloff 0.4（两份产物一致）
+single-zcds-multi-target-falloff.test.ts.log	not ok 6 - 普攻穿透：15 行都带 normalPierceFalloff 0.4，且不再误写成 pierceCount
+single-zcds-multi-target-falloff.test.ts.log	not ok 7 - 溅射：39 行基准 20/26/32%、同爆点第 2 个起 ×0.7，三档都低于普攻
+single-zcds-multi-target-falloff.test.ts.log	not ok 8 - 处决：卡牌链路的 pvpSkillPlan 一条 executeChance 都不许有
+single-zcds-multi-target-falloff.test.ts.log	not ok 9 - 处决：卡牌技能升级表（armySkillLevelUp）描述里不留处决句
+single-zcds-neutral-features.test.ts.log	not ok 1 - 常规随机池每张地图都投放趣味资源，源预设与发布资源一致并进入开局快照
+single-zcds-neutral-features.test.ts.log	not ok 15 - 验收地图包含所有新类型，真实模型可开局、推进和重置
+single-zcds-neutral-resource-reward.test.ts.log	not ok 3 - 相邻即自动领取：金币与神器充能都入袋，格子变成已占领且不重复领
+single-zcds-neutral-resource-reward.test.ts.log	not ok 4 - 资源点中立无归属：一方先拿到即锁定，双方都领不到第二次

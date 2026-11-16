@@ -5,25 +5,17 @@ export const TERRITORY_MAP_KIND = 'territoryChapter' as const;
 export const TERRITORY_MAP_VERSION = 1 as const;
 
 /**
- * 「**银币宝箱**」的 `rewardId`（2026-11-10 用户口径：它有独立的打开动画）。
+ * 「银币宝箱」的 `rewardId`。
  *
- * `levelMapGrideReward.json` 里 `1023` 是唯一**只发银币**（`resId=7`）的格子奖励，
- * 其余 `1016~1022` 是「银币 + 卡牌碎片 + 专属道具」的**卡牌碎片宝箱**。
- * 地图侧两者也分开：`1023` 的格子显式配 `buildingId = 69020`（`coinBox` 蓝银金属箱），
- * 其它固定资源格 `buildingId` 为空 ⇒ 回退 `TERRITORY_SITE_ART` ⇒ `art.fixedResource`
- * = `69005` 的 `territory_fixed_resource_v1`（黄铜藤蔓箱）。
- *
- * ⚠️ **判据别写成「奖励里有没有银币」或「奖励全是银币」**：卡牌碎片宝箱也发银币，
- * 而且奖励组是按概率抽的、回包内容会变；只有 `rewardId` 是稳定的配表口径。
- * 七章合计 148 格配有这个 `rewardId`（`tests/territory-building-id.test.ts` 有全表守卫）。
+ * `levelMapGrideReward.json` 中 `1023` 是唯一只发银币的格子奖励，其余固定资源格是
+ * 卡牌碎片宝箱。`1023` 的格子配 `buildingId = 69020`（蓝银箱），其它回退黄铜箱。
+ * 判据只能用稳定的 `rewardId`：卡牌碎片宝箱也发银币，且奖励组按概率抽取。
  */
 export const TERRITORY_SILVER_CHEST_REWARD_ID = 1023;
 
 /**
- * 站点类型**命名常量**（**唯一事实源**：`TerritorySiteType` 与 `TERRITORY_SITE_TYPES` 都由它推导）。
- *
- * ⚠️ 禁止在别处写 `'stage'` / `['stage', …] as const` 这类第二份字面量——
- * 业务代码一律 `site.type === TERRITORY_SITE_TYPE.fixedResource` 判定（改名/拼错编译期即暴露）。
+ * 站点类型命名常量。`TerritorySiteType` 与 `TERRITORY_SITE_TYPES` 都由它推导，
+ * 业务判定统一使用这里的常量，不再散落字面量。
  */
 export const TERRITORY_SITE_TYPE = {
     stage: 'stage',
@@ -43,28 +35,8 @@ export function isTerritoryBattleSite(site: Pick<TerritorySite, 'type'>): boolea
         || site.type === TERRITORY_SITE_TYPE.asyncPvp;
 }
 
-/** 全量类型数组（配表解析校验用；顺序 = 表内声明顺序，由常量表推导，不是第二份字面量）。 */
+/** 全量类型数组（配表解析校验用，顺序与常量表一致）。 */
 export const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
-
-/** 编译期守卫：每个键必须是合法类型值（防 `stage: 'boss'` 这类键值错位静默通过）。 */
-type Assert<T extends true> = T;
-type AssertSiteTypeKeysAreValues = Assert<
-    keyof typeof TERRITORY_SITE_TYPE extends TerritorySiteType ? true : false
->;
-
-/**
- * 🔴 历史口径（**已废弃，2026-10-15**）：早先「先解锁、再点一下就打」的关卡是**按格子 id
- * 硬编码**的（`TERRITORY_TWO_STEP_CELL_IDS = [327, 328]`，只有 `configId=10001` 这一片），
- * 于是出现了「关卡 1 点建筑就开战、关卡 2 只能弹详情面板」的分裂。
- *
- * 现在改由**站点类型**判定：`TerritoryModel.selectSite` 与
- * `TerritoryMapView.stationRenderOf` 按可开战站点类型处理 `stage` / `boss` / `asyncPvp`
- * ⇒ 两份硬编码名单连同 `isTerritoryTwoStepCell()` 一起删掉了。
- *
- * ⚠️ 别再往回加「按 cellId 名单」这类判定 —— 每加一关就要改一次代码，且漏改的症状是
- * **零报错**（类型/数据都对，只是点了没反应，或反过来外观说能打、点了没反应）。
- * 关卡的准入条件只有一条：**站点有受支持的战斗类型和有效 configId**。
- */
 
 export interface TerritoryUnlock {
     requiredCells: number[];
@@ -96,10 +68,10 @@ export interface TerritoryRandomSites {
     /**
      * 逐格建筑 ID：`cellId → 建筑 ID`。
      *
-     *  与 `TerritorySite.buildingId` 同名同义（地图配置里指认「这一格最终长成哪栋建筑」），
-     *  但**粒度是单个随机据点**而不是整张图 —— 一张图里的不同随机格可以指向不同建筑。
-     *  键是 JSON 对象的字符串形态（`'69004'` 对应 `cellId=69004`）；未列出的候选格留空即
-     *  完全交给 `rewardPoolId` 抽签。
+     * 与 `TerritorySite.buildingId` 同名同义（地图配置里指认「这一格最终长成哪栋建筑」），
+     * 但**粒度是单个随机据点**而不是整张图 —— 一张图里的不同随机格可以指向不同建筑。
+     * 键是 JSON 对象的字符串形态（`'69004'` 对应 `cellId=69004`）；未列出的候选格留空即
+     * 完全交给 `rewardPoolId` 抽签。
      */
     buildingIds?: Readonly<Record<number, string>>;
 }
@@ -154,8 +126,7 @@ export function territoryNeighbors(
 const TERRITORY_MAP_MIN_SIDE = 4;
 const TERRITORY_MAP_MAX_SIDE = 60;
 /** 站点未提供 unlock 时的默认报价（旧实现硬编码的 10/2/5）。 */
-const TERRITORY_DEFAULT_UNLOCK: TerritoryUnlock = {
-    requiredCells: [],
+const TERRITORY_DEFAULT_UNLOCK: Omit<TerritoryUnlock, 'requiredCells'> = {
     combatPower: 0,
     silverCost: 10,
     exploreSeconds: 2,
@@ -198,8 +169,7 @@ function nonNegative(value: unknown, label: string): number {
 }
 
 /**
- * 严格的整数数组：元素非整数直接 throw（带 label/index）。
- * 旧实现把非法元素映射成 NaN 再由调用方 filter 吞掉，坏配置会静默漏到运行时。
+ * 严格的整数数组：元素非整数直接 throw（带 label/index），避免坏配置静默漏到运行时。
  */
 function cellList(value: unknown, label: string): number[] {
     assert(Array.isArray(value), `${label} must be an array`);
@@ -252,7 +222,7 @@ function parseHeader(data: Record<string, unknown>): TerritoryMapHeader {
 
 /**
  * 章节默认报价。
- * ⚠️ requiredCells 恒为 []（旧实现不读 defaults.requiredCells）—— 默认报价的前置格没有意义，
+ * requiredCells 恒为 []（旧实现不读 defaults.requiredCells）—— 默认报价的前置格没有意义，
  * 否则没写 unlock 的站点会被强制要求默认前置。
  */
 function parseDefaults(raw: unknown): TerritoryUnlock {
@@ -382,7 +352,7 @@ function parseRandomSites(raw: unknown, ctx: TerritoryMapContext): TerritoryRand
         maxActive,
     };
     // 可选字段：cellId → 建筑 ID。空串按「这一格没指定」处理（编辑器表单清空后会落成""）。
-    // ⚠️ 键是 JSON 对象的字符串形态，只接受十进制非负整数；`Number('')` 是 0、`Number(' 12 ')` 是 12，
+    // 键是 JSON 对象的字符串形态，只接受十进制非负整数；`Number('')` 是 0、`Number(' 12 ')` 是 12，
     // 所以必须先用正则卡住，再判越界与「不是候选格」（否则那一格永远不出现，这条配置等于静默失效）。
     if (raw.buildingIds !== undefined) {
         assert(isRecord(raw.buildingIds), 'randomSites.buildingIds must be an object');
@@ -419,8 +389,8 @@ function parseDecorations(raw: unknown, total: number): TerritoryDecoration[] | 
 /**
  * 把编辑器导出的地图 JSON 归一化成 {@link TerritoryMapConfig}。
  *
- *  任一字段不合规直接 throw —— 地图是配置驱动的，错了就让开发者在控制台看到，
- *  不悄悄退回默认值，否则运行时会出现"格子能点但没奖励"这种静默错误。
+ * 任一字段不合规直接 throw —— 地图是配置驱动的，错了就让开发者在控制台看到，
+ * 不悄悄退回默认值，否则运行时会出现"格子能点但没奖励"这种静默错误。
  */
 export function configureTerritoryMap(input: unknown): TerritoryMapConfig {
     assert(isRecord(input), 'map must be an object');

@@ -1,13 +1,6 @@
 /**
  * 卡牌详情页 Presenter：把 pvpCard / pvpUnitGrowth / armySkillLevelUp 三张表
- * 组装成视图可直接渲染的 `CardDetailPresentation`。不 import cc，可单测。
- *
- * 组装口径：
- *   - 六维数值 ← `computeDetailStats`（成长公式与战斗层同源，见 `CardDetailStats`）；
- *   - 技能链格子 ← 卡表 `skillIds` 顺序，格子名取技能名，角标 = 首档解锁英雄等级，
- *     锁定态 = 当前英雄等级不够；表里没配到的技能占「未解锁」空格；
- *   - 里程碑行 ← 每个技能的每一档（含首档），按解锁等级升序，行内带技能名；
- *   - 暴击伤害文案 ← `CardDetailCritDamage`（`pvpSkillPlan` 的 109001 链，取目标等级那一行）。
+ * 组装成视图可直接渲染的 CardDetailPresentation。不 import cc，可单测。
  */
 
 import type { ZCArmySkill, ZCArmySkillTable } from './CardSkillList';
@@ -63,7 +56,7 @@ export interface CardDetailPresentation {
     readonly milestones: readonly CardDetailMilestone[];
 }
 
-/** 六维里血量/攻击取整、范围/移速保留 1 位小数、时间取整秒。 */
+/** 血量、攻击、建筑血量取整，范围和移速保留 1 位小数。 */
 function formatInt(value: number): string {
     return String(Math.round(value));
 }
@@ -98,11 +91,8 @@ export function buildDetailStats(
 }
 
 /**
- * 技能链：按卡表顺序出格，最多 5 格（超出的技能里程碑里仍能看到）。
- *
- * 2026-11-11 起不再补空占位格 —— 每张卡 `pvpCard.skillList` 都只有 4 个技能，
- * 补到 5 格会多出一个永远「未解锁」的假技能。表里查不到的技能 id 仍占一格（保持与卡表同序），
- * 由视图按 `empty` 画成锁定态。
+ * 技能链按卡表顺序出格，最多 5 格。
+ * 每张卡只有 4 个技能，不补空占位；查不到的 id 仍占一格，由视图画成锁定态。
  */
 export const DETAIL_CHAIN_SLOTS = 5;
 
@@ -132,14 +122,8 @@ export function buildDetailChain(
 }
 
 /**
- * 里程碑：卡表里每个技能的每一档（含首档），按解锁等级升序。
- *
- * 2026-11-10 起不再跳过首档 —— 首档（`unlockHeroLevel` 常为 0 / 3 / 6）才是玩家已经拿到的
- * 那几条，跳掉就会出现「技能格上有名字、描述栏里查无此技能」。同等级同描述的不同技能各留一行
- * （描述栏要囊括全部技能），只有同一技能的同一档重复出现在 `skillIds` 里才去重。
- *
- * 表里 `desc` 整块没填的技能（`armySkillLevelUp` 有 24 个技能 72 行是这样）整档不出列：
- * 玩家看到的是「18级 暂无描述」这种空条，不如不显示（2026-11-10 需求）。
+ * 里程碑：每个技能的每一档（含首档），按解锁等级升序。
+ * 同技能同档去重，描述为空的档不显示。
  */
 export function buildDetailMilestones(
     table: ZCArmySkillTable,
@@ -169,11 +153,8 @@ export function buildDetailMilestones(
 }
 
 /**
- * 描述栏打开时的默认落点（`milestones` 已按解锁等级升序）。
- *
- * 从最新解锁的那一档开始看：它下面是「接下来能拿的」，上面是已经过去的档位（仍可上滚）。
- * 一档都没解锁时落在第一行；全部解锁时退一格，让最后两档同屏 —— 与 2026-11-10 的默认窗口口径一致，
- * 区别只是不再删行，历史档位始终能滚回去看。
+ * 描述栏默认落点。从最新解锁的一档开始，下面是接下来能拿的；
+ * 全解锁时退一格让最后两档同屏，一档都没解锁时落第一行。
  */
 export function milestoneAnchorIndex(milestones: readonly CardDetailMilestone[]): number {
     const total = milestones.length;

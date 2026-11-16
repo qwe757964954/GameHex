@@ -630,14 +630,6 @@ export function buildFriendRowView(
  *    头像框在 (37,20) 81×81 —— 两者本来重叠）。单测看不见，只有端到端探针 /
  *    对着效果图看才发现。
  */
-export const FRIEND_ROW_GROUP_NORMAL: { readonly x: number; readonly y: number } = { x: -136, y: 6 };
-export const FRIEND_ROW_GROUP_DELETE: { readonly x: number; readonly y: number } = { x: -93, y: 0 };
-
-/** 按是否删除模式给整组位置（`FriendRow.render` 的唯一入口）。 */
-export function rowGroupPosition(deleteMode: boolean): { readonly x: number; readonly y: number } {
-    return deleteMode ? FRIEND_ROW_GROUP_DELETE : FRIEND_ROW_GROUP_NORMAL;
-}
-
 /**
  * `{0}` 替换的**极简本地实现** —— 不引 `FriendTexts.formatText`（那会把「文案」模块拉进
  * 「判定」模块的依赖链；虽然两边都引擎无关，但依赖方向应当是「文案 → 判定」之外并列）。

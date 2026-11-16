@@ -18,28 +18,28 @@
  * | `tab_rank`（`组件_联盟_页签`，title=联盟排名，checked） | (76,1013) 207×105 | `TabRank`（`LeagueNorthTab`） |
  * | `tab_progress`（同上，title=盟内进度） | (293,1013) | `TabProgress`（`LeagueNorthTab`） |
  *
- * ⚠️ 表头两行（`n7`..`n11`）分别属于两个 group `n15`/`n16`，各带 `gearDisplay pages=0` / `pages=1`
- *    ⇒ **随页签显隐**。本端把它们做成两组节点，`applyTabPage()` 里按当前页签整块切 `active`。
+ * 表头两行（`n7`..`n11`）分别属于两个 group `n15`/`n16`，各带 `gearDisplay pages=0` / `pages=1`
+ * ⇒ **随页签显隐**。本端把它们做成两组节点，`applyTabPage()` 里按当前页签整块切 `active`。
  *
  * ## 老端行为与移植取舍
  *
  * 1. **两个页签 = 两个 `rankType`**：`[24, 22][页签]`（`getRankType()`），
- *    切换时**重新发一次** `RequestGetRank` —— 请求体见 `LeagueRepository.loadNorthRank`。
- *    老端 `init()` 先把页签置到「联盟排名」，`enter()` 里才发第一条包 ⇒ 本端 `onOpen` 里
- *    以 `rank` 页签进 `reload()` 即可（`loadNorthRank` 内部按页签发）。
+ * 切换时**重新发一次** `RequestGetRank` —— 请求体见 `LeagueRepository.loadNorthRank`。
+ * 老端 `init()` 先把页签置到「联盟排名」，`enter()` 里才发第一条包 ⇒ 本端 `onOpen` 里
+ * 以 `rank` 页签进 `reload()` 即可（`loadNorthRank` 内部按页签发）。
  * 2. **`heroItem` 是「我的名次」那一格**：老端 `updateView()` 里对 `rsp.rankInfo.myRank` 单独
- *    渲染一次 `heroItem`；**响应里没有 `myRank` 时老端会抛**（`renderRank(undefined)` 取 `.rank`）
- *    ⇒ 本端 `myRow === null` 时**整块藏掉**（`MyBg` + `HeroItem` 一起），不抛也不画空行。
+ * 渲染一次 `heroItem`；**响应里没有 `myRank` 时老端会抛**（`renderRank(undefined)` 取 `.rank`）
+ * ⇒ 本端 `myRow === null` 时**整块藏掉**（`MyBg` + `HeroItem` 一起），不抛也不画空行。
  * 3. **名次格的两页**：老端 `rank.lab` 恒定写 `data.rank`、`setSelectedPage("标签", rank == -1 ? "未上榜" : "第一名")`
- *    —— 前 3 名**没有专属奖牌图**（`组件_联盟_北伐中原_排名` 的 `第一名` 页就是那颗白字 `lab`）。
- *    本端把这条口径收在 `LeagueNorthRankRow.render()` 里（`rank > 0` ⇒ 显示数字，否则「未上榜」）。
+ * —— 前 3 名**没有专属奖牌图**（`组件_联盟_北伐中原_排名` 的 `第一名` 页就是那颗白字 `lab`）。
+ * 本端把这条口径收在 `LeagueNorthRankRow.render()` 里（`rank > 0` ⇒ 显示数字，否则「未上榜」）。
  * 4. **头像**：老端 `head.SetUrlByIcon(ModelPlayer.GetPlayerIcon(usedSkinResId))` —— 玩家头像系统
- *    Demo3.8 没迁 ⇒ 头像内层恒隐藏（同主面板 boss 立绘那条）。`LeagueNorthRankRow` 里已处置。
+ * Demo3.8 没迁 ⇒ 头像内层恒隐藏（同主面板 boss 立绘那条）。`LeagueNorthRankRow` 里已处置。
  *
  * ## 本端有意增补
  *
  * - `!ok` 时**保留上一趟数据**（不清空成 0 行）+ 提示 —— 老端只有推送刷新、没有这个岔路，
- *   但本端排行是「请求-响应」式，超时/离线时把列表清空会看着像「没人上榜」，那是错的。
+ * 但本端排行是「请求-响应」式，超时/离线时把列表清空会看着像「没人上榜」，那是错的。
  * - 页签切换的 `revision` 闸：连点两个页签时，先到的响应不许覆盖后点的结果。
  */
 
@@ -69,7 +69,7 @@ const { ccclass, property } = _decorator;
 
 @ccclass('LeagueNorthRankPage')
 export class LeagueNorthRankPage extends PopupBase {
-    /** ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）。 */
+    /**  目录名大小写必须与磁盘一致（`ui/League/`）。 */
     static prefabPath = 'ui/League/LeagueNorthRank';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
@@ -78,8 +78,8 @@ export class LeagueNorthRankPage extends PopupBase {
     /**
      * `TabRank` / `TabProgress`：两个页签。
      *
-     * ⚠️ 与 `heroItem` 同理 —— 页签是 `LeagueNorthTab.prefab` 的**嵌套实例** ⇒ 绑节点，
-     *    运行时 `getComponent(LeagueNorthTab)`。
+     * 与 `heroItem` 同理 —— 页签是 `LeagueNorthTab.prefab` 的**嵌套实例** ⇒ 绑节点，
+     * 运行时 `getComponent(LeagueNorthTab)`。
      */
     @property({ type: Node, tooltip: 'TabRank：「联盟排名」页签（默认选中）' })
     tabRank: Node = null;
@@ -96,10 +96,10 @@ export class LeagueNorthRankPage extends PopupBase {
     /**
      * `HeroItem`：我的名次那一行（**不画行底框**）。
      *
-     * ⚠️ 这里绑的是**节点**而不是组件 —— `HeroItem` 是 `LeagueNorthRankRow.prefab` 的
-     *    **嵌套实例**，实例壳上的脚本组件跨 prefab 引用在编辑器里序列化不可靠
-     *    （同 `LeagueTaskPage.box1/box2/box3` 对 `LeagueTaskBox` 的处置）
-     *    ⇒ 绑节点、运行时 `getComponent(LeagueNorthRankRow)`。
+     * 这里绑的是**节点**而不是组件 —— `HeroItem` 是 `LeagueNorthRankRow.prefab` 的
+     * **嵌套实例**，实例壳上的脚本组件跨 prefab 引用在编辑器里序列化不可靠
+     * （同 `LeagueTaskPage.box1/box2/box3` 对 `LeagueTaskBox` 的处置）
+     * ⇒ 绑节点、运行时 `getComponent(LeagueNorthRankRow)`。
      */
     @property({ type: Node, tooltip: 'HeroItem：我的名次那一行的节点（挂 LeagueNorthRankRow）' })
     heroItem: Node = null;
@@ -132,9 +132,7 @@ export class LeagueNorthRankPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         const button = this.closeButton?.getComponent(Button);
@@ -172,9 +170,7 @@ export class LeagueNorthRankPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 数据端口
-    // ============================================================
 
     static get titleText(): string {
         return '排名';
@@ -189,9 +185,7 @@ export class LeagueNorthRankPage extends PopupBase {
         this.closeByButton();
     }
 
-    // ============================================================
     // 页签
-    // ============================================================
 
     /** 页签切换（`rank` = 联盟排名 / `progress` = 盟内进度）。 */
     private async onTabClick(tab: LeagueNorthRankTab): Promise<void> {
@@ -222,9 +216,7 @@ export class LeagueNorthRankPage extends PopupBase {
         if (this.tabProgressRef) this.tabProgressRef.setFrames(payload);
     }
 
-    // ============================================================
     // 取数 / 铺数据
-    // ============================================================
 
     /** 按当前页签发一条排行请求（老端 `enter()` / 切页签各发一次）。 */
     private async reload(): Promise<void> {
@@ -240,7 +232,7 @@ export class LeagueNorthRankPage extends PopupBase {
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision || tab !== this.tab) return;
 
-        // ⚠️ `!ok` ⇒ 保留上一趟的列表（见类头「有意增补」），只提示
+        // `!ok` ⇒ 保留上一趟的列表（见类头「有意增补」），只提示
         if (snapshot.ok) {
             this.rows = snapshot.rows.slice();
             this.presentMyRank(snapshot.myRow);

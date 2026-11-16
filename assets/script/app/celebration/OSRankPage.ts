@@ -96,67 +96,67 @@ export class OSRankPage extends PopupBase {
     // ============================================================
 
     @property({ type: Label, tooltip: 'RefreshTime：倒计时 `13:16:55后刷新`（FGUI `refreshTime`）' })
-    refreshTime: Label = null;
+    refreshTime: Label = null!;
 
     @property({ type: Label, tooltip: 'MyPowerLabel：战力口径名（FGUI `lab_proty`，运行时被 `config.name` 覆盖）' })
-    myPowerLabel: Label = null;
+    myPowerLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'MyPowerValue：当前进度值（FGUI `lab_my_power`；老端直接 `setText(curValue)`，**不缩写**）' })
-    myPowerValue: Label = null;
+    myPowerValue: Label = null!;
 
     @property({ type: Label, tooltip: 'MyRankLabel：`我的名次:`（FGUI `n99`，静态文案）' })
-    myRankLabel: Label = null;
+    myRankLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'MyRankValue：`第3名` / `未上榜`（FGUI `lab_my_rank`）' })
-    myRankValue: Label = null;
+    myRankValue: Label = null!;
 
     @property({ type: Label, tooltip: 'FooterTip：邮件发放说明（FGUI `n105`，**只在排名页可见**，原文含错别字「多钱」，照抄）' })
-    footerTip: Label = null;
+    footerTip: Label = null!;
 
     @property({ type: [Node], tooltip: '列头底图 + 文案（FGUI group `n123` 的 6 个成员，**只在排名页可见**）：Header1/2/3 + HeaderLabel1/2/3' })
     rankHeaderNodes: Node[] = [];
 
     @property({ type: Label, tooltip: '列头第三格 `{战力口径}要求`（FGUI `lab_proty1`，**只在排名页可见**）' })
-    rankHeaderLabel3: Label = null;
+    rankHeaderLabel3: Label = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'ListTarget：庆典目标列表（FGUI `list_target`）' })
-    listTarget: VirtualScrollView = null;
+    listTarget: VirtualScrollView = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'ListRank：庆典排名列表（FGUI `list_rank`）' })
-    listRank: VirtualScrollView = null;
+    listRank: VirtualScrollView = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'ListShop：限时特惠列表（FGUI `list_goods`）' })
-    listShop: VirtualScrollView = null;
+    listShop: VirtualScrollView = null!;
 
     @property({ type: OSTabButton, tooltip: 'TabTarget：庆典目标页签（FGUI `按钮_庆典目标`）' })
-    tabTarget: OSTabButton = null;
+    tabTarget: OSTabButton = null!;
 
     @property({ type: OSTabButton, tooltip: 'TabRank：庆典排名页签（FGUI `按钮_庆典排名`）' })
-    tabRank: OSTabButton = null;
+    tabRank: OSTabButton = null!;
 
     @property({ type: OSTabButton, tooltip: 'TabShop：限时特惠页签（FGUI `按钮_庆典特惠`）' })
-    tabShop: OSTabButton = null;
+    tabShop: OSTabButton = null!;
 
     @property({ type: Node, tooltip: 'BackBtn：返回（FGUI `按钮_返回`）' })
-    backBtn: Node = null;
+    backBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'RankDetailBtn：`详细排名>`（FGUI `btn_rank`）' })
-    rankDetailBtn: Node = null;
+    rankDetailBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'RankDetailBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false（见文件头）' })
-    rankDetailRedDot: Node = null;
+    rankDetailRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'HelpBtn：帮助（FGUI `btn_help`）' })
-    helpBtn: Node = null;
+    helpBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'HelpBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false' })
-    helpRedDot: Node = null;
+    helpRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'GoBuildBtn：`前往提升>`（FGUI `btn_go_build`）' })
-    goBuildBtn: Node = null;
+    goBuildBtn: Node = null!;
 
     @property({ type: Node, tooltip: 'GoBuildBtn/RedDot：老端**从不点亮** ⇒ 每趟写 false' })
-    goBuildRedDot: Node = null;
+    goBuildRedDot: Node = null!;
 
     // ============================================================
     // 运行时状态
@@ -179,21 +179,19 @@ export class OSRankPage extends PopupBase {
     // ============================================================
 
     protected onInit(): void {
-        this.backBtn?.on('click', this._onBack, this);
-        this.rankDetailBtn?.on('click', this._onRankDetail, this);
-        this.helpBtn?.on('click', this._onHelp, this);
-        this.goBuildBtn?.on('click', this._onGoBuild, this);
+        this.backBtn.on('click', this._onBack, this);
+        this.rankDetailBtn.on('click', this._onRankDetail, this);
+        this.helpBtn.on('click', this._onHelp, this);
+        this.goBuildBtn.on('click', this._onGoBuild, this);
 
-        // 页签回调只挂一次（页签节点不像列表行那样被复用）。
-        if (this.tabTarget) this.tabTarget.onTap = () => this.selectTab(0);
-        if (this.tabRank) this.tabRank.onTap = () => this.selectTab(1);
-        if (this.tabShop) this.tabShop.onTap = () => this.selectTab(2);
+        this.tabTarget.onTap = () => this.selectTab(0);
+        this.tabRank.onTap = () => this.selectTab(1);
+        this.tabShop.onTap = () => this.selectTab(2);
 
-        // ⚠️ `renderItemFn` **只绑一次**，行内容按 index 现取（规则 55）。
-        //    三个列表各绑自己的分支，页签切换不需要重绑。
-        if (this.listTarget) this.listTarget.renderItemFn = this._renderTargetRow;
-        if (this.listRank) this.listRank.renderItemFn = this._renderRankRow;
-        if (this.listShop) this.listShop.renderItemFn = this._renderShopRow;
+        // 三个列表各绑自己的分支，页签切换不需要重绑。
+        this.listTarget.renderItemFn = this._renderTargetRow;
+        this.listRank.renderItemFn = this._renderRankRow;
+        this.listShop.renderItemFn = this._renderShopRow;
     }
 
     protected async onOpen(): Promise<void> {
@@ -247,25 +245,20 @@ export class OSRankPage extends PopupBase {
         if (!snapshot) return;
 
         // ---- ① 倒计时（老端 `UpdateTime()`）----
-        if (this.refreshTime) this.refreshTime.string = countdownTextOf(snapshot, Date.now());
+        this.refreshTime.string = countdownTextOf(snapshot, Date.now());
 
         // ---- ② 战力口径 + 当前值（老端 `lab_proty` / `lab_my_power`）----
-        // ⚠️ 老端是 `setText(refConfig.name)`（把设计期占位「战斗力:」整个覆盖）
-        //    与 `setText(voCelebration.GetValue())` —— `GetValue()` 返回 `cmd.curValue`，
-        //    FGUI 的 `setText` 对 Long 走 `toString()` ⇒ **纯整数、不走 numAbbr**。
-        if (this.myPowerLabel) {
-            this.myPowerLabel.string = snapshot.config ? snapshot.config.name : CL_TEXTS.powerLabelFallback;
-        }
-        if (this.myPowerValue) this.myPowerValue.string = `${Math.floor(snapshot.curValue)}`;
+        this.myPowerLabel.string = snapshot.config ? snapshot.config.name : CL_TEXTS.powerLabelFallback;
+        this.myPowerValue.string = `${Math.floor(snapshot.curValue)}`;
 
-        // ---- ③ 「我的名次:」标签（静态文案，兜一手：prefab 里是半角冒号）----
-        if (this.myRankLabel) this.myRankLabel.string = CL_TEXTS.myRankLabel;
+        // ---- ③ 「我的名次:」标签（静态文案）----
+        this.myRankLabel.string = CL_TEXTS.myRankLabel;
 
         // ---- ④ 排名页底部说明（只在排名页可见，但文案是静态的）----
-        if (this.footerTip) this.footerTip.string = CL_TEXTS.footerTip;
+        this.footerTip.string = CL_TEXTS.footerTip;
 
         // ---- ⑤ 列头第三格 `{战力口径}要求`（老端 `lab_proty1 = name + 要求`）----
-        if (this.rankHeaderLabel3) this.rankHeaderLabel3.string = propertyWantTextOf_(snapshot);
+        this.rankHeaderLabel3.string = propertyWantTextOf_(snapshot);
 
         // ---- ⑥ 页签 + 红点 + 列表显隐 ----
         this.applyTab();
@@ -285,27 +278,25 @@ export class OSRankPage extends PopupBase {
         const shopTab = tab === 2;
 
         // ---- 三个列表（gearDisplay 落点见文件头）----
-        if (this.listTarget) this.listTarget.node.active = targetTab;
-        if (this.listRank) this.listRank.node.active = rankTab;
-        if (this.listShop) this.listShop.node.active = shopTab;
+        this.listTarget.node.active = targetTab;
+        this.listRank.node.active = rankTab;
+        this.listShop.node.active = shopTab;
 
         // ---- 排名页专有的列头 6 件 + 底部说明 ----
-        for (const node of this.rankHeaderNodes) {
-            if (node) node.active = rankTab;
-        }
-        if (this.rankHeaderLabel3) this.rankHeaderLabel3.node.active = rankTab;
-        if (this.footerTip) this.footerTip.node.active = rankTab;
+        for (const node of this.rankHeaderNodes) node.active = rankTab;
+        this.rankHeaderLabel3.node.active = rankTab;
+        this.footerTip.node.active = rankTab;
 
         // ---- 页签四件套：只有「庆典目标」的红点会被点亮（老端 `targetRd.OnRDUpdate(GetRd())`）----
         const rd = snapshot ? snapshot.rd !== 0 : false;
-        if (this.tabTarget) this.tabTarget.render(targetTab, rd);
-        if (this.tabRank) this.tabRank.render(rankTab, false);
-        if (this.tabShop) this.tabShop.render(shopTab, false);
+        this.tabTarget.render(targetTab, rd);
+        this.tabRank.render(rankTab, false);
+        this.tabShop.render(shopTab, false);
 
         // ---- 三处「老端从不点亮」的红点：显式写 false（prefab 烘的就是隐藏，这里是防回归）----
-        if (this.rankDetailRedDot) this.rankDetailRedDot.active = false;
-        if (this.helpRedDot) this.helpRedDot.active = false;
-        if (this.goBuildRedDot) this.goBuildRedDot.active = false;
+        this.rankDetailRedDot.active = false;
+        this.helpRedDot.active = false;
+        this.goBuildRedDot.active = false;
     }
 
     /**
@@ -355,7 +346,7 @@ export class OSRankPage extends PopupBase {
         if (!this.isValid || !this.node.isValid) return;
         // 老端：`rsp.rankInfo.myRank` 有值 ⇒ `rank == -1 ? 未上榜 : 第{0}名`；没值也退到「未上榜」。
         const rank = detail ? detail.myRank.rank : -1;
-        if (this.myRankValue) this.myRankValue.string = myRankValueTextOf(rank);
+        this.myRankValue.string = myRankValueTextOf(rank);
     }
 
     // ============================================================
@@ -366,7 +357,7 @@ export class OSRankPage extends PopupBase {
     private _tick(): void {
         const snapshot = this._snapshot;
         if (!snapshot) return;
-        if (this.refreshTime) this.refreshTime.string = countdownTextOf(snapshot, Date.now());
+        this.refreshTime.string = countdownTextOf(snapshot, Date.now());
     }
 
     // ============================================================

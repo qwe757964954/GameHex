@@ -10,9 +10,6 @@ const STATUS_COLOR = new Color(166, 176, 166, 255);
 @ccclass('LoginPage')
 export class LoginPage extends Component {
     // ===== 编辑器拖拽绑定 =====
-    @property({ type: Node, tooltip: '登录根节点 LoginRoot' })
-    root: Node | null = null;
-
     @property({ type: EditBox, tooltip: '账号输入框 AccountEdit' })
     accountInput: EditBox = null!;
 
@@ -62,9 +59,10 @@ export class LoginPage extends Component {
     @property({ type: Node, tooltip: 'GM 按钮 GmBtn（仅开发/体验渠道显示）' })
     gmBtn: Node | null = null;
 
-
     onLoad(): void {
-        this.repairStatusLabelBinding();
+        if (!this.statusLabel) {
+            this.statusLabel = this.node.getChildByName('StatusLabel')?.getComponent(Label) ?? null;
+        }
         this.serverButton.on(Button.EventType.CLICK, this.onServers, this);
         this.loginButton.on(Button.EventType.CLICK, this.onLogin, this);
         this.registerButton.on(Button.EventType.CLICK, this.onRegister, this);
@@ -130,8 +128,5 @@ export class LoginPage extends Component {
     };
     private submit(kind: 'login' | 'register'): void {
         EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind, account: this.accountInput.string, password: this.passwordInput.string });
-    }
-    private repairStatusLabelBinding(): void {
-        if (!this.statusLabel) this.statusLabel = (this.root ?? this.node).getChildByName('StatusLabel')?.getComponent(Label) ?? null;
     }
 }

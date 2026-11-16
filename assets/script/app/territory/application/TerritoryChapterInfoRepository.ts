@@ -4,37 +4,11 @@ import { withTimeout, toCount } from '../../net/RequestGuard';
 import { RequestCityChapterInfo } from './RequestTerritoryChapterInfoMsg';
 
 /**
- * 占城（领地）· **账号级章节汇总** Repository（进程级单例）。
+ * 占城（领地）账号级章节汇总 Repository（进程级单例）。
  *
- * ## 它管什么
- *
- * 服务端 `ChapterInfo { idleTime, chapters[] }`：
- * - `idleTime`：上次挂机时间戳（秒），用于离线挂机时长起算；
- * - `chapters`：账号已解锁/通关的章节号集合。
- *
- * 与 {@link TerritoryCellRepository} 的分工：
- * - `TerritoryCellRepository` 管**单章格子**状态（解锁 / 通关 / 领奖），页面级、随开随拉；
- * - 本类管**跨章汇总**，登录后拉一次，存内存 + localStorage，冒险页打开直接读。
- *
- * ## 数据流
- *
- * 1. 登录成功 → {@link bindOwner}：按 `(serverId, roleId)` 切 namespace，从 localStorage 恢复上次的快照；
- * 2. 登录后并行 {@link refresh}：发 `CmdCityChapterInfoReqMsg`，回包覆盖内存 + 写盘；
- * 3. 服务端通关后主动推 `CmdCityChapterInfoBroMsg` → 本类收到后覆盖内存 + 写盘
- *    （冒险页下次打开读 `availableChapters` 即最新，无需实时订阅）；
- * 4. 冒险页（`TerritoryPage`）打开时读 {@link availableChapters}，决定底部章节切换按钮范围。
- *
- * ## 为什么必须持久化
- *
- * 用户原话：「下次打开冒险，用服务器的数据」。即：
- * - 不每次进冒险页都重发 Req（首屏要快、要离线可开）；
- * - 但热更 / 切后台回来不能丢账号章节进度；
- * - 服务端 Bro 是唯一权威，收到即覆盖本地，不存在回滚问题。
- *
- * ## ⚠️ Bro 是**整包**覆盖，不是合并
- *
- * `CmdCityChapterInfoBroMsg.info.chapters` 是账号当前全量章节列表，不是「新增了哪一章」。
- * 本地直接替换，不要 `Set.union` —— 否则服务端回退章节（测服回档）时本地会脏着不收敛。
+ * 与单章格子的 TerritoryCellRepository 分工：本类只存跨章汇总（上次挂机时间与已开放章节），
+ * 登录后拉一次并持久化到本地，冒险页打开时直接读取。
+ * 服务端 Bro 是整包覆盖而非增量，收到后直接替换，不做集合并集，避免回档时本地不收敛。
  */
 
 /** 归一后的章节快照。chapters 已去重、升序、过滤非法项；idleTime 为非负秒。 */
@@ -107,7 +81,7 @@ export class TerritoryChapterInfoRepository {
     /**
      * 拉一次最新章节汇总。并发调用共享同一次在途 Req；离线 / 失败静默回落本地快照。
      *
-     * ⚠️ 不抛错：登录后并行触发，失败不能影响进入主界面。
+     * 不抛错：登录后并行触发，失败不能影响进入主界面。
      */
     refresh(): Promise<void> {
         if (this.refreshing) return this.refreshing;
@@ -125,7 +99,7 @@ export class TerritoryChapterInfoRepository {
     /**
      * 领奖回包里的 `idleTime` 写回快照（新的挂机起点）。
      *
-     * 为什么需要：`CmdCityChapterIdleRewardRspMsg.idleTime` 只跟着领奖回包回来，
+     * `CmdCityChapterIdleRewardRspMsg.idleTime` 只跟着领奖回包回来，
      * 服务端**不保证**再推一条 `CmdCityChapterInfoBroMsg`。不写回的话
      * 征收弹窗与主城金币车的计时会停在上一次 `ChapterInfo` 的值（领完还显示满格）。
      *

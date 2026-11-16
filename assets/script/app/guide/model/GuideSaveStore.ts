@@ -1,32 +1,7 @@
 /**
- * 新手引导进度存档（纯 TS，不 import `cc`，可被 `tests/` 直接 import）。
- *
- * ## 为什么这样分层
- *
- * 完全对齐工程既有的 `TerritorySaveStore` 模式：
- *
- * ```
- * GuideSaveStore（本文件，纯逻辑 + 注入式 storage）
- *        ↑
- * GuideStorageAdapter（application 层，唯一 import { sys } from 'cc' 的地方）
- * ```
- *
- * 引擎 I/O 只在适配器那一处接入。好处：本文件能在 node 单测里跑，
- * 将来换成服务端下发 / 换平台存储，只改适配器。
- *
- * ## 存储选型
- *
- * 用 `sys.localStorage`（Cocos 封装，底层 Web 是 `window.localStorage`、原生是各平台 KV），
- * 与 `territory` / `bigmap` 两套既有存档同一套设施 —— 运维上一个清理口，不引入第四种存储。
- *
- * 不选 `EngineMain.saveLocalStorage`（`LocalCache` 用的那套）：新代码不走老 `engine/` 层。
- * 不选 `GameCacheMgr`：它是**服务端下发数据**的缓存，不是本地存档。
- *
- * ## Key 口径
- *
- * `guide.progress.v1.<namespace>`，namespace = `server:<id>:role:<id>:`。
- * 与 `territory.*` / `zhancheng.bigmap.*` 平级但互不重叠 —— 引导进度是**账号级**，
- * 不随章节变化，所以只有一份，不像领地那样按 chapterId 分。
+ * 新手引导进度存档，纯 TS，不 import cc，tests 可直接 import。
+ * 引擎 I/O 只在 GuideStorageAdapter 接入；key 为 guide.progress.v1.server:<id>:role:<id>，
+ * 账号级，不随章节变化。
  */
 
 import { GuideProgress } from './GuideProgress';
@@ -60,9 +35,7 @@ export interface GuideSaveData {
     readonly grantedSteps: readonly string[];
     readonly skipped: boolean;
     /**
-     * 首次进入引导的毫秒时间戳；`0` = 未知。
-     * 判 `firstLogin` 用它，而不是「存档是否存在」—— 存档可能被清或换了设备，
-     * 用「是否曾经开始过」更接近设计意图。
+     * 首次进入引导的毫秒时间戳，0 表示未知。判 firstLogin 用它，而不是看存档是否存在。
      */
     readonly startedAt: number;
     /** 最近一次写入时间戳；接服务端后用于两边取新。 */
@@ -70,8 +43,7 @@ export interface GuideSaveData {
 }
 
 /**
- * 内存存储：单测 / 编辑器预览 / localStorage 不可用时的兜底。
- * 与 `BigMapSaveKeys.createMemoryBigMapStorage` 同一用途，单独导出是为了让测试零依赖。
+ * 内存存储，供单测、编辑器预览和 localStorage 不可用时兜底。
  */
 export function createMemoryGuideStorage(seed: Record<string, string> = {}): IGuideStorage {
     const map = new Map<string, string>(Object.entries(seed));
@@ -82,13 +54,7 @@ export function createMemoryGuideStorage(seed: Record<string, string> = {}): IGu
 }
 
 /**
- * 引导进度存档。
- *
- * 一致性口径：
- * 1. **只增不减** —— `completedSteps` / `grantedSteps` 写入时与磁盘已有值取并集，
- *    旧实例晚写不会把新进度覆盖回去；
- * 2. **幂等** —— 序列化后与磁盘一致就不写（少一次 IO，也不触发存储事件）；
- * 3. **不抛** —— 除构造期身份非法外，读写全部吞异常并降级，引导存档坏了不该让人进不去主界面。
+ * 引导进度存档。进度字段只增不减，写入幂等，读写异常降级而不抛出。
  */
 export class GuideSaveStore {
     /** storage 抛异常时的进程内兜底；归属本类，不泄漏到模块作用域。 */
@@ -98,9 +64,9 @@ export class GuideSaveStore {
     private readonly storage: IGuideStorage | null;
 
     /**
-     * @param owner 账号归属；`null` 表示预览 / 未登录 —— 只写内存，不落盘。
-     * @param storage 存储端口；省略时走内存兜底（测试默认路径）。
-     * @throws owner 非空但 `roleId` / `serverId` 为空 —— 身份不明时宁可早失败，也别写串账号。
+     * @param owner 账号归属；null 表示预览或未登录，只写内存。
+     * @param storage 存储端口；省略时走内存兜底。
+     * @throws owner 非空但 roleId 或 serverId 为空，避免写串账号。
      */
     constructor(owner: IGuideSaveOwner | null, storage: IGuideStorage | null = null) {
         if (owner && (!owner.roleId.trim() || !owner.serverId.trim())) {
@@ -119,10 +85,7 @@ export class GuideSaveStore {
     }
 
     /**
-     * 读存档。
-     *
-     * @returns `null` = **从未开始过**（触发 `firstLogin` 用），或存档损坏/版本不符已丢弃。
-     *   调用方不要用 `null` 和「空进度」做等价判断 —— 两者语义不同。
+     * 读存档。返回 null 表示从未开始过或存档损坏，调用方不要把它和空进度等价。
      */
     load(): GuideSaveData | null {
         const raw = this.readRaw();
@@ -140,11 +103,7 @@ export class GuideSaveStore {
     }
 
     /**
-     * 写存档（与磁盘已有值合并后写入）。
-     *
-     * @param data `GuideProgress.toSave()` 的结果。
-     * @param now 当前时间戳，默认 `Date.now()`（单测注入固定值用）。
-     * @returns 是否真的发生了写入（内容没变时返回 `false`，幂等）。
+     * 写存档，与磁盘已有值合并后写入；内容没变返回 false。
      */
     save(data: GuideProgressData, now: number = Date.now()): boolean {
         const existing = this.load();
@@ -189,12 +148,8 @@ export class GuideSaveStore {
 }
 
 /**
- * 读存档并构造步骤机。
- *
- * 配置非法（空表 / 断链 / 入口不唯一）时 `GuideProgress` 会抛 —— 这里统一吞掉并返回 `null`，
- * 语义是「本次不做引导」，而不是让主界面进不去。这条约定写在这里，调用方不用各自 try/catch。
- *
- * @param saved 已读出的存档；省略时内部 `store.load()` 一次（调用方已经读过就传进来，别重复读）。
+ * 读存档并构造步骤机。配置非法时 GuideProgress 会抛，这里统一吞掉返回 null，
+ * 语义是本次不做引导，而不是让主界面进不去。
  */
 export function restoreGuideProgress(
     store: Pick<GuideSaveStore, 'load'>,
@@ -216,7 +171,7 @@ export function restoreGuideProgress(
     }
 }
 
-// ---- 内部：结构校验与合并 ----
+// 内部：结构校验与合并
 
 /** 单条 stepId 的合法性：非空字符串。表里的 stepId 形如 `'1-1'`。 */
 function isStepId(value: unknown): value is string {
@@ -241,8 +196,7 @@ function toTimestamp(value: unknown): number {
 }
 
 /**
- * 把任意 JSON 归一成存档结构；版本不符直接丢弃（当前只有 v1，未来在这里插迁移）。
- * 字段级容错只做"坏字段给默认"，不整份丢弃 —— 一张缺 `skipped` 的旧档不该让玩家重跑引导。
+ * 把任意 JSON 归一成存档结构，版本不符直接丢弃；字段坏了给默认，不整份丢弃。
  */
 function normalizeSave(value: unknown): GuideSaveData | null {
     if (!value || typeof value !== 'object') return null;
@@ -263,11 +217,8 @@ function normalizeSave(value: unknown): GuideSaveData | null {
 }
 
 /**
- * 合并写入：进度字段只增不减，防「旧实例晚写把新进度盖回去」。
- *
- * `currentStepId` 的取舍：若传入值已经被判定为完成（在并集后的 `completedSteps` 里），
- * 说明这份数据比磁盘上的旧 —— 保留磁盘的当前步，同时用 `firstIncomplete` 兜一层，
- * 保证最终落盘的当前步一定不是"已完成的步"。
+ * 合并写入，进度字段只增不减，防止旧实例晚写覆盖新进度。
+ * 传入的 currentStepId 已完成时说明数据落后，沿用磁盘的当前步。
  */
 function mergeSave(
     existing: GuideSaveData | null,

@@ -14,10 +14,6 @@ import type { IBigMapResourceView } from '../application/BigMapViewState';
 
 const { ccclass, property } = _decorator;
 const RESOURCE_TYPES = ['grain', 'wood', 'iron', 'coin', 'stamina'] as const;
-const MODE_FRAME_WIDTH = 111;
-const MODE_FRAME_Y = -7.5;
-const MODE_ICON_SIZE = 79;
-const MODE_ICON_Y = 11.5;
 
 /** 持有页面预制体内部控件，负责渲染和输入；外部仅交付展示快照与资源。 */
 @ccclass('BigMapPageLayout')
@@ -32,6 +28,11 @@ export class BigMapPageLayout extends Component {
     @property(Sprite) private modeIcon: Sprite = null!;
     @property(Sprite) private modeFrame: Sprite = null!;
     @property(Sprite) private modeFallback: Sprite = null!;
+
+    @property({ group: '模式按钮', tooltip: '底框目标宽度' }) private modeFrameWidth = 111;
+    @property({ group: '模式按钮', tooltip: '底框目标 y' }) private modeFrameY = -7.5;
+    @property({ group: '模式按钮', tooltip: '图标目标尺寸' }) private modeIconSize = 79;
+    @property({ group: '模式按钮', tooltip: '图标目标 y' }) private modeIconY = 11.5;
     @property(Button) private exploreButton: Button = null!;
     @property(Node) private queuePanel: Node = null!;
     @property(Label) private queueLabel: Label = null!;
@@ -169,9 +170,9 @@ export class BigMapPageLayout extends Component {
             //图标跟着文字走：写【基地】就压建筑 icon，写【大地图】就压折页地图。
             //换模式时只换 spriteFrame，不重建节点 —— 重建会让那颗按钮在点下的那一帧闪一下。
             const icon = this.art.hud.get(mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
-            fitBigMapSprite(this.modeIcon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y);
+            fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
             const frame = this.art.hud.get('mode_frame') ?? null;
-            fitBigMapSprite(this.modeFrame, frame, MODE_FRAME_WIDTH, 0, MODE_FRAME_Y);
+            fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
             this.modeFallback.node.active = !frame;
         }
     }

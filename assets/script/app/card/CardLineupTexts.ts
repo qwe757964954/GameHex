@@ -72,7 +72,7 @@ export const CARD_LINEUP_TEXTS = {
     skillUpgradeSending: '升级中',
     skillUpgradeOffline: '未连接服务器',
     skillUpgradeFailed: '技能升级失败',
-    // ---- 卡牌详情页（2026-11-03 改版：CardUpgrade 弹窗整体换成详情页外观）----
+    // 卡牌详情页文案
     /** 底部页签两个状态的名字。 */
     detailTabInfo: '详情',
     detailTabLevel: '等级',

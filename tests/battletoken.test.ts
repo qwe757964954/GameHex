@@ -47,12 +47,8 @@ import {
     btSpriteType,
     qualityFrameLevel,
     qualityFrameName,
-} from '../assets/script/app/battletoken/BattleTokenArt';
+    } from '../assets/script/app/battletoken/BattleTokenArt';
 import {
-    BT_BUY_BTN_H,
-    BT_BUY_BTN_W,
-    BT_BUY_ROW_H,
-    BT_BUY_ROW_W,
     BT_CFG_LEVEL_UP_COST,
     BT_CFG_MAX_LEVEL,
     BT_CFG_RESET_COST,
@@ -73,8 +69,6 @@ import {
     BT_TYPE_SIGN_IN,
     artKeyOf,
     buildLevelRows,
-    buyButtonLayout,
-    buyButtonPos,
     configNum,
     countdownText,
     currentClaimLv,
@@ -104,6 +98,14 @@ import {
     tabIndexOf,
     tabPageIndex,
 } from '../assets/script/app/battletoken/BattleTokenTable';
+import {
+    BT_BUY_BTN_H,
+    BT_BUY_BTN_W,
+    BT_BUY_ROW_H,
+    BT_BUY_ROW_W,
+    buyButtonLayout,
+    buyButtonPos,
+} from './fixtures/battletoken-buy-layout';
 import type { ILevelRow } from '../assets/script/app/battletoken/BattleTokenTable';
 import { BT_TEXTS, btCountdownText, btFormat, btMoneyText, btTabLabel, btUnlockHint } from '../assets/script/app/battletoken/BattleTokenTexts';
 import { qualityFrameLevel as sevenDayQualityFrameLevel } from '../assets/script/app/sevenDay/SevenDayArt';
@@ -954,7 +956,7 @@ test('prefab 存在，根节点是第一个 cc.Node 且 cc.Prefab.data 指向它
     assert.equal(PREFAB_NODES[0]!._parent as unknown, null, '根节点没有父节点');
     assert.deepEqual(transformOf('BattleToken'), { w: 720, h: 1280, ax: 0.5, ay: 0.5 });
     // 100 个节点是「4 页签共用一套内容 + 2 个列表模板」的结果，数量变了先确认结构
-    assert.equal(PREFAB_NODES.length, 100);
+    assert.equal(PREFAB_NODES.length, 102);
 });
 
 test('⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
@@ -1470,10 +1472,9 @@ test('⚠️ 经验条：`BarFill` 必须是 anchor (0,0.5) + `x = −totalLengt
 
 test('购买行：三个按钮的位置 / 尺寸 / 位置随「两个·三个」切换（`buyButtonPos` 与 prefab 同结果）', () => {
     for (const [name, index] of [['Plan1', 0], ['Plan2', 1], ['Plan3', 2]] as const) {
-        const path = `BattleToken/PageRoot/BuyRow/${name}`;
-        const pos = buyButtonPos(true, index)!;
+        const path = `BattleToken/PageRoot/BuyRow/PlansThree/${name}`;
         const own = node(path)._lpos as { x: number; y: number };
-        assert.deepEqual([own.x, own.y], [pos.x, pos.y], `${name} 的节点坐标与 buyButtonPos(true,${index}) 不符`);
+        assert.deepEqual([own.x, own.y], [0, 0], `${name} 的坐标由 PlansThree 的 Layout 接管`);
         assert.deepEqual([transformOf(path).w, transformOf(path).h], [BT_BUY_BTN_W, BT_BUY_BTN_H]);
         // 按钮底图 + 可点 Button + 脚本三件齐全
         assert.equal(compOfType(path, 'cc.Button')._transition, 3, '按钮用 SCALE 过渡');
@@ -1604,14 +1605,25 @@ test('购买战令：Open 回包 ret=true 后必须继续走 `FW.pay(payChannelI
     assert.match(page, /openPlan\(resId, payChannelId, this\)/);
 });
 
-test('长屏布局：页头贴顶、底栏贴底，多出的高度全部给面板和列表', () => {
+test('长屏布局：面板与底栏由 prefab Widget 适配，代码不再重算尺寸/位置', () => {
     const page = src('BattleTokenPage.ts');
-    assert.match(page, /this\._applyScreenLayout\(\);/);
-    assert.match(page, /parentTransform\?\.contentSize\.height/);
-    assert.match(page, /this\.pageRoot\.setPosition\(0, extra \/ 2/);
-    assert.match(page, /PANEL_BASE_HEIGHT \+ extra/);
-    assert.match(page, /LIST_BASE_HEIGHT \+ extra/);
-    assert.match(page, /const bottomOffset = -extra \/ 2/);
+    assert.doesNotMatch(page, /_applyScreenLayout/);
+    assert.doesNotMatch(page, /parentTransform\?\.contentSize\.height/);
+    assert.doesNotMatch(page, /PANEL_BASE_HEIGHT|LIST_BASE_HEIGHT|DESIGN_HEIGHT/);
+
+    const expectWidget = (path: string, flags: number, values: Record<string, number>): void => {
+        const widget = compOfType(path, 'cc.Widget');
+        assert.equal(widget._alignFlags, flags, `${path} alignFlags`);
+        for (const [key, value] of Object.entries(values)) {
+            assert.equal(widget[`_${key}`], value, `${path}.${key}`);
+        }
+    };
+    expectWidget('BattleToken/PageRoot/PanelBg', 21, { top: 413, bottom: 127, horizontalCenter: 0 });
+    expectWidget('BattleToken/PageRoot/ListView3', 21, { top: 517, bottom: 183, horizontalCenter: 4 });
+    expectWidget('BattleToken/PageRoot/ListView2', 21, { top: 515, bottom: 183, horizontalCenter: 4 });
+    expectWidget('BattleToken/BottomBar', 20, { bottom: -8, horizontalCenter: 1 });
+    expectWidget('BattleToken/BackBtn', 20, { bottom: -8, horizontalCenter: -297.5 });
+    expectWidget('BattleToken/TabBar', 20, { bottom: 0, horizontalCenter: 120 });
 
     const pageScript = compOfType('BattleToken', scriptCid('assets/script/app/battletoken/BattleTokenPage.ts'));
     for (const key of ['pageRoot', 'panelBg', 'bottomBar', 'tabBar']) {

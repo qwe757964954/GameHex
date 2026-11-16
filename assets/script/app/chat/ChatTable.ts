@@ -421,65 +421,6 @@ export function fallbackStageName(chapter: number): string {
     return `第${chapter % 10000}层`;
 }
 
-/** 招募项里一个可动件的目标位置（Cocos 局部坐标：**相对父节点中心、y 向上**）。 */
-export interface IPoint {
-    readonly x: number;
-    readonly y: number;
-}
-
-/** 招募项的「自己 / 别人」两档版面。 */
-export interface IRecruitLayout {
-    /** 底板 `n69`。 */
-    readonly background: IPoint;
-    /** 头像框 `com_head`。 */
-    readonly head: IPoint;
-    /** 玩家名。 */
-    readonly name: IPoint;
-    /** `InfoGroup`（关卡名 / 宣言 / 战力 / 加入按钮 的容器）。 */
-    readonly infoGroup: IPoint;
-    /** 玩家名的水平对齐（老端 `tf.align = isSelf ? RIGHT : LEFT`）。 */
-    readonly nameAlign: 'left' | 'right';
-}
-
-/**
- * 招募项的版面 = FGUI `组件_聊天_招募项.xml` 的 `自己` 控制器
- * （4 处 `gearXY`，两档值逐字照抄）。
- *
- * ## 换算口径（父框 530×259，父中心 = (265, 129.5)）
- *
- * `pos.x = 子中心x − 265`、`pos.y = 129.5 − 子中心y`；子中心 = FGUI 的 `xy` **左上角** + size/2
- * （本组件的 5 个元素都**没有** `anchor="true"` ⇒ `xy` 是左上角，`pivot` 只影响旋转轴心）。
- *
- * | 元素 | 默认(别人) xy · size | 自己档 gearXY | 默认 pos | 自己 pos |
- * |---|---|---|---|---|
- * | `n69` 底板 | (117,31) 420×229 | `-6,31` | (62, -16) | (-61, -16) |
- * | `com_head` | (6,43) 110×110 | `412,43` | (-204, 31.5) | (202, 31.5) |
- * | 玩家名 | (126,4) 84×29 | `326,4` | (-97, 111) | (103, 111) |
- * | `group n77` | (189,44) 301×161 | `64,44` | (74.5, 5) | (-50.5, 5) |
- *
- * ⚠️ `group n77` 的 `gearXY` 是**作用在组上**的 —— 组内 4 件（关卡名 / 宣言 / 战力 / 按钮）
- *    坐标**不变**，整体跟着组走。这也正是可可节点树里把 4 件挂到 `InfoGroup` 下的原因。
- * ⚠️ 与 `FriendTable.rowGroupPosition` 同一处置：**样式在 prefab、随状态变的位置进这张表**
- *    （代码里 `setPosition` 覆盖 prefab 的默认值，prefab 存的就是「别人」那一档）。
- */
-export function recruitLayout(isSelf: boolean): IRecruitLayout {
-    return isSelf
-        ? {
-            background: { x: -61, y: -16 },
-            head: { x: 202, y: 31.5 },
-            name: { x: 103, y: 111 },
-            infoGroup: { x: -50.5, y: 5 },
-            nameAlign: 'right',
-        }
-        : {
-            background: { x: 62, y: -16 },
-            head: { x: -204, y: 31.5 },
-            name: { x: -97, y: 111 },
-            infoGroup: { x: 74.5, y: 5 },
-            nameAlign: 'left',
-        };
-}
-
 // ⚠️ 招募项 **`InfoGroup` 组内**的 4 件（关卡名 / 宣言 / 战力 / 加入按钮）是**静态**的
 //    （FGUI 只对「组」下 gearXY，组内不做位移）⇒ 它们的坐标**写在 prefab 里**，
 //    本文件不表达。反解口径（组中心 = FGUI (339.5, 124.5)）：

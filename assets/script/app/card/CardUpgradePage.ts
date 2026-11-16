@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Color, Label, Node, Prefab, Sprite, SpriteFrame, Widget } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
@@ -206,9 +206,15 @@ export class CardUpgradePage extends PopupBase {
     @property({ group: '材料状态色', type: Color, tooltip: '「升级增加全队暴击伤害」文案的颜色' })
     critColor: Color = new Color(97, 19, 4, 255);
 
+    @property({ group: '技能格', tooltip: '首格激活样式下角标的左偏移；普通态取 prefab 现值' })
+    activeBadgeLeft = 75.8;
+
     private chain: CardDetailPresentation['chain'] = [];
 
     private milestones: CardDetailPresentation['milestones'] = [];
+
+    /** 技能格角标普通态左偏移：首次渲染时从 prefab 读取，切回普通态时复用。 */
+    private readonly normalBadgeLeft = new Map<Widget, number>();
 
     /** 升到下一级新增的全队暴击伤害（百分点）；0 = 不显示那条文案。 */
     private critDamageGain = 0;
@@ -333,9 +339,7 @@ export class CardUpgradePage extends PopupBase {
         return !!this.node && this.node.isValid;
     }
 
-    // ------------------------------------------------------------------
-    // 头部：名字 / 品质 / 种族职业 / 立绘 / 战力
-    // ------------------------------------------------------------------
+    // 头部：名字、品质、种族职业、立绘、战力。
 
     private renderHeader(data: ICardUpgradeViewState): void {
         const card = data.data.card;
@@ -383,9 +387,7 @@ export class CardUpgradePage extends PopupBase {
         }).catch(error => { if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 待机预览加载失败', error); });
     }
 
-    // ------------------------------------------------------------------
-    // 详情区：六维 / 技能链 / 里程碑
-    // ------------------------------------------------------------------
+    // 详情区：六维、技能链、里程碑。
 
     private renderDetail(detail: CardDetailPresentation | null): void {
         if (!detail) {
@@ -445,11 +447,12 @@ export class CardUpgradePage extends PopupBase {
         slot.namePlateTransform.setContentSize(activeStyle ? 68 : 72, activeStyle ? 31 : 35);
         const badgeSize = activeStyle ? 32.4 : 36;
         slot.badgeTransform.setContentSize(badgeSize, badgeSize);
-        slot.badgeWidget.left = activeStyle ? 75.8 : 73;
+        const normalLeft = this.normalBadgeLeft.get(slot.badgeWidget) ?? slot.badgeWidget.left;
+        this.normalBadgeLeft.set(slot.badgeWidget, normalLeft);
+        slot.badgeWidget.left = activeStyle ? this.activeBadgeLeft : normalLeft;
         slot.badgeWidget.updateAlignment();
         slot.interactable = configured;
-        //  技能图标暂时都共用 `skillArt` 里烘焙的那张图：首格不再单独隐藏（2026-11-11 需求），
-        //  等每个技能都有专属图标后再按 `data.skillId` 换图。
+        // 技能图标暂时共用 skillArt 里烘焙的图，等每个技能有专属图标后再按 skillId 换图。
         slot.skillArt.node.active = true;
         slot.lockRoot.active = !unlocked;
         slot.namePlate.node.active = unlocked;
@@ -483,9 +486,7 @@ export class CardUpgradePage extends PopupBase {
         ]);
     }
 
-    // ------------------------------------------------------------------
-    // 固定底栏：原升级判定与提示语义保持不变
-    // ------------------------------------------------------------------
+    // 固定底栏：升级判定与提示语义保持不变。
 
     /** 把判定结果铺到升级面板（这是升级侧唯一的写 UI 入口）。 */
     private renderStatus(status: ZCUpgradeStatus, phase: CardUpgradePhase): void {
@@ -561,8 +562,7 @@ export class CardUpgradePage extends PopupBase {
             this.setUpgradeEnabled(status.canUpgrade);
             return;
         }
-        //  这一栏常态显示「升级增加全队暴击伤害」：材料不足已经由按钮置灰 + 材料数字变红表达，
-        //  不再让红字提示和奖励文案抢同一行（2026-11-10 需求）。
+        // 这一栏常态显示升级增加的全队暴击伤害；材料不足已由按钮置灰和材料数字变红表达。
         this.hintLabel.string = this.critDamageText();
         this.hintLabel.color = this.critColor;
         //  材料不足（canUpgrade = false）时按钮置灰：交互态与灰态只有一个入口，避免两者说法不一致。

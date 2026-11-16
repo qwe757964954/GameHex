@@ -13,7 +13,6 @@
  *避免「按钮灰着但不知道为啥」。
  */
 import {
-    BigMapCityLayer,
     type BigMapCityState,
     type IBigMapBuildingConfig,
     type IBigMapCityConfig,
@@ -184,14 +183,4 @@ export function bigMapWithinCityRange(
 ): boolean {
     if (playerCampId > 0) return city.cityId === playerCampId;
     return hexDistance <= city.radiateCapacity;
-}
-
-/** 城池层级的展示名（线框图左上角标签用）。 */
-export function bigMapCityLayerName(layer: BigMapCityLayer): string {
-    switch (layer) {
-        case BigMapCityLayer.Legion: return '军团';
-        case BigMapCityLayer.WarAlliance: return '战盟';
-        case BigMapCityLayer.Throne: return '王座';
-        default: return '个人';
-    }
 }

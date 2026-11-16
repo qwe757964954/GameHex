@@ -205,10 +205,10 @@ export class GMCommandTable {
     /**
      * 执行一条指令。
      * 命中本地处理器 → 本地执行；否则发往游戏服（CmdSystemGmReqMsg）。
-     * @returns 是否被本地处理器接管
+     * @returns 是否有指令被处理（本地执行或已交给服务器）
      */
     static async execute(text: string): Promise<boolean> {
-        const trimmed = (text ?? '').trim();
+        const trimmed = text.trim();
         if (!trimmed) return false;
         GMCommandTable.lastInput = trimmed;
 

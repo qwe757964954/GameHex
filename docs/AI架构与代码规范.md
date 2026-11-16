@@ -255,7 +255,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 1. 运行 `tools/config`：将 Excel 导出为 `json`、`remoteRef` 与 `refGen` 类型定义。
 2. 运行 `tools/ref`：将产物同步至工程目录并执行引用守卫检查。
 3. 运行 `python tools/pvp_card_check.py`：逐行校验卡表中每个 `unitPrefabPath` 对应的 `assets/resources/<unitPrefabPath>.prefab` 真实存在（在编译/提交期拦截，避免等到运行时才报 `Bundle resources doesn't contain ...`）。
-4. 产物落地后，通过 Cocos MCP 刷新 `db://assets/remoteRef`。
+4. 产物落地后，通过 Funplay Cocos MCP 刷新 `db://assets/remoteRef`。
 
 ### 7.3.2 美术碎图自动图集（`auto-atlas.pac`）与单位资源规范
 1. **自动图集（`auto-atlas.pac`）拓扑铁律**：

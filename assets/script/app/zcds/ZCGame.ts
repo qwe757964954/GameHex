@@ -435,6 +435,7 @@ export class ZCGame extends Component {
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。
             spawnRegionFrames: prepared.spawnRegionFrames,
+            spawnRegionHintPrefab: prepared.spawnRegionHintPrefab,
             // 金币粒子落点 = 整个 CoinPanel 面板（不是 GoldLabel / coin 子图标）。
             coinPanelNode: this.hudView.coinPanel,
             artifactButtonNode: this.hudView.artifactButton.node,

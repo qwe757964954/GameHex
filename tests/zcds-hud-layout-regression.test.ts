@@ -79,13 +79,15 @@ test('Score 自身绘制九宫格底图，并按领先状态改变真实尺寸',
     };
     // `render` 现在还会读 `value.node.scale`（数字弹跳），给 Value 一个独立节点桩。
     slot.value = {
-        enabled: true, string: '', fontSize: 28, lineHeight: 39, isBold: false,
+        enabled: true, string: '', fontSize: 32, lineHeight: 39, isBold: false,
         node: {
             scale: { x: 1, y: 1, z: 1 },
             setScale(x: number, y?: number, z?: number) { this.scale = { x, y: y ?? x, z: z ?? 1 }; },
         },
     };
     slot.cross = { enabled: false };
+    // 普通尺寸 / 字号来自 prefab：onLoad 从节点 UITransform 与 Value Label 读。
+    (slot as unknown as { onLoad(): void }).onLoad();
     //  render 无返回值；尺寸每次都重设（setContentSize 幂等）。
     slot.render({ value: 7, finished: false, leading: true });
     assert.deepEqual([rect.width, rect.height, slot.value.string], [110, 77, '7']);

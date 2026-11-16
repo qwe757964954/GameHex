@@ -1,15 +1,13 @@
 import { RequestStartBattle, RequestFinishBattle } from '../generated/requestMsg/RequestBattleMsg';
 import { GameNet } from '../net/GameNet';
-import { withTimeout } from '../net/RequestGuard';
-import { toCount } from '../net/RequestGuard';
+import { toCount, withTimeout } from '../net/RequestGuard';
 import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
 import type { ZCBattleStart } from './BattleStartModel';
 
 /**
- * 「开始游戏」网络层（数据模型与校验见 `BattleStartModel`）。
- * 对应 `CmdStartBattleReqMsg` / `CmdStartBattleRspMsg`。
- * 载荷必须嵌在 `startBattleInfo` 里：`{ startBattleInfo: { battleType, battleParams } }`。
- * 本层永远兑现、不 reject；拿不到数据返回 `null`，正式入口必须终止本次开战。
+ * 开始战斗网络层。载荷必须放在 startBattleInfo 里：
+ * { startBattleInfo: { battleType, battleParams } }。
+ * 本层永远兑现、不 reject；拿不到数据返回 null，正式入口据此终止开战。
  */
 
 /** 开始游戏请求硬超时（毫秒）。 */
@@ -124,9 +122,9 @@ async function sendStartBattle(
     return result;
 }
 
-// ==================== 完成战斗上报 ====================
+// 完成战斗上报
 
-/** 对局胜负上报结果（`CmdFinishBattleReqMsg.result`：1胜 2负）。 */
+/** 对局胜负上报结果：1 胜、2 负。 */
 export const BATTLE_RESULT_WIN = 1;
 export const BATTLE_RESULT_LOSE = 2;
 
@@ -134,12 +132,8 @@ export const BATTLE_RESULT_LOSE = 2;
 export const BATTLE_FINISH_TIMEOUT_MS = 3000;
 
 /**
- * 完成战斗响应。
- *
- * ⚠️ 2026-09-24 协议同步：`CmdFinishBattleRspMsg` 已**收敛为单字段 `code`**
- * （原 `addScore` / `newGrade` / `newScore` 三个字段已从后端 proto 删除）。
- * 段位 / 积分等结算数据改由**广播** `CmdBattleResultBroMsg.dataBytes` 下发
- * （1001 -> `CmdPveBattleResultInfo`），不再走这条回包。
+ * 完成战斗响应。协议已收敛为单字段 code；段位和积分改由
+ * CmdBattleResultBroMsg 广播下发，不再走这条回包。
  */
 export interface ZCBattleFinish {
     readonly code: number;

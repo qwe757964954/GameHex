@@ -17,7 +17,7 @@ export interface IBigMapPlayerLevelReward {
     readonly amount: number;
 }
 
-/** 弹窗内容。全部由 Presenter 的纯规则算出，视图只负责写节点。 */
+/** 弹窗内容。全部由 Controller 的纯规则算出，视图只负责写节点。 */
 export interface IBigMapPlayerLevelContent {
     /** 标题木牌：据点名（服务端暂不下发对手昵称，见 `TerritoryModel.playerStageContent`）。 */
     readonly title: string;
@@ -39,15 +39,15 @@ export interface IBigMapPlayerLevelContent {
  * 资产名沿用设计稿（蓝湖「玩家关卡」，`ui/territory/BigMapPlayerLevelPanel.prefab`），
  * 类名与 prefab 同名便于对照；归属是领地页，所以代码放在 `app/territory/view`。
  *
- * ## 为什么不是 `BigMapTargetPanel`
+ * 不复用 `BigMapTargetPanel`
  *
  * 后者是「三行文字 + 一颗开战按钮」的通用关卡弹窗（`BigMapLevelInfoPanel` 在用）；
  * 这个面板是**玩家据点专用**结构：标题木牌 + 两条占领奖励（第二条是图标格）+ 侦查/开战双按钮，
  * 两个按钮**各带一份货币消耗**。硬塞进通用组件会把它的字段撑成一半永远用不上。
  *
- * ## 交互：只派发意图，不收回调
+ * 交互：只派发意图，不收回调
  *
- * 按钮点击一律在本节点上 `emit`（`TERRITORY_EVENTS`），页面订阅后转给 Presenter。
+ * 按钮点击一律在本节点上 `emit`（`TERRITORY_EVENTS`），页面订阅后转给 Controller。
  * 这是 `docs/AI架构与代码规范.md` §2.1 的口径 —— 视图不持有控制器入口，
  * 漏传回调不会变成「点了没反应且零报错」。
  */
@@ -116,7 +116,7 @@ export class BigMapPlayerLevelPanel extends Component {
     /**
      * 绑一次交互并做屏幕适配；重复调用无副作用（页面在 `onLoad` 里调一次）。
      *
-     * `costIcon` 是**体力**图标（2026-11-04 山猫：「这里是扣体力不是扣银币」）：
+     * `costIcon` 是**体力**图标「这里是扣体力不是扣银币」：
      * 弹窗自己不解表（避免视图里出现配置读取），由页面加载后注入。
      */
     initialize(width: number, height: number, costIcon: SpriteFrame | null): void {
@@ -202,7 +202,7 @@ export class BigMapPlayerLevelPanel extends Component {
         const has = Number.isFinite(cost) && cost > 0;
         label.string = has ? String(Math.round(cost)) : '';
         root.active = has;
-        // ⚠️ `CostIcon` 是按钮的**直接子节点**（与 `CostBg` / `CostLabel` 平级），
+        // `CostIcon` 是按钮的**直接子节点**（与 `CostBg` / `CostLabel` 平级），
         // 不跟着 `CostBg` 一起关 ⇒ 少了这行会留一颗没有数字的体力图标挂在按钮上。
         // 帧还没加载到（`null`）时只少一颗图标，数字照常显示。
         icon.node.active = has && icon.spriteFrame !== null;

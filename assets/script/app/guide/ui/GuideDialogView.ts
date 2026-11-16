@@ -1,25 +1,8 @@
 /**
- * 引导对话条 + 角色立绘（View 层，挂在 `GuideDialog.prefab` 根节点上）。
- *
- * ## 与 Controller 的契约
- *
- * Controller 只交状态（`IGuideViewState`），本类负责：
- *   ① 按 `dialogId` 找台词组并逐句播放；
- *   ② 按说话人切立绘；
- *   ③ 台词播完、且本步 `completeCond === 'click'` 时，经事件报告推进意图。
- *
- * 立绘帧**由外部注入**（`initialize`），View 不自己 load —— 与 `ZCGuideItem` 的口径一致：
- * 表现层不碰资源管线，加载归属 application。
- *
- * ## 逐句 vs 整组
- *
- * 设计案注①写「整组算 1 次点击」，但一组有 3 句（最长 38 字），一次点击全播完等于玩家没得看。
- * 这里按**逐句点击**实现：点一次下一句，最后一句再点才报告推进意图。
- * 步的 `completeCond` 仍是 `click`，语义不变，只是点击次数变多。
- *
- * ## 立绘缺失
- *
- * 没交图的角色（当前是豌豆游侠）`portrait` 会隐藏，只显示台词，不报错也不留白框。
+ * 引导对话条和角色立绘，挂在 GuideDialog.prefab 根节点上。
+ * Controller 只交状态，本类负责按 dialogId 播台词、按说话人切立绘，
+ * 台词播完且 completeCond 为 click 时经事件报告推进意图。
+ * 立绘帧由外部注入，View 不自己 load。
  */
 
 import {
@@ -59,18 +42,7 @@ export interface IGuideFocusTarget {
 
 
 /**
- * 立绘显示高度（设计分辨率 720×1280，脚底贴屏幕底、头顶到约 y=+60）。
- *
- * 2026-11-13 真机反馈「太大」：940 时头顶到 +300、宽 647 几乎满宽，把对话条和背景全压住了。
- * 现在按 700 走（约 55% 屏高），静图与骨骼同一口径。
- */
-const PORTRAIT_HEIGHT = 700;
-
-/**
- * 单句无人点击时自动推进的秒数。
- *
- * 设计案「分步脚本」页每一行的「失败/兜底」列都写着「8s 无响应自动推进」——
- * 之前没实现，玩家不点就永久停在这一句（真机上表现为"引导卡死、点什么都没用"）。
+ * 单句无人点击时自动推进的秒数，对应设计案的 8s 无响应兜底。
  */
 const IDLE_ADVANCE_SECONDS = 8;
 
@@ -82,6 +54,9 @@ const HOLE_MASK_ALPHA = 100;
 export class GuideDialogView extends Component {
     @property({ type: Node, group: '立绘', tooltip: 'Portrait：角色立绘节点（锚点 0.5/0，脚底贴屏幕底部）' })
     portraitNode: Node = null!;
+
+    @property({ group: '立绘', tooltip: '立绘显示高度；宽度按原图比例计算' })
+    portraitHeight = 700;
 
     @property({ type: Node, group: '对话条', tooltip: 'DialogBox：底部对话条容器' })
     dialogBox: Node = null!;
@@ -115,11 +90,8 @@ export class GuideDialogView extends Component {
     private debugSkipAt = 0;
 
     /**
-     * 子组件缓存。
-     *
-     * 为什么绑 Node 再 `getComponent`：MCP 写 prefab 时 `cc.Sprite` / `cc.Label` 这类
-     * **组件引用**在序列化阶段会被丢掉（实测 2026-11-13：接口返回 success，存盘后是 `null`），
-     * 而 `Node` 引用能正确落盘。用 Node 绑 + 代码取组件，既不按名字查找，也不会静默丢引用。
+     * 子组件缓存。MCP 写 prefab 时组件引用可能在序列化阶段丢失，Node 引用能正常落盘，
+     * 所以这里绑 Node，再在 onLoad 里取组件，既不用按名字查找，也不会静默丢引用。
      */
     private portraitSprite: Sprite = null!;
     private nameText: Label = null!;
@@ -281,15 +253,19 @@ export class GuideDialogView extends Component {
             this.hostTransform.convertToNodeSpaceAR(this.focusEdgeWorld, this.focusCorner);
             const halfWidth = Math.abs(this.focusCorner.x - this.focusLocal.x);
             const halfHeight = Math.abs(this.focusCorner.y - this.focusLocal.y);
-            const limitX = this.hostTransform.width / 2 - halfWidth;
-            const limitY = this.hostTransform.height / 2 - halfHeight;
+            // 装饰框的留白可以越过边缘，控件本身仍完整可见（如贴底的英雄页签）。
+            const contentRatioX = target.shape === 'hex' ? 1 : transform.width / this.focusWidth;
+            const contentRatioY = target.shape === 'hex' ? 1 : transform.height / this.focusHeight;
+            const limitX = this.hostTransform.width / 2 - halfWidth * contentRatioX;
+            const limitY = this.hostTransform.height / 2 - halfHeight * contentRatioY;
             visible = halfWidth > 0 && halfHeight > 0 && Number.isFinite(this.focusLocal.x) && Number.isFinite(this.focusLocal.y)
                 && Math.abs(this.focusLocal.x) <= limitX && Math.abs(this.focusLocal.y) <= limitY;
             for (const clip of this.focusClips) {
                 clip.convertToNodeSpaceAR(this.focusWorld, this.clipCenter);
                 clip.convertToNodeSpaceAR(this.focusEdgeWorld, this.clipCorner);
                 const x = this.clipCenter.x, y = this.clipCenter.y;
-                const dx = Math.abs(this.clipCorner.x - x), dy = Math.abs(this.clipCorner.y - y);
+                const dx = Math.abs(this.clipCorner.x - x) * contentRatioX;
+                const dy = Math.abs(this.clipCorner.y - y) * contentRatioY;
                 if (x - dx < -clip.anchorX * clip.width || x + dx > (1 - clip.anchorX) * clip.width
                     || y - dy < -clip.anchorY * clip.height || y + dy > (1 - clip.anchorY) * clip.height) visible = false;
             }
@@ -351,11 +327,8 @@ export class GuideDialogView extends Component {
     }
 
     /**
-     * 点击区尺寸随遮罩类型切换（运行时数据，进不了 prefab）。
-     *
-     * 🔴 `hole` 步（翻地 2-1/3-1/4-1、解锁地块 7-1）要玩家去点**地图格子**，
-     * 点击区若保持全屏 720×1280 就会把所有点击吃掉 —— 表现就是「对话停在这一句、
-     * 点哪都没反应、像卡死」（2026-11-13 真机实锤）。
+     * 点击区尺寸随遮罩类型切换。hole 步要玩家点地图格子，点击区若保持全屏会把点击全吃掉，
+     * 表现为对话停住、点哪都没反应。
      */
     private layoutBlocker(maskType: GuideMaskType): void {
         const node = this.blockerNode;
@@ -409,7 +382,6 @@ export class GuideDialogView extends Component {
      * 点击推进由 completeCond 决定，通过带实例和步骤作用域的事件报告。
      */
     render(state: IGuideViewState): void {
-
         if (state.finished) {
             this.hide();
             return;
@@ -432,9 +404,8 @@ export class GuideDialogView extends Component {
         }
         this.applyMaskStyle(state.maskType);
         this.applyHints(state);
-        // 🔴 判据是 `completeCond === 'click'`，不是 `requireAction`。
-        //    `requireAction` 只说"玩家要做一个点击动作"（可能点的是地块/「收下」按钮）；
-        //    拿它当"点对话条就推进"会让 2-1（tileFlipped）被误推、2-2（popupClosed）永远推不动。
+        // 判据是 completeCond === 'click'，不是 requireAction。
+        // requireAction 只说玩家要做一个动作，拿它当「点对话条就推进」会误推带参步。
         this.canAdvance = state.completeCond === 'click';
 
         if (this.queue.length === 0) {
@@ -462,9 +433,7 @@ export class GuideDialogView extends Component {
         this.focusTransform = null;
     }
 
-    
     // 内部实现
-    
 
     /** 点击：先逐句推进，最后一句再点才报告推进意图。 */
     private onTap(): void {
@@ -487,10 +456,9 @@ export class GuideDialogView extends Component {
         this.nameText.string = line.speaker;
         this.contentText.string = formatGuideContent(line.content);
         this.applyPortrait(line.speaker);
-        // 日志必须报**实际显示状态**，不是「有没有配资源」：
-        // hole 步会刻意不显示立绘（立绘会罩住焦点地块），旧写法在那里恒打「有」，非常误导。
-        const portraitShown = (this.portraitNode?.active ?? false)
-            && (!!this.portraitSprite?.spriteFrame || this.npcNode?.active === true);
+        // 日志报实际显示状态：hole 步会刻意藏立绘。
+        const portraitShown = this.portraitNode.active
+            && (!!this.portraitSprite.spriteFrame || this.npcNode?.active === true);
         console.log(`[GuideDialog] 播 ${line.id} · ${line.speaker} · 立绘=${portraitShown ? '显示' : '隐藏'} · ${line.content.length} 字`);
         this.armIdleTimer();
     }
@@ -516,73 +484,58 @@ export class GuideDialogView extends Component {
     };
 
     /**
-     * 切换立绘。两种来源：
-     *   · 静图（埃莉斯）→ 换 `SpriteFrame` 并按 `PORTRAIT_HEIGHT` 等比设尺寸；
-     *   · 骨骼（豌豆游侠）→ 实例化战场那份 `skel/豌豆射手`，播它自带的 `idle`，
-     *     首次建好后只切 `active`（不重复 instantiate）。
-     * 未登记 / 加载失败 ⇒ 两个都藏起来，不留白框。
+     * 切换立绘。静图换 SpriteFrame 并按 portraitHeight 等比设尺寸；
+     * 骨骼实例化一次后只切 active；未登记或加载失败时两个都藏起来。
      */
     private applyPortrait(speaker: string): void {
         const portrait = getGuidePortraitAsset(speaker);
         const sprite = this.portraitSprite;
 
-        // 🔴 hole 步（2-1/3-1/4-1/5-1/7-1）**不显示立绘**。
-        //    立绘是 650×940 竖图，落点 y ∈ [-640, 300]，正好把屏幕中部的焦点地块整个罩住 ——
-        //    玩家既看不见呼吸光圈、也点不准那块地。设计案这几步的焦点写的就是「地图上的地块」，
-        //    本来就没有立绘。玩家看「名字 + 台词」就够知道谁在说话。
+        // hole 步不显示立绘，立绘会罩住屏幕中部的焦点地块。
         if (this.currentMaskType === 'hole' || this.focusKey) {
-            if (sprite) {
-                sprite.spriteFrame = null;
-                sprite.node.active = false;
-            }
-            if (this.npcNode) this.npcNode.active = false;
+            this.hidePortrait();
             return;
         }
 
         const loaded = portrait ? this.frames.get(portrait.asset) ?? null : null;
 
         if (!portrait || !loaded) {
-            if (sprite) {
-                sprite.spriteFrame = null;
-                sprite.node.active = false;
-            }
-            if (this.npcNode) this.npcNode.active = false;
+            this.hidePortrait();
             return;
         }
 
         if (portrait.kind === 'sprite') {
             if (this.npcNode) this.npcNode.active = false;
-            if (!sprite) return;
             const frame = loaded as SpriteFrame;
             sprite.node.active = true;
             sprite.spriteFrame = frame;
-            // 尺寸由代码统一控制 ⇒ CUSTOM；TRIMMED 会在换图时把节点拉回原图尺寸
+            // 尺寸由代码统一控制，必须用 CUSTOM；TRIMMED 会在换图时把节点拉回原图尺寸。
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             const raw = frame.originalSize;
-            const width = raw.height > 0 ? Math.round(raw.width * (PORTRAIT_HEIGHT / raw.height)) : raw.width;
-            this.setNodeSize(sprite.node, width, PORTRAIT_HEIGHT);
+            const width = raw.height > 0 ? Math.round(raw.width * (this.portraitHeight / raw.height)) : raw.width;
+            this.setNodeSize(sprite.node, width, this.portraitHeight);
             return;
         }
 
-        // 骨骼：藏掉静图，挂上/显示骨骼节点
-        if (sprite) {
-            sprite.spriteFrame = null;
-            sprite.node.active = false;
-        }
+        sprite.spriteFrame = null;
+        sprite.node.active = false;
         const npc = this.ensureNpc(loaded as Prefab);
-        if (npc) npc.active = true;
+        npc.active = true;
+    }
+
+    private hidePortrait(): void {
+        this.portraitSprite.spriteFrame = null;
+        this.portraitSprite.node.active = false;
+        if (this.npcNode) this.npcNode.active = false;
     }
 
     /**
-     * 建骨骼立绘（只建一次）。
-     *
-     * 缩放按骨骼的 `UITransform.height` 反推到 `PORTRAIT_HEIGHT`；拿不到高度就按 1 处理并告警
-     * （宁可小也不能因为猜错比例把整屏糊满）。
+     * 建骨骼立绘，只建一次。缩放按骨骼 UITransform 高度反推到 portraitHeight，
+     * 拿不到高度时按 1 处理并告警。
      */
-    private ensureNpc(prefab: Prefab): Node | null {
+    private ensureNpc(prefab: Prefab): Node {
         if (this.npcNode) return this.npcNode;
         const host = this.portraitNode;
-        if (!host) return null;
 
         const node = instantiate(prefab);
         // 骨骼 prefab 的 layer 可能是 DEFAULT，UI 相机不认；跟着宿主走最稳。
@@ -593,7 +546,7 @@ export class GuideDialogView extends Component {
         const transform = node.getComponent(UITransform);
         const rawHeight = transform ? transform.height : 0;
         if (rawHeight > 0) {
-            const scale = PORTRAIT_HEIGHT / rawHeight;
+            const scale = this.portraitHeight / rawHeight;
             node.setScale(scale, scale, 1);
             console.log(`[GuideDialog] 骨骼立绘 ${prefab.name} · 原始高 ${rawHeight} · scale ${scale.toFixed(2)}`);
         } else {

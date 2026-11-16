@@ -51,16 +51,10 @@ export class LoginRoot {
     private authenticated = false;
 
     // ---- 状态查询 ----
-    get isBusy(): boolean { return this.busy; }
     get isDisposed(): boolean { return this.disposed; }
-    get gameConfig_(): GameConfig | null { return this.gameConfig; }
     get servers_(): ServerInfoData[] { return this.servers; }
     get selectedServerId_(): number | null { return this.selectedServerId; }
     get recentServerIds_(): number[] { return this.recentServerIds; }
-    get version_(): string { return this.versionConfig.version; }
-    get channel_(): string { return this.gameConfig?.channel ?? ''; }
-    get channelCode_(): string { return String(this.gameConfig?.channelCode ?? ''); }
-    get isWss_(): boolean { return !!this.gameConfig?.isWss; }
     /** 是否有已保存的登录会话（用于自动登录判断） */
     get hasSavedSession_(): boolean { return !!sys.localStorage.getItem('login_session'); }
 

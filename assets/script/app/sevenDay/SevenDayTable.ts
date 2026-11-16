@@ -553,14 +553,8 @@ export function isDayUnlocked(day: number, curDay: number): boolean {
 /**
  * 某一天是否有红点（老端 `ModelSevenday.hasRedDot(day)`）。
  *
- * ⚠️ **未开启的天不亮**（2026-09-28 修）：老端循环里有三条硬过滤 ——
- * `ref.days == day` / `ref.days <= curDay` / `rewardState == FINISH`。
- * 本端原先漏了中间那条 ⇒ 服务端把未来天的任务也标成 `FINISH` 时（它确实会这么给），
- * 「第 5 天」这种还没开启的按钮就亮红点了。判据：`tests/seven-day.test.ts` A5。
- *
- * ⚠️ 老端宝箱那段有个**没生效的 bug**：`ids.findIndex(t => { t == ref.resId })`
- * 回调忘了 `return`，恒返回 `-1`，于是「已领取的宝箱」也会被算成未领取
- * （那是 `boxHasRedDot` 的路径，与这里无关）。本端按**正确语义**来（领过就不算）。
+ * 只统计已解锁的天，且只认服务端的 `FINISH` 状态；未来天即使被服务端标成
+ * `FINISH` 也不亮红点。
  */
 export function dayHasRedDot(
     tasks: readonly ISevenDayTaskRow[],
@@ -577,25 +571,15 @@ export function dayHasRedDot(
     return false;
 }
 
-/** 宝箱区是否有红点。 */
-export function boxHasRedDot(
-    boxes: readonly ISevenDayPointRow[],
-    state: ISevenDayServerState = EMPTY_SEVEN_DAY_STATE,
-): boolean {
-    for (const box of boxes) {
-        if (boxStateOf(box, state) === 'claimable') return true;
-    }
-    return false;
-}
-
-/** 整个活动是否有红点（天数按钮的汇总红点）。 */
-export function anyDayHasRedDot(
+/** 某一天是否有红点（老端 `ModelSevenday.hasRedDot(day)`）。
     tasks: readonly ISevenDayTaskRow[],
+    day: number,
     curDay: number,
     state: ISevenDayServerState = EMPTY_SEVEN_DAY_STATE,
 ): boolean {
+    if (day > curDay) return false;                  // 老端 `if (ref.days > curDay) continue;`
     for (const task of tasks) {
-        if (task.days > curDay) continue;
+        if (task.days !== day) continue;
         const server = state.tasks.get(task.resId);
         if (server && server.rewardState === SEVEN_DAY_STATE_FINISH) return true;
     }
@@ -636,14 +620,4 @@ export function discountText(discount: number, template: string): string {
 /** 天数按钮文案：`第1天`。 */
 export function dayLabelOf(day: number, prefix: string, suffix: string): string {
     return `${prefix}${day}${suffix}`;
-}
-
-/**
- * `param.count` 与 `targetType` 拼出「当前/目标」以外的兜底文案。
- *
- * 现在只有「通关类特殊、其余走 `taskProgress`」两条路，这个函数留给以后
- * 补别的特殊 `targetType` 时用 —— 保持单一出口，别在界面里写 `if`。
- */
-export function isSpecialProgressTarget(targetType: number): boolean {
-    return targetType === SEVEN_DAY_TARGET_FIGHT;
 }

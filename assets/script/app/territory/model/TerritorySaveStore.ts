@@ -84,8 +84,8 @@ function timestampRecord(value: unknown): Record<string, number> {
 /**
  * 领地本地存档。
  *
- *  服务端领地协议接入后只需替换这一层。localStorage 不可用（隐私模式 / 禁 cookie）时
- *  退回进程内 Map，本次会话不丢存档，但不会跨启动保留。
+ * 服务端领地协议接入后只需替换这一层。localStorage 不可用（隐私模式 / 禁 cookie）时
+ * 退回进程内 Map，本次会话不丢存档，但不会跨启动保留。
  */
 export class TerritorySaveStore {
     /** localStorage 不可用时的内存兜底；归属本类，不泄漏到模块作用域。 */
@@ -106,12 +106,7 @@ export class TerritorySaveStore {
 
     loadLastChapter(availableChapters: readonly number[], fallback = 1): number {
         const key = `${TERRITORY_LAST_CHAPTER_KEY}.${this.namespace}`;
-        let raw: string | null = null;
-        try {
-            raw = TerritorySaveStore.memoryFallback.get(key) ?? this.storage?.getItem(key) ?? null;
-        } catch {
-            raw = TerritorySaveStore.memoryFallback.get(key) ?? null;
-        }
+        const raw = this.readRaw(key);
         const chapterId = Math.max(1, Math.floor(Number(raw)));
         return availableChapters.includes(chapterId) ? chapterId : fallback;
     }
@@ -163,12 +158,7 @@ export class TerritorySaveStore {
         walletSeed: TerritoryWallet = { silver: 0, stamina: 0 },
     ): TerritoryChapterSave {
         const key = this.key(chapterId);
-        let raw: string | null = null;
-        try {
-            raw = TerritorySaveStore.memoryFallback.get(key) ?? this.storage?.getItem(key) ?? null;
-        } catch {
-            raw = TerritorySaveStore.memoryFallback.get(key) ?? null;
-        }
+        const raw = this.readRaw(key);
         if (raw) {
             try {
                 const parsed = JSON.parse(raw) as Partial<TerritoryChapterSave>;
@@ -272,9 +262,6 @@ export class TerritorySaveStore {
         const save = source ? clone(source) : this.load(chapterId);
         const silverCost = amount(request.silverCost);
         const staminaCost = amount(request.staminaCost);
-        // if (save.wallet.silver < silverCost) {
-        //     return { ok: false, reason: TERRITORY_TEXTS.silverNotEnough, save };
-        // }
         if (save.wallet.stamina < staminaCost) {
             return { ok: false, reason: TERRITORY_TEXTS.staminaNotEnough, save };
         }
@@ -323,20 +310,11 @@ export class TerritorySaveStore {
     }
 
     save(chapterId: number, state: TerritoryChapterSave): void {
-        const key = this.key(chapterId);
-        const raw = JSON.stringify(state);
-        TerritorySaveStore.memoryFallback.set(key, raw);
-        try {
-            this.storage?.setItem(key, raw);
-        } catch (error) {
-            console.warn('[TerritorySaveStore] localStorage 不可用，本次会话改用内存存档', error);
-        }
+        this.writeRaw(this.key(chapterId), JSON.stringify(state));
     }
 
     /**
-     * 账号级成就的 key：**故意不带 chapterId**。
-     *
-     * 带章节 = 切章就查不到（2026-11-04 战斗宝箱入口消失的根因），见 `TERRITORY_PASSED_LEVELS_KEY`。
+     * 账号级成就的 key：故意不带 chapterId，避免切章后查不到。
      */
     private passedLevelsKey(): string {
         return `${TERRITORY_PASSED_LEVELS_KEY}.${this.namespace}`;

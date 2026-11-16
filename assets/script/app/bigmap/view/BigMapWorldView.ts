@@ -12,7 +12,7 @@ import {
 } from '../model/BigMapTerritoryColor';
 import type { BigMapCityState, BigMapTerrain } from '../model/BigMapTypes';
 import {
-    BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT, BIGMAP_COLUMN_STEP, BIGMAP_ROW_STEP,
+    BIGMAP_TILE_WIDTH, BIGMAP_TILE_HEIGHT,
     BIGMAP_MARKER_CITY_WIDTH, BIGMAP_MARKER_BASE_WIDTH, BIGMAP_MARKER_MONSTER_WIDTH,
     bigMapGroundIndex, buildBigMapTerritoryEdges, buildBigMapWorldLayout, pickBigMapHex, pickBigMapMarker, visibleBigMapHexes,
     type IBigMapTerritoryEdge,
@@ -30,9 +30,6 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent } from '../application/BigMapEvents';
 
 const { ccclass, property } = _decorator;
-export const WORLD_HEX_SIZE = BIGMAP_TILE_WIDTH / 2;
-export const WORLD_COL_STEP = BIGMAP_COLUMN_STEP;
-export const WORLD_ROW_STEP = BIGMAP_ROW_STEP;
 const MIN_ZOOM = 0.15;
 const MAX_ZOOM = 1.6;
 /**
@@ -127,26 +124,26 @@ interface IBigMapMarkerArt {
 @ccclass('BigMapWorldView')
 export class BigMapWorldView extends Component {
     private data: IBigMapViewState | null = null;
-    @property({ type: UITransform, group: '布局' }) private rootTransform: UITransform = null;
-    @property({ type: Node, group: '布局' }) private viewport: Node = null;
-    @property({ type: UITransform, group: '布局' }) private viewportTransform: UITransform = null;
-    @property({ type: Node, group: '地图图层' }) private content: Node = null;
-    @property({ type: Sprite, group: '背景' }) private background: Sprite = null;
-    @property({ type: Sprite, group: '背景' }) private sand: Sprite = null;
-    @property({ type: UITransform, group: '背景' }) private sandTransform: UITransform = null;
-    @property({ type: Graphics, group: '地图图层' }) private terrainLayer: Graphics = null;
-    @property({ type: Node, group: '地图图层' }) private tileLayer: Node = null;
-    @property({ type: Node, group: '地图图层' }) private decorLayer: Node = null;
-    @property({ type: Graphics, group: '地图图层' }) private markerLayer: Graphics = null;
-    @property({ type: Node, group: '地图图层' }) private iconLayer: Node = null;
-    @property({ type: Prefab, group: '模板资源' }) private templatesPrefab: Prefab = null;
+    @property({ type: UITransform, group: '布局' }) private rootTransform: UITransform = null!;
+    @property({ type: Node, group: '布局' }) private viewport: Node = null!;
+    @property({ type: UITransform, group: '布局' }) private viewportTransform: UITransform = null!;
+    @property({ type: Node, group: '地图图层' }) private content: Node = null!;
+    @property({ type: Sprite, group: '背景' }) private background: Sprite = null!;
+    @property({ type: Sprite, group: '背景' }) private sand: Sprite = null!;
+    @property({ type: UITransform, group: '背景' }) private sandTransform: UITransform = null!;
+    @property({ type: Graphics, group: '地图图层' }) private terrainLayer: Graphics = null!;
+    @property({ type: Node, group: '地图图层' }) private tileLayer: Node = null!;
+    @property({ type: Node, group: '地图图层' }) private decorLayer: Node = null!;
+    @property({ type: Graphics, group: '地图图层' }) private markerLayer: Graphics = null!;
+    @property({ type: Node, group: '地图图层' }) private iconLayer: Node = null!;
+    @property({ type: Prefab, group: '模板资源' }) private templatesPrefab: Prefab = null!;
     private templateRoot: Node | null = null;
-    private groundTemplate: Node = null;
-    private decorTemplate: Node = null;
-    private markerTemplate: Node = null;
-    @property({ type: Button, group: '操作按钮' }) private zoomInButton: Button = null;
-    @property({ type: Button, group: '操作按钮' }) private zoomOutButton: Button = null;
-    @property({ type: Button, group: '操作按钮' }) private focusButton: Button = null;
+    private groundTemplate: Node = null!;
+    private decorTemplate: Node = null!;
+    private markerTemplate: Node = null!;
+    @property({ type: Button, group: '操作按钮' }) private zoomInButton: Button = null!;
+    @property({ type: Button, group: '操作按钮' }) private zoomOutButton: Button = null!;
+    @property({ type: Button, group: '操作按钮' }) private focusButton: Button = null!;
     private layout: IHexGridLayout = buildBigMapWorldLayout(0, 0);
     private art: IBigMapArt | null = null;
     private backgroundTransform: UITransform | null = null;
@@ -214,7 +211,7 @@ export class BigMapWorldView extends Component {
         //模板实例不挂入页面层级；只将它的原型克隆到实际显示图层。
         const root = instantiate(this.templatesPrefab);
         root.active = false;
-        const templates = root.getComponent(BigMapWorldTemplates) as BigMapWorldTemplates;
+        const templates = root.getComponent(BigMapWorldTemplates);
         this.groundTemplate = templates.groundTemplate;
         this.decorTemplate = templates.decorTemplate;
         this.markerTemplate = templates.markerTemplate;
@@ -242,9 +239,13 @@ export class BigMapWorldView extends Component {
 
     render(data: IBigMapViewState): void {
         this.data = data;
-        this.selectedHexId = data.ui.selectedCityId > 0 ? data.cities.get(data.ui.selectedCityId)?.hexId ?? -1
-            : data.ui.selectedMonsterId > 0 ? data.monsters.get(data.ui.selectedMonsterId)?.hexId ?? -1
-            : data.ui.selectedBaseHexId;
+        let selectedHexId = data.ui.selectedBaseHexId;
+        if (data.ui.selectedCityId > 0) {
+            selectedHexId = data.cities.get(data.ui.selectedCityId)?.hexId ?? -1;
+        } else if (data.ui.selectedMonsterId > 0) {
+            selectedHexId = data.monsters.get(data.ui.selectedMonsterId)?.hexId ?? -1;
+        }
+        this.selectedHexId = selectedHexId;
         this.refresh();
     }
 
@@ -841,7 +842,7 @@ export class BigMapWorldView extends Component {
             const hitArea = marker.view.hitArea;
             //名条已挪到建筑下方（`badgeY` 为负），裁剪余量要同时吃上下两头：
             //上 = 建筑顶（主城还要算头像），下 = 名条底。只算一头会让贴边的标记提前消失。
-            const iconTop = (hitArea.iconY ?? 0) + (hitArea.height ?? 0) / 2;
+            const iconTop = (hitArea.iconY ?? 0) + hitArea.height / 2;
             const plateBottom = (hitArea.badgeY ?? 0) - (hitArea.badgeHeight ?? 30) / 2;
             const halfHeight = this.viewportTransform.height / 2 + Math.max(150, iconTop, -plateBottom) * this.zoom;
             marker.node.active = Math.abs(marker.node.position.x * this.zoom + position.x) < halfWidth
@@ -933,8 +934,6 @@ export class BigMapWorldView extends Component {
         this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom - 100 + lift * this.zoom);
     }
 
-    get currentZoom(): number { return this.zoom; }
-
     private onTouchStart(event: EventTouch): void {
         this.dragStart = event.getUILocation();
         const touches = event.getAllTouches();
@@ -1007,8 +1006,6 @@ export class BigMapWorldView extends Component {
         const local = this.viewportTransform.convertToNodeSpaceAR(new Vec3(point.x, point.y, 0));
         return new Vec2(local.x, local.y);
     }
-
-    get selected(): number { return this.selectedHexId; }
 
     occupantAt(hexId: number) {
         return this.data

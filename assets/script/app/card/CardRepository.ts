@@ -65,11 +65,7 @@ export interface CardLineupData {
     readonly heroLevels: ReadonlyMap<string, number>;
     readonly heroLevelCaps: ReadonlyMap<string, number>;
     readonly heroListKnown: boolean;
-    /**
-     * 服务端阵型这次到底拿到了没有。
-     *
-     * `false` = 这次没拿到服务端阵型（未连接 / 超时），`deck` 是空数组（上阵区留空等数据）。
-     */
+    /** 服务端阵型这次是否拿到；false 时 deck 为空，上阵区留空等数据。 */
     readonly formationsKnown: boolean;
     readonly bonuses: ZCDeckBonuses;
 }
@@ -83,9 +79,7 @@ export interface LineupBoardData {
     readonly heroLevels: ReadonlyMap<string, number>;
     readonly heroLevelCaps: ReadonlyMap<string, number>;
     /**
-     * 后端阵型（`CmdFormationInfoReqMsg` 的响应）。
-     * `null` = 没有可用的后端数据（未连接 / 请求失败）→ 面板退回本地卡组；
-     * 空数组是服务端明确回「一个阵型都没有」。
+     * 后端阵型。null 表示没有可用数据（未连接或请求失败），空数组表示服务端确认没有阵型。
      */
     readonly formations: readonly ZCFormation[] | null;
 }
@@ -126,13 +120,7 @@ export interface ICardRepository {
     loadArtConfig(): Promise<ICardArtConfig>;
     loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt>;
     loadLineup(autoLoadDecks: boolean, refreshFormations?: boolean): Promise<CardLineupData>;
-    /**
-     * 首帧用的本地阵容快照（同步，命中才有值）。
-     *
-     * 有它就等于「上次服务端确认过的阵容」：页面第一帧直接画出来，网络回来再覆盖。
-     * 没有（首次安装 / 过期 / 存坏）返回 `null`，页面走空台直到权威数据到达。
-     * 见 `LineupSnapshot.ts` 文件头。
-     */
+    /** 首帧用的本地阵容快照；命中才返回值，否则返回 null。 */
     loadLineupSnapshot(): CardLineupData | null;
     loadBoard(autoLoadDecks: boolean): Promise<LineupBoardData>;
     /** 详情切卡使用完整卡库；首帧阵容快照不包含卡库。 */
@@ -141,10 +129,7 @@ export interface ICardRepository {
     /** 详情页取数（六维属性 + 技能链 + 里程碑）；失败由调用方按 `null` 降级。英雄等级内部取后端缓存。 */
     loadCardDetail(cardId: string, level: number): Promise<CardDetailPresentation>;
     /**
-     * 阵容战力 = 上阵卡攻击力之和（本地算，不发协议）。
-     *
-     * 口径见 `CardLineupPower`；返回 0 表示「阵容还没拿到」或「阵容里全是建筑卡」，
-     * 调用方据此决定要不要保留占位文案。
+     * 阵容战力，本地算，不发协议。返回 0 表示阵容未就绪或全是建筑卡。
      */
     loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number>;
     upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult>;
@@ -195,50 +180,29 @@ export class RuntimeCardRepository implements ICardRepository {
         return cardArtProvider.loadDetail(card, await this.loadArtConfig());
     }
     /**
-     * `cardLevelUp` 的建表结果（卡库一次要 36 张卡的进度，每张都建一遍表就是 36 次全表解析）。
-     *
-     * 实测（2026-11-03，`tmp/_bench_cardlevelup.mjs`）：表 1785 行，建一次 0.12ms，
-     * 一张卡建一次 → 整页 12.03ms；复用一张表 0.40ms。
-     *
-     * 按 `rows` 引用判定命中：`RefUtil` 返回的是同一份冻结数组，会话语义内不会换对象；
-     * 真换了就重建，不需要额外的失效通知（`evaluateUpgrade` 只读表，缓存不持有可变状态）。
+     * cardLevelUp 建表结果。卡库一次要 36 张卡的进度，复用一张表避免重复解析全表。
+     * 按 rows 引用判命中；RefUtil 返回同一份冻结数组，引用变了就重建。
      */
     private levelUpTable: { readonly rows: readonly unknown[]; readonly table: ZCCardLevelUpTable } | null = null;
 
     /**
-     * `pvpSkillPlan` 的「全队暴击伤害增幅」建表结果（2194 行 → 35 卡 × 50 级）。
-     *
-     * 与 `levelUpTable` 同样的缓存口径：按 `rows` 引用判命中。每次打开详情都重建 2194 行
-     * 的 Map 虽然只要零点几毫秒，但切卡是高频操作，没必要重复做。
+     * pvpSkillPlan 的全队暴击伤害建表结果，与 levelUpTable 同样按 rows 引用缓存。
      */
     private critGainTable: { readonly rows: readonly unknown[]; readonly table: ZCCritDamageGainTable } | null = null;
 
     /**
-     * 卡牌阵容页的取数。
-     *
-     *  本页显示的是当前出阵的那套阵容，所以八卡优先用服务端「选中阵型」的 `heroIds`
-     * （`LineupPresets.resolveSelectedDeck`）—— 布阵面板保存时会把该阵型置为选中
-     * （`FormationService` 的 `select = 1`），于是「保存 → 本页重刷」就能看到刚改的阵容。
-     *
-     *  拿不到阵型数据（未连接 / 请求失败 / 没有选中阵型）才退回本地卡表的「玩家默认」八卡，
-     *  保证断网与编辑器预览也有一屏内容。
-     *  阵型为空数组是有效值（玩家把选中的阵型一键下阵后保存了），不能当成"没数据"退回本地。
-     *
-     *  映射源用 `catalog`（pvpCard 全表）而不只是 `deck`：阵型里的英雄可能不在本地八卡里。
+     * 卡牌阵容页取数：优先用服务端选中阵型的 heroIds；拿不到阵型数据时退回本地卡表，
+     * 阵型为空数组则保持空阵容。catalog 用全表，阵型里的英雄可能不在本地八卡中。
      */
     async loadLineup(autoLoadDecks: boolean, refreshFormations = true): Promise<CardLineupData> {
-        // 与 `loadBoard` 同口径：缓存命中就不再发英雄列表请求。
-        // 刚升级成功时 `applyPvpHeroLevel` 已经把新等级写进缓存，布阵保存不影响等级，
-        // 所以重刷本页不需要重新拉一次权威列表。
+        // 缓存命中就不再拉英雄列表；升级成功时 applyPvpHeroLevel 已经写回新等级。
         const cached = getCachedPvpHeroInfos();
         const [tableDeck, heroInfos, heroLevelCaps, catalog, formations, art] = await Promise.all([
             autoLoadDecks ? ensureLineupDecks() : Promise.resolve(getPlayerDeck()),
             cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
             loadPvpCatalogCards(),
-            // 与布阵面板同口径等满 3000ms：没拿到就留空台（见下方 `deck`），不拿兜底卡组先顶上。
-            //  `maxAgeMs`：切 tab 时 `MainTabsComposition.prefetchHero` 已经预取过一次，
-            //  几百毫秒内的这份就是它拉回来的 —— 再发一遍是纯重复请求（首屏白等一个 RTT）。
+            // maxAgeMs：切 tab 时 prefetchHero 已经预取过一次，几百毫秒内的结果直接复用。
             refreshFormations
                 ? fetchFormations({ label: '阵容页首屏阵型', maxAgeMs: FORMATION_PREFETCH_FRESH_MS })
                 : Promise.resolve(getCachedFormations()),
@@ -246,11 +210,8 @@ export class RuntimeCardRepository implements ICardRepository {
         ]);
         const heroLevels = this.levels(heroInfos);
         const selectedDeck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations });
-        //  只给服务端确认过的选中阵型写快照 —— 本地卡表那张「玩家默认」八卡不是玩家的阵容，
-        // 写进去就是把假数据持久化，下次首帧会理直气壮地画错。
+        // 只给服务端确认过的选中阵型写快照，本地默认八卡不能当玩家阵容持久化。
         if (selectedDeck) writeLineupSnapshot(selectedDeck, heroLevels);
-        //  阵型没拿到（未连接 / 超时）→ 上阵区留空，等真数据回来再画；
-        //  拿到但里面没有选中阵型 → 用本地卡表的「玩家默认」八卡。
         const deck = formations === null ? [] : (selectedDeck ?? tableDeck);
         return {
             art,
@@ -266,10 +227,8 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 首帧快照：只有上阵八卡与等级，卡库留空。
-     *
-     * 卡库（`CardGrid`）的全表卡面一次要加载 36 张图 + 36 份升级进度，让它跟着快照一起
-     * 抢首帧既慢又没必要 —— 快照的职责只是「别让玩家看到一个假的阵容」。
+     * 首帧快照只包含上阵八卡与等级，卡库留空。
+     * 卡库要加载 36 张卡面和升级进度，跟着快照抢首帧既慢也没必要。
      */
     loadLineupSnapshot(): CardLineupData | null {
         const art = this.artConfig;
@@ -284,8 +243,7 @@ export class RuntimeCardRepository implements ICardRepository {
             catalog: [],
             heroLevels,
             heroLevelCaps: new Map(),
-            // 快照来自服务端确认过的数据，等级是已知的（未出现在 `levels` 里的按 0 处理，
-            // 与在线路径「后端列表里没有 = 没拥有」同一口径）。
+            // 快照来自服务端确认过的数据，未出现在 levels 里的等级按 0 处理。
             heroListKnown: true,
             formationsKnown: true,
             bonuses: currentDeckBonuses(snapshot.cards),
@@ -293,13 +251,8 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 详情页左右切卡的目录。
-     *
-     * `loadPvpCatalogCards()` 是图鉴全表，里面还留着金矿（`type=1` 建筑卡）——
-     * 它是真能上阵的一张卡，所以卡库要它；但详情页是「卡牌升级详情」，金矿没有升级配置
-     * （`cardLevelUp` 里没这一行），滑进去只会看到一排锁 + 「该卡暂无升级配置」。
-     * 于是这里跟卡库展示层用同一个谓词 `visibleLineupCards` 摘掉金矿
-     * （主城在 `loadPvpCatalogCards` 里已被 `isHqCard` 摘掉，不重复判）。
+     * 详情页左右切卡的目录。金矿是真能上阵的卡，但没有升级配置，
+     * 这里和卡库展示层一样用 visibleLineupCards 摘掉。
      */
     async loadDetailNavigation(): Promise<CardDetailNavigationData> {
         const catalog = visibleLineupCards(await loadPvpCatalogCards());
@@ -317,8 +270,7 @@ export class RuntimeCardRepository implements ICardRepository {
             this.loadArtConfig(),
         ]);
         const pool = heroInfos === null ? deck : await loadPvpHeroCards(heroInfos);
-        //  卡池为空是"面板看起来没内容"的头号原因，而它有两种完全不同的成因，日志必须能一眼分开。
-        // 后端英雄在 pvpCard 里对不上号时 `loadPvpHeroCards` 会另出一条列 id 的告警，配合看。
+        // 卡池为空时日志要能区分「后端列表不可用」和「有英雄但 pvpCard 对不上」。
         if (pool.length === 0) {
             console.warn(
                 '[CardRepository] 布阵卡池为空：'
@@ -336,12 +288,7 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 详情页取数。
-     *
-     * 四份数据并行：pvpCard 原始行（属性基础值）、pvpUnitGrowth（成长）、
-     * armySkillLevelUp（技能链与里程碑）、pvpSkillPlan（全队暴击伤害链）；
-     * 英雄等级取后端缓存（没有 = 0，全锁）。
-     * 组装在 `CardDetailPresenter`（纯函数、可单测），这里只取数与编排。
+     * 详情页取数。四份表并行读取，英雄等级取后端缓存，组装交给 CardDetailPresenter。
      */
     async loadCardDetail(cardId: string, level: number): Promise<CardDetailPresentation> {
         const [rawRow, growthRaw, skillRaw, cards, levelUpRaw, plans] = await Promise.all([
@@ -380,16 +327,8 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 阵容战力 = 上阵卡攻击力之和（本地算、不发协议，山猫 2026-11-06）。
-     *
-     * 与 `loadCardDetail` 共用同一批取数与同一个纯函数（`CardLineupPower`），
-     * 保证「主界面战力」和「卡牌详情里的攻击」不会各算一套。
-     *
-     * 三份表一次读全：`pvpCard`（基础值，按 id 建索引）、`pvpUnitGrowth`（成长）、
-     * `cardLevelUp`（等级绝对属性）。逐张卡 `loadPvpCardRawRow` 会读 8 遍整表，所以走批量版。
-     *
-     * 不能让这里抛错：主界面 HUD 刷新失败不该把整个玩家信息块拖垮。
-     * 读表异常 ⇒ 打 warn 返回 0，HUD 保留 prefab 上的占位文案。
+     * 阵容战力，本地算，不发协议。与 loadCardDetail 共用同一批取数和纯函数，
+     * 保证主界面与详情页攻击力口径一致。读表异常只告警返回 0，不拖垮 HUD。
      */
     async loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number> {
         try {
@@ -437,17 +376,8 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 技能面板取数。
-     *
-     * 三份数据各有各的权威源：
-     *   - 有哪些技能、什么顺序 ← `pvpCard.skillList`（卡表，缺省时退回 `armySkillLevelUp` 里该英雄的行）；
-     *   - 技能名 / 每档解锁等级 / 每档描述 ← `armySkillLevelUp`；
-     *   - 已升到第几档 ← 后端 `CmdPvpHeroInfo.skills`（缓存）。不猜 `level + 1` ——
-     *     服务端可能因条件不满足只升半档，猜出来的数字点两下就跟服务端对不上。
-     *
-     * 技能等级一律从 `PvpHeroService` 的缓存读：技能升级响应回来后
-     * `upgradeHeroSkill` 已经把新值写回缓存，所以「收到响应 → 重刷」天然拿到最新值，
-     * 不需要再发一次英雄列表请求。
+     * 技能面板取数。技能顺序读 pvpCard.skillList，技能内容读 armySkillLevelUp，
+     * 已升档位读后端缓存，不按 level 猜。
      */
     async loadSkillList(heroId: number): Promise<CardSkillListData> {
         const [rows, plans, properties] = await Promise.all([
@@ -493,11 +423,8 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     /**
-     * 卡表里这张卡的技能顺序。
-     *
-     * 卡表那一行存在但 `skillList` 为空，是策划明确不给技能（主城、金矿），返回空数组、不兜底；
-     * 卡表里根本找不到这张卡（表缺失 / id 对不上）才退回 `fallbackIds`（技能表全部技能）——
-     * 宁可多列几行也别让面板空着。
+     * 卡表里这张卡的技能顺序。卡在但 skillList 为空按无技能处理；
+     * 卡表里找不到才退回 fallbackIds。
      */
     private async skillIdsOf(heroId: number, fallbackIds: readonly number[]): Promise<readonly number[]> {
         const cards = await loadPvpCatalogCards();

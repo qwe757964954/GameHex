@@ -87,9 +87,6 @@ test('断线续跑：从存档步接着跑，不重放已完成的步，也不�
     });
 
     assert.equal(progress.current?.stepId, '5-3');
-    // 已发过奖的步再问，应返回空（补偿逻辑的只读口）
-    assert.deepEqual(progress.pendingRewards('2-2'), []);
-    assert.equal(progress.pendingRewards('8-1').length, 1);
 
     const done = progress.complete('5-3');
     assert.equal(done?.next?.stepId, '5-4');
@@ -150,7 +147,6 @@ test('存档往返：toSave 再恢复，状态与奖励台账一致', () => {
     assert.equal(restored.current?.stepId, '6-1');
     assert.deepEqual(restored.completedSteps.sort(), progress.completedSteps.sort());
     assert.deepEqual(restored.grantedSteps.sort(), progress.grantedSteps.sort());
-    assert.deepEqual(restored.pendingRewards('2-2'), []);
 });
 
 test('表校验：空表直接抛（配置缺失不该静默走空流程）', () => {

@@ -6,8 +6,8 @@
  *  2. 底部菜单层 `MenuBar`（老端 `组件_民兵_菜单层`：底板 + 返回 + 天赋/皮肤两页签）；
  *  3. `MilitiaTalentItem` 的三张图（效果框 `frame_Zhikuang04`、链条 `tf_bar01_bg`/`tf_bar_fg_3gong`）。
  *
- * 为什么钉在这里而不是靠截图：`spriteFrame` 没绑**不报错**、只留白；页签按钮缺图同理
- * （`cocos-mcp-build-prefab` §10.3 的教训）。逐条对磁盘是最便宜的回归。
+ * 为什么钉在这里而不是靠截图：`spriteFrame` 没绑**不报错**、只留白；页签按钮缺图同理。
+ * 逐条对磁盘是最便宜的回归。
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';

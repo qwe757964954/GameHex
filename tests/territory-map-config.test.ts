@@ -10,7 +10,7 @@ const chapterTwo = JSON.parse(readFileSync(assetUrl('config/territory-maps/chapt
 test('client territory config loads static chapter data', () => {
     const config = configureTerritoryMap(sample);
     assert.equal(config.mapKind, 'territoryChapter');
-    assert.equal(config.sites.length, 152);
+    assert.equal(config.sites.length, 176);
     assert.equal(config.startCellId, 367);
     assert.equal(config.sites[0].type, 'fixedResource');
     assert.ok(territoryNeighbors(config.startCellId, config).length > 0);

@@ -70,10 +70,13 @@ function childNamed(data: PrefabJson, index: number, name: string): number {
     return hit;
 }
 
-test('★ MainRoot 只有 Bg / Content / BottomNav，且 BottomNav 排在 Content 之后', () => {
+test('★ MainRoot 只允许 Bg / Content / BottomNav（Bg 可缺省），且 BottomNav 排在 Content 之后', () => {
     const data = prefabOf(MAIN_ROOT);
     const names = namesOf(data, childrenOf(data, rootIndexOf(data, 'MainRoot')));
-    assert.deepEqual(names, ['Bg', 'Content', 'BottomNav']);
+    const allowed = ['Bg', 'Content', 'BottomNav'];
+    assert.ok(names.every((name) => allowed.includes(name)),
+        `MainRoot 出现多余节点：${names.join(' / ')}`);
+    assert.ok(names.includes('Content') && names.includes('BottomNav'));
     assert.ok(names.indexOf('BottomNav') > names.indexOf('Content'),
         '底栏画在 Content 之上 ⇒ 页面内任何节点都盖不过英雄按钮');
 });

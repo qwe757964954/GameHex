@@ -1,39 +1,8 @@
 /**
- * 云盖层的**跨流程宿主**：把"匹配页底下那层云"搬到流程宿主之上，跳到战场之后继续散。
+ * 云盖层的跨流程宿主：先切战场，再让云散开。
  *
- * ## 为什么需要它（用户 2026-11-02 第三次打回）
- *
- * > 云散开进入战场的动画地图就应该是战场，不能是黑色的地图
- *
- * 旧的时序是「散云 → 散到 60% 才 navigate」。两个毛病叠在一起：
- *  ① 云住在匹配页里，`navigate` 一去 `MatchingComposition.dispose()` 就把页面连同云一起销毁，
- *     最后 40% 那一段**根本没播**；
- *  ② 散开的那 60% 背后是刚被 `hidePageContent()` 关掉的页面（连 `Bg` 都关了），
- *     露出来的是镜头清屏色 —— 玩家看到的就是"云散开 → 一片黑 → 战场"。
- *
- * 现在反过来：**先切战场，再散云**。
- *  ① `closeInstantly()`：藏 UI，并把云搬到这里（挂在宿主**父节点**上 ⇒ 切流程、清宿主节点都带不走它）；
- *  ② 立刻 `navigate`：战场在云**下面**挂起来。云是几百朵密铺、整层不透明、覆盖率 0.998，
- *     所以切场景的全过程玩家一点看不见；
- *  ③ 切换**落定**之后再等 {@link TERRITORY_BATTLE_COVER_RELEASE_DELAY}（让战场先渲染出
- *     一帧），才开始散 ⇒ 散开露出来的就是战场。
- *
- * ## 为什么挂在**流程宿主的父节点**上，而不是宿主底下
- *
- * 🔴 `ZCGame.createGame` 的第一行就是 `this.node.removeAllChildren()` —— 战场要先把宿主节点
- * 清空、再挂自己的 HUD。云要是宿主的子节点，进入战场那一帧就被删掉了（等于没交接）。
- * 所以这一层挂在宿主的**父节点**（`Canvas`）上，紧排在 `Procedure` 之后：
- * 战场全都在 `Procedure` 内部，弹窗挂在 `Popup`，我们正好夹在两者之间。
- *
- * ## 为什么每帧校正一次兄弟位
- *
- * `Canvas` 这一层本来只有 `Camera / Procedure / Popup` 三个，但保不齐以后有人往里插节点；
- * 每帧算一次"应该排在第几"（宿主的 index + 1），不一致才写一次，代价可以忽略。
- *
- * ## 兜底
- *
- * 流程切换迟迟不落定（战场预加载卡住 / 路由没注册）时，最多再等
- * {@link TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT} 就强行散云 —— 不能让玩家永远盯着一屏云。
+ * 云挂在流程宿主的父节点上，切换流程清空宿主时不会被带走；等切换落定并渲染一帧后再开始散云，
+ * 散开露出的就是战场。兄弟位每帧校正，切换超时时强制散云。
  */
 
 import { _decorator, Component, Node, Vec3 } from 'cc';
@@ -48,7 +17,7 @@ export const TERRITORY_BATTLE_COVER_OVERLAY_NODE = 'BattleCoverOverlay';
 /**
  * 切换落定之后、开始散云之前再等多久（秒）。
  *
- * 为什么不是 0：`onSwitchSettled` 在 `onEnter` **之前**同步触发，战场上那些地块 / HUD 是
+ * `onSwitchSettled` 在 `onEnter` **之前**同步触发，战场上那些地块 / HUD 是
  * 在 `onEnter` 里现建的。等两三个渲染帧，散到半透明时底下已经有画面了。
  */
 export const TERRITORY_BATTLE_COVER_RELEASE_DELAY = 0.1;
@@ -77,7 +46,7 @@ export class TerritoryBattleCoverOverlay extends Component {
      */
     static create(host: Node, cover: TerritoryBattleCover): TerritoryBattleCoverOverlay | null {
         if (!host?.isValid || !cover?.built) return null;
-        // 🔴 挂宿主的**父节点**：战场进入时会 `host.removeAllChildren()`（见类注释）。
+        // 挂宿主的**父节点**：战场进入时会 `host.removeAllChildren()`（见类注释）。
         const parent = host.parent?.isValid ? host.parent : host;
         const node = new Node(TERRITORY_BATTLE_COVER_OVERLAY_NODE);
         node.layer = parent.layer;
@@ -161,7 +130,7 @@ export class TerritoryBattleCoverOverlay extends Component {
     /**
      * 放掉这一屏云。
      *
-     * 🔴 必须走 `cover.dispose()` 而不是只把节点删掉：云的帧属于**匹配页那个资源作用域**，
+     * 必须走 `cover.dispose()` 而不是只把节点删掉：云的帧属于**匹配页那个资源作用域**，
      * 页面离开时已经被 `decRef` 过一次，全靠盖层自己那一份引用撑着。这里不还回去，
      * 那几帧就永远掉不出 0（内存里常驻一屏云图）。
      */

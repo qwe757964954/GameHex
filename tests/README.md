@@ -1,7 +1,8 @@
 # tests/ 索引与约定
 
-496 个测试文件、约 15 万行、5.8 千条用例，全部跑在 `node:test` 上（无 jest / vitest）。
 本文件解决两件事：**找不到**（哪个文件管哪块）和**写不对**（新用例该用哪套手法）。
+测试规模与分域索引见「前缀索引」，由 `npm run index:tests` 从文件系统统计、`npm run index:tests:write` 回写。
+全部跑在 `node:test` 上（无 jest / vitest）。
 
 ## 怎么跑
 
@@ -18,7 +19,7 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 > ⚠️ **不要用「跑一遍看绿不绿」判断改动安全**。本工程基线长期带红，唯一有效判据是
 > 「相对基线零新增」，由 `verify.mjs` 的差集给出。裸跑全量只会看到一片红。
 >
-> `npm test` 走的是分批执行器：单进程跑 496 个文件实测会挂住（工程内记录 449 个文件
+> `npm test` 走的是分批执行器：单进程跑 516 个文件实测会挂住（工程内记录 449 个文件
 > 23m39s 不返回），分批 60 个文件 ≈130s 跑完。想还原旧行为用 `npm run test:raw`。
 
 ## 为什么是平铺而不是按域建子目录
@@ -29,29 +30,61 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 
 所以维持平铺 + **文件名前缀即功能域**，靠本文件做索引。
 
+### 目录约束
+
+- `tests/*.test.ts` 必须平铺：`tools/verify/verify.mjs` 只读 `tests` 顶层 `.test.ts`，放进子目录不会被默认发现。
+- 夹具统一放 `tests/fixtures/`，辅助放 `tests/helpers/`；`__pycache__/` 不入库。
+- 新增、重命名或合并用例后跑 `npm run index:tests:write`，不要手改计数。
+
 ## 前缀索引
 
-`文件` 是 `.test.ts` 个数，`用例` 是 `test()/it()` 声明数，后四列是断言手法分布（见下节），
-`已进路由表` 指被 `docs/agent/规范路由与最小验证.md` 显式引用（未引用不等于不跑 —— `verify.mjs`
-还有 import 反向可达与路径字面量两条机械判据兜底）。
+`文件` 是 `.test.ts` 个数，`用例` 是 `test()/it()` 声明数，`已进路由表` 指被
+`docs/agent/规范路由与最小验证.md` 显式引用（未引用不等于不跑 —— `verify.mjs` 还有 import
+反向可达与路径字面量两条机械判据兜底）。
 
-| 前缀 | 文件 | 用例 | 单测 | 沙箱 | 源码 | 资源 | 已进路由表 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `zcds` | 148 | 1404 | 48 | 26 | 37 | 37 | 36 |
-| `territory` | 81 | 1095 | 30 | 23 | 22 | 6 | 26 |
-| `bigmap` | 66 | 522 | 27 | 28 | 6 | 5 | 7 |
-| `card` | 27 | 274 | 9 | 10 | 3 | 5 | 0 |
-| `league` | 16 | 480 | 7 | 3 | 4 | 2 | 3 |
-| `main` | 15 | 130 | 6 | 4 | 4 | 1 | 3 |
-| `battle` | 9 | 98 | 4 | 4 | 1 | 0 | 0 |
-| `chest` | 7 | 52 | 1 | 4 | 1 | 1 | 0 |
-| `matching` | 7 | 49 | 4 | 2 | 1 | 0 | 0 |
-| `login` | 6 | 27 | 1 | 4 | 1 | 0 | 0 |
-| `map` | 4 | 130 | 1 | 1 | 0 | 2 | 0 |
-| `popup` | 4 | 30 | 2 | 2 | 0 | 0 | 0 |
-| `pvp` | 4 | 23 | 3 | 0 | 1 | 0 | 0 |
-| `framework` / `role` / `sprite` | 3 各 | — | — | — | — | — | 0 |
-| 其余 57 个单文件前缀 | 57 | — | 见下表 | | | | 5 |
+<!-- TEST-INDEX:BEGIN -->
+共 516 个测试文件、155,288 行、6,008 条用例（2026-11-16 实测；`npm run index:tests` 可重算）。
+
+| 前缀 | 文件 | 用例 | 已进路由表 |
+| --- | --- | --- | --- |
+| `zcds` | 150 | 1420 | 36 |
+| `territory` | 83 | 1131 | 26 |
+| `bigmap` | 65 | 523 | 7 |
+| `card` | 27 | 275 | 0 |
+| `league` | 17 | 484 | 3 |
+| `main` | 15 | 130 | 3 |
+| `guide` | 14 | 106 | 0 |
+| `battle` | 9 | 99 | 0 |
+| `chest` | 7 | 52 | 0 |
+| `matching` | 7 | 49 | 0 |
+| `login` | 6 | 27 | 0 |
+| `map` | 4 | 130 | 0 |
+| `popup` | 4 | 30 | 0 |
+| `pvp` | 4 | 23 | 0 |
+| `framework` | 3 | 20 | 0 |
+| `role` | 3 | 29 | 0 |
+| `sprite` | 3 | 18 | 0 |
+| `asset` | 2 | 10 | 1 |
+| `auto` | 2 | 9 | 0 |
+| `component` | 2 | 2 | 0 |
+| `config` | 2 | 9 | 0 |
+| `firstRecharge` | 2 | 43 | 0 |
+| `game` | 2 | 14 | 0 |
+| `hero` | 2 | 15 | 0 |
+| `hot` | 2 | 34 | 2 |
+| `militia` | 2 | 23 | 1 |
+| `network` | 2 | 23 | 0 |
+| `post` | 2 | 16 | 0 |
+| `prefab` | 2 | 6 | 0 |
+| `preview` | 2 | 11 | 0 |
+| `procedure` | 2 | 16 | 1 |
+| `reddot` | 2 | 26 | 0 |
+| `reward` | 2 | 15 | 1 |
+| `store` | 2 | 35 | 0 |
+| `tab` | 2 | 13 | 0 |
+| `verify` | 2 | 17 | 0 |
+| 其余 57 个单文件前缀 | 57 | 1125 | 6 |
+<!-- TEST-INDEX:END -->
 
 单文件前缀（一个功能一个文件，按需 grep）：`activity`、`art`、`battletoken`、`bootstrap`、
 `bundle`、`cache`、`callback`、`celebration`、`center`、`chapter`、`chat`、`cocos`、`common`、
@@ -63,7 +96,10 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 
 ## 四类断言手法
 
-| 手法 | 数量 | 什么时候用 | 入口 |
+> 「数量」是 2026-11-13 人工归类快照（合计 496），与当前 516 个文件不一致；归类依赖人工判断，
+> 暂不随索引自动重算，仅作分布参考。
+
+| 手法 | 数量（2026-11-13 快照） | 什么时候用 | 入口 |
 | --- | --- | --- | --- |
 | **单测** | 177 | Model / 纯函数 / 协议编解码，真模块能直接 `import`（不拖 `cc`） | 直接 import |
 | **沙箱** | 141 | 视图 / 控制器依赖 `cc`，node 里 import 不进来 | `helpers/cc-sandbox.ts` |
@@ -87,12 +123,12 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 5. **不要复制算法**。断言用的常量、几何公式从源模块 import；复制一份等于给自己发一张
    永远绿的假证书。
 
-## 已知遗留（2026-11-13 体检，未处理）
+## 已知遗留（2026-11-16 复核）
 
 | 问题 | 现状 | 处置建议 |
 | --- | --- | --- |
-| 巨型文件 | `territory-presenter` 3405 行/111 用例、`map-editor` 2724/109、`hang` 2350/87、`zcds-model` 2328/66 | 按语义块拆成 3–4 个文件，不重写断言 |
-| 单源文件被围猎 | `TerritoryMapView.ts` 被 **34** 个测试文件覆盖，每个都自带一份 cc 桩 | 根因是它本身太大；先拆源模块，测试自然收敛 |
+| 巨型文件 | `territory-presenter` 3466 行/113 用例、`map-editor` 2724/109、`hang` 2350/87、`zcds-model` 2328/66 | 按语义块拆成 3–4 个文件，不重写断言 |
+| 单源文件被围猎 | `TerritoryMapView.ts` 被 **42** 个测试文件覆盖，每个都自带一份 cc 桩 | 根因是它本身太大；先拆源模块，测试自然收敛 |
 | 重名用例 | 27 组同名（`D3 ⚠️ 所有节点 _layer 都是 UI_2D` ×5） | 加 `<域> ›` 前缀消歧；**改名会让基线失败名单失配**，需与 `baseline` 重算同批做 |
-| 两种风格 | 490 个平铺 `test()`，6 个 `describe/it` | 非缺陷，两种都能被 TAP 采集；保持现状即可，新文件用平铺 |
-| 未接进流水线的脚本 | `tests/*.py`（7 个）、`smoke_hotupdate_hook.mjs` 不在 `npm test` 里 | 已有独立入口（`test:hotupdate-publish` 等），改前查 `package.json` |
+| 两种风格 | 510 个平铺 `test()`，6 个 `describe/it` | 非缺陷，两种都能被 TAP 采集；保持现状即可，新文件用平铺 |
+| 未接进流水线的脚本 | `test_login_slices.py`（缺 Pillow，未接 npm）、`smoke_hotupdate_hook.mjs` 不在 `npm test` 里；其余 6 个 `tests/*.py` 已接 `test:*` 入口 | 补 `pip install Pillow` 后接入口，或长期标 manual；改前查 `package.json` |

@@ -14,11 +14,9 @@
  *改数值只需改 `bigmapCityLevel` / `bigmapScoreRule`，不用动代码。
  */
 import {
-    BigMapQueueState,
     type BigMapResType,
     type IBigMapBaseState,
     type IBigMapCityConfig,
-    type IBigMapCitySite,
     type IBigMapConfig,
     type IBigMapMonsterSite,
 } from './BigMapTypes';
@@ -35,7 +33,6 @@ export const BIGMAP_BATTLE_TEXT = {
     pending: '正在进入战斗',
     unavailable: '当前无法进入战斗',
     campMissing: '据点未配置战斗',
-    campUnavailable: '当前据点不可攻打',
     /** 服务器 `SlgCampSimpleInfo.opType = 1`：已有玩家占领，本场不可再打。 */
     campOccupied: '该据点已被占领',
     monsterMissing: '野怪不存在',
@@ -301,7 +298,6 @@ export function bigMapMonsterAttackPreview(
         bigMapMarginalWarScore(damage, config.scoreRule.marginalDamageCap)
         *bigMapRankCoeff(config, rank),
     );
-    void monster;
     return { staminaCost: monster.staminaCost, damage, warScore, inRange: true, damageCutPct: 0 };
 }
 
@@ -394,14 +390,4 @@ export function bigMapMonsterHpRatio(
     if (!offline) return null;
     const hp = progress.monsterHp[site.instanceId] ?? offline.defenseHp;
     return Math.max(0, Math.min(1, hp / Math.max(1, offline.defenseHp)));
-}
-
-/** 建造队列是否空闲（攻城与建造互不阻塞，这里只给界面做「有队列正在跑」的角标）。 */
-export function bigMapHasActiveQueue(base: IBigMapBaseState): boolean {
-    return base.queues.some((slot) => slot.state === BigMapQueueState.Building);
-}
-
-/** 城池占位（供界面算「基地到城池」的距离时取锚点）。 */
-export function bigMapCityAnchor(citySite: IBigMapCitySite): number {
-    return citySite.anchorHexId;
 }

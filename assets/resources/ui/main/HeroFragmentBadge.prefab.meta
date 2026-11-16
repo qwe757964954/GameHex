@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "3a9e5b12-7c40-4f1a-9d31-8e2b6c4f0a11",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "HeroFragmentBadge",
+    "hasIcon": false
+  }
+}

@@ -10,7 +10,7 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueTabPage')
 export class LeagueTabPage extends Component {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感。
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感。
      * 本页由 `MainRoot.prefab` 的 `MainTabHost.alliancePage` 实例化，这个常量主要给测试 / 文档引用。
      */
     static prefabPath = 'ui/League/LeagueTab';
@@ -38,15 +38,12 @@ export class LeagueTabPage extends Component {
         this.currentPage.setParent(this.node);
         this.currentPage.setPosition(Vec3.ZERO);
 
-
         // 未入盟页要能在「加入 / 创建联盟成功」后把容器叫回来重判一次（老端靠推送）。
         const join = this.currentPage.getComponent(LeagueJoinPage);
         if (join) join.joinOwner = this;
     }
 
-    // ============================================================
     // 只读出口（供单测 / 探针断言）
-    // ============================================================
 
     /** 当前铺的是不是「未入盟」那张页。 */
     get isShowingJoinPage(): boolean {

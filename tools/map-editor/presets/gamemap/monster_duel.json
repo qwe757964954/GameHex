@@ -9,16 +9,6 @@
   "mirrorVertical": false,
   "mirrorHorizontal": false,
   "mirror180": false,
-  "homes": [
-    {
-      "row": 17,
-      "column": 6
-    },
-    {
-      "row": 5,
-      "column": 6
-    }
-  ],
   "ascii": [
     ".............",
     ".............",
@@ -44,6 +34,19 @@
     ".............",
     "............."
   ],
+  "homes": [
+    {
+      "row": 17,
+      "column": 6
+    },
+    {
+      "row": 5,
+      "column": 6
+    }
+  ],
+  "spacing": {
+    "resourceMinDistance": 3
+  },
   "resourcePoints": [
     {
       "row": 16,
@@ -121,8 +124,5 @@
         152
       ]
     }
-  ],
-  "spacing": {
-    "resourceMinDistance": 3
-  }
+  ]
 }

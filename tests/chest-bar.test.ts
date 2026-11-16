@@ -119,12 +119,12 @@ test('C7 蓝卡计时条保留时钟图标，时间文字与图标同排', () =>
     const clock = node(SLOT, 'Clock')!;
     const clockSprite = ((clock._components ?? []) as Array<{ __id__: number }>)
         .map((ref) => SLOT[ref.__id__]).find((entry) => entry?.__type__ === 'cc.Sprite') as Entry | undefined;
-    assert.deepEqual([ (clock._lpos as { x: number; y: number }).x, (clock._lpos as { x: number; y: number }).y ], [-24, 0]);
+    assert.deepEqual([ (clock._lpos as { x: number; y: number }).x, (clock._lpos as { x: number; y: number }).y ], [-57, 0]);
     assert.equal((clockSprite?._spriteFrame as { __uuid__?: string })?.__uuid__,
         'b022a368-7f62-4ac9-9e61-152a2328b86c@f9941');
 
     const timeText = node(SLOT, 'TimeText')!;
-    assert.deepEqual([ (timeText._lpos as { x: number; y: number }).x, (timeText._lpos as { x: number; y: number }).y ], [16, 0]);
+    assert.deepEqual([ (timeText._lpos as { x: number; y: number }).x, (timeText._lpos as { x: number; y: number }).y ], [15, 0]);
 });
 
 test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢复', () => {

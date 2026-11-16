@@ -1,6 +1,6 @@
 import type { ConfigService } from '../../../core/config/ConfigService';
 import {
-    BIGMAP_TABLE, attachBigMapResourceItemIcons, parseBigMapConfig, type BigMapRawTables,
+    BIGMAP_TABLE, attachBigMapResourceItemIcons, parseBigMapConfig,
 } from '../model/BigMapConfig';
 import { applyBigMapScheduleOverrides } from '../model/BigMapCitySchedule';
 import type { IBigMapConfig } from '../model/BigMapTypes';
@@ -58,9 +58,4 @@ async function readItemRows(config: ConfigService, parsed: IBigMapConfig): Promi
         console.warn('[BigMapConfigLoader] 背包道具表读取失败，资源图标退回概念图', error);
         return [];
     }
-}
-
-/** 给编辑器/单测用：直接把已经读好的表塞进来。 */
-export function loadBigMapConfigFromTables(tables: BigMapRawTables): IBigMapConfig {
-    return parseBigMapConfig(tables);
 }

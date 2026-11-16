@@ -23,42 +23,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { TERRITORY_CHEST_OPEN_ARTS, TERRITORY_CHEST_OPEN_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
-    CHEST_OPEN_BAND_H,
-    CHEST_OPEN_BAND_LOCAL_X,
-    CHEST_OPEN_BAND_LOCAL_Y,
-    CHEST_OPEN_BAND_W,
-    CHEST_OPEN_CARD_H,
-    CHEST_OPEN_CARD_TOP,
-    CHEST_OPEN_CARD_W,
-    CHEST_OPEN_CHEST_BOTTOM,
-    CHEST_OPEN_CHEST_CENTER_X,
-    CHEST_OPEN_CHEST_H,
-    CHEST_OPEN_CHEST_W,
-    CHEST_OPEN_CLOSE_BOTTOM,
-    CHEST_OPEN_CLOSE_H,
-    CHEST_OPEN_CLOSE_W,
-    CHEST_OPEN_COUNT_FONT_SIZE,
-    CHEST_OPEN_COUNT_OUTLINE_WIDTH,
-    CHEST_OPEN_GRID_MIN_SCALE,
-    CHEST_OPEN_GRID_W,
-    CHEST_OPEN_ICON_H,
-    CHEST_OPEN_ICON_LOCAL_Y,
-    CHEST_OPEN_ICON_W,
-    CHEST_OPEN_OUTLINE_WIDTH,
-    CHEST_OPEN_SKIP_H,
-    CHEST_OPEN_SKIP_LEFT,
-    CHEST_OPEN_SKIP_TOP,
-    CHEST_OPEN_SKIP_W,
-    CHEST_OPEN_TITLE_FONT_FAMILY,
-    CHEST_OPEN_TITLE_FONT_SIZE,
     chestOpenBgProgressOf,
     chestOpenCardProgressOf,
-    chestOpenCardSlotOf,
     chestOpenCardVisualOf,
     chestOpenChestVisualOf,
     chestOpenCountTextOf,
     chestOpenEaseOutBack,
-    chestOpenGridHeightOf,
     chestOpenGridScaleOf,
     chestOpenIconFitOf,
     chestOpenRevealDoneSecondsOf,
@@ -77,6 +47,42 @@ import {
 } from '../assets/script/app/territory/view/TerritoryChestOpenArt';
 import { assetPath } from './helpers/asset-paths';
 
+/**
+ * 设计稿期望值（测试夹具）。
+ *
+ * 生产代码里的布局常量已经迁到 prefab；这里保留一份「期望值」用于对账 prefab，
+ * 不从生产 model 反向读取，否则等于用实现给自己出题。
+ */
+const CHEST_OPEN_CARD_W = 139;
+const CHEST_OPEN_CARD_H = 185;
+const CHEST_OPEN_CARD_TOP = 432;
+const CHEST_OPEN_GRID_W = 580;
+const CHEST_OPEN_ICON_W = 112;
+const CHEST_OPEN_ICON_H = 147;
+const CHEST_OPEN_ICON_LOCAL_Y = -3;
+const CHEST_OPEN_BAND_W = 122;
+const CHEST_OPEN_BAND_H = 29;
+const CHEST_OPEN_BAND_LOCAL_X = -0.5;
+const CHEST_OPEN_BAND_LOCAL_Y = -70;
+const CHEST_OPEN_CHEST_W = 282;
+const CHEST_OPEN_CHEST_H = 277;
+const CHEST_OPEN_CHEST_BOTTOM = 199;
+const CHEST_OPEN_CHEST_CENTER_X = -6.5;
+const CHEST_OPEN_SKIP_LEFT = 31;
+const CHEST_OPEN_SKIP_TOP = 102;
+const CHEST_OPEN_SKIP_W = 123;
+const CHEST_OPEN_SKIP_H = 64;
+const CHEST_OPEN_CLOSE_BOTTOM = 126;
+const CHEST_OPEN_CLOSE_W = 148;
+const CHEST_OPEN_CLOSE_H = 64;
+const CHEST_OPEN_TITLE_FONT_SIZE = 37;
+const CHEST_OPEN_TITLE_FONT_FAMILY = 'Microsoft YaHei';
+const CHEST_OPEN_COUNT_FONT_SIZE = 22;
+const CHEST_OPEN_OUTLINE_WIDTH = 2;
+const CHEST_OPEN_COUNT_OUTLINE_WIDTH = 2;
+const CHEST_OPEN_GRID_MIN_SCALE = 0.7;
+const CHEST_OPEN_CARD_COLS = 4;
+
 const read = (path: string): string => readFileSync(path, 'utf8');
 
 /** 源码文本断言一律先剥注释：注释里提到 `FW.ShowReward` / `settleRewards` 是解释，不是接线。 */
@@ -94,55 +100,30 @@ const ART_REL = 'image/territory/chest_open';
 // A. 纯口径
 // ============================================================
 
-test('A1｜卡片栅格：4 列步进 147、行步进 216、满行居中 580', () => {
-    assert.equal(CHEST_OPEN_CARD_TOP, 432, '设计稿首行 y=432');
-    assert.equal(CHEST_OPEN_CARD_W, 139);
-    assert.equal(CHEST_OPEN_CARD_H, 185);
-    assert.equal(CHEST_OPEN_GRID_W, 580, '4×139 + 3×8 = 580（设计稿整行宽）');
-
-    // 设计稿 x = 72 / 217 / 364 / 511，换算到「容器顶部中心」原点：-220.5 / -73.5 / 73.5 / 220.5
-    assert.deepEqual(
-        [0, 1, 2, 3].map((index) => chestOpenCardSlotOf(index, 4).x),
-        [-220.5, -73.5, 73.5, 220.5],
-    );
-    assert.deepEqual(
-        [0, 1, 2, 3].map((index) => chestOpenCardSlotOf(index, 4).y),
-        [-92.5, -92.5, -92.5, -92.5],
-    );
-
-    // 设计稿 4+1：第 5 张在第二行、整行居中（x=0）、y = -(216+92.5)
-    assert.deepEqual(chestOpenCardSlotOf(4, 5), { x: 0, y: -308.5, inRow: 1 });
-    assert.equal(chestOpenCardSlotOf(1, 3).inRow, 3, '3 张时是一整行（不是 3+0 的假两行）');
-    assert.deepEqual([0, 1, 2].map((index) => chestOpenCardSlotOf(index, 3).x), [-147, 0, 147]);
+test('A1｜行数：4 列一行，5~8 两张，0 张不建行', () => {
+    assert.deepEqual([0, 1, 4, 5, 8, 9].map((total) => chestOpenRowsOf(total, CHEST_OPEN_CARD_COLS)), [0, 1, 1, 2, 2, 3]);
+    assert.equal(chestOpenRowsOf(4, 0), 0, '列数非法不建行');
 });
 
-test('A2｜行数 / 总高：1~4 张一行、5~8 两张', () => {
-    assert.deepEqual([0, 1, 4, 5, 8, 9].map(chestOpenRowsOf), [0, 1, 1, 2, 2, 3]);
-    assert.equal(chestOpenGridHeightOf(0), 0);
-    assert.equal(chestOpenGridHeightOf(4), 185);
-    assert.equal(chestOpenGridHeightOf(5), 401, '185×2 + 31 = 401');
-    assert.equal(chestOpenGridHeightOf(9), 617);
-});
-
-test('A3｜缩放兜底：1610/1485 不缩，1280 缩到 0.888，再矮压到 0.7 下限', () => {
-    assert.equal(chestOpenGridScaleOf(5, 1610), 1, '设计稿高度下与效果图逐像素一致');
-    assert.equal(chestOpenGridScaleOf(5, 1485), 1, '长屏机（实测可见高 1485）两行仍放得下');
-    const ratio1280 = chestOpenGridScaleOf(5, 1280);
+test('A2｜缩放兜底：1610/1485 不缩，1280 缩到 356/401，再矮压到 0.7 下限', () => {
+    assert.equal(chestOpenGridScaleOf(401, 686, CHEST_OPEN_GRID_MIN_SCALE), 1, '设计稿高度下与效果图逐像素一致');
+    assert.equal(chestOpenGridScaleOf(401, 561, CHEST_OPEN_GRID_MIN_SCALE), 1, '长屏机（实测可见高 1485）两行仍放得下');
+    const ratio1280 = chestOpenGridScaleOf(401, 356, CHEST_OPEN_GRID_MIN_SCALE);
     assert.ok(Math.abs(ratio1280 - 356 / 401) < 1e-9, `1280 时取 356/401，实际 ${ratio1280}`);
     assert.ok(ratio1280 < 1 && ratio1280 > CHEST_OPEN_GRID_MIN_SCALE);
-    assert.equal(chestOpenGridScaleOf(9, 1280), CHEST_OPEN_GRID_MIN_SCALE, '三行以上触底');
-    assert.equal(chestOpenGridScaleOf(0, 1280), 1, '没有卡就不缩');
+    assert.equal(chestOpenGridScaleOf(617, 356, CHEST_OPEN_GRID_MIN_SCALE), CHEST_OPEN_GRID_MIN_SCALE, '三行以上触底');
+    assert.equal(chestOpenGridScaleOf(0, 356, CHEST_OPEN_GRID_MIN_SCALE), 1, '没有卡就不缩');
 });
 
-test('A4｜图标适配：等比、居中、最多放大 2 倍（道具图标 100×100 要铺满 112）', () => {
-    assert.deepEqual(chestOpenIconFitOf(112, 112), { width: 112, height: 112 });
-    assert.deepEqual(chestOpenIconFitOf(100, 100), { width: 112, height: 112 }, '工程道具/货币的真实尺寸');
-    assert.deepEqual(chestOpenIconFitOf(200, 200), { width: 112, height: 112 }, '大图缩进 112×147');
-    assert.deepEqual(chestOpenIconFitOf(224, 448), { width: 73.5, height: 147 }, '高窄图按高卡边');
-    assert.deepEqual(chestOpenIconFitOf(60, 60), { width: 112, height: 112 }, '小图放大到铺满，不是留白');
-    assert.deepEqual(chestOpenIconFitOf(20, 20), { width: 40, height: 40 }, '太小就封顶 2 倍，不硬拉');
-    assert.deepEqual(chestOpenIconFitOf(0, 0), { width: CHEST_OPEN_ICON_W, height: CHEST_OPEN_ICON_H });
-    assert.deepEqual(chestOpenIconFitOf(-8, 20), { width: CHEST_OPEN_ICON_W, height: CHEST_OPEN_ICON_H });
+test('A3｜图标适配：等比、居中、按 prefab 的图标位与最大放大倍数', () => {
+    assert.deepEqual(chestOpenIconFitOf(112, 112, 112, 147, 2), { width: 112, height: 112 });
+    assert.deepEqual(chestOpenIconFitOf(100, 100, 112, 147, 2), { width: 112, height: 112 }, '工程道具/货币的真实尺寸');
+    assert.deepEqual(chestOpenIconFitOf(200, 200, 112, 147, 2), { width: 112, height: 112 }, '大图缩进图标位');
+    assert.deepEqual(chestOpenIconFitOf(224, 448, 112, 147, 2), { width: 73.5, height: 147 }, '高窄图按高卡边');
+    assert.deepEqual(chestOpenIconFitOf(60, 60, 112, 147, 2), { width: 112, height: 112 }, '小图放大到铺满，不是留白');
+    assert.deepEqual(chestOpenIconFitOf(20, 20, 112, 147, 2), { width: 40, height: 40 }, '太小就封顶 2 倍，不硬拉');
+    assert.deepEqual(chestOpenIconFitOf(0, 0, 112, 147, 2), { width: 112, height: 147 });
+    assert.deepEqual(chestOpenIconFitOf(-8, 20, 112, 147, 2), { width: 112, height: 147 });
 });
 
 test('A5｜数量文案：道具 X1、货币 +N（设计稿两种形态是两类奖励）', () => {
@@ -349,7 +330,7 @@ test('D1｜根节点 720×1610 + 四边拉伸 Widget（长屏靠 Widget 适配�
     assert.deepEqual(items[0].data, { __id__: items.indexOf(root) });
 });
 
-test('D2｜卡片容器：锚点顶部中心 + Widget top=432 / hCenter，尺寸 580', () => {
+test('D2｜卡片容器：锚点顶部中心 + Widget top=432 / hCenter，Layout 纵向排布', () => {
     const items = prefabItems();
     const cards = nodeByName(items, 'Cards');
     const ui = compOf(items, cards, 'cc.UITransform');
@@ -360,6 +341,27 @@ test('D2｜卡片容器：锚点顶部中心 + Widget top=432 / hCenter，尺寸
     assert.equal(widget._top, CHEST_OPEN_CARD_TOP);
     assert.equal(widget._horizontalCenter, 0);
     assert.equal(widget._bottom, 0, '底部不贴边（否则会和宝箱互相拉扯）');
+
+    // 栅格已经迁到 cc.Layout：页面不再按 4 列/间距自己算 x/y。
+    const layout = compOf(items, cards, 'cc.Layout');
+    assert.equal(layout._layoutType, 2, 'VERTICAL');
+    assert.equal(layout._resizeMode, 1, 'CONTAINER：按行数收高');
+    assert.equal(layout._spacingX, 8);
+    assert.equal(layout._spacingY, 31);
+    assert.deepEqual(
+        [layout._paddingLeft, layout._paddingRight, layout._paddingTop, layout._paddingBottom],
+        [0, 0, 0, 0],
+    );
+    assert.equal(layout._verticalDirection, 1, 'TOP_TO_BOTTOM');
+
+    const row = nodeByName(items, 'RowTemplate');
+    assert.equal(row._active, false, '行模板必须 inactive');
+    assert.deepEqual(sizeOf(items, row), { width: CHEST_OPEN_GRID_W, height: CHEST_OPEN_CARD_H });
+    const rowLayout = compOf(items, row, 'cc.Layout');
+    assert.equal(rowLayout._layoutType, 1, 'HORIZONTAL');
+    assert.equal(rowLayout._resizeMode, 1, 'CONTAINER：按卡数收窄，不足一行由容器居中');
+    assert.equal(rowLayout._spacingX, 8);
+    assert.equal(rowLayout._spacingY, 0);
 });
 
 test('D3｜卡片模板：139×185、inactive、渲染序 Frame→Icon→Band→Count', () => {
@@ -439,7 +441,7 @@ test('D5｜跳过 / 关闭：设计稿文字位置，触摸框加高到 64', () 
     assert.ok(!componentsOf(items, close).includes('cc.UIOpacity'), '「点击关闭」常驻，不需要透明度');
 });
 
-test('D6｜脚本引用：页面 10 个 Inspector 引用全部指向对的节点/组件', () => {
+test('D6｜脚本引用：页面 Inspector 引用 / 栅格配置全部来自 prefab', () => {
     const items = prefabItems();
     const page = items.find((item: any) => item?.bgOpacity && item.cardsRoot && item.skipLabel);
     assert.ok(page, 'prefab 里找不到 TerritoryChestOpenPage 组件（用 bgOpacity 特征找）');
@@ -466,8 +468,12 @@ test('D6｜脚本引用：页面 10 个 Inspector 引用全部指向对的节点
     assert.equal(refType(page.closeLabel), 'cc.Label');
     assert.equal(ownerName(page.closeLabel), 'Close');
     assert.equal(refName(page.cardsRoot), 'Cards');
+    assert.equal(refName(page.rowTemplate), 'RowTemplate');
     assert.equal(refName(page.cardTemplate), 'CardTemplate');
     assert.equal(refName(page.chestNode), 'Chest');
+    assert.equal(page.gridColumns, 4, '列数属于 prefab 配置，不在页面写 4');
+    assert.equal(page.gridMinScale, CHEST_OPEN_GRID_MIN_SCALE);
+    assert.equal(page.gridBottomGap, 16);
     assert.equal(page.popupLayer, 0, 'NORMAL 层（Popup 节点已是 Canvas 最上层）');
     assert.equal(page.closeOnBlank, true, '点空白关闭（入场期间先收尾动画）');
     assert.deepEqual(page.contentNodes, []);
@@ -487,6 +493,7 @@ test('D7｜卡片脚本引用：frame / icon / count / opacity 都绑在同一�
     assert.equal(ownerName(cardComp.count), 'Count', 'count 引用指错');
     assert.equal(items[cardComp.opacity.__id__].__type__, 'cc.UIOpacity');
     assert.equal(ownerName(cardComp.opacity), 'CardTemplate', '整卡透明度必须挂模板根上');
+    assert.equal(cardComp.iconMaxUpscale, 2, '图标最大放大倍数属于 prefab 默认值');
 });
 
 test('D8｜脚本 uuid ↔ prefab 里的压缩 cid（错一个字符 = 运行时"组件缺失"）', () => {

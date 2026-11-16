@@ -42,7 +42,7 @@
 python tools/slice_bigmap_art.py --sprites <建筑图集.png> --details <资源图集.png> --ui <界面图集.png> --background <基地背景.png>
 ```
 
-然后通过 Cocos MCP 刷新 `db://assets/bundles/bigmap/image` 和 `db://assets/script/app/bigmap`。
+然后通过 Funplay Cocos MCP 刷新 `db://assets/bundles/bigmap/image` 和 `db://assets/script/app/bigmap`。
 
 ## 验证与边界
 

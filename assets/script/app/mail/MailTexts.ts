@@ -2,14 +2,14 @@
  * 「邮件」模块的全部文案 —— **改文案只动这一个文件**。
  *
  * 来源（逐条可回溯）：
- *   · FGUI `邮件/组件/组件_邮件_主界面.xml`：`Button title`「一键删除」「一键领取」、
- *     `文本_无邮件提示`「邮箱内没有任何信件」、`文本_自动删除提示`（带 `vars="true"` 占位）
- *   · FGUI `邮件/组件/组件_邮件_邮件内容.xml`：`Button title`（`gearText` 的两页「领取」「删除」）
- *   · FGUI `邮件/组件/组件_邮件_主界面Item.xml`：`状态`（`gearText` 的「已领取」/ default「已读」）
- *   · 老端 `LayerMail.ts` 的 `FW.showTip(FW.G_W("MAIL_NO_DELETABLE"))` 与 `PanelDialog` 配置
+ * · FGUI `邮件/组件/组件_邮件_主界面.xml`：`Button title`「一键删除」「一键领取」、
+ * `文本_无邮件提示`「邮箱内没有任何信件」、`文本_自动删除提示`（带 `vars="true"` 占位）
+ * · FGUI `邮件/组件/组件_邮件_邮件内容.xml`：`Button title`（`gearText` 的两页「领取」「删除」）
+ * · FGUI `邮件/组件/组件_邮件_主界面Item.xml`：`状态`（`gearText` 的「已领取」/ default「已读」）
+ * · 老端 `LayerMail.ts` 的 `FW.showTip(FW.G_W("MAIL_NO_DELETABLE"))` 与 `PanelDialog` 配置
  *
- * ⚠️ 占位符统一用 `{0}` 形式（不用老端的 `StringUtil.format` 的 `%s`），
- *   由 `formatText` 替换 —— 与本模块其余文案同一口径。
+ * 占位符统一用 `{0}` 形式（不用老端的 `StringUtil.format` 的 `%s`），
+ * 由 `formatText` 替换 —— 与本模块其余文案同一口径。
  */
 
 /** `{0}` / `{1}` 顺序替换；缺参保留原样（便于一眼看出漏传）。 */

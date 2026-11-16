@@ -109,8 +109,10 @@ function createSlot() {
     };
     (slot as unknown as { node: unknown }).node = node;
     // 字号 / 行高 / isBold 与 prefab 出厂值一致：首帧（普通格）不该有任何字样写入。
-    slot.value = { enabled: true, string: '', fontSize: 28, lineHeight: 39, isBold: false, node: valueNode };
+    slot.value = { enabled: true, string: '', fontSize: 32, lineHeight: 39, isBold: false, node: valueNode };
     slot.cross = { enabled: false };
+    // 普通尺寸 / 字号来自 prefab：onLoad 从节点 UITransform 与 Value Label 读。
+    (slot as unknown as { onLoad(): void }).onLoad();
     return { slot, rect, node, valueNode, harness };
 }
 

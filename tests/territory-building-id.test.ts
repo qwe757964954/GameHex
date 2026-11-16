@@ -272,7 +272,7 @@ test('★★★章节 02~07：每个 (type, configId) 组都要配建筑，且 i
  *     fixedResource ⇒ art.fixedResource ⇒ image/territory/buildings/territory_fixed_resource_v1
  *
  * 那张图正好就是 `build.json` 里 `69005` 的贴图 ⇒ 空串与「配了 69005」视觉上完全一样。
- * 所以用户说的「从 69005 改成 69020」与实测「148 格全是空串」并不矛盾，
+ * 所以用户说的「从 69005 改成 69020」与实测「146 格全是空串」并不矛盾，
  * 本用例钉的是**结果**：`rewardId=1023` 的格必须显式写 `69020`。
  *
  * ## 为什么必须显式配 id
@@ -296,12 +296,13 @@ test('★★★章节 01~07：用 1023 奖励的宝箱格配 69020（coinBox）�
         `${CHEST_BUILDING} 的贴图应是 coinBox`);
 
     let total = 0;
+    const expectedByChapter = [23, 27, 36, 15, 15, 15, 15];
     for (const chapter of [1, 2, 3, 4, 5, 6, 7]) {
         const path = `assets/resources/config/territory-maps/chapter_0${chapter}.json`;
         const map = JSON.parse(readFileSync(path, 'utf8')) as Raw;
         const chests = (map.sites as Raw[]).filter((site) => site.rewardId === REWARD_ID);
-        // 7 章合计 148 格（ch01=25 ch02=27 ch03=36 ch04~07 各 15）；某章变 0 说明奖励 id 被改回去了。
-        assert.ok(chests.length > 0, `chapter_0${chapter} 应有 rewardId=${REWARD_ID} 的宝箱格`);
+        assert.equal(chests.length, expectedByChapter[chapter - 1],
+            `chapter_0${chapter} 的 rewardId=${REWARD_ID} 宝箱格数量变了`);
 
         for (const site of chests) {
             assert.equal(site.type, 'fixedResource',
@@ -313,5 +314,5 @@ test('★★★章节 01~07：用 1023 奖励的宝箱格配 69020（coinBox）�
         total += chests.length;
     }
     // 每格一个独立 `configId`（`fixedResource_<cellId>`）⇒ 逐格填，不像关卡那样「每组一格」。
-    assert.equal(total, 148, '七章合计应有 148 个 rewardId=1023 的宝箱格');
+    assert.equal(total, 146, '七章合计应有 146 个 rewardId=1023 的宝箱格');
 });

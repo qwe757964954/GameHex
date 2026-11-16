@@ -28,9 +28,6 @@ export interface IGiftShopRowView {
     readonly rewards: readonly IGiftRewardView[];
 }
 
-/** 按钮文案带图标时 Label 的 x 偏移（让开左侧 34px 的货币图）。 */
-const LABEL_WITH_ICON_X = 16;
-
 /**
  * 礼包商品列表里的**一行**（503×175，充当「超值礼包」页 `RowView.content` 下第一个子节点，
  * 即虚拟列表的模板）。
@@ -71,8 +68,11 @@ export class GiftShopRow extends Component {
     @property({ type: Node, tooltip: 'ActionBtn：购买按钮（挂 cc.Button）' })
     actionButton: Node = null;
 
-    @property({ type: Label, tooltip: 'ActionBtn/Label：按钮文案' })
+    @property({ type: Label, tooltip: 'ActionBtn/Label：按钮文案；无图标时居中' })
     actionLabel: Label = null;
+
+    @property({ group: '购买按钮', tooltip: '带货币图时 Label 的 x 偏移（让开左侧 34px 的图标）' })
+    actionLabelIconX = 16;
 
     @property({ type: Sprite, tooltip: 'ActionBtn/Icon：按钮左侧货币图标（`免费` 时隐藏）' })
     actionIcon: Sprite = null;
@@ -133,7 +133,7 @@ export class GiftShopRow extends Component {
 
         this.actionLabel.string = view.buyText;
         // 带图标时让开左侧位置（见类注释里偏离②）。`免费` 是纯文案，回正中心。
-        this.actionLabel.node.setPosition(view.showIcon ? LABEL_WITH_ICON_X : 0, 0);
+        this.actionLabel.node.setPosition(view.showIcon ? this.actionLabelIconX : 0, 0);
         const showIcon = view.showIcon && view.currencyFrame != null;
         if (view.currencyFrame) this.actionIcon.spriteFrame = view.currencyFrame;
         this.actionIcon.node.active = showIcon;

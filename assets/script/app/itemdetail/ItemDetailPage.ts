@@ -1,11 +1,11 @@
-import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform, Widget } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from './GoodsBox';
 import { ItemDetailRow } from './ItemDetailRow';
-import { itemDetailLayoutOf, ID_PANEL_WIDTH, qualityFrameSuffixOf, qualityTitleStepOf } from './ItemDetailTable';
+import { qualityFrameSuffixOf, qualityTitleStepOf } from './ItemDetailTable';
 import type { IItemAccessRef, IItemRow } from './ItemDetailTable';
 import { itemDetailRepository } from './ItemDetailRepository';
 import type { IItemDetailRepository, IItemDetailSnapshot } from './ItemDetailRepository';
@@ -152,12 +152,30 @@ export class ItemDetailPage extends PopupBase {
      */
     private defaultTitleFrame: SpriteFrame | null = null;
 
+    /** 面板 / 列表 / 标题的 prefab 基线，运行时只按内容差值收放。 */
+    private panelWidget: Widget | null = null;
+    private panelBaseHeight = 0;
+    private panelBaseBottom = 0;
+    private listBaseHeight = 0;
+    private listBaseY = 0;
+    private titleBaseY = 0;
+    private contentBlockHeight = 0;
+
     // ============================================================
     // 生命周期
     // ============================================================
 
     protected onInit(): void {
         this.defaultTitleFrame = this.titleBg?.spriteFrame ?? null;
+        const panel = this.panelBg?.getComponent(UITransform);
+        this.panelWidget = this.panelBg?.getComponent(Widget) ?? null;
+        this.panelBaseHeight = panel?.height ?? 0;
+        this.panelBaseBottom = this.panelWidget?.bottom ?? 0;
+        const list = this.accessList?.node.getComponent(UITransform);
+        this.listBaseHeight = list?.height ?? 0;
+        this.listBaseY = this.accessList?.node.position.y ?? 0;
+        this.titleBaseY = this.accessTitle?.position.y ?? 0;
+        this.contentBlockHeight = (this.contentTitle?.position.y ?? 0) - this.titleBaseY;
         this.bindButton(this.closeButton, () => this.close(PopupCloseReason.CloseButton));
         this.bindButton(this.btnGo, () => this.onGoClick());
         this.bindButton(this.btnGo1, () => this.onGoClick());
@@ -259,26 +277,23 @@ export class ItemDetailPage extends PopupBase {
      * 只缩面板不改按钮，按钮会跑到面板外。
      */
     private applyLayout(rowCount: number, hasContent: boolean): void {
-        const layout = itemDetailLayoutOf(rowCount, hasContent);
-        const panelTransform = this.panelBg?.getComponent(UITransform);
-        if (panelTransform) panelTransform.setContentSize(ID_PANEL_WIDTH, layout.panelHeight);
-        const listNode = this.accessList?.node;
+        const list = this.accessList;
+        const listNode = list?.node;
         const listTransform = listNode?.getComponent(UITransform);
-        if (listNode && listTransform) {
-            listTransform.setContentSize(listTransform.width, layout.listHeight);
-            listNode.setPosition(listNode.position.x, layout.listTop, listNode.position.z);
-        }
+        if (!list || !listNode || !listTransform || !this.panelWidget) return;
+        const needed = rowCount * list.itemHeight + Math.max(0, rowCount - 1) * list.spacing;
+        const listHeight = Math.min(this.listBaseHeight, needed);
+        listTransform.setContentSize(listTransform.width, listHeight);
+
+        const shift = hasContent ? 0 : this.contentBlockHeight;
+        listNode.setPosition(listNode.position.x, this.listBaseY + shift, listNode.position.z);
         if (this.accessTitle) {
-            this.accessTitle.setPosition(this.accessTitle.position.x, layout.titleY, this.accessTitle.position.z);
+            this.accessTitle.setPosition(this.accessTitle.position.x, this.titleBaseY + shift, this.accessTitle.position.z);
         }
-        const buttons: readonly [Node | null, number][] = [
-            [this.btnGo, layout.goY],
-            [this.btnGo1, layout.go1Y],
-            [this.btnCompos, layout.go1Y],
-        ];
-        for (const [button, y] of buttons) {
-            if (button) button.setPosition(button.position.x, y, button.position.z);
-        }
+
+        const panelHeight = this.panelBaseHeight - (this.listBaseHeight - listHeight) - shift;
+        this.panelWidget.bottom = this.panelBaseBottom + (this.panelBaseHeight - panelHeight);
+        this.panelWidget.updateAlignment();
     }
 
     // ---------- 预加载 ----------

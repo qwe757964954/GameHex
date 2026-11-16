@@ -1796,6 +1796,9 @@
     "_components": [
       {
         "__id__": 472
+      },
+      {
+        "__id__": 531
       }
     ],
     "_prefab": {
@@ -12370,5 +12373,43 @@
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "q2HS65/SEMoZ+vXDFkiRg8"
+  },
+  {
+    "__type__": "cc.Layout",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 71
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 532
+    },
+    "_resizeMode": 0,
+    "_layoutType": 3,
+    "_cellSize": {
+      "__type__": "cc.Size",
+      "width": 110.7,
+      "height": 110.7
+    },
+    "_startAxis": 0,
+    "_paddingLeft": 0,
+    "_paddingRight": 0,
+    "_paddingTop": 0,
+    "_paddingBottom": 0,
+    "_spacingX": 20.7,
+    "_spacingY": 18,
+    "_verticalDirection": 1,
+    "_horizontalDirection": 0,
+    "_constraint": 2,
+    "_constraintNum": 4,
+    "_affectedByScale": false,
+    "_isAlign": false,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "layout_changehead_content_01"
   }
 ]

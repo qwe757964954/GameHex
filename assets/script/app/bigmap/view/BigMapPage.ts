@@ -198,8 +198,7 @@ export class BigMapPage extends Component {
     }
 
     private buildBaseArea(data: IBigMapViewState, width: number, height: number): void {
-        const rect = this.worldAreaRect(width, height);
-        this.layout.buildBase(data, rect);
+        this.layout.buildBase(data, this.worldAreaRect(width, height));
     }
 
     //-------------------------------------------------------------- 模式切换
@@ -213,8 +212,6 @@ export class BigMapPage extends Component {
     private sendIntent(intent: BigMapIntent): void {
         if (this.ready && !this.enteringBattle) EventMgr.instance.emit(BigMapUiEvent.Intent, { intent });
     }
-    private onWorldTap(hexId: number): void { this.sendIntent({ kind: 'worldTap', hexId }); }
-    private onPlotTap(hexId: number): void { this.sendIntent({ kind: 'plotTap', hexId }); }
 
     private onRender(event: IBigMapRenderEvent): void {
         this.data = event.state;
@@ -275,11 +272,8 @@ export class BigMapPage extends Component {
             userData: content,
             //点空白只让弹窗自己收掉，页面状态里的 `buildMenuVisible` 还是 true ⇒
             //下一次 500ms `tick → publish` 会按「该开」再弹回来。所以把用户主动收起
-            //翻译成意图，让 model 的可见性跟着关。
+            //翻译成意图，让 model 的可见性跟着关；`Force` 是页面自己收，不在此列。
             onClose: (reason) => {
-                //`Force` 是页面自己在收（切模式 / 状态已经变了），model 那边早就关过了；
-                //其余（点空白、点了某一行、关闭按钮）都是用户主动关 —— 状态必须跟着关，
-                //否则下一次 500ms `tick → publish` 会把弹窗原样再弹回来。
                 if (reason === PopupCloseReason.Force) return;
                 if (this.isValid) this.sendIntent({ kind: 'closeBuildMenu' });
             },
@@ -479,7 +473,7 @@ export class BigMapPage extends Component {
             };
         }
         if (this.mode === 'base') return null;
-        const monster = this.mode === 'world' && this.selectedMonsterId !== 0 ? data.monsters.get(this.selectedMonsterId) : null;
+        const monster = this.selectedMonsterId !== 0 ? data.monsters.get(this.selectedMonsterId) : null;
         if (!monster) return null;
         return {
             title: `${monster.name}（${monster.level} 级）`, body: formatBigMapMonsterDetail(monster),
@@ -542,7 +536,9 @@ export class BigMapPage extends Component {
         try {
             frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
                 resources.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope: resources.scope }));
-        } catch (error) { console.warn('[BigMapPage] 驻守玩家头像加载失败', error); }
+        } catch (error) {
+            console.warn('[BigMapPage] 驻守玩家头像加载失败', error);
+        }
         if (!this.isValid || resources.scope.disposed) return;
         this.rolePortraits.set(avatarId, frame);
         this.worldView.setRolePortrait(avatarId, frame);

@@ -79,12 +79,14 @@ import {
     normalizeRecruits,
     normalizeSpeaker,
     parseEmoji,
-    recruitLayout,
     TF_BATTLE_TYPE_CHAPTER,
     toIdString,
     type IChatMessage,
     type IChatRole,
 } from '../assets/script/app/chat/ChatTable';
+import {
+    recruitLayout,
+} from './fixtures/chat-recruit-layout';
 import {
     chatSpriteType,
     chatTint,
@@ -714,8 +716,8 @@ test('C1 根节点 = 第一个 cc.Node 且 cc.Prefab.data 指向它（排错会�
     assert.equal(root._parent as unknown, null, '根节点没有父节点');
     assert.equal((root._children as unknown[]).length, 18, '根直下 18 个节点');
     // 规模：109 节点 / 543 组件（与编辑器 `prefab_browse validate` 的读数一致）
-    assert.equal(GEOM.length, 109);
-    assert.equal(ALL.filter((entry) => entry && entry.__type__ === 'cc.Node').length, 109);
+    assert.equal(GEOM.length, 114);
+    assert.equal(ALL.filter((entry) => entry && entry.__type__ === 'cc.Node').length, 114);
 });
 
 test('C2 ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {

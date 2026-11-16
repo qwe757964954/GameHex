@@ -45,6 +45,8 @@ export interface TerritoryCardRow {
     rarity?: number;
     /** `pvpCard.headIcon`：敌军头像（关卡提示的敌军卡用）。 */
     headIcon?: string;
+    /** 部分卡牌表用 `icon` 存头像。 */
+    icon?: string;
     /** `pvpCard.description`：敌方说明（关卡提示的描述框用）。 */
     description?: string;
 }
@@ -107,8 +109,8 @@ export function readTerritoryIdleRewardMaxHours(
 /**
  * `gameConfig.chapterLevelAutoStartConfig` 的缺省值。
  *
- * 策划表 `S-数据配置` 原话：「章节地图【首次】激活关卡地块，自动进入战斗（1开 0关」，
- * 表里当前是 `1`。⚠️ 缺省取 **开**：取关会让整个功能在配置读不到时**静默失效**
+ * 配置表 `S-数据配置` 定义：「章节地图【首次】激活关卡地块，自动进入战斗（1开 0关」，
+ * 表里当前是 `1`。 缺省取 **开**：取关会让整个功能在配置读不到时**静默失效**
  * （表现是「点了格子只解锁、不进战斗」，零报错）。要关请改表，不要靠删配置行来关。
  */
 export const TERRITORY_LEVEL_AUTO_START_FALLBACK = true;
@@ -125,7 +127,7 @@ export function readTerritoryLevelAutoStart(
 ): boolean {
     const raw = rows.find((entry) => entry.key === 'chapterLevelAutoStartConfig')?.value;
     if (raw == null) return fallback;
-    // ⚠️ 别直接 `Number(raw)`：`Number('')` / `Number('  ')` / `Number(null)` 全是 **0**
+    // 别直接 `Number(raw)`：`Number('')` / `Number(' ')` / `Number(null)` 全是 **0**
     // ⇒ 空值会被当成「关」⇒ 表里多一个空格就把功能静默关掉。空串必须走 fallback。
     if (typeof raw === 'number') return Number.isFinite(raw) ? raw !== 0 : fallback;
     const text = typeof raw === 'string' ? raw.trim() : '';
@@ -188,10 +190,10 @@ export interface TerritoryCampaignStage {
     /**
      * `levelInfo.openGrideTime`：本关「NPC 翻地块频率」（秒，0 = 不额外限速，按全局 2.8s）。
      *
-     * 🔴 **只管战斗内 NPC 点地块的最小间隔**（两次点击之间的间距，计时从第一次翻格之后开始），
+     * **只管战斗内 NPC 点地块的最小间隔**（两次点击之间的间距，计时从第一次翻格之后开始），
      * 与领地格子的「探索中」时长**没有任何关系** —— 后者是地图配置自己的
      * `site.unlock.exploreSeconds`（`TerritoryMapConfig`，缺省 2 秒，走 `TerritoryProgress` 的倒计时）。
-     * 2026-11-11 之前这里把同一列也喂给 `exploreSeconds`，导致「把 NPC 调慢到 10 秒，
+     * 之前这里把同一列也喂给 `exploreSeconds`，导致「把 NPC 调慢到 10 秒，
      * 领地通关后开那一格也要等 10 秒」，已拆开。
      */
     openGrideTime: number;
@@ -239,17 +241,10 @@ function asGradeProModifier(value: unknown): TerritoryGradeProModifier | undefin
 }
 
 /**
- * 表格列 → 数组。**`x ?? []` 顶不住空对象**（见 218）。
+ * 表格列 → 数组。
  *
- * 转表器可能把「空列表」写成 **`{}`** 而不是 `[]`。`{}` 不是 nullish ⇒ `??` **不生效** ⇒
- * 下游 `.flatMap` / `.map` 直接抛 `is not a function`，
- * 整章领地数据加载失败（`TerritoryModel.loadChapter` →「领地数据加载失败」+ 提示条）。
- *
- * 归一放在读表边界，而不是逐个调用点打补丁。
- *
- * ⚠️ 泛型默认 `any`（不是 `unknown`）：`asArray(x).flatMap((reward) => reward.resId)` 里
- * `reward` 会推成 `unknown` ⇒ 下游读字段报 `TS2339`。列在转表产物里就是松散 JSON，
- * 收紧成 `unknown[]` 只是把脏值的锅推给调用方，不提供任何安全性。
+ * 转表器可能把空列表写成 `{}` 而不是 `[]`，`?? []` 不会命中，下游 `.map` 会抛错，
+ * 因此在读表边界统一归一。
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asArray<T = any>(value: unknown): T[] {
@@ -257,8 +252,6 @@ function asArray<T = any>(value: unknown): T[] {
 }
 
 function teamMatchesLevel(team: TerritoryNpcTeamRow, levelId: number): boolean {
-    // ⚠️ 同 `idleReward`：转表器把空列表写成 `{}`（见 `asArray` 注释）。
-    //当前 npcTeam 表 38 行都是数组，但同表同机制，不能靠"现在没脏"当防护。
     const values = asArray(team.npcTeamMatch).map((value) => asNumber(value)).filter(Boolean);
     if (!values.length) return false;
     if (values.length === 1) return values[0] === levelId;
@@ -276,14 +269,14 @@ function teamMatchesLevel(team: TerritoryNpcTeamRow, levelId: number): boolean {
 /**
  * 塔防出怪表 → 战斗波次，并标出**哪一波是 BOSS 波**。
  *
- * 口径（策划表 `defenceModWave.monsterType`，1 普通 / 2 精英 / 3 BOSS）：
+ * 口径（表 `defenceModWave.monsterType`，1 普通 / 2 精英 / 3 BOSS）：
  * 每组 `startId` 只有最后一波是 BOSS，其余都是普通小怪。两种数据形态都要成立：
  *
  * - 表里带了 `monsterType`：认 `3`；一组里一个 `3` 都没有（脏数据 / 忘填）时按最后一波兜底，
- *   否则「击杀 BOSS 才算胜利」会变成永远打不赢。
+ * 否则「击杀 BOSS 才算胜利」会变成永远打不赢。
  * - 表里还没有这一列（当前客户端 JSON 就是这样）：直接按最后一波判 BOSS。
  *
- * ⚠️ BOSS 波是**胜负手**（见 `ZCOutcomeSystem` 的塔防分支），兜底宁可放宽也不能放宽成「没有 BOSS」。
+ * BOSS 波是**胜负手**（见 `ZCOutcomeSystem` 的塔防分支），兜底宁可放宽也不能放宽成「没有 BOSS」。
  */
 function projectDefenceWaves(
     rows: readonly TerritoryDefenceWaveRow[],
@@ -330,14 +323,13 @@ export function buildTerritoryCampaign(
     const resourceNames = new Map(resourceRows.map((row) => [row.resId, row.name]));
 
     const projectCard = (cardId: number, level = 1): TerritoryCampaignEnemy => {
-        // 头像按 `npcTeam.cardId` → `pvpCard` → `monsterCard` 依次找（两张表都有 `headIcon`，`pvpCard` 另有 `icon` 口径）
-        const headIconOf = (row: Record<string, unknown> | undefined): string => {
+        // 头像按 npcTeam.cardId → pvpCard → monsterCard 依次查，两张表都有头像字段。
+        const headIconOf = (row: TerritoryCardRow | undefined): string => {
             const raw = row?.headIcon ?? row?.icon ?? '';
             return typeof raw === 'string' ? raw : '';
         };
         const headIconFor = (cardId: number): string =>
-            headIconOf(pvpCardsById.get(cardId) as unknown as Record<string, unknown> | undefined)
-            || headIconOf(monsters.get(cardId) as unknown as Record<string, unknown> | undefined);
+            headIconOf(pvpCardsById.get(cardId)) || headIconOf(monsters.get(cardId));
         const pvpCard = pvpCardsById.get(cardId);
         if (pvpCard) return {
             cardId,
@@ -364,7 +356,6 @@ export function buildTerritoryCampaign(
         .filter((row) => row.levelChapter === chapterId)
         .map((row): TerritoryCampaignStage => {
             const mode = row.levelMod === 2 ? 'defence' : 'match';
-            const opponentCount = 1;
             const bossTeamId = asNumber(asRecord(row.extraCards).enemy, 0) || null;
             const matchedTeams = mode === 'match'
                 ? npcTeams
@@ -414,7 +405,7 @@ export function buildTerritoryCampaign(
                 enemyTeamId: enemyTeamIds[0] ?? null,
                 enemyTeamIds,
                 enemyTeamCardIds,
-                opponentCount,
+                opponentCount: 1,
                 enemies,
                 waves,
                 idleRewards,

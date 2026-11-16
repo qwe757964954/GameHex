@@ -143,28 +143,16 @@
     },
     "_children": [
       {
-        "__id__": 11
-      },
-      {
         "__id__": 17
       },
       {
-        "__id__": 51
-      },
-      {
-        "__id__": 58
-      },
-      {
-        "__id__": 65
-      },
-      {
-        "__id__": 72
+        "__id__": 117
       },
       {
         "__id__": 79
       },
       {
-        "__id__": 85
+        "__id__": 122
       }
     ],
     "_active": true,
@@ -174,6 +162,9 @@
       },
       {
         "__id__": 9
+      },
+      {
+        "__id__": 127
       }
     ],
     "_prefab": {
@@ -310,6 +301,9 @@
       },
       {
         "__id__": 15
+      },
+      {
+        "__id__": 129
       }
     ],
     "_prefab": {
@@ -1290,11 +1284,17 @@
     "__type__": "cc.Node",
     "_objFlags": 0,
     "_parent": {
-      "__id__": 5
+      "__id__": 117
     },
     "__editorExtras__": {},
     "_prefab": {
       "__id__": 52
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 232,
+      "z": 0
     }
   },
   {
@@ -1378,11 +1378,17 @@
     "__type__": "cc.Node",
     "_objFlags": 0,
     "_parent": {
-      "__id__": 5
+      "__id__": 117
     },
     "__editorExtras__": {},
     "_prefab": {
       "__id__": 59
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 116,
+      "z": 0
     }
   },
   {
@@ -1466,11 +1472,17 @@
     "__type__": "cc.Node",
     "_objFlags": 0,
     "_parent": {
-      "__id__": 5
+      "__id__": 117
     },
     "__editorExtras__": {},
     "_prefab": {
       "__id__": 66
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
     }
   },
   {
@@ -1554,11 +1566,17 @@
     "__type__": "cc.Node",
     "_objFlags": 0,
     "_parent": {
-      "__id__": 5
+      "__id__": 117
     },
     "__editorExtras__": {},
     "_prefab": {
       "__id__": 73
+    },
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": -116,
+      "z": 0
     }
   },
   {
@@ -1721,7 +1739,7 @@
     "_anchorPoint": {
       "__type__": "cc.Vec2",
       "x": 0.5,
-      "y": 0.25
+      "y": 0.5
     },
     "_id": ""
   },
@@ -1803,7 +1821,7 @@
     "_objFlags": 0,
     "__editorExtras__": {},
     "_parent": {
-      "__id__": 5
+      "__id__": 122
     },
     "_children": [
       {
@@ -1820,6 +1838,9 @@
       },
       {
         "__id__": 91
+      },
+      {
+        "__id__": 125
       }
     ],
     "_prefab": {
@@ -1828,7 +1849,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -220,
+      "y": 0,
       "z": 0
     },
     "_lrot": {
@@ -2467,5 +2488,319 @@
   {
     "__type__": "cc.CompPrefabInfo",
     "fileId": "E4f4dC43QjS7Gb1WHqC6nw"
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "Rows",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 5
+    },
+    "_children": [
+      {
+        "__id__": 51
+      },
+      {
+        "__id__": 58
+      },
+      {
+        "__id__": 65
+      },
+      {
+        "__id__": 72
+      }
+    ],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 118
+      },
+      {
+        "__id__": 120
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": -14,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 117
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 119
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 650,
+      "height": 464
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "rows_gameaway_01"
+  },
+  {
+    "__type__": "cc.Layout",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_enabled": true,
+    "_resizeMode": 1,
+    "_layoutType": 2,
+    "_cellSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_startAxis": 0,
+    "_paddingLeft": 0,
+    "_paddingRight": 0,
+    "_paddingTop": 0,
+    "_paddingBottom": 0,
+    "_spacingX": 0,
+    "_spacingY": 0,
+    "_verticalDirection": 1,
+    "_horizontalDirection": 0,
+    "_constraint": 0,
+    "_constraintNum": 0,
+    "_affectedByScale": false,
+    "_isAlign": false,
+    "_id": "",
+    "node": {
+      "__id__": 117
+    },
+    "__prefab": {
+      "__id__": 121
+    }
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "layout_gameaway_117_01"
+  },
+  {
+    "__type__": "cc.Node",
+    "_name": "ReturnArea",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_parent": {
+      "__id__": 5
+    },
+    "_children": [
+      {
+        "__id__": 85
+      }
+    ],
+    "_active": true,
+    "_components": [
+      {
+        "__id__": 123
+      }
+    ],
+    "_prefab": null,
+    "_lpos": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_lrot": {
+      "__type__": "cc.Quat",
+      "x": 0,
+      "y": 0,
+      "z": 0,
+      "w": 1
+    },
+    "_lscale": {
+      "__type__": "cc.Vec3",
+      "x": 1,
+      "y": 1,
+      "z": 1
+    },
+    "_mobility": 0,
+    "_layer": 33554432,
+    "_euler": {
+      "__type__": "cc.Vec3",
+      "x": 0,
+      "y": 0,
+      "z": 0
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.UITransform",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 122
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 124
+    },
+    "_contentSize": {
+      "__type__": "cc.Size",
+      "width": 222,
+      "height": 84
+    },
+    "_anchorPoint": {
+      "__type__": "cc.Vec2",
+      "x": 0.5,
+      "y": 0.5
+    },
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "area_gameaway_01"
+  },
+  {
+    "__type__": "cc.Widget",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_enabled": true,
+    "_alignFlags": 4,
+    "_target": null,
+    "_left": 0,
+    "_right": 0,
+    "_top": 0,
+    "_bottom": 16,
+    "_horizontalCenter": 0,
+    "_verticalCenter": 0,
+    "_isAbsLeft": true,
+    "_isAbsRight": true,
+    "_isAbsTop": true,
+    "_isAbsBottom": true,
+    "_isAbsHorizontalCenter": true,
+    "_isAbsVerticalCenter": true,
+    "_originalWidth": 0,
+    "_originalHeight": 0,
+    "_alignMode": 2,
+    "_lockFlags": 4,
+    "_id": "",
+    "node": {
+      "__id__": 85
+    },
+    "__prefab": {
+      "__id__": 126
+    }
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "widget_gameaway_85_01"
+  },
+  {
+    "__type__": "cc.Layout",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_enabled": true,
+    "_resizeMode": 1,
+    "_layoutType": 2,
+    "_cellSize": {
+      "__type__": "cc.Size",
+      "width": 100,
+      "height": 100
+    },
+    "_startAxis": 0,
+    "_paddingLeft": 0,
+    "_paddingRight": 0,
+    "_paddingTop": 0,
+    "_paddingBottom": 12,
+    "_spacingX": 0,
+    "_spacingY": 0,
+    "_verticalDirection": 1,
+    "_horizontalDirection": 0,
+    "_constraint": 0,
+    "_constraintNum": 0,
+    "_affectedByScale": false,
+    "_isAlign": false,
+    "_id": "",
+    "node": {
+      "__id__": 5
+    },
+    "__prefab": {
+      "__id__": 128
+    }
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "layout_gameaway_5_01"
+  },
+  {
+    "__type__": "cc.Widget",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "_enabled": true,
+    "_alignFlags": 45,
+    "_target": null,
+    "_left": 2,
+    "_right": 2,
+    "_top": 2,
+    "_bottom": 2,
+    "_horizontalCenter": 0,
+    "_verticalCenter": 0,
+    "_isAbsLeft": true,
+    "_isAbsRight": true,
+    "_isAbsTop": true,
+    "_isAbsBottom": true,
+    "_isAbsHorizontalCenter": true,
+    "_isAbsVerticalCenter": true,
+    "_originalWidth": 646,
+    "_originalHeight": 572,
+    "_alignMode": 2,
+    "_lockFlags": 45,
+    "_id": "",
+    "node": {
+      "__id__": 11
+    },
+    "__prefab": {
+      "__id__": 130
+    }
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "widget_gameaway_bg_01"
   }
 ]

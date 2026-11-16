@@ -19,7 +19,7 @@
  * （不是给同一张图染 8 种色）⇒ 落地也照换图走：宿主用
  * `LeagueArt.leagueBannerArt(view.icon)` 取图名再 `loadArt`，拿到 frame 交给 `applyBanner`。
  *
- * ⚠️ 换图是**异步**的、而槽位会被虚拟列表复用 ⇒ 与 `LeagueMemberRow` 同一套令牌口径。
+ * 换图是**异步**的、而槽位会被虚拟列表复用 ⇒ 与 `LeagueMemberRow` 同一套令牌口径。
  */
 
 import { _decorator, Component, Label, Sprite, SpriteFrame } from 'cc';

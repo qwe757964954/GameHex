@@ -1,30 +1,5 @@
 /**
- * 主线任务（`taskMain` 表 + `CmdTask` 缓存）的判定口径 —— 零 import 纯函数层。
- *
- * ## 「10级领取」是什么
- *
- * 主界面上那个挂着物品框的小角标（老端 `组件_主界面_领取武将`），数据源是 `taskMain` 表里
- * **`targetType = 99`** 的那一行（全表 49 行里只有 1 行）：
- *
- * ```json
- * { "resId": 500099, "preResId": 0, "targetType": 99,
- *   "param": { "count": 10 }, "reward": [{ "number": 1, "resId": 18014 }],
- *   "name": "10级获取英雄", "goto": null }
- * ```
- *
- * ⇒ 角标文案「10级领取」里的 `10` 就是 `param.count`，进度 `(7/10)` 的 7 来自
- * 服务端 `CmdTask.count`、10 来自这张表。奖励是 `18014`「猎头者」碎片。
- *
- * ## 为什么是 `targetType = 99`
- *
- * 老端 `VOMainTaskBag.SpecialTaskForHeroId = 99`，`GetHeroVO()` 就这么过滤的：
- *
- * ```js
- * for (let vo of tmVO) { if (vo.GetRef().targetType == this.SpecialTaskForHeroId) return vo }
- * ```
- *
- * 同一个包里的 `GetFirstVO()` 还**主动排除** 99（`targetType != 99 && …`），
- * 说明 99 是「英雄任务」这条独立支线的哨兵值 —— 别把它混进主线列表。
+ * 主线任务判定纯函数，不依赖 cc。任务进度、奖励和入口显隐都从这里算。
  */
 
 /** 英雄任务（= 主界面「10级领取」）在 `taskMain.targetType` 里的哨兵值。 */
@@ -120,9 +95,7 @@ export function pickHeroTaskRow(rows: ReadonlyMap<number, IMainTaskRow>): IMainT
     return best;
 }
 
-// ============================================================
 // 进度 / 状态
-// ============================================================
 
 /**
  * 进度文案 `(7/10)` —— 老端 `com_task_hero.tm("lab_value").setText(\`(${GetValue()}/${GetMaxValue()})\`)`。
@@ -151,7 +124,7 @@ export function isUndoneOf(rewardState: number): boolean {
  * if (heroTaskVo && (canGet || heroTaskVo.IsUnDone())) { …显示… } else { com_task_hero.visible = false }
  * ```
  *
- * ⚠️ 后果是**已领取（REWARDED）时整块隐藏** —— 别「优化」成常显。
+ * 后果是**已领取（REWARDED）时整块隐藏** —— 别「优化」成常显。
  */
 export function entryVisibleOf(hasTask: boolean, rewardState: number): boolean {
     if (!hasTask) return false;
@@ -179,7 +152,7 @@ export const EMPTY_TASK_STATE = { count: 0, rewardState: CMD_COMMON_STATE.UNDONE
  *
  * `CmdTask` 的形状（`Cmd.d.ts`）：`{ count: Long, resId: number, rewardState: CmdCommonState }`。
  * `count` 是 **`uint64` ⇒ Long**，必须走 `toIdString` / `Number()` 之前先收敛成字符串
- * （项目规则 23：禁直接 `Number(long)` 当数值用；这里只做展示与进度比较，
+ * （禁止直接 `Number(long)` 当数值用；这里只做展示与进度比较，
  * 用 `toCount`（`RequestGuard`）即可 —— 但本文件是零依赖层，所以只接**已经收敛好的 number**）。
  */
 export function normalizeTaskState(raw: unknown): IMainTaskState {
@@ -193,9 +166,7 @@ export function normalizeTaskState(raw: unknown): IMainTaskState {
     };
 }
 
-// ============================================================
 // 「当前主线任务」—— 详情弹窗 + 主界面入口共用的那一条
-// ============================================================
 
 /** 选中的一条主线任务：表行 + 它在服务端缓存里的状态。 */
 export interface IMainTaskPick {
@@ -208,14 +179,14 @@ export interface IMainTaskPick {
  *
  * ```js
  * GetFirstVO() {
- *     let tmVO = this.GetBagsTask();            // taskMain 全表 → 逐条取缓存行
- *     tmVO.sort((a, b) => a.GetRef().preResId - b.GetRef().preResId);
- *     for (let vo of tmVO) {
- *         if (vo.GetRef().targetType != this.SpecialTaskForHeroId &&      // ≠ 99
- *             (vo.GetCmd().rewardState == UNDONE || vo.GetCmd().rewardState == FINISH)) {
- *             return vo
- *         }
- *     }
+ * let tmVO = this.GetBagsTask();            // taskMain 全表 → 逐条取缓存行
+ * tmVO.sort((a, b) => a.GetRef().preResId - b.GetRef().preResId);
+ * for (let vo of tmVO) {
+ * if (vo.GetRef().targetType != this.SpecialTaskForHeroId &&      // ≠ 99
+ * (vo.GetCmd().rewardState == UNDONE || vo.GetCmd().rewardState == FINISH)) {
+ * return vo
+ * }
+ * }
  * }
  * ```
  *
@@ -224,8 +195,8 @@ export interface IMainTaskPick {
  * 1. **主动排除 `targetType = 99`** —— 那是「10级领取」那条独立支线（见文件头）。
  * 2. **只认 `UNDONE` / `FINISH`** —— `REWARDED`（已领）的跳过，继续往后找。
  * 3. **按 `preResId` 升序**取第一个 —— 这是「任务链顺序」，不是 `resId`。
- *    ⚠️ `preResId` 打平时补 `resId` 升序做 tie-break（老端靠 V8 `Array.sort` 的稳定性，
- *    不写就是「看 Map 迭代序」，同样的表换个引擎版本会选出不同的任务）。
+ * `preResId` 打平时补 `resId` 升序做 tie-break（老端靠 V8 `Array.sort` 的稳定性，
+ * 不写就是「看 Map 迭代序」，同样的表换个引擎版本会选出不同的任务）。
  *
  * ## 有意偏离：不照抄老端对 `null` 调 `GetRef()`
  *
@@ -270,7 +241,7 @@ export function taskTitleOf(row: IMainTaskRow): string {
  * com.tm("lab_title").setText(`${vo.GetTitle()} (${vo.GetValue()}/${vo.GetMaxValue()})`)
  * ```
  *
- * ⚠️ **`GetTitle()` 与 `(x/y)` 之间有一个空格**（FGUI 原稿里那段设计期占位文字
+ * **`GetTitle()` 与 `(x/y)` 之间有一个空格**（FGUI 原稿里那段设计期占位文字
  * `玩家等级打到10级(9/10)` 是**没空格**的，别照抄原稿 —— 代码才是行为真源）。
  */
 export function taskDetailTitleOf(row: IMainTaskRow, state: IMainTaskState): string {
@@ -290,4 +261,3 @@ export function taskDetailTitleOf(row: IMainTaskRow, state: IMainTaskState): str
 export function taskEntryLabelOf(row: IMainTaskRow, state: IMainTaskState): string {
     return `${taskTitleOf(row)}\n(${state.count}/${row.maxCount})`;
 }
-

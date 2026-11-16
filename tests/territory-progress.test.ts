@@ -98,18 +98,21 @@ test('server-confirmed random unlock survives a local progress reload', () => {
 });
 
 test('random cells unlocked-and-passed become owned without pending pass reports', () => {
+    const candidates = map.randomSites?.candidateCells ?? [];
+    assert.ok(candidates.length >= 2, 'chapter_01 至少要有两个随机候选格');
+    const [first, second] = candidates;
     const progress = new TerritoryProgress(map);
-    progress.markCellsUnlocked([346, 349]);
-    const added = progress.markCellsPassed([346, 349, 99999]);
-    assert.deepEqual(added, [346, 349]);
-    assert.equal(progress.isOwned(346), true);
-    assert.equal(progress.isOwned(349), true);
+    progress.markCellsUnlocked([first, second]);
+    const added = progress.markCellsPassed([first, second, 99999]);
+    assert.deepEqual(added, [first, second]);
+    assert.equal(progress.isOwned(first), true);
+    assert.equal(progress.isOwned(second), true);
     // 随机格仍在解锁集合里（服务端 unlockCells 口径），与已领取 fixedResource 一致。
-    assert.equal(progress.isCellUnlocked(349), true);
+    assert.equal(progress.isCellUnlocked(second), true);
     // 随机格不发通关请求 ⇒ 不得进入 pendingPasses。
     assert.deepEqual(progress.pendingPassCells, []);
     // 重复记账幂等。
-    assert.deepEqual(progress.markCellsPassed([346]), []);
+    assert.deepEqual(progress.markCellsPassed([first]), []);
 });
 
 // ============================================================

@@ -486,7 +486,6 @@ export class BigMapModel {
         return this.config.mainBuildingId;
     }
 
-    /** 某个建造区格子上「正在建造」的建筑名（空串 = 该格没有在建工程）。 */
     /**
      *在建格对应的建筑 id（建造中的格不在 `base.buildings` 里，只存在于队列）。
      *
@@ -500,6 +499,7 @@ export class BigMapModel {
         return slot?.buildingId ?? 0;
     }
 
+    /** 某个建造区格子上「正在建造」的建筑名（空串 = 该格没有在建工程）。 */
     buildingNameOfQueueAt(hexId: number): string {
         const slot = this.data.base.queues.find((item) => (
             item.state === BigMapQueueState.Building && item.instanceId === 0 && item.anchorHexId === hexId
@@ -739,7 +739,7 @@ export class BigMapModel {
         return {
             current,
             max,
-            cost: affordable || Number.isFinite(cost) ? cost : 0,
+            cost: Number.isFinite(cost) ? cost : 0,
             canUnlock: affordable,
             reason: affordable ? '' : `货币不足（需要 ${Math.round(cost || 0)}）`,
         };
@@ -756,7 +756,8 @@ export class BigMapModel {
         return { ok: true, message: `建造队列 +1（消耗货币 ${Math.round(result.cost)}）` };
     }
 
-    mainLevel(): number {        return bigMapMainLevel(this.config, this.data.base);
+    mainLevel(): number {
+        return bigMapMainLevel(this.config, this.data.base);
     }
 
     attackPower(): number {
@@ -1159,8 +1160,7 @@ export class BigMapModel {
 
     async refreshCampDetail(campId: number, force = false): Promise<void> {
         const repository = this.deps.campRepository;
-        if (this.isDisposed) return;
-        if (!repository) return;
+        if (this.isDisposed || !repository) return;
         //早退必须逐条留痕：这里以前是一行 `if (...) return`，点据点没反应时完全看不出
         //卡在哪一条（2026-10-30 排查「没看到发 CmdSlgCampInfoReqMsg」时踩的）。
         if (!this.worldInstance.cities.has(campId)) {
@@ -1453,7 +1453,8 @@ export class BigMapModel {
         if (!monster) return { ok: false, message: BIGMAP_BATTLE_TEXT.monsterMissing };
         if (!monster.battle) return this.attackMonster(instanceId);
         const view = this.monsterView(instanceId);
-        if (!view?.canAttack) return { ok: false, message: view?.attackReason || BIGMAP_BATTLE_TEXT.monsterUnavailable };
+        if (!view) return { ok: false, message: BIGMAP_BATTLE_TEXT.monsterUnavailable };
+        if (!view.canAttack) return { ok: false, message: view.attackReason || BIGMAP_BATTLE_TEXT.monsterUnavailable };
         return this.requestServerBattle(ZC_BATTLE_TYPE_SLG_MONSTER, monster.id);
     }
 

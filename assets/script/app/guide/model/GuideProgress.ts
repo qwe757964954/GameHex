@@ -1,27 +1,7 @@
 /**
- * 新手引导的步骤机（纯 TS，不 import `cc`，可直接在 node 单测里跑）。
- *
- * ## 它管什么
- *
- * 1. **定位当前步** —— 存档恢复后能接着跑，不重放已完成的步骤；
- * 2. **推进** —— 只接受「当前步」完成，乱序 / 重复 / 已跳过的回调一律返回 `null`；
- * 3. **跳过** —— 从当前步起把剩余步骤一次性标记完成，并交出全部未发奖励（文档要求「跳过也补发」）；
- * 4. **发奖台账** —— `granted` 记录哪些步的奖励已经交出去，保证同一进程内不重复发。
- *
- * ## 它不管什么（边界，别越界用）
- *
- * - ❌ **不是权威发奖**：`granted` 是本地台账，换设备 / 清存档就没了。跨端幂等要靠服务端按
- *   `stepId` 去重，或者在登录时用服务端的引导进度覆盖本地。
- * - ❌ **不读表、不加载资源**：表由 `GuideStepConfig.parseGuideSteps` 解析后传进来；
- *   资源归属由 application 层的 Loader 负责。
- * - ❌ **不派发事件**：完成/跳过的表现由 Controller 订阅后自己做。
- * - ❌ **不做重试**：`complete()` 交出去的奖励清单必须由调用方落地；发失败要自己重试到成功。
- *   本类不会因为「没发出去」而回退步骤 —— 引导奖励是必得项，宁可补发也不要把玩家卡回上一步。
- *
- * ## 与文档的口径差异
- *
- * 设计案正文写「流程 1~5 强制、流程 6 可跳过」，但导表页只把 `skipAble=1` 标在 `8-1` 收尾步。
- * 本类按**表**判（`canSkip` 读当前步的 `skipAble`），不按正文。表改了就生效，不用动代码。
+ * 新手引导步骤机，纯 TS，不 import cc。
+ * 负责定位当前步、推进、跳过和本地发奖台账。granted 只是本地台账，不是权威发奖；
+ * 本类不读表、不加载资源、不派发事件。
  */
 
 import { GUIDE_STEP_END } from './GuideStepConfig';
@@ -56,12 +36,10 @@ export class GuideProgress {
     private skippedFlag = false;
 
     /**
-     * @param steps 已解析、且**按行序**排好的步骤表（不要在这里再排序）。
-     * @param saved 上次存档；传入即恢复进度。
-     *
-     * @throws 表为空、缺 `firstLogin` 入口、`nextStep` 指向不存在的步、链上有环 —— 这些都抛。
-     *   调用方（Loader / Controller）**必须** `try/catch` 并降级成「本次不引导」：
-     *   配置错误可以少一段新手引导，但不能阻塞主界面进入。
+     * @param steps 已解析且按行序排好的步骤表，不要在这里再排序。
+     * @param saved 上次存档，传入即恢复进度。
+     * @throws 表为空、缺 firstLogin 入口、nextStep 指向不存在的步、链上有环。
+     *   调用方必须 try/catch 并降级成本次不引导。
      */
     constructor(steps: readonly GuideStep[], saved?: GuideProgressData) {
         if (steps.length === 0) throw new Error('guideStep 表为空，无法启动引导');
@@ -95,21 +73,18 @@ export class GuideProgress {
         return step !== null && step.skipAble && !this.skippedFlag;
     }
 
-    /** 已完成的步（含被跳过时一次性标记的）。 */
+    /** 已完成的步（含跳过时一次性标记的）。 */
     get completedSteps(): readonly string[] {
-        return [...this.completed];
+        return Array.from(this.completed);
     }
 
-    /** 已发过奖的步。用于「重进游戏时补发漏掉的奖励」这类外部补偿逻辑。 */
+    /** 已发过奖的步。 */
     get grantedSteps(): readonly string[] {
-        return [...this.granted];
+        return Array.from(this.granted);
     }
 
     /**
-     * 完成当前步：推进 + 记账，返回本次该发的奖励。
-     *
-     * **幂等**：同一 `stepId` 重复调用（或传入非当前步）一律返回 `null`，不会重复发奖。
-     * 奖励清单里的 `pro` 是权重，当前全表 `10000`（必得）；调用方若要接随机，按 `pro` 自己掷。
+     * 完成当前步：推进并记账，返回本次应发的奖励。重复或非当前步返回 null。
      */
     complete(stepId: string): GuideCompletion | null {
         const step = this.byId.get(stepId);
@@ -129,19 +104,16 @@ export class GuideProgress {
     }
 
     /**
-     * 从当前步起跳过整条引导：剩余步骤全部标记完成，交出全部未发奖励。
-     *
-     * @param force `true` = 忽略当前步的 `skipAble`（调试逃生口 / 运营强推）。
-     *   正常用户路径不要传 —— 表里 1~5 是强制流程。
-     *   跳过后 `current` 为 `null`、`wasSkipped` 为真。
+     * 从当前步起跳过整条引导，剩余步骤全部标记完成并交出未发奖励。
+     * force 为 true 时忽略当前步 skipAble，仅用于调试或运营强推。
      */
     skip(force = false): readonly GuideReward[] {
         if (!force && !this.canSkip) return [];
 
         const rewards: GuideReward[] = [];
         let cursor = this.cursor;
-        // 上限保护：链已在构造时校验过无环，这里只是防御非法状态下的死循环。
-        for (let guard = 0; cursor && guard <= this.steps.length; guard += 1) {
+        // 构造期已校验链表无环，这里按链走即可。
+        while (cursor) {
             const step = this.byId.get(cursor);
             if (!step) break;
             if (!this.completed.has(cursor)) {
@@ -161,17 +133,10 @@ export class GuideProgress {
     toSave(): GuideProgressData {
         return {
             currentStepId: this.cursor ?? '',
-            completedSteps: [...this.completed],
-            grantedSteps: [...this.granted],
+            completedSteps: Array.from(this.completed),
+            grantedSteps: Array.from(this.granted),
             skipped: this.skippedFlag,
         };
-    }
-
-    /** 该步尚未发放的奖励；已发过返回空数组。补偿逻辑用它做只读判断。 */
-    pendingRewards(stepId: string): readonly GuideReward[] {
-        const step = this.byId.get(stepId);
-        if (!step) return [];
-        return this.ungrantedRewards(step);
     }
 
     private ungrantedRewards(step: GuideStep): GuideReward[] {
@@ -203,10 +168,8 @@ export class GuideProgress {
     }
 
     /**
-     * 链校验：从唯一 `firstLogin` 入口顺 `nextStep` 走到底，必须覆盖全表且无环。
-     *
-     * 不覆盖全表 = 有步永远走不到（多半是 `nextStep` 写错）；有环 = 玩家会卡在同一步。
-     * 这两种都在构造期抛，而不是等玩家踩到。
+     * 链校验：从唯一 firstLogin 入口顺 nextStep 走到底，必须覆盖全表且无环。
+     * 不覆盖全表说明有步永远走不到，有环说明玩家会卡住，都在构造期抛出。
      */
     private assertChainCloses(): void {
         const entries = this.steps.filter((step) => step.triggerType === 'firstLogin');

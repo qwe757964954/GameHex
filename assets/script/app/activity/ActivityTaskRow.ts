@@ -87,6 +87,11 @@ export class ActivityTaskRow extends Component {
         this.onAction?.();
     }
 
+    /** 行模板预摆的奖励格数量；外部按它截断奖励数据。 */
+    get slotCount(): number {
+        return this.slots.length;
+    }
+
     /** 奖励格（`rewardBar` 下的子节点，按 x 从左到右排 —— `_children` 顺序 ≠ 视觉顺序）。 */
     private get slots(): ActivityRewardSlot[] {
         return this.rewardBar.getComponentsInChildren(ActivityRewardSlot)

@@ -10,7 +10,7 @@
  * 2. **错图**：异步回来的图属于已经滚过去的行（同 `LeagueApplyRow` 的头像令牌问题）。
  *
  * ⇒ 口径与 `MainEntranceList`（「先取完图标再刷列表」）、`LayerActivityPage.loadIconFrames`
- *    一致：**宿主**先把本趟要用到的帧全取进内存，行只做同步的 `spriteFrame = frame`。
+ * 一致：**宿主**先把本趟要用到的帧全取进内存，行只做同步的 `spriteFrame = frame`。
  *
  * ## 两支分流（`item` 直通 / `roleProperty` 落 `icons/resource`）
  *
@@ -22,9 +22,9 @@
  * | `item`（`iconIsPath = true`，路径直通） | 武库石板 `icons/common/图标_武库石板`、银钥匙 `icons/item/图标_银钥匙` |
  * | `roleProperty`（`iconIsPath = false`，FGUI 裸名） | 联盟银币 `图标_联盟银币`、金币 `图标_幻灵玉`、联盟贡献 `图标_联盟贡献` |
  *
- * ⚠️ 只走 `item` 一支的症状：所有「货币类」奖励格**只剩品质框、没有图标**，而且**不报错**。
- *    商店的「购买」按钮货币小图标（`priceType = 11` 联盟银币）也是这一支，
- *    它只在 `roleProperty` 表里 ⇒ 少查一张表就是「按钮上光秃秃只剩数字」。
+ * 只走 `item` 一支的症状：所有「货币类」奖励格**只剩品质框、没有图标**，而且**不报错**。
+ * 商店的「购买」按钮货币小图标（`priceType = 11` 联盟银币）也是这一支，
+ * 它只在 `roleProperty` 表里 ⇒ 少查一张表就是「按钮上光秃秃只剩数字」。
  *
  * ## 品质框
  *
@@ -68,14 +68,14 @@ export async function loadLeagueRewardArt(
     items: ReadonlyMap<number, ILeagueGoodsInfo>,
     resources: ReadonlyMap<number, ILeagueGoodsInfo>,
 ): Promise<ILeagueRewardArt> {
-    // ---- 品质框：4 张，固定要（谁都用）----
+    // 品质框：4 张，固定要（谁都用）
     const qualities = new Map<number, SpriteFrame | null>();
     await Promise.all(QUALITY_FRAME_NAMES.map(async (name, index) => {
         const frame = await loadArt(name, QUALITY_FRAME_ROOT);
         qualities.set(index + 1, frame);
     }));
 
-    // ---- 图标：按 resId 去重取 ----
+    // 图标：按 resId 去重取
     const icons = new Map<number, SpriteFrame | null>();
     const wanted = new Map<number, { root: string; name: string }>();
     for (const resId of resIds) {
@@ -118,6 +118,3 @@ function qualityLevelOf(resId: number, levels: ReadonlyMap<number, number>): num
     if (quality === undefined) return 1;
     return qualityFrameLevel(quality);
 }
-
-/** 「该 `resId` 有没有图」—— 供探针 / 单测快速判空（不加载）。 */
-export const LEAGUE_QUALITY_FRAME_COUNT = QUALITY_FRAME_NAMES.length;

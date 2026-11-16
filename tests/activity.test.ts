@@ -43,6 +43,23 @@ import {
     ACTIVITY_PREVIEW_NUM_POS,
     ACTIVITY_PREVIEW_NUM_SCALE,
     ACTIVITY_PREVIEW_PADDING_X,
+    ACTIVITY_STRIP_HEIGHT,
+    ACTIVITY_STRIP_POS,
+    ACTIVITY_STRIP_WIDTH,
+    ACTIVITY_TITLE_LABEL_SIZE,
+    ACTIVITY_TITLE_SIZE,
+    barFillWidth,
+    chestOffsetX,
+    chestPitch,
+    fguiTopLeftToCocos,
+    previewBubblePlacement,
+    previewBubbleWidth,
+    previewCellCount,
+    previewCellX,
+    rewardNumLayout,
+    type IPreviewAnchorBox,
+} from '../assets/script/app/activity/LayerActivityLayout';
+import {
     ACTIVITY_ROW_ACTION_POS,
     ACTIVITY_ROW_ACTION_SIZE,
     ACTIVITY_ROW_BG_POS,
@@ -63,23 +80,8 @@ import {
     ACTIVITY_ROW_TITLE_LEFT,
     ACTIVITY_ROW_TITLE_SIZE,
     ACTIVITY_ROW_WIDTH,
-    ACTIVITY_STRIP_HEIGHT,
-    ACTIVITY_STRIP_POS,
-    ACTIVITY_STRIP_WIDTH,
-    ACTIVITY_TITLE_LABEL_SIZE,
-    ACTIVITY_TITLE_SIZE,
-    barFillWidth,
-    chestOffsetX,
-    chestPitch,
-    fguiTopLeftToCocos,
-    previewBubblePlacement,
-    previewBubbleWidth,
-    previewCellCount,
-    previewCellX,
-    rewardNumLayout,
     rewardSlotX,
-    type IPreviewAnchorBox,
-} from '../assets/script/app/activity/LayerActivityLayout';
+} from './fixtures/activity-row-layout';
 import {
     ACTIVITY_TEXTS,
 } from '../assets/script/app/activity/LayerActivityTexts';
@@ -554,20 +556,40 @@ function refNodeName(value: unknown): string {
     return String(PREFAB_INDEX.objOf(id)._name ?? '');
 }
 
-test('B. ⚠️ 长屏适配：贴顶名单与 prefab 名字硬绑定（改名要红）', () => {
-    // `topAlignedNodes` 是 `nodeArray`，MCP 写不进去（扩展漏传 dump.type）⇒ 名单落在代码里，
-    // 于是「代码里的名字」与「prefab 里的节点名」之间**没有编译期约束** ——
-    // 改名会让长屏适配**静默偏掉**（只是位置差一点，不报错），只能由这条用例钉住。
+function prefabComp(path: string, type: string): Record<string, unknown> | null {
+    const i = PREFAB_INDEX.pathIdx.get(path);
+    if (i === undefined) return null;
+    return PREFAB_INDEX.byType(i, type);
+}
+
+/** 断言 prefab 里的 Widget 对齐配置，防止迁移后数值被静默改回。 */
+function assertWidget(path: string, flags: number, values: Record<string, number>): void {
+    const widget = prefabComp(path, 'cc.Widget');
+    assert.ok(widget, `${path} 没有 cc.Widget`);
+    assert.equal(widget!._alignFlags, flags, `${path} alignFlags`);
+    for (const [key, value] of Object.entries(values)) {
+        assert.equal(widget![`_${key}`], value, `${path}.${key}`);
+    }
+}
+
+test('B. ⚠️ 长屏适配：贴顶/贴底节点由 prefab Widget 接管，代码不再按名字偏移', () => {
     const src = readFileSync('assets/script/app/activity/LayerActivityPage.ts', 'utf8');
-    const block = /const ACTIVITY_HEADER_NODES: readonly string\[\] = \[([\s\S]*?)\n\];/.exec(src);
-    assert.ok(block, 'LayerActivityPage.ts 里找不到 ACTIVITY_HEADER_NODES 表');
-    const names = [...block![1].matchAll(/'([^']+)'/g)].map((m) => m[1]);
-    assert.ok(names.length >= 5, `贴顶名单太短（读到的名字：${names.join(',')}）`);
+    assert.doesNotMatch(src, /ACTIVITY_HEADER_NODES/);
+    assert.doesNotMatch(src, /applyScreenLayout|captureLayoutBase|topAlignedNodes|bottomAlignedNodes/);
 
     const rootKids = prefabChildren('');
-    for (const name of names) {
-        assert.ok(rootKids.includes(name), `贴顶名单里的「${name}」不在 prefab 根下（改名了？长屏适配会静默偏掉）`);
+    for (const name of ['TitleArt', 'TitleLabel', 'TopBg', 'CloseBtn', 'ProgressStrip', 'Hint']) {
+        assert.ok(rootKids.includes(name), `贴顶节点「${name}」不在 prefab 根下`);
     }
+
+    assertWidget('PanelBg', 21, { top: 150, bottom: 110, horizontalCenter: 0 });
+    assertWidget('TitleArt', 17, { top: 105, horizontalCenter: -13.5 });
+    assertWidget('TitleLabel', 17, { top: 127, horizontalCenter: -13 });
+    assertWidget('TopBg', 17, { top: 228, horizontalCenter: 2.5 });
+    assertWidget('CloseBtn', 17, { top: 148, horizontalCenter: 327 });
+    assertWidget('ProgressStrip', 17, { top: 315, horizontalCenter: 36 });
+    assertWidget('Hint', 17, { top: 320, horizontalCenter: 200 });
+    assertWidget('RowView', 21, { top: 454, bottom: 166, horizontalCenter: 1 });
 
     // 面板必须是九宫底（长屏只长高，靠 9-slice 平铺；SIMPLE 拉伸会变形）
     const panelSprite = PREFAB_INDEX.byType(PREFAB_INDEX.pathIdx.get('PanelBg')!, 'cc.Sprite');
@@ -575,22 +597,16 @@ test('B. ⚠️ 长屏适配：贴顶名单与 prefab 名字硬绑定（改名�
     assert.equal(panelSprite!._type, 1, 'PanelBg 不是 SLICED（9 宫），长屏拉伸会变形');
 });
 
-test('B. ⚠️ 长屏适配：panel 绑到 PanelBg，且 onInit 抓基线 / onOpen 应用', () => {
-    assert.equal(refNodeName(rootScript().panel), 'PanelBg', 'LayerActivityPage.panel 没绑到 PanelBg');
-
-    // 顺序错了会**累加偏移**：基线若在 onOpen 里抓（那时已经 apply 过一次），
-    // 每开关一次弹窗就整体再往上挪 extra/2。
+test('B. ⚠️ 长屏适配：Widget 在 prefab 上生效，代码不再抓基线 / 手动应用', () => {
     const src = readFileSync('assets/script/app/activity/LayerActivityPage.ts', 'utf8');
+    assert.doesNotMatch(src, /captureLayoutBase\(\)/);
+    assert.doesNotMatch(src, /applyScreenLayout\(\)/);
+    assert.doesNotMatch(src, /const ACTIVITY_DESIGN_HEIGHT/);
+
     const onInit = /protected onInit\(\): void \{([\s\S]*?)\n {4}\}/.exec(src);
     assert.ok(onInit, '读不到 onInit 的实现体');
-    assert.ok(
-        onInit![1].indexOf('captureLayoutBase()') >= 0,
-        'onInit 里必须调 captureLayoutBase() —— 基线要在 prefab 还没被 applyScreenLayout 动过时抓',
-    );
     assert.ok(onInit![1].indexOf('bindBlankContent()') >= 0, 'onInit 里必须调 bindBlankContent()');
-    const onOpen = /protected async onOpen\(\): Promise<void> \{([\s\S]*?)\n {4}\}/.exec(src);
-    assert.ok(onOpen, '读不到 onOpen 的实现体');
-    assert.ok(onOpen![1].indexOf('applyScreenLayout()') >= 0, 'onOpen 里必须调 applyScreenLayout()');
+    assert.ok(onInit![1].indexOf('captureLayoutBase()') < 0, 'onInit 里不应再抓布局基线');
 });
 
 test('B. 列表视窗 / content 锚点必须是 (0.5, 1)（VScrollView 约定）', () => {

@@ -364,12 +364,12 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 玩家基地与城池锚点同格时复用城池标记，显示一套主城建筑、名条与头像，保留原城池查询和点击语义；位置同步变更后原位置恢复城池外观。基地格没有城池时才创建独立基地标记。
 
-通过 Cocos MCP 接入两种现有预制体：
+通过 Funplay Cocos MCP 接入两种现有预制体：
 
 - `BigMapLevelInfoPanel`：城池／野怪详情，显示真实名称、状态、行动力与挑战说明，提供定位、攻打、关闭。
 - `BigMapPlayerLevelPanel`：其他基地详情，显示已有基地名称、战力和距离，保留定位；攻打仍按当前功能范围禁用。
 
-控制器 `BigMapTargetPanel` 只更新显示与转发输入；资格、请求、战斗参数及结算继续由原 Presenter / Repository 负责。全部示例奖励、示例费用已清除；小屏等比缩放，禁用按钮同时变暗。`BigMapChestDetailPanel` 暂无世界宝箱实例协议，`BigMapLevelTipPanel` 暂无开战前敌军阵容数据，两者保留为资源，未填入虚构数据。基地建造详情继续使用原有界面。
+详情弹窗只更新显示与转发输入；资格、请求、战斗参数及结算继续由原 Presenter / Repository 负责。全部示例奖励、示例费用已清除；小屏等比缩放，禁用按钮同时变暗。`BigMapChestDetailPanel` 暂无世界宝箱实例协议，`BigMapLevelTipPanel` 暂无开战前敌军阵容数据，两者保留为资源，未填入虚构数据。基地建造详情继续使用原有界面。
 
 ### 5.4.1 无缝背景上的透明格（2026-10-28）
 

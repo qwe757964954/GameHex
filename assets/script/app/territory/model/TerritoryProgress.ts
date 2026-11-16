@@ -35,8 +35,8 @@ export type TerritoryExploreCheck =
 /**
  * 玩家单章领地进度。
  *
- *  静态地图留在 `TerritoryMapConfig`；本类只持有可保存的玩家状态，
- *  因此地图 JSON 重发后能安全恢复。
+ * 静态地图留在 `TerritoryMapConfig`；本类只持有可保存的玩家状态，
+ * 因此地图 JSON 重发后能安全恢复。
  */
 export class TerritoryProgress {
     private readonly owned = new Set<number>();
@@ -57,7 +57,7 @@ export class TerritoryProgress {
     /**
      * 服务端 `unlockCells`：已解锁、可探索的格子。
      *
-     * ⚠️ 与 {@link disabled} 是**两回事**：这个是"服务端允许点"，那个是"玩家手动关掉"。
+     * 与 {@link disabled} 是**两回事**：这个是"服务端允许点"，那个是"玩家手动关掉"。
      */
     private readonly unlockable = new Set<number>();
     /** 服务端格子状态是否已成功拉取过；false 时 {@link isUnlockable} 一律放行。 */
@@ -109,39 +109,14 @@ export class TerritoryProgress {
     }
 
     /**
-     * 把服务端 `CmdCityChapterCellInfoRspMsg` 的格子状态**合并**进来。
+     * 合并服务端下发的格子状态。
      *
-     * ## 语义映射（两边名字不同，别按字面对号入座）
+     * `passCells` 对应本地的 owned，只增不减；`unlockCells` 是完整集合，
+     * 完整快照时按服务端结果重建，避免本地永久领先。
+     * 服务端的 unlockCells 不等于本地 disabled，后者表示玩家手动关闭的站点。
      *
-     * | 服务端字段 | 本地 | 含义 |
-     * |---|---|---|
-     * | `passCells`（已通关） | `owned` | **已占领** ← 就是同一个东西 |
-     * | `unlockCells`（已解锁） | `unlockable` | 战斗格可探索；固定资源格已领取 |
-     * | `rewardState` | 不落本地 | 章节领奖态由服务端权威，客户端不存 |
-     *
-     * ⚠️ 服务端的 `unlockCells` **不是**本地的 `disabled`（那是"玩家手动关掉的站点"），
-     * 两者千万别混：一个管"能不能点"，一个管"玩家要不要它"。
-     *
-     * ## `passCells` 只增；`unlockCells` 是**完整集合**
-     *
-     * 协议里两个都是 bitSet（`repeated uint64`），**一次性给全量**。所以：
-     *  - `passCells` 单调增加（本地可能在等服务端确认，覆盖会丢待确认态）；
-     *  - `unlockCells` 在 `replaceUnlocks` 时**按快照重建**（见下）。
-     *
-     * ## 🔴 为什么 `unlockCells` 必须能重建（2026-11-09 实机）
-     *
-     * 原来这条也是单调 `add`，而 `unlockable` 在构造时还会灌入**本地存档**的
-     * `unlockedCells` ⇒ 两份数据只并集、从不清 ⇒ 本地一旦领先服务端就永久领先。
-     * 症状：点一个「服务端认为前置未解锁」的关卡格，客户端判前置全满足 ⇒ **不上锁**、
-     * 直接发 `CmdCityChapterUnlockCellReqMsg`，服务端回 `CmdTips「前置地块未解锁」`。
-     * 玩家看到的是一句莫名其妙的红字，而不是地图上那把锁。
-     *
-     * @param options.replaceUnlocks 传 `true` 表示这是一次**完整快照**（`CmdCityChapterCellInfoRspMsg`）：
-     *   `unlockable` 先用快照重建，本地存档里多出来的格跟着消失。
-     *   ⚠️ `CmdCityChapterPassCellBroMsg`（只讲通关、`unlockCells` 传空）**绝不能**传它，
-     *   否则整章格子会被清成未解锁、玩家一个都点不动。
-     *
-     * @returns 新增占领的格子（升序）。调用方据此决定要不要提示 / 刷新。
+     * @param options.replaceUnlocks 完整快照传 true；仅含通关信息的推包不能传。
+     * @returns 新增占领的格子，升序。
      */
     applyServerState(
         state: { readonly unlockCells: readonly number[]; readonly passCells: readonly number[] },
@@ -163,13 +138,7 @@ export class TerritoryProgress {
             this.owned.add(cell);
             added.push(cell);
         }
-        // 完整快照 ⇒ 重建解锁集：本地存档 / 旧回包里多出来的格子必须跟着消失，
-        // 否则前置判定会放行一个服务端认为未解锁的格（见方法头注）。
-        // 完整快照 ⇒ 重建解锁集：本地存档 / 旧回包里多出来的格子必须跟着消失，
-        // 否则前置判定会放行一个服务端认为未解锁的格（见方法头注）。
-        // ⚠️ **空数组不清空**：`unlockCells` 为空只可能是「服务端还没算好 / 桩数据 / 旧包」，
-        //    真清空会让整章格子一个都点不动（连起点格都没解锁）。宁可留着本地多出的格
-        //    （最多被服务端打回一次「前置地块未解锁」），也不能一次空包把图清死。
+        // 完整快照 ⇒ 重建解锁集；空数组不清空，否则空包会把整章格子清死。
         if (options?.replaceUnlocks && (state.unlockCells?.length ?? 0) > 0) this.unlockable.clear();
         for (const cell of state.unlockCells ?? []) {
             if (!validCell(cell)) continue;
@@ -181,7 +150,7 @@ export class TerritoryProgress {
     /**
      * 这格是否**可探索**（服务端已解锁）。
      *
-     * ⚠️ 服务端没给过状态时（`unlockCells` 为空且尚未拉取）**一律放行** ——
+     * 服务端没给过状态时（`unlockCells` 为空且尚未拉取）**一律放行** ——
      * 收紧会让玩家在离线 / 请求失败时点不动任何格子。
      */
     isUnlockable(cellId: number): boolean {
@@ -205,7 +174,7 @@ export class TerritoryProgress {
     /**
      * 标记服务端状态已拉取。
      *
-     * ⚠️ 只在**成功**拉到回包时调（`TerritoryPage.mergeServerState` 里）——
+     * 只在**成功**拉到回包时调（`TerritoryPage.mergeServerState` 里）——
      * 请求失败时保持 false，否则 {@link isUnlockable} 会用"全不放行"白送一次全图可探索。
      */
     markServerStateKnown(known = true): void {
@@ -226,14 +195,14 @@ export class TerritoryProgress {
     /**
      * 按**服务端回包给的格子清单**批量记账解锁（`CmdCityChapterUnlockCellRspMsg.cellId`）。
      *
-     * ## 为什么要批量
+     * 回包可能一次解锁整片区域
      *
      * 解锁回包的 `cellId` 是 **`repeated uint32`**：服务端按「相同 `configId` = 一片战斗区域」
-     * 把同区域的一起解锁。实机日志（2026-10-10）：请求 `cellId:327`、回包 `cellId:[327, 328]`。
+     * 把同区域的一起解锁。实机日志：请求 `cellId:327`、回包 `cellId:[327, 328]`。
      * 只记请求的那一格 ⇒ 同区域其余格在界面上仍是锁态，玩家以为要一格格点。
      *
      * @param cellIds 服务端回的格子清单；空数组时**什么都不做**（不退回请求格——
-     *   记账必须以服务端为准，客户端替它猜会把没解锁的格也标成可点）。
+     * 记账必须以服务端为准，客户端替它猜会把没解锁的格也标成可点）。
      * @returns 实际新增解锁的格子（升序），供调用方决定要不要刷新/ 写盘。
      */
     markCellsUnlocked(cellIds: readonly number[]): number[] {
@@ -249,8 +218,7 @@ export class TerritoryProgress {
     }
 
     /**
-     * 单格通关成功后的本地记账（配合 `TerritoryCellRepository.passCell`）。
-     * 服务端返回 `succ=1` 之后才调 —— **不乐观更新**。
+     * 单格通关后的本地记账，服务端返回 succ 后才调用。
      */
     markCellPassed(cellId: number): void {
         if (!Number.isInteger(cellId) || cellId < 0 || cellId >= this.map.rows * this.map.columns) return;
@@ -260,36 +228,15 @@ export class TerritoryProgress {
     }
 
     /**
-     * 按**服务端回包给的格子清单**批量记账通关（**随机格解锁即通关**专用）。
+     * 按服务端回包的格子清单批量记录通关，用于随机格解锁即通关。
      *
-     * ## 为什么随机格需要它
+     * 随机格没有独立通关步骤，解锁记账只会进入 unlockable，因此需要补记为 owned。
+     * 不加入 pendingPasses，随机格不发通关请求。
+     * 入参是整批解锁回包，只对 randomSites.candidateCells 内的格子生效，
+     * 避免把同批的关卡或首领格误记为已通关。
      *
-     * 随机格没有「通关」这一步：解锁成功即由服务端发奖（见
-     * `docs/领地随机资源跨端规则.md`），但解锁记账只把格子放进 `unlockable`，
-     * 地图底色仍是泥地（未通关）—— 玩家翻开后看不到草地地块，
-     * 还会以为要再点一次。
-     *
-     * ⚠️ **不加入 `pendingPasses`**：随机格永远不发 `CmdCityChapterPassCellReqMsg`
-     * （服务端在解锁时已结算）。这与 `settle()` 到期占领的记账不同，别复用那条。
-     *
-     * ⚠️ 调用前仍需先调 {@link markCellsUnlocked}：服务端快照里随机格在 `unlockCells`，
-     * 两个集合都保留，与已领取的 `fixedResource` 格「同时在 unlockable 与 owned」口径一致。
-     *
-     * ## 🔴 只认随机候选格（2026-11-06 修 chapter_02 的「boss 没通关就变蓝」）
-     *
-     * 入参是**服务端的解锁回包**，而回包的 `cellId` 是「一片区域一起解锁」的整批
-     * （实测：请求 327 → 回 `[327, 328]`）。原实现对整批无差别地记 `owned`，于是只要回包里
-     * 混进一个关卡 / 首领格，那格就变成「已通关」—— 表现是**地块变草地 + 编号气泡变蓝
-     * （`isAreaPassed` 判 `owned`）+ `owned ⊆ opened` 直接把后继关卡提前揭示**，
-     * 而玩家根本没打过那一关（用户 2026-11-06：chapter_02 的 boss「尚未通关就已经显示成
-     * 已通过的蓝色气泡」「解锁关系没有绑到 2-9，提前披露了」）。
-     *
-     * 「解锁 = 通关」这条特例**只对随机格成立**（服务端在解锁时结算发奖），
-     * 关卡 / 首领 / 宝箱格必须走各自的 passCell 或战斗流程 ⇒ 这里按 `randomSites.candidateCells`
-     * 白名单过滤。⚠️ 老地图没有 `randomSites` 时（清单为空）保持原样全收，避免整章随机格失效。
-     *
-     * @param cellIds 服务端回包给的格子清单（与解锁同一清单）。
-     * @returns 实际新增占领的格子（升序），供调用方决定写盘 / 刷新。
+     * @param cellIds 服务端回包给的格子清单
+     * @returns 实际新增占领的格子，升序
      */
     markCellsPassed(cellIds: readonly number[]): number[] {
         const total = this.map.rows * this.map.columns;
@@ -318,26 +265,11 @@ export class TerritoryProgress {
     }
 
     /**
-     * 这一格是否「同区域已通关」—— **任一同 `configId` 的格子 owned，整片都算已通关**。
+     * 这一格是否同区域已通关：任一 configId 相同的战斗格 owned，整片都算通关。
      *
-     * ## 为什么需要（2026-10-12）
-     *
-     * 山猫口径：「327 与 328 configId 一样，都是打同一关卡，**327 / 328 算一起的**」。
-     * 二者在同一片战斗区域（`configId=10001`），只差`buildingId`（328 有、327 没有）
-     * ⇒ 通关一次就该整片一起变已通关外观，而不是「打的是327、结果 328 还显示可通关」。
-     *
-     * ## 🔴 只在**查询态**扩散，不动 `owned` 存储
-     *
-     * `owned` 会被 `ownedCells` 落进存档、被服务端 `passCells` 快照合并、喂
-     * `territoryChapterCompletion` 算章节进度分母。若在这里把同区域的格子都写进 `owned`：
-     * - 存档多出一批「从没单独打过」的格子；
-     * - 服务端快照回来时它们会被当成「本地已占领但服务端没确认」⇒ 反复重报通关。
-     *
-     * 所以只在这里把「这一格的区域组里有没有 owned」当查询条件返回，**存储仍是原本打过的那几格**。
-     *
-     * 区域组 = 所有 `type ∈ {stage, boss, asyncPvp}` 且 `configId` 是**同一个非空数字**的站点。
-     * 非战斗类型（`fixedResource` / `bonus`）**不参与** ——
-     * 它们各是各的据点（`fixedResource` 甚至同 configId 有 3 个格子，见 map 配置）。
+     * 只在查询时扩散，不写入 owned，避免存档出现从未单独打过的格，
+     * 也避免服务端快照回来时被当成待确认通关反复上报。
+     * 区域组只包含 stage、boss、asyncPvp 且 configId 为同一非空数字的站点。
      */
     isAreaPassed(cellId: number): boolean {
         if (this.owned.has(cellId)) return true;
@@ -362,7 +294,7 @@ export class TerritoryProgress {
      * 每格一调），全量重渲染时原先是几千次数组扫描。
      *
      * 区域组 = 所有 `type ∈ {stage, boss, asyncPvp}` 且 `configId` 为非空数字串的站点
-     * （口径与下方 `isPrerequisiteComplete` 一致；fixedResource 同 configId 有多格，不参与）。
+     * （与下方 `isPrerequisiteComplete` 一致；fixedResource 同 configId 有多格，不参与）。
      */
     private areaIndexCache: { byCell: Map<number, string>; byConfig: Map<string, number[]> } | null = null;
     private areaIndex(): { byCell: Map<number, string>; byConfig: Map<string, number[]> } {
@@ -526,7 +458,7 @@ export class TerritoryProgress {
      * 判据与 {@link checkUnlock} 的拦截**同源**（那边直接调本方法），所以「被拦截」与
      * 「提示里列出来的那几格」永远是一回事 —— 不会出现"拦了但说不出拦在哪"。
      *
-     * 用途：玩家看得见的提示要具体到前置对象（需求 2026-11-02），由
+     * 用途：玩家看得见的提示要具体到前置对象，由
      * `TerritoryModel` 翻译成 `1-1 关卡通关后解锁` / `前置宝箱未打开`。
      * 返回**去重**后的 cellId；顺序沿用配置里的书写顺序（编辑器里的连线顺序）。
      */
@@ -539,18 +471,18 @@ export class TerritoryProgress {
     /**
      * 这一格的前置里，**已经解锁、但还没点开领取**的固定资源（宝箱）格。
      *
-     * ## 为什么要单独列出来（2026-11-09 用户）
+     * 需要单独列出
      *
      * > 「前置地块未解锁，展示的也是锁 icon，不是银币 + 显示红色的 UI」
      *
      * 前置宝箱走在 {@link isPrerequisiteComplete} 的**固定资源特例**里（`unlockable` 即算完成），
-     * 所以它既不进 {@link prerequisiteBlockers}、也不挡住点击 —— 解服务器口径就是这样
+     * 所以它既不进 {@link prerequisiteBlockers}、也不挡住点击 —— 按服务器口径就是这样
      * （`unlockCells` 里记 completed）。但**玩家眼里那只宝箱还闭着**，后继格只把银币数字
-     * 染红（旧口径：山猫 2026-10-21）读起来像「钱不够」，和「先把宝箱点了」完全不是一回事。
+     * 染红读起来像「钱不够」，和「先把宝箱点了」完全不是一回事。
      *
      * ⇒ 显示侧把这一种也归进「前置没完成」，画锁（见 `lockBlockedCells`），
-     *   红字只留给**真的缺钱**。⚠️ 只影响画法：点击拦截仍走 {@link checkUnlock}，
-     *   这一种**照常能解锁**（服务端允许），锁只是提示。
+     * 红字只留给**真的缺钱**。只影响画法：点击拦截仍走 {@link checkUnlock}，
+     * 这一种**照常能解锁**（服务端允许），锁只是提示。
      */
     unclaimedFixedPrerequisites(cellId: number): number[] {
         const site = this.siteForCell(cellId);
@@ -569,10 +501,10 @@ export class TerritoryProgress {
      * 这一格是不是「被前置卡住」—— **显示侧的唯一口径**（`siteOpenableCells` 排除、`lockBlockedCells` 纳入）。
      *
      * 两个来源取并集：
-     *  ① {@link prerequisiteBlockers}：前置关卡没打通 / 前置格根本还没开；
-     *  ② {@link unclaimedFixedPrerequisites}：前置宝箱解锁了却没点开（服务端已算完成）。
+     * ① {@link prerequisiteBlockers}：前置关卡没打通 / 前置格根本还没开；
+     * ② {@link unclaimedFixedPrerequisites}：前置宝箱解锁了却没点开（服务端已算完成）。
      *
-     * 🔴 与 {@link checkUnlock} 的**拦截**口径不是同一条：②只影响画法，不拦点击。
+     * 与 {@link checkUnlock} 的**拦截**口径不是同一条：②只影响画法，不拦点击。
      */
     isPrerequisitePending(cellId: number): boolean {
         return this.prerequisiteBlockers(cellId).length > 0
@@ -582,12 +514,12 @@ export class TerritoryProgress {
     /**
      * 这一格**是否已经「完成」**（可以当作别人的前置了）。
      *
-     * 🔴 **唯一口径**：点击拦截（{@link prerequisiteBlockers} ← `checkUnlock`）与
+     * **唯一口径**：点击拦截（{@link prerequisiteBlockers} ← `checkUnlock`）与
      * **显示侧的揭示**（`territoryRevealedCells`）都走这一个方法。
      *
-     * 2026-11-06 之前显示侧自己写的是「`owned ∪ unlocked` 里有就算满足」，
+     * 之前显示侧自己写的是「`owned ∪ unlocked` 里有就算满足」，
      * 于是**只要把 2-9 的格子用银币解锁、根本不用打**，2-10（首领）就露出来了 ——
-     * 用户原话：「boss 关卡的解锁关系没有绑定到 2-9 的关卡中，提前披露了」。
+     * 注意：「boss 关卡的解锁关系没有绑定到 2-9 的关卡中，提前披露了」。
      * 拦截那一侧本来就是「必须通关」，两边不同源才是那个 bug 的根。
      */
     isPrerequisiteComplete(cellId: number): boolean {
@@ -598,7 +530,7 @@ export class TerritoryProgress {
         if (site && (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
             return this.isAreaPassed(site.cellId);
         }
-        // 🔴 2026-10-15：关卡前置**改走区域口径**（同 `configId` 任一格 owned 即算完成），
+        // 关卡前置**改走区域口径**（同 `configId` 任一格 owned 即算完成），
         // 与显示侧 `isAreaPassed` 对齐。
         //
         // 之前这里是严格 `owned.has(cellId)`，而显示是区域共享 ⇒ 两套口径：
@@ -606,8 +538,8 @@ export class TerritoryProgress {
         // 「前置领地尚未占领」且**一个协议都不发**（真机实证）。
         // 而且 328 才有建筑、玩家只点 328 ⇒ 327 永远拿不到 owned ⇒ 不改就是死锁。
         //
-        // ⚠️ 只对 stage/boss/asyncPvp 生效：fixedResource 是上一行那条「解锁即完成」的特例，
-        //    两者别混成一条（fixedResource 同 configId 有多格，绝不能区域共享）。
+        // 只对 stage/boss/asyncPvp 生效：fixedResource 是上一行那条「解锁即完成」的特例，
+        // 两者别混成一条（fixedResource 同 configId 有多格，绝不能区域共享）。
         return false;
     }
 

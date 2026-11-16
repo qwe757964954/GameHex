@@ -1,14 +1,14 @@
 /**
  * 过场里**一件 HUD 的写节点工具**（位置 / 透明度 / 收工复位）。
  *
- * ## 为什么单独一个模块，而不是写在页面里
+ * 单独一个模块，而不是写在页面里
  *
  * `tests/territory-page-split.test.ts` 有一条架构守卫：**页面不许自己搭 UI**
  * （源码里出现 `new Node(` / `addComponent(` 就红）。那是"页面只接线、预制体管结构"的底线，
  * 过场要临时给 HUD 挂 `UIOpacity`（节点上本来没有）不该把它破掉 ——
  * 于是"挂组件 / 复位 / 决定要不要删"这三件事挪到视图层，页面只传节点进来。
  *
- * ## 为什么只删"自己加的"那个 `UIOpacity`
+ * 只删自己添加的 `UIOpacity`
  *
  * prefab 里有的 HUD 本来就带 `UIOpacity`（半透明底条之类）。收工一律 `destroy()` 会把它们
  * 变成**永久不透明**（不是恢复原值，是连组件都没了）；一律不删又会给每个推过的 HUD
@@ -34,7 +34,7 @@ export interface ITerritoryBattleIntroHud {
  * 把一件 HUD 包成过场可用的句柄（顺手补上 `UIOpacity`）。
  *
  * @param node 已确认有效的节点
- * @param dir  往哪边飞（见 `TERRITORY_BATTLE_INTRO_TARGETS`）
+ * @param dir 往哪边飞（见 `TERRITORY_BATTLE_INTRO_TARGETS`）
  */
 export function acquireIntroHud(node: Node, dir: TerritoryBattleIntroDir): ITerritoryBattleIntroHud | null {
     if (!node?.isValid) return null;

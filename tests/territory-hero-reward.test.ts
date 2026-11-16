@@ -179,13 +179,22 @@ test('多英雄按优先级逐个排好，同优先级按 cardId 兜底，不改
 // 接线守卫：三条需求都真的接进运行时，而不是只写在注释里
 // ============================================================
 
-test('① 固定格落点分流：7/9 仍飞资源栏并击中那一格，其余改飞英雄按钮并让按钮抖', () => {
+test('① 随机格领奖表现：统一地图喷发，非钱包类补飞英雄按钮并让按钮抖', () => {
     const page = body(PAGE);
-    assert.match(page, /setRewardCatchWorldPoint\(resId, bar\.slotWorldPositionOf\(key\)\)/,
-        '钱包类落点原串必须保留（既有单测也钉着它）');
-    assert.match(page, /setRewardCatchWorldPoint\(resId, heroWorld\)/, '非钱包类落点 = 英雄按钮');
-    assert.match(page, /bar\.playGainFeedback\(key, amount\)/, '钱包类落地仍触发数字跳动');
-    assert.match(page, /heroButton\.playHitFeedback\(\)/, '非钱包类落地触发按钮受击抖动');
+    assert.match(page, /this\.mapView\.playResourceGain\(cellId, gains, \{ frame: readoutFrame, amount \}\)/,
+        '奖励统一在地图上喷发并合成读数，钱包类不再单独飞资源栏');
+    assert.match(page, /isTerritoryHeroRewardResId\(entry\.resId\)/, '只挑非钱包类补飞英雄按钮');
+    assert.match(page, /this\.mapView\.mountRewardFxLayer\(this\.rewardFxRoot\(\)\)/,
+        '飞行图标挂在 MainRoot 顶层，跨到底栏也不会被页面节点盖住');
+    assert.match(page, /this\.mapView\.setHeroRewardTargetWorld\(this\.heroTabWorldPositionOf\(heroButton\)\)/,
+        '非钱包类落点 = 英雄按钮');
+    assert.match(page, /this\.mapView\.setHeroRewardLandedHandler\(/, '落地回调必须登记');
+    assert.match(page, /heroButton\?\.isValid\) heroButton\.playHitFeedback\(\)/,
+        '非钱包类落地触发按钮受击抖动');
+    assert.match(page, /this\.mapView\.playHeroRewardFlight\(cellId, heroEntries\)/,
+        '喷发之后再补一段飞向英雄按钮的动画');
+    assert.doesNotMatch(page, /setRewardCatchWorldPoint|slotWorldPositionOf|bar\.playGainFeedback/,
+        '旧 ResBar 落点接线已移除，不要再接回去');
     assert.match(page, /findHeroTabHost\(\)/, '找底栏逐层往上问，不从场景根搜');
     assert.match(page, /tabType === MainTab\.Hero/, '按 tabType 精确定位，不靠「第 2 个子节点」');
 });
@@ -226,7 +235,7 @@ test('③ 页面：任何来源的领奖都查一次新达成，且纯表现不�
     const trigger = page.indexOf('void this.playHeroBadges(rewards);');
     assert.ok(trigger >= 0 && trigger < page.indexOf('if (presentation?.popup === true)'),
         '必须排在所有分流之前：随机格 / 固定格 / 银币宝箱 / 挂机弹窗都要覆盖');
-    const fn = page.slice(page.indexOf('private async playHeroBadges('), page.indexOf('private ensureHeroBadge('));
+    const fn = page.slice(page.indexOf('private async playHeroBadges('), page.indexOf('private async ensureHeroBadge('));
     assert.match(fn, /if \(!this\.isValid \|\| !items\.length\) return;/, 'await 之后判失效');
     assert.match(fn, /if \(!this\.isValid\) return;/, '第二次 await 之后还要判失效');
     assert.doesNotMatch(fn, /settleRewards|FW\.ShowReward|onDone/,

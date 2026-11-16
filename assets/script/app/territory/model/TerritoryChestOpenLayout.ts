@@ -1,16 +1,16 @@
 /**
  * 「领地宝箱开启」奖励页的**纯口径**（零 `cc`）：行数、缩放兜底、图标适配、
- *  数量文案与入场时间轴。
+ * 数量文案与入场时间轴。
  *
  * 卡宽、卡高、列/行间距、首行位置、卡框/图标/底条尺寸、宝箱与按钮边距、字号
  * 全部由 `TerritoryChestOpen.prefab` 配置；本文件不再保存第二份布局常量。
  *
- * ## 适配口径
+ * 适配口径
  *
- *  · `Cards` 用 Widget 贴顶、`Chest` 用 Widget 贴底、`Skip` 贴左上、`Close` 贴底居中；
- *  · 卡片行列由 prefab 的 `cc.Layout`（Cards 纵向、RowTemplate 横向）排版，
- *    页面只按列数分行，不计算卡位；
- *  · 短屏放不下时按 Widget 边距算出的可用高度做等比兜底，下限由 prefab 属性传入。
+ * · `Cards` 用 Widget 贴顶、`Chest` 用 Widget 贴底、`Skip` 贴左上、`Close` 贴底居中；
+ * · 卡片行列由 prefab 的 `cc.Layout`（Cards 纵向、RowTemplate 横向）排版，
+ * 页面只按列数分行，不计算卡位；
+ * · 短屏放不下时按 Widget 边距算出的可用高度做等比兜底，下限由 prefab 属性传入。
  */
 // ============================================================
 // 卡片栅格（只算行数，尺寸/间距交给 prefab Layout）
@@ -58,10 +58,10 @@ export function chestOpenIconFitOf(
  * 数量文案。
  *
  * 设计稿两种形态是**两类奖励**的证件照，不是随机：
- *   · 道具（碎片 / 经验 / 材料）→ `X1`（大写 X，出处是设计稿第 1/3/4/5 张卡）；
- *   · 货币（银币 / 晶石）→ `+4095` / `+3`（出处是第 2 张卡的「+4095」与设计稿的「+3」）。
+ * · 道具（碎片 / 经验 / 材料）→ `X1`（大写 X，出处是设计稿第 1/3/4/5 张卡）；
+ * · 货币（银币 / 晶石）→ `+4095` / `+3`（出处是第 2 张卡的「+4095」与设计稿的「+3」）。
  *
- * ⚠️ `roleProperty`（resId 1~17）与 `item`（resId 10xxx）id 段不重叠，判定见视图。
+ * `roleProperty`（resId 1~17）与 `item`（resId 10xxx）id 段不重叠，判定见视图。
  */
 export function chestOpenCountTextOf(number: number, isCurrency: boolean): string {
     const value = Math.max(0, Math.floor(number));

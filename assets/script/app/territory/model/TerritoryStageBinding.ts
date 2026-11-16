@@ -15,28 +15,12 @@ export interface TerritoryChapterCompletion {
 }
 
 /**
- * 快速寻敌的目标：**当前章节关卡链上「推进到的那一关」**（2026-10-31 用户口径）。
+ * 快速寻敌的目标：当前章节关卡链上「推进到的那一关」。
  *
- *   > 「快速寻敌功能的逻辑是跳到当前章节地图上最新一个未通过的关卡，
- *   >   如果没有未通过的关卡，就打开已通过的关卡，其他镜头逻辑不变。」
- *
- * 「最新一个未通过的关卡」= 关卡序号最小的**未通过**关卡。关卡链是线性的
- * （`applyTerritoryStageUnlocks` 把每一关的前置写成上一格，见本文件下半段），
- * 所以「序号最小的未通过」和「玩家接下来该打的那一关」是同一关。
- *
- * 🔴 2026-10-31 之前这里**只收 Boss**（`site.type === boss || stage.isBoss`）：
- *   一章有两个 Boss（chapter_01 = stage 5 / stage 10）时，快速寻敌会跳过前面所有普通关卡
- *   直接怼到 Boss 上 —— 玩家还没打 1-1 就被丢到 1-5。现在**普通关卡与 Boss 一视同仁**。
- *
- * 全部通关（没有未通过的）⇒ 退回**关卡序号最高**的那一关（打开详情，可重复挑战）。
- * 同一关绑了多格（`expandBindingsToAreaSites`）⇒ 优先取**带建筑**的那格、再按 cellId 升序：
- * 定位结果不许依赖入参 `sites` 的遍历顺序。
- *
- * 🔴 **只挑已解锁的**（2026-10-31 用户追加「只挑已解锁的」）：锁着的关卡被选中时，
- *   详情只能显示「解锁后开战」，玩家点了也打不了 —— 那不是"快速寻敌"，是"快速看价目表"。
- *   判据见 {@link isLevelUnlocked}：与点击路径同口径，**区域已通关也算解锁**。
- *
- * ⚠️ `asyncPvp`（异步据点）**不算**关卡：它不进线性推进链，当成终点会把玩家带去 PVP 格子。
+ * 取关卡序号最小的未通过关卡；全部通关时退回序号最高的一关，供重复挑战。
+ * 同一关绑了多格时优先带建筑的那格，再按 cellId 升序，结果不依赖遍历顺序。
+ * 只挑已解锁的关卡：锁着的关卡选中后也打不了。
+ * 异步据点不进线性推进链，不作为目标。
  */
 export function findCurrentTerritoryLevel(
     sites: readonly TerritorySite[],
@@ -63,7 +47,7 @@ export function findCurrentTerritoryLevel(
 /**
  * 扫荡目标查询用到的进度子集。
  *
- * ⚠️ 用**结构子集**而不是 `TerritoryProgress`：视图层拿到的是
+ * 用**结构子集**而不是 `TerritoryProgress`：视图层拿到的是
  * `ITerritoryProgressView`（`Pick` 出来的只读查询），它不是类实例、传不进原签名。
  * 与 `TerritoryChestHint` 的「最小进度视图」同一处置。
  */
@@ -73,7 +57,7 @@ export interface ITerritoryStagePassQuery {
 }
 
 /**
- * 「**已通关**的最高关卡格」—— 征收扫荡的目标格（山猫 2026-11-09 口径）。
+ * 「**已通关**的最高关卡格」—— 征收扫荡的目标格（口径）。
  *
  * 与 {@link findCurrentTerritoryLevel} 的分工：
  * - 那个优先给「还没打的下一关」，是**快速寻敌**（跳过去打）；
@@ -111,20 +95,16 @@ export function findHighestPassedTerritoryLevel(
 }
 
 /**
- * 这一格关卡**能不能直接打**（快速寻敌的准入条件）。
+ * 这一格关卡能不能直接打（快速寻敌的准入条件）。
  *
- * 两条与点击路径 `TerritoryModel.selectSite` 完全同源：
- *  1. **区域已通关也算解锁** —— 那种格子不会再走解锁请求（见 `isAreaPassed` 的注释），
- *     只判"本格在 `unlockCells` 里"会把「区域通了但这格没单独解锁」的关卡漏掉；
- *  2. 用 `isUnlockable` 而不是 `isCellUnlocked`：前者在**服务端格子状态还没拉回来**时一律放行，
- *     后者是严格集合。首帧快照未到就严格过滤，快速寻敌会直接变成「暂无可定位的关卡」——
- *     一个按钮在弱网 / 请求失败时变成死的，比偶尔落在锁着的关卡上更糟。
+ * 与点击路径同源：区域已通关视为解锁；服务端格子状态未拉回时使用 `isUnlockable`
+ * 放行，避免弱网下按钮永久不可用。
  */
 function isLevelUnlocked(progress: TerritoryProgress, cellId: number): boolean {
     return progress.isAreaPassed(cellId) || progress.isUnlockable(cellId);
 }
 
-/** Current map stations are the completion authority; unbound table rows do not block a chapter. */
+/** 章节完成度以当前地图站点为准；表里未绑定的关卡不参与统计。 */
 export function territoryChapterCompletion(
     bindings: readonly TerritoryStageBinding[],
     ownedCells: readonly number[],
@@ -136,26 +116,11 @@ export function territoryChapterCompletion(
 }
 
 /**
- * 本章**最后一个首领关卡**的格子 —— 章节通关的判据（2026-11-04 用户口径）。
+ * 本章最后一个首领关卡的格子，作为章节通关判据。
  *
- * > 「章节通关条件：通过该章节的最后 1 个 boss 关卡」*（异步据点**不**参与判定）*
- *
- * ## 为什么按 `stage.stage` 而不是 `levelId`
- * `levelInfo` 的 `levelId` 是全局号，同一章里不一定单调（chapter_01 的 20001 排在 10010 之后）；
- * 而 `stage.stage` 就是策划表里的「第几关」，**线性推进链**（`applyTerritoryStageUnlocks`）
- * 也是按它排序的 ⇒ 取 `stage` 最大的那个 boss，才是链尾那一关。
- * 同 `stage` 撞车时按 `levelId`、再按 `cellId` 兜底，结果不依赖入参顺序。
- *
- * ## 为什么只认 `bindings`
- * `bindings` = `bindTerritoryStages`（stage + boss，按 `levelId` 去重）。它天然排除了两类
- * **打不了**的站点：没绑关卡的（`configId` 缺 / 表里没这一行）和异步据点。
- * 拿"打不了的格子"当通关门槛 = 这一章永远通不了、下一章永远锁着 —— 死锁比漏判严重得多。
- *
- * 一章配了多个 boss（chapter_01 有 stage 5 / stage 10）⇒ 取**最后**那个，
- * 这也是「链尾打完才算通关」的本意：前面那个 boss 通不通不影响。
- *
- * @returns `null` = 本章一个可打的首领都没有（配置缺失）。调用方必须**退回**旧口径
- *          「全部站点占领」，别把它当成"已经通关"。
+ * 按 `stage.stage` 排序而非全局 `levelId`，与线性推进链一致；同 stage 时按 levelId、
+ * cellId 兜底。只认已绑定的 stage/boss 站点，避免把打不了的格子算成通关门槛。
+ * 返回 `null` 表示本章没有可打的首领，调用方应退回「全部站点占领」的旧口径。
  */
 export function chapterFinalBossCell(bindings: readonly TerritoryStageBinding[]): number | null {
     let best: TerritoryStageBinding | null = null;
@@ -174,9 +139,8 @@ export function chapterFinalBossCell(bindings: readonly TerritoryStageBinding[])
 }
 
 /**
- * Binds the current territory-map JSON to PVP levels without changing either table.
- * Only an explicit numeric configId on a stage or boss site can join linear progression.
- * Repeated IDs on display stations bind once, in map order.
+ * 把地图 JSON 里的关卡站点绑定到 PVP 关卡表：只有显式数字 configId 的 stage/boss 站点
+ * 进入线性推进链，重复 ID 按地图顺序绑定一次。
  */
 export function bindTerritoryStages(
     sites: readonly TerritorySite[],
@@ -185,7 +149,7 @@ export function bindTerritoryStages(
     return bindStagesForSiteTypes(sites, stages, [TERRITORY_SITE_TYPE.stage, TERRITORY_SITE_TYPE.boss]);
 }
 
-/** Bind async PvP stations for battle lookup, while keeping them out of linear progression. */
+/** 绑定异步据点用于战斗查询，不进入线性推进链。 */
 export function bindTerritoryBattleStages(
     sites: readonly TerritorySite[],
     stages: readonly TerritoryCampaignStage[],
@@ -213,16 +177,16 @@ function bindStagesForSiteTypes(
 }
 
 /**
- * 把「区域代表格」的关卡**扩散给同区域的全部站点**（2026-10-12）。
+ * 把「区域代表格」的关卡**扩散给同区域的全部站点**。
  *
- * ## 为什么需要这一步
+ * 需要扩散到同区全部站点
  *
  * `bindTerritoryStages` 只给每个 `levelId` 绑**第一个**站点（去重），
  * 于是同一 `configId` 的其余站点 `stageByCell` 查不到 ⇒ 走「`!stage`」分支 ⇒
  * 弹「站点配置待补齐 / 当前 PVP-关卡表中没有可绑定关卡」——
  * 可实际上 `configId` 配了、`levelInfo.json` 里也有那一行，**只是被去重踢掉了**。
  *
- * ## 🔴 为什么不能直接放开 `bindTerritoryStages` 的去重
+ * 不能直接放开 `bindTerritoryStages` 的去重
  *
  * 放开后 chapter_01 的绑定数会从 **10 → 54**，`applyTerritoryStageUnlocks` 会把整张图
  * 串成 **54 格长的线性链**，每片区域的每个格子都变成一个独立关卡：
@@ -243,7 +207,7 @@ export function expandBindingsToAreaSites(
     const stageById = new Map(bindings.map(({ stage }) => [stage.levelId, stage]));
     const byCell = new Map<number, TerritoryCampaignStage>();
     for (const { site, stage } of bindings) byCell.set(site.cellId, stage);
-    // ⚠️ 遍历顺序不影响结果（按 cellId 写 Map，后者不覆盖前者即可）；
+    // 遍历顺序不影响结果（按 cellId 写 Map，后者不覆盖前者即可）；
     // 同区域的展示格在此补上同一个 stage ⇒ 它不再被当成「没配关卡」。
     for (const site of sites) {
         if (byCell.has(site.cellId)) continue;
@@ -257,10 +221,10 @@ export function expandBindingsToAreaSites(
 }
 /** Playable levels advance in chapter order; decorative stations keep their map gates.
  *
- *  ⚠️ 入参必须是 `bindTerritoryStages` 的**去重后**列表（每 `levelId` 恰好一条）。
- *  它把链上的每一步的 `requiredCells` 改写成「上一格的cellId」⇒
- *  **链长 = `bindings.length`**。若误传 `expandBindingsToAreaSites` 的结果，
- *  同区域的格子会各自占一步，链会按格子数（而非关卡数）膨胀。
+ * 入参必须是 `bindTerritoryStages` 的**去重后**列表（每 `levelId` 恰好一条）。
+ * 它把链上的每一步的 `requiredCells` 改写成「上一格的cellId」⇒
+ * **链长 = `bindings.length`**。若误传 `expandBindingsToAreaSites` 的结果，
+ * 同区域的格子会各自占一步，链会按格子数（而非关卡数）膨胀。
  */
 export function applyTerritoryStageUnlocks(
     map: TerritoryMapConfig,

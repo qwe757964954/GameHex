@@ -1,18 +1,11 @@
 /**
- * 新手引导步骤表解析（对应 `assets/remoteRef/guideStep.json`）。
- *
- * ⚠️ 与 zcds 的 `ZCGuide*`（战斗内「指南」百科，展示建塔概率）**无关** —— 名字近，语义不同。
- *
- * 表是列存 `{k,v,c}`，运行时 `RefUtil.instance.getRefAll('guideStep')` 会解成行对象数组
- * 再交给本模块。解析只负责「单行 → 强类型」；步骤链是否闭合由 `GuideProgress` 在构造时校验
- * （单行解析没有全局视野，不该在这里判链）。
- *
- * 🔴 **保持输入顺序，不排序**：`stepId`（`'1-1'` / `'10-1'`）是字符串，按字典序排会把 `10-1`
- * 排到 `2-1` 前面。本表的执行序 = **行序**，与 `ZCGuideConfig.parseGuideEntries` 按
- * `order` 列排序的口径不同，别照抄那套。
+ * 新手引导步骤表解析，对应 remoteRef/guideStep.json。
+ * 与 zcds 的战斗内指南百科无关，只是名字相近。
+ * 表是列存 {k,v,c}，这里只做单行转强类型；步骤链是否闭合由 GuideProgress 校验。
+ * 保持输入顺序不排序：stepId 是字符串，字典序会把 10-1 排到 2-1 前面，本表执行序等于行序。
  */
 
-/** `nextStep` 的结束哨兵。写死字面量是为了和表里共存，不要在代码里手打 `'end'`。 */
+/** nextStep 的结束哨兵，不要在代码里手打 'end'。 */
 export const GUIDE_STEP_END = 'end';
 
 /** 步骤触发方式：首登进入，或上一步完成即触发。 */
@@ -44,10 +37,8 @@ export interface GuideStep {
     readonly triggerType: GuideTriggerType;
     readonly maskType: GuideMaskType;
     /**
-     * 焦点控件标识。**空串 = 该步没有焦点控件**（纯对话，或业务入口尚未接线）。
-     *
-     * 不要把它当节点路径直接 `cc.find` —— 宿主页层级一动就断（`MainTerritoryMap.ts:176`
-     * 有同类注释）。正确做法是业务侧注册「锚点名 → Node」，引导按名取。
+     * 焦点控件标识，空串表示该步没有焦点控件。
+     * 不要当节点路径直接 cc.find，宿主页层级一动就断；业务侧注册锚点名到 Node，引导按名取。
      */
     readonly focusNode: string;
     readonly requireAction: GuideRequireAction;
@@ -64,10 +55,8 @@ export interface GuideStep {
 }
 
 /**
- * 把 `guideStep` 的行对象数组解析成强类型步骤表。
- *
- * 容错口径：缺 `stepId` 的行**静默丢弃**（半行数据无法定位，留着只会在链校验里炸）；
- * 其余字段按类型兜底 —— 策划把 `skipAble` 写成 `'是'` 这类错误不该让引导整条挂掉。
+ * 把行对象数组解析成步骤表。缺 stepId 的行静默丢弃，其余字段按类型兜底，
+ * 避免策划写错一个字段就让整条引导挂掉。
  */
 export function parseGuideSteps(rows: readonly unknown[]): GuideStep[] {
     const out: GuideStep[] = [];

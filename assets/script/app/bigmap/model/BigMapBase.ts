@@ -17,7 +17,6 @@ import {
     BigMapQueueState,
     BIGMAP_BUILD_RES,
     type BigMapResType,
-    type IBigMapBuildingConfig,
     type IBigMapBuildingInstance,
     type IBigMapConfig,
     type IBigMapBaseState,
@@ -145,11 +144,9 @@ function occupyCells(
 }
 
 /**
- *队列容量：初始 1 条，每建成一座「建造队列」功能建筑 +1，封顶 `maxBuildQueue`。
+ *队列容量：把存档里的 `queueUnlocked` 收口到 `[initBuildQueue, maxBuildQueue]`。
  *
- *由建筑反推而不是只信存档里的 `queueUnlocked` —— 存档字段会被脏数据写坏，
- *而「你建了几座队列建筑」永远和界面显示一致，推出来不会漂。
- *本期唯一的功能建筑就是「建造队列」(71007)，按 `kind = Function` 匹配，换 id 不用改代码。
+ *老存档 / 脏数据可能写出越界值；容量的真源只有存档字段，由 `bigMapUnlockQueue` 推进。
  */
 export function bigMapClampQueueUnlocked(config: IBigMapConfig, value: unknown): number {
     const parsed = Math.round(Number(value));
@@ -679,17 +676,4 @@ export function bigMapCanAfford(
         if (res === 'wood') return state.res.wood >= cost.costWood;
         return state.res.iron >= cost.costIron;
     });
-}
-
-/** 建筑展示名（视图直接用，省得每处都 get 一次配置）。 */
-export function bigMapBuildingName(config: IBigMapConfig, buildingId: number): string {
-    return config.buildings.get(buildingId)?.name ?? '未知建筑';
-}
-
-/** 建筑配置（视图取图标/占格用）。 */
-export function bigMapBuildingConfig(
-    config: IBigMapConfig,
-    buildingId: number,
-): IBigMapBuildingConfig | null {
-    return config.buildings.get(buildingId) ?? null;
 }

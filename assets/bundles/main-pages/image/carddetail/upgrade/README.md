@@ -2,7 +2,7 @@
 
 来源：蓝湖「占城项目 / 卡牌(1) / 版本2」（image_id `df735b11-3690-4883-93ac-0dda3d6f4447`），用户提供的 `卡牌(1)_slices/mipmap-xhdpi`。
 
-PNG 按原名原尺寸导入，不重新裁切；meta 由 Cocos Creator 3.8.8 生成，九宫格边距经 Cocos MCP 设置。复用父目录 `carddetail/auto-atlas.pac`，不增加子图集。
+PNG 按原名原尺寸导入，不重新裁切；meta 由 Cocos Creator 3.8.8 生成，九宫格边距经 Funplay Cocos MCP 设置。复用父目录 `carddetail/auto-atlas.pac`，不增加子图集。
 
 这些切图仅接入 `CardUpgrade.prefab`。技能、品质、角色与材料继续消费当前运行时数据及原有资源管线；`CardSkill` 的皮肤和升级规则保持原样。
 

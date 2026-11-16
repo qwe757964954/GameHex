@@ -108,7 +108,7 @@ export class ZCGameHUDView extends Component {
 
     // 顶部四格（设计稿「多队伍」）：逐席位显示地块数；地块数 = 0 视为该玩家已战斗结束 ⇒ 显示红 X。
     //  用四个独立 `@property` 而不是 `[ZCGameHudScoreSlot]` 数组 —— MCP 设不了数组属性
-    //   （见 `cocos-mcp-build-prefab` 技能铁律 3：传单值会把数组写坏成 `{__id__:N}`）。
+    //   （旧版 Cocos MCP 的已知缺陷：传单值会把数组写坏成 `{__id__:N}`）。
     @property({ type: Layout, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout：居中的分数格排列' })
     scoreLayout: Layout = null!;
     @property({ type: ZCGameHudScoreSlot, group: '顶部信息', tooltip: 'TopInfoPanel/ScoreLayout/Score1：第 1 席地块数' })
@@ -482,8 +482,6 @@ private fillPlayerRow(node: Node, index: number): void {
         const remainingSeconds = model.remainingSeconds;
         if (remainingSeconds !== null) {
             const seconds = Math.max(0, Math.ceil(remainingSeconds));
-            this.timeLabel.fontSize = 28;
-            this.timeLabel.lineHeight = 40;
             this.timeLabel.string = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
         } else {
             this.timeLabel.string = '';

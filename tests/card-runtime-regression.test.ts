@@ -80,6 +80,7 @@ for (const existing of [false, true]) {
                 return true;
             } } } },
             './FormationModel': formationModel,
+            '../net/RequestGuard': requestGuard,
         });
         service.applyFormation({ formationId: 1, heroIds: [68001], selected: true });
         if (existing) service.applyFormation({ formationId: 2, heroIds: [], selected: false });

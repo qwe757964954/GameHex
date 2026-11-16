@@ -38,8 +38,8 @@ export const TERRITORY_CLOUD_POCKET_NODE = 'TerritoryCloudPocket';
  * 云体与影子是**两张同画布图**（`cloud_body_N` / `cloud_shadow_N`，由
  * `tools/split_cloud_layers.py` 离线拆出来）。所有影子都住进这一层 ⇒
  * **所有影子都在所有云体之下**，跨层也不可能有影子压在云上
- * （用户 2026-10-23 第三轮：「云层的影子部分的层级要比云层低」；
- *  2026-10-26 修的是**跨层**那一半：云层影子曾排在铺满层云体之上，形成一条灰云带）。
+ * （第三轮：「云层的影子部分的层级要比云层低」；
+ * 修的是**跨层**那一半：云层影子曾排在铺满层云体之上，形成一条灰云带）。
  */
 export const TERRITORY_CLOUD_SHADOW_NODE = 'CloudShadow';
 /** 影子层里的「铺满层影子」子分组（与真实云层影子分开，各自可清空）。 */
@@ -95,12 +95,11 @@ function frameList(frames: readonly SpriteFrame[] | undefined): readonly SpriteF
 /**
  * 一朵正在消散的云（一次消散 = 一条轨道）。
  *
- * 为什么要把"起点 / 基础倍率"存在轨道里，而不是每帧从别处查：
- *  · 缩放 / 上飘都是**相对起手**算的（`baseScale × pose.scale`、`baseY + pose.liftY`），
- *    消散过程中节点自己的 `scale` / `position` 一直在变，不能当基准；
- *  · 云洞那朵（0.6 倍）和解锁区的云（1.0 倍）走**同一条**时间轴，只有基准倍率不同；
- *  · 云洞那朵是从云洞层"借"过来的临时节点，散完要销毁（解锁区那朵是常驻节点、散完只是收起来），
- *    所以还要一个 `inPocket` 标记 —— 收尾动作不一样。
+ * · 缩放 / 上飘都是**相对起手**算的（`baseScale × pose.scale`、`baseY + pose.liftY`），
+ * 消散过程中节点自己的 `scale` / `position` 一直在变，不能当基准；
+ * · 云洞那朵（0.6 倍）和解锁区的云（1.0 倍）走**同一条**时间轴，只有基准倍率不同；
+ * · 云洞那朵是从云洞层"借"过来的临时节点，散完要销毁（解锁区那朵是常驻节点、散完只是收起来），
+ * 所以还要一个 `inPocket` 标记 —— 收尾动作不一样。
  */
 interface ITerritoryCloudDissolveTrack {
     readonly body: Sprite;
@@ -116,127 +115,14 @@ interface ITerritoryCloudDissolveTrack {
 }
 
 /**
- * 章节地图的「未解锁云」。
+ * 章节地图的未解锁云表现层。
  *
- * ## 它盖的是**格位**，不是格子节点
- *
- * 没露出来的格子在 `TerritoryMapView.paintHexes` 里就是 `node.active = false`（连地皮都不画），
- * 所以云只能挂在自己的层里、按 `layout.points` 的坐标摆 —— 挂在格子节点下会跟着一起被隐藏，
- * 表现为"整张图一朵云都没有"且零报错。
- *
- * ## 层序（2026-10-23 第三轮定稿）
- *
- * ```
- * MapLayer
- * ├── MapBackground
- * ├── GridLayer            格子（已解锁的才画）
- * ├── CloudKeepOut        ← 挡云遮罩（反向 Mask，只画"已解锁格面外扩 15px"）
- * │   ├── CloudShadow      ← **影子层**（第 0 个孩子：所有影子都在所有云体之下）
- * │   │   ├── CloudFillShadow    铺满层的影子
- * │   │   └── CloudLayerShadow   真实云层的影子
- * │   ├── CloudFillLayer   铺满背景的虚拟云（云体）
- * │   └── CloudLayer       未解锁云（静止图，云体）
- * ├── CloudDissolveLayer  正在消散的云（**自带**一张"排除自己"的挡云遮罩）
- * │   └── CloudShadow      消散云的影子（层内第 0 ⇒ 在消散云体之下）
- * └── StationIconLayer ... 站点 / 飘字
- *
- * 页面根
- * └── TerritoryCloudPocket 被地块包围的云洞（**不裁剪**；压在 UI 之上、被 `TerritoryOverlay`
- *                         的宝箱/粒子压住；不拦点击）
- *     └── CloudShadow
- * ```
- *
- * · 云压在**格子之上**：2026-10-23 山猫实机口径（截图）—— 压在格子层下面时，已解锁地块会把云的
- *   溢出部分整块切平（草地边缘把云切成直角），看着像被裁掉而不是云飘过；
- * · 云压在**站点层之下**：云 200×240 比一格大，糊在建筑图标上会把别人家的据点盖掉；
- * · 真正"不遮挡地块"靠的是 `CloudKeepOut` 这层**反向遮罩**（用户口径：
- *   「云层和地块有个固定的间隔 15px，不会遮挡地块」）；
- * · **影子永远成组压在云体之下** —— 而且必须是**全局**的一个影子层：
- *   2026-10-26 实机出现一条"灰云带"，根因正是两层各带一个影子分组
- *   （`CloudLayer` 的影子在层内是第 0，但整个 `CloudLayer` 排在 `CloudFillLayer` 之后 ⇒
- *   云层影子压到了铺满层云体上）。现在影子全在 `CloudShadow` 层，跨层也不可能有影子压云。
- *   做成两层图而不是运行时切 rect，原因见 `TerritoryCloud.ts` 里「为什么这里没有切片换算」那段 ——
- *   三版运行时切出来是反的，影子糊在云体上，整片云发灰。
- *
- * ## 为什么消散要单独一层
- *
- * 遮罩是"已解锁格 → 立刻加进挡云区"。刚解锁那一格的云如果还在遮罩层里，消散动画第一帧就被
- * 自己的挡云区擦掉了 —— 等于没播。所以 `startDissolve` 把节点**挪到 `CloudDissolveLayer`**。
- *
- * 但消散层也不能完全不管间隔（用户第三轮：「这部分的云朵也要与地块有间隔，且图层在地块的上方」）：
- * 它自带一张**同形状、但把"正在消散的那些格"排除掉**的反向遮罩 ⇒ 云在自己那一格上完整地散，
- * 溢出到**邻居**地块的部分照旧被擦掉 15px。
- *
- * ⚠️ 两个层的父节点都在 `MapLayer` 的原点、缩放 1，所以 `setParent` 不改局部坐标 ——
- *   挪层那一刻云不会跳位。
- *
- * ## 帧
- *
- * 待机**不换帧**（2026-10-23 用户：「序列帧动画只有在地块解锁、云层消散时才使用，未解锁状态应该是
- * 静止的图片」）⇒ 只用 `idle[0]` 一张图，`step()` 只推进消散。
- *
- * ## 解锁消散：四段过渡（2026-10-26 六版）
- *
- * 用户口径：「云朵快速变小消失，爆炸散开消失，过程伴随透明度变透消失」。
- *
- * ```
- * 进度   0%────12%──────────────30%──────────56%─────────100%
- * 帧     └── 整朵（index=-1）──┴─ 消散帧 0（裂成环）─┴─ 消散帧 1（碎块）─┘
- * 体缩放 1 ──→ 1.06 ───────────→ 0.84 ──────→ 1.15（掉头向外炸）──────→
- * 体位置 0 ───────────────────── 云体 +12px（缓出）──────────────────→
- * 体透明 1 ──────────────────────┴──→ 0（hold 之后线性）──────────────→
- * 影缩放 1 ──→ 1.06 ───────────→ 0.84 ──────→ 0.70（反着收）──────────→
- * 影位置 全程不动（贴地投影）──────────────────────────────────────────→
- * 影透明 1 ──────────────────────┴──→ 0（比云体早 25% 归零）──────────→
- * ```
- *
- * 三件事各管一段语义，别互相替换：
- *  · **缩放**是"变小 / 炸开"——壳先收到 0.84（读"变小"）、碎块再炸到 1.15（读"散开"），
- *    一收一放才是爆炸；只缩会读成"云瘪了"，只涨会读成"云涨大"；
- *  · **序列帧**是"爆炸散开"的形（第 0 帧裂成环、第 1 帧只剩碎块）；
- *  · **不透明度**是"变透消失"，压在碎块帧上（第一帧就淡会读成"凭空变淡"而不是"散掉"）。
- *
- * 影子的三条曲线**都不跟云体共用**（见 `applyDissolve`）：不飘、碎块段反着收、更早归零 ——
- * 云升空散掉时，地上的投影只会更小更淡。同一条曲线会出现"云只剩几缕、地上还挂一大团灰"。
- *
- * 起手段**不换帧**（`index = -1` 用待机整朵图）—— 老口径第一帧直接写 `cloud_dissolve_body_0`，
- * 整朵云跳成"中间已经裂出洞的环"是一次瞬间跳变，用户说的是"加一个过渡动画"。
- *
- * ## 消散为什么也要给云洞那朵播
- *
- * 洞格的云画在页面顶层的云洞层里（0.6 倍），解锁区那朵是**收起来待命**的（1.0 倍）。
- * 老口径洞格一解锁就把云洞那朵销毁、同时点亮正常层那朵 ⇒ 实机是"小云凭空没 + 大云凭空来"。
- * 现在洞格解锁时把那朵（连同影子）**挪进消散层**、按 0.6 倍记一条消散轨道，散完再销毁
- * （见 `startPocketDissolve`）。
- *
- * ## 全解锁：镜头散场 + 铺满层**逐朵**退场（2026-10-27 两轮）
- *
- * 第一轮（用户）：「拉高摄像机，观看云层逐渐消失的过程……云雾消失后重新拉进镜头」⇒
- * 拉远 1.1s → 雾淡 2s → 拉回 0.7s（`TerritoryMapView.stepCloudDolly` 推镜头，时钟在这边）。
- *
- * 第二轮（用户）：「从靠近地块的云雾先消失，离地块远的消失的慢，形成一个消失扩散的视觉效果」⇒
- * 铺满层不再是一个 `UIOpacity` 管整层，而是**每朵按到最近地块的距离**各拿一条窗口：
- *
- * ```
- * 距离  0（贴着地块） ───────────────────────→ 最远
- * 起淡   ── 0 ──→ 0.25 × 总时长
- * 淡完   0.55 × 总时长 ──────────────────────→ 1.00 × 总时长
- * ```
- *
- * 起得早 + 淡得快，两条叠起来才是"雾从地块边缘一圈圈退出去"；只错开起淡时间的话，
- * 观感是"整片雾匀速变薄、只是先后不同"。
- *
- * ⚠️ 逐朵不能挂 `UIOpacity`（几百个组件会让节点退出静态合批），走 `Sprite.color.a`；
- *    影子在另一个节点里，必须用**同一个**读数一起写。
- *
- * ## 云体 / 影子怎么拆
- *
- * **美术层拆的**，运行时不切：`tools/split_cloud_layers.py` 按像素把 `cloud_idle_0` 拆成
- * `cloud_body_0` / `cloud_shadow_0`（同画布 200×240、像素互斥、叠起来严格等于原图），
- * 消散帧同理拆成 `cloud_dissolve_body_N` / `cloud_dissolve_shadow_N`。
- *
- * 所以体 / 影两个节点：同一张帧尺寸（`SizeMode.RAW`）、同一个锚点、写**同一个** `setPosition`
- * 就对齐 —— 这里不存在任何 rect / offset 换算（三版就是死在那套换算上）。
+ * 云覆盖的是格位而不是格子节点：未揭示格不绘制地皮，云挂在自己的图层按坐标摆放。
+ * 层序上云位于格层之上、站点层之下；不遮挡地块靠 CloudKeepOut 的反向遮罩实现。
+ * 影子统一放在全局影子层，保证任何云体都不会压住其他云的影子。
+ * 消散时节点移入 CloudDissolveLayer，该层自带排除自身的遮罩，避免第一帧就被擦掉。
+ * 待机不换帧，仅使用一张静止云体；解锁按四段过渡：整朵膨胀、裂壳、碎块炸开上飘、淡出。
+ * 云体与影子由美术离线拆图，运行时不做 rect 换算。
  */
 export class TerritoryCloudView {
     /** 云层（静止云；`CloudKeepOut` 的子节点）。`null` = 还没 `attach`。 */
@@ -268,9 +154,9 @@ export class TerritoryCloudView {
     /**
      * 「铺满背景」的虚拟云层（`CloudKeepOut` 里**影子层之后**的那层 ⇒ 画在真实格云之下）。
      *
-     *  为什么要铺：用户 2026-10-23 第二轮「云的填充整个背景图全部填充，包括玩家信息和资源栏上方」——
-     *  原来只在**格位**摆云，地图包围盒之外的留白（`TERRITORY_MAP_CONTENT_PADDING` = 四周 300px）
-     *  一片云都没有，滚到边缘时顶部那条露出底图（截图 1 的红框）。
+     * 「云的填充整个背景图全部填充，包括玩家信息和资源栏上方」——
+     * 原来只在**格位**摆云，地图包围盒之外的留白（`TERRITORY_MAP_CONTENT_PADDING` = 四周 300px）
+     * 一片云都没有，滚到边缘时顶部那条露出底图（截图 1 的红框）。
      */
     private fillLayer: Node | null = null;
     /** 铺满层的影子子分组（同样住在影子层里，排在真实云层影子之前）。 */
@@ -288,8 +174,8 @@ export class TerritoryCloudView {
      * 与消散轨道同一个记法（{@link ITerritoryCloudDissolveTrack.elapsed}）：曲线是模型里的
      * 纯函数 {@link territoryCloudFillWaveOpacity}，视图只负责"已用时 + dt"与最后写进 `Sprite.color.a`。
      *
-     * ⚠️ 这是**整条时间轴**的表：每朵雾的窗口（{@link fillWaveOrders}）都压在它以内，
-     *    所以"该不该收工"只看它（见 {@link stepFillFade}）。
+     * 这是**整条时间轴**的表：每朵雾的窗口（{@link fillWaveOrders}）都压在它以内，
+     * 所以"该不该收工"只看它（见 {@link stepFillFade}）。
      */
     private fillFadeElapsed = -1;
     /**
@@ -303,18 +189,18 @@ export class TerritoryCloudView {
     /**
      * 本次退场**用多长**（秒）—— 两条档：
      *
-     *  · 默认 {@link TERRITORY_CLOUD_FILL_FADE_SECONDS}（0.5s，与最后一朵云的消散同长）；
-     *  · 走镜头散场时 {@link TERRITORY_CLOUD_DOLLY_FADE_SECONDS}（2s，镜头已经拉远，
-     *    玩家看着整张图，雾要"逐渐"消失才读得出过程）。
+     * · 默认 {@link TERRITORY_CLOUD_FILL_FADE_SECONDS}（0.5s，与最后一朵云的消散同长）；
+     * · 走镜头散场时 {@link TERRITORY_CLOUD_DOLLY_FADE_SECONDS}（2s，镜头已经拉远，
+     * 玩家看着整张图，雾要"逐渐"消失才读得出过程）。
      *
-     * ⚠️ 只在**起跑那一刻**写一次，`stepFillFade` 每帧只读它 —— 让时长跟"已用时"一起变
-     *    等于每帧换一条曲线，表现是雾忽快忽慢。
+     * 只在**起跑那一刻**写一次，`stepFillFade` 每帧只读它 —— 让时长跟"已用时"一起变
+     * 等于每帧换一条曲线，表现是雾忽快忽慢。
      */
     private fillFadeSeconds = TERRITORY_CLOUD_FILL_FADE_SECONDS;
     /** 铺满层已经退完（此时 `active = false`，连绘制都省掉）。 */
     private fillDismissed = false;
     /**
-     * 「本章已通关 ⇒ 不管还有没有没激活的格，整片雾都要散」（2026-11-04）。
+     * 「本章已通关 ⇒ 不管还有没有没激活的格，整片雾都要散」。
      *
      * 记成**状态**而不是一次性的动作：`sync` 每次都会重算"该不该有雾"，
      * 只做一次动作的话，下一次 `renderMap` 就把雾按回退复原回来了（表现为雾一闪一闪）。
@@ -339,11 +225,11 @@ export class TerritoryCloudView {
     /**
      * 「被地块包围的云洞」顶层节点（**页面根**的孩子、压在 UI 之上）。
      *
-     *  · 三版口径：**不裁剪**（原来的正像遮罩已撤）。洞里每格只放一朵、缩到
-     *    `TERRITORY_CLOUD_POCKET_SCALE`，留出观感上的空隙；
-     *  · 它不在 `MapLayer` 里 ⇒ 不吃 `CloudKeepOut` 的反向擦除，也不被 ScrollView 视口裁掉，
-     *    所以"视觉上可以压住 UI"；
-     *  · 每帧把自己的世界位置 / 缩放对齐 `MapLayer`，于是子节点仍用**地图局部坐标**摆放。
+     * · 三版口径：**不裁剪**（原来的正像遮罩已撤）。洞里每格只放一朵、缩到
+     * `TERRITORY_CLOUD_POCKET_SCALE`，留出观感上的空隙；
+     * · 它不在 `MapLayer` 里 ⇒ 不吃 `CloudKeepOut` 的反向擦除，也不被 ScrollView 视口裁掉，
+     * 所以"视觉上可以压住 UI"；
+     * · 每帧把自己的世界位置 / 缩放对齐 `MapLayer`，于是子节点仍用**地图局部坐标**摆放。
      */
     private pocketNode: Node | null = null;
     private pocketShadowGroup: Node | null = null;
@@ -360,10 +246,10 @@ export class TerritoryCloudView {
     /**
      * 尺寸可用（`setFillArea` 至少调过一次）。
      *
-     * ⚠️ 与 {@link fillKey} **不是一回事**：`fillKey` 是"按这套参数建出来的那批节点还在不在"
+     * 与 {@link fillKey} **不是一回事**：`fillKey` 是"按这套参数建出来的那批节点还在不在"
      * 的指纹（`clearFill` 会清空它，逼下一次 `setFillArea` 重建）；而尺寸本身（行列 / 宽高）
      * 在 `reset()` 之后**仍然有效** —— 换章那一帧 `setFillOccupied` 就靠它把铺满层当场建回来
-     * （见 {@link setFillOccupied}，2026-11-06 那条裸底图）。
+     * （见 {@link setFillOccupied}，那条裸底图）。
      */
     private fillAreaReady = false;
     /**
@@ -378,11 +264,11 @@ export class TerritoryCloudView {
     /**
      * 内容层偏移（= `TerritoryMapView.applyContentShift` 真正写进 `GridLayer` 的那个 y）。
      *
-     * 🔴 **必须由地图视图注入**（`setContentShiftY`），不能现算缺省值。
-     * 自 2026-10-27 起两份留白都是页面按「视口高 + HUD 底边」反算的**运行时值**，
+     * **必须由地图视图注入**（`setContentShiftY`），不能现算缺省值。
+     * 自 两份留白都是页面按「视口高 + HUD 底边」反算的**运行时值**，
      * `territoryMapContentShiftY()` 不传参拿到的是老缺省（300 / 0 ⇒ +150），
      * 而 720×1280 上的真值是 342.5 —— 差 192.5px（≈ 两排），
-     * 云洞层整排漂到上面那几排已解锁地块上（用户 2026-10-28 截图红圈）。
+     * 云洞层整排漂到上面那几排已解锁地块上（截图红圈）。
      *
      * 缺省值保留只为「没人注入」的场景（单测 / 页面还没量到 HUD）有个合理兜底。
      */
@@ -392,7 +278,7 @@ export class TerritoryCloudView {
     /**
      * 「这一格**已经激活**」的探针（`sync` 每帧注入；`null` = 没人给 ⇒ 退回 `revealed` 口径）。
      *
-     * 🔴 与 `revealed` 是**两个口径**，混用就是 2026-10-27 那个「还没激活完全部地块，云就散了」：
+     * 与 `revealed` 是**两个口径**，混用就是 那个「还没激活完全部地块，云就散了」：
      * `revealed` 含「在已占领格**前沿**的随机候选格」—— 那些格**能看见、还没开**
      * （见 `territoryRevealedCells`）。它们一进 `revealed`，全解锁判据就提前成立。
      */
@@ -406,7 +292,7 @@ export class TerritoryCloudView {
     /**
      * 正在散：`cellId → 轨道`（起点 / 基础倍率 / 已用时）。
      *
-     * 值从"已用时（秒）"升级成轨道是 2026-10-26 六版的事 —— 消散要写缩放与上飘，
+     * 值从"已用时（秒）"升级成轨道，消散要写缩放与上飘，
      * 两者都是**相对起手**算的，光有时间算不出来（见 {@link ITerritoryCloudDissolveTrack}）。
      */
     private readonly dissolving = new Map<number, ITerritoryCloudDissolveTrack>();
@@ -423,11 +309,11 @@ export class TerritoryCloudView {
     /**
      * **整张格网**的格心坐标（地图视图注入 `input.layout.points`）。
      *
-     * 🔴 2026-11-11：挡云区不能再只认 {@link cells}（= `territoryCloudCells`，只有
-     *    `sites` / `randomSites` / 起始格）。`chapter_02` 起「预告关卡」披露的是**整关
-     *    footprint**（一关 5~10 格），`paintHexes` 会把它们全画成地块，可这些格根本不在
-     *    `cells` 里 ⇒ 一个挡云多边形都描不上，云直接贴到地块边缘
-     *    （用户：「第 2 章的云层和地块没有固定间隔」）。
+     * 挡云区不能再只认 {@link cells}（= `territoryCloudCells`，只有
+     * `sites` / `randomSites` / 起始格）。`chapter_02` 起「预告关卡」披露的是**整关
+     * footprint**（一关 5~10 格），`paintHexes` 会把它们全画成地块，可这些格根本不在
+     * `cells` 里 ⇒ 一个挡云多边形都描不上，云直接贴到地块边缘
+     * 「第 2 章的云层和地块没有固定间隔」。
      *
      * 注入的是**全量**格心，所以「凡是已揭示、且拿得到坐标的格」都能描出 15px 外扩轮廓；
      * 第一章那种「站点格就是 footprint 本身」的图行为逐格不变。
@@ -444,7 +330,7 @@ export class TerritoryCloudView {
      * 在**格子层的父节点**里建四层，并插到格子层的后两位（= 格子之上、站点层之下，见类注释）。
      *
      * @param hexLayer `TerritoryMapView.gridLayer` —— 只从它身上取父节点 / layer / 兄弟序，
-     *                 云不会成为它的子节点。
+     * 云不会成为它的子节点。
      */
     attach(hexLayer: Node): void {
         if (this.keepOut?.isValid) return;
@@ -463,8 +349,8 @@ export class TerritoryCloudView {
         // 一开始还没有已解锁格 ⇒ 挡云区是空的，先关掉（空模具的反向遮罩在某些驱动上是未定义行为）。
         mask.enabled = false;
         const graphics = keepOut.getComponent(Graphics) ?? keepOut.addComponent(Graphics);
-        // ⚠️ 必须显式写全透明：`Mask` 自己建的 Graphics 才是 alpha 0，若这里先建了一个默认的，
-        //    `_createGraphics` 就不会改它的颜色 ⇒ `fill()` 会画出一块**白色实心**的多边形。
+        // 必须显式写全透明：`Mask` 自己建的 Graphics 才是 alpha 0，若这里先建了一个默认的，
+        // `_createGraphics` 就不会改它的颜色 ⇒ `fill()` 会画出一块**白色实心**的多边形。
         graphics.fillColor = this.keepOutFill;
         this.mapLayer = parent;
         this.keepOut = keepOut;
@@ -473,10 +359,10 @@ export class TerritoryCloudView {
 
         // ①.5 **全局影子层** —— `CloudKeepOut` 的第 0 个孩子，**所有**影子都住在这里。
         //
-        // 🔴 2026-10-26：影子分组原来是"各层各一个（层里第 0 个孩子）"，那只保证
+        // 影子分组原来是"各层各一个（层里第 0 个孩子）"，那只保证
         // **层内**影子在云体之下。两层一叠就漏：`CloudLayer` 的影子在层内是第 0，
         // 但整个 `CloudLayer` 排在 `CloudFillLayer` **之后** ⇒ 真实云层的影子画到了
-        // 铺满层的云体**之上**，地图上出现一条"灰云带"（用户截图）。
+        // 铺满层的云体**之上**，地图上出现一条"灰云带"（截图）。
         // 现在把影子全部抽到一个独立层里、压在两个云体层之下 —— 跨层也不可能有影子压云。
         const shadowLayer = this.createLayerNode(TERRITORY_CLOUD_SHADOW_NODE, keepOut, hexLayer.layer, 0);
         this.shadowLayer = shadowLayer;
@@ -485,7 +371,7 @@ export class TerritoryCloudView {
         this.shadowGroup = this.createShadowGroup(shadowLayer, TERRITORY_CLOUD_LAYER_SHADOW_NODE);
 
         // ②-0 铺满层（虚拟格点）—— 画在真实格云之下。
-        //      同一张遮罩 ⇒ 已解锁的地方连它一起擦，不用单独判一遍。
+        // 同一张遮罩 ⇒ 已解锁的地方连它一起擦，不用单独判一遍。
         const fill = this.createLayerNode(TERRITORY_CLOUD_FILL_NODE, keepOut, hexLayer.layer, 1);
         this.fillLayer = fill;
 
@@ -494,7 +380,7 @@ export class TerritoryCloudView {
         this.layer = layer;
 
         // ③ 消散层 —— 插在遮罩**之后**（遮罩之上、站点层之下）。
-        //    ⚠️ 别写成 `parent.children.length`：那会跑到 `GainLayer` 之上，把飘字压住。
+        // 别写成 `parent.children.length`：那会跑到 `GainLayer` 之上，把飘字压住。
         const dissolve = this.createLayerNode(TERRITORY_CLOUD_DISSOLVE_NODE, parent, hexLayer.layer, sibling + 1);
         const dissolveMask = dissolve.addComponent(Mask);
         // 同挡云区：反向擦除。区别只有一个 —— 正在消散的那些格**不进**擦除区（见类注释）。
@@ -524,7 +410,7 @@ export class TerritoryCloudView {
     /**
      * 建一个只装 Sprite 的图层节点：`设 layer → 挂父 → 定兄弟序 → 补 UITransform` 四步合一处。
      *
-     * ⚠️ 兄弟序**必须在调用点算**：`attachPocket` 的「挂到最后一个孩子」依赖 `setParent` **之后**
+     * 兄弟序**必须在调用点算**：`attachPocket` 的「挂到最后一个孩子」依赖 `setParent` **之后**
      * 的 `children.length`，挪进这里会差一位（云洞层压不住 UI）。
      */
     private createLayerNode(name: string, parent: Node, layer: number, siblingIndex?: number): Node {
@@ -540,12 +426,12 @@ export class TerritoryCloudView {
      * 建「被地块包围的云洞」的顶层节点（`attach` 里调一次；没有页面根就静默跳过）。
      *
      * 层级要点：
-     *  · **append 到页面根**（= 最后一个孩子）⇒ 压住玩家信息 / 资源栏等 UI，也压在地块之上；
-     *  · `TerritoryOverlay`（宝箱 / 飞出的奖励粒子 / 点击反馈）是**之后**才建的，且建的时候会
-     *    把自己设成最后一个孩子 ⇒ 天然压在云洞层之上，满足"不能遮挡粒子特效"；
-     *  · 不注册任何触摸监听、也不挂 `BlockInputEvents` ⇒ **不影响点击**（事件照旧落到下面的
-     *    ScrollView / 按钮上）；
-     *  · 三版口径**没有遮罩**：原来"洞外扩 15px"的正像遮罩会把云裁成一块白色六边形。
+     * · **append 到页面根**（= 最后一个孩子）⇒ 压住玩家信息 / 资源栏等 UI，也压在地块之上；
+     * · `TerritoryOverlay`（宝箱 / 飞出的奖励粒子 / 点击反馈）是**之后**才建的，且建的时候会
+     * 把自己设成最后一个孩子 ⇒ 天然压在云洞层之上，满足"不能遮挡粒子特效"；
+     * · 不注册任何触摸监听、也不挂 `BlockInputEvents` ⇒ **不影响点击**（事件照旧落到下面的
+     * ScrollView / 按钮上）；
+     * · 三版口径**没有遮罩**：原来"洞外扩 15px"的正像遮罩会把云裁成一块白色六边形。
      */
     private attachPocket(hexLayer: Node): void {
         if (this.pocketNode?.isValid) return;
@@ -566,9 +452,9 @@ export class TerritoryCloudView {
      * 注入美术（云体 / 影子是**两套图**，见 {@link ITerritoryCloudFrames}）。
      *
      * 降级口径（缺图只是不画，不阻断进页面）：
-     *  - 没有云体帧 ⇒ 整条云表现静默关闭（地图照常渲染）；
-     *  - 没有影子帧 ⇒ 只画云体（等价于老的单层表现，不会报错）；
-     *  - 消散两套缺一套 ⇒ 缺的那套留空（影子不动 / 云体不换帧，靠淡出收尾）。
+     * - 没有云体帧 ⇒ 整条云表现静默关闭（地图照常渲染）；
+     * - 没有影子帧 ⇒ 只画云体（等价于老的单层表现，不会报错）；
+     * - 消散两套缺一套 ⇒ 缺的那套留空（影子不动 / 云体不换帧，靠淡出收尾）。
      *
      * 铺满层 / 云洞层可能**先**建了节点（`setFillArea` 早于美术就绪）：这里要把帧补上去，
      * 否则那几百个 Sprite 会一直是空帧、整片背景**没有云**且零报错。
@@ -633,8 +519,8 @@ export class TerritoryCloudView {
     /**
      * 铺满整块背景所需的矩形与行列（`renderMap` 每次都会调，同指纹直接返回）。
      *
-     * @param width   / @param height 内容层尺寸（`territoryMapContentSize`），以 (0,0) 为中心
-     * @param rows    / @param columns 地图行列（决定格网相位；虚拟格点靠它延伸）
+     * @param width / @param height 内容层尺寸（`territoryMapContentSize`），以 (0,0) 为中心
+     * @param rows / @param columns 地图行列（决定格网相位；虚拟格点靠它延伸）
      */
     setFillArea(width: number, height: number, rows: number, columns: number): void {
         const key = `${rows}|${columns}|${Math.round(width)}|${Math.round(height)}`;
@@ -642,8 +528,8 @@ export class TerritoryCloudView {
         this.fillColumns = columns > 0 ? columns : 0;
         this.fillWidth = width > 0 ? width : 0;
         this.fillHeight = height > 0 ? height : 0;
-        // ⚠️ 先置位再看指纹：换章那一帧 `syncGrid` 的 `reset()` 就发生在这次 `setFillArea`
-        //    **之后**，紧随其后的 `setFillOccupied` 只认这个标记（见 `setFillOccupied`）。
+        // 先置位再看指纹：换章那一帧 `syncGrid` 的 `reset()` 就发生在这次 `setFillArea`
+        // **之后**，紧随其后的 `setFillOccupied` 只认这个标记（见 `setFillOccupied`）。
         this.fillAreaReady = true;
         if (key === this.fillKey) return;
         this.fillKey = key;
@@ -653,9 +539,9 @@ export class TerritoryCloudView {
     /**
      * 告诉铺满层：这些格**已经由真实云层盖了**，不要重复铺（否则同一处两朵更亮、边界一眼可见）。
      *
-     * 🔴 2026-10-26：这个集合是**铺满范围的唯一依据**。章节图 20×20 / 400 格里只有 ~117 格
+     * 这个集合是**铺满范围的唯一依据**。章节图 20×20 / 400 格里只有 ~117 格
      * 配了内容，剩下那 280 多格既没有真实云、以前又不在铺满范围（铺满只铺格网外那圈）
-     * ⇒ 地图上出现**整条裸露的沙漠底图**（用户截图左侧红框）。现在格内空格照铺，
+     * ⇒ 地图上出现**整条裸露的沙漠底图**（截图左侧红框）。现在格内空格照铺，
      * 只跳过这里登记的格。换章换了内容格 ⇒ 必须重算一次。
      */
     setFillOccupied(cellIds: readonly number[]): void {
@@ -664,13 +550,13 @@ export class TerritoryCloudView {
         this.fillOccupied = next;
         // 还没 `setFillArea`（尺寸未知）时先记账，等尺寸到了自然重算。
         //
-        // 🔴 判据必须是「**尺寸**知不知道」，不能是「`fillKey` 空不空」（2026-11-06）：
-        //    `TerritoryMapView.renderMap` 的顺序是
-        //      ① `syncContentSize` → `setFillArea(新章尺寸)`  ← 用旧已盖格白建一套
-        //      ② `syncGrid`        → `clouds.reset()`       ← 清空铺满层、`fillKey = ''`
-        //      ③ `syncClouds`      → `setFillOccupied(新格)` ← 这一帧**唯一**能重建的机会
-        //    按 `fillKey` 判就会把 ③ 挡掉：铺满层 `active = true` 但一朵都没有 ⇒ 整片背景
-        //    裸沙、零报错（用户：「chapter02 地图未通关，用来遮挡背景的云层丢失了」）。
+        // 判据必须是「**尺寸**知不知道」，不能是「`fillKey` 空不空」：
+        // `TerritoryMapView.renderMap` 的顺序是
+        // ① `syncContentSize` → `setFillArea(新章尺寸)` ← 用旧已盖格白建一套
+        // ② `syncGrid` → `clouds.reset()` ← 清空铺满层、`fillKey = ''`
+        // ③ `syncClouds` → `setFillOccupied(新格)` ← 这一帧**唯一**能重建的机会
+        // 按 `fillKey` 判就会把 ③ 挡掉：铺满层 `active = true` 但一朵都没有 ⇒ 整片背景
+        // 裸沙、零报错「chapter02 地图未通关，用来遮挡背景的云层丢失了」。
         if (!this.fillAreaReady) return;
         this.rebuildFillPoints();
     }
@@ -781,7 +667,7 @@ export class TerritoryCloudView {
      * 整章云散**是否还在演**（镜头拉远 + 铺满层逐朵淡出，见 {@link startDismiss}）。
      *
      * 页面用它决定「这一帧能不能换图」：`TerritoryMapView.syncGrid` 换章第一件事就是
-     * `reset()`，云一散场就被掐掉 —— 用户 2026-11-04「SVG 合并之后，完成章节云层消散的动画
+     * `reset()`，云一散场就被掐掉 —— 「SVG 合并之后，完成章节云层消散的动画
      * 没有了」就是这条。`fillDismissed` 之后才算播完（淡完了才 `active = false`）。
      */
     get dismissing(): boolean {
@@ -790,31 +676,14 @@ export class TerritoryCloudView {
     }
 
     /**
-     * 这一章**是否已通关** ⇒ 是的话整片雾一起散（2026-11-04）。
+     * 本章通关状态。按每帧重算结果写入，不能只执行一次动作。
      *
-     * 与 `sync` 里那条 `isMapCleared` 是两回事：那条判「全图都打通了」，而新通关口径是
-     * 「通过最后一个首领关卡」—— 异步据点、没打的普通关可能还盖着云，但这一章已经结束了。
-     * 不在这里强行收掉，切章后那半张雾会跟着消失，玩家只觉得"动画又没了"。
+     * 已通关时由 territoryCloudClearAction 决定散场方式；
+     * cleared 为 false 时撤掉标记，避免换章不重建网格时残留上一章状态。
+     * 只有首次通关才播动画，持久已通关的章节直接收雾。
      *
-     * 🔴 **写成"每帧写入的状态"，不是一次性动作**：
-     *  · `sync` 每次都会重算"该不该有雾"，判据不成立就按回退复原（`writeFillOpacity(1)`），
-     *    只做一次动作的话雾会一闪一闪；
-     *  · 反过来，光粘住也不行：换章时 `syncGrid` **可能不重建网格**（两章布局键相同时它
-     *    直接早退，`reset` 不会跑），粘住的旧标记会让新一章的雾一上来就是散的。
-     *    所以 `cleared = false` 就撤掉标记 —— 谁写谁负责，地图每帧都写。
-     *
-     * 幂等：已经在演（或已经淡完）就什么都不做，重复的 `renderMap` 不会把演出重启一遍。
-     *
-     * ## 🔴 只有**首次通关**才演（2026-11-05 用户补的口径）
-     *
-     * 「通过的动画只有首次通关章节播放，切换章节后获取到通过状态也不用播放」。
-     * `chapterCleared` 是**持久状态**：切回早通了的章节、存档里就通着的章节，进页面
-     * 第一帧它已经是 `true` —— 只看电平就会"一进本章雾自己演一遍散场"。
-     * 判据交给模型（它知道"这一拍之前通没通"），这里只执行 {@link territoryCloudClearAction}
-     * 给的三选一：`animate` 演完整散场、`instant` 直接收掉、`none` 不动。
-     *
-     * @param cleared 本章是否已通关（持久状态）
-     * @param animate 这一拍是不是"刚打通"（模型的一次性信号，切回旧章时恒 `false`）
+     * @param cleared 本章是否已通关
+     * @param animate 这一拍是否刚通关，切回旧章时恒为 false
      */
     setChapterCleared(cleared: boolean, animate: boolean): void {
         if (!cleared) {
@@ -849,7 +718,7 @@ export class TerritoryCloudView {
     /**
      * 镜头「拉远程度」：0 = 初始高度、1 = 整张图入画。
      *
-     * ⚠️ 没在演时恒 0（= 初始高度），地图视图可以无脑每帧拿它当插值参数。
+     * 没在演时恒 0（= 初始高度），地图视图可以无脑每帧拿它当插值参数。
      */
     get dollyZoom(): number {
         return this.dollyElapsed >= 0 ? territoryCloudDollyZoom(this.dollyElapsed) : 0;
@@ -876,18 +745,18 @@ export class TerritoryCloudView {
      * 按「这一帧露出哪些格」同步云与挡云区。**幂等**，可每帧调。
      *
      * 三种走向：
-     *  · 格位没露出来 ⇒ 盖着静止云（首次则建节点）；
-     *  · 格位刚刚露出来（上一帧还盖着）⇒ 挪进消散层、就地播一次消散，**不再待机**；
-     *  · 格位早就露出来 ⇒ 什么都不做。
+     * · 格位没露出来 ⇒ 盖着静止云（首次则建节点）；
+     * · 格位刚刚露出来（上一帧还盖着）⇒ 挪进消散层、就地播一次消散，**不再待机**；
+     * · 格位早就露出来 ⇒ 什么都不做。
      *
-     * ⚠️ 进页面 / 换章的首帧天然不会误播消散：`shown` 是空的 ⇒ 已露出的格走
+     * 进页面 / 换章的首帧天然不会误播消散：`shown` 是空的 ⇒ 已露出的格走
      * "早就露出来"那条，直接跳过。
      *
      * @param pockets 「被地块包围」的未解锁格（`territoryCloudPocketCells`）。这些格子的云
-     *                **搬到页面级云洞层**：不吃挡云区的反向擦除、压在 UI 之上（需求 2026-10-23 ②）。
+     * **搬到页面级云洞层**：不吃挡云区的反向擦除、压在 UI 之上（②）。
      * @param isActivated 「这一格已经**激活**」的探针 —— 铺满层收官的判据。
-     *                **必须**传（只服务端确认过的解锁/占领/通关才算），省略就退回 `revealed`
-     *                口径 ⇒ 前沿可买但还没买的随机格会把收官提前（见 {@link activatedProbe}）。
+     * **必须**传（只服务端确认过的解锁/占领/通关才算），省略就退回 `revealed`
+     * 口径 ⇒ 前沿可买但还没买的随机格会把收官提前（见 {@link activatedProbe}）。
      */
     sync(
         cells: readonly ITerritoryCloudCell[],
@@ -903,14 +772,14 @@ export class TerritoryCloudView {
             this.reset();
             return;
         }
-        // 全地图解锁 ⇒ 整片云收工（用户口径：「只有全地图解锁后才展示」）。
+        // 全地图解锁 ⇒ 整片云收工「只有全地图解锁后才展示」。
         // 光靠挡云区也能擦干净格位，但**内容层留白那圈虚拟云**没有对应的已解锁格，
         // 不显式收掉就会在"全解锁"后还挂着一圈雾 —— 影子同理，要跟着一起收。
         //
-        // 🔴 2026-10-27 两轮：
-        //  · 第一轮：收工从"瞬间 `active = false`"改成一条淡出时间轴；
-        //  · 第二轮（本次）：判据从 `revealed` 换成「全部内容格**已激活**」，且开场先演镜头
-        //    （拉远 → 雾淡 → 拉回）。这里只负责"起跑 / 取消"，推进在 `step` 里。
+        // 两轮：
+        // · 第一轮：收工从"瞬间 `active = false`"改成一条淡出时间轴；
+        // · 第二轮（本次）：判据从 `revealed` 换成「全部内容格**已激活**」，且开场先演镜头
+        // （拉远 → 雾淡 → 拉回）。这里只负责"起跑 / 取消"，推进在 `step` 里。
         if (this.dismissForced || this.isMapCleared(revealed)) {
             // 幂等：已经在淡的那一遍不会被后面的 `sync` 重置（`renderMap` 会反复调）。
             if (!this.fillDismissed && this.fillFadeElapsed < 0 && this.dollyElapsed < 0) {
@@ -945,8 +814,8 @@ export class TerritoryCloudView {
                 this.placeCloud(cellId, cell);
                 // 回退（撤销解锁 / 服务端快照改口径）：这一格又没露出来 ⇒
                 // 立刻取消消散、挪回云层、恢复静止帧。
-                // ⚠️ 走 `cancelDissolve` 而不是直接 delete：云洞那朵是从云洞层借来的临时节点，
-                //    取消时必须销毁（云洞层会自己重建一朵新的），否则原地留一颗孤儿云。
+                // 走 `cancelDissolve` 而不是直接 delete：云洞那朵是从云洞层借来的临时节点，
+                // 取消时必须销毁（云洞层会自己重建一朵新的），否则原地留一颗孤儿云。
                 this.cancelDissolve(cellId);
                 if (sprite.node.parent !== layer) sprite.node.setParent(layer);
                 this.restoreShadow(cellId);
@@ -954,7 +823,7 @@ export class TerritoryCloudView {
                 // 云洞格：页面顶层那层已经画了一朵（不裁剪 + 缩到 `POCKET_SCALE`），
                 // 这里只留"待机记账"、把节点收起来 —— 否则洞心叠两朵，正常层那朵被邻格的
                 // 15px 啃掉一圈，看着比别处更亮（就是截图里那块白斑）。
-                // ⚠️ 但它**仍要记进 `shown`**：这一格解锁时要照常播消散（起手会重新点亮）。
+                // 但它**仍要记进 `shown`**：这一格解锁时要照常播消散（起手会重新点亮）。
                 this.setCloudVisible(cellId, !this.pocketCells.has(cellId));
                 this.shown.add(cellId);
                 continue;
@@ -979,38 +848,11 @@ export class TerritoryCloudView {
     }
 
     /**
-     * 「全地图都打通了」没 —— 决定铺满层（`CloudFillLayer`）要不要整层收掉。
+     * 判断全图内容格是否都已激活，决定铺满层是否收掉。
      *
-     * ## 判据的两次修订（都别再退回去）
-     *
-     * ### ① 分母不能用 `rows × columns`
-     *
-     * 老口径 `revealed.size >= rows × columns`。章节图的格网是 20×20 = 400，可里面
-     * **只有 117~262 格配了内容**（`sites` + `randomSites.candidateCells` + 起始格），
-     * 剩下 138~283 格什么都没有 —— 它们既不会出现在 `revealed` 里，也永远不会被解锁
-     * ⇒ `revealed.size` 一辈子到不了 400，铺满层**永远不撤**（2026-10-27 用户：「全部解锁后，
-     * 云团没有消失」）。
-     *
-     * 现在分母 = `cells`（只有有内容的格）。
-     *
-     * ### ② 分子不能用 `revealed`（🔴 本次）
-     *
-     * `revealed` 来自 `territoryRevealedCells`：= 已占领 / 已解锁 ∪ 前置满足的非随机站点
-     * ∪ **在已占领格「前沿」的随机候选格**。最后那一类是「地图上看得见、还没花钱开」的格
-     * —— 它们一进 `revealed`，判据就成立 ⇒ 玩家还有一格没激活，雾就散了
-     * （用户 2026-10-27：「还未激活完全部地块，云层就消失了」）。
-     *
-     * 现在改问注入的探针 {@link activatedProbe}（页面给的是
-     * `isCellUnlocked || isOwned || isAreaPassed`，见 `TerritoryMapView.isCellActivated`）。
-     *
-     * ⚠️ 两件事别顺手做：
-     *  · **别把云团自己的消散也改成「激活才散」**—— 云团是"盖住没露出来的格"，
-     *    格子一露就得让开，否则格子上压着一团雾；
-     *  · 别拿 `revealed` 当探针的兜底之外的第二个判据（两者一旦"或"在一起，
-     *    ①那条 bug 立刻回来）。
-     *
-     * 退化情况（`cells` 为空 = 整张图一格内容都没有，多半是配错图）⇒ `false`，
-     * 免得空白图一进去就把云全撤了。
+     * 分母只取有内容的 cells，不能用格网总数；分子用 activatedProbe，
+     * 不能用 revealed，后者包含尚未激活的前沿随机格。
+     * 云团自身的消散仍按露出判定，不能改成激活判定。
      */
     private isMapCleared(revealed: ReadonlySet<number>): boolean {
         if (this.cells.length === 0) return false;
@@ -1031,9 +873,9 @@ export class TerritoryCloudView {
     /**
      * 开场：全图打通的这一帧。
      *
-     *  · 有拉远余量（`dollyFitScale < 1`，页面量过视口）⇒ 先演镜头：拉远到位后**才**起淡出，
-     *    淡出放慢到 {@link TERRITORY_CLOUD_DOLLY_FADE_SECONDS}；
-     *  · 没余量 / 页面没注入视口（单测、极小图）⇒ 直接走默认 0.5s 淡出，不锁玩家输入。
+     * · 有拉远余量（`dollyFitScale < 1`，页面量过视口）⇒ 先演镜头：拉远到位后**才**起淡出，
+     * 淡出放慢到 {@link TERRITORY_CLOUD_DOLLY_FADE_SECONDS}；
+     * · 没余量 / 页面没注入视口（单测、极小图）⇒ 直接走默认 0.5s 淡出，不锁玩家输入。
      */
     private startDismiss(): void {
         if (this.dollyFitScale < 1) {
@@ -1047,10 +889,10 @@ export class TerritoryCloudView {
      * 起跑一条铺满层退场时间轴（**唯一入口**：默认档与演出档都从这里进）。
      *
      * 三件事绑在一起做，少一件就有一条路径没编波：
-     *  ① 定总时长（之后不再改，见 {@link fillFadeSeconds}）；
-     *  ② 时钟归零；
-     *  ③ 编波次（{@link prepareFillWave}）—— 必须在这一刻编：全解锁后地块位置已是终态，
-     *     而"离地块多远"正是波的唯一依据。
+     * ① 定总时长（之后不再改，见 {@link fillFadeSeconds}）；
+     * ② 时钟归零；
+     * ③ 编波次（{@link prepareFillWave}）—— 必须在这一刻编：全解锁后地块位置已是终态，
+     * 而"离地块多远"正是波的唯一依据。
      */
     private beginFillFade(seconds: number): void {
         this.fillFadeSeconds = Number.isFinite(seconds) && seconds > 0
@@ -1065,9 +907,9 @@ export class TerritoryCloudView {
      *
      * 退场**过程中**仍是 `true`（要画，只不过越来越透）；只有淡完了才 `active = false`。
      *
-     * 🔴 还要**有节点**才算在展示（与 {@link rebuildFill} 同一个公式）：只看 `fillDismissed`
+     * 还要**有节点**才算在展示（与 {@link rebuildFill} 同一个公式）：只看 `fillDismissed`
      * 的话，节点被清空而没人重建时这一层是"开着但空着"—— 画面是整片裸底图，而 `fillVisible`
-     * 依然读 `true`（2026-11-06 chapter02 那条就是这么骗过所有人的）。宁可这里说 `false`。
+     * 依然读 `true`（chapter02 那条就是这么骗过所有人的）。宁可这里说 `false`。
      */
     private applyFillActive(): void {
         const show = !this.fillDismissed && this.fillSprites.length > 0;
@@ -1080,12 +922,12 @@ export class TerritoryCloudView {
     /**
      * 按「这一朵到最近地块的距离」编出每朵的波次（写进 {@link fillWaveOrders}）。
      *
-     * ## 为什么是"到最近**地块格心**"
+     * 参照物取最近**地块格心**
      *
      * 雾本来就是"盖住没解锁的格"，它的空间语义只有一种参照物 —— 地块。铺满层还铺到了
      * 内容层留白那圈（`TERRITORY_MAP_CONTENT_PADDING`），那圈离地块最远，正好是"最后才散"的那部分。
      *
-     * ## 为什么只编一次
+     * 只在铺满时编一次
      *
      * 几百朵 × 几百格 = 十几万次距离计算。它是**全解锁那一刻**的静态量（地块位置此后不变），
      * 每帧重算是白烧 CPU。重建铺满层 / 换章会清空这个数组（见 `rebuildFill` / `clearFill`）。
@@ -1126,15 +968,15 @@ export class TerritoryCloudView {
      * 写铺满层的**整层**不透明度（`0~1` → `Sprite.color.a` 的 `0~255`）——
      * 回退复原 / 收工归零 / 编不出波时的兜底都走它。
      *
-     * ## 为什么不用 `UIOpacity` 了（2026-10-27 第二轮）
+     * 不再给整层挂 `UIOpacity`
      *
      * 老口径给整层挂一个 `UIOpacity` 写同一个 alpha ⇒ 几百朵雾**同一帧**起淡、同一帧淡完，
-     * 屏幕上是"整层灰一起变薄"。用户要的是「从靠近地块的云雾先消失，离地块远的消失的慢」，
+     * 屏幕上是"整层灰一起变薄"。目标是「从靠近地块的云雾先消失，离地块远的消失的慢」，
      * 那就只能**逐朵**写 —— 而逐朵挂组件会让每个节点退出静态合批（几百个组件只为这 2s），
      * 所以改走 `Sprite.color.a`（与消散同一套做法，见 {@link writeOpacity}）。
      *
-     * ⚠️ 影子在**另一个节点**里（`fillShadowGroup` 住在全局影子层），必须一起写 ——
-     *    只淡云体不淡影子，退场那几秒里地图上会浮着一层灰。
+     * 影子在**另一个节点**里（`fillShadowGroup` 住在全局影子层），必须一起写 ——
+     * 只淡云体不淡影子，退场那几秒里地图上会浮着一层灰。
      */
     private writeFillOpacity(value: number): void {
         for (const sprite of this.fillSprites) this.writeOpacity(sprite, value);
@@ -1168,8 +1010,8 @@ export class TerritoryCloudView {
     private stepFillFade(delta: number): void {
         if (this.fillFadeElapsed < 0 || this.fillDismissed) return;
         this.fillFadeElapsed += delta;
-        // ⚠️ 收工只看**整条时长**：最慢那一朵的窗口右端正好等于它（见 wave 窗口的推导），
-        //    所以"时间到"与"全都淡完"是同一时刻，不会出现"还有一朵没淡完就被收起来"。
+        // 收工只看**整条时长**：最慢那一朵的窗口右端正好等于它（见 wave 窗口的推导），
+        // 所以"时间到"与"全都淡完"是同一时刻，不会出现"还有一朵没淡完就被收起来"。
         if (this.fillFadeElapsed < this.fillFadeSeconds) {
             this.applyFillWave(this.fillFadeElapsed);
             return;
@@ -1185,9 +1027,9 @@ export class TerritoryCloudView {
      * 推进「全解锁镜头散场」的时钟（在 `step` 里每帧调）。
      *
      * 它只管**自己这只表**和「什么时候起淡」：
-     *  · `elapsed >= 拉远时长` 那一帧起淡，时长切到 2s（见 {@link beginFillFade}）；
-     *  · 到总时长收工 ⇒ `dollyElapsed = -1`（`dollyActive` 变 false、`dollyZoom` 回到 0），
-     *    地图视图看到它变 false 就会把 `MapLayer` 还原、放开输入。
+     * · `elapsed >= 拉远时长` 那一帧起淡，时长切到 2s（见 {@link beginFillFade}）；
+     * · 到总时长收工 ⇒ `dollyElapsed = -1`（`dollyActive` 变 false、`dollyZoom` 回到 0），
+     * 地图视图看到它变 false 就会把 `MapLayer` 还原、放开输入。
      */
     private stepDolly(delta: number): void {
         if (this.dollyElapsed < 0) return;
@@ -1205,11 +1047,11 @@ export class TerritoryCloudView {
         if (!this.layer?.isValid) return;
         this.syncPocketTransform();
         const delta = Number.isFinite(dt) && dt > 0 ? dt : 0;
-        // ⚠️ 顺序：镜头时钟在最前（它负责"该不该起淡"），淡出紧随其后消费同一帧的 dt
-        //    ⇒ 起淡那一帧就能写出第一个不透明度，不会白等一帧。
+        // 顺序：镜头时钟在最前（它负责"该不该起淡"），淡出紧随其后消费同一帧的 dt
+        // ⇒ 起淡那一帧就能写出第一个不透明度，不会白等一帧。
         this.stepDolly(delta);
-        // ⚠️ 铺满层的退场要排在消散的早退之前：全解锁那一帧可能没有任何朵在消散
-        //    （存档进来就是全解锁的），此时也得有人把雾淡掉。
+        // 铺满层的退场要排在消散的早退之前：全解锁那一帧可能没有任何朵在消散
+        // （存档进来就是全解锁的），此时也得有人把雾淡掉。
         this.stepFillFade(delta);
         if (!this.dissolving.size) return;
         this.batching = true;
@@ -1258,7 +1100,7 @@ export class TerritoryCloudView {
      * 位置用**格面中心**（布局点 + `HEX_GRID_CONTENT_LIFT`），与地块同源 ——
      * 少加这一下，擦除区会整体低 12.5px，上边缘的云会压到地块。
      *
-     * 🔴 遍历范围见 {@link forEachKeepOutCell}：**所有已揭示格**，不只是有内容云的那些格。
+     * 遍历范围见 {@link forEachKeepOutCell}：**所有已揭示格**，不只是有内容云的那些格。
      */
     private rebuildKeepOut(): void {
         const mask = this.keepOutMask;
@@ -1280,7 +1122,7 @@ export class TerritoryCloudView {
     /**
      * 把一个格的「地块轮廓外扩 15px」描进模具（`rebuildKeepOut` / 消散层共用）。
      *
-     * ⚠️ 基准点是**格面中心**（`cell.y + HEX_GRID_CONTENT_LIFT`），不是节点位置：地皮图锚在
+     * 基准点是**格面中心**（`cell.y + HEX_GRID_CONTENT_LIFT`），不是节点位置：地皮图锚在
      * 整图中心，图心比格面中心低 12.5；而多边形是"格面 + 下方 2.5D 侧壁"外扩来的。
      */
     private traceKeepOut(
@@ -1375,7 +1217,7 @@ export class TerritoryCloudView {
             shadow.node.setPosition(point.x, y, 0);
             this.fillShadowSprites.push(shadow);
         }
-        // ⚠️ 退完场之后再重建（换章后尺寸变了）不许把雾又点亮 —— 与 `applyFillActive` 同口径。
+        // 退完场之后再重建（换章后尺寸变了）不许把雾又点亮 —— 与 `applyFillActive` 同口径。
         const show = this.fillPoints.length > 0 && !this.fillDismissed;
         layer.active = show;
         if (group) group.active = show;
@@ -1394,9 +1236,9 @@ export class TerritoryCloudView {
         this.fillShadowSprites.length = 0;
         this.fillPoints = [];
         this.fillKey = '';
-        // ⚠️ `fillAreaReady` / 行列 / 宽高 **都不撤**：它们是"内容层多大"这件事实，换章后又没变。
-        //    撤掉就等于把裸底图放回来 —— `reset()` 在 `renderMap` 里排在 `setFillArea` 之后，
-        //    而这一帧再没人喂尺寸了（见 `setFillOccupied`，2026-11-06）。
+        // `fillAreaReady` / 行列 / 宽高 **都不撤**：它们是"内容层多大"这件事实，换章后又没变。
+        // 撤掉就等于把裸底图放回来 —— `reset()` 在 `renderMap` 里排在 `setFillArea` 之后，
+        // 而这一帧再没人喂尺寸了（见 `setFillOccupied`，）。
         // 铺满层整个作废 ⇒ 退场时间轴也一并回到"从没淡过"（波次同理，节点都换了）。
         this.fillFadeElapsed = -1;
         this.fillDismissed = false;
@@ -1413,13 +1255,13 @@ export class TerritoryCloudView {
     /**
      * 同步云洞 → 重建那几朵云。
      *
-     * 三版口径（用户 2026-10-23 第三轮）：
-     *  · **不裁剪**（正像遮罩已撤，云不再被切成白色六边形）；
-     *  · **减少数量**：每个洞格只放**一朵**（原来是「洞格 + 六邻」7 朵）；
-     *  · **轻微缩小**：`TERRITORY_CLOUD_POCKET_SCALE`，留出与地块的观感空隙；
-     *  · 图层仍在**页面根**（压在地块与 UI 之上）。
+     * 三版口径（第三轮）：
+     * · **不裁剪**（正像遮罩已撤，云不再被切成白色六边形）；
+     * · **减少数量**：每个洞格只放**一朵**（原来是「洞格 + 六邻」7 朵）；
+     * · **轻微缩小**：`TERRITORY_CLOUD_POCKET_SCALE`，留出与地块的观感空隙；
+     * · 图层仍在**页面根**（压在地块与 UI 之上）。
      *
-     * ## 洞格解锁 ⇒ 那朵云要**原地消散**，不许凭空消失（2026-10-26 六版）
+     * 洞格解锁 ⇒ 那朵云要**原地消散**，不许凭空消失
      *
      * 老口径里洞格一旦解锁，`rebuildPocket` 会把它连节点一起销毁，同一帧解锁区那朵（1.0 倍）
      * 又被 `startDissolve` 点亮 ⇒ 实机是"一朵小云凭空没 + 一朵大云凭空来"。现在先把要走的
@@ -1484,11 +1326,10 @@ export class TerritoryCloudView {
     /**
      * 把一个刚解锁的洞格的云转成消散：挪进消散层 + 记一条轨道（倍率仍是云洞那档）。
      *
-     * 为什么挪进**地图里**的 `CloudDissolveLayer` 而不是留在云洞层自己散：
-     *  · 消散层的挡云区会把"正在消散的格"排除，云在自己那格上完整地散；
-     *  · 云洞那朵缩到 0.6 倍只有 120px 宽，本来就够不着邻居那圈 15px 擦除区 ⇒ 不会被削边；
-     *  · 两个层用的是**同一套地图局部坐标**（`CloudDissolveLayer` 自己也吃了 150 的内容层偏移），
-     *    所以 `setParent` 不改局部坐标、云不会跳位（同 {@link startDissolve}）。
+     * · 消散层的挡云区会把"正在消散的格"排除，云在自己那格上完整地散；
+     * · 云洞那朵缩到 0.6 倍只有 120px 宽，本来就够不着邻居那圈 15px 擦除区 ⇒ 不会被削边；
+     * · 两个层用的是**同一套地图局部坐标**（`CloudDissolveLayer` 自己也吃了 150 的内容层偏移），
+     * 所以 `setParent` 不改局部坐标、云不会跳位（同 {@link startDissolve}）。
      */
     private startPocketDissolve(cellId: number): void {
         if (this.dissolving.has(cellId)) return;
@@ -1539,29 +1380,10 @@ export class TerritoryCloudView {
     }
 
     /**
-     * 让云洞层每帧对齐 `MapLayer`（世界位置 + 世界缩放）。
+     * 让云洞层每帧对齐 MapLayer 的世界位置与缩放。
      *
-     * 这样云洞层里的子节点可以继续用**地图局部坐标**摆位：地图滚动 / 推镜时不用逐格换算，
-     * 只有这一个节点在动。没有洞时开销就是一次 `size` 判断。
-     *
-     * ## 🔴 必须把「内容层偏移」一起算进去（2026-10-26 修，2026-10-28 补注入）
-     *
-     * `territoryMapContentShiftY()` 是 `TerritoryMapView.applyContentShift` 写在
-     * **`MapLayer` 的孩子**上的（格子层 / 云层 / 站点层 / 飘字层都 +shift），`MapLayer` 自己
-     * 的 `worldPosition` 里**没有**这一截。
-     *
-     * 云洞层偏偏是**页面根**的孩子（要压在 UI 之上），之前直接
-     * `pocket.setWorldPosition(map.worldPosition)` ⇒ 它整层比地块**低 150 地图像素**
-     * （≈ 一排半格）。实机表现就是用户 2026-10-26 截图红圈：云洞里的云没落在洞里，
-     * 而是压到了**下面那一排已解锁地块**上。
-     *
-     * 所以这里不能拿 `worldPosition` 直接对齐，要问 `MapLayer` 要「局部 `(0, shift)` 的世界坐标」，
-     * 缩放在内的整条变换链一次算完。
-     *
-     * ⚠️ 2026-10-28 复发：这个 `shift` 又变回了「现算缺省值」（+150），而真值在 720×1280 上是
-     * **342.5**（见 `territoryMapContentShiftY` 的运行时口径）⇒ 云洞整层低 192.5px（≈ 两排），
-     * 云没落在洞里、而是压到了上面那排已解锁地块上（用户截图红圈）。
-     * 现值一律取自 {@link contentShiftY}，由 `applyContentShift` 注入。
+     * 偏移必须取注入的 contentShiftY，因为 MapLayer 的 worldPosition 不含
+     * 内容层偏移；若直接对齐会使云洞整体偏低。
      */
     private syncPocketTransform(): void {
         const pocket = this.pocketNode;
@@ -1779,8 +1601,8 @@ export class TerritoryCloudView {
     /**
      * 消散收尾。
      *
-     *  · 解锁区那朵是**常驻节点** ⇒ 复位（缩放 / 不透明度 / 隐藏），这一格若又变回未解锁还要用；
-     *  · 云洞那朵是从云洞层借的**临时节点** ⇒ 直接销毁（云洞层会自己重建，留着就是一颗孤儿云）。
+     * · 解锁区那朵是**常驻节点** ⇒ 复位（缩放 / 不透明度 / 隐藏），这一格若又变回未解锁还要用；
+     * · 云洞那朵是从云洞层借的**临时节点** ⇒ 直接销毁（云洞层会自己重建，留着就是一颗孤儿云）。
      */
     private settleDissolve(track: ITerritoryCloudDissolveTrack): void {
         if (track.inPocket) {

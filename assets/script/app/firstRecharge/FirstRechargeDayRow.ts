@@ -1,7 +1,6 @@
 import { _decorator, Component, Label, Node, SpriteFrame, UITransform } from 'cc';
 import { qualityFrameName } from './FirstRechargeArt';
 import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
-import { dayPlateWidth, rewardRowWidth, rewardSlotOffsets } from './FirstRechargeLayout';
 import { FirstRechargeSlot } from './FirstRechargeSlot';
 import type { FirstRechargeDayState, IFirstRechargeReward } from './FirstRechargeTable';
 import { FIRST_RECHARGE_TEXTS } from './FirstRechargeTexts';
@@ -47,6 +46,9 @@ export class FirstRechargeDayRow extends Component {
     @property({ type: Node, tooltip: 'SlotBar：奖励格容器（下面挂 3 个 FirstRechargeSlot）' })
     slotBar: Node = null;
 
+    @property({ tooltip: '日牌宽度相对 SlotBar 的左右留白' })
+    platePaddingX = 30;
+
     /**
      * 行内的奖励格，**按 x 从左到右**排序 —— 渲染顺序契约与设计稿一致。
      *
@@ -68,9 +70,8 @@ export class FirstRechargeDayRow extends Component {
 
         const slots = this.slots;
         const count = Math.min(data.rewards.length, slots.length);
-        this.applyLayout(count);
+        this.applyLayout();
 
-        const offsets = rewardSlotOffsets(count);
         for (let index = 0; index < slots.length; index++) {
             const slot = slots[index];
             if (index >= count) {
@@ -80,7 +81,6 @@ export class FirstRechargeDayRow extends Component {
             const reward = data.rewards[index];
             const item = data.items.get(reward.resId);
             slot.node.active = true;
-            slot.node.setPosition(offsets[index], 0, 0);
             //  品质框与图标都必须由宿主**预加载好**再进来（见 `FirstRechargeSlot.render`）
             slot.render(
                 data.iconFrames.get(reward.resId) ?? null,
@@ -97,12 +97,10 @@ export class FirstRechargeDayRow extends Component {
         this.node.active = false;
     }
 
-    /** 把「牌宽 + 格排宽」写到节点上（渲染组件是 `sizeMode=CUSTOM`，不会被贴图改回去）。 */
-    private applyLayout(count: number): void {
-        const plateWidth = dayPlateWidth(count);
-        const plate = this.node.getComponent(UITransform);
-        if (plate) plate.setContentSize(plateWidth, plate.contentSize.height);
+    /** 日牌宽度跟随 SlotBar 的 Layout 结果；渲染组件是 `sizeMode=CUSTOM`，不会被贴图改回去。 */
+    private applyLayout(): void {
         const bar = this.slotBar.getComponent(UITransform);
-        if (bar) bar.setContentSize(rewardRowWidth(count), bar.contentSize.height);
+        const plate = this.node.getComponent(UITransform);
+        if (bar && plate) plate.setContentSize(bar.width + this.platePaddingX, plate.height);
     }
 }

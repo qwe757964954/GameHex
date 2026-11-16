@@ -172,7 +172,7 @@ function makeWorldView() {
         clearTimeout: (id: number) => timers.delete(id),
     });
     interface IMarker { kind: string; id: number; node: { active: boolean; position: { x: number; y: number }; setPosition(x: number, y: number, z: number): void }; icon: object;
-        view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height?: number }; setPortrait?(frame: unknown): void } }
+        view: { hitArea: { badgeY: number; badgeHeight: number; iconY?: number; height: number }; setPortrait?(frame: unknown): void } }
     interface IView extends Component {
         data: object; viewportTransform: object; content: object; markers: IMarker[];
         art: {
@@ -191,7 +191,7 @@ function makeWorldView() {
     const view = new View();
     view.viewportTransform = { width: 200, height: 200 };
     view.content = { position: { x: 0, y: 0 }, setScale() {}, setPosition(x: number, y: number) { this.position = { x, y }; } };
-    const markerView = { hitArea: { badgeY: 70, badgeHeight: 30 } };
+    const markerView = { hitArea: { height: 80, badgeY: 70, badgeHeight: 30 } };
     view.markers = [
         { kind: 'city', id: 101, node: { active: true, position: { x: 0, y: 0 }, setPosition(x: number, y: number) { this.position = { x, y }; } }, icon: {}, view: markerView },
         { kind: 'city', id: 102, node: { active: true, position: { x: 2000, y: 0 }, setPosition(x: number, y: number) { this.position = { x, y }; } }, icon: {}, view: markerView },
@@ -348,7 +348,7 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     interface IPage {
         data: object; worldView: object; infoThumbnail: object; infoBody: { string: string };
         infoTitle: object; primaryButton: { node: { active: boolean }; setText(value: string): void; setEnabled(value: boolean): void }; secondaryButton: object;
-        setInfoVisible(value: boolean): void; refreshInfo(data: unknown): void; onWorldTap(hexId: number): void;
+        setInfoVisible(value: boolean): void; refreshInfo(data: unknown): void; sendIntent(intent: { kind: 'worldTap'; hexId: number }): void;
     }
     const Page = exports.BigMapPage as new () => IPage;
     const page = new Page();
@@ -381,7 +381,7 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     EventMgr.instance.on(mvcEvents.BigMapUiEvent.Intent, (event: mvcEvents.IBigMapIntentEvent) => {
         if (event.intent.kind === 'worldTap') calls.push(event.intent.hexId);
     }, page);
-    page.onWorldTap(1);
+    page.sendIntent({ kind: 'worldTap', hexId: 1 });
     page.refreshInfo(page.data);
     EventMgr.instance.offTarget(page);
     // ① 点据点的 worldTap 意图照旧

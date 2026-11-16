@@ -1,50 +1,8 @@
 import { EventMgr } from '../../framework/event/EventMgr';
 import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
- * 「联盟任务」弹窗（老端 `play/LayerLeagueTask`，`ui/League/LeagueTask`）。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/任务/组件_联盟_任务.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `popBg`（公用 `组件_公共弹窗_新`，标题「联盟任务」） | (40,187) **640×895** | `PopupBg` + `TitleBg` + `TitleDeco` + `Title` + `CloseBtn` |
- * | `n29` 横幅底（`frame_Zhikuang01` 染色 `#657d54`） | (85,249) 550×160 | `HeadBg` |
- * | `comp_progress`（`组件_联盟_进度条`） | (134,303) 452×38 | `TaskProgress` |
- * | `n31` 圆环装饰（`frame_yuan_pic02`） | (106,288) 43×46 `scale 1.4` | `Circle` |
- * | `list`（`overflow=scroll`、`lineGap=10`、9 项） | (85,415) **550×537** | `TaskListView`（虚拟列表） |
- * | `lab_jump` | (157,969) 405×34 | `AdLabel` |
- * | `lab_count` | (126,299) 21×39 | `CountLabel` |
- * | `box_3` / `box_5` / `box_8` | (245,277) / (358,277) / (517,277) 90×100 | `Box1` / `Box2` / `Box3` |
- * | `reward`（`组件_联盟_任务_奖励框`） | (289,178) 110×110 `visible=false` | `Reward` |
- *
- * `popBg` 那组的关系是 `center-center,middle-middle` ⇒ 弹窗**恒居中**（`popBg` 中心设计态
- * 是 (360,634.5)，不是画布中心 (360,640) —— 那 5.5px 是设计意图，照抄）。
- *
- * ## 老端行为（`LayerLeagueTaskUI`）与移植取舍
- *
- * 1. **不发任何请求**：`init()` 只挂 `VOLeagueTaskBag` / `VORoleUnionBag` / `VORoleBag` 的
- *    `OnChanged → updateView`，自己一个包都不发（联盟任务 = 通用任务缓存，见
- *    `LeagueRepository.loadTask`）。本端 `CacheMgr` 只读取值、不发变更事件 ⇒
- *    `onOpen` 主动读一次，**领奖成功后自己再读一次**（同 P4 三面板口径）。
- * 2. **按钮三支**（老端 `initList()` 里）：
- *    `btn_get → RequestTaskReward(resId)` / `btn_go → CtrlJumpView` + `unload()` /
- *    `btn_adv → RequestWatchAdvert(unionTask, false, resId)`。
- *    后两支本端都接不了（跳转路由、广告子系统都没迁）⇒ 明确提示，不发包。
- * 3. **宝箱点击三支**（老端 `setBoxState` 的 `onClick`）：
- *    可领取 ⇒ 领进度奖励（**请求体只有 `subType`、没有宝箱 id**）；
- *    不可领取 ⇒ 弹奖励浮框；已领取 ⇒ 什么都不做。
- * 4. **浮框位置**：老端 `rewardCom.x = box.x; rewardCom.y = box.y - rewardCom.height`
- *    —— 以 FGUI 的「左上角 + 向下为正」换算到 Cocos 就是「浮框下沿贴宝箱上沿」，
- *    即 `reward.y = box.y + 宝箱半高 + 浮框半高`（见 `TASK_BOX_REWARD_GAP`）。
- * 5. **顶部进度条的 `lab_title` 是空的**（老端 `setText("")`；行内那条才有百分比）。
- *
- * ## 本端有意增补
- *
- * - `busy` 防连点（老端没有）：`requestTaskReward` / `requestTaskProgressReward` 都是
- *   写请求、走 5s 超时，连点会重复发包（同 `LeagueStorePage.beginWrite()`）。
- * - 奖励图标**先取完再刷列表**（`loadLeagueRewardArt`），否则虚拟列表槽位复用会闪上一行的图。
- * - 面板上只建 **3 个**宝箱节点（对齐 FGUI 原稿）；`taskUnionProgress` 表万一超过 3 行，
- *   多出来的会被丢掉并在控制台留一条 warn（不错位、也不静默）。
+ * 联盟任务弹窗。任务列表和三个进度宝箱；领奖/进度奖走写请求，广告和跳转未接只提示。
+ * 奖励图标先预取再刷列表。
  */
 
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
@@ -82,7 +40,7 @@ const { ccclass, property } = _decorator;
  *
  * 来历：FGUI `组件_联盟_进度条` 原生 652×38、`bar` 在 `(8,8) 637×21`；
  * 面板实例把整条压到 **452** 宽 ⇒ 填充满宽 = `637 / 652 × 452 ≈ 441.6`，取 **441**。
- * ⚠️ 同 `LeagueHallPage.PROGRESS_FULL_WIDTH`：不按 `UITransform` 现算（填充宽度正是本类在改的东西）。
+ * 同 `LeagueHallPage.PROGRESS_FULL_WIDTH`：不按 `UITransform` 现算（填充宽度正是本类在改的东西）。
  */
 const TASK_PROGRESS_FULL_WIDTH = 441;
 
@@ -100,7 +58,7 @@ const TASK_BOX_SLOTS = 3;
 @ccclass('LeagueTaskPage')
 export class LeagueTaskPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueTask';
@@ -159,9 +117,7 @@ export class LeagueTaskPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
@@ -194,9 +150,7 @@ export class LeagueTaskPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -216,8 +170,8 @@ export class LeagueTaskPage extends PopupBase {
     /**
      * 读一次任务（缓存 + 表），再把本趟要用到的图全取好，最后铺行 / 铺宝箱。
      *
-     * ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     *    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
@@ -306,9 +260,9 @@ export class LeagueTaskPage extends PopupBase {
     /**
      * 顶部进度条 + `lab_count`。
      *
-     * ⚠️ 老端 `progress.value = Math.min(done, total)`、`max = total`，且
-     *    `comp_progress.lab_title` 被**显式置空**（百分比只在行内那条上有）⇒ 这里也写空串。
-     *    `max = 0`（服务端还没下发任何 `CmdTask`）时比例算 0，不让它出 `NaN`。
+     * 老端 `progress.value = Math.min(done, total)`、`max = total`，且
+     * `comp_progress.lab_title` 被**显式置空**（百分比只在行内那条上有）⇒ 这里也写空串。
+     * `max = 0`（服务端还没下发任何 `CmdTask`）时比例算 0，不让它出 `NaN`。
      */
     private applyProgress(value: number, max: number): void {
         if (this.progressLabel) this.progressLabel.string = '';
@@ -322,9 +276,9 @@ export class LeagueTaskPage extends PopupBase {
     /**
      * 底部「每日观看广告跳过剩余次数 N/M」。
      *
-     * ⚠️ 两个数字来自**广告子系统**（`ModelRole.GetAdvertRestTimes/GetAdvertLimit`），
-     *    Demo3.8 没迁 ⇒ 编不出数字。与其显示一个假的「0/0」，不如整行隐藏
-     *    （见 `LEAGUE_TASK_AD_TEXT_TEMPLATE` 的说明）。等广告落地后把 `active` 打开即可。
+     * 两个数字来自**广告子系统**（`ModelRole.GetAdvertRestTimes/GetAdvertLimit`），
+     * Demo3.8 没迁 ⇒ 编不出数字。与其显示一个假的「0/0」，不如整行隐藏
+     * （见 `LEAGUE_TASK_AD_TEXT_TEMPLATE` 的说明）。等广告落地后把 `active` 打开即可。
      */
     private applyAdLabel(snapshot: ILeagueTaskSnapshot): void {
         if (!this.adLabel) return;
@@ -354,9 +308,7 @@ export class LeagueTaskPage extends PopupBase {
         }
     }
 
-    // ============================================================
     // 交互
-    // ============================================================
 
     /** 点「领取」—— 老端 `btn_get.onClick` 只有一句 `RequestTaskReward(ref.resId)`。 */
     private async claim(view: ILeagueTaskRowView): Promise<void> {
@@ -379,8 +331,8 @@ export class LeagueTaskPage extends PopupBase {
     /**
      * 点「看广告」—— 老端 `btn_adv.onClick` 的 `RequestWatchAdvert(unionTask, false, resId)`。
      *
-     * ⚠️ **先播后发**：`RequestRoleWatchAdvert` 本身就是「记一次广告」的凭据，
-     *    没放完就发等于白送 ⇒ `playLeagueAd()` 返回 `false` 时直接退出、**一个包都不发**。
+     * **先播后发**：`RequestRoleWatchAdvert` 本身就是「记一次广告」的凭据，
+     * 没放完就发等于白送 ⇒ `playLeagueAd()` 返回 `false` 时直接退出、**一个包都不发**。
      */
     private async watchAd(view: ILeagueTaskRowView): Promise<void> {
         if (!this.beginWrite()) return;
@@ -400,9 +352,9 @@ export class LeagueTaskPage extends PopupBase {
     /**
      * 点一个宝箱 —— 老端 `setBoxState` 的 `onClick` 三支（见类头）。
      *
-     * ⚠️ 领进度奖励的请求体**只有 `subType`**，没有宝箱 id：服务端按
-     *    `CmdRoleUnion.todayTaskGetProgressCount` 自己推进。所以这里传的是
-     *    `LeagueUnionTaskType.leagueTask`，不是 `view.id`。
+     * 领进度奖励的请求体**只有 `subType`**，没有宝箱 id：服务端按
+     * `CmdRoleUnion.todayTaskGetProgressCount` 自己推进。所以这里传的是
+     * `LeagueUnionTaskType.leagueTask`，不是 `view.id`。
      */
     private async onBoxClick(view: ILeagueTaskBoxView): Promise<void> {
         if (view.state === 'canReward') {
@@ -470,9 +422,7 @@ export class LeagueTaskPage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     private onCloseClick(): void {
         this.closeByButton();

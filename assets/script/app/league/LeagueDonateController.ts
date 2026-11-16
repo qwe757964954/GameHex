@@ -80,7 +80,7 @@ export class LeagueDonateController extends ControllerBase {
     /**
      * 点「免费」（广告路）—— 老端 `onClickAdv()`。
      *
-     * ⚠️ **先播后发**：`requestDonate(true)` 的凭据就是「广告放完了」，没放完就发等于白拿。
+     * **先播后发**：`requestDonate(true)` 的凭据就是「广告放完了」，没放完就发等于白拿。
      * 这里自己管 `busy` 而不是转 `sendDonate()`，否则会二次加锁把自己锁死。
      */
     private async donateFree(): Promise<void> {
@@ -113,7 +113,7 @@ export class LeagueDonateController extends ControllerBase {
     /**
      * 点「金币」—— 老端 `onClickDonate()` 的三道关：次数 → 钱 → 确认。
      *
-     * ⚠️ 确认框的 `onSure` 是延迟触发的：会话可能已经关闭，必须在这里再判 `isDisposed`。
+     * 确认框的 `onSure` 是延迟触发的：会话可能已经关闭，必须在这里再判 `isDisposed`。
      */
     private donateByCoin(): void {
         const { model, feedback } = this.options;

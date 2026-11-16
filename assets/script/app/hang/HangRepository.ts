@@ -1,76 +1,8 @@
 /**
- * 征收（挂机）的数据端口 —— **表 + 服务器状态 + 网络请求** 三合一的 Repository。
- *
- * 与 `GiftRepository` / `SevenDayRepository` / `BattleTokenRepository` 同一套分层：
- * 页面只依赖本文件，判定逻辑全在 `HangTable`（纯函数、可单测），本文件只负责「把数据搬进来」。
- *
- * ## 数据来源
- *
- * | # | 来源 | 用途 |
- * |---|---|---|
- * | ① | `guankaReward`（1632 行，**压缩表**） | 每关的 `idleRewards`（每小时基础产出）+ `end`（快速征收一次扣的体力） |
- * | ② | `interactReward` | 探索层「挂机收益建筑」互动加成（**只有 `type === 3` 的 9 行**产税） |
- * | ③ | `gameConfig` | `sweepFreeTimes`（免费扫荡次数上限） |
- * | ④ | `item` + `roleProperty` | 奖励格的品质框 + 图标（**两支分流**，唯一入口 `resolveRewardIconRef`） |
- * | ⑤ | `monthCardActPlan` + `payChannel` | 福利月卡的 `plan` / `type` / 真实金额（`rmb` 是 `payChannel.id`） |
- * | ⑥ | `CacheMgr.getTlCmdRole()[0]` | `lastIdleRewardTime`（挂机起点）+ `sweepTimes`（今日已扫荡次数） |
- * | ⑦ | `CacheMgr.getTlCmdRoleInteractInfo()` | 已互动建筑的 `resId` 集合（`state === 1`） |
- * | ⑧ | `CacheMgr.getCmdBattleLevel(level)` / `getCmdBattleChapter(chapter)` | `star`（**3 位位掩码**）⇒ 通关 / 完美通关判定；章节缓存是否存在 ⇒ `GetSweetLevel` 的 `break` |
- *
- * ## ⚠️ 走 `CacheMgr`，不自己存快照
- *
- * `CmdRole` / `CmdBattleLevel` / `CmdRoleInteractInfo` 全在 `protoCache.json` 里登记
- * ⇒ 服务端会推，`GameNet` 收包时已写进 `GameCache`。所以每次 `load()` 现读，**不要自己存一份**。
- *
- * ## ⚠️ 没有「拉取挂机数据」的请求
- *
- * `Cmd.d.ts` 里挂机相关的三个请求是 `GetReward` / `Quick` / `Time`（**没有"查询"**），
- * 老端 `LayerHang.init()` 也只读缓存 + `CmdRole`。缓存为空 = 服务端还没推 / 离线，
- * 界面按 `lastIdleRewardTime = 0` ⇒ 进度 0 渲染即可，**不要造一个假请求**。
- *
- * ## ⚠️ 三个「关卡」不是一个（本模块最大的坑）
- *
- * | 用途 | 取哪一关 | 老端实现 |
- * |---|---|---|
- * | 奖励区展示的每小时产出 | `GetMaxChallengeLevel() - 1`（**已通关的最后一关**） | `ModelChapterNew.ts:198` |
- * | 快速征收扣多少体力 | `GetSweetLevel()`（**最高 3 星「完美通关」的关**） | `ModelChapterNew.ts:237` |
- * | 进度条 / 倒计时 | **与关卡无关**，只看 `CmdRole.lastIdleRewardTime` | `LayerHang.refreshTime()` |
- *
- * 三者在 `HangTable` 里各有纯函数（`deriveMaxChallengeLevel` / `deriveSweetLevel` /
- * `incomeLevelOf` / `sweepLevelOf`），本文件只负责注入 `isPassed` / `starOf` / `hasChapter`
- * 三个查询器。
- *
- * ⚠️ 两处兜底**不对称，且是有意的**（见 `HangTable` 里两个函数的注释）：
- *   - `incomeLevelOf` **有**兜底（退到第 1 关）—— 纯展示，让离线预览 / 新号看得见产出区；
- *   - `sweepLevelOf` **没有**兜底（没满星关 = `0`）—— 它决定「发不发请求」，
- *     兜底会让新号发出老端从不发的 `{level: 1, type: 1}`。**纯展示可以退，发请求不能退。**
- *
- * ⚠️ `CmdBattleLevel.star` 是 **3 位位掩码**（bit0=1 星 / bit1=2 星 / bit2=3 星），**不是星数**。
- * 所以老端 `GetStageIsPerfectClean()` 的 `mask >= 3` 实际含义是「2 星及以上」——
- * 与 FGUI 文案一致。要星数请显式过 `HangTable.levelStarCount()`。
- *
- * ## ⚠️ 支付链路只到「业务前置请求」
- *
- * 老端 `onClickBuyWelfareMonthCard()` 的顺序是：先发 `CmdCardBuyReqMsg`，
- * 拿到 `rsp.ret === true` **之后**再 `SDKMgr.pay(payRef.id, "common", 0)`。
- * Demo3.8 没有支付 SDK（与礼包 / 首充 / 月卡 / 战令同一处置）⇒
- * **只留注释，发到业务前置请求为止**。而且本模块更要往上一层：本轮连「买」都不发，
- * 见下面「福利月卡」一节。
- *
- * ## ⚠️ 福利月卡：表在、玩家状态不在
- *
- * 已核实（2026-09-24）：
- *
- * | 事实 | 结论 |
- * |---|---|
- * | `monthCardActPlan` 有两行；**plan 1 = 「福利月卡」**，`privilege[].type` 含 **4**（`NoCountSweep`「无限次快速扫荡」） | **特权定义是有的**，不是缺表 |
- * | `monthCardActPlan.plan1.rmb = 9` ⇒ `payChannel` id 9 = `rmb: 30`、`name: "福利月卡"` | 月卡条上的 **￥30 能算出来**（与线上截图一致） |
- * | `protoCache.json`（78 张表）里**没有任何月卡表** | **玩家持卡状态读不到** ⇒ `hasUnlimited` 只能恒 `false` |
- *
- * ⇒ 本轮走「无月卡默认分支」（用户 2026-09-24 拍板）：
- * `是否购买月卡` 置「否」（月卡销售条**显示**，FGUI `n74` 的 `gearDisplay pages="1"` 正是
- * 「否」这一页）、倍率恒 1、`change_btn` 点击提示「激活月卡后解锁功能」。
- * 价格 / 标题仍从表里取真值（不写死 ￥30）。
+ * 挂机数据端口：表、CmdRole 缓存和网络请求。
+ * 数据每次从 CacheMgr / protoCache 现读，不另存快照；没有「拉取挂机数据」的请求。
+ * 收益展示用已通关最后一关，快速征收用最高三星关，两者不能合并。
+ * 月卡表只有配置、没有玩家持卡状态，本轮按未持卡分支处理。
  */
 
 import { FW } from '../../framework/FW';
@@ -79,10 +11,7 @@ import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
 import { withTimeout } from '../net/RequestGuard';
 import {
-    HJ_CFG_SWEEP_FREE_TIMES,
-    HJ_END_RES_ID,
     HJ_INTERACT_STATE_DONE,
-    HJ_MIN_CHALLENGE_LEVEL,
     HJ_PASSED_STAR,
     HJ_SWEEP_TYPE_CHAPTER,
     adCountBranchOf,
@@ -128,7 +57,7 @@ export const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
 /**
  * 广告位类型：扫荡（老端 `AdType.sweep = 11`）。
  *
- * ⚠️ `AdType` 是**协议枚举**、两端同源（`generated/refGen/RefEnum.ts`），但这里不 import 它：
+ * `AdType` 是**协议枚举**、两端同源（`generated/refGen/RefEnum.ts`），但这里不 import 它：
  * `HangRepository` 要能在纯 Node 单测里跑，import 生成目录会拖进一堆引擎依赖。
  * 值本身有单测钉住（`tests/hang.test.ts` 会断言 `ad.json` 里 `type === 11` 那行的 `key === 'sweep'`）。
  */
@@ -138,9 +67,9 @@ export const HJ_AD_TYPE_SWEEP = 11;
  * 老端「打开征收」用的跳转类型：`JUMP_TYPE.HANG = 9`
  * （`client/assets/script/app/game/model/jump/ModelJump.ts:22`）。
  *
- * ## ⚠️ 征收**不是** `open.json` 入口 —— 别往 `MainEntranceRoute` 里加 `LayerHang`
+ * ##  征收**不是** `open.json` 入口 —— 别往 `MainEntranceRoute` 里加 `LayerHang`
  *
- * 已核实（2026-09-24，三处证据）：
+ * 已核实（三处证据）：
  *
  * | 事实 | 出处 |
  * |---|---|
@@ -152,7 +81,7 @@ export const HJ_AD_TYPE_SWEEP = 11;
  * `open.url → 弹窗`，塞一个表里不存在的 url 会打破
  * `tests/main-entrance-route.test.ts`「白名单 ⊆ open.json」那条守卫（专治拼错导致的静默失效）。
  *
- * ⚠️ 本工程**还没接跳转链路**（与活动 / 七日同一处置，见 `LayerActivityPage` 的 `goto` 分支）⇒
+ * 本工程**还没接跳转链路**（与活动 / 七日同一处置，见 `LayerActivityPage` 的 `goto` 分支）⇒
  * 这里只留常量与出处。等跳转链路落地，在它 `JumpType` 的 switch 里加
  * `case HJ_JUMP_TYPE_HANG: void HangPage.open();` 即可 —— 那才是老端的位置。
  */
@@ -252,7 +181,7 @@ export interface IHangRepository {
     /**
      * 记一次「看完广告」（`CmdRoleWatchAdvertReqMsg`）。
      *
-     * ⚠️ 这只是**网络那一半**：老端 `ModelRole.RequestWatchAdvert` 是先
+     * 这只是**网络那一半**：老端 `ModelRole.RequestWatchAdvert` 是先
      * `CtrlPay.PayforAdVideo(type)` 真的把广告放完、拿到凭据再发这个请求。
      * Demo3.8 没有广告 SDK ⇒ 调用点由 `HangPage.HJ_AD_PLAYBACK_AVAILABLE` 把关，
      * **没有播放凭据不许发**（否则可刷）。
@@ -272,7 +201,7 @@ async function readRows(table: string): Promise<unknown[]> {
 /**
  * `Long` / `number` / `string` → 毫秒数；认不出返回 0。
  *
- * ⚠️ 不能 `Number(long)` —— protobufjs 的 `Long` 转 number 会得到 `NaN`，
+ * 不能 `Number(long)` —— protobufjs 的 `Long` 转 number 会得到 `NaN`，
  * 而 `NaN` 参与算术会静默污染整条链路（`elapsed = NaN` ⇒ 进度条 0、文案 `NaN:NaN:NaN`）。
  */
 function toNumber(value: unknown): number {
@@ -298,7 +227,7 @@ function toNumber(value: unknown): number {
  * 它是 `AdCountText`（「今日剩余(x/y)」/「今日看广告次数:a/b」）的唯一数据源，也是
  * 「免费」角标（`freePageOf`）的判据。
  *
- * ⚠️ 导出给页面用：`CmdRole` 没有查询协议，只能靠服务端推 `cmdCaches`
+ * 导出给页面用：`CmdRole` 没有查询协议，只能靠服务端推 `cmdCaches`
  * ⇒ 扫荡 / 领奖成功后必须**重读一次**（见 `HangPage._refreshRoleState`），
  * 否则文案停在打开弹窗那一刻，看起来就像「次数没接」。
  */
@@ -322,11 +251,11 @@ export function readRoleState(): IHangRoleState | null {
 /**
  * 订阅 `CmdRole` 缓存更新（服务端推 `cmdCaches` 时触发）。
  *
- * 🔴 为什么必须订阅、而不是只在「扫荡成功」时重读一次：
- *   · `CmdRole` **没有查询协议**，`sweepTimes` 只能靠服务端推送；
- *   · `CmdCityChapterSweepRspMsg` 只回 `succ` + `tlCmdGoods`，**不含次数**；
- *   · 扫荡 / 其它系统（体力恢复、金币、月卡）都可能刷 `CmdRole`，推送到达的时刻
- *     与「谁的界面正开着」无关 ⇒ 订阅是最稳的刷新源。
+ * 为什么必须订阅、而不是只在「扫荡成功」时重读一次：
+ * · `CmdRole` **没有查询协议**，`sweepTimes` 只能靠服务端推送；
+ * · `CmdCityChapterSweepRspMsg` 只回 `succ` + `tlCmdGoods`，**不含次数**；
+ * · 扫荡 / 其它系统（体力恢复、金币、月卡）都可能刷 `CmdRole`，推送到达的时刻
+ * 与「谁的界面正开着」无关 ⇒ 订阅是最稳的刷新源。
  *
  * 返回退订函数（内部按 caller 一次性摘干净，重复调用安全）。
  */
@@ -334,20 +263,19 @@ export function subscribeRoleChange(caller: object, callback: () => void): () =>
     try {
         CacheMgr.instance.setEventUpdate('CmdRole', caller, callback);
     } catch (error) {
-        // ⚠️ `setEvent` 走 `getCache`，缺缓存时会 `new GameCache` 去读 `protoCache` 描述表；
-        //    未登录 / 断网 / 热更态下表还没加载，构造会抛。订阅失败只影响「推送即刷新」，
-        //    `rewards` 命令那条兜底仍在 —— 不能让一次订阅把整个弹窗打挂。
+        // `setEvent` 走 `getCache`，缺缓存时会 `new GameCache` 去读 `protoCache` 描述表；
+        // 未登录 / 断网 / 热更态下表还没加载，构造会抛。订阅失败只影响「推送即刷新」，
+        // `rewards` 命令那条兜底仍在 —— 不能让一次订阅把整个弹窗打挂。
         console.warn('[Hang] 订阅 CmdRole 缓存失败', error);
         return () => {};
     }
     return () => CacheMgr.instance.removeEventCaller('CmdRole', caller);
 }
 
-
 /**
  * 读已互动建筑的 `resId` 集合（`CmdRoleInteractInfo.state === HJ_INTERACT_STATE_DONE`）。
  *
- * ⚠️ `CmdRoleInteractInfo` 的行**同时携带 `state = 0` 的未互动项**，
+ * `CmdRoleInteractInfo` 的行**同时携带 `state = 0` 的未互动项**，
  * 直接拿全表当"已互动"会把加成算多 —— 必须过滤 `state === 1`
  * （老端 `VORoleInteractBag.GetBagAsArray((vo) => vo.GetState() === 1)`）。
  */
@@ -371,7 +299,7 @@ function readInteractedIds(): Set<number> {
 /**
  * 通关判定器（`CacheMgr.getCmdBattleLevel(level).star >= 1`）。
  *
- * ⚠️ `CmdBattleLevel.star` 是 **3 位掩码**（bit0=1 星 / bit1=2 星 / bit2=3 星），不是星数。
+ * `CmdBattleLevel.star` 是 **3 位掩码**（bit0=1 星 / bit1=2 星 / bit2=3 星），不是星数。
  * 老端 `GetStageIsClean(stage)` 是 `mask > 0`，在位掩码下与 `>= 1` 等价，故此处照抄 `HJ_PASSED_STAR`。
  * `star` 缺失（服务端没推过这一关）视作未通关。
  */
@@ -385,7 +313,7 @@ function makePassedLookup(): (level: number) => boolean {
 /**
  * 星级**掩码**查询器（给 `deriveSweetLevel` 用）。
  *
- * ⚠️ 直接返回 `star` 原始值 —— **不要**在这里过 `levelStarCount()`：
+ * 直接返回 `star` 原始值 —— **不要**在这里过 `levelStarCount()`：
  * 老端 `GetStageIsPerfectClean()` 比的就是掩码（`mask >= 3` ⇔ 2 星及以上），
  * 换成星数再比 `>= 3` 会让 2 星关被误判成满星关。
  */
@@ -403,7 +331,7 @@ function makeStarLookup(): (level: number) => number {
 function makeChapterLookup(): (chapter: number) => boolean {
     return (chapter: number): boolean => {
         try {
-            return (CacheMgr.instance as any)?.getCmdBattleChapter(chapter) != null;
+            return CacheMgr.instance.getCmdBattleChapter(chapter) != null;
         } catch (error) {
             console.warn('[Hang] 读 CmdBattleChapter 缓存失败', error);
             return false;
@@ -414,7 +342,7 @@ function makeChapterLookup(): (chapter: number) => boolean {
 function readBattleLevel(level: number): CmdBattleLevel | null {
     try {
         // `getCmdBattleLevel` 的形参是生成的 number 键；level 来自表，天然是 number。
-        return (CacheMgr.instance as any)?.getCmdBattleLevel(level) ?? null;
+        return CacheMgr.instance.getCmdBattleLevel(level) ?? null;
     } catch (error) {
         console.warn('[Hang] 读 CmdBattleLevel 缓存失败', error);
         return null;
@@ -424,7 +352,7 @@ function readBattleLevel(level: number): CmdBattleLevel | null {
 /**
  * 找「福利月卡」那一行（`privilege[].type` 含 `NoCountSweep = 4`），并把 `rmb` 换成真实金额。
  *
- * ⚠️ `monthCardActPlan.rmb` 是 **`payChannel.id`**（不是钱数）—— 与 `battleTokenPlan.rmb`
+ * `monthCardActPlan.rmb` 是 **`payChannel.id`**（不是钱数）—— 与 `battleTokenPlan.rmb`
  * 同一个坑。查不到时退化成 `rmb = id`（宁可显示怪数字，也不要空按钮）。
  */
 function readMonthCard(planRows: readonly unknown[], payRows: readonly unknown[]): IHangMonthCardRef | null {
@@ -481,9 +409,9 @@ function readAdLimit(adRows: readonly unknown[]): number {
 /**
  * 今日**已用**的看广告次数（`CmdRole.tlCmdAdvert` 里 `type = 11` 那行的 `num`）。
  *
- * ⚠️ `CmdAdvert.num` 是「已用次数」不是「剩余次数」；老端
+ * `CmdAdvert.num` 是「已用次数」不是「剩余次数」；老端
  * `GetAdvertRestTimes = maxTimes - GetAdvertTimes` —— 别把 `num` 直接当剩余。
- * ⚠️ 该表**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
+ * 该表**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
  */
 function readAdUsed(): number {
     try {
@@ -526,23 +454,23 @@ export class RuntimeHangRepository implements IHangRepository {
         const interactedIds = readInteractedIds();
         const monthCard = readMonthCard(planRaw, payRaw);
 
-        // ---- 看广告次数（`ad` 表 limit − `CmdAdvert` 已用）----
+        // 看广告次数（`ad` 表 limit − `CmdAdvert` 已用）
         const adLimit = readAdLimit(adRaw);
         const adRest = Math.max(0, adLimit - readAdUsed());
 
-        // ---- 关卡进度（三个口径，各有各的算法）----
+        // 关卡进度（三个口径，各有各的算法）
         const maxChallengeLevel = deriveMaxChallengeLevel(guankaRows, makePassedLookup());
         const sweetLevel = deriveSweetLevel(guankaRows, makeStarLookup(), makeChapterLookup());
         const incomeLevel = incomeLevelOf(maxChallengeLevel);
         const sweepLevel = sweepLevelOf(sweetLevel);
 
-        // ---- 产出奖励 ----
+        // 产出奖励
         const incomeRow = guankaRowOf(guankaRows, incomeLevel);
         const baseRewards = incomeRow ? incomeRow.idleRewards : [];
         const interactRewards = collectInteractTaxRewards(interactRows, interactedIds);
         const mergedRewards = mergeRewards(baseRewards, interactRewards);
 
-        // ---- 快速征收消耗 ----
+        // 快速征收消耗
         const sweepRow = guankaRowOf(guankaRows, sweepLevel);
         const sweepEnd = sweepRow ? sweepRow.end : 0;
 
@@ -555,7 +483,7 @@ export class RuntimeHangRepository implements IHangRepository {
             role,
             interactedIds,
             monthCard,
-            // ⚠️ 玩家持卡状态读不到（`protoCache.json` 无月卡表）⇒ 恒 false，见文件头
+            // 玩家持卡状态读不到（`protoCache.json` 无月卡表）⇒ 恒 false，见文件头
             hasUnlimited: monthCard?.owned === true,
             maxChallengeLevel,
             sweetLevel,
@@ -588,7 +516,7 @@ export class RuntimeHangRepository implements IHangRepository {
         };
 
         try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
+            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
             const sent = await withTimeout(
                 net.send(new RequestHangGetReward({}, caller, callback), false),
                 WRITE_TIMEOUT_MS,
@@ -605,10 +533,10 @@ export class RuntimeHangRepository implements IHangRepository {
     /**
      * 快速征收 / 扫荡：`CmdBattleSweepReqMsg`。
      *
-     * ⚠️ 请求体只有 `{ level, type }` —— **proto 里没有 `times`**，见 `RequestHangMsg.ts` 文件头。
-     * ⚠️ 老端 `onClickLevy` 在发请求**之前**还会做两件事，都在页面侧：
-     *   ① `CheckHaveEnoughCostAndOpenAlert([{ resId: 9, number: 5 * times }])` —— 体力不足就早退；
-     *   ② 免费次数用完时先弹「看广告」二次确认。
+     * 请求体只有 `{ level, type }` —— **proto 里没有 `times`**，见 `RequestHangMsg.ts` 文件头。
+     * 老端 `onClickLevy` 在发请求**之前**还会做两件事，都在页面侧：
+     * ① `CheckHaveEnoughCostAndOpenAlert([{ resId: 9, number: 5 * times }])` —— 体力不足就早退；
+     * ② 免费次数用完时先弹「看广告」二次确认。
      * Repository 不替页面做这两个判断（它要弹框 / 要读 UI），只负责发请求。
      */
     async sweep(level: number, type: number = HJ_SWEEP_TYPE_CHAPTER, caller?: object): Promise<HangRequestResult> {
@@ -641,7 +569,7 @@ export class RuntimeHangRepository implements IHangRepository {
     /**
      * 记一次「看完广告」：`CmdRoleWatchAdvertReqMsg { type, id? }`（老端 `ModelRole.RequestWatchAdvert`）。
      *
-     * ⚠️ 调用前必须先真的把广告放完（`HangPage.HJ_AD_PLAYBACK_AVAILABLE` 把关）——
+     * 调用前必须先真的把广告放完（`HangPage.HJ_AD_PLAYBACK_AVAILABLE` 把关）——
      * 这个请求本身就是「加一次广告次数」的凭据，裸发等于白送。
      */
     async watchAd(type: number = HJ_AD_TYPE_SWEEP, caller?: object): Promise<HangRequestResult> {
@@ -677,11 +605,8 @@ export const hangRepository: IHangRepository = new RuntimeHangRepository();
 
 /** 读一次超时常量给测试用（避免测试里硬编码 800/5000）。 */
 export const HJ_READ_TIMEOUT_MS = READ_TIMEOUT_MS;
-export const HJ_WRITE_TIMEOUT_MS = WRITE_TIMEOUT_MS;
 
-// ============================================================
 // 快照上的便捷查询（需要文案模板的那两个留在这里）
-// ============================================================
 
 /**
  * 「广告次数」那一行的文案。
@@ -708,7 +633,7 @@ export function goodsOf(snapshot: IHangSnapshot, resId: number): IActivityGoodsI
 /**
  * 奖励图标的两支分流解析；解析不出返回 `null`（奖励格降级成只画品质框）。
  *
- * ⚠️ **不要**自己判 `item` / `roleProperty` —— 走 `LayerActivityArt.resolveRewardIconRef`
+ * **不要**自己判 `item` / `roleProperty` —— 走 `LayerActivityArt.resolveRewardIconRef`
  * （本模块自己那份转发在 `HangArt.hjResolveRewardIconRef`）。
  */
 export function rewardIconRefOf(snapshot: IHangSnapshot, resId: number): { root: string; name: string } | null {
@@ -725,17 +650,3 @@ export function monthCardPriceTextOf(snapshot: IHangSnapshot): string {
     if (!snapshot.monthCard) return HJ_TEXTS.monthCardPriceFallback;
     return hjFormat(HJ_TEXTS.priceTemplate, snapshot.monthCard.rmb);
 }
-
-/**
- * 关卡基础产出里每小时的体力消耗 resId —— 用于「快速征收」按钮的 `costIcon`。
- *
- * ⚠️ 这次没用上（体力图标固定写 `HangArt.HJ_COST_ICON_PATH`），但保留常量出口，
- * 免得以后再有人从 `roleProperty` 里手抄一遍 `9`。
- */
-export const HJ_COST_RES_ID = HJ_END_RES_ID;
-
-/** `gameConfig` 里 `sweepFreeTimes` 的 key（给单测断言用）。 */
-export const HJ_SWEEP_FREE_TIMES_KEY = HJ_CFG_SWEEP_FREE_TIMES;
-
-/** 最低可挑战关号（给单测断言用）。 */
-export const HJ_MIN_LEVEL = HJ_MIN_CHALLENGE_LEVEL;

@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import ts from 'typescript';
 import { loadViews } from './helpers/zcds-view-fixtures';
+import { ZCBuildingType } from '../assets/script/app/zcds/model/ZCGameTypes';
 import {
     ZC_CARD_FADE_START_PROGRESS,
     ZC_CARD_REVEAL_SECONDS,
@@ -54,6 +55,7 @@ function createView() {
     const loaded = { exports: {} as Record<string, any> };
     new Function('require', 'module', 'exports', compiled)((name: string) => {
         if (name === 'cc') return cc;
+        if (name === '../model/ZCGameTypes') return { ZCBuildingType };
         if (name === '../../guide/ui/GuideFocusAnchor') return { GuideFocusAnchor: class {} };
         // 淡出起点必须取自真源：地块回场时机与它同值（见 `ZC_CARD_FADE_START_PROGRESS`）。
         if (name === '../model/ZCBattlePresentationQueue') return { ZC_CARD_FADE_START_PROGRESS };
@@ -205,5 +207,21 @@ test('抽卡焦点只属于玩家当前可见的卡，复用为敌方、未开�
     view.render(reveal(20) as never, 0.4);
     assert.equal(view.guideAnchor.key, '');
     view.render(reveal(0) as never, ZC_CARD_REVEAL_SECONDS);
+    assert.equal(view.guideAnchor.key, '');
+});
+
+test('金矿正常弹出但不成为卡牌引导焦点，下一张实际卡牌才显示焦点且沿用实际卡名', () => {
+    const { view, node } = createView();
+    view.nameLabel = { string: '', color: null };
+    view.render({ ...reveal(0), cardId: '2001', building: 'mine', cardName: '金矿', unitId: null } as never, 0.4);
+    assert.equal(node.active, true);
+    assert.equal(view.guideAnchor.key, '');
+    const drawn = { ...reveal(1), cardId: '68008', building: 'barracks', cardName: '实际抽到的卡牌' };
+    view.render(drawn as never, 1.4);
+    assert.equal(view.guideAnchor.key, 'Battle/DrawnCard');
+    assert.equal(view.guideAnchor.shownAt, drawn.startedAt);
+    assert.equal(view.nameLabel.string, drawn.cardName);
+    // 槽位再次复用为金矿时，不能残留上一张卡的焦点。
+    view.render({ ...drawn, building: 'mine', unitId: null } as never, 1.5);
     assert.equal(view.guideAnchor.key, '');
 });

@@ -1,14 +1,12 @@
 /**
- * 领地模块玩家可见文案集中处。
+ * 领地模块玩家可见文案。
  *
- *  散落在 TerritoryPage / TerritoryProgress / TerritorySaveStore / TerritoryMapView 里的
- *  中文字符串以前是硬编码，改文案要跨文件搜。这里按场景分组，和 card 模块
- *  `CARD_LINEUP_TEXTS` 同口径。
+ * 按场景分组，避免文案散落在页面、模型与视图里。
  */
 
 /** 加载 / 状态提示（轻提示 toast）。 */
 export const TERRITORY_TEXTS = {
-    // 加载态（2026-10-12 起不再有整页 LoadingPanel：本地存档先渲染、失败只 toast）
+    // 加载态（不再有整页 LoadingPanel：本地存档先渲染、失败只 toast）
     loadingResourceMissing: '领地资源未就绪',
     loadingChapter: '领地数据加载中，请稍候',
     noLevelTarget: '暂无可定位的关卡',
@@ -45,7 +43,7 @@ export const TERRITORY_TEXTS = {
     battleIncomplete: '上次挑战未完成',
     newlyOwned: (count: number) => `已占领 ${count} 个新地块`,
     /**
-     * 往后切章被拦的提示（2026-11-04 用户口径：**通过本章最后一个首领关卡**就算通关）。
+     * 往后切章被拦的提示（**通过本章最后一个首领关卡**就算通关）。
      *
      * 不再报「已占领 x/y」：占领率与通关条件已经不是一回事（异步据点不参与判定），
      * 报占领进度会让人以为"再占几格就能进"。
@@ -53,10 +51,10 @@ export const TERRITORY_TEXTS = {
     requireChapterComplete: () => '请先通关本章最后一个首领关卡',
 
     /**
-     * 首次解锁关卡 ⇒ 自动进战斗时的提示条（需求 2026-11-02）。
+     * 首次解锁关卡 ⇒ 自动进战斗时的提示条。
      *
      * 这条入口是**系统替玩家按下的开战**（他没看过关卡界面），所以要在推镜头的同一时刻
-     * 交代一句「为什么要进战斗」。与 `model/TerritoryBattleApproach` 的过场时长配套：
+     * 交代一句「进战斗的原因」。与 `model/TerritoryBattleApproach` 的过场时长配套：
      * 页面在起播时弹它，1.2s 后跳战斗页。
      */
     battleApproach: '遭遇敌人，即将开始战斗',
@@ -71,7 +69,7 @@ export const TERRITORY_TEXTS = {
     footprintAlreadyOwned: '该地块已经占领',
     footprintLocked: '该地块暂不可探索',
     /**
-     * 前置没满足的**兜底**文案（2026-11-02 起只在"叫不出名字"时用）。
+     * 前置没满足的**兜底**文案（只在"叫不出名字"时用）。
      *
      * 玩家能看到的提示优先由 `model/TerritoryPrerequisite` 拼出具体对象：
      * 关卡用它的气泡文案（`1-1 关卡通关后解锁`），宝箱用 `前置宝箱未打开`。
@@ -82,7 +80,7 @@ export const TERRITORY_TEXTS = {
     /**
      * 前置是关卡：`names` 是**一个**关卡的气泡文案（如 `1-1` / `PVP`）。
      *
-     * ⚠️ 口径 2026-11-02：**只报第一个前置**，所以这里不会收到「1-1、1-2」这种名单
+     * 口径 **只报第一个前置**，所以这里不会收到「1-1、1-2」这种名单
      * （见 `model/TerritoryPrerequisite`）。要改回全列，得同时动那边。
      */
     prerequisiteStageLocked: (names: string) => `${names} 关卡通关后解锁`,
@@ -102,13 +100,7 @@ export const TERRITORY_TEXTS = {
     fixedResourceUnlocked: '已解锁，点击宝箱领取',
     fixedResourceUnlockFailed: '解锁失败，请稍后重试',
     fixedResourceClaimReady: '可领取',
-    /**
-     * 领取成功的轻提示。
-     *
-     * ⚠️ 2026-10-22 起**页面上不再弹**（`TERRITORY_TWO_STEP_TEXTS.fixedResource.claimed` 改空串）：
-     * 那条深色提示条正压在地图中央，把刚开的宝箱和地块全盖住，而同样的信息开箱表演已经表达过了。
-     * 文案留着是为了地图角标等其它用途要复用时不必再造一句。
-     */
+    /** 领取成功的轻提示；页面不弹（开箱表演已表达），留给角标等场景复用。 */
     fixedResourceClaimed: '已领取',
     fixedResourceClaimFailed: '领取失败，请稍后重试',
 
@@ -122,8 +114,7 @@ export const TERRITORY_TEXTS = {
     // Boss 关两步式（先解锁展示建筑；已解锁再次点击 → `CmdStartBattleReqMsg` 开战，不发通关）
     bossUnlocked: '已解锁，点击开战',
     bossUnlockFailed: '解锁失败，请稍后重试',
-    // 关卡格**只解锁**那一步的提示（2026-10-28：锁着时点一下只花银币解锁、不弹关卡界面；
-    // 解锁后还要再点一次才打开界面，所以文案不能沿用 `bossUnlocked` 的「点击开战」）。
+    // 锁着时点击只花银币解锁、不打开关卡界面，因此不能沿用 bossUnlocked 的「点击开战」。
     stageUnlocked: '已解锁，点击查看关卡',
     bossBattleReady: '可开战',
     bossBattleClaimed: '已通关',
@@ -144,7 +135,8 @@ export const TERRITORY_TEXTS = {
     matchLineupLabel: '匹配阵容',
 
     // 未绑定关卡的详情面板
-    pendingTitle: '站点配置待补齐',    unboundConfigId: '未配置',
+    pendingTitle: '站点配置待补齐',
+    unboundConfigId: '未配置',
 
     // 异步据点「玩家关卡」弹窗（蓝湖「玩家关卡」设计稿）
     /** 第一条占领奖励的固定文案；本期所有异步据点都是「1 个卡牌宝箱」。 */
@@ -167,8 +159,8 @@ export const TERRITORY_TEXTS = {
     levelFight: '开始战斗',
     /** 关卡界面主按钮：未解锁（点了先解锁）。 */
     levelUnlock: '解锁后开战',
-    // ⚠️ 不要恢复「已通关」那档按钮文案（2026-10-28 曾短暂存在、同日撤回）：
-    // 用户口径是**已通关的关卡再打一次照常扣体力** ⇒ 按钮恒为 {@link levelFight} 或
+    // 不要恢复「已通关」那档按钮文案（曾短暂存在、同日撤回）：
+    // 规则是**已通关的关卡再打一次照常扣体力** ⇒ 按钮恒为 {@link levelFight} 或
     // {@link levelUnlock}，没有第三种状态。写回去会被读成"这关不能打了"，是错的。
 
     // 开战兜底
@@ -215,59 +207,35 @@ export const TERRITORY_FALLBACK_WALLET = {
 /** 开局玩家固定上场人数（领地 PVE 玩家侧）。 */
 export const TERRITORY_DEFAULT_PLAYER_COUNT = 2;
 
-/** 详情面板敌方守军最多展示几条。 */
-export const TERRITORY_ENEMY_DISPLAY_LIMIT = 8;
-
 /**
- * 玩家关卡弹窗里**奖励格的数量**（设计稿 = 3 格）。
+ * 玩家关卡弹窗里的奖励格数量（设计稿 3 格）。
  *
- * 不是「最多显示几条」的自由值：prefab 里就是 3 个槽位，改这个数要么露空槽要么丢奖励，
- * 真要改必须同步改 prefab（`RewardSlots/Slot1..3`）。
+ * prefab 固定 3 个槽位（`RewardSlots/Slot1..3`），改这个数需同步改 prefab。
  */
 export const TERRITORY_ASYNC_REWARD_SLOTS = 3;
 
-/**
- * 「侦查」按钮的**体力**消耗（设计稿 = 10）。
- *
- * 🔴 服务端还没有侦查协议、也没有对应配置表 ⇒ 先按设计稿写常量。
- * 协议/配置到位后把它换成服务端下发的价格（只改 Presenter 一处，视图不用动）。
- *
- * 🔴 2026-11-04 山猫：「这里是扣体力不是扣银币」—— 弹窗两颗按钮的费用都是体力
- * （原本按银币展示：侦查是这条常量、开战读 `unlock.silverCost`）。
- */
+/** 侦查按钮的体力消耗（设计稿 10）。服务端暂无侦查协议，接入后改为下发价格。 */
 export const TERRITORY_ASYNC_SCOUT_STAMINA = 10;
 
 /** 存档 storage key 前缀。 */
 export const TERRITORY_STORAGE_PREFIX = 'territory.chapter.v1.';
 export const TERRITORY_LAST_CHAPTER_KEY = 'territory.lastChapter.v1';
 /**
- * 「已通关的领地关卡」storage key（**账号级，不带 chapterId**）。
+ * 「已通关的领地关卡」storage key（账号级，不带 chapterId）。
  *
- * 为什么不能按章节分：`levelInfo.levelChapter` 决定关卡归属哪一章 —— 20001 属于第 1 章，
- * 而第 2 章（10011~20007）里根本没有它。若通关状态只活在「当前章的格子」里，
- * 玩家一切到第 2 章，`stageByCell` 就查不到 20001 ⇒ 依赖它的功能（战斗宝箱入口）
- * 会在「已经解锁过」之后突然消失（2026-11-04 实机）。
- *
- * 所以「通关」在这里按**一次性成就**落盘：过了就永远算过，与当前在哪个章节无关。
+ * 关卡归属由 `levelInfo.levelChapter` 决定，跨章后当前章的 `stageByCell` 查不到它；
+ * 按一次性成就落盘，切章后依赖它的功能才不会消失。
  */
 export const TERRITORY_PASSED_LEVELS_KEY = 'territory.passedLevels.v1';
 /**
- * 「已激活的领地关卡」storage key（**账号级，不带 chapterId**）。
+ * 「已激活的领地关卡」storage key（账号级，不带 chapterId）。
  *
- * 与 {@link TERRITORY_PASSED_LEVELS_KEY} 并列，只是判据从「打完」换成「花银币激活」：
- * 快速寻敌（`open` 表 `refId = 702`）要求「激活第 1 章第 4 关地块后解锁，且解锁后所有章节常驻」。
- * 只查当前章的 `stageByCell`，切到第 2 章就查不到 10004 ⇒ 按钮会在解锁之后消失（2026-11-04
- * 战斗宝箱入口那个 bug 的同款形状），所以激活也按**一次性成就**落盘。
- *
- * ⚠️ 两张表**不能合并**：「激活」包含「还没打」的状态，合并会让「打赢了但没激活」这种
- * 不存在的情况互相污染，也会让将来某个功能只想要「激活」时被迫接受「通关」。
+ * 判据是「花银币激活」，供快速寻敌等需要跨章常驻的功能使用。
+ * 与通关表分开：激活包含「还没打」的状态，合并会污染两种语义。
  */
 export const TERRITORY_ACTIVATED_LEVELS_KEY = 'territory.activatedLevels.v1';
 
-// ============================================================
-// 「关卡界面」/「关卡提示」（蓝湖，2026-10-27）
-
-
+// 关卡界面 / 关卡提示
 /** 「关卡界面」掉落奖励最多几格（与 prefab 的 `DropSlots/Slot1..3` 对应）。 */
 export const TERRITORY_LEVEL_DROP_SLOTS = 3;
 

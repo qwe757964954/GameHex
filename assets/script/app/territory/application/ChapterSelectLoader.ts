@@ -33,9 +33,9 @@ interface IChapterNameConfig {
 /**
  * `levelInfo` 里判「最后一个首领」只需要四个字段（其余列读不读都一样）。
  *
- * 🔴 首领 = `levelMod === 2`（塔防）。这是 `buildTerritoryCampaign` 里
- *   `mode = row.levelMod === 2 ? 'defence' : 'match'` / `isBoss: mode === 'defence'`
- *   的同一条判据，两处必须同源，否则弹窗的「已通关」会和 HUD 的通关判据打架。
+ * 首领 = `levelMod === 2`（塔防）。这是 `buildTerritoryCampaign` 里
+ * `mode = row.levelMod === 2 ? 'defence' : 'match'` / `isBoss: mode === 'defence'`
+ * 的同一条判据，两处必须同源，否则弹窗的「已通关」会和 HUD 的通关判据打架。
  */
 interface ILevelStageRow {
     readonly levelId: number;
@@ -45,7 +45,7 @@ interface ILevelStageRow {
 }
 
 /**
- * 本章**最后一个首领关卡**的 `levelId`（2026-11-04：章节通关 = 通过这一关）。
+ * 本章**最后一个首领关卡**的 `levelId`（章节通关 = 通过这一关）。
  *
  * 排序口径与 `chapterFinalBossCell` 一致：先 `chapterStage`、再 `levelId`
  * （`levelId` 是全局号，同章内不单调）。一章没有首领 ⇒ `null`。
@@ -149,7 +149,7 @@ export async function loadChapterSelectRows(
     // 服务端可切章节超出配表范围时，以两者较大者为准，保证已解锁的章一定有行。
     const [chapterConfigs, levels] = await Promise.all([
         resources.configs.getTable<IChapterNameConfig>('chapterName'),
-        // 2026-11-04：章节通关 = 通过本章最后一个首领关卡 ⇒ 弹窗要能认出那一关占哪些格。
+        // 章节通关 = 通过本章最后一个首领关卡 ⇒ 弹窗要能认出那一关占哪些格。
         // 读不回来就退化成空表（`finalBossCells` 缺省 ⇒ 行状态退回占领率口径）。
         resources.configs.getTable<ILevelStageRow>('levelInfo'),
     ]);

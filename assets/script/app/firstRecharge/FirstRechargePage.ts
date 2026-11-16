@@ -6,7 +6,6 @@ import { CacheMgr } from '../net/CacheMgr';
 import { QUALITY_FRAME_NAMES } from './FirstRechargeArt';
 import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
 import { FirstRechargeDayRow } from './FirstRechargeDayRow';
-import { dayPlateOffsets } from './FirstRechargeLayout';
 import {
     firstRechargeRepository,
 } from './FirstRechargeRepository';
@@ -78,10 +77,7 @@ export class FirstRechargePage extends PopupBase {
     @property({ type: Label, tooltip: 'Hint：底板里的副标题，异常时被离线 / 失败提示顶掉' })
     hintLabel: Label = null;
 
-    @property({ type: Color, tooltip: '提示文字：正常态颜色' })
-    hintIdleColor: Color = new Color(176, 168, 150, 255);
-
-    @property({ type: Color, tooltip: '提示文字：异常态颜色' })
+    @property({ type: Color, tooltip: '提示文字：异常态颜色；正常态取 prefab Label 颜色' })
     hintErrorColor: Color = new Color(226, 88, 74, 255);
 
     /** 数据端口；测试可替换（`repository` 只读，用 `setRepository` 换）。 */
@@ -89,6 +85,9 @@ export class FirstRechargePage extends PopupBase {
 
     private closeAction: Button = null;
     private buyAction: Button = null;
+
+    /** 提示文字正常态颜色：从 prefab Label 上取。 */
+    private readonly hintIdleColor = new Color();
 
     /** 当前快照（表 + 服务器状态 + 道具表）。 */
     private snapshot: IFirstRechargeSnapshot | null = null;
@@ -106,6 +105,7 @@ export class FirstRechargePage extends PopupBase {
     private subtitle = '';
 
     protected onInit(): void {
+        this.hintIdleColor.set(this.hintLabel.color);
         //  Hint 是「副标题 + 错误提示」两用的：先把 prefab 上的静态文案记下来当正常态，
         //  `setHint('')` 就是"恢复副标题"。数据到位后 `presentHeadline()` 会换成真实兵种名。
         this.subtitle = this.hintLabel.string;
@@ -208,10 +208,7 @@ export class FirstRechargePage extends PopupBase {
 
         const state = snapshot.states.get(tier.id);
         const rows = this.dayRows;
-        //  三天**横排**，牌宽随「当天几条奖励」变（3 条 269 / 2 条 186），整排再居中。
-        //  老客户端是 FairyGUI `list_item` 的 `autoItemSize` 自动排；Cocos 的 `cc.Layout`
-        //  只支持等宽格子，所以公式收在 `FirstRechargeLayout`（纯函数、有单测）。
-        const offsets = dayPlateOffsets(rows.map((_row, index) => (tier.days[index] ?? []).length));
+        //  三天**横排**：DayList 的 cc.Layout 负责间距与整排居中，DayRow 自己按奖励数改宽。
         for (let index = 0; index < rows.length; index++) {
             const day = index + 1;
             const rewards = tier.days[index] ?? [];
@@ -220,7 +217,6 @@ export class FirstRechargePage extends PopupBase {
                 continue;
             }
             rows[index].node.active = true;
-            rows[index].node.setPosition(offsets[index], rows[index].node.position.y, 0);
             rows[index].render({
                 day,
                 state: dayStateOf(state, day, snapshot.now),

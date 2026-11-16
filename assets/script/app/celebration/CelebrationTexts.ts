@@ -135,7 +135,7 @@ export const CL_TEXTS = {
      * 老端 `ModelCelebration.RequestCelebrationBuyShop` 的分支：
      * `rsp.canRmb ? SDKMgr.pay(rmb, "common", 0) : FW.ShowReward(rsp.tlCmdGoods)`。
      * Demo3.8 **没有支付 SDK**（与礼包 / 首充 / 月卡 / 战令同一处置）⇒
-     * rmb 分支只提示、不假装成功。见 `CelebrationRepository.CL_PAY_SDK_AVAILABLE`。
+     * rmb 分支只提示、不假装成功。
      */
     payUnavailable: '支付暂未接入',
     /** 跳转未接入（`celebrationConfig.goto`；老端走 `CtrlJumpView.JumpType`）。 */

@@ -65,7 +65,6 @@ export class BigMapBuildMenuPopup extends PopupBase {
         if (this.rows.length !== content.rows.length) this.rebuildRows(content);
         content.rows.forEach((item, index) => {
             const row = this.rows[index];
-            if (!row) return;
             row.kind = item.kind;
             row.name.string = item.name;
             row.detail.string = item.detail;
@@ -82,11 +81,9 @@ export class BigMapBuildMenuPopup extends PopupBase {
             node.name = `BuildRow_${item.kind}`;
             node.setParent(this.rowsRoot);
             node.active = true;
-            //行高 56（模板 50 + 6 间距），与面板 556 高刚好容下 10 行。
-            node.setPosition(0, 222 - index * 56);
-            const name = node.getChildByName('Name')?.getComponent(Label) ?? null!;
-            const detail = node.getChildByName('Detail')?.getComponent(Label) ?? null!;
-            const background = node.getComponent(Sprite) ?? null!;
+            const name = node.getChildByName('Name').getComponent(Label);
+            const detail = node.getChildByName('Detail').getComponent(Label);
+            const background = node.getComponent(Sprite);
             //行是复用的：`render` 只更新 `row.kind`，所以点击必须读当前值 ——
             //把 `item.kind` 闭包进回调，目录顺序一变就会点到别的建筑。
             const row = { node, name, detail, background, kind: item.kind };

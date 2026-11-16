@@ -42,8 +42,6 @@ export interface IBigMapCampInfo {
     readonly detailed: boolean;
 }
 
-export const BIGMAP_CAMP_OCCUPATION_TEXT = ['未占领', '已占领'] as const;
-
 export const BIGMAP_CAMP_QUERY_TEXT = {
     pending: '据点信息加载中',
     failed: '据点信息获取失败，请重新选择据点重试',

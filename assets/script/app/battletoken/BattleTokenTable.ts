@@ -525,68 +525,6 @@ export function scrollTargetIndex(claimLv: number, max: number): number {
 }
 
 /**
- * 购买按钮尺寸（FGUI `组件/按钮_购买.xml` 与 `按钮_购买_免费.xml` 都是 193×74）。
- */
-export const BT_BUY_BTN_W = 193;
-export const BT_BUY_BTN_H = 74;
-
-/** 购买行容器尺寸（FGUI `组件/组件_战令_标签组合.xml`，720×71；按钮 74 高会溢出 3px）。 */
-export const BT_BUY_ROW_W = 720;
-export const BT_BUY_ROW_H = 71;
-
-/** 一个按钮在购买行里的「左上角 + 尺寸」（FGUI 坐标）。 */
-export interface IBuyButtonBox {
-    readonly left: number;
-    readonly top: number;
-    readonly w: number;
-    readonly h: number;
-}
-
-/**
- * 购买行三个按钮的位置 —— FGUI `标签组合` 里那两组 `gearXY controller="个数"`。
- *
- * ⚠️ `pages="0,1"` 的**值序**是「page0 | page1」= 「两个 | 三个」，**不是**屏幕顺序：
- *
- * | 下标 | 按钮 | 两个（page 0） | 三个（page 1） |
- * |---|---|---|---|
- * | 0 | `免费` | `109,-3` | `58,-1` |
- * | 1 | `方案1`（= `order 2` / Normal / 黄） | `440,-4` | `287,-2` |
- * | 2 | `方案2`（= `order 3` / Advanced / **红**） | 隐藏 | `496,-2` |
- *
- * 两组都「整体居中」：两个时两端 109..633、三个时 58..689，中心都在 371 附近。
- */
-export function buyButtonLayout(three: boolean): readonly (IBuyButtonBox | null)[] {
-    if (three) {
-        return [
-            { left: 58, top: -1, w: BT_BUY_BTN_W, h: BT_BUY_BTN_H },
-            { left: 287, top: -2, w: BT_BUY_BTN_W, h: BT_BUY_BTN_H },
-            { left: 496, top: -2, w: BT_BUY_BTN_W, h: BT_BUY_BTN_H },
-        ];
-    }
-    return [
-        { left: 109, top: -3, w: BT_BUY_BTN_W, h: BT_BUY_BTN_H },
-        { left: 440, top: -4, w: BT_BUY_BTN_W, h: BT_BUY_BTN_H },
-        null,
-    ];
-}
-
-/**
- * 购买行里第 `index` 个按钮的**节点坐标**（相对容器中心）。
- *
- * 容器与按钮同为 `anchor (0.5,0.5)` ⇒ `pos = 子中心 − 父中心`。
- * 三个按钮的 xy 是**左上角**（这几处 `pivot="0.5,0.5"` 没带 `anchor="true"`，
- * 见规则 58；用「气泡 n141 正好包住 `anchor="true"` 的说明文字」交叉验证过）。
- */
-export function buyButtonPos(three: boolean, index: number): { x: number; y: number } | null {
-    const box = buyButtonLayout(three)[index];
-    if (!box) return null;
-    return {
-        x: box.left + box.w / 2 - BT_BUY_ROW_W / 2,
-        y: BT_BUY_ROW_H / 2 - (box.top + box.h / 2),
-    };
-}
-
-/**
  * 底栏某类型是否该显示红点（老端 `GetBattleTokenRD`）。
  *
  * 判据：存在一行 `i` 与一个方案 `cmd`，满足 `cmd.open && level > i && tlTakeLevel 不含 i+1`。

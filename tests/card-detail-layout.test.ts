@@ -606,7 +606,7 @@ function makeHexSlot() {
         normalNamePlateFrame: 'blue', activeNamePlateFrame: 'purple',
         namePlateTransform: { width: 0, height: 0, setContentSize(width, height) { this.width = width; this.height = height; } },
         badgeTransform: { width: 0, height: 0, setContentSize(width, height) { this.width = width; this.height = height; } },
-        badgeWidget: { left: 0, updateAlignment() {} },
+        badgeWidget: { left: 73, updateAlignment() {} },
     };
 }
 

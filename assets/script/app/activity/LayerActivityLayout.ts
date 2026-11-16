@@ -125,63 +125,6 @@ function clampRatio(ratio: number): number {
     return ratio >= 1 ? 1 : ratio;
 }
 
-// ============================================================
-// 任务行（父容器 = 行模板 679×190）
-// ============================================================
-
-export const ACTIVITY_ROW_WIDTH = 679;
-export const ACTIVITY_ROW_HEIGHT = 190;
-
-/** 一行最多放几个奖励格 —— 与 prefab 里 `RowTemplate/RewardBar` 下的槽位数一致。 */
-export const ACTIVITY_ROW_REWARD_SLOTS = 5;
-
-/** 行底框 `act_row_bg`：FGUI (19,13) 658×175。 */
-export const ACTIVITY_ROW_BG_POS = fguiTopLeftToCocos(19, 13, 658, 175, ACTIVITY_ROW_WIDTH, ACTIVITY_ROW_HEIGHT);
-export const ACTIVITY_ROW_BG_SIZE = { width: 658, height: 175 } as const;
-
-/**
- * 标题飘带 `act_row_ribbon`：FGUI (-2,0) 420×105，`scale="1,0.7"`。
- *
- * ⚠️ FGUI 那条 `scale` **没写 `pivot` ⇒ 按 (0,0) 即左上角缩放**（FairyGUI 的默认 pivot 是 0,0），
- *   所以缩放后飘带的纵向范围是 FGUI `y = 0 ~ 73.5`，不是「以中心缩 0.7」。
- *   对应到 Cocos：Ribbon 节点的锚点必须是 **(0, 1)**，位置 = 飘带的**左上角**。
- *   若按居中锚点写（本文件早期版本就是），飘带整体会**下移 15.75px**，
- *   把标题挤出飘带的可视区（肉眼看只是"字没在飘带上"，不会报错）。
- */
-export const ACTIVITY_ROW_RIBBON_POS = {
-    x: -ACTIVITY_ROW_WIDTH / 2 - 2,
-    y: ACTIVITY_ROW_HEIGHT / 2,
-} as const;
-export const ACTIVITY_ROW_RIBBON_SIZE = { width: 420, height: 105 } as const;
-export const ACTIVITY_ROW_RIBBON_SCALE_Y = 0.7;
-
-/**
- * 标题文字：「标题 (进度/目标)」，fontSize 21，色 `#e4d79c`，描边 `#1d150e` 宽 3。
- *
- * ⚠️ 宽度**没有照抄 FGUI 的 206**：实测当前 5 条任务名在 21px 下的宽度是 **192 ~ 323**
- *   （`累计击杀2000只怪物 (2000/2000)` 最宽），照抄 206 会有 4 条走 `Label` 的 SHRINK
- *   把字缩到 13~17px（FGUI 那边是 `autoSize="none"`，干脆折行后被 30 高的框裁掉 —— 原稿本身是坏的）。
- *   行飘带自身有 420 宽（局部 `-341.5 ~ +78.5`），所以**左边缘保持 FGUI 的 `x = 21`**
- *   （局部 -318.5）、宽度放到 340（右边缘 21.5，仍在飘带内）。
- *   锚点用 **(0.5, 0.5)**，`POS` 是**加宽后那个框的中心**；文字对齐 = 左。
- */
-export const ACTIVITY_ROW_TITLE_POS = fguiTopLeftToCocos(21, 15, 340, 30, ACTIVITY_ROW_WIDTH, ACTIVITY_ROW_HEIGHT);
-export const ACTIVITY_ROW_TITLE_SIZE = { width: 340, height: 30 } as const;
-export const ACTIVITY_ROW_TITLE_LEFT = 21 - ACTIVITY_ROW_WIDTH / 2;
-
-/** 奖励格容器：FGUI (74,71) 350×90（`colGap=5`，每格 85×85）。 */
-export const ACTIVITY_ROW_REWARD_BAR_POS = fguiTopLeftToCocos(74, 71, 350, 90, ACTIVITY_ROW_WIDTH, ACTIVITY_ROW_HEIGHT);
-export const ACTIVITY_ROW_REWARD_BAR_SIZE = { width: 350, height: 90 } as const;
-export const ACTIVITY_ROW_REWARD_SLOT_SIZE = 85;
-export const ACTIVITY_ROW_REWARD_SLOT_GAP = 5;
-
-/** 第 `index` 个奖励格在 `RewardBar` 里的 x（靠左排，与 FGUI `list` 的 `layout="row"` 一致）。 */
-export function rewardSlotX(index: number): number {
-    return -ACTIVITY_ROW_REWARD_BAR_SIZE.width / 2
-        + ACTIVITY_ROW_REWARD_SLOT_SIZE / 2
-        + index * (ACTIVITY_ROW_REWARD_SLOT_SIZE + ACTIVITY_ROW_REWARD_SLOT_GAP);
-}
-
 /**
  * 物品框**数量**（`Num`）的版面 —— 与格子边长有关，全工程**只有这一个真源**。
  *
@@ -228,30 +171,6 @@ export function rewardNumLayout(cellSize: number): {
         fontSize: Math.round(24 * scale),
     };
 }
-
-/** 行内奖励格（85×85）的数量版面。 */
-const ROW_NUM_LAYOUT = rewardNumLayout(ACTIVITY_ROW_REWARD_SLOT_SIZE);
-export const ACTIVITY_ROW_REWARD_NUM_SCALE = ROW_NUM_LAYOUT.scale;
-export const ACTIVITY_ROW_REWARD_NUM_POS = ROW_NUM_LAYOUT.pos;
-/** 字号 20（= 24 × 0.85 四舍五入）。 */
-export const ACTIVITY_ROW_REWARD_NUM_FONT_SIZE = ROW_NUM_LAYOUT.fontSize;
-/**
- * ⚠️ 这里**故意没有**「数量框尺寸」常量 —— `cc.Label` 的 `Overflow.NONE` 会按**实测文本**
- * 重写宿主的 `contentSize`（空串就写成 `0 × 25.2`），prefab 里写死的尺寸存不住（实测：
- * MCP 补写 `(11.05, 28.9)` 后存盘又变回 `(0, 25.2)`）。
- * 但**这正是想要的行为**：盒子永远紧贴文本，而锚点 `(1, 0.5)` 把**右缘钉死在 `POS.x`**
- * ⇒ 「2」和「1000」的右缘落在同一条竖线上、多的位数往左长。
- * 所以承重的是 **锚点 + `POS` + `fontSize`**，不是尺寸；`halign=RIGHT` 是在
- * 「盒子比文本宽」（将来若开 `enableWrapText`）时才生效的保险。
- */
-
-/** 右侧按钮：FGUI (509,89) 132×63。 */
-export const ACTIVITY_ROW_ACTION_POS = fguiTopLeftToCocos(509, 89, 132, 63, ACTIVITY_ROW_WIDTH, ACTIVITY_ROW_HEIGHT);
-export const ACTIVITY_ROW_ACTION_SIZE = { width: 132, height: 63 } as const;
-
-/** 已领取印章：FGUI (509,75) 119×74。 */
-export const ACTIVITY_ROW_STAMP_POS = fguiTopLeftToCocos(509, 75, 119, 74, ACTIVITY_ROW_WIDTH, ACTIVITY_ROW_HEIGHT);
-export const ACTIVITY_ROW_STAMP_SIZE = { width: 119, height: 74 } as const;
 
 // ============================================================
 // 外层（父容器 = 画布 720×1280）

@@ -1,100 +1,46 @@
 /**
- * 「关卡通过后地皮换色」的**时间轴**（纯函数、零 `cc`）。
+ * 关卡通过后地皮换色的时间轴（纯函数，零 cc）。
  *
- * 需求原文（2026-10-23）：*「原本红色的地块变小，变透消失，新的地块小变大出现，伴随透明度变实 /
- * 有多个地块变化时，动画轻微的时间落差 / 地块上的建筑保持原地不动」*。四句需求正好对应本文件
- * 与视图的四件事：
- *
- * | 需求 | 落到哪 |
- * | --- | --- |
- * | 旧地块变小、变透消失 | `territoryHexRecolorFrame().outScale / outOpacity`（1 → 0.55 / 1 → 0） |
- * | 新地块小变大 + 透明度变实 | 同上的 `.inScale / inOpacity`（0.6 → 1 / 0 → 1） |
- * | 多格轻微时间落差 | `territoryHexRecolorDelays()`（按**这批格的簇心**排序，逐个错峰） |
- * | 地块上的建筑不动 | **不在本文件**：视图只动格节点的两个临时子节点，格根缩放恒 1 ⇒ 建筑（在 `Station*Layer`）不受影响 |
- *
- * ## 为什么不是 tween / 为什么不缩放格根
- *
- * 与 `TerritoryHexSpawn` / `TerritoryHexFlip` / `TerritoryChestAnimation` 同一套路
- * （见 `AGENTS.md`「渲染幂等与纯函数时间轴」）：格节点是**池化复用**的，tween 在节点回收后
- * 还会继续跑（老坑）；而纯函数能单测 —— 时长、交叉、错峰上限这些是产品口径，不该只靠"看一遍"验收。
- *
- * 缩放**只能写在临时子节点上**：格根一缩，格面框 / 底光 / 翻格用的 `Reveal` 会跟着缩；
- * 建筑虽然不在格节点下（挂 `StationIconLayer` 等四层），但把格根当缩放载体迟早会牵连到别的东西。
- *
- * ## 与「翻格」「生成」的分工
- *
- * 三件事都改地皮，但**不是一回事**，别合并：
- *  · **翻格**（`TerritoryHexFlip`）= 玩家点开随机资源格，碎裂 + 新地皮放大填充；
- *  · **生成**（`TerritoryHexSpawn`）= 进度推进后新露出的格子整批进场（整格透明 + 由小变大）；
- *  · **换色**（本文件）= 已经在场上的格子，**通关**后地皮从泥土块换成草地块。
- * 同一格撞车时优先级：翻格 > 生成 > 换色（视图里按这个顺序互相 `stop`）。
+ * 旧地皮缩小变透明消失，新地皮由小放大并淡入，多格按簇心排序轻微错峰。
+ * 缩放只写在格节点的临时子节点上，格根不动，建筑不受影响。
+ * 格节点池化复用，因此用纯函数时间轴而不是 tween。
  */
 
 import { territoryHexStaggerDelays } from './TerritoryHexStagger';
 
-/** 单格换色动画的总时长（秒）。0.36s：比"生成"（0.4s）略快 —— 它是旧东西退场，不该让人等。 */
+/** 单格换色总时长（秒）。 */
 export const TERRITORY_HEX_RECOLOR_SECONDS = 0.36;
 
-/** 相邻两格的换色间隔（秒）—— 需求里的「轻微的先后落差」。0.07s ≈ 4 帧。 */
+/** 相邻两格的换色间隔（秒）。 */
 export const TERRITORY_HEX_RECOLOR_STAGGER_SECONDS = 0.07;
 
-/**
- * 错峰**总上限**（秒）。
- *
- * 一次通关常常只影响 1~3 格，但「区域通关」口径下（同 `configId` 的多格一起算）可能一次十几格，
- * 不封顶就排到 1s 以上 —— 读起来像卡顿而不是"落差"。
- */
+/** 错峰总上限（秒），避免大面积通关时排到一秒以上。 */
 export const TERRITORY_HEX_RECOLOR_STAGGER_MAX_SECONDS = 0.3;
 
-/**
- * 旧地皮缩到多小再消失：`0.55`。
- *
- * 与「生成」的起手缩放同值（`TERRITORY_HEX_SPAWN_FROM_SCALE`）：一进一出都是"半格大小"，
- * 两套动画放在同一屏上不会一大一小。不用 0：缩到 0 会先变成一个点再消失，像被针刺掉。
- */
+/** 旧地皮缩到该比例后消失，与生成动画的起手缩放一致。 */
 export const TERRITORY_HEX_RECOLOR_OUT_SCALE = 0.55;
 
-/**
- * 新地皮从多大开始长：`0.6`。
- *
- * 比旧地皮的终态（0.55）略大一点，交叉的那几帧里"新"不会被"旧"完全盖住，
- * 视觉上是**从旧的残影里顶出来**，而不是"旧的缩没了、新的才开始"。
- */
+/** 新地皮的起手缩放，略大于旧地皮终态以保留交叉。 */
 export const TERRITORY_HEX_RECOLOR_IN_FROM_SCALE = 0.6;
 
-/**
- * 旧地皮在整段的**第几成**彻底消失（0~1）。
- *
- * 0.55 ⇒ 前 0.198s 走完"缩小 + 化掉"，剩下的时间全给新地皮收尾。
- * 超过 0.7 就会读到"两半同时在动"，谁是主体就分不清了。
- */
+/** 旧地皮在整段动画的该比例处完全消失。 */
 export const TERRITORY_HEX_RECOLOR_OUT_END = 0.55;
 
-/**
- * 新地皮在整段的**第几成**开始出现（0~1）。
- *
- * 0.30 ⇒ 与旧地皮的退场**交叉 0.09s**（0.30~0.55）。这一段重叠是刻意的：
- * 完全错开（`>= OUT_END`）会在中间留一帧"格子空了"，一闪就是漏光。
- */
+/** 新地皮开始出现的比例，与旧地皮退场交叉约 0.09s。 */
 export const TERRITORY_HEX_RECOLOR_IN_START = 0.3;
 
-/**
- * 新地皮的透明度在自己的窗口里走完几成就铺满（0~1）。
- *
- * 与生成动画同一口径（`TERRITORY_HEX_SPAWN_OPACITY_PORTION = 0.7`）：先"变实"再"长满"，
- * 反过来会出现「已经长到 1 了还是半透明」的灰蒙感。
- */
+/** 新地皮透明度在自己的窗口内走完该比例即铺满。 */
 export const TERRITORY_HEX_RECOLOR_IN_OPACITY_PORTION = 0.7;
 
-/** 某一时刻的姿态。视图直接照着写节点，不再做二次换算。 */
+/** 某一时刻的姿态，视图直接写入节点。 */
 export interface ITerritoryHexRecolorFrame {
-    /** 旧地皮缩放（`1 → TERRITORY_HEX_RECOLOR_OUT_SCALE`）。 */
+    /** 旧地皮缩放。 */
     readonly outScale: number;
-    /** 旧地皮不透明度（`1 → 0`，视图乘 255 取整）。 */
+    /** 旧地皮不透明度。 */
     readonly outOpacity: number;
-    /** 新地皮缩放（`TERRITORY_HEX_RECOLOR_IN_FROM_SCALE → 1`）。 */
+    /** 新地皮缩放。 */
     readonly inScale: number;
-    /** 新地皮不透明度（`0 → 1`）。 */
+    /** 新地皮不透明度。 */
     readonly inOpacity: number;
 }
 
@@ -131,7 +77,7 @@ function easeInQuad(p: number): number {
  * 已用时（秒）→ 这一帧「旧的退场 / 新的进场」两组参数。
  *
  * @param seconds 相对**本格自己的**起点（延迟已扣掉）。`<= 0` = 还没轮到它 ⇒ 起手帧
- *                （旧地皮原样、新地皮 0）。视图 `play()` 时先写一遍这一帧，避免"闪一帧新地皮"。
+ * （旧地皮原样、新地皮 0）。视图 `play()` 时先写一遍这一帧，避免"闪一帧新地皮"。
  */
 export function territoryHexRecolorFrame(seconds: number): ITerritoryHexRecolorFrame {
     // `!(seconds > 0)` 一次挡掉 NaN / 0 / 负数 / -Infinity（NaN 的比较恒 false，正是想要的）。

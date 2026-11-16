@@ -18,15 +18,15 @@
  * ## 老端行为（`LayerLeagueHallApproveUI`）与移植取舍
  *
  * 1. **数据靠推送刷新**：老端 `init()` 里 `toolSet.addListener(VOUnionApplysBag, "OnChanged", updateView)`
- *    —— 面板自己**不发** `RequestUnionApplyList`，只等推送。本端为「打开即一定有数据」，
- *    在 `onOpen` 里**主动拉一次**（`requestApplyList`）再读缓存（`ILeagueRepository` 口径）。
+ * —— 面板自己**不发** `RequestUnionApplyList`，只等推送。本端为「打开即一定有数据」，
+ * 在 `onOpen` 里**主动拉一次**（`requestApplyList`）再读缓存（`ILeagueRepository` 口径）。
  * 2. **两个批量按钮先判空再发包**：
- *    `if (!nowApplyArr || nowApplyArr.length == 0) return;` ⇒ 空列表**不发包**（`canApproveAll`）。
+ * `if (!nowApplyArr || nowApplyArr.length == 0) return;` ⇒ 空列表**不发包**（`canApproveAll`）。
  * 3. **行内两颗按钮**：`btn_kick` = 拒绝（`agree=false`）、`btn_sure` = 同意（`agree=true`）；
- *    点头像 = `CtrlMgr.CtrlPlayer.openOtherPlayerInfo(applyId, serverId, selectServerId)`（他人信息面板未落地）。
+ * 点头像 = `CtrlMgr.CtrlPlayer.openOtherPlayerInfo(applyId, serverId, selectServerId)`（他人信息面板未落地）。
  * 4. **写操作后刷新**：老端靠推送，本端在写成功后**再拉一次**列表（见 `afterWrite`）。
- *    另加一道**防连点闸门** `busy` —— 老端没有，但写操作会走 5s 超时，
- *    连点会重复发包（**这是本端有意加的一道**，与「详情行把盟主提到最前」同性质的稳健性增量）。
+ * 另加一道**防连点闸门** `busy` —— 老端没有，但写操作会走 5s 超时，
+ * 连点会重复发包（**这是本端有意加的一道**，与「详情行把盟主提到最前」同性质的稳健性增量）。
  */
 
 import { _decorator, Button, Node } from 'cc';
@@ -52,7 +52,7 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueApplyListPage')
 export class LeagueApplyListPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueApplyList';
@@ -81,9 +81,7 @@ export class LeagueApplyListPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     /**
      * 三颗按钮的节点在 `LeagueApplyList.prefab` 上都挂了 `cc.Button` ⇒ 统一监听节点 `CLICK`。
@@ -113,9 +111,7 @@ export class LeagueApplyListPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -130,8 +126,8 @@ export class LeagueApplyListPage extends PopupBase {
     /**
      * 拉一次申请列表 + 铺行。
      *
-     * ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     *    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
@@ -175,9 +171,7 @@ export class LeagueApplyListPage extends PopupBase {
         row.onAvatar = (current) => this.openApplicant(current);
     }
 
-    // ============================================================
     // 审批
-    // ============================================================
 
     /** 行内「同意 / 拒绝」（老端 `btn_sure` / `btn_kick`）。 */
     private async approveOne(action: LeagueApplyAction, view: ILeagueApplyView): Promise<void> {
@@ -236,9 +230,7 @@ export class LeagueApplyListPage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     /** 「全部同意 / 全部拒绝」——箭头函数属性：引用稳定，重复 `on` 会被引擎去重。 */
     private readonly handleAgreeAll = (): void => {

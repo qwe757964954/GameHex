@@ -299,6 +299,9 @@ class FakeNode {
     setScale(x: number, y: number, z = 1): void {
         this.scale = { x, y, z };
     }
+    setParent(value: FakeNode | null): void {
+        this.parent = value;
+    }
     setPosition(x: number, y: number, z = 0): void {
         this.position = { x, y, z };
     }
@@ -394,6 +397,8 @@ function loadSlotClass(): new () => {
                     Color: FakeColor,
                     Component: FakeComponent,
                     Label: FakeLabel,
+                    Prefab: class {},
+                    instantiate: (prefab: { make: () => FakeNode }) => prefab.make(),
                     LabelOutline: FakeLabelOutline,
                     Node: FakeNode,
                     Sprite: FakeSprite,
@@ -422,6 +427,14 @@ function makeSlot(initialText: string): {
 } {
     const SlotClass = loadSlotClass();
     const slot = new SlotClass();
+    (slot as unknown as { spendFloatPrefab: unknown }).spendFloatPrefab = {
+        make: () => {
+            const node = new FakeNode('MainResBarSpendFloat');
+            node.position = { x: 0, y: 2, z: 0 };
+            node.addComponent(FakeLabel);
+            return node;
+        },
+    };
     slot.node = new FakeNode('Res0');
     // 槽位 132×40 ⇒ 上沿在 y=+20；飘字起点 = 20 + 2 = 22。
     slot.node.addComponent(FakeUITransform);
@@ -577,11 +590,18 @@ test('★源码契约：单格不许自己挂 update，也不许用 tween（心�
  * 正确姿势是 Label 自带的三个属性，而且**必须一起给**：`outlineWidth` 只在
  * `enableOutline = true` 时才参与渲染，只设宽度不设开关的话描边静默消失。
  */
-test('飘字描边走 Label 自带属性，不再 addComponent(LabelOutline)', () => {
+test('飘字描边与字号都在 MainResBarSpendFloat.prefab 里，代码不再复制 Value 排版', () => {
     const slotSrc = readFileSync(SLOT, 'utf8');
     assert.doesNotMatch(slotSrc, /addComponent\(\s*LabelOutline\s*\)/,
         '别再挂已弃用的 LabelOutline 组件（会刷 width deprecated 警告）');
-    assert.match(slotSrc, /label\.enableOutline = true/, 'outlineWidth 只在 enableOutline=true 时才画');
-    assert.match(slotSrc, /label\.outlineColor = new Color\(0, 0, 0, 255\)/);
-    assert.match(slotSrc, /label\.outlineWidth = SPEND_FLOAT_OUTLINE_WIDTH/);
+    assert.doesNotMatch(slotSrc, /copySpendFloatTypography|SPEND_FLOAT_OUTLINE_WIDTH/,
+        '字号/行高/描边迁进 prefab，代码只 instantiate');
+    assert.match(slotSrc, /instantiate\(this\.spendFloatPrefab\)/);
+    const prefab = JSON.parse(readFileSync('assets/resources/ui/common/MainResBarSpendFloat.prefab', 'utf8')) as any[];
+    const label = prefab.find((entry) => entry?.__type__ === 'cc.Label');
+    assert.equal(label?._enableOutline, true, 'outlineWidth 只在 enableOutline=true 时才画');
+    assert.equal(label?._outlineWidth, 2);
+    assert.equal(label?._fontSize, 22);
+    assert.equal(label?._lineHeight, 24);
+    assert.equal(label?._overflow, 0, 'NONE：大额不许缩字');
 });

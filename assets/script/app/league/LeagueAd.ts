@@ -8,16 +8,15 @@
  * 让「捐献免费」与「任务看广告」两条链路能真正跑通 —— 关键是**先播后发**，
  * 绝不裸发（`adv=true` / `RequestWatchAdvert` 本身就是发奖凭据，裸发等于白拿）。
  *
- * ⚠️ 真接入点：微信小游戏走 `wx.createRewardedVideoAd()`，`onClose(res)` 里
- *    `res && res.isEnded` 为 true 才算「看完」。届时只需把 `playLeagueAd` 的函数体
- *    换成真调用，**调用方一行都不用改**。
+ * 真接入点：微信小游戏走 `wx.createRewardedVideoAd()`，`onClose(res)` 里
+ * `res && res.isEnded` 为 true 才算「看完」。届时只需把 `playLeagueAd` 的函数体
+ * 换成真调用，**调用方一行都不用改**。
  */
 import { AdType } from '../generated/refGen/RefEnum';
 import { CacheMgr } from '../net/CacheMgr';
 
 /** 广告位类型（对齐 `RefEnum.AdType`，避免各处写魔数）。 */
-export const LEAGUE_AD_TYPE_UNION_TASK = AdType.unionTask;     // 14
-export const LEAGUE_AD_TYPE_UNION_DONATE = AdType.unionDonate; // 15
+export const LEAGUE_AD_TYPE_UNION_TASK = AdType.unionTask; // 15
 
 /** Mock 一次广告播放的时长（ms）。真 SDK 接入后随本函数一起删掉。 */
 const MOCK_AD_PLAY_MS = 800;
@@ -35,9 +34,7 @@ export async function playLeagueAd(): Promise<boolean> {
     return true;
 }
 
-// ============================================================
 // 广告次数（`ad` 表 limit − `CmdRole.tlCmdAdvert` 已用）
-// ============================================================
 //
 // 与 `HangRepository` 对 `sweep = 11` 的算法同源，但**按 type 参数化**
 // （那边是硬编码 11 的两个私有函数，这边要同时服务 `unionTask = 14` 与 `unionDonate = 15`）。
@@ -61,20 +58,17 @@ export function leagueAdLimit(adRows: readonly unknown[], type: number): number 
 /**
  * 今日**已用**的看广告次数（`CmdRole.tlCmdAdvert` 里某 `type` 的 `num`）。
  *
- * ⚠️ `CmdAdvert.num` 是「已用次数」不是「剩余次数」—— 剩余要自己拿上限去减。
- * ⚠️ 该表**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
+ * `CmdAdvert.num` 是「已用次数」不是「剩余次数」—— 剩余要自己拿上限去减。
+ * 该表**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
  */
 export function leagueAdUsed(type: number): number {
     try {
-        const rows = (CacheMgr.instance as { getTlCmdRole?: () => unknown[] })?.getTlCmdRole?.() ?? [];
+        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
         for (const row of rows) {
-            if (!row) continue;
-            const list = (row as Record<string, unknown>).tlCmdAdvert;
-            if (!Array.isArray(list)) return 0;
+            const list = row.tlCmdAdvert;
+            if (!list) return 0;
             for (const entry of list) {
-                if (!entry || typeof entry !== 'object') continue;
-                const e = entry as Record<string, unknown>;
-                if (Number(e.type) === type) return Number(e.num) || 0;
+                if (entry.type === type) return Number(entry.num) || 0;
             }
             return 0;
         }

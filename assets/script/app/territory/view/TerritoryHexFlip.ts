@@ -20,10 +20,10 @@ export const TERRITORY_HEX_REVEAL_NODE = 'Reveal';
 /**
  * 翻格时「旧 / 新」两张地皮。
  *
- * ⚠️ **必须成对给**：`applyFace` 只要少一张就整条不动帧。
- *  为什么不能只给新的：点击那一帧 `paintHexes` 已经把地皮**换成新的**了（进度先于动画更新），
- *  不给旧的就等于「从新地皮开始翻」，读不出「翻开」这件事；
- *  为什么不能只给旧的：动画结束会停在旧地皮上（表现为「翻完还是泥巴」）。
+ * **必须成对给**：`applyFace` 只要少一张就整条不动帧。
+ * 点击那一帧 `paintHexes` 已经把地皮**换成新的**了（进度先于动画更新），
+ * 不给旧的就等于「从新地皮开始翻」，读不出「翻开」这件事；
+ * 动画结束会停在旧地皮上（表现为「翻完还是泥巴」）。
  */
 export interface ITerritoryHexFlipFrames {
     readonly from?: SpriteFrame | null;
@@ -69,27 +69,27 @@ function readTileHalfSize(node: Node): { x: number; y: number } {
 /**
  * 领地地图「翻开随机资源格」的翻格表现。
  *
- * ## 只剩「原地快碎裂」（2026-10-16 用户口径）
+ * 只剩「原地快碎裂」
  *
  * 需求原文：「地块反转动画优化，两种方案都做，点击后随机播放，让我根据播放的结果判断只保留
  * 哪一种方案」⇒ 用户看完两套后拍板「**只保留地块破碎效果的方案**」。于是：
- *  · **保留**：`hexShatterFx` —— **原地快碎裂**（片元级碎块腐蚀，材质做）→ 新地皮从格心放大
- *    填充（写在 `Reveal` 子节点上）；
- *  · **删除**：抬起后绕水平轴垂直翻转 360° 的那套（`hexTurnFx`）、随机点将
- *    （`pickHexFlipVariant` + 本类的 `variant` / `lastVariant` / `setRandom` 点将用法），
- *    以及只有它需要的接线：`tileSin` / `flipPerspective` / `flipCos` / `flipSin` /
- *    `turnParams`（侧视淡出）与「抬起期间提到同层末位」的 siblingIndex 处理。
- *    着色器那四段（顶点 3D 旋转 + 透视除法 / 体积明暗 / 侧视淡出 / 补光）一并删除，
- *    且删除都是**逐像素等价**的 —— 理由见 `core/hex/HexFlipPresentation` 的模块头注释。
+ * · **保留**：`hexShatterFx` —— **原地快碎裂**（片元级碎块腐蚀，材质做）→ 新地皮从格心放大
+ * 填充（写在 `Reveal` 子节点上）；
+ * · **删除**：抬起后绕水平轴垂直翻转 360° 的那套（`hexTurnFx`）、随机点将
+ * （`pickHexFlipVariant` + 本类的 `variant` / `lastVariant` / `setRandom` 点将用法），
+ * 以及只有它需要的接线：`tileSin` / `flipPerspective` / `flipCos` / `flipSin` /
+ * `turnParams`（侧视淡出）与「抬起期间提到同层末位」的 siblingIndex 处理。
+ * 着色器那四段（顶点 3D 旋转 + 透视除法 / 体积明暗 / 侧视淡出 / 补光）一并删除，
+ * 且删除都是**逐像素等价**的 —— 理由见 `core/hex/HexFlipPresentation` 的模块头注释。
  *
- * ## 与对局共用什么
+ * 与对局共用什么
  *
- *  · 材质 → 同一份 `shaders/hex-flip.effect`（**只剩碎裂**那部分）；
- *  · 动作曲线与时长 → `core/hex/HexFlipPresentation`（`hexShatterFx` / `HEX_SHATTER_SECONDS`）；
- *  · 底光那套强度 / 帧序推导 → 同一个写口（⚠️ 碎裂不抬起 ⇒ 这道光恒灭，见 `applyGroundGlow`）。
+ * · 材质 → 同一份 `shaders/hex-flip.effect`（**只剩碎裂**那部分）；
+ * · 动作曲线与时长 → `core/hex/HexFlipPresentation`（`hexShatterFx` / `HEX_SHATTER_SECONDS`）；
+ * · 底光那套强度 / 帧序推导 → 同一个写口（ 碎裂不抬起 ⇒ 这道光恒灭，见 `applyGroundGlow`）。
  * 差别只在**接线**：对局翻完接卡牌揭示（并有「整格隐藏」段），领地翻完就停在新地皮上。
  *
- * ## ⚠️ 材质是**每格一份**
+ * 材质是**每格一份**
  *
  * uniform 里含格心世界坐标与随机种子 ⇒ 不能共享一份材质。播完必须摘回 `null` 并 `destroy()`，
  * 否则这一格会永久退出静态合批（不报错，只涨 DC）。
@@ -135,7 +135,7 @@ export class TerritoryHexFlip {
     }
 
     /**
-     * 播一次翻格（「原地快碎裂」）。
+     * 播一次翻格「原地快碎裂」。
      *
      * @param frames 旧 / 新两张地皮；缺一张就整条不动帧（理由见 `ITerritoryHexFlipFrames`）
      * @returns 是否真的开始了（没有 effect、或这一格已经在播 ⇒ `false`，调用方无需处理）
@@ -203,9 +203,9 @@ export class TerritoryHexFlip {
 
     private apply(active: ITerritoryHexFlipActive, fx: IZCHexFlipFx): void {
         const { node, basePosition } = active;
-        // 🔴 **不动画家排序**：碎裂是「原地」的（`tileLift` 恒 0），地块既不会抬起来、碎片也
-        //    不会伸到邻格头上，所以不需要像早先那套翻整圈那样「抬起期间提到同层末位」。
-        // 格心坐标也不动（需求原文「原地快碎裂」）：只有「被别处挪过」时才掰回基准。
+        // **不动画家排序**：碎裂是「原地」的（`tileLift` 恒 0），地块既不会抬起来、碎片也
+        // 不会伸到邻格头上，所以不需要像早先那套翻整圈那样「抬起期间提到同层末位」。
+        // 格心坐标也不动（原文「原地快碎裂」）：只有「被别处挪过」时才掰回基准。
         if (node.position.y !== basePosition.y) node.setPosition(basePosition.x, basePosition.y, basePosition.z);
         // 格根缩放恒 `1`（新地皮的放大写在子节点 `Reveal` 上，见 `applyReveal`）——
         // 池化复用回来的节点若带着脏缩放，这里掰回来。
@@ -239,9 +239,9 @@ export class TerritoryHexFlip {
      * 写「这一帧该显示旧地皮还是新地皮」（**唯一写入口**）。
      *
      * 换脸点 = 这一格**碎没**的那一瞬（`HEX_SHATTER_ERODE_END`），所以换帧本身看不见。
-     * ⚠️ 别改到碎裂中途（进度还小的时候）：那会看到地皮在碎片底下硬切一刀。
+     * 别改到碎裂中途（进度还小的时候）：那会看到地皮在碎片底下硬切一刀。
      *
-     * ⚠️ 必须**每帧重写**：`paintHexes` 是幂等的全量重绘，随时可能把 `spriteFrame` 直接写成
+     * 必须**每帧重写**：`paintHexes` 是幂等的全量重绘，随时可能把 `spriteFrame` 直接写成
      * 新地皮（进度先于动画更新了），动画中途被顶掉就会「碎到一半突然换成新地皮」。
      * 每帧比一次引用（零成本）即可自愈。
      */
@@ -277,7 +277,7 @@ export class TerritoryHexFlip {
      * 位置要**抵消父节点的上移**（父节点抬多少、Sprite 就往下补多少）⇒ 光带留在原格开口处；
      * 颜色跟随该格底图当前的颜色（地图格是绿/黄/灰，白光乘色后与地图同色系）。
      *
-     * ⚠️ 这道光画的是「地块抬起来之后露出的原格开口」—— 而「原地快碎裂」**全程不抬起**
+     * 这道光画的是「地块抬起来之后露出的原格开口」—— 而「原地快碎裂」**全程不抬起**
      * （`tileLift` 恒 `0`），强度式子里的 `tileLift / HEX_FLIP_LIFT_PIXELS` 因此恒为 0
      * ⇒ **这段永远不点亮**（唯一实际动作是把节点关掉）。这是本方案的**自洽结果**，不是漏接线：
      * 别为了让底光亮起来去填一个假的抬升量（那等于把「原地」破坏掉）。
@@ -306,7 +306,7 @@ export class TerritoryHexFlip {
         // 带着上一格的放大倍率（否则下次播放会从「半个格子」开始）。
         if (active.glow?.node.active) active.glow.node.active = false;
         this.hideReveal(active);
-        // 🔴 落回**新地皮**：动画中途被 `reset()` 打断时 `applyFace` 可能还停在旧地皮上，
+        // 落回**新地皮**：动画中途被 `reset()` 打断时 `applyFace` 可能还停在旧地皮上，
         // 摘了材质不收口就会永远停在泥巴块（表现为「格子没翻过来」）。
         if (active.toFrame && sprite.spriteFrame !== active.toFrame) sprite.spriteFrame = active.toFrame;
         // 必须真的摘回 `null`（恢复内置 sprite 材质），否则这一格永久退出静态合批。

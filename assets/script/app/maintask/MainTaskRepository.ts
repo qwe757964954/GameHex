@@ -5,9 +5,9 @@
  * 本文件只负责「把表 + 缓存搬进来」与「发领奖请求」。
  *
  * 数据来源：
- *   ① 配置表 `taskMain` —— 取 `targetType = 99` 那一行（进度上限 / 奖励 / 名字）；
- *   ② 服务端缓存 `CmdTask`（`CacheMgrGen.getTlCmdTask()`）—— `count` / `rewardState`；
- *   ③ 请求 `CmdTakeMainTaskRewardReqMsg` —— 领奖。
+ * ① 配置表 `taskMain` —— 取 `targetType = 99` 那一行（进度上限 / 奖励 / 名字）；
+ * ② 服务端缓存 `CmdTask`（`CacheMgrGen.getTlCmdTask()`）—— `count` / `rewardState`；
+ * ③ 请求 `CmdTakeMainTaskRewardReqMsg` —— 领奖。
  *
  * ## 缓存读不到不是异常
  *
@@ -180,7 +180,7 @@ function emptySnapshot(): IHeroTaskSnapshot {
 
 /**
  * 读一张缓存表；表不存在 / 未登录时返回空数组。
- * ⚠️ `CacheMgrGen` 的取值方法在缺表时**抛异常**（不是返回空），必须自己兜住。
+ * `CacheMgrGen` 的取值方法在缺表时**抛异常**（不是返回空），必须自己兜住。
  */
 function readCache(fn: () => unknown[]): readonly unknown[] {
     try {
@@ -218,12 +218,12 @@ function taskStateMap(rows: readonly unknown[]): Map<number, IMainTaskState> {
  * 老端 `ModelGoods.CreateGoodsByCmd({number, resId})` 后再读 VO；本工程没有 Goods VO，
  * 按老端 `ModelGoods.GetGoodsIconKeyByRefId` 的**两支**查：
  *
- *   ① `item`（键是 **`resId`**，不是 `id` —— 按 `id` 查会全 MISSING 且**不报错**）
- *      ⇒ `icon` 是相对 `resources` 的完整路径，`iconIsPath = true`；
- *   ② 查不到再查 `roleProperty`（货币 / 属性类，银币 7 / 体力 9 / 金币 10 …）
- *      ⇒ `icon` 是 FGUI 裸组件名，`iconIsPath = false`，落 `icons/resource/`。
+ * ① `item`（键是 **`resId`**，不是 `id` —— 按 `id` 查会全 MISSING 且**不报错**）
+ * ⇒ `icon` 是相对 `resources` 的完整路径，`iconIsPath = true`；
+ * ② 查不到再查 `roleProperty`（货币 / 属性类，银币 7 / 体力 9 / 金币 10 …）
+ * ⇒ `icon` 是 FGUI 裸组件名，`iconIsPath = false`，落 `icons/resource/`。
  *
- * 🔴 **只查 ① 是 2026-11-06 体验反馈「奖励 icon 缺失」的根因**：taskMain 的奖励里
+ * **只查 ① 是「奖励 icon 缺失」的根因**：taskMain 的奖励里
  * 货币占绝大多数（金币 47 条、银币 28 条），这些 resId 在 `item` 表里根本没有 ⇒
  * `icon` 空串 ⇒ 详情弹窗一律画空白格，而且不报错。图其实一直在盘上，缺的是这条分支。
  *
@@ -338,9 +338,9 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
      * 选出一条「当前主线任务」（主界面入口 + 详情弹窗共用）。
      *
      * 与 `load()` 的三点不同，都是老端口径：
-     *   ① 选的是 `GetFirstVO()`（按 `preResId` 升序、排除 `targetType = 99`、只认 UNDONE/FINISH）；
-     *   ② 奖励是**一组**（详情弹窗的 `list_item` 要铺 N 个格子，不是只有一个）；
-     *   ③ 文案分两套 —— 详情用 `title (x/y)`、入口用 `title\n(x/y)`。
+     * ① 选的是 `GetFirstVO()`（按 `preResId` 升序、排除 `targetType = 99`、只认 UNDONE/FINISH）；
+     * ② 奖励是**一组**（详情弹窗的 `list_item` 要铺 N 个格子，不是只有一个）；
+     * ③ 文案分两套 —— 详情用 `title (x/y)`、入口用 `title\n(x/y)`。
      */
     async loadFirst(): Promise<IMainTaskSnapshot> {
         let rows: readonly unknown[] = [];
@@ -386,8 +386,8 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
         if (!net.isConnected) return 'offline';
 
         try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
-            //    HUD 会卡在「已点但没反应」的状态再也不刷新。
+            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬，
+            // HUD 会卡在「已点但没反应」的状态再也不刷新。
             const sent = await withTimeout(
                 net.send(new RequestTakeMainTaskReward(
                     { resId },

@@ -84,12 +84,13 @@ export async function loadGuidePortraits(
     scope?: ResourceScope,
 ): Promise<Map<string, SpriteFrame | Prefab>> {
     const loaded = new Map<string, SpriteFrame | Prefab>();
+    const loadOptions = scope ? { scope } : undefined;
     await Promise.all(GUIDE_PORTRAIT_ENTRIES.map(async ({ speaker, kind, asset }) => {
         const path = kind === 'sprite' ? `${asset}/spriteFrame` : asset;
         try {
             const value = kind === 'sprite'
-                ? await resources.assets.load(path, SpriteFrame, scope ? { scope } : undefined)
-                : await resources.assets.load(path, Prefab, scope ? { scope } : undefined);
+                ? await resources.assets.load(path, SpriteFrame, loadOptions)
+                : await resources.assets.load(path, Prefab, loadOptions);
             if (value) loaded.set(asset, value);
             else console.warn(`[GuideLoader] 立绘为空：${asset}`);
         } catch (error) {

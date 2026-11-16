@@ -85,6 +85,7 @@ test('A2. 底图在 image/ 根、其余在 image/hero_obtain/（路径单一真�
 test('B. prefab 节点坐标 = 设计稿（prefab 是几何真源）', () => {
     const items = readJson(PREFAB_PATH);
     const cases: [string, number, number][] = [
+        ['HeroHost', -14.5, -17],
         ['Rays', 0, -769],
         ['Shadow', 1, -952],
         ['HeroRoot', 0.5, -745],
@@ -144,10 +145,12 @@ test('C. Widget：根/点击层四边拉伸且 ALWAYS；底图居中不拉伸；
     }
 });
 
-test('C2. 页面不再写运行时缩放：适配交给 Stage/Bg 的 Widget', () => {
+test('C2. 页面不再写运行时缩放：适配交给 Stage/Bg 的 Widget，立绘偏置交给 prefab', () => {
     const src = readFileSync(`${ROOT}/${PAGE_SCRIPT}`, 'utf8');
     assert.equal(/applyScreenFit|heroObtainStageScaleOf|heroObtainBgCoverScaleOf/.test(src), false,
         '运行时缩放/定位代码应删除，只靠 Widget 居中');
+    assert.equal(/HERO_OBTAIN_HERO_ART_OFFSET|heroHost/.test(src), false,
+        'HeroHost 位置已写进 prefab，页面不再持引用或 setPosition');
 });
 
 test('D. 文字规格：30/28pt、2px 描边、overflow NONE、填充为 FILLED', () => {

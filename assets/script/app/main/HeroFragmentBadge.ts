@@ -1,7 +1,9 @@
 import {
     Color,
     Graphics,
+    instantiate,
     Node,
+    Prefab,
     Sprite,
     UIOpacity,
     UITransform,
@@ -36,20 +38,8 @@ import {
  * 这里每帧 `clear()` + `roundRect()` 重画，与 `TerritoryChestView` 的 Graphics 同一套路。
  */
 
-/** 徽标根节点名（运行时建，不进 prefab）。 */
-export const HERO_FRAGMENT_BADGE_NODE = 'HeroFragmentBadge';
-
-/** 整块宽 / 高（设计像素）。 */
-export const HERO_FRAGMENT_BADGE_WIDTH = 150;
-export const HERO_FRAGMENT_BADGE_HEIGHT = 44;
-/** 徽标中心相对英雄按钮图标中心的上抬量。 */
-export const HERO_FRAGMENT_BADGE_LIFT_PX = 58;
-/** 左侧碎片 icon 边长。 */
-export const HERO_FRAGMENT_BADGE_ICON_SIZE = 44;
-/** 进度条左缘相对徽标左缘的间距（给 icon 让位）。 */
-export const HERO_FRAGMENT_BADGE_BAR_INSET = 50;
-/** 进度条高度。 */
-export const HERO_FRAGMENT_BADGE_BAR_HEIGHT = 24;
+/** 徽标 prefab 的 resources 路径。 */
+export const HERO_FRAGMENT_BADGE_PREFAB = 'ui/main/HeroFragmentBadge';
 
 const BAR_BG_COLOR = new Color(255, 255, 255, 255);
 const BAR_FILL_COLOR = new Color(60, 200, 40, 255);
@@ -69,38 +59,50 @@ export class HeroFragmentBadge {
     private readonly barFill: Graphics;
     private readonly iconSprite: Sprite;
     private readonly opacity: UIOpacity;
+    /** 全部版面值来自 prefab：根尺寸、进度条左缘/宽/高、上抬量。 */
+    private readonly barLeft: number;
+    private readonly barWidth: number;
+    private readonly barHeight: number;
+    private readonly lift: number;
 
     private readonly queue: IHeroBadgeQueued[] = [];
     private current: IHeroBadgeQueued | null = null;
     /** < 0 = 空闲。 */
     private elapsed = -1;
 
-    constructor(navBar: Node, heroButton: TabButton) {
-        this.node = new Node(HERO_FRAGMENT_BADGE_NODE);
+    constructor(navBar: Node, heroButton: TabButton, prefab: Prefab) {
+        this.node = instantiate(prefab);
+        this.node.name = prefab.name;
         this.node.layer = navBar.layer;
         this.node.setParent(navBar);
-        this.node.addComponent(UITransform).setContentSize(
-            HERO_FRAGMENT_BADGE_WIDTH, HERO_FRAGMENT_BADGE_HEIGHT);
         // 🔴 底栏子节点顺序 = 渲染序：徽标必须压在七格按钮之上。
         this.node.setSiblingIndex(navBar.children.length - 1);
-        this.opacity = this.node.addComponent(UIOpacity);
+        this.opacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
         this.node.active = false;
 
-        this.barBg = this.createGraphics('BadgeBarBg');
-        this.barFill = this.createGraphics('BadgeBarFill');
+        const rootTransform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
+        const barNode = this.childNode('BadgeBarBg');
+        this.barBg = barNode.getComponent(Graphics) ?? barNode.addComponent(Graphics);
+        const fillNode = this.childNode('BadgeBarFill');
+        this.barFill = fillNode.getComponent(Graphics) ?? fillNode.addComponent(Graphics);
+        const barTransform = barNode.getComponent(UITransform)!;
+        this.barWidth = barTransform.width;
+        this.barHeight = barTransform.height;
+        this.barLeft = barNode.position.x - this.barWidth / 2;
 
-        const iconNode = new Node('BadgeIcon');
-        iconNode.layer = this.node.layer;
-        iconNode.setParent(this.node);
-        iconNode.addComponent(UITransform).setContentSize(
-            HERO_FRAGMENT_BADGE_ICON_SIZE, HERO_FRAGMENT_BADGE_ICON_SIZE);
-        iconNode.setPosition(
-            -HERO_FRAGMENT_BADGE_WIDTH / 2 + HERO_FRAGMENT_BADGE_ICON_SIZE / 2, 0, 0);
-        this.iconSprite = iconNode.addComponent(Sprite);
+        const iconNode = this.childNode('BadgeIcon');
+        this.iconSprite = iconNode.getComponent(Sprite) ?? iconNode.addComponent(Sprite);
         this.iconSprite.trim = false;
         this.iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
+        this.lift = this.childNode('LiftAnchor').position.y;
 
-        this.placeAboveHeroButton(navBar, heroButton);
+        this.placeAboveHeroButton(navBar, heroButton, rootTransform);
+    }
+
+    private childNode(name: string): Node {
+        const found = this.node.getChildByName(name);
+        if (!found) throw new Error(`HeroFragmentBadge.prefab 缺少节点 ${name}`);
+        return found;
     }
 
     /**
@@ -157,14 +159,14 @@ export class HeroFragmentBadge {
 
     /** 全量写这一帧：两条 Graphics 清掉重画，整体透明度交给根节点的 `UIOpacity`。 */
     private apply(progress: number, alpha: number): void {
-        const left = -HERO_FRAGMENT_BADGE_WIDTH / 2 + HERO_FRAGMENT_BADGE_BAR_INSET;
-        const width = HERO_FRAGMENT_BADGE_WIDTH - HERO_FRAGMENT_BADGE_BAR_INSET;
-        const half = HERO_FRAGMENT_BADGE_BAR_HEIGHT / 2;
+        const left = this.barLeft;
+        const width = this.barWidth;
+        const half = this.barHeight / 2;
         const radius = half;
 
         this.barBg.clear();
         this.barBg.fillColor = BAR_BG_COLOR;
-        this.barBg.roundRect(left, -half, width, HERO_FRAGMENT_BADGE_BAR_HEIGHT, radius);
+        this.barBg.roundRect(left, -half, width, this.barHeight, radius);
         this.barBg.fill();
 
         this.barFill.clear();
@@ -172,7 +174,7 @@ export class HeroFragmentBadge {
         if (filled > 0) {
             this.barFill.fillColor = BAR_FILL_COLOR;
             // 填充太窄时半径跟着收，否则圆角会鼓出槽的左端。
-            this.barFill.roundRect(left, -half, filled, HERO_FRAGMENT_BADGE_BAR_HEIGHT,
+            this.barFill.roundRect(left, -half, filled, this.barHeight,
                 Math.min(radius, filled / 2));
             this.barFill.fill();
         }
@@ -180,22 +182,16 @@ export class HeroFragmentBadge {
         if (this.opacity.opacity !== value) this.opacity.opacity = value;
     }
 
-    private createGraphics(name: string): Graphics {
-        const node = new Node(name);
-        node.layer = this.node.layer;
-        node.setParent(this.node);
-        node.addComponent(UITransform);
-        return node.addComponent(Graphics);
-    }
-
     /** 摆在英雄按钮图标正上方（`BottomNav` 局部坐标，走引擎矩阵换算）。 */
-    private placeAboveHeroButton(navBar: Node, heroButton: TabButton): void {
+    private placeAboveHeroButton(navBar: Node, heroButton: TabButton, rootTransform: UITransform): void {
         const icon = heroButton.icon;
         const iconTransform = icon?.isValid ? icon.node.getComponent(UITransform) : null;
         const navTransform = navBar.getComponent(UITransform);
         if (!iconTransform || !navTransform) return;
         const world = iconTransform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
         const local = navTransform.convertToNodeSpaceAR(world, new Vec3());
-        this.node.setPosition(local.x, local.y + HERO_FRAGMENT_BADGE_LIFT_PX, 0);
+        this.node.setPosition(local.x, local.y + this.lift, 0);
+        // 根节点尺寸也来自 prefab（保留引用，防止后续在编辑器里改尺寸后代码又写回常量）。
+        if (rootTransform.width <= 0 || rootTransform.height <= 0) return;
     }
 }

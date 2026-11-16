@@ -89,9 +89,9 @@ export class LeagueCreateController extends ControllerBase {
     /**
      * 老端 `onClickCreat()` 的守卫链：防连点 → 空名 → 现读消耗 → 钱够 → 发包。
      *
-     * ⚠️ 提交时**重新读一次** `createCost()`：表可热更、金币也可能刚被花掉。
-     * ⚠️ 每个 `await` 后都用 `isDisposed` + `model.name !== name` 作废迟到结果
-     *    （结果回来时输入框已被改动 ⇒ 放弃，同老端 `input.text != labName`）。
+     * 提交时**重新读一次** `createCost()`：表可热更、金币也可能刚被花掉。
+     * 每个 `await` 后都用 `isDisposed` + `model.name !== name` 作废迟到结果
+     * （结果回来时输入框已被改动 ⇒ 放弃，同老端 `input.text != labName`）。
      */
     private async submit(name: string, quickJoin: boolean): Promise<void> {
         if (this.submitting) return;

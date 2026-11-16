@@ -32,7 +32,6 @@ import {
     Sprite,
     SpriteFrame,
     UIOpacity,
-    UITransform,
     Vec3,
 } from 'cc';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
@@ -214,9 +213,7 @@ export class HeroObtainPage extends PopupBase {
         if (this._elapsed >= heroObtainTotalSeconds()) this.finishReveal();
     }
 
-    // ============================================================
     // 资源
-    // ============================================================
 
     private async loadArtFrames(): Promise<ArtFrames> {
         const names = Object.keys(HERO_OBTAIN_ARTS) as (keyof typeof HERO_OBTAIN_ARTS)[];
@@ -247,9 +244,7 @@ export class HeroObtainPage extends PopupBase {
             });
     }
 
-    // ============================================================
-    // 静态渲染（幂等，全量赋值）
-    // ============================================================
+    // 静态渲染，幂等，全量赋值。
 
     private resetState(): void {
         this._elapsed = 0;
@@ -316,9 +311,7 @@ export class HeroObtainPage extends PopupBase {
         scope.defer(() => { this._preview?.clear(); });
     }
 
-    // ============================================================
     // 入场动画
-    // ============================================================
 
     private startReveal(): void {
         this._elapsed = 0;

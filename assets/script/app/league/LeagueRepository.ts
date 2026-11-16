@@ -1,38 +1,7 @@
 /**
- * 「联盟」的数据端口 —— **缓存 + 配置表 + 网络请求** 三合一的 Repository。
- *
- * 与 `FriendRepository` / `GiftRepository` 同一套分层：页面只依赖本文件的接口，
- * 判定逻辑全在 `LeagueTable`（纯函数、可单测），本文件只负责「把数据搬进来 / 把请求发出去」。
- *
- * ## 数据来源（四张表全是**服务端推**，本类不存快照）
- *
- * `assets/resources/config/protoCache.json` 里有这几张表 ⇒ 服务端会主动推
- * （`GameCacheMgr.handleCache` 按 `CmdCache` 写进 `GameCache`）⇒ 每次 `load()` 现读
- * `CacheMgr`，不复制一份：
- *
- * | 缓存表 | `tlKey` | 内容 | 对应的推送 |
- * |---|---|---|---|
- * | `CmdRoleUnion` | `roleId` | **我的**联盟态（`unionId`） | `CmdUnionInfoUpdateBroMsg` |
- * | `CmdUnion` | `id` | 联盟本体（名称 / 等级 / 旗帜 / 人数上限 …） | `CmdUnionInfoUpdateBroMsg` |
- * | `CmdUnionMember` | `roleId` | 成员列表（职位 / 贡献 / 在线 …） | `CmdUnionMemberListUpdateBroMsg` |
- * | `CmdUnionApplys` | `applyId` | 入盟申请 | `CmdUnionApplyListUpdateBroMsg` |
- * | `CmdUnionLogs` | `id` | 动态 | `CmdUnionLogListUpdateBroMsg` |
- *
- * ## 唯一**必须自己存**的东西：搜索缓存（`searchCache`）
- *
- * 老端 `ModelLeague.searchCacheDict` 保存「按 id 搜到的那一个联盟」，**且以输入串为键**
- * （见 `LeagueTable.pickUnionListForSearch` 的注释）。搜索结果只在 Rsp 里、
- * 没有推送、也不在缓存表里 ⇒ 只能放内存。
- *
- * ⚠️ 为什么**不**把 Rsp 里的 `CmdUnion` 补写进 `CmdUnion` 缓存表（`FriendRepository` 的
- * `localPatches` 那种做法）：全服页签展示的是**别人家**的联盟，写进缓存会和「我所在的联盟」
- * 抢同一个 `tlKey`；而 `CmdUnion.getTlCmdUnion()` 是**全表**读，一旦混进来就会污染
- * 母面板头部的联盟信息。所以搜索缓存**独立存放**，不进缓存表。
- *
- * ## 请求三态
- *
- * 每个请求都是 `'ok' | 'offline' | 'failed'`：**离线早退**、`withTimeout` 兜底
- * （读 800ms / 写 5000ms），`catch` 一律返 `'failed'` —— 绝不把 Promise 悬着。
+ * 联盟数据端口：缓存表、配置表、搜索缓存和网络请求。
+ * 服务端已推的表每次 load 现读 CacheMgr；搜索结果不进 CmdUnion 表，避免污染当前联盟。
+ * 请求统一返回 ok | offline | failed，读 800ms、写 5000ms 超时。
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -205,18 +174,18 @@ function countOf(value: unknown): number {
 /**
  * `Long` / `number`（**毫秒**）→ **秒**。
  *
- * ⚠️ **入参单位是毫秒，这里必须 `/ 1000`** —— 服务端 `CmdUnionActivity.resetTime` 写的是
- *    `CommonUtils.getTodayZeroTimestamp()`，而它的实现是
- *    `todayZero.toInstant().toEpochMilli()`（`server/.../utils/CommonUtils.java`）⇒ **ms**。
- *    老端 `LayerLeagueDiscount.updateView()` 的 `cmd.resetTime + TimeUtil.S_DayTime * 1000`
- *    也正是「ms + ms」，随后 `updateTime()` 里 `(resetTime - nowMillisecond()) / 1000` 才折回秒。
- *    ⇒ 不除 1000 的话，砍价倒计时会算出十几万小时（本函数曾漏这一步，见下）。
+ * **入参单位是毫秒，这里必须 `/ 1000`** —— 服务端 `CmdUnionActivity.resetTime` 写的是
+ * `CommonUtils.getTodayZeroTimestamp()`，而它的实现是
+ * `todayZero.toInstant().toEpochMilli()`（`server/.../utils/CommonUtils.java`）⇒ **ms**。
+ * 老端 `LayerLeagueDiscount.updateView()` 的 `cmd.resetTime + TimeUtil.S_DayTime * 1000`
+ * 也正是「ms + ms」，随后 `updateTime()` 里 `(resetTime - nowMillisecond()) / 1000` 才折回秒。
+ * ⇒ 不除 1000 的话，砍价倒计时会算出十几万小时（本函数曾漏这一步，见下）。
  *
- * ⚠️ 也不能 `Number(long)` —— protobufjs 的 `Long` 转 number 是 `NaN`
- *    （同 `HangRepository.toNumber` 的教训），而 `NaN` 会让倒计时整段变 `NaN:NaN:NaN`。
+ * 也不能 `Number(long)` —— protobufjs 的 `Long` 转 number 是 `NaN`
+ * （同 `HangRepository.toNumber` 的教训），而 `NaN` 会让倒计时整段变 `NaN:NaN:NaN`。
  *
- * ⚠️ 本文件**只有砍价一处**用它（`loadDiscount`）—— 若将来有「服务端给的就是秒」的字段，
- *    别复用本函数，另写一个 `toSeconds` 直通版（否则会凭空少 1000 倍）。
+ * 本文件**只有砍价一处**用它（`loadDiscount`）—— 若将来有「服务端给的就是秒」的字段，
+ * 别复用本函数，另写一个 `toSeconds` 直通版（否则会凭空少 1000 倍）。
  */
 function toSecFromMs(value: unknown): number {
     const n = toMsNumber(value);
@@ -275,9 +244,7 @@ export interface ILeagueRewardResult {
     readonly rewards: CmdGoods[];
 }
 
-// ============================================================
 // P4 三个面板各自的快照
-// ============================================================
 
 /**
  * 联盟商店的一次刷新数据。
@@ -339,9 +306,9 @@ export interface ILeagueDiscountSnapshot {
      * number: priceNow}])` 的等价物：`CmdRole` 里 `roleProperty.coin`（**resId 10**）的持有量
      * >= `view.priceNow`。
      *
-     * ⚠️ 与 `canBuy` **不是一回事**：老端 `canBuy()` 只看**次数**（它决定 `状态` 切到哪一页），
-     *    钱不够时仍然停在「购买」页、按钮不灰 —— 点下去才提示「金币不足」。
-     *    这里把「够不够钱」单独留一个字段，供页面在 click 里分叉（口径同 `ILeagueStoreRowView.enough`）。
+     * 与 `canBuy` **不是一回事**：老端 `canBuy()` 只看**次数**（它决定 `状态` 切到哪一页），
+     * 钱不够时仍然停在「购买」页、按钮不灰 —— 点下去才提示「金币不足」。
+     * 这里把「够不够钱」单独留一个字段，供页面在 click 里分叉（口径同 `ILeagueStoreRowView.enough`）。
      */
     readonly enough: boolean;
     /** 奖励图标解析用（见 `ILeagueStoreSnapshot.items` 的说明）。 */
@@ -352,10 +319,10 @@ export interface ILeagueDiscountSnapshot {
 /**
  * 联盟任务面板的一次刷新数据 —— 老端 `LayerLeagueTask.updateView() + initList()` 的数据侧。
  *
- * ⚠️ **不发任何请求**：联盟任务就是**通用任务缓存**（老端 `VOLeagueTaskBag.GetCacheName()`
- *    返回 `"CmdTask"`）按 `taskUnion.resId` 反查 ⇒ `loadTask()` 只读 `getTlCmdTask()`。
- *    老端 `init()` 也不发包，只挂 `VOLeagueTaskBag` / `VORoleUnionBag` 的 `OnChanged`。
- *    ⇒ 本端 `onOpen` 读一次、**领奖成功后自己再读一次**（同 P4 三面板口径）。
+ * **不发任何请求**：联盟任务就是**通用任务缓存**（老端 `VOLeagueTaskBag.GetCacheName()`
+ * 返回 `"CmdTask"`）按 `taskUnion.resId` 反查 ⇒ `loadTask()` 只读 `getTlCmdTask()`。
+ * 老端 `init()` 也不发包，只挂 `VOLeagueTaskBag` / `VORoleUnionBag` 的 `OnChanged`。
+ * ⇒ 本端 `onOpen` 读一次、**领奖成功后自己再读一次**（同 P4 三面板口径）。
  */
 export interface ILeagueTaskSnapshot {
     /** 任务行视图（已排序：可领取 → 未完成 → 已领取，见 `buildLeagueTaskRowViews`）。 */
@@ -367,8 +334,8 @@ export interface ILeagueTaskSnapshot {
     /**
      * **有 VO 的任务数** —— 顶部进度条的分母。
      *
-     * ⚠️ 不是表行数：表里有任务但服务端还没下发 `CmdTask` 时，分母会小于行数。
-     *    照抄表行数会让进度条永远不满（见 `leagueTaskProgress` 的注释）。
+     * 不是表行数：表里有任务但服务端还没下发 `CmdTask` 时，分母会小于行数。
+     * 照抄表行数会让进度条永远不满（见 `leagueTaskProgress` 的注释）。
      */
     readonly total: number;
     /** 顶部进度条 `value`（= `min(done, total)`）。 */
@@ -384,16 +351,16 @@ export interface ILeagueTaskSnapshot {
     /**
      * 广告**能力**是否可用（本端恒 `false`，见 `LEAGUE_AD_PLAYBACK_AVAILABLE`）。
      *
-     * ⚠️ 与 `showAd` **是两件事**：`showAd` 是「今天的广告次数还没用」（数据），
-     *    本字段是「这个包会不会真放广告」（能力）。老端不看后者（它有 `CtrlPay.PayforAdVideo`），
-     *    本端没有 ⇒ 两个都为 `true` 才允许点（否则点了也拿不到东西）。
+     * 与 `showAd` **是两件事**：`showAd` 是「今天的广告次数还没用」（数据），
+     * 本字段是「这个包会不会真放广告」（能力）。老端不看后者（它有 `CtrlPay.PayforAdVideo`），
+     * 本端没有 ⇒ 两个都为 `true` 才允许点（否则点了也拿不到东西）。
      */
     readonly adAvailable: boolean;
     /**
      * 底部「每日观看广告跳过剩余次数{0}/{1}」的**剩余**（老端 `GetAdvertRestTimes`）。
      *
      * = `ad` 表 `type = 14`（unionTask）那行的 `limit` − `CmdRole.tlCmdAdvert` 同 type 的已用 `num`
-     *   （与 `HangRepository` 对 `sweep = 11` 的算法同源）。⚠️ `CmdAdvert.num` 是**已用**不是剩余。
+     * （与 `HangRepository` 对 `sweep = 11` 的算法同源）。 `CmdAdvert.num` 是**已用**不是剩余。
      */
     readonly adRest: number;
     /** 同上这一行的**上限**（`ad` 表 `type = 14` 的 `limit`；缺行 / 非法退 **1**，同老端兜底）。 */
@@ -405,17 +372,15 @@ export interface ILeagueTaskSnapshot {
     readonly resources: ReadonlyMap<number, ILeagueGoodsInfo>;
 }
 
-// ============================================================
 // 北伐中原（P6）
-// ============================================================
 
 /**
  * 北伐主面板（`ui/League/LeagueNorthExpedition`）的一次刷新数据 ——
  * 老端 `LayerLeagueNorthernExpedition.updateView()` 的数据侧。
  *
- * ⚠️ 老端 `initAsync()` 发 `RequestActList(NORTHERN_EXPEDITION)`（**只有这一条**），
- *    数值本体全在 `CmdUnionActivity`（`type = 2`）里；本端 `onOpen` 先发一次、
- *    再读缓存（同 P4/P5 的口径：Rsp 落地到缓存后由推送/重读拿到）。
+ * 老端 `initAsync()` 发 `RequestActList(NORTHERN_EXPEDITION)`（**只有这一条**），
+ * 数值本体全在 `CmdUnionActivity`（`type = 2`）里；本端 `onOpen` 先发一次、
+ * 再读缓存（同 P4/P5 的口径：Rsp 落地到缓存后由推送/重读拿到）。
  */
 export interface ILeagueNorthSnapshot {
     /** 已入盟（未入盟时面板只渲染静态骨架）。 */
@@ -433,9 +398,9 @@ export interface ILeagueNorthSnapshot {
     /**
      * 今日**已擂鼓**次数（`CmdRoleUnion.todayDrumTimes`，服务端权威）。
      *
-     * ⚠️ 与 `selfTimes` **不是一个数**：`selfTimes` 是「本次北伐的挑战次数」
-     *    （从 `CmdUnionActivity.tlCmdUnionActInfo` 里数出来的），擂鼓次数在
-     *    `CmdRoleUnion` 上。老端 `按钮_擂鼓` 量的是**这个**（`GetRoleUnion().GetCmd().todayDrumTimes`）。
+     * 与 `selfTimes` **不是一个数**：`selfTimes` 是「本次北伐的挑战次数」
+     * （从 `CmdUnionActivity.tlCmdUnionActInfo` 里数出来的），擂鼓次数在
+     * `CmdRoleUnion` 上。老端 `按钮_擂鼓` 量的是**这个**（`GetRoleUnion().GetCmd().todayDrumTimes`）。
      */
     readonly todayDrumTimes: number;
     /** 「属性加成」整串（`攻击` + 数字）。 */
@@ -454,8 +419,8 @@ export interface ILeagueNorthSnapshot {
      * 「挑战」按钮上的红点 —— 老端 `(com.tm("按钮_挑战.组件_红点") as GObjRD)`
      * ← `hasNorthernExpeditionChallengeRD()`（= 本次北伐还有剩余挑战次数）。
      *
-     * ⚠️ 与 `hasRedDot` 的区别：`hasRedDot` 是「挑战 ∪ 奖励」的并（入口红点用），
-     *    这颗**只**吃挑战那一半 —— 奖励可领时不该把红点打到「挑战」按钮上。
+     * 与 `hasRedDot` 的区别：`hasRedDot` 是「挑战 ∪ 奖励」的并（入口红点用），
+     * 这颗**只**吃挑战那一半 —— 奖励可领时不该把红点打到「挑战」按钮上。
      */
     readonly challengeRedDot: boolean;
     /** 奖励页两档红点（主面板左侧 `btn_reward` 上那颗只吃「奖励」那一半）。 */
@@ -479,8 +444,8 @@ export interface ILeagueNorthRankSnapshot {
     /**
      * 奖励图标 / 品质框解析用（见 `ILeagueStoreSnapshot.items` 的说明）。
      *
-     * ⚠️ 排行的奖励来自 `bfUnionRankAward`（只有 `resId` + `number`，**没有** `quality`）
-     *    ⇒ 品质框只能靠这两张表反查。不带上它们，第 0 页两颗物品框会全部退到 1 档框。
+     * 排行的奖励来自 `bfUnionRankAward`（只有 `resId` + `number`，**没有** `quality`）
+     * ⇒ 品质框只能靠这两张表反查。不带上它们，第 0 页两颗物品框会全部退到 1 档框。
      */
     readonly items: ReadonlyMap<number, ILeagueGoodsInfo>;
     readonly resources: ReadonlyMap<number, ILeagueGoodsInfo>;
@@ -505,10 +470,10 @@ export interface ILeagueNorthRewardSnapshot {
 /**
  * 联盟**入口行**的红点状态（老端 `TabLeagueMain.updateRD()` + `ModelLeague.has*RD()`）。
  *
- * ⚠️ 刻意**不复用** `loadDiscount()`：后者除了两个数字之外还会走 `loadIconTables()`
- *    预载奖励图帧（`resources.load` + 8 张品质框）。联盟主页每次 `onLoad` 都要刷入口红点，
- *    把那笔开销挂上来是白花。本方法只读 `gameConfig`（一张小表）+ `CmdRoleUnion`（一行）
- *    + `taskUnion` / `taskUnionProgress`（两张小表）+ `CmdTask`（通用任务缓存）。
+ * 刻意**不复用** `loadDiscount()`：后者除了两个数字之外还会走 `loadIconTables()`
+ * 预载奖励图帧（`resources.load` + 8 张品质框）。联盟主页每次 `onLoad` 都要刷入口红点，
+ * 把那笔开销挂上来是白花。本方法只读 `gameConfig`（一张小表）+ `CmdRoleUnion`（一行）
+ * + `taskUnion` / `taskUnionProgress`（两张小表）+ `CmdTask`（通用任务缓存）。
  *
  * 只有「每日砍价」与「联盟任务」两条是**真判据**；其余见
  * `LeagueTable.hasLeagueDiscountRedDot` / `hasLeagueTaskRedDot` 的注释。
@@ -517,10 +482,10 @@ export interface ILeagueEntryRedDots {
     /**
      * 「每日砍价」入口 —— 老端 `hasDiscountRD()` = `todayBargainTimes < unionBargainBuyCount`。
      *
-     * ⚠️ 额外加了「必须已入盟」这道闸：老端 `TabLeagueMain.updateRD()` 自己没判，
-     *    但它是由 `RDLeague` 驱动的，而 `RDLeague.OnComputeResult()` 第一句就是
-     *    `if (!IsJoinedLeague()) return 0`。未入盟时 `todayBargainTimes` 恒 0 ⇒
-     *    单看表达式会**恒亮**（0 < 配置的非零上限），那是错的。
+     * 额外加了「必须已入盟」这道闸：老端 `TabLeagueMain.updateRD()` 自己没判，
+     * 但它是由 `RDLeague` 驱动的，而 `RDLeague.OnComputeResult()` 第一句就是
+     * `if (!IsJoinedLeague()) return 0`。未入盟时 `todayBargainTimes` 恒 0 ⇒
+     * 单看表达式会**恒亮**（0 < 配置的非零上限），那是错的。
      */
     readonly discount: boolean;
 
@@ -579,10 +544,10 @@ export interface ILeagueRepository {
     /**
      * 申请加入联盟（联盟信息弹窗的「加入」／加入联盟页的「快速加入」）。
      *
-     * ⚠️ 入参是**数组**：协议是 `CmdUnionJoinReqMsg { unionIds: Long[] }`，
-     *    老端 `LayerLeagueInfoUI.onClickJoin()` 发的是 `RequestLeagueJoin([cmd.id])`
-     *    （包一层单元素数组，不是裸 id）；「快速加入」则是 `RequestLeagueJoin(arr)`（最多 5 条）。
-     *    这里保留数组形状，两条调用链共用同一个方法。
+     * 入参是**数组**：协议是 `CmdUnionJoinReqMsg { unionIds: Long[] }`，
+     * 老端 `LayerLeagueInfoUI.onClickJoin()` 发的是 `RequestLeagueJoin([cmd.id])`
+     * （包一层单元素数组，不是裸 id）；「快速加入」则是 `RequestLeagueJoin(arr)`（最多 5 条）。
+     * 这里保留数组形状，两条调用链共用同一个方法。
      */
     join(unionIds: readonly string[], caller?: object): Promise<LeagueRequestResult>;
 
@@ -611,9 +576,7 @@ export interface ILeagueRepository {
     /** 编辑信息（`type` 取 `LeagueEditType`）。 */
     edit(type: number, content: string, caller?: object): Promise<LeagueRequestResult>;
 
-    // ============================================================
     // P4：商店 / 捐献 / 砍价
-    // ============================================================
 
     /** 商店快照（读 `unionShop` + `CmdShop(8)` + `roleProperty` + `CmdRole`，**不发包**）。 */
     loadStore(): Promise<ILeagueStoreSnapshot>;
@@ -621,8 +584,8 @@ export interface ILeagueRepository {
     /**
      * 买一件（`CmdShopBuyReqMsg { id, cmdShopType: 8, buyTimes: 1 }`）。
      *
-     * ⚠️ 老端 `requestBuy` 里那段 `if (id == 1) { … gemBox … }` 是**宝石商店**专用的价格改写，
-     *    只在 `StoreType.gemBox` 下才走。**联盟商店不走那一支** ⇒ 本端不移植那段。
+     * 老端 `requestBuy` 里那段 `if (id == 1) { … gemBox … }` 是**宝石商店**专用的价格改写，
+     * 只在 `StoreType.gemBox` 下才走。**联盟商店不走那一支** ⇒ 本端不移植那段。
      *
      * 成功时返回奖励明细，Controller 展示一次。
      */
@@ -636,10 +599,10 @@ export interface ILeagueRepository {
      *
      * 成功时返回配置奖励，Controller 显示成功提示与奖励。
      *
-     * ⚠️ `CmdUnionDonateRspMsg` **只有 `ret`、没有奖励字段** —— 奖励是**本地**按
-     *    `gameConfig` 的 `unionDonateGainCoin` / `unionDonateGainExp` 算出来的
-     *    （老端 `ModelLeague.showCommonDonateReward`，它的 `adv` 形参**根本没用到**）。
-     *    所以两个数在 `loadDonate()` 时缓存（`donateGain`），`requestDonate` 直接取用。
+     * `CmdUnionDonateRspMsg` **只有 `ret`、没有奖励字段** —— 奖励是**本地**按
+     * `gameConfig` 的 `unionDonateGainCoin` / `unionDonateGainExp` 算出来的
+     * （老端 `ModelLeague.showCommonDonateReward`，它的 `adv` 形参**根本没用到**）。
+     * 所以两个数在 `loadDonate()` 时缓存（`donateGain`），`requestDonate` 直接取用。
      */
     requestDonate(adv: boolean, caller?: object): Promise<ILeagueRewardResult>;
 
@@ -656,24 +619,22 @@ export interface ILeagueRepository {
     /** 拉活动列表（`type` 取 `LeagueACT_TYPE`；数据由 `CmdUnionActivity` 推送落地）。 */
     requestActList(type: number, caller?: object): Promise<LeagueRequestResult>;
 
-    // ============================================================
     // P5：联盟任务
-    // ============================================================
 
     /**
      * 任务快照（读 `taskUnion` + `taskUnionProgress` + `CmdTask` + `CmdRoleUnion`，**不发包**）。
      *
-     * ⚠️ 联盟任务**没有独立请求**：老端 `VOLeagueTaskBag.GetCacheName()` 返回 `"CmdTask"`
-     *    ⇒ 就是通用任务缓存按 `taskUnion.resId` 反查。所有数据都在缓存里、进面板即可渲染。
+     * 联盟任务**没有独立请求**：老端 `VOLeagueTaskBag.GetCacheName()` 返回 `"CmdTask"`
+     * ⇒ 就是通用任务缓存按 `taskUnion.resId` 反查。所有数据都在缓存里、进面板即可渲染。
      */
     loadTask(): Promise<ILeagueTaskSnapshot>;
 
     /**
      * 领某一个任务的奖励（`CmdTaskUnionGetRewardReqMsg { resId }`）。
      *
-     * ⚠️ 协议里 `CmdCommonState.FINISH` 的语义是「**可领奖**」不是「已完成」——
-     *    所以「能领」的判据是 `rewardState === 1`（见 `LeagueTable.leagueTaskStateOf`），
-     *    不是 `>= 1`。领完服务端把 `rewardState` 推到 `2`（`REWARDED`）。
+     * 协议里 `CmdCommonState.FINISH` 的语义是「**可领奖**」不是「已完成」——
+     * 所以「能领」的判据是 `rewardState === 1`（见 `LeagueTable.leagueTaskStateOf`），
+     * 不是 `>= 1`。领完服务端把 `rewardState` 推到 `2`（`REWARDED`）。
      *
      * 成功时返回响应奖励，由 Controller 展示一次。
      */
@@ -683,33 +644,31 @@ export interface ILeagueRepository {
      * 任务「看广告」跳过 —— `CmdRoleWatchAdvertReqMsg { type: 14, id: resId }`
      * （老端 `btn_adv.onClick` 的 `RequestWatchAdvert(unionTask, false, resId)`）。
      *
-     * ⚠️ **调用方必须先把广告真放完**（`LeagueAd.playLeagueAd()` 返回 `true` 才发）：
-     *    这个请求本身就是「记一次广告」的凭据，裸发等于白送。
+     * **调用方必须先把广告真放完**（`LeagueAd.playLeagueAd()` 返回 `true` 才发）：
+     * 这个请求本身就是「记一次广告」的凭据，裸发等于白送。
      */
     requestTaskAdvert(resId: number, caller?: object): Promise<LeagueRequestResult>;
 
     /**
      * 领进度宝箱奖励（`CmdTaskUnionGetProgressRewardReqMsg { subType }`）。
      *
-     * ⚠️ 请求体只有 `subType`、**没有宝箱 id** —— 服务端按
-     *    `CmdRoleUnion.todayTaskGetProgressCount` 自己推进到下一个宝箱。
-     *    所以调用点不能「按点中的那个箱子」传参，只能传 `LeagueUnionTaskType.leagueTask`。
+     * 请求体只有 `subType`、**没有宝箱 id** —— 服务端按
+     * `CmdRoleUnion.todayTaskGetProgressCount` 自己推进到下一个宝箱。
+     * 所以调用点不能「按点中的那个箱子」传参，只能传 `LeagueUnionTaskType.leagueTask`。
      *
      * 成功时返回响应奖励，由 Controller 展示一次。
      */
     requestTaskProgressReward(subType: number, caller?: object): Promise<ILeagueRewardResult>;
 
-    // ============================================================
     // P6：北伐中原（主面板 + 排行 / 奖励两个子页）
-    // ============================================================
 
     /**
      * 北伐主面板快照（读 `CmdUnionActivity(2)` + `taskUnion` + `CmdTask` + `gameConfig` +
      * `guankaReward` + `monster`，**不发包**）。
      *
-     * ⚠️ 老端进面板时**发一条** `RequestActList(NORTHERN_EXPEDITION)`（`initAsync()` 里）；
-     *    本端把「发包」与「读数」分开：页面 `onOpen` 里先 `requestActList` 再 `loadNorthExpedition()`
-     *    （同 P4 三面板的做法 —— Rsp 落地到 `CmdUnionActivity` 缓存后才读得到）。
+     * 老端进面板时**发一条** `RequestActList(NORTHERN_EXPEDITION)`（`initAsync()` 里）；
+     * 本端把「发包」与「读数」分开：页面 `onOpen` 里先 `requestActList` 再 `loadNorthExpedition()`
+     * （同 P4 三面板的做法 —— Rsp 落地到 `CmdUnionActivity` 缓存后才读得到）。
      */
     loadNorthExpedition(): Promise<ILeagueNorthSnapshot>;
 
@@ -766,8 +725,8 @@ function readSelfRoleId(): string {
 /**
  * 读 `CmdRole` 的第一行本身（创建消耗要按 `roleProperty.key` 从这一行取持有量）。
  *
- * ⚠️ 选行口径与原 `readSelfRoleId` **完全一致**：优先「id 非空且非 0」的那一行，
- *    全表都没有合法 id 时才退回第一行 —— 免得两条链路读到不同的行（缓存被塞了脏行时尤其明显）。
+ * 选行口径与原 `readSelfRoleId` **完全一致**：优先「id 非空且非 0」的那一行，
+ * 全表都没有合法 id 时才退回第一行 —— 免得两条链路读到不同的行（缓存被塞了脏行时尤其明显）。
  */
 function readSelfRoleRow(): CmdRole | null {
     try {
@@ -794,11 +753,11 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 一次捐献到手的两个数（`gameConfig.unionDonateGainCoin` / `unionDonateGainExp`）。
      *
-     * ⚠️ `CmdUnionDonateRspMsg` 里**没有奖励**（只有 `ret`）⇒ 弹窗内容只能本地算，
-     *    所以在 `loadDonate()` 时缓存一份（等价于老端 `showCommonDonateReward` 里
-     *    现读 `RefMgrgameConfig` —— 那边表是全局常驻，这边取值要 await，只能先存）。
-     *    捐献界面一定会先 `loadDonate()` 再发包（页面 `onOpen` → `reload()`），
-     *    所以 `requestDonate` 时它必然已就位；万一没有，就只弹提示、不弹空奖励窗。
+     * `CmdUnionDonateRspMsg` 里**没有奖励**（只有 `ret`）⇒ 弹窗内容只能本地算，
+     * 所以在 `loadDonate()` 时缓存一份（等价于老端 `showCommonDonateReward` 里
+     * 现读 `RefMgrgameConfig` —— 那边表是全局常驻，这边取值要 await，只能先存）。
+     * 捐献界面一定会先 `loadDonate()` 再发包（页面 `onOpen` → `reload()`），
+     * 所以 `requestDonate` 时它必然已就位；万一没有，就只弹提示、不弹空奖励窗。
      */
     private donateGain: { readonly coin: number; readonly exp: number } | null = null;
 
@@ -848,9 +807,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    // ============================================================
     // 查询（全是空请求体的全量拉）
-    // ============================================================
 
     async requestDetail(caller?: object): Promise<LeagueRequestResult> {
         return this.send(() => new RequestUnionDetail({}, caller));
@@ -871,7 +828,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 搜索：`CmdUnionSearchReqMsg` 只有 `id` 一个字段，**按 id 搜**。
      *
-     * ⚠️ 缓存键用**未清洗的原串**（老端口径）—— 界面上的输入框会做「非正整数就清空」
+     * 缓存键用**未清洗的原串**（老端口径）—— 界面上的输入框会做「非正整数就清空」
      * （`onInputTextChange`），所以到这里的串已经被上游保证是数字串了；但缓存键仍按原串存，
      * 与 `pickUnionListForSearch` 的查法一致。
      */
@@ -892,9 +849,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         this.searchCache.clear();
     }
 
-    // ============================================================
     // 成员管理
-    // ============================================================
 
     async kick(memberId: string, caller?: object): Promise<LeagueRequestResult> {
         return this.memberRequest((id) => new RequestUnionKick({ memberId: id } as any, caller), memberId);
@@ -922,9 +877,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 申请加入联盟。
      *
-     * ⚠️ 每个 id 都过一遍 `toIdString`（口径同 `memberRequest`）—— 裸数字 / `Long` 都收敛成
-     *    十进制字符串；**整条请求体一个合法 id 都没有时直接早退**（不发包，
-     *    与 `memberRequest` 的空 id 守卫同性质：宁可不发，也别发一条 `unionIds: []` 让服务端记一笔）。
+     * 每个 id 都过一遍 `toIdString`（口径同 `memberRequest`）—— 裸数字 / `Long` 都收敛成
+     * 十进制字符串；**整条请求体一个合法 id 都没有时直接早退**（不发包，
+     * 与 `memberRequest` 的空 id 守卫同性质：宁可不发，也别发一条 `unionIds: []` 让服务端记一笔）。
      */
     async join(unionIds: readonly string[], caller?: object): Promise<LeagueRequestResult> {
         const ids: string[] = [];
@@ -936,17 +891,15 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return this.send(() => new RequestUnionJoin({ unionIds: ids } as any, caller));
     }
 
-    // ============================================================
     // 创建联盟（未入盟态）
-    // ============================================================
 
     /**
      * 创建联盟。
      *
-     * ⚠️ 名称为空 / 是 `***`（违禁词占位）时**直接早退**（口径同老端 `LayerLeagueCreat.onClickCreat`
-     *    的守卫：`if (!labName || labName == "***") return`）—— 页面层会先拦一道并给提示，
-     *    这里再兜一道，免得被别的调用方绕过。
-     * ⚠️ `icon` 过一遍 `leagueCreateBannerIndexOf` 夹到 `[0, 7]`：FGUI `颜色` controller 只有 8 页。
+     * 名称为空 / 是 `***`（违禁词占位）时**直接早退**（口径同老端 `LayerLeagueCreat.onClickCreat`
+     * 的守卫：`if (!labName || labName == "***") return`）—— 页面层会先拦一道并给提示，
+     * 这里再兜一道，免得被别的调用方绕过。
+     * `icon` 过一遍 `leagueCreateBannerIndexOf` 夹到 `[0, 7]`：FGUI `颜色` controller 只有 8 页。
      */
     async requestCreat(icon: number, name: string, quick: boolean, caller?: object): Promise<LeagueRequestResult> {
         const leagueName = typeof name === 'string' ? name : '';
@@ -972,9 +925,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return buildLeagueCostView(property, has, need);
     }
 
-    // ============================================================
     // 申请审批
-    // ============================================================
 
     async approveApply(applyId: string, agree: boolean, caller?: object): Promise<LeagueRequestResult> {
         return this.memberRequest(
@@ -987,9 +938,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return this.send(() => new RequestUnionApproveJoinOneKey({ agree } as any, caller));
     }
 
-    // ============================================================
     // 联盟设置
-    // ============================================================
 
     async setQuickJoin(quick: boolean, caller?: object): Promise<LeagueRequestResult> {
         return this.send(() => new RequestUnionSetQuickJoin({ quick } as any, caller));
@@ -1000,9 +949,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return this.send(() => new RequestUnionEdit({ type, content } as any, caller));
     }
 
-    // ============================================================
     // P4：商店 / 捐献 / 砍价
-    // ============================================================
 
     /**
      * 商店快照 —— 老端 `LayerLeagueStore.updateView() + initList()` 的数据侧。
@@ -1034,11 +981,11 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 购买 —— `CmdShopBuyReqMsg { id, cmdShopType: 8, buyTimes: 1 }`
      * （老端 `ModelStore.requestBuy(id, StoreType.League, false, **true**)`）。
      *
-     * ★ 老端第 4 个参数就是 `showReward`，响应回调里
-     *   `if (showReward && rsp.tlCmdGoods?.length > 0) → CtrlAlert.openLayerShowReward2(config)`
-     *   （`switch (storeType)` 里联盟走 `default` ⇒ 不需要额外按钮配置）。
-     *   本工程由 Controller 消费返回奖励并展示 ShowRewardPage。
-     *   ⚠️ 曾经这里把响应整个丢掉、只回三态 ⇒ **买成功却不弹「获得奖励」**（用户报的缺陷）。
+     * 老端第 4 个参数就是 `showReward`，响应回调里
+     * `if (showReward && rsp.tlCmdGoods?.length > 0) → CtrlAlert.openLayerShowReward2(config)`
+     * （`switch (storeType)` 里联盟走 `default` ⇒ 不需要额外按钮配置）。
+     * 本工程由 Controller 消费返回奖励并展示 ShowRewardPage。
+     * 曾经这里把响应整个丢掉、只回三态 ⇒ **买成功却不弹「获得奖励」**（用户报的缺陷）。
      */
     async buyStoreGoods(id: number, caller?: object): Promise<ILeagueRewardResult> {
         const goodsId = Number.isFinite(id) ? Math.trunc(id) : 0;
@@ -1049,7 +996,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
                 cmdShopType: LEAGUE_SHOP_TYPE_UNION,
                 buyTimes: 1,
             } as any, caller, onRsp),
-            // ⚠️ `CmdShopBuyRspMsg` **没有 `ret`**（见 Cmd.d.ts）⇒ 只能按奖励列表是否为空判
+            // `CmdShopBuyRspMsg` **没有 `ret`**（见 Cmd.d.ts）⇒ 只能按奖励列表是否为空判
             (rsp) => rsp.tlCmdGoods ?? [],
         );
     }
@@ -1059,8 +1006,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      *
      * `gameConfig` 的 6 个键 + `CmdRoleUnion` 的两个计数 + `roleProperty`（两件奖励的图标）。
      *
-     * ⚠️ 老端的「免费：{剩余}/{上限}」不在这里 —— 那两个数来自**广告子系统**
-     *    （`RefMgrad` + `VORole.GetAdvertTimes`），Demo3.8 没迁（见 `LEAGUE_AD_PLAYBACK_AVAILABLE`）。
+     * 老端的「免费：{剩余}/{上限}」不在这里 —— 那两个数来自**广告子系统**
+     * （`RefMgrad` + `VORole.GetAdvertTimes`），Demo3.8 没迁（见 `LEAGUE_AD_PLAYBACK_AVAILABLE`）。
      */
     async loadDonate(): Promise<ILeagueDonateSnapshot> {
         const config = parseLeagueP4Config(await readRows(LEAGUE_GAME_CONFIG_TABLE));
@@ -1068,10 +1015,10 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         const todayDonateTimes = countOf(roleUnion?.todayDonateTimes);
         const todayDonateAdvTimes = countOf(roleUnion?.todayDonateAdvTimes);
 
-        // ⚠️ 捐的钱是 `roleProperty.coin`（= **10** 金币）—— 老端 `onClickDonate` 里是
-        //    `CheckHaveEnoughCostAndOpenAlert([{resId: roleProperty.coin, number: donateConst}])`，
-        //    按钮上的 `icon` 也是这个（`LayerLeagueDonate.updateView` 的 `GetGoodsIconKeyByRefId(roleProperty.coin)`）。
-        //    **不是** `unionCoin`(11)：11 是「捐出去之后到手的奖励」那一件（见下面的 `coinResId`）。
+        // 捐的钱是 `roleProperty.coin`（= **10** 金币）—— 老端 `onClickDonate` 里是
+        // `CheckHaveEnoughCostAndOpenAlert([{resId: roleProperty.coin, number: donateConst}])`，
+        // 按钮上的 `icon` 也是这个（`LayerLeagueDonate.updateView` 的 `GetGoodsIconKeyByRefId(roleProperty.coin)`）。
+        // **不是** `unionCoin`(11)：11 是「捐出去之后到手的奖励」那一件（见下面的 `coinResId`）。
         const owned = await this.ownedResourceOf(LEAGUE_COIN_RES_ID);
 
         const maxCount = config.donateMaxCount;
@@ -1085,8 +1032,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
             todayDonateAdvTimes,
             remain,
             remainText: `${LEAGUE_DONATE_COUNT_PREFIX}${remain}/${maxCount}`,
-            // ⚠️ 道具名走**语言表**（「联盟金币」/「联盟贡献」），不是 `roleProperty.name`
-            //    （`resId=11` 那张表的 name 是「联盟银币」）—— 老端也是 `FW.G_W(...)`。
+            // 道具名走**语言表**（「联盟金币」/「联盟贡献」），不是 `roleProperty.name`
+            // （`resId=11` 那张表的 name 是「联盟银币」）—— 老端也是 `FW.G_W(...)`。
             coinNameText: `${LEAGUE_DONATE_COIN_PREFIX}${LEAGUE_GOODS_COUNT_SEP}${config.donateGainCoin}`,
             expNameText: `${LEAGUE_DONATE_EXP_PREFIX}${LEAGUE_GOODS_COUNT_SEP}${config.donateGainExp}`,
             coinResId: LEAGUE_UNION_COIN_RES_ID,
@@ -1120,9 +1067,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 砍价快照 —— 老端 `LayerLeagueDiscount.updateView()` 的数据侧。
      *
-     * ⚠️ 老端把 `RefMgrunionDiscount` 的**全部行**都 preload，但 `updateView` 只取
-     *    `VOUnionActivityBag.GetTypeArray(DISCOUNT)[0]`（**当前进行中的那一轮**）⇒
-     *    商品取 `unionDiscount` 表的**第一行**（按 id 升序），与老端口径一致。
+     * 老端把 `RefMgrunionDiscount` 的**全部行**都 preload，但 `updateView` 只取
+     * `VOUnionActivityBag.GetTypeArray(DISCOUNT)[0]`（**当前进行中的那一轮**）⇒
+     * 商品取 `unionDiscount` 表的**第一行**（按 id 升序），与老端口径一致。
      */
     async loadDiscount(): Promise<ILeagueDiscountSnapshot> {
         const rows = parseUnionDiscountRows(await readRows(LEAGUE_UNION_DISCOUNT_TABLE));
@@ -1159,9 +1106,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 入口行红点（见 `ILeagueEntryRedDots`）。**不发包、不加载图**。
      *
-     * ⚠️ `task` 那一支要把 `taskUnion` / `taskUnionProgress` 两张表 + `CmdTask` 缓存都读一遍
-     *    （`hasLeagueTaskRedDot` 要「有任务可领 ∪ 有宝箱可领」两个判据）。两张表都很小、
-     *    `getRefAllAsync` 有缓存 ⇒ 这点开销比 `loadDiscount()` 的图标预载小得多。
+     * `task` 那一支要把 `taskUnion` / `taskUnionProgress` 两张表 + `CmdTask` 缓存都读一遍
+     * （`hasLeagueTaskRedDot` 要「有任务可领 ∪ 有宝箱可领」两个判据）。两张表都很小、
+     * `getRefAllAsync` 有缓存 ⇒ 这点开销比 `loadDiscount()` 的图标预载小得多。
      */
     async loadLeagueEntryRedDots(): Promise<ILeagueEntryRedDots> {
         const config = parseLeagueP4Config(await readRows(LEAGUE_GAME_CONFIG_TABLE));
@@ -1173,8 +1120,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         const progressRows = parseTaskUnionProgressRows(await readRows(LEAGUE_TASK_PROGRESS_TABLE));
         const cmds = this.readTaskCmds();
 
-        // ⚠️ 北伐用的是 `taskUnion` 的**另两档**（`subType` 2/3）⇒ 单独解析一次。
-        //    两张表同一份文件、`getRefAllAsync` 有缓存 ⇒ 多读一次的代价只是多遍历 33 行。
+        // 北伐用的是 `taskUnion` 的**另两档**（`subType` 2/3）⇒ 单独解析一次。
+        // 两张表同一份文件、`getRefAllAsync` 有缓存 ⇒ 多读一次的代价只是多遍历 33 行。
         const northRows = parseNorthTaskUnionRows(await readRows(LEAGUE_TASK_UNION_TABLE));
         const northConfig = parseLeagueNorthConfig(await readRows(LEAGUE_GAME_CONFIG_TABLE));
         const northAct = parseLeagueActivity(this.readUnionActivity(LeagueACT_TYPE.NORTHERN_EXPEDITION));
@@ -1203,10 +1150,10 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 砍价 / 购买（`buy = true` 即购买）。
      *
-     * ★ `buy = true`（真买）时服务端把成交物放在响应的 `tlCmdGoods` 里 ——
-     *   响应成功才返回物品，展示由会话 Controller 负责。
-     *   砍价（`buy = false`）没有奖励 ⇒ 回调自然空跑。
-     *   ⚠️ 同一个方法两种语义，**不能**因为「砍价不弹」就整条不接。
+     * `buy = true`（真买）时服务端把成交物放在响应的 `tlCmdGoods` 里 ——
+     * 响应成功才返回物品，展示由会话 Controller 负责。
+     * 砍价（`buy = false`）没有奖励 ⇒ 回调自然空跑。
+     * 同一个方法两种语义，**不能**因为「砍价不弹」就整条不接。
      */
     async requestBargain(buy: boolean, caller?: object): Promise<ILeagueRewardResult> {
         return this.sendWithRewards<CmdUnionBargainRspMsg>(
@@ -1220,9 +1167,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return this.send(() => new RequestUnionActList({ type: value } as any, caller));
     }
 
-    // ============================================================
     // P5：联盟任务
-    // ============================================================
 
     /**
      * 任务快照 —— 老端 `LayerLeagueTask.updateView() + initList()` 的数据侧。
@@ -1230,7 +1175,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 四张来源：`taskUnion`（任务表）/ `taskUnionProgress`（三个宝箱）/ `CmdTask`（进度与状态）/
      * `CmdRoleUnion`（`todayTaskAdvTimes` / `todayTaskGetProgressCount`）。**一张都不发请求**。
      *
-     * ⚠️ 排序、百分比、红点全部交给 `LeagueTable` 的纯函数（可单测），这里只负责取数与拼装。
+     * 排序、百分比、红点全部交给 `LeagueTable` 的纯函数（可单测），这里只负责取数与拼装。
      */
     async loadTask(): Promise<ILeagueTaskSnapshot> {
         const taskRows: ILeagueTaskUnionRow[] = parseTaskUnionRows(await readRows(LEAGUE_TASK_UNION_TABLE));
@@ -1252,8 +1197,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
             boxes,
             done,
             total,
-            // ⚠️ 老端 `progress.value = Math.min(done, total)` 里的 `Math.min` 不是多余的：
-            //    服务端有可能先推「已领奖」再把任务行推下来，中间态 `done > total`。
+            // 老端 `progress.value = Math.min(done, total)` 里的 `Math.min` 不是多余的：
+            // 服务端有可能先推「已领奖」再把任务行推下来，中间态 `done > total`。
             progressValue: Math.min(done, total),
             progressMax: total,
             showAd: countOf(roleUnion?.todayTaskAdvTimes) <= 0,
@@ -1293,9 +1238,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         );
     }
 
-    // ============================================================
     // P6：北伐中原
-    // ============================================================
 
     /**
      * 北伐主面板快照 —— 老端 `LayerLeagueNorthernExpedition.updateView()` + `updateTime()` 的数据侧。
@@ -1304,8 +1247,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * （boss 名）/ `taskUnion`（`subType` 2/3，红点用）/ `CmdTask`（那两档的进度）/ `CmdRoleUnion`
      * （`todayDrumTimes` 之类）+ `item` / `roleProperty`（奖励图标）。**一张都不发请求**。
      *
-     * ⚠️ 「今日挑战奖励」老端是**按下标硬取** `reward[0]` / `reward[1]` 铺两个物品框
-     *    （`com_goods` / `com_goods1`）⇒ 本端保留数组、由页面按下标取前两个。
+     * 「今日挑战奖励」老端是**按下标硬取** `reward[0]` / `reward[1]` 铺两个物品框
+     * （`com_goods` / `com_goods1`）⇒ 本端保留数组、由页面按下标取前两个。
      */
     async loadNorthExpedition(): Promise<ILeagueNorthSnapshot> {
         const config = parseLeagueNorthConfig(await readRows(LEAGUE_GAME_CONFIG_TABLE));
@@ -1348,9 +1291,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
                 taskRows,
                 cmds,
             ),
-            // ⚠️ 与 `rewardRedDot` 同口径（**不加 `joined`**）：这两颗都是**面板内**红点，
-            //    面板只可能从「已入盟」的联盟入口进；入口红点 `hasRedDot` 才需要那道闸。
-            //    `hasLeagueNorthChallengeRedDot` 自带 `if (!act) return false`（活动没开不亮）。
+            // 与 `rewardRedDot` 同口径（**不加 `joined`**）：这两颗都是**面板内**红点，
+            // 面板只可能从「已入盟」的联盟入口进；入口红点 `hasRedDot` 才需要那道闸。
+            // `hasLeagueNorthChallengeRedDot` 自带 `if (!act) return false`（活动没开不亮）。
             challengeRedDot: hasLeagueNorthChallengeRedDot(act, selfRoleId, config.enterMaxCount),
             rewardRedDot,
             items,
@@ -1366,8 +1309,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         const roleRedDot = hasLeagueNorthRewardRedDot(rows, cmds, 'role');
         const { items, resources } = await this.loadIconTables();
         return {
-            // ⚠️ 两档**各自过滤**（老端 `refArray.filter(t => t.subType == subType)`），
-            //    不是「一次全过滤 + 页签切显示」—— 两档的行数差很多（现网 20 vs 5）。
+            // 两档**各自过滤**（老端 `refArray.filter(t => t.subType == subType)`），
+            // 不是「一次全过滤 + 页签切显示」—— 两档的行数差很多（现网 20 vs 5）。
             leagueRows: buildLeagueNorthRewardRowViews(northRewardRowsOf(rows, 'league'), cmds),
             roleRows: buildLeagueNorthRewardRowViews(northRewardRowsOf(rows, 'role'), cmds),
             leagueRedDot,
@@ -1391,8 +1334,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         const rsp = await this.requestRsp<any>((done, fail) => new RequestGetRank({
             rankType,
             showNum: LEAGUE_NORTH_RANK_SHOW_NUM,
-            // ⚠️ 填**角色 id**（不是 unionId）—— 照抄老端 `ModelRole.GetRole().GetCmd().id`，
-            //    见 `RequestGetRank` 的说明（`unionId` 这个字段名在服务端被当角色 id 用）。
+            // 填**角色 id**（不是 unionId）—— 照抄老端 `ModelRole.GetRole().GetCmd().id`，
+            // 见 `RequestGetRank` 的说明（`unionId` 这个字段名在服务端被当角色 id 用）。
             unionId: readSelfRoleId(),
         } as any, caller, done, fail));
 
@@ -1471,9 +1414,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 缓存里的 `CmdTask` 全表 —— 联盟任务**没有独立缓存**，就是它按 `resId` 反查。
      *
-     * ⚠️ 只保留 `resId` / `count` / `rewardState` 三个字段，**不裁剪到 `taskUnion` 的行**：
-     *    过滤交给 `LeagueTable`（`buildLeagueTaskRowViews` 用 `Map` 反查，表外的任务自然落空），
-     *    这样本函数与「表里有哪些联盟任务」解耦（表热更后不必重进面板）。
+     * 只保留 `resId` / `count` / `rewardState` 三个字段，**不裁剪到 `taskUnion` 的行**：
+     * 过滤交给 `LeagueTable`（`buildLeagueTaskRowViews` 用 `Map` 反查，表外的任务自然落空），
+     * 这样本函数与「表里有哪些联盟任务」解耦（表热更后不必重进面板）。
      */
     private readTaskCmds(): ILeagueTaskCmd[] {
         try {
@@ -1487,9 +1430,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
                 const state = Number(row.rewardState);
                 out.push({
                     resId: Math.trunc(resId),
-                    // ⚠️ `count` 是 protobuf 的 `Long`：`countOf` 走 `Number(value)`，
-                    //    protobufjs 的 `Long#valueOf()` 会给出 number ⇒ 能过；
-                    //    直接 `value as number` 则会在比较里得到 `NaN`（同砍价倒计时那条教训）。
+                    // `count` 是 protobuf 的 `Long`：`countOf` 走 `Number(value)`，
+                    // protobufjs 的 `Long#valueOf()` 会给出 number ⇒ 能过；
+                    // 直接 `value as number` 则会在比较里得到 `NaN`（同砍价倒计时那条教训）。
                     count: countOf(row.count),
                     rewardState: Number.isFinite(state) ? Math.trunc(state) : 0,
                 });
@@ -1508,9 +1451,9 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 1. `roleProperty` 表里按 `resId` 找那一行，取它的 `key`（如 `resId=10 → "coin"`）；
      * 2. 用这个 `key` 去 `CmdRole`（我自己的角色行）上取字段值。
      *
-     * ⚠️ **不能拿 `resId` 当字段名去猜**（`CmdRole[10]` 恒 `undefined`）——
-     *    `resId → key` 这一步才是映射本体（`LeagueTable.findLeagueProperty`）。
-     * ⚠️ 表 / 角色行读不到时 `key` 落空串 ⇒ `rolePropertyAmount` 返回 0（不抛、不猜）。
+     * **不能拿 `resId` 当字段名去猜**（`CmdRole[10]` 恒 `undefined`）——
+     * `resId → key` 这一步才是映射本体（`LeagueTable.findLeagueProperty`）。
+     * 表 / 角色行读不到时 `key` 落空串 ⇒ `rolePropertyAmount` 返回 0（不抛、不猜）。
      *
      * P4 用它两处：砍价的 `enough`（`resId 10` 金币）、捐献的 `enough`（`resId 11` 联盟银币）。
      */
@@ -1591,8 +1534,8 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * `roleId → 成员名` 的查表函数。
      *
-     * ⚠️ 返回 `undefined`（不是空串）表示「查不到」—— `buildLeagueDiscountRows` 靠它
-     *    把整条丢掉（老端 `if (member)` 同口径）。名字是空串的成员**照留**。
+     * 返回 `undefined`（不是空串）表示「查不到」—— `buildLeagueDiscountRows` 靠它
+     * 把整条丢掉（老端 `if (member)` 同口径）。名字是空串的成员**照留**。
      */
     private memberNameLookup(): (roleId: string) => string | null | undefined {
         const members = normalizeLeagueMembers(readCacheRows('CmdUnionMember'));
@@ -1601,9 +1544,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         return (roleId: string) => byRole.get(roleId);
     }
 
-    // ============================================================
     // 内部工具
-    // ============================================================
 
     private async appoint(
         memberId: string,
@@ -1620,7 +1561,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
     /**
      * 把 id 过一遍 `toIdString` 再发。
      *
-     * ⚠️ 必须发**字符串**：`protoCompiledStatic.ts` 生成的请求类构造函数是**裸赋值**
+     * 必须发**字符串**：`protoCompiledStatic.ts` 生成的请求类构造函数是**裸赋值**
      * （`this[key] = properties[key]`，不做 `Long.fromValue`），真正的换算在编码时由
      * `LongBits.from` 做 —— 它认 `Long` / `number` / **十进制字符串**，其余形状（普通对象）
      * 会被当成 `zero` ⇒ **id 静默变成 0**。口径同 `FriendRepository`。
@@ -1636,7 +1577,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         const net = GameNet.instance;
         if (!net?.isConnected) return 'offline';
         try {
-            // ⚠️ 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
+            // 必须 withTimeout：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
             const sent = await withTimeout(net.send(make(), false), WRITE_TIMEOUT_MS, () => false);
             return sent === true ? 'ok' : 'failed';
         } catch (error) {
@@ -1690,22 +1631,4 @@ export { LeagueEditType };
 /** 读一张分表（`remoteRef`）；表缺失时返回空数组。 */
 async function readRows(table: string): Promise<unknown[]> {
     return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
-
-/** 未入盟时的空快照（页面用它做「未入盟」空态，免得每处都写一遍）。 */
-export function emptyLeagueSnapshot(nowMs: number = Date.now()): ILeagueSnapshot {
-    return {
-        joined: false,
-        unionId: '0',
-        myPosition: 0,
-        selfRoleId: '',
-        myUnion: null,
-        myMaxExp: 0,
-        members: [],
-        logs: [],
-        applys: [],
-        unions: [],
-        officialPowers: new Map<number, ILeagueOfficialRow>(),
-        now: nowMs,
-    };
 }

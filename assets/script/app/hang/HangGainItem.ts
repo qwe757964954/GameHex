@@ -14,7 +14,7 @@ const { ccclass, property } = _decorator;
  * rewardCom1.tm("text").setText(mergedRewards[0].number + "/h");
  * ```
  *
- * ⚠️ FGUI 原稿里的 `邮件信息` 控制器（`0,无 / 1,有`）挂在 `text` 上：`gearDisplay pages="0"`
+ * FGUI 原稿里的 `邮件信息` 控制器（`0,无 / 1,有`）挂在 `text` 上：`gearDisplay pages="0"`
  * 且 `selected="0"` ⇒ **默认就是「无」这一页、文字可见**。老端从头到尾**没有**动这个控制器
  * （`initView` 只 `setText`）⇒ 移植时把它当「一直显示」处理，不要额外接控制器。
  */

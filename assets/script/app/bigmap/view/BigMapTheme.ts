@@ -1,4 +1,4 @@
-import { Color, Graphics, Label, Node, SpriteFrame } from 'cc';
+import { Color, Label, Node, SpriteFrame } from 'cc';
 
 /**
  *大世界地图／基地建造的配色与 UI 构建工具。
@@ -50,9 +50,6 @@ export const BIGMAP_COLORS = {
     gridLine: new Color(70, 92, 74, 130),
     ringLine: new Color(120, 156, 126, 190),
 } as const;
-
-/** 卡片底部厚边（`shadow` 用；`drawPanel` 不画，留给 prefab 的九宫）。 */
-export const BIGMAP_EDGE_DARK = new Color(122, 87, 48, 255);
 
 /**
  *势力范围色板 —— 无主势力用的颜色（2026-10-21 用户口径：
@@ -128,27 +125,6 @@ export const BIGMAP_TERRITORY_OWNED_FILL_ALPHA = 150;
  *取 10 格 ≈ 屏幕上一屏内看得见的两块势力；此时 DSATUR 只用 5 色就能保证任意两块不撞色。
  */
 export const BIGMAP_TERRITORY_NEIGHBOR_GAP = 10;
-
-/** 画一块面板底（圆角 + 描边），所有面板 / 按钮共用这一套观感。 */
-export function drawPanel(
-    graphics: Graphics,
-    width: number,
-    height: number,
-    fill: Color,
-    stroke: Color | null = BIGMAP_COLORS.border,
-    radius = 8,
-): void {
-    graphics.clear();
-    graphics.fillColor = fill;
-    graphics.roundRect(-width / 2, -height / 2, width, height, radius);
-    graphics.fill();
-    if (stroke) {
-        graphics.strokeColor = stroke;
-        graphics.lineWidth = 2;
-        graphics.roundRect(-width / 2, -height / 2, width, height, radius);
-        graphics.stroke();
-    }
-}
 
 /** 一个用 Graphics 画的方按钮：返回节点、Label、以及置灰方法。 */
 export interface IBigMapButton {

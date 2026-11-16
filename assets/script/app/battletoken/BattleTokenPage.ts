@@ -21,7 +21,6 @@ import {
     BT_TYPE_LEVEL_FUND,
     artKeyOf,
     battleTokenTabRdExpr,
-    buyButtonPos,
     countdownText,
     expMaxOf,
     hintBoxOf,
@@ -55,9 +54,6 @@ const { ccclass, property } = _decorator;
 
 /** 倒计时刷新间隔（秒）。 */
 const TICK_SECONDS = 1;
-const DESIGN_HEIGHT = 1280;
-const PANEL_BASE_HEIGHT = 740;
-const LIST_BASE_HEIGHT = 580;
 
 /**
  * 战令主控 —— 挂在 `assets/resources/ui/BattleToken/BattleToken.prefab` 的根节点上。
@@ -203,6 +199,8 @@ export class BattleTokenPage extends PopupBase {
     private _listBound2 = false;
     private _tick = 0;
     private _busy = false;
+    private plansThree: Node | null = null;
+    private plansTwo: Node | null = null;
 
     /**
      * 底栏 4 个页签 —— **运行时**从 `tabBar` 收集（见 `collectTabButtons`），不走 Inspector 数组。
@@ -214,6 +212,8 @@ export class BattleTokenPage extends PopupBase {
     private _tabButtons: readonly TabButton[] = [];
 
     protected onInit(): void {
+        this.plansThree = this.plan1Btn.node.parent;
+        this.plansTwo = this.plansThree?.parent?.getChildByName('PlansTwo') ?? null;
         this._wireStatic();
     }
 
@@ -225,7 +225,6 @@ export class BattleTokenPage extends PopupBase {
         this._busy = false;
         this._snapshot = null;
         this._type = BT_DEFAULT_TYPE;
-        this._applyScreenLayout();
         await this._loadAndShow(BT_DEFAULT_TYPE);
     }
 
@@ -465,9 +464,10 @@ export class BattleTokenPage extends PopupBase {
             btn.node.active = show;
             if (!show || !plan) continue;
 
-            // FGUI `gearXY controller="个数"` —— 两个方案与三个方案的 x 差 50px 左右，必须跟着摆
-            const pos = buyButtonPos(three, i);
-            if (pos) btn.node.setPosition(pos.x, pos.y, btn.node.position.z);
+            // 两方案 / 三方案各有一套 prefab Layout 容器；换父节点后由 Layout 排布。
+            const parent = three ? this.plansThree : this.plansTwo;
+            if (parent && btn.node.parent !== parent) btn.node.setParent(parent);
+            btn.node.setSiblingIndex(i);
 
             const ps = state.planStates.get(plan.resId) ?? null;
             const unlocked = !!ps?.open;
@@ -516,32 +516,6 @@ export class BattleTokenPage extends PopupBase {
         } finally {
             this._busy = false;
         }
-    }
-
-    /**
-     * 战令原稿是 720×1280，在 720×1555 一类长屏上如果整块居中，顶部和底部都会留空。
-     * 这里保留原稿横向尺寸：页头贴顶、底栏贴底，额外高度全部给中间面板和列表。
-     */
-    private _applyScreenLayout(): void {
-        const rootTransform = this.node.getComponent(UITransform);
-        const parentTransform = this.node.parent?.getComponent(UITransform);
-        const visibleHeight = Math.max(DESIGN_HEIGHT, parentTransform?.contentSize.height ?? DESIGN_HEIGHT);
-        const extra = visibleHeight - DESIGN_HEIGHT;
-        rootTransform?.setContentSize(rootTransform.contentSize.width, visibleHeight);
-
-        if (this.pageRoot) this.pageRoot.setPosition(0, extra / 2, this.pageRoot.position.z);
-        if (this.panelBg) {
-            this.panelBg.getComponent(UITransform)?.setContentSize(720, PANEL_BASE_HEIGHT + extra);
-            this.panelBg.setPosition(this.panelBg.position.x, -143 - extra / 2, this.panelBg.position.z);
-        }
-        for (const list of [this.list3, this.list2]) {
-            list?.node.getComponent(UITransform)?.setContentSize(656, LIST_BASE_HEIGHT + extra);
-        }
-
-        const bottomOffset = -extra / 2;
-        if (this.bottomBar) this.bottomBar.setPosition(this.bottomBar.position.x, -588 + bottomOffset, this.bottomBar.position.z);
-        if (this.backButton) this.backButton.setPosition(this.backButton.position.x, -586.5 + bottomOffset, this.backButton.position.z);
-        if (this.tabBar) this.tabBar.setPosition(this.tabBar.position.x, -584 + bottomOffset, this.tabBar.position.z);
     }
 
     private async _takeReward(index: number, resId: number): Promise<void> {

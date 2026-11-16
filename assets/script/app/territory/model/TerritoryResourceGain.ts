@@ -1,19 +1,10 @@
 import { TERRITORY_SILVER_RES_ID, TERRITORY_STAMINA_RES_ID } from './TerritoryIdleReward';
 
 /**
- * 领地「资源点 / 挂机」发奖的表现分流（山猫 2026-10-15 定）。
+ * 领地资源点与挂机奖励的表现分流。
  *
- * ## 为什么要分流
- *
- *  领地发下来的奖励里，**银币（`resId 7`）与体力（`resId 9`）直接进钱包**，玩家在顶部
- *  钱包行就能看到数值变化；再弹一次「恭喜获得」弹窗是重复反馈，还会挡住地图。
- *  道具（其余 `resId`）进领地库存、界面上看不到增量 ⇒ **必须**靠弹窗告知。
- *
- * ⇒ 口径：**7 / 9 走「icon + 数字升起」飘字，其余走奖励弹窗**；一批奖励里两类都有时
- *  **逐条分开处理**（各走各的通道），不是整批二选一。
- *
- * ⚠️ `7 / 9` 不是本文件自造的字面量：真源是 `TerritoryIdleReward` 里那两个
- *  `roleProperty` 常量（`idleRewardDestinationOf` 也在用它判钱包去向），改表要改那里。
+ * 银币和体力直接进钱包，只走图标加数字飘字；其余奖励进入领地库存，需弹窗提示。
+ * 一批奖励同时包含两类时逐条分流。资源 id 来自 TerritoryIdleReward 中的常量。
  */
 export const TERRITORY_WALLET_RES_IDS: readonly number[] = [
     TERRITORY_SILVER_RES_ID,
@@ -47,11 +38,11 @@ export function isTerritoryWalletResId(resId: unknown): boolean {
  * `resId` → **顶部资源栏那一格的 key**（`roleProperty.key` = `CmdRole` 的字段名）。
  *
  * 用途单一：宝箱开出来的银币 / 体力会**飞进资源栏**，落点必须是它们各自的格子
- * （2026-10-26 用户口径）。`7 → gold`（银币）、`9 → end`（体力）——
+ * 。`7 → gold`（银币）、`9 → end`（体力）——
  * `roleProperty.json` 里这两行的 `key` 与 `icon` 就是 `图标_铜币` / `图标_体力`，
  * 与 HUD 那条 `resKeys = gold,end` 是同一套口径。
  *
- * ⚠️ 这里是**表现层的落点映射**，不参与发奖（发奖口径是 {@link isTerritoryWalletResId}）；
+ * 这里是**表现层的落点映射**，不参与发奖（发奖口径是 {@link isTerritoryWalletResId}）；
  * 两者都源自同一对常量，所以改表只改 `TerritoryIdleReward` 一处。
  */
 export const TERRITORY_WALLET_RES_KEY: Readonly<Record<number, string>> = {
@@ -69,7 +60,7 @@ export function territoryWalletResKeyOf(resId: unknown): string | null {
 /**
  * 按 resId 把一批奖励分成「飘字 / 弹窗」两组。
  *
- * ⚠️ **保持原顺序**：飘字先后即视觉上下顺序，弹窗顺序即 `ShowRewardPage` 的格序，
+ * **保持原顺序**：飘字先后即视觉上下顺序，弹窗顺序即 `ShowRewardPage` 的格序，
  * 用 `filter` 两次而不是一次遍历塞两个数组也能保序，但两处判据会各自漂移 ⇒ 单一循环。
  */
 export function splitTerritoryRewards<T extends ITerritoryRewardEntry>(
@@ -103,7 +94,7 @@ export const TERRITORY_GAIN_STACK_GAP_PX = 40;
 /**
  * 飘字起点相对**喷发原点**（= 格心，见 `territoryBurstParticle` 的说明）的抬升。
  *
- * 2026-10-16 row17 用户口径：「图标和数字 ui 增加上移的动画放在**粒子效果坐标点的上方间隔 40px**」
+ * row17 动画口径：「图标和数字 ui 增加上移的动画放在**粒子效果坐标点的上方间隔 40px**」
  * ⇒ 这个值就是需求里的那个 40（此前是 30，为「别盖住建筑图标」的经验值）。
  */
 export const TERRITORY_GAIN_START_LIFT_PX = 40;
@@ -112,21 +103,20 @@ export const TERRITORY_GAIN_START_LIFT_PX = 40;
  * **合成读数**（随机格：统一图标 + 数量之和）在 {@link TERRITORY_GAIN_START_LIFT_PX} 之上
  * **再抬**这么多像素。
  *
- * 2026-10-26 用户口径：「金球加数字 UI 的初始位置增加 30px，不会遮挡粒子效果」。
+ * 「金球加数字 UI 的初始位置增加 30px，不会遮挡粒子效果」。
  *
- * 为什么只抬合成读数、不动 40：
- *  · 40 是 row17 的需求原值（银币 / 体力那条逐条飘字用它，改它会连带推翻 §3.5 的判据）；
- *  · 合成读数只有**一条**、图标是最大的那颗「种族经验球」（比银币图宽且高），
- *    贴着 40px 会和格心喷出来的那一把粒子挤在同一片区域（现场截图 2026-10-26 第三张）。
+ * · 40 是 row17 的需求原值（银币 / 体力那条逐条飘字用它，改它会连带推翻 §3.5 的判据）；
+ * · 合成读数只有**一条**、图标是最大的那颗「种族经验球」（比银币图宽且高），
+ * 贴着 40px 会和格心喷出来的那一把粒子挤在同一片区域（现场截图 第三张）。
  *
- * ⇒ 逐条模式仍 40，合成模式 40 + 30 = 70（用户口径原话「初始位置增加 30px」）。
+ * ⇒ 逐条模式仍 40，合成模式 40 + 30 = 70（「初始位置增加 30px」）。
  */
 export const TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX = 30;
 
 /**
  * **合成读数**的起点抬升（= `TERRITORY_GAIN_START_LIFT_PX + EXTRA`，恒 70）。
  *
- * ⚠️ 只给 `TerritoryMapView.playResourceGain` 的 `readout` 分支用；逐条分支走 40。
+ * 只给 `TerritoryMapView.playResourceGain` 的 `readout` 分支用；逐条分支走 40。
  */
 export const TERRITORY_GAIN_READOUT_LIFT_PX =
     TERRITORY_GAIN_START_LIFT_PX + TERRITORY_GAIN_READOUT_EXTRA_LIFT_PX;
@@ -145,9 +135,8 @@ export interface ITerritoryGainContentX {
 /**
  * 把「图标 + 数字」整组**按中心摆正**：组中心恒在 `0`。
  *
- * 为什么不能只靠 prefab 摆：
- *  `Amount` 的锚点在左边（x = 0），数字一变宽就只往右长，整组跟着偏 ——
- *  `+1` 偏左、`+100000` 偏右，而 prefab 里只看得到样张那一句，永远"看着是居中的"。
+ * `Amount` 的锚点在左边（x = 0），数字一变宽就只往右长，整组跟着偏 ——
+ * `+1` 偏左、`+100000` 偏右，而 prefab 里只看得到样张那一句，永远"看着是居中的"。
  *
  * 算法：总宽 = 图标宽 + 间隙 + 数字宽；左边界 `left = -总宽 / 2`；
  * 再按**各自的锚点**换算出要写的 `x`（锚点 0.5 = 写中心，锚点 0 = 写左边缘）。
@@ -157,7 +146,7 @@ export interface ITerritoryGainContentX {
  * @param iconAnchorX 图标锚点 x（prefab 里是 0.5）。
  * @param textAnchorX 数字锚点 x（prefab 里是 0）。
  * @returns 任一宽度读不到（非正 / NaN）时返回 `null` —— 调用方应保持 prefab 原摆位，
- *          别把整组甩到左边（首帧 Label 还没排版就会这样）。
+ * 别把整组甩到左边（首帧 Label 还没排版就会这样）。
  */
 export function territoryGainContentX(
     iconWidth: number,
@@ -215,55 +204,55 @@ export function territoryGainFx(elapsed: number): ITerritoryGainFx | null {
 // 喷发曲线（纯函数，零 cc —— 与上面那条升起曲线同一套路）
 // ============================================================
 //
-// 2026-10-16 row17 初版口径：「播放喷发效果，喷发多个图标，范围限制在一个倒圆锥，
-//   坐标点对应点击地块的中心点，图标和数字 ui 在粒子坐标点上方间隔 40px」。
-// 2026-10-17 用户给出**细化后的完整口径**，本节按新口径重写（初版是「固定距离 + 径向直线飞出」，
-//   没有重力、没有翻面、只有 6 颗）：
+// row17 初版口径：「播放喷发效果，喷发多个图标，范围限制在一个倒圆锥，
+// 坐标点对应点击地块的中心点，图标和数字 ui 在粒子坐标点上方间隔 40px」。
+// 给出**细化后的完整口径**，本节按新口径重写（初版是「固定距离 + 径向直线飞出」，
+// 没有重力、没有翻面、只有 6 颗）：
 //
-//   · 每次喷发 12 颗，错峰 0.025s（**不得同一帧全部生成**）；
-//   · 出射方向以**屏幕竖直向上为轴**，左右各 26°：
-//       `phi = random(-1, 1) · 半顶角`、`vx = speed · sin(phi)`、`vy = speed · cos(phi)`；
-//   · 初速 650 px/s ±12%，重力 1500 px/s²，轨迹是抛物线；
-//   · 2026-11-02 用户改口径（本节的**现行**规则）：
-//       「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」
-//     ⇒ 旧版的「绕自身水平轴上下翻面」（`scaleY = baseScale·cos(ωt+phase)`、`scaleX` 恒定、
-//       频率 2~4 次/秒、**禁止平面自转**）**整段作废**，换成：
-//       `scale = baseScale · grow(t)`（横纵等比，`grow` 从 0.15 用 easeOutCubic 涨到 1，0.18s 完成）+
-//       `rotation = 360 · spinHz · t + phase`（0.6~1.1 圈/秒，匀速，不取模）。
-//     ⚠️ 「翻面」和「自转」是两件事：前者压 `scaleY`（会翻到背面、宽度不变），
-//       后者只转 `rotation`（图标永远正面朝上）。混着实现会得到"既翻又转"的怪相。
-//   · 每隔 1.1s ±15% 的生命，末段 0.25s `UIOpacity` 淡出；
-//     下落回到地块表面（`offsetY ≤ 0`）时立刻在 0.12s 内淡出并回收，**绝不穿进地块**。
+// · 每次喷发 12 颗，错峰 0.025s（**不得同一帧全部生成**）；
+// · 出射方向以**屏幕竖直向上为轴**，左右各 26°：
+// `phi = random(-1, 1) · 半顶角`、`vx = speed · sin(phi)`、`vy = speed · cos(phi)`；
+// · 初速 650 px/s ±12%，重力 1500 px/s²，轨迹是抛物线；
+// · 改口径（本节的**现行**规则）：
+// 「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」
+// ⇒ 旧版的「绕自身水平轴上下翻面」（`scaleY = baseScale·cos(ωt+phase)`、`scaleX` 恒定、
+// 频率 2~4 次/秒、**禁止平面自转**）**整段作废**，换成：
+// `scale = baseScale · grow(t)`（横纵等比，`grow` 从 0.15 用 easeOutCubic 涨到 1，0.18s 完成）+
+// `rotation = 360 · spinHz · t + phase`（0.6~1.1 圈/秒，匀速，不取模）。
+// 「翻面」和「自转」是两件事：前者压 `scaleY`（会翻到背面、宽度不变），
+// 后者只转 `rotation`（图标永远正面朝上）。混着实现会得到"既翻又转"的怪相。
+// · 每隔 1.1s ±15% 的生命，末段 0.25s `UIOpacity` 淡出；
+// 下落回到地块表面（`offsetY ≤ 0`）时立刻在 0.12s 内淡出并回收，**绝不穿进地块**。
 //
 // 逐句对应到代码（谁管哪一句别记混）：
-//  · 「12 颗 + 错峰」        → `TERRITORY_GAIN_BURST_COUNT` / `..._STAGGER_SECONDS`
-//    （一次点击喷出 COUNT 颗，**每颗都是一个资源图标**，不是一颗带动画的图）。
-//  · 「开口朝上的倒锥」      → 约束的是**出射方向**：`|phi| ≤ 半顶角`，即 `|vx| / vy ≤ tan(半顶角)`。
-//    ⚠️ 别把它误当成「任意时刻都满足 `|x| ≤ y · tan`」：初版是径向直线运动才成立，
-//       抛物线**不成立**（位置角从出射角开始一路变大，到顶点时 x/y 趋于无穷）。
-//       抛物线的水平包络是 `|x| ≤ 2 · tan(半顶角) · apex`（`apex = vy² / 2g`），单测验的是这一条。
-//  · 「喷发坐标点 = 地块中心点」 → 原点由调用方给（`TerritoryMapView.playResourceGain`：
-//    格心 = `hex.position.y + HEX_GRID_CONTENT_LIFT`，即「人眼看到的台面中心」）。
-//    本节只产出**相对原点的偏移**，不碰任何世界坐标。
-//  · 「上方间隔 40px」       → `TERRITORY_GAIN_START_LIFT_PX`（图标 + 数字那一条的起点抬升）。
+// · 「12 颗 + 错峰」 → `TERRITORY_GAIN_BURST_COUNT` / `..._STAGGER_SECONDS`
+// （一次点击喷出 COUNT 颗，**每颗都是一个资源图标**，不是一颗带动画的图）。
+// · 「开口朝上的倒锥」 → 约束的是**出射方向**：`|phi| ≤ 半顶角`，即 `|vx| / vy ≤ tan(半顶角)`。
+// 别把它误当成「任意时刻都满足 `|x| ≤ y · tan`」：初版是径向直线运动才成立，
+// 抛物线**不成立**（位置角从出射角开始一路变大，到顶点时 x/y 趋于无穷）。
+// 抛物线的水平包络是 `|x| ≤ 2 · tan(半顶角) · apex`（`apex = vy² / 2g`），单测验的是这一条。
+// · 「喷发坐标点 = 地块中心点」 → 原点由调用方给（`TerritoryMapView.playResourceGain`：
+// 格心 = `hex.position.y + HEX_GRID_CONTENT_LIFT`，即「人眼看到的台面中心」）。
+// 本节只产出**相对原点的偏移**，不碰任何世界坐标。
+// · 「上方间隔 40px」 → `TERRITORY_GAIN_START_LIFT_PX`（图标 + 数字那一条的起点抬升）。
 //
-// ⚠️ 轨迹用**解析式**而不是逐帧累加：
-//    `y = vy·t − ½·g·t²` 正是 `vy -= g·dt; y += vy·dt` 的**精确解**，
-//    但写成累加会让落点依赖帧率（30fps 两帧与 60fps 四帧结果不同），
-//    而本工程的动画一律「记录 startedAt + 纯函数算进度」（见 AGENTS.md「渲染幂等与纯函数时间轴」）。
-//    所以这里保留解析式，**语义与需求里的逐帧积分完全等价**。
+// 轨迹用**解析式**而不是逐帧累加：
+// `y = vy·t − ½·g·t²` 正是 `vy -= g·dt; y += vy·dt` 的**精确解**，
+// 但写成累加会让落点依赖帧率（30fps 两帧与 60fps 四帧结果不同），
+// 而本工程的动画一律「记录 startedAt + 纯函数算进度」（见 AGENTS.md「渲染幂等与纯函数时间轴」）。
+// 所以这里保留解析式，**语义与需求里的逐帧积分完全等价**。
 //
-// ⚠️ 与上面那条「升起曲线」是**两条独立的时间线**：升起的飘字 1.15s、喷发粒子最长 1.54s，
-//   两者同时开始、各自结束（喷发只负责「喷出来的图标」，飘字负责「+N 读数」）。
+// 与上面那条「升起曲线」是**两条独立的时间线**：升起的飘字 1.15s、喷发粒子最长 1.54s，
+// 两者同时开始、各自结束（喷发只负责「喷出来的图标」，飘字负责「+N 读数」）。
 
 /** 一次喷发吐出多少个图标（需求口径：12；**满喷**的上限，实际个数按奖励量分级）。 */
 export const TERRITORY_GAIN_BURST_COUNT = 12;
 
 /**
- * 粒子数**按奖励总量分级**（需求 2026-10-22）：
+ * 粒子数**按奖励总量分级**：
  *
- *   > 「沿用宝箱获得资源中级别的粒子喷射动画，**减少粒子个数来区分奖励**，
- *   >   资源奖励数**小于 50 时粒子数量很稀疏**」
+ * > 「沿用宝箱获得资源中级别的粒子喷射动画，**减少粒子个数来区分奖励**，
+ * > 资源奖励数**小于 50 时粒子数量很稀疏**」
  *
  * | 奖励总量 | 粒子数 | 读感 |
  * | --- | --- | --- |
@@ -271,8 +260,8 @@ export const TERRITORY_GAIN_BURST_COUNT = 12;
  * | `50 ~ 200`（含） | 9（`MEDIUM`） | 中等 |
  * | `> 200` | 12（满喷 `COUNT`） | 密 —— 大奖励才给满 |
  *
- * ⚠️ 分级只看**总量**，与「哪个资源」无关（与宝箱分档同一口径：不加权、不按种类）。
- * ⚠️ 稀疏档也**不是 0**：一次点击必须有反馈，5 颗已经能读成「喷了一下」，0 颗等于没做。
+ * 分级只看**总量**，与「哪个资源」无关（与宝箱分档同一口径：不加权、不按种类）。
+ * 稀疏档也**不是 0**：一次点击必须有反馈，5 颗已经能读成「喷了一下」，0 颗等于没做。
  */
 export const TERRITORY_GAIN_BURST_COUNT_SPARSE = 5;
 export const TERRITORY_GAIN_BURST_COUNT_MEDIUM = 9;
@@ -296,10 +285,10 @@ export function territoryBurstCountForTotal(total: number): number {
 }
 
 /**
- * 倒锥的**半顶角**（度）：出射方向与屏幕竖直轴的夹角上限（需求默认 26°）。
+ * 倒锥的**半顶角**（度）：出射方向与屏幕竖直轴的夹角上限（默认 26°）。
  *
- *  ⚠️ 改这个值会同步改变 `|vx| / vy ≤ tan(半顶角)` 与水平包络 `2·tan·apex` 两条判据 ——
- *  单测读的就是这个常量算 tan，别在测试里另抄一个角度。
+ * 改这个值会同步改变 `|vx| / vy ≤ tan(半顶角)` 与水平包络 `2·tan·apex` 两条判据 ——
+ * 单测读的就是这个常量算 tan，别在测试里另抄一个角度。
  */
 export const TERRITORY_GAIN_BURST_HALF_ANGLE_DEG = 26;
 
@@ -315,7 +304,7 @@ export const TERRITORY_GAIN_BURST_GRAVITY = 1500;
 /**
  * 相邻两颗粒子的出发间隔（秒）。
  *
- *  12 颗 × 0.025s = 0.275s 铺开 ⇒ **绝不会同一帧全部生成**（一格 60fps 才 16ms）。
+ * 12 颗 × 0.025s = 0.275s 铺开 ⇒ **绝不会同一帧全部生成**（一格 60fps 才 16ms）。
  */
 export const TERRITORY_GAIN_BURST_STAGGER_SECONDS = 0.025;
 
@@ -328,14 +317,14 @@ export const TERRITORY_GAIN_BURST_LIFE_JITTER = 0.15;
 /**
  * 生命末段淡出时长（秒）——**没落回地面**的那几颗走这条。
  *
- *  大多数粒子会在 ~0.8s 落回台面走下面那条「快速淡出」，这条只兜「飞得高、落得慢」的少数。
+ * 大多数粒子会在 ~0.8s 落回台面走下面那条「快速淡出」，这条只兜「飞得高、落得慢」的少数。
  */
 export const TERRITORY_GAIN_BURST_FADE_SECONDS = 0.25;
 
 /**
  * 落回地块表面后的快速淡出时长（秒）。
  *
- *  ⚠️ 从这一刻起 `offsetY` 被夹在 0：粒子**停在台面上淡出**，不会穿进地块。
+ * 从这一刻起 `offsetY` 被夹在 0：粒子**停在台面上淡出**，不会穿进地块。
  */
 export const TERRITORY_GAIN_BURST_SURFACE_FADE_SECONDS = 0.12;
 
@@ -344,7 +333,7 @@ export const TERRITORY_GAIN_BURST_BASE_SCALE = 1;
 export const TERRITORY_GAIN_BURST_SCALE_JITTER = 0.2;
 
 /**
- * 「由小变大」的膨大时长（秒）——需求 2026-11-02：
+ * 「由小变大」的膨大时长（秒）——需求
  *
  * > 「取消垂直反转效果，改成粒子由小变大生成，同时伴随持续的旋转效果」
  *
@@ -356,17 +345,17 @@ export const TERRITORY_GAIN_BURST_GROW_SECONDS = 0.18;
 /**
  * 出生那一帧的缩放系数（相对 `baseScale`）。
  *
- *  不用 0：从 0 起会让「出现」的第一帧完全是空的，看起来像掉帧；
- *  留 0.15 既保住了"小"的观感，又保证第一帧就看得见。
+ * 不用 0：从 0 起会让「出现」的第一帧完全是空的，看起来像掉帧；
+ * 留 0.15 既保住了"小"的观感，又保证第一帧就看得见。
  */
 export const TERRITORY_GAIN_BURST_GROW_START_SCALE = 0.15;
 
 /**
  * 自转速度区间（**圈/秒**）：每颗取区间内的随机值，12 颗不会同步转。
  *
- *  ⚠️ 这是「平面自转」（绕屏幕法线），与旧版那套「绕水平轴翻面」完全不是一回事：
- *    旧版压的是 `scaleY`（会翻到背面、宽度不变），现在只改 `rotation`，图标永远正面朝上。
- *  0.6~1.1 圈/秒 ≈ 一颗 1.1s 生命里转 0.7~1.2 圈：转得出来又不至于晕。
+ * 这是「平面自转」（绕屏幕法线），与旧版那套「绕水平轴翻面」完全不是一回事：
+ * 旧版压的是 `scaleY`（会翻到背面、宽度不变），现在只改 `rotation`，图标永远正面朝上。
+ * 0.6~1.1 圈/秒 ≈ 一颗 1.1s 生命里转 0.7~1.2 圈：转得出来又不至于晕。
  */
 export const TERRITORY_GAIN_BURST_SPIN_MIN_HZ = 0.6;
 export const TERRITORY_GAIN_BURST_SPIN_MAX_HZ = 1.1;
@@ -374,12 +363,12 @@ export const TERRITORY_GAIN_BURST_SPIN_MAX_HZ = 1.1;
 /**
  * 整次喷发的**上限**时长（秒）= 最后一颗的出发时刻 + 它可能达到的最长生命。
  *
- *  只是给视图兜底用的硬上限（防止某颗因为脏数据一直不消失）；实际收尾更早 ——
- *  视图逐帧看「还有没有活着的粒子」。
+ * 只是给视图兜底用的硬上限（防止某颗因为脏数据一直不消失）；实际收尾更早 ——
+ * 视图逐帧看「还有没有活着的粒子」。
  *
- *  ⚠️ 粒子数现在是**可变**的（见 `territoryBurstCountForTotal`），所以真正的上限
- *  要按本次实际个数算：`territoryBurstTotalSeconds(count)`。下面这个常量只是
- *  **满喷（12 颗）**时的值，留给默认参数与单测用。
+ * 粒子数现在是**可变**的（见 `territoryBurstCountForTotal`），所以真正的上限
+ * 要按本次实际个数算：`territoryBurstTotalSeconds(count)`。下面这个常量只是
+ * **满喷（12 颗）**时的值，留给默认参数与单测用。
  */
 export const TERRITORY_GAIN_BURST_TOTAL_SECONDS = (TERRITORY_GAIN_BURST_COUNT - 1) * TERRITORY_GAIN_BURST_STAGGER_SECONDS
     + TERRITORY_GAIN_BURST_LIFE_SECONDS * (1 + TERRITORY_GAIN_BURST_LIFE_JITTER);
@@ -394,9 +383,9 @@ export function territoryBurstTotalSeconds(count: number = TERRITORY_GAIN_BURST_
 /**
  * 确定性哈希 → `[0, 1)`：给「同一 index 每次喷发长得不一样」的抖动取值用。
  *
- *  为什么不用 `Math.random()`：同一 `(seed, index)` 必须给出**同一个**偏移，
- *  否则单测无法验证倒锥判据，池化复用也无法复现问题。
- *  视觉上的「随机」由调用方**每次喷发换一个 seed**（`TerritoryMapView` 的自增计数）提供。
+ * 同一 `(seed, index)` 必须给出**同一个**偏移，
+ * 否则单测无法验证倒锥判据，池化复用也无法复现问题。
+ * 视觉上的「随机」由调用方**每次喷发换一个 seed**（`TerritoryMapView` 的自增计数）提供。
  */
 function burstNoise(seed: number, index: number, salt: number): number {
     let h = Math.imul(seed | 0, 0x27d4eb2d)
@@ -431,9 +420,9 @@ export interface ITerritoryBurstLaunch {
 /**
  * 第 `index` 颗粒子的出射参数（确定性：同一 `(seed, index)` 恒等）。
  *
- *  `index` 越界 / 非整数 ⇒ `null`（调用方少配了粒子引用时，多余那颗就该「不存在」）。
+ * `index` 越界 / 非整数 ⇒ `null`（调用方少配了粒子引用时，多余那颗就该「不存在」）。
  *
- *  @param count 本次喷发的粒子数（默认满喷 12）—— 由 `territoryBurstCountForTotal` 按奖励量给。
+ * @param count 本次喷发的粒子数（默认满喷 12）—— 由 `territoryBurstCountForTotal` 按奖励量给。
  */
 export function territoryBurstLaunch(
     seed: number,
@@ -471,9 +460,9 @@ export interface ITerritoryBurstParticle {
     /**
      * 等比缩放（横纵**同一个值**）。
      *
-     *  需求 2026-11-02 取消了旧的「绕水平轴翻面」——那套是 `scaleY = cos(...)`、
-     *  会翻到背面且横纵不等比。现在出生时小、0.18s 内长到 `baseScale`，
-     *  全程横纵等比 ⇒ 只留这一个标量，别再拆 `scaleX / scaleY`。
+     * 需求 取消了旧的「绕水平轴翻面」——那套是 `scaleY = cos(...)`、
+     * 会翻到背面且横纵不等比。现在出生时小、0.18s 内长到 `baseScale`，
+     * 全程横纵等比 ⇒ 只留这一个标量，别再拆 `scaleX / scaleY`。
      */
     readonly scale: number;
     /** 平面自转角度（度，可超过 360）. 持续累加，不归零 —— 归零会在回转点卡一帧。 */
@@ -483,25 +472,10 @@ export interface ITerritoryBurstParticle {
 }
 
 /**
- * 第 `index` 颗粒子喷发到第 `elapsed` 秒时的表现参数；`null` = 这一帧它不该出现
- * （**还没出发**、或**已经消失**）。
+ * 计算第 index 颗粒子在 elapsed 秒时的表现参数，未出现或已消失时返回 null。
  *
- *  ## 轨迹
- *
- *  从喷发原点按 `(vx, vy)` 抛出，只受重力 ⇒ `x = vx·t`、`y = vy·t − ½·g·t²`。
- *  竖直方向先升后降，顶点在 `t = vy / g`（约 0.39~0.49s），落回原高度在 `t = 2·vy / g`
- *  （约 0.69~0.97s）。
- *
- *  ## 什么时候收
- *
- *  两条终止条件取**先到的那条**：
- *   · 落回台面（`t ≥ 2·vy / g` 且比 `life` 早）⇒ 从落点起 `SURFACE_FADE_SECONDS(0.12)` 淡出，
- *     期间位置**冻在落点**（`offsetY` 恒 0、横向也不再滑）：既不会穿进地块，也不会读成「贴地滑一段」；
- *   · 生命到期（`life` 更早，只发生在飞得最高最快的少数）⇒ 最后 `FADE_SECONDS(0.25)` 淡出。
- *
- *  ## 边界
- *
- *  `index` 不是 `[0, COUNT)` 里的整数、`elapsed` 非有限或为负 ⇒ `null`。
+ * 粒子按初速度抛出并受重力影响，落回台面或生命周期结束时淡出。
+ * index 越界或 elapsed 非法也返回 null。
  */
 export function territoryBurstParticle(
     seed: number,
@@ -529,12 +503,12 @@ export function territoryBurstParticle(
     const rawY = launch.vy * flightTime - 0.5 * gravity * flightTime * flightTime;
     const span = Math.max(1e-6, endTime - fadeStart);
     const opacity = local <= fadeStart ? 1 : 1 - (local - fadeStart) / span;
-    // 需求 2026-11-02：**由小变大**（去掉旧版的余弦翻面）+ **持续自转**。
+    // 需求 **由小变大**（去掉旧版的余弦翻面）+ **持续自转**。
     //
-    //  · 生长：`GROW_START → 1` 用 easeOutCubic（前快后慢）——线性长大像"充气"，
-    //    缓出才像"啵"地一下弹出来；0.18s 之后恒为 1，不再变。
-    //  · 自转：`rotation` 随 local 匀速累加、**不取模**。取模会在 360° 回绕的那一帧
-    //    被引擎当成"反向转回去"，观感是转一下卡一下。
+    // · 生长：`GROW_START → 1` 用 easeOutCubic（前快后慢）——线性长大像"充气"，
+    // 缓出才像"啵"地一下弹出来；0.18s 之后恒为 1，不再变。
+    // · 自转：`rotation` 随 local 匀速累加、**不取模**。取模会在 360° 回绕的那一帧
+    // 被引擎当成"反向转回去"，观感是转一下卡一下。
     const growProgress = Math.min(1, local / TERRITORY_GAIN_BURST_GROW_SECONDS);
     const growEased = 1 - (1 - growProgress) ** 3;
     const grow = TERRITORY_GAIN_BURST_GROW_START_SCALE

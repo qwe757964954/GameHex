@@ -15,17 +15,6 @@ import { tween, type Tween } from 'cc';
 */
 const { ccclass, property } = _decorator;
 
-const SCORE_LEAD_WIDTH = 110;
-const SCORE_LEAD_HEIGHT = 77;
-const SCORE_NORMAL_WIDTH = 94;
-const SCORE_NORMAL_HEIGHT = 66;
-
-/** 普通格数字字号 / 行高 = prefab 出厂值（32 / 39）；领先格按设计稿 36。*/
-const SCORE_NORMAL_FONT_SIZE = 32;
-const SCORE_NORMAL_LINE_HEIGHT = 39;
-const SCORE_LEAD_FONT_SIZE = 36;
-const SCORE_LEAD_LINE_HEIGHT = 44;
-
 /** 弹跳峰值（相对基准缩放 1）与两段时长：先放大、再带回弹地缩回。*/
 const PULSE_PEAK_SCALE = 1.2;
 const PULSE_UP_SECONDS = 0.1;
@@ -60,6 +49,16 @@ export class ZCGameHudScoreSlot extends Component {
     @property({ type: Sprite, tooltip: 'Cross：红 X（该玩家已战斗结束；平时隐藏）' })
     cross: Sprite = null;
 
+    @property({ group: '尺寸', tooltip: '领先格宽度' }) leadWidth = 110;
+    @property({ group: '尺寸', tooltip: '领先格高度' }) leadHeight = 77;
+    @property({ group: '尺寸', tooltip: '普通格宽度' }) normalWidth = 94;
+    @property({ group: '字号', tooltip: '领先格字号' }) leadFontSize = 36;
+    @property({ group: '字号', tooltip: '领先格行高' }) leadLineHeight = 44;
+
+    /** 普通格尺寸 / 字号：首帧从 prefab 读取。 */
+    private normalHeight = 0;
+    private normalFontSize = 0;
+    private normalLineHeight = 0;
     /** 是否已完成首次渲染 —— 首帧直接落位，不让开局四格从默认尺寸演一遍。*/
     private rendered = false;
     /** 上一次的领先状态，用于识别切换。*/
@@ -72,6 +71,12 @@ export class ZCGameHudScoreSlot extends Component {
     private pulseTween: Tween<Node> | null = null;
     /** 当前数字弹跳补间（只动 `Value` 节点，不动整格）。*/
     private numberPulseTween: Tween<Node> | null = null;
+
+    protected onLoad(): void {
+        this.normalHeight = this.node.getComponent(UITransform).height;
+        this.normalFontSize = this.value.fontSize;
+        this.normalLineHeight = this.value.lineHeight;
+    }
 
     /** 全量赋值。数字 / 红 X 同步切换；尺寸在领先状态变化时补间，否则幂等落位。*/
     render(data: IHudScoreSlotData): void {
@@ -89,15 +94,15 @@ export class ZCGameHudScoreSlot extends Component {
         this.value.string = data.finished ? '' : String(data.value);
         // 领先格数字加大加粗。只写变化的字段：`fontSize` / `isBold` 的 setter 都会触发字集重建，
         // 每帧无条件写会白白重建 4 格 × 0.15s 一轮的字形贴图。
-        const fontSize = data.leading ? SCORE_LEAD_FONT_SIZE : SCORE_NORMAL_FONT_SIZE;
+        const fontSize = data.leading ? this.leadFontSize : this.normalFontSize;
         if (this.value.fontSize !== fontSize) {
             this.value.fontSize = fontSize;
-            this.value.lineHeight = data.leading ? SCORE_LEAD_LINE_HEIGHT : SCORE_NORMAL_LINE_HEIGHT;
+            this.value.lineHeight = data.leading ? this.leadLineHeight : this.normalLineHeight;
         }
         if (this.value.isBold !== data.leading) this.value.isBold = data.leading;
         const rect = this.node.getComponent(UITransform);
-        const targetWidth = data.leading ? SCORE_LEAD_WIDTH : SCORE_NORMAL_WIDTH;
-        const targetHeight = data.leading ? SCORE_LEAD_HEIGHT : SCORE_NORMAL_HEIGHT;
+        const targetWidth = data.leading ? this.leadWidth : this.normalWidth;
+        const targetHeight = data.leading ? this.leadHeight : this.normalHeight;
         // 数字变化 / 领先切换的判据要在写入 `leading` / `lastValue` 之前算好。
         // 首帧不弹（`rendered` 为 false）：开局四格齐弹一遍只剩噪音。
         const valueChanged = this.rendered && !data.finished

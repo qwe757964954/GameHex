@@ -19,9 +19,9 @@ export interface IRewardSlotView {
  * 由宿主按页签类型决定显示 / 隐藏哪个。
  *
  * 字段分工：
- *   - 任务行：`nameLabel`（名字 + 进度）、`actionButton`（前往 / 领取 / 已领取）、`rewardBar`
- *   - 礼包行：`nameLabel`（标题）、`actionButton`（购买）、`limitLabel`（限购 X/Y）、
- *     `discountLabel`（折扣）、`priceLabel`（价格）、`rewardBar`
+ * - 任务行：`nameLabel`（名字 + 进度）、`actionButton`（前往 / 领取 / 已领取）、`rewardBar`
+ * - 礼包行：`nameLabel`（标题）、`actionButton`（购买）、`limitLabel`（限购 X/Y）、
+ * `discountLabel`（折扣）、`priceLabel`（价格）、`rewardBar`
  *
  * 奖励格（`rewardBar` 下的 `cc.Sprite` 子节点）由宿主**预加载好图**再传进来（复用 `VScrollView`
  * 的回收残影规避约定：这里现加载会先闪一帧上一行的图）。
@@ -29,37 +29,37 @@ export interface IRewardSlotView {
 @ccclass('LimitTimeActItem')
 export class LimitTimeActItem extends Component {
     @property({ type: Label, tooltip: 'Name：名字（任务行会拼上进度）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Button, tooltip: 'ActionBtn：右侧按钮（前往 / 领取 / 购买）' })
-    actionButton: Button = null;
+    actionButton: Button = null!;
 
     @property({ type: Label, tooltip: 'ActionLabel：按钮文字' })
-    actionLabel: Label = null;
+    actionLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'RewardBar：奖励格容器（子节点是奖励格）' })
-    rewardBar: Node = null;
+    rewardBar: Node = null!;
 
     @property({ type: Label, tooltip: 'LimitLabel：限购文字（礼包 / 限购行用，任务行置空）' })
-    limitLabel: Label = null;
+    limitLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'DiscountLabel：折扣文字（礼包 / 限购行用）' })
-    discountLabel: Label = null;
+    discountLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'PriceLabel：价格文字（礼包 / 限购行用）' })
-    priceLabel: Label = null;
+    priceLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     @property({ type: Node, tooltip: 'TakenStamp：已领取印章（任务行用）' })
-    takenStamp: Node = null;
+    takenStamp: Node = null!;
 
     /**
      * 铺一个任务行。
      *
      * `phase`：`goto` 前往 / `claimable` 领取 / `taken` 已领取 / `undone` 未完成（不可点）。
-     * 无条件写 label（规则 82），不依赖新旧状态短路。
+     * 无条件写 label，不依赖新旧状态短路。
      */
     renderTask(opts: {
         title: string;
@@ -119,17 +119,15 @@ export class LimitTimeActItem extends Component {
                 continue;
             }
             slot.active = true;
-            const frame = slot.getComponent(Sprite);
-            const iconNode = slot.getChildByName('Icon');
-            const icon = iconNode?.getComponent(Sprite);
-            if (frame && view.frame) frame.spriteFrame = view.frame;
-            if (icon && iconNode) {
-                if (view.icon) {
-                    icon.spriteFrame = view.icon;
-                    iconNode.active = true;
-                } else {
-                    iconNode.active = false;
-                }
+            const frame = slot.getComponent(Sprite)!;
+            const iconNode = slot.getChildByName('Icon')!;
+            const icon = iconNode.getComponent(Sprite)!;
+            frame.spriteFrame = view.frame;
+            if (view.icon) {
+                icon.spriteFrame = view.icon;
+                iconNode.active = true;
+            } else {
+                iconNode.active = false;
             }
         }
     }

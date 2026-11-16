@@ -1,5 +1,5 @@
 import { _decorator, Button, EditBox, Label, Node } from 'cc';
-import { PopupBase, PopupOpenContext } from '../../framework/ui/PopupBase';
+import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { GameNet } from '../net/GameNet';
@@ -48,22 +48,22 @@ export class GMPanel extends PopupBase {
     // ============================================================
 
     @property({ type: Node, tooltip: 'Panel：面板主体（620×860），同时充当「点击空白关闭」的内容区' })
-    panel: Node = null;
+    panel: Node = null!;
 
     @property({ type: Node, tooltip: 'Panel/BtnClose：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: EditBox, tooltip: 'Panel/Input：GM 指令输入框' })
-    cmdInput: EditBox = null;
+    cmdInput: EditBox = null!;
 
     @property({ type: Node, tooltip: 'Panel/BtnExecute：执行按钮（挂 cc.Button）' })
-    executeButton: Node = null;
+    executeButton: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'Panel/ListView：指令列表虚拟视窗（挂 VirtualScrollView + Mask）' })
-    listView: VirtualScrollView = null;
+    listView: VirtualScrollView = null!;
 
     @property({ type: Label, tooltip: 'Panel/StatusLabel：底部状态栏（提示语 / 服务器连接状态）' })
-    statusLabel: Label = null;
+    statusLabel: Label = null!;
 
     // ============================================================
     // 运行时状态
@@ -83,7 +83,7 @@ export class GMPanel extends PopupBase {
         // 内容区只认面板本体：Bg 是铺满全屏的压暗遮罩，若它也算内容区，空白点击将永远关不掉面板。
         this.contentNodes = [this.panel];
 
-        //  CLICK 是挂在**节点**上的（Button 自身没有 on），别写成 button.on(...)。
+        // CLICK 是挂在节点上的（Button 自身没有 on）。
         const close = this.closeButton.getComponent(Button);
         if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
@@ -93,13 +93,13 @@ export class GMPanel extends PopupBase {
         // 输入框回车 = 执行（事件名是 Node 上的字符串事件，不走 Button）
         this.cmdInput.node.on('editing-return', this.onInputReturn, this);
 
-        //  两个回调只在初始化时接一次：槽位节点会被反复复用，不能在回调里再挂事件，
+        // 两个回调只在初始化时接一次：槽位节点会被反复复用，不能在回调里再挂事件，
         // 否则每次滚动都会叠一层监听。
         this.listView.renderItemFn = this._renderRow;
         this.listView.onItemClickFn = this._onRowClick;
     }
 
-    protected async onOpen(_userData?: any, _context?: PopupOpenContext): Promise<void> {
+    protected async onOpen(): Promise<void> {
         this.cmdInput.string = GMCommandTable.lastInput;
         GMCommandTable.onTip = this._onTip;
 
@@ -154,7 +154,7 @@ export class GMPanel extends PopupBase {
      */
     private async _pushList(): Promise<void> {
         const list = this.listView;
-        if (!list || !list.node.isValid) return;
+        if (!list.node.isValid) return;
         if (!await this.nextPopupFrame()) return;
         if (!this.isValid || !this.node.isValid || !list.node.isValid) return;
 
@@ -189,7 +189,7 @@ export class GMPanel extends PopupBase {
     // ============================================================
 
     private _setStatus(message: string): void {
-        this.statusLabel.string = message ?? '';
+        this.statusLabel.string = message;
     }
 
     private async _execute(): Promise<void> {

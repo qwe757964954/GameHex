@@ -1,54 +1,6 @@
 /**
- * 征收（挂机，老端 `LayerHang`）美术口径 —— **资源路径的唯一入口**。
- *
- * 图分四类：
- *
- * | 类别 | 目录 | 说明 |
- * |---|---|---|
- * | 自有 13 张 | `image/hang/` | 从 FGUI「挂机」包 + 「公用0」包 + **「主界面_战斗」包**挑出，重命名成 `hj_` 前缀 |
- * | 跨模块复用 10 张 | `image/friend` / `image/firstRecharge` / `image/monthcard` / `image/activity` / `image/common` | md5 同源，**不另存第二份** |
- * | 货币图标 | `icons/resource/` | `图标_体力`（`roleProperty.end = 9`），唯一入口 `resolveRewardIconRef` |
- * | 品质框 | `image/frame/` | 与七日 / 礼包 / 活动 / 战令同一套 4 张 |
- *
- * ⚠️ 「主界面_战斗」那两张（`entryIcon` / `entryBg`）是 **2026-09-24 补迁**的：
- * 它们是**主界面左下角「快速扫荡」入口**（老端 `组件_战斗_章节选择` 里的 `快速扫荡` 节点）的图，
- * 属于「征收」这条功能链，但出自另一个 FGUI 包。第一轮只搬了弹窗本体，漏了入口 ⇒ 主界面上没有入口。
- * 判据 = FGUI `组件_战斗_快速扫荡.xml` 的 `<Button icon="ui://10z7u2rtuihv1xwmqye">`
- * （`主界面_战斗/package.xml:54` → `zjm_icon03_ZhengShou.png`）+ `n61` 的 `战斗选关_九宫_信息底01.png`。
- *
- * ## 复用哪些张（已 md5 逐字节比对，见 `tmp/_hang_verify_art.mjs`）
- *
- * | FGUI 源 | 落到 | 用途 | 九宫 |
- * |---|---|---|---|
- * | `公用0/图片/底板_panel/panel_window_01_9gong.png` | `friend/fd_panel_bg` | 弹窗底 626×903 | ✅ `129,128,123,36` |
- * | `公用0/图片/框体_frame/title_brown.png` | `firstRecharge/title_brown` | 弹窗标题底条 344×81 | ✅ `171,20,16,40` |
- * | `公用0/图片/按钮_btn/TY_btn23.png` | `friend/fd_tab_off` | **快速征收按钮底图** | ❌ 无 |
- * | `公用0/图片/按钮_btn/TY_btn06.png` | `friend/fd_btn_gold` | 领取按钮底图（`颜色=1` 橙） | ✅ `14,11,4,12` |
- * | `公用0/图片/按钮_btn/TY_btn07.png` | `friend/fd_btn_dark` | 领取按钮底图（`颜色=0` 蓝） | ✅ `15,11,4,9` |
- * | `公用0/图片/公用_按钮_关闭01.png` | `activity/act_btn_close` | 弹窗关闭键 60×60 | ❌ 无 |
- * | `公用0/图片/公用_图标_红点.png` | `common/cm_red_dot` | 普通红点 | ❌ 无 |
- * | `公用0/图片/公用_图标_红点02.png` | `common/cm_red_dot_num` | 数字红点 | ❌ 无 |
- * | `公用0/图片/公用_图标_新.png` | `common/cm_red_dot_new` | 「新」红点 | ❌ 无 |
- *
- * ⚠️ **九宫不是看名字猜的**：`TY_btn23` 在 `公用0/package.xml` 里**没有** `scale9grid`
- * （`<image ... name="TY_btn23.png" exported="true"/>`，无 `scale`），而 `TY_btn06/07` 有。
- * 判据一律读各自 `.meta` 的 `subMetas.f9941.userData.border*`（非 0 即九宫）；
- * 生成器 `tmp/gen_hang.mjs` 就是按 `.meta` 决定 `_type` 的，**别在 TS 里再抄一份名单**。
- *
- * ⚠️ `按钮_切换` 里那个小箭头 `change_btn` 的 `icon="ui://w3m64m87wtic1yxnapo"` ——
- * `wtic1yxnapo` 在 `公用0/package.xml:297` 是 **`zhek_2.png`**，也就是**本模块自有**的
- * `hj_gear_icon`（34×37，与显示尺寸 34×37 完全吻合）。**它不是 `TY_btn21`**，不必另找复用件。
- *
- * ## ⚠️ 九宫格（`HJ_ART_SLICED`）
- *
- * 三张图带 FGUI `scale9grid`；四边 border 已写进各自 `.meta` 的
- * `subMetas.f9941.userData.border*`（见 `tmp/_set_hang_slice.mjs`）。
- * **`.prefab` 里的 `cc.Sprite._type` 必须写 `1(SLICED)` 才用得上它** ——
- * 漏写的症状是「图照样显示、只是整张被拉伸」，不报错。
- *
- * ⚠️ `hj_bar_fill`（14×17）与 `hj_bar_bg`（30×23）都是**小图被拉成 290×20**
- * ⇒ 按原图算的 border 会整体偏边，必须把 `trimType` 钉成 `none` 后 refresh 重新导入，
- * 尺寸才回到原图（已做，实测 `width === rawWidth`）。
+ * 挂机模块美术路径与九宫格集合。入口图属于主界面，独立于挂机弹窗。
+ * 所有路径都相对 resources，加载前确认大小写；九宫格图必须按 SLICED 使用。
  */
 
 import { RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT, spriteFramePath } from '../ArtPaths';
@@ -88,7 +40,7 @@ export const HJ_ART_NAMES: Readonly<Record<string, string>> = {
      * **主界面左下角「征收」入口**的按钮脸 113×102
      * （FGUI `主界面_战斗/图片/zjm_icon03_ZhengShou.png`，非九宫）。
      *
-     * ⚠️ 它不是「挂机」包的图 —— 入口本身长在**主界面**（老端 `组件_战斗_章节选择`）里，
+     * 它不是「挂机」包的图 —— 入口本身长在**主界面**（老端 `组件_战斗_章节选择`）里，
      * 只是点下去开的是征收弹窗。第一轮漏迁的就是它 + `entryBg`。
      */
     entryIcon: 'hj_entry_icon',
@@ -114,7 +66,7 @@ export type HangArtKey = keyof typeof HJ_ART_NAMES;
  *
  * 换算口径：`left=x / top=y / right=W-(x+w) / bottom=H-(y+h)`。
  *
- * ⚠️ `hj_entry_bg` 与 `hj_entry_icon` 两张**必须** `trimType: none`：FGUI 的
+ * `hj_entry_bg` 与 `hj_entry_icon` 两张**必须** `trimType: none`：FGUI 的
  * `<loader fill="scaleFree">` 是把**整张原图**（含透明留白）缩放到 loader 尺寸，
  * 而 Cocos 默认 `trimType: auto` 会先裁掉透明边 —— 实测 `hj_entry_bg` 被裁掉左侧 3px
  * （80→75），border 就会整体偏边。已钉成 `none`（`tmp/_set_hang_slice.mjs`）。
@@ -129,7 +81,7 @@ export const HJ_ART_SLICED: ReadonlySet<string> = new Set<string>([
 /**
  * `cc.Sprite._type` 的取值（生成器 / 页面共用，避免各处写魔数）。
  *
- * `SIMPLE = 0` / `SLICED = 1`；`_sizeMode` 恒为 `CUSTOM = 0`（规则 7：被渲染组件回写
+ * `SIMPLE = 0` / `SLICED = 1`；`_sizeMode` 恒为 `CUSTOM = 0`（被渲染组件会回写
  * `contentSize` 的坑）。
  */
 export const HJ_SPRITE_SIMPLE = 0;
@@ -150,9 +102,7 @@ export function hjArtRef(key: HangArtKey): { root: string; name: string } {
     return { root: HJ_ART_ROOT, name: HJ_ART_NAMES[key] };
 }
 
-// ============================================================
 // 跨模块复用（md5 同源，不另存第二份）
-// ============================================================
 
 /** 弹窗底板 626×903（九宫 `129,128,123,36`）。 */
 export const HJ_SHARED_PANEL_BG = { root: 'image/friend', name: 'fd_panel_bg' } as const;
@@ -178,14 +128,12 @@ export function hjSharedPath(ref: { root: string; name: string }): string {
     return spriteFramePath(ref.root, ref.name);
 }
 
-// ============================================================
 // 货币图标（`roleProperty`，`iconIsPath = false`）
-// ============================================================
 
 /**
  * `roleProperty` 图标目录（FGUI 裸组件名 → 落这里）。
  *
- * ⚠️ 值转发 `ArtPaths.RESOURCE_ICON_ART_ROOT`（**唯一真源**）：这个字面量曾在
+ * 值转发 `ArtPaths.RESOURCE_ICON_ART_ROOT`（**唯一真源**）：这个字面量曾在
  * `LayerActivityArt` / 本模块 / `gift` 注释里各写一份，改目录时要同时改多处。
  */
 export const HJ_RESOURCE_ICON_ROOT = ART_RESOURCE_ICON_ROOT;
@@ -193,8 +141,8 @@ export const HJ_RESOURCE_ICON_ROOT = ART_RESOURCE_ICON_ROOT;
 /**
  * 快速征收按钮上那个体力小图标的资源名。
  *
- * ⚠️ `roleProperty.end = 9`，`icon` 存的是 FGUI 裸名 **`图标_体力`**（不是路径）
- * ⇒ 只能落 `icons/resource/`。这张图是**追加迁移**进来的（规则 74：按「用到的表」
+ * `roleProperty.end = 9`，`icon` 存的是 FGUI 裸名 **`图标_体力`**（不是路径）
+ * ⇒ 只能落 `icons/resource/`。这张图是**追加迁移**进来的（按「用到的表」
  * 逐条对账时最容易漏的一张）—— 漏了不报错、按钮上永远留一块白。
  */
 export const HJ_COST_ICON_NAME = '图标_体力';
@@ -202,9 +150,7 @@ export const HJ_COST_ICON_NAME = '图标_体力';
 /** 体力图标的加载路径。 */
 export const HJ_COST_ICON_PATH = spriteFramePath(HJ_RESOURCE_ICON_ROOT, HJ_COST_ICON_NAME);
 
-// ============================================================
 // 品质框（与七日 / 礼包 / 活动 / 战令同一套）
-// ============================================================
 
 /** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
 export {

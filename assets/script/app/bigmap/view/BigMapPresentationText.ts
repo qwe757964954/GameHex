@@ -49,9 +49,6 @@ export const BIGMAP_PRESENTATION_TEXT = {
     //世界页不再有标题字，「当前在基地还是大地图」由那颗两态木牌表达。
     baseToggle: '基地',
     worldToggle: '大地图',
-    harvestAll: '一键收取',
-    build: '建造',
-    buildMenu: '建造目录',
     emptyPlot: '＋',
     /**
      *选中建筑时名字牌的第二行（参考图口径：`科研中心` / `等级21` 两行，无底板）。
@@ -65,13 +62,8 @@ export const BIGMAP_PRESENTATION_TEXT = {
     moveCancel: '取消移动',
     moveHint: BIGMAP_MOVE_HINT,
     emptyQueue: '暂无建造任务',
-    queue: '建造队列',
-    /** 队列条尾部提示：还差几条才到 `bigmapQueue.maxBuildQueue`（花货币解锁）。 */
-    queueLocked: '待解锁',
     stored: '可收取',
     harvest: '收取',
-    /** 开战回包已到、战斗资源还在预加载：世界页留着并盖一层遮罩，别露出主界面的领地页。 */
-    enteringBattle: '正在进入战斗…',
     /** 城池弹窗（蓝湖「城池弹窗3」）：增益效果段标题。 */
     buffTitle: '增益效果',
     /** 弹窗底部那颗大按钮（设计稿写「进攻」，与旧面板的「攻打」是同一件事）。 */

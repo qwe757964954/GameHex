@@ -21,7 +21,7 @@ const { ccclass, property } = _decorator;
  * 所以这一格 = **品质框 + 图标**，**没有数量文字**（`onNumberVisible(false)`）。设计图
  * `税-标注.jpg` 里四个奖励格外面那圈蓝框就是品质框（`quality 3` ⇒ `common_img_pzk_02`）。
  *
- * ⚠️ 只有 `frame` 需要 `_type = 1`（若它落到九宫名单里）；图标恒 `SIMPLE`。
+ * 只有 `frame` 需要 `_type = 1`（若它落到九宫名单里）；图标恒 `SIMPLE`。
  */
 @ccclass('HangRewardSlot')
 export class HangRewardSlot extends Component {
@@ -34,7 +34,7 @@ export class HangRewardSlot extends Component {
     /**
      * 铺一格。
      *
-     * 两个参数都是**绝对赋值**（规则 10）：格子会被复用，`null` 一律当「没有、要清掉」，
+     * 两个参数都是**绝对赋值**：格子会被复用，`null` 一律当「没有、要清掉」，
      * 绝不能「`null` 就保留上一趟的图」。
      */
     render(frame: SpriteFrame | null, iconFrame: SpriteFrame | null): void {

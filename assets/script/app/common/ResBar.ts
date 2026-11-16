@@ -77,7 +77,7 @@ const GLOW_PADDING = 8;
  *
  * ## 为什么 keys 写成字符串而不是数组
  *
- * MCP `component_set_component_property` **不支持数组属性**（见 `cocos-mcp-build-prefab` 铁律 3），
+ * MCP 工具**设不了数组属性**（写单值会把数组写坏成 `{__id__:N}`，旧版 Cocos MCP 的已知缺陷），
  * 数组只能在 Inspector 里手填；而「哪几种货币」是要**落在 prefab 实例上**的配置 ⇒
  * 用逗号分隔字符串，prefab 里可覆盖、代码里零分支。
  *

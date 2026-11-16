@@ -250,7 +250,7 @@ test('实心按钮使用 HUD 金钮，模式按钮的三层结构在 Prefab 中�
     assert.equal(label._enableOutline, true);
     assert.equal(label._outlineWidth, 2);
     assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'), /this\.art\.hud\.get\(mode === 'world' \? 'mode_base' : 'mode_world'\)/);
-    assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'), /fitBigMapSprite\(this\.modeIcon, icon, MODE_ICON_SIZE, 0, MODE_ICON_Y\)/);
+    assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'), /fitBigMapSprite\(this\.modeIcon, icon, this\.modeIconSize, 0, this\.modeIconY\)/);
 });
 
 test('页面不再给面板贴深铁概念图，也不再引用木牌皮肤', () => {

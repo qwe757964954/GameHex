@@ -115,8 +115,12 @@ function loadPanelClass(): new () => Obj {
 }
 
 const makeNode = (): Obj => {
-    const node: Obj = { active: true, pos: [0, 0] as number[] };
-    node.setPosition = (x: number, y: number) => { node.pos = [x, y]; };
+    const node: Obj = { active: true, pos: [4, 21.5] as number[], position: { x: 4, y: 21.5, z: 0 } };
+    node.setPosition = (x: number, y: number) => {
+        node.pos = [x, y];
+        node.position = { x, y, z: 0 };
+    };
+    node.getComponent = () => ({ width: 42 });
     node.on = () => undefined;
     return node;
 };

@@ -1,65 +1,30 @@
 /**
- * 「新地块生成」的**时间轴**（纯函数、零 `cc`）。
+ * 新地块生成的时间轴（纯函数，零 cc）。
  *
- * 需求原文（2026-10-22）：*「增加新地块生成动画：生成新的地块整个节点由透明渐变 / 地块由小变大 /
- * 多个地块出现有轻微的先后落差」*。三句需求正好对应本文件的三个导出：
- *
- * | 需求 | 落到哪 |
- * | --- | --- |
- * | 整个节点由透明渐变 | `territoryHexSpawnFrame().opacity`（视图写格节点的 `UIOpacity`，子节点一起淡） |
- * | 地块由小变大 | `territoryHexSpawnFrame().scale`（从 `TERRITORY_HEX_SPAWN_FROM_SCALE` 长到 1） |
- * | 多个地块有先后落差 | `territoryHexSpawnDelays()`（一次出现的格子按**簇心**排序，逐个错峰） |
- *
- * ## 为什么不是 tween
- *
- * 与 `TerritoryHexFlip` / `TerritoryGainBurst` / `TerritoryChestAnimation` 同一套路
- * （见 `AGENTS.md`「渲染幂等与纯函数时间轴」）：tween 挂在**池化**的格节点上，节点被回收后
- * 还会继续跑（老坑）；而纯函数可以单测 —— 时长、错峰上限、脏数据这些是产品口径，
- * 不该只靠"看一遍动画"验收。
- *
- * ## 与「翻格」的分工
- *
- * 这两件事**不是一回事**，别合并：
- *  · **翻格**（`TerritoryHexFlip`）= 玩家点开**随机资源格**，那一格从泥块碎裂成草地；
- *  · **生成**（本文件）= 进度推进后**新露出**的格子整批进场。
- *  同一格两件事都可能发生（在边界上开一个随机格），此时以**翻格优先**：
- *  翻格自带「新地皮放大填充」，再叠一层整格淡入只会糊（视图里 `syncFlip` 会掐掉同格的生成动画）。
+ * 整格由透明渐显、由小变大，多格按簇心排序轻微错峰。
+ * 格节点池化复用，因此用纯函数时间轴而不是 tween。
+ * 与翻格同时发生时以翻格优先，避免两层淡入糊在一起。
  */
 
 import { territoryHexStaggerDelays } from './TerritoryHexStagger';
 
-/** 单格生成动画的总时长（秒）。0.4s ≈ 手感临界点：再慢就挡视线，再快就看不清渐变。 */
+/** 单格生成时长（秒）。 */
 export const TERRITORY_HEX_SPAWN_SECONDS = 0.4;
 
-/** 相邻两格的出场间隔（秒）—— 需求里的「轻微的先后落差」。0.055s 约 3 帧，够看出层次又不拖沓。 */
+/** 相邻两格出场间隔（秒）。 */
 export const TERRITORY_HEX_SPAWN_STAGGER_SECONDS = 0.055;
 
-/**
- * 错峰**总上限**（秒）。
- *
- * 一次露出一整排（十几格）时，`index × stagger` 会排到 0.6s 以上，最后几格要等半秒才出现 ——
- * 读起来像卡顿而不是"落差"。封顶之后多出来的格子按上限同时出现，整体长度可控。
- */
+/** 错峰总上限（秒），超出部分同时出现。 */
 export const TERRITORY_HEX_SPAWN_STAGGER_MAX_SECONDS = 0.3;
 
-/**
- * 起手缩放：`0.55`。
- *
- * 不用 0：缩到 0 时格子只剩一个点，六边形的形状（这次动画的主体）反而看不出来；
- * 0.55 起手能读到"一块地皮从格心长开"，且 0.4s 内涨到 1 的位移量刚好。
- */
+/** 起手缩放，避免缩到 0 时看不出六边形轮廓。 */
 export const TERRITORY_HEX_SPAWN_FROM_SCALE = 0.55;
 
-/**
- * 透明度在第几成时**已经铺满**（0~1 的进度比例）。
- *
- * 0.7 ⇒ 前 70% 的时间就从透明走到不透明，剩下 30% 是"实体继续长大"。
- * 反过来（透明度跟着缩放一起到 100%）会出现「格子已经长大了但还是半透明」的灰蒙感。
- */
+/** 透明度在该进度前铺满，剩余时间留给继续放大。 */
 export const TERRITORY_HEX_SPAWN_OPACITY_PORTION = 0.7;
 
 // ---------------------------------------------------------------------------
-// 「胜利通过」那一批：同一套曲线，参数更重（用户 2026-11-03）
+// 「胜利通过」那一批：同一套曲线，参数更重
 // ---------------------------------------------------------------------------
 
 /**
@@ -71,7 +36,7 @@ export const TERRITORY_HEX_SPAWN_OPACITY_PORTION = 0.7;
  * 「打完这一关、地盘归我」是**主动作的收尾**，玩家刚从一个弹窗/战斗里出来，视线就在这一格上。
  * 所以这一档刻意把它做成"一锤一锤"的：
  *
- * | 维度 | 普通 | 胜利 | 为什么 |
+ * | 维度 | 普通 | 胜利 | 说明 |
  * | --- | --- | --- | --- |
  * | 单格时长 | 0.4s | 0.62s | 过冲要有时间收尾，不然读成"抖了一下" |
  * | 起手缩放 | 0.55 | 0.28 | 起手更小 ⇒ "从地里长出来"的落差更大 |
@@ -171,9 +136,9 @@ function easeOutCubic(p: number): number {
  * 已用时（秒）→ 这一帧的缩放与不透明度。
  *
  * @param seconds 相对**本格自己的**起点（延迟已扣掉）。`<= 0` = 还没轮到它 ⇒ 起手帧
- *                （`fromScale` + 全透明）。视图 `play()` 时先写一遍这一帧，避免"闪一帧全尺寸"。
- * @param timing  节奏档位：默认普通生成；胜利通过那批传 `TERRITORY_HEX_SPAWN_VICTORY_TIMING`
- *                （多一段"长过头再收回来"的过冲）。
+ * （`fromScale` + 全透明）。视图 `play()` 时先写一遍这一帧，避免"闪一帧全尺寸"。
+ * @param timing 节奏档位：默认普通生成；胜利通过那批传 `TERRITORY_HEX_SPAWN_VICTORY_TIMING`
+ * （多一段"长过头再收回来"的过冲）。
  */
 export function territoryHexSpawnFrame(
     seconds: number,
@@ -218,7 +183,7 @@ export function territoryHexSpawnFrame(
  *
  * @param stagger 相邻两格的间隔；取负值按 0 处理（不允许倒序进场）。
  * @param staggerMax 错峰总上限；缺省 `TERRITORY_HEX_SPAWN_STAGGER_MAX_SECONDS`
- *                   （胜利档传 `TERRITORY_HEX_SPAWN_VICTORY_TIMING` 的那两个值）。
+ * （胜利档传 `TERRITORY_HEX_SPAWN_VICTORY_TIMING` 的那两个值）。
  */
 export function territoryHexSpawnDelays(
     cells: readonly ITerritoryHexSpawnCell[],

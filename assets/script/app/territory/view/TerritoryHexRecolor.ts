@@ -26,27 +26,27 @@ interface ITerritoryHexRecolorActive {
 /**
  * 「关卡通过后地皮换色」表现：旧地皮缩小淡出 + 新地皮放大淡入，多格按批错峰。
  *
- * ## 结构（`createHex` 里挂的那两个子节点）
+ * 结构（`createHex` 里挂的那两个子节点）
  *
  * ```
- * Hex_<cellId>        ← 格根：地皮 Sprite（换色期间 enabled=false）
- * ├── RecolorNew      ← 新地皮：0.6 → 1，透明度 0 → 1
- * ├── RecolorOld      ← 旧地皮：1 → 0.55，透明度 1 → 0
- * ├── Frame           ← 格面框（通关即消失，不参与本动画）
- * ├── GroundGlow      ← 翻格底光
- * └── Reveal          ← 翻格用的"新地皮放大填充"
+ * Hex_<cellId> ← 格根：地皮 Sprite（换色期间 enabled=false）
+ * ├── RecolorNew ← 新地皮：0.6 → 1，透明度 0 → 1
+ * ├── RecolorOld ← 旧地皮：1 → 0.55，透明度 1 → 0
+ * ├── Frame ← 格面框（通关即消失，不参与本动画）
+ * ├── GroundGlow ← 翻格底光
+ * └── Reveal ← 翻格用的"新地皮放大填充"
  * ```
  *
  * `RecolorOld` 排在 `RecolorNew` **之后**（渲染序 ⇒ 画在上面）：旧地皮缩小的过程里
  * 新地皮从它身下露出来，读作"换了一张"，而不是"两张叠在一起各淡各的"。
  *
- * ## 为什么不动格根
+ * 缩放只写子节点，格根保持 1
  *
  * 需求第四条「地块上的建筑保持原地不动」。建筑本来就不在格节点下（`StationIconLayer` 等四层），
  * 但**格根一缩放，格面框 / 底光 / `Reveal` 都会跟着缩** —— 那会露出一圈"框跟着地皮一起缩"的破绽。
  * 所以缩放只写在两个临时子节点上，格根缩放全程恒 1。
  *
- * ## 池化契约
+ * 池化契约
  *
  * 与其它表现层一致：`isPlaying / play / step / stop / reset`，`settle()` 必须收口 ——
  * 藏起来的格根地皮要**重新 `enabled`**（不然这一格会永久变成空白），两个临时节点要收起、
@@ -71,8 +71,8 @@ export class TerritoryHexRecolor {
     /**
      * 开始播一格换色。
      *
-     * @param from  旧地皮帧（**调用方在 `applyTileFrame` 之前读到的**那张）
-     * @param to    新地皮帧
+     * @param from 旧地皮帧（**调用方在 `applyTileFrame` 之前读到的**那张）
+     * @param to 新地皮帧
      * @param delay 这一格的档期（秒，`>= 0`）；同批格子由 `territoryHexRecolorDelays` 算出来
      * @returns 是否真的开始（同一格已经在播 / 缺临时节点 / 缺帧 ⇒ `false`）
      */
@@ -98,8 +98,8 @@ export class TerritoryHexRecolor {
         if (oldSprite.spriteFrame !== from) oldSprite.spriteFrame = from;
         if (newSprite.spriteFrame !== to) newSprite.spriteFrame = to;
         this.actives.push(active);
-        // ⚠️ 起手必须先写一遍：`paintHexes` 已经把格根地皮换成**新帧**了，这一帧若不藏起来，
-        //    就会先渲染一帧"满尺寸的新地皮"，下一帧才缩成 0.6 —— 表现为"闪一下再长"。
+        // 起手必须先写一遍：`paintHexes` 已经把格根地皮换成**新帧**了，这一帧若不藏起来，
+        // 就会先渲染一帧"满尺寸的新地皮"，下一帧才缩成 0.6 —— 表现为"闪一下再长"。
         this.apply(active, 0);
         return true;
     }
@@ -107,7 +107,7 @@ export class TerritoryHexRecolor {
     /**
      * 把格根地皮重新藏起来（幂等）。
      *
-     * 为什么需要它：`paintHexes` 每秒都会全量走一遍 `applyTileFrame`，那一句会
+     * `paintHexes` 每秒都会全量走一遍 `applyTileFrame`，那一句会
      * `sprite.enabled = true` —— 换色播到一半被重绘一次，就会在"长大的新地皮"底下
      * 闪出一张满尺寸的新地皮。所以 `paintHexes` 写完帧要立刻再藏一次（同帧，看不见）。
      */
@@ -173,11 +173,11 @@ export class TerritoryHexRecolor {
     /**
      * 收口。
      *
-     * 🔴 三件事一件都不能漏：
-     *  1. 格根地皮必须重新 `enabled` —— 换色期间它是藏起来的，不还回来这一格就永远空白；
-     *  2. 新地皮帧要写回格根 —— 动画中途被 `reset()` 打断时格根可能还停在旧帧（藏着的），
-     *     还回来就变成"通关了还是泥巴块"；
-     *  3. 两个临时节点收起 + 缩放复位 + 透明度 255（池化复用不能带着上一格的半尺寸 / 半透明）。
+     * 三件事一件都不能漏：
+     * 1. 格根地皮必须重新 `enabled` —— 换色期间它是藏起来的，不还回来这一格就永远空白；
+     * 2. 新地皮帧要写回格根 —— 动画中途被 `reset()` 打断时格根可能还停在旧帧（藏着的），
+     * 还回来就变成"通关了还是泥巴块"；
+     * 3. 两个临时节点收起 + 缩放复位 + 透明度 255（池化复用不能带着上一格的半尺寸 / 半透明）。
      */
     private settle(active: ITerritoryHexRecolorActive): void {
         const ground = active.ground;

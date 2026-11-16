@@ -58,7 +58,7 @@ function makeMarker(kind: IFakeMarker['kind'], id: number | string, hexId: numbe
             setPosition(x: number, y: number) { this.position = { x, y }; },
         },
         // cullMarkers 的视口余量要读 hitArea（名条位置），给一组常规值即可
-        view: { hitArea: { badgeY: 70, badgeHeight: 30 } },
+        view: { hitArea: { height: 80, badgeY: 70, badgeHeight: 30 } },
     };
 }
 

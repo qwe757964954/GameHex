@@ -1042,6 +1042,34 @@ test('组合预览使用最高正权重资源的图片，并提供组合名候�
     }
 });
 
+test('野怪 ID 反查组合并展示组内野怪，点位保存的仍是组合 ID', async () => {
+    const { editor, element } = createEditor({ fetch: async (path: string) => ({
+        ok: true, json: async () => path === '/api/neutral-resource-groups' ? { groups: [
+            { groupId: 14009, name: '随机野怪', items: [
+                { resourceType: 11, weight: 5000, resId: '68007' },
+                { resourceType: 11, weight: 5000, resId: '68008' },
+            ] },
+            { groupId: 14010, name: '固定野怪', items: [{ resourceType: 11, weight: 10, resId: '68009' }] },
+            { groupId: 13001, name: '金币宝箱', items: [{ resourceType: 1, weight: 10, icon: 'gold' }] },
+        ] } : { presets: [], assets: [] },
+    }) });
+    await new Promise((resolve) => setImmediate(resolve));
+    editor.applyLayout({ version: 3, rows: 10, columns: 16, playerCount: 2, cityMode: 'select', ascii: Array(10).fill('1111111111111111') });
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.monsterCardsOfGroup(14009))).map((card: any) => card.resId), ['68007', '68008']);
+    // 只有一只正权重野怪的组合可以用野怪 ID 直接选中，并进入放置
+    element('monsterCardId').value = '68009';
+    element('monsterCardId').listeners.change();
+    assert.equal(editor.state().resourceGroupId, 14010);
+    editor.paint(2, 2);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.buildJSON())).resourcePoints[0], { row: 2, column: 2, groupId: 14010 });
+    assert.match(element('monsterCardStatus').textContent, /组合 14010.*68009（固定）/);
+    // 多只野怪的组合照实列出权重，不假装能固定；点位仍只写组合 ID
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.monsterGroupCandidates('68007'))), [{ groupId: 14009, name: '随机野怪' }]);
+    editor.addResourceGroupPoint(9, 14, 14009);
+    assert.equal(editor.selectPatrolPoint(9, 14), true);
+    assert.match(element('patrolStatus').textContent, /组合 14009.*68007.*68008/);
+});
+
 test('资源组合输入从空值开始，确认后显示统一资源图片和组合编号，数据只保存组合ID', () => {
     const { editor, element } = createEditor();
     editor.applyLayout({ version: 3, rows: 8, columns: 12, cityMode: 'select', ascii: Array(8).fill('000000000000') });

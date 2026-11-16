@@ -774,16 +774,19 @@ test('E11 两个视图脚本里不出现中文字面量（文案唯一出口 = M
     assert.deepEqual(bad, [], `视图脚本里出现中文（应走 MainTaskTexts）：\n  ${bad.join('\n  ')}`);
 });
 
-test('E12 详情弹窗的槽位常量与 prefab 几何一致（110 / 4 列 / 442×266）', () => {
-    const pick = (name: string): number => {
-        const m = DETAIL_SRC.match(new RegExp(`const\\s+${name}\\s*=\\s*([0-9.]+)`));
-        assert.ok(m, `源码里找不到 ${name}`);
-        return Number(m![1]);
-    };
-    assert.equal(pick('SLOT_SIZE'), 110, 'FGUI item 本体 110×110');
-    assert.equal(pick('SLOT_COLUMNS'), 4, '视口 442 ÷ 110 = 4.02 ⇒ 4 列');
-    assert.equal(pick('VIEW_W'), 442);
-    assert.equal(pick('VIEW_H'), 266);
+test('E12 详情弹窗的槽位几何全部在 MainTaskDetail.prefab 的 Grid Layout 里（110 / 4 列 / 442×266）', () => {
+    assert.doesNotMatch(DETAIL_SRC, /const\s+(SLOT_SIZE|SLOT_COLUMNS|VIEW_W|VIEW_H)\s*=/, '槽位几何常量必须已删除');
+    const rewardNode = detail.find((entry: any) => entry?.__type__ === 'cc.Node' && entry._name === 'RewardList');
+    assert.ok(rewardNode, 'MainTaskDetail.prefab 必须有 RewardList');
+    const rewardIndex = detail.indexOf(rewardNode);
+    const layout = compOf(detail, rewardIndex, 'cc.Layout');
+    assert.ok(layout, 'RewardList 必须挂 cc.Layout');
+    assert.equal(layout._layoutType, 3, 'GRID');
+    assert.equal(layout._constraint, 2);
+    assert.equal(layout._constraintNum, 4, '4 列');
+    assert.deepEqual([layout._cellSize.width, layout._cellSize.height], [110, 110], '格子 110×110');
+    const transform = compOf(detail, rewardIndex, 'cc.UITransform');
+    assert.deepEqual([transform._contentSize.width, transform._contentSize.height], [442, 266], '视口 442×266');
 });
 
 // ============================================================

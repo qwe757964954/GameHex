@@ -10,19 +10,19 @@ const { ccclass, property } = _decorator;
 /**
  * 领地「资源获得」读数 —— **icon + 数字从起点升起、边升边淡出**。
  *
- *  挂在 `ui/territory/TerritoryResourceGain.prefab` 的根上，由 `TerritoryMapView` 池化复用：
- *  每次 `play()` 前调用方先 `setPosition` 定好起点，本类只负责从起点往上飘。
+ * 挂在 `ui/territory/TerritoryResourceGain.prefab` 的根上，由 `TerritoryMapView` 池化复用：
+ * 每次 `play()` 前调用方先 `setPosition` 定好起点，本类只负责从起点往上飘。
  *
- *  ⚠️ 起点**不是格心**：2026-10-16 row17 起它是「**喷发原点**（= 点击地块的中心点）
- *  往上 `TERRITORY_GAIN_START_LIFT_PX`(40px)」—— 需求原话「图标和数字 ui 增加上移的动画
- *  放在例子效果坐标点的上方间隔 40px」。喷发那半句在同目录 `TerritoryGainBurst`。
+ * 起点**不是格心**：row17 起它是「**喷发原点**（= 点击地块的中心点）
+ * 往上 `TERRITORY_GAIN_START_LIFT_PX`(40px)」—— 需求说明「图标和数字 ui 增加上移的动画
+ * 放在例子效果坐标点的上方间隔 40px」。喷发那半句在同目录 `TerritoryGainBurst`。
  *
- *  表现参数全部在 `model/TerritoryResourceGain`（纯函数、零 cc），本文件只做**逐帧写节点**，
- *  不自己算曲线 —— 与 `TerritoryHexFlip` 同一套路（真源单一，单测直接测纯函数）。
+ * 表现参数全部在 `model/TerritoryResourceGain`（纯函数、零 cc），本文件只做**逐帧写节点**，
+ * 不自己算曲线 —— 与 `TerritoryHexFlip` 同一套路（真源单一，单测直接测纯函数）。
  *
- * ⚠️ **不建 tween**：飘字是池化节点，`tween` 挂在复用节点上会在回收后继续跑
- *  （见规则 106 / 247）；逐帧 `step(dt)` 由 `TerritoryMapView.update` 统一推进，
- *  回收时把 `elapsed` 置 -1 即可，没有需要显式销毁的定时器。
+ * **不建 tween**：飘字是池化节点，`tween` 挂在复用节点上会在回收后继续跑
+ * （见规则 106 / 247）；逐帧 `step(dt)` 由 `TerritoryMapView.update` 统一推进，
+ * 回收时把 `elapsed` 置 -1 即可，没有需要显式销毁的定时器。
  */
 @ccclass('TerritoryResourceGainView')
 export class TerritoryResourceGainView extends Component {
@@ -42,7 +42,7 @@ export class TerritoryResourceGainView extends Component {
     /**
      * 从**节点当前的 y** 起飘。
      *
-     * ⚠️ 起点必须在 `play()` **之前**由调用方写好：本类每帧写的是「起点 + 位移」，
+     * 起点必须在 `play()` **之前**由调用方写好：本类每帧写的是「起点 + 位移」，
      * 池化复用时上一次的位移还留在节点上，不重设起点就会越飘越高。
      */
     play(frame: SpriteFrame | null, amount: number): void {
@@ -62,7 +62,7 @@ export class TerritoryResourceGainView extends Component {
      * 几何全在 `territoryGainContentX`（纯函数，单测直接测）；这里只负责读两个宽度、
      * 逼一次 Label 排版、把结果写回节点。每次 `play()` 都重算，任何位数都居中。
      *
-     * ⚠️ 必须先 `updateRenderData(true)`：`overflow = NONE` 时 Label 是**延迟**把实测尺寸
+     * 必须先 `updateRenderData(true)`：`overflow = NONE` 时 Label 是**延迟**把实测尺寸
      * 写回 `UITransform` 的，不逼一下读到的是上一句的宽度（看着像"数字跳到一半"）。
      */
     private layoutContent(): void {

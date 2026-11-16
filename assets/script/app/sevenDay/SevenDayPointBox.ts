@@ -18,34 +18,34 @@ const { ccclass, property } = _decorator;
 @ccclass('SevenDayPointBox')
 export class SevenDayPointBox extends Component {
     @property({ type: Sprite, tooltip: 'BoxIcon：宝箱图（`sd_box_glow`）' })
-    boxIcon: Sprite = null;
+    boxIcon: Sprite = null!;
 
     @property({ type: Node, tooltip: 'BoxBtn：宝箱点击区（挂 cc.Button）' })
-    boxButton: Node = null;
+    boxButton: Node = null!;
 
     @property({ type: Node, tooltip: 'ProgressBar：填充条（锚点必须 (0,0.5)）' })
-    progressBar: Node = null;
+    progressBar: Node = null!;
 
     @property({ type: Node, tooltip: 'ProgressBg：进度条底（满宽，用来取宽度上限）' })
-    progressBg: Node = null;
+    progressBg: Node = null!;
 
     @property({ type: Label, tooltip: 'NeedLabel：达标积分数字' })
-    needLabel: Label = null;
+    needLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'CheckMark：已领取对勾（默认隐藏）' })
-    checkMark: Node = null;
+    checkMark: Node = null!;
 
     @property({ type: Node, tooltip: 'Ray：可领取时的旋转光效（默认隐藏）' })
-    ray: Node = null;
+    ray: Node = null!;
 
     @property({ type: Sprite, tooltip: 'BoxBtn 里的品质框 Sprite（复用 `image/frame/common_img_pzk_*`）' })
-    qualityFrame: Sprite = null;
+    qualityFrame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'BoxBtn/Icon：奖励物品图标（这一档能领到什么）；没有映射图时整块隐藏' })
-    rewardIcon: Sprite = null;
+    rewardIcon: Sprite = null!;
 
-    @property({ type: Node, tooltip: 'BoxBtn/RedDot：可领取时的红点（默认隐藏）' })
-    redDot: Node = null;
+    @property({ type: Node, tooltip: 'BoxBtn/RedDot：可领取时的红点（默认隐藏；prefab 中可不存在）' })
+    redDot: Node | null = null;
 
     /**
      * 铺一个宝箱。

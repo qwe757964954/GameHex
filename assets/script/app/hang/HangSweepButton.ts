@@ -21,7 +21,7 @@ const { ccclass, property } = _decorator;
  * `cost` 的文本 = `x{end × times}`（`end` = 该关单次体力消耗，`times` = 当前倍率）。
  * 服务端按同一口径扣体力，所以这个数字必须跟着倍率走（老端 `refreshBtn` 原注释）。
  *
- * ⚠️ 底图是**实图**（`TY_btn23` → `fd_tab_off`），但文案仍必须另挂 Label 子节点
+ * 底图是**实图**（`TY_btn23` → `fd_tab_off`），但文案仍必须另挂 Label 子节点
  * （技能 §10.3：`icon` 与 `title` 在 FGUI 里是两回事，少一个子 Label 就是「空按钮」）。
  */
 @ccclass('HangSweepButton')
@@ -61,7 +61,7 @@ export class HangSweepButton extends Component {
     }
 
     protected onDestroy(): void {
-        // ⚠️ 判 `isValid` 后再摘监听（规则 60 的同类问题）
+        // 判 `isValid` 后再摘监听
         if (this.node && this.node.isValid) this.node.off(Button.EventType.CLICK, this._handleClick, this);
     }
 

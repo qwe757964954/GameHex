@@ -32,9 +32,8 @@
  * ③ `InfoGroup` 是**整组**平移，组内 4 件坐标不变（FGUI 的 `gearXY` 作用在组上）。
  */
 
-import { _decorator, Button, Component, Label, Node, Sprite } from 'cc';
+import { _decorator, Button, Component, Label, Node, Sprite, Vec3 } from 'cc';
 import { FriendAvatarLoader } from '../friend/FriendAvatar';
-import { recruitLayout } from './ChatTable';
 
 const { ccclass, property } = _decorator;
 
@@ -81,11 +80,31 @@ export class ChatRecruitRow extends Component {
 
     /** 头像异步加载器（防「虚拟列表复用 ⇒ 头像串行」，见 `FriendAvatar` 文件头）。 */
     private avatar: FriendAvatarLoader | null = null;
+    /** 「自己」态的坐标标记组；「别人」态直接缓存 prefab 初始坐标。 */
+    private selfLayout: Node | null = null;
+    private readonly normalPositions = new Map<Node, Vec3>();
 
     protected onLoad(): void {
         this.avatar = new FriendAvatarLoader(() => this.headIcon);
+        this.selfLayout = this.node.getChildByName('SelfLayout');
+        this.normalPositions.set(this.background.node, this.background.node.position.clone());
+        this.normalPositions.set(this.headNode, this.headNode.position.clone());
+        this.normalPositions.set(this.nameLabel.node, this.nameLabel.node.position.clone());
+        this.normalPositions.set(this.infoGroup, this.infoGroup.position.clone());
         this.joinButton.on(Button.EventType.CLICK, this.emitJoin, this);
         this.headNode.on(Node.EventType.TOUCH_END, this.emitHead, this);
+    }
+
+    private applyLayout(isSelf: boolean): void {
+        const apply = (node: Node, markerName: string): void => {
+            const marker = isSelf ? this.selfLayout?.getChildByName(markerName) : null;
+            const local = marker?.position ?? this.normalPositions.get(node);
+            if (local) node.setPosition(local.x, local.y, node.position.z);
+        };
+        apply(this.background.node, 'Background');
+        apply(this.headNode, 'Head');
+        apply(this.nameLabel.node, 'Name');
+        apply(this.infoGroup, 'InfoGroup');
     }
 
     /**
@@ -106,17 +125,10 @@ export class ChatRecruitRow extends Component {
         isSelf: boolean,
         buttonText: string,
     ): void {
-        const layout = recruitLayout(isSelf);
-
-        this.background.node.setPosition(layout.background.x, layout.background.y, 0);
-        this.headNode.setPosition(layout.head.x, layout.head.y, 0);
-        this.nameLabel.node.setPosition(layout.name.x, layout.name.y, 0);
-        this.infoGroup.setPosition(layout.infoGroup.x, layout.infoGroup.y, 0);
+        this.applyLayout(isSelf);
 
         this.nameLabel.string = name;
-        this.nameLabel.horizontalAlign = layout.nameAlign === 'right'
-            ? Label.HorizontalAlign.RIGHT
-            : Label.HorizontalAlign.LEFT;
+        this.nameLabel.horizontalAlign = isSelf ? Label.HorizontalAlign.RIGHT : Label.HorizontalAlign.LEFT;
 
         this.stageLabel.string = stageName;
         // 老端 `item.tm("宣言").setText("")` —— 逐字照抄：**恒空**，不是没写完

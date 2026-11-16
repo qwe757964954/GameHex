@@ -8,18 +8,18 @@ import {
 } from '../model/TerritoryHeroReward';
 
 /**
- * 随机格「碎片 / 种族经验 → 飞向底部英雄按钮」的**轻量飞行**（2026-11-10 需求 ②）。
+ * 随机格「碎片 / 种族经验 → 飞向底部英雄按钮」的**轻量飞行**（②）。
  *
- * ## 为什么不是复用 `TerritoryChestView` 的 Fly 层
+ * 不复用 `TerritoryChestView` 的 Fly 层
  *
- * 那套 Fly 活在开箱覆盖层里，与三档镜头 / 光柱 /  input 锁 / `onDone` 结算绑成一整台戏；
+ * 那套 Fly 活在开箱覆盖层里，与三档镜头 / 光柱 / input 锁 / `onDone` 结算绑成一整台戏；
  * 随机格是「解锁即发奖」，本来就有格心喷发 + 一条合成读数，只需要**补一段**飞行。
  * 借它的壳会把「不弹窗、不锁输入」的随机格语义一起改掉。
  *
  * ⇒ 曲线另立真源 `model/TerritoryHeroReward`，但**贝塞尔公式与固定格同款**
  * （`TerritoryChestView.applyFly`），玩家看到的是同一种「奖励被收进按钮」的语言。
  *
- * ## 与 `TerritoryGainBurst` 同一套路
+ * 与 `TerritoryGainBurst` 同一套路
  *
  * 非 `Component`、不是 tween：逐帧 `step(dt)` 由 `TerritoryMapView.update` 统一推进，
  * 节点池化（换章 / 复位时 `stop()` 只收不销毁），时钟置 `-1` 即空闲。
@@ -109,7 +109,7 @@ export class TerritoryHeroFlight {
         if (this.elapsed < 0) return false;
         const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
         this.elapsed += step;
-        // 🔴 按**显式到达时刻**判，而不是看 `fx` 变 null 的隐式窗口（掉帧会漏）。
+        // 按**显式到达时刻**判，而不是看 `fx` 变 null 的隐式窗口（掉帧会漏）。
         if (!this.landed && this.elapsed >= territoryHeroFlightArriveAt(0, this.count)) {
             this.landed = true;
             this.onLanded?.();

@@ -24,8 +24,8 @@
  *
  * FGUI `rank`（`组件_联盟_北伐中原_排名`，60×60）自己也是一个 5 页控制器：
  * `0 第一名 / 1 第二名 / 2 第三名 / 3 第N名 / 4 未上榜`。
- * ⚠️ 老端**从来只切到「第一名」或「未上榜」两页**（`setSelectedPage("标签", data.rank == -1 ? "未上榜" : "第一名")`）
- *    —— 前 3 名没有专属的奖牌图，`rank.lab` 就是统一的白字数字。照抄，不"补全"。
+ * 老端**从来只切到「第一名」或「未上榜」两页**（`setSelectedPage("标签", data.rank == -1 ? "未上榜" : "第一名")`）
+ * —— 前 3 名没有专属的奖牌图，`rank.lab` 就是统一的白字数字。照抄，不"补全"。
  */
 
 import {_decorator, Component, Label, Node, Sprite} from 'cc';
@@ -41,7 +41,7 @@ export type LeagueNorthRankRowMode = 'rank' | 'progress';
 
 @ccclass('LeagueNorthRankRow')
 export class LeagueNorthRankRow extends Component {
-    // ---------- 名次格（两页共用） ----------
+    // 名次格（两页共用）
 
     @property({ type: Sprite, tooltip: 'RowBg：行底框（`显示背景` 控制器第 1 页时藏掉）' })
     rowBg: Sprite = null;
@@ -52,7 +52,7 @@ export class LeagueNorthRankRow extends Component {
     @property({ type: Node, tooltip: 'Rank/Unranked：「未上榜」那块（名次 = -1 时显示）' })
     unranked: Node = null;
 
-    // ---------- 「联盟排名」页 ----------
+    // 「联盟排名」页
 
     @property({ type: Node, tooltip: 'RankFields：联盟名 / 伤害 / 人数 / 奖励（第 0 页）' })
     rankFields: Node = null;
@@ -72,7 +72,7 @@ export class LeagueNorthRankRow extends Component {
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods1：奖励格 2' })
     rewardSlot1: LeagueRewardSlot = null;
 
-    // ---------- 「盟内进度」页 ----------
+    // 「盟内进度」页
 
     @property({ type: Node, tooltip: 'ProgressFields：头像 / 玩家名 / 伤害 / 战斗力（第 1 页）' })
     progressFields: Node = null;
@@ -115,7 +115,7 @@ export class LeagueNorthRankRow extends Component {
 
         if (this.rowBg) this.rowBg.node.active = showBackground;
 
-        // ---- 名次格（两页共用）----
+        // 名次格（两页共用）
         const ranked = view.rank > 0;
         if (this.rankLabel) {
             this.rankLabel.node.active = ranked;
@@ -136,9 +136,7 @@ export class LeagueNorthRankRow extends Component {
         else this.renderProgress(view);
     }
 
-    // ============================================================
     // 内部
-    // ============================================================
 
     /** 第 0 页：联盟名 / 伤害 / 人数 / 两个奖励格（老端 `renderRank()`）。 */
     private renderRank(view: ILeagueNorthRankRowView, art: ILeagueRewardArt | null): void {
@@ -146,8 +144,8 @@ export class LeagueNorthRankRow extends Component {
         if (this.leaguePower) this.leaguePower.string = view.powerText;
         if (this.roleCount) this.roleCount.string = view.roleCountText;
 
-        // ⚠️ 老端：名次落在奖励区间里才显示两颗物品框，否则 `visible = false`（**不隐藏行**）。
-        //    未上榜（rank = -1）永远查不到区间 ⇒ 两颗都藏。
+        // 老端：名次落在奖励区间里才显示两颗物品框，否则 `visible = false`（**不隐藏行**）。
+        // 未上榜（rank = -1）永远查不到区间 ⇒ 两颗都藏。
         const slots: readonly (LeagueRewardSlot | null)[] = [this.rewardSlot, this.rewardSlot1];
         for (let i = 0; i < slots.length; i += 1) {
             const slot = slots[i];
@@ -169,10 +167,10 @@ export class LeagueNorthRankRow extends Component {
         if (this.userPower) this.userPower.string = view.powerAbbrText;
         if (this.powerText) this.powerText.string = view.powerAbbrText;
 
-        // ⚠️ 老端 `head.SetUrlByIcon(ModelPlayer.GetPlayerIcon(usedSkinResId))` ——
-        //    玩家头像系统（`ModelPlayer.GetPlayerIcon`）在 Demo3.8**没迁**（同战斗入口那条）
-        //    ⇒ 头像内层恒隐藏，只留 `img_Touxiang_01` 那个空框（**不画问号占位**，同
-        //    `LeagueRewardSlot.render` 对「解析不出图标」的处置）。等头像系统落地后把这里换成查表即可。
+        // 老端 `head.SetUrlByIcon(ModelPlayer.GetPlayerIcon(usedSkinResId))` ——
+        // 玩家头像系统（`ModelPlayer.GetPlayerIcon`）在 Demo3.8**没迁**（同战斗入口那条）
+        // ⇒ 头像内层恒隐藏，只留 `img_Touxiang_01` 那个空框（**不画问号占位**，同
+        // `LeagueRewardSlot.render` 对「解析不出图标」的处置）。等头像系统落地后把这里换成查表即可。
         if (this.headIcon) this.headIcon.node.active = false;
     }
 

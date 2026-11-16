@@ -20,9 +20,7 @@ export const LEAGUE_TIP_LOADING = '联盟数据加载中，请稍候';
 export const LEAGUE_TIP_OFFLINE = '网络未连接，请稍后再试';
 export const LEAGUE_TIP_FAILED = '操作失败，请稍后再试';
 
-// ============================================================
 // 大厅（`ui/League/LeagueHall`）
-// ============================================================
 
 /** 三个页签文案（顺序 = FGUI `标签` controller 的页序：详情 / 动态 / 全服联盟）。 */
 export const LEAGUE_HALL_TABS = ['详情', '动态', '全服联盟'] as const;
@@ -37,10 +35,10 @@ export const LEAGUE_HALL_ID_PREFIX = 'ID:';
 /**
  * 联系微信号前缀（老端 `FW.G_W("CONTACT_WAY")`）。
  *
- * ⚠️ 冒号是**全角** `：`（U+FF1A）—— 老端运行时取的是 `mL.json` 的 `CONTACT_WAY` = 「微信号：」。
- *    FGUI 设计稿 `组件_联盟_大厅.xml` 的 `league_wx` 写的是半角 `微信号:`（U+003A），
- *    那只是**设计期占位串**（运行时会整条被老端覆盖），不能当运行时真值。
- *    两处逐字节差异见 `tests/league-hall.test.ts` 的 D1 段（该段连同 U+FF1A 一起断言）。
+ * 冒号是**全角** `：`（U+FF1A）—— 老端运行时取的是 `mL.json` 的 `CONTACT_WAY` = 「微信号：」。
+ * FGUI 设计稿 `组件_联盟_大厅.xml` 的 `league_wx` 写的是半角 `微信号:`（U+003A），
+ * 那只是**设计期占位串**（运行时会整条被老端覆盖），不能当运行时真值。
+ * 两处逐字节差异见 `tests/league-hall.test.ts` 的 D1 段（该段连同 U+FF1A 一起断言）。
  */
 export const LEAGUE_HALL_WX_PREFIX = '微信号：';
 /** 管理按钮文案（FGUI `按钮_联盟_管理` 的 `<text title="管理">`）。 */
@@ -69,9 +67,7 @@ export const LEAGUE_HALL_PLACEHOLDER = {
     maxMemberCount: 46,
 } as const;
 
-// ============================================================
 // 子面板：退出提示（`组件_联盟_大厅_退出提示`）
-// ============================================================
 
 /**
  * 退出联盟的二次确认正文。
@@ -87,9 +83,7 @@ export const LEAGUE_EXIT_CONFIRM_CONTENT =
 export const LEAGUE_EXIT_CONFIRM_SURE = '确定';
 export const LEAGUE_EXIT_CONFIRM_CANCEL = '取消';
 
-// ============================================================
 // 子面板：等级预览（`组件_联盟_大厅_等级预览`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="等级预览"/>`）。 */
 export const LEAGUE_LEVEL_PREVIEW_TITLE = '等级预览';
@@ -109,9 +103,7 @@ export const LEAGUE_LEVEL_ROW_TITLE_PREFIX = '等级';
  */
 export const LEAGUE_LEVEL_ROW_CTX_PREFIX = '最大可加入人数：+';
 
-// ============================================================
 // 子面板：申请列表（`组件_联盟_大厅_申请列表`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="申请管理"/>`）。 */
 export const LEAGUE_APPLY_TITLE = '申请管理';
@@ -123,17 +115,15 @@ export const LEAGUE_APPLY_ALL_REJECT = '全部拒绝';
 /**
  * 申请行内两个按钮（FGUI `组件_联盟_联盟角色申请` 的 `<Button title=… titleFontSize="28">`）。
  *
- * ⚠️ 两个按钮的**语义与底图要对上**：`btn_kick`（文案「拒绝」）用 `TY_btn09`、
- *    `btn_sure`（文案「同意」）用 `TY_btn10` —— 老端 `renderApply` 里
- *    `btn_kick → RequestLeagueApproveJoin(applyId, **false**)`、
- *    `btn_sure → …(applyId, **true**)`。名字里的 kick 是设计稿复用笔误，别按名字接。
+ * 两个按钮的**语义与底图要对上**：`btn_kick`（文案「拒绝」）用 `TY_btn09`、
+ * `btn_sure`（文案「同意」）用 `TY_btn10` —— 老端 `renderApply` 里
+ * `btn_kick → RequestLeagueApproveJoin(applyId, **false**)`、
+ * `btn_sure → …(applyId, **true**)`。名字里的 kick 是设计稿复用笔误，别按名字接。
  */
 export const LEAGUE_APPLY_ROW_REJECT = '拒绝';
 export const LEAGUE_APPLY_ROW_AGREE = '同意';
 
-// ============================================================
 // 子面板：编辑信息（`组件_联盟_大厅_编辑信息`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="编辑信息"/>`）。 */
 export const LEAGUE_EDIT_TITLE = '编辑信息';
@@ -150,19 +140,7 @@ export const LEAGUE_EDIT_CANCEL = '取消';
  */
 export const LEAGUE_EDIT_REJECTED_PLACEHOLDER = '***';
 
-/**
- * 违禁词提示（老端 `FW.G_W("CHAT_SENSITIVE_WORD")`，`mL.json`）。
- *
- * ⚠️ 目前**发不出来**：老端的违禁词校验走 `SDKMgr.checkMessage`，而 Demo3.8
- *    **没有 SDK 层**（同 `app/chat/ChatTexts.sensitiveWord` 处的说明）⇒ 编辑信息面板
- *    暂不做校验。留着这条文案是为了将来补上校验时
- *    不用再回老端查字 —— 那时把 `checkMessage` 的失败分支接上即可。
- */
-export const LEAGUE_EDIT_SENSITIVE_TIP = '聊天：有违禁词';
-
-// ============================================================
 // 子面板：管理（`组件_联盟_大厅_管理`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="联盟管理"/>`）。 */
 export const LEAGUE_MGR_TITLE = '联盟管理';
@@ -174,9 +152,9 @@ export const LEAGUE_MGR_NOTICE_TITLE = '联盟公告';
 /**
  * 底部两颗按钮（FGUI `<Button title=…>`）。
  *
- * ⚠️ 「退出联盟」在 FGUI 里是**两颗同名按钮**（`btn_quit` / `btn_quit1`）挂在 `管理`
- *    controller 的**互斥**两页上：能审批时显示「申请管理 + 退出联盟」，
- *    不能审批时只显示**居中那颗** `btn_quit1`。文案一样，落地时共用本常量。
+ * 「退出联盟」在 FGUI 里是**两颗同名按钮**（`btn_quit` / `btn_quit1`）挂在 `管理`
+ * controller 的**互斥**两页上：能审批时显示「申请管理 + 退出联盟」，
+ * 不能审批时只显示**居中那颗** `btn_quit1`。文案一样，落地时共用本常量。
  */
 export const LEAGUE_MGR_APPLY = '申请管理';
 export const LEAGUE_MGR_QUIT = '退出联盟';
@@ -184,9 +162,7 @@ export const LEAGUE_MGR_QUIT = '退出联盟';
 /** 「允许快速加入」勾选框右侧的说明文字（FGUI `n23`，`管理` controller 第 1 页才显示）。 */
 export const LEAGUE_MGR_QUICK_JOIN = '允许快速加入';
 
-// ============================================================
 // 子面板：联盟信息（`组件_联盟_大厅_联盟信息`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="联盟信息"/>`）。 */
 export const LEAGUE_INFO_TITLE = '联盟信息';
@@ -205,9 +181,7 @@ export const LEAGUE_INFO_JOIN = '加入';
  */
 export const LEAGUE_INFO_NOT_FOUND = '未找到联盟信息';
 
-// ============================================================
 // 加入联盟（`ui/League/LeagueJoin`）—— 「未入盟」态的整页
-// ============================================================
 
 /**
  * 底部两颗按钮的文案（FGUI `组件_联盟_加入联盟` 的
@@ -222,14 +196,12 @@ export const LEAGUE_JOIN_BTN_QUICK = '快速加入';
  * `mL.json`（**`id=553`**，key 列 `LEAGUE_NO_JOINABLE`）里 = **「没有可加入的联盟」**。
  * 触发点：老端 `TabLeagueJoin.onClickJoin()` 取「可快速加入」列表为空时 `showTip` 后**不发包**。
  *
- * ⚠️ id 是**逐行核对 `assets/remoteRef/mL.json` 的 `[id, key, name]` 三列**得出的
- *    （`id=554` 是 `LEAGUE_EXPEDITION_DRUM_LIMIT`「今日擂鼓次数已用尽」，差一位就串了）。
+ * id 是**逐行核对 `assets/remoteRef/mL.json` 的 `[id, key, name]` 三列**得出的
+ * （`id=554` 是 `LEAGUE_EXPEDITION_DRUM_LIMIT`「今日擂鼓次数已用尽」，差一位就串了）。
  */
 export const LEAGUE_NO_JOINABLE = '没有可加入的联盟';
 
-// ============================================================
 // 创建联盟（`ui/League/LeagueCreate`）
-// ============================================================
 
 /** 弹窗标题（FGUI `popBg` 的 `<Label title="创建联盟"/>`）。 */
 export const LEAGUE_CREATE_TITLE = '创建联盟';
@@ -252,10 +224,10 @@ export const LEAGUE_COST_HAS_SUFFIX = '/';
 /**
  * 联盟名为空时的提示 —— 用服务端的 `UNION_NAME_EMPTY`（`mL.json` **`id=597`** = 「联盟名字为空」）。
  *
- * ⚠️ 老端 `LayerLeagueCreat.onClickCreat()` 对空名是**静默 `return`**（不发包、不提示）；
- *    本端补一句提示是**有意偏离** —— 点「创建」毫无反应会让玩家以为卡了。
- *    文案本身取自服务端的同类错误码，不是新造的词。
- * ⚠️ id 是逐行核对 `mL.json` 的 `[id, key, name]` 得出的（`id=598` 是 `UNION_NAME_TOO_LONG`）。
+ * 老端 `LayerLeagueCreat.onClickCreat()` 对空名是**静默 `return`**（不发包、不提示）；
+ * 本端补一句提示是**有意偏离** —— 点「创建」毫无反应会让玩家以为卡了。
+ * 文案本身取自服务端的同类错误码，不是新造的词。
+ * id 是逐行核对 `mL.json` 的 `[id, key, name]` 得出的（`id=598` 是 `UNION_NAME_TOO_LONG`）。
  */
 export const LEAGUE_TIP_UNION_NAME_EMPTY = '联盟名字为空';
 
@@ -272,9 +244,7 @@ export const LEAGUE_COST_NOT_ENOUGH_TEMPLATE = '{0}不足';
 /** `roleProperty.name` 也取不到时的兜底（退化成老端另一条通用提示，`mL.json id=532`）。 */
 export const LEAGUE_COST_NOT_ENOUGH_FALLBACK = '未达到购买条件';
 
-// ============================================================
 // 大厅三个页签的行文案（`mL.json` 的 key → 值，逐字照搬）
-// ============================================================
 
 /**
  * 成员「在线」（老端 `FW.G_W("ONLINE_TEXT")`，`mL.json` id=416）。
@@ -290,7 +260,7 @@ export const LEAGUE_MEMBER_COUNT_PREFIX = '联盟成员';
  * 详情行里压在贡献值前面的固定小字（FGUI `组件_联盟_联盟角色item.xml` 的 `n18`，
  * 静态 `text="成员:"`）。
  *
- * ⚠️ 老端 `render()` **没有**给 `n18` 赋值 ⇒ 它是写死的静态文本 ——
+ * 老端 `render()` **没有**给 `n18` 赋值 ⇒ 它是写死的静态文本 ——
  * 这一列的表头是「今日/历史贡献」而前缀却写着「成员:」，属设计稿的复用笔误。
  * 移植保真优先，照搬。
  */
@@ -351,14 +321,12 @@ export function fillLeagueText(template: string, ...values: readonly (string | n
     });
 }
 
-// ============================================================
 // P4 公用
-// ============================================================
 
 /**
  * 「道具名 * 数量」之间的分隔符（老端三处都是裸拼 `FW.G_W("…") + "*" + number`）。
  *
- * ⚠️ 是**半角星号**，不是 `×`（`LayerLeagueDonate` / `LayerLeagueStore` 逐字如此）。
+ * 是**半角星号**，不是 `×`（`LayerLeagueDonate` / `LayerLeagueStore` 逐字如此）。
  */
 export const LEAGUE_GOODS_COUNT_SEP = '*';
 
@@ -371,17 +339,15 @@ export const LEAGUE_GOODS_COUNT_SEP = '*';
  * - 「免费捐献」：播完广告再发 `RequestUnionDonate(true)`（**先播后发**）；
  * - 「任务看广告」：播完广告再发 `RequestRoleWatchAdvert { type: 14, id: resId }`；
  * - 次数不再编不出来 —— `ad` 表 `limit` − `CmdRole.tlCmdAdvert` 已用（`unionTask=14` /
- *   `unionDonate=15`，与 `HangRepository` 对 `sweep=11` 同一算法）⇒ 底部行与
- *   「免费：N/M」都显示**真值**，不是假的 `0/0`。
+ * `unionDonate=15`，与 `HangRepository` 对 `sweep=11` 同一算法）⇒ 底部行与
+ * 「免费：N/M」都显示**真值**，不是假的 `0/0`。
  *
- * ⚠️ `playLeagueAd()` 是 **Mock**（模拟播放后成功返回），真机接微信
- *    `wx.createRewardedVideoAd()` 时替换其函数体即可，调用方不用改 —— 见 `LeagueAd.ts`。
+ * `playLeagueAd()` 是 **Mock**（模拟播放后成功返回），真机接微信
+ * `wx.createRewardedVideoAd()` 时替换其函数体即可，调用方不用改 —— 见 `LeagueAd.ts`。
  */
 export const LEAGUE_AD_PLAYBACK_AVAILABLE = true;
 
-// ============================================================
 // 联盟商店（`ui/League/LeagueStore`）
-// ============================================================
 
 /** 弹窗标题（FGUI `组件_联盟_商店` 的 `popBg` → `<Label title="联盟商店"/>`）。 */
 export const LEAGUE_STORE_TITLE = '联盟商店';
@@ -389,22 +355,20 @@ export const LEAGUE_STORE_TITLE = '联盟商店';
 /**
  * 售罄提示 —— 老端 `FW.G_W("SOLD_OUT")`（`mL.json` **`id=563`** = 「已售罄」）。
  *
- * ⚠️ `id=558` 是 `SPIN_SOLD_OUT`（转盘的「已售罄」），值恰好一样但**不是同一个 key**；
- *    移植按 `SOLD_OUT` 取。
+ * `id=558` 是 `SPIN_SOLD_OUT`（转盘的「已售罄」），值恰好一样但**不是同一个 key**；
+ * 移植按 `SOLD_OUT` 取。
  */
 export const LEAGUE_STORE_SOLD_OUT = '已售罄';
 
 /**
  * 限购进度文案 —— 老端 `item.tm("labCount").setText(\`${ref.limitDesc}:${ref.limit - buyTimes}/${ref.limit}\`)`。
  *
- * ⚠️ 分隔符是**半角冒号**（模板串直写 `:`），别写成全角 —— 全服/管理那几处用的是全角，
- *    两处口径**故意不同**（各自照抄自己的老端代码）。
+ * 分隔符是**半角冒号**（模板串直写 `:`），别写成全角 —— 全服/管理那几处用的是全角，
+ * 两处口径**故意不同**（各自照抄自己的老端代码）。
  */
 export const LEAGUE_STORE_LIMIT_TEMPLATE = '{0}:{1}/{2}';
 
-// ============================================================
 // 联盟捐献（`ui/League/LeagueDonate`）
-// ============================================================
 
 /** 弹窗标题（FGUI `组件_联盟_捐献` 的 `popBg` → `<Label title="联盟捐献"/>`）。 */
 export const LEAGUE_DONATE_TITLE = '联盟捐献';
@@ -443,28 +407,23 @@ export const LEAGUE_TIP_DONATE_LIMIT = '今日捐献次数已用完';
  * 捐献成功提示（老端 `ModelLeague.RequestLeagueDonate` 的 `FW.G_W("DONATE_SUCCESS")`，
  * `mL.json` **id=507** = 「捐献成功」）。
  *
- * ⚠️ 只在响应 `rsp.ret === true` 时才弹 —— `CmdUnionDonateRspMsg` 里**只有 `ret`**，
- *    奖励不在响应里（老端 `showCommonDonateReward` 是**本地**按 `gameConfig` 算的）。
+ * 只在响应 `rsp.ret === true` 时才弹 —— `CmdUnionDonateRspMsg` 里**只有 `ret`**，
+ * 奖励不在响应里（老端 `showCommonDonateReward` 是**本地**按 `gameConfig` 算的）。
  */
 export const LEAGUE_DONATE_SUCCESS = '捐献成功';
 
 /** 今日广告捐献次数用完（老端 `FW.G_W("LEAGUE_AD_DONATE_LIMIT")`，`mL.json` **id=547**）。 */
 export const LEAGUE_TIP_AD_DONATE_LIMIT = '今日广告捐献次数已用完';
 
-/** 广告能力未接入时的提示（与 `HangTexts.adUnavailable` 逐字一致）。 */
-export const LEAGUE_TIP_AD_NOT_READY = '广告暂未接入';
-
 /**
  * 金币捐献的二次确认 —— 老端**硬编码** `"是否花费10金币进行联盟捐献？"`。
  *
- * ⚠️ **有意偏离**：老端把 `unionDonateCost` 的字面值 `10` 写死在文案里（改配置文案不会跟着变）。
- *    本端改成模板、由页面填 `gameConfig.unionDonateCost` —— 措辞一字不改，只把数字变成活的。
+ * **有意偏离**：老端把 `unionDonateCost` 的字面值 `10` 写死在文案里（改配置文案不会跟着变）。
+ * 本端改成模板、由页面填 `gameConfig.unionDonateCost` —— 措辞一字不改，只把数字变成活的。
  */
 export const LEAGUE_DONATE_CONFIRM = '是否花费{0}金币进行联盟捐献？';
 
-// ============================================================
 // 每日砍价（`ui/League/LeagueDiscount`）
-// ============================================================
 
 /** FGUI `状态` controller 的三个页名（`pages="0,砍价,1,购买,2,已购买"`）。 */
 export const LEAGUE_DISCOUNT_PAGES = ['砍价', '购买', '已购买'] as const;
@@ -478,8 +437,8 @@ export const LEAGUE_DISCOUNT_BTN_BUY = '购买';
 /**
  * 砍价行里「砍价」二字（FGUI `组件_联盟_砍价Item` 的 `n43` 静态 `text="砍价"`）。
  *
- * ⚠️ 与按钮文案**同字不同源**：老端 `render()` 只覆盖 `lab_who` / `lab_price`，
- *    `n43` 从没被赋值 ⇒ 是设计稿的静态文本。两处都保留各自来源，别合并成一个常量。
+ * 与按钮文案**同字不同源**：老端 `render()` 只覆盖 `lab_who` / `lab_price`，
+ * `n43` 从没被赋值 ⇒ 是设计稿的静态文本。两处都保留各自来源，别合并成一个常量。
  */
 export const LEAGUE_DISCOUNT_ROW_ACTION = '砍价';
 
@@ -498,21 +457,16 @@ export const LEAGUE_TIP_BUY_TIMES_LIMIT = '购买次数已达上限';
 /**
  * 购买砍价商品的二次确认 —— 老端 `FW.G_W("UNION_BUY_BAR_COMFORM")`。
  *
- * ⚠️ **这个 key 在新端的 `mL.json` 里已经没有了**（老端 `mL.json` 里在 **id=600**）。
- *    文案逐字取自老端：`是否花费{0}金币购买该礼包？`（措辞里确实写的是「礼包」，属原稿措辞，
- *    移植保真照搬，不"顺手改对"）。
+ * **这个 key 在新端的 `mL.json` 里已经没有了**（老端 `mL.json` 里在 **id=600**）。
+ * 文案逐字取自老端：`是否花费{0}金币购买该礼包？`（措辞里确实写的是「礼包」，属原稿措辞，
+ * 移植保真照搬，不"顺手改对"）。
  */
 export const LEAGUE_DISCOUNT_BUY_CONFIRM = '是否花费{0}金币购买该礼包？';
-
-/** 砍价最低价（服务端错误码 `UNION_BARGAIN_MIN_COST`，`mL.json` id=318）—— 老端没主动提示，本端备着。 */
-export const LEAGUE_TIP_BARGAIN_MIN_COST = '已经达到砍价最低价格';
 
 /** 已购买（`状态` 第 3 页）时的兜底提示 —— 老端走 `LEAGUE_BUY_TIMES_LIMIT`，这里同口径。 */
 export const LEAGUE_TIP_DISCOUNT_DONE = LEAGUE_TIP_BUY_TIMES_LIMIT;
 
-// ============================================================
 // P4 公用：货币不足
-// ============================================================
 
 /**
  * 货币不足提示 —— 老端 `ModelGoods.CheckHaveEnoughCostAndOpenAlert`：
@@ -524,15 +478,13 @@ export const LEAGUE_TIP_DISCOUNT_DONE = LEAGUE_TIP_BUY_TIMES_LIMIT;
  *
  * `mL.json` **id=188** = `'{0}不足'`（`{0}` = 货币名，如「金币」/「联盟银币」）。
  *
- * ⚠️ 老端那条链还会先弹一个「道具不足」详情面板（`openDetail`，联盟这几处**都传了 `false`**
- *    —— 商店是 `CheckHaveEnoughCostAndOpenAlert([cost], false)`，所以联盟这边只有 tip、
- *    没有详情面板）。⇒ 本端只做 `showTip`。
+ * 老端那条链还会先弹一个「道具不足」详情面板（`openDetail`，联盟这几处**都传了 `false`**
+ * —— 商店是 `CheckHaveEnoughCostAndOpenAlert([cost], false)`，所以联盟这边只有 tip、
+ * 没有详情面板）。⇒ 本端只做 `showTip`。
  */
 export const LEAGUE_TIP_NOT_ENOUGH_TEMPLATE = '{0}不足';
 
-// ============================================================
 // 联盟任务（`ui/League/LeagueTask`）
-// ============================================================
 
 /** 弹窗标题（FGUI `组件_联盟_任务` 的 `popBg` → `<Label title="联盟任务"/>`）。 */
 export const LEAGUE_TASK_TITLE = '联盟任务';
@@ -541,8 +493,8 @@ export const LEAGUE_TASK_TITLE = '联盟任务';
  * 任务行两颗按钮的文案（FGUI `组件_联盟_任务item.xml` 的
  * `<Button title="领取" titleFontSize="24">` / `<Button title="前往" …>`）。
  *
- * ⚠️ 两颗按钮是**互斥**的两页（`gearDisplay 状态 pages="1"` / `pages="0"`）：
- *    可领取 ⇒ 「领取」；未完成 ⇒ 「前往」；已领取 ⇒ 两颗都不显示（改显示 `n35` 那块「已领取」标）。
+ * 两颗按钮是**互斥**的两页（`gearDisplay 状态 pages="1"` / `pages="0"`）：
+ * 可领取 ⇒ 「领取」；未完成 ⇒ 「前往」；已领取 ⇒ 两颗都不显示（改显示 `n35` 那块「已领取」标）。
  */
 export const LEAGUE_TASK_BTN_GET = '领取';
 export const LEAGUE_TASK_BTN_GO = '前往';
@@ -562,13 +514,13 @@ export const LEAGUE_TASK_PERCENT_TEMPLATE = '{0}%';
  * 底部「跳过广告」文案 —— 老端 `FW.G_W("VIEW_AD_SKIP_TEXT")`，
  * `mL.json` **id=446** = `每日观看广告跳过剩余次数{0}/{1}`（`{0}` = 剩余次数 / `{1}` = 上限）。
  *
- * ⚠️ **FGUI 设计稿里那串不是运行时真值**：`组件_联盟_任务.xml` 的 `lab_jump` 写的是
- *    `每日观看广告跳过剩余次数:1/1`（**半角冒号**），而 `mL.json` 的模板**没有冒号**。
- *    老端 `updateView()` 每次都整条覆盖 ⇒ 运行期真值以 `mL.json` 为准（同大厅微信号前缀那条教训）。
- * ⚠️ 剩余次数 / 上限老端来自广告子系统（`ModelRole.GetAdvertRestTimes/GetAdvertLimit`），
- *    本端改用同源算法自己算：`ad` 表 `type=14`（unionTask）的 `limit`
- *    − `CmdRole.tlCmdAdvert` 里同 type 的已用 `num`（见 `LeagueRepository.loadTask`）
- *    ⇒ 这一行现在显示**真值**（`LEAGUE_AD_PLAYBACK_AVAILABLE` 翻 `true` 后整行显形）。
+ * **FGUI 设计稿里那串不是运行时真值**：`组件_联盟_任务.xml` 的 `lab_jump` 写的是
+ * `每日观看广告跳过剩余次数:1/1`（**半角冒号**），而 `mL.json` 的模板**没有冒号**。
+ * 老端 `updateView()` 每次都整条覆盖 ⇒ 运行期真值以 `mL.json` 为准（同大厅微信号前缀那条教训）。
+ * 剩余次数 / 上限老端来自广告子系统（`ModelRole.GetAdvertRestTimes/GetAdvertLimit`），
+ * 本端改用同源算法自己算：`ad` 表 `type=14`（unionTask）的 `limit`
+ * − `CmdRole.tlCmdAdvert` 里同 type 的已用 `num`（见 `LeagueRepository.loadTask`）
+ * ⇒ 这一行现在显示**真值**（`LEAGUE_AD_PLAYBACK_AVAILABLE` 翻 `true` 后整行显形）。
  */
 export const LEAGUE_TASK_AD_TEXT_TEMPLATE = '每日观看广告跳过剩余次数{0}/{1}';
 
@@ -581,24 +533,6 @@ export const LEAGUE_TASK_AD_TEXT_TEMPLATE = '每日观看广告跳过剩余次�
  * 措辞逐字取自 `SevenDayTexts.gotoMissing`（同一件事，不另造词）。
  */
 export const LEAGUE_TASK_GOTO_MISSING = '该功能暂未开放';
-
-// ============================================================
-// 北伐中原（`ui/League/LeagueNorthExpedition` + 排行 / 奖励子页）
-// ============================================================
-//
-// 真源两处，**取运行期的那个**：
-//   ① FGUI XML 的 `text="…"`（设计稿占位串，会用半角冒号 / 写死的假数字）；
-//   ② 老端 `FW.G_W("<key>")`（`mL.json` 的 `name` 列）—— 每条都是 `updateView()` 里**整条覆盖**的。
-// 老端覆盖过的那几条一律用 ②（同 P5 的 `lab_jump` 教训：设计稿的半角冒号不是真值）。
-
-/** 主面板标题栏上的小字（FGUI `组件_联盟_北伐中原.xml` 的 `n7`，运行时**不**被覆盖）。 */
-export const LEAGUE_NORTH_SECTION_TITLE = '战况';
-
-/** 「英雄共鸣」小标题（FGUI `n21`，运行时不被覆盖）。 */
-export const LEAGUE_NORTH_BUFF_TITLE = '英雄共鸣';
-
-/** 「今日挑战奖励」小标题（FGUI `n9`，运行时不被覆盖）。 */
-export const LEAGUE_NORTH_DAILY_TITLE = '今日挑战奖励';
 
 /**
  * 属性加成的前缀 —— `mL.json` **id=423** `ATTR_ATTACK` = `攻击`。
@@ -613,17 +547,17 @@ export const LEAGUE_NORTH_ENTER_COUNT_PREFIX = '挑战次数:';
 /**
  * 活动剩余时间 —— `mL.json` **id=114** `Client_RemainTime` = `剩余时间：{0}`。
  *
- * ⚠️ FGUI 设计稿写的是 `活动剩余时间:08:15:38`（半角冒号 + 三组假数字），
- *    而老端每次 `updateTime()` 都用 `FW.G_W("Client_RemainTime")` **整条覆盖**
- *    ⇒ 运行期真值是 `剩余时间：08:15:38`（**全角冒号**）。这里取运行期那个。
+ * FGUI 设计稿写的是 `活动剩余时间:08:15:38`（半角冒号 + 三组假数字），
+ * 而老端每次 `updateTime()` 都用 `FW.G_W("Client_RemainTime")` **整条覆盖**
+ * ⇒ 运行期真值是 `剩余时间：08:15:38`（**全角冒号**）。这里取运行期那个。
  */
 export const LEAGUE_NORTH_REMAIN_TIME_TEMPLATE = '剩余时间：{0}';
 
 /**
  * 活动未开放时的提示 —— `mL.json` **id=388** `LayerRank_10_NOT_OPEN` = `{0}点到{1}点开启`。
  *
- * ⚠️ 老端**两处**（「挑战」与「扫荡」）都用了同一个 key，本端也共用这一条
- *    （`LeagueTable.leagueNorthOpenHourText()` 直接填好 `{0}` / `{1}`）。
+ * 老端**两处**（「挑战」与「扫荡」）都用了同一个 key，本端也共用这一条
+ * （`LeagueTable.leagueNorthOpenHourText()` 直接填好 `{0}` / `{1}`）。
  */
 export const LEAGUE_NORTH_OPEN_HOUR_TEMPLATE = '{0}点到{1}点开启';
 
@@ -644,8 +578,8 @@ export const LEAGUE_NORTH_HELP_ID = 'leaguefb01';
 /**
  * 帮助入口在 Demo3.8 还没接时的提示 —— 措辞与 `LEAGUE_TASK_GOTO_MISSING` 一致。
  *
- * ⚠️ 老端那颗按钮走 `CtrlMgr.CtrlAlert.OpenHelpe(id)`；本工程**没有** `CtrlAlert`
- *    （联盟 P1 的主页帮助按钮 `BtnHelp` 也是同样处置）⇒ 统一提示，不静默失败。
+ * 老端那颗按钮走 `CtrlMgr.CtrlAlert.OpenHelpe(id)`；本工程**没有** `CtrlAlert`
+ * （联盟 P1 的主页帮助按钮 `BtnHelp` 也是同样处置）⇒ 统一提示，不静默失败。
  */
 export const LEAGUE_NORTH_HELP_MISSING = LEAGUE_TASK_GOTO_MISSING;
 

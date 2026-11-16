@@ -23,10 +23,10 @@
  * （读 800ms / 写 5000ms），`catch` 一律返 `'failed'` —— 绝不把 Promise 悬着
  * （`GameNet.send` 没有按请求的超时，服务端不回应就永悬）。
  *
- * ⚠️ 批量接口（删除 / 领取）的 `id` 是 `Long[]` ⇒ **必须发十进制字符串数组**：
- *   `protoCompiledStatic.ts` 生成的请求类构造函数是**裸赋值**，真正的换算在编码时由
- *   `LongBits.from` 做 —— 它认 `Long` / `number` / 十进制字符串，普通对象会被当成 `zero`
- *   ⇒ **id 静默变成 0**（发出去、服务端删不掉，界面看着「点了没反应」）。
+ * 批量接口（删除 / 领取）的 `id` 是 `Long[]` ⇒ **必须发十进制字符串数组**：
+ * `protoCompiledStatic.ts` 生成的请求类构造函数是**裸赋值**，真正的换算在编码时由
+ * `LongBits.from` 做 —— 它认 `Long` / `number` / 十进制字符串，普通对象会被当成 `zero`
+ * ⇒ **id 静默变成 0**（发出去、服务端删不掉，界面看着「点了没反应」）。
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
@@ -196,7 +196,7 @@ export class RuntimeMailRepository implements IMailRepository {
         const result = await this.send(
             () =>
                 new RequestMailTakeReward({ id: list } as any, caller, (rsp: any) => {
-                    // ⚠️ `CmdMailTakeRewardRspMsg.tlReward` 是**裸 `CmdGoods[]`**（不是 `CmdGoodsList`）
+                    // `CmdMailTakeRewardRspMsg.tlReward` 是**裸 `CmdGoods[]`**（不是 `CmdGoodsList`）
                     FW.ShowReward(rsp?.tlReward ?? []);
                     rewards = mailRewardsOfArray(rsp?.tlReward);
                 }),
@@ -207,9 +207,7 @@ export class RuntimeMailRepository implements IMailRepository {
         return { result, rewards };
     }
 
-    // ============================================================
     // 内部工具
-    // ============================================================
 
     /** `toIdString` 逐个归一 + 去重（发出去的一定是十进制字符串）。 */
     private cleanIds(ids: readonly string[]): string[] {
@@ -233,7 +231,7 @@ export class RuntimeMailRepository implements IMailRepository {
 
     /**
      * 统一的发包 + 三态收口。
-     * ⚠️ 必须 `withTimeout`：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
+     * 必须 `withTimeout`：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
      */
     private async send(make: () => any, timeoutMs: number): Promise<MailRequestResult> {
         const net = GameNet.instance;

@@ -1,0 +1,249 @@
+
+assets/script/app/store/StoreActions.ts  (8 hits)
+  134: * ⚠️ 只做「校验 + 发包 + 提示」，**不改任何本地状态**（理由见文件头）。
+  137: // ⚠️ 这条日志是 `tmp/_store2_tap.mjs` 判定「点了有没有反应」的**唯一硬证据**。
+  222: * ⚠️ 老端的 `btn_ad` 受 FGUI「有无广告」控制器 + 红点控制（`GetAdvertRestTimes > 0` 才显示），
+  242: * ⚠️ 老端读 `mL` 表的预置文案（`putongbaoxiangjilv` / `gaojibaoxiangjilv`），
+  347: * ⚠️ `resourceShop` **没有** `freeTimes` / `adTimes` ⇒ `resolveCoinBranch` 恒返 `'paid'`，
+  378: * ⚠️ 老端在本地还有**两道**前置：`nowLv <= ref.level` ⇒ 提示「请先通关该关卡」；
+  405: * ⚠️ **本端缺这条协议**：`generated/netProto/Cmd.d.ts` 里只有
+  418: * ⚠️ 本端礼包段只落了 **1 档**（`guankaGift.id = 18`，即 50 关卡礼包）；
+
+assets/script/app/store/StoreAd.ts  (6 hits)
+  18: * ⚠️ 真接入点：微信小游戏走 `wx.createRewardedVideoAd()`，`onClose(res)` 里
+  31: * ⚠️ 老端 `GetAdType(refGemBox.id)`：`id == 2 ⇒ superBox`，**其余一律 `commonBox`**
+  34: * ## ⚠️ 本文件**保持纯净**（不 import `CacheMgr`）
+  36: * 「今天还能看几次」要读 `CmdRole.tlCmdAdvert`，那必须过 `CacheMgr` —— 而
+  47: * ⚠️ **刻意不 import `AdType` 枚举** —— 与 `hang/HangRepository.ts` 同一处置：
+  83: * ⚠️ 目前**只被 `StoreRepository.adRemaining()` 用**（前端在广告档点击时前置拦住
+
+assets/script/app/store/StoreCostTable.ts  (5 hits)
+  98: * ⚠️ 参数顺序刻意用「次数」而不是整行：`goldShop` 才有 `freeTimes / adTimes`，
+  110: /** 限购判定：`limit <= 0` 不限购；否则已买次数必须小于上限（老端 `ref.limit <= 0 || buyTimes < ref.limit`）。 */
+  128: // ⚠️ 老端是从 `mL` 表读**预置文案**（`putongbaoxiangjilv` / `gaojibaoxiangjilv`），
+  135: //    ⚠️ **刻意不把 `pro` 换算成百分比**：`gemPro`(993800) 与 `pro`(40/4/16/2) 的
+  155: * ⚠️ 只吃**奖励两串**，不吃 `gemBox` 行 —— 行列的是价格，与「出什么」无关；
+
+assets/script/app/store/StorePage.ts  (4 hits)
+  34: * ⚠️ **`组件_商店_界面` 里没有页签、没有分页** —— 用户拿真机截图纠正过一次。
+  44: * **实现 = 公共货币件 `app/common/ResBar`**（2026-09-29 换的，原先本类自己拿
+  55: * ⚠️ **待确认的真源分歧**：`open.json` 里商城是 `refId = 1`（`url: "TabStore"`），
+  71: * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/Store/`，S 大写）：
+
+assets/script/app/store/StoreRepository.ts  (6 hits)
+  26: * ⚠️ 但**类型不同**：`CmdShopBuyReqMsg.cmdShopType` 声明的是 proto 枚举 `CmdShopType`，
+  41: * - `GameNet.instance.isConnected === false` ⇒ 直接返回 `'offline'`（不静默失败，调用方据此提示）；
+  123: * ⚠️ 这里**不落** `rewards`（那是 `StoreShopTable.STORE_GIFT_ROW` 的展示职责）——
+  128: /** 需要的关卡（`level`）；`nowLevel` 必须**大于**它（= 已通关）才可买。 */
+  258: * ⚠️ `CmdAdvert.num` 是「已用」不是「剩余」—— 剩余要拿 `ad.limit` 去减。
+  259: * ⚠️ 该字段**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
+
+assets/script/app/store/StoreSectionPage.ts  (9 hits)
+  39: * ## 节点名约定（构建器与运行期共用，改一边必须改另一边；`tests/store.test.ts` 守它）
+  49: * ⚠️ 后三段的卡节点**自己**也是一个按钮（`cc.Button` 落在卡上，不是落在价格按钮上）——
+  86: * ⚠️ 用 `@property({ type: CCString })` 存**字符串键**而不是枚举：
+  111: // ⚠️ 另外 4 段不订阅 —— 它们的内容来自静态表，与背包无关。
+  170: *   ⚠️ **不能**用兜底切换后的价格类型：钥匙不足时它已被换成金币，判断不出有没有钥匙；
+  186: * ⚠️ 老端 `updateConsumeItem(getBtnInnerChild(box, "按钮_1次", "消耗1次"), priceType, cost)`
+  282: // ⚠️ `rowId` 一律传 **`guankaGift.id`**（= 18），不是 `level`（= 50）——
+  335: // ⚠️ MCP 建出来的 `cc.Button` 的 `_target` 是 `null`（规格里没这一步）。
+  361: /** 写一个 Label 的文案（节点不存在 / 没 Label 时静默跳过）。 */
+
+assets/script/app/store/StoreShopTable.ts  (11 hits)
+  67: * ⚠️ 真值只能运行期读背包（`CmdItem` 缓存）—— 构建器看不到玩家存档。
+  76: * ⚠️ 这只是**钥匙充足时**的数字。钥匙不够时老端会退到备选货币（金币，`cost3` / `cost2`）
+  92: * ⚠️ `keyResId` / `keyIcon` / `keyName` 一律写成**字面量**，不要引 `STORE_KEY_*` 常量：
+  127: * ⚠️ **发请求用的是这个 id，不是 `level`** —— 老端 `ModelStore.requestBuyGuanKaGift(ref.id)`
+  173: * ⚠️ 这里的「金币」是 **元宝铺**（`StoreType.Gift` → `组件_商店_元宝页面`），卖的是**人民币直购元宝**：
+  206: * ⚠️ `iconPath` 一律写成**字面量字符串**，不要用 `图标_幻灵丹_0${n}` 这类拼串辅助函数：
+  208: * 遇到函数调用会 `ReferenceError`（构建器宁可直接炸，也不静默算错）。
+  224: * ⚠️ 这里的「银币」对应 `StoreType.gold` → `组件_商店_铜钱页面`，真源 `goldShop.json`。
+  258: * ⚠️ `price` 以**配置表的 `cost`** 为准（100/100/10/100/30/30/10），
+  293: * ⚠️ 那 4 张在 `image/` 下（`roleArtRelPath` 会补 `image/` 前缀），
+  296: * ⚠️ 写成**字面量 Record**（不是 `return \`..._0${q}\``）：构建器 `tmp/_store2_build.mjs`
+
+assets/script/app/store/StoreTable.ts  (2 hits)
+  27: // 这里原先那句 `STORE_RESBAR_ART_ROOT = 'image/main/resbar'` 从来没人引用，已删（规则 113）。
+  123: * ⚠️ 2026-09-29：「显示哪两格」**已移出本表**，配置落在
+
+assets/script/app/battle/BattleResultService.ts  (4 hits)
+  23: * ## 为什么必须 `GameNet.addEvent`
+  38: * （同一秒内连开两局时静默串数据），而广播本来就不可能早于等待开始。
+  55: * ⚠️ 监听必须在**对局开始前**挂上：广播是「对局结束时」才推的，
+  112: * ⚠️ 但**不算超时**：广播确实到了，只是没内容，没必要让调用方再白等一个超时。
+
+assets/script/app/battle/BattleStartModel.ts  (24 hits)
+  22: * ## ⚠️ 是**固定值**，不是每关的 `configId`
+  35: *（山猫 2026-10-15 定：「1002 的战斗里面要嵌个子类型」）。
+  42: * ⚠️ 别与 `battleType` 混为一谈：`battleType` 说「打哪一大类」，
+  54: * ⚠️ 三个值**全转字符串**：proto 里 `battleParams` 是 `repeated string`，
+  64: * 与格子战斗**同结构**（山猫 2026-10-15 拍板「对称」），只有下标 0 的子类型不同
+  67: * ⚠️ 当前**没有任何调用点**（领地还没接宝箱战斗流程）—— 先用单测把形状钉住，
+  68: * 真接线时补一处调用即可。别因为「现在零引用」就删（规则 170 指的是**已废弃**的实现，
+  76: * 战斗单元的来源类型 —— 对应 `CmdBattleUnitInfo.unitType`（服务端 2026-10-26 新增）。
+  84: * ⚠️ 协议里是 `optional`：老服务端**不下发**这个字段（读到 `undefined`），
+  108: * 2026-11-13 实测 `CmdPvpAttrInfo.attrId` 开始出现 `attack.addRate` / `maxHp.addRate`、
+  110: * 两种错法都会静默出错：当绝对值用会得到 `-0.2 点攻击`；当未知键丢掉则整条规则消失
+  138: * （2026-10-29 实测：`["levelAttackRatio","0.8","levelHpRatio","0.8"]`，与 `levelInfo` 表的
+  156: * 两者都会被静默当成"合法的 0 加成"，比显式 null 难查一个数量级。
+  164: * ⚠️ `source` 的取值含义协议里只有一句「来源」，客户端没有枚举表。
+  165: * 实测（2026-10-29）只见过 `source = 1`，内容就是服务端算好的关卡倍率
+  180: * ⚠️ 与 `campId` **不是一回事**：`campId` 是阵营席位（1~4，前端只拿它映射 `ZCOwner`），
+  205: * 任何按它分流的地方都必须先判空再决定兜底口径。
+  209: * PVP buff 列表（`CmdBattleUnitInfo.buffInfo = 8`，服务端 2026-10-29 / r936 新增）。
+  225: /** 随机种子，必须保持字符串（uint64 超 2^53，转 number 会让相邻种子相同）。 */
+  260: * ⚠️ **不要把 key 当数字解析**：实际下发的是 `levelAttackRatio` 这种属性名。
+  261: * 2026-10-29 之前这里按正整数解析，会把整条 buff 丢光且零报错。
+  376: * "这个键有没有点号 / 值有没有小数"去猜语义，猜错一次就是静默错算。
+  528: * 图在 `image/artifact/<icon>`（**与对局里的神器格同一张图**，山猫 2026-10-08 定），
+  605: // ⚠️ 用 `Array.from` 而不是 `[...set]`：构建期 Babel 的 loose 模式会把展开降级成
+
+assets/script/app/battle/BattleStartService.ts  (3 hits)
+  11: * 载荷必须嵌在 `startBattleInfo` 里：`{ startBattleInfo: { battleType, battleParams } }`。
+  12: * 本层永远兑现、不 reject；拿不到数据返回 `null`，正式入口必须终止本次开战。
+  139: * ⚠️ 2026-09-24 协议同步：`CmdFinishBattleRspMsg` 已**收敛为单字段 `code`**
+
+assets/script/app/battle/BattleStatisticsModel.ts  (3 hits)
+  21: *      protobufjs 的 writer 会抛错 / 写出畸形载荷 ⇒ 必须 `String(...)`。
+  27: * 整张统计表只有一个桶，**且全程零报错**。所以调用方必须把 `seatUnitIds` 传进来；
+  101: // ⚠️ `kv` 是 `repeated string` ⇒ 数字必须转字符串（见文件头 ③）。
+
+assets/script/app/card/CardArtConfig.ts  (2 hits)
+  34: * 表必须齐全的键清单：品级 × 4 类图 + 职业 × 2 类图。
+  103: if (!value || typeof value !== 'object') throw new Error(`${table} 行必须是对象`);
+
+assets/script/app/card/CardDetailPresenter.ts  (4 hits)
+  103: * 2026-11-11 起不再补空占位格 —— 每张卡 `pvpCard.skillList` 都只有 4 个技能，
+  137: * 2026-11-10 起不再跳过首档 —— 首档（`unlockHeroLevel` 常为 0 / 3 / 6）才是玩家已经拿到的
+  142: * 玩家看到的是「18级 暂无描述」这种空条，不如不显示（2026-11-10 需求）。
+  175: * 一档都没解锁时落在第一行；全部解锁时退一格，让最后两档同屏 —— 与 2026-11-10 的默认窗口口径一致，
+
+assets/script/app/card/CardLineupBond.ts  (1 hits)
+  26: * 图必须无条件赋值。槽位会被复用，只写“有图”的情况会把上一项的图标留下来。
+
+assets/script/app/card/CardLineupCard.ts  (2 hits)
+  114: // 图按引用比较：异步补完是另一个对象，必须重画。
+  141: * 未解锁：开遮罩和锁。槽位会复用，必须无条件写，不能只处理 true。
+
+assets/script/app/card/CardLineupDecks.ts  (1 hits)
+  115: * 主城是场地建筑，不是卡，必须用 isHqCard 摘掉；金矿是能上阵的卡，保留。
+
+assets/script/app/card/CardLineupEvents.ts  (1 hits)
+  17: * 原来靠 onUpgraded 回调，漏传就静默不刷新；现在谁关心谁订阅。
+
+assets/script/app/card/CardLineupPage.ts  (1 hits)
+  526: //  不写 `if (!view) return`：那只会让列表静默空白，把配置错误藏起来。
+
+assets/script/app/card/CardLineupTexts.ts  (1 hits)
+  75: // ---- 卡牌详情页（2026-11-03 改版：CardUpgrade 弹窗整体换成详情页外观）----
+
+assets/script/app/card/CardLineupTypes.ts  (2 hits)
+  12: * 职业白名单：表 cardUiArtClass 必须和它对上，少一行或多一行都报错。
+  64: * 阵营白名单，和职业是两个维度；表 cardUiArtCamp 必须对得上。
+
+assets/script/app/card/CardRepository.ts  (3 hits)
+  200: * 实测（2026-11-03，`tmp/_bench_cardlevelup.mjs`）：表 1785 行，建一次 0.12ms，
+  320: //  卡池为空是"面板看起来没内容"的头号原因，而它有两种完全不同的成因，日志必须能一眼分开。
+  383: * 阵容战力 = 上阵卡攻击力之和（本地算、不发协议，山猫 2026-11-06）。
+
+assets/script/app/card/CardSkillDescMarkup.ts  (2 hits)
+  5: * 规则（2026-11-11 策划口径）：
+  49: * 描述原文 → RichText 标记串。数字逐个包裹 `<color=#xxxxxx>`，其余原样输出。
+
+assets/script/app/card/CardSkillList.ts  (1 hits)
+  14: *   ① 技能列表必须按 `id` 聚合，直接 `map` 出来会有 400+ 条；
+
+assets/script/app/card/CardSkillListView.ts  (1 hits)
+  25: //  底色是浅米黄（244,232,200），文字必须够深才看得清：
+
+assets/script/app/card/CardSkillSlotView.ts  (3 hits)
+  17: * 就静默跳过（当时的理由是"技能区是可选模块，缺一个 Label 不该让面板打不开"），
+  19: * 现在的约定是必绑、绑组件：没绑就是打开面板时当场抛错，而不是静默不显示。
+  21: * 必须单独成文件：一个脚本最多一个 `Component`。
+
+assets/script/app/card/CardUnitPreview.ts  (3 hits)
+  47: /** 美术 prefab 自带的缩放。必须存原值 —— 节点上那个已经是「乘过系数」的，读它会越乘越小。 */
+  71: // 早退分支必须按新系数重写一遍缩放，否则第二张卡会带着第一张的尺寸。
+  91: // 模型挂在立绘节点下；RAW 立绘已归一缩放，模型高度必须抵消宿主缩放。
+
+assets/script/app/card/CardUpgradePage.ts  (4 hits)
+  39: * 必须与 `CardUpgrade.prefab` 的 `Header/Hero._lscale`（318/390）一起改：
+  283: * 顺序上必须先由 `renderStatus` 把 `expItemId` 定下来（它是这一趟图标画的那件道具）；
+  459: //  技能图标暂时都共用 `skillArt` 里烘焙的那张图：首格不再单独隐藏（2026-11-11 需求），
+  573: //  不再让红字提示和奖励文案抢同一行（2026-11-10 需求）。
+
+assets/script/app/card/FormationModel.ts  (4 hits)
+  45: // 必须用 `Array.from` 而不是 `[...result.values()]`：构建期 Babel（loose）会把展开
+  47: // 遍历它得到的东西根本不是 ZCFormation（`PvpHeroService` 同款坑）。
+  73: * 为什么必须有它：`GameNet.send` 只在「收到回包」或「断线」时兑现（`NetSocket.onTimeOut()`
+  77: * （离线时请求根本不发），只在连真服时才炸 —— 2026-09-20 就这么炸过一次。
+
+assets/script/app/card/FormationService.ts  (6 hits)
+  24: * 必须自己兜一个，因为 `GameNet.send` 只在「收到回包」或「断线」时兑现
+  28: * （站台空、职业计数 0、卡池空白），2026-09-20 真机上就是这么炸的。
+  183: //  这也解释了为什么这里必须带 `select: 1`：不改选中，服务端记着的「出阵阵型」仍旧是别的那一条，
+  206: // 服务端理应回同一条；回别的就按返回的存，但必须出声，否则本地缓存会静默错位。
+  245: * 必须自己兜超时：同 `saveFormation` —— `GameNet.send` 没有按请求的超时，
+  309: //  必须断言：`response` 的赋值发生在回调里，TS 不做跨函数控制流分析 ——
+
+assets/script/app/card/HeroObtainData.ts  (1 hits)
+  11: * ⚠️ 设计稿的职业徽标是**射手**（`yx_zhiye_ss`），但 `椰蛋战士` 在 `pvpCard` 里是**战士**，
+
+assets/script/app/card/LineupBoardClassItem.ts  (1 hits)
+  13: * ⚠️ 页面项历史上曾按「木条上方灰态 + 条内亮态」画两枚图，现已简化为单枚 `Icon`
+
+assets/script/app/card/LineupBoardPage.ts  (2 hits)
+  119: * 不能在里 await，所以美术必须在灌数据前全部缓存好。
+  269: * 把第 `index` 张卡灌进一个行节点（新建或回收来的）。必须同步。
+
+assets/script/app/card/LineupPresets.ts  (1 hits)
+  4: * 「没有阵型数据」(null) 与「阵型是空的」(空数组) 必须分开。
+
+assets/script/app/card/LineupSnapshot.ts  (2 hits)
+  15: *   3. 读的一侧必须自己兜脏数据（版本不符 / 过期 / JSON 坏 / 字段缺失）—— 存储是外来的。
+  100: /** 写快照（失败静默：存储满了/隐私模式不该影响进页面）。 */
+
+assets/script/app/card/PvpHeroService.ts  (1 hits)
+  145: // 必须用 `Array.from` 而不是 `[...result.values()]`：构建期 Babel（loose）会把展开
+
+assets/script/app/card/view/HeroObtainPage.ts  (1 hits)
+  263: // 起手态必须在 `onOpen` 的 await 之前落盘：弹窗节点先于资源加载 active，
+
+assets/script/app/guide/application/GuideController.ts  (6 hits)
+  6: * - ✅ 订阅完成事件、推进步骤机、发奖、落盘、输出 `IGuideViewState`
+  7: * - ❌ 不碰节点 / 不建遮罩 / 不做高亮 —— 那是 View 的事，Controller 只交状态
+  8: * - ❌ 不直连业务模块（territory / card）—— 业务侧调 {@link GuideController.notify}，
+  56: * View 必须用它决定「点对话条能不能推进这一步」，**不能用 `requireAction`**：
+  120: // 🔴 订阅必须放在「确认要跑引导」之后。
+  297: * 直接订阅卡牌侧的既有事件，**不做业务侧改动**。注意设计案的 6-3 写的是
+
+assets/script/app/guide/application/GuideLoader.ts  (1 hits)
+  46: // 这种"表在、但一步都没有"的情况原先完全静默，真机上表现为"没有引导且没有任何日志"。
+
+assets/script/app/guide/model/GuideDialogConfig.ts  (2 hits)
+  74: * `sprite` 必须带 `/spriteFrame` —— `resources.load` 裸路径会报
+  75: * 「Bundle resources doesn't contain xxx」（`spriteFramePathOf` 那条规则的由来）。
+
+assets/script/app/guide/model/GuideProgress.ts  (6 hits)
+  13: * - ❌ **不是权威发奖**：`granted` 是本地台账，换设备 / 清存档就没了。跨端幂等要靠服务端按
+  15: * - ❌ **不读表、不加载资源**：表由 `GuideStepConfig.parseGuideSteps` 解析后传进来；
+  17: * - ❌ **不派发事件**：完成/跳过的表现由 Controller 订阅后自己做。
+  18: * - ❌ **不做重试**：`complete()` 交出去的奖励清单必须由调用方落地；发失败要自己重试到成功。
+  63: *   调用方（Loader / Controller）**必须** `try/catch` 并降级成「本次不引导」：
+  206: * 链校验：从唯一 `firstLogin` 入口顺 `nextStep` 走到底，必须覆盖全表且无环。
+
+assets/script/app/guide/model/GuideStepConfig.ts  (3 hits)
+  4: * ⚠️ 与 zcds 的 `ZCGuide*`（战斗内「指南」百科，展示建塔概率）**无关** —— 名字近，语义不同。
+  10: * 🔴 **保持输入顺序，不排序**：`stepId`（`'1-1'` / `'10-1'`）是字符串，按字典序排会把 `10-1`
+  69: * 容错口径：缺 `stepId` 的行**静默丢弃**（半行数据无法定位，留着只会在链校验里炸）；
+
+assets/script/app/guide/ui/GuideDialogView.ts  (9 hits)
+  69: /** 遮罩不透明度：设计案「全屏半透明黑 60%」= 153，取整 150；hole 步降到 40% 把注意力留给焦点区。 */
+  116: * **组件引用**在序列化阶段会被丢掉（实测 2026-11-13：接口返回 success，存盘后是 `null`），
+  117: * 而 `Node` 引用能正确落盘。用 Node 绑 + 代码取组件，既不按名字查找，也不会静默丢引用。
+  355: * 🔴 `hole` 步（翻地 2-1/3-1/4-1、解锁地块 7-1）要玩家去点**地图格子**，
+  357: * 点哪都没反应、像卡死」（2026-11-13 真机实锤）。
+  425: // 真机上唯一能证明"对话层真的出来了"的证据。组缺失是最常见的静默失败
+  434: // 🔴 判据是 `completeCond === 'click'`，不是 `requireAction`。
+  489: // 日志必须报**实际显示状态**，不是「有没有配资源」：
+  528: // 🔴 hole 步（2-1/3-1/4-1/5-1/7-1）**不显示立绘**。

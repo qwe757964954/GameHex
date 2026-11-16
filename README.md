@@ -57,6 +57,14 @@ assets/resources/subproto/  # 从 client 同步的完整业务协议与缓存描
 tests/zcds-model.test.ts      # 核心玩法单元测试
 ```
 
+## 目录约定
+
+- `docs/`：文档；`agent/` 规范、`design/` 方案、`spec/` 规格、`ops/` 构建发布、`reports/` 报告、`history/` 归档。
+- `tests/`：测试；保持平铺，索引见 `tests/README.md`。
+- `logs/`：运行日志，按 `YYYY-MM-DD/` 存放；根目录禁止 `*.log`。
+- `tmp/`：临时产物；`outputs/`：发布/审计产物。
+- 根目录只放 `AGENTS.md`、`README.md`、`package*.json`、`tsconfig.json` 等入口与配置。
+
 ## 验证
 
 安装一次开发依赖后运行：
@@ -66,7 +74,6 @@ npm install
 npm test
 npm run check:zcds
 npm run check:login
-npm run check:mcp
 ```
 
 说明：旧 framework 中仍保留少量尚未被本玩法引用的迁移桩和 FGUI 类型声明；“占城大师”启动链本身不依赖这些遗留模块。

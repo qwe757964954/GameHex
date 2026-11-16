@@ -1,77 +1,6 @@
 /**
- * 「联盟管理」弹窗（老端 `play/LayerLeagueHallMgr`，`ui/League/LeagueMgr`）。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/大厅/组件_联盟_大厅_管理.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `popBg`（公用 `组件_公共弹窗_新`，标题「联盟管理」） | (40,185) **640×979** | `PopupBg` + `TitleBg` + `TitleDeco` + `Title` + `CloseBtn` |
- * | `league_banner`（`组件_联盟_旗帜`，scale **0.76**） | (113,267) 179×196 | `Banner`（+`Frame` / `Base` / `ColorIcon`） |
- * | `league_name` | (252,267) | `LeagueName` |
- * | `league_id` | (252,311) | `LeagueId` |
- * | `league_wx` | (252,344) | `LeagueWx` |
- * | `league_copyid`（`lm_btn01`） | (579,312) 28×30 | `CopyId` |
- * | `btnName` / `btnWx`（**无图热区**） | (253,266) / (252,343) | `NameHot` / `WxHot` |
- * | `comp_dec`（`组件_联盟_告示`，标题「联盟宣言」） | (80,423) 560×240 | `DecBox`（+`Bg` / `TitleBar` / `Title` / `Content`） |
- * | `comp_notice`（同组件，标题「联盟公告」） | (80,672) 560×240 | `NoticeBox`（同上） |
- * | `btn_mgr`（`TY_btn10`，页 1） | (386,976) 218×106 | `BtnMgr` |
- * | `btn_quit`（`TY_btn09`，页 1） | (115,976) 218×106 | `BtnQuit` |
- * | `btn_quit1`（`TY_btn09`，**页 0**） | (251,976) 218×106 | `BtnQuitOnly` |
- * | `按钮_勾选`（页 1） | (94,921) 50×50 | `QuickJoinBox`（+`Check`） |
- * | `n23`「允许快速加入」（页 1） | (139,929) | `QuickJoinLabel` |
- *
- * ## 高度是**奇数** ⇒ 板根 y = **−34.5**（不是 0）
- *
- * `popBg` 高 979 @ y=185 ⇒ 板中心 = `185 + 489.5 = 674.5`，画布中心 640
- * ⇒ 板相对画布中心 **+34.5**（y 向下为正）⇒ 根内 y = **−34.5**。
- *
- * ⚠️ 这里**没有**「恒居中」可用：老端确实调了 `com.toFullCenterParent(t.container)`，
- *    但组件自身 `size="720,1280"` = 整块画布 ⇒ 「居中」是恒等变换，
- *    FGUI 里那对 `xy` 就是**最终画布坐标**（`LeagueLevelPreview` / `LeagueEdit` 同理）。
- *    这张面板与那两张的区别只是「设计态没摆正中」—— 照抄即可，不要顺手摆到 640。
- *
- * ## 骨架为什么是 442.5 / 445（不是 440.5 / 443）
- *
- * 骨架（标题条 / 字 / 闭钮）的 `xy` 在 `组件_公共弹窗_新` 里是**相对 popBg 顶边**的
- * （常数：条 12.5、字/闭钮 10）⇒ 落根坐标 = 板根 y + 板半高 − 常数。
- * 板半高 = 489.5、板根 y = −34.5 ⇒ 条 `−34.5 + 477 = 442.5`、字/闭钮 `−34.5 + 479.5 = 445`。
- * 与已收口的等级预览（0.5 / 440.5 / 443）、申请列表（0 / 340.5 / 343）、
- * 编辑信息（0.5 / 206.5 / 209）同一套解算。
- *
- * ## 「管理」controller 是**两页互斥**的显隐，不是页签
- *
- * 老端 `updateView()` 里 `com.setSelectedPage("管理", model.GetMyMember().CanApprove() ? "是" : "否")`：
- *
- * | 页 | 可见 |
- * |---|---|
- * | `1`(`是`) | `btn_mgr` + `btn_quit`（居左）+ `按钮_勾选` + `n23` |
- * | `0`(`否`) | 只有 `btn_quit1`（**居中**） |
- *
- * 落地口径见 `LeagueTable.leagueMgrPage` —— 页面只把 4 + 1 个节点按页开关，不做任何几何调整。
- *
- * ## 老端行为对照
- *
- * 1. **四个编辑入口**（`btnName` / `btnWx` / `comp_dec` / `comp_notice`）每个都被
- *    `if (model.GetMyMember().CanEditor())` 包住 ⇒ 无权限时**点了什么都不发生**（老端不提示）。
- *    本端照搬（只 `console.warn` 一条，不弹提示）。
- * 2. **编辑结果靠推送刷新**：老端 `init()` 里挂了 `VOUnionBag` / `VORoleUnionBag` 的 `OnChanged`。
- *    本端改成 `onReveal()` 重新读一次缓存 —— 编辑信息弹窗关掉后本面板会被「重新露出」，
- *    那一拍正好把新名字 / 新宣言铺上来（不必给自己挂推送监听）。
- * 3. **「允许快速加入」在 `exitAfter()` 才发包**（不是在勾选的瞬间）：
- *    `if (IsJoinedLeague() && CanEditor()) { if (select != cmd.autoJoin) RequestLeagueSetQuickJoin(select) }`
- *    ⇒ 本端放在 `onClose()`。**这是有意的**：勾一下发一次包会产生一串中间态，
- *    而服务端会广播 `CmdUnionInfoUpdateBroMsg` 把勾选框按推送回写 ⇒ 界面会自己跳。
- * 4. **未入盟直接关**：老端 `if (!IsJoinedLeague()) return this.unload()`（**不提示**）。本端照搬。
- * 5. **退出联盟**：`btn_quit` / `btn_quit1` 绑同一方法 ⇒ 开 `LeagueExitConfirm`，
- *    点「确定」后**先关本面板再发包**（老端 `OpenLayerLeagueExitConfirm(this.unload.bind(this))`
- *    的 `onSure` 就是「先 unload 自己、再 `RequestLeagueQuit()`」）。
- *
- * ## 本端有意增补（与老端的偏差，逐条列出）
- *
- * - 勾选框**点击后立即翻本地面板态**（`quickJoinCheck.active`）：老端靠 FGUI
- *   `Button(mode="Check")` 自管，本端没有 controller 组件，所以自己持一个 `actualJoin` 字段 +
- *   显隐那颗勾（`QuickJoinBox/Check`）。
- * - 复制 ID 按钮（`league_copyid`）老端**没接线**，本端沿用大厅的占位口径（`copyLeagueText`）。
+ * 联盟管理弹窗。管理/非管理两页互斥显隐；宣言和公告可编辑，退出联盟走二次确认。
+ * 快速加入在关闭时发包，勾选过程只改本地状态。
  */
 
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
@@ -120,7 +49,7 @@ const MGR_TEXTS: ILeagueMgrTexts = {
 @ccclass('LeagueMgrPage')
 export class LeagueMgrPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueMgr';
@@ -197,9 +126,7 @@ export class LeagueMgrPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
 
@@ -250,8 +177,8 @@ export class LeagueMgrPage extends PopupBase {
     /**
      * 关面板 —— 老端 `exitAfter()`：**这一刻**才决定要不要发「快速加入」。
      *
-     * ⚠️ 不走 `async`：`onClose` 是同步钩子，发包是 fire-and-forget（老端也是 `.then()` 不 await）。
-     *    这里不做 revision 校验 —— 面板已经关了，结果只影响一条提示。
+     * 不走 `async`：`onClose` 是同步钩子，发包是 fire-and-forget（老端也是 `.then()` 不 await）。
+     * 这里不做 revision 校验 —— 面板已经关了，结果只影响一条提示。
      */
     protected onClose(): void {
         this.revision += 1;
@@ -263,9 +190,7 @@ export class LeagueMgrPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数 / 铺界面
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -280,10 +205,10 @@ export class LeagueMgrPage extends PopupBase {
     /**
      * 读一次缓存 → 铺界面。
      *
-     * ⚠️ **不主动发包**：老端这张面板只挂推送监听（`VOUnionBag` / `VORoleUnionBag` 的 `OnChanged`），
-     *    明细数据由大厅母面板的 `requestDetail` 负责拉。本端保持一致 ——
-     *    「从大厅点管理进来」时缓存里必然已经有我这盟那一行。
-     *    未入盟 / 数据还没推回来 ⇒ 老端口径是**静默 `unload()`**，本端照搬（只 warn 一条）。
+     * **不主动发包**：老端这张面板只挂推送监听（`VOUnionBag` / `VORoleUnionBag` 的 `OnChanged`），
+     * 明细数据由大厅母面板的 `requestDetail` 负责拉。本端保持一致 ——
+     * 「从大厅点管理进来」时缓存里必然已经有我这盟那一行。
+     * 未入盟 / 数据还没推回来 ⇒ 老端口径是**静默 `unload()`**，本端照搬（只 warn 一条）。
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
@@ -321,9 +246,9 @@ export class LeagueMgrPage extends PopupBase {
     /**
      * 切「管理」controller 的两页（老端 `com.setSelectedPage("管理", 「是」/「否」)`）。
      *
-     * ⚠️ 这是**互斥显隐**：页 1 露 4 个节点、页 0 只露中间那颗 `btn_quit1`。
-     *    注意 `PopupBase` 的「点空白关闭」是按**激活的直接子节点**算内容区的
-     *    ⇒ 切 `active` 的同时空白判定也跟着变（隐藏的那颗不再算内容），正好。
+     * 这是**互斥显隐**：页 1 露 4 个节点、页 0 只露中间那颗 `btn_quit1`。
+     * 注意 `PopupBase` 的「点空白关闭」是按**激活的直接子节点**算内容区的
+     * ⇒ 切 `active` 的同时空白判定也跟着变（隐藏的那颗不再算内容），正好。
      */
     private applyPage(page: 0 | 1): void {
         const show = page === 1;
@@ -353,16 +278,14 @@ export class LeagueMgrPage extends PopupBase {
         if (frame) this.bannerColor.spriteFrame = frame;
     }
 
-    // ============================================================
     // 四个编辑入口（每一条都被 `CanEdit` 守卫 —— 老端同此）
-    // ============================================================
 
     /**
      * 开「编辑信息」弹窗。
      *
-     * ⚠️ `content` 一律传**裸值**（老端 `OpenLayerLeagueEdit(cmd.name, 1)` /
-     *    `(cmd.wxChat, 2)` / `(cmd.notice, 3)` / `(cmd.declaration, 4)`）——
-     *    尤其微信号：**不能**传带「微信号：」前缀的 `wxText`，否则前缀会被当正文改掉。
+     * `content` 一律传**裸值**（老端 `OpenLayerLeagueEdit(cmd.name, 1)` /
+     * `(cmd.wxChat, 2)` / `(cmd.notice, 3)` / `(cmd.declaration, 4)`）——
+     * 尤其微信号：**不能**传带「微信号：」前缀的 `wxText`，否则前缀会被当正文改掉。
      */
     private openEditor(type: number, content: string | undefined): void {
         if (!this.canEdit) {
@@ -372,9 +295,7 @@ export class LeagueMgrPage extends PopupBase {
         void LeagueEditPage.open({ userData: { type, content: content ?? '' } });
     }
 
-    // ============================================================
     // 退出联盟
-    // ============================================================
 
     private onQuitClick(): void {
         openLeagueExitConfirm(() => {
@@ -384,9 +305,7 @@ export class LeagueMgrPage extends PopupBase {
         });
     }
 
-    // ============================================================
     // 允许快速加入
-    // ============================================================
 
     /**
      * 勾 / 取消勾 —— **只改本地面板态**，不发包。
@@ -402,8 +321,8 @@ export class LeagueMgrPage extends PopupBase {
      * 老端 `exitAfter()`：
      * ```ts
      * if (IsJoinedLeague() && GetMyMember().CanEditor()) {
-     *     let select = 按钮_勾选.selected;
-     *     if (select != cmd.autoJoin) RequestLeagueSetQuickJoin(select).then(() => {});
+     * let select = 按钮_勾选.selected;
+     * if (select != cmd.autoJoin) RequestLeagueSetQuickJoin(select).then(() => {});
      * }
      * ```
      * ⇒ **无权限不发**、**值没变不发**。
@@ -422,9 +341,7 @@ export class LeagueMgrPage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     /** 按名字接按钮；节点有 `cc.Button` 走 CLICK，否则退回 `TOUCH_END`（缺节点只 warn）。 */
     private bindClick(node: Node | null, handler: () => void): void {

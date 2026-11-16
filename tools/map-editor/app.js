@@ -41,6 +41,12 @@
    *  **只做提示与校验**：真正发什么由客户端读同一张表决定，编辑器不重复一份业务规则。
    */
   var neutralGroups = {};
+  /**
+   * 野怪卡牌 ID → 组合 ID 列表；由 `neutralGroups` 里 `resourceType === 11` 且权重 > 0 的项反查。
+   *  地图点位按协议只存组合 ID，这里只负责“填野怪 ID 自动选中组合”和面板展示。
+   */
+  var monsterGroupsByCard = {};
+  var monsterCardIds = [];
   var resourceWeight = 1;
   var resourceImages = {};
   var passthrough = {};
@@ -264,9 +270,12 @@
   function resourceLabel(point) {
     if (point && point.groupId !== undefined) {
       var known = neutralGroups[point.groupId];
-      return known && known.name
+      var cards = monsterCardsOfGroup(point.groupId);
+      var label = known && known.name
         ? '资源组合 ' + point.groupId + '：' + known.name
         : '资源组合 ' + point.groupId + '（表里查不到这个组合 ID）';
+      if (cards.length) label += ' · 野怪 ID ' + cards.map(function (card) { return card.resId; }).join(' / ');
+      return label;
     }
     var pool = point && point.pool ? point.pool : {};
     var ids = Object.keys(pool);
@@ -286,6 +295,61 @@
     if (preview.resourceType === 7 && RESOURCE_ASSETS['gate_' + preview.effect]) return 'gate_' + preview.effect;
     return preview.resourceType === 1 && RESOURCE_ASSETS[preview.icon]
       ? preview.icon : RESOURCE_TYPE_VISUALS[preview.resourceType] || 'chest';
+  }
+  /**
+   * 组合里“能出野怪”的项：`resourceType === 11` 且权重 > 0。
+   *  权重 0 的项不会被抽到，不能当作“这个点位是它”。
+   */
+  function monsterCardsOfGroup(groupId) {
+    var group = neutralGroups[groupId];
+    if (!group) return [];
+    return (group.items || []).filter(function (item) {
+      return item.resourceType === 11 && item.weight > 0
+        && item.resId != null && String(item.resId).trim() !== '';
+    }).map(function (item) {
+      return { resId: String(item.resId).trim(), weight: item.weight, itemId: item.id };
+    });
+  }
+  /** 野怪卡牌 ID → 含它的组合（去重；同一组合里重复配同一只只算一次）。*/
+  function monsterGroupCandidates(cardId) {
+    var text = String(cardId == null ? '' : cardId).trim();
+    if (!text) return [];
+    return (monsterGroupsByCard[text] || []).map(function (groupId) {
+      return { groupId: groupId, name: (neutralGroups[groupId] || {}).name || '' };
+    });
+  }
+  /** 面板/提示用：一只就写“固定”，多只写权重并点明开局抽签。*/
+  function groupMonsterLabel(groupId) {
+    var cards = monsterCardsOfGroup(groupId);
+    if (!cards.length) return '没有正权重野怪';
+    if (cards.length === 1) return '野怪 ID ' + cards[0].resId + '（固定）';
+    return '野怪 ID ' + cards.map(function (card) { return card.resId + '（权重 ' + card.weight + '）'; }).join(' / ') + '，开局按权重抽签';
+  }
+  function rebuildMonsterIndex() {
+    monsterGroupsByCard = {};
+    monsterCardIds = [];
+    Object.keys(neutralGroups).forEach(function (groupId) {
+      var seen = {};
+      ((neutralGroups[groupId] || {}).items || []).forEach(function (item) {
+        if (item.resourceType !== 11 || !(item.weight > 0)) return;
+        var resId = String(item.resId == null ? '' : item.resId).trim();
+        if (!resId || seen[resId]) return;
+        seen[resId] = true;
+        (monsterGroupsByCard[resId] = monsterGroupsByCard[resId] || []).push(Number(groupId));
+      });
+    });
+    monsterCardIds = Object.keys(monsterGroupsByCard).sort(function (a, b) { return Number(a) - Number(b); });
+  }
+  function fillMonsterOptions() {
+    var list = $('monsterCardOptions');
+    if (!list) return;
+    list.innerHTML = monsterCardIds.map(function (resId) {
+      var groups = (monsterGroupsByCard[resId] || []).map(function (groupId) {
+        var name = (neutralGroups[groupId] || {}).name || '';
+        return String(groupId) + (name ? ' ' + name : '');
+      }).join('、');
+      return '<option value="' + resId + '">' + esc(groups) + '</option>';
+    }).join('');
   }
   function resourcePointAt(row, column) {
     return resourcePoints.find(function (point) { return point.row === row && point.column === column; }) || null;
@@ -352,8 +416,9 @@
   function selectPatrolPoint(row, column) {
     var point = resourcePointAt(row, column);
     if (!point) { flash('请点击一个野怪资源点', 'warn'); return false; }
+    // 表没拉到时（离线双击 HTML）不拦：旧行为是只要有组合就允许涂。
     var group = neutralGroups[point.groupId];
-    if (group && !group.items.some(function (item) { return item.resourceType === 11 && item.weight > 0; })) {
+    if (group && !monsterCardsOfGroup(point.groupId).length) {
       flash('该组合没有正权重野怪，不能设置巡逻', 'warn'); return false;
     }
     patrolPointId = row * COLS + column;
@@ -394,28 +459,96 @@
       legacy.textContent = '含 ' + count + ' 个旧资源池点位。继续保留；在该格放置组合可替换。';
     }
     var patrolPoint = selectedPatrolPoint();
+    // 野怪 ID 面板：优先跟随已确认的组合，其次跟随当前选中的巡逻点位。
+    var monsterStatus = $('monsterCardStatus');
+    if (monsterStatus) {
+      var monsterGroup = resourceGroupId !== null ? resourceGroupId
+        : patrolPoint && patrolPoint.groupId !== undefined ? patrolPoint.groupId : null;
+      if (monsterGroup === null) {
+        monsterStatus.textContent = '野怪 ID 用来反查组合：填写后自动选中含这只野怪的组合。点位保存的仍是组合 ID，开局按组内权重抽签。';
+      } else if (!neutralGroups[monsterGroup]) {
+        monsterStatus.textContent = '组合 ' + monsterGroup + ' 不在 PVP-中立资源配置 里，解析不出野怪 ID。';
+      } else {
+        monsterStatus.textContent = '组合 ' + monsterGroup
+          + '（' + ((neutralGroups[monsterGroup] || {}).name || '未命名') + '）· '
+          + groupMonsterLabel(monsterGroup) + '。';
+      }
+    }
     $('patrolStatus').textContent = patrolPoint
-      ? '出生点（' + (patrolPoint.row + 1) + ' 行，' + (patrolPoint.column + 1) + ' 列）· ' + (patrolPoint.patrolCells || []).length + ' 格；左键涂格，右键擦除。'
+      ? '出生点（' + (patrolPoint.row + 1) + ' 行，' + (patrolPoint.column + 1) + ' 列）· ' + (patrolPoint.patrolCells || []).length + ' 格'
+        + (patrolPoint.groupId !== undefined
+          ? ' · 组合 ' + patrolPoint.groupId + (neutralGroups[patrolPoint.groupId] ? ' ' + (neutralGroups[patrolPoint.groupId].name || '') : '') + ' · ' + groupMonsterLabel(patrolPoint.groupId)
+          : '') + '；左键涂格，右键擦除。'
       : '点击“编辑巡逻范围”，再选择地图上的野怪资源点。';
     $('btnClearPatrol').disabled = !patrolPoint || !patrolPoint.patrolCells;
     $('btnPatrolSelect').setAttribute('aria-pressed', brush === 'patrol' || brush === 'patrol-select' ? 'true' : 'false');
   }
-  function setResourceGroup(value) {
+  function setResourceGroup(value, keepMonsterInput) {
     var groupId = typeof value === 'string' && value.trim() ? Number(value) : value;
     if (!validResourceGroupId(groupId)) throw new Error('资源组合 ID 必须为 1～2147483647 的整数');
     resourceGroupId = groupId;
     resourceBrush = '';
     $('resourceGroupId').value = String(groupId);
+    // 反向选择（填野怪 ID）时保留输入框，让策划看到自己查的是哪只；直接填组合时清掉失效的野怪 ID。
+    if (!keepMonsterInput && $('monsterCardId')) $('monsterCardId').value = '';
     brush = 'resource';
     eraseBrush = false;
     syncControls();
     renderResourcePanel();
     if (hover) drawCursor(brushCells(hover.row, hover.column, brushRadius));
   }
+  /**
+   * 组合输入既接受组合 ID，也接受野怪 ID：野怪 ID 唯一命中一个组合时自动换算。
+   *  多个组合都含这只野怪时不猜，直接报候选让策划填组合 ID。
+   */
+  function resolveResourceGroupInput(value) {
+    var text = String(value == null ? '' : value).trim();
+    if (!text) throw new Error('资源组合 ID 必须为 1～2147483647 的整数');
+    var numeric = Number(text);
+    if (validResourceGroupId(numeric) && (!Object.keys(neutralGroups).length || neutralGroups[numeric])) return numeric;
+    var candidates = monsterGroupCandidates(text);
+    if (candidates.length === 1) return candidates[0].groupId;
+    if (candidates.length > 1) {
+      throw new Error('野怪 ID ' + text + ' 出现在多个组合：'
+        + candidates.map(function (candidate) { return candidate.groupId + (candidate.name ? ' ' + candidate.name : ''); }).join('、')
+        + '；请直接填组合 ID');
+    }
+    return numeric;
+  }
+  /** 「野怪 ID」输入确认后：唯一组合直接选中并进入放置，多只野怪时明确提示开局抽签。*/
+  function applyMonsterCardId() {
+    var input = $('monsterCardId');
+    var text = input ? String(input.value || '').trim() : '';
+    if (!text) { renderResourcePanel(); return; }
+    var candidates = monsterGroupCandidates(text);
+    if (!candidates.length) {
+      flash('中立资源表里没有野怪 ID ' + text, 'err');
+      renderResourcePanel();
+      return;
+    }
+    if (candidates.length > 1) {
+      flash('野怪 ID ' + text + ' 出现在多个组合：'
+        + candidates.map(function (candidate) { return candidate.groupId + (candidate.name ? ' ' + candidate.name : ''); }).join('、')
+        + '；请直接填组合 ID', 'warn');
+      renderResourcePanel();
+      return;
+    }
+    var groupId = candidates[0].groupId;
+    var cards = monsterCardsOfGroup(groupId);
+    setResourceGroup(groupId, true);
+    if (cards.length > 1) {
+      flash('野怪 ' + text + ' 属于组合 ' + groupId + '，组内还有 '
+        + cards.filter(function (card) { return card.resId !== text; }).map(function (card) { return card.resId; }).join(' / ')
+        + '：开局按权重抽签，点位不能固定单只', 'warn');
+    } else {
+      flash('野怪 ' + text + ' → 组合 ' + groupId + '：点击可通行格放置', 'ok');
+    }
+  }
   function setResourceBrush(resourceId) {
     if (!RESOURCE_ASSETS[resourceId]) return;
     resourceBrush = resourceId;
     resourceGroupId = null;
+    if ($('monsterCardId')) $('monsterCardId').value = '';
     brush = 'resource';
     eraseBrush = false;
     renderResourcePanel();
@@ -3151,8 +3284,12 @@
       $('resourceGroupOptions').innerHTML = Object.keys(neutralGroups).map(function (id) {
         return '<option value="' + id + '">' + esc(neutralGroups[id].name) + '</option>';
       }).join('');
+      rebuildMonsterIndex();
+      fillMonsterOptions();
     } catch (error) {
       neutralGroups = {};
+      rebuildMonsterIndex();
+      fillMonsterOptions();
     }
   }
   async function loadResourceLibrary() {
@@ -3826,8 +3963,10 @@
     });
     function chooseResourceGroup() {
       try {
-        setResourceGroup($('resourceGroupId').value);
-        flash('已选择资源组合 ' + resourceGroupId + '：点击可通行格放置，右键删除', 'ok');
+        var groupId = resolveResourceGroupInput($('resourceGroupId').value);
+        setResourceGroup(groupId);
+        var cards = monsterCardsOfGroup(groupId);
+        flash('已选择资源组合 ' + groupId + (cards.length ? '（' + groupMonsterLabel(groupId) + '）' : '') + '：点击可通行格放置，右键删除', 'ok');
       } catch (error) { flash(error.message, 'err'); }
     }
     $('btnResourcePlace').addEventListener('click', function () {
@@ -3846,10 +3985,20 @@
       // 编辑输入时暂停旧组合，避免尚未确认的新 ID 把上一组合写到地图。
       resourceGroupId = null;
       resourceBrush = '';
+      // 手改组合时清掉野怪 ID 的反查结果，避免两栏各说各的。
+      if ($('monsterCardId')) $('monsterCardId').value = '';
       syncControls();
     });
     $('resourceGroupId').addEventListener('keydown', function (event) {
       if (event.key === 'Enter') { event.preventDefault(); chooseResourceGroup(); }
+    });
+    $('monsterCardId').addEventListener('change', applyMonsterCardId);
+    $('monsterCardId').addEventListener('keydown', function (event) {
+      if (event.key === 'Enter') { event.preventDefault(); applyMonsterCardId(); }
+    });
+    // 清空野怪 ID 时回到“只跟随组合/点位”的说明，不保留上一只的解析结果。
+    $('monsterCardId').addEventListener('input', function () {
+      if (!String(this.value || '').trim()) renderResourcePanel();
     });
     Array.prototype.forEach.call(document.querySelectorAll('#regionSection button'), function (button) {
       button.addEventListener('click', function () {
@@ -3909,6 +4058,8 @@
     rememberDecorName: rememberDecorName, groupDecorEntries: groupDecorEntries,
     setResourceBrush: setResourceBrush, setResourceWeight: setResourceWeight, resourceMarkup: resourceMarkup,
     setResourceGroup: setResourceGroup, addResourceGroupPoint: addResourceGroupPoint,
+    monsterCardsOfGroup: monsterCardsOfGroup, monsterGroupCandidates: monsterGroupCandidates,
+    resolveResourceGroupInput: resolveResourceGroupInput, applyMonsterCardId: applyMonsterCardId,
     selectPatrolPoint: selectPatrolPoint, clearPatrolCells: clearPatrolCells,
     setPartitionBrush: setPartitionBrush, setRegionBrush: setRegionBrush, setRegionTendency: setRegionTendency, setRegionText: setRegionText,
     mapMetadataMarkup: mapMetadataMarkup,

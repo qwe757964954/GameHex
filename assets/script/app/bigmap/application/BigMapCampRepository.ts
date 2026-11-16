@@ -166,7 +166,7 @@ export class BigMapCampRepository {
 
     /** 按角色身份跨据点迁移；未查询的目标不补造名单，广播版本阻止旧查询回写。 */
     applyRoleEvent(campId: number, event: IBigMapRoleEvent): boolean {
-        if (this.isDisposed || !event) return false;
+        if (this.isDisposed) return false;
         let changed = false;
         for (const [oldCampId, roles] of this.roleSnapshots) {
             if (oldCampId === campId) continue;

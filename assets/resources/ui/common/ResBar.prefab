@@ -753,7 +753,11 @@
     },
     "iconOverride": null,
     "alwaysShowPlus": false,
-    "_id": ""
+    "_id": "",
+    "spendFloatPrefab": {
+      "__uuid__": "7d1f4a26-3b59-4c8e-a0f2-6b8d3e5c1a73",
+      "__expectedType__": "cc.Prefab"
+    }
   },
   {
     "__type__": "cc.CompPrefabInfo",
@@ -1450,7 +1454,11 @@
     },
     "iconOverride": null,
     "alwaysShowPlus": false,
-    "_id": ""
+    "_id": "",
+    "spendFloatPrefab": {
+      "__uuid__": "7d1f4a26-3b59-4c8e-a0f2-6b8d3e5c1a73",
+      "__expectedType__": "cc.Prefab"
+    }
   },
   {
     "__type__": "cc.CompPrefabInfo",
@@ -2147,7 +2155,11 @@
     },
     "iconOverride": null,
     "alwaysShowPlus": false,
-    "_id": ""
+    "_id": "",
+    "spendFloatPrefab": {
+      "__uuid__": "7d1f4a26-3b59-4c8e-a0f2-6b8d3e5c1a73",
+      "__expectedType__": "cc.Prefab"
+    }
   },
   {
     "__type__": "cc.CompPrefabInfo",

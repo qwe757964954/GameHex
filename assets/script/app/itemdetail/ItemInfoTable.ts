@@ -24,21 +24,6 @@ export const ITEM_INFO_PANEL_WIDTH = 470;
 /** 面板高（设计稿 659，固定 —— 底板是一张整图，不能随内容伸缩）。 */
 export const ITEM_INFO_PANEL_HEIGHT = 659;
 
-/** 获取途径：单行高度。 */
-export const ITEM_INFO_ROW_HEIGHT = 57;
-
-/** 获取途径：行间距。 */
-export const ITEM_INFO_ROW_GAP = 11;
-
-/** 获取途径：底板上下内边距。 */
-export const ITEM_INFO_ROWS_PAD = 13;
-
-/** 获取途径：行宽（底板宽 437 − 左右 11.5）。 */
-export const ITEM_INFO_ROW_WIDTH = 414;
-
-/** 获取途径：底板宽（九宫，按行数只改高度）。 */
-export const ITEM_INFO_PLATE_WIDTH = 437;
-
 /**
  * 主物品格：设计稿尺寸 100×100。
  *
@@ -49,30 +34,6 @@ export const ITEM_INFO_REWARD_SLOT_SIZE = 100;
 
 /** 公共奖励格（`ui/common/RewardItem.prefab`）的原始边长。 */
 export const ITEM_INFO_REWARD_ITEM_SIZE = 96;
-
-/**
- * prefab 里预建的行数。
- * 取 `item` 表 `access` 的最大长度（实测 4 条，仅 1 件物品），再多就是表出错，
- * 宁可截断 + 控制台告警，也不要为了极端数据把行做成虚拟列表。
- */
-export const ITEM_INFO_MAX_ROWS = 4;
-
-/**
- * 获取途径底板高度：`2 × 内边距 + n × 行高 + (n−1) × 行距`。
- * n=2 ⇒ 26 + 114 + 11 = 151（与设计稿底板高度一致）。
- */
-export function itemInfoRowsHeightOf(count: number): number {
-    const n = Math.floor(count);
-    if (!Number.isFinite(n) || n <= 0) return 2 * ITEM_INFO_ROWS_PAD + ITEM_INFO_ROW_HEIGHT;
-    return 2 * ITEM_INFO_ROWS_PAD + n * ITEM_INFO_ROW_HEIGHT + (n - 1) * ITEM_INFO_ROW_GAP;
-}
-
-/** 实际要摆几行：至少 1 行（「暂无获取途径」占位），最多 `ITEM_INFO_MAX_ROWS`。 */
-export function itemInfoRowCountOf(count: number): number {
-    const n = Math.floor(count);
-    if (!Number.isFinite(n) || n <= 0) return 1;
-    return Math.min(n, ITEM_INFO_MAX_ROWS);
-}
 
 /**
  * `item.type`（`ItemType` 枚举）→ 界面上的「类型」名。

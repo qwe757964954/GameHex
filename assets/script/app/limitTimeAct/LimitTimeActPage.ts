@@ -39,9 +39,9 @@ const TAB_NODES: ReadonlyArray<readonly [string, LimitTimeTab]> = [
  * 版式照老端结构重排：顶部标题 + 倒计时 + 页签栏 + 页签描述 + 一条虚拟列表 + 关闭。
  *
  * 数据链路（与 `LayerActivityPage` 不同 —— 这套的**配置是服务端下发**的）：
- *   打开 → `refresh()` 拉 `reqActivityJson`（配置）+ `reqActivityLimitTimeInfo`（状态）
- *         → `load()` 组装快照 → 铺列表。
- *   领取 / 购买 → `reqActivityLimitTimeTake` → 用响应里的新状态原地覆盖 → 重铺。
+ * 打开 → `refresh()` 拉 `reqActivityJson`（配置）+ `reqActivityLimitTimeInfo`（状态）
+ * → `load()` 组装快照 → 铺列表。
+ * 领取 / 购买 → `reqActivityLimitTimeTake` → 用响应里的新状态原地覆盖 → 重铺。
  *
  * 三页签共用一条 `VirtualScrollView`：`renderItemFn` 按 `activeTab` 分支渲染任务行 / 礼包行。
  */
@@ -50,25 +50,25 @@ export class LimitTimeActPage extends PopupBase {
     static prefabPath = 'ui/LimitTimeAct/LimitTimeAct';
 
     @property({ type: Label, tooltip: 'TitleLabel：标题（服务端 limitTimeConfig.title 下发，兜底「限时活动」）' })
-    titleLabel: Label = null;
+    titleLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'TimeLabel：倒计时' })
-    timeLabel: Label = null;
+    timeLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'DescLabel：页签描述' })
-    descLabel: Label = null;
+    descLabel: Label = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'List：三页签共用的虚拟列表' })
-    list: VirtualScrollView = null;
+    list: VirtualScrollView = null!;
 
     @property({ type: Button, tooltip: 'CloseBtn：关闭按钮' })
-    closeBtn: Button = null;
+    closeBtn: Button = null!;
 
     @property({ type: Label, tooltip: 'HintLabel：提示行（未开 / 离线 / 失败）' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
     @property({ type: SpriteFrame, tooltip: '页签选中底板（主页同款 city/nav_sel）' })
-    selectedTabFrame: SpriteFrame = null;
+    selectedTabFrame: SpriteFrame = null!;
 
     /** 数据端口；测试可替换。 */
     private repo: ILimitTimeActRepository = limitTimeActRepository;
@@ -87,11 +87,10 @@ export class LimitTimeActPage extends PopupBase {
 
     protected onInit(): void {
         for (const [name, tab] of TAB_NODES) {
-            const node = this.node.getChildByName(name);
-            const button = node?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => this.onClickTab(tab), this);
+            const button = this.node.getChildByName(name)!.getComponent(Button)!;
+            button.node.on(Button.EventType.CLICK, () => this.onClickTab(tab), this);
         }
-        this.closeBtn?.node.on(Button.EventType.CLICK, this.closeByButton, this);
+        this.closeBtn.node.on(Button.EventType.CLICK, this.closeByButton, this);
     }
 
     protected async onOpen(): Promise<void> {
@@ -117,9 +116,7 @@ export class LimitTimeActPage extends PopupBase {
         this.repo = repository;
     }
 
-    // ============================================================
     // 取数与渲染
-    // ============================================================
 
     /** 拉一次配置 + 数据，再组装渲染当前页签。 */
     private async refreshAndPresent(): Promise<void> {
@@ -169,22 +166,20 @@ export class LimitTimeActPage extends PopupBase {
 
         if (!this.aliveCheck() || revision !== this.loadRevision) return;
 
-        const list = this.list;
-        if (!list) return;
         if (!this.rendererBound) {
             this.rendererBound = true;
-            list.renderItemFn = (node, index) => this.renderItem(node, index);
-            list.onItemClickFn = (node, index) => this.onItemClick(index);
+            this.list.renderItemFn = (node, index) => this.renderItem(node, index);
+            this.list.onItemClickFn = (_node, index) => this.onItemClick(index);
         }
-        list.refreshList(this.rows.length);
+        this.list.refreshList(this.rows.length);
     }
 
     /** 渲染一行（任务 / 礼包分支）。 */
     private renderItem(node: Node, index: number): void {
         const row = this.rows[index];
-        const item = node.getComponent(LimitTimeActItem);
+        const item = node.getComponent(LimitTimeActItem)!;
         const snapshot = this.snapshot;
-        if (!row || !item || !snapshot) return;
+        if (!row || !snapshot) return;
 
         if (this.activeTab === LimitTimeTab.Task) {
             const task = row as ILimitTimeTaskRow;
@@ -262,9 +257,7 @@ export class LimitTimeActPage extends PopupBase {
         await this.reloadAndPresent();
     }
 
-    // ============================================================
     // 页签 + 倒计时
-    // ============================================================
 
     private onClickTab(tab: LimitTimeTab): void {
         if (this.activeTab === tab) return;
@@ -276,11 +269,10 @@ export class LimitTimeActPage extends PopupBase {
     /** 页签只显示主页同款金色选中底板，未选中态保持透明。 */
     private renderTabSelection(): void {
         for (const [name, tab] of TAB_NODES) {
-            const node = this.node.getChildByName(name);
-            if (!node) continue;
+            const node = this.node.getChildByName(name)!;
             const selected = tab === this.activeTab;
-            const background = node.getComponent(Sprite);
-            if (background) background.spriteFrame = selected ? this.selectedTabFrame : null;
+            const background = node.getComponent(Sprite)!;
+            background.spriteFrame = selected ? this.selectedTabFrame : null;
             for (const label of node.getComponentsInChildren(Label)) {
                 label.color = selected ? TAB_LABEL_COLOR_ON : TAB_LABEL_COLOR_OFF;
             }
@@ -296,7 +288,7 @@ export class LimitTimeActPage extends PopupBase {
     /** 刷新倒计时文案。 */
     private updateTime = (): void => {
         const meta = this.snapshot?.meta;
-        if (!meta || !this.timeLabel) return;
+        if (!meta) return;
         const remain = Math.floor((meta.endTime - Date.now()) / 1000);
         if (remain <= 0) {
             this.timeLabel.string = LIMIT_TIME_TEXTS.actEnd;
@@ -306,11 +298,11 @@ export class LimitTimeActPage extends PopupBase {
     };
 
     private setHint(text: string): void {
-        if (this.hintLabel) this.hintLabel.string = text;
+        this.hintLabel.string = text;
     }
 
     private aliveCheck(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.node.isValid && this.isPopupOpen;
     }
 }
 

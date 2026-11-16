@@ -62,7 +62,7 @@ import type {
     ITerritoryHeroProgressSource,
     ITerritoryRewardDelta,
 } from '../territory/model/TerritoryHeroReward';
-import { HeroFragmentBadge, type HeroFragmentBadgeFrames } from './HeroFragmentBadge';
+import { HeroFragmentBadge, HERO_FRAGMENT_BADGE_PREFAB, type HeroFragmentBadgeFrames } from './HeroFragmentBadge';
 import {
     TERRITORY_MAP_BOTTOM_INSET,
     territoryMapContentPaddingBottom,
@@ -2036,17 +2036,21 @@ export class MainTerritoryMap extends Component {
                 item.iconResId > 0 ? this.rewardIcons.get(item.iconResId) ?? null : null,
             ]),
         );
-        this.ensureHeroBadge()?.enqueue(items, frames);
+        const badge = await this.ensureHeroBadge();
+        if (!this.isValid) return;
+        badge?.enqueue(items, frames);
     }
 
     /** 惰性建徽标：挂在 `BottomNav` 上，摆在英雄按钮图标正上方。 */
-    private ensureHeroBadge(): HeroFragmentBadge | null {
+    private async ensureHeroBadge(): Promise<HeroFragmentBadge | null> {
         if (this.heroBadge) return this.heroBadge;
         const host = this.findHeroTabHost();
         if (!host) return null;
         const button = this.findHeroTabButton();
         if (!button) return null;
-        this.heroBadge = new HeroFragmentBadge(host.navBar, button);
+        const prefab = await this.assets.load(HERO_FRAGMENT_BADGE_PREFAB, Prefab).catch(() => null);
+        if (!prefab || !this.isValid) return null;
+        this.heroBadge = new HeroFragmentBadge(host.navBar, button, prefab);
         return this.heroBadge;
     }
 

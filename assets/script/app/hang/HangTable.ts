@@ -1,45 +1,10 @@
 /**
- * 征收（挂机）的判定口径 —— **零 import 的纯函数**，全部可单测。
- *
- * 老端真源：`client/assets/script/app/game/ctrl/hang/LayerHang.ts` +
- * `.../model/hang/ModelHang.ts` + `.../model/chapter/ModelChapterNew.ts`。
- *
- * ## 三个「关卡」不是一个
- *
- * 老端同一个界面里用了**三套关卡号**，混用会静默取错数据：
- *
- * | 用途 | 老端取值 | 含义 |
- * |---|---|---|
- * | 收益展示（16/h、1/h、奖励格、当天最长征收时间） | `GetMaxChallengeLevel() - 1` | **已通关的最后一关** |
- * | 快速征收的体力消耗 `end` | `GetSweetLevel()` | **最高「完美通关」（3 星）的关卡** |
- * | 进度条/倒计时 | 与关卡无关，只看 `CmdRole.lastIdleRewardTime` | — |
- *
- * ⚠️ 扫荡（`onClickLevy`）用 `GetRefGuanKaRewardsByLevel(GetSweetLevel()).end` 算体力，
- * 而收益展示用 `GetMaxChallengeLevel() - 1` 那行 —— **两者可以不是同一行**，
- * 别图省事合并成一个 level。
- *
- * ## ⚠️ 星级是**位掩码**，不是星数（本模块最容易读错的一处）
- *
- * `CmdBattleLevel.star` 是 **3 位掩码**（bit0 = 1 星、bit1 = 2 星、bit2 = 3 星），
- * 不是 0~3 的星数。两端各有两处独立证据：
- *
- * | 处 | 代码 | 说明 |
- * |---|---|---|
- * | 取第 i 档是否达成 | `ModelChapterNew.GetLevelStarMask()` → `mask & (1 << (index - 1))` | 位运算 |
- * | 掩码 → 星数 | `VOBattleChapter.ToLocalStar(s) = (s&1) + ((s>>1)&1) + ((s>>2)&1)` | 显式换算 |
- *
- * ⇒ 老端 `GetStageIsPerfectClean()`（`VOBattleChapter:183`）写的 `mask >= StageProgress.threeStar`
- * 其实是 **`mask >= 0b011`，即「1 星与 2 星都拿到」= 2 星及以上** ——
- * **与 FGUI 文案「征收最新2星及以上通关的关卡奖励」完全一致**。
- *
- * ⚠️ 曾经把它误读成「星数 >= 3」，于是得出「文案说 2 星、代码判 3 星」的矛盾结论并照抄 ——
- * **那个结论是错的**。`star` 当星数用时只有 `>= 1` 这种边界碰巧等价（`mask > 0` ⇔ `mask >= 1`），
- * 一旦涉及 2 星 / 3 星就必然走偏。要星数请显式过 `levelStarCount()`。
+ * 挂机收益判定纯函数，零 cc 依赖。
+ * 收益展示用已通关最后一关，快速征收费体力用最高三星关，两者不能合并。
+ * CmdBattleLevel.star 是 3 位位掩码不是星数；要星数走 levelStarCount()。
  */
 
-// ============================================================
 // 常量
-// ============================================================
 
 /** 挂机收益封顶时长 —— 老端 `LayerHangUI.maxIdleTime = 8 * 60 * 60 * 1000`。 */
 export const HJ_MAX_IDLE_MS = 8 * 60 * 60 * 1000;
@@ -53,7 +18,7 @@ export const HJ_MIN_CLAIM_MS = 60 * 60 * 1000;
 /**
  * 快速征收的倍率档位 —— 老端 `LayerHang.SWEEP_GEARS` 写死。
  *
- * ⚠️ 老端注释：*「目前客户端写死：gameConfig 里没有对应配置项（已逐条核对全部 150 项）」*。
+ * 老端注释：*「目前客户端写死：gameConfig 里没有对应配置项（已逐条核对全部 150 项）」*。
  * Demo3.8 的 `gameConfig` 同样没有这一项，**继续写死**，别再去找配置。
  */
 export const HJ_SWEEP_GEARS: readonly number[] = [1, 5, 10, 20, 50];
@@ -70,7 +35,7 @@ export const HJ_FALLBACK_SWEEP_FREE_TIMES = 3;
 /**
  * 体力的 `resId`。
  *
- * ⚠️ 老端 `LayerHangUI.init` 里是 `this.ModelMgr.ModelGoods.GetGoodsIconKeyByRefId(roleProperty.end)`，
+ * 老端 `LayerHangUI.init` 里是 `this.ModelMgr.ModelGoods.GetGoodsIconKeyByRefId(roleProperty.end)`，
  * 而 `roleProperty` 是 **`generated/refGen/RefEnum.ts` 里的代码枚举**（不是 `roleProperty.json` 的列！
  * 那张表只有 `resId/key/type/name/quality/describe/showType/unenoughTips/access/useJump` 十列，
  * 根本没有 `end`）。`RefEnum.roleProperty.end = 9`，两端同值（已逐行比对）。
@@ -90,7 +55,7 @@ export const HJ_INSTANCE_TYPE_NORMAL = 0;
 /**
  * 「完美通关」的星级**掩码**门槛（老端 `StageProgress.threeStar`）。
  *
- * ⚠️ 名字里的 `STAR` 指的是**星档**，但比较对象是 `CmdBattleLevel.star` 这个**位掩码**：
+ * 名字里的 `STAR` 指的是**星档**，但比较对象是 `CmdBattleLevel.star` 这个**位掩码**：
  * `mask >= 3` ⇔ `0b011` ⇔ bit0 + bit1 都置位 ⇔ **1 星与 2 星都拿到**。
  * 也就是说这个门槛的实际语义是「**2 星及以上**」，与 FGUI 文案一致（见文件头）。
  * 别把它当「星数 >= 3」用 —— 那会让 2 星关被当成满星关，静默改变快速征收的体力档
@@ -117,9 +82,7 @@ export const HJ_FALLBACK_INCOME_LEVEL = 1;
 /** 快速征收的 `CmdBattleSweepReqMsg.type`（`CmdBattleType.CHAPTER`）。 */
 export const HJ_SWEEP_TYPE_CHAPTER = 1;
 
-// ============================================================
 // 奖励条目
-// ============================================================
 
 /** 一条奖励（`{resId, number}`）。 */
 export interface IHjReward {
@@ -174,9 +137,7 @@ export function perHourText(reward: IHjReward | null): string {
     return reward ? `${reward.number}/h` : '';
 }
 
-// ============================================================
 // 表解析
-// ============================================================
 
 /** `guankaReward` 里本模块用到的一行。 */
 export interface IHjGuankaRow {
@@ -250,7 +211,7 @@ export function parseInteractRows(values: unknown): IHjInteractRow[] {
  * @param rows        `interactReward` 全表
  * @param interactedIds 玩家已互动（`state === 1`）的 `resId` 集合
  *
- * ⚠️ 只算 `type === 3` 的行 —— `interactReward` 里 type 有 `[0,1,2,3,4]` 五种，
+ * 只算 `type === 3` 的行 —— `interactReward` 里 type 有 `[0,1,2,3,4]` 五种，
  * 只有 3 是产税建筑（9 行，`battlelevel` 26/46/66/…）。
  */
 export function collectInteractTaxRewards(
@@ -286,9 +247,7 @@ export function sweepFreeTimesOf(config: ReadonlyMap<string, unknown>): number {
     return Number.isFinite(n) && n > 0 ? Math.floor(n) : HJ_FALLBACK_SWEEP_FREE_TIMES;
 }
 
-// ============================================================
 // 进度条 / 倒计时
-// ============================================================
 
 /** 已累计时长（毫秒，负数归零）—— 老端 `Math.max(0, now - startTime)`。 */
 export function idleElapsedMs(startMs: number, nowMs: number): number {
@@ -330,14 +289,14 @@ function pad2(n: number): string {
 /**
  * `08:00:00` 形态的倒计时 —— 老端 `TimeUtil.timeMillisecond2HMSStr(diffTime)`。
  *
- * ⚠️ 与战令的 `TimeUtil.timeSec2HMSStr2` **不是同一个函数**：那个带「N天」前缀，
+ * 与战令的 `TimeUtil.timeSec2HMSStr2` **不是同一个函数**：那个带「N天」前缀，
  * 这个不带（8h 封顶，天数永远是 0）。别复用 `BattleTokenTexts.formatDuration`。
  *
- * ⚠️ 秒数是 **`Math.ceil`（进位）**，不是截断：老端 `timeMillisecond2HMSStr` 写的是
+ * 秒数是 **`Math.ceil`（进位）**，不是截断：老端 `timeMillisecond2HMSStr` 写的是
  * `timeSec2HMSStr(Math.ceil(time * 0.001))`。改成 `floor` 会让 `3_599_999ms` 显示
  * `00:59:59` 而不是 `01:00:00`（差 1 秒，肉眼几乎看不出，但口径就不是老端了）。
  *
- * ⚠️ **封顶不在这里**：老端是在 `LayerHang.refreshTime()` 里先 `diffTime = min(diffTime, 8h)`
+ * **封顶不在这里**：老端是在 `LayerHang.refreshTime()` 里先 `diffTime = min(diffTime, 8h)`
  * 再调本函数。要封顶请先过 `idleCappedMs()` / `cappedElapsedMsOf()`。
  */
 export function formatHms(ms: number): string {
@@ -348,14 +307,12 @@ export function formatHms(ms: number): string {
     return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
 }
 
-// ============================================================
 // 倍率档位
-// ============================================================
 
 /**
  * 当前倍率。
  *
- * ⚠️ **2026-11-11 口径变更（山猫拍板）：倍率对所有玩家开放**，不再要求福利月卡。
+ * **当前口径：倍率对所有玩家开放**，不再要求福利月卡。
  * 协议 `CmdCityChapterSweepReqMsg` 新增 `optional uint32 times = 3`，由服务端按
  * `倍率 × 单次消耗` 扣体力、按倍率发奖 ⇒ 客户端的档位不再需要「持卡」这道门禁。
  * 老端 `refreshGearBtn` 那套「无特权把下标复位成 0」随之作废（见 `HangPage.reload`）。
@@ -392,7 +349,7 @@ export function gearLabel(times: number): string {
 /**
  * 快速征收按钮上的花费文案 `x10`。
  *
- * ⚠️ 服务端按 `end × times` 扣体力（老端 `BattleSweepHandler` 第 3 步），
+ * 服务端按 `end × times` 扣体力（老端 `BattleSweepHandler` 第 3 步），
  * 这里同口径算，**不是**客户端乘算。
  */
 export function sweepCostText(end: number, times: number): string {
@@ -401,9 +358,7 @@ export function sweepCostText(end: number, times: number): string {
     return `x${e * t}`;
 }
 
-// ============================================================
 // 关卡进度推导
-// ============================================================
 
 /**
  * 星级**掩码** → 星数（0~3）—— 老端 `VOBattleChapter.ToLocalStar` 的逐字实现。
@@ -423,7 +378,7 @@ export function levelStarCount(starMask: number): number {
  * 从 1 起顺序数普通关，遇到第一个没过就停；通关 N 关 ⇒ `N + 1`。
  * `isPassed` 由调用方注入（Repository 传 `CmdBattleLevel.star >= 1`），保持本文件零 import。
  *
- * ⚠️ 上界是**普通关总数**，不是 `normal.length + 1`；两张表都空时返回 **0**
+ * 上界是**普通关总数**，不是 `normal.length + 1`；两张表都空时返回 **0**
  * （老端 `if (maxLevel > tlRef.length) maxLevel = tlRef.length` 且 `tlRef` 已被
  * `getTlRef("instanceType", Normal)` 过滤过 ⇒ 空表得 0）。这一条与
  * `FirstRechargeAutoOpen.deriveMaxChallengeLevel` 的既有单测同口径，**别"顺手"钳到 1**：
@@ -448,12 +403,12 @@ export function deriveMaxChallengeLevel(
  * 遍历普通关，记下**最后一个**达 `HJ_PERFECT_STAR` 掩码门槛的 `level`；
  * 一个都没有时返回 `null`（老端此时返回 `undefined`）。
  *
- * ⚠️ 两个注入器的语义都别写错：
- *   · `starOf(level)` 返回的是 **`CmdBattleLevel.star` 位掩码**（不是星数）；
- *   · `hasChapter(chapter)` 对应老端 `VOBattleChapterBag.Get(ref.chapter) == null`
- *     —— 老端在这里是 **`break`（整段停止扫描）而不是 `continue`**：某章从没挑战过
- *     （服务端不发该章缓存）之后的所有章都不再看。照抄这个 break，别改成 continue，
- *     否则「中间缺章的脏档」会取到后面的关，与线上表现不符。
+ * 两个注入器的语义都别写错：
+ * · `starOf(level)` 返回的是 **`CmdBattleLevel.star` 位掩码**（不是星数）；
+ * · `hasChapter(chapter)` 对应老端 `VOBattleChapterBag.Get(ref.chapter) == null`
+ * —— 老端在这里是 **`break`（整段停止扫描）而不是 `continue`**：某章从没挑战过
+ * （服务端不发该章缓存）之后的所有章都不再看。照抄这个 break，别改成 continue，
+ * 否则「中间缺章的脏档」会取到后面的关，与线上表现不符。
  */
 export function deriveSweetLevel(
     rows: readonly IHjGuankaRow[],
@@ -472,7 +427,7 @@ export function deriveSweetLevel(
 /**
  * 收益展示用的关号 —— 老端 `initView` 的 `GetMaxChallengeLevel() - 1`。
  *
- * ⚠️ 这一处是**有意的纯展示偏差**（与老端不同，已记账）：一关没过时老端去查 `level = 0`
+ * 这一处是**有意的纯展示偏差**（与老端不同，已记账）：一关没过时老端去查 `level = 0`
  * （表里没有 ⇒ `if (!cfg) return`，收益条与 6 格全空），Demo3.8 退到第 1 关，
  * 让离线预览 / 新号也能看到「产出奖励」区长什么样。
  * **只有展示**——它不参与任何请求（发请求的关号见 `sweepLevelOf`，那个**没有**兜底）。
@@ -485,20 +440,18 @@ export function incomeLevelOf(maxChallengeLevel: number): number {
 /**
  * 快速征收按哪一关算体力 —— 老端 `refreshBtn` / `onClickLevy` 的 `GetSweetLevel()`。
  *
- * ⚠️ **没有兜底，与老端一致**：老端 `GetRefGuanKaRewardsByLevel(level)` 在「一关都没满星」时
+ * **没有兜底，与老端一致**：老端 `GetRefGuanKaRewardsByLevel(level)` 在「一关都没满星」时
  * 返回 `null` ⇒ `if (ref) cost.setText(...)` 不写花费文案、`onClickLevy` 第一句就 `return`
  * （**一个请求都不发**）。所以这里返回 `0`（= 没有可扫的关），由调用方按 0 处理。
  *
- * ⚠️ 为什么这里**不能**像 `incomeLevelOf` 那样退到第 1 关：那会让「没过第 1 关的新号」
+ * 为什么这里**不能**像 `incomeLevelOf` 那样退到第 1 关：那会让「没过第 1 关的新号」
  * 真的发出 `{level: 1, type: 1}` 的扫荡请求 —— 老端从不会发。**纯展示可以退，发请求不能退。**
  */
 export function sweepLevelOf(sweetLevel: number | null): number {
     return Number.isFinite(sweetLevel as number) && (sweetLevel as number) > 0 ? (sweetLevel as number) : 0;
 }
 
-// ============================================================
 // 快照查询（页面直接调，不必自己拼）
-// ============================================================
 
 /**
  * 这批函数要用到的快照字段 —— **结构性子集**。
@@ -529,7 +482,7 @@ export interface IHjSnapshotView {
 /**
  * 挂机已累计时长（毫秒，**未钳到上限**）。
  *
- * ⚠️ 起点为 0（缓存没推 / 离线）时**这里也会算出一个巨大的值** —— 页面不要直接用它，
+ * 起点为 0（缓存没推 / 离线）时**这里也会算出一个巨大的值** —— 页面不要直接用它，
  * 用 `cappedElapsedMsOf` / `progressOf`（那三个做了起点兜底）。
  */
 export function elapsedMsOf(snapshot: IHjSnapshotView): number {
@@ -567,7 +520,7 @@ export function claimableOf(snapshot: IHjSnapshotView): boolean {
 /**
  * 快速征收按钮上的花费文案 `x10`。
  *
- * ⚠️ 服务端按 `end × times` 扣体力（老端 `BattleSweepHandler` 第 3 步），
+ * 服务端按 `end × times` 扣体力（老端 `BattleSweepHandler` 第 3 步），
  * 这里同口径算，**不是**客户端乘算。
  */
 export function costTextOf(snapshot: IHjSnapshotView, gearIndex: number = HJ_DEFAULT_GEAR_INDEX): string {
@@ -582,11 +535,11 @@ export function sweepUsedOf(snapshot: IHjSnapshotView): number {
 /**
  * 「广告次数」那一行的**分支** —— 老端 `refreshBtn` 的三个互斥分支。
  *
- *   · `unlimited`：有月卡 ⇒ `无限征收`
- *   · `watch`：免费次数用完 ⇒ `今日看广告次数:{a}/{b}`
- *   · `left`：还有免费次数 ⇒ `今日剩余({x}/{y})`
+ * · `unlimited`：有月卡 ⇒ `无限征收`
+ * · `watch`：免费次数用完 ⇒ `今日看广告次数:{a}/{b}`
+ * · `left`：还有免费次数 ⇒ `今日剩余({x}/{y})`
  *
- * ⚠️ 本轮只有 `left` 会走到（无月卡 + `sweepTimes` 读不到 ⇒ 0 < 3）。另两个分支照抄老端，
+ * 本轮只有 `left` 会走到（无月卡 + `sweepTimes` 读不到 ⇒ 0 < 3）。另两个分支照抄老端，
  * 等月卡 / 广告链路接上即可生效 —— 所以**分支判定必须可单测**（这正是它留在这里的原因）。
  */
 export type HJAdCountBranch = 'unlimited' | 'watch' | 'left';
@@ -606,10 +559,10 @@ export function adLeftOf(snapshot: IHjSnapshotView): number {
  * 「快速征收」按钮的 `免费` 控制器页码。
  *
  * 老端 `btn.setSelectedIndex("免费", sweepTimes >= sweepFreeTimes ? 0 : 1)`：
- *   · `0` = 「否」⇒ 显示「看视频」小图标（`n6` 的 `gearDisplay pages="0"`）
- *   · `1` = 「是」⇒ 藏小图标，`title` 落到 `(79,53)`
+ * · `0` = 「否」⇒ 显示「看视频」小图标（`n6` 的 `gearDisplay pages="0"`）
+ * · `1` = 「是」⇒ 藏小图标，`title` 落到 `(79,53)`
  *
- * ⚠️ 语义反直觉：**「免费=是」才是「还有免费次数」**。写反了界面照样跑，
+ * 语义反直觉：**「免费=是」才是「还有免费次数」**。写反了界面照样跑，
  * 只是图标与文案位置错位 —— 所以必须钉住。
  */
 export function freePageOf(snapshot: IHjSnapshotView): number {

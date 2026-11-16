@@ -212,7 +212,6 @@ test('restoreGuideProgress：按存档恢复到当前步，已完成步不重跑
     const progress = restoreGuideProgress(store, STEPS);
     assert.ok(progress);
     assert.equal(progress.current?.stepId, '6-1');
-    assert.deepEqual(progress.pendingRewards('2-2'), []);
 });
 
 test('restoreGuideProgress：配置坏掉时返回 null（本次不引导），不让主流程崩', () => {

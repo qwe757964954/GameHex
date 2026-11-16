@@ -4,7 +4,7 @@ const { ccclass, property } = _decorator;
 
 @ccclass('BigMapBasePlot')
 export class BigMapBasePlot extends Component {
-    @property(Graphics) selection: Graphics = null;
+    @property(Graphics) selection: Graphics = null!;
     /**
      *选中底光（暖金光晕，画在建筑图下面）。
      *
@@ -18,10 +18,10 @@ export class BigMapBasePlot extends Component {
      *原先「建造中」只有格子上方那一行 `120s` 小字，二十几格同屏时根本找不到哪几格在施工。
      */
     @property(Graphics) progressRing: Graphics = null!;
-    @property(Sprite) icon: Sprite = null;
-    @property(Sprite) badge: Sprite = null;
-    @property(UITransform) badgeTransform: UITransform = null;
-    @property(Label) nameLabel: Label = null;
-    @property(Label) status: Label = null;
-    @property(Sprite) resource: Sprite = null;
+    @property(Sprite) icon: Sprite = null!;
+    @property(Sprite) badge: Sprite = null!;
+    @property(UITransform) badgeTransform: UITransform = null!;
+    @property(Label) nameLabel: Label = null!;
+    @property(Label) status: Label = null!;
+    @property(Sprite) resource: Sprite = null!;
 }

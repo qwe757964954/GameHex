@@ -5,19 +5,19 @@
  * `ModelBackStageAct` / `VOBackStageAct`。
  *
  * 数据来源分两类：
- *   - 配置（`limitTimeTask` / `limitTimeDay` / `limitTimeActivity` / `limitTimeConfig`）：
- *     **服务端下发**（`reqActivityJson` 的 `content` 是一段 JSON 字符串），不是 `remoteRef` 静态表；
- *   - 服务器状态（`CmdActivitySimple` 缓存 + `reqActivityLimitTimeInfo` 响应）：
- *     每日任务进度 `tlCmdTask`、每日礼包次数 `tlLimitTimeDay`、限购次数 `tlLimitTimeActivity`。
+ * - 配置（`limitTimeTask` / `limitTimeDay` / `limitTimeActivity` / `limitTimeConfig`）：
+ * **服务端下发**（`reqActivityJson` 的 `content` 是一段 JSON 字符串），不是 `remoteRef` 静态表；
+ * - 服务器状态（`CmdActivitySimple` 缓存 + `reqActivityLimitTimeInfo` 响应）：
+ * 每日任务进度 `tlCmdTask`、每日礼包次数 `tlLimitTimeDay`、限购次数 `tlLimitTimeActivity`。
  *
  * 老端这些判定挂在 `VOBackStageAct` / `ModelMgr` 上没法单测，这里全部收敛成**传参纯函数**。
  *
  * ## 三页签配置的形状（服务端 `reqActivityJson` 下发）
- *   - `limitTimeTask`：`{ resId, name, sort, desc, targetType, param:{count}, reward:[{resId,number}] }`
- *   - `limitTimeDay` / `limitTimeActivity`：
- *     `{ resId, title, desc, reward, priceType, cost, count, discount, extend, refreshParam }`
- *     （`count` = 限购次数；`discount` = 折扣，2 = 2 折；`priceType` = 货币 resId；`cost` = 单价）
- *   - `limitTimeConfig`：`{ key, value, title }`（`key=icon` 是入口图标，另有一条 `title`）
+ * - `limitTimeTask`：`{ resId, name, sort, desc, targetType, param:{count}, reward:[{resId,number}] }`
+ * - `limitTimeDay` / `limitTimeActivity`：
+ * `{ resId, title, desc, reward, priceType, cost, count, discount, extend, refreshParam }`
+ * （`count` = 限购次数；`discount` = 折扣，2 = 2 折；`priceType` = 货币 resId；`cost` = 单价）
+ * - `limitTimeConfig`：`{ key, value, title }`（`key=icon` 是入口图标，另有一条 `title`）
  */
 
 import { toCount } from '../net/RequestGuard';
@@ -46,9 +46,7 @@ export type LimitTimeTaskPhase = 'goto' | 'claimable' | 'taken' | 'undone';
 /** 礼包 / 限购的购买按钮态。 */
 export type LimitTimeGoodsPhase = 'buyable' | 'soldout';
 
-// ============================================================
 // 解析
-// ============================================================
 
 /** 解析一条奖励数组；非法条目跳过。 */
 export function parseRewards(raw: unknown): ILimitTimeReward[] {
@@ -227,9 +225,7 @@ function asArray(value: unknown): unknown[] {
     return Array.isArray(value) ? value : [];
 }
 
-// ============================================================
 // 状态判定
-// ============================================================
 
 /** 一条每日任务的服务器进度；没下发 = 0 / 未完成。 */
 export function taskStateOf(resId: number, states: readonly ILimitTimeTaskState[]): ILimitTimeTaskState {

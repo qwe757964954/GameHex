@@ -30,8 +30,6 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
-    anyDayHasRedDot,
-    boxHasRedDot,
     boxProgressOf,
     boxStateOf,
     dayHasRedDot,
@@ -44,7 +42,6 @@ import {
     EMPTY_SEVEN_DAY_STATE,
     formatRemain,
     isDayUnlocked,
-    isSpecialProgressTarget,
     listDayTabs,
     listRowsOfDay,
     listRowsOfTab,
@@ -477,20 +474,6 @@ test('⚠️ dayHasRedDot 未开启的天不亮（老端 ref.days > curDay 就 c
     assert.equal(dayHasRedDot(tasks, 7, 7, state), false, '第 7 天没任务 ⇒ 不亮');
 });
 
-test('anyDayHasRedDot 只在「已解锁的天」里找（未来天的可领取不算）', () => {
-    const tasks = [task({ resId: 1, days: 1 }), task({ resId: 5, days: 5 })];
-    assert.equal(anyDayHasRedDot(tasks, 1, stateOf({ tasks: [[5, 1, SEVEN_DAY_STATE_FINISH]] })), false);
-    assert.equal(anyDayHasRedDot(tasks, 5, stateOf({ tasks: [[5, 1, SEVEN_DAY_STATE_FINISH]] })), true);
-    assert.equal(anyDayHasRedDot(tasks, 7, stateOf({ tasks: [[1, 1, SEVEN_DAY_STATE_FINISH]] })), true);
-});
-
-test('boxHasRedDot：有可领宝箱才有红点', () => {
-    assert.equal(boxHasRedDot(BOXES, stateOf({ point: 0 })), false);
-    assert.equal(boxHasRedDot(BOXES, stateOf({ point: 10 })), true);
-    assert.equal(boxHasRedDot(BOXES, stateOf({ point: 10, takenBoxIds: [1] })), false);
-    assert.equal(boxHasRedDot(BOXES, stateOf({ point: 65 })), true);
-});
-
 test('isDayUnlocked：第 day 天 <= 今天即解锁', () => {
     assert.equal(isDayUnlocked(1, 1), true);
     assert.equal(isDayUnlocked(2, 1), false);
@@ -533,8 +516,6 @@ test('真实表里存在通关类任务，且它们的 goto 都配了（界面�
     for (const row of fightTasks) {
         assert.ok(row.goto > 0, `${row.resId}（${row.name}）没配 goto，只能干等）`);
     }
-    assert.equal(isSpecialProgressTarget(SEVEN_DAY_TARGET_FIGHT), true);
-    assert.equal(isSpecialProgressTarget(27), false);
 });
 
 test('discountText：10 折不显示标签，5 折显示「5折」，0/负也当不打折', () => {
@@ -1021,7 +1002,7 @@ test('列表行渲染不许闭包捕获 present() 的入参（否则 reload 后�
     const page = readFileSync('assets/script/app/sevenDay/SevenDayPage.ts', 'utf8');
     assert.match(page, /private rowContext: \{/, '没有存「本趟渲染上下文」的字段');
     assert.match(page, /this\.rowContext = \{ snapshot, qualityFrames, iconFrames \};/);
-    assert.match(page, /list\.renderItemFn = \(node, index\) => this\.renderRow\(node, index\);/,
+    assert.match(page, /this\.rowList\.renderItemFn = \(node, index\) => this\.renderRow\(node, index\);/,
         'renderItemFn 应委托给方法（在里面现取上下文），不要内联闭包');
     assert.match(page, /private renderRow\(node: Node, index: number\): void \{/);
     assert.match(page, /const context = this\.rowContext;/, 'renderRow 没现取上下文');
@@ -1495,31 +1476,46 @@ test('天数红点画在选中光效上层（active 后不能仍被 SelectGlow �
     assert.deepEqual(wrong, [], `红点必须晚于选中光效渲染：\n${wrong.join('\n')}`);
 });
 
-test('长屏适配：页头贴顶、积分区贴底，Panel 与 RowView 吃掉额外高度', () => {
+test('长屏适配：页头贴顶、积分区贴底，Panel 与 RowView 由 prefab Widget 拉伸', () => {
     const source = readFileSync('assets/script/app/sevenDay/SevenDayPage.ts', 'utf8');
-    assert.match(source, /const DESIGN_HEIGHT = 1280;/);
-    assert.match(source, /this\.captureLayoutBase\(\);/);
-    assert.match(source, /this\.applyScreenLayout\(\);/);
-    assert.match(source, /baseY \+ extra \/ 2/, '贴顶节点没有上移半个额外高度');
-    assert.match(source, /baseY - extra \/ 2/, '贴底节点没有下移半个额外高度');
-    assert.match(source, /this\.panelBaseHeight \+ extra/, 'Panel 没有纵向拉伸');
-    assert.match(source, /this\.rowListBaseHeight \+ extra/, 'RowView 没有纵向拉伸');
+    assert.doesNotMatch(source, /const DESIGN_HEIGHT = 1280;/);
+    assert.doesNotMatch(source, /captureLayoutBase\(\)/);
+    assert.doesNotMatch(source, /applyScreenLayout\(\)/);
+    assert.doesNotMatch(source, /topAlignedNodes|bottomAlignedNodes/);
 
-    const pageCid = scriptCid('assets/script/app/sevenDay/SevenDayPage.ts');
-    const page = PREFAB.find((entry) => entry && entry.__type__ === pageCid) as {
-        panel?: { __id__: number };
-        topAlignedNodes?: Array<{ __id__: number }>;
-        bottomAlignedNodes?: Array<{ __id__: number }>;
-    } | undefined;
-    assert.ok(page?.panel, 'SevenDayPage.panel 未绑定');
-    assert.equal(PREFAB[page!.panel!.__id__]!._name, 'Panel');
-    const namesOf = (refs: Array<{ __id__: number }> | undefined): string[] =>
-        (refs ?? []).map((ref) => String(PREFAB[ref.__id__]?._name));
-    assert.deepEqual(
-        namesOf(page!.topAlignedNodes),
-        ['BgTop', 'BgDeco', 'TitleArt', 'CloseBtn', 'TimeBg', 'TimeLabel', 'TimeText', 'Hint', 'DayBar', 'TabBar'],
-    );
-    assert.deepEqual(namesOf(page!.bottomAlignedNodes), ['BoxBar', 'Medal', 'PointLabel', 'ChipBg', 'ChipLabel']);
+    const root = PREFAB_NODES[0]!;
+    const widgetOn = (name: string): Record<string, unknown> => {
+        const node = PREFAB_NODES.find((entry) => entry._name === name && parentOfNode(entry) === root);
+        assert.ok(node, `SevenDay 根下缺 ${name}`);
+        const widget = componentsOf(node!).find((comp) => comp.__type__ === 'cc.Widget');
+        assert.ok(widget, `${name} 没有 cc.Widget`);
+        return widget!;
+    };
+    const assertWidget = (name: string, flags: number, values: Record<string, number>): void => {
+        const widget = widgetOn(name);
+        assert.equal(widget._alignFlags, flags, `${name} alignFlags`);
+        for (const [key, value] of Object.entries(values)) {
+            assert.equal(widget[`_${key}`], value, `${name}.${key}`);
+        }
+    };
+
+    assertWidget('Panel', 21, { top: 296, bottom: 44, horizontalCenter: 0 });
+    assertWidget('BgTop', 17, { top: 0, horizontalCenter: 0 });
+    assertWidget('BgDeco', 17, { top: -47, horizontalCenter: 184 });
+    assertWidget('TitleArt', 17, { top: -29, horizontalCenter: -150.5 });
+    assertWidget('CloseBtn', 17, { top: 1, horizontalCenter: 327 });
+    assertWidget('TimeBg', 17, { top: 321, horizontalCenter: -145 });
+    assertWidget('TimeLabel', 17, { top: 321, horizontalCenter: -189 });
+    assertWidget('TimeText', 17, { top: 320, horizontalCenter: -44 });
+    assertWidget('Hint', 17, { top: 320, horizontalCenter: 200 });
+    assertWidget('DayBar', 17, { top: 106, horizontalCenter: -153 });
+    assertWidget('TabBar', 17, { top: 382, horizontalCenter: 1 });
+    assertWidget('BoxBar', 20, { bottom: 93, horizontalCenter: 66 });
+    assertWidget('Medal', 20, { bottom: 135, horizontalCenter: -261.5 });
+    assertWidget('PointLabel', 20, { bottom: 164.5, horizontalCenter: -263 });
+    assertWidget('ChipBg', 20, { bottom: 92, horizontalCenter: -261 });
+    assertWidget('ChipLabel', 20, { bottom: 94, horizontalCenter: -261 });
+    assertWidget('RowView', 21, { top: 392, bottom: 243, horizontalCenter: 0 });
 });
 
 test('点空白关闭：内容区只认 5 个**交互**节点（全屏美术/底板算空白），否则整屏都算内容 ⇒ 点哪儿都不关', () => {
@@ -1532,10 +1528,10 @@ test('点空白关闭：内容区只认 5 个**交互**节点（全屏美术/底
     // 判据 = 显式给「交互节点」，而不是留空让 PopupBase 自动取「全部激活的直接子节点」
     assert.match(
         source,
-        /this\.closeButton, this\.dayBar, this\.tabBar, this\.rowList\?\.node, this\.boxBar/,
+        /this\.closeButton, this\.dayBar, this\.tabBar, this\.rowList\.node, this\.boxBar/,
         '内容区没按「交互节点」列（少一个就会把对应控件那一片算成空白，点它误关）',
     );
-    assert.match(source, /this\.contentNodes = interactive;/, '算了却没用上');
+    assert.match(source, /this\.contentNodes = \[this\.closeButton, this\.dayBar, this\.tabBar, this\.rowList\.node, this\.boxBar\];/, '算了却没用上');
 
     // ⚠️ 反例 1：内容区被清空 ⇒ PopupBase 退回「全部直接子节点」⇒ BgTop(720×484) + Panel(720×1145)
     //    两根全屏底图都算内容 ⇒ 整屏都是内容 ⇒ 点空白永不关闭（用户报的就是这个）。
@@ -1564,6 +1560,15 @@ test('点空白关闭：内容区只认 5 个**交互**节点（全屏美术/底
 });
 
 test('prefab 生成器同步红点与长屏布局配置（重生成不能回退）', () => {
+    // 生成器是本地临时脚本（tmp/ 不入库）。不在工作区时直接校验它的产物 prefab：
+    // 红点必须仍是 `common/cm_red_dot`，不能退回旧的 gameui/icon_01；顶部/底部节点的
+    // Widget 对齐由 B 组结构用例覆盖。
+    if (!existsSync('tmp/gen_seven_day.mjs')) {
+        const prefab = readFileSync('assets/bundles/main-pages/ui/SevenDay/SevenDay.prefab', 'utf8');
+        assert.ok(prefab.includes('84c85dbf-f6d0-4171-bcf6-66c163725f67@f9941'),
+            'SevenDay.prefab 的红点必须引用 common/cm_red_dot');
+        return;
+    }
     const generator = readFileSync('tmp/gen_seven_day.mjs', 'utf8');
     assert.match(generator, /dot: artUuid\('common\/cm_red_dot'\)/);
     assert.equal(/dot: artUuid\('gameui\/icon_01'\)/.test(generator), false);

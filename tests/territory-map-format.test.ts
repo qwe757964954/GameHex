@@ -28,7 +28,7 @@ test('territory sample normalizes independently from battle map protocol', () =>
     const result = normalizeTerritoryMap(sample);
     assert.equal(result.map.mapKind, 'territoryChapter');
     assert.equal(result.map.rows, 20);
-    assert.equal(result.map.sites.length, 152);
+    assert.equal(result.map.sites.length, 176);
     assert.deepEqual(result.map.randomSites?.candidateCells, sample.randomSites.candidateCells);
 });
 

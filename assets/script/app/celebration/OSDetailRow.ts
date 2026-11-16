@@ -93,19 +93,19 @@ export class OSAvatarLoader {
 @ccclass('OSDetailRow')
 export class OSDetailRow extends Component {
     @property({ type: Label, tooltip: 'RankNum：名次数字（FGUI `rank/lab`，`标签` 页 0..3）' })
-    rankNum: Label = null;
+    rankNum: Label = null!;
 
     @property({ type: Label, tooltip: 'RankNone：`未上榜`（FGUI `rank/n10`，`标签` 页 4）' })
-    rankNone: Label = null;
+    rankNone: Label = null!;
 
     @property({ type: Label, tooltip: 'NameText：玩家名（FGUI `userName`）' })
-    nameText: Label = null;
+    nameText: Label = null!;
 
     @property({ type: Sprite, tooltip: 'HeadFrame/icon：头像（异步加载，走 `HeadArt.loadHeadFrame`）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'PowerText：战力（`numAbbr`）' })
-    powerText: Label = null;
+    powerText: Label = null!;
 
     /** 头像加载器（`onLoad` 里建，`onEnable` 后可用）。 */
     private _avatar: OSAvatarLoader | null = null;
@@ -121,15 +121,14 @@ export class OSDetailRow extends Component {
      */
     render(entry: ICelebrationRankEntry): void {
         const notInRank = entry.rank === OS_NOT_IN_RANK;
-        // 🔴 显隐**无条件写**（规则 82）—— prefab 里 `RankNum` 是可见、`RankNone` 是隐藏，
-        //    而「未上榜」是常态，只在翻转时写会让首次 `false === 缓存初值` 短路。
-        if (this.rankNum) this.rankNum.node.active = !notInRank;
-        if (this.rankNone) this.rankNone.node.active = notInRank;
-        if (this.rankNum) this.rankNum.string = notInRank ? '' : String(entry.rank);
-        if (this.nameText) this.nameText.string = entry.roleName;
-        if (this.powerText) this.powerText.string = numAbbrOf(entry.power);
+        // 显隐无条件写：prefab 里 RankNum 可见、RankNone 隐藏，未上榜是常态。
+        this.rankNum.node.active = !notInRank;
+        this.rankNone.node.active = notInRank;
+        this.rankNum.string = notInRank ? '' : String(entry.rank);
+        this.nameText.string = entry.roleName;
+        this.powerText.string = numAbbrOf(entry.power);
 
-        // 头像是异步的 ⇒ 走带防串行守卫的加载器；`usedSkinResId <= 0` 当空头像。
+        // 头像是异步的，走带防串行守卫的加载器；usedSkinResId <= 0 当空头像。
         this._avatar?.apply(entry.usedSkinResId > 0 ? String(entry.usedSkinResId) : '');
     }
 }

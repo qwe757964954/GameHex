@@ -125,14 +125,12 @@ test('宝箱详情「打开」按钮：两行态坐标与按钮中线对齐，�
     assert.ok(costLabel._lpos.y < 0, '两行态：倒计时胶囊在下半位');
 
     const src = readFileSync('assets/script/app/main/ChestDetailPanel.ts', 'utf8');
-    assert.match(src, /const OPEN_LABEL_X = 4;/);
-    assert.match(src, /const OPEN_LABEL_Y_TWO_LINE = 21\.5;/);
-    assert.match(src, /const OPEN_LABEL_Y_CENTER = 0;/);
-    assert.match(
-        src,
-        /this\.openLabel\.node\.setPosition\(OPEN_LABEL_X, hasCountdown \? OPEN_LABEL_Y_TWO_LINE : OPEN_LABEL_Y_CENTER\)/,
-        '只切胶囊显隐、不把文案放回中线 = 下半截留白（截图那颗「打开」偏上）',
-    );
+    assert.doesNotMatch(src, /const OPEN_LABEL_X|const OPEN_LABEL_Y_TWO_LINE|const OPEN_LABEL_Y_CENTER/,
+        '两行态 / 居中态的坐标必须来自 prefab');
+    assert.match(src, /this\.openLabelX = this\.openLabel\.node\.position\.x/);
+    assert.match(src, /this\.openLabelTwoLineY = this\.openLabel\.node\.position\.y/);
+    assert.match(src, /this\.openLabelCenterY/);
+    assert.match(src, /this\.openLabel\.node\.setPosition\(this\.openLabelX, this\.openLabelY\)/);
 });
 
 test('宝箱详情走 PopupBase：页面不再绑 prefab，组件声明 prefabPath，Widget 已启用', () => {
@@ -214,6 +212,7 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     const positions: number[][] = [];
     const node = () => ({
         active: true, children: [], parent: null,
+        position: { x: 4, y: 21.5, z: 0 },
         setPosition(x: number, y: number) { positions.push([x, y]); },
         setScale() {}, setSiblingIndex() {}, addComponent() {},
         getComponent: () => ({ setContentSize() {} }),

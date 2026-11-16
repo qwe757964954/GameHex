@@ -1,4 +1,4 @@
-import { _decorator, Button, instantiate, Label, Node, UITransform } from 'cc';
+import { _decorator, Button, instantiate, Label, Layout, Node, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { UIResources } from '../../framework/ui/UIResources';
@@ -10,12 +10,8 @@ import { itemDetailRepository } from './ItemDetailRepository';
 import type { IItemDetailRepository, IItemDetailSnapshot } from './ItemDetailRepository';
 import type { IItemAccessRef } from './ItemDetailTable';
 import {
-    ITEM_INFO_MAX_ROWS,
-    ITEM_INFO_PLATE_WIDTH,
     ITEM_INFO_REWARD_ITEM_SIZE,
     ITEM_INFO_REWARD_SLOT_SIZE,
-    itemInfoRowCountOf,
-    itemInfoRowsHeightOf,
     itemTypeNameOf,
 } from './ItemInfoTable';
 
@@ -232,16 +228,16 @@ export class ItemInfoPage extends PopupBase {
 
     private presentAccess(snapshot: IItemDetailSnapshot): void {
         const texts = ITEM_DETAIL_TEXTS;
+        const rows = this.rows;
         // 途径查不到时给一行占位（留空列表看着像界面坏了）；占位行不可点、不画箭头。
         const refs: IItemAccessRef[] = snapshot.accessRefs.length > 0
-            ? snapshot.accessRefs.slice(0, ITEM_INFO_MAX_ROWS)
+            ? snapshot.accessRefs.slice(0, rows.length)
             : [{ resId: 0, text: texts.noAccess }];
-        if (snapshot.accessRefs.length > ITEM_INFO_MAX_ROWS) {
-            console.warn(`[ItemInfo] ${this.resId} 的获取途径 ${snapshot.accessRefs.length} 条，超过预建行数 ${ITEM_INFO_MAX_ROWS}，多余的没显示`);
+        if (snapshot.accessRefs.length > rows.length) {
+            console.warn(`[ItemInfo] ${this.resId} 的获取途径 ${snapshot.accessRefs.length} 条，超过预建行数 ${rows.length}，多余的没显示`);
         }
         this.accessRefs = refs;
 
-        const rows = this.rows;
         for (let index = 0; index < rows.length; index += 1) {
             const ref = refs[index];
             if (!ref) {
@@ -251,14 +247,16 @@ export class ItemInfoPage extends PopupBase {
             rows[index].node.active = true;
             rows[index].render(ref.text, ref.resId > 0);
         }
-        this.applyRowsHeight(refs.length);
+        this.applyRowsHeight();
     }
 
-    /** 底板高度按实际行数收放（底板锚点在上沿，只往下长）。 */
-    private applyRowsHeight(count: number): void {
-        const height = itemInfoRowsHeightOf(itemInfoRowCountOf(count));
-        const transform = this.rowsPlate?.getComponent(UITransform);
-        if (transform) transform.setContentSize(ITEM_INFO_PLATE_WIDTH, height);
+    /** 底板高度跟随 RowsRoot 的 Layout 容器高度（两者同一坐标系，锚点都在上沿）。 */
+    private applyRowsHeight(): void {
+        const layout = this.rowsRoot?.getComponent(Layout);
+        layout?.updateLayout();
+        const rows = this.rowsRoot?.getComponent(UITransform);
+        const plate = this.rowsPlate?.getComponent(UITransform);
+        if (rows && plate) plate.setContentSize(plate.width, rows.height);
     }
 
     private onAccessClick(index: number): void {

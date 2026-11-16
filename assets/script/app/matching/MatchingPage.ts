@@ -8,10 +8,6 @@ import { MATCH_TEXT, type MatchPhase, type MatchPlayerData } from './MatchTypes'
 import type { IMatchingViewState } from './MatchingModel';
 import { matchingTipProgress, matchingWaveOffset } from './MatchingTimeline';
 const { ccclass, property } = _decorator;
-const ITEM_HEIGHT = 160;
-const ITEM_GAP = 38;
-const ITEMS_CENTER_Y = 37;
-
 /**
  * 匹配页只渲染快照、驱动视觉时间轴；搜索及开战由外部控制器负责。
  *
@@ -204,13 +200,8 @@ export class MatchingPage extends Component {
     }
     private layout(count: number): void {
         const visibleCount = Math.max(1, Math.min(this.itemViews.length, count));
-        const stride = ITEM_HEIGHT + ITEM_GAP;
-        const span = visibleCount * ITEM_HEIGHT + (visibleCount - 1) * ITEM_GAP;
         this.itemList.children.forEach((node, index) => {
-            const visible = index < visibleCount;
-            node.active = visible;
-            if (!visible) return;
-            node.setPosition(0, ITEMS_CENTER_Y + span / 2 - ITEM_HEIGHT / 2 - index * stride, 0);
+            node.active = index < visibleCount;
         });
     }
 

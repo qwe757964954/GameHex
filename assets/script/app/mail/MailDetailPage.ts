@@ -1,37 +1,7 @@
 /**
- * 「邮件」详情弹窗（老端 `LayerMailVerbose`）。
- *
- * 结构逐节点对齐 FGUI `邮件/组件/组件_邮件_邮件内容.xml`：
- *   `PanelBg → TitleBg → Title → CloseBtn → MailTitle → SplitLine → ContentView → RewardBox → RewardList → TakeBtn → TakenStamp`
- *   （`RewardBox` 里是**横向虚拟列表** `RewardList/content/RewardSlotTemplate`：格子按数据出、由列表的
- *     `NodePool` 复用，见下面「奖励列表」那段）
- *
- * ## 三处**有意偏离** FGUI 原稿（都记在 `tmp/_mail_nodes.md` §5）
- *
- * ① **长文本不做滚动列表**：原稿用 `controller 类型`（短文本 / 长文本）切「一个 Label」与
- *    「一个虚拟列表」。新端统一走 `ContentView`（Label 多行，`<br/>` 换成换行）——
- *    邮件正文一般就几行，再挂一个 `VScrollView` 收益极低。
- * ② **正文框高度固定 400，无奖励时拉到 580**：原稿靠 `gearSize controller="奖励领取"` 切换，
- *    这里在 `applyContentHeight` 里显式做（两个高度常量在 `MailTable`）。
- * ③ **正文不带富文本样式**：原稿是 `richtext ubb="true"`；新端无富文本标签，
- *    文案里也没有颜色标记（`MailTexts` 里不带标记）。
- *
- * ## 奖励列表：**逐条对齐**原稿（不预摆格子）
- *
- * FGUI 是 `列表_奖励列表`（`layout="row" colGap="10" align="center" overflow="scroll"`），
- * 老端 `LayerMailVerbose.InitList()` 用 `initVirtualList(this, RenderListItem)` —— 格数跟数据走、
- * item 由列表池化。新端同样用 `VirtualScrollView` 对齐这三件事：
- *
- * | FGUI | 新端 |
- * |---|---|
- * | `layout="row" colGap="10"` | `VirtualScrollView`（`direction=HORIZONTAL`、`spacing=10`、一行的 `gridCount=1`） |
- * | `align="center"`（只在装得下时生效） | `autoCenter = true`（同一公式 `(视口−内容)/2`，同样只在小内容时生效） |
- * | `overflow="scroll"` | 横向滚动（视口 515 宽，一格 90 + 间距 10 ⇒ 一次最多看 5 格） |
- * | 预摆 8 个 item | 一个 `RewardSlotTemplate`，其余由 `NodePool` 复用 |
- *
- * 所以**没有「第 8 格画到弹窗外」这回事了**：视口挂 `cc.Mask`，超出部分裁掉、可拖出来看。
- * 按钮口径（FGUI `gearText controller="是否领取" pages="0,1" values="领取|删除"`）：
- * **没领** ⇒ 「领取」；**已领** ⇒ 「删除」（老端 `com.getSelectedIndex("是否领取") == 0` 那支）。
+ * 邮件详情弹窗。长文本不做滚动列表，正文直接用多行 Label。
+ * 有奖励时正文高 400，无奖励时拉到 580。
+ * 奖励用横向虚拟列表；按钮未领取显示「领取」，已领取显示「删除」。
  */
 
 import { _decorator, Button, Label, Node, SpriteFrame, UITransform } from 'cc';
@@ -120,16 +90,14 @@ export class MailDetailPage extends PopupBase {
         return this.detail;
     }
 
-    // ============================================================
     // PopupBase 生命周期
-    // ============================================================
 
     protected onInit(): void {
         this.titleLabel.string = MAIL_DETAIL_TITLE;
         this.closeButton?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.takeButton?.node.on(Button.EventType.CLICK, this.onTakeOrDelete, this);
 
-        // ⚠️ 只绑一次，回调按 index 现取（同 `MailPage` 铁律 ①）
+        // 只绑一次，回调按 index 现取（同 `MailPage` 铁律 ①）
         if (!this.rewardRendererBound && this.rewardList) {
             this.rewardList.renderItemFn = (node, index) => this.renderRewardSlot(node, index);
             this.rewardRendererBound = true;
@@ -147,9 +115,7 @@ export class MailDetailPage extends PopupBase {
         await this.loadDetail();
     }
 
-    // ============================================================
     // 数据 → 界面
-    // ============================================================
 
     private async loadDetail(): Promise<void> {
         // 先读详情（服务端顺带标记已读），再取表索引（`load()` 在已经拉过列表时不再发包）
@@ -174,7 +140,7 @@ export class MailDetailPage extends PopupBase {
     /**
      * 一次性把**每个**奖励格要用的图取完（品质框 + 道具图标）。
      *
-     * ⚠️ 必须**先取完再铺**：`renderItemFn` 是同步回调，在里面现加载会先闪一帧上一份奖励的图。
+     * 必须**先取完再铺**：`renderItemFn` 是同步回调，在里面现加载会先闪一帧上一份奖励的图。
      * 这里是虚拟列表 ⇒ 格子是按 index 现造的，所以不能按「宿主有几个格子」截断，
      * 要把数据里的每一格都备好（`loadArt` 自身有缓存，重复项不会重复请求）。
      */
@@ -207,10 +173,10 @@ export class MailDetailPage extends PopupBase {
         const hasReward = count > 0;
         this.applyContentHeight(hasReward);
 
-        // ⚠️ `RewardBox` 出厂 `active = false`（原稿是 `controller 奖励领取` 的一页），
-        //    所以里面的虚拟列表 `onLoad/start` 要等**第一次被激活**才跑（规则 108）；
-        //    而 `VirtualScrollView` 的视口尺寸与槽位数组全在 `start()` 里建 ⇒ 必须先开箱、
-        //    等一帧、再 `refreshList()`，否则列表一片空白（**不报错**）。同 `MailPage` 铁律 ②。
+        // `RewardBox` 出厂 `active = false`（原稿是 `controller 奖励领取` 的一页），
+        // 所以里面的虚拟列表 `onLoad/start` 要等**第一次被激活**才跑；
+        // 而 `VirtualScrollView` 的视口尺寸与槽位数组全在 `start()` 里建 ⇒ 必须先开箱、
+        // 等一帧、再 `refreshList()`，否则列表一片空白（**不报错**）。同 `MailPage` 铁律 ②。
         this.rewardBox.active = hasReward;
         if (!hasReward) return;
 
@@ -232,7 +198,7 @@ export class MailDetailPage extends PopupBase {
      * 列表的 item 回调（`renderItemFn`）：只按 `index` 取这一格要用的两张图。
      *
      * `node` 是列表从 `RewardSlotTemplate` 克隆/回收来的，`MailRewardSlot` 与它的
-     * `frame` / `icon` 两个引用**由生成器写死在模板上**（规则 109：绑错了当场抛，不在这里判空）。
+     * `frame` / `icon` 两个引用**由生成器写死在模板上**（绑错了当场抛，不在这里判空）。
      */
     private renderRewardSlot(node: Node, index: number): void {
         const frames = this.rewardFrames[index] ?? [null, null];
@@ -249,9 +215,7 @@ export class MailDetailPage extends PopupBase {
         );
     }
 
-    // ============================================================
     // 交互
-    // ============================================================
 
     private onCloseClick(): void {
         this.closeByButton();

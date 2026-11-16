@@ -30,11 +30,11 @@ import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompleti
  * ## 老端行为与移植取舍
  *
  * 1. **`init()` 挂两个事件监听**（`VORoleUnionBag` / `VOLeagueTaskBag` 的 `OnChanged` → `updateView()`）
- *    —— 那是「推送即刷新」的路子。本端是拉取式：领奖成功后 `afterWrite('ok')` 里自己 `reload()` 一次。
+ * —— 那是「推送即刷新」的路子。本端是拉取式：领奖成功后 `afterWrite('ok')` 里自己 `reload()` 一次。
  * 2. **领奖**：老端 `ModelLeague.RequestTaskReward(ref.resId)`，且**只有 `CanBeReward()` 时才挂
- *    onClick**。本端把这道判据收在 `LeagueNorthRewardRow` 里（不可领直接不发），页里再防一次（`busy`）。
+ * onClick**。本端把这道判据收在 `LeagueNorthRewardRow` 里（不可领直接不发），页里再防一次（`busy`）。
  * 3. **页签红点**：老端 `tab_league.com_rd` / `tab_role.com_rd`，判据是
- *    `hasNorthernExpeditionReward(subType)` —— 本端快照的 `leagueRedDot` / `roleRedDot`。
+ * `hasNorthernExpeditionReward(subType)` —— 本端快照的 `leagueRedDot` / `roleRedDot`。
  */
 
 import { _decorator, Button, Node } from 'cc';
@@ -65,7 +65,7 @@ const { ccclass, property } = _decorator;
 
 @ccclass('LeagueNorthRewardPage')
 export class LeagueNorthRewardPage extends PopupBase {
-    /** ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）。 */
+    /**  目录名大小写必须与磁盘一致（`ui/League/`）。 */
     static prefabPath = 'ui/League/LeagueNorthReward';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
@@ -74,7 +74,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     /**
      * `TabLeague` / `TabRole`：两个页签（`LeagueNorthTab.prefab` 的**嵌套实例**）。
      *
-     * ⚠️ 绑节点、运行时 `getComponent(LeagueNorthTab)`（同 `LeagueNorthRankPage.heroItem`）。
+     * 绑节点、运行时 `getComponent(LeagueNorthTab)`（同 `LeagueNorthRankPage.heroItem`）。
      */
     @property({ type: Node, tooltip: 'TabLeague：「联盟奖励」页签（默认选中）' })
     tabLeague: Node = null;
@@ -110,9 +110,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
@@ -150,9 +148,7 @@ export class LeagueNorthRewardPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 数据端口
-    // ============================================================
 
     static get titleText(): string {
         return LEAGUE_NORTH_REWARD_TITLE;
@@ -163,9 +159,7 @@ export class LeagueNorthRewardPage extends PopupBase {
         return leagueRepository;
     }
 
-    // ============================================================
     // 页签
-    // ============================================================
 
     private onCloseClick(): void {
         this.closeByButton();
@@ -203,9 +197,7 @@ export class LeagueNorthRewardPage extends PopupBase {
         if (this.tabRoleRef) this.tabRoleRef.setFrames(payload);
     }
 
-    // ============================================================
     // 取数 / 铺数据
-    // ============================================================
 
     /** 读一次奖励快照（**不发包**：两档都在缓存里）→ 预取图 → 铺。 */
     private async reload(): Promise<void> {
@@ -252,15 +244,13 @@ export class LeagueNorthRewardPage extends PopupBase {
         row.render(view ?? null, this.art);
     }
 
-    // ============================================================
     // 领奖
-    // ============================================================
 
     /**
      * 点「领取」—— 老端 `ModelLeague.RequestTaskReward(ref.resId)`。
      *
-     * ⚠️ 「不可领不发包」这道闸在 `LeagueNorthRewardRow` 里（同老端「只有 `CanBeReward` 才挂 onClick」），
-     *    这里只再防一次 `busy`（连点两颗不同行会重复发包）。
+     * 「不可领不发包」这道闸在 `LeagueNorthRewardRow` 里（同老端「只有 `CanBeReward` 才挂 onClick」），
+     * 这里只再防一次 `busy`（连点两颗不同行会重复发包）。
      */
     private async onClaim(view: ILeagueNorthRewardRowView): Promise<void> {
         if (this.busy) return;

@@ -8,7 +8,7 @@
  * 对应关系见 `guideStep.completeCond`：
  *   2-1/3-1/4-1/7-1 → tileFlipped    ← TerritoryController 的 randomTap
  *   5-1/5-2         → siteTap        ← TerritoryController 的 siteTap
- *   6-1             → pageOpened:card ← LineupBoardPage.onOpen
+ *   6-1             → pageOpened:card ← GuideComposition（英雄卡牌页）
  *   6-2             → cardSelected:<id> ← MainPageComposition.openUpgrade
  *   6-3             → cardLevelUp:<id>  ← Controller 直接订阅 HeroUpgraded
  *   8-1             → popupClosed    ← MainTaskDetailPage.onClose
@@ -34,11 +34,12 @@ test('翻格上报：只在受理成功时发（randomTap / siteTap 都要被返
     );
 });
 
-test('6-1：布阵/卡牌页打开时上报 pageOpened:card', () => {
+test('6-1：英雄卡牌页的引导启动后核对页面，队伍编辑弹窗不代替卡牌页', () => {
     assert.match(
-        read('assets/script/app/card/LineupBoardPage.ts'),
-        /reportGuideComplete\('pageOpened', 'card'\)/,
+        read('assets/script/app/bootstrap/guide/GuideComposition.ts'),
+        /this\.root\.getComponent\(CardLineupPage\)\) controller\.notify\('pageOpened', 'card'\)/,
     );
+    assert.doesNotMatch(read('assets/script/app/card/LineupBoardPage.ts'), /reportGuideComplete\('pageOpened'/);
 });
 
 test('6-2：选中卡牌上报 cardSelected:<cardId>，不得硬编码 id', () => {

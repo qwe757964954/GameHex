@@ -12,15 +12,15 @@
  * | `n4` 浅色半透明衬底 `white_jiao8`（alpha 0.4） | `CtxBar` | 垫在副文案下面 |
  * | `ctx`（26px / 默认黑 / 左对齐） | `Ctx` | 文案 = `UNION_LEVEL_PREVIEW_TEXT` + 新增上限 |
  *
- * ⚠️ 两行文案的**颜色是反的**（`title` 浅字压深条、`ctx` 深字压浅条）—— 这不是笔误，
- *    FGUI 原稿就是两组「深条 + 浅字 / 浅条 + 深字」；别「统一」成同一个颜色。
+ * 两行文案的**颜色是反的**（`title` 浅字压深条、`ctx` 深字压浅条）—— 这不是笔误，
+ * FGUI 原稿就是两组「深条 + 浅字 / 浅条 + 深字」；别「统一」成同一个颜色。
  *
- * ⚠️ `CtxBar` 那张 `white_jiao8.png` 是**纯白**图，FGUI 靠 loader 的 `color="#cbaa85"`
- *    把它染成茶色 ⇒ prefab 里 `CtxBar` 的 `cc.Sprite.color` 必须是
- *    `rgba(0xcb,0xaa,0x85,102)`（色调 + alpha），只写 alpha 会渲染成白条。
+ * `CtxBar` 那张 `white_jiao8.png` 是**纯白**图，FGUI 靠 loader 的 `color="#cbaa85"`
+ * 把它染成茶色 ⇒ prefab 里 `CtxBar` 的 `cc.Sprite.color` 必须是
+ * `rgba(0xcb,0xaa,0x85,102)`（色调 + alpha），只写 alpha 会渲染成白条。
  *
- * ⚠️ 整行会被虚拟列表 **clone 复用** ⇒ `render()` 里每一处状态都要**绝对赋值**，
- *    不能只在「有值」时写（否则上一行的残留会留在复用槽位上）。
+ * 整行会被虚拟列表 **clone 复用** ⇒ `render()` 里每一处状态都要**绝对赋值**，
+ * 不能只在「有值」时写（否则上一行的残留会留在复用槽位上）。
  */
 
 import { _decorator, Component, Label, Sprite } from 'cc';

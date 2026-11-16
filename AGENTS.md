@@ -9,6 +9,12 @@ Cocos Creator 3.8.8 + TypeScript。
 3. 不重复读取已有源码；只读相关规范章节。独立查询批量执行，输出限相关片段及失败信息。
 4. 优先复用已有模式、类型、文本常量、资源加载器与测试夹具；不另建平行状态机或工具类。
 
+## 目录与文件归属
+
+- 根目录只放工程入口与配置（`AGENTS.md`、`README.md`、`package*.json`、`tsconfig.json`、`.gitignore`、`.mcp.json`、`funplay-cocos-mcp.config.json`）；其余文件按类型归档。
+- 文档进 `docs/`（规则见 `docs/README.md`）；测试保持 `tests/` 平铺（规则见 `tests/README.md`）；日志进 `logs/YYYY-MM-DD/`（规则见 `logs/README.md`）；临时与产物进 `tmp/`、`outputs/`。
+- 提交前跑 `npm run verify:hygiene`；根目录出现非白名单文件即失败。
+
 ## 工程约束与业务需求
 
 - 工程约束规定实现方式，业务规格描述功能，历史记录仅供追溯。Agent 不自行补充业务需求，不把具体参数或旧范围升级为全工程红线。
@@ -47,7 +53,7 @@ Cocos Creator 3.8.8 + TypeScript。
 - render 幂等、全量赋值；动画用 `startedAt` + 纯函数计算进度，视图不零散建 tween 或累加 dt。`update` 不加载资源、查全局配置、创建临时数组/节点或混业务规则；遵守现有动态/静态节流。
 - 单例可用于生命周期内唯一的共享服务；明确初始化归属及必要的重置/释放策略。页面、对局、实体状态优先由宿主持有实例；禁止无归属 static 暂存或借单例绕过分层，详见[单例与状态作用域](docs/agent/单例与状态作用域.md)。
 - 必填 Inspector 引用用 `null!`，真可空字段用 `| null`；不以 `as any`、非空断言或静默 `?.` 掩盖错误。`strictNullChecks` 未开启：节点/组件查询及查表不变量直接访问；可空值先窄化，await 前保存局部引用。单例和 prefab 必绑引用直接访问。
-- 交互节点在 prefab 挂 `cc.Button`（NONE、target=null），代码只绑 CLICK；禁止 CLICK/TOUCH_END 兜底。Prefab/Scene 用 Cocos MCP 定位验证并刷新，meta 由引擎生成；脚本造节点须有 UITransform，CUSTOM Sprite 设 `_isTrimmedMode=false`。
+- 交互节点在 prefab 挂 `cc.Button`（NONE、target=null），代码只绑 CLICK；禁止 CLICK/TOUCH_END 兜底。Prefab/Scene 用 Funplay Cocos MCP 定位验证并刷新，meta 由引擎生成；脚本造节点须有 UITransform，CUSTOM Sprite 设 `_isTrimmedMode=false`。
 - 未经明确要求，不直接修改生成文件及 `library/temp/build/native`。改资源/配表遵守下表工具链。
 
 ## 按需读取（修改前必须命中对应项）

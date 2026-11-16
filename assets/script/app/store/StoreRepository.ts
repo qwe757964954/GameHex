@@ -1,51 +1,12 @@
 /**
- * 「商城」的**数据 + 网络端口** —— 与 `LeagueRepository` / `HangRepository` 同一套分层：
+ * 商城的数据与网络端口。页面只依赖 StoreActions；购买规则在 StoreCostTable；
+ * 静态展示内容在 StoreShopTable。
  *
- * - 页面（`StoreSectionPage`）只依赖 `StoreActions`；
- * - `StoreActions` 只依赖本文件的**取数**与**发包**两组能力；
- * - 「花了多少 / 让不让买」的规则全在 `StoreCostTable`（纯函数、可单测）；
- * - 「卡上显示什么」在 `StoreShopTable`（静态内容表）。
+ * cmdShopType 的数值与老端 StoreType 一致。RequestShopBuy 在本文件单独定义，
+ * 不复用 league 的那份，避免 store 反向依赖 league。
  *
- * ## 一、老端的四个点击入口 → 本端的四个协议动作
- *
- * | 老端实施 | 协议 | 本端方法 |
- * |---|---|---|
- * | `onClickCharge` → `SDKMgr.pay(ref.id, "common", 0)` | ——（支付 SDK，不经游戏服） | `StoreActions` 直接调 `FW.pay` |
- * | `onClickCoin` 免费 / 付费档 | `RequestShopBuy`（`CmdShopBuyReqMsg { id, cmdShopType, buyTimes }`） | {@link IStoreRepository.buyShopGoods} |
- * | `onClickCoin` 广告档 | `RequestRoleWatchAdvert`（`CmdRoleWatchAdvertReqMsg { type }`） | {@link IStoreRepository.watchAd} |
- * | 礼包 `btn_buy` → `ModelStore.requestBuyGuanKaGift(ref.id)` | `RequestRoleGuanKaGiftBuy`（`{ resId }`） | {@link IStoreRepository.buyGuanKaGift} |
- * | 宝箱 `按钮_1次/10次` → `ModelStore.requestBuy(id, StoreType.gemBox, isTen)` | `RequestShopBuy`（`cmdShopType = 1`） | {@link IStoreRepository.draw} |
- *
- * ## 二、`cmdShopType` 与老端 `StoreType` 的数值**重合**（不是我凑的）
- *
- * `CmdShopType`（proto 枚举，`Cmd.d.ts`）: `box=1 / resource=2 / diamond=3 / gold=4 / gift=5 …
- * / union=8`。
- * 老端 `ModelStore.StoreType`: `gemBox=1 / resource=2 / diamond=3 / gold=4 / Gift=5 … / League=8`。
- * 两套**逐位相同** ⇒ 商城只需要 `gemBox(1)` / `resource(2)` / `gold(4)` / `gift(5)` 四个。
- *
- * ⚠️ 但**类型不同**：`CmdShopBuyReqMsg.cmdShopType` 声明的是 proto 枚举 `CmdShopType`，
- *    而本工程从 proto 重新生成时**没有**导出该枚举的 TS 字面量（只有 `Cmd.d.ts` 的
- *    `declare enum`）。所以这里用本文件的 `STORE_SHOP_TYPE` 提供带名的数字常量，
- *    与 `league/RequestLeagueMsg.ts` 的 `LEAGUE_SHOP_TYPE_UNION` 同一处置。
- *
- * ## 三、`RequestShopBuy` 为什么在本文件重新定义
- *
- * `league/RequestLeagueMsg.ts` 里**有一份**同名类（联盟商店在用）。本文件**不复用它**：
- * 那份的注释与常量（`LEAGUE_SHOP_TYPE_UNION`）都是「联盟视角」，商城复用会让
- * `store` 模块反向依赖 `league`。而 `RequestMsg` 子类只是 `getReqMsgProtoName()`
- * 的薄包装（proto 注册在 `Cmd.d.ts` / `protoCompiledStatic.ts`，与包装类无关），
- * 两边各持一份**不会冲突**。
- *
- * ## 四、离线与超时
- *
- * - `GameNet.instance.isConnected === false` ⇒ 直接返回 `'offline'`（不静默失败，调用方据此提示）；
- * - 发送一律过 `withTimeout`（`GameNet.send` **没有**按请求的超时，服务端不回就永悬）。
- *
- * ## 五、`FW.ShowReward` 是本工程的统一发奖出口
- *
- * 三个 Rsp 都带 `tlCmdGoods` ⇒ 统一 `FW.ShowReward(...)`（组合根接到 `ShowRewardPage`）。
- * 铜钱铺（`cmdShopType = 4`）传 `{ isGold: true }` —— 对齐老端 `requestBuy` 里
- * `isGold: storeType == StoreType.gold` 的口径（换音效）。
+ * 离线直接返回 offline。发包统一走 withTimeout，因为 GameNet.send 没有按请求的超时。
+ * 三个响应都用 FW.ShowReward 发奖；铜钱铺传 isGold 以播放金币音效。
  */
 
 import { FW } from '../../framework/FW';
@@ -64,9 +25,7 @@ import type {
     IShopCostRow,
 } from './StoreCostTable';
 
-// ============================================================
 // 协议
-// ============================================================
 
 /** 通用商店购买（`CmdShopBuyReqMsg`）。 */
 export class RequestShopBuy extends RequestMsg<CmdShopBuyReqMsg, CmdShopBuyRspMsg> {
@@ -92,9 +51,7 @@ export const STORE_SHOP_TYPE = {
 /** 请求结果三态（与 `LeagueRequestResult` / `HangRequestResult` 同口径）。 */
 export type StoreRequestResult = 'ok' | 'offline' | 'failed';
 
-// ============================================================
-// 表名 / 超时
-// ============================================================
+// 表名与超时
 
 const TABLE_GEM_BOX = 'gemBox';
 const TABLE_GOLD_SHOP = 'goldShop';
@@ -107,9 +64,7 @@ const TABLE_AD = 'ad';
 const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 
-// ============================================================
 // 行类型
-// ============================================================
 
 /** `gemBox` 一行（花费字段 + 两串奖励，后者给概率说明用）。 */
 export interface IStoreGemBoxRow extends IGemBoxCostRow {
@@ -118,10 +73,8 @@ export interface IStoreGemBoxRow extends IGemBoxCostRow {
 }
 
 /**
- * `guankaGift` 一行的购买相关字段。
- *
- * ⚠️ 这里**不落** `rewards`（那是 `StoreShopTable.STORE_GIFT_ROW` 的展示职责）——
- *    本文件只回答「这一档要多少钱、限购几次、要通关到第几关」。
+ * guankaGift 一行的购买字段。奖励展示由 StoreShopTable.STORE_GIFT_ROW 负责，
+ * 这里只回答价格、限购和关卡要求。
  */
 export interface IStoreGuanKaGiftRow {
     readonly id: number;
@@ -140,9 +93,7 @@ export interface IStoreShopGoodsState {
     readonly nextBuyTime: number;
 }
 
-// ============================================================
 // 端口
-// ============================================================
 
 export interface IStoreRepository {
     /** 读 `gemBox` 一行（含两串奖励）。 */
@@ -191,9 +142,7 @@ export interface IStoreRepository {
     pay(payChannelId: number): void;
 }
 
-// ============================================================
 // 实现
-// ============================================================
 
 /** `Long` / `number` / `string` → 秒。认不出返回 0（**不能**直接 `Number(Long)`，会得 `NaN`）。 */
 function toSeconds(value: unknown): number {
@@ -236,50 +185,37 @@ async function findRowById(table: string, id: number): Promise<Record<string, un
  * 全表都没有合法 id 时才退回第一行 —— 两条链路读到同一行。
  */
 function readSelfRoleRow(): unknown {
-    try {
-        const rows = (CacheMgr.instance as { getTlCmdRole?: () => unknown[] })?.getTlCmdRole?.() ?? [];
-        let first: unknown = null;
-        for (const row of rows) {
-            if (!row || typeof row !== 'object') continue;
-            if (!first) first = row;
-            const id = String((row as { id?: unknown }).id ?? '');
-            if (id.length > 0 && id !== '0') return row;
-        }
-        return first;
-    } catch (error) {
-        console.warn('[Store] 读 CmdRole 缓存失败', error);
-        return null;
+    const rows = CacheMgr.instance.getTlCmdRole() ?? [];
+    let first: unknown = null;
+    for (const row of rows) {
+        if (!row || typeof row !== 'object') continue;
+        if (!first) first = row;
+        const id = String((row as { id?: unknown }).id ?? '');
+        if (id.length > 0 && id !== '0') return row;
     }
+    return first;
 }
 
 /**
- * 今日**已用**的看广告次数（`CmdRole.tlCmdAdvert` 里某 `type` 的 `num`）。
- *
- * ⚠️ `CmdAdvert.num` 是「已用」不是「剩余」—— 剩余要拿 `ad.limit` 去减。
- * ⚠️ 该字段**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
+ * 今日已用的看广告次数。CmdAdvert.num 是已用次数，剩余次数要用 ad.limit 减；
+ * 字段缺失时按 0 处理。
  */
 function adUsed(type: number): number {
-    try {
-        const rows = (CacheMgr.instance as { getTlCmdRole?: () => unknown[] })?.getTlCmdRole?.() ?? [];
-        for (const row of rows) {
-            if (!row) continue;
-            const list = (row as Record<string, unknown>).tlCmdAdvert;
-            if (!Array.isArray(list)) return 0;
-            for (const entry of list) {
-                if (!entry || typeof entry !== 'object') continue;
-                const e = entry as Record<string, unknown>;
-                if (Number(e.type) === type) return Number(e.num) || 0;
-            }
-            return 0;
+    const rows = CacheMgr.instance.getTlCmdRole() ?? [];
+    for (const row of rows) {
+        if (!row) continue;
+        const list = row.tlCmdAdvert;
+        if (!list) return 0;
+        for (const entry of list) {
+            if (entry.type === type) return Number(entry.num) || 0;
         }
-    } catch (error) {
-        console.warn('[Store] 读 CmdAdvert 缓存失败', error);
+        return 0;
     }
     return 0;
 }
 
 class RuntimeStoreRepository implements IStoreRepository {
-    // ---------- 读表 ----------
+    // 读表
 
     async readGemBox(id: number): Promise<IStoreGemBoxRow | null> {
         const row = await findRowById(TABLE_GEM_BOX, id);
@@ -331,7 +267,7 @@ class RuntimeStoreRepository implements IStoreRepository {
         };
     }
 
-    // ---------- 读缓存 ----------
+    // 读缓存
 
     async held(resId: number): Promise<number> {
         // ① `roleProperty` 里有 ⇒ 它的 `key` 就是 `CmdRole` 上的字段名。
@@ -347,20 +283,15 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     shopGoods(cmdShopType: number, id: number): IStoreShopGoodsState {
-        try {
-            const mgr = CacheMgr.instance as { getCmdShop?: (type: number) => unknown };
-            const shop = asRow(mgr?.getCmdShop?.(cmdShopType));
-            const list = (shop?.tlCmdShopGoods ?? []) as unknown[];
-            for (const raw of list) {
-                const row = asRow(raw);
-                if (!row || Number(row.id) !== id) continue;
-                return {
-                    buyTimes: Math.max(0, Number(row.buyTimes) || 0),
-                    nextBuyTime: toSeconds(row.nextBuyTime),
-                };
-            }
-        } catch (error) {
-            console.warn('[Store] 读 CmdShop 缓存失败', error);
+        const shop = asRow(CacheMgr.instance.getCmdShop(cmdShopType as CmdShopType));
+        const list = (shop?.tlCmdShopGoods ?? []) as unknown[];
+        for (const raw of list) {
+            const row = asRow(raw);
+            if (!row || Number(row.id) !== id) continue;
+            return {
+                buyTimes: Math.max(0, Number(row.buyTimes) || 0),
+                nextBuyTime: toSeconds(row.nextBuyTime),
+            };
         }
         return { buyTimes: 0, nextBuyTime: 0 };
     }
@@ -389,7 +320,7 @@ class RuntimeStoreRepository implements IStoreRepository {
         return Math.max(0, limit - adUsed(type));
     }
 
-    // ---------- 发包 ----------
+    // 发包
 
     draw(cardId: number, tenTimes: boolean, caller?: object): Promise<StoreRequestResult> {
         return this.shopBuy(cardId, STORE_SHOP_TYPE.gemBox, tenTimes ? 10 : 1, caller);
@@ -400,11 +331,10 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async watchAd(type: number, caller?: object): Promise<StoreRequestResult> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return 'offline';
+        if (!GameNet.instance.isConnected) return 'offline';
         try {
             const sent = await withTimeout(
-                net.send(new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
+                GameNet.instance.send(new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
                     if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
                 }), false),
                 WRITE_TIMEOUT_MS,
@@ -418,11 +348,10 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return 'offline';
+        if (!GameNet.instance.isConnected) return 'offline';
         try {
             const sent = await withTimeout(
-                net.send(new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
+                GameNet.instance.send(new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
                     if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
                 }), false),
                 WRITE_TIMEOUT_MS,
@@ -436,8 +365,6 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     pay(payChannelId: number): void {
-        // 老端 `SDKMgr.pay(ref.id, "common", 0)`；本端由组合根接到 `CenterPaymentService`
-        // （见 `bootstrap/ProcedureBootstrap.ts`），失败时它自己 `FW.showTip`。
         FW.pay(payChannelId, 'common', 0);
     }
 
@@ -448,16 +375,14 @@ class RuntimeStoreRepository implements IStoreRepository {
         buyTimes: number,
         caller?: object,
     ): Promise<StoreRequestResult> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return 'offline';
+        if (!GameNet.instance.isConnected) return 'offline';
         try {
             const sent = await withTimeout(
-                net.send(new RequestShopBuy(
+                GameNet.instance.send(new RequestShopBuy(
                     { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
                     caller,
                     (rsp: CmdShopBuyRspMsg) => {
                         if (rsp?.tlCmdGoods?.length) {
-                            // 铜钱铺用金币音效（老端 `isGold: storeType == StoreType.gold`）。
                             FW.ShowReward(rsp.tlCmdGoods, { isGold: cmdShopType === STORE_SHOP_TYPE.gold });
                         }
                     },

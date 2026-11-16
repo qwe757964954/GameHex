@@ -9,7 +9,6 @@ import {
     SpriteFrame,
 } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { reportGuideComplete } from '../guide/application/GuideEvents';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { cardArtProvider } from './CardArtProvider';
 import type { ICardArtConfig } from './CardArtConfig';
@@ -163,9 +162,6 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     protected onOpen(): void {
-        // 新手引导 6-1「进入卡牌页」：布阵页就是本端的卡牌页（选卡 / 上阵 / 进升级）。
-        // 判据 `pageOpened:card` 的参数与 `guideStep` 表里保持一致。
-        reportGuideComplete('pageOpened', 'card');
         this.saveButton.interactable = false;
         this.saveLabel.string = CARD_LINEUP_TEXTS.boardSave;
         this.poolCards = [];

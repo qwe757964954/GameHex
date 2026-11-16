@@ -2,20 +2,20 @@
  * 「邮件」主容器（老端 `LayerMail`）。
  *
  * 结构逐节点对齐 FGUI `邮件/组件/组件_邮件_主界面.xml`：
- *   `PanelBg → TitleBg → Title → CloseBtn → RowView → BatchRemoveBtn → GetOneKeyBtn → EmptyLabel → AutoDeleteLabel`
+ * `PanelBg → TitleBg → Title → CloseBtn → RowView → BatchRemoveBtn → GetOneKeyBtn → EmptyLabel → AutoDeleteLabel`
  *
- * ⚠️ **不加任何整体偏移**：原稿 `popBg xy=13,128 size=680,946` 就是 **720×1280 画布坐标**。
- *   早期笔记里「原稿是 706×1202 ⇒ 整体 `(+7,+39)`」的推导**是错的** —— 那个 706 只是
- *   `group n47_fokg` 框住了 popBg 自己（普通组的框 = 成员并集，不是独立证据）；
- *   全工程 249 个 `size="720,1280"` 组件里 194 个对称于 720 ⇒ 基准就是 720。
- *   三条反证见 `tmp/_mail_geom_check.mjs`（120 项）与 `tests/mail.test.ts` C4（容差 0.5px）。
+ * **不加任何整体偏移**：原稿 `popBg xy=13,128 size=680,946` 就是 **720×1280 画布坐标**。
+ * 早期笔记里「原稿是 706×1202 ⇒ 整体 `(+7,+39)`」的推导**是错的** —— 那个 706 只是
+ * `group n47_fokg` 框住了 popBg 自己（普通组的框 = 成员并集，不是独立证据）；
+ * 全工程 249 个 `size="720,1280"` 组件里 194 个对称于 720 ⇒ 基准就是 720。
+ * 三条反证见 `tmp/_mail_geom_check.mjs`（120 项）与 `tests/mail.test.ts` C4（容差 0.5px）。
  *
  * ## 三条时序铁律（都在本文件里，且都**静默失效**）
  *
  * ① `rowList.renderItemFn` **只在 `onInit` 里绑一次**，回调按 `index` 现取 `this.rows[index]`
- *    —— 禁闭包捕获本趟入参（否则 reload 后界面永远停在第一份快照）。
+ * —— 禁闭包捕获本趟入参（否则 reload 后界面永远停在第一份快照）。
  * ② `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
- *    ⇒ 必须 `await this.nextPopupFrame()` 再 `refreshList`，否则列表**一片空白**。
+ * ⇒ 必须 `await this.nextPopupFrame()` 再 `refreshList`，否则列表**一片空白**。
  * ③ 行底图必须在 `refreshList` **之前**取完（`loadRowArt`），否则复用条目会闪上一行的图。
  */
 
@@ -110,9 +110,7 @@ export class MailPage extends PopupBase {
         this.repo = repository;
     }
 
-    // ============================================================
     // PopupBase 生命周期
-    // ============================================================
 
     protected onInit(): void {
         this.batchRemoveLabel.string = MAIL_BTN_DELETE_ONE_KEY;
@@ -122,7 +120,7 @@ export class MailPage extends PopupBase {
         this.batchRemoveButton?.node.on(Button.EventType.CLICK, this.onBatchRemove, this);
         this.getOneKeyButton?.node.on(Button.EventType.CLICK, this.onGetOneKey, this);
 
-        // ⚠️ 只绑一次，回调按 index 现取（见文件头铁律 ①）
+        // 只绑一次，回调按 index 现取（见文件头铁律 ①）
         if (!this.rowRendererBound && this.rowList) {
             this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
             this.rowRendererBound = true;
@@ -130,7 +128,7 @@ export class MailPage extends PopupBase {
     }
 
     protected async onOpen(): Promise<void> {
-        // ⚠️ 铁律 ②：`VirtualScrollView` 在 `start()` 里建槽位，`onOpen` early 于它
+        // 铁律 ②：`VirtualScrollView` 在 `start()` 里建槽位，`onOpen` early 于它
         await this.nextPopupFrame();
         await this.reload();
     }
@@ -140,9 +138,7 @@ export class MailPage extends PopupBase {
         void this.reload();
     }
 
-    // ============================================================
     // 数据 → 列表
-    // ============================================================
 
     /** 读数据 → 预取行底图 → 铺列表。不抛。 */
     async reload(): Promise<void> {
@@ -154,7 +150,7 @@ export class MailPage extends PopupBase {
             if (!this.isValid || revision !== this.revision) return;
             this.snapshot = snapshot;
 
-            // ⚠️ 铁律 ③：图要在 `refreshList` 之前取完
+            // 铁律 ③：图要在 `refreshList` 之前取完
             await this.loadRowArt();
             if (!this.isValid || revision !== this.revision) return;
 
@@ -182,7 +178,7 @@ export class MailPage extends PopupBase {
 
     /** 铺列表 + 空态 + 自动删除提示。 */
     private present(snapshot: IMailSnapshot): void {
-        // ⚠️ 文案模板一律从 `MailTexts` 取（`MailTable` 里一个中文字面量都没有）
+        // 文案模板一律从 `MailTexts` 取（`MailTable` 里一个中文字面量都没有）
         const texts = {
             readText: MAIL_STATE_READ,
             timeDays: MAIL_TIME_DAYS,
@@ -214,14 +210,12 @@ export class MailPage extends PopupBase {
             return;
         }
         row.node.active = true;
-        // ⚠️ 回调每次重设（同一实例会被复用到别的下标）
+        // 回调每次重设（同一实例会被复用到别的下标）
         row.onOpen = (id) => this.openDetail(id);
         row.render(view, this.rowArt);
     }
 
-    // ============================================================
     // 交互
-    // ============================================================
 
     private onCloseClick(): void {
         this.closeByButton();

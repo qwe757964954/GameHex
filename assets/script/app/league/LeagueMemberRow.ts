@@ -23,10 +23,10 @@
  * ## 三个容易踩的点
  *
  * 1. **整行会被虚拟列表 clone 复用** ⇒ `render()` 里每一处状态都要**绝对赋值**
- *    （含「普通成员行把 `PositionTag` 关掉」这种「不显示」也要显式写），
- *    否则上一行的残留会留在复用槽位上。
+ * （含「普通成员行把 `PositionTag` 关掉」这种「不显示」也要显式写），
+ * 否则上一行的残留会留在复用槽位上。
  * 2. **头像异步加载要防串行**：等图回来时槽位可能已经被下一行复用 ⇒ 用 `avatarSeq`
- *    做令牌，`applyAvatar` 只认最后一次 `render` 发出的序号（同 `LeagueLevelPreviewPage` 的 `revision` 思路）。
+ * 做令牌，`applyAvatar` 只认最后一次 `render` 发出的序号（同 `LeagueLevelPreviewPage` 的 `revision` 思路）。
  * 3. `lab_lv` 只有数字、`lab_power` 只有数字 —— FGUI 原稿如此，**不要**自己补「级」/「战力」后缀。
  */
 
@@ -104,8 +104,8 @@ export class LeagueMemberRow extends Component {
         if (this.positionTag) this.positionTag.active = showPosition;
         if (this.positionLabel) {
             this.positionLabel.node.active = showPosition;
-            // ⚠️ 不显示时把字**清掉**：节点虽 `active=false`，但槽位是复用的、
-            //    留着「盟主」会让「探针/核对器读到的字符串」与「肉眼所见」对不上（排查时极易误判）。
+            // 不显示时把字**清掉**：节点虽 `active=false`，但槽位是复用的、
+            // 留着「盟主」会让「探针/核对器读到的字符串」与「肉眼所见」对不上（排查时极易误判）。
             this.positionLabel.string = showPosition
                 ? (isAdmin ? LEAGUE_POSITION_ADMIN : LEAGUE_POSITION_LEADER)
                 : '';
@@ -123,8 +123,8 @@ export class LeagueMemberRow extends Component {
     /**
      * 头像异步返回时调用。
      *
-     * ⚠️ 令牌对不上说明这个槽位已经被**下一行**占用了 ⇒ 直接丢弃，
-     *    否则会把 A 的头像贴到 B 身上。
+     * 令牌对不上说明这个槽位已经被**下一行**占用了 ⇒ 直接丢弃，
+     * 否则会把 A 的头像贴到 B 身上。
      */
     applyAvatar(frame: SpriteFrame | null, token: number): void {
         if (token !== this.avatarSeq) return;

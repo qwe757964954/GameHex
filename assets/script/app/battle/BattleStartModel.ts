@@ -17,212 +17,124 @@ export const ZC_BATTLE_TYPE_SLG_CAMP = 1004;
 export type IZCSlgBattleType = typeof ZC_BATTLE_TYPE_SLG_MONSTER | typeof ZC_BATTLE_TYPE_SLG_CAMP;
 
 /**
- * 章节战斗（领地关卡 / Boss 关）的 battleType。
- *
- * ## ⚠️ 是**固定值**，不是每关的 `configId`
- *
- * `battleType` 表达的是「**打哪一类战斗**」，关卡身份由 `battleParams` 里的
- * `格子id` 定位（见 {@link chapterCellBattleParams}）⇒ 同一章的所有关卡（含 Boss）都用这一个类型。
- * 早期实现误把 `site.configId`（每关不同，如 `10001`）当 battleType 发出去，
- * 症状是「点Boss 关没反应 / 服务端按未知类型处理」。
- *
- * 与 `ZC_BATTLE_TYPE_PVP` 同一套 `1000 + n` 的私有编号段（避开老枚举的 1~若干）。
+ * 章节战斗（领地关卡 / Boss 关）的 battleType。这里是固定值，不是每关的 configId；
+ * 关卡身份由 battleParams 里的格子 id 决定。早期把 configId 当 battleType 发出去，
+ * 服务端会按未知类型处理且不报错。
  */
 export const ZC_BATTLE_TYPE_CHAPTER = 1002;
 
 /**
- * 章节战斗（1002）**内嵌的子类型**，固定占 `battleParams[0]`
- *（山猫 2026-10-15 定：「1002 的战斗里面要嵌个子类型」）。
- *
- * | 子类型 | 常量 | `battleParams` |
- * |---|---|---|
- * | 1 | `ZC_CHAPTER_BATTLE_SUB_CELL`（格子战斗） | `[1, 章节id, 格子id]` |
- * | 2 | `ZC_CHAPTER_BATTLE_SUB_TREASURE`（宝箱战斗） | `[2, 章节id, 格子id]` —— 与格子战斗**同结构**，暂未接线 |
- *
- * ⚠️ 别与 `battleType` 混为一谈：`battleType` 说「打哪一大类」，
- * 子类型说「**同一大类里的哪一种**」，关卡身份仍然只由后面的 `格子id` 决定
- * —— 两者都变了要连服务端一起确认，改错一个数字服务端按未知类型处理，**零报错**。
+ * 章节战斗内嵌的子类型，固定放在 battleParams[0]。
+ * 1 = 格子战斗，2 = 宝箱战斗；两者参数结构相同，只有首项不同。
+ * 子类型和 battleType 不是一回事，改错一个数字服务端同样会静默按未知类型处理。
  */
 export const ZC_CHAPTER_BATTLE_SUB_CELL = 1;
 
-/** 宝箱战斗的子类型（1002 / `battleParams[0] = 2`）。 */
+/** 宝箱战斗的子类型。 */
 export const ZC_CHAPTER_BATTLE_SUB_TREASURE = 2;
 
 /**
- * 格子战斗（1002 / 子类型 1）的 `battleParams`：`[子类型, 章节id, 格子id]`。
- *
- * ⚠️ 三个值**全转字符串**：proto 里 `battleParams` 是 `repeated string`，
- * 直接塞数字 protobuf 的 `writers.string` 写不出来 ⇒ 整条**空发出去**，服务端说参数缺失且不报错。
+ * 格子战斗参数：[子类型, 章节 id, 格子 id]。
+ * proto 里 battleParams 是 repeated string，数字必须转字符串，否则 protobuf 写不出去。
  */
 export function chapterCellBattleParams(chapterId: number, cellId: number): string[] {
     return [String(ZC_CHAPTER_BATTLE_SUB_CELL), String(chapterId), String(cellId)];
 }
 
 /**
- * 宝箱战斗（1002 / 子类型 2）的 `battleParams`：`[子类型, 章节id, 格子id]`。
- *
- * 与格子战斗**同结构**（山猫 2026-10-15 拍板「对称」），只有下标 0 的子类型不同
- * ⇒ 两种战斗共用一条参数布局，服务端按 `battleParams[0]` 分流，别各写一套顺序。
- *
- * ⚠️ 当前**没有任何调用点**（领地还没接宝箱战斗流程）—— 先用单测把形状钉住，
- * 真接线时补一处调用即可。别因为「现在零引用」就删（规则 170 指的是**已废弃**的实现，
- * 这条是服务端约定的口径，属于等着被调用的接口，删了等于把约定从代码里抹掉）。
+ * 宝箱战斗参数，与格子战斗同结构，只有子类型不同。
+ * 目前还没有调用点，先按服务端约定保留，接线时直接用。
  */
 export function chapterTreasureBattleParams(chapterId: number, cellId: number): string[] {
     return [String(ZC_CHAPTER_BATTLE_SUB_TREASURE), String(chapterId), String(cellId)];
 }
 
 /**
- * 战斗单元的来源类型 —— 对应 `CmdBattleUnitInfo.unitType`（服务端 2026-10-26 新增）。
- *
- * | 值 | 含义 |
- * |---|---|
- * | 1 | 玩家 |
- * | 2 | 机器人 |
- * | 3 | 怪物 |
- *
- * ⚠️ 协议里是 `optional`：老服务端**不下发**这个字段（读到 `undefined`），
- * 与「给了 0 / 负数 / 未知值」一样都归为「不知道」，**绝不回退成 Player**
- * —— 把机器人当成玩家会让战绩、结算、头像口径一起错，而且全程零报错。
+ * 战斗单元来源类型，对应 CmdBattleUnitInfo.unitType：1 玩家、2 机器人、3 怪物。
+ * 协议字段可选，老服务端不下发。缺省不能当成玩家，否则战绩和结算口径都会错。
  */
 export const ZC_BATTLE_UNIT_TYPE = {
-    /** 真实玩家（有角色档）。 */
     Player: 1,
-    /** 服务端补位的机器人（有 showInfo，但不是真角色）。 */
     Robot: 2,
-    /** 关卡 / SLG 怪物（PVP 对局里不该出现）。 */
     Monster: 3,
 } as const;
 
 export type ZCBattleUnitType = (typeof ZC_BATTLE_UNIT_TYPE)[keyof typeof ZC_BATTLE_UNIT_TYPE];
 
-/** 服务端下发的单个战斗单元（一方）。 */
+/** 服务端下发的单个战斗单元。 */
 export interface ZCBattleHero {
     readonly heroId: number;
     readonly level: number;
 }
 
 /**
- * 服务端下发的**增量**属性：`statId.operation`，与 `ZCStatSchema` 的字段选择器同一套命名法。
- *
- * 2026-11-13 实测 `CmdPvpAttrInfo.attrId` 开始出现 `attack.addRate` / `maxHp.addRate`、
- * `value = "-0.2"` —— 是「攻击、生命各 -20%」这类规则增量，**不是绝对值**。
- * 两种错法都会静默出错：当绝对值用会得到 `-0.2 点攻击`；当未知键丢掉则整条规则消失
- * （`heroAttrs` 里连条目都没有，下游 `serverAttributes` 全空，只有一行 warn）。
- *
- * 只认 `attack` / `maxHp`：服务端目前只下发这两项，下游服务端通道也只把这两项
- * 写进 `ZCUnitDefinition`。要加第三项，运行时白名单得一起改，别只扩这张表。
+ * 服务端下发的增量属性，attrId 形如 attack.addRate。
+ * 这是规则增量，不是绝对值；当绝对值用会少算，未知键丢掉则整条规则消失。
+ * 目前只认 attack 和 maxHp，扩项时运行时白名单也要一起改。
  */
 export interface ZCBattleHeroModifier {
     readonly statId: 'attack' | 'maxHp';
-    /** `add` = 绝对增量；`addRate` = 相对基础值的比例（`-0.2` = -20%）。 */
+    /** add = 绝对增量；addRate = 相对基础值的比例。 */
     readonly operation: 'add' | 'addRate';
     readonly value: number;
 }
 
 export interface ZCBattleHeroAttrs {
     readonly heroId: number;
-    /** 服务端最终数值（允许负数），不再乘关卡倍率；缺失项保留客户端计算结果。 */
+    /** 服务端最终数值，缺失项保留客户端计算结果。 */
     readonly attributes: Readonly<Partial<ZCCardLevelAttrs>>;
-    /**
-     * 增量属性。**没有增量时不写这个键**：纯绝对值回包与引入增量前完全同形，
-     * 既保持"缺省即没有"的语义，也不给老数据多带一个空数组。
-     */
+    /** 没有增量时不写这个键，保持与旧回包同形。 */
     readonly modifiers?: readonly ZCBattleHeroModifier[];
 }
 
 /**
- * `CmdPvpBuffInfo.buffs` 里的一对 `key,value`（已校验）。
- *
- * 协议是 `repeated string`，注释写的是 `[id,value,id,value]`，但**实际下发的 `id` 是字符串属性名**
- * （2026-10-29 实测：`["levelAttackRatio","0.8","levelHpRatio","0.8"]`，与 `levelInfo` 表的
- * `levelAttack` / `levelHp` 对应）—— 不是数字编号。按数字解析会把**所有合法数据丢光**，
- * 而且全程零报错（`toPositiveInt('levelAttackRatio')` 返回 null）。
+ * 已校验的一对 key/value。协议注释写的是 id，但实际下发的是属性名，
+ * 例如 levelAttackRatio，不是数字编号。
  */
 export interface ZCBattleBuffEntry {
-    /** 属性 key（如 `levelAttackRatio` / `levelHpRatio`），**字符串**，原样保留。 */
+    /** 属性 key，原样保留。 */
     readonly key: string;
-    /**
-     * 原始值字符串（如 `"0.8"`）。
-     *
-     * 协议只承诺是 `string`，没承诺一定是数字（将来可能有文本属性）。
-     * 原文一律保留，数值另见 {@link numeric}。
-     */
+    /** 原始值字符串。 */
     readonly value: string;
-    /**
-     * `value` 解析出的**有限数值**；解析不出来是 `null`。
-     *
-     * 单独给一个字段而不是让消费方自己 `Number()`：`Number('')` 是 0、`Number('x')` 是 NaN，
-     * 两者都会被静默当成"合法的 0 加成"，比显式 null 难查一个数量级。
-     */
+    /** 解析出的有限数值；解析失败为 null。 */
     readonly numeric: number | null;
 }
 
-/**
- * 一种来源的 buff 集合（`CmdPvpBuffInfo`）。
- *
- * ⚠️ `source` 的取值含义协议里只有一句「来源」，客户端没有枚举表。
- * 实测（2026-10-29）只见过 `source = 1`，内容就是服务端算好的关卡倍率
- * （`levelAttackRatio` / `levelHpRatio`）。**别按 source 分支**，见 {@link ZCBattleUnit.buffs}。
- */
+/** 一种来源的 buff 集合。source 的取值含义协议未说明，不要按 source 分流。 */
 export interface ZCBattleBuff {
-    /** 来源（`CmdPvpBuffInfo.source`，`uint32`）。 */
     readonly source: number;
-    /** 该来源下的 buff，保持服务端下发顺序，**不去重不合并**（叠加语义归消费方）。 */
+    /** 保持服务端顺序，不去重不合并。 */
     readonly entries: readonly ZCBattleBuffEntry[];
 }
 
 export interface ZCBattleUnit {
     readonly campId: number;
-    /**
-     * 服务端战斗单元 id（`CmdBattleUnitInfo.unitId = 6`）。
-     *
-     * ⚠️ 与 `campId` **不是一回事**：`campId` 是阵营席位（1~4，前端只拿它映射 `ZCOwner`），
-     * `unitId` 是服务端给每个参战单元分配的身份 —— 战斗统计
-     * （`CmdBattleStatisticsInfo.unitId`）靠它把数据归属到具体单元。
-     * 缺字段 / 非法值收敛成 0（本地局没有服务端 id），**不代表"第 0 号单元"**。
-     */
+    /** 服务端战斗单元 id；与阵营席位 campId 不是一回事。 */
     readonly unitId: number;
     readonly roleId: string;
     readonly serverId: number;
     readonly name: string;
     readonly power: number;
-    /** 头像 id（不是资源名）。 */
     readonly avatarId: string;
     readonly headFrameId: string;
     readonly gradeId: number;
     readonly gradeScore: number;
     readonly heroIds: readonly number[];
-    /** 保留 CmdPvpHeroInfo.level，供卡牌技能解锁/升级在开局前编译。 */
+    /** 供卡牌技能解锁和升级在开局前编译。 */
     readonly heroes?: readonly ZCBattleHero[];
     readonly heroAttrs?: readonly ZCBattleHeroAttrs[];
     readonly artifactId: number;
     readonly artifactLevel: number;
-    /**
-     * 单元来源类型（玩家 / 机器人 / 怪物）。
-     *
-     * 服务端未下发或给了未知值时是 `undefined` —— **不等于玩家**，
-     * 任何按它分流的地方都必须先判空再决定兜底口径。
-     */
+    /** 来源类型；缺省或未知值不能当成玩家。 */
     readonly unitType?: ZCBattleUnitType;
-    /**
-     * PVP buff 列表（`CmdBattleUnitInfo.buffInfo = 8`，服务端 2026-10-29 / r936 新增）。
-     *
-     * **恒为数组**：老服务端不下发 ⇒ `[]`，调用方不用判 `undefined`。
-     * 结构是「来源 → 若干 `key,value`」，其中 key 是**属性名**（`levelAttackRatio` 等），
-     * 不是数字编号 —— 详见 {@link ZCBattleBuffEntry}。
-     *
-     * 消费方是 `buildZCClientCombatConfig`（按 `campId` 折成 owner 级关卡倍率，
-     * 再经 `compileZCMatchRuntime` 乘进该方所有单位的攻/血）。
-     * 同一 `key` 出现多次时**按倍率累乘**，不按来源去重。
-     */
+    /** PVP buff；老服务端不下发时为 []。 */
     readonly buffs: readonly ZCBattleBuff[];
 }
 
 /** 一次开始游戏结果。 */
 export interface ZCBattleStart {
     readonly battleId: string;
-    /** 随机种子，必须保持字符串（uint64 超 2^53，转 number 会让相邻种子相同）。 */
+    /** 随机种子必须是字符串，uint64 超过 2^53，转 number 会让相邻种子相同。 */
     readonly seed: string;
     readonly version: string;
     readonly units: readonly ZCBattleUnit[];
@@ -234,12 +146,7 @@ export interface ZCBattleTeams {
     readonly enemy: ZCBattleUnit | null;
 }
 
-/**
- * `unitType` 归一化：只认 1 / 2 / 3，其余（缺省、0、负数、小数、字符串垃圾）一律 `undefined`。
- *
- * 收成联合类型而不是裸 `number`，一是让调用方的 `switch` 能做穷尽检查，
- * 二是防止有人把魔法数字写进分支（写错一个数字没有任何报错）。
- */
+/** 只认 1/2/3，其余值一律归为 undefined。 */
 export function normalizeBattleUnitType(value: unknown): ZCBattleUnitType | undefined {
     const num = toCount(value);
     if (num === ZC_BATTLE_UNIT_TYPE.Player) return ZC_BATTLE_UNIT_TYPE.Player;
@@ -249,16 +156,9 @@ export function normalizeBattleUnitType(value: unknown): ZCBattleUnitType | unde
 }
 
 /**
- * `[key,value,key,value,...]` 扁平字符串 → 成对结构。
- *
- * 三条边界，全部「丢数据 + 出声」，不猜：
- *   ① **奇数长度**：末位没有配对的 value，丢弃并告警（补齐一个假 value 等于替服务端编数据）；
- *   ② **key 为空 / 非字符串**：**整对**丢弃 —— 只有 value 没有 key 是无主数据；
- *   ③ **同 key 重复**：**保留多条**，不合并、不覆盖 —— 合并语义（覆盖？累乘？）属于消费方，
- *      在这里替它决定会把「叠加」和「服务端 bug」一起吞掉。
- *
- * ⚠️ **不要把 key 当数字解析**：实际下发的是 `levelAttackRatio` 这种属性名。
- * 2026-10-29 之前这里按正整数解析，会把整条 buff 丢光且零报错。
+ * 扁平字符串 [key,value,key,value] 转成对结构。三条边界都按「丢数据并告警」处理：
+ * 奇数长度丢末位；空 key 整对丢弃；同 key 保留多条，不替消费方合并。
+ * key 是属性名，不能当数字解析。
  */
 export function parseBattleBuffEntries(buffs: readonly string[] | null | undefined): ZCBattleBuffEntry[] {
     const list = Array.isArray(buffs) ? buffs : [];
@@ -289,10 +189,8 @@ function toFiniteNumber(value: string): number | null {
 }
 
 /**
- * `CmdBattleUnitInfo.buffInfo` → {@link ZCBattleBuff} 数组。
- *
- * 一个单元可能有多种来源（每个元素一个 `source`），**按数组原序保留**，不合并同 `source` 的条目。
- * 缺字段 / 非数组 / 元素为 null ⇒ 返回 `[]`（老服务端不下发，不是错误）。
+ * buffInfo 转 ZCBattleBuff 数组。按数组原序保留，不合并同 source 的条目；
+ * 缺字段或非数组按 [] 处理。
  */
 export function parseBattleBuffs(infos: CmdPvpBuffInfo[] | null | undefined): ZCBattleBuff[] {
     const list = Array.isArray(infos) ? infos : [];
@@ -308,19 +206,16 @@ export function parseBattleBuffs(infos: CmdPvpBuffInfo[] | null | undefined): ZC
 }
 
 /**
- * 从 buff 列表里取某个 key 的**倍率值**；一处都没有 / 全是非数值 ⇒ `null`。
- *
- * - 同 key 出现多次按**累乘**（倍率天生可叠，且不区分 `source`）；
- * - 一个都没有时返回 `null` 而不是 `1` —— 调用方据此区分「服务端没下发」与「下发了 1」，
- *   后者是"明确要求 ×1"，前者是"这局没有这条规则"。
+ * 取某个 key 的倍率值，同 key 多次出现按累乘。一个都没有时返回 null 而不是 1，
+ * 调用方据此区分「没下发」和「明确 ×1」。
  */
 export function battleBuffRatio(buffs: readonly ZCBattleBuff[] | null | undefined, key: string): number | null {
     const target = typeof key === 'string' ? key.trim() : '';
     if (!target) return null;
     let result: number | null = null;
     for (const group of Array.isArray(buffs) ? buffs : []) {
-        for (const entry of group?.entries ?? []) {
-            if (!entry || entry.key !== target || entry.numeric === null) continue;
+        for (const entry of group.entries) {
+            if (entry.key !== target || entry.numeric === null) continue;
             result = (result ?? 1) * entry.numeric;
         }
     }
@@ -370,10 +265,8 @@ interface IZCBattleHeroAttrAccumulator {
 }
 
 /**
- * `attrId` → 增量语义。键是**完整** `statId.operation`，查不到才算无效。
- *
- * 与 `CARD_LEVEL_ATTR_STAT`（绝对值）分成两张表：混成一张的话，调用方只能靠
- * "这个键有没有点号 / 值有没有小数"去猜语义，猜错一次就是静默错算。
+ * attrId 到增量语义的映射。与 CARD_LEVEL_ATTR_STAT（绝对值）分开，
+ * 避免调用方靠有没有点号去猜语义。
  */
 const BATTLE_HERO_MODIFIER_STATS: Readonly<Record<string, Pick<ZCBattleHeroModifier, 'statId' | 'operation'>>> = {
     'attack.add': { statId: 'attack', operation: 'add' },
@@ -502,7 +395,7 @@ export function normalizeBattleHeroes(heroInfos: CmdPvpHeroInfo[] | null | undef
  * 命中不了退回 campId 升序前两条并告警。
  */
 export function splitBattleUnits(units: readonly ZCBattleUnit[], selfRoleId?: string): ZCBattleTeams {
-    const self = selfRoleId ? units.find((unit) => unit.roleId !== '' && unit.roleId === selfRoleId) : undefined;
+    const self = selfRoleId ? units.find((unit) => unit.roleId === selfRoleId) : undefined;
     if (self) {
         return { mine: self, enemy: units.find((unit) => unit.campId !== self.campId) ?? null };
     }
@@ -523,10 +416,7 @@ export interface ArtifactRow {
     artifactId?: unknown;
     name?: unknown;
     /**
-     * `pvpArtifact[].icon` —— 图标**资源名**（如 `霜封冰刃`），不是路径。
-     *
-     * 图在 `image/artifact/<icon>`（**与对局里的神器格同一张图**，山猫 2026-10-08 定），
-     * 不在匹配界面自己的 `image/matching/` 根下。
+     * pvpArtifact[].icon 是图标资源名，不是路径；图统一在 image/artifact/<icon>。
      */
     icon?: unknown;
 }
@@ -602,9 +492,8 @@ export function buildMatchProfileLookup(
         gradeName: (gradeId: number): string => grades.get(toCount(gradeId)) ?? '',
         artifactName: (artifactId: number): string => artifacts.get(toCount(artifactId)) ?? '',
         artifactIcon: (artifactId: number): string => artifactIcons.get(toCount(artifactId)) ?? '',
-        // ⚠️ 用 `Array.from` 而不是 `[...set]`：构建期 Babel 的 loose 模式会把展开降级成
-        // `[].concat(iterator)`，Set 迭代器被 concat 展开成空数组 ⇒ 预热列表恒空
-        // （`tests/battle-start-protocol.test.ts` 有专门一条用例钉这个口径）。
+        // 用 Array.from 而不是展开 Set：构建期 Babel 的 loose 模式会把它降级成 concat，
+        // Set 迭代器展开后为空，预热列表会恒空。
         allArtifactIcons: (): string[] => Array.from(new Set(artifactIcons.values())),
         headArt: createHeadArtResolver(headRows, iconRows),
     };

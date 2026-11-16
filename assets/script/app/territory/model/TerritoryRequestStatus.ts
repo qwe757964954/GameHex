@@ -1,7 +1,7 @@
 /**
  * 领地请求结果状态码（`TerritoryCellRepository` 及其调用方共用，纯 TS 零依赖）。
  *
- * ⚠️ **运行时比较一律走 `TERRITORY_REQUEST_STATUS`**，禁止写
+ * **运行时比较一律走 `TERRITORY_REQUEST_STATUS`**，禁止写
  * `sent === 'offline'` / `reason === 'rejected'` 这类裸字面量比较——状态名改动或
  * 拼错时字面量比较在运行时静默失配，走本表则编译期就暴露。
  *

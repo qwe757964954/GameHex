@@ -7,8 +7,8 @@
  * （title + 多行 content + 单确认按钮），无需新 prefab。
  *
  * 已接线：
- *   - `LeaguePage.BtnHelp`      → `openLeagueHelp('league')`
- *   - `LeagueNorthExpeditionPage.HelpBtn` → `openLeagueHelp(LEAGUE_NORTH_HELP_ID)`
+ * - `LeaguePage.BtnHelp`      → `openLeagueHelp('league')`
+ * - `LeagueNorthExpeditionPage.HelpBtn` → `openLeagueHelp(LEAGUE_NORTH_HELP_ID)`
  */
 import { FW } from '../../framework/FW';
 import { CommonTips } from '../common/CommonTips';
@@ -23,9 +23,9 @@ interface LeagueHelpEntry {
 /**
  * 帮助内容注册表。key = 老端 `OpenHelpe(id)` 的 id。
  *
- * ⚠️ 老端这些文案来自 `IRefsystemDesc` 配置表，本工程未迁那份表，这里**手写静态兜底**
- *    （与联盟其它「配置没迁就静态兜底」的口径一致，如 `LEAGUE_NORTH_HELP_ID`）。
- *    要补新帮助页，往这里加一条即可。
+ * 老端这些文案来自 `IRefsystemDesc` 配置表，本工程未迁那份表，这里**手写静态兜底**
+ * （与联盟其它「配置没迁就静态兜底」的口径一致，如 `LEAGUE_NORTH_HELP_ID`）。
+ * 要补新帮助页，往这里加一条即可。
  */
 const LEAGUE_HELP_CONTENT: Record<string, LeagueHelpEntry> = {
     league: {

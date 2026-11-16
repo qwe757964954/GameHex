@@ -14,10 +14,10 @@
  * ## 三个行为口径（照老端 `LayerLeagueHallDetail`）
  *
  * 1. **浮层不居中、而是贴在被点的那一行上**：老端 `itemClick` 里
- *    `comp_ctrl.y = local.y`（该行竖向中点在详情组件内的 y）—— 横向不动。
- *    y 的换算见 `LeagueHallPage.placeOpsBar`。
+ * `comp_ctrl.y = local.y`（该行竖向中点在详情组件内的 y）—— 横向不动。
+ * y 的换算见 `LeagueHallPage.placeOpsBar`。
  * 2. **5 个按钮按权限逐个显隐**（`myvo.CanBeXxx(targetOffical)` → 本端 `resolveLeagueMemberActions`），
- *    不是整排显示 / 隐藏。
+ * 不是整排显示 / 隐藏。
  * 3. **任何一次操作、或点空白，都要收起浮层**（老端每个 handler 末尾都调 `onGlobalTouch()`）。
  *
  * ## 为什么 `Click` 能当遮罩
@@ -25,9 +25,9 @@
  * 工程既有约定（见 `framework/ui/PopupBase` 的注释）：Cocos 里节点**只要注册了触摸监听**
  * 就参与命中检测（`UITransform.hitTest`），**不需要 Sprite / Button**。
  *
- * ⚠️ 但「浮层打开时不要把点击透传到底下的页签 / 列表行」这件事**不能只靠引擎**：
- *    引擎会把事件派发给所有命中节点（各节点自行决定是否 `propagationStopped`）。
- *    所以 `LeagueHallPage` 里对页签 / 行点击做了一道 `opsBar.isOpen ⇒ 只收起、不响应` 的显式闸门。
+ * 但「浮层打开时不要把点击透传到底下的页签 / 列表行」这件事**不能只靠引擎**：
+ * 引擎会把事件派发给所有命中节点（各节点自行决定是否 `propagationStopped`）。
+ * 所以 `LeagueHallPage` 里对页签 / 行点击做了一道 `opsBar.isOpen ⇒ 只收起、不响应` 的显式闸门。
  */
 
 import { _decorator, Button, Component, Node } from 'cc';

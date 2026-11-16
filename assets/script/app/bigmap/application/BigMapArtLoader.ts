@@ -6,12 +6,9 @@ import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '..
 import {
     BIGMAP_BASE_BACKGROUND, BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
     BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_STAMINA_ART,
-    BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, worldCampArtFor,
+    BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, toBigMapArtPath, worldCampArtFor,
     type IBigMapHudUiKey, type IBigMapPlateKey,
 } from './BigMapArtCatalog';
-
-export { toBigMapArtPath } from './BigMapArtCatalog';
-import { toBigMapArtPath } from './BigMapArtCatalog';
 
 export interface IBigMapArt {
     readonly background: SpriteFrame | null;

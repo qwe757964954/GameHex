@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "5c7d2e31-9a48-4b6f-8e20-1f3a5b7c9d42",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "SpawnRegionHint",
+    "hasIcon": false
+  }
+}

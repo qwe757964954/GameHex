@@ -1,4 +1,4 @@
-import { _decorator, Button, Label, Node, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Label, Node, SpriteFrame } from 'cc';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
@@ -10,10 +10,6 @@ import { RunAwayPlayerItem } from './RunAwayPlayerItem';
 
 const { ccclass, property } = _decorator;
 const DEFAULT_TITLE = '伤害统计';
-const ROW_HEIGHT = 116;
-const HEADER_HEIGHT = 70;
-const FOOTER_HEIGHT = 42;
-const RETURN_HEIGHT = 84;
 
 export interface GameRunAwayOptions {
     readonly players?: readonly IZCDamageStatsPlayer[];
@@ -28,12 +24,6 @@ export class GameRunAway extends PopupBase {
 
     @property(Label)
     titleLabel: Label = null!;
-    @property(UITransform)
-    panelTransform: UITransform = null!;
-    @property(UITransform)
-    backgroundTransform: UITransform = null!;
-    @property(Node)
-    header: Node = null!;
     @property(Label)
     footerLabel: Label = null!;
     @property([RunAwayPlayerItem])
@@ -42,19 +32,22 @@ export class GameRunAway extends PopupBase {
     returnButton: Button = null!;
 
     private showReturn = false;
+    /** Return 按钮的占位区（GameRunAway.prefab 的 ReturnArea，高度 84 由 prefab Layout 决定）。 */
+    private returnArea: Node | null = null;
     private players: readonly IZCDamageStatsPlayer[] = [];
     private readonly heads = new Map<string, SpriteFrame>();
     private defaultHeads: (SpriteFrame | null)[] = [];
 
     protected onInit(): void {
         this.defaultHeads = this.items.map(item => item.avatar.spriteFrame);
+        this.returnArea = this.returnButton.node.parent;
         this.returnButton.node.on(Button.EventType.CLICK, this.returnByButton, this);
     }
 
     protected async onOpen(userData?: GameRunAwayOptions): Promise<void> {
         this.showReturn = Boolean(userData?.showReturn);
         this.titleLabel.string = userData?.title ?? DEFAULT_TITLE;
-        this.returnButton.node.active = this.showReturn;
+        if (this.returnArea) this.returnArea.active = this.showReturn;
         this.returnButton.interactable = true;
         this.refresh(userData?.players ?? []);
         const scope = this.resourceScope;
@@ -93,17 +86,11 @@ export class GameRunAway extends PopupBase {
             maxDamageTaken = Math.max(maxDamageTaken, player.damageTaken);
         }
         const count = Math.min(players.length, this.items.length);
-        const height = HEADER_HEIGHT + ROW_HEIGHT * count + FOOTER_HEIGHT + (this.showReturn ? RETURN_HEIGHT : 0);
-        this.panelTransform.setContentSize(this.panelTransform.width, height);
-        this.backgroundTransform.setContentSize(this.backgroundTransform.width, height - 4);
-        this.header.setPosition(0, height / 2 - HEADER_HEIGHT / 2);
-        this.footerLabel.node.setPosition(0, -height / 2 + FOOTER_HEIGHT / 2 + (this.showReturn ? RETURN_HEIGHT : 0));
-        this.returnButton.node.setPosition(0, -height / 2 + RETURN_HEIGHT / 2);
+        if (this.returnArea) this.returnArea.active = this.showReturn;
         for (let index = 0; index < this.items.length; index++) {
             const item = this.items[index], player = players[index];
             item.node.active = index < count;
             if (!player) continue;
-            item.node.setPosition(0, height / 2 - HEADER_HEIGHT - ROW_HEIGHT * (index + 0.5));
             item.refresh({
                 ...player, headSpriteFrame: this.heads.get(player.headKey) ?? this.defaultHeads[index],
                 maxDamage, maxDamageTaken,

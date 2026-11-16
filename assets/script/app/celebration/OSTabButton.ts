@@ -49,19 +49,19 @@ export type { IOsTabVisual } from './CelebrationViewState';
 @ccclass('OSTabButton')
 export class OSTabButton extends Component {
     @property({ type: Node, tooltip: 'PlateUp：未选中底板（FGUI `n10`，`TY_btn13`）' })
-    plateUp: Node = null;
+    plateUp: Node = null!;
 
     @property({ type: Node, tooltip: 'PlateDown：选中底板（FGUI `n11`，`TY_btn14`）' })
-    plateDown: Node = null;
+    plateDown: Node = null!;
 
     @property({ type: Node, tooltip: 'IconOff：未选中图标（FGUI `icon`，100×100）' })
-    iconOff: Node = null;
+    iconOff: Node = null!;
 
     @property({ type: Node, tooltip: 'IconOn：选中图标（FGUI `selectIcon`，80×80）' })
-    iconOn: Node = null;
+    iconOn: Node = null!;
 
     @property({ type: Node, tooltip: 'RedDot：页签红点（FGUI `红点`）。只有「庆典目标」页签会被点亮，见 `OSRankPage`' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 点击回调 —— **由宿主在 `onLoad` 之后挂一次**（页签不会像列表行那样被复用）。 */
     onTap: (() => void) | null = null;
@@ -84,11 +84,11 @@ export class OSTabButton extends Component {
      */
     render(selected: boolean, redDot: boolean): void {
         const vis = osTabVisual(selected);
-        if (this.plateUp) this.plateUp.active = vis.plateUp;
-        if (this.plateDown) this.plateDown.active = vis.plateDown;
-        if (this.iconOff) this.iconOff.active = vis.iconOff;
-        if (this.iconOn) this.iconOn.active = vis.iconOn;
-        if (this.redDot) this.redDot.active = redDot;
+        this.plateUp.active = vis.plateUp;
+        this.plateDown.active = vis.plateDown;
+        this.iconOff.active = vis.iconOff;
+        this.iconOn.active = vis.iconOn;
+        this.redDot.active = redDot;
     }
 
     private _emitTap(): void {

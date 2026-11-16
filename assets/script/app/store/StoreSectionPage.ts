@@ -25,72 +25,28 @@ import { EventMgr } from '../../framework/event/EventMgr';
 const { ccclass, property } = _decorator;
 
 /**
- * 「商城」**分段页**的根脚本 —— 5 个分段 prefab（`StoreGemBox` / `StoreLevelGift` /
- * `StoreGold` / `StoreSilver` / `StoreGoods`）**共用同一个类**。
+ * 商城分段页根脚本，5 个分段 prefab（StoreGemBox / StoreLevelGift / StoreGold /
+ * StoreSilver / StoreGoods）共用。
  *
- * ## 它做三件事
+ * 职责有三块：按 STORE_SECTIONS 写段标题；按固定节点名从 StoreShopTable 回填图标和文案；
+ * 给可点节点挂 StoreActions 意图。
  *
- * 1. **段标题**：以 {@link STORE_SECTIONS} 为准（prefab 里的文案是落盘快照，表是唯一真源）。
- * 2. **按节点名回填「图标 + 文案」**：5 段的节点名是一套**约定**（见下表），
- *    数据一律来自 `StoreShopTable.ts`。构建器 `tmp/_store2_build.mjs` 落盘时用的是
- *    **同一张表** ⇒ prefab 里的静态图与运行期回填**同源**，不会出现「构建填 A、运行刷成 B」。
- * 3. **接按钮**：所有可点节点 → {@link storeAction}（真实协议 / 真实支付 / 前置校验）。
+ * 节点名是构建器和运行期的共用契约，改动要同步 tmp/_store2_build.mjs 和 tests/store.test.ts。
+ * 后三段的整卡本身是按钮，gem/gift 只有局部按钮，热区口径不同。
  *
- * ## 节点名约定（构建器与运行期共用，改一边必须改另一边；`tests/store.test.ts` 守它）
- *
- * | 段 | 图标槽 | 按钮 |
- * |---|---|---|
- * | gem | `List/Card{i}/Buy1/Cost/Icon`、`Buy10/Cost/Icon`、`Own/Icon` | `Buy1`、`Buy10`、`AdBtn`、`Help` |
- * | gift | `List/Card/Reward/R{j}/Icon`、`Reward/R{j}/Frame`、`BuyBtn/Icon` | `BuyBtn`、`ChestBtn`、`ArrowLeft`、`ArrowRight` |
- * | gold | `List/Card{i}/Icon`、`Extra/Icon` | `List/Card{i}`、`List/Card{i}/Price` |
- * | silver | `List/Card{i}/Icon` | `List/Card{i}`、`List/Card{i}/Price` |
- * | goods | `List/Card{i}/ItemBox/Icon`、`ItemBox/Frame`、`Price/Icon` | `List/Card{i}`、`List/Card{i}/Price` |
- *
- * ⚠️ 后三段的卡节点**自己**也是一个按钮（`cc.Button` 落在卡上，不是落在价格按钮上）——
- * 老端 `initVirtualList(this, 渲染函数, 点击回调)` 的第三参就是「整卡点击」，
- * gem / gift 两段**没有**第三参 ⇒ 热区口径本来就不同。见 `tmp/_store2_build.mjs`
- * 的 `CARD_BUTTON_COMPS` 注释。
- *
- * ## 宝箱段的两条状态是**逐档、且随背包变**的（gem 独有）
- *
- * | 条 | 取哪一档的货币 | 老端 |
- * |---|---|---|
- * | 「拥有」（`Own`） | **固定** `gemBox.priceType` —— 1 档 `10991 银钥匙` / 2 档 `10992 金钥匙`；`ownNum > 0` 才显示整块 | `RenderBox` L668–690 |
- * | 「消耗」（`Buy1/Cost`、`Buy10/Cost`） | **动态**：钥匙够 ⇒ 本档钥匙；不够 ⇒ 退到备选货币（金币，`cost3` / `cost2`） | `updateConsumeItem(...)` |
- *
- * 两条刚好相反（一个看「有没有钥匙」、一个看「实际扣什么」），别弄混。
- * 数值由 {@link refreshBoxOwn} / {@link refreshBoxCost} 现算，并在 `CmdItem` / `CmdRole`
- * 缓存变化时重刷（= 老端 `VOBag.OnChanged` 里重跑 `RenderBox`）。
- *
- * ## 运行期回填是**幂等**的
- *
- * prefab 里已经写好了静态图/文案（构建期从同一张表读），`onLoad` 再刷一遍结果相同。
- * 留着这一遍是为了**真协议到位时不用改 prefab** —— 把 `StoreShopTable` 换成
- * 「`RefUtil` 读表 + `VOBag` 读状态」即可。
- *
- * ## 与外壳的关系
- *
- * 分段 prefab 是外壳 `Store.prefab` 里 `ScrollView/view/content` 的 5 个直接子节点
- * （`Sec0_StoreGemBox` … `Sec4_StoreGoods`），由外壳一次性实例化 ⇒ **分段自己不负责加载**。
- * 老端 `list.initVirtualList(...)` 是懒加载；本端 5 段总量可控（约 280 节点），不做虚拟化
- * —— 这是**有意降级**，不是漏了。
+ * gem 段的「拥有」按固定钥匙类型判断，「消耗」按实际扣费显示；两者都随背包和钱包刷新。
+ * 5 个分段由外壳一次性实例化，不做虚拟化。
  */
 @ccclass('StoreSectionPage')
 export class StoreSectionPage extends Component {
-    @property({ type: Label, tooltip: 'Title：段标题（`title_brown` 绶带上的描边文字）' })
-    titleLabel: Label = null;
+    @property({ type: Label, tooltip: 'Title：段标题' })
+    titleLabel: Label = null!;
 
-    /**
-     * 本段是 5 段里的哪一段。
-     *
-     * ⚠️ 用 `@property({ type: CCString })` 存**字符串键**而不是枚举：
-     * 枚举要靠 `cc.Enum` 注册，prefab 里存的是数字，跨版本容易错位；
-     * 字符串键与 {@link STORE_SECTIONS} 的 `key` 一位对一位，改不坏。
-     */
-    @property({ tooltip: '段键：gem / gift / gold / silver / goods（见 StoreTable.STORE_SECTIONS）' })
+    /** 字符串键与 STORE_SECTIONS 的 key 一一对应；prefab 里存数字枚举容易跨版本错位。 */
+    @property({ tooltip: '段键：gem / gift / gold / silver / goods' })
     sectionKey = '';
 
-    /** 段配置（拿不到返回 `null`）。 */
+    /** 当前段配置；段键无效时为 null。 */
     get section() {
         return STORE_SECTIONS.find((s) => s.key === (this.sectionKey as StoreSectionKey)) ?? null;
     }
@@ -98,17 +54,13 @@ export class StoreSectionPage extends Component {
     onLoad(): void {
         const section = this.section;
         if (!section) {
-            // 段键漏写 ⇒ 只剩 prefab 里的落盘快照，图标/按钮都不会回填。这条警告是排查入口。
             console.warn(`[StoreSectionPage] 未知段键「${this.sectionKey}」，段标题与内容保持 prefab 现状`);
             return;
         }
-        if (this.titleLabel) this.titleLabel.string = section.title;
+        this.titleLabel.string = section.title;
         this.bindButtons(section.key);
         this.refresh();
-        // 宝箱段的「拥有 / 消耗」两条依赖**背包与钱包**（钥匙在 `CmdItem`、金币在 `CmdRole`）。
-        // 老端是 `VOBag.OnChanged` 里重跑 `RenderBox`；本端用 framework 的缓存事件，
-        // 口径与 `StorePage` / `MainResBar` 一致（都是 `setEventUpdate`）。
-        // ⚠️ 另外 4 段不订阅 —— 它们的内容来自静态表，与背包无关。
+        // 宝箱段的拥有数量和消耗货币都依赖背包与钱包缓存；其余段来自静态表，不需要订阅。
         if (section.key === 'gem') {
             CacheMgr.instance.setEventUpdate('CmdItem', this, this.onChestWalletChanged);
             CacheMgr.instance.setEventUpdate('CmdRole', this, this.onChestWalletChanged);
@@ -116,21 +68,17 @@ export class StoreSectionPage extends Component {
     }
 
     onDestroy(): void {
-        // 对没订阅过的表 `removeEventCaller` 是 no-op（内部先 `peekCache`）⇒ 不必判断段键。
         CacheMgr.instance.removeEventCaller('CmdItem', this);
         CacheMgr.instance.removeEventCaller('CmdRole', this);
     }
 
-    /** 背包 / 钱包变化 ⇒ 重刷宝箱段（老端 `VOBag.OnChanged` → `RenderBox` 的对应物）。 */
+    /** 背包或钱包变化后重刷宝箱段。 */
     private readonly onChestWalletChanged = (): void => {
         if (this.sectionKey !== 'gem') return;
         this.refreshGem();
     };
 
-    // ============================================================
-    // 一、按节点名回填图标 + 文案（数据全部来自 StoreShopTable）
-    // ============================================================
-    /** 把本段的图标 / 文案按表刷一遍（异步，图标逐张加载；失败只留白不抛）。 */
+    /** 按段键回填图标和文案。 */
     refresh(): void {
         const key = this.sectionKey as StoreSectionKey;
         switch (key) {
@@ -146,7 +94,6 @@ export class StoreSectionPage extends Component {
     private refreshGem(): void {
         STORE_CHEST_ROWS.forEach((row, i) => {
             const card = `List/Card${i}`;
-            // 钥匙**逐档不同**（1 档银 / 2 档金）⇒ 三处图标一律取本档的 `keyIcon`。
             this.setIcon(`${card}/Buy1/Cost/Icon`, row.keyIcon);
             this.setIcon(`${card}/Buy10/Cost/Icon`, row.keyIcon);
             this.setIcon(`${card}/Own/Icon`, row.keyIcon);
@@ -156,21 +103,12 @@ export class StoreSectionPage extends Component {
             this.setText(`${card}/AdBtn/Label`, '免费');
             this.tint(`${card}/Buy1/Label`, row.buttonColor);
             this.tint(`${card}/Buy10/Label`, row.buttonColor);
-            // 「拥有」条要读背包（同步），「消耗」条要读表（异步，且要算兜底价）⇒ 分开。
             this.refreshBoxOwn(card, row);
         });
         void this.refreshBoxCost();
     }
 
-    /**
-     * 「拥有」条：**背包里有几把本档的钥匙**（老端 `RenderBox` 的 `ownItem`）。
-     *
-     * 老端口径（`TabStoreMain` L668–690）：
-     * - `keyType = refGemBox.priceType` —— **固定用配置表的钥匙类型**，
-     *   ⚠️ **不能**用兜底切换后的价格类型：钥匙不足时它已被换成金币，判断不出有没有钥匙；
-     * - `ownNum > 0` 才显示**整块**「拥有」，否则 `ownItem.visible = false`；
-     * - 数量走 `StringUtil.formatNumberToKMBT`（本端同名函数已存在）。
-     */
+    /** 拥有条按配置里的固定钥匙类型判断，不能用兜底后的价格类型，否则钥匙不足时判断不出持有量。 */
     private refreshBoxOwn(card: string, row: IStoreChestRow): void {
         const count = countItem(row.keyResId);
         const ownNode = this.find(`${card}/Own`);
@@ -179,18 +117,12 @@ export class StoreSectionPage extends Component {
     }
 
     /**
-     * 消耗条：按 {@link resolveDrawCost} 算**当前实际会扣的**货币与数量并覆盖上去。
-     *
-     * 钥匙够 ⇒ 本档钥匙 + `cost1`/`cost10`；钥匙不够 ⇒ 退到备选货币（金币）+ `cost3`/`cost2`。
-     *
-     * ⚠️ 老端 `updateConsumeItem(getBtnInnerChild(box, "按钮_1次", "消耗1次"), priceType, cost)`
-     *    用的是**兜底切换后**的 `priceType` / `cost` —— 与「拥有」条刚好相反，别弄混：
-     *    消耗显示「实际要扣什么」，拥有显示「有没有钥匙」。
+     * 消耗条按实际扣费显示：钥匙够就用本档钥匙，不够就退到备选货币。
+     * 与拥有条相反，这里必须用兜底后的价格类型。
      */
     private async refreshBoxCost(): Promise<void> {
         for (let i = 0; i < STORE_CHEST_ROWS.length; i += 1) {
             const row = STORE_CHEST_ROWS[i];
-            // `STORE_CHEST_ROWS[i]` ↔ `gemBox.id = i + 1`（与 `bindButtons` 的 `rowId = i + 1` 同口径）。
             const box = await storeRepository.readGemBox(i + 1);
             if (!box || !this.isValid) return;
 
@@ -205,7 +137,6 @@ export class StoreSectionPage extends Component {
             for (const [suffix, ten] of [['Buy1', false], ['Buy10', true]] as const) {
                 if (!this.isValid) return;
                 const cost = resolveDrawCost(box, heldOf, ten);
-                // 扣的是本档钥匙就用钥匙图，退到备选货币就用金币图。
                 const icon = cost.resId === row.keyResId ? row.keyIcon : STORE_COIN_ICON;
                 this.setIcon(`${card}/${suffix}/Cost/Icon`, icon);
                 this.setText(`${card}/${suffix}/Cost/Value`, String(cost.number));
@@ -261,9 +192,6 @@ export class StoreSectionPage extends Component {
         });
     }
 
-    // ============================================================
-    // 二、接按钮 → StoreActions（真实链路）
-    // ============================================================
     private bindButtons(key: StoreSectionKey): void {
         switch (key) {
             case 'gem': {
@@ -279,8 +207,7 @@ export class StoreSectionPage extends Component {
             }
             case 'gift': {
                 const row = STORE_GIFT_ROW;
-                // ⚠️ `rowId` 一律传 **`guankaGift.id`**（= 18），不是 `level`（= 50）——
-                //    老端 `ModelStore.requestBuyGuanKaGift(ref.id)` 发的是 id。
+                // 请求参数用礼包 id（18），不是关卡号（50）。
                 this.onClick('List/Card/BuyBtn', 'buyGift', { section: 'gift', rowId: row.id, label: row.title });
                 this.onClick('List/Card/ChestBtn', 'claimGift', { section: 'gift', rowId: row.id, label: row.title });
                 this.onClick('ArrowLeft', 'page', { section: 'gift', rowId: row.id, amount: -1, label: row.title });
@@ -290,9 +217,6 @@ export class StoreSectionPage extends Component {
             case 'gold': {
                 STORE_GOLD_ROWS.forEach((row, i) => {
                     const ctx = { section: 'gold', index: i, rowId: row.id, label: row.name } as const;
-                    // 老端 `initVirtualList(this, this.RenderCharge, this.onClickCharge)` ⇒ **整卡**可点。
-                    // 卡与价格按钮各挂一个 `click`：触摸落到价格按钮上时由**它**派发（卡上的那份不会重复触发，
-                    // `cc.Button` 发的是 `node.emit('click')` 不是冒泡事件）。
                     this.onClick(`List/Card${i}`, 'pay', ctx);
                     this.onClick(`List/Card${i}/Price`, 'pay', ctx);
                 });
@@ -301,7 +225,6 @@ export class StoreSectionPage extends Component {
             case 'silver': {
                 STORE_SILVER_ROWS.forEach((row, i) => {
                     const ctx = { section: 'silver', index: i, rowId: row.id, label: row.name } as const;
-                    // 老端 `initVirtualList(this, this.RendCoinItem, this.onClickCoin)` ⇒ 整卡可点。
                     this.onClick(`List/Card${i}`, 'buyCoin', ctx);
                     this.onClick(`List/Card${i}/Price`, 'buyCoin', ctx);
                 });
@@ -310,7 +233,6 @@ export class StoreSectionPage extends Component {
             case 'goods': {
                 STORE_GOODS_ROWS.forEach((row, i) => {
                     const ctx = { section: 'goods', index: i, rowId: row.id, label: row.name } as const;
-                    // 老端 `initVirtualList(this, this.RenderGoods, this.onClickCoin)` ⇒ 整卡可点。
                     this.onClick(`List/Card${i}`, 'buyGoods', ctx);
                     this.onClick(`List/Card${i}/Price`, 'buyGoods', ctx);
                 });
@@ -320,23 +242,20 @@ export class StoreSectionPage extends Component {
         }
     }
 
-    /** 给一个节点挂 `click`（节点缺失 / 没挂 `cc.Button` 时只打一条 warn，不抛）。 */
+    /** 给节点挂 CLICK。节点名对不上时只告警，避免整个分段打不开。 */
     private onClick(path: string, kind: StoreActionKind, ctx: IStoreActionContext): void {
         const node = this.find(path);
         if (!node) {
-            console.warn(`[StoreSectionPage] ${this.sectionKey} 段找不到按钮节点 ${path}（节点名约定变了？）`);
+            console.warn(`[StoreSectionPage] ${this.sectionKey} 段找不到按钮节点 ${path}`);
             return;
         }
         const button = node.getComponent(Button);
         if (!button) {
-            console.warn(`[StoreSectionPage] ${this.sectionKey} 段 ${path} 上没有 cc.Button，点击不会触发`);
+            console.warn(`[StoreSectionPage] ${this.sectionKey} 段 ${path} 上没有 cc.Button`);
             return;
         }
-        // ⚠️ MCP 建出来的 `cc.Button` 的 `_target` 是 `null`（规格里没这一步）。
-        //    按下态（`transition = SCALE` / `zoomScale = 0.9`）要对 `target` 做缩放，
-        //    显式补上自己是最省事的兜底（缺 target 时部分引擎版本会直接抛）。
+        // 构建器生成的 Button 可能没有 target；按下态缩放需要它，缺省会报错。
         if (!button.target) button.target = node;
-        // `storeAction` 是 async（要读表 / 等广告 / 发包）⇒ 显式 `void`，不把 Promise 交给事件系统。
         node.on(Button.EventType.CLICK, () => {
             let root: Node | null = this.node;
             while (root && !root.getComponent(StorePage)) root = root.parent;
@@ -345,10 +264,7 @@ export class StoreSectionPage extends Component {
         }, this);
     }
 
-    // ============================================================
-    // 三、小工具
-    // ============================================================
-    /** 按「从段根算起」的斜杠路径找子节点。 */
+    /** 按相对段根的斜杠路径查子节点。 */
     private find(path: string): Node | null {
         let cur: Node | null = this.node;
         for (const seg of path.split('/')) {
@@ -358,13 +274,13 @@ export class StoreSectionPage extends Component {
         return cur;
     }
 
-    /** 写一个 Label 的文案（节点不存在 / 没 Label 时静默跳过）。 */
+    /** 写 Label 文案；节点或 Label 不存在时跳过。 */
     private setText(path: string, text: string): void {
         const label = this.find(path)?.getComponent(Label);
         if (label) label.string = text;
     }
 
-    /** 给一个 `cc.Sprite` 槽位异步刷图标（**失败保留现有图**，见 `StoreArt` 的注释）。 */
+    /** 异步刷图标，失败时保留 prefab 里的现有图。 */
     private setIcon(path: string, artPath: string): void {
         const sprite = this.find(path)?.getComponent(Sprite);
         if (!sprite || !artPath) return;
@@ -375,7 +291,7 @@ export class StoreSectionPage extends Component {
         });
     }
 
-    /** 给一个 Label 上色（宝箱卡的低级/高级按钮字色）。 */
+    /** 给 Label 上色。 */
     private tint(path: string, rgb: readonly [number, number, number]): void {
         const label = this.find(path)?.getComponent(Label);
         if (label) label.color.set(rgb[0], rgb[1], rgb[2], 255);

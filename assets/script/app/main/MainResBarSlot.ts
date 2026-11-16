@@ -1,4 +1,4 @@
-import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Color, Component, instantiate, Label, Node, Prefab, Sprite, SpriteFrame, UITransform } from 'cc';
 import type { ResBarSlot } from './MainResBarTypes';
 import { loadResBarSprite } from './MainResBarArt';
 import {
@@ -10,19 +10,10 @@ import {
     resBarSpendFlashColor,
     resBarSpendFloatFx,
     resBarSpendFx,
-    RES_BAR_SPEND_FLOAT_GAP,
     type IResBarCountText,
 } from './MainResBarFeedback';
 
 const { ccclass, property } = _decorator;
-
-/**
- * 飘字描边宽度（px）。
- *
- * 资源栏的数字压在 `Bg` 底板上，白字不带描边也看得清；飘字却**悬在地图上方**，
- * 白字直接压在浅色地格上会糊 —— 所以给它一圈黑边。要拿掉就把这个常量置 0。
- */
-const SPEND_FLOAT_OUTLINE_WIDTH = 2;
 
 /**
  * 资源栏里的一个资源格。
@@ -58,6 +49,9 @@ export class MainResBarSlot extends Component {
      */
     @property({ type: Node, tooltip: 'Plus：补货加号（只有可补货的格子才有，如体力格；没有就留空）' })
     plus: Node | null = null;
+
+    @property({ type: Prefab, tooltip: 'SpendFloat：扣减飘字模板（字号/描边/锚点都在 prefab 里）' })
+    spendFloatPrefab: Prefab | null = null;
 
     @property({ type: SpriteFrame, tooltip: 'Optional icon supplied by the host prefab; otherwise use the resource table icon' })
     iconOverride: SpriteFrame | null = null;
@@ -99,7 +93,7 @@ export class MainResBarSlot extends Component {
     /** 上方飘字节点（懒建，见 {@link ensureSpendFloat}）。 */
     private spendFloat: Node | null = null;
     private spendFloatLabel: Label | null = null;
-    /** 飘字起点的本地坐标（`y` = 槽位半高 + {@link RES_BAR_SPEND_FLOAT_GAP}）。 */
+    /** 飘字起点的本地坐标（`y` = 槽位半高 + prefab 根节点的初始 y 偏移）。 */
     private spendFloatStartY = 0;
     private spendFloatX = 0;
     /**
@@ -293,57 +287,30 @@ export class MainResBarSlot extends Component {
         this.applySpendFloat();
     }
 
-    /**
-     * 上方的 `-N` 飘字：**懒建**在槽位下面（三格各一个），起点压在「槽位上沿 + 2px」。
-     *
-     * 为什么运行时建、不放进 prefab：它是纯反馈件（没有美术资产、没有交互），排版又必须和
-     * `Value` 完全一致 —— 复制 `valueLabel` 的字体 / 字号，比在 prefab 里手抄三份再靠人肉对版本
-     * 可靠得多。真要在编辑器里调，将来给它加一个 `@property` 覆盖即可。
-     */
+    /** 上方的 `-N` 飘字：懒建在槽位下面，样式全部来自 `MainResBarSpendFloat.prefab`。 */
     private ensureSpendFloat(): Label | null {
         if (this.spendFloatLabel) return this.spendFloatLabel;
         const host = this.valueLabel?.node;
-        if (!host || !host.isValid) return null;
+        if (!host || !host.isValid || !this.spendFloatPrefab) return null;
         const transform = this.node.getComponent(UITransform);
-        // 「资源栏上方 2px」= 槽位上沿（半高）再往上 GAP。
-        this.spendFloatStartY = (transform ? transform.height / 2 : 0) + RES_BAR_SPEND_FLOAT_GAP;
-        // 与数字同一列：玩家读的是"哪个数字扣了多少"。
+        const node = instantiate(this.spendFloatPrefab);
+        const gap = node.position.y;
+        this.spendFloatStartY = (transform ? transform.height / 2 : 0) + gap;
         this.spendFloatX = host.position.x;
 
-        const node = new Node('SpendFloat');
+        node.name = 'SpendFloat';
         node.layer = host.layer;
-        node.parent = this.node;
-        const ui = node.addComponent(UITransform);
-        ui.setAnchorPoint(0.5, 0);
-        const label = node.addComponent(Label);
-        this.copySpendFloatTypography(label);
-        // 描边走 Label 自己的属性（3.8 起 `LabelOutline` 组件已弃用，会刷
-        // `'LabelOutline.width' is deprecated` 警告）。三者必须一起给：
-        // `outlineWidth` 只在 `enableOutline = true` 时才参与渲染，否则静默不画。
-        label.enableOutline = true;
-        label.outlineColor = new Color(0, 0, 0, 255);
-        label.outlineWidth = SPEND_FLOAT_OUTLINE_WIDTH;
+        node.setParent(this.node);
+        node.setPosition(this.spendFloatX, this.spendFloatStartY, 0);
+        const label = node.getComponent(Label);
+        if (!label) {
+            node.destroy();
+            return null;
+        }
         node.active = false;
-
         this.spendFloat = node;
         this.spendFloatLabel = label;
         return label;
-    }
-
-    /** 飘字排版照抄数字那一格（字体 / 字号 / 对齐），只有 `overflow` 改成 `NONE`：大额不许缩字。 */
-    private copySpendFloatTypography(label: Label): void {
-        const source = this.valueLabel;
-        label.useSystemFont = source.useSystemFont;
-        label.font = source.font;
-        label.fontFamily = source.fontFamily;
-        label.fontSize = source.fontSize;
-        label.lineHeight = source.lineHeight;
-        label.isBold = source.isBold;
-        label.isItalic = source.isItalic;
-        label.horizontalAlign = source.horizontalAlign;
-        label.verticalAlign = source.verticalAlign;
-        label.enableWrapText = false;
-        label.overflow = Label.Overflow.NONE;
     }
 
     /** 起播：写好文本、压回起点、显示出来。 */

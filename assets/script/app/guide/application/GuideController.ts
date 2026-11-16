@@ -1,28 +1,7 @@
 /**
- * 新手引导控制器：把「步骤机 + 存档 + 业务完成事件」串起来。
- *
- * ## 职责边界（对齐 MVC 规范）
- *
- * - ✅ 订阅完成事件、推进步骤机、发奖、落盘、输出 `IGuideViewState`
- * - ❌ 不碰节点 / 不建遮罩 / 不做高亮 —— 那是 View 的事，Controller 只交状态
- * - ❌ 不直连业务模块（territory / card）—— 业务侧调 {@link GuideController.notify}，
- *      或者由组合层把业务事件转成 `notify` 调用。这样引导内核不认识任何业务类型，可单测。
- *
- * ## 完成事件的匹配口径
- *
- * 表里的 `completeCond` 是字符串，带参用 `name:arg`：
- *
- * ```
- * notify('tileFlipped')            → 匹配 'tileFlipped'
- * notify('cardLevelUp', 68001)     → 匹配 'cardLevelUp:68001'
- * ```
- *
- * **严格相等**才推进 —— 不做前缀匹配，避免 `cardLevelUp` 误推 `cardLevelUp:68001` 这种带参步。
- *
- * ## 发奖失败怎么办
- *
- * `complete()` 记账在前、`grant()` 在后。`grant` 抛错只上报（`failed`），**不回滚进度**：
- * 引导奖励是必得项，宁可让服务端按 `stepId` 幂等补发，也不要把玩家卡回上一步。
+ * 新手引导控制器，串起步骤机、存档和业务完成事件。
+ * 只订阅完成事件、推进步骤、发奖、落盘并输出 IGuideViewState；不碰节点，也不直连业务模块。
+ * completeCond 严格相等匹配；发奖抛错只上报，不回滚进度。
  */
 
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
@@ -51,12 +30,8 @@ export interface IGuideViewState {
     readonly dialogId: string;
     readonly requireAction: GuideRequireAction;
     /**
-     * 完成判定（`guideStep.completeCond`）。
-     *
-     * View 必须用它决定「点对话条能不能推进这一步」，**不能用 `requireAction`**：
-     * `requireAction='click'` 只说明"玩家要做一个点击动作"（可能是点地块、点收下），
-     * 不代表"点对话条就算完成"。两者混用会让 `2-1`（completeCond=tileFlipped）
-     * 被对话条点击误推进、`2-2`（popupClosed）永远推不动。
+     * 完成判定 guideStep.completeCond。View 决定能否点对话条推进时必须用它，
+     * 不能用 requireAction；requireAction 只表示玩家要做一个动作，不代表点对话条算完成。
      */
     readonly completeCond: string;
     /** 本次是否首次进入（`firstLogin` 触发判据）。 */
@@ -103,10 +78,7 @@ export class GuideController extends ControllerBase {
     }
 
     /**
-     * 启动：读存档 → 恢复步骤机 → 发布首个状态。
-     *
-     * @returns `false` = 配置不可用（空表 / 断链）或本步已无内容，本次不做引导。
-     *   **不抛** —— 引导配置坏了不该让主界面进不去。
+     * 启动：读存档、恢复步骤机、发布首个状态。返回 false 表示本次不做引导，不抛出。
      */
     start(): boolean {
         if (this.progress) return true;
@@ -117,21 +89,14 @@ export class GuideController extends ControllerBase {
             this.progress = progress;
             this.firstRun = saved === null;
 
-            // 🔴 订阅必须放在「确认要跑引导」之后。
-            //    `restoreGuideProgress` 返回 null（配置断链 / 空表）时会提前 return，
-            //    若订阅写在最前面，那一次失败也会把三组监听挂在 `EventMgr` 上；
-            //    下次 `start()` 再挂一遍 ⇒ 同一个上报被处理多次。`notify` 虽然幂等
-            //    （cursor 校验），但日志翻倍、`grant` 会被重复调用，排查时非常误导。
-            // 联调逃生口：`GuideDebugEvent.ForceSkip` 可跳过整条引导。
+            // 订阅放在确认要跑引导之后：启动失败提前 return，不会重复挂监听。
+            // 联调逃生口：GuideDebugEvent.ForceSkip 可跳过整条引导。
             this.listen(GuideDebugEvent.ForceSkip, this.onForceSkip);
-            // 完成判定两路：① 通用通道；② 卡牌升级的既有强事件（业务侧零改动）。
+            // 完成判定两路：通用通道和卡牌升级事件。
             this.listen(GuideEvent.Complete, this.onCompleteReported);
             this.listen(GuideEvent.Advance, this.onAdvance);
             this.listen(CardLineupEvent.HeroUpgraded, this.onHeroUpgraded);
-            // 联调阶段只观察原始进度，不假定后端的「当前 / 已完成」约定。
             if (this.options.gateway) void this.options.gateway.load().catch(error => this.report(error));
-            // 引导只有十几步，低频日志；这条是"链路真的起来了"的唯一证据 ——
-            // 没有它，真机上「没启动」和「启动了但 View 没显示」完全无法区分。
             console.log(`[Guide] 启动 · step=${progress.current?.stepId ?? '(结束)'} · firstRun=${this.firstRun} · completed=${progress.completedSteps.length} · granted=${progress.grantedSteps.length}`);
             this.publish();
             return true;
@@ -142,11 +107,7 @@ export class GuideController extends ControllerBase {
     }
 
     /**
-     * 业务侧上报「某件事完成了」。命中当前步的 `completeCond` 才推进。
-     *
-     * @param cond 事件名，如 `'tileFlipped'` / `'cardLevelUp'`
-     * @param arg 可选的参数，拼成 `name:arg` 参与匹配
-     * @returns 是否真的推进了一步
+     * 业务侧上报某件事完成。命中当前步的 completeCond 才推进，返回是否真的推进了一步。
      */
     notify(cond: string, arg?: string | number): boolean {
         const progress = this.progress;
@@ -169,10 +130,7 @@ export class GuideController extends ControllerBase {
     }
 
     /**
-     * 强制跳过整条引导（忽略 `skipAble`）。
-     *
-     * 两个用途：① 联调逃生口（`GuideDebugEvent.ForceSkip` 触发）；② 运营强推走完。
-     * 奖励照常补发，进度落盘为「已跳过」，不会在下次进主界面又冒出来。
+     * 强制跳过整条引导，忽略 skipAble，奖励照常补发并落盘。
      */
     skipAll(): boolean {
         const progress = this.progress;
@@ -292,12 +250,7 @@ export class GuideController extends ControllerBase {
     };
 
     /**
-     * 卡牌升级成功 → `cardLevelUp:<heroId>`。
-     *
-     * 直接订阅卡牌侧的既有事件，**不做业务侧改动**。注意设计案的 6-3 写的是
-     * 「升级动画播完」，这里用的是「服务端确认升级成功」—— 早于动画结束，
-     * 玩家能更早看到下一句；若要求严格等动画，需要在 `CardUpgradePage` 的动画结束回调里
-     * 改成 `reportGuideComplete('cardLevelUp', heroId)`。
+     * 卡牌升级成功转成 cardLevelUp:<heroId>，直接订阅卡牌既有事件，不改业务侧。
      */
     private readonly onHeroUpgraded = (payload: { readonly heroId?: number }): void => {
         const heroId = Number(payload?.heroId);
@@ -306,7 +259,7 @@ export class GuideController extends ControllerBase {
     };
 
     private now(): number {
-        return this.options.now ? this.options.now() : Date.now();
+        return this.options.now?.() ?? Date.now();
     }
 
     private report(error: unknown): void {

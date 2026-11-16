@@ -13,8 +13,8 @@ import { configureTerritoryMap } from '../model/TerritoryMapConfig';
 /**
  * 章节加载适配器：把「资源入口 + 地图 JSON + campaign + 美术」打包成 {@link ITerritoryChapterBundle}。
  *
- *  唯一允许碰 cc / RefUtil 的加载路径。Presenter 只消费归一化后的结构，不感知资源加载方式。
- *  地图 JSON 拉不到（≠ 单张美术缺失）返回 `null`，Presenter 展示加载失败。
+ * 唯一允许碰 cc / RefUtil 的加载路径。Controller 只消费归一化后的结构，不感知资源加载方式。
+ * 地图 JSON 拉不到（≠ 单张美术缺失）返回 `null`，Controller 展示加载失败。
  */
 export class TerritoryChapterLoader implements ITerritoryChapterLoader {
     constructor(private readonly assets: AssetService) {}

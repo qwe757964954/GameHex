@@ -1,33 +1,6 @@
 /**
- * 「邮件」列表里的**一行**（`575×170`）。
- *
- * 结构逐节点对齐 FGUI `邮件/组件/组件_邮件_主界面Item.xml`：
- *
- * | FGUI 节点 | 本节点 | 说明 |
- * |---|---|---|
- * | `n21` loader | 本节点 `cc.Sprite` | 行底图 —— **三态换图**（见下） |
- * | `n24` | `Deco` | 左侧信纸装饰（`ml_mail_deco`） |
- * | `n25` | `MailIcon` | 信封图标（`ml_mail_icon`） |
- * | `文本_标题` | `Title` | 邮件标题 |
- * | `文本_时间` | `Time` | 相对时间（右对齐，`pivot 0,0.5` ⇒ 左边缘固定） |
- * | `状态` | `State` | 「已读」（`pivot 1,0.5` ⇒ **右边缘固定**） |
- * | `n26` | `TakenStamp` | 「已领取」印章（`ml_taken_stamp`） |
- * | ~~`com_rd`~~ | — | 红点：**本轮不接**（见 `tmp/_mail_nodes.md`） |
- *
- * ## 三态（FGUI `controller 状态`）
- *
- * | state | 行底图 | `State` 文本 | `TakenStamp` |
- * |---|---|---|---|
- * | 0 未读 | `frame_Zhikuang06`（`friend/fd_row_bg`） | 隐藏 | 隐藏 |
- * | 1 已读 | `frame_Zhikuang06_b`（`mail/ml_row_bg_read`） | 「已读」 | 隐藏 |
- * | 2 已领取 | 同上（`_b` 版） | **隐藏**（`gearText` 改的那支被 `gearDisplay` 挡掉） | 显示 |
- *
- * ⚠️ 整行会被虚拟列表 **clone 复用** ⇒ `render()` 里每一处都要**绝对赋值**
- *   （记忆规则 10：条件式赋值会让上一行的状态串到下一行）。
- *   最容易漏的是 `State` 的 `active` 与 `TakenStamp` 的 `active`。
- *
- * ⚠️ 行底图由**宿主预加载好再传进来**（`IMailRowArt`）：在这里现加载会先闪一帧上一行的图
- *   （`VScrollView` 回收残影缺陷，与 `ActivityRewardSlot` 同款口径）。
+ * 邮件列表行，575×170。未读/已读/已领取三态换行底图、状态字和印章。
+ * 行会被虚拟列表复用，render 必须绝对赋值；行底图由宿主预加载后传入，避免闪上一行的图。
  */
 
 import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
@@ -70,8 +43,8 @@ export class MailRow extends Component {
 
     /**
      * 打开详情回调 —— **由宿主在每次铺行时重设**（`MailPage.renderRow`）。
-     * ⚠️ 不能在 `render()` 里绑监听：同一个实例会被复用到别的下标，
-     *    回调里必须按当前行现取 id，否则会「点第 3 行打开第 1 封」。
+     * 不能在 `render()` 里绑监听：同一个实例会被复用到别的下标，
+     * 回调里必须按当前行现取 id，否则会「点第 3 行打开第 1 封」。
      */
     onOpen: ((id: string) => void) | null = null;
 

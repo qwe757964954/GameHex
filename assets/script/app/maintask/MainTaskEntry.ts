@@ -58,7 +58,7 @@ export class MainTaskEntry extends Component {
     /**
      * 把快照铺到入口上。
      *
-     * ⚠️ 每一处都**无条件写**（规则 82）：本节点 `_active` 烘的是 `true`（规则 86 要求），
+     * 每一处都**无条件写**：本节点 `_active` 烘的是 `true`，
      * 「只在翻转时写」会在首次「新值 === 缓存初值」时短路 ⇒ 该藏的时候藏不掉。
      */
     applySnapshot(snapshot: IMainTaskSnapshot): void {
@@ -76,7 +76,7 @@ export class MainTaskEntry extends Component {
     /**
      * 挂点击。
      *
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**只有 `cc.Sprite`、没有 `cc.Button`**（规则 81b）：
+     * FGUI `<loader>` / `<image>` 迁过来**只有 `cc.Sprite`、没有 `cc.Button`**：
      * 那种节点上绑 `Button.EventType.CLICK` 是**静默死按钮**。反过来 `<component>` 形态的
      * 按钮迁过来**有** `cc.Button`，绑 `TOUCH_END` 会绕过 `interactable`。按实际组件分流。
      */

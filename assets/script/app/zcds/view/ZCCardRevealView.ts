@@ -1,5 +1,5 @@
 import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UIOpacity } from 'cc';
-import type { ZCBuildingType, ZCCardReveal } from '../model/ZCGameTypes';
+import { ZCBuildingType, type ZCCardReveal } from '../model/ZCGameTypes';
 import type { ZCOwner } from '../model/ZCMapConfig';
 import { ZC_CARD_FADE_START_PROGRESS } from '../model/ZCBattlePresentationQueue';
 import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
@@ -125,7 +125,8 @@ export class ZCCardRevealView extends Component {
     render(reveal: Readonly<ZCCardReveal>, now: number): void {
         const duration = Math.max(0.001, reveal.durationSeconds);
         const elapsedSeconds = now - reveal.startedAt;
-        this.guideAnchor.key = reveal.owner === 'player' && elapsedSeconds >= 0 && elapsedSeconds < duration
+        this.guideAnchor.key = reveal.owner === 'player' && reveal.building !== ZCBuildingType.Mine
+            && elapsedSeconds >= 0 && elapsedSeconds < duration
             ? 'Battle/DrawnCard' : '';
         this.guideAnchor.shownAt = reveal.startedAt;
         // 「未开始」＝还在等前置的地块收场段走完（`startedAt` 落在未来）。

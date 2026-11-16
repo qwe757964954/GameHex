@@ -182,12 +182,12 @@ function pageFixture() {
 test('开战成功后锁输入，预加载失败后允许重新点击', () => {
     const { page, taps } = pageFixture();
     page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: true } });
-    page.onWorldTap(42);
-    page.onPlotTap(42);
+    page.sendIntent({ kind: 'worldTap', hexId: 42 });
+    page.sendIntent({ kind: 'plotTap', hexId: 42 });
     assert.deepEqual(taps, [], '遮罩期间不该再走选中/开战');
     // 预加载失败时撤掉，玩家可以重新点。
     page.render({ ...page.data, ui: { ...page.data?.ui, enteringBattle: false } });
-    page.onWorldTap(42);
+    page.sendIntent({ kind: 'worldTap', hexId: 42 });
     assert.deepEqual(taps, [42]);
     EventMgr.instance.offTarget(page);
 });

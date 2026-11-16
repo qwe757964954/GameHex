@@ -4,15 +4,6 @@ import { paintMapMarkerBadge } from '../../common/MapMarkerBadge';
 
 const { ccclass, property } = _decorator;
 
-/** 名条左端徽章中心相对条中心的横向偏移（设计稿「大地图3」：菱形/圆形徽章都落在 -70 附近）。 */
-const PLATE_BADGE_X = -70;
-/** 名条名字的左边缘相对条中心的横向偏移：`-宽/2 + 76`（设计稿两条口径一致，取中值 -24）。 */
-const PLATE_NAME_X = -24;
-/** 名字到条右端的内边距。 */
-const PLATE_NAME_RIGHT_PAD = 10;
-/** 徽章数字框宽（两位数字 31px + 余量），超过用 `Overflow.SHRINK` 收。 */
-const PLATE_LEVEL_WIDTH = 50;
-
 /**
  *据点标记：建筑图 + 名条（徽章数字 + 名字）+ 其上的「谁占着」小旗 + 主城头像。
  *
@@ -26,21 +17,22 @@ const PLATE_LEVEL_WIDTH = 50;
  */
 @ccclass('BigMapWorldMarker')
 export class BigMapWorldMarker extends Component {
-    @property({ type: Sprite, group: '图标' }) icon: Sprite = null;
+    @property({ type: Sprite, group: '图标' }) icon: Sprite = null!;
     /** 名条底图（蓝湖四张 `plate_*`）。字段名沿用 `badge`，历史原因：它原来是手画角标的底。 */
-    @property({ type: Sprite, group: '名条' }) private badge: Sprite = null;
+    @property({ type: Sprite, group: '名条' }) private badge: Sprite = null!;
     /** 徽章位数字（等级 / 关卡号）。 */
-    @property({ type: Label, group: '名条' }) private label: Label = null;
+    @property({ type: Label, group: '名条' }) private label: Label = null!;
     /** 条右侧的据点名。 */
-    @property({ type: Label, group: '名条' }) private nameLabel: Label = null;
+    @property({ type: Label, group: '名条' }) private nameLabel: Label = null!;
     /** 名条的手画兜底底板：只在没贴图时显示。 */
-    @property({ type: Graphics, group: '名条' }) private badgeBackground: Graphics = null;
+    @property({ type: Graphics, group: '名条' }) private badgeBackground: Graphics = null!;
     /** 占据者（小旗 + 名字）整段；没有占据者时整段隐藏。 */
-    @property({ type: Node, group: '占据者' }) private occupantRoot: Node = null;
-    @property({ type: Sprite, group: '占据者' }) private occupantFlag: Sprite = null;
-    @property({ type: Label, group: '占据者' }) private occupantLabel: Label = null;
-    @property({ type: Node, group: '玩家头像' }) private portraitRoot: Node = null;
-    @property({ type: Sprite, group: '玩家头像' }) private portrait: Sprite = null;
+    @property({ type: Node, group: '占据者' }) private occupantRoot: Node = null!;
+    @property({ type: Sprite, group: '占据者' }) private occupantFlag: Sprite = null!;
+    @property({ type: Label, group: '占据者' }) private occupantLabel: Label = null!;
+    @property({ type: Node, group: '玩家头像' }) private portraitRoot: Node = null!;
+    @property({ type: Sprite, group: '玩家头像' }) private portrait: Sprite = null!;
+    @property({ group: '名条', tooltip: '名字到条右端的内边距' }) private nameRightPad = 10;
 
     /**
      *`render()` 算出的原始命中框（不含头像外扩）。
@@ -99,8 +91,6 @@ export class BigMapWorldMarker extends Component {
         if (plate) {
             this.badge.spriteFrame = plate;
             if (badgeTransform) badgeTransform.setContentSize(plateWidth, plateHeight);
-        } else if (badgeTransform && badgeTransform.width <= 0) {
-            badgeTransform.setContentSize(88, 30);
         }
         //手画底板只在真的没图时画：有图还画会把贴图整个盖住（老 bug 的形态）。
         //必须按名条整条尺寸画（不是 88×30 的小角标）—— 缺图时也要是「一整条」，
@@ -118,20 +108,16 @@ export class BigMapWorldMarker extends Component {
         //一次性诊断已定位问题（`Badge` 的 Sprite 在 prefab 里 `_enabled=false`），探针移除。
 
         this.label.string = level;
-        this.label.node.setPosition(PLATE_BADGE_X, 0, 0);
-        const levelTransform = this.label.node.getComponent(UITransform);
-        if (levelTransform) levelTransform.setContentSize(PLATE_LEVEL_WIDTH, plateHeight || 30);
 
         this.nameLabel.string = name;
         this.nameLabel.node.active = name !== '';
-        this.nameLabel.node.setPosition(PLATE_NAME_X, 0, 0);
         const nameTransform = this.nameLabel.node.getComponent(UITransform);
         if (nameTransform) {
-            nameTransform.setAnchorPoint(0, 0.5);
-            //左边缘在 `PLATE_NAME_X`（负值），右边缘留 `PLATE_NAME_RIGHT_PAD` ⇒ 宽度是差。
+            // 左边缘与锚点取自 prefab；右边缘只留 `nameRightPad`，宽度随名条贴图现算。
+            const nameX = this.nameLabel.node.position.x;
             nameTransform.setContentSize(
-                plateWidth ? plateWidth / 2 - PLATE_NAME_RIGHT_PAD - PLATE_NAME_X : 0,
-                plateHeight || 30,
+                plateWidth ? plateWidth / 2 - this.nameRightPad - nameX : 0,
+                plateHeight || nameTransform.height,
             );
         }
 
@@ -144,13 +130,10 @@ export class BigMapWorldMarker extends Component {
     setOccupantFlag(frame: SpriteFrame | null): void {
         this.occupantFlag.spriteFrame = frame;
         this.occupantFlag.node.active = frame !== null;
-        if (!frame) { this.occupantLabel.node.setPosition(-84, 0, 0); return; }
-        const flagWidth = 37;
+        if (!frame) return;
+        const flagWidth = this.occupantFlag.node.getComponent(UITransform).width;
         const scale = flagWidth / Math.max(1, frame.rect.width);
         this.occupantFlag.node.setScale(scale, scale, 1);
-        //设计稿实测（「大地图3」帐篷上那条）：旗中心在建筑中心左 105px，名字左边缘左 84px。
-        this.occupantFlag.node.setPosition(-105, 0, 0);
-        this.occupantLabel.node.setPosition(-84, 0, 0);
     }
 
     /**

@@ -10,6 +10,8 @@ import { GameNetGuideGateway } from '../../guide/application/GuideGateway';
 import { GuideDialogView } from '../../guide/ui/GuideDialogView';
 import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
 import { MainTab, MainTabHost } from '../../main/MainTabHost';
+import { CardLineupPage } from '../../card/CardLineupPage';
+import { MainTaskDetailPage } from '../../maintask/MainTaskDetailPage';
 import type { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { FW } from '../../../framework/FW';
 
@@ -43,11 +45,36 @@ export class GuideComposition extends ControllerBase {
         // 奖励可能由其它功能打开，也可能早于引导完成加载；统一按弹窗实例暂停。
         const rewards = new Set(PopupManager.inst.openedPopups.filter(popup => popup instanceof ShowRewardPage));
         let latestState: IGuideViewState | null = null;
+        let ownsMainGoal = false;
+        let mainGoal: MainTaskDetailPage | null = null;
+        this.own(() => {
+            if (ownsMainGoal && (!mainGoal || PopupManager.inst.get(MainTaskDetailPage) === mainGoal)) {
+                PopupManager.inst.closeByClass(MainTaskDetailPage);
+            }
+        });
         const render = (state: IGuideViewState): void => {
             latestState = state;
             const battleFocus = state.focusNode.startsWith('Battle/') || state.focusNode.startsWith('BattleResult/');
             if (rewards.size > 0 || (!state.finished && battleFocus !== (this.phase === 'battle'))) view.hide();
-            else view.render(state);
+            else {
+                view.render(state);
+                if (!state.finished && state.focusNode === 'Popup/MainGoal'
+                    && !ownsMainGoal && !PopupManager.inst.get(MainTaskDetailPage)) {
+                    ownsMainGoal = true;
+                    void MainTaskDetailPage.open().then(popup => {
+                        if (this.isDisposed) return;
+                        mainGoal = popup;
+                        if (!popup) {
+                            ownsMainGoal = false;
+                            reportGuideFailure(new Error('主线任务面板打开失败'));
+                        }
+                    }, error => {
+                        if (this.isDisposed) return;
+                        ownsMainGoal = false;
+                        reportGuideFailure(error);
+                    });
+                }
+            }
         };
         this.listen(VIEW_LIFECYCLE, ({ owner, phase }: IViewLifecycle) => {
             if (!(owner instanceof ShowRewardPage)) return;
@@ -84,6 +111,8 @@ export class GuideComposition extends ControllerBase {
         }
         this.own(() => controller.dispose());
         if (this.phase === 'battle') controller.notify('battleEntered');
+        // 切页会重建引导；加载完成后按实际页面补报，避免错过页面 ready 事件。
+        else if (this.root.getComponent(CardLineupPage)) controller.notify('pageOpened', 'card');
     }
 
     private async createGuideView(): Promise<GuideDialogView | null> {
@@ -109,6 +138,8 @@ export class GuideComposition extends ControllerBase {
                     }
                     const mapNode = this.territoryView?.getGuideFocusNode(key) ?? null;
                     if (mapNode) return { node: mapNode, shape: 'hex' };
+                    const card = /^CardList\/Card_(\d+)$/.exec(key);
+                    if (card) this.root.getComponent(CardLineupPage)?.revealGuideCard(card[1]);
                     let anchor: GuideFocusAnchor | null = null;
                     for (const item of canvas.getComponentsInChildren(GuideFocusAnchor)) {
                         if (item.key === key && item.node.activeInHierarchy && (!anchor || item.shownAt > anchor.shownAt)) anchor = item;

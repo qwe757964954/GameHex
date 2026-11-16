@@ -7,17 +7,17 @@
  * | FGUI 节点 | 本节点 | 说明 |
  * |---|---|---|
  * | `lab_who`（24px `#3a240d` 左对齐、`vAlign=middle`） | `Who` | 砍价的成员名 |
- * | `n43`（24px `#3a240d`、`vAlign=middle`，静态 `text="砍价"`） | `Action` | ⚠️ **静态文本**，老端从没赋值过 |
+ * | `n43`（24px `#3a240d`、`vAlign=middle`，静态 `text="砍价"`） | `Action` |  **静态文本**，老端从没赋值过 |
  * | `icon`（34×34、`fill=scaleFree`） | `Icon` | 货币图标（金币 `图标_幻灵玉`） |
  * | `lab_price`（24px `#3a240d`、`vAlign=middle`） | `Price` | 这个人砍掉的额度 |
  *
- * ⚠️ **`n43` 与按钮上的「砍价」同字不同源**：老端 `render()` 只覆盖 `lab_who` / `lab_price`，
- *    `n43` 从头到尾没被赋过值 ⇒ 它是设计稿的静态文本。本行也照抄（`LEAGUE_DISCOUNT_ROW_ACTION`
- *    与 `LEAGUE_DISCOUNT_BTN_SALE` 两个常量**故意不合并**，各自跟随自己的来源）。
+ * **`n43` 与按钮上的「砍价」同字不同源**：老端 `render()` 只覆盖 `lab_who` / `lab_price`，
+ * `n43` 从头到尾没被赋过值 ⇒ 它是设计稿的静态文本。本行也照抄（`LEAGUE_DISCOUNT_ROW_ACTION`
+ * 与 `LEAGUE_DISCOUNT_BTN_SALE` 两个常量**故意不合并**，各自跟随自己的来源）。
  *
- * ⚠️ **查不到成员的整条会被宿主丢掉**（老端 `if (member) listCmds.push(item)`），
- *    所以行组件永远不会拿到一个「名字为空」的条目去渲染
- *    —— 过滤在 `LeaderTable.buildLeagueDiscountRows`，行只负责上屏。
+ * **查不到成员的整条会被宿主丢掉**（老端 `if (member) listCmds.push(item)`），
+ * 所以行组件永远不会拿到一个「名字为空」的条目去渲染
+ * —— 过滤在 `LeaderTable.buildLeagueDiscountRows`，行只负责上屏。
  *
  * ## 没有按钮
  *
@@ -36,7 +36,7 @@ export class LeagueDiscountRow extends Component {
     @property({ type: Label, tooltip: 'lab_who：砍价的成员名（24px）' })
     whoLabel: Label = null;
 
-    @property({ type: Label, tooltip: 'n43：「砍价」二字（⚠️ 静态文本，老端从没赋值）' })
+    @property({ type: Label, tooltip: 'n43：「砍价」二字（ 静态文本，老端从没赋值）' })
     actionLabel: Label = null;
 
     @property({ type: Label, tooltip: 'lab_price：该成员砍掉的额度（24px）' })
@@ -69,7 +69,7 @@ export class LeagueDiscountRow extends Component {
 
         if (this.whoLabel) this.whoLabel.string = view.name;
         if (this.priceLabel) this.priceLabel.string = String(view.value);
-        // ⚠️ `n43` 是静态文本 ⇒ 每次复用都写回常量，防止别处改过它之后串到下一行
+        // `n43` 是静态文本 ⇒ 每次复用都写回常量，防止别处改过它之后串到下一行
         if (this.actionLabel) this.actionLabel.string = LEAGUE_DISCOUNT_ROW_ACTION;
         if (this.icon && iconFrame) this.icon.spriteFrame = iconFrame;
     }

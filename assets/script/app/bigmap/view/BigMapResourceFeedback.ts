@@ -41,7 +41,7 @@ export class BigMapResourceFeedback {
     private readonly baseB: number;
     private readonly baseA: number;
 
-    //增加：命中（labelScale + 数字滚动）
+    //命中：Label 缩放 + 数字滚动
     private hitElapsed = -1;
     private hitFrom = 0;
     private hitTo = 0;
@@ -63,17 +63,17 @@ export class BigMapResourceFeedback {
 
     constructor(label: Label) {
         this.label = label;
-        this.baseScale = label.node.scale.x ?? 1;
-        this.baseY = label.node.position.y ?? 0;
+        this.baseScale = label.node.scale.x;
+        this.baseY = label.node.position.y;
         const color = label.color;
-        this.baseR = color?.r ?? 255;
-        this.baseG = color?.g ?? 255;
-        this.baseB = color?.b ?? 255;
-        this.baseA = color?.a ?? 255;
+        this.baseR = color.r;
+        this.baseG = color.g;
+        this.baseB = color.b;
+        this.baseA = color.a;
         //飘字节点由 prefab 预置在 Value 节点下（SpendFloat），缺了就降级为不飘字。
         const floatNode = label.node.getChildByName('SpendFloat');
         this.floatNode = floatNode;
-        this.floatLabel = floatNode?.getComponent(Label) ?? null;
+        this.floatLabel = floatNode ? floatNode.getComponent(Label) : null;
     }
 
     get isPlaying(): boolean {
@@ -222,7 +222,7 @@ export class BigMapResourceFeedback {
         this.floatStartY = (valueTransform ? valueTransform.height / 2 : 0) + FLOAT_GAP;
         this.floatX = 0;
         if (!this.floatConfigured) {
-            node.getComponent(UITransform)?.setAnchorPoint(0.5, 0);
+            node.getComponent(UITransform).setAnchorPoint(0.5, 0);
             this.copyTypography(floatLabel);
             floatLabel.enableOutline = true;
             floatLabel.outlineColor = new Color(0, 0, 0, 255);

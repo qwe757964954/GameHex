@@ -11,7 +11,7 @@ export const TERRITORY_STAMINA_RES_ID = 9;
  * 挂机奖励去向（**唯一事实源**：`TerritoryIdleRewardDestination` 由它推导，禁止写
  * `'wallet.silver'` 这类裸字面量）。
  *
- * ⚠️ **键是合法标识符，值是存档里的真实路径**（`save.wallet.silver` / `save.wallet.stamina`）——
+ * **键是合法标识符，值是存档里的真实路径**（`save.wallet.silver` / `save.wallet.stamina`）——
  * `TerritorySaveStore` 的 switch 按**值**匹配，存档路径由值携带，改名只动键。
  */
 export const TERRITORY_IDLE_REWARD_DESTINATION = {

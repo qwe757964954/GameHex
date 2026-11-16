@@ -203,9 +203,7 @@ export function canStepSkill(
     return skillLevelUnlocked(skill, target, heroLevel);
 }
 
-// ------------------------------------------------------------------
 // 内部工具
-// ------------------------------------------------------------------
 
 function toCount(value: unknown): number | null {
     if (value === null || value === undefined || value === '') return null;

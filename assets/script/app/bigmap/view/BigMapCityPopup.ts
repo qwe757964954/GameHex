@@ -112,21 +112,21 @@ export class BigMapCityPopup extends PopupBase {
     @property({ type: Label, group: '开放时间' }) private openingLabel: Label = null!;
 
     @property({ type: Label, group: '战功', tooltip: 'Panel/Progress/Label：当前 / 最低占领战功' })
-    private warScoreLabel: Label = null;
+    private warScoreLabel: Label = null!;
     /** 战功填充条的 UITransform —— 直接拖组件，不走 `getComponent`（拖错在编辑器里就看得见）。 */
     @property({ type: UITransform, group: '战功', tooltip: 'Panel/Progress/Fill 的 UITransform：按比例改宽度' })
-    private warScoreFillTransform: UITransform = null;
+    private warScoreFillTransform: UITransform = null!;
 
-    @property({ type: Label, group: '城主' }) private lordNameLabel: Label = null;
-    @property({ type: Label, group: '城主' }) private lordScoreLabel: Label = null;
-    @property({ type: Sprite, group: '城主' }) private lordPerson: Sprite = null;
+    @property({ type: Label, group: '城主' }) private lordNameLabel: Label = null!;
+    @property({ type: Label, group: '城主' }) private lordScoreLabel: Label = null!;
+    @property({ type: Sprite, group: '城主' }) private lordPerson: Sprite = null!;
     @property({ type: Label, group: '城主' }) private emptyLordLabel: Label = null!;
     @property({ type: Node, group: '城主' }) private lordScoreRoot: Node = null!;
 
-    @property({ type: Button, group: '操作' }) private fightButton: Button = null;
-    @property({ type: Label, group: '操作' }) private fightLabel: Label = null;
-    @property({ type: Label, group: '操作' }) private staminaLabel: Label = null;
-    @property({ type: Sprite, group: '操作' }) private staminaIcon: Sprite = null;
+    @property({ type: Button, group: '操作' }) private fightButton: Button = null!;
+    @property({ type: Label, group: '操作' }) private fightLabel: Label = null!;
+    @property({ type: Label, group: '操作' }) private staminaLabel: Label = null!;
+    @property({ type: Sprite, group: '操作' }) private staminaIcon: Sprite = null!;
     @property({ type: Button, group: '操作' }) private playerActionsButton: Button = null!;
 
     /** 战功进度条槽的原始宽度（设计稿 `progress_02` = 250）—— 按比例改宽度时不能读被改过的值。 */

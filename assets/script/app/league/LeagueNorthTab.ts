@@ -6,9 +6,9 @@
  *
  * ```xml
  * <gearIcon  controller="button" pages="0,1,2,3"
- *            values="…7ws21yxnalz | …7ws21yxnam2 | …7ws21yxnalz | …7ws21yxnam2"/>
+ * values="…7ws21yxnalz | …7ws21yxnam2 | …7ws21yxnalz | …7ws21yxnam2"/>
  * <gearColor controller="button" pages="0,1,2,3"
- *            values="#b6af95,#160e08|#fcf0d6,#502010|#b6af95,#502010|#fcf0d6,#502010"/>
+ * values="#b6af95,#160e08|#fcf0d6,#502010|#b6af95,#502010|#fcf0d6,#502010"/>
  * ```
  *
  * `button` controller 的 4 页是 `up / down / over / selectedOver`，`selected="3"` ⇒
@@ -18,9 +18,9 @@
  * | 未选中 | `TY_btn23`（**亮**） | `#b6af95`（暗） | `#160e08` |
  * | 选中 | `TY_btn20`（**暗**） | `#fcf0d6`（亮） | `#502010` |
  *
- * ⚠️ **底图与字色是反着来的**（选中 = 底图变暗 + 文字变亮）—— 只换底图不换字色，
- *    两个页签看着都像"选中的"，肉眼几乎分不出。两张底图由宿主预载后传进来
- *    （`render()` 是同步的，现加载会闪一帧上一张图，同 `LeagueRewardSlot` 的口径）。
+ * **底图与字色是反着来的**（选中 = 底图变暗 + 文字变亮）—— 只换底图不换字色，
+ * 两个页签看着都像"选中的"，肉眼几乎分不出。两张底图由宿主预载后传进来
+ * （`render()` 是同步的，现加载会闪一帧上一张图，同 `LeagueRewardSlot` 的口径）。
  *
  * ## 红点
  *
@@ -60,8 +60,8 @@ export class LeagueNorthTab extends Component {
      * `Bg`：底图（FGUI `组件_联盟_页签.xml` 的 `n4`，224×79 而组件只有 207×105
      * ⇒ 底图**必须**是子节点，不能挂在根上）。
      *
-     * ⚠️ 保留 `getComponent(Sprite)` 兜底：老写法是「把底图挂在根上」，
-     *    万一有 prefab 还是那个形状，`onLoad` 里也能取到。
+     * 保留 `getComponent(Sprite)` 兜底：老写法是「把底图挂在根上」，
+     * 万一有 prefab 还是那个形状，`onLoad` 里也能取到。
      */
     @property({ type: Sprite, tooltip: 'Bg：页签底图（两态靠换 spriteFrame）' })
     bg: Sprite = null;
@@ -118,14 +118,12 @@ export class LeagueNorthTab extends Component {
         return this.selected;
     }
 
-    // ============================================================
     // 内部
-    // ============================================================
 
     /**
      * 把 `selected` / `dotOn` / `frames` 三个状态**一次性落到节点上**。
      *
-     * ⚠️ 三条都是**绝对赋值**（不累积）：槽位复用 / 反复切页签时不会留下上一次的残影。
+     * 三条都是**绝对赋值**（不累积）：槽位复用 / 反复切页签时不会留下上一次的残影。
      */
     private apply(): void {
         const frame = this.selected ? this.frames.selected : this.frames.normal;

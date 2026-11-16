@@ -294,5 +294,3 @@ export function createClientInfo(version: string, channel: string): ClientInfoPa
         appId: '',
     };
 }
-
-

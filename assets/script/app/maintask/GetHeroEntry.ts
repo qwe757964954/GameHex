@@ -12,46 +12,8 @@ import { GameNet } from '../net/GameNet';
 const { ccclass, property } = _decorator;
 
 /**
- * 主界面「10级领取」HUD —— 老端 FGUI `主界面_战斗/组件/组件_主界面_领取武将.xml`（120×120），
- * 装配代码在 `GObjChapterSelect.onMainTaskChange()` 里（挂在「组件_战斗_章节选择」上）。
- *
- * 内容 = 奖励物品框 + 进度文案 `(7/10)` + 可领取红点。
- *
- * ## 数据
- *
- * `taskMain` 表里 `targetType = 99` 那**唯一**一行（`resId 500099`，`param.count = 10`，
- * 奖励 `18014`），进度与领取状态来自服务端缓存 `CmdTask`，领奖发
- * `CmdTakeMainTaskRewardReqMsg`。判定与解析全在 `MainTaskTable`（纯函数、可单测）。
- *
- * ## 点击（老端口径，两路）
- *
- * ```js
- * com_hero.SetClaimable(cb)   // 可领时：点物品框 = 领奖，而不是弹详情
- * com_task_hero.setClick(() => {
- *     if (heroTaskVo.CanBeReward()) { CtrlMainTask.RequestReward(resId) }
- *     // else 分支是空的（注释掉的那段才是"打开物品信息"）
- * })
- * ```
- *
- * ⇒ 可领（`FINISH`）点 → 领奖；否则 `com_goods` 的默认 `onClickItem()` 生效 → 弹该物品详情。
- *
- * ## ⚠️ 显隐归属（别加 `onEnable` 自动刷新）
- *
- * 本组件**自己**写 `node.active`（`applySnapshot` 里无条件写，规则 82/86）。
- * 若在 `onEnable` 里再调 `refresh()`，会与「`applySnapshot` 把 `node.active` 置 false」
- * 形成互相触发，而且**隐藏之后就再也没人把它点亮**（`applySnapshot` 在 inactive 时不执行）。
- *
- * 刷新时机与 `ChatEntryButton` / `HangEntryButton` / `OSRankEntryButton` 同一口径：
- * 宿主 `ArenaRoot`（竞技页）由 `MainTabHost.showPage()` **整页实例化 / 销毁**
- * （`MainTabHost.ts:112`）⇒ 每次切回竞技 tab，`onLoad` 都会重跑一次 `refresh()`，
- * **不需要**再让 `MainPage` 额外调 —— 加宿主调用是多余的第二条刷新链。
- * 唯一残留窗口：首次进主界面时 `CmdTask` 还没到（那时 HUD 会隐藏，切一次 tab 即恢复）。
- *
- * ## prefab 上的两条硬约束
- *
- * · 本节点 `_active` **必须烘 `true`**（规则 86）：`onLoad` 只在激活时跑，
- *   而 `refresh()` 就在 `onLoad` 里 —— 烘 `false` = 永不刷新的死锁，且一条错都不报。
- * · 物品框内的 `Frame` / `Icon` / `Num` 按 100×100 原稿烘，缩放交给宿主节点 `scale`（见 `GoodsBox`）。
+ * 主界面「10级领取」HUD。节点烘 true，显隐由 applySnapshot 绝对赋值。
+ * 图标先加载完再铺，避免异步回来时节点已销毁。
  */
 @ccclass('GetHeroEntry')
 export class GetHeroEntry extends Component {
@@ -99,7 +61,7 @@ export class GetHeroEntry extends Component {
         const snapshot = await this.repo.load();
         if (!this.isAlive() || revision !== this.revision) return;
 
-        // 图先 **await 完**再铺（规则 60/73）：`applySnapshot` 是同步的，
+        // 图先 **await 完**再铺：`applySnapshot` 是同步的，
         // 在里面现加载会先闪一帧上一份的图；漏项更是**静默留白**（不报错）。
         const [qualityFrame, iconFrame] = await Promise.all([
             loadQualityFrameArt(qualityFrameSuffixOf(snapshot.rewardQuality)),
@@ -116,7 +78,7 @@ export class GetHeroEntry extends Component {
     /**
      * 把快照铺到 HUD 上。
      *
-     * ⚠️ 每一处都**无条件写**（规则 82）：本节点 `_active` 烘的是 `true`（规则 86 要求），
+     * 每一处都**无条件写**：本节点 `_active` 烘的是 `true`，
      * 「只在翻转时写」会在首次「新值 === 缓存初值」时短路 ⇒ 该藏的时候藏不掉。
      */
     applySnapshot(snapshot: IHeroTaskSnapshot): void {

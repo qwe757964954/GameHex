@@ -10,7 +10,6 @@ import { MonthCardGiftPage } from '../monthcard/MonthCardGiftPage';
 import { HJ_COST_ICON_PATH, hjSharedPath } from './HangArt';
 import {
     HJ_DEFAULT_GEAR_INDEX,
-    HJ_MAX_IDLE_MS,
     contentCenterOffsetY,
     formatHms,
     gearLabel,
@@ -46,13 +45,17 @@ import { HangSweepButton } from './HangSweepButton';
 
 const { ccclass, property } = _decorator;
 
-/** 倒计时刷新间隔（秒）。 */
+/**
+ * 征收主控，挂在 Hang.prefab 根节点。
+ * onOpen 走 reload：读表和缓存、预加载图标、渲染静态内容、刷时间和按钮；之后每秒只刷进度和时间。
+ * 三个静默降级点：sweepTimes 读不到按 0、月卡状态读不到按未持卡、预加载漏图只留白不报错。
+ */
 const TICK_SECONDS = 1;
 
 /**
  * 广告**播放**能力是否可用。
  *
- * ⚠️ 老端 `ModelRole.RequestWatchAdvert` 是两步：先 `CtrlPay.PayforAdVideo(type)` 真的放广告，
+ * 老端 `ModelRole.RequestWatchAdvert` 是两步：先 `CtrlPay.PayforAdVideo(type)` 真的放广告，
  * 拿到凭据再发 `CmdRoleWatchAdvertReqMsg`。**Demo3.8 里 `CtrlPay` 与任何广告 SDK 都没迁** ——
  * 直接发请求等于玩家不看完也能白拿一次扫荡次数（可刷，且服务端未必校验）。
  *
@@ -77,29 +80,29 @@ const SWEEP_DEBOUNCE_MS = 500;
  *
  * ```
  * onOpen → reload()
- *            ├─ hangRepository.load()            读表 + 读缓存（不发请求）
- *            ├─ _preloadFrames()                 预加载「界面会 _setFrame() 的每一处」
- *            ├─ _renderStatic()                  收益条 / 奖励网格 / 月卡条（跟心跳无关的一次性内容）
- *            └─ _refreshTime() + _refreshButtons()
- *         之后每秒 _tick() 只刷进度条 + 时间（到 MAX 停表，与老端 refreshTime 一致）
+ * ├─ hangRepository.load()            读表 + 读缓存（不发请求）
+ * ├─ _preloadFrames()                 预加载「界面会 _setFrame() 的每一处」
+ * ├─ _renderStatic()                  收益条 / 奖励网格 / 月卡条（跟心跳无关的一次性内容）
+ * └─ _refreshTime() + _refreshButtons()
+ * 之后每秒 _tick() 只刷进度条 + 时间（到 MAX 停表，与老端 refreshTime 一致）
  * ```
  *
- * ## ⚠️ 三个「静默降级」点（都会在单测 / 探针里钉住）
+ * ##  三个「静默降级」点（都会在单测 / 探针里钉住）
  *
  * ① **`sweepTimes` 读不到就恒 0** ⇒ 免费次数永远「没用过」⇒ 广告分支本轮走不到
- *    （`CmdRole.sweepTimes` 字段存在、离线时不给值）。
+ * （`CmdRole.sweepTimes` 字段存在、离线时不给值）。
  * ② **玩家持卡状态读不到**（`protoCache.json` 里没有月卡表，`readMonthCard` 的 `owned`
- *    写死 `false`）⇒ `hasUnlimited` 恒 `false` ⇒ 月卡条恒显示。它**只影响月卡条与
- *    免费次数文案**；2026-11-11 起**不再限制倍率切换**（协议已带 `times`）。
+ * 写死 `false`）⇒ `hasUnlimited` 恒 `false` ⇒ 月卡条恒显示。它**只影响月卡条与
+ * 免费次数文案**；当前不再限制倍率切换（协议已带 `times`）。
  * ③ **预加载集合必须覆盖「界面会 `_setFrame()` 的每一处」**：收益条图标 ×2、快速征收的
- *    体力图标、6 个奖励格的图标 + 品质框。漏了不报错，只是那一格永远留白。
+ * 体力图标、6 个奖励格的图标 + 品质框。漏了不报错，只是那一格永远留白。
  */
 @ccclass('HangPage')
 export class HangPage extends PopupBase {
     /**
      * 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。
      *
-     * ⚠️ 目录名**必须**与磁盘一致（`assets/resources/ui/Hang/`，H 大写）：
+     * 目录名**必须**与磁盘一致（`assets/resources/ui/Hang/`，H 大写）：
      * Android / iOS 的热更新 zip 内路径**大小写敏感**，写成 `ui/hang/...`
      * 在编辑器里照样能跑（Windows 不敏感），真机上才会 `resources.load` 失败变空弹窗。
      */
@@ -150,7 +153,7 @@ export class HangPage extends PopupBase {
     @property({ type: Label, tooltip: '月卡价格 `￥30`（FGUI `月卡_按钮/title`）' })
     monthCardPriceLabel: Label = null;
 
-    // ---------------- 运行态 ----------------
+    // 运行态
 
     /** 当前快照（`load()` 的产物）。 */
     private _snapshot: IHangSnapshot | null = null;
@@ -191,23 +194,21 @@ export class HangPage extends PopupBase {
     /** 上一次铺的 resId 串（Render 每秒可能来一次，列表没变就不重铺）。 */
     private _territoryRewardKey = '';
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
-        // ⚠️ 监听一律挂在**节点**上（`cc.Button` 的 click 就是 node.emit 出来的，
-        //    所以监听节点与监听组件等价）；弹窗预制体里这几个按钮存的都是节点。
+        // 监听一律挂在**节点**上（`cc.Button` 的 click 就是 node.emit 出来的，
+        // 所以监听节点与监听组件等价）；弹窗预制体里这几个按钮存的都是节点。
         this.closeButton?.on(Button.EventType.CLICK, this._onTapClose, this);
         this.claimButton?.on(Button.EventType.CLICK, this._onTapClaim, this);
-        // 🔴 月卡入口**不能**用 `Button.EventType.CLICK`：它在 FGUI 原稿里是
-        //    `<loader id="n77_" name="taskBtn" ...>`（**不是按钮**），迁过来只有 `cc.Sprite`、
-        //    **没有 `cc.Button`** ⇒ `Button.EventType.CLICK` 永远不会被 emit，点了毫无反应、
-        //    且不报任何错（本模块踩过一次：探针 `真点月卡入口` 一直是 `mcFound:false`）。
-        //    老端也是手动开的触摸：`taskBtn.touchable = true; taskBtn.setClick(this.onClickMonthCard, this);`
-        //    ⇒ 这里改成节点级触摸事件（会走引擎的命中检测：按下在外、松手在外都不会触发）。
-        //    ⚠️ 别想着「顺手加个 `cc.Button`」—— 那要改 prefab，而 FGUI 的 loader 本来就没有
-        //    按钮的缩放反馈，加了反而多一个老端没有的表现。
+        // 月卡入口**不能**用 `Button.EventType.CLICK`：它在 FGUI 原稿里是
+        // `<loader id="n77_" name="taskBtn" ...>`（**不是按钮**），迁过来只有 `cc.Sprite`、
+        // **没有 `cc.Button`** ⇒ `Button.EventType.CLICK` 永远不会被 emit，点了毫无反应、
+        // 且不报任何错（本模块踩过一次：探针 `真点月卡入口` 一直是 `mcFound:false`）。
+        // 老端也是手动开的触摸：`taskBtn.touchable = true; taskBtn.setClick(this.onClickMonthCard, this);`
+        // ⇒ 这里改成节点级触摸事件（会走引擎的命中检测：按下在外、松手在外都不会触发）。
+        // 别想着「顺手加个 `cc.Button`」—— 那要改 prefab，而 FGUI 的 loader 本来就没有
+        // 按钮的缩放反馈，加了反而多一个老端没有的表现。
         this.monthCardEntry?.on(Node.EventType.TOUCH_END, this._onTapMonthCard, this);
         this.monthCardBuy?.on(Button.EventType.CLICK, this._onTapMonthCard, this);
         this.sweepButton?.bindTap(() => { this._onTapSweep(); });
@@ -219,11 +220,11 @@ export class HangPage extends PopupBase {
     }
 
     protected async onOpen(): Promise<void> {
-        // 🔴 `CmdRole` 没有查询协议、扫荡回包（`CmdCityChapterSweepRspMsg`）也不带次数
-        //    ⇒ `sweepTimes` 只在服务端推 `cmdCaches` 时变。订阅它，AdCountText / 免费角标
-        //    才能实时跟上；只靠「打开弹窗读一次」会在扫荡后一直显示旧值（看着就像字段没接）。
-        //    订阅放 `onOpen` 而不是 `onInit`：弹窗可能被复用（`cache=true`），
-        //    `onInit` 只跑一次，`onClose` 退订后再次打开就漏订阅了。
+        // `CmdRole` 没有查询协议、扫荡回包（`CmdCityChapterSweepRspMsg`）也不带次数
+        // ⇒ `sweepTimes` 只在服务端推 `cmdCaches` 时变。订阅它，AdCountText / 免费角标
+        // 才能实时跟上；只靠「打开弹窗读一次」会在扫荡后一直显示旧值（看着就像字段没接）。
+        // 订阅放 `onOpen` 而不是 `onInit`：弹窗可能被复用（`cache=true`），
+        // `onInit` 只跑一次，`onClose` 退订后再次打开就漏订阅了。
         this._unsubscribeRole?.();
         this._unsubscribeRole = subscribeRoleChange(this, () => { this._refreshRoleState(); });
         // 借 Ready 让领地 Controller 重发一帧渲染：产出奖励格的数据源（`levelInfo.idleReward`）
@@ -246,9 +247,7 @@ export class HangPage extends PopupBase {
     // （与礼包 / 邮件 / 活动 / 七日 同一个口径）。曾经在这里返回 false，属于与老端不符，
     // 已删；要改成不关请同时改 prefab 的属性，别只在代码里拦（两处打架会让人查半天）。
 
-    // ============================================================
     // 刷新
-    // ============================================================
 
     /** 重读一次数据并把整屏铺一遍。 */
     async reload(): Promise<void> {
@@ -257,25 +256,25 @@ export class HangPage extends PopupBase {
         // 老端 refreshLastTime()：`lastIdleRewardTime || now` —— 起点为 0 时退到「现在」，
         // 否则进度条会从 1970 年算起（`elapsed` 溢出成 8h 满格）。
         //
-        // 🔴 占城接入后（2026-11-09）：**服务端 `ChapterInfo.idleTime` 优先**。
+        // 占城接入后：**服务端 `ChapterInfo.idleTime` 优先**。
         // 它是账号级、登录后拉一次 + Bro 覆盖的唯一权威起点；`CmdRole.lastIdleRewardTime`
         // 是旧主线挂机那套，与领地征收不是一条账。
         const start = snapshot.role ? snapshot.role.lastIdleRewardTimeMs : 0;
         this._startMs = this._serverIdleStartMs() ?? (start > 0 ? start : Date.now());
-        // ⚠️ 2026-11-11 起**不再**「无月卡就把倍率复位到 1 倍」（老端 `refreshGearBtn` 的做法）。
-        //    协议新增 `times` 后倍率对所有玩家开放（山猫口径）；每次 reload 都复位会把档位
-        //    抹回 x1 —— 表现就是「点了 GearSwitch 角标闪一下又变回来、请求永远 1 倍」。
-        //    越界兜底在 `sweepTimesOf`，这里刻意不动 `_gearIndex`。
+        // 当前**不再**「无月卡就把倍率复位到 1 倍」（老端 `refreshGearBtn` 的做法）。
+        // 协议新增 `times` 后倍率对所有玩家开放（山猫口径）；每次 reload 都复位会把档位
+        // 抹回 x1 —— 表现就是「点了 GearSwitch 角标闪一下又变回来、请求永远 1 倍」。
+        // 越界兜底在 `sweepTimesOf`，这里刻意不动 `_gearIndex`。
 
         await this._preloadFrames(snapshot);
         this._renderGains(snapshot);
         this._renderRewards(snapshot);
         this._renderMonthCard(snapshot);
-        // ⚠️ 这里**不要**预置 `_atMax = false`。`_refreshTime()` 是无条件写节点的，
-        //    预置只会让「面板刚打开时角标是亮的」这个现象看起来像被修过（其实靠的是下一句）。
+        // 这里**不要**预置 `_atMax = false`。`_refreshTime()` 是无条件写节点的，
+        // 预置只会让「面板刚打开时角标是亮的」这个现象看起来像被修过（其实靠的是下一句）。
         this._refreshTime();
         this._refreshButtons();
-        // ⚠️ 必须排在 `_renderMonthCard()`（决定月卡条显隐）之后 —— 居中量随月卡条显隐变。
+        // 必须排在 `_renderMonthCard()`（决定月卡条显隐）之后 —— 居中量随月卡条显隐变。
         this._fitContentCenter();
         this._restartTimer();
     }
@@ -310,11 +309,11 @@ export class HangPage extends PopupBase {
     /**
      * 领地 Controller 的命令：收到 `rewards`（领奖 / 扫荡的实际发放）就重读服务端状态。
      *
-     * 🔴 必须重读，不能本地 `_startMs = Date.now()`：服务端 `idleTime` 是**秒级时间戳**，
+     * 必须重读，不能本地 `_startMs = Date.now()`：服务端 `idleTime` 是**秒级时间戳**，
      * 且按整小时结余（领完还会留零头），本地「从现在重新计时」会与下一次结算错位。
      * 只有快照真的变了才动 —— 扫荡不一定重置挂机起点。
      *
-     * 🔴 同一处还要重读 `CmdRole`：**扫荡回包 `CmdCityChapterSweepRspMsg` 只有 `succ` +
+     * 同一处还要重读 `CmdRole`：**扫荡回包 `CmdCityChapterSweepRspMsg` 只有 `succ` +
      * `tlCmdGoods`，根本没有次数**。`sweepTimes` 靠服务端更新 `CmdRole` 后推 `cmdCaches`，
      * 客户端不重读就只能一直显示打开弹窗那一刻的旧值（症状 =「次数接了但看着没接」）。
      */
@@ -332,7 +331,7 @@ export class HangPage extends PopupBase {
     /**
      * 重读 `CmdRole`（`sweepTimes` / `lastIdleRewardTime`）并刷新按钮区。
      *
-     * ⚠️ 读不到（离线 / 缓存没推）就**保留旧值直接返回** —— 不能把 `sweepTimes` 当成 0 写回去，
+     * 读不到（离线 / 缓存没推）就**保留旧值直接返回** —— 不能把 `sweepTimes` 当成 0 写回去，
      * 那会让「今日剩余」瞬移回满、免费角标重新亮起来，比不刷新更糟。
      */
     private _refreshRoleState(): void {
@@ -350,7 +349,7 @@ export class HangPage extends PopupBase {
     /**
      * 领地渲染：用「已通关的最高关卡格」那一关的 `levelInfo.idleReward` 铺产出奖励区。
      *
-     * 🔴 口径与扫荡目标**同源**（`findHighestPassedTerritoryLevel`）：
+     * 口径与扫荡目标**同源**（`findHighestPassedTerritoryLevel`）：
      * 展示的每小时产出就是征收 / 扫荡按的那一关，不用「下一关」，也不用老主线表
      * `guankaReward.idleRewards`（那是主线挂机，和占城不是一条账）。
      *
@@ -389,7 +388,7 @@ export class HangPage extends PopupBase {
     /**
      * 进度条 / 时间文案 / `MAX` 角标。
      *
-     * 🔴 `maxBadge.active` **必须无条件写**（哪怕值没变），不能写成「只在翻转时写」——
+     * `maxBadge.active` **必须无条件写**（哪怕值没变），不能写成「只在翻转时写」——
      * 这是本模块踩过的坑：prefab 里 `MaxBadge._active` 烘的是 **`true`**
      * （FGUI 原稿 `<image name="maxImg" …>` 没有 `visible="false"` ⇒ 默认可见），
      * 而首次 `_refreshTime()` 时 `atMax === _atMax === false` ⇒ 「只在翻转时写」会**短路不写**，
@@ -438,7 +437,7 @@ export class HangPage extends PopupBase {
     /**
      * 奖励网格：`mergedRewards` 有几条铺几格，多余的格子**隐藏**。
      *
-     * ⚠️ 条数口径（容易记反，两侧都别看错）：老端 `_mergeTaxRewards` 是
+     * 条数口径（容易记反，两侧都别看错）：老端 `_mergeTaxRewards` 是
      * `baseRewards.map(...)` **原样拷贝** `idleRewards`，只把「互动建筑加成」按 resId 相加
      * ⇒ **列表条数 = `idleRewards.length`（表里 1432 行全是 6）**，其中第 3/4 条是同一个
      * `resId`（`10012`）。**去重后的唯一 resId 才是 5 个**。
@@ -477,14 +476,14 @@ export class HangPage extends PopupBase {
      * 固定 720×1280（`PopupManager` 每次 open 把它摆到屏幕中心）⇒ 只要把内容块
      * **在根节点里**摆正中间，效果就等价。预览实测偏下 128，这里补回来。
      *
-     * ⚠️ 三个坑：
-     *   ① 必须排除运行时补的 `__BlankClose`（`PopupBase.ensureBlankCatcher`）——
-     *      它是**全屏**的，算进包围盒会把整块撑成屏幕大小、偏移恒 0（看起来"没 bug"）；
-     *   ② 只统计 `activeInHierarchy` 的节点 —— 月卡条（FGUI `n74`）无月卡才显示，
-     *      它显隐直接改变内容块高度（1054 ↔ 903）⇒ 居中位移 128 ↔ 52.5；
-     *   ③ 用「声明矩形」（`position + contentSize + anchorPoint`）而不是
-     *      `getBoundingBoxToWorld()` —— 后者含标题横幅骑出底板的 28px，与老端差 14px
-     *      （口径写在 `contentCenterOffsetY` 的注释里）。
+     * 三个坑：
+     * ① 必须排除运行时补的 `__BlankClose`（`PopupBase.ensureBlankCatcher`）——
+     * 它是**全屏**的，算进包围盒会把整块撑成屏幕大小、偏移恒 0（看起来"没 bug"）；
+     * ② 只统计 `activeInHierarchy` 的节点 —— 月卡条（FGUI `n74`）无月卡才显示，
+     * 它显隐直接改变内容块高度（1054 ↔ 903）⇒ 居中位移 128 ↔ 52.5；
+     * ③ 用「声明矩形」（`position + contentSize + anchorPoint`）而不是
+     * `getBoundingBoxToWorld()` —— 后者含标题横幅骑出底板的 28px，与老端差 14px
+     * （口径写在 `contentCenterOffsetY` 的注释里）。
      *
      * 这里改的是**弹窗根节点自己的位置**（`PopupManager` 只在 open 时设过一次
      * `setPosition(0,0,0)`，之后不会再动它），不是各子节点的坐标 ——
@@ -507,9 +506,7 @@ export class HangPage extends PopupBase {
         this.node.setPosition(0, -contentCenterOffsetY(boxes), 0);
     }
 
-    // ============================================================
     // 点击
-    // ============================================================
 
     private _onTapClose(): void {
         void this.close();
@@ -518,7 +515,7 @@ export class HangPage extends PopupBase {
     /**
      * 领取（`ClaimBtn`）：发意图给领地 Controller。
      *
-     * 🔴 2026-11-09 起征收走占城协议 `CmdCityChapterIdleRewardReqMsg`，
+     * 征收走占城协议 `CmdCityChapterIdleRewardReqMsg`，
      * 奖励由服务端 `tlCmdGoods` 决定、由 `MainTerritoryMap.presentRewards({ popup: true })`
      * 弹窗展示。本地不再判「满 1 小时」—— 结算口径在服务端，客户端拦一道只会
      * 把合法领取挡在门外（且服务端按整小时结算，前端判据必然对不齐）。
@@ -531,7 +528,7 @@ export class HangPage extends PopupBase {
     /**
      * 倍率切换（`GearSwitch`）：`1 → 5 → 10 → 20 → 50 → 1` 循环。
      *
-     * ⚠️ 2026-11-11 口径变更：**不再拦月卡**。老端 `onClickChangeGear` 对非月卡玩家
+     * 当前口径：**不再拦月卡**。老端 `onClickChangeGear` 对非月卡玩家
      * 只弹「激活月卡后解锁功能」，但协议已加 `times` 字段、扣费在服务端，
      * 客户端再拦一道只会让「界面有角标但永远切不动」。
      */
@@ -547,7 +544,7 @@ export class HangPage extends PopupBase {
      * 老端那套「体力校验 / 免费次数 / 看广告换次数」全部下线 —— 它们是主线挂机
      * （`CmdBattleSweepReqMsg`）的规则，占城扫荡由服务端按章节格子扣，客户端只防连点。
      *
-     * 🔴 `times` 必须随意图带上：它既是「请求倍率」，也是「服务端扣多少体力」的唯一依据。
+     * `times` 必须随意图带上：它既是「请求倍率」，也是「服务端扣多少体力」的唯一依据。
      * 漏带 ⇒ 界面角标显示 x50、实际只扫 1 倍，且零报错（协议字段可缺省）。
      */
     private _onTapSweep(): void {
@@ -564,12 +561,10 @@ export class HangPage extends PopupBase {
         void MonthCardGiftPage.open({});
     }
 
-    // ============================================================
     // 图片
-    // ============================================================
 
     /**
-     * **预加载「界面会 `_setFrame()` 的每一处」**（规则 60 / 73 的合并口径）。
+     * **预加载「界面会 `_setFrame()` 的每一处」**。
      *
      * 挂机界面会动态换图的只有三类：收益条图标 ×2、快速征收的体力图标、奖励格的
      * 图标 + 品质框。**按钮固定底图不在此列**（`fd_tab_off` / `fd_btn_gold` / 弹窗底板
@@ -588,8 +583,8 @@ export class HangPage extends PopupBase {
     private _loadFrame(path: string): Promise<SpriteFrame | null> {
         if (this._frames.has(path)) return Promise.resolve(this._frames.get(path));
         return new Promise((resolve) => {
-            // ⚠️ 必须带 `/spriteFrame`（规则 57）：裸路径会报
-            //    `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。
+            // 必须带 `/spriteFrame`：裸路径会报
+            // `Bundle resources doesn't contain xxx`，且只是静默留白 + 一条 warn。
             routedLoad(path, SpriteFrame, (error, frame) => {
                 if (error || !frame) {
                     console.warn('[Hang] 加载图失败', path, error);
@@ -617,6 +612,3 @@ export class HangPage extends PopupBase {
     }
 
 }
-
-/** `HJ_MAX_IDLE_MS` 的展示口径（给探针 / 单测读，避免两边各写一遍 8h）。 */
-export const HJ_MAX_IDLE_TEXT = formatHms(HJ_MAX_IDLE_MS);

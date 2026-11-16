@@ -30,7 +30,6 @@ import {
     ACTIVITY_CHEST_NODE_HEIGHT,
     ACTIVITY_CHEST_NODE_WIDTH,
     ACTIVITY_PREVIEW_MAX_CELLS,
-    ACTIVITY_ROW_REWARD_SLOTS,
     barFillWidth,
     chestOffsetX,
 } from './LayerActivityLayout';
@@ -52,45 +51,6 @@ import type { IActivityProgressRow, IActivityReward, IActivityServerState, IActi
 import { ACTIVITY_TEXTS } from './LayerActivityTexts';
 
 const { ccclass, property } = _decorator;
-
-/** 提示文字颜色（与七日狂欢 / 首充同一口径：正常棕 / 异常红）。 */
-const ACTIVITY_HINT_IDLE = new Color(176, 168, 150, 255);
-const ACTIVITY_HINT_ERROR = new Color(226, 88, 74, 255);
-
-/**
- * 设计分辨率高度 —— `applyScreenLayout()` 的基线。
- *
- * ⚠️ **别用 `view.getVisibleSize().height`**：长屏上它是 1485（设计分辨率只有 1280），
- *    拿它当基线算 `extra` 会让「多出来的高度」每次都再叠一遍（反复开关弹窗越走越偏）。
- *    这里要的是「画布按设计分辨率算有多高」这个常量。
- */
-const ACTIVITY_DESIGN_HEIGHT = 1280;
-
-/**
- * 「贴顶节点」名单 —— 长屏适配时整体 `+extra/2`（保持与面板顶的相对位置）。
- *
- * ## ⚠️ 为什么名单在代码里而不是 prefab 的 Inspector 上
- *
- * `topAlignedNodes` 是 `@property([Node])`，而 MCP 的 `component_set_component_property`
- * **写不了 `nodeArray`**：旧版扩展在 `dag.dump` 里漏传 `type`，必抛
- * `Cannot read properties of undefined (reading 'hasOwnProperty')`
- * （`extensions/cocos-mcp-server/dist/tools/component-tools.js` 的 `nodeArray` 分支），
- * 而铁律禁止手写 prefab JSON ⇒ Inspector 上配不了。`SevenDayPage.contentNodes` 是同一个处境，
- * 同样落在代码里。**扩展修好之后可以整张挪回 Inspector**（那时删掉这张表即可）。
- *
- * ## ⚠️ 名字与 prefab 是硬绑定
- *
- * 改名会让长屏适配**静默偏掉**（只是位置差一点，不报错）⇒
- * `tests/activity.test.ts` 有一条用例逐个断言这些名字在 prefab 根下存在。
- */
-const ACTIVITY_HEADER_NODES: readonly string[] = [
-    'TitleArt',      // 标题横幅
-    'TitleLabel',    // 「每日任务」
-    'TopBg',         // 横幅下的顶部装饰
-    'CloseBtn',      // 右上角关闭
-    'ProgressStrip', // 周活跃整条（徽章 / 积分 / 条 / 宝箱）
-    'Hint',          // 提示行
-];
 
 /**
  * 「活动 → 每日任务」弹窗（`assets/resources/ui/Activity/Activity.prefab`）。
@@ -164,17 +124,13 @@ export class LayerActivityPage extends PopupBase {
     @property({ type: Label, tooltip: 'Hint：提示行（离线 / 空配置 / 操作失败时显示）' })
     hintLabel: Label = null;
 
-    @property({ type: Node, tooltip: 'PanelBg：长屏时拉伸的九宫主底板（位置不动、只长高：上下各吃一半额外高度）' })
-    panel: Node = null;
-
-    @property({ type: [Node], tooltip: '贴顶节点：长屏额外高度不改变它们距屏幕顶部的位置（留空 ⇒ 用代码里的 ACTIVITY_HEADER_NODES，见其注释）' })
-    topAlignedNodes: Node[] = [];
-
-    @property({ type: [Node], tooltip: '贴底节点：长屏上保持距屏幕底部不变（每日任务当前没有这种节点，留空即可）' })
-    bottomAlignedNodes: Node[] = [];
+    @property({ type: Color, tooltip: '提示文字异常态颜色；正常态取 prefab Label 颜色' })
+    hintErrorColor: Color = new Color(226, 88, 74, 255);
 
     /** 数据端口；测试可替换。 */
     private repo: IActivityRepository = activityRepository;
+    /** 提示文字正常态颜色：从 prefab Label 上取。 */
+    private readonly hintIdleColor = new Color();
 
     private closeAction: Button | null = null;
     private snapshot: IActivitySnapshot | null = null;
@@ -203,18 +159,6 @@ export class LayerActivityPage extends PopupBase {
     private iconFrames: Map<number, SpriteFrame> | null = null;
 
     /**
-     * 长屏自适应的**基线**（`节点 → prefab 里的原始 y`）。
-     *
-     * ⚠️ 必须在 `onInit` 里、`applyScreenLayout()` **之前**抓一次：基线一旦被污染
-     * （比如某次在 onOpen 里抓），后续每次开关弹窗都会在**上一次挪过**的位置上再加一次偏移。
-     */
-    private readonly layoutBaseY = new Map<Node, number>();
-    private panelBaseWidth = 0;
-    private panelBaseHeight = 0;
-    private rowListBaseWidth = 0;
-    private rowListBaseHeight = 0;
-
-    /**
      * 「这一趟」渲染要用的上下文。
      *
      * ⚠️ `renderItemFn` 是长驻回调，必须从这里**现取** snapshot / 预加载图，
@@ -227,6 +171,7 @@ export class LayerActivityPage extends PopupBase {
     } | null = null;
 
     protected onInit(): void {
+        this.hintIdleColor.set(this.hintLabel.color);
         this.titleLabel.string = ACTIVITY_TEXTS.title;
         this.closeAction = this.closeButton.getComponent(Button);
         this.closeAction?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
@@ -234,16 +179,11 @@ export class LayerActivityPage extends PopupBase {
         if (this.boxTemplate) this.boxTemplate.active = false;
         // 「点空白关闭」的内容区（见 bindBlankContent 的说明），必须早于任何布局改动
         this.bindBlankContent();
-        // 长屏基线：此刻 prefab 还没被 applyScreenLayout 动过，抓到的就是设计值
-        this.captureLayoutBase();
     }
 
     protected async onOpen(): Promise<void> {
         this.busy = false;
         this.setHint('');
-        // 长屏适配要放在铺界面之前：宝箱是按「条宽比例」定位的，而条在面板里；
-        // 先把面板/列表拉到位，后面算出来的世界坐标才对。
-        this.applyScreenLayout();
         // 领奖后服务端只把新状态推进 `CmdActivity`，不挂在响应体上 ⇒ 必须订阅缓存变更。
         this.unsubscribe = this.repo.subscribe(this, () => this.onActivityCacheChanged());
         await this.reload();
@@ -346,7 +286,7 @@ export class LayerActivityPage extends PopupBase {
             return;
         }
         node.active = true;
-        view.render(this.buildRowView(context.snapshot, row, context.qualityFrames, context.iconFrames));
+        view.render(this.buildRowView(context.snapshot, row, context.qualityFrames, context.iconFrames, view.slotCount));
     }
 
     /** 把一行数据翻译成 `ActivityTaskRow.render()` 要的视图模型。 */
@@ -355,20 +295,21 @@ export class LayerActivityPage extends PopupBase {
         row: IActivityTaskRow,
         qualityFrames: Map<string, SpriteFrame>,
         iconFrames: Map<number, SpriteFrame>,
+        maxSlots: number,
     ): IActivityTaskRowView {
         const phase = taskPhaseOf(row, snapshot.state);
         const texts = ACTIVITY_TEXTS;
 
-        if (row.rewards.length > ACTIVITY_ROW_REWARD_SLOTS) {
+        if (row.rewards.length > maxSlots) {
             // 不静默截断：超出 prefab 槽位数的奖励会被丢掉，必须留痕（改 prefab 加槽位才行）
             console.warn(
                 `[Activity] 任务 ${row.resId} 有 ${row.rewards.length} 条奖励，`
-                + `超过行模板的 ${ACTIVITY_ROW_REWARD_SLOTS} 个槽位，多余的不会显示`,
+                + `超过行模板的 ${maxSlots} 个槽位，多余的不会显示`,
             );
         }
 
         const slots: IActivityRewardSlotView[] = [];
-        for (let index = 0; index < Math.min(row.rewards.length, ACTIVITY_ROW_REWARD_SLOTS); index++) {
+        for (let index = 0; index < Math.min(row.rewards.length, maxSlots); index++) {
             const reward = row.rewards[index];
             slots.push({
                 qualityFrame: this.qualityFrameOf(reward.resId, snapshot, qualityFrames),
@@ -744,7 +685,7 @@ export class LayerActivityPage extends PopupBase {
 
     private setHint(text: string, error: boolean = false): void {
         this.hintLabel.string = text;
-        this.hintLabel.color = error ? ACTIVITY_HINT_ERROR : ACTIVITY_HINT_IDLE;
+        this.hintLabel.color = error ? this.hintErrorColor : this.hintIdleColor;
     }
 
     // ============================================================
@@ -779,98 +720,6 @@ export class LayerActivityPage extends PopupBase {
             if (node && node.isValid) interactive.push(node);
         }
         this.contentNodes = interactive;
-    }
-
-    /**
-     * 长屏（`getVisibleSize().height > 1280`）适配。
-     *
-     * 设计分辨率是 720×1280，长屏多出来的 `extra` 这样分：
-     *   · `PanelBg`（九宫底板）**位置不动、只长高 `extra`** —— 上下各长 `extra/2`，
-     *     于是「面板顶离屏幕顶」「面板底离屏幕底」两段留白**回到 1280 机型上的比例**，
-     *     不会出现「长屏上下各多露一大块游戏场景」；
-     *   · 贴顶节点（标题横幅 / 关闭按钮 / 顶部装饰 / 周活跃整条 / 提示行）整体 `+extra/2`
-     *     —— 它们与面板顶的相对位置因此**保持不变**；
-     *   · 任务列表同时 `+extra/2` 且**高度 +extra** —— 顶边跟着标题走、底边往下多吃一段。
-     *
-     * ⚠️ 三处偏移都必须从 `layoutBaseY` / `*Base*`（`onInit` 抓的基线）算，
-     *    **不能读「当前位置」**—— 否则反复开关弹窗会一次次累加偏移。
-     */
-    private applyScreenLayout(): void {
-        const rootTransform = this.node.getComponent(UITransform);
-        const parentTransform = this.node.parent?.getComponent(UITransform);
-        const visibleHeight = Math.max(
-            ACTIVITY_DESIGN_HEIGHT,
-            parentTransform?.contentSize.height ?? ACTIVITY_DESIGN_HEIGHT,
-        );
-        const extra = visibleHeight - ACTIVITY_DESIGN_HEIGHT;
-        rootTransform?.setContentSize(rootTransform.contentSize.width, visibleHeight);
-
-        for (const node of this.headerNodes()) {
-            const baseY = this.layoutBaseY.get(node);
-            if (baseY !== undefined) node.setPosition(node.position.x, baseY + extra / 2, node.position.z);
-        }
-        for (const node of this.bottomNodes()) {
-            const baseY = this.layoutBaseY.get(node);
-            if (baseY !== undefined) node.setPosition(node.position.x, baseY - extra / 2, node.position.z);
-        }
-
-        const panelTransform = this.panel?.getComponent(UITransform);
-        if (panelTransform && this.panelBaseHeight > 0) {
-            panelTransform.setContentSize(this.panelBaseWidth, this.panelBaseHeight + extra);
-        }
-
-        const listNode = this.rowList?.node;
-        const listTransform = listNode?.getComponent(UITransform);
-        const listBaseY = listNode ? this.layoutBaseY.get(listNode) : undefined;
-        if (listNode && listTransform && listBaseY !== undefined && this.rowListBaseHeight > 0) {
-            listNode.setPosition(listNode.position.x, listBaseY + extra / 2, listNode.position.z);
-            listTransform.setContentSize(this.rowListBaseWidth, this.rowListBaseHeight + extra);
-        }
-    }
-
-    /** 抓一次 prefab 的原始布局（`onInit` 里调，早于任何 `applyScreenLayout`）。 */
-    private captureLayoutBase(): void {
-        for (const node of [...this.headerNodes(), ...this.bottomNodes()]) {
-            if (node) this.layoutBaseY.set(node, node.position.y);
-        }
-        const listNode = this.rowList?.node;
-        if (listNode) {
-            this.layoutBaseY.set(listNode, listNode.position.y);
-            const transform = listNode.getComponent(UITransform);
-            if (transform) {
-                this.rowListBaseWidth = transform.contentSize.width;
-                this.rowListBaseHeight = transform.contentSize.height;
-            }
-        }
-        const panelTransform = this.panel?.getComponent(UITransform);
-        if (panelTransform) {
-            this.panelBaseWidth = panelTransform.contentSize.width;
-            this.panelBaseHeight = panelTransform.contentSize.height;
-        }
-    }
-
-    /**
-     * 贴顶节点。
-     *
-     * prefab 上配了（`topAlignedNodes` 非空）就以它为准；否则按 `ACTIVITY_HEADER_NODES`
-     * 的名字从根下取 —— 为什么要有这个兜底见那张表的注释（MCP 写不了 `nodeArray`）。
-     * `captureLayoutBase` 与 `applyScreenLayout` **必须共用这一个入口**，
-     * 否则「抓基线」和「加偏移」会作用在两套不同的节点上。
-     */
-    private headerNodes(): Node[] {
-        const declared = (this.topAlignedNodes ?? []).filter((node) => !!node && node.isValid);
-        if (declared.length > 0) return declared;
-        const fallback: Node[] = [];
-        for (const name of ACTIVITY_HEADER_NODES) {
-            const node = this.node.getChildByName(name);
-            if (node) fallback.push(node);
-        }
-        return fallback;
-    }
-
-    /** 贴底节点（同上；当前为空集）。 */
-    private bottomNodes(): Node[] {
-        return (this.bottomAlignedNodes ?? []).filter((node) => !!node && node.isValid);
     }
 
     // ============================================================

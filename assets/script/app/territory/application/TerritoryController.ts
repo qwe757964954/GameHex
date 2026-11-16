@@ -85,7 +85,7 @@ export class TerritoryController extends ControllerBase {
                 const site = this.model.state.map?.sites.find((site) => site.cellId === intent.cellId);
                 // 新手引导 5-1「攻打第一关」的判据：设计案要「进入关卡列表」，但主界面的关卡列表
                 // 入口还不存在；改为「点地图上的关卡格」（地图上那个 1-1 红标）⇒ 一样能进战斗。
-                // ⚠️ 只在上报**真的受理**时报（`selectSite` 返回 false 的三种情况：在途 / 未 reveal /
+                // 只在上报**真的受理**时报（`selectSite` 返回 false 的三种情况：在途 / 未 reveal /
                 // 防连点）。无条件上报会让玩家点一个"点不动的格子"也把引导推过去。
                 // 注意 5-1 的 maskType 必须同步是 hole，否则全屏点击区会把这个点击吃掉。
                 const canFlip = site?.type === TERRITORY_SITE_TYPE.fixedResource
@@ -98,7 +98,7 @@ export class TerritoryController extends ControllerBase {
             }
             case 'randomTap': {
                 // 新手引导 2-1/3-1/4-1/7-1 的判据：设计案写「进入翻开动画 / 地块进入通关态」。
-                // ⚠️ 只在**校验通过、真的开始翻**时上报（`selectRandomResource` 返回 false 的情况：
+                // 只在**校验通过、真的开始翻**时上报（`selectRandomResource` 返回 false 的情况：
                 // 在途 / 非候选格 / 银币·体力·相邻格不满足 / 已开启）。无条件上报会让
                 // "钱不够点一下"也算翻了一格，引导直接跳步。
                 // 精确到"服务端确认翻格成功"要 Model 暴露 `runCellWrite` 的完成回调，属后续项。

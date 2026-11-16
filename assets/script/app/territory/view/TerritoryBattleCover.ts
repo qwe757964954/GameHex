@@ -1,46 +1,10 @@
 /**
- * 过场用的**云盖层**：一整屏云，按 `spread` 从画面中心散开 / 收拢，
- * 并按各自的 `delay` 一朵朵淡掉；`hold` 段（等回包 / 等目标页资源）里循环播待机帧。
+ * 过场云盖层：整屏云按 spread 散开或收拢，并按各自 delay 逐朵淡出。
  *
- * 只做四件事：建一屏云 → 每帧按倍率改写位置与逐朵不透明度 → 推进待机帧 → 收工时藏起来。
- * 时间轴与数值全部在 `model/TerritoryBattleIntro`（零 cc），这里只负责写节点。
- *
- * ## 🔴 美术只取**云体**（`cloud_body_0`），绝不能用 `cloud_idle_*` 合并图
- *
- * 两张图的差别只有一个：`cloud_idle_*` 把**影子**（纯黑、alpha 21~61）和云体烤在了一起，
- * `cloud_body_*` 只有云体。地图那边两者分开用 —— 影子全部抽到 `CloudShadow` 一层、
- * **压在云体之下**，所以地图上的云是白的。
- *
- * 盖层是几百朵**密铺**：每朵自带的黑影会盖在**邻居的白色云体**上，叠两三层就整屏发灰
- * （用户 2026-11-02 晚上实机截图：整屏均值 147，而领地正常页是 231）。
- * 实测（`tools/probe_cloud_cover_grey.py` 按真点阵合成）：合并图 147 / 纯云体 **225**。
- *
- * 想让盖层也有影子，**不要**把影子塞进每朵云里 —— 那等于把地图犯过的错再犯一遍
- * （见 `TerritoryCloudView` 里「灰云带」那段）。真要做，得像地图那样单独建一个**全局影子层**，
- * 且压在**所有**云体之下。
- *
- * ## 为什么现在只有一帧
- *
- * 用户要的是「云**静止**在匹配界面下方」，而能换的 `cloud_idle_1..4` 都带着那层黑影
- * （一换就灰）。帧循环的机制留着：`setBattleCloudFrames` 塞进多帧就自动恢复呼吸。
- *
- * ## 为什么单独铺一层，不借用地图上那套云
- *
- * 地图的云（`TerritoryCloudView`）只盖**未解锁格**，而且每朵的位置、倍率、消散状态都由
- * 解锁进度驱动 —— 拿它做"整屏盖住"要临时把几百朵云的状态全改一遍，收工还得原样还回去
- * （换章 / 解锁动到一半被打断就是一堆错位）。这里按**视口**重新摆一屏，与地图互不相干：
- * 盖上去、散掉、藏起来，中途出任何问题都只影响这一层。
- *
- * ## 为什么位置逐帧写、整层不透明度只写一个数
- *
- * 一屏三四百朵。**位移**必须逐朵写（散开就是位移），这是省不掉的；**显形 / 整层淡出**
- * 挂在一个 `UIOpacity` 上（一次改一个数）。逐朵只写**自己那份额外的淡出**（`color.a`）——
- * 散场是"一朵朵先淡后淡"散的，不是整屏一起降 alpha（那样读成"画面闪一下"）。
- *
- * ## 为什么 `clear()` 只是藏起来
- *
- * 建一屏云要 `new` 三四百个节点。过场每局只播一次、但页面可能反复进出战斗 ⇒ 收工藏起来、
- * 下次直接复用，避免"每次开战都在点击那一帧建几百个节点"的抖动。
+ * 时间轴与数值在 `model/TerritoryBattleIntro`，本类只负责建层、逐帧写位置与透明度、
+ * 推进待机帧，以及收工时隐藏复用。
+ * 只使用纯云体 `cloud_body_0`，不能用带影子的合并图，否则密铺后整屏发灰。
+ * 显形与整层淡出共用一个 UIOpacity，逐朵只写自己的额外淡出。
  */
 
 import { Color, Node, Sprite, UIOpacity, UITransform } from 'cc';
@@ -75,7 +39,7 @@ export class TerritoryBattleCover {
      * 空 ⇒ 建不出盖层（`build` 返回 `false`，调用方放弃整页过场）：
      * 没有贴图的精灵画出来是透明的，"盖住地块"这件事就不存在了。
      *
-     * 当前只有 1 帧（见类注释「为什么现在只有一帧」）；多帧时按步进循环。
+     * 当前只有 1 帧（见类注释「当前只有一帧」）；多帧时按步进循环。
      */
     private frames: readonly SpriteFrame[] = [];
     /**
@@ -104,12 +68,12 @@ export class TerritoryBattleCover {
     /**
      * 这一层**自己持有引用**的那些帧（与 {@link frames} 同一批，去重）。
      *
-     * 🔴 为什么必须自己持引用：`frames` 是**页面注入**的（`setBattleCloudFrames`），
+     * `frames` 是**页面注入**的（`setBattleCloudFrames`），
      * 而注入方活在**另一个资源作用域**里 —— 领地页 / 匹配页一离开就 `ResourceScope.dispose()`，
      * `CocosAssetService` 会把这些帧 `decRef` 掉。盖层没有自己那一份引用的话，图当场被回收，
      * 而还挂在 `Canvas` 上的几百个 `Sprite` 照样每帧提交渲染 ⇒ 下一帧就崩在 `Batcher2D`：
      * `frame should not be invalid, it may have been released` → `getGFXTexture` 空指针
-     * （2026-11-03 实机：匹配成功切战场，首帧绘制完就整屏报错）。
+     * （匹配成功切战场，首帧绘制完就整屏报错）。
      *
      * 跨流程交接（`TerritoryBattleCoverOverlay`）正是这个场景：**云比页面活得久**。
      * 与 `docs/ZCGameHUD.md`「装饰图必须自己 `addRef()`」同一条口径。
@@ -201,7 +165,7 @@ export class TerritoryBattleCover {
     /**
      * 按视口尺寸铺一层云（幂等：尺寸没变就只把层显示出来）。
      *
-     * @param width  / @param height 视口尺寸（px）；非法或没有云帧 ⇒ 不铺（返回 `false`）
+     * @param width / @param height 视口尺寸（px）；非法或没有云帧 ⇒ 不铺（返回 `false`）
      * @returns 是否铺好了（`false` ⇒ 调用方应把云层当作"没有"，放弃整页过场）
      */
     build(width: number, height: number): boolean {
@@ -281,7 +245,7 @@ export class TerritoryBattleCover {
      * 开始 `in` 段（向四周散开 + 逐朵淡）。之后靠 {@link tick} 自走。
      *
      * @returns **过多久该发起跳转**（秒）= `IN_SECONDS × NAVIGATE_RATIO`。
-     *          交回给调用方是为了让"何时切场景"仍然只有一个地方决定（本类不认识流程）。
+     * 交回给调用方是为了让"何时切场景"仍然只有一个地方决定（本类不认识流程）。
      */
     startRelease(): number {
         // 幂等：重复调（页面调度 + 覆盖层各调一次）不许把散场重新归零 —— 归零就是"闪一下重散"。
@@ -417,9 +381,9 @@ export class TerritoryBattleCover {
         const node = new Node(`BattleIntroCloud_${index}`);
         node.layer = parent.layer;
         node.setParent(parent);
-        // 🔴 尺寸必须写成**显示尺寸**（260×312），贴图只有 200×240。
-        //    用 `SizeMode.RAW` 的话节点会跟着位图走 ⇒ 屏幕上只有设计尺寸的 3/4，
-        //    而模型里的"间距 < 云体尺寸"是按 260×312 算的 ⇒ 团与团之间会漏出底色。
+        // 尺寸必须写成**显示尺寸**（260×312），贴图只有 200×240。
+        // 用 `SizeMode.RAW` 的话节点会跟着位图走 ⇒ 屏幕上只有设计尺寸的 3/4，
+        // 而模型里的"间距 < 云体尺寸"是按 260×312 算的 ⇒ 团与团之间会漏出底色。
         node.addComponent(UITransform)
             .setContentSize(TERRITORY_BATTLE_INTRO_COVER_WIDTH, TERRITORY_BATTLE_INTRO_COVER_HEIGHT);
         const sprite = node.addComponent(Sprite);

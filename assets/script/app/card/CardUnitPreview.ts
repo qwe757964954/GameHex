@@ -26,16 +26,9 @@ class CardUnitPreviewPlayer extends Component {
 }
 
 /**
- * 上阵站台使用对局同一份兵种预制体，脚点对齐在原静态立绘区域底部。
- *
- * ── 体型（`pvpCard.prefabSize`）────────────────────────────────────────
- * 归一化把每个兵种都压到 `visibleHeight` 高，这在一张张卡片并排时是对的（站台等高对齐），
- * 但会把「这张卡的兵本来就比别的大」抹平：巨人卡和法师看起来一样高。所以再加一层
- * 按卡配的 `prefabSize`（与对局里 `ZCUnitView.applyVisualSize` 同一个系数、同一列表），
- * 归一之后乘上去 —— 顺序不能反，反了就等于拿骨架 canvas 把策划的意图再抵消一次。
- *
- * 代价是 >1 的兵会高过站台（`previewHeight=120` 是基准，1.5 倍就画 180px）：这是刻意的，
- * 体型差正是靠这个表达；真嫌顶到上一排，调站台的 `previewHeight` 整体缩，别回来加 clamp。
+ * 上阵站台使用对局同一份兵种预制体，脚点对齐在立绘区域底部。
+ * 先按画布高度归一，再乘 pvpCard.prefabSize；顺序反了会把策划的体型意图抵消。
+ * 大于 1 的兵允许高过站台，这是刻意的体型表达，不要加 clamp。
  */
 export class CardUnitPreview {
     private visual: Node | null = null;
@@ -56,8 +49,7 @@ export class CardUnitPreview {
     constructor(private readonly hero: Sprite, private readonly visibleHeight: number) {}
 
     /**
-     * @param prefabSize 该卡兵种的等比缩放（`pvpCard.prefabSize`，留空 1）。默认 1 = 老的
-     *   「所有兵种等高」行为；非法值（0 / 负数 / NaN）由 `cardPreviewFactor` 兜成 1。
+     * prefabSize 是该卡兵种的等比缩放；缺省 1，非法值由 cardPreviewFactor 兜成 1。
      */
     show(prefab: Prefab | null, prefabSize = 1): boolean {
         if (!prefab) {
@@ -67,8 +59,7 @@ export class CardUnitPreview {
         if (this.prefab === prefab && this.visual?.isValid) {
             this.hero.node.active = true;
             this.hero.enabled = false;
-            // 多张卡可能共用同一份 prefab（形态皮肤 / 共用兵种），而 `prefabSize` 按卡配 ⇒
-            // 早退分支必须按新系数重写一遍缩放，否则第二张卡会带着第一张的尺寸。
+            // 多张卡可能共用同一份 prefab，而 prefabSize 按卡配，早退也要按新系数重写缩放。
             this.applySize(prefabSize);
             return true;
         }

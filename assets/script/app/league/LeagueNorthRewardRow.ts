@@ -9,9 +9,9 @@
  * | 1 | 已完成 | **显示** | 藏 | 显示 | 领取 | 否 |
  * | 2 | 已领取 | 藏 | **显示** | 藏 | — | — |
  *
- * ⚠️ 「未完成」那页的按钮是**灰的但仍然点得动**（FGUI `grayed=1`；老端在 click 里判
- *    `taskVo.CanBeReward()` 决定发不发包）⇒ 本类只染 `color`，**不动 `interactable`**
- *    （口径同 `LeagueStoreRow`，见 `LeagueArt.LEAGUE_TINT_GRAY` 的说明）。
+ * 「未完成」那页的按钮是**灰的但仍然点得动**（FGUI `grayed=1`；老端在 click 里判
+ * `taskVo.CanBeReward()` 决定发不发包）⇒ 本类只染 `color`，**不动 `interactable`**
+ * （口径同 `LeagueStoreRow`，见 `LeagueArt.LEAGUE_TINT_GRAY` 的说明）。
  *
  * ## 进度条
  *
@@ -41,7 +41,7 @@ const { ccclass, property } = _decorator;
  *
  * 来历：FGUI `组件_联盟_进度条` 原生 652×38、`bar` 在设计态 637×21；
  * 面板实例把整条压到 **160** 宽 ⇒ 填充满宽 = `637 / 652 × 160 ≈ 156.3`，取 **156**。
- * ⚠️ 不按 `UITransform` 现算 —— 填充宽度正是本类在改的东西（同 `LeagueTaskPage` 的口径）。
+ * 不按 `UITransform` 现算 —— 填充宽度正是本类在改的东西（同 `LeagueTaskPage` 的口径）。
  */
 const NORTH_ROW_PROGRESS_FULL_WIDTH = 156;
 
@@ -89,8 +89,8 @@ export class LeagueNorthRewardRow extends Component {
     }
 
     protected onDestroy(): void {
-        // ⚠️ 只清自己的回调，**不**手动 off 事件（销毁期 `getComponent` 已不可用 ——
-        //    同 `LeagueTaskBox.onDestroy` 那条教训）：监听随节点销毁由引擎清。
+        // 只清自己的回调，**不**手动 off 事件（销毁期 `getComponent` 已不可用 ——
+        // 同 `LeagueTaskBox.onDestroy` 那条教训）：监听随节点销毁由引擎清。
         this.current = null;
         this.onClaim = null;
     }
@@ -149,14 +149,12 @@ export class LeagueNorthRewardRow extends Component {
         return this.current;
     }
 
-    // ============================================================
     // 内部
-    // ============================================================
 
     /**
      * 进度条宽度 —— `percent` 是**已经算好的 0~100**（`ILeagueNorthRewardRowView.progress`）。
      *
-     * ⚠️ 锚点是 `(0, 0.5)`（位置点 = 左中点）⇒ 宽度往**右**长，左端不动。
+     * 锚点是 `(0, 0.5)`（位置点 = 左中点）⇒ 宽度往**右**长，左端不动。
      */
     private applyProgress(percent: number): void {
         if (!this.progressFill) return;
@@ -169,8 +167,8 @@ export class LeagueNorthRewardRow extends Component {
     private readonly onClick = (): void => {
         const view = this.current;
         if (!view) return;
-        // ⚠️ 老端只有「可领取」才挂 onClick（未完成那页 `clearClick()` 后什么都不绑）⇒
-        //    不是可领取就**直接不发**（宿主也不用再判一遍）。
+        // 老端只有「可领取」才挂 onClick（未完成那页 `clearClick()` 后什么都不绑）⇒
+        // 不是可领取就**直接不发**（宿主也不用再判一遍）。
         if (view.state !== 'canReward') return;
         if (this.onClaim) this.onClaim(view);
     };

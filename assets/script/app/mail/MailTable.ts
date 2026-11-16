@@ -1,27 +1,7 @@
 /**
- * 「邮件」模块的判定口径 —— **零 import 的纯函数**（只依赖 `RequestGuard` 的两个转换工具，
- * 不引 `cc`、不引 `MailArt`、不引 `MailTexts`）⇒ 可被 `tsx --test` 直接单测。
- *
- * ⚠️ 本文件**不许出现任何文案字面量**（含四档相对时间模板）：`mailTimeText` 收
- *    `IMailRowViewTexts`，模板由 `MailTexts` 经页面传进来 —— 否则「改文案只动 `MailTexts`」
- *    这条约定会在邮件模块静默失效。
- *
- * ## 老端对照（`client/.../model/mail/ModelMail.ts` + `Xiulian/LayerMail.ts`）
- *
- * | 口径 | 老端 | 本文件 |
- * |---|---|---|
- * | 排序 | `up = !take \|\| !read` 置顶，同组按 `sendTime` **降序** | `sortMails` |
- * | 一键领取收集 | `!cmd.take` 的 id | `pickTakeIds` |
- * | 一键删除收集 | `read + take == 0`（已读且已领）的 id | `pickDeletableIds` |
- * | 行状态 | `setSelectedIndex("状态", take ? 2 : read ? 1 : 0)` | `mailStateOf` |
- * | 时间 | `TimeUtil.timeSec2HMSStr15` | `mailTimeText` |
- *
- * ## ⚠️ 布尔字段不能用 `toIdString`
- *
- * `toIdString` 只认 `string` / `number` / `Long` 形状，`boolean` 会落到它最后那句
- * `return ''` 上 —— 也就是说 `toIdString(true) === ''`。本模块的 `read` / `take`
- * 恰好是 `CmdMailSimple` 上的 **boolean**，一旦图省事拿 `toIdString` 去拼「指纹 / 键」就会
- * 得到空串（静默、不报错；友模块轮已经栽过一次）。这里**显式**用 `=== true` 归一。
+ * 邮件判定纯函数，不依赖 cc、MailArt、MailTexts。
+ * 排序、可领取/可删除集合、行状态和时间文案都从这里出，文案模板由调用方传入。
+ * CmdMailSimple 的 read/take 是 boolean，不能用 toIdString 归一。
  */
 
 import { toCount, toIdString } from '../net/RequestGuard';
@@ -74,9 +54,7 @@ export interface IMailDetail {
     readonly rewards: readonly IMailReward[];
 }
 
-// ============================================================
 // 归一
-// ============================================================
 
 /** 一条 `CmdMailSimple` → `IMailRow`；没有合法 id 返回 `null`（不抛）。 */
 export function normalizeMailRow(raw: unknown): IMailRow | null {
@@ -86,7 +64,7 @@ export function normalizeMailRow(raw: unknown): IMailRow | null {
     if (!id) return null;
     return {
         id,
-        // ⚠️ boolean 字段显式判等（见文件头：`toIdString(true)` 是空串）
+        // boolean 字段显式判等（见文件头：`toIdString(true)` 是空串）
         read: cmd.read === true,
         take: cmd.take === true,
         // `sendTime` 是 Long（秒）⇒ 毫秒。`toCount` 对数/字符串/Long 都认。
@@ -155,16 +133,14 @@ export function mailStateOf(row: Pick<IMailRow, 'read' | 'take'>): number {
     return row.read ? MAIL_STATE_READ : MAIL_STATE_UNREAD;
 }
 
-// ============================================================
 // 时间（老端 `TimeUtil.timeSec2HMSStr15`）
-// ============================================================
 
 /**
  * 该时间所在日的次日 0 点（毫秒）。
  *
- * ⚠️ 老端函数名写作 `getNextDay12`，但**实现出来是「次日 0 点」不是中午 12 点**
- *   （`time_left.hour = 24 - h - 1` + `60 - m - 1` 分 + `60 - s` 秒 ⇒ 正好补到次日 00:00:00）。
- *   这里按**实测语义**实现，不按名字。
+ * 老端函数名写作 `getNextDay12`，但**实现出来是「次日 0 点」不是中午 12 点**
+ * （`time_left.hour = 24 - h - 1` + `60 - m - 1` 分 + `60 - s` 秒 ⇒ 正好补到次日 00:00:00）。
+ * 这里按**实测语义**实现，不按名字。
  */
 export function nextDayStart(ms: number): number {
     const date = new Date(ms);
@@ -212,9 +188,9 @@ function fillTimeText(template: string, value: number): string {
  * ```
  * 即「**跨过次日后按天算**」—— 所以昨天 23:00 的邮件在今天 00:10 看到是「1天前」。
  *
- * ⚠️ `days` 用**总小时数**除 24（老端 `TimeUtil.timeSec2HMS` 的 `h = floor(time/3600)`
- *   是**总**小时，不是 24 进制的小时位）⇒ 3 天前的 12:00 在 10:00 看到是「3天前」
- *   （82 小时 / 24 = 3），不是「2天前」。这一档容易按直觉写错，`tests/mail.test.ts` A10 钉住。
+ * `days` 用**总小时数**除 24（老端 `TimeUtil.timeSec2HMS` 的 `h = floor(time/3600)`
+ * 是**总**小时，不是 24 进制的小时位）⇒ 3 天前的 12:00 在 10:00 看到是「3天前」
+ * （82 小时 / 24 = 3），不是「2天前」。这一档容易按直觉写错，`tests/mail.test.ts` A10 钉住。
  */
 export function mailTimeText(sendTimeMs: number, nowMs: number, texts: IMailRowViewTexts): string {
     if (!texts) return '';
@@ -232,9 +208,7 @@ export function mailTimeText(sendTimeMs: number, nowMs: number, texts: IMailRowV
     return texts.timeJustNow;
 }
 
-// ============================================================
 // 配置 / 文案
-// ============================================================
 
 /** 读 `gameConfig` 的两个键；表缺失 / 值非法时用兜底值（50 / 40）。 */
 export function parseMailConfig(rows: readonly unknown[] | null | undefined): IMailConfig {
@@ -259,9 +233,7 @@ export function autoDeleteArgs(config: IMailConfig): readonly [number, number] {
     return [config.validDays, config.maxNum];
 }
 
-// ============================================================
 // 详情：正文与奖励
-// ============================================================
 
 /** 正文是不是「长文本」——老端按 `<br/>` 切分，切出多于一段就走滚动列表。 */
 export function isLongText(content: string): boolean {
@@ -277,7 +249,7 @@ export function splitMailLines(content: string): string[] {
 /**
  * FGUI 详情页 `列表_奖励列表` 预摆的 item 数（8）。
  *
- * ⚠️ 它**不是**「只能显示 8 个」——老端 `LayerMailVerbose.InitList()` 用的是
+ * 它**不是**「只能显示 8 个」——老端 `LayerMailVerbose.InitList()` 用的是
  * `initVirtualList`，格数跟着数据走。新端同理（横向 `VirtualScrollView`），
  * 这里只用来在超出时给一条告警（`MailDetailPage.present`），与活动模块同口径。
  */
@@ -287,17 +259,17 @@ export const MAIL_REWARD_SLOT_COUNT = 8;
  * 奖励列表容器的四个口径（FGUI `列表_奖励列表`：`xy=102,775 size=515,100`
  * `layout="row" colGap="10" align="center" vAlign="middle" overflow="scroll"`）。
  *
- * 🔴 **`align="center"` 只在「内容装得下」时生效** —— FGUI `GList.handleAlign` 源码：
+ * **`align="center"` 只在「内容装得下」时生效** —— FGUI `GList.handleAlign` 源码：
  * ```js
  * if (contentWidth < this.viewWidth) {
- *     if (this._align == AlignType.Center) newOffsetX = Math.floor((this.viewWidth - contentWidth) / 2);
- *     ...
+ * if (this._align == AlignType.Center) newOffsetX = Math.floor((this.viewWidth - contentWidth) / 2);
+ * ...
  * }
  * ```
  * 超宽时 `newOffsetX` 恒为 `0`（内容从容器左边排起，不做负向偏移）。所以 5 格（490 ≤ 515）
  * 居中、**1 格居中偏 212px**、6 格起（590 > 515）从左边排起 —— 这一档差得很明显。
  *
- * 2026-09-29 起这条口径**由组件承接**（`VirtualScrollView.autoCenter`：同一公式
+ * 这条口径**由组件承接**（`VirtualScrollView.autoCenter`：同一公式
  * `(视口−内容)/2`、同样只在小内容时生效），宿主不再逐格写坐标；这四个数就是 prefab 上
  * `RewardList` / item 模板必须落到的值（`tests/mail.test.ts` C4 逐个核）。
  */
@@ -377,9 +349,7 @@ export function detailButtonText(take: boolean, takeText: string, deleteText: st
     return take ? deleteText : takeText;
 }
 
-// ============================================================
 // 行视图
-// ============================================================
 
 /** `MailRow.render()` 需要的全部展示信息（与 `IMailRow` 分开：视图不该看见 `read` / `take` 原字段）。 */
 export interface IMailRowView {

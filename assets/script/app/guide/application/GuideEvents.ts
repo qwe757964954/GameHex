@@ -1,21 +1,7 @@
 /**
- * 引导的「完成判定」上报通道。
- *
- * ## 为什么要一个通道
- *
- * `guideStep.completeCond` 是业务事件名（`tileFlipped` / `cardLevelUp:68001` …），
- * 但业务侧（领地 / 卡牌 / 关卡）不该持有 `GuideController` 引用 —— 那会让每个 feature
- * 反向依赖引导。所以走 `EventMgr` 单向广播：业务侧只管说"这件事发生了"，
- * 由 Controller 决定它是不是当前步要的那件。
- *
- * ## 用法（业务侧一行）
- *
- * ```ts
- * reportGuideComplete('tileFlipped');          // 对应 completeCond = 'tileFlipped'
- * reportGuideComplete('cardLevelUp', heroId);  // 对应 completeCond = 'cardLevelUp:68001'
- * ```
- *
- * 引导没在跑时这行只是发一个无人订阅的事件，开销可忽略。
+ * 引导完成判定的上报通道。
+ * 业务侧不持有 GuideController，统一通过 EventMgr 广播，由 Controller 判断是否当前步。
+ * 用法：reportGuideComplete('tileFlipped') 或 reportGuideComplete('cardLevelUp', 68001)。
  */
 
 import { EventMgr } from '../../../framework/event/EventMgr';

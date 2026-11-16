@@ -17,9 +17,7 @@
  * 4. 收尾：「点击屏幕继续」淡入（终态与设计稿逐像素一致，不留任何常驻呼吸动画）。
  */
 
-// ============================================================
 // 进度语义
-// ============================================================
 
 /** 碎片进度 0..1（`current / max`，非法值兜 0）。 */
 export function heroObtainFillRatioOf(current: number, max: number): number {
@@ -36,9 +34,7 @@ export function heroObtainCountTextOf(current: number, max: number): string {
     return `${value}/${upper}`;
 }
 
-// ============================================================
 // 缓动
-// ============================================================
 
 function heroObtainClamp01(value: number): number {
     return value <= 0 ? 0 : (value >= 1 ? 1 : value);
@@ -56,9 +52,7 @@ function heroObtainEaseOutQuad(t: number): number {
     const p = 1 - t;
     return 1 - p * p;
 }
-// ============================================================
 // 时间轴
-// ============================================================
 
 export const HERO_OBTAIN_TIMELINE = {
     /** 全屏底图淡入。 */

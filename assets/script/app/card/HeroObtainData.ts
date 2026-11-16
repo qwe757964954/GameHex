@@ -1,15 +1,9 @@
 /**
- * 「获得英雄」页的展示数据解析：`heroId → 名字 / 立绘 / 职业徽标`。
+ * 「获得英雄」页的展示数据解析：heroId 转名字、立绘和职业徽标。
+ * 只读表归一，不碰节点；卡数据与阵容页共用同一入口。
  *
- * 只做**读表 + 归一**，不碰节点：页面拿到 {@link IHeroObtainData} 后一次性渲染。
- *
- *  - 卡数据走 `pvpCard`（与阵容页同一入口 `loadPvpCardRawRow` + `parseCardCatalogRow`），
- *    避免同张表两套解析；
- *  - 头像走 `icon` 表（`兵种_头像_*` → `icons/cardHead/*`），只当 Spine 加载失败时的兜底；
- *  - 职业徽标走 `cardUiArtClass`（`name` 是中文职业名，和 `pvpCard.traits.attack` 同词表）。
- *
- * ⚠️ 设计稿的职业徽标是**射手**（`yx_zhiye_ss`），但 `椰蛋战士` 在 `pvpCard` 里是**战士**，
- *    徽标按数据走（`yx_zhiye_zs`）。设计稿只是拿这张卡当模特，不能把徽标写死。
+ * 设计稿里椰蛋战士的职业徽标画的是射手，但 pvpCard 里它是战士，
+ * 徽标按数据走，不能按设计稿写死。
  */
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { ICON_PACKAGE_ART_ROOT } from '../ArtPaths';

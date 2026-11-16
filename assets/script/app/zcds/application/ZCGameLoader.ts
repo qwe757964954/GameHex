@@ -17,7 +17,7 @@ import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { ZCGuideLoader } from './ZCGuideLoader';
 import type { IZCGuidePreparedContent } from './ZCGuideLoader';
 import type { IZCDeferredBattleArt, IZCGamePreparedResources } from './ZCGamePreparedResources';
-import type { IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
+import { SPAWN_REGION_HINT_PREFAB, type IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import { ensureZCRuntimeCompiled } from './ZCRuntimePrecompiler';
@@ -149,6 +149,7 @@ export class ZCGameLoader {
             unknownResourceFrame: icons.unknownResourceFrame,
             goldCoinFrame: icons.goldCoinFrame,
             spawnRegionFrames: icons.spawnRegionFrames,
+            spawnRegionHintPrefab: icons.spawnRegionHintPrefab,
             neutralResourceFrames: icons.neutralResourceFrames,
             hexGroundGlowFrames: sceneEffects.hexGroundGlowFrames,
             hexPulseFrames: sceneEffects.hexPulseFrames,
@@ -198,14 +199,15 @@ export class ZCGameLoader {
     }
 
     private async loadMapIcons(scope: ResourceScope | undefined, selectSpawn: boolean) {
-        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames] = await Promise.all([
+        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames] = await Promise.all([
             this.loadArtifactIconFrame(scope),
             selectSpawn ? this.loadUnknownResourceFrame(scope) : null,
             this.loadGoldCoinFrame(scope),
             selectSpawn ? this.loadSpawnRegionFrames(scope) : null,
+            selectSpawn ? this.loadSpawnRegionHintPrefab(scope) : null,
             this.loadNeutralResourceFrames(scope),
         ]);
-        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, neutralResourceFrames };
+        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames };
     }
 
     private async loadInitialSceneEffects(scope: ResourceScope | undefined, progressive: boolean) {
@@ -454,6 +456,11 @@ export class ZCGameLoader {
     }
 
     /** 前区红色气泡，中后区绿色气泡。*/
+    private loadSpawnRegionHintPrefab(scope?: ResourceScope): Promise<Prefab | null> {
+        return this.resources.assets.load(SPAWN_REGION_HINT_PREFAB, Prefab, this.battleOptions(scope, BATTLE_ENTRY_PRIORITY))
+            .catch(() => null);
+    }
+
     private async loadSpawnRegionFrames(scope?: ResourceScope): Promise<IZCSpawnRegionHintFrames> {
         const frames = await this.loadSortedSpriteFrames(SPAWN_REGION_ART_ROOT, scope);
         const green = frames.find(frame => frame.name === 'frame_01');

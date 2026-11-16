@@ -20,7 +20,7 @@ export interface IHexStaggerCell {
 /**
  * 计算每格的延迟（秒）。
  *
- * @param cells      这一批要播动画的格子；空批直接返回空 Map
+ * @param cells 这一批要播动画的格子；空批直接返回空 Map
  * @param gapSeconds 相邻两格的间隔（调用方已校验为非负数）
  * @param capSeconds 错峰总上限（调用方已校验；超出后剩余格子按上限同时进场）
  * @returns cellId → 延迟秒数

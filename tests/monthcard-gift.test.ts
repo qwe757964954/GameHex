@@ -24,7 +24,7 @@ import {
     MONTHCARD_FRAME_NAMES,
     backgroundArtForType,
     monthCardFramePath,
-} from '../assets/script/app/monthcard/MonthCardGiftArt';
+    } from '../assets/script/app/monthcard/MonthCardGiftArt';
 import {
     MONTHCARD_BOUGHT_TAG_POS,
     MONTHCARD_BUY_POS,
@@ -37,18 +37,20 @@ import {
     MONTHCARD_MAX_DAY_REWARD_SLOTS,
     MONTHCARD_MAX_PRIVILEGE_ROWS,
     MONTHCARD_RENEW_POS,
-    MONTHCARD_SLOT_STRIDE,
     MONTHCARD_SP_BBOX,
     MONTHCARD_SP_SCALE,
     MONTHCARD_SP_SIZE,
     MONTHCARD_TIME_POS,
     MONTHCARD_TITLE_POS,
-    dayRewardSlotPosition,
     entryPosition,
     fguiAnchorToCocos,
     fguiTopLeftToCocos,
-    privilegeRowPosition,
 } from '../assets/script/app/monthcard/MonthCardGiftLayout';
+import {
+    MONTHCARD_SLOT_STRIDE,
+    dayRewardSlotPosition,
+    privilegeRowPosition,
+} from './fixtures/monthcard-gift-layout';
 import {
     MONTHCARD_BOUGHT_TAG_DY,
     MONTHCARD_IMPORTED_CURRENCY_ART,
@@ -594,7 +596,7 @@ test('月卡 prefab：所有节点 layer 都是 UI_2D，且 fileId 长度为 22 
         );
 
         // 22 位是 `compressUuid` 的形态；长度写错会让编辑器的资源库查询整个炸掉，
-        // 而且报错完全不指向文件（见 `cocos-mcp-build-prefab` 铁律 11）。
+        // 而且报错完全不指向文件。
         const ids = o.map((x) => x.fileId).filter((v): v is string => typeof v === 'string');
         assert.deepEqual(Array.from(new Set(ids.map((s) => s.length))), [22], `${path} 的 fileId 长度必须全为 22`);
         assert.equal(new Set(ids).size, ids.length, `${path} 的 fileId 有重复`);

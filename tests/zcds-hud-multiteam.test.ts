@@ -115,8 +115,10 @@ test('★★★ScoreSlot 组件里数字与红 X 必须互斥（漏一个就叠�
 
 test('unique leader receives the larger size', () => {
     const src = readFileSync('assets/script/app/zcds/view/ZCGameHudScoreSlot.ts', 'utf8');
-    for (const size of ['SCORE_LEAD_WIDTH = 110', 'SCORE_LEAD_HEIGHT = 77',
-        'SCORE_NORMAL_WIDTH = 94', 'SCORE_NORMAL_HEIGHT = 66']) assert.ok(src.includes(size));
+    for (const size of ['leadWidth = 110', 'leadHeight = 77', 'normalWidth = 94']) {
+        assert.ok(src.includes(size), `尺寸必须落在 @property：${size}`);
+    }
+    assert.match(src, /normalHeight = this\.node\.getComponent\(UITransform\)\.height/, '普通高度从 prefab 读');
     assert.ok(!src.includes('shiftX'));
 });
 

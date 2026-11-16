@@ -35,9 +35,9 @@ export const GET_HERO_TEXTS = {
  * （prefab `ui/MainTask/MainTaskEntry`）的文案。
  *
  * 静态文案真源 = FGUI：
- *   · 弹窗标题 `组件_公共弹窗_新` 的实例覆写 `customProperty title="任务详情"`
- *     （XML 里 `<Label title="任务详情"/>`）；
- *   · 前往按钮 `按钮_公共_通用` 的实例覆写 `Button title="前往"`。
+ * · 弹窗标题 `组件_公共弹窗_新` 的实例覆写 `customProperty title="任务详情"`
+ * （XML 里 `<Label title="任务详情"/>`）；
+ * · 前往按钮 `按钮_公共_通用` 的实例覆写 `Button title="前往"`。
  *
  * 领奖三态与「10级领取」**共用同一份字面量**（同一个 `CmdTakeMainTaskRewardReqMsg`、
  * 同一种失败分类），别在两处各写一遍 —— 改一处漏一处必然分叉。
@@ -69,4 +69,3 @@ export const MAIN_TASK_TEXTS = {
     /** 表里有任务但缓存里没有该 `resId` 行时的日志。 */
     noCmdWarn: '[MainTask] CmdTask 缓存里没有这条主线任务，入口隐藏',
 } as const;
-

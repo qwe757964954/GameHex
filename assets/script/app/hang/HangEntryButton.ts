@@ -44,12 +44,10 @@ export class HangEntryButton extends Component {
     /** 摇摆 tween 是否在跑（只用来保证 `_startShake` 幂等，不参与任何节点状态的「缓存比较」）。 */
     private _shaking: boolean = false;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     onLoad(): void {
-        // ⚠️ 监听挂在**节点**上（`cc.Button` 的 click 本来就是 `node.emit` 出来的）。
+        // 监听挂在**节点**上（`cc.Button` 的 click 本来就是 `node.emit` 出来的）。
         // 点击区在根节点：见文件头「点击区落在根节点上」。
         const button = this.node.getComponent(Button);
         if (!button) {
@@ -67,7 +65,7 @@ export class HangEntryButton extends Component {
     }
 
     /**
-     * ⚠️ 这里**只**做「停表 + 停 tween」，不写 `off(...)`（规则 71）：
+     * 这里**只**做「停表 + 停 tween」，不写 `off(...)`：
      * 同节点组件按 `_components` 序销毁，`cc.Button` 排在脚本前面 ⇒ 它先被 destruct、
      * `node` own property 被置 null ⇒ `this.node.getComponent(Button).node.off(...)` 抛
      * `TypeError` 并**中断整条销毁链**（节点留在父 `children` 里 → 重复销毁）。
@@ -79,12 +77,10 @@ export class HangEntryButton extends Component {
         this._stopShake();
     }
 
-    // ============================================================
     // 公开入口
-    // ============================================================
 
     /**
-     * 点金币车：**只打开征收弹窗，不直接领奖**（山猫 2026-11-09）。
+     * 点金币车：**只打开征收弹窗，不直接领奖**。
      *
      * 领取 / 扫荡都在弹窗里按按钮触发（`HangPage` 的 `ClaimBtn` / `SweepBtn`）——
      * 早先这里直接 `emit(claimIdleRewards)`，玩家点一下入口就静默领掉了，
@@ -109,9 +105,7 @@ export class HangEntryButton extends Component {
         this.redDot.active = visible;
     }
 
-    // ============================================================
     // 内部
-    // ============================================================
 
     /**
      * 每秒一跳：刷时长文案、按「能不能领」开关摇摆。
@@ -151,7 +145,7 @@ export class HangEntryButton extends Component {
     /**
      * 停摇摆并把角度复位。
      *
-     * ⚠️ 复位**必须**判 `isValid`：入口是随宿主 `ArenaRoot` 一起销毁的，`onDestroy` 跑到这里时
+     * 复位**必须**判 `isValid`：入口是随宿主 `ArenaRoot` 一起销毁的，`onDestroy` 跑到这里时
      * 子节点内部那个存欧拉角的 `Vec3` 可能已被释放，`setRotationFromEuler` 会抛
      * `TypeError: Cannot set properties of null (setting 'x')` —— 而 `onDestroy` 抛异常会
      * **中断销毁链**（节点留在父 `children` 里 → 下一趟重复 `destroy()`）。

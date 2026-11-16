@@ -14,7 +14,7 @@ import { RequestMsg } from '../../../framework/net/RequestMsg';
  * 与 {@link RequestTerritoryCellInfo} 那一组的差别：
  * - 那组是**单章格子**状态（按 `levelChapter` 拉），页面级、随开随拉；
  * - 这一条是**账号级章节汇总**（账号已解锁/通关了哪些章、上次挂机时间），
- *   登录后拉一次存本地，冒险页打开时直接读，不随页面销毁。
+ * 登录后拉一次存本地，冒险页打开时直接读，不随页面销毁。
  */
 
 /** 拉章节汇总信息。请求体为空（`CmdCityChapterInfoReqMsg {}`）。 */

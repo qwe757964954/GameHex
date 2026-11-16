@@ -40,7 +40,7 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueLevelPreviewPage')
 export class LeagueLevelPreviewPage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上才会 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueLevelPreview';
@@ -57,9 +57,7 @@ export class LeagueLevelPreviewPage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         const button = this.closeButton?.getComponent(Button);
@@ -82,9 +80,7 @@ export class LeagueLevelPreviewPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数（只读配置表）
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -98,8 +94,8 @@ export class LeagueLevelPreviewPage extends PopupBase {
 
         this.rows = buildLeagueLevelViews(parseUnionLevelRows(raw));
 
-        // ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-        //    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+        // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+        // ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 

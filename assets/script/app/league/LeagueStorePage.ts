@@ -1,47 +1,9 @@
 import { EventMgr } from '../../framework/event/EventMgr';
 import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompletion } from './LeagueRewardEvents';
 /**
- * 「联盟商店」弹窗（老端 `play/LayerLeagueStore`，`ui/League/LeagueStore`）。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/商店/组件_联盟_商店.xml`，720×1280）
- *
- * | FGUI | xy / size | 本节点 |
- * |---|---|---|
- * | `popBg`（公用 `组件_公共弹窗_新`，标题「联盟商店」） | (44,173) **640×820** | `PopupBg` + `TitleBg` + `TitleDeco` + `Title` + `CloseBtn` |
- * | `list`（`overflow=scroll`、`lineGap=10`、9 项） | (80,226) **550×715** | `StoreListView`（虚拟列表） |
- * | `defaultItem` = `组件_联盟_商店Item`（556×142） | — | `StoreListView/content/StoreRow` |
- *
- * `popBg` 那组的 relation 是 `center-center,middle-middle` ⇒ 弹窗**恒居中**
- * （FGUI 的 xy 是设计态坐标；本端照抄 `LeagueApplyList` 的「popBg 半高 = 353，标题骨架按
- * 距顶边常数 12.5 / 10 / 10 折算」口径）。底板图见 `LeagueArt.LEAGUE_ART_POPUP_BOARD`。
- *
- * ⚠️ 列表视口 **550**、行 **556** —— FGUI 原稿就是差 6px（行比视口宽）。
- *    本端照抄：`VScrollView` 的槽位在 content 里居中，左右各被 Mask 裁掉 3px，
- *    落在行底框 `frame_Zhikuang01` 的九宫格边框里（左 38 / 右 76），肉眼不可辨。
- *    （不把行改成 550：那会让行内所有子节点的坐标跟着挪位，与 FGUI 对不上账。）
- *
- * ## 老端行为（`LayerLeagueStoreUI`）与移植取舍
- *
- * 1. **数据靠推送刷新**：老端 `init()` 挂 `VOShopBag` 的 `OnChanged → updateView`，
- *    自己**不发**列表请求。本端 `CacheMgr` 只读取值、不发变更事件 ⇒
- *    `onOpen` 主动读一次缓存（`loadStore`），**买成功后自己再读一次**（见 `afterWrite`）。
- * 2. **购买的三支分支**（老端 click 里）：
- *    ```
- *    buyTimes < ref.limit ? (CheckHaveEnoughCostAndOpenAlert([cost]) ? requestBuy : 无)
- *                         : showTip("SOLD_OUT")
- *    ```
- *    ⇒ 本端在 `onBuy` 里按 `view.soldOut` / `view.enough` 分三支；提示文案分别取
- *    `LEAGUE_STORE_SOLD_OUT`（「已售罄」）与 `{货币名}不足`（`ModelGoods_1`）。
- *    ⚠️ **不是**靠按钮 `interactable = false` 挡 —— FGUI 的 `grayed` 点得动，
- *    老端靠 click 内的分支做反馈；见 `LeagueStoreRow` 的类头。
- * 3. **不加二次确认**：老端商店是直接 `requestBuy`（只有砍价 / 捐献才 `PanelDialog`）。
- * 4. **`StoreType.League = 8`**：`CmdShopBuyReqMsg.cmdShopType`，见 `LEAGUE_SHOP_TYPE_UNION`。
- *
- * ## 本端有意增补
- *
- * - `busy` 防连点（老端没有）：`buyStoreGoods` 是写请求、走 5s 超时，连点会重复发包
- *   （同 `LeagueApplyListPage.beginWrite()`；与 P3 那段「`creating` 守卫被 `await` 穿透」的教训同源）。
- * - 奖励图标**先取完再刷列表**（`loadLeagueRewardArt`），否则虚拟列表槽位复用会闪上一行的图。
+ * 联盟商店弹窗。打开读缓存，购买成功后重读；售罄和货币不足在点击分支提示。
+ * 列表行宽 556 与视口 550 的 6px 差是 FGUI 原稿，不要改行宽。
+ * 有意增补：busy 防连点，避免写请求在 5s 超时内重复发包。
  */
 
 import { _decorator, Button, Node } from 'cc';
@@ -71,7 +33,7 @@ const { ccclass, property } = _decorator;
 @ccclass('LeagueStorePage')
 export class LeagueStorePage extends PopupBase {
     /**
-     * ⚠️ 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
+     * 目录名大小写必须与磁盘一致（`ui/League/`）—— 热更新 zip 内路径大小写敏感，
      * 在 Windows 编辑器里怎么写都能跑，真机上 `resources.load` 失败、开出一个空弹窗。
      */
     static prefabPath = 'ui/League/LeagueStore';
@@ -97,9 +59,7 @@ export class LeagueStorePage extends PopupBase {
     /** 每次取数递增，用来作废在飞的异步结果。 */
     private revision = 0;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
@@ -125,9 +85,7 @@ export class LeagueStorePage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 取数
-    // ============================================================
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
     static get titleText(): string {
@@ -142,8 +100,8 @@ export class LeagueStorePage extends PopupBase {
     /**
      * 读一次商店（缓存 + 表），再把本趟要用到的图全取好，最后铺行。
      *
-     * ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     *    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
@@ -200,9 +158,7 @@ export class LeagueStorePage extends PopupBase {
         row.onBuy = (current) => void this.buy(current);
     }
 
-    // ============================================================
     // 购买
-    // ============================================================
 
     /**
      * 点「购买」—— 老端 click 的三支分支（见类头）。
@@ -260,9 +216,7 @@ export class LeagueStorePage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 杂项
-    // ============================================================
 
     private onCloseClick(): void {
         this.closeByButton();

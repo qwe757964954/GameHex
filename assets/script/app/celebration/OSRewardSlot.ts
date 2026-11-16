@@ -1,5 +1,5 @@
 import { _decorator, Component, Label, Sprite, SpriteFrame } from 'cc';
-import { OS_SPRITE_SIMPLE, osSpriteType } from './CelebrationArt';
+import { OS_SPRITE_SIMPLE } from './CelebrationArt';
 
 const { ccclass, property } = _decorator;
 
@@ -52,13 +52,13 @@ export function osNumberTextOf(number: number): string {
 @ccclass('OSRewardSlot')
 export class OSRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框（`image/frame/common_img_pzk_0N`）。必须排在 Icon 之前。' })
-    frame: Sprite = null;
+    frame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Icon：道具 / 货币图标' })
-    icon: Sprite = null;
+    icon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Num：数量（0 时为空串，老端 `GetNumberStr`）' })
-    num: Label = null;
+    num: Label = null!;
 
     /**
      * 铺一格。
@@ -70,32 +70,17 @@ export class OSRewardSlot extends Component {
      * @param number 数量；`0` ⇒ 文案为空串
      */
     render(iconFrame: SpriteFrame | null, qualityFrame: SpriteFrame | null, number: number): void {
-        if (this.frame) {
-            // ⚠️ 品质框**走绝对赋值**（与 activity / monthcard 的「null 就保留静态框」不同）：
-            //    那两个模块的格子总是有品质框，保留静态框是兜底；庆典的奖励格会被
-            //    虚拟列表复用到「空槽」上，留着上一格的框比空着更像"图坏了"。
-            this.frame.spriteFrame = qualityFrame;
-            this.frame.type = OS_SPRITE_SIMPLE;
-            this.frame.node.active = !!qualityFrame;
-        }
-        if (this.icon) {
-            this.icon.spriteFrame = iconFrame;
-            this.icon.type = OS_SPRITE_SIMPLE;
-            this.icon.node.active = !!iconFrame;
-        }
-        if (this.num) this.num.string = osNumberTextOf(number);
-        this.node.active = true;
-    }
+        // 品质框走绝对赋值：格子会被虚拟列表复用，不能留下上一格的图。
+        this.frame.spriteFrame = qualityFrame;
+        this.frame.type = OS_SPRITE_SIMPLE;
+        this.frame.node.active = !!qualityFrame;
 
-    /**
-     * 套一层 `frame` 的九宫类型（品质框默认 `SIMPLE`，这里给「框也要拉伸」的场合留口子）。
-     *
-     * 目前**没有调用点** —— 品质框是固定 90×90 的正方图，`SIMPLE` 就够。
-     * 留着是为了下一个模块别再去 `CelebrationArt` 里翻九宫名单。
-     */
-    setFrameSliced(sliced: boolean): void {
-        if (!this.frame) return;
-        this.frame.type = sliced ? osSpriteType('itemBg') : OS_SPRITE_SIMPLE;
+        this.icon.spriteFrame = iconFrame;
+        this.icon.type = OS_SPRITE_SIMPLE;
+        this.icon.node.active = !!iconFrame;
+
+        this.num.string = osNumberTextOf(number);
+        this.node.active = true;
     }
 
     /** 空格子（`rewards` 不够 / `resId` 解析不出）：整格隐藏。 */

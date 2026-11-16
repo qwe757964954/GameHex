@@ -57,17 +57,19 @@ import {
     STORE_ART_SLICED,
     STORE_ART_TAG,
     STORE_ART_TITLE,
+    STORE_GRID_LINE_GAP,
+    STORE_GRID_ROWS,
+    STORE_SECTIONS,
+} from '../assets/script/app/store/StoreTable';
+import {
     STORE_CARD_H,
     STORE_CONTENT_H,
     STORE_GRID_COL_X,
-    STORE_GRID_LINE_GAP,
-    STORE_GRID_ROWS,
     STORE_SECTION_GAP,
     STORE_SECTION_H,
     STORE_SECTION_LIST_TOP,
-    STORE_SECTIONS,
     storeSectionTop,
-} from '../assets/script/app/store/StoreTable';
+} from './fixtures/store-section-layout';
 import type { StoreSectionKey } from '../assets/script/app/store/StoreTable';
 import {
     STORE_CHEST_ROWS,

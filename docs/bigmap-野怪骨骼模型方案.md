@@ -286,7 +286,7 @@ export const BIGMAP_MONSTER_VISIBLE_HEIGHT = 129;
 export function bigMapMonsterVisualScale(size: number): number;   // 1 → 1.0, 2 → 1.15, 4 → 1.35
 ```
 
-### 4.6 Prefab 改动（**必须走 Cocos MCP**，不手写 JSON）
+### 4.6 Prefab 改动（**必须走 Funplay Cocos MCP**，不手写 JSON）
 
 `assets/bundles/bigmap/ui/bigmap/BigMapWorldTemplates.prefab`：
 

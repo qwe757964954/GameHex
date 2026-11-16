@@ -10,18 +10,18 @@ import {
 /**
  * **点击反馈**：地块按压回弹 + 绿色光圈 + 蓝色圆环（规格 §1 的 0.00~0.05s 那一段）。
  *
- * ## 为什么不是 `cc.Button` 的 `Transition = SCALE`
+ * 不采用 `cc.Button` 的 `Transition = SCALE`
  *
  * 引擎那套是「按下放大到 `zoomScale`、抬起还原」，手感读作"按下去变胖、松手跳一下"；
  * 而规格要的是 **PressBounce（先压 94%、再弹 102%、落回 100%）**，且必须**按下当帧**就有反应。
  * 所以按压由这里自己写（见 `model/TerritoryTapFeedback` 的注释）。
  *
- * ## 两层环画在哪
+ * 两层环画在哪
  *
  * 页面坐标系（不随地图滚动）。`play(origin)` 的 `origin` 是**格子的台面中心**，
  * 由 `TerritoryMapView` 用 `convertToNodeSpaceAR` 换算好后传进来 —— 本类不碰 ScrollView。
  *
- * ## 复用
+ * 复用
  *
  * 同时最多 4 组（连点时手指不会比这更快）。用**固定槽位**而不是池：
  * 每组就是一个 `Graphics` + 一个 `UIOpacity`，比反复建/销毁便宜，也不会漏节点。
@@ -69,9 +69,9 @@ export class TerritoryTapFeedback {
     /**
      * 播一次点击反馈。
      *
-     * @param origin     页面坐标系里的格子中心（台面中心）
+     * @param origin 页面坐标系里的格子中心（台面中心）
      * @param pressTarget 要「压一下」的节点（通常是被点地块的六边格节点）；
-     *                    `null` = 只画光圈圆环，不压任何东西（例如点到空地）
+     * `null` = 只画光圈圆环，不压任何东西（例如点到空地）
      */
     play(origin: Vec3, pressTarget: Node | null = null): void {
         const slot = this.acquireSlot();
@@ -84,7 +84,8 @@ export class TerritoryTapFeedback {
             this.releasePress();
             this.pressedNode = pressTarget;
             this.pressedElapsed = 0;
-            pressTarget.setScale(territoryTapPressScale(0) ?? 1, territoryTapPressScale(0) ?? 1, 1);
+            const scale = territoryTapPressScale(0) ?? 1;
+            pressTarget.setScale(scale, scale, 1);
         }
     }
 

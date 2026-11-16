@@ -5,11 +5,11 @@
  * 「未开放」占位。现接通：复制联盟 ID / 微信号。
  *
  * 为什么不直接调 `WxUtil.Copy`：
- *   `WxUtil.Copy` 内部硬走 `wx.setClipboardData`（`window["wx"]`）。
- *   在**非微信环境**（浏览器 / 编辑器 / 真机非微信包）下 `WxUtil.wx` 为
- *   `undefined`，调用即抛 `TypeError`，点击复制按钮会直接崩。
- *   这里先判有没有微信环境，没有就退回 `navigator.clipboard`（Web 标准通道），
- *   再没有就提示「复制失败」—— 三种情况都不崩。
+ * `WxUtil.Copy` 内部硬走 `wx.setClipboardData`（`window["wx"]`）。
+ * 在**非微信环境**（浏览器 / 编辑器 / 真机非微信包）下 `WxUtil.wx` 为
+ * `undefined`，调用即抛 `TypeError`，点击复制按钮会直接崩。
+ * 这里先判有没有微信环境，没有就退回 `navigator.clipboard`（Web 标准通道），
+ * 再没有就提示「复制失败」—— 三种情况都不崩。
  *
  * 成功提示沿用项目约定 `FW.G_W("Func_1")`（与 `WxUtil.Copy` 一致）。
  */

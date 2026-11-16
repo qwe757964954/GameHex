@@ -37,13 +37,13 @@ interface IBigMapPlotArt {
 export class BigMapBaseView extends Component {
     private data: IBigMapViewState | null = null;
     private art: IBigMapArt | null = null;
-    @property(UITransform) private viewport: UITransform = null;
-    @property(Sprite) private background: Sprite = null;
-    @property(Node) private content: Node = null;
-    @property(UITransform) private contentTransform: UITransform = null;
-    @property(UITransform) private fallback: UITransform = null;
-    @property(Node) private plots: Node = null;
-    @property(Node) private plotTemplate: Node = null;
+    @property(UITransform) private viewport: UITransform = null!;
+    @property(Sprite) private background: Sprite = null!;
+    @property(Node) private content: Node = null!;
+    @property(UITransform) private contentTransform: UITransform = null!;
+    @property(UITransform) private fallback: UITransform = null!;
+    @property(Node) private plots: Node = null!;
+    @property(Node) private plotTemplate: Node = null!;
     /**
      *摆放预览（半透明建筑图，跟着手指走）。
      *
@@ -53,8 +53,8 @@ export class BigMapBaseView extends Component {
      *挂在 `BaseContent` 下（与 `BasePlots` 同级）—— 它要跟着地图坐标系动，
      *不能挂在视口上，否则拖动镜头时 ghost 会飘。
      */
-    @property(Sprite) private plotGhost: Sprite = null;
-    @property(UIOpacity) private plotGhostOpacity: UIOpacity = null;
+    @property(Sprite) private plotGhost: Sprite | null = null;
+    @property(UIOpacity) private plotGhostOpacity: UIOpacity | null = null;
     private camera: IBigMapBaseCamera = { zoom: 1, x: 0, y: 0 };
     private dragStart: Vec2 | null = null;
     private dragMoved = 0;
@@ -241,9 +241,6 @@ export class BigMapBaseView extends Component {
         this.pendingBuildingId = buildingId;
         this.refresh();
     }
-
-    get pending(): number { return this.pendingBuildingId; }
-    get selected(): number { return this.selectedHexId; }
 
     select(hexId: number): void {
         this.selectedHexId = hexId;

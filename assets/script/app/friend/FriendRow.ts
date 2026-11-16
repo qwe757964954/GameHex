@@ -23,10 +23,9 @@
  *   最容易漏的两处：`Duration`（页签 1/2 必须写空串 + 关节点）与 `CheckBtn/Mark`。
  */
 
-import { _decorator, Button, Color, Component, Label, Node, Sprite } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, Sprite, Vec3 } from 'cc';
 import { FriendAvatarLoader } from './FriendAvatar';
 import { friendTint } from './FriendArt';
-import { rowGroupPosition } from './FriendTable';
 import type { IFriendRowView } from './FriendTable';
 
 const { ccclass, property } = _decorator;
@@ -99,9 +98,14 @@ export class FriendRow extends Component {
     onCheck: (() => void) | null = null;
 
     private avatar: FriendAvatarLoader | null = null;
+    /** 普通态位置取 prefab 初始值；删除态位置取 prefab 的 DeleteGroupAnchor。 */
+    private normalGroupPosition: Vec3 | null = null;
+    private deleteGroupAnchor: Node | null = null;
 
     protected onLoad(): void {
         this.avatar = new FriendAvatarLoader(() => this.icon);
+        this.normalGroupPosition = this.shiftGroup?.position.clone() ?? null;
+        this.deleteGroupAnchor = this.node.getChildByName('DeleteGroupAnchor');
         this.actionButton.on(Button.EventType.CLICK, this.emitAction, this);
         this.chatButton.on(Button.EventType.CLICK, this.emitChat, this);
         this.checkButton.on(Button.EventType.CLICK, this.emitCheck, this);
@@ -124,9 +128,11 @@ export class FriendRow extends Component {
         // 私聊（Demo3.8 没有聊天模块，宿主传 `chatAvailable=false` ⇒ 一律不显示）
         this.chatButton.active = view.showChat;
 
-        // 删除模式下整组右移 43、下移 6，把左边让给勾选框（FGUI `group n80` 的 gearXY）
-        const group = rowGroupPosition(view.showCheck);
-        if (this.shiftGroup) this.shiftGroup.setPosition(group.x, group.y, 0);
+        // 删除模式下整组右移 43、下移 6：两档位置都在 prefab（默认位置 + DeleteGroupAnchor）
+        if (this.shiftGroup) {
+            const target = view.showCheck ? this.deleteGroupAnchor?.position : this.normalGroupPosition;
+            if (target) this.shiftGroup.setPosition(target.x, target.y, 0);
+        }
 
         // 主按钮：文案 + 置灰 + 可点性 + 显隐，四样都要绝对赋值
         // （删除模式下 FGUI 把 `btn` 整块藏掉，留着会和勾选框挤在一起）

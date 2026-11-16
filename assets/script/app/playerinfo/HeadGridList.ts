@@ -1,5 +1,4 @@
-import { _decorator, Component, EventTouch, Node, UITransform } from 'cc';
-import { HEAD_ITEM_COLUMNS, HEAD_ITEM_STEP_Y, HEAD_VIEW_H } from './PlayerInfoTable';
+import { _decorator, Component, EventTouch, Layout, Node, UITransform } from 'cc';
 
 const { ccclass, property } = _decorator;
 
@@ -106,9 +105,9 @@ export class HeadGridList extends Component {
      */
     refreshList(total: number): void {
         this._total = Math.max(0, Math.floor(Number(total) || 0));
-        const rows = Math.max(1, Math.ceil(this._total / HEAD_ITEM_COLUMNS));
+        const rows = Math.max(1, Math.ceil(this._total / this.columns));
         const contentH = this.contentHeight(rows);
-        this._maxTopRow = Math.max(0, Math.ceil((contentH - this.viewHeight) / HEAD_ITEM_STEP_Y));
+        this._maxTopRow = Math.max(0, Math.ceil((contentH - this.viewHeight) / this.stepY));
 
         // `Content` 尺寸只为「内容到底有多高」留个可读记录（**不参与滚动**）。
         const contentUi = this.content?.getComponent(UITransform);
@@ -150,16 +149,35 @@ export class HeadGridList extends Component {
     // 内部：槽位与滚动
     // ============================================================
 
+    private get layout(): Layout | null {
+        return this.content?.getComponent(Layout) ?? null;
+    }
+
+    /** 列数 / 行步进 / 格高全部来自 Content 的 Grid Layout。 */
+    private get columns(): number {
+        return Math.max(1, this.layout?.constraintNum ?? this.slots.length);
+    }
+
+    private get itemHeight(): number {
+        return this.slots[0]?.getComponent(UITransform)?.height ?? 0;
+    }
+
+    private get spacingY(): number {
+        return this.layout?.spacingY ?? 0;
+    }
+
+    private get stepY(): number {
+        return this.itemHeight + this.spacingY;
+    }
+
     private get viewHeight(): number {
         const h = this.node.getComponent(UITransform)?.contentSize.height ?? 0;
-        return h > 0 ? h : HEAD_VIEW_H;
+        return h > 0 ? h : this.itemHeight * 2 + this.spacingY;
     }
 
     /** 内容总高（按行数算，末行不留 gap）。 */
     private contentHeight(rows: number): number {
-        const step = HEAD_ITEM_STEP_Y;
-        const item = step - 18; // lineGap 20 × 0.9 = 18
-        return rows * step - (step - item);
+        return rows * this.stepY - this.spacingY;
     }
 
     /**
@@ -175,8 +193,8 @@ export class HeadGridList extends Component {
         const slots = this.slots;
         for (let i = 0; i < slots.length; i += 1) {
             const node = slots[i];
-            const row = this._topRow + Math.floor(i / HEAD_ITEM_COLUMNS);
-            const dataIndex = row * HEAD_ITEM_COLUMNS + (i % HEAD_ITEM_COLUMNS);
+            const row = this._topRow + Math.floor(i / this.columns);
+            const dataIndex = row * this.columns + (i % this.columns);
             const has = dataIndex >= 0 && dataIndex < this._total;
             node.active = has;
             this._slotDataIndex[i] = has ? dataIndex : -1;
@@ -204,7 +222,7 @@ export class HeadGridList extends Component {
         if (!this._dragging) return;
         const dy = event.getUILocation().y - this._dragStartY;
         if (Math.abs(dy) > TAP_TOLERANCE) this._moved = true;
-        const row = this._dragStartRow - dy / HEAD_ITEM_STEP_Y;
+        const row = this._dragStartRow - dy / this.stepY;
         const rounded = Math.max(0, Math.min(this._maxTopRow, Math.round(row)));
         if (rounded !== this._topRow) {
             this._topRow = rounded;

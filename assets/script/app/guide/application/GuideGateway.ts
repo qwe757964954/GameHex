@@ -76,7 +76,7 @@ export class GameNetGuideGateway implements IGuideGateway {
         const step1 = Number(parts[1]);
         const step2 = Number(parts[2]);
         if (!isUint32(step1) || !isUint32(step2) || step1 === 0 || step2 === 0) return false;
-        // shortcut: 暂按刚完成的 stepId 拆分上报，后端日志确认语义后再启用远端恢复。
+        // 当前按刚完成 stepId 拆分上报；远端恢复等后端确认语义后再启用。
         const payload: CmdFunctionGuideUpdateReqMsg = { info: { funcId: GUIDE_FUNCTION_ID, step1, step2 } };
         console.info(`[GuideProto] 更新请求 localCompletedStep=${completedStepId}`, JSON.stringify(payload));
         let response: CmdFunctionGuideUpdateRspMsg | null = null;

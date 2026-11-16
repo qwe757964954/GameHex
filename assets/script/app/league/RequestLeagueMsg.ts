@@ -1,49 +1,10 @@
 /**
- * 「联盟」的协议族封装 —— 与老端 `generated/requestMsg/RequestLeagueMsg.ts` 一一对应。
- *
- * 为什么不照抄老端文件：Demo3.8 的 `ReqMsgProtoName` 是**从 proto 重新生成**的
- * （`assets/script/app/generated/netProto/Cmd.d.ts` 6753~6804 行），老端那份的键名与这里
- * 是同一套（`CmdUnionDetailReqMsg` …），所以逐个重建即可。
- *
- * ## ⚠️ 「能不能发」的判据 = `MessageId` 里有没有登记对应的 `<Base>RspMsg`
- *
- * 本文件用到的 16 条（P4 新增 `CmdShopBuyReqMsg`）**全部登记**（`Cmd.d.ts` 6753~6804 行 +
- * `CmdShopBuyReqMsg` 在 `ReqMsgProtoName` 联合里，7090 行），另有一批推送
- * （`CmdUnionApproveJoinBroMsg` / `CmdUnionInfoUpdateBroMsg` / `CmdUnionMemberListUpdateBroMsg` /
- * `CmdUnionApplyListUpdateBroMsg` / `CmdUnionLogListUpdateBroMsg` / `CmdUnionListUpdateBroMsg` /
- * `CmdUnionTaskListUpdateBroMsg`，6773~6789 行）—— 推送侧由 `LeagueRepository` 的
- * `protoCache.json` 缓存读取代劳（见该文件头）。
- *
- * ## ⚠️ 请求体字段口径（照抄 `Cmd.d.ts`，**别照抄老端 TS 的形参类型**）
- *
- * | 请求 | 请求体 |
- * |---|---|
- * | 创建 | `{ icon: number, name: string, quick: boolean }` |
- * | 加入 | `{ unionIds: Long[] }` ← **数组** |
- * | 批准 / 拒绝单条 | `{ reqId: Long, agree: boolean }` |
- * | 一键批准 / 拒绝 | `{ agree: boolean }` |
- * | 退出 | `{}`（空） |
- * | 踢人 | `{ memberId: Long }` |
- * | 任命 | `{ memberId: Long, officialId: number, type: boolean }` ← `type` 是「任命/卸任」 |
- * | 设置快速加入 | `{ quick: boolean }` |
- * | 编辑 | `{ type: number, content: string }`（1 名字 / 2 微信号 / 3 公告 / 4 宣言） |
- * | 详情 / 申请列表 / 动态 / 联盟列表 | `{}`（空，全量拉） |
- * | 搜索 | `{ id: Long }`（**按 id 搜**，不是按名） |
- * | 捐献 | `{ adv: boolean }` |
- * | 砍价 / 购买 | `{ buy: boolean }` |
- * | 活动列表 | `{ type: number }`（`LeagueACT_TYPE`） |
- * | 擂鼓 / 扫荡 | 见下（`drumTimes` / `sweepTimes`） |
- *
- * ⚠️ id 一律以**十进制字符串**发（`toIdString` 过一道再发）——
- * `protoCompiledStatic.ts` 生成的请求类构造函数是**裸赋值**，普通对象会被 `LongBits.from`
- * 当成 `zero` ⇒ **id 静默变成 0**。口径同 `RequestFriendMsg`。
+ * 联盟网络请求。请求体字段和 MessageId 以生成协议为准。
  */
 
 import { RequestMsg } from '../../framework/net/RequestMsg';
 
-// ============================================================
 // 查询（4 条全量拉 + 1 条搜索）
-// ============================================================
 
 /** 请求联盟详情（成员列表随 `CmdUnionMemberListUpdateBroMsg` 推）。 */
 export class RequestUnionDetail extends RequestMsg<CmdUnionDetailReqMsg, CmdUnionDetailRspMsg> {
@@ -80,9 +41,7 @@ export class RequestUnionSearch extends RequestMsg<CmdUnionSearchReqMsg, CmdUnio
     }
 }
 
-// ============================================================
 // 成员管理（详情页签的角色操作浮层）
-// ============================================================
 
 /** 踢出联盟。 */
 export class RequestUnionKick extends RequestMsg<CmdUnionKickReqMsg, CmdUnionKickRspMsg> {
@@ -98,9 +57,7 @@ export class RequestUnionAppoint extends RequestMsg<CmdUnionAppointReqMsg, CmdUn
     }
 }
 
-// ============================================================
 // 申请审批（申请列表面板）
-// ============================================================
 
 /** 批准 / 拒绝单条申请（`agree = false` 即拒绝）。 */
 export class RequestUnionApproveJoin extends RequestMsg<CmdUnionApproveJoinReqMsg, CmdUnionApproveJoinRspMsg> {
@@ -116,9 +73,7 @@ export class RequestUnionApproveJoinOneKey extends RequestMsg<CmdUnionApproveJoi
     }
 }
 
-// ============================================================
 // 联盟设置
-// ============================================================
 
 /** 退出联盟（空请求体）。 */
 export class RequestUnionQuit extends RequestMsg<CmdUnionQuitReqMsg, CmdUnionQuitRspMsg> {
@@ -141,9 +96,7 @@ export class RequestUnionEdit extends RequestMsg<CmdUnionEditReqMsg, CmdUnionEdi
     }
 }
 
-// ============================================================
 // 商店 / 捐献 / 活动（P4、P6 才用，先随联盟协议族一起收进来）
-// ============================================================
 
 /** 创建联盟（**未入盟**态）。 */
 export class RequestUnionCreate extends RequestMsg<CmdUnionCreateReqMsg, CmdUnionCreateRspMsg> {
@@ -182,8 +135,8 @@ export class RequestUnionBargain extends RequestMsg<CmdUnionBargainReqMsg, CmdUn
  *
  * 请求体：`{ id, cmdShopType, buyTimes }`；响应 `{ tlCmdGoods }`（买到的奖励，联盟商店买的是实体道具）。
  *
- * ⚠️ `cmdShopType` 是 **proto 枚举**（`CmdShopType`），不是老端的 `StoreType` ——
- *    两者数值重合（联盟都是 8），但类型不同，调用点请用 `LEAGUE_SHOP_TYPE_UNION`。
+ * `cmdShopType` 是 **proto 枚举**（`CmdShopType`），不是老端的 `StoreType` ——
+ * 两者数值重合（联盟都是 8），但类型不同，调用点请用 `LEAGUE_SHOP_TYPE_UNION`。
  */
 export class RequestShopBuy extends RequestMsg<CmdShopBuyReqMsg, CmdShopBuyRspMsg> {
     getReqMsgProtoName(): ReqMsgProtoName {
@@ -228,9 +181,7 @@ export class RequestRoleWatchAdvert extends RequestMsg<CmdRoleWatchAdvertReqMsg,
     }
 }
 
-// ============================================================
 // 联盟任务（P5）
-// ============================================================
 
 /** 领取联盟任务奖励。 */
 export class RequestTaskUnionGetReward extends RequestMsg<CmdTaskUnionGetRewardReqMsg, CmdTaskUnionGetRewardRspMsg> {
@@ -246,9 +197,7 @@ export class RequestTaskUnionGetProgressReward extends RequestMsg<CmdTaskUnionGe
     }
 }
 
-// ============================================================
 // 北伐中原（P6）—— 排行走**通用排行协议**
-// ============================================================
 
 /**
  * 拉排行榜（**通用排行协议**，不是联盟的）。
@@ -264,11 +213,11 @@ export class RequestTaskUnionGetProgressReward extends RequestMsg<CmdTaskUnionGe
  * `CmdGetRankRspMsg` / `CmdRankRole` 三者在 `netProto/Cmd.d.ts` 里**都有**、
  * `CmdGetRankReqMsg` 也已登记进 `ReqMsgProtoName`（`Cmd.d.ts` 7038 行）⇒ 补一个类即可。
  *
- * ⚠️ 位置：与 `RequestRoleWatchAdvert` 一样，**跨域协议就近收在本文件**
- *    （理由同 —— 只有一个调用点，为它单开一个 `RequestRankMsg.ts` 不值当）。
- * ⚠️ 老端那个 `unionId` 填的是**角色 id**（`ModelRole.GetRole().GetCmd().id`），不是 `unionId`
- *    —— 看着像老代码的 bug，但**服务端那边就是这么认的**（否则老端的 `myRank` 永远是空的）。
- *    本端照抄（`loadNorthRank` 里传 `readSelfRoleId()`），不"顺手修正"。
+ * 位置：与 `RequestRoleWatchAdvert` 一样，**跨域协议就近收在本文件**
+ * （理由同 —— 只有一个调用点，为它单开一个 `RequestRankMsg.ts` 不值当）。
+ * 老端那个 `unionId` 填的是**角色 id**（`ModelRole.GetRole().GetCmd().id`），不是 `unionId`
+ * —— 看着像老代码的 bug，但**服务端那边就是这么认的**（否则老端的 `myRank` 永远是空的）。
+ * 本端照抄（`loadNorthRank` 里传 `readSelfRoleId()`），不"顺手修正"。
  */
 export class RequestGetRank extends RequestMsg<CmdGetRankReqMsg, CmdGetRankRspMsg> {
     getReqMsgProtoName(): ReqMsgProtoName {

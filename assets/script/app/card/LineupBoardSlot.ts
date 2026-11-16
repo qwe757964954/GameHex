@@ -124,9 +124,7 @@ export class LineupBoardSlot extends Component {
         this.unitGroup.active = !empty;
     }
 
-    // ========================================================================
-    // 手势（与 LineupBoardCard 同一份实现，避免两套误触判定）
-    // ========================================================================
+    // 手势，与 LineupBoardCard 同一份实现，避免两套误触判定。
 
     private onTouchStart(event: EventTouch): void {
         if (!this.tapHost || !this.currentCard) return;

@@ -1,38 +1,23 @@
 /**
- * 「领地宝箱开启」奖励页（蓝湖设计稿 720×1610 → 全屏弹窗）。
+ * 领地宝箱开启奖励页（设计稿 720×1610，全屏弹窗）。
  *
- * ## 与既有链路的关系
- *
- * 领地宝箱开箱走 `MainTerritoryMap.presentRewards → playChestThenSettle`：先在**地图里**
- * 播既有那套三档开箱表演（`chest_seq_0..5`），播完才弹这一页。所以本页是**开箱后的奖励展示页**，
- * 不替换世界内表演、也不动银币宝箱（`coinBox`）/ 随机格喷发 / 挂机征收那三条路。
- *
- * ## 展示口径
- *
- *  · **整箱全部奖励**（含银币 / 体力）都由这一页承载 —— 设计稿的卡本身就画了 `+4095` / `+3`，
- *    再走一次 `FW.ShowReward` 会二次弹窗；
- *  · 卡序沿用 `sortRewardEntries`（品质降序、同品质 resId 升序），与设计稿的橙→紫→绿→蓝→蓝一致；
- *  · 数量文案分两类：道具 `X1`、货币 `+N`（判据是 `roleProperty` 表里查得到、且 `item` 表里查不到）。
- *
- * ## 层级 / 显示动画
- *
- *  · `PopupLayer.NORMAL` + `closeOnBlank`：挂到 Canvas 下的 `Popup` 节点（`Root.scene` 里
- *    Camera → Procedure → Popup，弹窗层在最上），不额外插系统层；
- *  · 入场：底图淡入 → 宝箱 backOut 弹入 → 卡片逐张错峰 → 「跳过」淡入后**常驻**
- *    （设计稿静止态就有「跳过>>」）。静止态与设计稿像素一致。
- *  · 「跳过」只跳**入场动画**（不是跳过关卡）：入场期间点它直接落到静止态；已经静止后
- *    再点等同关闭本页。点空白同理（`canCloseOnBlank` 在入场期间先收尾动画，不直接关窗）。
+ * 由 MainTerritoryMap.presentChestRewards 进入，承载整箱全部奖励，
+ * 卡序沿用 sortRewardEntries，货币显示 +N、道具显示 X1。
+ * 页面挂在 Popup 普通层，入场为底图淡入、宝箱弹入、卡片错峰，跳过只收尾入场动画。
  */
 import {
     _decorator,
     Button,
+    CCFloat,
+    CCInteger,
     instantiate,
     Label,
+    Layout,
     Node,
-    Sprite,
     SpriteFrame,
     UIOpacity,
     UITransform,
+    Widget,
 } from 'cc';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import { PopupBase } from '../../../framework/ui/PopupBase';
@@ -44,15 +29,13 @@ import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../../showR
 import type { IRewardEntry } from '../../showReward/ShowRewardTable';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 import {
-    CHEST_OPEN_GRID_W,
     chestOpenBgProgressOf,
-    chestOpenCardSlotOf,
     chestOpenCardVisualOf,
     chestOpenChestVisualOf,
     chestOpenCountTextOf,
-    chestOpenGridHeightOf,
     chestOpenGridScaleOf,
     chestOpenRevealDoneSecondsOf,
+    chestOpenRowsOf,
     chestOpenSkipAlphaOf,
 } from '../model/TerritoryChestOpenLayout';
 import { TerritoryChestOpenCard } from './TerritoryChestOpenCard';
@@ -72,13 +55,25 @@ export class TerritoryChestOpenPage extends PopupBase {
     @property({ type: UIOpacity, tooltip: '全屏底图（入场淡入）' })
     bgOpacity: UIOpacity = null!;
 
-    @property({ type: Node, tooltip: '卡片容器（锚点 0.5/1，Widget 顶对齐 432）' })
+    @property({ type: Node, tooltip: '卡片容器（锚点 0.5/1，Widget 定边距，Layout 纵向排列）' })
     cardsRoot: Node = null!;
+
+    @property({ type: Node, tooltip: '卡片行模板（保持 inactive；横向 Layout 排卡片）' })
+    rowTemplate: Node = null!;
 
     @property({ type: Node, tooltip: '卡片模板（保持 inactive，运行时 instantiate）' })
     cardTemplate: Node = null!;
 
-    @property({ type: Node, tooltip: '开启态宝箱（Widget 底对齐 199、hCenter -6.5）' })
+    @property({ type: CCInteger, tooltip: '每行卡数（prefab 栅格列数）' })
+    gridColumns = 0;
+
+    @property({ type: CCFloat, tooltip: '卡片区缩放下限（prefab 配置，避免继续压到宝箱）' })
+    gridMinScale = 0;
+
+    @property({ type: CCFloat, tooltip: '卡片区底与宝箱顶的留白（prefab 配置）' })
+    gridBottomGap = 0;
+
+    @property({ type: Node, tooltip: '开启态宝箱（Widget 贴底对齐）' })
     chestNode: Node = null!;
 
     @property({ type: UIOpacity, tooltip: '宝箱透明度（入场弹入）' })
@@ -87,7 +82,7 @@ export class TerritoryChestOpenPage extends PopupBase {
     @property({ type: Button, tooltip: '左上「跳过>>」（NONE，target=null）' })
     skipButton: Button = null!;
 
-    @property({ type: UIOpacity, tooltip: '「跳过」透明度（入场结束后淡出）' })
+    @property({ type: UIOpacity, tooltip: '「跳过」透明度（入场淡入后常驻）' })
     skipOpacity: UIOpacity = null!;
 
     @property({ type: Button, tooltip: '底部「点击关闭」（NONE，target=null）' })
@@ -101,6 +96,8 @@ export class TerritoryChestOpenPage extends PopupBase {
 
     /** 本次铺出来的卡（克隆体），关闭时统一销毁。 */
     private readonly _cards: TerritoryChestOpenCard[] = [];
+    /** 本次铺出来的行（克隆体），销毁行时连带销毁卡。 */
+    private readonly _rows: Node[] = [];
     /** 入场时钟（`startedAt` 口径：只累加，不回读节点状态）。 */
     private _revealElapsed = 0;
     private _revealPlaying = false;
@@ -110,6 +107,7 @@ export class TerritoryChestOpenPage extends PopupBase {
         this.skipLabel.string = TERRITORY_TEXTS.chestOpenSkip;
         this.closeLabel.string = TERRITORY_TEXTS.chestOpenClose;
         this.cardTemplate.active = false;
+        this.rowTemplate.active = false;
         this.skipButton.node.on(Button.EventType.CLICK, this.onSkipClick, this);
         this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
     }
@@ -155,8 +153,8 @@ export class TerritoryChestOpenPage extends PopupBase {
     /**
      * 只写节点、不做业务。
      *
-     * ⚠️ 不在这里加载资源 / 查表 / 建节点：入场只有 0.6~0.8 秒，每帧 new 数组或查全局配置
-     *    都会把这段动画拖成掉帧（见 `docs` 的 render 幂等与 update 纪律）。
+     * 不在这里加载资源 / 查表 / 建节点：入场只有 0.6~0.8 秒，每帧 new 数组或查全局配置
+     * 都会把这段动画拖成掉帧（见 `docs` 的 render 幂等与 update 纪律）。
      */
     protected update(dt: number): void {
         if (!this._revealPlaying || this.isCovered) return;
@@ -205,31 +203,61 @@ export class TerritoryChestOpenPage extends PopupBase {
         frames: ReadonlyMap<string, SpriteFrame | null>,
         tables: IRewardGoodsTables,
     ): void {
-        const total = entries.length;
-        const rootUi = this.node.getComponent(UITransform);
+        const columns = Math.max(1, this.gridColumns);
+        const rows = chestOpenRowsOf(entries.length, columns);
         const gridUi = this.cardsRoot.getComponent(UITransform);
-        gridUi.setContentSize(CHEST_OPEN_GRID_W, chestOpenGridHeightOf(total));
-        const scale = chestOpenGridScaleOf(total, rootUi.height);
-        this.cardsRoot.setScale(scale, scale, 1);
+        const cardsLayout = this.cardsRoot.getComponent(Layout);
+        this.cardsRoot.setScale(1, 1, 1);
 
-        for (let index = 0; index < total; index++) {
-            const node = instantiate(this.cardTemplate);
-            node.active = true;
-            this.cardsRoot.addChild(node);
-            const card = node.getComponent(TerritoryChestOpenCard);
-            const entry = entries[index];
-            const slot = chestOpenCardSlotOf(index, total);
-            card.place(slot.x, slot.y);
-            card.render(
-                frames.get(chestOpenCardFrameNameOf(entry.quality)) ?? null,
-                icons[index],
-                chestOpenCountTextOf(entry.number, chestOpenIsCurrency(tables, entry.resId)),
-            );
-            this._cards.push(card);
+        for (let rowIndex = 0; rowIndex < rows; rowIndex++) {
+            const row = instantiate(this.rowTemplate);
+            row.active = true;
+            this.cardsRoot.addChild(row);
+            this._rows.push(row);
+
+            const rowStart = rowIndex * columns;
+            const rowEnd = Math.min(entries.length, rowStart + columns);
+            for (let index = rowStart; index < rowEnd; index++) {
+                const node = instantiate(this.cardTemplate);
+                node.active = true;
+                row.addChild(node);
+                const card = node.getComponent(TerritoryChestOpenCard);
+                const entry = entries[index];
+                card.render(
+                    frames.get(chestOpenCardFrameNameOf(entry.quality)) ?? null,
+                    icons[index],
+                    chestOpenCountTextOf(entry.number, chestOpenIsCurrency(tables, entry.resId)),
+                );
+                this._cards.push(card);
+            }
+
+            // 行内卡片数决定本行宽度：横向 Layout 会按子节点重排，并让不足一行的卡居中。
+            row.getComponent(Layout).updateLayout();
         }
+
+        // 行数决定卡片区高度：纵向 Layout 会按行节点重排。
+        cardsLayout.updateLayout();
+
+        // Layout 排完再取动画基准：节点位置是 prefab 的最终位置，运行时只叠加临时偏移。
+        for (const card of this._cards) card.captureBase();
+
+        // 短屏兜底：可用高度来自 prefab 的 Widget 边距与宝箱尺寸，不再写死 432/199/277。
+        const rootUi = this.node.getComponent(UITransform);
+        const minScale = this.gridMinScale > 0 ? this.gridMinScale : 1;
+        const scale = chestOpenGridScaleOf(gridUi.height, this.availableGridHeight(rootUi.height), minScale);
+        this.cardsRoot.setScale(scale, scale, 1);
 
         // 模板永远保持 inactive：它是「蓝图」，铺完就藏起来（否则编辑器/预览里会多一张空卡）。
         this.cardTemplate.active = false;
+        this.rowTemplate.active = false;
+    }
+
+    /** 卡片区底到宝箱顶之间可用于排卡的高度（全部来自 prefab 的 Widget/尺寸）。 */
+    private availableGridHeight(rootHeight: number): number {
+        const cardsWidget = this.cardsRoot.getComponent(Widget);
+        const chestWidget = this.chestNode.getComponent(Widget);
+        const chestUi = this.chestNode.getComponent(UITransform);
+        return rootHeight - cardsWidget.top - chestWidget.bottom - chestUi.height - this.gridBottomGap;
     }
 
     // ============================================================
@@ -302,12 +330,15 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     private clearCards(): void {
-        for (const card of this._cards) {
-            card.node.removeFromParent();
-            card.node.destroy();
+        for (const row of this._rows) {
+            row.removeFromParent();
+            row.destroy();
         }
+        this._rows.length = 0;
         this._cards.length = 0;
+        this.cardsRoot.setScale(1, 1, 1);
         this.cardTemplate.active = false;
+        this.rowTemplate.active = false;
     }
 }
 

@@ -18,7 +18,7 @@ import { LEAGUE_TASK_GOTO_MISSING } from './LeagueTexts';
 /**
  * 老端 `JUMP_TYPE` 枚举里本端**已经能开**的目标（其余一律兜底提示）。
  * 仅收纳联盟任务「前往」实际会用到、且 Demo3.8 确有页面的几项：
- *   9=征收 / 11=联盟商店 / 12=联盟捐献 / 13=每日挑战（活动）。
+ * 9=征收 / 11=联盟商店 / 12=联盟捐献 / 13=每日挑战（活动）。
  */
 const LEAGUE_TASK_JUMP_TARGETS: Readonly<Record<number, () => void>> = {
     9: () => { void HangPage.open({}); },            // 征收

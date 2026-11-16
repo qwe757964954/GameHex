@@ -13,7 +13,7 @@
  * 整句文案由 `LeagueTable.buildLeagueLogViews` 按 `join` / `opPosition` 选模板填好，
  * 行脚本**不做任何文案拼接**（老端 `render` 也是 `StringUtil.format` 完直接 `setText`）。
  *
- * ⚠️ 整行会被虚拟列表 clone 复用 ⇒ `render()` 两次 `string` 都要**绝对赋值**。
+ * 整行会被虚拟列表 clone 复用 ⇒ `render()` 两次 `string` 都要**绝对赋值**。
  */
 
 import { _decorator, Component, Label } from 'cc';

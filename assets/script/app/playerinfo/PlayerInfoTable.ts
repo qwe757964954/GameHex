@@ -199,58 +199,6 @@ export function buildHeadIdList(platformImg: unknown, refHeadIds: readonly numbe
  * 出处 = FGUI `组件_个人信息_更换头像界面` 的
  * `<list layout="flow_hz" lineItemCount="4" colGap="23" lineGap="20" scale="0.9,0.9">`。
  */
-export const HEAD_ITEM_COLUMNS = 4;
-
-/**
- * 表格实例把整个 list 缩了 `0.9`（`scale="0.9,0.9"`），而布局引擎把 scale **吸进了尺寸**
- * ⇒ prefab 里的坐标已经是**屏幕尺寸**，所以这里全部按 0.9 折算，别再乘一次。
- *
- * | 量 | FGUI 原值 | 折算（×0.9） |
- * |---|---|---|
- * | item 本体 | 123×123 | **110.7** |
- * | 横向步进 | 123 + colGap 23 = 146 | **131.4** |
- * | 纵向步进 | 123 + lineGap 20 = 143 | **128.7** |
- * | 视口 | 612×286 | **550.8 × 257.4** |
- */
-export const HEAD_ITEM_SCALE = 0.9;
-/** item 本体边长（123 × 0.9）。 */
-export const HEAD_ITEM_SIZE = 110.7;
-/** 横向步进（(123 + 23) × 0.9）。 */
-export const HEAD_ITEM_STEP_X = 131.4;
-/** 纵向步进（(123 + 20) × 0.9）。 */
-export const HEAD_ITEM_STEP_Y = 128.7;
-/** 视口宽（612 × 0.9）。 */
-export const HEAD_VIEW_W = 550.8;
-/** 视口高（286 × 0.9）。 */
-export const HEAD_VIEW_H = 257.4;
-/** 视口能完整放下的行数（`floor(257.4 / 128.7) = 2`）。 */
-export const HEAD_ITEM_ROWS = 2;
-/** 视口内的槽位数（4 列 × 2 行）—— prefab 里预置几个槽就铺几个（超出的靠拖动滚动）。 */
-export const HEAD_ITEM_SLOT_COUNT = HEAD_ITEM_COLUMNS * HEAD_ITEM_ROWS;
-
-/**
- * 列表内容的总高度（按行数算，**最后一行不留 lineGap**）。
- * @param total 头像总个数
- */
-export function headContentHeight(total: unknown): number {
-    const n = Math.max(0, Math.floor(Number(total) || 0));
-    const rows = Math.max(1, Math.ceil(n / HEAD_ITEM_COLUMNS));
-    return rows * HEAD_ITEM_STEP_Y - (HEAD_ITEM_STEP_Y - HEAD_ITEM_SIZE);
-}
-
-/**
- * 第 `index` 个格子在**内容容器**里的位置（内容容器左上角为原点，y 向下为正）。
- * 与 prefab 的静态摆位必须用同一个函数（`tmp/gen_playerinfo.mjs` 直接 import 不了 `.ts`，
- * 所以生成器里抄了同一组常量 —— 两侧的守卫是 `tests/playerinfo.test.ts` 的几何用例）。
- */
-export function headSlotOffset(index: unknown): { x: number; y: number } {
-    const i = Math.max(0, Math.floor(Number(index) || 0));
-    return {
-        x: (i % HEAD_ITEM_COLUMNS) * HEAD_ITEM_STEP_X,
-        y: Math.floor(i / HEAD_ITEM_COLUMNS) * HEAD_ITEM_STEP_Y,
-    };
-}
-
 // ============================================================
 // 写请求失败文案
 // ============================================================

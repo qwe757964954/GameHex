@@ -7,8 +7,6 @@ export const BIGMAP_SKIN_COLORS = {
     muted: new Color(189, 180, 161),
     gold: new Color(255, 202, 92),
     dark: new Color(41, 32, 21),
-    /** @deprecated 压在地图沙地上只有 1.22:1（选中态等于看不见），改用 {@link selectOuter} 双环。 */
-    cyan: new Color(79, 216, 228),
     /**
      *地图上「选中」的双环配色：外深内金。
      *

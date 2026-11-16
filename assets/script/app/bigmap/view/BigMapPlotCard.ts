@@ -89,7 +89,6 @@ export class BigMapPlotCard extends Component {
     private paintBackground(): void {
         if (this.painted) return;
         const transform = this.node.getComponent(UITransform);
-        if (!transform) return;
         drawBigMapCardPanel(this.background, transform.width, transform.height);
         this.painted = true;
     }
@@ -124,9 +123,6 @@ export class BigMapPlotCard extends Component {
         this.renderAction(this.secondaryButton, this.secondaryLabel, content.secondary);
     }
 
-    /** 拿最近一次的展示数据（页面侧判断"当前卡上是哪座建筑"用，不参与渲染）。 */
-    get rendered(): IBigMapPlotCardContent | null { return this.content; }
-
     private renderAction(button: Button, label: Label, action: IBigMapPlotCardAction | null): void {
         button.node.active = action !== null;
         label.string = action?.text ?? '';
@@ -145,7 +141,7 @@ export class BigMapPlotCard extends Component {
      */
     private handlePrimary(): void {
         const content = this.content;
-        if (!content?.primary || !content.primary.enabled) return;
+        if (!content || !content.primary) return;
         if (!this.confirmPending) {
             this.confirmPending = true;
             this.primaryLabel.string = content.busy ? CONFIRM_CANCEL_TEXT : CONFIRM_UPGRADE_TEXT;

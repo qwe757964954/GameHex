@@ -7,9 +7,9 @@ import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 /**
  * 领地模块的配色真源。
  *
- *  原先散在 `TerritoryPage` 顶部的 `COLORS` 里，页面瘦身后由 `TerritoryMapView` /
- *  `TerritoryStationView` / 详情弹窗共用 —— 放在一处，改色只改这里。
- *  （纯常量 + 纯映射函数；不持有任何节点，也不参与状态判定。）
+ * 原先散在 `TerritoryPage` 顶部的 `COLORS` 里，页面瘦身后由 `TerritoryMapView` /
+ * `TerritoryStationView` / 详情弹窗共用 —— 放在一处，改色只改这里。
+ * （纯常量 + 纯映射函数；不持有任何节点，也不参与状态判定。）
  */
 
 /** 页面与面板底色（暖棕木质，对齐阵容页风格）。 */
@@ -27,10 +27,10 @@ export const TERRITORY_COLORS = {
     exploring: new Color(201, 138, 61, 255),
     danger: new Color(160, 67, 57, 255),
     /**
-     * 「解锁状态」的底条色 —— **红**（山猫 2026-10-15 定：「关卡的解锁状态 用红色」，
+     * 「解锁状态」的底条色 —— **红**（定：「关卡的解锁状态 用红色」，
      * 口径 = **所有站点类型**的不可解锁态：关卡 / 首领 / 资源点 / 异步PVP / 奖励点 / 随机格）。
      *
-     * ⚠️ 与下面的 `randomConditionText` **同值** `230,30,24` —— 同一个「条件不满足」语义：
+     * 与下面的 `randomConditionText` **同值** `230,30,24` —— 同一个「条件不满足」语义：
      * 底条是这个红、条上的银币消耗文字也是这个红。改一处要记得改另一处。
      */
     locked: new Color(230, 30, 24, 255),
@@ -44,15 +44,15 @@ export const TERRITORY_COLORS = {
     /**
      * 「条件不满足 / 资源不够」的**数字文字色**（红）。
      *
-     * 两处共用同一个红（2026-11-03）：
-     *  · 未解锁格的**银币**消耗数字（银币不够时）；
-     *  · 宝箱气泡里的**体力**消耗数字（体力不够时，`ITerritoryStationRender.levelBubbleTextColor`）。
+     * 两处共用同一个红：
+     * · 未解锁格的**银币**消耗数字（银币不够时）；
+     * · 宝箱气泡里的**体力**消耗数字（体力不够时，`ITerritoryStationRender.levelBubbleTextColor`）。
      * 判据统一走 `model/TerritoryCostShortfall`（两项各判各的，别在这里按 `isOpenable` 一刀切）。
      */
     randomConditionText: new Color(230, 30, 24, 255),
     randomAvailableText: new Color(255, 255, 255, 255),
-    // 🔴 原来的三个**格子底色** `mapNeutral / mapOwned / mapTarget`（米 / 绿 / 金）已于
-    // 2026-10-16 删除：地图底色改成两张成品美术图二选一（未通关 `img_land_02` 泥土块 /
+    // 原来的三个**格子底色** `mapNeutral / mapOwned / mapTarget`（米 / 绿 / 金）已于
+    // 删除：地图底色改成两张成品美术图二选一（未通关 `img_land_02` 泥土块 /
     // 已通关 `img_land_01` 草地块），不再靠染色区分状态 —— 成品图自带明暗，再乘色会发脏。
     // 状态表达交给「哪张地皮 + 哪个格面框」，见 `TerritoryMapView.paintHexes`。
     mapLabelText: new Color(62, 43, 30, 255),

@@ -1,4 +1,4 @@
-import { _decorator, Button, Color, Label, Node, SpriteFrame, UITransform } from 'cc';
+import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt, loadFrameArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
@@ -32,8 +32,6 @@ import type { SevenDayListRow } from './SevenDayTable';
 import { SEVEN_DAY_TEXTS } from './SevenDayTexts';
 
 const { ccclass, property } = _decorator;
-
-const DESIGN_HEIGHT = 1280;
 
 /**
  * 「七日狂欢」弹窗（`assets/resources/ui/SevenDay/SevenDay.prefab`）。
@@ -71,37 +69,31 @@ export class SevenDayPage extends PopupBase {
     static prefabPath = 'ui/SevenDay/SevenDay';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上角关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: Label, tooltip: 'TimeLabel：剩余时间（`3天12时`）' })
-    timeLabel: Label = null;
+    timeLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'DayBar：天数按钮栏（下面挂 7 个 SevenDayDayTab）' })
-    dayBar: Node = null;
+    dayBar: Node = null!;
 
     @property({ type: Node, tooltip: 'TabBar：页签栏（下面挂 3 个 SevenDayPageTab）' })
-    tabBar: Node = null;
+    tabBar: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：奖励行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null;
+    rowList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'BoxBar：积分宝箱栏（下面挂 5 个 SevenDayPointBox）' })
-    boxBar: Node = null;
+    boxBar: Node = null!;
 
     @property({ type: Label, tooltip: 'PointLabel：当前积分' })
-    pointLabel: Label = null;
+    pointLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'Hint：提示行（离线 / 空配置 / 操作失败时替换掉页签名）' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
-    @property({ type: Node, tooltip: 'Panel：长屏时向下拉伸的九宫主底板' })
-    panel: Node = null;
-
-    @property({ type: [Node], tooltip: '贴顶节点：长屏额外高度不改变它们距屏幕顶部的位置' })
-    topAlignedNodes: Node[] = [];
-
-    @property({ type: [Node], tooltip: '贴底节点：积分宝箱与积分区域在长屏上保持距屏幕底部不变' })
-    bottomAlignedNodes: Node[] = [];
+    @property({ type: Color, tooltip: '提示文字异常态颜色；正常态取 prefab Label 颜色' })
+    hintErrorColor: Color = new Color(226, 88, 74, 255);
 
     /** 数据端口；测试可替换。 */
     private repo: ISevenDayRepository = sevenDayRepository;
@@ -119,8 +111,6 @@ export class SevenDayPage extends PopupBase {
      */
     private static readonly SHOW_PAGE_TAB_BAR = false;
 
-    private closeAction: Button | null = null;
-    /** 当前快照（表 + 服务器状态 + 道具表）。 */
     private snapshot: ISevenDaySnapshot | null = null;
     /** 当前选中的天（1-based）。`0` = 还没定（首帧按创角第几天）。 */
     private selectedDay = 0;
@@ -136,14 +126,8 @@ export class SevenDayPage extends PopupBase {
     private loadRevision = 0;
     /** 列表数据（`renderItemFn` 按 index 取）。 */
     private rows: SevenDayListRow[] = [];
-    /** `renderItemFn` 只需绑一次。 */
-    private rowRendererBound = false;
-    /** 自适应布局必须始终从 prefab 的 720×1280 基线算，避免重复打开时累计偏移。 */
-    private readonly layoutBaseY = new Map<Node, number>();
-    private panelBaseWidth = 0;
-    private panelBaseHeight = 0;
-    private rowListBaseWidth = 0;
-    private rowListBaseHeight = 0;
+    /** 提示文字正常态颜色：从 prefab Label 上取。 */
+    private readonly hintIdleColor = new Color();
     /**
      * 「这一趟」渲染要用的上下文。
      *
@@ -157,10 +141,12 @@ export class SevenDayPage extends PopupBase {
     } | null = null;
 
     protected onInit(): void {
+        this.hintIdleColor.set(this.hintLabel.color);
         this.bindBlankContent();
-        this.captureLayoutBase();
-        this.closeAction = this.closeButton.getComponent(Button);
-        this.closeAction?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+
+        const closeButton = this.closeButton.getComponent(Button);
+        closeButton?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
 
         for (const tab of this.dayTabs) {
             tab.node.on(Button.EventType.CLICK, () => this.onDayClick(tab), this);
@@ -174,47 +160,17 @@ export class SevenDayPage extends PopupBase {
     }
 
     /**
-     * 声明「内容区」= 只有这几个**交互**节点；其余一切都算空白（点了就关）。
-     *
-     * ## 为什么这个界面必须显式声明
-     *
-     * 本页是**全屏页**，两根底图拼起来把整屏盖满：
-     * `BgTop` 720×484（顶部美术）+ `Panel` 720×1145（九宫底板，长屏还会被 `applyScreenLayout`
-     * 再拉高 `visibleHeight − 1280`）。`PopupBase` 默认把「全部激活的直接子节点」当内容区，
-     * 于是整屏都是内容 ⇒ **点空白永不关闭**（实测 720×1485 上按 16×24 扫 384 点，只有底部 44px
-     * 里的 2 个点是空白）。
-     *
-     * 而底图又过不了 `PopupBase.isBlankBackdrop()` 的「全屏装饰底图」判据 ——
-     * 它要求**宽高都 ≥ 设计分辨率的 90%**（648×1152），`Panel` 是 **720×1145**（差 **7px**）、
-     * `BgTop` 只有 484 高 ⇒ 两片都没被排掉。
-     *
-     * ## 为什么列这几个就够、且不会误关
-     *
-     * `Button` / `ScrollView` 都在自己节点上注册了触摸监听 ⇒ 触摸的命中目标是**它们**，
-     * 事件沿父链冒泡（冒不到 index 0 的 `__BlankClose`）⇒ 点按钮/滑列表**本来就不会**被接收层抢走。
-     * 把它们放进内容区只是让语义显式、并挡掉「按钮之间的小缝隙」误判成空白。
-     *
-     * ## 为什么写在代码里而不是 prefab 的 Inspector
-     *
-     * `contentNodes` 是 `PopupBase` 上的 `@property([Node])`，本来该在编辑器里配；
-     * 但 cocos-mcp-server 的 `component_set_component_property` 对 `nodeArray` **漏传
-     * `dump.type`**，写入必抛 `Cannot read properties of undefined (reading 'hasOwnProperty')`
-     * （`extensions/cocos-mcp-server/dist/tools/component-tools.js` 的 `propertyType === 'nodeArray'` 分支），
-     * 而铁律禁止手写 prefab JSON ⇒ 只能代码化。**修好扩展后可以改回 Inspector 配置**。
+     * 全屏底图会盖满屏幕，必须声明交互节点为内容区，否则点空白无法关闭。
+     * 旧版 Cocos MCP 不支持写 `nodeArray`，所以没有在 prefab 的 Inspector 上配置。
      */
     private bindBlankContent(): void {
-        const interactive: Node[] = [];
-        for (const node of [this.closeButton, this.dayBar, this.tabBar, this.rowList?.node, this.boxBar]) {
-            if (node && node.isValid) interactive.push(node);
-        }
-        this.contentNodes = interactive;
+        this.contentNodes = [this.closeButton, this.dayBar, this.tabBar, this.rowList.node, this.boxBar];
     }
 
     protected async onOpen(): Promise<void> {
         this.busy = false;
         this.selectedTab = '';
         this.setHint('');
-        this.applyScreenLayout();
         // 打开时向服务端要一次最新状态；连不上就跳过（继续用内存快照渲染，不弹错）。
         await this.repo.refreshFromServer(this);
         if (!this.alive) return;
@@ -363,19 +319,9 @@ export class SevenDayPage extends PopupBase {
     ): void {
         // 行由 `present()` 提前算好传进来（图标预加载要用同一份，见那里的注释）。
         this.rows = rows;
-        // ⚠️ `renderItemFn` 是**长驻**回调（只挂一次），而它每次被调用时要用「**这一趟**」的
-        //    snapshot / 预加载图。所以只能存到字段里**现取**，绝不能闭包捕获这里的入参 ——
-        //    闭包捕获会让后续每次 reload 都拿**第一次**的 snapshot 去渲染：
-        //    症状是「领奖成功后行文案永远停在『领取』、进度永远不动」（离线数据变了但界面纹丝不动）。
+        // 长驻回调必须从字段取当前快照，不能闭包捕获本次入参，否则后续刷新会一直用第一份数据。
         this.rowContext = { snapshot, qualityFrames, iconFrames };
-
-        const list = this.rowList;
-        if (!list) return;
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            list.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
-        list.refreshList(this.rows);
+        this.rowList.refreshList(this.rows);
     }
 
     /** 虚拟列表的行渲染（被 clone 复用的槽位 → 每次都按当前 `this.rows` / `rowContext` 重铺）。 */
@@ -487,7 +433,7 @@ export class SevenDayPage extends PopupBase {
         for (const tab of this.dayTabs) tab.hide();
         for (const tab of this.pageTabs) tab.hide();
         for (const box of this.boxes) box.hide();
-        this.rowList?.refreshList([]);
+        this.rowList.refreshList([]);
         this.pointLabel.string = '0';
         this.timeLabel.string = '';
         this.setHint(SEVEN_DAY_TEXTS.empty);
@@ -685,63 +631,7 @@ export class SevenDayPage extends PopupBase {
 
     private setHint(text: string, error: boolean = false): void {
         this.hintLabel.string = text;
-        this.hintLabel.color = error
-            ? SEVEN_DAY_HINT_ERROR
-            : SEVEN_DAY_HINT_IDLE;
-    }
-
-    /**
-     * 原稿是 720×1280。长屏不再把整页垂直居中：页头贴顶、积分区贴底，
-     * 中间九宫底板与奖励列表吃掉全部额外高度。
-     */
-    private applyScreenLayout(): void {
-        const rootTransform = this.node.getComponent(UITransform);
-        const parentTransform = this.node.parent?.getComponent(UITransform);
-        const visibleHeight = Math.max(DESIGN_HEIGHT, parentTransform?.contentSize.height ?? DESIGN_HEIGHT);
-        const extra = visibleHeight - DESIGN_HEIGHT;
-        rootTransform?.setContentSize(rootTransform.contentSize.width, visibleHeight);
-
-        for (const node of this.topAlignedNodes) {
-            const baseY = this.layoutBaseY.get(node);
-            if (baseY !== undefined) node.setPosition(node.position.x, baseY + extra / 2, node.position.z);
-        }
-        for (const node of this.bottomAlignedNodes) {
-            const baseY = this.layoutBaseY.get(node);
-            if (baseY !== undefined) node.setPosition(node.position.x, baseY - extra / 2, node.position.z);
-        }
-
-        const panelTransform = this.panel?.getComponent(UITransform);
-        if (panelTransform && this.panelBaseHeight > 0) {
-            panelTransform.setContentSize(this.panelBaseWidth, this.panelBaseHeight + extra);
-        }
-
-        const listNode = this.rowList?.node;
-        const listTransform = listNode?.getComponent(UITransform);
-        const listBaseY = listNode ? this.layoutBaseY.get(listNode) : undefined;
-        if (listNode && listTransform && listBaseY !== undefined && this.rowListBaseHeight > 0) {
-            listNode.setPosition(listNode.position.x, listBaseY + extra / 2, listNode.position.z);
-            listTransform.setContentSize(this.rowListBaseWidth, this.rowListBaseHeight + extra);
-        }
-    }
-
-    private captureLayoutBase(): void {
-        for (const node of [...this.topAlignedNodes, ...this.bottomAlignedNodes]) {
-            if (node) this.layoutBaseY.set(node, node.position.y);
-        }
-        const listNode = this.rowList?.node;
-        if (listNode) {
-            this.layoutBaseY.set(listNode, listNode.position.y);
-            const transform = listNode.getComponent(UITransform);
-            if (transform) {
-                this.rowListBaseWidth = transform.contentSize.width;
-                this.rowListBaseHeight = transform.contentSize.height;
-            }
-        }
-        const panelTransform = this.panel?.getComponent(UITransform);
-        if (panelTransform) {
-            this.panelBaseWidth = panelTransform.contentSize.width;
-            this.panelBaseHeight = panelTransform.contentSize.height;
-        }
+        this.hintLabel.color = error ? this.hintErrorColor : this.hintIdleColor;
     }
 
     /** 天数按钮（按 x 从左到右 —— `_children` 顺序 ≠ 视觉顺序）。 */
@@ -766,7 +656,7 @@ export class SevenDayPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.node.isValid;
     }
 
     onDestroy(): void {
@@ -775,10 +665,6 @@ export class SevenDayPage extends PopupBase {
         super.onDestroy();
     }
 }
-
-/** 提示文字颜色（与首充同一口径：正常棕 / 异常红）。 */
-const SEVEN_DAY_HINT_IDLE = new Color(176, 168, 150, 255);
-const SEVEN_DAY_HINT_ERROR = new Color(226, 88, 74, 255);
 
 /** 用「现在」重算创角第几天（跨天检测用）。 */
 function deriveCurDayOf(snapshot: ISevenDaySnapshot, nowMs: number): number {

@@ -3,8 +3,6 @@ import type { IBigMapStorage } from './BigMapModel';
 import type { IBigMapSaveOwner } from './BigMapSaveKeys';
 import { BIGMAP_SAVE_KEY, createMemoryBigMapStorage } from './BigMapSaveKeys';
 
-export { BIGMAP_SAVE_KEY, createMemoryBigMapStorage } from './BigMapSaveKeys';
-
 /**
  *端上存储实现：`sys.localStorage`。
  *

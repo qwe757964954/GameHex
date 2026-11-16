@@ -223,9 +223,7 @@ export class CardLineupPage extends Component {
         this.renderBondBanner(data.bonuses);
     }
 
-    // ========================================================================
-    // 上阵站台：prepare（只取已就绪的图）→ commit（同步画等级 / 空台）→ 图后台补
-    // ========================================================================
+    // 上阵站台：prepare 只取已就绪的图，commit 同步画等级和空台，图后台补。
 
     /**
      * 站台图缓存，页面实例内跨刷新复用。
@@ -421,10 +419,21 @@ export class CardLineupPage extends Component {
      */
     private poolSignature: string | null = null;
     private poolCount = -1;
+    private poolCards: readonly ZCDeckCard[] = [];
+    private guideCardIndex = -1;
+
+    /** 虚拟列表可能尚未创建目标卡；按展示顺序滚到卡牌，随后由焦点锚点交付节点。 */
+    revealGuideCard(cardId: string): void {
+        const index = this.poolCards.findIndex(card => card.id === cardId);
+        if (index < 0 || index === this.guideCardIndex) return;
+        this.guideCardIndex = index;
+        this.cardGrid.scrollToIndex(index, false, undefined, undefined, true);
+    }
 
     /** 同步写卡库列表（回调与总条数一起设，避免列表先按旧条数刷一遍）。 */
     private commitPool(data: IPreparedPool): void {
         const { cards, fragments, deployedIds } = data;
+        this.poolCards = cards;
         const signature = cards.map((card) => {
             const progress = fragments.get(card.id);
             return `${card.id}:${this.levelOf(card)}:${deployedIds.has(card.id) ? 1 : 0}`

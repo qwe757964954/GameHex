@@ -23,14 +23,6 @@ import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
 
-/**
- *页面宿主 prefab（只装 `UITransform` + 四边 `Widget` + `UIOpacity` + `BigMapPage`，没有视觉节点）。
- *
- *以前这里是 `new Node` + 四个 `addComponent`：四边对齐、透明度、layer、页面组件全散在代码里，
- *Inspector 里既看不见也调不了。搬到 prefab 后这些配置在编辑器可读可改，
- *代码只留「尺寸 / 位置 / 父子」—— 那三件必须运行时算（依赖宿主尺寸与 HUD 高度）。
- */
-const BIGMAP_PAGE_HOST_PREFAB = 'ui/bigmap/BigMapPageHost';
 import { BigMapCampRepository } from './BigMapCampRepository';
 import { GameNetBigMapCampGateway } from './GameNetBigMapCampGateway';
 import { BigMapSlgRepository } from './BigMapSlgRepository';
@@ -42,6 +34,15 @@ import type { IBigMapConfig } from '../model/BigMapTypes';
 import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 //顶栏资源数量走背包（`CmdItem` 缓存）：SLG 资源在服务端就是道具 18501~18505。
 import { readItemCounts } from '../../card/ItemBag';
+
+/**
+ *页面宿主 prefab（只装 `UITransform` + 四边 `Widget` + `UIOpacity` + `BigMapPage`，没有视觉节点）。
+ *
+ *以前这里是 `new Node` + 四个 `addComponent`：四边对齐、透明度、layer、页面组件全散在代码里，
+ *Inspector 里既看不见也调不了。搬到 prefab 后这些配置在编辑器可读可改，
+ *代码只留「尺寸 / 位置 / 父子」—— 那三件必须运行时算（依赖宿主尺寸与 HUD 高度）。
+ */
+const BIGMAP_PAGE_HOST_PREFAB = 'ui/bigmap/BigMapPageHost';
 
 /**
  *大世界入口（唯一一处把「配置 / 存档 / 冒险进度 / 页面」接起来的地方）。
@@ -130,7 +131,7 @@ export class BigMapEntry {
                 root.destroy();
                 return;
             }
-            const transform = root.getComponent(UITransform)!;
+            const transform = root.getComponent(UITransform);
             if (host) {
                 //宿主页里：宽度占满，顶部让出主界面 HUD、底部让出菜单栏，剩下的中间区域给地图。
                 const hostSize = host.getComponent(UITransform)?.contentSize;
@@ -153,7 +154,6 @@ export class BigMapEntry {
                     hudNode.setSiblingIndex(host.children.length - 1);
                 }
             } else {
-                if (!canvas) return;
                 transform.setContentSize(size.width, size.height);
                 //四边对齐在 prefab 的 `cc.Widget` 上（flags=45 / ALWAYS），这里不再补组件。
                 root.setParent(canvas);
@@ -231,9 +231,9 @@ export class BigMapEntry {
             const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });
             //Graphics 在 onEnable 中初始化材质。准备期间保持节点激活，避免提前绘制
             //缓存空材质并在原生 UIModelProxy.activeSubModels 中崩溃；用透明度隐藏成品前的页面。
-            const opacity = root.getComponent(UIOpacity)!;
+            const opacity = root.getComponent(UIOpacity);
             opacity.opacity = 0;
-            const page = root.getComponent(BigMapPage)!;
+            const page = root.getComponent(BigMapPage);
             const navigation = options?.navigation;
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;

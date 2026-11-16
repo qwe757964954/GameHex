@@ -5,23 +5,23 @@
  * 判定逻辑全在 `LimitTimeActTable`（纯函数、可单测），本文件只负责「把数据搬进来 / 发出去」。
  *
  * 数据来源（**与 `LayerActivity` 那套「每日挑战」不同，这套的配置是服务端下发的**）：
- *   ① 活动实例 —— `CmdActivitySimple` 缓存（登录同步下发），取 `type === 101(limit_time)` 那条；
- *   ② 配置（`limitTimeTask` / `limitTimeDay` / `limitTimeActivity` / `limitTimeConfig`）——
- *      **服务端下发**（`reqActivityJson` 的 `content` 是 JSON 字符串），不是 `remoteRef` 静态表；
- *   ③ 服务器状态 —— `reqActivityLimitTimeInfo`（任务进度 + 礼包 / 限购次数）；
- *   ④ 领取 / 购买 —— `reqActivityLimitTimeTake`（`type`: 1 领任务 / 2 买每日礼包 / 3 买限购）。
+ * ① 活动实例 —— `CmdActivitySimple` 缓存（登录同步下发），取 `type === 101(limit_time)` 那条；
+ * ② 配置（`limitTimeTask` / `limitTimeDay` / `limitTimeActivity` / `limitTimeConfig`）——
+ * **服务端下发**（`reqActivityJson` 的 `content` 是 JSON 字符串），不是 `remoteRef` 静态表；
+ * ③ 服务器状态 —— `reqActivityLimitTimeInfo`（任务进度 + 礼包 / 限购次数）；
+ * ④ 领取 / 购买 —— `reqActivityLimitTimeTake`（`type`: 1 领任务 / 2 买每日礼包 / 3 买限购）。
  *
- * ## ⚠️ 配置是服务端下发的 ⇒ 本模块**必须**有主动拉取（不像 MonthCard 那种纯读本地）
+ * ##  配置是服务端下发的 ⇒ 本模块**必须**有主动拉取（不像 MonthCard 那种纯读本地）
  *
- *  老端在 `ModelBackStageAct.afterEnterGame()` 里遍历 `VOBackStageActBag` 逐个拉配置 + 数据，
- *  Demo3.8 没有 `afterEnterGame` 钩子，这里改成**页面打开时 `refresh()` 拉一次**，拉到后缓存
- *  在内存里供后续 `load()` 复用；`load()` 本身**不发请求**（会被预览页频繁调用）。
+ * 老端在 `ModelBackStageAct.afterEnterGame()` 里遍历 `VOBackStageActBag` 逐个拉配置 + 数据，
+ * Demo3.8 没有 `afterEnterGame` 钩子，这里改成**页面打开时 `refresh()` 拉一次**，拉到后缓存
+ * 在内存里供后续 `load()` 复用；`load()` 本身**不发请求**（会被预览页频繁调用）。
  *
- * ## ⚠️ 领奖 / 购买后要拿响应里的状态**原地覆盖**，而不是再拉一次
+ * ##  领奖 / 购买后要拿响应里的状态**原地覆盖**，而不是再拉一次
  *
- *  `CmdActivityLimitTimeTakeRspMsg` 响应体里带了更新后的 `tlCmdTask` / `tlLimitTimeDay` /
- *  `tlLimitTimeActivity`（老端 `ModelBackStageAct.reqActivityLimitTimeTake` 就是拿这些
- *  `SetData` 的），所以领完直接把响应数据覆盖进内存缓存即可，不用再发一次 `reqActivityLimitTimeInfo`。
+ * `CmdActivityLimitTimeTakeRspMsg` 响应体里带了更新后的 `tlCmdTask` / `tlLimitTimeDay` /
+ * `tlLimitTimeActivity`（老端 `ModelBackStageAct.reqActivityLimitTimeTake` 就是拿这些
+ * `SetData` 的），所以领完直接把响应数据覆盖进内存缓存即可，不用再发一次 `reqActivityLimitTimeInfo`。
  */
 
 import { FW } from '../../framework/FW';
@@ -65,7 +65,7 @@ export interface ILimitTimeActRepository {
     peekMeta(): ILimitTimeActMeta | null;
 }
 
-/** 读请求超时（规则 22）。 */
+/** 读请求超时。 */
 const READ_TIMEOUT_MS = 800;
 const WRITE_TIMEOUT_MS = 5000;
 

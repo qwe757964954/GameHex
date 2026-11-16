@@ -31,33 +31,35 @@ import { SR_ART_NAMES, SR_ART_SLICED, SR_ART_TILED } from '../assets/script/app/
 import { SHOW_REWARD_SOUNDS, SHOW_REWARD_TEXTS, showRewardSoundKey } from '../assets/script/app/showReward/ShowRewardTexts';
 import {
     FGUI_FPS,
+    SR_STAGGER_MS,
+    SR_STAR_COUNT,
+    SR_STAR_TRACKS,
+    framesToSeconds,
+    parseCmdGoodsList,
+    rewardEntryOf,
+    rewardIconPathOf,
+    sortRewardEntries,
+    staggerSecondsOf,
+    toCmdGoods,
+} from '../assets/script/app/showReward/ShowRewardTable';
+import {
     SR_COLUMNS,
     SR_COL_GAP,
     SR_ITEM_SIZE,
     SR_ROWS,
     SR_ROW_GAP,
     SR_SLOT_COUNT,
-    SR_STAGGER_MS,
-    SR_STAR_COUNT,
-    SR_STAR_TRACKS,
     SR_STEP_X,
     SR_STEP_Y,
     SR_VIEW_H,
     SR_VIEW_W,
     contentHeightOf,
-    framesToSeconds,
     maxTopRowOf,
-    parseCmdGoodsList,
-    rewardEntryOf,
-    rewardIconPathOf,
     rowsOf,
     columnsOf,
     slotLocalCenterOf,
-    sortRewardEntries,
-    staggerSecondsOf,
-    toCmdGoods,
     windowSlotOf,
-} from '../assets/script/app/showReward/ShowRewardTable';
+} from './fixtures/showreward-grid-layout';
 import type { IRewardEntry } from '../assets/script/app/showReward/ShowRewardTable';
 import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
 import { assetPath } from './helpers/asset-paths';
@@ -583,7 +585,7 @@ test('C10｜`HintLabel`：文案照原稿、`overflow=NONE`（SHRINK 会把 24 �
     assert.deepEqual([uitOf(o, idx)._contentSize.width, uitOf(o, idx)._contentSize.height], [196, 34]);
 });
 
-test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×1，且无 MissingScript', () => {
+test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×1 / PanelBg×1，且无 MissingScript', () => {
     const o = loadPrefab();
     const cids = new Map<string, number>();
     for (const obj of o) {
@@ -591,9 +593,9 @@ test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×
         if (obj.__type__ === 'cc.MissingScript') assert.fail('prefab 里出现 cc.MissingScript');
         if (/^[0-9A-Za-z+/]{23}$/.test(obj.__type__)) cids.set(obj.__type__, (cids.get(obj.__type__) ?? 0) + 1);
     }
-    assert.equal(cids.size, 4, `脚本类应有 4 种，实际 ${[...cids.keys()].join(',')}`);
+    assert.equal(cids.size, 5, `脚本类应有 5 种，实际 ${[...cids.keys()].join(',')}`);
     const counts = [...cids.values()].sort((a, b) => a - b);
-    assert.deepEqual(counts, [1, 1, 1, 1]);
+    assert.deepEqual(counts, [1, 1, 1, 1, 1]);
 });
 
 test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 goods/glow/stars(5)', () => {
@@ -771,7 +773,10 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
     const dependencies: Record<string, unknown> = {
         cc: { _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} } },
         '../../framework/ui/PopupBase': { PopupBase: class {} },
-        '../../framework/ui/PopupDef': {}, '../../framework/FW': {},
+        '../../framework/ui/PopupDef': { PopupCloseReason: { Close: 0, ClickBlank: 1 } },
+        '../../framework/FW': {},
+        '../../framework/event/EventMgr': { EventMgr: { instance: { emit() {} } } },
+        '../../framework/ui/ViewLifecycle': { VIEW_LIFECYCLE: {} },
         '../itemdetail/ItemDetailPage': {},
         '../itemdetail/ItemDetailTable': { itemNumberTextOf: String },
         '../../vscrollview/VScrollView': {}, './ShowRewardItem': {},
@@ -999,7 +1004,7 @@ test('F4｜反向守卫：`HeadGridList` 的死回调 + 错误滚动模型都不
     // ② 滚动模型：禁 Content 位移
     assert.ok(!/applyScroll/.test(HEAD_CODE), '不该有 applyScroll（旧模型的病灶）');
     assert.ok(!/this\.content\.setPosition\(/.test(HEAD_CODE), '禁让 Content 位移');
-    assert.ok(/Math\.floor\(i \/ HEAD_ITEM_COLUMNS\)/.test(HEAD_SRC), '必须用窗口式公式');
+    assert.ok(/Math\.floor\(i \/ this\.columns\)/.test(HEAD_SRC), '必须用窗口式公式（列数从 Grid Layout 读）');
     assert.ok(/_slotDataIndex\[i\] = has \? dataIndex : -1;/.test(HEAD_SRC), '无条件写数据下标');
     assert.ok(!/\.off\s*\(/.test(HEAD_CODE), '禁写 off(...)（规则 71）');
 });

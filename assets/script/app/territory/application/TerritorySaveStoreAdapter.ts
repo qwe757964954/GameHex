@@ -10,7 +10,7 @@ import {
 import type { TerritoryIdleRewardSource } from '../model/TerritoryIdleReward';
 
 /**
- * 本地存档适配器：捕获角色归属并提供引擎存储端口，Presenter 不接触 Cocos。
+ * 本地存档适配器：捕获角色归属并提供引擎存储端口，Controller 不接触 Cocos。
  */
 export class TerritorySaveStoreAdapter implements ITerritoryChapterStore {
     private readonly store: TerritorySaveStore;

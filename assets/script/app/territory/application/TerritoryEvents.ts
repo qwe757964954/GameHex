@@ -6,9 +6,9 @@ export const TerritoryUiEvent = {
     /**
      * 章节入口（地图起始格的章节建筑 / 它头上的「章节」气泡）点了 ⇒ 宿主页开章节选择弹窗。
      *
-     * 🔴 这一条**必须有名字**：`TerritoryStationView` 发它、`MainPage` 订阅它，谁都不知道对方。
-     *    少了这个键两边都拿 `undefined` 当事件名 —— `emit` / `on` 恰好都落在同一个空键上，
-     *    功能看着还能用，实际是「两条无关的 undefined 撞在一起」，加任何第三个事件就崩。
+     * 这一条**必须有名字**：`TerritoryStationView` 发它、`MainPage` 订阅它，谁都不知道对方。
+     * 少了这个键两边都拿 `undefined` 当事件名 —— `emit` / `on` 恰好都落在同一个空键上，
+     * 功能看着还能用，实际是「两条无关的 undefined 撞在一起」，加任何第三个事件就崩。
      */
     ChapterSelect: 'territory:chapter-select',
 } as const;
@@ -20,9 +20,9 @@ export type TerritoryIntent =
     /**
      * 章节选择弹窗里点了某一行 ⇒ 按 `chapterId` 直接切（`chapter` 只够「翻一页」）。
      *
-     * 🔴 2026-11-04 补：这条一直是**运行时**在用（`ChapterSelectPanel` 发、
-     *    `TerritoryController` 收），但没写进联合类型 —— 结果控制器那个 `case` 是死分支，
-     *    TS 也帮不上忙。加回来之后「回到已通过的章节」这条路才有类型保障。
+     * 这条一直是**运行时**在用（`ChapterSelectPanel` 发、
+     * `TerritoryController` 收），但没写进联合类型 —— 结果控制器那个 `case` 是死分支，
+     * TS 也帮不上忙。加回来之后「回到已通过的章节」这条路才有类型保障。
      */
     | { readonly kind: 'selectChapter'; readonly chapterId: number }
     | { readonly kind: 'battle' | 'closeDetail' | 'openLevelTip' | 'closeLevelTip' | 'scout' | 'focusLevel'

@@ -54,6 +54,8 @@ export interface IZCGamePreparedResources {
     goldCoinFrame: SpriteFrame | null;
     /** 只有自选出生点地图会加载。*/
     spawnRegionFrames: IZCSpawnRegionHintFrames | null;
+    /** 区域气泡预制体；只有自选出生点地图会加载。*/
+    spawnRegionHintPrefab: Prefab | null;
     buildingFrames: ReadonlyMap<string, SpriteFrame>;
     wallFrames: ReadonlyMap<string, SpriteFrame>;
     wallMaterial: Material | null;

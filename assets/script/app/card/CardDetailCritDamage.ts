@@ -1,14 +1,7 @@
 /**
- * 卡牌详情页的「升级增加全队暴击伤害」文案数据。不 import cc，可单测。
- *
- * 数据源 `pvpSkillPlan`：每张可上场卡都有 50 行固定链（`skillChainId = 109001`），
- * 一行 = 一个等级档的增量（不是累计值）：
- *   - `skillLevel` / `unlockHeroLevel` = 卡牌等级（两者相等）；
- *   - `statId = critDamage`、`operation = add`、`value` = 百分点（1 = +1%）。
- *
- * 战斗层把本局阵容所有卡的这条链汇总成一个 owner 级共享池
- * （`ZCModifierRuntime.shareLineupCritDamage`），详情页只读这一条链，
- * 告诉玩家「再升一级，全队暴击伤害还能加多少」。
+ * 卡牌详情页「升级增加全队暴击伤害」的数据层，不 import cc。
+ * 数据源 pvpSkillPlan 的 109001 链：每行是一个等级档的增量，value 单位为百分点。
+ * 详情页只读这一条链，告诉玩家再升一级全队暴击伤害还能加多少。
  */
 
 /** 「全队暴击伤害增幅」在 `pvpSkillPlan` 里的固定技能链。 */
@@ -21,10 +14,8 @@ const CRIT_DAMAGE_STAT = 'critDamage';
 export type ZCCritDamageGainTable = ReadonlyMap<string, ReadonlyMap<number, number>>;
 
 /**
- * `pvpSkillPlan` 原始行 → 暴击伤害增量表（只收 109001 链上启用的 `critDamage` 行）。
- *
- * 数值口径：`add` 直接是百分点（1 = +1%）；`addRate` 是比例（0.01 = +1%）按 ×100 折算。
- * 其它 statId / 其它链 / 停用行一律忽略 —— 这张表只服务详情页那一行文案。
+ * pvpSkillPlan 原始行转暴击伤害增量表，只收 109001 链上启用的 critDamage 行。
+ * add 直接是百分点，addRate 按 ×100 折算。
  */
 export function buildCritDamageGainTable(rows: readonly unknown[]): ZCCritDamageGainTable {
     const table = new Map<string, Map<number, number>>();
@@ -51,10 +42,8 @@ export function buildCritDamageGainTable(rows: readonly unknown[]): ZCCritDamage
 }
 
 /**
- * 从 `level` 升到 `level + 1` 会新增的全队暴击伤害（百分点）。
- *
- * 读的是目标等级那一行 —— 链路上每行是「到这一级才给」的增量；
- * 没配 / 已满级（没有 level+1 行）返回 0，调用方据此不显示文案。
+ * 从 level 升到 level + 1 新增的暴击伤害百分点，读目标等级那一行。
+ * 没配或已满级返回 0，调用方据此不显示文案。
  */
 export function critDamageGainAt(
     table: ZCCritDamageGainTable,
@@ -66,9 +55,8 @@ export function critDamageGainAt(
 }
 
 /**
- * 百分点 → 展示文本：`2 → 2%`、`0.5 → 0.5%`。非正数返回空串（不显示这一行）。
- *
- * 用 `toFixed(1)` 兜住配表里的小数（绿卡每级 0.5%），整数档不显示 `.0`。
+ * 百分点转展示文本：2 转 2%，0.5 转 0.5%。非正数返回空串。
+ * 配表有 0.5 这类小数，整数档不显示 .0。
  */
 export function formatCritDamageGain(points: number): string {
     if (!Number.isFinite(points) || points <= 0) return '';

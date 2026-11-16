@@ -1,43 +1,6 @@
 /**
- * 「联盟 · 大厅」母面板（老端 `play/LayerLeagueHall`，`assets/resources/ui/League/LeagueHall.prefab`）。
- *
- * ## 版面（真源 = FGUI `主界面_联盟/大厅/组件_联盟_大厅.xml`，720×1280）
- *
- * 一屏三块：
- *  - **头部信息区**：联盟旗帜（`Banner`）+ 名称 / 等级 / ID / 微信 / 公告底板 + 经验进度条
- *    + 帮助 / 管理 / 复制 ID / 复制微信四个小按钮；
- *  - **底部页签栏**：返回 + 三个页签（详情 / 动态 / 全服联盟），页签底图与图标各分「选中 / 未选中」两套；
- *  - **页签内容区**：`TabDetail` / `TabLog` / `TabAllServer` 三个互斥容器（切页签 = 切 `active`）。
- *
- * ## 页签模型（FGUI `标签` controller → 三个 `active` 容器）
- *
- * FGUI 里三个页签是**三个独立组件**，由页签框架叠在内容区互斥显示，每个组件在
- * `initAsync` 各发一条请求（详情 / 动态 / 全服）。Demo3.8 侧不引页签框架，
- * 直接用「三个容器 + 一个选中下标」——`selectTab(i)` 同时切容器可见性与页签按钮的
- * 选中 / 未选中子节点（`BgUp/BgDown/IconUp/IconDown`），口径与 `MainTabHost` 一致；
- * 取数搬到 `activateTab(i)`，**第一次切到该页签才发请求**（等价于老端的懒建 tab 组件）。
- *
- * ## 三张列表都是「行模板内联在本 prefab 里」的虚拟列表
- *
- * | 页签 | 列表节点 | 行模板 | 行高 / 间距 |
- * |---|---|---|---|
- * | 详情 | `TabDetail/DetailList` | `…/content/MemberRow` | 109 / `lineGap 8` |
- * | 动态 | `TabLog/LogList` | `…/content/LogRow` | 70 / `lineGap 8` |
- * | 全服 | `TabAllServer/ServerList` | `…/content/ServerRow` | 113 / `lineGap 4` |
- *
- * 行模板**不必单独出 prefab**：`VirtualScrollView` 支持 `itemNode` 指向 content 下的节点
- * （`_initFixedSizeMode` 还会把 content 的**第一个子节点**当模板 `removeFromParent` 掉，
- * 所以上屏后 content 里不会留一个「多余的假行」）。
- *
- * ## 与老端的**有意偏差**
- *
- * 1. 老端 `updateView` 在「未入盟」时会 `unload()`（把大厅整个关掉）。本端**不关**：
- *    大厅只可能从「已入盟」的入口进来，真出现空态时把面板自己关掉反而更难查；
- *    这里退回占位头部 + 空列表。
- * 2. `league_copyid` / `league_copywx` 两个节点老端**压根没接线**；本端现已接通：
- *    复制联盟 ID / 微信号（走 `copyLeagueText`，非微信环境自动退回 `navigator.clipboard`）。
- * 3. `btn_help` 老端接的是等级预览（`OpenLayerLeagueLevelPreview`）⇒ 本端同样打开
- *    `LeagueLevelPreviewPage`（已落地）。
+ * 联盟大厅母面板。三个页签用容器 active 切换，首次切到才拉数据。
+ * 详情/动态/全服列表的行模板内联在 prefab；复制 ID 和微信已接通。
  */
 
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
@@ -135,7 +98,7 @@ const _pageLocal = new Vec3();
 
 @ccclass('LeagueHallPage')
 export class LeagueHallPage extends PopupBase {
-    /** ⚠️ 目录名大小写必须与磁盘一致（`assets/resources/ui/League/`）。 */
+    /**  目录名大小写必须与磁盘一致（`assets/resources/ui/League/`）。 */
     static prefabPath = 'ui/League/LeagueHall';
 
     @property({ type: Node, tooltip: 'Banner：联盟旗帜容器' })
@@ -261,9 +224,7 @@ export class LeagueHallPage extends PopupBase {
     private bound = false;
     private listsBound = false;
 
-    // ============================================================
     // 生命周期
-    // ============================================================
 
     onLoad(): void {
         this.ensureBound();
@@ -276,8 +237,8 @@ export class LeagueHallPage extends PopupBase {
     /**
      * 首屏取数。
      *
-     * ⚠️ 不放 `onLoad`：`onLoad` 由引擎在节点激活时调，而 `onOpen` 才由弹窗管理器调，
-     *    两者先后不确定（管理器可能先 `onInit` 再入场景）。取数放 `onOpen` 更贴「面板被打开」。
+     * 不放 `onLoad`：`onLoad` 由引擎在节点激活时调，而 `onOpen` 才由弹窗管理器调，
+     * 两者先后不确定（管理器可能先 `onInit` 再入场景）。取数放 `onOpen` 更贴「面板被打开」。
      */
     protected onOpen(): void {
         this.ensureBound();
@@ -294,15 +255,13 @@ export class LeagueHallPage extends PopupBase {
         super.onDestroy();
     }
 
-    // ============================================================
     // 按钮接线
-    // ============================================================
 
     /**
      * 按钮 / 列表接线（`onLoad` 与 `onOpen` 都会兜一次，所以必须幂等）。
      *
-     * ⚠️ 顺序有讲究：`tabButtons/tabPages` 必须在 `bindButtons()` **之前**填好，
-     *    否则「页签按钮一个都没接上」—— 而且不报错（`for` 循环跑了个空数组）。
+     * 顺序有讲究：`tabButtons/tabPages` 必须在 `bindButtons()` **之前**填好，
+     * 否则「页签按钮一个都没接上」—— 而且不报错（`for` 循环跑了个空数组）。
      */
     private ensureBound(): void {
         if (!this.tabButtons.length) {
@@ -337,8 +296,8 @@ export class LeagueHallPage extends PopupBase {
     /**
      * 列表回调 + 查询框监听。
      *
-     * ⚠️ `renderItemFn` **只能绑一次**（放 `onLoad` / `onOpen` 都会随每次打开重复叠加，
-     *    叠加后同一帧会被渲染 N 次）。
+     * `renderItemFn` **只能绑一次**（放 `onLoad` / `onOpen` 都会随每次打开重复叠加，
+     * 叠加后同一帧会被渲染 N 次）。
      */
     private bindLists(): void {
         if (!this.listsBound) {
@@ -377,9 +336,7 @@ export class LeagueHallPage extends PopupBase {
         else node.on(Node.EventType.TOUCH_END, handler, this);
     }
 
-    // ============================================================
     // 页签
-    // ============================================================
 
     /**
      * 切换页签（同步部分 = 切容器 + 切按钮态；随后异步取数）。
@@ -468,9 +425,7 @@ export class LeagueHallPage extends PopupBase {
         else this.presentUnions();
     }
 
-    // ============================================================
     // 头部信息
-    // ============================================================
 
     /** 头部信息（数据没回来前 = 占位串）。 */
     private applyHeaderPlaceholder(): void {
@@ -555,9 +510,7 @@ export class LeagueHallPage extends PopupBase {
         }
     }
 
-    // ============================================================
     // 详情页签（成员）
-    // ============================================================
 
     private presentMembers(): void {
         const snapshot = this.snapshot;
@@ -592,7 +545,7 @@ export class LeagueHallPage extends PopupBase {
     /**
      * 点成员行 ⇒ 在该行位置弹出角色操作浮层（老端 `itemClick`）。
      *
-     * ⚠️ 浮层展开时它自带一层全屏遮罩：**先收起、本次点击不透传**（不然点页签会「既收起又切页」）。
+     * 浮层展开时它自带一层全屏遮罩：**先收起、本次点击不透传**（不然点页签会「既收起又切页」）。
      */
     private onMemberClick(node: Node, index: number): void {
         if (this.opsBar?.isOpen) {
@@ -622,9 +575,7 @@ export class LeagueHallPage extends PopupBase {
         return _pageLocal.y - OPS_BAR_CENTER_OFFSET;
     }
 
-    // ============================================================
     // 动态页签（日志）
-    // ============================================================
 
     private presentLogs(): void {
         const snapshot = this.snapshot;
@@ -644,9 +595,7 @@ export class LeagueHallPage extends PopupBase {
         row.render(view);
     }
 
-    // ============================================================
     // 全服页签（联盟列表 + 搜索）
-    // ============================================================
 
     private presentUnions(): void {
         const snapshot = this.snapshot;
@@ -708,10 +657,10 @@ export class LeagueHallPage extends PopupBase {
     /**
      * 点全服列表里的某一行 ⇒ 开「联盟信息」。
      *
-     * ⚠️ 传的是**行视图对象本身**，不是 id：全服列表的 `CmdUnion` 来自
-     *    `RequestUnionSearch` 的 Rsp，而 `LeagueRepository` **刻意不**把搜索结果写进
-     *    缓存表（免得抢「我所在的联盟」那个 `tlKey`）⇒ 详情面板回缓存查是查不到的。
-     *    这就是 `ILeagueUnionView` 带 `wxChat` / `declaration` 两个字段的原因。
+     * 传的是**行视图对象本身**，不是 id：全服列表的 `CmdUnion` 来自
+     * `RequestUnionSearch` 的 Rsp，而 `LeagueRepository` **刻意不**把搜索结果写进
+     * 缓存表（免得抢「我所在的联盟」那个 `tlKey`）⇒ 详情面板回缓存查是查不到的。
+     * 这就是 `ILeagueUnionView` 带 `wxChat` / `declaration` 两个字段的原因。
      */
     private onUnionClick(_node: Node, index: number): void {
         if (this.opsBar?.isOpen) {
@@ -723,9 +672,7 @@ export class LeagueHallPage extends PopupBase {
         void LeagueInfoPage.open({ userData: { union: view } });
     }
 
-    // ============================================================
     // 角色操作浮层
-    // ============================================================
 
     private onOpsAction(action: LeagueOpsAction): void {
         const view = this.selectedMember;
@@ -818,9 +765,7 @@ export class LeagueHallPage extends PopupBase {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }
 
-    // ============================================================
     // 公共小工具
-    // ============================================================
 
     private openLevelPreview(): void {
         void LeagueLevelPreviewPage.open({});
@@ -829,8 +774,8 @@ export class LeagueHallPage extends PopupBase {
     /**
      * 铺列表。
      *
-     * ⚠️ `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
-     *    ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
+     * `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
+     * ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
      */
     private refreshList(list: VirtualScrollView | null, count: number): void {
         if (!list) return;

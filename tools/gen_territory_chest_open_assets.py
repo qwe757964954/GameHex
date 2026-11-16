@@ -8,8 +8,9 @@ xhdpi `sliceScale=2` 导出的切图是 **1:1 设计像素**（不用再乘 2）
 （幂等：每次都整份重写 meta / prefab，切图只拷贝不修改）
 
 ⚠️ prefab 是**整份重写**的：在编辑器里手改过 prefab 之后再跑本脚本，手改内容会被覆盖。
-   布局改动的正确入口是 `assets/script/app/territory/model/TerritoryChestOpenLayout.ts`
-   （本脚本里的 `CARD_TOP` 等只用来摆 prefab 的初始位置，运行时的贴边全靠 Widget）。
+   布局的最终真源是 `assets/resources/ui/territory/TerritoryChestOpen.prefab`
+   （Cards/RowTemplate 的 `cc.Layout`、各节点的 `UITransform`/`Widget`）；运行时
+   `TerritoryChestOpenPage` 只按列数分行并读取 prefab 的边距/尺寸，不再维护第二份栅格常量。
 
 ## 为什么 meta 要脚本写而不是让编辑器导
 
@@ -26,7 +27,8 @@ prefab 里 `cc.Sprite._spriteFrame` 存的是 `<图片 uuid>@f9941`，脚本要�
 TerritoryChestOpen   720×1610  Widget 四边拉伸（长屏适配：顶上锚卡片、底下锚宝箱）
 ├── Bg               720×1610  Widget 四边拉伸 + UIOpacity（入场淡入；图在 image/ 根，不进图集）
 ├── Cards            580×401   Widget top=432 / hCenter=0（锚点 0.5,1 = 顶部中心）
-│   └── CardTemplate 139×185   inactive（运行时 instantiate；渲染序 Frame→Icon→Band→Count）
+│   ├── RowTemplate  580×185   inactive；cc.Layout 横向（spacingX=8、CONTAINER），页面按列数克隆
+│   └── CardTemplate 139×185   inactive（运行时 instantiate 到行里；渲染序 Frame→Icon→Band→Count）
 │       ├── Frame    139×185   品质卡框（默认蓝框，运行时按 quality 换 01~04）
 │       ├── Icon     112×147   y=-3（图标位顶边距卡顶 22）
 │       ├── Band     122×29    (-0.5,-70) 数量底条（盖住图标下沿）
@@ -393,6 +395,42 @@ class Builder:
             "_lockFlags": 0,
         })
 
+    def layout(
+        self,
+        node,
+        layout_type,
+        resize_mode=1,
+        cell_size=(0, 0),
+        start_axis=0,
+        padding=(0, 0, 0, 0),
+        spacing=(0, 0),
+        vertical_direction=1,
+        horizontal_direction=0,
+        constraint=0,
+        constraint_num=0,
+        affected_by_scale=False,
+        is_align=False,
+    ):
+        return self.comp(node, {
+            "__type__": "cc.Layout",
+            "_resizeMode": resize_mode,
+            "_layoutType": layout_type,
+            "_cellSize": {"__type__": "cc.Size", "width": cell_size[0], "height": cell_size[1]},
+            "_startAxis": start_axis,
+            "_paddingLeft": padding[0],
+            "_paddingRight": padding[1],
+            "_paddingTop": padding[2],
+            "_paddingBottom": padding[3],
+            "_spacingX": spacing[0],
+            "_spacingY": spacing[1],
+            "_verticalDirection": vertical_direction,
+            "_horizontalDirection": horizontal_direction,
+            "_constraint": constraint,
+            "_constraintNum": constraint_num,
+            "_affectedByScale": affected_by_scale,
+            "_isAlign": is_align,
+        })
+
     def label(self, node, text, font_size, line_height, outline_width=2, font_family="Microsoft YaHei"):
         return self.comp(node, {
             "__type__": "cc.Label",
@@ -488,7 +526,11 @@ def build_prefab():
         "contentNodes": [],
         "bgOpacity": None,
         "cardsRoot": None,
+        "rowTemplate": None,
         "cardTemplate": None,
+        "gridColumns": 4,
+        "gridMinScale": 0.7,
+        "gridBottomGap": 16,
         "chestNode": None,
         "chestOpacity": None,
         "skipButton": None,
@@ -509,7 +551,14 @@ def build_prefab():
     # ── Cards：顶部锚定（容器锚点 0.5/1 ⇒ 局部原点就是它自己的顶边中心）──
     cards = b.node("Cards", root, (0, CANVAS_H / 2 - CARD_TOP), (580, 401), anchor=(0.5, 1))
     b.widget(cards, 17, (580, 401), top=CARD_TOP, hcenter=0)
+    # 纵向 Layout：页面按列数分行，行高/行距由 prefab 决定，不再用纯函数算 y。
+    b.layout(cards, 2, resize_mode=1, spacing=(8, 31), vertical_direction=1, is_align=True)
     b.prefab_info(cards)
+
+    # 行模板：横向 Layout，页面按列数往里塞卡；不足一行的卡由容器宽度居中。
+    row = b.node("RowTemplate", cards, (0, -92.5), (580, 185), active=False)
+    b.layout(row, 1, resize_mode=1, spacing=(8, 0), horizontal_direction=0, is_align=True)
+    b.prefab_info(row)
 
     card = b.node("CardTemplate", cards, (0, -92.5), (139, 185), active=False)
     card_opacity = b.uiopacity(card)
@@ -519,6 +568,7 @@ def build_prefab():
         "icon": None,
         "count": None,
         "opacity": None,
+        "iconMaxUpscale": 2,
     })
     b.prefab_info(card)
 
@@ -566,6 +616,7 @@ def build_prefab():
     page = b.items[page_comp]
     page["bgOpacity"] = b.ref(bg_opacity)
     page["cardsRoot"] = b.ref(cards)
+    page["rowTemplate"] = b.ref(row)
     page["cardTemplate"] = b.ref(card)
     page["chestNode"] = b.ref(chest)
     page["chestOpacity"] = b.ref(chest_opacity)

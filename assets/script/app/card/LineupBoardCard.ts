@@ -112,9 +112,7 @@ export class LineupBoardCard extends Component {
         this.check.active = onField;
     }
 
-    // ========================================================================
     // 手势
-    // ========================================================================
 
     private onTouchStart(event: EventTouch): void {
         if (!this.tapHost || !this.currentCard) return;

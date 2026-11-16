@@ -14,14 +14,6 @@ export const MONTHCARD_LIST_HEIGHT = 756;
 
 export const MONTHCARD_ENTRY_STRIDE = MONTHCARD_ENTRY_HEIGHT;
 
-/** 奖励格尺寸。 */
-export const MONTHCARD_SLOT_WIDTH = 80;
-export const MONTHCARD_SLOT_HEIGHT = 80;
-export const MONTHCARD_SLOT_STRIDE = MONTHCARD_SLOT_WIDTH + 10;
-
-export const MONTHCARD_PRIVILEGE_ROW_HEIGHT = 34;
-export const MONTHCARD_PRIVILEGE_STRIDE = MONTHCARD_PRIVILEGE_ROW_HEIGHT + 6;
-
 export const MONTHCARD_MAX_PRIVILEGE_ROWS = 5;
 export const MONTHCARD_MAX_DAY_REWARD_SLOTS = 4;
 
@@ -161,23 +153,5 @@ export function entryPosition(index: number): ILayoutPoint {
     return {
         x: 0,
         y: MONTHCARD_LIST_HEIGHT / 2 - MONTHCARD_ENTRY_HEIGHT / 2 - index * MONTHCARD_ENTRY_STRIDE,
-    };
-}
-
-/** 第 index 个每日奖励格位置。 */
-export function dayRewardSlotPosition(index: number): ILayoutPoint {
-    return {
-        x: index * MONTHCARD_SLOT_STRIDE + MONTHCARD_SLOT_WIDTH / 2 - MONTHCARD_DAY_LIST_SIZE.width / 2,
-        y: 0,
-    };
-}
-
-/** 第 index 行特权位置（靠左）。 */
-export function privilegeRowPosition(index: number): ILayoutPoint {
-    return {
-        x: MONTHCARD_PRIVILEGE_ROW_SIZE.width / 2 - MONTHCARD_PRIVILEGE_LIST_SIZE.width / 2,
-        y: MONTHCARD_PRIVILEGE_LIST_SIZE.height / 2
-            - MONTHCARD_PRIVILEGE_ROW_HEIGHT / 2
-            - index * MONTHCARD_PRIVILEGE_STRIDE,
     };
 }

@@ -48,55 +48,48 @@ const { ccclass, property } = _decorator;
 @ccclass('OSRankItem')
 export class OSRankItem extends Component {
     @property({ type: Label, tooltip: 'RankText：`第1名` / `2-3名` / `21-50名`（FGUI `文本_排名`）' })
-    rankText: Label = null;
+    rankText: Label = null!;
 
     @property({ type: OSArtStrip, tooltip: 'RewardList：横向奖励条（吃 `rewards1`）' })
-    strip: OSArtStrip = null;
+    strip: OSArtStrip = null!;
 
     @property({ type: OSRewardSlot, tooltip: 'Goods：右侧单个奖励格（吃 `rewards2[0]`，FGUI `com_goods`）' })
-    goods: OSRewardSlot = null;
+    goods: OSRewardSlot = null!;
 
     @property({ type: Label, tooltip: 'PowerText：`{战力口径}达{N}`（FGUI `lab_power`）' })
-    powerText: Label = null;
+    powerText: Label = null!;
 
     render(snapshot: ICelebrationSnapshot, row: ICelebrationRankRow, frames: CelebrationFrames): void {
         // ---- 名次文案 + 颜色（gearColor `名次`）----
-        if (this.rankText) {
-            this.rankText.string = rankRowTextOf(row);
-            const segment = osSegmentOf(row);
-            this.rankText.color = toColor(osRankTextColor(segment));
-            this.rankText.outlineColor = toColor(OS_RANK_TEXT_STROKE);
-        }
+        this.rankText.string = rankRowTextOf(row);
+        const segment = osSegmentOf(row);
+        this.rankText.color = toColor(osRankTextColor(segment));
+        this.rankText.outlineColor = toColor(OS_RANK_TEXT_STROKE);
 
         // ---- 战力要求文案 + 颜色（gearColor `状态`）----
         const reached = rankReached(snapshot, row);
-        if (this.powerText) {
-            this.powerText.string = rankConditionTextOf(snapshot, row);
-            this.powerText.color = toColor(osPowerTextColor(reached));
-            this.powerText.outlineColor = toColor(OS_POWER_TEXT_STROKE);
-        }
+        this.powerText.string = rankConditionTextOf(snapshot, row);
+        this.powerText.color = toColor(osPowerTextColor(reached));
+        this.powerText.outlineColor = toColor(OS_POWER_TEXT_STROKE);
 
         // ---- 左侧横排奖励（`rewards1`）----
-        if (this.strip) this.strip.render(snapshot, row.rewards1, frames);
+        this.strip.render(snapshot, row.rewards1, frames);
 
         // ---- 右侧单个奖励（`rewards2[0]`）----
-        if (this.goods) {
-            const first = row.rewards2.length > 0 ? row.rewards2[0] : null;
-            if (!first) {
-                this.goods.hide();
-            } else {
-                this.goods.render(
-                    frames.iconOf(snapshot, first.resId),
-                    frames.qualityOf(snapshot, first.resId),
-                    first.number,
-                );
-                // gearLook `状态 pages="1" values="1,0,1,1"` ⇒ 未达标整格置灰。
-                // ⚠️ tint **无条件写**（规则 82）：`gearLook` 的默认是「不置灰」，
-                //    只在翻转时写会让首次「未达标 === 缓存初值」短路、永久不灰。
-                const tint = toColor(osTint(!reached));
-                for (const sprite of collectSprites(this.goods)) sprite.color = tint;
-                if (this.goods.num) this.goods.num.color = tint;
-            }
+        const first = row.rewards2.length > 0 ? row.rewards2[0] : null;
+        if (!first) {
+            this.goods.hide();
+        } else {
+            this.goods.render(
+                frames.iconOf(snapshot, first.resId),
+                frames.qualityOf(snapshot, first.resId),
+                first.number,
+            );
+            // gearLook `状态 pages="1" values="1,0,1,1"` ⇒ 未达标整格置灰。
+            // tint 无条件写，避免首次「未达标 === 缓存初值」短路。
+            const tint = toColor(osTint(!reached));
+            for (const sprite of collectSprites(this.goods)) sprite.color = tint;
+            this.goods.num.color = tint;
         }
     }
 }
@@ -118,10 +111,7 @@ function toColor(rgb: readonly [number, number, number]): Color {
 
 /** 一个奖励格里会被染色的 `cc.Sprite`（框 + 图标）。 */
 function collectSprites(slot: OSRewardSlot): Sprite[] {
-    const out: Sprite[] = [];
-    if (slot.frame) out.push(slot.frame);
-    if (slot.icon) out.push(slot.icon);
-    return out;
+    return [slot.frame, slot.icon];
 }
 
 /** `ECelebrationRankSegment` 与字符串分段是同一套口径的两个表示 —— 给单测对账用。 */

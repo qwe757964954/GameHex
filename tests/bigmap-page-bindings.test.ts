@@ -35,7 +35,7 @@ class Node {
     on(event: string, callback: () => void, caller: object) { this.events.set(event, callback.bind(caller)); }
 }
 class Button { static EventType = { CLICK: 'click' }; interactable = true; }
-class Label { static Overflow = { NONE: 0 }; string = ''; lineHeight = 21; }
+class Label { static Overflow = { NONE: 0 }; string = ''; lineHeight = 21; color = { r: 238, g: 235, b: 214, a: 255 }; }
 class Sprite {}
 class Widget { bottom = 0; alignmentUpdates = 0; updateAlignment() { this.alignmentUpdates++; } }
 class Graphics { clear() {} roundRect() {} fill() {} stroke() {} }

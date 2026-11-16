@@ -9,6 +9,7 @@ import { POPUP_ROOT_NAME } from '../../../framework/ui/PopupDef';
 import { startBattle } from '../../battle/BattleStartService';
 import { readRoleRow } from '../../main/MainRoleRow';
 import { HeadArt } from '../../HeadArt';
+import { spriteFramePath } from '../../ArtPaths';
 import { toIdString } from '../../net/RequestGuard';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
 import { createTerritorySaveStore } from '../../territory/application/TerritorySaveStoreAdapter';
@@ -266,7 +267,7 @@ export class BigMapEntry {
                 const resolver = await HeadArt.loadHeadArtResolver(configs);
                 if (scope.disposed) return null;
                 return HeadArt.loadHeadFrame(toIdString(role.img), (name, root) => (
-                    controller.resources.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope })
+                    controller.resources.assets.load(spriteFramePath(root, name), SpriteFrame, { scope })
                 ), resolver);
             });
             if (revision !== this.openRevision || !root.isValid) return;

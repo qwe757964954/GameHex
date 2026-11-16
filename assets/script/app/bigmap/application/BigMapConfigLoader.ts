@@ -2,6 +2,7 @@ import type { ConfigService } from '../../../core/config/ConfigService';
 import {
     BIGMAP_TABLE, attachBigMapResourceItemIcons, parseBigMapConfig,
 } from '../model/BigMapConfig';
+import type { BigMapRawTables } from '../model/BigMapConfig';
 import { applyBigMapScheduleOverrides } from '../model/BigMapCitySchedule';
 import type { IBigMapConfig } from '../model/BigMapTypes';
 import { withBigMapCampCities } from '../model/BigMapCampWorld';

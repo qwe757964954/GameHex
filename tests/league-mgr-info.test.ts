@@ -201,7 +201,8 @@ test('B5 ⚠️ 勾图复用 `image/sevenDay/sd_check`（工程内已有两处�
     // 复用先例还在（哪天有人「顺手」把它挪走，这条会红）
     const friend = readFileSync('assets/script/app/friend/FriendArt.ts', 'utf8');
     const token = readFileSync('assets/script/app/battletoken/BattleTokenArt.ts', 'utf8');
-    assert.ok(friend.includes("'image/sevenDay'") && friend.includes("'sd_check'"), 'FriendArt 的复用先例被改动了');
+    assert.ok((friend.includes("'image/sevenDay'") || /SEVEN_DAY_ART_ROOT/.test(friend)) && friend.includes("'sd_check'"),
+        'FriendArt 的复用先例被改动了');
     assert.ok(token.includes("'image/sevenDay'") && token.includes("'sd_check'"), 'BattleTokenArt 的复用先例被改动了');
 });
 

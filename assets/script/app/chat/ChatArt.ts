@@ -14,6 +14,7 @@ import {
     FRIEND_ART_ROOT,
     GAMEUI_ART_ROOT,
     LOGIN_ART_ROOT,
+    spriteFramePath,
 } from '../ArtPaths';
 
 /** 聊天自有图目录（不带 `resources/` 前缀）。 */
@@ -120,7 +121,7 @@ export function emojiArtName(index: number): string {
  * 必须是完整资源路径（`resources` 相对路径），裸图名会让 `cc.RichText` 静默不渲染。
  */
 export function emojiRichSrc(index: number): string {
-    return `${CHAT_ART_ROOT}/${emojiArtName(index)}/spriteFrame`;
+    return spriteFramePath(CHAT_ART_ROOT, emojiArtName(index));
 }
 
 /** 一行里通用的头像框底（三段式：底图 + 头像 icon）。 */

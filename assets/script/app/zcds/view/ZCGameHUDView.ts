@@ -406,12 +406,12 @@ export class ZCGameHUDView extends Component {
         for (const [owner, profile] of profiles) {
             if (!profile.headKey || this.headFrames.has(owner)) continue;
             void HeadArt.loadHeadFrame(profile.headKey).then((frame) => {
+                if (!this.isValid) return;
                 if (frame) this.headFrames.set(owner, frame);
                 // 头像异步到货：选点阶段没有"下一帧 render"，得在这里补刷一次；
                 // 对局阶段多刷这一次无害（下一帧 `render` 会写成同样的值）。
                 //  用 `repaintPlayerRows` 而不是 `paintPlayerRows` —— 后者会把兵力取值函数
                 // 重置成 null，对局中会把兵力文字抹掉一小会儿。
-                if (!this.isValid) return;
                 this.repaintPlayerRows();
             });
         }

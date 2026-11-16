@@ -29,8 +29,8 @@ import { readRefRows } from '../common/TableRead';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
 import { sendGameRequest, toIdString } from '../net/RequestGuard';
-import { parseItemRows, parseRolePropertyRows } from '../activity/LayerActivityTable';
-import { resolveRewardIconRef } from '../activity/LayerActivityArt';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import { resolveRewardIconRef } from '../common/RewardIcon';
 import {
     buyCountOf,
     celebrationIdOf,

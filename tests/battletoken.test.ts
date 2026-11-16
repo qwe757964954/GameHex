@@ -33,7 +33,6 @@ import {
     BT_ART_SLICED,
     BT_ART_NAMES,
     BT_PAGE_ART,
-    BT_QUALITY_FRAME_NAMES,
     BT_SPRITE_SIMPLE,
     BT_SPRITE_SLICED,
     btArtPath,
@@ -48,6 +47,7 @@ import {
     qualityFrameLevel,
     qualityFrameName,
     } from '../assets/script/app/battletoken/BattleTokenArt';
+import { QUALITY_FRAME_NAMES } from '../assets/script/app/common/QualityFrameArt';
 import {
     BT_CFG_LEVEL_UP_COST,
     BT_CFG_MAX_LEVEL,
@@ -682,7 +682,7 @@ test('页头三件套：4 个页签 × 3 张图全部落盘，且文件名严格
 });
 
 test('品质框：4 档，**必须与七日 / 礼包 / 活动 / 首充同算法**（跨 5 个模块的约定）', () => {
-    assert.deepEqual([...BT_QUALITY_FRAME_NAMES], [
+    assert.deepEqual([...QUALITY_FRAME_NAMES], [
         'common_img_pzk_01', 'common_img_pzk_02', 'common_img_pzk_03', 'common_img_pzk_04',
     ]);
     // ⚠️ 实际映射有个「看着像 off-by-one」的既成约定：`clamp(quality - 1, 1, 4)`
@@ -703,7 +703,7 @@ test('品质框：4 档，**必须与七日 / 礼包 / 活动 / 首充同算法*
             `quality=${q} 时与 SevenDayArt 的算法不一致（五个模块必须一致）`,
         );
     }
-    for (const name of BT_QUALITY_FRAME_NAMES) {
+    for (const name of QUALITY_FRAME_NAMES) {
         assert.ok(existsSync(assetPath(`image/frame/${name}.png`)), `品质框缺图：${name}`);
     }
 });
@@ -1578,7 +1578,7 @@ test('Repository：状态走 `CacheMgr.getCmdBattleToken(type)`，**不自存快
     // 奖励图标两支都要读：`item`（路径直通）+ `roleProperty`（货币档，战令奖励几乎全是它）
     assert.match(repository, /parseItemRows/);
     assert.match(repository, /parseRolePropertyRows/);
-    assert.match(repository, /'payChannel'/);
+    assert.match(repository, /PAY_CHANNEL_TABLE/);
 });
 
 test('⚠️ 三条请求都必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {

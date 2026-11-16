@@ -8,8 +8,8 @@ import { EventMgr } from '../../framework/event/EventMgr';
 import { ZC_BATTLE_TYPE_CHAPTER, ZC_CHAPTER_BATTLE_SUB_TREASURE } from '../battle/BattleStartModel';
 import type { IMatchingEntryParams } from '../matching/MatchTypes';
 import { spriteFramePathOf } from '../ArtPaths';
-import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
-import { qualityFrameSuffixOf, qualityNameOf } from '../itemdetail/ItemDetailTable';
+import { itemQualityFrameRelPath } from '../itemdetail/ItemDetailArtLoader';
+import { qualityNameOf } from '../itemdetail/ItemDetailTable';
 import { ChestBar } from './ChestBar';
 import { PopupManager } from '../../framework/ui/PopupManager';
 import { ChestDetailPanel } from './ChestDetailPanel';
@@ -892,7 +892,7 @@ export class MainPage extends Component {
     }
 
     private async loadQualityFrame(quality: number): Promise<SpriteFrame | null> {
-        return this.loadChestFrame(`image/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`);
+        return this.loadChestFrame(itemQualityFrameRelPath(quality));
     }
 
     private readonly onChestDetailClose = (): void => {

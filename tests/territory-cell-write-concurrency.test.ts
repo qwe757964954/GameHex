@@ -24,6 +24,7 @@ test('overlapping unlock responses keep their own succ results', async () => {
         if (id === '../../../framework/FW') return { FW: { ShowReward: () => { /* no-op */ } } };
         if (id === '../../net/GameNet') return { GameNet: gameNet };
         if (id === '../../net/RequestGuard') return { withTimeout: (promise: Promise<boolean>) => promise };
+        if (id === '../../net/Timeouts') return { READ_TIMEOUT_MS_LONG: 5_000 };
         if (id === './RequestTerritoryCellInfoMsg') return {
             RequestTerritoryCellInfo: Request, RequestTerritoryIdleReward: Request,
             RequestTerritoryPassCell: Request, RequestTerritorySweep: Request,

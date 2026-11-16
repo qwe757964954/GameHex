@@ -6,6 +6,7 @@ import type { IBigMapCityView, IBigMapViewState } from '../application/BigMapVie
 import { BIGMAP_PRESENTATION_TEXT, formatBigMapCityOpening, formatBigMapMonsterDetail, formatBigMapPlotDetail } from './BigMapPresentationText';
 import { BigMapWorldView } from './BigMapWorldView';
 import { HeadArt } from '../../HeadArt';
+import { spriteFramePath } from '../../ArtPaths';
 import { BIGMAP_CAMP_ROLE_TEXT, formatBigMapCampRoleDetail } from '../model/BigMapCampRoleInfo';
 import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 
@@ -535,7 +536,7 @@ export class BigMapPage extends Component {
         let frame: SpriteFrame | null = null;
         try {
             frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
-                resources.assets.load(`${root}/${name}/spriteFrame`, SpriteFrame, { scope: resources.scope }));
+                resources.assets.load(spriteFramePath(root, name), SpriteFrame, { scope: resources.scope }));
         } catch (error) {
             console.warn('[BigMapPage] 驻守玩家头像加载失败', error);
         }

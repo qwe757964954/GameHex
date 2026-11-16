@@ -26,7 +26,7 @@
  *`DEFAULT_BIGMAP_CITY_SCHEDULE` 只给测试夹具和兜底用。
  */
 
-const SECONDS_PER_DAY = 86400;
+import { SECONDS_PER_DAY } from '../../../core/time/TimeMs';
 
 /** 攻城日程的四个阶段。 */
 export type BigMapCityPhase = 'closed' | 'prepare' | 'locked' | 'settling';

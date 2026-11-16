@@ -13,6 +13,7 @@ import { Prefab, SpriteFrame } from 'cc';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { RefUtil } from '../../../framework/ref/RefUtil';
+import { spriteFramePathOf } from '../../ArtPaths';
 import {
     GUIDE_PORTRAIT_ENTRIES,
     groupGuideDialogLines,
@@ -86,7 +87,7 @@ export async function loadGuidePortraits(
     const loaded = new Map<string, SpriteFrame | Prefab>();
     const loadOptions = scope ? { scope } : undefined;
     await Promise.all(GUIDE_PORTRAIT_ENTRIES.map(async ({ speaker, kind, asset }) => {
-        const path = kind === 'sprite' ? `${asset}/spriteFrame` : asset;
+        const path = kind === 'sprite' ? spriteFramePathOf(asset) : asset;
         try {
             const value = kind === 'sprite'
                 ? await resources.assets.load(path, SpriteFrame, loadOptions)

@@ -50,7 +50,9 @@ test('spawn region hints render in a dedicated non-interactive overlay', () => {
     assert.match(renderWorld, /this\.boardLayer\('CooldownOverlay'\)/);
     assert.match(renderWorld, /this\.options\.spawnRegionFrames \?\? null/);
     assert.match(renderWorld, /spawnRegionHintOverlay\.render\([^;]*hintsVisible/s);
-    assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1,/);
+    // 缩放值在整盘重算入口算一次（`mapScale`），提示气泡直接复用同一个数。
+    assert.match(renderWorld, /const mapScale = Math\.abs\(this\.options\.mapLayer\.scale\.x\) \|\| 1;/);
+    assert.match(renderWorld, /spawnRegionHintOverlay\.render\(\s*this\.spawnRegionHints,\s*hintsVisible,\s*mapScale,/);
     assert.doesNotMatch(renderWorld.replace(/\/\/[^\n]*/g, ''), /regionText/);
 
     assert.match(hintOverlay, /class ZCSpawnRegionHintOverlay/);

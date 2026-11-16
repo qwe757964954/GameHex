@@ -1,10 +1,13 @@
 import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
+import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
 import { isZCAwakeMonster } from './ZCNeutralFeatureSystem';
 
 export interface ZCPoint { readonly x: number; readonly y: number }
 export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
+/** acquire 的复用出参；只在当次调用内有效，调用方不得跨拍保留。*/
+export interface ZCTargetSelectionSink { kind: ZCCombatTargetKind; id: number }
 
 export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition' | 'effectiveDefinition' | 'hasExposedWall'> {
     readonly baseDefinition: (id: string) => ZCUnitDefinition;
@@ -14,7 +17,14 @@ export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition
     readonly unitById: (id: number) => ZCUnitState | null;
     readonly hexPosition: (hexId: number) => ZCPoint;
     readonly preferUnitTargets?: (unit: ZCUnitState) => boolean;
+    /** 已按 owner 建好索引时，索敌只遍历敌方桶，不再线性扫全量 units。*/
+    readonly unitsOf?: (owner: ZCOwner) => ReadonlySet<ZCUnitState>;
+    /** 已按「当前单位 owner」预分组的目标地块；缺省时回退到全量 hexes。*/
+    readonly candidateHexes?: (owner: ZCOwner) => readonly ZCHexState[];
 }
+
+/** 索敌是同步纯查询；候选坐标出参共用一块，避免每次 acquire 新建字面量。*/
+const ACQUIRE_POSITION = { x: 0, y: 0 };
 
 /** 每局独占的 BFS 工作区；访问标记避免每次创建 Set/Map。*/
 export class ZCPathWorkspace {

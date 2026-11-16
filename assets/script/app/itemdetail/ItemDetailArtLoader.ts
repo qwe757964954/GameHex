@@ -2,6 +2,7 @@ import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { spriteFramePathOf } from '../ArtPaths';
 import { ID_ART_NAMES, qualityFrameArtPath, titleArtPathOf } from './ItemDetailArt';
+import { qualityFrameSuffixOf } from './ItemDetailTable';
 
 /** 物品详情图的根（`ID_ART_NAMES` 的 value 是相对 `assets/resources/image/` 的路径）。 */
 export const ID_ART_ROOT = 'image';
@@ -49,6 +50,21 @@ export function loadTitleArt(titleStep: string): Promise<SpriteFrame | null> {
 /** 品质框（`quality` 1..8 ⇒ `cu_quality_01`..`08`）。 */
 export function loadQualityFrameArt(suffix: string): Promise<SpriteFrame | null> {
     return loadIdArtByRel(qualityFrameArtPath(suffix));
+}
+
+/** 品质档位 → 相对 `resources` 的路径（不带 `/spriteFrame`；给控制器级 loader 用）。 */
+export function itemQualityFrameRelPath(quality: number): string {
+    return `${ID_ART_ROOT}/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`;
+}
+
+/** 品质档位 → `resources.load` 用的完整装配路径。 */
+export function itemQualityFramePathOf(quality: number): string {
+    return spriteFramePathOf(itemQualityFrameRelPath(quality));
+}
+
+/** 品质档位 → 模块缓存取图。 */
+export function loadItemQualityFrame(quality: number): Promise<SpriteFrame | null> {
+    return cache.load(itemQualityFramePathOf(quality));
 }
 
 /** 已有缓存（不触发加载）。 */

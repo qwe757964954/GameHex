@@ -335,9 +335,9 @@ test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames'
     const frames = readFileSync('assets/script/app/showReward/RewardFrames.ts', 'utf8');
     assert.match(frames, /export async function resolveCmdGoodsFrames/);
     assert.match(frames, /rewardEntryOf\(one, tables\.items, tables\.resources\)/);
-    assert.match(frames, /const suffix = qualityFrameSuffixOf\(entry\.quality\)/);
-    assert.match(frames, /loadQualityFrameArt\(suffix\)/);
-    assert.match(frames, /loadControllerRewardFrame\(resources, idFramePathOf\(qualityFrameArtPath\(suffix\)\)\)/);
+    assert.match(frames, /const qualityFrameRel = itemQualityFrameRelPath\(entry\.quality\)/);
+    assert.match(frames, /loadItemQualityFrame\(entry\.quality\)/);
+    assert.match(frames, /loadControllerRewardFrame\(resources, qualityFrameRel\)/);
     // 「获得奖励」弹窗改走共用件：不许再自己 getRefAllAsync('item')
     const rewardPage = readFileSync('assets/script/app/showReward/ShowRewardPage.ts', 'utf8');
     assert.doesNotMatch(rewardPage, /getRefAllAsync\('item'\)/, '两处各自拉表 = 两份换算迟早漂移');

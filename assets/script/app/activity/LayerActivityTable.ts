@@ -36,6 +36,7 @@ import { toCount } from '../net/RequestGuard';
 import { taskPhaseRank } from '../common/TaskOrder';
 import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../common/ResTypes';
 import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { parseRows } from '../../core/table/RowParse';
 import type { IResGoodsInfo } from '../common/ResTypes';
 
 export { parseItemRows, parseRolePropertyRows, rewardGoodsOf };
@@ -137,17 +138,14 @@ export function parseRewards(raw: unknown): IActivityReward[] {
 
 /** `dayChallengeActTask` 全表 → 归一化行（按 `order` 升序）。 */
 export function parseTaskRows(rows: readonly unknown[]): IActivityTaskRow[] {
-    const out: IActivityTaskRow[] = [];
-    for (const raw of rows ?? []) {
-        const row = asRow(raw);
-        if (!row) continue;
+    const out = parseRows(rows, (row) => {
         const resId = toCount(row.resId);
         const name = typeof row.name === 'string' ? row.name : '';
-        if (resId <= 0 || name.length === 0) continue;
+        if (resId <= 0 || name.length === 0) return null;
         const param = row.param && typeof row.param === 'object'
             ? (row.param as Record<string, unknown>)
             : null;
-        out.push({
+        return {
             resId,
             plan: toCount(row.plan),
             name,
@@ -157,8 +155,8 @@ export function parseTaskRows(rows: readonly unknown[]): IActivityTaskRow[] {
             unlockChapter: toCount(row.unlockChapter),
             goto: toCount(row.goto),
             rewards: parseRewards(row.reward),
-        });
-    }
+        };
+    });
     out.sort((a, b) => a.order - b.order || a.resId - b.resId);
     return out;
 }

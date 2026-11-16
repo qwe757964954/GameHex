@@ -8,6 +8,16 @@ import type { ConfigService } from '../assets/script/core/config/ConfigService';
 import * as BattleStartModel from '../assets/script/app/battle/BattleStartModel';
 import { loadSpriteFrameCache, TestSpriteFrame } from './helpers/sprite-frame-cache';
 
+const TABLE_NAMES_STUB = {
+    ITEM_TABLE: 'item',
+    ROLE_PROPERTY_TABLE: 'roleProperty',
+    PAY_CHANNEL_TABLE: 'payChannel',
+    GUANKA_REWARD_TABLE: 'guankaReward',
+    HEAD_TABLE: 'head',
+    ICON_TABLE: 'icon',
+    OPEN_TABLE: 'open',
+};
+
 function load<T>(file: string, dependencies: Record<string, unknown>): T {
     const exports = {};
     const code = ts.transpileModule(readFileSync(`assets/script/app/matching/${file}.ts`, 'utf8'), {
@@ -80,6 +90,7 @@ test('匹配配置按注入来源读取，失败不污染后续解析', async ()
     const { loadMatchProfileLookup } = load<typeof import('../assets/script/app/matching/MatchProfileConfig')>('MatchProfileConfig', {
         '../battle/BattleStartModel': BattleStartModel,
         '../../framework/ref/RefUtil': {},
+        '../../core/config/TableNames': TABLE_NAMES_STUB,
     });
     const first = await loadMatchProfileLookup(configs({ grade: [{ gradeId: 1, gradeName: '白银' }] }));
     const second = await loadMatchProfileLookup(configs({ grade: [{ gradeId: 1, gradeName: '黄金' }] }));
@@ -93,6 +104,7 @@ test('匹配配置按注入来源读取，失败不污染后续解析', async ()
 test('开战回包阵容经真实卡表生成僵尸、坦克、战士、射手统计，零计数仍展示', async () => {
     const { loadMatchProfileLookup } = load<typeof import('../assets/script/app/matching/MatchProfileConfig')>('MatchProfileConfig', {
         '../battle/BattleStartModel': BattleStartModel,
+        '../../core/config/TableNames': TABLE_NAMES_STUB,
     });
     const rows = Object.fromEntries(['grade', 'pvpArtifact', 'head', 'icon', 'pvpCard'].map(name => {
         const table = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));

@@ -7,6 +7,7 @@ import { findHighestPassedTerritoryLevel } from '../territory/model/TerritorySta
 import { TerritoryChapterInfoRepository } from '../territory/application/TerritoryChapterInfoRepository';
 import { routedLoad } from '../common/RoutedResource';
 import { MonthCardGiftPage } from '../monthcard/MonthCardGiftPage';
+import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { HJ_COST_ICON_PATH, hjSharedPath } from './HangArt';
 import {
     HJ_DEFAULT_GEAR_INDEX,
@@ -44,8 +45,6 @@ import { HangRewardSlot } from './HangRewardSlot';
 import { HangSweepButton } from './HangSweepButton';
 
 const { ccclass, property } = _decorator;
-
-const TICK_SECONDS = 1;
 
 /**
  * 征收主控，挂在 Hang.prefab 根节点。

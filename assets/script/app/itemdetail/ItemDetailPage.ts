@@ -6,11 +6,11 @@ import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from './GoodsBox';
 import { ItemDetailRow } from './ItemDetailRow';
-import { qualityFrameSuffixOf, qualityTitleStepOf } from './ItemDetailTable';
+import { qualityTitleStepOf } from './ItemDetailTable';
 import type { IItemAccessRef, IItemRow } from './ItemDetailTable';
 import { itemDetailRepository } from './ItemDetailRepository';
 import type { IItemDetailRepository, IItemDetailSnapshot } from './ItemDetailRepository';
-import { loadItemIconArt, loadQualityFrameArt, loadTitleArt } from './ItemDetailArtLoader';
+import { loadItemIconArt, loadItemQualityFrame, loadTitleArt } from './ItemDetailArtLoader';
 import { ITEM_DETAIL_TEXTS } from './ItemDetailTexts';
 
 const { ccclass, property } = _decorator;
@@ -284,7 +284,7 @@ export class ItemDetailPage extends PopupBase {
     private async loadBox(item: IItemRow | null): Promise<IBoxFrames> {
         if (!item) return EMPTY_BOX;
         const [qualityFrame, iconFrame] = await Promise.all([
-            loadQualityFrameArt(qualityFrameSuffixOf(item.quality)),
+            loadItemQualityFrame(item.quality),
             loadItemIconArt(item.icon),
         ]);
         return { qualityFrame, iconFrame };

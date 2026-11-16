@@ -132,8 +132,7 @@ import type {
     ITerritoryShowTipPayload,
     ITerritorySetBusyPayload,
 } from '../territory/application/TerritoryEvents';
-import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
+import { itemQualityFramePathOf } from '../itemdetail/ItemDetailArtLoader';
 import { LoadingPopup } from '../common/LoadingPopup';
 
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
@@ -1726,7 +1725,7 @@ export class MainTerritoryMap extends Component {
             if (path) icon = await this.assets.load(path, SpriteFrame);
             const quality = Number(propRows.find((row) => Number(row.resId) === resId)?.quality);
             if (Number.isFinite(quality) && quality > 0) {
-                const framePath = spriteFramePathOf(`image/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`);
+                const framePath = itemQualityFramePathOf(quality);
                 frame = await this.assets.load(framePath, SpriteFrame).catch(() => null);
             }
         } catch {

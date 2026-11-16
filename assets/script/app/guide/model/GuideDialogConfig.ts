@@ -4,6 +4,8 @@
  * 不走配表，写错角色名会编译报错。未登记角色返回 null，表现层只显示台词。
  */
 
+import { spriteFramePathOf } from '../../ArtPaths';
+
 /** 一句台词。 */
 export interface GuideDialogLine {
     /** 句 id，数字：组序号 × 100 + 句序号，例如 D01a 为 101。 */
@@ -52,7 +54,7 @@ export function getGuidePortraitAsset(speaker: string): GuidePortraitAsset | nul
 export function getGuidePortraitLoadPath(speaker: string): string | null {
     const portrait = getGuidePortraitAsset(speaker);
     if (!portrait) return null;
-    return portrait.kind === 'sprite' ? `${portrait.asset}/spriteFrame` : portrait.asset;
+    return portrait.kind === 'sprite' ? spriteFramePathOf(portrait.asset) : portrait.asset;
 }
 
 /** 解析台词表。缺 `id` / `content` 的行丢弃（半行数据无法播放）。 */

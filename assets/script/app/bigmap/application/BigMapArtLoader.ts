@@ -2,6 +2,7 @@ import { SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
+import { spriteFramePathOf } from '../../ArtPaths';
 import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
     BIGMAP_BASE_BACKGROUND, BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
@@ -55,7 +56,7 @@ export async function loadBigMapArt(
 ): Promise<IBigMapArt> {
     const fetchFrame = async (path: string, quiet = false): Promise<SpriteFrame | null> => {
         try {
-            const framePath = `${path}/spriteFrame`;
+            const framePath = spriteFramePathOf(path);
             const options = { scope, bundle: bundleForPath(path) };
             if (scope.disposed) return null;
             // 这里原来 `has()` 为 false 时静默 return null，日志里什么都看不到 ——

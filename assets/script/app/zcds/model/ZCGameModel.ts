@@ -294,8 +294,11 @@ export class ZCGameModel {
     private topologyRevision = 0;
     private readonly connectedDevelopedCache = new Map<number, readonly number[]>();
     private hexRenderMap: Map<number, ZCMutableRenderHex> | null = null;
+    /** 投影字段最近一次刷新对应的逻辑时钟；同一逻辑步的多个显示帧直接复用。*/
+    private hexRenderElapsed = -1;
+    private hexRenderTopologyRevision = -1;
     /** 席位→格数缓存：HUD 一帧要取 4 个席位的数，不逐席位过滤全盘。*/
-    private readonly territoryCounts = new Map<ZCOwner, number>();
+    private readonly territoryCounts = new Map<ZCFaction, number>();
     private territoryCountsReady = false;
     private readonly unitContext: IZCUnitContext;
     private readonly groundZoneContext: IZCGroundZoneContext;
@@ -931,6 +934,13 @@ export class ZCGameModel {
     */
     private refreshHexRenderMap(): ReadonlyMap<number, ZCGameRenderHex> {
         const hexesById = this.hexRenderMap ??= new Map<number, ZCMutableRenderHex>();
+        const elapsed = this.state.elapsedSeconds;
+        // 一个逻辑步（20 Hz）只算一次；60 Hz 显示帧里没有推进逻辑时直接复用上一拍。
+        if (this.hexRenderElapsed === elapsed && this.topologyRevision === this.hexRenderTopologyRevision) {
+            return hexesById;
+        }
+        this.hexRenderElapsed = elapsed;
+        this.hexRenderTopologyRevision = this.topologyRevision;
         for (const state of this.state.hexes) {
             let entry = hexesById.get(state.id);
             if (!entry) {
@@ -969,10 +979,17 @@ export class ZCGameModel {
     }
 
     private invalidateTerrain(): void {
-        this.hexRenderMap = null;
+        this.clearHexRenderMap();
         this.topologyRevision++;
         this.connectedDevelopedCache.clear();
         this.unitTargeting.invalidateTerrain();
+    }
+
+    /** 投影表失效时同时忘掉刷新戳，避免同一逻辑步内的操作误命中空表。*/
+    private clearHexRenderMap(): void {
+        this.hexRenderMap = null;
+        this.hexRenderElapsed = -1;
+        this.hexRenderTopologyRevision = -1;
     }
 
     get artifactChargeFull(): number { return this.rules.artifactChargeFull; }
@@ -1260,7 +1277,7 @@ export class ZCGameModel {
         if (this.goldOf(ZCOwner.Player) < hex.developmentCost) {
             return this.fail(`金币不足，需要 ${hex.developmentCost}。`, 'insufficientGold');
         }
-        this.hexRenderMap = null;
+        this.clearHexRenderMap();
         this.setGold(ZCOwner.Player, this.goldOf(ZCOwner.Player) - hex.developmentCost);
         this.chargeArtifactFromDevelopment();
         return this.developFor(ZCOwner.Player, hex);
@@ -1272,7 +1289,7 @@ export class ZCGameModel {
         if (activation.ok === false) {
             return this.fail(activation.reason === 'cooldown' ? '神器正在冷却。' : '神器尚未充满。');
         }
-        this.hexRenderMap = null;
+        this.clearHexRenderMap();
         for (const unit of this.state.units) {
             if (unit.owner !== ZCOwner.Player && unit.battleState !== 'dead') this.damageUnit(unit, this.rules.artifactDamage, { owner: ZCOwner.Player, kind: 'artifact' });
         }

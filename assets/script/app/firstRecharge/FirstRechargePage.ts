@@ -1,9 +1,9 @@
 import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { loadFrameArt, loadIconByArtPath } from '../card/CardLineupIcons';
+import { loadIconByArtPath } from '../card/CardLineupIcons';
+import { loadQualityFrameMap } from '../common/QualityFrameLoader';
 import { RedDot } from '../common/RedDot';
 import { CacheMgr } from '../net/CacheMgr';
-import { QUALITY_FRAME_NAMES } from './FirstRechargeArt';
 import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
 import { FirstRechargeDayRow } from './FirstRechargeDayRow';
 import { firstRechargeRepository } from './FirstRechargeRepository';
@@ -394,11 +394,7 @@ export class FirstRechargePage extends PopupBase {
     private async loadQualityFrames(): Promise<Map<string, SpriteFrame>> {
         const cached = this.qualityFrames;
         if (cached) return cached;
-        const frames = new Map<string, SpriteFrame>();
-        await Promise.all(QUALITY_FRAME_NAMES.map(async (name) => {
-            const frame = await loadFrameArt(name);
-            if (frame) frames.set(name, frame);
-        }));
+        const frames = await loadQualityFrameMap();
         this.qualityFrames = frames;
         return frames;
     }

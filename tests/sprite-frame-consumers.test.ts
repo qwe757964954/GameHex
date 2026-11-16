@@ -5,6 +5,7 @@ import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
 import * as ArtPaths from '../assets/script/app/ArtPaths';
 import * as HeadArtModel from '../assets/script/app/HeadArtModel';
+import * as TableNames from '../assets/script/core/config/TableNames';
 import * as ItemDetailArt from '../assets/script/app/itemdetail/ItemDetailArt';
 import * as RoleArt from '../assets/script/app/role/RoleArt';
 import { qualityFrameSuffixOf } from '../assets/script/app/itemdetail/ItemDetailTable';
@@ -25,8 +26,10 @@ function fixture<T>(file: string, extras: Record<string, unknown> = {}) {
         '../common/SpriteFrameCache': shared, './common/SpriteFrameCache': shared, './SpriteFrameCache': shared,
         '../HeadArt': { HeadArt: {} }, './HeadArtModel': HeadArtModel,
         '../framework/ref/RefUtil': {}, './ItemDetailArt': ItemDetailArt,
+        './ItemDetailTable': { qualityFrameSuffixOf },
         './RoleArt': RoleArt, '../itemdetail/ItemDetailTable': { qualityFrameSuffixOf },
         '../common/ResTypes': { resIconRoot },
+        '../core/config/TableNames': TableNames,
         ...extras,
     };
     runInNewContext(ts.transpileModule(readFileSync(`assets/script/app/${file}.ts`, 'utf8'), {

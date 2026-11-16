@@ -222,16 +222,22 @@ export interface IItemRefRow {
 
 /** `item` 全表 → `resId` → 展示字段；同 resId 后写覆盖（与 activity 口径一致）。 */
 export function parseItemRows(rows: readonly unknown[]): Map<number, IResGoodsInfo> {
-    return parseRowsToMap(rows, (row) => {
+    const parsed = parseRowsToMap(rows, (row) => {
         const resId = toCount(row.resId);
         if (resId <= 0) return null;
         return {
-            name: typeof row.name === 'string' ? row.name : '',
-            quality: toCount(row.quality),
-            icon: typeof row.icon === 'string' ? row.icon : '',
-            iconIsPath: true,
+            resId,
+            info: {
+                name: typeof row.name === 'string' ? row.name : '',
+                quality: toCount(row.quality),
+                icon: typeof row.icon === 'string' ? row.icon : '',
+                iconIsPath: true,
+            },
         };
     }, (one) => one.resId, { keep: 'last' });
+    const map = new Map<number, IResGoodsInfo>();
+    for (const one of parsed.values()) map.set(one.resId, one.info);
+    return map;
 }
 
 /** `roleProperty` 全表 → `resId` → 展示字段；同 resId 后写覆盖。 */

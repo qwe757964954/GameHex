@@ -442,6 +442,9 @@ export class ZCGameRenderWorld {
     private readonly hexEntityBySource = new Map<number, number>();
     /** 静态帧复用的边界掩码容器；`buildTerritoryBoundaryMasks` 支持 out。*/
     private readonly boundaryMasks = new Map<number, number>();
+    /** 有中立特性表现的格状态；静态帧重建，动态帧只遍历这几十格。*/
+    private readonly neutralFeatureHexStates = new Map<number, DeepReadonly<ZCHexState>>();
+    private neutralFeatureSetReady = false;
     /** 静态帧复用的地块渲染入参对象，避免每格每次静态刷新都新建 9 字段对象。*/
     private readonly hexRenderArgs: {
         state: DeepReadonly<ZCHexState>;
@@ -672,6 +675,9 @@ export class ZCGameRenderWorld {
     */
     initialize(mapConfig: ZCMatchMap): void {
         this.clearSpawnRegionHints();
+        // 换局 / 换图后选点缓存键必须失效，否则新一局的首次整盘渲染会被上一局的键挡掉。
+        this.spawnRenderSelection = null;
+        this.spawnRenderRevision = -1;
         // 兵种帧一次算好：`unitVisualPrefabs` 整局不变 ⇒ 下面 `resolveUnitFrame` 必然命中，不必再判缓存。
         //  prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
         for (const [unitId, prefab] of this.options.unitVisualPrefabs) {
@@ -910,6 +916,20 @@ export class ZCGameRenderWorld {
 
     /** 自选出生点阶段的棋盘表现；该阶段尚未创建 ZCGameModel。*/
     renderSpawnSelection(selection: ZCSpawnSelection, hintsVisible: boolean): void {
+        // 整盘重算只在「选点状态变化 / 提示开关 / 缩放」时执行：`revision` 覆盖落点、确认、
+        // AI 自动确认与阶段结束（`isPlacing` 转 false），倒计时文案仍由 HUD 自己逐帧刷。
+        const mapScale = Math.abs(this.options.mapLayer.scale.x) || 1;
+        if (this.spawnRenderSelection === selection
+            && this.spawnRenderRevision === selection.revision
+            && this.spawnRenderHints === hintsVisible
+            && this.spawnRenderScale === mapScale) {
+            return;
+        }
+        this.spawnRenderSelection = selection;
+        this.spawnRenderRevision = selection.revision;
+        this.spawnRenderHints = hintsVisible;
+        this.spawnRenderScale = mapScale;
+
         const snapshot = selection.snapshot;
         const selectedByHex = this.spawnSelectedByHex;
         selectedByHex.clear();
@@ -978,7 +998,7 @@ export class ZCGameRenderWorld {
         this.spawnRegionHintOverlay.render(
             this.spawnRegionHints,
             hintsVisible,
-            Math.abs(this.options.mapLayer.scale.x) || 1,
+            mapScale,
         );
         for (const config of selection.map.hexes) {
             const entityId = this.hexEntityBySource.get(config.id);
@@ -1038,6 +1058,7 @@ export class ZCGameRenderWorld {
     renderStatic(frame: ZCGameRenderFrame): void {
         this.renderHexSystem(frame);
         this.wallRenderer.render(frame);
+        this.refreshNeutralFeatureHexIds(frame);
     }
 
     /** 逻辑仍为 20 Hz，连续坐标在相邻逻辑帧间插值。*/
@@ -1061,8 +1082,10 @@ export class ZCGameRenderWorld {
 
     private renderNeutralFeatures(frame: ZCGameRenderFrame): void {
         if (frame.mapConfig.cityMode === 'select') return;
+        // 直接调用（单测 / 首帧早于 renderStatic）时先补一次索引；正常帧由静态刷新维护。
+        if (!this.neutralFeatureSetReady) this.refreshNeutralFeatureHexIds(frame);
         const now = this.visualTime(frame);
-        for (const hex of frame.snapshot.hexes) {
+        for (const hex of this.neutralFeatureHexStates.values()) {
             const feature = hex.neutralFeature;
             if (feature?.patrol && !feature.claimed) {
                 const view = this.hexViews.get(this.hexEntityBySource.get(hex.id));
@@ -1105,6 +1128,15 @@ export class ZCGameRenderWorld {
             }
         }
         this.effectPool.recyclePortalFx(now);
+    }
+
+    private refreshNeutralFeatureHexIds(frame: ZCGameRenderFrame): void {
+        this.neutralFeatureHexStates.clear();
+        for (const hex of frame.snapshot.hexes) {
+            const feature = hex.neutralFeature;
+            if (feature?.patrol || feature?.claimed) this.neutralFeatureHexStates.set(hex.id, hex);
+        }
+        this.neutralFeatureSetReady = true;
     }
 
     /**
@@ -1549,8 +1581,8 @@ export class ZCGameRenderWorld {
 
     /**
      * 选点阶段的逐格归属 / 选中集合 / 解锁格 / 基地邻格高亮 / 边界掩码 ——
-     * 全是 `renderSpawnSelection` 每帧复用的工作集（该方法被 `ZCGame.update` 每帧驱动）：
-     * 先 `clear` 再重填，禁止每帧 `new`。`spawnHomeNeighborOwner` / `spawnSectionOwnerByHex`
+     * 全是 `renderSpawnSelection` 每次整盘重算复用的工作集（重算由 `selection.revision` 驱动）：
+     * 先 `clear` 再重填，禁止每次 `new`。`spawnHomeNeighborOwner` / `spawnSectionOwnerByHex`
      * 同时由 `resolveSpawnOwnerForHex` 只读。
     */
     private readonly spawnHomeNeighborOwner = new Map<number, ZCOwner>();
@@ -1559,6 +1591,12 @@ export class ZCGameRenderWorld {
     private readonly spawnUnlockedResources = new Set<number>();
     private readonly spawnPlayerBaseNeighbors = new Set<number>();
     private readonly spawnBoundaryMasks = new Map<number, number>();
+
+    /** 整盘重算的缓存键：同一份 selection + 同一版本 + 相同提示开关与地图缩放时跳过。*/
+    private spawnRenderSelection: ZCSpawnSelection | null = null;
+    private spawnRenderRevision = -1;
+    private spawnRenderHints = false;
+    private spawnRenderScale = 0;
 
     /** 选点侧的逐格归属（稳定引用，整局一份）。*/
     private readonly spawnOwnerForHex = this.resolveSpawnOwnerForHex.bind(this);
@@ -1642,6 +1680,8 @@ export class ZCGameRenderWorld {
 
     destroy(): void {
         this.clearSpawnRegionHints();
+        this.spawnRenderSelection = null;
+        this.spawnRenderRevision = -1;
         this.sweep.clear();
         this.claimWave.clear();
         // 探针缓冲跨局残留会让下一局首帧沿用上一局的轮廓（内容恰好相同时直接 return）。

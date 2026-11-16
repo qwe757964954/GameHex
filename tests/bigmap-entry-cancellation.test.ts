@@ -7,6 +7,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { toIdString } from '../assets/script/app/net/RequestGuard';
+import * as artifactPaths from '../assets/script/app/ArtPaths';
 import { BIGMAP_BATTLE_TEXT } from '../assets/script/app/bigmap/model/BigMapBattle';
 // core 纯 TS：直接拿真源常量，别在桩里写死 'bigmap'（改名后断言要跟着红）。
 import * as BundleCatalog from '../assets/script/core/asset/BundleCatalog';
@@ -147,6 +148,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         // 背包读取链（ItemBag → CacheMgr → … → cc）在沙箱里不打桩会直接 require 'cc' 失败。
         if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
         if (name.endsWith('/RequestGuard')) return { toIdString };
+        if (name.endsWith('/ArtPaths')) return artifactPaths;
         if (name.endsWith('/BigMapBattle')) return { BIGMAP_BATTLE_TEXT };
         if (name.endsWith('/BundleCatalog')) return BundleCatalog;
         if (name.endsWith('/BattleStartService')) return { startBattle: (type: number, params: readonly string[], _caller: unknown, isCurrent: () => boolean) => {

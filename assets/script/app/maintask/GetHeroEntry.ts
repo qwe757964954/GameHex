@@ -2,8 +2,7 @@ import { _decorator, Component, Label, Node, SpriteFrame } from 'cc';
 import { Toast } from '../common/Toast';
 import { GoodsBox } from '../itemdetail/GoodsBox';
 import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
-import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
+import { loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
 import { mainTaskRepository } from './MainTaskRepository';
 import type { IHeroTaskSnapshot, IMainTaskRepository } from './MainTaskRepository';
 import { GET_HERO_TEXTS } from './MainTaskTexts';
@@ -64,7 +63,7 @@ export class GetHeroEntry extends Component {
         // 图先 **await 完**再铺：`applySnapshot` 是同步的，
         // 在里面现加载会先闪一帧上一份的图；漏项更是**静默留白**（不报错）。
         const [qualityFrame, iconFrame] = await Promise.all([
-            loadQualityFrameArt(qualityFrameSuffixOf(snapshot.rewardQuality)),
+            loadItemQualityFrame(snapshot.rewardQuality),
             loadItemIconArt(snapshot.rewardIcon),
         ]);
         if (!this.isAlive() || revision !== this.revision) return;

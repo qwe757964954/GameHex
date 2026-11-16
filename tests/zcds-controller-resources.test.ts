@@ -84,11 +84,12 @@ test('结算补图只通过控制器加载配置和分包资源，释放后不�
         if (name === '../ArtPaths') return { spriteFramePathOf };
         if (name.endsWith('/RefUtil')) return { RefUtil: { instance: { getRefAllAsync: legacy } } };
         if (name.endsWith('/ItemDetailArtLoader')) return {
-            loadItemIconArt: legacy, loadQualityFrameArt: legacy,
-            idFramePathOf: (path: string) => spriteFramePathOf(`image/${path}`),
+            loadItemIconArt: legacy, loadItemQualityFrame: legacy,
+            itemQualityFrameRelPath: () => 'image/common/cu_quality_01',
         };
-        if (name.endsWith('/ItemDetailArt')) return { qualityFrameArtPath: () => 'common/cu_quality_01' };
-        if (name.endsWith('/ItemDetailTable')) return { qualityFrameSuffixOf: () => '01' };
+        if (name === '../common/ResTypes') return {
+            parseItemRows: () => new Map(), parseRolePropertyRows: () => new Map(),
+        };
         if (name.endsWith('/LayerActivityTable')) return { parseItemRows: () => new Map(), parseRolePropertyRows: () => new Map() };
         if (name === './ShowRewardTable') return {
             parseCmdGoodsList: (raw: unknown) => raw, rewardEntryOf: (entry: unknown) => entry,

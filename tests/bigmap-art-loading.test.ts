@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as catalog from '../assets/script/app/bigmap/application/BigMapArtCatalog';
+import * as artifactPaths from '../assets/script/app/ArtPaths';
 import * as bundleCatalog from '../assets/script/core/asset/BundleCatalog';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
@@ -18,6 +19,7 @@ function artLoader() {
         require: (name: string) => {
             if (name === 'cc') return { SpriteFrame: class {} };
             if (name === './BigMapArtCatalog') return catalog;
+            if (name === '../../ArtPaths') return artifactPaths;
             if (name === '../../../core/asset/BundleCatalog') return bundleCatalog;
             throw new Error(`未预期依赖 ${name}`);
         },

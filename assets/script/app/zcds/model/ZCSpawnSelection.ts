@@ -63,6 +63,8 @@ export class ZCSpawnSelection {
     private remaining = ZC_SPAWN_SELECTION_SECONDS;
     private completed = false;
     private finalResult: ZCSpawnSelectionResult | null = null;
+    /** 落点 / 确认 / AI 自动确认的状态版本；渲染层据此跳过未变化的整盘重算。*/
+    private revisionValue = 0;
 
     constructor(
         readonly map: ZCMatchMap,
@@ -115,6 +117,12 @@ export class ZCSpawnSelection {
     }
 
     get result(): ZCSpawnSelectionResult | null { return this.finalResult; }
+
+    /**
+     * 影响地图表现的版本号：落点 / 确认 / AI 自动确认 / 阶段结束时递增。
+     * 渲染层只在版本变化（或提示开关、缩放变化）时重算整盘；倒计时文案由 HUD 自己逐帧刷。
+    */
+    get revision(): number { return this.revisionValue; }
 
     isResourcePoint(hexId: number): boolean { return this.resourceByHex.has(hexId); }
 
@@ -210,7 +218,10 @@ export class ZCSpawnSelection {
         if (state.confirmedHexId !== null) return this.fail('主城位置已经锁定');
         const reason = this.invalidReason(owner, hexId);
         if (reason) return this.fail(reason);
-        state.selectedHexId = hexId;
+        if (state.selectedHexId !== hexId) {
+            state.selectedHexId = hexId;
+            this.revisionValue += 1;
+        }
         state.invalidReason = null;
         return this.success('已选择主城位置');
     }
@@ -228,6 +239,7 @@ export class ZCSpawnSelection {
         const firstConfirmation = !this.owners.some((candidate) => this.states[candidate].confirmedHexId !== null);
         state.confirmedHexId = state.selectedHexId;
         state.invalidReason = null;
+        this.revisionValue += 1;
         if (firstConfirmation) this.remaining = Math.min(this.remaining, ZC_SPAWN_COMPRESSED_SECONDS);
         if (owner === ZCOwner.Player) {
             for (const ai of this.owners.slice(1)) {
@@ -329,6 +341,7 @@ export class ZCSpawnSelection {
                 if (!legal.length) throw new Error(`${owner} 没有满足主城间距约束的合法出生格`);
                 state.selectedHexId = legal[Math.min(legal.length - 1, Math.floor(this.clampedRandom() * legal.length))];
             }
+            this.revisionValue += 1;
         }
         this.confirm(owner);
     }
@@ -346,6 +359,8 @@ export class ZCSpawnSelection {
         const homes = Object.fromEntries(this.owners.map((owner) => [owner, this.states[owner].confirmedHexId])) as Record<ZCOwner, number>;
         this.finalResult = { homes, resolvedResources: this.drawResources() };
         this.completed = true;
+        // 阶段结束后 `isPlacing` 变 false ⇒ 高亮与确认按钮要收掉，地图表现也得重算一次。
+        this.revisionValue += 1;
     }
 
     private drawResources(): ZCMapResolvedResource[] {

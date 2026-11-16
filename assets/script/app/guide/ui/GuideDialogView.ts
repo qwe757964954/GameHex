@@ -296,7 +296,9 @@ export class GuideDialogView extends Component {
         this.blockerNode.active = !waitingForBattleFocus;
         for (const mask of this.focusMasks) mask.active = visible;
         const dialogMoved = this.dialogWidget.bottom !== dialogBottom;
-        this.dialogWidget.bottom = dialogBottom;
+        // `Widget.bottom` 的 setter 无条件 `_recursiveDirty()`（引擎 widget.ts 的 442-445），
+        // 值没变也写会让对话框每帧重排一次 ⇒ 只在真的位移时赋值。
+        if (dialogMoved) this.dialogWidget.bottom = dialogBottom;
         if (changed || dialogMoved) this.layoutBlocker(this.currentMaskType);
         this.portraitNode.setPosition(0, dialogBottom - this.hostTransform.height / 2
             + this.dialogTransform.height + PORTRAIT_DIALOG_GAP, 0);

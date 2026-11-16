@@ -25,6 +25,7 @@
  */
 
 import {
+    ACTIVITY_ART_ROOT as ART_ACTIVITY_ROOT,
     COMMON_ART_ROOT,
     RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT,
     spriteFramePath,
@@ -32,7 +33,7 @@ import {
 import type { ActivityBoxPhase } from './LayerActivityTable';
 
 /** 活动美术目录（相对 `resources` 的路径）。 */
-export const ACTIVITY_ART_ROOT = 'image/activity';
+export const ACTIVITY_ART_ROOT = ART_ACTIVITY_ROOT;
 
 /** 标题横幅所在目录（复用工工程既有的 `image/common/title_02.png`）。 */
 export const ACTIVITY_TITLE_ART_ROOT = COMMON_ART_ROOT;

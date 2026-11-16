@@ -4,6 +4,7 @@ import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { BigMapUiEvent, type BigMapIntent } from '../application/BigMapEvents';
 import { HeadArt } from '../../HeadArt';
+import { spriteFramePath } from '../../ArtPaths';
 
 const { ccclass, property } = _decorator;
 
@@ -233,7 +234,7 @@ export class BigMapCityPopup extends PopupBase {
         const assets = this.assets;
         try {
             frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
-                assets.load(`${root}/${name}/spriteFrame`, SpriteFrame));
+                assets.load(spriteFramePath(root, name), SpriteFrame));
         } catch (error) {
             console.warn('[BigMapCityPopup] 排行头像加载失败', error);
         }
@@ -256,7 +257,7 @@ export class BigMapCityPopup extends PopupBase {
         let frame: SpriteFrame | null = null;
         try {
             frame = await HeadArt.loadHeadFrame(avatarId, (name, root) =>
-                assets.load(`${root}/${name}/spriteFrame`, SpriteFrame));
+                assets.load(spriteFramePath(root, name), SpriteFrame));
         } catch (error) {
             console.warn('[BigMapCityPopup] 城主形象加载失败', error);
         }

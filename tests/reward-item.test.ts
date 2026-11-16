@@ -97,8 +97,7 @@ function loadClass(overrides: Record<string, unknown> = {}): {
         '../../core/asset/ResourceScope': { ResourceScope },
         '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async () => [] } } },
         '../ArtPaths': { spriteFramePathOf: (path: string) => path },
-        '../itemdetail/ItemDetailArt': { qualityFrameArtPath: () => 'common/cu_quality_01' },
-        '../itemdetail/ItemDetailTable': { qualityFrameSuffixOf: () => 'green' },
+        '../itemdetail/ItemDetailArtLoader': { itemQualityFrameRelPath: () => 'image/common/cu_quality_01' },
         '../common/ResTypes': {
             ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty',
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '',
@@ -364,10 +363,10 @@ test('任务详情按当前奖励渲染公共框，复用清理多余格，旧�
     assert.equal(page.taskTitle.string, '另一任务');
 });
 
-test('公共奖励格：品质框路径必须带 `image/` 前缀（`qualityFrameArtPath` 只给相对片段）', () => {
+test('公共奖励格：品质框路径必须走统一前缀入口（`ItemDetailArtLoader`）', () => {
     const src = readFileSync('assets/script/app/common/RewardItemView.ts', 'utf8');
     // 2026-10-28 真机踩过：漏了前缀 ⇒ 图标正常、品质框整片空白（不报错）
-    assert.match(src, /`image\/\$\{qualityFrameArtPath/, '品质框路径必须补 image/ 前缀');
+    assert.match(src, /itemQualityFrameRelPath\(quality\)/, '品质框路径必须走 ItemDetailArtLoader 的统一入口');
 });
 
 test('公共奖励格使用控制器资源，无需主界面或组合根单独注入', () => {

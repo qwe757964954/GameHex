@@ -29,7 +29,7 @@ function createPage() {
         if (name === '../../framework/ui/PopupManager') return { PopupManager: { inst: { get: () => panel } } };
         if (name === '../ArtPaths') return { spriteFramePathOf: (s: string) => `${s}/spriteFrame` };
         if (name === '../itemdetail/ItemDetailTable') return { qualityNameOf: () => '精良', qualityFrameSuffixOf: () => '01' };
-        if (name === '../itemdetail/ItemDetailArt') return { qualityFrameArtPath: () => 'frame' };
+        if (name === '../itemdetail/ItemDetailArtLoader') return { itemQualityFrameRelPath: () => 'image/frame' };
         if (name === '../../framework/event/EventMgr') return { EventMgr: { instance: { offTarget() {} } } };
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller() {} } } };
         // `onDestroy` 会退订关卡缓存（战斗宝箱入口的开启动条件看 `CmdBattleLevel`）

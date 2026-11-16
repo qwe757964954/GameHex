@@ -15,8 +15,7 @@
  */
 import type { IBigMapBattleProgress } from './BigMapBattle';
 import { bigMapCityTimeline, type IBigMapCitySchedule } from './BigMapCitySchedule';
-
-const SECONDS_PER_DAY = 86400;
+import { SECONDS_PER_DAY } from '../../../core/time/TimeMs';
 
 /** 一座城在当日快照里的成绩。 */
 export interface IBigMapCityDayScore {

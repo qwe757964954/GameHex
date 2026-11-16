@@ -674,8 +674,10 @@ test('头像异步到货：HUD 已销毁时不刷行（CCObject.isValid 不能�
     hud.setSeatProfiles(new Map([['player', { name: '蓝方', headKey: 'blue' }]]) as never);
     hud.rowCalls.length = 0;
     hud.isValid = false;
+    hud.headFrames = null;
     await Promise.resolve();
     await Promise.resolve();
+    assert.equal(hud.headFrames, null, '引擎已清理的头像缓存不能再被异步回调访问');
     assert.equal(hud.rowCalls.length, 0, '已销毁后不应再刷行（会向已销毁节点树写入）');
     // headKey 为空时直接 continue，不走异步分支。
     const { hud: hud2 } = createHud(hexes, frame);

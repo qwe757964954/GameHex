@@ -4,6 +4,12 @@
  */
 
 /**
+ * 兼容旧导出：阵型单测与旧调用方曾从本模块取 `withTimeout`。
+ * 真源在 `app/net/RequestGuard`，行为与参数保持不变。
+ */
+export { withTimeout } from '../net/RequestGuard';
+
+/**
  * 经过边界校验的阵型。heroIds 与 pvpCard.id、后端英雄 heroId 同一套编号，
  * 与卡表对齐时用 String(heroId)。
  */

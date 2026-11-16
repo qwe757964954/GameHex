@@ -1,8 +1,7 @@
 import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { spriteFramePathOf } from '../ArtPaths';
-import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
+import { loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
 import { RL_ART_NAMES, RL_ART_ROOT, roleArtRelPath } from './RoleArt';
 import type { IRoleBagEntry } from './RoleTypes';
 
@@ -112,5 +111,5 @@ export function loadMilitiaTalentIcon(iconKey: string): Promise<SpriteFrame | nu
 
 /** 按品质加载品质框（与「获得奖励」弹窗同一套 cu_quality 图）。 */
 export function loadRoleQualityFrame(quality: number): Promise<SpriteFrame | null> {
-    return loadQualityFrameArt(qualityFrameSuffixOf(quality));
+    return loadItemQualityFrame(quality);
 }

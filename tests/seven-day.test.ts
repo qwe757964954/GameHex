@@ -874,9 +874,11 @@ test('Repository：状态内存持有（不走 CacheMgr）+ 四表并发读 + �
     );
     assert.match(repository, /private state: ISevenDayServerState = EMPTY_SEVEN_DAY_STATE/);
     assert.match(repository, /normalizeServerState\(/);
-    for (const table of ['sevenDayTask', 'sevenDayShop', 'sevenDayPoint', 'item']) {
+    for (const table of ['sevenDayTask', 'sevenDayShop', 'sevenDayPoint']) {
         assert.match(repository, new RegExp(`['"]${table}['"]`), `没读到 ${table} 表`);
     }
+    // 跨 feature 的 item 表名走 core 常量，避免与 itemdetail / gift 各写一份字面量。
+    assert.match(repository, /ITEM_TABLE/, '没读到 item 表');
     // `GameNet.send` 没有按请求的超时 → 统一走公共发包壳，否则面板停在占位外观
     assert.match(repository, /sendGameRequest\(/);
     assert.match(repository, /READ_TIMEOUT_MS/);

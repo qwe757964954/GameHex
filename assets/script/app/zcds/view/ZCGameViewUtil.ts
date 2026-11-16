@@ -113,6 +113,9 @@ export function buildTerritoryBoundaryMasks(
         let internal = 0;
         for (let edge = 0; edge < 6; edge += 1) {
             const normal = Math.PI / 3 * edge + Math.PI / 6;
+            // 法线只跟边有关：cos/sin 每条边算一次，别放进邻居内层重复算（逐位等价）。
+            const normalCos = Math.cos(normal);
+            const normalSin = Math.sin(normal);
             let adjacentId: number | null = null;
             let best = -Infinity;
             for (const id of hex.neighbors) {
@@ -120,7 +123,7 @@ export function buildTerritoryBoundaryMasks(
                 if (!neighbor?.playable) continue;
                 const dx = neighbor.x - hex.x;
                 const dy = neighbor.y - hex.y;
-                const alignment = (dx * Math.cos(normal) + dy * Math.sin(normal))
+                const alignment = (dx * normalCos + dy * normalSin)
                     / Math.max(1, Math.hypot(dx, dy));
                 if (alignment > best) { best = alignment; adjacentId = id; }
             }

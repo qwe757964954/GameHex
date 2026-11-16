@@ -69,7 +69,9 @@ export class BigMapBaseView extends Component {
     private selectedHexId = -1;
     private pendingBuildingId = 0;
     /** 摆放态下放得下的格子（红绿预判；`pendingBuildingId === 0` 时恒空）。 */
-    private placeable: ReadonlySet<number> = new Set();
+    private placeable: Set<number> = new Set();
+    /** 已经画过选中/摆放描边的格；refresh 只在这些格上 clear，避免每格无条件重绘。*/
+    private readonly selectionPainted = new Set<number>();
     /** ghost 当前吸附的格子；`-1` = 还没指过任何格（回落到选中格）。 */
     private ghostHexId = -1;
 
@@ -82,7 +84,7 @@ export class BigMapBaseView extends Component {
     /** dragging 态被拖动建筑的 buildingId（ghost 取图用）。 */
     private dragBuildingId = 0;
     /** 移建态落得下的格子（红绿预判；非移建态恒空）。 */
-    private moveable: ReadonlySet<number> = new Set();
+    private moveable: Set<number> = new Set();
 
 
     protected onLoad(): void {
@@ -158,12 +160,15 @@ export class BigMapBaseView extends Component {
 
     build(data: IBigMapViewState, width: number, height: number): void {
         this.data = data;
-        this.placeable = new Set(data.placeableHexIds);
-        this.moveable = new Set(data.moveableHexIds);
+        this.placeable.clear();
+        this.moveable.clear();
+        for (const hexId of data.placeableHexIds) this.placeable.add(hexId);
+        for (const hexId of data.moveableHexIds) this.moveable.add(hexId);
         this.currentWidth = width;
         this.currentHeight = height;
         for (const slot of this.slots.values()) slot.root.destroy();
         this.slots.clear();
+        this.selectionPainted.clear();
         this.cells = data.plots;
         requireBigMapTransform(this.node).setContentSize(width, height);
         for (const cell of this.cells) {
@@ -200,8 +205,10 @@ export class BigMapBaseView extends Component {
         this.selectedHexId = data.ui.selectedPlotHexId;
         this.pendingBuildingId = data.ui.pendingBuildingId;
         this.moving = data.ui.pendingMoveInstanceId !== 0;
-        this.placeable = new Set(data.placeableHexIds);
-        this.moveable = new Set(data.moveableHexIds);
+        this.placeable.clear();
+        this.moveable.clear();
+        for (const hexId of data.placeableHexIds) this.placeable.add(hexId);
+        for (const hexId of data.moveableHexIds) this.moveable.add(hexId);
         //退出摆放态就把 ghost 的"指过哪格"忘掉，否则下次选建筑会先闪一下上次的位置。
         if (this.pendingBuildingId === 0) this.ghostHexId = -1;
         this.refresh();
@@ -260,12 +267,15 @@ export class BigMapBaseView extends Component {
             const height = this.layout.tileHeight;
             const isEmpty = cell.slot === 'empty';
             const isSelected = cell.hexId === this.selectedHexId;
-            slot.selection.clear();
+            const wasPainted = this.selectionPainted.has(cell.hexId);
+            if (wasPainted || isSelected) slot.selection.clear();
+            let painted = false;
             if (isSelected) {
                 //双环：深色外环撑对比（对沙地 8.96:1），暖金内环给「选中」语感。
                 //单环亮色在沙地上做不出 3:1（纯白也只有 2.09:1），这是唯一可靠的画法。
                 this.strokeHex(slot.selection, width, height, BIGMAP_SKIN_COLORS.selectOuter, 6);
                 this.strokeHex(slot.selection, width, height, BIGMAP_SKIN_COLORS.selectInner, 2);
+                painted = true;
             } else if (isEmpty && (this.pendingBuildingId !== 0 || this.moving)) {
                 //摆放态：逐格判「放得下 / 放不下」；移建态：逐格判 bigMapCanMove 落点。
                 //绿边 vs 红边（对沙地 3.87:1 / 5.06:1），两种模式各用各的预判集合。
@@ -274,7 +284,10 @@ export class BigMapBaseView extends Component {
                     : !this.moveable.has(cell.hexId);
                 this.strokeHex(slot.selection, width, height,
                     blocked ? BIGMAP_SKIN_COLORS.placeBad : BIGMAP_SKIN_COLORS.placeOk, 2);
+                painted = true;
             }
+            if (painted) this.selectionPainted.add(cell.hexId);
+            else this.selectionPainted.delete(cell.hexId);
             this.renderGlow(slot.glow, isSelected, width, height);
             this.renderProgressRing(slot.progressRing, cell, width, height);
             //建造中也要用这座建筑自己的图（2026-11-11 用户口径：那张通用脚手架概念图可以去掉）。

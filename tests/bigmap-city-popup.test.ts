@@ -7,6 +7,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import { assetPath } from './helpers/asset-paths';
 import { formatBigMapCityOpening } from '../assets/script/app/bigmap/view/BigMapPresentationText';
+import * as artifactPaths from '../assets/script/app/ArtPaths';
 
 /**
  * 城池弹窗（蓝湖「城池弹窗3」）判据。
@@ -284,6 +285,7 @@ function loadPopup(headArt: object = {}) {
         exports,
         require: (name: string) => {
             if (name.endsWith('/HeadArt')) return { HeadArt: headArt };
+            if (name.endsWith('/ArtPaths')) return artifactPaths;
             if (name.endsWith('/EventMgr')) return { EventMgr };
             if (name.endsWith('/BigMapEvents')) return mvcEvents;
             if (name.endsWith('/framework/ui/PopupBase')) return { PopupBase };

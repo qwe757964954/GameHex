@@ -3309,6 +3309,10 @@ export class TerritoryMapView extends Component {
         // 与 `paintHexes` 同源（同一份收敛结果）：锁与价格**互斥** ——
         // 组内任一格被卡住 ⇒ 锁落在承载格 ⇒ 承载格的价格整条摘掉，绝不会"锁 + 银币"并排。
         const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
+        // 候选格循环里要按 cellId 多次判断，先各建一次 Set，避免逐格线性 includes。
+        const openableCells = new Set(input.randomResourceOpenableCells);
+        const pendingCells = new Set(input.pendingRandomResourceCells);
+        const hasPending = pendingCells.size > 0;
         // 首轮只做快照、不播任何「刚生成」的动效（见 `syncChestSpawnView`）。
         const firstPass = !this.stationsReady;
         const startPoint = input.layout.points.get(input.map.startCellId);
@@ -3327,7 +3331,7 @@ export class TerritoryMapView extends Component {
                 // `renderLevelBubble` 给气泡节点挂的那颗 Button（`visible && content.interactive`）
                 // ⇒ 点建筑、点「章节」气泡都能进弹窗（「包括气泡部分」）。
                 chapterEntry: true,
-                interactive: input.pendingRandomResourceCells.length === 0,
+                interactive: !hasPending,
                 // 初始点位也要有气泡，提示这里是「章节」入口。
                 // 底图走 `levelBubbleFrame`（已通关那张蓝 `frame_03`，未通关才是红）——
                 // 初始点从开局就属于玩家，不该跟"待挑战"的格子长得不一样。
@@ -3361,7 +3365,7 @@ export class TerritoryMapView extends Component {
             const locked = lockCells.has(site.cellId);
             const content = {
                 ...base,
-                interactive: base.interactive && input.pendingRandomResourceCells.length === 0,
+                interactive: base.interactive && !hasPending,
                 iconScale: this.buildScaleOf(site, input.art),
                 // 四棵棕榈（69010~69013）走「底边对齐格心」而不是居中 —— 与 `iconScale` 同源
                 // 判据（`site.buildingId` 在地图 JSON 里是**字符串**，必须 `Number(...)`）。
@@ -3387,8 +3391,8 @@ export class TerritoryMapView extends Component {
             if (!point || seen.has(cellId)) continue;
             seen.add(cellId);
             const isOpened = input.progress.isCellUnlocked(cellId);
-            const isOpenable = input.randomResourceOpenableCells.includes(cellId);
-            const isPending = input.pendingRandomResourceCells.includes(cellId);
+            const isOpenable = openableCells.has(cellId);
+            const isPending = pendingCells.has(cellId);
             const target = { kind: 'randomResource' as const, cellId };
             const view = this.stationViews.get(cellId) ?? this.createStation(target);
             const center = this.cellCenter(point);
@@ -3432,7 +3436,7 @@ export class TerritoryMapView extends Component {
                 tint: isOpened ? TERRITORY_COLORS.cleared
                     : isOpenable ? TERRITORY_COLORS.gold : TERRITORY_COLORS.locked,
                 badge: '',
-                interactive: !isOpened && input.pendingRandomResourceCells.length === 0,
+                interactive: !isOpened && !hasPending,
             };
             // 随机资源格与站点格同一条口径：锁刚摘掉 + 价格刚出现 ⇒ 起播 1s 过渡。
             this.startUnlockTransitionIfNeeded(cellId, content.isCondition === true);

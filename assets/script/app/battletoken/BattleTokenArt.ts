@@ -135,25 +135,9 @@ export function btSharedPath(ref: { readonly root: string; readonly name: string
 // ============================================================
 
 /** 品质框统一在 `common/QualityFrameArt`，这里只转发，不重算。 */
-import {
-    QUALITY_FRAME_NAMES,
-    QUALITY_FRAME_ROOT,
-    qualityFrameLevel,
-    qualityFrameName,
-} from '../common/QualityFrameArt';
+import { qualityFrameLevel, qualityFrameName } from '../common/QualityFrameArt';
 
 export { qualityFrameLevel, qualityFrameName };
-
-/** 品质框目录。 */
-export const BT_QUALITY_FRAME_ROOT = QUALITY_FRAME_ROOT;
-
-/** 全部品质框名（按框档枚举，恰好 4 张）。 */
-export const BT_QUALITY_FRAME_NAMES: readonly string[] = QUALITY_FRAME_NAMES;
-
-/** 品质框装配路径。 */
-export function qualityFramePath(quality: number): string {
-    return spriteFramePath(BT_QUALITY_FRAME_ROOT, qualityFrameName(quality));
-}
 
 // ============================================================
 // 九宫

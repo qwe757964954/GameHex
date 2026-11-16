@@ -152,10 +152,54 @@ const displayResults = displayScenarios.map(scenario => {
 // 单独的诊断轮次计数索敌；包装计时会扰动热路径，不能与上述未插桩耗时混为一谈。
 const targetingProfiles = displayScenarios.map(scenario => {
     const original = ZCTargetingSystem.acquire;
-    let calls = 0, targetingMs = 0, tickMs = 0;
+    let calls = 0, targetingMs = 0, tickMs = 0, candidateChecks = 0;
     ZCTargetingSystem.acquire = (...args) => {
+        // 诊断轮只统计候选规模，不计入上面的未插桩耗时；Proxy 只包住索敌上下文。
+        const context = args[1];
+        const counted = new Proxy(context, {
+            get(target, property, receiver) {
+                if (property === 'units') {
+                    const value = Reflect.get(target, property, receiver);
+                    candidateChecks += value.length;
+                    return value;
+                }
+                if (property === 'unitsOf') {
+                    const fn = Reflect.get(target, property, receiver);
+                    if (!fn) return undefined;
+                    return (owner: unknown) => {
+                        const value = fn.call(target, owner);
+                        candidateChecks += value?.size ?? 0;
+                        return value;
+                    };
+                }
+                if (property === 'hexes') {
+                    const value = Reflect.get(target, property, receiver);
+                    candidateChecks += value.length;
+                    return value;
+                }
+                if (property === 'hexesOf') {
+                    const fn = Reflect.get(target, property, receiver);
+                    if (!fn) return undefined;
+                    return (owner: unknown) => {
+                        const value = fn.call(target, owner);
+                        candidateChecks += value?.length ?? 0;
+                        return value;
+                    };
+                }
+                if (property === 'monsterHexes') {
+                    const fn = Reflect.get(target, property, receiver);
+                    if (!fn) return undefined;
+                    return () => {
+                        const value = fn.call(target);
+                        candidateChecks += value?.length ?? 0;
+                        return value;
+                    };
+                }
+                return Reflect.get(target, property, receiver);
+            },
+        });
         const started = performance.now();
-        try { return original(...args); }
+        try { return original(args[0], counted, args[2], args[3]); }
         finally { calls++; targetingMs += performance.now() - started; }
     };
     try {
@@ -165,7 +209,7 @@ const targetingProfiles = displayScenarios.map(scenario => {
             const started = performance.now(); model.tick(1 / 60); tickMs += performance.now() - started;
         }
     } finally { ZCTargetingSystem.acquire = original; }
-    return { name: scenario.name, calls, targetingMs, instrumentedTickMs: tickMs };
+    return { name: scenario.name, calls, candidateChecks, targetingMs, instrumentedTickMs: tickMs };
 });
 
 // 大片领地只占一份连通成员表，冷启动可直接观察存储规模，不用堆内存差推算分配。

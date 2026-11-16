@@ -27,6 +27,20 @@ function makeWallFrame(
     };
 }
 
+test('中立特性索引在真实构造后可首帧刷新，并替换上一静态帧状态', () => {
+    const { load } = loadViews();
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({});
+    const patrol = { id: 1, neutralFeature: { patrol: true } };
+    const claimed = { id: 2, neutralFeature: { claimed: true } };
+    world.refreshNeutralFeatureHexIds({ snapshot: { hexes: [patrol, claimed, { id: 3 }] } });
+    assert.equal(world.neutralFeatureHexStates.size, 2);
+    assert.equal(world.neutralFeatureHexStates.get(1), patrol);
+    assert.equal(world.neutralFeatureHexStates.get(2), claimed);
+    world.refreshNeutralFeatureHexIds({ snapshot: { hexes: [] } });
+    assert.equal(world.neutralFeatureHexStates.size, 0);
+    world.destroy();
+});
+
 test('单位整体轮廓只建一份共享材质，并随对局渲染层销毁', () => {
     const { load } = loadViews();
     const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({

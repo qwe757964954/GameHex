@@ -1788,7 +1788,7 @@ test('页面：切页只换图 / 换数据，**不重建节点**；到 MAX 就�
     // 1s 心跳只刷进度条 + 时间
     assert.match(page, /private _tick\(\): void \{\s*this\._refreshTime\(\);\s*if \(this\._atMax\) this\.unschedule\(this\._tick\);/);
     assert.match(page, /if \(!this\._atMax\) this\.schedule\(this\._tick, TICK_SECONDS\);/);
-    assert.match(page, /const TICK_SECONDS = 1;/);
+    assert.match(page, /import \{ TICK_SECONDS \} from '..\/..\/core\/time\/TimeMs';/);
     // 🔴 `MAX` 角标必须**无条件写**，不许写成「只在翻转时写 `active`」：
     //    prefab 里 `MaxBadge._active` 烘的是 `true`（FGUI 原稿没写 `visible="false"`），
     //    首次 `_refreshTime()` 时 `atMax === _atMax === false` ⇒ 「只在翻转时写」会短路不写，

@@ -5,8 +5,7 @@ import { ComponentController } from '../../framework/controller/ComponentControl
 import type { ResourceScope } from '../../core/asset/ResourceScope';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { spriteFramePathOf } from '../ArtPaths';
-import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
+import { itemQualityFrameRelPath } from '../itemdetail/ItemDetailArtLoader';
 import {
     ITEM_TABLE,
     ROLE_PROPERTY_TABLE,
@@ -136,8 +135,7 @@ export class RewardItemView extends Component {
         const quality = RewardItemView.qualityOf(resId);
         const iconPath = resBarIconSpritePath(resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows));
         const [qualityFrame, iconFrame] = await Promise.all([
-            // qualityFrameArtPath 返回的是相对 `image/` 的路径，前缀不能漏。
-            this.loadFrame(`image/${qualityFrameArtPath(qualityFrameSuffixOf(quality))}`),
+            this.loadFrame(itemQualityFrameRelPath(quality)),
             this.loadFrame(iconPath),
         ]);
         // 加载期间格子可能已被复用成别的物品，以最后一次 render 为准。

@@ -1018,8 +1018,8 @@ test('H1 真实 taskMain 的每个奖励都解析得出图标，且文件在磁�
  */
 test('H2 奖励解析接线：仓储两支都查、详情页委托公共奖励格解析', () => {
     const repo = readFileSync('assets/script/app/maintask/MainTaskRepository.ts', 'utf8');
-    assert.ok(repo.includes("getRefAsync('item'"), '奖励解析少了 item 这一支');
-    assert.ok(repo.includes("getRefAsync('roleProperty'"), '奖励解析少了 roleProperty 这一支（货币奖励会全空白）');
+    assert.ok(/getRefAsync\(ITEM_TABLE/.test(repo), '奖励解析少了 item 这一支');
+    assert.ok(/getRefAsync\(ROLE_PROPERTY_TABLE/.test(repo), '奖励解析少了 roleProperty 这一支（货币奖励会全空白）');
     assert.ok(repo.includes('iconIsPath'), 'IRewardEntry 必须带 iconIsPath，否则裸名和路径分不开');
 
     const page = readFileSync('assets/script/app/maintask/MainTaskDetailPage.ts', 'utf8');

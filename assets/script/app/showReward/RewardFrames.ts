@@ -1,12 +1,9 @@
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { spriteFramePathOf } from '../ArtPaths';
-import { idFramePathOf } from '../itemdetail/ItemDetailArtLoader';
-import { qualityFrameArtPath } from '../itemdetail/ItemDetailArt';
+import { itemQualityFrameRelPath, loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
 import { SpriteFrame } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { loadItemIconArt, loadQualityFrameArt } from '../itemdetail/ItemDetailArtLoader';
-import { qualityFrameSuffixOf } from '../itemdetail/ItemDetailTable';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from './ShowRewardTable';
@@ -62,9 +59,9 @@ async function loadControllerRewardFrame(resources: IControllerResources, path: 
 
 /** 一条奖励 → 两张图（品质框按 `quality` 换档，图标可能没有）。 */
 export async function loadRewardFramesOf(entry: IRewardEntry, resources?: IControllerResources): Promise<IRewardFrames> {
-    const suffix = qualityFrameSuffixOf(entry.quality);
+    const qualityFrameRel = itemQualityFrameRelPath(entry.quality);
     const [qualityFrame, iconFrame] = await Promise.all([
-        resources ? loadControllerRewardFrame(resources, idFramePathOf(qualityFrameArtPath(suffix))) : loadQualityFrameArt(suffix),
+        resources ? loadControllerRewardFrame(resources, qualityFrameRel) : loadItemQualityFrame(entry.quality),
         entry.iconPath ? (resources ? loadControllerRewardFrame(resources, entry.iconPath) : loadItemIconArt(entry.iconPath)) : Promise.resolve(null),
     ]);
     return { qualityFrame, iconFrame };

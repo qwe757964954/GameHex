@@ -164,6 +164,30 @@ test('玩家确认会把全局窗口压到 3 秒，AI 在 1 秒后跟随确认',
     assert.equal(selection.result?.resolvedResources[1].itemId, ZC_TEST_ITEM.Mine);
 });
 
+test('选点版本号覆盖落点 / 确认 / AI 自动确认 / 阶段结束，供渲染层跳过未变化的重算', () => {
+    const selection = new ZCSpawnSelection(makeMap(), sequence(0.9, 0.25));
+    assert.equal(selection.revision, 0, '构造时的预置落点不计版本（渲染层首次一定渲染）');
+
+    const legal = selection.legalHexes('player', false);
+    const chosen = legal.find((id) => id !== selection.snapshot.selections.player.selectedHexId)!;
+    assert.equal(selection.select('player', chosen).ok, true);
+    assert.equal(selection.revision, 1, '落点变化必须递增');
+
+    assert.equal(selection.select('player', chosen).ok, true);
+    assert.equal(selection.revision, 1, '重复选同一格不得递增');
+
+    assert.equal(selection.confirm('player').ok, true);
+    assert.equal(selection.revision, 2, '确认必须递增');
+
+    selection.tick(0.9);
+    assert.equal(selection.revision, 2, 'AI 跟随时间未到不得递增');
+
+    selection.tick(0.2);
+    // AI 自动选点各递增一次，跟随确认再递增一次，阶段结束（isPlacing 转 false）再递增一次。
+    assert.ok(selection.revision > 2, 'AI 自动确认 / 阶段结束必须递增');
+    assert.equal(selection.snapshot.finished, true);
+});
+
 test('后确认方必须与已确认主城之间留下至少 N 个空格', () => {
     // AI 的第一个随机数令其在 4 秒确认；先**显式**给 AI 选好落点（对方半区里紧贴玩家那一格），
     // tick 到 4 秒时 `autoConfirm` 会确认它 —— 不再靠 `0.87 × 合法格数` 的取整去撞一格，

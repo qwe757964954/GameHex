@@ -10,6 +10,7 @@ import * as campModel from '../assets/script/app/bigmap/model/BigMapCampInfo';
 import * as BigMapCampRoleInfo from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 import * as BigMapCampMove from '../assets/script/app/bigmap/model/BigMapCampMove';
 import { BIGMAP_CAMP_REFRESH_SECONDS } from '../assets/script/app/bigmap/application/BigMapCampRepository';
+import * as artifactPaths from '../assets/script/app/ArtPaths';
 import { createControllerResources } from './helpers/controller-context';
 
 function loadModule(path: string, require: (name: string) => unknown, globals: object = {}) {
@@ -74,6 +75,7 @@ test('玩家头像按ID合并加载（榜首 + 名单全员），资源域释放
     const exports = loadModule('assets/script/app/bigmap/view/BigMapPage.ts', (name) => {
         if (name === 'cc') return { _decorator: { ccclass: () => (value: unknown) => value }, Component: class {} };
         if (name.endsWith('/HeadArt')) return { HeadArt: { loadHeadFrame: () => new Promise((resolve) => pending.push(resolve)) } };
+        if (name.endsWith('/ArtPaths')) return artifactPaths;
         return {};
     });
     interface IPage {

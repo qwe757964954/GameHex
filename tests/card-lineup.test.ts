@@ -577,6 +577,8 @@ test('阵容预览迟到结果不能在 reset 后重新发布目录', async () =
             '../../framework/ref/RefUtil': { RefUtil: { instance: {
                 getRefAllAsync: () => new Promise(resolve => completions.push(resolve)),
             } } },
+            '../common/TableRead': { readRefRows: async (source: { getRefAllAsync(table: string): Promise<unknown[]> }, table: string) =>
+                (await source.getRefAllAsync(table)) ?? [] },
         };
         const context = { exports: {} as { ensureLineupDecks(): Promise<readonly ZCDeckCard[]> },
             require: (name: string) => dependencies[name], console };

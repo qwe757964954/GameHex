@@ -1134,7 +1134,7 @@ test('物品 G6｜HUD 的图与物品详情**同源**（同一份缓存，不开
     assert.ok(/from '\.\.\/itemdetail\/ItemDetailArtLoader'/.test(entry),
         'HUD 领取入口必须复用 ItemDetailArtLoader 的缓存');
     const hud = stripComments(HUD_SRC);
-    assert.ok(/loadQualityFrameArt\(/.test(hud) && /loadItemIconArt\(/.test(hud));
+    assert.ok(/loadItemQualityFrame\(/.test(hud) && /loadItemIconArt\(/.test(hud));
     assert.ok(!/resources\.load\(/.test(hud), 'HUD 不该自己 resources.load —— 图必须走 ItemDetailArtLoader 的缓存（规则 81）');
 });
 

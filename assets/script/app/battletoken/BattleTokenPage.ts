@@ -3,15 +3,13 @@ import { TICK_SECONDS } from '../../core/time/TimeMs';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { routedLoad } from '../common/RoutedResource';
+import { spriteFramePath } from '../ArtPaths';
+import { QUALITY_FRAME_NAMES, QUALITY_FRAME_ROOT, qualityFrameName, qualityFramePath } from '../common/QualityFrameArt';
 import {
-    BT_QUALITY_FRAME_NAMES,
-    BT_QUALITY_FRAME_ROOT,
     BT_SHARED_CHECK,
     BT_SHARED_LOCK_MASK,
     btPageArtPath,
     btSharedPath,
-    qualityFrameName,
-    qualityFramePath,
     resolveRewardIconRef,
 } from './BattleTokenArt';
 import {
@@ -559,7 +557,7 @@ export class BattleTokenPage extends PopupBase {
         for (const tab of BT_TABS) {
             paths.push(btPageArtPath(tab.artKey, 'title'), btPageArtPath(tab.artKey, 'headbg'), btPageArtPath(tab.artKey, 'hero'));
         }
-        for (const name of BT_QUALITY_FRAME_NAMES) paths.push(`${BT_QUALITY_FRAME_ROOT}/${name}/spriteFrame`);
+        for (const name of QUALITY_FRAME_NAMES) paths.push(spriteFramePath(QUALITY_FRAME_ROOT, name));
         for (const path of [btSharedPath(BT_SHARED_CHECK), btSharedPath(BT_SHARED_LOCK_MASK), qualityFramePath(1)]) paths.push(path);
         const costPath = this._iconPathOf(BT_EXP_COST_RES_ID);
         if (costPath) paths.push(costPath);
@@ -623,7 +621,7 @@ export class BattleTokenPage extends PopupBase {
         if (!goods || !goods.icon) return null;
         // 复用活动的统一入口（`item` 直通 / `roleProperty` 落 `icons/resource`）
         const ref = resolveRewardIconRef(goods);
-        return ref ? `${ref.root}/${ref.name}/spriteFrame` : null;
+        return ref ? spriteFramePath(ref.root, ref.name) : null;
     }
 
     private _rewardIcon(resId: number): SpriteFrame | null {

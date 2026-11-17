@@ -90,8 +90,9 @@ test('结算补图只通过控制器加载配置和分包资源，释放后不�
         if (name === '../common/ResTypes') return {
             parseItemRows: () => new Map(), parseRolePropertyRows: () => new Map(),
         };
+        if (name === '../../core/config/TableNames') return { ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty' };
         if (name.endsWith('/LayerActivityTable')) return { parseItemRows: () => new Map(), parseRolePropertyRows: () => new Map() };
-        if (name === './ShowRewardTable') return {
+        if (name === '../common/RewardEntries') return {
             parseCmdGoodsList: (raw: unknown) => raw, rewardEntryOf: (entry: unknown) => entry,
             sortRewardEntries: (entries: unknown) => entries,
         };

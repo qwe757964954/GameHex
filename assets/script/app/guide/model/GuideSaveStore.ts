@@ -45,6 +45,7 @@ export interface GuideSaveData {
     /** 当前未完成的步；空串 = 引导已结束。 */
     readonly currentStepId: string;
     readonly completedSteps: readonly string[];
+    /** 兼容旧版字段，不作为服务端发奖或到账依据。 */
     readonly grantedSteps: readonly string[];
     readonly skipped: boolean;
     /**

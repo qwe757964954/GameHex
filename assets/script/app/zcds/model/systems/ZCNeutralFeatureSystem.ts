@@ -4,10 +4,13 @@ import { ownersForPlayerCount, type ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import { ZCMapGeometry } from '../ZCMapGeometry';
 import { neutralResourceItemOf, ZCNeutralResourceType, type IZCNeutralFeatureConfig } from '../ZCNeutralResourceGroup';
+import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
+import { ZCTargetingSystem } from './ZCTargetingSystem';
 import type { IZCBarracksSpawn } from './ZCEconomySystem';
-import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
+import { hexGridDistance, HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 
 export interface IZCNeutralFeatureContext {
+    readonly rules?: Pick<ZCRuntimeRules, 'neutralMonsterFocusSwitchCdSeconds' | 'neutralMonsterRegenDelaySeconds' | 'neutralMonsterRegenRate' | 'combatDistanceScale'>;
     random(): number;
     definition(unit: ZCUnitState): ZCUnitDefinition;
     monsterDefinition(card: ZCDeckCard): ZCUnitDefinition;
@@ -21,7 +24,7 @@ export interface IZCNeutralFeatureContext {
 
 export function isZCAwakeMonster(hex: Readonly<ZCHexState>): boolean {
     return neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Monster
-        && hex.neutralFeature?.awake === true && hex.hp > 0;
+        && hex.neutralFeature?.awake === true && !hex.neutralFeature.claimed && hex.hp > 0;
 }
 
 /** 身份仍是出生格；战斗与渲染共享这一段逻辑时间轴。*/
@@ -31,13 +34,9 @@ export function zcMonsterPosition(
     now: number,
     result = { x: 0, y: 0 },
 ): { x: number; y: number } {
-    const patrol = hex.neutralFeature?.claimed ? undefined : hex.neutralFeature?.patrol;
-    const from = map.hexes[patrol?.fromHexId ?? hex.id];
-    const to = map.hexes[patrol?.toHexId ?? hex.id];
-    const progress = patrol && patrol.durationSeconds > 0
-        ? Math.max(0, Math.min(1, ((patrol.pausedAt ?? now) - patrol.startedAt) / patrol.durationSeconds)) : 1;
-    result.x = from.x + (to.x - from.x) * progress;
-    result.y = from.y + (to.y - from.y) * progress;
+    const point = map.hexes[hex.id];
+    result.x = point.x;
+    result.y = point.y;
     return result;
 }
 
@@ -47,7 +46,7 @@ export class ZCNeutralFeatureSystem {
     private readonly geometry: ZCMapGeometry;
     private hasFeatures = false;
     private hasGates = false;
-    private readonly patrolCells = new Map<number, ReadonlySet<number>>();
+    private readonly monsterTerritories = new Map<number, readonly number[]>();
     private readonly patrolMonsterIds: number[] = [];
     get patrolOrigins(): readonly number[] { return this.patrolMonsterIds; }
     constructor(private readonly map: ZCMatchMap, private readonly context: IZCNeutralFeatureContext) {
@@ -56,16 +55,11 @@ export class ZCNeutralFeatureSystem {
 
     initialize(state: ZCSnapshot): void {
         this.previous.clear();
-        this.patrolCells.clear();
         this.patrolMonsterIds.length = 0;
-        for (const point of this.map.resourcePoints ?? []) {
-            if (point.patrolCells?.length) this.patrolCells.set(point.row * this.map.columns + point.column, new Set(point.patrolCells));
-        }
         this.hasFeatures = this.hasGates = false;
         for (const hex of state.hexes) {
             const item = neutralResourceItemOf(hex.neutralResourceId);
             if (!item?.feature) continue;
-            if (item.resourceType === ZCNeutralResourceType.Monster && this.patrolCells.has(hex.id)) this.patrolMonsterIds.push(hex.id);
             if (item.resourceType === ZCNeutralResourceType.Portal && (this.map.playerCount ?? 2) !== 2) {
                 hex.neutralResourceId = null;
                 continue;
@@ -120,6 +114,10 @@ export class ZCNeutralFeatureSystem {
             const item = neutralResourceItemOf(hex.neutralResourceId);
             const feature = hex.neutralFeature;
             if (!item?.feature || !feature || feature.claimed) continue;
+            if (item.resourceType === ZCNeutralResourceType.Monster) {
+                this.unlockMonster(state, hex, item.feature);
+                continue;
+            }
             const neighborId = this.map.hexes[hex.id].neighbors.find(id => state.hexes[id].owner !== 'neutral'
                 && state.hexes[id].developmentResolved
                 && (item.resourceType !== ZCNeutralResourceType.Extension || !state.hexes.some(resource =>
@@ -127,10 +125,6 @@ export class ZCNeutralFeatureSystem {
                     && resource.neutralFeature.startedAt !== undefined)));
             if (neighborId === undefined) continue;
             const owner = state.hexes[neighborId].owner as ZCOwner;
-            if (item.resourceType === ZCNeutralResourceType.Monster) {
-                this.wakeMonster(state, hex, item.feature);
-                continue;
-            }
             hex.owner = owner;
             feature.claimed = true;
             if (item.resourceType === ZCNeutralResourceType.Extension) this.extend(state, hex, neighborId, owner);
@@ -337,79 +331,112 @@ export class ZCNeutralFeatureSystem {
         gate.effect = next.effect;
     }
 
-    private wakeMonster(state: ZCSnapshot, hex: ZCHexState, config: IZCNeutralFeatureConfig): void {
-        if (hex.neutralFeature.awake || hex.neutralFeature.claimed) return;
-        const seen = new Set<number>([hex.id]);
-        let frontier = [hex.id];
-        for (let depth = 1; depth <= config.wakeRange; depth += 1) {
-            const next: number[] = [];
-            for (const id of frontier) for (const neighbor of this.map.hexes[id].neighbors) {
-                if (seen.has(neighbor)) continue;
-                seen.add(neighbor);
-                if (state.hexes[neighbor].owner !== 'neutral' && state.hexes[neighbor].developmentResolved) {
-                    hex.neutralFeature.awake = true;
-                    this.context.changed();
-                    return;
-                }
-                next.push(neighbor);
-            }
-            frontier = next;
+    territory(hex: Readonly<ZCHexState>): readonly number[] {
+        const config = neutralResourceItemOf(hex.neutralResourceId)?.feature;
+        if (!config || config.wakeRange === undefined) return [];
+        let cells = this.monsterTerritories.get(hex.id);
+        if (!cells) {
+            cells = this.map.hexes.filter(point => point.playable
+                && hexGridDistance(this.map.hexes[hex.id], point) <= config.wakeRange).map(point => point.id);
+            this.monsterTerritories.set(hex.id, cells);
         }
+        return cells;
+    }
+
+    private unlockMonster(state: ZCSnapshot, hex: ZCHexState, config: IZCNeutralFeatureConfig): void {
+        const feature = hex.neutralFeature;
+        if (feature.claimed) return;
+        const unlocked = feature.unlockedOwners ?? (feature.unlockedOwners = []);
+        for (const id of this.territory(hex)) {
+            const building = state.hexes[id];
+            if (building.owner === 'neutral' || building.building === 'none' || building.hp <= 0
+                || unlocked.includes(building.owner)) continue;
+            unlocked.push(building.owner);
+            this.context.changed();
+        }
+    }
+
+    toggleFocus(state: ZCSnapshot, hex: ZCHexState, owner: ZCOwner): boolean {
+        const item = neutralResourceItemOf(hex.neutralResourceId);
+        if (item?.resourceType !== ZCNeutralResourceType.Monster || hex.neutralFeature.claimed) return false;
+        this.unlockMonster(state, hex, item.feature);
+        const feature = hex.neutralFeature;
+        if (!feature.unlockedOwners.includes(owner) || (feature.focusReadyAt?.[owner] ?? 0) > state.elapsedSeconds) return false;
+        const focused = feature.focusOwners ?? (feature.focusOwners = []);
+        const index = focused.indexOf(owner);
+        if (index < 0) focused.push(owner); else focused.splice(index, 1);
+        feature.focusReadyAt ??= {};
+        feature.focusReadyAt[owner] = state.elapsedSeconds + (this.context.rules?.neutralMonsterFocusSwitchCdSeconds ?? 3);
+        feature.awake = true;
+        this.context.changed();
+        return true;
+    }
+
+    /** Only live current attackers count; old hatred is not a retaliation order. */
+    priorityTarget(state: ZCSnapshot, unit: ZCUnitState): number | null {
+        for (const hex of state.hexes) {
+            if (!isZCAwakeMonster(hex) || !hex.neutralFeature.focusOwners?.includes(unit.owner)) continue;
+            const definition = this.context.definition(unit);
+            const center = this.map.hexes[hex.id];
+            const reach = ZCTargetingSystem.attackReach(definition, 80, this.context.rules?.combatDistanceScale ?? 1);
+            const unitHex = this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId;
+            const committed = this.territory(hex).includes(unitHex)
+                || Math.hypot(unit.freeX - center.x, unit.freeY - center.y) <= reach;
+            if (committed) return hex.id;
+            const enemy = state.units.find(candidate => candidate.id === unit.targetUnitId
+                && candidate.owner !== unit.owner && candidate.hp > 0 && candidate.battleState !== 'dead');
+            if (enemy && Math.hypot(unit.freeX - enemy.freeX, unit.freeY - enemy.freeY)
+                <= ZCTargetingSystem.attackReach(definition, this.context.definition(enemy).bodyRadius,
+                    this.context.rules?.combatDistanceScale ?? 1) * 1.3) continue;
+            // On the way, let a nearby opponent engage before resuming focus.
+            const opponent = state.units.some(candidate => candidate.owner !== unit.owner && candidate.hp > 0
+                && candidate.battleState !== 'dead' && (definition.canAttackAir || !this.context.definition(candidate).flying)
+                && Math.hypot(unit.freeX - candidate.freeX, unit.freeY - candidate.freeY)
+                    <= ZCTargetingSystem.attackReach(definition, this.context.definition(candidate).bodyRadius,
+                        this.context.rules?.combatDistanceScale ?? 1));
+            if (!opponent) return hex.id;
+        }
+        return null;
     }
 
     private tickMonster(state: ZCSnapshot, hex: ZCHexState, config: IZCNeutralFeatureConfig): void {
         if (!isZCAwakeMonster(hex)) return;
         const feature = hex.neutralFeature;
         const definition = this.context.monsterDefinition(findCatalogCard(config.resId));
-        const center = zcMonsterPosition(this.map, hex, state.elapsedSeconds);
-        const inRange = (unit: ZCUnitState) => unit.hp > 0 && unit.battleState !== 'dead'
-            && (definition.canAttackAir || !this.context.definition(unit).flying)
-            && (feature.patrol
-                ? Math.round(Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2) / HEX_GRID_LOGICAL_ROW_STEP)
-                : this.geometry.distance(hex.id, this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId)) <= config.attackRange;
+        const center = this.map.hexes[hex.id];
+        const eligible = (unit: ZCUnitState) => unit.hp > 0 && unit.battleState !== 'dead'
+            && (definition.canAttackAir || !this.context.definition(unit).flying);
+        feature.retaliationUnitIds = (feature.retaliationUnitIds ?? []).filter(id => state.units.some(unit => unit.id === id && eligible(unit)));
+        const inRange = (unit: ZCUnitState) => eligible(unit) && (feature.retaliationUnitIds.includes(unit.id)
+            || Math.hypot(unit.freeX - center.x, unit.freeY - center.y)
+                <= ZCTargetingSystem.attackReach(definition, this.context.definition(unit).bodyRadius,
+                    this.context.rules?.combatDistanceScale ?? 1));
         let target = state.units.find(unit => unit.id === feature.targetUnitId && inRange(unit));
         if (!target) {
             let best = Infinity;
             for (const unit of state.units) {
                 if (!inRange(unit)) continue;
-                const distance = Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2);
-                if (distance < best) { target = unit; best = distance; }
+                const distance = Math.hypot(unit.freeX - center.x, unit.freeY - center.y);
+                if (distance < best || (distance === best && target && unit.id < target.id)) { target = unit; best = distance; }
             }
             feature.targetUnitId = target?.id ?? null;
         }
-        this.tickPatrol(state, hex, definition.moveSpeed, !!target);
-        if (!target || state.elapsedSeconds < feature.nextAttackAt) return;
-        feature.nextAttackAt = state.elapsedSeconds + definition.attackInterval;
+        const now = state.elapsedSeconds;
+        const attacked = state.units.some(unit => eligible(unit) && unit.targetBuildingHexId === hex.id
+            && (unit.battleState === 'attack' || unit.battleState === 'waitAttack'));
+        if (target || attacked) {
+            delete feature.disengagedAt;
+            feature.regenUpdatedAt = now;
+        } else {
+            feature.disengagedAt ??= now;
+            const start = feature.disengagedAt + (this.context.rules?.neutralMonsterRegenDelaySeconds ?? 3);
+            const delta = Math.max(0, now - Math.max(start, feature.regenUpdatedAt ?? now));
+            hex.hp = Math.min(hex.maxHp, hex.hp + hex.maxHp * (this.context.rules?.neutralMonsterRegenRate ?? 0) / 10000 * delta);
+            feature.regenUpdatedAt = now;
+        }
+        if (!target || now < feature.nextAttackAt) return;
+        feature.nextAttackAt = now + definition.attackInterval;
         this.context.damageUnit(target, definition.attack);
     }
 
-    private tickPatrol(state: ZCSnapshot, hex: ZCHexState, speed: number, attacking: boolean): void {
-        const cells = this.patrolCells.get(hex.id);
-        if (!cells || cells.size < 2 || speed <= 0) return;
-        const feature = hex.neutralFeature;
-        const patrol = feature.patrol ?? (feature.patrol = {
-            fromHexId: hex.id, toHexId: hex.id, startedAt: state.elapsedSeconds, durationSeconds: 0,
-        });
-        const canEnter = (id: number): boolean => cells.has(id) && state.hexes[id].building === 'none'
-            && state.hexes[id].wallHp <= 0 && (id === hex.id || state.hexes[id].neutralResourceId === null);
-        if (attacking || !canEnter(patrol.toHexId)) {
-            if (patrol.pausedAt === undefined) patrol.pausedAt = state.elapsedSeconds;
-            return;
-        }
-        if (patrol.pausedAt !== undefined) {
-            patrol.startedAt += state.elapsedSeconds - patrol.pausedAt;
-            delete patrol.pausedAt;
-        }
-        if (state.elapsedSeconds < patrol.startedAt + patrol.durationSeconds) return;
-        const neighbors = this.map.hexes[patrol.toHexId].neighbors.filter(canEnter).sort((a, b) => a - b);
-        const onward = neighbors.filter(id => id !== patrol.fromHexId);
-        const choices = onward.length ? onward : neighbors;
-        if (!choices.length) return;
-        patrol.fromHexId = patrol.toHexId;
-        patrol.toHexId = choices[Math.min(choices.length - 1, Math.floor(this.context.random() * choices.length))];
-        const from = this.map.hexes[patrol.fromHexId];
-        const to = this.map.hexes[patrol.toHexId];
-        patrol.startedAt = state.elapsedSeconds;
-        patrol.durationSeconds = Math.sqrt((to.x - from.x) ** 2 + (to.y - from.y) ** 2) / speed;
-    }
 }

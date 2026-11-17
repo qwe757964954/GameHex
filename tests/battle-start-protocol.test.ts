@@ -385,8 +385,8 @@ test('开始战斗请求兜硬超时、永不 reject、失败返回 null', () =>
     const service = readFileSync('assets/script/app/battle/BattleStartService.ts', 'utf8');
     assert.match(service, /export const BATTLE_START_TIMEOUT_MS\s*=\s*\d+/, '必须有硬超时常量');
     assert.match(service, /withTimeout\(sendStartBattle\(/, '发送必须包在 withTimeout 里');
-    // 未连接直接早退，不发包
-    assert.match(service, /if \(!GameNet\.instance\.isConnected\)/, '离线时不能发包（离线复现不出"悬着"的问题）');
+    // 共享请求入口负责离线拦截，不在业务服务重复判断
+    assert.match(service, /sendGameRequest\(GameNet\.instance/,  '离线时不能发包（离线复现不出"悬着"的问题）');
     // GameNet 统一检查 MessageId；战斗服务只负责离线、超时和响应归一化。
     const gameNet = codeOf('assets/script/app/net/GameNet.ts');
     assert.match(gameNet, /getMessageId\(messageName\)/);

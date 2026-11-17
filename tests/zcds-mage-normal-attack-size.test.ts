@@ -11,8 +11,9 @@ import { assetPath } from './helpers/asset-paths';
  * 用户原话：「战斗中，所有的法师职业的普通攻击子弹特效改小比例成70%」。
  * 追问后定的两条边界（用户亲选）：
  *  1. 共用的 prefab **照缩、接受连带** —— 冰锥（泰兰德也用）、雷电（磁电菇也用）跟着变小；
- *  2. 阿尔萨斯虽在 `traits.attack === '法师'` 里，但普攻 `mode === 'melee'`（践踏环，不是子弹），
- *     **跳过不动**。
+ *  2. 阿尔萨斯普攻 `mode === 'melee'`（践踏环，不是子弹），**跳过不动**。
+ *     2026-11-15 蘑菇整族重排后他已改回**战士**（`traits.attack=战士`、射程 45，
+ *     与源表 `attackStyle=1` 一致），从法师名单里移出，只保留「近战 prefab 不缩」这个用途。
  *
  * ## 口径：尺寸只认 prefab 里**带 `cc.Sprite` 那个节点**的 `_lscale`
  *
@@ -47,7 +48,7 @@ interface IMageAttack {
 }
 
 /**
- * 9 个法师里**纳入本次改动**的 8 个（阿尔萨斯见 {@link MELEE_MAGE}）。
+ * 8 个法师**全部纳入本次改动**（机甲菇 2026-11-15 起改回战士，见 {@link MELEE_MAGE}）。
  * 顺序 = `pvpCard.id` 顺序，方便和配置表对照。
  */
 const MAGES: readonly IMageAttack[] = [
@@ -68,6 +69,14 @@ const MAGES: readonly IMageAttack[] = [
         // `x` 是**负数**（镜像朝向）；缩放只改大小，必须保留符号。
         // 2026-11-03 SVN：这张卡换皮改名（旧名「冰冻菇」），特效与缩放口径未变。
         before: { x: -0.4, y: 0.4 }, after: { x: -0.28, y: 0.28 },
+    },
+    {
+        unitId: 68016, name: '磁电菇', skillId: 30231,
+        // 2026-11-15 蘑菇整族重排：本卡从「战士」改回**法师**（源表 `attackStyle=2`、
+        // 射程 550，普攻技能 30231「雷法师普攻」本来就是 projectile），于是和雷蕉共用同一份
+        // prefab —— 缩放口径与雷蕉完全一致（同样是美术烘焙终值）。
+        prefab: 'units/projectiles/雷弹攻击/雷弹攻击',
+        before: { x: 0.78, y: 0.78 }, after: { x: 0.78, y: 0.78 }, rebaked: true,
     },
     {
         unitId: 68022, name: '雷蕉', skillId: 30231,
@@ -104,17 +113,24 @@ const MAGES: readonly IMageAttack[] = [
 /**
  * 第 9 个法师，**故意不动**：普攻是近战践踏环，且和爆锤莲王（战士，68027）共用
  * `重骑兵_践踏`。缩它等于顺手改了战士的普攻，用户明确否掉了。
+ *
+ * 2026-11-15 起它**不再是法师**：`PVP-卡牌.xlsx` 把它改回战士（`traits.attack=战士`、
+ * `unitAttackRange=45`、`attackStyle=1`），与普攻技能 30241 的 `mode=melee` 一致。
+ * 这条仍保留，但它现在的身份是「战士的近战普攻样本」——用来钉住「近战 prefab 不缩」。
  */
-const MELEE_MAGE = { unitId: 68015, name: '阿尔萨斯', skillId: 30241, prefab: 'units/projectiles/重骑兵_践踏/重骑兵_践踏' };
+const MELEE_MAGE = { unitId: 68015, name: '机甲菇', skillId: 30241, prefab: 'units/projectiles/重骑兵_践踏/重骑兵_践踏' };
 
 /**
  * 被连带的**非法师**单位（用户已知情接受）：
- * 水手菇（旧名「冰冻菇」）的 30261 就是弩兵普攻（冰锥），雷蕉的 30231 就是雷法师普攻，
- * 这两个技能同时被射手毒箭蘑菇（旧名「泰兰德」）、战士磁电菇（原萨尔）引用。哪天要拆成专属 prefab，这条会先红。
+ * 水手菇（旧名「冰冻菇」）的 30261 就是弩兵普攻（冰锥），
+ * 这个技能同时被射手毒箭菇（旧名「毒箭蘑菇」/「泰兰德」）引用。哪天要拆成专属 prefab，这条会先红。
+ *
+ * 2026-11-15：磁电菇（原萨尔）已从这条名单里摘掉 —— 它现在就是**法师**
+ * （`traits.attack=法师`、`unitAttackRange=550`、`attackStyle=2`），
+ * 和雷蕉共用 30231「雷法师普攻」是本职，不再算「连带」。
  */
 const COLLATERAL = [
-    { unitId: 68017, name: '毒箭蘑菇', role: '射手', skillId: 30261, sharedBy: '水手菇' },
-    { unitId: 68016, name: '磁电菇', role: '战士', skillId: 30231, sharedBy: '雷蕉' },
+    { unitId: 68017, name: '毒箭菇', role: '射手', skillId: 30261, sharedBy: '水手菇' },
 ];
 
 const prefabFile = (prefab: string): string => `${prefab}.prefab`;
@@ -152,12 +168,12 @@ function spriteNodeScale(prefab: string): { name: string; x: number; y: number }
 
 const near = (actual: number, expected: number, eps = 1e-6): boolean => Math.abs(actual - expected) < eps;
 
-test('① 名单：pvpCard 里恰好 9 个法师，其中 8 个走投射物、1 个（阿尔萨斯）走近战', () => {
+test('① 名单：pvpCard 里恰好 8 个法师，全部走投射物（阿尔萨斯 2026-11-15 起改回战士）', () => {
     const cards = readRows('pvpCard');
     const mages = cards.filter((card) => card.traits && card.traits.attack === '法师');
     assert.deepEqual(
         mages.map((card) => card.id).sort((a: number, b: number) => a - b),
-        [...MAGES.map((mage) => mage.unitId), MELEE_MAGE.unitId].sort((a, b) => a - b),
+        MAGES.map((mage) => mage.unitId).sort((a, b) => a - b),
         '法师名单变了 ⇒ 新法师要不要一起缩，得先回答这个问题',
     );
     // 名单里的 prefab 不是手抄的：逐条回配置表核对，防止「改了名字相近的另一个特效」。
@@ -171,6 +187,10 @@ test('① 名单：pvpCard 里恰好 9 个法师，其中 8 个走投射物、1 
         assert.equal(row.mode, 'projectile', `${mage.name} 不再是投射物，这条用例的前提就没了`);
     }
 
+    //  阿尔萨斯现在挂在战士档：普攻仍是近战践踏环，不能顺手并进 MAGES。
+    const meleeCard = cards.find((item) => item.id === MELEE_MAGE.unitId)!;
+    assert.equal(meleeCard.traits.attack, '战士', '阿尔萨斯要是变回法师了，就得把他并进 MAGES');
+    assert.equal(meleeCard.unitAttackRange, 45, '战士射程档是 45');
     const melee = skills.find((item) => item.skillId === MELEE_MAGE.skillId)!;
     assert.equal(melee.mode, 'melee', '阿尔萨斯要是改成投射物了，就得把他并进 MAGES');
 });
@@ -231,7 +251,7 @@ test('④ 光束（镭射飞龙）：只缩粗细，x 恒 1 —— 长度由每�
         'applyBeamStretch 必须把宽度作为绝对值写入 scaleY（覆盖 prefab 的 0.7）');
 });
 
-test('⑤ 连带影响是**已知取舍**：冰锥/雷电同时被泰兰德、磁电菇（原萨尔）用着，他们也一起变小了', () => {
+test('⑤ 连带影响是**已知取舍**：冰锥同时被射手毒箭菇（原毒箭蘑菇/泰兰德）用着，他也一起变小了', () => {
     const cards = readRows('pvpCard');
     const skills = readRows('pvpSkill');
     for (const victim of COLLATERAL) {

@@ -37,8 +37,8 @@ export function parseCardAttrList(value: unknown): readonly ZCCardAttrEntry[] {
         if (!raw || typeof raw !== 'object' || Array.isArray(raw)) continue;
         const entry = raw as Record<string, unknown>;
         const statId = typeof entry.statId === 'string' ? entry.statId.trim() : '';
-        const num = Number(entry.value);
-        if (statId.length === 0 || !Number.isFinite(num)) continue;
+        const num = entry.value;
+        if (statId.length === 0 || typeof num !== 'number' || !Number.isFinite(num)) continue;
         list.push({ statId, value: num });
     }
     return list;
@@ -102,12 +102,9 @@ export interface ZCUpgradeStatus {
     blockedReason: string;
 }
 
-/** 收成非负整数；非法值 null（空串/null 不能当 0）。 */
+/** 校验非负安全整数，不转换类型或取整；非法值返回 null。 */
 function toCount(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null;
-    const num = Number(value);
-    if (!Number.isFinite(num) || num < 0) return null;
-    return Math.floor(num);
+    return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function toId(value: unknown): string | null {
@@ -160,7 +157,7 @@ export function buildCardLevelUpTable(rows: readonly unknown[]): ZCCardLevelUpTa
 
 /** 等级上限（表里最大 level）；无配置返回 0。 */
 export function resolveMaxLevel(table: ZCCardLevelUpTable, cardId: string): number {
-    const levels = table.get(String(cardId));
+    const levels = table.get(cardId);
     if (!levels) return 0;
     let max = 0;
     for (const level of levels.keys()) {
@@ -180,8 +177,8 @@ export function evaluateUpgrade(
     currentLevel: number,
     countOf: ZCItemCounter,
 ): ZCUpgradeStatus {
-    const id = String(cardId);
-    const level = Math.max(0, Math.floor(Number(currentLevel) || 0));
+    const id = cardId;
+    const level = Math.max(0, Math.floor(currentLevel || 0));
 
     const empty: ZCUpgradeStatus = {
         cardId: id,
@@ -249,7 +246,7 @@ export function evaluateUpgrade(
  */
 export function upgradeButtonText(level: number, sending: boolean): string {
     const texts = CARD_LINEUP_TEXTS;
-    const current = Math.max(0, Math.floor(Number(level) || 0));
+    const current = Math.max(0, Math.floor(level || 0));
     if (current === 0) return sending ? texts.upgradeUnlocking : texts.upgradeUnlock;
     return sending ? texts.upgradeSending : texts.upgradeConfirm;
 }

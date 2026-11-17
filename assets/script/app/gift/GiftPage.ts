@@ -563,11 +563,6 @@ export class GiftPage extends PopupBase {
         }
     }
 
-    /** 灵玉档位购买入口；支付链路尚未接入，仅提示。 */
-    private onPayChannel(_id: number): void {
-        this.setHint(GIFT_TEXTS.payMissing, true);
-    }
-
     // ============================================================
     // 图与文案
     // ============================================================

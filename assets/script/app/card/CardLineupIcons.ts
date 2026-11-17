@@ -1,7 +1,6 @@
 import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import {
-    CARD_ART_ROOT,
     CARD_DETAIL_ART_ROOT,
     CARD_HEAD_ART_ROOT,
     COMMON_ART_ROOT,
@@ -24,14 +23,6 @@ export function loadIconByArtPath(artPath: string): Promise<SpriteFrame | null> 
     return artCache.load(artPath);
 }
 
-/**
- * 阵容页旧版卡面 / 站台图（image/card）。
- * 新版固定图在 CardArtProvider 里直接走 image/card_lineup，别再往这里加映射。
- */
-export function loadLineupArt(name: string): Promise<SpriteFrame | null> {
-    return loadArt(name, CARD_ART_ROOT);
-}
-
 /** 卡牌详情页切图（`image/carddetail`）：面板 / 六边形 / 品质菱形 / 图标 / 按钮。 */
 export function loadCardDetailArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, CARD_DETAIL_ART_ROOT);
@@ -51,14 +42,3 @@ export function loadFrameArt(name: string): Promise<SpriteFrame | null> {
 export function loadCommonArt(name: string): Promise<SpriteFrame | null> {
     return loadArt(name, COMMON_ART_ROOT);
 }
-
-/** 批量加载，按传入顺序返回（缺失位置为 `null`）。 */
-export function loadLineupArtList(names: readonly string[]): Promise<(SpriteFrame | null)[]> {
-    return Promise.all(names.map((name) => loadLineupArt(name)));
-}
-
-/** 预加载一批图标（进入界面前调用，减少首帧空白）。 */
-export function preloadLineupArt(names: readonly string[]): Promise<void> {
-    return loadLineupArtList(names).then(() => undefined);
-}
-

@@ -34,6 +34,7 @@ import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { LeagueApplyRow, type LeagueApplyAction } from './LeagueApplyRow';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import { leagueRepository, type ILeagueRepository, type LeagueRequestResult } from './LeagueRepository';
 import {
     buildLeagueApplyViews,
@@ -158,7 +159,6 @@ export class LeagueApplyListPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueApplyRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();
@@ -222,12 +222,7 @@ export class LeagueApplyListPage extends PopupBase {
 
     /** 写完后按三态收口；成功则重新拉一次列表（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     // 杂项

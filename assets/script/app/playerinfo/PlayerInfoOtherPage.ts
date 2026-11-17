@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -73,26 +72,26 @@ export class PlayerInfoOtherPage extends PopupBase {
 
     // ---------- 身份区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：头像（`com_head.icon`，80×74）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'NameLabel：玩家名（`text_name`）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'UidLabel：玩家 ID（`text_uid`）' })
-    uidLabel: Label = null;
+    uidLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'ServerLabel：区服名（`text_serverid`，本工程恒空，见文件头 ①）' })
-    serverLabel: Label = null;
+    serverLabel: Label = null!;
 
     // ---------- 数值区 ----------
     @property({ type: Label, tooltip: 'AttackLabel：攻击力（`文本_攻击力`）' })
-    attackLabel: Label = null;
+    attackLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'BattleLevelLabel：关卡进度（`文本_关卡进度`）' })
-    battleLevelLabel: Label = null;
+    battleLevelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'UnionLabel：联盟名（`联盟名`）' })
-    unionLabel: Label = null;
+    unionLabel: Label = null!;
 
     // ---------- 立绘 / 装备 / 列表 ----------
     @property({ type: Node, tooltip: 'ModelHost：骨骼模型位（`iconHalf`），本工程不渲染（文件头 ③）' })
@@ -109,13 +108,13 @@ export class PlayerInfoOtherPage extends PopupBase {
     blackButton: Node = null;
 
     @property({ type: Label, tooltip: 'BlackBtn/Label：拉黑按钮文字' })
-    blackLabel: Label = null;
+    blackLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'FriendBtn：加好友 / 删好友（`按钮_好友`）' })
     friendButton: Node = null;
 
     @property({ type: Label, tooltip: 'FriendBtn/Label：好友按钮文字' })
-    friendLabel: Label = null;
+    friendLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'ChatBtn：私聊（`按钮_私聊`）' })
     chatButton: Node = null;
@@ -188,13 +187,9 @@ export class PlayerInfoOtherPage extends PopupBase {
         return !!this.node && this.node.isValid && this.isPopupOpen;
     }
 
-    /**
-     * 绑按钮。
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**没有 `cc.Button`**（规则 81b），
-     * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
-     */
+    /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     // ============================================================
@@ -245,16 +240,16 @@ export class PlayerInfoOtherPage extends PopupBase {
     // ---------- 铺界面 ----------
 
     private present(snapshot: IPlayerInfoSnapshot): void {
-        if (this.headIcon) this.headIcon.spriteFrame = this.headFrame;
+        this.headIcon.spriteFrame = this.headFrame;
 
         // 全部**无条件写**（规则 82）。
-        if (this.nameLabel) this.nameLabel.string = snapshot.roleName;
-        if (this.uidLabel) this.uidLabel.string = formatUid(snapshot.roleId);
+        this.nameLabel.string = snapshot.roleName;
+        this.uidLabel.string = formatUid(snapshot.roleId);
         // 缺口 ①：没有 `server` 表 ⇒ `formatServerWithParen('')` 给空串（不是「()」）。
-        if (this.serverLabel) this.serverLabel.string = formatServerWithParen(snapshot.serverName);
-        if (this.attackLabel) this.attackLabel.string = formatPower(snapshot.power);
-        if (this.battleLevelLabel) this.battleLevelLabel.string = formatBattleLevel(snapshot.battleLevel);
-        if (this.unionLabel) this.unionLabel.string = formatUnionName(snapshot.unionName);
+        this.serverLabel.string = formatServerWithParen(snapshot.serverName);
+        this.attackLabel.string = formatPower(snapshot.power);
+        this.battleLevelLabel.string = formatBattleLevel(snapshot.battleLevel);
+        this.unionLabel.string = formatUnionName(snapshot.unionName);
 
         this.presentEquip();
         this.presentButtons();
@@ -278,12 +273,8 @@ export class PlayerInfoOtherPage extends PopupBase {
     /** 三个按钮的文案（等于老端 `refreshBtn()` 的两个控制器切换）。 */
     private presentButtons(): void {
         const T = PLAYER_INFO_TEXTS;
-        if (this.friendLabel) {
-            this.friendLabel.string = this.isFriend ? T.otherFriendButtonActive : T.otherFriendButton;
-        }
-        if (this.blackLabel) {
-            this.blackLabel.string = this.isBlack ? T.otherBlackButtonActive : T.otherBlackButton;
-        }
+        this.friendLabel.string = this.isFriend ? T.otherFriendButtonActive : T.otherFriendButton;
+        this.blackLabel.string = this.isBlack ? T.otherBlackButtonActive : T.otherBlackButton;
     }
 
     private applyFriends(snapshot: IFriendSnapshot): void {

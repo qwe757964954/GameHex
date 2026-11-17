@@ -1,20 +1,8 @@
 /**
- * 「获得奖励」弹窗纯口径层（零 `cc`）。
- * 奖励归一化 / 排序 / 图标路径 / 展示数据已归位到 `common/RewardEntries`；
- * 本文件保留旧导出名，调用方与既有测试不需要改 import 路径。
+ * 「获得奖励」弹窗的纯动画口径层（零 `cc`）。
+ * 奖励归一化 / 排序 / 图标路径 / 展示数据在 `common/RewardEntries`；
+ * 本文件只保留奖励格动画时间轴与星点轨迹，不再转发公共奖励函数。
  */
-export {
-    parseCmdGoodsList,
-    rewardEntryOf,
-    rewardIconPathOf,
-    sortRewardEntries,
-    toCmdGoods,
-} from '../common/RewardEntries';
-export type { ICmdGoodsLike, IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
-
-// ============================================================
-// 动画时间轴
-// ============================================================
 
 /** FGUI transition 单位是帧、帧率 60（官方默认值；老端打包态未导出该常量）。 */
 export const FGUI_FPS = 60;

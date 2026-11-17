@@ -8,6 +8,7 @@ import { loadGuideDialog, loadGuidePortraits, loadGuideSteps } from '../../guide
 import { createGuidePersistence } from '../../guide/application/GuideStorageAdapter';
 import { GameNetGuideGateway } from '../../guide/application/GuideGateway';
 import { GuideDialogView } from '../../guide/ui/GuideDialogView';
+import type { IGuideFocusTarget } from '../../guide/ui/GuideDialogView';
 import { GuideFocusAnchor } from '../../guide/ui/GuideFocusAnchor';
 import { MainTab, MainTabHost } from '../../main/MainTabHost';
 import { CardLineupPage } from '../../card/CardLineupPage';
@@ -15,13 +16,48 @@ import { CardUpgradePage } from '../../card/CardUpgradePage';
 import { GuideEvent, type IGuideCompletePayload } from '../../guide/application/GuideEvents';
 import { MainTaskDetailPage } from '../../maintask/MainTaskDetailPage';
 import type { MainTerritoryMap } from '../../main/MainTerritoryMap';
-import { FW } from '../../../framework/FW';
 
 const GUIDE_DIALOG_PREFAB = 'ui/Guide/GuideDialog';
+
+/**
+ * 对话条出现时要一起收起的常驻 HUD（按节点名深度找，不写 `cc.find` 绝对路径 —— 页面结构一动就断）。
+ *
+ * | 节点 | 是什么 |
+ * | --- | --- |
+ * | `TopHud` | 左上玩家卡 + 右上资源条 + 好友 / 邮件 / 排行榜 / 邀请 |
+ * | `BottomHud` | 任务入口 / 征收入口 / 聊天 / 宝箱入口与数量格 |
+ * | `BeginGame` | 底部「快速寻敌」 |
+ *
+ * 底部七格导航（`BottomNav`）不在这张表里：它挂在 `Canvas / MainRoot` 上，不在 tab 页面里。
+ */
+const DIALOG_HIDDEN_HUD = ['TopHud', 'BottomHud', 'BeginGame'] as const;
+
+/** 常驻 GM 入口的节点名（`Canvas/GMButton`，见 `GMManager`）：也压在右上角，对话期间一起收。 */
+const GM_BUTTON_NODE = 'GMButton';
+
+/** 深度优先按名字找节点（含自己）。 */
+function findChildByName(root: Node, name: string): Node | null {
+    if (root.name === name) return root;
+    for (const child of root.children) {
+        const hit = findChildByName(child, name);
+        if (hit) return hit;
+    }
+    return null;
+}
+
+/** `node` 是否在 `ancestor` 子树里（含自身）。 */
+function isInsideNode(node: Node, ancestor: Node): boolean {
+    for (let cur: Node | null = node; cur; cur = cur.parent) if (cur === ancestor) return true;
+    return false;
+}
 
 /** 主界面与章节战斗复用同一装配逻辑，进度继续由 GuideController 和存档持有。 */
 export class GuideComposition extends ControllerBase {
     private latestState: IGuideViewState | null = null;
+    /** 引导层挂载的 `Canvas`：焦点解析与 HUD 显隐都要从这里取宿主。 */
+    private canvas: Node | null = null;
+    /** 本次对话为「只留引导 UI」收起来的节点；恢复时只还原本就显示的那些。 */
+    private readonly hiddenHud = new Set<Node>();
     constructor(private readonly context: IControllerContext, private readonly root: Node,
         private readonly phase: 'main' | 'battle', private readonly territoryView: MainTerritoryMap | null = null) {
         super(context, 'guide-composition');
@@ -60,9 +96,16 @@ export class GuideComposition extends ControllerBase {
             const battleFocus = state.focusNode.startsWith('Battle/') || state.focusNode.startsWith('BattleResult/');
             const requiredCard = /^cardLevelUp:(\d+)$/.exec(state.completeCond)?.[1];
             const otherCard = [...cardDetails].some(popup => state.focusNode !== 'CardDetail/BtnUpgrade' || popup.guideCardId !== requiredCard);
-            if (rewards.size > 0 || otherCard || (!state.finished && battleFocus !== (this.phase === 'battle'))) view.hide();
-            else {
-                view.render(state);
+            if (rewards.size > 0 || otherCard || (!state.finished && battleFocus !== (this.phase === 'battle'))) {
+                view.hide();
+                // 引导层没在显示就别占着底栏 —— 玩家这时该正常用主界面。
+                this.restoreDialogHud();
+            } else {
+                // 地图步骤从其它页恢复时，先指向领地入口；切回地图后仍按原步骤定位地块。
+                const shown = state.focusNode.startsWith('Map/') && !this.territoryView
+                    ? { ...state, focusNode: 'Main/TerritoryEntry' } : state;
+                view.render(shown);
+                this.syncDialogHud(shown, battleFocus);
                 if (!state.finished && state.focusNode === 'Popup/MainGoal'
                     && !ownsMainGoal && !PopupManager.inst.get(MainTaskDetailPage)) {
                     ownsMainGoal = true;
@@ -100,19 +143,6 @@ export class GuideComposition extends ControllerBase {
             steps,
             gateway: new GameNetGuideGateway(),
             view: { owner: view, render },
-            // 引导奖励出口。
-            // ⚠️ 客户端**没有本地发奖通道**：钱包与背包都是服务端权威（`refreshWalletFromServer`），
-            //    GM 的 addItem 也是走 `RequestSystemGm` 发到服务器。所以这里只能用通用奖励弹窗
-            //    把「应得」展示出来，并留一条 warn 标明尚未入账 —— 真入账需要一条
-            //    「引导奖励领取」协议（`client_proto` 里目前没有）。
-            //    进度侧不受影响：`grantedSteps` 已经记账，协议补齐后可用 stepId 幂等补发。
-            grant: (rewards, stepId) => {
-                FW.ShowReward(rewards.map((reward) => ({
-                    resId: reward.resId,
-                    number: reward.number,
-                })) as unknown as CmdGoods[]);
-                console.warn(`[Guide] 步骤 ${stepId} 的 ${rewards.length} 项奖励已展示，但尚未入账（缺引导奖励协议）`);
-            },
             failed: reportGuideFailure,
         });
         if (!controller.start()) {
@@ -141,33 +171,12 @@ export class GuideComposition extends ControllerBase {
             // 焦点会落在导航栏与弹窗里，覆盖层不能局限在当前 tab 的内容节点下。
             const canvas = this.root.scene.getChildByName('Canvas');
             canvas.addChild(node);
+            this.canvas = canvas;
             this.own(() => node.destroy());
+            // 会话结束时（切页 / 退出）还原本次收起的 HUD。
+            this.own(() => this.restoreDialogHud());
             const view = node.getComponent(GuideDialogView);
-            if (view) {
-                view.setFocusProvider(key => {
-                    // 详情被误关或重登恢复时，依次找回英雄页、目标卡、升级按钮。
-                    if ((key.startsWith('CardList/') || key === 'CardDetail/BtnUpgrade') && !PopupManager.inst.get(CardUpgradePage)) {
-                        if (!this.root.getComponent(CardLineupPage)) key = 'Main/CardEntry';
-                        else if (key === 'CardDetail/BtnUpgrade') {
-                            const cardId = /^cardLevelUp:(\d+)$/.exec(this.latestState?.completeCond ?? '')?.[1];
-                            if (cardId) key = `CardList/Card_${cardId}`;
-                        }
-                    }
-                    if (key === 'Main/CardEntry') {
-                        const tab = canvas.getComponentInChildren(MainTabHost)?.getGuideTabNode(MainTab.Hero);
-                        return tab ? { node: tab, shape: 'rect' } : null;
-                    }
-                    const mapNode = this.territoryView?.getGuideFocusNode(key) ?? null;
-                    if (mapNode) return { node: mapNode, shape: 'hex' };
-                    const card = /^CardList\/Card_(\d+)$/.exec(key);
-                    if (card) this.root.getComponent(CardLineupPage)?.revealGuideCard(card[1]);
-                    let anchor: GuideFocusAnchor | null = null;
-                    for (const item of canvas.getComponentsInChildren(GuideFocusAnchor)) {
-                        if (item.key === key && item.node.activeInHierarchy && (!anchor || item.shownAt > anchor.shownAt)) anchor = item;
-                    }
-                    return anchor ? { node: anchor.node, shape: 'rect' } : null;
-                });
-            }
+            if (view) view.setFocusProvider(key => this.resolveFocusTarget(key));
             if (!view) {
                 console.warn('[GuideComposition] 引导 prefab 上缺少 GuideDialogView');
                 node.destroy();
@@ -178,6 +187,92 @@ export class GuideComposition extends ControllerBase {
             reportGuideFailure(error);
             return null;
         }
+    }
+
+    /**
+     * 焦点标识 → 真实节点。组合层是唯一知道「哪个业务节点挂哪个键」的地方。
+     *
+     * 同一份解析也用于保留当前焦点所在的 HUD。
+     */
+    private resolveFocusTarget(key: string): IGuideFocusTarget | null {
+        // 详情被误关或重登恢复时，依次找回英雄页、目标卡、升级按钮。
+        if ((key.startsWith('CardList/') || key === 'CardDetail/BtnUpgrade') && !PopupManager.inst.get(CardUpgradePage)) {
+            if (!this.root.getComponent(CardLineupPage)) key = 'Main/CardEntry';
+            else if (key === 'CardDetail/BtnUpgrade') {
+                const cardId = /^cardLevelUp:(\d+)$/.exec(this.latestState?.completeCond ?? '')?.[1];
+                if (cardId) key = `CardList/Card_${cardId}`;
+            }
+        }
+        if (key === 'Main/CardEntry' || key === 'Main/TerritoryEntry') {
+            const tab = this.canvas ? this.canvas.getComponentInChildren(MainTabHost)?.getGuideTabNode(
+                key === 'Main/TerritoryEntry' ? MainTab.Territory : MainTab.Hero) : null;
+            return tab ? { node: tab, shape: 'rect' } : null;
+        }
+        const mapNode = this.territoryView?.getGuideFocusNode(key) ?? null;
+        if (mapNode) return { node: mapNode, shape: 'hex' };
+        const canvas = this.canvas;
+        if (!canvas) return null;
+        const card = /^CardList\/Card_(\d+)$/.exec(key);
+        if (card) this.root.getComponent(CardLineupPage)?.revealGuideCard(card[1]);
+        let anchor: GuideFocusAnchor | null = null;
+        for (const item of canvas.getComponentsInChildren(GuideFocusAnchor)) {
+            if (item.key === key && item.node.activeInHierarchy && (!anchor || item.shownAt > anchor.shownAt)) anchor = item;
+        }
+        return anchor ? { node: anchor.node, shape: 'rect' } : null;
+    }
+
+    /**
+     * 对话步骤收起页面常驻挂件与 GM 入口；底部导航保持原有显隐，输入由引导遮罩控制。
+     *
+     * 收起的是 {@link DIALOG_HIDDEN_HUD} 那几棵子树与 GM 入口。
+     * 判据是**这一步有没有台词**（`dialogId`），不是「对话条真的画出来了」：台词组缺失时
+     * 对话条会藏，但引导仍在跑，HUD 同样不该给点 —— 玩家中途切页会把引导卡死。
+     *
+     * 唯一例外：焦点就落在某个要收的节点里，那个节点留着，
+     * 否则手指导向一个玩家点不到的地方。
+     */
+    private syncDialogHud(state: IGuideViewState, battleFocus: boolean): void {
+        const hide = this.phase === 'main' && !state.finished && !battleFocus && !!state.dialogId;
+        if (!hide) {
+            this.restoreDialogHud();
+            return;
+        }
+        const focus = this.resolveFocusTarget(state.focusNode)?.node ?? null;
+        const targets = this.dialogHudNodes().filter(node => !focus || !isInsideNode(focus, node));
+        // 上一步收起来、这一步不该收的先还回去。
+        for (const node of [...this.hiddenHud]) {
+            if (!node.isValid) { this.hiddenHud.delete(node); continue; }
+            if (targets.includes(node)) continue;
+            node.active = true;
+            this.hiddenHud.delete(node);
+        }
+        for (const node of targets) {
+            if (!node.isValid || !node.active) continue;
+            this.hiddenHud.add(node);
+            node.active = false;
+        }
+    }
+
+    /** 把这次收起来的 HUD 全部还回去（引导层不显示 / 会话结束时）。 */
+    private restoreDialogHud(): void {
+        for (const node of this.hiddenHud) if (node.isValid) node.active = true;
+        this.hiddenHud.clear();
+    }
+
+    /** 这一步要收的 HUD：页面常驻子树与 `Canvas` 上的 GM 入口。 */
+    private dialogHudNodes(): Node[] {
+        const out: Node[] = [];
+        const canvas = this.canvas;
+        if (canvas?.isValid) {
+            // GM 入口是 `Canvas` 的直接子节点（不在 tab 页里），但它也压在右上角那一片。
+            const gm = canvas.getChildByName(GM_BUTTON_NODE);
+            if (gm?.isValid) out.push(gm);
+        }
+        for (const name of DIALOG_HIDDEN_HUD) {
+            const node = findChildByName(this.root, name);
+            if (node?.isValid) out.push(node);
+        }
+        return out;
     }
 }
 function reportGuideFailure(error: unknown): void { console.warn('[GuideComposition]', error); }

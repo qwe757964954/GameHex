@@ -149,12 +149,9 @@ export class RechargeTotalView extends Component {
 
     private captureTabFrames(): void {
         const tabs = this.tabsSorted;
-        // 第一个页签上烤的是「选中」图、第二个是「未选中」图（见生成器 `TAB_ART`）。
-        for (let index = 0; index < tabs.length; index++) {
-            const frame = tabs[index].getComponent(Sprite)?.spriteFrame ?? null;
-            if (index === 0) this.tabOnFrame = frame;
-            else if (index === 1) this.tabOffFrame = frame;
-        }
+        // 第一个页签上烤的是「选中」图、第二个是「未选中」图（见生成器 `TAB_ART`）；两态按角色取，不靠循环下标。
+        this.tabOnFrame = tabs[0]?.getComponent(Sprite)?.spriteFrame ?? null;
+        this.tabOffFrame = tabs[1]?.getComponent(Sprite)?.spriteFrame ?? null;
     }
 
     private presentTabs(data: IRechargeTotalPresentData): void {

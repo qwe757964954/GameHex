@@ -313,6 +313,22 @@ test('材料状态渲染入口将真实消耗 ID 交给两个已绑定图标', (
     ]);
 });
 
+test('材料两行按 key 取，requirements 倒序也不会把卡牌与经验串位', () => {
+    const { page } = createPage();
+    for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
+        'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
+    page.renderMaterialIcon = () => {};
+    page.renderStatus({ configured: true, maxed: false, level: 1, targetLevel: 2,
+        // 顺序与生成器相反：角色必须由 `key` 决定。
+        requirements: [{ key: 'exp', itemId: '16000', name: '', owned: 200, need: 160, enough: false },
+            { key: 'card', itemId: '18003', name: '卡牌', owned: 100, need: 53, enough: true }],
+        generalExpItemId: '16000', armyExpItemId: '16003', generalExpOwned: 100, armyExpOwned: 100,
+        canUpgrade: false }, 'ready');
+    assert.equal(page.matCardCountLabel.string, '100/53', '卡牌行只认 key=card');
+    assert.equal(page.matCardItemLabel.string, '卡牌');
+    assert.equal(page.matExpCountLabel.string, '200/160', '经验行只认 key=exp');
+});
+
 test('材料不足时升级按钮置灰，材料齐备后恢复原色并可点', () => {
     const { page } = createPage();
     for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',

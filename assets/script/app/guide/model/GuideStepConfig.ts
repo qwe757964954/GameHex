@@ -4,6 +4,8 @@
  * 表是列存 {k,v,c}，这里只做单行转强类型；步骤链是否闭合由 GuideProgress 校验。
  * 保持输入顺序不排序：stepId 是字符串，字典序会把 10-1 排到 2-1 前面，本表执行序等于行序。
  */
+import { toCount } from '../../../core/value/Coerce';
+import { asRow } from '../../../core/table/RowParse';
 
 /** nextStep 的结束哨兵，不要在代码里手打 'end'。 */
 export const GUIDE_STEP_END = 'end';
@@ -93,21 +95,15 @@ function toAction(value: unknown): GuideRequireAction {
     return value === 'click' || value === 'drag' ? value : '';
 }
 
-function toCount(value: unknown, fallback: number): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function parseRewards(value: unknown): GuideReward[] {
     if (!Array.isArray(value)) return [];
     const out: GuideReward[] = [];
     for (const item of value) {
-        if (!item || typeof item !== 'object') continue;
-        const raw = item as Record<string, unknown>;
-        const resId = Number(raw.resId);
-        const count = Number(raw.number);
-        if (!Number.isFinite(resId) || resId <= 0) continue;
-        if (!Number.isFinite(count) || count <= 0) continue;
+        const raw = asRow(item);
+        if (!raw) continue;
+        const resId = toCount(raw.resId);
+        const count = toCount(raw.number);
+        if (resId <= 0 || count <= 0) continue;
         out.push({
             resId,
             number: count,

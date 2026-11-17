@@ -13,6 +13,7 @@ import { loadArt } from '../card/CardLineupIcons';
 import { LEAGUE_ART_ROOT, leagueTaskBoxArt } from './LeagueArt';
 import { LeagueTaskBox } from './LeagueTaskBox';
 import { LeagueTaskRow } from './LeagueTaskRow';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import {
     leagueRepository,
     LeagueUnionTaskType,
@@ -29,7 +30,6 @@ import {
     LEAGUE_TASK_AD_TEXT_TEMPLATE,
     LEAGUE_TASK_TITLE,
     LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_OFFLINE,
     fillLeagueText,
 } from './LeagueTexts';
 
@@ -64,22 +64,22 @@ export class LeagueTaskPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueTask';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'TaskListView：任务列表（虚拟列表 + Mask）' })
-    taskList: VirtualScrollView = null;
+    taskList: VirtualScrollView = null!;
 
     @property({ type: Sprite, tooltip: 'TaskProgress/ProgressFill：顶部进度填充' })
-    progressFill: Sprite = null;
+    progressFill: Sprite = null!;
 
     @property({ type: Label, tooltip: 'TaskProgress/ProgressLabel：顶部进度文案（老端恒置空）' })
-    progressLabel: Label = null;
+    progressLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'lab_count：已领奖任务数' })
-    countLabel: Label = null;
+    countLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'lab_jump：看广告跳过次数（广告未接入 ⇒ 整行隐藏）' })
-    adLabel: Label = null;
+    adLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'Box1：第 1 个宝箱（FGUI `box_3`，里程碑取自表）' })
     box1: Node = null;
@@ -91,13 +91,13 @@ export class LeagueTaskPage extends PopupBase {
     box3: Node = null;
 
     @property({ type: Node, tooltip: 'reward：宝箱奖励浮框（默认隐藏）' })
-    rewardNode: Node = null;
+    rewardNode: Node = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'reward/com_goods：浮框里的奖励格' })
-    rewardSlot: LeagueRewardSlot = null;
+    rewardSlot: LeagueRewardSlot = null!;
 
     @property({ type: Node, tooltip: 'reward/clickNode：点任意处关掉浮框' })
-    rewardClose: Node = null;
+    rewardClose: Node = null!;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueTaskRowView[] = [];
@@ -121,18 +121,17 @@ export class LeagueTaskPage extends PopupBase {
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueTask] CloseBtn 上没有 cc.Button，点击不会生效');
+        const button = this.closeButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
-        if (this.rewardClose) this.rewardClose.on(Node.EventType.TOUCH_END, this.onRewardCloseClick, this);
+        this.rewardClose.on(Node.EventType.TOUCH_END, this.onRewardCloseClick, this);
 
         for (const node of this.boxNodes) {
             const box = node?.getComponent(LeagueTaskBox);
             if (box) box.onBoxClick = (view) => void this.onBoxClick(view);
         }
 
-        if (this.taskList) this.taskList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.taskList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {
@@ -228,21 +227,18 @@ export class LeagueTaskPage extends PopupBase {
         if (!snapshot) return;
 
         this.applyProgress(snapshot.progressValue, snapshot.progressMax);
-        if (this.countLabel) this.countLabel.string = String(snapshot.done);
+        this.countLabel.string = String(snapshot.done);
         this.applyAdLabel(snapshot);
         this.renderBoxes(snapshot);
         this.hideReward();
 
-        if (this.taskList) {
-            this.taskList.refreshList(this.rows);
-            this.taskList.scrollToTop(false);
-        }
+        this.taskList.refreshList(this.rows);
+        this.taskList.scrollToTop(false);
     }
 
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueTaskRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();
@@ -265,10 +261,8 @@ export class LeagueTaskPage extends PopupBase {
      * `max = 0`（服务端还没下发任何 `CmdTask`）时比例算 0，不让它出 `NaN`。
      */
     private applyProgress(value: number, max: number): void {
-        if (this.progressLabel) this.progressLabel.string = '';
-        if (!this.progressFill) return;
+        this.progressLabel.string = '';
         const uit = this.progressFill.node.getComponent(UITransform);
-        if (!uit) return;
         const ratio = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
         uit.setContentSize(Math.max(TASK_PROGRESS_FULL_WIDTH * ratio, 1), uit.contentSize.height);
     }
@@ -281,7 +275,6 @@ export class LeagueTaskPage extends PopupBase {
      * （见 `LEAGUE_TASK_AD_TEXT_TEMPLATE` 的说明）。等广告落地后把 `active` 打开即可。
      */
     private applyAdLabel(snapshot: ILeagueTaskSnapshot): void {
-        if (!this.adLabel) return;
         const available = snapshot.adAvailable;
         this.adLabel.node.active = available;
         if (!available) return;
@@ -373,7 +366,6 @@ export class LeagueTaskPage extends PopupBase {
      * box 节点与 reward 节点都是**面板根的直接子节点** ⇒ 直接在根坐标系里对齐，无需换算。
      */
     private showReward(view: ILeagueTaskBoxView): void {
-        if (!this.rewardNode) return;
         const reward = view.rewards[0];
         if (!reward) {
             console.warn(`[LeagueTask] taskUnionProgress#${view.id} 没有奖励，浮框不弹`);
@@ -384,16 +376,14 @@ export class LeagueTaskPage extends PopupBase {
             const p = box.position;
             this.rewardNode.setPosition(new Vec3(p.x, p.y + TASK_BOX_REWARD_GAP, p.z));
         }
-        if (this.rewardSlot) {
-            const frames = this.art ? this.art.framesOf(reward.resId) : { frame: null, icon: null };
-            this.rewardSlot.node.active = true;
-            this.rewardSlot.render(frames.frame, frames.icon, reward.number, true);
-        }
+        const frames = this.art ? this.art.framesOf(reward.resId) : { frame: null, icon: null };
+        this.rewardSlot.node.active = true;
+        this.rewardSlot.render(frames.frame, frames.icon, reward.number, true);
         this.rewardNode.active = true;
     }
 
     private hideReward(): void {
-        if (this.rewardNode) this.rewardNode.active = false;
+        this.rewardNode.active = false;
     }
 
     /** 防连点：写操作在飞时直接拒掉。 */
@@ -414,12 +404,7 @@ export class LeagueTaskPage extends PopupBase {
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     // 杂项

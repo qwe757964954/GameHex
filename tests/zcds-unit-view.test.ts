@@ -11,7 +11,7 @@ import { assetPath } from './helpers/asset-paths';
  * 现在七个引用（含 `VisualRoot` / `HealthBar` 两个容器）全部由 prefab 绑定 ——
  * 这一组用例锁的就是「别再退回运行时兜底」。
  *
- * 判据三层：① 源码里不许有 `new Node` / `getChildByName` / `addComponent`；
+ * 判据三层：① 源码里不许有 `new Node` / `addComponent`，唯一允许的子节点查找是美术 prefab 的固定 `spine`；
  * ② 七个 `@property` 声明为 `null!` 且代码里不再判空 / 带 `?.`；
  * ③ prefab 上这七个引用都能反解到正确类型的对象（漏绑 = 运行时空指针）。
  */
@@ -34,11 +34,29 @@ const REFS: Record<string, string> = {
     healthBar: 'cc.ProgressBar',
 };
 
-test('单位视图不再自己建节点、也不再运行时找子节点', () => {
+test('单位视图不再自己建节点，只按固定结构取美术骨架子节点', () => {
     const code = stripComments(source);
     assert.doesNotMatch(code, /new Node\(/, 'VisualRoot 必须由 prefab 提供');
-    assert.doesNotMatch(code, /getChildByName\(/, 'HealthBar / VisualRoot 都由 prefab 绑定');
     assert.doesNotMatch(code, /\.addComponent\(/, '组件必须挂在 prefab 上');
+    // 自身七个引用必须由 prefab 绑定；唯一允许的子节点查找是单位美术 prefab 的固定 `spine`。
+    assert.doesNotMatch(code, /getChildByName\(\s*['"](?:HealthBar|VisualRoot|Fallback)/,
+        'HealthBar / VisualRoot / Fallback 都由 prefab 绑定');
+    assert.match(code, /VISUAL_SPINE_NODE_NAME = 'spine'/, '骨架子节点名应固定为 spine');
+    const lookups = code.match(/getChildByName\([^)]*\)/g) ?? [];
+    assert.deepEqual(lookups, [
+        'getChildByName(ZCUnitView.VISUAL_SPINE_NODE_NAME)',
+        'getChildByName(ZCUnitView.VISUAL_SPINE_NODE_NAME)',
+    ], '只允许主美术与轮廓副本按固定子节点名取骨架');
+});
+
+test('单位视图只走 Spine 动画契约，不再保留 Animation 降级', () => {
+    const code = stripComments(source);
+    assert.doesNotMatch(code, /\bAnimation\b/, 'Animation 兼容分支必须删干净');
+    assert.doesNotMatch(code, /endsWith\('-idle'\)|-idle|-run|-attack/, '旧 clip 名搜索必须删干净');
+    assert.match(code, /UNIT_ANIMATION_IDLE = 'idle'/, '待机动画名应固定为 idle');
+    assert.match(code, /UNIT_ANIMATION_MOVE = 'move'/, '移动动画名应固定为 move');
+    assert.match(code, /UNIT_ANIMATION_ATTACK = 'attack'/, '攻击动画名应固定为 attack');
+    assert.match(code, /\.setAnimation\(0, name, true\)/, '播放必须走 Skeleton.setAnimation');
 });
 
 test('七个 @property 声明为必填，且代码里不再判空或带 ?.', () => {

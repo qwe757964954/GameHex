@@ -13,7 +13,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
 import { RequestArmyUpLevel } from '../generated/requestMsg/RequestArmyMsg';
-import { toCount } from '../net/RequestGuard';
+import { sendGameRequest, toCount } from '../net/RequestGuard';
 import { readItemCounts } from '../card/ItemBag';
 import type { IMilitiaLevelRow, IMilitiaModifierRow, IMilitiaTalentDetail, IMilitiaTalentSnapshot } from './MilitiaTypes';
 import { MILITIA_ARMY_ID } from './MilitiaTypes';
@@ -108,15 +108,8 @@ class MilitiaRepository {
      * —— 所以这里成功后只重刷界面，不额外弹窗。
      */
     async requestLevelUp(armyId: number = MILITIA_ARMY_ID): Promise<MilitiaUpgradeResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const ok = await net.send(new RequestArmyUpLevel({ armyId }, this, () => { }), false);
-            return ok ? 'ok' : 'failed';
-        } catch (error) {
-            console.warn('[MilitiaRepository] 兵种升级请求失败', error);
-            return 'failed';
-        }
+        return sendGameRequest(GameNet.instance,
+            () => new RequestArmyUpLevel({ armyId }, this), { tag: 'MilitiaRepository' });
     }
 }
 

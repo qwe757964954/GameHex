@@ -110,6 +110,10 @@ type SkillControllerCtor = new (context: unknown, options: Record<string, unknow
 interface ISkillViewProbe {
     skillSkin: { active: boolean };
     nameLabel: { string: string };
+    coinIcon: { spriteFrame: unknown; node: { parent: { active: boolean } } };
+    materialIcon: { spriteFrame: unknown; node: { parent: { active: boolean } } };
+    coinLabel: { string: string; color: unknown };
+    materialLabel: { string: string; color: unknown };
     upgradeButton: { interactable: boolean; node: { on(...args: unknown[]): void } };
     tierScroll: { refreshList(count: number): void; renderItemFn: (node: unknown, index: number) => void };
     onInit(): void;
@@ -219,12 +223,14 @@ function makeSkillPageView() {
         './CardSkillList': skillList,
     });
     const page = new module.CardSkillPage();
-    const label = () => ({ string: '', node: { active: false, parent: { active: false } } });
+    const label = () => ({ string: '', color: null, node: { active: false, parent: { active: false } } });
     Object.assign(page, {
         nameLabel: label(), kindLabel: label(), cooldownLabel: label(), cooldownValue: label(),
         upgradeLabel: label(), coinLabel: label(), materialLabel: label(),
         coinIcon: { spriteFrame: null, node: { parent: { active: false } } },
         materialIcon: { spriteFrame: null, node: { parent: { active: false } } },
+        // 颜色只验「用了哪一支」，给两个可区分的哨兵，不依赖真实 Color 实例。
+        enoughColor: 'enough', insufficientColor: 'lack',
         upgradeButton: { interactable: false, node: { on() {} } },
         tierScroll: {
             renderItemFn: null,
@@ -425,6 +431,43 @@ test('单技能皮肤：三个档位来自所选技能，关闭清空并禁用�
     assert.equal(f.page.skillSkin.active, false);
     assert.equal(f.page.upgradeButton.interactable, false);
     assert.equal(f.page.nameLabel.string, '');
+});
+
+test('技能消耗两组各按显式配对渲染，有数据 → 无数据 → 有数据 复用不留残值', () => {
+    const f = makeSkillPageView();
+    f.page.onInit();
+    const frame = {} as import('cc').SpriteFrame;
+    // 金币：图已到、持有够；材料：图没到、持有不足 —— 两种合法分支各占一组。
+    const coin = { itemId: 7, name: '金币', need: 1000, owned: 1000, frame };
+    const material = { itemId: 10300, name: '技能书', need: 3, owned: 1, frame: null };
+    const present = (costs: unknown[]) => ({
+        rows: [{ skill: SKILL_PAGE_TABLE.get(100101), level: 1 }], heroLevel: 20, costs,
+    });
+
+    f.page.render(present([coin, material]));
+    assert.equal(f.page.coinIcon.spriteFrame, frame, '金币组只吃 costs[0]');
+    assert.equal(f.page.coinIcon.node.parent.active, true);
+    assert.equal(f.page.coinLabel.string, '1000', '有图时只显示数量');
+    assert.equal(f.page.coinLabel.color, 'enough');
+    assert.equal(f.page.materialIcon.spriteFrame, null, '图没到时清空旧帧，不串用上一项的图');
+    assert.equal(f.page.materialIcon.node.parent.active, true, '材料组只吃 costs[1]');
+    assert.equal(f.page.materialLabel.string, '技能书 3', '没图时退回「名字 + 数量」');
+    assert.equal(f.page.materialLabel.color, 'lack', '持有不足按不足色');
+
+    f.page.render(present([]));
+    for (const side of [f.page.coinIcon, f.page.materialIcon]) {
+        assert.equal(side.spriteFrame, null, '无消耗时图标要清空');
+        assert.equal(side.node.parent.active, false, '无消耗时整组收起');
+    }
+    assert.equal(f.page.coinLabel.string, '');
+    assert.equal(f.page.materialLabel.string, '');
+    assert.equal(f.page.coinLabel.color, 'enough', '文案与颜色一并复位，不留上一档的红');
+    assert.equal(f.page.materialLabel.color, 'enough');
+
+    f.page.render(present([coin, material]));
+    assert.equal(f.page.coinIcon.spriteFrame, frame, '收起后复用同一实例要能重新出图');
+    assert.equal(f.page.materialIcon.node.parent.active, true, '收起后要能重新展开');
+    assert.equal(f.page.materialLabel.string, '技能书 3');
 });
 
 test('技能皮肤：等级目标、请求中与满级状态跟随真实渲染数据', () => {
@@ -684,7 +727,9 @@ test('技能仓库区分角色货币和背包材料，同时按英雄读取技�
         '../itemdetail/ItemDetailArtLoader': { loadItemIconArt: async (path: string) => { iconPaths.push(path); return frame; } },
     });
     const { RuntimeCardRepository } = loadRuntime<typeof import('../assets/script/app/card/CardRepository')>('CardRepository', dependencies);
-    const state = await new RuntimeCardRepository().loadSkillList(68001);
+    const repository = new RuntimeCardRepository();
+    repository.bindHeroSession(dependencies['./PvpHeroService']);
+    const state = await repository.loadSkillList(68001);
     assert.equal(state.costItems.get(7).owned, 5500, '货币不能误读背包里的 99');
     assert.equal(state.costItems.get(10300).owned, 5);
     assert.equal(state.costItems.get(7).frame, frame);

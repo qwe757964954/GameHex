@@ -194,6 +194,13 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
                 site["battleIds"] = list(battle_ids)
         elif "battleIds" in raw:
             issues.append(f"{label}.battleIds is only valid for patrolChest sites")
+        if "patrolId" in raw:
+            if site_type != "patrolChest":
+                issues.append(f"{label}.patrolId is only valid for patrolChest sites")
+            if not _is_int(raw["patrolId"]) or not 0 < raw["patrolId"] <= 9007199254740991:
+                issues.append(f"{label}.patrolId must be a positive integer")
+            elif site_type == "patrolChest":
+                site["patrolId"] = raw["patrolId"]
         if "rewardId" in raw:
             if site_type != "fixedResource":
                 issues.append(f"{label}.rewardId is only valid for fixedResource sites")

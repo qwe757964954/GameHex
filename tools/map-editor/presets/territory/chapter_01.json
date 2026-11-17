@@ -3077,6 +3077,7 @@
         60001,
         60002
       ],
+      "patrolId": 1111,
       "buildingId": "",
       "unlock": {
         "requiredCells": [

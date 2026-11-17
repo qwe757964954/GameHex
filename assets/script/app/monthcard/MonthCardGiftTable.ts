@@ -8,6 +8,8 @@
  */
 
 import { spriteFramePath } from '../ArtPaths';
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { toCount } from '../../core/value/Coerce';
 import { FALLBACK_RES_ICON_ART, resIconRoot } from '../common/ResTypes';
 import { SECONDS_PER_DAY } from '../../core/time/TimeMs';
 
@@ -134,11 +136,6 @@ export function formatRemain(remainMs: number): { readonly day: string; readonly
     return { day: `${pad(hh)}:${pad(mm)}:${pad(ss)}`, isDayUnit: false };
 }
 
-function num(value: unknown, fallback = 0): number {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-}
-
 function str(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
@@ -150,16 +147,12 @@ function parseRewards(
 ): IMonthCardGiftReward[] {
     if (!Array.isArray(value)) return [];
     const out: IMonthCardGiftReward[] = [];
-    for (const raw of value) {
-        if (!raw || typeof raw !== 'object') continue;
-        const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
-        const count = num(row.number);
-        if (!Number.isSafeInteger(resId) || resId <= 0 || count <= 0) continue;
-        const meta = nameByResId.get(resId);
+    for (const reward of parseRewardAmounts(value)) {
+        if (!Number.isSafeInteger(reward.resId)) continue;
+        const meta = nameByResId.get(reward.resId);
         out.push({
-            resId,
-            number: count,
+            resId: reward.resId,
+            number: reward.number,
             name: meta ? meta.name : '',
             iconArt: meta ? meta.iconArt : '',
         });
@@ -177,7 +170,7 @@ function parsePrivileges(value: unknown): IMonthCardGiftPrivilege[] {
         const desc = str(row.desc);
         if (desc.length === 0) continue;
         const param = row.param && typeof row.param === 'object' ? (row.param as Record<string, unknown>) : {};
-        out.push({ desc, type: num(row.type), value: num(param.value) });
+        out.push({ desc, type: toCount(row.type), value: toCount(param.value) });
     }
     return out;
 }
@@ -198,14 +191,14 @@ export function buildRewardMeta(
     for (const raw of roleRows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
+        const resId = toCount(row.resId);
         if (!Number.isSafeInteger(resId) || resId <= 0) continue;
         meta.set(resId, { name: str(row.name), iconArt: resolveIconArtForCurrency(str(row.icon)) });
     }
     for (const raw of itemRows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
+        const resId = toCount(row.resId);
         if (!Number.isSafeInteger(resId) || resId <= 0 || meta.has(resId)) continue;
         const iconPath = str(row.icon);
         meta.set(resId, {
@@ -222,9 +215,9 @@ export function buildPriceResolver(payRows: readonly unknown[]): (payId: number)
     for (const raw of payRows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const id = num(row.id);
+        const id = toCount(row.id);
         if (!Number.isSafeInteger(id) || id <= 0) continue;
-        priceById.set(id, num(row.rmb));
+        priceById.set(id, toCount(row.rmb));
     }
     return (payId: number) => priceById.get(payId) ?? 0;
 }
@@ -239,12 +232,12 @@ export function buildGifts(
     for (const raw of planRows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string,unknown>;
-        const plan = num(row.plan);
-        const type = num(row.type);
+        const plan = toCount(row.plan);
+        const type = toCount(row.type);
         if (!Number.isSafeInteger(plan) || plan <= 0) continue;
         if (!Number.isSafeInteger(type) || type <= 0) continue;
 
-        const payId = num(row.rmb);
+        const payId = toCount(row.rmb);
         const buyRewards = parseRewards(row.buyReward, rewardMeta);
         out.push({
             plan,
@@ -252,7 +245,7 @@ export function buildGifts(
             title: str(row.desc),
             price: priceOf(payId),
             payId,
-            continueDays: num(row.continueDays),
+            continueDays: toCount(row.continueDays),
             privileges: parsePrivileges(row.privilege),
             buyReward: buyRewards.length > 0 ? buyRewards[0] : null,
             dayRewards: parseRewards(row.dayReward, rewardMeta),
@@ -272,16 +265,16 @@ export function buildStates(
     for (const raw of activityRows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
+        const resId = toCount(row.resId);
         if (!Number.isSafeInteger(resId) || resId <= 0) continue;
-        refByResId.set(resId, { type: num(row.type), plan: num(row.plan) });
+        refByResId.set(resId, { type: toCount(row.type), plan: toCount(row.plan) });
     }
 
     const states = new Map<number, IMonthCardGiftState>();
     for (const raw of activityCmds) {
         if (!raw || typeof raw !== 'object') continue;
         const cmd = raw as Record<string, unknown>;
-        const refId = num(cmd.activityRefId);
+        const refId = toCount(cmd.activityRefId);
         const ref = refByResId.get(refId);
         if (!ref) continue;
         if (ref.type !== MONTH_CARD_ACT_TYPE && ref.type !== MONTH_CARD_ACT_TYPE_2) continue;
@@ -299,7 +292,7 @@ export function buildStates(
 
         states.set(ref.plan, {
             claimedToday: detail?.todayTake === true,
-            activityResId: num(cmd.openResId),
+            activityResId: toCount(cmd.openResId),
         });
     }
     return states;

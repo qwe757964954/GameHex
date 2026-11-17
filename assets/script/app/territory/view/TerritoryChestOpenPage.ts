@@ -14,22 +14,25 @@ import {
     Label,
     Layout,
     Node,
+    Sprite,
     SpriteFrame,
     UIOpacity,
     UITransform,
     Widget,
 } from 'cc';
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import type { PopupOpenContext } from '../../../framework/ui/PopupBase';
 import { spriteFramePathOf } from '../../ArtPaths';
 import { loadRewardGoodsTables } from '../../showReward/RewardFrames';
 import type { IRewardGoodsTables } from '../../showReward/RewardFrames';
-import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../../showReward/ShowRewardTable';
-import type { IRewardEntry } from '../../showReward/ShowRewardTable';
+import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../../common/RewardEntries';
+import type { IShowRewardEntry as IRewardEntry } from '../../common/RewardEntries';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 import {
-    chestOpenBgProgressOf,
+    CHEST_OPEN_REVEAL,
     chestOpenCardVisualOf,
     chestOpenChestVisualOf,
     chestOpenCountTextOf,
@@ -98,12 +101,24 @@ export class TerritoryChestOpenPage extends PopupBase {
     private readonly _cards: TerritoryChestOpenCard[] = [];
     /** 本次铺出来的行（克隆体），销毁行时连带销毁卡。 */
     private readonly _rows: Node[] = [];
-    /** 入场时钟（`startedAt` 口径：只累加，不回读节点状态）。 */
+    /** 由开始时间计算的动画进度，不回读节点状态。 */
     private _revealElapsed = 0;
+    private _revealStartedAt = 0;
+    private _waitingToOpen = false;
+    private _entries: readonly IRewardEntry[] = [];
+    private chestSprite: Sprite = null!;
+    private openedChestFrame: SpriteFrame = null!;
+
+    @property({ type: SpriteFrame, tooltip: '待开启的闭合金属箱' })
+    closedChestFrame: SpriteFrame = null!;
+
     private _revealPlaying = false;
     private _revealDone = false;
 
     protected onInit(): void {
+        this.chestSprite = this.chestNode.getComponent(Sprite);
+        this.openedChestFrame = this.chestSprite.spriteFrame;
+        this.chestNode.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.skipLabel.string = TERRITORY_TEXTS.chestOpenSkip;
         this.closeLabel.string = TERRITORY_TEXTS.chestOpenClose;
         this.cardTemplate.active = false;
@@ -132,10 +147,22 @@ export class TerritoryChestOpenPage extends PopupBase {
         if (!(await this.nextPopupFrame())) return;
 
         this.presentCards(entries, icons, frames, tables);
-        this.startReveal();
+        this._entries = entries;
+        this._waitingToOpen = true;
+        this.bgOpacity.opacity = 255;
+        this.chestNode.active = true;
+        this.chestOpacity.opacity = 255;
+        this.applyChestFrame(this.closedChestFrame);
+        this.cardsRoot.active = false;
+        this.skipButton.node.active = true;
+        this.skipOpacity.opacity = 255;
+        this.closeButton.node.active = true;
+        this.closeLabel.string = TERRITORY_TEXTS.chestOpenClaim;
     }
 
     protected onClose(): void {
+        this._waitingToOpen = false;
+        this._entries = [];
         this._revealPlaying = false;
         this._revealDone = true;
         this.clearCards();
@@ -143,6 +170,11 @@ export class TerritoryChestOpenPage extends PopupBase {
 
     /** 入场期间点空白 = 跳过动画（而不是把窗关掉）；入场结束后才允许关。 */
     protected canCloseOnBlank(): boolean {
+        if (!this._entries.length) return false;
+        if (this._waitingToOpen) {
+            this.startReveal();
+            return false;
+        }
         if (!this._revealDone) {
             this.finishReveal();
             return false;
@@ -158,7 +190,7 @@ export class TerritoryChestOpenPage extends PopupBase {
      */
     protected update(dt: number): void {
         if (!this._revealPlaying || this.isCovered) return;
-        this._revealElapsed += dt;
+        this._revealElapsed = (performance.now() - this._revealStartedAt) / 1000;
         this.applyReveal();
         if (this._revealElapsed >= chestOpenRevealDoneSecondsOf(this._cards.length)) this.finishReveal();
     }
@@ -207,6 +239,8 @@ export class TerritoryChestOpenPage extends PopupBase {
         const rows = chestOpenRowsOf(entries.length, columns);
         const gridUi = this.cardsRoot.getComponent(UITransform);
         const cardsLayout = this.cardsRoot.getComponent(Layout);
+        // onLoad 和 Layout 需要激活的父节点；同一帧铺完后由待开启状态隐藏，不会提前露卡。
+        this.cardsRoot.active = true;
         this.cardsRoot.setScale(1, 1, 1);
 
         for (let rowIndex = 0; rowIndex < rows; rowIndex++) {
@@ -264,10 +298,21 @@ export class TerritoryChestOpenPage extends PopupBase {
     // 入场动画
     // ============================================================
 
+    private applyChestFrame(frame: SpriteFrame): void {
+        if (this.chestSprite.spriteFrame === frame) return;
+        this.chestSprite.spriteFrame = frame;
+        const ui = this.chestNode.getComponent(UITransform);
+        ui.setContentSize(ui.width, ui.width * frame.originalSize.height / frame.originalSize.width);
+        this.chestNode.getComponent(Widget).updateAlignment();
+    }
+
     private resetRevealState(): void {
         this._revealElapsed = 0;
         this._revealPlaying = false;
         this._revealDone = false;
+        this._entries = [];
+        this._waitingToOpen = false;
+        this.cardsRoot.active = false;
         this.bgOpacity.opacity = 0;
         this.chestNode.active = false;
         this.chestOpacity.opacity = 0;
@@ -277,6 +322,10 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     private startReveal(): void {
+        this._waitingToOpen = false;
+        this.cardsRoot.active = true;
+        this.closeLabel.string = TERRITORY_TEXTS.chestOpenClose;
+        this._revealStartedAt = performance.now();
         this.chestNode.active = true;
         this.skipButton.node.active = true;
         this.closeButton.node.active = true;
@@ -289,7 +338,9 @@ export class TerritoryChestOpenPage extends PopupBase {
     /** 按当前时钟把所有节点写到对应状态（幂等；`elapsed = 0` 也走这里，避免闪一帧静止态）。 */
     private applyReveal(): void {
         const elapsed = this._revealElapsed;
-        this.bgOpacity.opacity = Math.round(255 * chestOpenBgProgressOf(elapsed));
+        this.bgOpacity.opacity = 255;
+        this.applyChestFrame(elapsed < CHEST_OPEN_REVEAL.cardDelay
+            ? this.closedChestFrame : this.openedChestFrame);
 
         const chest = chestOpenChestVisualOf(elapsed);
         this.chestNode.setScale(chest.scale, chest.scale, 1);
@@ -309,15 +360,18 @@ export class TerritoryChestOpenPage extends PopupBase {
         this._revealPlaying = false;
         this._revealElapsed = chestOpenRevealDoneSecondsOf(this._cards.length);
         this.bgOpacity.opacity = 255;
+        this.applyChestFrame(this.openedChestFrame);
         this.chestNode.setScale(1, 1, 1);
         this.chestOpacity.opacity = 255;
         for (const card of this._cards) card.settle();
         this.skipButton.node.active = true;
         this.skipOpacity.opacity = 255;
+        EventMgr.instance.emit(TerritoryUiEvent.ChestRevealed, { owner: this, entries: this._entries });
     }
 
     /** 入场期间 = 直接落静止态；已静止 = 等同于关闭（按钮不留死状态）。 */
     private onSkipClick(): void {
+        if (this._waitingToOpen) this.startReveal();
         if (this._revealDone) {
             this.closeByButton();
             return;
@@ -326,7 +380,9 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     private onCloseClick(): void {
-        this.closeByButton();
+        if (this._waitingToOpen) this.startReveal();
+        else if (!this._revealDone) this.finishReveal();
+        else this.closeByButton();
     }
 
     private clearCards(): void {

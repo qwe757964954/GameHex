@@ -26,13 +26,7 @@ export class OSRankEntryButton extends Component {
 
     protected onLoad(): void {
         // 监听挂在节点上：cc.Button 的 click 本来就是 node.emit 出来的，点击区在根节点 100×100。
-        const button = this.node.getComponent(Button);
-        if (!button) {
-            // 缺 cc.Button 时 CLICK 永远不会 emit，表现是「点了毫无反应且不报错」。
-            console.error(`[Celebration] ${this.node.name} 上没有 cc.Button，主界面入口点击不会生效`);
-        } else {
-            this.node.on(Button.EventType.CLICK, this.onClick, this);
-        }
+        this.node.on(Button.EventType.CLICK, this.onClick, this);
         void this.refresh();
     }
 

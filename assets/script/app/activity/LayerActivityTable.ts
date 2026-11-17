@@ -35,9 +35,9 @@ import { clamp01Finite } from '../../core/math/Scalar';
 import { toCount } from '../net/RequestGuard';
 import { taskPhaseRank } from '../common/TaskOrder';
 import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../common/ResTypes';
-import { parseRewardAmounts } from '../../core/table/RewardRows';
-import { parseRows } from '../../core/table/RowParse';
 import type { IResGoodsInfo } from '../common/ResTypes';
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { parseRows, asRow } from '../../core/table/RowParse';
 
 export { parseItemRows, parseRolePropertyRows, rewardGoodsOf };
 export type { IResGoodsInfo as IActivityGoodsInfo };
@@ -124,12 +124,6 @@ export type ActivityBoxPhase = 'locked' | 'claimable' | 'taken';
 // ============================================================
 // 表解析
 // ============================================================
-
-/** 配表原始条目 → 行对象；`null` / 非对象（脏行）返回 `null`，调用方跳过。 */
-function asRow(raw: unknown): Record<string, unknown> | null {
-    if (!raw || typeof raw !== 'object') return null;
-    return raw as Record<string, unknown>;
-}
 
 /** 读一条奖励数组；非法条目跳过。 */
 export function parseRewards(raw: unknown): IActivityReward[] {

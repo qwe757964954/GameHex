@@ -52,28 +52,28 @@ const TINT_GRAY = new Color(...LEAGUE_TINT_GRAY);
 @ccclass('LeagueNorthRewardRow')
 export class LeagueNorthRewardRow extends Component {
     @property({ type: Label, tooltip: 'labName：任务标题（`{count}` 已替换）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格' })
-    rewardSlot: LeagueRewardSlot = null;
+    rewardSlot: LeagueRewardSlot = null!;
 
     @property({ type: Node, tooltip: 'comp_progress：进度条（未完成 / 已完成两页显示）' })
-    progressNode: Node = null;
+    progressNode: Node = null!;
 
     @property({ type: Sprite, tooltip: 'comp_progress/bar：填充（按 value/max 改宽度）' })
-    progressFill: Sprite = null;
+    progressFill: Sprite = null!;
 
     @property({ type: Label, tooltip: 'comp_progress/lab_title：进度文案（`now/max`）' })
-    progressLabel: Label = null;
+    progressLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'n7：整幅「已领取」印章（只在「已领取」页显示）' })
-    doneTag: Node = null;
+    doneTag: Node = null!;
 
     @property({ type: Node, tooltip: '按钮：领取按钮（未完成 / 已完成两页显示）' })
-    claimButton: Node = null;
+    claimButton: Node = null!;
 
     @property({ type: Label, tooltip: '按钮/title：按钮文案（未完成 / 领取）' })
-    claimLabel: Label = null;
+    claimLabel: Label = null!;
 
     /** 点到那条「领取」（只在可领取时由宿主发包）。 */
     onClaim: ((view: ILeagueNorthRewardRowView) => void) | null = null;
@@ -82,10 +82,8 @@ export class LeagueNorthRewardRow extends Component {
     private current: ILeagueNorthRewardRowView | null = null;
 
     protected onLoad(): void {
-        const button = this.claimButton ? this.claimButton.getComponent(Button) : null;
-        if (button) button.node.on(Button.EventType.CLICK, this.onClick, this);
-        else if (this.claimButton) this.claimButton.on(Node.EventType.TOUCH_END, this.onClick, this);
-        else console.warn('[LeagueNorthRewardRow] 按钮缺失，点击不会生效');
+        const button = this.claimButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onClick, this);
     }
 
     protected onDestroy(): void {
@@ -109,39 +107,33 @@ export class LeagueNorthRewardRow extends Component {
         }
         this.node.active = true;
 
-        if (this.nameLabel) this.nameLabel.string = view.nameText;
+        this.nameLabel.string = view.nameText;
 
-        if (this.rewardSlot) {
-            const reward = view.reward;
-            if (!reward) {
-                this.rewardSlot.node.active = false;
-            } else {
-                const frames = art ? art.framesOf(reward.resId) : { frame: null, icon: null };
-                this.rewardSlot.node.active = true;
-                this.rewardSlot.render(frames.frame, frames.icon, reward.number, true);
-            }
+        const reward = view.reward;
+        if (!reward) {
+            this.rewardSlot.node.active = false;
+        } else {
+            const frames = art ? art.framesOf(reward.resId) : { frame: null, icon: null };
+            this.rewardSlot.node.active = true;
+            this.rewardSlot.render(frames.frame, frames.icon, reward.number, true);
         }
 
         const rewarded = view.state === 'rewarded';
         const claimable = view.state === 'canReward';
 
         // 进度条：未完成 / 已完成两页都显示（老端 `gearDisplay pages="0,1"`）
-        if (this.progressNode) this.progressNode.active = !rewarded;
+        this.progressNode.active = !rewarded;
         this.applyProgress(view.progress);
-        if (this.progressLabel) this.progressLabel.string = view.progressText;
+        this.progressLabel.string = view.progressText;
 
         // 印章只有「已领取」页
-        if (this.doneTag) this.doneTag.active = rewarded;
+        this.doneTag.active = rewarded;
 
         // 按钮：未完成（灰）/ 已完成（亮）两页显示
-        if (this.claimButton) {
-            this.claimButton.active = !rewarded;
-            const sprite = this.claimButton.getComponent(Sprite);
-            if (sprite) sprite.color = claimable ? TINT_NORMAL : TINT_GRAY;
-        }
-        if (this.claimLabel) {
-            this.claimLabel.string = claimable ? LEAGUE_NORTH_REWARD_BTN_CLAIM : LEAGUE_NORTH_REWARD_BTN_UNDONE;
-        }
+        this.claimButton.active = !rewarded;
+        const sprite = this.claimButton.getComponent(Sprite);
+        sprite.color = claimable ? TINT_NORMAL : TINT_GRAY;
+        this.claimLabel.string = claimable ? LEAGUE_NORTH_REWARD_BTN_CLAIM : LEAGUE_NORTH_REWARD_BTN_UNDONE;
     }
 
     /** 当前铺的数据（探针 / 单测用）。 */
@@ -157,9 +149,7 @@ export class LeagueNorthRewardRow extends Component {
      * 锚点是 `(0, 0.5)`（位置点 = 左中点）⇒ 宽度往**右**长，左端不动。
      */
     private applyProgress(percent: number): void {
-        if (!this.progressFill) return;
         const uit = this.progressFill.node.getComponent(UITransform);
-        if (!uit) return;
         const ratio = Number.isFinite(percent) ? Math.max(0, Math.min(1, percent / 100)) : 0;
         uit.setContentSize(Math.max(NORTH_ROW_PROGRESS_FULL_WIDTH * ratio, 1), uit.contentSize.height);
     }

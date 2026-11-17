@@ -72,11 +72,15 @@ BULLET_SUMMARY = re.compile(r'(【孢子弹幕】弹数 \d+ → \d+)(（[^）]*�
 BULLET_PARAM = re.compile(r'skill 域 skillParamJson=\{"bulletNum":1/1/2\}')
 BULLET_UNIT = 'unit 域 bulletNum add=1/1/2'
 SPLASH_SUMMARY = re.compile(r'溅射 \d+% → \d+%(?:' + re.escape(SPLASH_SUFFIX) + r')?(?=；)')
-SPLASH_PARAM = re.compile(r'"(?:explosionDamageRate|splashDamageRate)":[\d./]+')
+#  🔴 幂等：匹配串必须把**已经写进去的** `,"splashFalloff":0.3` 一起吃掉。
+#  老写法只匹配到 `:[\d./]+` 就停 ⇒ 每跑一次追加一个 `"splashFalloff":0.3`（踩过）。
+SPLASH_PARAM = re.compile(
+    r'"(?:explosionDamageRate|splashDamageRate)":[\d./]+(?:,"splashFalloff":[\d.]+)*')
 PIERCE_PARAM = re.compile(r'"pierceCount":([\d/]+)')
 EXECUTE_PARAM = re.compile(r'skill 域 skillParamJson=\{"executeChance":[\d./]+\} \+ ')
 
-EXECUTE_BODY_OLD = '对已经枯萎到临界的目标直接执行终止程序，省掉收尾的那几下。'EXECUTE_BODY_NEW = ('枯萎的植株一碰就碎：暴击率与伤害两路同时把收尾那几下压短。'
+EXECUTE_BODY_OLD = '对已经枯萎到临界的目标直接执行终止程序，省掉收尾的那几下。'
+EXECUTE_BODY_NEW = ('枯萎的植株一碰就碎：暴击率与伤害两路同时把收尾那几下压短。'
                     '【处决已从卡牌链路移除】2026-11-14 起处决只保留给其他养成系统，'
                     '本卡不再带处决，两条词缀各自独立生效。')
 EXECUTE_SUMMARY_OLD = re.compile(r'【枯萎收割】处决 \d+% → \d+%；')
@@ -249,7 +253,7 @@ def plan_bullet(cells) -> dict:
     desc = cells.get('N', '')
     match = BULLET_SUMMARY.search(desc)
     if match:
-        note = '（额外弹 60% / 36%，第 1 发仍是本体 100%%）'
+        note = '（额外弹 60% / 36%，第 1 发仍是本体 100%）'
         if match.group(2) != note:
             want['N'] = desc[:match.start()] + match.group(1) + note + '；' + desc[match.end():]
 

@@ -44,12 +44,6 @@ export class OSTabButton extends Component {
     onTap: () => void = null!;
 
     protected onLoad(): void {
-        const button = this.node.getComponent(Button);
-        if (!button) {
-            // 缺 cc.Button 时 CLICK 永远不会 emit，表现是「点了毫无反应且不报错」，所以要说一声。
-            console.error(`[Celebration] ${this.node.name} 上没有 cc.Button，页签点击不会生效`);
-            return;
-        }
         this.node.on(Button.EventType.CLICK, this._emitTap, this);
     }
 

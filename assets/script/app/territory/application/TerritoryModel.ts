@@ -35,7 +35,7 @@ import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
-import { TerritoryProgress } from '../model/TerritoryProgress';
+import { TerritoryProgress, normalizeTerritoryChapter } from '../model/TerritoryProgress';
 import { TERRITORY_REQUEST_STATUS } from '../model/TerritoryRequestStatus';
 import type {
     TerritoryBeginBattleResult,
@@ -1919,7 +1919,7 @@ export class TerritoryModel {
      * @param cellIds 本次通关的格子 id
      */
     applyPassCellsBro(levelChapter: number, cellIds: readonly number[]): void {
-        const chapterId = this.normalizeBroChapter(levelChapter);
+        const chapterId = normalizeTerritoryChapter(levelChapter);
         if (this.loadingPushes) {
             if (chapterId === this.loadingPushes.chapterId) {
                 for (const cellId of cellIds) this.loadingPushes.passCells.add(cellId);
@@ -1947,18 +1947,6 @@ export class TerritoryModel {
     }
 
     /**
-     * Bro 章节号归一。
-     *
-     * 与 `TerritoryCellRepository.normalizeChapter` **同一口径**（0 / 负数 / NaN → 第 1 章）——
-     * 两处必须一致，否则「服务端推 `levelChapter=0`」时 Repository 归成 1、这里却按 0 比对，
-     * 格子就白收了（症状：广播收到了但格子没变，且零报错）。
-     */
-    private normalizeBroChapter(levelChapter: number): number {
-        const parsed = Math.floor(Number(levelChapter));
-        return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-    }
-
-    /**
      * 落地服务端**主动下发**的章节格子状态（`CmdCityChapterCellInfoRspMsg`）。
      *
      * 与 {@link mergeServerState} 拉到的快照同性质（含 unlockCells/passCells 的完整权威状态），
@@ -1969,7 +1957,7 @@ export class TerritoryModel {
      * - 占领、解锁、待确认或权威状态变化才刷新 + 落盘，重复推送幂等。
      */
     applyCellInfoState(state: ITerritoryCellState): void {
-        const chapterId = this.normalizeBroChapter(state.levelChapter);
+        const chapterId = normalizeTerritoryChapter(state.levelChapter);
         if (this.loadingPushes) {
             if (chapterId === this.loadingPushes.chapterId) {
                 const previous = this.loadingPushes.cellInfo;

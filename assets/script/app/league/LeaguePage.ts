@@ -5,7 +5,6 @@
 
 import { _decorator, Component, Node, Label, Sprite, Button, SpriteFrame } from 'cc';
 import { FW } from '../../framework/FW';
-import { loadArt } from '../card/CardLineupIcons';
 import { RedDot } from '../common/RedDot';
 import { LeagueDiscountPage } from './LeagueDiscountPage';
 import { LeagueDonatePage } from './LeagueDonatePage';
@@ -13,7 +12,8 @@ import { LeagueHallPage } from './LeagueHallPage';
 import { LeagueStorePage } from './LeagueStorePage';
 import { LeagueNorthExpeditionPage } from './LeagueNorthExpeditionPage';
 import { LeagueTaskPage } from './LeagueTaskPage';
-import { LEAGUE_ART_BANNER_BASE, LEAGUE_ART_BANNER_FRAME, LEAGUE_ART_ROOT, LEAGUE_BANNER_COLOR_COUNT, leagueBannerArt } from './LeagueArt';
+import { LEAGUE_ART_BANNER_BASE, LEAGUE_ART_BANNER_FRAME } from './LeagueArt';
+import { loadLeagueBannerFrames } from './LeagueBannerArt';
 import { leagueRepository, type ILeagueEntryRedDots, type ILeagueRepository } from './LeagueRepository';
 import {
     LEAGUE_ENTRANCES,
@@ -64,22 +64,22 @@ export class LeaguePage extends Component {
     banner: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（随联盟颜色切图）' })
-    bannerColor: Sprite = null;
+    bannerColor: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Banner/Frame：选中态外框（未选中时隐藏）' })
-    bannerFrame: Sprite = null;
+    bannerFrame: Sprite = null!;
 
     @property({ type: Label, tooltip: 'LabName：联盟名' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabLv：联盟等级' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabUserCount：成员数' })
-    memberLabel: Label = null;
+    memberLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'BtnHelp：玩法说明（未落地 ⇒ 提示）' })
-    helpButton: Node = null;
+    helpButton: Node = null!;
 
     /** 当前展示的联盟颜色下标（FGUI `颜色` controller 的页序）。 */
     private bannerColorIndex = 0;
@@ -135,7 +135,7 @@ export class LeaguePage extends Component {
             this.repository.load(),
             this.repository.loadLeagueEntryRedDots(),
         ]);
-        if (!this.node || !this.node.isValid || revision !== this.revision) return;
+        if (!this.node.isValid || revision !== this.revision) return;
         this.applyInfoTexts(snapshot.myUnion);
         if (snapshot.myUnion) void this.applyBannerColor(snapshot.myUnion.icon);
         this.applyEntranceRedDots(redDots);
@@ -154,17 +154,13 @@ export class LeaguePage extends Component {
      * —— 那是**设计态文本**（`labLv` 写的是「传奇:4级」），只当兜底用，不是运行时真值。
      */
     private applyInfoTexts(union: ILeagueUnionRow | null | undefined): void {
-        if (this.nameLabel) this.nameLabel.string = union?.name || LEAGUE_INFO_PLACEHOLDER.name;
-        if (this.levelLabel) {
-            this.levelLabel.string = union
-                ? `${union.level}${LEAGUE_HALL_LV_SUFFIX}`
-                : LEAGUE_INFO_PLACEHOLDER.level;
-        }
-        if (this.memberLabel) {
-            this.memberLabel.string = union
-                ? `${LEAGUE_UNION_MEMBER_PREFIX}${union.count}/${union.maxCount}`
-                : LEAGUE_INFO_PLACEHOLDER.memberCount;
-        }
+        this.nameLabel.string = union?.name || LEAGUE_INFO_PLACEHOLDER.name;
+        this.levelLabel.string = union
+            ? `${union.level}${LEAGUE_HALL_LV_SUFFIX}`
+            : LEAGUE_INFO_PLACEHOLDER.level;
+        this.memberLabel.string = union
+            ? `${LEAGUE_UNION_MEMBER_PREFIX}${union.count}/${union.maxCount}`
+            : LEAGUE_INFO_PLACEHOLDER.memberCount;
     }
 
     /**
@@ -203,9 +199,8 @@ export class LeaguePage extends Component {
             }
         }
 
-        const help = this.helpButton?.getComponent(Button);
-        if (help) help.node.on(Button.EventType.CLICK, this.onHelpClick, this);
-        else console.warn('[League] BtnHelp 上没有 cc.Button，点击不会生效');
+        const help = this.helpButton.getComponent(Button);
+        help.node.on(Button.EventType.CLICK, this.onHelpClick, this);
     }
 
     private onEntranceClick(nodeName: string): void {
@@ -291,12 +286,10 @@ export class LeaguePage extends Component {
      */
     async applyBannerColor(colorIndex: number): Promise<void> {
         this.bannerColorIndex = colorIndex;
-        if (!this.bannerColor) return;
 
         if (!this.bannerFrames) {
-            const names = LEAGUE_BANNER_COLORS_ART();
-            const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
-            if (!this.node || !this.node.isValid) return;
+            const frames = await loadLeagueBannerFrames();
+            if (!this.node.isValid) return;
             this.bannerFrames = frames;
         }
         const frame = this.bannerFrames[colorIndex] ?? null;
@@ -305,7 +298,7 @@ export class LeaguePage extends Component {
 
     /** 选中态外框（FGUI `选中` controller：0=否 / 1=是）。 */
     setBannerSelected(selected: boolean): void {
-        if (this.bannerFrame) this.bannerFrame.node.active = selected;
+        this.bannerFrame.node.active = selected;
         if (selected && !this.bannerFrame) {
             console.warn('[League] Banner/Frame 缺失，选中态外框不显示');
         }
@@ -320,11 +313,4 @@ export class LeaguePage extends Component {
     static bannerFrameArt(): string {
         return LEAGUE_ART_BANNER_FRAME;
     }
-}
-
-/** 八张旗面图名（挡住 `LeagueArt` 的表结构，页面类只关心「一串图名」）。 */
-function LEAGUE_BANNER_COLORS_ART(): string[] {
-    const names: string[] = [];
-    for (let index = 0; index < LEAGUE_BANNER_COLOR_COUNT; index += 1) names.push(leagueBannerArt(index));
-    return names;
 }

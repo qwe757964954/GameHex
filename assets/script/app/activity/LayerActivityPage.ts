@@ -10,8 +10,8 @@ import {
     boxArtKey,
     buttonArtKey,
     qualityFrameName,
-    resolveRewardIconRef,
 } from './LayerActivityArt';
+import { resolveRewardIconRef } from '../common/RewardIcon';
 import { activityRepository } from './LayerActivityRepository';
 import { loadQualityFrameMap } from '../common/QualityFrameLoader';
 import type { ActivityRequestResult, IActivityRepository, IActivitySnapshot } from './LayerActivityRepository';
@@ -104,19 +104,19 @@ export class LayerActivityPage extends PopupBase {
     titleLabel: Label = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：任务行列表（自带虚拟列表 + Mask）' })
-    rowList: VirtualScrollView = null;
+    rowList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'ProgressStrip：周活跃整条（徽章 / 积分 / 条 / 宝箱都在它下面）' })
     progressStrip: Node = null;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BarFill：进度条填充（锚点必须 (0,0.5)，靠改宽度走）' })
-    barFill: Node = null;
+    barFill: Node = null!;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BoxRow：宝箱容器（子节点在运行时从 BoxTemplate clone）' })
-    boxRow: Node = null;
+    boxRow: Node = null!;
 
     @property({ type: Node, tooltip: 'ProgressStrip/BoxRow/BoxTemplate：宝箱模板（默认隐藏，只用来 clone）' })
-    boxTemplate: Node = null;
+    boxTemplate: Node = null!;
 
     @property({ type: Label, tooltip: 'ProgressStrip/CoinLabel：当前周活跃积分' })
     coinLabel: Label = null;
@@ -176,7 +176,7 @@ export class LayerActivityPage extends PopupBase {
         this.closeAction = this.closeButton.getComponent(Button);
         this.closeAction?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         // 宝箱模板只用来 clone，永远不进渲染
-        if (this.boxTemplate) this.boxTemplate.active = false;
+        this.boxTemplate.active = false;
         // 「点空白关闭」的内容区（见 bindBlankContent 的说明），必须早于任何布局改动
         this.bindBlankContent();
     }
@@ -257,7 +257,6 @@ export class LayerActivityPage extends PopupBase {
         this.rowContext = { snapshot, qualityFrames, iconFrames };
 
         const list = this.rowList;
-        if (!list) return;
         if (!this.rowRendererBound) {
             this.rowRendererBound = true;
             list.renderItemFn = (node, index) => this.renderRow(node, index);
@@ -268,11 +267,6 @@ export class LayerActivityPage extends PopupBase {
     /** 虚拟列表的行渲染（被 clone 复用的槽位 → 每次都按当前 `this.rows` / `rowContext` 重铺）。 */
     private renderRow(node: Node, index: number): void {
         const view = node.getComponent(ActivityTaskRow);
-        if (!view) {
-            console.warn('[Activity] 行模板上没有 ActivityTaskRow 组件，整行跳过');
-            node.active = false;
-            return;
-        }
         // 回调按 **index 现取** `this.rows[index]`，不能闭包捕获 `row` ——
         // 同一个实例会被复用到别的下标。
         view.onAction = () => {
@@ -345,11 +339,9 @@ export class LayerActivityPage extends PopupBase {
 
         // 填充条的锚点是 (0, 0.5)，所以它的 x 就是**条的左端**、宽度 = 填充比例 × 条宽。
         // 两个数都从版面常量取：改条宽时 prefab 不会跟着漂。
-        this.barFill?.setPosition(ACTIVITY_BAR_LEFT, ACTIVITY_BAR_CENTER_Y, 0);
-        const fill = this.barFill?.getComponent(UITransform);
-        if (fill) {
-            fill.setContentSize(barFillWidth(barRatioOf(snapshot.state, boxes)), ACTIVITY_BAR_HEIGHT);
-        }
+        this.barFill.setPosition(ACTIVITY_BAR_LEFT, ACTIVITY_BAR_CENTER_Y, 0);
+        const fill = this.barFill.getComponent(UITransform);
+        fill.setContentSize(barFillWidth(barRatioOf(snapshot.state, boxes)), ACTIVITY_BAR_HEIGHT);
 
         this.rebuildBoxes(boxes, snapshot.state, costMax);
     }
@@ -392,14 +384,10 @@ export class LayerActivityPage extends PopupBase {
             node.parent = row;
             node.active = true;
             const transform = node.getComponent(UITransform);
-            if (transform) transform.setContentSize(ACTIVITY_CHEST_NODE_WIDTH, ACTIVITY_CHEST_NODE_HEIGHT);
+            transform.setContentSize(ACTIVITY_CHEST_NODE_WIDTH, ACTIVITY_CHEST_NODE_HEIGHT);
             node.setPosition(chestOffsetX(chestRatioOf(data, costMax)), ACTIVITY_CHEST_CENTER_Y, 0);
 
             const view = node.getComponent(ActivityProgressBox);
-            if (!view) {
-                console.warn('[Activity] 宝箱模板上没有 ActivityProgressBox 组件，跳过');
-                continue;
-            }
             // 宝箱图尺寸跟着「条宽 ÷ 档位数」走，不写死在 prefab 上（改表加档位不会叠图）
             view.applyArtSize(ACTIVITY_CHEST_ART_SIZE);
             // 锚点取 `chestButton`（72×72 的宝箱本体）而不是外层 `BoxN`（72×92）：
@@ -414,18 +402,17 @@ export class LayerActivityPage extends PopupBase {
     private presentEmpty(): void {
         this.rows = [];
         this.rowContext = null;
-        this.rowList?.refreshList([]);
+        this.rowList.refreshList([]);
         this.clearBoxes();
-        this.barFill?.setPosition(ACTIVITY_BAR_LEFT, ACTIVITY_BAR_CENTER_Y, 0);
-        const fill = this.barFill?.getComponent(UITransform);
-        if (fill) fill.setContentSize(0, ACTIVITY_BAR_HEIGHT);
+        this.barFill.setPosition(ACTIVITY_BAR_LEFT, ACTIVITY_BAR_CENTER_Y, 0);
+        const fill = this.barFill.getComponent(UITransform);
+        fill.setContentSize(0, ACTIVITY_BAR_HEIGHT);
         this.coinLabel.string = '0';
         this.setHint(ACTIVITY_TEXTS.empty);
     }
 
     private clearBoxes(): void {
         const row = this.boxRow;
-        if (!row) return;
         for (const child of row.children.slice()) {
             if (child === this.boxTemplate) continue;
             child.destroy();
@@ -712,7 +699,7 @@ export class LayerActivityPage extends PopupBase {
      */
     private bindBlankContent(): void {
         const interactive: Node[] = [];
-        for (const node of [this.closeButton, this.progressStrip, this.rowList?.node]) {
+        for (const node of [this.closeButton, this.progressStrip, this.rowList.node]) {
             if (node && node.isValid) interactive.push(node);
         }
         this.contentNodes = interactive;

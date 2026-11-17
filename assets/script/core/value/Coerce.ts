@@ -26,12 +26,18 @@ export function toIdString(value: unknown): string {
     return '';
 }
 
-/** `Long` / `string` / `number` → 有限数值；认不出来返回 0。 */
-export function toCount(value: unknown): number {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+/**
+ * `Long` / `string` / `number` → 有限数值；认不出来返回 `fallback`。
+ *
+ * 默认 `fallback = 0`，保持既有调用方的降级语义；需要区分“缺失/非法”和显式 0 时，
+ * 由调用方传第二个参数（如引导表的 `guideId` 缺省 1）。
+ * Long 的优先级与 `TimeMs.toMillis` 不同：本函数先取 `low/high`，后者先取 `toNumber()`。
+ */
+export function toCount(value: unknown, fallback = 0): number {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : fallback;
     if (typeof value === 'string') {
         const parsed = Number(value);
-        return Number.isFinite(parsed) ? parsed : 0;
+        return Number.isFinite(parsed) ? parsed : fallback;
     }
     if (value && typeof value === 'object') {
         const long = value as { toNumber?: () => number; low?: number; high?: number };
@@ -40,10 +46,10 @@ export function toCount(value: unknown): number {
         }
         if (typeof long.toNumber === 'function') {
             const parsed = long.toNumber();
-            return Number.isFinite(parsed) ? parsed : 0;
+            return Number.isFinite(parsed) ? parsed : fallback;
         }
     }
-    return 0;
+    return fallback;
 }
 
 /** 正整数字段；非法返回 `null`。 */

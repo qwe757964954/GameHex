@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform, Widget } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -152,7 +151,7 @@ export class ItemDetailPage extends PopupBase {
 
     protected onInit(): void {
         // 记下 prefab 的静态基线，后面 `applyLayout` 只叠加差值。
-        this.defaultTitleFrame = this.titleBg?.spriteFrame ?? null;
+        this.defaultTitleFrame = this.titleBg.spriteFrame ?? null;
         const panel = this.panelBg.getComponent(UITransform);
         this.panelWidget = this.panelBg.getComponent(Widget);
         this.panelBaseHeight = panel.height;
@@ -199,14 +198,11 @@ export class ItemDetailPage extends PopupBase {
     }
 
     /**
-     * 绑按钮。
-     *
-     * FGUI 的 `<loader>` / `<image>` 迁过来只有 `cc.Sprite`、没有 `cc.Button`，
-     * 那种节点绑 `CLICK` 是死按钮；而 `<component>` 形态迁过来带 `cc.Button`，
-     * 绑 `TOUCH_END` 又会绕过 `interactable`。所以按节点上有没有 `cc.Button` 分流。
+     * 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。
+     * `closeButton` 允许未绑（本页没有 CloseBtn），未绑时安全跳过。
      */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     /** 无条件写 `active`，避免复用实例时残留上一件物品的显隐。 */
@@ -314,8 +310,7 @@ export class ItemDetailPage extends PopupBase {
     private get contentSlots(): GoodsBox[] {
         const out: GoodsBox[] = [];
         for (const child of this.contentBar.children) {
-            const box = child.getComponent(GoodsBox);
-            if (box) out.push(box);
+            out.push(child.getComponent(GoodsBox));
         }
         return out;
     }
@@ -361,7 +356,6 @@ export class ItemDetailPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用，每次按当前 `this.accessRefs` 重铺）。 */
     private renderAccessRow(node: Node, index: number): void {
         const view = node.getComponent(ItemDetailRow);
-        if (!view) return;
         const ref = this.accessRefs[index];
         if (!ref) {
             view.hide();

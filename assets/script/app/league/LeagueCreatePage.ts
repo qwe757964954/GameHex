@@ -8,14 +8,13 @@ import { EventMgr } from '../../framework/event/EventMgr';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
+import { loadLeagueBannerFrames } from './LeagueBannerArt';
 import {
-    LEAGUE_ART_ROOT,
     LEAGUE_COST_ENOUGH_COLOR,
     LEAGUE_COST_ENOUGH_STROKE,
     LEAGUE_COST_ICON_ROOT,
     LEAGUE_COST_SHORT_COLOR,
     LEAGUE_COST_SHORT_STROKE,
-    leagueBannerArt,
 } from './LeagueArt';
 import { LeagueCreateEvent, type ILeagueCreateViewState } from './LeagueCreateEvents';
 import { leagueCreateBannerIndices, type ILeagueCostView } from './LeagueTable';
@@ -49,31 +48,31 @@ export class LeagueCreatePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueCreate';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: EditBox, tooltip: 'NameInput：lab_leagueName 的 cc.EditBox（多行）' })
-    nameInput: EditBox = null;
+    nameInput: EditBox = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'BannerListView：可选旗帜色（横向虚拟列表，8 项）' })
-    bannerList: VirtualScrollView = null;
+    bannerList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'QuickJoinBox：「允许快速加入」勾选框（整块 50×50 是热区）' })
     quickJoinBox: Node = null;
 
     @property({ type: Node, tooltip: 'QuickJoinBox/Check：勾（FGUI 实例 checked=true ⇒ 默认已勾）' })
-    quickJoinCheck: Node = null;
+    quickJoinCheck: Node = null!;
 
     @property({ type: Node, tooltip: 'BtnCreate：消耗按钮（底图 + 衬底 + 「创建」+ 消耗项）' })
-    costButton: Node = null;
+    costButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'BtnCreate/Cost/CostIcon：消耗图标（运行时按表换帧）' })
     costIcon: Sprite = null;
 
     @property({ type: Label, tooltip: 'BtnCreate/Cost/Has：持有量（「100/」，两态换色）' })
-    costHasLabel: Label = null;
+    costHasLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'BtnCreate/Cost/Need：需要量（恒一色，FGUI 没有 gearColor）' })
-    costNeedLabel: Label = null;
+    costNeedLabel: Label = null!;
 
     /** 列表数据源 —— 就是颜色下标本身（`[0..7]`）。 */
     private readonly bannerIndices: number[] = leagueCreateBannerIndices();
@@ -94,25 +93,20 @@ export class LeagueCreatePage extends PopupBase {
      * （`if (!this._inited)`），所以「只绑一次」的布尔门闩已删。
      */
     protected onInit(): void {
-        const close = this.closeButton?.getComponent(Button);
-        if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueCreate] CloseBtn 上没有 cc.Button，点击不会生效');
+        const close = this.closeButton.getComponent(Button);
+        close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         this.bindClick(this.costButton, () => this.emitSubmit());
         this.bindClick(this.quickJoinBox, () => this.emitQuickJoin());
-        this.nameInput?.node.on('text-changed', this.emitName, this);
+        this.nameInput.node.on('text-changed', this.emitName, this);
 
-        if (this.bannerList) {
-            this.bannerList.renderItemFn = (node, index) => this.renderBanner(node, index);
-            this.bannerList.onItemClickFn = (_node, index) => this.emitBanner(index);
-        } else {
-            console.warn('[LeagueCreate] BannerListView 没绑上，旗帜列表不会渲染');
-        }
+        this.bannerList.renderItemFn = (node, index) => this.renderBanner(node, index);
+        this.bannerList.onItemClickFn = (_node, index) => this.emitBanner(index);
     }
 
     protected async onOpen(): Promise<void> {
         this.selectIndex = 0;
-        if (this.nameInput) this.nameInput.string = '';
+        this.nameInput.string = '';
         this.applyStaticTexts();
 
         await this.loadBannerFrames();
@@ -139,7 +133,7 @@ export class LeagueCreatePage extends PopupBase {
 
     private emitName(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: this, kind: 'name', name: this.nameInput?.string ?? '',
+            owner: this, kind: 'name', name: this.nameInput.string ?? '',
         });
     }
 
@@ -149,10 +143,6 @@ export class LeagueCreatePage extends PopupBase {
     }
 
     private emitQuickJoin(): void {
-        if (!this.quickJoinCheck) {
-            console.warn('[LeagueCreate] QuickJoinBox/Check 没绑上，勾选框点不动');
-            return;
-        }
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             owner: this, kind: 'quickJoin', quickJoin: !this.quickJoinCheck.active,
         });
@@ -162,7 +152,7 @@ export class LeagueCreatePage extends PopupBase {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
             owner: this,
             kind: 'submit',
-            name: this.nameInput?.string ?? '',
+            name: this.nameInput.string ?? '',
             quickJoin: this.quickJoinSelected,
         });
     }
@@ -177,28 +167,26 @@ export class LeagueCreatePage extends PopupBase {
     render(state: ILeagueCreateViewState): void {
         const input = this.nameInput;
         if (input && input.string !== state.name) input.string = state.name;
-        if (this.quickJoinCheck) this.quickJoinCheck.active = state.quickJoin;
+        this.quickJoinCheck.active = state.quickJoin;
         this.selectIndex = state.selectIndex;
         this.repaintBanners();
         if (state.cost) this.applyCost(state.cost);
-        const button = this.costButton?.getComponent(Button);
-        if (button) button.interactable = !state.submitting;
+        const button = this.costButton.getComponent(Button);
+        button.interactable = !state.submitting;
     }
 
     /** 8 张旗面一次性预载（之后行渲染是纯同步的，槽位复用时不会闪上一张的图）。 */
     private async loadBannerFrames(): Promise<void> {
         if (this.bannerFrames) return;
         const revision = this.revision;
-        const frames = await Promise.all(
-            this.bannerIndices.map((index) => loadArt(leagueBannerArt(index), LEAGUE_ART_ROOT)),
-        );
+        const frames = await loadLeagueBannerFrames();
         if (!this.alive || revision !== this.revision) return;
         this.bannerFrames = frames;
     }
 
     /** 铺列表（`bannerIndices` 是静态的 8 项，直接 `refreshList`）。 */
     private present(): void {
-        if (!this.bannerList || !this.bannerList.isValid) return;
+        if (!this.bannerList.isValid) return;
         this.bannerList.refreshList(this.bannerIndices);
     }
 
@@ -217,25 +205,20 @@ export class LeagueCreatePage extends PopupBase {
      * `lab_need` **没有** gearColor ⇒ 两态都保持 `#e6e5d9` / `#181614`（别顺手也染红）。
      */
     private applyCost(cost: ILeagueCostView): void {
-        if (this.costHasLabel) {
-            this.costHasLabel.string = cost.hasText;
-            this.paintLabel(
-                this.costHasLabel,
-                cost.enough ? LEAGUE_COST_ENOUGH_COLOR : LEAGUE_COST_SHORT_COLOR,
-                cost.enough ? LEAGUE_COST_ENOUGH_STROKE : LEAGUE_COST_SHORT_STROKE,
-            );
-        }
-        if (this.costNeedLabel) {
-            this.costNeedLabel.string = cost.needText;
-            this.paintLabel(this.costNeedLabel, LEAGUE_COST_ENOUGH_COLOR, LEAGUE_COST_ENOUGH_STROKE);
-        }
+        this.costHasLabel.string = cost.hasText;
+        this.paintLabel(
+            this.costHasLabel,
+            cost.enough ? LEAGUE_COST_ENOUGH_COLOR : LEAGUE_COST_SHORT_COLOR,
+            cost.enough ? LEAGUE_COST_ENOUGH_STROKE : LEAGUE_COST_SHORT_STROKE,
+        );
+        this.costNeedLabel.string = cost.needText;
+        this.paintLabel(this.costNeedLabel, LEAGUE_COST_ENOUGH_COLOR, LEAGUE_COST_ENOUGH_STROKE);
         void this.applyCostIcon(cost);
     }
 
     /** 消耗图标（`roleProperty.icon` 是 FGUI 组件名 ⇒ 目录固定 `icons/resource`）。 */
     private async applyCostIcon(cost: ILeagueCostView): Promise<void> {
         const sprite = this.costIcon;
-        if (!sprite) return;
         const revision = this.revision;
         const frame = await loadArt(cost.iconName, cost.iconRoot || LEAGUE_COST_ICON_ROOT);
         if (!sprite.isValid || revision !== this.revision) return;
@@ -279,10 +262,10 @@ export class LeagueCreatePage extends PopupBase {
         node.active = true;
 
         const frame = node.getChildByName(BANNER_FRAME);
-        if (frame) frame.active = index === this.selectIndex;
+        frame.active = index === this.selectIndex;
 
-        const icon = node.getChildByName(BANNER_COLOR_ICON)?.getComponent(Sprite);
-        if (icon) icon.spriteFrame = this.bannerFrames?.[colorIndex] ?? null;
+        const icon = node.getChildByName(BANNER_COLOR_ICON).getComponent(Sprite);
+        icon.spriteFrame = this.bannerFrames?.[colorIndex] ?? null;
     }
 
     /**
@@ -290,12 +273,12 @@ export class LeagueCreatePage extends PopupBase {
      * （老端 `updateShowItem` 的同义做法）：重排整表会让横向列表跳一下。
      */
     private repaintBanners(): void {
-        if (!this.bannerList || !this.bannerList.isValid) return;
+        if (!this.bannerList.isValid) return;
         for (let index = 0; index < this.bannerIndices.length; index += 1) {
             const node = this.bannerList.getItemByIndex(index);
             if (!node) continue;
             const frame = node.getChildByName(BANNER_FRAME);
-            if (frame) frame.active = index === this.selectIndex;
+            frame.active = index === this.selectIndex;
         }
     }
 
@@ -303,7 +286,7 @@ export class LeagueCreatePage extends PopupBase {
 
     /** 当前是否勾了「允许快速加入」（老端读 `按钮_勾选` 的 `selected`）。 */
     get quickJoinSelected(): boolean {
-        return this.quickJoinCheck?.active === true;
+        return this.quickJoinCheck.active === true;
     }
 
     // 杂项
@@ -317,9 +300,9 @@ export class LeagueCreatePage extends PopupBase {
      */
     private applyStaticTexts(): void {
         setLabelIfEmpty(this.costButton, LEAGUE_CREATE_SUBMIT);
-        const quickJoinLabel = this.node?.getChildByName(QUICK_JOIN_LABEL_NODE) ?? null;
+        const quickJoinLabel = this.node.getChildByName(QUICK_JOIN_LABEL_NODE) ?? null;
         setLabelIfEmpty(quickJoinLabel, LEAGUE_CREATE_QUICK_JOIN);
-        const placeholder = this.nameInput?.placeholderLabel;
+        const placeholder = this.nameInput.placeholderLabel;
         if (placeholder && !placeholder.string) placeholder.string = LEAGUE_CREATE_NAME_PROMPT;
     }
 

@@ -123,8 +123,11 @@ export function buildTerritoryBoundaryMasks(
                 if (!neighbor?.playable) continue;
                 const dx = neighbor.x - hex.x;
                 const dy = neighbor.y - hex.y;
+                // `hypot` 带溢出保护（多一层分支与前置缩放）；格距不可能溢出，直接用 sqrt。
+                // 2026-11-16 以 `tmp/perf/mask-sqrt-compare.ts` 对 15 张图 × 3 种归属逐格比对：
+                // 换成 sqrt 后 mask 完全相同（0 差异），不影响邻居平局归属。
                 const alignment = (dx * normalCos + dy * normalSin)
-                    / Math.max(1, Math.hypot(dx, dy));
+                    / Math.max(1, Math.sqrt(dx * dx + dy * dy));
                 if (alignment > best) { best = alignment; adjacentId = id; }
             }
             if (best <= 0.7) adjacentId = null;

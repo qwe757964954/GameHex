@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 /**
  * SLG 据点角色展示（`SlgGameCameRoleInfo` / `CmdSlgCampRoleInfosReqMsg`，协议 r879 + r880）的接线单测。
  *
@@ -291,6 +292,7 @@ test('★网关：真的发 CmdSlgCampRoleInfosReqMsg，body 只有 campId', asy
         },
     };
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
+        if (name.endsWith('/RequestGuard')) return requestGuard;
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
         if (name === './RequestBigMapCampMsg') return requests;
         return {};
@@ -313,6 +315,7 @@ test('网关：断线时返回 null（不发请求）', async () => {
     }));
     let sent = 0;
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
+        if (name.endsWith('/RequestGuard')) return requestGuard;
         if (name.endsWith('/GameNet')) return {
             GameNet: { instance: { isConnected: false, async send() { sent += 1; return true; } } },
         };

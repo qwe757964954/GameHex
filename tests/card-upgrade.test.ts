@@ -18,6 +18,7 @@ import {
     buildCardLevelUpTable,
     evaluateUpgrade,
     parseCardLevelUpRow,
+    parseCardAttrList,
     resolveMaxLevel,
     upgradeButtonText,
     ZCCardLevelUpTable,
@@ -93,10 +94,10 @@ test('parseCardLevelUpRow：坏行返回 null，不抛异常', () => {
         id: 66001, level: 1, costCardID: null, costCardNum: 10,
         costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: 20,
     }), null);
-    // 正常行：id / 数量都归一化成字符串 / 整数
+    // 正常行：数字 ID 适配为业务字符串，数量保持原值
     const ok = parseCardLevelUpRow({
-        id: 66001, name: '精灵弓箭手', level: '1', costCardID: 18003, costCardNum: '10',
-        costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: '20',
+        id: 66001, name: '精灵弓箭手', level: 1, costCardID: 18003, costCardNum: 10,
+        costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: 20,
     });
     assert.deepEqual(ok, {
         id: '66001', name: '精灵弓箭手', level: 1, costCardID: '18003', costCardNum: 10,
@@ -373,4 +374,39 @@ test('材料位显示卡牌表名称，不再写死通用文案', () => {
         /this\.matCardItemLabel\.string = texts\.upgradeCardRow;/,
         '这里退回写死文案就是本 bug 的原形态',
     );
+});
+
+
+test('升级配置数量只接受非负安全整数，不转换字符串、布尔值或小数', () => {
+    const row = {
+        id: 68001, level: 1, costCardID: 18003, costCardNum: 10,
+        costArmyLevelID: 16003, costGeneralLevelID: 16000, costArmyLevelNum: 20,
+    };
+    for (const field of ['level', 'costCardNum', 'costArmyLevelNum']) {
+        for (const value of ['1', '', true, false, null, undefined, -1, 1.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1]) {
+            assert.equal(parseCardLevelUpRow({ ...row, [field]: value }), null, `${field}=${String(value)}`);
+        }
+        assert.equal(parseCardLevelUpRow({ ...row, [field]: 0 })?.[field], 0);
+    }
+});
+
+test('升级属性只接受有限数字，保留合法小数并跳过错误类型', () => {
+    const invalid = ['12', '', true, false, null, undefined, NaN, Infinity];
+    assert.deepEqual(parseCardAttrList([
+        { statId: 'attack', value: 12.5 },
+        { statId: 'maxHp', value: 0 },
+        ...invalid.map(value => ({ statId: 'attack', value })),
+    ]), [{ statId: 'attack', value: 12.5 }, { statId: 'maxHp', value: 0 }]);
+});
+
+test('真实升级配置的数量和属性值符合数字契约，解析不改变数值', () => {
+    for (const row of readCardLevelUp()) {
+        const parsed = parseCardLevelUpRow(row);
+        assert.ok(parsed, `卡牌 ${row.id} 等级 ${row.level} 必须能解析`);
+        for (const field of ['level', 'costCardNum', 'costArmyLevelNum']) {
+            assert.equal(typeof row[field], 'number');
+            assert.equal(parsed[field], row[field]);
+        }
+        assert.deepEqual(parsed.attrList ?? [], row.attrList);
+    }
 });

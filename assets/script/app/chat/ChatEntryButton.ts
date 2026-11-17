@@ -20,17 +20,12 @@ export class ChatEntryButton extends Component {
     redDot: Node | null = null;
 
     protected onLoad(): void {
-        const button = this.node.getComponent(Button);
-        if (!button) {
-            console.warn(`[Chat] ${this.node.name} 上没有 cc.Button，点击不会生效`);
-            return;
-        }
         // 刻意不配 onDestroy / off（与 login/ServerSelectItem、framework/ui/PopupBase 同一约定）：
         // 同节点组件按数组序销毁，cc.Button 先于本组件被销毁并清掉 `node`，
         // 此时再 `getComponent(Button).node.off(...)` 会抛错，异常从销毁循环里抛出后
         // 组件停在 Destroying 却未 Destroyed，之后重复销毁刷屏。
         // 不 off 本身是安全的：`Node._onPreDestroyBase` 会在销毁组件前清空监听。
-        button.node.on(Button.EventType.CLICK, this.onClick, this);
+        this.node.on(Button.EventType.CLICK, this.onClick, this);
     }
 
     private onClick(): void {

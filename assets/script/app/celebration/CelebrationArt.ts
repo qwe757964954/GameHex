@@ -14,9 +14,8 @@ import { qualityFrameNameOfLevel } from '../common/QualityFrameArt';
 import { ECelebrationRankSegment } from './CelebrationTable';
 import type { ICelebrationGoodsInfo } from './CelebrationTable';
 
-// 下面那句 `export { resolveRewardIconRef as osResolveRewardIconRef }` 只是重导出，不建本地绑定，
-// 所以这里还要单独 import 一次给 `celebrationNeededArtPaths` 用。
-import { resolveRewardIconRef as osResolveRewardIconRef } from '../activity/LayerActivityArt';
+// 奖励图标统一走 common/RewardIcon；本文件不保留旧 activity 转发入口。
+import { resolveRewardIconRef as osResolveRewardIconRef } from '../common/RewardIcon';
 
 export const OS_ART_NAMES = {
     // ---------- 开服冲榜包自有（image/celebration）----------
@@ -168,7 +167,7 @@ export function osSpriteType(key: string): number {
 /**
  * `{root, name}` → 装配路径（奖励图标这种运行期才知道的路径走这里）。
  *
- * 这里的 `root` 来自 `LayerActivityArt.resolveRewardIconRef`（`icons/item/**` / `icons/resource`），
+ * 这里的 `root` 来自 `common/RewardIcon.resolveRewardIconRef`（`icons/item/**` / `icons/resource`），
  * 已经相对 `assets/resources/`，与 `OS_ART_NAMES` 不是同一口径，不能再拼 `OS_ART_ROOT`。
  */
 export function osSharedPath(ref: { root: string; name: string }): string {
@@ -208,9 +207,8 @@ export function osQualityFramePath(quality: number): string {
 
 /**
  * 奖励图标的两支分流解析（`item` 走图路径 / `roleProperty` 走 `icons/resource`）。
- * 统一走 `LayerActivityArt.resolveRewardIconRef`，这里只是转发，免得页面 import 两个模块。
+ * 统一走 `common/RewardIcon.resolveRewardIconRef`；本文件只保留内部使用，不再对外转发。
  */
-export { resolveRewardIconRef as osResolveRewardIconRef } from '../activity/LayerActivityArt';
 
 // ============================================================
 // 「这次刷新需要哪些图」

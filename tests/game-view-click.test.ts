@@ -24,7 +24,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import ts from 'typescript';
-import { toCount, withTimeout } from '../assets/script/app/net/RequestGuard';
+import { sendGameRequest, toCount, withTimeout } from '../assets/script/app/net/RequestGuard';
 import { assetPath } from './helpers/asset-paths';
 
 const CMD = 'com.xkhy.tafang.cmd';
@@ -93,7 +93,7 @@ function loadService(options: {
         // `withTimeout` 收成 10ms：只验「超时 → false 且不 reject」这一个分支，不真的等 3 秒。
         if (name.endsWith('/RequestGuard')) {
             return {
-                toCount,
+                toCount, sendGameRequest,
                 withTimeout: (promise: Promise<boolean>, _ms: number, fallback: () => boolean) =>
                     Promise.race([promise, new Promise<boolean>((resolve) => setTimeout(() => resolve(fallback()), 10))]),
             };

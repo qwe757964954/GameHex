@@ -44,7 +44,7 @@ export class ZCGameHudScoreSlot extends Component {
     background: Sprite = null;
 
     @property({ type: Label, tooltip: 'Value：地块数（已结束时隐藏）' })
-    value: Label = null;
+    value: Label = null!;
 
     @property({ type: Sprite, tooltip: 'Cross：红 X（该玩家已战斗结束；平时隐藏）' })
     cross: Sprite = null;

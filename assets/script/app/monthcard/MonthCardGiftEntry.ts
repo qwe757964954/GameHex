@@ -71,7 +71,7 @@ export class MonthCardGiftEntry extends Component {
     bg: Sprite = null;
 
     @property({ type: Node, tooltip: 'SpNode：yueka spine 容器' })
-    spNode: Node = null;
+    spNode: Node = null!;
 
     @property({ type: Node, tooltip: 'BtnBuy：主按钮' })
     btnBuy: Node = null;
@@ -98,7 +98,7 @@ export class MonthCardGiftEntry extends Component {
     redDot: Node = null;
 
     @property({ type: Node, tooltip: 'GainBubble：立即获得气泡' })
-    gainBubble: Node = null;
+    gainBubble: Node = null!;
 
     @property({ type: Node, tooltip: 'GainLabel：立即获得文案' })
     gainLabel: Node = null;
@@ -127,7 +127,7 @@ export class MonthCardGiftEntry extends Component {
     private view: IMonthCardGiftView | null = null;
     private privilegeRows: MonthCardGiftPrivilegeRow[] = [];
     private daySlots: MonthCardGiftSlot[] = [];
-    private skeleton: sp.Skeleton | null = null;
+    private skeleton: sp.Skeleton = null!;
     private bubbleAngle = 0;
 
     onBuy: ((view: IMonthCardGiftView) => void) | null = null;
@@ -136,12 +136,11 @@ export class MonthCardGiftEntry extends Component {
     protected onLoad(): void {
         this.privilegeRows = this.privilegeList.getComponentsInChildren(MonthCardGiftPrivilegeRow);
         this.daySlots = this.dayList.getComponentsInChildren(MonthCardGiftSlot);
-        this.skeleton = this.spNode.getComponentInChildren(sp.Skeleton);
-
+        this.skeleton = this.spNode.getComponent(sp.Skeleton);
         const buyButton = this.btnBuy.getComponent(Button);
-        if (buyButton) buyButton.node.on(Button.EventType.CLICK, this.handleBuyClick, this);
+        buyButton.node.on(Button.EventType.CLICK, this.handleBuyClick, this);
         const rewardButton = this.btnReward.getComponent(Button);
-        if (rewardButton) rewardButton.node.on(Button.EventType.CLICK, this.handleClaimClick, this);
+        rewardButton.node.on(Button.EventType.CLICK, this.handleClaimClick, this);
     }
 
     /** 把一张卡的视图铺到界面上。 */
@@ -184,14 +183,14 @@ export class MonthCardGiftEntry extends Component {
         // spine：已购买 + 至尊月卡 + 今日未领
         const spin = bought && gift.type === MONTH_CARD_TYPE_PREMIUM && !view.claimedToday;
         this.spNode.active = spin;
-        if (spin && this.skeleton) {
+        if (spin) {
             // ⚠️ 别拿 `'animation'` 当兜底名：`skel/yueka/yueka.skel` 里**没有**这个动画
             // ⇒ 每调一次 `applyView` 就打一条「Spine: Animation not found: animation」
             // （2026-10-14 战斗结束回主界面时被成片刷出来）。
             // 动画名口径与 `ZCHexView.readIdleClip` / `ZCUnitView` 一致：**只能走 `getRuntimeData()`**
             // （`sp.Skeleton.findAnimation()` 依赖 `onLoad` 之后的 `_skeleton`，绑定时取不到）。
             const current = this.skeleton.animation
-                || this.skeleton.skeletonData?.getRuntimeData(true)?.animations[0]?.name;
+                || this.skeleton.skeletonData.getRuntimeData(true).animations[0].name;
             if (current) this.skeleton.setAnimation(0, current, true);
         }
 

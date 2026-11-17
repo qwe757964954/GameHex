@@ -21503,6 +21503,18 @@ null
 [
 "bigMapReFreshRankStopTime",
 60
+],
+[
+"neutralMonsterFocusSwitchCdSeconds",
+3
+],
+[
+"neutralMonsterRegenDelaySeconds",
+3
+],
+[
+"neutralMonsterRegenRate",
+0
 ]
 ],
 "c":1
@@ -30251,7 +30263,7 @@ null
 1,
 4,
 "解锁民兵皮肤，最终伤害提升10%",
-"icons/hero/tx_icon_MB_JXK_SHOUREN",
+null,
 [
 26
 ],
@@ -30266,7 +30278,7 @@ null
 1,
 5,
 "解锁民兵皮肤，最终伤害提升15%",
-"icons/hero/tx_icon_MB_JXK_YUREN",
+null,
 [
 26
 ],
@@ -30281,7 +30293,7 @@ null
 1,
 6,
 "解锁民兵皮肤，最终伤害提升20%",
-"icons/hero/tx_icon_MB_JXK_KULOU",
+null,
 [
 26
 ],
@@ -50896,7 +50908,7 @@ null
 [
 19106,
 18009,
-0,
+10,
 2,
 2,
 null

@@ -87,7 +87,7 @@ export interface IMainTaskRewardEntry {
     /**
      * 图标：`item` 命中时是**相对 `assets/resources/` 的完整路径**（`icons/item/图标_兵书随机`）；
      * `roleProperty` 命中时是 **FGUI 裸组件名**（`图标_铜币`）。
-     * 两者靠 {@link iconIsPath} 区分，一律交给 `activity/LayerActivityArt.resolveRewardIconRef` 解析。
+     * 两者靠 {@link iconIsPath} 区分，一律交给 `common/RewardIcon.resolveRewardIconRef` 解析。
      */
     readonly icon: string;
     /**

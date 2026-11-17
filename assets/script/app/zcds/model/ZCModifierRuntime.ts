@@ -18,6 +18,7 @@ import {
     findZCTextModifierOverride,
     isZCTextAttackValue,
     parseZCModifierAdapterCatalogs,
+    readZCSkillMixStats,
     STAT_TO_PATCH,
     type ZCModifierAdapterCatalogs,
     type ZCModifierAdapterTables,
@@ -584,8 +585,8 @@ function compileSkillPlanLoadout(
     const effects = executed.commands.flatMap((command) => mapModifierCommand(command, {
         unitIdByName: (name) => byName.get(name),
     }));
-    const typedModifiers: ZCTypedModifier[] = skillPlans.flatMap((row) => (
-        row.statId && row.operation && row.value != null
+    const typedModifiers: ZCTypedModifier[] = skillPlans.flatMap((row) => {
+        const main: ZCTypedModifier[] = row.statId && row.operation && row.value != null
             ? [{
                 sourceId: row.modifierId,
                 sourceKind: 'skill' as const,
@@ -596,8 +597,21 @@ function compileSkillPlanLoadout(
                 value: row.value,
                 priority: 100,
             }]
-            : []
-    ));
+            : [];
+        //  同条混搭（`skillParamJson` 的 `mix.<statId>[.addRate]`）：设计案里「克制条 + 暴击率」
+        //  「溅射 + 攻速」这类一条技能两个属性，走这里补第二条；主属性仍是 `statId` 那一格。
+        const mix = readZCSkillMixStats(row.skillParams).map((entry) => ({
+            sourceId: row.modifierId,
+            sourceKind: 'skill' as const,
+            targetUnitId: unitId,
+            domain: 'unit' as const,
+            statId: entry.statId,
+            operation: entry.operation,
+            value: entry.value,
+            priority: 100,
+        }));
+        return [...main, ...mix];
+    });
     const textModifiers = legacyModifierIds.length
         ? compileTypedModifiers(legacyModifierIds, unitId, 'skill', catalogs, true).textModifiers
         : [];

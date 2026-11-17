@@ -11,7 +11,7 @@ import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as ILeagueGoodsInfo } from '../common/ResTypes';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toIdString, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toIdString } from '../net/RequestGuard';
 import {
     buildLeagueCostView,
     findLeagueProperty,
@@ -1372,44 +1372,15 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         );
     }
 
-    /**
-     * 发一条**要拿回数据**的请求（北伐排行专用）。
-     *
-     * 为什么不能用 `send()`：那个只看「请求有没有被接受」（`GameNet.send` 兑现的是
-     * `boolean`），响应体只从 `RequestMsg.fCallback` 出来。要数据就得自己包一层 Promise。
-     *
-     * 三重兜底，保证**一定兑现**（与 `send()` 同口径）：
-     * ① 离线 ⇒ 立刻 `null`；② `make()` 或 `net.send()` 抛 ⇒ `fail()`；
-     * ③ `withTimeout(WRITE_TIMEOUT_MS)` ⇒ 服务端不回也 `null`。
-     */
-    private requestRsp<T>(
+    /** 响应体由消息回调接收；共享入口统一处理离线、异常和超时。 */
+    private async requestRsp<T>(
         make: (done: (rsp: T) => void, fail: () => void) => any,
     ): Promise<T | null> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return Promise.resolve(null);
-        return withTimeout(new Promise<T | null>((resolve) => {
-            let settled = false;
-            const finish = (value: T | null): void => {
-                if (settled) return;
-                settled = true;
-                resolve(value);
-            };
-            let request: any;
-            try {
-                request = make((rsp) => finish(rsp), () => finish(null));
-            } catch (error) {
-                console.warn('[League] 构造排行请求失败', error);
-                finish(null);
-                return;
-            }
-            try {
-                const accepted = net.send(request, false);
-                if (accepted && typeof accepted.catch === 'function') void accepted.catch(() => finish(null));
-            } catch (error) {
-                console.warn('[League] 排行请求发送失败', error);
-                finish(null);
-            }
-        }), WRITE_TIMEOUT_MS, () => null);
+        let response: T | null = null;
+        const status = await sendGameRequest(GameNet.instance, () => make(
+            rsp => { response = rsp; }, () => { response = null; },
+        ), { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
+        return status === 'ok' ? response : null;
     }
 
     /**
@@ -1593,20 +1564,12 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         make: (onRsp: (rsp: Rsp) => void) => unknown,
         onResponse: (rsp: Rsp) => void,
     ): Promise<LeagueRequestResult> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return 'offline';
         let applied = false;
-        try {
-            const sent = await withTimeout(
-                net.send(make((rsp: Rsp) => { applied = true; onResponse(rsp); }) as any, false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[League] 请求失败', error);
-            return 'failed';
-        }
+        const status = await sendGameRequest(GameNet.instance, () => make((rsp: Rsp) => {
+            applied = true;
+            onResponse(rsp);
+        }), { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
+        if (status !== 'ok') return status;
         return applied ? 'ok' : 'failed';
     }
 }

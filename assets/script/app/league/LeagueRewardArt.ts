@@ -15,7 +15,7 @@
  * ## 两支分流（`item` 直通 / `roleProperty` 落 `icons/resource`）
  *
  * 图标解析走 `LeagueArt.leagueRewardIconRef`（→ 全工程唯一入口
- * `LayerActivityArt.resolveRewardIconRef`）。联盟 P4 的奖励里**两支都有**：
+ * `common/RewardIcon.resolveRewardIconRef`）。联盟 P4 的奖励里**两支都有**：
  *
  * | 来源 | 举例 |
  * |---|---|
@@ -30,7 +30,7 @@
  *
  * FGUI 的「物品框」是个 `ItemBehavior2` 动态撑起来的空盒子（见 `LeagueRewardSlot` 的说明），
  * 品质框那 8 张图的引用 id 换成了本工程已迁移的 `image/frame/common_img_pzk_0N`
- * （4 档，`LayerActivityArt.QUALITY_FRAME_NAMES`）—— 与活动 / 七日 / 礼包**同一套**。
+ * （4 档，`common/QualityFrameArt.QUALITY_FRAME_NAMES`）—— 与活动 / 七日 / 礼包**同一套**。
  */
 
 import type { SpriteFrame } from 'cc';
@@ -109,9 +109,9 @@ export async function loadLeagueRewardArt(
 /**
  * `resId` → 品质框档（1..4）。
  *
- * 直接用 `LayerActivityArt.qualityFrameLevel`（`quality − 1` 后钳到 1..4，最低档兜 1）
+ * 直接用 `common/QualityFrameArt.qualityFrameLevel`（`quality − 1` 后钳到 1..4，最低档兜 1）
  * —— 本工程的品质框名就是 `common_img_pzk_0{level}`，档位算法只此一份。
- * 表里查不到这个 `resId` 时按 1 档（与 `resolveRewardIconRef` 的「解析不出降级」同口径）。
+ * 表里查不到这个 `resId` 时按 1 档（与 `common/RewardIcon.resolveRewardIconRef` 的「解析不出降级」同口径）。
  */
 function qualityLevelOf(resId: number, levels: ReadonlyMap<number, number>): number {
     const quality = levels.get(resId);

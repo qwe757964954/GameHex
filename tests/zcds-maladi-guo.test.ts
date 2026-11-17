@@ -121,22 +121,34 @@ test('102601 孢子弹幕：张角收到 0°，且弹数 / 攻速 / 伤害三组
     }
 });
 
-test('102602 吸养根须：字段名是 splashDamageRate（设计案写的 explosionDamageRate 是错的）', () => {
+test('102602 裂变爆炸：落点正圆 90，溅射 50/55/60%，尾巴走 mix 混搭', () => {
+    //  2026-11-16 设计案 V5：102602 由「吸养根须」改成「裂变爆炸」，吸血搬到 101502。
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
-        const leech = planOf(rows, 102602);
-        assert.equal(leech.length, 3);
-        assert.deepEqual(leech.map((row) => Number(row.value)), [0.3, 0.4, 0.5], 'lifestealRate');
-        assert.deepEqual(leech.map((row) => paramsOf(row).splashDamageRate), [0.2, 0.26, 0.32],
-            '2026-11-14 多目标递减：溅射基准压到 20/26/32%（都低于普攻 100%）');
-        assert.deepEqual(leech.map((row) => paramsOf(row).splashFalloff), [0.3, 0.3, 0.3],
+        const blast = planOf(rows, 102602);
+        assert.equal(blast.length, 3);
+        assert.deepEqual(blast.map((row) => row.statId), [null, null, null], '主机制全在参数里');
+        assert.deepEqual(blast.map((row) => paramsOf(row).splashDamageRate), [0.5, 0.55, 0.6]);
+        assert.deepEqual(blast.map((row) => paramsOf(row).splashFalloff), [0.3, 0.3, 0.3],
             '同一爆点第 2 个目标起每次 ×0.7');
-        assert.deepEqual(leech.map((row) => paramsOf(row).splashRadius), [38, 46, 55],
-            '设计案没写溅射半径，沿用配表既有值（同磁电菇 101601 档）');
-        for (const row of leech) {
+        assert.deepEqual(blast.map((row) => paramsOf(row).splashRadius), [90, 90, 90],
+            '落点正圆半径 90（设计案 blastRadius）');
+        assert.deepEqual(blast.map((row) => paramsOf(row)['mix.attack.addRate']), [0.16, 0.16, 0.16]);
+        assert.deepEqual(blast.map((row) => paramsOf(row)['mix.attackRange.addRate']), [0.23, 0.23, 0.23]);
+        //  尾巴按「槽位能对上就留在行里」分配：192602 本就是 damageRate 子链 ⇒ 伤害 +13% 落行，
+        //  攻击 / 攻击范围没有同类槽位 ⇒ 走 mix。两边数值必须与设计案 L1 一致且不重复计。
+        for (const row of blast) {
+            assert.equal(paramsOf(row)['mix.damageRate.addRate'], undefined,
+                '伤害尾巴已由子链 192602 承载，不能再在 mix 里重复一份');
+        }
+        const tail = planOf(rows, 192602);
+        assert.deepEqual(tail.map((row) => row.statId), ['damageRate', 'damageRate', 'damageRate']);
+        assert.deepEqual(tail.map((row) => Number(row.value)), [0.13, 0.13, 0.13]);
+        assert.deepEqual(tail.map((row) => row.skillName), ['裂变爆炸', '裂变爆炸', '裂变爆炸'], '子链跟着技能改名');
+        for (const row of blast) {
             assert.equal(paramsOf(row).explosionDamageRate, undefined,
                 'explosionDamageRate 在 skillParamJson 里没有消费方，别写进去');
+            assert.equal(row.statId, null, '不能再用 lifestealRate 冒充爆炸');
         }
-        assert.deepEqual(planOf(rows, 192602).map((row) => Number(row.value)), [0.15, 0.2, 0.25], 'damageRate');
     }
 });
 

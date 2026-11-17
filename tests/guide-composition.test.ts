@@ -68,7 +68,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         GuideStorageAdapter: { createGuidePersistence: () => ({ store: {}, outbox: {} }) },
         GuideGateway: { GameNetGuideGateway: class {} },
         GuideDialogView: { GuideDialogView: class {} }, GuideFocusAnchor: { GuideFocusAnchor: class {} },
-        MainTabHost: { MainTabHost: class {}, MainTab: { Hero: 'hero' } }, FW: { FW: {} },
+        MainTabHost: { MainTabHost: class {}, MainTab: { Hero: 'hero', Territory: 'territory' } }, FW: { FW: {} },
         CardLineupPage: { CardLineupPage },
         CardUpgradePage: { CardUpgradePage }, GuideEvents: { GuideEvent },
         ViewLifecycle: { VIEW_LIFECYCLE }, PopupManager: { PopupManager: { inst: {
@@ -92,14 +92,32 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         assert.ok(value, `unbound import: ${path}`);
         return value;
     } });
-    const cardTab = {};
-    const canvas = { addChild() {}, getComponentsInChildren: () => anchors,
-        getComponentInChildren: () => ({ getGuideTabNode: () => cardTab }) };
-    const composition = new exports.GuideComposition(createControllerContext(), {
+    const cardTab: { parent?: object } = {};
+    const territoryTab: { parent?: object } = {};
+    // 底栏与页签维持真实父子关系，引导不改变底栏自身的显隐。
+    const navBar = { isValid: true, active: true, parent: null as object | null };
+    cardTab.parent = navBar;
+    territoryTab.parent = navBar;
+    const tabHost = { isValid: true, navBar, getGuideTabNode: (tab: string) => tab === 'territory' ? territoryTab : cardTab };
+    // 常驻 GM 入口挂在 `Canvas` 上（不在 tab 页里），也压在右上角那一片。
+    const gmButton = { name: 'GMButton', isValid: true, active: true, children: [] as object[], parent: null as object | null };
+    const canvas = { isValid: true, addChild() {}, getComponentsInChildren: () => anchors,
+        getComponentInChildren: () => tabHost, getChildByName: () => gmButton };
+    // 页面里的常驻 HUD：对话步要连它们一起收（顶栏 / 底部挂件 / 快速寻敌）。
+    const hudNode = (name: string) => ({ name, isValid: true, active: true, children: [] as object[], parent: null as object | null });
+    const topHud = hudNode('TopHud');
+    const bottomHud = hudNode('BottomHud');
+    const beginGame = hudNode('BeginGame');
+    const arena = {
+        name: 'ArenaRoot', isValid: true, active: true, children: [topHud, bottomHud, beginGame],
         scene: { getChildByName: () => canvas },
         getComponent: (type: unknown) => page === 'card' && type === CardLineupPage ? new CardLineupPage() : null,
-    }, page === 'battle' ? 'battle' : 'main') as ControllerBase;
-    return { composition, anchors, notifications, revealedCards, cardTab, ShowRewardPage, firstReward,
+    };
+    const mapTile = { activeInHierarchy: true };
+    const territoryView = page === 'territory' ? { getGuideFocusNode: (key: string) => key.startsWith('Map/') ? mapTile : null } : null;
+    const composition = new exports.GuideComposition(createControllerContext(), arena, page === 'battle' ? 'battle' : 'main', territoryView) as ControllerBase;
+    return { composition, anchors, notifications, revealedCards, cardTab, territoryTab, mapTile, ShowRewardPage, firstReward,
+        navBar, topHud, bottomHud, beginGame, gmButton,
         openCard(id: string) {
             const popup = new CardUpgradePage(); popup.guideCardId = id;
             openedPopups.push(popup);
@@ -115,6 +133,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         finishDialogs: () => finishDialogs({ groups: new Map() }),
         render: (state: object) => render(state), focus: (key: string) => focus(key),
         renderedFocus: () => renderedFocus,
+        navVisible: () => navBar.active,
         counts: () => ({ destroys, starts, stops, hidden, rendered }) };
 }
 
@@ -270,6 +289,69 @@ test('战斗装配只显示战斗步骤，当前卡牌取最新的有效展示�
     } finally { f.composition.dispose(); }
     assert.equal(f.counts().stops, 1);
     assert.equal(f.counts().destroys, 1);
+});
+
+test('对话步收起页面挂件但保留底栏，焦点是否位于底栏不影响显隐', async () => {
+    const f = fixture(false, false, 'territory');
+    const hud = () => [f.topHud.active, f.bottomHud.active, f.beginGame.active, f.navBar.active, f.gmButton.active];
+    try {
+        await tick();
+        const tile = { finished: false, focusNode: 'Map/Tile_1', completeCond: 'tileFlipped', dialogId: 'D04' };
+        f.render(tile);
+        assert.deepEqual(hud(), [false, false, false, true, false],
+            '地图焦点步骤也必须保留底部页签');
+        // 第 6-1 步的焦点就是英雄页签：底栏留着，其余照收 —— 否则手指导向一个点不到的地方。
+        f.render({ finished: false, focusNode: 'Main/CardEntry', completeCond: 'pageOpened:card', dialogId: 'D12' });
+        assert.deepEqual(hud(), [false, false, false, true, false], '焦点在底栏里时底栏不能收');
+        f.render({ ...tile, dialogId: '' });
+        assert.deepEqual(hud(), [true, true, true, true, true], '没有台词的步骤不动 HUD');
+        f.render(tile);
+        assert.deepEqual(hud(), [false, false, false, true, false]);
+    } finally { f.composition.dispose(); }
+    assert.deepEqual(hud(), [true, true, true, true, true], '引导装配销毁后 HUD 必须还回来');
+});
+
+test('回地图翻地块：英雄页先高亮领地页签，回到领地后恢复原地块焦点', async () => {
+    const state = { stepId: '7-1', finished: false, focusNode: 'Map/TileNew_1', completeCond: 'tileFlipped', dialogId: 'D15' };
+    const card = fixture(false, false, 'card');
+    try {
+        await tick();
+        card.render(state);
+        assert.equal(card.renderedFocus(), 'Main/TerritoryEntry');
+        assert.equal(card.focus(card.renderedFocus())?.node, card.territoryTab);
+        assert.equal(card.focus(card.renderedFocus())?.shape, 'rect');
+        assert.equal(card.navVisible(), true);
+        assert.equal(state.focusNode, 'Map/TileNew_1', '展示转换不得改写原步骤');
+    } finally {
+        card.composition.dispose();
+    }
+    const territory = fixture(false, false, 'territory');
+    try {
+        await tick();
+        territory.render(state);
+        assert.equal(territory.renderedFocus(), state.focusNode);
+        assert.equal(territory.focus(state.focusNode)?.node, territory.mapTile);
+        assert.equal(territory.focus(state.focusNode)?.shape, 'hex');
+    } finally {
+        territory.composition.dispose();
+    }
+});
+
+test('卡牌引导保留底栏，结束或退出时不强制显示由宿主隐藏的底栏', async () => {
+    const f = fixture(false, false, 'card');
+    try {
+        await tick();
+        const state = { finished: false, focusNode: 'CardList/Card_68001', completeCond: 'cardSelected:68001', dialogId: 'D13' };
+        f.render(state);
+        assert.equal(f.navVisible(), true, '选卡对话不能隐藏底栏');
+        f.navBar.active = false;
+        f.render(state);
+        f.render({ ...state, finished: true });
+        assert.equal(f.navVisible(), false, '引导不接管宿主的底栏显隐');
+    } finally {
+        f.composition.dispose();
+    }
+    assert.equal(f.navVisible(), false, '退出也不强制显示本来隐藏的底栏');
 });
 
 test('奖励窗打开时隐藏引导，多个奖励窗全部关闭后恢复最新步骤，退出解除订阅', async () => {

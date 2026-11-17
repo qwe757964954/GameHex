@@ -5,8 +5,8 @@
  * 表被改坏（断链 / 步数变化）这里会直接红。
  *
  * 覆盖四类风险：
- *   ① 乱序/重复完成导致重复发奖；② 断线续跑重放已完成的步；
- *   ③ 跳过时漏发剩余奖励；④ 表本身断链但没人发现。
+ *   ① 乱序/重复完成；② 断线续跑重放已完成的步；
+ *   ③ 客户端错误地生成已发奖标记；④ 表本身断链但没人发现。
  */
 
 import test from 'node:test';
@@ -56,14 +56,14 @@ test('真实表：从首登入口走到 end，16 步全覆盖且顺序与行序�
     assert.equal(progress.wasSkipped, false);
 });
 
-test('幂等：同一步重复完成返回 null，不产生第二批奖励', () => {
+test('幂等：同一步重复完成返回 null，完成不等于服务端已发奖', () => {
     const progress = new GuideProgress(STEPS);
     // 2-2 是第一个带奖励的步（银币10 + 经验15 + 碎片3）
     walkTo(progress, '2-2');
     const first = progress.complete('2-2');
     assert.ok(first);
-    assert.equal(first.rewards.length, 3);
-    assert.deepEqual(first.rewards.map((r) => r.resId), [7, 3, 18003]);
+    assert.equal('rewards' in first, false);
+    assert.deepEqual(progress.grantedSteps, []);
 
     const again = progress.complete('2-2');
     assert.equal(again, null);
@@ -90,7 +90,7 @@ test('断线续跑：从存档步接着跑，不重放已完成的步，也不�
 
     const done = progress.complete('5-3');
     assert.equal(done?.next?.stepId, '5-4');
-    assert.deepEqual(done?.rewards, []);
+    assert.deepEqual(progress.grantedSteps, ['2-2', '3-1', '4-1'], '旧标记只兼容读取，不增加到账记录');
 });
 
 test('存档里的步已失效（策划删/改名）：回退到首个未完成步，不卡死', () => {
@@ -106,35 +106,34 @@ test('存档里的步已失效（策划删/改名）：回退到首个未完成�
 test('强制步不可跳过：当前步 skipAble=0 时 skip 无效', () => {
     const progress = new GuideProgress(STEPS);
     assert.equal(progress.canSkip, false);
-    assert.deepEqual(progress.skip(), []);
+    progress.skip();
     assert.equal(progress.current?.stepId, '1-1');
     assert.equal(progress.wasSkipped, false);
 });
 
-test('跳过收尾步：剩余步骤一次性标记完成，并补发全部未发奖励', () => {
+test('跳过收尾步只标记完成，不在客户端生成奖励', () => {
     const progress = new GuideProgress(STEPS);
     walkTo(progress, '8-1');
     assert.equal(progress.current?.stepId, '8-1');
     assert.equal(progress.canSkip, true);
 
-    const rewards = progress.skip();
-    // 8-1 的 rewardJson = 10010 × 30；前面 2-2 / 3-1 / 4-1 已随完成发过
-    assert.deepEqual(rewards.map((r) => `${r.resId}x${r.number}`), ['10010x30']);
+    progress.skip();
+    assert.deepEqual(progress.grantedSteps, []);
     assert.equal(progress.isFinished, true);
     assert.equal(progress.wasSkipped, true);
-    assert.deepEqual(progress.skip(), []);
+    progress.skip();
+    assert.deepEqual(progress.grantedSteps, []);
 });
 
-test('全流程奖励合计 6 条，且不重复计入', () => {
+test('走完整条引导也不计算奖励或写入本地已发奖标记', () => {
     const progress = new GuideProgress(STEPS);
-    const all: string[] = [];
     let guard = 0;
     while (progress.current && guard++ < 64) {
         const done = progress.complete(progress.current.stepId);
         assert.ok(done);
-        for (const reward of done.rewards) all.push(`${reward.resId}x${reward.number}`);
+        assert.equal('rewards' in done, false);
     }
-    assert.deepEqual(all, ['7x10', '3x15', '18003x3', '18003x3', '18003x4', '10010x30']);
+    assert.deepEqual(progress.toSave().grantedSteps, []);
 });
 
 test('存档往返：toSave 再恢复，状态与奖励台账一致', () => {
@@ -176,20 +175,17 @@ test('表校验：firstLogin 入口必须唯一', () => {
     assert.throws(() => new GuideProgress(twoEntries), /只能有 1 个 firstLogin/);
 });
 
-test('强制跳过：忽略 skipAble，剩余步一次性补发全部奖励', () => {
+test('强制跳过忽略 skipAble，但不模拟发奖或新增奖励标记', () => {
     const progress = new GuideProgress(STEPS);
     // 正常路径跳不动（1-1 是强制步）
     assert.equal(progress.canSkip, false);
-    assert.deepEqual(progress.skip(), []);
+    progress.skip();
 
-    // 强推（调试 / 运营逃生口）：从 1-1 直接走完，奖励一次补齐
-    const rewards = progress.skip(true);
+    progress.skip(true);
     assert.equal(progress.isFinished, true);
     assert.equal(progress.wasSkipped, true);
-    assert.deepEqual(
-        rewards.map((r) => `${r.resId}x${r.number}`),
-        ['7x10', '3x15', '18003x3', '18003x3', '18003x4', '10010x30'],
-    );
+    assert.deepEqual(progress.toSave().grantedSteps, []);
     // 已经结束，再跳无效
-    assert.deepEqual(progress.skip(true), []);
+    progress.skip(true);
+    assert.deepEqual(progress.toSave().grantedSteps, []);
 });

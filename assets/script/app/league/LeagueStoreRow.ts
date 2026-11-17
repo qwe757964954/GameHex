@@ -25,25 +25,25 @@ const NORMAL_TINT = new Color(...LEAGUE_TINT_NORMAL);
 @ccclass('LeagueStoreRow')
 export class LeagueStoreRow extends Component {
     @property({ type: Label, tooltip: 'labName：商品名（26px 居中）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'labCount：限购进度「剩余/上限」（18px 右对齐）' })
-    countLabel: Label = null;
+    countLabel: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格（图标 + 数量）' })
-    rewardSlot: LeagueRewardSlot = null;
+    rewardSlot: LeagueRewardSlot = null!;
 
     @property({ type: Node, tooltip: 'btnBuy：购买按钮' })
-    buyButton: Node = null;
+    buyButton: Node = null!;
 
     @property({ type: Label, tooltip: 'btnBuy/title：单价数字（18px）' })
-    costLabel: Label = null;
+    costLabel: Label = null!;
 
     @property({ type: Sprite, tooltip: 'btnBuy/priceIcon：货币图标（按 priceType 换帧）' })
-    priceIcon: Sprite = null;
+    priceIcon: Sprite = null!;
 
     @property({ type: Node, tooltip: 'btnBuy/com_rd：红点（ 恒隐藏 —— 老端那两行是注释掉的）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 点「购买」的回调（`view` 是**点击那一刻**这一槽位上的行数据）。 */
     onBuy: ((view: ILeagueStoreRowView) => void) | null = null;
@@ -55,15 +55,15 @@ export class LeagueStoreRow extends Component {
     private buttonSprite: Sprite | null = null;
 
     protected onLoad(): void {
-        this.buttonSprite = this.buyButton ? this.buyButton.getComponent(Sprite) : null;
+        this.buttonSprite = this.buyButton.getComponent(Sprite);
         this.bind();
     }
 
     protected onDestroy(): void {
         // 判 `isValid` 后再摘：宿主销毁时子节点可能已先被拆
-        if (this.buyButton && this.buyButton.isValid) {
+        if (this.buyButton.isValid) {
             const button = this.buyButton.getComponent(Button);
-            if (button) button.node.off(Button.EventType.CLICK, this.onBuyClick, this);
+            button.node.off(Button.EventType.CLICK, this.onBuyClick, this);
         }
     }
 
@@ -93,16 +93,14 @@ export class LeagueStoreRow extends Component {
             return;
         }
 
-        if (this.nameLabel) this.nameLabel.string = view.desc;
-        if (this.countLabel) this.countLabel.string = view.limitText;
+        this.nameLabel.string = view.desc;
+        this.countLabel.string = view.limitText;
 
-        if (this.rewardSlot) {
-            this.rewardSlot.node.active = true;
-            this.rewardSlot.render(qualityFrame, iconFrame, view.rewardNumber, true);
-        }
+        this.rewardSlot.node.active = true;
+        this.rewardSlot.render(qualityFrame, iconFrame, view.rewardNumber, true);
 
-        if (this.costLabel) this.costLabel.string = String(view.cost);
-        if (this.priceIcon && priceFrame) this.priceIcon.spriteFrame = priceFrame;
+        this.costLabel.string = String(view.cost);
+        if (priceFrame) this.priceIcon.spriteFrame = priceFrame;
 
         // **不把 `interactable` 关掉**（虽然老端的按钮是「灰」的）：
         // FGUI 的 `grayed` 只影响渲染，**点得动** —— 所以老端在 click 里自己分了三支：
@@ -112,7 +110,7 @@ export class LeagueStoreRow extends Component {
         if (this.buttonSprite) this.buttonSprite.color = view.canBuy ? NORMAL_TINT : GRAY_TINT;
 
         // 红点恒关（老端那两行是注释掉的，见类头）
-        if (this.redDot) this.redDot.active = false;
+        this.redDot.active = false;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */
@@ -125,13 +123,8 @@ export class LeagueStoreRow extends Component {
     private bind(): void {
         if (this.bound) return;
         this.bound = true;
-        if (!this.buyButton) {
-            console.warn('[LeagueStoreRow] BuyBtn 缺失，购买点击不会生效');
-            return;
-        }
         const button = this.buyButton.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onBuyClick, this);
-        else this.buyButton.on(Node.EventType.TOUCH_END, this.onBuyClick, this);
+        button.node.on(Button.EventType.CLICK, this.onBuyClick, this);
     }
 
     /** 只有一个出口：空槽（`current === null`）时点一次不发。 */

@@ -68,19 +68,19 @@ export class MailPage extends PopupBase {
     static prefabPath = 'ui/Mail/Mail';
 
     @property({ type: Button, tooltip: 'CloseBtn：右上角关闭' })
-    closeButton: Button = null;
+    closeButton: Button = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：邮件列表（自带虚拟列表 + Mask）' })
     rowList: VirtualScrollView = null;
 
     @property({ type: Button, tooltip: 'BatchRemoveBtn：一键删除' })
-    batchRemoveButton: Button = null;
+    batchRemoveButton: Button = null!;
 
     @property({ type: Label, tooltip: 'BatchRemoveBtn/Label：文案' })
     batchRemoveLabel: Label = null;
 
     @property({ type: Button, tooltip: 'GetOneKeyBtn：一键领取' })
-    getOneKeyButton: Button = null;
+    getOneKeyButton: Button = null!;
 
     @property({ type: Label, tooltip: 'GetOneKeyBtn/Label：文案' })
     getOneKeyLabel: Label = null;
@@ -116,9 +116,9 @@ export class MailPage extends PopupBase {
         this.batchRemoveLabel.string = MAIL_BTN_DELETE_ONE_KEY;
         this.getOneKeyLabel.string = MAIL_BTN_TAKE_ONE_KEY;
         this.emptyLabel.string = MAIL_EMPTY;
-        this.closeButton?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        this.batchRemoveButton?.node.on(Button.EventType.CLICK, this.onBatchRemove, this);
-        this.getOneKeyButton?.node.on(Button.EventType.CLICK, this.onGetOneKey, this);
+        this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.batchRemoveButton.node.on(Button.EventType.CLICK, this.onBatchRemove, this);
+        this.getOneKeyButton.node.on(Button.EventType.CLICK, this.onGetOneKey, this);
 
         // 只绑一次，回调按 index 现取（见文件头铁律 ①）
         if (!this.rowRendererBound && this.rowList) {

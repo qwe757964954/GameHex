@@ -38,13 +38,13 @@ export class MailDetailPage extends PopupBase {
     static prefabPath = 'ui/Mail/MailDetail';
 
     @property({ type: Button, tooltip: 'CloseBtn：右上角关闭' })
-    closeButton: Button = null;
+    closeButton: Button = null!;
 
     @property({ type: Label, tooltip: 'MailTitle：邮件标题' })
     titleLabel: Label = null;
 
     @property({ type: Node, tooltip: 'ContentView：正文（Label 多行；无奖励时会拉高）' })
-    contentNode: Node = null;
+    contentNode: Node = null!;
 
     @property({ type: Label, tooltip: 'ContentView：正文字（本节点上的 cc.Label）' })
     contentLabel: Label = null;
@@ -63,7 +63,7 @@ export class MailDetailPage extends PopupBase {
     rewardList: VirtualScrollView = null;
 
     @property({ type: Button, tooltip: 'TakeBtn：领取 / 删除' })
-    takeButton: Button = null;
+    takeButton: Button = null!;
 
     @property({ type: Label, tooltip: 'TakeBtn/Label：按钮文案（领取 / 删除）' })
     takeLabel: Label = null;
@@ -94,8 +94,8 @@ export class MailDetailPage extends PopupBase {
 
     protected onInit(): void {
         this.titleLabel.string = MAIL_DETAIL_TITLE;
-        this.closeButton?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        this.takeButton?.node.on(Button.EventType.CLICK, this.onTakeOrDelete, this);
+        this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        this.takeButton.node.on(Button.EventType.CLICK, this.onTakeOrDelete, this);
 
         // 只绑一次，回调按 index 现取（同 `MailPage` 铁律 ①）
         if (!this.rewardRendererBound && this.rewardList) {
@@ -207,8 +207,7 @@ export class MailDetailPage extends PopupBase {
 
     /** 正文框高度：有奖励 400、无奖励 580（FGUI `gearSize` 的两页，见文件头偏离 ②）。 */
     private applyContentHeight(hasReward: boolean): void {
-        const ut = this.contentNode?.getComponent(UITransform);
-        if (!ut) return;
+        const ut = this.contentNode.getComponent(UITransform);
         ut.setContentSize(
             ut.contentSize.width,
             hasReward ? MAIL_CONTENT_HEIGHT_WITH_REWARD : MAIL_CONTENT_HEIGHT_NO_REWARD,

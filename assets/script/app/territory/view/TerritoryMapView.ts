@@ -548,13 +548,13 @@ export class TerritoryMapView extends Component {
      * 渲染序同理：它必须是 `MapLayer` 的**第一个子节点**，格子才画在背景上（子节点顺序 = 渲染序）。
      */
     @property({ type: Sprite, group: '节点引用', tooltip: 'MapLayer/MapBackground：随地图一起滑动的底图（须是 MapLayer 第一个子节点）' })
-    mapBackground: Sprite = null;
+    mapBackground: Sprite = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'GridLayer：六边格容器（按 cellId 复用）' })
-    gridLayer: Node = null;
+    gridLayer: Node = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationIconLayer：连续渲染全部建筑图标' })
-    stationIconLayer: Node = null;
+    stationIconLayer: Node = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationCaptionLayer：连续渲染全部名称底条' })
     stationCaptionLayer: Node = null;
@@ -563,7 +563,7 @@ export class TerritoryMapView extends Component {
     stationTextLayer: Node = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationBadgeLayer：连续渲染全部站点角标' })
-    stationBadgeLayer: Node = null;
+    stationBadgeLayer: Node = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'StationHitLayer：只保存站点按钮根节点' })
     stationHitLayer: Node = null;
@@ -1065,7 +1065,7 @@ export class TerritoryMapView extends Component {
         // 两份留白一变成运行时值就整层漂掉（截图：云洞的云压到上面那排已解锁地块上）。
         this.clouds.setContentShiftY(shift);
         for (const child of this.node.children) {
-            if (child === this.mapBackground?.node) continue;
+            if (child === this.mapBackground.node) continue;
             if (child.position.y === shift) continue;
             child.setPosition(child.position.x, shift, child.position.z);
         }
@@ -1930,7 +1930,7 @@ export class TerritoryMapView extends Component {
      * 拿到的才是**新章**的真实位置 —— 不重测就会把地图拽回旧章的滚动位置。
      */
     setChapterSwitchOffset(offset: number): void {
-        if (!this.node?.isValid || this.chestCameraActive) return;
+        if (!this.node.isValid || this.chestCameraActive) return;
         if (this.chapterSwitchRestY === null) this.chapterSwitchRestY = this.node.position.y;
         this.chapterSwitchOffsetY = Number.isFinite(offset) ? offset : 0;
         const position = this.node.position;
@@ -2513,9 +2513,8 @@ export class TerritoryMapView extends Component {
     private mapCenterInOverlay(): Vec3 | null {
         const grid = this.gridLayer;
         const host = this.overlayHost;
-        if (!grid?.isValid || !host?.isValid) return null;
-        const world = grid.getComponent(UITransform)?.convertToWorldSpaceAR(Vec3.ZERO);
-        if (!world) return null;
+        if (!grid.isValid || !host?.isValid) return null;
+        const world = grid.getComponent(UITransform).convertToWorldSpaceAR(Vec3.ZERO);
         const local = host.getComponent(UITransform)?.convertToNodeSpaceAR(world);
         if (!local) return null;
         return new Vec3(local.x, local.y + HEX_GRID_CONTENT_LIFT, 0);
@@ -2982,7 +2981,7 @@ export class TerritoryMapView extends Component {
      */
     private ensureHexLockLayer(): Node | null {
         if (this.hexLockLayer?.isValid) return this.hexLockLayer;
-        const parent = this.gridLayer?.parent;
+        const parent = this.gridLayer.parent;
         if (!parent) return null;
         let layer = parent.getChildByName(TERRITORY_HEX_LOCK_LAYER);
         if (!layer) {
@@ -2992,7 +2991,7 @@ export class TerritoryMapView extends Component {
             layer.addComponent(UITransform);
             // 新节点 append 在末尾（index 最大）⇒ 挪到气泡层当前下标 = 插在它前面（= 在气泡下层）。
             // 气泡层缺失时退回命中层之前（宁可按老口径压在内容上，也不能没有锁）。
-            const above = this.stationBadgeLayer ?? this.stationHitLayer;
+            const above = this.stationBadgeLayer;
             if (above && above.parent === parent) layer.setSiblingIndex(above.getSiblingIndex());
         }
         this.hexLockLayer = layer;
@@ -3575,7 +3574,7 @@ export class TerritoryMapView extends Component {
     /** 懒建虚影层 + 虚影壳（照 `ensureHexLockLayer` 的写法：运行时建、按兄弟下标插位）。 */
     private ensureGhostLayer(): Node | null {
         if (this.ghostLayer?.isValid) return this.ghostLayer;
-        const parent = this.stationIconLayer?.parent;
+        const parent = this.stationIconLayer.parent;
         if (!parent || !this.stationIconLayer) return null;
         let layer = parent.getChildByName(TERRITORY_GHOST_LAYER);
         if (!layer) {
@@ -3588,7 +3587,7 @@ export class TerritoryMapView extends Component {
             // 目标从 `StationBadgeLayer` 换成 `StationCaptionLayer` ——
             // 用户看了实机后要「银币 icon + 数字的层级高于建筑」（原来数字被 35% 的虚影染成一块，
             // 读不出这一格要花多少银币）。价格底条在 Caption 层、数字在 Text 层，都在它上面。
-            const above = this.stationCaptionLayer ?? this.stationBadgeLayer;
+            const above = this.stationCaptionLayer;
             if (above && above.parent === parent) layer.setSiblingIndex(above.getSiblingIndex());
         }
         this.ghostLayer = layer;

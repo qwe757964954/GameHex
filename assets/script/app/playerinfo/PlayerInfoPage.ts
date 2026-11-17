@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -54,46 +53,46 @@ export class PlayerInfoPage extends PopupBase {
 
     // ---------- 头像区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：头像图（90×90）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Node, tooltip: 'ChangeHeadBtn：「更换头像」按钮' })
     changeHeadButton: Node = null;
 
     @property({ type: Node, tooltip: 'ChangeHeadBtn/RedDot：新头像红点（本工程恒隐藏，见文件头 ②）' })
-    changeHeadDot: Node = null;
+    changeHeadDot: Node = null!;
 
     @property({ type: Node, tooltip: 'SettingBtn：「设置」按钮' })
     settingButton: Node = null;
 
     // ---------- 名字区 ----------
     @property({ type: Label, tooltip: 'NameLabel：玩家名（`text_name`）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'RenameBtn：改名铅笔（`btn_rename`）' })
     renameButton: Node = null;
 
     // ---------- 数值区 ----------
     @property({ type: Label, tooltip: 'LevelLabel：等级（`text_level`）' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'ExpBar/ExpBg：经验条底（满宽，用来取宽度上限）' })
-    expBg: Node = null;
+    expBg: Node = null!;
 
     @property({ type: Node, tooltip: 'ExpBar/ExpFill：经验条填充（锚点 (0,1)，只改宽度）' })
-    expFill: Node = null;
+    expFill: Node = null!;
 
     @property({ type: Label, tooltip: 'ExpBar/ExpLabel：经验数值（老端漏写，本工程补上 `当前/上限`）' })
-    expLabel: Label = null;
+    expLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'UidLabel：玩家 ID（`text_uid`）' })
-    uidLabel: Label = null;
+    uidLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'ServerLabel：区服名（`text_serverid`）' })
-    serverLabel: Label = null;
+    serverLabel: Label = null!;
 
     // ---------- 兑换码 ----------
     @property({ type: EditBox, tooltip: 'RedeemInput/RedeemEditBox：兑换码输入框' })
-    redeemInput: EditBox = null;
+    redeemInput: EditBox = null!;
 
     @property({ type: Node, tooltip: 'RedeemBtn：兑换码「确定」' })
     redeemButton: Node = null;
@@ -154,15 +153,9 @@ export class PlayerInfoPage extends PopupBase {
         return !!this.node && this.node.isValid && this.isPopupOpen;
     }
 
-    /**
-     * 绑按钮。
-     *
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**只有 `cc.Sprite`、没有 `cc.Button`**（规则 81b）：
-     * 那种节点上绑 `Button.EventType.CLICK` 是**静默死按钮**。反过来 `<component extention="Button">`
-     * 形态的按钮迁过来**有** `cc.Button`，绑 `TOUCH_END` 会绕过 `interactable`。按实际组件分流。
-     */
+    /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     // ============================================================
@@ -209,13 +202,13 @@ export class PlayerInfoPage extends PopupBase {
     // ---------- 铺界面 ----------
 
     private present(snapshot: IPlayerInfoSnapshot): void {
-        if (this.headIcon) this.headIcon.spriteFrame = this.headFrame;
+        this.headIcon.spriteFrame = this.headFrame;
 
         // 全部**无条件写**（规则 82）——同一实例会被不同角色复用。
-        if (this.nameLabel) this.nameLabel.string = snapshot.roleName;
-        if (this.levelLabel) this.levelLabel.string = formatLevel(snapshot.level);
-        if (this.uidLabel) this.uidLabel.string = formatUid(snapshot.roleId);
-        if (this.serverLabel) this.serverLabel.string = formatServer(snapshot.serverName);
+        this.nameLabel.string = snapshot.roleName;
+        this.levelLabel.string = formatLevel(snapshot.level);
+        this.uidLabel.string = formatUid(snapshot.roleId);
+        this.serverLabel.string = formatServer(snapshot.serverName);
 
         this.presentExp(snapshot);
         this.presentRedDots();
@@ -231,20 +224,21 @@ export class PlayerInfoPage extends PopupBase {
      * 老端 `pr.max = expMax || 1; pr.value = exp || 0`。
      */
     private presentExp(snapshot: IPlayerInfoSnapshot): void {
-        const full = this.expBg?.getComponent(UITransform)?.contentSize.width ?? 0;
-        const fillUi = this.expFill?.getComponent(UITransform);
+        // ExpBg 节点在 PlayerInfo.prefab 上带 UITransform + Sprite。
+        const full = this.expBg.getComponent(UITransform).contentSize.width;
+        const fillUi = this.expFill.getComponent(UITransform);
         if (fillUi && full > 0) {
             const ratio = expProgressOf(snapshot.exp, snapshot.expMax);
             fillUi.setContentSize(full * ratio, fillUi.contentSize.height);
         }
         // 有意偏离：FGUI 的 `经验值_进度.title` 节点存在但老端从不写它（恒空），
         // 这里补上 `当前/上限` —— 节点语义明确，且不影响任何几何。
-        if (this.expLabel) this.expLabel.string = formatExpRatio(snapshot.exp, snapshot.expMax);
+        this.expLabel.string = formatExpRatio(snapshot.exp, snapshot.expMax);
     }
 
     /** 红点：本工程不接头像红点变量类，一律隐藏（见文件头 ②）。 */
     private presentRedDots(): void {
-        if (this.changeHeadDot) this.changeHeadDot.active = false;
+        this.changeHeadDot.active = false;
     }
 
     // ============================================================
@@ -283,7 +277,7 @@ export class PlayerInfoPage extends PopupBase {
      */
     private async onRedeem(): Promise<void> {
         if (this.redeeming) return;
-        const raw = this.redeemInput?.string ?? '';
+        const raw = this.redeemInput.string ?? '';
         if (!raw || raw.trim().length === 0) {
             Toast.show(PLAYER_INFO_TEXTS.redeemEmpty);
             return;
@@ -294,7 +288,7 @@ export class PlayerInfoPage extends PopupBase {
             const result = await this.repo.redeem(code);
             if (!this.alive) return;
             if (result === 'ok') {
-                if (this.redeemInput) this.redeemInput.string = '';
+                this.redeemInput.string = '';
                 // 老端服务端直发奖励、客户端不弹成功提示；这里给一句明确反馈（v1 已写进文案表）。
                 Toast.show(PLAYER_INFO_TEXTS.redeemSuccess);
             } else {
@@ -312,6 +306,6 @@ export class PlayerInfoPage extends PopupBase {
 
     /** 探针用：当前输入框里的兑换码。 */
     get redeemCode(): string {
-        return this.redeemInput?.string ?? '';
+        return this.redeemInput.string ?? '';
     }
 }

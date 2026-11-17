@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { CardUnitPreviewAssets } from '../assets/script/app/card/CardUnitPreviewAssets';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { assetPath } from './helpers/asset-paths';
@@ -22,16 +22,11 @@ test('卡表中的上阵兵种预制体均有待机动作', () => {
         typeof value === 'string' && value.length > 0));
     assert.ok(paths.size > 0);
     for (const path of paths) {
+        assert.ok(path.startsWith('skel/'), `${path} 应为已交付的 skel 骨骼预制体`);
         const prefabPath = assetPath(`${path}.prefab`);
         assert.ok(existsSync(prefabPath), `${path} 预制体应存在`);
-        if (path.startsWith('skel/')) {
-            assert.match(readFileSync(prefabPath, 'utf8'), /"defaultAnimation": "idle"/,
-                `${path} 骨骼预制体应提供 idle`);
-        } else {
-            const folder = assetPath(`${path.slice(0, path.lastIndexOf('/'))}/anim`);
-            assert.ok(readdirSync(folder).some((name) => name.endsWith('-idle.anim')),
-                `${path} 序列帧预制体应提供 idle`);
-        }
+        assert.match(readFileSync(prefabPath, 'utf8'), /"defaultAnimation": "idle"/,
+            `${path} 骨骼预制体应提供 idle`);
     }
 });
 

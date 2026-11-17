@@ -147,6 +147,7 @@ export interface ZCHexState {
 }
 
 export interface ZCUnitState {
+    neutralReinforcement?: boolean;
     /** 兵营传送批次的表现时间轴；恢复时继续飞行，不重新扣次数。*/
     portalFlight?: { fromHexId: number; barracksHexId: number; startedAt: number };
     inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>;
@@ -369,6 +370,12 @@ export interface IZCNeutralFeatureState {
     awake?: boolean;
     targetUnitId?: number | null;
     nextAttackAt?: number;
+    unlockedOwners?: ZCOwner[];
+    focusOwners?: ZCOwner[];
+    focusReadyAt?: Partial<Record<ZCOwner, number>>;
+    retaliationUnitIds?: number[];
+    disengagedAt?: number;
+    regenUpdatedAt?: number;
     patrol?: IZCMonsterPatrolState;
 }
 

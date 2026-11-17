@@ -6,6 +6,7 @@ import type { ZCPvpTables } from '../model/ZCGameRuntimeConfig';
 /** 进对局要用的全部 PVP 分表；空闲期预编译和进对局加载共用这份清单。*/
 export const ZC_RUNTIME_TABLE_NAMES = [
     'pvpGlobal',
+    'gameConfig',
     'pvpArtifact',
     'pvpCard',
     'pvpSkill',

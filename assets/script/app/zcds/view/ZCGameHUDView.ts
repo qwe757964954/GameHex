@@ -358,7 +358,6 @@ export class ZCGameHUDView extends Component {
     startSettlementOverview(): void {
         if (this.settlementOverviewRequested) return;
         const mapLayer = this.mapLayer;
-        if (!mapLayer) return;
         this.settlementOverviewRequested = true;
         this.settlementOverviewDone = false;
         // 开局入场可能还没播完（短局 + 手快）；停掉它，否则两个 tween 同时写 mapLayer。
@@ -447,7 +446,7 @@ export class ZCGameHUDView extends Component {
 /** 按当前缓存重设条数并逐条填充（槽位已建时立即生效）。*/
 private repaintPlayerRows(): void {
         const list = this.playerList;
-        if (!list || !list.isValid) return;
+        if (!list.isValid) return;
         if (list.totalCount !== this.rowOwners.length) list.setTotalCount(this.rowOwners.length);
         for (let i = 0; i < this.rowOwners.length; i++) {
             const node = list.getItemByIndex(i);

@@ -123,7 +123,7 @@ export class OSShopItem extends Component {
         // 售罄时置灰但不禁用，见文件头。
         const tint = new Color(...osTint(vis.buyGrayed), 255);
         const plate = this.buyPlate.getComponent(Sprite);
-        if (plate) plate.color = tint;
+        plate.color = tint;
         this.buyTitle.color = tint;
     }
 }

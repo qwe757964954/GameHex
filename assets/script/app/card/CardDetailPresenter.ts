@@ -105,7 +105,7 @@ export function buildDetailChain(
     for (const rawId of skillIds.slice(0, DETAIL_CHAIN_SLOTS)) {
         const skillId = Number(rawId);
         const skill: ZCArmySkill | undefined = Number.isSafeInteger(skillId) && skillId > 0 ? table.get(skillId) : undefined;
-        if (!skill || skill.levels.length === 0) {
+        if (!skill) {
             slots.push({ skillId: 0, name: '', unlockLevel: 0, unlocked: false, empty: true });
             continue;
         }

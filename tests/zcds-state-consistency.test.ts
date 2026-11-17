@@ -352,7 +352,8 @@ test('单位公共预制体以根节点为脚点，并由 VisualRoot 校准兵�
     const view = prefab.find((entry: any) => entry.visualRoot && entry.healthBar);
     assert.deepEqual([root._lpos.x, root._lpos.y], [0, 0]);
     assert.deepEqual([footPoint?._lpos.x, footPoint?._lpos.y], [0, 0]);
-    assert.deepEqual([visualRoot?._lpos.x, visualRoot?._lpos.y], [0, 45.7]);
+    // Spine 骨架原点≈脚底，VisualRoot 不再为序列帧内容原点补 45.7px。
+    assert.deepEqual([visualRoot?._lpos.x, visualRoot?._lpos.y], [0, 0]);
     assert.equal(view?.visualRoot?.__id__, prefab.indexOf(visualRoot));
     assert.equal(view?.barOffsetY, 80);
 });

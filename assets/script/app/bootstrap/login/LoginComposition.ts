@@ -13,6 +13,7 @@ import type { ILoginService, IServerSelectContent } from '../../login/LoginEvent
 import { LoginUiEvent } from '../../login/LoginEvents';
 import { ServerSelectPanel } from '../../login/ServerSelectPanel';
 import { GameNet } from '../../net/GameNet';
+import { cardRepository } from '../../card/CardRepository';
 import { EngineMain } from '../../../engine/EngineMain';
 import { WxUtil } from '../../../framework/utils/WxUtil';
 import { TTUtil } from '../../../framework/utils/TTUtil';
@@ -32,6 +33,7 @@ export class LoginComposition extends ControllerBase {
     }
     mount(): void {
         if (!this.prefab || this.isDisposed) throw new Error('LoginRoot 尚未预加载');
+        cardRepository.bindHeroSession(null);
         try {
             const node = instantiate(this.prefab);
             this.node = node;

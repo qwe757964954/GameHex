@@ -5,6 +5,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
+import protobuf from 'protobufjs/light.js';
+import { ProtoCoder } from '../assets/script/framework/net/ProtoCoder';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import type { AssetService, AssetLoadOptions } from '../assets/script/core/asset/AssetService';
 import { assetPath } from './helpers/asset-paths';
@@ -262,6 +264,7 @@ test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背�
     }).outputText;
     runInNewContext(code, { exports, console, require: name => {
         if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => value => value } };
+        if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession() {} } };
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
         if (name.endsWith('/PopupDef')) return { PopupLayer: { SYSTEM: 1 } };
@@ -283,6 +286,78 @@ test('奖励详情由组合根响应，层级覆盖结算、预览不伪造背�
     } finally { bootstrap.onDestroy(); }
     EventMgr.instance.emit(REWARD_ITEM_DETAIL_INTENT, { resId: 18003 });
     assert.equal(opened.length, 1);
+});
+
+test('通用奖励广播可由真实 ProtoCoder 按消息 ID 解码并识别为广播', async () => {
+    const coder = new ProtoCoder();
+    await coder.init();
+    try {
+        const schema = JSON.parse(readFileSync(assetPath('config/protoCompiled.json'), 'utf8'));
+        const type = protobuf.Root.fromJSON(schema).lookupType('com.xkhy.tafang.cmd.CmdItemRewardBroMsg');
+        const bytes = type.encode({ resType: 1, tlCmdGoods: [{ resId: 16014, number: '8589934593' }] }).finish();
+        assert.equal(coder.isBro(283150558), true);
+        assert.equal(coder.getRspNameById(283150558), 'CmdItemRewardBroMsg');
+        const decoded = coder.decodeDataById(283150558, bytes);
+        assert.equal(decoded.resType, 1);
+        assert.equal(String(decoded.tlCmdGoods[0].resId), '16014');
+        assert.equal(String(decoded.tlCmdGoods[0].number), '8589934593');
+        assert.equal(coder.decodeDataById(283150558, type.encode({ resType: 2 }).finish()).tlCmdGoods.length, 0);
+    } finally {
+        coder.destroy();
+    }
+});
+
+test('通用奖励广播转交原始奖励明细，缺省列表为空，宿主销毁后退订', () => {
+    const exports: Record<string, any> = {};
+    const rewards: unknown[] = [];
+    const listeners = new Map<string, { owner: object; listener: (msg: unknown) => void }>();
+    const net = {
+        addEvent(name: string, owner: object, listener: (msg: unknown) => void) {
+            listeners.set(name, { owner, listener });
+        },
+        removeEvent(name: string, owner: object, listener: (msg: unknown) => void) {
+            const current = listeners.get(name);
+            assert.equal(current?.owner, owner);
+            assert.equal(current?.listener, listener);
+            listeners.delete(name);
+        },
+    };
+    const code = ts.transpileModule(readFileSync('assets/script/app/bootstrap/ProcedureBootstrap.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText;
+    runInNewContext(code, { exports, console, require: name => {
+        if (name === 'cc') return { Component: class {}, _decorator: { ccclass: () => value => value } };
+        if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession() {} } };
+        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/RewardItemEvents')) return { REWARD_ITEM_DETAIL_INTENT };
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/FW')) return { FW: { ShowReward: goods => rewards.push(goods) } };
+        return {};
+    } });
+    const bootstrap = new exports.ProcedureBootstrap();
+    bootstrap.configurePresentation();
+    try {
+        const subscription = listeners.get('CmdItemRewardBroMsg');
+        assert.ok(subscription);
+        assert.equal(subscription.owner, bootstrap);
+        const goods = [{ resId: 16014, number: { low: 8, high: 0, unsigned: true } }];
+        subscription.listener({ resType: 1, tlCmdGoods: goods });
+        assert.equal(rewards[0], goods, 'uint64 与奖励列表保持原样，交给现有奖励解析链路');
+        subscription.listener({ resType: 2, tlCmdGoods: [] });
+        subscription.listener({ resType: 3 });
+        assert.equal(rewards.length, 3);
+        assert.equal(Array.isArray(rewards[1]), true);
+        assert.equal((rewards[1] as unknown[]).length, 0);
+        assert.equal(Array.isArray(rewards[2]), true);
+        assert.equal((rewards[2] as unknown[]).length, 0);
+    } finally {
+        bootstrap.onDestroy();
+    }
+    assert.equal(listeners.size, 0);
+    bootstrap.configurePresentation();
+    assert.equal(listeners.size, 2, '重新装配不会遗留上一宿主的监听');
+    bootstrap.onDestroy();
+    assert.equal(listeners.size, 0);
 });
 
 test('奖励资源详情支持 roleProperty 名称、说明和图标，item 配置优先，未知 ID 保持空态', async () => {

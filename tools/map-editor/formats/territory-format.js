@@ -140,6 +140,10 @@ export function normalizeTerritoryMap(data, fallbackId) {
     const unlock = normalizeUnlock(raw.unlock, label, issues, defaults);
     if (unlock.requiredCells.includes(cellId)) issues.push(`${label}.unlock.requiredCells cannot contain its own cellId`);
     const hasRewardId = raw.rewardId !== undefined;
+    if (raw.patrolId !== undefined) {
+      if (type !== 'patrolChest') issues.push(`${label}.patrolId is only valid for patrolChest sites`);
+      if (!Number.isSafeInteger(raw.patrolId) || raw.patrolId <= 0) issues.push(`${label}.patrolId must be a positive integer`);
+    }
     if (type === 'patrolChest') {
       if (!Array.isArray(raw.battleIds) || !raw.battleIds.length
         || !raw.battleIds.every((id) => Number.isSafeInteger(id) && id > 0)) {
@@ -156,6 +160,7 @@ export function normalizeTerritoryMap(data, fallbackId) {
       cellId,
       footprint,
       ...(type === 'patrolChest' && Array.isArray(raw.battleIds) ? { battleIds: [...raw.battleIds] } : {}),
+      ...(type === 'patrolChest' && raw.patrolId !== undefined ? { patrolId: raw.patrolId } : {}),
       ...(stringValue(raw.configId, `${label}.configId`, issues) !== undefined ? { configId: raw.configId } : {}),
       ...(stringValue(raw.buildingId, `${label}.buildingId`, issues) !== undefined ? { buildingId: raw.buildingId } : {}),
       ...(hasRewardId && type === 'fixedResource' && Number.isInteger(raw.rewardId) && raw.rewardId > 0 ? { rewardId: raw.rewardId } : {}),

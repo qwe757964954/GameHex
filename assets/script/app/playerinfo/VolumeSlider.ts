@@ -37,10 +37,10 @@ const _tmpLocal = new Vec3();
 @ccclass('VolumeSlider')
 export class VolumeSlider extends Component {
     @property({ type: Node, tooltip: 'Track：底槽（同时也是拖动热区，宽度是进度分母）' })
-    track: Node = null;
+    track: Node = null!;
 
     @property({ type: Node, tooltip: 'Fill：填充条（锚点 (0,1)，只改宽度）' })
-    fill: Node = null;
+    fill: Node = null!;
 
     @property({ type: Node, tooltip: 'Grip：滑块（40×40，位置按 ratio 平移）' })
     grip: Node = null;
@@ -62,11 +62,7 @@ export class VolumeSlider extends Component {
     // ============================================================
 
     protected onLoad(): void {
-        if (!this.track || !this.fill || !this.grip) {
-            console.error('[VolumeSlider] Track / Fill / Grip 三个引用缺一不可');
-            return;
-        }
-        this._trackWidth = this.track.getComponent(UITransform)?.contentSize.width ?? 0;
+        this._trackWidth = this.track.getComponent(UITransform).contentSize.width;
         // ⚠️ 必须在 `onLoad` 记设计值 —— 首次 `setValue()` 之后 `grip.position.x` 就被改写了，
         //    再读就只是「上一次的值」，拖动会越拖越偏。
         this._gripDesignX = this.grip.position.x;
@@ -106,25 +102,21 @@ export class VolumeSlider extends Component {
 
     /** 按 value 摆放 Fill / Grip。 */
     private layout(value: number): void {
-        if (!this.fill || !this.grip) return;
-        if (this._trackWidth <= 0) this._trackWidth = this.track?.getComponent(UITransform)?.contentSize.width ?? 0;
+        if (this._trackWidth <= 0) this._trackWidth = this.track.getComponent(UITransform).contentSize.width;
         if (this._trackWidth <= 0) return;
 
         const ratio = value / 100;
         const fillUi = this.fill.getComponent(UITransform);
-        if (fillUi) {
-            fillUi.setContentSize(this._trackWidth * ratio, fillUi.contentSize.height);
-        }
+        fillUi.setContentSize(this._trackWidth * ratio, fillUi.contentSize.height);
         const y = this.grip.position.y;
         this.grip.setPosition(this._gripDesignX - this._trackWidth * (1 - ratio), y, 0);
     }
 
     /** 触摸 → 触点在底槽内的横向比例。 */
     private onTouch(event: EventTouch): void {
-        if (!this.track || this._trackWidth <= 0) return;
+        if (this._trackWidth <= 0) return;
         this._dragging = true;
         const ui = this.track.getComponent(UITransform);
-        if (!ui) return;
         const p = event.getUILocation();
         ui.convertToNodeSpaceAR(_tmpLocal.set(p.x, p.y, 0));
         // 锚点 (0,1) ⇒ AR 原点 = 左上角 ⇒ `x ∈ [0, W]` 即 0..100。

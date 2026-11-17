@@ -7,6 +7,8 @@
  * 那种「把回调塞进视图」的写法，漏接一个就是「点了没反应且零报错」。
  */
 export const CHEST_EVENTS = {
+    /** 异步对战宝箱成功开启后的奖励；载荷 { owner: MainPage, goods }，由主界面组合层展示。 */
+    REWARDS: 'chest:rewards',
     // ── 宝箱栏（`ChestBar` / `ChestSlotView`）──
     /** 点了某一格的按钮。载荷：界面数组下标 `0~3`（不是服务端 1~4 的 `item.index`）。 */
     SLOT_ACTION: 'chest:slot-action',

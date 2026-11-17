@@ -315,3 +315,45 @@ test('★ 塔防关的 NPC 卡组必须含金矿卡（type=1），否则保底�
     }
     assert.ok(checked >= 14, `至少要检查到 14 个带 NPC 队伍的塔防关，实际 ${checked}`);
 });
+
+/**
+ * `asNumber` 只把有限 `number` 当数字；数字字符串、NaN/Infinity、缺失一律走 fallback。
+ * 通过 `buildTerritoryCampaign` 真实入口验证，不导出私有函数只为测试。
+ */
+test('★ asNumber：只认有限 number，数字字符串/非有限/缺失不参与 NPC 匹配', () => {
+    const level = (over: Record<string, unknown> = {}) => levelRow({
+        levelId: 101, levelMod: 1, levelModValue: 1, idleReward: [], ...over,
+    });
+    const team = (match: unknown, card: unknown = [{ cardID: 70001 }]) => ({
+        npcTeamId: 1, npcTeamType: 1, npcTeamMatch: match, npcCard: card,
+    });
+    const pvp = { id: 70001, name: '测试卡', type: 1, enabled: true };
+    const build = (match: unknown, card?: unknown, idleReward: unknown = []) => buildTerritoryCampaign(
+        [level({ idleReward })] as never, [] as never, [team(match, card)] as never,
+        [pvp] as never, 9, [] as never,
+    ).stages[0];
+
+    const numeric = build([101]);
+    assert.deepEqual(numeric.enemyTeamIds, [1]);
+    assert.equal(numeric.enemies.length, 1);
+
+    for (const dirty of [['101'], [NaN], [Infinity], undefined]) {
+        const stage = build(dirty);
+        assert.deepEqual(stage.enemyTeamIds, [], `npcTeamMatch=${String(dirty)} 不应匹配`);
+        assert.equal(stage.enemies.length, 0);
+    }
+
+    const numericReward = build([101], [{ cardID: 70001 }], [{ resId: 60001, number: 2, pro: 10000 }]);
+    assert.deepEqual(numericReward.idleRewards, [{ resId: 60001, name: '资源 60001', amount: 2, probability: 10000 }]);
+    for (const dirty of [
+        [{ resId: '60001', number: 2, pro: 10000 }],
+        [{ resId: 60001, number: NaN, pro: 10000 }],
+        [{}],
+    ]) {
+        const stage = build([101], [{ cardID: 70001 }], dirty);
+        assert.deepEqual(stage.idleRewards, [], `idleReward=${JSON.stringify(dirty)} 不应进入投影`);
+    }
+
+    assert.equal(build([101], [{ cardID: 70001 }]).enemies[0].level, 1, '缺失等级走非零默认 1');
+    assert.equal(build([101], [{ cardID: 70001, level: 3 }]).enemies[0].level, 3);
+});

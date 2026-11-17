@@ -74,11 +74,13 @@ import {
     QUALITY_FRAME_NAMES,
     qualityFrameLevel,
     qualityFrameName,
+    SEVEN_DAY_ART_ROOT,
+} from '../assets/script/app/sevenDay/SevenDayArt';
+import {
     resolveItemIconPath,
     resolveItemIconRef,
-    SEVEN_DAY_ART_ROOT,
     splitIconPath,
-} from '../assets/script/app/sevenDay/SevenDayArt';
+} from '../assets/script/app/common/RewardIcon';
 import { assetPath } from './helpers/asset-paths';
 
 // ============================================================

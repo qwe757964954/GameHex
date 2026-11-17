@@ -758,8 +758,7 @@ test('D6 ⚠️ 入口白名单**两处**都要登记（漏一处：入口不弹
     assert.ok(LIST_SRC.includes('gift:'), 'POPUP_CLASSES 的键必须是 gift');
 });
 
-test('D7 ⚠️ 灵玉直冲只提示「支付功能尚未接入」，不静默失败（Demo3.8 没有 SDKMgr）', () => {
-    assert.ok(PAGE_SRC.includes('GIFT_TEXTS.payMissing'), '点击要落提示');
+test('D7 ⚠️ 页面代码里不许出现 SDKMgr（Demo3.8 没有支付 SDK）', () => {
     assert.ok(
         !PAGE_CODE.includes('SDKMgr'),
         'Demo3.8 没有支付 SDK —— 注释里说明可以，但代码里不许出现 SDKMgr',

@@ -1,5 +1,5 @@
 import type { NetworkTransport } from '../../core/network/NetworkTransport';
-import { appendCacheBust, compareVersion, isRolloutEligible } from '../../core/update/HotUpdateManifest';
+import { appendCacheBust, compareVersion, expandLatestUrl, isRolloutEligible } from '../../core/update/HotUpdateManifest';
 import {
     isNativeHotUpdatePlatform,
     parseNativeHotUpdatePlan,
@@ -195,7 +195,7 @@ export class NativeHotUpdateRuntime {
         let plan: IHotUpdateNativePlan;
         try {
             const raw = await this.dependencies.network.requestJson<unknown>({
-                url: appendCacheBust(this.expandLatestUrl(config.latestUrlTemplate, platform, config.channel), this.now()),
+                url: appendCacheBust(expandLatestUrl(config.latestUrlTemplate, platform, config.channel), this.now()),
                 method: 'GET',
                 timeoutMs: config.requestTimeoutMs,
             });
@@ -452,13 +452,6 @@ export class NativeHotUpdateRuntime {
         return compareVersion(clientVersion, minClientVersion);
     }
 
-    private expandLatestUrl(template: string, platform: HotUpdatePlatform, channel: string): string {
-        const value = template
-            .replace(/\{platform\}/g, encodeURIComponent(platform))
-            .replace(/\{channel\}/g, encodeURIComponent(channel));
-        if (!/^https?:\/\//i.test(value)) throw new Error('热更新 latestUrlTemplate 配置无效');
-        return value;
-    }
 }
 
 function disabled(message: string): INativeHotUpdateResult {

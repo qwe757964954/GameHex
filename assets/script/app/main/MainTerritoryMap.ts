@@ -53,7 +53,6 @@ import {
     type IResPropertyRow,
 } from '../common/ResTypes';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { ResBar } from '../common/ResBar';
 import { MainTabHost } from './MainTabHost';
 import { MainTab } from './MainTabModel';
 import { TabButton } from '../common/TabButton';
@@ -275,10 +274,10 @@ interface IChapterSwitchState {
 @ccclass('MainTerritoryMap')
 export class MainTerritoryMap extends Component {
     @property({ type: ScrollView, group: '节点引用', tooltip: 'MapScrollView：地图滚动容器（视口裁剪 + 惯性回弹）' })
-    mapScrollView: ScrollView = null;
+    mapScrollView: ScrollView = null!;
 
     @property({ type: TerritoryMapView, group: '节点引用', tooltip: 'MapScrollView 的内容层（六边格 / 连线 / 站点）' })
-    mapView: TerritoryMapView = null;
+    mapView: TerritoryMapView = null!;
 
     @property({ type: Prefab, group: '节点引用', tooltip: '异步据点「玩家关卡」弹窗 prefab（ui/territory/BigMapPlayerLevelPanel）' })
     playerStagePrefab: Prefab = null;
@@ -307,8 +306,6 @@ export class MainTerritoryMap extends Component {
      */
     private staminaIcon: SpriteFrame | null = null;
     private state: ITerritoryRenderState | null = null;
-    /** 领地存档归属（roleId/serverId），进入对局时随 pve 一并下发。 */
-    private saveOwner: ITerritorySaveOwner | null = null;
     private lastRenderedChapter = -1;
     /**
      * 上一帧的"换图"被压住了（整章云散还在演）。
@@ -342,16 +339,8 @@ export class MainTerritoryMap extends Component {
     private firstReadyNotified = false;
     private controllerResources: IControllerResources = null;
     private get assets(): AssetService { return this.controllerResources.assets; }
-    private get configs(): GameContext['configs'] { return this.controllerResources.configs; }
     private get sessionAssets(): GameContext['sessionAssets'] { return this.controllerResources.sessionAssets; }
     private battleReady: Promise<unknown> | null = null;
-    /**
-     * 「遭遇敌人」过场正在播（或排队中）⇒ 丢弃后续的 navigate 命令。
-     *
-     *  过场期间地图输入是锁着的（`playBattleApproach` 里 `setInputLocked(true)`），正常点不出第二个格子；
-     *  这道闸是给「服务端推送 / 上一笔迟到回包」兜底的 —— 真跳两次会让战斗流程收到两份 `pve`。
-     */
-    private battleApproachPending = false;
     /**
      * 「进战斗 / 匹配」整页过场（`null` = 没在演）。
      *
@@ -414,10 +403,13 @@ export class MainTerritoryMap extends Component {
         this.heroProgressSource = source;
     }
 
-    /** Composition supplies presentation resources before mounting the page. */
-    initialize(resources: IControllerResources, saveOwner: ITerritorySaveOwner | null = null): void {
+    /**
+     * Composition supplies presentation resources before mounting the page.
+     * `_saveOwner` 仍按组合层契约收下（`entry.saveOwner`），但本视图不消费：
+     * 存档归属随 `pve` 一起下发，页面侧不再另存一份。
+     */
+    initialize(resources: IControllerResources, _saveOwner: ITerritorySaveOwner | null = null): void {
         this.controllerResources = resources;
-        this.saveOwner = saveOwner;
         EventMgr.instance.on(TerritoryViewEvent.Render, this.onRender, this);
         EventMgr.instance.on(TerritoryViewEvent.Command, this.onCommand, this);
         void this.loadHexFlipAssets();
@@ -599,7 +591,7 @@ export class MainTerritoryMap extends Component {
         // 的 content —— 播放时拖一下地图，宝箱就和地块错位了（实机 screenshot-3）。
         // 关 `ScrollView.enabled` 会一并摘掉拖拽监听，比改 `vertical/horizontal` 干净。
         this.mapView.scrollLock = (locked) => {
-            if (this.mapScrollView?.isValid) this.mapScrollView.enabled = !locked;
+            if (this.mapScrollView.isValid) this.mapScrollView.enabled = !locked;
         };
 
         if (!this.controllerResources) {
@@ -624,9 +616,9 @@ export class MainTerritoryMap extends Component {
         this.heroBadge = null;
         // 飞舞奖励图标的顶层宿主挂在 `MainRoot`（本页之外），由视图建、由视图收：
         // 页面只负责通知，不自己搭 UI（架构守卫禁止 `new Node` / `addComponent`）。
-        this.mapView?.disposeRewardFxLayer();
+        this.mapView.disposeRewardFxLayer();
         this.heroProgressSource = null;
-        this.mapView?.setHeroRewardLandedHandler(null);
+        this.mapView.setHeroRewardLandedHandler(null);
         EventMgr.instance.emit(TerritoryUiEvent.Disposed);
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
         // 「等流程接手」的订阅必须自己摘：它是挂在全局 ProcedureManager 上的，
@@ -637,7 +629,7 @@ export class MainTerritoryMap extends Component {
         EventMgr.instance.offTarget(this);
         this.battleReady = null;
         // 开箱表演正在播 ⇒ 收起（`stop` 不回调结算；页面都要没了，结算已由 Controller 落库）。
-        this.mapView?.stopChestPlay();
+        this.mapView.stopChestPlay();
         // `view` 是全局单例，不摘会随页面复用累积回调（每次进来多跑一次重量）。
         view?.off?.('canvas-resize', this.onCanvasResize, this);
         this.mapInsetResizeBound = false;
@@ -680,8 +672,8 @@ export class MainTerritoryMap extends Component {
         this.closePopup(LevelInfoPanel);
         // 一次开战只跳一次：过场 / 前奏已经拿到去向之后再来一条 navigate
         //（服务端推送 / 迟到回包）一律丢弃。
-        // 🔴 别用 `battleApproachPending` 当这道判据：`onSetBusy` 在**开战请求在途**时
-        //    就起演了整页过场并将它置 true，回包后本该交给过场的那条 navigate 会被一起吞掉
+        // 🔴 别把「过场是否已经起演」当这道判据：`onSetBusy` 在**开战请求在途**时
+        //    就起演了整页过场，回包后本该交给过场的那条 navigate 会被一起吞掉
         //    ⇒ 过场 `hold` 等不到 nav、3s 后判取消；而会话资源照常加载完（日志停在
         //    「[BattleLoading] 首帧资源准备完成」），玩家却永远进不了战斗、全程零报错。
         //    症状是「首次解锁直开那一波能进，之后重复挑战 / 下一关都进不去」。
@@ -743,7 +735,7 @@ export class MainTerritoryMap extends Component {
      */
     private beginChapterSwitch(fromChapterId: number, toChapterId: number, deferRender = false): void {
         if (!territoryChapterSwitchWanted(fromChapterId, toChapterId)) return;
-        if (!this.mapView?.isValid) return;
+        if (!this.mapView.isValid) return;
         if (this.chapterSwitch) return;
         // 手动切章一到，旧的首通待播标记作废（去向由这次点击说了算）。
         this.chapterClearFollowup = false;
@@ -767,7 +759,7 @@ export class MainTerritoryMap extends Component {
         const transition = this.chapterSwitch;
         if (!transition) return;
         // 云在等新章的那几秒也不能冻住（`cloud_idle_*` 待机循环，只换帧不动位置）。
-        this.mapView?.stepChapterSwitchCover(step);
+        this.mapView.stepChapterSwitchCover(step);
         transition.elapsed += step;
         if (transition.phase === 'lead') {
             const progress = territoryChapterSwitchLeadProgress(transition.elapsed);
@@ -862,7 +854,7 @@ export class MainTerritoryMap extends Component {
     /** 转场收工（正常播完 / 加载失败 / 页面被销毁都走它，幂等）。 */
     private endChapterSwitch(): void {
         this.chapterSwitch = null;
-        this.mapView?.endChapterSwitch();
+        this.mapView.endChapterSwitch();
     }
 
     private beginBattlePrelude(payload: ITerritoryNavigateBattlePayload): void {
@@ -875,12 +867,11 @@ export class MainTerritoryMap extends Component {
             return;
         }
         if (this.battlePrelude) return;
-        this.battleApproachPending = true;
         // 弹窗先关（与整页过场同一口径：「先关闭弹窗，再播放过场动画」）。
         this.closeBattleIntroPopups();
         // 前奏两段都不许再点：推镜自己会锁输入，地块生成那 0.7s 没有镜头动画，
         // 只靠 `setInputLocked` 会被下一帧的自动解锁放掉 ⇒ 用前奏那把锁。
-        this.mapView?.setPreludeLock(true);
+        this.mapView.setPreludeLock(true);
         this.battlePrelude = { stage: 'spawn', elapsed: 0, payload, seenSpawn: false };
     }
 
@@ -911,9 +902,8 @@ export class MainTerritoryMap extends Component {
         // ③ 云层过场（原来 `onNavigateToBattle` 里那条路，顺序没变，只是被推迟到这里）。
         const nav: ITerritoryBattleIntroNav = { route: 'battle', payload: prelude.payload };
         this.battlePrelude = null;
-        this.battleApproachPending = false;
         // 前奏这把锁交给过场：`beginBattleIntro` 自己会 `setInputLocked(true)`。
-        this.mapView?.setPreludeLock(false);
+        this.mapView.setPreludeLock(false);
         if (this.startBattleIntro()) {
             this.releaseBattleIntro(nav);
             return;
@@ -950,9 +940,9 @@ export class MainTerritoryMap extends Component {
                 battleParams: nav.payload.battleParams,
                 pve: nav.payload.pve,
                 // 待机步进带过去，匹配页那层云接着同一拍循环 —— 不带的话切过去整屏云会"换一次脸"。
-                coverStep: this.mapView?.battleIntroCoverStep ?? 0,
+                coverStep: this.mapView.battleIntroCoverStep ?? 0,
                 // 视口尺寸也要带：领地这边量的是地图视口，和 `view.getVisibleSize()` 不一定相等。
-                coverViewport: this.mapView?.battleIntroCoverSize,
+                coverViewport: this.mapView.battleIntroCoverSize,
             });
         } else {
             // 首领关（`mode = defence`，塔防类）不经过匹配，直进战场（用户同日补充）。
@@ -983,10 +973,6 @@ export class MainTerritoryMap extends Component {
                 // 真的切走了：主界面马上会被 `onLeave` 卸掉，留个兜底定时器反而可能在
                 // 交接的空档把 UI 弹回来，先把它作废。
                 this.battleIntroLeftover = null;
-                // 🔴 一次性门闩在**成功**路径也要复位：旧实现只在失败/收工
-                //    （`restoreBattleIntroScene`）里清，成功切走时留着 true ⇒ 页面若被复用，
-                //    下一次开战的 navigate 会被静默丢掉。
-                this.battleApproachPending = false;
                 return;
             }
             // 预加载失败 / 被别的切换顶掉 / 路由没注册 —— 这一局是进不去了。
@@ -1039,8 +1025,7 @@ export class MainTerritoryMap extends Component {
     private abortBattlePrelude(): void {
         if (!this.battlePrelude) return;
         this.battlePrelude = null;
-        this.battleApproachPending = false;
-        this.mapView?.setPreludeLock(false);
+        this.mapView.setPreludeLock(false);
     }
 
     private onShowRewards(payload: ITerritoryShowRewardsPayload): void {
@@ -1105,7 +1090,7 @@ export class MainTerritoryMap extends Component {
         //    换图这件事不能因为"过场在演"之类的分支被跳过）。
         if (this.chapterSwapPending) {
             // ①-a 整章云散（章节通过动画）还在演 ⇒ 一帧都不许动地图。
-            if (this.mapView?.chapterClearPlaying) return;
+            if (this.mapView.chapterClearPlaying) return;
             const followup = this.chapterClearSwitch;
             if (followup) {
                 // ①-b 云散演完 ⇒ 接着起「相机上移、新章居中」的切换转场。
@@ -1156,7 +1141,7 @@ export class MainTerritoryMap extends Component {
         if (!intro) return;
         // 云盖层的待机循环**三段都要推**（尤其 `hold`：位置不动、云在呼吸）。
         // 只换帧、不碰位置，所以放在相位判断之前没有任何副作用。
-        this.mapView?.stepBattleIntroCover(step);
+        this.mapView.stepBattleIntroCover(step);
         if (intro.phase === 'out') {
             intro.elapsed += step;
             const fx = territoryBattleIntroOutFx(intro.elapsed);
@@ -1226,7 +1211,7 @@ export class MainTerritoryMap extends Component {
      */
     private startBattleIntro(): boolean {
         if (this.battleIntro) return true;
-        if (!this.mapView?.isValid) return false;
+        if (!this.mapView.isValid) return false;
         // 地图那半先起手（它会量基准、锁输入、建雾盖层）；失败就整个过场不做。
         if (!this.mapView.beginBattleIntro()) return false;
         // 用户 2026-11-02：「从弹窗这部分走过程需要先关闭弹窗，再播放过场动画」。
@@ -1244,7 +1229,6 @@ export class MainTerritoryMap extends Component {
             hud: this.collectBattleIntroHud(),
             pushPx: territoryBattleIntroPushPx(...this.battleIntroViewport()),
         };
-        this.battleApproachPending = true;
         this.writeBattleIntroFx(territoryBattleIntroOutFx(0));
         return true;
     }
@@ -1370,8 +1354,7 @@ export class MainTerritoryMap extends Component {
     /** 把 HUD 摆回开演前的位置 / 透明度，并收掉地图那半（地块倍率、不透明度、云盖层、输入锁）。 */
     private restoreBattleIntroScene(hud: readonly ITerritoryBattleIntroHud[]): void {
         for (const handle of hud) releaseIntroHud(handle);
-        if (this.mapView?.isValid) this.mapView.endBattleIntro();
-        this.battleApproachPending = false;
+        if (this.mapView.isValid) this.mapView.endBattleIntro();
     }
 
     /** 写一帧：HUD 沿各自方向位移 + 淡出，并把同一帧交给地图（地块 / 云盖层）。 */
@@ -1380,7 +1363,7 @@ export class MainTerritoryMap extends Component {
         if (!intro) return;
         const distance = intro.pushPx * fx.uiPush;
         for (const handle of intro.hud) applyIntroHud(handle, distance, fx.uiOpacity);
-        if (this.mapView?.isValid) this.mapView.applyBattleIntro(fx);
+        if (this.mapView.isValid) this.mapView.applyBattleIntro(fx);
     }
 
     /**
@@ -1459,7 +1442,7 @@ export class MainTerritoryMap extends Component {
                 return;
             }
             // 非首通的换章也要让整章云散演完（旧口径，`syncGrid` 会 reset 掉云）。
-            if (this.mapView?.chapterClearPlaying) {
+            if (this.mapView.chapterClearPlaying) {
                 this.chapterSwapPending = true;
                 return;
             }
@@ -1741,8 +1724,8 @@ export class MainTerritoryMap extends Component {
         // ⚠️ 两份留白必须与内容层**同源**：`territoryMapOffsetForCell` 用它们算可滚上限，
         //    少传就等于按「没留白」算 —— 跳过去会停在半路（差的那截滚不到）。
         const offset = territoryMapOffsetForCell(layout, cellId, size, {
-            paddingBottom: this.mapView?.contentPaddingBottom,
-            paddingTop: this.mapView?.contentPaddingTop,
+            paddingBottom: this.mapView.contentPaddingBottom,
+            paddingTop: this.mapView.contentPaddingTop,
         });
         this.mapScrollView.stopAutoScroll();
         this.mapScrollView.scrollToOffset(new Vec2(offset.x, offset.y), 0);
@@ -1868,7 +1851,7 @@ export class MainTerritoryMap extends Component {
      * 同时把视口尺寸交给视图（全解锁镜头散场要用它算「整张图入画」的倍率）。
      */
     private syncMapInsets(): void {
-        if (!this.mapScrollView?.isValid || !this.mapView?.isValid) return;
+        if (!this.mapScrollView.isValid || !this.mapView.isValid) return;
         const viewport = this.mapScrollView.node.getComponent(UITransform);
         if (!viewport) return;
         const hudBottom = this.topHudBottom(viewport);
@@ -1883,7 +1866,7 @@ export class MainTerritoryMap extends Component {
     /** 订阅屏幕变化：HUD 的 Widget 与安全区都会因此改变 ⇒ 留白必须跟着重量。 */
     private bindMapInsetResize(): void {
         if (this.mapInsetResizeBound) return;
-        if (!this.mapScrollView?.isValid || !this.mapView?.isValid) return;
+        if (!this.mapScrollView.isValid || !this.mapView.isValid) return;
         this.mapInsetResizeBound = true;
         view?.on?.('canvas-resize', this.onCanvasResize, this);
     }

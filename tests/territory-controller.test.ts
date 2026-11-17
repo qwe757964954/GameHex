@@ -102,7 +102,11 @@ test('真实金币车组件无旧主线数据也保持可见，点击只打开�
     const button = { interactable: true, node: {
         on(_event: string, handler: () => void, owner: object) { click = () => handler.call(owner); },
     } };
-    const node = { active: false, getComponent: () => button };
+    const node = {
+        active: false,
+        getComponent: () => button,
+        on(_event: string, handler: () => void, owner: object) { click = () => handler.call(owner); },
+    };
     const label = { string: '' };
     interface IEntryProbe {
         node: typeof node;

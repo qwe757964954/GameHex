@@ -3,7 +3,7 @@ import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type {ZCCombatTarget, ZCUnitState} from '../ZCGameTypes';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import { sweptCircleHitScalars } from './ZCProjectileSystem';
-import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext } from './ZCTargetingSystem';
+import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext, type ZCTargetSelectionSink } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
 import { isZCAwakeMonster, zcMonsterPosition } from './ZCNeutralFeatureSystem';
 
@@ -30,6 +30,7 @@ export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometr
     readonly units: ReadonlyMap<number, ZCUnitState>;
     readonly targeting: ZCTargetingContext;
     readonly combatDistanceScale: number;
+    priorityMonster?(unit: ZCUnitState): number | null;
     baseDefinition(id: string): ZCUnitDefinition;
 }
 
@@ -43,6 +44,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     }>();
     /** 每单位一块索敌结果 scratch：同拍多次 `current()` 不再造字面量。跨调用持有时由调用方传 out。*/
     private readonly targetScratch = new Map<number, ZCCombatTarget>();
+    private readonly selectionScratch: ZCTargetSelectionSink = { kind: 'unit', id: 0 };
     private readonly selfPosition = { x: 0, y: 0 };
     private readonly targetPosition = { x: 0, y: 0 };
     private readonly candidatePosition = { x: 0, y: 0 };
@@ -70,7 +72,9 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。*/
     acquire(unit: ZCUnitState): void {
-        const target = ZCTargetingSystem.acquire(unit, this.targetingContext);
+        const monsterId = this.context.priorityMonster?.(unit) ?? null;
+        const target = monsterId === null ? ZCTargetingSystem.acquire(unit, this.targetingContext, false, this.selectionScratch)
+            : { kind: 'building' as const, id: monsterId };
         unit.targetUnitId = null;
         unit.targetWallHexId = null;
         unit.targetBuildingHexId = null;
@@ -81,9 +85,34 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。*/
     refreshPriorityTarget(unit: ZCUnitState): boolean {
+        const monsterId = this.context.priorityMonster?.(unit) ?? null;
+        if (monsterId !== null) {
+            if (unit.targetBuildingHexId === monsterId) return false;
+            unit.targetUnitId = unit.targetWallHexId = null;
+            unit.targetBuildingHexId = monsterId;
+            return true;
+        }
+        const hex = unit.targetBuildingHexId === null ? null : this.context.hex(unit.targetBuildingHexId);
+        if (hex && isZCAwakeMonster(hex)) {
+            let attacker: ZCUnitState | null = null;
+            let best = Infinity;
+            const definition = this.context.effectiveDefinition(unit);
+            for (const candidate of this.context.units.values()) {
+                if (candidate.owner === unit.owner || candidate.hp <= 0 || candidate.battleState === 'dead'
+                    || candidate.targetUnitId !== unit.id || !['attack', 'waitAttack'].includes(candidate.battleState)
+                    || (!definition.canAttackAir && this.context.baseDefinition(candidate.unitId).flying)) continue;
+                const distance = Math.hypot(candidate.freeX - unit.freeX, candidate.freeY - unit.freeY);
+                if (distance < best || (distance === best && candidate.id < attacker.id)) { attacker = candidate; best = distance; }
+            }
+            if (attacker) {
+                unit.targetBuildingHexId = unit.targetWallHexId = null;
+                unit.targetUnitId = attacker.id;
+                return true;
+            }
+        }
         if (!this.context.targeting.preferUnitTargets?.(unit)
             || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
-        const target = ZCTargetingSystem.acquire(unit, this.targetingContext, true);
+        const target = ZCTargetingSystem.acquire(unit, this.targetingContext, true, this.selectionScratch);
         if (!target) return false;
         unit.targetUnitId = target.id;
         unit.targetWallHexId = null;

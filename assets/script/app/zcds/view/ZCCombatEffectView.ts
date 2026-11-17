@@ -32,7 +32,7 @@ export class ZCCombatEffectView extends Component {
     spriteTransform: UITransform | null = null;
 
     @property({ type: Graphics })
-    graphics: Graphics | null = null;
+    graphics: Graphics = null!;
 
     private visualNode: Node | null = null;
     private visualPrefab: Prefab | null = null;
@@ -401,7 +401,7 @@ export class ZCCombatEffectView extends Component {
         const trail = zcMissileTrailOf(prefabPath);
         if (!trail) return;
         const graphics = this.graphics;
-        if (!graphics?.isValid) return;
+        if (!graphics.isValid) return;
         graphics.clear();
         const [red, green, blue] = trail.color;
         for (const quad of zcMissileTrailQuads(trail)) {

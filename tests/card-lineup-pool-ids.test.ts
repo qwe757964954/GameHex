@@ -18,12 +18,12 @@ import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConf
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { runInNewContext } from 'node:vm';
 import test from 'node:test';
-import ts from 'typescript';
+import { loadTsModule } from './helpers/cc-sandbox';
 import * as Catalog from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { isHqCard, parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCPvpTableParser';
 import * as RuntimeConfig from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import * as TableRead from '../assets/script/app/common/TableRead';
 import { resolveSelectedDeck } from '../assets/script/app/card/LineupPresets';
 
 /** 真表：`assets/remoteRef/pvpCard.json`（列存 `{k,v}`）。 */
@@ -40,28 +40,23 @@ type Decks = {
     loadPvpCatalogCards: () => Promise<ReadonlyArray<{ id: string; name: string }>>;
 };
 
-/** 把真实模块跑起来：`RefUtil` 换成喂真表的桩，解析用真 `ZCGameRuntimeConfig`。 */
+/** 把真实模块跑起来：`RefUtil` 换成喂真表的桩，`TableRead` 用真实模块。 */
 function loadDecksModule(): { module: Decks; warnings: unknown[][] } {
     const warnings: unknown[][] = [];
-    const moduleExports: Record<string, unknown> = {};
     const rows = { pvpCard: readRows('pvpCard'), pvpBond: readRows('pvpBond') } as Record<string, unknown[]>;
 
-    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/card/CardLineupDecks.ts', 'utf8'), {
-        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, {
-        exports: moduleExports,
-        require: (id: string) => {
-            if (id.endsWith('framework/ref/RefUtil')) {
-                return { RefUtil: { instance: { getRefAllAsync: async (table: string) => rows[table] ?? [] } } };
-            }
-            if (id.endsWith('ZCRuntimeConfigStore')) return { ZC_RUNTIME_CONFIG };
-            if (id.endsWith('ZCCombatCatalog')) return Catalog;
-            if (id.endsWith('ZCGameRuntimeConfig')) return RuntimeConfig;
-            throw new Error(`未预料的依赖：${id}`);
+    const { exports, unresolved } = loadTsModule<Decks>('assets/script/app/card/CardLineupDecks.ts', {
+        modules: {
+            '/framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => rows[table] ?? [] } } },
+            '/common/TableRead': TableRead,
+            '/ZCRuntimeConfigStore': { ZC_RUNTIME_CONFIG },
+            '/ZCCombatCatalog': Catalog,
+            '/ZCGameRuntimeConfig': RuntimeConfig,
         },
-        console: { log() {}, warn: (...args: unknown[]) => { warnings.push(args); } },
+        globals: { console: { log() {}, warn: (...args: unknown[]) => { warnings.push(args); } } },
     });
-    return { module: moduleExports as unknown as Decks, warnings };
+    if (unresolved.length > 0) throw new Error(`未预料的依赖：${unresolved.join(', ')}`);
+    return { module: exports, warnings };
 }
 
 test('主城（2002）在后端英雄列表里时不产生「没有对应配置」告警，也不进卡池', async () => {

@@ -23,6 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { TERRITORY_CHEST_OPEN_ARTS, TERRITORY_CHEST_OPEN_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
+    chestOpenLegendHeroesOf,
     chestOpenBgProgressOf,
     chestOpenCardProgressOf,
     chestOpenCardVisualOf,
@@ -621,4 +622,171 @@ test('E6｜入场期间点空白 = 跳过动画，不是关窗；「跳过」先
         /this\.skipButton\.node\.active = false/,
         '「跳过」常驻：设计稿静止态就带「跳过>>」',
     );
+});
+
+
+test('橙卡按升级表的碎片关联识别，排除橙材料、其他品质、零数量并去重', () => {
+    const rows = [{ id: '68005', costCardID: '18003' }];
+    assert.deepEqual(chestOpenLegendHeroesOf([
+        { resId: 18003, quality: 5, number: 2 },
+        { resId: 18003, quality: 5, number: 1 },
+        { resId: 10001, quality: 5, number: 1 },
+    ], rows), ['68005']);
+    for (const quality of [1, 2, 3, 4, 6]) {
+        assert.deepEqual(chestOpenLegendHeroesOf([{ resId: 18003, quality, number: 1 }], rows), []);
+    }
+    assert.deepEqual(chestOpenLegendHeroesOf([{ resId: 18003, quality: 5, number: 0 }], rows), []);
+});
+
+test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只通知一次', async () => {
+    const { ccStub, loadTsModule } = await import('./helpers/cc-sandbox');
+    const layout = await import('../assets/script/app/territory/model/TerritoryChestOpenLayout');
+    const entries = await import('../assets/script/app/common/RewardEntries');
+    const emitted: unknown[] = [];
+    let now = 0;
+    class PopupBase {
+        isValid = true;
+        closes = 0;
+        closeByButton() { this.closes++; }
+        nextPopupFrame() { return Promise.resolve(true); }
+    }
+    const { exports, unresolved } = loadTsModule<{ TerritoryChestOpenPage: new () => any }>(PAGE_TS, {
+        globals: { performance: { now: () => now } },
+        modules: {
+            cc: ccStub({ Button: { EventType: { CLICK: 'click' } } }),
+            '/PopupBase': { PopupBase }, '/BundleCatalog': {}, '/ArtPaths': {},
+            '/RewardFrames': { loadRewardGoodsTables: async () => ({ items: new Map(), resources: new Map() }) },
+            '/RewardEntries': entries, '/TerritoryTexts': { TERRITORY_TEXTS },
+            '/TerritoryChestOpenLayout': layout, '/TerritoryChestOpenCard': {}, '/TerritoryChestOpenArt': {},
+            '/EventMgr': { EventMgr: { instance: { emit: (...args: unknown[]) => emitted.push(args) } } },
+            '/TerritoryEvents': { TerritoryUiEvent: { ChestRevealed: 'revealed' } },
+        },
+    });
+    assert.deepEqual(unresolved, []);
+    for (const skip of [false, true]) {
+        const page = new exports.TerritoryChestOpenPage();
+        page.cardsRoot = { active: true, setScale() {} };
+        page.chestNode = { active: false, setScale() {} };
+        page.cardTemplate = {}; page.rowTemplate = {};
+        page.bgOpacity = {}; page.chestOpacity = {}; page.skipOpacity = {};
+        page.skipButton = { node: {} }; page.closeButton = { node: {} }; page.closeLabel = {};
+        page.closedChestFrame = { kind: 'closed' }; page.openedChestFrame = { kind: 'opened' };
+        page.chestSprite = {};
+        page.applyChestFrame = (frame: unknown) => { page.chestSprite.spriteFrame = frame; };
+        page.loadCardFrames = async () => new Map(); page.loadIcon = async () => null;
+        page.presentCards = () => {};
+        assert.equal(page.canCloseOnBlank(), false, '加载期间点击不提前揭晓');
+        assert.equal(emitted.length, skip ? 1 : 0);
+        await page.onOpen({ goods: [{ resId: 18003, number: 1 }] }, { cancelled: false });
+        assert.equal(page.cardsRoot.active, false);
+        assert.equal(page.chestSprite.spriteFrame, page.closedChestFrame);
+        assert.equal(page.closeLabel.string, TERRITORY_TEXTS.chestOpenClaim);
+        const before = emitted.length;
+        if (skip) page.onSkipClick();
+        else {
+            page.onCloseClick();
+            assert.equal(page.cardsRoot.active, true);
+            assert.equal(page.closes, 0);
+            now += 2000;
+            page.update(0);
+        }
+        assert.equal(page.chestSprite.spriteFrame, page.openedChestFrame);
+        assert.equal(emitted.length, before + 1);
+        page.finishReveal();
+        assert.equal(emitted.length, before + 1);
+        page.onCloseClick();
+        assert.equal(page.closes, 1);
+        page.onClose();
+        assert.equal(page._entries.length, 0);
+    }
+});
+
+
+test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放当前弹窗', async () => {
+    const { loadTsModule } = await import('./helpers/cc-sandbox');
+    const { ResourceScope } = await import('../assets/script/core/asset/ResourceScope');
+    const upgrade = await import('../assets/script/app/card/CardUpgradeCost');
+    const layout = await import('../assets/script/app/territory/model/TerritoryChestOpenLayout');
+    const opened: Array<{ userData: { heroId: string; progressCurrent: number; progressMax: number }; onClose(): void }> = [];
+    let closed = 0;
+    const chestOpens: unknown[] = [];
+    let chestCloses = 0;
+    const modules: Record<string, unknown> = {};
+    // 只执行特写编排，不实例化主界面、其他页签和其控制器。
+    for (const name of ['GuideComposition', 'ViewLifecycle', 'CardLineupPage', 'CardLineupController',
+        'CardUpgradePage', 'LineupBoardPage', 'RolePage', 'RoleController', 'RoleRepository',
+        'MilitiaTalentPage', 'StorePage', 'StoreController', 'StoreActions', 'LeagueTabPage',
+        'LeagueTabController', 'LeagueRepository', 'MainPage', 'MainTerritoryMap', 'TerritoryEntry',
+        'FW', 'TerritoryHeroProgressSource', 'TerritoryEvents', 'ChestEvents']) modules['/' + name] = {};
+    Object.assign(modules, {
+        '/ControllerBase': { ControllerBase: class {} },
+        '/HeroObtainPage': { HeroObtainPage: { open: async (params: typeof opened[number]) => {
+            opened.push(params);
+            return { close: () => { closed++; params.onClose(); } };
+        } } },
+        '/CardLineupDecks': { loadCardLevelUpRows: async () => [1, 2].map(id => ({
+            id: String(68000 + id), name: 'hero', level: 1, costCardID: String(18000 + id), costCardNum: 10,
+            costArmyLevelID: '16001', costGeneralLevelID: '16000', costArmyLevelNum: 0,
+        })) },
+        '/CardUpgradeCost': upgrade,
+        '/ItemBag': { createItemCounter: () => () => 4 },
+        '/TerritoryChestOpenPage': { TerritoryChestOpenPage: { open: async (params: unknown) => {
+            chestOpens.push(params);
+            return { close: () => { chestCloses++; } };
+        } } },
+        '/TerritoryChestOpenLayout': layout,
+        '/CardRepository': { cardRepository: { loadLineup: async () => ({ heroLevels: new Map() }) } },
+    });
+    const loaded = loadTsModule<{ MainPageComposition: new (...args: unknown[]) => any }>(
+        'assets/script/app/bootstrap/main/MainPageComposition.ts', { modules });
+    assert.deepEqual(loaded.unresolved, []);
+    const composition = Object.create(loaded.exports.MainPageComposition.prototype);
+    composition.scope = new ResourceScope('test');
+    composition.isDisposed = false;
+    const event = { owner: { isValid: true }, entries: [1, 2].map(id => ({ resId: 18000 + id, quality: 5, number: 1 })) };
+    const task = composition.presentChestHeroes(event);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(opened.length, 1);
+    assert.deepEqual({ ...opened[0].userData }, { heroId: '68001', progressCurrent: 4, progressMax: 10 });
+    opened[0].onClose();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(opened.length, 2);
+    assert.equal(opened[1].userData.heroId, '68002');
+    composition.isDisposed = true;
+    composition.scope.dispose();
+    await task;
+    assert.equal(closed, 1);
+    assert.equal(opened.length, 2);
+
+    const stale = Object.create(loaded.exports.MainPageComposition.prototype);
+    stale.scope = new ResourceScope('stale'); stale.isDisposed = false;
+    event.owner.isValid = false;
+    await stale.presentChestHeroes(event);
+    assert.equal(opened.length, 2, '回包前宝箱页已销毁时不再弹英雄');
+
+    const root = {};
+    const treasureHost = Object.create(loaded.exports.MainPageComposition.prototype);
+    treasureHost.root = root; treasureHost.isDisposed = false;
+    const goods = [{ resId: 18001, number: 2 }];
+    treasureHost.onTreasureRewards({ owner: { node: {} }, goods });
+    treasureHost.onTreasureRewards({ owner: { node: root }, goods: [] });
+    assert.equal(chestOpens.length, 0, '忽略其他宿主及空奖励');
+    treasureHost.onTreasureRewards({ owner: { node: root }, goods });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(chestOpens.length, 1);
+    assert.equal((chestOpens[0] as { userData: { goods: unknown } }).userData.goods, goods);
+    treasureHost.onTreasureRewards({ owner: { node: root }, goods });
+    treasureHost.isDisposed = true;
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(chestCloses, 1, '开箱页加载期间退出时关闭迟到弹窗');
+});
+
+
+test('铺奖励前激活父节点，使卡片 onLoad 与 Layout 先于填图、动画基准采样执行', () => {
+    const page = read(PAGE_TS);
+    const body = page.slice(page.indexOf('    private presentCards('), page.indexOf('    private availableGridHeight('));
+    const activeAt = body.indexOf('this.cardsRoot.active = true;');
+    assert.ok(activeAt >= 0, '隐藏的父节点会阻止卡片 onLoad，render 无法赋图');
+    assert.ok(activeAt < body.indexOf('instantiate(this.rowTemplate)'), '必须在创建行与卡片之前激活');
+    assert.ok(activeAt < body.indexOf('updateLayout()'), 'Layout 排版后才能采样动画基准');
 });

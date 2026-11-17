@@ -24,6 +24,7 @@ import type { IRewardAmount } from '../../core/types/Reward';
  */
 
 import { parseRows, parseRowsToMap } from '../../core/table/RowParse';
+import { toCount } from '../../core/value/Coerce';
 import { parseRewardAmounts } from '../../core/table/RewardRows';
 import { DAY_MS, startOfDay } from '../../core/time/TimeMs';
 import { clamp01Finite } from '../../core/math/Scalar';
@@ -126,11 +127,6 @@ export const EMPTY_SEVEN_DAY_STATE: ISevenDayServerState = {
 // 表行解析
 // ============================================================
 
-function asNumber(value: unknown, fallback: number = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function asString(value: unknown, fallback: string = ''): string {
     return typeof value === 'string' ? value : fallback;
 }
@@ -149,19 +145,19 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 export function parseTaskRow(value: unknown): ISevenDayTaskRow | null {
     const row = asRecord(value);
     if (!row) return null;
-    const resId = asNumber(row.resId, 0);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
     const param = asRecord(row.param);
     return {
         resId,
-        days: asNumber(row.days, 0),
-        type: asNumber(row.type, 0),
+        days: toCount(row.days),
+        type: toCount(row.type),
         typeName: asString(row.typeName),
         name: asString(row.name),
-        targetType: asNumber(row.targetType, 0),
-        targetCount: param ? asNumber(param.count, 0) : 0,
+        targetType: toCount(row.targetType),
+        targetCount: param ? toCount(param.count) : 0,
         reward: parseRewards(row.reward),
-        goto: asNumber(row.goto, 0),
+        goto: toCount(row.goto),
     };
 }
 
@@ -169,20 +165,20 @@ export function parseTaskRow(value: unknown): ISevenDayTaskRow | null {
 export function parseShopRow(value: unknown): ISevenDayShopRow | null {
     const row = asRecord(value);
     if (!row) return null;
-    const id = asNumber(row.id, 0);
+    const id = toCount(row.id);
     if (id <= 0) return null;
     return {
         id,
-        days: asNumber(row.days, 0),
-        type: asNumber(row.type, 0),
+        days: toCount(row.days),
+        type: toCount(row.type),
         typeName: asString(row.typeName),
         name: asString(row.name),
         rewards: parseRewards(row.rewards),
-        priceType: asNumber(row.priceType, 0),
-        cost: asNumber(row.cost, 0),
-        originalPrice: asNumber(row.originalPrice, 0),
-        limit: asNumber(row.limit, 0),
-        discount: asNumber(row.discount, 10),
+        priceType: toCount(row.priceType),
+        cost: toCount(row.cost),
+        originalPrice: toCount(row.originalPrice),
+        limit: toCount(row.limit),
+        discount: Number.isFinite(Number(row.discount)) ? toCount(row.discount) : 10,
     };
 }
 
@@ -190,9 +186,9 @@ export function parseShopRow(value: unknown): ISevenDayShopRow | null {
 export function parsePointRow(value: unknown): ISevenDayPointRow | null {
     const row = asRecord(value);
     if (!row) return null;
-    const resId = asNumber(row.resId, 0);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
-    return { resId, point: asNumber(row.point, 0), reward: parseRewards(row.reward) };
+    return { resId, point: toCount(row.point), reward: parseRewards(row.reward) };
 }
 
 /**
@@ -207,7 +203,7 @@ export interface ISevenDayItemInfo {
     readonly name: string;
     /**
      * `item.icon` 原样带出。2026-09-23 起它是「相对 `assets/resources/` 的资源路径」
-     * （`icons/item/图标_兵书随机`），由 `SevenDayArt.resolveItemIconRef` 解析；
+     * （`icons/item/图标_兵书随机`），由 `common/RewardIcon.resolveItemIconRef` 解析；
      * 老数据的裸组件名（`图标_图纸_帽子`）解析不出，奖励格会降级成「只画品质框」。
      */
     readonly icon: string;
@@ -218,13 +214,13 @@ export interface ISevenDayItemInfo {
 export function parseItemRow(value: unknown): ISevenDayItemInfo | null {
     const row = asRecord(value);
     if (!row) return null;
-    const resId = asNumber(row.resId, 0);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
     return {
         resId,
         name: asString(row.name),
         icon: asString(row.icon),
-        quality: asNumber(row.quality, 1),
+        quality: Number.isFinite(Number(row.quality)) ? toCount(row.quality) : 1,
     };
 }
 

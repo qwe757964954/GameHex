@@ -2,10 +2,8 @@ import { _decorator, Button, Color, Label, Node, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { loadArt } from '../card/CardLineupIcons';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
-import {
-    qualityFrameName,
-    resolveItemIconRef,
-} from './SevenDayArt';
+import { qualityFrameName } from './SevenDayArt';
+import { resolveItemIconRef } from '../common/RewardIcon';
 import { sevenDayRepository } from './SevenDayRepository';
 import { loadQualityFrameMap } from '../common/QualityFrameLoader';
 import type { ISevenDayRepository, ISevenDaySnapshot, SevenDayRequestResult } from './SevenDayRepository';
@@ -145,7 +143,7 @@ export class SevenDayPage extends PopupBase {
         this.bindBlankContent();
 
         const closeButton = this.closeButton.getComponent(Button);
-        closeButton?.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
 
         for (const tab of this.dayTabs) {
@@ -327,7 +325,6 @@ export class SevenDayPage extends PopupBase {
     /** 虚拟列表的行渲染（被 clone 复用的槽位 → 每次都按当前 `this.rows` / `rowContext` 重铺）。 */
     private renderRow(node: Node, index: number): void {
         const view = node.getComponent(SevenDayRewardRow);
-        if (!view) return;
         // 回调按 **index 现取** `this.rows[index]`，不能闭包捕获 `row` ——
         // 同一个实例会被复用到别的下标（`renderItemFn` 每次重铺都会重新赋值）。
         view.onAction = () => {
@@ -586,7 +583,7 @@ export class SevenDayPage extends PopupBase {
      * 预加载当前页签各行奖励的图标；解析不出路径的条目直接跳过（奖励格降级成「只画品质框」）。
      *
      * ⚠️ 别在这里加 `SEVEN_DAY_ITEM_ICON_MAP.size === 0 → 早退`：白名单**现在就是空的**，
-     *    图标靠 `item.icon` 的资源路径直通（见 `SevenDayArt.splitIconPath`），
+     *    图标靠 `item.icon` 的资源路径直通（见 `common/RewardIcon.splitIconPath`），
      *    加那条早退会让所有图标静默消失。
      */
     private async loadIconFrames(

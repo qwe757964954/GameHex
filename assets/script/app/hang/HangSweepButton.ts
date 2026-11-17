@@ -30,19 +30,19 @@ export class HangSweepButton extends Component {
     button: Button = null;
 
     @property({ type: Label, tooltip: '「快速征收」（跟随 `免费` 页换位置）' })
-    title: Label = null;
+    title: Label = null!;
 
     @property({ type: Node, tooltip: '看广告小图标（`免费` = 否 时显示）' })
-    adIcon: Node = null;
+    adIcon: Node = null!;
 
     @property({ type: Sprite, tooltip: '体力图标（`roleProperty.end = 9` ⇒ `图标_体力`）' })
-    costIcon: Sprite = null;
+    costIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: '`x10` 形态的花费文案' })
-    cost: Label = null;
+    cost: Label = null!;
 
     @property({ type: Node, tooltip: '红点（FGUI `com_rd`；截图无红点 ⇒ 默认隐藏，留待红点系统接）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** `title` 在「否」页的位置（组件内相对中心的局部坐标）。 */
     private static readonly TITLE_POS_NOT_FREE = { x: 10, y: -10 };
@@ -76,18 +76,17 @@ export class HangSweepButton extends Component {
      */
     renderFree(hasFree: boolean): void {
         const pos = hasFree ? HangSweepButton.TITLE_POS_FREE : HangSweepButton.TITLE_POS_NOT_FREE;
-        if (this.title) this.title.node.setPosition(pos.x, pos.y, 0);
-        if (this.adIcon) this.adIcon.active = !hasFree;
+        this.title.node.setPosition(pos.x, pos.y, 0);
+        this.adIcon.active = !hasFree;
     }
 
     /** 铺花费文案（`x10`）。 */
     renderCost(text: string): void {
-        if (this.cost) this.cost.string = text;
+        this.cost.string = text;
     }
 
     /** 铺体力图标。 */
     renderCostIcon(frame: SpriteFrame | null): void {
-        if (!this.costIcon) return;
         this.costIcon.spriteFrame = frame;
         this.costIcon.type = HJ_SPRITE_SIMPLE;
         this.costIcon.node.active = !!frame;
@@ -95,6 +94,6 @@ export class HangSweepButton extends Component {
 
     /** 红点显隐（本轮恒 `false`）。 */
     renderRedDot(visible: boolean): void {
-        if (this.redDot) this.redDot.active = visible;
+        this.redDot.active = visible;
     }
 }

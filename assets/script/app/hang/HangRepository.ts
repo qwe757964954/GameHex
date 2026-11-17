@@ -602,8 +602,7 @@ export function goodsOf(snapshot: IHangSnapshot, resId: number): IActivityGoodsI
 /**
  * 奖励图标的两支分流解析；解析不出返回 `null`（奖励格降级成只画品质框）。
  *
- * **不要**自己判 `item` / `roleProperty` —— 走 `common/RewardIcon.resolveRewardIconRef`
- * （本模块自己那份转发在 `HangArt.hjResolveRewardIconRef`）。
+ * **不要**自己判 `item` / `roleProperty` —— 直接走 `common/RewardIcon.resolveRewardIconRef`。
  */
 export function rewardIconRefOf(snapshot: IHangSnapshot, resId: number): { root: string; name: string } | null {
     return resolveRewardIconRef(goodsOf(snapshot, resId));

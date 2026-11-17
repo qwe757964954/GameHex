@@ -7,7 +7,7 @@
 
 import { spriteFramePath } from '../ArtPaths';
 import { resIconRoot } from '../common/ResTypes';
-import { resolveItemIconRef } from '../sevenDay/SevenDayArt';
+import { resolveItemIconRef } from '../common/RewardIcon';
 
 /** 礼包美术目录（运行时时相对 `resources` 的路径）。 */
 export const GIFT_ART_ROOT = 'image/gift';

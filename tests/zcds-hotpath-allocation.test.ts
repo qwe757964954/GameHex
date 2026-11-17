@@ -100,14 +100,14 @@ test('状态结算及牵引不在每步创建容器，穿透记录不反复复�
 test('索敌候选循环只记标量，不为每个更优候选分配对象或闭包', () => {
     const source = readFileSync('assets/script/app/zcds/model/systems/ZCTargetingSystem.ts', 'utf8');
     const body = methodBody(source,
-        'static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {');
+        'static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false, out?: ZCTargetSelectionSink): ZCTargetSelection | null {');
     assert.doesNotMatch(body, /=>|best\s*=\s*\{/);
 });
 
 test('索敌飞行判定只读基础定义，不触发每候选 effective 计算', () => {
     const source = readFileSync('assets/script/app/zcds/model/systems/ZCTargetingSystem.ts', 'utf8');
     const body = methodBody(source,
-        'static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {');
+        'static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false, out?: ZCTargetSelectionSink): ZCTargetSelection | null {');
     assert.match(body, /context\.baseDefinition\(hater\.unitId\)\.flying/);
     assert.match(body, /context\.baseDefinition\(candidate\.unitId\)\.flying/);
 });

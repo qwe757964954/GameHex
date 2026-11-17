@@ -11,6 +11,8 @@ python strip_edition.py
 if errorlevel 1 goto :failed
 python protoCompiled_fix.py
 if errorlevel 1 goto :failed
+node "%~dp0..\tools\proto\gen_static_module.mjs"
+if errorlevel 1 goto :failed
 
 
 python proto_remove_namespace.py protoCompiled.proto protoCompiled_no_namespace.proto "package padding;"

@@ -37,15 +37,8 @@ import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
 import { visibleLineupCards } from './CardLineupTypes';
-import {
-    applyPvpHeroLevel,
-    applyPvpHeroSkillLevel,
-    fetchPvpHeroInfos,
-    getCachedPvpHeroInfo,
-    getCachedPvpHeroInfos,
-    normalizePvpHeroInfos,
-} from './PvpHeroService';
-import type { PvpHeroInfo, PvpHeroSkillLevel } from './PvpHeroService';
+import { normalizePvpHeroInfos } from './PvpHeroService';
+import type { PvpHeroService, PvpHeroInfo, PvpHeroSkillLevel } from './PvpHeroService';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
 import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
@@ -54,7 +47,7 @@ import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
 import type { ICardSkillCost } from './CardPresentations';
 import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
 import { readRoleRow } from '../main/MainRoleRow';
-import { toCount } from '../net/RequestGuard';
+import { sendGameRequest, toCount } from '../net/RequestGuard';
 
 import { ICON_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 export interface CardLineupData {
@@ -151,6 +144,22 @@ export interface ICardRepository {
 
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
 export class RuntimeCardRepository implements ICardRepository {
+    private heroes: PvpHeroService | null = null;
+
+    /** 登录组合层绑定新会话；返回登录和应用销毁时传 null。 */
+    bindHeroSession(heroes: PvpHeroService | null): void {
+        if (this.heroes === heroes) return;
+        const previous = this.heroes;
+        this.heroes = heroes;
+        previous?.dispose();
+    }
+
+    prefetchHeroInfos(): void {
+        if (this.heroes && this.heroes.getCachedPvpHeroInfos() === null) {
+            void this.heroes.fetchPvpHeroInfos();
+        }
+    }
+
     // 只缓存与账号无关的不可变配置，随应用中的 Repository 实例存活。
     private artConfig: ICardArtConfig | null = null;
     private artTask: Promise<ICardArtConfig> | null = null;
@@ -196,11 +205,12 @@ export class RuntimeCardRepository implements ICardRepository {
      * 阵型为空数组则保持空阵容。catalog 用全表，阵型里的英雄可能不在本地八卡中。
      */
     async loadLineup(autoLoadDecks: boolean, refreshFormations = true): Promise<CardLineupData> {
+        const heroes = this.heroes;
         // 缓存命中就不再拉英雄列表；升级成功时 applyPvpHeroLevel 已经写回新等级。
-        const cached = getCachedPvpHeroInfos();
+        const cached = heroes?.getCachedPvpHeroInfos() ?? null;
         const [tableDeck, heroInfos, heroLevelCaps, catalog, formations, art] = await Promise.all([
             autoLoadDecks ? ensureLineupDecks() : Promise.resolve(getPlayerDeck()),
-            cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
+            cached === null ? (heroes?.fetchPvpHeroInfos() ?? Promise.resolve(null)) : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
             loadPvpCatalogCards(),
             // maxAgeMs：切 tab 时 prefetchHero 已经预取过一次，几百毫秒内的结果直接复用。
@@ -209,6 +219,7 @@ export class RuntimeCardRepository implements ICardRepository {
                 : Promise.resolve(getCachedFormations()),
             this.loadArtConfig(),
         ]);
+        if (this.heroes !== heroes) throw new Error('卡牌会话已结束');
         const heroLevels = this.levels(heroInfos);
         const selectedDeck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations });
         // 只给服务端确认过的选中阵型写快照，本地默认八卡不能当玩家阵容持久化。
@@ -257,19 +268,21 @@ export class RuntimeCardRepository implements ICardRepository {
      */
     async loadDetailNavigation(): Promise<CardDetailNavigationData> {
         const catalog = visibleLineupCards(await loadPvpCatalogCards());
-        const infos = getCachedPvpHeroInfos();
+        const infos = this.heroes?.getCachedPvpHeroInfos() ?? null;
         return { catalog, heroLevels: this.levels(infos), heroListKnown: infos !== null };
     }
 
     async loadBoard(autoLoadDecks: boolean): Promise<LineupBoardData> {
-        const cached = getCachedPvpHeroInfos();
+        const heroes = this.heroes;
+        const cached = heroes?.getCachedPvpHeroInfos() ?? null;
         const [deck, heroInfos, heroLevelCaps, formations, art] = await Promise.all([
             autoLoadDecks ? ensureLineupDecks() : Promise.resolve(getPlayerDeck()),
-            cached === null ? fetchPvpHeroInfos() : Promise.resolve(cached),
+            cached === null ? (heroes?.fetchPvpHeroInfos() ?? Promise.resolve(null)) : Promise.resolve(cached),
             loadPvpHeroLevelCaps(),
             fetchFormations(),
             this.loadArtConfig(),
         ]);
+        if (this.heroes !== heroes) throw new Error('卡牌会话已结束');
         const pool = heroInfos === null ? deck : await loadPvpHeroCards(heroInfos);
         // 卡池为空时日志要能区分「后端列表不可用」和「有英雄但 pvpCard 对不上」。
         if (pool.length === 0) {
@@ -306,7 +319,7 @@ export class RuntimeCardRepository implements ICardRepository {
         // 等级属性走 cardLevelUp.attrList（绝对值）；这张卡没配时 pair 两个都是 null，
         // buildDetailStats 内部回落 pvpUnitGrowth，老行为不变。
         const levelAttrs = resolveCardLevelAttrsPair(this.levelUpTableOf(levelUpRaw), String(cardId), level);
-        const heroLevel = getCachedPvpHeroInfo(Number(cardId))?.level ?? 0;
+        const heroLevel = this.heroes?.getCachedPvpHeroInfo(Number(cardId))?.level ?? 0;
         const base = detailBaseOfRow(rawRow);
         const growthRows = parseGrowthRows(growthRaw);
         const unitId = String(card?.unitId ?? '');
@@ -386,7 +399,7 @@ export class RuntimeCardRepository implements ICardRepository {
             RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),
         ]);
         const table = buildArmySkillTable(rows);
-        const info = getCachedPvpHeroInfo(heroId);
+        const info = this.heroes?.getCachedPvpHeroInfo(heroId);
         const fallbackIds = Array.from(table.keys());
         const skillIds = await this.skillIdsOf(heroId, fallbackIds);
         const skillDetails = new Map<number, { kind: string; cooldown: number }>();
@@ -437,15 +450,16 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 
     async upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return { kind: 'offline' };
+        const heroes = this.heroes;
         let response: CmdPvpHeroUpLevelRspMsg | null = null;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestPvpHeroUpLevel({ heroId }, caller, (rsp) => { response = rsp; }),
-                false,
+                { tag: 'CardRepository' },
             );
-            if (!ok || !response) return { kind: 'failed' };
+            if (this.heroes !== heroes) return { kind: 'failed' };
+            if (status === 'offline') return { kind: 'offline' };
+            if (status !== 'ok' || !response) return { kind: 'failed' };
         } catch (error) {
             console.warn('[CardRepository] 升级请求失败', error);
             return { kind: 'failed' };
@@ -468,17 +482,18 @@ export class RuntimeCardRepository implements ICardRepository {
      * 服务端可能因条件不满级/连升），再整份写回缓存。
      */
     async upgradeHeroSkill(heroId: number, skillId: number, caller?: object): Promise<UpgradeHeroSkillResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return { kind: 'offline' };
+        const heroes = this.heroes;
         if (!Number.isSafeInteger(heroId) || heroId <= 0) return { kind: 'failed' };
         if (!Number.isSafeInteger(skillId) || skillId <= 0) return { kind: 'failed' };
         let response: CmdPvpHeroUpSkillRspMsg | null = null;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestPvpHeroUpSkill({ heroId, skillId }, caller, (rsp) => { response = rsp; }),
-                false,
+                { tag: 'CardRepository' },
             );
-            if (!ok || !response) return { kind: 'failed' };
+            if (this.heroes !== heroes) return { kind: 'failed' };
+            if (status === 'offline') return { kind: 'offline' };
+            if (status !== 'ok' || !response) return { kind: 'failed' };
         } catch (error) {
             console.warn('[CardRepository] 技能升级请求失败', error);
             return { kind: 'failed' };
@@ -495,14 +510,14 @@ export class RuntimeCardRepository implements ICardRepository {
         if (Number.isSafeInteger(heroLevel) && heroLevel >= 0) {
             this.applyHeroLevel(resolvedHeroId, heroLevel, skills);
         } else {
-            applyPvpHeroSkillLevel(resolvedHeroId, skillId, level);
+            heroes?.applyPvpHeroSkillLevel(resolvedHeroId, skillId, level);
         }
         return { kind: 'success', heroId: resolvedHeroId, skillId, level, skills };
     }
 
     /** 把服务端确认的英雄等级（可选带技能表快照）写回本地列表缓存。 */
     applyHeroLevel(heroId: number, level: number, skills?: readonly PvpHeroSkillLevel[]): void {
-        applyPvpHeroLevel(heroId, level, skills);
+        this.heroes?.applyPvpHeroLevel(heroId, level, skills);
     }
 
     saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult> {
@@ -518,4 +533,4 @@ export class RuntimeCardRepository implements ICardRepository {
     }
 }
 
-export const cardRepository: ICardRepository = new RuntimeCardRepository();
+export const cardRepository = new RuntimeCardRepository();

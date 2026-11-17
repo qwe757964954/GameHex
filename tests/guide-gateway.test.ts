@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTsModule } from './helpers/cc-sandbox';
@@ -33,7 +34,7 @@ function harness(send: (request: IRequest) => Promise<boolean>) {
     const net = { isConnected: true, send, removeCaller: (owner: object) => cancelled.push(owner) };
     const result = loadTsModule<{ GameNetGuideGateway: new () => GameNetGuideGateway }>(
         'assets/script/app/guide/application/GuideGateway.ts', {
-            modules: { '/RequestMsg': requestModule.exports, '/GameNet': { GameNet: { instance: net } } },
+            modules: { '/RequestGuard': requestGuard, '/RequestMsg': requestModule.exports, '/GameNet': { GameNet: { instance: net } } },
             globals: { console: { info: (...args: unknown[]) => logs.push(args), warn: (...args: unknown[]) => logs.push(args) } },
         },
     );

@@ -38,8 +38,9 @@ import {
 import type { IMainTaskRow, IMainTaskState } from '../assets/script/app/maintask/MainTaskTable';
 import { GET_HERO_TEXTS, MAIN_TASK_TEXTS } from '../assets/script/app/maintask/MainTaskTexts';
 import { MT_ART_NAMES, MT_ART_SLICED, MT_ART_TILED } from '../assets/script/app/maintask/MainTaskArt';
-import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../assets/script/app/activity/LayerActivityTable';
-import { RESOURCE_ICON_ART_ROOT, resolveRewardIconRef } from '../assets/script/app/activity/LayerActivityArt';
+import { parseItemRows, parseRolePropertyRows, rewardGoodsOf } from '../assets/script/app/common/ResTypes';
+import { resolveRewardIconRef } from '../assets/script/app/common/RewardIcon';
+import { RESOURCE_ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import { assetExists, assetPath } from './helpers/asset-paths';
 
 // ============================================================
@@ -755,11 +756,11 @@ test('E9 入口：领奖三态提示齐备、有防连点', () => {
     assert.ok(body.includes('claimFailed'), "缺 'failed' 分支");
 });
 
-test('E10 入口：`bindClick` 与详情弹窗同一分流口径（`<component>` 形态有 cc.Button）', () => {
+test('E10 入口：`bindClick` 直接使用 prefab 根节点的 cc.Button（不再退回 TOUCH_END）', () => {
     const body = methodBody(ENTRY_SRC, 'bindClick');
     assert.ok(body.includes('getComponent(Button)'));
-    assert.ok(body.includes('Button.EventType.CLICK'));
-    assert.ok(body.includes('Node.EventType.TOUCH_END'));
+    assert.ok(body.includes('button.node.on(Button.EventType.CLICK'));
+    assert.ok(!body.includes('Node.EventType.TOUCH_END'), '根节点已挂 cc.Button，不允许再留 TOUCH_END 兜底');
 });
 
 test('E11 两个视图脚本里不出现中文字面量（文案唯一出口 = MainTaskTexts）', () => {

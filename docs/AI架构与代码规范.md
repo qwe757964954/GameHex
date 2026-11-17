@@ -141,6 +141,7 @@ GameNet.instance.removeCaller(this);
 ```
 
 - 禁止为满足归属参数而写 `this as unknown as destroyable`、`caller as destroyable`、`caller as any`、`caller as never`；也不得给组件或服务伪造 `destroyed` / `destroy()`。遇到类型不匹配，应修正最底层公共签名及上游端口。
+- 业务请求入口统一复用 `sendGameRequest` 处理离线、异常、硬超时与发送结果，不逐处读取 `GameNet.instance.isConnected` 或声明 `net` 后重复判连接。保留参数校验、真实 caller、业务响应判定及各接口的离线返回/缓存回退；连接状态展示、网络诊断与传输层心跳仍可读取连接状态。
 - 网络请求与事件统一按宿主登记、主动解除，不靠回包时检查组件 `isValid` 兜底。纯 TS 端口为 `core/runtime/CallbackOwner.ICallbackOwnerRegistry`；既有 `EventProxy` 承担归属管理，不另建全局注册表。
 - 普通组件在 `onDestroy` 调用 `GameNet.removeCaller(this)`。`PopupBase` 在关闭及销毁时、`ProcedureManager` 在流程切出、进入失败、预加载取消及销毁时统一解除；端口由 `ProcedureBootstrap` 注入。缓存弹窗关闭时节点可能仍然有效，同样必须解除。`ScriptObject` 沿用既有销毁钩子；普通订阅对象由持有者显式退订。缓存订阅仍按原缓存 API 解绑。
 - `NetworkRequest` 接管 `RequestMsg` 的回调与宿主引用：正常完成后注销清理动作；宿主退出时清空成功/失败回调、取消发送资格并让 `send()` 的 Promise 以 `false` 落定。取消不触发业务失败回调，重复解除和迟到回包不再触达旧宿主。复合异步流程的 `context` / `revision` 守卫仍遵循 §3.2。

@@ -14,12 +14,14 @@ import { loadRewardFrames, loadRewardGoodsTables } from './RewardFrames';
 import type { IRewardFrames } from './RewardFrames';
 import {
     framesToSeconds,
+    staggerSecondsOf,
+} from './ShowRewardTable';
+import {
     parseCmdGoodsList,
     rewardEntryOf,
     sortRewardEntries,
-    staggerSecondsOf,
-} from './ShowRewardTable';
-import type { ICmdGoodsLike, IRewardEntry } from './ShowRewardTable';
+} from '../common/RewardEntries';
+import type { ICmdGoodsLike, IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
 
 const { ccclass, property } = _decorator;
 
@@ -45,10 +47,10 @@ export class ShowRewardPage extends PopupBase {
     static prefabPath = 'ui/ShowReward/ShowReward';
 
     @property({ type: Node, tooltip: 'PanelBg：弹窗底（FGUI n1，入场纵向弹入）' })
-    panelBg: Node = null;
+    panelBg: Node = null!;
 
     @property({ type: Node, tooltip: 'TitleImage：标题图（FGUI n2，延迟 3 帧弹入）' })
-    titleImage: Node = null;
+    titleImage: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'RewardGrid：奖励网格（FGUI list，视口 468×330）' })
     grid: VirtualScrollView = null!;
@@ -57,7 +59,7 @@ export class ShowRewardPage extends PopupBase {
     hintBg: Node = null;
 
     @property({ type: Label, tooltip: 'HintLabel：底部提示文案（FGUI n11）' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
     /** 本次奖励（已排序）。 */
     private entries: IRewardEntry[] = [];
@@ -123,7 +125,7 @@ export class ShowRewardPage extends PopupBase {
         // 取消还没到点的错峰回调，并把槽位收干净：关窗后不留隐藏态 / 半截动画
         // （弹窗实例若被缓存复用，这些状态会直接带到下一次打开）。
         this.unscheduleAllCallbacks();
-        this.grid?.refreshList(0);
+        this.grid.refreshList(0);
         this.entries = [];
         this.frames = [];
         this.playedAni.clear();
@@ -151,7 +153,7 @@ export class ShowRewardPage extends PopupBase {
 
     private present(): void {
         // 无条件写：实例会被复用。
-        if (this.hintLabel) this.hintLabel.string = SHOW_REWARD_TEXTS.hint;
+        this.hintLabel.string = SHOW_REWARD_TEXTS.hint;
 
         this.grid.scrollToTop();
         this.grid.refreshList(this.entries.length);
@@ -167,7 +169,6 @@ export class ShowRewardPage extends PopupBase {
      */
     private renderItem(node: Node, dataIndex: number): void {
         const item = node.getComponent(ShowRewardItem);
-        if (!item) return;
         const sameEntry = item.dataIndex === dataIndex;
         item.dataIndex = dataIndex;
 
@@ -226,16 +227,12 @@ export class ShowRewardPage extends PopupBase {
      * 等查表 / 加载图再缩会先露出一帧全尺寸面板 + 标题，再弹回去 —— 看起来就是「飘 / 抖」。
      */
     private prepareEnterAnimation(): void {
-        if (this.panelBg) {
-            Tween.stopAllByTarget(this.panelBg);
-            this.panelBg.setScale(1, 0.3, 1);
-        }
-        if (this.titleImage) {
-            Tween.stopAllByTarget(this.titleImage);
-            this.titleImage.active = false;
-            this.titleImage.setScale(1, 0.46, 1);
-        }
-        for (const node of [this.hintBg, this.hintLabel?.node ?? null]) {
+        Tween.stopAllByTarget(this.panelBg);
+        this.panelBg.setScale(1, 0.3, 1);
+        Tween.stopAllByTarget(this.titleImage);
+        this.titleImage.active = false;
+        this.titleImage.setScale(1, 0.46, 1);
+        for (const node of [this.hintBg, this.hintLabel.node ?? null]) {
             if (!node) continue;
             Tween.stopAllByTarget(node);
             node.active = false;
@@ -251,25 +248,21 @@ export class ShowRewardPage extends PopupBase {
     private playEnterAnimation(): void {
         this.prepareEnterAnimation();
 
-        if (this.panelBg) {
-            tween(this.panelBg)
-                .to(framesToSeconds(5), { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
-                .start();
-        }
+        tween(this.panelBg)
+            .to(framesToSeconds(5), { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+            .start();
 
         // 隐藏 + 延迟不能写成同一 tween 的 delay+call（见上方引擎坑）；scheduleOnce 到点先激活再起 tween。
-        if (this.titleImage) {
-            this.scheduleOnce(() => {
-                if (!this.alive || !this.titleImage) return;
-                this.titleImage.active = true;
-                tween(this.titleImage)
-                    .to(framesToSeconds(5), { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
-                    .start();
-            }, framesToSeconds(3));
-        }
+        this.scheduleOnce(() => {
+            if (!this.alive || !this.titleImage) return;
+            this.titleImage.active = true;
+            tween(this.titleImage)
+                .to(framesToSeconds(5), { scale: new Vec3(1, 1, 1) }, { easing: 'quadOut' })
+                .start();
+        }, framesToSeconds(3));
 
         // n10 / n11 在 time=4 仅显示（无缩放），同样用 scheduleOnce。
-        const late = [this.hintBg, this.hintLabel?.node ?? null];
+        const late = [this.hintBg, this.hintLabel.node ?? null];
         for (const node of late) {
             if (!node) continue;
             node.active = false;

@@ -136,7 +136,12 @@ function walkStroke(from, to, emit) {
     for (const c of cells) emit(c);
   }
 }
-function showValidation(kind, text) { const box = $('validation'); box.hidden = !text; box.className = `validation ${kind || ''}`; box.textContent = text || ''; }
+function showValidation(kind, text) {
+  const box = $('validation');
+  box.hidden = !text;
+  box.className = `validation ${kind || ''}`;
+  box.textContent = text || '';
+}
 
 /**
  * flat-top 六边形（**压扁**：横向半宽 `R`、纵向半高 `Y/2`）。
@@ -602,6 +607,31 @@ function applyPatrolBattleIdsFromForm() {
   return true;
 }
 
+function readPatrolId() {
+  const text = $('patrolId').value.trim();
+  if (!text) return undefined;
+  const id = Number(text);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    message('野怪巡逻 ID 必须是正整数');
+    $('patrolId').focus();
+    return null;
+  }
+  return id;
+}
+
+function applyPatrolIdFromForm() {
+  const site = siteAtCell(selectedCell);
+  if (!site || site.type !== 'patrolChest') return true;
+  const id = readPatrolId();
+  if (id === null) return false;
+  if (site.patrolId === id) return true;
+  commit();
+  if (id === undefined) delete site.patrolId;
+  else site.patrolId = id;
+  markErrorsStale();
+  return true;
+}
+
 function applyRewardIdFromForm() {
   const site = siteAtCell(selectedCell);
   if (!site || site.type !== 'fixedResource') return true;
@@ -736,6 +766,7 @@ function syncForm() {
   setField('siteId', site.id); setField('siteType', site.type); setField('configId', site.configId || ''); setField('buildingId', site.buildingId || '');
   setField('rewardId', site.rewardId ?? '');
   setField('battleIds', (site.battleIds || []).join(','));
+  setField('patrolId', site.patrolId ?? '');
   syncRewardField(site.type);
   setField('requiredCells', site.unlock.requiredCells.join(',')); setField('unlockType', site.unlock.unlockType || 'combatPower'); setField('unlockValue', site.unlock.unlockValue ?? site.unlock.combatPower ?? 0); setField('silverCost', site.unlock.silverCost); setField('exploreSeconds', site.unlock.exploreSeconds); setField('staminaCost', site.unlock.staminaCost);
 }
@@ -848,6 +879,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
   if (!applyRewardIdFromForm()) return;
   applyRandomBuildingIdFromForm();
   if (!applyPatrolBattleIdsFromForm()) return;
+  if (!applyPatrolIdFromForm()) return;
   const cells = brushRadius > 0 ? neighborCells(Math.floor(cell / map.columns), cell % map.columns, brushRadius) : [cell];
   if (mode === 'select') { selectedCell = cell; if (!skipRender) render(); return; }
   if (!skipCommit) commit();
@@ -879,6 +911,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
 function buildJSON() {
   applyRandomBuildingIdFromForm();
   if (!applyPatrolBattleIdsFromForm()) throw new Error('巡逻宝箱战斗 ID 无效');
+  if (!applyPatrolIdFromForm()) throw new Error('野怪巡逻 ID 无效');
   const value = snapshot();
   value.id = $('mapId').value.trim(); value.chapterId = Number($('chapterId').value); value.name = $('mapName').value.trim() || value.id; value.rows = Number($('rows').value); value.columns = Number($('columns').value); value.background = $('background').value.trim();
   value.randomSites = { ...value.randomSites, triggerSilver: Number($('triggerSilver').value), rewardPoolId: $('rewardPoolId').value.trim(), maxActive: Number($('maxActive').value) };
@@ -933,8 +966,34 @@ function validateCurrent() {
     throw error;
   }
 }
-async function save() { let result; try { result = validateCurrent(); } catch { return false; } const value = result.map; const response = await fetch(`/api/territory-presets/${encodeURIComponent(value.id)}`, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(value) }); const body = await response.json(); if (!response.ok) throw new Error(body.error); map = result.map; setDirty(false); render(); message(`已保存 ${value.id}`); return true; }
-async function publish() { if (!await save()) return; const response = await fetch(`/api/territory-publish/${encodeURIComponent(map.id)}`, { method: 'POST' }); const body = await response.json(); if (!response.ok) throw new Error(body.error); message(`已发布到 ${body.target}`); }
+async function save() {
+  let result;
+  try {
+    result = validateCurrent();
+  } catch {
+    return false;
+  }
+  const value = result.map;
+  const response = await fetch(`/api/territory-presets/${encodeURIComponent(value.id)}`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(value)
+  });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error);
+  map = result.map;
+  setDirty(false);
+  render();
+  message(`已保存 ${value.id}`);
+  return true;
+}
+async function publish() {
+  if (!await save()) return;
+  const response = await fetch(`/api/territory-publish/${encodeURIComponent(map.id)}`, { method: 'POST' });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error);
+  message(`已发布到 ${body.target}`);
+}
 function message(text) { $('message').textContent = text; }
 
 function beginDrag(event) {
@@ -1029,11 +1088,24 @@ $('map').addEventListener('wheel', (event) => { event.preventDefault(); zoomAt(e
 $('fit').addEventListener('click', resetView);
 bindZoomSlider($('zoomSlider'), (percent) => zoomTo(percent / 100));
 document.querySelectorAll('input[name="brushRadius"]').forEach((radio) => radio.addEventListener('change', () => { brushRadius = Number(radio.value); }));
-    $('tools').addEventListener('click', (event) => { const button = event.target.closest('button'); if (!button) return; mode = button.dataset.mode; if (mode !== 'format') formatSource = null; document.querySelectorAll('#tools button').forEach((item) => item.classList.toggle('active', item === button)); $('toolStatus').textContent = `当前工具：${button.textContent}`; });
+$('tools').addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button) return;
+  mode = button.dataset.mode;
+  if (mode !== 'format') formatSource = null;
+  document.querySelectorAll('#tools button').forEach((item) => item.classList.toggle('active', item === button));
+  $('toolStatus').textContent = `当前工具：${button.textContent}`;
+});
 $('siteType').addEventListener('change', () => syncRewardField($('siteType').value));
 $('rewardId').addEventListener('change', applyRewardIdFromForm);
 $('battleIds').addEventListener('change', applyPatrolBattleIdsFromForm);
-$('randomBuildingId').addEventListener('change', () => { if (applyRandomBuildingIdFromForm()) { render(); message(selectedCell == null ? '' : `已设置格子 ${selectedCell} 的建筑 ID，按 Ctrl+S 保存`); } });
+$('patrolId').addEventListener('change', applyPatrolIdFromForm);
+$('randomBuildingId').addEventListener('change', () => {
+  if (applyRandomBuildingIdFromForm()) {
+    render();
+    message(selectedCell == null ? '' : `已设置格子 ${selectedCell} 的建筑 ID，按 Ctrl+S 保存`);
+  }
+});
 $('applyBatchRewardId').addEventListener('click', applyBatchRewardId);
 $('applySite').addEventListener('click', () => {
   const site = siteAtCell(selectedCell);
@@ -1041,6 +1113,8 @@ $('applySite').addEventListener('click', () => {
   const type = $('siteType').value;
   const battleIds = type === 'patrolChest' ? readPatrolBattleIds() : null;
   if (type === 'patrolChest' && !battleIds) return;
+  const patrolId = type === 'patrolChest' ? readPatrolId() : undefined;
+  if (patrolId === null) return;
   const rewardText = $('rewardId').value.trim();
   const rewardId = rewardText === '' ? null : Number(rewardText);
   if (type === 'fixedResource' && rewardId !== null && (!Number.isInteger(rewardId) || rewardId <= 0)) {
@@ -1053,6 +1127,8 @@ $('applySite').addEventListener('click', () => {
   site.type = type;
   if (type === 'patrolChest') { site.battleIds = battleIds; delete site.configId; }
   else { site.configId = $('configId').value.trim(); delete site.battleIds; }
+  if (patrolId === undefined) delete site.patrolId;
+  else site.patrolId = patrolId;
   site.buildingId = $('buildingId').value.trim();
   if (type === 'fixedResource' && rewardId !== null) site.rewardId = rewardId;
   else delete site.rewardId;
@@ -1089,9 +1165,29 @@ $('presetSelect').addEventListener('change', () => loadSelectedPreset().catch((e
 $('save').addEventListener('click', () => save().catch((error) => message(error.message)));
 $('validate').addEventListener('click', () => { try { validateCurrent(); } catch { /* details are shown in the validation panel */ } });
 $('publish').addEventListener('click', () => publish().catch((error) => message(error.message)));
-$('export').addEventListener('click', () => { if (!applyRewardIdFromForm()) return; const blob = new Blob([JSON.stringify(buildJSON(), null, 2)], { type: 'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${map.id}.json`; link.click(); URL.revokeObjectURL(link.href); });
+$('export').addEventListener('click', () => {
+  if (!applyRewardIdFromForm()) return;
+  const blob = new Blob([JSON.stringify(buildJSON(), null, 2)], { type: 'application/json' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `${map.id}.json`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
 $('import').addEventListener('click', () => $('file').click());
-$('file').addEventListener('change', async () => { const file = $('file').files[0]; if (!file) return; try { map = normalizeTerritoryMap(JSON.parse(await file.text())).map; setDirty(true); clearErrorMarkers(); render(); message(`已导入 ${map.id}`); } catch (error) { message(error.message); } });
+$('file').addEventListener('change', async () => {
+  const file = $('file').files[0];
+  if (!file) return;
+  try {
+    map = normalizeTerritoryMap(JSON.parse(await file.text())).map;
+    setDirty(true);
+    clearErrorMarkers();
+    render();
+    message(`已导入 ${map.id}`);
+  } catch (error) {
+    message(error.message);
+  }
+});
 $('map').addEventListener('contextmenu', (e) => e.preventDefault());
 $('showLinks').addEventListener('change', applyLinkVisibility);
 window.addEventListener('pointerup', endDrag);
@@ -1122,5 +1218,23 @@ window.addEventListener('keydown', (event) => {
   else if (key === 'y' || (key === 'z' && event.shiftKey)) { event.preventDefault(); if (!future.length) return; history.push(snapshot()); restore(future.pop()); setDirty(true); }
 });
 window.addEventListener('beforeunload', (event) => { if (!dirty) return; event.preventDefault(); event.returnValue = ''; });
-window.__territoryEditor = { state: () => snapshot(), viewport: () => ({ zoom, viewX, viewY }), buildJSON, validate: () => validateTerritoryMap(buildJSON()), paint: (row, column, nextMode) => { mode = nextMode || mode; paint(row * map.columns + column); }, load: (value) => { map = normalizeTerritoryMap(value).map; setDirty(false); render(); }, zoomAt: (factor) => { const rect = $('map').getBoundingClientRect(); zoomAt({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }, factor); }, resetView, hitAt: (clientX, clientY) => { const local = clientToLocal(clientX, clientY); const hit = cellAtLocal(local.x, local.y); return { local, hit, cellId: hit ? hit.row * map.columns + hit.col : -1 }; }, debug: () => ({ mode, selectedCell, errorMarkers: errorMarkers.map((marker) => marker.cellId) }) };
+window.__territoryEditor = {
+  state: () => snapshot(),
+  viewport: () => ({ zoom, viewX, viewY }),
+  buildJSON,
+  validate: () => validateTerritoryMap(buildJSON()),
+  paint: (row, column, nextMode) => { mode = nextMode || mode; paint(row * map.columns + column); },
+  load: (value) => { map = normalizeTerritoryMap(value).map; setDirty(false); render(); },
+  zoomAt: (factor) => {
+    const rect = $('map').getBoundingClientRect();
+    zoomAt({ clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2 }, factor);
+  },
+  resetView,
+  hitAt: (clientX, clientY) => {
+    const local = clientToLocal(clientX, clientY);
+    const hit = cellAtLocal(local.x, local.y);
+    return { local, hit, cellId: hit ? hit.row * map.columns + hit.col : -1 };
+  },
+  debug: () => ({ mode, selectedCell, errorMarkers: errorMarkers.map((marker) => marker.cellId) })
+};
 render();

@@ -57,7 +57,7 @@ export class MatchPlayerItem extends Component {
         type: VirtualScrollView,
         tooltip: 'Content/StatRow/StatList：小图标+数值的虚拟列表（容器、条目预制体等配置绑在它自己身上）',
     })
-    statList: VirtualScrollView = null;
+    statList: VirtualScrollView = null!;
 
     @property({
         type: Node,
@@ -232,14 +232,9 @@ export class MatchPlayerItem extends Component {
         this.statRow.active = slots.length > 0;
 
         const list = this.statList;
-        if (!list) {
-            console.warn('[MatchPlayerItem] 未绑定 StatList，小图标不会渲染');
-            return;
-        }
 
         list.renderItemFn = (itemNode: Node, index: number): void => {
             const item = itemNode.getComponent(MatchStatItem);
-            if (!item) return;
             item.render(this.stats[index] ?? null, this.statFrames[index] ?? null);
         };
         list.refreshList(slots);

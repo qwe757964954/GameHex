@@ -170,15 +170,14 @@ export {
 } from '../common/QualityFrameArt';
 
 /**
- * 奖励图标的两支分流 —— **转发 `common/RewardIcon.resolveRewardIconRef`**。
+ * 奖励图标的两支分流真源在 `common/RewardIcon`：
  *
- * 为什么必须转发而不是自己判：奖励里混着两类东西。
+ * 奖励里混着两类东西：
  *
  * | 来源 | `icon` 存的是 | 怎么解析 |
  * |---|---|---|
  * | `item` 表（`iconIsPath = true`） | 相对 `resources` 的路径 `icons/item/xxx` | 直通，只认 `icons/` 前缀 |
  * | `roleProperty` 表（`iconIsPath = false`） | FGUI 裸组件名 `图标_体力` | 落 `icons/resource/<name>` |
  *
- * 只处理 `item` 那一支的症状：奖励格**只剩品质框、没有图标**（静默降级、不报错）。
+ * 调用方直接 import `common/RewardIcon`；本文件不再保留图标转发。
  */
-export { resolveRewardIconRef as hjResolveRewardIconRef } from '../common/RewardIcon';

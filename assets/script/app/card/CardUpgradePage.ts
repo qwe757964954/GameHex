@@ -500,10 +500,10 @@ export class CardUpgradePage extends PopupBase {
         //  经验图标的「点开道具信息」身份每一趟都重算：图标换了、道具就不能还停在上一次那件。
         this.expItemId = 0;
         this.expItemOwned = 0;
-        const cardRequirement = status.requirements.find(row => row.key === 'card');
+        const cardRow = status.requirements.find(row => row.key === 'card');
         this.renderMaterialIcon(
             this.matCardIcon,
-            cardRequirement ? [{ id: cardRequirement.itemId, owned: cardRequirement.owned }] : [],
+            cardRow ? [{ id: cardRow.itemId, owned: cardRow.owned }] : [],
         );
         this.renderMaterialIcon(
             this.matExpIcon,
@@ -521,7 +521,8 @@ export class CardUpgradePage extends PopupBase {
             : `${texts.detailTabLevel} ${status.level}${texts.upgradeLevelArrow}${status.targetLevel}`;
 
         // ---- 两行材料 ----
-        const [cardRow, expRow] = status.requirements;
+        //  角色按 `key` 取，不靠 `requirements` 的数组顺序：少一行或将来加行都不会把卡牌 / 经验串位。
+        const expRow = status.requirements.find(row => row.key === 'exp');
         if (cardRow) {
             this.matCardCountLabel.string = `${cardRow.owned}${texts.progressSeparator}${cardRow.need}`;
             this.matCardCountLabel.color = cardRow.enough ? this.enoughColor : this.lackColor;

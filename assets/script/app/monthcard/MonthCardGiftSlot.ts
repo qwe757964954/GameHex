@@ -9,20 +9,13 @@ const { ccclass, property } = _decorator;
 @ccclass('MonthCardGiftSlot')
 export class MonthCardGiftSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框（本节点上的 cc.Sprite）' })
-    frame: Sprite = null;
+    frame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Icon：奖励图标' })
     icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Count：数量文案' })
     count: Label = null;
-
-    protected onLoad(): void {
-        if (!this.frame) {
-            const own = this.getComponent(Sprite);
-            if (own) this.frame = own;
-        }
-    }
 
     /**
      * 铺一个奖励。图标和框需由宿主预加载好再传入。

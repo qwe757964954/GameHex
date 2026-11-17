@@ -94,10 +94,7 @@ export class SevenDayPointBox extends Component {
         if (this.redDot) this.redDot.active = state === 'claimable';
         this.boxButton.getComponent(Button).interactable = true;
         // 未开启时压暗宝箱本体（老端靠换「开启/未开启」两张图；这里压暗省一张美术）
-        // `addComponent` 的返回类型带 `null` ⇒ 必须判一次，别直接 `!`（prefab 配错时宁可不变暗，也别在
-        // 渲染路径上抛异常把整页带崩）。
-        const opacity = this.boxIcon.getComponent(UIOpacity) ?? this.boxIcon.addComponent(UIOpacity);
-        if (opacity) opacity.opacity = state === 'locked' ? 160 : 255;
+        this.boxIcon.getComponent(UIOpacity).opacity = state === 'locked' ? 160 : 255;
     }
 
     hide(): void {

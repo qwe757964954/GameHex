@@ -59,8 +59,8 @@ function assertUsesArtPaths(source: string, hint: string): void {
  *   - `icons/cardHead`：角色立绘与兵种头像；
  *   - `image/frame`：布阵卡池卡框（`common_img_pzk_*`）。
  *
- *  2026-09-15 美术收编时 `class_*` 从 `card` 挪到了 `icon`，但代码里
- * 仍旧统一走 `loadLineupArt`（只认 `CARD_ART_ROOT`）→ 角标**一直静默留白**
+ *  2026-09-15 美术收编时 `class_*` 从 `card` 挪到了 `icon`，但旧代码仍
+ * 只按 `image/card` 根目录加载 → 角标**一直静默留白**
  * （`resources.load` 只打一条 warn），这条用例是当时唯一的报警点。
  */
 test('卡牌阵容 / 布阵的每张图都在它自己的根目录下', () => {

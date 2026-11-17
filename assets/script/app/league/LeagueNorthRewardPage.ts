@@ -38,11 +38,11 @@ import { LeagueRewardEvent, type ILeagueRewardIntent, type ILeagueRewardCompleti
  */
 
 import { _decorator, Button, Node } from 'cc';
-import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
 import { LEAGUE_ART_ROOT } from './LeagueArt';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import { LeagueNorthRewardRow } from './LeagueNorthRewardRow';
 import { LeagueNorthTab, LEAGUE_NORTH_TAB_ART_NAMES } from './LeagueNorthTab';
 import {
@@ -57,8 +57,6 @@ import {
     LEAGUE_NORTH_REWARD_TITLE,
     LEAGUE_NORTH_TAB_REWARD_LEAGUE,
     LEAGUE_NORTH_TAB_REWARD_ROLE,
-    LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_OFFLINE,
 } from './LeagueTexts';
 
 const { ccclass, property } = _decorator;
@@ -69,7 +67,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueNorthReward';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     /**
      * `TabLeague` / `TabRole`：两个页签（`LeagueNorthTab.prefab` 的**嵌套实例**）。
@@ -83,14 +81,14 @@ export class LeagueNorthRewardPage extends PopupBase {
     tabRole: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RewardList：奖励列表（虚拟列表）' })
-    rewardList: VirtualScrollView = null;
+    rewardList: VirtualScrollView = null!;
 
     /** 当前页签。 */
     private tab: LeagueNorthRewardTab = 'league';
 
     /** 两个页签的脚本实例（`onInit` 里从嵌套实例壳上取一次）。 */
-    private tabLeagueRef: LeagueNorthTab | null = null;
-    private tabRoleRef: LeagueNorthTab | null = null;
+    private tabLeagueRef: LeagueNorthTab = null!;
+    private tabRoleRef: LeagueNorthTab = null!;
 
     /** 本趟快照（切页签复用，不重发）。 */
     private snapshot: ILeagueNorthRewardSnapshot | null = null;
@@ -114,19 +112,18 @@ export class LeagueNorthRewardPage extends PopupBase {
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
-        const closeBtn = this.closeButton?.getComponent(Button);
-        if (closeBtn) closeBtn.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueNorthReward] CloseBtn 上没有 cc.Button，点击不会生效');
+        const closeBtn = this.closeButton.getComponent(Button);
+        closeBtn.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         // 页签是嵌套实例 ⇒ 运行时从壳上取脚本（见 `tabLeague` 的 @property 注释）
-        this.tabLeagueRef = this.tabLeague ? this.tabLeague.getComponent(LeagueNorthTab) : null;
-        this.tabRoleRef = this.tabRole ? this.tabRole.getComponent(LeagueNorthTab) : null;
+        this.tabLeagueRef = this.tabLeague.getComponent(LeagueNorthTab);
+        this.tabRoleRef = this.tabRole.getComponent(LeagueNorthTab);
 
-        if (this.rewardList) this.rewardList.renderItemFn = (node, index) => this.renderRow(node, index);
-        if (this.tabLeagueRef) this.tabLeagueRef.onTabClick = () => this.onTabClick('league');
-        if (this.tabRoleRef) this.tabRoleRef.onTabClick = () => this.onTabClick('role');
-        if (this.tabLeagueRef) this.tabLeagueRef.setTitle(LEAGUE_NORTH_TAB_REWARD_LEAGUE);
-        if (this.tabRoleRef) this.tabRoleRef.setTitle(LEAGUE_NORTH_TAB_REWARD_ROLE);
+        this.rewardList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.tabLeagueRef.onTabClick = () => this.onTabClick('league');
+        this.tabRoleRef.onTabClick = () => this.onTabClick('role');
+        this.tabLeagueRef.setTitle(LEAGUE_NORTH_TAB_REWARD_LEAGUE);
+        this.tabRoleRef.setTitle(LEAGUE_NORTH_TAB_REWARD_ROLE);
         this.applyTabPage();
     }
 
@@ -175,14 +172,10 @@ export class LeagueNorthRewardPage extends PopupBase {
 
     /** 把当前页签落到两颗按钮 + 页签红点。 */
     private applyTabPage(): void {
-        if (this.tabLeagueRef) {
-            this.tabLeagueRef.setSelected(this.tab === 'league');
-            this.tabLeagueRef.setRedDot(!!this.snapshot?.leagueRedDot);
-        }
-        if (this.tabRoleRef) {
-            this.tabRoleRef.setSelected(this.tab === 'role');
-            this.tabRoleRef.setRedDot(!!this.snapshot?.roleRedDot);
-        }
+        this.tabLeagueRef.setSelected(this.tab === 'league');
+        this.tabLeagueRef.setRedDot(!!this.snapshot?.leagueRedDot);
+        this.tabRoleRef.setSelected(this.tab === 'role');
+        this.tabRoleRef.setRedDot(!!this.snapshot?.roleRedDot);
     }
 
     /** 预取页签的两张底图（选中 / 未选中）。 */
@@ -193,8 +186,8 @@ export class LeagueNorthRewardPage extends PopupBase {
         const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
         if (!this.alive) return;
         const payload = { normal: frames[0] ?? null, selected: frames[1] ?? null };
-        if (this.tabLeagueRef) this.tabLeagueRef.setFrames(payload);
-        if (this.tabRoleRef) this.tabRoleRef.setFrames(payload);
+        this.tabLeagueRef.setFrames(payload);
+        this.tabRoleRef.setFrames(payload);
     }
 
     // 取数 / 铺数据
@@ -230,7 +223,6 @@ export class LeagueNorthRewardPage extends PopupBase {
         this.rows = snapshot
             ? (this.tab === 'league' ? snapshot.leagueRows.slice() : snapshot.roleRows.slice())
             : [];
-        if (!this.rewardList) return;
         this.rewardList.refreshList(this.rows);
         this.rewardList.scrollToTop(false);
     }
@@ -238,7 +230,6 @@ export class LeagueNorthRewardPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueNorthRewardRow);
-        if (!row) return;
         const view = this.rows[index];
         row.onClaim = (target) => void this.onClaim(target);
         row.render(view ?? null, this.art);
@@ -269,12 +260,7 @@ export class LeagueNorthRewardPage extends PopupBase {
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新，本端自己拉）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     private get alive(): boolean {

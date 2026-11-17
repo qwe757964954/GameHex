@@ -24,6 +24,18 @@ function requireString(value: unknown, name: string): string {
 }
 
 /**
+ * 展开 `latestUrlTemplate` 的 `{platform}` / `{channel}` 占位，并拒绝非 HTTP(S) 地址。
+ * 编排器与原生运行时共用，避免两份模板替换规则漂移。
+ */
+export function expandLatestUrl(template: string, platform: HotUpdatePlatform, channel: string): string {
+    const value = template
+        .replace(/\{platform\}/g, encodeURIComponent(platform))
+        .replace(/\{channel\}/g, encodeURIComponent(channel));
+    if (!/^https?:\/\//i.test(value)) throw new Error('热更新 latestUrlTemplate 配置无效');
+    return value;
+}
+
+/**
  * 校验远端地址：强制 HTTPS（本地联调可放行 loopback / RFC1918），并拒绝空白与 `..` 穿越。
  * v1（Bundle 清单）与 v2（原生全目录清单）共用，避免两套口径。
  */

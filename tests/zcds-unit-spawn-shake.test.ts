@@ -33,13 +33,27 @@ test('单位出生抖动：先 Y 拉 110% 回落、再 X 拉 110% 回落，结�
     view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
-    // 序列帧形态：Sprite + Animation（canvas 归一系数为 1 ⇒ 基准缩放 = 1）。
+    // Spine 形态：根节点 + 固定子节点 `spine`，canvas 高取 69.4（目标高）⇒ 基准缩放 1。
     const prefab = {
+        name: 'test-unit',
         make: () => {
             const node = new FakeNode();
-            const animation = { clips: [{ name: 'unit-idle' }], defaultClip: null, play() {}, stop() {} };
-            node.getComponent = ((type: unknown) => type === cc.Sprite ? { node, color: null }
-                : type === cc.Animation ? animation : null) as typeof node.getComponent;
+            const spine = new FakeNode('spine');
+            spine.setParent(node);
+            const skeleton = {
+                node: spine,
+                skeletonData: {
+                    getRuntimeData: () => ({
+                        height: 69.4,
+                        animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }],
+                    }),
+                },
+                customMaterial: null,
+                premultipliedAlpha: false,
+                setAnimation() { return true; },
+            };
+            spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton
+                : null) as typeof spine.getComponent;
             return node;
         },
     };

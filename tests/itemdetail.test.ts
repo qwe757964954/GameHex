@@ -660,9 +660,10 @@ test('物品 D1｜ItemDetail 根是 720×1280，挂了页面脚本，且没有 `
         !rects.has('CloseBtn'),
         'FGUI 原稿没有关闭按钮 —— 加了就与设计稿分叉（关闭靠点空白，见 PopupBase.closeOnBlank）',
     );
-    // 同理：`ItemDetailPage.closeButton` 允许未绑（`bindButton` 兼容壳首行 `if (!node) return;`）
-    const CLICK_HELPER_SRC = readFileSync('assets/script/app/common/ClickBinding.ts', 'utf8');
-    assert.ok(/if \(!node\) return;/.test(stripComments(CLICK_HELPER_SRC)), 'bindButton 必须能接住未绑定的节点');
+    // 同理：`ItemDetailPage.closeButton` 允许未绑（本页没有 CloseBtn），未绑时直接跳过。
+    assert.match(stripComments(PAGE_SRC), /node\?\.on\(Button\.EventType\.CLICK, handler, this\);/,
+        '未绑节点必须安全跳过，且只绑 CLICK');
+    assert.doesNotMatch(stripComments(PAGE_SRC), /ClickBinding|bindButtonCompat|TOUCH_END/);
 });
 
 test('物品 D2｜ItemDetail 每个节点的矩形 == FGUI 原稿逐像素换算', () => {
@@ -768,7 +769,7 @@ test('物品 D5｜三个按钮的底图统一换成 `cu_ty_btn21`（FGUI 控制�
     for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.equal(plateOf(name), green, `${name} 的底板不是 btn2Green（FGUI 三个按钮都用「颜色=1」绿档）`);
     }
-    // 按钮上必须有 cc.Button（决定 `bindButton` 走 CLICK 还是 TOUCH_END）
+    // 按钮上必须有 cc.Button（只绑 CLICK 的前提）
     for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.ok(compOf(prefab, rects.get(name)!.id, 'cc.Button'), `${name} 上没有 cc.Button`);
     }
@@ -870,12 +871,12 @@ test("物品 D10｜领取入口的有效根位置位于画布内，子节点覆�
 const HUD_PREFAB = loadPrefab(MT_PREFAB);
 const ID_PREFAB_OBJ = loadPrefab(ID_PREFAB);
 
-test('物品 E1｜三个按钮走「有 `cc.Button` 用 CLICK，否则 TOUCH_END」分流（规则 81b）', () => {
-    const helper = stripComments(readFileSync('assets/script/app/common/ClickBinding.ts', 'utf8'));
-    assert.ok(/getComponent\(Button\)/.test(helper), 'bindButton 没有做 Button 存在性判定');
-    assert.ok(/Button\.EventType\.CLICK/.test(helper));
-    assert.ok(/Node\.EventType\.TOUCH_END/.test(helper));
-    assert.ok(/bindButtonCompat/.test(stripComments(PAGE_SRC)), '页面应委托 common/ClickBinding');
+test('物品 E1｜三个按钮只绑 CLICK，prefab 必须挂 `cc.Button`（规则 81b）', () => {
+    const page = stripComments(PAGE_SRC);
+    assert.match(page, /node\?\.on\(Button\.EventType\.CLICK, handler, this\);/,
+        '页面应只绑 CLICK，并允许未绑节点安全跳过');
+    assert.doesNotMatch(page, /ClickBinding|bindButtonCompat|TOUCH_END/,
+        '页面不许再走「有 Button 用 CLICK，否则 TOUCH_END」的兼容分流');
 
     // 反向守卫：prefab 里凡是被 `Button.EventType.CLICK` 绑的节点，必须真有 cc.Button。
     // 三个按钮在 prefab 上都挂了 cc.Button ⇒ 走 CLICK 是对的。
@@ -883,7 +884,7 @@ test('物品 E1｜三个按钮走「有 `cc.Button` 用 CLICK，否则 TOUCH_END
     for (const name of ['PanelBg/BtnGo', 'PanelBg/BtnGo1', 'PanelBg/BtnCompos']) {
         assert.ok(
             compOf(ID_PREFAB_OBJ, rects.get(name)!.id, 'cc.Button'),
-            `${name} 没有 cc.Button —— bindButton 会退化成 TOUCH_END（灰态也能点）`,
+            `${name} 没有 cc.Button —— CLICK 收不到，且不会有 TOUCH_END 兜底`,
         );
     }
     // `GoodsBox` 自己监听 TOUCH_END：它上面**没有** cc.Button，写 CLICK 就是死按钮
@@ -912,7 +913,7 @@ test('物品 E3｜`GoodsBox.render` 的 `spriteFrame` 是**无条件写**（规�
     assert.ok(/this\.icon\.node\.active = iconFrame != null;/.test(body));
     assert.ok(/this\.num\.string = numberText;/.test(body));
     assert.ok(/this\.num\.node\.active = showNumber && numberText\.length > 0;/.test(body));
-    assert.ok(/this\.defaultFrame = this\.frame\?\.spriteFrame \?\? null;/.test(body),
+    assert.ok(/this\.defaultFrame = this\.frame\.spriteFrame \?\? null;/.test(body),
         'onLoad 里要先把 prefab 的静态帧记下来');
 });
 
@@ -920,7 +921,7 @@ test('物品 E4｜`ItemDetailPage` 缎带与四个按钮也是无条件写', () 
     const body = stripComments(PAGE_SRC);
     assert.ok(/this\.titleBg\.spriteFrame = this\.frames\.title \?\? this\.defaultTitleFrame;/.test(body),
         '缎带必须有回退值 —— 它是品质的**颜色**语义');
-    assert.ok(/this\.defaultTitleFrame = this\.titleBg\?\.spriteFrame \?\? null;/.test(body));
+    assert.ok(/this\.defaultTitleFrame = this\.titleBg\.spriteFrame \?\? null;/.test(body));
     assert.ok(/this\.nameText\.string = row && row\.name \? row\.name : texts\.unknownName;/.test(body));
     assert.ok(/this\.setActive\(this\.btnGo1, buttons\.showGo1\);/.test(body));
     assert.ok(/this\.setActive\(this\.btnCompos, buttons\.showCompos\);/.test(body));

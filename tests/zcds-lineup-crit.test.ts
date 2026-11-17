@@ -175,16 +175,17 @@ test('全队暴击伤害是 owner 级唯一值：汇总后写回全队，暴击�
     assert.equal(patches.get('68007')?.critRatePct ?? 0, 0, '暴击率必须逐单位各算，不能被汇总');
 });
 
-test('裂变暴击不再给暴击伤害：68025 的 critDamage 只剩 109001，暴击率仍是 38%', () => {
+test('裂变暴击不再给暴击伤害：68025 的 critDamage 只剩 109001，暴击率 15%（卡牌上限）', () => {
     prepare();
     const catalogs = getZCModifierCatalogs();
     const at25 = selectZCSkillPlans('68025', 25, catalogs);
     const loadout = compileZCCombatBuild({ unitId: '68025', heroLevel: 25 }, captureZCMatchConfig().units, catalogs)
         .find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
-    //  单卡技能只提暴击率（裂变暴击 III = +38%，原设计值保留），暴击伤害一个点都不给。
+    //  单卡技能只提暴击率，暴击伤害一个点都不给。
     //  2026-11-10 之前是 90/120/150 的暴伤，用户口径：卡牌自身技能不许带暴击伤害加成。
-    assert.equal(loadout!.statPatch.critRatePct, 38, '裂变暴击 III = +38% 暴击率（原设计值）');
+    //  🔴 V5（2026-11-16）：暴击率收进「克制 / 暴击条」，档位 11/13/15%，III 级正好顶到 15% 卡牌上限。
+    assert.equal(loadout!.statPatch.critRatePct, 15, '裂变暴击 III = +15% 暴击率（卡牌上限）');
     assert.equal(loadout!.statPatch.critDamagePct, 75, '只剩 25×3（109001 本链），裂变暴击的 150 已删除');
     assert.equal(at25.filter((row) => row.skillChainId === LINEUP_CRIT_CHAIN_ID).length, 25);
 });
@@ -195,17 +196,23 @@ test('全表守卫：`critDamage` 只允许来自 109001，单卡技能不得再
         && Number(row.skillChainId) !== LINEUP_CRIT_CHAIN_ID);
     assert.deepEqual(stray.map((row) => `${row.unitId}:${row.skillChainId}:${row.value}`), [],
         '除 109001 外不应再有 critDamage 行 —— 暴击伤害是全队属性，单卡技能只许提暴击率');
-    //  反方向：`critRate` 仍在，且是原设计值 22/30/38（不是上一轮压过的 3/4/5）。
-    //  只钉这 4 张暴击卡 —— 别的卡本来就有自己的暴击率技能（如 68035 的 20%），不归本条管。
-    const RATE_CARDS = ['68016', '68025', '68033', '68034'];
-    const rates = readRows('pvpSkillPlan')
-        .filter((row) => row.statId === 'critRate' && RATE_CARDS.includes(String(row.unitId)))
-        .map((row) => Number(row.value))
-        .sort((a, b) => a - b);
-    assert.deepEqual(rates, [22, 22, 22, 22, 30, 30, 30, 30, 38, 38, 38, 38],
-        '裂变暴击 4 卡 × 3 档 = 22 / 30 / 38%（原设计值）');
+    //  反方向：`critRate` 仍在，且各卡自己那一档。
+    //  只钉这 2 张暴击卡 —— 别的卡本来就有自己的暴击率技能（如 68035 的 20%），不归本条管。
+    //  🔴 V5 设计案（2026-11-16）把暴击率收进「暴击条」，档位 11/13/15%（卡牌上限 15%）；
+    //  68016（磁电菇）与 68034（魔术师）那两条技能已改成「裂变爆炸」，不再产暴击率，从表里撤掉。
+    const RATE_BANDS: Record<string, readonly [number, number, number]> = {
+        68025: [11, 13, 15],
+        68033: [11, 13, 15],
+    };
+    for (const [card, band] of Object.entries(RATE_BANDS)) {
+        const rates = readRows('pvpSkillPlan')
+            .filter((row) => row.statId === 'critRate' && String(row.unitId) === card)
+            .map((row) => Number(row.value))
+            .sort((a, b) => a - b);
+        assert.deepEqual(rates, [...band].sort((a, b) => a - b), `${card} 的裂变暴击三档`);
+    }
     //  desc 里不许再出现「暴击伤害」——删了数值还留着文案就是骗玩家。
-    for (const row of readRows('pvpSkillPlan').filter((item) => RATE_CARDS.includes(String(item.unitId))
+    for (const row of readRows('pvpSkillPlan').filter((item) => RATE_BANDS[String(item.unitId)]
         && item.statId === 'critRate')) {
         assert.ok(!String(row.desc).includes('暴击伤害'), `${row.unitId} 的 desc 还写着暴击伤害：${row.desc}`);
     }

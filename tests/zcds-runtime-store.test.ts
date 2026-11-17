@@ -4,11 +4,10 @@ import test from 'node:test';
 import { ZCRuntimeConfigStore } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import { compilePvpTables } from '../assets/script/app/zcds/model/ZCPvpConfigCompiler';
 import type { ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
+import { ZC_RUNTIME_TABLE_NAMES } from '../assets/script/app/zcds/application/ZCRuntimePrecompiler';
 
 function compiledConfig() {
-    const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-        'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams'];
-    return compilePvpTables(Object.fromEntries(names.map(name => {
+    return compilePvpTables(Object.fromEntries(ZC_RUNTIME_TABLE_NAMES.map(name => {
         const raw = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
         return [name, Array.isArray(raw) ? raw : raw.v.map((values: unknown[]) =>
             Object.fromEntries(raw.k.map((key: string, index: number) => [key, values[index]])))];

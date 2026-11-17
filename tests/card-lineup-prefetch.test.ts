@@ -24,11 +24,11 @@ function fixture(hasSnapshot = true, cachedHeroes: unknown = null, artConfig: Pr
         ControllerBase: { ControllerBase }, MainTabController: { MainTabController }, MainTabHost: { MainTab },
         MainTabEvents: { MainTabEvent }, ViewLifecycle: { VIEW_LIFECYCLE: 'test:prefetch-lifecycle' },
         FormationService: { fetchFormations: () => { requested.push('formations'); return Promise.resolve([]); } },
-        PvpHeroService: {
-            getCachedPvpHeroInfos: () => cachedHeroes,
-            fetchPvpHeroInfos: () => { requested.push('heroes'); return Promise.resolve([]); },
-        },
-        CardRepository: { cardRepository: { loadArtConfig: () => artConfig, loadLineupSnapshot: () => hasSnapshot ? { deck } : null } },
+        CardRepository: { cardRepository: {
+            prefetchHeroInfos: () => { if (cachedHeroes === null) requested.push('heroes'); },
+            loadArtConfig: () => artConfig,
+            loadLineupSnapshot: () => hasSnapshot ? { deck } : null,
+        } },
         CardLineupTypes: { visibleIconTallies, visibleLineupCards },
         CardArtProvider: { cardArtProvider: {
             loadLineupSlot: async (card: ZCDeckCard) => { requested.push(`slot:${card.id}`); },

@@ -98,13 +98,10 @@ import {
     findDayChallengeTab,
     lastBoxCost,
     normalizeActivityState,
-    parseItemRows,
     parseProgressRows,
     parseRewards,
-    parseRolePropertyRows,
     parseTabRows,
     parseTaskRows,
-    rewardGoodsOf,
     sortTasksForDisplay,
     stateSignatureOf,
     taskHasRedDot,
@@ -115,9 +112,12 @@ import {
     type IActivityTaskRow,
 } from '../assets/script/app/activity/LayerActivityTable';
 import {
-    RESOURCE_ICON_ART_ROOT,
-    resolveRewardIconRef,
-} from '../assets/script/app/activity/LayerActivityArt';
+    parseItemRows,
+    parseRolePropertyRows,
+    rewardGoodsOf,
+} from '../assets/script/app/common/ResTypes';
+import { resolveRewardIconRef } from '../assets/script/app/common/RewardIcon';
+import { RESOURCE_ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
     ACTIVITY_JUMP_ROUTES,
     JUMP_TYPE,

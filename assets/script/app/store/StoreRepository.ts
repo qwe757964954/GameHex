@@ -13,6 +13,7 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
+import { asRow } from '../../core/table/RowParse';
 import { RequestShopBuy } from '../net/RequestShopMsg';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
@@ -161,10 +162,6 @@ function toSeconds(value: unknown): number {
 
 /** 读一张分表（`remoteRef`）；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
-
-function asRow(raw: unknown): Record<string, unknown> | null {
-    return raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : null;
-}
 
 /** 按 `id` 扫一张表，返回第一行命中的原始行；无该 id 时返回 `null`。 */
 async function findRowById(table: string, id: number): Promise<Record<string, unknown> | null> {

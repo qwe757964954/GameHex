@@ -1,6 +1,6 @@
 import { RequestPvpInfo } from '../generated/requestMsg/RequestPvpMsg';
 import { GameNet } from '../net/GameNet';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, withTimeout } from '../net/RequestGuard';
 import { normalizePvpInfo } from './PvpInfoModel';
 import type { ZCPvpInfo } from './PvpInfoModel';
 
@@ -39,10 +39,6 @@ export function clearLastPvpInfo(): void {
 }
 
 async function requestPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
-    if (!GameNet.instance.isConnected) {
-        console.warn('[PvpInfoService] 游戏服未连接，跳过 PVP 信息请求（保留本地占位值）');
-        return lastResult;
-    }
 
     return withTimeout(sendPvpInfo(caller), PVP_INFO_TIMEOUT_MS, () => {
         console.warn(`[PvpInfoService] PVP 信息 ${PVP_INFO_TIMEOUT_MS}ms 无响应，段位信息暂空`);
@@ -53,12 +49,12 @@ async function requestPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
 async function sendPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
     let response: CmdPvpInfoRspMsg | null = null;
     try {
-        const ok = await GameNet.instance.send(new RequestPvpInfo(
+        const status = await sendGameRequest(GameNet.instance, () => new RequestPvpInfo(
             {},
             caller,
             (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return lastResult;
+        ), { timeoutMs: PVP_INFO_TIMEOUT_MS, tag: 'PvpInfoService' });
+        if (status !== 'ok' || !response) return lastResult;
     } catch (error) {
         console.warn('[PvpInfoService] PVP 信息请求失败', error);
         return lastResult;

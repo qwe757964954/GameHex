@@ -55,6 +55,9 @@ export interface ZCRuntimeRules {
     captureDefendMultiplier: number;
     captureRequireSupply: boolean;
     killUnitGoldReward: number;
+    neutralMonsterFocusSwitchCdSeconds: number;
+    neutralMonsterRegenDelaySeconds: number;
+    neutralMonsterRegenRate: number;
     destroyBuildingGoldReward: number;
     /** 每个席位在自己主城邻格里的金矿保底个数（`ZCPvpTileRules.createPvpTileTypes` 阶段 1a）。*/
     initialGuaranteedMine: number;
@@ -114,6 +117,7 @@ export function findUnplayableDeckCards(): ZCUnplayableDeckCard[] {
 
 /** 当前 remoteRef 中的 PVP 分表。*/
 export interface ZCPvpTables {
+    gameConfig?: Array<{ key: string; value: unknown }>;
     pvpGlobal?: Array<{ key: string; value: unknown }>;
     pvpArtifact?: Array<Record<string, unknown>>;
     pvpCard?: Array<Record<string, unknown>>;

@@ -10,7 +10,7 @@ import { parseRechargeItemMap } from './RechargeItemMap';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     buildRechargeTotalPageView,
     parseRechargeActPlanRows,
@@ -97,16 +97,7 @@ export class RuntimeRechargeActivityRepository implements IRechargeActivityRepos
             caller,
             (rsp) => FW.ShowReward(rsp?.tlReward ?? []),
         );
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(net.send(msg, false), WRITE_TIMEOUT_MS, () => false);
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[RechargeActivity] 领奖请求失败', error);
-            return 'failed';
-        }
-        return 'ok';
+        return sendGameRequest(GameNet.instance, () => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeActivity' });
     }
 }
 

@@ -15,16 +15,16 @@ const BREATH_SEGMENT_SECONDS = 0.5;
 @ccclass('LeagueTaskBox')
 export class LeagueTaskBox extends Component {
     @property({ type: Sprite, tooltip: '按钮_章节宝箱：宝箱图（zb0 不可领取 / zb1 可领取 / zb2 已领取）' })
-    chest: Sprite = null;
+    chest: Sprite = null!;
 
     @property({ type: Label, tooltip: 'lab_value：里程碑数字（3 / 5 / 8）' })
-    valueLabel: Label = null;
+    valueLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'n67：已领取对勾（仅「已领取」页）' })
-    checkMark: Node = null;
+    checkMark: Node = null!;
 
     @property({ type: Node, tooltip: 'com_rd：可领取红点（仅「可领取」页）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 点到这个宝箱（无论什么状态都会回调，由宿主按状态分三支）。 */
     onBoxClick: ((view: ILeagueTaskBoxView) => void) | null = null;
@@ -80,14 +80,14 @@ export class LeagueTaskBox extends Component {
         this.node.active = true;
 
         if (frame && this.chest) this.chest.spriteFrame = frame;
-        if (this.valueLabel) this.valueLabel.string = String(view.milestone);
-        if (this.checkMark) this.checkMark.active = view.state === 'rewarded';
+        this.valueLabel.string = String(view.milestone);
+        this.checkMark.active = view.state === 'rewarded';
 
         // 红点走共用组件（`ui/common/RedDot.prefab`）。绑的是实例根节点，
         // 组件运行时取（跨嵌套 prefab 边界取不到内部组件）。
         const dot = this.redDot ? this.redDot.getComponent(RedDot) : null;
         if (dot) dot.setRedDot(view.state === 'canReward' ? 1 : 0);
-        else if (this.redDot) this.redDot.active = view.state === 'canReward';
+        else this.redDot.active = view.state === 'canReward';
     }
 
     // 内部
@@ -99,7 +99,6 @@ export class LeagueTaskBox extends Component {
      * 就是那颗按钮。乱挪会连带 `Value` / `Check` / `RedDot` 一起脉动。
      */
     private startBreathing(): void {
-        if (!this.chest) return;
         const node = this.chest.node;
         const one = new Vec3(1, 1, 1);
         tween(node)

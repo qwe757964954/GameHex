@@ -47,7 +47,7 @@ export interface IActivityTaskRowView {
 @ccclass('ActivityTaskRow')
 export class ActivityTaskRow extends Component {
     @property({ type: Sprite, tooltip: 'Background：行底框（本节点上的 cc.Sprite，九宫 `act_row_bg`）' })
-    background: Sprite = null;
+    background: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Title：任务名 + 进度，如 `完成1次装备升级 (1/1)`' })
     titleLabel: Label = null;
@@ -100,19 +100,13 @@ export class ActivityTaskRow extends Component {
     }
 
     render(view: IActivityTaskRowView): void {
-        // prefab 上偶尔会漏绑 `background`（本节点自己就是那张底图）—— 兜一下而不是画不出来
-        if (!this.background) {
-            const own = this.getComponent(Sprite);
-            if (own) this.background = own;
-        }
-
         this.titleLabel.string = view.title;
 
         // 按钮：三态共用同一个节点，靠换图 + 文案 + interactable 区分
         this.actionLabel.string = view.actionText;
         if (view.actionFrame) this.actionBackground.spriteFrame = view.actionFrame;
         const button = this.actionButton.getComponent(Button);
-        if (button) button.interactable = view.actionEnabled;
+        button.interactable = view.actionEnabled;
         this.actionRedDot.active = view.redDot;
         this.actionButton.active = view.actionVisible;
         // 印章与按钮互斥（FGUI 是 `状态` 控制器的第 2 页）

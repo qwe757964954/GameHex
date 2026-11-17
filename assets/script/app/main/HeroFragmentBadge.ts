@@ -77,21 +77,21 @@ export class HeroFragmentBadge {
         this.node.setParent(navBar);
         // 🔴 底栏子节点顺序 = 渲染序：徽标必须压在七格按钮之上。
         this.node.setSiblingIndex(navBar.children.length - 1);
-        this.opacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
+        this.opacity = this.node.getComponent(UIOpacity);
         this.node.active = false;
 
-        const rootTransform = this.node.getComponent(UITransform) ?? this.node.addComponent(UITransform);
+        const rootTransform = this.node.getComponent(UITransform);
         const barNode = this.childNode('BadgeBarBg');
-        this.barBg = barNode.getComponent(Graphics) ?? barNode.addComponent(Graphics);
+        this.barBg = barNode.getComponent(Graphics);
         const fillNode = this.childNode('BadgeBarFill');
-        this.barFill = fillNode.getComponent(Graphics) ?? fillNode.addComponent(Graphics);
-        const barTransform = barNode.getComponent(UITransform)!;
+        this.barFill = fillNode.getComponent(Graphics);
+        const barTransform = barNode.getComponent(UITransform);
         this.barWidth = barTransform.width;
         this.barHeight = barTransform.height;
         this.barLeft = barNode.position.x - this.barWidth / 2;
 
         const iconNode = this.childNode('BadgeIcon');
-        this.iconSprite = iconNode.getComponent(Sprite) ?? iconNode.addComponent(Sprite);
+        this.iconSprite = iconNode.getComponent(Sprite);
         this.iconSprite.trim = false;
         this.iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
         this.lift = this.childNode('LiftAnchor').position.y;

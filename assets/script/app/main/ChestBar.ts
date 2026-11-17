@@ -121,7 +121,8 @@ export class ChestBar extends Component {
     }
 
     private closedX(): number {
-        const width = this.node.getComponent(UITransform)?.width ?? 720;
+        // ChestBar 根节点在 ArenaRoot.prefab 上带 UITransform（720×317）和 Widget。
+        const width = this.node.getComponent(UITransform).width;
         return this.openX! - width;
     }
 

@@ -19,6 +19,7 @@ interface ITreasureInfo {
 async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number) {
     let nowMs = nowSeconds * 1000;
     let latestInfos = infos;
+    let sendResponse: unknown = null;
     let onBroadcast: ((message: unknown) => void) | null = null;
     class RequestStub {
         constructor(
@@ -27,7 +28,7 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
             readonly fCallback?: (rsp: { infos: readonly ITreasureInfo[] }) => void,
         ) {}
     }
-    const exports: { NewTreasureRepository?: new () => NewTreasureRepository } = {};
+    const exports: { NewTreasureRepository?: new (presentRewards: (goods: readonly unknown[]) => void) => NewTreasureRepository } = {};
     const source = readFileSync('assets/script/app/main/NewTreasureRepository.ts', 'utf8');
     const code = ts.transpileModule(source, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020,
@@ -54,20 +55,24 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
         } } };
         if (name === '../net/GameNet') return { GameNet: { instance: {
             isConnected: true,
+            protoMgr: { getMessageId: () => 1 },
             addEvent(_name: string, _caller: unknown, listener: (message: unknown) => void) { onBroadcast = listener; },
             removeCallerEvent() { onBroadcast = null; },
             send: async (request: RequestStub) => {
-                request.fCallback?.({ infos: latestInfos });
+                request.fCallback?.((sendResponse ?? { infos: latestInfos }) as { infos: readonly ITreasureInfo[] });
                 return true;
             },
         } } };
         throw new Error(`Unexpected import: ${name}`);
     } });
     assert.ok(exports.NewTreasureRepository);
-    const repository = new exports.NewTreasureRepository();
+    const rewards: (readonly unknown[])[] = [];
+    const repository = new exports.NewTreasureRepository(goods => rewards.push(goods));
     assert.equal(await repository.load({}, () => {}), 'ok');
     return {
         repository,
+        rewards,
+        setResponse: (response: unknown) => { sendResponse = response; },
         setNow: (seconds: number) => { nowMs = seconds * 1000; },
         setInfos: (value: readonly ITreasureInfo[]) => { latestInfos = value; },
         broadcastInfo: (info: ITreasureInfo) => { onBroadcast?.({ info }); },
@@ -445,4 +450,39 @@ test('★★★还没开始等 ⇒ 金色「解锁」；等完了 ⇒ 绿色「�
     const right = labelNode.position.x + textWidth / 2;
     assert.ok(Math.abs(left + right) < 1e-6, `图标 + 文字必须整体居中（左 ${left} / 右 ${right}）`);
     assert.ok(left < -10 && right > 10, '这一组是横向铺开的，不是挤在一点上');
+});
+
+
+test('异步对战宝箱：到点开启和立即打开均交付回包奖励，失败及空奖励不展示', async () => {
+    const { repository, rewards, setResponse } = await loadTreasure([{ index: 1, cardBoxID: 19001, openTime: 1 }], 100);
+    const goods = [{ resId: 18003, number: 22 }, { resId: 7, number: 100 }];
+    let response = { succ: 1, index: 1, tlCmdGoods: goods };
+    setResponse(response);
+    assert.equal(await repository.open(1), 'ok');
+    assert.equal(await repository.fastOpen(1), 'ok');
+    assert.equal(rewards.length, 2);
+    assert.equal(rewards[0], goods, '整批回包奖励原样交付，包含货币');
+    assert.equal(rewards[1], goods);
+    response = { ...response, succ: 0 };
+    setResponse(response);
+    assert.equal(await repository.open(1), 'failed');
+    assert.equal(await repository.fastOpen(1), 'failed');
+    assert.equal(rewards.length, 2);
+    response = { ...response, succ: 1, tlCmdGoods: [] };
+    setResponse(response);
+    assert.equal(await repository.open(1), 'ok');
+    assert.equal(rewards.length, 2);
+});
+
+test('异步宝箱奖励经宿主事件接开箱页，不再落普通奖励窗', () => {
+    const repository = readFileSync('assets/script/app/main/NewTreasureRepository.ts', 'utf8');
+    const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
+    const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    assert.doesNotMatch(repository, /FW\.ShowReward/);
+    assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ owner: this, goods \}\)/);
+    assert.match(composition, /this\.listen\(CHEST_EVENTS\.REWARDS, this\.onTreasureRewards\)/);
+    const handler = composition.slice(composition.indexOf('    private onTreasureRewards('), composition.indexOf('    private onChestRevealed('));
+    assert.match(handler, /event\.owner\.node !== this\.root/);
+    assert.match(handler, /TerritoryChestOpenPage\.open\(\{ userData: \{ goods: event\.goods \} \}\)/);
+    assert.match(handler, /if \(this\.isDisposed\) popup\?\.close\(\)/);
 });

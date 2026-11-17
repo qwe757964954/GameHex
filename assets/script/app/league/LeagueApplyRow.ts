@@ -14,16 +14,16 @@ export type LeagueApplyAction = 'agree' | 'reject';
 @ccclass('LeagueApplyRow')
 export class LeagueApplyRow extends Component {
     @property({ type: Label, tooltip: 'lab_name：申请人名（26px 左对齐）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'lab_lv：等级（纯数字，无后缀）' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'lab_power：战力（纯数字）' })
-    powerLabel: Label = null;
+    powerLabel: Label = null!;
 
     @property({ type: Sprite, tooltip: 'icon：头像（宿主按 view.img 取图后调 applyAvatar）' })
-    avatarSprite: Sprite = null;
+    avatarSprite: Sprite = null!;
 
     @property({ type: Node, tooltip: 'btn_sure：同意（ 发 agree=true）' })
     agreeButton: Node = null;
@@ -73,12 +73,12 @@ export class LeagueApplyRow extends Component {
             return;
         }
 
-        if (this.nameLabel) this.nameLabel.string = view.name;
-        if (this.levelLabel) this.levelLabel.string = view.levelText;
-        if (this.powerLabel) this.powerLabel.string = view.powerText;
+        this.nameLabel.string = view.name;
+        this.levelLabel.string = view.levelText;
+        this.powerLabel.string = view.powerText;
 
         // 先清头像：槽位是复用的，不清的话新行会短暂顶着上一行的头像
-        if (this.avatarSprite) this.avatarSprite.spriteFrame = null;
+        this.avatarSprite.spriteFrame = null;
     }
 
     /** 本次铺行对应的头像令牌（宿主取图时带走，回来时原样交给 `applyAvatar`）。 */
@@ -93,7 +93,7 @@ export class LeagueApplyRow extends Component {
      */
     applyAvatar(frame: SpriteFrame | null, token: number): void {
         if (token !== this.avatarSeq) return;
-        if (this.avatarSprite) this.avatarSprite.spriteFrame = frame;
+        this.avatarSprite.spriteFrame = frame;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */

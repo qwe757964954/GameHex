@@ -129,13 +129,13 @@ export class ChestDetailPanel extends PopupBase {
     private openCostLabel: Label = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnPrimary：主按钮底图（加速态换绿）' })
-    private openFrame: Sprite = null;
+    private openFrame: Sprite = null!;
 
     @property({ type: SpriteFrame, group: '节点引用', tooltip: '按钮·绿色「加速」（btn_speed_up，与 btn_open 同形状）' })
     private openSpeedUpFrame: SpriteFrame = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/SpeedUpIcon：加速播放图标（chest_bolt）' })
-    private openSpeedUpIcon: Node = null;
+    private openSpeedUpIcon: Node = null!;
 
     @property({ group: '布局', tooltip: '无倒计时时文案中心 y；两行态 y 取自 prefab' })
     private openLabelCenterY = 0;
@@ -160,7 +160,7 @@ export class ChestDetailPanel extends PopupBase {
         this.openLabelX = this.openLabel.node.position.x;
         this.openLabelTwoLineY = this.openLabel.node.position.y;
         this.openLabelY = this.openLabelTwoLineY;
-        this.defaultOpenFrame = this.openFrame?.spriteFrame ?? null;
+        this.defaultOpenFrame = this.openFrame.spriteFrame ?? null;
         this.dropList.renderItemFn = this.renderReward;
         this.closeButton.node.on(Button.EventType.CLICK, this.handleClose, this);
         this.fastButton.node.on(Button.EventType.CLICK, this.handleFastOpen, this);
@@ -241,7 +241,7 @@ export class ChestDetailPanel extends PopupBase {
         this.openLabel.string = state.caption;
         this.openButton.interactable = state.enabled;
         const frame = state.speedUp ? this.openSpeedUpFrame : this.defaultOpenFrame;
-        if (this.openFrame && frame) this.openFrame.spriteFrame = frame;
+        if (frame) this.openFrame.spriteFrame = frame;
         this.updateCountdownText(state.countdown);
         this.layoutOpenLabel(state.speedUp);
     }
@@ -255,7 +255,7 @@ export class ChestDetailPanel extends PopupBase {
      */
     private layoutOpenLabel(speedUp: boolean): void {
         const labelNode = this.openLabel.node;
-        if (this.openSpeedUpIcon) this.openSpeedUpIcon.active = speedUp;
+        this.openSpeedUpIcon.active = speedUp;
         if (!speedUp) {
             labelNode.setPosition(this.openLabelX, this.openLabelY);
             return;

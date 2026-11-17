@@ -56,6 +56,16 @@ test('ResBar 根据 1/2/3 个实际资源格重排，再对齐右上角，重填
     assert.equal(f.slots[1].node.active, false); assert.equal(f.slots[2].node.active, false);
 });
 
+test('Res0 未绑时 Res1 仍取第二份数据，后面的格子不顶位', async () => {
+    const f = fixture(true);
+    // 只绑 Res1/Res2：过滤后的位置不能再当数据下标，否则 Res1 会拿到 Res0 的 gold。
+    f.bar.slot0 = null;
+    f.keys(['gold', 'coin']);
+    await f.bar.reload();
+    assert.equal(f.slots[1].value, '20', 'Res1 渲染第二份数据（coin），不顶替 Res0');
+    assert.equal(f.slots[2].node.active, false, '没有第三份数据时 Res2 整格隐藏');
+});
+
 test('已有固定布局的 ResBar 保留宿主位置和尺寸', async () => {
     const f = fixture(false); await f.bar.reload();
     assert.equal(f.activeCounts.length, 0); assert.equal(f.aligned, 0);

@@ -4,6 +4,7 @@
  * 子组件通过参数接收文案，只有页面持有本表。`empty` / `offline` / `failed`
  * 是列表降级提示，不是占位符。
  */
+import { formatPlaceholders } from '../../core/text/Placeholder';
 
 export const GIFT_TEXTS = {
     /** 商品行按钮：免费。 */
@@ -80,10 +81,7 @@ export const RECHARGE_TEXTS = {
     gotoMissing: '充值入口尚未接入',
 };
 
-/** 按 `{0}` / `{1}` 占位符填参数；缺参数的位置原样保留。 */
+/** 按 `{0}` / `{1}` 占位符填参数；缺参数的位置原样保留，与历史礼包文案一致。 */
 export function formatText(template: string, ...args: readonly (string | number)[]): string {
-    return template.replace(/\{(\d+)\}/g, (whole, index) => {
-        const value = args[Number(index)];
-        return value === undefined ? whole : String(value);
-    });
+    return formatPlaceholders(template, args, { missing: 'keep', nullish: 'string' });
 }

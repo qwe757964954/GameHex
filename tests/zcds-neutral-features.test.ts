@@ -113,7 +113,7 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
 }
 
 test('野怪唤醒后按快照时间轴巡逻，遇敌暂停、离开后继续且不越出范围', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
     const center = f.config.map.hexes[f.hex.id];
     f.system.tick(f.state);
     assert.equal(f.hex.neutralFeature.patrol, undefined, '沉睡时不巡逻');
@@ -148,7 +148,7 @@ test('野怪唤醒后按快照时间轴巡逻，遇敌暂停、离开后继续�
 });
 
 test('巡逻受建筑阻塞时等待，清除后恢复；快照拒绝非法移动段', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
     f.hex.neutralFeature.awake = true;
     for (const id of f.config.map.hexes[f.hex.id].neighbors) f.state.hexes[id].building = 'tower';
     f.system.tick(f.state);
@@ -180,7 +180,7 @@ test('巡逻受建筑阻塞时等待，清除后恢复；快照拒绝非法移�
 });
 
 test('巡逻中的索敌、近战锁定和弹道共用当前位置，恢复一致且死亡只结算一次', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 }, true, true);
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
     f.hex.neutralFeature.awake = true;
     f.system.tick(f.state);
     f.state.elapsedSeconds = f.hex.neutralFeature.patrol.durationSeconds / 2;
@@ -250,7 +250,7 @@ test('强化门在相邻格翻开前不领取、不触发，翻开后自动生�
 
 test('趣味资源只认已翻开的邻格，不被未翻格的归属或远处翻格激活', () => {
     for (const [type, param] of [[8, {}], [9, {}], [10, {}],
-        [11, { resId: '68001', wakeRange: 2, attackRange: 1 }]] as const) {
+        [11, { resId: '68001', wakeRange: 2, reviveRate: 1 }]] as const) {
         const f = fixture(type, param);
         const neighbors = f.config.map.hexes[f.hex.id].neighbors;
         for (const hex of f.state.hexes) {
@@ -317,7 +317,7 @@ test('高速穿越整格也触发，冷却期间进入并停留不会等到冷�
 });
 
 test('野怪锁定首个目标，失效后换最近单位，脱战不回血', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 });
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     f.hex.neutralFeature.awake = true;
     f.hex.hp -= 5;
     const first = f.unit(1);
@@ -342,7 +342,7 @@ test('野怪锁定首个目标，失效后换最近单位，脱战不回血', ()
 });
 
 test('真实模型睡眠怪免伤，唤醒后远程弹道可命中且击杀只发一次既有奖励', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 });
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     const config = { ...f.config, map: { ...f.config.map,
         resolvedResources: [{ hexId: f.hex.id, itemId: f.hex.neutralResourceId }] } };
     const model = new ZCGameModel(null, () => 0, config);
@@ -662,7 +662,7 @@ test('三人局不投放传送门，野怪睡眠时不是攻击目标', () => {
     delete f.hex.neutralFeature;
     system.initialize(f.state);
     assert.equal(f.hex.neutralResourceId, null);
-    const m = fixture(11, { resId: '68001', wakeRange: 2, attackRange: 1 });
+    const m = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     assert.equal(isZCAwakeMonster(m.hex), false);
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].owner = 'player';
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].developmentResolved = true;

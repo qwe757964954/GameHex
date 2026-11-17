@@ -46,7 +46,9 @@ test('无效奖励 ID 不覆盖已保存的站点值', () => {
 test('切换格子、校验、保存与导出前都会提交当前奖励输入', () => {
     assert.match(source, /function paint\([^\n]+\{\s*\n\s*if \(cell < 0\) return;\s*\n\s*if \(!applyRewardIdFromForm\(\)\) return;/);
     assert.match(source, /function validateCurrent\(\) \{\s*\n\s*if \(!applyRewardIdFromForm\(\)\) throw/);
-    assert.match(source, /async function save\(\) \{[^\n]*validateCurrent\(\)/);
+    const saveBody = source.match(/async function save\(\) \{([\s\S]*?)\n\}/);
+    assert.ok(saveBody, 'save must remain a top-level function');
+    assert.match(saveBody[1], /validateCurrent\(\)/);
     assert.match(source, /\$\('rewardId'\)\.addEventListener\('change', applyRewardIdFromForm\)/);
-    assert.match(source, /\$\('export'\)\.addEventListener\('click', \(\) => \{ if \(!applyRewardIdFromForm\(\)\) return;/);
+    assert.match(source, /\$\('export'\)\.addEventListener\('click', \(\) => \{\s*if \(!applyRewardIdFromForm\(\)\) return;/);
 });

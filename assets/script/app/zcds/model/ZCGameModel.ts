@@ -1,3 +1,4 @@
+import { ZCCombatSystem } from './systems/ZCCombatSystem';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
@@ -289,6 +290,10 @@ export class ZCGameModel {
     private readonly radiusHexes = new Map<string, readonly number[]>();
     private targetHexRevision = -1;
     private readonly targetHexes: ZCHexState[] = [];
+    /** 按索敌方 owner 预分组：怪物对所有人可索敌，其余目标只进入非己方 owner 的组。*/
+    private readonly candidateHexesByOwner = new Map<ZCOwner, ZCHexState[]>(
+        ZC_OWNER_ORDER.map(owner => [owner, [] as ZCHexState[]]),
+    );
     private readonly exposedWalls = new Set<number>();
     private tileStatesDirty = true;
     private topologyRevision = 0;
@@ -467,6 +472,7 @@ export class ZCGameModel {
             random: this.random,
             definition: unit => this.effectiveUnitDefinition(unit),
             monsterDefinition: card => this.unitDefinition(card.unitId),
+            rules: this.rules,
             cloneUnit: unit => this.cloneGateUnit(unit),
             spawnBatch: hex => this.spawnFirstBarracksUnit(hex),
             damageUnit: (unit, damage, owner) => { this.damageUnit(unit, damage, { owner: owner ?? 'neutral', kind: 'building' }); },
@@ -547,6 +553,11 @@ export class ZCGameModel {
             get now() { return model.state.elapsedSeconds; },
             get units() { return model.state.units; },
             get hexes() { model.refreshTargetHexes(); return model.targetHexes; },
+            unitsOf: (owner) => this.units.unitsOf(owner),
+            candidateHexes: (owner) => {
+                model.refreshTargetHexes();
+                return model.candidateHexesByOwner.get(owner) ?? [];
+            },
             unitById: (id) => this.units.byId.get(id) ?? null,
             unitPosition: this.services.unitPosition,
             hexPosition: (id) => this.hexCenter(id),
@@ -772,6 +783,7 @@ export class ZCGameModel {
             geometry: this.geometry,
             units: this.units.byId,
             targeting: this.targetingContext,
+            priorityMonster: unit => this.neutralFeatures.priorityTarget(this.state, unit),
             combatDistanceScale: this.rules.combatDistanceScale,
             baseDefinition: (id) => this.unitDefinition(id),
             effectiveDefinition: this.services.effectiveDefinition,
@@ -1769,12 +1781,22 @@ export class ZCGameModel {
         if (this.targetHexRevision === this.topologyRevision) return;
         this.targetHexRevision = this.topologyRevision;
         this.targetHexes.length = 0;
+        for (const bucket of this.candidateHexesByOwner.values()) bucket.length = 0;
         this.exposedWalls.clear();
         for (const hex of this.state.hexes) {
-            if (isZCAwakeMonster(hex)) { this.targetHexes.push(hex); continue; }
+            if (isZCAwakeMonster(hex)) {
+                this.targetHexes.push(hex);
+                for (const bucket of this.candidateHexesByOwner.values()) bucket.push(hex);
+                continue;
+            }
             const exposed = ZCTileSystem.hasExposedWall(this.state, this.config.map, hex);
             if (exposed) this.exposedWalls.add(hex.id);
-            if (exposed || (hex.owner !== 'neutral' && hex.building !== 'none' && hex.hp > 0 && hex.wallHp <= 0)) this.targetHexes.push(hex);
+            if (!exposed && (hex.owner === 'neutral' || hex.building === 'none' || hex.hp <= 0 || hex.wallHp > 0)) continue;
+            this.targetHexes.push(hex);
+            if (hex.owner === 'neutral') continue;
+            for (const [owner, bucket] of this.candidateHexesByOwner) {
+                if (owner !== hex.owner) bucket.push(hex);
+            }
         }
     }
 
@@ -1790,14 +1812,48 @@ export class ZCGameModel {
         if (result.killed) this.invalidateTerrain();
     }
 
+    toggleMonsterFocus(hexId: number, owner: ZCOwner = ZCOwner.Player): boolean {
+        const hex = this.state.hexes[hexId];
+        if (this.state.status !== 'playing' || !this.activeOwners.includes(owner) || !hex) return false;
+        const changed = this.neutralFeatures.toggleFocus(this.state, hex, owner);
+        if (changed) for (const unit of this.state.units) {
+            if (unit.owner === owner && this.unitTargeting.refreshPriorityTarget(unit)) {
+                ZCCombatSystem.switchState(unit, 'target');
+            }
+        }
+        return changed;
+    }
+
     private damageBuilding(unit: IZCStructureDamageSource, building: ZCHexState, damage: number): void {
         if (isZCAwakeMonster(building)) {
             if (!Number.isFinite(damage) || damage <= 0) return;
+            const feature = building.neutralFeature;
+            if (unit.id !== undefined && this.units.byId.has(unit.id)) {
+                feature.retaliationUnitIds ??= [];
+                if (!feature.retaliationUnitIds.includes(unit.id)) feature.retaliationUnitIds.push(unit.id);
+            }
+            delete feature.disengagedAt;
+            feature.regenUpdatedAt = this.state.elapsedSeconds;
             building.hp = Math.max(0, building.hp - damage);
             if (building.hp === 0) {
                 const center = this.hexCenter(building.id);
-                building.neutralFeature.claimed = true;
-                building.neutralResourceId = null;
+                const item = neutralResourceItemOf(building.neutralResourceId);
+                const card = findCatalogCard(item.feature.resId);
+                const definition = this.unitDefinition(card.unitId);
+                feature.claimed = true;
+                feature.focusOwners = [];
+                feature.retaliationUnitIds = [];
+                feature.targetUnitId = null;
+                delete feature.disengagedAt;
+                delete feature.regenUpdatedAt;
+                const reinforcement = this.spawnUnit(unit.owner, card, 1, building.id, true);
+                if (reinforcement) {
+                    reinforcement.neutralReinforcement = true;
+                    reinforcement.inheritedStats = { ...definition, attack: definition.attack * item.feature.reviveRate };
+                    reinforcement.hp = reinforcement.maxHp = definition.maxHp * item.feature.reviveRate;
+                    reinforcement.freeX = center.x;
+                    reinforcement.freeY = center.y;
+                }
                 this.grantGold(unit.owner, this.rules.killUnitGoldReward, center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
                 this.tileStatesDirty = true;
                 this.invalidateTerrain();
@@ -2137,7 +2193,8 @@ export class ZCGameModel {
             && ZCGameModel.sameInheritedStats(cached.inherited, unit.inheritedStats)) {
             return cached.def;
         }
-        const definition = this.effectiveUnitDefinitionFor(unit.owner, unit.unitId);
+        const definition = unit.neutralReinforcement ? this.unitDefinition(unit.unitId)
+            : this.effectiveUnitDefinitionFor(unit.owner, unit.unitId);
         const original = unit.inheritedStats ? { ...definition, ...unit.inheritedStats } : definition;
         const base = unit.gateSize ? {
             ...original,

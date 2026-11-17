@@ -1,6 +1,5 @@
 import {
     _decorator,
-    Animation,
     Color,
     Component,
     Graphics,
@@ -471,6 +470,10 @@ export class ZCHexView extends Component {
      * 与 `ZCUnitView` 战场口径（活体单位 69.4）不同，这里要塞进 N 个并排预览。
     */
     private static readonly RESOURCE_UNIT_TARGET_HEIGHT = 48.6;
+    /** 单位美术 prefab 的固定骨架子节点；36 套上阵单位统一为「根节点 + 子节点 `spine`」。 */
+    private static readonly RESOURCE_UNIT_SPINE_NODE_NAME = 'spine';
+    /** 单位骨架的待机动作名；36 套单位 SkeletonData 都提供 `idle` / `move` / `attack`。 */
+    private static readonly RESOURCE_UNIT_IDLE_ANIMATION = 'idle';
     /** 多个并排时的横向间距。*/
     private static readonly RESOURCE_UNIT_SPACING = 16;
     /**
@@ -485,11 +488,10 @@ export class ZCHexView extends Component {
      * 骨架 canvas 高度（设计单位），用来算缩放。
      * 必须走 `getRuntimeData()`，不能读 prefab 的 `UITransform` ——
      * 豌豆射手 prefab 根节点 UITransform 是复制坚果留下的，与骨架不符。
-     * 与 `ZCUnitView` 同源同口径。
+     * 与 `ZCUnitView` 同源同口径。资源点单位 prefab 的 SkeletonData 均已核实绑定。
     */
     private static spineResourceCanvasHeight(skeleton: sp.Skeleton): number {
-        const runtime = skeleton.skeletonData?.getRuntimeData(true);
-        return runtime?.height ?? 0;
+        return skeleton.skeletonData.getRuntimeData(true).height;
     }
 
     @property({ type: Sprite, group: '节点引用' })
@@ -497,19 +499,19 @@ export class ZCHexView extends Component {
 
     /** 三个投影侧面与原位柔光共用的 Sprite；图片仅提供柔光纹理。*/
     @property({ type: Sprite, group: '节点引用', tooltip: 'GroundGlow：三个阵营色投影侧面；图片仅供原位柔光取样' })
-    groundGlow: Sprite = null;
+    groundGlow: Sprite = null!;
 
     @property({ type: SpriteFrame, group: '地块底图', tooltip: '统一六边格蒙版：hex_flat（130×119 画布 / 面 123×90，扁平纯白）' })
     tileFrame: SpriteFrame | null = null;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BuildingLayer：开发图标和价格' })
-    buildingLayer: Node = null;
+    buildingLayer: Node = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: '根节点下的 BuildingIcon：已建建筑' })
     buildingSprite: Sprite = null;
 
     @property({ type: Sprite, group: '节点引用' })
-    iconSprite: Sprite = null;
+    iconSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '节点引用' })
     priceIcon: Sprite = null;
@@ -578,7 +580,7 @@ export class ZCHexView extends Component {
     artifactSpineRoot: Node | null = null;
 
     @property({ type: Label, group: '节点引用' })
-    iconLabel: Label = null;
+    iconLabel: Label = null!;
 
     @property({ type: ProgressBar, group: '状态条', tooltip: 'HealthBar：建筑生命值' })
     healthBar: ProgressBar = null;
@@ -645,7 +647,7 @@ export class ZCHexView extends Component {
     private monsterOffsetX = 0;
     private monsterOffsetY = 0;
     private monsterBarBase: Vec3 | null = null;
-    private readonly resourceUnitSkeletons: (sp.Skeleton | null)[] = [];
+    private readonly resourceUnitSkeletons: sp.Skeleton[] = [];
     /** 骨骼节点的缓存键：`unitId@数量` —— 变了才重建。*/
     private resourceUnitCache = '';
     private contentKey = '';
@@ -825,11 +827,13 @@ export class ZCHexView extends Component {
         this.basePosition = this.node.position.clone();
         this.lastActivationFx = null;
         // 脉冲层与开口光共用 `GroundGlow`：这里把 prefab 的原始画布尺寸存一份，
-        // 离开脉冲段时按它写回（见 `restorePulseLayer`）。
-        const groundGlowTransform = this.groundGlow?.node.getComponent(UITransform);
-        this.groundGlowBaseSize = groundGlowTransform
-            ? { width: groundGlowTransform.contentSize.width, height: groundGlowTransform.contentSize.height }
-            : null;
+        // 离开脉冲段时按它写回（见 `restorePulseLayer`）。GroundGlow 是 Sprite，
+        // `UIRenderer` 强制 requireComponent(UITransform)，无需再判空。
+        const groundGlowTransform = this.groundGlow.node.getComponent(UITransform);
+        this.groundGlowBaseSize = {
+            width: groundGlowTransform.contentSize.width,
+            height: groundGlowTransform.contentSize.height,
+        };
         // 抖动 / 邻格生成动画都是每局一次的表现状态，对象池复用会带着上一局的值回来：
         // 不复位的话新格可能一上来就停在「被拉长的姿态」或「半透明的小尺寸」。
         this.buildingShakeStartedAt = null;
@@ -840,7 +844,7 @@ export class ZCHexView extends Component {
         this.developableBootstrapped = false;
         // 懒挂的 `UIOpacity` 是节点级组件：复用回来的节点上可能已经挂着它（上一局播到一半
         // 被回收 ⇒ 透明度停在 0）。这里直接从 `buildingLayer` 上重新认领一份，别只信字段。
-        this.developableSpawnOpacity = this.buildingLayer?.getComponent(UIOpacity) ?? null;
+        this.developableSpawnOpacity = this.buildingLayer.getComponent(UIOpacity) ?? null;
         // 起手把 `buildingLayer` 的缩放 / 透明度落回基准（上一局若播到一半被回收，
         // 节点会带着 0.6 的缩放与 0 的透明度回来 ⇒ 新局第一帧这一格是"隐形的小格子"）。
         this.applyDevelopableSpawn(0);
@@ -872,13 +876,13 @@ export class ZCHexView extends Component {
         this.resourceIconRaised = false;
         this.mowerVisible = true;
         this.iconSprite.node.active = true;
-        if (this.buildingLayer && this.iconSprite && this.iconSprite.node.parent !== this.buildingLayer) {
+        if (this.iconSprite.node.parent !== this.buildingLayer) {
             this.iconSprite.node.setParent(this.buildingLayer);
         }
         // 神器点 Spine 容器同口径无条件收回 BuildingLayer 并隐藏（resourceIconLayer 此刻
         // 可能尚未注入，不能走 setResourceIconRaised(false) 的早退分支）。
         if (this.artifactSpineRoot) {
-            if (this.buildingLayer && this.artifactSpineRoot.parent !== this.buildingLayer) {
+            if (this.artifactSpineRoot.parent !== this.buildingLayer) {
                 this.artifactSpineRoot.setParent(this.buildingLayer);
             }
             this.artifactSpineRoot.active = false;
@@ -986,14 +990,13 @@ export class ZCHexView extends Component {
     */
     private applyIconPosition(local: Readonly<{ x: number; y: number; z: number }>): void {
         const sprite = this.iconSprite;
-        if (!sprite) return;
         if (!this.resourceIconRaised) {
             sprite.node.setPosition(local.x + this.monsterOffsetX, local.y + this.monsterOffsetY, local.z);
             return;
         }
-        const base = this.buildingLayer?.position;
-        const worldX = this.node.position.x + (base?.x ?? 0);
-        const worldY = this.node.position.y + (base?.y ?? 0);
+        const base = this.buildingLayer.position;
+        const worldX = this.node.position.x + base.x;
+        const worldY = this.node.position.y + base.y;
         sprite.node.setPosition(worldX + local.x + this.monsterOffsetX, worldY + local.y + this.monsterOffsetY, local.z);
         // Spine 容器抬到 ResourceLayer 后按资源图标落点 RESOURCE_ICON_POS 补偿。
         const spineRoot = this.artifactSpineRoot;
@@ -1371,7 +1374,6 @@ export class ZCHexView extends Component {
     */
     private applyGroundGlow(tileLift: number, tileFlip: number, tileScale = 1): void {
         const sprite = this.groundGlow;
-        if (!sprite) return;
         // 非脉冲段这条路径接管同一个节点 ⇒ 先把脉冲段写在它上面的画布尺寸 / 对齐缩放归位
         // （池化复用/分段切换时不归位，开口光会被画成 320×320 的一大块）。
         this.restorePulseLayer();
@@ -1521,7 +1523,7 @@ export class ZCHexView extends Component {
     */
     private applyDevelopableSpawn(now: number): void {
         const layer = this.buildingLayer;
-        if (!layer || !layer.isValid) return;
+        if (!layer.isValid) return;
         const startedAt = this.developableSpawnStartedAt;
         const progress = startedAt === null ? 1 : clamp01((now - startedAt) / ZC_HEX_NEIGHBOR_SPAWN_SECONDS);
         const scale = startedAt === null ? 1 : elasticPopScale(progress, DEVELOPABLE_SPAWN_FROM_SCALE);
@@ -1555,12 +1557,12 @@ export class ZCHexView extends Component {
      * 开口光会按 320×320 × 0.75/0.63 的位置和尺寸画出来，整条光带偏掉。
     */
     private restorePulseLayer(): void {
-        const node = this.groundGlow?.node;
-        if (!node) return;
+        const node = this.groundGlow.node;
         if (node.scale.x !== 1 || node.scale.y !== 1) node.setScale(1, 1, 1);
+        // `groundGlowBaseSize` 在 `onDisable` 会清空，是真实的生命周期可空状态。
         const base = this.groundGlowBaseSize;
         const ui = node.getComponent(UITransform);
-        if (base && ui && (ui.contentSize.width !== base.width || ui.contentSize.height !== base.height)) {
+        if (base && (ui.contentSize.width !== base.width || ui.contentSize.height !== base.height)) {
             ui.setContentSize(base.width, base.height);
         }
     }
@@ -1578,7 +1580,6 @@ export class ZCHexView extends Component {
     */
     private applyPulseRipple(frame: number): void {
         const sprite = this.groundGlow;
-        if (!sprite) return;
         const node = sprite.node;
         const frames = this.pulseFrames;
         // 没有帧 / 波已走完 / 帧号越界 ⇒ 整层关掉（不是「显示第 0 帧」，那会留一圈亮边）。
@@ -1979,7 +1980,6 @@ export class ZCHexView extends Component {
             : this.hideResourceUnits();
         const sleepingMonster = monster && !state.neutralFeature?.awake;
         for (const skeleton of this.resourceUnitSkeletons) {
-            if (!skeleton) continue;
             skeleton.color = sleepingMonster ? MONSTER_SLEEP_TINT : Color.WHITE;
             skeleton.timeScale = sleepingMonster ? 0.35 : 1;
         }
@@ -2135,15 +2135,24 @@ export class ZCHexView extends Component {
             // 并排：整体以格心为原点向两侧展开，数量为奇数时正中那只不偏。
             const offsetX = (i - (count - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING;
             visual.setPosition(offsetX, ZCHexView.RESOURCE_UNIT_POS_Y, 0);
-            const skeleton = visual.getComponent(sp.Skeleton) ?? visual.getComponentInChildren(sp.Skeleton);
-            // 序列帧形态没有骨架：用 prefab 自身尺寸按比例缩到目标高。
-            const factor = skeleton
-                ? ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT / ZCHexView.spineResourceCanvasHeight(skeleton)
-                : ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT
-                    / Math.max(1, visual.getComponent(UITransform)?.height ?? 1);
-            const safe = Number.isFinite(factor) && factor > 0 ? factor : 1;
-            visual.setScale(safe, safe, 1);
-            this.playResourceUnitIdle(visual, skeleton);
+            const spineNode = visual.getChildByName(ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME);
+            if (!spineNode) {
+                throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」缺少固定子节点 ${ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME}`);
+            }
+            const skeleton = spineNode.getComponent(sp.Skeleton);
+            if (!skeleton) {
+                throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」的 ${ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME} 节点缺少 sp.Skeleton`);
+            }
+            if (!skeleton.skeletonData) {
+                throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」的 ${ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME} 节点未绑定 SkeletonData`);
+            }
+            const canvasHeight = ZCHexView.spineResourceCanvasHeight(skeleton);
+            if (!(canvasHeight > 0)) {
+                throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」的骨架 canvas 高度为 ${canvasHeight}`);
+            }
+            const factor = ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT / canvasHeight;
+            visual.setScale(factor, factor, 1);
+            this.playResourceUnitIdle(skeleton, prefab.name);
             this.resourceUnitNodes.push(visual);
             this.resourceUnitSkeletons.push(skeleton);
         }
@@ -2155,25 +2164,14 @@ export class ZCHexView extends Component {
         });
     }
 
-    /** 播待机动作：spine 走 `setAnimation`，序列帧走 `Animation`；都没有就静默（不抛）。*/
-    private playResourceUnitIdle(visual: Node, skeleton: sp.Skeleton | null): void {
-        if (skeleton) {
-            const names = (skeleton.skeletonData?.getRuntimeData(true)?.animations ?? []).map((a) => a.name);
-            // 美术起名不统一（`idle` / `Idle` / `-idle` 都有），逐名探测而不是写死一个。
-            const clip = names.find((n) => {
-                const lower = n.toLowerCase();
-                return lower === 'idle' || lower.endsWith('-idle');
-            }) ?? names[0] ?? '';
-            if (clip) skeleton.setAnimation(0, clip, true);
-            return;
+    /** 播待机动作：资源点单位同样是 Spine，35 套资源点 prefab 均已核实提供 idle。 */
+    private playResourceUnitIdle(skeleton: sp.Skeleton, prefabName: string): void {
+        const names = skeleton.skeletonData.getRuntimeData(true).animations.map((clip) => clip.name);
+        if (!names.includes(ZCHexView.RESOURCE_UNIT_IDLE_ANIMATION)) {
+            throw new Error(`ZCHexView 资源点单位 prefab「${prefabName}」的 SkeletonData 缺少动画`
+                + ` ${ZCHexView.RESOURCE_UNIT_IDLE_ANIMATION}（实际 ${names.join('/') || '空'}）`);
         }
-        //  必须显式标成 `Animation | null`：`getComponentInChildren` 的返回类型是基类 `Component`，
-        // 直接用会报 `.clips` / `.play` 不存在。
-        const animation: Animation | null =
-            visual.getComponent(Animation) ?? visual.getComponentInChildren(Animation);
-        const clip = animation?.clips?.find((c) => (c?.name ?? '').toLowerCase().includes('idle'))
-            ?? animation?.defaultClip ?? animation?.clips?.[0] ?? null;
-        if (animation && clip) animation.play(clip.name);
+        skeleton.setAnimation(0, ZCHexView.RESOURCE_UNIT_IDLE_ANIMATION, true);
     }
 
     /**

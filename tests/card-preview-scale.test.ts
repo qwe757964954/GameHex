@@ -20,13 +20,13 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
-import { cardPreviewFactor, FRAME_FOOT_FROM_CENTER_Y } from '../assets/script/app/card/CardPreviewScale';
+import { cardPreviewFactor } from '../assets/script/app/card/CardPreviewScale';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCPvpTableParser';
 
 // ==================== A. 纯函数 ====================
 
-/** 爆锤莲王那份骨架的 canvas 高（prefab `UITransform` 941），站台 120、宿主缩放 1。 */
-const LILY = { height: 120, canvas: 941, ratio: 0.97, host: 1 };
+/** 爆锤莲王那份骨架的 runtime canvas 高（2026-11-17 实测 1527；prefab 根 UITransform 769 与骨架无关），站台 120、宿主缩放 1。 */
+const LILY = { height: 120, canvas: 1527, ratio: 0.97, host: 1 };
 
 test('A1 归一之后再乘体型：比值就是 prefabSize 本身', () => {
     const normal = cardPreviewFactor(LILY.height, 1, LILY.canvas, LILY.ratio, LILY.host);
@@ -41,20 +41,20 @@ test('A1 归一之后再乘体型：比值就是 prefabSize 本身', () => {
 
 test('A2 顺序不能反：先归一再乘体型 ≠ 先乘体型再归一（会得到反向结论）', () => {
     // 反序等价于把 canvas 高也乘上系数 —— 画布大的兵会「表里写 1.5、屏幕上更小」。
-    const correct = cardPreviewFactor(120, 1.5, 941, 0.97, 1);
-    const reversed = cardPreviewFactor(120, 1, 941 * 1.5, 0.97, 1);
+    const correct = cardPreviewFactor(120, 1.5, 1527, 0.97, 1);
+    const reversed = cardPreviewFactor(120, 1, 1527 * 1.5, 0.97, 1);
     assert.ok(Math.abs(correct - reversed * 2.25) < 1e-9, '反序会把系数平方着抵消掉');
 });
 
 test('A3 非法值兜成 1（缩放 0 会让模型凭空消失，且控制台干干净净）', () => {
-    const base = cardPreviewFactor(120, 1, 941, 0.97, 1);
+    const base = cardPreviewFactor(120, 1, 1527, 0.97, 1);
     for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, undefined as unknown as number, null as unknown as number]) {
-        assert.equal(cardPreviewFactor(120, bad, 941, 0.97, 1), base, `prefabSize=${String(bad)} 应兜成 1`);
+        assert.equal(cardPreviewFactor(120, bad, 1527, 0.97, 1), base, `prefabSize=${String(bad)} 应兜成 1`);
     }
     // 源尺寸退化（0 / 负数）不能除出 Infinity
     assert.ok(Number.isFinite(cardPreviewFactor(120, 1, 0, 0, 1)));
     // 宿主缩放在分母：宿主放大几倍，模型就得缩几倍才能保持屏幕尺寸
-    assert.ok(Math.abs(cardPreviewFactor(120, 1, 941, 0.97, 2) - base / 2) < 1e-9);
+    assert.ok(Math.abs(cardPreviewFactor(120, 1, 1527, 0.97, 2) - base / 2) < 1e-9);
 });
 
 // ==================== B. 真组件（假 cc） ====================
@@ -64,18 +64,21 @@ test('A3 非法值兜成 1（缩放 0 会让模型凭空消失，且控制台干
  * `./CardPreviewScale` 用本文件顶部 import 的**真模块** —— 这样验的是「组件有没有把
  * 系数写进节点」，而不是又测一遍纯函数。
  *
- * 同时把假的 `Skeleton` / `Animation` 类暴露出来，让下面的 prefab 桩能造出
- * `instanceof` 为真的组件（组件里是用 `getComponent(sp.Skeleton)` 判美术形态的）。
+ * 同时把假的 `Skeleton` 类暴露出来，让下面的 prefab 桩能造出 `instanceof` 为真的组件
+ * （组件里是用 `getComponent(sp.Skeleton)` 判美术形态的）。
  */
 function loadPreviewClass(): {
     Preview: new (hero: any, visibleHeight: number) => any;
-    Kinds: { Skeleton: new () => any; Animation: new () => any; UITransform: new () => any };
+    Kinds: { Skeleton: new () => any; UITransform: new () => any };
 } {
     const moduleExports: Record<string, unknown> = {};
 
     class Component { node: any = null; }
-    class Skeleton {}
-    class Animation { clips: any[] = []; play(): void {} }
+    class Skeleton {
+        node: any = null;
+        skeletonData: any = null;
+        setAnimation(): boolean { return true; }
+    }
     class UITransform { height = 0; anchorY = 0.5; }
 
     class FakeNode {
@@ -83,13 +86,20 @@ function loadPreviewClass(): {
         isValid = true;
         destroyed = false;
         parent: FakeNode | null = null;
+        children: FakeNode[] = [];
         scale = { x: 1, y: 1, z: 1 };
         position = { x: 0, y: 0, z: 0 };
         readonly components: any[] = [];
         constructor(name = 'visual') { this.name = name; }
         setScale(x: number, y: number, z: number): void { this.scale = { x, y, z }; }
         setPosition(x: number, y: number, z: number): void { this.position = { x, y, z }; }
-        setParent(parent: FakeNode): void { this.parent = parent; }
+        setParent(parent: FakeNode): void {
+            this.parent = parent;
+            parent.children?.push(this);
+        }
+        getChildByName(name: string): FakeNode | null {
+            return this.children.find((child) => child.name === name) ?? null;
+        }
         addComponent(type: new () => any): any {
             const component = new type();
             component.node = this;
@@ -97,13 +107,12 @@ function loadPreviewClass(): {
             return component;
         }
         getComponent(type: any): any { return this.components.find((entry) => entry instanceof type) ?? null; }
-        getComponentInChildren(type: any): any { return this.getComponent(type); }
         destroy(): void { this.destroyed = true; this.isValid = false; }
     }
 
     const cc = {
         _decorator: { ccclass: () => (target: unknown) => target, property: () => () => {} },
-        Component, Skeleton, Animation, UITransform, Node: FakeNode,
+        Component, Skeleton, UITransform, Node: FakeNode,
         sp: { Skeleton },
         instantiate: (prefab: any) => prefab.make(FakeNode),
     };
@@ -114,48 +123,32 @@ function loadPreviewClass(): {
         exports: moduleExports,
         require: (id: string) => id === 'cc'
             ? cc
-            : { cardPreviewFactor, FRAME_FOOT_FROM_CENTER_Y },
+            : { cardPreviewFactor },
         console: { log() {}, warn() {} },
     });
     return {
         Preview: moduleExports.CardUnitPreview as new (hero: any, visibleHeight: number) => any,
-        Kinds: { Skeleton, Animation, UITransform },
+        Kinds: { Skeleton, UITransform },
     };
 }
 
 /**
- * 造一份 spine 美术 prefab 桩。
+ * 造一份 spine 美术 prefab 桩：根节点 + 固定子节点 `spine`（真实 36 套单位的结构）。
  * @param rootScale prefab 根节点自带缩放（爆锤莲王是 1.2，全表只有它和火龙果不是 1）。
  */
 function spinePrefab(Skeleton: new () => any, canvasHeight: number, rootScale = 1): any {
     return {
+        name: 'unit',
         make: (FakeNode: any) => {
-            const node = new FakeNode('spine');
+            const node = new FakeNode('unit');
+            const spine = new FakeNode('spine');
+            spine.setParent(node);
             const skeleton: any = new Skeleton();
-            skeleton.node = node;
+            skeleton.node = spine;
             skeleton.skeletonData = { getRuntimeData: () => ({ height: canvasHeight, animations: [{ name: 'idle' }] }) };
             skeleton.setAnimation = () => true;
-            node.components.push(skeleton);
+            spine.components.push(skeleton);
             node.scale = { x: rootScale, y: rootScale, z: 1 };
-            return node;
-        },
-    };
-}
-
-/** 造一份序列帧美术 prefab 桩：`Animation` 带 `-idle` 剪辑，节点高 128（无 canvas）。 */
-function framePrefab(Animation: new () => any, UITransform: new () => any, nodeHeight = 128): any {
-    return {
-        make: (FakeNode: any) => {
-            const node = new FakeNode('frame');
-            //  组件必须是**真的** `instanceof Animation` / `UITransform`：
-            //  组件源码用 `getComponent(Animation)` 找待机剪辑、用 `getComponent(UITransform)` 读节点高。
-            const animation: any = new Animation();
-            animation.node = node;
-            animation.clips = [{ name: 'frame-idle' }];
-            node.components.push(animation);
-            const transform: any = new UITransform();
-            transform.height = nodeHeight;
-            node.components.push(transform);
             return node;
         },
     };
@@ -173,12 +166,12 @@ function heroSprite(height = 155, anchorY = 0, scaleY = 1): any {
 test('B1 系数真的乘进了节点缩放；复用同 prefab 换卡时必须按新体型重写', () => {
     const { Preview, Kinds } = loadPreviewClass();
     const preview = new Preview(heroSprite(), 120);
-    const prefab = spinePrefab(Kinds.Skeleton, 941);
+    const prefab = spinePrefab(Kinds.Skeleton, 1527);
 
     assert.equal(preview.show(prefab, 1), true);
     const visual = preview.visual;
     const plain = visual.scale.y;
-    assert.ok(Math.abs(plain - 120 / (941 * 0.97)) < 1e-9, `归一系数不对：${plain}`);
+    assert.ok(Math.abs(plain - 120 / (1527 * 0.97)) < 1e-9, `归一系数不对：${plain}`);
 
     // 同一份 prefab 被另一张卡复用（萨满 = 磁电菇 / 雷蕉，体型按卡不同）⇒ 早退分支也要重写
     preview.show(prefab, 1.5);
@@ -194,17 +187,17 @@ test('B2 prefab 根节点自带的缩放只乘一次（不能越调越小）', (
     const { Preview, Kinds } = loadPreviewClass();
     const preview = new Preview(heroSprite(), 120);
     // 爆锤莲王的 prefab 根 scale = 1.2
-    preview.show(spinePrefab(Kinds.Skeleton, 941, 1.2), 1);
+    preview.show(spinePrefab(Kinds.Skeleton, 1527, 1.2), 1);
     const first = preview.visual.scale.y;
     preview.show(preview.prefab, 1);
     assert.equal(preview.visual.scale.y, first, '同样的入参重复调 show 不得把根缩放再乘一遍');
-    assert.ok(Math.abs(first / (120 / (941 * 0.97)) - 1.2) < 1e-9, '根缩放要参与，且只参与一次');
+    assert.ok(Math.abs(first / (120 / (1527 * 0.97)) - 1.2) < 1e-9, '根缩放要参与，且只参与一次');
 });
 
 test('B3 非法系数不写 0 缩放（否则模型消失）', () => {
     const { Preview, Kinds } = loadPreviewClass();
     const preview = new Preview(heroSprite(), 120);
-    const prefab = spinePrefab(Kinds.Skeleton, 941);
+    const prefab = spinePrefab(Kinds.Skeleton, 1527);
     preview.show(prefab, 1);
     const normal = preview.visual.scale.y;
     preview.show(prefab, 0);
@@ -213,31 +206,24 @@ test('B3 非法系数不写 0 缩放（否则模型消失）', () => {
     assert.equal(preview.visual.scale.y, normal, 'NaN 应兜成 1');
 });
 
-test('B4 序列帧美术的脚点偏移跟着体型走（不缩的话 1.5 倍的兵会陷进站台里）', () => {
-    const { Preview, Kinds } = loadPreviewClass();
+test('B4 不是固定 Spine 结构的 prefab 直接报错，不再静默降级成序列帧', () => {
+    const { Preview } = loadPreviewClass();
     const preview = new Preview(heroSprite(), 120);
-    const prefab = framePrefab(Kinds.Animation, Kinds.UITransform, 128);
+    const framePrefab = { name: 'frame', make: (FakeNode: any) => new FakeNode('frame') };
 
-    assert.equal(preview.show(prefab, 1), true, '带 -idle 剪辑的序列帧美术应当被接受');
-    const normal = preview.visual.position.y;
-    const factorNormal = cardPreviewFactor(120, 1, 128, 0.686, 1);
-    assert.ok(Math.abs(normal - FRAME_FOOT_FROM_CENTER_Y * factorNormal) < 1e-9,
-        `序列帧脚点应为 ${FRAME_FOOT_FROM_CENTER_Y} × 归一系数，实际 ${normal}`);
-
-    preview.show(prefab, 1.5);
-    assert.ok(Math.abs(preview.visual.position.y / normal - 1.5) < 1e-9,
-        `脚点偏移必须随体型等比放大，实际比值 ${preview.visual.position.y / normal}`);
+    assert.throws(() => preview.show(framePrefab, 1), /spine/,
+        '缺固定子节点 spine 时必须抛错，不能退回 Animation 待机');
 });
 
 test('B5 换 prefab（不同兵种）重建节点，体型按新卡重算', () => {
     const { Preview, Kinds } = loadPreviewClass();
     const preview = new Preview(heroSprite(), 120);
-    preview.show(spinePrefab(Kinds.Skeleton, 941), 1.5);
+    preview.show(spinePrefab(Kinds.Skeleton, 1527), 1.5);
     const lily = preview.visual.scale.y;
     // 魔术师 canvas 976、体型 0.85 —— 两个维度都变了，不能残留上一张的系数
     preview.show(spinePrefab(Kinds.Skeleton, 976), 0.85);
     const magician = preview.visual.scale.y;
-    assert.ok(Math.abs(magician / lily - (0.85 / 1.5) * (941 / 976)) < 1e-9,
+    assert.ok(Math.abs(magician / lily - (0.85 / 1.5) * (1527 / 976)) < 1e-9,
         `换卡后应按新 canvas + 新体型重算，实际比值 ${magician / lily}`);
 });
 

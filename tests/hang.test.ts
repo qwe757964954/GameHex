@@ -3,7 +3,7 @@
  *
  * 分六段，各守一件事：
  *
- *   A. **判定口径**（`HangTable`，**零 import** 纯函数）—— 老端这些判定散在
+ *   A. **判定口径**（`HangTable`，纯 core 依赖的纯函数）—— 老端这些判定散在
  *      `ModelChapterNew` / `ModelHang` / `ModelRole` / `LayerHangUI` 里（依赖 DI 容器 +
  *      FGUI 控制器），没法单测；移植时全收敛成传参纯函数，本段是唯一回归网。
  *      ⚠️ 快照级查询（`freePageOf` / `adCountBranchOf` / `progressOf` …）也在这里，
@@ -27,7 +27,7 @@
  * ——不 import `cc`、不 import `RefUtil` / `CacheMgr`，所以能在 Node 里直接跑。
  * `HangRepository` 拖进 `CacheMgr`（→ `GameNet` → `cc`）就再也跑不了单测，
  * 于是「只读源码文本」是它的唯一测法。
- * 本文件第一行断言 `HangTable.ts` **一个 import 都没有**，就是在守这条约定 ——
+ * 本文件第一行断言 `HangTable.ts` **只允许纯 core import**，就是在守这条约定 ——
  * 谁往 Table 里加一个 import，判定逻辑就整体失去回归网。
  *
  * ## ⚠️ 两层「表」都要解压（本文件最大的坑）
@@ -222,9 +222,14 @@ const CONFIG = parseGameConfigRows(readRefRows('gameConfig'));
 // A. 判定口径（HangTable）
 // ============================================================
 
-test('⚠️ `HangTable.ts` 零 import —— 这是「判定逻辑可单测」的物理前提，别往里加 import', () => {
+test('⚠️ `HangTable.ts` 只允许纯 core import —— 保住 Node 单测能力，禁止 cc / framework / feature', () => {
     const table = src('HangTable.ts');
-    assert.equal(/^\s*import\s/m.test(table), false, 'HangTable 出现了 import —— 判定逻辑会失去 Node 单测能力');
+    const importPaths = [...table.matchAll(/from\s+'([^']+)'/g)].map((m) => m[1]);
+    assert.ok(importPaths.length > 0, 'HangTable 至少应复用 core 的时间/奖励类型');
+    for (const path of importPaths) {
+        assert.match(path, /^\.\.\/\.\.\/core\//, `HangTable 出现了非 core import：${path}`);
+    }
+    assert.doesNotMatch(table, /\brequire\(/, 'HangTable 不能使用 require');
     // 兜底：确认读到的是真文件（不然「没匹配上」会假绿）
     assert.ok(table.includes('export function deriveMaxChallengeLevel'));
 });
@@ -1767,20 +1772,20 @@ test('⚠️ 预加载集合 = 「界面会 `_setFrame()` 的每一处」（漏�
     assert.match(page, /if \(ref\) paths\.add\(hjSharedPath\(ref\)\);/);
     assert.match(page, /paths\.add\(qualityFramePath\(rewardQualityOf\(snapshot, reward\.resId\)\)\);/);
     // 预加载的每一处都能在 `_setFrame` 侧找到消费者
-    assert.match(page, /this\.sweepButton\?\.renderCostIcon\(this\._frameOf\(HJ_COST_ICON_PATH\)\);/);
-    assert.match(page, /this\.gain1\?\.render\(this\._iconFrameOf\(snapshot, first \? first\.resId : 0\), perHourText\(first\)\);/);
+    assert.match(page, /this\.sweepButton\.renderCostIcon\(this\._frameOf\(HJ_COST_ICON_PATH\)\);/);
+    assert.match(page, /this\.gain1\.render\(this\._iconFrameOf\(snapshot, first \? first\.resId : 0\), perHourText\(first\)\);/);
     assert.match(page, /slot\.render\(\s*this\._frameOf\(qualityFramePath\(rewardQualityOf\(snapshot, reward\.resId\)\)\)/);
 });
 
-test('⚠️ 奖励图标两支分流必须转发 `resolveRewardIconRef`，**不许自己判** `item` / `roleProperty`', () => {
+test('⚠️ 奖励图标两支分流必须 direct import `common/RewardIcon`，**不许自己判** `item` / `roleProperty`', () => {
     const art = src('HangArt.ts');
-    assert.match(art, /export \{ resolveRewardIconRef as hjResolveRewardIconRef \} from '\.\.\/common\/RewardIcon';/);
+    assert.doesNotMatch(art, /hjResolveRewardIconRef|resolveRewardIconRef/);
     const repository = src('HangRepository.ts');
     assert.match(repository, /import \{ resolveRewardIconRef \} from '\.\.\/common\/RewardIcon';/);
     assert.match(repository, /return resolveRewardIconRef\(goodsOf\(snapshot, resId\)\);/);
-    // 唯一入口在 `common/RewardIcon.ts`
+    // 唯一入口在 `common/RewardIcon.ts`；activity 不再转发图标解析。
     const layerArt = readFileSync('assets/script/app/activity/LayerActivityArt.ts', 'utf8');
-    assert.match(layerArt, /resolveRewardIconRef[\s\S]*from '\.\.\/common\/RewardIcon'/);
+    assert.doesNotMatch(layerArt, /from '\.\.\/common\/RewardIcon'|from '\.\.\/common\/ResTypes'|export const RESOURCE_ICON_ART_ROOT/);
 });
 
 test('页面：切页只换图 / 换数据，**不重建节点**；到 MAX 就停表', () => {
@@ -1794,7 +1799,7 @@ test('页面：切页只换图 / 换数据，**不重建节点**；到 MAX 就�
     //    首次 `_refreshTime()` 时 `atMax === _atMax === false` ⇒ 「只在翻转时写」会短路不写，
     //    于是**面板刚打开 MAX 就一直亮**（探针实测逮到，`maxBadgeActive === true` / `00:00:02`）。
     //    老端 `LayerHang.refreshTime()` 是每秒无条件 `tm("maxImg").visible = …`。
-    assert.match(page, /this\._atMax = atMax;\s*if \(this\.maxBadge\) this\.maxBadge\.active = atMax;/);
+    assert.match(page, /this\._atMax = atMax;\s*this\.maxBadge\.active = atMax;/);
     assert.equal(/if \(atMax !== this\._atMax\)/.test(page), false,
         '`maxBadge.active` 不许写成「只在翻转时写」—— prefab 默认 `_active = true`，会短路成常亮');
     // 页面里不许 `instantiate`（节点全是 prefab 烘死的）
@@ -1823,7 +1828,7 @@ test('🔴 click 监听必须挂在**真挂了 `cc.Button` 的节点**上（挂�
         monthCardBuy: 'Hang/MonthCardBar/BuyBtn',
     };
     for (const [prop, path] of Object.entries(CLICK_BOUND)) {
-        assert.match(page, new RegExp(`this\\.${prop}\\?\\.on\\(Button\\.EventType\\.CLICK, this\\._onTap`),
+        assert.match(page, new RegExp(`this\\.${prop}\\.on\\(Button\\.EventType\\.CLICK, this\\._onTap`),
             `${prop} 应当走 Button CLICK`);
         assert.equal(hasCompType(path, 'cc.Button'), true,
             `${path} 上必须有 cc.Button，否则 CLICK 永远不触发（静默死按钮）`);
@@ -1839,8 +1844,8 @@ test('🔴 click 监听必须挂在**真挂了 `cc.Button` 的节点**上（挂�
     //    不报错、不弹窗、探针里表现为 `mcFound:false`。
     assert.equal(hasCompType('Hang/MonthCardBar/Entry', 'cc.Button'), false,
         '`Entry` 在 FGUI 里是 loader，prefab 里不该有 cc.Button（有了说明有人绕过生成器手改过）');
-    assert.match(page, /this\.monthCardEntry\?\.on\(Node\.EventType\.TOUCH_END, this\._onTapMonthCard, this\);/);
-    assert.equal(/this\.monthCardEntry\?\.on\(Button\.EventType\.CLICK/.test(page), false,
+    assert.match(page, /this\.monthCardEntry\.on\(Node\.EventType\.TOUCH_END, this\._onTapMonthCard, this\);/);
+    assert.equal(/this\.monthCardEntry\.on\(Button\.EventType\.CLICK/.test(page), false,
         '`Entry` 上没有 cc.Button，写成 Button CLICK 会静默失效');
 });
 
@@ -2251,7 +2256,7 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
 
     // ---- ② 点击：挂在金币车容器的 cc.Button 上，覆盖图标和时间 ----
     assert.match(code, /this\.node\.getComponent\(Button\)/);
-    assert.match(code, /button\.node\.on\(Button\.EventType\.CLICK, this\.onClick, this\);/);
+    assert.match(code, /this\.node\.on\(Button\.EventType\.CLICK, this\.onClick, this\);/);
     // 2026-11-09：点入口**只开弹窗**，领奖 / 扫荡都在弹窗里按按钮触发
     assert.match(code, /void HangPage\.open\(\{\}\);/);
     assert.equal(/claimIdleRewards/.test(code), false, '入口不许自己发领奖意图（会变成「点一下就静默领掉」）');

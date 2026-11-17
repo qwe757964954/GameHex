@@ -187,6 +187,7 @@ export const TERRITORY_TEXTS = {
     chestOpenSkip: '跳过>>',
     /** 「宝箱开启」奖励页：关闭提示（设计稿原文）。 */
     chestOpenClose: '点击关闭',
+    chestOpenClaim: '点击领取奖励',
 } as const;
 
 /** 未绑定关卡的据点类型名（地图上的"类型"标签）。 */

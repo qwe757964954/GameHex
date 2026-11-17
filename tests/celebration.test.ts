@@ -16,7 +16,7 @@
  * ## 为什么能直接 `import` 这些源码
  *
  * `CelebrationTable` / `CelebrationTexts` / `CelebrationArt` / `CelebrationViewState` 的 import
- * 链上**没有 `cc`**（`ArtPaths` 零依赖、`LayerActivityArt` → `SevenDayArt` → `ArtPaths` 也零依赖）。
+ * 链上**没有 `cc`**（`ArtPaths` 零依赖、`common/RewardIcon` → `common/ResTypes` 也零依赖）。
  * 这是硬约束：一旦哪条链上出现 `import … from 'cc'`，本文件会整片 import 失败 ⇒
  * 那一刻的报错就是哨兵，别去「从测试里绕开」。
  *

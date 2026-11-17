@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, EditBox, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -77,24 +76,24 @@ export class RenamePage extends PopupBase {
 
     // ---------- 输入 ----------
     @property({ type: EditBox, tooltip: 'NameInput：姓名输入框（FGUI `文本_输入姓名`）' })
-    nameInput: EditBox = null;
+    nameInput: EditBox = null!;
 
     // ---------- 按钮 ----------
     @property({ type: Node, tooltip: 'FreeBtn：「免费」（FGUI `按钮_免费`，绿底，免费页显示）' })
-    freeButton: Node = null;
+    freeButton: Node = null!;
 
     @property({ type: Node, tooltip: 'ConfirmBtn：「确定」（FGUI `按钮_确定`，付费页显示）' })
-    confirmButton: Node = null;
+    confirmButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'ConfirmBtn/CostIcon：消耗图标（改名卡 / 金币）' })
-    confirmCostIcon: Sprite = null;
+    confirmCostIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'ConfirmBtn/CostLabel：消耗数量（`x1` / `x500`）' })
-    confirmCostLabel: Label = null;
+    confirmCostLabel: Label = null!;
 
     // ---------- 底部 ----------
     @property({ type: Label, tooltip: 'TipsLabel：「剩余免费次数：N」（FGUI `text_tips`，原稿是 UBB）' })
-    tipsLabel: Label = null;
+    tipsLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'GmBtn：彩蛋按钮（FGUI `组件_GM开关`），不挂也不影响主流程' })
     gmButton: Node = null;
@@ -135,7 +134,7 @@ export class RenamePage extends PopupBase {
 
         // 老端 `文本_输入姓名` 是 FGUI TextInput，监听 `EDITING_END`（失焦）做过滤 + 敏感词检查。
         // Cocos 的等价事件是 `EDITING_DID_ENDED`。
-        const input = this.nameInput?.node;
+        const input = this.nameInput.node;
         if (input) input.on(EditBox.EventType.EDITING_DID_ENDED, this.onEditingEnd, this);
     }
 
@@ -159,7 +158,7 @@ export class RenamePage extends PopupBase {
         this.gmClicks = 0;
 
         // 老端 `init`：`文本_输入姓名.setText(GetRole().GetName())`。
-        if (this.nameInput) this.nameInput.string = this.currentName;
+        this.nameInput.string = this.currentName;
         this.present();
     }
 
@@ -181,13 +180,9 @@ export class RenamePage extends PopupBase {
         return !!this.node && this.node.isValid && this.isPopupOpen;
     }
 
-    /**
-     * 绑按钮。
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**没有 `cc.Button`**（规则 81b），
-     * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
-     */
+    /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     // ============================================================
@@ -228,21 +223,17 @@ export class RenamePage extends PopupBase {
      */
     private present(): void {
         const free = isFreeRenamePage(this.freeRenameCount);
-        if (this.freeButton) this.freeButton.active = free;
-        if (this.confirmButton) this.confirmButton.active = !free;
+        this.freeButton.active = free;
+        this.confirmButton.active = !free;
 
         // 老端 `UpdateView`：`text_tips.setVar("count", renameNum).flushVars()`
         // —— 原稿是 UBB 富文本，Cocos 的 cc.Label 不认，折算成纯文本（见 `formatFreeRenameTips`）。
-        if (this.tipsLabel) {
-            this.tipsLabel.string = formatFreeRenameTips(this.freeRenameCount);
-        }
+        this.tipsLabel.string = formatFreeRenameTips(this.freeRenameCount);
 
         // 消耗图标 + 数量。老端按「手上有几张改名卡」分流；本工程没有背包 ⇒ 走金币那支（缺口 ①）。
         const icon = this.costIcons.get('coin') ?? null;
-        if (this.confirmCostIcon) this.confirmCostIcon.spriteFrame = icon;
-        if (this.confirmCostLabel) {
-            this.confirmCostLabel.string = `x${this.cost?.gemCost ?? 0}`;
-        }
+        this.confirmCostIcon.spriteFrame = icon;
+        this.confirmCostLabel.string = `x${this.cost?.gemCost ?? 0}`;
     }
 
     // ============================================================
@@ -252,14 +243,14 @@ export class RenamePage extends PopupBase {
     /** 输入框失焦：过滤非法字符 + 写回 + 敏感词检查（老端 `onNameEditingEnd`）。 */
     private async onEditingEnd(): Promise<void> {
         if (!this.alive) return;
-        const raw = this.nameInput?.string ?? '';
+        const raw = this.nameInput.string ?? '';
         const name = sanitizePlayerName(raw);
         if (name !== raw && this.nameInput) this.nameInput.string = name;
         if (!name) return;
 
         const passed = await this.checkSensitive(name);
         // 检查期间玩家可能又改了输入 —— 与老端一样，只对「还是这串」的结果做处理。
-        if (!this.alive || (this.nameInput?.string ?? '') !== name) return;
+        if (!this.alive || (this.nameInput.string ?? '') !== name) return;
         if (!passed) this.showSensitiveNameTip(name);
     }
 
@@ -296,7 +287,7 @@ export class RenamePage extends PopupBase {
 
     /** 三态校验（空 / 未改 / 通过），命中前两态时弹提示并返回 `''`。 */
     private validatedName(): string {
-        const raw = this.nameInput?.string ?? '';
+        const raw = this.nameInput.string ?? '';
         const state = checkRenameInput(raw, this.currentName);
         if (state === RenameInputState.Empty) {
             Toast.show(PLAYER_INFO_TEXTS.renameEmpty);
@@ -361,7 +352,7 @@ export class RenamePage extends PopupBase {
      * 本工程没有 GM 面板 ⇒ 达标时给一句「未接入」（缺口 ③）。
      */
     private onGmClick(): void {
-        const text = this.nameInput?.string ?? '';
+        const text = this.nameInput.string ?? '';
         this.gmClicks = text === 'gmgmgm+-' ? this.gmClicks + 1 : 0;
         if (this.gmClicks >= 5) {
             this.gmClicks = 0;
@@ -371,6 +362,6 @@ export class RenamePage extends PopupBase {
 
     /** 探针用：输入框里的原始字符串。 */
     get inputText(): string {
-        return this.nameInput?.string ?? '';
+        return this.nameInput.string ?? '';
     }
 }

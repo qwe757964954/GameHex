@@ -91,7 +91,7 @@ export class LeagueOpsBar extends Component {
 
     /** 收起浮层（幂等）。 */
     hide(): void {
-        if (!this.node || !this.node.isValid) return;
+        if (!this.node.isValid) return;
         if (!this.node.active) return;
         this.node.active = false;
         if (this.onDismiss) this.onDismiss();

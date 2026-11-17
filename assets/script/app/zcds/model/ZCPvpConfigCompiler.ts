@@ -45,6 +45,9 @@ export interface IZCPvpCompiledConfig {
 /** 校验并编译当前 PVP 分表；任何字段失败都不会污染运行时配置。*/
 export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     const global = kvToObject(tables.pvpGlobal);
+    const gameConfig = kvToObject(tables.gameConfig);
+    const monsterRegenRate = globalNumberOr(gameConfig, 'neutralMonsterRegenRate', 0, 0, true);
+    if (!Number.isSafeInteger(monsterRegenRate)) throw new Error('neutralMonsterRegenRate 必须是非负整数');
     const schemaVersion = typeof global.schemaVersion === 'number' ? global.schemaVersion : 2;
     if (schemaVersion < 2) throw new Error('pvpGlobal.schemaVersion 必须不小于 2');
 
@@ -187,6 +190,9 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         captureDefendMultiplier: globalNumberOr(global, 'captureDefendMultiplier', 2),
         captureRequireSupply: refBool(global.captureRequireSupply) ?? true,
         killUnitGoldReward: globalNumber(global, 'killUnitGoldReward', 0, true),
+        neutralMonsterFocusSwitchCdSeconds: globalNumberOr(gameConfig, 'neutralMonsterFocusSwitchCdSeconds', 3, 0, true),
+        neutralMonsterRegenDelaySeconds: globalNumberOr(gameConfig, 'neutralMonsterRegenDelaySeconds', 3, 0, true),
+        neutralMonsterRegenRate: monsterRegenRate,
         destroyBuildingGoldReward: globalNumber(global, 'destroyBuildingGoldReward', 0, true),
         // 每个席位各保底几个金矿 —— 口径见 `createPvpTileTypes` 阶段 1a（不是全场合计）。
         initialGuaranteedMine: number(tileParameters.initialGuaranteedMine, 'pvpTileGenParams.initialGuaranteedMine', 0, true),

@@ -1,5 +1,5 @@
 import { GameNet } from '../../net/GameNet';
-import { toCount, toIdString, withTimeout } from '../../net/RequestGuard';
+import { sendGameRequest, toCount, toIdString } from '../../net/RequestGuard';
 import { RequestGetRank } from '../../generated/requestMsg/RequestRankMsg';
 import { CmdRankType } from '../../generated/netProto/CmdInterface';
 import type { IBigMapCityRankBoard, IBigMapCityRankEntry, IBigMapRankProvider } from '../model/BigMapRank';
@@ -21,7 +21,7 @@ export class RemoteBigMapRankProvider implements IBigMapRankProvider {
     }
 
     fetchCityRank(cityId: number): Promise<IBigMapCityRankBoard | null> {
-        if (this.isDisposed || !this.isOwnerCurrent() || !GameNet.instance.isConnected) return Promise.resolve(null);
+        if (this.isDisposed || !this.isOwnerCurrent()) return Promise.resolve(null);
         const pending = this.pending.get(cityId);
         if (pending) return pending;
         const task = this.queue.then(() => this.load(cityId)).finally(() => {
@@ -34,7 +34,7 @@ export class RemoteBigMapRankProvider implements IBigMapRankProvider {
 
     private async load(cityId: number): Promise<IBigMapCityRankBoard | null> {
         const net = GameNet.instance;
-        if (this.isDisposed || !this.isOwnerCurrent() || !net.isConnected) return null;
+        if (this.isDisposed || !this.isOwnerCurrent()) return null;
         let info: CmdRankData | null = null;
         //53 的 type 承载 campId；unionId 是联盟上下文，此榜不传。
         const request = new RequestGetRank({ rankType: CmdRankType.SLG_CAMP_ROLE_HARM_RANK, showNum: 50, type: cityId },
@@ -43,14 +43,14 @@ export class RemoteBigMapRankProvider implements IBigMapRankProvider {
         request.canSend = () => !this.isDisposed
             && this.isOwnerCurrent() && Date.now() < expiresAt;
         request.allowRetry = false;
-        let sent: boolean;
+        let status: Awaited<ReturnType<typeof sendGameRequest>>;
         try {
-            sent = await withTimeout(net.send(request, false), this.timeoutMs, () => false);
+            status = await sendGameRequest(net, () => request, { timeoutMs: this.timeoutMs, tag: 'BigMapRank' });
         } finally {
             net.removeCaller(this);
         }
         if (this.isDisposed || !this.isOwnerCurrent()) return null;
-        if (!sent || !info) return null;
+        if (status !== 'ok' || !info) return null;
         const entry = (role: CmdRankRole): IBigMapCityRankEntry => ({
             roleId: toIdString(role.roleId), name: role.roleName ?? '', avatarId: toIdString(role.roleImg),
             rank: role.rank, warScore: toCount(role.value), isPlayer: toIdString(role.roleId) === this.roleId,

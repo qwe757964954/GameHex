@@ -16,6 +16,11 @@
  *   ③ tab 只显示前两档；第 3 档起**必须第 2 档已激活**才出现（渐进解锁）。
  */
 
+import { MS_PER_DAY, startOfDay } from '../../core/time/TimeMs';
+
+/** 本地时区当天 0 点；保留旧导出路径，实现真源在 `core/time/TimeMs`。 */
+export { startOfDay };
+
 /** 一条奖励：`{ resId, number }`（与 `CmdGoods` 同口径）。 */
 export interface IFirstRechargeReward {
     readonly resId: number;
@@ -63,8 +68,6 @@ export const FIRST_RECHARGE_DAYS = 3;
 /** 前两档常显；第 3 档起要等第 2 档激活。 */
 export const FIRST_RECHARGE_ALWAYS_VISIBLE_TIERS = 2;
 
-const DAY_MS = 86400000;
-
 /** `Long` / `string` / `number` 统一成毫秒数；非法值返回 0。 */
 export function toMillis(value: unknown): number {
     if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
@@ -74,6 +77,7 @@ export function toMillis(value: unknown): number {
     }
     if (value && typeof value === 'object') {
         // protobufjs 的 Long：`{ low, high, unsigned }`（有 toNumber 就优先用它）
+        // 注意与 core/time/TimeMs.toMillis 的优先级相反（那边先 toNumber()），保留本表契约。
         const long = value as { toNumber?: () => number; low?: number; high?: number };
         if (typeof long.toNumber === 'function') {
             const parsed = long.toNumber();
@@ -86,13 +90,6 @@ export function toMillis(value: unknown): number {
     return 0;
 }
 
-/** 本地时区当天 0 点（毫秒）。 */
-export function startOfDay(timeMs: number): number {
-    const date = new Date(timeMs);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
-}
-
 /**
  * 「今天是激活后的第几天」，0 = 还没到激活日。
  *
@@ -103,7 +100,7 @@ export function dayOfActiveTime(activeTimeMs: number, nowMs: number): number {
     if (!Number.isFinite(activeTimeMs) || activeTimeMs <= 0) return 0;
     const start = startOfDay(activeTimeMs);
     if (nowMs < start) return 0;
-    return Math.floor((nowMs - start) / DAY_MS) + 1;
+    return Math.floor((nowMs - start) / MS_PER_DAY) + 1;
 }
 
 /** 单个奖励条目的解析；字段不合法返回 `null`。 */

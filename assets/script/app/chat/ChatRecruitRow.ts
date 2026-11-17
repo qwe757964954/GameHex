@@ -135,7 +135,7 @@ export class ChatRecruitRow extends Component {
 
         this.joinLabel.string = buttonText;
         const button = this.joinButton.getComponent(Button);
-        if (button) button.interactable = !isSelf;
+        button.interactable = !isSelf;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */

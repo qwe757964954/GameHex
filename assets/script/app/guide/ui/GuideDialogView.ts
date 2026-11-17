@@ -17,7 +17,6 @@ import {
     Node,
     Prefab,
     RichText,
-    sp,
     Sprite,
     SpriteFrame,
     UITransform,
@@ -31,10 +30,13 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { getGuidePortraitAsset } from '../model/GuideDialogConfig';
 import type { GuideDialogLine } from '../model/GuideDialogConfig';
 import type { GuideMaskType } from '../model/GuideStepConfig';
-import { formatGuideContent, guideDialogBottom, guideHintMotion } from '../model/GuidePresentation';
+import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion } from '../model/GuidePresentation';
 import { HEX_GRID_CONTENT_LIFT, HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT } from '../../../core/hex/HexGridLayout';
 
 const { ccclass, property } = _decorator;
+
+/** 指南骨骼立绘的固定骨架子节点（`skel/豌豆射手`：根节点 + `spine`）。 */
+const GUIDE_PORTRAIT_SPINE_NODE_NAME = 'spine';
 
 export interface IGuideFocusTarget {
     readonly node: Node;
@@ -50,11 +52,13 @@ const IDLE_ADVANCE_SECONDS = 8;
 /** 遮罩不透明度：设计案「全屏半透明黑 60%」= 153，取整 150；hole 步降到 40% 把注意力留给焦点区。 */
 const FULL_MASK_ALPHA = 150;
 const HOLE_MASK_ALPHA = 100;
+
+/** 为对话框上方的姓名牌留出空间，角色脚底不压住姓名牌。 */
 const PORTRAIT_DIALOG_GAP = 48;
 
 @ccclass('GuideDialogView')
 export class GuideDialogView extends Component {
-    @property({ type: Node, group: '立绘', tooltip: 'Portrait：角色立绘节点（锚点 0.5/0，脚底贴屏幕底部）' })
+    @property({ type: Node, group: '立绘', tooltip: 'Portrait：角色立绘节点（锚点 0.5/0，居中站在对话框上方）' })
     portraitNode: Node = null!;
 
     @property({ group: '立绘', tooltip: '立绘显示高度；宽度按原图比例计算' })
@@ -153,6 +157,10 @@ export class GuideDialogView extends Component {
         this.maskTransforms = this.focusMasks.map(node => node.getComponent(UITransform));
         this.schedule(this.resolveFocus, 0.25);
         this.blockerNode.on(Button.EventType.CLICK, this.onTap, this);
+        // 焦点孔外的四块遮罩同时也是「孔外点击区」：点了等于点对话条（推进台词）。
+        // Button 是 prefab 里挂好的（transition=NONE、target=null），代码只绑 CLICK；
+        // 只有焦点真的存在时它们才 active，孔内没有任何遮挡 ⇒ 地图格子 / 弹窗按钮照常收点击。
+        for (const mask of this.focusMasks) mask.on(Button.EventType.CLICK, this.onTap, this);
         this.debugSkipNode.active = DEBUG;
         if (DEBUG) this.debugSkipNode.on(Button.EventType.CLICK, this.onDebugSkipTap, this);
         this.warnIfNotUiLayer();
@@ -186,7 +194,7 @@ export class GuideDialogView extends Component {
         color.a = maskType === 'hole' ? HOLE_MASK_ALPHA : FULL_MASK_ALPHA;
         dim.color = color;
         for (const sprite of this.focusMaskSprites) sprite.color = color;
-        this.layoutBlocker(maskType);
+        this.layoutBlocker();
     }
 
     /** 只按配置的焦点标识定位；没有焦点的对话步骤不显示操作手指。 */
@@ -204,7 +212,7 @@ export class GuideDialogView extends Component {
         this.focusHintText.string = state.focusNode === 'Battle/DrawnCard' ? '当前抽到的卡牌' : state.requireAction === 'drag'
             ? '拖拽卡牌到指定格子' : state.focusNode.startsWith('Map/Tile') ? '点击地图上的地块' : '点击高亮区域';
         this.resolveFocus();
-        this.layoutBlocker(state.maskType);
+        this.layoutBlocker();
     }
 
     private readonly resolveFocus = (): void => {
@@ -274,13 +282,17 @@ export class GuideDialogView extends Component {
             if (visible) {
                 this.focusScaleX = halfWidth * 2 / this.focusWidth;
                 this.focusScaleY = halfHeight * 2 / this.focusHeight;
-                this.focusRing.setPosition(this.focusLocal);
-                this.focusRing.setScale(this.focusScaleX, this.focusScaleY, 1);
-                this.focusHand.setPosition(this.focusLocal);
+                // ⚠️ 这里是**每帧**跑的对齐（相机/父节点可能在动），所以四件事都先比较再写：
+                // · `setPosition` / `setContentSize` 不比较就写，等于每帧把四条遮罩的 Sprite 顶点、
+                //   光圈与手指的 transform 全部标脏重建 —— 手指的呼吸动画就会一卡一卡（用户实测反馈）。
+                // · 缩放与手指浮动**不在这里写**：它们由 `update` 的呼吸每帧统一下发，两边都写会互相覆盖。
+                if (!this.focusRing.position.equals(this.focusLocal)) this.focusRing.setPosition(this.focusLocal);
                 const hintWidth = this.hintTransform.width;
                 const hintLimitX = (this.hostTransform.width - hintWidth) / 2 - 12;
-                this.mapHint.setPosition(Math.max(-hintLimitX, Math.min(hintLimitX, this.focusLocal.x)),
-                    Math.min(this.focusLocal.y + halfHeight + 140, this.hostTransform.height / 2 - 100), 0);
+                const hintX = Math.max(-hintLimitX, Math.min(hintLimitX, this.focusLocal.x));
+                const hintY = Math.min(this.focusLocal.y + halfHeight + 140, this.hostTransform.height / 2 - 100);
+                const hint = this.mapHint.position;
+                if (hint.x !== hintX || hint.y !== hintY) this.mapHint.setPosition(hintX, hintY, 0);
                 this.layoutFocusMasks(this.focusLocal.x, this.focusLocal.y, halfWidth, halfHeight);
                 dialogBottom = guideDialogBottom(this.hostTransform.height, this.dialogTransform.height,
                     this.defaultDialogBottom, this.focusLocal.y, halfHeight);
@@ -299,9 +311,8 @@ export class GuideDialogView extends Component {
         // `Widget.bottom` 的 setter 无条件 `_recursiveDirty()`（引擎 widget.ts 的 442-445），
         // 值没变也写会让对话框每帧重排一次 ⇒ 只在真的位移时赋值。
         if (dialogMoved) this.dialogWidget.bottom = dialogBottom;
-        if (changed || dialogMoved) this.layoutBlocker(this.currentMaskType);
-        this.portraitNode.setPosition(0, dialogBottom - this.hostTransform.height / 2
-            + this.dialogTransform.height + PORTRAIT_DIALOG_GAP, 0);
+        if (changed || dialogMoved) this.layoutBlocker();
+        this.placePortrait();
     }
 
     /** 四块 Sprite 拼出真实透亮的焦点孔；按钮消费孔外输入，孔内交给原控件。 */
@@ -316,15 +327,28 @@ export class GuideDialogView extends Component {
 
     private placeMask(index: number, x: number, y: number, width: number, height: number): void {
         const node = this.focusMasks[index];
-        node.setPosition(x, y, 0);
-        this.maskTransforms[index].setContentSize(Math.max(0, width), Math.max(0, height));
+        const size = this.maskTransforms[index];
+        const w = Math.max(0, width), h = Math.max(0, height);
+        const pos = node.position;
+        if (pos.x !== x || pos.y !== y) node.setPosition(x, y, 0);
+        // 尺寸没变就不写：`setContentSize` 会触发 Sprite 重算渲染数据，每帧四块 = 每秒 240 次重建。
+        if (size.width !== w || size.height !== h) size.setContentSize(w, h);
     }
 
+    /**
+     * 每帧只做两件事：把几何「对齐」到当前焦点、把呼吸动画写下去。
+     *
+     * ⚠️ 分工必须清楚（2026-11-16 修「手指呼吸卡顿」时定的）：
+     * · 位置/尺寸这类**几何**归 `placeFocusRing`，它内部逐项比较后才写节点；
+     * · **呼吸**（气泡缩放、光圈脉动、手指浮动）只在这里写 —— 每帧必写是它的本分。
+     * 早先两边都写同一批属性，等于每帧把四条遮罩的 `contentSize` 重设一遍
+     * （每次都会让 Sprite 重建顶点缓冲），动画就一卡一卡。
+     */
     protected update(): void {
         if (this.focusKey) this.placeFocusRing();
         const motion = guideHintMotion(this.animationStartedAt, Date.now());
-        const hint = this.tapHint.active ? this.tapHint : this.mapHint;
-        hint.setScale(motion.hintScale, motion.hintScale, 1);
+        const hint = this.tapHint.active ? this.tapHint : this.mapHint.active ? this.mapHint : null;
+        if (hint) hint.setScale(motion.hintScale, motion.hintScale, 1);
         if (this.focusHand.active) {
             this.focusHand.setPosition(this.focusRing.position.x,
                 this.focusRing.position.y + motion.handLift, 0);
@@ -333,13 +357,19 @@ export class GuideDialogView extends Component {
     }
 
     /**
-     * 点击区尺寸随遮罩类型切换。hole 步要玩家点地图格子，点击区若保持全屏会把点击全吃掉，
-     * 表现为对话停住、点哪都没反应。
+     * 点击区布局。
+     *
+     * 有焦点孔时，**孔外的点击全部由四块遮罩接住**（它们都绑了 CLICK → `onTap`，见 `onLoad`），
+     * `Blocker` 只守对话条自己那一块；孔内不放任何遮挡，地块 / 弹窗按钮照常收点击。
+     *
+     * 没有孔时（`full` 步，或 `hole` 步的焦点还没就绪）必须铺满宿主：需求是
+     * 「对话框出现时屏蔽其他点击，点哪都等于点对话条」，漏一条缝玩家就点到主界面底栏去了。
+     * ⚠️ 因此**不能按 `maskType === 'hole'` 判**：焦点未就绪时孔并不存在，那样整屏点击会漏下去，
+     * 而该步又要等玩家点地块，等于两头都卡死。
      */
-    private layoutBlocker(maskType: GuideMaskType): void {
+    private layoutBlocker(): void {
         const node = this.blockerNode;
-        if (maskType === 'hole' || this.focusRing.active) {
-            // hole：点击区只覆盖对话条（地图要能点）。
+        if (this.focusRing.active) {
             // 位置/尺寸直接取 `DialogBox` 的实际值，不写死 —— 对话条改了尺寸这里自动跟上。
             this.dialogWidget.updateAlignment();
             const box = this.dialogTransform;
@@ -356,7 +386,7 @@ export class GuideDialogView extends Component {
 
     private readonly onLayoutChanged = (): void => {
         this.placeFocusRing();
-        this.layoutBlocker(this.currentMaskType);
+        this.layoutBlocker();
     };
 
     private onDebugSkipTap(): void {
@@ -492,6 +522,15 @@ export class GuideDialogView extends Component {
         this.onTap();
     };
 
+    /** 两位角色均居中站在对话框上方，对话框避让焦点时跟随移动。 */
+    private placePortrait(): void {
+        const dialogTop = -this.hostTransform.height / 2 + this.dialogWidget.bottom + this.dialogTransform.height;
+        const foot = dialogTop + PORTRAIT_DIALOG_GAP;
+        const pos = this.portraitNode.position;
+        // 同上：这个方法每帧被 `placeFocusRing` 顺带调用，值没变就别写。
+        if (pos.x !== 0 || pos.y !== foot) this.portraitNode.setPosition(0, foot, 0);
+    }
+
     /**
      * 切换立绘。静图换 SpriteFrame 并按 portraitHeight 等比设尺寸；
      * 骨骼实例化一次后只切 active；未登记或加载失败时两个都藏起来。
@@ -522,8 +561,11 @@ export class GuideDialogView extends Component {
             // 尺寸由代码统一控制，必须用 CUSTOM；TRIMMED 会在换图时把节点拉回原图尺寸。
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             const raw = frame.originalSize;
-            const width = raw.height > 0 ? Math.round(raw.width * (this.portraitHeight / raw.height)) : raw.width;
-            this.setNodeSize(sprite.node, width, this.portraitHeight);
+            const size = fitGuidePortrait(raw.width, raw.height, this.portraitHeight, this.hostTransform.width);
+            const width = Math.round(size.width);
+            const height = Math.round(size.height);
+            this.setNodeSize(sprite.node, width, height);
+            this.placePortrait();
             return;
         }
 
@@ -533,6 +575,9 @@ export class GuideDialogView extends Component {
         sprite.node.active = true;
         const npc = this.ensureNpc(loaded as Prefab);
         npc.active = true;
+        // 骨骼节点只建一次，但宿主宽度可能变化，显示尺寸每次都要重算。
+        this.fitNpc();
+        this.placePortrait();
     }
 
     private hidePortrait(): void {
@@ -541,10 +586,7 @@ export class GuideDialogView extends Component {
         if (this.npcNode) this.npcNode.active = false;
     }
 
-    /**
-     * 建骨骼立绘，只建一次。按实际骨骼的显示框等比缩放并对齐脚点，
-     * 拿不到高度时按 1 处理并告警。
-     */
+    /** 建骨骼立绘，只建一次（尺寸不在这里定，见 {@link fitNpc}）。 */
     private ensureNpc(prefab: Prefab): Node {
         if (this.npcNode) return this.npcNode;
         const host = this.portraitNode;
@@ -554,20 +596,37 @@ export class GuideDialogView extends Component {
         node.layer = host.layer;
         host.addChild(node);
         node.setPosition(0, 0, 0);
-
-        const skeleton = node.getComponentInChildren(sp.Skeleton);
-        const transform = skeleton ? skeleton.node.getComponent(UITransform) : node.getComponent(UITransform);
-        const rawHeight = transform ? transform.height : 0;
-        if (rawHeight > 0) {
-            const scale = this.portraitHeight / rawHeight;
-            node.setScale(scale, scale, 1);
-            node.setPosition(0, skeleton ? transform.anchorY * this.portraitHeight : 0, 0);
-            console.log(`[GuideDialog] 骨骼立绘 ${prefab.name} · 原始高 ${rawHeight} · scale ${scale.toFixed(2)}`);
-        } else {
-            console.warn('[GuideDialog] 骨骼立绘没有 UITransform 高度，缩放按 1 处理（可能偏小）');
-        }
-
         this.npcNode = node;
         return node;
+    }
+
+    /**
+     * 把骨骼按绑定框等比缩到目标尺寸并让脚点贴住立绘原点（锚点 0.5/0）。
+     *
+     * 和静图一样受 {@link PORTRAIT_MAX_WIDTH_RATIO} 的宽度上限约束 —— 骨骼绑定框
+     * （`skel/豌豆射手` 是 654×916）普遍比立绘"胖"，只按高度缩会横向撑出对话条。
+     *
+     * 每次切回骨骼都按当前宿主宽度重算，不能沿用首次实例化时的尺寸。
+     */
+    private fitNpc(): void {
+        const node = this.npcNode;
+        if (!node) return;
+        const spineNode = node.getChildByName(GUIDE_PORTRAIT_SPINE_NODE_NAME);
+        if (!spineNode) {
+            throw new Error(`GuideDialogView 骨骼立绘缺少固定子节点 ${GUIDE_PORTRAIT_SPINE_NODE_NAME}`);
+        }
+        const transform = spineNode.getComponent(UITransform);
+        if (!transform) {
+            throw new Error(`GuideDialogView 骨骼立绘的 ${GUIDE_PORTRAIT_SPINE_NODE_NAME} 节点缺少 UITransform`);
+        }
+        const rawWidth = transform.width;
+        const rawHeight = transform.height;
+        if (!(rawWidth > 0) || !(rawHeight > 0)) {
+            throw new Error(`GuideDialogView 骨骼立绘尺寸无效：${rawWidth}×${rawHeight}`);
+        }
+        const size = fitGuidePortrait(rawWidth, rawHeight, this.portraitHeight, this.hostTransform.width);
+        const scale = size.height / rawHeight;
+        node.setScale(scale, scale, 1);
+        node.setPosition(0, transform.anchorY * size.height, 0);
     }
 }

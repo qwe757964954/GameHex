@@ -126,12 +126,9 @@ import {
     LEAGUE_TIP_DONATE_LIMIT,
     LEAGUE_TIP_NOT_ENOUGH_TEMPLATE,
 } from '../assets/script/app/league/LeagueTexts';
-import {
-    RESOURCE_ICON_ART_ROOT,
-    resolveRewardIconRef,
-    ROLE_PROPERTY_ICON_ROOT_OVERRIDE,
-} from '../assets/script/app/activity/LayerActivityArt';
-import { parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
+import { resolveRewardIconRef } from '../assets/script/app/common/RewardIcon';
+import { parseRolePropertyRows, ROLE_PROPERTY_ICON_ROOT_OVERRIDE } from '../assets/script/app/common/ResTypes';
+import { RESOURCE_ICON_ART_ROOT } from '../assets/script/app/ArtPaths';
 import { assetExists, assetPath } from './helpers/asset-paths';
 
 const STORE_PAGE_TS = 'assets/script/app/league/LeagueStorePage.ts';
@@ -341,7 +338,7 @@ test('B11 `roleProperty` 裸名图标落哪个目录：默认 `icons/resource`�
         const file = assetPath(`${ref.root}/${ref.name}.png`);
         assert.ok(existsSync(file),
             `resId=${resId}（${info.name}）解析到 ${ref.root}/${ref.name}，但实盘没有 ${file}`
-            + ' ⇒ 该加进 LayerActivityArt 的 `ROLE_PROPERTY_ICON_ROOT_OVERRIDE`');
+            + ' ⇒ 该加进 common/ResTypes 的 `ROLE_PROPERTY_ICON_ROOT_OVERRIDE`');
         (ref.root === RESOURCE_ICON_ART_ROOT ? defaulted : overrode).push(`${resId}:${ref.root}/${ref.name}`);
     }
     // 覆盖面守卫：绝大多数（实测 8/11）走默认目录，少数例外必须显式列出来 —— 任何一侧变了都要人工确认。
@@ -709,17 +706,18 @@ test('E2b 商店：买成功后要消费响应里的 `tlCmdGoods` ⇒ 弹「获�
     // 只有「真收到响应」才算 ok（沿用 GiftRepository.buyGift 的 applied 闸）
     assert.ok(
         /make: \(onRsp: \(rsp: Rsp\) => void\)/.test(src)
-        && /applied = true; onResponse\(rsp\)/.test(src)
-        && /return applied \? 'ok' : 'failed'/.test(src),
+        && /applied = true;\s*onResponse\(rsp\)/.test(src)
+        && /applied \? 'ok' : 'failed'/.test(src),
         '`sendWithResponse` 必须真的调用 make 传进来的回调，且只有收到响应才算 ok（超时/未连接不许当 ok）',
     );
     // 未连接就地返回 offline，别把 state 弄成 ok
-    assert.ok(/if \(!net\?\.isConnected\) return 'offline'/.test(src));
+    assert.match(src, /sendGameRequest\(GameNet\.instance/);
     // ⚠️ 弹窗由 Controller 展示一次；页面不许再弹一遍
     assert.ok(!strip(read(STORE_PAGE_TS)).includes('FW.ShowReward'), '页面不要再弹一次，避免双弹');
 });
 
-test('E2c 砍价 / 任务领奖 / 任务进度奖 / 北伐扫荡 都已接弹窗；「看广告」是**有意不弹**', () => {    const src = strip(read(REPO_TS));
+test('E2c 砍价 / 任务领奖 / 任务进度奖 / 北伐扫荡 都已接弹窗；「看广告」是**有意不弹**', () => {
+    const src = strip(read(REPO_TS));
     // 老端逐条对 `ModelLeague`：`RequestTaskReward` / `RequestTaskUnionGetProgressReward` /
     // `RequestUnionActSweep` / `RequestUnionBargain` 全是 `if (rsp.ret) FW.ShowReward(rsp.tlCmdGoods)`。
     for (const request of [

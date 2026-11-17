@@ -22,10 +22,10 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenProgressBar')
 export class BattleTokenProgressBar extends Component {
     @property({ type: ProgressBar, tooltip: '进度条本体（HORIZONTAL 模式，barSprite = BarFill）' })
-    bar: ProgressBar = null;
+    bar: ProgressBar = null!;
 
     @property({ type: Label, tooltip: '条上的数值文案（FGUI `显示进度文本` 控制器默认显示）' })
-    valueLabel: Label = null;
+    valueLabel: Label = null!;
 
     /**
      * 设进度。
@@ -35,9 +35,7 @@ export class BattleTokenProgressBar extends Component {
      * 在运行时会被 Widget/布局改过，现算会随帧漂移。
      */
     setProgress(value: number, max: number, text: string | null = null): void {
-        if (this.bar) {
-            this.bar.progress = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
-        }
-        if (this.valueLabel) this.valueLabel.string = text ?? `${value}`;
+        this.bar.progress = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+        this.valueLabel.string = text ?? `${value}`;
     }
 }

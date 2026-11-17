@@ -18,25 +18,16 @@ class FakeSkeleton {
     getCurrent() { return { trackTime: 0 }; }
 }
 
-/** 每调一次 `make()` 就产出一份「美术实例 + 它的骨架」，便于区分主美术与轮廓副本。 */
+/** 每调一次 `make()` 就产出一份「美术实例 + 固定子节点 spine 上的骨架」，便于区分主美术与轮廓副本。 */
 function spinePrefab(cc: any, FakeNode: any, skeletons: FakeSkeleton[]) {
-    return { make: () => {
+    return { name: 'NutVisual', make: () => {
         const node = new FakeNode('NutVisual');
+        const spine = new FakeNode('spine');
+        spine.setParent(node);
         const skeleton = new FakeSkeleton();
-        Object.assign(skeleton, { node });
+        Object.assign(skeleton, { node: spine });
         skeletons.push(skeleton);
-        node.getComponent = ((type: unknown) => (type === cc.sp.Skeleton ? skeleton : null)) as typeof node.getComponent;
-        return node;
-    } };
-}
-
-function framePrefab(cc: any, FakeNode: any) {
-    return { make: () => {
-        const node = new FakeNode('NutVisual');
-        const sprite = { node, color: null as unknown };
-        const animation = { clips: [{ name: 'nut-idle' }], defaultClip: null, play() {}, stop() {} };
-        node.getComponent = ((type: unknown) => (type === cc.Sprite ? sprite
-            : type === cc.Animation ? animation : null)) as typeof node.getComponent;
+        spine.getComponent = ((type: unknown) => (type === cc.sp.Skeleton ? skeleton : null)) as typeof spine.getComponent;
         return node;
     } };
 }
@@ -129,7 +120,7 @@ test('整体外轮廓 = 美术放大副本：子序在角色之下、同朝向�
     assert.equal(copyNode.active, false, '阵亡不出整体轮廓');
 });
 
-test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美术或不给材质时只关整体轮廓', () => {
+test('对象池复用后副本跟着新体型/新阵营走；摘掉材质或切到无美术时只关整体轮廓', () => {
     const { load, bar, cc, FakeNode, presentationArt } = loadViews();
     const { view } = setupView(load, bar, FakeNode);
     view.setOutlineCopyMaterial({ name: 'outline-copy' });
@@ -158,18 +149,11 @@ test('对象池复用后副本跟着新体型/新阵营走；切到序列帧美�
     assert.equal(copyNode.active, false, '没有整体轮廓材质就不出整体轮廓');
     assert.equal(copy.customMaterial, null, '材质要真的从副本上摘掉');
 
-    // 换成分件序列帧美术：没有整体外形可描 ⇒ 副本销毁，不留半成品节点。
-    presentationArt.unitVisualPrefabs.set('test-unit', framePrefab(cc, FakeNode));
-    view.initialize({ unitId: 'test-unit', prefabSize: 1 });
-    assert.equal(view.outlineCopyNode, null, '序列帧美术不建整体轮廓');
-    assert.equal(view.visualRoot.children.filter((child: any) => child.name.endsWith('_OutlineCopy')).length, 0,
-        '副本节点必须被销毁（否则留在美术层里当幽灵）');
-    assert.deepEqual(view.visualRoot.children.map((child: any) => child.name),
-        ['NutVisual'], '只剩美术');
-
-    // 切到无美术：同样要把副本清干净。
+    // 切到无美术：副本与主美术一起清干净。
     presentationArt.unitVisualPrefabs.delete('test-unit');
     view.initialize({ unitId: 'test-unit', prefabSize: 1 });
     assert.equal(view.outlineCopyNode, null);
+    assert.equal(view.visualNode, null);
     assert.equal(view.visualRoot.children.filter((child: any) => child.name.endsWith('_OutlineCopy')).length, 0);
+    assert.deepEqual(view.visualRoot.children, [], '美术与副本都该销毁');
 });

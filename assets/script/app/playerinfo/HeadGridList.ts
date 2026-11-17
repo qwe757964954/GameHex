@@ -45,7 +45,7 @@ const TAP_TOLERANCE = 12;
 @ccclass('HeadGridList')
 export class HeadGridList extends Component {
     @property({ type: Node, tooltip: 'Content：槽位容器（**不参与滚动**，子节点 = 8 个 ChangeHeadItem 槽位）' })
-    content: Node = null;
+    content: Node = null!;
 
     /** 铺一格（**在每次重绑时按 `dataIndex` 现取数据**）。 */
     renderItem: ((node: Node, dataIndex: number) => void) | null = null;
@@ -110,8 +110,8 @@ export class HeadGridList extends Component {
         this._maxTopRow = Math.max(0, Math.ceil((contentH - this.viewHeight) / this.stepY));
 
         // `Content` 尺寸只为「内容到底有多高」留个可读记录（**不参与滚动**）。
-        const contentUi = this.content?.getComponent(UITransform);
-        if (contentUi) contentUi.setContentSize(contentUi.contentSize.width, contentH);
+        const contentUi = this.content.getComponent(UITransform);
+        contentUi.setContentSize(contentUi.contentSize.width, contentH);
 
         // ⚠️ **不重置** `_topRow`（只在越界时收敛回上界）：`refreshList` 也会在
         //    「点一格改选中态」之后被调用，那时候重置顶行会让列表「自己跳回顶部」。
@@ -150,7 +150,7 @@ export class HeadGridList extends Component {
     // ============================================================
 
     private get layout(): Layout | null {
-        return this.content?.getComponent(Layout) ?? null;
+        return this.content.getComponent(Layout) ?? null;
     }
 
     /** 列数 / 行步进 / 格高全部来自 Content 的 Grid Layout。 */

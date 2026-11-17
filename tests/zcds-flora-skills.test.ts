@@ -122,13 +122,15 @@ test('镭射飞龙 25 级：四类词缀都进了 statPatch', () => {
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
     const patch = loadout!.statPatch;
-    assert.equal(patch.bulletNumFlat, 2, '101001 III 级 +2 发');
-    assert.equal(patch.bulletAngleFlat, 12);
-    // 101001 攻速 26% + 101002 攻速 26%
-    assert.equal(patch.attackSpeedPct, 52);
-    // 101001 伤害 16% + 101002 附加 78%
-    assert.equal(patch.damageRatePct, 94);
-    assert.equal(patch.attackRangePct, 16, '101002 III 级射程 +16%');
+    assert.equal(patch.bulletNumFlat, 2, '281001 III 级 +2 发');
+    assert.equal(patch.bulletAngleFlat, 12, '371001 总张角 12°');
+    //  攻速只剩 101001 自己的 26% —— 101002 自 2026-11-16 起改「裂变爆炸」，
+    //  它的旧子链 191002（曾是攻速 14/20/26%）已改写成攻击 +16%，不再叠加攻速。
+    assert.equal(patch.attackSpeedPct, 26, '101001 III 级攻速 26%（唯一的攻速来源）');
+    //  伤害 = 191001（101001 自己的伤害尾巴 16%）+ 101002 的混搭尾 13%。
+    assert.equal(patch.damageRatePct, 29, '191001 伤害 16% + 101002 混搭尾 13%');
+    assert.equal(patch.attackPct, 16, '101002 尾巴「攻击 +16%」由子链 191002 承载');
+    assert.equal(patch.attackRangePct, 23, '101002 尾巴「攻击范围 +23%」由子链 281002 承载');
 });
 
 // ── 二、三个新原语（缺省关闭，老行为不变） ─────────────────────────────────────

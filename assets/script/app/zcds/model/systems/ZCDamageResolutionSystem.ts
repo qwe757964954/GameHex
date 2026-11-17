@@ -132,7 +132,8 @@ export class ZCDamageResolutionSystem {
     }
 
     private static recordDamage(attacker: ZCOwner | 'neutral', defender: ZCOwner, amount: number,
-        context: IZCDamageResolutionContext): void {        if (amount <= 0) return;
+        context: IZCDamageResolutionContext): void {
+        if (amount <= 0) return;
         if (attacker !== 'neutral') context.damageDealt[attacker] += amount;
         context.damageTaken[defender] += amount;
     }

@@ -57,7 +57,7 @@ npm.cmd run benchmark:zcds -- .codex-artifacts/zcds-performance-current.json .co
 
 五场景的兵种定义表引用变化均从每轮 720 次降为 0 次（不含初始化）。密集远程场景弹道峰值 200，持续开发场景观测到 50 次地形版本变化。单连通领地的合成场景中，200 格的成员数组由 200 份、40,000 个格子编号，降为 1 份、200 个编号。
 
-索敌另用诊断轮次包装 `ZCTargetingSystem.acquire`，避免插桩污染主基准。五场景索敌合计约 10.7～39.6 ms / 12 秒模拟时间，占插桩 tick 时间约 19%～39%。当前保留全图最近及平局规则；这些数据不足以支持另改索敌算法。主基准均值下降，但部分场景 p95 略升，因此不承诺尾延迟下降或设备 FPS 提升。
+> 历史记录（2026-11-03）：当时保留全图最近及平局规则，索敌仍为线性全表扫描；这些数据不足以支持另改索敌算法。2026-11-16 后续已落地 owner 分桶与目标地块分组（P2-8），精确最近目标与同距离 id 规则不变，详见文末最新记录。
 
 重新运行并与本次同规则结果比较：
 
@@ -94,6 +94,29 @@ npm.cmd run benchmark:zcds -- .codex-artifacts/zcds-pipeline-current.json .codex
 
 ## 2026-11-11：扩展到 SLG、领地、卡牌与共用资源栏
 
-SLG 标记复用 ViewState 既有 Map，去掉逐标记线性扫描和临时 Map；领地虚影与云消散移除三处逐帧数组复制；阵容站台同兵种数据刷新保留单位模型，换美术、显式清除和空位仍释放；共享资源栏动画逐帧直接推进三个可选槽位。未增加全局资源缓存或修改玩法参数。
-
 针对性测试 119/119；相关集四个 ArenaRoot 预制体/几何断言在修改前后均失败。已保存修改前快照和只读映射反事实回归，独立复核五个生产文件增量未发现问题。全量检查与验收缺口见 [全工程性能复核与修复](../outputs/audit-2026-11-11/全工程性能复核与修复.md)。工程级扫描只定位候选分配点，不代表所有流程完成真机性能验收。
+
+## 2026-11-16：P2-8 索敌候选遍历与性能收尾
+
+P2-8 只改 `ZCTargetingSystem.acquire` 调用链，不扩展 P2-12、不替换全工程 `Math.hypot`、不改 `statModsCountOf` 语义。原规则保持不变：仇恨目标进同一候选池；普通单位跳过自身/死亡/`hp<=0`/同 owner，不能对空跳过 flying；平方距离更近者胜，同距离 id 小者胜；`unitsOnly`/已有单位候选且 `preferUnitTargets` 早退；地块 awake monster 视为 building，否则跳过 neutral/同 owner，暴露城墙为 wall，其余 `building !== 'none' && hp>0 && wallHp<=0` 为 building；单位与地块共用 `bestDistance/bestId`。
+
+实现：
+
+- `ZCUnitRegistry` 新增 `byOwner` owner 桶、`unitsOf` 与 `changeOwner` 迁移；索敌只遍历敌方 owner 桶。
+- `ZCGameModel.candidateHexesByOwner` 在 `refreshTargetHexes` 中按 owner 预分组：awake monster 进所有组，非 neutral 城墙/建筑只进非己方组，保留 `targetHexes` 作为旧语义/fallback。
+- `acquire` 的候选坐标复用 `ACQUIRE_POSITION`，结果用 `ZCTargetSelectionSink` 出参；`ZCUnitTargeting` 用 `selectionScratch`，调用方只读当拍并立即复制 id。
+- 未引入空间索引/目标缓存：owner 桶已减少 25.3%～50.3% 候选，固定邻格会漏掉更远合法目标；跨拍缓存无法覆盖移动/死亡/出生/阵营/地形/城墙全部失效因素。
+
+改前/改后同配置同种子（Node v22.23.2，本机）候选量与 targetingMs：
+
+| 场景 | 候选检查：前 → 后 | targetingMs 前 → 后均值 |
+| --- | ---: | ---: |
+| 2p | 741,840 → 368,779（-50.3%） | 26.70 → 25.90 |
+| 3p | 1,006,075 → 667,987（-33.6%） | 39.63 → 38.09 |
+| 4p | 675,941 → 505,162（-25.3%） | 30.60 → 30.53 |
+| projectiles | 324,498 → 161,818（-50.1%） | 14.37 → 9.71 |
+| terrain | 770,981 → 384,461（-50.1%） | 31.18 → 22.45 |
+
+改后 3 次 timing 的 targetingMs：2p 21.04/29.60/27.05、3p 32.53/43.70/38.03、4p 30.76/30.85/29.98、projectiles 9.18/9.96/9.99、terrain 19.99/26.92/20.44 ms。2p/3p 相对 P2-8 前分别约 -8.8%/-9.5%，但波动与噪声同量级；4p 基本持平/略高，无明确收益；projectiles/terrain 有较明显下降（约 -22.4%/-19.5% 对 P2-8 前稳定基准）。tick 均值/p95 三次均值与 P2-8 前相比无稳定全局提升，4p 均值/p95 反而略高；不将 Node 数字表述为设备 FPS/GC 收益。
+
+确定性：5 个 benchmark 文件均与 `benchmark-baseline-check.json` 的 results 3 组 + displayResults 5 组 digest 一致；新增 `tests/zcds-targeting-index.test.ts` 6/6，核心 zcds 92/92，`check:zcds` 与 `verify:hygiene` 退出码 0。`benchmark-p28-before.json` 该轮 tick 异常偏高，不作稳定 tick 基线；`benchmark-p28-after-1.json` 的 `candidateChecks` 不完整，不作候选量结论。未连接真机，设备 FPS、GC、DrawCall、内存峰值与加载耗时均未验证；`zcds-neutral-features` 仍有 `corset.json 未投放类型 8` 与 `neutral_fun.json` ENOENT 两条既有数据红灯，未补业务资源。

@@ -5442,6 +5442,13 @@
 
     
 
+    declare class CmdItemRewardBroMsg {
+        resType: number;
+        tlCmdGoods?: (CmdGoods[]|null);
+    }
+
+    
+
     declare class CmdFormationInfo {
         formationId: number;
         heroId?: (number[]|null);
@@ -6564,6 +6571,7 @@
         CmdFriendAgreeOneKeyBroMsg = 831238063,
         CmdFriendRefuseOneKeyBroMsg = 1287890183,
         CmdGranaryUpdateBroMsg = 789546177,
+        CmdItemRewardBroMsg = 283150558,
         CmdRefreshLimitedTimeBundleBroMsg = 1678727286,
         CmdBuyLimitedTimeBundleBroMsg = 937248641,
         CmdRollBroMsg = 11546745,
@@ -7462,6 +7470,7 @@ declare type MessageProtoName =
 | "CmdArtifactBattleRspMsg"
 | "CmdItemComposReqMsg"
 | "CmdItemComposRspMsg"
+| "CmdItemRewardBroMsg"
 | "CmdFormationInfo"
 | "CmdFormationInfo_Key"
 | "CmdFormationInfoReqMsg"

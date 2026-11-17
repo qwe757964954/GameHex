@@ -42,7 +42,7 @@ export class LeagueUnionRow extends Component {
     memberLabel: Label = null;
 
     @property({ type: Sprite, tooltip: 'banner/ColorIcon：旗面（按 view.icon 换图）' })
-    bannerColor: Sprite = null;
+    bannerColor: Sprite = null!;
 
     /** 当前铺在这一行上的联盟 id（点击时宿主用它去开「联盟信息」）。 */
     private current: ILeagueUnionView | null = null;
@@ -71,7 +71,7 @@ export class LeagueUnionRow extends Component {
         this.memberLabel.string = view.memberText;
 
         // 先清旗面：槽位复用，不清会顶着上一行的颜色闪一下
-        if (this.bannerColor) this.bannerColor.spriteFrame = null;
+        this.bannerColor.spriteFrame = null;
     }
 
     /** 本次铺行对应的旗面令牌。 */
@@ -82,7 +82,7 @@ export class LeagueUnionRow extends Component {
     /** 旗面异步返回时调用（令牌对不上说明槽位已被下一行占用 ⇒ 丢弃）。 */
     applyBanner(frame: SpriteFrame | null, token: number): void {
         if (token !== this.bannerSeq) return;
-        if (this.bannerColor) this.bannerColor.spriteFrame = frame;
+        this.bannerColor.spriteFrame = frame;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */

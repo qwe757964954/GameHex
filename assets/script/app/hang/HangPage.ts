@@ -108,49 +108,49 @@ export class HangPage extends PopupBase {
     static prefabPath = 'ui/Hang/Hang';
 
     @property({ type: Node, tooltip: '弹窗关闭键（`组件_公共弹窗_新/按钮_关闭`）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: Node, tooltip: '「领取」按钮（FGUI `按钮_领取`，`颜色=1` 橙底）' })
-    claimButton: Node = null;
+    claimButton: Node = null!;
 
     @property({ type: ProgressBar, tooltip: '征收进度条（FGUI `征收_进度`）' })
-    progressBar: ProgressBar = null;
+    progressBar: ProgressBar = null!;
 
     @property({ type: Label, tooltip: '已征收时长 `08:00:00`（FGUI `time`）' })
-    timeLabel: Label = null;
+    timeLabel: Label = null!;
 
     @property({ type: Node, tooltip: '`MAX` 角标（FGUI `maxImg`，只在到顶时显示）' })
-    maxBadge: Node = null;
+    maxBadge: Node = null!;
 
     @property({ type: HangGainItem, tooltip: '收益条 1（吃 `mergedRewards[0]`）' })
-    gain1: HangGainItem = null;
+    gain1: HangGainItem = null!;
 
     @property({ type: HangGainItem, tooltip: '收益条 2（吃 `mergedRewards[1]`）' })
-    gain2: HangGainItem = null;
+    gain2: HangGainItem = null!;
 
     @property({ type: [HangRewardSlot], tooltip: '产出奖励网格的 6 个格子（顺序 = 网格顺序，多余隐藏）' })
     rewardSlots: HangRewardSlot[] = [];
 
     @property({ type: HangSweepButton, tooltip: '「快速征收」按钮' })
-    sweepButton: HangSweepButton = null;
+    sweepButton: HangSweepButton = null!;
 
     @property({ type: Label, tooltip: '广告次数行（`今日剩余(3/3)` / `今日看广告次数:5/5` / `无限征收`）' })
-    adCountLabel: Label = null;
+    adCountLabel: Label = null!;
 
     @property({ type: HangGearSwitch, tooltip: '倍率切换角标（FGUI `change_btn`）' })
-    gearSwitch: HangGearSwitch = null;
+    gearSwitch: HangGearSwitch = null!;
 
     @property({ type: Node, tooltip: '月卡销售条（FGUI 组 `n74`，无月卡时显示）' })
-    monthCardBar: Node = null;
+    monthCardBar: Node = null!;
 
     @property({ type: Node, tooltip: '月卡入口图标（FGUI `taskBtn`，点它进月卡礼包页）' })
-    monthCardEntry: Node = null;
+    monthCardEntry: Node = null!;
 
     @property({ type: Node, tooltip: '月卡购买按钮（FGUI `月卡_按钮`）' })
-    monthCardBuy: Node = null;
+    monthCardBuy: Node = null!;
 
     @property({ type: Label, tooltip: '月卡价格 `￥30`（FGUI `月卡_按钮/title`）' })
-    monthCardPriceLabel: Label = null;
+    monthCardPriceLabel: Label = null!;
 
     // 运行态
 
@@ -198,8 +198,8 @@ export class HangPage extends PopupBase {
     protected onInit(): void {
         // 监听一律挂在**节点**上（`cc.Button` 的 click 就是 node.emit 出来的，
         // 所以监听节点与监听组件等价）；弹窗预制体里这几个按钮存的都是节点。
-        this.closeButton?.on(Button.EventType.CLICK, this._onTapClose, this);
-        this.claimButton?.on(Button.EventType.CLICK, this._onTapClaim, this);
+        this.closeButton.on(Button.EventType.CLICK, this._onTapClose, this);
+        this.claimButton.on(Button.EventType.CLICK, this._onTapClaim, this);
         // 月卡入口**不能**用 `Button.EventType.CLICK`：它在 FGUI 原稿里是
         // `<loader id="n77_" name="taskBtn" ...>`（**不是按钮**），迁过来只有 `cc.Sprite`、
         // **没有 `cc.Button`** ⇒ `Button.EventType.CLICK` 永远不会被 emit，点了毫无反应、
@@ -208,10 +208,10 @@ export class HangPage extends PopupBase {
         // ⇒ 这里改成节点级触摸事件（会走引擎的命中检测：按下在外、松手在外都不会触发）。
         // 别想着「顺手加个 `cc.Button`」—— 那要改 prefab，而 FGUI 的 loader 本来就没有
         // 按钮的缩放反馈，加了反而多一个老端没有的表现。
-        this.monthCardEntry?.on(Node.EventType.TOUCH_END, this._onTapMonthCard, this);
-        this.monthCardBuy?.on(Button.EventType.CLICK, this._onTapMonthCard, this);
-        this.sweepButton?.bindTap(() => { this._onTapSweep(); });
-        this.gearSwitch?.bindTap(() => this._onTapGear());
+        this.monthCardEntry.on(Node.EventType.TOUCH_END, this._onTapMonthCard, this);
+        this.monthCardBuy.on(Button.EventType.CLICK, this._onTapMonthCard, this);
+        this.sweepButton.bindTap(() => { this._onTapSweep(); });
+        this.gearSwitch.bindTap(() => this._onTapGear());
         // 领奖 / 扫荡的回包由领地 Controller 发 `rewards` 命令 ⇒ 收到后重读服务端起点。
         EventMgr.instance.on(TerritoryViewEvent.Command, this._onTerritoryCommand, this);
         // 产出奖励格的真正数据源是 `levelInfo.idleReward`（随领地状态变化）。
@@ -398,11 +398,11 @@ export class HangPage extends PopupBase {
     private _refreshTime(): void {
         const elapsed = this._elapsed();
         const capped = idleCappedMs(elapsed);
-        if (this.progressBar) this.progressBar.progress = idleProgress01(elapsed);
-        if (this.timeLabel) this.timeLabel.string = formatHms(capped);
+        this.progressBar.progress = idleProgress01(elapsed);
+        this.timeLabel.string = formatHms(capped);
         const atMax = idleReachedMax(elapsed);
         this._atMax = atMax;
-        if (this.maxBadge) this.maxBadge.active = atMax;
+        this.maxBadge.active = atMax;
     }
 
     /** 收益条 / 奖励格 / 按钮文案 —— 只跟「数据 + 档位」有关，不跟心跳。 */
@@ -411,17 +411,15 @@ export class HangPage extends PopupBase {
         if (!snapshot) return;
 
         const times = sweepTimesOf(this._gearIndex);
-        this.sweepButton?.renderCost(costTextOf(snapshot, this._gearIndex));
+        this.sweepButton.renderCost(costTextOf(snapshot, this._gearIndex));
         // `免费 = 是`（page 1）才是「还有免费次数」—— 语义反直觉，别写反
-        this.sweepButton?.renderFree(freePageOf(snapshot) === 1);
+        this.sweepButton.renderFree(freePageOf(snapshot) === 1);
         // 红点：FGUI `com_rd` 默认可见、但老端从头到尾没接管它，用户截图里也没有
         // ⇒ 默认隐藏，留给后面的红点系统接（`renderRedDot` 已经留好口子）。
-        this.sweepButton?.renderRedDot(false);
-        this.sweepButton?.renderCostIcon(this._frameOf(HJ_COST_ICON_PATH));
-        this.gearSwitch?.render(gearLabel(times));
-        if (this.adCountLabel) {
-            this.adCountLabel.string = adCountTextOf(snapshot, snapshot.adRest, snapshot.adLimit);
-        }
+        this.sweepButton.renderRedDot(false);
+        this.sweepButton.renderCostIcon(this._frameOf(HJ_COST_ICON_PATH));
+        this.gearSwitch.render(gearLabel(times));
+        this.adCountLabel.string = adCountTextOf(snapshot, snapshot.adRest, snapshot.adLimit);
     }
 
     /** 收益条 1/2：`mergedRewards[0]` / `[1]` 的「图标 + `16/h`」。 */
@@ -429,8 +427,8 @@ export class HangPage extends PopupBase {
         const rewards = this._displayRewards(snapshot);
         const first = rewardAt(rewards, 0);
         const second = rewardAt(rewards, 1);
-        this.gain1?.render(this._iconFrameOf(snapshot, first ? first.resId : 0), perHourText(first));
-        this.gain2?.render(this._iconFrameOf(snapshot, second ? second.resId : 0), perHourText(second));
+        this.gain1.render(this._iconFrameOf(snapshot, first ? first.resId : 0), perHourText(first));
+        this.gain2.render(this._iconFrameOf(snapshot, second ? second.resId : 0), perHourText(second));
     }
 
     /**
@@ -463,8 +461,8 @@ export class HangPage extends PopupBase {
 
     /** 月卡销售条：无月卡 ⇒ 显示 + 铺价格。 */
     private _renderMonthCard(snapshot: IHangSnapshot): void {
-        if (this.monthCardBar) this.monthCardBar.active = monthCardBarVisibleOf(snapshot);
-        if (this.monthCardPriceLabel) this.monthCardPriceLabel.string = monthCardPriceTextOf(snapshot);
+        this.monthCardBar.active = monthCardBarVisibleOf(snapshot);
+        this.monthCardPriceLabel.string = monthCardPriceTextOf(snapshot);
     }
 
     /**

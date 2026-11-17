@@ -46,19 +46,19 @@ export class BattleTokenRow extends Component {
     slots: BattleTokenRewardSlot[] = [];
 
     @property({ type: Node, tooltip: '上方连接段容器（FGUI group n105「头」）' })
-    lineTop: Node = null;
+    lineTop: Node = null!;
 
     @property({ type: Sprite, tooltip: '上方连接段的填充（FGUI n104「上」）' })
-    lineTopFill: Sprite = null;
+    lineTopFill: Sprite = null!;
 
     @property({ type: Node, tooltip: '下方连接段容器（FGUI group n102「尾」）' })
-    lineBottom: Node = null;
+    lineBottom: Node = null!;
 
     @property({ type: Sprite, tooltip: '下方连接段的填充（FGUI n98「下」）' })
-    lineBottomFill: Sprite = null;
+    lineBottomFill: Sprite = null!;
 
     @property({ type: Label, tooltip: '等级数字（FGUI 文本_等级）' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     /** 这条模板是几个格子（3 = 通行证，2 = 其余）。由生成器写死。 */
     @property({ type: CCInteger, tooltip: '格子数：3 = 三方案模板，2 = 两方案模板' })
@@ -85,18 +85,13 @@ export class BattleTokenRow extends Component {
 
         // ---- 连接段 + 等级 ----
         const joints = jointState(index, row.max, ctx.level);
-        if (this.lineTop) this.lineTop.active = joints.topExist;
-        if (this.lineTopFill) {
-            // 帧由 prefab 写死（`bt_line_fill`，九宫），这里只切显隐（规则：状态绝对赋值）
-            this.lineTopFill.type = btSpriteType(BT_ART_NAMES.lineFill);
-            this.lineTopFill.node.active = joints.topLit;
-        }
-        if (this.lineBottom) this.lineBottom.active = joints.bottomExist;
-        if (this.lineBottomFill) {
-            this.lineBottomFill.type = btSpriteType(BT_ART_NAMES.lineFill);
-            this.lineBottomFill.node.active = joints.bottomLit;
-        }
-        if (this.levelLabel) this.levelLabel.string = `${index + 1}`;
+        this.lineTop.active = joints.topExist;
+        this.lineTopFill.type = btSpriteType(BT_ART_NAMES.lineFill);
+        this.lineTopFill.node.active = joints.topLit;
+        this.lineBottom.active = joints.bottomExist;
+        this.lineBottomFill.type = btSpriteType(BT_ART_NAMES.lineFill);
+        this.lineBottomFill.node.active = joints.bottomLit;
+        this.levelLabel.string = `${index + 1}`;
 
         // ---- 每个格子 ----
         for (let i = 0; i < this.slots.length; i++) {

@@ -107,14 +107,10 @@ export class ItemInfoPage extends PopupBase {
      */
     private createRewardView(): void {
         const host = this.goodsHost;
-        if (!host) {
-            console.error('[ItemInfo] 未绑 goodsHost，主物品格不显示');
-            return;
-        }
         this.rewardLoading = (async () => {
             const prefab = await UIResources.loadAsync(ItemInfoPage.REWARD_ITEM_PATH);
             // 加载期间弹窗可能已关闭 / 销毁。
-            if (!prefab || !host.isValid || !this.node?.isValid) return;
+            if (!prefab || !host.isValid || !this.node.isValid) return;
             const node = instantiate(prefab);
             node.parent = host;
             const scale = ITEM_INFO_REWARD_SLOT_SIZE / ITEM_INFO_REWARD_ITEM_SIZE;
@@ -156,7 +152,7 @@ export class ItemInfoPage extends PopupBase {
         const out: ItemInfoRow[] = [];
         for (const child of this.rowsRoot.children) {
             const row = child.getComponent(ItemInfoRow);
-            if (row) out.push(row);
+            out.push(row);
         }
         return out;
     }

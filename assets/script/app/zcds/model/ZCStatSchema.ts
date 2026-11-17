@@ -13,6 +13,7 @@ import type { ZCUnitStatPatch } from './ZCModifierRuntime';
 export type ZCStatId =
     | 'attack'
     | 'maxHp'
+    | 'buildingHp'
     | 'moveSpeed'
     | 'attackRange'
     | 'attackInterval'
@@ -312,7 +313,7 @@ const SOURCE_KINDS = new Set<ZCModifierSourceKind>(Object.values(ZCModifierSourc
 const SKILL_STATES = new Set<ZCSkillStateMode>(Object.values(ZCSkillStateMode));
 const REFRESH_POLICIES = new Set<ZCStatusRefreshPolicy>(Object.values(ZCStatusRefreshPolicy));
 const STAT_IDS = new Set<ZCStatId>([
-    'attack', 'maxHp', 'moveSpeed', 'attackRange', 'attackInterval', 'attackSpeed',
+    'attack', 'maxHp', 'buildingHp', 'moveSpeed', 'attackRange', 'attackInterval', 'attackSpeed',
     'attackDuration', 'attackHitTime', 'projectileCount', 'damageRate', 'pierceCount',
     'executeChance', 'impactDamageRate', 'explosionDamageRate', 'zoneCount', 'slowRatio',
     'expireDamageRate', 'freezeDuration', 'shieldRatio', 'directionCount', 'moveSpeedBoost',
@@ -438,6 +439,34 @@ function parseSkillParams(value: unknown, path: string): Readonly<Record<string,
     const entries = Object.entries(raw);
     if (!entries.length) return undefined;
     return Object.fromEntries(entries.map(([key, child]) => [text(key, `${path}.key`), number(child, `${path}.${key}`)]));
+}
+
+/**
+ * `skillParamJson` 里的「同条混搭」属性：一条技能既加主属性、又加第二条。
+ *
+ * 表结构里一行计划只有 `statId / operation / value` 一个槽，而设计案的克制条、
+ * 金卡混搭尾都是「主机制 + 1~2 条尾巴」。这里不改表结构，改用参数里的保留前缀：
+ *   `"mix.critRate": 4`          → critRate.add     = 4
+ *   `"mix.maxHp.addRate": 0.06`  → maxHp.addRate    = 0.06
+ * 只有 `mix.` 开头才被当属性解析；其余键仍是技能参数（`burstCount` 等），互不干扰。
+ * 后缀缺省 = `add`（与既有 `attackCount`/`critRate` 那批「没有百分比口径」的口径一致）。
+ *
+ * 写错 statId 一律抛错：静默忽略会变成「配了但没生效」，比报错更难查。
+*/
+export function readZCSkillMixStats(
+    params: Readonly<Record<string, number>> | undefined,
+): readonly { statId: ZCStatId; operation: ZCStatOperation; value: number }[] {
+    if (!params) return [];
+    const out: { statId: ZCStatId; operation: ZCStatOperation; value: number }[] = [];
+    for (const [key, value] of Object.entries(params)) {
+        if (!key.startsWith('mix.')) continue;
+        const match = /^mix\.([A-Za-z][A-Za-z0-9]*)(?:\.(add|addRate|multiply|override))?$/.exec(key);
+        if (!match) throw new Error(`[ZCStatSchema] skillParamJson 混搭键非法：${key}；应写 mix.<statId>[.addRate]`);
+        const statId = match[1] as ZCStatId;
+        if (!STAT_IDS.has(statId)) throw new Error(`[ZCStatSchema] skillParamJson 混搭 statId 不存在：${key}`);
+        out.push({ statId, operation: (match[2] ?? 'add') as ZCStatOperation, value });
+    }
+    return out;
 }
 
 function resolveOverrideValueField(

@@ -19,6 +19,7 @@ import {
     type LeagueRequestResult,
 } from './LeagueRepository';
 import { loadLeagueRewardArt, type ILeagueRewardArt } from './LeagueRewardArt';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import { LeagueRewardSlot } from './LeagueRewardSlot';
 import { openLeagueHelp } from './LeagueHelp';
 import {
@@ -32,8 +33,6 @@ import {
     LEAGUE_NORTH_DRUM_LIMIT,
     LEAGUE_NORTH_HELP_ID,
     LEAGUE_NORTH_REMAIN_TIME_TEMPLATE,
-    LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_OFFLINE,
     fillLeagueText
 } from './LeagueTexts';
 
@@ -74,7 +73,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     rankButton: Node = null;
 
     @property({ type: Node, tooltip: 'RewardRedDot：奖励入口上的红点' })
-    rewardRedDot: Node = null;
+    rewardRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'DrumBtn：「擂鼓」' })
     drumButton: Node = null;
@@ -101,28 +100,28 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     sweepButton: Node = null;
 
     @property({ type: Label, tooltip: 'MonsterLabel：boss 名（`guankaReward` → `monster`）' })
-    monsterLabel: Label = null;
+    monsterLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'EndTimeLabel：活动剩余时间' })
-    endTimeLabel: Label = null;
+    endTimeLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'TimesLabel：挑战次数' })
-    timesLabel: Label = null;
+    timesLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'AttrLeaguePower/Value：今日联盟累计伤害' })
-    attrLeaguePower: Label = null;
+    attrLeaguePower: Label = null!;
 
     @property({ type: Label, tooltip: 'AttrPower/Value：今日累计伤害（我）' })
-    attrPower: Label = null;
+    attrPower: Label = null!;
 
     @property({ type: Label, tooltip: 'AttrTime/Value：Buff 剩余时间' })
-    attrTime: Label = null;
+    attrTime: Label = null!;
 
     @property({ type: Label, tooltip: 'AttrAdd/Value：叠加层数' })
-    attrAdd: Label = null;
+    attrAdd: Label = null!;
 
     @property({ type: Label, tooltip: 'AttrBuff/Value：属性加成' })
-    attrBuff: Label = null;
+    attrBuff: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'DailySlot0：今日挑战奖励第 1 个物品框' })
     dailySlot0: LeagueRewardSlot = null;
@@ -232,16 +231,16 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         const snapshot = this.snapshot;
         if (!snapshot) return;
 
-        if (this.monsterLabel) this.monsterLabel.string = snapshot.boss ? snapshot.boss.name : '';
-        if (this.timesLabel) this.timesLabel.string = snapshot.timesText;
-        if (this.attrLeaguePower) this.attrLeaguePower.string = String(snapshot.leagueValue);
-        if (this.attrPower) this.attrPower.string = String(snapshot.selfValue);
-        if (this.attrAdd) this.attrAdd.string = String(snapshot.buffAddTimes);
-        if (this.attrBuff) this.attrBuff.string = snapshot.buffText;
+        this.monsterLabel.string = snapshot.boss ? snapshot.boss.name : '';
+        this.timesLabel.string = snapshot.timesText;
+        this.attrLeaguePower.string = String(snapshot.leagueValue);
+        this.attrPower.string = String(snapshot.selfValue);
+        this.attrAdd.string = String(snapshot.buffAddTimes);
+        this.attrBuff.string = snapshot.buffText;
 
         const dot = this.rewardRedDot ? this.rewardRedDot.getComponent(RedDot) : null;
         if (dot) dot.setRedDot(snapshot.rewardRedDot ? 1 : 0);
-        else if (this.rewardRedDot) this.rewardRedDot.active = snapshot.rewardRedDot;
+        else this.rewardRedDot.active = snapshot.rewardRedDot;
 
         // 「挑战」按钮上的红点 —— 老端 `按钮_挑战.组件_红点` ← `hasNorthernExpeditionChallengeRD()`
         // （「还有挑战次数」）。与奖励入口那颗**分开**：奖励可领不该把红点打到挑战按钮上。
@@ -295,21 +294,17 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     private readonly tick = (): void => {
         const snapshot = this.snapshot;
         if (!snapshot?.act) {
-            if (this.attrTime) this.attrTime.string = leagueNorthHms(0);
-            if (this.endTimeLabel) {
-                this.endTimeLabel.string = fillLeagueText(LEAGUE_NORTH_REMAIN_TIME_TEMPLATE, leagueNorthHms(0));
-            }
+            this.attrTime.string = leagueNorthHms(0);
+            this.endTimeLabel.string = fillLeagueText(LEAGUE_NORTH_REMAIN_TIME_TEMPLATE, leagueNorthHms(0));
             return;
         }
         const now = Date.now();
         const buffSec = leagueNorthBuffRemainSec(snapshot.config, snapshot.act.addBuffTimeMs, now);
-        if (this.attrTime) this.attrTime.string = leagueNorthHms(buffSec);
-        if (this.endTimeLabel) {
-            this.endTimeLabel.string = fillLeagueText(
-                LEAGUE_NORTH_REMAIN_TIME_TEMPLATE,
-                leagueNorthHms(leagueNorthResetRemainSec(snapshot.act.resetTimeSec, now)),
-            );
-        }
+        this.attrTime.string = leagueNorthHms(buffSec);
+        this.endTimeLabel.string = fillLeagueText(
+            LEAGUE_NORTH_REMAIN_TIME_TEMPLATE,
+            leagueNorthHms(leagueNorthResetRemainSec(snapshot.act.resetTimeSec, now)),
+        );
     };
 
     // 交互
@@ -384,12 +379,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     // 杂项

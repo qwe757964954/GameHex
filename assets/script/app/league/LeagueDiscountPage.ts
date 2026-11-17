@@ -14,6 +14,7 @@ import { PopupBase } from '../../framework/ui/PopupBase';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { LEAGUE_ART_BARGAIN_STRIKE_COLOR, LEAGUE_TINT_GRAY, LEAGUE_TINT_NORMAL } from './LeagueArt';
 import { LeagueDiscountRow } from './LeagueDiscountRow';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import {
     leagueRepository,
     LeagueACT_TYPE,
@@ -69,7 +70,7 @@ export class LeagueDiscountPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueDiscount';
 
     @property({ type: VirtualScrollView, tooltip: 'DiscountListView：砍价参与列表（虚拟列表 + Mask）' })
-    discountList: VirtualScrollView = null;
+    discountList: VirtualScrollView = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'RewardA：rewards[0]（左格）' })
     rewardA: LeagueRewardSlot = null;
@@ -78,22 +79,22 @@ export class LeagueDiscountPage extends PopupBase {
     rewardB: LeagueRewardSlot = null;
 
     @property({ type: Sprite, tooltip: 'PriceIcon：金币图标（老端 itemIcon，`roleProperty.coin`）' })
-    priceIcon: Sprite = null;
+    priceIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'LabPrice：原价（上面压着 Strike 删除线）' })
-    priceLabel: Label = null;
+    priceLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabPriceNow：现价' })
-    priceNowLabel: Label = null;
+    priceNowLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabUserCount：当前累计N人砍价' })
-    userCountLabel: Label = null;
+    userCountLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabEndTime：剩余时间（每秒刷）' })
-    endTimeLabel: Label = null;
+    endTimeLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'BtnSale：砍价按钮（仅「砍价」页可见）' })
-    saleButton: Node = null;
+    saleButton: Node = null!;
 
     /**
      * `BtnSale/RedDot`：砍价红点（= `canBargain`；「砍价」页之外恒关）。
@@ -107,13 +108,13 @@ export class LeagueDiscountPage extends PopupBase {
      * （同口径：`LeagueStoreRow.redDot` / `LeagueAdButton.redDot` 都是 `Node`。）
      */
     @property({ type: Node, tooltip: 'BtnSale/RedDot：砍价红点（= canBargain；「砍价」页之外恒关）' })
-    saleRedDot: Node = null;
+    saleRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'BtnBuy：购买按钮（「购买」「已购买」页可见）' })
-    buyButton: Node = null;
+    buyButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'BtnBuy 的底图（「已购买」页要染灰 —— FGUI gearLook 的 grayed）' })
-    buyButtonBg: Sprite = null;
+    buyButtonBg: Sprite = null!;
 
     @property({ type: Graphics, tooltip: 'Strike：原价删除线（FGUI n53，100×3）' })
     strike: Graphics = null;
@@ -140,7 +141,7 @@ export class LeagueDiscountPage extends PopupBase {
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
-        if (this.discountList) this.discountList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.discountList.renderItemFn = (node, index) => this.renderRow(node, index);
         this.bindClick(this.saleButton, () => void this.onSale(), 'BtnSale');
         this.bindClick(this.buyButton, () => void this.onBuy(), 'BtnBuy');
         // 删除线与数据无关（原价永远被划掉），建一次即可
@@ -228,29 +229,25 @@ export class LeagueDiscountPage extends PopupBase {
         const view = snapshot.view;
         const art = this.art;
 
-        if (this.userCountLabel) this.userCountLabel.string = snapshot.countText;
+        this.userCountLabel.string = snapshot.countText;
 
         // 两件奖励（`rewards[0]` → 左格 `com_goods`、`rewards[1]` → 右格 `com_goods1`）
         this.presentReward(this.rewardA, view?.rewardA ?? null, art);
         this.presentReward(this.rewardB, view?.rewardB ?? null, art);
 
         // 金币图标（老端 `itemIcon` = `GetGoodsIconKeyByRefId(roleProperty.coin)`）
-        if (this.priceIcon) {
-            const frame = art ? art.iconFrameOf(LEAGUE_COIN_RES_ID) : null;
-            if (frame) this.priceIcon.spriteFrame = frame;
-        }
+        const frame = art ? art.iconFrameOf(LEAGUE_COIN_RES_ID) : null;
+        if (frame) this.priceIcon.spriteFrame = frame;
 
         // 价格
-        if (this.priceLabel) this.priceLabel.string = view ? String(view.price) : '';
-        if (this.priceNowLabel) this.priceNowLabel.string = view ? String(view.priceNow) : '';
+        this.priceLabel.string = view ? String(view.price) : '';
+        this.priceNowLabel.string = view ? String(view.priceNow) : '';
 
         this.applyPage(view);
 
         // 参与列表
-        if (this.discountList) {
-            this.discountList.refreshList(this.rows);
-            this.discountList.scrollToTop(false);
-        }
+        this.discountList.refreshList(this.rows);
+        this.discountList.scrollToTop(false);
 
         // 倒计时（`view` 缺失时归零 ⇒ 显示 00:00:00）
         this.deadlineSec = view && view.resetTimeSec > 0
@@ -278,26 +275,21 @@ export class LeagueDiscountPage extends PopupBase {
      */
     private applyPage(view: ILeagueDiscountView | null): void {
         const page = view ? view.pageIndex : -1;
-        if (this.saleButton) this.saleButton.active = page === LEAGUE_DISCOUNT_PAGE.bargain;
-        if (this.buyButton) {
-            this.buyButton.active = page === LEAGUE_DISCOUNT_PAGE.buy || page === LEAGUE_DISCOUNT_PAGE.bought;
-        }
+        this.saleButton.active = page === LEAGUE_DISCOUNT_PAGE.bargain;
+        this.buyButton.active = page === LEAGUE_DISCOUNT_PAGE.buy || page === LEAGUE_DISCOUNT_PAGE.bought;
         // FGUI `gearLook pages="2" values="1,0,1,1"` ⇒ 只有「已购买」页 `grayed`
-        if (this.buyButtonBg) {
-            this.buyButtonBg.color = page === LEAGUE_DISCOUNT_PAGE.bought ? GRAY_TINT : NORMAL_TINT;
-        }
+        this.buyButtonBg.color = page === LEAGUE_DISCOUNT_PAGE.bought ? GRAY_TINT : NORMAL_TINT;
         // 老端 `(com.tm("btn_sale.组件_红点") as GObjRD).OnRDUpdate(canBeSale() ? 1 : 0)`
         // —— 走共用红点组件（`ui/common/RedDot.prefab`，普通红点 = spine「红点闪闪」）。
         // 红点只在「砍价」页那颗按钮上，`canBargain` 一变就整块收起（`setRedDot(0)` 会 `active=false`）。
         // 绑的是实例**根节点**（见 `saleRedDot` 的注释），组件运行时取。
-        const rd = this.saleRedDot?.getComponent(RedDot);
+        const rd = this.saleRedDot.getComponent(RedDot);
         if (rd) rd.setRedDot(view && this.snapshot?.canBargain ? 1 : 0);
     }
 
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueDiscountRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();
@@ -337,7 +329,6 @@ export class LeagueDiscountPage extends PopupBase {
     }
 
     private updateTime(): void {
-        if (!this.endTimeLabel) return;
         const remain = this.deadlineSec - Math.floor(Date.now() / 1000);
         // `formatLeagueCountdown` 对 `<= 0` 输出 `00:00:00`（老端那个显式分支）
         this.endTimeLabel.string = fillLeagueText(LEAGUE_DISCOUNT_TIME_TEMPLATE, formatLeagueCountdown(remain));
@@ -415,7 +406,6 @@ export class LeagueDiscountPage extends PopupBase {
      */
     private drawStrikeThrough(): void {
         const graphics = this.strike;
-        if (!graphics) return;
         const size = graphics.node.getComponent(UITransform)?.contentSize;
         const w = size && size.width > 0 ? size.width : STRIKE_FALLBACK_W;
         const h = size && size.height > 0 ? size.height : STRIKE_FALLBACK_H;
@@ -444,12 +434,7 @@ export class LeagueDiscountPage extends PopupBase {
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     /** 按节点绑按钮（节点上有 `cc.Button` 就走 CLICK；缺则 warn 并退到 TOUCH_END）。 */

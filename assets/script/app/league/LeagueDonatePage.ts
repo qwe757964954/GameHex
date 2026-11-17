@@ -32,28 +32,28 @@ export class LeagueDonatePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueDonate';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'ItemCoin/Reward：铜币奖励格' })
-    coinSlot: LeagueRewardSlot = null;
+    coinSlot: LeagueRewardSlot = null!;
 
     @property({ type: Label, tooltip: 'ItemCoin/Name：labName「联盟金币*300」' })
-    coinName: Label = null;
+    coinName: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'ItemExp/Reward：贡献奖励格' })
-    expSlot: LeagueRewardSlot = null;
+    expSlot: LeagueRewardSlot = null!;
 
     @property({ type: Label, tooltip: 'ItemExp/Name：labName「联盟贡献*10」' })
-    expName: Label = null;
+    expName: Label = null!;
 
     @property({ type: Label, tooltip: 'LabCount：剩余捐献次数' })
-    countLabel: Label = null;
+    countLabel: Label = null!;
 
     @property({ type: LeagueAdButton, tooltip: 'BtnFree：免费捐献（广告未接入 ⇒ 只提示）' })
-    freeButton: LeagueAdButton = null;
+    freeButton: LeagueAdButton = null!;
 
     @property({ type: LeagueAdButton, tooltip: 'BtnBuy：金币捐献' })
-    buyButton: LeagueAdButton = null;
+    buyButton: LeagueAdButton = null!;
 
     /** 展示资源按快照缓存，避免每次 render 都重取三张图。 */
     private art: ILeagueRewardArt | null = null;
@@ -68,9 +68,8 @@ export class LeagueDonatePage extends PopupBase {
     // 生命周期
 
     protected onInit(): void {
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueDonate] CloseBtn 上没有 cc.Button，点击不会生效');
+        const button = this.closeButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         this.bindClick(this.freeButton, () => this.emitFree());
         this.bindClick(this.buyButton, () => this.emitCoin());
@@ -124,29 +123,25 @@ export class LeagueDonatePage extends PopupBase {
      */
     private present(snapshot: ILeagueDonateSnapshot): void {
         // 两件奖励：名字（语言表前缀 + 数量）
-        if (this.coinName) this.coinName.string = snapshot.coinNameText;
-        if (this.expName) this.expName.string = snapshot.expNameText;
+        this.coinName.string = snapshot.coinNameText;
+        this.expName.string = snapshot.expNameText;
 
         // 剩余次数
-        if (this.countLabel) this.countLabel.string = snapshot.remainText;
+        this.countLabel.string = snapshot.remainText;
 
         // 免费按钮：「免费」页 + 老端那句「免费：{剩余}/{上限}」+ 红点恒关
-        if (this.freeButton) {
-            this.freeButton.setPage('free');
-            const advRest = Math.max(0, snapshot.config.donateAdvCount - snapshot.todayDonateAdvTimes);
-            this.freeButton.setFreeLabel(
-                fillLeagueText(LEAGUE_DONATE_FREE_COUNT_TEMPLATE, advRest, snapshot.config.donateAdvCount),
-            );
-            // 老端：`hasDonateRD()` = 广告剩余次数 > 0，而广告子系统没迁 ⇒ 恒 0 ⇒ 恒关。
-            this.freeButton.setRedDot(false);
-        }
+        this.freeButton.setPage('free');
+        const advRest = Math.max(0, snapshot.config.donateAdvCount - snapshot.todayDonateAdvTimes);
+        this.freeButton.setFreeLabel(
+            fillLeagueText(LEAGUE_DONATE_FREE_COUNT_TEMPLATE, advRest, snapshot.config.donateAdvCount),
+        );
+        // 老端：`hasDonateRD()` = 广告剩余次数 > 0，而广告子系统没迁 ⇒ 恒 0 ⇒ 恒关。
+        this.freeButton.setRedDot(false);
 
         // 金币按钮：「金币」页 + 单价；图标由 applyArt 异步补上
-        if (this.buyButton) {
-            this.buyButton.setPage('coin');
-            this.buyButton.setCost(snapshot.config.donateCost);
-            this.buyButton.setRedDot(false);
-        }
+        this.buyButton.setPage('coin');
+        this.buyButton.setCost(snapshot.config.donateCost);
+        this.buyButton.setRedDot(false);
     }
 
     /** 三张图：两件奖励（11 / 13）+ 金币按钮上那颗**金币**图标（10）。 */
@@ -168,15 +163,11 @@ export class LeagueDonatePage extends PopupBase {
     }
 
     private paintArt(snapshot: ILeagueDonateSnapshot, art: ILeagueRewardArt): void {
-        if (this.coinSlot) {
-            const frames = art.framesOf(snapshot.coinResId);
-            this.coinSlot.render(frames.frame, frames.icon, snapshot.config.donateGainCoin, true);
-        }
-        if (this.expSlot) {
-            const frames = art.framesOf(snapshot.expResId);
-            this.expSlot.render(frames.frame, frames.icon, snapshot.config.donateGainExp, true);
-        }
-        if (this.buyButton) this.buyButton.setCostIcon(art.iconFrameOf(LEAGUE_COIN_RES_ID));
+        const coinFrames = art.framesOf(snapshot.coinResId);
+        this.coinSlot.render(coinFrames.frame, coinFrames.icon, snapshot.config.donateGainCoin, true);
+        const expFrames = art.framesOf(snapshot.expResId);
+        this.expSlot.render(expFrames.frame, expFrames.icon, snapshot.config.donateGainExp, true);
+        this.buyButton.setCostIcon(art.iconFrameOf(LEAGUE_COIN_RES_ID));
     }
 
     // 杂项

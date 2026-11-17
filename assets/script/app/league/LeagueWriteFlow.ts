@@ -13,8 +13,9 @@ export async function settleLeagueWrite(
     alive: boolean,
     reload: () => Promise<void>,
 ): Promise<LeagueRequestResult> {
+    if (!alive) return result;
     if (result === 'ok') {
-        if (alive) await reload();
+        await reload();
     } else {
         FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
     }

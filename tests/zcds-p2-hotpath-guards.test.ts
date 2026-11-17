@@ -115,3 +115,22 @@ test('P2-16 基地态 Graphics：复用 Set，只清已画过的格', () => {
     assert.doesNotMatch(source, /for \(const cell of this\.cells\) \{[\s\S]{0,200}slot\.selection\.clear\(\);[\s\S]{0,40}if \(isSelected\)/,
         '不得每格无条件 clear');
 });
+
+test('P2-8 索敌：owner 分桶 + 目标地块预分组，候选循环不新建坐标对象', () => {
+    const targeting = read('assets/script/app/zcds/model/systems/ZCTargetingSystem.ts');
+    const acquire = bodyOf(targeting, 'static acquire(', 5000);
+    assert.match(acquire, /context\.unitsOf\(owner\)/, '敌方单位走 owner 桶');
+    assert.match(acquire, /context\.candidateHexes\(unit\.owner\)/, '目标地块按当前 owner 预分组');
+    assert.match(targeting, /const ACQUIRE_POSITION = \{ x: 0, y: 0 \};/, '候选坐标复用');
+    assert.doesNotMatch(acquire, /const candidatePosition = \{/, '不得每次 acquire 新建坐标对象');
+
+    const registry = read('assets/script/app/zcds/model/systems/ZCUnitRegistry.ts');
+    assert.match(registry, /private readonly byOwner = new Map/, 'owner 索引');
+    assert.match(registry, /unitsOf\(owner: ZCOwner\)/, 'owner 查询入口');
+    assert.match(registry, /changeOwner\(unit: ZCUnitState, owner: ZCOwner\)/, '阵营迁移入口');
+
+    const model = read('assets/script/app/zcds/model/ZCGameModel.ts');
+    assert.match(model, /private readonly candidateHexesByOwner = new Map/, '地块目标分组');
+    assert.match(model, /unitsOf: \(owner\) => this\.units\.unitsOf\(owner\)/, '索敌上下文接入 owner 索引');
+    assert.match(model, /candidateHexes: \(owner\) =>/, '索敌上下文接入地块分组');
+});

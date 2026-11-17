@@ -18,8 +18,10 @@ import { buildCardLevelUpTable, evaluateUpgrade, upgradeButtonText } from '../as
 const card = (id: string) => ({ id, name: id }) as ZCDeckCard;
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function deferred<T>() { let resolve: (value: T) => void = () => {}; const promise = new Promise<T>(yes => { resolve = yes; }); return { promise, resolve }; }
-function upgradeStatus(level = 0) { return { cardId: '1', level, targetLevel: level + 1, configured: true, maxLevel: 10, maxed: false,
-    armyExpItemId: '16003', generalExpItemId: '16000', armyExpOwned: 99, generalExpOwned: 99, requirements: [], canUpgrade: true, blockedReason: '' }; }
+function upgradeStatus(level = 0) {
+    return { cardId: '1', level, targetLevel: level + 1, configured: true, maxLevel: 10, maxed: false,
+        armyExpItemId: '16003', generalExpItemId: '16000', armyExpOwned: 99, generalExpOwned: 99, requirements: [], canUpgrade: true, blockedReason: '' };
+}
 
 test('详情与升级状态独立展示；升级后忽略上一等级迟到的详情', async () => {
     const h = upgradeFixture();

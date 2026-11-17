@@ -1387,7 +1387,7 @@ export function leagueCreateCost(
  * `roleProperty` 表的行（**只取消耗展示要用的那几列**）。
  *
  * `icon` 在本表里存的是 **FGUI 组件名**（`图标_幻灵玉`），不是相对 `resources` 的路径
- * ⇒ 取图要落 `icons/resource/<icon>`（同 `LayerActivityTable` 的 `iconIsPath = false` 口径）。
+ * ⇒ 取图要落 `icons/resource/<icon>`（同 `common/RewardIcon` 的 `iconIsPath = false` 口径）。
  * `key` 同时是 **`CmdRole` 上的字段名**（老端 `ModelGoods.GetGoodsNumberByRefId`
  * 对 `playerAtt` 类就是 `voRole.GetRolePropertyNum(ref.key)`）⇒ 持有量按它取。
  */

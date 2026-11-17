@@ -50,13 +50,7 @@ export class HangEntryButton extends Component {
         // 监听挂在**节点**上（`cc.Button` 的 click 本来就是 `node.emit` 出来的）。
         // 点击区在根节点：见文件头「点击区落在根节点上」。
         const button = this.node.getComponent(Button);
-        if (!button) {
-            // 与 `ChatEntryButton` 同一处置：只说一声、不静默。缺 `cc.Button` 时
-            // `Button.EventType.CLICK` 永远不会被 emit，表现是「点了毫无反应且不报错」。
-            console.error(`[Hang] ${this.node.name} 上没有 cc.Button，主界面入口点击不会生效`);
-            return;
-        }
-        button.node.on(Button.EventType.CLICK, this.onClick, this);
+        this.node.on(Button.EventType.CLICK, this.onClick, this);
         this.node.active = true;
         button.interactable = false;
         this.timeLabel.string = formatHms(0);
@@ -128,7 +122,7 @@ export class HangEntryButton extends Component {
     private _startShake(): void {
         if (this._shaking) return;
         const target = this.shakeNode;
-        if (!target || !target.isValid) return;
+        if (!target.isValid) return;
         this._shaking = true;
 
         const segment = HJ_ENTRY_SHAKE_SEGMENT_SECONDS;
@@ -154,7 +148,7 @@ export class HangEntryButton extends Component {
     private _stopShake(): void {
         this._shaking = false;
         const target = this.shakeNode;
-        if (!target || !target.isValid) return;
+        if (!target.isValid) return;
         Tween.stopAllByTarget(target);
         // 无条件复位：`repeatForever` 的 tween 被停掉时可能停在任意角度（含 ±8° 附近）。
         target.setRotationFromEuler(0, 0, 0);

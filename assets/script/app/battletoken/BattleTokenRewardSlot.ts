@@ -24,25 +24,25 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenRewardSlot')
 export class BattleTokenRewardSlot extends Component {
     @property({ type: Sprite, tooltip: '品质框（`image/frame/common_img_pzk_*`）' })
-    frame: Sprite = null;
+    frame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: '道具图标（`item` / `roleProperty` 两支分流解析）' })
-    icon: Sprite = null;
+    icon: Sprite = null!;
 
     @property({ type: Node, tooltip: '已领取对勾（复用 sevenDay/sd_check）' })
-    checkMark: Node = null;
+    checkMark: Node = null!;
 
     @property({ type: Node, tooltip: '置灰遮罩（bt_icon_mask）' })
-    mask: Node = null;
+    mask: Node = null!;
 
     @property({ type: Node, tooltip: '未解锁的锁标（bt_lock）' })
-    lockIcon: Node = null;
+    lockIcon: Node = null!;
 
     @property({ type: Node, tooltip: '可领取红点（common/cm_red_dot）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     @property({ type: Button, tooltip: '整格的按钮（可领取时才 interactable）' })
-    button: Button = null;
+    button: Button = null!;
 
     private _onTake: (() => void) | null = null;
 
@@ -72,20 +72,16 @@ export class BattleTokenRewardSlot extends Component {
      * @param iconFrame  道具图标（`null` ⇒ 隐藏 IcoN 节点）
      */
     render(state: IRewardSlotState, frame: SpriteFrame | null, iconFrame: SpriteFrame | null): void {
-        if (this.frame) {
-            if (frame) this.frame.spriteFrame = frame;
-            this.frame.type = BT_SPRITE_SIMPLE;
-        }
-        if (this.icon) {
-            this.icon.spriteFrame = iconFrame;
-            this.icon.node.active = !!iconFrame;
-        }
+        if (frame) this.frame.spriteFrame = frame;
+        this.frame.type = BT_SPRITE_SIMPLE;
+        this.icon.spriteFrame = iconFrame;
+        this.icon.node.active = !!iconFrame;
         // 绝对赋值（规则 10）—— 复用节点上残留的是上一趟的状态
-        if (this.checkMark) this.checkMark.active = state.taken;
-        if (this.mask) this.mask.active = state.masked;
-        if (this.lockIcon) this.lockIcon.active = !state.unlocked;
-        if (this.redDot) this.redDot.active = state.claimable;
-        if (this.button) this.button.interactable = state.canTake;
+        this.checkMark.active = state.taken;
+        this.mask.active = state.masked;
+        this.lockIcon.active = !state.unlocked;
+        this.redDot.active = state.claimable;
+        this.button.interactable = state.canTake;
     }
 
     /** 空格子（该行没有这个方案，或者奖励 resId 解析不出）：整格隐藏。 */

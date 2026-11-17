@@ -95,7 +95,7 @@ test('衍生、传送与号角显示对应图形，池化换格不会沿用上�
 
 test('野怪用月牙与利爪区分状态，唤醒复用骨骼，击杀后收起', () => {
     installZCNeutralTestCatalog([{ groupId: 14009, id: 1400901, groupName: '野怪', resourceType: 11, weight: 1,
-        param: { resId: '68001', wakeRange: 2, attackRange: 1 } }]);
+        param: { resId: '68001', wakeRange: 2, reviveRate: 1 } }]);
     try {
         const { load, cc, bar } = loadViews();
         const view = stubHexView(load, cc, bar);
@@ -147,20 +147,24 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     return view;
 }
 
-/** 造一个「骨骼 prefab」：带假骨架（动画名idle/move/attack，canvas 高 916.29）与 setAnimation 记录。 */
-function spinePrefab(load: (name: string) => any, cc: any, name = '豌豆射手', canvasHeight = 916.29) {
+/** 造一个「骨骼 prefab」：根节点 + 固定子节点 `spine`，带假骨架（动画名默认 idle/move/attack，canvas 高 916.29）。 */
+function spinePrefab(load: (name: string) => any, cc: any, name = '豌豆射手', canvasHeight = 916.29,
+    animationNames = ['idle', 'move', 'attack']) {
     const played: Array<{ clip: string; loop: boolean }> = [];
     const skeleton = {
-        skeletonData: { getRuntimeData: () => ({ height: canvasHeight, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
+        skeletonData: { getRuntimeData: () => ({ height: canvasHeight, animations: animationNames.map((name) => ({ name })) }) },
         setAnimation(_track: number, clip: string, loop: boolean) { played.push({ clip, loop }); },
     };
     const make = () => {
-        const node = new (load('./ZCHexView') ? (cc.Node as any) : (cc.Node as any))();
-        // 桩组件要挂在节点上才能被 getComponent 找到。
+        const node = new (cc.Node as any)();
+        const spine = new (cc.Node as any)('spine');
+        spine.setParent(node);
+        // 桩组件要挂在固定子节点上才能被 getComponent 找到；根节点保留 __skeleton 供用例读状态。
         const sk = { ...skeleton, skeletonData: skeleton.skeletonData, setAnimation: skeleton.setAnimation };
+        sk.node = spine;
         node.__skeleton = sk;
-        node.getComponent = (type: any) => (type === cc.sp?.Skeleton || type?.name === 'Skeleton' ? sk : null);
-        node.getComponentInChildren = (type: any) => (type === cc.sp?.Skeleton || type?.name === 'Skeleton' ? sk : null);
+        spine.getComponent = (type: any) => (type === cc.sp?.Skeleton || type?.name === 'Skeleton' ? sk : null);
+        node.getComponent = () => null;
         node.name = name;
         node.componentName = name;
         return node;
@@ -250,6 +254,17 @@ test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，
     const y = 12 + load('./ZCHexView').NEUTRAL_RESOURCE_LIFT;
     assert.deepEqual(Array.from(nodes, (n) => n.position.y), [y, y, y],
         '兵团预览与中立资源图标共用整体上移量');
+});
+
+test('资源点单位缺少 idle 动画时直接抛错，不播空动画或降级', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const prefab = spinePrefab(load, cc, '坏兵', 916.29, ['move']);
+    view.setResourceUnits('68001', prefab as never, 1);
+    assert.throws(() => view.render({
+        state: resourceHexState(ZC_TEST_ITEM.Unit),
+        canDevelop: false, playerGold: 0, cooldown: null, now: 0,
+    }), /缺少动画 idle/);
 });
 
 test('领取后（neutralResourceId 清空）骨���收掉，不残留', () => {

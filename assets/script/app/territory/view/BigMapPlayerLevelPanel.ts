@@ -124,7 +124,7 @@ export class BigMapPlayerLevelPanel extends Component {
         this.setCostIcon(costIcon);
         if (width > 0 && height > 0) {
             const root = this.node.getComponent(UITransform);
-            if (root) root.setContentSize(width, height);
+            root.setContentSize(width, height);
             this.dimTransform.setContentSize(width, height);
             const scale = Math.min(1, (width - 32) / this.panelTransform.width,
                 (height - 64) / this.panelTransform.height);

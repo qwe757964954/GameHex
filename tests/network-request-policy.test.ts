@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
-import { withTimeout } from '../assets/script/app/net/RequestGuard';
+import { sendGameRequest, withTimeout } from '../assets/script/app/net/RequestGuard';
 
 function load(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -244,4 +244,43 @@ test('默认可重试请求沿用旧的超时重发行为', () => {
     h.state.addNetworkRequest(request);
     h.state.update(3001);
     assert.equal(h.sent(), 2);
+});
+
+
+test('GM 请求复用共享入口：离线不发送，列表成功或失败都只通知一次', async () => {
+    let sends = 0;
+    const net = { isConnected: false, ok: true, async send(request: { fCallback(rsp: unknown): void }) {
+        sends++;
+        if (this.ok) request.fCallback({ cmd: [{ cmd: 'serverOnly', desc: '服务器指令' }] });
+        return this.ok;
+    } };
+    class Request {
+        constructor(_body: object, _owner: object, readonly fCallback: (rsp: unknown) => void) {}
+    }
+    const table = load('assets/script/app/gm/GMCommandTable.ts', name => {
+        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/RequestGuard')) return { sendGameRequest };
+        if (name.endsWith('/RequestSystemMsg')) return { RequestGmList: Request, RequestSystemGm: Request };
+        return {};
+    }).GMCommandTable as typeof import('../assets/script/app/gm/GMCommandTable').GMCommandTable;
+    const tips: string[] = [];
+    table.onTip = tip => tips.push(tip);
+    assert.equal(await table.execute('serverOnly'), false);
+    assert.equal(sends, 0);
+    assert.match(tips[0], /未连接/);
+    let calls = 0;
+    const list = () => new Promise<ReturnType<typeof table.getCommandList>>(resolve => table.requestServerList(items => {
+        calls++;
+        resolve(items);
+    }));
+    assert.equal((await list()).length, 0);
+    assert.equal(calls, 1);
+    assert.equal(sends, 0);
+    net.isConnected = true;
+    assert.equal((await list())[0].gm, 'serverOnly');
+    assert.equal(calls, 2);
+    net.ok = false;
+    assert.equal((await list())[0].gm, 'serverOnly');
+    assert.equal(calls, 3);
+    assert.equal(sends, 2);
 });

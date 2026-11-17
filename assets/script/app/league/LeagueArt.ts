@@ -23,10 +23,8 @@
  * `zx_btn01`）在 FGUI 里**都没有 `scale="9grid"`** ⇒ 一律 `SIMPLE`，
  * 下面 `LEAGUE_ART_SLICED` 为空集是**有意**的（后续面板的大底板才需要九宫格）。
  *
- * P4 起本文件**多了两条对活动模块的 import**（`LayerActivityArt` / `LayerActivityTable`）——
- * 奖励图标的两支分流（`item` 直通 / `roleProperty` 落 `icons/resource`）是**全工程唯一入口**，
- * 活动、战令、礼包、邮件、挂机都在转它；联盟再抄一份就是第六份重复实现。
- * 这两个模块本身**不 import `cc`**（纯表/纯函数）⇒ 本文件仍保持引擎无关，单测可直连。
+ * P4 起本文件直接 import `common/RewardIcon` 与 `common/ResTypes`，奖励图标不再经活动模块转发；
+ * 这两处与 `ArtPaths` 都不 import `cc` ⇒ 本文件仍保持引擎无关，单测可直连。
  */
 
 import {
@@ -471,7 +469,7 @@ export const LEAGUE_ART_CREATE_NAME_BG = LEAGUE_ART_INPUT_BG;
 
 /**
  * 消耗图标的**资源目录** —— `icons/resource/`（`roleProperty` 那一支的 FGUI 裸名，
- * 与 `LayerActivityArt.resolveRewardIconRef` 的 `iconIsPath = false` 分支同口径）。
+ * 与 `common/RewardIcon.resolveRewardIconRef` 的 `iconIsPath = false` 分支同口径）。
  *
  * **不能**走 `image/league`：`roleProperty.icon` 存的是 FGUI 组件名（`图标_幻灵玉`），
  * 不是相对 `resources` 的路径 —— 见 `LeagueTable` 的 `buildLeagueCostView`。

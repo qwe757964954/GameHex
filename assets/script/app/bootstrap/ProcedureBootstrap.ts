@@ -33,6 +33,7 @@ import { createLeagueCreatePopupComposition } from './LeagueCreatePopupCompositi
 import { createLeagueDonatePopupComposition } from './LeagueDonatePopupComposition';
 import { ensureZCRuntimeCompiled } from '../zcds/application/ZCRuntimePrecompiler';
 import { resetZCRuntime } from '../zcds/model/ZCGameRuntimeConfig';
+import { cardRepository } from '../card/CardRepository';
 
 const { ccclass } = _decorator;
 const RESOURCE_LOAD_CONCURRENCY = 4;
@@ -60,6 +61,10 @@ export class ProcedureBootstrap extends Component {
     /** 真实支付发货广播：`CmdRecharge.rewards` 才是本次到账明细。 */
     private readonly onRechargeSettled = (msg: CmdRechargeBroMsg): void => {
         FW.ShowReward(msg?.cmdRecharge?.rewards ?? []);
+    };
+
+    private readonly onItemReward = (msg: CmdItemRewardBroMsg): void => {
+        FW.ShowReward(msg.tlCmdGoods ?? []);
     };
 
     onLoad(): void {
@@ -91,6 +96,7 @@ export class ProcedureBootstrap extends Component {
         // 对齐 2.0 `ModelStore.enter()`：支付请求/中心服开单本身不代表发货，必须等游戏服
         // `CmdRechargeBroMsg`。首充、灵玉直充等所有充值入口共用这一条全局结算出口。
         GameNet.instance.addEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
+        GameNet.instance.addEvent('CmdItemRewardBroMsg', this, this.onItemReward);
         EventMgr.instance.on(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
     }
     private configurePayment(network: FetchNetworkTransport): void {
@@ -117,7 +123,7 @@ export class ProcedureBootstrap extends Component {
         registerRdVars();
     }
     private createProcedureManager(): ProcedureManager {
-        return this.getComponent(ProcedureManager) ?? this.addComponent(ProcedureManager);
+        return this.getComponent(ProcedureManager);
     }
     private configureServices(manager: ProcedureManager): void {
         const assets = new ResourceLoadManager(new CocosAssetService(), { maxConcurrentLoads: RESOURCE_LOAD_CONCURRENCY });
@@ -153,10 +159,14 @@ export class ProcedureBootstrap extends Component {
     }
 
     onDestroy(): void {
+        cardRepository.bindHeroSession(null);
         EventMgr.instance.off(REWARD_ITEM_DETAIL_INTENT, this.onRewardItemDetail, this);
         const resourceLoads = this.resourceLoads;
         this.resourceLoads = null;
         try { resourceLoads?.dispose(); }
-        finally { GameNet.instance.removeEvent('CmdRechargeBroMsg', this, this.onRechargeSettled); }
+        finally {
+            GameNet.instance.removeEvent('CmdRechargeBroMsg', this, this.onRechargeSettled);
+            GameNet.instance.removeEvent('CmdItemRewardBroMsg', this, this.onItemReward);
+        }
     }
 }

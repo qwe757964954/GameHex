@@ -27,13 +27,13 @@ const { ccclass, property } = _decorator;
 @ccclass('TerritoryResourceGainView')
 export class TerritoryResourceGainView extends Component {
     @property({ type: Sprite, group: '节点引用', tooltip: 'Icon：资源图标（银币 / 体力）' })
-    iconSprite: Sprite = null;
+    iconSprite: Sprite = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Amount：+N 数值' })
-    amountLabel: Label = null;
+    amountLabel: Label = null!;
 
     @property({ type: UIOpacity, group: '节点引用', tooltip: '挂在根节点上的 cc.UIOpacity（整条一起淡出）' })
-    opacity: UIOpacity = null;
+    opacity: UIOpacity = null!;
 
     /** < 0 = 空闲（可被复用）。 */
     private elapsed = -1;
@@ -66,12 +66,10 @@ export class TerritoryResourceGainView extends Component {
      * 写回 `UITransform` 的，不逼一下读到的是上一句的宽度（看着像"数字跳到一半"）。
      */
     private layoutContent(): void {
-        const icon = this.iconSprite?.node;
-        const amount = this.amountLabel?.node;
-        if (!icon || !amount) return;
+        const icon = this.iconSprite.node;
+        const amount = this.amountLabel.node;
         const iconSize = icon.getComponent(UITransform);
         const amountSize = amount.getComponent(UITransform);
-        if (!iconSize || !amountSize) return;
         this.amountLabel.updateRenderData(true);
         // 宽度为 0 / NaN（首帧还没排版）⇒ 返回 null，保持 prefab 摆位，别把整组甩到左边。
         const x = territoryGainContentX(

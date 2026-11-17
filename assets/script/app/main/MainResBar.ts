@@ -86,7 +86,7 @@ export class MainResBar extends Component {
      * 值为「阵容内攻击力总和」，本地算（口径见 `card/CardLineupPower`），**不发协议**。
      */
     @property({ type: Label, tooltip: 'PowerLabel：战力（阵容内攻击力总和，本地计算）' })
-    powerLabel: Label | null = null;
+    powerLabel: Label = null!;
 
     /** 防止 `reload` 重入（缓存落地 / 资源变化都可能触发）。 */
     private loading = false;
@@ -176,10 +176,9 @@ export class MainResBar extends Component {
      * 与 `reload` 同口径：失败只 warn、不抛。
      */
     private async refreshPower(): Promise<void> {
-        if (!this.powerLabel) return;
         try {
             const power = await cardRepository.loadLineupPower();
-            if (!this.isValid || !this.powerLabel) return;
+            if (!this.isValid) return;
             if (power > 0) this.powerLabel.string = formatPowerText(power);
         } catch (error) {
             console.warn('[MainResBar] 战力刷新失败，保留占位', error);

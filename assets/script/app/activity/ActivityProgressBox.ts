@@ -47,7 +47,7 @@ const LOCKED_TINT = new Color(190, 190, 190, 255);
 @ccclass('ActivityProgressBox')
 export class ActivityProgressBox extends Component {
     @property({ type: Node, tooltip: 'ChestBtn：宝箱本体（挂 cc.Button，呼吸动效作用在它身上）' })
-    chestButton: Node = null;
+    chestButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'ChestBtn/Bg：宝箱图（按状态换 by0/by1/by2）' })
     chestIcon: Sprite = null;
@@ -88,7 +88,7 @@ export class ActivityProgressBox extends Component {
     applyArtSize(size: number): void {
         if (!(size > 0)) return;
         this.chestIcon.sizeMode = Sprite.SizeMode.CUSTOM;
-        this.chestIcon.node.getComponent(UITransform)?.setContentSize(size, size);
+        this.chestIcon.node.getComponent(UITransform).setContentSize(size, size);
     }
 
     /**
@@ -133,7 +133,6 @@ export class ActivityProgressBox extends Component {
     private stopBreath(): void {
         if (!this.breathing) return;
         this.breathing = false;
-        if (!this.chestButton) return;
         Tween.stopAllByTarget(this.chestButton);
         // ⚠️ 这里**必须**判 `isValid`：宝箱是随宿主节点一起销毁的，`onDestroy` 跑到这时
         //    子节点 `chestButton` 内部存缩放/位置的 `Vec3` 已经被释放，`setScale` 直接抛

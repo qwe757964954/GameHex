@@ -50,6 +50,7 @@ const GUARD_TESTS = [
     'tests/isolated-compile-import.test.ts',
     'tests/sprite-frame-null.test.ts',
     'tests/definition-integrity.test.ts',
+    'tests/function-body-layout.test.ts',
     'tests/verify-gate.test.ts',
 ];
 

@@ -73,7 +73,7 @@ export class LeagueNorthRankPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueNorthRank';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     /**
      * `TabRank` / `TabProgress`：两个页签。
@@ -88,10 +88,10 @@ export class LeagueNorthRankPage extends PopupBase {
     tabProgress: Node = null;
 
     @property({ type: VirtualScrollView, tooltip: 'RankList：名次列表（虚拟列表）' })
-    rankList: VirtualScrollView = null;
+    rankList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'MyBg：我的名次底板（n13，594×160）' })
-    myBg: Node = null;
+    myBg: Node = null!;
 
     /**
      * `HeroItem`：我的名次那一行（**不画行底框**）。
@@ -102,23 +102,23 @@ export class LeagueNorthRankPage extends PopupBase {
      * ⇒ 绑节点、运行时 `getComponent(LeagueNorthRankRow)`。
      */
     @property({ type: Node, tooltip: 'HeroItem：我的名次那一行的节点（挂 LeagueNorthRankRow）' })
-    heroItem: Node = null;
+    heroItem: Node = null!;
 
     @property({ type: Node, tooltip: 'HeaderRank：联盟排名页的表头（n15，随页签显隐）' })
-    headerRank: Node = null;
+    headerRank: Node = null!;
 
     @property({ type: Node, tooltip: 'HeaderProgress：盟内进度页的表头（n16，随页签显隐）' })
-    headerProgress: Node = null;
+    headerProgress: Node = null!;
 
     @property({ type: Label, tooltip: 'AwardTip：发奖说明（n12，静态文案）' })
-    awardTip: Label = null;
+    awardTip: Label = null!;
 
     /** 当前页签。 */
     private tab: LeagueNorthRankTab = 'rank';
 
     /** 两个页签的脚本实例（`onInit` 里从嵌套实例壳上取一次）。 */
-    private tabRankRef: LeagueNorthTab | null = null;
-    private tabProgressRef: LeagueNorthTab | null = null;
+    private tabRankRef: LeagueNorthTab = null!;
+    private tabProgressRef: LeagueNorthTab = null!;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueNorthRankRowView[] = [];
@@ -135,21 +135,20 @@ export class LeagueNorthRankPage extends PopupBase {
     // 生命周期
 
     protected onInit(): void {
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueNorthRank] CloseBtn 上没有 cc.Button，点击不会生效');
+        const button = this.closeButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         // 页签与 HeroItem 都是嵌套实例 ⇒ 运行时从壳上取脚本（见各自的 @property 注释）
-        this.tabRankRef = this.tabRank ? this.tabRank.getComponent(LeagueNorthTab) : null;
-        this.tabProgressRef = this.tabProgress ? this.tabProgress.getComponent(LeagueNorthTab) : null;
+        this.tabRankRef = this.tabRank.getComponent(LeagueNorthTab);
+        this.tabProgressRef = this.tabProgress.getComponent(LeagueNorthTab);
 
-        if (this.rankList) this.rankList.renderItemFn = (node, index) => this.renderRow(node, index);
-        if (this.tabRankRef) this.tabRankRef.onTabClick = () => void this.onTabClick('rank');
-        if (this.tabProgressRef) this.tabProgressRef.onTabClick = () => void this.onTabClick('progress');
-        if (this.awardTip) this.awardTip.string = LEAGUE_NORTH_RANK_AWARD_TIP;
+        this.rankList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.tabRankRef.onTabClick = () => void this.onTabClick('rank');
+        this.tabProgressRef.onTabClick = () => void this.onTabClick('progress');
+        this.awardTip.string = LEAGUE_NORTH_RANK_AWARD_TIP;
         // 页签文案由图里的静态文字兜底，这里再写一遍（改文案表时不用回 prefab 改）
-        if (this.tabRankRef) this.tabRankRef.setTitle(LEAGUE_NORTH_TAB_RANK);
-        if (this.tabProgressRef) this.tabProgressRef.setTitle(LEAGUE_NORTH_TAB_PROGRESS);
+        this.tabRankRef.setTitle(LEAGUE_NORTH_TAB_RANK);
+        this.tabProgressRef.setTitle(LEAGUE_NORTH_TAB_PROGRESS);
         this.applyTabPage();
     }
 
@@ -197,10 +196,10 @@ export class LeagueNorthRankPage extends PopupBase {
 
     /** 把当前页签落到两颗按钮 + 两行表头 + 我的那行（重铺一次，因为版式不同）。 */
     private applyTabPage(): void {
-        if (this.tabRankRef) this.tabRankRef.setSelected(this.tab === 'rank');
-        if (this.tabProgressRef) this.tabProgressRef.setSelected(this.tab === 'progress');
-        if (this.headerRank) this.headerRank.active = this.tab === 'rank';
-        if (this.headerProgress) this.headerProgress.active = this.tab === 'progress';
+        this.tabRankRef.setSelected(this.tab === 'rank');
+        this.tabProgressRef.setSelected(this.tab === 'progress');
+        this.headerRank.active = this.tab === 'rank';
+        this.headerProgress.active = this.tab === 'progress';
         this.presentHero();
     }
 
@@ -212,8 +211,8 @@ export class LeagueNorthRankPage extends PopupBase {
         const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
         if (!this.alive) return;
         const payload = { normal: frames[0] ?? null, selected: frames[1] ?? null };
-        if (this.tabRankRef) this.tabRankRef.setFrames(payload);
-        if (this.tabProgressRef) this.tabProgressRef.setFrames(payload);
+        this.tabRankRef.setFrames(payload);
+        this.tabProgressRef.setFrames(payload);
     }
 
     // 取数 / 铺数据
@@ -265,20 +264,17 @@ export class LeagueNorthRankPage extends PopupBase {
 
     private presentHero(): void {
         const visible = !!this.myRow;
-        if (this.myBg) this.myBg.active = visible;
-        if (!this.heroItem) return;
+        this.myBg.active = visible;
         this.heroItem.active = visible;
         if (!visible) return;
         // 实例壳上的脚本只能运行时取（见 `heroItem` 的 @property 注释）
         const hero = this.heroItem.getComponent(LeagueNorthRankRow);
-        if (!hero) return;
         // 我的那一格不画行底框（FGUI `controller="显示背景,1"`）
         hero.render(this.myRow, this.tab, this.art, false);
     }
 
     /** 刷新虚拟列表（首次已在 `onOpen` 里等过一帧，槽位已建好）。 */
     private refreshList(): void {
-        if (!this.rankList) return;
         this.rankList.refreshList(this.rows);
         this.rankList.scrollToTop(false);
     }
@@ -286,7 +282,6 @@ export class LeagueNorthRankPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueNorthRankRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.render(null, this.tab, this.art, true);

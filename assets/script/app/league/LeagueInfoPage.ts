@@ -6,12 +6,7 @@
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { loadArt } from '../card/CardLineupIcons';
-import {
-    LEAGUE_ART_ROOT,
-    LEAGUE_BANNER_COLOR_COUNT,
-    leagueBannerArt,
-} from './LeagueArt';
+import { loadLeagueBannerFrames } from './LeagueBannerArt';
 import { leagueRepository, type ILeagueRepository, type LeagueRequestResult } from './LeagueRepository';
 import {
     buildLeagueInfoViewFromUnionView,
@@ -62,34 +57,34 @@ export class LeagueInfoPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueInfo';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（按 icon 换图）' })
-    bannerColor: Sprite = null;
+    bannerColor: Sprite = null!;
 
     @property({ type: Label, tooltip: 'LeagueName：联盟名' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueLv：等级（`6级`）' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueLeader：盟主（`盟主:xxx`）' })
-    leaderLabel: Label = null;
+    leaderLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueId：联盟 ID' })
-    idLabel: Label = null;
+    idLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueWx：联系微信号' })
-    wxLabel: Label = null;
+    wxLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabUser：成员数（`成员:46/51`）' })
-    memberLabel: Label = null;
+    memberLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'DecBox/Content：联盟宣言正文' })
-    declarationLabel: Label = null;
+    declarationLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'BtnJoin：加入' })
-    joinButton: Node = null;
+    joinButton: Node = null!;
 
     /** 本趟铺上来的视图（点「加入」时取它的 id）。 */
     private view: ILeagueInfoView | null = null;
@@ -104,13 +99,11 @@ export class LeagueInfoPage extends PopupBase {
 
     protected onInit(): void {
 
-        const close = this.closeButton?.getComponent(Button);
-        if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueInfo] CloseBtn 上没有 cc.Button，点击不会生效');
+        const close = this.closeButton.getComponent(Button);
+        close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
-        const join = this.joinButton?.getComponent(Button);
-        if (join) join.node.on(Button.EventType.CLICK, this.onJoinClick, this);
-        else console.warn('[LeagueInfo] BtnJoin 上没有 cc.Button，点击不会生效');
+        const join = this.joinButton.getComponent(Button);
+        join.node.on(Button.EventType.CLICK, this.onJoinClick, this);
     }
 
     protected onOpen(userData?: ILeagueInfoParams): void {
@@ -142,23 +135,20 @@ export class LeagueInfoPage extends PopupBase {
     }
 
     private present(view: ILeagueInfoView): void {
-        if (this.nameLabel) this.nameLabel.string = view.name;
-        if (this.levelLabel) this.levelLabel.string = view.levelText;
-        if (this.leaderLabel) this.leaderLabel.string = view.leaderText;
-        if (this.idLabel) this.idLabel.string = view.idText;
-        if (this.wxLabel) this.wxLabel.string = view.wxText;
-        if (this.memberLabel) this.memberLabel.string = view.memberText;
-        if (this.declarationLabel) this.declarationLabel.string = view.declaration;
+        this.nameLabel.string = view.name;
+        this.levelLabel.string = view.levelText;
+        this.leaderLabel.string = view.leaderText;
+        this.idLabel.string = view.idText;
+        this.wxLabel.string = view.wxText;
+        this.memberLabel.string = view.memberText;
+        this.declarationLabel.string = view.declaration;
         void this.applyBannerColor(view.icon);
     }
 
     /** 旗面按颜色下标**换图**（FGUI 是 `gearIcon` 换图，不是给一张图染色）。 */
     private async applyBannerColor(colorIndex: number): Promise<void> {
-        if (!this.bannerColor) return;
         if (!this.bannerFrames) {
-            const names: string[] = [];
-            for (let index = 0; index < LEAGUE_BANNER_COLOR_COUNT; index += 1) names.push(leagueBannerArt(index));
-            const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
+            const frames = await loadLeagueBannerFrames();
             if (!this.alive) return;
             this.bannerFrames = frames;
         }

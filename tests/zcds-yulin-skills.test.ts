@@ -111,21 +111,21 @@ test('玉林好汉：12 行技能计划齐备，且 100404 三档的穿透/衰�
         for (const tier of tiers) assert.equal(Number(tier.pvpSkillId), 30716);
     }
 
-    // 100401 攻速 +10% / 100403 移速 +15%：三级同值、replace。
-    for (const [chainId, statId, value] of [[100401, 'attackSpeed', 0.1], [100403, 'moveSpeed', 0.15]] as const) {
-        for (const tier of byChain(chainId)) {
-            assert.equal(tier.statId, statId);
-            assert.equal(tier.operation, 'addRate');
-            assert.equal(Number(tier.value), value);
-            assert.equal(tier.progressionMode, 'replace');
-        }
-    }
-    // 100402 铁质飞镖：伤害倍率，不是攻击力（设计案 N 列「不抬高面板」）。
-    for (const tier of byChain(100402)) {
-        assert.equal(tier.statId, 'damageRate');
+    // 100401 灵巧投掷：攻速 +10%，三级同值、replace。
+    //  🔴 100401 在 V5 设计案里是「职业猎杀协议」（对战士 +24%、暴击 +6%），属克制条批次，
+    //  还没落表；这里钉的是**当前**的灵巧投掷，等克制条落地时连本用例一起改。
+    for (const tier of byChain(100401)) {
+        assert.equal(tier.statId, 'attackSpeed');
         assert.equal(tier.operation, 'addRate');
         assert.equal(Number(tier.value), 0.1);
+        assert.equal(tier.progressionMode, 'replace');
     }
+    // 100402 废土铁芽：面板攻击 17/20/23%（V5 从「铁质飞镖·伤害倍率」改过来）。
+    assert.deepEqual(byChain(100402).map((tier) => [tier.statId, Number(tier.value)]),
+        [['attack', 0.17], ['attack', 0.2], ['attack', 0.23]]);
+    // 100403 超视孢子：攻击范围 24/28/32%（V5 从「移速 +15%」改过来）。
+    assert.deepEqual(byChain(100403).map((tier) => [tier.statId, Number(tier.value)]),
+        [['attackRange', 0.24], ['attackRange', 0.28], ['attackRange', 0.32]]);
 
     // 100404 精英猎手：60/70/80%，穿透 3/6/8 人，每穿一人 -20%。
     const ultimate = byChain(100404).map((row) => JSON.parse(String(row.skillParamJson)) as Record<string, number>);
@@ -167,18 +167,20 @@ test('100404 没有 pvpSkillBinding 行时，skillParamJson 仍进得到 skillRu
     assert.equal(skill!.parameters.pierceFalloff, 0.2);
 });
 
-test('100402 铁质飞镖的 damageRate 落进 unit 域 statPatch（不再被 default 吞掉）', () => {
+test('100402 / 100403 的 statId 都折进 unit 域 statPatch（不再被 default 吞掉）', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const loadout = compileZCCombatBuild({
         unitId: '68004', heroLevel: 25, generalStar: { generalId: 68004, star: 1 },
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
-    // 三档同值 10%，replace ⇒ 最终只留一条，值 10（百分数整数）。
-    assert.equal(loadout!.statPatch.damageRatePct, 10, 'damageRate 必须折成 damageRatePct');
-    // 100401 / 100403 的老属性不受影响。
+    // 100402 III 级 = 攻击 +23%，100403 III 级 = 攻击范围 +32%，100401 = 攻速 +10%（三档同值）。
+    assert.equal(loadout!.statPatch.attackPct, 23, 'attack 必须折成 attackPct');
+    assert.equal(loadout!.statPatch.attackRangePct, 32, 'attackRange 必须折成 attackRangePct');
     assert.equal(loadout!.statPatch.attackSpeedPct, 10);
-    assert.equal(loadout!.statPatch.moveSpeedPct, 15);
+    //  V5 起 100402 不再承载 damageRate（改成面板攻击），68004 全卡没有伤害倍率尾巴；
+    //  `damageRate → damageRatePct` 的折叠由 `tests/zcds-flora-skills.test.ts` 钉住。
+    assert.equal(loadout!.statPatch.damageRatePct, undefined);
 });
 
 // ── 三、穿透衰减（新增 pierceFalloff） ────────────────────────────────────────

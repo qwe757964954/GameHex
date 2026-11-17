@@ -77,7 +77,7 @@ function unitDefinition(prefabSize: number): any {
 function stubUnitView(load: (name: string) => any, bar: () => any): any {
     const view = new (load('./ZCUnitView').ZCUnitView)();
     const node = bar().node;
-    //  引擎侧 `Component.node`：spine 美术挂载会往它上面写 `layer`（帧图那条路径不碰）。
+    //  引擎侧 `Component.node`：spine 美术挂载会往它上面写 `layer`。
     view.node = node;
     view.rootTransform = { setContentSize: () => {} };
     view.visualRoot = bar().node;
@@ -89,25 +89,18 @@ function stubUnitView(load: (name: string) => any, bar: () => any): any {
     return view;
 }
 
-/** 造一个「prefab 自带缩放 = 1、序列帧形态（无 Animation/Skeleton）」的美术 prefab 桩。 */
-function framePrefab(FakeNode: any): any {
-    return {
-        make: () => {
-            const node = new FakeNode('visual');
-            node.getComponent = () => null;
-            return node;
-        },
-    };
-}
-
-/** 造一个 spine 形态的美术 prefab 桩：带 `skeletonData.getRuntimeData().height`。 */
+/** 造一个 spine 形态的美术 prefab 桩：根节点 + 固定子节点 `spine`，带 `skeletonData.getRuntimeData().height`。 */
 function spinePrefab(FakeNode: any, canvasHeight: number): any {
-    const skeleton = makeSkeleton(canvasHeight);
     return {
+        name: 'unit',
         make: () => {
             const node = new FakeNode('spine-visual');
-            skeleton.node = node;
-            node.getComponent = (type: any) => (type?.name === 'Skeleton' ? skeleton : null);
+            const spine = new FakeNode('spine');
+            spine.setParent(node);
+            const skeleton = makeSkeleton(canvasHeight);
+            skeleton.node = spine;
+            node.getComponent = () => null;
+            spine.getComponent = (type: any) => (type?.name === 'Skeleton' ? skeleton : null);
             return node;
         },
     };
@@ -115,7 +108,13 @@ function spinePrefab(FakeNode: any, canvasHeight: number): any {
 
 function makeSkeleton(canvasHeight: number): any {
     return {
-        skeletonData: { getRuntimeData: () => ({ height: canvasHeight, animations: [{ name: 'idle' }] }) },
+        node: null,
+        skeletonData: {
+            getRuntimeData: () => ({
+                height: canvasHeight,
+                animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }],
+            }),
+        },
         setAnimation: () => true,
         color: null,
     };
@@ -156,7 +155,8 @@ test('C3 解析层：建筑卡（无单位预设）整行跳过，不因缺 pref
 test('V1 视图层：prefabSize 真的乘进了节点的实际缩放', () => {
     const { load, bar, FakeNode, setArtQueries } = loadViews();
     const view = stubUnitView(load, bar);
-    setArtQueries({ resolveUnitPrefab: () => framePrefab(FakeNode) });
+    // canvas 高 = SPINE_CANVAS_TARGET_HEIGHT ⇒ 归一系数 1，单独看 prefabSize 的效果。
+    setArtQueries({ resolveUnitPrefab: () => spinePrefab(FakeNode, 69.4) });
     view.initialize(unitDefinition(1));
     assert.equal(view.visualNode.scale.x, 1, '系数 1 ⇒ 原样');
 
@@ -196,7 +196,7 @@ test('V3 视图层：血条 Y 跟着体型走（不缩的话 1.2 倍的兵血条
         x: 0, y: 0, now: 0,
     });
 
-    setArtQueries({ resolveUnitPrefab: () => framePrefab(FakeNode) });
+    setArtQueries({ resolveUnitPrefab: () => spinePrefab(FakeNode, 69.4) });
     const big = stubUnitView(load, bar);
     big.initialize(unitDefinition(1.2));
     big.render(presentation() as any);

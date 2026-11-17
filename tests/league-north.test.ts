@@ -915,7 +915,7 @@ test('E11 LeagueRepository：北伐快照的取数与两种请求通道', () => 
     assert.ok(body.includes('hasLeagueNorthRedDot(') || body.includes('rewardRedDot'));
     assert.ok(body.includes('leagueNorthBossOf('), 'boss 三级反查要在取数层做');
     // 排行：唯一走「拿响应」的通道
-    assert.ok(/private requestRsp</.test(repo), '排行要有一等响应通道 requestRsp');
+    assert.ok(/private async requestRsp</.test(repo), '排行要有一等响应通道 requestRsp');
     assert.ok(repo.includes('new RequestGetRank('), '排行应发 RequestGetRank');
     assert.ok(/unionId: readSelfRoleId\(\)/.test(repo), '⚠️ 排行请求体的 unionId 填**角色 id**');
     // 两个写请求

@@ -9,7 +9,7 @@ import { parseRechargeItemMap } from './RechargeItemMap';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     buildRoundView,
     parseRechargeDailyRows,
@@ -95,20 +95,7 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
     private async sendClaim(
         msg: RequestRechargeDailyGetReward | RequestRechargeDailyGetAccReward,
     ): Promise<RechargeDailyRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
-        try {
-            const sent = await withTimeout(
-                net.send(msg, false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn('[RechargeDaily] 领奖请求失败', error);
-            return 'failed';
-        }
-        return 'ok';
+        return sendGameRequest(GameNet.instance, () => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeDaily' });
     }
 }
 

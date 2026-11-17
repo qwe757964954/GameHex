@@ -129,6 +129,21 @@ test('★ 四个失败提示都经 writeFailText（offline 与 failed 分开）'
     assert.deepEqual(miss, [], `这些调用点还没走 writeFailText：${miss.join('、')}`);
 });
 
+test('⚠️ 反向：四个个人信息页只绑 CLICK，不再引 ClickBinding / TOUCH_END 兜底', () => {
+    const PAGES = ['SettingPage.ts', 'RenamePage.ts', 'PlayerInfoOtherPage.ts', 'ChangeHeadPage.ts', 'PlayerInfoPage.ts'];
+    const misses: string[] = [];
+    for (const file of PAGES) {
+        const body = stripComments(src(file));
+        if (!/node\?\.on\(Button\.EventType\.CLICK, handler, this\);/.test(body)) {
+            misses.push(`${file} 未只绑 CLICK`);
+        }
+        if (/ClickBinding|bindButtonCompat|TOUCH_END/.test(body)) {
+            misses.push(`${file} 仍有兼容分流残留`);
+        }
+    }
+    assert.deepEqual(misses, [], misses.join('；'));
+});
+
 test('⚠️ 反向：不许再出现裸的失败文案（绕过 writeFailText）', () => {
     const BARE = ['changeHeadFailed', 'renameRequestFailed', 'redeemFailed', 'otherLoadFailed'];
     /**

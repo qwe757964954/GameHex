@@ -316,13 +316,13 @@ export class TerritoryStationView extends Component {
     button: Button = null;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'Icon：站点图标（主城 / 前哨 / 首领）' })
-    iconSprite: Sprite = null;
+    iconSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'CaptionBg：未解锁时显示消耗图标，缺少建筑图时作为名称底条' })
-    captionSprite: Sprite = null;
+    captionSprite: Sprite = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'CaptionLabel：未解锁时显示消耗数值，缺少建筑图时显示名称' })
-    captionLabel: Label = null;
+    captionLabel: Label = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BadgeLabel：已解锁关卡编号气泡文字' })
     badgeLabel: Label = null;

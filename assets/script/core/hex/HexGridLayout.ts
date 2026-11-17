@@ -51,6 +51,14 @@ export const HEX_GRID_VIEW_COLUMN_SPACING = 92.25;
 export const HEX_GRID_VIEW_ROW_SPACING = 90;
 export const HEX_GRID_VIEW_COLUMN_PHASE = HEX_GRID_VIEW_ROW_SPACING / 4;
 
+/** 偶列下移的蜂窝最短格距；与通行、虚空无关。 */
+export function hexGridDistance(from: { row: number; column: number }, to: { row: number; column: number }): number {
+    const dq = to.column - from.column;
+    const dr = to.row - (to.column + (to.column & 1)) / 2
+        - from.row + (from.column + (from.column & 1)) / 2;
+    return (Math.abs(dq) + Math.abs(dr) + Math.abs(dq + dr)) / 2;
+}
+
 export interface HexGridPoint {
     readonly x: number;
     readonly y: number;

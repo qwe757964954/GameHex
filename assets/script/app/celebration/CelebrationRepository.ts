@@ -420,7 +420,7 @@ export function goodsOf(snapshot: ICelebrationSnapshot, resId: number): ICelebra
 
 /**
  * 奖励图标的两支分流解析；解析不出返回 `null`（奖励格降级成只画品质框）。
- * 统一走 `LayerActivityArt.resolveRewardIconRef`，不要自己判 `item` / `roleProperty`。
+ * 统一走 `common/RewardIcon.resolveRewardIconRef`，不要自己判 `item` / `roleProperty`。
  */
 export function rewardIconRefOf(
     snapshot: ICelebrationSnapshot,

@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -40,6 +41,7 @@ function harness() {
         removeCaller(owner: object) { removed.push(owner); events.clear(); },
     };
     const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapSlgGateway.ts', (name) => {
+        if (name.endsWith('/RequestGuard')) return requestGuard;
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
         if (name === './RequestBigMapSlgMsg') return requests;
         if (name.endsWith('/BigMapServerState')) return serverState;

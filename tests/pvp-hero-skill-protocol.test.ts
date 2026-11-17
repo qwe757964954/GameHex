@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 /**
  * PVP 英雄**技能**协议（r621）的接线护栏。
  *
@@ -23,6 +24,8 @@ import test from 'node:test';
 import protobuf from 'protobufjs/light.js';
 import protobufRoot from '../assets/script/lib/protobuf/protoCompiledStatic';
 import { assetPath } from './helpers/asset-paths';
+import { loadTsModule } from './helpers/cc-sandbox';
+import { TMap } from '../assets/script/framework/collection/TMap';
 
 const PROTO_SRC = 'client_proto/protoCompiled.proto';
 const STATIC_SRC = 'assets/script/lib/protobuf/protoCompiledStatic.ts';
@@ -31,6 +34,45 @@ const REFLECT_JSON = assetPath('config/protoCompiled.json');
 const SERVICE_SRC = 'assets/script/app/card/PvpHeroService.ts';
 const REPO_SRC = 'assets/script/app/card/CardRepository.ts';
 const REQUEST_SRC = 'assets/script/app/generated/requestMsg/RequestPvpMsg.ts';
+
+function sessionFixture() {
+    class ScriptObject {
+        destroyed = false;
+        assert(value: unknown): void {
+            assert.ok(value);
+        }
+    }
+    const proxy = loadTsModule<typeof import('../assets/script/framework/event/EventProxy')>('assets/script/framework/event/EventProxy.ts', {
+        modules: { '/ScriptObject': { ScriptObject }, '/TMap': { TMap }, '/Utils': {} },
+    });
+    const network = loadTsModule<typeof import('../assets/script/framework/net/NetworkRequest')>('assets/script/framework/net/NetworkRequest.ts', {
+        modules: { '/ScriptObject': { ScriptObject } }, globals: { window: {} },
+    });
+    const module = loadTsModule<typeof import('../assets/script/app/card/PvpHeroService')>(SERVICE_SRC, {
+        modules: { '/RequestGuard': requestGuard, '/RequestPvpMsg': { RequestPvpHeroInfoList: class {
+            constructor(readonly cmdReqMsg: object, readonly caller: object, readonly fCallback: (rsp: object) => void) {}
+            getReqMsgProtoName(): string {
+                return 'CmdPvpHeroInfoListReqMsg';
+            }
+        } } },
+    });
+    for (const result of [proxy, network, module]) assert.deepEqual(result.unresolved, []);
+    const owners = new proxy.exports.EventProxy();
+    const requests: InstanceType<typeof network.exports.NetworkRequest>[] = [];
+    const callers: object[] = [];
+    const net: ConstructorParameters<typeof module.exports.PvpHeroService>[0] = {
+        isConnected: true,
+        send: request => {
+            callers.push(request.caller);
+            const operation = new network.exports.NetworkRequest();
+            operation.packageRequest(requests.length, new Uint8Array(), request, false, owners);
+            requests.push(operation);
+            return operation.promise;
+        },
+        removeCaller: owner => owners.removeCallerListener(owner),
+    };
+    return { Service: module.exports.PvpHeroService, net, requests, callers };
+}
 
 // ============================================================
 // A. 协议层：产物里真的有、且真的编得解得
@@ -155,20 +197,105 @@ test('★★ 升英雄等级不能顺手清空技能等级', () => {
     assert.match(src, /if \(!replaced\) next\.push\(\{ heroId, level, skills: skills \?\? \[\] \}\)/);
 });
 
-test('★★ 技能表归一化：去非法项 / 去重 / 按 id 升序，且不返回服务端数组本身', () => {
+test('★★ 技能表归一化：去重 / 按 id 升序，且不返回服务端数组本身', () => {
     const src = readFileSync(SERVICE_SRC, 'utf8');
     assert.match(src, /function normalizeHeroSkills/);
     assert.match(src, /result\.set\(skillId, \{ skillId, level \}\)/);
     assert.match(src, /\.sort\(\(a, b\) => a\.skillId - b\.skillId\)/);
     // 返回 Array.from(...) 而非原数组：外部改到会影响缓存。
     assert.match(src, /return Array\.from\(result\.values\(\)\)\.sort/);
-    // 非法项必须跳过而不是让整条英雄被丢。
-    assert.match(src, /服务端返回了非法技能等级数据，已跳过/);
 });
 
 test('★★ 技能升级也要回写缓存（响应只回一条英雄信息，不刷列表）', () => {
     const src = readFileSync(SERVICE_SRC, 'utf8');
-    assert.match(src, /export function applyPvpHeroSkillLevel/);
+    assert.match(src, /applyPvpHeroSkillLevel\(/);
     // 缓存里没有这条技能 → 追加，不能丢（服务端新开的技能）。
     assert.match(src, /\[\.\.\.info\.skills, \{ skillId, level \}\]/);
+});
+
+test('英雄列表按协议数值归一化，升级写回保留技能并支持追加', async () => {
+    const { exports: module, unresolved } = loadTsModule<typeof import('../assets/script/app/card/PvpHeroService')>(SERVICE_SRC, {
+        modules: {
+            '/RequestGuard': requestGuard,
+            '/RequestPvpMsg': {
+                RequestPvpHeroInfoList: class {
+                    constructor(_body: object, _caller: object, readonly fCallback: (rsp: object) => void) {}
+                },
+            },
+
+        },
+        globals: { console: { warn() {} } },
+    });
+    assert.deepEqual(unresolved, []);
+    const infos = module.normalizePvpHeroInfos([
+        { heroId: 1, level: 1 },
+        { heroId: 0, level: 1 },
+        { heroId: 2, level: -1 },
+        { heroId: 1, level: 2, skills: [
+            { id: 9, level: 1 }, { id: 7, level: 1 }, { id: 7, level: 3 },
+        ] },
+        { heroId: 3, level: 0 },
+    ]);
+    assert.deepEqual(JSON.parse(JSON.stringify(infos)), [
+        { heroId: 1, level: 2, skills: [{ skillId: 7, level: 3 }, { skillId: 9, level: 1 }] },
+        { heroId: 3, level: 0, skills: [] },
+    ]);
+
+    const service = new module.PvpHeroService({
+        isConnected: true,
+        send: async request => {
+            request.fCallback({ infos: [{ heroId: 1, level: 2, skills: [{ id: 7, level: 3 }] }] } as never);
+            return true;
+        },
+        removeCaller() {},
+    });
+    await service.fetchPvpHeroInfos();
+    service.applyPvpHeroLevel(1, 4);
+    assert.equal(service.getCachedPvpHeroInfo(1).skills[0].level, 3);
+    service.applyPvpHeroSkillLevel(1, 7, 5);
+    service.applyPvpHeroSkillLevel(1, 9, 0);
+    service.applyPvpHeroLevel(2, 0);
+    assert.deepEqual(JSON.parse(JSON.stringify(service.getCachedPvpHeroInfos())), [
+        { heroId: 1, level: 4, skills: [{ skillId: 7, level: 5 }, { skillId: 9, level: 0 }] },
+        { heroId: 2, level: 0, skills: [] },
+    ]);
+});
+
+test('英雄缓存按会话隔离：合并请求，释放取消等待且迟到响应不污染新会话', async () => {
+    const { Service, net, requests, callers } = sessionFixture();
+    const first = new Service(net);
+    const pending = first.fetchPvpHeroInfos();
+    assert.equal(first.fetchPvpHeroInfos(), pending);
+    assert.equal(requests.length, 1);
+    assert.equal(callers[0], first);
+    const cancelled = requests[0].promise;
+    const lateReply = requests[0].resolve;
+    first.dispose();
+    first.dispose();
+    assert.equal(await cancelled, false);
+    assert.equal(await pending, null);
+
+    const second = new Service(net);
+    const current = second.fetchPvpHeroInfos();
+    lateReply({ infos: [{ heroId: 1, level: 99 }] });
+    assert.equal(first.getCachedPvpHeroInfos(), null);
+    assert.equal(second.getCachedPvpHeroInfos(), null);
+    requests[1].resolve({ infos: [{ heroId: 2, level: 0 }] });
+    await current;
+    assert.equal(second.getCachedPvpHeroInfo(2).level, 0);
+    assert.equal(second.getCachedPvpHeroInfo(1), null);
+    assert.equal(await first.fetchPvpHeroInfos(), null);
+    assert.equal(requests.length, 2);
+    second.dispose();
+    assert.equal(second.getCachedPvpHeroInfos(), null);
+});
+
+test('响应已落定但 await 尚未恢复时释放，也不能重新写入旧会话缓存', async () => {
+    const { Service, net, requests } = sessionFixture();
+    const service = new Service(net);
+    const pending = service.fetchPvpHeroInfos();
+    requests[0].resolve({ infos: [{ heroId: 1, level: 9 }] });
+    service.dispose();
+    assert.equal(await pending, null);
+    assert.equal(service.getCachedPvpHeroInfos(), null);
 });

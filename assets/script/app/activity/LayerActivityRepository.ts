@@ -39,7 +39,7 @@ import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { withTimeout, toCount } from '../net/RequestGuard';
+import { sendGameRequest, toCount } from '../net/RequestGuard';
 import {
     activityCoinOf,
     EMPTY_ACTIVITY_STATE,
@@ -258,26 +258,13 @@ export class RuntimeActivityRepository implements IActivityRepository {
         label: string,
         rewardField: 'tlReward' | 'tlCmdGoods',
     ): Promise<ActivityRequestResult> {
-        const net = GameNet.instance;
-        if (!net || !net.isConnected) return 'offline';
-
         let responded = false;
-        try {
-            const sent = await withTimeout(
-                net.send(build((rsp) => {
-                    FW.ShowReward(rsp?.[rewardField] ?? []);
-                    responded = true;
-                }) as any, false),
-                WRITE_TIMEOUT_MS,
-                () => false,
-            );
-            if (sent !== true) return 'failed';
-        } catch (error) {
-            console.warn(`[Activity] ${label}请求失败`, error);
-            return 'failed';
-        }
-        // 两条协议都**没有 `ret` 字段**（响应体只有奖励列表），成功判据只能是「响应到达」，
-        // 与 `MonthCardGiftRepository.claim` 同一口径。
+        const status = await sendGameRequest(GameNet.instance, () => build((rsp) => {
+            FW.ShowReward(rsp?.[rewardField] ?? []);
+            responded = true;
+        }), { timeoutMs: WRITE_TIMEOUT_MS, tag: `Activity:${label}` });
+        if (status !== 'ok') return status;
+        // 两条协议都没有 ret 字段，以响应到达判定成功。
         return responded ? 'ok' : 'failed';
     }
 }

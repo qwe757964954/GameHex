@@ -153,10 +153,11 @@ const displayResults = displayScenarios.map(scenario => {
 const targetingProfiles = displayScenarios.map(scenario => {
     const original = ZCTargetingSystem.acquire;
     let calls = 0, targetingMs = 0, tickMs = 0, candidateChecks = 0;
+    const countCandidates = process.env.ZCDS_TARGETING_COUNTS === '1';
     ZCTargetingSystem.acquire = (...args) => {
-        // 诊断轮只统计候选规模，不计入上面的未插桩耗时；Proxy 只包住索敌上下文。
+        // 诊断轮只统计候选规模；默认不代理上下文，避免 Proxy 干扰 targetingMs。
         const context = args[1];
-        const counted = new Proxy(context, {
+        const counted = countCandidates ? new Proxy(context, {
             get(target, property, receiver) {
                 if (property === 'units') {
                     const value = Reflect.get(target, property, receiver);
@@ -195,9 +196,18 @@ const targetingProfiles = displayScenarios.map(scenario => {
                         return value;
                     };
                 }
+                if (property === 'candidateHexes') {
+                    const fn = Reflect.get(target, property, receiver);
+                    if (!fn) return undefined;
+                    return (owner: unknown) => {
+                        const value = fn.call(target, owner);
+                        candidateChecks += value?.length ?? 0;
+                        return value;
+                    };
+                }
                 return Reflect.get(target, property, receiver);
             },
-        });
+        }) : context;
         const started = performance.now();
         try { return original(args[0], counted, args[2], args[3]); }
         finally { calls++; targetingMs += performance.now() - started; }

@@ -380,7 +380,6 @@ export class FriendPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendRow);
-        if (!row) return;
 
         row.onAction = () => this.dispatchRow(this.rowIds[index], (id) => void this.onRowAction(id));
         row.onChat = () => this.dispatchRow(this.rowIds[index], (id) => this.onRowChat(id));
@@ -464,8 +463,8 @@ export class FriendPage extends PopupBase {
         this.rows[index] = view;
 
         const node = this.rowList.getItemByIndex(index);
-        const item = node?.getComponent(FriendRow);
-        if (item) item.render(view);
+        const item = node.getComponent(FriendRow);
+        item.render(view);
     }
 
     // ============================================================

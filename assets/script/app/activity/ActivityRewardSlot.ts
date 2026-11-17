@@ -23,22 +23,13 @@ const { ccclass, property } = _decorator;
 @ccclass('ActivityRewardSlot')
 export class ActivityRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Frame：品质框底图（本节点上的 cc.Sprite）' })
-    frame: Sprite = null;
+    frame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Icon：道具图标（没有映射图时会被隐藏）' })
     icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Num：数量 —— **子节点 `Num` 上**的 cc.Label（锚点 (1,0.5) + overflow=NONE；空串时不显示）' })
-    num: Label = null;
-
-    protected onLoad(): void {
-        if (!this.frame) {
-            const own = this.getComponent(Sprite);
-            if (own) this.frame = own;
-        }
-        // 只是提醒，**不抛**：抛了会在虚拟列表 clone 时打断整行渲染（比「少个数字」严重得多）
-        if (!this.num) console.warn('[Activity] ActivityRewardSlot 漏绑 num，奖励数量不会显示');
-    }
+    num: Label = null!;
 
     /**
      * 铺一个奖励。
@@ -60,10 +51,8 @@ export class ActivityRewardSlot extends Component {
             // 没图就整块藏掉 —— 不画问号占位（那更像"图坏了"）
             this.icon.node.active = false;
         }
-        if (this.num) {
-            this.num.string = numberText;
-            this.num.node.active = numberText.length > 0;
-        }
+        this.num.string = numberText;
+        this.num.node.active = numberText.length > 0;
     }
 
     hide(): void {

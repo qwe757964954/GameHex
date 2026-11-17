@@ -76,10 +76,10 @@ export class RewardPreviewPage extends PopupBase {
     static prefabPath = 'ui/Activity/RewardPreview';
 
     @property({ type: Node, tooltip: 'Bubble：气泡底板（九宫格；锚点必须 (0.5,0.5)，运行时按格数改宽）' })
-    bubble: Node = null;
+    bubble: Node = null!;
 
     @property({ type: Node, tooltip: 'Bubble/Cells：格子容器（子节点 Cell1..CellN，各挂 GoodsBox）' })
-    cells: Node = null;
+    cells: Node = null!;
 
     /**
      * 当前**打开着**的实例。
@@ -122,7 +122,7 @@ export class RewardPreviewPage extends PopupBase {
     protected onInit(): void {
         // 内容区显式点名气泡：点气泡不关窗、点别处关窗（见类头「关闭口径」）。
         // ⚠️ 必须在 `_bindBlankClose()` 之前设好 —— 基类是在 `onInit` 之后才建的接收层。
-        if (this.bubble) this.contentNodes = [this.bubble];
+        this.contentNodes = [this.bubble];
         this.bindCells();
     }
 
@@ -161,14 +161,14 @@ export class RewardPreviewPage extends PopupBase {
         const width = previewBubbleWidth(shown);
 
         // 气泡底板：九宫格 Sprite（`_type = SLICED` + `sizeMode = CUSTOM`）⇒ 改尺寸即可拉伸
-        this.bubble?.getComponent(UITransform)?.setContentSize(width, ACTIVITY_PREVIEW_HEIGHT);
+        this.bubble.getComponent(UITransform).setContentSize(width, ACTIVITY_PREVIEW_HEIGHT);
 
         for (let index = 0; index < slots.length; index += 1) {
             const node = slots[index];
             const box = node.getComponent(GoodsBox);
             if (index >= shown) {
                 // 复用残留：藏掉之前先把内容清干净（万一格数变多，不会先闪上一批的图）
-                box?.render(null, null, '', false);
+                box.render(null, null, '', false);
                 node.active = false;
                 continue;
             }
@@ -199,7 +199,6 @@ export class RewardPreviewPage extends PopupBase {
      */
     private applyPlacement(anchor: IPreviewAnchorBox, bubbleWidth: number): void {
         const bubble = this.bubble;
-        if (!bubble) return;
 
         const visible = view.getVisibleSize();
         const placement = previewBubblePlacement(
@@ -211,11 +210,6 @@ export class RewardPreviewPage extends PopupBase {
         );
 
         const rootTransform = this.node.getComponent(UITransform);
-        if (!rootTransform) {
-            // 理论上不会走到（prefab 根一定有 UITransform）；退化成「层坐标 = UI 坐标」会偏
-            bubble.setPosition(placement.x, placement.y, 0);
-            return;
-        }
         const local = rootTransform.convertToNodeSpaceAR(_tmpWorld.set(placement.x, placement.y, 0));
         bubble.setPosition(local.x, local.y, 0);
     }
@@ -235,7 +229,6 @@ export class RewardPreviewPage extends PopupBase {
      */
     private cellNodes(): Node[] {
         const parent = this.cells;
-        if (!parent) return [];
         return parent.children.filter((node) => !!node && node.isValid && node.name.startsWith('Cell'));
     }
 
@@ -244,10 +237,6 @@ export class RewardPreviewPage extends PopupBase {
         const slots = this.cellNodes();
         for (let index = 0; index < slots.length; index += 1) {
             const box = slots[index].getComponent(GoodsBox);
-            if (!box) {
-                console.warn(`[Activity] RewardPreview 的 ${slots[index].name} 上没有 GoodsBox 组件，这一格不可点`);
-                continue;
-            }
             // 回调里按 index **现取**当前数据：格子不复用，但 `currentCells` 每次都换。
             box.onClick = () => this.onCellClick(index);
         }

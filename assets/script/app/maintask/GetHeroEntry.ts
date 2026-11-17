@@ -17,13 +17,13 @@ const { ccclass, property } = _decorator;
 @ccclass('GetHeroEntry')
 export class GetHeroEntry extends Component {
     @property({ type: GoodsBox, tooltip: 'Goods：奖励物品框（带 `Frame`/`Icon`/`Num` 三件套）' })
-    goods: GoodsBox = null;
+    goods: GoodsBox = null!;
 
     @property({ type: Label, tooltip: 'ValueLabel：进度文案 `(7/10)`' })
-    valueLabel: Label = null;
+    valueLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 数据端口；测试可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;
@@ -43,9 +43,7 @@ export class GetHeroEntry extends Component {
     }
 
     protected onLoad(): void {
-        if (this.goods) {
-            this.goods.onClick = () => { void this.onGoodsClick(); };
-        }
+        this.goods.onClick = () => { void this.onGoodsClick(); };
         void this.refresh();
     }
 
@@ -82,10 +80,10 @@ export class GetHeroEntry extends Component {
      */
     applySnapshot(snapshot: IHeroTaskSnapshot): void {
         this.node.active = snapshot.visible;
-        if (this.valueLabel) this.valueLabel.string = snapshot.configured ? snapshot.progressText : '';
-        if (this.redDot) this.redDot.active = snapshot.showRedDot;
+        this.valueLabel.string = snapshot.configured ? snapshot.progressText : '';
+        this.redDot.active = snapshot.showRedDot;
         // 奖励物品框：老端 `com_hero.UpdateByGoods(good)`，格子里不显示数量。
-        this.goods?.render(this.qualityFrame, this.iconFrame, '', false);
+        this.goods.render(this.qualityFrame, this.iconFrame, '', false);
     }
 
     private isAlive(): boolean {

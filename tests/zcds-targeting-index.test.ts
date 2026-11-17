@@ -47,15 +47,14 @@ function context(options: {
     readonly units?: readonly ZCUnitState[];
     readonly unitsOf?: Map<ZCOwner, Set<ZCUnitState>>;
     readonly hexes?: readonly ZCHexState[];
-    readonly hexesOf?: Map<ZCOwner, ZCHexState[]>;
-    readonly monsters?: readonly ZCHexState[];
+    readonly candidateHexes?: Map<ZCOwner, ZCHexState[]>;
     readonly positions?: Map<number, { x: number; y: number }>;
     readonly preferUnitTargets?: (unit: ZCUnitState) => boolean;
 } = {}): ZCTargetingContext {
     const units = options.units ?? [];
     const unitsOf = options.unitsOf ?? buckets(units);
     const hexes = options.hexes ?? [];
-    const hexesOf = options.hexesOf ?? new Map();
+    const candidateHexes = options.candidateHexes ?? new Map();
     const positions = options.positions ?? new Map(units.map(candidate => [candidate.id, { x: candidate.freeX, y: candidate.freeY }]));
     const byId = new Map(units.map(candidate => [candidate.id, candidate]));
     return {
@@ -67,8 +66,7 @@ function context(options: {
         get hexes() {
             throw new Error('不应回退到全量 hexes 扫描');
         },
-        hexesOf: owner => hexesOf.get(owner) ?? [],
-        monsterHexes: () => options.monsters ?? [],
+        candidateHexes: owner => candidateHexes.get(owner) ?? [],
         unitById: id => byId.get(id) ?? null,
         unitPosition: (target, out) => {
             const position = positions.get(target.id) ?? { x: target.freeX, y: target.freeY };
@@ -104,7 +102,7 @@ test('单位与地块共用候选池；同距离按 id 裁决而不是来源优�
     const structure = hex(6, ZCOwner.Enemy, 5, 0, { building: 'hq' });
     const result = ZCTargetingSystem.acquire(me, context({
         units: [me, enemy], unitsOf: buckets([me, enemy]),
-        hexes: [structure], hexesOf: new Map([[ZCOwner.Enemy, [structure]]]),
+        hexes: [structure], candidateHexes: new Map([[ZCOwner.Player, [structure]]]),
     }));
     assert.deepEqual(result, { kind: 'building', id: 6 });
 });
@@ -130,7 +128,7 @@ test('移动、死亡、出生与阵营迁移实时改变最近目标，不保�
     result = ZCTargetingSystem.acquire(me, context({ units, unitsOf: buckets(units) }), true);
     assert.deepEqual(result, { kind: 'unit', id: 3 });
 
-    const born = unit(4, ZCOwner.Enemy, 2);
+    const born = unit(4, ZCOwner.Enemy, 0.5);
     units.push(born);
     registry.register(born);
     result = ZCTargetingSystem.acquire(me, context({ units, unitsOf: buckets(units) }), true);
@@ -149,7 +147,7 @@ test('空候选返回 null；只有敌方单位/地块、怪物和目标池互�
     const wall = hex(8, ZCOwner.Enemy, 12, 0, { exposed: true });
     const result = ZCTargetingSystem.acquire(me, context({
         units: [me], unitsOf: buckets([me]),
-        hexes: [wall], hexesOf: new Map([[ZCOwner.Enemy, [wall]]]),
+        hexes: [wall], candidateHexes: new Map([[ZCOwner.Player, [wall]]]),
     }));
     assert.deepEqual(result, { kind: 'wall', id: 8 });
 });

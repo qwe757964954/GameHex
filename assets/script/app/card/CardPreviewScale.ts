@@ -12,9 +12,3 @@ export function cardPreviewFactor(
     const size = Number.isFinite(prefabSize) && prefabSize > 0 ? prefabSize : 1;
     return visibleHeight * size / (Math.max(1, sourceHeight * visibleRatio) * hostScale);
 }
-
-/**
- * 序列帧美术的脚点对齐偏移：这类 prefab 的原点在画布中心，要按缩放把中心往下推，
- * 脚才落在站台底边；spine 的脚点已经烘焙进骨架，不需要这一步。
- */
-export const FRAME_FOOT_FROM_CENTER_Y = 45.7;

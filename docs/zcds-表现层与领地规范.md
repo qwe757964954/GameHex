@@ -5747,3 +5747,74 @@ if (!approaching) zone.remainingSeconds -= dt;       // ← 读秒与位移彻�
 | 不影响攻击 | 锁内射程内有目标 + CD 到点 ⇒ `attack`；CD 没到就站着等 |
 | 不打断出拳 | `attack` 分支在锁之前，`stateTime` 照常推进 |
 | 视图 + 快照 | `casting` 进了那条三元、重播判据只认 `attacking`、两个字段登记进 codec 白名单 |
+
+---
+
+## 19. 普攻衍生的多目标递减 + 处决只留在养成系统（2026-11-14）
+
+### 19.1 用户口径（原话）
+
+> 技能设计中的处决机制先从卡牌中移除，处决机制只能留在其他的养成系统中，普通攻击带来的穿透类 / 分裂子弹 / 溅射 的伤害设计上需要遵循 多个目标递减的机制，初始值必须低于普通攻击，主要形成大面积的造成伤害的效果，但是数值不能太大。
+
+拆成三条硬约束：
+
+1. **处决（`executeChance`）从卡牌链路整体移除**，只保留给其他养成系统 —— 卡牌里「枯萎收割」（68024 / 102401、68035 / 103502）不再带处决。
+2. **普攻衍生的三种结算形状必须多目标递减**：穿透 / 多弹（= 用户说的「分裂子弹」）/ 溅射。
+3. **初始值低于普通攻击**，定位是「大面积、数值不大」，不是「单体加强版」。
+
+### 19.2 三种结算形状的落地参数
+
+| 形状 | 配表键 | 值 | 递减语义 | 逐目标 |
+| :--- | :--- | :--- | :--- | :--- |
+| 穿透 | `normalPierceFalloff` | `0.4` | `ZCProjectileSystem` 每穿一次 `× (1 - falloff)`，**首次命中不算穿** | 60% → 36% → 21.6% |
+| 溅射 | `splashDamageRate` + `splashFalloff` | `0.20/0.26/0.32` + `0.3` | 同一爆点旁溅目标按**距离由近到远**排序，第 n 个（n 从 0 计）`× (1 - falloff)^n` | 20% → 14% → 9.8% |
+| 多弹 | `bulletFalloff` | `0.4` | 第 1 颗是普攻本体（100%），第 2 颗起每颗 `× 0.6` | 100% → 60% → 36% |
+
+三档都是**低于普攻（100%）**的；满档总额：穿透单发 100%（首目标）+ 36% + 21.6%；溅射一爆点 20% + 14% + 9.8%；多弹 +2 发整轮 196%（原 300%）。
+
+### 19.3 三处「照字面写会静默失效」
+
+1. 🔴 **`pierceCount` 不是普攻穿透**。`pierceCount` 只服务「强化那一击」（`empowered` 分支），普攻穿透必须写 `normalPierceCount`；写在 `pierceCount` 上等于没配。设计案 P 列历史上一律写的 `pierceCount`，本轮一并改成 `normalPierceCount`。
+2. 🔴 **溅射的键名是 `splashDamageRate`，不是 `explosionDamageRate`**。后者引擎不认（命中爆炸走 `impactBurst*` 前缀，是另一套）。设计案 13 条溅射行里有 12 条写的是错键，本轮全部更正。
+3. 🔴 **多弹是 unit 域修改器（`bulletNumFlat`），不能写进 `skillParamJson`**：`bulletNum` 走 `pvpAttrMap` 的 flat 映射，写进 `skillParamJson{"bulletNum":…}` 不会被读到。多弹的**递减系数**才是 `skillParamJson.bulletFalloff`（挂在多弹那几条修改器行自己身上，同 `pvpSkillId` 合并进普攻那份 runtime）。
+
+### 19.4 代码落点
+
+- `ZCAttackResolutionSystem.zcBulletDamageScale(index, baseProjectileCount, bulletFalloff)` —— 新导出的纯函数，`IZCPreparedAttack` 新增 `bulletNumExtra / bulletFalloff / baseProjectileCount` 三个字段透传到 `createAttackProjectiles`。`baseProjectileCount = projectileCount - bulletNumExtra` ⇒ **固定颗数（凤凰降临 4 颗）不算额外弹、不吃递减**。
+- `strikeTargets` / `resolveProjectileHit` 的溅射段：先收集 `{unit, distance}` → `sort` → 按下标乘 `(1 - splashFalloff)^index`。
+- `splashFalloff` 缺省 `0`、`bulletFalloff` 缺省 `0`、`normalPierceFalloff` 缺省 `0` ⇒ **没配这个键的既有技能行为逐字不变**。
+
+### 19.5 处决移除的落点
+
+`pvpSkillPlan.skillParamJson.executeChance` 6 行（102401/192401/103502/193502 × 3 档）已删；`armySkillLevelUp.desc`（卡牌技能卡文案，玩家真读的那份）里 6 处「普攻有 NN%概率处决残血目标，」已删；`pvpSkillPlan.desc` 同步删。代码侧 `ZCGameModel.tryExecuteUnit` / `tryExecute` 的读取路径**没删** —— 那是给其他养成系统留的入口，只是卡牌链路不再写这个键。
+
+🔴 设计案里「枯萎收割」去掉处决后只剩暴击率 + 伤害两路，原「满级价值约 139 VP」是按含处决算的，**需要重算**（表里已标【优化中】）。
+
+### 19.6 设计案回填（`技能设计案2.xlsx`）
+
+- **N 列**：43 处「处决」句式全部清掉（30 行模板句「…附加伤害或处决为主干」、12 行紫档机制句「…减速 / 处决」、1 行旁注「不额外触发状态与处决」）；枯萎收割两行的档位句从「一处必杀机制 + 一到两处倍率」改成「两处倍率」。
+- **K/L/M 列**：穿透补「（穿透目标承受 60%/36%）」，溅射换基准值并补「（同一爆点第2个目标起每次×0.7）」，多弹补「（额外弹：60% / 36%）」，枯萎收割删「普攻有 NN%概率处决残血目标，」。
+- **S 列（技能状态）**：新增第三个取值 **【优化中】**，本轮涉改 24 行（穿透 5 + 溅射 13 + 多弹 4 + 处决 2）标上；`S1` 表头改成「技能状态（已实现 / 优化中 / 待规划）」。**只标「口径被本轮改过」的行，纯文案清理不动状态。**
+
+### 19.7 守卫
+
+| 用例 | 钉什么 |
+| :--- | :--- |
+| `zcds-multi-target-falloff.test.ts`（9 条） | 三条公式 + 缺省 0 不变 + 固定颗数不吃递减；四张多弹卡 12 行带 `bulletFalloff 0.4`；15 行普攻穿透带 `normalPierceFalloff 0.4` 且无 `pierceCount`；39 行溅射 20/26/32 + `splashFalloff 0.3` 且 `< 1`；`executeChance` 与「处决残血目标」零残留（两份产物 + `armySkillLevelUp`） |
+| `zcds-zombie-skills.test.ts`「科学家 26 级」 | 三条词缀从「穿透 / 处决 / 暴击」改为「穿透 / 暴击 + 处决已移除」，断言 `skillParams.executeChance === undefined` |
+| `zcds-dawtianlu-skills.test.ts` 102504 | 102502 裂变暴击的 `splashDamageRate` 0.48 → 0.32，并断言 `splashFalloff 0.3` |
+| `zcds-maladi-guo.test.ts` 102602 | 溅射基准 0.20/0.28/0.36 → 0.20/0.26/0.32 + `splashFalloff` |
+
+### 19.8 两个「改配表脚本」的幂等坑
+
+1. 🔴 **描述替换串不能与匹配串自相包含**。`SPLASH_DESC = r'造成\d+%溅射伤害'` 而插入文本是「造成20%溅射伤害（同一爆点第2个目标起每次×0.7）」—— 每跑一次多追加一段括号，重跑三次后 68008 的 desc 变成三段。修法：匹配串把**已插入的后缀一起吃掉**（`(?:后缀)*`），替换成单段。
+2. 🔴 **参数替换同理**：只匹配 `"splashDamageRate":[\d./]+` 会在每次重跑时再追加一个 `,"splashFalloff":0.3`。匹配串必须带 `(?:,"splashFalloff":[\d.]+)*`。
+3. 🔴 **源表稀疏行没有 AC 格**：`sync_treant_excel.set_cell` 只会替换已存在的 `<c>`，多弹那 12 行历史行的 AC 列整列是空的 ⇒ `SystemExit('单元格 AC340 不存在')`。需要按列序**插格**（并沿用前一格 `s=` 样式），见 `patch_bullet_falloff.set_cell_safe`。
+
+### 19.9 本轮脚本
+
+- `tools/config/patch_multi_target_falloff.py` —— 穿透 / 溅射 / 处决，三写（remoteRef + client + `J-技能表.xlsx` sheet9 的 Z/AC、`K-卡牌升级.xlsx` sheet2 的 C）。
+- `tools/config/patch_bullet_falloff.py` —— 多弹 `bulletFalloff`，三写（同上，只动 AC）。
+- `tools/config/patch_design_doc_multitarget.py` —— 设计案回填（zip 级手术，`--check` 干跑）。
+- 验法：源表 2209 行 × Z/AC 两列**逐格对拍 0 不一致**；`npx tsc --noEmit` 0 error；`tests/zcds-*.test.ts` 1446 条 / 1439 绿 / 7 红（7 红是改动前既有的）。
+- 顺手修掉一条既有红：`remoteRef` vs `client` 互校里 `96802501~50.pvpSkillId` 长期是 `30171`（remoteRef）对 `30858`（client）。`patch_bullet_falloff.py` 按 client 全量重建 remoteRef（不再「只改有变化的行」）后自动对齐 —— 68025 的普攻就是自己的 30858，`30171` 是长枪兵的历史值，属于 remoteRef 陈旧。

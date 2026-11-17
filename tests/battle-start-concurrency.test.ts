@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
-import { withTimeout, toCount } from '../assets/script/app/net/RequestGuard';
+import { sendGameRequest, withTimeout, toCount } from '../assets/script/app/net/RequestGuard';
 import * as BattleStartModel from '../assets/script/app/battle/BattleStartModel';
 
 function slgFixture() {
@@ -25,7 +25,7 @@ function slgFixture() {
             if (name === '../net/GameNet') return { GameNet: { instance: { isConnected: true,
                 send: () => new Promise<boolean>(resolve => { finishSend = resolve; }),
             } } };
-            if (name === '../net/RequestGuard') return { withTimeout, toCount };
+            if (name === '../net/RequestGuard') return { sendGameRequest, withTimeout, toCount };
             if (name === './BattleStartModel') return { ...BattleStartModel, normalizeBattleStart: (rsp: unknown) => rsp };
             throw new Error(`Unstubbed import: ${name}`);
         },
@@ -110,7 +110,7 @@ test('different battle requests cannot share one in-flight server response', asy
                 isConnected: true,
                 send: () => new Promise<boolean>(resolve => { finishSend = resolve; }),
             } } };
-            if (name === '../net/RequestGuard') return { withTimeout: (value: unknown) => value, toCount: Number };
+            if (name === '../net/RequestGuard') return { sendGameRequest, withTimeout: (value: unknown) => value, toCount: Number };
             if (name === './BattleStartModel') return {
                 ZC_BATTLE_TYPE_PVP: 1001,
                 normalizeBattleStart: (response: unknown) => response,

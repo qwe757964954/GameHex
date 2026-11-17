@@ -164,8 +164,8 @@ export class BigMapPage extends Component {
     private get size(): { width: number; height: number } {
         const size = view.getVisibleSize();
         return {
-            width: this.node.getComponent(UITransform)?.width || size.width,
-            height: this.node.getComponent(UITransform)?.height || size.height,
+            width: this.node.getComponent(UITransform).width || size.width,
+            height: this.node.getComponent(UITransform).height || size.height,
         };
     }
 

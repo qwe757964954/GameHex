@@ -191,3 +191,17 @@ export function chestOpenChestVisualOf(elapsed: number): IChestOpenChestVisual {
         opacity: Math.round(255 * chestOpenClamp01(progress * 3)),
     };
 }
+
+/** 用升级表的真实碎片关联识别橙卡，排除橙色材料，同英雄只展示一次。 */
+export function chestOpenLegendHeroesOf(
+    entries: readonly { readonly resId: number; readonly quality: number; readonly number: number }[],
+    rows: readonly { readonly id: string; readonly costCardID: string }[],
+): readonly string[] {
+    const ids = new Set<string>();
+    for (const entry of entries) {
+        if (entry.quality !== 5 || !(entry.number > 0)) continue;
+        const row = rows.find((one) => Number(one.costCardID) === entry.resId);
+        if (row) ids.add(row.id);
+    }
+    return Array.from(ids);
+}

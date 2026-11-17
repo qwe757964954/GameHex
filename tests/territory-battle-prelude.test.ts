@@ -150,7 +150,7 @@ test('★★★前奏期间不许开整页过场：云一旦盖上，前两段�
         pageSource.indexOf('private stepBattlePrelude('));
     assert.ok(begin.length > 0, '找不到 `beginBattlePrelude`');
     assert.ok(!begin.includes('startBattleIntro()'), '前奏起手就开过场 ⇒ 云把地块生成整段盖住');
-    assert.ok(begin.includes('this.battleApproachPending = true'), '前奏期间要挡住第二条 navigate');
+    assert.ok(begin.includes('this.battlePrelude = {'), '前奏期间要挡住第二条 navigate');
     assert.ok(begin.includes('this.closeBattleIntroPopups()'), '弹窗必须先关（与整页过场同一口径）');
     // 极端并发：别的开战请求已经把云盖上了 ⇒ 前两段补不了，但也不能干等
     // （过场的 `hold` 在等 `nav`，不交出去要硬等 3s 再判取消）。

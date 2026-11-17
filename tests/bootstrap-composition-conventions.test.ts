@@ -88,6 +88,7 @@ function loginFixture(activationFails = false, cleanupFails = false) {
         if (name.endsWith('/ViewLifecycle')) return { VIEW_LIFECYCLE };
         if (name.endsWith('/LoginEvents')) return { LoginUiEvent };
         if (name.endsWith('/EngineMain')) return { EngineMain: { isMiniGameWeiXin: false, isMiniGameDouyin: false } };
+        if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: value => { assert.equal(value, null); calls.push('clear-heroes'); } } };
         if (name.endsWith('/LoginRoot')) return { LoginRoot: class { configureGateway() {} } };
         if (name.endsWith('/LoginProtocol')) return { LoginGateway: class {} };
         if (name.endsWith('/LoginController')) return { LoginController: class {
@@ -113,9 +114,9 @@ test('login assembly failure stops controller before destroying view and releasi
     const h = loginFixture(true);
     await h.preload();
     assert.throws(() => h.composition.mount(), error => error === h.failure);
-    assert.deepEqual(h.calls, ['controller', 'dispose', 'destroy', 'resources']);
+    assert.deepEqual(h.calls, ['clear-heroes', 'controller', 'dispose', 'destroy', 'resources']);
     h.composition.dispose(); h.preloadScope.dispose();
-    assert.equal(h.calls.length, 4);
+    assert.equal(h.calls.length, 5);
 });
 
 test('login server popup completing after exit closes without retaining a stale panel', async () => {
@@ -136,6 +137,6 @@ test('login cleanup failure still releases resources and preserves the activatio
     const h = loginFixture(true, true);
     await h.preload();
     assert.throws(() => h.composition.mount(), error => error === h.failure);
-    assert.deepEqual(h.calls, ['controller', 'dispose', 'destroy', 'resources']);
+    assert.deepEqual(h.calls, ['clear-heroes', 'controller', 'dispose', 'destroy', 'resources']);
     h.preloadScope.dispose();
 });

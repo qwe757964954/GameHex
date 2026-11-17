@@ -1,6 +1,6 @@
 import { toCount } from '../net/RequestGuard';
-import { parseCmdGoodsList } from '../showReward/ShowRewardTable';
-import type { ICmdGoodsLike } from '../showReward/ShowRewardTable';
+import { parseCmdGoodsList } from '../common/RewardEntries';
+import type { ICmdGoodsLike } from '../common/RewardEntries';
 import { ZC_BATTLE_TYPE_CHAPTER, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER } from './BattleStartModel';
 
 /**

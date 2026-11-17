@@ -63,27 +63,9 @@ export function checkRenameInput(raw: unknown, currentName: unknown): RenameInpu
     return RenameInputState.Ok;
 }
 
-/**
- * 昵称长度是否超过 {@link PLAYER_NAME_MAX_LENGTH}。
- * 只用于提示，不阻止发送（服务端才是权威）。
- */
-export function isPlayerNameTooLong(raw: unknown): boolean {
-    return typeof raw === 'string' && raw.length > PLAYER_NAME_MAX_LENGTH;
-}
-
 // ============================================================
 // 兑换码
 // ============================================================
-
-/** 兑换码是否非空（老端 `if (s != "" && s != null)`）。 */
-export function isRedeemCodeUsable(raw: unknown): boolean {
-    return typeof raw === 'string' && raw.trim().length > 0;
-}
-
-/** 兑换码规范化（去首尾空白；**不做大小写转换** —— 服务端按原样校验）。 */
-export function normalizeRedeemCode(raw: unknown): string {
-    return typeof raw === 'string' ? raw.trim() : '';
-}
 
 // ============================================================
 // 个人信息展示
@@ -194,11 +176,6 @@ export function buildHeadIdList(platformImg: unknown, refHeadIds: readonly numbe
     return out;
 }
 
-/**
- * 换头像列表的每行格数。
- * 出处 = FGUI `组件_个人信息_更换头像界面` 的
- * `<list layout="flow_hz" lineItemCount="4" colGap="23" lineGap="20" scale="0.9,0.9">`。
- */
 // ============================================================
 // 写请求失败文案
 // ============================================================
@@ -209,8 +186,7 @@ export type PlayerInfoWriteResult = 'ok' | 'offline' | 'failed';
 /**
  * 写请求（换头像 / 改名 / 兑换码）失败时的提示文案 —— **`offline` 与 `failed` 必须分开**。
  *
- * 为什么单开一个函数：`PlayerInfoRepository.send()` 第一句就是
- * `if (!net.isConnected) return 'offline'` —— 断线时**包根本没发出去**。
+ * 为什么单开一个函数：共享请求入口 `sendGameRequest()` 返回 `offline` —— 断线时**包根本没发出去**。
  * 旧口径把两态都写成「更换头像失败 / 改名失败」，于是「没连上服务器」被读成「功能坏了」，
  * 排查方向直接被带偏。
  *
@@ -231,29 +207,6 @@ export function writeFailText(result: PlayerInfoWriteResult, failedText: string)
 // ============================================================
 
 /**
- * 音量（0..100）→ 滑动条进度（0..1）。
- * 与 `AudioSettingTable.toVolumeScale` 的分母一致（100）。
- */
-export function volumeToSlider(value: unknown): number {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(1, n / 100));
-}
-
-/** 滑动条进度（0..1）→ 音量（0..100，向下取整）。 */
-export function sliderToVolume(progress: unknown): number {
-    const n = Number(progress);
-    if (!Number.isFinite(n)) return 0;
-    return Math.max(0, Math.min(100, Math.floor(n * 100)));
-}
-
-/** `数量` 文案（改名按钮上的 `x1` / `x200`）。 */
-export function formatCostText(count: unknown): string {
-    const n = Number(count);
-    return `x${Number.isFinite(n) && n > 0 ? Math.floor(n) : 1}`;
-}
-
-/**
  * 二次确认正文 —— `StringUtil.format(模板, 金币数)` 的等价物（只替换 `{0}`）。
  *
  * 老端 `LayerShowTip.SetData({ context: StringUtil.format(FW.G_W("LayerRename_4"), renameCostGem) })`。
@@ -264,53 +217,6 @@ export function formatRenameCostConfirm(template: string, gemCost: unknown): str
     const n = Number(gemCost);
     const safe = Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
     return String(template).replace('{0}', String(safe));
-}
-
-/** 改名消耗的两种形态。 */
-export const RenameCostMode = {
-    /** 手上有改名卡 ⇒ 花 1 张（老端 `num > 0` 分支）。 */
-    Free: 'free',
-    /** 没有改名卡 ⇒ 花金币（老端 `else` 分支）。 */
-    Paid: 'paid',
-} as const;
-export type RenameCostModeValue = typeof RenameCostMode[keyof typeof RenameCostMode];
-
-/** 改名按钮上要显示的东西。 */
-export interface IRenameCostDisplay {
-    readonly mode: RenameCostModeValue;
-    /** 按钮图标该用哪张：`'item'` = 改名卡、`'coin'` = 金币。 */
-    readonly iconKind: 'item' | 'coin';
-    /** 按钮上的数量文本（`x1` / `x500`）。 */
-    readonly countText: string;
-}
-
-/**
- * 改名按钮的「图标 + 数量」。
- *
- * 老端 `LayerRenameUI.UpdateView`：
- * ```js
- * if (num > 0) { loader.SetUrlByIcon(goods.GetIconKey()); title.setText("x1") }          // 改名卡
- * else         { loader.SetUrlByIcon(coinGoods.GetIconKey()); title.setText("x" + renameCostGem) }
- * ```
- *
- * ⚠️ 判定用的是「手上有几张改名卡」（背包），**不是** `freeRenameCount`（服务端给的免费次数）——
- * 两者在老端是**两套独立的分流**：`UpdateView` 按改名卡数量切按钮外观，
- * `setSelectedPage("类型", renameNum > 0)` 按免费次数切「免费 / 付费」两个页面。
- * 本工程没有背包 getter（见 `PlayerInfoRepository` 文件头缺口 ②），所以
- * `ownedRenameItem` 传 `null` 表示「未知」，此时退回金币那一支（`renameCostGem` 是配置表常量，
- * 一定拿得到）——**不假装**知道玩家背包里有什么。
- */
-export function renameCostDisplayOf(
-    ownedRenameItem: number | null | undefined,
-    gemCost: unknown,
-): IRenameCostDisplay {
-    const owned = Number(ownedRenameItem);
-    const hasItem = Number.isFinite(owned) && owned > 0;
-    return {
-        mode: hasItem ? RenameCostMode.Free : RenameCostMode.Paid,
-        iconKind: hasItem ? 'item' : 'coin',
-        countText: hasItem ? formatCostText(1) : formatCostText(gemCost),
-    };
 }
 
 /**
@@ -366,15 +272,6 @@ export function formatServerWithParen(serverName: unknown): string {
     const s = typeof serverName === 'string' ? serverName : '';
     return s ? `(${s})` : '';
 }
-
-/** 装备格位号 → prefab 里的节点名后缀（老端 `"equipType" + voEquip.GetEquipType()`）。 */
-export function equipSlotName(slot: unknown): string {
-    const n = Number(slot);
-    return Number.isFinite(n) && n > 0 ? `EquipSlot${Math.floor(n)}` : '';
-}
-
-/** 他人信息最多渲染几个装备格（FGUI `equipType1..6`）。 */
-export const OTHER_EQUIP_SLOT_COUNT = 6;
 
 /**
  * 他人信息里一格装备。

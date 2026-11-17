@@ -118,7 +118,10 @@ export class ResBar extends Component {
             if (!this.isValid) return;
             if (!view) console.warn('[ResBar] 拿不到 CmdRole 缓存（登录前 / 缓存未落地），数值按 0 显示');
             const slots = view?.slots ?? buildResBarSlots(keys, iconOf);
-            this.hostSlots().forEach((slot, i) => {
+            this.hostSlots().forEach((slot) => {
+                //  `hostSlots()` 会跳过未绑的格子，循环下标不等于数据下标 —— 按 Res0..2 的固定位取。
+                const i = this.hostSlotIndex(slot);
+                if (i < 0) return;
                 const cell = slots[i];
                 // 扣除反馈必须在 render 之前调：那一刻 label 上还是扣前的值，
                 // render 会把新值塞进待落地暂存，两条时间线才对得上。
@@ -147,6 +150,14 @@ export class ResBar extends Component {
         return [this.slot0, this.slot1, this.slot2].filter((slot): slot is MainResBarSlot => !!slot);
     }
 
+    /** 格子在本组件里的固定位（`Res0/1/2`）—— 过滤掉未绑槽位后，位置不能再当数据下标用。 */
+    private hostSlotIndex(slot: MainResBarSlot): number {
+        if (slot === this.slot0) return 0;
+        if (slot === this.slot1) return 1;
+        if (slot === this.slot2) return 2;
+        return -1;
+    }
+
     // ============================================================
     // 单格反馈：加（宝箱图标飞进来）/ 扣（白色闪烁 + 跳动 + 再扣 + -N 飘字）
     // ============================================================
@@ -160,9 +171,9 @@ export class ResBar extends Component {
     update(dt: number): void {
         if (!this.feedbackActive) return;
         let busy = false;
-        if (this.slot0) busy = this.slot0.step(dt) || busy;
-        if (this.slot1) busy = this.slot1.step(dt) || busy;
-        if (this.slot2) busy = this.slot2.step(dt) || busy;
+        busy = this.slot0.step(dt) || busy;
+        busy = this.slot1.step(dt) || busy;
+        busy = this.slot2.step(dt) || busy;
         if (this.stepFlash(dt)) busy = true;
         this.feedbackActive = busy;
     }
@@ -233,7 +244,7 @@ export class ResBar extends Component {
     private slotOfKey(key: string): MainResBarSlot | null {
         const index = this.keys.indexOf(key);
         if (index < 0) return null;
-        return this.hostSlots()[index] ?? null;
+        return this.hostSlots().find((slot) => this.hostSlotIndex(slot) === index) ?? null;
     }
 
     private stepFlash(dt: number): boolean {
@@ -280,7 +291,6 @@ export class ResBar extends Component {
     private ensureGlow(): Graphics | null {
         if (this.glow?.isValid) return this.glow;
         const host = this.node.getComponent(UITransform);
-        if (!host) return null;
         const node = new Node('FeedbackGlow');
         node.layer = this.node.layer;
         // 自适应 Layout 只排列资源格；闪光留在格内并保持货币条坐标原点。
@@ -335,7 +345,6 @@ export class ResBar extends Component {
     /** 世界坐标 → 本组件局部坐标（走引擎矩阵，不自己算偏移）。 */
     private toLocal(world: Readonly<Vec3>): Vec3 {
         const transform = this.node.getComponent(UITransform);
-        if (!transform) return new Vec3(world.x, world.y, 0);
         return transform.convertToNodeSpaceAR(new Vec3(world.x, world.y, 0), new Vec3());
     }
 

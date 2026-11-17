@@ -1,5 +1,5 @@
 import { ZCDC_LOG_DIAGNOSTICS } from '../ZCDCLogSwitch';
-import { _decorator, Animation, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
@@ -51,26 +51,26 @@ export class ZCUnitView extends Component {
         enemy3: ZC_CLIENT_COLORS.enemy3Edge,
     };
 
-    /** 当前兵种画布的脚底位于视觉根节点下方 45.7px；单位根节点本身代表逻辑脚点。*/
-    private static readonly UNIT_VISUAL_CENTER_FROM_FOOT_Y = 45.7;
-
     /**
-     * 「视觉容器相对单位逻辑脚点」的 Y 偏移，按资产形态分两套：
-     * 序列帧（`units/`）内容原点在画布中心 ⇒ +45.7；spine（`skel/`）骨架原点≈脚底 ⇒ 0。
-     * 混用的症状是 spine 单位整体浮空 45.7px，不报错、只有肉眼能发现。
+     * 兵种美术 prefab 的固定骨架子节点与动画契约。
+     *
+     * 36 套上阵单位 prefab 统一为「根节点 + 子节点 `spine`」，SkeletonData 都提供
+     * `idle` / `move` / `attack`（2026-11-17 逐份 `getRuntimeData()` 核实）。
+     * 不再按后缀 / 大小写探测，也不再保留序列帧 `Animation` 分支。
     */
-    private static readonly UNIT_VISUAL_OFFSET_FRAME = ZCUnitView.UNIT_VISUAL_CENTER_FROM_FOOT_Y;
-    private static readonly UNIT_VISUAL_OFFSET_SPINE = 0;
+    private static readonly VISUAL_SPINE_NODE_NAME = 'spine';
+    private static readonly UNIT_ANIMATION_IDLE = 'idle';
+    private static readonly UNIT_ANIMATION_MOVE = 'move';
+    private static readonly UNIT_ANIMATION_ATTACK = 'attack';
 
     /**
-     * 阵亡后的美术染色。序列帧走 `Sprite.color`、spine 走 `Skeleton.color`，
-     * setter 内部是拷贝，共享这一个实例安全。
+     * 阵亡后的骨架染色。`Skeleton.color` 的 setter 内部是拷贝，共享这一个实例安全。
     */
     private static readonly UNIT_DEAD_TINT = new Color(135, 135, 135, 190);
     /**
      * 其他玩家（非我方席位）单位的暗色叠加色（#828282）。
      *
-     * 与阵亡灰同一机制：走顶点色相乘（`Sprite.color` / `Skeleton.color`），
+     * 与阵亡灰同一机制：走骨架顶点色相乘（`Skeleton.color`），
      * 保留原画色相、整体压暗成灰调。乘 0.51 灰而不是 0（全黑），是为了还看得出体积与明暗。
     */
     private static readonly OTHER_PLAYER_TINT = new Color(0x82, 0x82, 0x82, 255);
@@ -111,16 +111,6 @@ export class ZCUnitView extends Component {
     private static readonly FACING_HYSTERESIS_COS = 0.15;
 
     /**
-     * 取骨架的动画名表（用于探测 idle / move / attack 到底叫什么）。
-     * 必须走 `getRuntimeData()`：`sp.Skeleton.findAnimation()` 依赖 `onLoad` 后的 `_skeleton`，
-     * `initialize()` 紧跟 `instantiate()` 调用，探测会静默返回空表。
-    */
-    private static spineAnimationNames(skeleton: sp.Skeleton): readonly string[] {
-        const runtime = skeleton.skeletonData?.getRuntimeData(true);
-        return (runtime?.animations ?? []).map((animation) => animation.name);
-    }
-
-    /**
      * 「首屏清单里没有这个兵的美术」要说一声（2026-11-02 运动霸 68033）。
      *
      * 这条路径原本一条日志都没有：`ZCGameLoader` 的告警只覆盖「load 抛了」，覆盖不到
@@ -142,16 +132,16 @@ export class ZCUnitView extends Component {
     /**
      * 骨架的 canvas 高度（设计单位），用来算 spine 单位的缩放。
      * 必须走 `getRuntimeData()`，不能读美术 prefab 上的 `UITransform`（尺寸不可信）。
+     * 36 套上阵单位 prefab 的 SkeletonData 均已核实绑定，runtime 高度非 0。
     */
     private static spineCanvasHeight(skeleton: sp.Skeleton): number {
-        const runtime = skeleton.skeletonData?.getRuntimeData(true);
-        return runtime?.height ?? 0;
+        return skeleton.skeletonData.getRuntimeData(true).height;
     }
 
     @property({ type: UITransform })
     rootTransform: UITransform = null!;
 
-    @property({ type: Node, tooltip: '兵种美术容器；原点相对单位逻辑脚点上移 45.7px' })
+    @property({ type: Node, tooltip: '兵种美术容器；骨架脚点即单位逻辑脚点' })
     visualRoot: Node = null!;
 
     @property({ type: Sprite })
@@ -215,9 +205,7 @@ export class ZCUnitView extends Component {
     private visualPrefab: Prefab | null = null;
     /** 出生时没有美术 ⇒ 已经向控制器发过补载请求（别每帧重发，控制器侧也会按兵种去重）。*/
     private deferredPrefabRequested = false;
-    private visualAnimation: Animation | null = null;
-    private visualSprite: Sprite | null = null;
-    /** 非 null = 这条兵种美术是 spine（`resources/skel/**`），动作走 `setAnimation` 而不是 `Animation`。*/
+    /** 这条兵种美术的骨架；所有上阵单位都来自 `resources/skel/**`，动作走 `setAnimation`。*/
     private visualSkeleton: sp.Skeleton | null = null;
     /**
      * 整体外轮廓 = 同一份美术 prefab 的第二个实例（放大 `OUTLINE_COPY_SCALE`、
@@ -225,7 +213,7 @@ export class ZCUnitView extends Component {
      *
      * 不声明进 `ZCGameUnit.prefab`：它和 `visualNode` 一样是「按兵种不同」的美术实例，
      * 进 prefab 反而要按兵种各建一份；这里与 `attachVisual` 同一条路径 `instantiate`。
-     * 只有 spine 美术有整体外形可描 —— 序列帧（`units/**`）不建副本。
+     * 所有上阵单位都是 spine 美术，轮廓副本始终按同一份 prefab 建。
     */
     private outlineCopyMaterial: Material | null = null;
     private outlineCopyNode: Node | null = null;
@@ -283,13 +271,9 @@ export class ZCUnitView extends Component {
     private lastFacing: 1 | -1 = 1;
     private appliedTint = -1;
     /**
-     * `visualRoot` 的基准 y 偏移（`attachVisual` 按骨架 / 序列帧各给一个）与当前已写入的悬空高度。
-     *
-     * 悬空高度叠加在基准上、不覆盖：`visualRoot` 的 y 是「美术相对脚下原点的摆位」，
-     * 直接把 y 写成 30 会让序列帧兵整体往下跳一截（它们的基准是负值）。
-     * 值没变就不写 —— 与 `appliedVisualScaleX` 同一条理由（setPosition 也置脏标记）。
+     * `visualRoot` 当前已写入的悬空高度（`castLiftPx`）；值没变就不写 ——
+     * 与 `appliedVisualScaleX` 同一条理由（setPosition 也置脏标记）。
     */
-    private visualBaseOffsetY = 0;
     private appliedCastLift = Number.NaN;
     /** 出生抖动起点（表现时间，秒）；null = 没在抖。建筑生成单位时由渲染层设一次。*/
     private spawnShakeStartedAt: number | null = null;
@@ -328,7 +312,6 @@ export class ZCUnitView extends Component {
             this.visualNode.active = true;
             this.applyVisualSize();
             this.resetVisualTint();
-            this.visualAnimation?.stop();
             this.playClip(this.idleClip, true);
             return;
         }
@@ -417,14 +400,11 @@ export class ZCUnitView extends Component {
         this.outlineCopyNode?.destroy();
         this.outlineCopyNode = null;
         this.outlineCopySkeleton = null;
-        this.visualAnimation = null;
-        this.visualSprite = null;
         this.visualSkeleton = null;
         this.idleClip = '';
         this.moveClip = '';
         this.attackClip = '';
         this.visualRoot.setPosition(Vec3.ZERO);
-        this.visualBaseOffsetY = 0;
         this.appliedCastLift = Number.NaN;
     }
 
@@ -435,28 +415,33 @@ export class ZCUnitView extends Component {
         visual.setPosition(Vec3.ZERO);
         visual.layer = this.node.layer;
         this.visualNode = visual;
-        // getComponentInChildren is not guaranteed to include the root node in every Cocos version.
-        this.visualAnimation = visual.getComponent(Animation) ?? visual.getComponentInChildren(Animation);
-        this.visualSprite = visual.getComponent(Sprite) ?? visual.getComponentInChildren(Sprite);
-        this.visualSkeleton = visual.getComponent(sp.Skeleton) ?? visual.getComponentInChildren(sp.Skeleton);
-        if (this.visualSprite) this.visualSprite.node.layer = this.node.layer;
-        if (this.visualSkeleton) this.visualSkeleton.node.layer = this.node.layer;
+
+        const spineNode = visual.getChildByName(ZCUnitView.VISUAL_SPINE_NODE_NAME);
+        if (!spineNode) {
+            throw new Error(`ZCUnitView 美术 prefab「${prefab.name}」缺少固定子节点 ${ZCUnitView.VISUAL_SPINE_NODE_NAME}`);
+        }
+        const skeleton = spineNode.getComponent(sp.Skeleton);
+        if (!skeleton) {
+            throw new Error(`ZCUnitView 美术 prefab「${prefab.name}」的 ${ZCUnitView.VISUAL_SPINE_NODE_NAME} 节点缺少 sp.Skeleton`);
+        }
+        if (!skeleton.skeletonData) {
+            throw new Error(`ZCUnitView 美术 prefab「${prefab.name}」的 ${ZCUnitView.VISUAL_SPINE_NODE_NAME} 节点未绑定 SkeletonData`);
+        }
+        skeleton.node.layer = this.node.layer;
+        this.visualSkeleton = skeleton;
 
         const scale = visual.scale;
         this.visualAssetScale.set(scale.x, scale.y, scale.z);
-        if (this.visualSkeleton) {
-            const canvasHeight = ZCUnitView.spineCanvasHeight(this.visualSkeleton);
-            if (canvasHeight > 0) {
-                const factor = ZCUnitView.SPINE_CANVAS_TARGET_HEIGHT / canvasHeight;
-                this.visualAssetScale.set(scale.x * factor, scale.y * factor, scale.z * factor);
-            }
+        const canvasHeight = ZCUnitView.spineCanvasHeight(skeleton);
+        if (!(canvasHeight > 0)) {
+            throw new Error(`ZCUnitView 美术 prefab「${prefab.name}」的骨架 canvas 高度为 ${canvasHeight}`);
         }
-        // 整体外轮廓用同一份美术 prefab 的第二个实例 ⇒ 只在有骨架时建。
-        if (this.visualSkeleton) this.attachOutlineCopy(prefab);
-        // Frame art is centered on its canvas; Spine art is already anchored near the feet.
-        this.visualBaseOffsetY = this.visualSkeleton
-            ? ZCUnitView.UNIT_VISUAL_OFFSET_SPINE : ZCUnitView.UNIT_VISUAL_OFFSET_FRAME;
-        this.visualRoot.setPosition(0, this.visualBaseOffsetY, 0);
+        const factor = ZCUnitView.SPINE_CANVAS_TARGET_HEIGHT / canvasHeight;
+        this.visualAssetScale.set(scale.x * factor, scale.y * factor, scale.z * factor);
+
+        this.attachOutlineCopy(prefab);
+        // 骨架原点≈脚底，视觉容器不再为序列帧内容原点补 45.7px。
+        this.visualRoot.setPosition(Vec3.ZERO);
         // 换过一套美术 ⇒ 悬空高度要按新基准重算，否则「上一套的 lift」会被当成已写入而跳过。
         this.appliedCastLift = Number.NaN;
     }
@@ -476,10 +461,14 @@ export class ZCUnitView extends Component {
         copy.setPosition(Vec3.ZERO);
         copy.layer = this.node.layer;
         copy.name = `${copy.name}_OutlineCopy`;
-        const skeleton = copy.getComponent(sp.Skeleton) ?? copy.getComponentInChildren(sp.Skeleton);
-        // 与 `attachVisual` 是同一份 prefab（`visualSkeleton` 非空才建副本）⇒ 这里必然找得到。
-        // 找不到说明美术资产形态变了，当场抛比静默少一层描边好排查。
-        if (!skeleton) throw new Error('ZCUnitView 轮廓副本：美术 prefab 里找不到 sp.Skeleton');
+        const spineNode = copy.getChildByName(ZCUnitView.VISUAL_SPINE_NODE_NAME);
+        if (!spineNode) {
+            throw new Error(`ZCUnitView 轮廓副本：prefab「${prefab.name}」缺少固定子节点 ${ZCUnitView.VISUAL_SPINE_NODE_NAME}`);
+        }
+        const skeleton = spineNode.getComponent(sp.Skeleton);
+        if (!skeleton) {
+            throw new Error(`ZCUnitView 轮廓副本：prefab「${prefab.name}」的 ${ZCUnitView.VISUAL_SPINE_NODE_NAME} 节点缺少 sp.Skeleton`);
+        }
         skeleton.node.layer = this.node.layer;
         skeleton.customMaterial = this.outlineCopyMaterial;
         // shader 按预乘口径输出（见 effect 顶部注释）；这里把口径钉死，别依赖美术 prefab 上的勾选。
@@ -489,20 +478,19 @@ export class ZCUnitView extends Component {
     }
 
     private configureAnimationClips(): void {
-        if (this.visualSkeleton) {
-            // Read names from the asset: Skeleton's runtime instance may not be ready yet.
-            const names = ZCUnitView.spineAnimationNames(this.visualSkeleton);
-            const pick = (candidates: readonly string[]): string => candidates.find((name) => names.includes(name)) ?? '';
-            this.idleClip = pick(['idle']);
-            this.moveClip = pick(['move', 'run']) || this.idleClip;
-            this.attackClip = pick(['attack']) || this.idleClip;
-            return;
+        // 36 套上阵单位 prefab 的 SkeletonData 都提供 idle / move / attack（2026-11-17 逐份核实），
+        // 不再从资产名表探测、也不再保留序列帧 Animation 分支；契约不符时直接报出 prefab 名。
+        const runtime = this.visualSkeleton.skeletonData.getRuntimeData(true);
+        const names = runtime.animations.map((clip) => clip.name);
+        const missing = [ZCUnitView.UNIT_ANIMATION_IDLE, ZCUnitView.UNIT_ANIMATION_MOVE,
+            ZCUnitView.UNIT_ANIMATION_ATTACK].filter((name) => !names.includes(name));
+        if (missing.length > 0) {
+            throw new Error(`ZCUnitView 美术 prefab「${this.visualNode.name}」的 SkeletonData 缺少动画`
+                + ` ${missing.join('/')}（实际 ${names.join('/') || '空'}）`);
         }
-        const clips = this.visualAnimation?.clips ?? [];
-        const bySuffix = (suffix: string): string => clips.find((clip) => clip?.name?.endsWith(suffix))?.name ?? '';
-        this.idleClip = bySuffix('-idle') || this.visualAnimation?.defaultClip?.name || clips[0]?.name || '';
-        this.moveClip = bySuffix('-run') || this.idleClip;
-        this.attackClip = bySuffix('-attack') || this.idleClip;
+        this.idleClip = ZCUnitView.UNIT_ANIMATION_IDLE;
+        this.moveClip = ZCUnitView.UNIT_ANIMATION_MOVE;
+        this.attackClip = ZCUnitView.UNIT_ANIMATION_ATTACK;
     }
 
     render(presentation: Readonly<IZCUnitPresentation>): void {
@@ -532,11 +520,10 @@ export class ZCUnitView extends Component {
 
             // 施法悬空（2026-11-11 麻辣铁锅 102603「角色上移 30px」）：只抬美术根节点，
             // 不动单位坐标 —— 判定 / 索敌 / 格子占用都还在脚下那个点上。
-            // 叠加在 `visualBaseOffsetY` 上（不是覆盖），见那个字段的注释。
             const castLift = presentation.castLiftPx ?? 0;
             if (castLift !== this.appliedCastLift) {
                 this.appliedCastLift = castLift;
-                this.visualRoot.setPosition(0, this.visualBaseOffsetY + castLift, 0);
+                this.visualRoot.setPosition(0, castLift, 0);
             }
 
             // 出生抖动：Y 拉 110% 回落 → X 拉 110% 回落，叠加在朝向翻转之上。
@@ -790,44 +777,25 @@ export class ZCUnitView extends Component {
     }
 
     /**
-     * 只给「手上真有的那一种渲染组件」上色。
-     *
-     * 序列帧单位有 `Sprite`、spine 单位有 `Skeleton`，二者互斥 —— 写成
-     * `if (sprite) sprite.color = …` 而不带 `else` 时，spine 单位永远不会变色：
-     * 阵亡不灰、其他玩家的兵不灰，都看不出区别（不报错、逻辑也没问题，纯表现缺失）。
+     * 给骨架上色：阵亡灰 / 其他玩家的灰都走 `Skeleton.color` 顶点色相乘。
     */
     private applyVisualTint(tint: number): void {
         if (this.appliedTint === tint) return;
         const color = tint === ZCUnitView.TINT_DEAD ? ZCUnitView.UNIT_DEAD_TINT
             : tint === ZCUnitView.TINT_OTHER_PLAYER ? ZCUnitView.OTHER_PLAYER_TINT
                 : Color.WHITE;
-        if (this.visualSprite) this.visualSprite.color = color;
-        else if (this.visualSkeleton) this.visualSkeleton.color = color;
-        else return;
+        this.visualSkeleton.color = color;
         this.appliedTint = tint;
     }
 
     private playClip(name: string, restart: boolean): void {
         if (!name || (!restart && this.currentClip === name)) return;
-        if (this.visualSkeleton) {
-            // spine 走轨道 0。名字在 `initialize` 里已用骨架的动画名表探测过，正常不会触发
-            // 引擎那条「动画不存在」的 warn（`logID 7509`）。
-            //
-            // 但 `setAnimation` 在骨架还没走完 `onLoad`（`this._skeleton` 为 null）时返回 null
-            // 且不生效（引擎源码：`skeleton ? findAnimation(name) : null` → `logID(7509)` → return）。
-            // 而 `initialize()` 是在 `instantiate()` 之后立刻调用的，赶不上骨架就绪。
-            // 所以只在真播上时写 `currentClip`：没写的话，下一帧 `render()` 会再试一次（自愈）；
-            // 写早了则 `currentClip === name` 会让它永远早退 —— 单位定格在 prefab 的 `defaultAnimation` 上
-            // （豌豆射手 / 外卖僵尸 的 defaultAnimation 是 `die` ⇒ 一出生就躺下，且一条错都不报）。
-            if (this.visualSkeleton.setAnimation(0, name, true)) {
-                this.currentClip = name;
-                // 整体外轮廓副本靠这个代次知道「该重新对一次动画了」（见 syncOutlineCopyClip）。
-                this.outlineClipEpoch++;
-            }
-            return;
+        // spine 走轨道 0。`setAnimation` 在骨架还没走完 `onLoad`（`this._skeleton` 为 null）时返回 null
+        // 且不生效；只在真播上时写 `currentClip`，没写的话下一帧 `render()` 会再试一次（自愈）。
+        if (this.visualSkeleton.setAnimation(0, name, true)) {
+            this.currentClip = name;
+            // 整体外轮廓副本靠这个代次知道「该重新对一次动画了」（见 syncOutlineCopyClip）。
+            this.outlineClipEpoch++;
         }
-        if (!this.visualAnimation) return;
-        this.visualAnimation.play(name);
-        this.currentClip = name;
     }
 }

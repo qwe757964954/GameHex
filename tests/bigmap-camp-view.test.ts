@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
 import assert from 'node:assert/strict';
@@ -126,7 +127,7 @@ test('真实 GameNet 适配器发送两种请求及 campIds，无连接与发送
         },
     };
     const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) =>
-        name.endsWith('/GameNet') ? { GameNet: { instance: net } } : requests);
+        name.endsWith('/RequestGuard') ? requestGuard : name.endsWith('/GameNet') ? { GameNet: { instance: net } } : requests);
     const Gateway = exports.GameNetBigMapCampGateway as new () => {
         fetchSimple(ids: number[]): Promise<unknown>; fetchDetail(ids: number[]): Promise<unknown>;
     };
@@ -266,8 +267,10 @@ test('据点名条兜底色按 opType 红黄显示，opType 未变时不重绘',
     h.view.markers = [h.view.markers[0]];
     h.view.markers[0].view.setPortrait = () => undefined;
     h.view.data = { ui: {}, world: { monsters: [] }, playerBaseHexId: -1, territories: [],
-        get cities() { return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true, campRoles: [],
-            campInfo: { campId: 101, opType, occupyRoleId: '', occupyRoleName: '', detailed: false } }]]); },
+        get cities() {
+            return new Map([[101, { cityId: 101, name: '营地', state: 'open', level: 1, isServerCamp: true, campRoles: [],
+                campInfo: { campId: 101, opType, occupyRoleId: '', occupyRoleName: '', detailed: false } }]]);
+        },
     };
     h.view.markerLayer = { clear() {} };
     // 名条换成整条贴图后，`tint` 只喂**手画兜底角标**（美术缺图时），所以仍按 opType 算。
@@ -362,11 +365,13 @@ test('点击据点打开城池弹窗（PopupBase），占领者进弹窗，并�
     let campDetailStatus = 'ready';
     let campRoles: { roleId: string; serverId: string; roleName: string; avatarId: string; defenseHp: number; pos: number }[] = [];
     let campRolesStatus = 'ready';
-    page.data = { ui: {}, get cities() { return new Map([[101, { name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
-        campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus, rankEntries: [
-            { roleId: '9007199254740993', rank: 1, name: '甲玩家', avatarId: '1001', warScore: 1512916 },
-            { roleId: 'other', rank: 2, name: '乙玩家', avatarId: '1002', warScore: 1000000 },
-        ] }]]); },
+    page.data = { ui: {}, get cities() {
+        return new Map([[101, { name: '营地', level: 1, desc: '简介', isServerCamp: true, canAttack, staminaCost: 20,
+            campInfo, campDetailStatus, attackReason: '', campRoles, campRolesStatus, rankEntries: [
+                { roleId: '9007199254740993', rank: 1, name: '甲玩家', avatarId: '1001', warScore: 1512916 },
+                { roleId: 'other', rank: 2, name: '乙玩家', avatarId: '1002', warScore: 1000000 },
+            ] }]]);
+    },
     };
     page.worldView = { occupantAt: () => ({ kind: 'city', cityId: 101 }) };
     page.infoThumbnail = { node: { active: false } };

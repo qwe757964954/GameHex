@@ -111,13 +111,6 @@ export const ZC_NEUTRAL_BURST_LABEL_ENTRANCE_RATIO = 0.32;
 export const ZC_NEUTRAL_BURST_LABEL_POP_SCALE = 1.18;
 export const ZC_NEUTRAL_BURST_LABEL_FROM_SCALE = 0.6;
 
-/** 按本次粒子数算整喷上限（粒子少 ⇒ 错峰铺开的尾巴也短）。*/
-export function zcNeutralBurstTotalSeconds(count: number = ZC_NEUTRAL_BURST_COUNT): number {
-    const safe = Number.isFinite(count) ? Math.max(1, Math.floor(count)) : ZC_NEUTRAL_BURST_COUNT;
-    return (safe - 1) * ZC_NEUTRAL_BURST_STAGGER_SECONDS
-        + ZC_NEUTRAL_BURST_LIFE_SECONDS * (1 + ZC_NEUTRAL_BURST_LIFE_JITTER);
-}
-
 /**
  * 确定性哈希 → `[0, 1)`：给「同一 index 每次喷发长得不一样」的抖动取值用。
  *

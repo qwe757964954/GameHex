@@ -1,3 +1,4 @@
+import * as requestGuard from '../assets/script/app/net/RequestGuard';
 /**
  * 据点迁城（`CmdSlgCampMoveReqMsg` / `CmdSlgCampMoveRspMsg`，协议 r882）的接线单测。
  *
@@ -231,6 +232,7 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
         removeCaller(owner: object) { removed.push(owner); },
     };
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
+        if (name.endsWith('/RequestGuard')) return requestGuard;
         if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
         if (name === './RequestBigMapCampMsg') return requests;
         return {};

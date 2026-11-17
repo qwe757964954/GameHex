@@ -6,12 +6,7 @@
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { FW } from '../../framework/FW';
 import { PopupBase } from '../../framework/ui/PopupBase';
-import { loadArt } from '../card/CardLineupIcons';
-import {
-    LEAGUE_ART_ROOT,
-    LEAGUE_BANNER_COLOR_COUNT,
-    leagueBannerArt,
-} from './LeagueArt';
+import { loadLeagueBannerFrames } from './LeagueBannerArt';
 import { LeagueApplyListPage } from './LeagueApplyListPage';
 import { openLeagueExitConfirm } from './LeagueExitConfirm';
 import { LeagueEditPage } from './LeagueEditPage';
@@ -55,19 +50,19 @@ export class LeagueMgrPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueMgr';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面（按 icon 换图）' })
-    bannerColor: Sprite = null;
+    bannerColor: Sprite = null!;
 
     @property({ type: Label, tooltip: 'LeagueName：联盟名（可点，改名字）' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueId：联盟 ID' })
-    idLabel: Label = null;
+    idLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LeagueWx：联系微信号（可点，改微信号）' })
-    wxLabel: Label = null;
+    wxLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'CopyId：复制联盟 ID' })
     copyIdButton: Node = null;
@@ -85,10 +80,10 @@ export class LeagueMgrPage extends PopupBase {
     noticeButton: Node = null;
 
     @property({ type: Label, tooltip: 'DecBox/Content：宣言正文' })
-    declarationLabel: Label = null;
+    declarationLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'NoticeBox/Content：公告正文' })
-    noticeLabel: Label = null;
+    noticeLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'BtnMgr：申请管理（仅「是」页可见）' })
     mgrButton: Node = null;
@@ -130,9 +125,8 @@ export class LeagueMgrPage extends PopupBase {
 
     protected onInit(): void {
 
-        const close = this.closeButton?.getComponent(Button);
-        if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueMgr] CloseBtn 上没有 cc.Button，点击不会生效');
+        const close = this.closeButton.getComponent(Button);
+        close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         this.bindClick(this.nameButton, () => this.openEditor(LeagueEditType.NAME, this.view?.name));
         this.bindClick(this.wxButton, () => this.openEditor(LeagueEditType.WX, this.view?.wxChat));
@@ -233,11 +227,11 @@ export class LeagueMgrPage extends PopupBase {
     }
 
     private present(view: ILeagueMgrView): void {
-        if (this.nameLabel) this.nameLabel.string = view.name;
-        if (this.idLabel) this.idLabel.string = view.idText;
-        if (this.wxLabel) this.wxLabel.string = view.wxText;
-        if (this.declarationLabel) this.declarationLabel.string = view.declaration;
-        if (this.noticeLabel) this.noticeLabel.string = view.notice;
+        this.nameLabel.string = view.name;
+        this.idLabel.string = view.idText;
+        this.wxLabel.string = view.wxText;
+        this.declarationLabel.string = view.declaration;
+        this.noticeLabel.string = view.notice;
         void this.applyBannerColor(view.icon);
         this.applyPage(leagueMgrPage(this.canApprove));
         this.applyQuickJoin(this.actualJoin);
@@ -266,11 +260,8 @@ export class LeagueMgrPage extends PopupBase {
 
     /** 旗面按颜色下标**换图**（FGUI 是 `gearIcon` 换图，不是给一张图染色）。 */
     private async applyBannerColor(colorIndex: number): Promise<void> {
-        if (!this.bannerColor) return;
         if (!this.bannerFrames) {
-            const names: string[] = [];
-            for (let index = 0; index < LEAGUE_BANNER_COLOR_COUNT; index += 1) names.push(leagueBannerArt(index));
-            const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
+            const frames = await loadLeagueBannerFrames();
             if (!this.alive) return;
             this.bannerFrames = frames;
         }

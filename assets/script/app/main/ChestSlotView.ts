@@ -21,7 +21,7 @@ export class ChestSlotView extends Component {
     card: Sprite = null;
 
     @property({ type: Node, tooltip: 'Timer：顶部计时条容器' })
-    timer: Node = null;
+    timer: Node = null!;
 
     @property({ type: Node, tooltip: 'Timer/TimeBg：仅激活倒计时中显示的进度条' })
     timeBg: Node = null;
@@ -45,13 +45,13 @@ export class ChestSlotView extends Component {
     nameLabel: Label = null;
 
     @property({ type: Label, tooltip: 'EmptyLabel：「空槽位」' })
-    emptyLabel: Label = null;
+    emptyLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'Cost：闪电 + 体力数字（空槽态）' })
-    cost: Node = null;
+    cost: Node = null!;
 
     @property({ type: Label, tooltip: 'Cost/Count：体力数字' })
-    costLabel: Label = null;
+    costLabel: Label = null!;
 
     @property({ type: Sprite, tooltip: 'Btn：按钮底（金 / 蓝 / 绿三选一）' })
     btn: Sprite = null;
@@ -147,12 +147,12 @@ export class ChestSlotView extends Component {
         this.btn.node.active = hasButton;
         this.dataIndex = dataIndex;
         this.actionEnabled = hasButton;
-        if (this.emptyLabel) this.emptyLabel.node.active = empty;
-        if (this.cost) this.cost.active = empty && showBattleEntry && data.cost > 0;
+        this.emptyLabel.node.active = empty;
+        this.cost.active = empty && showBattleEntry && data.cost > 0;
 
         // 文案
         if (!empty) this.nameLabel.string = data.name;
-        if (this.costLabel) this.costLabel.string = String(data.cost);
+        this.costLabel.string = String(data.cost);
         this.btnLabel.string = ChestSlotView.actionText(data);
         this.btnLabel.isBold = true;
         this.btnLabel.spacingX = isSpeedUp ? this.speedUpTextSpacing : 0;

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
-import { compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans } from '../assets/script/app/zcds/model/ZCModifierRuntime';
+import { compileZCCombatBuild, getZCModifierCatalogs, parseZCModifierCatalogs, selectZCSkillPlans } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { assetPath } from './helpers/asset-paths';
 import { withoutLineupCrit } from './helpers/lineup-crit';
@@ -32,9 +32,10 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const selected = withoutLineupCrit(selectZCSkillPlans('68001', 24, catalogs));
-    //  100104「豌豆机关枪」自 2026-10-29 起启用（设计案2），兵种 24 级落在 II 级档（91001042）。
+    //  100101「超视孢子」自 2026-11-16 起改成 `replace` 三档递进 14/18/24%：
+    //  24 级只取 III 档（91001013）。此前是 accumulate 三档同值 10%，会一次性选中三行。
     assert.deepEqual(selected.map((row) => row.modifierId), [
-        91001011, 91001012, 91001013,
+        91001013,
         91001023,
         91001033,
         91001042,
@@ -48,7 +49,7 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
     }, config.units, catalogs);
     const plan = loadouts.find((loadout) => loadout.sourceKey.startsWith('skillPlan:'));
     assert.ok(plan);
-    assert.equal(plan.typedModifiers.filter((item) => item.statId === 'attackRange').length, 3);
+    assert.equal(plan.typedModifiers.filter((item) => item.statId === 'attackRange').length, 1);
     assert.deepEqual(
         plan.typedModifiers.filter((item) => item.statId === 'attack').map((item) => item.value),
         [0.12, 0.3],
@@ -74,4 +75,42 @@ test('unlockHeroLevel=0 的首档一级就生效，高解锁档不提前下发',
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 14, catalogs)).map((row) => row.modifierId), [
         94013012, 94013021,
     ]);
+});
+
+
+test('skillParamJson 的 mix.<statId> 编译成第二条单位属性（同条混搭）', () => {
+    const config = prepare();
+    const catalogs = parseZCModifierCatalogs([], [], {
+        pvpSkillPlan: [{
+            enabled: 1, modifierId: 99000001, unitId: '68001', skillChainId: 100101, skillLevel: 1,
+            unlockHeroLevel: 1, progressionMode: 'replace', pvpSkillId: 30701,
+            statId: 'attack', operation: 'addRate', value: 0.14,
+            skillParamJson: '{"mix.critRate.add":4,"mix.maxHp.addRate":0.06}',
+        }],
+    });
+    const loadouts = compileZCCombatBuild({ unitId: '68001', heroLevel: 1 }, config.units, catalogs);
+    const plan = loadouts.find((loadout) => loadout.sourceKey.startsWith('skillPlan:'));
+    assert.ok(plan);
+    const mixed = new Map(plan.typedModifiers
+        .filter((item) => item.sourceId === 99000001)
+        .map((item) => [item.statId, item]));
+    assert.equal(mixed.get('attack')?.value, 0.14, '主属性仍走 statId 那一格');
+    assert.equal(mixed.get('critRate')?.operation, 'add', 'mix.<statId> 缺省 add');
+    assert.equal(mixed.get('critRate')?.value, 4);
+    assert.equal(mixed.get('maxHp')?.operation, 'addRate');
+    assert.equal(mixed.get('maxHp')?.value, 0.06);
+});
+
+test('mix 键写错 statId 时直接抛错，不静默忽略', () => {
+    const config = prepare();
+    assert.throws(() => {
+        const catalogs = parseZCModifierCatalogs([], [], {
+            pvpSkillPlan: [{
+                enabled: 1, modifierId: 99000002, unitId: '68001', skillChainId: 100101, skillLevel: 1,
+                unlockHeroLevel: 1, progressionMode: 'replace', pvpSkillId: 30701,
+                skillParamJson: '{"mix.attackPct":10}',
+            }],
+        });
+        compileZCCombatBuild({ unitId: '68001', heroLevel: 1 }, config.units, catalogs);
+    }, /混搭/);
 });

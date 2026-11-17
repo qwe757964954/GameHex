@@ -117,7 +117,7 @@ export class BattleTokenPage extends PopupBase {
 
     // ---------------- 底栏 ----------------
     @property({ type: Node, tooltip: '返回按钮（FGUI 按钮_返回）' })
-    backButton: Node = null;
+    backButton: Node = null!;
 
     @property({ type: Node, tooltip: '内容页根（长屏时贴顶）' })
     pageRoot: Node = null;
@@ -142,29 +142,29 @@ export class BattleTokenPage extends PopupBase {
     titleIcon: Sprite = null;
 
     @property({ type: Node, tooltip: '标题条底板（FGUI n127，`pages="1,3,0"` ⇒ 等级基金不显示）' })
-    titleBg: Node = null;
+    titleBg: Node = null!;
 
     @property({ type: Node, tooltip: '页头说明气泡（FGUI n141，七日登录比其他页宽 48）' })
-    qipao: Node = null;
+    qipao: Node = null!;
 
     @property({ type: Label, tooltip: '页头说明（FGUI n13，按页签换文案 + 换框尺寸）' })
-    hintLabel: Label = null;
+    hintLabel: Label = null!;
 
     @property({ type: Label, tooltip: '倒计时（FGUI 文本_倒计时）' })
-    countdownLabel: Label = null;
+    countdownLabel: Label = null!;
 
     // ---------------- 通行证专有 ----------------
     @property({ type: Node, tooltip: '整块「经验条 + 已消耗」容器（只在通行证页显示）' })
-    expGroup: Node = null;
+    expGroup: Node = null!;
 
     @property({ type: BattleTokenProgressBar, tooltip: '经验条（FGUI progress）' })
-    expBar: BattleTokenProgressBar = null;
+    expBar: BattleTokenProgressBar = null!;
 
     @property({ type: Label, tooltip: '「已消耗：」（FGUI n138）' })
-    consumedLabel: Label = null;
+    consumedLabel: Label = null!;
 
     @property({ type: Label, tooltip: '已消耗数值（FGUI 文本_消耗）' })
-    consumedValue: Label = null;
+    consumedValue: Label = null!;
 
     @property({ type: Sprite, tooltip: '消耗的道具图标（FGUI costIcon）' })
     costIcon: Sprite = null;
@@ -181,10 +181,10 @@ export class BattleTokenPage extends PopupBase {
 
     // ---------------- 列表 ----------------
     @property({ type: VirtualScrollView, tooltip: '三方案列表（通行证用）' })
-    list3: VirtualScrollView = null;
+    list3: VirtualScrollView = null!;
 
     @property({ type: VirtualScrollView, tooltip: '两方案列表（其余 3 个页签用）' })
-    list2: VirtualScrollView = null;
+    list2: VirtualScrollView = null!;
 
     // ---------------- 运行时 ----------------
     private _snapshot: IBattleTokenSnapshot | null = null;
@@ -250,9 +250,7 @@ export class BattleTokenPage extends PopupBase {
     // ============================================================
 
     private _wireStatic(): void {
-        if (this.backButton) {
-            this.backButton.on(Node.EventType.TOUCH_END, this._onBack, this);
-        }
+        this.backButton.on(Node.EventType.TOUCH_END, this._onBack, this);
         this._tabButtons = collectTabButtons(this.tabBar);
         for (const btn of this._tabButtons) {
             const type = btn.tabType;
@@ -261,7 +259,7 @@ export class BattleTokenPage extends PopupBase {
             // 组件自己持有绑定器并在 `onDestroy` 解绑，这里只喂表达式（与主界面六格同一条通路）。
             btn.bindRedDotExpr(battleTokenTabRdExpr(type));
         }
-        if (this.consumedLabel) this.consumedLabel.string = BT_TEXTS.consumedLabel;
+        this.consumedLabel.string = BT_TEXTS.consumedLabel;
     }
 
     private _onBack = (): void => {
@@ -307,28 +305,24 @@ export class BattleTokenPage extends PopupBase {
         // 说明文字：文案 + **框尺寸**都要按页签换（FGUI n13 的 `gearText` + `gearSize`）。
         // 七日登录那页的框是 `gearSize` 的 default `425,42`（比通行证的 230,71 宽而矮），
         // 不跟着改就会把「持续登录 每日领取丰厚奖励」折进 230 宽里 ⇒ 静默变两行 / 缩小字号。
-        if (this.hintLabel) {
-            this.hintLabel.string = pageHintOf(type);
-            const box = hintBoxOf(type);
-            this.hintLabel.node.getComponent(UITransform)?.setContentSize(box.w, box.h);
-        }
+        this.hintLabel.string = pageHintOf(type);
+        const hintBox = hintBoxOf(type);
+        this.hintLabel.node.getComponent(UITransform).setContentSize(hintBox.w, hintBox.h);
         // 说明气泡：FGUI `n141` 的 `gearSize pages="1,3"` ⇒ 七日登录 378 宽、其余 330 宽；
         // 高度恒 195（`scale (1,0.6)` 在 prefab 上，**不要在这里改高度**）。
-        if (this.qipao) {
-            const box = qipaoBoxOf(type);
-            this.qipao.getComponent(UITransform)?.setContentSize(box.w, box.h);
-        }
+        const qipaoBox = qipaoBoxOf(type);
+        this.qipao.getComponent(UITransform).setContentSize(qipaoBox.w, qipaoBox.h);
 
         // FGUI `n127`（标题条）与 `文本_倒计时` 都挂 `gearDisplay controller="标签" pages="1,3,0"`
         // ⇒ 通行证(page 1) / 七日登录(3) / 过关令(0) 显示，**等级基金(2) 不显示**
         // （老端也刚好不给 levelFund 起定时器：`if (type != battleToken_levelFund) addTimer(...)`）。
         // ⚠️ 别按「通行证不显示」写 —— 那正好反了，而且不报错、只是少一条底 + 多一条倒计时。
         const showTitleBar = type !== BT_TYPE_LEVEL_FUND;
-        if (this.titleBg) this.titleBg.active = showTitleBar;
-        if (this.countdownLabel) this.countdownLabel.node.active = showTitleBar;
+        this.titleBg.active = showTitleBar;
+        this.countdownLabel.node.active = showTitleBar;
 
         // FGUI `progress` / `costIcon` / `文本_消耗` / `n138`（已消耗：）都是 `pages="1"` ⇒ 只在通行证
-        if (this.expGroup) this.expGroup.active = type === BT_TYPE_END;
+        this.expGroup.active = type === BT_TYPE_END;
     }
 
     /** 通行证页的经验条 + 已消耗。 */
@@ -342,8 +336,8 @@ export class BattleTokenPage extends PopupBase {
         //    `组件/进度条/进度条01_公用_数值.xml`，`<ProgressBar titleType="valueAndmax"/>`
         //    ⇒ `GProgressBar.update()` 自己写成 `value + "/" + max`（老端只设 value/max、不碰 title）。
         //    只写 `${exp}` 不报错，只是和 FGUI 显示的不一样。
-        if (this.expBar) this.expBar.setProgress(exp, expMax, `${exp}/${expMax}`);
-        if (this.consumedValue) this.consumedValue.string = `${exp}`;
+        this.expBar.setProgress(exp, expMax, `${exp}/${expMax}`);
+        this.consumedValue.string = `${exp}`;
         // 消耗图标：老端 `GetGoodsIconKeyByRefId(roleProperty.end)`，`end = 9`（体力）。
         // ⚠️ 这一张**不在奖励表里** ⇒ `_preloadCommonFrames` 必须显式带上（见那里的注释）。
         this._setFrame(this.costIcon, this._iconPathOf(BT_EXP_COST_RES_ID));
@@ -388,22 +382,18 @@ export class BattleTokenPage extends PopupBase {
         };
 
         // 两个列表都接上（显隐另算）—— 只挂一次回调（规则 55）
-        if (this.list3) {
-            this.list3.node.active = three;
-            if (!this._listBound3) {
-                this._listBound3 = true;
-                this.list3.renderItemFn = (node, index) => this._renderRow(node, index);
-            }
-            if (three) this.list3.refreshList(this._rows as unknown[]);
+        this.list3.node.active = three;
+        if (!this._listBound3) {
+            this._listBound3 = true;
+            this.list3.renderItemFn = (node, index) => this._renderRow(node, index);
         }
-        if (this.list2) {
-            this.list2.node.active = !three;
-            if (!this._listBound2) {
-                this._listBound2 = true;
-                this.list2.renderItemFn = (node, index) => this._renderRow(node, index);
-            }
-            if (!three) this.list2.refreshList(this._rows as unknown[]);
+        if (three) this.list3.refreshList(this._rows as unknown[]);
+        this.list2.node.active = !three;
+        if (!this._listBound2) {
+            this._listBound2 = true;
+            this.list2.renderItemFn = (node, index) => this._renderRow(node, index);
         }
+        if (!three) this.list2.refreshList(this._rows as unknown[]);
 
         this._applyHeadExp(state, maxLevel, levelUpCostOf(snapshot));
         this._scrollToClaim(rows, state, opened, taken, maxLevel);
@@ -534,7 +524,7 @@ export class BattleTokenPage extends PopupBase {
     // ============================================================
 
     private _applyCountdown(): void {
-        if (!this.countdownLabel || !this._snapshot) return;
+        if (!this._snapshot) return;
         const state = stateOf(this._snapshot, this._type);
         const nowSec = Math.floor(Date.now() / 1000);
         this.countdownLabel.string = countdownText(state.endSeconds, nowSec);

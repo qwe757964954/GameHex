@@ -34,7 +34,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import {
     RequestCodeExchange,
     RequestRoleChangeImg,
@@ -274,26 +274,20 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
     }
 
     async loadOther(roleId: string, serverId: number, caller?: object): Promise<IOtherInfoResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return { status: 'offline', snapshot: null };
-
         let rsp: Record<string, unknown> | null = null;
         try {
             // ⚠️ `GameNet.send(req, false)` 的第二个参数恒为 `false`（全工程口径）——
             //    回包通过 `RequestMsg` 的 `fCallback` 通知，不是靠返回值。见
             //    `LayerActivityRepository` / `BattleTokenRepository` 的同款写法。
-            await withTimeout(
-                net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                     new RequestRoleInfoView(
                         { roleId: toNumber(roleId, 0), serverId } as any,
                         caller,
                         (r: any) => { rsp = (r ?? null) as Record<string, unknown> | null; },
-                    ) as any,
-                    false,
-                ),
-                READ_TIMEOUT_MS,
-                () => false,
+                    ),
+                { timeoutMs: READ_TIMEOUT_MS, tag: 'PlayerInfo' },
             );
+            if (status !== 'ok') return { status, snapshot: null };
         } catch (error) {
             console.warn('[PlayerInfo] 请求他人信息失败', error);
             return { status: 'failed', snapshot: null };

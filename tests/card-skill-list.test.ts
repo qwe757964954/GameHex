@@ -51,8 +51,8 @@ test('armySkillLevelUp：按 skillId 聚合，一行只是一个等级档', () =
     assert.ok(TABLE.size < raw.length, `聚合失败：表 ${TABLE.size} 条 / 原 ${raw.length} 行`);
 
     const skill = TABLE.get(100101);
-    assert.ok(skill, '100101（豌豆快送）必须存在于表里');
-    assert.equal(skill.name, '豌豆快送');
+    assert.ok(skill, '100101（超视孢子）必须存在于表里');
+    assert.equal(skill.name, '超视孢子');
     assert.deepEqual(skill.levels.map((row) => row.level), [1, 2, 3]);
     assert.deepEqual(skill.levels.map((row) => row.unlockHeroLevel), [3, 14, 22]);
     assert.equal(skillMaxLevel(skill), 3);
@@ -74,11 +74,26 @@ test('armySkillLevelUp：坏行跳过、name 取第一个非空', () => {
     assert.equal(parseArmySkillLevelRow({ id: 0, skilllevel: 1 }), null, 'id=0 非法');
 });
 
+test('armySkillLevelUp：进表的技能档位恒非空且恒为正 —— `levels[0]` / 末档可直取', () => {
+    // 这条是 `skillMaxLevel` / `resolveSkillLevel` 直接取 `levels[0]` 与末档的前提：
+    // 没有合法档位的技能不能进表，档位来自 `toPositiveInt(skilllevel)` 不会是 0 / 负数。
+    const table = buildArmySkillTable([
+        { id: 920001, skilllevel: 0, unlockarmylevel: 0 },
+        { id: 920001, unlockarmylevel: 0 },
+        { id: 920002, skilllevel: 3, unlockarmylevel: 0 },
+        { id: 920002, skilllevel: 1, unlockarmylevel: 0 },
+    ]);
+    assert.equal(table.has(920001), false, '没有合法档位的技能整条丢弃');
+    const skill = table.get(920002)!;
+    assert.deepEqual(skill.levels.map((row) => row.level), [1, 3], '按 level 升序聚合');
+    assert.ok(skill.levels[0].level > 0 && skill.levels[skill.levels.length - 1].level > 0);
+});
+
 test('resolveCardSkills：顺序以卡表 skillList 为准，缺失告警跳过', () => {
     const skills = resolveCardSkills(TABLE, PEASHOOTER_SKILLS, '68001');
     assert.deepEqual(skills.map((skill) => skill.skillId), PEASHOOTER_SKILLS);
     // 名称以 `pvpSkillPlan`（实际研发）为准：100104 已由「黄袍加身」更名为「豌豆机关枪」。
-    assert.deepEqual(skills.map((skill) => skill.name), ['豌豆快送', '强化豌豆', '饥饿缠身', '豌豆机关枪']);
+    assert.deepEqual(skills.map((skill) => skill.name), ['超视孢子', '强化豌豆', '饥饿缠身', '豌豆机关枪']);
 
     const reversed = resolveCardSkills(TABLE, [100104, 100101], '68001');
     assert.deepEqual(reversed.map((skill) => skill.skillId), [100104, 100101]);

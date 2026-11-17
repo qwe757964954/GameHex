@@ -94,14 +94,37 @@ test('普攻穿透：15 行都带 normalPierceFalloff 0.4，且不再误写成 p
     }
 });
 
-test('溅射：39 行基准 20/26/32%、同爆点第 2 个起 ×0.7，三档都低于普攻', () => {
-    const expected: Record<string, number> = { 1: 0.2, 2: 0.26, 3: 0.32 };
+test('溅射：48 行按品级分档，同爆点第 2 个起 ×0.7，三档都低于普攻', () => {
+    //  2026-11-16 技能设计案 V5：溅射基准改由设计案 L1~L3 定价，随「被动重设计」分批落地。
+    //  本表按**当前配表快照**钉住，每落地一批就同步一次；新增链必须在这里登记档位，
+    //  否则会被 DEFAULT_BAND 兜住而看不出漏配。
+    const BANDS: Record<string, readonly [number, number, number]> = {
+        100802: [0.50, 0.54, 0.58],
+        100902: [0.50, 0.54, 0.58],
+        101002: [0.50, 0.55, 0.60],
+        101302: [0.20, 0.26, 0.32],
+        101501: [0.50, 0.54, 0.58],
+        101502: [0.32, 0.40, 0.48],
+        101601: [0.50, 0.55, 0.60],
+        101602: [0.30, 0.38, 0.46],
+        101702: [0.12, 0.16, 0.20],
+        102202: [0.20, 0.26, 0.32],
+        102502: [0.20, 0.26, 0.32],
+        102602: [0.50, 0.55, 0.60],
+        102701: [0.20, 0.26, 0.32],
+        103202: [0.50, 0.54, 0.58],
+        103301: [0.32, 0.40, 0.48],
+        103402: [0.50, 0.55, 0.60],
+    };
+    const DEFAULT_BAND: readonly [number, number, number] = [0.2, 0.26, 0.32];
     for (const rows of [readRows('pvpSkillPlan'), readClientRows('pvpSkillPlan')]) {
         const splash = rows.filter((row) => params(row).splashDamageRate != null);
-        assert.equal(splash.length, 39, '13 条链 × 3 档');
+        assert.equal(splash.length, 48, '16 条链 × 3 档');
         for (const row of splash) {
+            const band = BANDS[String(row.skillChainId)] ?? DEFAULT_BAND;
             const rate = params(row).splashDamageRate;
-            assert.equal(rate, expected[String(row.skillLevel)], `${row.modifierId} 基准值`);
+            assert.equal(rate, band[Number(row.skillLevel) - 1],
+                `${row.modifierId}（链 ${row.skillChainId}）基准值`);
             assert.ok(rate < 1, '初始值必须低于普通攻击（100%）');
             assert.equal(params(row).splashFalloff, 0.3, `${row.modifierId} 缺递减`);
         }

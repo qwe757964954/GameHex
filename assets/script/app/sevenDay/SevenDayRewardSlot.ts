@@ -19,13 +19,6 @@ export class SevenDayRewardSlot extends Component {
     @property({ type: Sprite, tooltip: 'Icon：道具图标（没有映射图时会被隐藏）' })
     icon: Sprite = null!;
 
-    protected onLoad(): void {
-        if (!this.frame) {
-            const own = this.getComponent(Sprite);
-            if (own) this.frame = own;
-        }
-    }
-
     /**
      * 铺一个奖励。
      *

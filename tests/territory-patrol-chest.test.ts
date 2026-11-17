@@ -47,6 +47,57 @@ test('普通站点不能误带巡逻战斗数组', () => {
 
 const source = readFileSync('tools/map-editor/territory-app.js', 'utf8');
 
+test('野怪巡逻 ID 在编辑器和客户端解析中保留，旧地图仍可省略', () => {
+    const input = patrolMap();
+    Object.assign(input.sites[0], { patrolId: 60001 });
+    const normalized = normalizeTerritoryMap(input).map;
+    assert.equal(normalized.sites[0].patrolId, 60001);
+    assert.equal(configureTerritoryMap(normalized).sites[0].patrolId, 60001);
+    assert.equal(configureTerritoryMap(patrolMap()).sites[0].patrolId, undefined);
+    for (const patrolId of [0, -1, 1.5, '60001', true, null, Number.MAX_SAFE_INTEGER + 1]) {
+        Object.assign(input.sites[0], { patrolId });
+        assert.throws(() => normalizeTerritoryMap(input), /patrolId/);
+        assert.throws(() => configureTerritoryMap(input), /patrolId/);
+    }
+    Object.assign(input.sites[0], { type: 'stage', patrolId: 60001 });
+    delete input.sites[0].battleIds;
+    assert.throws(() => normalizeTerritoryMap(input), /patrolId/);
+    assert.throws(() => configureTerritoryMap(input), /patrolId/);
+});
+
+test('野怪巡逻 ID 输入可按格修改及清空，非法值不覆盖原配置', () => {
+    const sites = [{ type: 'patrolChest', cellId: 1, patrolId: 60001 }, { type: 'patrolChest', cellId: 2 }];
+    const field = { value: '60002', focus() {} };
+    const context = {
+        map: { sites }, selectedCell: 1, $: () => field,
+        commits: 0, commit() { context.commits += 1; }, markErrorsStale() {}, message() {},
+    };
+    const functions = ['siteAtCell', 'readPatrolId', 'applyPatrolIdFromForm'].map((name) => {
+        const match = source.match(new RegExp(`function ${name}\\([^\\n]*\\) \\{[\\s\\S]*?\\n\\}`));
+        assert.ok(match, `${name} must exist`);
+        return match[0];
+    });
+    const apply = runInNewContext(`${functions.join('\n')}; applyPatrolIdFromForm`, context) as () => boolean;
+    assert.equal(apply(), true);
+    assert.equal(sites[0].patrolId, 60002);
+    apply();
+    assert.equal(context.commits, 1);
+    for (const value of ['0', '-1', '1.5', 'abc', '9007199254740992']) {
+        field.value = value;
+        assert.equal(apply(), false);
+        assert.equal(sites[0].patrolId, 60002);
+    }
+    context.selectedCell = 2;
+    field.value = '60003';
+    assert.equal(apply(), true);
+    assert.equal(sites[1].patrolId, 60003);
+    context.selectedCell = 1;
+    field.value = '';
+    assert.equal(apply(), true);
+    assert.equal('patrolId' in sites[0], false);
+    assert.equal(sites[1].patrolId, 60003);
+});
+
 function patrolEditor() {
     const sites = [
         { type: 'patrolChest', cellId: 1, battleIds: [10001] },
@@ -102,6 +153,10 @@ test('巡逻宝箱的工具、表单及保存入口接通', () => {
     assert.match(html, /data-mode="patrolChest"/);
     assert.match(html, /option value="patrolChest"/);
     assert.match(html, /id="battleIds"/);
+    assert.match(html, /id="patrolId"/);
+    assert.match(source, /if \(!applyPatrolIdFromForm\(\)\) return;/);
+    assert.match(source, /if \(!applyPatrolIdFromForm\(\)\) throw/);
+    assert.match(source, /\$\('patrolId'\)\.addEventListener\('change', applyPatrolIdFromForm\)/);
     assert.match(source, /function paint\([^\n]+\{[\s\S]*?if \(!applyPatrolBattleIdsFromForm\(\)\) return;/);
     assert.match(source, /function buildJSON\(\) \{[\s\S]*?if \(!applyPatrolBattleIdsFromForm\(\)\) throw/);
     assert.match(source, /\$\('battleIds'\)\.addEventListener\('change', applyPatrolBattleIdsFromForm\)/);

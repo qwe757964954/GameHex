@@ -1,6 +1,6 @@
 import { RequestFormationInfo, RequestFormationOp, RequestFormationSelect } from '../generated/requestMsg/RequestFormationMsg';
 import { GameNet } from '../net/GameNet';
-import { withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, withTimeout } from '../net/RequestGuard';
 import { normalizeFormation, normalizeFormations, normalizeHeroIds, toPositiveInt } from './FormationModel';
 import type { ZCFormation } from './FormationModel';
 
@@ -103,8 +103,6 @@ export async function saveFormation(
     heroIds: readonly number[],
     caller?: object,
 ): Promise<FormationSaveResult> {
-    if (!GameNet.instance.isConnected) return { kind: 'offline' };
-
     const normalizedId = toPositiveInt(formationId);
     if (normalizedId === null) {
         console.warn('[FormationService] formationId 非法，已取消保存', formationId);
@@ -136,12 +134,13 @@ async function sendFormationOp(
     try {
         // 保存顺带置选中。否则服务端记着的出阵阵型仍是别的，而阵容页读的是选中阵型，
         // 玩家会看到保存后界面没变。切页签走独立的 selectFormation，只换选中不动卡组。
-        const ok = await GameNet.instance.send(new RequestFormationOp(
+        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationOp(
             { info: { formationId, heroId: heroIds, select: 1 } },
             caller,
             (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return { kind: 'failed' };
+        ), { timeoutMs: FORMATION_SAVE_TIMEOUT_MS, tag: 'FormationService' });
+        if (status === 'offline') return { kind: 'offline' };
+        if (status !== 'ok' || !response) return { kind: 'failed' };
     } catch (error) {
         console.warn('[FormationService] 阵型保存请求失败', error);
         return { kind: 'failed' };
@@ -183,7 +182,6 @@ function hasSelectProtocol(): boolean {
  * 超时按失败返回，调用方已经切过去的本地页签不回滚。
  */
 export function selectFormation(formationId: number, caller?: object): Promise<boolean> {
-    if (!GameNet.instance.isConnected) return Promise.resolve(false);
     if (!hasSelectProtocol()) return Promise.resolve(false);
 
     const normalizedId = toPositiveInt(formationId);
@@ -204,12 +202,12 @@ export function selectFormation(formationId: number, caller?: object): Promise<b
 async function sendFormationSelect(formationId: number, caller?: object): Promise<boolean> {
     let response: CmdFormationSelectRspMsg | null = null;
     try {
-        const ok = await GameNet.instance.send(new RequestFormationSelect(
+        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationSelect(
             { formationId },
             caller,
             (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return false;
+        ), { timeoutMs: FORMATION_REQUEST_TIMEOUT_MS, tag: 'FormationService' });
+        if (status !== 'ok' || !response) return false;
     } catch (error) {
         console.warn('[FormationService] 选中阵型请求失败', error);
         return false;
@@ -226,17 +224,14 @@ async function sendFormationSelect(formationId: number, caller?: object): Promis
 }
 
 async function requestFormations(): Promise<readonly ZCFormation[] | null> {
-    const net = GameNet.instance;
-    if (!net.isConnected) return cachedFormations;
-
     let response: CmdFormationInfoRspMsg | null = null;
     try {
-        const ok = await net.send(new RequestFormationInfo(
+        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationInfo(
             {},
             undefined,
             (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return cachedFormations;
+        ), { timeoutMs: FORMATION_REQUEST_TIMEOUT_MS, tag: 'FormationService' });
+        if (status !== 'ok' || !response) return cachedFormations;
     } catch (error) {
         console.warn('[FormationService] 请求阵型失败，布阵面板退回本地卡组', error);
         return cachedFormations;

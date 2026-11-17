@@ -3,7 +3,7 @@ import { PopupBase } from '../../framework/ui/PopupBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { Toast } from '../common/Toast';
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
-import type { CardSkillListPresentation } from './CardPresentations';
+import type { CardSkillListPresentation, ICardSkillCost } from './CardPresentations';
 import { CardSkillTierView } from './CardSkillTierView';
 import { CardPopupEvent } from './CardPopupEvents';
 import { skillLevelRow } from './CardSkillList';
@@ -61,15 +61,24 @@ export class CardSkillPage extends PopupBase {
         const next = row ? skillLevelRow(row.skill, row.level + 1) : undefined;
         this.upgradeLabel.string = state?.busy ? texts.skillUpgradeSending : row && !next ? texts.upgradeMaxed : texts.skillUpgradeSingle;
         const costs = state?.costs ?? [];
-        [this.coinIcon, this.materialIcon].forEach((icon, index) => {
-            const cost = costs[index];
-            const label = index === 0 ? this.coinLabel : this.materialLabel;
-            icon.spriteFrame = cost?.frame ?? null;
-            icon.node.parent.active = !!cost;
-            label.string = cost ? (cost.frame ? String(cost.need) : `${cost.name} ${cost.need}`) : '';
-            label.color = cost && cost.owned < cost.need ? this.insufficientColor : this.enoughColor;
-        });
+        this.renderCost(this.coinIcon, this.coinLabel, costs[0]);
+        this.renderCost(this.materialIcon, this.materialLabel, costs[1]);
     }
+
+    /**
+     * 一项升级消耗：图标 + 数量各是一组（prefab 里 `CoinCost` / `MaterialCost` 两个节点）。
+     *
+     * `cost` 缺省 = 这一档没有这项消耗（满级 / 表里没配）：整组收起，文案与颜色一并复位，
+     * 同一个弹窗换技能复用时不会留下上一档的数字。`frame` 为 null 是合法的「图还没到」，
+     * 这时不空着数量，退化成「名字 + 数量」。
+     */
+    private renderCost(icon: Sprite, label: Label, cost: ICardSkillCost | undefined): void {
+        icon.spriteFrame = cost?.frame ?? null;
+        icon.node.parent.active = !!cost;
+        label.string = cost ? (cost.frame ? String(cost.need) : `${cost.name} ${cost.need}`) : '';
+        label.color = cost && cost.owned < cost.need ? this.insufficientColor : this.enoughColor;
+    }
+
     notify(kind: 'offline' | 'failed'): void {
         Toast.show(kind === 'offline' ? CARD_LINEUP_TEXTS.skillUpgradeOffline : CARD_LINEUP_TEXTS.skillUpgradeFailed);
     }

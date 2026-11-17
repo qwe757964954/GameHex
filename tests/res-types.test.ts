@@ -81,12 +81,14 @@ test('表名与格数上限是常量，不是散落的字面量', () => {
 test('货币图标目录只有一处真源：ArtPaths.RESOURCE_ICON_ART_ROOT', () => {
     assert.equal(RESOURCE_ICON_ART_ROOT, 'icons/resource');
 
-    // 两个曾经的"第二份字面量"必须改成转发（源码级，因为这两个模块带 cc 不能 import）
-    for (const file of ['assets/script/app/activity/LayerActivityArt.ts', 'assets/script/app/hang/HangArt.ts']) {
-        const code = stripComments(readFileSync(file, 'utf8'));
-        assert.doesNotMatch(code, /=\s*'icons\/resource'/, `${file} 又写了一份字面量，应当转发 ArtPaths`);
-        assert.match(code, /RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT/, `${file} 没有从 ArtPaths 转发目录常量`);
-    }
+    // `HangArt` 仍保留业务别名，但必须转发 ArtPaths；`LayerActivityArt` 已退掉该转发。
+    const hangArt = stripComments(readFileSync('assets/script/app/hang/HangArt.ts', 'utf8'));
+    assert.doesNotMatch(hangArt, /=\s*'icons\/resource'/, 'HangArt 又写了一份字面量，应当转发 ArtPaths');
+    assert.match(hangArt, /RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT/, 'HangArt 没有从 ArtPaths 转发目录常量');
+
+    const layerArt = stripComments(readFileSync('assets/script/app/activity/LayerActivityArt.ts', 'utf8'));
+    assert.doesNotMatch(layerArt, /RESOURCE_ICON_ART_ROOT|COMMON_ICON_ART_ROOT|ROLE_PROPERTY_ICON_ROOT_OVERRIDE|resIconRoot|resolveRewardIconRef|resolveItemIconRef|splitIconPath/,
+        'LayerActivityArt 已不再承担资源目录 / 奖励图标转发');
 
     // 顶部货币条与主界面 HUD 取图都必须走这个目录（不许回到 image/main/resbar）
     for (const file of ['assets/script/app/main/MainResBarArt.ts', 'assets/script/app/common/ResBar.ts']) {

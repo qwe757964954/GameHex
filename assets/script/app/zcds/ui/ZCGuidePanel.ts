@@ -130,8 +130,6 @@ export class ZCGuidePanel extends PopupBase {
     private renderItem(itemNode: Node, index: number): void {
         const entry = this.entries[index];
         const item = itemNode.getComponent(ZCGuideItem);
-        // `getComponent` 的类型契约可空：条目节点没挂脚本时跳过（这不是 Inspector 引用）。
-        if (!item) return;
         if (!entry) {
             item.clear();
             return;

@@ -13,7 +13,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { TerritoryProgress } from '../assets/script/app/territory/model/TerritoryProgress';
+import { TerritoryProgress, normalizeTerritoryChapter } from '../assets/script/app/territory/model/TerritoryProgress';
 import type { TerritoryMapConfig } from '../assets/script/app/territory/model/TerritoryMapConfig';
 
 // ============================================================
@@ -250,20 +250,10 @@ test('★★ 生成产物不比 proto 源旧（proto 更新后必须重跑生成
     }
 });
 
-test('★Repository 真的发包：走 GameNet.send 且带 withTimeout', () => {
-    assert.ok(/GameNet\.instance/.test(REPO_SRC), '必须走 GameNet.instance');
-    // `net.send` 可能跨行写（withTimeout 包了一层），所以只查"出现了 net.send("。
-    assert.ok(/net\.send\(/.test(REPO_SRC), '必须调 net.send 发包');
-    // ⚠️ withTimeout 必加：`GameNet.send` 没有按请求超时，服务端不回就永悬在"加载中"。
-    assert.ok(/withTimeout\(/.test(REPO_SRC), '必须 withTimeout，否则界面会永远转圈');
-    // ⚠️ needLoading 必须传 false：领地页有自己的 loading 态，别让网络层再叠一层。
-    // 用宽松匹配（`build() as never, false`），跨行也能命中。
-    assert.ok(
-        /net\.send\([\s\S]{0,80}?,\s*false\s*\)/.test(REPO_SRC),
-        '发包要传 needLoading=false（领地页自己有 loading 态）',
-    );
-    // 离线早退：连不上就别发。
-    assert.ok(/isConnected/.test(REPO_SRC), '必须判 isConnected 并离线早退');
+test('★Repository 通过共享入口发送，保留读取超时', () => {
+    assert.match(REPO_SRC, /sendGameRequest\(GameNet\.instance, build/);
+    assert.match(REPO_SRC, /timeoutMs: READ_TIMEOUT_MS/);
+    assert.doesNotMatch(REPO_SRC, /isConnected/);
 });
 
 test('★章节扫荡请求带倍率 `times`（proto id 3），且运行时编码器真的编得出来', async () => {
@@ -561,24 +551,21 @@ test('★Bro 的格子同样走越界裁剪（服务端扩容过章节、客户�
 });
 
 test('★★★ Bro 的章节号归一：Repository 与 Presenter 必须同一口径', () => {
-    // 两处各写一份归一（Repository 收包时用、Presenter 比对时用）⇒ 必须一致，
-    // 否则「服务端推 levelChapter=0」时 Repository 归成1、Presenter 按 0 比对，
-    // 格子白收（症状：广播收到了但格子没变，且零报错）。
-    const repoNorm = /private normalizeChapter\(levelChapter: number\): number \{[\s\S]*?\};?\s*$/m;
-    const repoBody = REPO_SRC.match(repoNorm);
-    assert.ok(repoBody, 'Repository 的 normalizeChapter 要能定位');
-    const presenterBody = PRESENTER_SRC.match(/private normalizeBroChapter\(levelChapter: number\): number \{[\s\S]*?\n    \}/);
-    assert.ok(presenterBody, 'Presenter 的 normalizeBroChapter 要能定位');
-    for (const [label, body] of [['Repository', repoBody[0]], ['Presenter', presenterBody[0]]] as const) {
-        assert.match(body, />= 1 \? parsed : 1/,
-            `${label} 的章节归一口径必须是「<1 一律当第 1 章」`);
-    }
+    // 两处都复用 TerritoryProgress 的纯函数，避免各写一份归一后漂移。
+    assert.match(REPO_SRC, /normalizeTerritoryChapter\(/,
+        'Repository 收包时必须复用 normalizeTerritoryChapter');
+    assert.match(PRESENTER_SRC, /normalizeTerritoryChapter\(/,
+        'Presenter 比对时必须复用 normalizeTerritoryChapter');
+    assert.equal(normalizeTerritoryChapter(0), 1, '0 → 第 1 章');
+    assert.equal(normalizeTerritoryChapter(-1), 1, '负数 → 第 1 章');
+    assert.equal(normalizeTerritoryChapter(Number.NaN), 1, 'NaN → 第 1 章');
+    assert.equal(normalizeTerritoryChapter('2.9' as unknown as number), 2, '先 floor 再判 >= 1');
 });
 
 test('★★★ Bro 落地必须复用 applyServerState，且不碰 serverStateKnown', () => {
     const bro = PRESENTER_SRC.slice(
         PRESENTER_SRC.indexOf('applyPassCellsBro(levelChapter'),
-        PRESENTER_SRC.indexOf('private normalizeBroChapter'),
+        PRESENTER_SRC.indexOf('落地服务端**主动下发**'),
     );
     assert.ok(bro.length > 0, 'applyPassCellsBro 要能定位');
     // 复用单调合并（含上界裁剪 + 探索结算），不另写一套。

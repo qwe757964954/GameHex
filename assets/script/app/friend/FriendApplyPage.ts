@@ -175,7 +175,6 @@ export class FriendApplyPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendApplyRow);
-        if (!row) return;
 
         row.onAgree = () => this.dispatchRow(this.rowIds[index], (id) => void this.onAgree(id));
         row.onReject = () => this.dispatchRow(this.rowIds[index], (id) => void this.onReject(id));

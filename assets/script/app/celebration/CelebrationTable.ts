@@ -139,7 +139,7 @@ export interface ICelebrationShopPricing {
     readonly oldPriceText: string;
     /** `lab_price`：rmb 分支是真实金额，cost 分支是 `costCount`。 */
     readonly priceText: string;
-    /** `icon_cost` 的 `costType`；怎么解析成图标由页面交给 `LayerActivityArt.resolveRewardIconRef`。 */
+    /** `icon_cost` 的 `costType`；怎么解析成图标由页面交给 `common/RewardIcon.resolveRewardIconRef`。 */
     readonly costIconResId: number;
     /** `RmbSign3`（rmb 分支的 ￥）。 */
     readonly showRmbSign: boolean;

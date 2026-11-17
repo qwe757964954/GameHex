@@ -26,10 +26,10 @@ const { ccclass, property } = _decorator;
 @ccclass('HangRewardSlot')
 export class HangRewardSlot extends Component {
     @property({ type: Sprite, tooltip: '品质框（`image/frame/common_img_pzk_0N`）' })
-    frame: Sprite = null;
+    frame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: '道具图标（`item` / `roleProperty` 两支分流解析）' })
-    icon: Sprite = null;
+    icon: Sprite = null!;
 
     /**
      * 铺一格。
@@ -38,15 +38,11 @@ export class HangRewardSlot extends Component {
      * 绝不能「`null` 就保留上一趟的图」。
      */
     render(frame: SpriteFrame | null, iconFrame: SpriteFrame | null): void {
-        if (this.frame) {
-            this.frame.spriteFrame = frame;
-            this.frame.type = HJ_SPRITE_SIMPLE;
-        }
-        if (this.icon) {
-            this.icon.spriteFrame = iconFrame;
-            this.icon.type = HJ_SPRITE_SIMPLE;
-            this.icon.node.active = !!iconFrame;
-        }
+        this.frame.spriteFrame = frame;
+        this.frame.type = HJ_SPRITE_SIMPLE;
+        this.icon.spriteFrame = iconFrame;
+        this.icon.type = HJ_SPRITE_SIMPLE;
+        this.icon.node.active = !!iconFrame;
         this.node.active = true;
     }
 

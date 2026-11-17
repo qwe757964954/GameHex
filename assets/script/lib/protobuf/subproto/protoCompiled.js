@@ -104154,6 +104154,145 @@ $root.com = (function() {
                     return CmdItemComposRspMsg;
                 })();
 
+                cmd.CmdItemRewardBroMsg = (function() {
+
+                    /**
+                     * Properties of a CmdItemRewardBroMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdItemRewardBroMsg
+                     * @property {number} resType CmdItemRewardBroMsg resType
+                     * @property {Array.<com.xkhy.tafang.cmd.CmdGoods>|null} [tlCmdGoods] CmdItemRewardBroMsg tlCmdGoods
+                     */
+
+                    /**
+                     * Constructs a new CmdItemRewardBroMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdItemRewardBroMsg.
+                     * @implements ICmdItemRewardBroMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdItemRewardBroMsg=} [properties] Properties to set
+                     */
+                    function CmdItemRewardBroMsg(properties) {
+                        this.tlCmdGoods = [];
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdItemRewardBroMsg resType.
+                     * @member {number} resType
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @instance
+                     */
+                    CmdItemRewardBroMsg.prototype.resType = 0;
+
+                    /**
+                     * CmdItemRewardBroMsg tlCmdGoods.
+                     * @member {Array.<com.xkhy.tafang.cmd.CmdGoods>} tlCmdGoods
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @instance
+                     */
+                    CmdItemRewardBroMsg.prototype.tlCmdGoods = $util.emptyArray;
+
+                    /**
+                     * Creates a new CmdItemRewardBroMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdItemRewardBroMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdItemRewardBroMsg} CmdItemRewardBroMsg instance
+                     */
+                    CmdItemRewardBroMsg.create = function create(properties) {
+                        return new CmdItemRewardBroMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdItemRewardBroMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdItemRewardBroMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdItemRewardBroMsg} message CmdItemRewardBroMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdItemRewardBroMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.resType);
+                        if (message.tlCmdGoods != null && message.tlCmdGoods.length)
+                            for (var i = 0; i < message.tlCmdGoods.length; ++i)
+                                $root.com.xkhy.tafang.cmd.CmdGoods.encode(message.tlCmdGoods[i], writer.uint32(/* id 2, wireType 2 =*/18).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdItemRewardBroMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdItemRewardBroMsg} CmdItemRewardBroMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdItemRewardBroMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdItemRewardBroMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.resType = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    if (!(message.tlCmdGoods && message.tlCmdGoods.length))
+                                        message.tlCmdGoods = [];
+                                    message.tlCmdGoods.push($root.com.xkhy.tafang.cmd.CmdGoods.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("resType"))
+                            throw $util.ProtocolError("missing required 'resType'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdItemRewardBroMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdItemRewardBroMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdItemRewardBroMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdItemRewardBroMsg";
+                    };
+
+                    return CmdItemRewardBroMsg;
+                })();
+
                 cmd.CmdFormationInfo = (function() {
 
                     /**
@@ -120532,6 +120671,7 @@ $root.com = (function() {
                  * @property {number} CmdFriendAgreeOneKeyBroMsg=831238063 CmdFriendAgreeOneKeyBroMsg value
                  * @property {number} CmdFriendRefuseOneKeyBroMsg=1287890183 CmdFriendRefuseOneKeyBroMsg value
                  * @property {number} CmdGranaryUpdateBroMsg=789546177 CmdGranaryUpdateBroMsg value
+                 * @property {number} CmdItemRewardBroMsg=283150558 CmdItemRewardBroMsg value
                  * @property {number} CmdRefreshLimitedTimeBundleBroMsg=1678727286 CmdRefreshLimitedTimeBundleBroMsg value
                  * @property {number} CmdBuyLimitedTimeBundleBroMsg=937248641 CmdBuyLimitedTimeBundleBroMsg value
                  * @property {number} CmdRollBroMsg=11546745 CmdRollBroMsg value
@@ -120866,6 +121006,7 @@ $root.com = (function() {
                     values[valuesById[831238063] = "CmdFriendAgreeOneKeyBroMsg"] = 831238063;
                     values[valuesById[1287890183] = "CmdFriendRefuseOneKeyBroMsg"] = 1287890183;
                     values[valuesById[789546177] = "CmdGranaryUpdateBroMsg"] = 789546177;
+                    values[valuesById[283150558] = "CmdItemRewardBroMsg"] = 283150558;
                     values[valuesById[1678727286] = "CmdRefreshLimitedTimeBundleBroMsg"] = 1678727286;
                     values[valuesById[937248641] = "CmdBuyLimitedTimeBundleBroMsg"] = 937248641;
                     values[valuesById[11546745] = "CmdRollBroMsg"] = 11546745;

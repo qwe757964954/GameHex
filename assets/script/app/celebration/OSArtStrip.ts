@@ -71,12 +71,6 @@ export class OSArtStrip extends Component {
             node.setScale(scale, scale, 1);
             node.setPosition(i * (this.itemWidth + this.gap) + this.itemWidth / 2, centerY, 0);
             const slot = node.getComponent(OSRewardSlot);
-            if (!slot) {
-                // 与「节点上没挂 cc.Button」同一个处置：说一声，不静默。
-                console.error('[Celebration] 奖励条条目上没有 OSRewardSlot，这一格不会显示');
-                node.active = false;
-                continue;
-            }
             slot.render(
                 frames.iconOf(snapshot, reward.resId),
                 frames.qualityOf(snapshot, reward.resId),
@@ -93,10 +87,6 @@ export class OSArtStrip extends Component {
 
     /** 池子扩到至少 `count` 个；只增不减。 */
     private _ensurePool(count: number): void {
-        if (!this.itemPrefab) {
-            console.error(`[Celebration] ${this.node.name} 的 itemPrefab 没绑，奖励条永远是空的`);
-            return;
-        }
         while (this._pool.length < count) {
             const node = instantiate(this.itemPrefab);
             node.name = `Reward${this._pool.length}`;

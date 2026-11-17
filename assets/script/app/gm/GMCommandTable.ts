@@ -4,6 +4,7 @@ import { Log } from '../../framework/log/Log';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
 import { RequestGmList, RequestSystemGm } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
+import { sendGameRequest } from '../net/RequestGuard';
 import { GMUtils } from './GMUtils';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { ZCGameUiEvent, type IZCDebugDrawCardResult } from '../zcds/view/ZCGameHudEvents';
@@ -227,39 +228,26 @@ export class GMCommandTable {
         }
 
         // 服务器指令：保留 addItem 等客户端无法本地执行的能力
-        const net = GameNet.instance;
-        if (!net.isConnected) {
+        const status = await sendGameRequest(GameNet.instance, () => new RequestSystemGm(
+            { cmd: trimmed },
+            GMCommandTable,
+            () => GMCommandTable.tip('GM指令发送成功'),
+            () => GMCommandTable.tip('GM指令发送失败'),
+        ), { tag: 'GM' });
+        if (status === 'offline') {
             GMCommandTable.tip('未连接游戏服，服务器指令无法发送');
             return false;
         }
-        const ok = await net.send(
-            new RequestSystemGm(
-                { cmd: trimmed },
-                GMCommandTable,
-                () => GMCommandTable.tip('GM指令发送成功'),
-                () => GMCommandTable.tip('GM指令发送失败'),
-            ),
-            false,
-        );
-        if (!ok) GMCommandTable.tip('GM指令未发出（网络忙/未就绪）');
+        if (status !== 'ok') GMCommandTable.tip('GM指令未发出（网络忙/未就绪）');
         return true;
     }
 
     /** 请求服务器 GM 指令列表（对齐 client 的 RequestGmList），完成后回调合并后的列表。 */
     static requestServerList(onDone: (list: GMCommandDef[]) => void): void {
-        const net = GameNet.instance;
-        if (!net.isConnected) {
-            onDone(GMCommandTable.getCommandList());
-            return;
-        }
-        void net.send(
-            new RequestGmList({}, GMCommandTable, (rsp: CmdGmListRspMsg) => {
-                if (rsp && Array.isArray(rsp.cmd)) {
-                    GMCommandTable._serverList = rsp.cmd.map((item) => ({ gm: item.cmd, desc: item.desc ?? '' }));
-                }
-                onDone(GMCommandTable.getCommandList());
-            }),
-            false,
-        );
+        void sendGameRequest(GameNet.instance, () => new RequestGmList({}, GMCommandTable, (rsp: CmdGmListRspMsg) => {
+            if (rsp && Array.isArray(rsp.cmd)) {
+                GMCommandTable._serverList = rsp.cmd.map((item) => ({ gm: item.cmd, desc: item.desc ?? '' }));
+            }
+        }), { tag: 'GM' }).then(() => onDone(GMCommandTable.getCommandList()));
     }
 }

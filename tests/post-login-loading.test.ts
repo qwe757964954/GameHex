@@ -18,6 +18,7 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
     const ratios: number[] = [], statuses: string[] = [];
     const navigations: Array<{ route: string; params: unknown }> = [];
     const owners: string[][] = [];
+    const heroSessions: object[] = [];
     let releases = 0, oldReleases = 0, audio = 0, reads = 0;
     const ui = {
         show() {}, release() { releases++; },
@@ -35,6 +36,9 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
             if (name.endsWith('/ControllerBase')) return { ControllerBase };
             if (name.endsWith('/PostLoginController')) return options.controllerError
                 ? { PostLoginController: class { constructor() { throw options.controllerError; } } } : { PostLoginController };
+            if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: session => heroSessions.push(session) } };
+            if (name.endsWith('/PvpHeroService')) return { PvpHeroService: class {} };
+            if (name.endsWith('/GameNet')) return { GameNet: { instance: {} } };
             if (name.endsWith('/PostLoginContract')) return { resolvePostLoginIdentity };
             if (name.endsWith('/PostLoginComposition')) return modules.composition;
             if (name.endsWith('/ProcedureManager')) return { ProcedureManager: { navigate: (route: string, params?: unknown) => navigations.push({ route, params }) } };
@@ -70,6 +74,7 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
     const procedure = new module.ProcedurePostLogin();
     const preload = new ResourceScope('post-login-test');
     return { procedure, bus, ratios, statuses, navigations, owners,
+        heroSessions,
         preload: (context = { resources: preload, cancelled: false }) => procedure.onPreload(undefined, context),
         get releases() { return releases; }, get oldReleases() { return oldReleases; }, get audio() { return audio; }, get reads() { return reads; } };
 }
@@ -80,6 +85,7 @@ test('PostLogin 导航 Main 只传入口数据，加载事件继续推进同一�
     h.procedure.onEnter();
     await new Promise<void>((resolve) => setImmediate(resolve));
     assert.deepEqual(h.navigations, [{ route: 'main', params: undefined }]);
+    assert.equal(h.heroSessions.length, 1, '登录后创建独立英雄会话');
     for (const ratio of [0, 0.3, 1]) h.bus.emit('main-loading:progress', { ratio, message: 'loading' });
     const expected = [0.6, 0.88, 0.88, 0.916, 1];
     assert.equal(h.ratios.length, expected.length);
@@ -258,6 +264,8 @@ test('PostLogin 复用热更实际进度、入口身份优先；失败退出释�
     h.procedure.onLeave(); assert.equal(h.releases, 1);
     await h.preload(); h.procedure.onEnter(); await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(h.owners, [['1', '2'], ['8', '9']]); assert.equal(h.audio, 2);
+    assert.equal(h.heroSessions.length, 2);
+    assert.notEqual(h.heroSessions[0], h.heroSessions[1], '再次登录创建新英雄会话');
     h.procedure.onDestroy(); assert.equal(h.releases, 2);
 });
 

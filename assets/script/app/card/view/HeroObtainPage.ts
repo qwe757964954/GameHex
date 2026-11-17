@@ -292,7 +292,8 @@ export class HeroObtainPage extends PopupBase {
 
     /** 进度条底不是脚本引用（只在 renderStatic 里写一次，这里按名字取）。 */
     private spriteOf(node: Node): Sprite {
-        return node.getComponent(Sprite) ?? null!;
+        // 目标节点（Rays/Title/Plate/Shadow/BarFill）均已核实带 Sprite；没有可回退的第二来源。
+        return node.getComponent(Sprite);
     }
 
     private bindHero(prefab: Prefab | null, headFrame: SpriteFrame | null): void {

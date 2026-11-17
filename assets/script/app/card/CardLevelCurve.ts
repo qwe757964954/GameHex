@@ -50,10 +50,3 @@ export function levelRateOf(rates: ReadonlyMap<number, number>, level: number): 
 }
 
 /** 曲线上的最大等级（= 表里配到的最高级）。 */
-export function curveMaxLevel(rates: ReadonlyMap<number, number>): number {
-    let max = 0;
-    for (const level of rates.keys()) {
-        if (level > max) max = level;
-    }
-    return max;
-}

@@ -6,8 +6,8 @@ import { SpriteFrame } from 'cc';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
-import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from './ShowRewardTable';
-import type { IRewardEntry } from './ShowRewardTable';
+import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../common/RewardEntries';
+import type { IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
 
 import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /**

@@ -1,6 +1,6 @@
 import { sys } from 'cc';
 import { GameNet } from '../../net/GameNet';
-import { withTimeout, toCount } from '../../net/RequestGuard';
+import { sendGameRequest, toCount } from '../../net/RequestGuard';
 import { RequestCityChapterInfo } from './RequestTerritoryChapterInfoMsg';
 
 import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
@@ -116,25 +116,19 @@ export class TerritoryChapterInfoRepository {
     // ============================================================
 
     private async doRefresh(): Promise<void> {
-        const net = GameNet.instance;
-        if (!net?.isConnected) return;
         let resolved: ITerritoryChapterInfo | null = null;
-        const sent = await withTimeout(
-            net.send(
+        const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestCityChapterInfo({}, undefined, (rsp) => {
                     // Rsp 外层是 `{ info: ChapterInfo }`，必须先剥壳，否则读到的永远是外层
                     // （外层没有 idleTime/chapters ⇒ 归一化成 idleTime=0, chapters=[] 的假空快照）。
                     const info = readInfoField(rsp);
                     console.info('[TerritoryChapterInfo] Rsp 原始 info =', JSON.stringify(info));
                     resolved = normalizeChapterInfo(info);
-                }) as never,
-                false,
-            ),
-            READ_TIMEOUT_MS,
-            () => false,
+                }),
+            { timeoutMs: READ_TIMEOUT_MS, tag: 'TerritoryChapterInfo' },
         );
-        console.info('[TerritoryChapterInfo] send 结果 =', sent, ' resolved =', JSON.stringify(resolved));
-        if (sent !== true || !resolved) return;
+        console.info('[TerritoryChapterInfo] send 结果 =', status, ' resolved =', JSON.stringify(resolved));
+        if (status !== 'ok' || !resolved) return;
         this.applySnapshot(resolved, /*persist*/ true);
     }
 

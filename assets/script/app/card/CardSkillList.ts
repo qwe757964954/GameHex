@@ -142,10 +142,9 @@ export function resolveCardSkills(
 export function resolveSkillLevel(skill: ZCArmySkill, levels: readonly PvpHeroSkillLevel[]): number {
     const entry = levels.find((item) => item.skillId === skill.skillId);
     const current = Math.floor(Number(entry?.level) || 0);
-    if (current <= 0) return skill.levels.length > 0 ? skill.levels[0].level : 0;
+    if (current <= 0) return skill.levels[0].level;
     // 服务端档位高于表里配的档（表还没跟上）时按表里的最大档显示，避免「已满级」判错。
-    const max = skillMaxLevel(skill);
-    return max > 0 ? Math.min(current, max) : current;
+    return Math.min(current, skillMaxLevel(skill));
 }
 
 /** 取某一档；没有则 undefined。 */
@@ -155,7 +154,7 @@ export function skillLevelRow(skill: ZCArmySkill, level: number): ZCArmySkillLev
 
 /** 该技能的最大档位（= 满级）。 */
 export function skillMaxLevel(skill: ZCArmySkill): number {
-    return skill.levels.length > 0 ? skill.levels[skill.levels.length - 1].level : 0;
+    return skill.levels[skill.levels.length - 1].level;
 }
 
 /**
@@ -168,7 +167,6 @@ export function skillMaxLevel(skill: ZCArmySkill): number {
  * 那样 `level = 2` 时按最大档判不算满级，可「+1 = 3」又不存在 —— 按钮可点却必然无声失败。
  */
 export function isSkillMaxed(skill: ZCArmySkill, level: number): boolean {
-    if (skill.levels.length === 0) return true;
     return !skill.levels.some((row) => row.level === level + 1);
 }
 

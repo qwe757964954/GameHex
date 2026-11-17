@@ -1,7 +1,7 @@
 /**
  * 新手引导控制器，串起步骤机、存档和业务完成事件。
- * 只订阅完成事件、推进步骤、发奖、落盘并输出 IGuideViewState；不碰节点，也不直连业务模块。
- * completeCond 严格相等匹配；发奖抛错只上报，不回滚进度。
+ * 只订阅完成事件、推进步骤、上报进度、落盘并输出 IGuideViewState；奖励由服务端发放和推送。
+ * completeCond 严格相等匹配；不碰节点，也不直连业务模块。
  */
 
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
@@ -16,7 +16,6 @@ import type { GuideSyncOutbox } from '../model/GuideSyncOutbox';
 import type {
     GuideMaskType,
     GuideRequireAction,
-    GuideReward,
     GuideStep,
 } from '../model/GuideStepConfig';
 
@@ -55,8 +54,6 @@ export interface IGuideControllerOptions {
         readonly owner: object;
         readonly render: (state: IGuideViewState) => void;
     };
-    /** 发奖出口。省略时只打日志。 */
-    readonly grant?: (rewards: readonly GuideReward[], stepId: string) => void;
     readonly failed?: (error: unknown) => void;
     /** 时间源，默认 `Date.now`（单测注入固定值）。 */
     readonly now?: () => number;
@@ -108,7 +105,7 @@ export class GuideController extends ControllerBase {
                     .catch(error => this.report(error))
                     .then(() => this.flushOutbox());
             }
-            console.log(`[Guide] 启动 · step=${progress.current?.stepId ?? '(结束)'} · firstRun=${this.firstRun} · completed=${progress.completedSteps.length} · granted=${progress.grantedSteps.length}`);
+            console.log(`[Guide] 启动 · step=${progress.current?.stepId ?? '(结束)'} · firstRun=${this.firstRun} · completed=${progress.completedSteps.length}`);
             this.publish();
             return true;
         } catch (error) {
@@ -132,8 +129,7 @@ export class GuideController extends ControllerBase {
         const result = progress.complete(step.stepId);
         if (!result) return false;
 
-        console.log(`[Guide] 完成 ${step.stepId}(${step.flowName}) → ${result.next?.stepId ?? '(结束)'} · 奖励 ${result.rewards.length} 项`);
-        this.grantRewards(result.rewards, step.stepId);
+        console.log(`[Guide] 完成 ${step.stepId}(${step.flowName}) → ${result.next?.stepId ?? '(结束)'}`);
         this.persist();
         this.syncProgress(step.stepId);
         this.publish();
@@ -141,15 +137,14 @@ export class GuideController extends ControllerBase {
     }
 
     /**
-     * 强制跳过整条引导，忽略 skipAble，奖励照常补发并落盘。
+     * 强制跳过整条引导，忽略 skipAble，上报进度并落盘。
      */
     skipAll(): boolean {
         const progress = this.progress;
         if (!progress || progress.isFinished) return false;
         try {
-            const rewards = progress.skip(true);
-            console.log(`[Guide] 强制跳过整条引导 · 补发 ${rewards.length} 项奖励`);
-            this.grantRewards(rewards, 'force-skip');
+            progress.skip(true);
+            console.log('[Guide] 强制跳过整条引导');
             this.persist();
             this.syncProgress(this.options.steps[this.options.steps.length - 1].stepId);
             this.publish();
@@ -165,9 +160,8 @@ export class GuideController extends ControllerBase {
         const progress = this.progress;
         if (!progress || !progress.canSkip) return false;
         try {
-            const rewards = progress.skip();
-            console.log(`[Guide] 跳过剩余步骤 · 补发 ${rewards.length} 项奖励`);
-            this.grantRewards(rewards, 'skip');
+            progress.skip();
+            console.log('[Guide] 跳过剩余步骤');
             this.persist();
             this.syncProgress(this.options.steps[this.options.steps.length - 1].stepId);
             this.publish();
@@ -185,17 +179,6 @@ export class GuideController extends ControllerBase {
             this.options.store.save(this.progress.toSave(), this.now());
         } catch (error) {
             console.error(`[Guide] 存档写入失败 · step=${this.progress.current?.stepId ?? '(结束)'}`, error);
-            this.report(error);
-        }
-    }
-
-    private grantRewards(rewards: readonly GuideReward[], stepId: string): void {
-        if (rewards.length === 0) return;
-        try {
-            if (this.options.grant) this.options.grant(rewards, stepId);
-            else console.log(`[GuideController] 步骤 ${stepId} 应发奖励`, rewards);
-        } catch (error) {
-            // 记账已在前一步完成；发奖失败不回流进度，靠服务端按 stepId 幂等补发。
             this.report(error);
         }
     }

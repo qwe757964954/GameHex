@@ -1,7 +1,6 @@
-import { FW } from '../../framework/FW';
 import { RequestMsg } from '../../framework/net/RequestMsg';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { sendGameRequest, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest } from '../net/RequestGuard';
 import { GameNet } from '../net/GameNet';
 import {
     CHEST_DETAIL_REWARD_SLOTS,
@@ -67,6 +66,8 @@ interface IBoxProRow {
 
 /** 新宝箱服务端状态和旧版 ChestBar 之间的适配层。 */
 export class NewTreasureRepository {
+    constructor(private readonly presentRewards: (goods: readonly unknown[]) => void) {}
+
     private readonly infos = new Map<number, TreasureInfo>();
     private readonly configs = new Map<number, IBoxConfig>();
     private readonly names = new Map<number, string>();
@@ -209,21 +210,17 @@ export class NewTreasureRepository {
             GameNet.instance.addEvent(TREASURE_BROADCAST, this.eventCaller, this.onBroadcast);
             this.isListening = true;
         }
-        if (!GameNet.instance.isConnected) return 'offline';
         if (this.isLoading) return 'ok';
         this.isLoading = true;
         try {
             await this.loadConfig();
             const received: { value: boolean } = { value: false };
-            const sent = await withTimeout(
-                GameNet.instance.send(new RequestNewTreasureInfoList({}, caller, (rsp) => {
+            const status = await sendGameRequest(GameNet.instance, () => new RequestNewTreasureInfoList({}, caller, (rsp) => {
                     this.replaceInfos(rsp?.infos ?? []);
                     received.value = true;
-                }), false),
-                READ_TIMEOUT_MS,
-                () => false,
-            );
-            return sent && received.value ? 'ok' : 'failed';
+                }), { timeoutMs: READ_TIMEOUT_MS, tag: 'NewTreasure' });
+            if (status !== 'ok') return status;
+            return received.value ? 'ok' : 'failed';
         } catch (error) {
             console.warn('[NewTreasure] 加载宝箱队列失败', error);
             return 'failed';
@@ -234,7 +231,6 @@ export class NewTreasureRepository {
 
     async activate(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        if (!GameNet.instance.isConnected) return 'offline';
         return this.withPendingAction(index, 'activate', async () => {
             let updated = false;
             const result = await this.send(
@@ -252,7 +248,6 @@ export class NewTreasureRepository {
 
     async fastOpen(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        if (!GameNet.instance.isConnected) return 'offline';
         return this.withPendingAction(index, 'fastOpen', async () => {
             let succeeded = false;
             const result = await this.send(
@@ -260,7 +255,7 @@ export class NewTreasureRepository {
                     if (rsp?.succ !== 1) return;
                     this.removeInfo(rsp.index);
                     succeeded = true;
-                    if (rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
+                    if (rsp.tlCmdGoods?.length) this.presentRewards(rsp.tlCmdGoods);
                 }),
                 WRITE_TIMEOUT_MS,
             );
@@ -270,22 +265,20 @@ export class NewTreasureRepository {
 
     async open(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        if (!GameNet.instance.isConnected) return 'offline';
-        const protoMgr = GameNet.instance.protoMgr;
-        // 请求号由响应枚举建立映射；未提供开箱响应号时不发送无法匹配的请求。
-        if (protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') == null) return 'protocol-missing';
         return this.withPendingAction(index, 'open', async () => {
             let succeeded = false;
-            const result = await this.send(
-                new RequestNewTreasureOpen({ index }, undefined, (rsp) => {
+            let hasProtocol = true;
+            const result = await sendGameRequest(GameNet.instance, () => {
+                hasProtocol = GameNet.instance.protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') != null;
+                if (!hasProtocol) throw new Error('未提供开箱响应消息号');
+                return new RequestNewTreasureOpen({ index }, undefined, (rsp) => {
                     if (rsp?.succ !== 1) return;
                     this.removeInfo(rsp.index);
                     succeeded = true;
-                    if (rsp.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
-                }),
-                WRITE_TIMEOUT_MS,
-            );
-            return this.settledResult(result, succeeded);
+                    if (rsp.tlCmdGoods?.length) this.presentRewards(rsp.tlCmdGoods);
+                });
+            }, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'NewTreasure' });
+            return hasProtocol ? this.settledResult(result, succeeded) : 'protocol-missing';
         });
     }
 

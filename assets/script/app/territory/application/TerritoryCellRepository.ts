@@ -1,5 +1,5 @@
 import { GameNet } from '../../net/GameNet';
-import { withTimeout } from '../../net/RequestGuard';
+import { sendGameRequest } from '../../net/RequestGuard';
 import { startBattle as requestStartBattle } from '../../battle/BattleStartService';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import {
@@ -17,6 +17,7 @@ import {
 import { readTerritoryGrantedRewards } from '../model/TerritoryGrantedReward';
 import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
 import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
+import { normalizeTerritoryChapter } from '../model/TerritoryProgress';
 
 import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
 /**
@@ -125,7 +126,7 @@ export class TerritoryCellRepository {
             return null;
         }
         const record = msg as { levelChapter?: unknown } | null;
-        const chapter = this.normalizeChapter(Number(record?.levelChapter));
+        const chapter = normalizeTerritoryChapter(Number(record?.levelChapter));
         const state = this.readState(msg, chapter, maxCell, true);
         if (state) this.state = state;
         return state;
@@ -140,7 +141,7 @@ export class TerritoryCellRepository {
             .map(Number)
             .filter((cell) => Number.isInteger(cell) && cell >= 0);
         if (cellIds.length === 0) return null;
-        return { levelChapter: this.normalizeChapter(Number(record.levelChapter)), cellIds };
+        return { levelChapter: normalizeTerritoryChapter(Number(record.levelChapter)), cellIds };
     }
 
     /**
@@ -156,7 +157,7 @@ export class TerritoryCellRepository {
         maxCell: number,
         caller?: object,
     ): Promise<TerritoryCellFetchResult> {
-        const chapter = this.normalizeChapter(levelChapter);
+        const chapter = normalizeTerritoryChapter(levelChapter);
         let resolved: ITerritoryCellState | null = null;
         const sent = await this.send(
             () => new RequestTerritoryCellInfo({ levelChapter: chapter }, caller, (rsp) => {
@@ -192,7 +193,7 @@ export class TerritoryCellRepository {
         let rewards: ITerritoryGrantedReward[] = [];
         const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritoryUnlockCell(
-                { levelChapter: this.normalizeChapter(levelChapter), cellId },
+                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId },
                 caller,
                 (rsp) => {
                     unlocked = readCellIdArray(rsp);
@@ -212,7 +213,7 @@ export class TerritoryCellRepository {
         let rewards: ITerritoryGrantedReward[] = [];
         const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritoryPassCell(
-                { levelChapter: this.normalizeChapter(levelChapter), cellId },
+                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId },
                 caller,
             (rsp) => {
                 const success = Number((rsp as { succ?: unknown })?.succ) === 1;
@@ -257,7 +258,7 @@ export class TerritoryCellRepository {
         let rewards: ITerritoryGrantedReward[] = [];
         const result = await this.writeWithSucc(
             (recordSuccess) => new RequestTerritorySweep(
-                { levelChapter: this.normalizeChapter(levelChapter), cellId, times: sweepTimes },
+                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId, times: sweepTimes },
                 caller,
                 (rsp) => {
                     const success = Number((rsp as { succ?: unknown })?.succ) === 1;
@@ -315,29 +316,13 @@ export class TerritoryCellRepository {
     // 内部
     // ============================================================
 
-    /** 章节号归一：0 /负数 / NaN 一律当第 1 章，避免服务端收到 `levelChapter=0`。 */
-    private normalizeChapter(levelChapter: number): number {
-        const parsed = Math.floor(Number(levelChapter));
-        return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
-    }
-
     /**
-     * 发包 + 收口。返回 `'ok'` 表示包已成功发出，**不保证回包已到**。
+     * 发包与传输结果收口；业务响应仍由请求回调处理。
      *
-     * `withTimeout` 必加：`GameNet.send` 没有按请求的超时，服务端不回就永悬
-     * ⇒ 界面卡在「加载中」再也不刷新（连线失败也一样）。
+
      */
     private async send(build: () => unknown, label: string): Promise<'ok' | TerritoryRequestTransportFailure> {
-        const net = GameNet.instance;
-        // 必须 early-return offline：连不上就发包会挂在 Promise 上，界面永远"加载中"。
-        if (!net?.isConnected) return TERRITORY_REQUEST_STATUS.offline;
-        try {
-            const sent = await withTimeout(net.send(build() as never, false), READ_TIMEOUT_MS, () => false);
-            return sent === true ? TERRITORY_REQUEST_STATUS.ok : TERRITORY_REQUEST_STATUS.failed;
-        } catch (error) {
-            console.warn(label, error);
-            return TERRITORY_REQUEST_STATUS.failed;
-        }
+        return sendGameRequest(GameNet.instance, build, { timeoutMs: READ_TIMEOUT_MS, tag: label });
     }
 
     /** 写请求公共壳：离线早退 + 超时兜底 + `succ` 判定。 */

@@ -677,7 +677,8 @@ test('结构目标作废（墙拆平 / 建筑爆了）⇒ 不再是冲刺对象'
     assert.equal(building.attacks.length, 0);
 });
 
-test('冷却没好 / 老上下文没有 dash 能力 ⇒ 一律不起冲', async () => {    const system = await import('../assets/script/app/zcds/model/systems/ZCUnitSystem');
+test('冷却没好 / 老上下文没有 dash 能力 ⇒ 一律不起冲', async () => {
+    const system = await import('../assets/script/app/zcds/model/systems/ZCUnitSystem');
 
     // ① 冷却没好：老老实实按原速走。
     const cooling = makeBattle({ gap: 60, nextAttackAt: 5 });

@@ -2,6 +2,10 @@
  * 新首充自动弹出判定 —— 纯函数，可单测。
  * 一律走 PVE 关卡进度，不用 PVP 战绩。
  */
+import { startOfDayMs } from '../../core/time/TimeMs';
+
+/** 保留旧导出路径；实现真源在 `core/time/TimeMs`。 */
+export { startOfDayMs };
 
 /** 关卡进度阈值：至少通关 3 关。 */
 export const FIRST_RECHARGE_CHALLENGE_LEVEL_THRESHOLD = 3;
@@ -91,11 +95,4 @@ export function deriveMaxChallengeLevel(
 export function isNewDay(savedDayStartMs: number, nowMs: number): boolean {
     const today = startOfDayMs(nowMs);
     return today !== savedDayStartMs;
-}
-
-/** 本地时区当天 0 点（毫秒）。 */
-export function startOfDayMs(timeMs: number): number {
-    const date = new Date(timeMs);
-    date.setHours(0, 0, 0, 0);
-    return date.getTime();
 }

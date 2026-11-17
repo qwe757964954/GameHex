@@ -35,13 +35,15 @@ import {
     SR_STAR_COUNT,
     SR_STAR_TRACKS,
     framesToSeconds,
+    staggerSecondsOf,
+} from '../assets/script/app/showReward/ShowRewardTable';
+import {
     parseCmdGoodsList,
     rewardEntryOf,
     rewardIconPathOf,
     sortRewardEntries,
-    staggerSecondsOf,
     toCmdGoods,
-} from '../assets/script/app/showReward/ShowRewardTable';
+} from '../assets/script/app/common/RewardEntries';
 import {
     SR_COLUMNS,
     SR_COL_GAP,
@@ -60,8 +62,8 @@ import {
     slotLocalCenterOf,
     windowSlotOf,
 } from './fixtures/showreward-grid-layout';
-import type { IRewardEntry } from '../assets/script/app/showReward/ShowRewardTable';
-import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/activity/LayerActivityTable';
+import type { IShowRewardEntry } from '../assets/script/app/common/RewardEntries';
+import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/common/ResTypes';
 import { assetPath } from './helpers/asset-paths';
 
 // ============================================================
@@ -250,7 +252,7 @@ test('A5｜数量归一化：uint64 是 Long，`toCount` 必须吃 number / stri
 });
 
 test('A6｜奖励排序：品质降序，品质相同时按 resId 升序（不是数量）', () => {
-    const of = (resId: number, quality: number, number = 1): IRewardEntry =>
+    const of = (resId: number, quality: number, number = 1): IShowRewardEntry =>
         ({ resId, quality, number, iconPath: '' });
     const sorted = sortRewardEntries([of(7, 1), of(9, 5), of(3, 5), of(4, 2), of(1, 5, 999)]);
     assert.deepEqual(sorted.map((e) => [e.resId, e.quality]), [[1, 5], [3, 5], [9, 5], [4, 2], [7, 1]]);
@@ -781,7 +783,15 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
         '../itemdetail/ItemDetailTable': { itemNumberTextOf: String },
         '../../vscrollview/VScrollView': {}, './ShowRewardItem': {},
         './ShowRewardTexts': {}, './RewardFrames': {},
+        '../common/RewardEntries': {
+            parseCmdGoodsList: () => [], rewardEntryOf: () => null, sortRewardEntries: (x: unknown[]) => x,
+        },
         './ShowRewardTable': { staggerSecondsOf },
+        '../common/RewardEntries': {
+            parseCmdGoodsList: (raw: unknown) => raw,
+            rewardEntryOf: (entry: unknown) => entry,
+            sortRewardEntries: (entries: unknown) => entries,
+        },
     };
     const source = ts.transpileModule(PAGE_SRC, {
         compilerOptions: {
@@ -828,7 +838,7 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
 
 test('虚拟槽位回收后，延迟动画不能改变列表管理的 active', () => {
     const exports = {} as typeof import('../assets/script/app/showReward/ShowRewardItem');
-    const chain = { to() { return this; }, start() { return this; } };
+    const chain = { delay() { return this; }, to() { return this; }, start() { return this; } };
     class Component {}
     class UIOpacity {}
     const cc = {
@@ -837,6 +847,7 @@ test('虚拟槽位回收后，延迟动画不能改变列表管理的 active', (
             property: () => () => {},
         },
         Component, UIOpacity,
+        Color: class { constructor(public color?: unknown) {} },
         Tween: { stopAllByTarget() {} },
         tween: () => chain,
         Vec3: class { constructor(public x: number, public y: number, public z: number) {} },
@@ -853,7 +864,7 @@ test('虚拟槽位回收后，延迟动画不能改变列表管理的 active', (
     } });
     const item = new exports.ShowRewardItem();
     const node = { active: true, setScale() {} };
-    Object.assign(item, { node, opacity: { opacity: 255 } });
+    Object.assign(item, { node, opacity: { opacity: 255 }, glow: { node: { active: false }, color: {} } });
     item.prepareAppear();
     assert.equal(item.opacity.opacity, 0);
     assert.equal(node.active, true, '等待动画时仍由列表控制激活状态');
@@ -918,7 +929,7 @@ test('D9｜错峰等待期先隐藏，虚拟列表持有槽位显隐', () => {
 
     // ⑤ 关窗取消排队回调并清空槽位（缓存复用不留隐藏态 / 半截动画）
     assert.ok(/this\.unscheduleAllCallbacks\(\)/.test(PAGE_CODE), '关窗要取消错峰回调');
-    assert.ok(/this\.grid\?\.refreshList\(0\)/.test(PAGE_CODE), '关窗要清空槽位');
+    assert.ok(/this\.grid\.refreshList\(0\)/.test(PAGE_CODE), '关窗要清空槽位');
 });
 
 // ============================================================

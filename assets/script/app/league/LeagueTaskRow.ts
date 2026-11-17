@@ -25,7 +25,7 @@ export const LEAGUE_TASK_ROW_PROGRESS_FULL_WIDTH = 156;
 @ccclass('LeagueTaskRow')
 export class LeagueTaskRow extends Component {
     @property({ type: Label, tooltip: 'title：任务名（24px 居中）' })
-    titleLabel: Label = null;
+    titleLabel: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励 1（缺位整格隐藏）' })
     rewardSlot: LeagueRewardSlot = null;
@@ -34,28 +34,28 @@ export class LeagueTaskRow extends Component {
     rewardSlot1: LeagueRewardSlot = null;
 
     @property({ type: Node, tooltip: 'comp_progress：整条进度（「已领取」页整块不显示）' })
-    progressNode: Node = null;
+    progressNode: Node = null!;
 
     @property({ type: Sprite, tooltip: 'comp_progress/bar：填充（按 value/max 改宽度）' })
-    progressFill: Sprite = null;
+    progressFill: Sprite = null!;
 
     @property({ type: Label, tooltip: 'comp_progress/lab_title：百分比文案（18/20px）' })
-    progressLabel: Label = null;
+    progressLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'btn_get：领取按钮（仅「可领取」页）' })
-    getButton: Node = null;
+    getButton: Node = null!;
 
     @property({ type: Node, tooltip: 'btn_get/组件_红点：可领取红点（与按钮可见性同源）' })
-    getRedDot: Node = null;
+    getRedDot: Node = null!;
 
     @property({ type: Node, tooltip: 'btn_go：前往按钮（仅「未完成」页）' })
-    goButton: Node = null;
+    goButton: Node = null!;
 
     @property({ type: Node, tooltip: 'btn_adv：看广告按钮（仅「未完成」+ 有广告次数 + 广告能力可用）' })
-    advButton: Node = null;
+    advButton: Node = null!;
 
     @property({ type: Node, tooltip: 'n35：整幅「已领取」标（仅「已领取」页）' })
-    doneTag: Node = null;
+    doneTag: Node = null!;
 
     /** 点「领取」（`view` 是**点击那一刻**这一槽位上的行数据）。 */
     onGet: ((view: ILeagueTaskRowView) => void) | null = null;
@@ -100,7 +100,7 @@ export class LeagueTaskRow extends Component {
             return;
         }
 
-        if (this.titleLabel) this.titleLabel.string = view.title;
+        this.titleLabel.string = view.title;
 
         const canReward = view.state === 'canReward';
         const undone = view.state === 'undone';
@@ -111,11 +111,11 @@ export class LeagueTaskRow extends Component {
 
         this.applyProgress(view.value, view.maxValue, view.percentText);
 
-        if (this.getButton) this.getButton.active = canReward;
-        if (this.goButton) this.goButton.active = undone;
-        if (this.advButton) this.advButton.active = undone && showAd && LEAGUE_AD_PLAYBACK_AVAILABLE;
-        if (this.doneTag) this.doneTag.active = rewarded;
-        if (this.progressNode) this.progressNode.active = !rewarded;
+        this.getButton.active = canReward;
+        this.goButton.active = undone;
+        this.advButton.active = undone && showAd && LEAGUE_AD_PLAYBACK_AVAILABLE;
+        this.doneTag.active = rewarded;
+        this.progressNode.active = !rewarded;
 
         // 红点走共用组件（`ui/common/RedDot.prefab`，普通红点 = spine「红点闪闪」）。
         // 必须 `setRedDot()` 而不是写 `node.active`：`RedDot.onLoad` 会把
@@ -123,7 +123,7 @@ export class LeagueTaskRow extends Component {
         // 绑的是实例**根节点**（跨嵌套 prefab 边界取不到内部组件，见 `getRedDot` 的声明口径）。
         const dot = this.getRedDot ? this.getRedDot.getComponent(RedDot) : null;
         if (dot) dot.setRedDot(canReward ? 1 : 0);
-        else if (this.getRedDot) this.getRedDot.active = canReward;
+        else this.getRedDot.active = canReward;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */
@@ -154,10 +154,8 @@ export class LeagueTaskRow extends Component {
      * 分母为 0 时老端不设 `pro_title`（整条留空）⇒ 这里是 `percentText === ''`。
      */
     private applyProgress(value: number, maxValue: number, percentText: string): void {
-        if (this.progressLabel) this.progressLabel.string = percentText;
-        if (!this.progressFill) return;
+        this.progressLabel.string = percentText;
         const uit = this.progressFill.node.getComponent(UITransform);
-        if (!uit) return;
         const ratio = maxValue > 0 ? Math.max(0, Math.min(1, value / maxValue)) : 0;
         // 最小 1px：`setContentSize(0)` 会让 Sprite 在九宫格下算出 NaN 顶点
         uit.setContentSize(Math.max(LEAGUE_TASK_ROW_PROGRESS_FULL_WIDTH * ratio, 1), uit.contentSize.height);

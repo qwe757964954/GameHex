@@ -5,7 +5,7 @@ import { LeagueDonateController } from '../assets/script/app/league/LeagueDonate
 import { LeagueDonateModel } from '../assets/script/app/league/LeagueDonateModel';
 import { LeagueDonateEvent, type ILeagueDonateIntent, type ILeagueDonateViewState } from '../assets/script/app/league/LeagueDonateEvents';
 import type { ILeagueDonateSnapshot, ILeagueRewardResult, LeagueRequestResult } from '../assets/script/app/league/LeagueRepository';
-import type { IActivityGoodsInfo } from '../assets/script/app/activity/LayerActivityTable';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../assets/script/app/common/ResTypes';
 import {
     fillLeagueText,
     LEAGUE_DONATE_CONFIRM,

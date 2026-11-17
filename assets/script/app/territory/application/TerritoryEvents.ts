@@ -11,6 +11,8 @@ export const TerritoryUiEvent = {
      * 功能看着还能用，实际是「两条无关的 undefined 撞在一起」，加任何第三个事件就崩。
      */
     ChapterSelect: 'territory:chapter-select',
+    /** 开箱揭晓完成；owner 为本次弹窗，entries 为已排序的奖励展示数据。 */
+    ChestRevealed: 'territory:chest-revealed',
 } as const;
 export const TerritoryViewEvent = { Render: 'territory:render', Command: 'territory:view-command' } as const;
 export type TerritoryIntent =

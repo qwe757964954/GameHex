@@ -1,3 +1,4 @@
+import { sendGameRequest } from '../net/RequestGuard';
 /**
  * 首充礼包（新首充）的数据端口 —— **表 + 服务器缓存 + 网络请求** 三合一的 Repository。
  *
@@ -14,6 +15,7 @@
  *  别去 `getCmdFirstRechargeNew({infos: ...})` 按字段查 —— 那条路按设计就取不到。
  */
 
+import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { GameNet } from '../net/GameNet';
@@ -57,10 +59,8 @@ export interface IFirstRechargeRepository {
     claim(id: number, day: number, caller?: object): Promise<FirstRechargeRequestResult>;
 }
 
-/** 读一张分表的全部行；表缺失时返回空数组（与 `CardLineupDecks.readRows` 同口径）。 */
-async function readRows(table: string): Promise<unknown[]> {
-    return (await RefUtil.instance.getRefAllAsync(table)) ?? [];
-}
+/** 读一张分表的全部行；表缺失时返回空数组（与既有读表壳同口径）。 */
+const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /** `item.json` 行 → 展示信息；字段不全的行跳过。 */
 function parseItemInfo(value: unknown): IFirstRechargeItemInfo | null {
@@ -114,31 +114,22 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
     }
 
     async refreshFromServer(caller?: object): Promise<boolean> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return false;
-        try {
-            // 打开界面时拉一次，服务端会把 CmdFirstRechargeNew 同步进缓存。
-            // 这里不看响应体（`CmdFirstRechargeOpenRspMsg` 是空的），后续统一从缓存读。
-            return await net.send(new RequestFirstRechargeOpen({}, caller), false);
-        } catch (error) {
-            console.warn('[FirstRecharge] 拉取首充状态失败', error);
-            return false;
-        }
+        // 空响应只触发公共缓存同步。
+        return await sendGameRequest(GameNet.instance,
+            () => new RequestFirstRechargeOpen({}, caller), { tag: 'FirstRecharge' }) === 'ok';
     }
 
     async buy(rmb: number, caller?: object): Promise<FirstRechargeRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
         // 老客户端在 `rsp.ret` 为真之后调 `SDKMgr.pay(ref.rmb, "common", 0)` 发起真实支付。
         // `rsp.ret` 只表示游戏服允许购买；不继续调用支付出口，中心服就收不到订单，
         // 也不会完成发货并把新的 CmdFirstRechargeNew 推进缓存。
         let ret = false;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestFirstRechargeBuy({ id: rmb }, caller, (rsp) => { ret = rsp?.ret === true; }),
-                false,
+                { tag: 'FirstRecharge' },
             );
-            if (!ok) return 'failed';
+            if (status !== 'ok') return status;
         } catch (error) {
             console.warn('[FirstRecharge] 购买请求失败', error);
             return 'failed';
@@ -149,11 +140,9 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
     }
 
     async claim(id: number, day: number, caller?: object): Promise<FirstRechargeRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
         let ret = false;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestFirstRechargeReward(
                     { id, day },
                     caller,
@@ -165,9 +154,9 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
                         if (ret && goods) FW.ShowReward(goods);
                     },
                 ),
-                false,
+                { tag: 'FirstRecharge' },
             );
-            if (!ok) return 'failed';
+            if (status !== 'ok') return status;
         } catch (error) {
             console.warn('[FirstRecharge] 领取请求失败', error);
             return 'failed';

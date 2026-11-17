@@ -4,7 +4,11 @@ import { toCount } from '../value/Coerce';
 import { asRow } from './RowParse';
 
 export interface IRewardAmountOptions {
-    /** 数量下限；默认 1（`number <= 0` 丢弃），传 0 时保留显式 0。 */
+    /**
+     * 数量下限；默认 1，表示 `number < 1` 的行丢弃（正小数如 0.5 也会丢）。
+     * 传 0 时允许数量为 0；该 0 可能来自显式 `0`，也可能来自缺失/非法值经
+     * `toCount` 归一化后的结果，不能视为“仅保留显式零”。
+     */
     readonly minNumber?: number;
 }
 

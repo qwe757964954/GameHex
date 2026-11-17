@@ -25,7 +25,7 @@ export class CardLineupSlot extends Component {
     disc: Sprite = null;
 
     @property({ type: Sprite, tooltip: 'Hero：四职业营地雕像' })
-    hero: Sprite = null;
+    hero: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'ClassBadge：职业角标' })
     classBadge: Sprite = null;
@@ -49,9 +49,6 @@ export class CardLineupSlot extends Component {
      */
     private previewSize = 1;
 
-    /** 落位淡入用的透明度组件（首次需要时补挂，Prefab 里不预置 —— 常态不需要它）。 */
-    private enterOpacity: UIOpacity | null = null;
-
     /** @param frames null 项清空旧图；level 不传用 fallbackLevel。 */
     render(card: ZCDeckCard, frames: ZCSlotFrames, level?: number, prefab?: Prefab | null): void {
         const retainedPrefab = this.previewUnitId === card.unitId && this.previewPath === card.unitPrefabPath
@@ -63,8 +60,8 @@ export class CardLineupSlot extends Component {
         this.classBadge.spriteFrame = frames.badge;
         // 等级/资源刷新沿用同兵种模型，省掉清除后分帧重新实例化。
         if (!this.applyPreview(prefab === undefined ? retainedPrefab : prefab)) this.hero.spriteFrame = frames.hero;
-        //  每次显式写 255：渲染幂等，不依赖上一次的透明度。
-        this.opacityOf().opacity = 255;
+        // 根节点在 LineupSlot.prefab 上预挂了 UIOpacity；每次显式写 255，渲染幂等，不依赖上一次的透明度。
+        this.node.getComponent(UIOpacity).opacity = 255;
         this.levelLabel.string = `${Math.max(1, Math.round(level ?? this.fallbackLevel))}${CARD_LINEUP_TEXTS.levelSuffix}`;
     }
 
@@ -95,10 +92,6 @@ export class CardLineupSlot extends Component {
         return false;
     }
 
-
-    private opacityOf(): UIOpacity {
-        return (this.enterOpacity ??= this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity));
-    }
 
     setEmpty(): void {
         this.applyPreview(null);

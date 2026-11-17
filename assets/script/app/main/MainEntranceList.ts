@@ -8,7 +8,7 @@ import { CacheMgr } from '../net/CacheMgr';
 import { toCount } from '../net/RequestGuard';
 import { PopupManager } from '../../framework/ui/PopupManager';
 import type { PopupBase } from '../../framework/ui/PopupBase';
-import { ItemCreationMode, VirtualScrollView } from '../../vscrollview/VScrollView';
+import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { FirstRechargePage } from '../firstRecharge/FirstRechargePage';
 import { FriendPage } from '../friend/FriendPage';
 import { GiftPage } from '../gift/GiftPage';
@@ -28,7 +28,6 @@ import { EntrancePopupKey, resolveEntranceRoute } from './MainEntranceRoute';
 import {
     collectEntranceItems,
     ENTRANCE_ITEM_SIZE,
-    ENTRANCE_ITEM_SPACING,
     ENTRANCE_SIDE_LAYOUT,
     MainEntranceItem,
     normalizeBelond,
@@ -108,17 +107,7 @@ export class MainEntranceList extends Component {
     private warnedMissingRedDot = false;
 
     onLoad(): void {
-        let list = this.node.getComponent(VirtualScrollView);
-        if (!list) {
-            console.error(
-                `[MainEntranceList] ${this.node.name} 缺 VirtualScrollView，已兜底补最小配置。`,
-            );
-            list = this.node.addComponent(VirtualScrollView);
-            list.content = this.node.getChildByName('Content');
-            list.itemCreationMode = ItemCreationMode.NODE;
-            list.spacing = ENTRANCE_ITEM_SPACING;
-            list.enableMouseWheel = true;
-        }
+        const list = this.node.getComponent(VirtualScrollView);
         this.list = list;
 
         list.renderItemFn = (node, index) => this.renderItem(node, index);

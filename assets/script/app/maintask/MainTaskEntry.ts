@@ -17,10 +17,10 @@ const { ccclass, property } = _decorator;
 @ccclass('MainTaskEntry')
 export class MainTaskEntry extends Component {
     @property({ type: Label, tooltip: 'Label: task entry title' })
-    label: Label = null;
+    label: Label = null!;
 
     @property({ type: Node, tooltip: 'RedDot：可领取红点（只有 `FINISH` 才亮）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 数据端口；测试 / 探针可替换。 */
     private repo: IMainTaskRepository = mainTaskRepository;
@@ -64,8 +64,8 @@ export class MainTaskEntry extends Component {
     applySnapshot(snapshot: IMainTaskSnapshot): void {
         this.node.active = snapshot.visible;
         // 入口固定显示短标题，任务名与进度由详情弹窗展示。
-        if (this.label) this.label.string = snapshot.configured ? MAIN_TASK_TEXTS.entryLabel : '';
-        if (this.redDot) this.redDot.active = snapshot.showRedDot;
+        this.label.string = snapshot.configured ? MAIN_TASK_TEXTS.entryLabel : '';
+        this.redDot.active = snapshot.showRedDot;
     }
 
     /** 节点还活着吗（异步回来时宿主可能已被销毁）。 */
@@ -82,11 +82,7 @@ export class MainTaskEntry extends Component {
      */
     private bindClick(): void {
         const button = this.node.getComponent(Button);
-        if (button) {
-            button.node.on(Button.EventType.CLICK, this.onEntryClick, this);
-            return;
-        }
-        this.node.on(Node.EventType.TOUCH_END, this.onEntryClick, this);
+        button.node.on(Button.EventType.CLICK, this.onEntryClick, this);
     }
 
     private onEntryClick(): void {

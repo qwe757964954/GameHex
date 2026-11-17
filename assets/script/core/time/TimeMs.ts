@@ -42,7 +42,14 @@ export function pad2(value: number): string {
     return value < 10 ? `0${value}` : String(value);
 }
 
-/** 秒级 HMS（小时可超过 24）；与 HangTable 现有 `formatHms` 同口径。 */
+/**
+ * 毫秒 → `HH:MM:SS`。
+ *
+ * - 输入是毫秒，不是秒；先 `Math.ceil` 到秒（正小数秒会进位）；
+ * - 负数按 0 处理；
+ * - 小时不封顶，可超过 24；
+ * - 不负责业务封顶（挂机 8h 等由调用方先裁剪）。
+ */
 export function formatHmsMs(ms: number): string {
     const totalSeconds = Math.ceil(Math.max(0, ms) / MS_PER_SECOND);
     const hh = Math.floor(totalSeconds / 3600);

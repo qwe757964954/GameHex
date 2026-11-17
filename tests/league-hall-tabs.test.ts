@@ -1105,7 +1105,7 @@ test('E3 全服搜索：数字守卫 / 空输入提示 / 走 Repository / 命中
 test('E4 角色操作浮层：权限判定 / 位置换算 / 遮罩闸门 / 5 个动作分发', () => {
     const src = stripComments(PAGE_SRC);
     assert.ok(src.includes('resolveLeagueMemberActions('), '5 个按钮的显隐必须走配置表的权限判定');
-    assert.ok(src.includes('this.opsBar?.show(actions, this.placeOpsBar(node))'), '浮层必须按「该行位置」弹');
+    assert.ok(src.includes('this.opsBar.show(actions, this.placeOpsBar(node))'), '浮层必须按「该行位置」弹');
     assert.ok(src.includes('convertToNodeSpaceAR('), '位置换算必须用引擎的坐标变换（别自己手推两层 content 的锚点）');
     for (const action of ['toLeader', 'toAdmin', 'unAdmin', 'kick', 'show']) {
         assert.ok(src.includes(`case '${action}':`), `缺少动作分发：${action}`);
@@ -1117,7 +1117,7 @@ test('E4 角色操作浮层：权限判定 / 位置换算 / 遮罩闸门 / 5 个
     assert.ok(src.includes('LEAGUE_TIP_VIEW_SELF'), '看自己必须给提示');
 
     // ⚠️ 浮层展开时它自带全屏遮罩 ⇒ 页签 / 行点击必须先收起、本次不透传
-    const gates = src.match(/if \(this\.opsBar\?\.isOpen\)/g) ?? [];
+    const gates = src.match(/if \(this\.opsBar\.isOpen\)/g) ?? [];
     assert.ok(gates.length >= 2, `页签 / 行点击都要有「浮层打开 ⇒ 只收起」的闸门，实得 ${gates.length} 处`);
 });
 

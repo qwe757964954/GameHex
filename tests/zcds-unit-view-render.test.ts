@@ -42,16 +42,28 @@ test('静止帧不重复写位置、血条和染色，受伤与死亡仍即时�
         get: () => active,
         set: (value: boolean) => { writes.active++; active = value; },
     });
-    const visualSprite = { node: new FakeNode(), color: null as unknown };
-    Object.defineProperty(visualSprite, 'color', {
-        get: () => null,
-        set: () => { writes.tint++; },
-    });
-    const animation = { clips: [{ name: 'unit-idle' }], defaultClip: null, play() {}, stop() {} };
+    const makeSkeleton = () => {
+        const skeleton: any = {
+            node: null,
+            skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
+            setAnimation: () => true,
+            getCurrent: () => ({ trackTime: 0 }),
+            customMaterial: null,
+            premultipliedAlpha: false,
+        };
+        Object.defineProperty(skeleton, 'color', {
+            get: () => null,
+            set: () => { writes.tint++; },
+        });
+        return skeleton;
+    };
     const prefab = { make: () => {
         const node = new FakeNode();
-        node.getComponent = ((type: unknown) => type === cc.Sprite ? visualSprite
-            : type === cc.Animation ? animation : null) as typeof node.getComponent;
+        const spine = new FakeNode('spine');
+        spine.setParent(node);
+        const skeleton = makeSkeleton();
+        skeleton.node = spine;
+        spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof spine.getComponent;
         return node;
     } };
     presentationArt.unitVisualPrefabs.set('test-unit', prefab);
@@ -99,10 +111,22 @@ test('对象池复用同一美术或切到无美术时，重置受伤窗口、�
     view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
-    const visualSprite = { node: new FakeNode(), color: null as unknown };
+    const makeSkeleton = () => ({
+        node: null as any,
+        color: null as any,
+        skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
+        setAnimation: () => true,
+        getCurrent: () => ({ trackTime: 0 }),
+        customMaterial: null,
+        premultipliedAlpha: false,
+    });
     const prefab = { make: () => {
         const node = new FakeNode();
-        node.getComponent = ((type: unknown) => type === cc.Sprite ? visualSprite : null) as typeof node.getComponent;
+        const spine = new FakeNode('spine');
+        spine.setParent(node);
+        const skeleton = makeSkeleton();
+        skeleton.node = spine;
+        spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof spine.getComponent;
         return node;
     } };
     const unit = { hp: 100, maxHp: 100, owner: 'player', battleState: 'idle', facingRadians: 0, completedAttackCount: 0 };
@@ -121,7 +145,7 @@ test('对象池复用同一美术或切到无美术时，重置受伤窗口、�
     render(.2);
     assert.equal(view.healthBar.node.active, false);
     assert.equal(view.healthBar.node.position.y, view.barOffsetY * 1.2);
-    assert.equal(visualSprite.color, cc.Color.WHITE);
+    assert.equal((view.visualSkeleton as any).color, cc.Color.WHITE);
     presentationArt.unitVisualPrefabs.delete('test-unit');
     view.initialize({ unitId: 'test-unit', prefabSize: .8 });
     render(.3);
@@ -140,15 +164,26 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
     view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
     view.healthBar = bar();
     let attempts = 0;
-    const skeleton = {
-        node: new FakeNode(),
-        color: null,
-        skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
-        setAnimation: () => { attempts++; return attempts === 1 ? null : {}; },
+    let made = 0;
+    const makeSkeleton = () => {
+        const main = made++ === 0;
+        return {
+            node: null as any,
+            color: null as any,
+            skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
+            setAnimation: () => { if (!main) return {}; attempts++; return attempts === 1 ? null : {}; },
+            getCurrent: () => ({ trackTime: 0 }),
+            customMaterial: null,
+            premultipliedAlpha: false,
+        };
     };
     const prefab = { make: () => {
         const node = new FakeNode();
-        node.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof node.getComponent;
+        const spine = new FakeNode('spine');
+        spine.setParent(node);
+        const skeleton = makeSkeleton();
+        skeleton.node = spine;
+        spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof spine.getComponent;
         return node;
     } };
     presentationArt.unitVisualPrefabs.set('test-unit', prefab);
@@ -166,6 +201,38 @@ test('Spine 尚未就绪时下一帧重试 idle，保持脚点和画布缩放', 
     assert.equal(attempts, 2);
 });
 
+
+test('Spine 契约动画缺失时直接抛错，不用空动画或旧格式兜底', () => {
+    const { load, bar, cc, FakeNode, presentationArt } = loadViews();
+    const view = new (load('./ZCUnitView').ZCUnitView)();
+    view.rootTransform = { setContentSize() {} };
+    view.visualRoot = new FakeNode();
+    view.sprite = { enabled: true, spriteFrame: null };
+    view.fallback = { node: new FakeNode(), enabled: false, color: null };
+    view.fallbackTransform = { setContentSize: (width: number, height: number) => { view.fallback.node.size = { width, height }; } };
+    view.fallbackLabel = { node: new FakeNode(), enabled: true, string: '' };
+    view.healthBar = bar();
+    const makeSkeleton = () => ({
+        node: null as any,
+        color: null as any,
+        skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }] }) },
+        setAnimation: () => true,
+        getCurrent: () => ({ trackTime: 0 }),
+        customMaterial: null,
+        premultipliedAlpha: false,
+    });
+    const prefab = { make: () => {
+        const node = new FakeNode();
+        const spine = new FakeNode('spine');
+        spine.setParent(node);
+        const skeleton = makeSkeleton();
+        skeleton.node = spine;
+        spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof spine.getComponent;
+        return node;
+    } };
+    presentationArt.unitVisualPrefabs.set('test-unit', prefab);
+    assert.throws(() => view.initialize({ unitId: 'test-unit', prefabSize: 1 }), /缺少动画 move\/attack/);
+});
 
 test('white 兜底 Sprite 随兵种尺寸和阵营更新，有美术时隐藏，复用后恢复', () => {
     const { load, FakeNode } = loadViews();

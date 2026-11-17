@@ -48507,6 +48507,72 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdItemComposRspMsg";
 };
 return CmdItemComposRspMsg;
 })();
+cmd.CmdItemRewardBroMsg = (function() {
+function CmdItemRewardBroMsg(properties) {
+this.tlCmdGoods = [];
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdItemRewardBroMsg.prototype.resType = 0;
+CmdItemRewardBroMsg.prototype.tlCmdGoods = $util.emptyArray;
+CmdItemRewardBroMsg.create = function create(properties) {
+return new CmdItemRewardBroMsg(properties);
+};
+CmdItemRewardBroMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.resType);
+if (message.tlCmdGoods != null && message.tlCmdGoods.length)
+for (let i = 0; i < message.tlCmdGoods.length; ++i)
+$root.com.xkhy.tafang.cmd.CmdGoods.encode(message.tlCmdGoods[i], writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdItemRewardBroMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdItemRewardBroMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.resType = reader.uint32();
+break;
+}
+case 2: {
+if (!(message.tlCmdGoods && message.tlCmdGoods.length))
+message.tlCmdGoods = [];
+message.tlCmdGoods.push($root.com.xkhy.tafang.cmd.CmdGoods.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("resType"))
+throw $util.ProtocolError("missing required 'resType'", { instance: message });
+return message;
+};
+CmdItemRewardBroMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdItemRewardBroMsg";
+};
+return CmdItemRewardBroMsg;
+})();
 cmd.CmdFormationInfo = (function() {
 function CmdFormationInfo(properties) {
 this.heroId = [];
@@ -56341,6 +56407,7 @@ values[valuesById[61711178] = "CmdFriendSendEndOneKeyBroMsg"] = 61711178;
 values[valuesById[831238063] = "CmdFriendAgreeOneKeyBroMsg"] = 831238063;
 values[valuesById[1287890183] = "CmdFriendRefuseOneKeyBroMsg"] = 1287890183;
 values[valuesById[789546177] = "CmdGranaryUpdateBroMsg"] = 789546177;
+values[valuesById[283150558] = "CmdItemRewardBroMsg"] = 283150558;
 values[valuesById[1678727286] = "CmdRefreshLimitedTimeBundleBroMsg"] = 1678727286;
 values[valuesById[937248641] = "CmdBuyLimitedTimeBundleBroMsg"] = 937248641;
 values[valuesById[11546745] = "CmdRollBroMsg"] = 11546745;

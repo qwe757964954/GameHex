@@ -44,27 +44,27 @@ export class LeagueNorthRankRow extends Component {
     // 名次格（两页共用）
 
     @property({ type: Sprite, tooltip: 'RowBg：行底框（`显示背景` 控制器第 1 页时藏掉）' })
-    rowBg: Sprite = null;
+    rowBg: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Rank/lab：名次数字（未上榜时整块换成 Unranked）' })
-    rankLabel: Label = null;
+    rankLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'Rank/Unranked：「未上榜」那块（名次 = -1 时显示）' })
-    unranked: Node = null;
+    unranked: Node = null!;
 
     // 「联盟排名」页
 
     @property({ type: Node, tooltip: 'RankFields：联盟名 / 伤害 / 人数 / 奖励（第 0 页）' })
-    rankFields: Node = null;
+    rankFields: Node = null!;
 
     @property({ type: Label, tooltip: 'leagueName：联盟名' })
-    leagueName: Label = null;
+    leagueName: Label = null!;
 
     @property({ type: Label, tooltip: 'leaguePower：联盟伤害（`formatNumberToZH`）' })
-    leaguePower: Label = null;
+    leaguePower: Label = null!;
 
     @property({ type: Label, tooltip: 'lab_role：人数（`count/maxCount`）' })
-    roleCount: Label = null;
+    roleCount: Label = null!;
 
     @property({ type: LeagueRewardSlot, tooltip: 'com_goods：奖励格 1' })
     rewardSlot: LeagueRewardSlot = null;
@@ -75,19 +75,19 @@ export class LeagueNorthRankRow extends Component {
     // 「盟内进度」页
 
     @property({ type: Node, tooltip: 'ProgressFields：头像 / 玩家名 / 伤害 / 战斗力（第 1 页）' })
-    progressFields: Node = null;
+    progressFields: Node = null!;
 
     @property({ type: Sprite, tooltip: 'com_head/Icon：头像内层（本端解析不出玩家头像 ⇒ 隐藏）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'userName：玩家名' })
-    userName: Label = null;
+    userName: Label = null!;
 
     @property({ type: Label, tooltip: 'userPower：伤害（`numAbbr` 缩写）' })
-    userPower: Label = null;
+    userPower: Label = null!;
 
     @property({ type: Label, tooltip: '文本_战斗力：战斗力/伤害那一格（同 `numAbbr`）' })
-    powerText: Label = null;
+    powerText: Label = null!;
 
     /** 当前铺在这一行的数据（`null` = 没铺）。 */
     private current: ILeagueNorthRankRowView | null = null;
@@ -113,24 +113,20 @@ export class LeagueNorthRankRow extends Component {
         }
         this.node.active = true;
 
-        if (this.rowBg) this.rowBg.node.active = showBackground;
+        this.rowBg.node.active = showBackground;
 
         // 名次格（两页共用）
         const ranked = view.rank > 0;
-        if (this.rankLabel) {
-            this.rankLabel.node.active = ranked;
-            this.rankLabel.string = ranked ? String(view.rank) : '';
-        }
-        if (this.unranked) {
-            this.unranked.active = !ranked;
-            // 「未上榜」是 FGUI 里那颗 `n10` 的静态文案 —— 只在未上榜那页显示
-            const label = this.unranked.getComponent(Label);
-            if (label && !label.string) label.string = LEAGUE_NORTH_RANK_UNRANKED;
-        }
+        this.rankLabel.node.active = ranked;
+        this.rankLabel.string = ranked ? String(view.rank) : '';
+        this.unranked.active = !ranked;
+        // 「未上榜」是 FGUI 里那颗 `n10` 的静态文案 —— 只在未上榜那页显示
+        const label = this.unranked.getComponent(Label);
+        if (!label.string) label.string = LEAGUE_NORTH_RANK_UNRANKED;
 
         const rankMode = tab === 'rank';
-        if (this.rankFields) this.rankFields.active = rankMode;
-        if (this.progressFields) this.progressFields.active = !rankMode;
+        this.rankFields.active = rankMode;
+        this.progressFields.active = !rankMode;
 
         if (rankMode) this.renderRank(view, art);
         else this.renderProgress(view);
@@ -140,9 +136,9 @@ export class LeagueNorthRankRow extends Component {
 
     /** 第 0 页：联盟名 / 伤害 / 人数 / 两个奖励格（老端 `renderRank()`）。 */
     private renderRank(view: ILeagueNorthRankRowView, art: ILeagueRewardArt | null): void {
-        if (this.leagueName) this.leagueName.string = view.leagueName;
-        if (this.leaguePower) this.leaguePower.string = view.powerText;
-        if (this.roleCount) this.roleCount.string = view.roleCountText;
+        this.leagueName.string = view.leagueName;
+        this.leaguePower.string = view.powerText;
+        this.roleCount.string = view.roleCountText;
 
         // 老端：名次落在奖励区间里才显示两颗物品框，否则 `visible = false`（**不隐藏行**）。
         // 未上榜（rank = -1）永远查不到区间 ⇒ 两颗都藏。
@@ -163,15 +159,15 @@ export class LeagueNorthRankRow extends Component {
 
     /** 第 1 页：头像 / 玩家名 / 伤害 / 战斗力（老端 `renderProgress()`）。 */
     private renderProgress(view: ILeagueNorthRankRowView): void {
-        if (this.userName) this.userName.string = view.userName;
-        if (this.userPower) this.userPower.string = view.powerAbbrText;
-        if (this.powerText) this.powerText.string = view.powerAbbrText;
+        this.userName.string = view.userName;
+        this.userPower.string = view.powerAbbrText;
+        this.powerText.string = view.powerAbbrText;
 
         // 老端 `head.SetUrlByIcon(ModelPlayer.GetPlayerIcon(usedSkinResId))` ——
         // 玩家头像系统（`ModelPlayer.GetPlayerIcon`）在 Demo3.8**没迁**（同战斗入口那条）
         // ⇒ 头像内层恒隐藏，只留 `img_Touxiang_01` 那个空框（**不画问号占位**，同
         // `LeagueRewardSlot.render` 对「解析不出图标」的处置）。等头像系统落地后把这里换成查表即可。
-        if (this.headIcon) this.headIcon.node.active = false;
+        this.headIcon.node.active = false;
     }
 
     /** 当前铺的数据（探针 / 单测用）。 */

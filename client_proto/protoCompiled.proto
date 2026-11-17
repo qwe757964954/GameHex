@@ -4235,6 +4235,12 @@ message CmdItemComposRspMsg {
     repeated CmdGoods tlCmdGoods = 1; // 获得物品
 }
 
+// 道具奖励广播
+message CmdItemRewardBroMsg {
+    required uint32 resType = 1;//资源类型
+    repeated CmdGoods tlCmdGoods = 2; //获得物品
+}
+
 // 阵型信息
 message CmdFormationInfo {
   required uint32 formationId = 1; // 阵型id
@@ -5267,6 +5273,7 @@ enum MessageId {
 	CmdFriendAgreeOneKeyBroMsg = 831238063; //一键同意好友广播
 	CmdFriendRefuseOneKeyBroMsg = 1287890183; //一键拒绝好友广播
 	CmdGranaryUpdateBroMsg = 789546177; //粮仓列表更新
+    CmdItemRewardBroMsg = 283150558; //道具奖励广播
 	CmdRefreshLimitedTimeBundleBroMsg = 1678727286; //刷新限时礼包广播
 	CmdBuyLimitedTimeBundleBroMsg = 937248641; //购买限时礼包广播
 	CmdRollBroMsg = 11546745; //提示飘字广播

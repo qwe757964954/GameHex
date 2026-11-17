@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -61,14 +60,14 @@ export class ChangeHeadPage extends PopupBase {
 
     // ---------- 预览区 ----------
     @property({ type: Sprite, tooltip: 'HeadBox/HeadIcon：当前选中头像的大预览（`com_head.icon`）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Label, tooltip: 'DescLabel：头像名 / 「自定义头像」（`text_desc`）' })
-    descLabel: Label = null;
+    descLabel: Label = null!;
 
     // ---------- 列表 ----------
     @property({ type: HeadGridList, tooltip: 'List：4 列 × 2 行头像网格' })
-    grid: HeadGridList = null;
+    grid: HeadGridList = null!;
 
     // ---------- 底部 ----------
     @property({ type: Node, tooltip: 'ConfirmBtn：确认（FGUI `btn_confirm`，黄底）' })
@@ -130,13 +129,9 @@ export class ChangeHeadPage extends PopupBase {
         return !!this.node && this.node.isValid && this.isPopupOpen;
     }
 
-    /**
-     * 绑按钮。
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**没有 `cc.Button`**（规则 81b），
-     * 那种节点绑 `Button.EventType.CLICK` 是**静默死按钮**。按实际组件分流。
-     */
+    /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     // ============================================================
@@ -162,7 +157,7 @@ export class ChangeHeadPage extends PopupBase {
         this.currentId = snapshot.img;
         this.selectId = snapshot.img;
 
-        this.grid?.refreshList(this.entries.length);
+        this.grid.refreshList(this.entries.length);
         this.presentDesc();
         this.presentPreview();
     }
@@ -199,7 +194,6 @@ export class ChangeHeadPage extends PopupBase {
      */
     private renderItem(node: Node, dataIndex: number): void {
         const item = node.getComponent(ChangeHeadItem);
-        if (!item) return;
         const entry = this.entries[dataIndex];
         if (!entry) return;
 
@@ -220,12 +214,11 @@ export class ChangeHeadPage extends PopupBase {
         this.presentPreview();
         // 重铺槽位让选中框跟上。用同一个 `total` 调 `refreshList` —— 它内部
         // `_topRow = min(_topRow, _maxTopRow)` **不会**把滚动位置重置回顶部。
-        this.grid?.refreshList(this.entries.length);
+        this.grid.refreshList(this.entries.length);
     }
 
     /** 顶部大预览 = 当前选中的头像。 */
     private presentPreview(): void {
-        if (!this.headIcon) return;
         this.headIcon.spriteFrame = this.frames.get(this.selectId) ?? null;
     }
 
@@ -235,7 +228,6 @@ export class ChangeHeadPage extends PopupBase {
      * 否则取 `GetRefHead(selectId).name`。
      */
     private presentDesc(): void {
-        if (!this.descLabel) return;
         if (this.selectId === PLATFORM_HEAD_ID) {
             this.descLabel.string = PLAYER_INFO_TEXTS.changeHeadPlatformDesc;
             return;

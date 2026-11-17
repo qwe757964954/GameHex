@@ -82,11 +82,6 @@ export function cardCampName(camp: ZCCardCamp, lineup: ICardLineupCatalog): stri
     return lineup.camps.find((meta) => meta.id === camp)?.name ?? '';
 }
 
-/** 品级的中文显示名（表 `cardUiArtRarity.name`，普通/稀有/史诗/传说）。 */
-export function cardRarityName(rarity: ZCCardRarity, lineup: ICardLineupCatalog): string {
-    return lineup.rarities.find((meta) => meta.id === rarity)?.name ?? '';
-}
-
 /** 中栏一项：某职业在阵容里的卡数。 */
 export interface ZCClassTally {
     cardClass: ZCCardClass;
@@ -137,11 +132,6 @@ export function tallyDeckIcons(deck: readonly ZCDeckCard[], lineup: ICardLineupC
 /** 列表实际显示条目：滤掉卡数为 0 的。条目数跟着阵容变，不能写死。 */
 export function visibleIconTallies(deck: readonly ZCDeckCard[], lineup: ICardLineupCatalog): ZCCardTally[] {
     return tallyDeckIcons(deck, lineup).filter((item) => item.count > 0);
-}
-
-/** 倍率型效果才进百分比合计；金币收入是绝对值。 */
-export function isPercentBond(effectType: string): boolean {
-    return effectType !== 'income';
 }
 
 /**

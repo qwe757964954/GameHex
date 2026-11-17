@@ -41,8 +41,9 @@ build_proto.bat
 
 | 输出文件 | 目标路径 | 用途 |
 |----------|----------|------|
-| `protoCompiled.js` | `../assets/script/lib/protobuf/subproto/protoCompiled.js` | 旧静态协议兼容产物；当前运行时优先使用下方 JSON 反射数据 |
-| `protoCompiled.json` | `../assets/resources/config/protoCompiled.json` | 协议元数据 JSON，运行时反射用 |
+| `protoCompiledStatic.ts` | `../assets/script/lib/protobuf/protoCompiledStatic.ts` | 当前运行时编解码模块，由构建脚本调用 `tools/proto/gen_static_module.mjs` 生成 |
+| `protoCompiled.js` | `../assets/script/lib/protobuf/subproto/protoCompiled.js` | 旧静态协议兼容产物 |
+| `protoCompiled.json` | `../assets/resources/config/protoCompiled.json` | 协议反射元数据，供工具及测试使用 |
 | `protoCache.json` | `../assets/resources/config/protoCache.json` | 缓存字段映射（`tlKey`/`tmField` 结构） |
 | `Cmd.d.ts` | `../assets/script/app/generated/netProto/Cmd.d.ts` | TypeScript 类型声明 |
 | `CmdInterface.ts` | `../assets/script/app/generated/netProto/CmdInterface.ts` | Enum 导出定义 |
@@ -67,7 +68,7 @@ pbjs --target static --wrap closure --force-long --force-message --out protoComp
 pbjs --target json --wrap closure --force-long --force-message --out ..\assets\resources\config\protoCompiled.json protoCompiled.proto protoNet.proto
 ```
 
-- 生成 JSON 格式的协议描述，供运行时反射使用（如动态解码未知消息）
+- 生成 JSON 格式的协议描述，供工具及测试使用。当前运行时由 `ProtoCoder` / `ProtocolCodec` 导入静态模块。
 
 ### 第 3 步：修复 JS 文件
 
@@ -78,6 +79,14 @@ python protoCompiled_fix.py
 - 在 `protoCompiled.js` 开头插入 `var $protobuf = window.protobuf`
 - 在结尾插入 `window.protobufRoot = $root`
 - 将修复后的文件输出到 `../assets/script/lib/protobuf/subproto/protoCompiled.js`
+
+随后构建脚本自动生成当前运行时使用的静态模块，失败时停止构建：
+
+```bat
+node "%~dp0..\tools\proto\gen_static_module.mjs"
+```
+
+仍按原来的 `build_proto.bat` → `ref/copy_ref.bat` 顺序操作；`copy_ref` 只处理配表，无需另外手动生成协议静态模块。
 
 ### 第 4 步：移除命名空间后生成类型定义
 

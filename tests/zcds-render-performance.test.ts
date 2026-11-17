@@ -513,13 +513,25 @@ test('特效节点按视觉类型复用，初始化重置，表现时间包含�
 
 test('复用单位和特效视觉子树，同时从头播放动画', () => {
     for (const name of ['ZCUnitView', 'ZCCombatEffectView']) {
-        const { load, FakeNode, setArtQueries } = loadViews();
-        let created = 0, played = 0, stopped = 0;
-        const prefab = { make: () => {
+        const { load, cc, FakeNode, setArtQueries } = loadViews();
+        let created = 0, animationPlayed = 0, animationStopped = 0, skeletonPlayed = 0;
+        const prefab = { name: 'probe', make: () => {
             created++;
-            const node = new FakeNode();
-            const animation = { clips: [{ name: 'unit-idle' }], stop: () => stopped++, play: () => played++ };
+            const node = new FakeNode('probe');
+            const animation = { clips: [{ name: 'unit-idle' }], stop: () => animationStopped++, play: () => animationPlayed++ };
             node.getComponent = ((type: { name?: string }) => type?.name === 'Animation' ? animation : null) as any;
+            // 单位视图按固定 `spine` 子节点取骨架；特效视图仍走根节点的 Animation。
+            const spine = new FakeNode('spine');
+            spine.setParent(node);
+            const skeleton = {
+                node: spine,
+                color: null,
+                skeletonData: { getRuntimeData: () => ({ height: 916, animations: [{ name: 'idle' }, { name: 'move' }, { name: 'attack' }] }) },
+                setAnimation: () => { skeletonPlayed++; return {}; },
+                customMaterial: null,
+                premultipliedAlpha: false,
+            };
+            spine.getComponent = ((type: unknown) => type === cc.sp.Skeleton ? skeleton : null) as typeof spine.getComponent;
             return node;
         } };
         const view = new (load(`./${name}`)[name])();
@@ -530,13 +542,20 @@ test('复用单位和特效视觉子树，同时从头播放动画', () => {
         if (name === 'ZCUnitView') setArtQueries({ resolveUnitPrefab: () => prefab });
         view.initialize(name === 'ZCUnitView' ? definition : prefab);
         if (name === 'ZCUnitView') {
-            assert.equal(view.visualRoot.position.y, 45.7);
+            assert.equal(view.visualRoot.position.y, 0, '骨架脚点即逻辑脚点，视觉容器不再上移');
             assert.equal(view.visualNode.parent, view.visualRoot, '兵种美术必须挂在脚点校准容器下');
         }
         view.initialize(name === 'ZCUnitView' ? definition : prefab);
-        assert.equal(created, 1, name);
-        assert.equal(played, 2, name);
-        assert.ok(stopped >= 1, name);
+        // 单位首次挂载会另建一份整体轮廓副本（特效没有）。
+        assert.equal(created, name === 'ZCUnitView' ? 2 : 1, `${name} 节点创建次数`);
+        if (name === 'ZCUnitView') {
+            assert.equal(skeletonPlayed, 2, '单位视图复用后要重播 Spine 待机');
+            assert.equal(animationPlayed, 0, '单位视图不得再走 Animation');
+        } else {
+            assert.equal(animationPlayed, 2, '特效视图复用后要重播 Animation');
+            assert.ok(animationStopped >= 1, '特效视图复用前要 stop 旧动画');
+            assert.equal(skeletonPlayed, 0, '特效视图不走 Spine');
+        }
         const previous = view.visualNode;
         if (name === 'ZCUnitView') setArtQueries({});
         view.initialize(name === 'ZCUnitView' ? definition : null);

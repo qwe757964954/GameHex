@@ -17,9 +17,6 @@ export const MAX_VISIBLE_ENTRANCE = 5;
 /** 条目边长。 */
 export const ENTRANCE_ITEM_SIZE = 66;
 
-/** 条目纵向间距，与尺寸一起决定视口高度。 */
-export const ENTRANCE_ITEM_SPACING = 14;
-
 /** 一个入口条目。 */
 export interface MainEntranceItem {
     readonly refId: number;

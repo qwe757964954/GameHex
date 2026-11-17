@@ -29,19 +29,19 @@ const { ccclass, property } = _decorator;
 @ccclass('BattleTokenBuyButton')
 export class BattleTokenBuyButton extends Component {
     @property({ type: Sprite, tooltip: '底图（bt_btn_yellow / bt_btn_red / bt_btn_free）' })
-    bg: Sprite = null;
+    bg: Sprite = null!;
 
     @property({ type: Sprite, tooltip: '货币 / 道具小图标（无图标时整节点隐藏）' })
-    icon: Sprite = null;
+    icon: Sprite = null!;
 
     @property({ type: Label, tooltip: '金额（￥6）或数量（680）' })
-    title: Label = null;
+    title: Label = null!;
 
     @property({ type: Button, tooltip: '按钮本体' })
     button: Button = null;
 
     @property({ type: Node, tooltip: '已开通的对勾（FGUI n21，挂 `gearDisplay controller="解锁" pages="1"`）' })
-    checkMark: Node = null;
+    checkMark: Node = null!;
 
     @property({ type: SpriteFrame, tooltip: '黄底（生成器写入）' })
     yellowFrame: SpriteFrame = null;
@@ -105,24 +105,18 @@ export class BattleTokenBuyButton extends Component {
         unlocked: boolean,
         red: boolean,
     ): void {
-        if (this.bg) {
-            const frame = kind === 'free' ? this.freeFrame : (red ? this.redFrame : this.yellowFrame);
-            if (frame) this.bg.spriteFrame = frame;
-        }
-        if (this.title) {
-            this.title.string = text;
-            const pos = this.title.node.position;
-            this.title.node.setPosition(iconFrame ? this.titleXWithIcon : this.titleXNoIcon, pos.y, pos.z);
-        }
-        if (this.icon) {
-            this.icon.spriteFrame = iconFrame;
-            this.icon.node.active = !!iconFrame;
-            if (iconFrame) {
-                const pos = this.icon.node.position;
-                this.icon.node.setPosition(this.iconX, pos.y, pos.z);
-            }
+        const frame = kind === 'free' ? this.freeFrame : (red ? this.redFrame : this.yellowFrame);
+        if (frame) this.bg.spriteFrame = frame;
+        this.title.string = text;
+        const pos = this.title.node.position;
+        this.title.node.setPosition(iconFrame ? this.titleXWithIcon : this.titleXNoIcon, pos.y, pos.z);
+        this.icon.spriteFrame = iconFrame;
+        this.icon.node.active = !!iconFrame;
+        if (iconFrame) {
+            const pos = this.icon.node.position;
+            this.icon.node.setPosition(this.iconX, pos.y, pos.z);
         }
         // 对勾：已开通 = 显示（对应 FGUI `解锁` page「是」）
-        if (this.checkMark) this.checkMark.active = unlocked;
+        this.checkMark.active = unlocked;
     }
 }

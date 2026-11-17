@@ -1,8 +1,10 @@
 /**
- * 挂机收益判定纯函数，零 cc 依赖。
+ * 挂机收益判定纯函数，只允许纯 `core` 依赖，禁止 `cc` / framework / 其它 feature。
  * 收益展示用已通关最后一关，快速征收费体力用最高三星关，两者不能合并。
  * CmdBattleLevel.star 是 3 位位掩码不是星数；要星数走 levelStarCount()。
  */
+import { formatHmsMs } from '../../core/time/TimeMs';
+import type { IRewardAmount } from '../../core/types/Reward';
 
 // 常量
 
@@ -84,11 +86,8 @@ export const HJ_SWEEP_TYPE_CHAPTER = 1;
 
 // 奖励条目
 
-/** 一条奖励（`{resId, number}`）。 */
-export interface IHjReward {
-    readonly resId: number;
-    readonly number: number;
-}
+/** 一条奖励（`{resId, number}`）；与 `core/types/Reward.IRewardAmount` 同一结构。 */
+export type IHjReward = IRewardAmount;
 
 /**
  * 把 `unknown` 洗成奖励数组。
@@ -281,31 +280,14 @@ export function shouldTick(elapsedMs: number): boolean {
     return !idleReachedMax(elapsedMs);
 }
 
-/** 两段补零。 */
-function pad2(n: number): string {
-    return n < 10 ? `0${n}` : `${n}`;
-}
-
 /**
- * `08:00:00` 形态的倒计时 —— 老端 `TimeUtil.timeMillisecond2HMSStr(diffTime)`。
+ * `08:00:00` 形态的倒计时，直接复用 `core/time/TimeMs.formatHmsMs`。
  *
- * 与战令的 `TimeUtil.timeSec2HMSStr2` **不是同一个函数**：那个带「N天」前缀，
- * 这个不带（8h 封顶，天数永远是 0）。别复用 `BattleTokenTexts.formatDuration`。
- *
- * 秒数是 **`Math.ceil`（进位）**，不是截断：老端 `timeMillisecond2HMSStr` 写的是
- * `timeSec2HMSStr(Math.ceil(time * 0.001))`。改成 `floor` 会让 `3_599_999ms` 显示
- * `00:59:59` 而不是 `01:00:00`（差 1 秒，肉眼几乎看不出，但口径就不是老端了）。
- *
- * **封顶不在这里**：老端是在 `LayerHang.refreshTime()` 里先 `diffTime = min(diffTime, 8h)`
- * 再调本函数。要封顶请先过 `idleCappedMs()` / `cappedElapsedMsOf()`。
+ * 口径：输入是毫秒；秒数 `Math.ceil` 进位（`3_599_999ms` → `01:00:00`）；
+ * 负数归零；小时可超过 24；不做业务封顶（挂机 8h 封顶由 `idleCappedMs()` /
+ * `cappedElapsedMsOf()` 先行处理）。与战令带「N天」前缀的格式不是同一个函数。
  */
-export function formatHms(ms: number): string {
-    const total = Math.ceil(Math.max(0, ms) / 1000);
-    const h = Math.floor(total / 3600);
-    const m = Math.floor((total % 3600) / 60);
-    const s = total % 60;
-    return `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
-}
+export const formatHms = formatHmsMs;
 
 // 倍率档位
 

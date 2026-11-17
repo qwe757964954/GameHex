@@ -106,11 +106,6 @@ export class SevenDayRewardRow extends Component {
         readonly qualityFrame: SpriteFrame | null;
         readonly iconFrame: SpriteFrame | null;
     }): void {
-        if (!this.background) {
-            const own = this.getComponent(Sprite);
-            if (own) this.background = own;
-        }
-
         this.titleLabel.string = view.title;
         this.progressLabel.string = view.progress;
 
@@ -122,7 +117,7 @@ export class SevenDayRewardRow extends Component {
                 ? this.buttonBlue
                 : this.buttonRed;
         const button = this.actionButton.getComponent(Button);
-        if (button) button.interactable = view.action.enabled;
+        button.interactable = view.action.enabled;
         this.actionRedDot.setRedDot(view.action.redDot);
 
         // 角标互斥：折扣只在「可购买」时出现，售罄 / 已领取各自独立（老端的控制器是互斥的，

@@ -31,16 +31,16 @@ const COLOR_LOCKED = new Color(90, 90, 90, 255);
 @ccclass('ChangeHeadItem')
 export class ChangeHeadItem extends Component {
     @property({ type: Sprite, tooltip: 'HeadIcon：头像图（`com_head.icon`，设计期无图，运行时塞）' })
-    headIcon: Sprite = null;
+    headIcon: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'HeadFrame：头像底框 73×73（`com_head.n0`）' })
-    headFrame: Sprite = null;
+    headFrame: Sprite = null!;
 
     @property({ type: Node, tooltip: 'SelectedFrame：选中框（`n2`，设计期隐藏）' })
-    selectedFrame: Node = null;
+    selectedFrame: Node = null!;
 
     @property({ type: Node, tooltip: 'RedDot：新头像红点（`com_rd`，设计期隐藏）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 点这一格（参数 = **数据下标**，由 `HeadGridList` 在重绑时写入 `dataIndex`）。 */
     onClicked: ((dataIndex: number) => void) | null = null;
@@ -58,24 +58,24 @@ export class ChangeHeadItem extends Component {
 
     /** 塞头像图（`null` = 清空，不保留上一格的图）。 */
     setHead(frame: SpriteFrame | null): void {
-        if (this.headIcon) this.headIcon.spriteFrame = frame;
+        this.headIcon.spriteFrame = frame;
     }
 
     /** 选中态。**无条件写**。 */
     setSelected(selected: boolean): void {
-        if (this.selectedFrame) this.selectedFrame.active = selected;
+        this.selectedFrame.active = selected;
     }
 
     /** 解锁态：未解锁压暗。**无条件写**。 */
     setLocked(locked: boolean): void {
         const c = locked ? COLOR_LOCKED : COLOR_NORMAL;
-        if (this.headIcon) this.headIcon.color = c;
-        if (this.headFrame) this.headFrame.color = c;
+        this.headIcon.color = c;
+        this.headFrame.color = c;
     }
 
     /** 新头像红点。**无条件写**。 */
     setNew(isNew: boolean): void {
-        if (this.redDot) this.redDot.active = isNew;
+        this.redDot.active = isNew;
     }
 
     // ============================================================

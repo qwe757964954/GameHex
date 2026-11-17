@@ -46,7 +46,7 @@ export class LeagueLevelPreviewPage extends PopupBase {
     static prefabPath = 'ui/League/LeagueLevelPreview';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'RowView：等级列表（虚拟列表 + Mask）' })
     levelList: VirtualScrollView = null;
@@ -60,9 +60,8 @@ export class LeagueLevelPreviewPage extends PopupBase {
     // 生命周期
 
     protected onInit(): void {
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[League] CloseBtn 上没有 cc.Button，点击不会生效');
+        const button = this.closeButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         this.levelList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
@@ -120,7 +119,6 @@ export class LeagueLevelPreviewPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueLevelRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();

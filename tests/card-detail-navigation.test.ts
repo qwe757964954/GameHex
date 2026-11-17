@@ -16,6 +16,10 @@ test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡�
     const catalog = [{ id: '1' }, { id: '2' }, { id: '3' }];
     let infos: Array<{ heroId: number; level: number }> | null = [{ heroId: 2, level: 7 }];
     let networkCalls = 0;
+    const heroes = {
+        getCachedPvpHeroInfos: () => infos,
+        fetchPvpHeroInfos: () => { networkCalls++; throw new Error('切卡不应发起英雄列表请求'); },
+    };
     const exports: Record<string, any> = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/card/CardRepository.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -23,14 +27,12 @@ test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡�
     runInNewContext(code, { exports, console, require: name => {
         if (name === './CardLineupDecks') return { loadPvpCatalogCards: async () => catalog, currentDeckBonuses: () => ({}) };
         if (name === './LineupSnapshot') return { readLineupSnapshot: () => ({ cards: [catalog[0]], levels: { '1': 4 } }) };
-        if (name === './PvpHeroService') return {
-            getCachedPvpHeroInfos: () => infos,
-            fetchPvpHeroInfos: () => { networkCalls++; throw new Error('切卡不应发起英雄列表请求'); },
-        };
+
         if (name === './CardLineupTypes') return { visibleLineupCards };
         return {};
     } });
     const repository = new exports.RuntimeCardRepository();
+    repository.bindHeroSession(heroes);
     assert.equal(repository.loadLineupSnapshot(), null, '配置未就绪前不发布不完整快照');
     repository.artConfig = {};
     assert.equal(repository.loadLineupSnapshot().catalog.length, 0);
@@ -59,7 +61,7 @@ test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对�
     const skillPlans = readRows('pvpSkillPlan');
     let heroInfos = [{ heroId: 68001, level: 2 }, { heroId: 68005, level: 10 }, { heroId: 68033, level: 50 }];
     let formations = [{ formationId: 1, selected: true, heroIds: [68001, 68005] }];
-    let formationRequests = 0;
+    let formationRequests = 0, snapshotWrites = 0, disposedSessions = 0;
     const exports: Record<string, any> = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/card/CardRepository.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
@@ -77,12 +79,11 @@ test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对�
             RefUtil: { instance: { getRefAllAsync: async (table: string) => table === 'pvpSkillPlan' ? skillPlans : [] } },
         };
         if (name === './LineupPresets') return { resolveSelectedDeck };
-        if (name === './LineupSnapshot') return { writeLineupSnapshot() {} };
+        if (name === './LineupSnapshot') return { writeLineupSnapshot() { snapshotWrites++; } };
         if (name === './FormationService') return {
             fetchFormations: async () => { formationRequests++; return formations; },
             getCachedFormations: () => formations,
         };
-        if (name === './PvpHeroService') return { getCachedPvpHeroInfo: () => null, getCachedPvpHeroInfos: () => heroInfos };
         if (name === './CardLineupDecks') return {
             currentDeckBonuses: () => ({}),
             loadPvpHeroLevelCaps: async () => new Map(),
@@ -97,6 +98,10 @@ test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对�
         return {};
     } });
     const repository = new exports.RuntimeCardRepository();
+    repository.bindHeroSession({
+        getCachedPvpHeroInfo: () => null, getCachedPvpHeroInfos: () => heroInfos,
+        dispose: () => { disposedSessions++; },
+    });
     repository.loadArtConfig = async () => ({});
     for (const row of levels) {
         const detail = await repository.loadCardDetail(String(row.id), row.level);
@@ -122,8 +127,24 @@ test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对�
     assert.equal(formationRequests, 1, '没有缓存也不因升级补发阵型请求');
     formations = cachedFormations;
     formations = [{ formationId: 1, selected: true, heroIds: [68033] }];
-    assert.equal((await repository.loadLineup(false)).power, 5434, '切换出战阵容后重算');
-    assert.equal(await repository.loadLineupPower(), 5434, '主界面共用同一战力结果');
+    //  68033 运动霸 Lv.50 攻击：面板 2026-11-16 按花果「金战士 1000/130」校正后是 130 起，
+    //  L50 = 4709（校正前是 700/150 档，L50 为 5434）。
+    assert.equal((await repository.loadLineup(false)).power, 4709, '切换出战阵容后重算');
+    assert.equal(await repository.loadLineupPower(), 4709, '主界面共用同一战力结果');
     formations = [{ formationId: 1, selected: true, heroIds: [] }];
     assert.equal((await repository.loadLineup(false)).power, 0, '明确下阵后清零');
+    const previousWrites = snapshotWrites;
+    const oldLineup = repository.loadLineup(false);
+    const oldBoard = repository.loadBoard(false);
+    const nextSession = { dispose: () => { disposedSessions++; }, getCachedPvpHeroInfos: () => null };
+    repository.bindHeroSession(nextSession);
+    repository.bindHeroSession(nextSession);
+    assert.equal(disposedSessions, 1, '更换会话只释放旧实例，同一实例重复绑定不释放');
+    await Promise.all([
+        assert.rejects(oldLineup, /卡牌会话已结束/),
+        assert.rejects(oldBoard, /卡牌会话已结束/),
+    ]);
+    assert.equal(snapshotWrites, previousWrites, '旧会话的阵容异步结果不得写回快照');
+    repository.bindHeroSession(null);
+    assert.equal(disposedSessions, 2, '登出释放当前实例');
 });

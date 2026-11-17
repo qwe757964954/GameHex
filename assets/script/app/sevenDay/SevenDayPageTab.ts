@@ -31,10 +31,6 @@ export class SevenDayPageTab extends Component {
     normalFrame: SpriteFrame = null!;
 
     render(title: string, selected: boolean, hasRedDot: boolean): void {
-        if (!this.background) {
-            const own = this.getComponent(Sprite);
-            if (own) this.background = own;
-        }
         this.titleLabel.string = title;
         // 绝对赋值（页签槽位在切天数时会被重填，见规则 10）
         this.background.spriteFrame = selected ? this.selectedFrame : this.normalFrame;

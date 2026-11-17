@@ -250,7 +250,7 @@ export class RolePage extends Component {
     private applyTabLook(): void {
         for (const [name, tab] of BAG_TAB_NODES) {
             const node = this.node.getChildByName(name);
-            if (node) node.setScale(this.activeTab === tab ? 1.08 : 1, this.activeTab === tab ? 1.08 : 1, 1);
+            node.setScale(this.activeTab === tab ? 1.08 : 1, this.activeTab === tab ? 1.08 : 1, 1);
         }
     }
 
@@ -261,7 +261,6 @@ export class RolePage extends Component {
     private showQipao(): void {
         this.stopQipao();
         const node = this.node.getChildByName(QIPAO_NODE);
-        if (!node) return;
         if (roleRepository.roleLevel() >= QIPAO_MAX_LEVEL) return;
         node.active = true;
         this.qipaoTimer = setTimeout(() => {
@@ -280,6 +279,6 @@ export class RolePage extends Component {
             this.qipaoTimer = null;
         }
         const node = this.node.getChildByName(QIPAO_NODE);
-        if (node) node.active = false;
+        node.active = false;
     }
 }

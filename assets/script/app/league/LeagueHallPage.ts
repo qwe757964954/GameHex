@@ -15,12 +15,12 @@ import {
     LEAGUE_ART_ROOT,
     LEAGUE_ART_TAB_UP,
     LEAGUE_ART_TAB_DOWN,
-    LEAGUE_BANNER_COLOR_COUNT,
     LEAGUE_BANNER_DEFAULT_COLOR,
     LEAGUE_HALL_TAB_ARTS,
     LEAGUE_TAB_ICON_ROOT,
     leagueBannerArt,
 } from './LeagueArt';
+import { loadLeagueBannerFrames } from './LeagueBannerArt';
 import {
     buildLeagueLogViews,
     buildLeagueMemberViews,
@@ -105,31 +105,31 @@ export class LeagueHallPage extends PopupBase {
     banner: Node = null;
 
     @property({ type: Sprite, tooltip: 'Banner/ColorIcon：旗面' })
-    bannerColor: Sprite = null;
+    bannerColor: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Banner/Frame：选中态外框' })
     bannerFrame: Sprite = null;
 
     @property({ type: Label, tooltip: 'LabName：联盟名' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabLv：等级' })
-    levelLabel: Label = null;
+    levelLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabNotice：公告' })
-    noticeLabel: Label = null;
+    noticeLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabId：联盟 ID' })
-    idLabel: Label = null;
+    idLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'LabWx：联系微信号' })
-    wxLabel: Label = null;
+    wxLabel: Label = null!;
 
     @property({ type: Sprite, tooltip: 'Progress/ProgressFill：经验进度填充' })
-    progressFill: Sprite = null;
+    progressFill: Sprite = null!;
 
     @property({ type: Label, tooltip: 'Progress/ProgressLabel：经验数值' })
-    progressLabel: Label = null;
+    progressLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'BtnBack：返回（关面板）' })
     backButton: Node = null;
@@ -159,7 +159,7 @@ export class LeagueHallPage extends PopupBase {
     tabAllServerButton: Node = null;
 
     @property({ type: Node, tooltip: 'TabDetail：详情内容容器' })
-    tabDetailPage: Node = null;
+    tabDetailPage: Node = null!;
 
     @property({ type: Node, tooltip: 'TabLog：动态内容容器' })
     tabLogPage: Node = null;
@@ -168,22 +168,22 @@ export class LeagueHallPage extends PopupBase {
     tabAllServerPage: Node = null;
 
     @property({ type: Label, tooltip: 'TabDetail/LabUserCount：联盟成员(N/M)' })
-    memberCountLabel: Label = null;
+    memberCountLabel: Label = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'TabDetail/DetailList：成员列表' })
-    memberList: VirtualScrollView = null;
+    memberList: VirtualScrollView = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'TabLog/LogList：动态列表' })
-    logList: VirtualScrollView = null;
+    logList: VirtualScrollView = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'TabAllServer/ServerList：全服联盟列表' })
-    serverList: VirtualScrollView = null;
+    serverList: VirtualScrollView = null!;
 
     @property({ type: EditBox, tooltip: 'TabAllServer/Search/Input：联盟 ID 查询框（数字键盘）' })
-    searchInput: EditBox = null;
+    searchInput: EditBox = null!;
 
     @property({ type: LeagueOpsBar, tooltip: 'TabDetail/OpsBar：角色操作浮层' })
-    opsBar: LeagueOpsBar = null;
+    opsBar: LeagueOpsBar = null!;
 
     /** 当前选中的页签下标（0=详情 / 1=动态 / 2=全服联盟）。 */
     selectedTab = 0;
@@ -247,7 +247,7 @@ export class LeagueHallPage extends PopupBase {
 
     protected onClose(): void {
         this.revision += 1;
-        this.opsBar?.hide();
+        this.opsBar.hide();
     }
 
     onDestroy(): void {
@@ -303,17 +303,11 @@ export class LeagueHallPage extends PopupBase {
         if (!this.listsBound) {
             this.listsBound = true;
 
-            if (this.memberList) {
-                this.memberList.renderItemFn = (node, index) => this.renderMemberRow(node, index);
-                this.memberList.onItemClickFn = (node, index) => this.onMemberClick(node, index);
-            }
-            if (this.logList) {
-                this.logList.renderItemFn = (node, index) => this.renderLogRow(node, index);
-            }
-            if (this.serverList) {
-                this.serverList.renderItemFn = (node, index) => this.renderServerRow(node, index);
-                this.serverList.onItemClickFn = (node, index) => this.onUnionClick(node, index);
-            }
+            this.memberList.renderItemFn = (node, index) => this.renderMemberRow(node, index);
+            this.memberList.onItemClickFn = (node, index) => this.onMemberClick(node, index);
+            this.logList.renderItemFn = (node, index) => this.renderLogRow(node, index);
+            this.serverList.renderItemFn = (node, index) => this.renderServerRow(node, index);
+            this.serverList.onItemClickFn = (node, index) => this.onUnionClick(node, index);
 
             const input = this.searchInput;
             if (input) {
@@ -323,7 +317,7 @@ export class LeagueHallPage extends PopupBase {
             }
         }
 
-        if (this.opsBar) this.opsBar.onSelect = (action) => this.onOpsAction(action);
+        this.opsBar.onSelect = (action) => this.onOpsAction(action);
     }
 
     private onClick(node: Node | null, handler: () => void): void {
@@ -359,7 +353,7 @@ export class LeagueHallPage extends PopupBase {
             this.applyTabButtonState(this.tabButtons[i], i === clamped);
         }
         // 浮层是「详情页签里贴着某一行」的东西 ⇒ 切走页签必须收起
-        this.opsBar?.hide();
+        this.opsBar.hide();
         this.selectedMember = null;
     }
 
@@ -430,17 +424,15 @@ export class LeagueHallPage extends PopupBase {
     /** 头部信息（数据没回来前 = 占位串）。 */
     private applyHeaderPlaceholder(): void {
         const p = LEAGUE_HALL_PLACEHOLDER;
-        if (this.nameLabel) this.nameLabel.string = p.name;
-        if (this.levelLabel) this.levelLabel.string = `${p.level}${LEAGUE_HALL_LV_SUFFIX}`;
-        if (this.noticeLabel) this.noticeLabel.string = p.notice;
-        if (this.idLabel) this.idLabel.string = `${LEAGUE_HALL_ID_PREFIX}${p.id}`;
-        if (this.wxLabel) this.wxLabel.string = `${LEAGUE_HALL_WX_PREFIX}${p.wxChat}`;
+        this.nameLabel.string = p.name;
+        this.levelLabel.string = `${p.level}${LEAGUE_HALL_LV_SUFFIX}`;
+        this.noticeLabel.string = p.notice;
+        this.idLabel.string = `${LEAGUE_HALL_ID_PREFIX}${p.id}`;
+        this.wxLabel.string = `${LEAGUE_HALL_WX_PREFIX}${p.wxChat}`;
         this.applyProgress(p.exp, p.maxExp);
-        if (this.memberCountLabel) {
-            this.memberCountLabel.string = buildMemberCountText(
-                LEAGUE_MEMBER_COUNT_PREFIX, p.memberCount, p.maxMemberCount,
-            );
-        }
+        this.memberCountLabel.string = buildMemberCountText(
+            LEAGUE_MEMBER_COUNT_PREFIX, p.memberCount, p.maxMemberCount,
+        );
     }
 
     /** 头部信息（真值口径同老端 `updateView`）。 */
@@ -450,16 +442,14 @@ export class LeagueHallPage extends PopupBase {
             // 未入盟 / 还没推回来 ⇒ 保持占位（老端这里是 `unload()`，见类头的「有意偏差」）
             return;
         }
-        if (this.nameLabel) this.nameLabel.string = union.name;
-        if (this.levelLabel) this.levelLabel.string = `${union.level}${LEAGUE_HALL_LV_SUFFIX}`;
-        if (this.noticeLabel) this.noticeLabel.string = union.notice;
-        if (this.idLabel) this.idLabel.string = `${LEAGUE_HALL_ID_PREFIX}${union.id}`;
-        if (this.wxLabel) this.wxLabel.string = `${LEAGUE_HALL_WX_PREFIX}${union.wxChat}`;
-        if (this.memberCountLabel) {
-            this.memberCountLabel.string = buildMemberCountText(
-                LEAGUE_MEMBER_COUNT_PREFIX, union.count, union.maxCount,
-            );
-        }
+        this.nameLabel.string = union.name;
+        this.levelLabel.string = `${union.level}${LEAGUE_HALL_LV_SUFFIX}`;
+        this.noticeLabel.string = union.notice;
+        this.idLabel.string = `${LEAGUE_HALL_ID_PREFIX}${union.id}`;
+        this.wxLabel.string = `${LEAGUE_HALL_WX_PREFIX}${union.wxChat}`;
+        this.memberCountLabel.string = buildMemberCountText(
+            LEAGUE_MEMBER_COUNT_PREFIX, union.count, union.maxCount,
+        );
         this.applyProgress(union.exp, snapshot.myMaxExp);
         void this.applyBannerColor(union.icon);
     }
@@ -468,21 +458,16 @@ export class LeagueHallPage extends PopupBase {
     applyProgress(exp: number, maxExp: number): void {
         const safeMax = maxExp > 0 ? maxExp : 1;
         const ratio = Math.min(Math.max(exp / safeMax, 0), 1);
-        if (this.progressFill) {
-            const uit = this.progressFill.node.getComponent(UITransform);
-            if (uit) uit.setContentSize(Math.max(PROGRESS_FULL_WIDTH * ratio, 1), uit.contentSize.height);
-        }
-        if (this.progressLabel) this.progressLabel.string = `${exp}/${maxExp}`;
+        const uit = this.progressFill.node.getComponent(UITransform);
+        uit.setContentSize(Math.max(PROGRESS_FULL_WIDTH * ratio, 1), uit.contentSize.height);
+        this.progressLabel.string = `${exp}/${maxExp}`;
     }
 
     /** 切旗帜颜色（FGUI `颜色` controller 8 色，下标 = `CmdUnion.icon`）。 */
     async applyBannerColor(colorIndex: number): Promise<void> {
-        if (!this.bannerColor) return;
         if (!this.bannerFrames) {
-            const names: string[] = [];
-            for (let index = 0; index < LEAGUE_BANNER_COLOR_COUNT; index += 1) names.push(leagueBannerArt(index));
-            const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
-            if (!this.node || !this.node.isValid) return;
+            const frames = await loadLeagueBannerFrames();
+            if (!this.node.isValid) return;
             this.bannerFrames = frames;
         }
         const frame = this.bannerFrames[colorIndex] ?? null;
@@ -493,7 +478,7 @@ export class LeagueHallPage extends PopupBase {
     private async applyTabIconArt(): Promise<void> {
         const upBg = await loadArt(LEAGUE_ART_TAB_UP, LEAGUE_ART_ROOT);
         const downBg = await loadArt(LEAGUE_ART_TAB_DOWN, LEAGUE_ART_ROOT);
-        if (!this.node || !this.node.isValid) return;
+        if (!this.node.isValid) return;
 
         for (let index = 0; index < this.tabButtons.length; index += 1) {
             const button = this.tabButtons[index];
@@ -523,7 +508,6 @@ export class LeagueHallPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderMemberRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueMemberRow);
-        if (!row) return;
         const view = this.memberRows[index];
         if (!view) {
             row.hide();
@@ -548,7 +532,7 @@ export class LeagueHallPage extends PopupBase {
      * 浮层展开时它自带一层全屏遮罩：**先收起、本次点击不透传**（不然点页签会「既收起又切页」）。
      */
     private onMemberClick(node: Node, index: number): void {
-        if (this.opsBar?.isOpen) {
+        if (this.opsBar.isOpen) {
             this.opsBar.hide();
             return;
         }
@@ -557,7 +541,7 @@ export class LeagueHallPage extends PopupBase {
         const myPosition = this.snapshot?.myPosition ?? 0;
         const actions = resolveLeagueMemberActions(myPosition, view.position, this.officialPowers);
         this.selectedMember = view;
-        this.opsBar?.show(actions, this.placeOpsBar(node));
+        this.opsBar.show(actions, this.placeOpsBar(node));
     }
 
     /**
@@ -568,7 +552,7 @@ export class LeagueHallPage extends PopupBase {
      */
     private placeOpsBar(rowNode: Node): number {
         const rowTransform = rowNode.getComponent(UITransform);
-        const pageTransform = this.tabDetailPage?.getComponent(UITransform);
+        const pageTransform = this.tabDetailPage.getComponent(UITransform);
         if (!rowTransform || !pageTransform) return OPS_BAR_FALLBACK_Y;
         rowTransform.convertToWorldSpaceAR(Vec3.ZERO, _rowWorld);
         pageTransform.convertToNodeSpaceAR(_rowWorld, _pageLocal);
@@ -585,7 +569,6 @@ export class LeagueHallPage extends PopupBase {
 
     private renderLogRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueLogRow);
-        if (!row) return;
         const view = this.logRows[index];
         if (!view) {
             row.hide();
@@ -599,7 +582,7 @@ export class LeagueHallPage extends PopupBase {
 
     private presentUnions(): void {
         const snapshot = this.snapshot;
-        const key = this.searchInput?.string ?? '';
+        const key = this.searchInput.string ?? '';
         // 老端 `GetCmdUnionListBySearch`：命中过搜索缓存就只显示那一条，否则显示全部
         const rows = snapshot
             ? pickUnionListForSearch(snapshot.unions, this.repository.cachedSearch(key))
@@ -610,7 +593,6 @@ export class LeagueHallPage extends PopupBase {
 
     private renderServerRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueUnionRow);
-        if (!row) return;
         const view = this.serverRows[index];
         if (!view) {
             row.hide();
@@ -632,17 +614,16 @@ export class LeagueHallPage extends PopupBase {
     /** 查询框输入：非正整数就地清空（老端 `onInputTextChange` 逐字照搬）。 */
     private onSearchTextChanged(): void {
         const input = this.searchInput;
-        if (!input) return;
         if (!isLeagueSearchId(input.string)) input.string = '';
     }
 
     /** 点「查询」：空输入提示；否则按 id 搜，回来后按缓存重铺列表。 */
     private async onSearchClick(): Promise<void> {
-        if (this.opsBar?.isOpen) {
+        if (this.opsBar.isOpen) {
             this.opsBar.hide();
             return;
         }
-        const key = this.searchInput?.string ?? '';
+        const key = this.searchInput.string ?? '';
         if (!key) {
             FW.showTip(LEAGUE_TIP_INPUT_UNION_ID);
             return;
@@ -663,7 +644,7 @@ export class LeagueHallPage extends PopupBase {
      * 这就是 `ILeagueUnionView` 带 `wxChat` / `declaration` 两个字段的原因。
      */
     private onUnionClick(_node: Node, index: number): void {
-        if (this.opsBar?.isOpen) {
+        if (this.opsBar.isOpen) {
             this.opsBar.hide();
             return;
         }

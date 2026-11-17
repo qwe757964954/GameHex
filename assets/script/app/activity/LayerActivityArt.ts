@@ -1,6 +1,11 @@
 /**
  * 活动（每日任务）美术口径。
  *
+ * 图标解析不由本文件转发：新入口是 `common/RewardIcon`，禁止新增从
+ * `LayerActivityArt` 取 `resolveRewardIconRef` / `resolveItemIconRef` / `splitIconPath`
+ * 的调用。本文件只保留活动自有美术与品质框转发；当全仓（含测试）不再存在上述
+ * 旧路径调用、且本文件只剩业务美术导出时，不再恢复图标转发符号。
+ *
  * 图都落在 `assets/resources/image/activity/`（20 张，从 zarts FGUI 的
  * `活动/图片` + `公用0/图片` 里挑出来，命名口径与 `image/sevenDay` 的 `sd_*`、
  * `image/gift` 的 `gf_*` 一致 —— 去中文 + `act_` 前缀）。
@@ -27,15 +32,13 @@
 import {
     ACTIVITY_ART_ROOT as ART_ACTIVITY_ROOT,
     COMMON_ART_ROOT,
-    RESOURCE_ICON_ART_ROOT as ART_RESOURCE_ICON_ROOT,
-    spriteFramePath,
 } from '../ArtPaths';
 import type { ActivityBoxPhase } from './LayerActivityTable';
 
 /** 活动美术目录（相对 `resources` 的路径）。 */
 export const ACTIVITY_ART_ROOT = ART_ACTIVITY_ROOT;
 
-/** 标题横幅所在目录（复用工工程既有的 `image/common/title_02.png`）。 */
+/** 标题横幅所在目录（复用工程既有的 `image/common/title_02.png`）。 */
 export const ACTIVITY_TITLE_ART_ROOT = COMMON_ART_ROOT;
 
 /** 活动要用的全部图（`key` → 文件名，不含扩展名）。 */
@@ -85,18 +88,6 @@ export const ACTIVITY_ART_NAMES: Readonly<Record<string, string>> = {
 /** 标题横幅（`image/common/title_02.png`，461×119）。 */
 export const ACTIVITY_TITLE_ART = 'title_02';
 
-/** 取一张活动美术图的装配路径；`key` 未知时返回 `null`。 */
-export function activityArtPath(key: string): string | null {
-    const name = ACTIVITY_ART_NAMES[key];
-    if (!name) return null;
-    return spriteFramePath(ACTIVITY_ART_ROOT, name);
-}
-
-/** 标题横幅的装配路径。 */
-export function activityTitlePath(): string {
-    return spriteFramePath(ACTIVITY_TITLE_ART_ROOT, ACTIVITY_TITLE_ART);
-}
-
 /** 宝箱三态 → 图 key。 */
 export function boxArtKey(phase: ActivityBoxPhase): string {
     if (phase === 'taken') return 'boxTaken';
@@ -122,27 +113,8 @@ export {
     qualityFrameName,
 } from '../common/QualityFrameArt';
 
-/** 奖励图标实现已归位到 `common/RewardIcon`；这里保留旧路径，调用方可继续 import activity。 */
-export {
-    resolveItemIconPath,
-    resolveItemIconRef,
-    resolveRewardIconRef,
-} from '../common/RewardIcon';
-export type { IItemIconRef as IActivityIconRef } from '../common/RewardIcon';
-
 /**
- * 资源类道具（货币 / 属性，`roleProperty` 表）的图标目录。
+ * 奖励图标实现归位到 `common/RewardIcon`；本文件不再转发图标符号。
  *
- * ⚠️ 值转发 `ArtPaths.RESOURCE_ICON_ART_ROOT`（**唯一真源**）——别在这里写字面量。
+ * 资源目录与裸名例外表也只在 `ArtPaths` / `common/ResTypes` 维护，本文件不转出口。
  */
-export const RESOURCE_ICON_ART_ROOT = ART_RESOURCE_ICON_ROOT;
-
-/**
- * `roleProperty` 里**不落 `icons/resource/`** 的裸名图标例外表 + 通用图标目录。
- * 定义在 `common/ResTypes.ts`（资源口径唯一出口），这里只转发保留对外 import 面。
- */
-export {
-    COMMON_ICON_ART_ROOT,
-    ROLE_PROPERTY_ICON_ROOT_OVERRIDE,
-    resIconRoot,
-} from '../common/ResTypes';

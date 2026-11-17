@@ -54,10 +54,9 @@ export interface IZCPathStepOptions {
 
 /** 索敌排序、射程和通用 BFS；不持有对局状态。*/
 export class ZCTargetingSystem {
-    static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false): ZCTargetSelection | null {
+    static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false, out?: ZCTargetSelectionSink): ZCTargetSelection | null {
         const definition = context.effectiveDefinition(unit);
-        const candidatePosition = { x: 0, y: 0 };
-        const from = context.unitPosition(unit, candidatePosition);
+        const from = context.unitPosition(unit, ACQUIRE_POSITION);
         const fromX = from.x, fromY = from.y;
         let bestKind: ZCCombatTargetKind | null = null;
         let bestId = Infinity;
@@ -67,24 +66,42 @@ export class ZCTargetingSystem {
             if (hater && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
                 && (definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)) {
                 // 仇恨目标进入同一候选池；保留旧逻辑的距离排序语义。
-                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, candidatePosition));
+                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, ACQUIRE_POSITION));
                 if (distance < bestDistance || (distance === bestDistance && hater.id < bestId)) {
                     bestDistance = distance; bestKind = 'unit'; bestId = hater.id;
                 }
             }
         }
-        for (const candidate of context.units) {
-            if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
-            if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
-            const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, candidatePosition));
-            if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
-                bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
+        if (context.unitsOf) {
+            // owner 分桶只排除同阵营单位；敌方单位仍全部参与精确最近目标比较。
+            for (const owner of ZC_OWNER_ORDER) {
+                if (owner === unit.owner) continue;
+                for (const candidate of context.unitsOf(owner)) {
+                    if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
+                    if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
+                    const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION));
+                    if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
+                        bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
+                    }
+                }
+            }
+        } else {
+            for (const candidate of context.units) {
+                if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
+                if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
+                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION));
+                if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
+                    bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
+                }
             }
         }
         if (unitsOnly || (bestKind !== null && context.preferUnitTargets?.(unit))) {
-            return bestKind === null ? null : { kind: bestKind, id: bestId };
+            return bestKind === null ? null : ZCTargetingSystem.writeSelection(bestKind, bestId, out);
         }
-        for (const hex of context.hexes) {
+        const hexCandidates = context.candidateHexes
+            ? context.candidateHexes(unit.owner)
+            : context.hexes;
+        for (const hex of hexCandidates) {
             let kind: ZCCombatTargetKind;
             if (isZCAwakeMonster(hex)) kind = 'building';
             else {
@@ -98,7 +115,12 @@ export class ZCTargetingSystem {
                 bestDistance = distance; bestKind = kind; bestId = hex.id;
             }
         }
-        return bestKind === null ? null : { kind: bestKind, id: bestId };
+        return bestKind === null ? null : ZCTargetingSystem.writeSelection(bestKind, bestId, out);
+    }
+
+    private static writeSelection(kind: ZCCombatTargetKind, id: number, out?: ZCTargetSelectionSink): ZCTargetSelection {
+        if (out) { out.kind = kind; out.id = id; return out; }
+        return { kind, id };
     }
 
     static attackReach(definition: ZCUnitDefinition, targetBodyRadius: number, distanceScale: number): number {

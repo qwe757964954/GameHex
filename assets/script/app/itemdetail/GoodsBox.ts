@@ -43,7 +43,7 @@ export class GoodsBox extends Component {
     private defaultFrame: SpriteFrame | null = null;
 
     protected onLoad(): void {
-        this.defaultFrame = this.frame?.spriteFrame ?? null;
+        this.defaultFrame = this.frame.spriteFrame ?? null;
         // 节点上没有 cc.Button，只能监听 TOUCH_END；绑 CLICK 会是死按钮。
         // 监听随节点销毁自动清理，这里不写 off（组件按 _components 序析构时 node 已置 null）。
         this.node.on(Node.EventType.TOUCH_END, this.emitClick, this);

@@ -63,9 +63,12 @@ test('8-1：主线任务详情页关闭上报 popupClosed', () => {
     );
 });
 
-test('发奖出口：组合层必须注入 grant（否则奖励只打日志、玩家什么也拿不到）', () => {
-    const src = read('assets/script/app/bootstrap/guide/GuideComposition.ts');
-    assert.match(src, /grant: \(rewards, stepId\) =>/, '没注入 grant 时 GuideController 只 console.log');
+test('引导奖励由后端推送，组合层和控制器不模拟发奖或弹出本地奖励', () => {
+    for (const path of ['assets/script/app/bootstrap/guide/GuideComposition.ts',
+        'assets/script/app/guide/application/GuideController.ts']) {
+        const src = read(path);
+        assert.doesNotMatch(src, /\bgrant\s*[?:]|\bgrantRewards\b|FW\.ShowReward\(|ShowRewardPage\.open\(/, path);
+    }
 });
 
 test('引导提示：TapHint 与 MapHint/Text 到位，且都是 Label + UI_2D', () => {

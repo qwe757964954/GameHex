@@ -124,17 +124,17 @@ export class ZCFloatTextView extends Component {
     }
 
     @property({ type: Label, group: '节点引用', tooltip: 'Text：显示数值的 Label（必填）' })
-    textLabel: Label = null;
+    textLabel: Label = null!;
 
     @property({
         type: Label,
         group: '节点引用',
         tooltip: 'Text/Prefix：暴击 / 克制 / 抵抗 / 秒杀 的小字号前缀（只在这四种飘字显示）',
     })
-    prefixLabel: Label | null = null;
+    prefixLabel: Label = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'GoldIcon：金币飘字的金币图标（挂在 Text 下自动跟随；gold 与 goldincome 都显示）' })
-    goldIcon: Sprite | null = null;
+    goldIcon: Sprite = null!;
 
     @property({ group: '数值表现', tooltip: '（已废弃）原飘字基准上移量；金币落点改见 goldCenterY' })
     offsetY = 26;
@@ -265,7 +265,6 @@ export class ZCFloatTextView extends Component {
     */
     private renderPrefix(prefix: string, fontSize: number, fade: number): void {
         const label = this.prefixLabel;
-        if (!label) return;
         const show = prefix.length > 0;
         label.node.active = show;
         label.enabled = show && fade > 0;
@@ -290,7 +289,6 @@ export class ZCFloatTextView extends Component {
     */
     private renderGoldIcon(spin: number, fade: number, x = 0): void {
         const icon = this.goldIcon;
-        if (!icon) return;
         icon.node.setPosition(x, 0, 0);
         icon.node.setRotationFromEuler(0, 0, spin * ZCFloatTextView.GOLD_ICON_SPINS * 360);
         const opacity = this.getGoldIconOpacity();
@@ -312,13 +310,13 @@ export class ZCFloatTextView extends Component {
      * 读到出厂值 240 时退回兜底宽度。
     */
     private readTextWidth(): number {
-        const width = this.textLabel.node.getComponent(UITransform)?.width ?? 0;
+        // Text 节点在 ZCGameFloatText.prefab 上带 UITransform + Label。
+        const width = this.textLabel.node.getComponent(UITransform).width;
         return width > 0 && width <= ZCFloatTextView.TEXT_WIDTH_MAX
             ? width : ZCFloatTextView.TEXT_WIDTH_FALLBACK;
     }
 
     private getGoldIconOpacity(): UIOpacity | null {
-        if (!this.goldIcon) return null;
         if (!this.goldIconOpacity) {
             this.goldIconOpacity = this.goldIcon.node.getComponent(UIOpacity)
                 ?? this.goldIcon.node.addComponent(UIOpacity);

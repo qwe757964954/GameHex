@@ -1,3 +1,4 @@
+import { sendGameRequest } from '../../net/RequestGuard';
 import { RequestMsg } from '../../../framework/net/RequestMsg';
 import { GameNet } from '../../net/GameNet';
 
@@ -47,10 +48,6 @@ export class GameNetGuideGateway implements IGuideGateway {
 
     private async read(): Promise<CmdFunctionGuideInfo | null> {
         if (this.disposed) return null;
-        if (!GameNet.instance.isConnected) {
-            console.info('[GuideProto] 游戏服未连接，跳过查询');
-            return null;
-        }
         const payload: CmdFunctionGuideInfoReqMsg = { funcId: GUIDE_FUNCTION_ID };
         console.info('[GuideProto] 查询请求', JSON.stringify(payload));
         let response: CmdFunctionGuideInfoRspMsg | null = null;
@@ -60,10 +57,10 @@ export class GameNetGuideGateway implements IGuideGateway {
                 console.info('[GuideProto] 查询原始回包（暂不覆盖本地进度）', JSON.stringify(rsp));
             });
             request.canSend = () => !this.disposed;
-            const ok = await GameNet.instance.send(request, false);
+            const status = await sendGameRequest(GameNet.instance, () => request, { tag: 'GuideProto' });
             if (this.disposed) return null;
             const info = response?.infos;
-            if (!ok || !info || info.funcId !== GUIDE_FUNCTION_ID
+            if (status !== 'ok' || !info || info.funcId !== GUIDE_FUNCTION_ID
                 || !isUint32(info.step1) || !isUint32(info.step2)) {
                 console.warn('[GuideProto] 查询失败或回包字段非法');
                 return null;
@@ -81,7 +78,7 @@ export class GameNetGuideGateway implements IGuideGateway {
     }
 
     private async write(completedStepId: string): Promise<GuideUpdateResult> {
-        if (this.disposed || !GameNet.instance.isConnected) return 'retry';
+        if (this.disposed) return 'retry';
         const parts = /^(\d+)-(\d+)$/.exec(completedStepId);
         if (!parts) return 'invalid';
         const step1 = Number(parts[1]);
@@ -98,9 +95,9 @@ export class GameNetGuideGateway implements IGuideGateway {
             });
             request.allowRetry = false;
             request.canSend = () => !this.disposed;
-            const ok = await GameNet.instance.send(request, false);
+            const status = await sendGameRequest(GameNet.instance, () => request, { tag: 'GuideProto' });
             if (this.disposed) return 'retry';
-            const succeeded = ok && response?.succ === 1;
+            const succeeded = status === 'ok' && response?.succ === 1;
             if (!succeeded) console.warn(`[GuideProto] 更新未确认 localCompletedStep=${completedStepId}`);
             return succeeded ? 'ok' : 'retry';
         } catch (error) {

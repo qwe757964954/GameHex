@@ -21,13 +21,6 @@ export class FirstRechargeSlot extends Component {
     @property({ type: UIOpacity, tooltip: 'Dim：压暗用（可选）' })
     dim: UIOpacity | null = null;
 
-    protected onLoad(): void {
-        if (!this.frame) {
-            const own = this.getComponent(Sprite);
-            if (own) this.frame = own;
-        }
-    }
-
     /** 框和图标由宿主预加载传入；qualityFrame null = 保留静态框。 */
     render(iconFrame: SpriteFrame | null, qualityFrame: SpriteFrame | null): void {
         if (qualityFrame) this.frame.spriteFrame = qualityFrame;

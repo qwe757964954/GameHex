@@ -7,7 +7,9 @@ const PORT = 8099;
 const ALLOWED_HOSTS = new Set([
     'cdn-msdf.fdsf675.com',
     'cosfate-1254042967.cos.ap-guangzhou.myqcloud.com',
+    'ray-1254042967.cos.ap-guangzhou.myqcloud.com',
     '175.27.170.110',
+    '129.211.162.236',
 ]);
 
 const server = http.createServer((req, res) => {

@@ -37,7 +37,7 @@ export class MainResBarSlot extends Component {
     icon: Sprite = null;
 
     @property({ type: Label, tooltip: 'Value：数值（体力是 当前/上限）' })
-    valueLabel: Label = null;
+    valueLabel: Label = null!;
 
     /**
      * Plus：补货加号。**设计上可选** —— 只有「能补货」的格子（体力这类）才配这个节点，
@@ -290,12 +290,11 @@ export class MainResBarSlot extends Component {
     /** 上方的 `-N` 飘字：懒建在槽位下面，样式全部来自 `MainResBarSpendFloat.prefab`。 */
     private ensureSpendFloat(): Label | null {
         if (this.spendFloatLabel) return this.spendFloatLabel;
-        const host = this.valueLabel?.node;
-        if (!host || !host.isValid || !this.spendFloatPrefab) return null;
-        const transform = this.node.getComponent(UITransform);
+        const host = this.valueLabel.node;
+        if (!host.isValid || !this.spendFloatPrefab) return null;
         const node = instantiate(this.spendFloatPrefab);
         const gap = node.position.y;
-        this.spendFloatStartY = (transform ? transform.height / 2 : 0) + gap;
+        this.spendFloatStartY = this.node.getComponent(UITransform).height / 2 + gap;
         this.spendFloatX = host.position.x;
 
         node.name = 'SpendFloat';

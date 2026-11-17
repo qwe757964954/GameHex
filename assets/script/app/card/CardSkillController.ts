@@ -104,7 +104,7 @@ export class CardSkillController extends ControllerBase {
                 return {
                     skill: row.skill,
                     level: row.level,
-                    desc: levelRow?.desc || lastLevel?.desc || '',
+                    desc: levelRow?.desc || lastLevel.desc || '',
                     source: row.level === row.serverLevel ? 'server' : 'local',
                 };
             }),

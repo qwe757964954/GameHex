@@ -4,6 +4,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { ccStub, loadTsModule } from './helpers/cc-sandbox';
 import * as table from '../assets/script/app/showReward/ShowRewardTable';
+import * as rewardEntries from '../assets/script/app/common/RewardEntries';
 
 test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期间退出都能配对恢复', async () => {
     class PopupBase {
@@ -17,6 +18,7 @@ test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期�
             '/EventMgr': { EventMgr }, '/ViewLifecycle': { VIEW_LIFECYCLE }, '/FW': { FW: {} },
             '/ItemDetailPage': {}, '/ItemDetailTable': {}, '/VScrollView': {}, '/ShowRewardItem': {},
             '/ShowRewardTexts': {}, '/RewardFrames': {}, '/ShowRewardTable': table,
+            '/RewardEntries': rewardEntries,
         } });
     assert.deepEqual(unresolved, []);
     const events: Array<{ owner: object; phase: string }> = [];

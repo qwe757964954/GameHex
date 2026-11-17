@@ -54,6 +54,8 @@ export interface TerritorySite {
     configId?: string;
     /** 巡逻宝箱可配置的战斗 ID，保留配置顺序。 */
     battleIds?: number[];
+    /** 巡逻宝箱的野怪巡逻配置 ID，旧地图可省略。 */
+    patrolId?: number;
     buildingId?: string;
     /** `PVP-关卡` 的关卡地图格子奖励表 ID，仅固定资源点使用。 */
     rewardId?: number;
@@ -322,6 +324,13 @@ function parseSite(
     } else {
         assert(raw.battleIds === undefined,
             `sites[${index}].battleIds is only valid for patrolChest sites`);
+    }
+    if (raw.patrolId !== undefined) {
+        assert(site.type === TERRITORY_SITE_TYPE.patrolChest,
+            `sites[${index}].patrolId is only valid for patrolChest sites`);
+        assert(Number.isSafeInteger(raw.patrolId) && Number(raw.patrolId) > 0,
+            `sites[${index}].patrolId must be a positive integer`);
+        site.patrolId = Number(raw.patrolId);
     }
     if (raw.rewardId !== undefined) {
         assert(site.type === TERRITORY_SITE_TYPE.fixedResource,

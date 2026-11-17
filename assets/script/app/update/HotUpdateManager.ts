@@ -1,6 +1,7 @@
 import {
     appendCacheBust,
     compareVersion,
+    expandLatestUrl,
     isRolloutEligible,
     parseHotUpdateManifest,
     parseReleasePointer,
@@ -9,7 +10,6 @@ import type {
     IHotUpdateConfig,
     IHotUpdateManagerDependencies,
     IHotUpdateManifest,
-    HotUpdatePlatform,
     IHotUpdateProgress,
     IHotUpdateResult,
 } from '../../core/update/HotUpdateTypes';
@@ -42,7 +42,7 @@ export class HotUpdateManager {
         }
 
         const stored = this.dependencies.store.read();
-        const latestUrl = this.expandLatestUrl(config.latestUrlTemplate, platform, config.channel);
+        const latestUrl = expandLatestUrl(config.latestUrlTemplate, platform, config.channel);
         emit({ phase: 'checking', message: '正在检查资源版本' });
 
         try {
@@ -160,13 +160,6 @@ export class HotUpdateManager {
         };
     }
 
-    private expandLatestUrl(template: string, platform: HotUpdatePlatform, channel: string): string {
-        const value = template
-            .replace(/\{platform\}/g, encodeURIComponent(platform))
-            .replace(/\{channel\}/g, encodeURIComponent(channel));
-        if (!/^https?:\/\//i.test(value)) throw new Error('热更新 latestUrlTemplate 配置无效');
-        return value;
-    }
 }
 
 class IntegrityError extends Error {

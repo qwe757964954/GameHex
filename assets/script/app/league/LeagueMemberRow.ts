@@ -54,13 +54,13 @@ export class LeagueMemberRow extends Component {
     contributeLabel: Label = null;
 
     @property({ type: Label, tooltip: 'n15：职务字（盟主 / 副盟主）' })
-    positionLabel: Label = null;
+    positionLabel: Label = null!;
 
     @property({ type: Sprite, tooltip: 'icon：头像（宿主按 view.img 取图后调 applyAvatar）' })
-    avatarSprite: Sprite = null;
+    avatarSprite: Sprite = null!;
 
     @property({ type: Node, tooltip: 'n14：职务标底图（仅盟主 / 副盟主显示）' })
-    positionTag: Node = null;
+    positionTag: Node = null!;
 
     /** 当前铺在这一行上的成员（`roleId` 供宿主做「是不是自己」的判断）。 */
     private current: ILeagueMemberView | null = null;
@@ -101,18 +101,14 @@ export class LeagueMemberRow extends Component {
 
         const showPosition = this.isLeaderOrAdmin(view);
         const isAdmin = view.position === LeaguePosition.ADMIN;
-        if (this.positionTag) this.positionTag.active = showPosition;
-        if (this.positionLabel) {
-            this.positionLabel.node.active = showPosition;
-            // 不显示时把字**清掉**：节点虽 `active=false`，但槽位是复用的、
-            // 留着「盟主」会让「探针/核对器读到的字符串」与「肉眼所见」对不上（排查时极易误判）。
-            this.positionLabel.string = showPosition
-                ? (isAdmin ? LEAGUE_POSITION_ADMIN : LEAGUE_POSITION_LEADER)
-                : '';
-        }
+        this.positionTag.active = showPosition;
+        this.positionLabel.node.active = showPosition;
+        this.positionLabel.string = showPosition
+            ? (isAdmin ? LEAGUE_POSITION_ADMIN : LEAGUE_POSITION_LEADER)
+            : '';
 
         // 先清头像：槽位是复用的，不清的话新行会短暂顶着上一行的头像
-        if (this.avatarSprite) this.avatarSprite.spriteFrame = null;
+        this.avatarSprite.spriteFrame = null;
     }
 
     /** 本次铺行对应的头像令牌（宿主取图时带走，回来时原样交给 `applyAvatar`）。 */
@@ -128,7 +124,7 @@ export class LeagueMemberRow extends Component {
      */
     applyAvatar(frame: SpriteFrame | null, token: number): void {
         if (token !== this.avatarSeq) return;
-        if (this.avatarSprite) this.avatarSprite.spriteFrame = frame;
+        this.avatarSprite.spriteFrame = frame;
     }
 
     /** 整行藏掉（列表数据不足时由宿主调用）。 */

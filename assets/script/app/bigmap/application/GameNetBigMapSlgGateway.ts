@@ -1,3 +1,4 @@
+import { sendGameRequest } from '../../net/RequestGuard';
 import { GameNet } from '../../net/GameNet';
 import type { RequestMsg } from '../../../framework/net/RequestMsg';
 import type { IBigMapSlgGateway, IBigMapSlgRequestBody, IBigMapSlgRequestName } from './BigMapSlgRepository';
@@ -34,9 +35,7 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
     }
 
     async request(name: IBigMapSlgRequestName, body: IBigMapSlgRequestBody): Promise<unknown> {
-        const net = GameNet.instance;
         if (this.isDisposed) return null;
-        if (!net.isConnected) { warnBlocked('未连接服务器'); return null; }
         if (!this.isOwnerCurrent()) { warnBlocked('存档已切换 / 页面已关闭'); return null; }
         let response: unknown = null;
         const receive = (rsp: unknown): void => { response = rsp; };
@@ -82,11 +81,11 @@ export class GameNetBigMapSlgGateway implements IBigMapSlgGateway {
         request.canSend = () => !this.isDisposed && this.isOwnerCurrent() && Date.now() < expiresAt;
         request.allowRetry = name === 'CmdSlgGameInfoReqMsg' || name === 'CmdSlgActionUpdateReqMsg'
             || name === 'CmdSlgBuildInfoReqMsg';
-        const sent = await net.send(request, false);
+        const status = await sendGameRequest(GameNet.instance, () => request, { timeoutMs: 5000, tag: 'SLG' });
         //发送失败（协议未注册 / 通道关闭）同样要留痕，否则表现和「没连上」一模一样：
         //一切静默，界面只剩「正在同步基地信息」。
-        if (!sent) warnBlocked(`发送失败 ${name}`);
-        return sent && !this.isDisposed && this.isOwnerCurrent() ? response : null;
+        if (status !== 'ok') warnBlocked(`发送失败 ${name}`);
+        return status === 'ok' && !this.isDisposed && this.isOwnerCurrent() ? response : null;
     }
 
 }

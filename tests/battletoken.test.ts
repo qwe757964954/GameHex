@@ -1702,7 +1702,7 @@ test('页面：切页只换图 / 换数据，**不重建节点**（4 个页签�
     assert.match(page, /btPageArtPath\(artKey, 'title'\)/);
     // 说明文字：文案 + **框尺寸**都要换（七日登录的 `425,42` 只在生成器里对不上会静默折行）
     assert.match(page, /hintBoxOf\(type\)/);
-    assert.match(page, /setContentSize\(box\.w, box\.h\)/);
+    assert.match(page, /setContentSize\(hintBox\.w, hintBox\.h\)/);
     assert.match(page, /qipaoBoxOf\(type\)/);
     // 通行证专有的显隐：`titleBg` / 倒计时 / 经验条都跟着 type 走
     assert.match(page, /type !== BT_TYPE_LEVEL_FUND/);

@@ -21,7 +21,7 @@ const { ccclass, property } = _decorator;
 @ccclass('HangGearSwitch')
 export class HangGearSwitch extends Component {
     @property({ type: Label, tooltip: '`x5` 角标（FGUI `times_text`）' })
-    timesText: Label = null;
+    timesText: Label = null!;
 
     @property({ type: Button, tooltip: '整块按钮（FGUI `extention="Button"`）' })
     button: Button = null;
@@ -51,6 +51,6 @@ export class HangGearSwitch extends Component {
 
     /** 铺一次角标文案（`x1` / `x5` / …）。 */
     render(timesLabel: string): void {
-        if (this.timesText) this.timesText.string = timesLabel;
+        this.timesText.string = timesLabel;
     }
 }

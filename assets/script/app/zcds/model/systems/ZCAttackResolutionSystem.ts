@@ -153,7 +153,8 @@ interface IZCPreparedAttack {
     readonly event: ZCCombatEvent;
 }
 
-function damageFloatTextKind(critical: boolean, counterMultiplier = 1): ZCCombatFloatTextKind {    if (critical) return 'critical';
+function damageFloatTextKind(critical: boolean, counterMultiplier = 1): ZCCombatFloatTextKind {
+    if (critical) return 'critical';
     if (counterMultiplier > 1) return 'restraint';
     if (counterMultiplier < 1) return 'resisted';
     return 'damage';
@@ -340,6 +341,7 @@ export class ZCAttackResolutionSystem {
         const parameters = context.skillRuntime[unit.owner]
             .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
         if (!(Math.max(0, parameters?.secondaryCooldown ?? 0) > 0)) return false;
+        //  上面这道守卫要求 `secondaryCooldown > 0`，而 runtime 缺失时读到的是 0 ⇒ 此处 `parameters` 必存在。
         const activeProfile = definition.secondaryProfile;
         if (!activeProfile) return false;
         const target = context.currentTarget(unit);
@@ -354,16 +356,16 @@ export class ZCAttackResolutionSystem {
         //  （bodyRadius 也是），这里不要再预乘一次，否则身体半径会被缩两次。
         const reach = ZCTargetingSystem.attackReach(
             definition, definition.bodyRadius, context.rules.combatDistanceScale);
-        const radius = Math.max(1, reach * Math.max(0.1, parameters?.secondaryRadiusScale ?? 1.4));
-        const halfAngle = Math.max(0, Math.min(180, parameters?.secondaryFanDeg ?? 120)) * Math.PI / 360;
-        const skillDamageRate = Math.max(0, parameters?.secondaryDamageRate ?? 1);
-        const knockbackCells = Math.max(0, parameters?.secondaryKnockback ?? 0);
+        const radius = Math.max(1, reach * Math.max(0.1, parameters.secondaryRadiusScale ?? 1.4));
+        const halfAngle = Math.max(0, Math.min(180, parameters.secondaryFanDeg ?? 120)) * Math.PI / 360;
+        const skillDamageRate = Math.max(0, parameters.secondaryDamageRate ?? 1);
+        const knockbackCells = Math.max(0, parameters.secondaryKnockback ?? 0);
         //  副轨命中挂状态（2026-10-30 僵尸「声波扫射」103203：II/III 级让命中目标减速）。
         //  必须显式开 `secondaryAppliesHitStatus = 1` 才挂：`skillParamJson` 里的 `statusId`
         //  是整卡共用的一个槽（`mergeSkillPlanIntoRuntime` 按 `unitId:pvpSkillId` 合并），
         //  不加闸门的话「同一张卡另一条技能的眩晕/易伤」会被副轨顺手一起打出去。
         //  缺省 0 ⇒ 既有副轨（椰蛋战士「横扫」）行为逐字不变。
-        const appliesHitStatus = (parameters?.secondaryAppliesHitStatus ?? 0) > 0;
+        const appliesHitStatus = (parameters.secondaryAppliesHitStatus ?? 0) > 0;
         const onHitStatusId = appliesHitStatus
             ? (context.skillRuntime[unit.owner].get(`${unit.unitId}:${profile.skillId}`)?.statusId
                 ?? activeProfile.onHitStatusId)
@@ -1667,7 +1669,8 @@ export class ZCAttackResolutionSystem {
     }
 
     static resolveProjectileHit(state: ZCSnapshot, projectile: ZCProjectileState, target: ZCCombatTarget,
-        context: IZCAttackResolutionContext): void {        const targetOwner = this.targetOwner(state, target, context);
+        context: IZCAttackResolutionContext): void {
+        const targetOwner = this.targetOwner(state, target, context);
         const multiplier = cardCounterMultiplier(this.cardById(context, projectile.owner, projectile.sourceCardId), target.cardId ? this.cardById(context, targetOwner, target.cardId) : undefined, context.counters);
         const damage = Math.round(projectile.baseDamage * multiplier);
         const floatTextKind = damageFloatTextKind(projectile.criticalHit === true, multiplier);

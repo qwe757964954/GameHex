@@ -1138,10 +1138,13 @@ test('E3 ⚠️ `refreshList` 必须晚于 `nextPopupFrame()`（否则虚拟列�
 
 test('E4 防连点 + 写后三态收口（`ok` 重读、`offline` / 其它各给提示）', () => {
     const code = readFileSync(PAGE_TS, 'utf8');
+    const flow = readFileSync('assets/script/app/league/LeagueWriteFlow.ts', 'utf8');
     assert.ok(/private beginWrite\(\): boolean/.test(code), '缺 beginWrite');
     assert.ok(/if \(this\.busy\) return false;/.test(code), 'beginWrite 应先判 busy');
-    assert.ok(code.includes("if (result === 'ok')"), 'afterWrite 应按 `ok` 重读一次');
-    assert.ok(code.includes('LEAGUE_TIP_OFFLINE') && code.includes('LEAGUE_TIP_FAILED'),
+    assert.ok(code.includes('settleLeagueWrite(result, this.alive, () => this.reload())'),
+        'afterWrite 应委托统一收口');
+    assert.ok(flow.includes("if (result === 'ok')"), '统一收口应按 `ok` 重读一次');
+    assert.ok(flow.includes('LEAGUE_TIP_OFFLINE') && flow.includes('LEAGUE_TIP_FAILED'),
         'offline / failed 各给一条提示，不许静默');
     // 三个意图共用页面刷新锁；领奖共用完成出口，广告保留独立 finally。
     const gates = code.match(/if \(!this\.beginWrite\(\)\) return;/g) ?? [];

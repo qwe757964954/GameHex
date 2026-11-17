@@ -172,8 +172,10 @@ test('统计条目复用时清除上一条图标，空数据隐藏整条', () =>
     const code = ts.transpileModule(readFileSync('assets/script/app/matching/MatchStatItem.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
     }).outputText;
-    runInNewContext(code, { exports, require() { return { Component: class {},
-        _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} } }; } });
+    runInNewContext(code, { exports, require() {
+        return { Component: class {},
+            _decorator: { ccclass: () => (type: unknown) => type, property: () => () => {} } };
+    } });
     const item = new exports.MatchStatItem();
     item.icon = { node: { active: true }, spriteFrame: {} };
     item.valueLabel = { node: { active: true }, string: '' };

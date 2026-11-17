@@ -116,7 +116,7 @@ export class MainPage extends Component {
     chestToggle: Node = null;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell0：第一个宝箱数量格' })
-    chestCell0: Sprite = null;
+    chestCell0: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'BottomHud/Cell1：第二个宝箱数量格' })
     chestCell1: Sprite = null;
@@ -134,7 +134,7 @@ export class MainPage extends Component {
     chestCellEmpty: SpriteFrame = null;
 
     @property({ type: ChestBar, tooltip: 'ChestBar：底部宝箱栏（4 格，蓝湖「塔防主界面-2」）' })
-    chestBar: ChestBar = null;
+    chestBar: ChestBar = null!;
 
     hasTerritoryMap = false;
     /**
@@ -146,7 +146,9 @@ export class MainPage extends Component {
      * `ProcedureManager.navigate(GameRoute.Matching, …)` 在过场里。
      */
     territoryMap: MainTerritoryMap | null = null;
-    private readonly treasureRepository = new NewTreasureRepository();
+    private readonly treasureRepository = new NewTreasureRepository((goods) => {
+        EventMgr.instance.emit(CHEST_EVENTS.REWARDS, { owner: this, goods });
+    });
     /** 运行时当前章节（来自 `TerritoryViewEvent.Render` 的 `state.chapterId`），弹窗标「当前章」用。 */
     private currentChapterId = 0;
     /** 章节弹窗行数据在途标记：挡连点，避免同一次点击并发拉两次地图。 */
@@ -629,7 +631,6 @@ export class MainPage extends Component {
 
     /** 宝箱展开时收起快速寻敌按钮，避免两个战斗入口互相遮挡。 */
     private setChestPanelOpen(open: boolean): void {
-        if (!this.chestBar) return;
         this.chestBar.setOpen(open);
         // 🔴 不能只写 `!open`：快速寻敌没解锁时，收起宝箱栏不该把它顺手亮出来。
         this.startButton.active = this.quickFindUnlocked && !open;
@@ -670,8 +671,8 @@ export class MainPage extends Component {
     private ensureChestBlankCatcher(): Node | null {
         if (this.chestBlankCatcher?.isValid) return this.chestBlankCatcher;
         const bar = this.chestBar;
-        const arena = bar?.node?.parent ?? null;
-        if (!bar || !arena) return null;
+        const arena = bar.node.parent;
+        if (!arena) return null;
 
         const catcher = new Node(CHEST_BLANK_CATCHER);
         catcher.layer = arena.layer;
@@ -684,7 +685,7 @@ export class MainPage extends Component {
         // 插入位置由「谁必须压在遮罩之上」决定，逐级兜底，最差也只退化到多盖一层 HUD，
         // 绝不会插到宝箱栏之后（那会把栏内按钮全盖死 ⇒ 只能靠左箭头收）。
         const topHud = arena.getChildByName('TopHud');
-        const bottomHud = this.chestCell0?.node?.parent ?? null;
+        const bottomHud = this.chestCell0.node?.parent ?? null;
         const index = topHud
             ? topHud.getSiblingIndex()
             : (bottomHud && bottomHud.parent === arena ? bottomHud.getSiblingIndex() : bar.node.getSiblingIndex());
@@ -759,7 +760,6 @@ export class MainPage extends Component {
         for (let index = 0; index < cells.length; index++) {
             cells[index].spriteFrame = index < count ? this.chestCellFilled : this.chestCellEmpty;
         }
-        if (!this.chestBar) return;
         this.chestBar.render(data);
     }
 

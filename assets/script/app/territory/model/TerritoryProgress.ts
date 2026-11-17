@@ -1,6 +1,12 @@
 import { TerritoryMapConfig, TerritorySite, isTerritoryBattleSite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 
+/** 章节号归一：0 / 负数 / NaN 一律当第 1 章，避免服务端收到 `levelChapter=0`。 */
+export function normalizeTerritoryChapter(levelChapter: number): number {
+    const parsed = Math.floor(Number(levelChapter));
+    return Number.isFinite(parsed) && parsed >= 1 ? parsed : 1;
+}
+
 /** 发起探索前回给 UI 的报价。 */
 export interface TerritoryExploreQuote {
     cellId: number;
@@ -126,7 +132,7 @@ export class TerritoryProgress {
         const validCell = (cell: unknown): cell is number =>
             typeof cell === 'number' && Number.isInteger(cell) && cell >= 0 && cell < total;
         const added: number[] = [];
-        for (const cell of state.passCells ?? []) {
+        for (const cell of state.passCells) {
             this.pendingPasses.delete(cell);
             if (!validCell(cell)) continue;
             // 服务端确认通关的，无条件记入权威集合（本地是否已 owned 都算确认过）。
@@ -139,8 +145,8 @@ export class TerritoryProgress {
             added.push(cell);
         }
         // 完整快照 ⇒ 重建解锁集；空数组不清空，否则空包会把整章格子清死。
-        if (options?.replaceUnlocks && (state.unlockCells?.length ?? 0) > 0) this.unlockable.clear();
-        for (const cell of state.unlockCells ?? []) {
+        if (options?.replaceUnlocks && state.unlockCells.length > 0) this.unlockable.clear();
+        for (const cell of state.unlockCells) {
             if (!validCell(cell)) continue;
             this.unlockable.add(cell);
         }

@@ -32,15 +32,6 @@ export function loadRoleArt(key: string): Promise<SpriteFrame | null> {
     return cache.load(path);
 }
 
-/** 批量预加载（同一批里失败的记 `null`，调用方按 `null` 留白）。 */
-export async function loadRoleArtAll(keys: readonly string[]): Promise<Map<string, SpriteFrame | null>> {
-    const out = new Map<string, SpriteFrame | null>();
-    await Promise.all(keys.map(async (key) => {
-        out.set(key, await loadRoleArt(key));
-    }));
-    return out;
-}
-
 /** 已有缓存（不触发加载）。 */
 export function peekRoleArt(key: string): SpriteFrame | null {
     return cache.peek(roleFramePathOf(key));

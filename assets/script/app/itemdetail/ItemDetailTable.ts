@@ -16,6 +16,7 @@
  */
 
 import { parseRowsToMap } from '../../core/table/RowParse';
+import { toCount } from '../../core/value/Coerce';
 
 // ============================================================
 // 品质
@@ -113,11 +114,6 @@ function str(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
 
-function num(value: unknown, fallback = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function numList(value: unknown): number[] {
     if (!Array.isArray(value)) return [];
     const out: number[] = [];
@@ -132,19 +128,19 @@ function numList(value: unknown): number[] {
 export function parseItemRow(raw: unknown): IItemRow | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
-    const resId = num(row.resId);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
     return {
         resId,
         name: str(row.name),
         desc: str(row.desc),
-        type: num(row.type),
-        useType: num(row.useType),
-        quality: num(row.quality, 1),
+        type: toCount(row.type),
+        useType: toCount(row.useType),
+        quality: Number.isFinite(Number(row.quality)) ? toCount(row.quality) : 1,
         icon: str(row.icon),
         access: numList(row.access),
         itemBox: numList(row.itemBox),
-        useJump: num(row.useJump),
+        useJump: toCount(row.useJump),
     };
 }
 
@@ -204,7 +200,7 @@ export function parseViewTypeRows(rows: readonly unknown[]): Map<number, IViewTy
     for (const raw of rows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
+        const resId = toCount(row.resId);
         if (resId <= 0) continue;
         out.set(resId, { resId, value: str(row.value) });
     }
@@ -259,16 +255,19 @@ export function parseItemCraftRows(rows: readonly unknown[]): Map<number, IItemC
     for (const raw of rows) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const id = num(row.id);
+        const id = toCount(row.id);
         if (id <= 0) continue;
         const rewardRaw = row.reward && typeof row.reward === 'object'
             ? (row.reward as Record<string, unknown>)
             : null;
         out.set(id, {
             id,
-            number: num(row.number),
+            number: toCount(row.number),
             reward: rewardRaw
-                ? { resId: num(rewardRaw.resId), number: num(rewardRaw.number, 1) }
+                ? {
+                    resId: toCount(rewardRaw.resId),
+                    number: Number.isFinite(Number(rewardRaw.number)) ? toCount(rewardRaw.number) : 1,
+                }
                 : null,
         });
     }

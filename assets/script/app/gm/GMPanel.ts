@@ -85,10 +85,10 @@ export class GMPanel extends PopupBase {
 
         // CLICK 是挂在节点上的（Button 自身没有 on）。
         const close = this.closeButton.getComponent(Button);
-        if (close) close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
+        close.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
         const execute = this.executeButton.getComponent(Button);
-        if (execute) execute.node.on(Button.EventType.CLICK, this.onExecuteClick, this);
+        execute.node.on(Button.EventType.CLICK, this.onExecuteClick, this);
 
         // 输入框回车 = 执行（事件名是 Node 上的字符串事件，不走 Button）
         this.cmdInput.node.on('editing-return', this.onInputReturn, this);

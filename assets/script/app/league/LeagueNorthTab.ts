@@ -67,10 +67,10 @@ export class LeagueNorthTab extends Component {
     bg: Sprite = null;
 
     @property({ type: Label, tooltip: 'title：页签文案（联盟排名 / 盟内进度 / 联盟奖励 / 个人奖励）' })
-    titleLabel: Label = null;
+    titleLabel: Label = null!;
 
     @property({ type: Node, tooltip: 'com_rd：页签红点（只有奖励页会点亮）' })
-    redDot: Node = null;
+    redDot: Node = null!;
 
     /** 点到这个页签（宿主按自己的页签表分发）。 */
     onTabClick: (() => void) | null = null;
@@ -83,7 +83,7 @@ export class LeagueNorthTab extends Component {
     private dotOn = false;
 
     protected onLoad(): void {
-        this.bgSprite = this.bg ?? this.getComponent(Sprite);
+        this.bgSprite = this.bg;
         const button = this.getComponent(Button);
         if (button) button.node.on(Button.EventType.CLICK, this.onClick, this);
         else this.node.on(Node.EventType.TOUCH_END, this.onClick, this);
@@ -110,7 +110,7 @@ export class LeagueNorthTab extends Component {
 
     /** 文案（页签表改了文案时用；一般 prefab 上已经写好）。 */
     setTitle(text: string): void {
-        if (this.titleLabel) this.titleLabel.string = text;
+        this.titleLabel.string = text;
     }
 
     /** 当前是否选中（探针 / 单测用）。 */
@@ -127,25 +127,23 @@ export class LeagueNorthTab extends Component {
      */
     private apply(): void {
         const frame = this.selected ? this.frames.selected : this.frames.normal;
-        const sprite = this.bgSprite ?? this.bg ?? this.getComponent(Sprite);
+        const sprite = this.bgSprite;
         if (frame && sprite) sprite.spriteFrame = frame;
 
-        if (this.titleLabel) {
-            const rgb = this.selected ? LEAGUE_ART_NORTH_TAB_TEXT_SELECTED : LEAGUE_ART_NORTH_TAB_TEXT_NORMAL;
-            this.titleLabel.color = color(rgb[0], rgb[1], rgb[2], 255);
-            // 描边同色切（FGUI 那条 `gearColor` 的第二列）：选中态描边更深
-            this.titleLabel.outlineColor = color(
-                LEAGUE_ART_NORTH_TAB_TEXT_STROKE[0],
-                LEAGUE_ART_NORTH_TAB_TEXT_STROKE[1],
-                LEAGUE_ART_NORTH_TAB_TEXT_STROKE[2],
-                255,
-            );
-        }
+        const rgb = this.selected ? LEAGUE_ART_NORTH_TAB_TEXT_SELECTED : LEAGUE_ART_NORTH_TAB_TEXT_NORMAL;
+        this.titleLabel.color = color(rgb[0], rgb[1], rgb[2], 255);
+        // 描边同色切（FGUI 那条 `gearColor` 的第二列）：选中态描边更深
+        this.titleLabel.outlineColor = color(
+            LEAGUE_ART_NORTH_TAB_TEXT_STROKE[0],
+            LEAGUE_ART_NORTH_TAB_TEXT_STROKE[1],
+            LEAGUE_ART_NORTH_TAB_TEXT_STROKE[2],
+            255,
+        );
 
         // 红点走共用组件（跨嵌套 prefab 边界取不到内部组件 ⇒ 取不到就退回直接写 active）
         const dot = this.redDot ? this.redDot.getComponent(RedDot) : null;
         if (dot) dot.setRedDot(this.dotOn ? 1 : 0);
-        else if (this.redDot) this.redDot.active = this.dotOn;
+        else this.redDot.active = this.dotOn;
     }
 
     private readonly onClick = (): void => {

@@ -1,3 +1,5 @@
+import { toCount } from '../../core/value/Coerce';
+
 /**
  * 主线任务判定纯函数，不依赖 cc。任务进度、奖励和入口显隐都从这里算。
  */
@@ -30,11 +32,6 @@ export interface IMainTaskRow {
     readonly goto: number;
 }
 
-function num(value: unknown, fallback = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function str(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
@@ -46,9 +43,9 @@ function parseRewards(value: unknown): { resId: number; number: number }[] {
     for (const raw of value) {
         if (!raw || typeof raw !== 'object') continue;
         const row = raw as Record<string, unknown>;
-        const resId = num(row.resId);
+        const resId = toCount(row.resId);
         if (resId <= 0) continue;
-        out.push({ resId, number: num(row.number, 1) });
+        out.push({ resId, number: Number.isFinite(Number(row.number)) ? toCount(row.number) : 1 });
     }
     return out;
 }
@@ -56,19 +53,19 @@ function parseRewards(value: unknown): { resId: number; number: number }[] {
 export function parseMainTaskRow(raw: unknown): IMainTaskRow | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
-    const resId = num(row.resId);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
     const param = row.param && typeof row.param === 'object'
         ? (row.param as Record<string, unknown>)
         : null;
     return {
         resId,
-        preResId: num(row.preResId),
-        targetType: num(row.targetType),
-        maxCount: param ? num(param.count) : 0,
+        preResId: toCount(row.preResId),
+        targetType: toCount(row.targetType),
+        maxCount: param ? toCount(param.count) : 0,
         reward: parseRewards(row.reward),
         name: str(row.name),
-        goto: num(row.goto),
+        goto: toCount(row.goto),
     };
 }
 

@@ -6,7 +6,6 @@
  */
 
 import { easeOutCubic } from '../../../core/math/Easing';
-import { clamp01Finite as clamp01 } from '../../../core/math/Scalar';
 
 /** 按压回弹总时长（秒，规格 0.18）。 */
 export const TERRITORY_TAP_PRESS_SECONDS = 0.18;

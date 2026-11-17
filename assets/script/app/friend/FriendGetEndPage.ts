@@ -156,7 +156,6 @@ export class FriendGetEndPage extends PopupBase {
     /** 虚拟列表的行渲染（槽位被 clone 复用 ⇒ 回调里按 index 现取）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(FriendGetEndRow);
-        if (!row) return;
 
         row.onAction = () => this.dispatchRow(this.rowIds[index], (id) => void this.onGetEnd(id));
 

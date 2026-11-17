@@ -242,10 +242,11 @@ test('前 7 次普攻不出弹，第 8 次打出 3 秒 / 穿透 8 次的重拳',
     assert.ok(Math.abs(fist.velocityX - 100) < 1e-6, '弹速 100');
     assert.equal(fist.remainingPierces, 8, 'III 级：最多命中 9 个敌人 = 首目标 + 穿透 8 次');
     assert.equal(fist.pierceFalloff, 0.5, '每多命中一人伤害 -50%');
-    // 140 × 7 = 980 是「面板 × 倍率」的裸值；实战还要过 `deckBonuses.unitAttackMultiplier`
-    // （羁绊/成长）。这里钉「确实是 7 倍那一档」，不锁死羁绊那 8%，免得改羁绊就红。
-    assert.ok(fist.baseDamage >= ATTACK * 7 && fist.baseDamage < ATTACK * 7 * 1.2,
-        `III 级首击应 ≈980，实际 ${fist.baseDamage}`);
+    // 140 × 7 = 980 是「面板 × 倍率」的裸值；再乘 102502「裂变暴击」的混搭尾「攻击提高 35%」
+    // （`statPatch.attackPct`，V5 2026-11-16）＝ 1323，最后还要过 `deckBonuses.unitAttackMultiplier`
+    // （羁绊/成长）。这里钉「确实是 7 倍那一档 × 1.35」，不锁死羁绊那 8%，免得改羁绊就红。
+    assert.ok(fist.baseDamage >= ATTACK * 7 * 1.35 && fist.baseDamage < ATTACK * 7 * 1.35 * 1.2,
+        `III 级首击应 ≈1323，实际 ${fist.baseDamage}`);
 });
 
 test('普攻那一发仍然是近战、不吃重拳参数（3 秒 / 穿透 8 次不外溢）', () => {

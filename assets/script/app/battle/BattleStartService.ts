@@ -1,6 +1,6 @@
 import { RequestStartBattle, RequestFinishBattle } from '../generated/requestMsg/RequestBattleMsg';
 import { GameNet } from '../net/GameNet';
-import { toCount, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toCount, withTimeout } from '../net/RequestGuard';
 import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
 import type { ZCBattleStart } from './BattleStartModel';
 
@@ -58,10 +58,6 @@ async function requestStartBattle(
     caller?: object,
     isCurrent?: () => boolean,
 ): Promise<ZCBattleStart | null> {
-    if (!GameNet.instance.isConnected) {
-        console.warn('[BattleStartService] 游戏服未连接，无法确认开战');
-        return null;
-    }
 
     let active = true;
     const canSend = (): boolean => active && (!isCurrent || isCurrent());
@@ -100,10 +96,10 @@ async function sendStartBattle(
             request.allowRetry = false;
             request.canSend = isCurrent;
         }
-        const ok = await GameNet.instance.send(request, false);
+        const status = await sendGameRequest(GameNet.instance, () => request, { timeoutMs: BATTLE_START_TIMEOUT_MS, tag: 'BattleStartService' });
         if (!isCurrent()) return null;
-        if (!ok || !response) {
-            console.warn(`[BattleLoading] 开战未获确认 type=${battleType} sendOk=${ok} hasResponse=${response !== null}`);
+        if (status !== 'ok' || !response) {
+            console.warn(`[BattleLoading] 开战未获确认 type=${battleType} status=${status} hasResponse=${response !== null}`);
             return null;
         }
         console.info(`[BattleLoading] 开战回包交接 ${Date.now() - responseAt}ms`);
@@ -147,10 +143,6 @@ export function finishBattle(
     statisticsInfos: ReadonlyArray<CmdBattleStatisticsInfo> = [],
     caller?: object,
 ): Promise<ZCBattleFinish | null> {
-    if (!GameNet.instance.isConnected) {
-        console.warn('[BattleStartService] 游戏服未连接，跳过完成战斗上报');
-        return Promise.resolve(null);
-    }
     return withTimeout(
         sendFinishBattle(clientTickCount, result, commands, statisticsInfos, caller),
         BATTLE_FINISH_TIMEOUT_MS,
@@ -170,7 +162,7 @@ async function sendFinishBattle(
 ): Promise<ZCBattleFinish | null> {
     let response: CmdFinishBattleRspMsg | null = null;
     try {
-        const ok = await GameNet.instance.send(new RequestFinishBattle(
+        const status = await sendGameRequest(GameNet.instance, () => new RequestFinishBattle(
             {
                 clientTickCount: Math.max(0, Math.floor(clientTickCount)),
                 result,
@@ -179,8 +171,8 @@ async function sendFinishBattle(
             },
             caller,
             (rsp) => { response = rsp; },
-        ), false);
-        if (!ok || !response) return null;
+        ), { timeoutMs: BATTLE_FINISH_TIMEOUT_MS, tag: 'BattleStartService' });
+        if (status !== 'ok' || !response) return null;
     } catch (error) {
         console.warn('[BattleStartService] 完成战斗上报失败', error);
         return null;

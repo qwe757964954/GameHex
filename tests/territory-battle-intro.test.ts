@@ -1151,7 +1151,7 @@ test('★★★busy 起演的过场必须收得下回包那条 navigate：不许
         '过场已起演时必须把回包的去向交给它');
 });
 
-test('★★★流程切走落定后要复位过场门闩（成功路径不复位 ⇒ 页面复用时第二次开战静默失效）', () => {
+test('★★★流程切走落定后要作废兜底现场（成功路径留着它，页面复用时会静默失效）', () => {
     const source = stripped(PAGE);
     const start = source.indexOf('private watchBattleSwitch()');
     const end = source.indexOf('private stopBattleSwitchWatch()');
@@ -1161,13 +1161,13 @@ test('★★★流程切走落定后要复位过场门闩（成功路径不复�
     const to = watch.indexOf('this.failBattleIntro');
     assert.ok(from > 0 && to > from, '找不到 entered 分支');
     const entered = watch.slice(from, to);
-    assert.ok(entered.includes('this.battleApproachPending = false;'), '成功落定必须复位一次性门闩');
+    assert.ok(entered.includes('this.battleIntroLeftover = null;'), '成功落定必须作废兜底现场');
 });
 
-test('★前奏仍要立起 battleApproachPending（修守卫不许顺手删掉前奏的并发判据）', () => {
+test('★前奏起手必须立起 battlePrelude（迟到回包的并发判据就在它身上）', () => {
     const source = stripped(PAGE);
     const start = source.indexOf('private beginBattlePrelude');
     const end = source.indexOf('private stepBattlePrelude');
     assert.ok(start > 0 && end > start, '找不到 beginBattlePrelude 的实现');
-    assert.ok(source.slice(start, end).includes('this.battleApproachPending = true'));
+    assert.ok(source.slice(start, end).includes('this.battlePrelude = {'), '前奏在跑要能挡住迟到回包');
 });

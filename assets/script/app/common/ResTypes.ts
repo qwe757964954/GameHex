@@ -99,7 +99,7 @@ export const ROLE_PROPERTY_ICON_ROOT_OVERRIDE: Readonly<Record<string, string>> 
 /**
  * 裸图标名 → 该去哪个目录取。**默认 `icons/resource`，例外查 {@link ROLE_PROPERTY_ICON_ROOT_OVERRIDE}**。
  *
- * 与 `activity/LayerActivityArt.resolveRewardIconRef` 的 `roleProperty` 支**同口径** ——
+ * 与 `common/RewardIcon.resolveRewardIconRef` 的 `roleProperty` 支**同口径** ——
  * 改这里就是改全工程，调用方别再写死目录。
  */
 export function resIconRoot(name: string): string {

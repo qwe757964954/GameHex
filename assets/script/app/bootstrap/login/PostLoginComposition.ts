@@ -7,6 +7,9 @@ import { LaunchProgressUI, LAUNCH_UPDATE_WEIGHT } from '../../loading/LaunchProg
 import { PostLoginController } from '../../loading/PostLoginController';
 import { resolvePostLoginIdentity } from '../../loading/PostLoginContract';
 import { TerritoryChapterInfoRepository } from '../../territory/application/TerritoryChapterInfoRepository';
+import { cardRepository } from '../../card/CardRepository';
+import { PvpHeroService } from '../../card/PvpHeroService';
+import { GameNet } from '../../net/GameNet';
 
 /** 每次进入持有独立控制器，启动遮罩仅在 Main 首屏完成后交给接续流程。 */
 export class PostLoginComposition extends ControllerBase {
@@ -81,6 +84,7 @@ export class PostLoginComposition extends ControllerBase {
 }
 
 function bootstrapPostLoginIdentity(params: unknown): void {
+    cardRepository.bindHeroSession(new PvpHeroService(GameNet.instance));
     let owner = resolvePostLoginIdentity(params, null);
     if (!owner) {
         try {

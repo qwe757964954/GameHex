@@ -20,10 +20,10 @@ const sec = (frames: number): number => frames / FGUI_FPS;
 @ccclass('ShowRewardItem')
 export class ShowRewardItem extends Component {
     @property({ type: GoodsBox, tooltip: 'Goods：物品框（品质框 / 图标 / 数量），FGUI 的 com_goods' })
-    goods: GoodsBox = null;
+    goods: GoodsBox = null!;
 
     @property({ type: Sprite, tooltip: 'Glow：闪光（FGUI n1），入场时 alpha 1→0 淡出' })
-    glow: Sprite = null;
+    glow: Sprite = null!;
 
     @property({ type: [Sprite], tooltip: 'Stars：5 个星点（FGUI n2~n6，按顺序传入，与 SR_STAR_TRACKS 对应）' })
     stars: Sprite[] = [];
@@ -54,7 +54,7 @@ export class ShowRewardItem extends Component {
         numberText: string,
         showNumber: boolean,
     ): void {
-        this.goods?.render(qualityFrame, iconFrame, numberText, showNumber);
+        this.goods.render(qualityFrame, iconFrame, numberText, showNumber);
     }
 
     // ============================================================
@@ -70,10 +70,8 @@ export class ShowRewardItem extends Component {
         this.stopAnim();
         this.node.setScale(0.2, 0.2, 1);
 
-        if (this.glow) {
-            this.glow.node.active = true;
-            this.setAlpha(this.glow, 1);
-        }
+        this.glow.node.active = true;
+        this.setAlpha(this.glow, 1);
 
         for (let i = 0; i < this.stars.length; i += 1) {
             const star = this.stars[i];
@@ -103,7 +101,7 @@ export class ShowRewardItem extends Component {
     settle(): void {
         this.stopAnim();
         this.node.setScale(1, 1, 1);
-        if (this.glow) this.glow.node.active = false;
+        this.glow.node.active = false;
         for (const star of this.stars) {
             if (!star) continue;
             star.node.active = false;
@@ -125,19 +123,17 @@ export class ShowRewardItem extends Component {
         // ② 闪光：t=5 起 7 帧内淡到 0。
         // 🔴 target 必须是 Node、不能是裸量对象：裸量没有 NODE_DESTROYED 停机时机，
         //    弹窗销毁后补间仍跑，glow 被置 null 后回调抛错并打断整轮 update。
-        if (this.glow) {
-            const color = new Color(this.glow.color);
-            tween(this.glow.node)
-                .delay(sec(5))
-                .to(sec(7), {}, {
-                    onUpdate: (_target, ratio) => {
-                        if (rev !== this.animRevision) return;
-                        color.a = Math.round(255 * (1 - ratio));
-                        this.glow.color = color;
-                    },
-                })
-                .start();
-        }
+        const color = new Color(this.glow.color);
+        tween(this.glow.node)
+            .delay(sec(5))
+            .to(sec(7), {}, {
+                onUpdate: (_target, ratio) => {
+                    if (rev !== this.animRevision) return;
+                    color.a = Math.round(255 * (1 - ratio));
+                    this.glow.color = color;
+                },
+            })
+            .start();
 
         // ③ 星点：t=5 出现放大（5 帧）+ 飞散（13 帧），t=10 起 8 帧缩回（节点须保持 active，见 resetAppear）。
         for (let i = 0; i < this.stars.length; i += 1) {
@@ -177,7 +173,7 @@ export class ShowRewardItem extends Component {
         this.animRevision += 1;
         Tween.stopAllByTarget(this.node);
         // 闪光补间以 glow 节点为 target（见 appear），不在上一条里。
-        if (this.glow) Tween.stopAllByTarget(this.glow.node);
+        Tween.stopAllByTarget(this.glow.node);
         for (const star of this.stars) {
             if (star) Tween.stopAllByTarget(star.node);
         }
@@ -189,17 +185,17 @@ export class ShowRewardItem extends Component {
 
     /** 数量文案（探针判有没有铺上数据）。 */
     get numberText(): string {
-        return this.goods?.num?.string ?? '';
+        return this.goods.num?.string ?? '';
     }
 
     /** 品质框 uuid（探针对比两格是否不同图）。 */
     get qualityUuid(): string {
-        return this.goods?.frame?.spriteFrame?._uuid ?? '';
+        return this.goods.frame?.spriteFrame?._uuid ?? '';
     }
 
     /** 道具图 uuid。 */
     get iconUuid(): string {
-        return this.goods?.icon?.spriteFrame?._uuid ?? '';
+        return this.goods.icon?.spriteFrame?._uuid ?? '';
     }
 
     private setAlpha(sprite: Sprite, alpha: number): void {

@@ -39,7 +39,7 @@ export class MailRow extends Component {
     takenStamp: Node = null;
 
     @property({ type: Button, tooltip: '本节点：整行可点（打开详情）' })
-    button: Button = null;
+    button: Button = null!;
 
     /**
      * 打开详情回调 —— **由宿主在每次铺行时重设**（`MailPage.renderRow`）。
@@ -52,7 +52,7 @@ export class MailRow extends Component {
     private mailId = '';
 
     protected onLoad(): void {
-        this.button?.node.on(Button.EventType.CLICK, this.emitOpen, this);
+        this.button.node.on(Button.EventType.CLICK, this.emitOpen, this);
     }
 
     /** 铺一行（所有状态绝对赋值）。 */

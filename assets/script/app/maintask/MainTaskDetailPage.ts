@@ -111,7 +111,7 @@ export class MainTaskDetailPage extends PopupBase {
 
     private presentTitle(snapshot: IMainTaskSnapshot): void {
         // 无条件写：同一实例会被不同任务复用，条件式赋值会留下上一条任务的标题。
-        if (this.taskTitle) this.taskTitle.string = snapshot.configured ? snapshot.detailTitle : '';
+        this.taskTitle.string = snapshot.configured ? snapshot.detailTitle : '';
     }
 
     /**

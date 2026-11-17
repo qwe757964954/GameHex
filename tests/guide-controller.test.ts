@@ -18,7 +18,7 @@ import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
 import type { IGuideGateway } from '../assets/script/app/guide/application/GuideGateway';
 import { GuideSyncOutbox } from '../assets/script/app/guide/model/GuideSyncOutbox';
 import { parseGuideSteps } from '../assets/script/app/guide/model/GuideStepConfig';
-import type { GuideReward, GuideStep } from '../assets/script/app/guide/model/GuideStepConfig';
+import type { GuideStep } from '../assets/script/app/guide/model/GuideStepConfig';
 import {
     createMemoryGuideStorage,
     GUIDE_SAVE_KEY_PREFIX,
@@ -44,7 +44,6 @@ const tick = (): Promise<void> => new Promise(resolve => { setTimeout(resolve, 0
 function makeController(roleId: string, overrides: {
     steps?: readonly GuideStep[];
     view?: (state: IGuideViewState) => void;
-    grant?: (rewards: readonly GuideReward[], stepId: string) => void;
     failed?: (error: unknown) => void;
     now?: () => number;
     storage?: ReturnType<typeof createMemoryGuideStorage>;
@@ -56,21 +55,16 @@ function makeController(roleId: string, overrides: {
         overrides.storage ?? createMemoryGuideStorage(),
     );
     const states: IGuideViewState[] = [];
-    const granted: { stepId: string; rewards: readonly GuideReward[] }[] = [];
     const controller = new GuideController(CONTEXT, {
         store,
         steps: overrides.steps ?? STEPS,
         gateway: overrides.gateway,
         outbox: overrides.outbox,
         view: { owner: states, render: (state) => { states.push(state); overrides.view?.(state); } },
-        grant: (rewards, stepId) => {
-            granted.push({ stepId, rewards });
-            overrides.grant?.(rewards, stepId);
-        },
         failed: overrides.failed,
         now: overrides.now ?? (() => 1000),
     });
-    return { controller, store, states, granted };
+    return { controller, store, states };
 }
 
 test('章节战斗从进入、当前抽卡展示结束到结算返回，按实际事件续接', () => {
@@ -148,8 +142,11 @@ test('带参事件：notify(name, arg) 匹配 completeCond 的 name:arg', () => 
     controller.dispose();
 });
 
-test('发奖：完成带奖励的步时把清单交给 grant 出口', () => {
-    const { controller, granted } = makeController('c-grant');
+test('完成带奖励配置的步骤只上报进度，不写已发奖标记', async () => {
+    const updates: string[] = [];
+    const { controller, store } = makeController('c-server-reward', {
+        gateway: { load: async () => null, update: async id => { updates.push(id); return 'ok'; }, dispose() {} },
+    });
     controller.start();
     // 1-1 → 1-2 → 1-3 → 2-1 都是无奖步
     assert.equal(controller.notify('click'), true);
@@ -157,32 +154,14 @@ test('发奖：完成带奖励的步时把清单交给 grant 出口', () => {
     assert.equal(controller.notify('click'), true);
     assert.equal(controller.notify('tileFlipped'), true);
     assert.equal(controller.currentStepId, '2-2');
-    assert.equal(granted.length, 0);
+    assert.deepEqual(store.load()?.grantedSteps, []);
 
-    // 2-2 完成时发 3 条（判据已改为 click：奖励弹窗关闭后玩家点对话条推进）
+    // 本地表有奖励配置，客户端仍只发送完成步骤，发奖由后端决定。
     assert.equal(controller.notify('click'), true);
-    assert.equal(granted.length, 1);
-    assert.equal(granted[0].stepId, '2-2');
-    assert.deepEqual(granted[0].rewards.map((r) => `${r.resId}x${r.number}`), ['7x10', '3x15', '18003x3']);
-    controller.dispose();
-});
-
-test('发奖抛错不阻塞推进（记账在前，失败只上报）', () => {
-    const errors: unknown[] = [];
-    const { controller } = makeController('c-grant-fail', {
-        grant: () => { throw new Error('钱包不可用'); },
-        failed: (error) => errors.push(error),
-    });
-    controller.start();
-    controller.notify('click');
-    controller.notify('click');
-    controller.notify('click');
-    controller.notify('tileFlipped');
-    assert.equal(controller.currentStepId, '2-2');
-
-    assert.equal(controller.notify('click'), true);
-    assert.equal(controller.currentStepId, '3-1');   // 进度照常前进
-    assert.equal(errors.length, 1);
+    await tick();
+    assert.equal(controller.currentStepId, '3-1');
+    assert.ok(updates.includes('2-2'));
+    assert.deepEqual(store.load()?.grantedSteps, []);
     controller.dispose();
 });
 
@@ -208,9 +187,9 @@ test('落盘：每推进一步写入当前步，重启后从断点继续', () =>
     second.controller.dispose();
 });
 
-test('跳过：非强制步才生效；跳过后一次性补发剩余奖励并结束', () => {
+test('跳过：非强制步才生效，只保存结束进度，不模拟补发奖励', () => {
     const storage = createMemoryGuideStorage();
-    const { controller, granted } = makeController('c-skip', { storage });
+    const { controller, store } = makeController('c-skip', { storage });
     controller.start();
     assert.equal(controller.skip(), false);   // 1-1 是强制步
 
@@ -227,9 +206,7 @@ test('跳过：非强制步才生效；跳过后一次性补发剩余奖励并�
 
     assert.equal(controller.skip(), true);
     assert.equal(controller.isFinished, true);
-    const last = granted[granted.length - 1];
-    assert.equal(last.stepId, 'skip');
-    assert.deepEqual(last.rewards.map((r) => `${r.resId}x${r.number}`), ['10010x30']);
+    assert.deepEqual(store.load()?.grantedSteps, []);
     assert.equal(storage.getItem(`${GUIDE_SAVE_KEY_PREFIX}.server:s1:role:c-skip`) !== null, true);
     assert.equal(controller.skip(), false);   // 已结束，再跳无效
     controller.dispose();

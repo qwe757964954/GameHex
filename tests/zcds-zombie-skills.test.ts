@@ -103,18 +103,39 @@ test('僵尸八卡：普攻行各归各家，遗留的武将技线全部摘掉',
     }
 });
 
-test('篮球天才：三路友军光环各占一个槽位（整卡共用一份参数袋，不能重名）', () => {
+test('友军光环：同一张卡的不同光环技能必须落在不同槽位（整卡共用一份参数袋，不能重名）', () => {
     prepare();
-    const plans = readRows('pvpSkillPlan').filter((row) => String(row.unitId) === '68030');
-    const byChain = new Map(plans.map((row) => [Number(row.skillChainId), row]));
-    const slots = [103001, 103002, 103003].map((chain) => {
-        const row = byChain.get(chain);
-        assert.ok(row, `缺 ${chain}`);
-        assert.equal(row!.behaviorKey, 'team_aura', `${chain} 必须走 team_aura`);
-        const params = JSON.parse(String(row!.skillParamJson)) as Record<string, number>;
-        return Object.keys(params).map((key) => Number(/^teamAura(\d)/.exec(key)?.[1])).find((n) => Number.isFinite(n));
-    });
-    assert.deepEqual(slots, [0, 1, 2], '三条光环必须落在 0/1/2 三个不同槽位');
+    //  槽位是**整卡共用**的：`ZCStatusStatMods` 按 `teamAura{k}*` 取值，两条技能抢同一个 k
+    //  就会互相覆盖，所以这里钉「槽位 → 技能链」是一对一。
+    //  🔴 2026-11-16 之前这条用例钉的是 68030 篮球天才的三路光环（103001/103002/103003），
+    //  V5 把 103001/103002 换成「废土铁芽 / 超视孢子」，只剩 103003 还是光环（职业猎杀协议落地时再换）。
+    const slotOwner = new Map<string, string>();
+    const auraChains = new Map<string, Set<number>>();
+    for (const row of readRows('pvpSkillPlan')) {
+        const params = row.skillParamJson
+            ? JSON.parse(String(row.skillParamJson)) as Record<string, number>
+            : {};
+        const slots = Object.keys(params)
+            .map((key) => /^teamAura(\d)(?:Radius|AttackPct|MaxHpPct|AttackSpeedPct|MoveSpeedPct)$/.exec(key)?.[1])
+            .filter((slot): slot is string => slot !== undefined);
+        if (!slots.length) continue;
+        const unit = String(row.unitId);
+        const chain = `${unit}:${row.skillChainId}`;
+        if (!auraChains.has(unit)) auraChains.set(unit, new Set());
+        auraChains.get(unit)!.add(Number(row.skillChainId));
+        for (const slot of new Set(slots)) {
+            const key = `${unit}#${slot}`;
+            const owner = slotOwner.get(key);
+            assert.ok(owner === undefined || owner === chain,
+                `${unit} 的槽位 ${slot} 被 ${owner} 与 ${chain} 同时占用`);
+            slotOwner.set(key, chain);
+        }
+    }
+    //  共生信号·迅 家族（金/蓝/紫三档同一条机制）统一走 0 号槽位。
+    for (const [unit, chain] of [['68006', 100602], ['68023', 102301], ['68031', 103101]] as const) {
+        assert.ok(auraChains.get(unit)?.has(chain), `${unit}:${chain} 必须是友军光环`);
+        assert.equal(slotOwner.get(`${unit}#0`), `${unit}:${chain}`, `${unit} 的光环应落在 0 号槽位`);
+    }
 });
 
 test('科学家 26 级：穿透 / 暴击两路词缀进了 statPatch，处决已从卡牌链路移除', () => {

@@ -23,7 +23,7 @@
 
 import { RequestGameViewClick } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
-import { toCount, withTimeout } from '../net/RequestGuard';
+import { sendGameRequest, toCount, withTimeout } from '../net/RequestGuard';
 
 /**
  * 界面编号 —— 协议 `mark` 的**服务端口径**。
@@ -51,11 +51,6 @@ export const GAME_VIEW_CLICK_TIMEOUT_MS = 3000;
  * @returns `true` = 服务端回 `succ === 1`；未连接 / 超时 / 失败一律 `false`
  */
 export function reportGameViewClick(mark: GameViewMark, caller?: object): Promise<boolean> {
-    if (!GameNet.instance.isConnected) {
-        // 离线（单机预览 / 断线）不算错误：这是埋点，没有本地兜底也不需要告警刷屏。
-        console.info('[GameViewClick] 游戏服未连接，跳过界面点击上报');
-        return Promise.resolve(false);
-    }
     return withTimeout(sendGameViewClick(mark, caller), GAME_VIEW_CLICK_TIMEOUT_MS, () => {
         console.warn(`[GameViewClick] 界面点击上报 ${GAME_VIEW_CLICK_TIMEOUT_MS}ms 无响应（mark=${mark}）`);
         return false;
@@ -73,8 +68,8 @@ async function sendGameViewClick(mark: GameViewMark, caller?: object): Promise<b
         // 见文件头 ③：埋点重发等于多记一次点击。
         request.allowRetry = false;
         // `needLoading = false`：埋点绝不能弹转圈。
-        const sent = await GameNet.instance.send(request, false);
-        if (!sent) return false;
+        const status = await sendGameRequest(GameNet.instance, () => request, { timeoutMs: GAME_VIEW_CLICK_TIMEOUT_MS, tag: 'GameViewClick' });
+        if (status !== 'ok') return false;
     } catch (error) {
         console.warn('[GameViewClick] 界面点击上报失败', error);
         return false;

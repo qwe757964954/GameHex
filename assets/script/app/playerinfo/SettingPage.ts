@@ -1,4 +1,3 @@
-import { bindButton as bindButtonCompat } from '../common/ClickBinding';
 import { _decorator, Button, Label, Node } from 'cc';
 import { PopupBase } from '../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../framework/ui/PopupDef';
@@ -66,10 +65,10 @@ export class SettingPage extends PopupBase {
     musicOnLabel: Node = null;
 
     @property({ type: VolumeSlider, tooltip: 'MusicSlider：音乐音量滑动条' })
-    musicSlider: VolumeSlider = null;
+    musicSlider: VolumeSlider = null!;
 
     @property({ type: Label, tooltip: 'MusicVolumeValue：音乐音量数值文本' })
-    musicVolumeValue: Label = null;
+    musicVolumeValue: Label = null!;
 
     // ---------- 音效 ----------
     @property({ type: Node, tooltip: 'SoundSwitch：「音效开关」整块' })
@@ -85,24 +84,18 @@ export class SettingPage extends PopupBase {
     soundOnLabel: Node = null;
 
     @property({ type: VolumeSlider, tooltip: 'SoundSlider：音效音量滑动条' })
-    soundSlider: VolumeSlider = null;
+    soundSlider: VolumeSlider = null!;
 
     @property({ type: Label, tooltip: 'SoundVolumeValue：音效音量数值文本' })
-    soundVolumeValue: Label = null;
+    soundVolumeValue: Label = null!;
 
     // ============================================================
     // 生命周期
     // ============================================================
 
-    /**
-     * 绑按钮。
-     *
-     * ⚠️ FGUI `<loader>` / `<image>` 迁过来**只有 `cc.Sprite`、没有 `cc.Button`**（规则 81b）：
-     * 那种节点上绑 `Button.EventType.CLICK` 是**静默死按钮**。反过来 `extention="Button"`
-     * 形态迁过来**有** `cc.Button`，绑 `TOUCH_END` 会绕过 `interactable`。按实际组件分流。
-     */
+    /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
     private bindButton(node: Node | null | undefined, handler: () => void): void {
-        bindButtonCompat(node, handler, this);
+        node?.on(Button.EventType.CLICK, handler, this);
     }
 
     protected onInit(): void {
@@ -145,11 +138,11 @@ export class SettingPage extends PopupBase {
         this.presentSwitch(soundOn, this.soundOnKnob, this.soundOffKnob, this.soundOnLabel, this.soundOffLabel);
 
         // `setValue` 的第二参 `notify = false`：这里是**外部驱动**，回调再打回来会自激。
-        this.musicSlider?.setValue(musicVolume, false);
-        this.soundSlider?.setValue(soundVolume, false);
+        this.musicSlider.setValue(musicVolume, false);
+        this.soundSlider.setValue(soundVolume, false);
 
-        if (this.musicVolumeValue) this.musicVolumeValue.string = mgr.getMusicVolumeText();
-        if (this.soundVolumeValue) this.soundVolumeValue.string = mgr.getSoundVolumeText();
+        this.musicVolumeValue.string = mgr.getMusicVolumeText();
+        this.soundVolumeValue.string = mgr.getSoundVolumeText();
     }
 
     /** 一个开关的四个节点。`on` 为真 = 滑块靠右 + 显示「开」。 */

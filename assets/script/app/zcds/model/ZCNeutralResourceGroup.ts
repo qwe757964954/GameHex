@@ -229,7 +229,7 @@ export interface IZCNeutralFeatureConfig {
     readonly damageMultiplier?: number;
     readonly resId?: string;
     readonly wakeRange?: number;
-    readonly attackRange?: number;
+    readonly reviveRate?: number;
 }
 
 function parseNeutralFeature(type: number, param: unknown, where: string,
@@ -240,7 +240,7 @@ function parseNeutralFeature(type: number, param: unknown, where: string,
         ? ['gateIds']
         : type === ZCNeutralResourceType.Portal ? ['range', 'uses', 'cooldownSeconds']
         : type === ZCNeutralResourceType.Extension ? ['damageRate', 'speed']
-        : type === ZCNeutralResourceType.Monster ? ['resId', 'wakeRange', 'attackRange'] : [];
+        : type === ZCNeutralResourceType.Monster ? ['resId', 'wakeRange', 'reviveRate'] : [];
     for (const key of Object.keys(data)) {
         if (!allowed.includes(key)) throw new Error(`${where}.param 出现未知字段：${key}`);
     }
@@ -270,9 +270,13 @@ function parseNeutralFeature(type: number, param: unknown, where: string,
     if (type === ZCNeutralResourceType.Monster) {
         if (typeof data.resId !== 'string') throw new Error(`${where}.param.resId 必须是卡牌ID字符串`);
         requireCard(String(data.resId ?? ''), ZCCardType.Barracks, where, cards);
-        for (const key of ['wakeRange', 'attackRange']) {
+        for (const key of ['wakeRange']) {
             if (!Number.isSafeInteger(data[key]) || (data[key] as number) < 1) throw new Error(`${where}.param.${key} 必须是正整数`);
         }
+    }
+    if (type === ZCNeutralResourceType.Monster
+        && (typeof data.reviveRate !== 'number' || !Number.isFinite(data.reviveRate) || data.reviveRate <= 0)) {
+        throw new Error(`${where}.param.reviveRate 必须大于0`);
     }
     return data as IZCNeutralFeatureConfig;
 }

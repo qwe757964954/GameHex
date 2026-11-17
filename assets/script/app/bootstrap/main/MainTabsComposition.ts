@@ -7,7 +7,6 @@ import { MainTabEvent } from '../../main/MainTabEvents';
 import { MainPageComposition } from './MainPageComposition';
 import { BigMapEntry } from '../../bigmap/application/BigMapEntry';
 import { fetchFormations } from '../../card/FormationService';
-import { fetchPvpHeroInfos, getCachedPvpHeroInfos } from '../../card/PvpHeroService';
 import { cardRepository } from '../../card/CardRepository';
 import { cardArtProvider } from '../../card/CardArtProvider';
 import { visibleIconTallies, visibleLineupCards } from '../../card/CardLineupTypes';
@@ -58,7 +57,7 @@ export class MainTabsComposition extends ControllerBase {
     /** 与页面 prefab 加载重叠；请求与图片复用既有会话缓存，不等待模型或网络才备图。 */
     private prefetchHero(): void {
         void fetchFormations({ label: '切角色 tab 预取' });
-        if (getCachedPvpHeroInfos() === null) void fetchPvpHeroInfos();
+        cardRepository.prefetchHeroInfos();
         void this.warmHeroArt();
     }
     private async warmHeroArt(): Promise<void> {

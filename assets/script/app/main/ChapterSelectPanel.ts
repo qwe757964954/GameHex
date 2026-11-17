@@ -95,7 +95,6 @@ export class ChapterSelectPanel extends PopupBase {
         const row = this.rows[index];
         if (!row) return;
         const item = node.getComponent(ChapterSelectItem);
-        if (!item) return;
         item.render(row);
         // slot 会被回收复用：先摘掉自己上一次绑的监听，避免同一个节点堆积多个闭包
         node.targetOff(this);

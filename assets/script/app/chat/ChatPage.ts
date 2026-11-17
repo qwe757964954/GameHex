@@ -397,7 +397,7 @@ export class ChatPage extends PopupBase {
     private renderTabNode(node: Node, index: number): void {
         const button = node.getComponent(FriendTabButton);
         const channel = this.channels[index];
-        if (!button || channel === undefined) {
+        if (channel === undefined) {
             node.active = false;
             return;
         }
@@ -415,7 +415,6 @@ export class ChatPage extends PopupBase {
     private renderMessageNode(node: Node, index: number): void {
         const bubble = node.getComponent(ChatBubble);
         const message = this.messageRows[index];
-        if (!bubble) return;
         if (!message) {
             bubble.hide();
             return;
@@ -436,7 +435,6 @@ export class ChatPage extends PopupBase {
     private renderPrivateNode(node: Node, index: number): void {
         const bubble = node.getComponent(ChatPrivateBubble);
         const message = this.privateRows[index];
-        if (!bubble) return;
         if (!message) {
             bubble.hide();
             return;
@@ -453,7 +451,6 @@ export class ChatPage extends PopupBase {
     private renderRecruitNode(node: Node, index: number): void {
         const row = node.getComponent(ChatRecruitRow);
         const view = this.recruitRows[index];
-        if (!row) return;
         if (!view) {
             row.hide();
             return;
@@ -475,7 +472,6 @@ export class ChatPage extends PopupBase {
     private renderHeadNode(node: Node, index: number): void {
         const row = node.getComponent(ChatPrivateHead);
         const view = this.headRows[index];
-        if (!row) return;
         if (!view) {
             row.hide();
             return;
@@ -488,7 +484,6 @@ export class ChatPage extends PopupBase {
 
     private renderEmojiNode(node: Node, index: number): void {
         const item = node.getComponent(ChatEmojiItem);
-        if (!item) return;
         if (index >= this.emojiFrames.length) {
             item.hide();
             return;
@@ -502,7 +497,6 @@ export class ChatPage extends PopupBase {
     private renderAtNode(node: Node, index: number): void {
         const row = node.getComponent(ChatAtRow);
         const view = this.atRows[index];
-        if (!row) return;
         if (!view) {
             row.hide();
             return;

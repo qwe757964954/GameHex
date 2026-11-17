@@ -17,15 +17,14 @@ import {
     type LeagueRequestResult,
 } from './LeagueRepository';
 import { loadLeagueRewardArt, type ILeagueRewardArt } from './LeagueRewardArt';
+import { settleLeagueWrite } from './LeagueWriteFlow';
 import { LeagueStoreRow } from './LeagueStoreRow';
 import { type ILeagueStoreRowView } from './LeagueTable';
 import {
     fillLeagueText,
     LEAGUE_STORE_SOLD_OUT,
     LEAGUE_STORE_TITLE,
-    LEAGUE_TIP_FAILED,
     LEAGUE_TIP_NOT_ENOUGH_TEMPLATE,
-    LEAGUE_TIP_OFFLINE,
 } from './LeagueTexts';
 
 const { ccclass, property } = _decorator;
@@ -39,10 +38,10 @@ export class LeagueStorePage extends PopupBase {
     static prefabPath = 'ui/League/LeagueStore';
 
     @property({ type: Node, tooltip: 'CloseBtn：右上关闭按钮（挂 cc.Button）' })
-    closeButton: Node = null;
+    closeButton: Node = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'StoreListView：商品列表（虚拟列表 + Mask）' })
-    storeList: VirtualScrollView = null;
+    storeList: VirtualScrollView = null!;
 
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueStoreRowView[] = [];
@@ -63,11 +62,10 @@ export class LeagueStorePage extends PopupBase {
 
     protected onInit(): void {
         EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this);
-        const button = this.closeButton?.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
-        else console.warn('[LeagueStore] CloseBtn 上没有 cc.Button，点击不会生效');
+        const button = this.closeButton.getComponent(Button);
+        button.node.on(Button.EventType.CLICK, this.onCloseClick, this);
 
-        if (this.storeList) this.storeList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.storeList.renderItemFn = (node, index) => this.renderRow(node, index);
     }
 
     protected async onOpen(): Promise<void> {
@@ -135,16 +133,13 @@ export class LeagueStorePage extends PopupBase {
     }
 
     private present(): void {
-        if (this.storeList) {
-            this.storeList.refreshList(this.rows);
-            this.storeList.scrollToTop(false);
-        }
+        this.storeList.refreshList(this.rows);
+        this.storeList.scrollToTop(false);
     }
 
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueStoreRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();
@@ -208,12 +203,7 @@ export class LeagueStorePage extends PopupBase {
 
     /** 写完后按三态收口；成功则重读一次（老端靠推送刷新）。 */
     private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        if (result === 'ok') {
-            await this.reload();
-            return;
-        }
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
+        await settleLeagueWrite(result, this.alive, () => this.reload());
     }
 
     // 杂项

@@ -1,3 +1,4 @@
+import { sendGameRequest } from '../net/RequestGuard';
 import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 月卡礼包的数据端口 —— **表 + 服务器缓存 + 网络请求** 三合一的 Repository。
@@ -128,19 +129,17 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
     }
 
     async buy(type: number, payId: number, caller?: object): Promise<MonthCardRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
         // 老客户端在 `rsp.ret` 为真之后调 `SDKMgr.pay(payRef.id, "common", 0)` 发起真实支付，
         // 其中 `payRef` = `payChannel` 里 `id === monthCardActPlan.rmb` 的那一行（= `payId`）。
         // `rsp.ret` 只代表「服务端受理了开单请求」（那时还没付款）—— 真正发货靠 `CmdCardBuyBroMsg`
         // 广播（见 `listen`）。所以这里 `rsp.ret` 为真后走 `FW.pay` 触发支付，返回 `'ok'` 只表示「已开单」。
         let ret = false;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestMonthCardBuy({ res_Id: type }, caller, (rsp) => { ret = rsp?.ret === true; }),
-                false,
+                { tag: 'MonthCardGift' },
             );
-            if (!ok) return 'failed';
+            if (status !== 'ok') return status;
         } catch (error) {
             console.warn('[MonthCardGift] 购买请求失败', error);
             return 'failed';
@@ -151,15 +150,13 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
     }
 
     async claim(activityResId: number, caller?: object): Promise<MonthCardRequestResult> {
-        const net = GameNet.instance;
-        if (!net.isConnected) return 'offline';
         //  ⚠️ `CmdTakeMonthCardActRewardRspMsg` **没有 `ret` 字段**（整个响应体只有 `tlReward` ——
         //  见 `Cmd.d.ts:3153`），与购买那条协议不一样。老端也从不判它：
         //  `ModelActivity.RequestTakeMonthCardActReward()` 收到响应就直接 `FW.ShowReward(rsp.tlReward)`。
         //  所以这里的成功判据是「响应到达」；失败路径是 `net.send` 返回 false 或者抛异常。
         let responded = false;
         try {
-            const ok = await net.send(
+            const status = await sendGameRequest(GameNet.instance, () =>
                 new RequestTakeMonthCardReward(
                     { resId: activityResId },
                     caller,
@@ -174,9 +171,9 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
                         if (goods && goods.length > 0) FW.ShowReward(goods);
                     },
                 ),
-                false,
+                { tag: 'MonthCardGift' },
             );
-            if (!ok) return 'failed';
+            if (status !== 'ok') return status;
         } catch (error) {
             console.warn('[MonthCardGift] 领取每日奖励请求失败', error);
             return 'failed';

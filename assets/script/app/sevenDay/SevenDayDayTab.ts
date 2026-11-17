@@ -48,12 +48,6 @@ export class SevenDayDayTab extends Component {
     private static readonly SELECTED_SCALE = 1.12;
 
     render(day: number, label: string, unlocked: boolean, selected: boolean, hasRedDot: boolean): void {
-        if (!this.background) {
-            // ⚠️ `@property` 是「同节点指自己」那种，新建脚本时编辑器未必把字段写进 prefab，
-            //    这里兜一次；已绑定时不会走到。
-            const own = this.getComponent(Sprite);
-            if (own) this.background = own;
-        }
         this.dayLabel.string = label;
         // ⚠️ 绝对赋值：天数按钮会被复用（切天数时同 7 个节点重填），
         //    条件式赋值会留下上一个状态的图（对象池同款缺陷，规则 10）。
@@ -63,8 +57,7 @@ export class SevenDayDayTab extends Component {
         const scale = selected ? SevenDayDayTab.SELECTED_SCALE : 1;
         this.node.setScale(scale, scale, 1);
         // 未解锁的按钮压暗（老端靠 `gearColor` 改文字色；这里整体压暗更省一张图）
-        const opacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
-        opacity.opacity = unlocked ? 255 : 200;
+        this.node.getComponent(UIOpacity).opacity = unlocked ? 255 : 200;
     }
 
     /** 隐藏（表里天数不够 7 天时，多余的天数按钮藏掉）。 */

@@ -1,29 +1,28 @@
 /**
  * 新手引导步骤机，纯 TS，不 import cc。
- * 负责定位当前步、推进、跳过和本地发奖台账。granted 只是本地台账，不是权威发奖；
+ * 负责定位当前步、推进和跳过；奖励发放、幂等与到账由服务端处理。
  * 本类不读表、不加载资源、不派发事件。
  */
 
 import { GUIDE_STEP_END } from './GuideStepConfig';
-import type { GuideReward, GuideStep } from './GuideStepConfig';
+import type { GuideStep } from './GuideStepConfig';
 
 /** 可持久化的引导进度快照。存 `stepId` 字符串而不是下标 —— 表插行/删行不会让存档错位。 */
 export interface GuideProgressData {
     /** 当前未完成的步；空串 = 引导已结束。 */
     readonly currentStepId: string;
     readonly completedSteps: readonly string[];
+    /** 仅兼容旧存档，不再新增，不代表服务端已发奖。 */
     readonly grantedSteps: readonly string[];
     /** 是否由「跳过」结束。 */
     readonly skipped: boolean;
 }
 
-/** `complete()` 的结果：下一步是谁、这次该发什么。 */
+/** `complete()` 的结果：完成了哪一步、下一步是谁。 */
 export interface GuideCompletion {
     readonly step: GuideStep;
     /** 下一步；`null` = 整条引导完成。 */
     readonly next: GuideStep | null;
-    /** 本次应发的奖励（已按 `granted` 过滤），调用方负责落地。 */
-    readonly rewards: readonly GuideReward[];
 }
 
 export class GuideProgress {
@@ -78,13 +77,13 @@ export class GuideProgress {
         return Array.from(this.completed);
     }
 
-    /** 已发过奖的步。 */
+    /** 旧版奖励标记，只用于存档兼容，不作为到账或补发依据。 */
     get grantedSteps(): readonly string[] {
         return Array.from(this.granted);
     }
 
     /**
-     * 完成当前步：推进并记账，返回本次应发的奖励。重复或非当前步返回 null。
+     * 完成当前步并推进。重复或非当前步返回 null。
      */
     complete(stepId: string): GuideCompletion | null {
         const step = this.byId.get(stepId);
@@ -92,41 +91,32 @@ export class GuideProgress {
         if (this.cursor !== stepId) return null;
         if (this.completed.has(stepId)) return null;
 
-        const rewards = this.ungrantedRewards(step);
         this.completed.add(stepId);
-        // 只记「真的发过奖」的步：零奖励步也写 granted 会让存档出现 `grantedSteps: ['1-1']`
-        // 这种误导现场（看日志的人会以为发过东西）。防重复完成靠 cursor，不靠这里。
-        if (step.rewards.length > 0) this.granted.add(stepId);
 
         const next = step.nextStep === GUIDE_STEP_END ? null : this.byId.get(step.nextStep) ?? null;
         this.cursor = next ? next.stepId : null;
-        return { step, next, rewards };
+        return { step, next };
     }
 
     /**
-     * 从当前步起跳过整条引导，剩余步骤全部标记完成并交出未发奖励。
+     * 从当前步起跳过整条引导，剩余步骤全部标记完成。
      * force 为 true 时忽略当前步 skipAble，仅用于调试或运营强推。
      */
-    skip(force = false): readonly GuideReward[] {
-        if (!force && !this.canSkip) return [];
-
-        const rewards: GuideReward[] = [];
+    skip(force = false): void {
+        if (!force && !this.canSkip) return;
         let cursor = this.cursor;
         // 构造期已校验链表无环，这里按链走即可。
         while (cursor) {
             const step = this.byId.get(cursor);
             if (!step) break;
             if (!this.completed.has(cursor)) {
-                rewards.push(...this.ungrantedRewards(step));
                 this.completed.add(cursor);
-                if (step.rewards.length > 0) this.granted.add(cursor);
             }
             cursor = step.nextStep === GUIDE_STEP_END ? null : step.nextStep;
         }
 
         this.cursor = null;
         this.skippedFlag = true;
-        return rewards;
     }
 
     /** 导出存档。`currentStepId` 用空串表示已结束（JSON 友好，不用 `null`）。 */
@@ -137,11 +127,6 @@ export class GuideProgress {
             grantedSteps: Array.from(this.granted),
             skipped: this.skippedFlag,
         };
-    }
-
-    private ungrantedRewards(step: GuideStep): GuideReward[] {
-        if (this.granted.has(step.stepId)) return [];
-        return step.rewards.map((reward) => ({ ...reward }));
     }
 
     private restore(saved: GuideProgressData): void {

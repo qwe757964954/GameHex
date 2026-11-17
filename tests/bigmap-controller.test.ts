@@ -165,10 +165,13 @@ test('出生广播补查未知据点且列表可循环查看，滑动时新城�
     let position = 0;
     const repository = new BigMapCampRepository({ fetchSimple: async () => ({ infos: [] }),
         fetchDetail: async () => ({ infos: [] }), requestMove: async () => null,
-        fetchRoles: async (campId) => { queryCount++; return { campId, infos: [
-            { roleId: '1', serverId: '2', roleName: '甲', img: '1', pos: position, defenseHp: 100 },
-            { roleId: '2', serverId: '2', roleName: '乙', img: '2', pos: position + 1, defenseHp: 90 },
-        ] }; } });
+        fetchRoles: async (campId) => {
+            queryCount++;
+            return { campId, infos: [
+                { roleId: '1', serverId: '2', roleName: '甲', img: '1', pos: position, defenseHp: 100 },
+                { roleId: '2', serverId: '2', roleName: '乙', img: '2', pos: position + 1, defenseHp: 90 },
+            ] };
+        } });
     const h = create(repository);
     const territory = h.model.territoryRegions()[0];
     position = territory.hexIds[0];

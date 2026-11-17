@@ -45,7 +45,7 @@ export const PLAYER_INFO_TEXTS = {
 
     /**
      * 断线 —— 客户端**压根没连上服务器**，请求根本没发出去
-     * （`PlayerInfoRepository.send()` 第一句 `if (!net.isConnected) return 'offline'`）。
+     * （共享请求入口 `sendGameRequest()` 返回 `offline`）。
      *
      * ⚠️ 与 `xxxFailed`（发出去了、超时或服务端拒）**必须分开**。
      * 2026-09-28 山猫报「更换头像的时候，显示更换头像失败」：实测根因是**同一账号第二端登录

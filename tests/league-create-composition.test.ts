@@ -87,6 +87,7 @@ function pageImports(): Record<string, unknown> {
             LEAGUE_COST_SHORT_COLOR: [0, 0, 0], LEAGUE_COST_SHORT_STROKE: [0, 0, 0],
             leagueBannerArt: () => '',
         },
+        LeagueBannerArt: { loadLeagueBannerFrames: async () => new Array(8).fill(null) },
         LeagueCreateEvents: { LeagueCreateEvent },
         LeagueTable: { leagueCreateBannerIndices: () => [0, 1, 2, 3, 4, 5, 6, 7] },
         LeagueTexts: {

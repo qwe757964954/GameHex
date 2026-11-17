@@ -59,10 +59,10 @@ export class LeagueJoinPage extends Component {
     searchButton: Node = null;
 
     @property({ type: EditBox, tooltip: 'Search/Input：联盟 ID 查询框（数字键盘）' })
-    searchInput: EditBox = null;
+    searchInput: EditBox = null!;
 
     @property({ type: VirtualScrollView, tooltip: 'LeagueListView：可加入的联盟列表（虚拟列表 + Mask）' })
-    unionList: VirtualScrollView = null;
+    unionList: VirtualScrollView = null!;
 
     @property({ type: Node, tooltip: 'BtnCreate：创建联盟（开 LeagueCreate 弹窗）' })
     createButton: Node = null;
@@ -131,10 +131,6 @@ export class LeagueJoinPage extends Component {
     private bindList(): void {
         if (this.rendererBound) return;
         this.rendererBound = true;
-        if (!this.unionList) {
-            console.warn('[LeagueJoin] LeagueListView 没绑上，联盟列表不会渲染');
-            return;
-        }
         this.unionList.renderItemFn = (node, index) => this.renderRow(node, index);
         this.unionList.onItemClickFn = (node, index) => this.onRowClick(node, index);
     }
@@ -143,7 +139,7 @@ export class LeagueJoinPage extends Component {
     private applyStaticTexts(): void {
         setLabelIfEmpty(this.createButton, LEAGUE_JOIN_BTN_CREATE);
         setLabelIfEmpty(this.quickJoinButton, LEAGUE_JOIN_BTN_QUICK);
-        const placeholder = this.searchInput?.placeholderLabel;
+        const placeholder = this.searchInput.placeholderLabel;
         if (placeholder && !placeholder.string) placeholder.string = LEAGUE_HALL_SEARCH_PROMPT;
     }
 
@@ -175,7 +171,7 @@ export class LeagueJoinPage extends Component {
      * 命中过搜索缓存就只显示那一条，否则显示全部。
      */
     private present(rows: readonly ILeagueUnionRow[]): void {
-        const key = this.searchInput?.string ?? '';
+        const key = this.searchInput.string ?? '';
         this.rows = buildLeagueUnionViews(pickUnionListForSearch(rows, this.repository.cachedSearch(key)), JOIN_ROW_TEXTS);
         void this.deferRefresh();
     }
@@ -188,7 +184,7 @@ export class LeagueJoinPage extends Component {
      */
     private async deferRefresh(): Promise<void> {
         await nextFrame();
-        if (!this.alive || !this.unionList?.isValid) return;
+        if (!this.alive || !this.unionList.isValid) return;
         this.unionList.refreshList(this.rows);
         this.unionList.scrollToTop(false);
     }
@@ -196,7 +192,6 @@ export class LeagueJoinPage extends Component {
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
         const row = node.getComponent(LeagueUnionRow);
-        if (!row) return;
         const view = this.rows[index];
         if (!view) {
             row.hide();
@@ -220,13 +215,12 @@ export class LeagueJoinPage extends Component {
     /** 查询框输入：非正整数就地清空（老端 `onInputTextChange` 逐字照搬）。 */
     private onSearchTextChanged(): void {
         const input = this.searchInput;
-        if (!input) return;
         input.string = sanitizeLeagueSearchInput(input.string);
     }
 
     /** 点「查询」：空输入提示；否则按 id 搜，回来后按缓存重铺列表。 */
     private async onSearchClick(): Promise<void> {
-        const key = this.searchInput?.string ?? '';
+        const key = this.searchInput.string ?? '';
         if (!key) {
             FW.showTip(LEAGUE_TIP_INPUT_UNION_ID);
             return;
@@ -251,7 +245,7 @@ export class LeagueJoinPage extends Component {
      * 取「可快速加入」列表（**命中搜索缓存时直接点名那一个**），空则提示且**不发包**。
      */
     private async onQuickJoinClick(): Promise<void> {
-        const key = this.searchInput?.string ?? '';
+        const key = this.searchInput.string ?? '';
         const snapshot = await this.repository.load();
         if (!this.alive) return;
 

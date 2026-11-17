@@ -9,6 +9,8 @@
  * 子页签由 `GIFT_SUB_TAB_ORDER` 与表内实际数据取交集，不跟随表行顺序。
  */
 
+import { parseRewardAmounts } from '../../core/table/RewardRows';
+import { toCount } from '../../core/value/Coerce';
 import { formatText, GIFT_TEXTS } from './GiftTexts';
 
 /** 一条奖励：`{ resId, number }`。 */
@@ -134,28 +136,13 @@ export function listGiftOfType(
 // 表行解析
 // ============================================================
 
-function asNumber(value: unknown, fallback: number = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function asString(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
 
 /** 奖励数组：老端存 `{ resId, number }`，`resId <= 0` 或数量为 0 的条目丢掉。 */
 function parseRewards(value: unknown): readonly IGiftReward[] {
-    if (!Array.isArray(value)) return [];
-    const out: IGiftReward[] = [];
-    for (const item of value) {
-        if (!item || typeof item !== 'object') continue;
-        const raw = item as Record<string, unknown>;
-        const resId = asNumber(raw.resId);
-        const number = asNumber(raw.number);
-        if (resId <= 0 || number <= 0) continue;
-        out.push({ resId, number });
-    }
-    return out;
+    return parseRewardAmounts(value);
 }
 
 /** 解析 `giftShop` 一行；`id` 非法或缺 `desc` 时返回 `null`（跳过该行）。 */
@@ -163,10 +150,10 @@ export function parseGiftShopRow(raw: unknown): IGiftShopRow | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
 
-    const id = asNumber(row.id);
+    const id = toCount(row.id);
     if (id <= 0) return null;
 
-    const type = asNumber(row.type);
+    const type = toCount(row.type);
     if (type <= 0) return null;
 
     const desc = asString(row.desc);
@@ -178,10 +165,10 @@ export function parseGiftShopRow(raw: unknown): IGiftShopRow | null {
         type,
         desc,
         rewards: parseRewards(row.rewards),
-        priceType: asNumber(row.priceType),
-        cost: asNumber(row.cost),
-        limit: asNumber(row.limit),
-        discount: asNumber(row.discount),
+        priceType: toCount(row.priceType),
+        cost: toCount(row.cost),
+        limit: toCount(row.limit),
+        discount: toCount(row.discount),
     };
 }
 
@@ -200,23 +187,23 @@ function parsePayChannelRow(raw: unknown): IPayChannelRow | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
 
-    const id = asNumber(row.id);
+    const id = toCount(row.id);
     if (id <= 0) return null;
 
-    const rmb = asNumber(row.rmb);
+    const rmb = toCount(row.rmb);
     if (rmb <= 0) return null;
 
     return {
         id,
         key: asString(row.key),
-        type: asNumber(row.type),
+        type: toCount(row.type),
         name: asString(row.name),
         rmb,
-        productid: asNumber(row.productid),
-        coin: asNumber(row.coin),
-        coin2: asNumber(row.coin2),
+        productid: toCount(row.productid),
+        coin: toCount(row.coin),
+        coin2: toCount(row.coin2),
         path: asString(row.path),
-        isShow: asNumber(row.isShow),
+        isShow: toCount(row.isShow),
     };
 }
 
@@ -320,9 +307,9 @@ export function normalizeShopGoods(shop: unknown): ReadonlyMap<number, number> {
     for (const item of list) {
         if (!item || typeof item !== 'object') continue;
         const row = item as Record<string, unknown>;
-        const id = asNumber(row.id);
+        const id = toCount(row.id);
         if (id <= 0) continue;
-        out.set(id, Math.max(0, asNumber(row.buyTimes)));
+        out.set(id, Math.max(0, toCount(row.buyTimes)));
     }
     return out;
 }
@@ -348,13 +335,13 @@ export interface IGiftItemInfo {
 function parseGiftItemRow(raw: unknown): IGiftItemInfo | null {
     if (!raw || typeof raw !== 'object') return null;
     const row = raw as Record<string, unknown>;
-    const resId = asNumber(row.resId);
+    const resId = toCount(row.resId);
     if (resId <= 0) return null;
     return {
         resId,
         name: asString(row.name),
         icon: asString(row.icon),
-        quality: asNumber(row.quality, 1),
+        quality: Number.isFinite(Number(row.quality)) ? toCount(row.quality) : 1,
     };
 }
 
@@ -443,7 +430,7 @@ export function normalizePaidChannelIds(role: unknown): ReadonlySet<number> {
     const list = (role as Record<string, unknown>).tlExtraId;
     if (!Array.isArray(list)) return out;
     for (const id of list) {
-        const value = asNumber(id);
+        const value = toCount(id);
         if (value > 0) out.add(value);
     }
     return out;

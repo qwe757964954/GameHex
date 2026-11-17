@@ -15,6 +15,9 @@ test('Coerce: Long / number / string 口径与旧 RequestGuard 一致', () => {
     assert.equal(toCount(12), 12);
     assert.equal(toCount('12'), 12);
     assert.equal(toCount('bad'), 0);
+    assert.equal(toCount('bad', 7), 7);
+    assert.equal(toCount(undefined, 1), 1);
+    assert.equal(toCount(0, 1), 0, '显式 0 不能被 fallback 覆盖');
     assert.equal(toCount(longLike), 4294967301);
     assert.equal(toCount({ toNumber: () => 7 }), 7);
     assert.equal(toIdString(longLike), '4294967301');
@@ -86,5 +89,7 @@ test('RewardRows: 奖励金额解析的 minNumber 口径', () => {
     ]);
     assert.deepEqual(rewards, [{ resId: 1, number: 2 }]);
     assert.deepEqual(parseRewardAmounts([{ resId: 2, number: 0 }], { minNumber: 0 }), [{ resId: 2, number: 0 }]);
+    assert.deepEqual(parseRewardAmounts([{ resId: 2, number: 0.5 }]), [], '默认 minNumber=1：0.5 也被丢弃');
+    assert.deepEqual(parseRewardAmounts([{ resId: 2, number: undefined }], { minNumber: 0 }), [{ resId: 2, number: 0 }], 'toCount 把缺失数量归一成 0');
     assert.deepEqual(parseRewardAmounts('bad'), []);
 });

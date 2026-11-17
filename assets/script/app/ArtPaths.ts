@@ -54,9 +54,10 @@ export const RESBAR_ART_ROOT = `${ART_ROOT}/main/resbar`;
  * 对应 `roleProperty` 表 `iconIsPath = false` 那一支：表里存的是 FGUI 裸组件名
  * （`图标_铜币`），装配路径就是 `<本目录>/<icon>/spriteFrame`。
  *
- * 消费方：`activity/LayerActivityArt.resolveRewardIconRef`（**唯一入口**，被 hang / gift /
+ * 消费方：`common/RewardIcon.resolveRewardIconRef`（**唯一入口**，被 hang / gift /
  * celebration / battletoken / league / showReward 复用）、`main/MainResBarArt`（顶部货币条）。
- * 别再新开 `const XXX = 'icons/resource'`（曾经有 `LayerActivityArt` / `HangArt` 两份同值常量）。
+ * 禁止新增 `const XXX = 'icons/resource'`；`HangArt.HJ_RESOURCE_ICON_ROOT` 是本目录的业务别名，
+ * 必须继续转发这里。
  */
 export const RESOURCE_ICON_ART_ROOT = `icons/resource`;
 

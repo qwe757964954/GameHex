@@ -105,18 +105,19 @@ describe('真表复核', () => {
         return String(row?.[index.get('desc')!] ?? '');
     };
 
-    it('火焰树妖首档：唯一一个百分比是「提高10%」，走绿色', () => {
+    it('火焰树妖首档：唯一一个百分比是「提高17%」，走绿色', () => {
         const desc = descOf(100301, 1);
-        assert.equal(desc, '攻击提高10%（三级同值，不叠加）');
-        assert.equal(formatSkillDescMarkup(desc), `攻击提高${colored(BOOST, '10%')}（三级同值，不叠加）`);
+        assert.equal(desc, '攻击提高17%');
+        assert.equal(formatSkillDescMarkup(desc), `攻击提高${colored(BOOST, '17%')}`);
     });
 
-    it('爆囊扩散首档（截图那一行）：造成30% 留蓝，提高14%/6% 变绿', () => {
+    it('爆囊扩散首档（截图那一行）：造成50% 留蓝，提高9%/9% 变绿', () => {
         const desc = descOf(101501, 1);
-        assert.equal(desc, '命中对周围造成30%溅射伤害，攻击速度提高14%，伤害提高6%');
+        assert.equal(desc, '命中对周围造成50%溅射伤害（同一爆点第2个目标起每次×0.7）；攻击提高9%，攻击速度提高9%');
         assert.equal(
             formatSkillDescMarkup(desc),
-            `命中对周围造成${colored(PLAIN, '30%')}溅射伤害，攻击速度提高${colored(BOOST, '14%')}，伤害提高${colored(BOOST, '6%')}`,
+            `命中对周围造成${colored(PLAIN, '50%')}溅射伤害（同一爆点第${colored(PLAIN, '2')}个目标起`
+            + `每次×${colored(PLAIN, '0.7')}）；攻击提高${colored(BOOST, '9%')}，攻击速度提高${colored(BOOST, '9%')}`,
         );
     });
 

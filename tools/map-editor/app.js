@@ -2200,7 +2200,7 @@
     // 渲染层 = 背景 / hex（grid 之前） / 自由装饰 / 资源 —— 文档顺序 = 绘制顺序，
     // 背景要在最底层，资源层最后画（鼠标右键光标预影像之外）。
     svg.innerHTML = '<g class="backgroundLayer"></g>' + html +
-      '<g class="mapMetadataLayer"></g><g class="freeDecorLayer"></g><g class="resourceLayer"></g>';
+      '<g class="monsterGroundLayer"></g><g class="mapMetadataLayer"></g><g class="freeDecorLayer"></g><g class="resourceLayer"></g>';
     // 整块 svg 换了 ⇒ 背景层是全新的空 <g>，同值守卫的缓存必须作废（否则新层永远不被写入）。
     backgroundMarkupCache = null;
     freeDecorMarkupCache = null;
@@ -2380,7 +2380,37 @@
     }
     return parts.join('');
   }
+  function monsterTerritory(point, radius) {
+    var queue = [{ row: point.row, column: point.column, distance: 0 }];
+    var seen = {};
+    seen[point.row * COLS + point.column] = true;
+    for (var head = 0; head < queue.length; head += 1) {
+      var current = queue[head];
+      if (current.distance >= radius) continue;
+      neighbors(current.row, current.column, true).forEach(function (pair) {
+        var id = pair[0] * COLS + pair[1];
+        if (seen[id]) return;
+        seen[id] = true;
+        queue.push({ row: pair[0], column: pair[1], distance: current.distance + 1 });
+      });
+    }
+    return queue.filter(function (cell) { return grid[cell.row][cell.column] !== VOID; });
+  }
+  function monsterGroundMarkup() {
+    var parts = [];
+    resourcePoints.forEach(function (point) {
+      var item = ((neutralGroups[point.groupId] || {}).items || []).find(function (item) { return item.resourceType === 11 && item.weight > 0; });
+      if (!item || !item.icon || item.icon === '0' || !Number.isInteger(item.wakeRange) || item.wakeRange <= 0) return;
+      monsterTerritory(point, item.wakeRange).forEach(function (cell) {
+        var center = hexCenter(cell.row, cell.column);
+        parts.push('<image class="monsterGround" href="' + esc(resourceImageUrl(item.icon)) + '" x="' + (center.x - HEX_R) + '" y="' + (center.y - HEX_HALF_H) + '" width="' + (HEX_R * 2) + '" height="' + (HEX_HALF_H * 2) + '" preserveAspectRatio="none" pointer-events="none"/>');
+      });
+    });
+    return parts.join('');
+  }
   function drawResources() {
+    var groundLayer = svg.querySelectorAll('g.monsterGroundLayer')[0];
+    if (groundLayer) groundLayer.innerHTML = monsterGroundMarkup();
     var layers = svg.querySelectorAll ? svg.querySelectorAll('g.resourceLayer') : null;
     if (!layers || !layers.length) return;
     var next = resourceMarkup();
@@ -2835,12 +2865,12 @@
     return paintCells(brushCells(row, column, brushRadius), selected);
   }
 
-  function neighbors(row, column) {
+  function neighbors(row, column, includeVoid) {
     var dirs = column & 1 ? DIR_ODD : DIR_EVEN;
     var result = [];
     for (var i = 0; i < dirs.length; i += 1) {
       var nr = row + dirs[i][1], nc = column + dirs[i][0];
-      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && grid[nr][nc] !== VOID) result.push([nr, nc]);
+      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && (includeVoid || grid[nr][nc] !== VOID)) result.push([nr, nc]);
     }
     return result;
   }
@@ -3276,6 +3306,7 @@
       (Array.isArray(result.groups) ? result.groups : []).forEach(function (group) {
         neutralGroups[group.groupId] = group;
         (group.items || []).forEach(function (item) {
+          if (item.resourceType === 11 && item.icon && item.icon !== '0') RESOURCE_ASSETS[item.icon] = 'image/map-resource/' + item.icon;
           if (item.resourceType === 11 && /^\d+$/.test(String(item.resId))) {
             RESOURCE_ASSETS['monster_' + item.resId] = 'image/map-resource/monster_' + item.resId;
           }

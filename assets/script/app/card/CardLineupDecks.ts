@@ -153,6 +153,26 @@ export async function loadCardLevelUpRows(): Promise<readonly unknown[]> {
 }
 
 /**
+ * 卡牌 id → 品级档位（`pvpCard.rarity` 的原始数字 1..4，4 = 金/传说/橙）。
+ *
+ * 只取数不解析：`parseCardCatalogRow` 会把 rarity 翻成 `gold/purple/...` 字符串，
+ * 而「哪些卡算橙卡」是玩法口径（数字档位），调用方要的是数字 —— 别在中途换一套词表。
+ * 坏行 / 缺列直接跳过（那张卡按「不是橙卡」处理，不会误弹英雄页）。
+ */
+export async function loadPvpCardRarities(): Promise<ReadonlyMap<string, number>> {
+    const rarities = new Map<string, number>();
+    for (const value of await readRows('pvpCard')) {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+        const row = value as Record<string, unknown>;
+        const id = Number(row.id);
+        const rarity = Number(row.rarity);
+        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isFinite(rarity)) continue;
+        rarities.set(String(id), rarity);
+    }
+    return rarities;
+}
+
+/**
  * 读 `armySkillLevelUp` 的原始行（技能级的等级/解锁/描述都在这一张表里）。
  *
  * 与 `loadCardLevelUpRows` 同口径：只负责取数，聚合与判定在 `CardSkillList`（无引擎依赖、可单测）。

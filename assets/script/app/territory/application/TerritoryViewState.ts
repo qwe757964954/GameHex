@@ -1,4 +1,5 @@
 import { TerritoryProgress } from '../model/TerritoryProgress';
+import { buildTerritoryMonsterPatrols, type ITerritoryMonsterPatrol } from '../model/TerritoryMonsterPatrol';
 import { isTerritoryBattleSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import { territoryUnlockShortfall } from '../model/TerritoryCostShortfall';
 import type { ITerritoryViewState } from './TerritoryModel';
@@ -23,12 +24,61 @@ export interface ITerritoryStationState {
     readonly staminaShort: boolean;
 }
 
+/**
+ * 「宝箱还没翻出来、点一下就翻」：`fixedResource` 且仍在 `siteOpenableCells` 里。
+ *
+ * 资源据点是**两步**（`TerritoryModel.selectSite` → `handleUnlockThenPass`）：
+ * 第一下 `unlockCell`（翻出宝箱）→ 第二下 `passCell`（点开宝箱领奖）。
+ * 这里是**第一步**的口径，`Map/Tile_*` 翻地步用它。
+ */
+function territoryUnlockableChestCells(state: Pick<ITerritoryRenderState, 'map' | 'siteOpenableCells'>): readonly number[] {
+    return state.map?.sites
+        .filter(site => site.type === TERRITORY_SITE_TYPE.fixedResource
+            && state.siteOpenableCells.includes(site.cellId))
+        .map(site => site.cellId) ?? [];
+}
+
+/**
+ * 「宝箱已翻出来、还没点开」：`fixedResource` 且**已解锁未通关**。
+ *
+ * 🔴 第二步时这一格已经**不在** `siteOpenableCells` 里（那个集合只收「未解锁」的格），
+ * 所以 `2-2 打开宝箱` 的焦点必须按「已解锁未通关」筛。按前者筛的后果不是"少画一个圈"：
+ * 孔挖不出来 ⇒ `Dim` + 铺满屏的 `Blocker` 压在宝箱上 ⇒ 玩家连点都点不到，整条引导死在这里。
+ */
+function territoryChestPendingCells(state: Pick<ITerritoryRenderState, 'map' | 'progress'>): readonly number[] {
+    const progress = state.progress;
+    if (!progress) return [];
+    return state.map?.sites
+        .filter(site => site.type === TERRITORY_SITE_TYPE.fixedResource
+            && progress.isCellUnlocked(site.cellId)
+            && !progress.isOwned(site.cellId))
+        .map(site => site.cellId) ?? [];
+}
+
+/**
+ * 引导「翻地 / 点宝箱」的**同源判据**：这一格点下去会不会推进 `tileFlipped`。
+ *
+ * `TerritoryController.onIntent('siteTap')`（上报）与 {@link guideMapFocusCells}（手指指哪）
+ * 都必须走这一个函数 —— 两边各写一份，迟早出现「手指指向点不动的箱子」或反过来。
+ */
+export function isTerritoryChestActionable(
+    state: Pick<ITerritoryRenderState, 'map' | 'progress' | 'siteOpenableCells'>,
+    cellId: number,
+): boolean {
+    const site = state.map?.sites.find(one => one.cellId === cellId);
+    if (!site || site.type !== TERRITORY_SITE_TYPE.fixedResource) return false;
+    if (state.siteOpenableCells.includes(cellId)) return true;
+    const progress = state.progress;
+    return !!progress && progress.isCellUnlocked(cellId) && !progress.isOwned(cellId);
+}
+
 /** 引导只消费模型发布的可操作集合，不把「未拥有」误当作「可以翻开」。 */
 export function guideMapFocusCells(focusNode: string, state: Pick<ITerritoryRenderState,
     'map' | 'randomResourceOpenableCells' | 'siteOpenableCells' | 'stageByCell' | 'progress'>): readonly number[] {
+    // `Map/Chest_N`：网箱已翻出来、等玩家点开（`2-2 打开宝箱`），只要箱子，别把随机格混进来。
+    if (/^Map\/Chest_\d+$/.test(focusNode)) return territoryChestPendingCells(state);
     if (/^Map\/(Tile_[123]|TileNew_1)$/.test(focusNode)) {
-        const fixed = state.map?.sites.filter(site => site.type === TERRITORY_SITE_TYPE.fixedResource
-            && state.siteOpenableCells.includes(site.cellId)).map(site => site.cellId) ?? [];
+        const fixed = territoryUnlockableChestCells(state);
         return fixed.length ? [...state.randomResourceOpenableCells, ...fixed] : state.randomResourceOpenableCells;
     }
     const level = /^Map\/Level_(\d+)$/.exec(focusNode);
@@ -72,6 +122,7 @@ export function buildTerritoryStationStates(state: TerritoryStationSource): Read
 }
 
 export interface ITerritoryRenderState extends Omit<ITerritoryViewState, 'progress'> {
+    readonly monsterPatrols: readonly ITerritoryMonsterPatrol[];
     readonly progress: ITerritoryProgressView | null;
     readonly stationStates: ReadonlyMap<number, ITerritoryStationState>;
 }
@@ -99,6 +150,7 @@ export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryR
         // 银币数字会在同一帧里从红变白（玩家看到"闪一下"），红/白也就不再对应付款前的事实。
         wallet: Object.freeze({ silver: state.wallet.silver, stamina: state.wallet.stamina }),
         progress,
+        monsterPatrols: state.map && progress ? buildTerritoryMonsterPatrols(state.map, progress) : [],
         stationStates: buildTerritoryStationStates({ ...state, progress }),
     });
 }

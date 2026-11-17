@@ -13,8 +13,13 @@ export const GUIDE_STEP_END = 'end';
 /** 步骤触发方式：首登进入，或上一步完成即触发。 */
 export type GuideTriggerType = 'firstLogin' | 'prevDone';
 
-/** 遮罩形态：全屏半透明 / 挖空高亮焦点。 */
-export type GuideMaskType = 'full' | 'hole';
+/**
+ * 遮罩形态：
+ * · `full` 全屏半透明（点哪都算点对话条）；
+ * · `hole` 挖空高亮焦点（孔内交给原控件）；
+ * · `none` **无遮罩**（弱引导）：不压暗、不挡点击、不弹气泡文案，只留光圈与手指动画。
+ */
+export type GuideMaskType = 'full' | 'hole' | 'none';
 
 /** 要求的玩家操作；空串 = 该步不要求操作（纯展示）。 */
 export type GuideRequireAction = 'click' | 'drag' | '';
@@ -44,7 +49,7 @@ export interface GuideStep {
      */
     readonly focusNode: string;
     readonly requireAction: GuideRequireAction;
-    /** 台词组 id（`D01`~`D16`），指向多语言表 key；空串 = 该步无台词。 */
+    /** 台词组 id（`D01`~`D14`），指向多语言表 key；空串 = 该步无台词。 */
     readonly dialogId: string;
     /** 完成事件名；带参用 `name:arg`（如 `cardLevelUp:68001`）。 */
     readonly completeCond: string;
@@ -78,7 +83,7 @@ function parseStep(value: unknown): GuideStep | null {
         guideId: toCount(raw.guideId, 1),
         flowName: typeof raw.flowName === 'string' ? raw.flowName : '',
         triggerType: raw.triggerType === 'firstLogin' ? 'firstLogin' : 'prevDone',
-        maskType: raw.maskType === 'hole' ? 'hole' : 'full',
+        maskType: raw.maskType === 'none' ? 'none' : raw.maskType === 'hole' ? 'hole' : 'full',
         focusNode: typeof raw.focusNode === 'string' ? raw.focusNode : '',
         requireAction: toAction(raw.requireAction),
         dialogId: typeof raw.dialogId === 'string' ? raw.dialogId : '',

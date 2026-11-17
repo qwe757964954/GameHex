@@ -99,11 +99,53 @@ export interface ZCUnitStatPatch {
      * 按 `damageUnit` 实际扣血（applied）反算，护盾/溢出/零伤害不回血。缺省 0 ⇒ 不生效。
     */
     lifestealRate?: number;
+    /**
+     * 每秒回复自身最大生命的百分比（**1.5 = 每秒 1.5%**，与 `critRatePct` 同口径）。
+     *
+     * 消费点 `ZCSkillTriggerSystem.applyHpRegen`：跨过整秒的那一帧结算一拍，
+     * 走与吸血同一条 `healUnit`（封顶 `maxHp`、死亡不生效、真回了才推飘字）。
+     * 设计口径「不受治疗加成、不被护盾吸收、溢出丢弃」—— 前两条由 `healUnit` 天然满足
+     * （不吃任何治疗倍率），第三条是封顶。缺省 0 ⇒ 整段不执行。
+    */
+    hpRegenPct?: number;
+    /**
+     * 普攻弹体的体积倍率（**绝对值，1.6 = ×1.6**），视觉与命中判定同步放大。
+     *
+     * 🔴 与其它 patch 字段的「相加」语义不同：它是一个**绝对倍率**，
+     * 同卡两条链都写会加成 3.2（设计口径里一张卡只有一条，用例里有全表守卫）。
+     * 缺省/非法（≤0）一律按 1 处理 ⇒ 存量弹道逐字不变。
+    */
+    bulletSizeScale?: number;
     //  以下 10 种对应 `pvpAttrMap` 里 2026-10-13 补齐的数值属性。带 Pct 的一律是「百分数整数」（20 = +20%）。
     /** 暴击率修正（20 = +20% 暴击率）；直接进 `criticalMultiplier` 判定。*/
     critRatePct?: number;
     /** 暴击伤害修正（50 = +50% 暴伤）。*/
     critDamagePct?: number;
+    /**
+     * 技能级「克制条」（2026-11-17）：判据编进字段名，值一律是**百分数整数**。
+     *
+     *  · `counter{Camp|Role}1..4 Pct`   —— 攻方：对指定阵营 / 职业的目标额外增伤；
+     *  · `countered{Camp|Role}1..4 Pct` —— 守方：受到指定阵营 / 职业来源的伤害降低。
+     *
+     * 序号 = `ZC_CAMP_TRAITS`（花果/蘑菇/盆栽/僵尸）与 `ZC_ATTACK_TRAITS`（射手/战士/法师/坦克）
+     * 的声明顺序，见 `ZCStatSchema.ZC_COUNTER_STAT_IDS`。缺省 0 ⇒ 乘 1，存量单位逐字不变。
+    */
+    counterCamp1Pct?: number;
+    counterCamp2Pct?: number;
+    counterCamp3Pct?: number;
+    counterCamp4Pct?: number;
+    counterRole1Pct?: number;
+    counterRole2Pct?: number;
+    counterRole3Pct?: number;
+    counterRole4Pct?: number;
+    counteredCamp1Pct?: number;
+    counteredCamp2Pct?: number;
+    counteredCamp3Pct?: number;
+    counteredCamp4Pct?: number;
+    counteredRole1Pct?: number;
+    counteredRole2Pct?: number;
+    counteredRole3Pct?: number;
+    counteredRole4Pct?: number;
     /** 弹幕数量修正（正=多几发）；最终发数 = profile 弹数 + 本值，下限 1。*/
     bulletNumFlat?: number;
     /** 多弹道的角度均分跨度（度）。缺省 0 = 不做扇形展开，行为与改造前逐字一致。*/

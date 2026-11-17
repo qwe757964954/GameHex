@@ -100,11 +100,15 @@ test('镭射飞龙：bulletNum / bulletAngle 必须走 statId，不能塞进 ski
     const byChain = (chainId: number) => plans
         .filter((row) => Number(row.skillChainId) === chainId)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
+    //  2026-11-17 第 5 批：发数从子链 281001 挪到主链 101001，281001 改承载「攻击 +28%」。
+    //  🔴 `bulletNumFlat` 是 flat 加法，两个载体各写一份就是双倍 —— 所以必须只留主链这一处。
+    assert.deepEqual(byChain(101001).map((row) => [row.statId, Number(row.value)]),
+        [['bulletNum', 2], ['bulletNum', 2], ['bulletNum', 2]], '金卡 2 道额外弹，三档同数');
     assert.deepEqual(byChain(281001).map((row) => [row.statId, Number(row.value)]),
-        [['bulletNum', 1], ['bulletNum', 1], ['bulletNum', 2]], '发数是增量口径：+1 = 2 发');
+        [['attack', 0.28], ['attack', 0.28], ['attack', 0.28]], '原发数槽位改承载攻击尾巴');
     for (const row of byChain(371001)) {
         assert.equal(row.statId, 'bulletAngle');
-        assert.equal(Number(row.value), 12, '总张角 12°（每发偏 6°）');
+        assert.equal(Number(row.value), 25, '扇形总张角 25°（设计案 P 列）');
     }
     // skillParamJson 里不该再出现这两个键
     for (const row of plans) {
@@ -122,15 +126,14 @@ test('镭射飞龙 25 级：四类词缀都进了 statPatch', () => {
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
     const patch = loadout!.statPatch;
-    assert.equal(patch.bulletNumFlat, 2, '281001 III 级 +2 发');
-    assert.equal(patch.bulletAngleFlat, 12, '371001 总张角 12°');
-    //  攻速只剩 101001 自己的 26% —— 101002 自 2026-11-16 起改「裂变爆炸」，
-    //  它的旧子链 191002（曾是攻速 14/20/26%）已改写成攻击 +16%，不再叠加攻速。
-    assert.equal(patch.attackSpeedPct, 26, '101001 III 级攻速 26%（唯一的攻速来源）');
-    //  伤害 = 191001（101001 自己的伤害尾巴 16%）+ 101002 的混搭尾 13%。
-    assert.equal(patch.damageRatePct, 29, '191001 伤害 16% + 101002 混搭尾 13%');
-    assert.equal(patch.attackPct, 16, '101002 尾巴「攻击 +16%」由子链 191002 承载');
-    assert.equal(patch.attackRangePct, 23, '101002 尾巴「攻击范围 +23%」由子链 281002 承载');
+    assert.equal(patch.bulletNumFlat, 2, '101001 III 级 +2 道额外弹');
+    assert.equal(patch.bulletAngleFlat, 25, '371001 总张角 25°（每颗偏 12.5°）');
+    //  攻速来源随第 5 批一起消失：101001 主链的 statId 由 attackSpeed 改成 bulletNum。
+    assert.equal(patch.attackSpeedPct, undefined, '101001 不再给攻速');
+    //  伤害只剩 101002 的混搭尾 13%。
+    assert.equal(patch.damageRatePct, 13, '101002 混搭尾 13%');
+    assert.equal(patch.attackPct, 44, '101001 攻击 28% + 101002 尾巴 16%');
+    assert.equal(patch.attackRangePct, 58, '101001 范围 35% + 101002 尾巴 23%');
 });
 
 // ── 二、三个新原语（缺省关闭，老行为不变） ─────────────────────────────────────

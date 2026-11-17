@@ -52,7 +52,7 @@ PROJECT = ROOT.parents[1]
 # ⚠️ `sever` 是仓库既有拼写（不是 server 的笔误），改名会打断转表链路，别"顺手修正"。
 # 该目录**不生成 Cocos 的 .meta** —— 它不是 Cocos 资源目录，生成 .meta 只会污染策划仓。
 DOC_JSON_ROOT = PROJECT.parents[0] / "doc" / "塔防数据配置" / "json"
-DOC_SEVER_TARGET: tuple[Path, ...] = (DOC_JSON_ROOT / "sever",)
+DOC_SEVER_DIR = DOC_JSON_ROOT / "sever"
 
 # 地图布局的**禁区**：eSon 转表中间目录。写进去就会被 `ref_compress_json.py` 抄成
 # `assets/remoteRef` 副本，所以既不写、发现遗留还要清（见模块注释「护栏与自愈」）。
@@ -121,6 +121,18 @@ def publish(targets: list[Path], payload: str) -> None:
         meta = target.with_suffix(target.suffix + ".meta")
         if not meta.exists():
             meta.write_text(json.dumps(META_PAYLOAD, indent=2) + "\n", encoding="utf-8")
+
+
+def purge_flat_sever_copy(file_name: str, dry_run: bool = False) -> str | None:
+    """分类目录发布成功后，清掉 sever 根目录的同名旧副本。"""
+    stale = DOC_SEVER_DIR / file_name
+    if not stale.is_file():
+        return None
+    if dry_run:
+        return f"would remove flat sever copy: {stale}"
+    stale.unlink()
+    stale.with_name(stale.name + ".meta").unlink(missing_ok=True)
+    return f"removed flat sever copy: {stale}"
 
 
 def parse_args(description: str) -> argparse.Namespace:

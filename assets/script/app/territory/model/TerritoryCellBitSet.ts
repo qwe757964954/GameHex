@@ -74,7 +74,7 @@ function wordToCells(word: unknown, base: number, invalid: string[], wordIndex: 
         if (word >= Math.pow(2, MAX_EXACT_CELL_IN_NUMBER)) {
             invalid.push(
                 `第 ${wordIndex} 块的值 ${word} 超出 number 形态的无损上限`
-                + `（格子号须 < ${MAX_EXACT_CELL_IN_NUMBER}；当前 runtime 未装 Long）`,
+                + `（格子号须 < ${MAX_EXACT_CELL_IN_NUMBER}；number 超过 2^53 后连低位都不可信）`,
             );
             return cells;
         }

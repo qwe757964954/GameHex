@@ -55,6 +55,7 @@ import { RequestBattleSweep, RequestHangGetReward } from './RequestHangMsg';
 
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 import { GUANKA_REWARD_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import { toMillis } from '../../core/time/TimeMs';
 /** 福利月卡特权 `type`：无限次快速扫荡（老端 `PrivilegeType.NoCountSweep = 4`）。 */
 export const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
 
@@ -199,28 +200,6 @@ export interface IHangRepository {
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
 /**
- * `Long` / `number` / `string` → 毫秒数；认不出返回 0。
- *
- * 不能 `Number(long)` —— protobufjs 的 `Long` 转 number 会得到 `NaN`，
- * 而 `NaN` 参与算术会静默污染整条链路（`elapsed = NaN` ⇒ 进度条 0、文案 `NaN:NaN:NaN`）。
- */
-function toNumber(value: unknown): number {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : 0;
-    }
-    if (value && typeof value === 'object') {
-        const long = value as { low?: number; high?: number; unsigned?: boolean };
-        if (typeof long.low === 'number' && typeof long.high === 'number') {
-            const n = long.high * 4294967296 + (long.low >>> 0);
-            return Number.isFinite(n) ? n : 0;
-        }
-    }
-    return 0;
-}
-
-/**
  * 读 `CmdRole` 的第一行；拿不到返回 `null`。
  *
  * `sweepTimes` = **今日已扫荡次数**（服务端按 `+= times` 累加，`sweepFreeTimes` 到了就转「看广告」分支）。
@@ -230,22 +209,20 @@ function toNumber(value: unknown): number {
  * 导出给页面用：`CmdRole` 没有查询协议，只能靠服务端推 `cmdCaches`
  * ⇒ 扫荡 / 领奖成功后必须**重读一次**（见 `HangPage._refreshRoleState`），
  * 否则文案停在打开弹窗那一刻，看起来就像「次数没接」。
+ *
+ * 缓存空 = 未登录 / 还没收到首推，返回 `null` 由调用方走「无数据」分支；
+ * 这里不包 `try/catch`：`getTlCmdRole()` 走 `GameCacheMgr.getValues` → `TDic.get`，
+ * 只读字典、不构造 `GameCache`、`CacheMgr.instance` 也非空，没有任何可抛点。
  */
 export function readRoleState(): IHangRoleState | null {
-    try {
-        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
-        for (const row of rows) {
-            if (!row) continue;
-            const cmd = row as unknown as Record<string, unknown>;
-            return {
-                lastIdleRewardTimeMs: toNumber(cmd.lastIdleRewardTime),
-                sweepTimes: Number(cmd.sweepTimes) || 0,
-            };
-        }
-    } catch (error) {
-        console.warn('[Hang] 读 CmdRole 缓存失败', error);
-    }
-    return null;
+    const row = CacheMgr.instance.getTlCmdRole()[0];
+    if (!row) return null;
+    return {
+        // `lastIdleRewardTime` 是 `sint64` ⇒ 运行时 `Long`，交给 core 的边界转换。
+        lastIdleRewardTimeMs: toMillis(row.lastIdleRewardTime),
+        // `sweep_times` 是 `sint32` ⇒ 已是 number，不再经 `Number()`。
+        sweepTimes: row.sweepTimes,
+    };
 }
 
 /**
@@ -281,17 +258,11 @@ export function subscribeRoleChange(caller: object, callback: () => void): () =>
  */
 function readInteractedIds(): Set<number> {
     const ids = new Set<number>();
-    try {
-        const rows = CacheMgr.instance.getTlCmdRoleInteractInfo() ?? [];
-        for (const row of rows) {
-            if (!row) continue;
-            const item = row as unknown as Record<string, unknown>;
-            const resId = Number(item.resId);
-            if (!Number.isFinite(resId) || resId <= 0) continue;
-            if (Number(item.state) === HJ_INTERACT_STATE_DONE) ids.add(resId);
-        }
-    } catch (error) {
-        console.warn('[Hang] 读 CmdRoleInteractInfo 缓存失败', error);
+    for (const row of CacheMgr.instance.getTlCmdRoleInteractInfo()) {
+        if (!row) continue;
+        // `resId` / `state` 都是 `sint32` ⇒ 已是 number；`resId <= 0` 是业务上界检查，保留。
+        if (row.resId <= 0) continue;
+        if (row.state === HJ_INTERACT_STATE_DONE) ids.add(row.resId);
     }
     return ids;
 }
@@ -414,21 +385,11 @@ function readAdLimit(adRows: readonly unknown[]): number {
  * 该表**只在有记录时才存在**（`tlCmdAdvert?: (CmdAdvert[]|null)`）⇒ 读不到按 0 算。
  */
 function readAdUsed(): number {
-    try {
-        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
-        for (const row of rows) {
-            if (!row) continue;
-            const list = (row as unknown as Record<string, unknown>).tlCmdAdvert;
-            if (!Array.isArray(list)) return 0;
-            for (const entry of list) {
-                if (!entry || typeof entry !== 'object') continue;
-                const e = entry as Record<string, unknown>;
-                if (Number(e.type) === HJ_AD_TYPE_SWEEP) return Number(e.num) || 0;
-            }
-            return 0;
-        }
-    } catch (error) {
-        console.warn('[Hang] 读 CmdAdvert 缓存失败', error);
+    const row = CacheMgr.instance.getTlCmdRole()[0];
+    if (!row) return 0;
+    // `tlCmdAdvert` 是 `repeated CmdAdvert`（d.ts 为 `CmdAdvert[]|null`）⇒ 只有 null 需要兜底。
+    for (const entry of row.tlCmdAdvert ?? []) {
+        if (entry.type === HJ_AD_TYPE_SWEEP) return entry.num;
     }
     return 0;
 }

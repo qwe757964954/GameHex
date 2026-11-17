@@ -7,9 +7,9 @@ import type { ITerritoryNavigateBattlePayload, TerritoryModel, TerritoryModelOut
 import type { TerritoryCellRepository } from './TerritoryCellRepository';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryIntentEvent,
     type TerritoryViewCommand } from './TerritoryEvents';
-import { buildTerritoryViewState } from './TerritoryViewState';
+import { buildTerritoryViewState, isTerritoryChestActionable } from './TerritoryViewState';
 import { TERRITORY_TEXTS } from './TerritoryTexts';
-import { isTerritoryBattleSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import { isTerritoryBattleSite } from '../model/TerritoryMapConfig';
 
 export interface ITerritoryControllerOptions {
     readonly context: IControllerContext;
@@ -88,8 +88,11 @@ export class TerritoryController extends ControllerBase {
                 // 只在上报**真的受理**时报（`selectSite` 返回 false 的三种情况：在途 / 未 reveal /
                 // 防连点）。无条件上报会让玩家点一个"点不动的格子"也把引导推过去。
                 // 注意 5-1 的 maskType 必须同步是 hole，否则全屏点击区会把这个点击吃掉。
-                const canFlip = site?.type === TERRITORY_SITE_TYPE.fixedResource
-                    && this.model.state.siteOpenableCells.includes(site.cellId);
+                // 2-1「翻第1块地」/ 2-2「打开宝箱」走的就是这条：资源据点是两步
+                // （`unlockCell` 翻出箱子 → `passCell` 点开箱子），两下都算 `tileFlipped`；
+                // 判据与 `guideMapFocusCells('Map/Chest_N')` 共用 `isTerritoryChestActionable`。
+                // 🔴 只判 `siteOpenableCells` 的话，第二步（已解锁）永远上报不了 ⇒ 2-2 卡死。
+                const canFlip = isTerritoryChestActionable(this.model.state, intent.cellId);
                 if (site && this.model.selectSite(site)) {
                     if (canFlip) reportGuideComplete('tileFlipped');
                     else if (isTerritoryBattleSite(site)) reportGuideComplete('siteTap');

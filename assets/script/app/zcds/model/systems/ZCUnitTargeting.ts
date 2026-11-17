@@ -94,6 +94,14 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         }
         const hex = unit.targetBuildingHexId === null ? null : this.context.hex(unit.targetBuildingHexId);
         if (hex && isZCAwakeMonster(hex)) {
+            if (hex.neutralFeature.focusOwners?.includes(unit.owner)) {
+                const opponent = ZCTargetingSystem.acquire(unit, this.targetingContext, true, this.selectionScratch);
+                if (opponent) {
+                    unit.targetBuildingHexId = unit.targetWallHexId = null;
+                    unit.targetUnitId = opponent.id;
+                    return true;
+                }
+            }
             let attacker: ZCUnitState | null = null;
             let best = Infinity;
             const definition = this.context.effectiveDefinition(unit);
@@ -102,7 +110,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
                     || candidate.targetUnitId !== unit.id || !['attack', 'waitAttack'].includes(candidate.battleState)
                     || (!definition.canAttackAir && this.context.baseDefinition(candidate.unitId).flying)) continue;
                 const distance = Math.hypot(candidate.freeX - unit.freeX, candidate.freeY - unit.freeY);
-                if (distance < best || (distance === best && candidate.id < attacker.id)) { attacker = candidate; best = distance; }
+                if (distance < best || (distance === best && attacker && candidate.id < attacker.id)) { attacker = candidate; best = distance; }
             }
             if (attacker) {
                 unit.targetBuildingHexId = unit.targetWallHexId = null;

@@ -63,6 +63,7 @@ export enum ZCGameUiEvent {
     ReturnToMain = 'zcgame-ui-return-to-main',
     /** 棋盘：点了某一格（payload = 格子 id）；派发方是 `ZCGameRenderWorld`（它才知道是哪一格）。*/
     HexClick = 'zcgame-ui-hex-click',
+    MonsterFocus = 'zcgame-ui-monster-focus',
     /** 展示缺图请求；owner 为本局 ZCGame，控制器按兵种配置解析资源路径。*/
     RequestUnitArt = 'zcgame-ui-request-unit-art',
     /**

@@ -1881,7 +1881,7 @@ test('⚠️ AdCountText 吃的是 `CmdRole.sweepTimes`，扫荡成功后必须�
     const repository = src('HangRepository.ts');
     // 读：CmdRole 第一行的 sweepTimes（今日已用次数）
     assert.match(repository, /export function readRoleState\(\): IHangRoleState \| null/);
-    assert.match(repository, /sweepTimes: Number\(cmd\.sweepTimes\) \|\| 0/);
+    assert.match(repository, /sweepTimes: row\.sweepTimes/);
     // 用：三个分支（无限 / 看广告 / 剩余）都由它决定，剩余是 `freeTimes - sweepTimes`
     assert.match(repository, /switch \(adCountBranchOf\(snapshot\)\)/);
     assert.match(repository, /adLeftOf\(snapshot\), snapshot\.sweepFreeTimes/);

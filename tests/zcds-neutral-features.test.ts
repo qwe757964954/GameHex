@@ -1,3 +1,4 @@
+import { hexGridDistance } from '../assets/script/core/hex/HexGridLayout';
 import { ZC_RUNTIME_CONFIG } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import assert from 'node:assert/strict';
 import test from 'node:test';
@@ -7,7 +8,7 @@ import { neutralResourceItemOf } from '../assets/script/app/zcds/model/ZCNeutral
 import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from '../assets/script/app/zcds/model/systems/ZCNeutralFeatureSystem';
 import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
-import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { captureZCMatchConfig, withZCGeneralStarSelections } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { ZCGameModel, configureZCMap } from '../assets/script/app/zcds/model/ZCGameModel';
 import { findCatalogCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
@@ -25,7 +26,7 @@ import { ZC_PORTAL_FLIGHT_SECONDS } from '../assets/script/app/zcds/model/ZCBatt
 import type { ZCEconomyContext } from '../assets/script/app/zcds/model/systems/ZCEconomySystem';
 
 const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
-    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'neutralResourceGroup', 'neutralEnhanceGate'];
+    'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'neutralResourceGroup', 'neutralEnhanceGate', 'skillAttrModifier', 'generalStar'];
 const tables = Object.fromEntries(names.map(name => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
     return [name, Array.isArray(source) ? source : source.v.map((row: unknown[]) =>
@@ -76,7 +77,7 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     ZC_RUNTIME_CONFIG.updateCatalogs({ neutralResources: compileZCNeutralResourceCatalog([
         { groupId: 14001, id: 1400101, groupName: '测试资源', resourceType: type, weight: 10000, param: featureParam },
     ], new Map([[card.id, card]]), gates) });
-    const config = { ...base, map: { ...base.map, resolvedResources: [] },
+    const config = { ...base, map: { ...base.map, hexes: base.map.hexes.map(point => ({ ...point })), resolvedResources: [] },
         rules: { ...base.rules, enemyAiIntervalSeconds: 10000 } };
     const state = ZCSnapshotCodec.createInitialState(config);
     const hex = state.hexes.find(hex => config.map.hexes[hex.id].playable && hex.owner === 'neutral'
@@ -90,7 +91,7 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     const batches: number[] = [];
     const structureHits: number[] = [];
     const system = new ZCNeutralFeatureSystem(config.map, {
-        random: () => 0, definition: () => config.units[0], monsterDefinition: () => config.units[0],
+        random: () => 0, rules: config.rules, definition: () => config.units[0], monsterDefinition: () => config.units[0],
         cloneUnit: () => { clones += 1; }, spawnBatch: hex => { if (hex.building === 'barracks') batches.push(hex.id); },
         damageUnit: (unit, damage) => { unit.hp -= damage; }, capture: (hex, owner) => { hex.owner = owner; }, changed: () => {},
         damageStructure: hex => { structureHits.push(hex.id); },
@@ -112,109 +113,111 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     return { config, state, hex, system, unit, batches, structureHits, clones: () => clones };
 }
 
-test('野怪唤醒后按快照时间轴巡逻，遇敌暂停、离开后继续且不越出范围', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
+test('monster territory ignores void paths, unlocks each side permanently and wakes only on focus', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     const center = f.config.map.hexes[f.hex.id];
-    f.system.tick(f.state);
-    assert.equal(f.hex.neutralFeature.patrol, undefined, '沉睡时不巡逻');
-    f.hex.neutralFeature.awake = true;
-    f.system.tick(f.state);
-    const segment = f.hex.neutralFeature.patrol;
-    assert.ok(segment);
-    assert.ok(center.neighbors.includes(segment.toHexId));
-    f.state.elapsedSeconds = segment.startedAt + segment.durationSeconds / 2;
-    const position = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
-    const end = f.config.map.hexes[segment.toHexId];
-    assert.equal(position.x, (center.x + end.x) / 2);
-    assert.equal(position.y, (center.y + end.y) / 2);
-    const attacker = f.unit(1);
-    attacker.freeX = position.x; attacker.freeY = position.y;
-    f.state.units = [attacker];
-    f.system.tick(f.state);
-    assert.ok(attacker.hp < 100);
-    assert.equal(segment.pausedAt, f.state.elapsedSeconds);
-    f.state.elapsedSeconds += 3;
-    f.system.tick(f.state);
-    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), position);
-    f.state.units = [];
-    f.system.tick(f.state);
-    assert.equal(segment.pausedAt, undefined);
-    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), position);
-    for (let i = 0; i < 30; i += 1) {
-        f.state.elapsedSeconds += 2;
+    const second = f.config.map.hexes.find(point => point.playable && hexGridDistance(center, point) === 2);
+    assert.ok(second);
+    for (const id of center.neighbors) f.config.map.hexes[id].playable = false;
+    const building = f.state.hexes[second.id];
+    building.owner = 'player'; building.building = 'barracks'; building.hp = 10;
+    f.system.claim(f.state);
+    assert.deepEqual(f.hex.neutralFeature.unlockedOwners, ['player']);
+    assert.equal(isZCAwakeMonster(f.hex), false);
+    assert.ok(f.system.territory(f.hex).includes(second.id));
+    assert.ok(center.neighbors.every(id => !f.system.territory(f.hex).includes(id)), JSON.stringify({neighbors: center.neighbors.map(id => [id, f.config.map.hexes[id].playable]), territory: f.system.territory(f.hex)}));
+    assert.ok(f.config.map.hexes.filter(point => hexGridDistance(center, point) > 2)
+        .every(point => !f.system.territory(f.hex).includes(point.id)));
+    f.config.rules.neutralMonsterFocusSwitchCdSeconds = 0.5;
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), true);
+    assert.equal(isZCAwakeMonster(f.hex), true);
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'enemy'), false);
+    building.owner = 'enemy';
+    f.system.claim(f.state);
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'enemy'), true);
+    building.building = 'none';
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), false);
+    f.state.elapsedSeconds = 0.5;
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), true);
+    assert.equal(isZCAwakeMonster(f.hex), true);
+    assert.deepEqual(f.hex.neutralFeature.focusOwners, ['enemy']);
+    assert.equal(f.hex.neutralFeature.patrol, undefined);
+    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, 100), { x: center.x, y: center.y });
+});
+
+test('monster regeneration retains fractions, resets on combat and respects distant retaliation targets', () => {
+    for (const rate of [0, 1, 10]) {
+        const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+        f.config.rules.neutralMonsterRegenDelaySeconds = 0.5;
+        f.config.rules.neutralMonsterRegenRate = rate;
+        f.hex.neutralFeature.awake = true;
+        f.hex.maxHp = 100; f.hex.hp = 50;
         f.system.tick(f.state);
-        assert.ok(f.config.map.resourcePoints[0].patrolCells.includes(segment.toHexId));
+        f.state.elapsedSeconds = 0.5; f.system.tick(f.state);
+        assert.equal(f.hex.hp, 50);
+        for (let i = 1; i <= 10; i++) { f.state.elapsedSeconds = 0.5 + i / 10; f.system.tick(f.state); }
+        assert.ok(Math.abs(f.hex.hp - (50 + rate / 100)) < 1e-9);
+        const attacker = f.unit(1);
+        attacker.freeX += 10000; attacker.hp = 100000;
+        f.state.units = [attacker]; f.hex.neutralFeature.retaliationUnitIds = [attacker.id];
+        const hp = f.hex.hp;
+        f.state.elapsedSeconds = 10; f.system.tick(f.state);
+        assert.equal(f.hex.hp, hp);
+        assert.equal(f.hex.neutralFeature.targetUnitId, attacker.id);
+        assert.ok(attacker.hp < 100000, 'out-of-range attacker remains attackable');
+        attacker.hp = 0;
+        f.state.elapsedSeconds = 11; f.system.tick(f.state);
+        f.state.elapsedSeconds = 11.5; f.system.tick(f.state);
+        assert.equal(f.hex.hp, hp);
+        f.state.elapsedSeconds = 12.5; f.system.tick(f.state);
+        assert.ok(Math.abs(f.hex.hp - (hp + rate / 100)) < 1e-9);
+        const active = f.unit(2); active.freeX += 10000; active.targetBuildingHexId = f.hex.id; active.battleState = 'attack';
+        f.state.units.push(active);
+        const regenerated = f.hex.hp;
+        f.state.elapsedSeconds = 13; f.system.tick(f.state);
+        assert.equal(f.hex.hp, regenerated);
+        assert.equal(f.hex.neutralFeature.disengagedAt, undefined);
+        f.hex.neutralFeature.claimed = true;
+        f.state.elapsedSeconds = 100; f.system.tick(f.state);
+        assert.equal(f.hex.hp, regenerated, 'reinforcement never uses neutral regeneration');
     }
 });
 
-test('巡逻受建筑阻塞时等待，清除后恢复；快照拒绝非法移动段', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
-    f.hex.neutralFeature.awake = true;
-    for (const id of f.config.map.hexes[f.hex.id].neighbors) f.state.hexes[id].building = 'tower';
-    f.system.tick(f.state);
-    assert.equal(f.hex.neutralFeature.patrol.toHexId, f.hex.id);
-    for (const id of f.config.map.hexes[f.hex.id].neighbors) f.state.hexes[id].building = 'none';
-    f.system.tick(f.state);
-    const segment = f.hex.neutralFeature.patrol;
-    assert.notEqual(segment.toHexId, f.hex.id);
-    assert.equal(ZCGameModel.isValidSnapshot(f.state, f.config), true);
-    const restored = JSON.parse(JSON.stringify(f.state));
-    f.system.initialize(restored);
-    f.state.elapsedSeconds = restored.elapsedSeconds = segment.durationSeconds / 2;
-    f.system.tick(f.state); f.system.tick(restored);
-    assert.deepEqual(f.state.hexes[f.hex.id].neutralFeature, restored.hexes[f.hex.id].neutralFeature);
-    const midpoint = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
-    f.state.hexes[segment.toHexId].wallHp = 10;
-    f.system.tick(f.state);
-    f.state.elapsedSeconds += 2;
-    f.system.tick(f.state);
-    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), midpoint, '行进途中出现城墙时暂停');
-    f.state.hexes[segment.toHexId].wallHp = 0;
-    f.system.tick(f.state);
-    assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds), midpoint, '解除阻塞时不瞬移');
-    for (const invalid of [{ toHexId: -1 }, { durationSeconds: -1 }, { startedAt: NaN }, { startedAt: f.state.elapsedSeconds + 1 }, { toHexId: f.config.map.homes[0] }]) {
-        const bad = JSON.parse(JSON.stringify(f.state));
-        Object.assign(bad.hexes[f.hex.id].neutralFeature.patrol, invalid);
-        assert.equal(ZCGameModel.isValidSnapshot(bad, f.config), false);
+test('last hit revives once at the origin with only hp/attack scaled and survives snapshot restoration', () => {
+    for (const rate of [0.8, 1, 1.2]) {
+        const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: rate });
+        f.hex.neutralFeature.awake = true;
+        const config = withZCGeneralStarSelections(f.config, { player: [{ generalId: 68001, star: 1 }] });
+        const model = new ZCGameModel(f.state, () => 0, config);
+        const access = model as unknown as {
+            state: ZCSnapshot;
+            damageBuilding(source: { owner: 'player' }, hex: ZCHexState, damage: number): void;
+            effectiveUnitDefinition(unit: ZCUnitState): ZCUnitDefinition;
+            unitDefinition(id: string): ZCUnitDefinition;
+        };
+        const monster = access.state.hexes[f.hex.id];
+        const original = access.unitDefinition(findCatalogCard('68001').unitId);
+        assert.ok(model.effectiveDefinitionForUnit('player', '68001').attack > original.attack, 'recipient has cultivation bonuses');
+        access.damageBuilding({ owner: 'player' }, monster, monster.hp);
+        const unit = access.state.units.find(unit => unit.neutralReinforcement);
+        assert.ok(unit);
+        assert.equal(unit.hp, original.maxHp * rate);
+        assert.equal(unit.maxHp, unit.hp);
+        assert.equal(unit.nextAttackAt, access.state.elapsedSeconds + original.attackInterval);
+        const definition = access.effectiveUnitDefinition(unit);
+        assert.equal(definition.attack, original.attack * rate);
+        for (const key of ['moveSpeed', 'attackInterval', 'attackRange', 'bodyRadius'] as const) assert.equal(definition[key], original[key]);
+        assert.equal(unit.freeX, f.config.map.hexes[f.hex.id].x);
+        assert.equal(unit.freeY, f.config.map.hexes[f.hex.id].y);
+        access.damageBuilding({ owner: 'player' }, monster, 100);
+        assert.equal(access.state.units.length, 1);
+        assert.equal(monster.neutralResourceId, null);
+        assert.deepEqual(monster.neutralFeature.focusOwners, []);
+        assert.deepEqual(monster.neutralFeature.retaliationUnitIds, []);
+        assert.equal(model.cardReveals.filter(item => item.monsterClaim).length, 1);
+        const restored = new ZCGameModel(model.exportSnapshot(), () => 0, config);
+        assert.deepEqual(restored.snapshot.units[0].inheritedStats, unit.inheritedStats);
     }
-});
-
-test('巡逻中的索敌、近战锁定和弹道共用当前位置，恢复一致且死亡只结算一次', () => {
-    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 }, true, true);
-    f.hex.neutralFeature.awake = true;
-    f.system.tick(f.state);
-    f.state.elapsedSeconds = f.hex.neutralFeature.patrol.durationSeconds / 2;
-    const position = zcMonsterPosition(f.config.map, f.hex, f.state.elapsedSeconds);
-    const model = new ZCGameModel(f.state, () => 0, f.config);
-    const access = model as unknown as {
-        state: ZCSnapshot;
-        unitTargeting: { acquire(unit: ZCUnitState): void; current(unit: ZCUnitState): ZCCombatTarget | null };
-        structureTargetOfHex(id: number, owner: 'player'): ZCCombatTarget | null;
-        damageBuilding(source: { owner: 'player' | 'enemy' }, hex: ZCHexState, damage: number): void;
-        projectileStructureTargets(projectile: { targetKind: 'unit'; targetId: number; owner: 'player' },
-            x: number, y: number, toX: number, toY: number, out: ZCCombatTarget[]): void;
-    };
-    const attacker = f.unit(1);
-    attacker.freeX = position.x; attacker.freeY = position.y;
-    access.unitTargeting.acquire(attacker);
-    assert.equal(attacker.targetBuildingHexId, f.hex.id);
-    const target = access.unitTargeting.current(attacker);
-    assert.equal(target.x, position.x); assert.equal(target.y, position.y);
-    assert.deepEqual(access.structureTargetOfHex(f.hex.id, 'player'), { ...target, cardId: null });
-    const out: ZCCombatTarget[] = [];
-    access.projectileStructureTargets({ targetKind: 'unit', targetId: -1, owner: 'player' },
-        position.x, position.y, position.x, position.y, out);
-    assert.ok(out.some(item => item.id === f.hex.id && item.x === position.x && item.y === position.y));
-    const restored = new ZCGameModel(model.exportSnapshot(), () => 0, f.config);
-    assert.deepEqual(restored.snapshot.hexes[f.hex.id].neutralFeature, model.snapshot.hexes[f.hex.id].neutralFeature);
-    const monster = access.state.hexes[f.hex.id];
-    const gold = access.state.goldByOwner.player;
-    access.damageBuilding({ owner: 'player' }, monster, monster.hp);
-    access.damageBuilding({ owner: 'enemy' }, monster, 100);
-    assert.equal(access.state.goldByOwner.player, gold + f.config.rules.killUnitGoldReward);
-    const reward = model.floatTexts.at(-1);
-    assert.equal(reward.x, position.x); assert.equal(reward.y, position.y);
-    assert.equal(access.structureTargetOfHex(f.hex.id, 'player'), null);
 });
 
 test('强化门按独立表引用，拒绝未知ID、重复效果和旧内联结构', () => {
@@ -249,8 +252,7 @@ test('强化门在相邻格翻开前不领取、不触发，翻开后自动生�
 });
 
 test('趣味资源只认已翻开的邻格，不被未翻格的归属或远处翻格激活', () => {
-    for (const [type, param] of [[8, {}], [9, {}], [10, {}],
-        [11, { resId: '68001', wakeRange: 2, reviveRate: 1 }]] as const) {
+    for (const [type, param] of [[8, {}], [9, {}], [10, {}]] as const) {
         const f = fixture(type, param);
         const neighbors = f.config.map.hexes[f.hex.id].neighbors;
         for (const hex of f.state.hexes) {
@@ -270,8 +272,7 @@ test('趣味资源只认已翻开的邻格，不被未翻格的归属或远处�
         assert.equal(isZCAwakeMonster(f.hex), false, `类型 ${type}`);
         neighbor.developmentResolved = true;
         f.system.claim(f.state);
-        if (type === 11) assert.equal(isZCAwakeMonster(f.hex), true);
-        else assert.equal(f.hex.neutralFeature.claimed, true, `类型 ${type}`);
+        assert.equal(f.hex.neutralFeature.claimed, true, `类型 ${type}`);
     }
 });
 
@@ -665,8 +666,11 @@ test('三人局不投放传送门，野怪睡眠时不是攻击目标', () => {
     const m = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     assert.equal(isZCAwakeMonster(m.hex), false);
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].owner = 'player';
-    m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].developmentResolved = true;
+    m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].building = 'barracks';
+    m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].hp = 10;
     m.system.claim(m.state);
+    assert.equal(isZCAwakeMonster(m.hex), false);
+    assert.equal(m.system.toggleFocus(m.state, m.hex, 'player'), true);
     assert.ok(isZCAwakeMonster(m.hex));
     const hp = m.hex.hp;
     m.system.claim(m.state);
@@ -911,4 +915,81 @@ test('真实模型传送保留飞行快照，落地前不行动，恢复不重�
     assert.notEqual(restored.snapshot.units.find(item => item.id === unit.id).battleState, 'born');
     unit.portalFlight.fromHexId = f.config.map.hexes.length;
     assert.equal(ZCSnapshotCodec.decode(born, f.config).ok, false);
+});
+
+
+test('focus interrupts combat only in reach/territory and cancellation retaliates against live current attackers', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+    const neighbor = f.state.hexes[f.config.map.hexes[f.hex.id].neighbors[0]];
+    neighbor.owner = 'player'; neighbor.building = 'barracks'; neighbor.hp = 100;
+    const soldier = f.unit(1), enemy = f.unit(2, 'enemy');
+    soldier.targetBuildingHexId = f.hex.id; soldier.battleState = 'attack';
+    enemy.targetUnitId = soldier.id; enemy.battleState = 'attack';
+    enemy.freeX += 10;
+    f.state.units = [soldier, enemy];
+    f.state.nextUnitId = 3;
+    const model = new ZCGameModel(f.state, () => 0, f.config);
+    const access = model as unknown as { state: ZCSnapshot; unitTargeting: {
+        refreshPriorityTarget(unit: ZCUnitState): boolean;
+    }; neutralFeatures: ZCNeutralFeatureSystem };
+    const own = access.state.units[0], opponent = access.state.units[1];
+    assert.equal(model.toggleMonsterFocus(f.hex.id), true);
+    assert.equal(own.targetBuildingHexId, f.hex.id);
+    assert.equal(access.unitTargeting.refreshPriorityTarget(own), false, 'focus resists retaliation in territory');
+    access.state.elapsedSeconds = 3;
+    assert.equal(model.toggleMonsterFocus(f.hex.id), true);
+    assert.equal(own.targetUnitId, opponent.id, 'cancel retaliates immediately without another hit');
+    own.targetUnitId = null; own.targetBuildingHexId = f.hex.id;
+    opponent.targetUnitId = null;
+    own.hatredUnitId = opponent.id; own.hatredUntil = 100;
+    assert.equal(access.unitTargeting.refreshPriorityTarget(own), false, 'historical hatred is not a live attacker');
+    own.freeX += 10000; opponent.freeX = own.freeX + 1;
+    own.targetUnitId = opponent.id; own.targetBuildingHexId = null;
+    own.battleState = 'attack';
+    access.state.elapsedSeconds = 6;
+    assert.equal(model.toggleMonsterFocus(f.hex.id), true);
+    assert.equal(own.targetUnitId, opponent.id, 'far combat continues');
+    opponent.hp = 0;
+    assert.equal(access.neutralFeatures.priorityTarget(access.state, own), f.hex.id, 'resume after opponent dies');
+    own.freeX = f.config.map.hexes[f.hex.id].x;
+    own.targetUnitId = opponent.id;
+    assert.equal(access.unitTargeting.refreshPriorityTarget(own), true);
+    assert.equal(own.targetBuildingHexId, f.hex.id);
+});
+
+test('monster params reject invalid multipliers, obsolete independent range and unsafe ground paths', () => {
+    const card = findCatalogCard('68001');
+    const compile = (param: unknown, icon: unknown = 0) => compileZCNeutralResourceCatalog([
+        { groupId: 1, id: 1, groupName: 'monster', resourceType: 11, weight: 10000, param, icon },
+    ], new Map([[card.id, card]]));
+    for (const rate of [0, -1, NaN, Infinity, '1', null, undefined]) assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: rate }));
+    assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: 1, attackRange: 2 }));
+    for (const icon of ['../escape', 'a/b', '']) assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: 1 }, icon));
+    for (const rate of [0.8, 1, 1.2]) assert.equal(compile({ resId: card.id, wakeRange: 2, reviveRate: rate }, 'monster_ice').items.get(1).territoryIcon, 'monster_ice');
+});
+
+test('S-table monster rules preserve fractional seconds and reject blank, negative or fractional regeneration rates', () => {
+    const rows = (cd: unknown, delay: unknown, rate: unknown) => [
+        { key: 'neutralMonsterFocusSwitchCdSeconds', value: cd },
+        { key: 'neutralMonsterRegenDelaySeconds', value: delay },
+        { key: 'neutralMonsterRegenRate', value: rate },
+    ];
+    loadPvpTables({ ...tables, gameConfig: rows(0.5, 1.5, 1) });
+    const config = captureZCMatchConfig();
+    assert.equal(config.rules.neutralMonsterFocusSwitchCdSeconds, 0.5);
+    assert.equal(config.rules.neutralMonsterRegenDelaySeconds, 1.5);
+    for (const input of [rows(-1, 0, 0), rows('', 0, 0), rows(0, -1, 0), rows(0, 0, 0.5), rows(0, 0, NaN)]) {
+        assert.throws(() => loadPvpTables({ ...tables, gameConfig: input }));
+    }
+    loadPvpTables(tables);
+});
+
+test('monster snapshot rejects malformed focus owners, cooldowns and retaliation state', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+    for (const invalid of [{ focusOwners: ['enemy'] }, { unlockedOwners: ['invalid'] },
+        { focusReadyAt: { player: -1 } }, { retaliationUnitIds: [0] }, { disengagedAt: 1 }, { regenUpdatedAt: NaN }]) {
+        const snapshot = ZCSnapshotCodec.clone(f.state);
+        Object.assign(snapshot.hexes[f.hex.id].neutralFeature, invalid);
+        assert.equal(ZCGameModel.isValidSnapshot(snapshot, f.config), false, JSON.stringify(invalid));
+    }
 });

@@ -139,33 +139,25 @@ function readState(type: number): ITokenState {
         endSeconds: 0,
         planStates: new Map<number, IPlanState>(),
     };
-    let cmd: any = null;
-    try {
-        cmd = (CacheMgr.instance as any)?.getCmdBattleToken(type);
-    } catch (error) {
-        console.warn('[BattleToken] 读 CmdBattleToken 缓存失败', error);
-        return empty;
-    }
+    // `get()` 找不到该键返回 null（**不抛**）⇒ 缓存里没有就按 0 级空状态。
+    const cmd = CacheMgr.instance.getCmdBattleToken(type);
     if (!cmd) return empty;
 
     const planStates = new Map<number, IPlanState>();
-    const list = Array.isArray(cmd.tlBattleTokenMessage) ? cmd.tlBattleTokenMessage : [];
-    for (const item of list) {
-        if (!item || typeof item !== 'object') continue;
-        const resId = Number((item as Record<string, unknown>).resId);
-        if (!Number.isFinite(resId) || resId <= 0) continue;
-        const rawTaken = (item as Record<string, unknown>).tlTakeLevel;
-        planStates.set(resId, {
-            open: !!(item as Record<string, unknown>).open,
-            // `undefined` ⇒ null（字段缺失）；`[]` ⇒ 空数组，两者语义不同
-            takenLevels: Array.isArray(rawTaken) ? rawTaken.map((n) => Number(n)) : null,
+    for (const item of cmd.tlBattleTokenMessage ?? []) {
+        // `CmdBattleTokenMessage` 的 `resId` / `open` / `tlTakeLevel` 都是 number / boolean。
+        if (item.resId <= 0) continue;
+        planStates.set(item.resId, {
+            open: item.open,
+            // `null` ⇒ 字段缺失；`[]` ⇒ 空数组，两者语义不同
+            takenLevels: item.tlTakeLevel ?? null,
         });
     }
 
     return {
         type,
-        level: Number(cmd.level) || 0,
-        exp: Number(cmd.exp) || 0,
+        level: cmd.level,
+        exp: cmd.exp,
         endSeconds: endSecondsOf(cmd.endTime),
         planStates,
     };

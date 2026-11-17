@@ -28,7 +28,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest, toIdString } from '../net/RequestGuard';
+import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import { resolveRewardIconRef } from '../common/RewardIcon';
 import {
@@ -107,24 +107,19 @@ export type CelebrationBuyResult = CelebrationRequestResult | 'pay';
 /** 读一张分表的全部行；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
-/** 读 `CmdCelebrationInfo` 全表；拿不到返回空数组。 */
+/**
+ * 读 `CmdCelebrationInfo` 全表；拿不到返回空数组。
+ *
+ * 不再包 `try/catch` / `?? []`：`getValues` 只读字典、不构造 `GameCache`（无可抛点），
+ * 且 `parseServerStates` 自己用 `Array.isArray` 兜住非数组入参。
+ */
 function readServers(): ICelebrationServerState[] {
-    try {
-        return parseServerStates(CacheMgr.instance.getTlCmdCelebrationInfo() ?? []);
-    } catch (error) {
-        console.warn('[Celebration] 读 CmdCelebrationInfo 缓存失败', error);
-        return [];
-    }
+    return parseServerStates(CacheMgr.instance.getTlCmdCelebrationInfo());
 }
 
-/** 读 `CmdRankItem` 全表 → `rankType` → 时间窗；拿不到返回空表。 */
+/** 读 `CmdRankItem` 全表 → `rankType` → 时间窗；拿不到返回空表（同上，判空在 `parseRankTimes` 内）。 */
 function readRankTimes(): Map<number, ICelebrationRankTime> {
-    try {
-        return parseRankTimes(CacheMgr.instance.getTlCmdRankItem() ?? []);
-    } catch (error) {
-        console.warn('[Celebration] 读 CmdRankItem 缓存失败', error);
-        return new Map<number, ICelebrationRankTime>();
-    }
+    return parseRankTimes(CacheMgr.instance.getTlCmdRankItem());
 }
 
 /**
@@ -136,17 +131,8 @@ function readRankTimes(): Map<number, ICelebrationRankTime> {
  * 读不到返回空串，服务端照样回包，只是 `myRank` 为空。
  */
 export function celebrationSelfRoleId(): string {
-    try {
-        const rows = CacheMgr.instance.getTlCmdRole() ?? [];
-        for (const row of rows) {
-            if (!row) continue;
-            const id = toIdString((row as unknown as Record<string, unknown>).id);
-            if (id) return id;
-        }
-    } catch (error) {
-        console.warn('[Celebration] 读 CmdRole 缓存失败', error);
-    }
-    return '';
+    const row = CacheMgr.instance.getTlCmdRole()[0];
+    return row ? toIdString(row.id) : '';
 }
 
 /** 详细排名弹窗要一行数据（`CmdRankRole` 的裁剪视图）。 */
@@ -326,34 +312,14 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
 function toRankEntry(role: CmdRankRole | null | undefined): ICelebrationRankEntry {
     if (!role) return { rank: 0, roleName: '', power: 0, usedSkinResId: 0 };
     return {
-        // `rank` 可能是 -1（未上榜），不要在这里抹成 0，否则 `CL_NOT_IN_RANK` 那条分支永远走不到。
-        rank: Number(role.rank) || 0,
+        // `rank` 是 `sint32` ⇒ 已是 number；可能是 -1（未上榜），不要抹成 0，
+        // 否则 `CL_NOT_IN_RANK` 那条分支永远走不到。
+        rank: role.rank,
         roleName: typeof role.roleName === 'string' ? role.roleName : '',
-        power: toLongNumber(role.value),
-        usedSkinResId: toLongNumber(role.usedSkinResId),
+        // `value` / `usedSkinResId` 是 `sint64` ⇒ 运行时 `Long`，走 core 的边界转换。
+        power: toCount(role.value),
+        usedSkinResId: toCount(role.usedSkinResId),
     };
-}
-
-/**
- * `Long` / `number` / `string` → number；认不出返回 0。
- *
- * 不能直接 `Number(long)`：protobufjs 的 `Long` 走不到 number，会得到 `NaN`，
- * 之后战力显示 `NaN`、名次判 `NaN === -1` 恒 false。
- */
-function toLongNumber(value: unknown): number {
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : 0;
-    }
-    if (value && typeof value === 'object') {
-        const long = value as { low?: number; high?: number };
-        if (typeof long.low === 'number' && typeof long.high === 'number') {
-            const n = long.high * 4294967296 + (long.low >>> 0);
-            return Number.isFinite(n) ? n : 0;
-        }
-    }
-    return 0;
 }
 
 export const celebrationRepository: ICelebrationRepository = new RuntimeCelebrationRepository();

@@ -30,7 +30,7 @@ function makeWallFrame(
 test('中立特性索引在真实构造后可首帧刷新，并替换上一静态帧状态', () => {
     const { load } = loadViews();
     const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({});
-    const patrol = { id: 1, neutralFeature: { patrol: true } };
+    const patrol = { id: 1, neutralFeature: { awake: false } };
     const claimed = { id: 2, neutralFeature: { claimed: true } };
     world.refreshNeutralFeatureHexIds({ snapshot: { hexes: [patrol, claimed, { id: 3 }] } });
     assert.equal(world.neutralFeatureHexStates.size, 2);
@@ -602,6 +602,8 @@ test('地块内容不变时不重复写 Sprite，生命和建筑冷却仍更新'
     // `applyActivationFx` 每帧也会把建筑外观缩放复位到基准值 ⇒ 同样按 prefab 的真实绑定补节点，
     // 否则这条用例会撞 `buildingSprite` 为 null（桩缺哪个引用，哪个用例当场红）。
     view.buildingSprite = { node: bar().node, enabled: true, spriteFrame: null, color: null };
+    view.groundGlow = { node: bar().node };
+    view.buildingLayer = bar().node;
     let terrain = 0, content = 0, cooldown = 0;
     view.renderTerrain = () => terrain++;
     view.renderContent = () => content++;

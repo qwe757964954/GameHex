@@ -86,7 +86,7 @@
       "buildingId": "",
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 30,
@@ -703,7 +703,7 @@
         "combatPower": 0,
         "silverCost": 15,
         "exploreSeconds": 1,
-        "staminaCost": 5
+        "staminaCost": 1
       }
     },
     {
@@ -3001,95 +3001,6 @@
       }
     },
     {
-      "id": "patrolChest_154",
-      "type": "patrolChest",
-      "cellId": 346,
-      "footprint": [
-        346
-      ],
-      "battleIds": [
-        60001,
-        60002
-      ],
-      "buildingId": "",
-      "unlock": {
-        "requiredCells": [
-          367
-        ],
-        "combatPower": 0,
-        "silverCost": 10,
-        "exploreSeconds": 2,
-        "staminaCost": 5
-      }
-    },
-    {
-      "id": "patrolChest_155",
-      "type": "patrolChest",
-      "cellId": 366,
-      "footprint": [
-        366
-      ],
-      "battleIds": [
-        60001,
-        60002
-      ],
-      "buildingId": "",
-      "unlock": {
-        "requiredCells": [
-          367
-        ],
-        "combatPower": 0,
-        "silverCost": 10,
-        "exploreSeconds": 2,
-        "staminaCost": 5
-      }
-    },
-    {
-      "id": "patrolChest_156",
-      "type": "patrolChest",
-      "cellId": 387,
-      "footprint": [
-        387
-      ],
-      "battleIds": [
-        60001,
-        60002
-      ],
-      "buildingId": "",
-      "unlock": {
-        "requiredCells": [
-          367
-        ],
-        "combatPower": 0,
-        "silverCost": 10,
-        "exploreSeconds": 2,
-        "staminaCost": 5
-      }
-    },
-    {
-      "id": "patrolChest_157",
-      "type": "patrolChest",
-      "cellId": 368,
-      "footprint": [
-        368
-      ],
-      "battleIds": [
-        60001,
-        60002
-      ],
-      "patrolId": 1111,
-      "buildingId": "",
-      "unlock": {
-        "requiredCells": [
-          367
-        ],
-        "combatPower": 0,
-        "silverCost": 10,
-        "exploreSeconds": 2,
-        "staminaCost": 5
-      }
-    },
-    {
       "id": "patrolChest_158",
       "type": "patrolChest",
       "cellId": 331,
@@ -3100,6 +3011,7 @@
         60003,
         60004
       ],
+      "patrolId": 50005,
       "buildingId": "",
       "unlock": {
         "requiredCells": [
@@ -3364,6 +3276,7 @@
         60005,
         60006
       ],
+      "patrolId": 50007,
       "buildingId": "",
       "unlock": {
         "requiredCells": [
@@ -3496,6 +3409,7 @@
         60007,
         60008
       ],
+      "patrolId": 50005,
       "buildingId": "",
       "unlock": {
         "requiredCells": [
@@ -3628,6 +3542,7 @@
         60009,
         60010
       ],
+      "patrolId": 50005,
       "buildingId": "",
       "unlock": {
         "requiredCells": [
@@ -3676,6 +3591,95 @@
       "unlock": {
         "requiredCells": [
           125
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "patrolChest_155",
+      "type": "patrolChest",
+      "cellId": 346,
+      "footprint": [
+        346
+      ],
+      "battleIds": [
+        60001,
+        60002
+      ],
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          347
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "patrolChest_155",
+      "type": "patrolChest",
+      "cellId": 366,
+      "footprint": [
+        366
+      ],
+      "battleIds": [
+        60001,
+        60002
+      ],
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          347
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "patrolChest_155",
+      "type": "patrolChest",
+      "cellId": 387,
+      "footprint": [
+        387
+      ],
+      "battleIds": [
+        60001,
+        60002
+      ],
+      "patrolId": 50021,
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          347
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      }
+    },
+    {
+      "id": "patrolChest_155",
+      "type": "patrolChest",
+      "cellId": 368,
+      "footprint": [
+        368
+      ],
+      "battleIds": [
+        60001,
+        60002
+      ],
+      "buildingId": "",
+      "unlock": {
+        "requiredCells": [
+          347
         ],
         "combatPower": 0,
         "silverCost": 10,

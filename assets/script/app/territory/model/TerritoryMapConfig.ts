@@ -52,9 +52,15 @@ export interface TerritorySite {
     cellId: number;
     footprint: number[];
     configId?: string;
-    /** 巡逻宝箱可配置的战斗 ID，保留配置顺序。 */
+    /**
+     * 巡逻宝箱的战斗 ID 池，保留配置顺序。
+     *
+     * 运行时按「区域组」摊到各格：`battleIds` 与 `unlock.requiredCells` 都相同的格子视为
+     * 同一片巡逻区域，组内按 `cellId` 升序第 `i` 格取 `battleIds[i % 长度]`；同一场战斗的
+     * 格子共享通过状态（任一格占点即整片通过），该战斗的巡逻野怪随之停止。
+     */
     battleIds?: number[];
-    /** 巡逻宝箱的野怪巡逻配置 ID，旧地图可省略。 */
+    /** 初始格的 monsterCard.id；同 site.id 的巡逻格全部解锁后生成，旧地图可省略。 */
     patrolId?: number;
     buildingId?: string;
     /** `PVP-关卡` 的关卡地图格子奖励表 ID，仅固定资源点使用。 */
@@ -149,7 +155,7 @@ interface TerritoryMapContext {
     readonly total: number;
     readonly startCellId: number;
     readonly occupied: Set<number>;
-    readonly ids: Set<string>;
+    readonly ids: Map<string, string>;
 }
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -272,8 +278,9 @@ function parseSite(
 ): TerritorySite {
     assert(isRecord(raw), `sites[${index}] must be an object`);
     assert(typeof raw.id === 'string' && raw.id.length > 0, `sites[${index}].id is invalid`);
-    assert(!ctx.ids.has(raw.id), `duplicate site id ${raw.id}`);
-    ctx.ids.add(raw.id);
+    assert(!ctx.ids.has(raw.id) || raw.type === TERRITORY_SITE_TYPE.patrolChest
+        && ctx.ids.get(raw.id) === TERRITORY_SITE_TYPE.patrolChest, `duplicate site id ${raw.id}`);
+    ctx.ids.set(raw.id, String(raw.type));
     assert(
         TERRITORY_SITE_TYPES.includes(raw.type as TerritorySiteType),
         `sites[${index}].type is invalid`,
@@ -410,10 +417,25 @@ export function configureTerritoryMap(input: unknown): TerritoryMapConfig {
         total: header.total,
         startCellId: header.startCellId,
         occupied: new Set(),
-        ids: new Set(),
+        ids: new Map(),
     };
     const sites = (input.sites as unknown[]).map((raw, index) =>
         parseSite(raw, ctx, index, defaults));
+    for (const [id, type] of ctx.ids) {
+        if (type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        const cells = new Set(sites.filter(site => site.type === TERRITORY_SITE_TYPE.patrolChest && site.id === id)
+            .flatMap(site => site.footprint));
+        const queue = [cells.values().next().value];
+        const visited = new Set(queue);
+        for (let index = 0; index < queue.length; index += 1) {
+            for (const neighbor of territoryNeighbors(queue[index], header)) {
+                if (!cells.has(neighbor) || visited.has(neighbor)) continue;
+                visited.add(neighbor);
+                queue.push(neighbor);
+            }
+        }
+        assert(visited.size === cells.size, `patrol site ${id} must be contiguous`);
+    }
     return {
         version: TERRITORY_MAP_VERSION,
         mapKind: TERRITORY_MAP_KIND,

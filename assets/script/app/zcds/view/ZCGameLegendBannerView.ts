@@ -6,6 +6,7 @@ const { ccclass, property } = _decorator;
 
 /** 横幅画布高度，按四方共用的设计稿规格。*/
 const BANNER_HEIGHT = 417;
+const MONSTER_CLAIM_TEXT = { defeat: '击败', reward: '获得援军' } as const;
 
 /**
  * 横幅的设计稿宽度（= 工程 `designResolution` 的 720，也是 4 张底图的原始宽度）。
@@ -188,6 +189,9 @@ export class ZCGameLegendBannerView extends Component {
 
     @property({ type: Label, group: '节点引用', tooltip: 'Name：卡名（卡表 name，如「吐豌豆骑手」）' })
     nameLabel: Label = null!;
+
+    @property(Label)
+    monsterClaimLabel: Label = null!;
 
     @property({ type: SpriteFrame, group: '玩家配色', tooltip: '我方（player，蓝）：legend_banner_02' })
     bannerPlayer: SpriteFrame = null!;
@@ -426,8 +430,14 @@ export class ZCGameLegendBannerView extends Component {
     }
 
     /** 底板 / 环 / 立绘 / 头像 / 卡名只在换卡时写一次；每帧只动位置与透明度。*/
+    private ownerNames: ReadonlyMap<ZCOwner, { readonly name: string }> | undefined;
+    setOwnerNames(names: ReadonlyMap<ZCOwner, { readonly name: string }> | undefined): void {
+        this.ownerNames = names;
+        this.invalidateContent();
+    }
+
     private renderContent(reveal: Readonly<ZCCardReveal>): void {
-        const key = `${reveal.cardId}|${reveal.owner}|${reveal.cardName}|${reveal.unitId ?? ''}`;
+        const key = `${reveal.cardId}|${reveal.owner}|${reveal.cardName}|${reveal.unitId ?? ''}|${reveal.monsterClaim === true}`;
         if (key === this.contentKey) return;
         this.contentKey = key;
         const frames = this.framesFor(reveal.owner);
@@ -437,7 +447,12 @@ export class ZCGameLegendBannerView extends Component {
         // 立绘尺寸只跟「换成了哪张图」有关 ⇒ 跟着内容键一起刷新，不进每帧路径。
         this.applyRoleScale();
         this.setSprite(this.headSprite, this.portraitResolver?.(reveal.owner) ?? null);
-        if (this.nameLabel.string !== reveal.cardName) this.nameLabel.string = reveal.cardName;
+        this.titleSprite.node.active = !reveal.monsterClaim;
+        this.nameLabel.node.active = !reveal.monsterClaim;
+        this.monsterClaimLabel.node.active = reveal.monsterClaim === true;
+        if (reveal.monsterClaim) {
+            this.monsterClaimLabel.string = `${this.ownerNames?.get(reveal.owner)?.name ?? reveal.owner}\n${MONSTER_CLAIM_TEXT.defeat} ${reveal.cardName}\n${MONSTER_CLAIM_TEXT.reward}`;
+        } else if (this.nameLabel.string !== reveal.cardName) this.nameLabel.string = reveal.cardName;
     }
 
     private alphaOf(progress: number): number {

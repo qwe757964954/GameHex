@@ -109,3 +109,56 @@ test('closing world before a failed tab restores the retained page highlight', a
     assert.equal(h.selected[h.selected.length - 1], MainTab.Territory);
     h.controller.dispose();
 });
+
+test('world to alliance highlights the target while loading without flashing the retained tab', async () => {
+    const h = harness();
+    const first = h.controller.switchTab(MainTab.Territory);
+    h.requests[0].resolve({ name: 'territory' });
+    await first;
+    await h.controller.switchTab(MainTab.World);
+    h.selected.length = 0;
+
+    const alliance = h.controller.switchTab(MainTab.Alliance);
+    h.controller.worldClosed();
+    assert.deepEqual(h.selected, [MainTab.Alliance]);
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Territory);
+    h.requests[1].resolve({ name: 'alliance' });
+    await alliance;
+    assert.deepEqual(h.selected, [MainTab.Alliance, MainTab.Alliance]);
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Alliance);
+    h.controller.dispose();
+});
+
+test('failed world to alliance restores the retained tab only after failure', async () => {
+    const h = harness();
+    const first = h.controller.switchTab(MainTab.Territory);
+    h.requests[0].resolve({});
+    await first;
+    await h.controller.switchTab(MainTab.World);
+    h.selected.length = 0;
+
+    const alliance = h.controller.switchTab(MainTab.Alliance);
+    assert.deepEqual(h.selected, [MainTab.Alliance]);
+    h.requests[1].reject(new Error('offline'));
+    await alliance;
+    assert.deepEqual(h.selected, [MainTab.Alliance, MainTab.Territory]);
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Territory);
+    h.controller.dispose();
+});
+
+test('stale tab failure does not overwrite the world highlight', async () => {
+    const h = harness();
+    const first = h.controller.switchTab(MainTab.Territory);
+    h.requests[0].resolve({});
+    await first;
+    await h.controller.switchTab(MainTab.World);
+    const alliance = h.controller.switchTab(MainTab.Alliance);
+    await h.controller.switchTab(MainTab.World);
+    h.selected.length = 0;
+
+    h.requests[1].reject(new Error('offline'));
+    await alliance;
+    assert.deepEqual(h.selected, []);
+    assert.equal(h.controller.snapshot.worldVisible, true);
+    h.controller.dispose();
+});

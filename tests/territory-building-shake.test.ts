@@ -235,6 +235,7 @@ function makeMapView() {
                 return { TerritoryStationView: class { setConditionSpawnScale() {} }, territoryUsesBottomAnchor: () => false };
             }
             if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
+            if (id === './TerritoryMonsterPatrolView') return { TerritoryMonsterPatrolView: class {} };
             // 喷发粒子（2026-10-16 row17）：夹具只关心建筑抖动，给个空壳即可。
             if (id === './TerritoryGainBurst') return {
                 TERRITORY_GAIN_BURST_NODE: 'GainBurst',

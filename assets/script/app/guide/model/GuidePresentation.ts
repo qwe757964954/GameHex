@@ -23,30 +23,23 @@ export function guideDialogBottom(height: number, dialogHeight: number, defaultB
 }
 
 /**
- * 立绘最大宽度占宿主宽的比例（0.4 ≈ 720 屏宽下的 288px）。
+ * 立绘盒宽度占宿主宽的比例：**149 / 720**（用户给的绿框口径）。
  *
- * 依据：埃莉斯静图 500×800 按 `portraitHeight` 460 显示出来正好 ≈ 288 宽，
- * 也就是「美术给的立绘本来就该这么宽」。豌豆游侠的骨骼绑定框是 654×916（比例更宽），
- * 按高度缩完会撑到 328 —— 一眼就能看出比静图胖一圈，还会压到对话条外的地图。
- * 所以统一按这个上限等比缩：宁可矮一点，不许横向撑开。
+ * 立绘整体要落在绿框里 —— 720 设计宽下约 149 宽。高度由 Inspector 的 `portraitHeight`
+ * （233）给，两者一起构成立绘盒，图按比例 contain 进去，绝不拉伸。
+ * 静图 500×800 与骨骼绑定框 654×916（`skel/豌豆射手`）的比例不同，
+ * 所以「在框内」只能按 `min(框宽/原宽, 框高/原高)` 缩，两种立绘的显示高度本来就会差一点。
  */
-export const PORTRAIT_MAX_WIDTH_RATIO = 0.4;
+export const PORTRAIT_BOX_WIDTH_RATIO = 149 / 720;
 
 /**
- * 按「目标高度 + 最大宽度」算立绘的显示尺寸（等比，绝不拉伸）。
+ * 把立绘按比例 contain 进给定盒子（`boxWidth × boxHeight`），返回显示尺寸。
  *
- * 高度优先：先按 `targetHeight` 等比缩放；宽高比大的图（骨骼 / 横幅立绘）会被宽度钳住，
- * 这时高度跟着一起降。入参非法（0 / 负数 / NaN）返回 0 尺寸，调用方据此隐藏立绘。
+ * 入参非法（0 / 负数 / NaN）返回 0 尺寸，调用方据此隐藏立绘。
  */
-export function fitGuidePortrait(rawWidth: number, rawHeight: number, targetHeight: number,
-    hostWidth: number): { readonly width: number; readonly height: number } {
-    if (!(rawWidth > 0) || !(rawHeight > 0) || !(targetHeight > 0)) return { width: 0, height: 0 };
-    let width = rawWidth * (targetHeight / rawHeight);
-    let height = targetHeight;
-    const maxWidth = hostWidth > 0 ? hostWidth * PORTRAIT_MAX_WIDTH_RATIO : 0;
-    if (maxWidth > 0 && width > maxWidth) {
-        width = maxWidth;
-        height = maxWidth * (rawHeight / rawWidth);
-    }
-    return { width, height };
+export function fitGuidePortrait(rawWidth: number, rawHeight: number,
+    boxWidth: number, boxHeight: number): { readonly width: number; readonly height: number } {
+    if (!(rawWidth > 0) || !(rawHeight > 0) || !(boxWidth > 0) || !(boxHeight > 0)) return { width: 0, height: 0 };
+    const scale = Math.min(boxWidth / rawWidth, boxHeight / rawHeight);
+    return { width: rawWidth * scale, height: rawHeight * scale };
 }

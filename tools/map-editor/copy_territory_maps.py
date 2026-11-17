@@ -25,7 +25,7 @@ TARGET = presets_io.PROJECT / "assets" / "resources" / "config" / "territory-map
 
 # 策划侧 sever 目录。**留在本模块**是为了让
 # `tests/test_copy_territory_maps.py` 能 `patch.object(publisher, 'DOC_TARGETS', ...)`。
-DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_SEVER_TARGET
+DOC_TARGETS: tuple[Path, ...] = (presets_io.DOC_SEVER_DIR / "territorymap",)
 
 
 def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
@@ -40,6 +40,9 @@ def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
     targets = [TARGET / f"{path.stem}.json", *(directory / f"{path.stem}.json" for directory in DOC_TARGETS)]
     if not dry_run:
         presets_io.publish(targets, payload)
+    note = presets_io.purge_flat_sever_copy(path.name, dry_run)
+    if note:
+        warnings = [*warnings, note]
     note = presets_io.purge_client_copy(path.name, dry_run)
     if note:
         warnings = [*warnings, note]

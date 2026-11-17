@@ -289,8 +289,14 @@ test('ZCUnitView：施法窗口必须参与片段选择，且不参与「重播�
         '★重播判据只能认 attacking');
 });
 
-test('快照校验：两个新字段必须登记进白名单', () => {
+test('快照校验：新增的可选数值字段必须登记进白名单', () => {
     const source = readSource('assets/script/app/zcds/model/ZCSnapshotCodec.ts');
-    assert.match(source, /'castActionUntil', 'castHoldUntil'\]/,
-        '★新增可选数值字段不登记，回放校验会把脏值放过去');
+    //  这几条都是「新增单位可选数值字段必须登记」的规矩（见 codec 里那段注释）：
+    //  漏一个，回放校验就会把脏值放过去 —— 而且不报错，只是读档后单位状态莫名奇妙。
+    //  2026-11-17 第 10 批：`cdReducePaidAt`（普攻回退冷却的同帧去重戳）随 `cdReduceOnHit`
+    //  整条车道全卡下线，从白名单和字段定义里一并删了。别照着旧笔记再加回来。
+    for (const field of ['castActionUntil', 'castHoldUntil']) {
+        assert.match(source, new RegExp(`'${field}'`),
+            `★${field} 没登记进快照白名单，回放校验会把脏值放过去`);
+    }
 });

@@ -146,7 +146,8 @@ test('鹿神守护：走强化槽的移动区域，伤害按 600/700/800 ÷ 面�
     //  成长链也要有，否则界面上点不出这一级。
     const growth = readRows('armySkillLevelUp').filter((row) => Number(row.id) === 103405);
     assert.equal(growth.length, 3);
-    assert.deepEqual(growth.map((row) => Number(row.unlockarmylevel)), [9, 18, 24]);
+    //  103405 是 68034 的第 4 格（第 3 格是 103404）⇒ 12 / 24 / 36（2026-11-17 统一档位）。
+    assert.deepEqual(growth.map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
     assert.equal(readRows('armySkillLevelUp').some((row) => Number(row.id) === 103403), false);
 });
 

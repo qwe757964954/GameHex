@@ -14,7 +14,8 @@ import {
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 
 function rows(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as
+    const small = JSON.parse(readFileSync('assets/remoteRef/refSmallAll.json', 'utf8'));
+    const source = (small[name] ?? JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'))) as
         | Array<Record<string, unknown>>
         | { k: string[]; v: unknown[][] };
     if (Array.isArray(source)) return source;

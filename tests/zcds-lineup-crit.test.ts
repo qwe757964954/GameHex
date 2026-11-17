@@ -178,16 +178,19 @@ test('全队暴击伤害是 owner 级唯一值：汇总后写回全队，暴击�
 test('裂变暴击不再给暴击伤害：68025 的 critDamage 只剩 109001，暴击率 15%（卡牌上限）', () => {
     prepare();
     const catalogs = getZCModifierCatalogs();
-    const at25 = selectZCSkillPlans('68025', 25, catalogs);
-    const loadout = compileZCCombatBuild({ unitId: '68025', heroLevel: 25 }, captureZCMatchConfig().units, catalogs)
+    //  取 26 级：102502「裂变暴击」在**第 2 格**，III 档要到 26 级才解锁（2026-11-17 统一档位前是 25）。
+    const selected = selectZCSkillPlans('68025', 26, catalogs);
+    const loadout = compileZCCombatBuild({ unitId: '68025', heroLevel: 26 }, captureZCMatchConfig().units, catalogs)
         .find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
     //  单卡技能只提暴击率，暴击伤害一个点都不给。
     //  2026-11-10 之前是 90/120/150 的暴伤，用户口径：卡牌自身技能不许带暴击伤害加成。
     //  🔴 V5（2026-11-16）：暴击率收进「克制 / 暴击条」，档位 11/13/15%，III 级正好顶到 15% 卡牌上限。
     assert.equal(loadout!.statPatch.critRatePct, 15, '裂变暴击 III = +15% 暴击率（卡牌上限）');
-    assert.equal(loadout!.statPatch.critDamagePct, 75, '只剩 25×3（109001 本链），裂变暴击的 150 已删除');
-    assert.equal(at25.filter((row) => row.skillChainId === LINEUP_CRIT_CHAIN_ID).length, 25);
+    //  109001 是「每级 +3%」的 accumulate 链 ⇒ 数值随英雄等级线性涨：26 级 = 26 × 3 = 78。
+    assert.equal(loadout!.statPatch.critDamagePct, 78, '只剩 26×3（109001 本链），裂变暴击的 150 已删除');
+    assert.equal(selected.filter((row) => row.skillChainId === LINEUP_CRIT_CHAIN_ID).length, 26,
+        '109001 每级一行 ⇒ 26 级选中 26 行（accumulate）');
 });
 
 test('全表守卫：`critDamage` 只允许来自 109001，单卡技能不得再产暴击伤害', () => {

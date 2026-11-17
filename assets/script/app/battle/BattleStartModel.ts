@@ -236,21 +236,24 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         return null;
     }
     const heroes = normalizeBattleHeroes(info.heroInfos);
+    // `campId` / `unitId` / `power` / `gradeId` / `gradeScore` / `artifactId` / `artifactLevel`
+    // 在 proto 里都是 `int32` / `uint32` ⇒ 运行时就是 number，不再过一遍 Long 转换；
+    // `roleId` / `img` / `headFrame` 是 `uint64` ⇒ `Long`，必须走 `toIdString`（超 2^53 保持精度）。
     return {
         campId,
-        unitId: toCount(info.unitId),
+        unitId: info.unitId,
         roleId: toIdString(show.roleId),
-        serverId: toCount(show.serverId),
+        serverId: show.serverId,
         name: typeof show.name === 'string' ? show.name : '',
-        power: toCount(show.power),
+        power: show.power,
         avatarId: toIdString(show.img),
         headFrameId: toIdString(show.headFrame),
-        gradeId: toCount(show.gradeId),
-        gradeScore: toCount(show.gradeScore),
+        gradeId: show.gradeId,
+        gradeScore: show.gradeScore,
         heroIds: heroes.map((hero) => hero.heroId),
         heroes,
-        artifactId: toCount(info.artifactId),
-        artifactLevel: toCount(info.artifactLevel),
+        artifactId: info.artifactId,
+        artifactLevel: info.artifactLevel,
         unitType: normalizeBattleUnitType(info.unitType),
         buffs: parseBattleBuffs(info.buffInfo),
         heroAttrs: parseBattleHeroAttrs(info.attrs),

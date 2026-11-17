@@ -727,10 +727,11 @@ function siteAtCell(cell) {
 function siteGroupCells(cell) {
   const site = siteAtCell(cell);
   if (!site) return [];
-  const key = site.configId || site.id;
+  const key = site.type === 'patrolChest' ? site.id : site.configId || site.id;
   const cells = new Set();
   for (const item of map.sites || []) {
-    if ((item.configId || item.id) !== key) continue;
+    if (site.type === 'patrolChest' && item.type !== 'patrolChest') continue;
+    if ((item.type === 'patrolChest' ? item.id : item.configId || item.id) !== key) continue;
     for (const id of item.footprint || [item.cellId]) cells.add(id);
   }
   return [...cells];
@@ -811,7 +812,7 @@ function applyFormatToCell(cell, source) {
     const s = source.site;
     map.sites.push({
       ...s,
-      id: `${s.type}_${cell}`,
+      id: s.type === 'patrolChest' ? s.id : `${s.type}_${cell}`,
       cellId: cell,
       footprint: [cell],
     });

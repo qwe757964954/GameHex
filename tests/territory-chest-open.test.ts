@@ -23,7 +23,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { TERRITORY_CHEST_OPEN_ARTS, TERRITORY_CHEST_OPEN_ART_ROOT } from '../assets/script/app/ArtPaths';
 import {
-    chestOpenLegendHeroesOf,
+    chestLegendHeroesOf,
     chestOpenBgProgressOf,
     chestOpenCardProgressOf,
     chestOpenCardVisualOf,
@@ -530,35 +530,94 @@ function componentsOf(items: any[], node: PrefabNode): string[] {
 // E. 接线
 // ============================================================
 
-test('E1｜领地宝箱「进流程先弹页」：不再前置地图开箱表演', () => {
+test('E1｜领地宝箱：先播地图开箱动画，奖励不再走「宝箱开启页」', () => {
     const main = read(MAIN_TS);
-    assert.match(main, /import \{ TerritoryChestOpenPage \} from '\.\.\/territory\/view\/TerritoryChestOpenPage';/);
+    // 2026-11-17 用户口径 ①：点开宝箱继续播**原有的奖励粒子动画**，页面那条入口整体让位。
+    assert.doesNotMatch(main, /TerritoryChestOpenPage/,
+        '领地宝箱链里不该再有「宝箱开启页」（宝箱栏 / 巡逻入口仍由组合层直连）');
 
     const at = main.indexOf('const tier = cellId !== null');
     assert.ok(at > 0, '宝箱档位判定不见了');
     const body = main.slice(at, main.indexOf('private presentChestRewards(', at));
-    assert.match(body, /this\.presentChestRewards\(rewards\)/, '进开箱流程先把「宝箱开启」页弹出来');
+    assert.match(body, /this\.presentChestRewards\(rewards, cellId, tier\)/, '档位齐了才进开箱链（要传给 chest_seq_*）');
 
-    // 弹页之后不该再有结算（会二次弹 `FW.ShowReward`）
-    const tail = body.slice(body.indexOf('this.presentChestRewards(rewards);'));
-    assert.doesNotMatch(tail, /settleRewards\(/, '弹页之后不许再走旧结算');
+    // 没有档位 = 不是宝石/碎片宝箱 ⇒ 仍旧当场结算
+    const head = body.slice(0, body.indexOf('this.presentChestRewards(rewards, cellId, tier);'));
+    assert.match(head, /if \(!tier\) \{\s*this\.settleRewards\(rewards, cellId\);/,
+        '无档位（纯货币/杂项）继续走旧结算');
 
-    // 旧前置表演整条链路已下线：先播 `chest_seq_*`、再回调弹页的写法不复存在
-    assert.doesNotMatch(main, /playChestThenSettle|wireRewardCatch/,
-        '地图内开箱表演不再前置（页面本身就是开箱表现）');
+    // 进了开箱链就不该再结算：否则动画还没演完奖励窗就弹上来了
+    const tail = body.slice(body.indexOf('this.presentChestRewards(rewards, cellId, tier);'));
+    assert.doesNotMatch(tail, /settleRewards\(/, '开箱链之后不许再走旧结算（会二次弹 `FW.ShowReward`）');
+
+    // 旧前置表演整条链路仍不复存在
+    assert.doesNotMatch(main, /playChestThenSettle|wireRewardCatch/);
     assert.doesNotMatch(main, /settleRewards\([^)]*,\s*true\)/, 'suppressGain 这个口子已经删了');
 });
 
-test('E2｜`presentChestRewards`：整批奖励（含货币）都给新页，空奖励不弹', () => {
+test('E2｜`runChestOpening`：先演 `chest_seq_*`，演完发 ChestRewardsReady；起播失败立刻交棒', () => {
     const main = read(MAIN_TS);
     const at = main.indexOf('private presentChestRewards(');
     assert.ok(at > 0);
     const body = main.slice(at, main.indexOf('private findHeroTabHost(', at));
-    assert.match(body, /if \(!rewards\.length\) return;/);
-    assert.match(body, /TerritoryChestOpenPage\.open\(/);
-    assert.match(body, /goods: rewards\.map\(\(reward\) => \(\{ resId: reward\.resId, number: reward\.amount \}\)\)/);
-    assert.doesNotMatch(body, /splitTerritoryRewards|isTerritoryWalletResId|FW\.ShowReward/,
-        '这一路不许再按钱包/道具分流（设计稿的卡本来就画了货币）');
+    assert.match(body, /if \(!rewards\.length\) return;/, '空奖励不弹');
+
+    // ① 图标先取齐再起播（`chest_seq` 的飞行图标/光柱用的就是这一批 frame）
+    const iconAt = body.indexOf('entries = await this.collectRewardIcons(rewards);');
+    const playAt = body.indexOf('this.mapView.playChestOpen(');
+    // 演出窗口从「点开箱子」那一刻就要开（取图是异步的，晚开就会抢台词）
+    assert.match(body.slice(0, body.indexOf('entries = await this.collectRewardIcons')),
+        /ChestPresentation, \{ owner: this, playing: true \}/);
+    assert.ok(iconAt > 0 && playAt > iconAt, '必须先取图再起播，否则喷空图');
+    assert.match(body,
+        /try \{\s*entries = await this\.collectRewardIcons\(rewards\);\s*\} catch \(error\) \{[\s\S]{0,240}?\}\s*if \(!this\.isValid\) \{/,
+        '取图失败只是没图标，不许拦着开箱（catch 之后照常起播）');
+
+    // ② 动画演完 → 发事件交棒组合层（英雄页 / 统一奖励窗由组合层决定）
+    assert.match(body, /const goods = rewards\.map\(\(reward\) => \(\{ resId: Number\(reward\.resId\), number: Number\(reward\.amount\) \|\| 0 \}\)\);/);
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ owner: this, rewards: goods \}\)/);
+    // ④ 取图是异步的：起播前必须再判一次页面是否还在
+    const isValidAt = body.indexOf('if (!this.isValid) {', iconAt);
+    assert.ok(isValidAt > 0 && isValidAt < playAt, '取图期间页面可能已销毁，起播前要判一次');
+    // 页面先塔时要把演出窗口关掉，否则引导层会一直等下去（2-3 的台词就再也不播了）
+    assert.match(body.slice(isValidAt, isValidAt + 240), /ChestPresentation[^;]*playing: false/);
+
+    // ③ 起播失败也要交棒：表现失败不能把整箱奖励吞掉
+    assert.match(body, /if \(this\.mapView\.playChestOpen\(cellId, tier, entries, handOff\)\) return;\s*handOff\(\);/,
+        '`playChestOpen` 返回 false 时直接 handOff');
+
+    // 这一路不许再按钱包/道具分流，也不许自己弹奖励窗
+    assert.doesNotMatch(body, /splitTerritoryRewards|isTerritoryWalletResId|FW\.ShowReward|settleRewards/,
+        '奖励怎么给玩家看由组合层统一决定（英雄页 → 统一奖励弹窗）');
+});
+
+test('点开宝箱那一下就关遮罩：等奖励回包才关会慢一个往返', () => {
+    const main = read(MAIN_TS);
+    const body = stripComments(main);
+    // ① 按意图开窗口：只认「已翻出、还没领」的 siteTap
+    assert.match(body, /EventMgr\.instance\.on\(TerritoryUiEvent\.Intent, this\.onChestTapIntent, this\)/);
+    const at = body.indexOf('onChestTapIntent = (');
+    assert.ok(at > 0, '缺少 onChestTapIntent');
+    const tap = body.slice(at, body.indexOf('private openChestPresentation(', at));
+    assert.match(tap, /intent\.kind !== 'siteTap'/, '随机格是喷资源那一路，不归它管');
+    assert.match(tap, /progress\.isCellUnlocked\(intent\.cellId\)/, '只在第二步（已翻出）开窗口');
+    assert.match(tap, /\|\| progress\.isOwned\(intent\.cellId\)/, '已领过的格子不开');
+    // 开卡格 / 已打通的资源格也是「已解锁未拥有」：不限定在宝箱上会把 5-1 点关卡格也当成开箱
+    assert.match(tap, /isTerritoryChestActionable\(state, intent\.cellId\)/, '必须用宝箱同源判据限定');
+    assert.match(tap, /this\.openChestPresentation\(\)/);
+
+    // ② 开窗口：先发 playing:true，并挂兜底计时器
+    const open = body.slice(body.indexOf('private openChestPresentation('), body.indexOf('private cancelChestPresentationWatchdog('));
+    assert.match(open, /ChestPresentation, \{ owner: this, playing: true \}/);
+    assert.match(open, /setTimeout\(/, '回包丢了也要把引导层还回去');
+    assert.match(open, /CHEST_PRESENTATION_WATCHDOG_MS/);
+
+    // ③ 奖励到达后每条不开箱的分支都自己关（否则引导层一直藏着）
+    const present = body.slice(body.indexOf('private presentRewards('), body.indexOf('private onChestTapIntent'));
+    const closeCount = (present.match(/this\.endChestPresentation\(\)/g) ?? []).length;
+    assert.ok(closeCount >= 4, `关窗口的分支只写了 ${closeCount} 处（弹窗/随机/银币/无档位/空奖励都要关）`);
+    assert.doesNotMatch(present, /this\.endChestPresentation\(\);\s*\/\/[^\n]*\n\s*this\.presentChestRewards/,
+        '开箱那一路不能在这里关（动画/英雄页/奖励窗都还在窗口里）');
 });
 
 test('E3｜银币宝箱 / 随机格 / 挂机征收三路保持原样', () => {
@@ -625,17 +684,26 @@ test('E6｜入场期间点空白 = 跳过动画，不是关窗；「跳过」先
 });
 
 
-test('橙卡按升级表的碎片关联识别，排除橙材料、其他品质、零数量并去重', () => {
-    const rows = [{ id: '68005', costCardID: '18003' }];
-    assert.deepEqual(chestOpenLegendHeroesOf([
-        { resId: 18003, quality: 5, number: 2 },
-        { resId: 18003, quality: 5, number: 1 },
-        { resId: 10001, quality: 5, number: 1 },
-    ], rows), ['68005']);
-    for (const quality of [1, 2, 3, 4, 6]) {
-        assert.deepEqual(chestOpenLegendHeroesOf([{ resId: 18003, quality, number: 1 }], rows), []);
-    }
-    assert.deepEqual(chestOpenLegendHeroesOf([{ resId: 18003, quality: 5, number: 0 }], rows), []);
+test('橙卡按**卡牌品级**识别：碎片查升级表拿英雄，再查 pvpCard.rarity===4；按卡牌 id 升序去重', () => {
+    const rows = [{ id: '68005', costCardID: '18003' }, { id: '68007', costCardID: '18007' }];
+    // 品级表：68005 史诗(3)、68007 金(4)。**碎片自己**的品质不参与判定 ——
+    // 18003 在 item 表里是 quality 2，按道具品质筛永远命中不了（老实现就是这个问题）。
+    const rarityOf = (id: string) => ({ '68005': 3, '68007': 4 } as Record<string, number>)[id] ?? 0;
+    assert.deepEqual(chestLegendHeroesOf([
+        { resId: 18003, number: 2 },
+        { resId: 18007, number: 1 },
+    ], rows, rarityOf), ['68007'], '只有金卡进英雄页');
+    // 多个橙卡：**卡牌 id 升序**，与奖励数组顺序无关。
+    const twoLegends = (id: string) => (id === '68001' || id === '68007' ? 4 : 0);
+    const rows2 = [{ id: '68007', costCardID: '18007' }, { id: '68001', costCardID: '18003' }];
+    assert.deepEqual(chestLegendHeroesOf([
+        { resId: 18007, number: 1 },
+        { resId: 18003, number: 1 },
+        { resId: 18007, number: 1 },
+    ], rows2, twoLegends), ['68001', '68007'], '按 id 升序、同英雄只展示一次');
+    // 数量 0 / 表里没有这张碎片 ⇒ 不算获得。
+    assert.deepEqual(chestLegendHeroesOf([{ resId: 18007, number: 0 }], rows, rarityOf), []);
+    assert.deepEqual(chestLegendHeroesOf([{ resId: 99999, number: 1 }], rows, rarityOf), []);
 });
 
 test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只通知一次', async () => {
@@ -643,6 +711,7 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
     const layout = await import('../assets/script/app/territory/model/TerritoryChestOpenLayout');
     const entries = await import('../assets/script/app/common/RewardEntries');
     const emitted: unknown[] = [];
+    const lifecycle: Array<{ phase: string }> = [];
     let now = 0;
     class PopupBase {
         isValid = true;
@@ -658,7 +727,12 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
             '/RewardFrames': { loadRewardGoodsTables: async () => ({ items: new Map(), resources: new Map() }) },
             '/RewardEntries': entries, '/TerritoryTexts': { TERRITORY_TEXTS },
             '/TerritoryChestOpenLayout': layout, '/TerritoryChestOpenCard': {}, '/TerritoryChestOpenArt': {},
-            '/EventMgr': { EventMgr: { instance: { emit: (...args: unknown[]) => emitted.push(args) } } },
+            '/ViewLifecycle': { VIEW_LIFECYCLE: 'view-lifecycle' },
+            '/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: any) => {
+                // 只收「开箱揭晓」；生命周期事件单独记，免得搅乱 emitted.length 的断言。
+                if (name === 'revealed') emitted.push([name, payload]);
+                else if (name === 'view-lifecycle') lifecycle.push(payload);
+            } } } },
             '/TerritoryEvents': { TerritoryUiEvent: { ChestRevealed: 'revealed' } },
         },
     });
@@ -678,6 +752,8 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
         assert.equal(page.canCloseOnBlank(), false, '加载期间点击不提前揭晓');
         assert.equal(emitted.length, skip ? 1 : 0);
         await page.onOpen({ goods: [{ resId: 18003, number: 1 }] }, { cancelled: false });
+        assert.equal(lifecycle[lifecycle.length - 1].phase, 'enabled',
+            '一进 onOpen 就报 enabled：引导层要立刻让位，否则放奖励对话会盖在这一页上');
         assert.equal(page.cardsRoot.active, false);
         assert.equal(page.chestSprite.spriteFrame, page.closedChestFrame);
         assert.equal(page.closeLabel.string, TERRITORY_TEXTS.chestOpenClaim);
@@ -698,6 +774,8 @@ test('待开启先显示闭箱，点击后才揭晓；跳过和重复点击只�
         assert.equal(page.closes, 1);
         page.onClose();
         assert.equal(page._entries.length, 0);
+        assert.equal(lifecycle[lifecycle.length - 1].phase, 'disabled',
+            '关掉才报 disabled：2-3 的奖励对话就是在这一刻才开始播的');
     }
 });
 
@@ -711,25 +789,35 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     let closed = 0;
     const chestOpens: unknown[] = [];
     let chestCloses = 0;
+    const rewardCalls: unknown[][] = [];
+    const events: Array<{ name: string; payload: { playing?: boolean } }> = [];
+    const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
     const modules: Record<string, unknown> = {};
     // 只执行特写编排，不实例化主界面、其他页签和其控制器。
     for (const name of ['GuideComposition', 'ViewLifecycle', 'CardLineupPage', 'CardLineupController',
         'CardUpgradePage', 'LineupBoardPage', 'RolePage', 'RoleController', 'RoleRepository',
         'MilitiaTalentPage', 'StorePage', 'StoreController', 'StoreActions', 'LeagueTabPage',
         'LeagueTabController', 'LeagueRepository', 'MainPage', 'MainTerritoryMap', 'TerritoryEntry',
-        'FW', 'TerritoryHeroProgressSource', 'TerritoryEvents', 'ChestEvents']) modules['/' + name] = {};
+        'FW', 'TerritoryHeroProgressSource', 'ChestEvents', 'EventMgr']) modules['/' + name] = {};
     Object.assign(modules, {
         '/ControllerBase': { ControllerBase: class {} },
+        '/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: unknown) => { events.push({ name, payload }); } } } },
+        '/TerritoryEvents': { TerritoryUiEvent: { ChestRewardsReady: 'territory:chest-rewards-ready', ChestPresentation: 'territory:chest-presentation' } },
         '/HeroObtainPage': { HeroObtainPage: { open: async (params: typeof opened[number]) => {
             opened.push(params);
             return { close: () => { closed++; params.onClose(); } };
         } } },
-        '/CardLineupDecks': { loadCardLevelUpRows: async () => [1, 2].map(id => ({
-            id: String(68000 + id), name: 'hero', level: 1, costCardID: String(18000 + id), costCardNum: 10,
-            costArmyLevelID: '16001', costGeneralLevelID: '16000', costArmyLevelNum: 0,
-        })) },
+        // 3 张卡：18001 / 18002 是橙卡（rarity 4），18003 是紫卡 ⇒ 只该弹前两张。
+        '/CardLineupDecks': {
+            loadCardLevelUpRows: async () => [1, 2, 3].map(id => ({
+                id: String(68000 + id), name: 'hero', level: 1, costCardID: String(18000 + id), costCardNum: 10,
+                costArmyLevelID: '16001', costGeneralLevelID: '16000', costArmyLevelNum: 0,
+            })),
+            loadPvpCardRarities: async () => new Map([['68001', 4], ['68002', 4], ['68003', 2]]),
+        },
         '/CardUpgradeCost': upgrade,
         '/ItemBag': { createItemCounter: () => () => 4 },
+        '/FW': { FW: { ShowReward: (goods: unknown[]) => { rewardCalls.push(goods); } } },
         '/TerritoryChestOpenPage': { TerritoryChestOpenPage: { open: async (params: unknown) => {
             chestOpens.push(params);
             return { close: () => { chestCloses++; } };
@@ -743,14 +831,17 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     const composition = Object.create(loaded.exports.MainPageComposition.prototype);
     composition.scope = new ResourceScope('test');
     composition.isDisposed = false;
-    const event = { owner: { isValid: true }, entries: [1, 2].map(id => ({ resId: 18000 + id, quality: 5, number: 1 })) };
-    const task = composition.presentChestHeroes(event);
-    await new Promise(resolve => setImmediate(resolve));
+    // 奖励故意倒序 + 掺一张紫卡：出去必须是「橙卡、卡牌 id 升序」。
+    const entries = [{ resId: 18002, number: 1 }, { resId: 18003, number: 1 }, { resId: 18001, number: 1 }];
+    const owner = { isValid: true };
+    const task = composition.presentChestHeroes(entries, owner);
+    await tick();
     assert.equal(opened.length, 1);
-    assert.deepEqual({ ...opened[0].userData }, { heroId: '68001', progressCurrent: 4, progressMax: 10 });
+    assert.deepEqual({ ...opened[0].userData }, { heroId: '68001', progressCurrent: 4, progressMax: 10 },
+        '先弹 id 最小的橙卡（紫卡 68003 不弹）');
     opened[0].onClose();
-    await new Promise(resolve => setImmediate(resolve));
-    assert.equal(opened.length, 2);
+    await tick();
+    assert.equal(opened.length, 2, '关掉前一张才开下一张');
     assert.equal(opened[1].userData.heroId, '68002');
     composition.isDisposed = true;
     composition.scope.dispose();
@@ -760,9 +851,37 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
 
     const stale = Object.create(loaded.exports.MainPageComposition.prototype);
     stale.scope = new ResourceScope('stale'); stale.isDisposed = false;
-    event.owner.isValid = false;
-    await stale.presentChestHeroes(event);
+    const staleOwner = { isValid: false };
+    await stale.presentChestHeroes(entries, staleOwner);
     assert.equal(opened.length, 2, '回包前宝箱页已销毁时不再弹英雄');
+
+    // 整条链：英雄页全部关掉之后才是统一「获得奖励」弹窗，且拿到的是**整批**奖励。
+    const chain = Object.create(loaded.exports.MainPageComposition.prototype);
+    chain.scope = new ResourceScope('chain'); chain.isDisposed = false;
+    const chainOwner = { isValid: true };
+    const rewards = [{ resId: 18002, number: 1 }, { resId: 18001, number: 1 }, { resId: 7, number: 300 }];
+    const chainTask = chain.runChestRewardChain(chainOwner, rewards);
+    await tick();
+    assert.equal(opened.length, 3);
+    assert.equal(rewardCalls.length, 0, '英雄页没关完不许弹统一奖励窗');
+    opened[2].onClose();
+    await tick();
+    assert.equal(opened.length, 4);
+    opened[3].onClose();
+    await tick();
+    await chainTask;
+    // 沙箱里 new 出来的对象原型与宿主不同，deepStrictEqual 会假红 ⇒ 先重建成宿主对象再比。
+    assert.deepEqual(
+        rewardCalls.map(call => call.map(one => ({ ...(one as { resId: number; number: number }) }))),
+        [[{ resId: 18002, number: 1 }, { resId: 18001, number: 1 }, { resId: 7, number: 300 }]],
+        '统一奖励窗拿到整批（含货币），且只弹一次');
+        // 有统一奖励弹窗接棒时组合层**不**关窗口：弹窗要等 prefab 加载完才 enabled，
+        // 这里抢先关会让 2-3 的对话框闪一下再被盖住。窗口由引导层在奖励窗关闭时收。
+        assert.deepEqual(events.map(one => [one.name, one.payload.playing]), []);
+        // 没有弹窗可等（空奖励 / 页面已毁掉）时必须自己关，否则引导层永远让位
+        await chain.runChestRewardChain({ isValid: true }, []);
+        assert.deepEqual(events.map(one => [one.name, one.payload.playing]),
+            [['territory:chest-presentation', false]]);
 
     const root = {};
     const treasureHost = Object.create(loaded.exports.MainPageComposition.prototype);
@@ -772,12 +891,12 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     treasureHost.onTreasureRewards({ owner: { node: root }, goods: [] });
     assert.equal(chestOpens.length, 0, '忽略其他宿主及空奖励');
     treasureHost.onTreasureRewards({ owner: { node: root }, goods });
-    await new Promise(resolve => setImmediate(resolve));
+    await tick();
     assert.equal(chestOpens.length, 1);
     assert.equal((chestOpens[0] as { userData: { goods: unknown } }).userData.goods, goods);
     treasureHost.onTreasureRewards({ owner: { node: root }, goods });
     treasureHost.isDisposed = true;
-    await new Promise(resolve => setImmediate(resolve));
+    await tick();
     assert.equal(chestCloses, 1, '开箱页加载期间退出时关闭迟到弹窗');
 });
 

@@ -90,22 +90,31 @@ function paramsOf(row: Record<string, unknown>): Record<string, number> {
 // ────────────────────────────────────────────── 一、配表守卫
 
 /**
- * 🔴 张角必须是 **0**，不能再回到 20。
+ * 🔴 张角只给**奇数颗**，偶数颗一律 0。
  *
- * `bulletNum` 在这张卡上是 +1 / +1 / +2（`282601`），普攻基数 1 发 ⇒ 弹数 **2 / 2 / 3**。
- * 扇形那套 `spread = (index / (count - 1)) * 2 - 1` 在 **偶数** 弹时只有 −1 和 +1，
- * 两发分别偏 −10° / +10°，**没有一发对准目标**。实测（`attackRange 550`、目标 68001
- * 命中圈 29 逻辑 px）：Lv1~Lv20 两发全脱靶、伤害 0；Lv25/30 三发只有 0° 那发命中，156（应 468）。
- * 这就是用户报的「普攻穿透目标不掉血、也没有法师受击特效」。
+ * 扇形那套 `spread = (index / (count - 1)) * 2 - 1` 在**偶数**弹时只有 −1 和 +1，
+ * **没有 0° 中心位** —— 两发分别偏 −half/+half，没有一发对准目标。实测（`attackRange 550`、
+ * 目标 68001 命中圈 29 逻辑 px）：两发全脱靶、伤害 0。这就是用户报的「普攻穿透目标不掉血、
+ * 也没有法师受击特效」。2026-11-11 曾为此把 102601 的张角从 12° 收成 0°。
  *
- * 改成 0 后 `halfSpan = 0`，全部子弹走 `aim` ⇒ 任何距离必中，受击特效 2/2/3 条。
+ * 2026-11-17 第 5 批把发数统一到主链、固定 +2 道额外弹 ⇒ 本体 1 + 2 = **3 颗（奇数）**，
+ * 中间那颗正好 0° 对准目标，25° 扇形这才落得了地。所以本用例从「张角必须 0」
+ * 改成「3 颗弹可以 25°，但总弹数为偶数时必须 0」。
  */
-test('102601 孢子弹幕：张角收到 0°，且弹数 / 攻速 / 伤害三组一行没动', () => {
+test('102601 孢群弹幕：弹数固定 2 道额外（共 3 颗），张角 25° 落在奇数颗上', () => {
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
+        //  发数只能在主链写一份：`bulletNumFlat` 是 flat 加法，子链再写一次就是双倍。
+        assert.deepEqual(planOf(rows, 102601).map((row) => [row.statId, Number(row.value)]),
+            [['bulletNum', 2], ['bulletNum', 2], ['bulletNum', 2]], '主链承载发数，三档同数');
+        assert.deepEqual(planOf(rows, 282601).map((row) => [row.statId, Number(row.value)]),
+            [['attack', 0.28], ['attack', 0.28], ['attack', 0.28]], '原子链发数槽改承载攻击尾巴');
+        assert.deepEqual(planOf(rows, 192601).map((row) => [row.statId, Number(row.value)]),
+            [['attackRange', 0.35], ['attackRange', 0.35], ['attackRange', 0.35]], '伤害槽改承载范围尾巴');
+
         const angle = planOf(rows, 372601);
         assert.equal(angle.length, 3, '缺 bulletAngle 三行 ⇒ 张角会退回别的卡的默认值');
-        assert.deepEqual(angle.map((row) => Number(row.value)), [0, 0, 0],
-            '张角非 0 ⇒ 偶数弹的扇形没有一发对准目标，普攻全脱靶');
+        assert.deepEqual(angle.map((row) => Number(row.value)), [25, 25, 25],
+            '本体 1 + 额外 2 = 3 颗（奇数）⇒ 中间那颗 0°，两侧各偏 12.5°');
         for (const row of angle) {
             assert.equal(row.statId, 'bulletAngle');
             assert.equal(row.operation, 'add');
@@ -113,11 +122,26 @@ test('102601 孢子弹幕：张角收到 0°，且弹数 / 攻速 / 伤害三组
         }
         assert.deepEqual(angle.map((row) => Number(row.unlockHeroLevel ?? 0)), [0, 14, 22],
             '解锁等级必须与 K 表 102601 一致');
+    }
+});
 
-        //  三组既有行不许被这次改动碰到
-        assert.deepEqual(planOf(rows, 282601).map((row) => Number(row.value)), [1, 1, 2], 'bulletNum 增量');
-        assert.deepEqual(planOf(rows, 102601).map((row) => Number(row.value)), [0.14, 0.2, 0.26], 'attackSpeed');
-        assert.deepEqual(planOf(rows, 192601).map((row) => Number(row.value)), [0.08, 0.12, 0.16], 'damageRate');
+test('多弹守卫：总弹数为偶数时张角必须是 0（扇形没有 0° 中心位）', () => {
+    for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
+        //  逐条多弹技能：本体 1 颗 + 主链 bulletNum = 总弹数；张角从该技能的 bulletAngle 行取。
+        const bullets = rows.filter((row) => String(row.statId ?? '') === 'bulletNum');
+        for (const row of bullets) {
+            if (Number(row.skillLevel) !== 1) continue;
+            const chain = Number(row.skillChainId);
+            const total = Number(row.value) + 1;
+            const angleRows = rows.filter((item) => String(item.statId ?? '') === 'bulletAngle'
+                && Number(item.skillChainId) % 10000 === chain % 10000);
+            //  只有偶数颗才受这条约束；奇数颗有 0° 中心位，可以散开。
+            if (total % 2 !== 0) continue;
+            for (const angle of angleRows) {
+                assert.equal(Number(angle.value), 0,
+                    `${chain} 只有 ${total} 颗弹（偶数），张角必须 0，否则整轮脱靶`);
+            }
+        }
     }
 });
 
@@ -156,7 +180,8 @@ test('102603 喷射火焰：矩形 0~350（宽 140）+ 触发距离 350 + 持续
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
         const spray = planOf(rows, 102603);
         assert.equal(spray.length, 3);
-        assert.deepEqual(spray.map((row) => Number(row.unlockHeroLevel ?? 0)), [9, 18, 24]);
+        //  2026-11-17 统一档位：102603 第 3 格 → 9/18/27，102604 第 4 格 → 12/24/36。
+        assert.deepEqual(spray.map((row) => Number(row.unlockHeroLevel ?? 0)), [9, 18, 27]);
         assert.deepEqual(spray.map((row) => paramsOf(row).auraDamageRate), [1.2, 1.5, 2]);
 
         for (const row of spray) {
@@ -202,7 +227,7 @@ test('102604 凤凰降临：固定 4 颗 90° + 三段伤害（直击 / 爆炸 /
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
         const phoenix = planOf(rows, 102604);
         assert.equal(phoenix.length, 3);
-        assert.deepEqual(phoenix.map((row) => Number(row.unlockHeroLevel ?? 0)), [0, 20, 25]);
+        assert.deepEqual(phoenix.map((row) => Number(row.unlockHeroLevel ?? 0)), [12, 24, 36]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).damageRate), [2.2, 2.8, 3]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).impactBurstDamageRate), [1.5, 2, 2.5]);
         assert.deepEqual(phoenix.map((row) => paramsOf(row).impactBurstSecondRate), [1.5, 1.8, 2]);
@@ -267,11 +292,11 @@ test('K 表转表产物：102603 / 102604 六行的名字、描述、修改器�
             const expected = 94026000 + (chainId === 102603 ? 30 : 40) + Number(row.skilllevel);
             assert.deepEqual(row.modfiy, [expected]);
         }
-        //  解锁等级以 K 表为唯一真源（102603 = 9/18/24、102604 = 0/20/25）
+        //  解锁等级以 K 表为唯一真源（102603 = 9/18/27、102604 = 12/24/36）
         assert.deepEqual(six.filter((row) => Number(row.id) === 102603)
-            .map((row) => Number(row.unlockarmylevel)), [9, 18, 24]);
+            .map((row) => Number(row.unlockarmylevel)), [9, 18, 27]);
         assert.deepEqual(six.filter((row) => Number(row.id) === 102604)
-            .map((row) => Number(row.unlockarmylevel)), [0, 20, 25]);
+            .map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
     }
 });
 
@@ -491,9 +516,13 @@ test('喷射火焰按单位覆盖自身光环造型，且被收进本局特效�
     //  68016 的磁电冲击不受影响
     assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68016'),
         'units/projectiles/雷电冲击/雷电冲击');
-    //  缺省单位仍走老光柱
+    //  ⚠️ 2026-11-17：68025 也换了自己的造型（大威天芦_火焰光环）⇒ 三家各走各的，
+    //  兜底光柱不再有单位落在上面。
     assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68025'),
-        'units/projectiles/持续光环伤害效果/持续光环伤害效果');
+        'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环');
+    //  真的没人用兜底时，查一个不存在的单位才回落到老光柱
+    assert.equal(zcSelfAuraEffectPath(ZC_SELF_AURA_BEHAVIOR_KEY, '68999'),
+        'units/projectiles/持续光环伤害效果/持续光环伤害效果', '未知单位退回兜底造型');
     assert.equal(zcSelfAuraEffectPath('bolt_strike', UNIT_ID), null);
 
     const unitOf = (path: string) => ({

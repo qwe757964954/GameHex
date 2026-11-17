@@ -146,7 +146,7 @@ node tools/map-editor/server.mjs --open
 >
 > 三套编辑器的交互规范、现状矩阵与待办见 [INTERACTION.md](./INTERACTION.md)。
 
-**拷贝地图不需要 Node.js。**双击 `copy-maps.bat` 会用 Python 3 将 `presets/gamemap` 中的全部地图拷贝到游戏资源目录，并同步一份到策划 `sever` 目录（不带 `.meta`）。也可在项目根目录使用 Python 命令预览或只拷贝一张：
+**拷贝地图不需要 Node.js。**双击 `copy-maps.bat` 会用 Python 3 将 `presets/gamemap` 中的全部地图拷贝到游戏资源目录，并同步一份到策划 `sever/battlemap/` 目录（不带 `.meta`）。成功同步后删除 `sever` 根目录同名旧文件；领地和大地图分别同步到 `sever/territorymap/`、`sever/slgmap/`，采用相同清理规则，`--dry-run` 只报告不删除。也可在项目根目录使用 Python 命令预览或只拷贝一张：
 
 ```powershell
 python tools/map-editor/copy_maps.py --dry-run

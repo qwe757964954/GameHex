@@ -9,20 +9,6 @@
   "mirrorVertical": false,
   "mirrorHorizontal": false,
   "mirror180": false,
-  "homes": [
-    {
-      "row": 16,
-      "column": 2
-    },
-    {
-      "row": 4,
-      "column": 10
-    },
-    {
-      "row": 16,
-      "column": 18
-    }
-  ],
   "ascii": [
     ".....................",
     ".....................",
@@ -49,6 +35,23 @@
     ".........000.........",
     "....................."
   ],
+  "homes": [
+    {
+      "row": 16,
+      "column": 2
+    },
+    {
+      "row": 4,
+      "column": 10
+    },
+    {
+      "row": 16,
+      "column": 18
+    }
+  ],
+  "spacing": {
+    "resourceMinDistance": 3
+  },
   "resourcePoints": [
     {
       "row": 14,
@@ -164,8 +167,5 @@
         288
       ]
     }
-  ],
-  "spacing": {
-    "resourceMinDistance": 3
-  }
+  ]
 }

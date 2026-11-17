@@ -667,7 +667,10 @@ test('C7 读缓存走 `CacheMgr` 的 5 张表；缺失不抛', () => {
     ]) {
         assert.ok(REPO_SRC.includes(getter), `缺 ${getter}`);
     }
-    assert.ok(REPO_SRC.includes('} catch (error) {'), '读缓存要 try/catch（拿不到就当空）');
+    // 缺失不抛是**结构**保证：`getValues` 查不到表返回空列表、`CacheMgr.instance` 非空，
+    // 所以这里直接调类型化 getter；不许再用 `as any` + try/catch 把真 bug 吞成空表。
+    assert.ok(!REPO_SRC.includes('CacheMgr.instance as any'), '读缓存不许用 `as any` 绕过类型');
+    assert.ok(REPO_SRC.includes('return CacheMgr.instance.getTlCmdUnion();'), '读缓存要直连 getter');
 });
 
 test('C8 ⚠️ 搜索缓存**独立存放**，不补写进 `CmdUnion` 缓存表', () => {

@@ -13,6 +13,24 @@ export const TerritoryUiEvent = {
     ChapterSelect: 'territory:chapter-select',
     /** 开箱揭晓完成；owner 为本次弹窗，entries 为已排序的奖励展示数据。 */
     ChestRevealed: 'territory:chest-revealed',
+    /**
+     * 领地宝箱的**开箱粒子动画播完**；owner 为地图页，rewards 为整箱奖励 `{resId, number}[]`。
+     *
+     * 组合层接手后按需求（2026-11-17 ②）走「橙卡英雄页（卡牌 id 升序）→ 统一获得奖励弹窗」。
+     * 与 {@link ChestRevealed} 的区别：那条是**宝箱开启页**自己揭晓完，弹窗本来就在播奖励；
+     * 这条是地图上的粒子动画演完，奖励还没展示给玩家。
+     */
+    ChestRewardsReady: 'territory:chest-rewards-ready',
+    /**
+     * 领地宝箱的**整段演出窗口**：`playing === true` 从「点开宝箱」开始，
+     * 直到「英雄页全关 + 统一奖励弹窗已弹」为止。
+     *
+     * 为什么要单独发一条：这一段里**没有任何全屏弹窗**（开箱是地图粒子、英雄页还没弹），
+     * 引导层没东西可让位 ⇒ 2-3 的台词（需求 2026-11-17 ⑩）会在粒子动画正中间抢播，
+     * 等奖励窗一开又被藏起来、关掉重播一遍。有了这条，引导从点箱子那刻就让位，
+     * 演完才从第一句开始播。
+     */
+    ChestPresentation: 'territory:chest-presentation',
 } as const;
 export const TerritoryViewEvent = { Render: 'territory:render', Command: 'territory:view-command' } as const;
 export type TerritoryIntent =

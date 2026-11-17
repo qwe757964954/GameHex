@@ -148,19 +148,22 @@ test('完成带奖励配置的步骤只上报进度，不写已发奖标记', as
         gateway: { load: async () => null, update: async id => { updates.push(id); return 'ok'; }, dispose() {} },
     });
     controller.start();
-    // 1-1 → 1-2 → 1-3 → 2-1 都是无奖步
+    // 1-1 → 1-2 → 2-1 都是无奖步（1-3 已随 D03 删掉，苏醒只剩两句）
     assert.equal(controller.notify('click'), true);
     assert.equal(controller.notify('click'), true);
-    assert.equal(controller.notify('click'), true);
+    assert.equal(controller.currentStepId, '2-1');
     assert.equal(controller.notify('tileFlipped'), true);
     assert.equal(controller.currentStepId, '2-2');
     assert.deepEqual(store.load()?.grantedSteps, []);
 
+    // 2-2 是「打开宝箱」：点箱子（`siteTap` 上报 tileFlipped）才推进，本身不带奖励。
+    assert.equal(controller.notify('tileFlipped'), true);
+    assert.equal(controller.currentStepId, '2-3');
     // 本地表有奖励配置，客户端仍只发送完成步骤，发奖由后端决定。
     assert.equal(controller.notify('click'), true);
     await tick();
     assert.equal(controller.currentStepId, '3-1');
-    assert.ok(updates.includes('2-2'));
+    assert.ok(updates.includes('2-3'));
     assert.deepEqual(store.load()?.grantedSteps, []);
     controller.dispose();
 });
@@ -171,18 +174,18 @@ test('落盘：每推进一步写入当前步，重启后从断点继续', () =>
     first.controller.start();
     first.controller.notify('click');
     first.controller.notify('click');
-    assert.equal(first.controller.currentStepId, '1-3');
+    assert.equal(first.controller.currentStepId, '2-1');
     first.controller.dispose();
 
     const saved = first.store.load();
     assert.ok(saved);
-    assert.equal(saved.currentStepId, '1-3');
+    assert.equal(saved.currentStepId, '2-1');
     assert.deepEqual(saved.completedSteps, ['1-1', '1-2']);
 
     // 模拟重进主界面
     const second = makeController('c-persist', { storage });
     second.controller.start();
-    assert.equal(second.controller.currentStepId, '1-3');
+    assert.equal(second.controller.currentStepId, '2-1');
     assert.equal(second.states[0].isFirstRun, false);
     second.controller.dispose();
 });
@@ -279,7 +282,7 @@ test('只有真实推进才上报已完成步骤，退出释放网关', async ()
     controller.notify('click');
     controller.notify('click');
     assert.deepEqual(updates, ['1-1', '1-2']);
-    assert.equal(controller.currentStepId, '1-3');
+    assert.equal(controller.currentStepId, '2-1');
     controller.skipAll();
     assert.equal(updates[updates.length - 1], STEPS[STEPS.length - 1].stepId);
     controller.dispose();
@@ -357,23 +360,36 @@ test('ViewState 带 completeCond：只有 click 步才允许「点对话条推�
     controller.dispose();
 });
 
-test('2-2 的判据是 click（工程没有翻地奖励弹窗的关闭信号）', () => {
+test('2-3（翻地奖励对话）的判据是 click（工程没有翻地奖励弹窗的关闭信号）', () => {
     const { controller } = makeController('c-22');
     controller.start();
     let guard = 0;
-    while (controller.currentStepId !== '2-2' && guard++ < 8) {
+    while (controller.currentStepId !== '2-3' && guard++ < 8) {
         const step = STEPS.find((s) => s.stepId === controller.currentStepId);
         assert.ok(step);
         const [name, arg] = step.completeCond.split(':');
         controller.notify(name, arg);
     }
-    assert.equal(controller.currentStepId, '2-2');
-    const step = STEPS.find((s) => s.stepId === '2-2');
+    assert.equal(controller.currentStepId, '2-3');
+    const step = STEPS.find((s) => s.stepId === '2-3');
     assert.ok(step);
-    assert.equal(step.completeCond, 'click', '2-2 若是 popupClosed，View 点了也不会推进 → 卡死');
+    assert.equal(step.completeCond, 'click', '2-3 若是 popupClosed，View 点了也不会推进 → 卡死');
     assert.equal(controller.notify('click'), true);
     assert.equal(controller.currentStepId, '3-1');
     controller.dispose();
+});
+
+test('奖励对话之后的两步翻地是弱引导：无遮罩、无气泡，只留手指', () => {
+    // 用户 2026-11-17 第 12 条：2-3 的奖励对话结束后，「翻第2/3块地」不压暗、不弹气泡文案，
+    // 只用手指点在地块上。配置口径 = `maskType: none`，焦点必须还是地块。
+    for (const stepId of ['3-1', '4-1']) {
+        const step = STEPS.find((one) => one.stepId === stepId);
+        assert.ok(step, `${stepId} 不存在`);
+        assert.equal(step.maskType, 'none',
+            `${stepId} 若是 hole，会有一层遮罩压在屏幕上（用户要的是弱引导）`);
+        assert.match(step.focusNode, /^Map\/(Tile_\d|TileNew_1)$/, `${stepId} 必须指到地块上，手指才有地方落`);
+        assert.equal(step.completeCond, 'tileFlipped', `${stepId} 仍要等玩家真的翻地`);
+    }
 });
 
 test('5-1 点地图关卡格，5-2 必须实际进入战斗后才完成', () => {
@@ -415,9 +431,9 @@ test('远端领先：本地先出首帧，查询回来校正到远端游标', as
 
     resolveLoad({ funcId: 1, step1: 2, step2: 2 });
     await tick();
-    assert.equal(controller.currentStepId, '3-1');
+    assert.equal(controller.currentStepId, '2-3');
     assert.equal(states.length, 2);
-    assert.equal(states[1].stepId, '3-1');
+    assert.equal(states[1].stepId, '2-3');
     assert.equal(states[1].isFirstRun, false);
     controller.dispose();
 });
@@ -433,12 +449,12 @@ test('远端落后：本地已推进时回包不倒退', async () => {
     controller.start();
     controller.notify('click');
     controller.notify('click');
-    assert.equal(controller.currentStepId, '1-3');
+    assert.equal(controller.currentStepId, '2-1');
     const published = states.length;
 
     resolveLoad({ funcId: 1, step1: 1, step2: 1 });
     await tick();
-    assert.equal(controller.currentStepId, '1-3');
+    assert.equal(controller.currentStepId, '2-1');
     assert.equal(states.length, published);
     controller.dispose();
 });
@@ -522,7 +538,7 @@ test('远端校正后裁掉已完成的待发项，避免重复补发', async ()
 
     resolveLoad({ funcId: 1, step1: 2, step2: 2 });
     await tick();
-    assert.equal(controller.currentStepId, '3-1');
+    assert.equal(controller.currentStepId, '2-3');
     assert.equal(outbox.size, 0);
     controller.dispose();
 });
@@ -558,8 +574,8 @@ test('远端落后于本地：启动时补推最后完成步，服务端不会�
     const outbox = new GuideSyncOutbox({ roleId: 'c-remote-behind-sync', serverId: 's1' }, storage);
     const updates: string[] = [];
     const gateway: IGuideGateway = {
-        // 服务端只收到 1-3，本地已走到 5-1（完成到 4-1）。
-        load: async () => ({ funcId: 1, step1: 1, step2: 3 }),
+        // 服务端只收到 2-1，本地已走到 5-1（完成到 4-1）。
+        load: async () => ({ funcId: 1, step1: 2, step2: 1 }),
         update: async id => { updates.push(id); return 'ok'; },
         dispose: () => {},
     };

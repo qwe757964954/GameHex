@@ -35,11 +35,12 @@ export function loadBigMapConfig(offlineMonsters = false): IBigMapConfig {
  * 需要垫图布局数据（势力范围 `rangeHex`、邻接 `adjacentCityIds`）的用例都用这个，
  * 不要手搓 —— 手搓的数据永远比盘上的干净，测不出真问题。
  *
- * @param name `bigmap-maps/` 下的文件名（不带 `.json`）。`bigMap` 是 100×100 的正式布局，
+ * @param name 历史 `world_01` 从测试夹具读取，其余从 `bigmap-maps/` 读取。`bigMap` 是 100×100 的正式布局，
  *             与旧版 40×40 配表尺寸不同；构建世界前需采用布局尺寸，正式入口已做此装配。
  */
 export function loadBigMapLayout(name = 'world_01'): IBigMapLayout {
-    const url = new URL(`../../assets/resources/config/bigmap-maps/${name}.json`, import.meta.url);
+    const url = new URL(name === 'world_01' ? '../fixtures/bigmap-world-legacy.json'
+        : `../../assets/resources/config/bigmap-maps/${name}.json`, import.meta.url);
     return parseBigMapLayout(JSON.parse(readFileSync(url, 'utf8')));
 }
 

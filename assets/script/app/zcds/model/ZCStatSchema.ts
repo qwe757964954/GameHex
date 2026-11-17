@@ -40,6 +40,13 @@ export type ZCStatId =
     //  与 `damageRate` 的差别：那个改的是打出去多少，这个改的是打完回多少，
     //  所以不能共用一个键 —— 否则「伤害 +10%」的卡会顺手变成「吸血 10%」。
     | 'lifestealRate'
+    //  以下 2 种是「被动重设计 V5」第 8 批（2026-11-17）新增的车道，都没有基础值：
+    //    · `hpRegenPct`     每秒回复最大生命的百分比（1.5 = 1.5%/秒）
+    //    · `bulletSizeScale` 普攻弹体体积倍率（绝对值，1.6 = ×1.6）
+    //  第 9 批原本还有 `cdReduceOnHit`（命中回退其他主动 CD），2026-11-17 按用户口径
+    //  **全卡下线** —— 这条车道一个字段都不留，别照着旧笔记再建一次。
+    | 'hpRegenPct'
+    | 'bulletSizeScale'
     //  以下 9 种对应 `pvpAttrMap` 里 `sourceUnit !== 'text'` 的数值属性（2026-10-13 表补齐）。
     //  文本类（`type` / `model` / `attackType`）走独立 schema，不进入纯数值的 `ZCUnitStatPatch`。
     | 'attackCount'
@@ -50,7 +57,33 @@ export type ZCStatId =
     | 'recruitCd'
     | 'recruitMaxNum'
     | 'singleRecruitNum'
-    | 'singleRecruitLegionCount';
+    | 'singleRecruitLegionCount'
+    | ZCCounterStatId;
+
+/**
+ * 技能级「克制条」的属性 id（2026-11-17 克制/抗性协议 20 条）。
+ *
+ * 为什么把**判据**编进 statId，而不是放 `skillParamJson`：
+ *
+ *  · 增伤要读**攻方**的配置、减伤要读**守方**的配置，而结算点只拿得到双方的
+ *    `statPatch`（按 `unitId` 索引）。参数袋是按 `unitId:pvpSkillId` 合并的整卡共用一份，
+ *    同一张卡两条克制条（如 68020 的 102001 + 102002 判据不同）会互相覆盖；
+ *  · 走 statPatch ⇒ 天然继承「多来源累加」「UI 明细」这套既有通道，不用新开状态。
+ *
+ * 下标 1..4 的顺序 = `ZC_CAMP_TRAITS` / `ZC_ATTACK_TRAITS` 的声明顺序
+ * （阵营：花果/蘑菇/盆栽/僵尸；职业：射手/战士/法师/坦克），与 `pvpCounter` 同一份词表。
+ *
+ * 与 `pvpCounter` 的关系：那 8 条规则是**全局**的 ×1.3 / ×0.7 克制倍率；这里只表达
+ * 「某张卡的某条被动对某类目标额外增伤/减伤」，判据按设计案文案字面取目标，
+ * 不依赖全局克制链（设计案的职业克制与 `pvpCounter` 并不一致：设计是射手→战士，表里是射手→法师）。
+*/
+export const ZC_COUNTER_STAT_IDS = [
+    'counterCamp1', 'counterCamp2', 'counterCamp3', 'counterCamp4',
+    'counterRole1', 'counterRole2', 'counterRole3', 'counterRole4',
+    'counteredCamp1', 'counteredCamp2', 'counteredCamp3', 'counteredCamp4',
+    'counteredRole1', 'counteredRole2', 'counteredRole3', 'counteredRole4',
+] as const;
+export type ZCCounterStatId = (typeof ZC_COUNTER_STAT_IDS)[number];
 
 //  取值真源 = `as const` 对象 + 同名派生类型（同 `ZCCardType`）：
 //  `Object.values(X)` 就是运行时校验集合，新增一个取值只改这里。
@@ -318,8 +351,10 @@ const STAT_IDS = new Set<ZCStatId>([
     'executeChance', 'impactDamageRate', 'explosionDamageRate', 'zoneCount', 'slowRatio',
     'expireDamageRate', 'freezeDuration', 'shieldRatio', 'directionCount', 'moveSpeedBoost',
     'bannerTargetCount', 'bannerCritRate', 'empoweredEvery', 'lifestealRate',
+    'hpRegenPct', 'bulletSizeScale',
     'attackCount', 'bulletNum', 'bulletAngle', 'critRate', 'critDamage',
     'recruitCd', 'recruitMaxNum', 'singleRecruitNum', 'singleRecruitLegionCount',
+    ...ZC_COUNTER_STAT_IDS,
 ]);
 const SKILL_BEHAVIORS = new Set([
     'empowered_attack', 'multi_projectile', 'periodic_damage', 'on_hit_status',
@@ -975,6 +1010,10 @@ const UNIT_STAT_IDS: readonly ZCStatId[] = [
     'singleRecruitNum', 'singleRecruitLegionCount',
     //  2026-11-04：同样没有基础值，表里用 `add` 直接给比例（0.02 = 2%）。
     'lifestealRate',
+    //  2026-11-17 第 8 批：同样没有基础值，表里用 `add` 直接给绝对值
+    //  （`hpRegenPct` 1.5 = 1.5%/秒；`bulletSizeScale` 1.6 = ×1.6）。
+    //  🔴 两个都不能写 `addRate`：rate 分支要乘 `baseValue`，而它们没有基础值 ⇒ 恒 0。
+    'hpRegenPct', 'bulletSizeScale',
 ];
 
 /**
@@ -996,6 +1035,30 @@ export const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyo
     //  与 `critRatePct` 那批「20 = +20%」的口径不同。`addRate` 在这里没有意义
     //  （rate 分支要乘 `baseValue`，而它没有基础值 ⇒ 恒 0）。
     lifestealRate: ['lifestealRate', null],
+    //  第 8 批（2026-11-17）：同样是「没有基础值、`add` 直接给绝对值」，所以第二个槽位是 null。
+    hpRegenPct: ['hpRegenPct', null],
+    bulletSizeScale: ['bulletSizeScale', null],
+
+    //  克制条（判据即 statId）：`counter*` 是攻方增伤、`countered*` 是守方减伤。
+    //  序号 = `ZC_CAMP_TRAITS` / `ZC_ATTACK_TRAITS` 的下标 + 1，值走 `add` + **百分点**
+    //  （45 = +45%，与 `critRate` 同口径），结算处 `zcSkillCounterMultiplier` 再除 100。
+    //  `addRate` 在这里没有意义：这一列没有基础值，`rate` 分支要乘 baseValue ⇒ 恒 0。
+    counterCamp1: ['counterCamp1Pct', null],
+    counterCamp2: ['counterCamp2Pct', null],
+    counterCamp3: ['counterCamp3Pct', null],
+    counterCamp4: ['counterCamp4Pct', null],
+    counterRole1: ['counterRole1Pct', null],
+    counterRole2: ['counterRole2Pct', null],
+    counterRole3: ['counterRole3Pct', null],
+    counterRole4: ['counterRole4Pct', null],
+    counteredCamp1: ['counteredCamp1Pct', null],
+    counteredCamp2: ['counteredCamp2Pct', null],
+    counteredCamp3: ['counteredCamp3Pct', null],
+    counteredCamp4: ['counteredCamp4Pct', null],
+    counteredRole1: ['counteredRole1Pct', null],
+    counteredRole2: ['counteredRole2Pct', null],
+    counteredRole3: ['counteredRole3Pct', null],
+    counteredRole4: ['counteredRole4Pct', null],
 };
 
 /** 把一次结算出的 statId 明细折成 `ZCUnitStatPatch`；空 patch 不写键（下游按缺省走）。*/

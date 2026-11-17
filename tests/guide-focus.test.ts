@@ -44,10 +44,10 @@ test('关卡入口按真实 levelId 匹配，只选可开启或已解锁的对�
     assert.deepEqual(guideMapFocusCells('Map/Level_10001', state), []);
 });
 
-test('步骤表补齐关卡入口和卡牌入口，苏醒三步保持无焦点', () => {
+test('步骤表补齐关卡入口和卡牌入口，苏醒两步保持无焦点', () => {
     const table = read('assets/remoteRef/guideStep.json');
     const rows = table.v.map((row: unknown[]) => Object.fromEntries(table.k.map((key: string, i: number) => [key, row[i]])));
-    for (const id of ['1-1', '1-2', '1-3']) assert.equal(rows.find(row => row.stepId === id).focusNode, '');
+    for (const id of ['1-1', '1-2']) assert.equal(rows.find(row => row.stepId === id).focusNode, '');
     assert.equal(rows.find(row => row.stepId === '5-1').focusNode, 'Map/Level_10001');
     assert.equal(rows.find(row => row.stepId === '6-1').focusNode, 'Main/CardEntry');
     assert.equal(rows.find(row => row.stepId === '5-2').completeCond, 'battleEntered');

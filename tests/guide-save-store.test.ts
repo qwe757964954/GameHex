@@ -250,7 +250,8 @@ test('远端校正：领先时采用并落盘，startedAt 保留首次时间', (
     const store = new GuideSaveStore(owner('remote-ahead'), createMemoryGuideStorage());
     store.save(dataOf({ currentStepId: '1-2', completedSteps: ['1-1'] }), 1000);
 
-    assert.equal(store.applyRemoteCursor({ funcId: 1, step1: 2, step2: 2 }, STEPS, 2000), true);
+    // 游标 2-3 是「翻地奖励对话」，下一句就是 3-1；2-2 现在是纯引导的「打开宝箱」。
+    assert.equal(store.applyRemoteCursor({ funcId: 1, step1: 2, step2: 3 }, STEPS, 2000), true);
     const saved = store.load();
     assert.ok(saved);
     assert.equal(saved.currentStepId, '3-1');

@@ -138,7 +138,7 @@ test('友军光环：同一张卡的不同光环技能必须落在不同槽位�
     }
 });
 
-test('科学家 26 级：穿透 / 暴击两路词缀进了 statPatch，处决已从卡牌链路移除', () => {
+test('科学家 26 级：多弹 / 攻速 / 伤害 / 范围四路词缀进了 statPatch，处决已从卡牌链路移除', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const loadout = compileZCCombatBuild({
@@ -146,10 +146,15 @@ test('科学家 26 级：穿透 / 暴击两路词缀进了 statPatch，处决已
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
     const patch = loadout!.statPatch;
-    // 103501 攻速 22% / 伤害 14%；103502 暴击率 36 / 伤害 32%
-    assert.equal(patch.attackSpeedPct, 22);
-    assert.equal(patch.damageRatePct, 46);
-    assert.equal(patch.critRatePct, 36);
+    //  2026-11-17 第 5 批：103502 由旧「枯萎收割（暴击率 20/28/36）」改成「苔针双连」多弹，
+    //  暴击率整段消失（旧值 20 还越了 15% 上限）。
+    //  103501 穿甲苔刺：攻速 22% / 伤害 14%；103502 苔针双连：额外 2 发 + 攻击 18% + 伤害 15% + 范围 25%。
+    assert.equal(patch.bulletNumFlat, 2, '103502 额外 2 发（本体 1 + 2 = 3 颗）');
+    assert.equal(patch.attackSpeedPct, 22, '103501 攻速 22%');
+    assert.equal(patch.damageRatePct, 29, '103501 伤害 14% + 103502 混搭尾 15%');
+    assert.equal(patch.attackPct, 18, '103502 攻击尾巴由子链 193502 承载');
+    assert.equal(patch.attackRangePct, 25, '103502 范围尾巴走 mix');
+    assert.equal(patch.critRatePct, undefined, '暴击率随「枯萎收割」一起退场');
     //  2026-11-14 口径：处决只留给其他养成系统，卡牌链路（`pvpSkillPlan`）不再带 executeChance。
     const plan = loadout!.skillPlans.find((row) => row.skillChainId === 103502 && row.skillLevel === 3);
     assert.ok(plan, '103502 三档必须仍在计划里');

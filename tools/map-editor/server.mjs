@@ -810,6 +810,7 @@ const server = createServer(async (req, res) => {
             weight: Number(row.weight) || 0,
             icon: typeof row.icon === 'string' ? row.icon : null,
             effect: effects[Number(gates.find(gate => gate.id === row.param?.gateIds?.[0])?.effectType) - 1] ?? null,
+            wakeRange: Number(row.param?.wakeRange),
             resId: row.param && typeof row.param === 'object' ? row.param.resId : null,
           });
         }

@@ -54,7 +54,8 @@ test('armySkillLevelUp：按 skillId 聚合，一行只是一个等级档', () =
     assert.ok(skill, '100101（超视孢子）必须存在于表里');
     assert.equal(skill.name, '超视孢子');
     assert.deepEqual(skill.levels.map((row) => row.level), [1, 2, 3]);
-    assert.deepEqual(skill.levels.map((row) => row.unlockHeroLevel), [3, 14, 22]);
+    // 100101 是 68001 的**第 1 格** ⇒ 按「技能1 = 3 / 10 / 22」的统一档位。
+    assert.deepEqual(skill.levels.map((row) => row.unlockHeroLevel), [3, 10, 22]);
     assert.equal(skillMaxLevel(skill), 3);
 });
 
@@ -92,8 +93,11 @@ test('armySkillLevelUp：进表的技能档位恒非空且恒为正 —— `leve
 test('resolveCardSkills：顺序以卡表 skillList 为准，缺失告警跳过', () => {
     const skills = resolveCardSkills(TABLE, PEASHOOTER_SKILLS, '68001');
     assert.deepEqual(skills.map((skill) => skill.skillId), PEASHOOTER_SKILLS);
-    // 名称以 `pvpSkillPlan`（实际研发）为准：100104 已由「黄袍加身」更名为「豌豆机关枪」。
-    assert.deepEqual(skills.map((skill) => skill.name), ['超视孢子', '强化豌豆', '饥饿缠身', '豌豆机关枪']);
+    // 名称以 `pvpSkillPlan`（实际研发）为准：100104 已由「黄袍加身」更名为「豌豆机关枪」，
+    // 100103 已由「饥饿缠身」换成 V5 的「异种猎杀协议」（对蘑菇阵营增伤 + 暴击率）。
+    assert.deepEqual(skills.map((skill) => skill.name), ['超视孢子', '强化豌豆', '异种猎杀协议', '豌豆机关枪']);
+    // 名称变了、身份没变：仍是 100101~100104 这四条链，顺序照卡表。
+    assert.deepEqual(skills.map((skill) => skill.skillId), [100101, 100102, 100103, 100104]);
 
     const reversed = resolveCardSkills(TABLE, [100104, 100101], '68001');
     assert.deepEqual(reversed.map((skill) => skill.skillId), [100104, 100101]);
@@ -115,15 +119,15 @@ test('resolveSkillLevel：后端没给时按第 1 档，超出表上限按表上
 
 test('skillLevelUnlocked / canStepSkill：↑ 判解锁等级，↓ 不判', () => {
     const skill = TABLE.get(100101)!;
-    // 第 2 档要英雄 14 级
-    assert.equal(skillLevelUnlocked(skill, 2, 13), false);
-    assert.equal(skillLevelUnlocked(skill, 2, 14), true);
+    // 第 2 档要英雄 10 级（技能1 第 2 档 = 10）
+    assert.equal(skillLevelUnlocked(skill, 2, 9), false);
+    assert.equal(skillLevelUnlocked(skill, 2, 10), true);
 
-    assert.equal(canStepSkill(skill, 1, 1, 3, false), false, '13 级以下升不到第 2 档');
-    assert.equal(canStepSkill(skill, 1, 1, 14, false), true);
-    assert.equal(canStepSkill(skill, 1, 1, 14, true), false, '发包期间置灰');
-    assert.equal(canStepSkill(skill, -1, 2, 14, false), true, '降级不需要解锁等级');
-    assert.equal(canStepSkill(skill, -1, 1, 14, false), false, '第 1 档没有更低的');
+    assert.equal(canStepSkill(skill, 1, 1, 9, false), false, '9 级以下升不到第 2 档');
+    assert.equal(canStepSkill(skill, 1, 1, 10, false), true);
+    assert.equal(canStepSkill(skill, 1, 1, 10, true), false, '发包期间置灰');
+    assert.equal(canStepSkill(skill, -1, 2, 10, false), true, '降级不需要解锁等级');
+    assert.equal(canStepSkill(skill, -1, 1, 10, false), false, '第 1 档没有更低的');
     assert.equal(canStepSkill(skill, 1, 3, 99, false), false, '满档不能再升');
 });
 
@@ -131,7 +135,7 @@ test('isSkillMaxed / skillLevelRow：满档与档位查找', () => {
     const skill = TABLE.get(100101)!;
     assert.equal(isSkillMaxed(skill, 2), false);
     assert.equal(isSkillMaxed(skill, 3), true);
-    assert.equal(skillLevelRow(skill, 2)?.unlockHeroLevel, 14);
+    assert.equal(skillLevelRow(skill, 2)?.unlockHeroLevel, 10);
     assert.equal(skillLevelRow(skill, 9), undefined);
 });
 

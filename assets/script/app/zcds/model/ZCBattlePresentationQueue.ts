@@ -156,6 +156,7 @@ export interface IZCHitFxOptions {
 
 /** 卡牌弹出入参（位置由视图以 hexId 对齐，这里同时给出世界坐标）。*/
 export interface IZCCardRevealOptions {
+    readonly monsterClaim?: boolean;
     readonly now: number;
     readonly owner: ZCOwner;
     readonly hexId: number;
@@ -267,6 +268,7 @@ export class ZCBattlePresentationQueue {
         this.cardRevealQueue.push({
             id: this.nextCardRevealId++,
             cardId: input.cardId,
+            ...(input.monsterClaim ? { monsterClaim: true } : {}),
             owner: input.owner,
             building: input.building,
             tier: input.tier,

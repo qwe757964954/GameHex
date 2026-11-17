@@ -9,6 +9,23 @@ import { loadViews } from './helpers/zcds-view-fixtures';
 import { assetPath } from './helpers/asset-paths';
 
 const PREFAB_PATH = assetPath('ui/game/ZCGameLegendBanner.prefab');
+
+test('野怪击杀横幅展示获胜者、野怪名称与援军结果，复用后恢复普通金卡标题', () => {
+    const { load, FakeNode } = loadViews();
+    const view = buildView(new (load('./ZCGameLegendBannerView').ZCGameLegendBannerView)(), FakeNode);
+    view.setOwnerNames(new Map([['enemy', { name: '对手甲' }]]));
+    const reveal = { id: 1, cardId: '68007', cardName: '野怪甲', owner: 'enemy', building: 'barracks',
+        tier: 4, unitId: null, x: 0, y: 0, hexId: 1, luckText: '', startedAt: 0, durationSeconds: 2, monsterClaim: true };
+    view.render(reveal, 0);
+    assert.equal(view.monsterClaimLabel.string, '对手甲\n击败 野怪甲\n获得援军');
+    assert.equal(view.titleSprite.node.active, false);
+    assert.equal(view.nameLabel.node.active, false);
+    assert.equal(view.monsterClaimLabel.node.active, true);
+    view.render({ ...reveal, monsterClaim: false }, 0);
+    assert.equal(view.titleSprite.node.active, true);
+    assert.equal(view.nameLabel.string, '野怪甲');
+    assert.equal(view.monsterClaimLabel.node.active, false);
+});
 // ⚠️ 横幅美术从 `image/gameui/legend` 搬到了 `image/legend`（gameui 目录清理时随批迁出），
 // 这条守卫当时没跟改 ⇒ 一直报 ENOENT 红着（与「图丢了」完全不是一回事，别再被它带偏）。
 const ART_ROOT = assetPath('image/legend');
@@ -71,7 +88,7 @@ test('ZCGameLegendBanner 结构：7 节点、渲染序 Banner→Role→Title→P
     assert.equal(objects[0].__type__, 'cc.Prefab');
     const nodes = objects.map((item, index) => (item.__type__ === 'cc.Node' ? index : -1))
         .filter((index) => index >= 0);
-    assert.equal(nodes.length, 7);
+    assert.equal(nodes.length, 8);
     assert.equal(objects[0].data.__id__, nodes[0], 'cc.Prefab.data 必须指向真根节点');
 
     const root = nodes[0];
@@ -79,7 +96,7 @@ test('ZCGameLegendBanner 结构：7 节点、渲染序 Banner→Role→Title→P
     // 子节点顺序 = 渲染顺序：底板最下、立绘压在它上面（设计稿里角色完整可见）。
     assert.deepEqual(
         (objects[root]._children ?? []).map((ref: { __id__: number }) => objects[ref.__id__]._name),
-        ['Banner', 'Role', 'Title', 'Portrait', 'Name'],
+        ['Banner', 'Role', 'Title', 'Portrait', 'Name', 'MonsterClaim'],
     );
     // 头像是头像环的子节点（同心：环 76 / 头像 66）。
     const portrait = nodeIndexByName(objects, 'Portrait');
@@ -145,6 +162,7 @@ test('ZCGameLegendBanner 绑定：六个组件引用指对节点，四套玩家�
     expectRef('ringSprite', 'Portrait', 'cc.Sprite');
     expectRef('headSprite', 'Head', 'cc.Sprite');
     expectRef('nameLabel', 'Name', 'cc.Label');
+    expectRef('monsterClaimLabel', 'MonsterClaim', 'cc.Label');
 
     // 八个帧字段逐个与 `.meta` 对账 —— 抄错图不报错，只表现为「颜色不对」。
     const seen: string[] = [];
@@ -366,6 +384,7 @@ test('渲染层只给金卡（tier 4）弹横幅，且挂全屏层而不是可�
             rendered: [] as number[],
             setArtResolver(fn: unknown) { this.artResolver = fn; },
             setPortraitResolver(fn: unknown) { this.portraitResolver = fn; },
+            setOwnerNames() {},
             setLayout(value: unknown) { this.layout = value; },
             render(reveal: { id: number }) { (this.rendered as number[]).push(reveal.id); },
         };
@@ -690,7 +709,7 @@ test('渲染层把本局人数与全屏层宽高注入横幅，落位按人数�
             const node = new FakeNode('LegendBanner');
             const view: Raw = {
                 isValid: true, layout: null,
-                setArtResolver() {}, setPortraitResolver() {},
+                setArtResolver() {}, setPortraitResolver() {}, setOwnerNames() {},
                 setLayout(value: unknown) { this.layout = value; },
                 render() {},
             };
@@ -736,7 +755,8 @@ function buildView(view: Raw, FakeNode: new (name?: string) => Raw): Raw {
     view.titleSprite = sprite();
     view.ringSprite = sprite();
     view.headSprite = sprite();
-    view.nameLabel = { string: '', enabled: true };
+    view.nameLabel = { string: '', enabled: true, node: new FakeNode('Name') };
+    view.monsterClaimLabel = { string: '', node: new FakeNode('MonsterClaim') };
     const bannerFrames: Raw = {};
     const ringFrames: Raw = {};
     for (const { suffix, banner, ring } of OWNER_ART) {
@@ -761,6 +781,7 @@ test('横幅优先取阵容角色立绘，取不到才回退兵种 / 建筑', ()
             isValid: true,
             artResolver: null,
             setArtResolver(fn: unknown) { this.artResolver = fn; },
+            setOwnerNames() {},
             setPortraitResolver() { /* 本用例不关心 */ },
             setLayout() { /* 同上 */ },
             render() { /* 同上 */ },

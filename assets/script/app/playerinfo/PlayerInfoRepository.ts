@@ -18,9 +18,12 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  *
  * ## 缓存读不到不是异常
  *
- * `CacheMgr.instance` 在 `GameNet.doPrepare()` 之前是空壳，`getTlCmdRole()` 会抛
- * 「没有这张表」。这里 `safe()` 吞掉并给空快照 —— 编辑器预览 / 未登录时界面必须能打开
- * 并且显示空态，而不是白屏 + 一片报错（与 `MainTaskRepository` 同口径）。
+ * `CacheMgr.instance` 在 `GameNet.doPrepare()` 之前只是个空字典：`getTlCmdRole()` 走
+ * `GameCacheMgr.getValues` → `TDic.get`，只读字典、不构造 `GameCache`，**不抛**，返回空数组
+ * ⇒ `loadSelf()` 给空快照。编辑器预览 / 未登录时界面必须能打开并显示空态，而不是白屏 + 一片报错。
+ *
+ * 会抛的是 `getCache()` 那条路（`GameCache.init()` 要读 `protoCacheMessage`），
+ * 见 `GameCacheMgr.peekCache` 的注释 —— 本文件只读，不碰那条路。
  *
  * ## 已知缺口（有意留下，不造假的兜底）
  *
@@ -34,7 +37,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest } from '../net/RequestGuard';
+import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
 import {
     RequestCodeExchange,
     RequestRoleChangeImg,
@@ -165,39 +168,24 @@ const FALLBACK_RENAME_COST: IRenameCostInfo = {
 };
 
 /**
- * `uint64` / `Long` / `string` / `number` → 十进制字符串。
+ * 文本字段安全取值：只认 string（协议里这些字段就是 `string`，别的类型视为脏数据）。
  *
- * ⚠️ 不能 `String(value)` 了事：proto 的 `uint64` 运行时是 `Long`（有 `toString()`，
- * 但直接插值在部分构建下会走 `valueOf()` 丢精度）。与全工程 `toIdString` 一个口径。
+ * id / `Long` 的十进制转换统一走 `core/value/Coerce.toIdString`（经 `RequestGuard` 出口）。
  */
-export function toIdText(value: unknown): string {
-    if (value === null || value === undefined) return '';
-    if (typeof value === 'string') return value;
-    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
-    const obj = value as { toString?: () => string };
-    if (typeof obj.toString === 'function') {
-        const s = obj.toString();
-        return s === '[object Object]' ? '' : s;
-    }
-    return '';
-}
-
-function toNumber(value: unknown, fallback = 0): number {
-    const n = Number(value);
-    return Number.isFinite(n) ? n : fallback;
-}
-
 function toText(value: unknown): string {
     return typeof value === 'string' ? value : '';
 }
 
-/** 读一张缓存表；表不存在 / 未登录时返回空数组（规则：`CacheMgrGen` 的取值方法会抛）。 */
-function readCache(fn: () => unknown[]): readonly unknown[] {
-    try {
-        return fn() ?? [];
-    } catch {
-        return [];
-    }
+/**
+ * **配置表行**取值（`remoteRef` JSON：可能是 number / string / null）。
+ *
+ * 与协议边界的 `toCount` 分开：协议字段类型由 proto 定死（不存在字符串形态），
+ * 而表行是 JSON，字符串是正常形态。两者对 `null` 的取舍也不同 ——
+ * 本函数按 `Number(null) === 0` 走，保持既有表行口径。
+ */
+function tableNumber(value: unknown, fallback = 0): number {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
 }
 
 function readTable(rows: unknown): readonly Record<string, unknown>[] {
@@ -208,7 +196,7 @@ function readTable(rows: unknown): readonly Record<string, unknown>[] {
 function buildLevelExpMap(rows: readonly Record<string, unknown>[]): Map<number, number> {
     const out = new Map<number, number>();
     for (const row of rows) {
-        const lv = toNumber(row.level, 0);
+        const lv = tableNumber(row.level, 0);
         if (lv <= 0) continue;
         out.set(lv, resolveExpMax(row));
     }
@@ -242,48 +230,49 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
     private renameCost: IRenameCostInfo | null = null;
 
     async loadSelf(): Promise<IPlayerInfoSnapshot> {
-        const rows = readCache(() => CacheMgr.instance.getTlCmdRole());
         // 缓存里通常只有「自己」那一条；`CmdRole` 的主键是 `id`。
-        const row = (rows[0] ?? null) as Record<string, unknown> | null;
+        const row = CacheMgr.instance.getTlCmdRole()[0];
         if (!row) return { ...EMPTY_SNAPSHOT };
 
-        const level = Math.max(1, Math.floor(toNumber(row.lv, 1)));
-        const exp = Math.max(0, Math.floor(toNumber(row.exp, 0)));
+        // `lv` / `exp` / `selectServerId` / `freeRenameCount` 是 `sint32` ⇒ 已是整数 number，
+        // 只保留业务下界钳制；`id` / `img` / `headFrame` 是 `sint64` ⇒ `Long`，走 core 边界转换。
+        const level = Math.max(1, row.lv);
+        const exp = Math.max(0, row.exp);
         const expMax = await this.expMaxOf(level);
 
         return {
             isSelf: true,
-            roleId: toIdText(row.id),
+            roleId: toIdString(row.id),
             roleName: toText(row.name),
-            img: Math.floor(toNumber(row.img, 0)),
+            img: toCount(row.img),
             platformImg: toText(row.platformImg),
-            headFrame: Math.floor(toNumber(row.headFrame, 0)),
+            headFrame: toCount(row.headFrame),
             level,
             exp,
             expMax,
-            serverId: Math.floor(toNumber(row.selectServerId, 0)),
+            serverId: row.selectServerId ?? 0,
             // 缺口 ①：本工程没有 `server` 表 ⇒ 区服名恒空串。
             serverName: '',
             power: 0,
             battleLevel: 0,
             unionName: '',
-            freeRenameCount: Math.max(0, Math.floor(toNumber(row.freeRenameCount, 0))),
+            freeRenameCount: Math.max(0, row.freeRenameCount),
             // 自己那份缓存（`CmdRole`）里没有装备栏 —— 装备只在他人信息（`CmdRoleInfoViewRspMsg`）里下发。
             equip: [],
         };
     }
 
     async loadOther(roleId: string, serverId: number, caller?: object): Promise<IOtherInfoResult> {
-        let rsp: Record<string, unknown> | null = null;
+        let rsp: CmdRoleInfoViewRspMsg | null = null;
         try {
             // ⚠️ `GameNet.send(req, false)` 的第二个参数恒为 `false`（全工程口径）——
             //    回包通过 `RequestMsg` 的 `fCallback` 通知，不是靠返回值。见
             //    `LayerActivityRepository` / `BattleTokenRepository` 的同款写法。
             const status = await sendGameRequest(GameNet.instance, () =>
                     new RequestRoleInfoView(
-                        { roleId: toNumber(roleId, 0), serverId } as any,
+                        { roleId: toCount(roleId), serverId } as any,
                         caller,
-                        (r: any) => { rsp = (r ?? null) as Record<string, unknown> | null; },
+                        (r: CmdRoleInfoViewRspMsg) => { rsp = r ?? null; },
                     ),
                 { timeoutMs: READ_TIMEOUT_MS, tag: 'PlayerInfo' },
             );
@@ -293,8 +282,8 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
             return { status: 'failed', snapshot: null };
         }
 
-        if (!rsp) return { status: 'failed', snapshot: null };
-        const r = rsp as Record<string, unknown>;
+        const r = rsp;
+        if (!r) return { status: 'failed', snapshot: null };
 
         const equip = await this.equipOf(r.tlCmdEquip);
 
@@ -302,20 +291,20 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
             status: 'ok',
             snapshot: {
                 isSelf: false,
-                roleId: toIdText(r.roleId),
+                roleId: toIdString(r.roleId),
                 roleName: toText(r.roleName),
-                img: Math.floor(toNumber(r.img, 0)),
+                img: toCount(r.img),
                 platformImg: toText(r.platformImg),
-                headFrame: Math.floor(toNumber(r.headFrame, 0)),
-                level: Math.max(1, Math.floor(toNumber(r.level, 1))),
+                headFrame: toCount(r.headFrame),
+                level: Math.max(1, r.level ?? 1),
                 // `CmdRoleInfoViewRspMsg` **没有** exp / expMax 字段 ⇒ 经验条在他人信息里恒空。
                 exp: 0,
                 expMax: 0,
-                serverId: Math.floor(toNumber(r.selectServerId, serverId)),
+                serverId: r.selectServerId ?? serverId,
                 serverName: '',
-                power: Math.floor(toNumber(r.power, 0)),
-                battleLevel: Math.floor(toNumber(r.battleLevel, 0)),
-                unionName: toText((r.unionInfo as Record<string, unknown> | null)?.name),
+                power: r.power ?? 0,
+                battleLevel: r.battleLevel ?? 0,
+                unionName: toText(r.unionInfo?.name),
                 freeRenameCount: 0,
                 equip,
             },
@@ -333,7 +322,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         const all: IHeadEntry[] = [];
         const ids: number[] = [];
         for (const row of rows) {
-            const id = Math.floor(toNumber(row.resId, 0));
+            const id = Math.floor(tableNumber(row.resId, 0));
             if (id <= 0) continue;
             ids.push(id);
             all.push({
@@ -358,8 +347,8 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         try {
             const itemRow = await RefUtil.instance.getRefAsync('gameConfig', 'key', 'renameItemId');
             const gemRow = await RefUtil.instance.getRefAsync('gameConfig', 'key', 'renameCostGem');
-            itemId = toNumber((itemRow as Record<string, unknown> | null)?.value, itemId);
-            gemCost = toNumber((gemRow as Record<string, unknown> | null)?.value, gemCost);
+            itemId = tableNumber((itemRow as Record<string, unknown> | null)?.value, itemId);
+            gemCost = tableNumber((gemRow as Record<string, unknown> | null)?.value, gemCost);
         } catch (error) {
             console.warn('[PlayerInfo] 读 gameConfig 改名配置失败', error);
         }
@@ -368,7 +357,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         let itemIconPath = '';
         try {
             const items = readTable(await RefUtil.instance.getRefAllAsync(ITEM_TABLE));
-            const row = items.find((r) => toNumber(r.resId, 0) === itemId);
+            const row = items.find((r) => tableNumber(r.resId, 0) === itemId);
             itemIconPath = toText(row?.icon);
         } catch (error) {
             console.warn('[PlayerInfo] 读 item 表失败', error);
@@ -380,7 +369,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         try {
             const props = readTable(await RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE));
             const row = props.find((r) => toText(r.key) === 'coin');
-            coinResId = toNumber(row?.resId, coinResId);
+            coinResId = tableNumber(row?.resId, coinResId);
             coinName = toText(row?.icon);
         } catch (error) {
             console.warn('[PlayerInfo] 读 roleProperty 表失败', error);
@@ -436,7 +425,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
         for (const raw of rawList) {
             const part = equipPartOf(raw, this.equipByResId);
             if (!part) continue;
-            const level = toNumber((raw as Record<string, unknown> | null)?.level, 0);
+            const level = tableNumber((raw as Record<string, unknown> | null)?.level, 0);
             out.push({
                 slot: part.type,
                 equipId: part.equipId,

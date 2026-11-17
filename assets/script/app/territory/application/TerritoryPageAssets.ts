@@ -1,4 +1,4 @@
-import { JsonAsset, SpriteFrame } from 'cc';
+import { JsonAsset, Prefab, SpriteFrame } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
@@ -23,6 +23,7 @@ import {
  * 起始格（`startCellId`，不在 `sites` 里）单独走 `start`。对应关系见 `TerritoryMapView`。
  */
 export interface ITerritoryBattleArt {
+    readonly monsterPrefabs?: ReadonlyMap<number, Prefab>;
     readonly background: SpriteFrame | null;
     /**
      * 关卡气泡底图（**已通关**）：蓝 `image/spawn-region/frame_03`。

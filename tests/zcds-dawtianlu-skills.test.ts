@@ -107,7 +107,8 @@ test('天降神拳：三档参数 = 300%/500%/700% 普通伤害，命中 5/7/9 �
         .filter((row) => Number(row.skillChainId) === 102504)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(tiers.length, 3, '102504 必须三档齐备');
-    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [0, 20, 25]);
+    //  102504 是 68025 的**第 4 格** ⇒ 按「技能4 = 12 / 24 / 36」统一档位（2026-11-17）。
+    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
     assert.deepEqual(tiers.map((row) => row.skillKind), ['active_attack', 'active_attack', 'active_attack']);
 
     const params = tiers.map((row) => JSON.parse(String(row.skillParamJson)) as Record<string, number>);
@@ -125,7 +126,7 @@ test('天降神拳：升级描述与修改器引用（K 表）齐备', () => {
     assert.equal(rows.length, 3, '102504 三档');
     const byLevel = rows.sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
     assert.deepEqual(byLevel.map((row) => row.name), ['天降神拳', '天降神拳', '天降神拳']);
-    assert.deepEqual(byLevel.map((row) => Number(row.unlockarmylevel)), [0, 20, 25]);
+    assert.deepEqual(byLevel.map((row) => Number(row.unlockarmylevel)), [12, 24, 36]);
     // modfiy 由 pvpSkillPlan.modifierId 回填 —— 三档必须各自对上，否则卡牌详情页的
     // 「升级提升」列表读不到这一档。
     assert.deepEqual(byLevel.map((row) => (row.modfiy as number[])[0]), [94025041, 94025042, 94025043]);
@@ -140,16 +141,17 @@ test('68025 没有 binding 行时，102504 的四条参数仍进得到 skillRunt
     assert.equal(readRows('pvpSkillBinding').some((row) => Number(row.pvpSkillId) === 30858), false,
         '前提变了：30858 现在有 binding 行，这条用例应改成走 merge 分支');
 
-    const selected = withoutLineupCrit(selectZCSkillPlans('68025', 25, catalogs));
-    // 全部 replace ⇒ 25 级每条「属性链」只留最高档。68025 现有 6 条链：
+    const selected = withoutLineupCrit(selectZCSkillPlans('68025', 36, catalogs));
+    // 全部 replace ⇒ 每条「属性链」只留最高档。68025 现有 6 条链：
     // 102501/192501/282501（蔓生连打）+ 102502（裂变暴击）+ 102503（无尘禁土）+ 102504（天降神拳）。
     // 2026-11-10 删掉 192502「裂变暴击·暴伤」，所以是 6 条而不是 7 条。
+    // 取 36 级是因为 102504 在**第 4 格**、III 档要到 36 级（2026-11-17 统一档位前是 25）。
     assert.equal(selected.length, 6, 'replace 语义下每条链只保留一档');
     assert.deepEqual(selected.map((row) => row.modifierId).sort(),
         [94025013, 94025023, 94025043, 94025053, 94925013, 95825013]);
 
     const loadout = compileZCCombatBuild({
-        unitId: '68025', heroLevel: 25,
+        unitId: '68025', heroLevel: 36,
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
 
@@ -183,7 +185,7 @@ function buildMatch(): ZCMatchConfig {
     const catalogs = getZCModifierCatalogs();
     //  68025 没有 generalStar 行 ⇒ 不传星级（传了 compileZCGeneralStarLoadout 会抛）。
     const loadout = compileZCCombatBuild({
-        unitId: '68025', heroLevel: 25,
+        unitId: '68025', heroLevel: 36,
     }, captured.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'))!;
     return {
         ...captured,
@@ -242,11 +244,12 @@ test('前 7 次普攻不出弹，第 8 次打出 3 秒 / 穿透 8 次的重拳',
     assert.ok(Math.abs(fist.velocityX - 100) < 1e-6, '弹速 100');
     assert.equal(fist.remainingPierces, 8, 'III 级：最多命中 9 个敌人 = 首目标 + 穿透 8 次');
     assert.equal(fist.pierceFalloff, 0.5, '每多命中一人伤害 -50%');
-    // 140 × 7 = 980 是「面板 × 倍率」的裸值；再乘 102502「裂变暴击」的混搭尾「攻击提高 35%」
-    // （`statPatch.attackPct`，V5 2026-11-16）＝ 1323，最后还要过 `deckBonuses.unitAttackMultiplier`
-    // （羁绊/成长）。这里钉「确实是 7 倍那一档 × 1.35」，不锁死羁绊那 8%，免得改羁绊就红。
-    assert.ok(fist.baseDamage >= ATTACK * 7 * 1.35 && fist.baseDamage < ATTACK * 7 * 1.35 * 1.2,
-        `III 级首击应 ≈1323，实际 ${fist.baseDamage}`);
+    // 140 × 7 = 980 是「面板 × 倍率」的裸值；再乘两条混搭尾的攻击加成：
+    //   102502「裂变暴击」+35%（V5 2026-11-16）、102501「蔓生三连」+26%（2026-11-17 连击批次）
+    //   ⇒ `statPatch.attackPct = 61`，＝ 1577.8，最后还要过 `deckBonuses.unitAttackMultiplier`
+    // （羁绊/成长）。这里钉「7 倍那一档 × 1.61」，不锁死羁绊那 8%，免得改羁绊就红。
+    assert.ok(fist.baseDamage >= ATTACK * 7 * 1.61 && fist.baseDamage < ATTACK * 7 * 1.61 * 1.2,
+        `III 级首击应 ≈1578（含羁绊约 1704），实际 ${fist.baseDamage}`);
 });
 
 test('普攻那一发仍然是近战、不吃重拳参数（3 秒 / 穿透 8 次不外溢）', () => {
@@ -274,7 +277,7 @@ test('无尘禁土：三档 = 冷却 15 秒 / 持续 4·6·8 / 每秒 30·40·55
         .filter((row) => Number(row.skillChainId) === 102503)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
     assert.equal(tiers.length, 3, '102503 必须三档齐备');
-    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [9, 18, 24], '兵种 9 / 18 / 24 级解锁');
+    assert.deepEqual(tiers.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27], '兵种 9 / 18 / 27 级解锁（第 3 格）');
     assert.deepEqual(tiers.map((row) => row.skillKind), ['active_cd', 'active_cd', 'active_cd'], '主动-冷却');
     assert.deepEqual(tiers.map((row) => row.behaviorKey), ['self_aura', 'self_aura', 'self_aura']);
     // 必须挂 30858（该单位当前普攻行）：计划行的 `pvpSkillId` 与 `pvpCard.unitSkillId` 不一致时
@@ -295,7 +298,7 @@ test('无尘禁土：三档 = 冷却 15 秒 / 持续 4·6·8 / 每秒 30·40·55
         .filter((row) => Number(row.id) === 102503)
         .sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
     assert.deepEqual(kRows.map((row) => row.name), ['无尘禁土', '无尘禁土', '无尘禁土']);
-    assert.deepEqual(kRows.map((row) => Number(row.unlockarmylevel)), [9, 18, 24]);
+    assert.deepEqual(kRows.map((row) => Number(row.unlockarmylevel)), [9, 18, 27]);
     assert.deepEqual(kRows.map((row) => (row.modfiy as number[])[0]), [94025051, 94025052, 94025053]);
 });
 
@@ -328,7 +331,8 @@ test('无尘禁土：冷却 15 秒到点才在脚下开，8 秒后自动收，�
     assert.ok(zones[0].remainingSeconds > 7.5 && zones[0].remainingSeconds <= 8, 'III 级持续 8 秒');
     assert.ok(model.snapshot.elapsedSeconds >= 15 && model.snapshot.elapsedSeconds < 16, '冷却 15 秒');
     assert.equal(zones[0].waveInterval, 1, '每秒一波');
-    assert.equal(zones[0].effectPrefabPath, 'units/projectiles/持续光环伤害效果/持续光环伤害效果');
+    //  2026-11-17 换美术：口径「使用【大威天芦_火焰光环】特效」，不再是老的竖直光柱。
+    assert.equal(zones[0].effectPrefabPath, 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环');
     assert.equal(statusSystem.statModsOf('1').damageRatePct, 20, 'III 级「期间自身伤害提高 20%」');
     assert.ok(zones[0].damage > 0, '每一波都要有伤害（倍率 0.55 × 面板）');
 
@@ -344,9 +348,13 @@ test('无尘禁土：冷却 15 秒到点才在脚下开，8 秒后自动收，�
 });
 
 test('无尘禁土：光环特效路径进得了本局加载清单，没带这条行为就不加载', () => {
-    //  `self_aura` 的光柱路径只登记在 `ZCSelfAuraFx` 的代码常量里（行为技能在 `pvpSkill`
+    //  `self_aura` 的造型路径只登记在 `ZCSelfAuraFx` 的代码表里（行为技能在 `pvpSkill`
     //  里没有造型槽）⇒ 不进 `buildZCVisualResourcePlan` 的清单就**不会被打包加载**，
     //  运行时 `effectVisualPrefabs.get()` 返回 null，表现为「每秒照常扣血、屏幕一次都不亮」。
+    //
+    //  ⚠️ 2026-11-17：68025 已从「兜底光柱」换成 `大威天芦_火焰光环` ⇒ 这里钉的是
+    //  **按单位覆盖后那条路径**，不再是 `ZC_SELF_AURA_EFFECT_PREFAB_PATH`。
+    const FLAME_AURA = 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环';
     const unit = (unitId: string) => ({
         unitId,
         prefabPath: `units/${unitId}/${unitId}`,
@@ -361,11 +369,13 @@ test('无尘禁土：光环特效路径进得了本局加载清单，没带这�
     };
 
     const withAura = buildZCVisualResourcePlan([unit('68025')] as never, adapters as never);
-    assert.ok(withAura.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH),
-        '带无尘禁土的局必须加载这条光柱');
+    assert.ok(withAura.effectPaths.includes(FLAME_AURA),
+        '带无尘禁土的局必须加载火焰光环这条');
+    assert.equal(withAura.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH), false,
+        '老光柱已经不该再被打包加载（除非有单位退回兜底）');
 
     const withoutAura = buildZCVisualResourcePlan([unit('68026')] as never, adapters as never);
-    assert.equal(withoutAura.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH), false,
+    assert.equal(withoutAura.effectPaths.includes(FLAME_AURA), false,
         '没带这条行为的兵不该吃这份加载');
     assert.equal(withoutAura.effectPaths.includes('units/projectiles/68099_普攻/68099_普攻'), false,
         'enabled=false 的计划不参与');
@@ -474,15 +484,19 @@ test('成长表补齐：68025 的 1~50 级按 cardLevelUp 反推，且真的进�
  *
  * 这条钉的是**两条数的一致性**，不是某个魔数：
  *   · 判定 —— `pvpSkillPlan.auraRadius`（逻辑 px）；
- *   · 视觉 —— `ZCCombatEffectScale` 的宿主倍率 × 预制体自带的可见宽。
+ *   · 视觉 —— 预制体的 `_contentSize.width` × 根 `_lscale`（自带可见宽）。
  * 只改一边的后果是「看着大、打不到」（或反过来），本项目已经因为这类事返工过两次
  * （椰蛋战士·暴风、三叶小丑·飓风），所以这里按屏上 px 做交叉校验。
+ *
+ * ⚠️ 2026-11-17 换美术后，这条从「查宿主倍率表」改成「读 prefab 本体」：
+ * 火焰光环的尺寸烘在 prefab 的 `_lscale` 里，画布宽被生成器钉成环外径
+ * ⇒ `width × scale` 直接等于判定直径，等式在测试里可读。
  */
-test('无尘禁土 200px：判定半径与光柱视觉同尺寸；天降神拳子弹 ×2.5', () => {
+test('无尘禁土 200px：判定半径与火焰光环视觉同尺寸；天降神拳子弹 ×2.5', () => {
     //  项目统一换算（docs §1.11，同 `镭射飞龙_导弹技能命中` 那条注释）：
     //  屏上 px = 逻辑 px × combatDistanceScale(0.3) × view/logical(2.5625)。
     const LOGIC_TO_SCREEN = 0.3 * 2.5625;
-    const AURA_SKILL = ZC_SELF_AURA_EFFECT_PREFAB_PATH;
+    const FLAME_AURA = 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环';
     const FIST = 'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效';
 
     // ① 判定：三档都必须是 200 逻辑 px
@@ -494,12 +508,19 @@ test('无尘禁土 200px：判定半径与光柱视觉同尺寸；天降神拳�
     }
     const judgeDiameter = 200 * LOGIC_TO_SCREEN * 2;   // 307.5 屏上 px
 
-    // ② 视觉：光柱 prefab 子节点 `offset` 烘焙 0.58、画布 256 ⇒ 可见宽 148.48 × 宿主倍率
-    const auraVisible = 256 * 0.58;
-    const auraScreen = auraVisible * zcCombatEffectNodeScaleOf(AURA_SKILL);
+    // ② 视觉：prefab 的画布宽（= 生成器钉住的环外径）× 根 `_lscale`
+    const prefab = JSON.parse(readFileSync(
+        `assets/bundles/battle/${FLAME_AURA}.prefab`, 'utf8')) as Array<Record<string, any>>;
+    const root = prefab.find((item) => item.__type__ === 'cc.Node')!;
+    const ui = prefab.find((item) => item.__type__ === 'cc.UITransform')!;
+    assert.equal(root._lscale.x, root._lscale.y, '等比缩放');
+    const auraScreen = ui._contentSize.width * root._lscale.x;
     assert.ok(Math.abs(auraScreen - judgeDiameter) / judgeDiameter < 0.005,
-        `光柱屏上宽 ${auraScreen.toFixed(1)}px 必须贴近判定直径 ${judgeDiameter.toFixed(1)}px`
-        + `（宿主倍率 ${zcCombatEffectNodeScaleOf(AURA_SKILL).toFixed(3)}）`);
+        `火焰环屏上宽 ${auraScreen.toFixed(2)}px 必须等于判定直径 ${judgeDiameter.toFixed(1)}px`
+        + `（画布宽 ${ui._contentSize.width} × _lscale ${root._lscale.x}）`);
+    //  尺寸已经烘进 prefab ⇒ 宿主倍率必须还是缺省的 1，否则会二次放大。
+    assert.equal(zcCombatEffectNodeScaleOf(FLAME_AURA), 1,
+        '火焰光环的尺寸烘在 prefab 里，别在 ZCCombatEffectScale 里再乘一次');
 
     // ③ 拳体子弹：原 256×128 画布 + 0.6 烘焙 ⇒ 153.6 屏上；乘 2.5 后 384
     assert.equal(zcCombatEffectNodeScaleOf(FIST), 2.5, '子弹宿主倍率 2.5');

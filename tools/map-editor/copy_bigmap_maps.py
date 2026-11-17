@@ -11,8 +11,8 @@
 
 用法：
     python tools/map-editor/copy_bigmap_maps.py --dry-run
-    python tools/map-editor/copy_bigmap_maps.py --id world_01
-    tools\\map-editor\\copy-bigmap-maps.bat --id world_01
+    python tools/map-editor/copy_bigmap_maps.py --id bigMap
+    tools\\map-editor\\copy-bigmap-maps.bat --id bigMap
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ SOURCE = presets_io.ROOT / "presets" / "bigmap"
 TARGET = presets_io.PROJECT / "assets" / "resources" / "config" / "bigmap-maps"
 VALIDATOR = presets_io.ROOT / "validate_bigmap_layout.ts"
 
-DOC_TARGETS: tuple[Path, ...] = presets_io.DOC_SEVER_TARGET
+DOC_TARGETS: tuple[Path, ...] = (presets_io.DOC_SEVER_DIR / "slgmap",)
 
 
 def _node_command() -> list[str] | None:
@@ -77,6 +77,9 @@ def copy_one(path: Path, dry_run: bool) -> tuple[list[Path], list[str]]:
     targets = [TARGET / f"{path.stem}.json", *(directory / f"{path.stem}.json" for directory in DOC_TARGETS)]
     if not dry_run:
         presets_io.publish(targets, payload)
+    note = presets_io.purge_flat_sever_copy(path.name, dry_run)
+    if note:
+        warnings = [*warnings, note]
     note = presets_io.purge_client_copy(path.name, dry_run)
     if note:
         warnings = [*warnings, note]

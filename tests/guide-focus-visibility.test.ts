@@ -74,6 +74,24 @@ test('卡牌贴滚动视口边缘时忽略装饰留白，真实内容被裁剪�
     assert.equal(f.host.focusRing.active, false);
 });
 
+test('焦点没就绪时只有「点对话条推进」的步铺满屏；等世界动作的步不挡（否则宝箱点不动）', () => {
+    const f = fixture(310, 0);
+    // 横向离屏 ⇒ 没有孔。
+    f.host.focusTransform.width = 102;
+    f.host.dialogClosed = false;
+    f.host.canAdvance = true;
+    f.place();
+    assert.equal(f.host.focusRing.active, false);
+    assert.equal(f.host.blockerNode.active, true, '台词步没有孔也要挡：孔外点哪都算点对话条');
+    assert.equal(f.host.dimNode.active, true);
+
+    // 2-1/2-2 这类等的是「点地块 / 点宝箱」，铺满屏等于把玩家唯一能点的目标锁在外面。
+    f.host.canAdvance = false;
+    f.place();
+    assert.equal(f.host.blockerNode.active, false, '这一步不许铺满屏，否则点屏幕任意地方都无反馈');
+    assert.equal(f.host.dimNode.active, false);
+});
+
 // 2026-11-16「手指呼吸卡顿」：焦点静止时每帧重设遮罩尺寸会让 Sprite 重建顶点缓冲。
 // 抽出真实的 placeMask，锁住「值没变就不写」这条。
 const maskMethod = view.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === 'placeMask')!;

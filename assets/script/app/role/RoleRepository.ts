@@ -24,7 +24,7 @@ const GEM_LOCK_WEAR = 2;
 function indexBy<T>(rows: readonly T[] | null | undefined, field: keyof T): Map<number, T> {
     const map = new Map<number, T>();
     for (const row of rows ?? []) {
-        const key = toCount(row[field] as unknown as number);
+        const key = toCount(row[field]);
         if (Number.isFinite(key)) map.set(key, row);
     }
     return map;
@@ -90,9 +90,9 @@ class RoleRepository {
      * 消费方：角色页「前期建议优先提升攻击力」气泡的显隐门控（老端 `TabRoleMain.showQiPao`：`lv >= 5` 不显示）。
      */
     roleLevel(): number {
-        const cache = CacheMgr.instance as unknown as { getTlCmdRole?: () => Array<Record<string, unknown>> } | null;
-        const rows = cache?.getTlCmdRole?.() ?? [];
-        return rows.length ? toCount(rows[0].lv as number) : 0;
+        // `CmdRole` 是单行表；`lv` 是 `sint32` ⇒ 已是 number。
+        const row = CacheMgr.instance.getTlCmdRole()[0];
+        return row ? row.lv : 0;
     }
 
     // ============================================================
@@ -118,17 +118,18 @@ class RoleRepository {
         const qualityByQ = indexBy(qualityRows as Array<Record<string, unknown>>, 'quality');
         const attrById = indexBy(attrRows as Array<Record<string, unknown>>, 'id');
 
-        const cmds = (CacheMgr.instance as unknown as { getTlCmdGem?: () => unknown[] })?.getTlCmdGem?.() ?? [];
+        // `CmdGem` 的行本身就是解码后的消息（`resId` / `id` 是 `sint64` ⇒ `Long`）。
+        const cmds = CacheMgr.instance.getTlCmdGem();
         const out: IRoleBagEntry[] = [];
 
-        for (const cmd of cmds as Array<Record<string, unknown>>) {
-            const resId = toCount(cmd.resId as number);
+        for (const cmd of cmds) {
+            const resId = toCount(cmd.resId);
             const gem = gemByResId.get(resId);
-            const gemId = toCount(cmd.id as number);
-            const attrId = toCount(cmd.attribute as number) || (gemId % 10000);
+            const gemId = toCount(cmd.id);
+            const attrId = cmd.attribute || (gemId % 10000);
             const attr = attrById.get(attrId);
             const quality = attr
-                ? toCount(attr.quality as number)
+                ? toCount(attr.quality)
                 : Math.floor(attrId * 0.001) + 1;
             const qualityRef = qualityByQ.get(quality);
             if (!gem || !qualityRef) continue;
@@ -143,8 +144,8 @@ class RoleRepository {
                 desc: String(attr?.modifyDesc ?? ''),
                 quality,
                 rank: 0,
-                count: Math.max(1, toCount(cmd.num as number)),
-                equipped: toCount(cmd.lock as number) >= GEM_LOCK_WEAR,
+                count: Math.max(1, toCount(cmd.num)),
+                equipped: toCount(cmd.lock) >= GEM_LOCK_WEAR,
                 upMark: false,
             });
         }
@@ -166,27 +167,24 @@ class RoleRepository {
         const equipRows = await RefUtil.instance.getRefAllAsync('equip');
         const equipByResId = indexBy(equipRows as Array<Record<string, unknown>>, 'resId');
 
-        const cache = CacheMgr.instance as unknown as {
-            getTlCmdEquipItem?: () => Array<Record<string, unknown>>;
-            getTlCmdEquipPart?: () => Array<Record<string, unknown>>;
-            getTlCmdEquipPage?: () => Array<Record<string, unknown>>;
-        };
-        const cmds = cache?.getTlCmdEquipItem?.() ?? [];
-        const parts = cache?.getTlCmdEquipPart?.() ?? [];
+        // 两表都是解码后的消息数组：`CmdEquipItem`（背包）/ `CmdEquipPart`（6 个部位）。
+        const cmds = CacheMgr.instance.getTlCmdEquipItem();
+        const parts = CacheMgr.instance.getTlCmdEquipPart();
 
         const equippedIds = new Set<number>();
         for (const part of parts) {
-            const equip = part.equip as Record<string, unknown> | null | undefined;
-            if (equip && equip.uniqueId != null) equippedIds.add(toCount(equip.uniqueId as number));
+            // `CmdEquipPart.equip` 是 **required** 字段（d.ts 非空），不用判 null。
+            equippedIds.add(toCount(part.equip.uniqueId));
         }
 
         const out: IRoleBagEntry[] = [];
         for (const cmd of cmds) {
-            const resId = toCount(cmd.resId as number);
+            // `resId` / `rank` / `curQuality` 是 `sint32` ⇒ number；`uniqueId` 是 `sint64` ⇒ `Long`。
+            const resId = cmd.resId;
             const equip = equipByResId.get(resId);
             if (!equip) continue;
-            const uniqueId = toCount(cmd.uniqueId as number);
-            const quality = toCount(cmd.curQuality as number) || toCount(equip.quality as number) || 1;
+            const uniqueId = toCount(cmd.uniqueId);
+            const quality = cmd.curQuality || toCount(equip.quality) || 1;
 
             out.push({
                 id: uniqueId,
@@ -197,21 +195,18 @@ class RoleRepository {
                 name: String(equip.name ?? ''),
                 desc: '',
                 quality,
-                rank: toCount(cmd.rank as number),
+                rank: cmd.rank,
                 count: 1,
                 equipped: equippedIds.has(uniqueId),
                 upMark: false,
             });
         }
 
-        const slots = this.buildEquipSlots(parts, equipRows as Array<Record<string, unknown>>, cache);
+        const slots = this.buildEquipSlots(parts, equipRows);
         // 攻击力的「装备支」只算**穿着中的** 6 件（老端 `ModelTeam.GetTotalAtk` 遍历的就是
         // `VOEquipPartBag` = 6 个部位），不是整个装备背包。
-        const equippedItems: Array<Record<string, unknown>> = [];
-        for (const part of parts) {
-            const equip = part?.equip as Record<string, unknown> | null | undefined;
-            if (equip) equippedItems.push(equip);
-        }
+        const equippedItems: CmdEquipItem[] = [];
+        for (const part of parts) equippedItems.push(part.equip);
         return { bag: out, slots, power: await this.readTotalAttack(equippedItems, slots) };
     }
 
@@ -229,7 +224,7 @@ class RoleRepository {
      * 所以现在这个数字**偏小但不是错的**（结构对，来源逐个补）。
      */
     private async readTotalAttack(
-        items: readonly Record<string, unknown>[],
+        items: readonly CmdEquipItem[],
         slots: readonly IRoleEquipSlotData[],
     ): Promise<number> {
         const [levelRows, rankRows, libRows, modifierRows, configRows] = await Promise.all([
@@ -242,40 +237,40 @@ class RoleRepository {
 
         const equipLevel = new Map<number, IEquipLevelRow>();
         for (const r of (levelRows ?? []) as Array<Record<string, unknown>>) {
-            equipLevel.set(toCount(r.equipLevel as number), {
-                attack: toCount(r.attack as number),
-                hpPer: toCount(r.hpPer as number),
+            equipLevel.set(toCount(r.equipLevel), {
+                attack: toCount(r.attack),
+                hpPer: toCount(r.hpPer),
             });
         }
 
         const equipRank = new Map<string, IEquipRankRow>();
         for (const r of (rankRows ?? []) as Array<Record<string, unknown>>) {
-            equipRank.set(`${toCount(r.rank as number)}|${toCount(r.qualityLevel as number)}`, {
-                attack: toCount(r.attack as number),
-                hpPer: toCount(r.hpPer as number),
-                add1: toCount(r.add1 as number),
-                add2: toCount(r.add2 as number),
-                add3: toCount(r.add3 as number),
+            equipRank.set(`${toCount(r.rank)}|${toCount(r.qualityLevel)}`, {
+                attack: toCount(r.attack),
+                hpPer: toCount(r.hpPer),
+                add1: toCount(r.add1),
+                add2: toCount(r.add2),
+                add3: toCount(r.add3),
             });
         }
 
         const equipLib = new Map<number, { attribute: string }>();
         for (const r of (libRows ?? []) as Array<Record<string, unknown>>) {
-            equipLib.set(toCount(r.id as number), { attribute: String(r.attribute ?? '') });
+            equipLib.set(toCount(r.id), { attribute: String(r.attribute ?? '') });
         }
 
         const skillAttrModifier = new Map<number, ISkillAttrModifierRow>();
         for (const r of (modifierRows ?? []) as Array<Record<string, unknown>>) {
-            skillAttrModifier.set(toCount(r.id as number), { modify: normalizeModify(r.modify) });
+            skillAttrModifier.set(toCount(r.id), { modify: normalizeModify(r.modify) });
         }
 
         let roleDefaultAtk = 0;
         for (const r of (configRows ?? []) as Array<Record<string, unknown>>) {
-            if (String(r.key ?? '') === 'roleDefaultAtk') roleDefaultAtk = toCount(r.value as number);
+            if (String(r.key ?? '') === 'roleDefaultAtk') roleDefaultAtk = toCount(r.value);
         }
 
         // 穿着中的装备：`CmdEquipPart` 的部位 → 该部位等级（来自 slots）+ 实例的 rank/品质/附加属性
-        const itemByUniqueId = new Map(items.map((i) => [toCount(i.uniqueId as number), i]));
+        const itemByUniqueId = new Map(items.map((i) => [toCount(i.uniqueId), i]));
         const parts: IEquipPowerPart[] = [];
         for (const slot of slots) {
             if (!slot.entry) continue;
@@ -283,9 +278,9 @@ class RoleRepository {
             if (!item) continue;
             parts.push({
                 level: slot.level,
-                rank: toCount(item.rank as number),
-                qualityLevel: toCount(item.curQuality as number),
-                effects: Array.isArray(item.tlEffects) ? (item.tlEffects as number[]) : [],
+                rank: item.rank,
+                qualityLevel: item.curQuality,
+                effects: item.tlEffects ?? [],
             });
         }
 
@@ -308,13 +303,12 @@ class RoleRepository {
      *     宁可保守也不要显示一个别的分页的等级（后续接分页时改成取当前页即可，一处）。
      */
     private buildEquipSlots(
-        parts: readonly Record<string, unknown>[],
+        parts: readonly unknown[],
         equipRows: readonly unknown[],
-        cache: { getTlCmdEquipPage?: () => Array<Record<string, unknown>> },
     ): IRoleEquipSlotData[] {
         // 「部位 / 等级 / 实例」的取值判定在 `RoleTable.buildEquipSlotPlan` 里（**零 cc、可单测**）；
         // 这里只做透传，避免判定逻辑埋在带 cc 的链上（规则 78）。
-        return buildEquipSlotPlan(parts, cache.getTlCmdEquipPage?.() ?? [], equipRows).map((plan) => ({
+        return buildEquipSlotPlan(parts, CacheMgr.instance.getTlCmdEquipPage(), equipRows).map((plan) => ({
             partId: plan.partId,
             entry: plan.entry,
             level: plan.level,
@@ -336,7 +330,8 @@ class RoleRepository {
 
         const out: IRoleBagEntry[] = [];
         for (const [resIdStr, count] of counts) {
-            const resId = toCount(resIdStr as unknown as number);
+            // `readItemCounts` 的键是 `String(CmdItem.resId)` ⇒ 这里就是 string，直接交给 toCount。
+            const resId = toCount(resIdStr);
             const item = itemByResId.get(resId);
             if (!item) continue;
             out.push({
@@ -347,7 +342,7 @@ class RoleRepository {
                 iconPath: String(item.icon ?? ''),
                 name: String(item.name ?? ''),
                 desc: String(item.desc ?? ''),
-                quality: toCount(item.quality as number) || 1,
+                quality: toCount(item.quality) || 1,
                 rank: 0,
                 count: Math.max(1, count),
                 equipped: false,

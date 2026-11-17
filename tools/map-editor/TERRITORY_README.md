@@ -20,7 +20,7 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 | 目标 | 用途 | 是否生成 `.meta` |
 | --- | --- | --- |
 | `assets/resources/config/territory-maps/` | Cocos 资源（客户端读） | 是 |
-| `doc/塔防数据配置/json/sever/` | 策划侧服务端表 | 否 |
+| `doc/塔防数据配置/json/sever/territorymap/` | 策划侧服务端地图 | 否 |
 
 > `sever` 是仓库既有拼写（与 `tools/config/export_tafang.mjs` 一致），不是 `server` 的笔误。
 > 策划目录不是 Cocos 资源目录，**不生成 `.meta`**。
@@ -35,7 +35,9 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 
 客户端静态模型位于 `assets/script/app/territory/model/TerritoryMapConfig.ts`。玩家占据、探索中、停用等进度状态不写进静态地图 JSON，应由后续 `TerritoryProgress` 运行时模型保存。
 
-巡逻宝箱：选择左侧“巡逻宝箱”工具绘制，或把所选站点类型改为“巡逻宝箱”，在右侧填写逗号分隔的战斗 ID（例如 `10001,10002,10003`）。切换格子、校验、保存或导出时会提交当前战斗 ID 输入；改变站点类型后点击“应用站点”。JSON 使用 `type: "patrolChest"` 和数字数组 `battleIds: [10001, 10002, 10003]`，保留填写顺序；允许编辑中暂时留空，保存/发布时必须至少有一个正整数 ID。野怪巡逻 ID 单独填写，JSON 使用可选数字字段 `patrolId`；填写时必须为正整数，留空则不输出该字段，兼容旧地图。切换格子、保存和导出时会提交输入，改成其他站点类型后点击“应用站点”会移除该字段。普通站点仍使用原有 `configId`。本次仅提供编辑、发布和客户端静态解析，战斗 ID 的运行时选择与宝箱奖励规则另行接入。
+巡逻宝箱：选择左侧“巡逻宝箱”工具绘制，或把所选站点类型改为“巡逻宝箱”，在右侧填写逗号分隔的战斗 ID（例如 `10001,10002,10003`）。切换格子、校验、保存或导出时会提交当前战斗 ID 输入；改变站点类型后点击“应用站点”。JSON 使用 `type: "patrolChest"` 和数字数组 `battleIds: [10001, 10002, 10003]`，保留填写顺序；允许编辑中暂时留空，保存/发布时必须至少有一个正整数 ID。野怪巡逻 ID 单独填写，JSON 使用可选数字字段 `patrolId`；填写时必须为正整数，留空则不输出该字段，兼容旧地图。切换格子、保存和导出时会提交输入，改成其他站点类型后点击“应用站点”会移除该字段。普通站点仍使用原有 `configId`。巡逻格用相同的“站点 ID”（`site.id`）组成一条连通路线，仅巡逻宝箱允许同 ID。组内所有格子（包括 footprint）全部解锁后，客户端从填有 `patrolId` 的格子生成对应 `monsterCard.id` 的模型，在同 ID 格内循环往返；单格路线只待机，不进入其他 ID 的格子。格式刷保留巡逻站点 ID，扩展同组格子时请清除复制出的 `patrolId`，仅在需要生成野怪的初始格填写。
+
+巡逻野怪的消失按**战斗 ID** 判定，与关卡同口径：同一片巡逻区域（相同 `battleIds` + 相同 `unlock.requiredCells`）的格子按 `cellId` 升序把 `battleIds` **下标依次**摊开（第 `i` 格取 `battleIds[i % 长度]`，例如 `[60001, 60002]` 在 4 格里是 60001/60002/60001/60002），同一场战斗的格子共享通过状态 —— 任一格已占点即整片通过，该战斗的巡逻野怪停止出现。宝箱奖励规则另行接入。
 
 ### 随机站点的逐格建筑 ID（2026-10-27 批量填充）
 
@@ -146,7 +148,7 @@ python tools/map-editor/fill_site_buildings.py --id chapter_03 --no-publish
 - 描边青色虚线（`.cell.site-group`，`stroke-width:2.6` + `dasharray:6 4`）；
 - 右侧信息栏显示 `cellId 84 · boss_110 · 同战斗 id 共 11 格`；
 - 空格子点上去没有分组，行为不变；
-- `configId` 为空的站点按 `site.id` 分组，组里只有自己 —— 与以前一致。
+- 巡逻宝箱固定按 `site.id` 分组；普通站点 `configId` 为空时按唯一的 `site.id` 分组。
 
 顺带修了一处：找站点原来只比对 `site.cellId`（锚点），**多格 footprint 的站点被点到非锚点格子时会当成空格**。
 现在统一走 `siteAtCell()`（按 footprint 反查），渲染索引也把 footprint 里每一格都登记了。

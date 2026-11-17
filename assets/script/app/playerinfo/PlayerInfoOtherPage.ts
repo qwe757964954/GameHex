@@ -10,7 +10,8 @@ import { HeadArt } from '../HeadArt';
 import { buildOtherListData, formatBattleLevel, formatPower, formatServerWithParen, formatUid, formatUnionName, writeFailText } from './PlayerInfoTable';
 import type { IOtherEquipEntry } from './PlayerInfoTable';
 import { PLAYER_INFO_TEXTS } from './PlayerInfoTexts';
-import { playerInfoRepository, toIdText } from './PlayerInfoRepository';
+import { toIdString } from '../net/RequestGuard';
+import { playerInfoRepository } from './PlayerInfoRepository';
 import type { IPlayerInfoRepository, IPlayerInfoSnapshot } from './PlayerInfoRepository';
 
 const { ccclass, property } = _decorator;
@@ -155,7 +156,7 @@ export class PlayerInfoOtherPage extends PopupBase {
     }
 
     protected async onOpen(userData?: IOtherInfoParams): Promise<void> {
-        this.roleId = toIdText(userData?.roleId);
+        this.roleId = toIdString(userData?.roleId);
         this.serverId = Number(userData?.serverId) || 0;
         await this.reload();
     }
@@ -225,7 +226,7 @@ export class PlayerInfoOtherPage extends PopupBase {
             return;
         }
 
-        this.selfId = toIdText(self.roleId);
+        this.selfId = toIdString(self.roleId);
         this.snapshot = other.snapshot;
         this.applyFriends(friends);
 

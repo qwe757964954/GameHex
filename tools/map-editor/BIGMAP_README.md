@@ -124,12 +124,12 @@ node tools/map-editor/server.mjs           # 只起服务，手动访问 http://
 对账规则：布局里出现的 `cityId` / `monsterId` 必须在 `BigMap-城池配置` / `BigMap-野怪配置` 里存在，
 否则拒绝发布（否则进游戏就是「图上有城、表里没数值」）。
 
-命令行发布（同时写策划侧 `doc/塔防数据配置/json/sever` 一份）：
+命令行发布（同时写策划侧 `doc/塔防数据配置/json/sever/slgmap/` 一份，成功后删除 `sever` 根目录同名旧文件）：
 
 ```powershell
 python tools/map-editor/copy_bigmap_maps.py --dry-run
-python tools/map-editor/copy_bigmap_maps.py --id world_01
-tools\map-editor\copy-bigmap-maps.bat --id world_01
+python tools/map-editor/copy_bigmap_maps.py --id bigMap
+tools\map-editor\copy-bigmap-maps.bat --id bigMap
 ```
 
 发布不会写策划 `json/client`（写了会被 `ref_compress_json.py` 抄成 `assets/remoteRef` 副本）：

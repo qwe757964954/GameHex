@@ -174,7 +174,8 @@ test('103504 三行 = 精密陷阱 / trap_place / 七个参数逐档对齐设计
         const trap = rows.filter((row) => String(row.unitId) === UNIT_ID && Number(row.skillChainId) === CHAIN)
             .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
         assert.equal(trap.length, 3, '103504 必须三档俱全');
-        assert.deepEqual(trap.map((row) => Number(row.unlockHeroLevel)), [1, 20, 25]);
+        // 103504 是这张卡的**第 4 格** ⇒ 按「技能4 = 12 / 24 / 36」统一档位（2026-11-17）。
+        assert.deepEqual(trap.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
         for (const row of trap) {
             assert.equal(row.skillName, '精密陷阱');
             assert.equal(row.behaviorKey, ZC_TRAP_BEHAVIOR_KEY);

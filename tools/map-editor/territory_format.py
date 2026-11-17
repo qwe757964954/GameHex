@@ -127,7 +127,7 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
         issues.append("sites must be an array")
         sites_data = []
     sites: list[dict[str, Any]] = []
-    site_ids: set[str] = set()
+    site_ids: dict[str, str] = {}
     occupied: dict[int, str] = {}
     for index, raw in enumerate(sites_data):
         label = f"sites[{index}]"
@@ -138,9 +138,9 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
         if not isinstance(site_id, str) or not site_id or not ID_PATTERN.fullmatch(site_id):
             issues.append(f"{label}.id is invalid")
             site_id = f"invalid_{index}"
-        if site_id in site_ids:
+        if site_id in site_ids and not (raw.get("type") == "patrolChest" and site_ids[site_id] == "patrolChest"):
             issues.append(f"duplicate site id {site_id}")
-        site_ids.add(site_id)
+        site_ids[site_id] = raw.get("type")
         site_type = raw.get("type")
         if site_type not in SITE_TYPES:
             issues.append(f"{label}.type is invalid")
@@ -209,17 +209,23 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
             elif site_type == "fixedResource":
                 site["rewardId"] = raw["rewardId"]
         sites.append(site)
+    for site_id, site_type in site_ids.items():
+        if site_type == "patrolChest":
+            cells = [cell for site in sites if site["type"] == "patrolChest" and site["id"] == site_id
+                     for cell in site["footprint"]]
+            if not _connected(cells, rows, columns):
+                issues.append(f"patrol site {site_id} must be contiguous")
     site_by_cell = {site["cellId"]: site for site in sites}
-    dependency_state: dict[str, int] = {}
+    dependency_state: dict[int, int] = {}
 
     def visit_site(site: dict[str, Any]) -> None:
-        state = dependency_state.get(site["id"], 0)
+        state = dependency_state.get(site["cellId"], 0)
         if state == 1:
             issues.append(f"unlock dependency cycle at {site['id']}")
             return
         if state == 2:
             return
-        dependency_state[site["id"]] = 1
+        dependency_state[site["cellId"]] = 1
         for required_cell in site["unlock"]["requiredCells"]:
             if required_cell == start:
                 continue
@@ -228,7 +234,7 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
                 issues.append(f"site {site['id']} requires cell {required_cell}, but no fixed site owns it")
             else:
                 visit_site(dependency)
-        dependency_state[site["id"]] = 2
+        dependency_state[site["cellId"]] = 2
 
     for site in sites:
         visit_site(site)

@@ -79,6 +79,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.listen(ZCGameUiEvent.RequestUnitArt, this.onRequestUnitArt);
         this.listen(ZCGameUiEvent.RequestEffectArt, this.onRequestEffectArt);
         this.listen(ZCGameUiEvent.HexClick, this.onHexClick);
+        this.listen(ZCGameUiEvent.MonsterFocus, this.onMonsterFocus);
         this.listen(ZCGameUiEvent.DebugDrawCard, this.onDebugDrawCard);
         this.listen(ZCGameUiEvent.DebugAddGold, this.onDebugAddGold);
         this.listen(ZCGameUiEvent.UseArtifact, this.onUseArtifact);
@@ -190,6 +191,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
             finally { this.pendingEffectArt.delete(path); }
         })();
         this.pendingEffectArt.set(path, task);
+    }
+    private onMonsterFocus(hexId: number): void {
+        if (!this.phase.isPlaying || this.view.dragMoved) return;
+        if (this.model?.toggleMonsterFocus(hexId)) this.render();
     }
     private onHexClick(hexId: number): void {
         if (this.phase.isSettled || this.view.dragMoved) return;

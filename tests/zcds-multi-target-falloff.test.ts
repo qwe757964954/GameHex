@@ -70,22 +70,29 @@ test('多弹递减公式：固定颗数（凤凰降临 4 颗）不吃递减', ()
 
 // ── 二、配表真值（两份产物互校） ────────────────────────────────────────────────
 
-test('多弹：4 张卡的 bulletNum 行都带 bulletFalloff 0.4（两份产物一致）', () => {
+test('多弹：9 条链的 bulletNum 行都带 bulletFalloff，三档 0.4 / 0.35 / 0.3（两份产物一致）', () => {
+    //  2026-11-17 第 5 批：逐档 `extraBulletDamage` 没有消费点，改用 `bulletFalloff` 逼近 ——
+    //  第 2 颗 = (1 - falloff)，三档分别 36% / 42% / 49%；文案写「约为第 1 发的 60/65/70%」。
+    const expected: Record<number, number> = { 1: 0.4, 2: 0.35, 3: 0.3 };
     for (const rows of [readRows('pvpSkillPlan'), readClientRows('pvpSkillPlan')]) {
         const bullets = rows.filter((row) => String(row.statId ?? '') === 'bulletNum');
-        assert.equal(bullets.length, 12, '4 张卡 × 3 档');
+        assert.equal(bullets.length, 27, '9 条链 × 3 档');
         for (const row of bullets) {
-            assert.equal(params(row).bulletFalloff, 0.4,
-                `${row.modifierId} 缺 bulletFalloff`);
+            const tier = Number(row.skillLevel);
+            assert.equal(params(row).bulletFalloff, expected[tier],
+                `${row.modifierId} L${tier} 的 bulletFalloff`);
             assert.ok(Number(row.value) > 0, 'bulletNum 必须是正数才有额外弹');
         }
     }
 });
 
-test('普攻穿透：15 行都带 normalPierceFalloff 0.4，且不再误写成 pierceCount', () => {
+test('普攻穿透：6 行都带 normalPierceFalloff 0.4，且不再误写成 pierceCount', () => {
+    //  5 条链 → 3 条：101301 / 102402 的穿透是旧机制（穿甲苔刺），第 5 批按设计案换成多弹后清掉了。
+    //  3 条链 → 2 条：100701 也在第 7 批整条换成「破阵投枪」（`normalPierceCount` 那套清空，
+    //  改由 `lancePierceCount` 表达），只剩 100801 / 103501。
     for (const rows of [readRows('pvpSkillPlan'), readClientRows('pvpSkillPlan')]) {
         const pierce = rows.filter((row) => params(row).normalPierceCount != null);
-        assert.equal(pierce.length, 15, '5 条链 × 3 档');
+        assert.equal(pierce.length, 6, '2 条链 × 3 档');
         for (const row of pierce) {
             assert.equal(params(row).normalPierceFalloff, 0.4, `${row.modifierId} 缺衰减`);
             assert.equal(params(row).pierceCount, undefined,
@@ -94,21 +101,25 @@ test('普攻穿透：15 行都带 normalPierceFalloff 0.4，且不再误写成 p
     }
 });
 
-test('溅射：48 行按品级分档，同爆点第 2 个起 ×0.7，三档都低于普攻', () => {
+test('溅射：42 行按品级分档，同爆点第 2 个起 ×0.7，三档都低于普攻', () => {
     //  2026-11-16 技能设计案 V5：溅射基准改由设计案 L1~L3 定价，随「被动重设计」分批落地。
     //  本表按**当前配表快照**钉住，每落地一批就同步一次；新增链必须在这里登记档位，
     //  否则会被 DEFAULT_BAND 兜住而看不出漏配。
+    //  2026-11-17 第四批（克制条 20 条）：101302 / 102202 的「爆囊扩散」改成职业猎杀协议，
+    //  溅射能力被设计案收走 ⇒ 16 链降到 14 链。
     const BANDS: Record<string, readonly [number, number, number]> = {
         100802: [0.50, 0.54, 0.58],
         100902: [0.50, 0.54, 0.58],
         101002: [0.50, 0.55, 0.60],
-        101302: [0.20, 0.26, 0.32],
         101501: [0.50, 0.54, 0.58],
         101502: [0.32, 0.40, 0.48],
         101601: [0.50, 0.55, 0.60],
-        101602: [0.30, 0.38, 0.46],
-        101702: [0.12, 0.16, 0.20],
-        102202: [0.20, 0.26, 0.32],
+        //  2026-11-17 第 8 批：「巨囊弹体」按设计案 L1~L3 改成 30/34/38
+        //  （原来那组 30/38/46 是旧「爆囊扩散」的档位）。
+        101602: [0.30, 0.34, 0.38],
+        //  2026-11-17 第 9 批：101702「噬血蔓延」按设计案 L 列（Q2 裁定）改成 40/44/48，
+        //  原 12/16/20 是旧「爆囊扩散」的档位；同批把主链换成 `lifestealRate`。
+        101702: [0.40, 0.44, 0.48],
         102502: [0.20, 0.26, 0.32],
         102602: [0.50, 0.55, 0.60],
         102701: [0.20, 0.26, 0.32],
@@ -119,7 +130,7 @@ test('溅射：48 行按品级分档，同爆点第 2 个起 ×0.7，三档都�
     const DEFAULT_BAND: readonly [number, number, number] = [0.2, 0.26, 0.32];
     for (const rows of [readRows('pvpSkillPlan'), readClientRows('pvpSkillPlan')]) {
         const splash = rows.filter((row) => params(row).splashDamageRate != null);
-        assert.equal(splash.length, 48, '16 条链 × 3 档');
+        assert.equal(splash.length, 42, '14 条链 × 3 档');
         for (const row of splash) {
             const band = BANDS[String(row.skillChainId)] ?? DEFAULT_BAND;
             const rate = params(row).splashDamageRate;

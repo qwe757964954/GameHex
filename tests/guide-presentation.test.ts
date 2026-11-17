@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion } from '../assets/script/app/guide/model/GuidePresentation';
+import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion, PORTRAIT_BOX_WIDTH_RATIO } from '../assets/script/app/guide/model/GuidePresentation';
 
 test('对话条避开底栏焦点；无重叠保持原位，顶部空间不足时放在焦点下方', () => {
     for (const height of [1280, 1560]) {
@@ -27,18 +27,28 @@ test('台词保持原文，仅强调点它，文本中的富文本标签不能�
     assert.equal(formatGuideContent('<img src="x"/> &'), '&lt;img src="x"/&gt; &amp;');
 });
 
-test('立绘尺寸：瘦高图按目标高度，胖图（骨骼）被宽度上限钳住且不拉伸', () => {
-    // 埃莉斯静图 500×800、目标高 460 ⇒ 287.5 宽，正好贴着 720 屏宽的上限（288）。
-    assert.deepEqual(fitGuidePortrait(500, 800, 460, 720), { width: 287.5, height: 460 });
-    // 窄图不受钳制。
-    assert.deepEqual(fitGuidePortrait(300, 800, 460, 720), { width: 172.5, height: 460 });
-    // 豌豆骨骼 654×916 ⇒ 宽 328 > 288，按宽度钳，高度跟着降到 403.4（比例不变）。
-    const bone = fitGuidePortrait(654, 916, 460, 720);
-    assert.equal(bone.width, 288);
-    assert.ok(Math.abs(bone.height - 288 * (916 / 654)) < 1e-9);
-    assert.ok(Math.abs(bone.width / bone.height - 654 / 916) < 1e-12, '等比缩放，绝不拉伸');
+test('立绘尺寸：整张图 contain 进绿框（720 屏宽下 149×233），两种立绘都不得越框', () => {
+    const boxWidth = 720 * PORTRAIT_BOX_WIDTH_RATIO;   // ≈149
+    // 埃莉斯静图 500×800：高度顶满盒子，宽度 145.6 < 149。
+    const still = fitGuidePortrait(500, 800, boxWidth, 233);
+    assert.ok(Math.abs(still.height - 233) < 1e-9);
+    assert.ok(Math.abs(still.width - 500 * (233 / 800)) < 1e-9);
+    // 豌豆骨骼 654×916（更胖）：先顶到盒宽，高度跟着降到 208.6。
+    const bone = fitGuidePortrait(654, 916, boxWidth, 233);
+    assert.ok(Math.abs(bone.width - boxWidth) < 1e-9, '胖图由盒宽决定');
+    assert.ok(Math.abs(bone.height - boxWidth * (916 / 654)) < 1e-9);
+    assert.ok(bone.height < 233);
+    // 两种都在框内，且比例不变。
+    for (const size of [still, bone]) {
+        assert.ok(size.width <= boxWidth + 1e-9 && size.height <= 233 + 1e-9, '必须在绿框内');
+        const ratio = size.width / size.height;
+        assert.ok(Math.abs(ratio - (size === still ? 500 / 800 : 654 / 916)) < 1e-12, '等比缩放，绝不拉伸');
+    }
+    // 矮胖图由盒高决定。
+    assert.deepEqual(fitGuidePortrait(400, 100, boxWidth, 233), { width: boxWidth, height: boxWidth / 4 });
     // 非法入参 ⇒ 0 尺寸（调用方据此不显示空白框）。
-    assert.deepEqual(fitGuidePortrait(0, 916, 460, 720), { width: 0, height: 0 });
-    assert.deepEqual(fitGuidePortrait(654, 0, 460, 720), { width: 0, height: 0 });
-    assert.deepEqual(fitGuidePortrait(654, 916, 0, 720), { width: 0, height: 0 });
+    assert.deepEqual(fitGuidePortrait(0, 916, boxWidth, 233), { width: 0, height: 0 });
+    assert.deepEqual(fitGuidePortrait(654, 0, boxWidth, 233), { width: 0, height: 0 });
+    assert.deepEqual(fitGuidePortrait(654, 916, 0, 233), { width: 0, height: 0 });
+    assert.deepEqual(fitGuidePortrait(654, 916, boxWidth, 0), { width: 0, height: 0 });
 });

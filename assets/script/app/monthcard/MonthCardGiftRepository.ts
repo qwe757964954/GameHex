@@ -117,13 +117,11 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
      */
     readEndTimes(): Map<number, number> {
         const map = new Map<number, number>();
-        for (const raw of CacheMgr.instance.getTlCmdCardCache()) {
-            if (!raw || typeof raw !== 'object') continue;
-            const row = raw as unknown as Record<string, unknown>;
-            const plan = Number(row.resId);
-            if (!Number.isSafeInteger(plan) || plan <= 0) continue;
+        // `CmdCardCache.resId` 是 number；`endTime` 是 `sint64` ⇒ `Long`，走 core 的 toMillis。
+        for (const row of CacheMgr.instance.getTlCmdCardCache()) {
+            if (row.resId <= 0) continue;
             const endMs = toMillis(row.endTime);
-            if (endMs > 0) map.set(plan, endMs);
+            if (endMs > 0) map.set(row.resId, endMs);
         }
         return map;
     }

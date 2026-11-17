@@ -41,7 +41,7 @@ import {
     TERRITORY_SILVER_RES_ID,
     TERRITORY_STAMINA_RES_ID,
 } from '../territory/model/TerritoryResourceGain';
-import { territoryChestTierOfRewards } from '../territory/model/TerritoryChestTier';
+import { territoryChestTierOfRewards, type TerritoryChestTier } from '../territory/model/TerritoryChestTier';
 import { TERRITORY_CHEST_OPEN_FRAMES } from '../territory/model/TerritoryChestAnimation';
 import type { ITerritoryChestIconEntry } from '../territory/view/TerritoryChestView';
 import {
@@ -103,7 +103,6 @@ import {
 } from '../territory/model/TerritoryChapterSwitch';
 import { TERRITORY_TEXTS } from '../territory/application/TerritoryTexts';
 import { TerritoryMapView } from '../territory/view/TerritoryMapView';
-import { TerritoryChestOpenPage } from '../territory/view/TerritoryChestOpenPage';
 import {
     acquireIntroHud,
     applyIntroHud,
@@ -137,7 +136,7 @@ import { LoadingPopup } from '../common/LoadingPopup';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { TerritoryUiEvent, TerritoryViewEvent, type TerritoryIntent,
     type ITerritoryRenderEvent, type ITerritoryCommandEvent } from '../territory/application/TerritoryEvents';
-import { guideMapFocusCells, type ITerritoryRenderState } from '../territory/application/TerritoryViewState';
+import { guideMapFocusCells, isTerritoryChestActionable, type ITerritoryRenderState } from '../territory/application/TerritoryViewState';
 
 import { ICON_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
@@ -166,6 +165,15 @@ const TOP_HUD_NODE_NAME = 'TopHud';
  * 不是平均线。`MainTaskEntry` 实测就是最高的（305px），也是用户红框画在它上方的原因。
  */
 const BOTTOM_HUD_NODE_NAMES = ['MainTaskEntry', 'BeginGame', 'ChestBar'] as const;
+
+/**
+ * 领地宝箱「演出窗口」的兜底时长：点开箱子后这么久还没等到奖励回包，就强制把引导层放回来。
+ *
+ * 为什么不靠 `presentRewards` 一定被调用：`passCell` 的回包可能失败 / 丢失，那时奖励流程
+ * 根本不启动，窗口就没人关 —— 引导层会一直藏着，玩家下一句台词永远等不到。
+ * 8 秒 ≥ 正常一次往返 + 开箱表演，不会误伤。
+ */
+const CHEST_PRESENTATION_WATCHDOG_MS = 8000;
 
 /**
  * 在 `root` 子树里按名字找节点（深度优先，含 `root` 自己）。
@@ -412,6 +420,8 @@ export class MainTerritoryMap extends Component {
         this.controllerResources = resources;
         EventMgr.instance.on(TerritoryViewEvent.Render, this.onRender, this);
         EventMgr.instance.on(TerritoryViewEvent.Command, this.onCommand, this);
+        // 点开宝箱那一下就要把引导遮罩关掉（奖励回包比这一下晚一个往返，见 `onChestTapIntent`）。
+        EventMgr.instance.on(TerritoryUiEvent.Intent, this.onChestTapIntent, this);
         void this.loadHexFlipAssets();
         void this.loadResourceGainIcons();
         void this.loadChestArt();
@@ -624,6 +634,9 @@ export class MainTerritoryMap extends Component {
         // 「等流程接手」的订阅必须自己摘：它是挂在全局 ProcedureManager 上的，
         // 页面都没了还留着，下一次别的流程切换失败会回调到一个死节点上。
         this.stopBattleSwitchWatch();
+        // 页面没了就把演出窗口交还（计时器也不会再往一个死页面上挂回调）。
+        // 引导层若已随页面一起拆掉，它自己的监听早就摘了，这一发是空转。
+        this.endChestPresentation();
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
         EventMgr.instance.offTarget(this);
@@ -1468,6 +1481,7 @@ export class MainTerritoryMap extends Component {
             map: state.map,
             layout: state.layout,
             art: state.art,
+            monsterPatrols: state.monsterPatrols,
             progress: state.progress,
             revealedCells: state.revealedCells,
             // 提前披露的格（2026-11-09）：视图据此给还没激活的关卡建筑画 35% 虚影。
@@ -1901,6 +1915,8 @@ export class MainTerritoryMap extends Component {
      */
     private guideFocusKey = '';
     private guideFocusCell: number | null = null;
+    /** 领地宝箱「演出窗口」的兜底计时器（回包丢了也要把引导层还回去，见 `openChestPresentation`）。 */
+    private chestPresentationWatchdog: ReturnType<typeof setTimeout> | null = null;
 
     /** 优先保持当前可见的焦点格；布局或滚动使它离屏时重新选择。 */
     getGuideFocusNode(focusNode: string): Node | null {
@@ -1939,7 +1955,12 @@ export class MainTerritoryMap extends Component {
         originCellId?: number | null,
         presentation?: ITerritoryRewardPresentation,
     ): void {
-        if (!rewards.length) return;
+        // 奖励到了 ⇒ 兜底计时器收掉：后面每个分支自己负责把「演出窗口」关干净。
+        this.cancelChestPresentationWatchdog();
+        if (!rewards.length) {
+            this.endChestPresentation();
+            return;
+        }
         // 2026-11-10 需求 ③：任何来源的领奖都查一次「本次新达成可升级」的英雄。
         // 徽标是纯表现且挂在底栏（比地图覆盖层更外层），放在所有分流之前 ⇒
         // 随机格 / 固定格 / 银币宝箱 / 挂机弹窗四条路都覆盖，也不会被开箱表演盖住。
@@ -1952,12 +1973,14 @@ export class MainTerritoryMap extends Component {
                 resId: reward.resId,
                 number: reward.amount,
             })) as unknown as CmdGoods[]);
+            this.endChestPresentation();
             return;
         }
         // 随机资源格：**不播开箱、也不弹奖励窗**，直接在格子上喷资源（需求 2026-10-22 §1 / 2026-10-26 §3）。
         // 由 Controller 指定（`{ chest: false }`），页面不自己判格子类型 —— 那是玩法口径。
         if (presentation?.chest === false) {
             void this.playCellGains(rewards, cellId);
+            this.endChestPresentation();
             return;
         }
         // 银币宝箱（`rewardId = 1023` / `coinBox` 蓝银金属箱）：**独立**打开动画（2026-11-10）。
@@ -1971,19 +1994,68 @@ export class MainTerritoryMap extends Component {
         if (presentation?.silverChest === true) {
             if (cellId !== null && cellId >= 0) this.mapView.playSilverChestOpen(cellId);
             this.settleRewards(rewards, cellId);
+            this.endChestPresentation();
             return;
         }
         const tier = cellId !== null && cellId >= 0 ? territoryChestTierOfRewards(rewards) : null;
         if (!tier) {
             this.settleRewards(rewards, cellId);
+            this.endChestPresentation();
             return;
         }
-        // 领地宝箱 ⇒ **进流程先弹**「宝箱开启」奖励页。
-        //
-        // 页面自己画着开启态宝箱 + 整批奖励，就是这一路的开箱成品表现；旧的地图内
-        // `chest_seq_*` 三档表演（木质藤蔓箱，美术与本页金属箱不一致）不再前置 ——
-        // 否则玩家要先看完整段过场才看得到奖励，同一件事还播两遍。
-        this.presentChestRewards(rewards);
+        // 领地宝箱 ⇒ ① 地图上的**开箱粒子动画**（`chest_seq_*` 三档）
+        //           ② 交组合层：橙卡英雄页（卡牌 id 升序）→ ③ 统一「获得奖励」弹窗。
+        // 窗口**不在这里关**：动画、英雄页、奖励窗都还在里面，收尾在链路的终点。
+        this.presentChestRewards(rewards, cellId, tier);
+    }
+
+    /**
+     * 「翻出来的宝箱被点开」那一下 ⇒ 立刻关掉引导遮罩（用户 2026-11-17 第 12 条 ①）。
+     *
+     * 🔴 **不能等奖励到账才关**：`passCell` 是异步回包（`handleUnlockThenPass` → `runCellWrite`），
+     *    从点箱子到奖励到账隔着一次往返。这期间引导已经推进到 2-3，会先把全屏遮罩和台词亮出来、
+     *    等粒子动画一起播又被整体藏掉 —— 玩家看到的就是「遮罩没跟着动画同步关」。
+     *    在**手指落下去那一刻**就开窗口，动画 / 英雄页 / 统一奖励窗全程都在窗口里。
+     *
+     * 只认「已翻出、还没领」的那一下：翻地（第一次点）不会播奖励动画，不该关遮罩。
+     */
+    private readonly onChestTapIntent = (event: { readonly intent?: TerritoryIntent }): void => {
+        const intent = event?.intent;
+        // 随机格是「喷资源」那一路（不播开箱动画），不归这里管。
+        if (!intent || intent.kind !== 'siteTap') return;
+        const state = this.state;
+        const progress = state?.progress;
+        if (!state || !progress) return;
+        // 🔴 必须限定在**宝箱**上：关卡格 / 已通关资源格也都是「已解锁未拥有」，
+        //    放过去就会在点它们时把引导层藏起来等一次永远不会来的开箱（5-1 点关卡格踩过）。
+        if (!isTerritoryChestActionable(state, intent.cellId)) return;
+        // 只要第二步（宝箱已翻出来、这一次是点开领奖）：第一步翻地不播奖励动画。
+        if (!progress.isCellUnlocked(intent.cellId) || progress.isOwned(intent.cellId)) return;
+        this.openChestPresentation();
+    };
+
+    private openChestPresentation(): void {
+        this.cancelChestPresentationWatchdog();
+        EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: true });
+        // 兜底：写请求失败 / 回包丢失时（`presentRewards` 根本不会被调用），引导层不能一直藏着。
+        // ⚠️ 这里**不判 `isValid`**：页面先被销毁时窗口同样没人关，这一发是唯一能把引导层放回来的。
+        this.chestPresentationWatchdog = setTimeout(() => {
+            this.chestPresentationWatchdog = null;
+            console.warn('[MainTerritoryMap] 开箱演出窗口超时（未收到奖励回包），交还引导层');
+            EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
+        }, CHEST_PRESENTATION_WATCHDOG_MS);
+    }
+
+    private cancelChestPresentationWatchdog(): void {
+        if (this.chestPresentationWatchdog === null) return;
+        clearTimeout(this.chestPresentationWatchdog);
+        this.chestPresentationWatchdog = null;
+    }
+
+    /** 关掉演出窗口（重复调用无害：引导层按值去重）。 */
+    private endChestPresentation(): void {
+        this.cancelChestPresentationWatchdog();
+        EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
     }
 
     /**
@@ -2152,23 +2224,60 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 开箱表演结束 ⇒ 弹「宝箱开启」奖励页（蓝湖「宝箱开启」设计稿）。
+     * 领地宝箱的完整链路（2026-11-17 用户口径，替换原来的「直接弹宝箱开启页」）：
      *
-     * 与 `settleRewards` 的分工：
-     *  · 这一路**整批**奖励都由全屏奖励页承载（含银币 / 体力）—— 设计稿的卡本身画了
-     *    `+4095` / `+3` 的货币样式，再走 `settleRewards` 会二次弹 `FW.ShowReward`；
-     *  · 银币宝箱（`silverChest`，另一套 `coinBox` 表演）/ 随机格（`chest:false`）/
-     *    挂机征收（`popup:true`）都不走这里，保持原样。
+     *  ① **先播原有的开箱粒子动画**（`TerritoryMapView.playChestOpen`：`chest_seq_*` 开盖补帧 +
+     *     三档镜头 / 光柱 / 粒子 / 飞图标 + 输入锁），演完再往下走；
+     *  ② 演完发 {@link TerritoryUiEvent.ChestRewardsReady} 交组合层：
+     *     橙卡（`pvpCard.rarity === 4`）碎片 ⇒ 按卡牌 id 升序逐个弹英雄页；
+     *  ③ 英雄页全关掉 ⇒ 统一「获得奖励」弹窗（`FW.ShowReward`，由组合层调）。
+     *
+     * ⚠️ 动画**播不了**（格子挪出视口 / 覆盖层没建 / 视图已回收）必须直接进 ②：
+     *    表现失败不能把整箱奖励吞掉。
+     * ⚠️ 奖励本身在应用层已经结算（`handleUnlockThenPass` → `showRewards`，见 MVC 边界用例
+     *    「页面不许依赖业务层」），这里只负责「怎么演、什么时候给玩家看」。
      */
     private presentChestRewards(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
+        cellId: number,
+        tier: TerritoryChestTier,
     ): void {
         if (!rewards.length) return;
-        void TerritoryChestOpenPage.open({
-            userData: {
-                goods: rewards.map((reward) => ({ resId: reward.resId, number: reward.amount })),
-            },
-        });
+        // 演出窗口从**点开箱子这一刻**开始（不是动画起播那一刻）：取图标是异步的，
+        // 中间几十毫秒里引导层若还醒着，2-3 的台词就会抢在粒子前面开口。
+        EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: true });
+        void this.runChestOpening(rewards, cellId, tier);
+    }
+
+    /** 开箱动画 → 交棒组合层；`playChestOpen` 起播失败时立刻交棒（奖励不能吞）。 */
+    private async runChestOpening(
+        rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
+        cellId: number,
+        tier: TerritoryChestTier,
+    ): Promise<void> {
+        const goods = rewards.map((reward) => ({ resId: Number(reward.resId), number: Number(reward.amount) || 0 }));
+        const handOff = (): void => {
+            // 地图页先塌了就没有「交给组合层」可言 ⇒ 直接把演出窗口关掉，别把引导层锁死。
+            if (!this.isValid) {
+                EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
+                return;
+            }
+            EventMgr.instance.emit(TerritoryUiEvent.ChestRewardsReady, { owner: this, rewards: goods });
+        };
+        // 图标先取齐再起播：`chest_seq` 的飞行图标 / 光柱用的就是这一批 frame，现取会喷空图。
+        // 取图失败只是「有数字没图标」，不许拦着开箱动画和后续奖励链。
+        let entries: ITerritoryChestIconEntry[] = [];
+        try {
+            entries = await this.collectRewardIcons(rewards);
+        } catch (error) {
+            console.warn('[MainTerritoryMap] 开箱奖励图标加载异常，按无图继续', error);
+        }
+        if (!this.isValid) {
+            EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
+            return;
+        }
+        if (this.mapView.playChestOpen(cellId, tier, entries, handOff)) return;
+        handOff();
     }
 
     /**

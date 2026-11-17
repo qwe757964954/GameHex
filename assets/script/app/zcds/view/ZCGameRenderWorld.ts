@@ -1,5 +1,7 @@
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
+import { ZCNeutralResourceType } from '../model/ZCNeutralResourceGroup';
+import { hexGridDistance } from '../../../core/hex/HexGridLayout';
 import { zcMonsterPosition } from '../model/systems/ZCNeutralFeatureSystem';
 import type { IZCDeferredBattleArt } from '../application/ZCGamePreparedResources';
 import { EffectAsset, Graphics, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
@@ -184,6 +186,7 @@ type ZCUnitPresentation = Parameters<ZCUnitView['render']>[0];
 type ZCOutlineMode = 'battle' | 'spawn';
 
 interface ZCPlacedHex {
+    hexId: number;
     x: number;
     y: number;
     view: ZCHexView;
@@ -197,6 +200,7 @@ interface ZCSceneComponent {
 interface ZCRenderWorldOptions {
     owner: object;
     presentationArt: IZCBattlePresentationArt;
+    ownerNames?: ReadonlyMap<ZCOwner, { readonly name: string }>;
     mapLayer: Node;
     /**
      * Board layer order comes from ZCGameBoard.prefab; the wall layer is inserted after OutlineLayer.
@@ -732,7 +736,9 @@ export class ZCGameRenderWorld {
             // 那个分支永远走不到，真掉组件时反而会悄悄补一个空视图（Inspector 引用全 null，表现全无）。
             const view = node.getComponent(ZCHexView);
             //  点击只派发意图（带 `hexId`），处理方由控制器订阅 —— 渲染世界不再收上层回调。
-            view.initialize(() => EventMgr.instance.emit(ZCGameUiEvent.HexClick, config.id));
+            view.initialize(() => EventMgr.instance.emit(ZCGameUiEvent.HexClick, config.id), config.id);
+            view.monsterFocusButton.node.active = false;
+            view.setMonsterGround(null);
             // 建筑专属外观解析整局不变，新建视图时喂一次（与 unit frame resolver 同口径）。
             view.setBuildingFrameResolver((cardId, building, owner) => this.resolveBuildingFrame(cardId, building));
             // 抬升动效要临时挂到「所有层之上」= 棋盘根节点的末位（见 `ZCHexView.setRaised`）；
@@ -764,7 +770,16 @@ export class ZCGameRenderWorld {
             const entityId = this.createEntity('hex', config.id, node);
             this.hexViews.set(entityId, view);
             this.hexEntityBySource.set(config.id, entityId);
-            placedById.set(config.id, { x: viewX, y: viewY, view, node });
+            placedById.set(config.id, { hexId: config.id, x: viewX, y: viewY, view, node });
+        }
+        for (const [originId, itemId] of this.resourceItemByHex) {
+            const item = neutralResourceItemOf(itemId);
+            if (!item?.territoryIcon) continue;
+            const ground = this.options.neutralResourceFrames?.get(item.territoryIcon);
+            if (!ground) throw new Error(`野怪领地地表未加载：${item.territoryIcon}`);
+            for (const [id, placed] of placedById) {
+                if (hexGridDistance(mapConfig.hexes[originId], mapConfig.hexes[id]) <= item.feature.wakeRange) placed.view.setMonsterGround(ground);
+            }
         }
         // 只重排 HexLayer 内的地块；棋盘图层顺序仍由 ZCGameBoard.prefab 声明。
         const placed = layout.paintOrder.flatMap((id) => {
@@ -837,11 +852,20 @@ export class ZCGameRenderWorld {
         overlay: Node,
     ): void {
         for (const { x, y, view } of placed) {
+            const focus = view.monsterFocusButton.node;
+            const offset = focus.position;
+            const offsetY = offset.y;
+            focus.setParent(overlay);
+            focus.setPosition(x, y + offsetY, 0);
+            this.reparentedNodes.push(focus);
+        }
+        for (const { x, y, view, hexId } of placed) {
             const health = view.healthBar?.node;
             if (!health) continue;
             const offset = health.position;
             const offsetX = offset.x;
-            const offsetY = offset.y;
+            const monster = neutralResourceItemOf(this.resourceItemByHex.get(hexId))?.resourceType === ZCNeutralResourceType.Monster;
+            const offsetY = monster ? 80 : offset.y;
             const offsetZ = offset.z;
             health.setParent(overlay);
             health.setPosition(x + offsetX, y + offsetY, offsetZ);
@@ -1087,6 +1111,8 @@ export class ZCGameRenderWorld {
         const now = this.visualTime(frame);
         for (const hex of this.neutralFeatureHexStates.values()) {
             const feature = hex.neutralFeature;
+            const monsterView = this.hexViews.get(this.hexEntityBySource.get(hex.id));
+            if (monsterView && typeof feature?.awake === 'boolean') monsterView.renderMonsterFocus(hex, now);
             if (feature?.patrol && !feature.claimed) {
                 const view = this.hexViews.get(this.hexEntityBySource.get(hex.id));
                 if (view) {
@@ -1134,7 +1160,7 @@ export class ZCGameRenderWorld {
         this.neutralFeatureHexStates.clear();
         for (const hex of frame.snapshot.hexes) {
             const feature = hex.neutralFeature;
-            if (feature?.patrol || feature?.claimed) this.neutralFeatureHexStates.set(hex.id, hex);
+            if (typeof feature?.awake === 'boolean' || feature?.claimed) this.neutralFeatureHexStates.set(hex.id, hex);
         }
         this.neutralFeatureSetReady = true;
     }
@@ -1404,7 +1430,7 @@ export class ZCGameRenderWorld {
         if (!cardRevealPrefab) return;
         const activeIds = this.cardRevealIds;
         activeIds.clear();
-        for (const reveal of frame.cardReveals) activeIds.add(reveal.id);
+        for (const reveal of frame.cardReveals) if (!reveal.monsterClaim) activeIds.add(reveal.id);
         for (const [sourceId, entityId] of this.cardRevealEntityBySource) {
             if (activeIds.has(sourceId)) continue;
             this.removeEntity(entityId);
@@ -1412,6 +1438,7 @@ export class ZCGameRenderWorld {
             if (this.shownPlayerCardReveals.delete(sourceId)) reportGuideComplete('cardRevealFinished');
         }
         for (const reveal of frame.cardReveals) {
+            if (reveal.monsterClaim) continue;
             let entityId = this.cardRevealEntityBySource.get(reveal.id);
             if (reveal.owner === 'player' && reveal.building !== ZCBuildingType.Mine
                 && this.visualTime(frame) >= reveal.startedAt) this.shownPlayerCardReveals.add(reveal.id);
@@ -1479,6 +1506,7 @@ export class ZCGameRenderWorld {
                 // 同上：视图组件在 ZCGameLegendBanner.prefab 上。
                 const view = node.getComponent(ZCGameLegendBannerView);
                 view.setArtResolver((item) => this.resolveLegendArt(item));
+                view.setOwnerNames(this.options.ownerNames);
                 // 每帧读取本局表，头像晚到后自动显示。
                 view.setPortraitResolver((owner) => this.options.presentationArt.legendPortraitFrames.get(owner) ?? null);
                 entityId = this.createEntity('legendBanner', reveal.id, node);

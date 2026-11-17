@@ -1,7 +1,7 @@
 /**
  * 引导台词与立绘配置的判据。
  *
- * 台词表是从设计案「NPC与文案」页提取的 44 句 —— 这里用真表当夹具，
+ * 台词表是从设计案「NPC与文案」页提取的 39 句 —— 这里用真表当夹具，
  * 表被改坏（丢句 / 组错 / 说话人写错）会直接红。
  */
 
@@ -25,28 +25,31 @@ const LINES = parseGuideDialogLines(RAW.v.map((row) => {
     return out;
 }));
 
-test('真表：44 句全部解析成功，id 是数字且不重复', () => {
-    assert.equal(LINES.length, 44);
+test('真表：39 句全部解析成功，id 是数字且不重复', () => {
+    assert.equal(LINES.length, 39);
     assert.equal(LINES.every((line) => typeof line.id === 'number' && Number.isSafeInteger(line.id)), true);
     const ids = new Set(LINES.map((line) => line.id));
-    assert.equal(ids.size, 44);
-    // id = 组序号 × 100 + 句序号 ⇒ 首句 101、末句 1603
+    assert.equal(ids.size, 39);
+    // id = 组序号 × 100 + 句序号 ⇒ 首句 101、末句 1403（旧 D03 删掉后整条 id 顺位前移）
     assert.equal(LINES[0].id, 101);
-    assert.equal(LINES[LINES.length - 1].id, 1603);
+    assert.equal(LINES[LINES.length - 1].id, 1403);
 });
 
-test('真表：16 个台词组，组号是 D01~D16', () => {
+test('真表：14 个台词组，组号是 D01~D14 且中间不留空档', () => {
     const groups = groupGuideDialogLines(LINES);
-    assert.equal(groups.size, 16);
+    assert.equal(groups.size, 14);
     const keys = [...groups.keys()].sort();
     assert.equal(keys[0], 'D01');
-    assert.equal(keys[keys.length - 1], 'D16');
+    assert.equal(keys[keys.length - 1], 'D14');
+    // 组号必须连续：删组后要么顺位前移，要么这里会露出来。
+    assert.deepEqual(keys, keys.map((_, index) => `D${String(index + 1).padStart(2, '0')}`));
 });
 
-test('真表：每组 2~3 句，且组内按 order 升序、句尾字母连续', () => {
+test('真表：每组 1~3 句，且组内按 order 升序、首句 order 恒为 1', () => {
     const groups = groupGuideDialogLines(LINES);
     for (const [group, lines] of groups) {
-        assert.ok(lines.length >= 2 && lines.length <= 3, `${group} 句数异常：${lines.length}`);
+        // 删掉旧 D03（单句翻地提示）后每组都是 2~3 句；上限仍按 3 句守。
+        assert.ok(lines.length >= 1 && lines.length <= 3, `${group} 句数异常：${lines.length}`);
         const orders = lines.map((line) => line.order);
         assert.deepEqual(orders, [...orders].sort((a, b) => a - b), `${group} 组内未按 order 排序`);
         assert.equal(orders[0], 1, `${group} 首句 order 应为 1`);
@@ -101,19 +104,36 @@ test('立绘来源：D01 组 2 句 = 骨骼(豌豆游侠) → 静图(埃莉斯)'
     );
 });
 
-test('立绘来源：D16 组 3 句交替，末句回到骨骼', () => {
+test('立绘来源：D14 组 3 句交替，末句回到骨骼', () => {
     const groups = groupGuideDialogLines(LINES);
-    const d16 = groups.get('D16');
-    assert.ok(d16);
+    const d14 = groups.get('D14');
+    assert.ok(d14);
     assert.deepEqual(
-        d16.map((line) => getGuidePortraitAsset(line.speaker)?.kind ?? null),
+        d14.map((line) => getGuidePortraitAsset(line.speaker)?.kind ?? null),
         ['prefab', 'sprite', 'prefab'],
     );
 });
 
-test('全部 44 句都能找到立绘来源（不再有「无立绘」的角色）', () => {
+test('全部 39 句都能找到立绘来源（不再有「无立绘」的角色）', () => {
     const missing = LINES
         .filter((line) => getGuidePortraitAsset(line.speaker) === null)
         .map((line) => line.id);
     assert.deepEqual(missing, []);
+});
+
+test('id 与组号、句序严格对应（删组顺位后最容易错的地方）', () => {
+    const groupNumber = (group: string) => Number(group.slice(1));
+    const bad = LINES.filter((line) => Math.floor(line.id / 100) !== groupNumber(line.group)
+        || line.id % 100 !== line.order);
+    assert.deepEqual(bad.map((line) => `${line.id}/${line.group}/${line.order}`), []);
+});
+
+test('步骤表的 dialogId 全部能在台词表里找到组，且没有孤儿组', () => {
+    const raw = JSON.parse(readFileSync('assets/remoteRef/guideStep.json', 'utf8')) as { k: string[]; v: unknown[][] };
+    const used = raw.v
+        .map((row) => row[raw.k.indexOf('dialogId')])
+        .filter((value): value is string => typeof value === 'string' && value.length > 0);
+    const groups = new Set(groupGuideDialogLines(LINES).keys());
+    assert.deepEqual(used.filter((id) => !groups.has(id)), [], '步骤引用了不存在的台词组');
+    assert.deepEqual([...groups].filter((group) => !used.includes(group)), [], '有台词组没有任何步骤在用');
 });

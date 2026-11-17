@@ -1,4 +1,6 @@
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { TerritoryMonsterPatrolView } from './TerritoryMonsterPatrolView';
+import type { ITerritoryMonsterPatrol } from '../model/TerritoryMonsterPatrol';
 import {
     _decorator,
     Color,
@@ -137,6 +139,7 @@ export { TERRITORY_ASYNC_PVP_BUBBLE_TEXT } from '../model/TerritoryLevelBubble';
 
 /** 地图渲染需要的建筑帧（页面持有更全的一套，多出的字段不影响结构类型兼容）。 */
 export interface ITerritoryMapArt {
+    readonly monsterPrefabs?: ReadonlyMap<number, Prefab>;
     /** 地图底图（`MapLayer/MapBackground` 的帧；null = 保持 prefab 默认）。 */
     readonly background: SpriteFrame | null;
     /**
@@ -437,6 +440,7 @@ interface ITerritoryChestCameraBase {
 
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
+    readonly monsterPatrols?: readonly ITerritoryMonsterPatrol[];
     readonly stationStates: ReadonlyMap<number, ITerritoryStationState>;
     readonly map: TerritoryMapConfig;
     readonly layout: ITerritoryMapLayout;
@@ -539,6 +543,7 @@ export interface ITerritoryGainReadout {
  */
 @ccclass('TerritoryMapView')
 export class TerritoryMapView extends Component {
+    private monsterPatrolView: TerritoryMonsterPatrolView | null = null;
     /**
      * `MapLayer/MapBackground`：地图底图。
      *
@@ -973,6 +978,7 @@ export class TerritoryMapView extends Component {
     }
 
     protected onDestroy(): void {
+        this.monsterPatrolView?.clear();
         // 过场云盖层自己持着帧引用（`TerritoryBattleCover.held`，跨流程交接时那几帧比页面活得久）。
         // 页面都没了就要还回去，否则这一屏云图永远掉不出引用计数。
         this.battleCover?.dispose();
@@ -2095,6 +2101,7 @@ export class TerritoryMapView extends Component {
      */
     update(dt: number): void {
         this.hexFlip.step(dt);
+        this.monsterPatrolView?.step(Date.now());
         // 新地块生成：与翻格同一帧序，排在 `hexFlip.step` 之后（同格撞车时翻格先写、
         // 这里再写会把缩放掰回生成曲线 —— 所以 `syncFlip` 起播时会 `stop` 掉同格的生成动画，
         // 走到这里就不存在两套缩放抢同一格的情况）。
@@ -2376,6 +2383,10 @@ export class TerritoryMapView extends Component {
         this.syncClouds(input);
         this.syncFlip(input);
         this.syncStations(input);
+        if (input.monsterPatrols?.length && input.art.monsterPrefabs) {
+            this.monsterPatrolView ??= new TerritoryMonsterPatrolView(this.stationIconLayer);
+            this.monsterPatrolView.sync(input.map, input.layout, input.monsterPatrols, input.art.monsterPrefabs, Date.now());
+        } else this.monsterPatrolView?.clear();
         // 虚影排在站点之后：它只往自己那一层加 `Icon`，与站点视图互不覆盖；
         // 排最后是为了「这一帧谁是已激活」已经由 `syncStations` 落定（淡出判据读同一份进度）。
         this.syncGhosts(input);

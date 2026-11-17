@@ -223,6 +223,16 @@ export class ZCSnapshotCodec {
                     check(optional(feature.effect, v => oneOf(ZC_GATE_EFFECTS, v)), `${prefix}.effect`);
                     for (const key of ['readyAt', 'windowUntil', 'nextAttackAt', 'cooldownSeconds', 'startedAt', 'lineProgress', 'lineDamage', 'portalAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
                     check(optional(feature.awake, v => typeof v === 'boolean'), `${prefix}.awake`);
+                    check(optional(feature.monsterResourceId, v => integer(v) && !!neutralResourceItemOf(Number(v))), `${prefix}.monsterResourceId`);
+                    for (const key of ['unlockedOwners', 'focusOwners']) check(optional(feature[key], v => Array.isArray(v)
+                        && new Set(v).size === v.length && v.every(owner => ownerSet.has(owner))), `${prefix}.${key}`);
+                    check(optional(feature.focusReadyAt, v => record(v) && Object.entries(v).every(([owner, at]) => ownerSet.has(owner) && nonnegative(at))), `${prefix}.focusReadyAt`);
+                    check(optional(feature.retaliationUnitIds, v => Array.isArray(v) && new Set(v).size === v.length
+                        && v.every(id => integer(id) && id > 0)), `${prefix}.retaliationUnitIds`);
+                    for (const key of ['disengagedAt', 'regenUpdatedAt']) check(optional(feature[key], v => nonnegative(v)
+                        && Number(v) <= value.elapsedSeconds), `${prefix}.${key}`);
+                    if (Array.isArray(feature.focusOwners)) check(feature.focusOwners.every(owner => Array.isArray(feature.unlockedOwners)
+                        && feature.unlockedOwners.includes(owner)), `${prefix}.focusOwners.unlocked`);
                     if (feature.patrol !== undefined) {
                         const patrol = feature.patrol;
                         const cells = config.map.resourcePoints?.find(point => point.row * config.map.columns + point.column === hex.id)?.patrolCells;
@@ -306,11 +316,13 @@ export class ZCSnapshotCodec {
                     check(nonnegative(flight.startedAt) && flight.startedAt <= data.elapsedSeconds, `${path}.portalFlight.startedAt`);
                 }
             }
+            check(optional(unit.neutralReinforcement, v => typeof v === 'boolean'), `${path}.neutralReinforcement`);
             if (unit.inheritedStats !== undefined) {
                 check(record(unit.inheritedStats), `${path}.inheritedStats`);
                 if (record(unit.inheritedStats)) for (const key of ['attack', 'moveSpeed', 'attackInterval', 'attackRange', 'bodyRadius']) {
                     check(nonnegative(unit.inheritedStats[key]), `${path}.inheritedStats.${key}`);
                 }
+                if (record(unit.inheritedStats)) check(optional(unit.inheritedStats.maxHp, v => nonnegative(v) && Number(v) > 0), `${path}.inheritedStats.maxHp`);
                 if (record(unit.inheritedStats)) check(typeof unit.inheritedStats.attackInterval === 'number'
                     && unit.inheritedStats.attackInterval > 0, `${path}.inheritedStats.attackInterval`);
             }
@@ -379,6 +391,8 @@ export class ZCSnapshotCodec {
             check(nonnegative(projectile.durationSeconds) && projectile.durationSeconds > 0, `${path}.durationSeconds`);
             for (const key of ['canHitAir', 'empowered']) check(typeof projectile[key] === 'boolean', `${path}.${key}`);
             check(optional(projectile.remainingPierces, integer), `${path}.remainingPierces`);
+            //  弹体体积倍率（2026-11-17 磁电菇 101602）：正数，缺省 1。漏了这条的话脏值会悄悄过校验。
+            check(optional(projectile.sizeScale, v => nonnegative(v) && (v as number) > 0), `${path}.sizeScale`);
             check(optional(projectile.pierceFalloff, v => nonnegative(v) && (v as number) <= 1), `${path}.pierceFalloff`);
             check(optional(projectile.executeChance, v => nonnegative(v) && (v as number) <= 1), `${path}.executeChance`);
             check(optional(projectile.criticalHit, v => typeof v === 'boolean'), `${path}.criticalHit`);
@@ -394,6 +408,13 @@ export class ZCSnapshotCodec {
             check(optional(projectile.hitUnitIds, v => Array.isArray(v)
                 && v.every(id => integer(id) && (id as number) > 0 && (id as number) < data.nextUnitId)
                 && new Set(v).size === v.length), `${path}.hitUnitIds`);
+            //  穿过己方单位回血（2026-11-17 急冻瓜「贯穿滋养」102401）：比例 / 剩余额度 / 已治 id。
+            //  额度是「每颗弹道还剩几次」，还原时必须原样带回 —— 丢了就等于读档后白重算一遍。
+            check(optional(projectile.allyHealPct, v => nonnegative(v) && (v as number) <= 1), `${path}.allyHealPct`);
+            check(optional(projectile.allyHealLeft, nonnegative), `${path}.allyHealLeft`);
+            check(optional(projectile.allyHealIds, v => Array.isArray(v)
+                && v.every(id => integer(id) && (id as number) > 0 && (id as number) < data.nextUnitId)
+                && new Set(v).size === v.length), `${path}.allyHealIds`);
             check(integer(projectile.skillId), `${path}.skillId`);
             for (const key of ['skillName']) check(typeof projectile[key] === 'string', `${path}.${key}`);
             for (const key of ['effectKey', 'projectileKey']) check(projectile[key] === null || typeof projectile[key] === 'string', `${path}.${key}`);

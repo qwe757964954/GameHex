@@ -192,16 +192,32 @@ export function chestOpenChestVisualOf(elapsed: number): IChestOpenChestVisual {
     };
 }
 
-/** 用升级表的真实碎片关联识别橙卡，排除橙色材料，同英雄只展示一次。 */
-export function chestOpenLegendHeroesOf(
-    entries: readonly { readonly resId: number; readonly quality: number; readonly number: number }[],
+/** 橙卡（金/传说）在 `pvpCard.rarity` 里的数值；1..4 依次 绿/蓝/紫/金。 */
+export const CHEST_LEGEND_CARD_RARITY = 4;
+
+/**
+ * 这一批奖励里的**橙卡碎片**英雄 id，按**卡牌 id 升序**。
+ *
+ * 🔴 判据是**卡牌品级**（`pvpCard.rarity === 4` = 金/传说），不是碎片道具的 `item.quality`：
+ * 碎片 `18003` 在 item 表里是 quality 2，按道具品质筛永远命中不了 —— 老实现（quality === 5）
+ * 在任何真实数据上都是空集，等于「获得传说英雄」从来没弹过。
+ *
+ * 碎片 → 英雄走 `cardLevelUp.costCardID`（升级表的真实关联），同英雄只展示一次；
+ * 多个橙卡碎片按卡牌 id 升序轮流展示（需求 2026-11-17 ②）。
+ */
+export function chestLegendHeroesOf(
+    entries: readonly { readonly resId: number; readonly number: number }[],
     rows: readonly { readonly id: string; readonly costCardID: string }[],
+    rarityOfCard: (cardId: string) => number,
 ): readonly string[] {
     const ids = new Set<string>();
     for (const entry of entries) {
-        if (entry.quality !== 5 || !(entry.number > 0)) continue;
+        if (!(entry.number > 0)) continue;
         const row = rows.find((one) => Number(one.costCardID) === entry.resId);
-        if (row) ids.add(row.id);
+        if (!row) continue;
+        if (rarityOfCard(row.id) !== CHEST_LEGEND_CARD_RARITY) continue;
+        ids.add(row.id);
     }
-    return Array.from(ids);
+    // 顺序是需求的一部分：多个橙卡按**卡牌 id 升序**逐个展示，不跟奖励数组顺序。
+    return Array.from(ids).sort((a, b) => Number(a) - Number(b));
 }

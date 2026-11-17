@@ -96,6 +96,7 @@ export class ZCNeutralFeatureSystem {
                 const card = findCatalogCard(item.feature.resId);
                 const definition = this.context.monsterDefinition(card);
                 hex.hp = hex.maxHp = definition.maxHp;
+                hex.neutralFeature.monsterResourceId = item.id;
                 hex.neutralFeature.awake = false;
                 hex.neutralFeature.nextAttackAt = 0;
             }
@@ -379,8 +380,8 @@ export class ZCNeutralFeatureSystem {
             const definition = this.context.definition(unit);
             const center = this.map.hexes[hex.id];
             const reach = ZCTargetingSystem.attackReach(definition, 80, this.context.rules?.combatDistanceScale ?? 1);
-            const unitHex = this.geometry.hexIdAt(unit.freeX, unit.freeY) ?? unit.sourceHexId;
-            const committed = this.territory(hex).includes(unitHex)
+            const unitHex = this.geometry.hexIdAt(unit.freeX, unit.freeY);
+            const committed = unitHex !== null && this.territory(hex).includes(unitHex)
                 || Math.hypot(unit.freeX - center.x, unit.freeY - center.y) <= reach;
             if (committed) return hex.id;
             const enemy = state.units.find(candidate => candidate.id === unit.targetUnitId

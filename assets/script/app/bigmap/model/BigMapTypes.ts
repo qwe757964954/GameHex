@@ -207,7 +207,8 @@ export interface IBigMapCampConfig {
     readonly rankResetTime: number;
     readonly warScoreReset: number;
     readonly buffGroupIds: readonly number[];
-    readonly buffEffectIds: readonly number[];
+    readonly occupyBuffEffectId: readonly Readonly<Record<string, number>>[];
+    readonly campDefenceEffect: readonly Readonly<Record<string, number>>[];
     /**
      *首占奖励（`bigMapCamp.firstReward`，2026-10-30 由单个 `firstRewardId` 改成掉落数组）。
      *
@@ -217,7 +218,8 @@ export interface IBigMapCampConfig {
     /** 占领奖励（`bigMapCamp.occupyReward`），结构同 `firstReward`。 */
     readonly occupyReward: readonly IBigMapDrop[];
     readonly buffConNum: number;
-    readonly buffRate: number;
+    readonly buffReduceRate: number;
+    readonly buffInflucenRate: number;
     readonly iconPath: string;
 }
 

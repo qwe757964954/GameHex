@@ -581,23 +581,27 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     prepare(4);
     configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));
     const source = captureZCMatchConfig();
+    //  末波换成 68005 椰蛋战士（花果·战士），与玩家 68001 豌豆游侠（花果·射手）构成**现存**克制对：
+    //  2026-11-17 克制链统一到设计案（坦克→射手→战士→法师→坦克），射手不再克法师，
+    //  原来用 68003 火焰树妖（法师）拿到的 1.3 倍已经不存在；本用例的语义是「缺席阵容的
+    //  波次卡也要按真实卡表吃克制」，所以换成一对仍然相克的卡，而不是把期望改成 10。
     const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
         battle: battle([68001], [68001]), selfRoleId: 'self',
         pve: {
             mode: 'defence', chapterId: 1, levelId: 50001, territoryCellId: 4, stage: 4,
-            territorySaveOwner: null, enemyName: '', enemyCardIds: [68002, 68003], enemyTeamCardIds: [],
+            territorySaveOwner: null, enemyName: '', enemyCardIds: [68002, 68005], enemyTeamCardIds: [],
             playerCount: 2, hpRate: 1, attackRate: 1,
             waves: [
                 { waveId: 1, showAtSeconds: .1, pvpCardId: 68002, monsterCount: 2, hpRate: 1, attackRate: 1 },
-                { waveId: 2, showAtSeconds: 20, pvpCardId: 68003, monsterCount: 1, hpRate: 1, attackRate: 1 },
+                { waveId: 2, showAtSeconds: 20, pvpCardId: 68005, monsterCount: 1, hpRate: 1, attackRate: 1 },
             ],
         },
     });
     const runtime = compileZCMatchRuntime(entry.matchConfig);
     assert.equal(runtime.cards.has('68002'), true, '波次卡必须进入战斗查表');
-    assert.equal(runtime.cards.has('68003'), true);
+    assert.equal(runtime.cards.has('68005'), true);
     for (const deck of Object.values(entry.matchConfig.ownerDecks ?? {})) {
-        assert.equal(deck.some(card => card.id === '68002' || card.id === '68003'), false,
+        assert.equal(deck.some(card => card.id === '68002' || card.id === '68005'), false,
             '波次卡不能进入服务端抽卡卡池');
     }
     const model = new ZCGameModel(null, () => .25, entry.matchConfig);
@@ -610,7 +614,7 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     assert.equal(model.snapshot.status, 'playing', '第二波必须实际生成并等待击败');
     assert.equal(model.defenceWaveProgress?.spawnedWaves, 2);
     const boss = model.snapshot.units.find(unit => unit.battleState !== 'dead');
-    assert.equal(boss?.cardId, '68003');
+    assert.equal(boss?.cardId, '68005');
     assert.ok(boss);
     const snapshot = model.exportSnapshot();
     snapshot.projectiles.push({
@@ -626,8 +630,7 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     const restored = new ZCGameModel(snapshot, () => .25, entry.matchConfig);
     restored.tick(.05);
     assert.equal(restored.snapshot.units.find(unit => unit.id === boss.id)?.hp, boss.hp - 13,
-        '缺席阵容的波次卡仍按真实卡表结算 1.3 倍克制伤害');
-    assert.equal(restored.damageStats.player.dealt, 13);
+        '缺席阵容的波次卡仍按真实卡表结算 1.3 倍克制伤害');    assert.equal(restored.damageStats.player.dealt, 13);
     for (const unit of model.snapshot.units) Object.assign(unit, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
     assert.equal(model.snapshot.status, 'victory');

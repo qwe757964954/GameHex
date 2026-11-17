@@ -54,8 +54,32 @@ FIELD_ROW = 5
 #  也可以在命令行上指定：`python patch_magdi_skill_rows_excel.py 102603 102604 372601`
 #  （麻辣铁锅那 9 行就是这么补的 —— 同一个 sheet、同一套列，没必要再抄一份脚本）。
 WANT_CHAINS = (101603, 101604)
-if len(sys.argv) > 1:
-    WANT_CHAINS = tuple(int(argument) for argument in sys.argv[1:])
+if len(sys.argv) > 1 and '--all' not in sys.argv:
+    WANT_CHAINS = tuple(int(argument) for argument in sys.argv[1:] if argument.lstrip('-').isdigit())
+
+#  `--all`：不按命令行列链，改成「`pvpCard.skillList` 引用到的全部技能链 + 它们的子链」。
+#  用于解锁等级统一这类跨全表的改动（2026-11-17）。
+#  子链按「链尾 4 位」归属（`19xxxx` / `28xxxx` / `37xxxx` 的尾号 = 主链尾号），与
+#  `patch_passive_redesign_tails.js` 同一套算法。
+if '--all' in sys.argv:
+    _card_path = os.path.join(ROOT, 'doc', '塔防数据配置', 'json', 'client', 'pvpCard.json')
+    with io.open(_card_path, encoding='utf-8') as _handle:
+        _cards = json.load(_handle)
+    _mains = {
+        int(chain)
+        for _card in _cards
+        if str(_card.get('id', '')).startswith('68')
+        for chain in (_card.get('skillList') or [])
+    }
+    _tails = {chain % 10000 for chain in _mains}
+    with io.open(CLIENT, encoding='utf-8') as _handle:
+        _plan_rows = json.load(_handle)
+    WANT_CHAINS = tuple(sorted({
+        int(row['skillChainId'])
+        for row in _plan_rows
+        if int(row['skillChainId']) % 10000 in _tails
+    }))
+    print('[all] 覆盖 %d 条链（%d 条主链 + 子链）' % (len(WANT_CHAINS), len(_mains)))
 
 #  与第 5 行表头逐列一致（`patch_lineup_crit_damage_excel.py` 已验证过一次，这里再守一遍）。
 SHEET_COLUMNS = [

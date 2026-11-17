@@ -150,7 +150,8 @@ export interface ZCUnitState {
     neutralReinforcement?: boolean;
     /** 兵营传送批次的表现时间轴；恢复时继续飞行，不重新扣次数。*/
     portalFlight?: { fromHexId: number; barracksHexId: number; startedAt: number };
-    inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>;
+    inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>
+        & Partial<Pick<ZCUnitDefinition, 'maxHp'>>;
     gateSize?: 'enlarge' | 'shrink';
     gateScale?: number;
     gateMoveMultiplier?: number;
@@ -370,6 +371,7 @@ export interface IZCNeutralFeatureState {
     awake?: boolean;
     targetUnitId?: number | null;
     nextAttackAt?: number;
+    monsterResourceId?: number;
     unlockedOwners?: ZCOwner[];
     focusOwners?: ZCOwner[];
     focusReadyAt?: Partial<Record<ZCOwner, number>>;
@@ -448,6 +450,14 @@ export interface ZCProjectileState extends ZCCombatEvent {
     velocityX: number;
     velocityY: number;
     collisionRadius: number;
+    /**
+     * 弹体体积倍率（2026-11-17 磁电菇「巨囊弹体」101602）：视图按它缩放弹体节点。
+     *
+     * 与 `collisionRadius` 是**同一件事的两面** —— 出手时已经把这个倍率乘进判定半径了，
+     * 这里只是把同一个数值带给表现层，让「看着变大」与「真的更容易擦到」同步。
+     * 缺省 1 ⇒ 所有既有弹道逐字不变。
+    */
+    sizeScale?: number;
     canHitAir: boolean;
     /** 命中后在落点创建持续区域（火船/风龙：投射物飞过去命中后才烧）。*/
     zoneDuration?: number;
@@ -466,6 +476,25 @@ export interface ZCProjectileState extends ZCCombatEvent {
     pierceFalloff?: number;
     /** Units already hit by this projectile; persisted so restore cannot hit the same unit twice.*/
     hitUnitIds?: number[];
+    /**
+     * 「穿过己方单位回血」（2026-11-17 急冻瓜「贯穿滋养」102401）的单次回复比例。
+     *
+     * 值就是比例本身（`0.03` = 回复该单位最大生命的 3%），出手时从
+     * `skillParamJson.allyPierceHealPct` 拷一份到弹道上 —— 弹道在途时施法者可能已经死了，
+     * 结算不该再回头查技能运行时。
+     * 缺省 / ≤0 ⇒ 这条弹道不治疗友军，存量弹道逐字不变。
+    */
+    allyHealPct?: number;
+    /**
+     * 这一颗弹道还能治疗几个己方单位（3 / 4 / 5）。
+     *
+     * 与 `allyHealPct` 一起拷进来，每次治疗自减一次，归零后不再触发 ——
+     * 「一颗子弹最多给 N 个己方单位回复」就是靠这个计数器实现的，它是**每颗弹道**的额度，
+     * 不是每张卡的额度（多发弹幕的每一颗各算各的）。
+    */
+    allyHealLeft?: number;
+    /** 已经被这颗弹道治疗过的己方单位 id（同一颗子弹对同一个单位只回一次）。*/
+    allyHealIds?: number[];
     /** Empowered-hit execute chance in the normalized 0..1 range.*/
     executeChance?: number;
     /** Critical is rolled when the projectile is launched and must survive snapshot restore.*/
@@ -585,6 +614,7 @@ export interface ZCHitFx {
  * 不带美术资源名，建筑图由渲染层按 `cardId -> buildIcon` 解析。
 */
 export interface ZCCardReveal {
+    monsterClaim?: boolean;
     id: number;
     /** 抽中的卡牌 id；渲染层据此读取卡表里的 buildIcon。*/
     cardId: string;

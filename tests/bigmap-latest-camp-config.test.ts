@@ -28,7 +28,7 @@ test('81 条城池参数完整进入配置，图片、尺寸和积分不再丢�
         assert.ok(camp);
         for (const field of ['chapter', 'gateNo', 'occupyType', 'campSize', 'openDay', 'dailyBattleLimit',
             'rankMinScore', 'warScoreRate', 'singleDamageScoreMax', 'maxScoreConfig', 'occupyScore',
-            'minOccupyScore', 'rankResetTime', 'warScoreReset', 'buffConNum', 'buffRate'] as const) {
+            'minOccupyScore', 'rankResetTime', 'warScoreReset', 'buffConNum', 'buffReduceRate', 'buffInflucenRate'] as const) {
             assert.equal(camp[field], row[field], `${row.campId}.${field}`);
         }
         // 2026-10-30：单个 `firstRewardId` 改成两列掉落数组，逐条对齐（resId / number / pro 都要在）。
@@ -43,7 +43,8 @@ test('81 条城池参数完整进入配置，图片、尺寸和积分不再丢�
         assert.ok(assetExists(`${artPath}.png`), artPath);
         assert.deepEqual(camp.adjacentCampIds, row.adjacentcampIds);
         assert.deepEqual(camp.buffGroupIds, row.buffGroupId);
-        assert.deepEqual(camp.buffEffectIds, row.buffEffectId);
+        assert.deepEqual(camp.occupyBuffEffectId, row.occupyBuffEffectId);
+        assert.deepEqual(camp.campDefenceEffect, row.campDefenceEffect);
     }
 });
 
@@ -68,12 +69,26 @@ test('新城池显示改读策划表，所有城池锚点与占格沿用现有�
 
 test('城池必填参数非法或缺失在配置边界报告对应字段', () => {
     for (const [field, value] of [['campSize', 0], ['chapter', undefined], ['occupyType', 5],
-        ['warScoreRate', -1], ['buffRate', Infinity], ['rallyOpen', 2],
+        ['warScoreRate', -1], ['buffReduceRate', Infinity], ['buffInflucenRate', -1], ['rallyOpen', 2],
+        ['occupyBuffEffectId', undefined], ['campDefenceEffect', null],
+        ['occupyBuffEffectId', [1]], ['campDefenceEffect', [{ 'attack.addRate': '0.1' }]],
+        ['campDefenceEffect', [{ 'attack.addRate': Infinity }]],
         ['adjacentcampIds', '[broken'], ['buffGroupId', [-1]]] as const) {
         const raw = tables();
         raw[BIGMAP_TABLE.camp][0][field] = value;
         assert.throws(() => parseBigMapConfig(raw), new RegExp(field));
     }
+});
+
+test('据点属性效果保留负数与空数组，旧字段不参与解析', () => {
+    const raw = tables();
+    Object.assign(raw[BIGMAP_TABLE.camp][0], {
+        occupyBuffEffectId: [], campDefenceEffect: [{ 'attack.addRate': -0.2 }],
+        buffEffectId: 'obsolete', buffRate: 'obsolete',
+    });
+    const camp = parseBigMapConfig(raw).camps.get(101);
+    assert.deepEqual(camp.occupyBuffEffectId, []);
+    assert.deepEqual(camp.campDefenceEffect, [{ 'attack.addRate': -0.2 }]);
 });
 
 test('未提供布局时仍用原种子摆放算法，城池占格大小取策划表', () => {

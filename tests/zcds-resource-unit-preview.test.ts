@@ -8,6 +8,33 @@ import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutra
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 installZCNeutralTestCatalog();
 
+test('野怪按钮显示我方独立解锁、集火与小数冷却状态，归属后隐藏', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    view.monsterFocusButton = { node: bar().node, interactable: true };
+    view.monsterFocusLabel = { string: '' };
+    view.monsterFocusBackground = { color: null };
+    const feature = { awake: false, claimed: false, unlockedOwners: ['enemy'], focusOwners: [], focusReadyAt: {} };
+    const state = { neutralFeature: feature };
+    view.renderMonsterFocus(state, 0);
+    assert.equal(view.monsterFocusButton.node.active, true);
+    assert.equal(view.monsterFocusButton.interactable, false);
+    assert.equal(view.monsterFocusLabel.string, '未解锁');
+    feature.unlockedOwners.push('player');
+    view.renderMonsterFocus(state, 0);
+    assert.equal(view.monsterFocusLabel.string, '集火野怪');
+    assert.equal(view.monsterFocusButton.interactable, true);
+    Object.assign(feature, { focusOwners: ['player'], focusReadyAt: { player: 0.5 } });
+    view.renderMonsterFocus(state, 0.25);
+    assert.match(view.monsterFocusLabel.string, /^取消集火 0\.3s$/);
+    assert.equal(view.monsterFocusButton.interactable, false);
+    view.renderMonsterFocus(state, 0.5);
+    assert.equal(view.monsterFocusButton.interactable, true);
+    feature.claimed = true;
+    view.renderMonsterFocus(state, 1);
+    assert.equal(view.monsterFocusButton.node.active, false);
+});
+
 test('强化门缩小图标，各阶段及缺图时都不显示资源文字', () => {
     installZCNeutralTestCatalog([{ groupId: 14001, id: 1400101, groupName: '门', resourceType: 7, weight: 1,
         param: { gateIds: [102] } }], [{ id: 102, name: '乘法', effectType: 2, value: 2, cooldownSeconds: 10,

@@ -111,13 +111,15 @@ test('玉林好汉：12 行技能计划齐备，且 100404 三档的穿透/衰�
         for (const tier of tiers) assert.equal(Number(tier.pvpSkillId), 30716);
     }
 
-    // 100401 灵巧投掷：攻速 +10%，三级同值、replace。
-    //  🔴 100401 在 V5 设计案里是「职业猎杀协议」（对战士 +24%、暴击 +6%），属克制条批次，
-    //  还没落表；这里钉的是**当前**的灵巧投掷，等克制条落地时连本用例一起改。
-    for (const tier of byChain(100401)) {
-        assert.equal(tier.statId, 'attackSpeed');
-        assert.equal(tier.operation, 'addRate');
-        assert.equal(Number(tier.value), 0.1);
+    // 100401 V5「职业猎杀协议」：对战士职业 +24/27/30%，并挂暴击率 6/8/10%（2026-11-17 落地）。
+    //  🔴 判据写进 statId（`counterRole2` = `ZC_ATTACK_TRAITS` 第 2 位「战士」），暴击率走
+    //  `skillParamJson` 的 `mix.critRate` —— 一条技能两个属性只有这样才不互相覆盖。
+    for (const [index, tier] of byChain(100401).entries()) {
+        assert.equal(tier.statId, 'counterRole2');
+        assert.equal(tier.operation, 'add');
+        assert.equal(Number(tier.value), [24, 27, 30][index]);
+        assert.equal((JSON.parse(String(tier.skillParamJson)) as Record<string, number>)['mix.critRate'],
+            [6, 8, 10][index]);
         assert.equal(tier.progressionMode, 'replace');
     }
     // 100402 废土铁芽：面板攻击 17/20/23%（V5 从「铁质飞镖·伤害倍率」改过来）。
@@ -144,13 +146,14 @@ test('100404 没有 pvpSkillBinding 行时，skillParamJson 仍进得到 skillRu
     assert.equal(bindings.some((row) => Number(row.pvpSkillId) === 30716), false,
         '前提变了：30716 现在有 binding 行，这条用例应改成走 merge 分支');
 
-    const selected = withoutLineupCrit(selectZCSkillPlans('68004', 25, catalogs));
-    // 四条链都是 `replace`（设计案「三级同值，不叠加」）⇒ 25 级每条链只留最高档，共 4 行。
+    const selected = withoutLineupCrit(selectZCSkillPlans('68004', 36, catalogs));
+    // 四条链都是 `replace`（设计案「三级同值，不叠加」）⇒ 每条链只留最高档，共 4 行。
+    // 取 36 级是因为 100404 在**第 4 格**、III 档要到 36 级（2026-11-17 统一档位前是 25）。
     assert.equal(selected.length, 4, 'replace 语义下每条链只保留一档');
     assert.deepEqual(selected.map((row) => row.modifierId).sort(),
-        [91004013, 91004023, 91004033, 91004043], '25 级应全部落到 III 级档');
+        [91004013, 91004023, 91004033, 91004043], '36 级应全部落到 III 级档');
     const loadout = compileZCCombatBuild({
-        unitId: '68004', heroLevel: 25, generalStar: { generalId: 68004, star: 1 },
+        unitId: '68004', heroLevel: 36, generalStar: { generalId: 68004, star: 1 },
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
 
@@ -171,15 +174,18 @@ test('100402 / 100403 的 statId 都折进 unit 域 statPatch（不再被 defaul
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const loadout = compileZCCombatBuild({
-        unitId: '68004', heroLevel: 25, generalStar: { generalId: 68004, star: 1 },
+        unitId: '68004', heroLevel: 36, generalStar: { generalId: 68004, star: 1 },
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
-    // 100402 III 级 = 攻击 +23%，100403 III 级 = 攻击范围 +32%，100401 = 攻速 +10%（三档同值）。
+    // 100402 III 级 = 攻击 +23%，100403 III 级 = 攻击范围 +32%，
+    // 100401 III 级 = 对战士职业 +30% + 暴击率 +10%（2026-11-17 换成克制条）。
     assert.equal(loadout!.statPatch.attackPct, 23, 'attack 必须折成 attackPct');
     assert.equal(loadout!.statPatch.attackRangePct, 32, 'attackRange 必须折成 attackRangePct');
-    assert.equal(loadout!.statPatch.attackSpeedPct, 10);
-    //  V5 起 100402 不再承载 damageRate（改成面板攻击），68004 全卡没有伤害倍率尾巴；
+    assert.equal(loadout!.statPatch.counterRole2Pct, 30, 'counterRole2 必须折成 counterRole2Pct');
+    assert.equal(loadout!.statPatch.critRatePct, 10, 'mix.critRate 必须折成 critRatePct');
+    //  V5 起 68004 不再有攻速 / 伤害倍率（100401 从灵巧投掷改成克制条，100402 从铁质飞镖改面板攻击）；
     //  `damageRate → damageRatePct` 的折叠由 `tests/zcds-flora-skills.test.ts` 钉住。
+    assert.equal(loadout!.statPatch.attackSpeedPct, undefined);
     assert.equal(loadout!.statPatch.damageRatePct, undefined);
 });
 

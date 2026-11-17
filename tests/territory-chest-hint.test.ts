@@ -162,7 +162,7 @@ test('★★★解锁序号取的是 `fixedResource_<N>` 的 N，不是数组下
 test('★★真实地图：所有固定宝箱的 id 都是 `fixedResource_<N>`，且**同章不重号**', () => {
     const files = [
         'chapter_01', 'chapter_02', 'chapter_03', 'chapter_04',
-        'chapter_05', 'chapter_06', 'chapter_07', 'chapter_smile',
+        'chapter_05', 'chapter_06', 'chapter_07',
     ];
     let chestTotal = 0;
     for (const name of files) {

@@ -96,3 +96,24 @@ test('有焦点孔时点击区只守对话条，孔内外分工交给四块遮�
     assert.equal(f.host.blockerTransform.height, 180);
     assert.deepEqual(f.host.blockerNode.position, { x: 0, y: -380 });
 });
+
+/**
+ * 弱引导（`maskType: none`，用户 2026-11-17 第 12 条）：两个翻地块步骤
+ * **不压暗、不挡点击、不弹气泡文案，只留光圈 + 手指**。
+ *
+ * 这几条只能靠源码守卫：《GuideDialogView` 是 cc.Component，整类跑起来要 prefab
+ * 和引擎节点；而这里错的后果是「屏幕上多一层灰」或「手指没了」，都不是报错型失败。
+ */
+test('弱引导：dim / 遮罩 / 点击区 / 气泡全关，光圈与手指照留', () => {
+    const text = readFileSync(VIEW, 'utf8');
+    assert.match(text, /const noMask = this\.currentMaskType === 'none';/, '要先判出弱引导形态');
+    assert.match(text, /this\.dimNode\.active = !noMask && fullBlock;/, '弱引导不许压暗');
+    assert.match(text, /this\.blockerNode\.active = !noMask && \(visible \|\| fullBlock\);/, '弱引导不许挡点击');
+    assert.match(text, /mask\.active = !noMask && visible;/, '四块焦点遮罩也要关');
+    assert.match(text, /this\.mapHint\.active = visible && !noMask;/, '气泡提示文案要关（手指已经说明点哪）');
+    // 光圈与手指**不受影响**：弱引导靠它们表达「点这里」。
+    assert.match(text, /this\.focusRing\.active = visible;/);
+    assert.match(text, /this\.focusHand\.active = visible;/);
+    // alpha 也归零：只关节点的话，显隐时序差一帧就会闪一层灰。
+    assert.match(text, /maskType === 'none' \? 0/, '弱引导的遮罩 alpha 必须归零');
+});

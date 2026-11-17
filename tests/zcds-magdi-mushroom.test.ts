@@ -116,8 +116,9 @@ test('pvpSkillPlan：两条技能的 6 行都在，参数与设计案逐格对�
     assert.equal(shock.length, 3);
 
     //  解锁等级以 K 表为唯一真源
-    assert.deepEqual(bolt.map((row) => Number(row.unlockHeroLevel)), [9, 18, 24]);
-    assert.deepEqual(shock.map((row) => Number(row.unlockHeroLevel)), [0, 20, 25]);
+    //  2026-11-17 统一档位：101603 是第 3 格 → 9/18/27，101604 是第 4 格 → 12/24/36。
+    assert.deepEqual(bolt.map((row) => Number(row.unlockHeroLevel)), [9, 18, 27]);
+    assert.deepEqual(shock.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36]);
 
     for (const row of [...bolt, ...shock]) {
         assert.equal(row.behaviorKey, row.skillChainId === 101603 ? 'bolt_strike' : 'self_aura');
@@ -841,9 +842,15 @@ test('两套特效路径都能进本局加载清单，且不会串到别家的�
         '五雷轰顶的落雷必须被加载');
     assert.ok(plan.effectPaths.includes('units/projectiles/雷电冲击/雷电冲击'),
         '磁电冲击的冲击波必须被加载');
-    assert.ok(plan.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH),
-        '大威天芦的「无尘禁土」仍走原来那根光柱，不能被磁电菇的造型覆盖');
-    assert.equal(zcSelfAuraEffectPath('self_aura', '68025'), ZC_SELF_AURA_EFFECT_PREFAB_PATH);
+    assert.ok(plan.effectPaths.includes('units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环'),
+        '大威天芦的「无尘禁土」走自己的火焰环，不能被磁电菇的造型覆盖');
+    //  ⚠️ 2026-11-17：68025 已换成【大威天芦_火焰光环】⇒ 兜底光柱不再有单位使用，
+    //  因此它**不该**出现在本局清单里（出现了说明有单位退回了缺省造型）。
+    assert.equal(plan.effectPaths.includes(ZC_SELF_AURA_EFFECT_PREFAB_PATH), false,
+        '兜底光柱已经没有任何单位落在上面');
+    assert.equal(zcSelfAuraEffectPath('self_aura', '68025'),
+        'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环',
+        '大威天芦走自己的火焰环，不能被磁电菇的造型盖掉');
     assert.equal(zcSelfAuraEffectPath('bolt_strike', '68016'), null, '不是自身光环就返回 null');
 });
 

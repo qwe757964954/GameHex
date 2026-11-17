@@ -431,6 +431,7 @@ export class ZCGame extends Component {
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
             neutralResourceFrames: prepared.neutralResourceFrames,
+            ownerNames: this.seatProfiles,
             // 中立资源获取特效：飞向 HUD 金币栏的那把金币贴图。
             goldCoinFrame: prepared.goldCoinFrame,
             // 自选主城区域气泡底图（frame_01 绿 / frame_02 红，九宫格）。

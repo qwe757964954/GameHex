@@ -1,4 +1,6 @@
 import json
+import contextlib
+import io
 import sys
 import tempfile
 import unittest
@@ -10,9 +12,77 @@ SCRIPT_DIR = Path(__file__).resolve().parents[1] / 'tools' / 'map-editor'
 sys.path.insert(0, str(SCRIPT_DIR))
 import copy_territory_maps as publisher
 import presets_io
+import copy_maps
+import copy_bigmap_maps
 
 
 class CopyTerritoryMapsTests(unittest.TestCase):
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.sever = Path(directory) / 'sever'
+        self.enterContext(patch.object(presets_io, 'DOC_SEVER_DIR', self.sever))
+
+    def test_default_server_targets_are_classified(self):
+        sever = presets_io.DOC_JSON_ROOT / 'sever'
+        self.assertEqual(copy_maps.SEVER_TARGET, sever / 'battlemap')
+        self.assertEqual(publisher.DOC_TARGETS, (sever / 'territorymap',))
+        self.assertEqual(copy_bigmap_maps.DOC_TARGETS, (sever / 'slgmap',))
+
+    def test_all_publishers_clean_flat_copies_only_after_success(self):
+        for module, folder, preset_id in (
+            (copy_maps, 'battlemap', 'river'),
+            (publisher, 'territorymap', 'chapter_01'),
+            (copy_bigmap_maps, 'slgmap', 'bigMap'),
+        ):
+            with self.subTest(folder=folder), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                sever = root / 'sever'
+                sever.mkdir()
+                source = module.SOURCE / f'{preset_id}.json'
+                stale = sever / source.name
+                stale.write_text('{"old":true}', encoding='utf-8')
+                meta = stale.with_name(stale.name + '.meta')
+                meta.write_text('{}', encoding='utf-8')
+                unrelated = sever / 'item.json'
+                unrelated.write_text('[]', encoding='utf-8')
+                grouped = sever / folder / source.name
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(patch.object(presets_io, 'DOC_SEVER_DIR', sever))
+                    stack.enter_context(patch.object(module, 'TARGET', root / 'resources'))
+                    if module is copy_maps:
+                        stack.enter_context(patch.object(module, 'SEVER_TARGET', grouped.parent))
+                    else:
+                        stack.enter_context(patch.object(module, 'DOC_TARGETS', (grouped.parent,)))
+                    if module is copy_bigmap_maps:
+                        stack.enter_context(patch.object(module, 'validate', return_value=(
+                            json.loads(source.read_text(encoding='utf-8')), [], [])))
+                    for dry_run in (True, False):
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            if module is copy_maps:
+                                argv = ['copy_maps.py', '--id', preset_id]
+                                if dry_run:
+                                    argv.append('--dry-run')
+                                with patch.object(sys, 'argv', argv):
+                                    module.main()
+                            else:
+                                module.copy_one(source, dry_run)
+                        self.assertEqual(stale.exists(), dry_run)
+                        self.assertEqual(meta.exists(), dry_run)
+                        self.assertEqual(grouped.exists(), not dry_run)
+                        self.assertTrue(unrelated.exists())
+                    self.assertEqual(grouped.read_bytes(), (root / 'resources' / source.name).read_bytes())
+                    self.assertFalse(grouped.with_name(grouped.name + '.meta').exists())
+
+    def test_failed_publish_keeps_flat_copy(self):
+        self.sever.mkdir()
+        source = publisher.SOURCE / 'chapter_01.json'
+        stale = self.sever / source.name
+        stale.write_text('{"old":true}', encoding='utf-8')
+        with patch.object(presets_io, 'publish', side_effect=OSError('write failed')):
+            with self.assertRaises(OSError):
+                publisher.copy_one(source, False)
+        self.assertEqual(stale.read_text(encoding='utf-8'), '{"old":true}')
+
     def test_publishes_same_map_to_resources_and_server(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

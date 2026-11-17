@@ -15,6 +15,7 @@ export interface IZCMatchRuntime {
     readonly effectiveDefinitions: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCUnitDefinition>>>;
     readonly cards: ReadonlyMap<string, ZCDeckCard>;
     readonly skillRuntime: Readonly<Record<ZCOwner, ReadonlyMap<string, ZCSkillRuntimeDefinition>>>;
+    readonly neutralSkillRuntime: ReadonlyMap<string, ZCSkillRuntimeDefinition>;
     readonly legacyAttributes: Readonly<Record<ZCOwner, ReadonlyMap<string, Readonly<Record<string, unknown>>>>>;
     readonly deckBonuses: Readonly<Record<ZCOwner, ZCDeckBonuses>>;
     /**
@@ -107,7 +108,9 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
         if (!cards.has(card.id)) cards.set(card.id, card);
     }
 
-    return { definitions, effectiveDefinitions, unitStatPatches, cards, skillRuntime, legacyAttributes, deckBonuses };
+    const neutralSkillRuntime = new Map(skillRegistry.compileBindings((config.skillBindings ?? []).filter(binding => binding.enabled), [])
+        .map(runtime => [`${runtime.unitId}:${runtime.skillId}`, runtime] as const));
+    return { definitions, effectiveDefinitions, unitStatPatches, cards, skillRuntime, neutralSkillRuntime, legacyAttributes, deckBonuses };
 }
 
 /**

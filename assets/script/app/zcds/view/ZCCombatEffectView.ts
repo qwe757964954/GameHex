@@ -246,7 +246,15 @@ export class ZCCombatEffectView extends Component {
         //  缓动用 ease-out quad（`1-(1-t)^2`）：0.3s 这种短入场里，线性会显得"一顿"，
         //  out-back 又会在末段过冲、把飓风撑得比最终尺寸还大一圈。
         const growFactor = this.growFactorOf(event, now);
-        this.node.setScale(nodeScale * growFactor, nodeScale * growFactor, 1);
+        //  弹体体积倍率（2026-11-17 磁电菇「巨囊弹体」101602）：模型把 `bulletSizeScale`
+        //  同时乘进了判定半径与这里的 `sizeScale`，所以「看着变大」与「真的更容易擦到」同步。
+        //  只在弹道事件上读它（近战/区域没有 `projectile`），缺省 1 ⇒ 既有特效逐字不变。
+        const sizeScale = (event.type === 'projectile' ? projectile?.sizeScale : undefined) ?? 1;
+        this.node.setScale(
+            nodeScale * growFactor * sizeScale,
+            nodeScale * growFactor * sizeScale,
+            1,
+        );
         //  除「定格光束」外一律复位到全不透明：池化节点上一任可能正好淡到 0 才回池。
         if (!event.beamHold) this.resetOpacity();
 

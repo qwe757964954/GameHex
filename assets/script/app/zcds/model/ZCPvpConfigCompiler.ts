@@ -46,6 +46,9 @@ export interface IZCPvpCompiledConfig {
 export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     const global = kvToObject(tables.pvpGlobal);
     const gameConfig = kvToObject(tables.gameConfig);
+    if (tables.gameConfig) for (const key of ['neutralMonsterFocusSwitchCdSeconds', 'neutralMonsterRegenDelaySeconds', 'neutralMonsterRegenRate']) {
+        if (typeof gameConfig[key] !== 'number' || !Number.isFinite(gameConfig[key]) || Number(gameConfig[key]) < 0) throw new Error(`gameConfig.${key} 必须是非负数`);
+    }
     const monsterRegenRate = globalNumberOr(gameConfig, 'neutralMonsterRegenRate', 0, 0, true);
     if (!Number.isSafeInteger(monsterRegenRate)) throw new Error('neutralMonsterRegenRate 必须是非负整数');
     const schemaVersion = typeof global.schemaVersion === 'number' ? global.schemaVersion : 2;

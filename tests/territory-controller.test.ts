@@ -85,6 +85,27 @@ test('可翻固定宝箱受理后报告翻地，关卡仍报告关卡点击，�
     } finally { h.controller.dispose(); EventMgr.instance.offTarget(listener); }
 });
 
+test('宝箱第二步（已翻出、还没点开）同样算翻地：只判 siteOpenableCells 会让 2-2 永远上报不了', () => {
+    // 资源据点是两步：unlock（翻出箱子）→ pass（点开箱子）。第二步时这一格已经**不在**
+    // `siteOpenableCells`（那个集合只收未解锁的格）⇒ 老判据漏报 ⇒ 引导 2-2 卡死。
+    const h = harness();
+    const fixed = { cellId: 348, type: 'fixedResource' };
+    Object.assign(h.model.state, {
+        map: { sites: [fixed] },
+        siteOpenableCells: [],
+        progress: { isCellUnlocked: (id: number) => id === 348, isOwned: () => false },
+    });
+    h.model.selectSite = () => true;
+    const events: string[] = [];
+    const listener = {};
+    EventMgr.instance.on(GuideEvent.Complete, payload => events.push(payload.cond), listener);
+    try {
+        h.controller.start();
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'siteTap', cellId: 348 } });
+        assert.deepEqual(events, ['tileFlipped'], '点开已翻出的宝箱就是 2-2 的完成判定');
+    } finally { h.controller.dispose(); EventMgr.instance.offTarget(listener); }
+});
+
 test('扫荡意图把倍率原样透传给 Model（`times` 是协议里唯一决定扣多少体力的字段）', () => {
     const h = harness();
     h.controller.start();

@@ -70,7 +70,7 @@ export class MainTabController<T> extends ControllerBase {
             const wasWorldVisible = this.snapshot.worldVisible;
             this.model.showWorld(false);
             this.options.world.closeWorld();
-            if (wasWorldVisible) this.options.view.renderNav(this.snapshot.currentTab);
+            if (wasWorldVisible) this.options.view.renderNav(tab);
             if (tab === this.snapshot.currentTab) {
                 this.model.settle();
                 this.options.view.renderNav(tab);
@@ -104,7 +104,10 @@ export class MainTabController<T> extends ControllerBase {
             this.model.commit(tab);
             this.options.view.renderNav(tab);
         } catch (error) {
-            if (this.current(revision)) this.options.failed(tab, error);
+            if (this.current(revision)) {
+                this.options.view.renderNav(this.snapshot.currentTab);
+                this.options.failed(tab, error);
+            }
         } finally {
             if (!adopted) scope.dispose();
             if (this.pendingScope === scope) this.pendingScope = null;

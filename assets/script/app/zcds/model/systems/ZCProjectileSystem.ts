@@ -17,6 +17,14 @@ export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDe
         out: ZCCombatTarget[],
     ): void;
     hit(projectile: ZCProjectileState, target: ZCCombatTarget): void;
+    /**
+     * 弹道本帧扫掠段「穿过」了一个己方单位（2026-11-17 急冻瓜「贯穿滋养」102401）。
+     *
+     * 与 `hit` 是两条互斥的通道：友军不参与碰撞、不消耗穿透次数、不扣伤害，
+     * 只是被路过一次。额度（`allyHealLeft`）与去重（`allyHealIds`）已经由本系统扣好/记好，
+     * 回调只负责「真的把血加上去」。不传 ⇒ 这条弹道对友军完全透明（存量行为）。
+    */
+    allyPass?(projectile: ZCProjectileState, unit: ZCUnitState): void;
     /** 弹道本帧消失（命中或被丢弃）时的回调；可选，目前用于定格光束。*/
     linger?(projectile: ZCProjectileState): void;
 }
@@ -53,6 +61,8 @@ export class ZCProjectileSystem {
     private readonly candidates = new Set<ZCUnitState>();
     /** 每弹道复用，替代 `new Set(projectile.hitUnitIds ?? [])`。*/
     private readonly hitIds = new Set<number>();
+    /** 每弹道复用：这颗弹道已经治疗过的友军（`projectile.allyHealIds` 的临时镜像）。*/
+    private readonly allyIds = new Set<number>();
     private readonly wideUnits: ZCUnitState[] = [];
     /** 每轮复用的结构候选（墙体 / 建筑），由 `context.structureTargets` 填。*/
     private readonly structures: ZCCombatTarget[] = [];
@@ -128,6 +138,12 @@ export class ZCProjectileSystem {
             if (knownIds) for (let i = 0; i < knownIds.length; i++) this.hitIds.add(knownIds[i]);
 
             const fraction = travelDt / dt; // 与 unit 无关，提到循环外，原来是每候选算一次
+            //  ── 穿过己方单位（102401「贯穿滋养」）──
+            //  先于敌军扫掠做：友军完全不参与碰撞（不消耗 `remainingPierces`、不改 `baseDamage`），
+            //  只是「被路过」一次，给它回一次血并把这一颗弹道的额度减一。
+            if (context.allyPass && (projectile.allyHealPct ?? 0) > 0 && (projectile.allyHealLeft ?? 0) > 0) {
+                this.healAllySweep(projectile, from, to, fraction, context);
+            }
             let passed = 0;
             let consumed = false;
             // 穿透只消耗命中名额；本拍剩余的飞行段仍须结算，最后一拍也不能跳过。
@@ -226,9 +242,62 @@ export class ZCProjectileSystem {
         this.bucketPool.length = 0;
         this.candidates.clear();
         this.hitIds.clear();
+        this.allyIds.clear();
         this.wideUnits.length = 0;
         this.structures.length = 0;
         this.step = 0;
+    }
+
+    /**
+     * 一颗弹道本帧扫掠段穿过的己方单位，逐个回血（102401「贯穿滋养」）。
+     *
+     * 三条约束，缺一条就会跑出设计口径：
+     *  · **排除施法者本人**：子弹从自己体内出发，不排除的话每一发都白送一次自愈，
+     *    「穿过己方单位」会退化成「普攻自带吸血」；
+     *  · **同一颗弹道对同一个单位只回一次**（`allyHealIds` 去重）：穿透弹在友军身上
+     *    多帧掠过不能连着回；
+     *  · **额度用完立刻停**（`allyHealLeft` 从 3 / 4 / 5 自减到 0）—— 额度是**每颗弹道**的，
+     *    多弹幕的每一颗各算各的。
+     *
+     * 判定与敌军命中用同一套「相对运动连续碰撞」（调用方已把本帧线段算好），
+     * 因此「子弹从谁身上擦过去」与「打中谁」是同一个物理口径，不会出现「看着穿过了却没回血」。
+    */
+    private healAllySweep(projectile: ZCProjectileState, from: Point, to: Point,
+        fraction: number, context: ZCProjectileContext): void {
+        const pass = context.allyPass;
+        if (!pass) return;
+        this.allyIds.clear();
+        const known = projectile.allyHealIds;
+        if (known) for (let i = 0; i < known.length; i++) this.allyIds.add(known[i]);
+        let left = projectile.allyHealLeft ?? 0;
+        for (const unit of this.candidates) {
+            if (left <= 0) break;
+            if (unit.owner !== projectile.owner) continue;
+            if (unit.id === projectile.sourceUnitId) continue;
+            if (unit.hp <= 0 || unit.battleState === 'dead') continue;
+            if (this.allyIds.has(unit.id)) continue;
+            const definition = context.effectiveDefinition(unit);
+            //  与敌军扫掠同一套插值：单位在这一帧内是连续移动的，用帧末位置会让擦边判定偏一格。
+            const start = this.starts.get(unit.id);
+            const startX = start ? start.x : unit.freeX;
+            const startY = start ? start.y : unit.freeY;
+            const unitX = startX + (unit.freeX - startX) * fraction;
+            const unitY = startY + (unit.freeY - startY) * fraction;
+            const contact = sweptCircleHitScalars(
+                (to.x - unitX) - (from.x - startX),
+                (to.y - unitY) - (from.y - startY),
+                from.x - startX,
+                from.y - startY,
+                projectile.collisionRadius + definition.bodyRadius * context.distanceScale,
+            );
+            if (contact === null) continue;
+            this.allyIds.add(unit.id);
+            const ids = projectile.allyHealIds ?? (projectile.allyHealIds = []);
+            ids.push(unit.id);
+            left -= 1;
+            projectile.allyHealLeft = left;
+            pass(projectile, unit);
+        }
     }
 
     /** 计算并缓存本帧格子范围；用 4 个标量判断替代 `[...].every(...)` 的临时数组。*/

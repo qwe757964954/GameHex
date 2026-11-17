@@ -1,15 +1,16 @@
 import { CHEST_EVENTS } from '../../main/ChestEvents';
 import { TerritoryUiEvent } from '../../territory/application/TerritoryEvents';
 import { TerritoryChestOpenPage } from '../../territory/view/TerritoryChestOpenPage';
-import { chestOpenLegendHeroesOf } from '../../territory/model/TerritoryChestOpenLayout';
+import { chestLegendHeroesOf } from '../../territory/model/TerritoryChestOpenLayout';
 import { HeroObtainPage } from '../../card/view/HeroObtainPage';
-import { loadCardLevelUpRows } from '../../card/CardLineupDecks';
+import { loadCardLevelUpRows, loadPvpCardRarities } from '../../card/CardLineupDecks';
 import { createItemCounter } from '../../card/ItemBag';
 import { buildCardLevelUpTable, evaluateUpgrade, parseCardLevelUpRow } from '../../card/CardUpgradeCost';
 import type { IShowRewardEntry as IRewardEntry } from '../../common/RewardEntries';
 import { GuideComposition } from '../guide/GuideComposition';
 import type { Node } from 'cc';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
 import { CardLineupPage } from '../../card/CardLineupPage';
 import { CardLineupController } from '../../card/CardLineupController';
@@ -102,6 +103,7 @@ export class MainPageComposition extends ControllerBase {
         this.registerPage(territory, entry, { ready: () => entry.start() });
         territory.initialize(entry.controller.resources, entry.saveOwner);
         this.listen(TerritoryUiEvent.ChestRevealed, this.onChestRevealed);
+        this.listen(TerritoryUiEvent.ChestRewardsReady, this.onChestRewardsReady);
         // 2026-11-10 需求 ③：英雄碎片进度徽标的数据源由组合层注入（页面只认接口，
         // 不反向 import `app/card`）。纯表现，没注入 ⇒ 不播徽标，发奖链路零变化。
         territory.setHeroProgressSource(new TerritoryHeroProgressSource());
@@ -118,20 +120,72 @@ export class MainPageComposition extends ControllerBase {
         }).catch(reportMainPageFailure);
     }
 
-    private onChestRevealed(event: { readonly owner: TerritoryChestOpenPage; readonly entries: readonly IRewardEntry[] }): void {
-        void this.presentChestHeroes(event).catch(reportMainPageFailure);
+    private onChestRevealed(event: { readonly owner: { readonly isValid: boolean }; readonly entries: readonly IRewardEntry[] }): void {
+        // 宝箱开启页（宝箱栏 / 巡逻等入口）那条：页内已经把奖励画出来了，这里只补英雄页。
+        void this.presentChestHeroes(event.entries, event.owner).catch(reportMainPageFailure);
     }
 
-    private async presentChestHeroes(event: { readonly owner: TerritoryChestOpenPage; readonly entries: readonly IRewardEntry[] }): Promise<void> {
-        if (!event.entries.some(entry => entry.quality === 5 && entry.number > 0)) return;
-        const [rawRows, lineup] = await Promise.all([loadCardLevelUpRows(), cardRepository.loadLineup(false)]);
+    private onChestRewardsReady(event: { readonly owner: MainTerritoryMap; readonly rewards: readonly IRewardEntry[] }): void {
+        // 领地宝箱：地图上的开箱粒子动画演完了（奖励还没给玩家看）⇒ 英雄页 → 统一奖励弹窗。
+        if (event.owner !== this.territoryView) return;
+        void this.runChestRewardChain(event.owner, event.rewards).catch(reportMainPageFailure);
+    }
+
+    /**
+     * 领地宝箱的奖励链（2026-11-17 需求 ② / ③）：
+     * 橙色卡牌碎片 ⇒ 按**卡牌 id 升序**逐个弹「获得英雄」→ 全关掉后弹**统一获得奖励弹窗**。
+     *
+     * 顺序是需求的一部分：先看英雄、再统一看整箱奖励；两者都在开箱粒子动画之后。
+     *
+     * ⚠️ 整段（含地图上的粒子动画）算一个「演出窗口」：进场时
+     *    {@link TerritoryUiEvent.ChestPresentation} 已由地图页置 true，这里负责收尾。
+     *    不关的话引导层会一直让位 —— 玩家的下一段台词就永远不播了。
+     *
+     * 🔴 **收尾不能一律在这里关**：`ShowRewardPage` 要等 prefab 加载完才 `enabled`，
+     *    中间隔着几帧。这里抢先关掉，2-3 的对话框会先闪出来、再被奖励窗盖掉。
+     *    ⇒ 「后面还有统一奖励弹窗」时把收尾交给引导层（它监听 `VIEW_LIFECYCLE`，
+     *    等奖励窗 `enabled` 时清窗口，`disabled` 时才真正恢复）；没有弹窗可等才在这里直接关。
+     */
+    private async runChestRewardChain(owner: MainTerritoryMap, rewards: readonly IRewardEntry[]): Promise<void> {
+        let popupPlanned = false;
+        try {
+            await this.presentChestHeroes(rewards, owner);
+            if (this.isDisposed || !owner.isValid || !rewards.length) return;
+            popupPlanned = true;
+            FW.ShowReward(rewards.map((reward) => ({
+                resId: reward.resId,
+                number: reward.number,
+            })) as unknown as CmdGoods[]);
+        } finally {
+            if (!popupPlanned) {
+                EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner, playing: false });
+            }
+        }
+    }
+
+    /**
+     * 橙卡（`pvpCard.rarity === 4`）碎片逐个展示英雄页。
+     *
+     * 🔴 判据是**卡牌品级**不是碎片道具品质：碎片 `18003` 在 item 表里是 quality 2，
+     * 老实现（`entry.quality === 5`）在任何真实数据上都筛不出英雄，等于这条链从来没跑过。
+     */
+    private async presentChestHeroes(
+        entries: readonly { readonly resId: number; readonly number: number }[],
+        owner: { readonly isValid: boolean },
+    ): Promise<void> {
+        if (!entries.some(entry => entry.number > 0)) return;
+        const [rawRows, lineup, rarities] = await Promise.all([
+            loadCardLevelUpRows(),
+            cardRepository.loadLineup(false),
+            loadPvpCardRarities(),
+        ]);
+        if (this.isDisposed || !owner.isValid) return;
         const rows = rawRows.map(parseCardLevelUpRow).filter(row => row !== null);
-        if (this.isDisposed || !event.owner.isValid) return;
-        const heroes = chestOpenLegendHeroesOf(event.entries, rows);
+        const heroes = chestLegendHeroesOf(entries, rows, (cardId) => rarities.get(cardId) ?? 0);
         const table = buildCardLevelUpTable(rawRows);
         const counter = createItemCounter();
         for (const heroId of heroes) {
-            if (this.isDisposed || !event.owner.isValid) return;
+            if (this.isDisposed || !owner.isValid) return;
             const status = evaluateUpgrade(table, heroId, lineup.heroLevels.get(heroId) ?? 0, counter);
             const progress = status.requirements.find(item => item.key === 'card');
             let finish: () => void;
@@ -145,7 +199,7 @@ export class MainPageComposition extends ControllerBase {
                 },
                 onClose: finish,
             });
-            if (this.isDisposed || !event.owner.isValid) {
+            if (this.isDisposed || !owner.isValid) {
                 popup?.close();
                 unregister();
                 return;

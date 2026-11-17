@@ -158,8 +158,12 @@ const NODE_SCALE_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
     // （约 4 格宽 × 2 格高；一格 = 92.25×90）。这条只改大小，穿透数/倍率/寿命都在
     // `pvpSkillPlan` 的 `skillParamJson` 里，与本表无关。
     'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效': 2.5,
-    // 68025「大威天芦」的「无尘禁土」光柱（`ZCSelfAuraFx.ZC_SELF_AURA_EFFECT_PREFAB_PATH`，
-    // `self_aura` 行为整段持有的一条长效表现事件）。
+    // ⚠️ 2026-11-17：68025「无尘禁土」已换成【大威天芦_火焰光环】（`ZCSelfAuraFx.SELF_AURA_FX_BY_UNIT`），
+    // 这条路径退成 `self_aura` 的**兜底**造型，本局没有任何单位落在它上面。
+    // 倍率保留：万一以后新增一个没配造型的 `self_aura` 技能退回这里，尺寸仍然对得上 200 半径。
+    // 新那条火焰光环的尺寸烘在它自己的 prefab `_lscale`（0.926205）里，**不要**在这里给它加条目。
+    //
+    // 下面这段是当年给 68025 光柱写的历史口径，仍然描述这条 prefab 的尺寸关系：
     // 预制体：根 scale 1 + 子节点 `offset` scale 0.58、contentSize 256×390
     // ⇒ 原屏上 256 × 0.58 = 148.5 宽（高 390 × 0.58 = 226.2）。
     //

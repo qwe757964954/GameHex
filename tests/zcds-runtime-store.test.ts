@@ -7,8 +7,9 @@ import type { ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeC
 import { ZC_RUNTIME_TABLE_NAMES } from '../assets/script/app/zcds/application/ZCRuntimePrecompiler';
 
 function compiledConfig() {
+    const small = JSON.parse(readFileSync('assets/remoteRef/refSmallAll.json', 'utf8'));
     return compilePvpTables(Object.fromEntries(ZC_RUNTIME_TABLE_NAMES.map(name => {
-        const raw = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
+        const raw = small[name] ?? JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
         return [name, Array.isArray(raw) ? raw : raw.v.map((values: unknown[]) =>
             Object.fromEntries(raw.k.map((key: string, index: number) => [key, values[index]])))];
     })) as ZCPvpTables);

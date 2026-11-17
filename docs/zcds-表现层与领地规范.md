@@ -5818,3 +5818,760 @@ if (!approaching) zone.remainingSeconds -= dt;       // ← 读秒与位移彻�
 - `tools/config/patch_design_doc_multitarget.py` —— 设计案回填（zip 级手术，`--check` 干跑）。
 - 验法：源表 2209 行 × Z/AC 两列**逐格对拍 0 不一致**；`npx tsc --noEmit` 0 error；`tests/zcds-*.test.ts` 1446 条 / 1439 绿 / 7 红（7 红是改动前既有的）。
 - 顺手修掉一条既有红：`remoteRef` vs `client` 互校里 `96802501~50.pvpSkillId` 长期是 `30171`（remoteRef）对 `30858`（client）。`patch_bullet_falloff.py` 按 client 全量重建 remoteRef（不再「只改有变化的行」）后自动对齐 —— 68025 的普攻就是自己的 30858，`30171` 是长枪兵的历史值，属于 remoteRef 陈旧。
+
+## 20. 被动重设计 V5 · 第 4 批：克制条 20 条（2026-11-17）
+
+### 20.1 口径
+
+设计案里的「异种猎杀协议 / 职业猎杀协议 / 抗性装甲协议 / 职业抗性协议」四类，都是**单卡条件加成**：
+
+- 攻方：**打**某阵营 / 某职业时增伤（`counter*`）；
+- 守方：**受到**某阵营 / 某职业的伤害时减伤（`countered*`）。
+
+它们是**卡牌被动**，与 `pvpCounter` 那 8 条全局克制规则（×1.3，阵营 4 条 + 职业 4 条）是**两套独立判定**，
+结算时**相乘**。两套的链条**现已同源**（2026-11-17 起，见 §20.8）：设计案「克制谱系」把
+「法师→坦克→射手→战士→法师」写成 A→B 读作「A 克 B」，即 **坦克→射手→战士→法师→坦克**，
+阵营为 **花果→蘑菇→盆栽→僵尸→花果**，`pvpCounter` 已逐条对齐。
+但克制条仍然**只按 statId 自己的判据**判定、不去读 `pvpCounter` —— 因为它是「单卡 × 单阵营/单职业」的
+细粒度条件，而全局那 8 条是「职业级 ×1.3」的粗粒度关系，两者的值、生效范围、生命周期都不同；
+同源只保证「表里写的方向和设计案不矛盾」，不保证「每张卡的克制条都能在全局链里找到对应」。
+
+### 20.2 判据编进 statId
+
+| statId | 语义 | 序号 |
+| :--- | :--- | :--- |
+| `counterCamp1..4` | 攻方：打某阵营增伤 | `ZC_CAMP_TRAITS` 下标 + 1（花果 1 / 蘑菇 2 / 盆栽 3 / 僵尸 4） |
+| `counterRole1..4` | 攻方：打某职业增伤 | `ZC_ATTACK_TRAITS` 下标 + 1（射手 1 / 战士 2 / 法师 3 / 坦克 4） |
+| `counteredCamp1..4` | 守方：受到某阵营伤害降低 | 同上 |
+| `counteredRole1..4` | 守方：受到某职业伤害降低 | 同上 |
+
+**为什么不写进 `skillParamJson`**（`counter: {camp:'蘑菇'}` 这种）：
+
+1. 参数袋按 `unitId:pvpSkillId` 合并 ⇒ 同一张卡两条克制条会互相覆盖，而 68020 / 68021 恰好各有两条；
+2. 结算点只拿得到双方的 `statPatch`，读不到「本行是哪条技能」，没法把判据和值对上。
+
+值口径与 `critRate` 相同：**`add` + 百分点**（45 = +45%），`foldStatPatch` 直接累加，结算处再除 100。
+`addRate` 在这一列恒 0 —— 这些 statId 没有 `baseValue` 可乘。
+
+### 20.3 🔴 方向必须分开取特征（第一版写错的坑）
+
+| 加成 | 判的是谁 |
+| :--- | :--- |
+| `counter*X` | **被打的人**是不是 X（我打 X 更疼） |
+| `countered*X` | **打我的人**是不是 X（X 打我我少受伤） |
+
+所以 `zcSkillCounterMultiplier(attackerPatch, defenderPatch, attackerTraits, defenderTraits)` **必须同时
+拿到攻守两侧的 `traits`**。第一版只传了守方、用守方自己的职业去查 `counteredRole*`，
+结果 68023 / 68031 的「受到法师伤害 -45%」被算成「守方自己是法师才减伤」——
+整条抗性协议永不生效，且 68023 恰好是法师（雷蕉是法师）时反而会误生效。集成用例当场抓出（`1 !== 0.55`）。
+
+### 20.4 代码落点
+
+- `ZCStatSchema`：`ZC_COUNTER_STAT_IDS`（16 个）+ `STAT_IDS` + `STAT_TO_PATCH`（第二列 `null`）。
+- `ZCModifierRuntime`：`ZCUnitStatPatch` 16 个可选 `*Pct` 字段。
+- `ZCAttackResolutionSystem`
+  - `zcSkillCounterMultiplier(...)` —— 导出纯函数，四层相乘：增伤（阵营/职业）× 减伤（阵营/职业）。
+  - `counterMultiplierFor(unit, targetOwner, targetCardId, context, targetUnitId)` = `cardCounterMultiplier` × 上面那条。
+  - `projectileCounterMultiplier(projectile, …)` —— `resolveProjectileHit` 是 static、手上只有弹体，
+    靠 `projectile.sourceUnitId` 反查攻方实例；**射手已阵亡**（`unitById` 查不到）时退回全局克制，
+    技能级克制条随之失效 —— 与「光环随施法者消失」同一口径。
+  - `unitDamage` 新增第 6 个可选参 `targetUnitId`（守方 patch 按单位实例的 `unitId` 取才准），
+    内部改调 `counterMultiplierFor`；10 处调用点已全部透传。
+  - 建筑 / 格子没有卡技能 ⇒ 传 `undefined`，只剩全局克制；`ZCGameModel` 的旧防御塔路径保持原样。
+- 缺省全 0 ⇒ 恒等，存量单位行为逐字不变。
+
+### 20.5 配表与源表
+
+- `tools/config/patch_passive_redesign_batch4.js`（幂等）：主判据写 `statId/operation/value`，
+  第二个判据与暴击率写 `mix.<statId>` / `mix.critRate`；**已有行的 `modifierId` 一律不动**
+  （`cardLevelUp.skillList` 引用它），只有整条链新建时按 `94000000 + (链 % 10000) * 10 + 档位` 生成。
+- `patch_passive_redesign_tails.js`：7 条带混搭尾的链；并把「清 `mix.*`」改成**只清自己拥有的 5 个 statId**
+  —— 整块清会把 batch4 写的 `mix.critRate` / `mix.counterRole2` 抹掉，两个脚本的先后顺序就有影响了。
+  验收法：乱序重跑（`batch4 → tails → tails → batch4 → tails`），四份产物 md5 零差异。
+- 旧机制的状态与参数必须一起清：100103 减速（`hunger_slow_*`）、100203 格挡、100303 点燃、
+  100503 生命汲取（范围 + `lifestealRate`）、101302 / 102202 溅射、103003 共生矩阵（友军光环）。
+- 回填：`patch_magdi_skill_rows_excel.py <20 链>`（J 表 60 行 × 29 列逐格一致）、
+  `patch_passive_redesign_k.py`（K 表 147 行，B 名 / C 描述 / **D 解锁兵种等级**）。
+- 顺手修掉一个超上限值：子链 `192302` 原本 `critRate add 20`（> 15% 上限），改成「攻击 7%」，
+  暴击率改由 `mix.critRate` 8/10/12。
+
+### 20.6 用例
+
+| 用例 | 钉什么 |
+| :--- | :--- |
+| `zcds-counter-protocol.test.ts`（11 条） | 60 行全部落表且 statId 在白名单、三档数值与暴击率逐条对齐设计案、判据序号与 `ZC_CAMP_TRAITS`/`ZC_ATTACK_TRAITS` 同序、同一卡同一档最多一条带暴击率；纯函数四层相乘与缺省恒等；近战 100→145 / 100→55 / 只命中一条 →130；弹道 100→145 与「射手已阵亡」退回 100 |
+| `zcds-multi-target-falloff.test.ts` | 溅射链 16 → 14（101302 / 102202 的溅射被设计案收走） |
+| `zcds-yedan-skills.test.ts` | 100503 由「生命汲取」整段换成克制条：`lifestealRate` 必须消失、混搭尾三个键进 `statPatch` |
+| `zcds-yulin-skills.test.ts` | 100401 由「灵巧投掷（攻速）」换成 `counterRole2` + `mix.critRate` |
+| `zcds-skill-plan.test.ts` | 100103 不再加攻击、不再挂 `hunger_slow_l3` |
+| `card-skill-list.test.ts` | 100103 名称「饥饿缠身」→「异种猎杀协议」 |
+
+### 20.7 遗留
+
+- **102001「对僵尸阵营 / 战士职业 +15%」** 落地为两条判据同值，打「僵尸·战士」（全表只有 68028）
+  会叠成 ×1.15²（+32%）。用户已裁定：**不做互斥、保持叠乘** —— 「双条件各给一份」是设计意图。
+
+### 20.8 全局克制链（`pvpCounter`）已与设计案同源
+
+2026-11-17 用户要求「按照设计案重新调整 射手--坦克--法师--战士--射手的链条全部重新设计，并同步源表」。
+设计案 `技能设计案2.xlsx / 技能设计案 (2)` 102001 机制列原文：
+
+> 克制谱系（花果→蘑菇→盆栽→僵尸→花果；法师→坦克→射手→战士→法师）
+
+A→B 读作「A 克 B」。职业链去掉闭环重复点 = **坦克→射手→战士→法师→坦克**，
+阵营链 = **花果→蘑菇→盆栽→僵尸→花果**（原本就一致，未改）。
+
+🔴 **「→」的方向不是猜的，用 Q/R 两列钉死**。同一张表表头：
+`Q = 克制（出手 ×1.3） / counter`、`R = 被克制 / counteredBy`。
+取四张**同阵营**（花果）的卡，排除阵营向、只剩职业向：
+
+| 卡 | 职业 | Q（本卡克谁） | R（谁克本卡） |
+| :--- | :--- | :--- | :--- |
+| 68001 豌豆游侠 | 射手 | 战士 | 坦克 |
+| 68002 巨力坚果 | 坦克 | 射手 | 法师 |
+| 68003 火焰树妖 | 法师 | 坦克 | 战士 |
+| 68005 椰蛋战士 | 战士 | 法师 | 射手 |
+
+克制边 = 坦克→射手→战士→法师→坦克；且**每条 R 正好是别人的 Q**（正反方向自洽）。
+⇒ 「法师→坦克→射手→战士→法师」= 法师克坦克、坦克克射手、射手克战士、战士克法师。
+
+⚠️ 用户口述的「射手--坦克--法师--战士--射手」与此**互为逆环**（那串「--」是节点罗列、不含方向），
+以设计案原文 + Q/R 列为准。
+
+| 维度 | 攻方 | 守方（克制目标） | 倍率 | 本次 |
+| :--- | :--- | :--- | :--- | :--- |
+| 攻击 | 坦克 | 射手 | 1.3 | ✅ 改（原 → 战士） |
+| 攻击 | 射手 | 战士 | 1.3 | ✅ 改（原 → 法师） |
+| 攻击 | 战士 | 法师 | 1.3 | ✅ 改（原 → 射手） |
+| 攻击 | 法师 | 坦克 | 1.3 | 不变 |
+| 阵营 | 花果 | 蘑菇 | 1.3 | 不变 |
+| 阵营 | 蘑菇 | 盆栽 | 1.3 | 不变 |
+| 阵营 | 盆栽 | 僵尸 | 1.3 | 不变 |
+| 阵营 | 僵尸 | 花果 | 1.3 | 不变 |
+
+**改法（三处，脚本幂等）：**
+
+1. `tools/config/patch_counter_chain_design.js` —— 两份 `pvpCounter.json`
+   （`assets/remoteRef` 列存 / `doc/塔防数据配置/json/client` 行存）。
+   守卫以「`dimension` + 攻方」为键，只比 `defender` 与 `damageMultiplier`——
+   🔴 别拿「维度|攻方|守方」整体比，一换守方就全表不匹配、脚本静默无操作。
+2. `tools/config/patch_counter_chain_design_excel.py` —— 源表 `PVP-克制羁绊.xlsx / 克制`，
+   zip 级手术只换 `xl/worksheets/sheet1.xml` 里 C7/C8/C9 三个共享字符串**索引**
+   （坦克 14 / 战士 15 / 射手 16 / 法师 17），不碰 `sharedStrings.xml`；带 `--check` 干跑 + 回读校验，
+   二次运行为 `[skip]`。
+3. 用例 `zcds-counter-protocol.test.ts` 第三组 4 条：8 条逐条对齐（**排序后比**，
+   配表行序不是契约）、四职业单环走 4 步回到起点、全局 × 技能级相乘（射手打战士 100×1.3×1.24=161）、
+   链条以外不生效（射手打法师不再是克制）。
+
+**连带影响**：`tests/zcds-client-combat-config.test.ts` 的「领地首领波次卡」原本靠「射手克法师」
+拿 1.3 倍，改后不再成立 ⇒ 末波卡由 `68003`（法师）换成 `68005`（椰蛋，花果·战士），保住用例语义。
+
+## 21. 被动重设计 V5 · 第 5 批：多弹 9 条（2026-11-17）
+
+### 21.1 口径（用户已裁定 Q11 / Q12）
+
+设计案写「第 1 发 60%，第 2 发 36%」并要求逐档提高到 65/39、70/42，但**引擎里逐档额外弹伤害
+没有任何消费点**（`extraBulletDamage` 谁都不读）。落地口径改成：
+
+- 三档 `bulletFalloff` = **0.4 / 0.35 / 0.3**，第 2 颗 = 本体 `(1-f)²` ⇒ **36% / 42.25% / 49%**；
+- 文案写「**约为第 1 发的 60% / 65% / 70%**」（L1 就是用户给的那句「约为第 1 发的 60%」）；
+- 普攻裂弹的张角走 **`bulletAngle`**，不用 `projectileSpreadDeg`。
+
+### 21.2 🔴 三个载体，一个都不能写重
+
+| 载体 | 性质 | 合并方式 | 能写几处 |
+| :--- | :--- | :--- | :--- |
+| `bulletNum`（patch `bulletNumFlat`） | **statId**（unit 域） | 所有行 fold 进同一 `statPatch` ⇒ **相加** | **只能一处** |
+| `bulletFalloff` | `skillParamJson` 键 | 按 `unitId:pvpSkillId` **覆盖** | **只能一处**（否则看行序） |
+| `bulletAngle`（patch `bulletAngleFlat`） | **statId**（unit 域） | **相加**（度数） | **只能一处** |
+
+代码依据：
+- `ZCAttackResolutionSystem` 第 1282 行 `bulletNumExtra = patch.bulletNumFlat`，第 1286 行
+  `projectileCount += bulletNumExtra` ⇒ flat 加法，两处就 +4；
+- `ZCMatchRuntimeCompiler.mergeSkillPlanIntoRuntime` 第 71 行
+  `parameters: { ...existing.parameters, ...params }` ⇒ 同名键**后者覆盖**；
+- `readZCSkillMixStats`/`foldStatPatch` 对 statId 一律累加。
+
+所以统一写法：**子弹数与递减系数只落主链行**，尾巴落子链槽位（或 `mix.*`），
+子链原 `bulletNum` 槽位改承载 `attack`/`attackRange`，原 `bulletFalloff` 从子链 `spj` 清掉。
+
+### 21.3 🔴 偶数颗不能配张角（第二颗起就没中心位）
+
+扇形分布是 `spread = (i / (count - 1)) * 2 - 1`（第 1435 行）：
+
+- `count = 3` ⇒ −1 / **0** / +1，中间那颗正好对准目标 ⇒ 25° 可用；
+- `count = 2` ⇒ 只有 −1 / +1，**没有 0° 中心位** ⇒ 两发分别偏 ±12.5°，整轮脱靶。
+
+102601 在 2026-11-11 为此把张角从 12° 收成 0°（实测两发全脱靶、伤害 0）。
+本批：3 颗的 5 条给 25°，2 颗的 102201 **不配张角**（全走 `aim`）。
+`patch_passive_redesign_batch5.js` 有硬守卫（`(bullets + 1) % 2 === 0 && angle` 直接抛错），
+`zcds-maladi-guo.test.ts` 另有一条通用守卫遍历全部 `bulletNum` 行。
+
+### 21.4 逐条配置
+
+| 链 | 卡 | 技能 | 额外弹 | `bulletFalloff` | 张角 | 尾巴 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 101001 | 68010 镭射飞龙（法师金） | 孢群弹幕 | 2 | 0.4/0.35/0.3 | `bulletAngle` 25 | 子链 281001 attack 0.28 · 191001 attackRange 0.35 |
+| 101301 | 68013 风炮菇（射手紫） | 连发苔针 | 1 | 0.4/0.35/0.3 | — | 无 |
+| 101701 | 68017 毒箭蘑菇（射手金） | 苔针双连 | 2 | 0.4/0.35/0.3 | — | 子链 281701 attack 0.28 · 191701 attackRange 0.35 |
+| 102201 | 68022 雷蕉（法师紫） | 孢子弹幕 | 1 | 0.4/0.35/0.3 | —（2 颗） | 无 |
+| 102402 | 68024 急冻瓜（法师金） | 孢群弹幕 | 2 | 0.4/0.35/0.3 | `bulletAngle` 25 | 子链 192402 attack 0.18；mix 伤害 0.15 · 范围 0.25 |
+| 102601 | 68026 麻辣铁锅（法师金） | 孢群弹幕 | 2 | 0.4/0.35/0.3 | `bulletAngle` 25 | 子链 282601 attack 0.28 · 192601 attackRange 0.35 |
+| 103201 | 68032 吉他手（射手金） | 苔针双连 | 2 | 0.4/0.35/0.3 | — | 子链 193201 attack 0.28 · 283201 attackRange 0.35 |
+| 103401 | 68034 魔术师（法师金） | 孢群弹幕 | 2 | 0.4/0.35/0.3 | `bulletAngle` 25 | 子链 283401 attack 0.28 · 193401 attackRange 0.35 |
+| 103502 | 68035 科学家（射手金） | 苔针双连 | 2 | 0.4/0.35/0.3 | — | 子链 193502 attack 0.18；mix 伤害 0.15 · 范围 0.25 |
+
+紫卡（101301 / 102201）按 **L 列的「额外发射 1 发 / 裂出 1 道」** 取 `bulletNum=1`，
+设计案 P 列笼统写的 `=2` 是金卡口径（研发档案 Q1 已裁定按 L 列）。
+
+### 21.5 工具链
+
+1. `tools/config/patch_passive_redesign_batch5.js` —— 两份 `pvpSkillPlan.json`
+   + 两份 `armySkillLevelUp.json`（主链 27 行 ×2、子链槽位 45 行 ×2）。幂等：重跑 md5 零差异。
+2. `patch_magdi_skill_rows_excel.py <24 个链号>` —— `J-技能表 / PVP技能配置` 72 行（含子链），
+   应输出「原地重写 72 行、追加 0 行」；出现「追加」说明有行的 modifierId 与 JSON 不一致。
+3. `patch_passive_redesign_k.py` —— `K-卡牌升级 / 卡牌技能升级表` 174 行（B 名 / C 描述 / **D 解锁等级**）。
+4. `patch_skill_design2_multibullet.py` —— 回写设计案本页 L1~L3 文案与 P 列落地口径（30 格），幂等。
+
+🔴 **子链 modifierId 不是算出来的，是表里既有的**。`372601` 的两份 JSON 都用 `97026011`
+（不是 `96726011`），一度误判成脏数据改成 967，结果 upsert 匹配不到 ⇒ 追加出重复行。
+改任何子链编号前，先查 `remoteRef` 与 `client` 是否**同一个值**。
+
+### 21.6 用例
+
+| 用例 | 钉什么 |
+| :--- | :--- |
+| `zcds-flora-skills` 533 | 发数在**主链 101001**（2/2/2），子链 281001 改承载 attack 0.28，张角 371001 = 25°；`spj` 里不得出现 `bulletNum`/`bulletAngle` |
+| `zcds-flora-skills` 534 | 68010 L25 的 patch：`bulletNumFlat=2` / `bulletAngleFlat=25` / 攻 44 / 伤 13 / 范围 58 / **无攻速** |
+| `zcds-maladi-guo` 849 | 102601 主链 bulletNum 2、子链 282601 attack 0.28、192601 attackRange 0.35、372601 张角 25° |
+| `zcds-maladi-guo` 守卫 | **总弹数为偶数时张角必须是 0**（遍历全部 `bulletNum` 行） |
+| `zcds-multi-target-falloff` | 多弹 27 行（9 链 × 3 档）按 `bulletFalloff` 0.4/0.35/0.3；穿透 6 行（2 链，`100701` 已换投枪） |
+| `zcds-zombie-skills` 1756 | 68035 L26：`bulletNumFlat=2` / 攻 18 / 伤 29 / 范围 25 / **`critRatePct` 消失** |
+
+### 21.7 遗留
+
+- 设计案 L 列写「同一爆点第 2 个目标起每次 ×0.7」，但 P 列落地口径**没有配** `splashDamageRate`
+  —— 本批按 P 列执行（不加溅射）。若这句要真生效，需要另配溅射并重新做 VP 核算。
+- `68008` 的 `100801` 是**穿透**不是多弹，本批没带它，仍在「半改卡」表里等穿透批次。
+- 103502 主链原为 `critRate add 20/28/36`（越过 15% 上限），本批整段换成多弹后暴击率退出卡牌。
+
+## 22. 被动重设计 V5 · 第 7 批：破阵投枪 5 条（2026-11-17）
+
+### 22.1 口径：那一拍**整份换成弹道**，不是「普攻加穿透」
+
+设计案 P 列原文：「触发时只替换本次普攻的 projectileKey，**不改 attackRange**」。
+落成代码就是 `lanceProfileOf()` 把普攻档案整份换掉：
+
+| 换掉的字段 | 值 | 为什么 |
+| :--- | :--- | :--- |
+| `mode` | `Projectile` | 这一拍不再是近战/区域 |
+| `projectileSpeed` | `lanceSpeed` 缺省 **700** | 「掷出去的枪」比普攻弹速快一档 |
+| `effectPrefabPath` | 常量 `units/projectiles/子弹_新怪物/通用箭矢` | 参数袋值域是 number，**路径不能配** |
+| `areaRadius` / `durationSeconds` / `waves` / `slowRatio` | 清零 | 否则区域型单位投枪时会在目标点额外建一块地火 |
+| `onHitStatusId` / `impactEffectPrefabPath` | 清空 | 投枪是**纯伤害弹** |
+| `empoweredEvery` / `empoweredSkillId` | 清零 | 强化装配在普攻行上，投枪弹不该再继承 |
+
+**不动的**：`attackRange` / `canAttackAir` / `collisionRadius` —— 沿用卡牌本体。
+
+### 22.2 四个参数键（全部是 `skillParamJson`，覆盖语义）
+
+| 键 | 三档值 | 语义 | 缺省 |
+| :--- | :--- | :--- | :--- |
+| `lanceEvery` | 4 / 3 / 2 | 每 N 次普攻触发一拍（按 `completedAttackCount % every === 0`） | **0 = 整条车道不触发** |
+| `lancePierceCount` | 3 | 穿透**目标总数（含首目标）** ⇒ 剩余穿透 = N − 1 | 3 |
+| `lancePierceFalloff` | 0.35 | 每穿一人 `× (1 - 0.35)` ⇒ 70% → 45.5% → 29.6% | 0.35 |
+| `lanceDamageRate` | 0.7 | 首目标折算（乘进伤害链，不是「相对普攻的折扣」） | 0.7 |
+
+🔴 **`lancePierceCount` / `pierceCount` / `normalPierceCount` 是三个不同语义**：
+前者是「总共能打几个人」（含首目标），中者是「强化那一击的额外穿透次数」，
+后者是「普攻的额外穿透次数」。写混的表现是「说穿 3 个、实际打 2 个」，数值上不容易看出来。
+
+### 22.3 🔴 首目标 70% 必须同时进两条乘法链（第一版写错的坑）
+
+近战/区域走 `ZCAttackResolutionSystem.unitDamage()`，弹道走 `createAttackProjectiles()` 里的
+`ZCCombatSystem.unitDamageBase()` —— **两段代码、两条乘法链**。
+
+第一版只把 `lanceDamageRate` 乘进了 `prepareAttack` 的 `damage`（事件字段），
+而弹道实际伤害读的是 `projectile.baseDamage`（另算一遍）⇒ 表现是
+「`combatEvents` 上写着 70%、真打出去还是 100%」，日志与飘字都看不出异常。
+
+修法：`IZCPreparedAttack` 新增 `lanceDamageRate` 字段透传到 `createAttackProjectiles`，
+`baseDamage` 写成 `unitDamageBase(..., skillDamageRate * damageRateMultiplier * lanceDamageRate)`；
+同时把 `legacy.hasDamageFormula` 那条旁路也加上 `&& !lance`（旧伤害公式是近战挥击的算法，套在枪上会跑偏）。
+
+### 22.4 与「强化那一击」互斥：撞拍时投枪让位、节拍不顺延
+
+两者都是「替换本次普攻」，同一拍只能兑现一个。强化装配的是武将技行（36xxx）的表现与倍率，
+优先级更高 ⇒ `lanceBeatOf()` 在 `empowered === true` 时直接 `return false`。
+
+节拍按**绝对累计次数**取模，所以让位那一拍只是「这次不投枪」，下一次仍然是 N 的整数倍
+（不会因为让位而往后顺延一格）。
+
+### 22.5 投枪是一枚枪
+
+`if (lance) projectileCount = 1` —— 不吃 `bulletNum` 的多发叠加，也不会被旧 `skillEffect` 的
+`hitCount` 撑成多发。多目标靠**穿透链**表达，不靠多发（多发会遇到「偶数颗没有 0° 中心位」那套麻烦）。
+
+### 22.6 代码落点
+
+- `lanceBeatOf(unit, skillRuntime, empowered)` —— 节拍判定，纯函数式读参数袋。
+- `lanceProfileOf(base, skillRuntime)` —— 整份换档。
+- `ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH` 导出（视图侧要按它兜底弹体）。
+- 三个缺省常量：`ZC_LANCE_DEFAULT_DAMAGE_RATE` / `_PIERCE_FALLOFF` / `_PIERCE_COUNT`（+ `_SPEED`）。
+
+### 22.7 工具链（幂等）
+
+1. `tools/config/patch_lance_batch7.js` —— 两份 `pvpSkillPlan.json` + 两份 `armySkillLevelUp.json`
+   （主链 15 行 ×2、子链槽位 24 行 ×2）。守卫：全表扫 `lanceEvery`，同 `unitId` >1 条链直接 throw。
+2. `patch_magdi_skill_rows_excel.py <13 个链号>` —— 39 行原地重写、29 列逐格对拍。
+3. `patch_passive_redesign_k.py --all` —— 420 行、改 30 格。
+4. `patch_skill_design2_lance.py` —— 设计案 32 格（含 `100901` 从「蔓生三连」整条改名为「破阵投枪」，
+   以及 5 行的「技能状态」改成【已实现】）。守卫：G 列链号必须对得上行号。
+
+### 22.8 用例
+
+`tests/zcds-lance-skills.test.ts` 13 条 —— 配表 4（参数袋四键三档 / 名称与解锁档 / 子链尾巴同档 / 一卡一链守卫）
++ 结算 9（4-3-2 节拍、其余拍仍近战、首目标 70%、剩余穿透 2、衰减 0.35、弹速 700 且区域清 0、
+撞拍让位、不吃多发、参数缺省兜底）。
+
+## 23. 被动重设计 V5 · 第 8 批：三条新 statId（2026-11-17）
+
+### 23.1 三个字段的共同点
+
+| statId | 语义 | `add` 写什么 | 消费点 |
+| :--- | :--- | :--- | :--- |
+| `hpRegenPct` | 每秒回复最大生命的百分比 | `1.5` = 每秒 1.5% | `ZCSkillTriggerSystem.applyHpRegen` |
+| `bulletSizeScale` | 普攻弹体体积倍率（**绝对**） | `1.6` = ×1.6 | `createAttackProjectiles` 的 `collisionRadius` + `sizeScale` |
+| `cdReduceOnHit` | ~~每次普攻命中回退其他主动的秒数~~ **❌ 已全卡下线（第 10 批）** | ~~`0.4` = 0.4 秒~~ | ~~`ZCAttackResolutionSystem.reduceCooldownsOnHit`~~ |
+
+> ⚠️ 本节写于第 8 批。第 10 批用户口径「所有卡牌都移除普通攻击减少冷却时间的这个机制」
+> 已把 `cdReduceOnHit` **整条车道**拆掉（四处登记 + 字段 + 消费点 + 快照白名单 + 两份 JSON）。
+> 下面 23.4 整节作废，23.5/23.7 里涉及它的行已标注。**现存约束只剩 `hpRegenPct` 与 `bulletSizeScale`。**
+
+🔴 **三个都只能写 `add`，不能写 `addRate`**。`foldStatPatch` 的 `rate` 分支要乘
+`baseValue(statId)`，而这三个都没有基础值（不在 `ZCUnitDefinition` 上）⇒ 恒 0。
+`STAT_TO_PATCH` 里第二个槽位写 `null` 就是在表达「这个 statId 没有百分数口径」，
+写了 `addRate` 不会报错、也不会生效 —— 最难查的那种。
+
+登记清单（少一步就静默失效）：`ZCStatId` 联合 → `STAT_IDS` 集合 → `UNIT_STAT_IDS`（折叠用）
+→ `STAT_TO_PATCH`（进 patch）→ `ZCUnitStatPatch` 字段（类型）→ 消费点。
+
+### 23.2 每秒回复：必须整秒结算，不能逐帧切碎
+
+`healUnit` 只收整数（`ZCStatusResolutionSystem.healUnit` 里 `Math.round` 之后封顶），
+所以「每帧按 `dt` 比例回一点」会被取整全部抹掉：最大生命 1000、每秒 2% ⇒ 单帧 0.32 → 0。
+
+落地：用 `floor(now) − floor(now − dt)` 数「这一步跨过了几个整秒」，跨过才补拍：
+
+```ts
+const ticks = Math.floor(now + 1e-9) - Math.floor(now - dt + 1e-9);
+if (ticks <= 0) return;
+context.healUnit?.(unit, unit.maxHp * rate / 100 * ticks);
+```
+
+步长固定 1/30 s 时 `ticks` 恒为 0 或 1；掉帧跨 2 秒就补 2 拍，不漏也不超。
+**不加新快照字段**（第 8 批当时对比的是 `cdReducePaidAt` 那种去重戳；该字段已于第 10 批删除），
+保持单位状态不变。
+
+### 23.3 弹体体积：一个倍率喂两处
+
+`bulletSizeScale` 同时决定「看着多大」与「判定多宽」：
+
+- 逻辑：`collisionRadius = (profile.collisionRadius ?? 3) × combatDistanceScale × scale`；
+- 视图：出手时把同一个 `scale` 写进 `ZCProjectileState.sizeScale`，
+  `ZCCombatEffectView.render` 乘进宿主节点缩放（`nodeScale × growFactor × sizeScale`）。
+
+只改一处就是两种症状：只改判定 →「判定变宽但看着没变」；只改视图 →「看着变大但打不中」。
+
+🔴 它在 `ZCUnitStatPatch` 里是**绝对倍率**，与其它字段的「相加」语义不同：
+同卡两条链都写会加成 3.2。设计口径里一张卡只有一条，本批没加守卫。
+
+### 23.4 ~~命中回退冷却：只扣别的车道，且同帧只算一次~~ → ❌ 整节作废（第 10 批）
+
+> 用户 2026-11-17 口径「所有卡牌都移除普通攻击减少冷却时间的这个机制」。
+> `ZC_CD_REDUCE_READY_KEYS` / `reduceCooldownsOnHit` / `cdReducePaidAt` 三个符号
+> **已从代码里全部删除**（含快照白名单）。下面保留原文只为记录当初的推理，不是现存约束。
+
+~~回退清单 `ZC_CD_REDUCE_READY_KEYS`：`secondaryReadyAt` / `selfCastReadyAt` / `auraReadyAt` /
+`boltReadyAt` / `trapReadyAt` / `strikeReadyAt` / `blinkReadyAt`。~~
+
+~~🔴 **刻意不含 `empoweredReadyAt`**：那是「强化那一击 / 普攻」自己的节拍，设计口径明确
+「不作用于自身、不作用于普攻本身」。放进来就成了「打人给自己加速」，攻速会失控螺旋。~~
+
+~~🔴 **同一逻辑步只结算一次**：去重靠 `unit.cdReducePaidAt === now`。~~
+~~穿透一拍打 3 人、溅射一拍扫一片，都在同一帧调进来，不去重就变成「命中人数越多 CD 掉得越快」。~~
+~~这个字段必须登记进 `ZCSnapshotCodec` 的单位可选数值白名单（漏了会让脏值过校验）。~~
+
+~~回退后一律夹到 `now`：`unit[key] = Math.max(now, readyAt - seconds)`，冷却已好的不会变成负 CD。~~
+
+⚠️ **教训**：`cdReducePaidAt` 当时登记进了快照白名单，下线时白名单也得一起清 ——
+否则「校验放行一个不存在的字段」这种事永远不会报错，只会让人以为那条车道还在。
+
+### 23.5 代码落点
+
+- `ZCStatSchema`：~~三个~~ **两个** statId 的四处登记（见 23.1）。
+- `ZCSkillTriggerSystem`：`IZCSkillTriggerContext.statPatchOf?` + `applyHpRegen`；
+  `tick` 的 `void dt` 已删（现在真的用到了 dt）。
+- `ZCAttackResolutionSystem`：`zcBulletSizeScale`（纯函数，非法值一律 1）、
+  ~~`reduceCooldownsOnHit`、`ZC_CD_REDUCE_READY_KEYS`~~（第 10 批删除）。
+- `ZCGameModel.buildSkillTriggerContext`：`statPatchOf` 接 `unitStatPatches`（与攻击系统同一份 map）。
+- `ZCCombatEffectView`：弹道分支乘 `projectile.sizeScale`。
+
+### 23.6 工具链（幂等）
+
+1. `tools/config/patch_regen_size_cd_batch8.js` —— 两份 `pvpSkillPlan.json` + 两份 `armySkillLevelUp.json`
+   （主链 9 行 ×2、子链槽位 6 行 ×2）。
+2. `patch_magdi_skill_rows_excel.py 100601 101602 191602 102401 192401` —— J 表 15 行、29 列逐格对拍。
+3. `patch_passive_redesign_k.py --all` —— K 表 420 行、改 18 格。
+4. `patch_skill_design2_batch8.py` —— 设计案 6 格（P 列 + 技能状态）。
+
+### 23.7 用例
+
+`tests/zcds-regen-size-cd.test.ts` ~~14~~ **10 条**（第 10 批删掉整个「结算：命中回退冷却」小节 4 条）
+—— 配表 5（三档 statId/数值/解锁、两条各自的旧机制清空与尾巴落位、登记链路折一次）
++ 结算 5（整秒结算 / 掉帧补拍 / 不配不生效 / 体积两处同步 / 非法值按 1）。
+
+## 24. 第 9 批：疑问清单 Q1/Q2/Q3 + 两条主动打样（2026-11-17）
+
+本批是「三件裁定 + 一次打样」，代码只开了**三个缺省不生效的键**，配上两条新主动，
+~~目的是把上一批 `102401 裂变共鸣`（每次普攻命中回退其他主动 CD）真正点亮。~~
+→ **该目的已于第 10 批作废**：102401 换成「贯穿滋养」，冷却回退整条车道下线。
+两条主动本身（102403 / 102404）不受影响，见 §25。
+
+### 24.1 Q1（多弹按 L 列）→ 核对结论：已全对，零改动
+
+| 链 | 卡 | 品级 | L 列 | 落表 | 结论 |
+| --- | --- | --- | --- | --- | --- |
+| 101001 / 101701 / 102402 / 102601 / 103201 / 103401 / 103502 | 7 张金卡 | 金 | 额外 2 | `bulletNum add 2` | ✅ |
+| 101301 / 102201 | 2 张紫卡 | 紫 | 额外 1 | `bulletNum add 1` | ✅ |
+
+`armySkillLevelUp.desc` 同步是「1 道 / 2 道」，与 L 列同口径。**原来担心的「紫卡一律 2」并不存在。**
+
+### 24.2 Q2：101702 噬血蔓延 整条重建（吸血 + 溅射 + 扩散段折算）
+
+| 列 | 旧（爆囊扩散残留） | 新（按 L 列） |
+| --- | --- | --- |
+| 主链 statId | `attackSpeed addRate` 0.30/0.38/0.46 | **`lifestealRate add` 0.30/0.34/0.38** |
+| 溅射 `splashDamageRate` | 0.12 / 0.16 / 0.20 | **0.40 / 0.44 / 0.48** |
+| 扩散段折算 | 表里没有键 | **`lifestealSpreadRate = 0.5`** |
+| 子链 191702 | `damageRate 0.20/0.26/0.32` | **`damageRate addRate 0.12`**（三档同值） |
+| 混搭尾 | 无 | `mix.attack.addRate 0.14` / `mix.attackRange.addRate 0.20` |
+| `splashRadius` | 38 / 46 / 55 | 38 / 46 / 55（设计案未定价，沿用） |
+
+🔴 **`lifestealRate` 没有基础值 ⇒ 只能 `add`**（`STAT_TO_PATCH` 第二槽 `null`），写 `addRate`
+会乘 `baseValue(0)` 恒 0 且不报错。
+
+🔴 **扩散段折算做在调用点，不做在全局**：
+
+```ts
+static applyLifesteal(source, hitText, context, spreadRate = 1): void {
+    const ratio = this.lifestealRatioOf(source, context) * Math.max(0, Math.min(1, spreadRate));
+    ...
+}
+private static lifestealSpreadRateOf(unit, context): number {   // 读 skillParamJson.lifestealSpreadRate
+    ...缺省 1（存量吸血 100703 / 100302 都没写这个键）
+}
+```
+
+传 `lifestealSpreadRateOf(...)` 的**只有两处**：弹道溅射（`resolveProjectileHit` 的 splash 分支）
+与命中爆炸（凤凰降临的 burst 分支）。近战锥扫、多点打击、区域每波、主目标直击一律不传 ——
+它们的每个目标都是「直击」，不是「扩散段」。做成全局乘一次会把主目标一起打五折。
+
+### 24.3 Q3：102001 异种猎杀协议 文案「间接版本」
+
+机制一手不动（`counterCamp4` + `mix.counterRole2` 各 15/20/25%，同时命中 ×1.15²）。
+只把玩家可见 desc 从「僵尸阵营 **/** 战士职业」改成「僵尸阵营**、**战士职业」：
+斜杠会被读成二选一，顿号是并列枚举 —— 既没暴露叠乘，也没把机制说错。
+改的 15 格：设计案 K/L/M（3）+ `pvpSkillPlan.desc`（两份 × 3 行）+ `armySkillLevelUp.desc`（两份 × 3 行）。
+
+### 24.4 打样一：102403 冰山陨落 → `self_aura` 车道
+
+| 项 | 值 |
+| --- | --- |
+| 触发 | 主动-冷却 **14 秒**（设计案 J 列原值） |
+| 车道 | `self_aura`（`castSelfAura`），冷却落 `auraReadyAt` |
+| 参数 | `auraCooldown 14` / `auraSeconds 3` / `auraInterval 0.5` / `auraRadius 120` / `auraDamageRate 0.55·0.65·0.75` / `auraSlowRatio 0.5` |
+| 解锁 | 9 / 18 / 27（本卡第 3 格） |
+| modifierId | 94024031 ~ 94024033 |
+
+**为什么选 `self_aura` 而不是新建「定点区域」**：
+1. 设计案表现列要求「技能持续过程中需要有**明确的蓝色光圈**代表技能范围」——
+   `self_aura` 的区域本身就是 `holdVisual: true` 的持续表现，光圈半径 = 判定半径（同一个 `auraRadius`），
+   不需要再做一层提示圈去和判定对拍（那种「圈画得比判定大」的坑以前踩过）；
+2. `auraReadyAt` ~~在 `ZC_CD_REDUCE_READY_KEYS` 里 ⇒ **102401 的冷却回退立刻生效**，这是本轮打样的目的~~；
+   → 该常量已于第 10 批删除，这条理由作废。102403 自身的冷却车道仍是 `auraReadyAt`，不受影响；
+3. `auraEvery` 也已存在（累计普攻口径），101604 磁电冲击在用，语义边界清楚。
+
+🔴 **本次新开 `auraSlowRatio`**：`castSelfAura` 原来把 `slowRatio` 写死 0。
+现在读参数、缺省 0 ⇒ 无尘禁土（102503）/ 喷射火焰（102603）的区域**逐字不变**。
+
+### 24.5 打样二：102404 急冻光线 → `random_strike`（累计普攻）
+
+| 项 | 值 |
+| --- | --- |
+| 触发 | 主动-累计普攻 **9 次**（设计案 J 列原值） |
+| 车道 | `random_strike` 的 `strikeEvery`（与 100804 戈壁狂箭同一条路） |
+| 参数 | `strikeEvery 9` / `strikeCount 3` / `strikeRadius 260` / `strikeDamageRate 0.8·0.95·1.1` / `strikeNearest 1` / `strikeAppliesStatus 1` |
+| 解锁 | 12 / 24 / 36（本卡第 4 格） |
+| modifierId | 94024041 ~ 94024043 |
+
+🔴 ~~**它刻意不吃 102401 的冷却回退**：累计次数不是冷卻，这条车道没有 `*ReadyAt`。~~
+→ **第 10 批后不存在「吃不吃回退」这个问题**（车道已删）。`strikeEvery` 仍是
+`random_strike` 两种触发口径里没有 `*ReadyAt` 的那一种，这一点不变。
+
+🔴 **`strikeAppliesStatus` 的状态 id 写死常量 `numb`**，不能取 `runtime.statusId`：
+那是整卡共用的一个槽（`mergeSkillPlanIntoRuntime` 按 `unitId:pvpSkillId` 合并，本卡 4 条技能
+全挂在 `68024:30671`），而 `hitStatusOnBeat` 对没配 `statusEveryNAttacks` 的技能恒为 true ⇒
+写了它这张卡的**普攻每一发**都会挂上同一个状态。这与落雷 `ZC_BOLT_NUMB_STATUS_ID` 同一个理由：
+`skillParamJson` 只有数值槽，装不下状态 id。
+
+用 `numb`（软控：只禁攻击 + 移速 −50%）而不是 `paralysis` / `freeze`：
+前者是软控，后者是硬控，冰系主动一次扫 3 个人再叠 3 秒硬控会直接改变对局节奏。
+
+### 24.6 新增的三个键（全部缺省不生效）
+
+| 键 | 载体 | 缺省 | 语义 | 消费点 |
+| --- | --- | --- | --- | --- |
+| `lifestealSpreadRate` | `skillParamJson` | `1` | 扩散段吸血折算（0.5 = 溅射只回一半） | `applyLifesteal` 第 4 参 |
+| `auraSlowRatio` | `skillParamJson` | `0` | `self_aura` 区域减速比例 | `castSelfAura` 的 `slowRatio` |
+| `strikeAppliesStatus` | `skillParamJson` | `0` | `random_strike` 命中是否挂 `numb` | `applyRandomStrike` 的 `options.statusId` |
+
+### 24.7 工具链（幂等）
+
+1. `tools/config/patch_pilot_batch9.js` —— 两份 `pvpSkillPlan.json`（101702 重建 6 行 / 102001 文案 3 行 /
+   102403+102404 新增 6 行）+ 两份 `armySkillLevelUp.json`（24 行）。
+   🔴 跨产物校验用**键序无关**的逐格比较，且列集合取**表头全列**：
+   client 那份里没写过的列（如 `statusStatJson`）不出现在对象上，用 `Object.keys(row)` 会比出假差异。
+2. `patch_magdi_skill_rows_excel.py 101702 102403 102404` + `... 191702` —— J 表 6 行原地重写 + 6 行追加。
+3. `patch_passive_redesign_k.py --all` —— K 表 420 行、改 21 格。
+4. `patch_skill_design2_pilot9.py` —— 设计案 25 格。
+
+### 24.8 用例
+
+`tests/zcds-active-pilot.test.ts` 13 条 —— 配表 6（101702 主链/参数袋/子链、两条主动的车道与解锁、
+Q3 文案、K 表三条链）+ 结算 7（扩散段折算三态、`auraSlowRatio` 落进区域、累计 9 次才开火、
+不挂状态、~~**打样闭环**：发一发普攻 ⇒ `auraReadyAt` 从 14.05 回退到 13.65~~）。
+→ 最后那条已于第 10 批**翻成反向守卫**：「普攻命中后 `auraReadyAt` 必须仍是 14.05，且单位上
+不存在 `cdReducePaidAt`」—— 车道下线后它第一个会红。
+
+> 夹具注意：敌方单位也是 `68024` 时，`castSelfAura` 回调**必须用传进来的 `u`**。
+
+## 25. 第 10 批：102401 换机制 + `cdReduceOnHit` 全卡下线（2026-11-17）
+
+### 25.1 口径
+
+> 「102401 的技能机制修改，子弹穿过己方单位会回复生命值 3/4/5% 的生命值，
+>   一颗子弹最多给 3/4/5 个己方单位回复，**所有卡牌都移除普通攻击减少冷却时间的这个机制**，
+>   修改后同步相关的配置，并且修改技能名字」
+
+三件事：**换机制 + 改名**（102401）、**全卡下线一条 statId**（`cdReduceOnHit`）、**四路同步**。
+
+### 25.2 102401：裂变共鸣 → 贯穿滋养
+
+| 项 | 值 |
+| --- | --- |
+| 链 | 102401（主）/ 192401（子）· 68024 急冻瓜（金） |
+| 解锁 | 3 / 10 / 22（技能 1 口径） |
+| 主链 | **三空**（`statId`/`operation`/`value` 全 null）+ `behaviorKey = skill_params` |
+| `allyPierceHealPct` | 0.03 / 0.04 / 0.05 —— 单次回复**被治疗单位自己最大生命**的百分比 |
+| `allyPierceMaxCount` | 3 / 4 / 5 —— **每颗弹道**能治疗的己方单位数 |
+| 子链 192401 | `attackSpeed` addRate 0.20 / 0.22 / 0.24 |
+| 混搭尾 | `mix.attack.addRate` 0.35 + `mix.attackRange.addRate` 0.35 |
+| 描述 | 普攻子弹穿过己方单位时，为其回复3%最大生命（每颗子弹最多回复3个己方单位）；攻击速度提高20%；攻击提高35%，攻击范围提高35% |
+
+**为什么改名**：「裂变共鸣」= CD 共鸣。机制换成续航后旧名会直接误导玩家与文案，
+按「只有机制完全一样的才同名、机制不同一律另名」必须另起。
+
+### 25.3 🔴 友军通道与 `hit` 是两条互斥通道
+
+`ZCProjectileSystem.update` 里，友军扫掠（`healAllySweep`）**先于**敌军扫掠执行，且：
+
+| 约束 | 违反后的症状 |
+| --- | --- |
+| 友军不消耗 `remainingPierces` | 「路过的友军替你挡了一发穿透」—— 穿甲卡的名额被自己人吃掉 |
+| 友军不改 `baseDamage`、不过 `pierceFalloff` | 衰减是「同一发打多个敌人」的补偿，友军没挨打 |
+| 友军不产生 `hit` 事件、不写 `hitUnitIds` | 写进去以后真的打它会被当成「已命中」跳过 |
+| 排除施法者本人（`unit.id !== sourceUnitId`） | 法师站在自己子弹起点上 ⇒ 每发白送自愈 |
+| 同一颗弹道对同一单位只回一次（`allyHealIds`） | 相邻两个扫掠步会在交界处重复接触同一个单位 |
+| 额度归零立刻停（`allyHealLeft`） | 「一颗子弹最多 N 个」是**每颗弹道**的额度，多弹幕各算各的 |
+
+### 25.4 🔴 额度与比例都要在出手时拷到弹道上
+
+`skillParamJson` 是 `unitId:pvpSkillId` **一份**。一轮齐射 3 颗若每帧回查 `allyPierceMaxCount`，
+就变成「整轮齐射共享 3 次」而不是「每颗 3 次」。同理血量比例也在出手时拷进去 ——
+弹道在途时施法者可能已经死了，结算不该回头查技能运行时。
+
+所以 `ZCProjectileState` 新增三个字段（都不是可选补丁，而是弹道自己的状态）：
+
+| 字段 | 语义 | 快照校验 |
+| --- | --- | --- |
+| `allyHealPct?` | 单次回复比例（`0.03` = 3%） | `nonnegative && ≤ 1` |
+| `allyHealLeft?` | 这一颗还能治疗几个 | `nonnegative` |
+| `allyHealIds?` | 已经被这颗治疗过的单位 id | 数组、整数、`> 0 && < nextUnitId`、无重复 |
+
+🔴 **比例按被治疗者自己的 `maxHp` 算**（`unit.maxHp * pct`）。法师血少、前排坦克血多；
+写成施法者的比例，这条被动对坦克几乎无效，恰好把「站后排把射程变成团队续航带」做反。
+
+治疗走 `ZCStatusResolutionSystem.healUnit`：封顶 `maxHp`、死亡不生效、溢出丢弃、
+不吃治疗加成、不碰护盾 —— 沿用既有口径，不新开一条治疗管线。
+
+### 25.5 删 statId 比加 statId 更容易漏
+
+加的时候漏一处是「静默失效」，删的时候漏一处是「编译报错」或者更坏的
+「字段还在、但再没人写它」—— 后者不报错，下次有人照着旧笔记配一行会得到恒 0 的属性。
+
+`cdReduceOnHit` 的七个载体，一个都不能留：
+
+| # | 载体 | 内容 |
+| --- | --- | --- |
+| 1 | `ZCStatSchema.ts` | `ZCStatId` 联合 / `STAT_IDS` / `UNIT_STAT_IDS` / `STAT_TO_PATCH` —— **四处登记** |
+| 2 | `ZCModifierRuntime.ts` | `ZCUnitStatPatch.cdReduceOnHit?: number` |
+| 3 | `ZCAttackResolutionSystem.ts` | `reduceCooldownsOnHit` 方法 + 两处调用 |
+| 4 | `ZCAttackResolutionSystem.ts` | `ZC_CD_REDUCE_READY_KEYS` 常量 |
+| 5 | `ZCGameTypes.ts` | `ZCUnitState.cdReducePaidAt?`（同帧去重戳） |
+| 6 | `ZCSnapshotCodec.ts` | 白名单里的 `'cdReducePaidAt'` |
+| 7 | 两份 `pvpSkillPlan.json` | 三行的 `statId` / `operation` / `value` → null |
+
+下线后必须补**两道守卫**，否则下次有人照着旧笔记重建时没人拦得住：
+
+- 全表守卫：`patch_ally_pierce_batch10.js` 的 `assertLaneGone()` —— 任一行的 `statId`
+  或 `skillParamJson` 里含 `cdReduceOnHit` 就 throw；
+- 源码守卫：`tests/zcds-ally-pierce-heal.test.ts` 对 5 个文件 `assert.ok(!/cdReduceOnHit/)`。
+
+### 25.6 工具链（幂等，注意顺序）
+
+1. `tools/config/patch_ally_pierce_batch10.js` —— 两份 `pvpSkillPlan.json`（主链 3 + 子链 3）
+   + 两份 `armySkillLevelUp.json`（6 行）+ 全表守卫。
+2. `patch_magdi_skill_rows_excel.py 102401 192401` —— J 表 6 行、29 列逐格对拍。
+3. `patch_passive_redesign_k.py --all` —— K 表 420 行、改 6 格。
+4. `patch_skill_design2_pilot10.py` —— 设计案 102401 **7 格** + 第 9 页「卡牌描述与落地」68024 那句。
+5. `patch_card_description.js` + `patch_card_description.py` —— **必须最后跑**：
+   它们以第 9 页为上游，把描述回填进两份 `pvpCard.json` 与 `PVP-卡牌.xlsx / 卡牌配置 I 列`。
+   先跑这一步会把旧文案（还带「裂变共鸣」）又抄一遍回去。
+
+### 25.7 用例
+
+`tests/zcds-ally-pierce-heal.test.ts` **15 条**：
+
+- 配表 6 —— 三档参数与三空主链 / 子链攻速 / K 表六行 / 全表无 `cdReduceOnHit` /
+  代码侧七处载体已拆 / 卡面描述已换；
+- 结算 7 —— 额度 3 停在第 4 个 / 额度 5 全治 / 同弹道同单位只回一次 / 不吃穿透不扣伤害不出 hit /
+  不配比例时友军完全透明 / 死亡友军不参与 / 快照三字段已登记；
+- **全链路 2** —— `ZCGameModel` 真跑：回 3% 见血（500 → 530）、满血封顶不溢出。
+
+顺带改：`zcds-regen-size-cd`（SKILLS 3→2、删 4 条回退用例）、
+`zcds-active-pilot`（末尾闭环翻成反向守卫）、`zcds-unit-cast-action`（白名单 3→2 字段）。
+
+## 26. 第 11 批：102503「无尘禁土」换火焰光环特效（2026-11-17）
+
+### 26.1 口径
+
+> 「大威天芦 的无尘禁土 使用【大威天芦_火焰光环】特效，并按照统一的格式制作预制，
+>   修改同步相关的配置源表和设计案」
+
+### 26.2 半成品资源：只有 30 张散图
+
+美术丢进来的是 `units/projectiles/大威天芦_火焰光环/` 里的 **30 张 864×883 散图**
+（`245-3-standby_loop_00/02/…/59`），**没有 prefab / anim / pac** ——
+与麻辣铁锅、磁电菇、雷蕉那几批一模一样的半成品状态。
+
+统一格式（与 `持续光环伤害效果` 逐字同构）：
+
+```
+<set>/
+├── atlas/<帧>.png (+ sprite-frame meta)
+├── atlas/<set>.pac (+ auto-atlas meta)
+├── anim/<set>-loop.anim (+ animation-clip meta)
+└── <set>.prefab (+ prefab meta)
+```
+
+生成器 = `tools/build_dawtianlu_flame_aura_fx.py`（幂等，换美术后重跑）。
+
+三件套的三个静默坑（散图 meta 必须 `type:"sprite-frame"` + `f9941`；`pac.meta` 三处必须 `false`）
+与 §14.5 同源，这里不重复。
+
+### 26.3 这是「脚下地面环」，锚点取椭圆环的几何中心
+
+图是三部分：**底部一圈地面椭圆环** + **环上竖起的火焰墙** + **环下溅出的火星**。
+
+`self_aura` 的判定是**以施法者为圆心的地面圆**（102503 没配 `auraForward`，
+`castSelfAura` 的 `spawnX/spawnY` 直接取本体位置）。能代表判定范围的只有那圈地面椭圆环 ——
+3/4 视角下地面圆的投影是椭圆，**椭圆的几何中心就是地面圆心的投影**，把它钉到宿主原点即可。
+
+🔴 椭圆参数**量出来，别写死**：
+
+| 量什么 | 怎么量 | 本套结果 |
+| :--- | :--- | :--- |
+| 环中心 y | 「水平跨度最大的那些行」的 y 中位（椭圆最宽处就在中心高度） | 704 源 px |
+| 环中心 x | 同一批行的左右缘中点中位 | 520.5 |
+| 环外径 | **各帧跨度的最大值**（不是中位） | 680 源 px |
+
+外径取最大值而不是中位：画布宽会被钉成它，取最大值才让「最满的那一帧」正好贴合判定边界；
+取中位会让最满那一帧溢出约 2%。「跨度 ≥ 最大跨度 × 0.96」是为了排除火焰墙的窄跨度与火星的碎跨度。
+
+### 26.4 🔴 画布宽 = 环外径，于是尺寸校验变成一条可读等式
+
+    _contentSize.width(340) × _lscale(0.904412) = 307.5 屏上 px = 判定直径
+
+判定直径 = `auraRadius 200 × 2 × 0.76875`（§1.11 的换算）。之所以不「紧贴内容裁切」，
+就是为了让这条等式成立 —— 用例直接读 prefab 验算术，不用在别处再抄一个「可见宽」魔数。
+代价是环两侧各留一点透明边（环外的火星），可以忽略。
+
+🔴 **尺寸烘在 prefab 的 `_lscale` 里，`ZCCombatEffectScale.NODE_SCALE_BY_PREFAB_PATH` 不登记**
+（未登记 = 宿主倍率 1）。这条 prefab 只服务 102503，没有共用路径的问题，
+所以不需要在两个文件里各写一半数。**改半径就重跑生成器**，别去那张表里找。
+
+### 26.5 🔴 `_lpos` 非零的前提：宿主不能旋转
+
+横向因为「画布宽 = 环外径」已经对称，`_lpos.x` 只剩取整误差（−0.226）；
+纵向要补 —— 环中心在画布中心**下方** 79.5 画布 px（火焰墙全在环上方），
+`_lpos.y = +71.9` 把它补回来，让「环中心 = 节点原点 = 区域圆心 = 施法者脚点」。
+
+🔴 这成立的前提是**宿主节点不旋转**：`castSelfAura` 只有配了 `auraFaceTarget` 才写 `angleDegrees`，
+102503 没配 ⇒ 宿主保持 0° ⇒ `_lpos.y` 是纯竖直位移。
+**如果以后给 102503 打开 `auraFaceTarget`，这个 y 会变成垂直于朝向的侧移**（§14.6 的老坑），
+届时要改成把偏移烘进子节点或走 `auraVisualLiftPx`。
+
+### 26.6 造型没有配置列 —— 落在代码表
+
+`self_aura` 是行为技能：全部参数压在 `pvpSkillPlan.skillParamJson`（只有数值槽），
+而 `pvpSkill`（唯一带 `effectPrefabPath` 的）按 `unitId` 挂的是**普攻行**（68025 = 30858），
+一行只服务一个「出手」，装不下第三条主动技能的造型。
+
+所以这条路径只能落成代码常量：`ZCSelfAuraFx.SELF_AURA_FX_BY_UNIT['68025']`。
+
+🔴 它必须被 `ZCVisualResourcePlan` 收进本局清单（那边按「本局有没有这个单位的 `self_aura` 计划」）。
+漏收的后果是**静默**的：技能照常每秒扣血、屏幕上一次都不亮，且一条错都不报。
+
+### 26.7 兜底光柱退场
+
+`ZC_SELF_AURA_EFFECT_PREFAB_PATH`（`持续光环伤害效果`）现在**没有任何单位落在上面** ——
+68016 / 68025 / 68026 三家各有造型。它保留作 `castSelfAura` 里
+`zcSelfAuraEffectPath(...) ?? ZC_SELF_AURA_EFFECT_PREFAB_PATH` 的兜底
+（`effectPrefabPath` 是 `groundZones` 必填字段，不能为 `null`）。
+`ZCCombatEffectScale` 里那条 2.07 倍率也保留并加了注释 ——
+万一以后有单位退回兜底，尺寸仍然对得上 200 半径。
+
+### 26.8 工具链
+
+1. `tools/build_dawtianlu_flame_aura_fx.py` —— 30 帧 → atlas + anim + prefab；
+   源散图搬进 `tmp/projectile_src/大威天芦_火焰光环/`（`keep_all=False`，不留死资源）。
+2. `ZCSelfAuraFx.ts` —— 加 `'68025'` 覆盖；`ZCCombatEffectScale.ts` —— 给老光柱那条加退场注释。
+3. `tools/config/patch_skill_design2_flame_aura.py` —— 设计案 102503 两格（O 表现 + P 落地口径），
+   顺手订正 P 列两处历史笔误：`auraRadius` 60 → 200、`unlockHeroLevel` 9/18/24 → 9/18/27。
+4. J / K 表已核对（`patch_magdi_skill_rows_excel.py 102503` 回读通过、`patch_passive_redesign_k.py --all` 无差异）。
+
+> 🔴 **读设计案共享字符串格要 `html.unescape`**：`t="s"` 的正文在 `sharedStrings.xml` 里，
+> `"` 存成 `&quot;`。不还原的话 `'"auraRadius":60'` 永远匹配不上 —— 本轮在
+> `patch_skill_design2_flame_aura.py` 里踩了一次。
+
+### 26.9 用例
+
+新增 `tests/zcds-dawtianlu-flame-aura.test.ts` **9 条**：
+结构 3（三件套齐备 + 无残留散图 / pac 三处 false / 30 张 meta 都是 sprite-frame）、
+动画 1（30 帧 / sample 12 / Loop / 2.5s / 帧引用都在图集里）、
+尺寸摆位 3（`width × scale = 307.5` / `_lpos` 横向归零纵向为正 / 首帧与 `_sizeMode`）、
+接线 2（三家造型互不覆盖 + 兜底仍可用 / 资源计划收进与不收进）。
+
+改 `zcds-dawtianlu-skills.test.ts`（3 条：区域 `effectPrefabPath` / 加载清单 / 尺寸改读 prefab）、
+`zcds-magdi-mushroom.test.ts` 与 `zcds-maladi-guo.test.ts`（各 1 条：68025 不再走兜底光柱）。

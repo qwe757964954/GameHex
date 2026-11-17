@@ -608,6 +608,16 @@ function campIds(row: BigMapRow, field: string): readonly number[] {
     return readConfigArray(value, path).map((id, index) => readConfigInteger(id, `${path}[${index}]`, 1));
 }
 
+function campEffects(row: BigMapRow, field: string): readonly Readonly<Record<string, number>>[] {
+    const path = `[BigMap] ${BIGMAP_TABLE.camp}[campId=${row.campId}].${field}`;
+    return readConfigArray(row[field], path).map((effect, index) => {
+        const itemPath = `${path}[${index}]`;
+        return Object.fromEntries(Object.entries(readConfigObject(effect, itemPath)).map(([stat, value]) => [
+            stat, readConfigNumber(value, `${itemPath}.${stat}`),
+        ]));
+    });
+}
+
 function parseCamp(row: BigMapRow): IBigMapCampConfig {
     return {
         campId: campInt(row, 'campId', 1),
@@ -632,12 +642,14 @@ function parseCamp(row: BigMapRow): IBigMapCampConfig {
         rankResetTime: campInt(row, 'rankResetTime', 0),
         warScoreReset: campInt(row, 'warScoreReset', 0, Number.MAX_SAFE_INTEGER),
         buffGroupIds: campIds(row, 'buffGroupId'),
-        buffEffectIds: campIds(row, 'buffEffectId'),
+        occupyBuffEffectId: campEffects(row, 'occupyBuffEffectId'),
+        campDefenceEffect: campEffects(row, 'campDefenceEffect'),
         //2026-10-30：单个 `firstRewardId` 换成两列掉落数组（首占 / 占领）。
         firstReward: parseDropList(row, 'firstReward', BIGMAP_TABLE.camp),
         occupyReward: parseDropList(row, 'occupyReward', BIGMAP_TABLE.camp),
         buffConNum: campInt(row, 'buffConNum', 0),
-        buffRate: campNumber(row, 'buffRate'),
+        buffReduceRate: campNumber(row, 'buffReduceRate'),
+        buffInflucenRate: campNumber(row, 'buffInflucenRate'),
         iconPath: text(row, 'campIcon').trim(),
     };
 }

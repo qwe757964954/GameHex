@@ -276,6 +276,7 @@ export class ZCGameModel {
     private readonly unitStatPatches: Partial<Record<ZCOwner, ReadonlyMap<string, ZCUnitStatPatch>>> = {};
     private readonly cards: Record<ZCOwner, ReadonlyMap<string, ZCDeckCard>>;
     private readonly skillRuntime: Record<ZCOwner, ReadonlyMap<string, ZCSkillRuntimeDefinition>>;
+    private readonly neutralSkillRuntime: ReadonlyMap<string, ZCSkillRuntimeDefinition>;
     private readonly legacySkillRuntime: ZCLegacySkillEffectRuntime;
     private readonly legacyAttributes: Record<ZCOwner, ReadonlyMap<string, Readonly<Record<string, unknown>>>>;
     private readonly units = new ZCUnitRegistry();
@@ -318,6 +319,7 @@ export class ZCGameModel {
             counters: this.config.counters,
             cards: this.cards,
             skillRuntime: this.skillRuntime,
+            neutralSkillRuntime: this.neutralSkillRuntime,
             statPatches: this.unitStatPatches,
             deckBonuses: this.deckBonuses,
             unitById: this.units.byId,
@@ -452,6 +454,7 @@ export class ZCGameModel {
         this.effectiveDefinitions = compiled.effectiveDefinitions;
         this.unitStatPatches = compiled.unitStatPatches;
         this.skillRuntime = compiled.skillRuntime;
+        this.neutralSkillRuntime = compiled.neutralSkillRuntime;
         this.legacyAttributes = compiled.legacyAttributes;
         this.deckBonuses = compiled.deckBonuses;
         this.cards = {
@@ -578,8 +581,27 @@ export class ZCGameModel {
             structureTargets: (projectile, fromX, fromY, toX, toY, out) =>
                 this.projectileStructureTargets(projectile, fromX, fromY, toX, toY, out),
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
+            allyPass: (projectile, unit) => this.healAllyOnProjectilePass(projectile, unit),
             linger: (projectile) => this.lingerBeam(projectile),
         };
+    }
+
+    /**
+     * 弹道穿过己方单位回血（2026-11-17 急冻瓜「贯穿滋养」102401）。
+     *
+     * 额度（`allyHealLeft`）与去重（`allyHealIds`）已经由 `ZCProjectileSystem` 扣好/记好，
+     * 这里只负责把血加回去。走 `ZCStatusResolutionSystem.healUnit` —— 封顶 `maxHp`、
+     * 死亡不生效、溢出丢弃，与吸血（100703）/ 吃口菠萝（100603）同一条实现，
+     * 不另开一套治疗口径，免得「有的治疗吃加成、有的不吃」。
+     *
+     * 比例按**被治疗单位自己的最大生命**算（`unit.maxHp * pct`），
+     * 不是施法者的 —— 「回复 3% 生命」在玩家理解里就是「回自己血条的 3%」。
+     */
+    private healAllyOnProjectilePass(projectile: Readonly<ZCProjectileState>, unit: ZCUnitState): void {
+        const pct = Math.max(0, Math.min(1, projectile.allyHealPct ?? 0));
+        if (!(pct > 0)) return;
+        const amount = unit.maxHp * pct;
+        if (amount > 0) ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext);
     }
 
     /**
@@ -813,7 +835,7 @@ export class ZCGameModel {
             statusSystem: this.statusSystem,
             //  键口径与 `ZCAttackResolutionSystem.sendAttack` 完全一致（`${unitId}:${普攻 profile.skillId}`），
             //  否则「配置里能查到、运行时查不到」会出现同一张卡在两条链路上行为不一致。
-            runtimeOf: (unit) => this.skillRuntime[unit.owner]
+            runtimeOf: (unit) => (unit.neutralReinforcement ? this.neutralSkillRuntime : this.skillRuntime[unit.owner])
                 .get(`${unit.unitId}:${this.effectiveUnitDefinition(unit).attackProfile.skillId}`),
             //  连发弹走 `sendBurstShot`，不进 `sendAttack`：后者会推进普攻节拍与强化 CD。
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
@@ -851,6 +873,10 @@ export class ZCGameModel {
             //  技能自己的触发距离（2026-11-12 用户口径）：喷火 102603 要「小于普攻距离、
             //  与特效 350px 对齐」⇒ 最近目标还在 350 表值 px 之外时待触发，不消费 CD。
             nearestEnemyDistance: (unit) => this.unitTargeting.nearestEnemyDistance(unit),
+            //  unit 域属性补丁（2026-11-17 波利奥「孢子回流」100601 的每秒回复）：
+            //  与攻击系统读的是同一份 `unitStatPatches`，别在这里另算一遍，
+            //  否则同一张卡会出现「攻击链路看到 1.5%、技能链路看到 0」。
+            statPatchOf: (unit) => this.unitStatPatches[unit.owner]?.get(unit.unitId),
         };
     }
 
@@ -1841,6 +1867,7 @@ export class ZCGameModel {
                 const card = findCatalogCard(item.feature.resId);
                 const definition = this.unitDefinition(card.unitId);
                 feature.claimed = true;
+                building.neutralResourceId = null;
                 feature.focusOwners = [];
                 feature.retaliationUnitIds = [];
                 feature.targetUnitId = null;
@@ -1849,11 +1876,17 @@ export class ZCGameModel {
                 const reinforcement = this.spawnUnit(unit.owner, card, 1, building.id, true);
                 if (reinforcement) {
                     reinforcement.neutralReinforcement = true;
-                    reinforcement.inheritedStats = { ...definition, attack: definition.attack * item.feature.reviveRate };
+                    reinforcement.inheritedStats = { attack: definition.attack * item.feature.reviveRate,
+                        maxHp: definition.maxHp * item.feature.reviveRate, moveSpeed: definition.moveSpeed,
+                        attackInterval: definition.attackInterval, attackRange: definition.attackRange, bodyRadius: definition.bodyRadius };
                     reinforcement.hp = reinforcement.maxHp = definition.maxHp * item.feature.reviveRate;
+                    reinforcement.nextAttackAt = this.state.elapsedSeconds + definition.attackInterval;
                     reinforcement.freeX = center.x;
                     reinforcement.freeY = center.y;
                 }
+                this.pushCardReveal({ owner: unit.owner, hexId: building.id, cardId: card.id,
+                    building: 'barracks', tier: 4, cardName: card.name, unitId: card.unitId,
+                    luckText: '', monsterClaim: true });
                 this.grantGold(unit.owner, this.rules.killUnitGoldReward, center.x, center.y, FLOAT_TEXT_GOLD_SECONDS);
                 this.tileStatesDirty = true;
                 this.invalidateTerrain();
@@ -2107,6 +2140,7 @@ export class ZCGameModel {
         const definition = source.inheritedStats ?? this.effectiveUnitDefinitionFor(source.owner, source.unitId);
         clone.maxHp = clone.hp = source.maxHp;
         clone.attackMultiplier = source.attackMultiplier;
+        clone.neutralReinforcement = source.neutralReinforcement;
         clone.freeX = source.freeX;
         clone.freeY = source.freeY;
         clone.facingRadians = source.facingRadians;
@@ -2124,6 +2158,7 @@ export class ZCGameModel {
             attackInterval: definition.attackInterval,
             attackRange: definition.attackRange,
             bodyRadius: definition.bodyRadius,
+            ...(source.inheritedStats?.maxHp !== undefined ? { maxHp: source.inheritedStats.maxHp } : {}),
         };
         return clone;
     }
@@ -2243,7 +2278,8 @@ export class ZCGameModel {
             && left.moveSpeed === right.moveSpeed
             && left.attackInterval === right.attackInterval
             && left.attackRange === right.attackRange
-            && left.bodyRadius === right.bodyRadius;
+            && left.bodyRadius === right.bodyRadius
+            && left.maxHp === right.maxHp;
     }
 
     private effectiveUnitDefinitionFor(owner: ZCOwner, id: string): ZCUnitDefinition {

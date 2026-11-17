@@ -1,5 +1,6 @@
 import {
     _decorator,
+    Button,
     Color,
     Component,
     Graphics,
@@ -15,6 +16,9 @@ import {
     UITransform,
     Vec3,
 } from 'cc';
+import { EventMgr } from '../../../framework/event/EventMgr';
+import { ZCGameUiEvent } from './ZCGameHudEvents';
+
 import type { DeepReadonly } from '../model/ZCGameTypes';
 import type {
     ZCBuildingCooldownState,
@@ -78,6 +82,12 @@ import {
 } from './ZCGameViewUtil';
 
 const { ccclass, property } = _decorator;
+
+const MONSTER_FOCUS_STYLE = {
+    locked: { text: '未解锁', color: new Color(130, 140, 150) },
+    focus: { text: '集火野怪', color: new Color(45, 120, 225) },
+    cancel: { text: '取消集火', color: new Color(235, 145, 55) },
+} as const;
 const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
     none: '', hq: '城', mine: '金', barracks: '兵', tower: '塔',
 };
@@ -810,7 +820,45 @@ export class ZCHexView extends Component {
     /** 白条这一帧是否还在动 —— 渲染层据此决定要不要把它挂进逐帧集合。*/
     private barTrailAnimating = false;
 
-    initialize(onClick: () => void): void {
+    @property(Button)
+    monsterFocusButton: Button = null!;
+    @property(Label)
+    monsterFocusLabel: Label = null!;
+    @property(Sprite)
+    monsterFocusBackground: Sprite = null!;
+    @property(Sprite)
+    monsterGround: Sprite = null!;
+    private focusHexId = -1;
+
+    onLoad(): void {
+        this.monsterFocusButton.node.on(Button.EventType.CLICK, this.onMonsterFocus, this);
+    }
+
+    private onMonsterFocus(): void {
+        EventMgr.instance.emit(ZCGameUiEvent.MonsterFocus, this.focusHexId);
+    }
+
+    setMonsterGround(frame: SpriteFrame | null): void {
+        this.monsterGround.spriteFrame = frame;
+        this.monsterGround.node.active = frame !== null;
+    }
+
+    renderMonsterFocus(state: DeepReadonly<ZCHexState>, now: number): void {
+        const feature = state.neutralFeature;
+        const visible = typeof feature?.awake === 'boolean' && !feature.claimed;
+        this.monsterFocusButton.node.active = visible;
+        if (!visible) return;
+        const unlocked = feature.unlockedOwners?.includes(ZCOwner.Player) ?? false;
+        const focused = feature.focusOwners?.includes(ZCOwner.Player) ?? false;
+        const remaining = Math.max(0, (feature.focusReadyAt?.player ?? 0) - now);
+        this.monsterFocusButton.interactable = unlocked && remaining <= 0;
+        const style = !unlocked ? MONSTER_FOCUS_STYLE.locked : focused ? MONSTER_FOCUS_STYLE.cancel : MONSTER_FOCUS_STYLE.focus;
+        this.monsterFocusLabel.string = remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text;
+        this.monsterFocusBackground.color = style.color;
+    }
+
+    initialize(onClick: () => void, hexId = -1): void {
+        this.focusHexId = hexId;
         this.clickHandler = onClick;
         // 地块节点是对象池复用的：先摘再挂，避免同一实例上叠出多个监听。
         this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
@@ -1859,7 +1907,8 @@ export class ZCHexView extends Component {
         this.observedWallHp = wallHp;
         if (damaged) this.lastDamagedAt = now;
         // updateHealthBar 已经把「maxHp 非法」写进 active，这里再叠 3 秒显示窗口。
-        bar.node.active = bar.node.active && isHealthBarVisible(this.lastDamagedAt, now);
+        bar.node.active = bar.node.active && (typeof state.neutralFeature?.awake === 'boolean' && !state.neutralFeature.claimed
+            || isHealthBarVisible(this.lastDamagedAt, now));
         // 扣血白条：城墙耐久 → 建筑耐久切换、以及任意一次掉血都走同一条曲线（只看比例）。
         this.lastBarRatio = healthBarRatio(barHp, barMaxHp);
         this.barTrailAnimating = this.damageTrail.render(bar, this.lastBarRatio, now);

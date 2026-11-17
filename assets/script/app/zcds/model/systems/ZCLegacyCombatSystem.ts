@@ -30,7 +30,7 @@ export class ZCLegacyCombatSystem {
         const baseAttack = ZCCombatSystem.unitDamageBase(
             source, definition, context.bonusesFor(source.owner), context.rules(), 1,
         ) * (source.attackMultiplier ?? 1);
-        const configured = context.legacyAttributes(source.owner).get(source.unitId) ?? {};
+        const configured = source.neutralReinforcement ? {} : context.legacyAttributes(source.owner).get(source.unitId) ?? {};
         const attributes: Record<string, unknown> = {
             ...configured,
             // 旧运行时从战斗角色动态注入这两个值；这里改用当前 owner/unit/品级/状态修正后的 PVP 攻击力。

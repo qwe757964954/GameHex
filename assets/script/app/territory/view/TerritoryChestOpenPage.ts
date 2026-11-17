@@ -21,6 +21,7 @@ import {
     Widget,
 } from 'cc';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { VIEW_LIFECYCLE } from '../../../framework/ui/ViewLifecycle';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import { PopupBase } from '../../../framework/ui/PopupBase';
@@ -128,6 +129,8 @@ export class TerritoryChestOpenPage extends PopupBase {
     }
 
     protected async onOpen(userData?: any, context?: PopupOpenContext): Promise<void> {
+        // 先报「我在前台」再加载：引导层要立刻让位，否则开箱那一下的对话会盖在这一页上闪一下。
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
         this.clearCards();
         this.resetRevealState();
 
@@ -166,6 +169,8 @@ export class TerritoryChestOpenPage extends PopupBase {
         this._revealPlaying = false;
         this._revealDone = true;
         this.clearCards();
+        // 关掉之后引导层才回来（2-3 的奖励对话就是在这个时机开始播的）。
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
     }
 
     /** 入场期间点空白 = 跳过动画（而不是把窗关掉）；入场结束后才允许关。 */

@@ -1,4 +1,4 @@
-import { _decorator, Animation, Button, Component, Label, Node } from 'cc';
+import { _decorator, Button, Component, Label, Node, sp } from 'cc';
 import { roleRepository } from './RoleRepository';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { RoleEvent } from './RoleEvents';
@@ -34,22 +34,32 @@ const NAV_NODES: ReadonlyArray<readonly [string, RoleNavId]> = [
 ];
 
 /**
- * 主角立绘：`units/剑圣/剑圣.prefab` 的**嵌套实例**节点名 + 待机动画名。
+ * 主角立绘：`skel/主角铁拳/主角铁拳.prefab` 的**嵌套实例**节点名 + 待机动画名。
  *
- * 这个 prefab 本来就是塔防里的「剑圣主角」（`cc.Sprite` + `cc.Animation`，clip 三个：
- * `剑圣-idle` / `-attack` / `-run`，`defaultClip` 就是 idle、`playOnLoad = true`）。
- * 这里选它而不是另做一张立绘：**资源单源** —— 战斗里改了帧，角色页跟着变。
+ * 2026-11-17 换代：原来嵌的是 `units/剑圣/剑圣.prefab`（序列帧，`cc.Sprite` + `cc.Animation`，
+ * **该目录同日已 `svn delete`**，别照着路径去找）。美术给了主角本体的 Spine 版（`tqzj`，动画
+ * `animation` / `attack` / `idle` / `move`，skin 只有 `default`）⇒ 统一走骨骼，
+ * 与其余 36 套单位同一套口径：**根节点 + 子节点 `spine`**，动作走 `setAnimation`。
  *
- * ⚠️ 仍然在 `onOpen` 里**显式播一次**：`playOnLoad` 依赖 `cc.Animation.onLoad` 的时序，
- * 而嵌套实例的 `onLoad` 时机随宿主激活走；显式播既确定又能被探针断言（别改成只靠 playOnLoad）。
+ * ⚠️ 仍然在 `renderSnapshot` 里**显式播一次**：`sp.Skeleton.defaultAnimation` 的自动播
+ * 依赖组件 `onLoad` 的时序，而嵌套实例的 `onLoad` 时机随宿主激活走（RolePage 的 `onLoad`
+ * 可能早于骨架就绪）；显式播既确定又能被断言。
  *
- * ⚠️ 剑圣**挂在 `HeroIcon` 下**（不是 `Role` 的直接子节点）：嵌套实例根**不能挂 `cc.Widget`**，
+ * ⚠️ `setAnimation` 在骨架还没走完 `onLoad` 时返回 `null`（与 `ZCUnitView.playClip` 同一条
+ * 自愈路径）⇒ 见 {@link playHeroIdle}，补一帧重试一次，不做无限重试。
+ *
+ * ⚠️ 立绘**挂在 `HeroIcon` 下**（不是 `Role` 的直接子节点）：嵌套实例根**不能挂 `cc.Widget`**，
  * 而屏幕比设计分辨率高时上半屏要整体贴顶 —— 所以把它收进同样贴顶的 `HeroIcon` 里，
  * 靠宿主一起走。取它必须先下 `HeroIcon` 一层（2026-09-26 iPhone X 适配时改）。
+ *
+ * ⚠️ 骨架原始尺寸 942.67×769（`spine` 子节点 822×1218），实例上覆盖了 `_lscale = 0.2`
+ * 才和 `HeroIcon`（209×244）对得上 —— 换美术时**先看 prefab 里的覆盖，别只看 prefab 自身尺寸**。
  */
 const ROLE_HERO_HOST = 'HeroIcon';
-const ROLE_HERO_NODE = '剑圣';
-const ROLE_HERO_IDLE = '剑圣-idle';
+const ROLE_HERO_NODE = '主角铁拳';
+/** 骨架子节点名（37 套单位里 36 套都是这个；`skel/yueka` 例外，见 {@link ensureInit}）。 */
+const ROLE_HERO_SPINE = 'spine';
+const ROLE_HERO_IDLE = 'idle';
 
 /**
  * 「前期建议优先提升攻击力」气泡（文案烘在 prefab 里，这里只管显隐）。
@@ -100,8 +110,8 @@ export class RolePage extends Component {
     /** 缓存：BagPanel 节点上的面板组件（{@link ensureInit} 里取）。 */
     private bagPanelComp: RoleBagPanel = null!;
 
-    /** 缓存：主角立绘上的 `cc.Animation`（进页面播 idle）。 */
-    private heroAnim: Animation = null!;
+    /** 缓存：主角立绘上的 `sp.Skeleton`（进页面播 idle）。 */
+    private heroSkeleton: sp.Skeleton = null!;
 
     /** 缓存：PowerValue 节点上的 Label。 */
     private powerLabel: Label = null!;
@@ -151,8 +161,11 @@ export class RolePage extends Component {
         this.bagPanelComp = this.bagPanel.getComponent(RoleBagPanel);
         this.powerLabel = this.powerValue.getComponent(Label);
 
-        // 主角立绘（`units/剑圣` 嵌套实例）上的动画组件 —— 它挂在 HeroIcon 下（见文件头说明）。
-        this.heroAnim = this.node.getChildByName(ROLE_HERO_HOST).getChildByName(ROLE_HERO_NODE).getComponent(Animation);
+        // 主角立绘（`skel/主角铁拳` 嵌套实例）上的骨架 —— 它挂在 HeroIcon 下（见文件头说明）。
+        // 布局与其余 36 套单位一致：Skeleton 在子节点 `spine` 上（`skel/yueka` 例外，直接挂在根）；
+        // 这两个分支都试，别假定唯一形态。
+        const heroRoot = this.node.getChildByName(ROLE_HERO_HOST).getChildByName(ROLE_HERO_NODE);
+        this.heroSkeleton = heroRoot.getComponent(sp.Skeleton) || heroRoot.getChildByName(ROLE_HERO_SPINE).getComponent(sp.Skeleton);
 
         // 装备栏：6 格按部位号顺序取（老端也是 `com.tm2("equipType" + 部位号)` 现取）。
         for (let partId = 1; partId <= ROLE_EQUIP_PART_COUNT; partId += 1) {
@@ -176,9 +189,8 @@ export class RolePage extends Component {
         // 攻击力**无条件写**（规则 82）：0 也显示成 "0" —— 留白会被误读成"压根没接"。
         this.powerLabel.string = String(snapshot.power);
 
-        // 主角立绘：每次进页面从头播 idle（`Stop` 一下再播，避免上次留下的进度）。
-        this.heroAnim.stop();
-        this.heroAnim.play(ROLE_HERO_IDLE);
+        // 主角立绘：每次进页面从头播 idle（spine 的 `setAnimation` 会让轨道重新计时）。
+        this.playHeroIdle();
 
         // 老端结构（`TabRoleMain`）：进页面下半屏**直接铺列表**，默认停在「宝石」页签，
         // 不是「点页签才弹出一个覆盖式面板」（那样进来时下半屏是空白的）。
@@ -192,6 +204,20 @@ export class RolePage extends Component {
         this.gemTabRedDot.setRedDot(readServerRedDot(CmdRedDotType.GEM_COMPOSE));
 
         this.showQipao();
+    }
+
+    /**
+     * 播主角待机。
+     *
+     * `setAnimation` 返回 `null` = 骨架还没走完 `onLoad`（与 `ZCUnitView.playClip` 同一条
+     * 自愈路径）。首次进页面时 RolePage 的 `onLoad` 可能早于嵌套实例的 `sp.Skeleton.onLoad`
+     * ⇒ 补一帧重试**一次**。不无限重试：真配错（动画名不存在）时宁可停在 setup pose，
+     * 也不要给已切走的页面留一串定时器。
+     */
+    private playHeroIdle(retry = 1): void {
+        if (this.heroSkeleton.setAnimation(0, ROLE_HERO_IDLE, true)) return;
+        if (retry <= 0) return;
+        this.scheduleOnce(() => this.playHeroIdle(retry - 1), 0);
     }
 
     protected onDestroy(): void {

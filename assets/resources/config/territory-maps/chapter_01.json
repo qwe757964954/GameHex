@@ -84,7 +84,7 @@
       ],
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 30,
@@ -700,7 +700,7 @@
         "combatPower": 0,
         "silverCost": 15,
         "exploreSeconds": 1,
-        "staminaCost": 5
+        "staminaCost": 1
       },
       "configId": "fixedResource_308",
       "buildingId": "",
@@ -3009,7 +3009,7 @@
       ],
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 10,
@@ -3031,7 +3031,7 @@
       ],
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 10,
@@ -3053,7 +3053,7 @@
       ],
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 10,
@@ -3075,7 +3075,7 @@
       ],
       "unlock": {
         "requiredCells": [
-          367
+          347
         ],
         "combatPower": 0,
         "silverCost": 10,
@@ -3086,7 +3086,8 @@
       "battleIds": [
         60001,
         60002
-      ]
+      ],
+      "patrolId": 50021
     },
     {
       "id": "patrolChest_158",
@@ -3108,7 +3109,8 @@
       "battleIds": [
         60003,
         60004
-      ]
+      ],
+      "patrolId": 50005
     },
     {
       "id": "patrolChest_330",
@@ -3372,7 +3374,8 @@
       "battleIds": [
         60005,
         60006
-      ]
+      ],
+      "patrolId": 50007
     },
     {
       "id": "patrolChest_166",
@@ -3504,7 +3507,8 @@
       "battleIds": [
         60007,
         60008
-      ]
+      ],
+      "patrolId": 50005
     },
     {
       "id": "patrolChest_173",
@@ -3636,7 +3640,8 @@
       "battleIds": [
         60009,
         60010
-      ]
+      ],
+      "patrolId": 50005
     },
     {
       "id": "patrolChest_175",

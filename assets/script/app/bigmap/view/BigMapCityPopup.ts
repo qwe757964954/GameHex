@@ -81,8 +81,8 @@ function formatCityScore(score: string): string {
  *
  *## 数据缺口（本版明确留空，不编）
  *
- *- 「增益效果」两条：`bigMapCamp` 表只有 `buffConNum` / `buffRate` 两个数值 + 一句 `campDesc`，
- *  没有逐条 buff 文案。有 `campDesc` 就填第一条，第二条隐藏。
+ *- 「增益效果」两条：`bigMapCamp` 表的属性效果没有逐条 buff 文案。
+ *  有 `campDesc` 就填第一条，第二条隐藏。
  */
 @ccclass('BigMapCityPopup')
 export class BigMapCityPopup extends PopupBase {

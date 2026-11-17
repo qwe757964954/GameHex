@@ -35,8 +35,10 @@ import {
     Vec3,
 } from 'cc';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import type { PopupOpenContext } from '../../../framework/ui/PopupBase';
+import { VIEW_LIFECYCLE } from '../../../framework/ui/ViewLifecycle';
 import { HERO_OBTAIN_ARTS, heroObtainArtPathOf, spriteFramePathOf } from '../../ArtPaths';
 import { CardUnitPreview } from '../CardUnitPreview';
 import { resolveHeroObtainData } from '../HeroObtainData';
@@ -172,6 +174,9 @@ export class HeroObtainPage extends PopupBase {
     }
 
     protected async onOpen(userData?: any, context?: PopupOpenContext): Promise<void> {
+        // 先报「我在前台」再加载：新手引导层要立刻让位（否则它的遮罩压在这一页上，
+        // 「点击屏幕继续」点不动），关掉这一页后再回来接着播。
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
         this.resetState();
         const data = await resolveHeroObtainData((userData ?? {}) as IHeroObtainUserData);
         if (!context || context.cancelled) return;
@@ -195,6 +200,8 @@ export class HeroObtainPage extends PopupBase {
         this._done = true;
         this._preview?.clear();
         this._preview = null;
+        // 多个橙卡碎片要**逐个**播：关掉这一页之后引导层 / 下一张才轮到。
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
     }
 
     /** 入场期间点任意处 = 直接落静止态；静止后 = 关闭。 */

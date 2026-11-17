@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parent
 PROJECT = ROOT.parents[1]
 SOURCE = ROOT / "presets" / "gamemap"
 # 与 bigmap / territory 同一策划落点，但本次只同步 sever（不带 .meta）。
-SEVER_TARGET = presets_io.DOC_JSON_ROOT / "sever"
+SEVER_TARGET = presets_io.DOC_SEVER_DIR / "battlemap"
 GAME_SOURCE = PROJECT / "assets" / "script" / "app" / "zcds" / "ZCGame.ts"
 MAP_DIRECTORY_PATTERN = re.compile(r"MAP_DIRECTORY = '([^']+)'")
 
@@ -64,6 +64,9 @@ def main():
             note = presets_io.purge_client_copy(file.name, True)
             if note:
                 print(note)
+            note = presets_io.purge_flat_sever_copy(file.name, True)
+            if note:
+                print(note)
             continue
         shutil.copyfile(file, target)
         meta = Path(str(target) + ".meta")
@@ -75,6 +78,9 @@ def main():
             }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # 策划 sever 目录只写 JSON，不生成 .meta（与 bigmap / territory 发布口径一致）。
         shutil.copyfile(file, sever_path)
+        note = presets_io.purge_flat_sever_copy(file.name)
+        if note:
+            print(note)
         note = presets_io.purge_client_copy(file.name)
         if note:
             print(note)

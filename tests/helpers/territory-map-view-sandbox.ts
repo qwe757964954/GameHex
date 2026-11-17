@@ -90,6 +90,8 @@ export function loadTerritoryMapViewClass(): any {
                 return { TerritoryStationView: class { setConditionSpawnScale() {} }, territoryUsesBottomAnchor: () => false };
         }
         if (id === './TerritoryResourceGainView') return { TerritoryResourceGainView: class {} };
+        // 本夹具不生成巡逻模型；真实位移和清理在 territory-monster-patrol 中验证。
+        if (id === './TerritoryMonsterPatrolView') return { TerritoryMonsterPatrolView: class {} };
         // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：夹具只关心站点文案，给个空壳即可。
         if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
         // 喷发粒子（2026-10-16 row17）：夹具只关心站点文案，给个空壳即可。

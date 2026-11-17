@@ -108,21 +108,31 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
         for (const tier of byChain(chainId)) assert.equal(Number(tier.pvpSkillId), 30707);
     }
 
-    // 100501 高速移动：三级同值 +15%
-    for (const tier of byChain(100501)) {
-        assert.equal(tier.statId, 'moveSpeed');
-        assert.equal(tier.operation, 'addRate');
-        assert.equal(Number(tier.value), 0.15);
+    // 100501「蔓生连打」（2026-11-17 连击批次）：旧的「高速移动」（移速 +15%）整条换掉 ——
+    // 设计案 mech 写明「移速不在战士任何档位池」。现在是 1 段连击 + 逐档递减系数。
+    for (const [index, tier] of byChain(100501).entries()) {
+        assert.equal(tier.statId, 'attackCount');
+        assert.equal(tier.operation, 'add');
+        assert.equal(Number(tier.value), 1, '紫卡只有 1 段额外连击（金卡才是 2 段）');
+        const params = JSON.parse(String(tier.skillParamJson)) as Record<string, number>;
+        assert.equal(params.comboDamage, [60, 65, 70][index], '第 2 段占首段的百分比');
+        assert.equal(params.comboFalloff, 0.4, '再往后每段 ×0.6（本卡没有第 3 段，系数不生效）');
     }
-    // 100503 生命汲取：**一行两个数值** —— 攻击范围占 statId、吸血占 skillParamJson。
-    // `ZCStatSchema` 硬校验「同一 unit + 技能链 + 等级只能有一行」，所以不能拆两行。
-    for (const row of byChain(100503)) {
-        assert.equal(row.statId, 'attackRange');
-        assert.equal(row.operation, 'addRate');
-        assert.equal(Number(row.value), 0.30);
+    // 100503 V5「异种猎杀协议」（2026-11-17 落地）：对蘑菇阵营 +45/50/55%、暴击率 8/10/12%，
+    // 混搭尾（攻击 7% / 伤害 6% / 攻速 7%）走 `mix.*`。
+    //  🔴 原来的「生命汲取」（攻击范围 +30% + `lifestealRate` 2%）被设计案整条替换 ——
+    //  `lifestealRate` 现在**不该**再出现在这行参数里。
+    for (const [index, row] of byChain(100503).entries()) {
+        assert.equal(row.statId, 'counterCamp2', '对蘑菇阵营（ZC_CAMP_TRAITS 第 2 位）');
+        assert.equal(row.operation, 'add');
+        assert.equal(Number(row.value), [45, 50, 55][index]);
         assert.equal(row.behaviorKey, 'skill_params');
         const params = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
-        assert.equal(params.lifestealRate, 0.02, '比例口径：0.02 = 2%');
+        assert.equal(params['mix.critRate'], [8, 10, 12][index]);
+        assert.equal(params['mix.attack.addRate'], 0.07);
+        assert.equal(params['mix.damageRate.addRate'], 0.06);
+        assert.equal(params['mix.attackSpeed.addRate'], 0.07);
+        assert.equal(params.lifestealRate, undefined, '吸血已随机制更换移除');
     }
 
     // 100502 横扫：120/150/180%，只有 III 级带 2 格击退
@@ -150,31 +160,45 @@ test('椰蛋战士：12 行技能计划（4 条链 × 3 档），三档数值逐
 
 // ── 二、编译期：属性与技能参数真的进运行时 ─────────────────────────────────────
 
-test('25 级：移速 +15% / 攻击范围 +30% 落进 unit 域 statPatch，吸血走技能参数', () => {
+test('36 级：连击段数与 100503 的克制条 / 混搭尾都落进 unit 域 statPatch', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
-    const selected = withoutLineupCrit(selectZCSkillPlans('68005', 25, catalogs));
-    // 四条链都是 `replace`（三级同值）⇒ 25 级每条链只留最高档，共 4 行。
+    const selected = withoutLineupCrit(selectZCSkillPlans('68005', 36, catalogs));
+    // 四条链都是 `replace`（三级同值）⇒ 每条链只留最高档，共 4 行。取 36 级是因为
+    // 100504 在**第 4 格**、III 档要到 36 级（2026-11-17 统一档位前是 25）。
     assert.equal(selected.length, 4, `四条链的最高档共 4 行，实得 ${selected.length}`);
     assert.deepEqual(selected.map((row) => row.modifierId).sort(),
         [91005103, 91005113, 91005123, 91005143]);
 
     const loadout = compileZCCombatBuild({
-        unitId: '68005', heroLevel: 25, generalStar: { generalId: 68005, star: 1 },
+        unitId: '68005', heroLevel: 36, generalStar: { generalId: 68005, star: 1 },
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout, '必须编译出技能计划 loadout');
-    assert.equal(loadout!.statPatch.moveSpeedPct, 15);
-    assert.equal(loadout!.statPatch.attackRangePct, 30);
-    // 吸血**不在** statPatch 里：它在 skillParamJson（见下一个用例），
-    // 所以这里必须是 undefined —— 否则说明 unit 域兜底路径被误触发了。
+    //  100501 换成连击后不再给移速（旧「高速移动」已整条替换）。
+    assert.equal(loadout!.statPatch.moveSpeedPct, undefined, '移速随「高速移动」一起移除');
+    assert.equal(loadout!.statPatch.multiHitFlat, 1, '1 段额外连击');
+    //  100503 换成克制条后不再给攻击范围（那条 30% 是旧「生命汲取」的），
+    //  改为「对蘑菇阵营 +55%」+ 暴击率 12% + 混搭尾（攻 7% / 伤害 6% / 攻速 7%）。
+    assert.equal(loadout!.statPatch.attackRangePct, undefined, '旧「生命汲取」的攻击范围已移除');
+    assert.equal(loadout!.statPatch.counterCamp2Pct, 55);
+    assert.equal(loadout!.statPatch.critRatePct, 12);
+    //  `addRate` 折百分数是 `value * 100`，0.07 会带出 7.000000000000001 ⇒ 比到 1e-9。
+    const near = (actual: number | undefined, expected: number) => {
+        assert.ok(actual != null && Math.abs(actual - expected) < 1e-9, `${actual} ≠ ${expected}`);
+    };
+    near(loadout!.statPatch.attackPct, 7);
+    near(loadout!.statPatch.damageRatePct, 6);
+    near(loadout!.statPatch.attackSpeedPct, 7);
+    // 吸血**不在** statPatch 里：它是技能参数而不是常驻补丁 ——
+    // 这条卡现在也根本没有吸血了，所以必须是 undefined。
     assert.equal(loadout!.statPatch.lifestealRate, undefined);
 });
 
-test('25 级：暴风 / 横扫 / 吸血三套参数都并进同一个运行时（68005:30707）', () => {
+test('36 级：暴风 / 横扫两套参数都并进同一个运行时（68005:30707）', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
     const loadout = compileZCCombatBuild({
-        unitId: '68005', heroLevel: 25, generalStar: { generalId: 68005, star: 1 },
+        unitId: '68005', heroLevel: 36, generalStar: { generalId: 68005, star: 1 },
     }, config.units, catalogs).find((item) => item.sourceKey.startsWith('skillPlan:'));
     assert.ok(loadout);
     const runtime = compileZCMatchRuntime({
@@ -196,8 +220,8 @@ test('25 级：暴风 / 横扫 / 吸血三套参数都并进同一个运行时�
     assert.equal(skill!.parameters.secondaryCooldown, 8);
     assert.equal(skill!.parameters.secondaryDamageRate, 1.8);
     assert.equal(skill!.parameters.secondaryKnockback, 2);
-    // 生命汲取的吸血比例（同一行挂的第二个数值）
-    assert.equal(skill!.parameters.lifestealRate, 0.02);
+    // 生命汲取已随 V5 移除（100503 改成异种猎杀协议）⇒ 同一份参数袋里不该再有吸血比例。
+    assert.equal(skill!.parameters.lifestealRate, undefined);
 });
 
 // ── 三、横扫：120° 扇形 + L3 击退 ─────────────────────────────────────────────

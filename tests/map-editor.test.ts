@@ -2,6 +2,28 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
+import { hexGridDistance } from '../assets/script/core/hex/HexGridLayout';
+
+test('野怪领地与运行时六边形距离一致：先取半径再排除空洞，不补偿缺格', () => {
+    const { editor } = createEditor();
+    editor.setSize(20, 11);
+    editor.setMirror(false, false);
+    editor.clearGrid();
+    const origin = { row: 8, column: 5 };
+    const voids = editor.monsterTerritory(origin, 1)
+        .filter((cell: { row: number; column: number }) => cell.row !== origin.row || cell.column !== origin.column);
+    editor.paintCells(voids, 'void');
+    const cells = editor.monsterTerritory(origin, 2);
+    const state = editor.state();
+    const actual = cells.map((cell: { row: number; column: number }) => cell.row * state.cols + cell.column).sort((a: number, b: number) => a - b);
+    const expected: number[] = [];
+    for (let row = 0; row < state.rows; row++) for (let column = 0; column < state.cols; column++) {
+        if (state.grid[row][column] !== -1 && hexGridDistance(origin, { row, column }) <= 2) expected.push(row * state.cols + column);
+    }
+    assert.deepEqual(Array.from(actual), expected);
+    assert.ok(cells.some((cell: { distance: number }) => cell.distance === 2), '空洞不造成绕路');
+    assert.equal(cells.length, 13, '19 格半径扣除 6 个空洞');
+});
 import ts from 'typescript';
 import { ZC_HEX_COLUMN_PHASE } from '../assets/script/app/zcds/model/ZCMapGeometry';
 import {
@@ -63,7 +85,8 @@ function createEditor(options: { hash?: string; fetch?: (path: string, options?:
         }, location: { hash: options.hash || '' },
         confirm(message: string) { confirmCalls.push(message); return options.confirm !== false; },
     };
-    const code = readFileSync('tools/map-editor/app.js', 'utf8');
+    const code = readFileSync('tools/map-editor/app.js', 'utf8')
+        .replace('window.__editor = {', 'window.__editor = { monsterTerritory,');
     runInNewContext(code, {
         document, window, fetch: options.fetch || (() => new Promise(() => {})),
         Image: options.imageSizes ? class {

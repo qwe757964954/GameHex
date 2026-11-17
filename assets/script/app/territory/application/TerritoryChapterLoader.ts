@@ -9,6 +9,8 @@ import {
 } from './TerritoryPageAssets';
 import { loadTerritoryCampaign } from '../model/TerritoryCampaignRepository';
 import { configureTerritoryMap } from '../model/TerritoryMapConfig';
+import { Prefab } from 'cc';
+import { RefUtil } from '../../../framework/ref/RefUtil';
 
 /**
  * 章节加载适配器：把「资源入口 + 地图 JSON + campaign + 美术」打包成 {@link ITerritoryChapterBundle}。
@@ -28,6 +30,18 @@ export class TerritoryChapterLoader implements ITerritoryChapterLoader {
         // 先解析地图拿 background，再决定背景图路径；单张美术缺失由 loadTerritoryBattleArt 内部回落。
         const sourceMap = configureTerritoryMap(mapJson);
         const art = await loadTerritoryBattleArt(this.assets, sourceMap.background);
+        const monsterIds = new Set(sourceMap.sites.flatMap(site => site.patrolId ? [site.patrolId] : []));
+        const monsterPrefabs = new Map<number, Prefab>();
+        if (monsterIds.size) {
+            const rows = await RefUtil.instance.getRefAllAsync('monsterCard');
+            await Promise.all(Array.from(monsterIds, async (id) => {
+                const row = rows.find((item: { id: number }) => item.id === id);
+                if (!row || typeof row.unitPrefabPath !== 'string' || !row.unitPrefabPath) {
+                    throw new Error(`[Territory] 巡逻野怪 ${id} 缺少 monsterCard.unitPrefabPath`);
+                }
+                monsterPrefabs.set(id, await this.assets.load(row.unitPrefabPath, Prefab));
+            }));
+        }
         return {
             mapJson,
             campaign: {
@@ -36,7 +50,7 @@ export class TerritoryChapterLoader implements ITerritoryChapterLoader {
                 idleRewardMaxHours: campaign.idleRewardMaxHours,
                 levelAutoStart: campaign.levelAutoStart,
             },
-            art,
+            art: { ...art, monsterPrefabs },
         };
     }
 }

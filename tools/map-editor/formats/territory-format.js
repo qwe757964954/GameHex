@@ -119,13 +119,16 @@ export function normalizeTerritoryMap(data, fallbackId) {
   const background = stringValue(data.background, 'background', issues) ?? '';
   if (!Array.isArray(data.sites)) issues.push('sites must be an array');
   const sites = [];
-  const siteIds = new Set();
+  const siteIds = new Map();
   const occupied = new Map();
   for (const [index, raw] of (Array.isArray(data.sites) ? data.sites : []).entries()) {
     const label = `sites[${index}]`;
     if (!isRecord(raw)) { issues.push(`${label} must be an object`); continue; }
     const siteId = stringValue(raw.id, `${label}.id`, issues, { required: true, pattern: SITE_ID_PATTERN });
-    if (siteIds.has(siteId)) issues.push(`duplicate site id ${siteId}`); else siteIds.add(siteId);
+    if (siteIds.has(siteId) && !(raw.type === 'patrolChest' && siteIds.get(siteId) === 'patrolChest')) {
+      issues.push(`duplicate site id ${siteId}`);
+    }
+    siteIds.set(siteId, raw.type);
     const type = raw.type;
     if (!TERRITORY_SITE_TYPES.includes(type)) issues.push(`${label}.type must be one of ${TERRITORY_SITE_TYPES.join(', ')}`);
     const cellId = integer(raw.cellId, `${label}.cellId`, issues, { min: 0, max: Math.max(0, total - 1) });
@@ -168,20 +171,25 @@ export function normalizeTerritoryMap(data, fallbackId) {
     });
   }
   const fixedCells = new Set([startCellId, ...occupied.keys()]);
+  for (const [id, type] of siteIds) {
+    if (type !== 'patrolChest') continue;
+    const cells = sites.filter(site => site.type === 'patrolChest' && site.id === id).flatMap(site => site.footprint);
+    if (!connected(cells, rows, columns)) issues.push(`patrol site ${id} must be contiguous`);
+  }
   const siteByCell = new Map(sites.map((site) => [site.cellId, site]));
   const dependencyState = new Map();
   const visitSite = (site) => {
-    const state = dependencyState.get(site.id) || 0;
+    const state = dependencyState.get(site.cellId) || 0;
     if (state === 1) { issues.push(`unlock dependency cycle at ${site.id}`); return false; }
     if (state === 2) return true;
-    dependencyState.set(site.id, 1);
+    dependencyState.set(site.cellId, 1);
     for (const requiredCell of site.unlock.requiredCells) {
       if (requiredCell === startCellId) continue;
       const dependency = siteByCell.get(requiredCell);
       if (!dependency) issues.push(`site ${site.id} requires cell ${requiredCell}, but no fixed site owns it`);
       else visitSite(dependency);
     }
-    dependencyState.set(site.id, 2);
+    dependencyState.set(site.cellId, 2);
     return true;
   };
   for (const site of sites) visitSite(site);

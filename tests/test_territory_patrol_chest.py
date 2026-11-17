@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools' / 'map-editor'))
 import copy_territory_maps as publisher
+import presets_io
 from territory_format import TerritoryValidationError, validate_territory_map
 
 
@@ -19,6 +20,22 @@ def patrol_map(battle_ids):
 
 
 class TerritoryPatrolChestTests(unittest.TestCase):
+    def test_same_site_id_defines_patrol_group_and_dependency_uses_cell_id(self):
+        data = patrol_map([60001])
+        data['sites'].append({'id': 'patrol_1', 'type': 'patrolChest', 'cellId': 5,
+                              'battleIds': [60001], 'unlock': {'requiredCells': [1]}})
+        self.assertEqual(len(validate_territory_map(data)[0]['sites']), 2)
+        data['sites'][1]['cellId'] = 15
+        with self.assertRaisesRegex(TerritoryValidationError, 'contiguous'):
+            validate_territory_map(data)
+        data['sites'][1] = {'id': 'patrol_1', 'type': 'stage', 'cellId': 5}
+        with self.assertRaisesRegex(TerritoryValidationError, 'duplicate site id'):
+            validate_territory_map(data)
+
+    def setUp(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory())
+        self.enterContext(patch.object(presets_io, 'DOC_SEVER_DIR', Path(directory) / 'sever'))
+
     def test_battle_ids_survive_publishing_to_both_targets(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

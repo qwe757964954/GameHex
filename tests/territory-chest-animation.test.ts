@@ -731,14 +731,30 @@ test('页面接线：加载**补帧序列** + 销毁时停播（漏了就是「�
     assert.ok(src.includes('territoryChestTierOfRewards'), '档位必须由 model 判，不在页面 if');
 });
 
-test('页面接线：领地宝箱不再前置地图表演（奖励页即开箱表现）', () => {
+test('页面接线：领地宝箱先播地图开箱表演，再交棒组合层（2026-11-17 口径）', () => {
     const src = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
     const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-    // 旧的「飞图标 + 播 chest_seq + 回调弹页」这一整条链路已下线：
-    // 页面本身画着开启态宝箱与整批奖励，再前置一段世界表演等于同一件事播两遍。
-    assert.doesNotMatch(body, /this\.wireRewardCatch\(rewards\)/, '不再给开箱表演接线');
-    assert.doesNotMatch(body, /playChestThenSettle/, '不再先播地图开箱');
-    assert.match(body, /this\.presentChestRewards\(rewards\);/, '宝箱这一路直接进奖励页');
+    // 旧的「先弹宝箱开启页」已下线；用户要求把**原有奖励粒子动画**放回来。
+    assert.doesNotMatch(body, /TerritoryChestOpenPage/, '领地宝箱这一路不再弹「宝箱开启页」');
+    assert.doesNotMatch(body, /playChestThenSettle|wireRewardCatch/, '旧的前置表演写法不复存在');
+    assert.match(body, /this\.presentChestRewards\(rewards, cellId, tier\)/, '档位齐了才进开箱链');
+    assert.match(body, /this\.mapView\.playChestOpen\(cellId, tier, entries, handOff\)/, '要真的播 chest_seq 开箱表演');
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ owner: this, rewards: goods \}\)/,
+        '演完交给组合层：橙卡英雄页（id 升序）→ 统一奖励弹窗');
+});
+
+test('页面接线：起播失败也要交棒（表演不能吞奖励）', () => {
+    const src = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+    const body = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    const at = body.indexOf('private async runChestOpening(');
+    assert.ok(at > 0, '缺少 runChestOpening');
+    const tail = body.slice(at, body.indexOf('private findHeroTabHost(', at));
+    assert.match(tail, /if \(this\.mapView\.playChestOpen\([^)]*\)\) return;\s*handOff\(\);?/,
+        '`playChestOpen` 返回 false（格子挪出视口 / 覆盖层没建）时立刻 handOff');
+    assert.match(tail, /catch \(error\)[\s\S]{0,200}?if \(!this\.isValid\) \{/,
+        '取图异常不拦路，但要判页面是否还在');
+    // 页面先塌 / 演出起不来时演出窗口必须收掉，否则引导层永远让位（下一句台词就不播了）
+    assert.match(tail, /ChestPresentation[^;]*playing: false/);
 });
 
 test('视图接线：换帧走 model，别在视图里再算一条时间轴', () => {

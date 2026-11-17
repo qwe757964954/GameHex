@@ -365,8 +365,8 @@ export class BigMapPage extends Component {
     /**
      *城池 → 弹窗展示数据。
      *
-     *排行榜来自当前城池快照；增益效果：`bigMapCamp` 表只有 `buffConNum` / `buffRate` 两个数值 + 一句 `campDesc`，
-     *  没有逐条 buff 文案，先填 `campDesc` 一条（第二条自动隐藏）。
+     *排行榜来自当前城池快照；`bigMapCamp` 表的属性效果没有逐条 buff 文案，
+     *先填 `campDesc` 一条（第二条自动隐藏）。
      */
     private buildCityPopupContent(city: IBigMapCityView): IBigMapCityPopupContent {
         const desc = city.campConfig?.desc ?? city.desc;

@@ -8,6 +8,7 @@
 
 import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
 import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
 import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
 import { ZCCombatEventType } from '../ZCCombatCatalog';
@@ -110,6 +111,14 @@ export interface IZCSkillTriggerContext {
      * 缺省 ⇒ 不压。
     */
     nearestEnemyDistance?(unit: ZCUnitState): number;
+    /**
+     * 取该单位当前生效的 unit 域属性补丁（`pvpSkillPlan` 折出来的 `statPatch`）。
+     *
+     * 目前只有「每秒回复」(`hpRegenPct`) 这一条读它：那条是**常驻属性**而不是技能参数，
+     * 按 `unitId` 索引、与攻击系统用的是同一份 map（口径必须一致，否则同一张卡
+     * 在攻击链路和技能链路看到两个不同的数值）。缺省 ⇒ 视为空补丁，整段不执行。
+    */
+    statPatchOf?(unit: ZCUnitState): ZCUnitStatPatch | undefined;
 }
 
 /** 友军光环的刷新窗口（秒）：每步都重挂一次，离开半径后最多这么久失效。*/
@@ -129,6 +138,16 @@ const TEAM_AURA_SLOTS = 3;
  * 这里退避一小会儿，再按 `unit.id` 错峰，把齐射拆成先后两波。
 */
 const STRIKE_RETRY_SECONDS = 0.2;
+
+/**
+ * 多点打击命中后挂的状态（`strikeAppliesStatus = 1` 时生效）：麻痹。
+ *
+ * 2026-11-17 急冻瓜「急冻光线」102404 用。为什么写死：`skillParamJson` 只有数值槽，
+ * 装不下状态 id；而 `runtime.statusId` 是整卡共用的一个槽（同一张卡的 102401~102404 都挂在
+ * `68024:30671` 这个键上），借它会顺带把这张卡的普攻也变成「每发都麻痹」。
+ * 用 `numb` 而不是 `paralysis`：前者只禁攻击 + 移速 −50%（软控），后者是 3 秒硬控。
+*/
+const ZC_STRIKE_NUMB_STATUS_ID = 'numb';
 
 /**
  * 每个 `unit.id` 槽位多加的退避（秒）：4 个槽 ⇒ 0.2 ~ 1.1s 的错峰。
@@ -183,7 +202,6 @@ export function lowHpGuardStatusId(reducePct: number, seconds: number): string {
 
 export class ZCSkillTriggerSystem {
     static tick(state: ZCSnapshot, dt: number, context: IZCSkillTriggerContext): void {
-        void dt;
         if (!state.units.length) return;
         const now = state.elapsedSeconds;
         let statusChanged = false;
@@ -196,6 +214,7 @@ export class ZCSkillTriggerSystem {
             const release = context.inAttackRange?.(unit) ?? true;
 
             if (this.applyPassiveStatus(state, unit, runtime, context)) statusChanged = true;
+            this.applyHpRegen(unit, dt, now, context);
             if (this.applyTeamAura(state, unit, runtime, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
@@ -218,6 +237,31 @@ export class ZCSkillTriggerSystem {
     private static markCastAction(unit: ZCUnitState, now: number, hold: boolean): void {
         unit.castActionUntil = now + ZC_SKILL_CAST_ACTION_SECONDS;
         if (hold) unit.castHoldUntil = now + ZC_SELF_CAST_HOLD_SECONDS;
+    }
+
+    /**
+     * 每秒回复（`pvpAttrMap.hpRegenPct`，2026-11-17 波利奥「孢子回流」100601）。
+     *
+     * 设计口径：「每秒回复自身最大生命的固定比例，不受治疗加成、不被护盾吸收，溢出丢弃」。
+     *  · 「不受治疗加成 / 不被护盾吸收」由 `healUnit` 天然满足（它只做封顶，不吃任何倍率、不碰护盾）；
+     *  · 「溢出丢弃」= `healUnit` 的封顶；
+     *  · **结算点是整秒边界**，不是每帧按比例切碎：逐帧切碎的话 `healUnit` 会把小数抹掉
+     *    （最大生命 1000、每秒 2% ⇒ 单帧 0.32 点 → 0），回血直接消失。
+     * 用 `floor(now) - floor(now - dt)` 数「这一步跨过了几个整秒」，就能在跨秒那一帧补一拍；
+     * 步长固定（1/30 s）时恒为 0 或 1，掉帧跨多秒也不会漏。
+    */
+    private static applyHpRegen(
+        unit: ZCUnitState,
+        dt: number,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        const rate = Math.max(0, context.statPatchOf?.(unit)?.hpRegenPct ?? 0);
+        if (!(rate > 0)) return;
+        const ticks = Math.floor(now + 1e-9) - Math.floor(now - dt + 1e-9);
+        if (ticks <= 0) return;
+        const amount = unit.maxHp * rate / 100 * ticks;
+        if (amount > 0) context.healUnit?.(unit, amount);
     }
 
     /** 1. 常驻被动状态：每个单位只挂一次（`passiveStatusApplied` 标记进快照）。*/
@@ -771,6 +815,13 @@ export class ZCSkillTriggerSystem {
                 splashRadius: Math.max(0, params?.strikeSplashRadius ?? 0) * scale,
                 splashDamageRate: Math.max(0, params?.strikeSplashDamageRate ?? 0),
                 splashFalloff: Math.max(0, Math.min(1, params?.strikeSplashFalloff ?? 0)),
+                //  命中挂状态（2026-11-17 急冻瓜「急冻光线」102404）：必须显式开
+                //  `strikeAppliesStatus = 1` 才挂，缺省 0 ⇒ 既有 `random_strike` 行为逐字不变。
+                //  🔴 状态 id **不能**取 `runtime.statusId`：那是整卡共用的一个槽
+                //  （`mergeSkillPlanIntoRuntime` 按 `unitId:pvpSkillId` 合并），
+                //  写了它会让这张卡的**普攻每一发**都挂上同一个状态（`hitStatusOnBeat` 对
+                //  没配 `statusEveryNAttacks` 的技能恒为 true）。与落雷同一个理由写死常量。
+                statusId: (params?.strikeAppliesStatus ?? 0) > 0 ? ZC_STRIKE_NUMB_STATUS_ID : undefined,
                 //  追踪导弹（镭射飞龙 68010）：挑到人就发会飞的导弹，不立即结算。
                 missilePrefabPath: missileFx?.missilePrefabPath,
                 impactPrefabPath: missileFx?.impactPrefabPath,

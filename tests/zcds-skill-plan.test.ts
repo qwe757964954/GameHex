@@ -31,9 +31,12 @@ function prepare() {
 test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动属性', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
-    const selected = withoutLineupCrit(selectZCSkillPlans('68001', 24, catalogs));
+    const selected = withoutLineupCrit(selectZCSkillPlans('68001', 30, catalogs));
     //  100101「超视孢子」自 2026-11-16 起改成 `replace` 三档递进 14/18/24%：
-    //  24 级只取 III 档（91001013）。此前是 accumulate 三档同值 10%，会一次性选中三行。
+    //  只取命中的最高档（91001013）。此前是 accumulate 三档同值 10%，会一次性选中三行。
+    //  解锁等级自 2026-11-17 统一为「技能1 3/10/22、技能2 6/16/26、技能3 9/18/27、
+    //  技能4 12/24/36」⇒ 要三条成长技能全到 III 档需 ≥27 级（100104 的 III 要 36，
+    //  所以它停在 II）。这里取 30 级，正是「四格同时接近满档」的典型档位。
     assert.deepEqual(selected.map((row) => row.modifierId), [
         91001013,
         91001023,
@@ -45,16 +48,30 @@ test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动
     assert.ok(selected.every((row) => row.pvpSkillId === currentSkillId));
 
     const loadouts = compileZCCombatBuild({
-        unitId: '68001', heroLevel: 24, generalStar: { generalId: 68001, star: 1 },
+        unitId: '68001', heroLevel: 30, generalStar: { generalId: 68001, star: 1 },
     }, config.units, catalogs);
     const plan = loadouts.find((loadout) => loadout.sourceKey.startsWith('skillPlan:'));
     assert.ok(plan);
     assert.equal(plan.typedModifiers.filter((item) => item.statId === 'attackRange').length, 1);
+    //  100103 自 2026-11-17 起是「异种猎杀协议」（对蘑菇阵营增伤 + 暴击率 6%），不再加攻击，
+    //  也不再挂 `hunger_slow_*` 减速状态 ⇒ 攻击只剩 100102 的那一条。
     assert.deepEqual(
         plan.typedModifiers.filter((item) => item.statId === 'attack').map((item) => item.value),
-        [0.12, 0.3],
+        [0.12],
     );
-    assert.equal(catalogs.adapters.statuses.some((status) => status.statusId === 'hunger_slow_l3'), true);
+    assert.deepEqual(
+        plan.typedModifiers.filter((item) => item.statId === 'counterCamp2').map((item) => item.value),
+        [13],
+        '对蘑菇阵营（ZC_CAMP_TRAITS 第 2 位）+13%',
+    );
+    assert.deepEqual(
+        plan.typedModifiers.filter((item) => item.statId === 'critRate').map((item) => item.value),
+        [6],
+    );
+    //  换机制时旧状态必须一起摘掉：100103 以前挂 `hunger_slow_l3`（命中减速 2 秒），
+    //  现在是纯数值被动，行上不该再有 statusId。`pvpStatus` 表里那条定义还在（别硬删），
+    //  所以这里断言的是「计划行不再引用它」，不是「表里没有它」。
+    assert.equal(selected.find((row) => row.skillChainId === 100103)?.statusId, undefined);
 });
 
 test('未达到解锁等级时不提前下发技能计划', () => {
@@ -64,16 +81,19 @@ test('未达到解锁等级时不提前下发技能计划', () => {
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68001', 2)), []);
 });
 
-test('unlockHeroLevel=0 的首档一级就生效，高解锁档不提前下发', () => {
+test('首档要解锁等级，未到等级不下发；到档才逐格推进', () => {
     prepare();
     const catalogs = getZCModifierCatalogs();
-    // 68013 两条链首档 unlock=0（94013011/94013021），1 级即选中；14/16/22/23 档全部过滤。
-    assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 1, catalogs)).map((row) => row.modifierId), [
-        94013011, 94013021,
-    ]);
-    // 14 级时 101301 进到 II 档（unlock=14），101302 仍停在首档（II 档要 16 级）。
+    // 解锁等级自 2026-11-17 统一后，101301（槽 1）首档要 3 级、101302（槽 2）首档要 6 级，
+    // 全表已经没有 unlock=0 的技能档 ⇒ 1 级一个技能都拿不到。
+    assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 1, catalogs)).map((row) => row.modifierId), []);
+    // 14 级：101301 够 II 档（10），101302 还停在 L1（它的 II 档要 16）。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 14, catalogs)).map((row) => row.modifierId), [
         94013012, 94013021,
+    ]);
+    // 16 级：101302 也进 II 档。
+    assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 16, catalogs)).map((row) => row.modifierId), [
+        94013012, 94013022,
     ]);
 });
 

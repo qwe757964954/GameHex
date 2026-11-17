@@ -17,7 +17,7 @@ import { asRow } from '../../core/table/RowParse';
 import { RequestShopBuy } from '../net/RequestShopMsg';
 import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { sendGameRequest, toCount } from '../net/RequestGuard';
 import { countItem } from '../card/ItemBag';
 import { rolePropertyAmount } from '../league/LeagueTable';
 import { RequestRoleGuanKaGiftBuy, RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
@@ -144,22 +144,6 @@ export interface IStoreRepository {
 
 // 实现
 
-/** `Long` / `number` / `string` → 秒。认不出返回 0（**不能**直接 `Number(Long)`，会得 `NaN`）。 */
-function toSeconds(value: unknown): number {
-    if (value == null) return 0;
-    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
-    if (typeof value === 'string') {
-        const n = Number(value);
-        return Number.isFinite(n) ? n : 0;
-    }
-    const long = value as { toNumber?: () => number };
-    if (typeof long.toNumber === 'function') {
-        const n = long.toNumber();
-        return Number.isFinite(n) ? n : 0;
-    }
-    return 0;
-}
-
 /** 读一张分表（`remoteRef`）；表缺失时返回空数组。 */
 const readRows = (table: string): Promise<unknown[]> => readRefRows(RefUtil.instance, table);
 
@@ -277,14 +261,14 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     shopGoods(cmdShopType: number, id: number): IStoreShopGoodsState {
-        const shop = asRow(CacheMgr.instance.getCmdShop(cmdShopType as CmdShopType));
-        const list = (shop?.tlCmdShopGoods ?? []) as unknown[];
-        for (const raw of list) {
-            const row = asRow(raw);
-            if (!row || Number(row.id) !== id) continue;
+        // `CmdShop` 缺失 = 未登录 / 未推到该档 ⇒ 空态（`get()` 找不到就返回 null，不抛）。
+        const shop = CacheMgr.instance.getCmdShop(cmdShopType as CmdShopType);
+        for (const goods of shop?.tlCmdShopGoods ?? []) {
+            if (goods.id !== id) continue;
             return {
-                buyTimes: Math.max(0, Number(row.buyTimes) || 0),
-                nextBuyTime: toSeconds(row.nextBuyTime),
+                // `buy_times` 是 `int32` ⇒ 已是 number；`next_buy_time` 是 `sint64` ⇒ `Long`。
+                buyTimes: Math.max(0, goods.buyTimes),
+                nextBuyTime: toCount(goods.nextBuyTime),
             };
         }
         return { buyTimes: 0, nextBuyTime: 0 };

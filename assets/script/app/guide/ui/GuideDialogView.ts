@@ -30,7 +30,7 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { getGuidePortraitAsset } from '../model/GuideDialogConfig';
 import type { GuideDialogLine } from '../model/GuideDialogConfig';
 import type { GuideMaskType } from '../model/GuideStepConfig';
-import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion } from '../model/GuidePresentation';
+import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion, PORTRAIT_BOX_WIDTH_RATIO } from '../model/GuidePresentation';
 import { HEX_GRID_CONTENT_LIFT, HEX_GRID_FACE_WIDTH, HEX_GRID_FACE_HEIGHT } from '../../../core/hex/HexGridLayout';
 
 const { ccclass, property } = _decorator;
@@ -53,16 +53,25 @@ const IDLE_ADVANCE_SECONDS = 8;
 const FULL_MASK_ALPHA = 150;
 const HOLE_MASK_ALPHA = 100;
 
-/** 为对话框上方的姓名牌留出空间，角色脚底不压住姓名牌。 */
-const PORTRAIT_DIALOG_GAP = 48;
+/**
+ * 立绘脚点下沉到对话条后面多少（占显示高度的比例）。
+ *
+ * 需求（2026-11-17）：立绘置于对话框**下层**，只露上半身 —— 脚点落到对话条上沿以下
+ * 1/4 处，剩下的被 `DialogBox/Bg`（不透明）真挡住。`Portrait`(42) 排在 `DialogBox`(94)
+ * 之前，渲染顺序天然在下层，不用裁切/蒙版，角色比例也不变。
+ */
+const PORTRAIT_SINK_RATIO = 0.25;
+
+/** 立绘右边与对话框右边框的留白（px）；0 = 真右对齐。 */
+const PORTRAIT_RIGHT_INSET = 0;
 
 @ccclass('GuideDialogView')
 export class GuideDialogView extends Component {
     @property({ type: Node, group: '立绘', tooltip: 'Portrait：角色立绘节点（锚点 0.5/0，居中站在对话框上方）' })
     portraitNode: Node = null!;
 
-    @property({ group: '立绘', tooltip: '立绘显示高度；宽度按原图比例计算' })
-    portraitHeight = 460;
+    @property({ group: '立绘', tooltip: '立绘盒高度（绿框口径 233）；宽度 = 宿主宽 × 149/720，图按比例 contain 进盒子' })
+    portraitHeight = 233;
 
     @property({ type: Node, group: '对话条', tooltip: 'DialogBox：底部对话条容器' })
     dialogBox: Node = null!;
@@ -88,6 +97,8 @@ export class GuideDialogView extends Component {
     private index = 0;
     /** 仅 click 步在台词播完后接受推进点击。 */
     private canAdvance = false;
+    /** 台词播完、对话条已收起（本步要靠玩家点高亮目标推进）；换步由 `render` 重置。 */
+    private dialogClosed = false;
     private stepId = '';
     /** 当前这句的无人操作计时器是否在跑（`schedule` 按回调去重，这里只做状态记录）。 */
     private idleArmed = false;
@@ -137,6 +148,10 @@ export class GuideDialogView extends Component {
     private focusScaleX = 1;
     private focusScaleY = 1;
     private focusProvider: ((key: string) => IGuideFocusTarget | null) | null = null;
+    /** 当前立绘的显示宽度（`placePortrait` 算右对齐偏移用；0 = 没有立绘在显示）。 */
+    private portraitDisplayWidth = 0;
+    /** 当前立绘的显示高度（`placePortrait` 算下沉量用；0 = 没有立绘在显示）。 */
+    private portraitDisplayHeight = 0;
     /** 当前步的遮罩类型 —— `applyPortrait` 靠它决定要不要显示立绘。 */
     private currentMaskType: GuideMaskType = 'full';
 
@@ -187,11 +202,12 @@ export class GuideDialogView extends Component {
      *
      * 为什么这部分进不了 prefab：`maskType` 是运行时数据（每步不同），同一个 `Dim`
      * 在 full 步要 60%、hole 步要 40% —— 静态资源撑不住这种切换。
+     * `none`（弱引导）直接 0：连压暗都不要，节点显隐交给 `placeFocusRing` 统一管。
      */
     private applyMaskStyle(maskType: GuideMaskType): void {
         const dim = this.dimSprite;
         const color = dim.color.clone();
-        color.a = maskType === 'hole' ? HOLE_MASK_ALPHA : FULL_MASK_ALPHA;
+        color.a = maskType === 'none' ? 0 : maskType === 'hole' ? HOLE_MASK_ALPHA : FULL_MASK_ALPHA;
         dim.color = color;
         for (const sprite of this.focusMaskSprites) sprite.color = color;
         this.layoutBlocker();
@@ -210,7 +226,8 @@ export class GuideDialogView extends Component {
         this.tapHint.setScale(1, 1, 1);
         this.mapHint.setScale(1, 1, 1);
         this.focusHintText.string = state.focusNode === 'Battle/DrawnCard' ? '当前抽到的卡牌' : state.requireAction === 'drag'
-            ? '拖拽卡牌到指定格子' : state.focusNode.startsWith('Map/Tile') ? '点击地图上的地块' : '点击高亮区域';
+            ? '拖拽卡牌到指定格子' : state.focusNode.startsWith('Map/Chest') ? '点击打开宝箱'
+            : state.focusNode.startsWith('Map/Tile') ? '点击地图上的地块' : '点击高亮区域';
         this.resolveFocus();
         this.layoutBlocker();
     }
@@ -298,15 +315,26 @@ export class GuideDialogView extends Component {
                     this.defaultDialogBottom, this.focusLocal.y, halfHeight);
             }
         }
+        // 弱引导（`none`）：**不压暗、不挡点击、不弹气泡文案**，只留光圈 + 手指。
+        // 这几步等的是玩家在世界里点地块，压暗会把手感做坏，气泡又和手指说的是同一件事。
+        const noMask = this.currentMaskType === 'none';
         const changed = this.focusRing.active !== visible;
         this.focusRing.active = visible;
         this.focusHand.active = visible;
-        this.mapHint.active = visible;
+        this.mapHint.active = visible && !noMask;
         const waitingForBattleFocus = !visible && (this.focusKey.startsWith('Battle/') || this.focusKey.startsWith('BattleResult/'));
-        this.dimNode.active = !visible && !waitingForBattleFocus;
-        this.dialogBox.active = !waitingForBattleFocus && this.queue.length > 0;
-        this.blockerNode.active = !waitingForBattleFocus;
-        for (const mask of this.focusMasks) mask.active = visible;
+        // 「孔外点哪都算点对话条」只对**靠点击推进**的步成立。
+        //
+        // 🔴 其余步（翻地块 / 点宝箱 / 抽卡 / 开战）等的是**世界里的动作**：此刻焦点要是没解析出来
+        // （宝箱还没冒出来、格子挪出视口、只剩一格可点却已变成另一种状态），铺满屏的点击区就把玩家
+        // 唯一能点的目标一起挡住了 —— 表现为「点屏幕任意地方无反馈」，整条引导死在这里（2-2 踩过）。
+        // 宁可在这一小段时间不挡：玩家还能拖地图、点格子，等焦点一出来光圈照常接管。
+        const canTapAdvance = this.canAdvance && !this.dialogClosed && this.queue.length > 0;
+        const fullBlock = !visible && !waitingForBattleFocus && canTapAdvance;
+        this.dimNode.active = !noMask && fullBlock;
+        this.dialogBox.active = !waitingForBattleFocus && !this.dialogClosed && this.queue.length > 0;
+        this.blockerNode.active = !noMask && (visible || fullBlock);
+        for (const mask of this.focusMasks) mask.active = !noMask && visible;
         const dialogMoved = this.dialogWidget.bottom !== dialogBottom;
         // `Widget.bottom` 的 setter 无条件 `_recursiveDirty()`（引擎 widget.ts 的 442-445），
         // 值没变也写会让对话框每帧重排一次 ⇒ 只在真的位移时赋值。
@@ -433,25 +461,36 @@ export class GuideDialogView extends Component {
         this.stepId = state.stepId;
         this.queue = this.groups.get(state.dialogId) ?? [];
         this.index = 0;
+        // 换步就是「重新开口」：上一步收起的对话条必须在下面按 queue 重新判一次显隐。
+        this.dialogClosed = false;
 
         // 真机上唯一能证明"对话层真的出来了"的证据。组缺失是最常见的静默失败
         // （表现为黑屏没字），单独打一条 warn，别和正常路径混在一起。
+        // `dialogId` 为空是表里的**纯引导步**（只出手指 + 气泡，例如「点击打开宝箱」），不是失败。
         if (this.queue.length === 0) {
-            console.warn(`[GuideDialog] 步 ${state.stepId} 找不到台词组 ${state.dialogId || '(空)'}，对话条将不可见`);
+            if (state.dialogId) {
+                console.warn(`[GuideDialog] 步 ${state.stepId} 找不到台词组 ${state.dialogId}，对话条将不可见`);
+            } else {
+                console.log(`[GuideDialog] 步 ${state.stepId}(${state.flowName}) · 无台词 · 遮罩 ${state.maskType}`);
+            }
         } else {
             console.log(`[GuideDialog] 步 ${state.stepId}(${state.flowName}) · 台词 ${state.dialogId} · ${this.queue.length} 句 · 遮罩 ${state.maskType}`);
         }
-        this.applyMaskStyle(state.maskType);
-        this.applyHints(state);
         // 判据是 completeCond === 'click'，不是 requireAction。
         // requireAction 只说玩家要做一个动作，拿它当「点对话条就推进」会误推带参步。
+        // ⚠️ 必须在 `applyHints` **之前**赋值：`applyHints` 内部会 `resolveFocus` → `placeFocusRing`，
+        // 而后者要按它决定「这一刻该不该铺满屏点击区」；无台词的步更是只走这一次（下面直接 return）。
         this.canAdvance = state.completeCond === 'click';
+        this.applyMaskStyle(state.maskType);
+        this.applyHints(state);
 
         if (this.queue.length === 0) {
             // 没有台词（或表没打进包）：藏对话条，只留遮罩/立绘，等业务事件。
             this.dialogBox.active = false;
             this.nameText.string = '';
             this.contentText.string = '';
+            // 纯引导步不该继承上一步的立绘 —— 那是「刚说完话的人」站在屏幕中间，谁都不是。
+            this.hidePortrait();
             return;
         }
         this.dialogBox.active = true;
@@ -466,6 +505,7 @@ export class GuideDialogView extends Component {
         this.queue = [];
         this.index = 0;
         this.canAdvance = false;
+        this.dialogClosed = false;
         this.stepId = '';
         this.focusKey = '';
         this.focusTarget = null;
@@ -474,7 +514,13 @@ export class GuideDialogView extends Component {
 
     // 内部实现
 
-    /** 点击：先逐句推进，最后一句再点才报告推进意图。 */
+    /**
+     * 点击：先逐句推进；最后一句再点，click 步报告推进意图，其余步收起对话条。
+     *
+     * 最后一句必须有个去处：`completeCond` 不是 `click` 的步（翻地块 / 抽卡 / 确认按钮）
+     * 早先「点了没反应」，对话条就常驻在屏幕底部，玩家以为还要继续点，
+     * 实际该做的是点光圈里那个目标 —— 现在点最后一句就收起对话条，进入强制引导。
+     */
     private onTap(): void {
         this.idleArmed = false;
         this.unschedule(this.onIdleTimeout);
@@ -485,7 +531,23 @@ export class GuideDialogView extends Component {
         if (this.canAdvance) {
             this.canAdvance = false;
             EventMgr.instance.emit(GuideEvent.Advance, { owner: this, stepId: this.stepId });
+            return;
         }
+        this.dismissDialog();
+    }
+
+    /**
+     * 收起对话条，只留光圈 / 手指 / 气泡。
+     *
+     * ⚠️ 判据是 `focusRing.active` 而不是 `focusKey`：焦点还没解析出来时孔并不存在，
+     * 这时候收起对话条，玩家既没字看、也没有能点的东西，等于卡死（只能等超时跳过）。
+     */
+    private dismissDialog(): void {
+        if (this.dialogClosed || !this.focusRing.active) return;
+        this.dialogClosed = true;
+        this.dialogBox.active = false;
+        this.hidePortrait();
+        this.layoutBlocker();
     }
 
     private playLine(index: number): void {
@@ -522,17 +584,22 @@ export class GuideDialogView extends Component {
         this.onTap();
     };
 
-    /** 两位角色均居中站在对话框上方，对话框避让焦点时跟随移动。 */
+    /**
+     * 立绘右边贴住对话框右边框，脚点下沉到对话条后面；尺寸取绿框内含（见 {@link fitGuidePortrait}）。
+     *
+     * 两者都用 `DialogBox` 的**实际**尺寸算，不写死 660/184 —— 对话条改了大小，立绘跟着走。
+     * 每帧被 `placeFocusRing` 顺带调用，值没变就别写。
+     */
     private placePortrait(): void {
         const dialogTop = -this.hostTransform.height / 2 + this.dialogWidget.bottom + this.dialogTransform.height;
-        const foot = dialogTop + PORTRAIT_DIALOG_GAP;
+        const foot = dialogTop - this.portraitDisplayHeight * PORTRAIT_SINK_RATIO;
+        const x = this.dialogTransform.width / 2 - this.portraitDisplayWidth / 2 - PORTRAIT_RIGHT_INSET;
         const pos = this.portraitNode.position;
-        // 同上：这个方法每帧被 `placeFocusRing` 顺带调用，值没变就别写。
-        if (pos.x !== 0 || pos.y !== foot) this.portraitNode.setPosition(0, foot, 0);
+        if (pos.x !== x || pos.y !== foot) this.portraitNode.setPosition(x, foot, 0);
     }
 
     /**
-     * 切换立绘。静图换 SpriteFrame 并按 portraitHeight 等比设尺寸；
+     * 切换立绘。静图换 SpriteFrame，按立绘盒（宿主宽 × 149/720、高 `portraitHeight`）contain 设尺寸；
      * 骨骼实例化一次后只切 active；未登记或加载失败时两个都藏起来。
      */
     private applyPortrait(speaker: string): void {
@@ -561,10 +628,12 @@ export class GuideDialogView extends Component {
             // 尺寸由代码统一控制，必须用 CUSTOM；TRIMMED 会在换图时把节点拉回原图尺寸。
             sprite.sizeMode = Sprite.SizeMode.CUSTOM;
             const raw = frame.originalSize;
-            const size = fitGuidePortrait(raw.width, raw.height, this.portraitHeight, this.hostTransform.width);
+            const size = fitGuidePortrait(raw.width, raw.height, this.portraitBoxWidth(), this.portraitHeight);
             const width = Math.round(size.width);
             const height = Math.round(size.height);
             this.setNodeSize(sprite.node, width, height);
+            this.portraitDisplayWidth = width;
+            this.portraitDisplayHeight = height;
             this.placePortrait();
             return;
         }
@@ -584,6 +653,8 @@ export class GuideDialogView extends Component {
         this.portraitSprite.spriteFrame = null;
         this.portraitSprite.node.active = false;
         if (this.npcNode) this.npcNode.active = false;
+        this.portraitDisplayWidth = 0;
+        this.portraitDisplayHeight = 0;
     }
 
     /** 建骨骼立绘，只建一次（尺寸不在这里定，见 {@link fitNpc}）。 */
@@ -601,10 +672,11 @@ export class GuideDialogView extends Component {
     }
 
     /**
-     * 把骨骼按绑定框等比缩到目标尺寸并让脚点贴住立绘原点（锚点 0.5/0）。
+     * 把骨骼按绑定框等比缩进立绘盒，并让脚点贴住立绘原点（锚点 0.5/0）。
      *
-     * 和静图一样受 {@link PORTRAIT_MAX_WIDTH_RATIO} 的宽度上限约束 —— 骨骼绑定框
-     * （`skel/豌豆射手` 是 654×916）普遍比立绘"胖"，只按高度缩会横向撑出对话条。
+     * 和静图同一套口径：{@link fitGuidePortrait} 在「宿主宽 × {@link PORTRAIT_BOX_WIDTH_RATIO}」
+     * 与 `portraitHeight` 组成的盒子内做 contain —— 骨骼绑定框（`skel/豌豆射手` 是 654×916）
+     * 比立绘"胖"，只按高度缩会横向撑出绿框。
      *
      * 每次切回骨骼都按当前宿主宽度重算，不能沿用首次实例化时的尺寸。
      */
@@ -624,9 +696,16 @@ export class GuideDialogView extends Component {
         if (!(rawWidth > 0) || !(rawHeight > 0)) {
             throw new Error(`GuideDialogView 骨骼立绘尺寸无效：${rawWidth}×${rawHeight}`);
         }
-        const size = fitGuidePortrait(rawWidth, rawHeight, this.portraitHeight, this.hostTransform.width);
+        const size = fitGuidePortrait(rawWidth, rawHeight, this.portraitBoxWidth(), this.portraitHeight);
         const scale = size.height / rawHeight;
         node.setScale(scale, scale, 1);
         node.setPosition(0, transform.anchorY * size.height, 0);
+        this.portraitDisplayWidth = size.width;
+        this.portraitDisplayHeight = size.height;
+    }
+
+    /** 立绘盒宽度：绿框口径按宿主宽等比（149/720）。 */
+    private portraitBoxWidth(): number {
+        return this.hostTransform.width * PORTRAIT_BOX_WIDTH_RATIO;
     }
 }

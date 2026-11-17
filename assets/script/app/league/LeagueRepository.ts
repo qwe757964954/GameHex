@@ -699,21 +699,21 @@ export interface ILeagueRepository {
 
 /** 请求超时（与好友 / 礼包 / 首充同口径：读 800ms / 写 5000ms）。 */
 
-/** 读缓存里一张表；拿不到返回空数组（**不抛**）。 */
+/**
+ * 读缓存里一张表；拿不到返回空数组（**不抛**）。
+ *
+ * `getValues` 查不到表时返回空的 `null_list`，`CacheMgr.instance` 也非空 ⇒ 不需要
+ * `as any` / `if (!mgr)` / `try-catch` 这些兜底（那套只会把真 bug 变成静默空表）。
+ */
 function readCacheRows(
     table: 'CmdUnion' | 'CmdUnionMember' | 'CmdUnionApplys' | 'CmdUnionLogs' | 'CmdRoleUnion',
 ): unknown[] {
-    try {
-        const mgr = CacheMgr.instance as any;
-        if (!mgr) return [];
-        if (table === 'CmdUnion') return mgr.getTlCmdUnion() ?? [];
-        if (table === 'CmdUnionMember') return mgr.getTlCmdUnionMember() ?? [];
-        if (table === 'CmdUnionApplys') return mgr.getTlCmdUnionApplys() ?? [];
-        if (table === 'CmdUnionLogs') return mgr.getTlCmdUnionLogs() ?? [];
-        return mgr.getTlCmdRoleUnion() ?? [];
-    } catch (error) {
-        console.warn(`[League] 读 ${table} 缓存失败`, error);
-        return [];
+    switch (table) {
+        case 'CmdUnion': return CacheMgr.instance.getTlCmdUnion();
+        case 'CmdUnionMember': return CacheMgr.instance.getTlCmdUnionMember();
+        case 'CmdUnionApplys': return CacheMgr.instance.getTlCmdUnionApplys();
+        case 'CmdUnionLogs': return CacheMgr.instance.getTlCmdUnionLogs();
+        default: return CacheMgr.instance.getTlCmdRoleUnion();
     }
 }
 
@@ -730,20 +730,13 @@ function readSelfRoleId(): string {
  * 全表都没有合法 id 时才退回第一行 —— 免得两条链路读到不同的行（缓存被塞了脏行时尤其明显）。
  */
 function readSelfRoleRow(): CmdRole | null {
-    try {
-        const rows = (CacheMgr.instance as any)?.getTlCmdRole?.() ?? [];
-        let first: CmdRole | null = null;
-        for (const row of rows) {
-            if (!row || typeof row !== 'object') continue;
-            if (!first) first = row as CmdRole;
-            const id = toIdString((row as { id?: unknown } | null)?.id);
-            if (id && id !== '0') return row as CmdRole;
-        }
-        return first;
-    } catch (error) {
-        console.warn('[League] 读 CmdRole 缓存失败', error);
+    let first: CmdRole | null = null;
+    for (const row of CacheMgr.instance.getTlCmdRole()) {
+        if (!first) first = row;
+        const id = toIdString(row.id);
+        if (id && id !== '0') return row;
     }
-    return null;
+    return first;
 }
 
 /** 生产环境 Repository。 */
@@ -1391,29 +1384,17 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
      * 这样本函数与「表里有哪些联盟任务」解耦（表热更后不必重进面板）。
      */
     private readTaskCmds(): ILeagueTaskCmd[] {
-        try {
-            const rows = ((CacheMgr.instance as any)?.getTlCmdTask?.() ?? []) as unknown[];
-            const out: ILeagueTaskCmd[] = [];
-            for (const raw of rows) {
-                if (!raw || typeof raw !== 'object') continue;
-                const row = raw as { resId?: unknown; count?: unknown; rewardState?: unknown };
-                const resId = Number(row.resId);
-                if (!Number.isFinite(resId)) continue;
-                const state = Number(row.rewardState);
-                out.push({
-                    resId: Math.trunc(resId),
-                    // `count` 是 protobuf 的 `Long`：`countOf` 走 `Number(value)`，
-                    // protobufjs 的 `Long#valueOf()` 会给出 number ⇒ 能过；
-                    // 直接 `value as number` 则会在比较里得到 `NaN`（同砍价倒计时那条教训）。
-                    count: countOf(row.count),
-                    rewardState: Number.isFinite(state) ? Math.trunc(state) : 0,
-                });
-            }
-            return out;
-        } catch (error) {
-            console.warn('[League] 读 CmdTask 缓存失败', error);
-            return [];
+        const out: ILeagueTaskCmd[] = [];
+        for (const row of CacheMgr.instance.getTlCmdTask()) {
+            out.push({
+                // `res_id` / `reward_state` 是 `sint32` / enum ⇒ 已是 number；
+                // `count` 是 `sint64` ⇒ `Long`，交给 `countOf`（走 `Number(value)`，Long 有 `valueOf`）。
+                resId: row.resId,
+                count: countOf(row.count),
+                rewardState: row.rewardState,
+            });
         }
+        return out;
     }
 
     /**
@@ -1452,16 +1433,10 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         };
     }
 
-    /** `CmdShop` 里联盟档（`cmdShopType = 8`）的货品行；拿不到返回空数组。 */
+    /** `CmdShop` 里联盟档（`cmdShopType = 8`）的货品行；拿不到返回空数组（`tlCmdShopGoods` 可空）。 */
     private readShopGoodsRows(): unknown[] {
-        try {
-            const shop = (CacheMgr.instance as any)?.getCmdShop?.(LEAGUE_SHOP_TYPE_UNION);
-            const list = shop?.tlCmdShopGoods;
-            return Array.isArray(list) ? list : [];
-        } catch (error) {
-            console.warn('[League] 读 CmdShop(union) 缓存失败', error);
-            return [];
-        }
+        const shop = CacheMgr.instance.getCmdShop(LEAGUE_SHOP_TYPE_UNION);
+        return shop?.tlCmdShopGoods ?? [];
     }
 
     /** 缓存里的 `CmdRoleUnion`（我那一行）；读不到返回 `null`。 */
@@ -1480,19 +1455,13 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
 
     /** 缓存里的联盟活动行（按 `unionId` 归档，再按 `type` 过滤）。 */
     private readUnionActivity(type: number): CmdUnionActivity | null {
-        try {
-            const mgr = CacheMgr.instance as any;
-            const unionId = this.myUnionId();
-            if (unionId && unionId !== '0' && typeof mgr?.getCmdUnionActivity === 'function') {
-                const hit = mgr.getCmdUnionActivity(unionId) as CmdUnionActivity | undefined;
-                if (hit && Number(hit.type) === type) return hit;
-            }
-            const all = (mgr?.getTlCmdUnionActivity?.() ?? []) as CmdUnionActivity[];
-            for (const row of all) {
-                if (row && Number(row.type) === type) return row;
-            }
-        } catch (error) {
-            console.warn('[League] 读 CmdUnionActivity 缓存失败', error);
+        const unionId = this.myUnionId();
+        if (unionId && unionId !== '0') {
+            const hit = CacheMgr.instance.getCmdUnionActivity(unionId);
+            if (hit && hit.type === type) return hit;
+        }
+        for (const row of CacheMgr.instance.getTlCmdUnionActivity()) {
+            if (row.type === type) return row;
         }
         return null;
     }

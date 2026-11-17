@@ -92,6 +92,7 @@ export interface ZCNeutralResourceItem {
     /** `resourceType=6` 引用的 J 表光环 buff key。*/
     readonly buffKey: string | null;
     /** 格子上画什么。*/
+    readonly territoryIcon?: string;
     readonly visual: ZCNeutralResourceVisual;
 }
 
@@ -169,6 +170,8 @@ export function compileZCNeutralResourceCatalog(
             buffKey: parsed.buffKey,
             ...(resourceType >= ZCNeutralResourceType.Gate
                 ? { feature: parseNeutralFeature(resourceType, param, where, cards, gateRows) } : {}),
+            ...(resourceType === ZCNeutralResourceType.Monster && row.icon !== 0 && row.icon !== '0' && row.icon !== undefined
+                ? { territoryIcon: parseMonsterTerritoryIcon(row.icon, where) } : {}),
             visual: neutralVisualOf(resourceType as ZCNeutralResourceType, icon),
         };
         items.set(item.id, item);
@@ -230,6 +233,11 @@ export interface IZCNeutralFeatureConfig {
     readonly resId?: string;
     readonly wakeRange?: number;
     readonly reviveRate?: number;
+}
+
+function parseMonsterTerritoryIcon(value: unknown, where: string): string {
+    if (typeof value !== 'string' || !/^[\p{L}\p{N}_-]+$/u.test(value)) throw new Error(`${where}.icon 地表资源名无效`);
+    return value;
 }
 
 function parseNeutralFeature(type: number, param: unknown, where: string,

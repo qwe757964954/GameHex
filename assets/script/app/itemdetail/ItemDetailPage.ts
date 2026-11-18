@@ -125,8 +125,6 @@ export class ItemDetailPage extends PopupBase {
     private accessRefs: IItemAccessRef[] = [];
     /** 「内容」格子当前对应的 resId。 */
     private contentResIds: number[] = [];
-    /** `renderItemFn` / `onItemClickFn` 只挂一次。 */
-    private accessRendererBound = false;
     /** 这一趟要用的图。 */
     private frames: IItemDetailFrames = { title: null, self: EMPTY_BOX, contents: new Map() };
     /**
@@ -179,8 +177,6 @@ export class ItemDetailPage extends PopupBase {
 
     protected onClose(_reason: PopupCloseReason): void {
         // 让在途的 load / present 作废。
-        this.loadRevision += 1;
-        this.presentRevision += 1;
         this.accessList.refreshList([]);
         this.accessRefs = [];
         this.contentResIds = [];
@@ -194,7 +190,7 @@ export class ItemDetailPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /**
@@ -343,13 +339,10 @@ export class ItemDetailPage extends PopupBase {
             ? snapshot.accessRefs.slice()
             : [{ resId: 0, text: ITEM_DETAIL_TEXTS.noAccess }];
 
-        // `renderItemFn` / `onItemClickFn` 是长驻回调，只挂一次，每次被调用时从 `this.accessRefs`
-        // 现取数据 —— 闭包捕获这里的 `snapshot` 会让后续 reload 一直用第一份。
-        if (!this.accessRendererBound) {
-            this.accessRendererBound = true;
-            list.renderItemFn = (node, index) => this.renderAccessRow(node, index);
-            list.onItemClickFn = (_node, index) => this.onAccessClick(index);
-        }
+        // `renderItemFn` / `onItemClickFn` 是普通属性赋值，不是事件订阅；每次铺列表写同一组回调，
+        // 回调内部从 `this.accessRefs` 现取数据。
+        list.renderItemFn = (node, index) => this.renderAccessRow(node, index);
+        list.onItemClickFn = (_node, index) => this.onAccessClick(index);
         list.refreshList(this.accessRefs);
     }
 

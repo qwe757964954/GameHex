@@ -7,7 +7,7 @@ import { getAllUnitDefinitions, type ZCUnitDefinition } from '../assets/script/a
 import { ZCOwner } from '../assets/script/app/zcds/model/ZCMapConfig';
 import type { ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
-import { compileZCCombatBuild, resolveZCUnitDefinition } from '../assets/script/app/zcds/model/ZCModifierRuntime';
+import { compileZCCombatBuild, getZCUnitStatBreakdown, resolveZCUnitDefinition } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import {
     ownerRatesOf,
@@ -160,7 +160,7 @@ test('服务端最终属性不再乘关卡倍率，缺失属性和其他单位�
     assert.equal(resolveZCUnitDefinition({ ...sampleUnit, maxHp: 1 }, attackOnly, rates).maxHp, 0.5);
 });
 
-test('服务端增量属性走累加通道：addRate 按基础值打折、add 进 flat，override 仍最高', () => {
+test('服务端增量属性走累加通道：addRate 按基础值打折、add 进 flat；定值后叠乘服务端 addRate', () => {
     const loadouts = compileZCCombatBuild({
         unitId: sampleUnit.unitId,
         serverModifiers: [
@@ -172,13 +172,31 @@ test('服务端增量属性走累加通道：addRate 按基础值打折、add �
     assert.equal(actual.attack, sampleUnit.attack * 0.8);
     assert.equal(actual.maxHp, Math.max(1, sampleUnit.maxHp - 10));
 
-    //  绝对值与增量同时到达：增量先算、override 定值（priority 1000 > 900）。
+    //  绝对值与增量同时到达（2026-11-18 口径）：`addRate` 在定值之后叠乘 ——
+    //  PVP 关卡对敌方阵营的 -20% 走的就是这一层；`add` 与本地 rate 仍被定值压制。
     const withOverride = compileZCCombatBuild({
         unitId: sampleUnit.unitId,
         serverAttributes: { attack: 42 },
         serverModifiers: [{ statId: 'attack', operation: 'addRate', value: -0.2 }],
     }, [sampleUnit]);
-    assert.equal(resolveZCUnitDefinition(sampleUnit, withOverride).attack, 42);
+    const overridden = resolveZCUnitDefinition(sampleUnit, withOverride).attack;
+    //  严格相等：叠乘后要收敛 IEEE 尾数，`33.60000000000001` 这种值不允许进面板。
+    assert.equal(overridden, 33.6);
+    //  breakdown 与 definition 同源：override 仍是 42，effective 已是叠乘后的最终值。
+    const attackBreakdown = getZCUnitStatBreakdown(sampleUnit, withOverride).find((item) => item.statId === 'attack');
+    assert.equal(attackBreakdown?.override, 42);
+    assert.equal(attackBreakdown?.rate, -0.2);
+    assert.equal(attackBreakdown?.effective, overridden);
+
+    //  本地成长/技能的 rate 不能二次污染服务端定值：+50% 仍只乘服务端那 -20%。
+    const localRate = {
+        sourceKey: 'skill', sourceKind: 'skill' as const, targetUnitId: sampleUnit.unitId,
+        appliedModifierIds: [], rawAttributes: {}, statPatch: { attackPct: 50 },
+        typedModifiers: [], skillPlans: [], breakdown: [], effects: [], unsupportedAttributes: [],
+        configHash: 'test',
+    };
+    const stacked = resolveZCUnitDefinition(sampleUnit, [...withOverride, localRate]).attack;
+    assert.ok(Math.abs(stacked - 33.6) < 1e-9, `本地 +50% 不应再乘上去，实际 ${stacked}`);
 });
 
 test('阵营倍率在普通成长之后相乘，不覆盖技能参数', () => {

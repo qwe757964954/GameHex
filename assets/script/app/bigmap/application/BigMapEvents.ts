@@ -1,5 +1,5 @@
 import type { IBigMapSlgReward } from './BigMapSlgRepository';
-import type { IBigMapViewState } from './BigMapViewState';
+import type { IBigMapViewState, BigMapMode } from './BigMapViewState';
 
 export const BIGMAP_MOVE_HINT = '点击空地移过去；点这格取消';
 
@@ -13,7 +13,7 @@ export type BigMapIntent =
     /** 长按建筑：进入移建态（等效于卡片「移动」按钮，但不要求先选中）。 */
     | { readonly kind: 'moveBegin'; readonly instanceId: number }
     | { readonly kind: 'visibleCamps'; readonly campIds: readonly number[] }
-    | { readonly kind: 'mode'; readonly mode: 'world' | 'base' }
+    | { readonly kind: 'mode'; readonly mode: BigMapMode }
     | { readonly kind: 'primary' | 'secondary' | 'clear' | 'toggleBuildMenu' | 'closeBuildMenu' | 'harvestAll' }
     /** 「探索」：选中并定位到当前可挑战、距离玩家基地最近的野怪。 */
     | { readonly kind: 'searchMonster' | 'campRoles' };

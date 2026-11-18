@@ -1,9 +1,15 @@
 import { ControllerBase, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { reportGuideComplete } from '../../guide/application/GuideEvents';
+import { GameNet } from '../../net/GameNet';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
-import type { ITerritoryNavigateBattlePayload, TerritoryModel, TerritoryModelOutput } from './TerritoryModel';
+import type {
+    ITerritoryCellGateway,
+    ITerritoryNavigateBattlePayload,
+    TerritoryModel,
+    TerritoryModelOutput,
+} from './TerritoryModel';
 import type { TerritoryCellRepository } from './TerritoryCellRepository';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryIntentEvent,
     type TerritoryViewCommand } from './TerritoryEvents';
@@ -13,12 +19,8 @@ import { isTerritoryBattleSite } from '../model/TerritoryMapConfig';
 
 export interface ITerritoryControllerOptions {
     readonly context: IControllerContext;
-    readonly network: {
-        addEvent(name: string, caller: object, handler: (message: unknown) => void): void;
-        removeCaller(caller: object): void;
-    };
-    readonly roleCache: { subscribe(callback: () => void): () => void };
-    readonly cells: Pick<TerritoryCellRepository, 'readPassCellsBro' | 'readCellInfo'>;
+    readonly roleCache: { subscribe(caller: object, callback: () => void): () => void };
+    readonly cells: TerritoryCellRepository;
     readonly schedule: (callback: () => void, seconds: number) => () => void;
     readonly now?: () => number;
     readonly battle?: {
@@ -29,35 +31,49 @@ export interface ITerritoryControllerOptions {
 
 /** Owns all business inputs and clocks. Views only send intents. */
 export class TerritoryController extends ControllerBase {
-    private started = false;
-    private stopping = false;
     private ticking = false;
     private stopOutput: (() => void) | null = null;
 
     private readonly model: TerritoryModel;
 
-    constructor(createModel: (resources: IControllerResources) => TerritoryModel, private readonly options: ITerritoryControllerOptions) {
+    constructor(createModel: (resources: IControllerResources, gateway: ITerritoryCellGateway) => TerritoryModel,
+        private readonly options: ITerritoryControllerOptions) {
         super(options.context, 'territory-controller');
-        try { this.model = createModel(this.resources); }
+        try { this.model = createModel(this.resources, this.createCellGateway(options.cells)); }
         catch (error) { super.dispose(); throw error; }
     }
 
     start(): void {
-        if (this.started || this.isDisposed) return;
-        this.started = true;
         this.stopOutput = this.model.onOutput((output) => this.onOutput(output));
         this.bindNetworkEvents();
-        this.own(() => this.options.network.removeCaller(this));
-        this.own(this.options.roleCache.subscribe(() => {
+        this.own(() => GameNet.instance.removeCaller(this));
+        this.own(this.options.roleCache.subscribe(this, () => {
             this.model.refreshWalletFromServer();
         }));
         this.bindUiEvents();
         this.model.start();
     }
 
+    /**
+     * 把仓储请求绑定到控制器本体：模型只看到无宿主的 gateway 端口，
+     * 断线 / 关闭页面时由 `removeCaller(this)` 统一取消。
+     */
+    private createCellGateway(cells: TerritoryCellRepository): ITerritoryCellGateway {
+        return {
+            fetchChapterCells: (chapterId, maxCell) => cells.fetchChapterCells(chapterId, maxCell, this),
+            unlockCell: (chapterId, cellId) => cells.unlockCell(chapterId, cellId, this),
+            passCell: (chapterId, cellId) => cells.passCell(chapterId, cellId, this),
+            startBattle: (battleType, battleParams) => cells.startBattle(battleType, battleParams, this),
+            claimIdleReward: () => cells.claimIdleReward(this),
+            sweep: (chapterId, cellId, times) => cells.sweep(chapterId, cellId, times, this),
+            upMonsterBoxLv: (chapterId, cellId) => cells.upMonsterBoxLv(chapterId, cellId, this),
+            clear: () => cells.clear(),
+        };
+    }
+
     private bindNetworkEvents(): void {
-        this.options.network.addEvent('CmdCityChapterPassCellBroMsg', this, this.onPassCellsBro);
-        this.options.network.addEvent('CmdCityChapterCellInfoRspMsg', this, this.onCellInfo);
+        GameNet.instance.addEvent('CmdCityChapterPassCellBroMsg', this, this.onPassCellsBro);
+        GameNet.instance.addEvent('CmdCityChapterCellInfoRspMsg', this, this.onCellInfo);
     }
     private onPassCellsBro(message: unknown): void {
         const bro = this.options.cells.readPassCellsBro(message);
@@ -87,7 +103,9 @@ export class TerritoryController extends ControllerBase {
                 // 入口还不存在；改为「点地图上的关卡格」（地图上那个 1-1 红标）⇒ 一样能进战斗。
                 // 只在上报**真的受理**时报（`selectSite` 返回 false 的三种情况：在途 / 未 reveal /
                 // 防连点）。无条件上报会让玩家点一个"点不动的格子"也把引导推过去。
-                // 注意 5-1 的 maskType 必须同步是 hole，否则全屏点击区会把这个点击吃掉。
+                // 5-1 的 maskType 是 `full`（用户 2026-11-17 第 21 条：全屏遮罩 + 高亮地块与气泡），
+                // 但这不会吃掉这一下：`GuideDialogView.needsFullScreenBlock()` 只对 `completeCond === 'click'`
+                // 铺满屏，5-1 是 `siteTap` ⇒ 点击区只盖对话条，孔里的点击照旧落到地块上。
                 // 2-1「翻第1块地」/ 2-2「打开宝箱」走的就是这条：资源据点是两步
                 // （`unlockCell` 翻出箱子 → `passCell` 点开箱子），两下都算 `tileFlipped`；
                 // 判据与 `guideMapFocusCells('Map/Chest_N')` 共用 `isTerritoryChestActionable`。
@@ -110,6 +128,8 @@ export class TerritoryController extends ControllerBase {
             }
             case 'claimIdleRewards': void this.model.claimIdleRewards(this.options.now?.() ?? Date.now()); break;
             case 'sweepChapter': void this.model.sweepIdleRewards(intent.times); break;
+            // 升级怪物宝箱：消耗与成功判定全在服务端（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
+            case 'upgradeMonsterBox': void this.model.upgradeMonsterBox(intent.cellId); break;
             case 'chapter': this.model.switchChapter(intent.offset); break;
             case 'selectChapter': this.model.selectChapter(intent.chapterId); break;
             case 'enterBattle': {
@@ -138,11 +158,6 @@ export class TerritoryController extends ControllerBase {
         }
     }
     private onOutput(output: TerritoryModelOutput): void {
-        if (this.stopping) {
-            // Balance only this session's outstanding loading contributions before disconnecting the view.
-            if (output.kind === 'busy' && !output.payload.busy) this.command(output);
-            return;
-        }
         if (output.kind === 'navigate') {
             const ready = this.options.battle?.prepare(output.payload, this.scope);
             this.command({ ...output, ready });
@@ -167,8 +182,7 @@ export class TerritoryController extends ControllerBase {
         EventMgr.instance.emit(TerritoryViewEvent.Command, { command });
     }
     dispose(): void {
-        if (this.isDisposed || this.stopping) return;
-        this.stopping = true;
+        if (this.isDisposed) return;
         this.releaseInputs();
         this.model.dispose();
         this.stopOutput?.();

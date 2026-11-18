@@ -1,4 +1,12 @@
 import { zcMissileFxPaths } from './ZCCombatEffectFlight';
+import { ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH, ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH } from './ZCSplashShotFx';
+import { ZC_BURST_IMPACT_PREFAB_PATH } from './ZCBurstFx';
+import { ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH } from './ZCSingleStrikeFx';
+import { ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_GUARD_PREFAB_PATH } from './ZCDashFx';
+import {
+    ZC_BARRAGE_IMPACT_PREFAB_PATH, ZC_BARRAGE_MISSILE_PREFAB_PATH,
+    ZC_WIND_BOLT_PREFAB_PATH, ZC_WIND_HURRICANE_PREFAB_PATH,
+} from './ZCWindBarrageFx';
 import { ZC_ATTACK_TRAITS } from './ZCCombatCatalog';
 
 /** 战斗外壳路径的唯一声明；预热只取公共子集，不构筑任何对局状态。*/
@@ -70,6 +78,29 @@ export function buildZCBattleWarmupPaths(
     // 追踪导弹的弹体/爆炸路径只在 ZCCombatEffectFlight.MISSILE_FX_BY_UNIT 里登记，
     // pvpSkill 任何一行都不带，表扫描收不到，所以这里单独补一遍。
     for (const fx of zcMissileFxPaths()) paths.add(fx);
+    //  孢爆箭 / 孢子凝珠（`splash_shot` / `spore_burst`，2026-11-17 第 12 批）的弹体与爆点
+    //  同样只在代码常量里登记（`ZCSplashShotFx`），表扫描收不到。实战清单里那两条也要
+    //  和这里对得上，否则会出现「预下载有、实战没有」或者反过来。
+    paths.add(ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH);
+    paths.add(ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH);
+    //  菌毯爆发 / 菌核爆裂（`burst_aura` / `burst_knockback`，2026-11-17 第 13 批）的爆点
+    //  同理只登记在 `ZCBurstFx` 里。这里加的是**去重后的集合**，重复的那条
+    //  （`普攻爆炸` 本来就因为普攻/孢爆箭在清单里）不会产生第二份加载。
+    paths.add(ZC_BURST_IMPACT_PREFAB_PATH);
+    //  菌丝突刺（`single_strike`，2026-11-17 第 14 批）的撕裂只登记在 `ZCSingleStrikeFx` 里。
+    //  菌丝绞杀（`fan_slow`）沿用上面那条普攻爆炸，不需要单独加。
+    paths.add(ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH);
+    //  冲锋（`charge_shield` / `legacy_dash`，2026-11-17 第 15 批）的残影与落地自保表现
+    //  只登记在 `ZCDashFx` 里。两条都是「此前没有任何技能在用」的老资源。
+    paths.add(ZC_DASH_EFFECT_PREFAB_PATH);
+    paths.add(ZC_DASH_GUARD_PREFAB_PATH);
+    //  风弹 + 飓风 / 连射导弹（`wind_bolt` / `missile_barrage`，2026-11-18 第 16 批）的四条路径
+    //  只登记在 `ZCWindBarrageFx` 里。其中导弹弹体与命中爆炸与镭射飞龙是同一份文件，
+    //  但这里加的是去重集合，不会产生第二份加载。
+    paths.add(ZC_WIND_BOLT_PREFAB_PATH);
+    paths.add(ZC_WIND_HURRICANE_PREFAB_PATH);
+    paths.add(ZC_BARRAGE_MISSILE_PREFAB_PATH);
+    paths.add(ZC_BARRAGE_IMPACT_PREFAB_PATH);
     return Array.from(paths);
 }
 

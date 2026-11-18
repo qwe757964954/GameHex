@@ -16,8 +16,12 @@ test('overlapping unlock responses keep their own succ results', async () => {
             this.callback = callback;
         }
     }
-    const gameNet = { instance: { isConnected: true, send: (request: Request) =>
-        new Promise<boolean>((resolve) => requests.push({ callback: request.callback, resolve })) } };
+    // Repository 走 `GameNet.sendRequest`（静态）⇒ 桩在静态方法上，用可手动 resolve 的 Promise
+    // 把「回包到达」与「传输完成」两个时刻分开（这正是本用例要压的并发窗口）。
+    const gameNet = { sendRequest: (make: () => unknown) => new Promise<string>((resolve) => {
+        const request = make() as Request;
+        requests.push({ callback: request.callback, resolve: (ok: boolean) => resolve(ok ? 'ok' : 'failed') });
+    }) };
     const exported: Record<string, unknown> = {};
     runInNewContext(code, { exports: exported, console, require: (id: string) => {
         // 解锁回包里的领奖出口（随机格「解锁即发奖」）。本用例只关心 succ 归属，不关心弹窗。
@@ -34,6 +38,14 @@ test('overlapping unlock responses keep their own succ results', async () => {
             startBattle: async () => null,
         };
         if (id === '../model/TerritoryCellBitSet') return {};
+        // 2026-11-18 新增 import：`readState` 用它解析 `monsterBoxInfos`，
+        // `unlockCell` 这条路径不碰它，给空对象即可（缺模块时 `require` 会直接 throw）。
+        if (id === '../model/TerritoryMonsterBox') return {};
+        // `unlockCell` 组包要归一章节号（0/负数/NaN → 1）。以前这条没被 require 到，
+        // 多半是导入顺序不同；补上避免落到末尾的 `throw new Error(id)`。
+        if (id === '../model/TerritoryProgress') return {
+            normalizeTerritoryChapter: (chapter: number) => (Number.isFinite(chapter) && chapter > 0 ? Math.floor(chapter) : 1),
+        };
         if (id === '../model/TerritoryGrantedReward') return { readTerritoryGrantedRewards: () => [] };
         if (id === '../model/TerritoryRequestStatus') return {
             TERRITORY_REQUEST_STATUS: {

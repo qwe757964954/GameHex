@@ -1,9 +1,10 @@
 import { instantiate, Label, Node, Prefab, Sprite, UITransform, Vec3, type SpriteFrame } from 'cc';
+import type { ZCDepth } from '../model/ZCMapConfig';
 import type { IZCSpawnRegionHint } from '../model/ZCSpawnRegionHint';
 
 /** 区域气泡 prefab 的 resources 路径：尺寸、锚点、文字排版与九宫格拉伸都在 prefab 里。 */
 export const SPAWN_REGION_HINT_PREFAB = 'ui/game/SpawnRegionHint';
-const DEPTH_LABEL: Readonly<Record<IZCSpawnRegionHint['depth'], string>> = {
+const DEPTH_LABEL: Readonly<Record<ZCDepth, string>> = {
     front: '前区',
     mid: '中区',
     back: '后区',
@@ -25,7 +26,7 @@ interface ISpawnRegionBubble {
     label: Label;
     /** 有贴图帧时非空（SLICED 九宫格底）。*/
     sprite: Sprite | null;
-    depth: IZCSpawnRegionHint['depth'] | null;
+    depth: ZCDepth | null;
     hintLabel: string | null;
 }
 

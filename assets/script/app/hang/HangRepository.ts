@@ -8,10 +8,14 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import { resolveRewardIconRef } from '../common/RewardIcon';
 import { readRefRows } from '../common/TableRead';
-import { GameNet } from '../net/GameNet';
+import { RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import type { IHjGuankaRow, IHjInteractRow, IHjReward, IHjSnapshotView } from './HangTable';
 import {
     HJ_INTERACT_STATE_DONE,
     HJ_PASSED_STAR,
@@ -30,7 +34,8 @@ import {
     sweepFreeTimesOf,
     sweepLevelOf,
 } from './HangTable';
-import type { IHjGuankaRow, IHjInteractRow, IHjReward, IHjSnapshotView } from './HangTable';
+import { HJ_TEXTS, hjFormat } from './HangTexts';
+import { RequestBattleSweep, RequestHangGetReward } from './RequestHangMsg';
 
 // 快照查询全在 `HangTable`（零引擎依赖 ⇒ 可单测），这里只做**转发**，
 // 让页面的 `import { ... } from './HangRepository'` 一行不用改。
@@ -44,18 +49,12 @@ export {
     progressOf,
     reachedMaxOf,
     sweepTimesOf,
-    sweepUsedOf,
+    sweepUsedOf
 } from './HangTable';
-import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
-import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
-import { resolveRewardIconRef } from '../common/RewardIcon';
-import { RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
-import { HJ_TEXTS, hjFormat } from './HangTexts';
-import { RequestBattleSweep, RequestHangGetReward } from './RequestHangMsg';
 
-import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { GUANKA_REWARD_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import { GUANKA_REWARD_TABLE, ITEM_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { toMillis } from '../../core/time/TimeMs';
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 福利月卡特权 `type`：无限次快速扫荡（老端 `PrivilegeType.NoCountSweep = 4`）。 */
 export const HJ_PRIVILEGE_NO_COUNT_SWEEP = 4;
 
@@ -473,8 +472,7 @@ export class RuntimeHangRepository implements IHangRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestHangGetReward({}, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
         );
@@ -498,8 +496,7 @@ export class RuntimeHangRepository implements IHangRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestBattleSweep({ level, type }, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
         );
@@ -521,8 +518,7 @@ export class RuntimeHangRepository implements IHangRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestRoleWatchAdvert({ type }, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Hang' },
         );

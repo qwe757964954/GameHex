@@ -22,9 +22,11 @@ function slgFixture() {
         exports, console,
         require: (name: string) => {
             if (name === '../generated/requestMsg/RequestBattleMsg') return { RequestStartBattle };
-            if (name === '../net/GameNet') return { GameNet: { instance: { isConnected: true,
-                send: () => new Promise<boolean>(resolve => { finishSend = resolve; }),
-            } } };
+            if (name === '../net/GameNet') {
+                const instance = { isConnected: true,
+                    send: () => new Promise<boolean>(resolve => { finishSend = resolve; }) };
+                return { GameNet: { instance, sendRequest: (make: () => unknown, options?: unknown) => sendGameRequest(instance, make, options) } };
+            }
             if (name === '../net/RequestGuard') return { sendGameRequest, withTimeout, toCount };
             if (name === './BattleStartModel') return { ...BattleStartModel, normalizeBattleStart: (rsp: unknown) => rsp };
             throw new Error(`Unstubbed import: ${name}`);
@@ -106,10 +108,11 @@ test('different battle requests cannot share one in-flight server response', asy
         console,
         require: (name: string) => {
             if (name === '../generated/requestMsg/RequestBattleMsg') return { RequestStartBattle };
-            if (name === '../net/GameNet') return { GameNet: { instance: {
-                isConnected: true,
-                send: () => new Promise<boolean>(resolve => { finishSend = resolve; }),
-            } } };
+            if (name === '../net/GameNet') {
+                const instance = { isConnected: true,
+                    send: () => new Promise<boolean>(resolve => { finishSend = resolve; }) };
+                return { GameNet: { instance, sendRequest: (make: () => unknown, options?: unknown) => sendGameRequest(instance, make, options) } };
+            }
             if (name === '../net/RequestGuard') return { sendGameRequest, withTimeout: (value: unknown) => value, toCount: Number };
             if (name === './BattleStartModel') return {
                 ZC_BATTLE_TYPE_PVP: 1001,

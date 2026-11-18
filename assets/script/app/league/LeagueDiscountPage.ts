@@ -134,7 +134,7 @@ export class LeagueDiscountPage extends PopupBase {
     /** 写操作在飞（防连点）。 */
     private busy = false;
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 取数趟次；关窗 / 重开都会作废在途结果。 */
     private revision = 0;
 
     // 生命周期
@@ -154,16 +154,12 @@ export class LeagueDiscountPage extends PopupBase {
 
     protected onClose(): void {
         this.busy = false;
-        this.revision += 1;
         this.stopCountdown();
     }
 
     onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.revision += 1;
-        // 不用手动 off() 事件（节点销毁时引擎会清），但定时器必须自己停：
-        // 销毁期 `unschedule` 只碰调度器、不碰已销毁节点，是安全的。
-        this.stopCountdown();
+        // 节点销毁时引擎先 `unscheduleAllCallbacks()` 再进 `onDestroy`，倒计时无需手停。
         super.onDestroy();
     }
 
@@ -182,7 +178,6 @@ export class LeagueDiscountPage extends PopupBase {
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
-
         const act = await this.repository.requestActList(LeagueACT_TYPE.DISCOUNT, this);
         if (!this.alive || revision !== this.revision) return;
 
@@ -192,14 +187,16 @@ export class LeagueDiscountPage extends PopupBase {
         const snapshot = await this.repository.loadDiscount();
         if (!this.alive || revision !== this.revision) return;
 
-        this.snapshot = snapshot;
-        this.rows = snapshot.rows.slice();
-        this.art = await this.loadArtFrames(snapshot);
+        const rows = snapshot.rows.slice();
+        const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
+        this.rows = rows;
+        this.art = art;
         this.present(snapshot);
 
         // 拉活动列表失败仍然把缓存里的东西铺出来（离线时界面不该是空的），另给一条提示
@@ -449,6 +446,6 @@ export class LeagueDiscountPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

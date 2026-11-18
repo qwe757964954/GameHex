@@ -1,8 +1,8 @@
 import { RequestPvpInfo } from '../generated/requestMsg/RequestPvpMsg';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, withTimeout } from '../net/RequestGuard';
-import { normalizePvpInfo } from './PvpInfoModel';
+import { withTimeout } from '../net/RequestGuard';
 import type { ZCPvpInfo } from './PvpInfoModel';
+import { normalizePvpInfo } from './PvpInfoModel';
 
 /**
  * PVP 玩法信息（`CmdPvpInfoReqMsg`）网络层（数据模型与校验见 `PvpInfoModel`）。
@@ -49,7 +49,7 @@ async function requestPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
 async function sendPvpInfo(caller?: object): Promise<ZCPvpInfo | null> {
     let response: CmdPvpInfoRspMsg | null = null;
     try {
-        const status = await sendGameRequest(GameNet.instance, () => new RequestPvpInfo(
+        const status = await GameNet.sendRequest(() => new RequestPvpInfo(
             {},
             caller,
             (rsp) => { response = rsp; },

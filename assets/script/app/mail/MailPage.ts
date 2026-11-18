@@ -98,12 +98,8 @@ export class MailPage extends PopupBase {
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: IMailRowView[] = [];
     private rowArt: IMailRowArt = { unread: null, read: null };
-    /** `renderItemFn` 只绑一次。 */
-    private rowRendererBound = false;
     /** 同一次刷新里有并发（`onOpen` + `onClose` 回调）时只跑一趟。 */
     private busy = false;
-    /** 刷新代数：过期结果直接丢（列表已重建）。 */
-    private revision = 0;
 
     /** 供测试 / 探针注入替身 Repository。 */
     setRepository(repository: IMailRepository): void {
@@ -120,10 +116,9 @@ export class MailPage extends PopupBase {
         this.batchRemoveButton.node.on(Button.EventType.CLICK, this.onBatchRemove, this);
         this.getOneKeyButton.node.on(Button.EventType.CLICK, this.onGetOneKey, this);
 
-        // 只绑一次，回调按 index 现取（见文件头铁律 ①）
-        if (!this.rowRendererBound && this.rowList) {
+        // `renderItemFn` 是普通属性赋值，不是事件订阅；`onInit` 只跑一次，直接写回调。
+        if (this.rowList) {
             this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
-            this.rowRendererBound = true;
         }
     }
 
@@ -144,15 +139,14 @@ export class MailPage extends PopupBase {
     async reload(): Promise<void> {
         if (this.busy) return;
         this.busy = true;
-        const revision = ++this.revision;
         try {
             const snapshot = await this.repo.load(this);
-            if (!this.isValid || revision !== this.revision) return;
+            if (!this.isValid) return;
             this.snapshot = snapshot;
 
             // 铁律 ③：图要在 `refreshList` 之前取完
             await this.loadRowArt();
-            if (!this.isValid || revision !== this.revision) return;
+            if (!this.isValid) return;
 
             this.present(snapshot);
         } catch (error) {

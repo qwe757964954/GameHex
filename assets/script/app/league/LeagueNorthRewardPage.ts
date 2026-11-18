@@ -105,7 +105,7 @@ export class LeagueNorthRewardPage extends PopupBase {
     /** 领奖在飞（防连点）。 */
     private busy = false;
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 取数趟次；关窗 / 重开都会作废在途结果。 */
     private revision = 0;
 
     // 生命周期
@@ -136,12 +136,10 @@ export class LeagueNorthRewardPage extends PopupBase {
 
     protected onClose(): void {
         this.busy = false;
-        this.revision += 1;
     }
 
     onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -181,10 +179,10 @@ export class LeagueNorthRewardPage extends PopupBase {
     /** 预取页签的两张底图（选中 / 未选中）。 */
     private async loadTabFrames(): Promise<void> {
         if (this.tabFramesReady) return;
-        this.tabFramesReady = true;
         const names = LEAGUE_NORTH_TAB_ART_NAMES;
         const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
         if (!this.alive) return;
+        this.tabFramesReady = true;
         const payload = { normal: frames[0] ?? null, selected: frames[1] ?? null };
         this.tabLeagueRef.setFrames(payload);
         this.tabRoleRef.setFrames(payload);
@@ -198,13 +196,14 @@ export class LeagueNorthRewardPage extends PopupBase {
         const snapshot = await this.repository.loadNorthReward();
         if (!this.alive || revision !== this.revision) return;
 
-        this.snapshot = snapshot;
-        this.art = await this.loadArtFrames(snapshot);
+        const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
+        this.art = art;
         this.applyTabPage();
         this.presentRows();
     }
@@ -264,6 +263,6 @@ export class LeagueNorthRewardPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

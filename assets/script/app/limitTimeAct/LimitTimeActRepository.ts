@@ -26,9 +26,8 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  */
 
 import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
 import {
     findLimitTimeMeta,
     parseActConfig,
@@ -126,8 +125,7 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
 
     private async fetchJson(meta: ILimitTimeActMeta): Promise<unknown> {
         let content: string | null = null;
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestActivityJson(
                 { activityId: meta.id, tlJsonName: meta.jsonNames as string[] },
                 undefined,
@@ -141,8 +139,7 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
 
     private async fetchInfo(): Promise<ILimitTimeActData | null> {
         let rsp: unknown = null;
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestActivityLimitTimeInfo({}, undefined, (r) => { rsp = r; }),
             { timeoutMs: READ_TIMEOUT_MS, tag: 'LimitTimeAct' },
         );
@@ -161,8 +158,7 @@ export class RuntimeLimitTimeActRepository implements ILimitTimeActRepository {
     /** `reqActivityLimitTimeTake` 的公共壳：离线早退、超时兜底、响应覆盖内存缓存。 */
     private async take(type: number, resId: number, caller?: object): Promise<LimitTimeRequestResult> {
         let rsp: CmdActivityLimitTimeTakeRspMsg | null = null;
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestActivityLimitTimeTake(
                 { resId, type },
                 caller,

@@ -77,7 +77,8 @@ export function territoryBossTint(): Color {
 export function territoryUnboundTint(type: TerritorySiteType): Color {
     switch (type) {
         case TERRITORY_SITE_TYPE.asyncPvp: return new Color(148, 92, 60, 255);
-        case TERRITORY_SITE_TYPE.fixedResource: return new Color(167, 126, 46, 255);
+        case TERRITORY_SITE_TYPE.fixedResource:
+        case TERRITORY_SITE_TYPE.patrolChest: return new Color(167, 126, 46, 255);
         case TERRITORY_SITE_TYPE.bonus: return new Color(190, 140, 70, 255);
         default: return TERRITORY_COLORS.unbound;
     }

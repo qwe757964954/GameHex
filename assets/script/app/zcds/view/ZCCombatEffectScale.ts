@@ -195,6 +195,21 @@ const NODE_SCALE_BY_PREFAB_PATH: Readonly<Record<string, number>> = {
     //    挂在宿主上 ⇒ 弹体与拖尾一起缩，比例不会各自漂；bake 进 prefab 的话拖尾得另写一套数。
     //    （与镭射飞龙导弹 `0.8` 同一条口径，那边注释里也写了同一句。）
     'units/projectiles/雷弹攻击/雷弹攻击': 0.5,
+    // 冲锋残影（`charge_shield` / `legacy_dash`，2026-11-17 第 15 批，`ZCDashFx`）。
+    // 预制体：contentSize 300×140、根 `_lscale` 1、clip 只有 1 帧（`wrapMode` 2 = loop）
+    // ⇒ 屏上 300×140，本质上是一张静态图。
+    //
+    // 300 屏上 px 是「武将技」的量级（≈ 9 个格距宽、4.5 个兵高），而这条冲锋只走
+    // 1~2 格（`chargeCells` × 42 逻辑 px × 0.3 × 2.5625 = 32.3~64.6 屏上 px）。
+    // 目标宽度取「行程的约 2 倍」≈ 120 屏上 px ⇒ 120 ÷ 300 = 0.4：
+    // 略宽于整段路，看起来是「一路犁过去」，又不至于盖住半个战场。
+    // 改 `chargeCells` / `dashCells` 时这条倍率要跟着重算（行程变了）。
+    'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋': 0.4,
+    // 落地自保的护盾表现（102303 III 级减伤，`ZCDashFx` 的 `ZC_DASH_GUARD_*`）。
+    // 设计案 O 列原话「落地自保叠 刀盾兵_护盾(缩 55%)」⇒ 直接取 0.55。
+    // 预制体：contentSize 100×100、根 `_lscale` 1 ⇒ 屏上 55×55，
+    // 与一个兵（可见高 ≈ 67）同一个量级，像「贴在身上的护罩」而不是「地上的一摊」。
+    'units/projectiles/刀盾兵_护盾/刀盾兵_护盾': 0.55,
 };
 
 /**

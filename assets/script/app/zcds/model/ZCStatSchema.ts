@@ -47,6 +47,11 @@ export type ZCStatId =
     //  **全卡下线** —— 这条车道一个字段都不留，别照着旧笔记再建一次。
     | 'hpRegenPct'
     | 'bulletSizeScale'
+    //  2026-11-18 第 17 批：`bodySizePct` —— **单位本体**的体型缩放（百分点，100 = 体型 ×2）。
+    //  与 `bulletSizeScale` 的区别：那个放大的是弹体、这个是站着的那个人/那棵树；
+    //  与 `gateScale`（中立资源门）的区别：那个是格子效果，这个走状态 → 面板这条通道。
+    //  101904 生命爆发 / 102104 巨型仙人掌 / 102704 战神附体 三条共用。
+    | 'bodySizePct'
     //  以下 9 种对应 `pvpAttrMap` 里 `sourceUnit !== 'text'` 的数值属性（2026-10-13 表补齐）。
     //  文本类（`type` / `model` / `attackType`）走独立 schema，不进入纯数值的 `ZCUnitStatPatch`。
     | 'attackCount'
@@ -351,7 +356,7 @@ const STAT_IDS = new Set<ZCStatId>([
     'executeChance', 'impactDamageRate', 'explosionDamageRate', 'zoneCount', 'slowRatio',
     'expireDamageRate', 'freezeDuration', 'shieldRatio', 'directionCount', 'moveSpeedBoost',
     'bannerTargetCount', 'bannerCritRate', 'empoweredEvery', 'lifestealRate',
-    'hpRegenPct', 'bulletSizeScale',
+    'hpRegenPct', 'bulletSizeScale', 'bodySizePct',
     'attackCount', 'bulletNum', 'bulletAngle', 'critRate', 'critDamage',
     'recruitCd', 'recruitMaxNum', 'singleRecruitNum', 'singleRecruitLegionCount',
     ...ZC_COUNTER_STAT_IDS,
@@ -391,6 +396,35 @@ const SKILL_BEHAVIORS = new Set([
     //  见 `ZCSkillTriggerSystem.applyTrap` + `ZCAttackResolutionSystem.castTrap`；
     //  结算复用 `ZCGroundZoneSystem`（`contactRadius` / `expireDamage` / `expirePrefabPath`）。
     'trap_place',
+    //  2026-11-17 第 12 批：冷却到点射一枚「命中就爆开」的弹（风炮菇「孢爆箭」101303 /
+    //  水手菇「孢子凝珠」101104）。两个 key 共用一套实现，后者多一段按档位变比例的减速。
+    //  见 `ZCSkillTriggerSystem.applySplashShot` + `ZCAttackResolutionSystem.castSplashShot`。
+    'splash_shot', 'spore_burst',
+    //  2026-11-17 第 13 批：以自身为圆心爆一次（菌壶菇「菌毯爆发」101504 /
+    //  菌王菇「菌核爆裂」101804）。两个 key 共用一套实现，后者把「爆完给自己套盾」
+    //  换成「爆完把怪推开」。见 `ZCSkillTriggerSystem.applyBurstSkill` +
+    //  `ZCAttackResolutionSystem.castBurstSkill`。
+    'burst_aura', 'burst_knockback',
+    //  2026-11-17 第 14 批：两条近身型主动 —— 菌丝绞杀 101503（`fan_slow`，扇形 + 减速）/
+    //  菌丝突刺 101403（`single_strike`，突进单体 + 眩晕）。
+    //  见 `ZCSkillTriggerSystem.applyFanSweep` / `applySingleStrike`。
+    'fan_slow', 'single_strike',
+    //  2026-11-17 第 15 批：冲锋车道 —— 菌盾冲锋 101204（`charge_shield`，定长 1 格 + 自护盾）/
+    //  冲锋 102303 与尖刺冲锋 102703（`legacy_dash`，朝最近敌人 / 朝面朝 + 眩晕或易伤）。
+    //  三条共用同一套「位移 + 线段命中」，只有参数不同。
+    //  见 `ZCSkillTriggerSystem.applyChargeShield` / `applyLegacyDash` +
+    //  `ZCAttackResolutionSystem.castChargeDash`。
+    'charge_shield', 'legacy_dash',
+    //  2026-11-18 第 16 批：风炮菇 68013 的一对主动 —— 孢爆箭 101303（`wind_bolt`，
+    //  慢速风弹 + 命中点留 3 秒飓风）/ 连射导弹 101304（`missile_barrage`，
+    //  累计 10 次普攻 → 3 颗抛物线炸弹、只走落点引爆）。
+    //  见 `ZCSkillTriggerSystem.applyWindShot` / `applyMissileBarrage` +
+    //  `ZCAttackResolutionSystem.castWindBolt` / `castBarrageShot` / `resolveProjectileArrival`。
+    'wind_bolt', 'missile_barrage',
+    //  2026-11-18 第 17 批：按「累计普攻 N 次」触发的一段自我增益（101904 生命爆发 /
+    //  102704 战神附体）。与 `self_cast` 的差别只有触发口径（那个是 CD、这个是累计普攻），
+    //  与 `empowered_attack` 的差别是「加下一击的形态」vs「加自己一段时间」。
+    'counter_self_buff',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',
@@ -1013,7 +1047,7 @@ const UNIT_STAT_IDS: readonly ZCStatId[] = [
     //  2026-11-17 第 8 批：同样没有基础值，表里用 `add` 直接给绝对值
     //  （`hpRegenPct` 1.5 = 1.5%/秒；`bulletSizeScale` 1.6 = ×1.6）。
     //  🔴 两个都不能写 `addRate`：rate 分支要乘 `baseValue`，而它们没有基础值 ⇒ 恒 0。
-    'hpRegenPct', 'bulletSizeScale',
+    'hpRegenPct', 'bulletSizeScale', 'bodySizePct',
 ];
 
 /**
@@ -1038,6 +1072,9 @@ export const STAT_TO_PATCH: Readonly<Record<string, [keyof ZCUnitStatPatch, keyo
     //  第 8 批（2026-11-17）：同样是「没有基础值、`add` 直接给绝对值」，所以第二个槽位是 null。
     hpRegenPct: ['hpRegenPct', null],
     bulletSizeScale: ['bulletSizeScale', null],
+    //  第 17 批（2026-11-18）：体型。同样是「没有基础值、`add` 直接给百分点」（100 = ×2），
+    //  所以第二个槽位是 null —— 写 `addRate` 会乘一个不存在的 baseValue，恒 0。
+    bodySizePct: ['bodySizePct', null],
 
     //  克制条（判据即 statId）：`counter*` 是攻方增伤、`countered*` 是守方减伤。
     //  序号 = `ZC_CAMP_TRAITS` / `ZC_ATTACK_TRAITS` 的下标 + 1，值走 `add` + **百分点**

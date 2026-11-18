@@ -15,18 +15,21 @@ export interface IGameSendPort {
 /** 网络请求三态；与 `core/types/NetResult` 同口径。 */
 export type GameRequestStatus = 'ok' | 'offline' | 'failed';
 
+export interface IGameRequestOptions {
+    readonly timeoutMs?: number;
+    readonly tag?: string;
+}
+
 /**
  * 统一「离线判定 → 发送 → 硬超时 → 三态」壳；响应回调仍由 `make()` 创建的消息对象持有。
  * 超时默认 5000ms（写请求口径）；读请求传 `timeoutMs`。
  */
 export async function sendGameRequest(
-    net: IGameSendPort | null | undefined,
+    net: IGameSendPort,
     make: () => unknown,
-    options?: {
-        readonly timeoutMs?: number;
-        readonly tag?: string;
-    },
+    options?: IGameRequestOptions,
 ): Promise<GameRequestStatus> {
+    // strict 关闭、运行时仍可能被 JS 侧传进空值，这里的 `?.` 是运行期防御，不是类型兜底。
     if (!net?.isConnected) return 'offline';
     try {
         const sent = await withTimeout(

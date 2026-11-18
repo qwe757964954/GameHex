@@ -183,6 +183,12 @@ export const TERRITORY_TEXTS = {
     sweepFailed: '扫荡失败，请稍后再试',
     /** 一个关卡都没通关时点扫荡（没有可扫的目标格，不发请求）。 */
     noSweepTarget: '暂无可扫荡的关卡',
+    /** 升级怪物宝箱在途（`CmdCityChapterUpMonsterBoxLvReqMsg`）。 */
+    busyUpgradeMonsterBox: '升级中…',
+    /** 升级怪物宝箱失败（服务端 `succ !== 1` / 超时）。 */
+    monsterBoxUpgradeFailed: '宝箱升级失败，请稍后再试',
+    /** 升级成功：用**服务端回包的新等级**，不本地 +1。 */
+    monsterBoxUpgraded: (lv: number) => `怪物宝箱已升至 ${lv} 级`,
     /** 「宝箱开启」奖励页：跳过卡片入场（蓝湖「宝箱开启」设计稿原文，`>>` 不是省略号）。 */
     chestOpenSkip: '跳过>>',
     /** 「宝箱开启」奖励页：关闭提示（设计稿原文）。 */

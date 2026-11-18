@@ -927,9 +927,9 @@ test('物品 E4｜`ItemDetailPage` 缎带与四个按钮也是无条件写', () 
     assert.ok(/this\.setActive\(this\.btnCompos, buttons\.showCompos\);/.test(body));
 });
 
-test('物品 E5｜`renderItemFn` / `onItemClickFn` **只绑一次**，数据按 index 现取（规则 55）', () => {
+test('物品 E5｜`renderItemFn` / `onItemClickFn` 每次铺列表写同一组回调，数据按 index 现取（规则 55）', () => {
     const body = stripComments(PAGE_SRC);
-    assert.ok(/if \(!this\.accessRendererBound\)/.test(body), '没有只绑一次的守卫 —— 每次 refresh 重绑会叠加监听');
+    assert.equal(/accessRendererBound/.test(body), false, '属性赋值不需要布尔门闩');
     assert.ok(/list\.renderItemFn = \(node, index\) => this\.renderAccessRow\(node, index\);/.test(body),
         'renderItemFn 必须转发到按 index 现取的方法，不能闭包捕获 snapshot');
     assert.ok(/list\.onItemClickFn = \(_node, index\) => this\.onAccessClick\(index\);/.test(body));
@@ -1047,7 +1047,7 @@ test('物品 G1｜Repository 走的是真缓存与新协议（不是占位实现
     assert.ok(/getTlCmdTask\(/.test(mt), '必须读 CmdTask 缓存');
     assert.ok(/getRefAllAsync\('taskMain'\)|'taskMain'/.test(mt), '必须读 taskMain 表');
     assert.ok(/RequestTakeMainTaskReward/.test(mt), '领奖必须发真协议');
-    assert.ok(/sendGameRequest\(/.test(mt) && /GameNet\.instance/.test(mt), '必须走公共发包壳（离线 / 超时 / catch 统一收口）');
+    assert.ok(/GameNet\.sendRequest\(/.test(mt), '必须走公共发包壳（离线 / 超时 / catch 统一收口）');
     assert.ok(/tag: 'MainTask'/.test(mt), '必须带 MainTask tag');
 
     const id = stripComments(readFileSync('assets/script/app/itemdetail/ItemDetailRepository.ts', 'utf8'));

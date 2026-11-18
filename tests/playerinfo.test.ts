@@ -169,6 +169,6 @@ test('⚠️ 反向：不许再出现裸的失败文案（绕过 writeFailText�
 
 test('⚠️ 反向：`send()` 必须走公共发包壳（offline 由壳统一早退，别并进 failed）', () => {
     const code = stripComments(readFileSync('assets/script/app/playerinfo/PlayerInfoRepository.ts', 'utf8'));
-    assert.match(code, /sendGameRequest\(GameNet\.instance, make/, '`PlayerInfoRepository.send` 没走公共发包壳');
+    assert.match(code, /GameNet\.sendRequest\(make/, '`PlayerInfoRepository.send` 没走公共发包壳');
     assert.match(code, /tag: 'PlayerInfo'/, '必须带 PlayerInfo tag');
 });

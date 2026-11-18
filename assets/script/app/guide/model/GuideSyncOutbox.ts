@@ -31,11 +31,15 @@ interface GuideOutboxFile {
 export class GuideSyncOutbox {
     /** storage 抛异常时的进程内兜底；归属本类，不泄漏到模块作用域。 */
     private static readonly memoryFallback = new Map<string, string>();
+    /** 每个账号队列的写入代次；多实例同 key 时用它判断自己的缓存是否已过期。 */
+    private static readonly revisions = new Map<string, number>();
 
     private readonly key: string;
     private readonly storage: IGuideStorage | null;
     /** 懒加载：构造时不读盘，避免启动路径上多做一次 localStorage 访问。 */
     private items: IGuideOutboxItem[] | null = null;
+    /** 缓存对应的写入代次；-1 表示尚未加载。 */
+    private revision = -1;
 
     /**
      * @param owner 账号归属；null 表示预览或未登录，只进内存。
@@ -87,7 +91,7 @@ export class GuideSyncOutbox {
         this.persist(next);
     }
 
-    /** 按远端校正后的完成集裁剪，避免把服务端已经有的步再补发一遍。 */
+    /** 按远端校正后的确认集裁剪，避免把服务端已经有的步再补发一遍。 */
     prune(completedStepIds: readonly string[]): void {
         const items = this.load();
         const completed = new Set(completedStepIds);
@@ -98,19 +102,22 @@ export class GuideSyncOutbox {
 
     /** 清空；只给调试 / 回归用。 */
     clear(): void {
-        this.items = [];
-        this.writeRaw(JSON.stringify({ version: OUTBOX_VERSION, items: [] } satisfies GuideOutboxFile));
+        this.persist([]);
     }
 
     private load(): IGuideOutboxItem[] {
-        if (this.items) return this.items;
+        const revision = GuideSyncOutbox.revisions.get(this.key) ?? 0;
+        if (this.items && revision === this.revision) return this.items;
         this.items = parseOutbox(this.readRaw());
+        this.revision = revision;
         return this.items;
     }
 
     private persist(items: IGuideOutboxItem[]): void {
         this.items = items;
-        this.writeRaw(JSON.stringify({ version: OUTBOX_VERSION, items } satisfies GuideOutboxFile));
+        const raw = JSON.stringify({ version: OUTBOX_VERSION, items } satisfies GuideOutboxFile);
+        this.writeRaw(raw);
+        this.revision = GuideSyncOutbox.revisions.get(this.key) ?? 0;
     }
 
     private readRaw(): string | null {
@@ -128,6 +135,7 @@ export class GuideSyncOutbox {
 
     private writeRaw(raw: string): void {
         GuideSyncOutbox.memoryFallback.set(this.key, raw);
+        GuideSyncOutbox.revisions.set(this.key, (GuideSyncOutbox.revisions.get(this.key) ?? 0) + 1);
         try {
             this.storage?.setItem(this.key, raw);
         } catch (error) {

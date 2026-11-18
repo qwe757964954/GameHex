@@ -10,13 +10,11 @@
  * 判定全在 {@link MilitiaTable}（零 `cc`，规则 78）；这里只做取数与发请求。
  */
 import { RefUtil } from '../../framework/ref/RefUtil';
+import { readItemCounts } from '../card/ItemBag';
+import { RequestArmyUpLevel } from '../generated/requestMsg/RequestArmyMsg';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { RequestArmyUpLevel } from '../generated/requestMsg/RequestArmyMsg';
-import { sendGameRequest, toCount } from '../net/RequestGuard';
-import { readItemCounts } from '../card/ItemBag';
-import type { IMilitiaLevelRow, IMilitiaModifierRow, IMilitiaTalentDetail, IMilitiaTalentSnapshot } from './MilitiaTypes';
-import { MILITIA_ARMY_ID } from './MilitiaTypes';
+import { toCount } from '../net/RequestGuard';
 import {
     buildMilitiaSnapshot,
     parseMilitiaLevelRows,
@@ -25,6 +23,8 @@ import {
     talentDescsOf,
     talentDetailOf,
 } from './MilitiaTable';
+import type { IMilitiaLevelRow, IMilitiaModifierRow, IMilitiaTalentDetail, IMilitiaTalentSnapshot } from './MilitiaTypes';
+import { MILITIA_ARMY_ID } from './MilitiaTypes';
 
 /** 请求结果（与 `CardRepository` 同一套说法）。 */
 export type MilitiaUpgradeResult = 'ok' | 'offline' | 'failed';
@@ -108,8 +108,7 @@ class MilitiaRepository {
      * —— 所以这里成功后只重刷界面，不额外弹窗。
      */
     async requestLevelUp(armyId: number = MILITIA_ARMY_ID): Promise<MilitiaUpgradeResult> {
-        return sendGameRequest(GameNet.instance,
-            () => new RequestArmyUpLevel({ armyId }, this), { tag: 'MilitiaRepository' });
+        return GameNet.sendRequest(() => new RequestArmyUpLevel({ armyId }, this), { tag: 'MilitiaRepository' });
     }
 }
 

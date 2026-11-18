@@ -8,7 +8,9 @@ import ts from 'typescript';
 const source = ts.createSourceFile('model.ts', readFileSync(
     'assets/script/app/territory/application/TerritoryModel.ts', 'utf8'), ts.ScriptTarget.Latest, true);
 const model = source.statements.find(ts.isClassDeclaration)!;
-const names = ['unlockThenStartBattle', 'handleUnlockThenBattle', 'handleUnlockOnly', 'reportPendingPasses', 'startBattle'];
+const names = ['unlockThenStartBattle', 'handleUnlockThenBattle', 'handleUnlockOnly', 'reportPendingPasses', 'startBattle',
+    // `handleUnlockOnly` 的解锁请求会经过它取「上报格子」（巡逻宝箱用锚点格），Probe 里必须一起带上。
+    'patrolReportCell'];
 const methods = names.map(name => {
     const method = model.members.find(member => ts.isMethodDeclaration(member) && member.name.getText(source) === name);
     assert.ok(method, name);
@@ -19,6 +21,8 @@ const Probe = runInNewContext(ts.transpileModule(`class Probe { ${methods} }\ngl
 }).outputText + '\nProbe;', {
     TERRITORY_TEXTS: {}, ZC_BATTLE_TYPE_CHAPTER: 1002,
     territoryRevealedCells: () => [2], TERRITORY_REQUEST_STATUS: { rejected: 'rejected' },
+    // 本用例只关心奖励路由，锚点格给恒等桩（真实算法在 territory-patrol-chest 里测）。
+    territoryPatrolAnchorCell: (site: { cellId: number }) => site.cellId,
 });
 
 test('各解锁入口将本次回包奖励传给展示出口，失败和过期回包不展示', async () => {

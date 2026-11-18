@@ -34,12 +34,19 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  *  所以这里不造一个「发出去但不知道会同步什么」的假刷新接口；打开界面 = `load()` 读表 + 读缓存。
  */
 
+import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest, toCount } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import { toCount } from '../net/RequestGuard';
+import type {
+    IActivityGoodsInfo,
+    IActivityProgressRow,
+    IActivityServerState,
+    IActivityTabRow,
+    IActivityTaskRow,
+} from './LayerActivityTable';
 import {
     activityCoinOf,
     EMPTY_ACTIVITY_STATE,
@@ -52,20 +59,13 @@ import {
     parseTaskRows,
     sortTasksForDisplay,
 } from './LayerActivityTable';
-import type {
-    IActivityGoodsInfo,
-    IActivityProgressRow,
-    IActivityServerState,
-    IActivityTabRow,
-    IActivityTaskRow,
-} from './LayerActivityTable';
 import {
     RequestTakeDayActProgressReward,
     RequestTakeDayChallengeActReward,
 } from './RequestActivityMsg';
 
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 采集一次界面要的全部数据。 */
 export interface IActivitySnapshot {
     /** 已按「可领取 → 未完成 → 已领取」排好序的任务行。 */
@@ -259,7 +259,7 @@ export class RuntimeActivityRepository implements IActivityRepository {
         rewardField: 'tlReward' | 'tlCmdGoods',
     ): Promise<ActivityRequestResult> {
         let responded = false;
-        const status = await sendGameRequest(GameNet.instance, () => build((rsp) => {
+        const status = await GameNet.sendRequest(() => build((rsp) => {
             FW.ShowReward(rsp?.[rewardField] ?? []);
             responded = true;
         }), { timeoutMs: WRITE_TIMEOUT_MS, tag: `Activity:${label}` });

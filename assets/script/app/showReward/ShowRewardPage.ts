@@ -67,8 +67,6 @@ export class ShowRewardPage extends PopupBase {
     private frames: IRewardFrames[] = [];
     /** 是否铜钱奖励（决定音效）。 */
     private isGold = false;
-    /** 每次取数 / 铺界面递增，用于丢弃过期异步结果。 */
-    private loadRevision = 0;
 
     /** 已播过动画的数据下标：滚动复用槽位，不记账会重播；每次打开清空。 */
     private readonly playedAni = new Set<number>();
@@ -100,19 +98,17 @@ export class ShowRewardPage extends PopupBase {
             return;
         }
 
-        const revision = (this.loadRevision += 1);
-
         const entries = await this.resolveEntries(goods);
-        if (!this.alive || revision !== this.loadRevision) return;
+        if (!this.alive) return;
         // 排序在加载图之前：frames 与 entries 须同序。
         const sorted = sortRewardEntries(entries);
 
         // 图先 await 完再铺：renderItem 同步，现加载会闪一帧旧图，漏项还会静默留白。
         const frames = await loadRewardFrames(sorted);
-        if (!this.alive || revision !== this.loadRevision) return;
+        if (!this.alive) return;
 
         await this.nextPopupFrame();
-        if (!this.alive || revision !== this.loadRevision) return;
+        if (!this.alive) return;
 
         this.entries = sorted;
         this.frames = frames;
@@ -120,8 +116,6 @@ export class ShowRewardPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        // 作废在途 load（醒来时页面已关）。
-        this.loadRevision += 1;
         // 取消还没到点的错峰回调，并把槽位收干净：关窗后不留隐藏态 / 半截动画
         // （弹窗实例若被缓存复用，这些状态会直接带到下一次打开）。
         this.unscheduleAllCallbacks();
@@ -297,6 +291,6 @@ export class ShowRewardPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return this.isPopupOpen && !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

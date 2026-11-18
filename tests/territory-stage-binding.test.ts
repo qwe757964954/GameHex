@@ -396,8 +396,12 @@ test('★★★接线层：Presenter 用战斗绑定扩散 stageByCell，主线 
         'utf8');
     assert.match(src, /const battleBindings = bindTerritoryBattleStages\(sourceMap\.sites, campaign\.stages\);/,
         'stageByCell 的输入绑定必须包含 asyncPvp 战斗站点');
-    assert.match(src, /const stageByCell = expandBindingsToAreaSites\(sourceMap\.sites, battleBindings\);/,
-        'stageByCell 必须由战斗绑定扩散生成（同区域格子共用关卡）');
+    // 2026-11-18：巡逻宝箱按自己的 `battleId` 也绑进 `stageByCell`
+    // （开局点开它要发 `CmdStartBattleReqMsg`），但它**不进**主线去重表 / 解锁链。
+    assert.match(src, /const patrolBindings = bindTerritoryPatrolStages\(sourceMap\.sites, campaign\.stages\);/,
+        '巡逻宝箱也要绑关卡行，否则点开那一格只能提示「站点配置待补齐」');
+    assert.match(src, /const stageByCell = expandBindingsToAreaSites\(sourceMap\.sites, \[\.\.\.battleBindings, \.\.\.patrolBindings\]\);/,
+        'stageByCell 必须由战斗绑定 + 巡逻绑定扩散生成（同区域格子共用关卡）');
     // 反向：stages 是章节进度分母，绝不能拿扩散后的 54 格去算。
     // （2026-10-31：赋值点从 `this.stages = …` 搬进了 chapter 对象字面量，断言跟着改成当前位置。）
     assert.match(src, /stages: bindings\.map\(\(\{ site, stage \}\) => \(\{ site, stage \}\)\),/,

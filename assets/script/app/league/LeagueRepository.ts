@@ -6,146 +6,114 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  */
 
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { readRefRows } from '../common/TableRead';
-import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as ILeagueGoodsInfo } from '../common/ResTypes';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toIdString } from '../net/RequestGuard';
+import { toIdString } from '../net/RequestGuard';
+import { LEAGUE_AD_TYPE_UNION_TASK, leagueAdLimit, leagueAdRest } from './LeagueAd';
 import {
     buildLeagueCostView,
-    findLeagueProperty,
-    findMyUnion,
-    findSelfMember,
-    ILeagueApplyRow,
-    ILeagueCostView,
-    ILeagueLogRow,
-    ILeagueMemberRow,
-    ILeagueOfficialRow,
-    ILeagueUnionRow,
-    isLeagueNameUsable,
-    LeaguePosition,
-    LEAGUE_CREATE_COST_RES_ID,
-    LEAGUE_GAME_CONFIG_TABLE,
-    LEAGUE_PROPERTY_TABLE,
-    leagueCreateBannerIndexOf,
-    leagueCreateCost,
-    leagueMaxExp,
-    LEAGUE_UNION_LEVEL_TABLE,
-    LEAGUE_UNION_OFFICIAL_TABLE,
-    LEAGUE_UNION_COIN_RES_ID,
-    LEAGUE_UNION_CONTRI_RES_ID,
-    LEAGUE_COIN_RES_ID,
-    normalizeLeagueApplies,
-    normalizeLeagueLogs,
-    normalizeLeagueMembers,
-    normalizeLeagueUnion,
-    normalizeLeagueUnions,
-    officialPowersMap,
-    parseLeagueOfficialRows,
-    parseLeaguePropertyRows,
-    parseUnionLevelRows,
-    rolePropertyAmount,
     // —— P4 ——
     buildLeagueDiscountRows,
     buildLeagueDiscountView,
+    // —— P6（北伐中原）——
+    buildLeagueNorthRankRowView,
+    buildLeagueNorthRankRowViews,
+    buildLeagueNorthRewardRowViews,
     buildLeagueStoreRowViews,
-    canLeagueBargain,
-    canLeagueBuyBargain,
-    hasLeagueDiscountRedDot,
-    hasLeagueStoreRedDot,
-    ILeagueDiscountRowView,
-    ILeagueDiscountView,
-    ILeagueP4Config,
-    ILeagueStoreRowView,
-    ILeagueUnionDiscountRow,
-    leagueShopBuyTimesOf,
-    LEAGUE_ITEM_TABLE,
-    LEAGUE_UNION_DISCOUNT_TABLE,
-    LEAGUE_UNION_SHOP_TABLE,
-    parseLeagueP4Config,
-    parseUnionDiscountRows,
-    parseUnionShopRows,
     // —— P5 ——
     buildLeagueTaskBoxViews,
     buildLeagueTaskRowViews,
+    canLeagueBargain,
+    canLeagueBuyBargain,
+    findLeagueProperty,
+    findMyUnion,
+    findSelfMember,
+    hasLeagueDiscountRedDot,
+    hasLeagueNorthChallengeRedDot,
+    hasLeagueNorthRedDot,
+    hasLeagueNorthRewardRedDot,
+    hasLeagueStoreRedDot,
     hasLeagueTaskRedDot,
+    ILeagueActivityView,
+    ILeagueApplyRow,
+    ILeagueCostView,
+    ILeagueDiscountRowView,
+    ILeagueDiscountView,
+    ILeagueLogRow,
+    ILeagueMemberRow,
+    ILeagueMonsterView,
+    ILeagueNorthConfig,
+    ILeagueNorthRankRowView,
+    ILeagueNorthRewardRowView,
+    ILeagueOfficialRow,
+    ILeagueP4Config,
+    ILeagueReward,
+    ILeagueStoreRowView,
     ILeagueTaskBoxView,
     ILeagueTaskCmd,
     ILeagueTaskProgressRow,
     ILeagueTaskRowView,
     ILeagueTaskUnionRow,
-    leagueTaskProgress,
-    LeagueUnionTaskType,
+    ILeagueUnionDiscountRow,
+    ILeagueUnionRow,
+    isLeagueNameUsable,
+    LEAGUE_COIN_RES_ID,
+    LEAGUE_CREATE_COST_RES_ID,
+    LEAGUE_GAME_CONFIG_TABLE,
+    LEAGUE_GUANKA_REWARD_TABLE,
+    LEAGUE_ITEM_TABLE,
+    LEAGUE_MONSTER_TABLE,
+    LEAGUE_NORTH_RANK_SHOW_NUM,
+    LEAGUE_NORTH_RANK_TYPE,
+    LEAGUE_PROPERTY_TABLE,
     LEAGUE_TASK_PROGRESS_TABLE,
     LEAGUE_TASK_UNION_TABLE,
-    parseTaskUnionProgressRows,
-    parseTaskUnionRows,
-    // —— P6（北伐中原）——
-    buildLeagueNorthRankRowView,
-    buildLeagueNorthRankRowViews,
-    buildLeagueNorthRewardRowViews,
-    hasLeagueNorthChallengeRedDot,
-    hasLeagueNorthRedDot,
-    hasLeagueNorthRewardRedDot,
-    ILeagueActivityView,
-    ILeagueMonsterView,
-    ILeagueNorthConfig,
-    ILeagueReward,
-    ILeagueNorthRankRowView,
-    ILeagueNorthRewardRowView,
-    LeagueNorthRankTab,
+    LEAGUE_UNION_COIN_RES_ID,
+    LEAGUE_UNION_CONTRI_RES_ID,
+    LEAGUE_UNION_DISCOUNT_TABLE,
+    LEAGUE_UNION_LEVEL_TABLE,
+    LEAGUE_UNION_OFFICIAL_TABLE,
+    LEAGUE_UNION_RANK_AWARD_TABLE,
+    LEAGUE_UNION_SHOP_TABLE,
     leagueActSelfStats,
+    leagueCreateBannerIndexOf,
+    leagueCreateCost,
+    leagueMaxExp,
     leagueNorthBossOf,
     leagueNorthBuffText,
+    LeagueNorthRankTab,
     leagueNorthTimesText,
+    LeaguePosition,
+    leagueShopBuyTimesOf,
+    leagueTaskProgress,
+    LeagueUnionTaskType,
+    normalizeLeagueApplies,
+    normalizeLeagueLogs,
+    normalizeLeagueMembers,
+    normalizeLeagueUnion,
+    normalizeLeagueUnions,
+    northRewardRowsOf,
+    officialPowersMap,
     parseLeagueActivity,
     parseLeagueGuanKaRows,
     parseLeagueMonsterRows,
     parseLeagueNorthConfig,
+    parseLeagueOfficialRows,
+    parseLeagueP4Config,
+    parseLeaguePropertyRows,
     parseLeagueRankRows,
     parseNorthTaskUnionRows,
-    northRewardRowsOf,
+    parseTaskUnionProgressRows,
+    parseTaskUnionRows,
+    parseUnionDiscountRows,
+    parseUnionLevelRows,
     parseUnionRankAwardRows,
-    LEAGUE_GUANKA_REWARD_TABLE,
-    LEAGUE_MONSTER_TABLE,
-    LEAGUE_NORTH_RANK_SHOW_NUM,
-    LEAGUE_NORTH_RANK_TYPE,
-    LEAGUE_UNION_RANK_AWARD_TABLE
+    parseUnionShopRows,
+    rolePropertyAmount
 } from './LeagueTable';
-import {
-    RequestUnionAppoint,
-    RequestUnionApplyList,
-    RequestUnionApproveJoin,
-    RequestUnionApproveJoinOneKey,
-    RequestUnionCreate,
-    RequestUnionDetail,
-    RequestUnionEdit,
-    RequestUnionJoin,
-    RequestUnionKick,
-    RequestUnionLog,
-    RequestUnionList,
-    RequestUnionQuit,
-    RequestUnionSearch,
-    RequestUnionSetQuickJoin,
-    // —— P4 ——
-    LeagueACT_TYPE,
-    LEAGUE_SHOP_TYPE_UNION,
-    RequestShopBuy,
-    RequestUnionActList,
-    RequestUnionBargain,
-    RequestUnionDonate,
-    LeagueEditType,
-    // —— P5 ——
-    RequestRoleWatchAdvert,
-    RequestTaskUnionGetProgressReward,
-    RequestTaskUnionGetReward,
-    // —— P6（北伐中原）——
-    RequestGetRank,
-    RequestUnionActDrum,
-    RequestUnionActSweep,
-} from './RequestLeagueMsg';
-import { LEAGUE_AD_TYPE_UNION_TASK, leagueAdLimit, leagueAdRest } from './LeagueAd';
 import {
     fillLeagueText,
     LEAGUE_AD_PLAYBACK_AVAILABLE,
@@ -155,18 +123,50 @@ import {
     LEAGUE_DONATE_EXP_PREFIX,
     LEAGUE_GOODS_COUNT_SEP,
 } from './LeagueTexts';
+import {
+    LEAGUE_SHOP_TYPE_UNION,
+    // —— P4 ——
+    LeagueACT_TYPE,
+    LeagueEditType,
+    // —— P6（北伐中原）——
+    RequestGetRank,
+    // —— P5 ——
+    RequestRoleWatchAdvert,
+    RequestShopBuy,
+    RequestTaskUnionGetProgressReward,
+    RequestTaskUnionGetReward,
+    RequestUnionActDrum,
+    RequestUnionActList,
+    RequestUnionActSweep,
+    RequestUnionApplyList,
+    RequestUnionAppoint,
+    RequestUnionApproveJoin,
+    RequestUnionApproveJoinOneKey,
+    RequestUnionBargain,
+    RequestUnionCreate,
+    RequestUnionDetail,
+    RequestUnionDonate,
+    RequestUnionEdit,
+    RequestUnionJoin,
+    RequestUnionKick,
+    RequestUnionList,
+    RequestUnionLog,
+    RequestUnionQuit,
+    RequestUnionSearch,
+    RequestUnionSetQuickJoin,
+} from './RequestLeagueMsg';
 
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 联盟商店的档位号（`CmdShopType.union = 8`）。 */
 export { LEAGUE_SHOP_TYPE_UNION };
 /** 联盟活动类型（`LeagueACT_TYPE`）。 */
-export { LeagueACT_TYPE };
+    export { LeagueACT_TYPE };
 /**
  * 联盟任务的子类型（`LeagueUnionTaskType`）—— 领进度宝箱时要传 `leagueTask`。
  *
  * 照 `LEAGUE_SHOP_TYPE_UNION` / `LeagueACT_TYPE` 的先例转出，让页面只 import 本文件。
  */
-export { LeagueUnionTaskType };
+    export { LeagueUnionTaskType };
 
 /** 计数归一：解析不出的、负数一律当 `0`（与 `LeagueTable.toCount` 同口径，本文件只用在这里）。 */
 function countOf(value: unknown): number {
@@ -1370,7 +1370,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         make: (done: (rsp: T) => void, fail: () => void) => any,
     ): Promise<T | null> {
         let response: T | null = null;
-        const status = await sendGameRequest(GameNet.instance, () => make(
+        const status = await GameNet.sendRequest(() => make(
             rsp => { response = rsp; }, () => { response = null; },
         ), { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
         return status === 'ok' ? response : null;
@@ -1515,7 +1515,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
 
     /** 统一的发包 + 三态收口。 */
     private async send(make: () => any): Promise<LeagueRequestResult> {
-        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
+        return GameNet.sendRequest(make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });
     }
 
     private async sendWithRewards<Rsp>(
@@ -1534,7 +1534,7 @@ export class RuntimeLeagueRepository implements ILeagueRepository {
         onResponse: (rsp: Rsp) => void,
     ): Promise<LeagueRequestResult> {
         let applied = false;
-        const status = await sendGameRequest(GameNet.instance, () => make((rsp: Rsp) => {
+        const status = await GameNet.sendRequest(() => make((rsp: Rsp) => {
             applied = true;
             onResponse(rsp);
         }), { timeoutMs: WRITE_TIMEOUT_MS, tag: 'League' });

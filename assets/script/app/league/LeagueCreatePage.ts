@@ -121,11 +121,10 @@ export class LeagueCreatePage extends PopupBase {
     }
 
     protected onClose(): void {
-        this.revision += 1;
+        // 关闭由 `alive` 覆盖；`revision` 只防同一存活期内换成本时旧图标覆盖。
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -221,7 +220,7 @@ export class LeagueCreatePage extends PopupBase {
         const sprite = this.costIcon;
         const revision = this.revision;
         const frame = await loadArt(cost.iconName, cost.iconRoot || LEAGUE_COST_ICON_ROOT);
-        if (!sprite.isValid || revision !== this.revision) return;
+        if (!this.alive || !sprite.isValid || revision !== this.revision) return;
         if (!frame) {
             // 表里没有图标（或图挂了）：藏掉节点，别留一个空框
             sprite.node.active = false;
@@ -322,7 +321,7 @@ export class LeagueCreatePage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }
 

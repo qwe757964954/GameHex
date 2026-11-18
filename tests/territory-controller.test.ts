@@ -1,4 +1,5 @@
 import { createControllerContext } from './helpers/controller-context';
+import { loadTsModule } from './helpers/cc-sandbox';
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -7,10 +8,39 @@ import ts from 'typescript';
 import { formatHms } from '../assets/script/app/hang/HangTable';
 import { TERRITORY_IDLE_REWARD_INTERVAL_MS } from '../assets/script/app/territory/model/TerritoryIdleReward';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { GuideEvent, reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { buildTerritoryViewState, isTerritoryChestActionable } from '../assets/script/app/territory/application/TerritoryViewState';
+import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
+import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import type { TerritoryCellRepository } from '../assets/script/app/territory/application/TerritoryCellRepository';
 import type { TerritoryModel, TerritoryModelOutput, ITerritoryViewState } from '../assets/script/app/territory/application/TerritoryModel';
 import { TerritoryUiEvent, TerritoryViewEvent } from '../assets/script/app/territory/application/TerritoryEvents';
-import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
+
+type TerritoryControllerCtor = typeof import('../assets/script/app/territory/application/TerritoryController')['TerritoryController'];
+
+interface IControllerNetPort {
+    addEvent(name: string, caller: object, handler: (message: unknown) => void): void;
+    removeCaller(caller: object): void;
+}
+/** Controller 直连 `GameNet.instance`；沙箱把单例桥接到每个 harness 自己的网络端口。 */
+let activeNet: IControllerNetPort = { addEvent() {}, removeCaller() {} };
+const { exports: controllerExports, unresolved: controllerUnresolved } = loadTsModule<{ TerritoryController: TerritoryControllerCtor }>(
+    'assets/script/app/territory/application/TerritoryController.ts', { modules: {
+        '/ControllerBase': { ControllerBase },
+        '/GuideEvents': { GuideEvent, reportGuideComplete },
+        '/GameNet': { GameNet: { instance: {
+            addEvent: (name: string, caller: object, handler: (message: unknown) => void) => activeNet.addEvent(name, caller, handler),
+            removeCaller: (caller: object) => activeNet.removeCaller(caller),
+        } } },
+        '/EventMgr': { EventMgr },
+        '/TerritoryEvents': { TerritoryUiEvent, TerritoryViewEvent },
+        '/TerritoryViewState': { buildTerritoryViewState, isTerritoryChestActionable },
+        '/TerritoryTexts': { TERRITORY_TEXTS },
+        '/TerritoryMapConfig': { isTerritoryBattleSite },
+    } });
+assert.deepEqual(controllerUnresolved, []);
+const TerritoryController = controllerExports.TerritoryController;
 
 function harness() {
     const calls: unknown[] = [];
@@ -35,13 +65,14 @@ function harness() {
     const listeners = new Map<string, { caller: object; handler: (msg: unknown) => void }>();
     let cache: (() => void) | null = null;
     const timers: Array<{ callback: () => void; seconds: number }> = [];
+    const cells = { readPassCellsBro: () => ({ levelChapter: 2, cellIds: [10] }), readCellInfo: () => null };
+    activeNet = {
+        addEvent(name, caller, handler) { listeners.set(name, { caller, handler }); },
+        removeCaller() { calls.push('removeCaller'); listeners.clear(); },
+    };
     const controller = new TerritoryController(() => model as unknown as TerritoryModel, { context: createControllerContext(),
-        network: {
-            addEvent(name, caller, handler) { listeners.set(name, { caller, handler }); },
-            removeCaller() { calls.push('removeCaller'); listeners.clear(); },
-        },
-        roleCache: { subscribe(callback) { cache = callback; return () => { calls.push('uncache'); cache = null; }; } },
-        cells: { readPassCellsBro: () => ({ levelChapter: 2, cellIds: [10] }), readCellInfo: () => null },
+        roleCache: { subscribe(_caller: object, callback: () => void) { cache = callback; return () => { calls.push('uncache'); cache = null; }; } },
+        cells: cells as unknown as TerritoryCellRepository,
         schedule(callback, seconds) { const timer = { callback, seconds }; timers.push(timer); return () => { calls.push(['stop', seconds]); timer.callback = () => {}; }; },
         now: () => 42,
     });
@@ -196,7 +227,7 @@ test('closing and reopening routes ordinary intents only to the active controlle
 
 test('controller owns network/cache and clocks; disposal releases them exactly once', () => {
     const h = harness();
-    h.controller.start(); h.controller.start();
+    h.controller.start();
     assert.equal(h.calls.filter(c => c === 'start').length, 1);
     assert.deepEqual([...h.listeners.keys()].sort(), ['CmdCityChapterCellInfoRspMsg', 'CmdCityChapterPassCellBroMsg']);
     const listener = h.listeners.get('CmdCityChapterPassCellBroMsg')!;
@@ -208,7 +239,8 @@ test('controller owns network/cache and clocks; disposal releases them exactly o
     assert.deepEqual(h.timers.map(t => t.seconds), [1, 60]);
     h.timers.forEach(t => t.callback());
     assert.deepEqual(h.calls.slice(-2), [['fast', 42], ['slow', 42]]);
-    h.controller.dispose(); h.controller.dispose();
+    EventMgr.instance.emit(TerritoryUiEvent.Disposed);
+    h.controller.dispose();
     assert.equal(h.calls.filter(c => c === 'dispose').length, 1);
     assert.equal(h.calls.filter(c => c === 'removeCaller').length, 1);
     assert.equal(h.calls.filter(c => c === 'uncache').length, 1);
@@ -225,9 +257,23 @@ test('disposal balances busy feedback once and drops late model outputs', () => 
     const h = harness(), owner = {};
     const busy: boolean[] = [];
     EventMgr.instance.on(TerritoryViewEvent.Command, (event: { command: TerritoryModelOutput }) => {
-        if (event.command.kind === 'busy') busy.push(event.command.payload.busy);
+        if (event.command.kind === 'busy') {
+            if (!event.command.payload.busy) {
+                assert.equal(h.controller.isDisposed, true);
+                assert.equal(h.controller.scope.disposed, false);
+                assert.equal(h.listeners.size, 0);
+                assert.ok(h.calls.includes('uncache'));
+            }
+            busy.push(event.command.payload.busy);
+        }
     }, owner);
-    h.model.dispose = () => { h.calls.push('dispose'); h.emit({ kind: 'busy', payload: { busy: false } }); };
+    h.model.dispose = () => {
+        h.calls.push('dispose');
+        h.emit({ kind: 'busy', payload: { busy: false } });
+    };
+    h.controller.scope.defer(() => {
+        h.calls.push('resources');
+    });
     try {
         h.controller.start();
         h.emit({ kind: 'busy', payload: { busy: true } });
@@ -236,5 +282,6 @@ test('disposal balances busy feedback once and drops late model outputs', () => 
         h.controller.dispose();
         h.emit({ kind: 'busy', payload: { busy: false } });
         assert.deepEqual(busy, [true, false]);
+        assert.deepEqual(h.calls.slice(-3), ['dispose', 'unsub', 'resources']);
     } finally { h.controller.dispose(); EventMgr.instance.offTarget(owner); }
 });

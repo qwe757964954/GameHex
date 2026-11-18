@@ -264,6 +264,12 @@ test('Boss focus stops map inertia and scrolls to the selected cell; missing tar
     const calls: unknown[][] = [];
     Object.assign(mapView, {
         state: { ready: true, layout },
+        // 🔴 `scrollToCell` 的留白必须与内容层同源（`territoryMapOffsetForCell` 用它们算可滚上限），
+        //    所以这里要把地图视图的留白一起喂进去；漏了就是 null 读属性直接崩。
+        mapView: {
+            contentPaddingBottom: territoryMapContentPaddingBottom,
+            contentPaddingTop: territoryMapContentPaddingTop,
+        },
         mapScrollView: {
             node: { getComponent: () => ({ contentSize: viewport }) },
             stopAutoScroll: () => calls.push(['stop']),
@@ -344,6 +350,10 @@ test('return focus retries an unlaid-out viewport at most three times and drops 
     let scrolls = 0;
     Object.assign(page, { state,
         scheduleOnce: (callback: () => void) => pending.push(callback),
+        mapView: {
+            contentPaddingBottom: territoryMapContentPaddingBottom,
+            contentPaddingTop: territoryMapContentPaddingTop,
+        },
         mapScrollView: {
             node: { getComponent: () => ({ contentSize: { width: 0, height: 0 } }) },
             stopAutoScroll() {}, scrollToOffset: () => { scrolls++; },

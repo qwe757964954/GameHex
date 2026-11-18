@@ -100,15 +100,6 @@ export class FriendApplyPage extends PopupBase {
         await this.reload();
     }
 
-    protected onClose(): void {
-        this.revision += 1;
-    }
-
-    onDestroy(): void {
-        this.revision += 1;
-        super.onDestroy();
-    }
-
     /** 供测试注入替身 Repository。 */
     setRepository(repository: IFriendRepository): void {
         this.repo = repository;
@@ -122,13 +113,13 @@ export class FriendApplyPage extends PopupBase {
         const revision = ++this.revision;
         const snapshot = await this.repo.load();
         if (!this.alive || revision !== this.revision) return;
-        this.snapshot = snapshot;
 
         // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
         // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
         this.present();
     }
 
@@ -255,6 +246,6 @@ export class FriendApplyPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

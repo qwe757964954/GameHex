@@ -110,7 +110,7 @@ export class ItemInfoPage extends PopupBase {
         this.rewardLoading = (async () => {
             const prefab = await UIResources.loadAsync(ItemInfoPage.REWARD_ITEM_PATH);
             // 加载期间弹窗可能已关闭 / 销毁。
-            if (!prefab || !host.isValid || !this.node.isValid) return;
+            if (!prefab || !host.isValid || !this.alive) return;
             const node = instantiate(prefab);
             node.parent = host;
             const scale = ITEM_INFO_REWARD_SLOT_SIZE / ITEM_INFO_REWARD_ITEM_SIZE;
@@ -131,8 +131,6 @@ export class ItemInfoPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        // 让在途的 load / present 作废。
-        this.revision += 1;
         this.accessRefs = [];
         for (const row of this.rows) row.hide();
     }
@@ -144,7 +142,7 @@ export class ItemInfoPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** prefab 预建的途径行（按 `_children` 序，不按 active 过滤）。 */

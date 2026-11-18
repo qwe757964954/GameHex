@@ -5,14 +5,35 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { createControllerContext } from './helpers/controller-context';
 import { loadBattlePreparation } from './helpers/battle-composition';
-import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
+import { loadTsModule } from './helpers/cc-sandbox';
 import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryCommandEvent } from '../assets/script/app/territory/application/TerritoryEvents';
 import type { ITerritoryNavigateBattlePayload, TerritoryModelOutput } from '../assets/script/app/territory/application/TerritoryModel';
 import type { ZCGameEntryParams } from '../assets/script/app/zcds/application/ZCGameEntry';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { buildTerritoryViewState, isTerritoryChestActionable } from '../assets/script/app/territory/application/TerritoryViewState';
+import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as requestGuard from '../assets/script/app/net/RequestGuard';
 import * as territoryTexts from '../assets/script/app/territory/application/TerritoryTexts';
+
+type TerritoryControllerCtor = typeof import('../assets/script/app/territory/application/TerritoryController')['TerritoryController'];
+
+/** Controller 直连 `GameNet.instance`，沙箱里给它一个空订阅端口。 */
+const { exports: controllerExports, unresolved: controllerUnresolved } = loadTsModule<{ TerritoryController: TerritoryControllerCtor }>(
+    'assets/script/app/territory/application/TerritoryController.ts', { modules: {
+        '/ControllerBase': { ControllerBase },
+        '/GuideEvents': { reportGuideComplete },
+        '/GameNet': { GameNet: { instance: { addEvent() {}, removeCaller() {} } } },
+        '/EventMgr': { EventMgr },
+        '/TerritoryEvents': { TerritoryUiEvent, TerritoryViewEvent },
+        '/TerritoryViewState': { buildTerritoryViewState, isTerritoryChestActionable },
+        '/TerritoryTexts': territoryTexts,
+        '/TerritoryMapConfig': { isTerritoryBattleSite },
+    } });
+assert.deepEqual(controllerUnresolved, []);
+const TerritoryController = controllerExports.TerritoryController;
 
 function fixture(failure = false) {
     const context = createControllerContext();

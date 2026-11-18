@@ -4,6 +4,7 @@ import { ZCCombatSystem } from './ZCCombatSystem';
 import { ZC_PORTAL_FLIGHT_SECONDS } from '../ZCBattlePresentationQueue';
 import type { IZCDashStep } from './ZCMovementSystem';
 import type { IZCDashHit } from './ZCUnitTargeting';
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 
 export interface IZCUnitTargeting {
     acquire(unit: ZCUnitState): void;
@@ -17,6 +18,7 @@ export interface IZCUnitTargeting {
     attackReachOf?(unit: ZCUnitState): number;
     findStepToward(unit: ZCUnitState): number | null;
     face(unit: ZCUnitState): void;
+    reportTargetChange?(unit: ZCUnitState): void;
     /** 本帧冲刺倍率（`>= 1`）；缺省按 1 处理，等价于没配冲刺。*/
     chargeSpeedScale?(unit: ZCUnitState): number;
     /** 冲刺路径上第一个撞到的敌人；缺省时冲刺只会跑到终点、不发生碰撞。*/
@@ -53,11 +55,16 @@ const SOLDIER_WAIT_RANDOM = 0.15;
 /** 冲刺超时的兜底余量：正常按「到点 / 撞到」收场，这里只防终点不可达。*/
 const DASH_TIMEOUT_MARGIN = 2;
 const DASH_MIN_SECONDS = 0.15;
+const CHASE_MAX_SECONDS = 5;
+const CHASE_MAX_DISTANCE = 3 * HEX_GRID_LOGICAL_ROW_STEP;
 
 /** 单位战斗状态机；由编排层提供索敌、命中和移动操作。*/
 export class ZCUnitSystem {
     static update(units: readonly ZCUnitState[], dt: number, context: IZCUnitContext): void {
-        for (const unit of units) this.updateUnit(unit, dt, context);
+        for (const unit of units) {
+            this.updateUnit(unit, dt, context);
+            context.targeting.reportTargetChange?.(unit);
+        }
     }
 
     private static switchWaitAttack(unit: ZCUnitState, context: IZCUnitContext): void {
@@ -69,7 +76,6 @@ export class ZCUnitSystem {
         // 软控只禁普攻、不冻移动；直接返回，解控后下一帧到点就能补拳。
         if (context.attackBlockedOf?.(unit)) return;
         // 出手前重新确认目标与射程，避免在等待期间攻击已经移动的单位。
-        context.targeting.acquire(unit);
         if (!context.targeting.current(unit) || !context.targeting.isInAttackRange(unit)) {
             ZCCombatSystem.switchState(unit, 'target');
             return;
@@ -224,6 +230,7 @@ export class ZCUnitSystem {
         if (context.targeting.refreshPriorityTarget?.(unit)) {
             ZCCombatSystem.switchState(unit, 'target');
         }
+        if (unit.chase && context.targeting.isInAttackRange(unit)) delete unit.chase;
         if (unit.battleState === 'attack') {
             if (!unit.attackHitDone && unit.stateTime >= definition.attackHitTime) context.sendAttack(unit);
             if (unit.stateTime >= definition.attackDuration) ZCCombatSystem.switchState(unit, 'idle');
@@ -266,7 +273,8 @@ export class ZCUnitSystem {
 
         // 正在射程内锁定目标时保持当前目标（RTS 式仇恨锁）：
         // 目标死亡或移出射程（isTargetOutOfAttackRange 滞回判定）后才重新索敌，切到最近的。
-        const lockedAndFighting = unit.battleState === 'idle' && !!context.targeting.current(unit);
+        const lockedAndFighting = (unit.battleState === 'idle' || unit.battleState === 'move')
+            && !!context.targeting.current(unit);
         if (!lockedAndFighting) {
             context.targeting.acquire(unit);
             if (context.targeting.current(unit)) ZCCombatSystem.switchState(unit, context.targeting.isInAttackRange(unit) ? 'idle' : 'move');
@@ -291,10 +299,26 @@ export class ZCUnitSystem {
                 return;
             }
             if (context.targeting.isInAttackRange(unit)) {
+                delete unit.chase;
                 if (context.now() >= unit.nextAttackAt) this.switchWaitAttack(unit, context);
                 else ZCCombatSystem.switchState(unit, 'idle');
                 return;
             }
+            if (target.kind === 'unit') {
+                unit.chase ??= { x: unit.freeX, y: unit.freeY, startedAt: context.now() };
+                if (context.now() - unit.chase.startedAt >= CHASE_MAX_SECONDS
+                    || Math.hypot(unit.freeX - unit.chase.x, unit.freeY - unit.chase.y) >= CHASE_MAX_DISTANCE) {
+                    if (!unit.disengagedUnitIds?.includes(target.id)) {
+                        unit.disengagedUnitIds = [...(unit.disengagedUnitIds ?? []), target.id];
+                    }
+                    unit.targetUnitId = unit.targetWallHexId = unit.targetBuildingHexId = null;
+                    unit.targetHexId = null;
+                    unit.progress = 0;
+                    delete unit.chase;
+                    ZCCombatSystem.switchState(unit, 'moveForward');
+                    return;
+                }
+            } else delete unit.chase;
             // 冲刺已在 tryStartDash 统一处理，走到这里说明没配冲刺或不在冲刺距离内。
             if (target.kind === 'unit') {
                 const targetUnit = context.unitById.get(target.id);

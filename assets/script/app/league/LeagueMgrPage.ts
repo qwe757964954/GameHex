@@ -175,12 +175,10 @@ export class LeagueMgrPage extends PopupBase {
      * 这里不做 revision 校验 —— 面板已经关了，结果只影响一条提示。
      */
     protected onClose(): void {
-        this.revision += 1;
         this.flushQuickJoin();
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -354,6 +352,6 @@ export class LeagueMgrPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

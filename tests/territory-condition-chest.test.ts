@@ -296,12 +296,12 @@ test('★★★美术：icon_baoxiang 从 territory 目录加载，落到 chestI
     assert.match(ASSETS_SRC, /readonly chestIcon: SpriteFrame \| null;/);
 });
 
-test('★★★数据：只有 fixedResource 分支传 conditionChestIcon', () => {
+test('★★★数据：只有普通宝箱（fixedResource）分支传 conditionChestIcon', () => {
     // 赋值只许出现在「可激活」那一个分支里：多一处就说明有别的格也长了宝箱。
     const assigned = MAP_SRC.match(/conditionChestIcon:/g) ?? [];
     assert.equal(assigned.length, 1, `conditionChestIcon 只该赋值一次，实际 ${assigned.length} 处`);
     assert.match(MAP_SRC, /site\.type === TERRITORY_SITE_TYPE\.fixedResource\s*\r?\n\s*\?\s*input\.art\.chestIcon/,
-        '判据必须是站点类型，不是「有没有图」');
+        '只有普通宝箱长这颗图标：野怪宝箱（patrolChest）按 2026-11-18 需求不展示任何宝箱外观');
     // 渲染契约只有一处声明（`TerritoryStationView` 的入参接口）。
     const declared = STATION_SRC.match(/readonly conditionChestIcon\?: SpriteFrame \| null;/g) ?? [];
     assert.equal(declared.length, 1);

@@ -690,7 +690,7 @@ test('C9 读 / 写超时常量与好友同口径（800 / 5000）', () => {
     assert.ok(REPO_SRC.includes('export const LEAGUE_READ_TIMEOUT_MS'));
     assert.ok(REPO_SRC.includes('export const LEAGUE_WRITE_TIMEOUT_MS'));
     // 必须走 `sendGameRequest`：超时 / 离线 / catch 统一收口
-    assert.ok(REPO_SRC.includes('sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS'), '发包必须兜硬超时');
+    assert.ok(REPO_SRC.includes('GameNet.sendRequest(make, { timeoutMs: WRITE_TIMEOUT_MS'), '发包必须兜硬超时');
 });
 
 test('C10 ⚠️ `unionOfficial` 表名与磁盘文件一致', () => {

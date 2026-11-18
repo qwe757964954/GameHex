@@ -112,7 +112,6 @@ export class ChangeHeadPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        this.loadRevision += 1;
         this.entries = [];
         this.frames.clear();
         this.owned = null;
@@ -126,7 +125,7 @@ export class ChangeHeadPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */

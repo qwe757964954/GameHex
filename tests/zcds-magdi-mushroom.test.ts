@@ -93,18 +93,22 @@ const SHOCK_PARAMS = {
 
 // ────────────────────────────────────────────── 一、配表守卫
 
-test('pvpStatus：新增软控 numb，只禁攻击 + 移速 −50%，不挂任何硬控', () => {
+test('pvpStatus 里的 numb 已按设计删除：控制能力移交别的系统，配表也不许再引用它', () => {
+    //  用户口径（2026-11-17）：「麻痹是设计上需要先删除，把控制部分留在别的系统」。
+    //  ⇒ 本用例原来钉的是「numb 存在且是软控」，现在反过来钉「不许回来」。
+    //  为什么必须钉住「配表也不许引用」：`pvpStatus` 里没有定义时 `statusSystem.apply`
+    //  会静默不生效（不报错、不抛异常），`pvpSkillPlan.statusId = 'numb'` 就成了一条
+    //  谁都看不出来的悬空引用 —— 策划以为挂了 3 秒麻痹，实际一个状态都没挂上。
     for (const rows of [readTable('pvpStatus'), readClientTable('pvpStatus')]) {
         const row = rows.find((item) => item.statusId === ZC_BOLT_NUMB_STATUS_ID);
-        assert.ok(row, '缺 pvpStatus.numb');
-        assert.equal(Number(row.enabled), 1);
-        //  control 必须是空：填 stun/freeze/paralysis/blind 里任何一个都会变成硬控
-        assert.equal(row.control ?? null, null, 'numb 不能是硬控，否则连移动都会停');
-        const mods = JSON.parse(String(row.statJson));
-        assert.equal(mods.moveSpeedPct, -50);
-        assert.equal(mods.attackDisabled, 1);
-        assert.equal(Number(row.durationSeconds), 3);
-        assert.equal(row.handlerKey, 'none');
+        assert.equal(row, undefined,
+            'numb 已按设计删除（2026-11-17）：控制能力归别的系统，不要建回来');
+    }
+    for (const [label, rows] of [['remoteRef', readTable('pvpSkillPlan')],
+        ['client', readClientTable('pvpSkillPlan')]] as const) {
+        const dangling = rows.filter((row) => String(row.statusId ?? '') === ZC_BOLT_NUMB_STATUS_ID);
+        assert.deepEqual(dangling.map((row) => row.modifierId), [],
+            `${label} 里还有把 statusId 写成 numb 的行 ⇒ 静默失效的悬空引用`);
     }
 });
 
@@ -231,7 +235,7 @@ function boltContext(caster: ZCUnitState, target: { id: number; x: number; y: nu
         },
         statPatches: { [ZCOwner.Player]: new Map([['68016', {}]]), [ZCOwner.Enemy]: new Map() },
         skillRuntime: {
-            [ZCOwner.Player]: new Map([['68016:30231', { parameters: params }]]),
+            [ZCOwner.Player]: new Map([['68016:30231', { parameters: { boltSearchRadius: 200, ...params } }]]),
             [ZCOwner.Enemy]: new Map(),
         },
         unitById: new Map([[caster.id, caster]]),
@@ -256,7 +260,7 @@ function boltContext(caster: ZCUnitState, target: { id: number; x: number; y: nu
 
 test('五雷轰顶：3 道雷各落一条事件 + 一个区域，沿「目标 → 背朝向」每道错开 60px', () => {
     const caster = unit(1, { freeX: 0, freeY: 0 });
-    const state = snapshot([caster]);
+    const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 }, BOLT_PARAMS);
     assert.equal(ZCAttackResolutionSystem.castBoltLine(state, caster, context), true);
 
@@ -288,7 +292,7 @@ test('五雷轰顶：3 道雷各落一条事件 + 一个区域，沿「目标 �
 
 test('五雷轰顶：L3 是 5 道 × 250%，总伤 5 倍而不是摊薄', () => {
     const caster = unit(1, { freeX: 0, freeY: 0 });
-    const state = snapshot([caster]);
+    const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
     const context = boltContext(caster, { id: 9, x: 60, y: 0 },
         { ...BOLT_PARAMS, boltCount: 5, boltDamageRate: 2.5 });
     ZCAttackResolutionSystem.castBoltLine(state, caster, context);
@@ -337,7 +341,7 @@ test('五雷轰顶：逐道 0.15s 出现 —— 任意一拍上「已到点」�
     assert.equal(entered(0, 0), true);
 
     const caster = unit(1, { freeX: 0, freeY: 0 });
-    const state = snapshot([caster]);
+    const state = snapshot([caster, unit(9, { owner: 'enemy', freeX: 60 })]);
     ZCAttackResolutionSystem.castBoltLine(state, caster, boltContext(caster, { id: 9, x: 60, y: 0 },
         { ...BOLT_PARAMS, boltCount: 5, boltDamageRate: 2.5 }));
 

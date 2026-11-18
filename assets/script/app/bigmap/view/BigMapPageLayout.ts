@@ -1,5 +1,5 @@
 import { _decorator, Button, Component, Label, Node, Sprite, Widget } from 'cc';
-import type { IBigMapViewState } from '../application/BigMapViewState';
+import type { BigMapMode, IBigMapViewState } from '../application/BigMapViewState';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, type BigMapIntent } from '../application/BigMapEvents';
@@ -61,7 +61,7 @@ export class BigMapPageLayout extends Component {
 
     //仅保留输入所需的表现状态；初始化前不接收操作。
     private inputEnabled = false;
-    private mode: 'world' | 'base' = 'world';
+    private mode: BigMapMode = 'world';
     private art: IBigMapArt | null = null;
     protected onLoad(): void {
         this.harvestButton.node.on(Button.EventType.CLICK, this.onHarvestClick, this);
@@ -155,7 +155,7 @@ export class BigMapPageLayout extends Component {
         if (content) this.plotCard.render(content);
     }
 
-    private applyMode(mode: IBigMapViewState['ui']['mode']): void {
+    private applyMode(mode: BigMapMode): void {
         this.baseView.node.active = mode === 'base';
         this.buildMenuButton.node.active = mode === 'base';
         this.queuePanel.active = mode === 'base';

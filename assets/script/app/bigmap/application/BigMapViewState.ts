@@ -1,8 +1,11 @@
 import type { BigMapModel } from './BigMapModel';
 export type { IBigMapResourceView, IBigMapPlotCellView, IBigMapPlotDetailView, IBigMapCityView, IBigMapMonsterView } from './BigMapModel';
 
+/** 大地图主视图模式：基地内景 / 世界地图。 */
+export type BigMapMode = 'world' | 'base';
+
 export interface IBigMapUiState {
-    readonly mode: 'world' | 'base';
+    readonly mode: BigMapMode;
     readonly selectedCityId: number;
     readonly selectedMonsterId: number;
     readonly selectedPlotHexId: number;

@@ -11,21 +11,20 @@ import { CardDetailMilestoneRow } from './CardDetailMilestoneRow';
 import { CardPopupEvent } from './CardPopupEvents';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
-import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
-import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
 import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
 import { cardCampName, cardClassName, resolveCardCamp, resolveCardClass } from './CardLineupTypes';
 import { milestoneAnchorIndex } from './CardDetailPresenter';
 import type {
+    CardDetailMilestone,
     CardDetailPresentation,
     CardDetailSkillSlot,
 } from './CardDetailPresenter';
 import { formatCritDamageGain } from './CardDetailCritDamage';
 import type {
     CardUpgradePhase,
-    CardUpgradePresentation,
     ICardUpgradeViewState,
 } from './CardPresentations';
+import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 
 export type { ICardUpgradeOpenData } from './CardPresentations';
 
@@ -51,8 +50,8 @@ type StatKey = 'hp' | 'attack' | 'buildHp' | 'spawn' | 'range' | 'speed';
 /** 卡牌详情视图：渲染外部会话快照，按钮仅派发意图。 */
 @ccclass('CardUpgradePage')
 export class CardUpgradePage extends PopupBase {
+    /** 同次打开中淘汰旧兵种预览；关闭由 PopupBase 释放 resourceScope 使任务失效。 */
     private artRevision = 0;
-    private renderRevision = 0;
     private preview: CardUnitPreview | null = null;
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
     private heroKey: string | null = null;
@@ -210,9 +209,9 @@ export class CardUpgradePage extends PopupBase {
     @property({ group: '技能格', tooltip: '首格激活样式下角标的左偏移；普通态取 prefab 现值' })
     activeBadgeLeft = 75.8;
 
-    private chain: CardDetailPresentation['chain'] = [];
+    private chain: readonly CardDetailSkillSlot[] = [];
 
-    private milestones: CardDetailPresentation['milestones'] = [];
+    private milestones: readonly CardDetailMilestone[] = [];
 
     /** 技能格角标普通态左偏移：首次渲染时从 prefab 读取，切回普通态时复用。 */
     private readonly normalBadgeLeft = new Map<Widget, number>();
@@ -230,7 +229,7 @@ export class CardUpgradePage extends PopupBase {
     private expItemOwned = 0;
 
     /** 按钮可点时的文字颜色（开机时从 prefab 的 Label 上取，代码不写死）。 */
-    private upgradeLabelColor: Color | null = null;
+    private upgradeLabelColor: Color = null!;
 
     protected onInit(): void {
         this.upgradeLabelColor = this.upgradeLabel.color.clone();
@@ -286,7 +285,7 @@ export class CardUpgradePage extends PopupBase {
     /**
      * 点经验材料图标 → 开「道具信息」弹窗（蓝湖「道具信息」稿）。
      *
-     * 顺序上必须先由 `renderStatus` 把 `expItemId` 定下来（它是这一趟图标画的那件道具）；
+     * `render` 同步应用图标和 `expItemId`（它是这一趟图标画的那件道具）；
      * 图标还没铺出来时不响应，避免拿上一张卡的经验道具去开详情。
      */
     private readonly onExpIconClick = (): void => {
@@ -307,7 +306,6 @@ export class CardUpgradePage extends PopupBase {
 
     /** 唯一的写 UI 入口：头部 + 详情区 + 升级状态。 */
     render(data: ICardUpgradeViewState): void {
-        this.renderRevision++;
         this.renderedCardId = String(data.cardId ?? '');
         this.renderHeader(data);
         this.levelBigLabel.string = String(data.level);
@@ -318,6 +316,11 @@ export class CardUpgradePage extends PopupBase {
         this.renderDetail(data.detail);
         if (data.status) {
             this.renderStatus(data.status, data.phase);
+            const { card, exp } = data.materials;
+            this.matCardIcon.spriteFrame = card?.frame ?? null;
+            this.matExpIcon.spriteFrame = exp?.frame ?? null;
+            this.expItemId = exp ? Number(exp.itemId) : 0;
+            this.expItemOwned = exp?.owned ?? 0;
             this.hasRenderedStatus = true;
             return;
         }
@@ -340,9 +343,9 @@ export class CardUpgradePage extends PopupBase {
         this.hintLabel.string = data.phase === 'failed' ? CARD_LINEUP_TEXTS.upgradeFailed : '';
     }
 
-    /** 组件所在节点是否仍然有效（面板随时可能被关掉，`close()` 是直接 destroy）。 */
+    /** 弹窗仍打开且节点尚未销毁。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     // 头部：名字、品质、种族职业、立绘、战力。
@@ -367,7 +370,7 @@ export class CardUpgradePage extends PopupBase {
     }
 
     /** 优先展示对应兵种的循环待机，缺少模型或 idle 时保留原立绘。 */
-    private renderHero(card: CardUpgradePresentation['data']['card'], hero: SpriteFrame | null): void {
+    private renderHero(card: ZCDeckCard | null, hero: SpriteFrame | null): void {
         const key = card ? `${card.id}|${card.rarity}|${card.unitId}|${card.unitPrefabPath}` : null;
         if (key !== null && key === this.heroKey) return;
         this.heroKey = key;
@@ -420,7 +423,7 @@ export class CardUpgradePage extends PopupBase {
         this.critDamageGain = Math.max(0, Number(detail.critDamageGain) || 0);
     }
 
-    private renderChain(chain: CardDetailPresentation['chain']): void {
+    private renderChain(chain: readonly CardDetailSkillSlot[]): void {
         this.chain = chain;
         this.chainScroll.refreshList(chain.length);
     }
@@ -431,7 +434,7 @@ export class CardUpgradePage extends PopupBase {
      * 只有落点或行数变了才滚 —— 同一张卡刷新（升级回包、状态刷两次）保持玩家当前阅读位置。
      * 一条都没有（技能描述整块未配）时显示占位条，而不是留一片空白。
      */
-    private renderMilestones(milestones: CardDetailPresentation['milestones']): void {
+    private renderMilestones(milestones: readonly CardDetailMilestone[]): void {
         this.milestones = milestones;
         this.milestoneScroll.refreshList(milestones.length);
         this.milestoneEmpty.active = milestones.length === 0;
@@ -497,25 +500,7 @@ export class CardUpgradePage extends PopupBase {
     /** 把判定结果铺到升级面板（这是升级侧唯一的写 UI 入口）。 */
     private renderStatus(status: ZCUpgradeStatus, phase: CardUpgradePhase): void {
         const texts = CARD_LINEUP_TEXTS;
-        //  经验图标的「点开道具信息」身份每一趟都重算：图标换了、道具就不能还停在上一次那件。
-        this.expItemId = 0;
-        this.expItemOwned = 0;
         const cardRow = status.requirements.find(row => row.key === 'card');
-        this.renderMaterialIcon(
-            this.matCardIcon,
-            cardRow ? [{ id: cardRow.itemId, owned: cardRow.owned }] : [],
-        );
-        this.renderMaterialIcon(
-            this.matExpIcon,
-            [
-                { id: status.generalExpItemId, owned: status.generalExpOwned },
-                { id: status.armyExpItemId, owned: status.armyExpOwned },
-            ],
-            (picked) => {
-                this.expItemId = Number(picked.id) || 0;
-                this.expItemOwned = picked.owned;
-            },
-        );
         this.levelTransitionLabel.string = status.maxed
             ? texts.upgradeMaxed
             : `${texts.detailTabLevel} ${status.level}${texts.upgradeLevelArrow}${status.targetLevel}`;
@@ -586,35 +571,7 @@ export class CardUpgradePage extends PopupBase {
     private setUpgradeEnabled(enabled: boolean): void {
         this.upgradeButton.interactable = enabled;
         this.upgradeButtonSprite.grayscale = !enabled;
-        const color = enabled ? this.upgradeLabelColor : this.disabledUpgradeLabelColor;
-        if (color) this.upgradeLabel.color = color;
-    }
-
-    /** 经验合计优先通用经验，未配图时取兵种经验；始终复用物品表图标。 */
-    private renderMaterialIcon(
-        sprite: Sprite,
-        entries: readonly { readonly id: string; readonly owned: number }[],
-        onPick?: (picked: { readonly id: string; readonly owned: number }) => void,
-    ): void {
-        const scope = this.resourceScope;
-        const revision = this.renderRevision;
-        void (async () => {
-            for (const entry of entries) {
-                if (!entry.id) continue;
-                const item = await itemDetailRepository.loadItemRow(Number(entry.id));
-                if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
-                if (!item || !item.icon) continue;
-                const frame = await loadItemIconArt(item.icon);
-                if (scope.disposed || !this.alive || revision !== this.renderRevision) return;
-                sprite.spriteFrame = frame;
-                //  只有真的画出来的那一件才算「当前显示的道具」（点图标开的就是它）。
-                onPick?.(entry);
-                return;
-            }
-            sprite.spriteFrame = null;
-        })().catch(error => {
-            if (!scope.disposed && this.alive) console.error('[CardUpgradePage] 物品图标加载失败', error);
-        });
+        this.upgradeLabel.color = enabled ? this.upgradeLabelColor : this.disabledUpgradeLabelColor;
     }
 
     private onCloseClick(): void {
@@ -626,8 +583,6 @@ export class CardUpgradePage extends PopupBase {
     };
 
     protected onClose(): void {
-        this.artRevision++;
-        this.renderRevision++;
         this.preview?.clear();
         this.preview = null;
         this.previewAssets = null;

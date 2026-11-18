@@ -1,5 +1,5 @@
 import { toCount, toIdString, toPositiveInt } from '../net/RequestGuard';
-import type { MatchPlayerData } from '../matching/MatchTypes';
+import type { MatchPlayerData, MatchStat } from '../matching/MatchTypes';
 import { MATCH_STAT_TYPES } from '../matching/MatchTypes';
 import { applyHeadArt, createHeadArtResolver } from '../HeadArtModel';
 import type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
@@ -70,6 +70,7 @@ export interface ZCBattleHero {
 /**
  * 服务端下发的增量属性，attrId 形如 attack.addRate。
  * 这是规则增量，不是绝对值；当绝对值用会少算，未知键丢掉则整条规则消失。
+ * 与绝对值同时下发时：`addRate` 在定值之后叠乘（PVP 关卡对敌方的减益），`add` 仍被定值压制。
  * 目前只认 attack 和 maxHp，扩项时运行时白名单也要一起改。
  */
 export interface ZCBattleHeroModifier {
@@ -302,18 +303,46 @@ export function parseBattleHeroAttrs(infos: CmdPvpHeroAttrInfo[] | null | undefi
             }
             const entry = heroes.get(heroId) ?? { attributes: {}, modifiers: new Map<string, ZCBattleHeroModifier>() };
             if (key) {
+                const previous = entry.attributes[key];
+                if (previous !== undefined && previous !== value) {
+                    console.warn('[BattleStartModel] 同一绝对值属性重复下发，后值覆盖前值',
+                        heroId, attrId, previous, value);
+                }
                 entry.attributes[key] = value;
             } else if (modifier) {
+                const previous = entry.modifiers.get(attrId);
+                if (previous && previous.value !== value) {
+                    //  这里按 `attrId` 覆盖，**不是**累加（下游 `applyZCTypedUnitModifiers` 才做累加）。
+                    //  值不一致说明服务端按来源拆成了多条，客户端只留最后一条 ⇒ 少算且零报错。
+                    console.warn('[BattleStartModel] 同一增量属性重复下发，仅保留后值',
+                        heroId, attrId, previous.value, value);
+                }
                 entry.modifiers.set(attrId, { statId: modifier.statId, operation: modifier.operation, value });
             }
             heroes.set(heroId, entry);
         }
     }
-    return Array.from(heroes, ([heroId, entry]) => ({
+    const parsed = Array.from(heroes, ([heroId, entry]) => ({
         heroId,
         attributes: entry.attributes,
         ...(entry.modifiers.size ? { modifiers: Array.from(entry.modifiers.values()) } : {}),
     }));
+    //  绝对值与增量同时下发时，`applyZCTypedUnitModifiers` 的口径是：
+    //  `addRate` 在定值之后叠乘（关卡减益），`add` 仍被定值压制。只有 `add` 会丢，
+    //  所以只对 `add` 留痕；按**单元**汇总成一条，避免逐英雄打把日志刷满。
+    const overlapped: string[] = [];
+    for (const hero of parsed) {
+        for (const modifier of hero.modifiers ?? []) {
+            if (modifier.operation === 'add' && hero.attributes[modifier.statId] !== undefined) {
+                overlapped.push(`${hero.heroId}:${modifier.statId}.add`);
+            }
+        }
+    }
+    if (overlapped.length) {
+        console.warn('[BattleStartModel] 绝对值与绝对增量同时下发，add 将被绝对值覆盖',
+            overlapped.length, overlapped.join(','));
+    }
+    return parsed;
 }
 
 /**
@@ -433,7 +462,7 @@ export type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 
 /** 服务端 id → 界面显示值解析器；查不到返回空串，调用方保留原值。 */
 export interface MatchProfileLookup {
-    heroStats(heroIds: readonly number[]): MatchPlayerData['stats'];
+    heroStats(heroIds: readonly number[]): MatchStat[];
     gradeName(gradeId: number): string;
     artifactName(artifactId: number): string;
     /** 神器图标资源名（`pvpArtifact[].icon`）；查不到返回空串，调用方保留 prefab 原帧。 */

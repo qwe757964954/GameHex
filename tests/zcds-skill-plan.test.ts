@@ -28,6 +28,24 @@ function prepare() {
     return captureZCMatchConfig();
 }
 
+test('技能 Range / All 通过现有参数袋编译，非法枚举在配置边界报错', () => {
+    const config = prepare();
+    const row = {
+        enabled: 1, modifierId: 99000003, unitId: '68001', skillChainId: 100101, skillLevel: 1,
+        unlockHeroLevel: 1, progressionMode: 'replace', pvpSkillId: 30701,
+        skillParamJson: '{"secondaryTargetMode":1,"strikeTargetMode":2}',
+    };
+    const catalogs = parseZCModifierCatalogs([], [], { pvpSkillPlan: [row] });
+    const selected = selectZCSkillPlans('68001', 1, catalogs);
+    assert.deepEqual(selected[0].skillParams, { secondaryTargetMode: 1, strikeTargetMode: 2 });
+    assert.ok(compileZCCombatBuild({ unitId: '68001', heroLevel: 1 }, config.units, catalogs).length > 0);
+    for (const value of [0, 3, -1, 1.5]) {
+        assert.throws(() => parseZCModifierCatalogs([], [], {
+            pvpSkillPlan: [{ ...row, skillParamJson: JSON.stringify({ secondaryTargetMode: value }) }],
+        }), /Range\(1\).*All\(2\)/);
+    }
+});
+
 test('英雄等级自动选择 accumulate/replace 技能升级档并编译被动属性', () => {
     const config = prepare();
     const catalogs = getZCModifierCatalogs();
@@ -87,13 +105,16 @@ test('首档要解锁等级，未到等级不下发；到档才逐格推进', ()
     // 解锁等级自 2026-11-17 统一后，101301（槽 1）首档要 3 级、101302（槽 2）首档要 6 级，
     // 全表已经没有 unlock=0 的技能档 ⇒ 1 级一个技能都拿不到。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 1, catalogs)).map((row) => row.modifierId), []);
-    // 14 级：101301 够 II 档（10），101302 还停在 L1（它的 II 档要 16）。
+    // 14 级：101301 够 II 档（10），101302 还停在 L1（它的 II 档要 16），
+    // 101303「孢爆箭」首档 9 级、II 档 18 ⇒ 停在 L1（2026-11-17 第 12 批落地）；
+    // 101304「连射导弹」首档 12 级、II 档 24 ⇒ 也停在 L1（2026-11-18 第 16 批落地，
+    // 它此前只有 K 表占位行，本批才进 J 表 ⇒ 这张期望表必须同步多一格）。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 14, catalogs)).map((row) => row.modifierId), [
-        94013012, 94013021,
+        94013012, 94013021, 94013031, 94013041,
     ]);
-    // 16 级：101302 也进 II 档。
+    // 16 级：101302 也进 II 档（101304 仍停在 L1，它的 II 档要 24）。
     assert.deepEqual(withoutLineupCrit(selectZCSkillPlans('68013', 16, catalogs)).map((row) => row.modifierId), [
-        94013012, 94013022,
+        94013012, 94013022, 94013031, 94013041,
     ]);
 });
 

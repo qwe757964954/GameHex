@@ -1,4 +1,3 @@
-import { sendGameRequest } from '../net/RequestGuard';
 /**
  * 首充礼包（新首充）的数据端口 —— **表 + 服务器缓存 + 网络请求** 三合一的 Repository。
  *
@@ -15,21 +14,21 @@ import { sendGameRequest } from '../net/RequestGuard';
  *  别去 `getCmdFirstRechargeNew({infos: ...})` 按字段查 —— 那条路按设计就取不到。
  */
 
-import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { GameNet } from '../net/GameNet';
+import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
+import { GameNet } from '../net/GameNet';
+import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
+import type {
+    IFirstRechargeState,
+    IFirstRechargeTier,
+} from './FirstRechargeTable';
 import {
     buildPriceResolver,
     buildStateMap,
     buildTiers,
 } from './FirstRechargeTable';
-import type {
-    IFirstRechargeState,
-    IFirstRechargeTier,
-} from './FirstRechargeTable';
-import type { IFirstRechargeItemInfo } from './FirstRechargeArt';
 import {
     RequestFirstRechargeBuy,
     RequestFirstRechargeOpen,
@@ -115,8 +114,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
 
     async refreshFromServer(caller?: object): Promise<boolean> {
         // 空响应只触发公共缓存同步。
-        return await sendGameRequest(GameNet.instance,
-            () => new RequestFirstRechargeOpen({}, caller), { tag: 'FirstRecharge' }) === 'ok';
+        return await GameNet.sendRequest(() => new RequestFirstRechargeOpen({}, caller), { tag: 'FirstRecharge' }) === 'ok';
     }
 
     async buy(rmb: number, caller?: object): Promise<FirstRechargeRequestResult> {
@@ -125,7 +123,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
         // 也不会完成发货并把新的 CmdFirstRechargeNew 推进缓存。
         let ret = false;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestFirstRechargeBuy({ id: rmb }, caller, (rsp) => { ret = rsp?.ret === true; }),
                 { tag: 'FirstRecharge' },
             );
@@ -142,7 +140,7 @@ export class RuntimeFirstRechargeRepository implements IFirstRechargeRepository 
     async claim(id: number, day: number, caller?: object): Promise<FirstRechargeRequestResult> {
         let ret = false;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestFirstRechargeReward(
                     { id, day },
                     caller,

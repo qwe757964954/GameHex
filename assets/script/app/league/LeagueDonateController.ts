@@ -42,7 +42,6 @@ export interface ILeagueDonateControllerOptions {
 export class LeagueDonateController extends ControllerBase {
     private started = false;
     private busy = false;
-    private revision = 0;
 
     constructor(context: IControllerContext, private readonly options: ILeagueDonateControllerOptions) {
         super(context, 'league-donate');
@@ -66,10 +65,9 @@ export class LeagueDonateController extends ControllerBase {
 
     /** 读一次快照（不发包）；成功后由 `afterWrite` 再读一次，等价老端靠推送刷新。 */
     private async reload(): Promise<void> {
-        const revision = ++this.revision;
         try {
             const snapshot = await this.options.repository.loadDonate();
-            if (this.isDisposed || revision !== this.revision) return;
+            if (this.isDisposed) return;
             this.options.model.snapshot = snapshot;
             this.publish();
         } catch (error) {

@@ -104,11 +104,10 @@ export class LeagueApplyListPage extends PopupBase {
     }
 
     protected onClose(): void {
-        this.revision += 1;
+        this.busy = false;
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -241,6 +240,6 @@ export class LeagueApplyListPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

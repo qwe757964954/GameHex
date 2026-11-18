@@ -91,6 +91,79 @@ export class ZCSkillRuntimeRegistry {
         //  `ZCAttackResolutionSystem.castTrap`，结算复用 `ZCGroundZoneSystem`
         //  （触碰走 `contactRadius`、爆炸走 `expireDamage` + `expirePrefabPath`）。
         this.register('trap_place', 'none');
+        //  2026-11-17 第 12 批：两条「冷却到点射一枚会爆开的弹」的车道。
+        //  · `splash_shot`（风炮菇「孢爆箭」101303）—— 朝锁定目标射一发，命中点半径内均等溅射；
+        //  · `spore_burst`（水手菇「孢子凝珠」101104）—— 同上，外加给命中目标挂一段减速。
+        //  为什么要在 `random_strike` 之外另开一条：那一条的命中状态只能是写死的 `numb`
+        //  （见 `ZC_STRIKE_NUMB_STATUS_ID` 的注释），而孢子凝珠要的是**按档位变比例**的减速。
+        //  两个 key 共用一个实现，只有「有没有减速参数」这一处差别 —— 名字分开是为了让
+        //  设计案 P 列的口径与配表逐字对得上，不是两套结算。
+        //  推进在 `ZCSkillTriggerSystem.applySplashShot`，发弹与溅射在
+        //  `ZCAttackResolutionSystem.castSplashShot`（复用 `strikeTargets` 的导弹分支）。
+        this.register('splash_shot', 'none');
+        this.register('spore_burst', 'none');
+        //  2026-11-17 第 13 批：两条「以自身为圆心爆一次」的车道。
+        //  · `burst_aura`（菌壶菇「菌毯爆发」101504）—— 半径内均等伤害 + 给自己套一段护盾，
+        //    III 级护盾期间再叠一层「受到伤害降低」；
+        //  · `burst_knockback`（菌王菇「菌核爆裂」101804）—— 半径内均等伤害 + 把命中目标推开 N 格。
+        //  与第 12 批的 `splash_shot` 正好互补：那个的圆心由**命中点**决定，这个的圆心恒等于**自己**，
+        //  所以不能用 `strikeTargets` 的导弹分支（那条要先选中一个远处目标、再让弹体飞过去）。
+        //  两条 key 共用一个实现，只差「爆完给自己加什么」；推进在
+        //  `ZCSkillTriggerSystem.applyBurstSkill`，结算在 `ZCAttackResolutionSystem.castBurstSkill`。
+        this.register('burst_aura', 'none');
+        this.register('burst_knockback', 'none');
+        //  2026-11-17 第 14 批：两条「近身型主动」，各自一套命中集合。
+        //  · `fan_slow`（机甲菇「菌丝绞杀」101503）—— 身前 120° 扇形、最多 4/5/6 人、带减速。
+        //    不能复用 `castFanSkill`（那条是副轨：半径按普攻射程 ×倍率、且**没有人数上限**）；
+        //    也不能复用 `burst_*`（那个是 360°）。推进在 `ZCSkillTriggerSystem.applyFanSweep`，
+        //    结算在 `ZCAttackResolutionSystem.castFanSweep`。
+        //  · `single_strike`（分裂菇「菌丝突刺」101403）—— 贴到最近敌人身边打一发 + 眩晕。
+        //    与 `blink_strike`（魔术师 103404）是同一类「挪过去再打」，但那条有往返 / 分身 /
+        //    搜索半径封顶三套 103404 专属语义，混用等于把两套参数塞进一格。
+        //    因为要位移，整条落在**触发系统**（`applySingleStrike`，与 `applyBlinkStrike` 同侧）。
+        this.register('fan_slow', 'none');
+        this.register('single_strike', 'none');
+        //  2026-11-17 第 15 批：冲锋车道，三条技能两套参数前缀。
+        //  · `charge_shield`（菇八戒「菌盾冲锋」101204）—— 朝目标方向定长 1 格，撞到的敌人吃伤害，
+        //    落点给自己挂 12/15/18% 最大生命的护盾。参数前缀 `charge*`。
+        //  · `legacy_dash`（南瓜战神「冲锋」102303 / 爆锤莲王「尖刺冲锋」102703）——
+        //    一条朝最近敌人、一条朝面朝方向，路径上的敌人全吃伤害；
+        //    前者带眩晕、后者带易伤（后续两档再各自加「自身减伤 / 自身护盾」）。参数前缀 `dash*`。
+        //  为什么两条 key 不合成一个：设计案 P 列与配表逐字对得上（与 `splash_shot`/`spore_burst`、
+        //  `burst_aura`/`burst_knockback` 同一条理由）。实现共用 `applyChargeDash` 的骨架，
+        //  差异全在参数（`chargeCells` 定长 vs `dashTowardNearest` 选向）。
+        //  🔴 两者都要位移，所以整条落在**触发系统**（与 `applySingleStrike` / `applyBlinkStrike` 同侧）：
+        //  `blinkTo` 只在触发侧的上下文里接线。
+        this.register('charge_shield', 'none');
+        this.register('legacy_dash', 'none');
+        //  2026-11-18 第 16 批：风炮菇（68013）的一对主动，一条「命中留区域」、一条「落点引爆」。
+        //  · `wind_bolt`（孢爆箭 101303）—— 射一枚慢速风弹（70 逻辑 px/s、4 秒寿命），
+        //    命中单体后**在原地留一片 3 秒飓风**（每个接触到的敌人只挨一次）。
+        //    上一版（第 12 批）借的是 `splash_shot`：命中点周围均等溅射。设计改口径后
+        //    两者差得太多（单体 + 持续区域 vs 一次性旁溅），保留 `splash_shot` 那条车道不动，
+        //    这里另开一条 —— 两条键共用一套壳子的话，「有没有飓风」会退化成「参数在不在」，
+        //    读表的人就分不清「这行忘了配半径」还是「这行本来就不留区域」。
+        //    推进在 `ZCSkillTriggerSystem.applyWindShot`，发弹在
+        //    `ZCAttackResolutionSystem.castWindBolt`，区域在 `resolveProjectileHit` 里留下来。
+        //  · `missile_barrage`（连射导弹 101304）—— 累计 10 次普攻放一轮 3 颗抛物线炸弹，
+        //    只走落点、途中不碰人（`ignoresMidAirCollision`），落点半径 180 一次性结算。
+        //    与 `random_strike` 的导弹分支（镭射飞龙 101003）不是一回事：那条是「挑 N 人各发一颗、
+        //    途中撞到谁就打谁」，这条是「三颗都砸向同一片区域、过程完全透明」。
+        //    推进在 `ZCSkillTriggerSystem.applyMissileBarrage`，发弹在
+        //    `ZCAttackResolutionSystem.castBarrageShot`，落地结算在 `resolveProjectileArrival`。
+        this.register('wind_bolt', 'none');
+        this.register('missile_barrage', 'none');
+        //  2026-11-18 第 17 批：按「累计普攻 N 次」触发的自我增益。
+        //  · `counter_self_buff`（窝瓜人「生命爆发」101904 / 爆锤莲王「战神附体」102704）——
+        //    打满 N 次普攻后给自己挂一段限时增益（移速 / 攻击 / 生命上限 / **体型**），
+        //    可以顺带回一口血。
+        //  为什么不在 `empowered_attack` 里加：那条车道加的是「**下一击**长什么样」
+        //  （护盾、连发、多方向），出手即消耗；这里要的是「**一段时间内**我一直变大变强」，
+        //  与出手无关。也不复用 `self_cast`：那条的触发口径写死是冷却秒数，
+        //  设计案这两条都是「累计普攻」（J 列 = 10），硬套等于把 J 列改掉。
+        //  推进在 `ZCSkillTriggerSystem.applyCounterBuff`，增益一律走状态系统的 `statMods`
+        //  （与 `self_cast` 同一个 `selfCastStatusId` 词缀签名，同数值复用同一条定义）。
+        this.register('counter_self_buff', 'none');
     }
 
     register(key: string, stateMode: ZCSkillStateMode): this {

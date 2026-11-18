@@ -1,4 +1,3 @@
-import { sendGameRequest } from '../../net/RequestGuard';
 import { RequestMsg } from '../../../framework/net/RequestMsg';
 import { GameNet } from '../../net/GameNet';
 
@@ -54,14 +53,13 @@ export class GameNetGuideGateway implements IGuideGateway {
         try {
             const request = new RequestFunctionGuideInfo(payload, this, rsp => {
                 response = rsp;
-                console.info('[GuideProto] 查询原始回包（暂不覆盖本地进度）', JSON.stringify(rsp));
+                console.info('[GuideProto] 查询原始回包（是否校正由 GuideController 判定）', JSON.stringify(rsp));
             });
             request.canSend = () => !this.disposed;
-            const status = await sendGameRequest(GameNet.instance, () => request, { tag: 'GuideProto' });
+            const status = await GameNet.instance.request(request, { tag: 'GuideProto' });
             if (this.disposed) return null;
             const info = response?.infos;
-            if (status !== 'ok' || !info || info.funcId !== GUIDE_FUNCTION_ID
-                || !isUint32(info.step1) || !isUint32(info.step2)) {
+            if (status !== 'ok' || !info || info.funcId !== GUIDE_FUNCTION_ID) {
                 console.warn('[GuideProto] 查询失败或回包字段非法');
                 return null;
             }
@@ -83,8 +81,8 @@ export class GameNetGuideGateway implements IGuideGateway {
         if (!parts) return 'invalid';
         const step1 = Number(parts[1]);
         const step2 = Number(parts[2]);
-        if (!isUint32(step1) || !isUint32(step2) || step1 === 0 || step2 === 0) return 'invalid';
-        // 当前按刚完成 stepId 拆分上报；远端恢复等后端确认语义后再启用。
+        if (step1 === 0 || step2 === 0 || Math.max(step1, step2) > 0xffffffff) return 'invalid';
+        // 按刚完成的 stepId 拆分上报；远端游标按「最后已完成步」解释，待后端确认语义。
         const payload: CmdFunctionGuideUpdateReqMsg = { info: { funcId: GUIDE_FUNCTION_ID, step1, step2 } };
         console.info(`[GuideProto] 更新请求 localCompletedStep=${completedStepId}`, JSON.stringify(payload));
         let response: CmdFunctionGuideUpdateRspMsg | null = null;
@@ -95,7 +93,7 @@ export class GameNetGuideGateway implements IGuideGateway {
             });
             request.allowRetry = false;
             request.canSend = () => !this.disposed;
-            const status = await sendGameRequest(GameNet.instance, () => request, { tag: 'GuideProto' });
+            const status = await GameNet.instance.request(request, { tag: 'GuideProto' });
             if (this.disposed) return 'retry';
             const succeeded = status === 'ok' && response?.succ === 1;
             if (!succeeded) console.warn(`[GuideProto] 更新未确认 localCompletedStep=${completedStepId}`);
@@ -105,8 +103,4 @@ export class GameNetGuideGateway implements IGuideGateway {
             return 'retry';
         }
     }
-}
-
-function isUint32(value: unknown): value is number {
-    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 0xffffffff;
 }

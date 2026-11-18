@@ -54,3 +54,24 @@ test('后端不可用时沿用离线等级；已上阵的卡不依赖英雄列�
     const cards = [card('a', 'gold'), card('b')];
     assert.deepEqual(sortLineupCards(cards, new Set(['b']), new Map(), new Map(), cardArtConfig.lineup, 3).map(item => item.id), ['b', 'a']);
 });
+
+test('可升级的卡排在最前，已上阵的也不例外（判据与条目上的升级箭头同源）', () => {
+    const cards = [card('deployed', 'gold'), card('rich'), card('not-enough'), card('maxed')];
+    const levels = new Map([['deployed', 5], ['rich', 3], ['not-enough', 4], ['maxed', 9]]);
+    const fragments = new Map([
+        // 碎片够了 ⇒ 排最前，哪怕它没上阵、品质也更低。
+        ['rich', { owned: 10, need: 10, maxed: false }],
+        // 差一片 ⇒ 不进第一组。
+        ['not-enough', { owned: 9, need: 10, maxed: false }],
+        // 满级 ⇒ 不是「可升级」（箭头也不显示）。
+        ['maxed', { owned: 99, need: 0, maxed: true }],
+    ]);
+    assert.deepEqual(sortLineupCards(cards, new Set(['deployed']), levels, fragments, cardArtConfig.lineup).map(item => item.id),
+        // 后两张都只是「已解锁」，按等级降序（满级 9 > 4）。
+        ['rich', 'deployed', 'maxed', 'not-enough']);
+    // 未解锁（0 级）的卡「碎片够了」也不算可升级 —— 那是「可解锁」，没有升级箭头。
+    const locked = new Map([['not-enough', { owned: 30, need: 10, maxed: false }]]);
+    assert.deepEqual(sortLineupCards([card('locked'), card('deployed')], new Set(['deployed']),
+        new Map([['locked', 0], ['deployed', 5]]), locked, cardArtConfig.lineup).map(item => item.id),
+        ['deployed', 'locked']);
+});

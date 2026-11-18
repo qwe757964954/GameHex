@@ -4621,6 +4621,12 @@ message ChapterInfo {
    repeated uint32 chapters = 2;//章节集合
 }
 
+// 占城 章节怪物宝箱信息
+message ChapterMonsterBoxInfo {
+   required uint32 cellId = 1;//格子id
+   required uint32 lv = 2;//等级
+}
+
 // 占城 章节信息请求
 message CmdCityChapterInfoReqMsg {
 
@@ -4705,6 +4711,19 @@ message CmdCityChapterCellInfoRspMsg {
    required uint32 rewardState  = 2;//奖励状态,0尚未领取,1已领取
    repeated uint64 unlockCells  = 3;//解锁的格子(bitSet)
    repeated uint64 passCells    = 4;//通关的格子集合(bitSet)
+   repeated ChapterMonsterBoxInfo monsterBoxInfos = 5;//怪物宝箱集合
+}
+
+// 占城 请求升级怪物宝箱
+message CmdCityChapterUpMonsterBoxLvReqMsg {
+   required uint32 levelChapter   = 1;//章节
+   required uint32 cellId         = 2;//格子id
+}
+
+// 占城 响应章节格子信息
+message CmdCityChapterUpMonsterBoxLvRspMsg {
+   required uint32 succ         = 1;//1成功
+   required ChapterMonsterBoxInfo monsterBoxInfo = 2;//怪物宝箱
 }
 
 //slg玩法 据点角色展示信息
@@ -5044,6 +5063,7 @@ enum MessageId {
     CmdCityChapterUnlockCellRspMsg = 45711217; //占城 请求解锁格子
     CmdCityChapterPassCellRspMsg = 1560327682; //占城 请求通关格子
     CmdCityChapterCellInfoRspMsg = 1137184677; //占城 请求章节格子信息
+    CmdCityChapterUpMonsterBoxLvRspMsg = 914309089; //占城 请求升级怪物宝箱
 	CmdDayWeekMonthGiftGetRewardRspMsg = 1356079122; //领取奖励
 	CmdDayWeekMonthGiftInfoRspMsg = 1005269291; //请求数据
 	CmdDayWeekMonthGiftFreeBuyRspMsg = 355499005; //免费购买

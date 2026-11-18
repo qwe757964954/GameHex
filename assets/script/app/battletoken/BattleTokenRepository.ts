@@ -33,12 +33,14 @@
  * 中心服不会建单 / 发货，表现就是「点购买有回包，但战令始终没开通」。
  */
 
-import { RefUtil } from '../../framework/ref/RefUtil';
-import { readRefRows } from '../common/TableRead';
 import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
+import { RefUtil } from '../../framework/ref/RefUtil';
+import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import type { ILevelRow, IPlanRow, IRewardRow } from './BattleTokenTable';
 import {
     BT_CFG_LEVEL_UP_COST,
     BT_CFG_MAX_LEVEL,
@@ -50,17 +52,14 @@ import {
     parsePlanRows,
     parseRewardRows,
 } from './BattleTokenTable';
-import type { ILevelRow, IPlanRow, IRewardRow } from './BattleTokenTable';
-import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
-import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import {
     RequestBattleTokenOpen,
     RequestBattleTokenReset,
     RequestBattleTokenTakeReward,
 } from './RequestBattleTokenMsg';
 
+import { ITEM_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 一个档位的服务器状态（老端 `VOBattleToken` 的界面所需子集）。 */
 export interface IPlanState {
     /** 该档位开没开。 */
@@ -216,8 +215,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
             ret = !!(rsp && rsp.ret);
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestBattleTokenOpen({ resId }, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'BattleToken' },
         );
@@ -237,8 +235,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestBattleTokenTakeReward(
                 { takeAll: true, resId, level, type },
                 caller,
@@ -253,8 +250,7 @@ export class RuntimeBattleTokenRepository implements IBattleTokenRepository {
     /** 重置战令。 */
     async reset(caller?: object): Promise<BattleTokenRequestResult> {
         let applied = false;
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestBattleTokenReset({}, caller, () => { applied = true; }),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'BattleToken' },
         );

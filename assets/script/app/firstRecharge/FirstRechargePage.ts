@@ -135,9 +135,11 @@ export class FirstRechargePage extends PopupBase {
     protected onClose(): void {
         CacheMgr.instance.removeEventUpdate('CmdFirstRechargeNew', this, this.onFirstRechargeCacheUpdate);
         // 作废尚未完成的读表/贴图任务，避免缓存复用后旧结果覆盖下一次打开。
-        this.loadRevision += 1;
-        this.presentRevision += 1;
         this.busy = false;
+    }
+
+    onDestroy(): void {
+        super.onDestroy();
     }
 
     private readonly onFirstRechargeCacheUpdate = (): void => {
@@ -408,14 +410,8 @@ export class FirstRechargePage extends PopupBase {
         this.hintLabel.color = error ? this.hintErrorColor : this.hintIdleColor;
     }
 
-    /** 组件所在节点是否仍然有效（`close()` 是直接 destroy）。 */
+    /** 关闭后使所有在途结果失效：`isPopupOpen` 立即转 false。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
-    }
-
-    onDestroy(): void {
-        this.presentRevision += 1;
-        this.loadRevision += 1;
-        super.onDestroy();
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

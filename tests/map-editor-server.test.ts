@@ -85,6 +85,43 @@ async function putPreset(base: string, id: string, body: unknown): Promise<{ sta
     return { status: response.status, body: await response.json().catch(() => null) };
 }
 
+test('领地编辑器保存并重读相同站点 ID 的巡逻宝箱，拒绝混用类型且不覆盖原存档', async () => {
+    await withServer(async base => {
+        const id = `territory_patrol_test_${Date.now()}`;
+        const url = `${base}/api/territory-presets/${id}`;
+        const map = {
+            version: 1, mapKind: 'territoryChapter', id, name: id, chapterId: 1,
+            rows: 20, columns: 20, startCellId: 0, defaults: {},
+            sites: [346, 366].map(cellId => ({
+                id: 'patrolChest_154', type: 'patrolChest', cellId, footprint: [cellId],
+                battleId: 60001,
+            })),
+        };
+        const put = (value: unknown) => fetch(url, {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(value),
+        });
+        try {
+            const saved = await put(map);
+            assert.equal(saved.status, 200, await saved.text());
+            const loaded = await fetch(url);
+            assert.equal(loaded.status, 200);
+            const before = (await loaded.json()).preset;
+            assert.deepEqual(before.sites.map(site => [site.cellId, site.id]), [
+                [346, 'patrolChest_154'], [366, 'patrolChest_154'],
+            ]);
+            assert.deepEqual(before.sites.map(site => site.battleId), [60001, 60001]);
+            const invalid = structuredClone(map);
+            invalid.sites[1].type = 'stage';
+            const rejected = await put(invalid);
+            assert.equal(rejected.status, 400);
+            assert.match((await rejected.json()).error, /duplicate site id patrolChest_154/);
+            assert.deepEqual((await (await fetch(url)).json()).preset, before);
+        } finally {
+            await fetch(url, { method: 'DELETE' });
+        }
+    });
+});
+
 test('服务端保存巡逻范围不丢字段，并拒绝断连、越界和主城冲突', async () => {
     await withServer(async base => {
         const id = `patrol_test_${Date.now()}`;

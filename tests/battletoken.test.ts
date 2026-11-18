@@ -1662,12 +1662,12 @@ test('页面继承 `PopupBase`（入口要按弹窗打开它，不是自己 inst
     assert.doesNotMatch(page, /this\.schedule\(/);
 });
 
-test('⚠️ 虚拟列表：`renderItemFn` 只绑一次 + 渲染时现取 `_rowContext`（禁闭包捕获）', () => {
+test('⚠️ 虚拟列表：两个列表各写一处 `renderItemFn`（属性赋值不叠加监听）+ 渲染时现取 `_rowContext`（禁闭包捕获）', () => {
     const page = src('BattleTokenPage.ts');
-    // 规则 55 ①：回调只绑一次，靠 `_listBound{N}` 守卫
-    assert.match(page, /_listBound3/);
-    assert.match(page, /_listBound2/);
-    assert.equal((page.match(/renderItemFn = /g) ?? []).length, 2, '两个列表各绑一次');
+    // 规则 55 ①：`renderItemFn` 是普通属性赋值，不是事件订阅；每次铺设写同一组回调即可，不需要布尔门闩。
+    assert.match(page, /this\.list3\.renderItemFn = \(node, index\) => this\._renderRow\(node, index\);/);
+    assert.match(page, /this\.list2\.renderItemFn = \(node, index\) => this\._renderRow\(node, index\);/);
+    assert.equal((page.match(/renderItemFn = /g) ?? []).length, 2, '两个列表各写一处');
     // 规则 55 ②：`_renderRow` 必须现取 `this._rowContext`，不能把入参闭包进去
     assert.match(page, /view\.render\(index, this\._rowContext\)/);
     // 数据先存字段再 await 预加载

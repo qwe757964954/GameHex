@@ -1,5 +1,5 @@
 import { createControllerContext } from './helpers/controller-context';
-import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
+import { loadTsModule } from './helpers/cc-sandbox';
 import type { TerritoryModel } from '../assets/script/app/territory/application/TerritoryModel';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -11,9 +11,43 @@ import type { TerritoryCellRepository } from '../assets/script/app/territory/app
 import * as bitSet from '../assets/script/app/territory/model/TerritoryCellBitSet';
 import * as requestStatus from '../assets/script/app/territory/model/TerritoryRequestStatus';
 import * as grantedReward from '../assets/script/app/territory/model/TerritoryGrantedReward';
+import * as monsterBox from '../assets/script/app/territory/model/TerritoryMonsterBox';
+import * as territoryProgress from '../assets/script/app/territory/model/TerritoryProgress';
 import * as events from '../assets/script/app/territory/view/TerritoryEvents';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { buildTerritoryViewState, isTerritoryChestActionable } from '../assets/script/app/territory/application/TerritoryViewState';
+import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
+import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { TerritoryUiEvent, TerritoryViewEvent } from '../assets/script/app/territory/application/TerritoryEvents';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
+
+type TerritoryControllerCtor = typeof import('../assets/script/app/territory/application/TerritoryController')['TerritoryController'];
+
+interface IControllerNetPort {
+    addEvent(name: string, caller: object, handler: (message: unknown) => void): void;
+    removeCaller(caller: object): void;
+}
+/** Controller 直连 `GameNet.instance`；沙箱把单例桥接到当前 harness 的网络桩。 */
+let activeNet: IControllerNetPort = { addEvent() {}, removeCaller() {} };
+const { exports: controllerExports, unresolved: controllerUnresolved } = loadTsModule<{ TerritoryController: TerritoryControllerCtor }>(
+    'assets/script/app/territory/application/TerritoryController.ts', { modules: {
+        '/ControllerBase': { ControllerBase },
+        '/GuideEvents': { reportGuideComplete },
+        '/GameNet': { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: {
+            addEvent: (name: string, caller: object, handler: (message: unknown) => void) => activeNet.addEvent(name, caller, handler),
+            removeCaller: (caller: object) => activeNet.removeCaller(caller),
+        } } },
+        '/EventMgr': { EventMgr },
+        '/TerritoryEvents': { TerritoryUiEvent, TerritoryViewEvent },
+        '/TerritoryViewState': { buildTerritoryViewState, isTerritoryChestActionable },
+        '/TerritoryTexts': { TERRITORY_TEXTS },
+        '/TerritoryMapConfig': { isTerritoryBattleSite },
+    } });
+assert.deepEqual(controllerUnresolved, []);
+const TerritoryController = controllerExports.TerritoryController;
 
 function loadClass<T>(path: string, name: string, imports: Record<string, unknown>): new () => T {
     const exported: Record<string, new () => T> = {};
@@ -47,12 +81,26 @@ function createHarness() {
     };
     const Repository = loadClass<TerritoryCellRepository>(
         'assets/script/app/territory/application/TerritoryCellRepository.ts', 'TerritoryCellRepository', {
-            '../../net/GameNet': { GameNet: { instance: net } },
-            '../../net/RequestGuard': { withTimeout: (promise: Promise<boolean>) => promise },
+            '../../net/GameNet': { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } },
+            // 仓储发请求走的是 `sendGameRequest`（离线早退 + 超时兜底 + ok/failed），
+            // 只桩 `withTimeout` 会让它整个是 `undefined` ⇒ 请求根本没发出去，
+            // 用例接着读 `requests[0].callback` 就崩在「undefined 上取属性」。
+            '../../net/RequestGuard': {
+                withTimeout: (promise: Promise<boolean>) => promise,
+                sendGameRequest: async (port: typeof net | null | undefined, make: () => unknown) => {
+                    if (!port?.isConnected) return 'offline';
+                    const sent = await port.send(make() as never, false);
+                    return sent === true ? 'ok' : 'failed';
+                },
+            },
             './RequestTerritoryCellInfoMsg': { RequestTerritoryCellInfo: Request },
             '../model/TerritoryCellBitSet': bitSet,
+            '../model/TerritoryMonsterBox': monsterBox,
             '../model/TerritoryRequestStatus': requestStatus,
             '../model/TerritoryGrantedReward': grantedReward,
+            // `normalizeTerritoryChapter` 走的是 chapter 归一（0/负数/NaN → 1），不桩就是
+            // `undefined()` ⇒ 四条用例全崩在建仓储的那一步。
+            '../model/TerritoryProgress': territoryProgress,
         },
     );
     const repository = new Repository();
@@ -64,8 +112,9 @@ function createHarness() {
         applyCellInfoState(state: bitSet.ITerritoryCellState) { snapshots.push(state); },
         dispose() {}, start() {}, onOutput() { return () => {}; },
     };
+    activeNet = net;
     const controller = new TerritoryController(() => presenter as unknown as TerritoryModel, { context: createControllerContext(),
-        network: net, cells: repository,
+        cells: repository,
         roleCache: { subscribe: () => () => {} }, schedule: () => () => {},
     });
     const page = { onLoad: () => controller.start(), onDestroy: () => controller.dispose() };
@@ -104,7 +153,9 @@ test('Controller 将完整快照交给 Presenter 并拒绝损坏报文', () => {
     h.page.onLoad();
     h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 0, unlockCells: [18], passCells: [272] });
     assert.equal(h.snapshots.length, 1);
-    assert.deepEqual({ ...h.snapshots[0] }, { levelChapter: 1, rewardState: 0, unlockCells: [1, 4], passCells: [4, 8] });
+    assert.deepEqual({ ...h.snapshots[0] }, {
+        levelChapter: 1, rewardState: 0, unlockCells: [1, 4], passCells: [4, 8], monsterBoxes: [],
+    });
     h.emit('CmdCityChapterCellInfoRspMsg', { levelChapter: 1, unlockCells: ['bad'], passCells: [16] });
     assert.equal(h.snapshots.length, 1);
     h.page.onDestroy();

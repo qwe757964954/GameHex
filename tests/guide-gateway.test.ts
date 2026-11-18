@@ -1,4 +1,5 @@
 import * as requestGuard from '../assets/script/app/net/RequestGuard';
+import type { IGameRequestOptions } from '../assets/script/app/net/RequestGuard';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadTsModule } from './helpers/cc-sandbox';
@@ -31,10 +32,17 @@ function harness(send: (request: IRequest) => Promise<boolean>) {
     assert.deepEqual(requestModule.unresolved, []);
     const cancelled: object[] = [];
     const logs: unknown[][] = [];
-    const net = { isConnected: true, send, removeCaller: (owner: object) => cancelled.push(owner) };
+    const net = {
+        isConnected: true,
+        send,
+        request(message: IRequest, options?: IGameRequestOptions) {
+            return requestGuard.sendGameRequest(this, () => message, options);
+        },
+        removeCaller: (owner: object) => cancelled.push(owner),
+    };
     const result = loadTsModule<{ GameNetGuideGateway: new () => GameNetGuideGateway }>(
         'assets/script/app/guide/application/GuideGateway.ts', {
-            modules: { '/RequestGuard': requestGuard, '/RequestMsg': requestModule.exports, '/GameNet': { GameNet: { instance: net } } },
+            modules: { '/RequestMsg': requestModule.exports, '/GameNet': { GameNet: { instance: net } } },
             globals: { console: { info: (...args: unknown[]) => logs.push(args), warn: (...args: unknown[]) => logs.push(args) } },
         },
     );
@@ -93,15 +101,14 @@ test('查询：0/0 视为从未开始，不返回可校正的游标', async () =
     h.gateway.dispose();
 });
 
-test('查询校验 funcId/uint32；succ 非 1、断线和异常均返回可重试', async () => {
-    for (const infos of [null, { funcId: 2, step1: 0, step2: 0 }, { funcId: 1, step1: -1, step2: 0 }, { funcId: 1, step1: 1.5, step2: 1 }]) {
+test('保留功能归属与本地 stepId 校验；succ 非 1、断线和异常均返回可重试', async () => {
+    for (const infos of [null, { funcId: 2, step1: 0, step2: 0 }]) {
         const h = harness(async r => { r.fCallback({ infos }); return true; });
         assert.equal(await h.gateway.load(), null);
         h.gateway.dispose();
     }
     const h = harness(async r => { r.fCallback({ succ: 0 }); return true; });
     assert.equal(await h.gateway.update('2-1'), 'retry');
-    for (const id of ['skip', '', '0-0', '-1-1', '4294967296-1']) assert.equal(await h.gateway.update(id), 'invalid');
     h.net.isConnected = false;
     assert.equal(await h.gateway.load(), null);
     assert.equal(await h.gateway.update('2-1'), 'retry');
@@ -110,4 +117,17 @@ test('查询校验 funcId/uint32；succ 非 1、断线和异常均返回可重�
     assert.equal(await failing.gateway.update('2-1'), 'retry');
     h.gateway.dispose();
     failing.gateway.dispose();
+    const sent: IRequest[] = [];
+    const local = harness(async request => {
+        sent.push(request);
+        request.fCallback({ succ: 1 });
+        return true;
+    });
+    for (const id of ['skip', '', '0-0', '0-1', '1-0', '-1-1', '1.5-1', '1-1-extra', '4294967296-1', '1-4294967296']) {
+        assert.equal(await local.gateway.update(id), 'invalid');
+    }
+    assert.equal(sent.length, 0);
+    assert.equal(await local.gateway.update('4294967295-4294967295'), 'ok');
+    assert.equal(JSON.stringify(sent[0].cmdReqMsg), '{"info":{"funcId":1,"step1":4294967295,"step2":4294967295}}');
+    local.gateway.dispose();
 });

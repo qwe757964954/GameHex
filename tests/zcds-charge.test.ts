@@ -113,10 +113,9 @@ test('冲刺起手距离：与 attackRange 同一套 px，乘 combatDistanceScal
     assert.equal(ZCTargetingSystem.chargeReach(CHARGE_DISTANCE, 0, DISTANCE_SCALE), 66);
 });
 
-test('冲刺距离不走「射程 > 100 打 9 折」那条分支', () => {
-    // `attackReach` 对 120 这样的远射程会 ×0.9；冲刺若也打折就是 59.4，
-    // 冲锋会莫名其妙提前 10% 触发。这里直接把两条口径的差钉住。
-    assert.equal(ZCTargetingSystem.attackReach({ attackRange: 120 } as ZCUnitDefinition, 0, DISTANCE_SCALE), 32.4);
+test('普攻与冲刺取消远程九折，冲刺仍补完整目标半径', () => {
+    // 普攻统一口径后，零身体半径时与冲刺距离一致。
+    assert.equal(ZCTargetingSystem.attackReach({ attackRange: 120 } as ZCUnitDefinition, 0, DISTANCE_SCALE), 36);
     assert.equal(ZCTargetingSystem.chargeReach(120, 0, DISTANCE_SCALE), 36);
 });
 

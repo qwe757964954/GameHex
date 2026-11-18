@@ -6,8 +6,13 @@ import { sweptCircleHitScalars } from './ZCProjectileSystem';
 import { ZCTargetingSystem, ZCPathWorkspace, type ZCTargetingContext, type ZCTargetSelectionSink } from './ZCTargetingSystem';
 import type { IZCUnitTargeting } from './ZCUnitSystem';
 import { isZCAwakeMonster, zcMonsterPosition } from './ZCNeutralFeatureSystem';
+import { ZCDC_LOG_TARGET_SWITCH } from '../../ZCDCLogSwitch';
 
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
+
+export function zcTargetSwitchWatched(): boolean {
+    return ZCDC_LOG_TARGET_SWITCH;
+}
 
 /** 冲刺撞到的那个对象：`x/y` 是最早接触点（冲刺停在这里）。*/
 export interface IZCDashHit {
@@ -31,6 +36,7 @@ export interface IZCUnitTargetingContext extends Pick<IZCModelServices, 'geometr
     readonly targeting: ZCTargetingContext;
     readonly combatDistanceScale: number;
     priorityMonster?(unit: ZCUnitState): number | null;
+    hasFocusableMonster?(): boolean;
     baseDefinition(id: string): ZCUnitDefinition;
 }
 
@@ -52,13 +58,17 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     private dashNearest = Infinity;
     private dashBestId = Infinity;
     private dashHit = false;
+    private readonly observedTargets = new WeakMap<ZCUnitState, { kind: ZCCombatTarget['kind']; id: number } | null>();
+    private readonly prioritySwitches = new WeakSet<ZCUnitState>();
 
     constructor(private readonly context: IZCUnitTargetingContext) {
         this.pathWorkspace = new ZCPathWorkspace(context.map.hexes.length);
         // 测试/旧上下文可能只在外层提供 baseDefinition；构造时补一次，避免索敌每帧拼上下文。
-        this.targetingContext = context.targeting.baseDefinition
-            ? context.targeting
-            : { ...context.targeting, baseDefinition: context.baseDefinition };
+        this.targetingContext = Object.create(context.targeting) as ZCTargetingContext;
+        Object.assign(this.targetingContext, {
+            baseDefinition: context.targeting.baseDefinition ?? context.baseDefinition,
+            canTargetUnit: (unit: ZCUnitState, candidate: ZCUnitState) => !unit.disengagedUnitIds?.includes(candidate.id),
+        });
     }
 
     invalidateTerrain(): void {
@@ -70,8 +80,52 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.targetScratch.delete(id);
     }
 
+    reportTargetChange(unit: ZCUnitState): void {
+        if (!ZCDC_LOG_TARGET_SWITCH) return;
+        const previous = this.observedTargets.get(unit);
+        const target = this.current(unit);
+        const isPriority = this.prioritySwitches.delete(unit);
+        if ((!previous && !target) || previous && target && previous.kind === target.kind && previous.id === target.id) return;
+        let reason = previous ? 'score' : 'init';
+        if (isPriority) reason = 'priority';
+        else if (previous) {
+            const victim = previous.kind === 'unit' ? this.context.units.get(previous.id) : this.context.hex(previous.id);
+            if (!victim || victim.hp <= 0) reason = 'dead';
+            else if (previous.kind === 'unit' && (this.context.units.get(previous.id).owner === unit.owner
+                || !this.context.baseDefinition(unit.unitId).canAttackAir
+                    && this.context.baseDefinition(this.context.units.get(previous.id).unitId).flying)) reason = 'invalid';
+            else if (previous.kind === 'unit' && unit.disengagedUnitIds?.includes(previous.id)) reason = 'outOfRange';
+            else if (!target) reason = 'invalid';
+            else {
+                const oldPosition = previous.kind === 'unit'
+                    ? this.context.unitPosition(this.context.units.get(previous.id), this.targetPosition)
+                    : this.context.targeting.hexPosition(previous.id);
+                const oldRadius = previous.kind === 'unit'
+                    ? this.context.baseDefinition(this.context.units.get(previous.id).unitId).bodyRadius
+                    : STRUCTURE_TARGET_BODY_RADIUS;
+                if (ZCTargetingSystem.isOutOfRange(this.context.unitPosition(unit, this.selfPosition), oldPosition,
+                    this.attackReach(this.context.effectiveDefinition(unit), oldRadius))) reason = 'outOfRange';
+            }
+        }
+        this.observedTargets.set(unit, target ? { kind: target.kind, id: target.id } : null);
+        console.info(`[索敌诊断] ${unit.owner}/${unit.unitId}#${unit.id} ${this.context.targeting.now.toFixed(2)}s`
+            + ` ${previous ? `${previous.kind}:${previous.id}` : 'none'} → ${target ? `${target.kind}:${target.id}` : 'none'} ${reason}`);
+    }
+
     /** 按当前模式索敌；同类候选距离相同时优先 id 较小的目标。*/
     acquire(unit: ZCUnitState): void {
+        if (unit.disengagedUnitIds) {
+            const definition = this.context.effectiveDefinition(unit);
+            const from = this.context.unitPosition(unit, this.selfPosition);
+            unit.disengagedUnitIds = unit.disengagedUnitIds.filter(id => {
+                const candidate = this.context.units.get(id);
+                return candidate && candidate.hp > 0 && candidate.battleState !== 'dead' && candidate.owner !== unit.owner
+                    && !ZCTargetingSystem.isInRange(from, this.context.unitPosition(candidate, this.candidatePosition),
+                        this.attackReach(definition, this.context.baseDefinition(candidate.unitId).bodyRadius));
+            });
+            if (!unit.disengagedUnitIds.length) delete unit.disengagedUnitIds;
+        }
+        const previous = unit.targetUnitId;
         const monsterId = this.context.priorityMonster?.(unit) ?? null;
         const target = monsterId === null ? ZCTargetingSystem.acquire(unit, this.targetingContext, false, this.selectionScratch)
             : { kind: 'building' as const, id: monsterId };
@@ -81,15 +135,20 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         if (target?.kind === 'unit') unit.targetUnitId = target.id;
         else if (target?.kind === 'wall') unit.targetWallHexId = target.id;
         else if (target?.kind === 'building') unit.targetBuildingHexId = target.id;
+        if (previous !== unit.targetUnitId) delete unit.chase;
     }
 
     /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。*/
     refreshPriorityTarget(unit: ZCUnitState): boolean {
+        if (this.context.hasFocusableMonster && !this.context.hasFocusableMonster()
+            && unit.targetBuildingHexId === null && unit.targetWallHexId === null
+            && !this.context.targeting.preferUnitTargets?.(unit)) return false;
         const monsterId = this.context.priorityMonster?.(unit) ?? null;
         if (monsterId !== null) {
             if (unit.targetBuildingHexId === monsterId) return false;
             unit.targetUnitId = unit.targetWallHexId = null;
             unit.targetBuildingHexId = monsterId;
+            if (zcTargetSwitchWatched()) this.prioritySwitches.add(unit);
             return true;
         }
         const hex = unit.targetBuildingHexId === null ? null : this.context.hex(unit.targetBuildingHexId);
@@ -99,6 +158,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
                 if (opponent) {
                     unit.targetBuildingHexId = unit.targetWallHexId = null;
                     unit.targetUnitId = opponent.id;
+                    if (zcTargetSwitchWatched()) this.prioritySwitches.add(unit);
                     return true;
                 }
             }
@@ -115,6 +175,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
             if (attacker) {
                 unit.targetBuildingHexId = unit.targetWallHexId = null;
                 unit.targetUnitId = attacker.id;
+                if (zcTargetSwitchWatched()) this.prioritySwitches.add(unit);
                 return true;
             }
         }
@@ -125,6 +186,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         unit.targetUnitId = target.id;
         unit.targetWallHexId = null;
         unit.targetBuildingHexId = null;
+        if (zcTargetSwitchWatched()) this.prioritySwitches.add(unit);
         return true;
     }
 
@@ -303,7 +365,8 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     /** 冲刺扫掠的单候选判定；结果写进实例 scratch，避免每个候选建 `consider` 闭包。*/
     private considerDashCandidate(definition: ZCUnitDefinition, kind: IZCDashHit['kind'], id: number, center: { x: number; y: number },
         bodyRadius: number, fromX: number, fromY: number, dx: number, dy: number): void {
-        const t = sweptCircleHitScalars(dx, dy, fromX - center.x, fromY - center.y, this.attackReach(definition, bodyRadius));
+        const t = sweptCircleHitScalars(dx, dy, fromX - center.x, fromY - center.y,
+            ZCTargetingSystem.chargeReach(definition.attackRange, bodyRadius, this.context.combatDistanceScale));
         if (t === null) return;
         // 同一个 t 上有多人（挤成一团）时取 id 小的，保证回放可复现。
         if (t > this.dashNearest || (t === this.dashNearest && id >= this.dashBestId)) return;

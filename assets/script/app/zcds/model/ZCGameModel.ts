@@ -12,7 +12,7 @@ import { ZCUnitSystem, type IZCUnitContext } from './systems/ZCUnitSystem';
 import { ZCUnitTargeting } from './systems/ZCUnitTargeting';
 import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
 import { ZCMapGeometry } from './ZCMapGeometry';
-import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig } from './ZCMatchConfig';
+import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
 
@@ -62,7 +62,7 @@ import { ZCLegacyCombatSystem, type IZCLegacyCombatContext } from './systems/ZCL
 import { ZCOutcomeSystem, type IZCOutcomeContext } from './systems/ZCOutcomeSystem';
 import { ZCSkillTriggerSystem, type IZCSkillTriggerContext } from './systems/ZCSkillTriggerSystem';
 import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from './systems/ZCStatusResolutionSystem';
-import type { ZCTargetingContext } from './systems/ZCTargetingSystem';
+import { ZCTargetingSystem, type ZCTargetingContext } from './systems/ZCTargetingSystem';
 import {
     ZC_CARD_START_SECONDS,
     ZCBattlePresentationQueue,
@@ -583,6 +583,9 @@ export class ZCGameModel {
             hit: (projectile, target) => this.resolveProjectileHit(projectile, target),
             allyPass: (projectile, unit) => this.healAllyOnProjectilePass(projectile, unit),
             linger: (projectile) => this.lingerBeam(projectile),
+            //  到点引爆（2026-11-18 第 16 批「连射导弹」101304）：只走落点的弹体飞完那一刻，
+            //  在落点做范围结算。命中那条通道（`hit`）与它互斥 —— 两种弹体各自只走一条。
+            arrive: (projectile) => this.resolveProjectileArrival(projectile),
         };
     }
 
@@ -634,6 +637,9 @@ export class ZCGameModel {
                 //  与命中那一拍同一条口径：配了 `burstEffectSeconds` 就活够整段动画
                 //  （爆炸龙卷 32 帧 = 1.0667s），否则沿用老口径 0.5s。
                 durationSeconds: projectile.burstEffectSeconds ?? 0.5,
+                //  到点爆炸的倍率（2026-11-18 第 16 批连射导弹）：同一份 prefab 被两条技能
+                //  以不同半径复用，只能走事件级倍率；缺省 ⇒ 1（镭射飞龙那条逐字不变）。
+                effectScale: projectile.impactEffectScale,
             });
             return;
         }
@@ -806,6 +812,7 @@ export class ZCGameModel {
             units: this.units.byId,
             targeting: this.targetingContext,
             priorityMonster: unit => this.neutralFeatures.priorityTarget(this.state, unit),
+            hasFocusableMonster: () => this.neutralFeatures.hasFocusableMonster(),
             combatDistanceScale: this.rules.combatDistanceScale,
             baseDefinition: (id) => this.unitDefinition(id),
             effectiveDefinition: this.services.effectiveDefinition,
@@ -832,6 +839,9 @@ export class ZCGameModel {
 
     private buildSkillTriggerContext(): IZCSkillTriggerContext {
         return {
+            effectiveDefinition: this.services.effectiveDefinition,
+            selectSkillTarget: (unit, radius, mode) => ZCTargetingSystem.acquireSkillUnit(
+                unit, this.state.units, radius, this.services, mode),
             statusSystem: this.statusSystem,
             //  键口径与 `ZCAttackResolutionSystem.sendAttack` 完全一致（`${unitId}:${普攻 profile.skillId}`），
             //  否则「配置里能查到、运行时查不到」会出现同一张卡在两条链路上行为不一致。
@@ -850,6 +860,53 @@ export class ZCGameModel {
             //  精密陷阱（科学家 103504）：在自己原地留一个陷阱，踩响或到点各炸一次。
             //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
+            //  孢爆箭 / 孢子凝珠（风炮菇 101303 / 水手菇 101104，2026-11-17 第 12 批）：
+            //  朝锁定目标射一枚「命中就炸一片」的弹。独立车道（`unit.splashReadyAt`），
+            //  不推进普攻节拍；减速状态的定义与 id 由触发系统算好传进来（状态归状态系统管，
+            //  这里只负责几何与伤害），避免两边各查一次表算出两个值。
+            castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
+                this.state, unit, this.attackResolutionContext, slowStatusId),
+            //  风弹（风炮菇 101303，2026-11-18 第 16 批）：朝锁定目标射一枚风弹，
+            //  命中后由 `resolveProjectileHit` 在落点建一片飓风（走弹道的 `zone*` 字段）。
+            //  独立车道（`unit.windBoltReadyAt`），不推进普攻节拍。
+            castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
+                this.state, unit, this.attackResolutionContext),
+            //  连射导弹（风炮菇 101304）：一次一枚，节拍由触发系统的排射进度推进。
+            //  它读的是 `completedAttackCount`（普攻次数）而不是自己的 CD，
+            //  但发弹本身不推进普攻节拍 —— 这是「累计 N 次普攻的奖励」，不是普攻。
+            castMissileBarrage: (unit) => ZCAttackResolutionSystem.castMissileBarrage(
+                this.state, unit, this.attackResolutionContext),
+            //  菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
+            //  以自身为圆心爆一次，爆完给自己套盾（+III 级减伤）或把怪推开。
+            //  独立车道（`unit.burstReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
+            //  （判据是爆发半径内有没有人，由 `castBurstSkill` 自己算）。
+            castBurstSkill: (unit, guardStatusId) => ZCAttackResolutionSystem.castBurstSkill(
+                this.state, unit, this.attackResolutionContext, guardStatusId),
+            //  菌丝绞杀（机甲菇 101503，2026-11-17 第 14 批）：身前扇形甩一次 + 减速。
+            //  独立车道（`unit.fanReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
+            //  （判据是扇形半径内有没有人）。减速状态的定义与 id 由触发系统算好传进来。
+            castFanSweep: (unit, slowStatusId) => ZCAttackResolutionSystem.castFanSweep(
+                this.state, unit, this.attackResolutionContext, slowStatusId),
+            //  冲锋（菌盾冲锋 101204 / 冲锋 102303 / 尖刺冲锋 102703，2026-11-17 第 15 批）：
+            //  沿「起冲点 → 落点」这条线段撞人。几何由触发系统算（它负责挪人），
+            //  这里只把「线段上撞到了谁、各挨多少、落地自保」交给攻击系统。
+            castChargeDash: (unit, options) => ZCAttackResolutionSystem.castChargeDash(
+                this.state, unit, this.attackResolutionContext, options),
+            //  孢爆箭（风炮菇 101303，2026-11-18 第 16 批改口径）：射一枚慢速风弹，
+            //  命中单体后原地留一片飓风。独立车道（`unit.windReadyAt`），不推进普攻节拍。
+            castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
+                this.state, unit, this.attackResolutionContext),
+            //  连射导弹（风炮菇 101304）：一次发**一颗**，一轮的 0/0.4/0.8s 节拍由触发系统排
+            //  （`barrageShotsLeft` / `barrageNextAt`）——弹体的 `startedAt` 不能排到未来。
+            castBarrageShot: (unit) => ZCAttackResolutionSystem.castBarrageShot(
+                this.state, unit, this.attackResolutionContext),
+            //  冲锋是一段**定长位移**（1~2 格），不像闪现 / 突刺那样「贴着一个必然合法的
+            //  目标落点走」⇒ 要拿格子合法性兜一道，否则站在地图边缘朝外冲会把人送出
+            //  可玩区域（`placeAt` 不做边界检查）。
+            hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
+            //  菌盾冲锋的「目标方向」：与攻击链路读同一个 `unitTargeting.current`，
+            //  两边各挑一次会出现「朝 A 的格子冲、打 B」。
+            currentTarget: (unit) => this.unitTargeting.current(unit),
             //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
             distanceScale: this.rules.combatDistanceScale,
             //  自身施法的治疗（吃口菠萝 100603）：走与吸血同一条 `healUnit` 实现，
@@ -1009,7 +1066,7 @@ export class ZCGameModel {
     }
 
     get terrainRevision(): number { return this.topologyRevision; }
-    get mapConfig(): ZCMatchConfig['map'] { return this.config.map; }
+    get mapConfig(): ZCMatchMap { return this.config.map; }
     definitionForUnit(id: string): ZCUnitDefinition { return this.unitDefinition(id); }
     /** UI/调试读取本局最终属性；基础目录仍可用 definitionForUnit 查询。*/
     effectiveDefinitionForUnit(owner: ZCOwner, id: string): ZCUnitDefinition {
@@ -1017,6 +1074,7 @@ export class ZCGameModel {
     }
 
     private invalidateTerrain(): void {
+        this.neutralFeatures.invalidateTerrain();
         this.clearHexRenderMap();
         this.topologyRevision++;
         this.connectedDevelopedCache.clear();
@@ -1495,6 +1553,29 @@ export class ZCGameModel {
         ZCUnitSystem.update(this.state.units, dt, this.unitContext);
         this.removeDeadUnits();
         this.refreshTileStates();
+        this.syncBodyScale();
+    }
+
+    /**
+     * 把「构筑期 patch + 状态 mods」的 `bodySizePct` 折成 `unit.bodyScale`（2026-11-18 第 17 批）。
+     *
+     * 为什么要有这一步：`statPatch` 是按 `(owner, unitId)` 索引的构筑期表、状态 mods 是另一套
+     * 缓存，两者都不在快照里，而 `ZCUnitView` 只拿得到 `ZCUnitState`。所以要有一个每帧落盘点，
+     * 与 `gateScale`（中立资源门直接写状态字段）走同一侧。
+     *
+     * 🔴 只写视图字段，**不动 `bodyRadius`** —— 体型 ×2 不该顺手变成「命中判定也 ×2」，
+     * 那会让「变大」变成纯亏。缺省 1 时不写字段（保持快照干净）。
+     */
+    private syncBodyScale(): void {
+        for (const unit of this.state.units) {
+            const buildPct = this.unitStatPatches[unit.owner]?.get(unit.unitId)?.bodySizePct ?? 0;
+            const statusPct = this.statusSystem.statModsOf(String(unit.id)).bodySizePct ?? 0;
+            const total = buildPct + statusPct;
+            const scale = total === 0 ? 1 : Math.max(0.1, 1 + total / 100);
+            //  逐值比较后才写：每帧无条件赋值会让快照哈希每帧都变（回放比对全红）。
+            const next = scale === 1 ? undefined : scale;
+            if (unit.bodyScale !== next) unit.bodyScale = next;
+        }
     }
 
     /** 旧战斗测试从此入口直接触发出手；测试迁到独立攻击夹具后可删除。*/
@@ -1562,6 +1643,15 @@ export class ZCGameModel {
 
     private resolveProjectileHit(projectile: ZCProjectileState, target: ZCCombatTarget): void {
         ZCAttackResolutionSystem.resolveProjectileHit(this.state, projectile, target, this.attackResolutionContext);
+    }
+
+    /**
+     * 到点引爆（2026-11-18 第 16 批「连射导弹」101304）：`explodeOnArrival` 的弹体飞完那一刻，
+     * 在落点对半径内所有敌人各结算一次。命中那条通道（`resolveProjectileHit`）不会被走到 ——
+     * 这类弹体整段不参与碰撞。
+     */
+    private resolveProjectileArrival(projectile: ZCProjectileState): void {
+        ZCAttackResolutionSystem.resolveProjectileArrival(this.state, projectile, this.attackResolutionContext);
     }
 
     private ensureMoveSpeedStatus(id: string, moveSpeedPct: number, durationSeconds: number): void {

@@ -19,7 +19,6 @@ import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
 import { RemoteBigMapRankProvider } from './RemoteBigMapRankProvider';
 import { BigMapModel } from './BigMapModel';
 import { BigMapController } from './BigMapController';
-import { GameNet } from '../../net/GameNet';
 import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
@@ -229,7 +228,7 @@ export class BigMapEntry {
                 selfRoleId: owner?.roleId ?? '',
             });
 
-            const controller = new BigMapController(model, { context: this.context, network: GameNet.instance, campRepository, slgRepository });
+            const controller = new BigMapController(model, { context: this.context, campRepository, slgRepository });
             //Graphics 在 onEnable 中初始化材质。准备期间保持节点激活，避免提前绘制
             //缓存空材质并在原生 UIModelProxy.activeSubModels 中崩溃；用透明度隐藏成品前的页面。
             const opacity = root.getComponent(UIOpacity);

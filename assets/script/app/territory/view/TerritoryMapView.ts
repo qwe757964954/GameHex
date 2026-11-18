@@ -47,7 +47,7 @@ import {
     territoryMapContentShiftY,
 } from '../model/TerritoryMapLayout';
 import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from '../model/TerritoryMapConfig';
-import { isTerritoryBattleSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import { isTerritoryBattleSite, isTerritoryChestSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
 import {
     TERRITORY_CHEST_HINT_SECONDS,
     territoryChestHintBounceOffset,
@@ -2218,15 +2218,17 @@ export class TerritoryMapView extends Component {
      *
      * @param entries 已筛选的钱包类奖励
      * @param readout 传入时只合成一条读数，否则每条奖励各一条
+     * @returns `true` = 真的起播了。调用方靠它决定「演出窗口」要不要按动画时长等
+     *          （格子挪出视口 / 没有可喷的资源 ⇒ `false`，窗口立刻还回去，别让引导层白等）。
      */
     playResourceGain(
         cellId: number,
         entries: readonly { resId: number; amount: number }[],
         readout?: ITerritoryGainReadout | null,
-    ): void {
-        if (!entries.length) return;
+    ): boolean {
+        if (!entries.length) return false;
         const hex = this.hexNodes.get(cellId);
-        if (!hex) return;
+        if (!hex) return false;
         const originX = hex.position.x;
         const originY = hex.position.y + HEX_GRID_CONTENT_LIFT;
         const baseY = originY + TERRITORY_GAIN_START_LIFT_PX;
@@ -2239,7 +2241,7 @@ export class TerritoryMapView extends Component {
             const view = this.acquireGain();
             view.node.setPosition(originX, originY + TERRITORY_GAIN_READOUT_LIFT_PX, 0);
             view.play(readout.frame ?? null, readout.amount);
-            return;
+            return true;
         }
         entries.forEach((entry, index) => {
             const view = this.acquireGain();
@@ -2247,6 +2249,7 @@ export class TerritoryMapView extends Component {
             view.node.setPosition(originX, baseY + index * TERRITORY_GAIN_STACK_GAP_PX, 0);
             view.play(this.gainIcons.get(entry.resId) ?? null, entry.amount);
         });
+        return true;
     }
 
     /**
@@ -2486,6 +2489,19 @@ export class TerritoryMapView extends Component {
     setViewportSize(width: number, height: number): void {
         this.viewportWidth = Number.isFinite(width) ? Math.max(0, width) : 0;
         this.viewportHeight = Number.isFinite(height) ? Math.max(0, height) : 0;
+    }
+
+    /**
+     * 页面注入：**底部 UI 是否被收起**（2026-11-17 新手引导）。
+     *
+     * 只做转发：建层、量视口、铺格点、逐帧淡出都在 {@link TerritoryCloudView}，
+     * 页面与地图视图都不许知道「云长什么样、铺几行」。
+     *
+     * 底栏在时 `MapViewport` 的 rect Mask 裁掉的那条带被底栏盖着；引导把底栏收起后
+     * 那里会露出 `zdbg1` 橙色裸底图 ⇒ 这时让云层继续向屏幕底铺满。
+     */
+    setBottomCloudFillVisible(visible: boolean): void {
+        this.clouds?.setBottomStripEnabled?.(visible === true);
     }
 
     /**
@@ -2755,6 +2771,16 @@ export class TerritoryMapView extends Component {
     /** 引导跟随真实格节点，位置与缩放仍由地图唯一维护。 */
     getGuideCellNode(cellId: number): Node | null {
         return this.hexNodes.get(cellId) ?? null;
+    }
+
+    /**
+     * 某格的关卡编号气泡节点（`1-1`）；没站点 / 气泡还没建 / 当前不显示 ⇒ `null`。
+     *
+     * 只给引导用：气泡挂在 `StationBadgeLayer`（不是地块的子节点），光圈要把它一起囊括，
+     * 必须单独拿到这个节点（用户 2026-11-17 第 17 条）。
+     */
+    getLevelBubbleNode(cellId: number): Node | null {
+        return this.stationViews.get(cellId)?.getLevelBubbleNode() ?? null;
     }
 
     /**
@@ -3200,7 +3226,7 @@ export class TerritoryMapView extends Component {
      * 四类格的「通关」口径**各不相同**，别用一条 `isOwned` 打天下：
      * · 起始格 —— 永远算通关（我方基地）；
      * · 随机资源格（`randomSites.candidateCells`）—— 银币开启即算（开出来就是我的资源建筑）；
-     * · 宝箱（`fixedResource`）—— `isOwned`（领完即算）；
+     * · 宝箱（`fixedResource` / `patrolChest`）—— `isOwned`（领完即算）；
      * · 战斗站点（`stage` / `boss` / `asyncPvp`）—— **`isAreaPassed`**（区域口径：
      * 同 `configId` 的 327/328 任一通关整片都算，与 `stationRenderOf` 同源）。
      */
@@ -3213,7 +3239,7 @@ export class TerritoryMapView extends Component {
         if (cellId === input.map.startCellId) return true;
         if (candidateCells.has(cellId)) return input.progress.isCellUnlocked(cellId);
         const site = siteByCell.get(cellId);
-        if (!site || site.type === TERRITORY_SITE_TYPE.fixedResource) return input.progress.isOwned(cellId);
+        if (!site || isTerritoryChestSite(site)) return input.progress.isOwned(cellId);
         return input.progress.isAreaPassed(cellId);
     }
 
@@ -3661,9 +3687,9 @@ export class TerritoryMapView extends Component {
     }
 
     /**
-     * 固定资源格生成宝箱时的抖动反馈。
+     * 宝箱格（固定资源据点 / 巡逻宝箱）生成宝箱时的抖动反馈。
      *
-     * 只处理 fixedResource，且仅当这一轮渲染有宝箱图、上一轮没有时触发。
+     * 只处理宝箱格，且仅当这一轮渲染有宝箱图、上一轮没有时触发。
      * 首轮不播，避免进页面或换章时整屏宝箱同时抖动。
      * 动效复用装饰建筑的脉冲实现。
      */
@@ -3672,7 +3698,7 @@ export class TerritoryMapView extends Component {
         content: ITerritoryStationRender,
         firstPass: boolean,
     ): void {
-        if (site.type !== TERRITORY_SITE_TYPE.fixedResource) {
+        if (!isTerritoryChestSite(site)) {
             this.chestCells.delete(site.cellId);
             return;
         }
@@ -3904,7 +3930,9 @@ export class TerritoryMapView extends Component {
                 isLoading: isPending,
                 conditionIcon: input.art.randomSilverIcon,
                 // 固定宝箱格可激活时在价格行**上方**再加一颗宝箱图标。
-                // 只给 `fixedResource`：关卡 / 异步据点 / 随机格的格心只放价格，别跟着长出一颗箱子。
+                // 只给**普通宝箱**（`fixedResource`）：关卡 / 异步据点 / 随机格的格心只放价格，
+                // 别跟着长出一颗箱子；野怪宝箱（`patrolChest`）也不再长（它点开是去打野怪，
+                // 不画任何宝箱外观，见下面的宝箱分支）。
                 // 前置没满足的宝箱格走的是 `syncStations` 的 `locked` 分支（`isCondition = false`），
                 // 到这里的一定是「可激活」⇒ 天然满足「未解锁只显示锁」。
                 conditionChestIcon: site.type === TERRITORY_SITE_TYPE.fixedResource
@@ -3930,17 +3958,24 @@ export class TerritoryMapView extends Component {
                 interactive: !isPending,
             };
         }
-        if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
+        // 宝箱格：普通宝箱（`fixedResource`）与野怪宝箱（`patrolChest`）共用**状态与交互**，
+        // 但外观分开 —— 见下面 `isPatrol` 那几处。
+        // 野怪宝箱点开是去打巡逻野怪（`battleIds` 那场），不是开箱领奖；按 2026-11-18 的需求，
+        // 它**不展示宝箱模型 / 图标 / 气泡**，只保留地块状态色与未解锁时的银币价
+        // （价格在更上面那条 `!isOpened` 分支里）。
+        if (isTerritoryChestSite(site)) {
             const claimed = station.owned;
             const pending = station.pending;
-            // 需求 第 1 条：固定奖励宝箱挂一个**气泡提示**（样式同「章节」那颗：
+            const isPatrol = site.type === TERRITORY_SITE_TYPE.patrolChest;
+            // 需求 第 1 条：**普通宝箱**挂一个气泡提示（样式同「章节」那颗：
             // 同一张 `levelBubbleFrame` 蓝底、同一套圆角与尾巴），内容是**体力 icon + 消耗数**。
             // 第 2 条：同屏只留一只 ⇒ 只有 `chestHintCell` 那一格给气泡，其余格传空。
-            const showHintBubble = !claimed && chestHintCell === site.cellId;
-            // 领取后清除宝箱图，状态只由地块颜色表达。
+            // 野怪宝箱不挂：它的第二下是开战，格面只靠地块颜色表达状态。
+            const showHintBubble = !isPatrol && !claimed && chestHintCell === site.cellId;
+            // 领取后清除宝箱图，状态只由地块颜色表达；野怪宝箱从一开始就不画。
             return {
                 site,
-                icon: claimed ? null : this.stationIconOf(site, null, input.art),
+                icon: isPatrol || claimed ? null : this.stationIconOf(site, null, input.art),
                 isLoading: pending,
                 caption: '',
                 levelBubble: showHintBubble ? String(site.unlock.staminaCost) : undefined,

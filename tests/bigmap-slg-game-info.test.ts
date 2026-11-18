@@ -1,7 +1,10 @@
 import { createControllerContext } from './helpers/controller-context';
-import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import type { BigMapController as BigMapControllerType } from '../assets/script/app/bigmap/application/BigMapController';
+import { loadBigMapController } from './helpers/bigmap-controller';
 import { afterEach } from 'node:test';
-const controllers: BigMapController[] = [];
+
+const { BigMapController } = loadBigMapController();
+const controllers: BigMapControllerType[] = [];
 afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 /**
  * 服务器 `SlgGameInfo`（所处城池 `toCampId` / 最大击杀野怪等级 `maxMonsterLevel`）的落点回归。

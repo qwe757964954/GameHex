@@ -6,6 +6,7 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as serverState from '../assets/script/app/bigmap/model/BigMapServerState';
 import type { IBigMapSlgGateway } from '../assets/script/app/bigmap/application/BigMapSlgRepository';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 function loadModule(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -42,7 +43,7 @@ function harness() {
     };
     const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapSlgGateway.ts', (name) => {
         if (name.endsWith('/RequestGuard')) return requestGuard;
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } };
         if (name === './RequestBigMapSlgMsg') return requests;
         if (name.endsWith('/BigMapServerState')) return serverState;
         return {};

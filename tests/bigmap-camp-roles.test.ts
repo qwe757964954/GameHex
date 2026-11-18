@@ -24,6 +24,7 @@ import {
     normalizeBigMapCampRoleInfos,
 } from '../assets/script/app/bigmap/model/BigMapCampRoleInfo';
 import { assetPath } from './helpers/asset-paths';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
@@ -293,7 +294,7 @@ test('★网关：真的发 CmdSlgCampRoleInfosReqMsg，body 只有 campId', asy
     };
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
         if (name.endsWith('/RequestGuard')) return requestGuard;
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } };
         if (name === './RequestBigMapCampMsg') return requests;
         return {};
     });
@@ -317,7 +318,7 @@ test('网关：断线时返回 null（不发请求）', async () => {
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
         if (name.endsWith('/RequestGuard')) return requestGuard;
         if (name.endsWith('/GameNet')) return {
-            GameNet: { instance: { isConnected: false, async send() { sent += 1; return true; } } },
+            GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: { isConnected: false, async send() { sent += 1; return true; } } },
         };
         if (name === './RequestBigMapCampMsg') return requests;
         return {};

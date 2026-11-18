@@ -6,6 +6,7 @@ import {
     TERRITORY_CLOUD_POCKET_SCALE,
     TERRITORY_CLOUD_SCALE,
     territoryCloudArtOffsetY,
+    territoryCloudBottomStripPoints,
     territoryCloudClearAction,
     territoryCloudDissolveFrame,
     territoryCloudDollyFadeDue,
@@ -32,6 +33,15 @@ export const TERRITORY_CLOUD_DISSOLVE_NODE = 'CloudDissolveLayer';
 export const TERRITORY_CLOUD_FILL_NODE = 'CloudFillLayer';
 /** 「被地块包围的云洞」顶层节点（挂在**页面根**、压在 UI 之上）。 */
 export const TERRITORY_CLOUD_POCKET_NODE = 'TerritoryCloudPocket';
+/**
+ * **底部补云带**（挂在页面根、**第 0 个孩子** = 压住橙色裸底图、但仍被 `MapViewport` 盖住）。
+ *
+ * 为什么排第 0：这条带只负责视口 Mask 裁不到的那一截；一旦有云溢出到视口里，
+ * `MapViewport/MapLayer/MapBackground` 是不透明的，会把它盖回去，不需要再挂一层 Mask。
+ */
+export const TERRITORY_CLOUD_BOTTOM_STRIP_NODE = 'CloudBottomStrip';
+/** 补云带里的影子分组（第 0 个孩子，保证影子在云体之下）。 */
+export const TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE = 'CloudBottomStripShadow';
 /**
  * 影子层节点名（`CloudKeepOut` 的**第 0 个**孩子）。
  *
@@ -168,6 +178,23 @@ export class TerritoryCloudView {
     private readonly fillShadowSprites: Sprite[] = [];
     /** 铺满区的指纹（内容层尺寸 + 行列）；同指纹不重建那几百个节点。 */
     private fillKey = '';
+    /**
+     * 底部补云带（页面根的第 0 个孩子；底栏被引导收起时才 `active`）。
+     *
+     * 这层**不在 `CloudKeepOut` 里**：它不是格网内的雾，而是补 `MapViewport` 的 Mask
+     * 裁不到的那一截屏幕。所以退场不能靠 `CloudKeepOut` 的反向遮罩，只能跟着铺满层
+     * 的 `active` / 不透明度一起收（见 {@link syncBottomStrip} / {@link syncBottomStripAlpha}）。
+     */
+    private bottomStrip: Node | null = null;
+    /** 补云带的影子分组（层内第 0 个孩子 ⇒ 影子永远在云体之下）。 */
+    private bottomStripShadowGroup: Node | null = null;
+    /** 补云带的云体 / 影子（帧晚到时也要补帧）。 */
+    private readonly bottomStripSprites: Sprite[] = [];
+    private readonly bottomStripShadowSprites: Sprite[] = [];
+    /** 页面注入：底栏是否被收起（= 有没有必要补这条带）。 */
+    private bottomStripEnabled = false;
+    /** 补云带指纹（行列 + 页面宽 + 带高 + 中线）；尺寸没变不重建那几十个节点。 */
+    private bottomStripKey = '';
     /**
      * 铺满层**退场**的已用时（秒）；`< 0` = 没在退场。
      *
@@ -489,6 +516,9 @@ export class TerritoryCloudView {
         this.dissolveShadowFrames = frameList(frames?.dissolveShadow);
         this.rebindSprites(this.fillSprites, this.idleFrame);
         this.rebindSprites(this.fillShadowSprites, this.shadowFrame);
+        // 补云带可能先于美术就绪就建了节点（与铺满层 / 云洞层同一个理由）⇒ 帧晚到要补。
+        this.rebindSprites(this.bottomStripSprites, this.idleFrame);
+        this.rebindSprites(this.bottomStripShadowSprites, this.shadowFrame);
         this.rebindSprites(this.pocketSprites, this.idleFrame);
         this.rebindSprites(this.pocketShadowSprites, this.shadowFrame);
         for (const [cellId, sprite] of this.sprites) {
@@ -498,6 +528,7 @@ export class TerritoryCloudView {
         }
         this.rebindSprites(Array.from(this.shadowSprites.values()), this.shadowFrame);
         if (!this.idleFrame) this.reset();
+        this.syncBottomStrip();
     }
 
     /**
@@ -554,6 +585,9 @@ export class TerritoryCloudView {
         // 先置位再看指纹：换章那一帧 `syncGrid` 的 `reset()` 就发生在这次 `setFillArea`
         // **之后**，紧随其后的 `setFillOccupied` 只认这个标记（见 `setFillOccupied`）。
         this.fillAreaReady = true;
+        // 屏幕尺寸变了但内容层尺寸碰巧没变时，补云带的带高 / 中线也可能已经变了 ⇒
+        // 每次都让它按运行时页面 / 视口尺寸重判一次（同指纹时 buildBottomStrip 自己早退）。
+        this.syncBottomStrip();
         if (key === this.fillKey) return;
         this.fillKey = key;
         this.rebuildFillPoints();
@@ -594,6 +628,114 @@ export class TerritoryCloudView {
             this.fillOccupied,
         );
         this.rebuildFill();
+    }
+
+    // ============================================================
+    // 底部补云带（视口 Mask 裁不到的那一截屏幕）
+    // ============================================================
+
+    /**
+     * 页面注入：底部 UI 是否被收起（2026-11-17 新手引导）。
+     *
+     * `GuideComposition.syncDialogHud` 在引导有台词 / 焦点时把 `BottomNav`（连同 `BottomHud`）
+     * `active = false`。底栏原本正好盖住 `MapViewport` 的 rect Mask 裁不到的那条 168px，
+     * 收起后那里只剩页面根的 `zdbg1` 橙色裸底图 —— 用户截图底部那一整条橙色。
+     *
+     * 🔴 只在**底栏收起**时点亮：底栏在时它照常盖着这条带，平时画面零变化。
+     *    不是每次 `renderMap` 都铺，也不是把 `setFillArea` 放大 —— 那条路仍在 Mask 里，
+     *    画不到视口外面去。
+     */
+    setBottomStripEnabled(enabled: boolean): void {
+        const value = enabled === true;
+        if (value === this.bottomStripEnabled) return;
+        this.bottomStripEnabled = value;
+        this.syncBottomStrip();
+    }
+
+    /** 补云带 `active` 的唯一写入口；跟着铺满层的「有没有云 / 有没有散完」一起收。 */
+    private syncBottomStrip(): void {
+        const show = this.bottomStripEnabled && !!this.idleFrame && !this.fillDismissed
+            && this.fillSprites.length > 0 && this.buildBottomStrip();
+        if (this.bottomStrip?.isValid && this.bottomStrip.active !== show) {
+            this.bottomStrip.active = show;
+        }
+        if (show) this.syncBottomStripAlpha();
+    }
+
+    /**
+     * 按页面 / 视口的**运行时**尺寸算出底部那条带，铺上同一张格网。
+     *
+     * 🔴 不许抄 `168`：它来自 `MapViewport` 的 Widget `bottom`，长屏 / 安全区变了会跟着变。
+     *    用「视口底边（页面局部坐标）− 页面底边」现算，才是 Mask 真正裁掉的那一段。
+     *
+     * 层级：挂页面根**第 0 个孩子** ⇒ 压住页面自己的橙色 `Sprite`，但被 `MapViewport`
+     * 整棵子树盖住。云溢出到视口里的那半朵会被不透明的 `MapBackground` 盖回去，无需 Mask。
+     */
+    private buildBottomStrip(): boolean {
+        const map = this.mapLayer;
+        const viewport = map?.parent;
+        const page = viewport?.parent;
+        if (!map?.isValid || !viewport?.isValid || !page?.isValid) return false;
+        const pageTransform = page.getComponent(UITransform);
+        const viewportTransform = viewport.getComponent(UITransform);
+        const pageSize = pageTransform?.contentSize;
+        const viewportSize = viewportTransform?.contentSize;
+        if (!pageSize || !viewportSize) return false;
+        const pageWidth = Number.isFinite(pageSize.width) ? pageSize.width : 0;
+        const pageHeight = Number.isFinite(pageSize.height) ? pageSize.height : 0;
+        const viewportHeight = Number.isFinite(viewportSize.height) ? viewportSize.height : 0;
+        if (!(pageWidth > 0) || !(pageHeight > 0) || !(viewportHeight > 0)) return false;
+        const viewportBottom = (viewport.position?.y ?? 0) - viewportHeight / 2;
+        const pageBottom = -pageHeight / 2;
+        const stripHeight = Math.min(pageHeight, Math.max(0, viewportBottom - pageBottom));
+        if (!(stripHeight > 0) || !(this.fillRows > 0) || !(this.fillColumns > 0)) return false;
+        const centerY = pageBottom + stripHeight / 2;
+        const key = `${this.fillRows}|${this.fillColumns}|${Math.round(pageWidth)}|`
+            + `${Math.round(stripHeight)}|${Math.round(centerY)}`;
+        if (key === this.bottomStripKey && this.bottomStrip?.isValid
+            && this.bottomStripSprites.length > 0) return true;
+        this.bottomStripKey = key;
+        if (!this.bottomStrip?.isValid) {
+            const root = this.createLayerNode(
+                TERRITORY_CLOUD_BOTTOM_STRIP_NODE, page, page.layer, 0);
+            this.bottomStrip = root;
+            this.bottomStripShadowGroup = this.createShadowGroup(
+                root, TERRITORY_CLOUD_BOTTOM_STRIP_SHADOW_NODE);
+        }
+        const root = this.bottomStrip;
+        const group = this.bottomStripShadowGroup;
+        if (!root?.isValid || !group?.isValid) return false;
+        root.getComponent(UITransform)?.setContentSize?.(pageWidth, pageHeight);
+        this.clearLayerNodes(root, group);
+        this.bottomStripSprites.length = 0;
+        this.bottomStripShadowSprites.length = 0;
+        const points = territoryCloudBottomStripPoints(
+            this.fillRows, this.fillColumns, pageWidth, stripHeight, centerY);
+        const offsetY = territoryCloudArtOffsetY(TERRITORY_CLOUD_SCALE);
+        for (const point of points) {
+            const y = point.y + HEX_GRID_CONTENT_LIFT + offsetY;
+            const body = this.createSprite(
+                root, 'CloudBottomFill', this.idleFrame, TERRITORY_CLOUD_SCALE);
+            body.node.setPosition(point.x, y, 0);
+            this.bottomStripSprites.push(body);
+            const shadow = this.createSprite(
+                group, 'CloudBottomFillShadow', this.shadowFrame, TERRITORY_CLOUD_SCALE);
+            shadow.node.setPosition(point.x, y, 0);
+            this.bottomStripShadowSprites.push(shadow);
+        }
+        return this.bottomStripSprites.length > 0;
+    }
+
+    /**
+     * 补云带跟着铺满层一起淡出：取铺满层第 0 朵的 `color.a`（整层淡出时同源、波次淡出时
+     * 取最早那朵的读数，宁可早一点收，也不要雾散完了底部还留一条云）。
+     */
+    private syncBottomStripAlpha(): void {
+        if (!this.bottomStrip?.isValid || !this.bottomStrip.active) return;
+        const alpha = this.fillSprites[0]?.color?.a;
+        const value = Number.isFinite(alpha) ? alpha / 255 : 1;
+        for (const sprite of this.bottomStripSprites) this.writeOpacity(sprite, value);
+        for (const sprite of this.bottomStripShadowSprites) this.writeOpacity(sprite, value);
     }
 
     get layerNode(): Node | null {
@@ -940,6 +1082,8 @@ export class TerritoryCloudView {
         if (this.fillShadowGroup?.isValid && this.fillShadowGroup.active !== show) {
             this.fillShadowGroup.active = show;
         }
+        // 整片雾散完 / 复原时，视口外那条补云带必须一起收 —— 否则底部会孤零零留一条云。
+        this.syncBottomStrip();
     }
 
     /**
@@ -1076,6 +1220,9 @@ export class TerritoryCloudView {
         // 铺满层的退场要排在消散的早退之前：全解锁那一帧可能没有任何朵在消散
         // （存档进来就是全解锁的），此时也得有人把雾淡掉。
         this.stepFillFade(delta);
+        // 底部补云带要跟着铺满层的逐朵淡出一起变淡；排在 `!dissolving` 的早退之前，
+        // 否则全解锁那一帧（没有云在消散）底部会一直亮到下一帧。
+        this.syncBottomStripAlpha();
         if (!this.dissolving.size) return;
         this.batching = true;
         this.stepDissolve(delta);
@@ -1250,6 +1397,8 @@ export class TerritoryCloudView {
             this.prepareFillWave();
             this.applyFillWave(this.fillFadeElapsed);
         }
+        // 铺满层重建（换章 / 已盖格变了）⇒ 底部补云带也按新的行列 / 雾状态重判一次。
+        this.syncBottomStrip();
     }
 
     private clearFill(): void {
@@ -1269,6 +1418,9 @@ export class TerritoryCloudView {
         this.fillWaveOrders = [];
         // 快照里没有在演的散场（换章时地图视图会跟着还原镜头）。
         this.dollyElapsed = -1;
+        // 铺满层刚被清空 ⇒ 底部补云带先收起来，等本帧 `setFillArea` / `setFillOccupied`
+        // 把雾建回来时自然重新点亮（判据是 `fillSprites.length`，不是 `fillKey`）。
+        this.syncBottomStrip();
     }
 
     // ============================================================

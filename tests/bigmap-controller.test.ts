@@ -2,13 +2,20 @@ import { createControllerContext } from './helpers/controller-context';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { BigMapController, type IBigMapNetworkEvents } from '../assets/script/app/bigmap/application/BigMapController';
+import { loadBigMapController, type IBigMapNetPort } from './helpers/bigmap-controller';
 import { BigMapModel, type IBigMapActionFeedback } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent } from '../assets/script/app/bigmap/application/BigMapEvents';
 import type { IBigMapViewState } from '../assets/script/app/bigmap/application/BigMapViewState';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
+
+/** 每个 harness 自己的网络端口；Controller 直连的单例在下面桥过来。 */
+let activeNet: IBigMapNetPort = { addEvent() {}, removeCaller() {} };
+const { BigMapController } = loadBigMapController({
+    addEvent: (name, caller, listener) => activeNet.addEvent(name, caller, listener),
+    removeCaller: (caller) => activeNet.removeCaller(caller),
+});
 
 const config = loadBigMapConfig();
 
@@ -28,7 +35,8 @@ test('收取奖励输出展示命令；空奖励、失败和销毁后的迟到�
             h.intent({ kind: 'harvestAll' });
             await new Promise(resolve => setImmediate(resolve));
         }
-        assert.deepEqual(commands, [{ kind: 'rewards', rewards }]);
+        // Controller 在 vm 沙箱里生成对象，原型来自另一个 realm；先归一成纯数据再比。
+        assert.deepEqual(JSON.parse(JSON.stringify(commands)), [{ kind: 'rewards', rewards }]);
         let finish!: (result: IBigMapActionFeedback) => void;
         h.model.requestHarvestAll = () => new Promise(resolve => { finish = resolve; });
         h.intent({ kind: 'harvestAll' });
@@ -41,7 +49,7 @@ test('收取奖励输出展示命令；空奖励、失败和销毁后的迟到�
         EventMgr.instance.offTarget(owner);
     }
 });
-class Network implements IBigMapNetworkEvents {
+class Network implements IBigMapNetPort {
     handlers = new Map<string, { owner: object; callback: (message: unknown) => void }[]>();
     addEvent(name: string, owner: object, callback: (message: unknown) => void) {
         const list = this.handlers.get(name) ?? [];
@@ -62,7 +70,8 @@ function create(campRepository?: BigMapCampRepository) {
     // 可见据点查询按 1s 限速（`BIGMAP_VISIBLE_REFRESH_INTERVAL_MS`），用例用可控时钟推进；
     // 不推进就等于「同一秒内的第二次上报只合并、不发」。
     let clock = 0;
-    const controller = new BigMapController(model, { context: createControllerContext(), network, campRepository,
+    activeNet = network;
+    const controller = new BigMapController(model, { context: createControllerContext(), campRepository,
         now: () => clock,
         schedule: (callback) => { ticks = callback; return () => { stopped++; ticks = () => {}; }; } });
     const snapshots: IBigMapViewState[] = [];
@@ -92,6 +101,23 @@ test('Controller 集中绑定一次、接收意图并发布纯展示快照，退
         assert.equal(h.snapshots.length, count);
         assert.equal(h.stopped(), 1);
         assert.equal([...h.network.handlers.values()].flat().length, 0);
+    } finally { h.dispose(); }
+});
+
+test('controller / model / repository 多层 dispose 重复调用只释放一次网关', () => {
+    let gatewayDisposals = 0;
+    const repository = new BigMapCampRepository({
+        fetchSimple: async () => null,
+        fetchDetail: async () => null,
+        fetchRoles: async () => null,
+        requestMove: async () => null,
+        dispose: () => { gatewayDisposals += 1; },
+    });
+    const h = create(repository);
+    try {
+        h.controller.dispose();
+        h.controller.dispose();
+        assert.equal(gatewayDisposals, 1);
     } finally { h.dispose(); }
 });
 

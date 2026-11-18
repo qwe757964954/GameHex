@@ -692,11 +692,11 @@ test('D1｜出现动画账本：`playedAni` 只加一次、错峰用 `scheduleOn
     assert.ok(/item\.appear\(\)/.test(PAGE_SRC));
 });
 
-test('D2｜过期的异步结果要丢掉（`loadRevision`）+ 空奖励直接关窗', () => {
-    assert.ok(/this\.loadRevision \+= 1/.test(PAGE_SRC), '缺 loadRevision');
-    assert.ok(/revision !== this\.loadRevision/.test(PAGE_SRC), 'onOpen 里没核 revision');
+test('D2｜空奖励直接关窗，异步结果只用 alive 判定', () => {
     assert.ok(/goods\.length === 0/.test(PAGE_SRC), '空奖励要早退');
     assert.ok(/this\.close\(PopupCloseReason\.Manual\)/.test(PAGE_SRC), '空奖励应关窗而不是白屏');
+    assert.ok(/if \(!this\.alive\) return/.test(PAGE_SRC), '异步回来必须检查存活');
+    assert.ok(!/loadRevision/.test(PAGE_SRC), '单次打开没有并发刷新，不再维护 revision');
     // 排序必须在加载图之前（`frames` 与 `entries` 必须同序）。
     // ⚠️ 2026-10-14：帧加载搬进了共用件 `RewardFrames`（结算页是第二个宿主），
     //    所以这里认的是 `loadRewardFrames(sorted)`，不再有私有的 `this.loadFrames`。
@@ -767,7 +767,8 @@ test('D7｜首次铺列表等到 start 后，打开时回到顶部', () => {
     const waitAt = PAGE_CODE.indexOf('await this.nextPopupFrame()');
     const presentAt = PAGE_CODE.indexOf('this.present()');
     assert.ok(waitAt >= 0 && waitAt < presentAt);
-    assert.match(PAGE_CODE.slice(waitAt, presentAt), /revision !== this.loadRevision/);
+    assert.ok(!PAGE_CODE.slice(waitAt, presentAt).includes('loadRevision'),
+        '单次打开不需要 revision，等待一帧后直接铺');
     assert.match(PAGE_CODE, /this\.grid\.scrollToTop\(\)/);
 });
 

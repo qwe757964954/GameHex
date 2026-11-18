@@ -150,7 +150,7 @@ const REQ_SRC = readFileSync(
     'utf8',
 );
 
-test('★领地的 5 条占城协议都在 RequestMsg 里，且请求名与 proto 一致', () => {
+test('★领地的 6 条占城协议都在 RequestMsg 里，且请求名与 proto 一致', () => {
     // 少一条 ⇒ 该功能点了没反应、零报错。
     const expected = [
         'CmdCityChapterCellInfoReqMsg',
@@ -158,6 +158,8 @@ test('★领地的 5 条占城协议都在 RequestMsg 里，且请求名与 prot
         'CmdCityChapterPassCellReqMsg',
         'CmdCityChapterSweepReqMsg',
         'CmdCityChapterIdleRewardReqMsg',
+        // 2026-11-18 新增：升级怪物宝箱（`monsterBoxInfos.lv` 的写侧）。
+        'CmdCityChapterUpMonsterBoxLvReqMsg',
     ];
     for (const protoName of expected) {
         assert.ok(REQ_SRC.includes(protoName), `缺请求类：${protoName}`);
@@ -210,6 +212,7 @@ test('★★ 占城协议已登记进运行时 MessageId（proto 源更新了，
         'CmdCityChapterPassCellReqMsg',
         'CmdCityChapterSweepReqMsg',
         'CmdCityChapterIdleRewardReqMsg',
+        'CmdCityChapterUpMonsterBoxLvReqMsg',
     ];
     for (const reqName of expected) {
         assert.ok(
@@ -237,7 +240,7 @@ test('★★ 生成产物不比 proto 源旧（proto 更新后必须重跑生成
     const staticSrc = readFileSync('assets/script/lib/protobuf/protoCompiledStatic.ts', 'utf8');
     const enumAt = staticSrc.indexOf('cmd.MessageId = (function() {');
     const enumBody = staticSrc.slice(enumAt, staticSrc.indexOf('return values;', enumAt));
-    for (const name of ['CmdCityChapterInfoRspMsg', 'CmdCityChapterCellInfoRspMsg']) {
+    for (const name of ['CmdCityChapterInfoRspMsg', 'CmdCityChapterCellInfoRspMsg', 'CmdCityChapterUpMonsterBoxLvRspMsg']) {
         assert.ok(
             protoSrc.includes(`${name} = `),
             `proto 源里应有 ${name}`,
@@ -251,7 +254,7 @@ test('★★ 生成产物不比 proto 源旧（proto 更新后必须重跑生成
 });
 
 test('★Repository 通过共享入口发送，保留读取超时', () => {
-    assert.match(REPO_SRC, /sendGameRequest\(GameNet\.instance, build/);
+    assert.match(REPO_SRC, /GameNet\.sendRequest\(build/);
     assert.match(REPO_SRC, /timeoutMs: READ_TIMEOUT_MS/);
     assert.doesNotMatch(REPO_SRC, /isConnected/);
 });
@@ -269,7 +272,7 @@ test('★章节扫荡请求带倍率 `times`（proto id 3），且运行时编�
     // ③ Model 必须把倍率透传给网关 —— 只改 Controller 不改这里等于把倍率丢在半路。
     const modelSrc = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
     assert.match(modelSrc, /async sweepIdleRewards\(times: number = 1\)/);
-    assert.match(modelSrc, /gateway\.sweep\(chapterId, target\.site\.cellId, times,/);
+    assert.match(modelSrc, /gateway\.sweep\(chapterId, target\.site\.cellId, times\)/);
 
     // ③ 🔴 运行时编解码走 `protoCompiledStatic`（静态模块），**不是** protoCompiled.json：
     //    static 产物落后于 proto 时，多传的字段会被 protobuf 静默丢弃 —— 日志里看不出任何异常。

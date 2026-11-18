@@ -38,8 +38,11 @@ import type {
 import type { ITerritoryGrantedReward } from '../territory/model/TerritoryGrantedReward';
 import {
     splitTerritoryRewards,
+    TERRITORY_GAIN_SECONDS,
     TERRITORY_SILVER_RES_ID,
     TERRITORY_STAMINA_RES_ID,
+    territoryBurstCountForTotal,
+    territoryBurstTotalSeconds,
 } from '../territory/model/TerritoryResourceGain';
 import { territoryChestTierOfRewards, type TerritoryChestTier } from '../territory/model/TerritoryChestTier';
 import { TERRITORY_CHEST_OPEN_FRAMES } from '../territory/model/TerritoryChestAnimation';
@@ -56,7 +59,11 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { MainTabHost } from './MainTabHost';
 import { MainTab } from './MainTabModel';
 import { TabButton } from '../common/TabButton';
-import { isTerritoryHeroRewardResId } from '../territory/model/TerritoryHeroReward';
+import {
+    isTerritoryHeroRewardResId,
+    territoryHeroFlightCountOf,
+    territoryHeroFlightTotalSeconds,
+} from '../territory/model/TerritoryHeroReward';
 import type {
     ITerritoryHeroProgressSource,
     ITerritoryRewardDelta,
@@ -174,6 +181,25 @@ const BOTTOM_HUD_NODE_NAMES = ['MainTaskEntry', 'BeginGame', 'ChestBar'] as cons
  * 8 秒 ≥ 正常一次往返 + 开箱表演，不会误伤。
  */
 const CHEST_PRESENTATION_WATCHDOG_MS = 8000;
+
+/**
+ * 开箱粒子动画**播完之后**再多等一拍，才把奖励交出去（用户 2026-11-17 第 13 条 ④）。
+ *
+ * 补帧动画的最后一帧直接接「奖励弹窗 / 下一段台词」会显得很急；100ms 让画面先落定。
+ * 只是观感缓冲，不参与任何判据 —— 调大只会让衔接更慢，不会漏奖励。
+ */
+const CHEST_HANDOFF_SETTLE_MS = 100;
+
+/**
+ * 随机资源格「喷射演出」播完之后再多等一拍才收窗（用户 2026-11-18 第 27 条补丁 B）。
+ *
+ * 与上面那 100ms 同一个道理：飘字 / 喷发的最后一帧直接接引导的光圈和台词会显得很急。
+ * 只是观感缓冲，不参与任何判据。
+ */
+const GAIN_PRESENTATION_SETTLE_MS = 120;
+
+/** 没有附加焦点节点时的共享空数组（每帧都会被读长度，别每次 new）。 */
+const EMPTY_GUIDE_EXTRA: readonly Node[] = [];
 
 /**
  * 在 `root` 子树里按名字找节点（深度优先，含 `root` 自己）。
@@ -377,6 +403,16 @@ export class MainTerritoryMap extends Component {
     private battleBusyHiddenLoading = false;
     /** `canvas-resize` 只挂一次（页面复用时不重复累积回调）。 */
     private mapInsetResizeBound = false;
+    /**
+     * 底部补云带是否已经点亮（上一帧的判定缓存，`null` = 还没判过）。
+     *
+     * 判定源是**底栏 `BottomNav` 的 `active`**：`GuideComposition.syncDialogHud` 在引导
+     * 有台词 / 焦点时把它 `active = false`。它原本正好盖住 `MapViewport` 的 Mask 裁不到的
+     * 那条 168px；收起后那里只剩页面根的 `zdbg1` 橙色裸底图（2026-11-17 截图）。
+     */
+    private bottomCloudFillVisible: boolean | null = null;
+    /** 底栏节点缓存：只在第一次 / 节点失效时逐层往上问 `MainTabHost`。 */
+    private bottomNavNode: Node | null = null;
     /**
      * 开箱表演要用的资源图标：`resId → 帧`（`null` = 查不到，只是那枚没有图）。
      *
@@ -1094,8 +1130,36 @@ export class MainTerritoryMap extends Component {
      *        照样散场跳转（让战场页自己显示加载态）。
      *  · `in`：云散开；过 60% 发起跳转（只一次），播完复位。
      */
+    /**
+     * 底栏被新手引导收起 ⇒ 让云层继续铺到屏幕底（2026-11-17）。
+     *
+     * 🔴 **不能**靠放大 `setFillArea` / `contentPaddingBottom` 解决：`CloudFillLayer` 是
+     *    `MapLayer` 的孩子，被 `MapViewport` 的 `cc.Mask`（GRAPHICS_RECT）裁在视口底边；
+     *    而视口的 Widget `bottom = 168` ⇒ 底部那条 168px 永远在 Mask 外面。引导把
+     *    `BottomNav` / `BottomHud` 一收，那里就露出整条 `zdbg1` 橙色底图。
+     *
+     * 判据只看**底栏 `active`**：它是那条带的"盖子"，盖子在就不补、盖子收了才补。
+     * 不用去问引导状态（页面不该反向依赖引导配置），也不用每帧重铺（值没变就早退）。
+     * 只转发一个布尔，建层 / 量视口 / 铺格点 / 淡出全在视图层。
+     */
+    private syncBottomCloudFill(): void {
+        if (!this.mapView?.isValid) return;
+        let navBar = this.bottomNavNode;
+        if (!navBar?.isValid) {
+            navBar = this.findHeroTabHost()?.navBar ?? null;
+            this.bottomNavNode = navBar;
+        }
+        const visible = !!navBar?.isValid && !navBar.active;
+        if (visible === this.bottomCloudFillVisible) return;
+        this.bottomCloudFillVisible = visible;
+        this.mapView?.setBottomCloudFillVisible?.(visible);
+    }
+
     update(dt: number): void {
         const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        // 底部补云带同样排在**所有早退之前**：过场 / 战斗前奏会 return，但引导收起底栏
+        // 这件事和它们在不在演无关，晚一帧补就会闪出一条橙色底图。
+        this.syncBottomCloudFill();
         // 英雄碎片徽标：排在**所有早退之前**（下面过场 / 战斗前奏会 return），
         // 否则一个转场就能把整串队列卡住，后面的英雄永远不播。
         this.heroBadge?.step(step);
@@ -1359,7 +1423,7 @@ export class MainTerritoryMap extends Component {
         this.battleIntro = null;
         this.battleIntroLeftover = { hud: intro.hud };
         this.scheduleOnce(() => {
-            if (!this.isValid || !this.battleIntroLeftover) return;
+            if (!this.battleIntroLeftover) return;
             this.failBattleIntro(`等了 ${TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS} 秒仍没等到流程切换落定`);
         }, TERRITORY_BATTLE_INTRO_RESTORE_FALLBACK_SECONDS);
     }
@@ -1738,8 +1802,8 @@ export class MainTerritoryMap extends Component {
         // ⚠️ 两份留白必须与内容层**同源**：`territoryMapOffsetForCell` 用它们算可滚上限，
         //    少传就等于按「没留白」算 —— 跳过去会停在半路（差的那截滚不到）。
         const offset = territoryMapOffsetForCell(layout, cellId, size, {
-            paddingBottom: this.mapView.contentPaddingBottom,
-            paddingTop: this.mapView.contentPaddingTop,
+                paddingBottom: this.mapView?.contentPaddingBottom,
+                paddingTop: this.mapView?.contentPaddingTop,
         });
         this.mapScrollView.stopAutoScroll();
         this.mapScrollView.scrollToOffset(new Vec2(offset.x, offset.y), 0);
@@ -1865,7 +1929,7 @@ export class MainTerritoryMap extends Component {
      * 同时把视口尺寸交给视图（全解锁镜头散场要用它算「整张图入画」的倍率）。
      */
     private syncMapInsets(): void {
-        if (!this.mapScrollView.isValid || !this.mapView.isValid) return;
+        if (!this.mapScrollView?.isValid || !this.mapView?.isValid) return;
         const viewport = this.mapScrollView.node.getComponent(UITransform);
         if (!viewport) return;
         const hudBottom = this.topHudBottom(viewport);
@@ -1880,7 +1944,7 @@ export class MainTerritoryMap extends Component {
     /** 订阅屏幕变化：HUD 的 Widget 与安全区都会因此改变 ⇒ 留白必须跟着重量。 */
     private bindMapInsetResize(): void {
         if (this.mapInsetResizeBound) return;
-        if (!this.mapScrollView.isValid || !this.mapView.isValid) return;
+        if (!this.mapScrollView?.isValid || !this.mapView?.isValid) return;
         this.mapInsetResizeBound = true;
         view?.on?.('canvas-resize', this.onCanvasResize, this);
     }
@@ -1917,8 +1981,27 @@ export class MainTerritoryMap extends Component {
     private guideFocusCell: number | null = null;
     /** 领地宝箱「演出窗口」的兜底计时器（回包丢了也要把引导层还回去，见 `openChestPresentation`）。 */
     private chestPresentationWatchdog: ReturnType<typeof setTimeout> | null = null;
+    /** 粒子动画播完到交棒的那一拍缓冲（见 `CHEST_HANDOFF_SETTLE_MS`）。 */
+    private chestHandOffTimer: ReturnType<typeof setTimeout> | null = null;
+    /**
+     * 随机格喷射演出的收窗计时（见 `presentRewards` 的 `{ chest: false }` 分支）。
+     *
+     * 这条路上没有任何弹窗接棒，窗口得由「动画时长」自己关 —— 否则喷发还没演完，
+     * 引导层就醒过来把 8-1 的光圈和台词压上去（用户 2026-11-18 第 27 条补丁 B）。
+     */
+    private gainPresentationTimer: ReturnType<typeof setTimeout> | null = null;
 
-    /** 优先保持当前可见的焦点格；布局或滚动使它离屏时重新选择。 */
+    /**
+     * 引导焦点格：**按候选顺序取第一个可见的格子**（顺序由 {@link guideMapFocusCells} 决定）。
+     *
+     * 🔴 不能按「离屏幕中心最近」挑：`Map/Tile_2` / `Map/Tile_3` 是给同一份候选池，
+     *    取最近的会让连续两步指向**同一格**，手指看着像没反应，要等宝箱被点开、
+     *    候选集合变了才跳到下一格（用户 2026-11-17 第 13 条 ①「手指要等宝箱打开才移动」）。
+     *    现在 `guideMapFocusCells` 已经把「本步该指的那一格」排到最前，这里照顺序取即可。
+     *
+     * 同一焦点键内保持已选格（`previousCell`）不变：布局 / 滚动会让格子短暂离屏，
+     * 每帧重挑会让呼吸光圈来回跳。
+     */
     getGuideFocusNode(focusNode: string): Node | null {
         const state = this.state;
         const view = this.mapView;
@@ -1929,25 +2012,48 @@ export class MainTerritoryMap extends Component {
         this.guideFocusCell = null;
         const viewport = this.mapScrollView.node.getComponent(UITransform);
         const local = new Vec3();
-        let bestDistance = Infinity;
-        for (const cellId of candidates) {
+        const visible = (cellId: number): Node | null => {
             const node = view.getGuideCellNode(cellId);
-            if (!node || !node.activeInHierarchy) continue;
+            if (!node || !node.activeInHierarchy) return null;
             viewport.convertToNodeSpaceAR(node.worldPosition, local);
             if (Math.abs(local.x) > viewport.width / 2 - HEX_GRID_FACE_WIDTH / 2
-                || Math.abs(local.y) > viewport.height / 2 - HEX_GRID_FACE_HEIGHT / 2) continue;
-            // 首帧 Widget / 初始定位尚未落定，不能永久缓存已经移出视口的格子。
-            if (cellId === previousCell) {
-                this.guideFocusCell = cellId;
+                || Math.abs(local.y) > viewport.height / 2 - HEX_GRID_FACE_HEIGHT / 2) return null;
+            return node;
+        };
+        // 同一焦点键内先认已选格：首帧 Widget / 初始定位还没落定时，
+        // 每帧重挑会让呼吸光圈来回跳。
+        if (previousCell !== null) {
+            const node = visible(previousCell);
+            if (node) {
+                this.guideFocusCell = previousCell;
                 return node;
             }
-            const distance = Math.hypot(local.x, local.y);
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                this.guideFocusCell = cellId;
-            }
         }
-        return this.guideFocusCell === null ? null : view.getGuideCellNode(this.guideFocusCell);
+        // 其余情况**按候选顺序取第一个可见的**（顺序即语义，见 `guideMapFocusCells`）。
+        for (const cellId of candidates) {
+            const node = visible(cellId);
+            if (!node) continue;
+            this.guideFocusCell = cellId;
+            return node;
+        }
+        return null;
+    }
+
+    /**
+     * 焦点要**一起圈进来**的附加节点：关卡格子的编号气泡（`1-1`）。
+     *
+     * 气泡挂在 `StationBadgeLayer`、抬在关卡建筑顶上方，和地块节点不是父子关系 ⇒
+     * 尺规上「光圈挖在地块上」就必然把气泡甩在圈外（用户 2026-11-17 第 17 条：
+     * 光圈要囊括 `1-1` 气泡）。这里把气泡节点交给引导层做并集，位置每帧跟着地图走。
+     *
+     * 必须在 {@link getGuideFocusNode} **之后**调：它才刚定下 `guideFocusCell`。
+     */
+    getGuideFocusExtraNodes(focusNode: string): readonly Node[] {
+        if (!/^Map\/Level_\d+$/.test(focusNode)) return EMPTY_GUIDE_EXTRA;
+        const cellId = this.guideFocusCell;
+        if (cellId === null) return EMPTY_GUIDE_EXTRA;
+        const bubble = this.mapView?.getLevelBubbleNode(cellId) ?? null;
+        return bubble ? [bubble] : EMPTY_GUIDE_EXTRA;
     }
 
     private presentRewards(
@@ -1957,6 +2063,8 @@ export class MainTerritoryMap extends Component {
     ): void {
         // 奖励到了 ⇒ 兜底计时器收掉：后面每个分支自己负责把「演出窗口」关干净。
         this.cancelChestPresentationWatchdog();
+        // 上一批喷射演出的收窗计时也一并作废：它会比这一批早到点，提前把窗口关掉。
+        this.cancelGainPresentationTimer();
         if (!rewards.length) {
             this.endChestPresentation();
             return;
@@ -1969,18 +2077,34 @@ export class MainTerritoryMap extends Component {
         // 挂机征收（`{ popup: true }`）：服务端发什么就弹什么 —— 产出常常只有银币 / 体力，
         // 走默认分流会被剥去飘字、一个弹窗都不出（用户 2026-11-09「点击征收就弹窗奖励」）。
         if (presentation?.popup === true) {
+            // 🔴 窗口要**先开、且不能在这里关**：`FW.ShowReward` 到弹窗 `enabled` 之间隔着
+            //    几帧 prefab 加载，这期间若把窗口关掉，引导层会立刻拿回 2-3 的
+            //    `Dim` + 铺满屏 `Blocker` —— 奖励弹窗随后在它**下面**弹出来，收下按钮
+            //    永远点不动（用户 2026-11-17 第 13 条 ②「点开宝箱弹出奖励弹窗卡死」）。
+            //    收尾交给 `ShowRewardPage` 的生命周期：它 `enabled` 时接管窗口，
+            //    关掉后组合层才把引导层放回来。弹窗没起来时由兜底计时器收窗。
+            this.openChestPresentation();
             FW.ShowReward(rewards.map((reward) => ({
                 resId: reward.resId,
                 number: reward.amount,
             })) as unknown as CmdGoods[]);
-            this.endChestPresentation();
             return;
         }
         // 随机资源格：**不播开箱、也不弹奖励窗**，直接在格子上喷资源（需求 2026-10-22 §1 / 2026-10-26 §3）。
         // 由 Controller 指定（`{ chest: false }`），页面不自己判格子类型 —— 那是玩法口径。
+        //
+        // 🔴 窗口要**盖住整段喷射动画**（用户 2026-11-18 第 27 条补丁 B）：7-1 翻地之后紧跟着
+        //    就是 8-1（整条引导的最后一步），喷发 / 飘字 / 英雄飞还在天上飞时若按老口径立刻
+        //    收窗，引导层一醒，8-1 的光圈和台词就整个压在粒子上。收窗时刻由 `playCellGains`
+        //    按「这一批到底演了多久」算出来（`holdGainPresentation`），不再固定在这里关。
         if (presentation?.chest === false) {
-            void this.playCellGains(rewards, cellId);
-            this.endChestPresentation();
+            this.openChestPresentation();
+            void this.playCellGains(rewards, cellId)
+                .catch((error) => {
+                    console.warn('[MainTerritoryMap] 随机格喷射演出异常，直接收窗', error);
+                    return 0;
+                })
+                .then((holdMs) => this.holdGainPresentation(holdMs));
             return;
         }
         // 银币宝箱（`rewardId = 1023` / `coinBox` 蓝银金属箱）：**独立**打开动画（2026-11-10）。
@@ -2052,9 +2176,40 @@ export class MainTerritoryMap extends Component {
         this.chestPresentationWatchdog = null;
     }
 
+    /**
+     * 喷射演出播完之后收窗：`holdMs` 到点才发 `{ playing: false }`。
+     *
+     * `holdMs <= 0` = 这一批**什么都没演**（格子不在视口 / 没有可喷的资源 / 页面已回收）⇒
+     * 立刻收，别让引导层白等。页面已经销毁时同样直接收：这一发是唯一能把引导层放回来的。
+     */
+    private holdGainPresentation(holdMs: number): void {
+        this.cancelGainPresentationTimer();
+        if (!this.isValid || !(holdMs > 0)) {
+            this.endChestPresentation();
+            return;
+        }
+        this.gainPresentationTimer = setTimeout(() => {
+            this.gainPresentationTimer = null;
+            this.endChestPresentation();
+        }, holdMs + GAIN_PRESENTATION_SETTLE_MS);
+    }
+
+    private cancelGainPresentationTimer(): void {
+        if (this.gainPresentationTimer === null) return;
+        clearTimeout(this.gainPresentationTimer);
+        this.gainPresentationTimer = null;
+    }
+
     /** 关掉演出窗口（重复调用无害：引导层按值去重）。 */
     private endChestPresentation(): void {
         this.cancelChestPresentationWatchdog();
+        // 喷射演出的收窗计时同样作废：这一发已经关了，它再到点只会把**下一段**演出关掉。
+        this.cancelGainPresentationTimer();
+        // 缓冲拍还没到就收窗（换章 / 页面销毁 / 别的分支抢先关）⇒ 别再补发交棒事件。
+        if (this.chestHandOffTimer !== null) {
+            clearTimeout(this.chestHandOffTimer);
+            this.chestHandOffTimer = null;
+        }
         EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
     }
 
@@ -2158,29 +2313,40 @@ export class MainTerritoryMap extends Component {
      *
      * 分工靠 `playResourceGain` 的 `readout` 参数表达 —— 视图那边一个 `if` 就够，
      * 不要为此再写一套"合并"的视图。
+     *
+     * @returns 这一批演出**还要演多久**（毫秒）—— 调用方按它决定什么时候收「演出窗口」
+     *          （见 {@link holdGainPresentation}）。`0` = 什么都没演（格子不在视口 / 无可喷资源 /
+     *          页面已回收）⇒ 立刻收窗，别让引导层白等。
      */
     private async playCellGains(
         rewards: readonly (TerritoryIdleRewardGain | ITerritoryGrantedReward)[],
         originCellId: number | null,
-    ): Promise<void> {
+    ): Promise<number> {
         const cellId = originCellId;
         // 没有来源格（不该发生在随机格这条路上）⇒ 无处喷，也不能退回弹窗把玩家挡一次。
-        if (cellId === null || cellId < 0) return;
+        if (cellId === null || cellId < 0) return 0;
         const [entries, readoutFrame] = await Promise.all([
             this.collectRewardIcons(rewards),
             this.ensureRandomGainReadoutIcon(),
         ]);
-        if (!this.isValid) return;
+        if (!this.isValid) return 0;
         const gains = entries
             .filter((entry) => Number.isFinite(entry.resId) && entry.resId > 0 && entry.amount > 0)
             .map((entry) => ({ resId: entry.resId, amount: entry.amount }));
-        if (!gains.length) return;
+        if (!gains.length) return 0;
         for (const gain of gains) {
             this.mapView.setGainIcon(gain.resId, this.rewardIcons.get(gain.resId) ?? null);
         }
         // 读数合成一条：图标统一、数字求和；喷发粒子仍按 gains 各用各的图。
         const amount = gains.reduce((sum, gain) => sum + gain.amount, 0);
-        this.mapView.playResourceGain(cellId, gains, { frame: readoutFrame, amount });
+        // 起播失败（格子挪出视口 / 覆盖层没建）⇒ 整段什么都没演，窗口立刻还回去。
+        const played = this.mapView.playResourceGain(cellId, gains, { frame: readoutFrame, amount });
+        if (!played) return 0;
+        // 喷发与读数**同时起播**，各自跑到自己的时长，取长的那个。
+        let seconds = Math.max(
+            territoryBurstTotalSeconds(territoryBurstCountForTotal(amount)),
+            TERRITORY_GAIN_SECONDS,
+        );
 
         // ②（2026-11-10 需求 ②）碎片 / 种族经验**再补一段**飞向底部「英雄」按钮的动画。
         //    只挑非钱包类：银币 / 体力归顶部资源栏，不能在这里重复飞一遍。
@@ -2196,8 +2362,12 @@ export class MainTerritoryMap extends Component {
             this.mapView.setHeroRewardLandedHandler(() => {
                 if (heroButton?.isValid) heroButton.playHitFeedback();
             });
-            this.mapView.playHeroRewardFlight(cellId, heroEntries);
+            const flying = this.mapView.playHeroRewardFlight(cellId, heroEntries);
+            // 只有真的飞了才按时长等：拿不到按钮时这一段根本没演，等它就是白等。
+            if (flying) seconds = Math.max(seconds, territoryHeroFlightTotalSeconds(
+                territoryHeroFlightCountOf(heroEntries.length)));
         }
+        return Math.round(seconds * 1000);
     }
 
     /**
@@ -2262,7 +2432,17 @@ export class MainTerritoryMap extends Component {
                 EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
                 return;
             }
-            EventMgr.instance.emit(TerritoryUiEvent.ChestRewardsReady, { owner: this, rewards: goods });
+            // 粒子动画播完再等一个缓冲拍（用户 2026-11-17 第 13 条 ④）：
+            // 补帧动画的最后一帧和「奖励弹窗 / 下一段台词」之间硬接会显得很急，
+            // 100ms 让画面先落定，再往后续接。
+            this.chestHandOffTimer = setTimeout(() => {
+                this.chestHandOffTimer = null;
+                if (!this.isValid) {
+                    EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
+                    return;
+                }
+                EventMgr.instance.emit(TerritoryUiEvent.ChestRewardsReady, { owner: this, rewards: goods });
+            }, CHEST_HANDOFF_SETTLE_MS);
         };
         // 图标先取齐再起播：`chest_seq` 的飞行图标 / 光柱用的就是这一批 frame，现取会喷空图。
         // 取图失败只是「有数字没图标」，不许拦着开箱动画和后续奖励链。

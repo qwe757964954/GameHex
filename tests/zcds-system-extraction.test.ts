@@ -39,7 +39,7 @@ test('Economy 系统统一建筑工作状态和周期键', () => {
 
 test('Targeting 系统独立计算射程与确定性 BFS 首步', () => {
     const definition = { attackRange: 60 } as ZCUnitDefinition;
-    assert.equal(ZCTargetingSystem.attackReach(definition, 20, 0.5), 40);
+    assert.equal(ZCTargetingSystem.attackReach(definition, 20, 0.5), 35);
     assert.equal(ZCTargetingSystem.isInRange({ x: 0, y: 0 }, { x: 30, y: 0 }, 40), true);
     const graph: Record<number, number[]> = { 0: [2, 1], 1: [3], 2: [3], 3: [] };
     const step = ZCTargetingSystem.findPathStep({

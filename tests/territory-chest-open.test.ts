@@ -576,6 +576,10 @@ test('E2｜`runChestOpening`：先演 `chest_seq_*`，演完发 ChestRewardsRead
     // ② 动画演完 → 发事件交棒组合层（英雄页 / 统一奖励窗由组合层决定）
     assert.match(body, /const goods = rewards\.map\(\(reward\) => \(\{ resId: Number\(reward\.resId\), number: Number\(reward\.amount\) \|\| 0 \}\)\);/);
     assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ owner: this, rewards: goods \}\)/);
+    // ②' 动画最后一帧到交棒之间要留一拍缓冲（用户 2026-11-17 第 13 条 ④）：
+    //     粒子动画结束 → 0.1s → 才接奖励窗 / 下一段台词，硬接会显得很急。
+    assert.match(body, /this\.chestHandOffTimer = setTimeout\(/, '交棒必须延时，不能和动画最后一帧硬接');
+    assert.match(body, /CHEST_HANDOFF_SETTLE_MS/, '缓冲时长要落常量，别写字面量');
     // ④ 取图是异步的：起播前必须再判一次页面是否还在
     const isValidAt = body.indexOf('if (!this.isValid) {', iconAt);
     assert.ok(isValidAt > 0 && isValidAt < playAt, '取图期间页面可能已销毁，起播前要判一次');
@@ -618,6 +622,22 @@ test('点开宝箱那一下就关遮罩：等奖励回包才关会慢一个往�
     assert.ok(closeCount >= 4, `关窗口的分支只写了 ${closeCount} 处（弹窗/随机/银币/无档位/空奖励都要关）`);
     assert.doesNotMatch(present, /this\.endChestPresentation\(\);\s*\/\/[^\n]*\n\s*this\.presentChestRewards/,
         '开箱那一路不能在这里关（动画/英雄页/奖励窗都还在窗口里）');
+});
+
+test('挂机征收那一支：先开演出窗口再弹奖励窗，收尾交给奖励窗自己的生命周期', () => {
+    const main = read(MAIN_TS);
+    const at = main.indexOf("if (presentation?.popup === true) {");
+    assert.ok(at > 0, '挂机征收分支不见了');
+    const body = main.slice(at, main.indexOf('if (presentation?.chest === false) {', at));
+
+    // 🔴 `FW.ShowReward` 到弹窗 `enabled` 之间隔着几帧 prefab 加载。这期间若窗口已关，
+    //    引导层会立刻拿回 2-3 的 `Dim` + 铺满屏 `Blocker`，奖励弹窗弹在它**下面**，
+    //    收下按钮永远点不动（用户 2026-11-17 第 13 条 ②「点开宝箱弹出奖励弹窗卡死」）。
+    const openAt = body.indexOf('this.openChestPresentation()');
+    const showAt = body.indexOf('FW.ShowReward(');
+    assert.ok(openAt > 0 && showAt > openAt, '必须先开窗口再弹窗');
+    assert.doesNotMatch(body, /this\.endChestPresentation\(\)/,
+        '这一支不许自己关窗：关窗要等奖励窗真的关掉（弹窗没起来由兜底计时器收）');
 });
 
 test('E3｜银币宝箱 / 随机格 / 挂机征收三路保持原样', () => {

@@ -1208,7 +1208,7 @@ test('D2 ⚠️ 三张表都走 `CacheMgr`（服务端会推），**不自己存
 });
 
 test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
-    assert.ok(REPO_CODE.includes('sendGameRequest(GameNet.instance'), '必须走公共发包壳');
+    assert.ok(REPO_CODE.includes('GameNet.sendRequest('), '必须走公共发包壳');
     assert.ok(REPO_CODE.includes(`tag: 'Friend'`), '必须带 Friend tag');
     assert.ok(REPO_SRC.includes(`import { WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '写超时走公共真源');
     // 给测试用的导出（避免测试里硬编码）
@@ -1292,10 +1292,12 @@ test('D8 ⚠️ 两个子弹窗 `onOpen` 里必须 `await this.nextPopupFrame()`
         assert.ok(code.includes('this.present('), `${label}: 铺列表要收一个入口`);
     }
     assert.ok(PAGE_CODE.includes('await this.nextPopupFrame()'), '主容器同样要等一帧');
-    // 载荷并发用 revision 守卫（老页面在途回来的数据不许落地）
+    // 载荷并发用 revision 守卫（同一存活期在途回来的旧数据不许落地）；关闭由 alive 覆盖。
     for (const [label, code] of [['FriendPage', PAGE_CODE], ['FriendApplyPage', APPLY_PAGE_CODE], ['FriendGetEndPage', GET_END_PAGE_CODE]] as const) {
-        assert.ok(code.includes('this.revision += 1'), `${label}: 必须有 revision 守卫`);
+        assert.ok(code.includes('++this.revision'), `${label}: 必须有同存活期 revision 守卫`);
         assert.ok(code.includes('private get alive'), `${label}: 必须有 alive 守卫`);
+        assert.ok(!/protected onClose\(\): void \{[\s\S]{0,120}?this\.revision \+= 1/.test(code),
+            `${label}: 关闭已由 alive 覆盖，不得再递增 revision`);
     }
 });
 

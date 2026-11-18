@@ -162,11 +162,9 @@ export class GiftPage extends PopupBase {
 
     protected onClose(): void {
         // 关闭后使所有在途请求失效。
-        this.revision += 1;
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -183,15 +181,15 @@ export class GiftPage extends PopupBase {
         const revision = ++this.revision;
         const snapshot = await this.repo.load();
         if (!this.alive || revision !== this.revision) return;
-        this.snapshot = snapshot;
-
         if (snapshot.shops.length === 0 && snapshot.payChannels.length === 0) {
+            this.snapshot = snapshot;
             this.presentEmpty();
             return;
         }
         // 先把固定图加载完，避免界面先出现空框再补图。
         await this.preloadStaticFrames();
         if (!this.alive || revision !== this.revision) return;
+        this.snapshot = snapshot;
         await this.present(revision);
     }
 
@@ -675,8 +673,9 @@ export class GiftPage extends PopupBase {
         this.hintLabel.color = error ? GIFT_HINT_ERROR : GIFT_HINT_IDLE;
     }
 
+    /** 关闭后使所有在途请求失效：`isPopupOpen` 立即转 false。 */
     private get alive(): boolean {
-        return this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }
 

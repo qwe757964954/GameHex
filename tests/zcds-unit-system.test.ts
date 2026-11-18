@@ -149,7 +149,7 @@ test('单位索敌保留射程滞回，目标死亡后立即失效', () => {
     targeting.acquire(soldier);
     assert.equal(soldier.targetUnitId, enemy.id);
     assert.equal(targeting.isInAttackRange(soldier), true);
-    enemy.freeX = 48;
+    enemy.freeX = 44;
     assert.equal(targeting.isInAttackRange(soldier), false);
     assert.equal(targeting.isOutOfAttackRange(soldier), false);
     enemy.freeX = 53;

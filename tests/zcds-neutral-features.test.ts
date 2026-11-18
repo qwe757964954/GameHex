@@ -36,6 +36,47 @@ loadPvpTables(tables);
 const gateParam = { effect: 'add', mode: 'fixed', value: 2, cooldownSeconds: 1, windowSeconds: 0.2,
     scale: 3, hpFlat: 1000, moveMultiplier: 2, attackSpeedMultiplier: 2, damageMultiplier: 0.5 };
 
+test('焦点怪物闸门缓存按地形失效，覆盖唤醒、死亡与初始化恢复', () => {
+    const { system, state, hex } = fixture(11, { resId: '68001', wakeRange: 3, reviveRate: 0.5 });
+    assert.equal(system.hasFocusableMonster(), false);
+    hex.neutralFeature.awake = true;
+    system.invalidateTerrain();
+    assert.equal(system.hasFocusableMonster(), true);
+    hex.hp = 0;
+    system.invalidateTerrain();
+    assert.equal(system.hasFocusableMonster(), false);
+    hex.hp = hex.maxHp;
+    system.initialize(state);
+    assert.equal(system.hasFocusableMonster(), true);
+});
+
+test('追击与脱战名单随快照往返，旧快照可读，非法新字段被拦截', () => {
+    const f = fixture();
+    f.state.units = [f.unit(1), f.unit(2, 'enemy')];
+    f.state.nextUnitId = 3;
+    f.state.elapsedSeconds = 6;
+    const soldier = f.state.units[0];
+    soldier.chase = { x: -10, y: 20, startedAt: 1 };
+    soldier.disengagedUnitIds = [2];
+    const decoded = ZCSnapshotCodec.decode(f.state, f.config);
+    assert.equal(decoded.ok, true, JSON.stringify(decoded));
+    if (decoded.ok) {
+        assert.deepEqual(decoded.snapshot.units[0].chase, soldier.chase);
+        assert.deepEqual(decoded.snapshot.units[0].disengagedUnitIds, [2]);
+    }
+    for (const chase of [{ x: NaN, y: 0, startedAt: 1 }, { x: 0, y: 0, startedAt: 7 }]) {
+        soldier.chase = chase;
+        assert.ok(ZCSnapshotCodec.errors(f.state, f.config).some(error => error.includes('.chase.')));
+    }
+    delete soldier.chase;
+    for (const ids of [[0], [1], [2, 2], [-1], [1.5]]) {
+        soldier.disengagedUnitIds = ids;
+        assert.ok(ZCSnapshotCodec.errors(f.state, f.config).some(error => error.includes('.disengagedUnitIds')));
+    }
+    delete soldier.disengagedUnitIds;
+    assert.equal(ZCSnapshotCodec.decode(f.state, f.config).ok, true);
+});
+
 test('常规随机池每张地图都投放趣味资源，源预设与发布资源一致并进入开局快照', () => {
     loadPvpTables(tables);
     for (const file of readdirSync('assets/resources/config/maps').filter(file => file.endsWith('.json'))) {

@@ -18,6 +18,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import type { ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { CardSkillListPresentation } from '../assets/script/app/card/CardPresentations';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 /** 执行真实模块，仅替换引擎与外部 I/O；每次加载隔离模块缓存。 */
 function loadRuntime<T>(file: string, dependencies: Record<string, unknown>): T {
@@ -73,7 +74,7 @@ for (const existing of [false, true]) {
         }
         const service = loadRuntime<typeof import('../assets/script/app/card/FormationService')>('FormationService', {
             '../generated/requestMsg/RequestFormationMsg': { RequestFormationOp },
-            '../net/GameNet': { GameNet: { instance: { isConnected: true, send: async (request: RequestFormationOp) => {
+            '../net/GameNet': { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: { isConnected: true, send: async (request: RequestFormationOp) => {
                 sends++;
                 assert.equal(request.owner, caller);
                 assert.equal(request.body.info.select, 1);

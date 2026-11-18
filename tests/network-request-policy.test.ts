@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { sendGameRequest, withTimeout } from '../assets/script/app/net/RequestGuard';
+import type { GameRequestStatus, IGameRequestOptions } from '../assets/script/app/net/RequestGuard';
 
 function load(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -147,11 +148,12 @@ test('已发送请求取消后迟到回包仍更新公共缓存，等待保持�
     assert.equal(h.sent(), 1);
 });
 
-test('GameNet send 和 sendNow 保留真实请求取消能力，编码失败仍以 Promise 拒绝', async () => {
+test('GameNet request 统一连接判定与超时取消，send 和 sendNow 保留真实请求取消能力', async () => {
     const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
         name.endsWith('/ScriptObject') ? { ScriptObject: class {} } : {}).NetworkRequest;
     const Proxy = { addCallerCleanup: () => () => {} };
     interface IGameNet {
+        request(msg: object, options?: IGameRequestOptions): Promise<GameRequestStatus>;
         send(msg: object): Promise<boolean> & { cancel?: () => void };
         sendNow(msg: object): Promise<boolean> & { cancel?: () => void };
     }
@@ -160,12 +162,30 @@ test('GameNet send 和 sendNow 保留真实请求取消能力，编码失败仍�
         if (name.endsWith('/NetSocket')) return { NetSocket: { msgEventProxy: Proxy } };
         if (name.endsWith('/ScriptObject')) return { ScriptObject: class { log() {} error() {} } };
         if (name.endsWith('/FW')) return { FW: { ignoreShowloadingNet: [] } };
+        if (name.endsWith('/RequestGuard')) return { sendGameRequest };
         return {};
     }).GameNet as new () => IGameNet;
     const net = new GameNet();
     let queued: IRequest | null = null;
-    Object.assign(net, { _netSocket: { addNetworkRequest: (request: IRequest) => { queued = request; return true; } },
+    const socket = { isSocketConnected: false, addNetworkRequest: (request: IRequest) => {
+        queued = request;
+        return true;
+    } };
+    Object.assign(net, { _netSocket: socket,
         _protoMgr: { getMessageId: () => 1, encode: () => new Uint8Array() } });
+    const message = { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: true };
+    assert.equal(await net.request(message), 'offline');
+    assert.equal(queued, null);
+    socket.isSocketConnected = true;
+    const completed = net.request(message);
+    queued!.resolve({});
+    assert.equal(await completed, 'ok');
+    assert.equal(await net.request(message, { timeoutMs: 0 }), 'failed');
+    assert.equal(queued!.allowRetry, false);
+    socket.isSocketConnected = false;
+    queued = null;
+    assert.equal(await net.request(message), 'offline');
+    assert.equal(queued, null);
     for (const method of ['send', 'sendNow'] as const) {
         const pending = net[method]({ getReqMsgProtoName: () => 'TestReqMsg', allowRetry: true });
         assert.equal(typeof pending.cancel, 'function');
@@ -180,6 +200,9 @@ test('GameNet send 和 sendNow 保留真实请求取消能力，编码失败仍�
     assert.equal(queued!.allowRetry, false);
     Object.assign(net, { _protoMgr: { getMessageId: () => 0 } });
     await assert.rejects(net.send({ getReqMsgProtoName: () => 'UnknownReqMsg' }), /协议编码失败/);
+    Object.assign(net, { _netSocket: socket });
+    socket.isSocketConnected = true;
+    assert.equal(await net.request(message), 'failed');
 });
 
 test('recived 日志带「发出 → 回包」的耗时，没有对应请求的推送包标 push', () => {
@@ -258,7 +281,10 @@ test('GM 请求复用共享入口：离线不发送，列表成功或失败都�
         constructor(_body: object, _owner: object, readonly fCallback: (rsp: unknown) => void) {}
     }
     const table = load('assets/script/app/gm/GMCommandTable.ts', name => {
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/GameNet')) return { GameNet: {
+            sendRequest: (make: () => unknown, options?: unknown) => sendGameRequest(net, make, options),
+            instance: net,
+        } };
         if (name.endsWith('/RequestGuard')) return { sendGameRequest };
         if (name.endsWith('/RequestSystemMsg')) return { RequestGmList: Request, RequestSystemGm: Request };
         return {};

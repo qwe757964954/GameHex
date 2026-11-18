@@ -38,7 +38,6 @@ export class GetHeroEntry extends Component {
     private busy = false;
 
     protected onDestroy(): void {
-        this.revision += 1;
         GameNet.instance.removeCaller(this);
     }
 

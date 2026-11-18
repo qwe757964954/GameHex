@@ -64,6 +64,8 @@ export class GuideController extends ControllerBase {
     private firstRun = false;
     /** 补发循环在途标记；避免并发 drain 打乱顺序。 */
     private flushing = false;
+    /** 在途期间又有新推进；本轮结束后再扫一遍队列，避免最后一项要等下次启动。 */
+    private flushQueued = false;
 
     constructor(context: IControllerContext, private readonly options: IGuideControllerOptions) {
         super(context, 'guide');
@@ -247,23 +249,24 @@ export class GuideController extends ControllerBase {
         }
         try {
             const steps = this.options.steps;
-            if (this.options.store.applyRemoteCursor(cursor, steps, this.now())) {
+            const remote = remoteCursorToData(cursor, steps);
+            if (remote && this.options.store.applyRemoteCursor(cursor, steps, this.now())) {
                 const progress = restoreGuideProgress(this.options.store, steps);
                 if (!progress) return;
                 this.progress = progress;
                 // 远端已有进度 ⇒ 不是首次进入，避免把老账号重新判成新玩家。
                 this.firstRun = false;
-                // 远端已经有的步不再补发，避免换机后把旧队列重放一遍。
-                this.options.outbox?.prune(progress.completedSteps);
+                // 只裁掉远端已确认的完成步：progress 的完成集是本地/远端并集，
+                // 非前缀存档下可能含尚未上报成功的本地项，不能拿它整份 prune。
+                this.options.outbox?.prune(remote.completedSteps);
                 console.log(`[Guide] 远端校正 · step=${progress.current?.stepId ?? '(结束)'}`);
                 this.publish();
                 return;
             }
             // 远端落后于本地（本地走过更多）：把最后完成步补推。
             // 待发队列若因旧版本 / 清缓存丢失，这一步能让服务端重新追上，否则会永久卡在旧游标。
-            const remote = remoteCursorToData(cursor, steps);
-            const saved = this.options.store.load();
-            if (remote && saved && saved.completedSteps.length > remote.completedSteps.length) {
+            const localCompleted = this.progress?.completedSteps.length ?? 0;
+            if (remote && localCompleted > remote.completedSteps.length) {
                 this.pushLocalProgress();
             }
         } catch (error) {
@@ -274,35 +277,66 @@ export class GuideController extends ControllerBase {
     /**
      * 迁移：把本地进度补推给服务端。游标按「最后已完成步」解释，
      * 推最后一步就等价于推整条已完成前缀，不必逐步重放。
+     * 用当前步骤机过滤后的完成集，避免把旧表已删除的 stepId 推给服务端。
      */
     private pushLocalProgress(): void {
+        const progress = this.progress;
+        if (!progress) return;
+        const completed = new Set(progress.completedSteps);
+        // 合并存档的完成集顺序不保证是链序，必须按 steps 行序取最靠后的一项。
+        let lastCompleted = '';
+        for (const step of this.options.steps) {
+            if (completed.has(step.stepId)) lastCompleted = step.stepId;
+        }
+        if (!lastCompleted) return;
         const outbox = this.options.outbox;
-        const saved = this.options.store.load();
-        const lastCompleted = saved?.completedSteps[saved.completedSteps.length - 1];
-        if (!outbox || !lastCompleted) return;
+        if (!outbox) {
+            // 预览 / 单测没有持久化队列，和 syncProgress 一样退化为直接发送。
+            const gateway = this.options.gateway;
+            if (gateway) void gateway.update(lastCompleted).catch(error => this.report(error));
+            return;
+        }
         outbox.push(lastCompleted, this.now());
     }
 
     private syncProgress(stepId: string): void {
         const gateway = this.options.gateway;
         if (!gateway) return;
-        const outbox = this.options.outbox;
-        if (!outbox) {
-            // 预览 / 单测没有持久化队列，退回直接发送；退出即丢，不用于正式链路。
-            void gateway.update(stepId).catch(error => this.report(error));
-            return;
+        // 上报是推进之后的副作用；失败只报告，不能把已经完成的本地状态和展示一起中断。
+        try {
+            const outbox = this.options.outbox;
+            if (!outbox) {
+                // 预览 / 单测没有持久化队列，退回直接发送；退出即丢，不用于正式链路。
+                void gateway.update(stepId).catch(error => this.report(error));
+                return;
+            }
+            outbox.push(stepId, this.now());
+            this.flushOutbox();
+        } catch (error) {
+            this.report(error);
         }
-        outbox.push(stepId, this.now());
-        this.flushOutbox();
     }
 
     /** 串行补发待发项；退出后队列留在存储里，下次会话继续。 */
     private flushOutbox(): void {
         const gateway = this.options.gateway;
         const outbox = this.options.outbox;
-        if (!gateway || !outbox || this.flushing) return;
+        if (!gateway || !outbox) return;
+        if (this.flushing) {
+            // 本轮结束后再扫一遍；否则在途期间的新推进要等下一次外部推进或下次启动。
+            this.flushQueued = true;
+            return;
+        }
         this.flushing = true;
-        void this.drainOutbox(gateway, outbox).finally(() => { this.flushing = false; });
+        this.flushQueued = false;
+        void this.drainOutbox(gateway, outbox)
+            .catch(error => this.report(error))
+            .finally(() => {
+                this.flushing = false;
+                if (!this.flushQueued) return;
+                this.flushQueued = false;
+                this.flushOutbox();
+            });
     }
 
     private async drainOutbox(gateway: IGuideGateway, outbox: GuideSyncOutbox): Promise<void> {

@@ -1,6 +1,6 @@
 import type { ZCDeckBonuses, ZCDeckCard, ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
-import type { ZCBuildingCooldownState, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
+import type { ZCBuildingCooldownState, ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import { ZCBuildingPhase } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
@@ -126,7 +126,7 @@ export class ZCEconomySystem {
     }
 
     /** 这一格是不是某类正在运转的产出建筑；`hex` 缺失视为没有产出。*/
-    private static isIncomeSource(hex: ZCHexState | undefined, kind: ZCHexState['building']): hex is ZCHexState {
+    private static isIncomeSource(hex: ZCHexState | undefined, kind: ZCBuildingType): hex is ZCHexState {
         return !!hex && hex.building === kind && this.isBuildingOperational(hex);
     }
 

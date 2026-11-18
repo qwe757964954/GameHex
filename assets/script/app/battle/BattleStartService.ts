@@ -1,8 +1,8 @@
-import { RequestStartBattle, RequestFinishBattle } from '../generated/requestMsg/RequestBattleMsg';
+import { RequestFinishBattle, RequestStartBattle } from '../generated/requestMsg/RequestBattleMsg';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toCount, withTimeout } from '../net/RequestGuard';
-import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
+import { toCount, withTimeout } from '../net/RequestGuard';
 import type { ZCBattleStart } from './BattleStartModel';
+import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
 
 /**
  * 开始战斗网络层。载荷必须放在 startBattleInfo 里：
@@ -96,7 +96,7 @@ async function sendStartBattle(
             request.allowRetry = false;
             request.canSend = isCurrent;
         }
-        const status = await sendGameRequest(GameNet.instance, () => request, { timeoutMs: BATTLE_START_TIMEOUT_MS, tag: 'BattleStartService' });
+        const status = await GameNet.sendRequest(() => request, { timeoutMs: BATTLE_START_TIMEOUT_MS, tag: 'BattleStartService' });
         if (!isCurrent()) return null;
         if (status !== 'ok' || !response) {
             console.warn(`[BattleLoading] 开战未获确认 type=${battleType} status=${status} hasResponse=${response !== null}`);
@@ -162,7 +162,7 @@ async function sendFinishBattle(
 ): Promise<ZCBattleFinish | null> {
     let response: CmdFinishBattleRspMsg | null = null;
     try {
-        const status = await sendGameRequest(GameNet.instance, () => new RequestFinishBattle(
+        const status = await GameNet.sendRequest(() => new RequestFinishBattle(
             {
                 clientTickCount: Math.max(0, Math.floor(clientTickCount)),
                 result,

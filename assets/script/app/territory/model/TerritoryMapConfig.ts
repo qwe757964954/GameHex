@@ -35,6 +35,19 @@ export function isTerritoryBattleSite(site: Pick<TerritorySite, 'type'>): boolea
         || site.type === TERRITORY_SITE_TYPE.asyncPvp;
 }
 
+/**
+ * 所有「宝箱」站点：固定资源据点与**巡逻宝箱**。
+ *
+ * 巡逻宝箱的领奖走的是和固定资源据点同一条两步式（解锁 → 探索 → 占点领奖），
+ * `battleId` 只决定巡逻野怪的生灭（见 `model/TerritoryMonsterPatrol`），**不发开战**。
+ * ⇒ 交互、渲染、宝箱气泡、引导与「解锁即完成」的前置口径都必须走这一个判定；
+ * 各处若各自写 `type === fixedResource`，巡逻宝箱就会表现成「点不动的格子」。
+ */
+export function isTerritoryChestSite(site: Pick<TerritorySite, 'type'>): boolean {
+    return site.type === TERRITORY_SITE_TYPE.fixedResource
+        || site.type === TERRITORY_SITE_TYPE.patrolChest;
+}
+
 /** 全量类型数组（配表解析校验用，顺序与常量表一致）。 */
 export const TERRITORY_SITE_TYPES: readonly TerritorySiteType[] = Object.values(TERRITORY_SITE_TYPE);
 
@@ -53,14 +66,18 @@ export interface TerritorySite {
     footprint: number[];
     configId?: string;
     /**
-     * 巡逻宝箱的战斗 ID 池，保留配置顺序。
+     * 巡逻宝箱的战斗 ID（`levelInfo.levelId`）。
      *
-     * 运行时按「区域组」摊到各格：`battleIds` 与 `unlock.requiredCells` 都相同的格子视为
-     * 同一片巡逻区域，组内按 `cellId` 升序第 `i` 格取 `battleIds[i % 长度]`；同一场战斗的
-     * 格子共享通过状态（任一格占点即整片通过），该战斗的巡逻野怪随之停止。
+     * **一片巡逻区 = 同一个 `site.id`**（与 `patrolId` 同组口径），整片共用这一个 `battleId`；
+     * 同片任一格占点即整片通过，该场战斗的巡逻野怪随之停止。
+     * 同片任一格命中（解锁 / 开战）都用**带 `patrolId` 的那一格**上报后端 ——
+     * 怪物配置绑在那一格上（见 `TerritoryModel.patrolReportCell`）。
+     *
+     * 2026-11-18 起是**单值**：之前是数组池 + 按区域组摊分，配置里实际一直只填一个值，
+     * 徒增「同片数值写歪就拆成两片、野怪待机」的坑。
      */
-    battleIds?: number[];
-    /** 初始格的 monsterCard.id；同 site.id 的巡逻格全部解锁后生成，旧地图可省略。 */
+    battleId?: number;
+    /** 初始格的 monsterCard.id；同 `site.id` 的巡逻格全部解锁后生成，旧地图可省略。 */
     patrolId?: number;
     buildingId?: string;
     /** `PVP-关卡` 的关卡地图格子奖励表 ID，仅固定资源点使用。 */
@@ -324,11 +341,16 @@ function parseSite(
     if (typeof raw.configId === 'string' && raw.configId) site.configId = raw.configId;
     if (typeof raw.buildingId === 'string' && raw.buildingId) site.buildingId = raw.buildingId;
     if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
-        assert(Array.isArray(raw.battleIds) && raw.battleIds.length > 0
-            && raw.battleIds.every((id) => Number.isSafeInteger(id) && id > 0),
-            `sites[${index}].battleIds must be a non-empty array of positive integers`);
-        site.battleIds = [...raw.battleIds];
+        assert(Number.isSafeInteger(raw.battleId) && Number(raw.battleId) > 0,
+            `sites[${index}].battleId must be a positive integer`);
+        // 旧字段 `battleIds`（数组）已废弃：留着会让「同片数值写歪 ⇒ 拆成两片 ⇒ 野怪待机」
+        // 重新回来，直接报错逼调用方改成单值。
+        assert(raw.battleIds === undefined,
+            `sites[${index}].battleIds is deprecated, use battleId`);
+        site.battleId = Number(raw.battleId);
     } else {
+        assert(raw.battleId === undefined,
+            `sites[${index}].battleId is only valid for patrolChest sites`);
         assert(raw.battleIds === undefined,
             `sites[${index}].battleIds is only valid for patrolChest sites`);
     }

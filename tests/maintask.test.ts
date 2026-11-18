@@ -721,9 +721,11 @@ test('E4 详情弹窗：奖励格与结算页共用 RewardItemView，不再手�
 test('E5 详情弹窗：异步取数回来检查存活与修订号，图片由奖励格自行加载', () => {
     const body = methodBody(DETAIL_SRC, 'reload');
     assert.ok(body.includes('await this.repo.loadFirst()'));
+    assert.ok(body.includes('const revision = ++this.loadRevision'));
     assert.ok(body.includes('!this.alive || revision !== this.loadRevision'));
     assert.ok(body.indexOf('!this.alive') < body.indexOf('this.snapshot = snapshot'));
-    assert.ok(methodBody(DETAIL_SRC, 'onClose').includes('this.loadRevision += 1'));
+    assert.ok(!methodBody(DETAIL_SRC, 'onClose').includes('this.loadRevision += 1'),
+        '关闭由 alive 覆盖，onClose 不再递增 revision');
 });
 
 test('E6 入口：显隐归属自己（`onLoad` 调 refresh，且**没有** onEnable 再调一次）', () => {

@@ -93,6 +93,13 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         seatProfiles = Array.from(buildSeatProfiles(battle.units, selfRoleId ?? null));
         // 战斗统计要按服务端单元 id 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
         seatUnitIds = Array.from(buildSeatUnitIds(battle.units, selfRoleId ?? null));
+        //  服务端属性原文：`[对局卡牌属性]` 只有最终值，面板对不上时分不清「服务端定值」还是
+        //  「本地成长叠加」。这里按协议原样打一份（campId 与 ZCOwner 不是一套编号，不混用）。
+        for (const unit of sorted) {
+            if (unit.heroAttrs?.length) {
+                console.info('[对局卡牌属性·服务端]', unit.campId, JSON.stringify(unit.heroAttrs));
+            }
+        }
     }
     return {
         resources: prepared,

@@ -1,15 +1,14 @@
 import { game, profiler } from 'cc';
 import { GameRoute } from '../../core/runtime/GameRoute';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { Log } from '../../framework/log/Log';
 import { ProcedureManager } from '../../framework/procedure/ProcedureManager';
+import { HERO_OBTAIN_DEMO_USER_DATA } from '../card/HeroObtainData';
+import { HeroObtainPage } from '../card/view/HeroObtainPage';
 import { RequestGmList, RequestSystemGm } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest } from '../net/RequestGuard';
-import { GMUtils } from './GMUtils';
-import { EventMgr } from '../../framework/event/EventMgr';
 import { ZCGameUiEvent, type IZCDebugDrawCardResult } from '../zcds/view/ZCGameHudEvents';
-import { HeroObtainPage } from '../card/view/HeroObtainPage';
-import { HERO_OBTAIN_DEMO_USER_DATA } from '../card/HeroObtainData';
+import { GMUtils } from './GMUtils';
 
 /** GM 指令项（对齐 client 的 { gm, desc } 结构）。 */
 export interface GMCommandDef {
@@ -228,7 +227,7 @@ export class GMCommandTable {
         }
 
         // 服务器指令：保留 addItem 等客户端无法本地执行的能力
-        const status = await sendGameRequest(GameNet.instance, () => new RequestSystemGm(
+        const status = await GameNet.sendRequest(() => new RequestSystemGm(
             { cmd: trimmed },
             GMCommandTable,
             () => GMCommandTable.tip('GM指令发送成功'),
@@ -244,7 +243,7 @@ export class GMCommandTable {
 
     /** 请求服务器 GM 指令列表（对齐 client 的 RequestGmList），完成后回调合并后的列表。 */
     static requestServerList(onDone: (list: GMCommandDef[]) => void): void {
-        void sendGameRequest(GameNet.instance, () => new RequestGmList({}, GMCommandTable, (rsp: CmdGmListRspMsg) => {
+        void GameNet.sendRequest(() => new RequestGmList({}, GMCommandTable, (rsp: CmdGmListRspMsg) => {
             if (rsp && Array.isArray(rsp.cmd)) {
                 GMCommandTable._serverList = rsp.cmd.map((item) => ({ gm: item.cmd, desc: item.desc ?? '' }));
             }

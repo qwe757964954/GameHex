@@ -10,6 +10,8 @@ import { PopupLayer } from '../../framework/ui/PopupDef';
 import { CommonTips } from '../common/CommonTips';
 import { CacheMgr } from './CacheMgr';
 import { RequestHeartbeat } from './HeartbeatMsg';
+import type { GameRequestStatus, IGameRequestOptions } from './RequestGuard';
+import { sendGameRequest } from './RequestGuard';
 
 export interface ReconnectLoginResult {
     ok: boolean;
@@ -299,6 +301,50 @@ export class GameNet extends ScriptObject {
     // ========================================================================
     // 收发协议
     // ========================================================================
+
+    /**
+     * 业务层入口：替调用方取单例，业务代码不再需要写 `GameNet.instance`。
+     *
+     * 收的是工厂函数而不是消息实例 —— 离线时连 `RequestMsg` 都不构造。
+     * `make` 的类型与 `sendGameRequest` 保持一致（`() => unknown`），
+     * 不在这里额外收窄：调用点大多返回具体 `Request*` 子类，收紧泛型只会制造无谓的推断负担。
+     *
+     * `this` 在静态上下文里就是类本身，所以取单例写 `this.instance` 即可，不必再写类名。
+     */
+    static sendRequest(
+        make: () => unknown,
+        options?: IGameRequestOptions,
+    ): Promise<GameRequestStatus> {
+        return sendGameRequest(this.instance, make, options);
+    }
+
+    /**
+     * 业务请求统一处理离线、异常与硬超时，保留消息的 caller 和取消归属。
+     *
+     * 两种入参语义不同，别混用：
+     * - 传 `RequestMsg` 实例：**对象已经构造**，这里只把「发送」推迟到离线判定之后。
+     * - 传 `() => RequestMsg`：**连构造一起推迟**，离线时不产生任何临时对象。
+     *
+     * 差别只在离线：`RequestMsg` 构造会走 `ScriptObject` 构造（`_suid++` + className 校验），
+     * 所以离线点击不该白跑一次。会随手构造消息的调用点（按钮点一下就 `new RequestXxx(...)`）
+     * 应传函数形态，把构造一起推迟到 `isConnected` 判断之后。
+     */
+    request<CmdReqMsg, CmdRspMsg>(
+        reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>,
+        options?: IGameRequestOptions,
+    ): Promise<GameRequestStatus>;
+    request<CmdReqMsg, CmdRspMsg>(
+        make: () => RequestMsg<CmdReqMsg, CmdRspMsg>,
+        options?: IGameRequestOptions,
+    ): Promise<GameRequestStatus>;
+    request<CmdReqMsg, CmdRspMsg>(
+        reqMsgOrMake: RequestMsg<CmdReqMsg, CmdRspMsg> | (() => RequestMsg<CmdReqMsg, CmdRspMsg>),
+        options?: IGameRequestOptions,
+    ): Promise<GameRequestStatus> {
+        // RequestMsg 是类实例、不是函数，这里的判断不会误判。
+        const make = typeof reqMsgOrMake === 'function' ? reqMsgOrMake : () => reqMsgOrMake;
+        return sendGameRequest(this, make, options);
+    }
 
     /** 入队发送（依次发出）。 */
     send<CmdReqMsg, CmdRspMsg>(reqMsg: RequestMsg<CmdReqMsg, CmdRspMsg>, needLoading: boolean = true): Promise<boolean> & { cancel?: () => void } {

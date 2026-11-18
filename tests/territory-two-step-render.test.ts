@@ -20,8 +20,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { assetPath } from './helpers/asset-paths';
 
-/** 关卡分支的起点（fixedResource 那段源码截取到它为止）。 */
-const STAGE_BRANCH_ANCHOR = '\n        if (site.type === ';
+/** 关卡分支的起点（宝箱那段源码截取到它为止）。 */
+const STAGE_BRANCH_ANCHOR = '\n        if (station.battle) {';
 
 /** Presenter / View 两侧必须**逐字相同**的关卡分支条件（站点类型走命名常量，禁字面量）。 */
 const STAGE_BRANCH = "station.battle";
@@ -128,13 +128,13 @@ test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocke
 // ============================================================
 
 test('★★★已领取的 fixedResource 格必须同时清空 icon/caption/badge', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
-    assert.ok(renderAt > 0, '要能定位 fixedResource 渲染分支');
+    const renderAt = MAP_VIEW_SRC.indexOf('if (isTerritoryChestSite(site))');
+    assert.ok(renderAt > 0, '要能定位宝箱（fixedResource / patrolChest）渲染分支');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
 
     //🔴 三个必须**都**被 claimed 清掉，缺一个就不算「彻底」：
-    assert.match(body, /icon:\s*claimed \? null :/,
-        '已领取 ⇒ icon 必须为 null（宝箱图要藏掉）');
+    assert.match(body, /icon:\s*isPatrol \|\| claimed \? null :/,
+        '已领取（或野怪宝箱）⇒ icon 必须为 null（宝箱图要藏掉）');
     assert.match(body, /caption:\s*''/,
         '已领取 ⇒ caption 必须为空串');
     assert.match(body, /badge:\s*''/,
@@ -157,17 +157,17 @@ test('无建筑图标时不再启用兜底文字，只有未解锁条件可以�
     }
 
     // 反向：claimed 分支不许再回落到 fixedResourceClaimed 文案。
-    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
+    const renderAt = MAP_VIEW_SRC.indexOf('if (isTerritoryChestSite(site))');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
     assert.ok(!/TERRITORY_TEXTS\.fixedResourceClaimed/.test(body),
         '地图上不该再出现「已领取」角标（那是领取成功提示条用的，不在这条路径）');
 });
 
 test('未领取的宝箱格保留图标和交互，地图上不显示「可领取」文字', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf('if (site.type === TERRITORY_SITE_TYPE.fixedResource)');
+    const renderAt = MAP_VIEW_SRC.indexOf('if (isTerritoryChestSite(site))');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
-    assert.match(body, /icon:\s*claimed \? null : this\.stationIconOf\(/,
-        '未领取必须照常走 stationIconOf 取宝箱图');
+    assert.match(body, /icon:\s*isPatrol \|\| claimed \? null : this\.stationIconOf\(/,
+        '未领取的普通宝箱必须照常走 stationIconOf 取宝箱图（野怪宝箱不画）');
     assert.match(body, /badge:\s*''/, '不再生成状态角标');
     assert.match(body, /interactive:\s*!claimed && !pending/,
         '已领取不可点（否则会重复发通关请求）');

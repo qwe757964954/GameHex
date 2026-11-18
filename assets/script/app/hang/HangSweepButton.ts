@@ -60,11 +60,6 @@ export class HangSweepButton extends Component {
         this.node.on(Button.EventType.CLICK, this._handleClick, this);
     }
 
-    protected onDestroy(): void {
-        // 判 `isValid` 后再摘监听
-        if (this.node && this.node.isValid) this.node.off(Button.EventType.CLICK, this._handleClick, this);
-    }
-
     private _handleClick(): void {
         if (this._onTap) this._onTap();
     }

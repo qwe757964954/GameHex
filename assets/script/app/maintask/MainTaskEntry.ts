@@ -16,6 +16,16 @@ const { ccclass, property } = _decorator;
  */
 @ccclass('MainTaskEntry')
 export class MainTaskEntry extends Component {
+    /**
+     * 新手引导门控：`false` 时入口强制隐藏（由 `GuideComposition` 按进度写，见 `TASK_ENTRY_UNLOCK_STEP`）。
+     *
+     * 需求（2026-11-18 第 26 条）：引导走到 8-1（主线任务那一步）任务按钮才出现 ——
+     * 前面几步连「任务」这个概念都还没介绍，提前露出会让玩家点进一个和引导无关的系统。
+     * 默认 `true`：非引导场景（老玩家 / 引导已结束）不受影响。
+     * 用**静态字段**而不是构造参数：入口随 tab 页反复重建，静态值能跨实例守住。
+     */
+    static guideUnlocked = true;
+
     @property({ type: Label, tooltip: 'Label: task entry title' })
     label: Label = null!;
 
@@ -32,7 +42,6 @@ export class MainTaskEntry extends Component {
     private busy = false;
 
     protected onDestroy(): void {
-        this.revision += 1;
         GameNet.instance.removeCaller(this);
     }
 
@@ -62,7 +71,8 @@ export class MainTaskEntry extends Component {
      * 「只在翻转时写」会在首次「新值 === 缓存初值」时短路 ⇒ 该藏的时候藏不掉。
      */
     applySnapshot(snapshot: IMainTaskSnapshot): void {
-        this.node.active = snapshot.visible;
+        // 引导没走到「任务」那一步之前一律藏着（见 `guideUnlocked`）。
+        this.node.active = snapshot.visible && MainTaskEntry.guideUnlocked;
         // 入口固定显示短标题，任务名与进度由详情弹窗展示。
         this.label.string = snapshot.configured ? MAIN_TASK_TEXTS.entryLabel : '';
         this.redDot.active = snapshot.showRedDot;

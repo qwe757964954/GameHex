@@ -25,6 +25,7 @@ import { ZCMapGeometry } from '../assets/script/app/zcds/model/ZCMapGeometry';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCUnitTargeting } from '../assets/script/app/zcds/model/systems/ZCUnitTargeting';
+import { ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
 import type { IZCStrikeOptions } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 
 /** 只造 `ZCSkillTriggerSystem` 真正读到的字段，其余留空。 */
@@ -63,6 +64,81 @@ interface IHarness {
     setNearest(value: number): void;
     readonly value: Parameters<typeof ZCSkillTriggerSystem.tick>[2];
 }
+
+test('没有打人技能或冷却未就绪时不查询范围；多车道就绪每拍只查询一次', () => {
+    const caster = unit(1);
+    const state = snapshot([caster]);
+    let checks = 0;
+    let parameters: Record<string, number> = {};
+    const context = {
+        ...harness(new ZCStatusSystem(), {}).value,
+        runtimeOf: () => runtime(parameters),
+        inAttackRange: () => { checks++; return true; },
+        castBolt: () => true,
+    };
+    ZCSkillTriggerSystem.tick(state, 0.05, context);
+    assert.equal(checks, 0);
+    parameters = { auraCooldown: 2, boltCooldown: 2, secondaryCooldown: 2 };
+    ZCSkillTriggerSystem.tick(state, 0.05, context);
+    assert.equal(checks, 0);
+    state.elapsedSeconds = 2;
+    ZCSkillTriggerSystem.tick(state, 0.05, context);
+    assert.equal(checks, 1);
+});
+
+test('独立技能闸门使用技能半径及 All：锁定墙或普攻范围无人不阻止，没合法敌人不耗 CD', () => {
+    for (const lane of ['secondary', 'bolt', 'shot', 'strike', 'blink'] as const) {
+        const caster = unit(1, { targetWallHexId: 99, facingRadians: 0 });
+        const foe = unit(2, { owner: 'enemy', freeX: 200, freeY: 0 });
+        const state = snapshot([caster, foe]);
+        const parameters = {
+            [`${lane}Cooldown`]: 2, [`${lane}TargetMode`]: 1,
+            strikeCount: 1, strikeRadius: 300, strikeDamageRate: 1, strikeNearest: 1,
+            blinkSearchRadius: 300, blinkHitRadius: 30, blinkDamageRate: 1,
+        };
+        const h = harness(new ZCStatusSystem(), parameters, { gate: false, attackReach: 50 });
+        let casts = 0;
+        const context = {
+            ...h.value,
+            selectSkillTarget: (source: ZCUnitState, radius: number, mode?: number) =>
+                ZCTargetingSystem.acquireSkillUnit(source, state.units, radius, h.value, mode),
+            castSecondary: () => { casts++; return true; },
+            castBolt: () => { casts++; return true; },
+            castSplashShot: () => { casts++; return true; },
+            strike: (_source: ZCUnitState, options: IZCStrikeOptions) => {
+                assert.equal(options.nearest, true, '独立目标实际结算必须按最近排序');
+                casts++;
+                return 1;
+            },
+        };
+        ZCSkillTriggerSystem.tick(state, 0.05, context);
+        state.elapsedSeconds = 2;
+        ZCSkillTriggerSystem.tick(state, 0.05, context);
+        assert.equal(casts, 0, `${lane}：敌人在技能范围外不出手`);
+        parameters[`${lane}TargetMode`] = 2;
+        ZCSkillTriggerSystem.tick(state, 0.05, context);
+        assert.equal(casts, 1, `${lane}：All 可选到全场目标`);
+        assert.equal(caster.targetWallHexId, 99, '技能选敌不改普攻锁定');
+    }
+});
+
+test('独立光环 auraTriggerRange=0 与缺省等价，均使用技能半径', () => {
+    for (const trigger of [undefined, 0]) {
+        const caster = unit(1, { auraReadyAt: 0 });
+        const foe = unit(2, { owner: 'enemy', freeX: 20 });
+        const state = snapshot([caster, foe]);
+        state.elapsedSeconds = 1;
+        const parameters: Record<string, number> = { auraCooldown: 2, auraRadius: 100, auraSeconds: 2, auraDamageRate: 1 };
+        if (trigger !== undefined) parameters.auraTriggerRange = trigger;
+        const h = harness(new ZCStatusSystem(), parameters, { gate: false });
+        ZCSkillTriggerSystem.tick(state, 0.05, {
+            ...h.value,
+            selectSkillTarget: (source, radius, mode) => ZCTargetingSystem.acquireSkillUnit(source, state.units, radius, h.value, mode),
+        });
+        assert.deepEqual(h.casts, ['aura:1']);
+        assert.equal(caster.auraReadyAt, 3);
+    }
+});
 
 /**
  * `inAttackRange` 用一个开关模拟「普攻射程内有没有目标」——本文件验的是闸门的**接线**，
@@ -345,13 +421,13 @@ test('hasTargetInAttackRange：与普攻同一套 attackReach，且不依赖锁�
         hasExposedWall: () => false,
     });
 
-    //  没锁敌也照样判：35px 的敌人在 40px 射程内。
+    //  没锁敌也照样判：35px 的敌人在 35px 射程边界。
     assert.equal(soldier.targetUnitId ?? null, null);
     assert.equal(targeting.hasTargetInAttackRange(soldier), true);
-    assert.equal(targeting.attackReachOf(soldier), 40);
+    assert.equal(targeting.attackReachOf(soldier), 35);
 
     enemy.freeX = 45;
-    assert.equal(targeting.hasTargetInAttackRange(soldier), false, '45px 超出 40px 射程');
+    assert.equal(targeting.hasTargetInAttackRange(soldier), false, '45px 超出 35px 射程');
 
     //  唯一的近处候选是飞行单位 ⇒ 打不到；再补一个死掉的敌人也不算。
     assert.equal(targeting.hasTargetInAttackRange(soldier), false);

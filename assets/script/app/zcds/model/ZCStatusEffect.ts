@@ -65,6 +65,14 @@ export interface ZCStatusStatMods {
      * 与硬控 `control` 不同，只在 startAttack / 起冲处挡下这一拳，移动与技能照常。
     */
     attackDisabled?: number;
+    /**
+     * 本体体型缩放（百分点，100 = ×2）。2026-11-18 第 17 批。
+     *
+     * 与 `ZCUnitStatPatch.bodySizePct` 同一口径，两处来源在上限侧相加：
+     * 构筑期修改器走 patch、技能增益走状态（本条），由 `ZCGameModel.syncBodyScale` 合并。
+     * 缺省 0 ⇒ 不缩放。
+    */
+    bodySizePct?: number;
 }
 
 /** 硬控类别：受控单位不能移动/攻击/施放，差异主要在视觉表现（详见 ZCUnitSystem 受控闸门）。*/

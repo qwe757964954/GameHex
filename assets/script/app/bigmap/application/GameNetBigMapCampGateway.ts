@@ -1,8 +1,7 @@
-import { sendGameRequest } from '../../net/RequestGuard';
-import { GameNet } from '../../net/GameNet';
 import type { RequestMsg } from '../../../framework/net/RequestMsg';
-import type { IBigMapCampGateway } from './BigMapCampRepository';
+import { GameNet } from '../../net/GameNet';
 import type { IBigMapCampMoveRequest } from '../model/BigMapCampMove';
+import type { IBigMapCampGateway } from './BigMapCampRepository';
 import {
     RequestSlgCampInfo,
     RequestSlgCampMove,
@@ -59,7 +58,7 @@ export class GameNetBigMapCampGateway implements IBigMapCampGateway {
     ): Promise<unknown> {
         if (this.isDisposed || !this.isOwnerCurrent()) return null;
         let response: unknown = null;
-        const status = await sendGameRequest(GameNet.instance, () => {
+        const status = await GameNet.sendRequest(() => {
             const request = make((rsp) => { response = rsp; });
             if (expiresMs !== undefined) {
                 const expiresAt = Date.now() + expiresMs;

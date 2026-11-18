@@ -2,7 +2,7 @@ import { _decorator, Color, Component, Label, RichText, Sprite, UITransform } fr
 
 import { CARD_LINEUP_TEXTS } from './CardLineupTexts';
 import { formatSkillDescMarkup, hexOfColor } from './CardSkillDescMarkup';
-import type { CardDetailPresentation } from './CardDetailPresenter';
+import type { CardDetailMilestone } from './CardDetailPresenter';
 
 const { ccclass, property } = _decorator;
 
@@ -41,7 +41,7 @@ export class CardDetailMilestoneRow extends Component {
     private readonly unlockedBackground = new Color(255, 255, 255, 255);
     private readonly lockedBackground = new Color(146, 129, 96, 255);
 
-    render(item: CardDetailPresentation['milestones'][number]): void {
+    render(item: CardDetailMilestone): void {
         this.levelLabel.string = item.unlockLevel > 0
             ? `${item.unlockLevel}${CARD_LINEUP_TEXTS.detailLevelSuffix}`
             : CARD_LINEUP_TEXTS.detailLevelInitial;

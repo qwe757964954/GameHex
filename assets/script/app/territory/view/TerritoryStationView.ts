@@ -367,6 +367,18 @@ export class TerritoryStationView extends Component {
     private mapY = 0;
     private mapZ = 0;
     private levelBubble: { readonly node: Node; readonly sprite: Sprite; readonly button: Button } | null = null;
+
+    /**
+     * 关卡编号气泡节点（`1-1` 胶囊 / 宝箱水滴 / PVP 头像气泡），没建或没显示 ⇒ `null`。
+     *
+     * 引导要把它和地块**一起**圈进光圈（用户 2026-11-17 第 17 条）：气泡挂在角标层、
+     * 抬在建筑顶上方，和地块节点不是父子关系 ⇒ 只能把这个节点交给引导层做并集。
+     */
+    getLevelBubbleNode(): Node | null {
+        const bubble = this.levelBubble;
+        if (!bubble || !bubble.node.isValid || !bubble.node.activeInHierarchy) return null;
+        return bubble.node;
+    }
     /** 气泡里的那个图标节点（`levelBubbleIcon` 有值时惰性创建；复用同一个节点）。 */
     private levelBubbleIcon: { readonly node: Node; readonly sprite: Sprite } | null = null;
     /**

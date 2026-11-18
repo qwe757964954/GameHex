@@ -25,8 +25,18 @@ export interface ZCProjectileContext extends Pick<IZCModelServices, 'effectiveDe
      * 回调只负责「真的把血加上去」。不传 ⇒ 这条弹道对友军完全透明（存量行为）。
     */
     allyPass?(projectile: ZCProjectileState, unit: ZCUnitState): void;
-    /** 弹道本帧消失（命中或被丢弃）时的回调；可选，目前用于定格光束。*/
+    /**
+     * 弹道本帧消失（命中或被丢弃）时的回调；可选，目前用于定格光束与导弹爆炸。*/
     linger?(projectile: ZCProjectileState): void;
+    /**
+     * 弹体**飞到落点**那一刻的回调（2026-11-18 第 16 批「连射导弹」101304）。
+     *
+     * 与 `hit` 的分工：`hit` 是「半路撞到谁就结算给谁」，这个只给
+     * `ignoresMidAirCollision` 的弹体用 —— 它整段不碰撞，只在 `startedAt + durationSeconds`
+     * 的那一刻落在 `to` 上，由调用方在落点做范围结算。
+     * 不传 ⇒ 到点即消失（存量「打空续飞」逐字不变）。
+    */
+    arrive?(projectile: ZCProjectileState): void;
 }
 
 /** 线段扫掠圆：返回第一次接触的位置比例，双方重叠时为 0。保留原导出签名给 ZCUnitTargeting 与测试用。*/
@@ -126,6 +136,22 @@ export class ZCProjectileSystem {
             to.x = from.x + projectile.velocityX * travelDt;
             to.y = from.y + projectile.velocityY * travelDt;
             projectile.previousX = from.x; projectile.previousY = from.y;
+
+            //  ── 只走落点引爆的弹体（2026-11-18 第 16 批「连射导弹」101304）──
+            //  设计原话：「炸弹只有达到落点才会爆炸，行径过程不会提前触碰其他目标」。
+            //  所以整段跳过扫掠（单位、墙体、建筑都不收），只按速度推进；
+            //  走到 `startedAt + durationSeconds` 那一拍把弹体钉在 `to` 上（`travelDt` 已被
+            //  钳到剩余时间，`to` 就是落点），然后交给唯一回收出口 `settleProjectile`
+            //  —— 它先 `arrive`（结算落点范围伤害）再 `linger`（爆炸表现）。
+            if (projectile.ignoresMidAirCollision === true) {
+                projectile.x = to.x; projectile.y = to.y;
+                if (context.now + 1e-9 < projectile.startedAt + projectile.durationSeconds) {
+                    projectiles[kept++] = projectile;
+                } else {
+                    this.settleProjectile(projectile, context);
+                }
+                continue;
+            }
 
             this.candidates.clear();
             const indexed = this.collectCellCandidates(from.x, from.y, to.x, to.y, projectile.collisionRadius);
@@ -229,10 +255,23 @@ export class ZCProjectileSystem {
             if (!consumed && context.now + 1e-9 < projectile.startedAt + projectile.durationSeconds) {
                 projectiles[kept++] = projectile;
             } else {
-                context.linger?.(projectile);
+                this.settleProjectile(projectile, context);
             }
         }
         projectiles.length = kept;
+    }
+
+    /**
+     * 弹体的**唯一**回收出口：命中消耗、寿命到点、飞到落点，三条路径都从这里走。
+     *
+     *  ⚠️ 别在别处再写一遍 `context.arrive?.() / context.linger?.()`：
+     *   - 只在「命中 / 到点」两处各写一份的写法，穿透弹会被定格两次、打空的弹会漏掉渐隐；
+     *   - 只走落点的弹体（`ignoresMidAirCollision`）到点时必须先 `arrive` 结算再 `linger`，
+     *     顺序反了就是「特效先炸、伤害后到」，联机两端还会在这一帧分叉。
+     */
+    private settleProjectile(projectile: ZCProjectileState, context: ZCProjectileContext): void {
+        if (projectile.ignoresMidAirCollision === true) context.arrive?.(projectile);
+        context.linger?.(projectile);
     }
 
     reset(): void {

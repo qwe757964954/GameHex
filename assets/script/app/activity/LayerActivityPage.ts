@@ -143,8 +143,6 @@ export class LayerActivityPage extends PopupBase {
     private loadRevision = 0;
     /** 当前列表数据（`renderItemFn` 按 index 取）。 */
     private rows: IActivityTaskRow[] = [];
-    /** `renderItemFn` 只需绑一次。 */
-    private rowRendererBound = false;
     /** 已加载的活动美术（`ACTIVITY_ART_NAMES` 的 key → SpriteFrame），首次用到后缓存。 */
     private art: Map<string, SpriteFrame> | null = null;
     /** 品质框（4 档固定图），首次用到后缓存。 */
@@ -257,10 +255,8 @@ export class LayerActivityPage extends PopupBase {
         this.rowContext = { snapshot, qualityFrames, iconFrames };
 
         const list = this.rowList;
-        if (!this.rowRendererBound) {
-            this.rowRendererBound = true;
-            list.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        // `renderItemFn` 是普通属性赋值，不是事件订阅；每次铺列表写同一组回调，行数据现取。
+        list.renderItemFn = (node, index) => this.renderRow(node, index);
         list.refreshList(this.rows);
     }
 
@@ -434,7 +430,7 @@ export class LayerActivityPage extends PopupBase {
      * 别的活动（月卡 / 充值好礼…）变化不该让这个界面白刷一遍。
      */
     private onActivityCacheChanged(): void {
-        if (!this.alive || !this.isPopupOpen || this.busy) return;
+        if (!this.isPopupOpen || this.busy) return;
         const current = stateSignatureOf(this.snapshot?.state ?? EMPTY_ACTIVITY_STATE);
         if (stateSignatureOf(this.repo.peekState()) === current) return;
         void this.reload();
@@ -710,12 +706,10 @@ export class LayerActivityPage extends PopupBase {
     // ============================================================
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     onDestroy(): void {
-        this.presentRevision += 1;
-        this.loadRevision += 1;
         this.unsubscribe?.();
         this.unsubscribe = null;
         super.onDestroy();

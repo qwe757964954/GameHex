@@ -5872,6 +5872,13 @@
 
     
 
+    declare class ChapterMonsterBoxInfo {
+        cellId: number;
+        lv: number;
+    }
+
+    
+
     declare class CmdCityChapterInfoReqMsg {
     }
 
@@ -5966,6 +5973,21 @@
         rewardState: number;
         unlockCells?: (Long[]|null);
         passCells?: (Long[]|null);
+        monsterBoxInfos?: (ChapterMonsterBoxInfo[]|null);
+    }
+
+    
+
+    declare class CmdCityChapterUpMonsterBoxLvReqMsg {
+        levelChapter: number;
+        cellId: number;
+    }
+
+    
+
+    declare class CmdCityChapterUpMonsterBoxLvRspMsg {
+        succ: number;
+        monsterBoxInfo: ChapterMonsterBoxInfo;
     }
 
     
@@ -6342,6 +6364,7 @@
         CmdCityChapterUnlockCellRspMsg = 45711217,
         CmdCityChapterPassCellRspMsg = 1560327682,
         CmdCityChapterCellInfoRspMsg = 1137184677,
+        CmdCityChapterUpMonsterBoxLvRspMsg = 914309089,
         CmdDayWeekMonthGiftGetRewardRspMsg = 1356079122,
         CmdDayWeekMonthGiftInfoRspMsg = 1005269291,
         CmdDayWeekMonthGiftFreeBuyRspMsg = 355499005,
@@ -7531,6 +7554,7 @@ declare type MessageProtoName =
 | "CmdFinishBattleRspMsg"
 | "CmdBattleResultBroMsg"
 | "ChapterInfo"
+| "ChapterMonsterBoxInfo"
 | "CmdCityChapterInfoReqMsg"
 | "CmdCityChapterInfoRspMsg"
 | "CmdCityChapterIdleRewardReqMsg"
@@ -7545,6 +7569,8 @@ declare type MessageProtoName =
 | "CmdCityChapterInfoBroMsg"
 | "CmdCityChapterCellInfoReqMsg"
 | "CmdCityChapterCellInfoRspMsg"
+| "CmdCityChapterUpMonsterBoxLvReqMsg"
+| "CmdCityChapterUpMonsterBoxLvRspMsg"
 | "SlgGameCameRoleInfo"
 | "SlgGameInfo"
 | "SlgGameActionInfo"
@@ -7862,6 +7888,7 @@ declare type ReqMsgProtoName =
 | "CmdCityChapterUnlockCellReqMsg"
 | "CmdCityChapterPassCellReqMsg"
 | "CmdCityChapterCellInfoReqMsg"
+| "CmdCityChapterUpMonsterBoxLvReqMsg"
 | "CmdSlgCampSimpleInfoReqMsg"
 | "CmdSlgCampInfoReqMsg"
 | "CmdSlgActionUpdateReqMsg"

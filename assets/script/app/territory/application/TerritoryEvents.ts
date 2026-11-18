@@ -59,7 +59,14 @@ export type TerritoryIntent =
      * `GearSwitch` 档位（1/5/10/20/50）。**必须随意图一起带到 Model** ——
      * 只在视图里改角标文案、请求仍发 1 倍，是最难发现的那种「界面变了但没生效」。
      */
-    | { readonly kind: 'sweepChapter'; readonly times?: number };
+    | { readonly kind: 'sweepChapter'; readonly times?: number }
+    /**
+     * 升级某一格的怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
+     *
+     * 只带 `cellId`：章节由 Model 按当前地图取，消耗由服务端按当前等级扣
+     * —— 视图不传钱、也不预扣。
+     */
+    | { readonly kind: 'upgradeMonsterBox'; readonly cellId: number };
 export interface ITerritoryIntentEvent { readonly intent: TerritoryIntent }
 export type TerritoryViewCommand = Exclude<TerritoryModelOutput, { readonly kind: 'changed' | 'navigate' }>
     | { readonly kind: 'navigate'; readonly payload: import('./TerritoryModel').ITerritoryNavigateBattlePayload; readonly ready?: Promise<unknown> }

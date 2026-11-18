@@ -1,4 +1,4 @@
-import { isTerritoryBattleSite } from '../../assets/script/app/territory/model/TerritoryMapConfig';
+import { isTerritoryBattleSite, isTerritoryChestSite } from '../../assets/script/app/territory/model/TerritoryMapConfig';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
@@ -148,9 +148,13 @@ export function loadTerritoryMapViewClass(): any {
         // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
         if (id === '../model/TerritoryMapConfig') return {
             isTerritoryBattleSite,
+            // 宝箱口径（fixedResource + patrolChest）由真实模块提供：
+            // 视图里 `stationRenderOf` / `isCellPassed` / `syncChestSpawnView` 都走它，
+            // 桩里缺这个函数会直接 `undefined is not a function`。
+            isTerritoryChestSite,
             TERRITORY_SITE_TYPE: {
                 stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
-                fixedResource: 'fixedResource', bonus: 'bonus',
+                fixedResource: 'fixedResource', bonus: 'bonus', patrolChest: 'patrolChest',
             },
         };
         // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
@@ -198,6 +202,7 @@ export function loadTerritoryMapViewClass(): any {
                 attach(): void {}
                 setFrames(): void {}
                 setKeepOutPoints(): void {}
+                setBottomStripEnabled(): void {}
                 sync(): void {}
                 step(): void {}
                 reset(): void {}

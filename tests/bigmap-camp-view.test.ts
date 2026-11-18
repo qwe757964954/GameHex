@@ -13,6 +13,7 @@ import * as BigMapCampMove from '../assets/script/app/bigmap/model/BigMapCampMov
 import { BIGMAP_CAMP_REFRESH_SECONDS } from '../assets/script/app/bigmap/application/BigMapCampRepository';
 import * as artifactPaths from '../assets/script/app/ArtPaths';
 import { createControllerResources } from './helpers/controller-context';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 function loadModule(path: string, require: (name: string) => unknown, globals: object = {}) {
     const source = readFileSync(path, 'utf8');
@@ -127,7 +128,7 @@ test('真实 GameNet 适配器发送两种请求及 campIds，无连接与发送
         },
     };
     const exports = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) =>
-        name.endsWith('/RequestGuard') ? requestGuard : name.endsWith('/GameNet') ? { GameNet: { instance: net } } : requests);
+        name.endsWith('/RequestGuard') ? requestGuard : name.endsWith('/GameNet') ? { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } } : requests);
     const Gateway = exports.GameNetBigMapCampGateway as new () => {
         fetchSimple(ids: number[]): Promise<unknown>; fetchDetail(ids: number[]): Promise<unknown>;
     };

@@ -4,10 +4,12 @@ import test from 'node:test';
 import { BigMapModel } from '../assets/script/app/bigmap/application/BigMapModel';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
-import { BigMapController, BIGMAP_SEARCH_MONSTER_EMPTY } from '../assets/script/app/bigmap/application/BigMapController';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { BigMapUiEvent, BigMapViewEvent, type IBigMapViewCommandEvent } from '../assets/script/app/bigmap/application/BigMapEvents';
 import { createControllerContext } from './helpers/controller-context';
+import { loadBigMapController } from './helpers/bigmap-controller';
+
+const { BigMapController, BIGMAP_SEARCH_MONSTER_EMPTY } = loadBigMapController();
 
 /**
  * 搜索复用 canAttack 判定，距离以玩家基地为起点。
@@ -88,7 +90,8 @@ test('从基地搜索切回世界地图并选中定位，无目标时只提示',
         commands.length = 0;
         model.monsterView = () => null;
         EventMgr.instance.emit(BigMapUiEvent.Intent, { intent: { kind: 'searchMonster' } });
-        assert.deepEqual(commands, [{ kind: 'feedback', ok: false, message: BIGMAP_SEARCH_MONSTER_EMPTY }]);
+        // Controller 在 vm 沙箱里生成对象，原型来自另一个 realm；先归一成纯数据再比。
+        assert.deepEqual(JSON.parse(JSON.stringify(commands)), [{ kind: 'feedback', ok: false, message: BIGMAP_SEARCH_MONSTER_EMPTY }]);
     } finally {
         controller.dispose();
         EventMgr.instance.offTarget(owner);

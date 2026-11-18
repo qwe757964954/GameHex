@@ -5,12 +5,19 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, type BigMapIntent } from '../application/BigMapEvents';
 
 const { ccclass, property } = _decorator;
+
+/** 弹窗底部一颗按钮的内容；`null` = 不显示。 */
+export interface IBigMapInfoPopupAction {
+    readonly text: string;
+    readonly enabled: boolean;
+}
+
 export interface IBigMapInfoPopupContent {
     readonly title: string;
     readonly body: string;
     readonly icon: SpriteFrame | null;
-    readonly primary: { readonly text: string; readonly enabled: boolean } | null;
-    readonly secondary: { readonly text: string; readonly enabled: boolean } | null;
+    readonly primary: IBigMapInfoPopupAction | null;
+    readonly secondary: IBigMapInfoPopupAction | null;
 }
 
 /** 野怪与基地建筑详情；生命周期、模态及空白关闭统一交给 PopupBase。 */
@@ -49,7 +56,7 @@ export class BigMapInfoPopup extends PopupBase {
         this.renderButton(this.primaryButton, this.primaryLabel, content.primary);
         this.renderButton(this.secondaryButton, this.secondaryLabel, content.secondary);
     }
-    private renderButton(button: Button, label: Label, action: IBigMapInfoPopupContent['primary']): void {
+    private renderButton(button: Button, label: Label, action: IBigMapInfoPopupAction | null): void {
         button.node.active = action !== null;
         label.string = action?.text ?? '';
         button.interactable = action?.enabled ?? false;

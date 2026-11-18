@@ -1,10 +1,10 @@
 import { battleBuffRatio } from '../../battle/BattleStartModel';
-import type { ZCBattleHero, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
+import type { ZCBattleHero, ZCBattleHeroModifier, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
 import { ZCOwner, ZCPlayerCount, type ZCSection } from '../model/ZCMapConfig';
 import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
-import { captureZCMatchConfig, type ZCMatchConfig, type IZCBattleRates } from '../model/ZCMatchConfig';
+import { captureZCMatchConfig, type ZCMatchConfig, type ZCMatchMap, type IZCBattleRates } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
 import { compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans, type ZCModifierCatalogs } from '../model/ZCModifierRuntime';
 
@@ -67,7 +67,7 @@ function battleUnitsByOwner(
 }
 
 /** homes 下标是地图席位，unitId 才是参战身份；同时转换分区，保证玩家视角与出生点一致。*/
-function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undefined, selfRoleId?: string): ZCMatchConfig['map'] {
+function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undefined, selfRoleId?: string): ZCMatchMap {
     const info = battle?.mapInfo;
     const map = config.map;
     if (!info) return map;
@@ -130,6 +130,14 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
     });
 }
 
+/**
+ * 建筑耐久「基础值 + 品级加成」的提示只在首次出现时打一次。
+ *
+ * `buildZCClientCombatConfig` 每局会跑两遍（`ZCGameLoader` 预加载 + `ZCBattleEntryBuilder` 正式 entry），
+ * 同一个 cardId 逐局重复提示只会把日志刷满、盖住真正的异常。
+ */
+const warnedBuildingHpCards = new Set<string>();
+
 /** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。*/
 function buildBattleDeck(
     source: readonly ZCDeckCard[],
@@ -150,7 +158,23 @@ function buildBattleDeck(
         const card = heroCardsById.get(String(hero.heroId));
         if (card) {
             const buildingHp = unit?.heroAttrs?.find((entry) => entry.heroId === hero.heroId)?.attributes.buildingHp;
-            selected.push(buildingHp === undefined ? card : Object.assign({}, card, { baseHp: buildingHp }));
+            //  非正 / 非有限的耐久没有意义：`ZCDevelopmentSystem` 用 `baseHp + 品级加成` 直接算
+            //  `hex.maxHp`、没有下限保护 ⇒ 负值会让建筑开局即破、血条倒挂。脏数据回落到本地卡表，
+            //  协议层仍原样保留（`heroAttrs` 是原始快照），只在这里拒绝消费。
+            const usable = buildingHp !== undefined && Number.isFinite(buildingHp) && buildingHp > 0;
+            if (buildingHp !== undefined && !usable) {
+                console.warn('[ZCClientCombatConfig] 服务端建筑血量非法，已回落本地卡表', card.id, buildingHp);
+            }
+            if (usable && (card.cyclePerTierValue ?? 0) > 0) {
+                //  服务端只给「基础耐久」，品级加成仍来自本地卡表 ⇒ 两处叠加。留痕，避免对不上时查错方向。
+                const hintKey = `${card.id}:${buildingHp}:${card.cyclePerTierValue}`;
+                if (!warnedBuildingHpCards.has(hintKey)) {
+                    warnedBuildingHpCards.add(hintKey);
+                    console.warn('[ZCClientCombatConfig] 服务端建筑血量按基础耐久使用，仍会叠加品级加成',
+                        card.id, buildingHp, card.cyclePerTierValue);
+                }
+            }
+            selected.push(usable ? Object.assign({}, card, { baseHp: buildingHp }) : card);
         }
     }
     return selected.concat(systemCards);
@@ -264,6 +288,29 @@ function growthSelectionOf(
     return row?.enabled ? { level: lv } : {};
 }
 
+/**
+ * 服务端只有增量、没有绝对值时，阵营倍率仍会乘在最终值上。
+ *
+ * `resolveZCUnitDefinition` 只在存在 server `override` 时跳过 `levelAttackRatio` / `levelHpRatio`；
+ * 只下发 `attack.addRate` 时两条增/减益会叠乘（0.8 × 0.8 = 0.64）。这是服务端口径，
+ * 客户端照算，但把组合留痕 —— 否则面板对不上时查不到方向。
+ */
+function warnServerRateOverlap(
+    owner: ZCOwner,
+    generalId: number,
+    unit: ZCBattleUnit | undefined,
+    modifiers: readonly ZCBattleHeroModifier[],
+): void {
+    if (!unit) return;
+    for (const modifier of modifiers) {
+        const key = modifier.statId === 'attack' ? ZC_BATTLE_RATE_KEYS.attack : ZC_BATTLE_RATE_KEYS.hp;
+        const rate = battleBuffRatio(unit.buffs, key);
+        if (rate === null || rate === 1) continue;
+        console.warn('[ZCClientCombatConfig] 服务端增量与阵营倍率同时生效，将叠乘',
+            owner, generalId, modifier.statId, modifier.operation, modifier.value, key, rate);
+    }
+}
+
 function compileOwnerLoadouts(
     owner: ZCOwner,
     heroes: readonly ZCBattleHero[],
@@ -273,6 +320,14 @@ function compileOwnerLoadouts(
 ): readonly ZCCompiledModifierLoadout[] {
     const catalogs = getZCModifierCatalogs();
     const loadouts: ZCCompiledModifierLoadout[] = [];
+    //  服务端给了阵容外的英雄属性 ⇒ 永远不会被消费。留痕一次，避免「服务端改了、客户端没反应」
+    //  时误判成数值没生效（实际是 heroId 不在这套阵容里）。
+    const knownHeroIds = new Set(heroes.map((hero) => hero.heroId));
+    const orphans = (unit?.heroAttrs ?? []).filter((entry) => !knownHeroIds.has(entry.heroId));
+    if (orphans.length) {
+        console.warn('[ZCClientCombatConfig] 服务端下发了阵容外的英雄属性，已忽略',
+            owner, orphans.map((entry) => entry.heroId));
+    }
     for (const hero of heroes) {
         const generalId = hero.heroId;
         //  星级不再进构筑（上游口径：星级表弃用）。`hasGeneral` 现在只当「这张卡是不是老卡」的
@@ -283,8 +338,11 @@ function compileOwnerLoadouts(
         const serverModifiers = heroAttrs?.modifiers;
         //   不能用 `serverAttributes` 的真假判：只下发增量属性（`attack.addRate`）时它是 `{}`，
         //  `{}` 是 truthy ⇒ 会绕过下面的 continue 兜底，把没有任何数据的老卡也塞进编译器。
-        const hasServerAttrs = (serverAttributes !== undefined && Object.keys(serverAttributes).length > 0)
-            || (serverModifiers?.length ?? 0) > 0;
+        //  也**不能**用「有任何键」：`buildingHp` 只喂 `buildBattleDeck`，战斗编译器只认
+        //  `attack` / `maxHp`，带着它进编译器只会白跑一次、产出空 loadout。
+        const hasServerAbsolute = serverAttributes?.attack !== undefined || serverAttributes?.maxHp !== undefined;
+        const hasServerAttrs = hasServerAbsolute || (serverModifiers?.length ?? 0) > 0;
+        if (serverModifiers?.length && !hasServerAbsolute) warnServerRateOverlap(owner, generalId, unit, serverModifiers);
         //  技能计划与星级是两件事（2026-11-10）：`pvpSkillPlan.unlockHeroLevel` 比的是
         //  「兵种等级」（= `hero.level`），与 `generalStar` 有没有行完全无关。
         //  原来 `heroLevel` 只写在 `hasGeneral` 分支里 ⇒ 没有星级行的卡（68015~68035 这一批

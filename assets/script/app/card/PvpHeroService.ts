@@ -1,6 +1,6 @@
-import { sendGameRequest } from '../net/RequestGuard';
 import { RequestPvpHeroInfoList } from '../generated/requestMsg/RequestPvpMsg';
 import type { GameNet } from '../net/GameNet';
+import { sendGameRequest } from '../net/RequestGuard';
 
 /** 单个 PVP 技能等级（后端 `CmdPvpHeroSkillInfo`）。 */
 export interface PvpHeroSkillLevel {

@@ -27,7 +27,12 @@ import { StoreController } from '../../store/StoreController';
 import { storeAction } from '../../store/StoreActions';
 import { LeagueTabPage } from '../../league/LeagueTabPage';
 import { LeagueTabController } from '../../league/LeagueTabController';
+import { LeagueJoinController } from '../../league/LeagueJoinController';
+import { LeagueTabEvent } from '../../league/LeagueTabEvents';
+import { LeagueCreatePage } from '../../league/LeagueCreatePage';
+import { LeagueInfoPage } from '../../league/LeagueInfoPage';
 import { leagueRepository } from '../../league/LeagueRepository';
+import { GameNet } from '../../net/GameNet';
 import { MainPage } from '../../main/MainPage';
 import { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { TerritoryEntry } from '../../territory/application/TerritoryEntry';
@@ -264,6 +269,23 @@ export class MainPageComposition extends ControllerBase {
             view: {
                 showPage: joined => league.showPage(joined)
             },
+            join: {
+                create: view => new LeagueJoinController(this.context, {
+                    owner: view,
+                    joinedOwner: league,
+                    repository: leagueRepository,
+                    view: { render: rows => view.render(rows) },
+                    feedback: {
+                        tip: text => FW.showTip(text),
+                        notifyJoined: owner => EventMgr.instance.emit(LeagueTabEvent.Joined, { owner }),
+                    },
+                    popups: {
+                        openCreate: owner => { void LeagueCreatePage.open({ userData: { owner } }); },
+                        openUnion: union => { void LeagueInfoPage.open({ userData: { union } }); },
+                    },
+                    requests: { removeCaller: caller => GameNet.instance.removeCaller(caller) },
+                }),
+            },
         });
     }
     private createTerritoryEntry(territory: MainTerritoryMap): TerritoryEntry {
@@ -282,7 +304,7 @@ export class MainPageComposition extends ControllerBase {
         else if (event.phase === 'disabled') page.disabled?.();
     }
     dispose(): void {
-        this.releaseInputs();
+        // 输入解除由 super.dispose() 统一完成（先 offTarget 再释放资源），这里只丢生命周期表。
         this.pages.clear();
         this.territoryView = null;
         super.dispose();

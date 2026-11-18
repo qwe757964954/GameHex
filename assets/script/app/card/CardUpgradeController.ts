@@ -1,7 +1,8 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
 import { EventMgr } from '../../framework/event/EventMgr';
 import type { ICardRepository } from './CardRepository';
-import type { ICardUpgradeViewState, ICardSkillOpenData } from './CardPresentations';
+import type { ICardMaterialIcon, ICardUpgradeMaterials, ICardUpgradeViewState, ICardSkillOpenData } from './CardPresentations';
+import type { ZCUpgradeStatus } from './CardUpgradeCost';
 import type { ICardDetailArt } from './CardArtProvider';
 import type { ICardLineupCatalog } from './CardArtConfig';
 import { resolveDetailNeighbor } from './CardDetailPresenter';
@@ -12,7 +13,7 @@ import { CardLineupEvent } from './CardLineupEvents';
 export interface ICardUpgradeControllerOptions {
     readonly owner: object;
     readonly model: CardUpgradeModel;
-    readonly repository: Pick<ICardRepository, 'loadUpgradeStatus' | 'loadCardDetail' | 'upgradeHero' | 'applyHeroLevel' | 'loadDetailNavigation' | 'loadDetailArt' | 'loadArtConfig'>;
+    readonly repository: Pick<ICardRepository, 'loadUpgradeStatus' | 'loadCardDetail' | 'upgradeHero' | 'applyHeroLevel' | 'loadDetailNavigation' | 'loadDetailArt' | 'loadArtConfig' | 'loadMaterialIcon'>;
     readonly failed: (error: unknown) => void;
     readonly view: {
         readonly render: (state: ICardUpgradeViewState) => void;
@@ -30,6 +31,9 @@ export interface ICardUpgradeControllerOptions {
 export class CardUpgradeController extends ControllerBase {
     private art: ICardDetailArt | null = null;
     private lineup: ICardLineupCatalog | null = null;
+    private materials: ICardUpgradeMaterials = { card: null, exp: null };
+    private materialKey: string | null = null;
+    private materialTask: Promise<[ICardMaterialIcon | null, ICardMaterialIcon | null]> | null = null;
     private started = false;
     private switching = false;
     private refreshRevision = 0;
@@ -55,7 +59,43 @@ export class CardUpgradeController extends ControllerBase {
         await this.refresh();
     }
     private publish(): void {
-        this.options.view.render({ ...this.options.model.snapshot, art: this.art, lineup: this.lineup });
+        this.options.view.render({ ...this.options.model.snapshot, art: this.art, lineup: this.lineup, materials: this.materials });
+    }
+    private async refreshMaterials(status: ZCUpgradeStatus): Promise<void> {
+        const cardId = status.requirements.find(row => row.key === 'card')?.itemId ?? '';
+        const key = JSON.stringify([cardId, status.generalExpItemId, status.armyExpItemId]);
+        if (this.materialKey !== key) {
+            this.materials = { card: null, exp: null };
+            this.materialKey = key;
+            this.materialTask = Promise.all([
+                this.options.repository.loadMaterialIcon([cardId]),
+                this.options.repository.loadMaterialIcon([status.generalExpItemId, status.armyExpItemId]),
+            ]);
+        }
+        // 持有量随状态更新，图标任务只随材料身份变化。
+        this.setMaterials(status, this.materials.card, this.materials.exp);
+        const task = this.materialTask;
+        if (!task) return;
+        try {
+            const [card, exp] = await task;
+            if (this.isDisposed || this.materialTask !== task) return;
+            this.materialTask = null;
+            if (!card && !exp) return;
+            const currentStatus = this.options.model.snapshot.status;
+            this.setMaterials(currentStatus ?? status, card, exp);
+            if (currentStatus) this.publish();
+        } catch (error) {
+            if (this.isDisposed || this.materialTask !== task) return;
+            this.materialTask = null;
+            this.materialKey = null;
+            console.warn('[CardUpgradeController] 材料图标加载失败', error);
+        }
+    }
+    private setMaterials(status: ZCUpgradeStatus, card: ICardMaterialIcon | null, exp: ICardMaterialIcon | null): void {
+        this.materials = {
+            card: card ? { ...card, owned: status.requirements.find(row => row.key === 'card').owned } : null,
+            exp: exp ? { ...exp, owned: exp.itemId === status.generalExpItemId ? status.generalExpOwned : status.armyExpOwned } : null,
+        };
     }
     private async refresh(): Promise<void> {
         const { model, repository } = this.options;
@@ -68,6 +108,7 @@ export class CardUpgradeController extends ControllerBase {
                 .then((value) => {
                     if (!current()) return;
                     model.setStatus(value);
+                    void this.refreshMaterials(value);
                     this.publish();
                 })
                 .catch((error) => {
@@ -131,6 +172,7 @@ export class CardUpgradeController extends ControllerBase {
             this.options.model.selectCard({ card, cardId: card.id, level });
             this.options.model.setStatus(status.value);
             this.options.model.setDetail(detail.status === 'fulfilled' ? detail.value : null);
+            void this.refreshMaterials(status.value);
             this.publish();
         } catch (error) {
             if (!this.isDisposed) this.options.failed(error);

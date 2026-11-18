@@ -1,8 +1,10 @@
 import { createControllerContext } from './helpers/controller-context';
-import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import { loadBigMapController } from './helpers/bigmap-controller';
 import { bigMapPlotDetailFixture, bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import * as mvcEvents from '../assets/script/app/bigmap/application/BigMapEvents';
+
+const { BigMapController } = loadBigMapController();
 /**
  * 建筑搬移 + 野怪击杀进度展示。
  *

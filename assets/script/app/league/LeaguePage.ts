@@ -87,9 +87,6 @@ export class LeaguePage extends Component {
     /** 旗面八张图（首次用到后缓存；切色不再走 `resources.load`）。 */
     private bannerFrames: (SpriteFrame | null)[] | null = null;
 
-    /** 每个入口只接一次点击（`onLoad` 会随实例化跑一次，这里仍留幂等保护）。 */
-    private entrancesBound = false;
-
     /**
      * 入口 → 红点**根节点**（`ui/common/RedDot.prefab` 的嵌套实例）。
      *
@@ -110,7 +107,6 @@ export class LeaguePage extends Component {
     }
 
     onDestroy(): void {
-        this.revision += 1;
     }
 
     /** 数据端口（单测 / 探针可换成内存桩）。 */
@@ -135,7 +131,7 @@ export class LeaguePage extends Component {
             this.repository.load(),
             this.repository.loadLeagueEntryRedDots(),
         ]);
-        if (!this.node.isValid || revision !== this.revision) return;
+        if (!this.alive || revision !== this.revision) return;
         this.applyInfoTexts(snapshot.myUnion);
         if (snapshot.myUnion) void this.applyBannerColor(snapshot.myUnion.icon);
         this.applyEntranceRedDots(redDots);
@@ -174,9 +170,6 @@ export class LeaguePage extends Component {
      * 等 `refreshEntranceRedDots()` 里的真判据回来再点。
      */
     private bindEntrances(): void {
-        if (this.entrancesBound) return;
-        this.entrancesBound = true;
-
         for (let index = 0; index < LEAGUE_ENTRANCES.length; index += 1) {
             const entrance = LEAGUE_ENTRANCES[index];
             const node = this.node.getChildByName(entrance.node);
@@ -289,11 +282,16 @@ export class LeaguePage extends Component {
 
         if (!this.bannerFrames) {
             const frames = await loadLeagueBannerFrames();
-            if (!this.node.isValid) return;
+            if (!this.alive) return;
             this.bannerFrames = frames;
         }
         const frame = this.bannerFrames[colorIndex] ?? null;
         if (frame) this.bannerColor.spriteFrame = frame;
+    }
+
+    /** 弹窗还活着吗（异步回来时可能已被关掉 / 销毁）。 */
+    private get alive(): boolean {
+        return !!this.node && this.node.isValid;
     }
 
     /** 选中态外框（FGUI `选中` controller：0=否 / 1=是）。 */

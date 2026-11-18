@@ -56,6 +56,17 @@ test('真实表：从首登入口走到 end，16 步全覆盖且顺序与行序�
     assert.equal(progress.wasSkipped, false);
 });
 
+test('行序与 nextStep 链不一致时构造期拒绝，避免恢复和远端游标把行前缀当链前缀', () => {
+    const swapped = [...STEPS];
+    const first = swapped[0];
+    swapped[0] = swapped[1];
+    swapped[1] = first;
+    assert.throws(
+        () => new GuideProgress(swapped),
+        /行序与 nextStep 链不一致/,
+    );
+});
+
 test('幂等：同一步重复完成返回 null，完成不等于服务端已发奖', () => {
     const progress = new GuideProgress(STEPS);
     // 2-3 是第一个带奖励的步（银币10 + 经验15 + 碎片3）；2-2 是「打开宝箱」，不带奖励
@@ -101,6 +112,25 @@ test('存档里的步已失效（策划删/改名）：回退到首个未完成�
         skipped: false,
     });
     assert.equal(progress.current?.stepId, '2-1');
+});
+
+test('热更插入中间步：旧档已完成其后全部步骤时，完成插入步直接越过已完成后继', () => {
+    const completed = STEPS
+        .map((step: GuideStep) => step.stepId)
+        .filter((stepId) => stepId !== '2-2');
+    const progress = new GuideProgress(STEPS, {
+        currentStepId: '',
+        completedSteps: completed,
+        grantedSteps: [],
+        skipped: false,
+    });
+    assert.equal(progress.current?.stepId, '2-2');
+
+    const done = progress.complete('2-2');
+    assert.ok(done);
+    assert.equal(done.next, null);
+    assert.equal(progress.current, null);
+    assert.equal(progress.isFinished, true);
 });
 
 test('强制步不可跳过：当前步 skipAble=0 时 skip 无效', () => {
@@ -190,7 +220,7 @@ test('强制跳过忽略 skipAble，但不模拟发奖或新增奖励标记', ()
     assert.deepEqual(progress.toSave().grantedSteps, []);
 });
 
-test('2-2「打开宝箱」是纯引导的挖孔步：不带台词、不发奖，推进判据与翻地同源', () => {
+test('2-2「打开宝箱」是纯引导步：弱引导（不压暗）、不带台词、不发奖，推进判据与翻地同源', () => {
     const byId = new Map(STEPS.map((step: GuideStep) => [step.stepId, step]));
     const flip = byId.get('2-1');
     const chest = byId.get('2-2');
@@ -201,8 +231,9 @@ test('2-2「打开宝箱」是纯引导的挖孔步：不带台词、不发奖�
     assert.equal(flip.nextStep, '2-2');
     assert.equal(chest.nextStep, '2-3');
     assert.equal(reward.nextStep, '3-1');
-    // 宝箱和它的气泡要能点到 ⇒ 必须挖孔，焦点锚点必须指向宝箱本身。
-    assert.equal(chest.maskType, 'hole');
+    // 第一次点宝箱就不压暗（用户 2026-11-17 第 13 条 ③）：只留手指 + 光圈，
+    // 后面开箱粒子动画自己会接管画面，遮罩留着反而挡视线。
+    assert.equal(chest.maskType, 'none');
     assert.equal(chest.focusNode, 'Map/Chest_1');
     assert.equal(chest.requireAction, 'click');
     // 这一步只有手指 + 气泡，没有台词；推进复用翻地事件，不另开事件名。
@@ -211,9 +242,10 @@ test('2-2「打开宝箱」是纯引导的挖孔步：不带台词、不发奖�
     // 别跟着顺位到 D03（那会让奖励对话在翻地时就先播一遍）。
     assert.equal(flip.dialogId, '');
     assert.equal(chest.completeCond, 'tileFlipped');
-    assert.deepEqual(chest.rewards, [], '奖励留在 2-3 发，别在纯引导步上重复发一次');
+    assert.deepEqual(chest.rewards, [], '奖励不走引导表：宝箱产出是服务端按格子发的');
     assert.equal(reward.dialogId, 'D03');
     // 奖励对话在宝箱页关掉之后才播 ⇒ 这一步不再指向弹窗（也就不会把立绘挡掉）。
     assert.equal(reward.focusNode, '');
-    assert.deepEqual(reward.rewards.map((item) => item.resId), [7, 3, 18003]);
+    // 2026-11-17 表改版：卡牌碎片奖励挪到 5-4（通关结算那一步），2-3 只播台词。
+    assert.deepEqual(reward.rewards, []);
 });

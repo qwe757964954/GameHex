@@ -93,7 +93,9 @@ ZCSettlementPage.open({ onConfirm: () => this.returnToMain(), onGrowEntry: (key)
 - 解绑必须在事件基础设施中立即生效。`EventBus.emit` 仍遍历快照，但执行每项前确认它仍是原订阅；派发中 `off` / `offTarget` 后，尚未执行的旧监听本次也不再执行。同一函数移除再注册视为新订阅，下一次派发才执行。不在业务回调里模拟这条契约。
 - 仓库清空监听集合后，无须在纯通知方法里重复检查 disposed；数组快照派发也须跳过已经退订的监听。网络请求回调由归属管理解除，局部回包赋值不再重复检测宿主释放。
 - 仍保留真正跨生命周期的保护：`await` 后、`catch` / `finally` 中可能触发的 UI 更新、无法取消的异步任务、公开入口拒绝对已释放对象发起新操作，以及 `dispose()` 幂等检查。解绑不能撤回已经开始运行的 async 函数。
-- 章节地图释放先断开输入、时钟和缓存，保留 Model 输出订阅完成本会话 loading 收尾，再退订输出。`stopping` 用于区分收尾消息，不是事件解绑的替代品。
+- 章节地图释放先断开输入、时钟和缓存，保留 Model 输出订阅完成本会话 loading 收尾，再退订输出。当前 Model 销毁只输出配对的 `busy=false` 收尾消息，随后清空输出订阅；Controller 按此顺序转发，无需额外的 `stopping` 状态。
+- Cocos 在 `Component._onPreDestroy()` 中先 `unscheduleAllCallbacks()` 再调用 `onDestroy`（3.8.8 `component.ts`）⇒ `onDestroy` 里再手动 `unschedule` / `unscheduleAllCallbacks` 是死代码，删除即可；`onDisable` 不是销毁路径，停表仍按需保留。
+- 同一条释放链上多层都写 `if (this.isDisposed) return` 时，逐层指出该层独有的副作用（关弹窗、销毁节点、只允许一次的依赖释放）。外层只转发到已有守卫的下层且自身步骤幂等时，该层早退不保留；下层守卫仅在它确实守住排他副作用时保留。
 - 测试应通过真实事件分发、请求归属和调度取消验证关闭后的行为，不保存旧 handler 再绕过事件系统直接调用。测试定时器的 stop 必须实际撤掉回调。
 - 回归：`tests/framework-event-bus.test.ts`、`tests/bigmap-controller.test.ts`、`tests/territory-controller.test.ts`、`tests/territory-cell-subscriptions.test.ts`、`tests/callback-owner.test.ts`、`tests/view-intent-events.test.ts`。
 
@@ -141,7 +143,7 @@ GameNet.instance.removeCaller(this);
 ```
 
 - 禁止为满足归属参数而写 `this as unknown as destroyable`、`caller as destroyable`、`caller as any`、`caller as never`；也不得给组件或服务伪造 `destroyed` / `destroy()`。遇到类型不匹配，应修正最底层公共签名及上游端口。
-- 业务请求入口统一复用 `sendGameRequest` 处理离线、异常、硬超时与发送结果，不逐处读取 `GameNet.instance.isConnected` 或声明 `net` 后重复判连接。保留参数校验、真实 caller、业务响应判定及各接口的离线返回/缓存回退；连接状态展示、网络诊断与传输层心跳仍可读取连接状态。
+- 业务请求通过 `GameNet.instance.request(request, options)` 由网络模块处理离线、异常、硬超时与发送结果；内部复用 `sendGameRequest`，存量调用保持兼容。业务方不传网络实例给守卫，也不逐处读取 `GameNet.instance.isConnected` 或声明 `net` 后重复判连接。保留参数校验、真实 caller、业务响应判定及各接口的离线返回/缓存回退；连接状态展示、网络诊断与传输层心跳仍可读取连接状态。
 - 网络请求与事件统一按宿主登记、主动解除，不靠回包时检查组件 `isValid` 兜底。纯 TS 端口为 `core/runtime/CallbackOwner.ICallbackOwnerRegistry`；既有 `EventProxy` 承担归属管理，不另建全局注册表。
 - 普通组件在 `onDestroy` 调用 `GameNet.removeCaller(this)`。`PopupBase` 在关闭及销毁时、`ProcedureManager` 在流程切出、进入失败、预加载取消及销毁时统一解除；端口由 `ProcedureBootstrap` 注入。缓存弹窗关闭时节点可能仍然有效，同样必须解除。`ScriptObject` 沿用既有销毁钩子；普通订阅对象由持有者显式退订。缓存订阅仍按原缓存 API 解绑。
 - `NetworkRequest` 接管 `RequestMsg` 的回调与宿主引用：正常完成后注销清理动作；宿主退出时清空成功/失败回调、取消发送资格并让 `send()` 的 Promise 以 `false` 落定。取消不触发业务失败回调，重复解除和迟到回包不再触达旧宿主。复合异步流程的 `context` / `revision` 守卫仍遵循 §3.2。

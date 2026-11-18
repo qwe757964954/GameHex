@@ -1,7 +1,7 @@
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
 import type { TerritorySite } from './TerritoryMapConfig';
-import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import { isTerritoryChestSite } from './TerritoryMapConfig';
 import { territoryLevelBubbleText } from './TerritoryLevelBubble';
 
 /**
@@ -53,8 +53,7 @@ export function territoryPrerequisiteText(
             ?? (site ? stageByCell.get(site.cellId) : undefined);
         return {
             cellId,
-            isChest: site?.type === TERRITORY_SITE_TYPE.fixedResource
-                || site?.type === TERRITORY_SITE_TYPE.patrolChest,
+            isChest: !!site && isTerritoryChestSite(site),
             label: territoryLevelBubbleText(site, stage),
         };
     });

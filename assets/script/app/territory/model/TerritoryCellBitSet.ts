@@ -6,6 +6,8 @@
  * 取位一律用取模，避免 JS 32 位有符号位移在 31 位以上出错；编码先去重再累加位值。
  */
 
+import type { ITerritoryMonsterBox } from './TerritoryMonsterBox';
+
 /** 一个 uint64 word 对应 64 格。 */
 const BITS_PER_WORD = 64;
 /** Long 的 low / high 各 32 位。 */
@@ -178,7 +180,7 @@ export function encodeCellBitSet(cells: readonly number[]): Array<{ low: number;
  *
  * 与本地 `TerritoryProgressData` 的差别：这是**只读回包**，落地要走
  * `TerritoryProgress` 的规则（起点必占领、探索中的格不可重复占领），
- * 所以这里只保留服务端给的三项，不预判任何本地约束。
+ * 所以这里只保留服务端给的几项，不预判任何本地约束。
  */
 export interface ITerritoryCellState {
     readonly levelChapter: number;
@@ -188,11 +190,19 @@ export interface ITerritoryCellState {
     readonly unlockCells: readonly number[];
     /** 已通关（已占领）的格子。 */
     readonly passCells: readonly number[];
+    /**
+     * 本章的怪物宝箱（`repeated ChapterMonsterBoxInfo`）。
+     *
+     * 归一化后一律是数组（没有就是空数组），不保留 `undefined`：
+     * 视图判"这一格有没有箱子"只需查表，不必再区分"字段缺失"与"空集合"。
+     * 解析口径见 `model/TerritoryMonsterBox`。
+     */
+    readonly monsterBoxes: readonly ITerritoryMonsterBox[];
 }
 
 /** 空快照：请求失败 / 服务端还没数据时用它，避免各处判 null。 */
 export function emptyCellState(levelChapter: number): ITerritoryCellState {
-    return { levelChapter, rewardState: 0, unlockCells: [], passCells: [] };
+    return { levelChapter, rewardState: 0, unlockCells: [], passCells: [], monsterBoxes: [] };
 }
 
 /** 奖励是否已领。协议说 0 未领 / 1 已领，其它值一律按未领（宁可让玩家再领一次也别卡住）。 */

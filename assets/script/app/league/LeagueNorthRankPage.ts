@@ -161,11 +161,9 @@ export class LeagueNorthRankPage extends PopupBase {
     }
 
     protected onClose(): void {
-        this.revision += 1;
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -206,10 +204,10 @@ export class LeagueNorthRankPage extends PopupBase {
     /** 预取页签的两张底图（选中 / 未选中）。 */
     private async loadTabFrames(): Promise<void> {
         if (this.tabFramesReady) return;
-        this.tabFramesReady = true;
         const names = LEAGUE_NORTH_TAB_ART_NAMES;
         const frames = await Promise.all(names.map((name) => loadArt(name, LEAGUE_ART_ROOT)));
         if (!this.alive) return;
+        this.tabFramesReady = true;
         const payload = { normal: frames[0] ?? null, selected: frames[1] ?? null };
         this.tabRankRef.setFrames(payload);
         this.tabProgressRef.setFrames(payload);
@@ -225,11 +223,13 @@ export class LeagueNorthRankPage extends PopupBase {
         const snapshot = await this.repository.loadNorthRank(tab, this);
         if (!this.alive || revision !== this.revision || tab !== this.tab) return;
 
-        this.art = await this.loadArtFrames(snapshot);
+        const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision || tab !== this.tab) return;
 
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision || tab !== this.tab) return;
+
+        this.art = art;
 
         // `!ok` ⇒ 保留上一趟的列表（见类头「有意增补」），只提示
         if (snapshot.ok) {
@@ -294,6 +294,6 @@ export class LeagueNorthRankPage extends PopupBase {
     private myRow: ILeagueNorthRankRowView | null = null;
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

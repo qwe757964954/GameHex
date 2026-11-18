@@ -53,15 +53,17 @@ export interface IZCServerStatModifier {
 /** client/server 交给战斗编译器的构筑快照；修改器 id 仍会在开战前经过 PVP 白名单。*/
 export interface ZCCombatBuildSelection {
     unitId: string;
-    /** 服务端卡牌绝对属性；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。*/
+    /** 服务端卡牌绝对属性（override，priority 1000）；覆盖同项本地成长、星级与技能数值，阵营倍率仍在最后应用。*/
     serverAttributes?: Readonly<Partial<Pick<ZCUnitDefinition, 'attack' | 'maxHp'>>>;
     /**
      * 服务端增量属性（`attack.add` / `attack.addRate`）。
      *
      * 与 {@link serverAttributes} 分工：那边是"最终绝对值"（override，priority 1000），
-     * 这里是"相对增/减"，priority 900 —— 同时到达时先算增量、再由绝对值定值。
-     * 走的是成长/技能同一条累加通道：`add` 累加后乘 `1 + addRate`。
-    */
+     * 这里是"相对增/减"，priority 900。合成口径见 `applyZCTypedUnitModifiers`：
+     *   ① 没有绝对值 ⇒ `(base + add 累加) × (1 + addRate)`；
+     *   ② 有绝对值 ⇒ 定值后再乘**服务端** `addRate`（PVP 关卡对敌方的 -20% 就在这一层）；
+     *      本地成长 / 技能的 rate 仍被定值压制，不参与，避免二次污染服务端最终值。
+     */
     serverModifiers?: readonly IZCServerStatModifier[];
     level?: number;
     /** 英雄养成等级：用于按 unlockHeroLevel 自动选择 J 表中的技能升级档。*/
@@ -116,6 +118,17 @@ export interface ZCUnitStatPatch {
      * 缺省/非法（≤0）一律按 1 处理 ⇒ 存量弹道逐字不变。
     */
     bulletSizeScale?: number;
+    /**
+     * **单位本体**的体型缩放（百分点整数，`100` = 体型 ×2，`30` = +30%）。
+     *
+     * 2026-11-18 第 17 批新增，三条技能共用：101904 生命爆发（×2）、
+     * 102104 巨型仙人掌（+30%）、102704 战神附体（×2）。
+     * 消费者只有 `ZCGameModel.syncBodyScale`（每帧折算成 `unit.bodyScale`），
+     * 再由 `ZCUnitView` 乘进本体缩放与血条偏移 —— 不影响 `bodyRadius`（命中判定按原半径，
+     * 否则「体型 ×2」会顺手变成「半个屏幕都算挨着」）。
+     * 缺省 0 ⇒ 缩放 1，存量单位逐字不变。
+    */
+    bodySizePct?: number;
     //  以下 10 种对应 `pvpAttrMap` 里 2026-10-13 补齐的数值属性。带 Pct 的一律是「百分数整数」（20 = +20%）。
     /** 暴击率修正（20 = +20% 暴击率）；直接进 `criticalMultiplier` 判定。*/
     critRatePct?: number;
@@ -723,7 +736,8 @@ export function compileZCCombatBuild(
                 sourceId: selection.unitId, sourceKind: 'server', targetUnitId: selection.unitId,
                 domain: 'unit', statId: modifier.statId, operation: modifier.operation,
                 value: modifier.value,
-                //  低于 override：服务端绝对值仍压过增量，两者同时到达时增量先算、绝对值定值。
+                //  priority 900：低于 override 的 1000。`addRate` 会在定值之后叠乘（关卡减益），
+                //  `add` 仍被定值压制 —— 详见 `applyZCTypedUnitModifiers` 的合成分支。
                 priority: 900,
             });
         }

@@ -14,7 +14,7 @@ import { reportGuideComplete } from '../assets/script/app/guide/application/Guid
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import type { IGuideViewState } from '../assets/script/app/guide/application/GuideController';
-import { GuideEvent } from '../assets/script/app/guide/application/GuideEvents';
+import { GuideEvent, GuideDebugEvent } from '../assets/script/app/guide/application/GuideEvents';
 import type { IGuideGateway } from '../assets/script/app/guide/application/GuideGateway';
 import { GuideSyncOutbox } from '../assets/script/app/guide/model/GuideSyncOutbox';
 import { parseGuideSteps } from '../assets/script/app/guide/model/GuideStepConfig';
@@ -249,6 +249,24 @@ test('未启动时 notify / skip 安全返回 false', () => {
     controller.dispose();
 });
 
+test('dispose 后事件总线不再把旧会话推进或强制跳过', () => {
+    const { controller, store, states } = makeController('c-disposed');
+    controller.start();
+    assert.equal(controller.currentStepId, '1-1');
+    const published = states.length;
+    controller.dispose();
+
+    // 生产路径经 EventMgr 订阅；dispose 必须由 offTarget 解除，而不是靠回调内再判一次。
+    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    EventMgr.instance.emit(GuideEvent.Complete, { cond: 'click' });
+    EventMgr.instance.emit(GuideDebugEvent.ForceSkip);
+
+    assert.equal(controller.currentStepId, '1-1');
+    assert.equal(controller.isFinished, false);
+    assert.equal(states.length, published);
+    assert.equal(store.load(), null);
+});
+
 test('点击意图只接受当前展示实例和当前步骤，旧步骤与退出后的事件不能推进', () => {
     const { controller, states } = makeController('c-scoped-advance');
     controller.start();
@@ -397,8 +415,11 @@ test('5-1 点地图关卡格，5-2 必须实际进入战斗后才完成', () => 
     assert.ok(s51);
     // 关卡列表入口不存在 ⇒ 判据换成 siteTap（点地图上的关卡格）
     assert.equal(s51.completeCond, 'siteTap');
-    // full 遮罩会让 Blocker 全屏、把地图点击吃掉 ⇒ 必须 hole
-    assert.equal(s51.maskType, 'hole', '5-1 若是 full，玩家点关卡格会被全屏点击区吞掉');
+    // 用户 2026-11-17 第 21 条：5-1 要「全屏遮罩 + 高亮关卡地块与编号气泡 + 手指点击」。
+    // `full` 与 `hole` 的差别只有两处：压暗 60% vs 40%、以及**立绘**（hole 一律藏立绘）。
+    // 「全屏点击区把地图吃掉」那个旧顾虑已经不成立：`needsFullScreenBlock()` 要求
+    // `completeCond === 'click'`，本步是 `siteTap` ⇒ Blocker 只盖对话条，点击照旧落到地块上。
+    assert.equal(s51.maskType, 'full', '5-1 要全屏遮罩；点击区由 needsFullScreenBlock 收窄到对话条');
 
     const s52 = STEPS.find((step) => step.stepId === '5-2');
     assert.ok(s52);
@@ -478,6 +499,33 @@ test('远端 0/0 未开始：不校正，firstRun 仍为真，也不产生上报
     controller.dispose();
 });
 
+test('查询等待期间 dispose：迟到回包不再校正、落盘或补发', async () => {
+    let resolveLoad: ((value: CmdFunctionGuideInfo | null) => void) | null = null;
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-remote-dispose', serverId: 's1' }, storage);
+    outbox.push('1-1', 900);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: () => new Promise(resolve => { resolveLoad = resolve; }),
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store, states } = makeController('c-remote-dispose', { storage, outbox, gateway });
+    controller.start();
+    const published = states.length;
+    assert.equal(published, 1);
+
+    controller.dispose();
+    resolveLoad({ funcId: 1, step1: 2, step2: 2 });
+    await tick();
+
+    assert.equal(controller.currentStepId, '1-1');
+    assert.equal(states.length, published);
+    assert.equal(store.load(), null);
+    assert.deepEqual(updates, []);
+    assert.equal(outbox.head()?.stepId, '1-1', '释放后的 flush 入口不得再发请求或 ack');
+});
+
 test('待发补发：上次会话遗留的待发项在启动时发出并出队', async () => {
     const storage = createMemoryGuideStorage();
     const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-start', serverId: 's1' }, storage);
@@ -494,6 +542,34 @@ test('待发补发：上次会话遗留的待发项在启动时发出并出队',
     assert.deepEqual(updates, ['1-1']);
     assert.equal(outbox.head(), null);
     controller.dispose();
+});
+
+test('补发请求在途时 dispose：迟到结果不 ack，队列留给下次会话', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-dispose', serverId: 's1' }, storage);
+    outbox.push('1-1', 900);
+    const calls: string[] = [];
+    let resolveUpdate: ((result: 'ok') => void) | null = null;
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: id => {
+            calls.push(id);
+            return new Promise<'ok'>(resolve => { resolveUpdate = resolve; });
+        },
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-outbox-dispose', { storage, outbox, gateway });
+    controller.start();
+    await tick();
+    assert.deepEqual(calls, ['1-1']);
+
+    controller.dispose();
+    resolveUpdate('ok');
+    await tick();
+
+    // await 之后旧会话已释放：结果不能再 ack，队列必须留给下一次会话。
+    assert.equal(outbox.head()?.stepId, '1-1');
+    assert.equal(outbox.size, 1);
 });
 
 test('发送失败保留待发项，下次推进按 FIFO 重试', async () => {
@@ -593,5 +669,163 @@ test('远端落后于本地：启动时补推最后完成步，服务端不会�
     // 不倒退、只补推：一步 4-1 在「最后已完成」语义下等价整条前缀。
     assert.equal(controller.currentStepId, '5-1');
     assert.deepEqual(updates, ['4-1']);
+    controller.dispose();
+});
+
+test('远端校正裁剪只删除远端已确认的步，未确认的本地完成项保留', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-prune-unconfirmed', serverId: 's1' }, storage);
+    outbox.push('2-1', 900);
+    let resolveLoad: ((value: CmdFunctionGuideInfo | null) => void) | null = null;
+    const gateway: IGuideGateway = {
+        load: () => new Promise(resolve => { resolveLoad = resolve; }),
+        // 队头永远失败，保证本项留在队列里，能观察 prune 是否误删。
+        update: async () => 'retry',
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-prune-unconfirmed', { storage, outbox, gateway });
+    // 本地非前缀完成集：完成了 2-1 却没有 1-2；服务端只确认到 1-2。
+    store.save({ currentStepId: '2-2', completedSteps: ['1-1', '2-1'], grantedSteps: [], skipped: false }, 900);
+    controller.start();
+    resolveLoad({ funcId: 1, step1: 1, step2: 2 });
+    await tick();
+    assert.equal(controller.currentStepId, '2-2');
+    assert.equal(outbox.head()?.stepId, '2-1', '2-1 尚未被服务端确认，不能随远端校正被裁掉');
+    controller.dispose();
+});
+
+test('网关 update 拒绝：上报错误、保留队头并复位补发状态', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-outbox-reject', serverId: 's1' }, storage);
+    const calls: string[] = [];
+    const errors: unknown[] = [];
+    let failing = true;
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => {
+            calls.push(id);
+            if (failing) throw new Error('boom');
+            return 'ok';
+        },
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-outbox-reject', {
+        storage, outbox, gateway, failed: error => errors.push(error),
+    });
+    controller.start();
+    await tick();
+    assert.equal(controller.notify('click'), true);
+    await tick();
+    assert.deepEqual(calls, ['1-1']);
+    assert.equal(outbox.head()?.stepId, '1-1');
+    assert.ok(errors.length > 0, '网关拒绝必须通过 failed 上报，而不是变成未处理拒绝');
+
+    failing = false;
+    assert.equal(controller.notify('click'), true);
+    await tick();
+    assert.deepEqual(calls, ['1-1', '1-1', '1-2']);
+    assert.equal(outbox.head(), null, 'flushing 复位后下一次推进能继续补发');
+    controller.dispose();
+});
+
+test('补发在途时再次推进：本轮结束后接着重试，不把新项拖到下次启动', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-flush-race', serverId: 's1' }, storage);
+    const calls: string[] = [];
+    const pending: Array<(result: 'ok' | 'retry') => void> = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => {
+            calls.push(id);
+            return await new Promise<'ok' | 'retry'>(resolve => { pending.push(resolve); });
+        },
+        dispose: () => {},
+    };
+    const { controller } = makeController('c-flush-race', { storage, outbox, gateway });
+    controller.start();
+    await tick();
+    assert.equal(controller.notify('click'), true);
+    await tick();
+    assert.deepEqual(calls, ['1-1']);
+    // 第一次上报还没回来时又推进一步：不能只在 flushing 标记上 return 而丢掉这次唤醒。
+    assert.equal(controller.notify('click'), true);
+    await tick();
+    assert.deepEqual(calls, ['1-1']);
+
+    pending.shift()?.('retry');
+    await tick();
+    assert.deepEqual(calls, ['1-1', '1-1'], '新推进应触发下一轮补发');
+    pending.shift()?.('ok');
+    await tick();
+    assert.deepEqual(calls, ['1-1', '1-1', '1-2'], '队头成功后按 FIFO 继续');
+    pending.shift()?.('ok');
+    await tick();
+    assert.equal(outbox.head(), null);
+    controller.dispose();
+});
+
+test('老玩家迁移只推当前表内的最后完成步，旧表残留 stepId 不发给服务端', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-migrate-stale', serverId: 's1' }, storage);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-migrate-stale', { storage, outbox, gateway });
+    store.save({
+        currentStepId: '',
+        completedSteps: ['1-1', '1-2', '2-1', '2-2', '2-3', '9-9'],
+        grantedSteps: [],
+        skipped: false,
+    }, 900);
+    controller.start();
+    await tick();
+    assert.equal(controller.currentStepId, '3-1');
+    assert.deepEqual(updates, ['2-3'], '9-9 已不在当前表内，不能拿它当服务端游标');
+    controller.dispose();
+});
+
+test('合并存档的完成集顺序打乱时，仍按链序补推最靠后的完成步', async () => {
+    const storage = createMemoryGuideStorage();
+    const outbox = new GuideSyncOutbox({ roleId: 'c-migrate-order', serverId: 's1' }, storage);
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-migrate-order', { storage, outbox, gateway });
+    // 合并后的数组末项是 2-2，但链上更靠后的是 2-3。
+    store.save({
+        currentStepId: '3-1',
+        completedSteps: ['1-1', '1-2', '2-1', '2-3', '2-2'],
+        grantedSteps: [],
+        skipped: false,
+    }, 900);
+    controller.start();
+    await tick();
+    assert.deepEqual(updates, ['2-3']);
+    controller.dispose();
+});
+
+test('无 outbox 直连模式也补推本地进度', async () => {
+    const updates: string[] = [];
+    const gateway: IGuideGateway = {
+        load: async () => null,
+        update: async id => { updates.push(id); return 'ok'; },
+        dispose: () => {},
+    };
+    const { controller, store } = makeController('c-migrate-direct', { gateway });
+    store.save({
+        currentStepId: '7-1',
+        completedSteps: ['1-1', '1-2', '2-1', '2-2', '2-3', '3-1', '4-1', '5-1', '5-2', '5-3', '5-4', '6-1', '6-2', '6-3'],
+        grantedSteps: [],
+        skipped: false,
+    }, 900);
+    controller.start();
+    await tick();
+    assert.deepEqual(updates, ['6-3']);
     controller.dispose();
 });

@@ -19,7 +19,10 @@ import {
     TerritoryModel,
 } from '../assets/script/app/territory/application/TerritoryModel';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { TerritoryController } from '../assets/script/app/territory/application/TerritoryController';
+import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { buildTerritoryViewState, isTerritoryChestActionable } from '../assets/script/app/territory/application/TerritoryViewState';
+import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
 import * as territoryEvents from '../assets/script/app/territory/application/TerritoryEvents';
 const { TerritoryUiEvent, TerritoryViewEvent } = territoryEvents;
 import type { TerritoryCampaignStage } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
@@ -42,8 +45,26 @@ import type {
     TerritoryWriteResult,
 } from '../assets/script/app/territory/application/TerritoryCellRepository';
 import { emptyCellState } from '../assets/script/app/territory/model/TerritoryCellBitSet';
-import { configureTerritoryMap, territoryNeighbors } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { configureTerritoryMap, isTerritoryBattleSite, territoryNeighbors } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { assetPath } from './helpers/asset-paths';
+import { loadTsModule } from './helpers/cc-sandbox';
+
+type TerritoryControllerCtor = typeof import('../assets/script/app/territory/application/TerritoryController')['TerritoryController'];
+
+/** Controller 直连 `GameNet.instance`；这里只驱动界面与 Model，订阅端口给空实现。 */
+const { exports: controllerExports, unresolved: controllerUnresolved } = loadTsModule<{ TerritoryController: TerritoryControllerCtor }>(
+    'assets/script/app/territory/application/TerritoryController.ts', { modules: {
+        '/ControllerBase': { ControllerBase },
+        '/GuideEvents': { reportGuideComplete },
+        '/GameNet': { GameNet: { instance: { addEvent() {}, removeCaller() {} } } },
+        '/EventMgr': { EventMgr },
+        '/TerritoryEvents': territoryEvents,
+        '/TerritoryViewState': { buildTerritoryViewState, isTerritoryChestActionable },
+        '/TerritoryTexts': { TERRITORY_TEXTS },
+        '/TerritoryMapConfig': { configureTerritoryMap, isTerritoryBattleSite, territoryNeighbors },
+    } });
+assert.deepEqual(controllerUnresolved, []);
+const TerritoryController = controllerExports.TerritoryController;
 
 interface IBattlePageProbe {
     onDetailStart(): void;
@@ -90,7 +111,6 @@ function createBattlePageProbe(presenter: TerritoryModel) {
     assert.ok(exports.MainTerritoryMap);
     const page = new exports.MainTerritoryMap();
     const controller = new TerritoryController(() => presenter, { context: createControllerContext(),
-        network: { addEvent() {}, removeCaller() {} },
         roleCache: { subscribe: () => () => {} },
         cells: { readCellInfo: () => null, readPassCellsBro: () => null },
         schedule: () => () => {},

@@ -4,28 +4,27 @@
  * 活动进度挂在 `CmdActivity.detail` 上，没有独立的拉取请求；缓存为空时界面按无活动处理。
  */
 
+import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { parseRechargeItemMap } from './RechargeItemMap';
-import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import type { IRechargeActivityInfo, IRechargeTotalPageView } from './RechargeActivityTable';
 import {
+    RECHARGE_TAB,
     buildRechargeTotalPageView,
     parseRechargeActPlanRows,
     parseRechargeActivityRows,
     parseRechargeTabRows,
     readRechargeActivities,
     rechargeTotalRedDot,
-    RECHARGE_TAB,
 } from './RechargeActivityTable';
-import type { IRechargeActivityInfo, IRechargeTotalPageView } from './RechargeActivityTable';
+import { parseRechargeItemMap } from './RechargeItemMap';
 import { RequestTakeRechargeGiftActReward } from './RequestRechargeActivityMsg';
 
-import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 import { ITEM_TABLE } from '../../core/config/TableNames';
 import type { INetRequestStatus } from '../../core/types/NetResult';
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面快照。 */
 export interface IRechargeActivitySnapshot {
     /** 页签 `id` → 该页签的视图。 */
@@ -97,7 +96,7 @@ export class RuntimeRechargeActivityRepository implements IRechargeActivityRepos
             caller,
             (rsp) => FW.ShowReward(rsp?.tlReward ?? []),
         );
-        return sendGameRequest(GameNet.instance, () => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeActivity' });
+        return GameNet.sendRequest(() => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeActivity' });
     }
 }
 

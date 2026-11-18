@@ -10,6 +10,7 @@ import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import * as guards from '../assets/script/app/net/RequestGuard';
 import * as leagueTable from '../assets/script/app/league/LeagueTable';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
@@ -118,7 +119,7 @@ test('真实仓库只返回响应数据：无 ret 的商店、ret 失败、离�
         exports, console,
         require: (id: string) => {
             if (id.endsWith('/FW')) throw new Error('Repository 不得访问展示端口');
-            if (id.endsWith('/GameNet')) return { GameNet: { instance: net } };
+            if (id.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } };
             if (id.endsWith('/RequestGuard')) return guards;
             if (id.endsWith('/RequestLeagueMsg')) return { ...requests, LeagueACT_TYPE: { NORTHERN_EXPEDITION: 3 }, LEAGUE_SHOP_TYPE_UNION: 8 };
             if (id.endsWith('/LeagueTable')) return leagueTable;

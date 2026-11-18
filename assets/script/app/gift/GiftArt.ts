@@ -8,6 +8,7 @@
 import { spriteFramePath } from '../ArtPaths';
 import { resIconRoot } from '../common/ResTypes';
 import { resolveItemIconRef } from '../common/RewardIcon';
+import type { IItemIconRef } from '../common/RewardIcon';
 
 /** 礼包美术目录（运行时时相对 `resources` 的路径）。 */
 export const GIFT_ART_ROOT = 'image/gift';
@@ -79,14 +80,14 @@ export const GIFT_RES_ICON_ART: Readonly<Record<number, string>> = {
 };
 
 /** 取一个资源档图标的加载参数；没有对应图时返回 `null`。 */
-export function giftResIconRef(resId: number): { readonly root: string; readonly name: string } | null {
+export function giftResIconRef(resId: number): IItemIconRef | null {
     const name = GIFT_RES_ICON_ART[resId];
     if (!name) return null;
     return { root: resIconRoot(name), name };
 }
 
 /** `priceType` / `roleProperty.coin` 的货币图标（购买按钮 + 灵玉卡中间那张）。 */
-export function giftCurrencyIconRef(): { readonly root: string; readonly name: string } {
+export function giftCurrencyIconRef(): IItemIconRef {
     const name = GIFT_RES_ICON_ART[10];
     return { root: resIconRoot(name), name };
 }
@@ -107,7 +108,7 @@ export function giftArtPath(key: string): string | null {
 export function resolveGiftIconRef(
     item: { readonly icon: string } | undefined,
     resId: number,
-): { readonly root: string; readonly name: string } | null {
+): IItemIconRef | null {
     const fromItem = item ? resolveItemIconRef(item.icon) : null;
     if (fromItem) return { root: fromItem.root, name: fromItem.name };
     return giftResIconRef(resId);

@@ -539,8 +539,11 @@ export class ZCUnitView extends Component {
                     this.spawnShakeStartedAt = null;
                 }
             }
-            const scaleX = this.visualBaseScale.x * facing * shakeX * (unit.gateScale ?? 1);
-            const scaleY = this.visualBaseScale.y * shakeY * (unit.gateScale ?? 1);
+            //  `bodyScale` = 技能驱动的体型（生命爆发 / 战神附体 / 巨型仙人掌，2026-11-18 第 17 批），
+            //  由 `ZCGameModel.syncBodyScale` 每帧折算；与格子效果 `gateScale` 相乘，两条来源互不干扰。
+            const bodyScale = unit.bodyScale ?? 1;
+            const scaleX = this.visualBaseScale.x * facing * shakeX * (unit.gateScale ?? 1) * bodyScale;
+            const scaleY = this.visualBaseScale.y * shakeY * (unit.gateScale ?? 1) * bodyScale;
             // 值没变就不写 setScale：引擎会因它置脏标记，每帧无条件写是纯浪费。
             if (scaleX !== this.appliedVisualScaleX || scaleY !== this.appliedVisualScaleY) {
                 this.appliedVisualScaleX = scaleX;
@@ -711,7 +714,7 @@ export class ZCUnitView extends Component {
         // 血条 Y 必须跟着 `prefabSize` 一起缩放：美术放大后头顶也跟着升
         // （基准 +69~+74，×1.2 就是 +83~+89），而条固定在 +80 就会陷进脑袋里。
         // 宽度不缩 —— 血条宽是「可读性」规格（56/64），跟着美术体型缩到 45 会读不出比例。
-        const barOffsetY = this.barOffsetY * this.visualSize * (unit.gateScale ?? 1);
+        const barOffsetY = this.barOffsetY * this.visualSize * (unit.gateScale ?? 1) * (unit.bodyScale ?? 1);
         if (barOffsetY !== this.barAppliedOffsetY) {
             this.healthBar.node.setPosition(0, barOffsetY, 0);
             this.barAppliedOffsetY = barOffsetY;
@@ -762,7 +765,8 @@ export class ZCUnitView extends Component {
         this.fallbackLabel.enabled = this.visualNode === null;
         if (this.visualNode) return;
         const radius = (definition.hero
-            ? ZCUnitView.FALLBACK_RADIUS_HERO : ZCUnitView.FALLBACK_RADIUS_UNIT) * (unit.gateScale ?? 1);
+            ? ZCUnitView.FALLBACK_RADIUS_HERO : ZCUnitView.FALLBACK_RADIUS_UNIT)
+            * (unit.gateScale ?? 1) * (unit.bodyScale ?? 1);
         this.fallback.node.setPosition(0, radius, 0);
         this.fallbackLabel.node.setPosition(0, radius + 1, 0);
         this.fallbackTransform.setContentSize(radius * 2, radius * 2);

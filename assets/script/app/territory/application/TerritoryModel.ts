@@ -30,9 +30,12 @@ import type {
     TerritoryMapConfig,
     TerritorySite,
 } from '../model/TerritoryMapConfig';
-import { configureTerritoryMap, isTerritoryBattleSite, TERRITORY_SITE_TYPE, TERRITORY_SILVER_CHEST_REWARD_ID } from '../model/TerritoryMapConfig';
+import { configureTerritoryMap, isTerritoryBattleSite, isTerritoryChestSite, TERRITORY_SITE_TYPE, TERRITORY_SILVER_CHEST_REWARD_ID } from '../model/TerritoryMapConfig';
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 import { buildTerritoryMapLayout } from '../model/TerritoryMapLayout';
+import { territoryPatrolAnchorCell } from '../model/TerritoryMonsterPatrol';
+import type { ITerritoryMonsterBox } from '../model/TerritoryMonsterBox';
+import { withTerritoryMonsterBox } from '../model/TerritoryMonsterBox';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
 import { TerritoryProgress, normalizeTerritoryChapter } from '../model/TerritoryProgress';
@@ -46,6 +49,7 @@ import type {
 import {
     applyTerritoryStageUnlocks,
     bindTerritoryBattleStages,
+    bindTerritoryPatrolStages,
     bindTerritoryStages,
     chapterFinalBossCell,
     expandBindingsToAreaSites,
@@ -57,6 +61,7 @@ import type { TerritoryChapterCompletion } from '../model/TerritoryStageBinding'
 import type {
     TerritoryCellFetchResult,
     TerritoryIdleRewardResult,
+    TerritoryMonsterBoxUpgradeResult,
     TerritoryStartBattleResult,
     TerritoryWriteResult,
 } from './TerritoryCellRepository';
@@ -114,17 +119,16 @@ export interface ITerritoryChapterLoader {
 /** 服务端格子网关；运行时直接传现有 TerritoryCellRepository 实例（结构匹配）。 */
 export interface ITerritoryCellGateway {
     fetchChapterCells(
-        chapterId: number, maxCell: number, host?: object,
+        chapterId: number, maxCell: number,
     ): Promise<TerritoryCellFetchResult>;
     /** 服务端解锁格子；战斗入口允许离线继续，固定资源领取只认成功回包。 */
-    unlockCell(chapterId: number, cellId: number, host?: object): Promise<TerritoryWriteResult>;
+    unlockCell(chapterId: number, cellId: number): Promise<TerritoryWriteResult>;
     /** 探索到期占领后上报通关；fire-and-forget。 */
-    passCell(chapterId: number, cellId: number, host?: object): Promise<TerritoryWriteResult>;
+    passCell(chapterId: number, cellId: number): Promise<TerritoryWriteResult>;
     /** Boss 关开战：请求战斗信息（`CmdStartBattleReqMsg`），**不走**通关上报。 */
     startBattle(
         battleType: number,
         battleParams: readonly string[],
-        host?: object,
     ): Promise<TerritoryStartBattleResult>;
     /**
      * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`）。
@@ -132,7 +136,7 @@ export interface ITerritoryCellGateway {
      * 回包 `tlCmdGoods` 是**服务端实际发放**的物品，必须原样展示；
      * `idleTime` 是新的挂机起点（秒），写回本地账本的只有它，不再本地掷骰结算。
      */
-    claimIdleReward(host?: object): Promise<TerritoryIdleRewardResult>;
+    claimIdleReward(): Promise<TerritoryIdleRewardResult>;
     /**
      * 章节扫荡（`CmdCityChapterSweepReqMsg { levelChapter, cellId, times }`）。
      *
@@ -140,7 +144,14 @@ export interface ITerritoryCellGateway {
      * `times` 是**扫荡倍率**（协议缺省 1，档位见 `HJ_SWEEP_GEARS`）：服务端按
      * `倍率 × 单次消耗` 扣体力、按倍率发奖 —— 客户端只透传，不做本地结算。
      */
-    sweep(chapterId: number, cellId: number, times: number, host?: object): Promise<TerritoryWriteResult>;
+    sweep(chapterId: number, cellId: number, times: number): Promise<TerritoryWriteResult>;
+    /**
+     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg { levelChapter, cellId }`）。
+     *
+     * 消耗由服务端按当前等级扣，客户端不预扣、也不本地 `lv + 1`；
+     * 回包 `monsterBoxInfo` 才是新等级（字段缺失时 `monsterBox` 为 `null`，见仓储注释）。
+     */
+    upMonsterBoxLv(chapterId: number, cellId: number): Promise<TerritoryMonsterBoxUpgradeResult>;
     clear(): void;
 }
 
@@ -327,8 +338,6 @@ export interface ITerritoryModelPorts {
      */
     readonly writeServerIdleTimeSeconds?: (seconds: number) => void;
     readonly availableChapters: readonly number[];
-    /** 网络请求的生命周期宿主（页面组件；断网/销毁时取消请求）。 */
-    readonly lifecycleHost?: object;
 }
 
 /**
@@ -456,6 +465,14 @@ export interface ITerritoryViewState {
     readonly layout: ITerritoryMapLayout;
     readonly art: ITerritoryBattleArt;
     readonly progress: TerritoryProgress | null;
+    /**
+     * 本章的怪物宝箱（`CmdCityChapterCellInfoRspMsg.monsterBoxInfos`），按格子号升序。
+     *
+     * 这是**服务端权威**的宝箱等级：升级回包会把新等级并进来（见
+     * `ITerritoryCellGateway.upMonsterBoxLv`），客户端不本地 +1。
+     * 视图侧不要直接 `find` —— `buildTerritoryStationStates` 已按格子号建好查询表。
+     */
+    readonly monsterBoxes: readonly ITerritoryMonsterBox[];
     readonly revealedCells: readonly number[];
     /**
      * **提前披露**的格：第 1 关开局就露、通过第 1 关露首领 1、通过首领 1 露首领 2。
@@ -487,6 +504,8 @@ export interface ITerritoryViewState {
     readonly randomResourceOpenableCells: readonly number[];
     readonly pendingRandomResourceCells: readonly number[];
     readonly pendingFixedResourceCells: readonly number[];
+    /** 升级怪物宝箱在途的格子：视图据此禁用按钮（连点会被 `runCellWrite` 挡，但按钮别留在可点态）。 */
+    readonly pendingMonsterBoxCells: readonly number[];
     /**
      * 「胜利通过」收进来的格子（打完关卡 / 战斗胜利后新归我的那几格）。
      *
@@ -663,6 +682,7 @@ export class TerritoryModel {
     private battleHandoff = false;
     private pendingFixedResourceCells = new Set<number>();
     private pendingRandomResourceCells = new Set<number>();
+    private pendingMonsterBoxCells = new Set<number>();
     /**
      * 上一次结算里**「胜利通过」收进来的格子**（只给动画挑节奏用，不参与玩法判定）。
      *
@@ -873,10 +893,42 @@ export class TerritoryModel {
             this.emitStateChange();
             return true;
         }
-        // 只剩**资源点**走「解锁 → 通关」（`CmdCityChapterPassCellReqMsg`）。
+        // 巡逻宝箱：解锁后出巡逻野怪，**要打掉才占点**。
+        // - 第一下（未解锁）：只解锁（`unlockCell`），野怪随这片巡逻区全解锁而出现；
+        // - 第二下（已解锁未占）：发 `CmdStartBattleReqMsg` 打这一片的 `battleId`；
+        // - 打完占点 ⇒ 同 `battleId` 的整片野怪停巡（见 `model/TerritoryMonsterPatrol`）。
+        // 格面仍是宝箱样子：`stationRenderOf` 的宝箱分支排在 `station.battle` 之前，
+        // 而且它没有关卡编号（`chapterStage=0`），所以不弹关卡详情。
+        if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
+            this.detailSite = null;
+            this.detailStage = null;
+            this.levelTipOpen = false;
+            if (this.progress.isOwned(site.cellId)) {
+                // 已占点 ⇒ 野怪已停巡，这一格没有下一步（不重复开战）。
+                this.emitStateChange();
+                return true;
+            }
+            if (!this.progress.isCellUnlocked(site.cellId)) {
+                void this.handleUnlockOnly(site, TERRITORY_TEXTS.stageUnlocked);
+                return true;
+            }
+            const patrolStage = this.stageByCell.get(site.cellId) ?? null;
+            if (!patrolStage) {
+                // 绑不到关卡行（`levelInfo` 缺这一片的 `battleId`）⇒ 明确提示，
+                // 别静默吞点击（那正是「点不动」的观感）。
+                this.showTip(TERRITORY_TEXTS.pendingTitle);
+                this.emitStateChange();
+                return true;
+            }
+            this.engagePatrolChest(site, patrolStage);
+            return true;
+        }
+        // 只剩**固定资源据点**走「解锁 → 通关」（`CmdCityChapterPassCellReqMsg`）。
         // 关卡（`stage` / `boss`）已在上面那条分支 return 掉 —— 给关卡发通关会被服务端
         // 回「章节格子非资源类型」（早期实机踩过），别把这两条路合并。
-        if (site.type === TERRITORY_SITE_TYPE.fixedResource) {
+        // `patrolChest` 也在上面单独分流掉了；这里仍用宝箱判定而不是写死 `fixedResource`，
+        // 是为了以后再加宝箱类型时自动落到这条领奖路径，不用回来补。
+        if (isTerritoryChestSite(site)) {
             this.detailSite = null;
             this.detailStage = null;
             this.emitStateChange();
@@ -1009,6 +1061,21 @@ export class TerritoryModel {
      * `battleParams = [子类型, 章节id, 格子id]`（子类型 = 1 格子战斗，见
      * `chapterCellBattleParams`）—— 关卡身份靠 `格子id` 定位，不是 battleType）。
      */
+    /**
+     * 巡逻宝箱第二下：发 `CmdStartBattleReqMsg` 打掉这一格的巡逻野怪。
+     *
+     * 为什么单独抽一层而不在 `selectSite` 里直接调 `handleBattleStationStart`：
+     * `selectSite` 只负责**分流**（守卫钉着「弹窗按钮那条路不在这里」），
+     * 真正的开战入口收敛在 `handleBattleStationStart` 一处，这里只是转调。
+     * 不弹关卡详情 —— 巡逻关 `chapterStage=0`，没有编号可展示。
+     */
+    private engagePatrolChest(site: TerritorySite, stage: TerritoryCampaignStage): void {
+        this.detailSite = null;
+        this.detailStage = null;
+        this.levelTipOpen = false;
+        void this.handleBattleStationStart(site, stage);
+    }
+
     private async handleBattleStationStart(
         site: TerritorySite,
         stage: TerritoryCampaignStage,
@@ -1067,10 +1134,19 @@ export class TerritoryModel {
             () => this.ports.gateway.startBattle(
                 ZC_BATTLE_TYPE_CHAPTER,
                 this.battleParamsFor(site, map.chapterId),
-                this.ports.lifecycleHost,
             ),
             (result) => this.applyBattleStart(site, stage, result),
         );
+    }
+
+    /**
+     * 巡逻宝箱上报后端用的格子：同 `site.id` 组里**带 `patrolId` 的那一格**。
+     *
+     * 怪物配置（`monsterCard.id`）绑在那一格上，服务端按 `cellId` 找配置 ⇒
+     * 「同片任一格命中（解锁 / 开战）都把它传给后端」。非巡逻宝箱返回自己。
+     */
+    private patrolReportCell(site: TerritorySite): number {
+        return territoryPatrolAnchorCell(site, this.map?.sites ?? []);
     }
 
     /**
@@ -1081,6 +1157,11 @@ export class TerritoryModel {
      * 「某种入口点进去服务端说配置错误」。
      */
     private battleParamsFor(site: TerritorySite, chapterId: number): readonly string[] {
+        // 巡逻宝箱：同片任一格命中，都按「带 `patrolId` 的那一格」上报 ——
+        // 怪物配置绑在那格上（2026-11-18 口径）。
+        if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
+            return chapterCellBattleParams(chapterId, this.patrolReportCell(site));
+        }
         if (site.type !== TERRITORY_SITE_TYPE.asyncPvp) {
             // 主线 stage / boss 恒为格子战斗子类型 1，不参与下面的分流。
             return chapterCellBattleParams(chapterId, site.cellId);
@@ -1180,8 +1261,7 @@ export class TerritoryModel {
         stage: TerritoryCampaignStage,
         chapterId: number,
     ): Promise<ITerritoryUnlockThenBattleOutcome | null> {
-        const unlock = await this.ports.gateway.unlockCell(
-            chapterId, site.cellId, this.ports.lifecycleHost);
+        const unlock = await this.ports.gateway.unlockCell(chapterId, site.cellId);
         if (!unlock.ok) {
             this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
             return null;
@@ -1192,7 +1272,6 @@ export class TerritoryModel {
         const battle = await this.ports.gateway.startBattle(
             ZC_BATTLE_TYPE_CHAPTER,
             this.battleParamsFor(site, chapterId),
-            this.ports.lifecycleHost,
         );
         return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle, rewards: unlock.rewards ?? [] };
     }
@@ -1222,7 +1301,9 @@ export class TerritoryModel {
         if (!this.canAffordUnlock(site)) return;
         await this.runCellWrite(
             site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyUnlock,
-            () => this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost),
+            // 巡逻宝箱：请求发「带 `patrolId` 的那一格」（怪物配置绑在那格），
+            // 在途标记/回包记账仍按玩家点的这一格 —— 转圈还在手指底下。
+            () => this.ports.gateway.unlockCell(map.chapterId, this.patrolReportCell(site)),
             (result) => {
                 if (!result.ok) {
                     this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
@@ -1235,6 +1316,61 @@ export class TerritoryModel {
                 this.refreshWalletFromServer(false);
                 if (result.rewards?.length) this.showRewards(result.rewards, site.cellId);
                 this.showTip(unlockedText);
+            },
+        );
+    }
+
+    /**
+     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg { levelChapter, cellId }`）。
+     *
+     * 与解锁 / 领取的区别：**消耗由服务端按当前等级判**（协议不带消耗、也不带奖励），
+     * 客户端只拦两件事：
+     * ① 本章快照里压根没有这一格的宝箱 ⇒ 不发（发出去只会被拒，还白弹一次失败提示）；
+     * ② 同一格已有在途升级 ⇒ `runCellWrite` 的 pending 判重挡住。
+     *
+     * 等级真源是回包的 `monsterBoxInfo`，**不本地 `lv + 1`**；回包给 `succ = 1` 却没带
+     * 合法条目时（`monsterBox === null`）不猜等级，直接重拉一次章节快照。
+     * 服务端明确拒绝（`rejected`）同样重拉：本地快照可能已经过时（别处升过级）。
+     */
+    async upgradeMonsterBox(cellId: number): Promise<void> {
+        const map = this.map;
+        const context = this.chapter;
+        if (!map || !context) return;
+        const snapshot = context.serverCellStateCache;
+        if (!snapshot?.monsterBoxes.some(box => box.cellId === cellId)) {
+            console.warn(`[TerritoryModel] 第 ${map.chapterId} 章格子 ${cellId} 不在怪物宝箱快照里，跳过升级`);
+            return;
+        }
+        this.beginInteraction(cellId);
+        const loadId = this.loadId;
+        await this.runCellWrite(
+            cellId, this.pendingMonsterBoxCells, TERRITORY_TEXTS.busyUpgradeMonsterBox,
+            () => this.ports.gateway.upMonsterBoxLv(map.chapterId, cellId),
+            (result) => {
+                // 与 `mergeServerState` 同口径：非 strict 下 `!result.ok` 收窄不生效，判失败用 `in`。
+                if ('reason' in result) {
+                    this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
+                    // 只有服务端明确拒绝才重拉：离线 / 超时时重拉会把本地已有的快照再打一次空请求。
+                    if (result.reason === TERRITORY_REQUEST_STATUS.rejected) {
+                        void this.mergeServerState(map.chapterId, loadId);
+                    }
+                    return;
+                }
+                const box = result.monsterBox;
+                if (!box) {
+                    // 「升级成功但等级未知」：服务端已经改了，别报失败也别猜，重拉取权威值。
+                    void this.mergeServerState(map.chapterId, loadId);
+                    return;
+                }
+                const latest = this.chapter?.serverCellStateCache;
+                if (latest && latest.levelChapter === map.chapterId) {
+                    this.requireChapter().serverCellStateCache = {
+                        ...latest,
+                        monsterBoxes: withTerritoryMonsterBox(latest.monsterBoxes, box),
+                    };
+                }
+                this.showTip(TERRITORY_TEXTS.monsterBoxUpgraded(box.lv));
+                // 在途帧与最终帧由 `runCellWrite` 的 finally 统一发布，这里不再 emit。
             },
         );
     }
@@ -1260,8 +1396,8 @@ export class TerritoryModel {
             site.cellId, this.pendingFixedResourceCells,
             isUnlocked ? TERRITORY_TEXTS.busyPass : TERRITORY_TEXTS.busyUnlock,
             () => (isUnlocked
-                ? this.ports.gateway.passCell(map.chapterId, site.cellId, this.ports.lifecycleHost)
-                : this.ports.gateway.unlockCell(map.chapterId, site.cellId, this.ports.lifecycleHost)),
+                ? this.ports.gateway.passCell(map.chapterId, site.cellId)
+                : this.ports.gateway.unlockCell(map.chapterId, site.cellId)),
             (result) => {
                 if (!result.ok) {
                     this.showTip(isUnlocked ? texts.claimFailed : texts.unlockFailed);
@@ -1399,10 +1535,10 @@ export class TerritoryModel {
             cellId, this.pendingRandomResourceCells, null,
             async () => {
                 const loadId = this.loadId;
-                const result = await this.ports.gateway.unlockCell(map.chapterId, cellId, this.ports.lifecycleHost);
+                const result = await this.ports.gateway.unlockCell(map.chapterId, cellId);
                 // 写请求超时不代表服务器没执行，先用既有章节快照合并流程核对。
                 if (loadId === this.loadId && 'reason' in result && result.reason === TERRITORY_REQUEST_STATUS.failed) {
-                    await this.mergeServerState(map.chapterId, loadId, this.ports.lifecycleHost);
+                    await this.mergeServerState(map.chapterId, loadId);
                 }
                 return result;
             },
@@ -1586,7 +1722,7 @@ export class TerritoryModel {
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
         try {
             const unlock = await this.ports.gateway.unlockCell(
-                map.chapterId, site.cellId, this.ports.lifecycleHost);
+                map.chapterId, site.cellId);
             // 取消或换章 / 换交互会作废任务版本，迟到结果不再提交。
             if (loadId !== this.loadId || requestId !== this.interactionId) return;
             if ('reason' in unlock) {
@@ -1774,7 +1910,7 @@ export class TerritoryModel {
     // ============================================================
 
     private async loadChapter(chapterId: number, autoAdvance = true): Promise<void> {
-        const { loader, gateway, store, lifecycleHost } = this.ports;
+        const { loader, gateway, store } = this.ports;
         const pushes: ITerritoryChapterPushes = this.loadId === 0
             && this.loadingPushes?.chapterId === chapterId
             ? this.loadingPushes
@@ -1834,15 +1970,23 @@ export class TerritoryModel {
         const sourceMap = configureTerritoryMap(mapJson);
         const bindings = bindTerritoryStages(sourceMap.sites, campaign.stages);
         const battleBindings = bindTerritoryBattleStages(sourceMap.sites, campaign.stages);
+        // 巡逻宝箱按各自的 `battleId` 绑关卡行（`levelInfo` 里 60001… 那批
+        // `levelType=4 / chapterStage=0` 的巡逻关）。只喂 `stageByCell`，**不**进
+        // `bindings`（线性推进链）与 `applyTerritoryStageUnlocks`：巡逻区的前置仍由
+        // 地图 JSON 的 `requiredCells` 决定。
+        const patrolBindings = bindTerritoryPatrolStages(sourceMap.sites, campaign.stages);
         // `stageByCell` 喂的是**扩散后**的表：同一 `configId` 的全部站点
         // 都挂上本区域的关卡 ⇒ 「同区域但排在第二个」的格子（cellId 328）不再查不到 stage，
         // 不会误弹「站点配置待补齐 / 当前 PVP-关卡表中没有可绑定关卡」——
         // 实际 `configId` 配了、`levelInfo.json` 里也有那一行，只是被去重踢掉了。
-        const stageByCell = expandBindingsToAreaSites(sourceMap.sites, battleBindings);
+        const stageByCell = expandBindingsToAreaSites(sourceMap.sites, [...battleBindings, ...patrolBindings]);
         const playableMap = applyTerritoryStageUnlocks(sourceMap, bindings);
         const map: TerritoryMapConfig = {
             ...playableMap,
             sites: playableMap.sites.map((site) => {
+                // 巡逻宝箱的解锁体力读**地图配置**（`unlock.staminaCost`），不能被关卡表的
+                // `levelCost` 覆盖：解锁（5）与开战（1）是两笔，覆盖后解锁会变成 1。
+                if (site.type === TERRITORY_SITE_TYPE.patrolChest) return site;
                 const stage = stageByCell.get(site.cellId);
                 return stage ? {
                     ...site,
@@ -1894,7 +2038,7 @@ export class TerritoryModel {
         this.emitStateChange();
         this.refreshServerIdleTime(chapterId);
 
-        await this.mergeServerState(chapterId, loadId, lifecycleHost);
+        await this.mergeServerState(chapterId, loadId);
         if (loadId !== this.loadId) return;
 
         this.applyStoredBattleResult();
@@ -2048,12 +2192,11 @@ export class TerritoryModel {
     private async mergeServerState(
         chapterId: number,
         loadId: number,
-        host: object,
     ): Promise<void> {
         const context = this.chapter;
         if (!context) return;
         const total = context.map.rows * context.map.columns;
-        const result = await this.ports.gateway.fetchChapterCells(chapterId, total, host);
+        const result = await this.ports.gateway.fetchChapterCells(chapterId, total);
         if (loadId !== this.loadId || context !== this.chapter) return;
         if ('reason' in result) {
             console.warn(`[TerritoryModel] 第 ${chapterId} 章服务端格子状态不可用（${result.reason}），沿用本地存档`);
@@ -2140,7 +2283,7 @@ export class TerritoryModel {
             for (const cellId of progress.pendingPassCells) {
                 // 离线开战可能连解锁都没送达 ⇒ 补解锁（这是唯一需要发的请求）。
                 if (!progress.serverStateKnown || !progress.isUnlockable(cellId)) {
-                    const unlock = await this.ports.gateway.unlockCell(chapterId, cellId, this.ports.lifecycleHost);
+                    const unlock = await this.ports.gateway.unlockCell(chapterId, cellId);
                     if (loadId !== this.loadId) return;
                     if (!unlock.ok) break;
                     progress.markCellsUnlocked(unlock.unlockedCellIds ?? [cellId]);
@@ -2219,7 +2362,7 @@ export class TerritoryModel {
         const loadId = this.loadId;
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyIdleReward);
         try {
-            const result = await this.ports.gateway.claimIdleReward(this.ports.lifecycleHost);
+            const result = await this.ports.gateway.claimIdleReward();
             if (loadId !== this.loadId) return;
             if (result.ok) {
                 if (result.idleTimeSeconds > 0) this.applyServerIdleTime(result.idleTimeSeconds);
@@ -2266,7 +2409,7 @@ export class TerritoryModel {
         const loadId = this.loadId;
         const exitBusy = this.enterBusy(TERRITORY_TEXTS.busySweep);
         try {
-            const result = await this.ports.gateway.sweep(chapterId, target.site.cellId, times, this.ports.lifecycleHost);
+            const result = await this.ports.gateway.sweep(chapterId, target.site.cellId, times);
             if (loadId !== this.loadId) return;
             if (!result.ok) {
                 // `'reason' in` 而不是 `!result.ok` —— 本工程 `strictNullChecks` 关闭，
@@ -2442,6 +2585,8 @@ export class TerritoryModel {
             layout: this.layout,
             art: this.art,
             progress,
+            // 服务端下发的怪物宝箱；没拉过快照时就是空数组（视图按"没有箱子"渲染）。
+            monsterBoxes: this.chapter?.serverCellStateCache?.monsterBoxes ?? [],
             revealedCells,
             previewCells,
             siteOpenableCells,
@@ -2452,6 +2597,7 @@ export class TerritoryModel {
             randomResourceOpenableCells,
             pendingRandomResourceCells: Array.from(this.pendingRandomResourceCells),
             pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
+            pendingMonsterBoxCells: Array.from(this.pendingMonsterBoxCells),
             victoryClaimCells: this.victoryClaimCells,
             // 地图拿它判「银币 / 体力数字要不要染红」。与 `buildHud` 同一个兜底：
             // 存档还没读到时就当 0（此时 `ready` 为 false，站点根本不会渲染）。

@@ -648,14 +648,13 @@ export class SevenDayPage extends PopupBase {
             .sort((a, b) => a.node.position.x - b.node.position.x);
     }
 
-    private get alive(): boolean {
-        return this.node.isValid;
+    /** 关闭后使所有在途结果失效：`isPopupOpen` 立即转 false。 */
+    onDestroy(): void {
+        super.onDestroy();
     }
 
-    onDestroy(): void {
-        this.presentRevision += 1;
-        this.loadRevision += 1;
-        super.onDestroy();
+    private get alive(): boolean {
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }
 

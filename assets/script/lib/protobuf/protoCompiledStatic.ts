@@ -52462,6 +52462,69 @@ return typeUrlPrefix + "/com.xkhy.tafang.cmd.ChapterInfo";
 };
 return ChapterInfo;
 })();
+cmd.ChapterMonsterBoxInfo = (function() {
+function ChapterMonsterBoxInfo(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+ChapterMonsterBoxInfo.prototype.cellId = 0;
+ChapterMonsterBoxInfo.prototype.lv = 0;
+ChapterMonsterBoxInfo.create = function create(properties) {
+return new ChapterMonsterBoxInfo(properties);
+};
+ChapterMonsterBoxInfo.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.cellId);
+writer.uint32(  16).uint32(message.lv);
+return writer;
+};
+ChapterMonsterBoxInfo.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.cellId = reader.uint32();
+break;
+}
+case 2: {
+message.lv = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("cellId"))
+throw $util.ProtocolError("missing required 'cellId'", { instance: message });
+if (!message.hasOwnProperty("lv"))
+throw $util.ProtocolError("missing required 'lv'", { instance: message });
+return message;
+};
+ChapterMonsterBoxInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.ChapterMonsterBoxInfo";
+};
+return ChapterMonsterBoxInfo;
+})();
 cmd.CmdCityChapterInfoReqMsg = (function() {
 function CmdCityChapterInfoReqMsg(properties) {
 if (properties)
@@ -53296,6 +53359,7 @@ cmd.CmdCityChapterCellInfoRspMsg = (function() {
 function CmdCityChapterCellInfoRspMsg(properties) {
 this.unlockCells = [];
 this.passCells = [];
+this.monsterBoxInfos = [];
 if (properties)
 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -53305,6 +53369,7 @@ CmdCityChapterCellInfoRspMsg.prototype.levelChapter = 0;
 CmdCityChapterCellInfoRspMsg.prototype.rewardState = 0;
 CmdCityChapterCellInfoRspMsg.prototype.unlockCells = $util.emptyArray;
 CmdCityChapterCellInfoRspMsg.prototype.passCells = $util.emptyArray;
+CmdCityChapterCellInfoRspMsg.prototype.monsterBoxInfos = $util.emptyArray;
 CmdCityChapterCellInfoRspMsg.create = function create(properties) {
 return new CmdCityChapterCellInfoRspMsg(properties);
 };
@@ -53323,6 +53388,9 @@ writer.uint32(  24).uint64(message.unlockCells[i]);
 if (message.passCells != null && message.passCells.length)
 for (let i = 0; i < message.passCells.length; ++i)
 writer.uint32(  32).uint64(message.passCells[i]);
+if (message.monsterBoxInfos != null && message.monsterBoxInfos.length)
+for (let i = 0; i < message.monsterBoxInfos.length; ++i)
+$root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.encode(message.monsterBoxInfos[i], writer.uint32(  42).fork(), q + 1).ldelim();
 return writer;
 };
 CmdCityChapterCellInfoRspMsg.decode = function decode(reader, length, error, long) {
@@ -53368,6 +53436,12 @@ message.passCells.push(reader.uint64());
 message.passCells.push(reader.uint64());
 break;
 }
+case 5: {
+if (!(message.monsterBoxInfos && message.monsterBoxInfos.length))
+message.monsterBoxInfos = [];
+message.monsterBoxInfos.push($root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
 default:
 reader.skipType(tag & 7, long);
 break;
@@ -53386,6 +53460,132 @@ typeUrlPrefix = "type.googleapis.com";
 return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterCellInfoRspMsg";
 };
 return CmdCityChapterCellInfoRspMsg;
+})();
+cmd.CmdCityChapterUpMonsterBoxLvReqMsg = (function() {
+function CmdCityChapterUpMonsterBoxLvReqMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdCityChapterUpMonsterBoxLvReqMsg.prototype.levelChapter = 0;
+CmdCityChapterUpMonsterBoxLvReqMsg.prototype.cellId = 0;
+CmdCityChapterUpMonsterBoxLvReqMsg.create = function create(properties) {
+return new CmdCityChapterUpMonsterBoxLvReqMsg(properties);
+};
+CmdCityChapterUpMonsterBoxLvReqMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.levelChapter);
+writer.uint32(  16).uint32(message.cellId);
+return writer;
+};
+CmdCityChapterUpMonsterBoxLvReqMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.levelChapter = reader.uint32();
+break;
+}
+case 2: {
+message.cellId = reader.uint32();
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("levelChapter"))
+throw $util.ProtocolError("missing required 'levelChapter'", { instance: message });
+if (!message.hasOwnProperty("cellId"))
+throw $util.ProtocolError("missing required 'cellId'", { instance: message });
+return message;
+};
+CmdCityChapterUpMonsterBoxLvReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg";
+};
+return CmdCityChapterUpMonsterBoxLvReqMsg;
+})();
+cmd.CmdCityChapterUpMonsterBoxLvRspMsg = (function() {
+function CmdCityChapterUpMonsterBoxLvRspMsg(properties) {
+if (properties)
+for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+if (properties[keys[i]] != null && keys[i] !== "__proto__")
+this[keys[i]] = properties[keys[i]];
+}
+CmdCityChapterUpMonsterBoxLvRspMsg.prototype.succ = 0;
+CmdCityChapterUpMonsterBoxLvRspMsg.prototype.monsterBoxInfo = null;
+CmdCityChapterUpMonsterBoxLvRspMsg.create = function create(properties) {
+return new CmdCityChapterUpMonsterBoxLvRspMsg(properties);
+};
+CmdCityChapterUpMonsterBoxLvRspMsg.encode = function encode(message, writer, q) {
+if (!writer)
+writer = $Writer.create();
+if (q === undefined)
+q = 0;
+if (q > $util.recursionLimit)
+throw Error("max depth exceeded");
+writer.uint32(  8).uint32(message.succ);
+$root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.encode(message.monsterBoxInfo, writer.uint32(  18).fork(), q + 1).ldelim();
+return writer;
+};
+CmdCityChapterUpMonsterBoxLvRspMsg.decode = function decode(reader, length, error, long) {
+if (!(reader instanceof $Reader))
+reader = $Reader.create(reader);
+if (long === undefined)
+long = 0;
+if (long > $Reader.recursionLimit)
+throw Error("maximum nesting depth exceeded");
+let end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg();
+while (reader.pos < end) {
+let tag = reader.uint32();
+if (tag === error)
+break;
+switch (tag >>> 3) {
+case 1: {
+message.succ = reader.uint32();
+break;
+}
+case 2: {
+message.monsterBoxInfo = $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.decode(reader, reader.uint32(), undefined, long + 1);
+break;
+}
+default:
+reader.skipType(tag & 7, long);
+break;
+}
+}
+if (!message.hasOwnProperty("succ"))
+throw $util.ProtocolError("missing required 'succ'", { instance: message });
+if (!message.hasOwnProperty("monsterBoxInfo"))
+throw $util.ProtocolError("missing required 'monsterBoxInfo'", { instance: message });
+return message;
+};
+CmdCityChapterUpMonsterBoxLvRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+if (typeUrlPrefix === undefined) {
+typeUrlPrefix = "type.googleapis.com";
+}
+return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg";
+};
+return CmdCityChapterUpMonsterBoxLvRspMsg;
 })();
 cmd.SlgGameCameRoleInfo = (function() {
 function SlgGameCameRoleInfo(properties) {
@@ -56178,6 +56378,7 @@ values[valuesById[1335059463] = "CmdCityChapterSweepRspMsg"] = 1335059463;
 values[valuesById[45711217] = "CmdCityChapterUnlockCellRspMsg"] = 45711217;
 values[valuesById[1560327682] = "CmdCityChapterPassCellRspMsg"] = 1560327682;
 values[valuesById[1137184677] = "CmdCityChapterCellInfoRspMsg"] = 1137184677;
+values[valuesById[914309089] = "CmdCityChapterUpMonsterBoxLvRspMsg"] = 914309089;
 values[valuesById[1356079122] = "CmdDayWeekMonthGiftGetRewardRspMsg"] = 1356079122;
 values[valuesById[1005269291] = "CmdDayWeekMonthGiftInfoRspMsg"] = 1005269291;
 values[valuesById[355499005] = "CmdDayWeekMonthGiftFreeBuyRspMsg"] = 355499005;

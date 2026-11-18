@@ -500,12 +500,22 @@ export class ZCGroundZoneSystem {
         //  每波目标上限（2026-11-11 磁电冲击：每波最多打 5 个）。与 `maxHits` 不同 ——
         //  这个每波重新计数，同一个敌人下一波照样能再吃，区域也不会提前散场。
         const waveCap = Math.max(0, Math.round(zone.waveMaxTargets ?? 0));
+        //  每个敌人只挨一次（2026-11-18 第 16 批，孢爆箭的飓风 101303）：
+        //  只做去重、**不设名额** —— 区域活满整段时长，第一次踩进来挨一下，
+        //  之后站在里面 / 反复进出都不再挨（设计原话「同个敌人持续接触也只是 1 次伤害」）。
+        //  与 `maxHits` 是两件事：那个是「打满 N 人就整片散场」，这个是「人来多少都行、各挨一次」。
+        const hitOnce = zone.hitOncePerUnit === true;
+        const onceIds = hitOnce ? (zone.hitUnitIds ?? (zone.hitUnitIds = [])) : null;
         let hitIndex = 0;
         for (const target of context.unitsInRadius(targetHexId, radiusHex)) {
             if (target.owner === zone.owner || target.battleState === 'dead') continue;
             const pos = context.unitPosition(target);
             if (!zcGroundZoneReaches(zone, pos.x, pos.y)) continue;
             if (waveCap > 0 && hitIndex >= waveCap) break;
+            if (onceIds) {
+                if (onceIds.includes(target.id)) continue;
+                onceIds.push(target.id);
+            }
             if (maxHits > 0 && hitUnitIds) {
                 if (hitUnitIds.includes(target.id)) continue;
                 if (hitUnitIds.length >= maxHits) break;

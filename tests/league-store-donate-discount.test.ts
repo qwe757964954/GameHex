@@ -711,7 +711,7 @@ test('E2b 商店：买成功后要消费响应里的 `tlCmdGoods` ⇒ 弹「获�
         '`sendWithResponse` 必须真的调用 make 传进来的回调，且只有收到响应才算 ok（超时/未连接不许当 ok）',
     );
     // 未连接就地返回 offline，别把 state 弄成 ok
-    assert.match(src, /sendGameRequest\(GameNet\.instance/);
+    assert.match(src, /GameNet\.sendRequest\(/);
     // ⚠️ 弹窗由 Controller 展示一次；页面不许再弹一遍
     assert.ok(!strip(read(STORE_PAGE_TS)).includes('FW.ShowReward'), '页面不要再弹一次，避免双弹');
 });
@@ -878,12 +878,14 @@ test('E13 三页的注释里都写明了各自的「有意偏离 / 增补」（�
     assert.ok(read(DISCOUNT_PAGE_TS).includes('没有 `popBg`、也没有关闭按钮'), '砍价面板靠点空白关闭');
 });
 
-test('E14 三页都实现 PopupBase 的三件套（onInit 绑一次 / onOpen 取数 / onClose 作废在飞异步）', () => {
+test('E14 三页都实现 PopupBase 的三件套（onInit 绑一次 / onOpen 取数 / 关闭由 alive 失效）', () => {
     for (const path of [STORE_PAGE_TS, DONATE_PAGE_TS, DISCOUNT_PAGE_TS]) {
         const src = strip(read(path));
         assert.ok(src.includes('protected onInit(): void'));
         assert.ok(src.includes('protected async onOpen(): Promise<void>'));
-        assert.ok(/protected onClose\(\)[\s\S]{0,120}?this\.revision \+= 1/.test(src));
+        assert.ok(src.includes('private get alive'), `${path}: 关闭后必须用 alive 挡住迟到结果`);
+        assert.ok(!/protected onClose\(\)[\s\S]{0,120}?this\.revision \+= 1/.test(src),
+            `${path}: onClose 不得再维护与 alive 重复的 revision`);
         assert.ok(src.includes('static prefabPath = '), path);
     }
 });

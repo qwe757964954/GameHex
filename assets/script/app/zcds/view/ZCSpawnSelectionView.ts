@@ -150,10 +150,6 @@ export class ZCSpawnSelectionView extends Component {
         this.scheduleOnce(this.hideToast, ZCSpawnSelectionView.TOAST_VISIBLE_SECONDS);
     }
 
-    protected onDestroy(): void {
-        this.unschedule(this.hideToast);
-    }
-
     private hideToast = (): void => {
         this.toastNode.active = false;
     };

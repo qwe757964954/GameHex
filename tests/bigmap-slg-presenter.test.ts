@@ -1,7 +1,10 @@
 import { createControllerContext } from './helpers/controller-context';
-import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import type { BigMapController as BigMapControllerType } from '../assets/script/app/bigmap/application/BigMapController';
+import { loadBigMapController } from './helpers/bigmap-controller';
 import { afterEach } from 'node:test';
-const controllers: BigMapController[] = [];
+
+const { BigMapController } = loadBigMapController();
+const controllers: BigMapControllerType[] = [];
 afterEach(() => { controllers.splice(0).forEach(c => c.dispose()); });
 import assert from 'node:assert/strict';
 import test from 'node:test';

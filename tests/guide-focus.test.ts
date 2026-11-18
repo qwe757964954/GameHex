@@ -12,9 +12,16 @@ const state: FocusState = {
 };
 
 test('翻地焦点消费模型的可翻集合：不扫描未拥有的锁定格或关卡格', () => {
+    // `Tile_N` 的 N = 「第几块要翻的地」⇒ 候选池是同一份，但会把第 N 个排到最前
+    // （顺序即语义，调用方取第一个可见格；不加这一步 3-1/4-1 会永远指向同一格）。
+    assert.deepEqual(guideMapFocusCells('Map/Tile_1', state), state.randomResourceOpenableCells);
+    assert.deepEqual(guideMapFocusCells('Map/Tile_2', state), [...state.randomResourceOpenableCells].reverse());
+    assert.deepEqual(guideMapFocusCells('Map/Tile_3', state), [...state.randomResourceOpenableCells].reverse());
+    assert.equal(guideMapFocusCells('Map/TileNew_1', state), state.randomResourceOpenableCells);
+    // 没有候选就从空集，别退化成「随便指一个」。
+    const empty = { ...state, randomResourceOpenableCells: [] };
     for (const key of ['Map/Tile_1', 'Map/Tile_2', 'Map/Tile_3', 'Map/TileNew_1']) {
-        assert.equal(guideMapFocusCells(key, state), state.randomResourceOpenableCells);
-        assert.deepEqual(guideMapFocusCells(key, { ...state, randomResourceOpenableCells: [] }), []);
+        assert.deepEqual(guideMapFocusCells(key, empty), []);
     }
 });
 
@@ -32,15 +39,61 @@ test('纯对话和非地图控件不得退化成地图焦点', () => {
     }
 });
 
-test('关卡入口按真实 levelId 匹配，只选可开启或已解锁的对应入口', () => {
-    const data: FocusState = {
+test('关卡入口按真实 levelId 匹配：只认「点得动」的格，且优先「有建筑」的那一格', () => {
+    // `stageByCell` 是**扩散后**的表：同一区域的多个站点共享同一个关卡号，
+    // 所以光按 levelId 挑会指到「没有建筑的兄弟格」上（用户 2026-11-17 第 17 条：
+    // 手指落在空地、关卡建筑在下面一格）。
+    const site = (cellId: number, type: string, buildingId?: string) =>
+        ({ cellId, type, buildingId, footprint: [] });
+    const data = {
         ...state,
+        map: {
+            sites: [
+                site(12, 'stage'),                  // 同区域兄弟格（没建筑）—— 旧口径会指它
+                site(18, 'stage', 'building_1_1'),  // 真正的关卡建筑
+                site(15, 'fixedResource'),          // 号相同但不是关卡站点，别混进来
+                site(20, 'stage'),                  // 同样共享 10001，没解锁但前置满足
+            ],
+        } as unknown as FocusState['map'],
         stageByCell: new Map([[12, { levelId: 10001 }], [15, { levelId: 10002 }],
             [18, { levelId: 10001 }], [20, { levelId: 10001 }]]) as FocusState['stageByCell'],
-        progress: { isCellUnlocked: (id: number) => id === 18 } as FocusState['progress'],
+        progress: {
+            isCellUnlocked: (id: number) => id === 12 || id === 18,
+            isDisabled: () => false,
+            isPrerequisitePending: () => false,
+        } as unknown as FocusState['progress'],
     };
-    assert.deepEqual(guideMapFocusCells('Map/Level_10001', data), [12, 18]);
+    // 有建筑的排前（就算 cellId 更大），兄弟格留作兜底。
+    //
+    // 20 没解锁但**没锁标** ⇒ 仍在候选里（用户 2026-11-17 第 21 条）：那一格显示「银币 + 数字」，
+    // 点一下就是「花银币解锁 + 直接开战」，正是 5-1 要让玩家做的那一下。
+    // 只按 `isCellUnlocked` 筛会漏掉它 ⇒ 光圈不出现、只剩一句台词飘在屏幕底部。
+    assert.deepEqual(guideMapFocusCells('Map/Level_10001', data), [18, 12, 20]);
+    // 关号只对得上资源点 ⇒ 没有可指的关卡入口。
     assert.deepEqual(guideMapFocusCells('Map/Level_10002', data), []);
+    // 🔴 第 24 条：**关卡建筑那一格顶锁标**（前置关卡没打通 / 前置宝箱没点开）⇒ 整步不出引导。
+    // 绝不能退到「同区域共享关卡号的兄弟格」上：兄弟格自己能开 ⇒ 光圈画到隔壁空地，
+    // 而玩家认的是带 `1-1` 气泡的建筑格（现场：光圈套在左侧价格格上，绿框的建筑格还挂着锁）。
+    const buildingLocked = {
+        ...data,
+        progress: {
+            isCellUnlocked: (id: number) => id === 12,
+            isDisabled: () => false,
+            isPrerequisitePending: (id: number) => id === 18,
+        } as unknown as FocusState['progress'],
+    };
+    assert.deepEqual(guideMapFocusCells('Map/Level_10001', buildingLocked), []);
+    // 兄弟格顶锁标不影响：建筑格可解锁 ⇒ 照样给（只是不带那一格）。
+    const siblingLocked = {
+        ...data,
+        progress: {
+            isCellUnlocked: () => false,
+            isDisabled: () => false,
+            isPrerequisitePending: (id: number) => id === 20,
+        } as unknown as FocusState['progress'],
+    };
+    assert.deepEqual(guideMapFocusCells('Map/Level_10001', siblingLocked), [18, 12]);
+    // 没有地图 / 没有进度 ⇒ 空集，不退化成「随便指一个」。
     assert.deepEqual(guideMapFocusCells('Map/Level_10001', state), []);
 });
 

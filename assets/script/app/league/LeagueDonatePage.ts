@@ -58,12 +58,11 @@ export class LeagueDonatePage extends PopupBase {
     /** 展示资源按快照缓存，避免每次 render 都重取三张图。 */
     private art: ILeagueRewardArt | null = null;
     private artSnapshot: ILeagueDonateSnapshot | null = null;
+    /** 正在取图的那份快照；后一次 render 换了快照时，前一次的结果不再落地。 */
+    private artRequestSnapshot: ILeagueDonateSnapshot | null = null;
 
     /** 写请求在飞（视图侧也挡一道，避免重复派发意图）。 */
     private busy = false;
-
-    /** 每次打开 / 关闭递增，用来作废在飞的展示资源加载。 */
-    private revision = 0;
 
     // 生命周期
 
@@ -76,18 +75,18 @@ export class LeagueDonatePage extends PopupBase {
     }
 
     protected async onOpen(): Promise<void> {
-        this.revision += 1;
         this.art = null;
         this.artSnapshot = null;
+        this.artRequestSnapshot = null;
         this.busy = false;
     }
 
     protected onClose(): void {
-        this.revision += 1;
+        this.busy = false;
+        this.artRequestSnapshot = null;
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -150,13 +149,14 @@ export class LeagueDonatePage extends PopupBase {
             this.paintArt(snapshot, this.art);
             return;
         }
-        const revision = this.revision;
+        if (this.artRequestSnapshot === snapshot) return;
+        this.artRequestSnapshot = snapshot;
         const art = await loadLeagueRewardArt(
             [snapshot.coinResId, snapshot.expResId, LEAGUE_COIN_RES_ID],
             snapshot.items,
             snapshot.resources,
         );
-        if (!this.alive || revision !== this.revision) return;
+        if (!this.alive || this.artRequestSnapshot !== snapshot) return;
         this.art = art;
         this.artSnapshot = snapshot;
         this.paintArt(snapshot, art);
@@ -189,6 +189,6 @@ export class LeagueDonatePage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

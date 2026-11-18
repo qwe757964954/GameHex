@@ -55,7 +55,7 @@ export class LeagueStorePage extends PopupBase {
     /** 写操作在飞（防连点）。 */
     private busy = false;
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 取数趟次；同一打开期内「首轮取数」与「写后刷新」可能重叠，只认最后一趟。 */
     private revision = 0;
 
     // 生命周期
@@ -74,12 +74,10 @@ export class LeagueStorePage extends PopupBase {
 
     protected onClose(): void {
         this.busy = false;
-        this.revision += 1;
     }
 
     onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -103,18 +101,18 @@ export class LeagueStorePage extends PopupBase {
      */
     private async reload(): Promise<void> {
         const revision = ++this.revision;
-
         const snapshot = await this.repository.loadStore();
         if (!this.alive || revision !== this.revision) return;
 
-        this.snapshot = snapshot;
-        this.rows = snapshot.rows.slice();
-        this.art = await this.loadArtFrames(snapshot);
+        const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
+        this.rows = snapshot.rows.slice();
+        this.art = art;
         this.present();
     }
 
@@ -213,6 +211,6 @@ export class LeagueStorePage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

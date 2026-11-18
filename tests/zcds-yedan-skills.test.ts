@@ -343,7 +343,7 @@ test('横扫：只打前方 120° 扇形的敌人，扇形外 / 超距一律不�
     assert.deepEqual(hits.map((hit) => hit.id).sort(), [2, 3], `只该打中正前方与斜前方，实际 ${JSON.stringify(hits)}`);
     // 伤害 = 面板 30 × 1 × 1 × 1.8（无暴击、无克制）
     for (const hit of hits) assert.equal(hit.damage, 54);
-    // 半径 = (attackRange 70 + bodyRadius 26) × 0.3 × 1.4 ≈ 40.3 ⇒ 60 距离的 E5 打不到
+    // 半径 = (attackRange 70 + bodyRadius 26 × 0.5) × 0.3 × 1.4 ≈ 34.86 ⇒ 60 距离的 E5 打不到
     assert.equal(hits.some((hit) => hit.id === 5), false, '超距目标不该被打');
 
     // 表现事件：一条 area、锚点在施法者、半径与伤害跟结算一致
@@ -352,7 +352,7 @@ test('横扫：只打前方 120° 扇形的敌人，扇形外 / 超距一律不�
     assert.equal(event.type, 'area');
     assert.equal(Number(event.skillId), 30832);
     assert.equal(event.fromX, 0);
-    assert.ok(Math.abs(Number(event.radius) - 40.32) < 0.01, `半径应 ≈40.32，实得 ${event.radius}`);
+    assert.ok(Math.abs(Number(event.radius) - 34.86) < 0.01, `半径应 ≈34.86，实得 ${event.radius}`);
 });
 
 test('横扫：L3 带 2 格击退（换算成逻辑距离 84），L1 不击退', () => {
@@ -380,9 +380,19 @@ test('横扫：没有副轨参数或没有目标时不出手（CD 不该被消�
     const noParams = fanContext(caster, [makeUnit(2, 20, 0)], {});
     assert.equal(ZCAttackResolutionSystem.castFanSkill(fanState(noParams.units), caster, noParams.context as never), false);
 
-    const noTarget = fanContext(caster, [makeUnit(2, 20, 0)], { secondaryCooldown: 8 });
+    const noTarget = fanContext(caster, [], { secondaryCooldown: 8 });
     (noTarget.context as unknown as { currentTarget: () => null }).currentTarget = () => null;
     assert.equal(ZCAttackResolutionSystem.castFanSkill(fanState(noTarget.units), caster, noTarget.context as never), false);
+});
+
+test('独立打击的最近排序落实到真实伤害对象，不受随机值影响', () => {
+    const caster = makeUnit(1, 0, 0, ZCOwner.Player);
+    const h = fanContext(caster, [makeUnit(3, 20, 0), makeUnit(2, 10, 0)], {});
+    const state = fanState(h.units);
+    const hits = ZCAttackResolutionSystem.strikeTargets(state, caster,
+        { count: 1, radius: Infinity, damageRate: 1, nearest: true }, h.context as never);
+    assert.equal(hits, 1);
+    assert.deepEqual(h.hits.map(hit => hit.id), [2]);
 });
 
 test('吸血：命中后按真正扣掉的血量 × 2% 回血', () => {

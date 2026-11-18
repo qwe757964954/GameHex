@@ -8,6 +8,7 @@ import type { ChestSlotView } from '../assets/script/app/main/ChestSlotView';
 import type { ChestBar } from '../assets/script/app/main/ChestBar';
 import type { NewTreasureRepository } from '../assets/script/app/main/NewTreasureRepository';
 import * as requestGuard from '../assets/script/app/net/RequestGuard';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 interface ITreasureInfo {
     cardBoxID: number;
@@ -53,7 +54,7 @@ async function loadTreasure(infos: readonly ITreasureInfo[], nowSeconds: number)
                 ];
             },
         } } };
-        if (name === '../net/GameNet') return { GameNet: { instance: {
+        if (name === '../net/GameNet') return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: {
             isConnected: true,
             protoMgr: { getMessageId: () => 1 },
             addEvent(_name: string, _caller: unknown, listener: (message: unknown) => void) { onBroadcast = listener; },

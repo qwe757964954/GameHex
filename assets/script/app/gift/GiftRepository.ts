@@ -5,12 +5,12 @@
  * `CmdShop` 在 `protoCache` 中，由服务端主动推送，因此这里每次读取缓存，不另存快照。
  */
 
+import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import type { IGiftItemInfo, IGiftShopRow, IPayChannelRow } from './GiftTable';
 import {
     GIFT_SHOP_TYPE,
     normalizePaidChannelIds,
@@ -19,12 +19,11 @@ import {
     parseGiftShopRows,
     parsePayChannelRows,
 } from './GiftTable';
-import type { IGiftItemInfo, IGiftShopRow, IPayChannelRow } from './GiftTable';
 import { RequestGiftShopBuy } from './RequestGiftMsg';
 
-import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { PAY_CHANNEL_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import { ITEM_TABLE, PAY_CHANNEL_TABLE } from '../../core/config/TableNames';
 import type { INetRequestStatus } from '../../core/types/NetResult';
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面刷新要的全部数据。 */
 export interface IGiftSnapshot {
     readonly shops: readonly IGiftShopRow[];
@@ -102,8 +101,7 @@ export class RuntimeGiftRepository implements IGiftRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestGiftShopBuy(
                 { id, cmdShopType: GIFT_SHOP_TYPE as CmdShopType, buyTimes: 1 },
                 caller,

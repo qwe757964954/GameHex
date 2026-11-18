@@ -25,11 +25,14 @@ function fixture() {
     }
     const view = new CardUpgradePage();
     const repository = {
+        loadMaterialIcon: async () => null,
         loadDetailArt: async () => ({ hero: null, diamond: null, classTag: null }),
         loadArtConfig: async () => cardArtConfig,
         loadUpgradeStatus: async (id: string, level: number) => {
             await pending;
-            return { cardId: id, level, canUpgrade: true };
+            return { cardId: id, level, targetLevel: level + 1, canUpgrade: true,
+                configured: true, maxLevel: 50, maxed: false, blockedReason: '', requirements: [],
+                generalExpItemId: '', armyExpItemId: '', generalExpOwned: 0, armyExpOwned: 0 };
         },
         loadCardDetail: async () => null,
         loadDetailNavigation: async () => ({ catalog: [unit('68012'), unit('68001')], heroLevels: new Map(), heroListKnown: true }),

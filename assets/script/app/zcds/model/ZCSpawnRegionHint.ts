@@ -1,11 +1,12 @@
 import {
     ZC_DEPTH_TENDENCY,
     ZC_TENDENCY_TEXT,
+    type ZCDepth,
     type ZCMapRegion,
 } from './ZCMapConfig';
 
 export interface IZCSpawnRegionHint {
-    depth: ZCMapRegion['depth'];
+    depth: ZCDepth;
     label: string;
     x: number;
     y: number;

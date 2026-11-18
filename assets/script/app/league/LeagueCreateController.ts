@@ -42,7 +42,6 @@ export interface ILeagueCreateControllerOptions {
 export class LeagueCreateController extends ControllerBase {
     private started = false;
     private submitting = false;
-    private revision = 0;
 
     constructor(context: IControllerContext, private readonly options: ILeagueCreateControllerOptions) {
         super(context, 'league-create');
@@ -75,10 +74,9 @@ export class LeagueCreateController extends ControllerBase {
     };
 
     private async refreshCost(): Promise<void> {
-        const revision = ++this.revision;
         try {
             const cost = await this.options.repository.createCost();
-            if (this.isDisposed || revision !== this.revision) return;
+            if (this.isDisposed) return;
             this.options.model.cost = cost;
             this.publish();
         } catch (error) {

@@ -1,50 +1,27 @@
 import { EventMgr } from '../../framework/event/EventMgr';
-import { LeagueTabEvent } from './LeagueTabEvents';
 /**
  * 加入联盟页，未入盟态的整页内容，不继承 PopupBase。
- * 支持搜索、快速加入和创建入口；快速加入命中搜索缓存时直接点名那一个联盟。
+ * 只负责接线与展示：搜索、快速加入、创建、行详情的业务编排在 `LeagueJoinController`。
  */
 
-import { _decorator, Button, Component, director, Director, EditBox, Label, Node } from 'cc';
-import { FW } from '../../framework/FW';
+import { _decorator, Button, Component, EditBox, Label, Node } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { loadArt } from '../card/CardLineupIcons';
 import { LEAGUE_ART_ROOT, leagueBannerArt } from './LeagueArt';
-import { LeagueCreatePage } from './LeagueCreatePage';
-import { LeagueInfoPage } from './LeagueInfoPage';
-import { leagueRepository, type ILeagueRepository, type LeagueRequestResult } from './LeagueRepository';
-import { GameNet } from '../net/GameNet';
+import { LeagueJoinEvent, type ILeagueJoinIntent } from './LeagueJoinEvents';
 import { LeagueUnionRow } from './LeagueUnionRow';
 import {
-    buildLeagueUnionViews,
     isLeagueSearchId,
-    pickQuickJoinIdsFor,
-    pickUnionListForSearch,
     sanitizeLeagueSearchInput,
-    type ILeagueUnionRow,
     type ILeagueUnionView,
 } from './LeagueTable';
 import {
-    LEAGUE_HALL_LV_SUFFIX,
     LEAGUE_HALL_SEARCH_PROMPT,
     LEAGUE_JOIN_BTN_CREATE,
     LEAGUE_JOIN_BTN_QUICK,
-    LEAGUE_NO_JOINABLE,
-    LEAGUE_TIP_FAILED,
-    LEAGUE_TIP_INPUT_UNION_ID,
-    LEAGUE_TIP_OFFLINE,
-    LEAGUE_UNION_LEADER_PREFIX,
-    LEAGUE_UNION_MEMBER_PREFIX,
 } from './LeagueTexts';
 
 const { ccclass, property } = _decorator;
-
-/** 全服行的三段前缀（与本页列表 / 大厅全服行同源）。 */
-const JOIN_ROW_TEXTS = {
-    levelSuffix: LEAGUE_HALL_LV_SUFFIX,
-    leaderPrefix: LEAGUE_UNION_LEADER_PREFIX,
-    memberPrefix: LEAGUE_UNION_MEMBER_PREFIX,
-} as const;
 
 @ccclass('LeagueJoinPage')
 export class LeagueJoinPage extends Component {
@@ -70,26 +47,8 @@ export class LeagueJoinPage extends Component {
     @property({ type: Node, tooltip: 'BtnQuickJoin：快速加入（最多 5 条）' })
     quickJoinButton: Node = null;
 
-    /**
-     * 写成功（快速加入 / 创建）后的回敲 —— 由容器页 `LeagueTabPage` 赋值。
-     * 老端靠 `CmdRoleUnion` 推送驱动容器切页，本端没有推送事件 ⇒ 用这条链路顶上。
-     */
-    joinOwner: object | null = null;
-
-    /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
-    private rows: ILeagueUnionView[] = [];
-
-    /** 渲染回调只绑一次（`start()` 只会跑一次，这里仍留幂等保护）。 */
-    private rendererBound = false;
-
-    /** 按钮只绑一次。 */
-    private buttonsBound = false;
-
-    /** 写操作在飞（防连点）。 */
-    private busy = false;
-
-    /** 每次取数递增，用来作废在飞的异步结果。 */
-    private revision = 0;
+    /** 控制器推来的本趟视图模型（`renderItemFn` 按 index 现取）。 */
+    private rows: readonly ILeagueUnionView[] = [];
 
     // 生命周期
 
@@ -101,93 +60,35 @@ export class LeagueJoinPage extends Component {
     /**
      * 必须 `start()` 而不是 `onLoad()`：`VirtualScrollView` 挂在本节点**子节点**上，
      * 引擎的激活顺序是「根 → 子」⇒ `onLoad` 那一刻子节点的槽位还没建。
-     * （同 `CardLineupPage.start()`；`LeagueHallPage` 因为有 `PopupBase.onOpen` 更晚，
-     * 用 `nextPopupFrame()` 再等一帧。）
+     * 控制器在 `showPage` 返回后创建，首屏取数由它负责；这里只写静态文案。
      */
     protected start(): void {
         this.applyStaticTexts();
-        void this.reload();
     }
 
     protected onDestroy(): void {
-        this.revision += 1;
-        GameNet.instance.removeCaller(this);
+        this.rows = [];
     }
 
-    // 接线
+    // 展示
 
-    private bindButtons(): void {
-        if (this.buttonsBound) return;
-        this.buttonsBound = true;
-        this.bindClick(this.searchButton, () => void this.onSearchClick());
-        this.bindClick(this.createButton, () => this.onCreateClick());
-        this.bindClick(this.quickJoinButton, () => void this.onQuickJoinClick());
-
-        const input = this.searchInput;
-        if (input) input.node.on('text-changed', this.onSearchTextChanged, this);
-        else console.warn('[LeagueJoin] Search/Input 没绑上，输入框不会过滤非数字');
-    }
-
-    private bindList(): void {
-        if (this.rendererBound) return;
-        this.rendererBound = true;
-        this.unionList.renderItemFn = (node, index) => this.renderRow(node, index);
-        this.unionList.onItemClickFn = (node, index) => this.onRowClick(node, index);
-    }
-
-    /** 两个按钮的文案（FGUI 是静态 `title`，本端也要在运行期写一次：prefab 里已写好，这里只兜底重刷）。 */
-    private applyStaticTexts(): void {
-        setLabelIfEmpty(this.createButton, LEAGUE_JOIN_BTN_CREATE);
-        setLabelIfEmpty(this.quickJoinButton, LEAGUE_JOIN_BTN_QUICK);
-        const placeholder = this.searchInput.placeholderLabel;
-        if (placeholder && !placeholder.string) placeholder.string = LEAGUE_HALL_SEARCH_PROMPT;
-    }
-
-    // 取数
-
-    /** 数据端口（单测 / 探针可换成内存桩）。 */
-    protected get repository(): ILeagueRepository {
-        return leagueRepository;
-    }
-
-    /** 拉一次列表 + 铺行。 */
-    private async reload(): Promise<void> {
-        const revision = ++this.revision;
-
-        const result = await this.repository.requestList(this);
-        if (!this.alive || revision !== this.revision) return;
-
-        const snapshot = await this.repository.load();
-        if (!this.alive || revision !== this.revision) return;
-
-        this.present(snapshot.unions);
-
-        // 拉失败仍然把缓存里的东西铺出来（离线时界面不该是空的），另给一条提示。
-        if (result !== 'ok') FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
-    }
-
-    /**
-     * 按「搜索缓存」铺行 —— 老端 `GetCmdUnionListBySearch`：
-     * 命中过搜索缓存就只显示那一条，否则显示全部。
-     */
-    private present(rows: readonly ILeagueUnionRow[]): void {
-        const key = this.searchInput.string ?? '';
-        this.rows = buildLeagueUnionViews(pickUnionListForSearch(rows, this.repository.cachedSearch(key)), JOIN_ROW_TEXTS);
-        void this.deferRefresh();
+    /** 控制器每次取数 / 搜索后把行推过来；本页只存数据并等一帧铺列表。 */
+    render(rows: readonly ILeagueUnionView[]): void {
+        this.rows = rows.slice();
+        this.unschedule(this.deferredRefresh);
+        this.scheduleOnce(this.deferredRefresh, 0);
     }
 
     /**
      * 铺列表。
      *
      * 列表在本节点的**子节点**上，本组件的 `start()` 早于它的槽位建立 ⇒ 必须再等一帧。
-     * 监听挂在全局 `Director` 上（不依赖本组件的调度），与 `PopupOpenContext.nextFrame()` 同口径。
+     * 用组件调度而不是全局 `Director`：页面销毁时 `unschedule` 直接收掉，不需要额外令牌。
      */
-    private async deferRefresh(): Promise<void> {
-        await nextFrame();
-        if (!this.alive || !this.unionList.isValid) return;
-        this.unionList.refreshList(this.rows);
+    private readonly deferredRefresh = (): void => {
+        this.unionList.refreshList(this.rows.length);
         this.unionList.scrollToTop(false);
-    }
+    };
 
     /** 虚拟列表的行渲染（槽位会被 clone 复用 ⇒ 回调里按 index **现取**）。 */
     private renderRow(node: Node, index: number): void {
@@ -210,69 +111,51 @@ export class LeagueJoinPage extends Component {
         row.applyBanner(frame, token);
     }
 
-    // 查询
+    // 接线
+
+    private bindButtons(): void {
+        this.bindClick(this.searchButton, this.emitSearch);
+        this.bindClick(this.createButton, this.emitCreate);
+        this.bindClick(this.quickJoinButton, this.emitQuickJoin);
+
+        const input = this.searchInput;
+        if (input) input.node.on('text-changed', this.onSearchTextChanged, this);
+        else console.warn('[LeagueJoin] Search/Input 没绑上，输入框不会过滤非数字');
+    }
+
+    private bindList(): void {
+        this.unionList.renderItemFn = (node, index) => this.renderRow(node, index);
+        this.unionList.onItemClickFn = (node, index) => this.onRowClick(node, index);
+    }
+
+    /** 两个按钮的文案（prefab 已写好，这里只在「空」时兜一次）。 */
+    private applyStaticTexts(): void {
+        setLabelIfEmpty(this.createButton, LEAGUE_JOIN_BTN_CREATE);
+        setLabelIfEmpty(this.quickJoinButton, LEAGUE_JOIN_BTN_QUICK);
+        const placeholder = this.searchInput.placeholderLabel;
+        if (placeholder && !placeholder.string) placeholder.string = LEAGUE_HALL_SEARCH_PROMPT;
+    }
+
+    // 输入 → 意图
 
     /** 查询框输入：非正整数就地清空（老端 `onInputTextChange` 逐字照搬）。 */
     private onSearchTextChanged(): void {
         const input = this.searchInput;
         input.string = sanitizeLeagueSearchInput(input.string);
+        this.emit({ owner: this, kind: 'input', text: input.string ?? '' });
     }
 
-    /** 点「查询」：空输入提示；否则按 id 搜，回来后按缓存重铺列表。 */
-    private async onSearchClick(): Promise<void> {
-        const key = this.searchInput.string ?? '';
-        if (!key) {
-            FW.showTip(LEAGUE_TIP_INPUT_UNION_ID);
-            return;
-        }
-        const revision = ++this.revision;
-        const result = await this.repository.search(key, this);
-        if (!this.alive || revision !== this.revision) return;
-        this.reportResult(result);
-        if (result !== 'ok') return;
+    private readonly emitSearch = (): void => {
+        this.emit({ owner: this, kind: 'search' });
+    };
 
-        // 搜索成功后**不重新拉列表**：老端也只是 `updateView()` 重铺一遍
-        //（`GetCmdUnionListBySearch` 会命中刚写进缓存的这一条）。
-        const snapshot = await this.repository.load();
-        if (!this.alive || revision !== this.revision) return;
-        this.present(snapshot.unions);
-    }
+    private readonly emitCreate = (): void => {
+        this.emit({ owner: this, kind: 'create' });
+    };
 
-    // 快速加入 / 创建
-
-    /**
-     * 「快速加入」—— 老端 `onClickJoin()`：
-     * 取「可快速加入」列表（**命中搜索缓存时直接点名那一个**），空则提示且**不发包**。
-     */
-    private async onQuickJoinClick(): Promise<void> {
-        const key = this.searchInput.string ?? '';
-        const snapshot = await this.repository.load();
-        if (!this.alive) return;
-
-        const ids = pickQuickJoinIdsFor(snapshot.unions, this.repository.cachedSearch(key));
-        if (!ids.length) {
-            FW.showTip(LEAGUE_NO_JOINABLE);
-            return;
-        }
-        if (!this.beginWrite()) return;
-        try {
-            await this.afterWrite(await this.repository.join(ids, this));
-        } finally {
-            this.busy = false;
-        }
-    }
-
-    /**
-     * 「创建联盟」→ 开 `LeagueCreate` 弹窗。
-     *
-     * 只传容器 owner，不传回调：创建成功后由 `LeagueCreateController` 按 owner 发
-     * `LeagueTabEvent.Joined` 通知容器（与 `notifyJoined()` 同一条链路）。
-     */
-    private onCreateClick(): void {
-        void LeagueCreatePage.open({
-            userData: { owner: this.joinOwner },
-        });
-    }
+    private readonly emitQuickJoin = (): void => {
+        this.emit({ owner: this, kind: 'quickJoin' });
+    };
 
     /**
      * 点列表某一行 ⇒ 开「联盟信息」。
@@ -284,51 +167,25 @@ export class LeagueJoinPage extends Component {
     private onRowClick(_node: Node, index: number): void {
         const view = this.rows[index];
         if (!view) return;
-        void LeagueInfoPage.open({ userData: { union: view } });
+        this.emit({ owner: this, kind: 'openUnion', union: view });
     }
 
-    // 收尾
-
-    /** 防连点：写操作在飞时直接拒掉。 */
-    private beginWrite(): boolean {
-        if (this.busy) return false;
-        this.busy = true;
-        return true;
+    private emit(intent: ILeagueJoinIntent): void {
+        EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
     }
 
-    /** 写完后按三态收口；成功则重拉一次列表 + 通知容器（老端靠推送刷新）。 */
-    private async afterWrite(result: LeagueRequestResult): Promise<void> {
-        if (!this.alive) return;
-        this.reportResult(result);
-        if (result !== 'ok') return;
-        await this.reload();
-        if (!this.alive) return;
-        this.notifyJoined();
-    }
-
-    private notifyJoined(): void {
-        if (this.joinOwner) EventMgr.instance.emit(LeagueTabEvent.Joined, { owner: this.joinOwner });
-    }
-
-    /** 三态归一：只有 `'ok'` 静默。 */
-    private reportResult(result: LeagueRequestResult): void {
-        if (result === 'ok') return;
-        FW.showTip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);
-    }
-
-    /** 按名字接按钮；节点有 `cc.Button` 走 CLICK，否则退回 `TOUCH_END`（缺节点只 warn）。 */
+    /** 按名字接按钮；prefab 必须挂 `cc.Button`（缺节点只 warn，不再用 TOUCH_END 兜底）。 */
     private bindClick(node: Node | null, handler: () => void): void {
         if (!node) {
             console.warn('[LeagueJoin] 按钮节点缺失，点击不会生效');
             return;
         }
         const button = node.getComponent(Button);
-        if (button) button.node.on(Button.EventType.CLICK, handler, this);
-        else node.on(Node.EventType.TOUCH_END, handler, this);
-    }
-
-    private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        if (!button) {
+            console.warn('[LeagueJoin] 按钮节点缺少 cc.Button，点击不会生效');
+            return;
+        }
+        button.node.on(Button.EventType.CLICK, handler, this);
     }
 
     /** 输入框占位文案（供单测 / 复用方取，避免到处写中文字面量）。 */
@@ -345,13 +202,6 @@ export class LeagueJoinPage extends Component {
     static isValidSearchId(text: string): boolean {
         return isLeagueSearchId(text);
     }
-}
-
-/** 引擎的一帧（不依赖组件调度，节点销毁也能结束）。 */
-function nextFrame(): Promise<void> {
-    return new Promise<void>((resolve) => {
-        director.once(Director.EVENT_AFTER_UPDATE, () => resolve());
-    });
 }
 
 /** 按钮底下的文案：prefab 已写好，运行期只在「空」时兜一次（免得手滑删了 label 就成空按钮）。 */

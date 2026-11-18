@@ -1,15 +1,5 @@
 import { RequestMsg } from '../../framework/net/RequestMsg';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { sendGameRequest } from '../net/RequestGuard';
-import { GameNet } from '../net/GameNet';
-import {
-    CHEST_DETAIL_REWARD_SLOTS,
-    CHEST_EMPTY_SLOT_STAMINA_COST,
-    CHEST_SLOT_COUNT,
-    ChestSlotAction,
-    ChestSlotState,
-} from './ChestTypes';
-import type { IChestDetailData, IChestDetailRewardData, IChestSlotData } from './ChestTypes';
 import {
     ITEM_TABLE,
     ROLE_PROPERTY_TABLE,
@@ -18,6 +8,15 @@ import {
     type IItemRefRow,
     type IResPropertyRow,
 } from '../common/ResTypes';
+import { GameNet } from '../net/GameNet';
+import type { IChestDetailData, IChestDetailRewardData, IChestSlotData } from './ChestTypes';
+import {
+    CHEST_DETAIL_REWARD_SLOTS,
+    CHEST_EMPTY_SLOT_STAMINA_COST,
+    CHEST_SLOT_COUNT,
+    ChestSlotAction,
+    ChestSlotState,
+} from './ChestTypes';
 
 import { READ_TIMEOUT_MS_SLOW as READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 type Result = 'ok' | 'offline' | 'failed' | 'protocol-missing' | 'busy';
@@ -215,7 +214,7 @@ export class NewTreasureRepository {
         try {
             await this.loadConfig();
             const received: { value: boolean } = { value: false };
-            const status = await sendGameRequest(GameNet.instance, () => new RequestNewTreasureInfoList({}, caller, (rsp) => {
+            const status = await GameNet.sendRequest(() => new RequestNewTreasureInfoList({}, caller, (rsp) => {
                     this.replaceInfos(rsp?.infos ?? []);
                     received.value = true;
                 }), { timeoutMs: READ_TIMEOUT_MS, tag: 'NewTreasure' });
@@ -268,7 +267,7 @@ export class NewTreasureRepository {
         return this.withPendingAction(index, 'open', async () => {
             let succeeded = false;
             let hasProtocol = true;
-            const result = await sendGameRequest(GameNet.instance, () => {
+            const result = await GameNet.sendRequest(() => {
                 hasProtocol = GameNet.instance.protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') != null;
                 if (!hasProtocol) throw new Error('未提供开箱响应消息号');
                 return new RequestNewTreasureOpen({ index }, undefined, (rsp) => {
@@ -297,7 +296,7 @@ export class NewTreasureRepository {
     }
 
     private async send<Req, Rsp>(request: RequestMsg<Req, Rsp>, timeoutMs: number): Promise<Result> {
-        return sendGameRequest(GameNet.instance, () => request, { timeoutMs, tag: 'NewTreasure' });
+        return GameNet.sendRequest(() => request, { timeoutMs, tag: 'NewTreasure' });
     }
 
     private async withPendingAction(index: number, action: string, perform: () => Promise<Result>): Promise<Result> {

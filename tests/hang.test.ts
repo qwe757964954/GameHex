@@ -2266,7 +2266,8 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     const destroy = /protected onDestroy\(\): void \{([\s\S]*?)\n {4}\}/.exec(code);
     assert.ok(destroy, '没抓到 `onDestroy` 函数体');
     assert.equal(/\.off\(/.test(destroy![1]!), false, '规则 71：`onDestroy` 里 off 会抛 TypeError 并中断销毁链');
-    assert.match(destroy![1]!, /this\.unscheduleAllCallbacks\(\);/);
+    assert.equal(/\.unschedule(?:AllCallbacks)?\(/.test(destroy![1]!), false,
+        'Cocos 在 Component._onPreDestroy() 里已统一停表，onDestroy 不需要再手停');
     assert.match(destroy![1]!, /this\._stopShake\(\);/);
     assert.match(destroy![1]!, /EventMgr\.instance\.offTarget\(this\);/);
 
@@ -2278,7 +2279,7 @@ test('⚠️ `HangEntryButton` 源码口径（它 import `cc` ⇒ 只能读文�
     // ⚠️ `_stopShake` 里必须判 `isValid`：销毁期 `setRotationFromEuler` 抛了会中断销毁链
     const stop = /private _stopShake\(\): void \{([\s\S]*?)\n {4}\}/.exec(code);
     assert.ok(stop, '没抓到 `_stopShake` 函数体');
-    assert.match(stop![1]!, /if \(!target \|\| !target\.isValid\) return;/);
+    assert.match(stop![1]!, /if \(!target\.isValid\) return;/);
     assert.match(stop![1]!, /Tween\.stopAllByTarget\(target\);/);
     assert.match(stop![1]!, /target\.setRotationFromEuler\(0, 0, 0\);/);
 

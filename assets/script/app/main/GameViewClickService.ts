@@ -23,7 +23,7 @@
 
 import { RequestGameViewClick } from '../generated/requestMsg/RequestSystemMsg';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toCount, withTimeout } from '../net/RequestGuard';
+import { toCount, withTimeout } from '../net/RequestGuard';
 
 /**
  * 界面编号 —— 协议 `mark` 的**服务端口径**。
@@ -68,7 +68,7 @@ async function sendGameViewClick(mark: GameViewMark, caller?: object): Promise<b
         // 见文件头 ③：埋点重发等于多记一次点击。
         request.allowRetry = false;
         // `needLoading = false`：埋点绝不能弹转圈。
-        const status = await sendGameRequest(GameNet.instance, () => request, { timeoutMs: GAME_VIEW_CLICK_TIMEOUT_MS, tag: 'GameViewClick' });
+        const status = await GameNet.sendRequest(() => request, { timeoutMs: GAME_VIEW_CLICK_TIMEOUT_MS, tag: 'GameViewClick' });
         if (status !== 'ok') return false;
     } catch (error) {
         console.warn('[GameViewClick] 界面点击上报失败', error);

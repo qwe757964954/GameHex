@@ -1,5 +1,7 @@
 import { cardArtConfig } from './helpers/card-art-config';
 import type { ICardDetailArt } from '../assets/script/app/card/CardArtProvider';
+import type { SpriteFrame } from 'cc';
+import type { ICardMaterialIcon } from '../assets/script/app/card/CardPresentations';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { CardUpgradeController } from '../assets/script/app/card/CardUpgradeController';
@@ -121,6 +123,7 @@ function upgradeFixture() {
     let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0;
     const pending = deferred<UpgradeHeroResult>();
     const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null, classTag: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
+        loadMaterialIcon: async (_ids: readonly string[]): Promise<ICardMaterialIcon | null> => null,
         loadLineupSnapshot: (): CardLineupData | null => null,
         loadDetailNavigation: async () => ({ catalog: [] as readonly ZCDeckCard[], heroLevels: new Map<string, number>(), heroListKnown: true }),
         loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }),
@@ -150,6 +153,79 @@ function upgradeFixture() {
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; } };
 }
+
+test('材料加载不阻塞状态和详情，同一材料只加载一次且升级后使用最新持有量', async () => {
+    const h = upgradeFixture();
+    const icon = deferred<ICardMaterialIcon | null>();
+    const calls: string[][] = [];
+    h.repository.loadMaterialIcon = ids => {
+        calls.push([...ids]);
+        return ids.includes('16000') ? icon.promise : Promise.resolve(null);
+    };
+    h.repository.loadUpgradeStatus = async (_id, level) => ({ ...upgradeStatus(level), generalExpOwned: level === 0 ? 99 : 7 });
+    try {
+        await h.controller.start();
+        assert.equal(h.states.at(-1).phase, 'ready');
+        assert.ok(h.states.at(-1).detail, '材料未就绪时仍展示详情');
+        assert.equal(h.states.at(-1).materials.exp, null);
+        assert.equal(calls.length, 2, '详情和状态分批发布不重复加载材料');
+        h.intent();
+        h.pending.resolve({ kind: 'success', heroId: 1, level: 1 });
+        await tick();
+        assert.equal(calls.length, 2, '仅持有量变化复用同一在途任务');
+        const frame = {} as SpriteFrame;
+        icon.resolve({ itemId: '16000', frame });
+        await tick();
+        assert.deepEqual(h.states.at(-1).materials.exp, { itemId: '16000', frame, owned: 7 });
+    } finally { h.finish(); }
+});
+
+test('切卡后旧材料结果不能覆盖新材料，销毁后材料结果不再发布', async () => {
+    for (const exit of ['switch', 'dispose']) {
+        const h = upgradeFixture();
+        const old = deferred<ICardMaterialIcon | null>();
+        const frame = {} as SpriteFrame;
+        h.repository.loadMaterialIcon = ids => ids.includes('16000')
+            ? old.promise : Promise.resolve(ids.includes('17000') ? { itemId: '17000', frame } : null);
+        h.repository.loadUpgradeStatus = async (id, level) => ({ ...upgradeStatus(level), generalExpItemId: id === '1' ? '16000' : '17000' });
+        h.repository.loadDetailNavigation = async () => ({ catalog: [card('1'), card('2')], heroLevels: new Map(), heroListKnown: true });
+        try {
+            await h.controller.start();
+            if (exit === 'switch') {
+                h.intent('next');
+                await tick();
+                assert.equal(h.states.at(-1).materials.exp.itemId, '17000');
+            } else h.controller.dispose();
+            const count = h.states.length;
+            old.resolve({ itemId: '16000', frame });
+            await tick();
+            assert.equal(h.states.length, count);
+        } finally { h.finish(); }
+    }
+});
+
+test('已就绪的材料图标在升级刷新中复用，兵种经验身份与持有量一起更新', async () => {
+    const h = upgradeFixture();
+    const frame = {} as SpriteFrame;
+    let loads = 0;
+    h.repository.loadMaterialIcon = async ids => {
+        loads++;
+        return { itemId: ids.includes('16003') ? '16003' : '18003', frame };
+    };
+    h.repository.loadUpgradeStatus = async (_id, level) => ({ ...upgradeStatus(level), armyExpOwned: level === 0 ? 31 : 8,
+        requirements: [{ key: 'card', itemId: '18003', name: '卡牌', owned: level === 0 ? 50 : 3, need: 1, enough: true }] });
+    try {
+        await h.controller.start();
+        await tick();
+        assert.deepEqual(h.states.at(-1).materials.exp, { itemId: '16003', frame, owned: 31 });
+        h.intent();
+        h.pending.resolve({ kind: 'success', heroId: 1, level: 1 });
+        await tick();
+        assert.equal(loads, 2);
+        assert.deepEqual(h.states.at(-1).materials.exp, { itemId: '16003', frame, owned: 8 });
+        assert.deepEqual(h.states.at(-1).materials.card, { itemId: '18003', frame, owned: 3 });
+    } finally { h.finish(); }
+});
 
 test('详情切卡等待新美术就绪后连同数据一次提交，期间保留原卡完整画面', async () => {
     const h = upgradeFixture();
@@ -239,7 +315,8 @@ function boardFixture(closeAfterSave = false) {
         failed() {},
         view: {
             render: state => { states.push(state); },
-            close: () => { closed++; }
+            // 与生产链路一致：view.close → PopupManager.close → composition.dispose → controller.dispose。
+            close: () => { closed++; controller.dispose(); }
         },
         feedback: {
             tip: value => tips.push(value)
@@ -344,6 +421,28 @@ test('切页签：阵容不满编或品级不全时只做本地切换，不发�
             assert.deepEqual(h.events, [], '没同步就不该广播 DeckSaved');
         } finally { h.finish(); }
     }
+});
+/**
+ * 真实路径：一键下阵 → 保存（`saveFormation` 固定 select=1，服务端当前阵型变空）
+ * → 切到另一条完整页签。源方案不是完整阵容，切页签只做本地切换，不发选中包。
+ * 这条用例补充「用夹具直接造残缺 source」之外的路径：状态由真实意图产生。
+ */
+test('切页签：保存空阵容后切到完整页签，只做本地切换', async () => {
+    const h = boardFixture(); try {
+        h.repository.loadBoard = async () => fullBoardData(fullDeck(8));
+        await h.controller.start();
+        h.intent('reset');
+        h.intent('save');
+        assert.equal(h.submissions.length, 1, '一键下阵后保存，空阵容也要走一次 saveFormation');
+        assert.deepEqual(h.submissions[0].heroIds, []);
+        h.pending.resolve({ kind: 'success', formation: { formationId: 1, heroIds: [], selected: true } });
+        await tick(); await tick();
+        assert.equal(h.states[h.states.length - 1].cards.length, 0);
+        h.intent('preset', { index: 1 });
+        await tick(); await tick();
+        assert.equal(h.states[h.states.length - 1].selectedPreset, 1, '本地页签切换不受源方案完整度影响');
+        assert.deepEqual(h.selects, [], '源方案为空时不同步服务端选中');
+    } finally { h.finish(); }
 });
 test('切页签：完整阵容但没改动时只同步选中，不重复提交卡组', async () => {
     const h = boardFixture(); try {

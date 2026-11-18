@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion, PORTRAIT_BOX_WIDTH_RATIO } from '../assets/script/app/guide/model/GuidePresentation';
+import { fitGuidePortrait, formatGuideContent, guideDialogBottom, guideHintMotion, PORTRAIT_BOX_WIDTH_RATIO, unionGuideFocusRects } from '../assets/script/app/guide/model/GuidePresentation';
 
 test('对话条避开底栏焦点；无重叠保持原位，顶部空间不足时放在焦点下方', () => {
     for (const height of [1280, 1560]) {
@@ -13,13 +13,35 @@ test('对话条避开底栏焦点；无重叠保持原位，顶部空间不足�
 });
 
 test('提示与手指使用绝对时间，在接触点起止且不会随帧率积累偏移', () => {
-    assert.deepEqual(guideHintMotion(1000, 1000), { hintScale: 1, handLift: 0 });
-    assert.deepEqual(guideHintMotion(1000, 900), { hintScale: 1, handLift: 0 });
-    assert.deepEqual(guideHintMotion(1000, 1600), { hintScale: 1.025, handLift: 7 });
-    assert.deepEqual(guideHintMotion(1000, 2200), { hintScale: 1, handLift: 0 });
+    // 描边不透明度跟同一拍呼吸（第 16 条 ③）：谷底 0.55、波峰 1，乘到 `RING_ALPHA_MAX` 上。
+    assert.deepEqual(guideHintMotion(1000, 1000), { hintScale: 1, handLift: 0, ringAlpha: 0.55 });
+    assert.deepEqual(guideHintMotion(1000, 900), { hintScale: 1, handLift: 0, ringAlpha: 0.55 });
+    assert.deepEqual(guideHintMotion(1000, 1600), { hintScale: 1.025, handLift: 7, ringAlpha: 1 });
+    assert.deepEqual(guideHintMotion(1000, 2200), { hintScale: 1, handLift: 0, ringAlpha: 0.55 });
+    for (let now = 1000; now <= 2200; now += 16) {
+        const { ringAlpha } = guideHintMotion(1000, now);
+        assert.ok(ringAlpha >= 0.55 && ringAlpha <= 1, '不透明度永远收敛在 0.55~1，不会越呼吸越淡');
+    }
     const expected = guideHintMotion(1000, 1700);
     for (let now = 1000; now < 1700; now += 16) guideHintMotion(1000, now);
     assert.deepEqual(guideHintMotion(1000, 1700), expected);
+});
+
+test('焦点矩形并集：关卡地块 + 编号气泡 一起圈住，非法输入返回 null', () => {
+    const tile = { x: 0, y: 0, halfWidth: 61.5, halfHeight: 45 };
+    // 气泡抬在地块上方（`mapMarkerBadgeY`：可见顶 + 半高 + 3）。
+    const bubble = { x: 0, y: 82, halfWidth: 47, halfHeight: 22.5 };
+    // 地块 y ∈ [-45, 45]、气泡 y ∈ [59.5, 104.5] ⇒ 中心 29.75、半高 74.75；宽度不变。
+    assert.deepEqual(unionGuideFocusRects([tile, bubble]),
+        { x: 0, y: 29.75, halfWidth: 61.5, halfHeight: 74.75 });
+    // 只有一块 ⇒ 值与入参一致。
+    assert.deepEqual(unionGuideFocusRects([tile]), tile);
+    // 空集 / 全是 0 尺寸 ⇒ null（调用方按「没有孔」处理，别画出 0×0 的圈）。
+    assert.equal(unionGuideFocusRects([]), null);
+    assert.equal(unionGuideFocusRects([{ x: 0, y: 0, halfWidth: 0, halfHeight: 0 }]), null);
+    // 横向并集：气泡伸到右边 ⇒ 宽度变大、中心跟着右移。
+    assert.deepEqual(unionGuideFocusRects([tile, { x: 90, y: 0, halfWidth: 20, halfHeight: 10 }]),
+        { x: 24.25, y: 0, halfWidth: 85.75, halfHeight: 45 });
 });
 
 test('台词保持原文，仅强调点它，文本中的富文本标签不能注入', () => {

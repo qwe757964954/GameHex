@@ -85,6 +85,7 @@ import {
     buildBigMapCityRankBoard,
     buildSoloRankBoard,
     type IBigMapCityRankBoard,
+    type IBigMapCityRankEntry,
     type IBigMapRankProvider,
 } from '../model/BigMapRank';
 import {
@@ -291,6 +292,9 @@ export interface IBigMapQueueView {
     readonly locked: boolean;
 }
 
+/** 据点详情查询状态（与角色列表状态相互独立）。 */
+export type BigMapCampDetailStatus = 'idle' | 'loading' | 'ready' | 'failed';
+
 export interface IBigMapCityView {
     readonly campConfig: IBigMapCampConfig | null;
     readonly cityId: number;
@@ -336,11 +340,11 @@ export interface IBigMapCityView {
     /** 同时在打的人数（喂拥挤系数）。 */
     readonly attackerCount: number;
     readonly topWarScore: number;
-    readonly rankEntries: IBigMapCityRankBoard['entries'];
+    readonly rankEntries: readonly IBigMapCityRankEntry[];
     /** 只有联机入口注入 Repository；预览与旧离线测试保留原有数据链路。 */
     readonly isServerCamp: boolean;
     readonly campInfo: IBigMapCampInfo | null;
-    readonly campDetailStatus: 'idle' | 'loading' | 'ready' | 'failed';
+    readonly campDetailStatus: BigMapCampDetailStatus;
     /**
      *据点内角色（`CmdSlgCampRoleInfosRspMsg`，r879）。空数组 = 查过、确实没人。
      *
@@ -401,7 +405,7 @@ export class BigMapModel {
     private readonly territories: readonly ITerritoryColorRegion[];
     private isDisposed = false;
     private isStartingBattle = false;
-    private readonly campDetailStatuses = new Map<number, IBigMapCityView['campDetailStatus']>();
+    private readonly campDetailStatuses = new Map<number, BigMapCampDetailStatus>();
     /** 角色列表的查询状态（与据点状态分开记，见 `IBigMapCityView.campRoles`）。 */
     private readonly campRoleStatuses = new Map<number, IBigMapCityView['campRolesStatus']>();
     /**
@@ -590,11 +594,11 @@ export class BigMapModel {
         return this.config.resourceIcons;
     }
 
-    get buildingConfigs(): IBigMapConfig['buildings'] {
+    get buildingConfigs(): ReadonlyMap<number, IBigMapBuildingConfig> {
         return this.config.buildings;
     }
 
-    get campConfigs(): IBigMapConfig['camps'] {
+    get campConfigs(): ReadonlyMap<number, IBigMapCampConfig> {
         return this.config.camps;
     }
 

@@ -30,12 +30,12 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  * ⇒ **id 静默变成 0**（发出去、服务端删不掉，界面看着「点了没反应」）。
  */
 
-import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
-import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
+import { RefUtil } from '../../framework/ref/RefUtil';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
+import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toIdString } from '../net/RequestGuard';
+import { toIdString } from '../net/RequestGuard';
 import {
     IMailConfig,
     IMailDetail,
@@ -54,8 +54,8 @@ import {
     RequestMailTakeReward,
 } from './RequestMailMsg';
 
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 一次界面刷新要的全部数据。 */
 export interface IMailSnapshot {
     /** 排序后的邮件列表（`sortMails`：未处理的置顶、同组新的在前）。 */
@@ -237,7 +237,7 @@ export class RuntimeMailRepository implements IMailRepository {
      * 必须 `withTimeout`：`GameNet.send` 没有按请求的超时，服务端不回就永悬。
      */
     private async send(make: () => any, timeoutMs: number): Promise<MailRequestResult> {
-        return sendGameRequest(GameNet.instance, make, { timeoutMs, tag: 'Mail' });
+        return GameNet.sendRequest(make, { timeoutMs, tag: 'Mail' });
     }
 }
 

@@ -3,27 +3,26 @@
  * 并发送单日/累计奖励的领取请求。
  */
 
+import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { parseRechargeItemMap } from './RechargeItemMap';
-import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import type { IRechargeDailyRoundView } from './RechargeDailyTable';
 import {
     buildRoundView,
     parseRechargeDailyRows,
     readRoundProgresses,
 } from './RechargeDailyTable';
-import type { IRechargeDailyRoundView } from './RechargeDailyTable';
+import { parseRechargeItemMap } from './RechargeItemMap';
 import {
     RequestRechargeDailyGetAccReward,
     RequestRechargeDailyGetReward,
 } from './RequestRechargeDailyMsg';
 
-import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 import { ITEM_TABLE } from '../../core/config/TableNames';
 import type { INetRequestStatus } from '../../core/types/NetResult';
+import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面快照。 */
 export interface IRechargeDailySnapshot {
     readonly rounds: readonly IRechargeDailyRoundView[];
@@ -95,7 +94,7 @@ export class RuntimeRechargeDailyRepository implements IRechargeDailyRepository 
     private async sendClaim(
         msg: RequestRechargeDailyGetReward | RequestRechargeDailyGetAccReward,
     ): Promise<RechargeDailyRequestResult> {
-        return sendGameRequest(GameNet.instance, () => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeDaily' });
+        return GameNet.sendRequest(() => msg, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'RechargeDaily' });
     }
 }
 

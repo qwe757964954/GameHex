@@ -244,11 +244,14 @@ test('长屏适配：四块按设计值钉顶，多出来的高度只进卡库',
         return widget as Record<string, any>;
     };
 
+    //  新版 UI：绿框（8 张卡）上移 80 + 战力飘带上移 30 ⇒ 上阵区底边从 610 抬到 530，
+    //  下面三块顺势收拢（原 643 / 732 / 790，块间距 33 / 21 / 6 → 20 / 14 / 6），
+    //  省出来的 100px 全给卡库（586 → 686）。
     const expected: Array<[string, number]> = [
-        ['TeamArea', 197],
-        ['MidBar', 643],
-        ['Banner', 732],
-        ['CardGrid', 790],
+        ['TeamArea', 117],
+        ['MidBar', 550],
+        ['Banner', 632],
+        ['CardGrid', 690],
     ];
     for (const [name, designTop] of expected) {
         assert.equal(widgetOf(name)._top, designTop,
@@ -641,7 +644,8 @@ test('页面版式按新版设计：四块钉顶、卡库/羁绊/页签尺寸与
     assert.deepEqual(sizeOf(pagePrefab, team!), { width: 720, height: 413 });
     assert.deepEqual(sizeOf(pagePrefab, mid!), { width: 720, height: 68 });
     assert.deepEqual(sizeOf(pagePrefab, banner!), { width: 576, height: 52 });
-    assert.deepEqual(sizeOf(pagePrefab, grid!), { width: 688, height: 586 });
+    //  卡库高度 = 1610（设计页高）− top 690 − bottom 234；上方三块收拢省下的 100px 全在这
+    assert.deepEqual(sizeOf(pagePrefab, grid!), { width: 688, height: 686 });
     assert.deepEqual(sizeOf(pagePrefab, tabs!), { width: 495, height: 65 });
 
     const tabWidget = tabs!._components
@@ -652,7 +656,8 @@ test('页面版式按新版设计：四块钉顶、卡库/羁绊/页签尺寸与
     const teamWidget = team!._components
         .map((ref: { __id__: number }) => pagePrefab[ref.__id__])
         .find((component: Record<string, any>) => component.__type__ === 'cc.Widget');
-    assert.equal(teamWidget!._top, 197, '上阵区顶边 = 蓝湖首行组 top 197');
+    // 蓝湖首行组 top 197，新版 UI 再上移 80 ⇒ 117（卡片视觉顶 = +516.9）
+    assert.equal(teamWidget!._top, 117, '上阵区顶边 = 蓝湖首行组 197 上移 80');
 
     const bond = nodeOf(pagePrefab, 'BondList');
     assert.ok(bond);

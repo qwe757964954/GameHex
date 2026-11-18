@@ -3,6 +3,9 @@
 /** 逐帧 / 高频诊断。默认关，排查时临时改 true。*/
 export const ZCDC_LOG_DIAGNOSTICS = false;
 
+/** 索敌切换诊断；只记录目标变化，默认关闭。*/
+export const ZCDC_LOG_TARGET_SWITCH = false;
+
 /** 加载失败、资源或配置缺失的告警。正式包里也开着，别挂到每帧路径上。*/
 export const ZCDC_LOG_WARNINGS = true;
 

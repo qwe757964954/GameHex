@@ -59,6 +59,7 @@
 | 🔴 **SVN 合并后「章节通关动画丢失」+「第 2 章云层贴地块」**（首通编排：边沿丢了也能靠同章电平兜底 → 云散演完 → **补起切换转场** → 云盖满才画新章；云层 15px 间隔按**全量格心 × 所有已揭示格**描，不再只按 `cloudCells`；2026-11-11，见 §3.40） | `MainTerritoryMap.renderAll`（`firstClearEdge` / `clearSignal` / `chapterClearFollowup` / `chapterClearSwitch`）、`update`（`chapterSwapPending` ①-a/b/c）、`beginChapterSwitch(..., deferRender)` / `TerritoryMapView.syncClouds`（`setKeepOutPoints(input.layout.points)`）/ `TerritoryCloudView.setKeepOutPoints`、`forEachKeepOutCell` / `tools/patch_chapter_clear_followup.py`、`tools/patch_territory_cloud_gap.py` | `tests/territory-chapter-clear-followup.test.ts`、`tests/territory-cloud.test.ts`（4 条挡云间隔）、`tests/territory-chapter-switch.test.ts` |
 | 🔴 **飞舞的奖励图标画在所有 UI 之上**（页面内 `TerritoryOverlay` 盖不过 `BottomHud` 聊天框与 `BottomNav` 底栏 ⇒ 粒子层挂 `MainRoot` 最后一位；**页面只找根、视图建层**，不许页面 `new Node`；只迁「飞向英雄按钮」那批，格心喷发与开箱表演原层不动；2026-11-11，见 §3.41） | `MainTerritoryMap.rewardFxRoot()`（找 `MainTabHost.navBar.parent`） / `TerritoryMapView.mountRewardFxLayer`、`disposeRewardFxLayer`、`setRewardFxHost`、`rewardFxLayer`、`cellPointInNode` / `tools/patch_territory_reward_fx_layer.py` | `tests/territory-reward-fx-layer.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-battle-intro.test.ts` |
 | 🔴 **SVN 合并后「未通关预告气泡变回蓝色」**（根因**不在**判据 / 路径 / 资源：`TerritoryPageAssets.loadFrame` 用 `assets.has()` 查 bundle 索引、查不到就静默 `return null` ⇒ `levelBubblePendingFrame = null` ⇒ `stationRenderOf` 两条未通关分支一起回退蓝 `frame_03`；改为**只由 `load` 判加载**、`has` 降级成失败后的日志；旧夹具一律 `has: () => true`，所以 12 条专项全绿也盖不住实机；2026-11-11，见 §3.42） | `TerritoryPageAssets.loadFrame` / `common/MapMarkerBadge.MAP_MARKER_BUBBLE_FRAME_{PASSED,PENDING}_PATH` / `TerritoryMapView.stationRenderOf`（`previewBubble` 与 `claimed` 两条分支） | `tests/territory-bubble-red-frame.test.ts`、`tests/territory-preview-bubble.test.ts`、`tests/territory-random-resource-render.test.ts` |
+| 🔴 **新手引导收起底部 UI 时云层要继续铺到屏幕底**（真因**不是** inset / 留白：`CloudFillLayer` 是 `MapLayer` 的孩子，被 `MapViewport` 的 rect `Mask` 裁在视口底边，而视口 Widget `bottom = 168` ⇒ 底栏一收就露出整条 `zdbg1` 橙色裸底图；须在**页面根第 0 个孩子**建 `CloudBottomStrip` 补 Mask 外那一截，只在底栏 `active = false` 时点亮，淡出跟着铺满层收；2026-11-17，见 §3.43） | `model/TerritoryCloud.territoryCloudBottomStripPoints` / `TerritoryCloudView.setBottomStripEnabled`、`buildBottomStrip`、`syncBottomStripAlpha` / `TerritoryMapView.setBottomCloudFillVisible` / `MainTerritoryMap.syncBottomCloudFill`（`update` 所有早退之前） | `tests/territory-cloud-bottom-strip.test.ts` |
 | **铺满背景的雾（铺满层）**：盖住"没有内容"的空格与内容层那圈留白；换章那一帧必须**当场重建**（2026-10-26 / 11-06） | `model/TerritoryCloud.territoryCloudFillPoints` / `TerritoryCloudView.setFillArea`、`setFillOccupied`（判据是 `fillAreaReady`，**不是** `fillKey`）、`rebuildFill`、`applyFillActive` / `TerritoryMapView.syncContentSize`、`syncClouds`、`syncGrid`（`reset()`） | `tests/territory-cloud.test.ts` |
 | **塔防 BOSS 波识别**（`defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS；客户端 JSON 必须含该列，缺列时按「每组最后一波」兜底，2026-11-07） | `model/TerritoryCampaignConfig.projectDefenceWaves`（→ `TerritoryCampaignWave.isBoss`）/ `ZCGameModel.defenceBossWaveIndex`、`isBossWave`、`ZCPveDefenceWave.isBoss` | `tests/territory-campaign-config.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | **塔防胜负只认「BOSS 已被击败」**（中间波清空不算赢；拆 BOSS 建筑提前触发的跳末波逻辑保持不变，2026-11-07） | `ZCGameModel.defenceBossState`（账本空时按场上同卡单位兜底）→ `ZCOutcomeSystem.checkOutcome(state, context, nextWaveIndex, defenceBoss)` | `tests/zcds-outcome-system.test.ts`、`tests/zcds-pve-defence.test.ts` |
@@ -508,7 +509,7 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
 | 章节加载器、Repository、存档与 MVC 装配 | `application/TerritoryEntry.ts`，页面传入已绑定 ResourceScope 的资源入口 |
 | 引擎生命周期与渲染接线 | `app/main/MainTerritoryMap.ts` 消费展示快照与表现命令、派发操作意图；`MainTabHost.showPage` 必须在 `setParent` 前调用 `initialize(this.controller.resources)` |
 
-章节地图事件释放遵循全局规范 §2.1.1：Controller 退出时退订 UI、网络、缓存与时钟，同步意图 / 广播 / 定时回调不重复判断 disposed。退出前的 `stopping` 仅用于平衡本会话 loading；`await` 后的有效性和取消检查继续保留。测试从事件入口验证解绑，不直接调用已保存的旧 handler。
+章节地图事件释放遵循全局规范 §2.1.1：Controller 退出时退订 UI、网络、缓存与时钟，同步意图 / 广播 / 定时回调不重复判断 disposed。退出前不再维护 `stopping` 状态：`model.dispose()` 先输出配对的 `busy=false` 收尾并清空输出订阅，Controller 保持输出订阅到 `model.dispose()` 返回后再 `stopOutput`，最后由 `super.dispose()` 释放资源（`isDisposed` 在 `releaseInputs()` 后即为真，资源要到 `scope.dispose()` 才释放）。`await` 后的有效性和取消检查继续保留。测试从事件入口验证解绑，不直接调用已保存的旧 handler。
 
 ### 3.2 七条硬口径
 
@@ -4267,6 +4268,78 @@ async function loadFrame(assets: AssetService, path: string): Promise<SpriteFram
 - 两份改动文件仍为 **LF**；定向 `tsc --noEmit` 涉改动文件只剩 2 条环境错误
   （`cc` 模块声明缺失 + 其派生的 `JsonAsset.json`），新用例零错误。
 
+### 3.43 新手引导收起底部 UI 时，云层继续向屏幕底填充完整（2026-11-17）
+
+> 需求原文：「新手引导需要隐藏底部的UI框，当UI框被隐藏时，云层继续向底部填充完整」。
+> 截图：上方云层铺到约 87% 高度后是一条笔直的水平断口，下面约 13% 是一整条橙色底图。
+
+#### 一、真因：**Mask 裁切**，不是 inset / `contentPaddingBottom`
+
+层级（真值取自 `assets/resources/ui/main/MainTerritoryMap.prefab`）：
+
+```text
+页面根 MainTerritoryMap  自身挂 cc.Sprite = image/zdbg1.jpg（橙色沙漠），720×1280
+  └ MapViewport          cc.Mask(_type=0 GRAPHICS_RECT, enabled=true) + Widget(bottom=168)
+                          UITransform 720×1112，顶边贴屏幕顶
+      └ MapLayer  → GridLayer / CloudKeepOut → CloudFillLayer（铺满层）
+```
+
+`CloudFillLayer` 铺得再满也**出不了 `MapViewport` 的 rect Mask**。视口底边离屏幕底
+`1280 − 1112 = 168` 正好是 `BottomNav`（720×152）+ 底下 HUD 的那一截；平时被底栏盖着，
+`GuideComposition.syncDialogHud` 在引导有台词 / 焦点时把 `BottomNav` / `BottomHud` /
+`TopHud` / `BeginGame` 一起 `active = false`，盖子一收就露出页面根那张橙色底图。
+截图那条 13% ≈ `168 / 1280`。
+
+🔴 所以**放大 `setFillArea` / 加大 `contentPaddingBottom` / 改 `bottomHudInset` 全都无效**：
+它们改的都是 Mask 里面的内容层，画不到视口外面去。这也是本次最容易走错的一条路。
+
+#### 二、修法：页面根第 0 个孩子补一条同源云带
+
+| 决定 | 口径 |
+| :-- | :-- |
+| 落点 | 页面根**第 0 个孩子** `CloudBottomStrip`：压住橙色底图，但整层仍被 `MapViewport` 盖住 ⇒ 溢出到视口里的半朵会被不透明的 `MapBackground` 盖回去，**不需要第二层 Mask** |
+| 几何 | `territoryCloudBottomStripPoints(rows, columns, 页面宽, 带高, 带中线)`：复用铺满层**同一张格网**（列距 92.25 / 行距 90 / 奇偶列相位一致），只把矩形整体平移到页面底部 |
+| 带高 | **现算** `视口底边(页面局部 y) − 页面底边`，即 `viewport.position.y − viewportH/2 + pageH/2`；🔴 不许抄死 `168`，长屏 / 安全区变化会变 |
+| 点亮判据 | 页面按 `MainTabHost.navBar.active === false` 判（底栏就是那条带的"盖子"）→ `TerritoryMapView.setBottomCloudFillVisible(bool)` → `TerritoryCloudView.setBottomStripEnabled(bool)`；页面**不反向依赖引导配置**，只转发一个布尔 |
+| 时序 | `MainTerritoryMap.syncBottomCloudFill()` 排在 `update()` **所有早退之前**（过场 / 战斗前奏会 `return`），且带 `bottomNavNode` 缓存 + 值没变早退，不每帧重铺 |
+| 收工 | `syncBottomStrip()` 只在「底栏收起 + 有云体帧 + 雾没散完 + 铺满层有节点」时点亮；`step()` 把铺满层第 0 朵的 `color.a` 同步到补云带 ⇒ 整片雾散完不会孤零零留一条云 |
+| 帧晚到 | `setFrames()` 同时给补云带的体 / 影 `rebindSprites`（与铺满层 / 云洞层同一个坑） |
+| 层级内序 | 层内第 0 个孩子是 `CloudBottomStripShadow`（影子分组），云体随后 ⇒ 影子永远在云体之下 |
+
+⚠️ **页面不许自己搭 UI**：建节点、量视口、铺格点、排兄弟序全在 `TerritoryCloudView`；
+`MainTerritoryMap.ts` 里一行 `new Node(` / `addComponent(` 都不许出现（架构守卫
+`territory-page-split` / `territory-battle-intro`）。
+
+#### 三、为什么不改视口几何
+
+把 `MapViewport` 的 Widget `bottom` 改成 0 / 把 `UITransform` 拉高，确实能让云画到屏幕底，
+但会连带改 `ScrollView` 的可滚范围、`bottomHudInset` 基准、`scrollToCell` 偏移与散场镜头倍率
+（全页地块整体下移 84px）。引导期间地图会「跳一下」，且 `tests/territory-map-bottom-inset.test.ts`
+那套 720×1112 实算全要重写 ⇒ 不如补一条独立的带。
+
+#### 四、判据与回归
+
+`tests/territory-cloud-bottom-strip.test.ts`（**11 条**）：
+
+1. prefab 事实：`MapViewport` 的 Mask 启用、`_type = 0`、Widget `_bottom = 168`、高 1112；
+   页面根 Sprite 是 `zdbg1`。
+2. 纯几何：补云带点阵与 `territoryCloudFillPoints` 逐点同 x、y 只差中线平移；
+   非法尺寸 / 行列 / 非有限中线一律返回空。
+3. 接线：页面判 `navBar.active` 且排在 `update` 所有早退之前、只转发布尔；
+   视图只做转发；云层用模型纯函数、挂页面根第 0 位、带高现算、帧晚到补帧。
+4. VM 行为：底栏没收起时**一个多余节点都不建**；收起后第 0 个孩子点亮、体影成对、
+   云心落在带内；开关反复切幂等；视口铺到页面底（带高 0）时不补；雾淡出 / 散完一起收。
+
+回归（2026-11-17）：专项 **11 / 11 绿**、`territory-cloud` + `territory-map-bottom-inset`
+**76 / 76 绿**、`npx tsc --noEmit` exit 0；领地全量 `tests/territory-*.test.ts`
+**1168 / 1149 绿 / 19 红**、广域 1380 / 1359 绿 / 21 红、全量 `test:raw`
+**6425 / 6352 绿 / 73 红**（本日基线 74 红）。🔴 这批红全是 **11-17 SVN 合并遗留**、
+与补云带无关，且已逐条用 `.svn/pristine` 基线正本对拍：`?.` 空守卫被冲掉
+（`chapterClearPlaying` / `disposeRewardFxLayer` / `resetChapterSwitchOffset`）、
+锁层 / 虚影层插入锚点回退、配表数量漂移（`1023` 宝箱格 22≠23、合计 145≠146、
+BOSS 波 24≠129）、`TerritoryProgress` 前置领地口径、无引擎视图类既有红。
+同文件里被冲掉的两条 `?.`（`bindMapInsetResize` / `scrollToCell`）已顺手补回。
+
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
 自选主城局选点结束进入战斗那一帧（`ZCGame.finishSpawnSelection`），纯表现层过渡（绝不回写模型）：
@@ -4555,74 +4628,29 @@ Creator 的规则是「被多个包引用时，资源存进**优先级高**的�
 - 头像经弹窗资源作用域与既有 `HeadArt` / `createIconLoader` 加载，关闭后迟到结果不得回填。视图不读取全局模型、不推进战斗规则、不新增统计网络请求。
 - 验证：`tests/battle-runtime-controller.test.ts`、`tests/battle-composition-services.test.ts`、`tests/zcds-settlement.test.ts`、`tests/zcds-progress.test.ts`；交互和归属守卫 `tests/view-intent-events.test.ts`、`tests/callback-owner.test.ts`。真实引擎探针需覆盖四行绑定、双人收缩、数值/比例更新与点空白关闭。
 
-## 13. 技能释放的触发范围：到点之后还要「普攻射程内有目标」（2026-11-11）
+## 13. 技能释放与独立目标选择（2026-11-18）
 
-需求原文：
+当前口径由用户在[索敌机制落地方案](design/zcds-索敌机制落地方案.md)中确认；替代 2026-11-11 的“所有打人技能封顶到普攻范围”。
 
-> 所有技能释放有一个触发范围，同角色的普通攻击的范围，否则达到触发条件也不会直接触发，
-> 只是待触发状态，直到目标进入范围才会触发。
+### 13.1 搜索与合法性
 
-改前是**每条车道各判各的**，同一个「能不能放」的问题有四套答案：
+- 普攻重新索敌按 `D²×仇恨系数×卡牌价值系数` 排序；卡表 `unitValueFactor` 越小越优先，旧配置默认 1。有效锁定保持，技能独立选敌继续取最近；首版逐卡权重和调参依据见索敌方案 §10。
+- 打人技能独立选择最近合法敌方单位，不复用普攻锁定的墙/建筑；同距按 id。Range=1 使用技能自己的搜索半径，All=2 搜索全场。参数袋按车道前缀配置 `xxxTargetMode`，缺省 Range，字段清单及各车道半径见方案 §9.1。
+- 正式对局由 `ZCGameModel.buildSkillTriggerContext` 注入 `selectSkillTarget`，与攻击系统共用 `ZCTargetingSystem.acquireSkillUnit`。死亡、同 owner 与不可攻击的飞行目标均排除。多点打击的实际伤害选择也按最近排序。
+- 自身圆形/前置矩形光环须存在真实形状覆盖的合法目标，判定复用 `zcGroundZoneReaches`，与出手后的区域伤害一致。喷火保留 350 表值长度；`auraTriggerRange` 正数才附加触发限制，0 与缺省等价。
+- 自身增益、常驻被动、连发和低血护体继续豁免选敌闸门；冲锋空挥耗 CD 的既有规则保持。
 
-| 车道 | 触发时机 | 改前的目标判据 | 没目标时 |
-| :--- | :--- | :--- | :--- |
-| 强化普攻 `empowered` | `sendAttack` 内 | 已要求身处普攻射程（天然满足） | — |
-| 副轨扇形 `secondary` | `secondaryCooldown` | **只判「有锁定目标」**，不判距离 | ⚠️ 目标在半张图外也清一片空气，CD 照扣 |
-| 自身施法 `self_cast` | `selfCastCooldown` | **完全不判目标** | ❌ 空场也给自己上增益 |
-| 自身光环 `self_aura` | `auraCooldown` | **完全不判目标** | ❌ 空场在脚下开一片空烧的地 |
-| 多点打击 `random_strike` | `strikeCooldown` / `strikeEvery` | 自带 `strikeRadius` | 不消费 CD |
-| 移形换影 `blink_strike` | `blinkCooldown` | 自带 `blinkSearchRadius` | 不消费 CD |
+### 13.2 射程与兼容上下文
 
-### 13.1 四个口径（用户当场拍板，不要重推）
+- 普攻 `attackReach=(attackRange+目标半径×0.5)×combatDistanceScale`，生效定义含 `attackRangePct`。
+- 自身 reach（副轨默认搜索半径及未配置搜索范围的落雷/弹体所用）取自身身体半径。其余技能沿用各自配置半径，不再统一封顶。
+- 未注入独立选敌的旧/轻量上下文保留 `inAttackRange` / `attackReachOf` 兼容行为。共享 `release` 仅在真正需要且触发就绪时惰性计算，每单位每拍至多一次；无技能、未就绪单位不扫描敌人。
 
-| 口径 | 选择 |
-| :--- | :--- |
-| 哪些技能走闸门 | **只有打人类的走**（副轨 / 自身光环 / 多点打击 / 移形换影）；自身增益与被动、连发、低血护体**不设闸门** |
-| 与技能自带搜索半径冲突时 | **直接压到普攻范围**（封顶，只压不抬） |
-| 表现层提示 | **不需要**，纯逻辑，不动任何 prefab |
-| 是否吃 `attackRangePct` | **吃**，与普攻同源 |
+### 13.3 待触发与冷却
 
-自身增益（`self_cast`：吃口菠萝自愈 / 嗜血 / 迅击）必须豁免：被远程风筝时敌人站在自己
-普攻范围之外，若也要求「范围内有目标」，残血时永远放不出自愈 —— 那不是待触发，是永久哑火。
+没有合法目标、实际形状无法覆盖敌人或参数不全时，保持 readyAt/累计次数不变，不刷新施法动作窗口。目标进入范围当拍补放。持续窗口已施放的后续波次仍按既有节拍推进，不反向取消已创建的效果。
 
-### 13.2 判据与唯一写入口
-
-- 闸门 `ZCUnitTargeting.hasTargetInAttackRange(unit)`：**不依赖锁敌**（锁敌是 RTS 式仇恨锁，
-  `current()` 会返回半张图外的目标）。锁定目标就在范围内直接返回（常见路径不扫全场），
-  否则按 `acquire` + `isInAttackRange` 同一套判据扫一遍敌我单位；城墙 / 建筑只认**已锁定的那个**
-  （地块不在 `units` 里，全场遍历地块表太贵，而攻城时它一定被 `targetWallHexId` 锁着）。
-- 射程口径与普攻**完全同源**：`ZCTargetingSystem.attackReach` —— `attackRange ≤ 100 ? attackRange + 目标身体半径 : attackRange × 0.9`，
-  再乘 `combatDistanceScale`；`effectiveDefinition` 已把 `attackRangePct` 算进去。
-- 封顶半径 `ZCUnitTargeting.attackReachOf(unit)`：身体半径取**自己**的（与 `castFanSkill` 算扇形半径同一口径），
-  所以「近战 45 + 身体 24」与普攻给的是同一个数。
-- 两者经 `IZCSkillTriggerContext.inAttackRange` / `attackReachOf` 注入，唯一装配点是
-  `ZCGameModel.buildSkillTriggerContext`。**两个字段都是可选的**：缺省 ⇒ 不设闸门，存量单测与既有单位行为逐字不变。
-- `ZCSkillTriggerSystem.tick` 里每个单位每步**只算一次** `release`，四条车道共用，不是各扫一遍。
-
-### 13.3 「待触发」不是新状态机
-
-`readyAt` 停在过去 + 本帧不执行、**一个字节都不消费**，目标进范围的那一帧立刻补放。
-所以不需要新增单位字段、不需要快照兼容处理：
-
-- `applySelfAura` / `advanceSecondary` / `applyRandomStrike`（CD 分支）/ `applyBlinkStrike`：
-  在 `now >= readyAt` 之后、真正施放之前插一道 `if (!release) return;`；
-- `applyRandomStrike` 的**累计次数**分支：闸门关闭时**不推进 `strikeFiredCount`**，
-  于是目标一进范围这一波立刻补出去；
-- 持续窗口（`strikeSeconds`）进行中的每一波不再判闸门 —— 那是**已经放出去**的效果，不该半路收掉。
-
-### 13.4 封顶只压不抬
-
-| 技能 | 表值 | 世界 px（×0.3） | 普攻射程 | 结果 |
-| :--- | :--- | :--- | :--- | :--- |
-| 镭射飞龙 `strikeRadius` | 1100 | 330 | 148.5 | 压到 **148.5** |
-| 魔术师 `blinkSearchRadius` | 600 | 180 | 148.5 | 压到 **148.5** |
-| 毒箭蘑菇 / 戈壁狂箭 `strikeRadius` | 252 | 75.6 | 135 | **保持 75.6**（本来就比普攻近，不许被放大） |
-
-`strikeSplashRadius` / `blinkHitRadius` / `blinkCloneRadius` 是**命中后的爆炸半径**，不是挑选半径，不受封顶影响。
-
-判据：`tests/zcds-skill-trigger-range.test.ts`（9 条 —— 缺省无闸门、三条待触发（含「按累计次数」那条不许记次数）、
-封顶只压不抬、闪现射程外空闪不消费 CD、自身增益豁免、被动/连发/低血豁免、`hasTargetInAttackRange` 判据本身）
-+ `tests/zcds-skill-trigger.test.ts`（既有 6 条须全绿，证明不传闸门时行为逐字不变）。
+验证：`zcds-targeting-policy.test.ts`、`zcds-skill-trigger-range.test.ts`、`zcds-skill-plan.test.ts`、`zcds-active-pilot.test.ts` 与各车道回归。追击时钟与脱战名单的快照验证见 `zcds-neutral-features.test.ts`。
 
 ## 14. 磁电菇两条新主动：`bolt_strike` 车道 + 软控「麻痹」（2026-11-11）
 
@@ -5345,7 +5373,7 @@ K 表的「每个标量独占一行 + 空数组压成 `[]`」排版必须逐字�
 - `ZCUnitTargeting.nearestEnemyDistance(unit)` —— 最近的敌对单位中心距（世界 px），
   过滤死人 / 打不到的空中单位，**不补身体半径、不打九折**（用户量的是「敌人处于多少 px」）；
 - `IZCSkillTriggerContext.nearestEnemyDistance?` —— 缺省不压，既有单位逐字不变；
-- `ZCSkillTriggerSystem.applySelfAura` 在 `release`（普攻射程闸门）之后加：
+- 历史实现：`ZCSkillTriggerSystem.applySelfAura` 在 `release`（当时的普攻射程闸门）之后加。2026-11-18 起改用 §13 的独立技能选敌，后续的施放条件保留：
   `最近距离 > auraTriggerRange × distanceScale ⇒ 返回 false`，**不消费 CD**，
   目标走进来的那一帧立刻补放（与既有的「待触发」同一套语义，不新增状态机）；
 - 组合根接线：`ZCGameModel.buildSkillTriggerContext`。
@@ -6575,3 +6603,451 @@ Q3 文案、K 表三条链）+ 结算 7（扩散段折算三态、`auraSlowRatio
 
 改 `zcds-dawtianlu-skills.test.ts`（3 条：区域 `effectPrefabPath` / 加载清单 / 尺寸改读 prefab）、
 `zcds-magdi-mushroom.test.ts` 与 `zcds-maladi-guo.test.ts`（各 1 条：68025 不再走兜底光柱）。
+
+---
+
+## 27. 第 12 批：主动技能「射一枚会爆的弹」（2026-11-17）
+
+孢爆箭 101303（风炮菇）/ 孢子凝珠 101104（水手菇）—— 两条共用一套实现的冷却型远程主动。
+本节只记「照设计案 P 列字面配就会静默出错」的四条，其余照着既有主动车道抄。
+
+### 27.1 参数键必须带 `shot` 前缀
+
+`skillParamJson` 按 `${unitId}:${pvpSkillId}` 合并成一袋（同一张卡的所有计划行共用），
+而 `splashRadius` / `splashDamageRate` **普攻链路也在读**（爆囊扩散那套）。
+设计案 P 列原来写的是裸 `damageRate` / `splashRadius` / `cooldown`：
+
+> 给主动技能配 90px 溅射 ⇒ 这张卡**每次普攻**也变成 90px 溅射。**不报错**，只是数值莫名变大。
+
+实际落地一律 `shot` 前缀：`shotCooldown` / `shotDamageRate` / `shotRadius` /
+`shotSlowRatio` / `shotSlowSeconds`。用例里有一条「参数袋不许出现裸键」的全表守卫。
+
+### 27.2 旁溅倍率不能省（省掉 = 不炸）
+
+`resolveProjectileHit` 里那句是 `projectile.splashDamageRate ?? 1`，看着像「不给就默认 1」，
+但 `strikeTargets` **只在 `splashDamageRate > 0` 时**才把它写进弹体 —— 省掉这一格，
+弹体上的 `splashDamageRate` 就是 `undefined`，旁溅伤害算出来是 0：
+
+> 箭飞过去、目标掉血、**周围一个人都不掉**，全程无报错。
+
+设计写的是「半径内**所有**敌人造成 90%」= 与直击同额 ⇒ 显式给 1，`splashFalloff` 给 0（不递减）。
+
+### 27.3 减速要随弹体在命中时挂
+
+`strikeTargets` 的 `options.statusId` 原来只有**立即结算**那一路在读（`castFanSkill` / 近战）。
+导弹/弹道分支一直没接 ⇒「会飞的技能挂减速」永远不生效。本批补了一行：
+
+```ts
+onHitStatusId: options.statusId,   // pushProjectile 时随弹体快照
+```
+
+`resolveProjectileHit` 早就在直击与旁溅两处读 `projectile.onHitStatusId`，只是没人喂它。
+缺省 `undefined` ⇒ 存量弹道逐字不变。
+
+### 27.4 按档位变比例的减速只能动态注册状态
+
+`pvpStatus` 里的 `slow` 是**一张定值档**，装不下 15/20/25% 三档。沿用友军光环的做法：
+按「百分点 + 秒数」拼 id（`__shotslow:15.0000:2.00__`），缺定义就 `register` 一条
+`statMods: { moveSpeedPct: -15 }`、`durationSeconds: 2`。
+
+> `moveSpeedPct` 是**百分点**口径（-15 = 移速 −15%），与 `numb` 的 `-50` 同一单位；
+> 0~1 的小数会被当成 0.15% 直接忽略。
+
+### 27.5 车道与闸门（照抄既有主动车道）
+
+| 项 | 做法 |
+| --- | --- |
+| 冷却字段 | `unit.splashReadyAt`，**必须登记 `ZCSnapshotCodec` 白名单**（不还原会读档白送一发） |
+| 首轮 | 首次推进只挂 CD（`now + shotCooldown`），开局不立刻放 |
+| 闸门 | 到点还要过「普攻射程内有目标」；锁定目标跑出射程 **不换目标、不消费 CD** |
+| 动作 | 真放出去才 `markCastAction`（不原地锁 —— 射手要边走边放） |
+| 表现 | 弹体/爆点 prefab 只在代码常量里（`ZCSplashShotFx`）⇒ 必须进 `ZCVisualResourcePlan` 与预下载清单 |
+
+### 27.6 工具链
+
+1. `tools/config/patch_splash_shot_batch12.js` —— 两份 `pvpSkillPlan.json` 各 3 档 + 裸键守卫
+2. `tools/config/patch_magdi_skill_rows_excel.py 101303 101104` —— J 表补 6 行
+3. `tools/config/patch_splash_shot_k.py` —— `armySkillLevelUp.json` 两份 + K 表 B/C/K/M
+   （**改写**既有行：这两条链原来是「愈合 / 寒冰箭」）
+4. `tools/config/patch_skill_design2_splash_shot.py` —— 设计案 O/P/S 三格（S 改「已实现」）
+
+### 27.7 用例
+
+`tests/zcds-splash-shot.test.ts` **14 条**：配表 5 / 登记 2 / 发弹 3 / 触发 4。
+连带修 `tests/zcds-skill-plan.test.ts` 的「到档才逐格推进」（68013 从 14 级起多出 101303 的 L1）。
+
+---
+
+## 28. 第 13 批：主动技能「以自身为圆心爆一次」（2026-11-17）
+
+菌毯爆发 101504（菌壶菇 68015）/ 菌核爆裂 101804（菌王菇 68018）—— 两条共用一套实现的
+冷却型自心圆爆发。与 §27 正好互补：**那个的圆心由命中点决定**（要先选中一个远处目标、
+再让弹体飞过去），**这个的圆心恒等于自己**（全向、不判朝向、不需要目标）。
+
+本节只记四条「照设计案 P 列字面配就会静默出错」的坑，其余照着 `castFanSkill` / `castSelfAura` 抄。
+
+### 28.1 参数键必须带 `burst` 前缀
+
+与 §27.1 同一个理由，但这次撞得更硬：**68015 这张卡的另一条技能（爆囊扩散 101501）
+已经在同一个袋子（`68015:30241`）里写了 `splashRadius` / `splashDamageRate`**。
+
+> 按设计案 P 列的裸 `radius = 150` 配下去 ⇒ 这张卡的普攻溅射半径从 38 变成 150。
+> 不报错、只是普攻突然变成大范围溅射，而且**改动方根本不会去看普攻行**。
+
+实际落地一律 `burst` 前缀：`burstCooldown` / `burstDamageRate` / `burstRadius` /
+`burstShieldRatio` / `burstShieldSeconds` / `burstShieldReducePct` / `burstKnockbackCells`。
+`patch_burst_batch13.js` 除了拦裸键，回读时还额外断言「101501 三档的 `splashRadius` 仍是 38/46/55」——
+裸键守卫只能证明「我没写进去」，这条才能证明「我没把它带跑」。
+
+### 28.2 「护盾期间减伤」没有现成 `pvpStatus` 档
+
+设计案 P 列原来写「III 级减伤走 `pvpStatus` 现有 `damageReduce` 档」。**那张表里没有这一档** ——
+最接近的几条 `vulnerability*` / `vuln_10` / `vuln_20` 是**反方向**（`damageTakenPct` 为正 =
+受到伤害提高），照配等于「给自己上了一个易伤」。
+
+做法与 §27.4 同源：按「百分点 + 秒数」拼 id 再注册。
+
+```ts
+import { burstGuardStatusId } from '../ZCBurstFx';
+burstGuardStatusId(15, 4);   // → '__burstguard:15.0000:4.00__'
+// statMods: { damageTakenPct: -15 }   ← 百分点口径，由 ZCDamageResolutionSystem 的
+//                                        1 + damageTakenPct / 100 消费
+```
+
+已知取舍：减伤跟着 `burstShieldSeconds`（4 秒）走，**护盾被打破不会提前揭掉减伤**
+（「护盾存在期间」在这里等价于「护盾的持续时间」）。要做到「破了就掉减伤」得在
+`expireShield` 之外再加一条「护盾归零时摘状态」的钩子，收益不抵复杂度。
+
+### 28.3 不能吃普攻射程闸门（`release`）
+
+2026-11-11 的历史实现中，`applySplashShot` / `castSecondary` / `castSelfAura` 都先过
+`context.inAttackRange?.(unit)`；2026-11-18 起已由 §13 的独立技能选敌替代。爆发车道从一开始就不使用普攻射程闸门：
+
+> 判据变成「普攻够不够得着」⇒ 一群怪在 140px 处围着、近战战士因为普攻打不到而不放大招。
+> 而 150 / 120 的爆发半径本来就大于近战普攻射程。
+
+本批的判据改成「**爆发半径内有没有人**」，由 `castBurstSkill` 自己算：命中 0 人 ⇒ 返回 false
+⇒ 触发系统不消费 CD（与「打不出去不消费 CD」这条老口径一致）。
+用例里有一条 `inAttackRange: () => false` 但照样放的守卫。
+
+### 28.4 `Area` 事件的 `radius` 不会让特效变大
+
+`ZCCombatEffectView` 里那句注释是硬事实：**「area 类地面区域的视觉尺寸完全来自 prefab 的
+烘焙缩放，视图从不按 `event.radius` 缩放」**。而 `普攻爆炸` 这一个 prefab 现在被四处共用
+——普攻命中、孢爆箭的 90px 溅射、菌毯爆发的 150、菌核爆裂的 120。
+
+⇒ 也不能给路径登记全局倍率（`NODE_SCALE_BY_PREFAB_PATH`）：那会把别人的爆炸一起放大。
+
+本批新增**事件级** `effectScale`（`undefined ⇒ 1`，`combatEvents` 不进存档，加字段不影响兼容），
+在 `ZCCombatEffectView` 里与 `nodeScale * growFactor * sizeScale` 相乘：
+
+```ts
+import { zcBurstEffectScale } from '../ZCBurstFx';
+zcBurstEffectScale(150);   // → 0.818   屏上直径 300 × 0.76875 = 230.625 ÷ prefab 屏上宽 282
+zcBurstEffectScale(120);   // → 0.654
+```
+
+两个常量都写在 `ZCBurstFx` 里并注明量法：
+`ZC_BURST_IMPACT_PREFAB_SCREEN_WIDTH = 282`（`UITransform._contentSize.width` 141 × 根 `_lscale` 2.0）、
+`ZC_BURST_SCREEN_PER_LOGIC = 0.76875`（= `combatDistanceScale` 0.3 × view/logical 2.5625）。
+
+不这么做的后果可量化：`普攻爆炸` 原生 ≈ 半径 183 逻辑 px ⇒ 配 120 的菌核爆裂会变成
+「看着半径 183、只有 120 内掉血」—— 就是项目里反复踩的「看着大、打不到」。
+
+### 28.5 车道与闸门
+
+| 项 | 值 |
+| --- | --- |
+| CD 槽位 | `unit.burstReadyAt`（两条 behaviorKey 共用一格） |
+| 首次推进 | 只挂 `now + burstCooldown`，开局不立刻放 |
+| 打不出去 | 不消费 CD，下帧重试 |
+| 施法动作 | `markCastAction(unit, now, **false**)` —— 不 hold，战士开团要能立刻跟进走位 |
+| 快照 | 必须登记 `ZCSnapshotCodec` 白名单（不还原 = 读档白送一次爆发） |
+| 伤害取值 | 与扇形 / 光环一致取**一份**：暴击与克制按「离得最近的那个敌人」算一次，半径内所有人吃同一个数 |
+| 护盾 | 复用 `applySelfShield`（取最大值 + 写 `shieldExpireAt`），到期由 `expireShield` 清零 |
+| 击退 | 复用 `applyKnockback`：格数 × `HEX_GRID_LOGICAL_ROW_STEP`，世界换算由 `applyLegacyKnockback` 自己乘 |
+
+### 28.6 工具链
+
+1. `tools/config/patch_burst_batch13.js` —— 两份 `pvpSkillPlan` 各 3 行。
+2. `tools/config/patch_magdi_skill_rows_excel.py 101504 101804` —— J 表补 6 行。
+3. `tools/config/patch_burst_k.py` —— `armySkillLevelUp` 两份 + K 表 B/C/K/M（**改写**既有行：
+   两条链原来是「天灾降临 / 蛇首狂舞」）。
+4. `tools/config/patch_skill_design2_burst13.py` —— 设计案第 76 / 91 行 O + P + S 三格。
+
+### 28.7 用例
+
+`tests/zcds-burst-batch13.test.ts` **18 条**：配表 5（含「68015 普攻溅射未被带跑」）/
+登记 3（含 `effectScale` 算法真值）/ 爆发 4 / 触发 6。
+
+连带修 `tests/zcds-magdi-mushroom.test.ts`：用户口径「麻痹是设计上需要先删除，控制部分留在
+别的系统」⇒ 原「`pvpStatus.numb` 存在且是软控」翻成「不许回来，且配表也不许再引用」
+（`pvpStatus` 没定义时 `statusSystem.apply` 静默不生效，悬空引用谁都看不出来）。
+
+## 29. 第 14 批：主动技能「近身型」两条车道（2026-11-17）
+
+菌丝绞杀 101503（机甲菇 68015）—— `fan_slow`：身前 120° 扇形甩一次，命中的敌人减速。
+菌丝突刺 101403（分裂菇 68014）—— `single_strike`：扑到最近敌人身边打一发，命中挂硬控。
+
+两条都是「离现有的某条车道最近、但不能直接复用」的类型，§29.1~29.5 记的正是「为什么不能复用」。
+
+### 29.1 参数键必须带 `fan` / `single` 前缀
+
+与 §27.1 / §28.1 同一条理由，本批是**同一张卡上第三次撞车**：
+
+> `68015:30241` 这个袋子里，到本批为止已经同时住着三条车道的参数 ——
+> 101501 的 `splashRadius`（38/46/55）、101504 的 `burstRadius`（150）、101503 的 `fanRadius`（150）。
+> 任一车道用裸 `radius`，另外两条会跟着一起变，且**没有任何一处会报错**。
+
+落地键名：`fanCooldown` / `fanDamageRate` / `fanRadius` / `fanAngle` / `fanMaxTargets` /
+`fanSlowRatio` / `fanSlowSeconds`；`singleCooldown` / `singleDamageRate` / `singleSearchRadius` /
+`singleStopDistance` / `singleHitRadius` / `singleStunSeconds` / `singleHastePct` / `singleHasteSeconds`。
+
+`patch_fan_single_batch14.js` 的裸键守卫扩大到 7 个（`splashRadius` / `splashDamageRate` /
+`burstRadius` / `burstDamageRate` / `damageRate` / `cooldown` / `radius`），回读时**两条既有车道都断言**：
+101501 仍是 38/46/55、101504 仍是 150。
+
+### 29.2 扇形不能复用 `castFanSkill`：人数上限是设计约束
+
+副轨那条 `castFanSkill` 是「扇形内**全打**」，半径还是「普攻射程 × `secondaryRadiusScale`」。
+设计案这条写的是「半径取表值 150、最多 4/5/6 名敌人」—— 两处都对不上：
+
+* 半径不跟普攻射程（否则战士换一把射程不同的武器，扇形大小会跟着变）；
+* **人数上限必须真的截断**。150 逻辑 px 的扇形扫到十个怪时只打前 N 个，
+  否则「多目标递减 / 人数上限」这两条设计约束同时失效（和 §27.2 的旁溅递减同一类问题）。
+
+`castFanSweep` 里对此的顺序是「先按距离排序、再 `slice(0, maxTargets)`」，
+伤害取值与 `castFanSkill` / `castSelfAura` 一致取**一份**：暴击与克制按扇形里最近的那个算一次，
+被扫到的所有人吃同一个数。
+
+### 29.3 朝向的兜底是 `unit.facingRadians`
+
+扇形总要有个方向。优先「朝当前锁定目标」（`atan2(target - origin)`），没有锁定目标时退回面朝方向。
+`target` 落在自己脚下（差值 < 1e-9）时也退回 `facingRadians` —— 否则 `atan2(0, 0)` 会给出 0，
+变成「目标贴脸时扇形突然朝 +x」。
+
+### 29.4 眩晕是硬控，且时长必须跟着档位走
+
+`pvpStatus` 里现成有 `stun_1` / `stun_1_5` / `stun_2` / `stun_2s` / `stun_3` / `stun_4` 等定值档，
+**不用**：值只是**这一次**巧合相同，之后改配表时长不会跟着变（与 §27.4 同一条判据）。
+
+做法：`singleStrikeStunStatusId(seconds)` → `__stunstrike:<秒>__`，注册时带 `control: 'stun'`：
+
+```ts
+control: 'stun',   // ZCControlKind 的硬控档 ⇒ 走 ZCUnitSystem 的受控闸门整段停手
+```
+
+> 不能拿 `numb` 那类软控（`attackDisabled: 1` + `moveSpeedPct: -50`、`control` 为空）冒充：
+> 软控只减移速、照常出手；且 `numb` 已按设计删除（控制能力归别的系统）。
+
+### 29.5 攻速增益只能「命中之后」给
+
+设计案 N 列原话是「命中后自身攻速 +30%·4s」。挂进 `self_cast`（施法即加）会变成
+**空挥也涨攻速** —— 突刺在搜索半径内没目标时压根不出手，但「施法即加」的判定发生在出手之前。
+
+在 `applySingleStrike` 里就是先 `const hits = context.strike(...)`，再 `if (hits > 0 && hastePct > 0 ...)`：
+
+```ts
+statMods: { attackIntervalPct: hastePct }   // 正值 = 间隔缩短 = 攻速提升（30 = +30%）
+```
+
+`attackIntervalPct` 是「间隔缩短」口径，消费点 `ZCGameModel:2266` 的
+`base.attackInterval * (1 - pct / 100)`；写负值等于给自己减速。
+
+### 29.6 突刺为什么整条落在触发系统（而不是攻击系统）
+
+它要**挪人**，而 `blinkTo` 只在触发侧的上下文里接线（`ZCGameModel.buildSkillTriggerContext`）
+—— 与 `applyBlinkStrike`（魔术师 103404）同侧。与 103404 的三处差别：
+
+| 项 | `blink_strike`（103404） | `single_strike`（101403） |
+| --- | --- | --- |
+| 形态 | 打往返、留分身 | 单向扑过去，不回来 |
+| 射程闸门 | 吃 `release` | **不吃**（意义就是「够不着才扑过去」） |
+| 命中状态 | 只结算伤害 | 硬控（`control: 'stun'`） |
+| 增益 | 无 | III 级命中后攻速 |
+
+`release` 那条尤其要注意：突刺一旦被普攻射程封顶，就退化成「原地打一发」，
+和它的名字与设计意图都不符。用例里有一条 `inAttackRange: () => false` 但照样扑的守卫。
+
+### 29.7 撕裂的播放时长 = 8 帧 ÷ 12fps，不是设计案写的 0.3s
+
+设计案 O 列写「贴目标播 0.3s」。实测 `长戟兵_撕裂` 是 8 张序列帧、`sample: 12`
+⇒ 走完一遍要 **0.667s**。截到 0.3s 会把后 4 张砍掉，观感是「砍一半就消失」。
+
+口径与五雷轰顶一致：**帧数 ÷ 采样率**，写在 `ZC_SINGLE_STRIKE_EFFECT_SECONDS` 里并加注释。
+
+贴目标的做法：`ZCCombatEffectPlacement` 对**未登记**的 prefab 一律按 `caster` 锚点取 `fromX/fromY`
+⇒ 把事件的 `fromX/fromY` 与 `toX/toY` **都写成目标坐标**，它就落在被打的那个人身上。
+漏收 `ZCVisualResourcePlan` 的后果是「照常结算、屏幕上不播」，所以代码常量里的路径必须同时进
+`ZCVisualResourcePlan.effects`（实战）与 `ZCGameResourcePlan` 的 warmup（预下载）。
+
+### 29.8 车道与闸门
+
+| 项 | `fan_slow`（101503） | `single_strike`（101403） |
+| --- | --- | --- |
+| CD 槽位 | `unit.fanReadyAt` | `unit.singleReadyAt` |
+| 首次推进 | 只挂 `now + fanCooldown`，不开局甩 | 只挂 `now + singleCooldown`，不开局扑 |
+| 普攻射程闸门 | **不吃**（判据 = 扇形半径内有没有人） | **不吃**（判据 = 搜索半径内有没有人） |
+| 打不出去 | 不消费 CD，下帧重试 | 同左（`searchRadius` 内没人就等） |
+| 施法动作 | `markCastAction(unit, now, false)` | 同左（人已经被挪走，不锁原地） |
+| 快照 | 必须登记 `ZCSnapshotCodec` 白名单 | 同左（不还原 = 读档白送一次） |
+
+### 29.9 用例：两处夹具坑会让用例「以假红指错方向」
+
+`tests/zcds-fan-single-batch14.test.ts` **17 条**（配表 6 / 登记 3 / 扇形 4 / 触发 4）。
+
+首次跑出 4 条红，全部是夹具问题、实现无误 —— 记录在此，避免下次重踩：
+
+1. **`distanceScale` 缺省是 1，不是 0.3。** `applySingleStrike` 里是
+   `context.distanceScale ?? 1`（老上下文 / 单测夹具的缺省语义是「不换算」）。
+   夹具不写这一格，`singleSearchRadius: 300` 就变成「300 **世界** px 都能扑」，
+   「搜索半径内没人 ⇒ 不消费 CD」那条永远测不出来（要求 90 才够不着，实际 95 也够得着）。
+2. **`runtimeOf` 不能对所有单位返回同一本技能书。** 真实语义是「这个单位自己的技能配置」。
+   夹具图省事写成 `runtimeOf: () => runtime`，被扑的那个敌人也会放一次突刺 ⇒
+   `strike` 被调两次、落点被敌人那次覆盖，红在「到点扑一次 / 落点应为 51」上，
+   看着像实现的问题。
+3. 观察命中别用 `applyHitStatus`：`castFanSweep` 里是 `if (slowStatusId) context.applyHitStatus(...)`，
+   不传减速 id 时它根本不会被调用 ⇒ 「扇形朝面朝方向」那条要改用 `damageUnit` 数命中。
+
+## 30. 第 15 批：主动技能「冲锋」一条车道三条技能（2026-11-17）
+
+菌盾冲锋 101204（菇八戒 68012）—— `charge_shield`：朝目标方向定长 1 格，撞到的敌人吃伤害，落地自护盾。
+冲锋 102303（南瓜战神 68023）—— `legacy_dash`：朝最近敌人冲，路径伤害 + 眩晕，III 级落地减伤。
+尖刺冲锋 102703（爆锤莲王 68027）—— `legacy_dash`：朝面朝方向冲，路径伤害 + 易伤 / 破甲，III 级落地护盾。
+
+一条车道、两条 behaviorKey（`charge_shield` / `legacy_dash`），一套结算（`castChargeDash`），
+差异全在参数 —— 与 §27（`shot` / `spore`）、§28（`burst_aura` / `burst_knockback`）同一套做法。
+
+### 30.1 命中集合是一整条线段（点到线段的距离）
+
+前面四批的命中集合分别是：一个点（§27 溅射）、一个圆（§28 自心爆发）、一片扇形（§29）、
+一个目标（`single_strike`）。冲锋是第五种：**「起冲点 → 落点」这条线段周围 `hitRadius` 的胶囊**。
+
+```ts
+// 投影参数必须夹在 [0,1] 才是「线段」而不是「直线」
+const t = clamp01(((x - ox) * spanX + (y - oy) * spanY) / spanSquared);
+distance = hypot(x - (ox + spanX * t), y - (oy + spanY * t));
+```
+
+不夹 `t` 的后果很难在肉眼上发现：落点**前方**的怪也会被算成「撞到」——
+它根本不在冲锋路径上，但玩家看到的是「没走过去就把人打了」。
+
+也正因为是线段，`strikeTargets`（圆形）与 `castFanSweep`（扇形）都不能复用，
+`castChargeDash` 是新写的一段（§30.6 有它和 `IZCStrikeOptions` 为什么分开接口的理由）。
+
+### 30.2 命中 0 人也要消费 CD，落地自保也不判命中
+
+这一条与本项目其它主动车道**刻意相反**：
+
+| 车道 | 打不出去时 | 理由 |
+| --- | --- | --- |
+| 扇形 / 爆发 / 突刺 / 闪现 | 不消费 CD，下帧重试 | 「空放浪费 12 秒」，而且突刺空扑还会把人送到没目标的空地 |
+| **冲锋（本批）** | **照常消费 CD** | 人已经冲出去了，位移本身不可被打断（设计案 N 列 102303 原话） |
+
+落地自保（护盾 / 减伤）同理：设计原话是「**并**为自己附加护盾」「冲锋**结束后**自身受到伤害降低 25%」——
+都是无条件生效，所以写在 `victims.length` 的判断**之外**。
+
+例外只有一处：`legacy_dash` 的**朝最近敌人**分支（102303）在搜索半径内没人时退出、不消费 CD ——
+那不是「冲了没打到」，而是「压根没有冲的目标」。朝面朝方向的分支（102703）没有这个概念，
+前面是空的也照冲。
+
+### 30.3 `damageTakenPct` 一个字段两个方向
+
+两条 `legacy_dash` 的自保与破甲**正好反向**，而且都在 `damageTakenPct` 上：
+
+| 技能 | 档位 | 状态 id | `statMods` | 挂给谁 |
+| --- | --- | --- | --- | --- |
+| 102303 冲锋 | III | `__dashguard:25.0000:3.00__` | `{ damageTakenPct: -25 }` | 自己 |
+| 102703 尖刺冲锋 | II | `__dashvuln:20.0000:4.00__` | `{ damageTakenPct: +20 }` | 被打的人 |
+| 102703 尖刺冲锋 | III | `__dashvuln:35.0000:6.00__` | `{ damageTakenPct: +35 }` | 被打的人 |
+
+> 写反一处就是「自保变成自残」「破甲变成给对方上护盾」，**而且不报错**。
+> 这也是为什么两条各用一个 id 前缀（`__dashguard:` / `__dashvuln:`）而不是一条共用：
+> 光看数值分不出方向，只能靠名字。
+
+眩晕不另立 id：`__stunstrike:<秒>__`（`control: 'stun'`，§29.4）与突刺共用 —— 机制完全一样，
+同一件事写两个 id 只会让状态系统里多一条永远命不中的定义。
+
+### 30.4 冲锋是「定长位移」，落点必须校验
+
+闪现 / 突刺的落点是「贴着一个必然合法的目标」算出来的，冲锋不是：它走的是
+`chargeCells` / `dashCells` 个格距，方向由目标或朝向决定 —— 站在地图边缘朝外冲就会把人送出可玩区域，
+而 `movement.placeAt` **不做边界检查**（它只写 `freeX/freeY` 再同步占格索引）。
+
+所以 `dashDestination` 沿路逐步缩短再落：
+
+```
+1 格不可站 → 0.75 → 0.5 → 0.25 → 一个都不行就不冲（不消费 CD）
+```
+
+判据来自新增的可选上下文 `hexIdAt`（`ZCGameModel` 转给 `geometry.hexIdAt`）。
+缺省（单测夹具）⇒ 不校验。
+
+「冲程为 0」（目标就贴在身上）不当作「不能冲」：线段退化成一个点，`castChargeDash` 照样按胶囊判一次，
+「冲到了」这件事仍然成立（消费 CD、落地自保生效）。
+
+朝最近敌人的那一档还要 `min(冲程, 到目标的距离)` 封顶，否则会**冲过头穿到目标背后** ——
+观感是「冲过去把人甩在身后」，判定上却只打到路过那一下。
+
+### 30.5 两个 legacy prefab 的尺寸与时长口径
+
+| prefab | contentSize | 根 `_lscale` | 烘焙 | clip | 时长口径 | 路径倍率 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `轻骑兵_冲锋` | 300×140 | 1 | 300 | 1 帧 loop（静态） | **设计给的 0.3s** | 0.4 |
+| `刀盾兵_护盾` | 100×100 | 1 | 100 | 17 帧 loop | **17 ÷ 12 = 1.417s** | 0.55 |
+
+两个 prefab 的**时长口径是相反的**，这是本批最容易做错的一处：
+
+* 残影是静态单帧 ⇒ 时长由「残影留多久」决定（设计案 O 列 0.3s），按帧数算会得到 0.083s；
+* 护盾是序列帧 ⇒ 必须按帧数走完（§29.7 同一条），拍一个短时长会把动画截断。
+
+`轻骑兵_冲锋` 的倍率 0.4 是反算出来的：烘焙 300 屏上 px 是「武将技」量级（≈9 个格距），
+而冲锋只走 1~2 格（32~65 屏上 px）⇒ 目标宽约 120 屏上 px ⇒ 120 ÷ 300 = 0.4。
+**改 `chargeCells` / `dashCells` 时这条倍率要跟着重算。**
+
+### 30.6 残影的锚点必须是 `midpoint`
+
+`ZCCombatEffectPlacement` 只有两个锚点（`caster` / `midpoint`），视图**没有**「沿路径平移」这条通道
+—— `ZCCombatEffectView` 每一帧只按锚点定位一次，不插值位置。
+
+⇒ 设计案 O 列「沿朝向平移留 0.3s 残影」唯一可行的落地方式是**画在这段路的中间**：
+事件的 `from` 写起冲点、`to` 写落点，把 `轻骑兵_冲锋` 登记成 `midpoint`。
+只写 `from`（起冲点）的话锚点退化成一个点，观感是「原地挥了一下然后瞬移」。
+
+登记在**路径**而不是技能 id：与 §26 / §27 同一条口径，同一个 prefab 被三条技能复用时配一次就都对。
+
+### 30.7 车道与闸门
+
+| 项 | `charge_shield`（101204） | `legacy_dash`（102303 / 102703） |
+| --- | --- | --- |
+| CD 槽位 | `unit.chargeReadyAt` | `unit.dashReadyAt`（两条共用一格：同一条车道） |
+| 首次推进 | 只挂 `now + chargeCooldown` | 只挂 `now + dashCooldown` |
+| 选向 | 当前锁定目标 → 面朝（兜底） | `dashTowardNearest` = 1 朝最近敌人 / 0 朝 `facingRadians` |
+| 冲程 | `chargeCells`（定长） | `dashCells`，朝最近敌人时再按 `min(·, 到目标距离)` 封顶 |
+| 普攻射程闸门 | **不吃** | **不吃** |
+| 打不出去 | 照常消费 CD（人已冲出去） | 朝最近敌人：没人 ⇒ 不消费；朝面朝：照冲 |
+| 落地自保 | 护盾（`applySelfShield`，现有光圈） | 102303 减伤（补 `刀盾兵_护盾` 表现）/ 102703 护盾（现有光圈） |
+| 快照 | 必须登记 `ZCSnapshotCodec` 白名单 | 同左 |
+
+两条都在 `markCastAction(unit, now, false)`：不 hold（人已经被挪走了）。
+
+### 30.8 工具链
+
+1. `tools/config/patch_charge_dash_batch15.js` —— 两份 `pvpSkillPlan` 各 3 + 3 + 3 行。
+   守卫：9 个裸键（含 `lanceDamageRate` / `lancePierceCount`）/ 每条链必须带自己的 CD 键 /
+   回读断言「68027 的普攻溅射仍是 38/46/55、投枪仍是每 4/3/2 次」。
+2. `tools/config/patch_magdi_skill_rows_excel.py 101204 102303 102703` —— J 表补 9 行（29 列逐格对拍）。
+3. `tools/config/patch_charge_dash_k.py` —— `armySkillLevelUp` 两份（name/desc/modfiy）
+   + `K-卡牌升级.xlsx` 的 B/C/K/M 四列（**改写**既有占位行）。
+4. `tools/config/patch_skill_design2_charge_dash15.py` —— 设计案第 61 / 115 / 135 行 O + P + S。
+
+### 30.9 用例
+
+`tests/zcds-charge-dash-batch15.test.ts` **17 条**：配表 6（三条技能三档 / 裸键 / 68027 两条既有车道未带跑 /
+两份产物一致 / K 表）+ 登记与表现 3（双登记与加载清单 / 快照白名单 / 锚点 `midpoint` + 两个路径倍率
++ 两种时长口径）+ 线段命中 3（路上全吃 & 线外不吃 & 落点前方不吃 / 命中 0 人照样给护盾 / 伤害取一份）
++ 触发 5（首次只挂 CD 与选向 / 无目标朝面朝 & 落点非法逐步缩短 / 朝最近敌人且不冲过头 & 没人不消费 CD /
+III 级减伤负值 / 尖刺冲锋面朝 & 易伤正值 & III 级护盾 & L1 照冲）。
+
+两条夹具坑沿用 §29.9：`distanceScale` 必须显式给 0.3（缺省 1 会把 1 格放大成 3.3 格）、
+`runtimeOf` 只给施法者自己的技能书。

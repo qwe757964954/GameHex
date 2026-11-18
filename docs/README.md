@@ -24,7 +24,7 @@
 | 任何代码改动 | [AGENTS.md](../AGENTS.md) | 按风险级别选择流程 |
 | 分层、依赖、Procedure、资源归属 | [AI架构与代码规范.md](AI架构与代码规范.md) §2 | 对应模块的归属章节 |
 | 视图事件、按钮、caller、异步、池化、渲染 | [AI架构与代码规范.md](AI架构与代码规范.md) §2.1、§2.2、§3 | [开发细则](agent/开发细则.md) 对应条目 |
-| 引用、类型、命名、风格 | [开发细则](agent/开发细则.md) | 不再查其他文档的同类规则 |
+| 引用、类型、命名、风格；生命周期与类型契约扫描 | [开发细则](agent/开发细则.md) | 全工程扫描提示词见「引用与类型」章节；不再查其他文档的同类规则 |
 | MVC 职责、Page 与组合层 | [MVC设计规范](agent/MVC设计规范.md) | 架构规范对应模块 |
 | 架构迁移进度、哪些模块尚未迁移 | [design/工程架构迁移清单.md](design/工程架构迁移清单.md) | 只按清单判断范围，不把“已实施”当全工程完成 |
 | 单例、共享服务、状态作用域 | [单例与状态作用域](agent/单例与状态作用域.md) | — |
@@ -37,6 +37,7 @@
 | 大地图基地、编辑器 | [bigmap-基地建筑交互改进方案.md](bigmap-基地建筑交互改进方案.md)、[bigmap-策划编辑器方案.md](bigmap-策划编辑器方案.md) | 按各文状态头区分已做与待做 |
 | 对局、领地、章节地图表现 | [zcds-表现层与领地规范.md](zcds-表现层与领地规范.md) | 章节地图实现见 [章节地图动画与点击反馈实现说明.md](章节地图动画与点击反馈实现说明.md) |
 | 对局子系统（捕获、投射物、匹配、联机、性能、旧技能） | [zcds-capture.md](zcds-capture.md)、[zcds-projectiles.md](zcds-projectiles.md)、[zcds-matching-preload.md](zcds-matching-preload.md)、[zcds-local-multiplayer.md](zcds-local-multiplayer.md)、[zcds-performance.md](zcds-performance.md)、[zcds-legacy-skill-runtime.md](zcds-legacy-skill-runtime.md) | 按文件名定位 |
+| 索敌、目标选择、仇恨与切换规则 | [design/zcds-索敌机制落地方案.md](design/zcds-索敌机制落地方案.md) | 当前口径见开篇，实施与验证见 §9，卡牌价值与导表见 §10；§2～§8 为历史评估 |
 | 对局 HUD、六边形视图决策、趣味中立资源 | [ZCGameHUD.md](ZCGameHUD.md)、[ZCHexView设计决策.md](ZCHexView设计决策.md)、[zcds-趣味中立资源.md](zcds-趣味中立资源.md) | — |
 | 卡牌阵容蓝湖改版 | [CardLineup蓝湖改版说明.md](CardLineup蓝湖改版说明.md) | — |
 | 协议与跨端规则 | [slg-协议接入说明.md](slg-协议接入说明.md) | 跨端资源规则见 [spec/领地随机资源跨端规则.md](spec/领地随机资源跨端规则.md) |

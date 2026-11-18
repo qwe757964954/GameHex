@@ -3,6 +3,7 @@ import type { ZCUnitDefinition } from '../ZCCombatCatalog';
 import type { ZCCombatTargetKind, ZCHexState, ZCUnitState } from '../ZCGameTypes';
 import { ZC_OWNER_ORDER, type ZCOwner } from '../ZCMapConfig';
 import { isZCAwakeMonster } from './ZCNeutralFeatureSystem';
+import { ZCSkillTargetMode } from '../ZCSkillRuntime';
 
 export interface ZCPoint { readonly x: number; readonly y: number }
 export interface ZCTargetSelection { readonly kind: ZCCombatTargetKind; readonly id: number }
@@ -21,6 +22,7 @@ export interface ZCTargetingContext extends Pick<IZCModelServices, 'unitPosition
     readonly unitsOf?: (owner: ZCOwner) => ReadonlySet<ZCUnitState>;
     /** 已按「当前单位 owner」预分组的目标地块；缺省时回退到全量 hexes。*/
     readonly candidateHexes?: (owner: ZCOwner) => readonly ZCHexState[];
+    readonly canTargetUnit?: (unit: ZCUnitState, candidate: ZCUnitState) => boolean;
 }
 
 /** 索敌是同步纯查询；候选坐标出参共用一块，避免每次 acquire 新建字面量。*/
@@ -54,6 +56,47 @@ export interface IZCPathStepOptions {
 
 /** 索敌排序、射程和通用 BFS；不持有对局状态。*/
 export class ZCTargetingSystem {
+    static skillSearchRadius(radius: number, mode = ZCSkillTargetMode.Range): number {
+        return mode === ZCSkillTargetMode.All ? Infinity : radius;
+    }
+
+    static auraSearchRadius(params: Readonly<Record<string, number>> | undefined, scale: number): number {
+        const radius = Math.max(0, params?.auraRadius ?? 0);
+        const halfHeight = Math.max(0, params?.auraRectHalfHeight ?? 0);
+        const halfLength = halfHeight > 0 ? Math.max(0, params?.auraRectHalfLength ?? 0) || radius : radius;
+        return (Math.max(0, params?.auraTriggerRange ?? 0)
+            || Math.max(0, params?.auraForward ?? 0) + Math.hypot(halfLength, halfHeight)) * scale;
+    }
+
+    static isSkillEnemy(unit: ZCUnitState, candidate: ZCUnitState,
+        context: { effectiveDefinition?(unit: ZCUnitState): ZCUnitDefinition }): boolean {
+        return candidate.id !== unit.id && candidate.owner !== unit.owner && candidate.hp > 0
+            && candidate.battleState !== 'dead' && (!context.effectiveDefinition
+                || context.effectiveDefinition(unit).canAttackAir || !context.effectiveDefinition(candidate).flying);
+    }
+
+    static acquireSkillUnit(unit: ZCUnitState, units: readonly ZCUnitState[], radius: number,
+        context: { unitPosition?(unit: ZCUnitState): ZCPoint; effectiveDefinition?(unit: ZCUnitState): ZCUnitDefinition },
+        mode = ZCSkillTargetMode.Range, canHit?: (x: number, y: number) => boolean): ZCUnitState | null {
+        const from = context.unitPosition?.(unit);
+        const fromX = from?.x ?? unit.freeX, fromY = from?.y ?? unit.freeY;
+        const limit = this.skillSearchRadius(radius, mode);
+        let nearest: ZCUnitState | null = null;
+        let best = Infinity;
+        for (const candidate of units) {
+            if (!this.isSkillEnemy(unit, candidate, context)) continue;
+            const position = context.unitPosition?.(candidate);
+            const dx = (position?.x ?? candidate.freeX) - fromX;
+            const dy = (position?.y ?? candidate.freeY) - fromY;
+            const distance = dx * dx + dy * dy;
+            if (distance > limit * limit || distance > best || distance === best && nearest && candidate.id >= nearest.id) continue;
+            if (canHit && !canHit(dx + fromX, dy + fromY)) continue;
+            best = distance;
+            nearest = candidate;
+        }
+        return nearest;
+    }
+
     static acquire(unit: ZCUnitState, context: ZCTargetingContext, unitsOnly = false, out?: ZCTargetSelectionSink): ZCTargetSelection | null {
         const definition = context.effectiveDefinition(unit);
         const from = context.unitPosition(unit, ACQUIRE_POSITION);
@@ -61,15 +104,15 @@ export class ZCTargetingSystem {
         let bestKind: ZCCombatTargetKind | null = null;
         let bestId = Infinity;
         let bestDistance = Infinity;
+        let bestCurrent = false;
         if (unit.hatredUnitId !== null && context.now <= unit.hatredUntil) {
             const hater = context.unitById(unit.hatredUnitId);
-            if (hater && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
-                && (definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)) {
-                // 仇恨目标进入同一候选池；保留旧逻辑的距离排序语义。
-                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, ACQUIRE_POSITION));
-                if (distance < bestDistance || (distance === bestDistance && hater.id < bestId)) {
-                    bestDistance = distance; bestKind = 'unit'; bestId = hater.id;
-                }
+            if (hater && hater.id !== unit.id && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
+                && (definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)
+                && (!context.canTargetUnit || context.canTargetUnit(unit, hater))) {
+                bestDistance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, ACQUIRE_POSITION))
+                    * 0.25 * (context.baseDefinition(hater.unitId).valueFactor ?? 1);
+                bestKind = 'unit'; bestId = hater.id; bestCurrent = hater.id === unit.targetUnitId;
             }
         }
         if (context.unitsOf) {
@@ -79,9 +122,13 @@ export class ZCTargetingSystem {
                 for (const candidate of context.unitsOf(owner)) {
                     if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
                     if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
-                    const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION));
-                    if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
-                        bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
+                    if (context.canTargetUnit && !context.canTargetUnit(unit, candidate)) continue;
+                    const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION))
+                        * (candidate.id === unit.hatredUnitId && context.now <= unit.hatredUntil ? 0.25 : 1)
+                        * (context.baseDefinition(candidate.unitId).valueFactor ?? 1);
+                    const current = candidate.id === unit.targetUnitId;
+                    if (distance < bestDistance || (distance === bestDistance && (current && !bestCurrent || current === bestCurrent && candidate.id < bestId))) {
+                        bestDistance = distance; bestKind = 'unit'; bestId = candidate.id; bestCurrent = current;
                     }
                 }
             }
@@ -89,9 +136,13 @@ export class ZCTargetingSystem {
             for (const candidate of context.units) {
                 if (candidate.id === unit.id || candidate.battleState === 'dead' || candidate.hp <= 0 || candidate.owner === unit.owner) continue;
                 if (!definition.canAttackAir && context.baseDefinition(candidate.unitId).flying) continue;
-                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION));
-                if (distance < bestDistance || (distance === bestDistance && candidate.id < bestId)) {
-                    bestDistance = distance; bestKind = 'unit'; bestId = candidate.id;
+                if (context.canTargetUnit && !context.canTargetUnit(unit, candidate)) continue;
+                const distance = targetDistanceSquared(fromX, fromY, context.unitPosition(candidate, ACQUIRE_POSITION))
+                    * (candidate.id === unit.hatredUnitId && context.now <= unit.hatredUntil ? 0.25 : 1)
+                    * (context.baseDefinition(candidate.unitId).valueFactor ?? 1);
+                const current = candidate.id === unit.targetUnitId;
+                if (distance < bestDistance || (distance === bestDistance && (current && !bestCurrent || current === bestCurrent && candidate.id < bestId))) {
+                    bestDistance = distance; bestKind = 'unit'; bestId = candidate.id; bestCurrent = current;
                 }
             }
         }
@@ -111,8 +162,9 @@ export class ZCTargetingSystem {
                 else continue;
             }
             const distance = targetDistanceSquared(fromX, fromY, context.hexPosition(hex.id));
-            if (distance < bestDistance || (distance === bestDistance && hex.id < bestId)) {
-                bestDistance = distance; bestKind = kind; bestId = hex.id;
+            const current = kind === 'wall' ? unit.targetWallHexId === hex.id : unit.targetBuildingHexId === hex.id;
+            if (distance < bestDistance || (distance === bestDistance && (current && !bestCurrent || current === bestCurrent && hex.id < bestId))) {
+                bestDistance = distance; bestKind = kind; bestId = hex.id; bestCurrent = current;
             }
         }
         return bestKind === null ? null : ZCTargetingSystem.writeSelection(bestKind, bestId, out);
@@ -124,15 +176,12 @@ export class ZCTargetingSystem {
     }
 
     static attackReach(definition: ZCUnitDefinition, targetBodyRadius: number, distanceScale: number): number {
-        const sourceReach = definition.attackRange <= 100
-            ? definition.attackRange + targetBodyRadius
-            : definition.attackRange * 0.9;
+        const sourceReach = definition.attackRange + targetBodyRadius * 0.5;
         return sourceReach * distanceScale;
     }
 
     /**
-     * 冲刺触发距离。与 `attackReach` 的区别是不走「射程 > 100 打 9 折」那条，
-     * 碰撞半径照旧补上，避免贴身时两套距离口径互相矛盾。
+     * 冲刺触发与撞击沿用完整目标半径；普攻射程统一不改变已校准的冲刺接触点。
     */
     static chargeReach(chargeDistance: number, targetBodyRadius: number, distanceScale: number): number {
         return (chargeDistance + targetBodyRadius) * distanceScale;

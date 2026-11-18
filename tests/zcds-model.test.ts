@@ -1594,7 +1594,7 @@ test('pvpCard.json 数字 rarity 1/2/3/4 对应绿/蓝/紫/金', () => {
     assert.throws(() => parseCardCatalogRow({ ...row, rarity: 5 }), /cards\[\]\.rarity/);
 });
 
-test('索敌按敌方单位、城墙、建筑分级，并在每一级选择最近目标', () => {
+test('索敌比较单位、城墙与建筑评分，并在无单位时先拆墙后拆建筑', () => {
     const seed = new ZCGameModel(null, () => 0.1);
     const sourceId = 10 * ZC_MAP_COLUMNS + 4;
     const enemyHexId = ZC_HEX_CONFIG[sourceId].neighbors.find((id) => seed.snapshot.hexes[id].owner === 'enemy')!;
@@ -1619,12 +1619,23 @@ test('索敌按敌方单位、城墙、建筑分级，并在每一级选择最�
 
     const unitSnapshot = createSnapshot();
     unitSnapshot.units = [makeUnit(1, 'player', sourceId), makeUnit(2, 'enemy', enemyHexId)];
+    // 单位放在墙前，避免同距时卡牌价值系数使墙的评分更低。
+    unitSnapshot.units[1].freeX = (ZC_HEX_CONFIG[sourceId].x + ZC_HEX_CONFIG[enemyHexId].x) / 2;
+    unitSnapshot.units[1].freeY = (ZC_HEX_CONFIG[sourceId].y + ZC_HEX_CONFIG[enemyHexId].y) / 2;
     unitSnapshot.nextUnitId = 3;
     const unitGame = new ZCGameModel(unitSnapshot, () => 0);
     unitGame.tick(0.2);
     assert.equal(unitGame.snapshot.units[0].targetUnitId, 2);
     assert.equal(unitGame.snapshot.units[0].targetWallHexId, null);
     assert.equal(unitGame.snapshot.units[0].targetBuildingHexId, null);
+
+    const tiedSnapshot = createSnapshot();
+    tiedSnapshot.units = [makeUnit(1, 'player', sourceId), makeUnit(2, 'enemy', enemyHexId)];
+    tiedSnapshot.nextUnitId = 3;
+    const tiedGame = new ZCGameModel(tiedSnapshot, () => 0);
+    tiedGame.tick(0.2);
+    assert.equal(tiedGame.snapshot.units[0].targetUnitId, null, '同距豌豆游侠系数1.05，墙按1计算');
+    assert.equal(tiedGame.snapshot.units[0].targetWallHexId, enemyHexId);
 
     const wallSnapshot = createSnapshot();
     wallSnapshot.units = [makeUnit(1, 'player', sourceId)];

@@ -453,6 +453,15 @@ export class VirtualScrollView extends Component {
   public pixelAlign: boolean = true;
 
   /**
+   * 运行时「不许拖」开关（默认 false，不影响任何现有列表）。
+   *
+   * 只掐 `TOUCH_MOVE`：按下 / 抬起照旧走，所以**子项点击照常有效**，只是列表拖不动、
+   * 也不会积惯性。引导要把某一行（如卡库里的目标卡）钉在屏幕里时打开它，
+   * 否则玩家一拖就把高亮孔拖到别处去了（用户 2026-11-17 第 16 条 ③）。
+   */
+  public scrollLocked: boolean = false;
+
+  /**
    * 是否接管触摸。**关掉后本节点及其所有子项都不再注册任何 `TOUCH_*`**，
    * 引擎命中测试会把触摸**穿透**到下层节点。
    *
@@ -1888,6 +1897,8 @@ export class VirtualScrollView extends Component {
   }
 
   private _onMove(e: EventTouch) {
+    // 引导锁：连方向判定都不做 —— 一旦判出方向就会停父级事件 / 起惯性。
+    if (this.scrollLocked) return;
     if (!this._isTouching) return;
 
     const uiDelta = e.getUIDelta(this._tmpMoveVec2);

@@ -1,4 +1,3 @@
-import { sendGameRequest } from '../net/RequestGuard';
 import type { INetRequestStatus } from '../../core/types/NetResult';
 /**
  * 月卡礼包的数据端口 —— **表 + 服务器缓存 + 网络请求** 三合一的 Repository。
@@ -32,8 +31,11 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
+import { GameNet } from '../net/GameNet';
+import type {
+    IMonthCardGiftSnapshot,
+} from './MonthCardGiftTable';
 import {
     buildGifts,
     buildPriceResolver,
@@ -41,15 +43,12 @@ import {
     buildStates,
     toMillis,
 } from './MonthCardGiftTable';
-import type {
-    IMonthCardGiftSnapshot,
-} from './MonthCardGiftTable';
 import {
     RequestMonthCardBuy,
     RequestTakeMonthCardReward,
 } from './RequestMonthCardMsg';
 
-import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
+import { ITEM_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 /** 请求结果：三态，页面据此决定提示文案。 */
 export type MonthCardRequestResult = INetRequestStatus;
 
@@ -133,7 +132,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         // 广播（见 `listen`）。所以这里 `rsp.ret` 为真后走 `FW.pay` 触发支付，返回 `'ok'` 只表示「已开单」。
         let ret = false;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestMonthCardBuy({ res_Id: type }, caller, (rsp) => { ret = rsp?.ret === true; }),
                 { tag: 'MonthCardGift' },
             );
@@ -154,7 +153,7 @@ export class RuntimeMonthCardGiftRepository implements IMonthCardGiftRepository 
         //  所以这里的成功判据是「响应到达」；失败路径是 `net.send` 返回 false 或者抛异常。
         let responded = false;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestTakeMonthCardReward(
                     { resId: activityResId },
                     caller,

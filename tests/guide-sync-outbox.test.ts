@@ -78,6 +78,26 @@ test('裁剪：已完成步骤的待发项被移除，未完成的保留', () =>
     assert.equal(outbox.size, 1);
 });
 
+test('同一账号多实例交错写入：后写者先刷新存储，不覆盖另一实例的新项', () => {
+    const storage = createMemoryGuideStorage();
+    const a = new GuideSyncOutbox(owner('multi-instance'), storage);
+    const b = new GuideSyncOutbox(owner('multi-instance'), storage);
+
+    a.push('1-1', 1000);
+    b.push('1-2', 2000);
+    // A 的实例缓存已过期，写入前必须重读 B 刚写进去的 1-2。
+    a.push('1-3', 3000);
+    assert.equal(a.size, 3);
+    assert.equal(a.head()?.stepId, '1-1');
+    assert.equal(b.size, 3);
+
+    a.ack('1-1');
+    b.ack('1-2');
+    assert.equal(a.head()?.stepId, '1-3');
+    assert.equal(a.size, 1);
+    assert.equal(b.head()?.stepId, '1-3');
+});
+
 test('预览态（owner=null）：只进内存，绝不写存储', () => {
     const storage = createMemoryGuideStorage();
     const outbox = new GuideSyncOutbox(null, storage);

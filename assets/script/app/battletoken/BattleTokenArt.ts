@@ -35,6 +35,7 @@
  */
 
 import { spriteFramePath } from '../ArtPaths';
+import type { IItemIconRef } from '../common/RewardIcon';
 
 /** 战令自有图目录（运行时时相对 `resources` 的路径）。 */
 export const BT_ART_ROOT = 'image/battletoken';
@@ -126,7 +127,7 @@ export const BT_SHARED_LOCK_MASK = { root: 'image/sevenDay', name: 'sd_bb24' } a
 export const BT_SHARED_CHECK = { root: 'image/sevenDay', name: 'sd_check' } as const;
 
 /** 取一张复用图的装配路径。 */
-export function btSharedPath(ref: { readonly root: string; readonly name: string }): string {
+export function btSharedPath(ref: IItemIconRef): string {
     return spriteFramePath(ref.root, ref.name);
 }
 

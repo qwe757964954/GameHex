@@ -23,7 +23,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toIdString } from '../net/RequestGuard';
+import { toIdString } from '../net/RequestGuard';
 import {
     friendFingerprint,
     IFriendConfig,
@@ -49,11 +49,11 @@ import {
     RequestFriendsAdd,
     RequestFriendsApply,
     RequestFriendsBlack,
+    RequestFriendSendEnd,
+    RequestFriendSendEndOneKey,
     RequestFriendsRefuse,
     RequestFriendsRemove,
     RequestFriendsSearch,
-    RequestFriendSendEnd,
-    RequestFriendSendEndOneKey,
 } from './RequestFriendMsg';
 
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
@@ -317,7 +317,7 @@ export class RuntimeFriendRepository implements IFriendRepository {
 
     /** 统一的发包 + 三态收口。 */
     private async send(make: () => any): Promise<FriendRequestResult> {
-        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Friend' });
+        return GameNet.sendRequest(make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Friend' });
     }
 
     /** 读一张表，并把本地补丁叠上去（指纹变了就丢补丁，见文件头）。 */

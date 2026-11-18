@@ -98,6 +98,6 @@ export class MilitiaTalentOverviewPage extends PopupBase {
 
     /** 组件所在节点是否仍然有效（弹窗随时可能被关，`close()` 是直接 destroy）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

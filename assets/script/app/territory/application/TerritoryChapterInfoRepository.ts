@@ -1,6 +1,6 @@
 import { sys } from 'cc';
 import { GameNet } from '../../net/GameNet';
-import { sendGameRequest, toCount } from '../../net/RequestGuard';
+import { toCount } from '../../net/RequestGuard';
 import { RequestCityChapterInfo } from './RequestTerritoryChapterInfoMsg';
 
 import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
@@ -117,7 +117,7 @@ export class TerritoryChapterInfoRepository {
 
     private async doRefresh(): Promise<void> {
         let resolved: ITerritoryChapterInfo | null = null;
-        const status = await sendGameRequest(GameNet.instance, () =>
+        const status = await GameNet.sendRequest(() =>
                 new RequestCityChapterInfo({}, undefined, (rsp) => {
                     // Rsp 外层是 `{ info: ChapterInfo }`，必须先剥壳，否则读到的永远是外层
                     // （外层没有 idleTime/chapters ⇒ 归一化成 idleTime=0, chapters=[] 的假空快照）。

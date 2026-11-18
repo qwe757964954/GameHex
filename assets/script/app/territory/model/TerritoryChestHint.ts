@@ -1,11 +1,14 @@
 import type { TerritorySite } from './TerritoryMapConfig';
-import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import { isTerritoryChestSite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 
 /**
- * 固定奖励宝箱的提示气泡与「还没点我」跳动规则（纯函数，零 cc）。
+ * 宝箱的提示气泡与「还没点我」跳动规则（纯函数，零 cc）。
  *
  * 气泡只在「已解锁且未领取」时出现；同屏只展示解锁序号最大的一个宝箱。
  * 点击被宝箱前置挡住的格子时，对应宝箱原地跳动 1.5s，并隐藏气泡。
+ *
+ * 宝箱口径 = `fixedResource` + `patrolChest`（见 `isTerritoryChestSite`）：
+ * 巡逻宝箱的领奖与固定据点同一条两步式，提示气泡与跳动一并适用。
  */
 
 /** 气泡/跳动需要的最小进度视图。 */
@@ -19,19 +22,21 @@ export interface ITerritoryChestHintProgress {
 /**
  * 宝箱的解锁序号。
  *
- * 固定宝箱 id 形如 `fixedResource_<N>`，N 即编辑器建点顺序。取不到序号时退回
+ * 宝箱 id 形如 `fixedResource_<N>` / `patrolChest_<N>`，N 即编辑器建点顺序。取不到序号时退回
  * `cellId`，保证排序不依赖输入遍历顺序。
  */
 export function territoryChestUnlockId(site: TerritorySite): number {
-    const matched = /^fixedResource_(\d+)$/.exec(String(site.id));
+    const matched = /^(?:fixedResource|patrolChest)_(\d+)$/.exec(String(site.id));
     if (matched) return Number(matched[1]);
     const trailing = /(\d+)\s*$/.exec(String(site.id));
     return trailing ? Number(trailing[1]) : site.cellId;
 }
 
 /**
- * 这个宝箱该不该挂提示：固定宝箱、已激活且未领取。
+ * 这个宝箱该不该挂提示：**普通宝箱**（`fixedResource`）、已激活且未领取。
  *
+ * 野怪宝箱（`patrolChest`）不挂：它点开是去打巡逻野怪，第二下不是「打开宝箱」，
+ * 体力气泡挂在它身上会读成「花 5 体力领这只箱子」（2026-11-18）。
  * 判据用本格的 `isCellUnlocked / isOwned`，不能用区域口径，否则同片未解锁的宝箱
  * 也会挂上气泡。
  */
@@ -63,7 +68,7 @@ export function territoryChestHintCell(
 }
 
 /**
- * 点某一格时该跳哪只宝箱：这一格的前置格里还没领取的固定宝箱。
+ * 点某一格时该跳哪只宝箱：这一格的前置格里还没领取的宝箱。
  *
  * 前置格可能落在宝箱的 `footprint` 而不是 `cellId`，两种命中都收；多个时取解锁序号
  * 最大的那只。返回 `null` 表示这一格不阻塞在宝箱上。
@@ -79,7 +84,7 @@ export function territoryPrerequisiteChestCell(
     for (const cell of required) {
         // 判据落在前置格上：这一步卡住的是前置格本身。
         if (progress.isOwned(cell)) continue;
-        const chest = sites.find((candidate) => candidate.type === TERRITORY_SITE_TYPE.fixedResource
+        const chest = sites.find((candidate) => isTerritoryChestSite(candidate)
             && (candidate.cellId === cell || candidate.footprint.includes(cell)));
         if (!chest) continue;
         const unlockId = territoryChestUnlockId(chest);

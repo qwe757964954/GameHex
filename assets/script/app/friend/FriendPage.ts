@@ -219,19 +219,9 @@ export class FriendPage extends PopupBase {
         await this.reload();
     }
 
-    protected onClose(): void {
-        // 关掉后在飞的异步结果一律作废（否则会往已回收的 Label 上写）。
-        this.revision += 1;
-    }
-
     /** 子弹窗（好友申请 / 领取体力）关掉时，本页重新取一次数。 */
     protected onReveal(): void {
         void this.reload();
-    }
-
-    onDestroy(): void {
-        this.revision += 1;
-        super.onDestroy();
     }
 
     /** 供测试注入替身 Repository。 */
@@ -245,18 +235,16 @@ export class FriendPage extends PopupBase {
 
     private async reload(): Promise<void> {
         const revision = ++this.revision;
-        const snapshot = await this.repo.load();
+        let snapshot = await this.repo.load();
         if (!this.alive || revision !== this.revision) return;
-        this.snapshot = snapshot;
 
         // 「添加好友」页签进来时还没有推荐列表就顺手拉一次。
         if (this.tab === FriendTab.Add && snapshot.suggestRows.length === 0) {
             const result = await this.repo.refreshSuggest(this);
             if (!this.alive || revision !== this.revision) return;
             if (result === 'ok') {
-                const again = await this.repo.load();
+                snapshot = await this.repo.load();
                 if (!this.alive || revision !== this.revision) return;
-                this.snapshot = again;
             }
         }
 
@@ -266,9 +254,9 @@ export class FriendPage extends PopupBase {
 
         // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`：
         // 不 defer 一帧的话 `refreshList` 会落在「槽位还没建」的空档，列表全空。
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
+        if (!(await this.nextPopupFrame()) || !this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
         this.present();
     }
 
@@ -616,7 +604,8 @@ export class FriendPage extends PopupBase {
         await this.reload();
     }
 
+    /** `isPopupOpen` 在关闭时立即转 false ⇒ 在飞结果不会再写已回收的 Label。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

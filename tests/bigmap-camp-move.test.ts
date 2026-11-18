@@ -28,6 +28,7 @@ import type { BigMapSlgRepository } from '../assets/script/app/bigmap/applicatio
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 import { assetPath } from './helpers/asset-paths';
+import { sendGameRequest } from '../assets/script/app/net/RequestGuard';
 
 const CMD = 'com.xkhy.tafang.cmd';
 
@@ -233,7 +234,7 @@ test('★网关：真发 CmdSlgCampMoveReqMsg，body 三项，allowRetry=false',
     };
     const mod = loadModule('assets/script/app/bigmap/application/GameNetBigMapCampGateway.ts', (name) => {
         if (name.endsWith('/RequestGuard')) return requestGuard;
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } };
         if (name === './RequestBigMapCampMsg') return requests;
         return {};
     });

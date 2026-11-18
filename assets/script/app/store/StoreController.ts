@@ -1,11 +1,12 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
 import { StoreEvent, type IStoreActionEvent } from './StoreEvents';
+import type { StoreActionKind, IStoreActionContext } from './StoreActions';
 
 export class StoreController extends ControllerBase {
     private started = false;
     private pending = false;
     constructor(context: IControllerContext | (() => IControllerContext), private readonly owner: object,
-        private readonly action: (kind: IStoreActionEvent['kind'], context: IStoreActionEvent['context']) => Promise<unknown>,
+        private readonly action: (kind: StoreActionKind, context: IStoreActionContext) => Promise<unknown>,
         private readonly failed: (error: unknown) => void) { super(context, 'store'); }
     start(): void {
         if (this.started || this.isDisposed) return;

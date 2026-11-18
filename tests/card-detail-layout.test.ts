@@ -160,8 +160,7 @@ test('切卡边界：首尾循环，单卡、空卡库和未知当前卡保持�
 });
 
 function createPage() {
-    const itemRows: Array<{ id: number; resolve: (value: unknown) => void }> = [];
-    const itemIcons: Array<{ path: string; resolve: (value: unknown) => void }> = [];
+    const itemInfo: unknown[] = [];
     const exports: Record<string, any> = {};
     const heroLoads: Array<(value: unknown) => void> = [];
     const modelLoads: Array<(value: unknown) => void> = [];
@@ -170,6 +169,7 @@ function createPage() {
     const intents: unknown[] = [];
     let cleared = 0;
     class PopupBase {
+        isPopupOpen = true;
         node = { isValid: true, on() {}, off() {} };
         resourceScope = { disposed: false, defer: release => releases.push(release) };
         assets = { load: () => new Promise(resolve => modelLoads.push(resolve)) };
@@ -208,12 +208,12 @@ function createPage() {
         if (name.endsWith('/PopupBase')) return { PopupBase };
         if (name.endsWith('/EventMgr')) return { EventMgr: { instance: { emit: (_event, payload) => intents.push(payload) } } };
         if (name === './CardPopupEvents') return { CardPopupEvent: { UpgradeIntent: 'upgrade-intent' } };
-        if (name === '../itemdetail/ItemDetailRepository') return { itemDetailRepository: {
-            loadItemRow: id => new Promise(resolve => itemRows.push({ id, resolve })),
+        if (name === '../itemdetail/ItemInfoPage') return { ItemInfoPage: {
+            open: async options => { itemInfo.push(options.userData); },
         } };
-        if (name === '../itemdetail/ItemDetailArtLoader') return {
-            loadItemIconArt: path => new Promise(resolve => itemIcons.push({ path, resolve })),
-        };
+        if (name === '../itemdetail/ItemDetailRepository' || name === '../itemdetail/ItemDetailArtLoader') {
+            throw new Error('材料查询与加载应由 Controller / Repository 持有');
+        }
         if (name === './CardArtProvider') return { cardArtProvider: {
             loadLineupCard: () => new Promise(resolve => heroLoads.push(resolve)),
         } };
@@ -250,38 +250,32 @@ function createPage() {
     }
     page.onInit();
     page.heroSprite = {};
-    return { page, counts, chainCounts, anchors, intents, makeRow, heroLoads, modelLoads, shown, releases, itemRows, itemIcons, clearCount: () => cleared };
+    return { page, counts, chainCounts, anchors, intents, makeRow, heroLoads, modelLoads, shown, releases, itemInfo, clearCount: () => cleared };
 }
 
-test('材料图标复用物品表与共用加载器，通用经验缺图时取兵种经验，迟到结果不能覆盖', async () => {
-    const { page, itemRows, itemIcons } = createPage();
-    const flush = () => new Promise(resolve => setImmediate(resolve));
-    const sprite = { spriteFrame: 'old' };
-    page.renderMaterialIcon(sprite, [{ id: '16000', owned: 0 }, { id: '16003', owned: 0 }]);
-    assert.equal(sprite.spriteFrame, 'old', '新图标就绪前保留当前图标');
-    assert.equal(itemRows[0].id, 16000);
-    itemRows[0].resolve({ icon: '' }); await flush();
-    assert.equal(itemRows[1].id, 16003);
-    itemRows[1].resolve({ icon: 'icons/item/army-exp' }); await flush();
-    assert.equal(itemIcons[0].path, 'icons/item/army-exp');
-    itemIcons[0].resolve('shared-exp'); await flush();
-    assert.equal(sprite.spriteFrame, 'shared-exp');
-    page.renderMaterialIcon(sprite, [{ id: '18003', owned: 0 }]);
-    assert.equal(sprite.spriteFrame, 'shared-exp');
-    itemRows[2].resolve({ icon: 'icons/item/card' }); await flush();
-    page.renderRevision++;
-    page.renderMaterialIcon(sprite, [{ id: '18004', owned: 0 }]);
-    itemRows[3].resolve({ icon: 'icons/item/current-card' }); await flush();
-    itemIcons[2].resolve('current'); itemIcons[1].resolve('stale'); await flush();
-    assert.equal(sprite.spriteFrame, 'current');
-    page.renderMaterialIcon(sprite, [{ id: '18005', owned: 0 }]);
-    itemRows[4].resolve({ icon: 'icons/item/late' }); await flush();
-    page.onClose(); itemIcons[3].resolve('closed'); await flush();
-    assert.equal(sprite.spriteFrame, 'current');
-    const { page: emptyPage } = createPage();
-    const emptySprite = { spriteFrame: 'old' };
-    emptyPage.renderMaterialIcon(emptySprite, []); await flush();
-    assert.equal(emptySprite.spriteFrame, null, '没有材料时仍须清除旧图标');
+test('材料图标引用保持绑定，页面只同步展示 ViewState 中的图标与点击身份', () => {
+    const { page, itemInfo } = createPage();
+    for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
+        'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
+    page.renderHeader = () => {};
+    const state = { cardId: '1', level: 1, detail: null, phase: 'ready', status: {
+        configured: true, maxed: false, level: 1, targetLevel: 2,
+        requirements: [{ key: 'card', itemId: '18003', owned: 100, need: 53, enough: true }],
+        generalExpOwned: 100, armyExpOwned: 25, canUpgrade: true,
+    }, materials: {
+        card: { itemId: '18003', frame: 'card-frame', owned: 100 },
+        exp: { itemId: '16003', frame: 'army-frame', owned: 25 },
+    } };
+    page.render(state);
+    assert.equal(page.matCardIcon.spriteFrame, 'card-frame');
+    assert.equal(page.matExpIcon.spriteFrame, 'army-frame');
+    page.onExpIconClick();
+    assert.equal(JSON.stringify(itemInfo[0]), JSON.stringify({ resId: 16003, number: 25 }));
+    page.render({ ...state, materials: { card: null, exp: null } });
+    assert.equal(page.matCardIcon.spriteFrame, null);
+    assert.equal(page.matExpIcon.spriteFrame, null);
+    page.onExpIconClick();
+    assert.equal(itemInfo.length, 1, '没有实际图标时不保留上一件物品的点击身份');
     for (const [field, name] of [['matCardIcon', 'CardIcon'], ['matExpIcon', 'ExpIcon']]) {
         const bound = prefab[pageBinding[field].__id__];
         assert.equal(bound.__type__, 'cc.Sprite');
@@ -290,34 +284,10 @@ test('材料图标复用物品表与共用加载器，通用经验缺图时取�
     }
 });
 
-test('材料状态渲染入口将真实消耗 ID 交给两个已绑定图标', () => {
-    const { page } = createPage();
-    for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
-        'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
-    // 入参口径：每件材料是 `{ id, owned }`（`owned` 给「点图标开道具信息」用），不再是裸 id 串。
-    const calls: Array<{ sprite: unknown; entries: { id: string; owned: number }[] }> = [];
-    page.renderMaterialIcon = (sprite, entries) => calls.push({ sprite, entries: Array.from(entries) });
-    page.renderStatus({ configured: true, maxed: false, level: 1, targetLevel: 2,
-        requirements: [{ key: 'card', itemId: '18003', owned: 100, need: 53, enough: true },
-            { key: 'exp', itemId: '16000', owned: 200, need: 160, enough: true }],
-        generalExpItemId: '16000', armyExpItemId: '16003', generalExpOwned: 100, armyExpOwned: 100,
-        canUpgrade: true }, 'ready');
-    // ⚠️ 页面是在 `vm` 沙箱里加载的，那边 new 的对象字面量与本地 Object 原型不同，
-    //    直接 deepEqual 会报「same structure but not reference-equal」⇒ 拍平成字符串再比。
-    assert.deepEqual(calls.map(call => ({
-        sprite: call.sprite,
-        entries: call.entries.map(entry => `${entry.id}:${entry.owned}`),
-    })), [
-        { sprite: page.matCardIcon, entries: ['18003:100'] },
-        { sprite: page.matExpIcon, entries: ['16000:100', '16003:100'] },
-    ]);
-});
-
 test('材料两行按 key 取，requirements 倒序也不会把卡牌与经验串位', () => {
     const { page } = createPage();
     for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
         'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
-    page.renderMaterialIcon = () => {};
     page.renderStatus({ configured: true, maxed: false, level: 1, targetLevel: 2,
         // 顺序与生成器相反：角色必须由 `key` 决定。
         requirements: [{ key: 'exp', itemId: '16000', name: '', owned: 200, need: 160, enough: false },
@@ -333,7 +303,6 @@ test('材料不足时升级按钮置灰，材料齐备后恢复原色并可点',
     const { page } = createPage();
     for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
         'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
-    page.renderMaterialIcon = () => {};
     const status = (enough: boolean) => ({ configured: true, maxed: false, level: 1, targetLevel: 2,
         requirements: [{ key: 'card', itemId: '18003', name: '卡牌', owned: enough ? 100 : 0, need: 53, enough },
             { key: 'exp', itemId: '16000', name: '', owned: 200, need: 160, enough: true }],
@@ -356,7 +325,6 @@ test('奖励条显示「升级增加全队暴击伤害」，数值取卡牌下�
     const { page } = createPage();
     for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',
         'levelTransitionLabel', 'hintLabel', 'matCardIcon', 'matExpIcon']) page[field] = {};
-    page.renderMaterialIcon = () => {};
     const status = { configured: true, maxed: false, level: 12, targetLevel: 13,
         requirements: [{ key: 'card', itemId: '68003', name: '火焰树妖', owned: 21, need: 325, enough: false }],
         generalExpItemId: '16000', armyExpItemId: '16003', generalExpOwned: 6108, armyExpOwned: 0,
@@ -437,9 +405,8 @@ test('升级等待新消耗时保留原材料展示，刷新技能不清空列�
     for (const field of ['nameLabel', 'levelTransitionLabel', 'tagClassLabel', 'powerLabel',
         'matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel', 'hintLabel',
         'matCardIcon', 'matExpIcon', 'campTagRoot']) page[field] = {};
-    page.renderMaterialIcon = () => {};
     const detail = { stats: [], chain: [], critDamageGain: 0, milestones: [{ name: '技能', unlockLevel: 2, desc: '技能', unlocked: false }] };
-    const state = { data: { cardId: '1', level: 1 }, cardId: '1', level: 1, detail, phase: 'ready', status: {
+    const state = { materials: { card: null, exp: null }, data: { cardId: '1', level: 1 }, cardId: '1', level: 1, detail, phase: 'ready', status: {
         configured: true, maxed: false, level: 1, targetLevel: 2, canUpgrade: true,
         requirements: [{ key: 'card', itemId: '18003', name: '卡牌', owned: 100, need: 53, enough: true }],
         generalExpItemId: '16000', armyExpItemId: '16003', generalExpOwned: 100, armyExpOwned: 100,
@@ -476,6 +443,7 @@ test('详情使用当前卡模型待机，迟到的上一张模型与关闭后�
     assert.equal(page.heroSprite.spriteFrame, 'current-art');
     page.renderHero({ unitPrefabPath: 'late' }, 'late-art');
     page.onClose();
+    page.isPopupOpen = false;
     assert.equal(clearCount(), 2, '切卡与关闭分别清除预览');
     assert.equal(page.previewAssets, null);
     modelLoads[2]('late-model');

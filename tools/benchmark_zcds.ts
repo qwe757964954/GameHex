@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { performance } from 'node:perf_hooks';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { ZCTargetingSystem } from '../assets/script/app/zcds/model/systems/ZCTargetingSystem';
+import { ZCUnitTargeting } from '../assets/script/app/zcds/model/systems/ZCUnitTargeting';
 import { ownersForPlayerCount } from '../assets/script/app/zcds/model/ZCMapConfig';
 import type { ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
@@ -152,6 +153,32 @@ const displayResults = displayScenarios.map(scenario => {
 // 单独的诊断轮次计数索敌；包装计时会扰动热路径，不能与上述未插桩耗时混为一谈。
 const targetingProfiles = displayScenarios.map(scenario => {
     const original = ZCTargetingSystem.acquire;
+    const originalSkill = ZCTargetingSystem.acquireSkillUnit;
+    const originalPriority = ZCUnitTargeting.prototype.refreshPriorityTarget;
+    const originalGate = ZCUnitTargeting.prototype.hasTargetInAttackRange;
+    const originalPath = ZCUnitTargeting.prototype.findStepToward;
+    let priorityMs = 0, gateMs = 0, pathMs = 0, skillTargetingMs = 0;
+    let priorityCalls = 0, gateCalls = 0, pathCalls = 0, skillCalls = 0;
+    ZCTargetingSystem.acquireSkillUnit = (...args) => {
+        const started = performance.now();
+        try { return originalSkill.apply(ZCTargetingSystem, args); }
+        finally { skillCalls++; skillTargetingMs += performance.now() - started; }
+    };
+    ZCUnitTargeting.prototype.refreshPriorityTarget = function(unit) {
+        const started = performance.now(), nestedBefore = targetingMs;
+        try { return originalPriority.call(this, unit); }
+        finally { priorityCalls++; priorityMs += performance.now() - started - (targetingMs - nestedBefore); }
+    };
+    ZCUnitTargeting.prototype.hasTargetInAttackRange = function(unit) {
+        const started = performance.now();
+        try { return originalGate.call(this, unit); }
+        finally { gateCalls++; gateMs += performance.now() - started; }
+    };
+    ZCUnitTargeting.prototype.findStepToward = function(unit) {
+        const started = performance.now();
+        try { return originalPath.call(this, unit); }
+        finally { pathCalls++; pathMs += performance.now() - started; }
+    };
     let calls = 0, targetingMs = 0, tickMs = 0, candidateChecks = 0;
     const countCandidates = process.env.ZCDS_TARGETING_COUNTS === '1';
     ZCTargetingSystem.acquire = (...args) => {
@@ -218,8 +245,21 @@ const targetingProfiles = displayScenarios.map(scenario => {
             if (scenario.develop && frame % 6 === 0) developNext(model);
             const started = performance.now(); model.tick(1 / 60); tickMs += performance.now() - started;
         }
-    } finally { ZCTargetingSystem.acquire = original; }
-    return { name: scenario.name, calls, candidateChecks, targetingMs, instrumentedTickMs: tickMs };
+    } finally {
+        ZCTargetingSystem.acquire = original;
+        ZCTargetingSystem.acquireSkillUnit = originalSkill;
+        ZCUnitTargeting.prototype.refreshPriorityTarget = originalPriority;
+        ZCUnitTargeting.prototype.hasTargetInAttackRange = originalGate;
+        ZCUnitTargeting.prototype.findStepToward = originalPath;
+    }
+    // priorityMs 扣除内部 acquire，分项之和不重复计数；path 单独报告，不计入索敌合计。
+    const totalTargetingMs = targetingMs + priorityMs + gateMs + skillTargetingMs;
+    if (![targetingMs, priorityMs, gateMs, pathMs, skillTargetingMs].every(value => Number.isFinite(value) && value >= 0)) {
+        throw new Error(`Invalid targeting profile: ${scenario.name}`);
+    }
+    return { name: scenario.name, calls, candidateChecks, targetingMs, priorityCalls, priorityMs,
+        gateCalls, gateMs, skillCalls, skillTargetingMs, pathCalls, pathMs, totalTargetingMs,
+        instrumentedTickMs: tickMs };
 });
 
 // 大片领地只占一份连通成员表，冷启动可直接观察存储规模，不用堆内存差推算分配。

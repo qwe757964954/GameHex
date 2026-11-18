@@ -228,13 +228,10 @@ export class ChatPage extends PopupBase {
         this.repo.unlisten(this);
         // 关界面时把已读时间落盘
         this.repo.saveRead();
-        // 关掉后在飞的异步结果一律作废（否则会往已回收的 Label 上写）
-        this.revision += 1;
     }
 
     onDestroy(): void {
         this.repo.unlisten(this);
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -706,6 +703,6 @@ export class ChatPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

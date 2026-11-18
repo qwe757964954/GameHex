@@ -10,17 +10,17 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  * 三个响应都用 FW.ShowReward 发奖；铜钱铺传 isGold 以播放金币音效。
  */
 
+import { asRow } from '../../core/table/RowParse';
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { readRefRows } from '../common/TableRead';
-import { asRow } from '../../core/table/RowParse';
-import { RequestShopBuy } from '../net/RequestShopMsg';
-import { GameNet } from '../net/GameNet';
-import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest, toCount } from '../net/RequestGuard';
 import { countItem } from '../card/ItemBag';
-import { rolePropertyAmount } from '../league/LeagueTable';
+import { readRefRows } from '../common/TableRead';
 import { RequestRoleGuanKaGiftBuy, RequestRoleWatchAdvert } from '../generated/requestMsg/RequestRoleMsg';
+import { rolePropertyAmount } from '../league/LeagueTable';
+import { CacheMgr } from '../net/CacheMgr';
+import { GameNet } from '../net/GameNet';
+import { toCount } from '../net/RequestGuard';
+import { RequestShopBuy } from '../net/RequestShopMsg';
 import { storeAdLimit } from './StoreAd';
 import type {
     IGemBoxCostRow,
@@ -309,8 +309,7 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async watchAd(type: number, caller?: object): Promise<StoreRequestResult> {
-        return sendGameRequest(
-            GameNet.instance,
+        return GameNet.sendRequest(
             () => new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
                 if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
             }),
@@ -319,8 +318,7 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult> {
-        return sendGameRequest(
-            GameNet.instance,
+        return GameNet.sendRequest(
             () => new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
                 if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
             }),
@@ -339,8 +337,7 @@ class RuntimeStoreRepository implements IStoreRepository {
         buyTimes: number,
         caller?: object,
     ): Promise<StoreRequestResult> {
-        return sendGameRequest(
-            GameNet.instance,
+        return GameNet.sendRequest(
             () => new RequestShopBuy(
                 { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
                 caller,

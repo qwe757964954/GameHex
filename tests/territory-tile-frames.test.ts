@@ -1,4 +1,4 @@
-import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { isTerritoryBattleSite, isTerritoryChestSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 import assert from 'node:assert/strict';
@@ -174,11 +174,14 @@ function loadMapView() {
                 },
             };
             // MapView 按站点类型命名常量判定（2026-10-19 起），需运行时值桩。
+            // `isTerritoryChestSite` 也是运行时值（宝箱 = 固定据点 + 巡逻宝箱），缺了直接报
+            // `undefined is not a function`。
             if (id === '../model/TerritoryMapConfig') return {
                 isTerritoryBattleSite,
+                isTerritoryChestSite,
                 TERRITORY_SITE_TYPE: {
                     stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
-                    fixedResource: 'fixedResource', bonus: 'bonus',
+                    fixedResource: 'fixedResource', bonus: 'bonus', patrolChest: 'patrolChest',
                 },
             };
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进

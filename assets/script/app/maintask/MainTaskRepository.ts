@@ -17,11 +17,11 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  * （编辑器预览），HUD 必须显示「0 进度」而不是白屏 + 一片报错。
  */
 
-import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
+import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest } from '../net/RequestGuard';
+import type { IMainTaskRow, IMainTaskState } from './MainTaskTable';
 import {
     CMD_COMMON_STATE,
     canClaimOf,
@@ -36,12 +36,11 @@ import {
     taskEntryLabelOf,
     taskTitleOf,
 } from './MainTaskTable';
-import type { IMainTaskRow, IMainTaskState } from './MainTaskTable';
 import { GET_HERO_TEXTS, MAIN_TASK_TEXTS } from './MainTaskTexts';
 import { RequestTakeMainTaskReward } from './RequestMainTaskMsg';
 
+import { ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 「10级领取」HUD 一次刷新要的全部数据。 */
 export interface IHeroTaskSnapshot {
     /** `taskMain` 表里有没有 `targetType = 99` 那行。 */
@@ -384,8 +383,7 @@ class MainTaskRepositoryImpl implements IMainTaskRepository {
 
     async claim(resId: number, caller?: object): Promise<MainTaskRequestResult> {
         if (!Number.isFinite(resId) || resId <= 0) return 'failed';
-        return sendGameRequest(
-            GameNet.instance,
+        return GameNet.sendRequest(
             () => new RequestTakeMainTaskReward(
                 { resId },
                 caller,

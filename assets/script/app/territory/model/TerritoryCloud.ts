@@ -638,6 +638,40 @@ export function territoryCloudFillPoints(
 }
 
 /**
+ * **底部补云带**的虚拟格点（页面坐标，原点 = 页面中心）。
+ *
+ * 🔴 为什么还要单独一条：`CloudFillLayer` 住在 `MapLayer` 里，被 `MapViewport` 的
+ *    `cc.Mask`（GRAPHICS_RECT）裁在**视口底边**；而 `MapViewport` 的 Widget `bottom = 168`
+ *    ⇒ 视口底边离屏幕底还有一条底栏的高度。底栏在时把这条带盖住，新手引导把底栏
+ *    `active = false` 之后就露出整片 `zdbg1` 橙色裸底图（2026-11-17 截图底部那 13%）。
+ *    铺满层的 `setFillArea` 再放大也没用 —— 它仍在 Mask 里，画不到视口外面。
+ *
+ * 复用 {@link territoryCloudFillPoints} 的**同一张格网**（行列相位、间距、边缘外扩都一样），
+ * 只是把那块矩形整体挪到页面底部那条带的中线，免得接缝处密度 / 相位对不上。
+ *
+ * @param rows / @param columns 地图行列（格网相位，必须与铺满层同源）
+ * @param width 页面宽（云要横向铺满整屏）
+ * @param stripHeight 视口底边 → 页面底边的高度
+ * @param centerY 这条带中线在**页面局部坐标**里的 y（通常为负）
+ */
+export function territoryCloudBottomStripPoints(
+    rows: number,
+    columns: number,
+    width: number,
+    stripHeight: number,
+    centerY: number,
+): ITerritoryCloudPoint[] {
+    const w = Number.isFinite(width) && width > 0 ? width : 0;
+    const h = Number.isFinite(stripHeight) && stripHeight > 0 ? stripHeight : 0;
+    if (!(w > 0) || !(h > 0) || !(rows > 0) || !(columns > 0)) return [];
+    // 中线不是有限数就别铺：把一整带云落在 y=0（页面正中）比不铺更糟。
+    if (!Number.isFinite(centerY)) return [];
+    const shift = centerY;
+    return territoryCloudFillPoints(rows, columns, w, h)
+        .map((point) => ({ x: point.x, y: point.y + shift }));
+}
+
+/**
  * 「被地块包围」的未解锁格（岛屿内部的小洞）。
  *
  * 判据：未解锁格彼此连通（六邻），且**这一块碰不到地图边缘** —— 只要有一条未解锁路径通到

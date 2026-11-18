@@ -15,7 +15,7 @@
  *      （防 cid 抄错成 `MissingScript`）；节点位置必须与 FGUI XML 反解出的画布像素一致（0.5px）。
  *      ⚠️ 本模块**不加整体偏移**（原稿 `popBg xy=13,128` 就是画布坐标，不是 706×1202 居中）。
  *   D. **数据管道接线**（源码文本）—— 4 个协议名 + `MessageId` 登记、`withTimeout` / 离线早退、
- *      **不走 `GameCache`**、`renderItemFn` 只绑一次、`onOpen` 里 `nextPopupFrame`、入口白名单两处。
+ *      **不走 `GameCache`**、`renderItemFn` 属性赋值（不叠加监听）、`onOpen` 里 `nextPopupFrame`、入口白名单两处。
  *   E. **文案表**。
  *
  * 口径真源：
@@ -842,7 +842,7 @@ test('D2 ⚠️ 4 个协议类名与老端一致（改一个字母就是静默�
 
 test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     const text = src('MailRepository.ts');
-    assert.ok(text.includes('sendGameRequest(GameNet.instance'), 'Repository 没走公共发包壳');
+    assert.ok(text.includes('GameNet.sendRequest('), 'Repository 没走公共发包壳');
     assert.ok(text.includes("tag: 'Mail'"), '必须带 Mail tag');
     assert.ok(text.includes(`import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '超时常量走公共真源');
     assert.ok(/MAIL_READ_TIMEOUT_MS\s*=\s*READ_TIMEOUT_MS/.test(text), '读超时导出必须复用公共真源');
@@ -899,11 +899,11 @@ test('D9 文案全在 `MailTexts`，页面不造字符串（自动删除提示�
         '页面头部之外不许出现中文字面量');
 });
 
-test('D10 ⚠️ 详情页奖励列表的接线：`renderItemFn` 只绑一次 + 开箱后等一帧再 `refreshList`', () => {
+test('D10 ⚠️ 详情页奖励列表的接线：`renderItemFn` 属性赋值 + 开箱后等一帧再 `refreshList`', () => {
     const text = stripSourceComments(src('MailDetailPage.ts'));
-    // ① item 回调：只绑一次，按 index 现取（同 MailPage 铁律 ①）
+    // ① item 回调：普通属性赋值，不是事件订阅；每次 onInit 写同一组回调即可。
+    assert.equal(text.includes('rewardRendererBound'), false, '属性赋值不需要布尔门闩');
     assert.ok(text.includes('renderItemFn'), '详情页没接 renderItemFn');
-    assert.ok(text.includes('rewardRendererBound'), 'renderItemFn 必须只绑一次（onInit 会重入）');
     assert.ok(/renderRewardSlot\(node, index\)/.test(text), '回调应转发到 renderRewardSlot(node, index)');
     // ② 图必须**先取完再铺**（renderItemFn 是同步的，里面现加载会闪上一份奖励的图）
     assert.ok(/this\.rewardFrames\[index\]/.test(text), 'renderRewardSlot 应只读预取好的 rewardFrames[index]');

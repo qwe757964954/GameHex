@@ -12,6 +12,7 @@ import { CardLineupController } from '../assets/script/app/card/CardLineupContro
 import { CardLineupUiEvent } from '../assets/script/app/card/CardLineupEvents';
 import { RoleController } from '../assets/script/app/role/RoleController';
 import { LeagueTabController } from '../assets/script/app/league/LeagueTabController';
+import { CHEST_EVENTS } from '../assets/script/app/main/ChestEvents';
 import { createControllerContext } from './helpers/controller-context';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -45,6 +46,9 @@ function fixture() {
         CardRepository: { cardRepository: { loadArtConfig: async () => ({}), loadLineupSnapshot: () => null, loadLineup: async () => { loads++; return { heroLevels: new Map() }; } } },
         RoleRepository: { roleRepository: { load: () => new Promise(resolve => pendingRoles.push(resolve)) } },
         FW: { FW: { showTip() {} } },
+        // 🔴 组合层构造时就会 `listen(CHEST_EVENTS.REWARDS, …)`（异步对战宝箱的奖励转交），
+        //    漏这条桩 ⇒ `CHEST_EVENTS` 是 `undefined`，`.REWARDS` 直接抛，四条用例全崩在构造上。
+        ChestEvents: { CHEST_EVENTS },
         GuideComposition: { GuideComposition: class { dispose() {} } },
     };
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8'), {

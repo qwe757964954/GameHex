@@ -55,11 +55,6 @@ export class BattleTokenRewardSlot extends Component {
         this.node.on(Button.EventType.CLICK, this._handleClick, this);
     }
 
-    protected onDestroy(): void {
-        // ⚠️ 判 `isValid` 后再摘监听：宿主销毁时子节点可能已先被拆（规则 60 的同类问题）
-        if (this.node && this.node.isValid) this.node.off(Button.EventType.CLICK, this._handleClick, this);
-    }
-
     private _handleClick(): void {
         if (this._onTake) this._onTake();
     }

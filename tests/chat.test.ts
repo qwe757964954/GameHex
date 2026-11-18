@@ -1150,7 +1150,7 @@ test('D2 ⚠️ 三张缓存都走 `CacheMgr`（服务端会推），**不自己
 });
 
 test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
-    assert.ok(REPO_CODE.includes('sendGameRequest(GameNet.instance'), '必须走公共发包壳');
+    assert.ok(REPO_CODE.includes('GameNet.sendRequest('), '必须走公共发包壳');
     assert.ok(REPO_CODE.includes(`tag: 'Chat'`), '必须带 Chat tag');
     assert.ok(REPO_SRC.includes(`import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '超时常量走公共真源');
     // 给测试用的导出（避免测试里硬编码）

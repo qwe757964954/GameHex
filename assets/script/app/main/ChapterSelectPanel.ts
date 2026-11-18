@@ -47,17 +47,14 @@ export class ChapterSelectPanel extends PopupBase {
 
     /** 本次打开要铺的行（`renderItemFn` 是长驻回调，必须从这里现取，不能闭包捕获入参）。 */
     private rows: readonly IChapterSelectRow[] = [];
-    private rendererBound = false;
 
     protected onOpen(userData?: IChapterSelectContent): void {
         const content = userData;
         if (!content) return;
         this.titleLabel.string = '章节选择';
         this.rows = content.rows;
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            this.list.renderItemFn = (node, index) => this.renderRow(node, index);
-        }
+        // `renderItemFn` 是普通属性赋值，不是事件订阅；弹窗复用后再次打开写同一组回调。
+        this.list.renderItemFn = (node, index) => this.renderRow(node, index);
         // ⚠️ 顺序关键：先把 content 归零、再改数量。
         // `_recomputeContentSize()` 里有一段「改数量前在底部 ⇒ 改完保持贴底」的 snap，
         // 弹窗实例被回收复用时（上次滚到底、这次只有 5 行）会把位置 clamp 到贴底，

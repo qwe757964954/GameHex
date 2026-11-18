@@ -1,13 +1,49 @@
-/** 绝对时间驱动，重渲染和帧率变化不会积累动画误差。 */
-export function guideHintMotion(startedAt: number, now: number): { hintScale: number; handLift: number } {
+/**
+ * 气泡 / 手指 / 光圈描边的呼吸。绝对时间驱动，重渲染和帧率变化不会积累动画误差。
+ *
+ * `ringAlpha` 是描边的不透明度系数（0.55~1）：只缩放的话描边只是「变大变小」，
+ * 加上透明度才像在呼吸（用户 2026-11-17 第 16 条 ③：卡牌那一步的描边要一直呼吸）。
+ */
+export function guideHintMotion(startedAt: number, now: number): { hintScale: number; handLift: number; ringAlpha: number } {
     const seconds = Math.max(0, now - startedAt) / 1000;
     const wave = (1 - Math.cos(seconds * Math.PI * 2 / 1.2)) / 2;
-    return { hintScale: 1 + 0.025 * wave, handLift: 7 * wave };
+    return { hintScale: 1 + 0.025 * wave, handLift: 7 * wave, ringAlpha: 0.55 + 0.45 * wave };
 }
 
 export function formatGuideContent(content: string): string {
     return content.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/点它/g, '<color=#FFD129>点它</color>');
+}
+
+/** 宿主本地坐标里的一块轴对齐矩形（中心 + 半宽半高）。 */
+export interface IGuideFocusRect {
+    readonly x: number;
+    readonly y: number;
+    readonly halfWidth: number;
+    readonly halfHeight: number;
+}
+
+/**
+ * 把「主焦点 + 附加节点」并成一块外接矩形 —— 引导孔和光圈都用它。
+ *
+ * 为什么需要并：领地的关卡编号气泡（`1-1`）挂在 `StationBadgeLayer` 上、抬在建筑顶上方，
+ * 和地块节点不是父子关系，只按地块算孔就会出现「气泡在圈外、圈挖在空地上」
+ * （用户 2026-11-17 第 17 条：光圈要囊括 `1-1` 气泡）。并集是两者都圈住的唯一解。
+ *
+ * 入参为空 / 全是非法尺寸 ⇒ `null`，调用方按「没有孔」处理。
+ */
+export function unionGuideFocusRects(rects: readonly IGuideFocusRect[]): IGuideFocusRect | null {
+    let left = Infinity, right = -Infinity, bottom = Infinity, top = -Infinity;
+    for (const rect of rects) {
+        if (!Number.isFinite(rect.x) || !Number.isFinite(rect.y)) continue;
+        if (!(rect.halfWidth > 0) || !(rect.halfHeight > 0)) continue;
+        left = Math.min(left, rect.x - rect.halfWidth);
+        right = Math.max(right, rect.x + rect.halfWidth);
+        bottom = Math.min(bottom, rect.y - rect.halfHeight);
+        top = Math.max(top, rect.y + rect.halfHeight);
+    }
+    if (!(right > left) || !(top > bottom)) return null;
+    return { x: (left + right) / 2, y: (bottom + top) / 2, halfWidth: (right - left) / 2, halfHeight: (top - bottom) / 2 };
 }
 
 /** 对话条避开焦点及其手指、提示条，其余步骤沿用预制体位置。 */

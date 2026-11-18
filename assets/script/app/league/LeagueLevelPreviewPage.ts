@@ -54,9 +54,6 @@ export class LeagueLevelPreviewPage extends PopupBase {
     /** 本趟列表的视图模型（`renderItemFn` 按 index 现取）。 */
     private rows: ILeagueLevelView[] = [];
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
-    private revision = 0;
-
     // 生命周期
 
     protected onInit(): void {
@@ -70,15 +67,6 @@ export class LeagueLevelPreviewPage extends PopupBase {
         await this.reload();
     }
 
-    protected onClose(): void {
-        this.revision += 1;
-    }
-
-    onDestroy(): void {
-        this.revision += 1;
-        super.onDestroy();
-    }
-
     // 取数（只读配置表）
 
     /** 弹窗标题（供单测 / 复用方取，避免到处写中文字面量）。 */
@@ -87,17 +75,17 @@ export class LeagueLevelPreviewPage extends PopupBase {
     }
 
     private async reload(): Promise<void> {
-        const revision = ++this.revision;
+        const context = this.popupOpenContext;
         const raw = await this.readTable();
-        if (!this.alive || revision !== this.revision) return;
+        if (!this.alive || context?.cancelled) return;
 
-        this.rows = buildLeagueLevelViews(parseUnionLevelRows(raw));
+        const rows = buildLeagueLevelViews(parseUnionLevelRows(raw));
 
         // `VirtualScrollView` 在 `start()` 里建槽位，而 `onOpen` 早于 `start()`
         // ⇒ 不 defer 一帧的话 `refreshList` 落在「槽位还没建」的空档，表现为列表空白。
-        await this.nextPopupFrame();
-        if (!this.alive || revision !== this.revision) return;
+        if (!(await this.nextPopupFrame()) || !this.alive || context?.cancelled) return;
 
+        this.rows = rows;
         this.present();
     }
 
@@ -133,6 +121,6 @@ export class LeagueLevelPreviewPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

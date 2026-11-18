@@ -372,6 +372,7 @@ test('冰山陨落：auraSlowRatio 落进区域 slowRatio，不配时为 0（存
         },
     });
     //  首次 tick 只挂 CD、不施放（`auraReadyAt` 从「当前 + CD」起算）。
+    withSlow.target.freeX = 20;
     withSlow.step(0.05);
     withSlow.step(14);
     //  两边各放一次（敌方单位也是 68024，`runtimeOf` 是同一份）⇒ 只数自己放的那片。
@@ -384,12 +385,33 @@ test('冰山陨落：auraSlowRatio 落进区域 slowRatio，不配时为 0（存
     const withoutSlow = makeHarness({
         parameters: { auraCooldown: 14, auraSeconds: 3, auraInterval: 0.5, auraRadius: 120, auraDamageRate: 0.55 },
     });
+    withoutSlow.target.freeX = 20;
     withoutSlow.step(0.05);
     withoutSlow.step(14);
     const plain = ((withoutSlow.state.groundZones ?? []) as Array<Record<string, number>>)
         .filter((zone) => Number(zone.sourceUnitId) === withoutSlow.source.id);
     assert.equal(plain.length, 1);
     assert.equal(plain[0].slowRatio, 0, '不配就是 0，无尘禁土 / 喷射火焰逐字不变');
+});
+
+test('前置矩形喷火保留350表值长度，All圆形光环无实际命中目标不空放', () => {
+    const flame = {
+        auraSeconds: 4, auraInterval: 1, auraRadius: 175, auraForward: 175,
+        auraTriggerRange: 350, auraRectHalfHeight: 70, auraFaceTarget: 1, auraDamageRate: 1,
+    };
+    const h = makeHarness({ parameters: flame });
+    h.target.freeX = 80;
+    assert.equal(ZCAttackResolutionSystem.castSelfAura(h.state, h.source, h.context), true);
+    assert.equal(h.state.groundZones[0].x, 52.5);
+    assert.equal(h.state.groundZones[0].rectHalfLength, 52.5);
+    const outside = makeHarness({ parameters: flame });
+    outside.target.freeX = 106;
+    assert.equal(ZCAttackResolutionSystem.castSelfAura(outside.state, outside.source, outside.context), false);
+    assert.equal(outside.state.groundZones.length, 0);
+    const circle = makeHarness({ parameters: { auraRadius: 100, auraSeconds: 2, auraDamageRate: 1, auraTargetMode: 2 } });
+    circle.target.freeX = 60;
+    assert.equal(ZCAttackResolutionSystem.castSelfAura(circle.state, circle.source, circle.context), false);
+    assert.equal(circle.state.groundZones.length, 0);
 });
 
 test('急冻光线：累计 9 次普攻才开火，且开 strikeAppliesStatus 时带 numb', () => {

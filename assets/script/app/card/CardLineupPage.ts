@@ -163,7 +163,6 @@ export class CardLineupPage extends Component {
 
     protected onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.presentRevision += 1;
         this.arenaSlotCache = null;
         this.cancelPreviewLoads();
         this.pendingPreviews.length = 0;
@@ -428,6 +427,19 @@ export class CardLineupPage extends Component {
         if (index < 0 || index === this.guideCardIndex) return;
         this.guideCardIndex = index;
         this.cardGrid.scrollToIndex(index, false, undefined, undefined, true);
+    }
+
+    /**
+     * 引导期间锁住卡库拖拽（引导第 6-2 步：光圈挖在目标卡上）。
+     *
+     * 只关拖拽、不关点击 —— 那一步要玩家**点**这张卡进升级弹窗。
+     * 不锁的话玩家一拖就把高亮孔拖到别的卡上，看起来像「高亮跟错人」。
+     */
+    setGuideScrollLocked(locked: boolean): void {
+        // 重导 prefab 很容易把 `cardGrid` 引用丢了；引导是每帧都会走到这里，
+        // 不能因为一个空引用把整条流程抛崩。
+        if (!this.cardGrid) return;
+        this.cardGrid.scrollLocked = locked;
     }
 
     /** 同步写卡库列表（回调与总条数一起设，避免列表先按旧条数刷一遍）。 */

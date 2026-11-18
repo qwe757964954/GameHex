@@ -162,7 +162,6 @@ export class PlayerInfoOtherPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        this.loadRevision += 1;
         this.snapshot = null;
         this.headFrame = null;
         this.roleId = '';
@@ -185,7 +184,7 @@ export class PlayerInfoOtherPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
@@ -232,8 +231,9 @@ export class PlayerInfoOtherPage extends PopupBase {
 
         // 图先 await 完再铺（与 `PlayerInfoPage.reload` 同一口径）。
         const id = String(other.snapshot.img);
-        this.headFrame = id ? await HeadArt.loadHeadFrame(id) : null;
+        const headFrame = id ? await HeadArt.loadHeadFrame(id) : null;
         if (!this.alive || revision !== this.loadRevision) return;
+        this.headFrame = headFrame;
 
         this.present(other.snapshot);
     }

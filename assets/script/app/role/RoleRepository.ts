@@ -14,7 +14,7 @@ import { readItemCounts } from '../card/ItemBag';
 import type { IRoleBagEntry, IRoleEquipSlotData, IRoleSnapshot, RoleBagTabId } from './RoleTypes';
 import { ROLE_BAG_TAB_KINDS, buildEquipSlotPlan, buildRoleNavs, sortBagEntries } from './RoleTable';
 import { totalAttackOf } from './RolePowerTable';
-import type { IEquipLevelRow, IEquipPowerPart, IEquipRankRow, ISkillAttrModifierRow } from './RolePowerTable';
+import type { IEquipLevelRow, IEquipPowerPart, IEquipRankRow, ISkillAttrModifierRow, ISkillAttrModify } from './RolePowerTable';
 
 import { ITEM_TABLE } from '../../core/config/TableNames';
 /** 宝石「镶嵌中」锁定阈值：GemLockState.wear = 2（lock / wearLock 也算已镶嵌）。 */
@@ -362,7 +362,7 @@ export const roleRepository = new RoleRepository();
  * 表里这一列是**嵌套数组**（`[{type, data}]`），但 ref 装配层有时给的是**JSON 字符串**
  * （`refSmallAll` 那种压缩形态）⇒ 两种都认，认不出就返回空数组（宁可少算也不抛）。
  */
-function normalizeModify(raw: unknown): ISkillAttrModifierRow['modify'] {
+function normalizeModify(raw: unknown): readonly ISkillAttrModify[] {
     let value: unknown = raw;
     if (typeof value === 'string') {
         try {

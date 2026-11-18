@@ -88,7 +88,7 @@ function loadService(options: {
         },
     };
     const mod = loadModule('assets/script/app/main/GameViewClickService.ts', (name) => {
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: net } };
+        if (name.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: net } };
         if (name.endsWith('/RequestSystemMsg')) return requests;
         // `withTimeout` 收成 10ms：只验「超时 → false 且不 reject」这一个分支，不真的等 3 秒。
         if (name.endsWith('/RequestGuard')) {
@@ -240,7 +240,7 @@ test('底栏实际点击：世界报 2，其他可用入口报 1；初始化和�
         if (name.endsWith('/EventMgr')) return { EventMgr };
         if (name.endsWith('/FormationService')) return { fetchFormations: async () => {} };
         if (name.endsWith('/FirstRechargeAutoOpen')) return { checkFirstRechargeOnEnterMain: async () => {} };
-        if (name.endsWith('/GameNet')) return { GameNet: { instance: { removeCaller() {} } } };
+        if (name.endsWith('/GameNet')) return { GameNet: { sendRequest: function (make, options) { return sendGameRequest(this.instance, make, options); }, instance: { removeCaller() {} } } };
         if (name === 'cc') return {
             _decorator: {
                 ccclass: () => (value: unknown) => value,

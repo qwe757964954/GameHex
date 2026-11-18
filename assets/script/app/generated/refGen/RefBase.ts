@@ -17,9 +17,19 @@ protected _RefMgrbattleTokenConfig:RefMgrbattleTokenConfigBase<IRefbattleTokenCo
 protected _RefMgrbattleTokenPlan:RefMgrbattleTokenPlanBase<IRefbattleTokenPlan>;
 protected _RefMgrbattleTokenReward:RefMgrbattleTokenRewardBase<IRefbattleTokenReward>;
 protected _RefMgrbfUnionRankAward:RefMgrbfUnionRankAwardBase<IRefbfUnionRankAward>;
+protected _RefMgrbigmapBuilding:RefMgrbigmapBuildingBase<IRefbigmapBuilding>;
+protected _RefMgrbigmapBuildingLevel:RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>;
+protected _RefMgrbigmapBuildingProduce:RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>;
 protected _RefMgrbigMapCamp:RefMgrbigMapCampBase<IRefbigMapCamp>;
-protected _RefMgrbigMapMonster:RefMgrbigMapMonsterBase<IRefbigMapMonster>;
+protected _RefMgrbigmapCity:RefMgrbigmapCityBase<IRefbigmapCity>;
+protected _RefMgrbigmapCityLevel:RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>;
+protected _RefMgrbigmapMonster:RefMgrbigmapMonsterBase<IRefbigmapMonster>;
 protected _RefMgrbigmapQueue:RefMgrbigmapQueueBase<IRefbigmapQueue>;
+protected _RefMgrbigmapRank:RefMgrbigmapRankBase<IRefbigmapRank>;
+protected _RefMgrbigmapResource:RefMgrbigmapResourceBase<IRefbigmapResource>;
+protected _RefMgrbigmapSchedule:RefMgrbigmapScheduleBase<IRefbigmapSchedule>;
+protected _RefMgrbigmapScoreRule:RefMgrbigmapScoreRuleBase<IRefbigmapScoreRule>;
+protected _RefMgrbigmapStamina:RefMgrbigmapStaminaBase<IRefbigmapStamina>;
 protected _RefMgrbigmapWorld:RefMgrbigmapWorldBase<IRefbigmapWorld>;
 protected _RefMgrbigNum:RefMgrbigNumBase<IRefbigNum>;
 protected _RefMgrbuild:RefMgrbuildBase<IRefbuild>;
@@ -36,6 +46,7 @@ protected _RefMgrchapterName:RefMgrchapterNameBase<IRefchapterName>;
 protected _RefMgrdayChallengeActTask:RefMgrdayChallengeActTaskBase<IRefdayChallengeActTask>;
 protected _RefMgrdayChallengeActTaskProgress:RefMgrdayChallengeActTaskProgressBase<IRefdayChallengeActTaskProgress>;
 protected _RefMgrdefenceModWave:RefMgrdefenceModWaveBase<IRefdefenceModWave>;
+protected _RefMgrdefenceWaveReward:RefMgrdefenceWaveRewardBase<IRefdefenceWaveReward>;
 protected _RefMgrequip:RefMgrequipBase<IRefequip>;
 protected _RefMgrequipLevel:RefMgrequipLevelBase<IRefequipLevel>;
 protected _RefMgrequipLib:RefMgrequipLibBase<IRefequipLib>;
@@ -86,6 +97,7 @@ protected _RefMgrmonthCardActPlan:RefMgrmonthCardActPlanBase<IRefmonthCardActPla
 protected _RefMgrneutralEnhanceGate:RefMgrneutralEnhanceGateBase<IRefneutralEnhanceGate>;
 protected _RefMgrneutralResourceGroup:RefMgrneutralResourceGroupBase<IRefneutralResourceGroup>;
 protected _RefMgrnewTreasureBoxConfig:RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>;
+protected _RefMgrnewTreasureBoxQueueConfig:RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>;
 protected _RefMgrnpcTeam:RefMgrnpcTeamBase<IRefnpcTeam>;
 protected _RefMgropen:RefMgropenBase<IRefopen>;
 protected _RefMgropenGridReward:RefMgropenGridRewardBase<IRefopenGridReward>;
@@ -157,9 +169,19 @@ get RefMgrbattleTokenConfig(){if(!this._RefMgrbattleTokenConfig){this._RefMgrbat
 get RefMgrbattleTokenPlan(){if(!this._RefMgrbattleTokenPlan){this._RefMgrbattleTokenPlan=new RefMgrbattleTokenPlanBase<IRefbattleTokenPlan>()}return this._RefMgrbattleTokenPlan}
 get RefMgrbattleTokenReward(){if(!this._RefMgrbattleTokenReward){this._RefMgrbattleTokenReward=new RefMgrbattleTokenRewardBase<IRefbattleTokenReward>()}return this._RefMgrbattleTokenReward}
 get RefMgrbfUnionRankAward(){if(!this._RefMgrbfUnionRankAward){this._RefMgrbfUnionRankAward=new RefMgrbfUnionRankAwardBase<IRefbfUnionRankAward>()}return this._RefMgrbfUnionRankAward}
+get RefMgrbigmapBuilding(){if(!this._RefMgrbigmapBuilding){this._RefMgrbigmapBuilding=new RefMgrbigmapBuildingBase<IRefbigmapBuilding>()}return this._RefMgrbigmapBuilding}
+get RefMgrbigmapBuildingLevel(){if(!this._RefMgrbigmapBuildingLevel){this._RefMgrbigmapBuildingLevel=new RefMgrbigmapBuildingLevelBase<IRefbigmapBuildingLevel>()}return this._RefMgrbigmapBuildingLevel}
+get RefMgrbigmapBuildingProduce(){if(!this._RefMgrbigmapBuildingProduce){this._RefMgrbigmapBuildingProduce=new RefMgrbigmapBuildingProduceBase<IRefbigmapBuildingProduce>()}return this._RefMgrbigmapBuildingProduce}
 get RefMgrbigMapCamp(){if(!this._RefMgrbigMapCamp){this._RefMgrbigMapCamp=new RefMgrbigMapCampBase<IRefbigMapCamp>()}return this._RefMgrbigMapCamp}
-get RefMgrbigMapMonster(){if(!this._RefMgrbigMapMonster){this._RefMgrbigMapMonster=new RefMgrbigMapMonsterBase<IRefbigMapMonster>()}return this._RefMgrbigMapMonster}
+get RefMgrbigmapCity(){if(!this._RefMgrbigmapCity){this._RefMgrbigmapCity=new RefMgrbigmapCityBase<IRefbigmapCity>()}return this._RefMgrbigmapCity}
+get RefMgrbigmapCityLevel(){if(!this._RefMgrbigmapCityLevel){this._RefMgrbigmapCityLevel=new RefMgrbigmapCityLevelBase<IRefbigmapCityLevel>()}return this._RefMgrbigmapCityLevel}
+get RefMgrbigmapMonster(){if(!this._RefMgrbigmapMonster){this._RefMgrbigmapMonster=new RefMgrbigmapMonsterBase<IRefbigmapMonster>()}return this._RefMgrbigmapMonster}
 get RefMgrbigmapQueue(){if(!this._RefMgrbigmapQueue){this._RefMgrbigmapQueue=new RefMgrbigmapQueueBase<IRefbigmapQueue>()}return this._RefMgrbigmapQueue}
+get RefMgrbigmapRank(){if(!this._RefMgrbigmapRank){this._RefMgrbigmapRank=new RefMgrbigmapRankBase<IRefbigmapRank>()}return this._RefMgrbigmapRank}
+get RefMgrbigmapResource(){if(!this._RefMgrbigmapResource){this._RefMgrbigmapResource=new RefMgrbigmapResourceBase<IRefbigmapResource>()}return this._RefMgrbigmapResource}
+get RefMgrbigmapSchedule(){if(!this._RefMgrbigmapSchedule){this._RefMgrbigmapSchedule=new RefMgrbigmapScheduleBase<IRefbigmapSchedule>()}return this._RefMgrbigmapSchedule}
+get RefMgrbigmapScoreRule(){if(!this._RefMgrbigmapScoreRule){this._RefMgrbigmapScoreRule=new RefMgrbigmapScoreRuleBase<IRefbigmapScoreRule>()}return this._RefMgrbigmapScoreRule}
+get RefMgrbigmapStamina(){if(!this._RefMgrbigmapStamina){this._RefMgrbigmapStamina=new RefMgrbigmapStaminaBase<IRefbigmapStamina>()}return this._RefMgrbigmapStamina}
 get RefMgrbigmapWorld(){if(!this._RefMgrbigmapWorld){this._RefMgrbigmapWorld=new RefMgrbigmapWorldBase<IRefbigmapWorld>()}return this._RefMgrbigmapWorld}
 get RefMgrbigNum(){if(!this._RefMgrbigNum){this._RefMgrbigNum=new RefMgrbigNumBase<IRefbigNum>()}return this._RefMgrbigNum}
 get RefMgrbuild(){if(!this._RefMgrbuild){this._RefMgrbuild=new RefMgrbuildBase<IRefbuild>()}return this._RefMgrbuild}
@@ -176,6 +198,7 @@ get RefMgrchapterName(){if(!this._RefMgrchapterName){this._RefMgrchapterName=new
 get RefMgrdayChallengeActTask(){if(!this._RefMgrdayChallengeActTask){this._RefMgrdayChallengeActTask=new RefMgrdayChallengeActTaskBase<IRefdayChallengeActTask>()}return this._RefMgrdayChallengeActTask}
 get RefMgrdayChallengeActTaskProgress(){if(!this._RefMgrdayChallengeActTaskProgress){this._RefMgrdayChallengeActTaskProgress=new RefMgrdayChallengeActTaskProgressBase<IRefdayChallengeActTaskProgress>()}return this._RefMgrdayChallengeActTaskProgress}
 get RefMgrdefenceModWave(){if(!this._RefMgrdefenceModWave){this._RefMgrdefenceModWave=new RefMgrdefenceModWaveBase<IRefdefenceModWave>()}return this._RefMgrdefenceModWave}
+get RefMgrdefenceWaveReward(){if(!this._RefMgrdefenceWaveReward){this._RefMgrdefenceWaveReward=new RefMgrdefenceWaveRewardBase<IRefdefenceWaveReward>()}return this._RefMgrdefenceWaveReward}
 get RefMgrequip(){if(!this._RefMgrequip){this._RefMgrequip=new RefMgrequipBase<IRefequip>()}return this._RefMgrequip}
 get RefMgrequipLevel(){if(!this._RefMgrequipLevel){this._RefMgrequipLevel=new RefMgrequipLevelBase<IRefequipLevel>()}return this._RefMgrequipLevel}
 get RefMgrequipLib(){if(!this._RefMgrequipLib){this._RefMgrequipLib=new RefMgrequipLibBase<IRefequipLib>()}return this._RefMgrequipLib}
@@ -226,6 +249,7 @@ get RefMgrmonthCardActPlan(){if(!this._RefMgrmonthCardActPlan){this._RefMgrmonth
 get RefMgrneutralEnhanceGate(){if(!this._RefMgrneutralEnhanceGate){this._RefMgrneutralEnhanceGate=new RefMgrneutralEnhanceGateBase<IRefneutralEnhanceGate>()}return this._RefMgrneutralEnhanceGate}
 get RefMgrneutralResourceGroup(){if(!this._RefMgrneutralResourceGroup){this._RefMgrneutralResourceGroup=new RefMgrneutralResourceGroupBase<IRefneutralResourceGroup>()}return this._RefMgrneutralResourceGroup}
 get RefMgrnewTreasureBoxConfig(){if(!this._RefMgrnewTreasureBoxConfig){this._RefMgrnewTreasureBoxConfig=new RefMgrnewTreasureBoxConfigBase<IRefnewTreasureBoxConfig>()}return this._RefMgrnewTreasureBoxConfig}
+get RefMgrnewTreasureBoxQueueConfig(){if(!this._RefMgrnewTreasureBoxQueueConfig){this._RefMgrnewTreasureBoxQueueConfig=new RefMgrnewTreasureBoxQueueConfigBase<IRefnewTreasureBoxQueueConfig>()}return this._RefMgrnewTreasureBoxQueueConfig}
 get RefMgrnpcTeam(){if(!this._RefMgrnpcTeam){this._RefMgrnpcTeam=new RefMgrnpcTeamBase<IRefnpcTeam>()}return this._RefMgrnpcTeam}
 get RefMgropen(){if(!this._RefMgropen){this._RefMgropen=new RefMgropenBase<IRefopen>()}return this._RefMgropen}
 get RefMgropenGridReward(){if(!this._RefMgropenGridReward){this._RefMgropenGridReward=new RefMgropenGridRewardBase<IRefopenGridReward>()}return this._RefMgropenGridReward}
@@ -299,9 +323,19 @@ export class RefMgrbattleTokenConfigBase<T extends IRefBase> extends RefMgrBase<
 export class RefMgrbattleTokenPlanBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("battleTokenPlan")}}
 export class RefMgrbattleTokenRewardBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("battleTokenReward")}}
 export class RefMgrbfUnionRankAwardBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bfUnionRankAward")}}
+export class RefMgrbigmapBuildingBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuilding")}}
+export class RefMgrbigmapBuildingLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingLevel")}}
+export class RefMgrbigmapBuildingProduceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapBuildingProduce")}}
 export class RefMgrbigMapCampBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigMapCamp")}}
-export class RefMgrbigMapMonsterBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigMapMonster")}}
+export class RefMgrbigmapCityBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCity")}}
+export class RefMgrbigmapCityLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapCityLevel")}}
+export class RefMgrbigmapMonsterBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapMonster")}}
 export class RefMgrbigmapQueueBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapQueue")}}
+export class RefMgrbigmapRankBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapRank")}}
+export class RefMgrbigmapResourceBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapResource")}}
+export class RefMgrbigmapScheduleBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapSchedule")}}
+export class RefMgrbigmapScoreRuleBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapScoreRule")}}
+export class RefMgrbigmapStaminaBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapStamina")}}
 export class RefMgrbigmapWorldBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigmapWorld")}}
 export class RefMgrbigNumBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("bigNum")}}
 export class RefMgrbuildBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("build")}}
@@ -318,6 +352,7 @@ export class RefMgrchapterNameBase<T extends IRefBase> extends RefMgrBase<T>{con
 export class RefMgrdayChallengeActTaskBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("dayChallengeActTask")}}
 export class RefMgrdayChallengeActTaskProgressBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("dayChallengeActTaskProgress")}}
 export class RefMgrdefenceModWaveBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("defenceModWave")}}
+export class RefMgrdefenceWaveRewardBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("defenceWaveReward")}}
 export class RefMgrequipBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("equip")}}
 export class RefMgrequipLevelBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("equipLevel")}}
 export class RefMgrequipLibBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("equipLib")}}
@@ -368,6 +403,7 @@ export class RefMgrmonthCardActPlanBase<T extends IRefBase> extends RefMgrBase<T
 export class RefMgrneutralEnhanceGateBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("neutralEnhanceGate")}}
 export class RefMgrneutralResourceGroupBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("neutralResourceGroup")}}
 export class RefMgrnewTreasureBoxConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxConfig")}}
+export class RefMgrnewTreasureBoxQueueConfigBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("newTreasureBoxQueueConfig")}}
 export class RefMgrnpcTeamBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("npcTeam")}}
 export class RefMgropenBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("open")}}
 export class RefMgropenGridRewardBase<T extends IRefBase> extends RefMgrBase<T>{constructor(){super("openGridReward")}}

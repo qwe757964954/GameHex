@@ -83,6 +83,32 @@ function connected(footprint, rows, columns) {
   return seen.size === target.size;
 }
 
+/**
+ * 同一片巡逻区（同 `site.id`）里 `battleId` 必须整片一致。
+ *
+ * 2026-11-18 口径：一片巡逻区 = 同一个 `site.id`，整片共用一个战斗 ID。
+ * 组里有一格数值写歪，那片战斗与停巡判据就按两场算 ⇒ 表现错乱且零报错。
+ * 这是**警告**不是错误：旧地图仍能读；保存前照抄一遍即可。
+ */
+function patrolRegionWarnings(sites) {
+  const byId = new Map();
+  for (const site of sites) {
+    if (site.type !== 'patrolChest') continue;
+    const list = byId.get(site.id);
+    if (list) list.push(site);
+    else byId.set(site.id, [site]);
+  }
+  const warnings = [];
+  for (const [siteId, members] of byId) {
+    const battleIds = new Set(members.map((site) => site.battleId));
+    if (battleIds.size > 1) {
+      warnings.push(`patrol group ${siteId} mixes ${battleIds.size} battleId values; `
+        + 'every cell in one group must share the same battleId');
+    }
+  }
+  return warnings;
+}
+
 function normalizeUnlock(unlock, siteLabel, issues, defaults) {
   if (unlock === undefined) unlock = {};
   if (!isRecord(unlock)) { issues.push(`${siteLabel}.unlock must be an object`); unlock = {}; }
@@ -148,11 +174,16 @@ export function normalizeTerritoryMap(data, fallbackId) {
       if (!Number.isSafeInteger(raw.patrolId) || raw.patrolId <= 0) issues.push(`${label}.patrolId must be a positive integer`);
     }
     if (type === 'patrolChest') {
-      if (!Array.isArray(raw.battleIds) || !raw.battleIds.length
-        || !raw.battleIds.every((id) => Number.isSafeInteger(id) && id > 0)) {
-        issues.push(`${label}.battleIds must be a non-empty array of positive integers`);
+      // 2026-11-18 起是单值（`battleId`）：一片巡逻区（同 `site.id`）共用这一个战斗 ID。
+      // 旧数组字段 `battleIds` 直接判错，别让它悄悄退回「按下标摊分」那套。
+      if (!Number.isSafeInteger(raw.battleId) || raw.battleId <= 0) {
+        issues.push(`${label}.battleId must be a positive integer`);
       }
-    } else if (raw.battleIds !== undefined) issues.push(`${label}.battleIds is only valid for patrolChest sites`);
+      if (raw.battleIds !== undefined) issues.push(`${label}.battleIds is deprecated, use battleId`);
+    } else {
+      if (raw.battleId !== undefined) issues.push(`${label}.battleId is only valid for patrolChest sites`);
+      if (raw.battleIds !== undefined) issues.push(`${label}.battleIds is only valid for patrolChest sites`);
+    }
     if (hasRewardId && type !== 'fixedResource') issues.push(`${label}.rewardId is only valid for fixedResource sites`);
     if (hasRewardId && (!Number.isInteger(raw.rewardId) || raw.rewardId <= 0)) {
       issues.push(`${label}.rewardId must be a positive integer`);
@@ -162,7 +193,7 @@ export function normalizeTerritoryMap(data, fallbackId) {
       type,
       cellId,
       footprint,
-      ...(type === 'patrolChest' && Array.isArray(raw.battleIds) ? { battleIds: [...raw.battleIds] } : {}),
+      ...(type === 'patrolChest' && Number.isSafeInteger(raw.battleId) && raw.battleId > 0 ? { battleId: raw.battleId } : {}),
       ...(type === 'patrolChest' && raw.patrolId !== undefined ? { patrolId: raw.patrolId } : {}),
       ...(stringValue(raw.configId, `${label}.configId`, issues) !== undefined ? { configId: raw.configId } : {}),
       ...(stringValue(raw.buildingId, `${label}.buildingId`, issues) !== undefined ? { buildingId: raw.buildingId } : {}),
@@ -264,6 +295,7 @@ export function normalizeTerritoryMap(data, fallbackId) {
   if (issues.length) throw new TerritoryValidationError(issues);
   if (sites.length !== 10) warnings.push(`chapter ${chapterId} has ${sites.length} fixed sites; expected 10 levels`);
   if (sites.length > Math.floor(total * 0.5)) warnings.push('fixed site occupancy exceeds half of the chapter map');
+  warnings.push(...patrolRegionWarnings(sites));
   const normalized = {
     version: TERRITORY_VERSION,
     mapKind: TERRITORY_MAP_KIND,

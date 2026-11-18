@@ -112586,6 +112586,142 @@ $root.com = (function() {
                     return ChapterInfo;
                 })();
 
+                cmd.ChapterMonsterBoxInfo = (function() {
+
+                    /**
+                     * Properties of a ChapterMonsterBoxInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface IChapterMonsterBoxInfo
+                     * @property {number} cellId ChapterMonsterBoxInfo cellId
+                     * @property {number} lv ChapterMonsterBoxInfo lv
+                     */
+
+                    /**
+                     * Constructs a new ChapterMonsterBoxInfo.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a ChapterMonsterBoxInfo.
+                     * @implements IChapterMonsterBoxInfo
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.IChapterMonsterBoxInfo=} [properties] Properties to set
+                     */
+                    function ChapterMonsterBoxInfo(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * ChapterMonsterBoxInfo cellId.
+                     * @member {number} cellId
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @instance
+                     */
+                    ChapterMonsterBoxInfo.prototype.cellId = 0;
+
+                    /**
+                     * ChapterMonsterBoxInfo lv.
+                     * @member {number} lv
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @instance
+                     */
+                    ChapterMonsterBoxInfo.prototype.lv = 0;
+
+                    /**
+                     * Creates a new ChapterMonsterBoxInfo instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.IChapterMonsterBoxInfo=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.ChapterMonsterBoxInfo} ChapterMonsterBoxInfo instance
+                     */
+                    ChapterMonsterBoxInfo.create = function create(properties) {
+                        return new ChapterMonsterBoxInfo(properties);
+                    };
+
+                    /**
+                     * Encodes the specified ChapterMonsterBoxInfo message. Does not implicitly {@link com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ChapterMonsterBoxInfo} message ChapterMonsterBoxInfo message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    ChapterMonsterBoxInfo.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.cellId);
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.lv);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a ChapterMonsterBoxInfo message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.ChapterMonsterBoxInfo} ChapterMonsterBoxInfo
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    ChapterMonsterBoxInfo.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.cellId = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    message.lv = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("cellId"))
+                            throw $util.ProtocolError("missing required 'cellId'", { instance: message });
+                        if (!message.hasOwnProperty("lv"))
+                            throw $util.ProtocolError("missing required 'lv'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for ChapterMonsterBoxInfo
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.ChapterMonsterBoxInfo
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    ChapterMonsterBoxInfo.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.ChapterMonsterBoxInfo";
+                    };
+
+                    return ChapterMonsterBoxInfo;
+                })();
+
                 cmd.CmdCityChapterInfoReqMsg = (function() {
 
                     /**
@@ -114359,6 +114495,7 @@ $root.com = (function() {
                      * @property {number} rewardState CmdCityChapterCellInfoRspMsg rewardState
                      * @property {Array.<Long>|null} [unlockCells] CmdCityChapterCellInfoRspMsg unlockCells
                      * @property {Array.<Long>|null} [passCells] CmdCityChapterCellInfoRspMsg passCells
+                     * @property {Array.<com.xkhy.tafang.cmd.ChapterMonsterBoxInfo>|null} [monsterBoxInfos] CmdCityChapterCellInfoRspMsg monsterBoxInfos
                      */
 
                     /**
@@ -114372,6 +114509,7 @@ $root.com = (function() {
                     function CmdCityChapterCellInfoRspMsg(properties) {
                         this.unlockCells = [];
                         this.passCells = [];
+                        this.monsterBoxInfos = [];
                         if (properties)
                             for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                                 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -114411,6 +114549,14 @@ $root.com = (function() {
                     CmdCityChapterCellInfoRspMsg.prototype.passCells = $util.emptyArray;
 
                     /**
+                     * CmdCityChapterCellInfoRspMsg monsterBoxInfos.
+                     * @member {Array.<com.xkhy.tafang.cmd.ChapterMonsterBoxInfo>} monsterBoxInfos
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterCellInfoRspMsg
+                     * @instance
+                     */
+                    CmdCityChapterCellInfoRspMsg.prototype.monsterBoxInfos = $util.emptyArray;
+
+                    /**
                      * Creates a new CmdCityChapterCellInfoRspMsg instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdCityChapterCellInfoRspMsg
@@ -114446,6 +114592,9 @@ $root.com = (function() {
                         if (message.passCells != null && message.passCells.length)
                             for (var i = 0; i < message.passCells.length; ++i)
                                 writer.uint32(/* id 4, wireType 0 =*/32).uint64(message.passCells[i]);
+                        if (message.monsterBoxInfos != null && message.monsterBoxInfos.length)
+                            for (var i = 0; i < message.monsterBoxInfos.length; ++i)
+                                $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.encode(message.monsterBoxInfos[i], writer.uint32(/* id 5, wireType 2 =*/42).fork(), q + 1).ldelim();
                         return writer;
                     };
 
@@ -114503,6 +114652,12 @@ $root.com = (function() {
                                         message.passCells.push(reader.uint64());
                                     break;
                                 }
+                            case 5: {
+                                    if (!(message.monsterBoxInfos && message.monsterBoxInfos.length))
+                                        message.monsterBoxInfos = [];
+                                    message.monsterBoxInfos.push($root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
                             default:
                                 reader.skipType(tag & 7, long);
                                 break;
@@ -114531,6 +114686,278 @@ $root.com = (function() {
                     };
 
                     return CmdCityChapterCellInfoRspMsg;
+                })();
+
+                cmd.CmdCityChapterUpMonsterBoxLvReqMsg = (function() {
+
+                    /**
+                     * Properties of a CmdCityChapterUpMonsterBoxLvReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdCityChapterUpMonsterBoxLvReqMsg
+                     * @property {number} levelChapter CmdCityChapterUpMonsterBoxLvReqMsg levelChapter
+                     * @property {number} cellId CmdCityChapterUpMonsterBoxLvReqMsg cellId
+                     */
+
+                    /**
+                     * Constructs a new CmdCityChapterUpMonsterBoxLvReqMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdCityChapterUpMonsterBoxLvReqMsg.
+                     * @implements ICmdCityChapterUpMonsterBoxLvReqMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdCityChapterUpMonsterBoxLvReqMsg=} [properties] Properties to set
+                     */
+                    function CmdCityChapterUpMonsterBoxLvReqMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdCityChapterUpMonsterBoxLvReqMsg levelChapter.
+                     * @member {number} levelChapter
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.prototype.levelChapter = 0;
+
+                    /**
+                     * CmdCityChapterUpMonsterBoxLvReqMsg cellId.
+                     * @member {number} cellId
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.prototype.cellId = 0;
+
+                    /**
+                     * Creates a new CmdCityChapterUpMonsterBoxLvReqMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdCityChapterUpMonsterBoxLvReqMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg} CmdCityChapterUpMonsterBoxLvReqMsg instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.create = function create(properties) {
+                        return new CmdCityChapterUpMonsterBoxLvReqMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdCityChapterUpMonsterBoxLvReqMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg} message CmdCityChapterUpMonsterBoxLvReqMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.levelChapter);
+                        writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.cellId);
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdCityChapterUpMonsterBoxLvReqMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg} CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.levelChapter = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    message.cellId = reader.uint32();
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("levelChapter"))
+                            throw $util.ProtocolError("missing required 'levelChapter'", { instance: message });
+                        if (!message.hasOwnProperty("cellId"))
+                            throw $util.ProtocolError("missing required 'cellId'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdCityChapterUpMonsterBoxLvReqMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvReqMsg";
+                    };
+
+                    return CmdCityChapterUpMonsterBoxLvReqMsg;
+                })();
+
+                cmd.CmdCityChapterUpMonsterBoxLvRspMsg = (function() {
+
+                    /**
+                     * Properties of a CmdCityChapterUpMonsterBoxLvRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @interface ICmdCityChapterUpMonsterBoxLvRspMsg
+                     * @property {number} succ CmdCityChapterUpMonsterBoxLvRspMsg succ
+                     * @property {com.xkhy.tafang.cmd.ChapterMonsterBoxInfo} monsterBoxInfo CmdCityChapterUpMonsterBoxLvRspMsg monsterBoxInfo
+                     */
+
+                    /**
+                     * Constructs a new CmdCityChapterUpMonsterBoxLvRspMsg.
+                     * @memberof com.xkhy.tafang.cmd
+                     * @classdesc Represents a CmdCityChapterUpMonsterBoxLvRspMsg.
+                     * @implements ICmdCityChapterUpMonsterBoxLvRspMsg
+                     * @constructor
+                     * @param {com.xkhy.tafang.cmd.ICmdCityChapterUpMonsterBoxLvRspMsg=} [properties] Properties to set
+                     */
+                    function CmdCityChapterUpMonsterBoxLvRspMsg(properties) {
+                        if (properties)
+                            for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                                if (properties[keys[i]] != null && keys[i] !== "__proto__")
+                                    this[keys[i]] = properties[keys[i]];
+                    }
+
+                    /**
+                     * CmdCityChapterUpMonsterBoxLvRspMsg succ.
+                     * @member {number} succ
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.prototype.succ = 0;
+
+                    /**
+                     * CmdCityChapterUpMonsterBoxLvRspMsg monsterBoxInfo.
+                     * @member {com.xkhy.tafang.cmd.ChapterMonsterBoxInfo} monsterBoxInfo
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.prototype.monsterBoxInfo = null;
+
+                    /**
+                     * Creates a new CmdCityChapterUpMonsterBoxLvRspMsg instance using the specified properties.
+                     * @function create
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.ICmdCityChapterUpMonsterBoxLvRspMsg=} [properties] Properties to set
+                     * @returns {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg} CmdCityChapterUpMonsterBoxLvRspMsg instance
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.create = function create(properties) {
+                        return new CmdCityChapterUpMonsterBoxLvRspMsg(properties);
+                    };
+
+                    /**
+                     * Encodes the specified CmdCityChapterUpMonsterBoxLvRspMsg message. Does not implicitly {@link com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg.verify|verify} messages.
+                     * @function encode
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @static
+                     * @param {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg} message CmdCityChapterUpMonsterBoxLvRspMsg message or plain object to encode
+                     * @param {$protobuf.Writer} [writer] Writer to encode to
+                     * @returns {$protobuf.Writer} Writer
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.encode = function encode(message, writer, q) {
+                        if (!writer)
+                            writer = $Writer.create();
+                        if (q === undefined)
+                            q = 0;
+                        if (q > $util.recursionLimit)
+                            throw Error("max depth exceeded");
+                        writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.succ);
+                        $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.encode(message.monsterBoxInfo, writer.uint32(/* id 2, wireType 2 =*/18).fork(), q + 1).ldelim();
+                        return writer;
+                    };
+
+                    /**
+                     * Decodes a CmdCityChapterUpMonsterBoxLvRspMsg message from the specified reader or buffer.
+                     * @function decode
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @static
+                     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+                     * @param {number} [length] Message length if known beforehand
+                     * @returns {com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg} CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @throws {Error} If the payload is not a reader or valid buffer
+                     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.decode = function decode(reader, length, error, long) {
+                        if (!(reader instanceof $Reader))
+                            reader = $Reader.create(reader);
+                        if (long === undefined)
+                            long = 0;
+                        if (long > $Reader.recursionLimit)
+                            throw Error("maximum nesting depth exceeded");
+                        var end = length === undefined ? reader.len : reader.pos + length, message = new $root.com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg();
+                        while (reader.pos < end) {
+                            var tag = reader.uint32();
+                            if (tag === error)
+                                break;
+                            switch (tag >>> 3) {
+                            case 1: {
+                                    message.succ = reader.uint32();
+                                    break;
+                                }
+                            case 2: {
+                                    message.monsterBoxInfo = $root.com.xkhy.tafang.cmd.ChapterMonsterBoxInfo.decode(reader, reader.uint32(), undefined, long + 1);
+                                    break;
+                                }
+                            default:
+                                reader.skipType(tag & 7, long);
+                                break;
+                            }
+                        }
+                        if (!message.hasOwnProperty("succ"))
+                            throw $util.ProtocolError("missing required 'succ'", { instance: message });
+                        if (!message.hasOwnProperty("monsterBoxInfo"))
+                            throw $util.ProtocolError("missing required 'monsterBoxInfo'", { instance: message });
+                        return message;
+                    };
+
+                    /**
+                     * Gets the default type url for CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @function getTypeUrl
+                     * @memberof com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg
+                     * @static
+                     * @param {string} [typeUrlPrefix] your custom typeUrlPrefix(default "type.googleapis.com")
+                     * @returns {string} The default type url
+                     */
+                    CmdCityChapterUpMonsterBoxLvRspMsg.getTypeUrl = function getTypeUrl(typeUrlPrefix) {
+                        if (typeUrlPrefix === undefined) {
+                            typeUrlPrefix = "type.googleapis.com";
+                        }
+                        return typeUrlPrefix + "/com.xkhy.tafang.cmd.CmdCityChapterUpMonsterBoxLvRspMsg";
+                    };
+
+                    return CmdCityChapterUpMonsterBoxLvRspMsg;
                 })();
 
                 cmd.SlgGameCameRoleInfo = (function() {
@@ -120442,6 +120869,7 @@ $root.com = (function() {
                  * @property {number} CmdCityChapterUnlockCellRspMsg=45711217 CmdCityChapterUnlockCellRspMsg value
                  * @property {number} CmdCityChapterPassCellRspMsg=1560327682 CmdCityChapterPassCellRspMsg value
                  * @property {number} CmdCityChapterCellInfoRspMsg=1137184677 CmdCityChapterCellInfoRspMsg value
+                 * @property {number} CmdCityChapterUpMonsterBoxLvRspMsg=914309089 CmdCityChapterUpMonsterBoxLvRspMsg value
                  * @property {number} CmdDayWeekMonthGiftGetRewardRspMsg=1356079122 CmdDayWeekMonthGiftGetRewardRspMsg value
                  * @property {number} CmdDayWeekMonthGiftInfoRspMsg=1005269291 CmdDayWeekMonthGiftInfoRspMsg value
                  * @property {number} CmdDayWeekMonthGiftFreeBuyRspMsg=355499005 CmdDayWeekMonthGiftFreeBuyRspMsg value
@@ -120777,6 +121205,7 @@ $root.com = (function() {
                     values[valuesById[45711217] = "CmdCityChapterUnlockCellRspMsg"] = 45711217;
                     values[valuesById[1560327682] = "CmdCityChapterPassCellRspMsg"] = 1560327682;
                     values[valuesById[1137184677] = "CmdCityChapterCellInfoRspMsg"] = 1137184677;
+                    values[valuesById[914309089] = "CmdCityChapterUpMonsterBoxLvRspMsg"] = 914309089;
                     values[valuesById[1356079122] = "CmdDayWeekMonthGiftGetRewardRspMsg"] = 1356079122;
                     values[valuesById[1005269291] = "CmdDayWeekMonthGiftInfoRspMsg"] = 1005269291;
                     values[valuesById[355499005] = "CmdDayWeekMonthGiftFreeBuyRspMsg"] = 355499005;

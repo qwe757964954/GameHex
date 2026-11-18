@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-"""把「翻第2块地 / 翻第3块地」两步改成**弱引导**（`maskType = none`）。
+"""把「点开宝箱 / 翻第2块地 / 翻第3块地」这几步改成**弱引导**（`maskType = none`）。
 
-用户口径（2026-11-17 第 12 条）：2-3 的奖励对话结束后，后续两个翻地块
-**不用遮罩、不用气泡提示文案，只保留手指点地块的动画**。
+用户口径：
+  · 2026-11-17 第 12 条：2-3 的奖励对话结束后，后续两个翻地块
+    **不用遮罩、不用气泡提示文案，只保留手指点地块的动画**；
+  · 2026-11-17 第 13 条 ③：**2-2「点开宝箱」也改成弱引导** ——
+    第一次点宝箱时就不压暗，只留手指 + 光圈（后面开箱演出自己会接管画面）。
 
 三写（源表 + 两份导出 JSON）：
-  · `doc/塔防数据配置/X-新手引导.xlsx` / `新手引导步骤`：3-1、4-1 的「遮罩类型」列 hole → none，
-    顺带把列头提示补上 `none 无遮罩`；
+  · `doc/塔防数据配置/X-新手引导.xlsx` / `新手引导步骤`：2-2、3-1、4-1 的「遮罩类型」列 hole → none，
+    顺带把列头提示补上 `none 无遮罩`（已补过就跳过）；
   · `assets/remoteRef/guideStep.json`（`{k,v,c}` 列存）；
   · `doc/塔防数据配置/json/client/guideStep.json`（每行一个对象的数组）。
 
@@ -35,7 +38,7 @@ REMOTE = os.path.join(PROJECT, 'assets', 'remoteRef', 'guideStep.json')
 CLIENT = os.path.join(DOC, 'json', 'client', 'guideStep.json')
 BACKUP = os.path.join(os.environ.get('TEMP', '.'), 'guide_step_backup')
 
-WEAK_STEPS = ('3-1', '4-1')
+WEAK_STEPS = ('2-2', '3-1', '4-1')
 WEAK_MASK = 'none'
 HINT_ADD = ' / none 无遮罩（弱引导）'
 

@@ -722,8 +722,10 @@ test('E2 ⚠️ 虚拟列表三处时序守点：renderItemFn 只绑一次 / 取
     assert.ok(page.includes('await this.nextPopupFrame()'), '⚠️ 铺数据前必须 await nextPopupFrame()，否则列表空白');
     assert.ok(page.includes('this.levelList.refreshList('), '没调用 refreshList');
     assert.ok(page.includes('this.levelList.scrollToTop('), '刷新后要回到顶部');
-    // ③ 异步回来时必须复核「还活着 / 还是这一趟」
-    assert.ok(page.includes('revision'), '缺 revision（在飞的异步结果会把旧数据写回新弹窗）');
+    // ③ 异步回来时必须复核「还活着 / 还是这一趟打开」
+    assert.ok(!page.includes('private revision'), '单次打开只加载一次，不再维护 revision');
+    assert.ok(page.includes('const context = this.popupOpenContext'), '必须在 await 前捕获打开上下文');
+    assert.ok(page.includes('context?.cancelled'), '重开/关闭后旧任务不得回填');
     assert.ok(page.includes('private get alive()'), '缺 alive 守卫（PopupBase 没有这个成员）');
     assert.ok(page.includes('this.alive'), 'alive 必须真的被用到');
 });

@@ -132,7 +132,6 @@ export class PlayerInfoPage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        this.loadRevision += 1;
         this.snapshot = null;
         this.headFrame = null;
         this.redeeming = false;
@@ -150,7 +149,7 @@ export class PlayerInfoPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */
@@ -170,8 +169,9 @@ export class PlayerInfoPage extends PopupBase {
 
         // 图必须先 **await 完**再铺界面（与 `MainTaskDetailPage.present` 同一口径）：
         // 铺界面是同步的，在里面现加载会先闪一帧空图；更糟的是漏进预加载集合时**静默留白**。
-        this.headFrame = await this.loadHeadFrameOf(snapshot);
+        const headFrame = await this.loadHeadFrameOf(snapshot);
         if (!this.alive || revision !== this.loadRevision) return;
+        this.headFrame = headFrame;
 
         this.present(snapshot);
     }

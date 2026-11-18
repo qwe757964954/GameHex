@@ -33,29 +33,29 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  *    类道具；`CacheMgrGen` 里**没有背包 getter** ⇒ `loadHeads()` 的 `unlocked` 一律 `true`，
  *    并把 `ownedResIds` 留成可选注入参数（探针 / 单测可喂假集合验证灰化分支）。
  */
-import { RefUtil } from '../../framework/ref/RefUtil';
 import { FW } from '../../framework/FW';
-import { CacheMgr } from '../net/CacheMgr';
-import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
+import { RefUtil } from '../../framework/ref/RefUtil';
+import { RESOURCE_ICON_ART_ROOT } from '../ArtPaths';
 import {
     RequestCodeExchange,
     RequestRoleChangeImg,
     RequestRoleChangeName,
     RequestRoleInfoView,
 } from '../generated/requestMsg/RequestRoleMsg';
-import { RESOURCE_ICON_ART_ROOT } from '../ArtPaths';
-import { equipPartOf, normalizeEquipRows } from '../role/RoleTable';
+import { CacheMgr } from '../net/CacheMgr';
+import { GameNet } from '../net/GameNet';
+import { toCount, toIdString } from '../net/RequestGuard';
 import type { IEquipRow } from '../role/RoleTable';
+import { equipPartOf, normalizeEquipRows } from '../role/RoleTable';
+import type { IOtherEquipEntry } from './PlayerInfoTable';
 import {
     buildHeadIdList,
     isHeadUnlocked,
     resolveExpMax,
 } from './PlayerInfoTable';
-import type { IOtherEquipEntry } from './PlayerInfoTable';
 
+import { HEAD_TABLE, ITEM_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { READ_TIMEOUT_MS_SLOW as READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { HEAD_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /** 「自己」一名玩家的展示数据。 */
 export interface IPlayerInfoSnapshot {
     /** 是不是自己（决定 `btn_rename` 等「仅自己可见」节点的显隐）。 */
@@ -268,7 +268,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
             // ⚠️ `GameNet.send(req, false)` 的第二个参数恒为 `false`（全工程口径）——
             //    回包通过 `RequestMsg` 的 `fCallback` 通知，不是靠返回值。见
             //    `LayerActivityRepository` / `BattleTokenRepository` 的同款写法。
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                     new RequestRoleInfoView(
                         { roleId: toCount(roleId), serverId } as any,
                         caller,
@@ -453,7 +453,7 @@ class PlayerInfoRepositoryImpl implements IPlayerInfoRepository {
 
     /** 统一的发包 + 三态收口（与 `FriendRepository.send` / `MainTaskRepository.claim` 同款）。 */
     private async send(make: () => any): Promise<PlayerInfoRequestResult> {
-        return sendGameRequest(GameNet.instance, make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'PlayerInfo' });
+        return GameNet.sendRequest(make, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'PlayerInfo' });
     }
 }
 

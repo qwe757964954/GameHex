@@ -11,7 +11,7 @@
  *   6-1             → pageOpened:card ← GuideComposition（英雄卡牌页）
  *   6-2             → cardSelected:<id> ← CardPopupComposition 的实际就绪快照
  *   6-3             → cardLevelUp:<id>  ← Controller 直接订阅 HeroUpgraded
- *   8-1             → popupClosed    ← MainTaskDetailPage.onClose
+ *   8-1             → pageOpened:task ← MainTaskDetailPage.onOpen
  */
 
 import test from 'node:test';
@@ -56,11 +56,16 @@ test('卡牌详情开关报告生命周期，误开详情的引导暂停和恢�
     assert.match(src, /protected onClose\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'disabled' \}\)/);
 });
 
-test('8-1：主线任务详情页关闭上报 popupClosed', () => {
-    assert.match(
-        read('assets/script/app/maintask/MainTaskDetailPage.ts'),
-        /reportGuideComplete\('popupClosed'\)/,
-    );
+test('8-1：玩家自己点开主线任务面板就算完成（不再由引导代开、也不等关闭）', () => {
+    const src = read('assets/script/app/maintask/MainTaskDetailPage.ts');
+    assert.match(src, /protected async onOpen\(\)[\s\S]{0,400}?reportGuideComplete\('pageOpened', 'task'\)/,
+        '面板一开就要上报 pageOpened:task —— 8-1 的完成条件就是「玩家自己把入口点开」');
+    assert.doesNotMatch(src, /reportGuideComplete\('popupClosed'\)/,
+        '旧口径（关闭面板才算完成）已废：玩家要能点开看任务，不该被逼着关掉');
+    // 引导侧不许再替玩家开面板（2026-11-18 第 27 条）。
+    assert.doesNotMatch(read('assets/script/app/bootstrap/guide/GuideComposition.ts'),
+        /focusNode === 'Popup\/MainGoal'/,
+        '8-1 的焦点改成底栏任务入口；组合层再代开面板就等于绕过玩家这一下点击');
 });
 
 test('引导奖励由后端推送，组合层和控制器不模拟发奖或弹出本地奖励', () => {
@@ -121,11 +126,43 @@ test('焦点光圈：坐标必须由地图侧提供（View 不得 import 地图�
     const map = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
     assert.match(map, /getGuideFocusNode/, '地图侧缺查询入口');
     assert.match(map, /guideMapFocusCells\(focusNode, state\)/, '焦点必须按配置取模型的可操作集合');
+    // 第 17 条：关卡格子的「1-1」气泡挂在角标层，和地块不是父子 ⇒ 必须单独交给引导层做并集，
+    // 否则光圈只能圈住地块、气泡永远在圈外。
+    assert.match(map, /getGuideFocusExtraNodes/, '关卡气泡没有出口，光圈永远圈不到它');
+    const bubble = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    assert.match(bubble, /getLevelBubbleNode\(cellId: number\)/, '地图视图要能按格号取气泡节点');
+    const station = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
+    assert.match(station, /getLevelBubbleNode\(\): Node \| null/, '站点视图要暴露气泡节点');
+    const composition = readFileSync('assets/script/app/bootstrap/guide/GuideComposition.ts', 'utf8');
+    assert.match(composition, /extra: this\.territoryView\?\.getGuideFocusExtraNodes\(key\)/,
+        '组合层必须把气泡一起交给视图（只查不传等于没做）');
 });
 
-test('hole 步必须隐藏立绘（否则 650×940 会把焦点地块整个罩住）', () => {
+test('回到主页面：引导要等领地页首帧（第 23 条）', () => {
+    const src = readFileSync('assets/script/app/bootstrap/guide/GuideComposition.ts', 'utf8');
+    // 结算点「确定」= 先上报 backToMap 再 navigate ⇒ 组合层比领地页早建，
+    // 不压住首帧的话 6-1 会浮在一片裸底上开口说话（用户 2026-11-18 第 23 条）。
+    assert.match(src, /const waitingForMap = !state\.finished && !!this\.territoryView && !this\.mapPresented/,
+        '缺「等地图首帧」的闸门：6-1 会在章节地图出来之前就渲染');
+    assert.match(src, /\|\| waitingForMap/, '闸门必须真的接进 view.hide() 那条分支，写了不用等于没做');
+    assert.match(src, /owner === this\.territoryView && phase === 'presented'/,
+        '必须认领地页首帧的 presented 事件（那是 state.ready && map && progress 都到位的时刻）');
+    assert.match(src, /private markMapPresented\(\): void/, 'presented 与兜底计时要走同一个幂等入口');
+    // 兜底：章节数据永远拉不下来时不能把整条引导钉死（与 MainTabHost 首屏兜底同一个思路）。
+    assert.match(src, /territoryView\?\.scheduleOnce\(\(\) => this\.markMapPresented\(\), MAP_PRESENTED_FALLBACK_SECONDS\)/,
+        '兜底计时丢了 = 一次网络失败就让引导永不出现');
+    // 信号源必须还在（别把 MainTerritoryMap 的 presented 移除 / 改成每帧都发）。
+    const map = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+    assert.match(map, /firstReadyNotified[\s\S]{0,160}phase: 'presented'/,
+        '领地页首帧只发一次 presented，改成每帧发会让引导层反复 render');
+});
+
+test('hole 步：立绘挡住焦点孔就必须让开（650×940 会把焦点地块整个罩住）', () => {
     const src = readFileSync('assets/script/app/guide/ui/GuideDialogView.ts', 'utf8');
-    assert.match(src, /currentMaskType === 'hole'/, 'applyPortrait 里缺 hole 判据');
+    // 第 25 条：判据从「maskType 一刀切」换成「几何相交」（见下一条用例），但**结论不能丢** ——
+    // 挡住那一刻必须真的把立绘收起来，否则玩家点不到焦点地块。
+    assert.match(src, /private applyPortraitPlacement\(side: 1 \| -1, suppress: boolean\): void \{[\s\S]{0,400}?this\.portraitNode\.active = !suppress/,
+        '挡孔时要把立绘收起来（骨骼挂在宿主下，关宿主一起走）');
     assert.match(src, /this\.currentMaskType = state\.maskType/, 'render 必须先记下当前 maskType');
 });
 
@@ -189,6 +226,45 @@ test('焦点格限定在真实视口内，并保持本步选中的格子', () =>
     const src = read('assets/script/app/main/MainTerritoryMap.ts');
     assert.match(src, /viewport.convertToNodeSpaceAR/);
     assert.match(src, /viewport.width \/ 2 - HEX_GRID_FACE_WIDTH \/ 2/);
-    assert.match(src, /cellId === previousCell/);
+    // 同一焦点键内先认已选格（两遍扫的第一遍），避免呼吸光圈每帧乱跳。
+    assert.match(src, /const previousCell = this\.guideFocusKey === focusNode \? this\.guideFocusCell : null;/);
+    assert.match(src, /if \(previousCell !== null\) \{[\s\S]{0,200}?this\.guideFocusCell = previousCell;[\s\S]{0,40}?return node;/);
     assert.doesNotMatch(src, /for \(const cellId of view.getCellIds\(\)\)/);
+});
+
+test('焦点格按候选顺序取第一个可见的，不再按「离屏幕中心最近」挑', () => {
+    const src = read('assets/script/app/main/MainTerritoryMap.ts');
+    // 按「最近」挑时，3-1 / 4-1 拿到的是同一份候选池 ⇒ 连续两步指向同一格，
+    // 手指看着像没动，要等宝箱被点开、池子变了才跳（用户 2026-11-17 第 13 条 ①）。
+    assert.doesNotMatch(src, /bestDistance/, '回到「取最近」会让连续两步指同一格');
+    assert.match(src, /if \(previousCell !== null\)/, '同一焦点键内仍要保持已选格，避免光圈每帧乱跳');
+    assert.match(src, /for \(const cellId of candidates\)[\s\S]{0,240}?this\.guideFocusCell = cellId;[\s\S]{0,40}?return node;/,
+        '拿不到已选格时按顺序取第一个可见的');
+});
+
+test('焦点晚到会重试：底栏 / 地块节点晚几帧出现时，不靠「下一次换步」才补上', () => {
+    const src = read('assets/script/app/guide/ui/GuideDialogView.ts');
+    assert.match(src, /FOCUS_RETRY_INTERVAL_MS/, '重试间隔要落常量');
+    assert.match(src, /private hasLiveFocus\(\): boolean \{[\s\S]{0,200}?activeInHierarchy/, '先判目标是否真的活着');
+    assert.match(src, /private reacquireFocus\(\): boolean \{[\s\S]{0,420}?this\.resolveFocus\(\)/, '重试要重新走业务侧解析');
+    assert.match(src, /if \(this\.focusKey\) \{[\s\S]{0,260}?this\.reacquireFocus\(\)/, 'update 里要接上重试');
+    // 换步清零节流：否则新一步的第一个 150ms 白等。
+    assert.match(src, /this\.focusRetryAt = 0;/, '换步要重置重试节流');
+});
+
+test('立绘不按 maskType 一刀切：hole 步先换边、两侧都挡才收（2026-11-18 第 25 条）', () => {
+    const src = read('assets/script/app/guide/ui/GuideDialogView.ts');
+    // 旧口径：`applyPortrait` 开头 `if (currentMaskType === 'hole') hidePortrait()` ——
+    // 6-3（升级按钮，孔在右下）的立绘在对话框上方靠右，根本不重叠，却整段没了形象。
+    assert.doesNotMatch(src, /if \(this\.currentMaskType === 'hole'\) \{\s*\n\s*this\.hidePortrait\(\);/,
+        '立绘不许再按 maskType 一刀切藏掉');
+    assert.match(src, /private syncPortraitSuppression\(focusVisible: boolean, halfWidth: number, halfHeight: number\): void \{/,
+        '避让判据要有独立入口（每帧被 placeFocusRing 调）');
+    // 三级让位：右侧站得下 → 换左侧 → 两侧都挡才收。能不收就不收，形象优先。
+    assert.match(src, /if \(!this\.portraitHitsFocus\(halfWidth, halfHeight, 1\)\) this\.applyPortraitPlacement\(1, false\);[\s\S]{0,200}?else if \(!this\.portraitHitsFocus\(halfWidth, halfHeight, -1\)\) this\.applyPortraitPlacement\(-1, false\);[\s\S]{0,140}?else this\.applyPortraitPlacement\(this\.portraitSide, true\);/,
+        '三级让位：右 → 左 → 才收');
+    assert.match(src, /this\.syncPortraitSuppression\(visible, focusHalfWidth, focusHalfHeight\);/,
+        '`placeFocusRing` 末尾必须调它（孔和立绘都是那一帧刚算出来的）');
+    assert.match(src, /if \(side === this\.portraitSide && suppress === this\.portraitSuppressed\) return;/,
+        '值没变不写节点（逐帧调用）');
 });

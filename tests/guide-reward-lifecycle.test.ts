@@ -21,17 +21,27 @@ test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期�
             '/RewardEntries': rewardEntries,
         } });
     assert.deepEqual(unresolved, []);
+    // `onClose` 要 `grid.refreshList(0)` 把槽位收干净（见 showreward 的「关窗要清空槽位」），
+    // 沙箱里没有预制体 ⇒ 手工塞一份最小网格，否则空奖励那条路会先崩在 this.grid 上。
+    const gridStub = () => ({
+        renderItemFn: null as unknown,
+        onItemClickFn: null as unknown,
+        scrollToTop() {},
+        refreshList(_total: number) {},
+    });
     const events: Array<{ owner: object; phase: string }> = [];
     const listener = {};
     EventMgr.instance.on(VIEW_LIFECYCLE, payload => events.push(payload), listener);
     try {
         const empty = new exports.ShowRewardPage();
+        empty.grid = gridStub();
         empty.prepareEnterAnimation = () => {};
         await empty.onOpen({ goods: [] });
         assert.deepEqual(events.map(e => e.phase), ['enabled', 'disabled']);
         assert.ok(events.every(e => e.owner === empty));
 
         const pending = new exports.ShowRewardPage();
+        pending.grid = gridStub();
         pending.prepareEnterAnimation = () => {};
         let resolve!: (value: unknown[]) => void;
         pending.resolveEntries = () => new Promise(done => { resolve = done; });

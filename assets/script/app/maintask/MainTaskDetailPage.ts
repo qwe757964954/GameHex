@@ -70,8 +70,7 @@ export class MainTaskDetailPage extends PopupBase {
         // 这个名字是通用的 —— 以后别的弹窗也要上报关闭时，改成带参（如 `panelClosed:maintask`），
         // 否则会和 8-1 串味。
         reportGuideComplete('popupClosed');
-        // 让在途的 load / present 直接作废（它们醒来时页面已经关了）。
-        this.loadRevision += 1;
+        // 关闭由 alive 覆盖，onClose 不再递增 revision。
         this.snapshot = null;
     }
 
@@ -82,7 +81,7 @@ export class MainTaskDetailPage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     // 取数与渲染

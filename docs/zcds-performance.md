@@ -1,6 +1,6 @@
 # zcds 性能优化
 
-逻辑保持 20 Hz 固定步长和全图最近索敌。单位坐标在相邻逻辑帧间插值；特效和飘字使用逻辑时间加当前步长余量，每帧更新。地块和 HUD 每 0.15 秒刷新，地块图片、价格和阵营内容仅在变化时写入。
+逻辑保持 20 Hz 固定步长和确定性评分索敌。单位坐标在相邻逻辑帧间插值；特效和飘字使用逻辑时间加当前步长余量，每帧更新。地块和 HUD 每 0.15 秒刷新，地块图片、价格和阵营内容仅在变化时写入。
 
 城墙使用地形版本缓存，占领、开发、破墙、摧毁建筑及重开对局时失效。墙段坐标、旋转、长度及相邻格对应关系按地图缓存。索敌复用上下文和坐标容器，缓存可攻击建筑与暴露城墙；寻路复用访问标记和队列，缓存按目标格排序的邻居。范围查询只缓存格子列表，单位仍从实时索引读取。
 
@@ -120,3 +120,11 @@ P2-8 只改 `ZCTargetingSystem.acquire` 调用链，不扩展 P2-12、不替换�
 改后 3 次 timing 的 targetingMs：2p 21.04/29.60/27.05、3p 32.53/43.70/38.03、4p 30.76/30.85/29.98、projectiles 9.18/9.96/9.99、terrain 19.99/26.92/20.44 ms。2p/3p 相对 P2-8 前分别约 -8.8%/-9.5%，但波动与噪声同量级；4p 基本持平/略高，无明确收益；projectiles/terrain 有较明显下降（约 -22.4%/-19.5% 对 P2-8 前稳定基准）。tick 均值/p95 三次均值与 P2-8 前相比无稳定全局提升，4p 均值/p95 反而略高；不将 Node 数字表述为设备 FPS/GC 收益。
 
 确定性：5 个 benchmark 文件均与 `benchmark-baseline-check.json` 的 results 3 组 + displayResults 5 组 digest 一致；新增 `tests/zcds-targeting-index.test.ts` 6/6，核心 zcds 92/92，`check:zcds` 与 `verify:hygiene` 退出码 0。`benchmark-p28-before.json` 该轮 tick 异常偏高，不作稳定 tick 基线；`benchmark-p28-after-1.json` 的 `candidateChecks` 不完整，不作候选量结论。未连接真机，设备 FPS、GC、DrawCall、内存峰值与加载耗时均未验证；`zcds-neutral-features` 仍有 `corset.json 未投放类型 8` 与 `neutral_fun.json` ENOENT 两条既有数据红灯，未补业务资源。
+
+## 2026-11-18 索敌分项与结果口径
+
+落实[索敌方案](design/zcds-索敌机制落地方案.md)后，`benchmark:zcds` 的 `targetingProfiles` 继续以 `targetingMs` 表示 acquire，另报告 `priorityMs`、`gateMs`、`skillTargetingMs` 与 `pathMs` 及各调用次数。priority 扣除嵌套 acquire，`totalTargetingMs` 为前三项及技能选敌之和，不重复计数；path 单独展示。插桩时间不可与未插桩 tick 混用。
+
+本机 B1 前/后基础场景战斗与表现 digest 逐位一致，2p tick 均值 0.3285→0.2424 ms，3p 0.4721→0.2965 ms；仅为单次本机数据，不推断设备 FPS。最终锁定/评分/射程/脱战属于明确行为变更，固定种子重复运行仍须确定，但不再与旧行为 digest 相等。
+
+原始前后报告、最终分项、射程对照与失败名差集存于 `outputs/zcds-targeting/`。基础场景没有主动技能参数，gate=0 不代表技能密集场景零成本；可配置 `ZCDS_TARGETING_COUNTS=1` 独立统计候选量，默认未计数的 0 不作为收益依据。

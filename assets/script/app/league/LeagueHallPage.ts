@@ -217,7 +217,7 @@ export class LeagueHallPage extends PopupBase {
     /** 哪个页签已经取过数（老端的 tab 组件建一次 ⇒ 这里等价于「请求过一次且成功」）。 */
     private tabRequested: boolean[] = [false, false, false];
 
-    /** 每次取数递增，用来作废在飞的异步结果。 */
+    /** 快照加载代次：只用于让先发起的 `activateTab` / `reloadCurrentTab` 让位给后发起的。 */
     private revision = 0;
 
     /** 按钮 / 列表回调只绑一次（`onLoad` 与 `onOpen` 都会兜一次）。 */
@@ -246,12 +246,10 @@ export class LeagueHallPage extends PopupBase {
     }
 
     protected onClose(): void {
-        this.revision += 1;
         this.opsBar.hide();
     }
 
     onDestroy(): void {
-        this.revision += 1;
         super.onDestroy();
     }
 
@@ -381,8 +379,8 @@ export class LeagueHallPage extends PopupBase {
 
         if (!this.tabRequested[index]) {
             const result = await this.requestTab(index);
-            if (result === 'ok') this.tabRequested[index] = true;
             if (!this.alive || revision !== this.revision) return;
+            if (result === 'ok') this.tabRequested[index] = true;
         }
 
         const snapshot = await this.repository.load();
@@ -467,7 +465,7 @@ export class LeagueHallPage extends PopupBase {
     async applyBannerColor(colorIndex: number): Promise<void> {
         if (!this.bannerFrames) {
             const frames = await loadLeagueBannerFrames();
-            if (!this.node.isValid) return;
+            if (!this.alive) return;
             this.bannerFrames = frames;
         }
         const frame = this.bannerFrames[colorIndex] ?? null;
@@ -478,7 +476,7 @@ export class LeagueHallPage extends PopupBase {
     private async applyTabIconArt(): Promise<void> {
         const upBg = await loadArt(LEAGUE_ART_TAB_UP, LEAGUE_ART_ROOT);
         const downBg = await loadArt(LEAGUE_ART_TAB_DOWN, LEAGUE_ART_ROOT);
-        if (!this.node.isValid) return;
+        if (!this.alive) return;
 
         for (let index = 0; index < this.tabButtons.length; index += 1) {
             const button = this.tabButtons[index];
@@ -488,6 +486,7 @@ export class LeagueHallPage extends PopupBase {
                 loadArt(arts.up, LEAGUE_TAB_ICON_ROOT),
                 loadArt(arts.down, LEAGUE_TAB_ICON_ROOT),
             ]);
+            if (!this.alive) return;
             setSprite(button.getChildByName('BgUp'), upBg);
             setSprite(button.getChildByName('BgDown'), downBg);
             setSprite(button.getChildByName('IconUp'), upIcon);
@@ -771,7 +770,7 @@ export class LeagueHallPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** 旗帜底图 / 外框图名（供需要按名取图的调用方）。 */

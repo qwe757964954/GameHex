@@ -731,8 +731,7 @@ test('D2 ⚠️ 已购次数走 `CacheMgr.getCmdShop(5)`，**不自己存快照*
 });
 
 test('D3 ⚠️ 写请求必须走 sendGameRequest（超时 / 离线 / catch 统一收口）', () => {
-    assert.ok(REPO_SRC.includes('sendGameRequest('), '必须走公共发包壳');
-    assert.ok(REPO_SRC.includes('GameNet.instance'), '必须向真实网络实例发包');
+    assert.ok(REPO_SRC.includes('GameNet.sendRequest('), '必须走公共发包壳（静态入口取真实网络实例）');
     assert.ok(REPO_SRC.includes("tag: 'Gift'"), '必须带 Gift tag');
     assert.ok(REPO_SRC.includes(`from '../net/Timeouts'`), '写超时走公共真源');
 });

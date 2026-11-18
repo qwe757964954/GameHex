@@ -1,11 +1,11 @@
 import { RequestFormationInfo, RequestFormationOp, RequestFormationSelect } from '../generated/requestMsg/RequestFormationMsg';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, withTimeout } from '../net/RequestGuard';
-import { normalizeFormation, normalizeFormations, normalizeHeroIds, toPositiveInt } from './FormationModel';
+import { withTimeout } from '../net/RequestGuard';
 import type { ZCFormation } from './FormationModel';
+import { normalizeFormation, normalizeFormations, normalizeHeroIds, toPositiveInt } from './FormationModel';
 
-export type { ZCFormation } from './FormationModel';
 export { normalizeFormation, normalizeFormations } from './FormationModel';
+export type { ZCFormation } from './FormationModel';
 
 /**
  * 阵型的网络与缓存层；数据模型与校验在 FormationModel。
@@ -134,7 +134,7 @@ async function sendFormationOp(
     try {
         // 保存顺带置选中。否则服务端记着的出阵阵型仍是别的，而阵容页读的是选中阵型，
         // 玩家会看到保存后界面没变。切页签走独立的 selectFormation，只换选中不动卡组。
-        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationOp(
+        const status = await GameNet.sendRequest(() => new RequestFormationOp(
             { info: { formationId, heroId: heroIds, select: 1 } },
             caller,
             (rsp) => { response = rsp; },
@@ -202,7 +202,7 @@ export function selectFormation(formationId: number, caller?: object): Promise<b
 async function sendFormationSelect(formationId: number, caller?: object): Promise<boolean> {
     let response: CmdFormationSelectRspMsg | null = null;
     try {
-        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationSelect(
+        const status = await GameNet.sendRequest(() => new RequestFormationSelect(
             { formationId },
             caller,
             (rsp) => { response = rsp; },
@@ -226,7 +226,7 @@ async function sendFormationSelect(formationId: number, caller?: object): Promis
 async function requestFormations(): Promise<readonly ZCFormation[] | null> {
     let response: CmdFormationInfoRspMsg | null = null;
     try {
-        const status = await sendGameRequest(GameNet.instance, () => new RequestFormationInfo(
+        const status = await GameNet.sendRequest(() => new RequestFormationInfo(
             {},
             undefined,
             (rsp) => { response = rsp; },

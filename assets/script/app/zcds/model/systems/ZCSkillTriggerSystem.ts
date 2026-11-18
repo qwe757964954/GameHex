@@ -10,11 +10,24 @@ import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import type { ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
 import { type ZCStatusStatMods, type ZCStatusSystem } from '../ZCStatusEffect';
-import type { IZCStrikeOptions } from './ZCAttackResolutionSystem';
+import type { IZCChargeDashOptions, IZCStrikeOptions } from './ZCAttackResolutionSystem';
+import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
 import { ZCCombatEventType } from '../ZCCombatCatalog';
 import { ZC_BLINK_CAST_EFFECT_PREFAB_PATH, ZC_BLINK_CAST_EFFECT_SECONDS } from '../ZCBlinkCastFx';
 import { ZC_SELF_CAST_HOLD_SECONDS, ZC_SKILL_CAST_ACTION_SECONDS } from '../ZCUnitCastAction';
 import { zcMissileFxOf } from '../ZCCombatEffectFlight';
+import { splashShotSlowStatusId } from '../ZCSplashShotFx';
+import { burstGuardStatusId } from '../ZCBurstFx';
+import { fanSweepSlowStatusId } from '../ZCFanSweepFx';
+import {
+    ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH, ZC_SINGLE_STRIKE_EFFECT_SECONDS,
+    singleStrikeHasteStatusId, singleStrikeStunStatusId,
+} from '../ZCSingleStrikeFx';
+import {
+    ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_EFFECT_SECONDS,
+    dashGuardStatusId, dashVulnerableStatusId,
+} from '../ZCDashFx';
+import { ZC_BARRAGE_DEFAULT_INTERVAL } from '../ZCWindBarrageFx';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 
@@ -58,6 +71,88 @@ export interface IZCSkillTriggerContext {
      * 返回 false 表示参数不全，调用方不要消费 CD；陷阱不设普攻射程闸门。
     */
     castTrap?(unit: ZCUnitState): boolean;
+    /**
+     * 孢爆箭 / 孢子凝珠到点射一发（`splash_shot` / `spore_burst`），由 `ZCGameModel` 转给
+     * `ZCAttackResolutionSystem.castSplashShot`。
+     *
+     * `slowStatusId` 由本系统按参数算好再传进去：状态定义归状态系统管（要 `register`），
+     * 几何与伤害归攻击系统管 —— 两边各查一次表迟早会算歪。
+     *
+     * 返回 `false` ⇒ 参数不全 / 锁定目标已经跑出射程 / 射程内一个人都没有，
+     * 此时**不要**消费 CD（与 `castSecondary` / `castSelfAura` / `strike` 同一条口径）。
+     */
+    castSplashShot?(unit: ZCUnitState, slowStatusId?: string): boolean;
+    /**
+     * 孢爆箭（新口径，2026-11-18 第 16 批）：射一枚风弹、命中后原地留一片飓风
+     * （`wind_bolt`，风炮菇 101303），由 `ZCGameModel` 转给
+     * `ZCAttackResolutionSystem.castWindBolt`。
+     *
+     * 返回 `false` ⇒ 参数不全 / 没有锁定目标 / 锁定目标跑出普攻射程，
+     * 此时**不要**消费 CD（与 `castSplashShot` 同一条口径）。
+     */
+    castWindBolt?(unit: ZCUnitState): boolean;
+    /**
+     * 连射导弹（`missile_barrage`，风炮菇 101304）：发射**一颗**抛物线炸弹，
+     * 由 `ZCGameModel` 转给 `ZCAttackResolutionSystem.castBarrageShot`。
+     *
+     * 为什么是「一颗」而不是「一轮」：一轮 3 颗的节拍（0 / 0.4 / 0.8s）由本系统的
+     * `barrageShotsLeft` / `barrageNextAt` 推进，落点每颗各自重算 —— 见
+     * `ZCAttackResolutionSystem.castBarrageShot` 的注释（`startedAt` 不能排到未来）。
+     *
+     * 返回 `false` ⇒ 参数不全 / 射程内没有目标。
+     */
+    castBarrageShot?(unit: ZCUnitState): boolean;
+    /**
+     * 菌毯爆发 / 菌核爆裂到点在自己脚下爆一次（`burst_aura` / `burst_knockback`），由
+     * `ZCGameModel` 转给 `ZCAttackResolutionSystem.castBurstSkill`。
+     *
+     * `guardStatusId` 同样是「本系统算 id、状态系统存定义、攻击系统挂到施法者身上」的分工
+     * （理由见 `castSplashShot` 那一段）。
+     *
+     * 返回 `false` ⇒ 参数不全 / 半径内一个人都没有，此时**不要**消费 CD。
+     * ⚠️ 这条**不设普攻射程闸门**：设计口径是「半径 150 内的所有敌人」，
+     * 用普攻射程去挡会变成「近战站脸上不放大招、远处一群怪却不放」—— 判据由
+     * `castBurstSkill` 自己按爆发半径算，命中 0 人即视为没放。
+     */
+    castBurstSkill?(unit: ZCUnitState, guardStatusId?: string): boolean;
+    /**
+     * 菌丝绞杀到点朝身前扇形甩一次（`fan_slow`），由 `ZCGameModel` 转给
+     * `ZCAttackResolutionSystem.castFanSweep`。
+     *
+     * 返回 `false` ⇒ 参数不全 / 扇形内一个人都没有，此时**不要**消费 CD。
+     * 与 `castBurstSkill` 同理：**不设普攻射程闸门**，判据是「扇形半径内有没有人」
+     * （表值 150 大于近战普攻射程，用射程挡会漏掉「怪就在面前 40px 但普攻够不着」的情形）。
+    */
+    castFanSweep?(unit: ZCUnitState, slowStatusId?: string): boolean;
+    /**
+     * 冲锋到点往「起冲点 → 落点」这条线段上撞人（`charge_shield` / `legacy_dash`，2026-11-17 第 15 批），
+     * 由 `ZCGameModel` 转给 `ZCAttackResolutionSystem.castChargeDash`。
+     *
+     * 几何（选向 / 冲刺格数 / 落点钳制）由本系统算好再传进来，攻击系统只负责
+     * 「线段上撞到了谁、各挨多少」以及落地自保 —— 与 `castFanSweep`（形状由攻击系统算）
+     * 的分工不同，因为冲锋的落点要先挪人，而 `blinkTo` 只在本系统这一侧有接线。
+     *
+     * 返回撞到的人数。**命中 0 人也照常消费 CD**（人已经冲出去了），
+     * 与「打不出去不消费 CD」的那几条（扇形 / 爆发 / 突刺）刻意不同。
+     */
+    castChargeDash?(unit: ZCUnitState, options: IZCChargeDashOptions): number;
+    /**
+     * 世界坐标 → 格子 id（取不到返回 `null`）。
+     *
+     * 只给冲锋用：冲锋是**定长位移**（1~2 格），不像闪现 / 突刺那样「贴着一个必然合法的
+     * 目标落点走」。没有这一层校验，站在地图边缘朝外冲就会把单位送出可玩区域
+     * （`placeAt` 不做边界检查），之后选目标 / 占格全乱。
+     * 缺省 ⇒ 不校验（单测夹具可以不传）。
+     */
+    hexIdAt?(x: number, y: number): number | null;
+    /**
+     * 当前锁定的攻击目标（世界坐标）；没有返回 `null`。
+     *
+     * 只给菌盾冲锋定方向用（设计案「向目标方向冲撞 1 格」）。与攻击系统读的是
+     * 同一个 `unitTargeting.current` —— 两边各挑一次会出现「朝 A 的格子冲、打 B」。
+     * 缺省 ⇒ 冲锋退回面朝方向。
+     */
+    currentTarget?(unit: ZCUnitState): { readonly x: number; readonly y: number } | null;
     /**
      * 表值（与 `attackRange` 同一套 px 口径）→ 世界坐标的距离换算，即 `rules.combatDistanceScale`。
      *
@@ -217,11 +312,20 @@ export class ZCSkillTriggerSystem {
             this.applyHpRegen(unit, dt, now, context);
             if (this.applyTeamAura(state, unit, runtime, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
+            if (this.applyCounterBuff(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
             this.applyBoltStrike(unit, params, now, context, release);
             this.applyTrap(unit, params, now, context);
+            this.applySplashShot(unit, params, now, context, release);
+            this.applyWindShot(unit, params, now, context, release);
+            this.applyMissileBarrage(unit, params, now, context, release);
+            this.applyBurstSkill(unit, params, now, context);
+            this.applyFanSweep(unit, params, now, context);
+            this.applyChargeShield(state, unit, params, now, context);
             this.applyRandomStrike(state, unit, params, now, context, release);
             this.applyBlinkStrike(state, unit, params, now, context, runtime, release);
+            this.applySingleStrike(state, unit, params, now, context);
+            this.applyLegacyDash(state, unit, params, now, context);
             this.expireShield(unit, now);
             this.advanceBurst(state, unit, now, context);
             this.advanceSecondary(unit, params, now, context, release);
@@ -659,6 +763,74 @@ export class ZCSkillTriggerSystem {
     // 五雷轰顶
 
     /**
+     * 累计普攻型自我增益（2026-11-18 第 17 批）。
+     *
+     * 设计口径：打满 N 次普攻 ⇒ 给自己开一段限时增益。
+     *   · 101904 生命爆发：移速 +50/80/100%、体型 ×2、最大生命 +15/30/50%；
+     *   · 102704 战神附体：体型 ×2、移速 −15%、攻击 +50/70/100%，6 秒，释放瞬间回 15% 最大生命。
+     *
+     * 参数：counterEvery / counterSeconds / counterMoveSpeedPct / counterAttackPct /
+     *       counterMaxHpPct / counterBodySizePct / counterHealMaxHpPct。
+     *
+     * 与 `applySelfAura` 的次数分支是同一套「比上次多打了 N 次」算法，差别只有两处：
+     *  · 那个要过 `release`（普攻范围内得有人）才放 —— 因为区域是打人的；这里加成的是自己，
+     *    敌方在不在射程内都该放（与 `self_cast` 同口径，不设射程闸门）；
+     *  · 那个记在 `auraFiredCount`，这里记在 `counterFiredCount` —— 各记各的，
+     *    否则同一张卡两条车道会互相吃掉对方攒的次数。
+     */
+    private static applyCounterBuff(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): boolean {
+        const every = Math.max(0, Math.round(params?.counterEvery ?? 0));
+        if (!(every > 0)) return false;
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.counterFiredCount;
+        //  第一次推进只记下当前计数，不补放（与 `auraFiredCount` / `barrageFiredCount` 同口径）。
+        if (fired === undefined) { unit.counterFiredCount = done; return false; }
+        if (done - fired < every) return false;
+
+        const seconds = Math.max(0, params?.counterSeconds ?? 0);
+        const mods: ZCStatusStatMods = {};
+        const moveSpeedPct = params?.counterMoveSpeedPct ?? 0;
+        const attackPct = params?.counterAttackPct ?? 0;
+        const maxHpPct = params?.counterMaxHpPct ?? 0;
+        const bodySizePct = params?.counterBodySizePct ?? 0;
+        if (moveSpeedPct) mods.moveSpeedPct = moveSpeedPct;
+        if (attackPct) mods.attackPct = attackPct;
+        if (maxHpPct) mods.maxHpPct = maxHpPct;
+        if (bodySizePct) mods.bodySizePct = bodySizePct;
+        //  参数不全（没时长，或四项增益全 0）⇒ 没真的放出来，**不消费次数**，下帧重试。
+        if (!(seconds > 0) || !Object.keys(mods).length) return false;
+
+        unit.counterFiredCount = done;
+        //  buff 类与 `self_cast` 一样「停在原地放」（`hold = true`）：人跑着放大，玩家看不出效果。
+        this.markCastAction(unit, now, true);
+        const statusId = selfCastStatusId(mods, seconds);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: seconds,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: mods,
+                behavior: { kind: 'none' },
+            });
+        }
+        const result = context.statusSystem.apply(String(unit.id), statusId, {
+            at: state.elapsedSeconds, durationSeconds: seconds,
+        });
+        //  回血按「吃到增益之后的上限」算（与 `applySelfCast` 的 selfCastHealPct 同一口径）。
+        const healPct = Math.max(0, params?.counterHealMaxHpPct ?? 0);
+        if (healPct > 0 && context.healUnit) context.healUnit(unit, unit.maxHp * healPct / 100);
+        return result.applied;
+    }
+
+    /**
      * 五雷轰顶：锁一个目标，把雷沿「目标背朝向」排开，每道雷独立计伤、独立判麻痹。
      * 与副轨/自身光环/多点打击的区别：方向由目标背朝向定，落点与目标强绑定。
      * 参数：boltCooldown/Count/Spacing/Interval/Delay/DamageRate/Radius/NumbChance/NumbSeconds。
@@ -765,6 +937,321 @@ export class ZCSkillTriggerSystem {
         //  施法动作（2026-11-13）：放下陷阱也算一次主动出手，蹲下摆一个是有必要的；
         //  但不原地锁住 —— 陷阱是「放下就不管」，锁住只会拖慢下一次走位。
         this.markCastAction(unit, now, false);
+    }
+
+    // 孢爆箭 / 孢子凝珠
+
+    /**
+     * 孢爆箭 / 孢子凝珠：冷却到点朝锁定目标射一枚「命中就爆开」的弹。
+     *
+     * 参数（`skillParamJson`，全部带 `shot` 前缀）：`shotCooldown` 冷却秒数 /
+     * `shotDamageRate` 相对面板的伤害倍率 / `shotRadius` 爆点半径（表值逻辑 px）/
+     * `shotSlowRatio` 减速百分点（0 = 不减速）/ `shotSlowSeconds` 减速时长。
+     *
+     * 🔴 **为什么前缀是 `shot` 而不是设计案 P 列原来写的 `damageRate` / `splashRadius`**：
+     * `skillParamJson` 按 `${unitId}:${pvpSkillId}` 合并成一袋，而 `splashRadius` /
+     * `splashDamageRate` 这两个键**普攻链路也在读**（爆囊扩散那套）。直接写裸键的话，
+     * 「给主动技能配的 90px 溅射」会顺带把这张卡的**每次普攻**也变成 90px 溅射 ——
+     * 不报错、只是数值莫名变大。同一个理由让 `cooldown` 也必须加前缀。
+     *
+     * 打不出去（射程内没人 / 锁定目标已经跑远）**不消费 CD**：这条与 `castSelfAura` /
+     * `castTrap` / `strike` 完全一致，否则单位在跑位途中会把这次机会空转掉。
+    */
+    private static applySplashShot(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castSplashShot) return;
+        const cooldown = Math.max(0, params?.shotCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.splashReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `boltReadyAt` / `trapReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.splashReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        //  触发范围闸门：到点但普攻范围内没人 ⇒ 待触发、CD 保持就绪。
+        if (!release) return;
+        const slowStatusId = this.splashShotSlowStatusId(params, context);
+        if (!context.castSplashShot(unit, slowStatusId)) return;
+        unit.splashReadyAt = now + cooldown;
+        //  施法动作：射一发算一次主动出手；不原地锁 —— 射手要边走边放。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 孢子凝珠的减速状态：按参数现算 id、缺定义就注册一条。
+     *
+     * 只有「比例和时长都 > 0」才建：孢爆箭（101303）两个参数都不配 ⇒ 返回 undefined，
+     * `castSplashShot` 也就不往弹体上挂状态，与不减速的存量行为完全一致。
+     * 状态本身走 `moveSpeedPct`（百分点，`-15` = 移速 −15%），与 `numb` 的 `-50` 同一单位。
+    */
+    private static splashShotSlowStatusId(
+        params: Readonly<Record<string, number>> | undefined,
+        context: IZCSkillTriggerContext,
+    ): string | undefined {
+        const slowPct = Math.max(0, Math.min(100, params?.shotSlowRatio ?? 0));
+        const seconds = Math.max(0, params?.shotSlowSeconds ?? 0);
+        if (!(slowPct > 0) || !(seconds > 0)) return undefined;
+        const statusId = splashShotSlowStatusId(slowPct, seconds);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: seconds,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: { moveSpeedPct: -slowPct },
+                behavior: { kind: 'none' },
+            });
+        }
+        return statusId;
+    }
+
+    /**
+     * 孢爆箭（新口径，2026-11-18 第 16 批）：`windCooldown` 到点射一枚风弹。
+     *
+     * 与上一版（第 12 批借用 `splash_shot`：命中点周围均等溅射）的差别全在攻击系统那一侧，
+     * 触发这一侧只换了两件事：
+     *  · 车道从 `splashReadyAt` 换成 `windReadyAt` —— 同一张卡（风炮菇 68013）今后若再出现
+     *    一条 `splash_shot`，两条不该互相顶掉冷却（`unit.*ReadyAt` 一条车道一格）；
+     *  · 依然吃 `release`（普攻射程）闸门：设计写的是「向目标射出」，锁定目标跑出射程
+     *    就不该放，而不是随手换一个更近的人。
+     *
+     * 参数（`skillParamJson`，`wind` 前缀）：windCooldown / windDamageRate / windSpeed /
+     * windLifeSeconds / windZoneRadius / windZoneSeconds / windZoneDamageRate。
+     * 🔴 前缀不能省：`68013:30401` 这个袋子里已经住着 101301 的 `bulletFalloff`、
+     * 101302 的 `mix.*`、以及本批 101304 的 `barrage*` —— 裸 `cooldown` / `damageRate`
+     * 会直接把别条车道改掉，而且不报错。
+    */
+    private static applyWindShot(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castWindBolt) return;
+        const cooldown = Math.max(0, params?.windCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.windReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `splashReadyAt` / `trapReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.windReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        //  触发范围闸门：到点但普攻范围内没人 ⇒ 待触发、CD 保持就绪。
+        if (!release) return;
+        if (!context.castWindBolt(unit)) return;
+        unit.windReadyAt = now + cooldown;
+        //  施法动作：射一发算一次主动出手；不原地锁 —— 射手要边走边放。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 连射导弹（2026-11-18 第 16 批）：每累计 `barrageEvery` 次普攻放一轮，一轮 `barrageCount` 颗。
+     *
+     * 两段结构（**顺序不能反**）：
+     *  1. **补发**：`barrageShotsLeft > 0` ⇒ 到点再发一颗，发完清字段。这一段必须在触发之前，
+     *     否则一轮还没打完就又凑满 10 次普攻，会把「还剩几颗」覆盖掉（多发或少发）。
+     *  2. **触发**：`completedAttackCount` 比上次触发时多出 `barrageEvery` 次 ⇒ 发第一颗 + 记次数。
+     *
+     * 三条设计口径：
+     *  · **没有 CD**（J 列写的是「主动-累计普攻」，10 次一轮）；
+     *  · **站在原地不动**：整轮都锁在原地（默认 0.5s 只够第一颗，这里按 `颗数 × 间隔` 补足）；
+     *  · 补发那几颗若目标全没了，**照样消耗这一格** —— 一轮是「已经承诺出去」的，
+     *    不然后面几颗会永远卡在队列里，下一次触发被堵住。
+     *
+     * 参数（`skillParamJson`，`barrage` 前缀）：barrageEvery / barrageCount / barrageInterval /
+     * barrageDamageRate / barrageRadius。前缀理由见 `applyWindShot`。
+    */
+    private static applyMissileBarrage(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castBarrageShot) return;
+        const interval = Math.max(0.05, params?.barrageInterval ?? ZC_BARRAGE_DEFAULT_INTERVAL);
+        //  ── 1. 补发 ──
+        const left = unit.barrageShotsLeft ?? 0;
+        if (left > 0) {
+            if (now < (unit.barrageNextAt ?? 0)) return;
+            context.castBarrageShot(unit);
+            unit.barrageShotsLeft = left - 1;
+            //  用「当前时刻」推进而不是 `+= interval`：模拟步被拉长时不会攒出几颗同帧齐发。
+            unit.barrageNextAt = now + interval;
+            if (unit.barrageShotsLeft <= 0) {
+                delete unit.barrageShotsLeft;
+                delete unit.barrageNextAt;
+            }
+            return;
+        }
+        //  ── 2. 触发（累计普攻） ──
+        const every = Math.max(0, Math.round(params?.barrageEvery ?? 0));
+        if (!(every > 0)) return;
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.barrageFiredCount;
+        if (fired === undefined) { unit.barrageFiredCount = done; return; }
+        if (done - fired < every) return;
+        //  触发范围闸门：凑满次数但普攻范围内没人 ⇒ 待触发、不记次数（目标进范围当帧补放）。
+        if (!release) return;
+        if (!context.castBarrageShot(unit)) return;
+        unit.barrageFiredCount = done;
+        const count = Math.max(1, Math.round(params?.barrageCount ?? 1));
+        if (count > 1) {
+            unit.barrageShotsLeft = count - 1;
+            unit.barrageNextAt = now + interval;
+        }
+        //  施法动作 + 原地站定：「站在原地不动」要覆盖整轮（首发 + 后续几颗的间隔）。
+        this.markCastAction(unit, now, true);
+        unit.castHoldUntil = now + interval * (count - 1) + ZC_SELF_CAST_HOLD_SECONDS;
+    }
+
+    /**
+     * 菌毯爆发 / 菌核爆裂：`burstCooldown` 到点在自己脚下爆一次（2026-11-17 第 13 批）。
+     *
+     * 与 `applySplashShot` 的三处差别：
+     *  · **不吃 `release` 闸门**。那个闸门问的是「普攻射程内有没有人」，而这两条技能的
+     *    判据是「爆发半径内有没有人」（150 / 120，普遍大于近战普攻射程）。用射程挡会出现
+     *    「一群怪在 140px 处围着、战士因为普攻打不到而不放大招」这种明显错的结果。
+     *    命中 0 人时 `castBurstSkill` 自己返回 false ⇒ CD 照样不消费，这条口径不变。
+     *  · 圆心恒等于自己，不需要锁定目标 —— 所以也不存在「目标跑了就不放」。
+     *  · 爆完给自己加什么由参数决定（护盾 / 击退），不由行为键分支：行为键只影响
+     *    加载清单与配表可读性，结算一律看参数在不在。
+     *
+     * 参数（`skillParamJson`，`burst` 前缀）：burstCooldown / burstDamageRate / burstRadius /
+     * burstShieldRatio / burstShieldSeconds / burstShieldReducePct / burstKnockbackCells。
+     * 🔴 前缀不能省：68015 这张卡的另一条技能（爆囊扩散 101501）已经在同一个参数袋里写了
+     * `splashRadius` / `splashDamageRate`，裸键会直接把普攻溅射改掉且不报错。
+    */
+    private static applyBurstSkill(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castBurstSkill) return;
+        const cooldown = Math.max(0, params?.burstCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.burstReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `splashReadyAt` / `trapReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.burstReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        const guardStatusId = this.burstGuardStatusId(params, context);
+        if (!context.castBurstSkill(unit, guardStatusId)) return;
+        unit.burstReadyAt = now + cooldown;
+        //  施法动作：爆一次算一次主动出手；不原地锁 —— 战士开团要能立刻跟进走位。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 菌毯爆发 III 级的「护盾期间受到伤害降低」状态：按参数现算 id、缺定义就注册一条。
+     *
+     * 只有「比例和时长都 > 0」才建：L1 / L2 不配这两个参数 ⇒ 返回 undefined，
+     * `castBurstSkill` 也就只套盾、不挂减伤，与「单纯护盾」的存量口径完全一致。
+     *
+     * 🔴 `pvpStatus` 里**没有**通用的「受到伤害降低 N%」定值档（那几张 `vulnerability` 是反方向），
+     * 所以只能动态注册；`damageTakenPct` 用百分点（`-15` = 受到伤害 −15%），
+     * 由 `ZCDamageResolutionSystem` 的 `1 + damageTakenPct / 100` 消费。
+     *
+     * 已知取舍：减伤跟着 `burstShieldSeconds`（4 秒）走，护盾被打破不会提前揭掉减伤 ——
+     * 「护盾存在期间」在这里等价于「护盾的持续时间」。要做到「破了就掉减伤」得在
+     * `expireShield` 之外再加一条「护盾归零时摘状态」的钩子，收益不抵复杂度。
+    */
+    private static burstGuardStatusId(
+        params: Readonly<Record<string, number>> | undefined,
+        context: IZCSkillTriggerContext,
+    ): string | undefined {
+        const reducePct = Math.max(0, Math.min(95, params?.burstShieldReducePct ?? 0));
+        const seconds = Math.max(0, params?.burstShieldSeconds ?? 0);
+        if (!(reducePct > 0) || !(seconds > 0)) return undefined;
+        const statusId = burstGuardStatusId(reducePct, seconds);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: seconds,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: { damageTakenPct: -reducePct },
+                behavior: { kind: 'none' },
+            });
+        }
+        return statusId;
+    }
+
+    /**
+     * 菌丝绞杀：`fanCooldown` 到点朝身前扇形甩一次（2026-11-17 第 14 批）。
+     *
+     * 与 `applyBurstSkill` 同一条口径：**不吃 `release`（普攻射程）闸门** ——
+     * 判据是「扇形半径内有没有人」（表值 150 普遍大于近战普攻射程），
+     * 用射程挡会变成「怪就在扇形里、战士因为普攻够不着而不放」。
+     * 命中 0 人时 `castFanSweep` 自己返回 false ⇒ CD 照样不消费。
+     *
+     * 参数（`skillParamJson`，`fan` 前缀）：fanCooldown / fanDamageRate / fanRadius /
+     * fanAngle / fanMaxTargets / fanSlowRatio / fanSlowSeconds。
+     * 🔴 前缀不能省：68015 这张卡的袋子里已经有 101501 的 `splashRadius`、
+     * 101504 的 `burstRadius` —— 裸 `radius` 会同时改掉普攻溅射与爆发半径，且不报错。
+    */
+    private static applyFanSweep(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castFanSweep) return;
+        const cooldown = Math.max(0, params?.fanCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.fanReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻甩（与其余四条车道同口径）。
+        if (readyAt === undefined) {
+            unit.fanReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        const slowStatusId = this.fanSweepSlowStatusId(params, context);
+        if (!context.castFanSweep(unit, slowStatusId)) return;
+        unit.fanReadyAt = now + cooldown;
+        //  施法动作：甩一次算一次主动出手；不原地锁。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 菌丝绞杀的减速状态：按参数现算 id、缺定义就注册一条。
+     *
+     * 只有「比例和时长都 > 0」才建。`moveSpeedPct` 走百分点（`-40` = 移速 −40%），
+     * 与 `__shotslow:`（第 12 批）同一单位 —— 写 0.4 等于没有。
+    */
+    private static fanSweepSlowStatusId(
+        params: Readonly<Record<string, number>> | undefined,
+        context: IZCSkillTriggerContext,
+    ): string | undefined {
+        const slowPct = Math.max(0, Math.min(100, params?.fanSlowRatio ?? 0));
+        const seconds = Math.max(0, params?.fanSlowSeconds ?? 0);
+        if (!(slowPct > 0) || !(seconds > 0)) return undefined;
+        const statusId = fanSweepSlowStatusId(slowPct, seconds);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: seconds,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: { moveSpeedPct: -slowPct },
+                behavior: { kind: 'none' },
+            });
+        }
+        return statusId;
     }
 
     /**
@@ -1046,6 +1533,456 @@ export class ZCSkillTriggerSystem {
             unit.blinkCloneAt = now + Math.max(0, params?.blinkCloneSeconds ?? 0);
         }
         unit.blinkReadyAt = now + cooldown;
+    }
+
+    // 菌丝突刺
+
+    /**
+     * 菌丝突刺：贴到最近敌人身边打一发 + 眩晕（2026-11-17 第 14 批）。
+     *
+     * 为什么整条落在触发系统而不是攻击系统：它要**挪人**，而 `blinkTo` 只在触发侧的上下文里接线
+     * （`ZCGameModel` 的 `buildSkillTriggerContext`）—— 与 `applyBlinkStrike` 同侧。
+     *
+     * 与 `applyBlinkStrike`（魔术师 103404）的三处差别：
+     *  · 不打往返、不留分身、**不用普攻射程封顶**：突刺的意义就是「够不着才扑过去」，
+     *    用普攻射程压住会把这条技能变成「原地打一发」；
+     *  · 命中挂**硬控**（`control: 'stun'`，按参数生成 `__stunstrike:<秒>__`），
+     *    而不是 103404 那种「只结算伤害」；
+     *  · 命中后给自己加攻速（III 级），**空放不给** —— 所以增益挂在 `strike` 的返回值之后。
+     *
+     * 参数（`skillParamJson`，`single` 前缀）：singleCooldown / singleDamageRate /
+     * singleSearchRadius / singleStopDistance / singleHitRadius /
+     * singleStunSeconds / singleHastePct / singleHasteSeconds。
+     * 🔴 前缀同样不能省：68014 的袋子里已经有 101401 的 `comboDamage`、101402 的 `mix.*`，
+     * 裸 `cooldown` 与状态表列名撞车。
+     *
+     * 没目标 / 参数不全 ⇒ 什么都不做，**不消费 CD**（与闪现同一条口径：空放只会浪费 12 秒）。
+    */
+    private static applySingleStrike(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.blinkTo || !context.strike) return;
+        const cooldown = Math.max(0, params?.singleCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.singleReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻扑（与其余车道同口径）。
+        if (readyAt === undefined) { unit.singleReadyAt = now + cooldown; return; }
+        if (now < readyAt) return;
+
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const searchRadius = Math.max(0, params?.singleSearchRadius ?? 0) * scale;
+        if (!(searchRadius > 0)) return;
+        const posOf = (target: ZCUnitState): { x: number; y: number } => (context.unitPosition
+            ? { ...context.unitPosition(target) }
+            : { x: target.freeX, y: target.freeY });
+        const self = posOf(unit);
+        let victim: ZCUnitState | undefined;
+        let best = Number.POSITIVE_INFINITY;
+        for (const candidate of state.units) {
+            if (candidate.owner === unit.owner || candidate.battleState === 'dead' || candidate.hp <= 0) continue;
+            const pos = posOf(candidate);
+            const gap = Math.hypot(pos.x - self.x, pos.y - self.y);
+            if (gap > searchRadius || gap >= best) continue;
+            best = gap;
+            victim = candidate;
+        }
+        //  搜索半径内没人 ⇒ 不消费 CD（等目标进圈再扑）。
+        if (!victim) return;
+
+        const target = posOf(victim);
+        const dx = target.x - self.x;
+        const dy = target.y - self.y;
+        const length = Math.hypot(dx, dy);
+        //  落点 = 目标身边 `singleStopDistance`，与闪现同一条几何：贴上去但不重叠
+        //  （重叠会让「谁在打谁」在渲染层分不清，也会让击退方向退化）。
+        const stop = Math.max(0, params?.singleStopDistance ?? 30) * scale;
+        const landX = length > stop && length > 1e-9 ? target.x - dx / length * stop : target.x;
+        const landY = length > stop && length > 1e-9 ? target.y - dy / length * stop : target.y;
+        const hitRadius = Math.max(1, Math.max(0, params?.singleHitRadius ?? 40) * scale);
+        const damageRate = Math.max(0, params?.singleDamageRate ?? 0);
+        if (!(damageRate > 0)) return;
+
+        //  命中表现贴在**目标**身上（设计案 O 列「长戟兵_撕裂 贴目标播」）。
+        //  `ZCCombatEffectPlacement` 对未登记的 prefab 一律按 `caster` 锚点取 `fromX/fromY`
+        //  ⇒ 这里把两端都写成目标坐标，就能落在被打的那个人身上。
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Melee,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: victim.id,
+            skillId: 0,
+            skillName: 'single_strike',
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH,
+            fromX: target.x,
+            fromY: target.y,
+            toX: target.x,
+            toY: target.y,
+            //  纯表现事件：半径与伤害一律 0，谁都不结算（同 `applyBlinkStrike` 的出发闪光）。
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: now,
+            durationSeconds: ZC_SINGLE_STRIKE_EFFECT_SECONDS,
+        });
+        context.blinkTo(unit, landX, landY);
+        //  施法动作：扑到位之后在落点播半秒攻击动作；不锁原地（人已经被挪走了）。
+        this.markCastAction(unit, now, false);
+
+        const stunSeconds = Math.max(0, params?.singleStunSeconds ?? 0);
+        let stunStatusId: string | undefined;
+        if (stunSeconds > 0) {
+            stunStatusId = singleStrikeStunStatusId(stunSeconds);
+            if (!context.statusSystem.hasDef(stunStatusId)) {
+                context.statusSystem.register({
+                    id: stunStatusId,
+                    name: stunStatusId,
+                    durationSeconds: stunSeconds,
+                    maxStacks: 1,
+                    refreshPolicy: 'refresh',
+                    //  硬控：单位进入受控、停止一切行动（与 `numb` 那种软控分开，后者已按设计删除）。
+                    control: 'stun',
+                    behavior: { kind: 'none' },
+                });
+            }
+        }
+        //  命中结算交给 `strikeTargets`（它负责暴击 / 克制 / 吸血 / 处决 / 命中状态），
+        //  `statusId` 在「立即结算」分支会被挂到被打的目标身上。
+        const hits = context.strike(unit, {
+            count: 1, radius: hitRadius, damageRate, nearest: true, statusId: stunStatusId,
+        });
+        //  III 级攻速增益：**命中之后**才给，空放不给（设计案 N 列原话）。
+        const hastePct = Math.max(0, params?.singleHastePct ?? 0);
+        const hasteSeconds = Math.max(0, params?.singleHasteSeconds ?? 0);
+        if (hits > 0 && hastePct > 0 && hasteSeconds > 0) {
+            const hasteStatusId = singleStrikeHasteStatusId(hastePct, hasteSeconds);
+            if (!context.statusSystem.hasDef(hasteStatusId)) {
+                context.statusSystem.register({
+                    id: hasteStatusId,
+                    name: hasteStatusId,
+                    durationSeconds: hasteSeconds,
+                    maxStacks: 1,
+                    refreshPolicy: 'refresh',
+                    //  `attackIntervalPct` 是「间隔缩短」口径：正值 = 攻速提升（30 = +30%）。
+                    statMods: { attackIntervalPct: hastePct },
+                    behavior: { kind: 'none' },
+                });
+            }
+            context.statusSystem.apply(String(unit.id), hasteStatusId,
+                { at: state.elapsedSeconds, durationSeconds: hasteSeconds });
+            state.statusEffects = context.statusSystem.exportSnapshot();
+        }
+        unit.singleReadyAt = now + cooldown;
+    }
+
+    // 冲锋车道（菌盾冲锋 / 冲锋 / 尖刺冲锋）
+
+    /**
+     * 菌盾冲锋：朝目标方向定长冲 1 格，撞到的敌人吃伤害，落点给自己挂护盾（2026-11-17 第 15 批）。
+     *
+     * 参数（`skillParamJson`，`charge` 前缀）：`chargeCooldown` / `chargeDamageRate` /
+     * `chargeCells` / `chargeHitRadius` / `chargeShieldRatio` / `chargeShieldSeconds`。
+     * 🔴 前缀不能省：`68012:30271` 这个袋子里已经有 101203 的 `mix.critRate`，
+     * 与 `legacy_dash` 那条（`dash*`）也只差一张卡 —— 裸 `cooldown` / `damageRate` 迟早串车。
+     *
+     * 与 `applyLegacyDash` 的差别只有三处：**选向**（朝目标 / 面朝）、
+     * **冲刺距离**（定长格数）、**落地给自己什么**（护盾）。位移 + 线段命中是同一套。
+     *
+     * 不吃普攻射程闸门（`release`）：冲锋的全部意义就是「够不着才冲过去」，
+     * 与 `applySingleStrike` 同一条理由。
+     */
+    private static applyChargeShield(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castChargeDash || !context.blinkTo) return;
+        const cooldown = Math.max(0, params?.chargeCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.chargeReadyAt;
+        //  首次：从「当前 + CD」起算，开局不立刻冲（与其余车道同口径）。
+        if (readyAt === undefined) { unit.chargeReadyAt = now + cooldown; return; }
+        if (now < readyAt) return;
+        const damageRate = Math.max(0, params?.chargeDamageRate ?? 0);
+        if (!(damageRate > 0)) return;
+        const heading = this.dashHeadingTowardTarget(unit, context);
+        if (heading === null) return;
+        const destination = this.dashDestination(unit, heading,
+            Math.max(0, params?.chargeCells ?? 1), Number.POSITIVE_INFINITY, context);
+        if (!destination) return;
+        const origin = this.dashOrigin(unit, context);
+        //  位移本身「不可被打断」（设计案 N 列 102303 原话），所以先推表现再挪人：
+        //  表现事件的 from 必须是**起冲点**，挪完再取就成了落点。
+        this.pushDashCastEvent(state, unit, origin, destination, now, 'charge_shield');
+        context.blinkTo(unit, destination.x, destination.y);
+        this.markCastAction(unit, now, false);
+
+        const shieldRatio = Math.max(0, params?.chargeShieldRatio ?? 0);
+        const shieldSeconds = Math.max(0, params?.chargeShieldSeconds ?? 0);
+        const hitRadius = Math.max(1, Math.max(0, params?.chargeHitRadius ?? 40)
+            * Math.max(1e-6, context.distanceScale ?? 1));
+        context.castChargeDash(unit, {
+            origin,
+            destination,
+            hitRadius,
+            damageRate,
+            shieldRatio,
+            shieldSeconds,
+        });
+        unit.chargeReadyAt = now + cooldown;
+    }
+
+    /**
+     * 冲锋 / 尖刺冲锋：往「最近敌人」或「面朝方向」冲 N 格，路径上的敌人全吃伤害
+     * （2026-11-17 第 15 批）。
+     *
+     * 两条技能共用本方法，靠 `dashTowardNearest` 区分选向：
+     *  · `dashTowardNearest = 1`（102303 冲锋）—— 朝搜索半径内最近的敌人，冲到他身上为止；
+     *  · `dashTowardNearest = 0`（102703 尖刺冲锋）—— 朝**面朝方向**定长冲（设计案 O 列
+     *    「沿朝向平移」），不找目标。
+     *
+     * 参数（`skillParamJson`，`dash` 前缀）：`dashCooldown` / `dashDamageRate` / `dashCells` /
+     * `dashHitRadius` / `dashTowardNearest` / `dashSearchRadius` / `dashStunSeconds` /
+     * `dashVulnerablePct` / `dashVulnerableSeconds` / `dashGuardReducePct` / `dashGuardSeconds` /
+     * `dashShieldRatio` / `dashShieldSeconds`。
+     * 🔴 前缀不能省：`68027:30241` 的袋子里已经有 102701 的 `splashRadius` 与
+     * 102702 的 `lancePierceCount` —— 裸 `radius` / `damageRate` 会一起改掉普攻溅射与投枪。
+     *
+     * 朝最近敌人的那一档：搜索半径内没人 ⇒ **不消费 CD**（与突刺同口径：
+     * 空冲只会浪费 12 秒，还把自己送到一个没有目标的空地）。
+     * 朝面朝方向那一档没有「没人」这个概念 —— 前面是空的也照冲（它就是一段位移）。
+     */
+    private static applyLegacyDash(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castChargeDash || !context.blinkTo) return;
+        const cooldown = Math.max(0, params?.dashCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.dashReadyAt;
+        if (readyAt === undefined) { unit.dashReadyAt = now + cooldown; return; }
+        if (now < readyAt) return;
+        const damageRate = Math.max(0, params?.dashDamageRate ?? 0);
+        if (!(damageRate > 0)) return;
+        const cells = Math.max(0, params?.dashCells ?? 0);
+        if (!(cells > 0)) return;
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const towardNearest = (params?.dashTowardNearest ?? 0) > 0;
+        //  朝最近敌人那档要一个最大冲程上限：人就在 20px 外时不该「冲过头」穿到背后去。
+        let limit = Number.POSITIVE_INFINITY;
+        let heading: number | null;
+        if (towardNearest) {
+            const searchRadius = Math.max(0, params?.dashSearchRadius ?? 0) * scale;
+            const target = searchRadius > 0
+                ? this.nearestEnemy(unit, searchRadius, state, context)
+                : null;
+            if (!target) return;
+            const self = this.dashOrigin(unit, context);
+            heading = Math.atan2(target.y - self.y, target.x - self.x);
+            limit = Math.hypot(target.x - self.x, target.y - self.y);
+        } else {
+            //  面朝方向：没有目标也照冲（它就是一段位移），所以这里不做「找不到就退出」。
+            heading = Number.isFinite(unit.facingRadians) ? unit.facingRadians : 0;
+        }
+        const destination = this.dashDestination(unit, heading, cells, limit, context);
+        if (!destination) return;
+        const origin = this.dashOrigin(unit, context);
+        this.pushDashCastEvent(state, unit, origin, destination, now, 'legacy_dash');
+        context.blinkTo(unit, destination.x, destination.y);
+        this.markCastAction(unit, now, false);
+
+        //  三个命中状态各自按参数生成签名（不是三条固定档）：
+        //  · 眩晕（102303）：`__stunstrike:<秒>__`，`control: 'stun'`，与突刺共用同一签名；
+        //  · 易伤 / 破甲（102703 L2/L3）：`__dashvuln:<百分点>:<秒>__`，`damageTakenPct` 为正；
+        //  · 自减伤（102303 L3）：`__dashguard:<百分点>:<秒>__`，`damageTakenPct` 为负。
+        //  易伤给**被打的人**、减伤给**自己** —— 两条都叫 `damageTakenPct`，方向正好相反，
+        //  写错一处就是「自保变成自残」，而且不报错。
+        let statusId: string | undefined;
+        const stunSeconds = Math.max(0, params?.dashStunSeconds ?? 0);
+        if (stunSeconds > 0) {
+            statusId = singleStrikeStunStatusId(stunSeconds);
+            this.ensureControlStatus(context, statusId, stunSeconds);
+        }
+        const vulnPct = Math.max(0, params?.dashVulnerablePct ?? 0);
+        const vulnSeconds = Math.max(0, params?.dashVulnerableSeconds ?? 0);
+        if (vulnPct > 0 && vulnSeconds > 0) {
+            statusId = dashVulnerableStatusId(vulnPct, vulnSeconds);
+            if (!context.statusSystem.hasDef(statusId)) {
+                context.statusSystem.register({
+                    id: statusId,
+                    name: statusId,
+                    durationSeconds: vulnSeconds,
+                    maxStacks: 1,
+                    refreshPolicy: 'refresh',
+                    //  `damageTakenPct` 用百分点：+35 = 受到伤害提高 35%（破甲）。
+                    statMods: { damageTakenPct: vulnPct },
+                    behavior: { kind: 'none' },
+                });
+            }
+        }
+        const guardPct = Math.max(0, params?.dashGuardReducePct ?? 0);
+        const guardSeconds = Math.max(0, params?.dashGuardSeconds ?? 0);
+        let guardStatusId: string | undefined;
+        if (guardPct > 0 && guardSeconds > 0) {
+            guardStatusId = dashGuardStatusId(guardPct, guardSeconds);
+            if (!context.statusSystem.hasDef(guardStatusId)) {
+                context.statusSystem.register({
+                    id: guardStatusId,
+                    name: guardStatusId,
+                    durationSeconds: guardSeconds,
+                    maxStacks: 1,
+                    refreshPolicy: 'refresh',
+                    //  `damageTakenPct` 取负：-25 = 受到伤害降低 25%。
+                    statMods: { damageTakenPct: -guardPct },
+                    behavior: { kind: 'none' },
+                });
+            }
+        }
+        context.castChargeDash(unit, {
+            origin,
+            destination,
+            hitRadius: Math.max(1, Math.max(0, params?.dashHitRadius ?? 40) * scale),
+            damageRate,
+            statusId,
+            shieldRatio: Math.max(0, params?.dashShieldRatio ?? 0),
+            shieldSeconds: Math.max(0, params?.dashShieldSeconds ?? 0),
+            guardStatusId,
+            guardSeconds,
+        });
+        unit.dashReadyAt = now + cooldown;
+    }
+
+    /** 取单位的世界坐标；缺省退回 `freeX/freeY`（与 `applySingleStrike` 同一口径）。*/
+    private static dashOrigin(unit: ZCUnitState, context: IZCSkillTriggerContext):
+        { readonly x: number; readonly y: number } {
+        return context.unitPosition
+            ? { ...context.unitPosition(unit) }
+            : { x: unit.freeX, y: unit.freeY };
+    }
+
+    /** 朝当前锁定目标的方向；没有目标时退回面朝方向（与 `castFanSweep` 同一条兜底）。*/
+    private static dashHeadingTowardTarget(unit: ZCUnitState,
+        context: IZCSkillTriggerContext): number | null {
+        const origin = this.dashOrigin(unit, context);
+        const target = context.currentTarget?.(unit) ?? null;
+        if (target && Math.abs(target.x - origin.x) + Math.abs(target.y - origin.y) > 1e-9) {
+            return Math.atan2(target.y - origin.y, target.x - origin.x);
+        }
+        return Number.isFinite(unit.facingRadians) ? unit.facingRadians : 0;
+    }
+
+    /** 搜索半径内最近的敌人（世界坐标）；没有返回 `null`。*/
+    private static nearestEnemy(unit: ZCUnitState, radius: number, state: ZCSnapshot,
+        context: IZCSkillTriggerContext): { readonly x: number; readonly y: number } | null {
+        const self = this.dashOrigin(unit, context);
+        let best = Number.POSITIVE_INFINITY;
+        let found: { readonly x: number; readonly y: number } | null = null;
+        for (const candidate of state.units) {
+            if (candidate.owner === unit.owner || candidate.battleState === 'dead' || candidate.hp <= 0) continue;
+            const pos = context.unitPosition ? context.unitPosition(candidate)
+                : { x: candidate.freeX, y: candidate.freeY };
+            const gap = Math.hypot(pos.x - self.x, pos.y - self.y);
+            if (gap > radius || gap >= best) continue;
+            best = gap;
+            found = { x: pos.x, y: pos.y };
+            //  贴脸（gap≈0）时方向没有意义，但仍要返回一个落点：直接落在他身上。
+            if (gap <= 1e-9) break;
+        }
+        return found;
+    }
+
+    /**
+     * 落点 = 起冲点沿 `heading` 走 `cells` 格，并且**必须落在合法格子上**。
+     *
+     * 冲锋是定长位移，与「贴着目标落点」的两条车道（闪现 / 突刺）不同 ——
+     * 站在地图边缘朝外冲会把单位送到可玩区域之外，而 `placeAt` 不检查边界。
+     * 所以这里逐步缩短（1 → 0.75 → 0.5 → 0.25），一个可用落点都找不到就**不冲**。
+     * `hexIdAt` 缺省（单测夹具）⇒ 不校验，直接按换算值落。
+     *
+     * `limit` 是最大冲程（世界 px）：朝最近敌人时传「到目标的距离」，防止冲过头穿到背后。
+    */
+    private static dashDestination(unit: ZCUnitState, heading: number, cells: number,
+        limit: number, context: IZCSkillTriggerContext): { x: number; y: number } | null {
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const full = Math.min(cells * HEX_GRID_LOGICAL_ROW_STEP * scale, limit);
+        const origin = this.dashOrigin(unit, context);
+        if (!Number.isFinite(heading)) return null;
+        //  冲程为 0（目标就贴在身上）⇒ **原地冲**：线段退化成一个点，`castChargeDash` 照样
+        //  按胶囊判一次、「冲到了」这件事也照样成立（消费 CD、落地自保生效）。
+        if (!(full > 0)) return { x: origin.x, y: origin.y };
+        const canStand = (x: number, y: number): boolean => {
+            if (!context.hexIdAt) return true;
+            return context.hexIdAt(x, y) !== null;
+        };
+        for (const ratio of [1, 0.75, 0.5, 0.25]) {
+            const x = origin.x + Math.cos(heading) * full * ratio;
+            const y = origin.y + Math.sin(heading) * full * ratio;
+            if (canStand(x, y)) return { x, y };
+        }
+        return null;
+    }
+
+    /**
+     * 冲锋残影：一条纯表现的 `melee` 事件，`from` = 起冲点、`to` = 落点。
+     *
+     * 为什么两端都要写：`ZCCombatEffectPlacement` 把 `轻骑兵_冲锋` 登记成 `midpoint` 锚点
+     * （设计案 O 列「沿朝向平移」，实现上就是「画在这段路的中间」），
+     * 只写 `from` 的话锚点退化成一个点，看起来像「在原地挥了一下然后瞬移」。
+     *
+     * 半径与伤害一律 0：这条事件谁都不结算，结算在 `castChargeDash` 里。
+    */
+    private static pushDashCastEvent(state: ZCSnapshot, unit: ZCUnitState,
+        origin: { readonly x: number; readonly y: number },
+        destination: { readonly x: number; readonly y: number },
+        now: number, skillName: string): void {
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Melee,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: null,
+            skillId: 0,
+            skillName,
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_DASH_EFFECT_PREFAB_PATH,
+            fromX: origin.x,
+            fromY: origin.y,
+            toX: destination.x,
+            toY: destination.y,
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: now,
+            durationSeconds: ZC_DASH_EFFECT_SECONDS,
+        });
+    }
+
+    /** 注册一条参数化硬控（`control: 'stun'`）；已存在则跳过。*/
+    private static ensureControlStatus(context: IZCSkillTriggerContext, statusId: string,
+        seconds: number): void {
+        if (context.statusSystem.hasDef(statusId)) return;
+        context.statusSystem.register({
+            id: statusId,
+            name: statusId,
+            durationSeconds: seconds,
+            maxStacks: 1,
+            refreshPolicy: 'refresh',
+            //  硬控：走 `ZCUnitSystem` 的受控闸门整段停手（软控只有 `attackDisabled` + 减速）。
+            control: 'stun',
+            behavior: { kind: 'none' },
+        });
     }
 }
 

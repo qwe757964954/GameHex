@@ -115,8 +115,6 @@ export class RenamePage extends PopupBase {
     private cost: IRenameCostInfo | null = null;
     /** 两种消耗图标（预加载，避免铺界面时现加载闪一帧）。 */
     private costIcons = new Map<string, SpriteFrame | null>();
-    /** 每次取数递增，丢弃过期结果。 */
-    private loadRevision = 0;
     /** 发请求进行中（老端 `renameing`）。 */
     private renaming = false;
     /** GM 彩蛋连点计数。 */
@@ -139,17 +137,14 @@ export class RenamePage extends PopupBase {
     }
 
     protected async onOpen(userData?: IRenameParams): Promise<void> {
-        this.loadRevision += 1;
-        const revision = this.loadRevision;
-
         const [snapshot, cost] = await Promise.all([
             this.repo.loadSelf(),
             this.repo.loadRenameCost(),
         ]);
-        if (!this.alive || revision !== this.loadRevision) return;
+        if (!this.alive) return;
 
         const icons = await this.loadCostIcons(cost);
-        if (!this.alive || revision !== this.loadRevision) return;
+        if (!this.alive) return;
 
         this.cost = cost;
         this.costIcons = icons;
@@ -163,7 +158,6 @@ export class RenamePage extends PopupBase {
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        this.loadRevision += 1;
         this.cost = null;
         this.costIcons.clear();
         this.renaming = false;
@@ -177,7 +171,7 @@ export class RenamePage extends PopupBase {
 
     /** 弹窗还活着吗（异步回来时页面可能已被关掉）。 */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && this.isPopupOpen;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     /** 绑按钮：prefab 已挂 `cc.Button`，只绑 CLICK，不退回 TOUCH_END。 */

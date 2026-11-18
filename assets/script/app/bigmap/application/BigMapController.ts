@@ -1,12 +1,13 @@
 import { ControllerBase } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { GameNet } from '../../net/GameNet';
 import { bigMapOccupantOf } from '../model/BigMapWorld';
 import { normalizeBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
 import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
 import { BIGMAP_MOVE_HINT, BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapIntentEvent,
     type BigMapViewCommand } from './BigMapEvents';
-import { buildBigMapViewState, type IBigMapUiState, type IBigMapViewState } from './BigMapViewState';
+import { buildBigMapViewState, type BigMapMode, type IBigMapUiState, type IBigMapViewState } from './BigMapViewState';
 import type { BigMapModel, IBigMapActionFeedback } from './BigMapModel';
 import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
@@ -23,13 +24,8 @@ export const BIGMAP_SEARCH_MONSTER_FOUND = '已定位到';
  */
 export const BIGMAP_VISIBLE_REFRESH_INTERVAL_MS = 1000;
 
-export interface IBigMapNetworkEvents {
-    addEvent(name: string, caller: object, listener: (message: unknown) => void): void;
-    removeCaller(caller: object): void;
-}
 export interface IBigMapControllerOptions {
     readonly context: IControllerContext;
-    readonly network?: IBigMapNetworkEvents;
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
     readonly schedule?: (callback: () => void, milliseconds: number) => () => void;
@@ -60,7 +56,7 @@ export class BigMapController extends ControllerBase {
         this.started = true;
         this.bindModelEvents();
         this.bindNetworkEvents();
-        this.own(() => this.options.network?.removeCaller(this));
+        this.own(() => GameNet.instance.removeCaller(this));
         this.bindUiEvents();
         const schedule = this.options.schedule ?? ((callback: () => void, milliseconds: number) => {
             const timer = setInterval(callback, milliseconds);
@@ -73,12 +69,10 @@ export class BigMapController extends ControllerBase {
     refreshUnlockContext(): void { if (!this.isDisposed) this.model.refreshUnlockContext(); }
 
     private bindNetworkEvents(): void {
-        const net = this.options.network;
-        if (!net) return;
-        net.addEvent('CmdSlgGameRoleInfoBroMsg', this, this.onRoleBroadcast);
-        net.addEvent('CmdSlgGameInfoBroMsg', this, this.onGameBroadcast);
-        net.addEvent('CmdSlgBuildInfoBroMsg', this, this.onBuildBroadcast);
-        net.addEvent('reconnectSuccessAndLogin', this, this.onGameBroadcast);
+        GameNet.instance.addEvent('CmdSlgGameRoleInfoBroMsg', this, this.onRoleBroadcast);
+        GameNet.instance.addEvent('CmdSlgGameInfoBroMsg', this, this.onGameBroadcast);
+        GameNet.instance.addEvent('CmdSlgBuildInfoBroMsg', this, this.onBuildBroadcast);
+        GameNet.instance.addEvent('reconnectSuccessAndLogin', this, this.onGameBroadcast);
     }
     private onRoleBroadcast(message: unknown): void {
         const event = normalizeBigMapRoleEvent(message);
@@ -162,7 +156,7 @@ export class BigMapController extends ControllerBase {
         }
     }
 
-    private switchMode(mode: IBigMapUiState['mode']): void {
+    private switchMode(mode: BigMapMode): void {
         if (mode === this.ui.mode) return;
         this.ui.mode = mode;
         this.ui.buildMenuVisible = false;
@@ -376,7 +370,7 @@ export class BigMapController extends ControllerBase {
         return this.model.refreshVisibleCamps(this.visibleCampIds);
     }
     dispose(): void {
-        if (this.isDisposed) return;
+        // 先断输入，再交给 Model 释放仓库（Model 自身保证仓库只释放一次）。
         this.releaseInputs();
         this.model.dispose();
         super.dispose();

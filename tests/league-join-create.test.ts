@@ -337,6 +337,8 @@ const JOIN_PREFAB = assetPath('ui/League/LeagueJoin.prefab');
 const CREATE_PREFAB = assetPath('ui/League/LeagueCreate.prefab');
 const TAB_PAGE_TS = 'assets/script/app/league/LeagueTabPage.ts';
 const JOIN_PAGE_TS = 'assets/script/app/league/LeagueJoinPage.ts';
+const JOIN_CONTROLLER_TS = 'assets/script/app/league/LeagueJoinController.ts';
+const MAIN_COMPOSITION_TS = 'assets/script/app/bootstrap/main/MainPageComposition.ts';
 const CREATE_PAGE_TS = 'assets/script/app/league/LeagueCreatePage.ts';
 const CREATE_MODEL_TS = 'assets/script/app/league/LeagueCreateModel.ts';
 const CREATE_CONTROLLER_TS = 'assets/script/app/league/LeagueCreateController.ts';
@@ -941,12 +943,15 @@ test('E2 ⚠️ 加入页：按钮文案「只填空的」（不覆盖 prefab �
     assert.ok(!/\.string\s*=\s*LEAGUE_JOIN_BTN/.test(src), '别无条件覆盖（prefab 里已经有文案）');
 });
 
-test('E3 ⚠️ 加入页：查询框 placeholder + 输入过滤 + 一定走 `pickQuickJoinIdsFor`', () => {
+test('E3 ⚠️ 加入页：查询框 placeholder + 输入过滤 + 快速加入走 `pickQuickJoinIdsFor`', () => {
     const src = stripComments(readFileSync(JOIN_PAGE_TS, 'utf8'));
     assert.ok(src.includes('placeholderLabel'), 'placeholder 走 EditBox 的 placeholderLabel');
     assert.ok(src.includes('LEAGUE_HALL_SEARCH_PROMPT'));
     assert.ok(src.includes('sanitizeLeagueSearchInput'), '粘贴旁路过滤');
-    assert.ok(src.includes('pickQuickJoinIdsFor'), '⚠️ 不能只调 pickQuickJoinUnionIds（会漏掉「搜索缓存」那一支）');
+    assert.ok(!src.includes('requestList') && !src.includes('joinOwner') && !src.includes('revision'),
+        '加入页只派发意图，不再持有请求 / 容器回调 / 会话 revision');
+    assert.ok(stripComments(readFileSync(JOIN_CONTROLLER_TS, 'utf8')).includes('pickQuickJoinIdsFor'),
+        '⚠️ 不能只调 pickQuickJoinUnionIds（会漏掉「搜索缓存」那一支）');
 });
 
 test('E4 ⚠️ 加入页：刷新列表必须 defer 一帧（虚拟列表槽位还没建）', () => {
@@ -957,7 +962,10 @@ test('E4 ⚠️ 加入页：刷新列表必须 defer 一帧（虚拟列表槽位
     assert.ok(/scheduleOnce|nextFrame|setTimeout|defer|setTimeoutFrame/i.test(before.slice(-1200)) ||
         /refreshList\s*\(\s*\)\s*\{[\s\S]{0,400}?scheduleOnce/.test(src),
         'refreshList 前要有让帧（本工程口径：defer 一帧，否则列表空白）');
-    assert.ok(src.includes('LeagueTabEvent.Joined'), '加入成功后通过事件通知容器');
+    assert.ok(stripComments(readFileSync(JOIN_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
+        '加入成功后由控制器通知容器');
+    assert.ok(stripComments(readFileSync(MAIN_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
+        '通知落到容器已有的 Joined 事件（按 owner 限定）');
 });
 
 test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 + 成功后关窗回敲', () => {

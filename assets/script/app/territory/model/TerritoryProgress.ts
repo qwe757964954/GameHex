@@ -1,4 +1,4 @@
-import { TerritoryMapConfig, TerritorySite, isTerritoryBattleSite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import { TerritoryMapConfig, TerritorySite, isTerritoryBattleSite, isTerritoryChestSite, TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { TERRITORY_TEXTS } from '../application/TerritoryTexts';
 
 /** 章节号归一：0 / 负数 / NaN 一律当第 1 章，避免服务端收到 `levelChapter=0`。 */
@@ -497,7 +497,8 @@ export class TerritoryProgress {
         for (const cell of new Set(required)) {
             if (this.owned.has(cell)) continue;
             if (!this.unlockable.has(cell)) continue;
-            if (this.siteForCell(cell)?.type !== TERRITORY_SITE_TYPE.fixedResource) continue;
+            const chest = this.siteForCell(cell);
+            if (!chest || !isTerritoryChestSite(chest)) continue;
             out.push(cell);
         }
         return out;
@@ -531,8 +532,8 @@ export class TerritoryProgress {
     isPrerequisiteComplete(cellId: number): boolean {
         if (this.owned.has(cellId)) return true;
         const site = this.siteForCell(cellId);
-        // 固定资源只进入 unlockCells，不进入 passCells；后继站点仍需把它视为已完成。
-        if (site?.type === TERRITORY_SITE_TYPE.fixedResource && this.unlockable.has(site.cellId)) return true;
+        // 宝箱（固定资源据点 / 巡逻宝箱）只进入 unlockCells，不进入 passCells；后继站点仍需把它视为已完成。
+        if (site && isTerritoryChestSite(site) && this.unlockable.has(site.cellId)) return true;
         if (site && (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
             return this.isAreaPassed(site.cellId);
         }

@@ -28,6 +28,22 @@ export class RequestTerritoryUnlockCell extends RequestMsg<
     }
 }
 
+/**
+ * 升级怪物宝箱等级（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
+ *
+ * 请求体只有 `levelChapter` + `cellId`：**消耗不随包带**（不像解锁要付银币），
+ * 由服务端按当前等级查表扣。回包 `succ` + `monsterBoxInfo`（那一格的新等级），
+ * 客户端不本地 +1 —— 服务端才是等级真源。
+ */
+export class RequestTerritoryUpMonsterBoxLv extends RequestMsg<
+    CmdCityChapterUpMonsterBoxLvReqMsg,
+    CmdCityChapterUpMonsterBoxLvRspMsg
+> {
+    getReqMsgProtoName(): ReqMsgProtoName {
+        return 'CmdCityChapterUpMonsterBoxLvReqMsg';
+    }
+}
+
 /** 通关格子（= 占领）。 */
 export class RequestTerritoryPassCell extends RequestMsg<
     CmdCityChapterPassCellReqMsg,

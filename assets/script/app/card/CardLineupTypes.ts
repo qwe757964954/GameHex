@@ -34,20 +34,35 @@ export function visibleLineupCards(cards: readonly ZCDeckCard[]): ZCDeckCard[] {
     return cards.filter(card => card.type !== ZCCardType.Mine);
 }
 
-/** 已上阵 > 已解锁 > 解锁中（未解锁但有碎片）> 未获得；同组依次比较品质、等级、职业。 */
+/**
+ * 排序分组：**可升级 > 已上阵 > 已解锁 > 解锁中（未解锁但有碎片）> 未获得**；
+ * 同组依次比较品质、等级、职业。
+ *
+ * 可升级排最前是用户 2026-11-17 第 16 条 ③ 的要求：引导第 6-2 步要在卡库里指出豌豆游侠，
+ * 而卡库是横向列表 —— 目标卡排在后面就压根不在渲染窗口里，光圈挖不出来（表现为「没有高亮」）。
+ * 判据与条目上的「可升级箭头」完全同源（`CardLineupCard.render`）：
+ * 已解锁 + 未满级 + 所需碎片 > 0 + 持有 ≥ 所需。
+ */
 export function sortLineupCards(
     cards: readonly ZCDeckCard[],
     deployedIds: ReadonlySet<string>,
     heroLevels: ReadonlyMap<string, number>,
-    fragments: ReadonlyMap<string, { readonly owned: number }>,
+    fragments: ReadonlyMap<string, { readonly owned: number; readonly need?: number; readonly maxed?: boolean }>,
     lineup: ICardLineupCatalog,
     fallbackLevel = 0,
 ): ZCDeckCard[] {
     const levelOf = (card: ZCDeckCard): number => heroLevels.get(card.id) ?? fallbackLevel;
+    const upgradable = (card: ZCDeckCard): boolean => {
+        const progress = fragments.get(card.id);
+        if (!progress || progress.maxed || levelOf(card) <= 0) return false;
+        const need = progress.need ?? 0;
+        return need > 0 && progress.owned >= need;
+    };
     const groupOf = (card: ZCDeckCard): number => {
-        if (deployedIds.has(card.id)) return 0;
-        if (levelOf(card) > 0) return 1;
-        return (fragments.get(card.id)?.owned ?? 0) > 0 ? 2 : 3;
+        if (upgradable(card)) return 0;
+        if (deployedIds.has(card.id)) return 1;
+        if (levelOf(card) > 0) return 2;
+        return (fragments.get(card.id)?.owned ?? 0) > 0 ? 3 : 4;
     };
     //  权重来自表 `sort` 列；表里没覆盖到的取值排到最后，不抛错（不阻断列表）。
     const rarityRank = new Map(lineup.rarities.map((meta) => [meta.id, meta.sort]));

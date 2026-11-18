@@ -20,12 +20,26 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
  *  清了会导致「关掉再打开先闪一帧全未完成」。
  */
 
+import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { readRefRows } from '../common/TableRead';
-import { FW } from '../../framework/FW';
-import { GameNet } from '../net/GameNet';
 import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
+import { GameNet } from '../net/GameNet';
+import { toCount, toIdString } from '../net/RequestGuard';
+import {
+    RequestSevenDayInfo,
+    RequestSevenDayShopBuy,
+    RequestSevenDayTakePointReward,
+    RequestSevenDayTakeTaskReward,
+} from './RequestSevenDayMsg';
+import type {
+    ISevenDayItemInfo,
+    ISevenDayPointRow,
+    ISevenDayServerState,
+    ISevenDayShopRow,
+    ISevenDayTaskRow,
+    ISevenDayTaskServerState,
+} from './SevenDayTable';
 import {
     deriveCurDay,
     deriveEndTimeMs,
@@ -37,23 +51,9 @@ import {
     parseTaskRows,
     SEVEN_DAY_FALLBACK_MAX_DAY,
 } from './SevenDayTable';
-import type {
-    ISevenDayItemInfo,
-    ISevenDayPointRow,
-    ISevenDayShopRow,
-    ISevenDayServerState,
-    ISevenDayTaskRow,
-    ISevenDayTaskServerState,
-} from './SevenDayTable';
-import {
-    RequestSevenDayInfo,
-    RequestSevenDayShopBuy,
-    RequestSevenDayTakePointReward,
-    RequestSevenDayTakeTaskReward,
-} from './RequestSevenDayMsg';
 
-import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 import { ITEM_TABLE } from '../../core/config/TableNames';
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 一次界面刷新要的全部数据。 */
 export interface ISevenDaySnapshot {
     readonly tasks: readonly ISevenDayTaskRow[];
@@ -189,8 +189,7 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
     }
 
     async refreshFromServer(caller?: object): Promise<boolean> {
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestSevenDayInfo({}, caller, (rsp) => {
                 this.applyServerInfo(rsp?.cmdSevenDayInfo);
             }),
@@ -235,8 +234,7 @@ export class RuntimeSevenDayRepository implements ISevenDayRepository {
             }
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => build(callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: `SevenDay:${label}` },
         );

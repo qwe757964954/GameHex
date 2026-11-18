@@ -583,26 +583,32 @@ function syncRewardField(type) {
   $('configIdField').hidden = type === 'patrolChest';
 }
 
-function readPatrolBattleIds() {
-  const text = $('battleIds').value.trim();
-  if (!text) return [];
-  const ids = text.split(/[,，\s]+/).map(Number);
-  if (!ids.length || !ids.every((id) => Number.isSafeInteger(id) && id > 0)) {
-    message('巡逻宝箱战斗 ID 必须是逗号分隔的正整数，至少填写一个');
-    $('battleIds').focus();
+/**
+ * 巡逻宝箱的战斗 ID：**单值**（一片巡逻区共用一个，2026-11-18 起不再用数组）。
+ *
+ * 留空返回 `undefined`（允许先空着继续编辑，保存时由格式校验拦），非法值返回 `null`。
+ */
+function readPatrolBattleId() {
+  const text = $('battleId').value.trim();
+  if (!text) return undefined;
+  const id = Number(text);
+  if (!Number.isSafeInteger(id) || id <= 0) {
+    message('巡逻宝箱战斗 ID 必须是正整数');
+    $('battleId').focus();
     return null;
   }
-  return ids;
+  return id;
 }
 
-function applyPatrolBattleIdsFromForm() {
+function applyPatrolBattleIdFromForm() {
   const site = siteAtCell(selectedCell);
   if (!site || site.type !== 'patrolChest') return true;
-  const ids = readPatrolBattleIds();
-  if (!ids) return false;
-  if (JSON.stringify(site.battleIds) === JSON.stringify(ids)) return true;
+  const id = readPatrolBattleId();
+  if (id === null) return false;
+  if (site.battleId === id) return true;
   commit();
-  site.battleIds = ids;
+  if (id === undefined) delete site.battleId;
+  else site.battleId = id;
   markErrorsStale();
   return true;
 }
@@ -629,6 +635,42 @@ function applyPatrolIdFromForm() {
   if (id === undefined) delete site.patrolId;
   else site.patrolId = id;
   markErrorsStale();
+  return true;
+}
+
+/**
+ * 「同步到同巡逻区」：把当前格的 `battleId` + `requiredCells` 写给**同一个巡逻宝箱 ID** 的全部格子。
+ *
+ * 一片巡逻区 = 同一个 `site.id`（2026-11-18 口径），整片共用一个 `battleId`。
+ * 逐格照抄既费事又容易漏一格 —— 漏的那格会自成一片（野怪永远待机）。
+ * `patrolId` **不同步**：一片只在该出怪的那一格填。
+ */
+function applyPatrolRegionSync() {
+  if (!applyPatrolBattleIdFromForm()) return false;
+  if (!applyPatrolIdFromForm()) return false;
+  const site = siteAtCell(selectedCell);
+  if (!site || site.type !== 'patrolChest') return true;
+  const members = (map.sites || []).filter((item) => item.type === 'patrolChest' && item.id === site.id);
+  if (members.length < 2) {
+    message(`巡逻宝箱 ID ${site.id} 只有 1 格，没有可同步的目标。`);
+    return true;
+  }
+  // 先算出「真的要改哪些格」再 commit：`commit()` 存的是**改之前**的快照，
+  // 先改后 commit 会让撤销直接跳回改完的状态（等于没得撤）。
+  const targets = members.filter((item) => item.cellId !== site.cellId
+    && (item.battleId !== site.battleId
+      || JSON.stringify(item.unlock.requiredCells) !== JSON.stringify(site.unlock.requiredCells)));
+  if (!targets.length) {
+    message(`这一片 ${members.length} 格已经是同一份配置。`);
+    return true;
+  }
+  commit();
+  for (const item of targets) {
+    item.battleId = site.battleId;
+    item.unlock.requiredCells = [...site.unlock.requiredCells];
+  }
+  markErrorsStale();
+  message(`已把战斗 ID 与前置同步到 ${site.id} 的另外 ${targets.length} 格。`);
   return true;
 }
 
@@ -716,22 +758,42 @@ function siteAtCell(cell) {
 }
 
 /**
- * 同一「战斗 id」的全部格子。
+ * 一片巡逻区的键 = **`site.id`**（与客户端 `territoryPatrolGroupKey` 同口径）。
  *
- * 地图数据是**每格一条 site 记录**，同一关卡用相同的 `configId` 串起来
- * （chapter_01 里 `configId=10005` 就有 7 条）。所以「这个关卡占了哪几格」
- * = 同 configId 的所有 footprint 并集 —— 只亮被点的那一格是看不出形状的。
+ * 2026-11-18 口径：「巡逻宝箱之前根据战斗 id 判断，现在改由巡逻宝箱 id 相同」——
+ * 同 `site.id` 就是一片，`battleId` / 前置**不参与**分组。
+ */
+function patrolGroupKey(site) {
+  return site.id;
+}
+
+/**
+ * 同一「战斗 id」的全部格子（选中任意一格 ⇒ 整组框出来）。
+ *
+ * 地图数据是**每格一条 site 记录**：
+ * - 关卡 / 首领 / 异步据点 / 固定资源：同一关卡用相同的 `configId` 串起来
+ *   （chapter_01 里 `configId=10005` 就有 7 条）⇒ 整组 = 同 configId 的 footprint 并集；
+ * - **巡逻宝箱**：整组 = 同 `site.id`（见 {@link patrolGroupKey}），与客户端同口径。
+ *   与客户端同口径。
  *
  * `configId` 为空时退回 `site.id`（组里只有自己，行为与以前一致）。
  */
 function siteGroupCells(cell) {
   const site = siteAtCell(cell);
   if (!site) return [];
-  const key = site.type === 'patrolChest' ? site.id : site.configId || site.id;
   const cells = new Set();
+  if (site.type === 'patrolChest') {
+    const key = patrolGroupKey(site);
+    for (const item of map.sites || []) {
+      if (item.type !== 'patrolChest' || patrolGroupKey(item) !== key) continue;
+      for (const id of item.footprint || [item.cellId]) cells.add(id);
+    }
+    return [...cells];
+  }
+  const key = site.configId || site.id;
   for (const item of map.sites || []) {
-    if (site.type === 'patrolChest' && item.type !== 'patrolChest') continue;
-    if ((item.type === 'patrolChest' ? item.id : item.configId || item.id) !== key) continue;
+    if (item.type === 'patrolChest') continue;
+    if ((item.configId || item.id) !== key) continue;
     for (const id of item.footprint || [item.cellId]) cells.add(id);
   }
   return [...cells];
@@ -760,13 +822,15 @@ function syncForm() {
     setField('randomBuildingId', isCandidate ? (map.randomSites?.buildingIds?.[selectedCell] ?? '') : '');
   }
   const groupSize = site ? siteGroupCells(selectedCell).length : 0;
+  // 巡逻宝箱按「一片巡逻区」（同 site.id）算，别的站点按「同一战斗 id / configId」算。
+  const groupLabel = site && site.type === 'patrolChest' ? '同巡逻区' : '同战斗 id';
   const info = selectedCell == null ? '点击地图格子'
-    : `cellId ${selectedCell}${site ? ` · ${site.id}${groupSize > 1 ? ` · 同战斗 id 共 ${groupSize} 格` : ''}` : isCandidate ? ' · 随机据点' : ''}`;
+    : `cellId ${selectedCell}${site ? ` · ${site.id}${groupSize > 1 ? ` · ${groupLabel}共 ${groupSize} 格` : ''}` : isCandidate ? ' · 随机据点' : ''}`;
   if ($('cellInfo').textContent !== info) $('cellInfo').textContent = info;
   if (!site) return;
   setField('siteId', site.id); setField('siteType', site.type); setField('configId', site.configId || ''); setField('buildingId', site.buildingId || '');
   setField('rewardId', site.rewardId ?? '');
-  setField('battleIds', (site.battleIds || []).join(','));
+  setField('battleId', site.battleId ?? '');
   setField('patrolId', site.patrolId ?? '');
   syncRewardField(site.type);
   setField('requiredCells', site.unlock.requiredCells.join(',')); setField('unlockType', site.unlock.unlockType || 'combatPower'); setField('unlockValue', site.unlock.unlockValue ?? site.unlock.combatPower ?? 0); setField('silverCost', site.unlock.silverCost); setField('exploreSeconds', site.unlock.exploreSeconds); setField('staminaCost', site.unlock.staminaCost);
@@ -786,9 +850,23 @@ function releaseCell(cell) {
   if (map.randomSites?.buildingIds) delete map.randomSites.buildingIds[cell];
 }
 
+/**
+ * 新建站点。
+ *
+ * 巡逻宝箱刷到已有巡逻区的边上时**沿用那一片的 `site.id`** —— 一片巡逻区 = 同一个 id，
+ * 每刷一格换一个 id 就得事后手动合并（2026-11-18 口径）。
+ * `battleId` 留空（保存时格式校验会拦，逼着填一个）。
+ */
 function addSite(cell, type) {
   map.sites = map.sites.filter((site) => site.cellId !== cell);
-  map.sites.push({ id: `${type}_${map.sites.length + 1}`, type, cellId: cell, footprint: [cell], ...(type === 'patrolChest' ? { battleIds: [] } : { configId: `${type}_${cell}` }), unlock: { requiredCells: [map.startCellId], unlockType: 'combatPower', unlockValue: map.defaults.combatPower ?? 0, silverCost: map.defaults.silverCost, exploreSeconds: map.defaults.exploreSeconds, staminaCost: map.defaults.staminaCost } });
+  let siteId = `${type}_${map.sites.length + 1}`;
+  if (type === 'patrolChest') {
+    const neighbor = hexNeighborsOf(cell, Number(map.rows), Number(map.columns))
+      .map((next) => siteAtCell(next))
+      .find((site) => site && site.type === 'patrolChest');
+    if (neighbor) siteId = neighbor.id;
+  }
+  map.sites.push({ id: siteId, type, cellId: cell, footprint: [cell], ...(type === 'patrolChest' ? {} : { configId: `${type}_${cell}` }), unlock: { requiredCells: [map.startCellId], unlockType: 'combatPower', unlockValue: map.defaults.combatPower ?? 0, silverCost: map.defaults.silverCost, exploreSeconds: map.defaults.exploreSeconds, staminaCost: map.defaults.staminaCost } });
   selectedCell = cell;
 }
 
@@ -879,7 +957,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
   if (cell < 0) return;
   if (!applyRewardIdFromForm()) return;
   applyRandomBuildingIdFromForm();
-  if (!applyPatrolBattleIdsFromForm()) return;
+  if (!applyPatrolBattleIdFromForm()) return;
   if (!applyPatrolIdFromForm()) return;
   const cells = brushRadius > 0 ? neighborCells(Math.floor(cell / map.columns), cell % map.columns, brushRadius) : [cell];
   if (mode === 'select') { selectedCell = cell; if (!skipRender) render(); return; }
@@ -911,7 +989,7 @@ function paint(cell, { skipCommit = false, skipRender = false } = {}) {
 
 function buildJSON() {
   applyRandomBuildingIdFromForm();
-  if (!applyPatrolBattleIdsFromForm()) throw new Error('巡逻宝箱战斗 ID 无效');
+  if (!applyPatrolBattleIdFromForm()) throw new Error('巡逻宝箱战斗 ID 无效');
   if (!applyPatrolIdFromForm()) throw new Error('野怪巡逻 ID 无效');
   const value = snapshot();
   value.id = $('mapId').value.trim(); value.chapterId = Number($('chapterId').value); value.name = $('mapName').value.trim() || value.id; value.rows = Number($('rows').value); value.columns = Number($('columns').value); value.background = $('background').value.trim();
@@ -1099,8 +1177,13 @@ $('tools').addEventListener('click', (event) => {
 });
 $('siteType').addEventListener('change', () => syncRewardField($('siteType').value));
 $('rewardId').addEventListener('change', applyRewardIdFromForm);
-$('battleIds').addEventListener('change', applyPatrolBattleIdsFromForm);
+$('battleId').addEventListener('change', applyPatrolBattleIdFromForm);
 $('patrolId').addEventListener('change', applyPatrolIdFromForm);
+$('syncPatrolRegion').addEventListener('click', () => {
+  if (!applyPatrolRegionSync()) return;
+  render();
+  syncForm();
+});
 $('randomBuildingId').addEventListener('change', () => {
   if (applyRandomBuildingIdFromForm()) {
     render();
@@ -1112,8 +1195,8 @@ $('applySite').addEventListener('click', () => {
   const site = siteAtCell(selectedCell);
   if (!site) return;
   const type = $('siteType').value;
-  const battleIds = type === 'patrolChest' ? readPatrolBattleIds() : null;
-  if (type === 'patrolChest' && !battleIds) return;
+  const battleId = type === 'patrolChest' ? readPatrolBattleId() : null;
+  if (type === 'patrolChest' && battleId === null) return;
   const patrolId = type === 'patrolChest' ? readPatrolId() : undefined;
   if (patrolId === null) return;
   const rewardText = $('rewardId').value.trim();
@@ -1126,8 +1209,14 @@ $('applySite').addEventListener('click', () => {
   commit();
   site.id = $('siteId').value.trim();
   site.type = type;
-  if (type === 'patrolChest') { site.battleIds = battleIds; delete site.configId; }
-  else { site.configId = $('configId').value.trim(); delete site.battleIds; }
+  if (type === 'patrolChest') {
+    if (battleId === undefined) delete site.battleId;
+    else site.battleId = battleId;
+    delete site.configId;
+  } else {
+    site.configId = $('configId').value.trim();
+    delete site.battleId;
+  }
   if (patrolId === undefined) delete site.patrolId;
   else site.patrolId = patrolId;
   site.buildingId = $('buildingId').value.trim();

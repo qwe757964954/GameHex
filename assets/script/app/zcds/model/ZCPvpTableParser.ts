@@ -372,6 +372,7 @@ export function parseUnits(
             attackDuration: number(raw.unitAttackDuration, `pvpCard.${label}.unitAttackDuration`),
             attackHitTime: number(raw.unitAttackHitTime, `pvpCard.${label}.unitAttackHitTime`),
             bodyRadius: optionalNumber(raw.unitBodyRadius, `pvpCard.${label}.unitBodyRadius`) ?? 0,
+            valueFactor: number(raw.unitValueFactor === '' ? 1 : raw.unitValueFactor ?? 1, `pvpCard.${label}.unitValueFactor`),
             spawnSeconds: optionalNumber(raw.soilderAddTime, `pvpCard.${label}.soilderAddTime`) ?? 0,
             flying: refBool(raw.unitFlying) ?? false,
             canAttackAir: refBool(raw.unitCanAttackAir) ?? false,

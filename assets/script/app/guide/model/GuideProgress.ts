@@ -18,10 +18,10 @@ export interface GuideProgressData {
     readonly skipped: boolean;
 }
 
-/** `complete()` 的结果：完成了哪一步、下一步是谁。 */
+/** `complete()` 的结果：完成了哪一步、下一个未完成步是谁。 */
 export interface GuideCompletion {
     readonly step: GuideStep;
-    /** 下一步；`null` = 整条引导完成。 */
+    /** 下一个未完成步；`null` = 整条引导完成。 */
     readonly next: GuideStep | null;
 }
 
@@ -95,7 +95,23 @@ export class GuideProgress {
 
         const next = step.nextStep === GUIDE_STEP_END ? null : this.byId.get(step.nextStep) ?? null;
         this.cursor = next ? next.stepId : null;
-        return { step, next };
+        // 配置热更可能在链中插入新步，旧档却已完成了它后面的步；
+        // 完成插入步后必须越过这些已完成后继，否则会停在已完成步上再也推不动。
+        this.advanceOverCompleted();
+        return { step, next: this.current };
+    }
+
+    /** 跳过当前游标后连续已完成的步，只停在第一个未完成步或结束。 */
+    private advanceOverCompleted(): void {
+        while (this.cursor) {
+            const step = this.byId.get(this.cursor);
+            if (!step) {
+                this.cursor = null;
+                return;
+            }
+            if (!this.completed.has(this.cursor)) return;
+            this.cursor = step.nextStep === GUIDE_STEP_END ? null : step.nextStep;
+        }
     }
 
     /**
@@ -155,6 +171,8 @@ export class GuideProgress {
     /**
      * 链校验：从唯一 firstLogin 入口顺 nextStep 走到底，必须覆盖全表且无环。
      * 不覆盖全表说明有步永远走不到，有环说明玩家会卡住，都在构造期抛出。
+     * 行序还必须与链序一致：`firstIncompleteStepId` 与 `remoteCursorToData`
+     * 都把「行前缀」当成「已完成前缀」，两者错位会跳过中间步或把未完成步当成已完成。
      */
     private assertChainCloses(): void {
         const entries = this.steps.filter((step) => step.triggerType === 'firstLogin');
@@ -163,12 +181,14 @@ export class GuideProgress {
         }
 
         const visited = new Set<string>();
+        const chain: string[] = [];
         let cursor: string | null = entries[0].stepId;
         while (cursor && cursor !== GUIDE_STEP_END) {
             const step: GuideStep | undefined = this.byId.get(cursor);
             if (!step) throw new Error(`guideStep.nextStep 指向不存在的步骤：${cursor}`);
             if (visited.has(cursor)) throw new Error(`guideStep 链上有环：${cursor}`);
             visited.add(cursor);
+            chain.push(cursor);
             cursor = step.nextStep;
         }
 
@@ -177,6 +197,14 @@ export class GuideProgress {
                 .filter((step) => !visited.has(step.stepId))
                 .map((step) => step.stepId);
             throw new Error(`guideStep 有步骤不在链上（永远走不到）：${unreachable.join(' / ')}`);
+        }
+
+        for (let i = 0; i < this.steps.length; i += 1) {
+            if (this.steps[i].stepId !== chain[i]) {
+                throw new Error(
+                    `guideStep 行序与 nextStep 链不一致：第 ${i + 1} 行是 ${this.steps[i].stepId}，链上应为 ${chain[i] ?? '(无)'}`,
+                );
+            }
         }
     }
 }

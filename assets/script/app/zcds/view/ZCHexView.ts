@@ -350,7 +350,7 @@ export function resourceIconScale(frame: SpriteFrame | null | undefined): number
 type IZCBuildingFrameResolver = (
     cardId: string | null,
     building: ZCBuildingType,
-    owner: ZCHexState['owner'],
+    owner: ZCFaction,
 ) => SpriteFrame | null;
 
 interface IZCHexPresentation {
@@ -2273,7 +2273,7 @@ export class ZCHexView extends Component {
         }
     }
 
-    private frameForTileType(type: ZCHexState['tileType']): SpriteFrame | null {
+    private frameForTileType(type: ZCPvpTileType): SpriteFrame | null {
         switch (type) {
             case ZCPvpTileType.Mine: return this.mineIconFrame;
             case ZCPvpTileType.BarracksCommon:

@@ -2,7 +2,7 @@ import { _decorator, Component, instantiate, Prefab, SpriteFrame, UITransform, V
 import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
-import type { IBigMapCityView, IBigMapViewState } from '../application/BigMapViewState';
+import type { BigMapMode, IBigMapCityView, IBigMapViewState } from '../application/BigMapViewState';
 import { BIGMAP_PRESENTATION_TEXT, formatBigMapCityOpening, formatBigMapMonsterDetail, formatBigMapPlotDetail } from './BigMapPresentationText';
 import { BigMapWorldView } from './BigMapWorldView';
 import { HeadArt } from '../../HeadArt';
@@ -24,8 +24,6 @@ import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapRenderEvent, type IBigMapViewCommandEvent } from '../application/BigMapEvents';
 
 const { ccclass } = _decorator;
-
-type BigMapMode = 'world' | 'base';
 
 const HEADER_HEIGHT = 108;
 

@@ -1,4 +1,5 @@
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
+import type { ConfigService } from '../../core/config/ConfigService';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { spriteFramePathOf } from '../ArtPaths';
 import { itemQualityFrameRelPath, loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
@@ -36,7 +37,7 @@ export interface IRewardGoodsTables {
  *
  * ⚠️ 两张表都要读：漏掉 `roleProperty` 那一支，货币格只剩品质框、没有图标（静默降级）。
  */
-export async function loadRewardGoodsTables(configs?: IControllerResources['configs']): Promise<IRewardGoodsTables> {
+export async function loadRewardGoodsTables(configs?: ConfigService): Promise<IRewardGoodsTables> {
     const [itemRows, resourceRows] = await Promise.all([
         configs ? configs.getTable(ITEM_TABLE) : RefUtil.instance.getRefAllAsync(ITEM_TABLE),
         configs ? configs.getTable(ROLE_PROPERTY_TABLE) : RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),

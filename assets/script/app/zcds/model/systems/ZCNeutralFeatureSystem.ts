@@ -1,5 +1,5 @@
 import { findCatalogCard, type ZCDeckCard, type ZCUnitDefinition } from '../ZCCombatCatalog';
-import type { IZCMonsterPatrolState, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
+import type { IZCNeutralFeatureState, IZCMonsterPatrolState, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { ownersForPlayerCount, type ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchMap } from '../ZCMatchConfig';
 import { ZCMapGeometry } from '../ZCMapGeometry';
@@ -46,6 +46,8 @@ export class ZCNeutralFeatureSystem {
     private readonly geometry: ZCMapGeometry;
     private hasFeatures = false;
     private hasGates = false;
+    private readonly monsterHexes: ZCHexState[] = [];
+    private focusableMonsters: readonly ZCHexState[] | null = null;
     private readonly monsterTerritories = new Map<number, readonly number[]>();
     private readonly patrolMonsterIds: number[] = [];
     get patrolOrigins(): readonly number[] { return this.patrolMonsterIds; }
@@ -56,6 +58,8 @@ export class ZCNeutralFeatureSystem {
     initialize(state: ZCSnapshot): void {
         this.previous.clear();
         this.patrolMonsterIds.length = 0;
+        this.monsterHexes.length = 0;
+        this.invalidateTerrain();
         this.hasFeatures = this.hasGates = false;
         for (const hex of state.hexes) {
             const item = neutralResourceItemOf(hex.neutralResourceId);
@@ -65,6 +69,7 @@ export class ZCNeutralFeatureSystem {
                 continue;
             }
             this.hasFeatures = true;
+            if (item.resourceType === ZCNeutralResourceType.Monster) this.monsterHexes.push(hex);
             if (item.resourceType === ZCNeutralResourceType.Gate) this.hasGates = true;
             if (hex.neutralFeature) {
                 if (item.feature.gates && hex.neutralFeature.gateId === undefined) {
@@ -324,7 +329,7 @@ export class ZCNeutralFeatureSystem {
         gate.insideUnitIds = inside;
     }
 
-    private nextEffect(gate: ZCHexState['neutralFeature'], config: IZCNeutralFeatureConfig): void {
+    private nextEffect(gate: IZCNeutralFeatureState, config: IZCNeutralFeatureConfig): void {
         if (config.gates.length === 1) return;
         const choices = config.gates.filter(option => option.id !== gate.gateId);
         const next = choices[Math.min(choices.length - 1, Math.floor(Math.max(0, this.context.random()) * choices.length))];
@@ -369,13 +374,24 @@ export class ZCNeutralFeatureSystem {
         feature.focusReadyAt ??= {};
         feature.focusReadyAt[owner] = state.elapsedSeconds + (this.context.rules?.neutralMonsterFocusSwitchCdSeconds ?? 3);
         feature.awake = true;
+        this.invalidateTerrain();
         this.context.changed();
         return true;
     }
 
+    invalidateTerrain(): void {
+        this.focusableMonsters = null;
+    }
+
+    hasFocusableMonster(): boolean {
+        this.focusableMonsters ??= this.monsterHexes.filter(isZCAwakeMonster);
+        return this.focusableMonsters.length > 0;
+    }
+
     /** Only live current attackers count; old hatred is not a retaliation order. */
     priorityTarget(state: ZCSnapshot, unit: ZCUnitState): number | null {
-        for (const hex of state.hexes) {
+        if (!this.hasFocusableMonster()) return null;
+        for (const hex of this.focusableMonsters) {
             if (!isZCAwakeMonster(hex) || !hex.neutralFeature.focusOwners?.includes(unit.owner)) continue;
             const definition = this.context.definition(unit);
             const center = this.map.hexes[hex.id];
@@ -384,17 +400,18 @@ export class ZCNeutralFeatureSystem {
             const committed = unitHex !== null && this.territory(hex).includes(unitHex)
                 || Math.hypot(unit.freeX - center.x, unit.freeY - center.y) <= reach;
             if (committed) return hex.id;
-            const enemy = state.units.find(candidate => candidate.id === unit.targetUnitId
-                && candidate.owner !== unit.owner && candidate.hp > 0 && candidate.battleState !== 'dead');
-            if (enemy && Math.hypot(unit.freeX - enemy.freeX, unit.freeY - enemy.freeY)
-                <= ZCTargetingSystem.attackReach(definition, this.context.definition(enemy).bodyRadius,
-                    this.context.rules?.combatDistanceScale ?? 1) * 1.3) continue;
-            // On the way, let a nearby opponent engage before resuming focus.
-            const opponent = state.units.some(candidate => candidate.owner !== unit.owner && candidate.hp > 0
-                && candidate.battleState !== 'dead' && (definition.canAttackAir || !this.context.definition(candidate).flying)
-                && Math.hypot(unit.freeX - candidate.freeX, unit.freeY - candidate.freeY)
-                    <= ZCTargetingSystem.attackReach(definition, this.context.definition(candidate).bodyRadius,
-                        this.context.rules?.combatDistanceScale ?? 1));
+            let opponent = false;
+            for (const candidate of state.units) {
+                if (candidate.owner === unit.owner || candidate.hp <= 0 || candidate.battleState === 'dead') continue;
+                const distance = Math.hypot(unit.freeX - candidate.freeX, unit.freeY - candidate.freeY);
+                const reach = ZCTargetingSystem.attackReach(definition, this.context.definition(candidate).bodyRadius,
+                    this.context.rules?.combatDistanceScale ?? 1);
+                if (candidate.id === unit.targetUnitId && distance <= reach * 1.3
+                    || (definition.canAttackAir || !this.context.definition(candidate).flying) && distance <= reach) {
+                    opponent = true;
+                    break;
+                }
+            }
             if (!opponent) return hex.id;
         }
         return null;

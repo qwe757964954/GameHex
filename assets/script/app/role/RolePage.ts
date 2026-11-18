@@ -177,9 +177,17 @@ export class RolePage extends Component {
         this.gemTabRedDot = this.node.getChildByName('BagTabGem').getChildByName('com_rd').getComponent(RedDot);
     }
 
-    /** 页面是否还活着（替代弹窗时代的 `isPopupOpen` 守卫）。 */
+    /**
+     * 页面是否还活着（替代弹窗时代的 `isPopupOpen` 守卫）。
+     *
+     * ⚠️ 必须**先判 `this.isValid`**：组件销毁时引擎的 `_destruct()`（`compileDestruct`）
+     * 会把所有对象型自有属性清成 `null`，`_node` 就在其中 ⇒ 销毁后再写 `this.node.isValid`
+     * 直接抛 `Cannot read properties of null (reading 'isValid')`。`isValid` 读的是
+     * `_objFlags`（数字，不被清理），销毁后恒 `false`，正好短路掉后面的节点判断。
+     * ⇒ 所有 `await` 之后的存活判断都走这里，不要再单独写 `this.node.isValid`。
+     */
     private get alive(): boolean {
-        return this.node.isValid && this.node.activeInHierarchy;
+        return this.isValid && this.node.activeInHierarchy;
     }
 
     /** 刷数据：攻击力 / 主角 idle / 装备栏 / 背包列表 / 红点。 */
@@ -220,8 +228,24 @@ export class RolePage extends Component {
         this.scheduleOnce(() => this.playHeroIdle(retry - 1), 0);
     }
 
+    /**
+     * ⚠️ 销毁期**只停定时器，不碰任何节点**（规则 176/278）。
+     *
+     * 引擎销毁序（`node.ts::_onPreDestroyBase` L1532→L1545）：先 `children[i]._destroyImmediate()`，
+     * 再销毁自身组件 ⇒ 轮到本组件的 `onDestroy` 时，子节点 `Qipao` 已走完 `_destruct`，
+     * 它的 `_name` 被清成 `''` ⇒ `getChildByName('Qipao')` 返回 `null`，
+     * 写 `node.active` 当场抛 `Cannot set properties of null (setting 'active')`。
+     *
+     * 🔴 这个异常不是"报一行就算了"：它从 `onDestroy` 抛回 `CCObject._deferredDestroy()`
+     * （`object.ts` L173，**没有 try/catch**）⇒ 整批延迟销毁中断，本对象拿不到 `Destroyed`
+     * 标记（永远不会 `isValid === false`）、留在 `objectsToDestroy` 里每帧重炸。
+     *
+     * 收气泡已经由 {@link onDisable} 负责，且必然早于这里：`Node.destroy()` 会先同步
+     * `active = false`（`node.ts` L1367）触发一次 `onDisable`，`NodeActivator.destroyComp`
+     * 也会在调 `onDestroy` 前先 `disableComp`。语义上也不需要 —— 整棵节点树都要没了。
+     */
     protected onDestroy(): void {
-        this.stopQipao();
+        this.clearQipaoTimer();
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
     }
 
@@ -298,13 +322,26 @@ export class RolePage extends Component {
         }, QIPAO_INTERVAL_MS);
     }
 
-    /** 停闪烁并把气泡收掉（进页面 / 切走都要先走这步，防定时器叠加）。 */
+    /**
+     * 停闪烁并把气泡收掉（进页面 / 切走都要先走这步，防定时器叠加）。
+     *
+     * ⚠️ 取不到节点时**直接跳过**，不是"静默兜底"：`onDisable` 有两条触发路径 ——
+     * ① 切 tab / `Node.destroy()`：先同步 `active = false`，此时子节点都还在；
+     * ② 宿主被父节点连带销毁：引擎先拆完子节点再 `disableComp`，`Qipao` 已经没了。
+     * 只有 ②会命中 `null`，写 `active` 必抛（就是本轮 `RolePage.ts:308` 那条）。
+     * 正常运行时若 `Qipao` 被改名，{@link showQipao} 里裸写的 `node.active = true` 仍会当场抛，
+     * 不会因为这里的判空而漏掉 prefab 绑定错误。
+     */
     private stopQipao(): void {
-        if (this.qipaoTimer !== null) {
-            clearTimeout(this.qipaoTimer);
-            this.qipaoTimer = null;
-        }
+        this.clearQipaoTimer();
         const node = this.node.getChildByName(QIPAO_NODE);
-        node.active = false;
+        if (node) node.active = false;
+    }
+
+    /** 只停定时器（销毁期用：此时子节点已先被引擎销毁，见 {@link onDestroy}）。 */
+    private clearQipaoTimer(): void {
+        if (this.qipaoTimer === null) return;
+        clearTimeout(this.qipaoTimer);
+        this.qipaoTimer = null;
     }
 }

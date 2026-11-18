@@ -690,3 +690,80 @@ test('下线的 pvpBaseTeamWeight 不再入库，权重三列由 pvpTile 承载'
     assert.equal(existsSync('assets/remoteRef/pvpBaseTeamWeight.json'), false,
         'pvpBaseTeamWeight 已并入 pvpTile 下线，不应被重新导入');
 });
+
+/**
+ * 服务端 `attrs.buildingHp` 的消费边界（2026-11-18）。
+ *
+ * 协议层对负值 / 0 原样保留（`battle-start-protocol` 已锁定那是「原始快照」），
+ * 但**消费端不能直接信**：`ZCDevelopmentSystem` 用 `baseHp + 品级加成` 算 `hex.maxHp`、
+ * 没有下限保护 ⇒ 负耐久会让建筑开局即破、血条倒挂。这里钉三件事：
+ *   ① 负数回落到本地卡表；
+ *   ② 0 在解析层就被丢（与 `maxHp = 0` 同口径），同样走本地；
+ *   ③ 只有 `buildingHp`、没有 `attack` / `maxHp` 时不产 server loadout（战斗编译器不认它）。
+ */
+test('服务端建筑血量的异常边界：非正回落到本地卡表，且不进战斗编译器', () => {
+    const source = prepare(4);
+    const localPlayerHp = source.playerDeck.find((card) => card.unitId === '68001')?.baseHp;
+    const localEnemyHp = source.enemyDeck.find((card) => card.unitId === '68001')?.baseHp;
+    const start = battle();
+    const remote: ZCBattleStart = { ...start, units: start.units.map((unit) => ({
+        ...unit,
+        heroes: [{ heroId: 68001, level: 1 }],
+        heroAttrs: parseBattleHeroAttrs(unit.roleId === 'self'
+            ? [{ heroId: 68001, attrs: [{ attrId: 'buildingHp', value: '-500' }] }]
+            : unit.campId === 1
+                ? [{ heroId: 68001, attrs: [{ attrId: 'buildingHp', value: '0' }] }]
+                : [
+                    { heroId: 68001, attrs: [{ attrId: 'buildingHp', value: '777' }] },
+                    { heroId: 99999, attrs: [{ attrId: 'attack', value: '1' }] },
+                ]),
+        buffs: [],
+    })) };
+
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    assert.equal(result.config.playerDeck.find((card) => card.unitId === '68001')?.baseHp, localPlayerHp,
+        '负耐久必须回落本地，不能直接进 hex.maxHp');
+    assert.equal(result.config.enemyDeck.find((card) => card.unitId === '68001')?.baseHp, localEnemyHp,
+        '0 在解析层已丢弃，同样回落本地');
+    assert.equal(result.config.ownerDecks?.enemy2?.find((card) => card.unitId === '68001')?.baseHp, 777,
+        '合法的正耐久照常覆盖');
+    for (const owner of ['player', 'enemy', 'enemy2', 'enemy3'] as const) {
+        const server = (result.config.modifiers?.[owner] ?? []).filter((loadout) => loadout.sourceKind === 'server');
+        assert.deepEqual(server, [], `${owner} 只有 buildingHp 时不能产出 server loadout`);
+    }
+    //  阵容外英雄（99999）的属性只忽略、不污染构筑，也不记成 skipped。
+    assert.deepEqual(result.skipped, []);
+});
+
+/**
+ * 服务端「绝对值 + 关卡减益」的合成口径（2026-11-18 山猫拍板 A 方案）。
+ *
+ * 实测回包（11:54 / 12:08 两局）里，敌方席位每个英雄都下发
+ * `attributes {attack, maxHp}` + `attack.addRate = -0.2` / `maxHp.addRate = -0.2`，
+ * 自己席位只发绝对值。原实现 `override ?? 累加` 把这一层整段吃掉 ⇒ 敌方强度高 25%。
+ * 这条用例钉的是**端到端**：减益必须出现在 `effectiveDefinitions` 里，而不是停在编译层。
+ */
+test('服务端绝对值与关卡减益同时下发：减益在定值之后叠乘并进入对局最终属性', () => {
+    const source = prepare(4);
+    const start = battle();
+    const remote: ZCBattleStart = { ...start, units: start.units.map((unit) => ({
+        ...unit,
+        heroes: [{ heroId: 68001, level: 1 }],
+        heroAttrs: parseBattleHeroAttrs([{ heroId: 68001, attrs: [
+            { attrId: 'attack', value: '12' },
+            { attrId: 'maxHp', value: '40' },
+            { attrId: 'attack.addRate', value: '-0.2' },
+            { attrId: 'maxHp.addRate', value: '-0.2' },
+        ] }]),
+        buffs: [],
+    })) };
+
+    const result = buildZCClientCombatConfig(source, remote, 'self');
+    const enemy = compileZCMatchRuntime(result.config).effectiveDefinitions.enemy.get('68001');
+    //  严格相等：叠乘后必须收敛 IEEE 尾数（`9.600000000000001` 会带进伤害与飘字）。
+    assert.equal(enemy?.attack, 9.6, '12 × 0.8 = 9.6');
+    assert.equal(enemy?.maxHp, 32, '40 × 0.8 = 32');
+    //  `buildingHp` 没有对应增量：服务端没给就回落本地卡表，不能被减益带偏。
+    assert.equal(result.config.enemyDeck.find((card) => card.unitId === '68001')?.baseHp,
+        source.enemyDeck.find((card) => card.unitId === '68001')?.baseHp);
+});

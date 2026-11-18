@@ -1,7 +1,26 @@
+import { RefUtil } from '../../framework/ref/RefUtil';
+import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
+import { RequestPvpHeroUpLevel, RequestPvpHeroUpSkill } from '../generated/requestMsg/RequestPvpMsg';
+import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
+import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
+import { readRoleRow } from '../main/MainRoleRow';
+import { GameNet } from '../net/GameNet';
+import { toCount } from '../net/RequestGuard';
 import type { ZCDeckBonuses, ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 import { getPlayerDeck, setCardRarityMeta } from '../zcds/model/ZCCombatCatalog';
-import { RequestPvpHeroUpLevel, RequestPvpHeroUpSkill } from '../generated/requestMsg/RequestPvpMsg';
-import { GameNet } from '../net/GameNet';
+import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
+import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
+import type { ZCCritDamageGainTable } from './CardDetailCritDamage';
+import { buildCritDamageGainTable, critDamageGainAt } from './CardDetailCritDamage';
+import type { CardDetailPresentation } from './CardDetailPresenter';
+import {
+    buildDetailChain,
+    buildDetailMilestones,
+    buildDetailStats,
+    detailBaseOfRow,
+    parseGrowthRows,
+} from './CardDetailPresenter';
+import { resolveCardLevelAttrs, resolveCardLevelAttrsPair } from './CardLevelAttr';
 import {
     currentDeckBonuses,
     ensureLineupDecks,
@@ -14,40 +33,21 @@ import {
     loadPvpHeroLevelCaps,
     loadPvpUnitGrowthRows,
 } from './CardLineupDecks';
-import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
-import type { ZCCardLevelUpTable, ZCUpgradeStatus } from './CardUpgradeCost';
-import { resolveCardLevelAttrs, resolveCardLevelAttrsPair } from './CardLevelAttr';
-import { cardAttackOf, formatPowerText, lineupAttackTotal } from './CardLineupPower';
 import type { ICardPowerInput } from './CardLineupPower';
-import { buildArmySkillTable } from './CardSkillList';
+import { cardAttackOf, formatPowerText, lineupAttackTotal } from './CardLineupPower';
+import { visibleLineupCards } from './CardLineupTypes';
+import type { ICardMaterialIcon, ICardSkillCost } from './CardPresentations';
 import type { ZCArmySkillTable } from './CardSkillList';
-import {
-    buildDetailChain,
-    buildDetailMilestones,
-    buildDetailStats,
-    detailBaseOfRow,
-    parseGrowthRows,
-} from './CardDetailPresenter';
-import { buildCritDamageGainTable, critDamageGainAt } from './CardDetailCritDamage';
-import type { ZCCritDamageGainTable } from './CardDetailCritDamage';
-import type { CardDetailPresentation } from './CardDetailPresenter';
-import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, saveFormation, selectFormation } from './FormationService';
+import { buildArmySkillTable } from './CardSkillList';
+import type { ZCCardLevelUpTable, ZCUpgradeStatus } from './CardUpgradeCost';
+import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
-import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
+import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, saveFormation, selectFormation } from './FormationService';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
-import { visibleLineupCards } from './CardLineupTypes';
+import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
+import type { PvpHeroInfo, PvpHeroService, PvpHeroSkillLevel } from './PvpHeroService';
 import { normalizePvpHeroInfos } from './PvpHeroService';
-import type { PvpHeroService, PvpHeroInfo, PvpHeroSkillLevel } from './PvpHeroService';
-import { RefUtil } from '../../framework/ref/RefUtil';
-import { CARD_ART_TABLES, parseCardArtConfig, type ICardArtConfig } from './CardArtConfig';
-import { cardArtProvider, type ICardDetailArt } from './CardArtProvider';
-import { itemDetailRepository } from '../itemdetail/ItemDetailRepository';
-import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
-import type { ICardSkillCost } from './CardPresentations';
-import { resBarCellOfRefId, resBarIconSpritePath } from '../common/ResTypes';
-import { readRoleRow } from '../main/MainRoleRow';
-import { sendGameRequest, toCount } from '../net/RequestGuard';
 
 import { ICON_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 export interface CardLineupData {
@@ -113,6 +113,8 @@ export type UpgradeHeroSkillResult =
 export interface ICardRepository {
     loadArtConfig(): Promise<ICardArtConfig>;
     loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt>;
+    /** 按优先级取首个加载成功的物品图标；无可用图标时返回 null。 */
+    loadMaterialIcon(itemIds: readonly string[]): Promise<ICardMaterialIcon | null>;
     loadLineup(autoLoadDecks: boolean, refreshFormations?: boolean): Promise<CardLineupData>;
     /** 首帧用的本地阵容快照；命中才返回值，否则返回 null。 */
     loadLineupSnapshot(): CardLineupData | null;
@@ -188,6 +190,21 @@ export class RuntimeCardRepository implements ICardRepository {
 
     async loadDetailArt(card: ZCDeckCard | null): Promise<ICardDetailArt> {
         return cardArtProvider.loadDetail(card, await this.loadArtConfig());
+    }
+
+    async loadMaterialIcon(itemIds: readonly string[]): Promise<ICardMaterialIcon | null> {
+        for (const itemId of itemIds) {
+            if (!itemId) continue;
+            try {
+                const item = await itemDetailRepository.loadItemRow(Number(itemId));
+                if (!item?.icon) continue;
+                const frame = await loadItemIconArt(item.icon);
+                if (frame) return { itemId, frame };
+            } catch (error) {
+                console.warn('[CardRepository] 材料图标加载失败', itemId, error);
+            }
+        }
+        return null;
     }
     /**
      * cardLevelUp 建表结果。卡库一次要 36 张卡的进度，复用一张表避免重复解析全表。
@@ -453,7 +470,7 @@ export class RuntimeCardRepository implements ICardRepository {
         const heroes = this.heroes;
         let response: CmdPvpHeroUpLevelRspMsg | null = null;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestPvpHeroUpLevel({ heroId }, caller, (rsp) => { response = rsp; }),
                 { tag: 'CardRepository' },
             );
@@ -487,7 +504,7 @@ export class RuntimeCardRepository implements ICardRepository {
         if (!Number.isSafeInteger(skillId) || skillId <= 0) return { kind: 'failed' };
         let response: CmdPvpHeroUpSkillRspMsg | null = null;
         try {
-            const status = await sendGameRequest(GameNet.instance, () =>
+            const status = await GameNet.sendRequest(() =>
                 new RequestPvpHeroUpSkill({ heroId, skillId }, caller, (rsp) => { response = rsp; }),
                 { tag: 'CardRepository' },
             );

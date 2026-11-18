@@ -16,7 +16,7 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { GameNet } from '../net/GameNet';
-import { sendGameRequest, toIdString } from '../net/RequestGuard';
+import { toIdString } from '../net/RequestGuard';
 import {
     ChatChannel,
     chatKey,
@@ -40,8 +40,8 @@ import {
     RequestTeamRecruitInit,
 } from './RequestChatMsg';
 
-import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 import { GUANKA_REWARD_TABLE } from '../../core/config/TableNames';
+import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
 /** 某个频道的某一页。 */
 export interface IChatPageData {
     readonly channel: number;
@@ -444,7 +444,7 @@ export class RuntimeChatRepository implements IChatRepository {
 
     /** 统一的发包 + 三态收口（离线早退 / `withTimeout` / `catch` 返 failed）。 */
     private async send(make: () => any, timeoutMs: number): Promise<ChatRequestResult> {
-        return sendGameRequest(GameNet.instance, make, { timeoutMs, tag: 'Chat' });
+        return GameNet.sendRequest(make, { timeoutMs, tag: 'Chat' });
     }
 }
 

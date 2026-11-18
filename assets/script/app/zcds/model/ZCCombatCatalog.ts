@@ -97,6 +97,8 @@ export interface ZCUnitDefinition {
     attackDuration: number;
     attackHitTime: number;
     bodyRadius: number;
+    /** pvpCard.unitValueFactor：越小越优先，仅重新索敌生效；旧配置缺省为 1。*/
+    valueFactor?: number;
     spawnSeconds: number;
     flying: boolean;
     canAttackAir: boolean;

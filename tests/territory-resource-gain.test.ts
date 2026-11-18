@@ -295,8 +295,8 @@ test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹�
         presentRewards(rewards: readonly Reward[], originCellId?: number, presentation?: { popup: boolean }): void;
     }> = {};
     runInNewContext(ts.transpileModule(`class RewardView { async playHeroBadges(rewards) { heroBadges.push(rewards); }
-        // 开箱「演出窗口」两个钩子：本用例只关心奖励分流，窗口开关由 territory-chest-open 盯。
-        cancelChestPresentationWatchdog() {} endChestPresentation() {}
+        // 开箱「演出窗口」三个钩子：本用例只关心奖励分流，窗口开关由 territory-chest-open 盯。
+        cancelChestPresentationWatchdog() {} endChestPresentation() {} openChestPresentation() {}
         ${methods.join('\n')} } exports.RewardView = RewardView;`, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, heroBadges, splitTerritoryRewards, FW: {

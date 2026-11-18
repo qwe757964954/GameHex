@@ -1,6 +1,7 @@
 import { Color, instantiate, Material, Node, Prefab, Sprite, SpriteFrame, UITransform, Vec3, Vec4 } from 'cc';
 import { ZCOwner } from '../model/ZCMapConfig';
 import type { ZCGameRenderFrame } from '../model/ZCGameRenderFrame';
+import type { DeepReadonly, ZCHexState } from '../model/ZCGameTypes';
 import {
     shouldRenderWallEdge,
     wallEndpointOwnerKey,
@@ -29,7 +30,7 @@ export interface IZCWallRendererDeps {
     readonly wallFrames: ReadonlyMap<string, SpriteFrame>;
 }
 
-type ZCWallState = ZCGameRenderFrame['snapshot']['hexes'][number];
+type ZCWallState = DeepReadonly<ZCHexState>;
 
 interface ZCVisibleWallSegment {
     wallState: ZCWallState;

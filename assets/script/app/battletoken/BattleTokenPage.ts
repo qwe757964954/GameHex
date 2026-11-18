@@ -192,8 +192,6 @@ export class BattleTokenPage extends PopupBase {
     private _rows: readonly ILevelRow[] = [];
     private _rowContext: IRowContext | null = null;
     private _frames = new Map<string, SpriteFrame>();
-    private _listBound3 = false;
-    private _listBound2 = false;
     private _tick = 0;
     private _busy = false;
     private plansThree: Node | null = null;
@@ -381,18 +379,12 @@ export class BattleTokenPage extends PopupBase {
             onTake: (order, index, resId) => { void this._takeReward(index, resId); },
         };
 
-        // 两个列表都接上（显隐另算）—— 只挂一次回调（规则 55）
+        // 两个列表都用同一行渲染；`renderItemFn` 是普通属性赋值，不是事件订阅。
         this.list3.node.active = three;
-        if (!this._listBound3) {
-            this._listBound3 = true;
-            this.list3.renderItemFn = (node, index) => this._renderRow(node, index);
-        }
+        this.list3.renderItemFn = (node, index) => this._renderRow(node, index);
         if (three) this.list3.refreshList(this._rows as unknown[]);
         this.list2.node.active = !three;
-        if (!this._listBound2) {
-            this._listBound2 = true;
-            this.list2.renderItemFn = (node, index) => this._renderRow(node, index);
-        }
+        this.list2.renderItemFn = (node, index) => this._renderRow(node, index);
         if (!three) this.list2.refreshList(this._rows as unknown[]);
 
         this._applyHeadExp(state, maxLevel, levelUpCostOf(snapshot));

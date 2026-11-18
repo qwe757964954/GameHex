@@ -10,87 +10,113 @@ export interface ITerritoryMonsterPatrol {
 }
 
 /**
- * 战斗组键：**同一片巡逻区域**。
+ * 一片巡逻区的键：**`site.id`**。
  *
- * 编辑器给每个巡逻格单独编号（`patrolChest_154` / `_155`…），`site.id` 只表达
- * 「巡逻路线连通的一组格」，不能拿来分战斗 —— 拿它分会变成「每格一组」，
- * 下标恒为 0、`battleIds` 的第二场（难度 2）永远不生效。
- * 一片区域的实际标识是「同一份 `battleIds` + 同一份前置格」：chapter_01 的
- * `[60001,60002] | [347]`、`[60003,60004] | [310]` 等五片正好各成一组。
+ * 2026-11-18 口径（山猫）：「巡逻宝箱之前根据战斗 id 判断，现在改由巡逻宝箱 id 相同」——
+ * 同 `site.id` 就是同一片，`battleId` / `requiredCells` **不参与**分组。
+ * 配置侧同步把同片格子刷成同一个 `site.id`（chapter_01 五片各一个 id），
+ * 编辑器读图时按同一口径分组。
+ *
+ * 为什么不能拿 `battleId` 当分组键：一片只配一个战斗，数值写歪一格就把它拆成两片 ⇒
+ * 那片 `route.length === 1` ⇒ 野怪永远站着不动（且零报错）。
  */
-function territoryBattleGroupKey(site: TerritorySite): string {
-    return `${site.battleIds?.join(',') ?? ''}|${site.unlock.requiredCells.join(',')}`;
+function territoryPatrolGroupKey(site: TerritorySite): string {
+    return site.id;
 }
 
 /**
- * 逐格分配战斗：区域组内按 `cellId` 升序，第 `i` 格取 `battleIds[i % length]`。
+ * 逐格战斗 ID：每一格 `cellId → battleId`。
  *
- * 配置里每组是「难度1 / 难度2」两场（`60001` / `60002`），这样摊开后同区两场都会
- * 落在具体格子上，而不是永远只用到第一个。
+ * 一片巡逻区共用同一个 `battleId`（{@link TERRITORY_SITE_TYPE.patrolChest} 的字段），
+ * 2026-11-18 起不再有「数组池按下标摊分」—— 配置里一直只填一个值，
+ * 摊分只会让「同片数值不一致」变成静默拆片。
+ *
+ * `battleId` 就是 `levelInfo.levelId`（`levelType=4 / levelMod=2 / chapterStage=0` 的
+ * 巡逻野怪关）：**开战参数按格子 id 发**（`chapterCellBattleParams`），这一份映射只用于
+ * 「这一格打哪一场」—— 绑关卡行（`TerritoryStageBinding`）与野怪停巡判据都读它。
  */
-function territoryBattleByCell(map: TerritoryMapConfig): ReadonlyMap<number, number> {
-    const groups = new Map<string, TerritorySite[]>();
-    for (const site of map.sites) {
-        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
-        const key = territoryBattleGroupKey(site);
-        const list = groups.get(key);
-        if (list) list.push(site);
-        else groups.set(key, [site]);
-    }
+export function territoryPatrolBattleByCell(
+    sites: readonly TerritorySite[],
+): ReadonlyMap<number, number> {
     const battleByCell = new Map<number, number>();
-    for (const sites of groups.values()) {
-        const ordered = sites.slice().sort((a, b) => a.cellId - b.cellId);
-        for (const [index, site] of ordered.entries()) {
-            const battleIds = site.battleIds;
-            if (!battleIds?.length) continue;
-            battleByCell.set(site.cellId, battleIds[index % battleIds.length]);
-        }
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        if (site.battleId === undefined) continue;
+        battleByCell.set(site.cellId, site.battleId);
     }
     return battleByCell;
 }
 
-/** 巡逻路线组：同一个 `site.id` 的全部巡逻格（footprint 并集）。 */
-function territoryRouteCells(map: TerritoryMapConfig): ReadonlyMap<string, ReadonlySet<number>> {
-    const cellsById = new Map<string, Set<number>>();
-    for (const site of map.sites) {
-        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
-        let cells = cellsById.get(site.id);
-        if (!cells) {
-            cells = new Set<number>();
-            cellsById.set(site.id, cells);
-        }
-        for (const cell of site.footprint) cells.add(cell);
+/**
+ * 这一片巡逻区上报后端用的格子：同 `site.id` 组里**带 `patrolId` 的那一格**。
+ *
+ * 怪物配置（`monsterCard.id`）绑在那一格上，服务端按 `cellId` 找配置 ⇒
+ * 「同片任一格命中，都把带怪物 id 的格子传给后端」（2026-11-18 口径）：
+ * 解锁与开战都用它。没有 `patrolId` 的旧图退回这一格自己。
+ */
+export function territoryPatrolAnchorCell(
+    site: TerritorySite,
+    sites: readonly TerritorySite[],
+): number {
+    if (site.type !== TERRITORY_SITE_TYPE.patrolChest) return site.cellId;
+    let anchor: number | null = null;
+    for (const item of sites) {
+        if (item.type !== TERRITORY_SITE_TYPE.patrolChest || item.id !== site.id) continue;
+        if (!item.patrolId) continue;
+        if (item.cellId === site.cellId) return item.cellId;
+        if (anchor === null || item.cellId < anchor) anchor = item.cellId;
     }
-    return cellsById;
+    return anchor ?? site.cellId;
 }
 
 /**
- * 巡逻野怪：组内格子全部开启后，从填了 `patrolId` 的格子出发，在本组格内往返。
+ * 巡逻路线组：**同一片巡逻区**（同一个 `site.id`）的全部巡逻格（footprint 并集）。
+ *
+ * 与 {@link territoryPatrolGroupKey} 同口径；停巡判据与绑关卡也读同一片。
+ */
+function territoryRouteCells(sites: readonly TerritorySite[]): ReadonlyMap<string, ReadonlySet<number>> {
+    const cellsByGroup = new Map<string, Set<number>>();
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        const key = territoryPatrolGroupKey(site);
+        let cells = cellsByGroup.get(key);
+        if (!cells) {
+            cells = new Set<number>();
+            cellsByGroup.set(key, cells);
+        }
+        for (const cell of site.footprint) cells.add(cell);
+    }
+    return cellsByGroup;
+}
+
+/**
+ * 巡逻野怪：**一片巡逻区**（同 `site.id`）的格子全部开启后，从填了 `patrolId` 的格子出发，
+ * 在这片区域的格子内往返（分片口径见 {@link territoryRouteCells}）。
  *
  * 生灭判据是**战斗 id**（与关卡同口径），不是单项占点：
- * - 区域组内按 `cellId` 升序把 `battleIds` 依次摊到各格（见 `territoryBattleByCell`）；
+ * - 一片巡逻区（同 `site.id`）共用同一个 `battleId`（见 `territoryPatrolBattleByCell`）；
  * - 同一场战斗（同 battleId）的格子**共享通过状态** —— 任一格已占点即整片通过，
  *   与 `TerritoryProgress.isAreaPassed` 的区域口径一致；
- * - 该格战斗已通过 ⇒ 不再生成这只巡逻野怪（玩家打掉了这组敌人）。
+ * - 该场战斗已通过 ⇒ 不再生成这只巡逻野怪（玩家打掉了这组敌人）。
  *
- * 「组内格子全部开启」仍保留为前置：它是**可见性**条件，未揭示的格子被云层盖着，
+ * 「片区内格子全部开启」仍保留为前置：它是**可见性**条件，未揭示的格子被云层盖着，
  * 提前出怪会直接穿帮。战斗判定决定的是「已经在巡逻的怪什么时候消失」。
  */
 export function buildTerritoryMonsterPatrols(
     map: TerritoryMapConfig,
     progress: { isCellUnlocked(cellId: number): boolean; isOwned(cellId: number): boolean },
 ): readonly ITerritoryMonsterPatrol[] {
-    const battleByCell = territoryBattleByCell(map);
+    const battleByCell = territoryPatrolBattleByCell(map.sites);
     // 已通过的战斗：同 id 的格子任一格占点即算通过（关卡的区域共享同口径）。
     const passed = new Set<number>();
     for (const [cellId, battleId] of battleByCell) {
         if (progress.isOwned(cellId)) passed.add(battleId);
     }
-    const cellsById = territoryRouteCells(map);
+    const cellsByGroup = territoryRouteCells(map.sites);
     const patrols: ITerritoryMonsterPatrol[] = [];
     for (const site of map.sites) {
         if (site.type !== TERRITORY_SITE_TYPE.patrolChest || !site.patrolId) continue;
-        const cells = cellsById.get(site.id);
+        const cells = cellsByGroup.get(territoryPatrolGroupKey(site));
         if (!cells) continue;
         if (!Array.from(cells).every(cell => progress.isCellUnlocked(cell) || progress.isOwned(cell))) continue;
         const battleId = battleByCell.get(site.cellId);

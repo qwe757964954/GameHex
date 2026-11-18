@@ -22,6 +22,33 @@ function runtime<T>(name: string, dependencies: Record<string, unknown>): T {
     return exports as T;
 }
 
+test('升级材料沿用物品表和共用图标加载器，缺图、空帧或失败时回退到下一个物品', async () => {
+    const rows: number[] = [], icons: string[] = [];
+    const frame = {};
+    const { RuntimeCardRepository: Repository } = runtime<{ RuntimeCardRepository: new () => RuntimeCardRepository }>('CardRepository', {
+        '../itemdetail/ItemDetailRepository': { itemDetailRepository: {
+            loadItemRow: async (id: number) => {
+                rows.push(id);
+                return id === 1 ? null : { icon: id === 2 ? '' : String(id) };
+            },
+        } },
+        '../itemdetail/ItemDetailArtLoader': {
+            loadItemIconArt: async (icon: string) => {
+                icons.push(icon);
+                if (icon === '4') throw new Error('missing art');
+                return icon === '3' ? null : frame;
+            },
+        },
+    });
+    const repository = new Repository();
+    const result = await repository.loadMaterialIcon(['', '1', '2', '3', '4', '5']);
+    assert.equal(result.itemId, '5');
+    assert.equal(result.frame, frame);
+    assert.deepEqual(rows, [1, 2, 3, 4, 5]);
+    assert.deepEqual(icons, ['3', '4', '5']);
+    assert.equal(await repository.loadMaterialIcon(['', '1', '2', '3']), null);
+});
+
 test('三张矩阵表解析出全部映射且资源真实存在', () => {
     assert.equal(cardArtConfig.paths.size, REQUIRED_CARD_ART_KEYS.length);
     for (const [key, path] of cardArtConfig.paths) assert.ok(assetPath(`${path}.png`), key);

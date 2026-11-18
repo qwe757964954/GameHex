@@ -349,11 +349,36 @@ export class ZCSnapshotCodec {
                 'auraReadyAt',
                 // 磁电冲击（磁电菇 101604，2026-11-11）：按累计普攻触发的上次计数。
                 'auraFiredCount',
+                // 生命爆发 / 战神附体（窝瓜人 101904 / 爆锤莲王 102704，2026-11-18 第 17 批）：
+                // 按累计普攻触发的上次计数（另一条车道，别和 `auraFiredCount` 混用）+
+                // 视图用的体型倍数。体型不还原的话读档回来会「状态还在、人变回原大小」。
+                'counterFiredCount', 'bodyScale',
                 // 五雷轰顶（磁电菇 68016，2026-11-11）：CD 截止。同一套口径。
                 'boltReadyAt',
                 // 精密陷阱（科学家 68035，2026-11-12）：CD 截止。同一套口径 ——
                 // 不还原的话读档回来会立刻在白送一个陷阱（`undefined` ⇒ 重新按 CD 起算）。
                 'trapReadyAt',
+                // 孢爆箭 / 孢子凝珠（风炮菇 101303 / 水手菇 101104，2026-11-17 第 12 批）：
+                // CD 截止。不还原的话读档回来会白送一发（`undefined` ⇒ 重新按 CD 起算）。
+                'splashReadyAt',
+                // 菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
+                // CD 截止。同一套口径 —— 不还原就是「读档回来白送一次范围爆发」。
+                'burstReadyAt',
+                // 菌丝绞杀 / 菌丝突刺（机甲菇 101503 / 分裂菇 101403，2026-11-17 第 14 批）：
+                // 同样是 CD 截止，不还原就是「读档回来白送一次扇形 / 一次突刺」。
+                'fanReadyAt', 'singleReadyAt',
+                // 菌盾冲锋 / 冲锋（菇八戒 101204 / 南瓜战神 102303 / 爆锤莲王 102703，
+                // 2026-11-17 第 15 批）：同样是 CD 截止，不还原就是「读档回来白送一次冲锋」。
+                'chargeReadyAt', 'dashReadyAt',
+                // 孢爆箭（风炮菇 101303，2026-11-18 第 16 批改成「风弹 + 飓风」）：
+                // 独立的 CD 截止。不还原就是读档回来白送一发风弹。
+                'windReadyAt',
+                // 连射导弹（风炮菇 101304，2026-11-18 第 16 批）：按累计普攻触发的上次计数。
+                // 不还原的话读档回来「已经打了 7 次普攻」会被当成从 0 开始，白送一轮连射。
+                'barrageFiredCount',
+                // 同一轮里「还剩几颗 / 下一颗几时」：不还原就会出现「读档后这一轮永远发不完」
+                // 或者「多发一颗」——`barrageNextAt` 是绝对时刻，与 CD 那一批同口径。
+                'barrageShotsLeft', 'barrageNextAt',
                 // 施法动作（2026-11-13 用户需求）：动作窗口截止 + buff 类原地锁截止。
                 // 两个都是「绝对时刻」，只影响表现与「这一秒能不能挪窝」，不进任何伤害算式。
                 'castActionUntil', 'castHoldUntil']) {
@@ -426,6 +451,21 @@ export class ZCSnapshotCodec {
             check(optional(projectile.burstSecondDamage, nonnegative), `${path}.burstSecondDamage`);
             check(optional(projectile.burstSecondDelay, nonnegative), `${path}.burstSecondDelay`);
             check(optional(projectile.burstEffectSeconds, nonnegative), `${path}.burstEffectSeconds`);
+            //  2026-11-18 第 16 批「连射导弹」101304：只走落点引爆的弹体。
+            //  两个开关 + 落点爆炸的半径/伤害都必须进快照 —— 退不出去的话，
+            //  联机两端会在「这一颗炸没炸、炸多大」上分叉。
+            for (const key of ['ignoresMidAirCollision', 'explodeOnArrival']) {
+                check(optional(projectile[key], v => typeof v === 'boolean'), `${path}.${key}`);
+            }
+            check(optional(projectile.arriveRadius, nonnegative), `${path}.arriveRadius`);
+            check(optional(projectile.arriveDamage, nonnegative), `${path}.arriveDamage`);
+            //  2026-11-18 第 16 批「孢爆箭」101303：命中点留下的飓风（半径/秒/伤害/表现）。
+            check(optional(projectile.hurricaneRadius, nonnegative), `${path}.hurricaneRadius`);
+            check(optional(projectile.hurricaneSeconds, nonnegative), `${path}.hurricaneSeconds`);
+            check(optional(projectile.hurricaneDamage, nonnegative), `${path}.hurricaneDamage`);
+            check(optional(projectile.hurricanePrefabPath, v => v === null || typeof v === 'string'), `${path}.hurricanePrefabPath`);
+            //  爆炸特效的事件级倍率（同一份 prefab 被两条技能以不同半径复用时只能走这一格）。
+            check(optional(projectile.impactEffectScale, v => nonnegative(v) && (v as number) > 0), `${path}.impactEffectScale`);
         });
         check(optional(data.groundZones, v => Array.isArray(v)), 'groundZones');
         if (Array.isArray(data.groundZones)) data.groundZones.forEach((zone: unknown, index: number) => {
@@ -451,6 +491,9 @@ export class ZCSnapshotCodec {
             check(optional(zone.maxHits, v => integer(v) && (v as number) >= 0), `${path}.maxHits`);
             check(optional(zone.hitUnitIds, v => Array.isArray(v)
                 && v.every(id => integer(id) && (id as number) > 0)), `${path}.hitUnitIds`);
+            //  2026-11-18 第 16 批（孢爆箭的飓风 101303）：同一个敌人只挨一次。
+            //  必须进快照 —— 不还原的话读档回来，站在飓风里的人会白挨第二下。
+            check(optional(zone.hitOncePerUnit, v => typeof v === 'boolean'), `${path}.hitOncePerUnit`);
             //  2026-11-06 逐目标递减（魔术师「鹿神守护」103405）：0~1 的比例。
             check(optional(zone.damageFalloff, v => nonnegative(v) && (v as number) <= 1), `${path}.damageFalloff`);
             //  2026-11-07 鹿神守护「先走近、再冲刺」：两段速度都要能还原，否则存档回来小鹿会

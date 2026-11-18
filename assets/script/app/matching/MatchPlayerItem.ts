@@ -123,11 +123,6 @@ export class MatchPlayerItem extends Component {
         if (frame) this.avatarFrame.spriteFrame = frame;
     }
 
-    protected onDestroy(): void {
-        this.contentRevision++;
-        this.slotRevision++;
-    }
-
     update(deltaTime: number): void {
         if (!this.isSearching) return;
         this.searchOrbitAngle += SEARCH_ORBIT_SPEED * deltaTime;

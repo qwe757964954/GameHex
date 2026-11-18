@@ -1,6 +1,7 @@
 import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
-import type { TerritoryMapConfig, TerritorySite } from './TerritoryMapConfig';
+import type { TerritoryMapConfig, TerritorySite, TerritorySiteType } from './TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
+import { territoryPatrolBattleByCell } from './TerritoryMonsterPatrol';
 import type { TerritoryProgress } from './TerritoryProgress';
 
 export interface TerritoryStageBinding {
@@ -157,10 +158,38 @@ export function bindTerritoryBattleStages(
     return bindStagesForSiteTypes(sites, stages, [TERRITORY_SITE_TYPE.stage, TERRITORY_SITE_TYPE.boss, TERRITORY_SITE_TYPE.asyncPvp]);
 }
 
+/**
+ * 巡逻宝箱绑定：每格按自己的 `battleId` 找关卡行（同片共用一个）。
+ *
+ * 与 {@link bindTerritoryStages} 的两点不同，都是必须的：
+ * - **不做 `levelId` 去重**：一片巡逻区里多个格子共享同一个 `battleId`，
+ *   每一格都要能点开打这一场；去重会让第二格起「查出没有关卡」。
+ * - **不进线性推进链**：`applyTerritoryStageUnlocks` 只吃主线绑定，
+ *   巡逻区的解锁前置由地图 JSON 的 `requiredCells` 决定，不能被串成关卡链。
+ *
+ * 巡逻关在 `levelInfo` 里是 `levelType=4 / levelMod=2 / chapterStage=0`（如 `60001`），
+ * 战斗走 `chapterCellBattleParams`（格子 id 定位），与本绑定只用于「取这一格的关卡行」。
+ */
+export function bindTerritoryPatrolStages(
+    sites: readonly TerritorySite[],
+    stages: readonly TerritoryCampaignStage[],
+): TerritoryStageBinding[] {
+    const stageById = new Map(stages.map((stage) => [stage.levelId, stage]));
+    const battleByCell = territoryPatrolBattleByCell(sites);
+    const bindings: TerritoryStageBinding[] = [];
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        const battleId = battleByCell.get(site.cellId);
+        const stage = battleId === undefined ? undefined : stageById.get(battleId);
+        if (stage) bindings.push({ site, stage });
+    }
+    return bindings;
+}
+
 function bindStagesForSiteTypes(
     sites: readonly TerritorySite[],
     stages: readonly TerritoryCampaignStage[],
-    siteTypes: readonly TerritorySite['type'][],
+    siteTypes: readonly TerritorySiteType[],
 ): TerritoryStageBinding[] {
     const stageById = new Map(stages.map((stage) => [stage.levelId, stage]));
     const usedLevelIds = new Set<number>();

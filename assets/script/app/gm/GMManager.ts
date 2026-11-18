@@ -79,7 +79,7 @@ export class GMManager extends Component {
         if (GMCommandTable.onToggleEntrance === this._onToggleEntrance) {
             GMCommandTable.onToggleEntrance = null;
         }
-        if (this.entrance) this.entrance.off(Node.EventType.TOUCH_END, this.togglePanel, this);
+        if (this.entrance && this.entrance.isValid) this.entrance.off(Node.EventType.TOUCH_END, this.togglePanel, this);
         if (GMManager._instance === this) {
             GMManager._instance = null;
         }

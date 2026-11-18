@@ -1,5 +1,7 @@
 import { createControllerContext } from './helpers/controller-context';
-import { BigMapController } from '../assets/script/app/bigmap/application/BigMapController';
+import { loadBigMapController } from './helpers/bigmap-controller';
+
+const { BigMapController } = loadBigMapController();
 /**
  * 据点角色事件广播（`CmdSlgGameRoleInfoBroMsg`，协议 r883）的接线单测。
  *

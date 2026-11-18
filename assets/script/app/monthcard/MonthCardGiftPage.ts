@@ -178,11 +178,13 @@ export class MonthCardGiftPage extends PopupBase {
     /** 保证有 count 个条目实例，多余的只隐藏不销毁。 */
     private async ensureEntries(count: number): Promise<boolean> {
         if (!this.entryPrefab) {
-            this.entryPrefab = await this.loadEntryPrefab();
-            if (!this.entryPrefab) {
+            const prefab = await this.loadEntryPrefab();
+            if (!this.alive) return false;
+            if (!prefab) {
                 this.setHint(MONTHCARD_TEXTS.entryLoadFailed);
                 return false;
             }
+            this.entryPrefab = prefab;
         }
 
         while (this.entries.length < count) {
@@ -328,12 +330,11 @@ export class MonthCardGiftPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 
     onDestroy(): void {
         this.stopCountdown();
-        this.revision += 1;
         this.entries = [];
         this.views = [];
         this.repo.unlisten(this);

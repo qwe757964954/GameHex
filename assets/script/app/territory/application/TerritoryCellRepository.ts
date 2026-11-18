@@ -1,23 +1,29 @@
-import { GameNet } from '../../net/GameNet';
-import { sendGameRequest } from '../../net/RequestGuard';
-import { startBattle as requestStartBattle } from '../../battle/BattleStartService';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
+import { startBattle as requestStartBattle } from '../../battle/BattleStartService';
+import { GameNet } from '../../net/GameNet';
+import {
+    decodeCellBitSet,
+    emptyCellState,
+    ITerritoryCellState,
+} from '../model/TerritoryCellBitSet';
+import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
+import { readTerritoryGrantedRewards } from '../model/TerritoryGrantedReward';
+import {
+    readTerritoryMonsterBox,
+    readTerritoryMonsterBoxes,
+    withTerritoryMonsterBox,
+    type ITerritoryMonsterBox,
+} from '../model/TerritoryMonsterBox';
+import { normalizeTerritoryChapter } from '../model/TerritoryProgress';
+import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
 import {
     RequestTerritoryCellInfo,
     RequestTerritoryIdleReward,
     RequestTerritoryPassCell,
     RequestTerritorySweep,
     RequestTerritoryUnlockCell,
+    RequestTerritoryUpMonsterBoxLv,
 } from './RequestTerritoryCellInfoMsg';
-import {
-    decodeCellBitSet,
-    emptyCellState,
-    ITerritoryCellState,
-} from '../model/TerritoryCellBitSet';
-import { readTerritoryGrantedRewards } from '../model/TerritoryGrantedReward';
-import type { ITerritoryGrantedReward } from '../model/TerritoryGrantedReward';
-import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
-import { normalizeTerritoryChapter } from '../model/TerritoryProgress';
 
 import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
 /**
@@ -62,6 +68,19 @@ export type TerritoryWriteResult =
 /** Boss 关开战（`CmdStartBattleReqMsg`）结果；`rejected` = 服务端拒绝（业务原因）。 */
 export type TerritoryStartBattleResult =
     | { readonly ok: true; readonly battle: ZCBattleStart }
+    | { readonly ok: false; readonly reason: TerritoryRequestFailure };
+
+/**
+ * 升级怪物宝箱结果。
+ *
+ * 与 {@link TerritoryWriteResult} 分开：回包除了 `succ` 还带**那一格的新等级**
+ * （`monsterBoxInfo`），且升级本身不发奖（奖励在打掉宝箱时结算），没有 `tlCmdGoods`。
+ *
+ * `monsterBox === null` 的语义是「**升级成功但等级未知**」（`succ = 1` 而回包条目缺失/脏），
+ * 不是失败 —— 见 {@link TerritoryCellRepository.upMonsterBoxLv}。
+ */
+export type TerritoryMonsterBoxUpgradeResult =
+    | { readonly ok: true; readonly monsterBox: ITerritoryMonsterBox | null }
     | { readonly ok: false; readonly reason: TerritoryRequestFailure };
 
 /**
@@ -227,6 +246,53 @@ export class TerritoryCellRepository {
     }
 
     /**
+     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
+     *
+     * 请求体只有章节与格子，**消耗由服务端按当前等级扣**（客户端不传，也不预扣本地银币）
+     * —— 与解锁/通关同一条「写请求不乐观更新」：等服务端 `succ = 1` 再改快照。
+     *
+     * 成功后只把**那一条** `monsterBoxInfo` 并进当前章节快照（`withTerritoryMonsterBox`），
+     * 不整包重建：格子状态（unlock / pass）由别的回包负责，这里重写会把这期间收到的
+     * 推送覆盖掉。
+     */
+    async upMonsterBoxLv(
+        levelChapter: number,
+        cellId: number,
+        caller?: object,
+    ): Promise<TerritoryMonsterBoxUpgradeResult> {
+        const chapter = normalizeTerritoryChapter(levelChapter);
+        let updated: ITerritoryMonsterBox | null = null;
+        let received = false;
+        let succeeded = false;
+        const sent = await this.send(
+            () => new RequestTerritoryUpMonsterBoxLv(
+                { levelChapter: chapter, cellId },
+                caller,
+                (rsp) => {
+                    received = true;
+                    succeeded = Number((rsp as { succ?: unknown })?.succ) === 1;
+                    if (succeeded) updated = readTerritoryMonsterBox((rsp as { monsterBoxInfo?: unknown })?.monsterBoxInfo);
+                },
+            ),
+            '[TerritoryCell] 升级怪物宝箱失败',
+        );
+        // 不用 `writeWithSucc`：它的返回类型与本方法的成功分支不同（`ok: true` 少了等级），
+        // 而本工程 `strictNullChecks` 未开启、对可判别联合的 `!result.ok` 收窄不生效
+        // （既有代码判失败一律写 `'reason' in result`，见 `mergeServerState`）。
+        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: sent };
+        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: sent };
+        // `send` 的 ok 只代表包发出去了；超时兜底先返回时回调还没跑 —— 与领挂机奖励同口径。
+        if (!received) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
+        if (!succeeded) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
+        // `succ = 1` 但回包条目缺失/脏 ⇒ **不能报失败**：服务端已经升级、消耗可能已扣，
+        // 报失败会让界面回滚出一个与服务端不一致的状态。降级成「等级未知」，由调用方重拉。
+        if (updated && this.state && this.state.levelChapter === chapter) {
+            this.state = { ...this.state, monsterBoxes: withTerritoryMonsterBox(this.state.monsterBoxes, updated) };
+        }
+        return { ok: true, monsterBox: updated };
+    }
+
+    /**
      * 章节关开战：请求战斗信息（`CmdStartBattleReqMsg`），battleType = 1002，
      * battleParams = [子类型, 章节id, cellid]（子类型 1 = 格子战斗，由调用方
      * `chapterCellBattleParams` 组好）。返回空（未连接/超时/失败）统一为 `failed`。
@@ -322,7 +388,7 @@ export class TerritoryCellRepository {
 
      */
     private async send(build: () => unknown, label: string): Promise<'ok' | TerritoryRequestTransportFailure> {
-        return sendGameRequest(GameNet.instance, build, { timeoutMs: READ_TIMEOUT_MS, tag: label });
+        return GameNet.sendRequest(build, { timeoutMs: READ_TIMEOUT_MS, tag: label });
     }
 
     /** 写请求公共壳：离线早退 + 超时兜底 + `succ` 判定。 */
@@ -366,6 +432,7 @@ export class TerritoryCellRepository {
             rewardState?: unknown;
             unlockCells?: unknown;
             passCells?: unknown;
+            monsterBoxInfos?: unknown;
         };
         const unlock = decodeCellBitSet(record.unlockCells as readonly unknown[] | undefined, maxCell);
         const pass = decodeCellBitSet(record.passCells as readonly unknown[] | undefined, maxCell);
@@ -394,8 +461,11 @@ export class TerritoryCellRepository {
             rewardState: Number(record.rewardState) || 0,
             unlockCells: unlock.cells,
             passCells: pass.cells,
+            // 附属信息 ⇒ **逐条丢弃脏数据**，不像 bitSet 那样整包作废（见 `TerritoryMonsterBox` 文件头）。
+            monsterBoxes: readTerritoryMonsterBoxes(record.monsterBoxInfos, maxCell),
         };
     }
 }
 
 export type { ITerritoryCellState };
+

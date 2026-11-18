@@ -25,17 +25,29 @@ import type { INetRequestStatus } from '../../core/types/NetResult';
 
 import { FW } from '../../framework/FW';
 import { RefUtil } from '../../framework/ref/RefUtil';
-import { readRefRows } from '../common/TableRead';
-import { GameNet } from '../net/GameNet';
-import { CacheMgr } from '../net/CacheMgr';
-import { sendGameRequest, toCount, toIdString } from '../net/RequestGuard';
 import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import { resolveRewardIconRef } from '../common/RewardIcon';
+import { readRefRows } from '../common/TableRead';
+import { RequestGetRank } from '../generated/requestMsg/RequestRankMsg';
+import { CacheMgr } from '../net/CacheMgr';
+import { GameNet } from '../net/GameNet';
+import { toCount, toIdString } from '../net/RequestGuard';
+import type {
+    ECelebrationTargetRewardType,
+    ICelebrationGoodsInfo,
+    ICelebrationRankRow,
+    ICelebrationRankTime,
+    ICelebrationServerState,
+    ICelebrationShopPricing,
+    ICelebrationShopRow,
+    ICelebrationSnapshot,
+    ICelebrationTargetRow,
+} from './CelebrationTable';
 import {
     buyCountOf,
     celebrationIdOf,
-    configOfRankType,
     conditionTextOf,
+    configOfRankType,
     countdownHmsOf,
     countdownOffsetOf,
     enabledOf,
@@ -61,23 +73,11 @@ import {
     stateBySubId,
     targetsOf,
 } from './CelebrationTable';
-import type {
-    ECelebrationTargetRewardType,
-    ICelebrationGoodsInfo,
-    ICelebrationRankRow,
-    ICelebrationRankTime,
-    ICelebrationServerState,
-    ICelebrationShopPricing,
-    ICelebrationShopRow,
-    ICelebrationSnapshot,
-    ICelebrationTargetRow,
-} from './CelebrationTable';
 import { CL_TEXTS } from './CelebrationTexts';
 import { RequestCelebrationBuyShop, RequestCelebrationGetTargetReward } from './RequestCelebrationMsg';
-import { RequestGetRank } from '../generated/requestMsg/RequestRankMsg';
 
+import { ITEM_TABLE, PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE } from '../../core/config/TableNames';
 import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-import { PAY_CHANNEL_TABLE, ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 // 判定与格式化都在零 import 的 `CelebrationTable`，这里转出一部分，页面只 import 本文件。
 export { CL_NOT_IN_RANK, buyCountOf, numAbbrOf, purchaseStateOf } from './CelebrationTable';
 export type {
@@ -90,7 +90,7 @@ export type {
     ICelebrationShopPricing,
     ICelebrationShopRow,
     ICelebrationSnapshot,
-    ICelebrationTargetRow,
+    ICelebrationTargetRow
 } from './CelebrationTable';
 
 /** 三个页签的个数（FGUI 控制器 `页签` 的页数）。 */
@@ -237,8 +237,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestCelebrationGetTargetReward({ id, subId }, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Celebration' },
         );
@@ -265,8 +264,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             applied = true;
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestCelebrationBuyShop({ id, subId }, caller, callback),
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Celebration' },
         );
@@ -298,8 +296,7 @@ export class RuntimeCelebrationRepository implements ICelebrationRepository {
             };
         };
 
-        const status = await sendGameRequest(
-            GameNet.instance,
+        const status = await GameNet.sendRequest(
             () => new RequestGetRank({ rankType: rankType as CmdRankType, showNum, unionId }, caller, callback),
             { timeoutMs: READ_TIMEOUT_MS, tag: 'Celebration' },
         );

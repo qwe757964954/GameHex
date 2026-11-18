@@ -5,7 +5,8 @@
  * 两个不报错的失败点：
  * ① 非 `click` 步（翻地块 / 抽卡 / 确认按钮）最后一句点了没反应 ⇒ 对话条常驻屏幕底部，
  *    玩家以为还要继续点，实际该点光圈里的目标；
- * ② 焦点还没解析出来（光圈没显示）就收起 ⇒ 玩家既没字看也没地方点，只能等超时兜底。
+ * ② 反过来，焦点解析不出来（光圈没显示）时**也必须能收起**：那一步世界本来就没被挡，
+ *    收起只会让玩家更自由；旧判据「没有孔就不许收」让 6-2 那种步永远收不掉（第 19 条）。
  */
 
 import test from 'node:test';
@@ -49,11 +50,15 @@ function fixture(lines: number, ringVisible = true) {
     const stub = {
         index: 0, queue: new Array(lines).fill({}) as readonly object[], canAdvance: false, idleArmed: true,
         stepId: '2-1', dialogBox: { active: true }, focusRing: { active: ringVisible },
-        played: 0, portraits: 0, layouts: 0,
+        // 第 19 条起 `dismissDialog` 会在同一帧撤掉点击区（`blockerNode.active = false`）。
+        blockerNode: { active: true },
+        played: 0, portraits: 0, layouts: 0, flushes: 0,
         unschedule(this: { idleArmed: boolean }) { this.idleArmed = false; },
         playLine(this: { index: number; played: number }, next: number) { this.index = next; this.played += 1; },
         hidePortrait(this: { portraits: number }) { this.portraits += 1; },
         layoutBlocker(this: { layouts: number }) { this.layouts += 1; },
+        // 第 20 条：收起台词的那一帧要把「被挡住的换步」补上。
+        flushPendingState(this: { flushes: number }) { this.flushes += 1; },
     };
     return Object.assign(new exports.View!(), stub) as typeof stub & { onTap(): void };
 }
@@ -83,19 +88,19 @@ test('非 click 步最后一句收起对话条：连立绘一起收，点击区�
     assert.equal(view.dialogBox.active, false, '对话结束就该关掉对话框');
     assert.equal(view.portraits, 1, '立绘跟着对话条一起收');
     assert.equal(view.layouts, 1, '点击区要按新尺寸重排');
+    assert.equal(view.flushes, 1, '收起这一帧就要把「被台词挡住的换步」补上（第 20 条）');
     assert.deepEqual(signals, [], '不是 click 步，不该往 Controller 报推进');
 });
 
-test('光圈还没显示（焦点未就绪）时不收对话条，避免两头都点不到', () => {
+test('光圈还没显示（焦点未就绪）时也能收起：那一步的世界本来就没被挡（第 19 条）', () => {
     const view = fixture(2, false);
     view.index = 1;
     view.onTap();
-    assert.equal(view.dialogBox.active, true);
-    assert.equal(view.portraits, 0);
-    // 焦点随后就绪，再点一次正常收起。
-    view.focusRing.active = true;
-    view.onTap();
-    assert.equal(view.dialogBox.active, false);
+    // 旧行为是「不收」：6-2 的 `CardList/Card_68001` 解析不出来时，对话条就此钉在屏幕底部 ——
+    // 玩家点不掉、8s 超时那条也点不掉。
+    assert.equal(view.dialogBox.active, false, '焦点没就绪也必须收得掉');
+    assert.equal(view.portraits, 1, '立绘跟着收');
+    assert.equal(view.blockerNode.active, false, '同一帧撤掉点击区，别白吃一次点击');
 });
 
 test('重复点击已收起的对话条不会重复收立绘/重排', () => {
@@ -109,9 +114,61 @@ test('重复点击已收起的对话条不会重复收立绘/重排', () => {
 });
 
 test('每帧对齐不得把收起的对话条又打开（placeFocusRing 必须判 dialogClosed）', () => {
+    // 第 24 条在这条判断里加了一个 `awaitingNarration`（等关卡光圈），dialogClosed 仍然必须在。
     assert.match(viewSource,
-        /this\.dialogBox\.active = !waitingForBattleFocus && !this\.dialogClosed && this\.queue\.length > 0/,
+        /this\.dialogBox\.active = !waitingForBattleFocus && !awaitingNarration\s*\n?\s*&& !this\.dialogClosed && this\.queue\.length > 0/,
         'placeFocusRing 每帧重设 active，漏掉 dialogClosed 就会把对话条立刻打开');
+});
+
+// 第 20 条：换步不能把还没说完的台词一起拆掉（战斗抽卡那张牌只活 1.156s）。
+const holdExports: { View?: new () => object } = {};
+runInNewContext(ts.transpileModule(
+    `exports.View = class { stepId = ''; queue = []; dialogClosed = false; focusKey = ''; ${methodText('shouldHoldForDialog')} };`,
+    { compilerOptions: { target: ts.ScriptTarget.ES2020, module: ts.ModuleKind.CommonJS } },
+).outputText, { exports: holdExports });
+
+interface IHoldView {
+    stepId: string;
+    queue: readonly object[];
+    dialogClosed: boolean;
+    focusKey: string;
+    shouldHoldForDialog(state: { stepId: string; dialogId: string }): boolean;
+}
+
+function holdFixture(): IHoldView {
+    return Object.assign(new holdExports.View!(), {
+        stepId: '5-3', queue: [{}, {}, {}], dialogClosed: false, focusKey: 'Battle/DrawnCard',
+    }) as IHoldView;
+}
+
+test('战斗抽卡：卡牌 1.156s 就没了，切 5-4 时台词必须留在屏幕上（第 20 条）', () => {
+    const view = holdFixture();
+    // `5-3` 的 D06 有 3 句、`5-4` 没有台词 ⇒ 挡住，等台词按 8s/句播完（或点掉）再切画面。
+    assert.equal(view.shouldHoldForDialog({ stepId: '5-4', dialogId: '' }), true);
+    // 上一步的台词已经收起 ⇒ 立刻切。
+    view.dialogClosed = true;
+    assert.equal(view.shouldHoldForDialog({ stepId: '5-4', dialogId: '' }), false);
+});
+
+test('新的一步自己有台词时不挡：否则下一步的推进点击会被吞掉（`cardLevelUp` 落在旧步上）', () => {
+    const view = holdFixture();
+    assert.equal(view.shouldHoldForDialog({ stepId: '6-3', dialogId: 'D09' }), false);
+    // 同一步重刷（弹窗开关 / 事件回流）绝不挡。
+    assert.equal(view.shouldHoldForDialog({ stepId: '5-3', dialogId: '' }), false);
+});
+
+test('玩家自己点出来的换步不挡（5-1 点关卡 → 5-2）：只拦战斗内的完成判定', () => {
+    const view = holdFixture();
+    view.stepId = '5-1';
+    view.focusKey = 'Map/Level_10001';
+    assert.equal(view.shouldHoldForDialog({ stepId: '5-2', dialogId: '' }), false);
+});
+
+test('`render` 先判「要不要等台词」，`hide` 丢掉暂存状态', () => {
+    assert.match(viewSource, /if \(this\.shouldHoldForDialog\(state\)\) \{\n            this\.pendingState = state;/,
+        'render 开头就要拦，不能先改 stepId 再判');
+    assert.match(methodText('dismissDialog'), /this\.flushPendingState\(\);/, '收起台词的那一帧补上换步');
+    assert.match(methodText('hide'), /this\.pendingState = null;/, '整层收起时别留着旧状态');
 });
 
 /**

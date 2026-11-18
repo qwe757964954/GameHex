@@ -87,7 +87,22 @@ export interface CardUpgradePresentation {
     readonly detail: CardDetailPresentation | null;
 }
 
+export interface ICardMaterialIcon {
+    readonly itemId: string;
+    readonly frame: SpriteFrame;
+}
+
+export interface ICardUpgradeMaterial extends ICardMaterialIcon {
+    readonly owned: number;
+}
+
+export interface ICardUpgradeMaterials {
+    readonly card: ICardUpgradeMaterial | null;
+    readonly exp: ICardUpgradeMaterial | null;
+}
+
 export interface ICardUpgradeViewState extends CardUpgradePresentation {
+    readonly materials: ICardUpgradeMaterials;
     readonly art: ICardDetailArt | null;
     /** 维度名称与 traits 归一化（表 `name` 列）；未加载到时为 null，标签区保持空。 */
     readonly lineup: ICardLineupCatalog | null;

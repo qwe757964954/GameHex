@@ -79,11 +79,6 @@ export class LimitTimeActPage extends PopupBase {
 
     /** 当前页签的列表数据（`renderItemFn` 按 index 取）。 */
     private rows: readonly (ILimitTimeTaskRow | ILimitTimeGoodsRow)[] = [];
-    /** `renderItemFn` 只需绑一次。 */
-    private rendererBound = false;
-
-    /** 每次「取数 → 铺界面」递增，用来丢弃过期的异步结果。 */
-    private loadRevision = 0;
 
     protected onInit(): void {
         for (const [name, tab] of TAB_NODES) {
@@ -142,9 +137,8 @@ export class LimitTimeActPage extends PopupBase {
 
     /** 领奖 / 购买后的重铺：直接从当前快照（响应已覆盖进 repo）重取。 */
     private async reloadAndPresent(): Promise<void> {
-        const revision = ++this.loadRevision;
         const snapshot = this.repo.load();
-        if (!this.aliveCheck() || revision !== this.loadRevision) return;
+        if (!this.aliveCheck()) return;
         this.snapshot = snapshot;
         await this.presentTab();
     }
@@ -153,7 +147,6 @@ export class LimitTimeActPage extends PopupBase {
     private async presentTab(): Promise<void> {
         const snapshot = this.snapshot;
         if (!snapshot) return;
-        const revision = ++this.loadRevision;
 
         if (this.activeTab === LimitTimeTab.Task) {
             this.rows = sortTasksForDisplay(snapshot.config.tasks, snapshot.data.tasks);
@@ -164,13 +157,11 @@ export class LimitTimeActPage extends PopupBase {
         }
         this.descLabel.string = this.tabDescOf(this.activeTab);
 
-        if (!this.aliveCheck() || revision !== this.loadRevision) return;
+        if (!this.aliveCheck()) return;
 
-        if (!this.rendererBound) {
-            this.rendererBound = true;
-            this.list.renderItemFn = (node, index) => this.renderItem(node, index);
-            this.list.onItemClickFn = (_node, index) => this.onItemClick(index);
-        }
+        // `renderItemFn` / `onItemClickFn` 是普通属性赋值，不是事件订阅；每次铺列表写同一组回调即可。
+        this.list.renderItemFn = (node, index) => this.renderItem(node, index);
+        this.list.onItemClickFn = (_node, index) => this.onItemClick(index);
         this.list.refreshList(this.rows.length);
     }
 

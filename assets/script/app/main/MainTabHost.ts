@@ -106,7 +106,6 @@ export class MainTabHost extends Component {
 
     onDestroy(): void {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
-        this.unschedule(this.onFirstScreenFallback);
         this.firstScreenReadyResolve();
     }
 

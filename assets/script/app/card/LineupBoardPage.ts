@@ -189,7 +189,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
      * `Component.node` 在组件被销毁后会变成 `null`，所以两种形态都要挡。
      */
     private get alive(): boolean {
-        return !!this.node && this.node.isValid && !this.resourceScope.disposed;
+        return this.isPopupOpen && (!this.node || this.node.isValid) && !this.resourceScope.disposed;
     }
 
     /**

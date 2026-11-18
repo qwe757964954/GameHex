@@ -59,15 +59,15 @@ export class HangEntryButton extends Component {
     }
 
     /**
-     * 这里**只**做「停表 + 停 tween」，不写 `off(...)`：
+     * 这里**只**做「停 tween」，不写 `off(...)`：
      * 同节点组件按 `_components` 序销毁，`cc.Button` 排在脚本前面 ⇒ 它先被 destruct、
      * `node` own property 被置 null ⇒ `this.node.getComponent(Button).node.off(...)` 抛
      * `TypeError` 并**中断整条销毁链**（节点留在父 `children` 里 → 重复销毁）。
-     * 不 `off` 是安全的：`Node._onPreDestroyBase` 会先 `_eventProcessor.destroy()` 清空监听。
+     * 不 `off` 是安全的：`Node._onPreDestroyBase` 会先 `_eventProcessor.destroy()` 清空监听；
+     * 定时器同理，由 `Component._onPreDestroy()` 在 `onDestroy` 前统一 `unscheduleAllCallbacks`。
      */
     protected onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.unscheduleAllCallbacks();
         this._stopShake();
     }
 

@@ -30,7 +30,7 @@ export class LeagueTabPage extends Component {
     refresh(force = false): void { EventMgr.instance.emit(LeagueTabEvent.Refresh, { owner: this, force }); }
 
     /** 整页替换：销毁旧的，实例化新的挂到本节点下（位置归零，两者都是 720×1280）。 */
-    showPage(joined: boolean): void {
+    showPage(joined: boolean): LeagueJoinPage | null {
         this.showingJoined = joined;
         const prefab = joined ? this.joinedPage : this.joinPage;
         this.currentPage?.destroy();
@@ -38,9 +38,9 @@ export class LeagueTabPage extends Component {
         this.currentPage.setParent(this.node);
         this.currentPage.setPosition(Vec3.ZERO);
 
-        // 未入盟页要能在「加入 / 创建联盟成功」后把容器叫回来重判一次（老端靠推送）。
-        const join = this.currentPage.getComponent(LeagueJoinPage);
-        if (join) join.joinOwner = this;
+        // 未入盟页由容器控制器在返回后创建并持有它自己的 Join 控制器；
+        // 已入盟页没有这个组件，返回 null。
+        return this.currentPage.getComponent(LeagueJoinPage);
     }
 
     // 只读出口（供单测 / 探针断言）

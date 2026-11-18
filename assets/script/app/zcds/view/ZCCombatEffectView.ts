@@ -1,4 +1,4 @@
-import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, sp, Sprite, UITransform, UIOpacity, Vec3 } from 'cc';
+import { _decorator, Animation, Color, Component, Graphics, instantiate, Node, Prefab, sp, Sprite, UIOpacity, UIRenderer, UITransform, Vec3 } from 'cc';
 import { ZCCombatEvent, ZCProjectileState } from '../model/ZCGameModel';
 import { mapToViewX, mapToViewY } from './ZCGameViewUtil';
 import { zcCombatEffectAnchorOf, zcCombatEffectAnchorPoint, zcCombatEffectLiftY, zcCombatEffectOverlayChild } from './ZCCombatEffectPlacement';
@@ -6,6 +6,7 @@ import { zcCombatEffectFlightOf, zcCombatEffectFacingDegrees, zcCombatEffectHead
 import { zcBeamCoreWidthOf, zcBeamFrame, zcBeamSpecOf, zcBeamStretchOf, zcBeamWidthScaleOf } from './ZCBeamEffect';
 import type { IZCBeamSpec } from './ZCBeamEffect';
 import { zcCombatEffectGrowFactor, zcCombatEffectNodeScaleOf } from './ZCCombatEffectScale';
+import { zcBlendCombatEffectTint, zcCombatEffectTintOf } from './ZCCombatEffectTint';
 import { zcMissileTrailOf, zcMissileTrailQuads } from './ZCMissileTrail';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 
@@ -56,6 +57,15 @@ export class ZCCombatEffectView extends Component {
     private readonly genericTint = new Color(255, 229, 148);
     /** 诊断用：本节点对应的特效资源路径（只有 `initialize` 知道）。*/
     private diagEffectPath = '';
+    /**
+     * 每个渲染器的**原始色**快照（2026-11-18 第 17 批「飓风要绿色」）。
+     *
+     * 为什么一定要快照：染色是乘算，如果直接在 `renderer.color` 上反复乘，第二次复用就变成
+     * 「绿 × 绿」越乘越黑。这里只在挂上新 prefab 时记一次原始色，之后每次都从它算。
+    */
+    private readonly tintBaseColor = new Map<UIRenderer, Color>();
+    /** 混色用的临时 `Color`（避免每个渲染器 new 一个，每帧分配在热路径上）。*/
+    private readonly tintScratch = new Color(255, 255, 255, 255);
 
     initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null): void {
         this.allowGeneric = allowGeneric && !prefab;
@@ -73,6 +83,8 @@ export class ZCCombatEffectView extends Component {
         if (this.visualPrefab !== prefab || !this.visualNode?.isValid) {
             this.visualNode?.destroy();
             this.visualNode = null;
+            //  换了一份美术 ⇒ 旧节点连同它的渲染器一起没了，原始色快照必须跟着作废。
+            this.tintBaseColor.clear();
         }
         this.visualPrefab = prefab;
         //   光束配置必须在 `if (!prefab) return` 之前认出来：美术没加载时也要知道
@@ -148,6 +160,68 @@ export class ZCCombatEffectView extends Component {
                 + ` 动画组件=${animation ? '有' : '无'} clip=${clipName ?? '无'}`
                 + ` 播放=${animation && clipName ? '已 play' : '未播放'}`);
         }
+        this.applyTint();
+    }
+
+    /**
+     * 按 `ZCCombatEffectTint` 的表给整棵子树叠色（2026-11-18 第 17 批）。
+     *
+     * 三条口径：
+     *  1. **乘算而不是覆盖**：保留美术调好的明暗层次，只推色相（见 `ZCCombatEffectTint`）。
+     *  2. **原始色只快照一次**：池化复用下 `renderer.color` 是上一任写过的值，直接再乘会越乘越黑。
+     *  3. **没登记就复位**：同一张池里借出来的节点可能上一任是绿色飓风、这一任是原色的龙卷风，
+     *     不复位就会「绿着出场」—— 症状是「只有第一次是对的」。
+    */
+    private applyTint(): void {
+        const visual = this.visualNode;
+        if (!visual?.isValid) {
+            this.tintBaseColor.clear();
+            return;
+        }
+        //  2026-11-18：**没登记过染色的 prefab 直接走人**（占绝大多数）。
+        //  两个作用：省掉一次全子树遍历；更关键的是无引擎的视图夹具（`zcds-progressive-art` /
+        //  `zcds-render-performance` 里的假节点只有 `isValid` / `children`）连
+        //  `getComponentsInChildren` 都没有 ⇒ 先判 tint 再判方法，夹具路径一次都不碰它。
+        const tint = zcCombatEffectTintOf(this.diagEffectPath);
+        if (!tint) {
+            //  先从上一任的染色里退回来再清表：池化复用下同一个 visual 节点会换 prefab，
+            //  不还原就等于「染过绿的飓风借给别的特效用，还是绿的」。
+            this.restoreTint();
+            return;
+        }
+        const probe = visual as unknown as { getComponentsInChildren?: unknown };
+        if (typeof probe.getComponentsInChildren !== 'function') {
+            this.tintBaseColor.clear();
+            return;
+        }
+        const renderers = visual.getComponentsInChildren(UIRenderer);
+        let rebuild = renderers.length !== this.tintBaseColor.size;
+        if (!rebuild) {
+            for (const renderer of renderers) {
+                if (this.tintBaseColor.has(renderer)) continue;
+                rebuild = true;
+                break;
+            }
+        }
+        if (rebuild) {
+            this.tintBaseColor.clear();
+            for (const renderer of renderers) this.tintBaseColor.set(renderer, renderer.color.clone());
+        }
+        for (const [renderer, base] of this.tintBaseColor) {
+            if (!renderer.isValid) continue;
+            const [red, green, blue] = zcBlendCombatEffectTint([base.r, base.g, base.b], tint);
+            this.tintScratch.set(red, green, blue, base.a);
+            renderer.color = this.tintScratch;
+        }
+    }
+
+    /** 把快照过的原始色写回去并清表（换到「不染色」的 prefab 时用）。*/
+    private restoreTint(): void {
+        if (!this.tintBaseColor.size) return;
+        for (const [renderer, base] of this.tintBaseColor) {
+            if (renderer.isValid) renderer.color = base;
+        }
+        this.tintBaseColor.clear();
     }
 
     /**
@@ -250,9 +324,13 @@ export class ZCCombatEffectView extends Component {
         //  同时乘进了判定半径与这里的 `sizeScale`，所以「看着变大」与「真的更容易擦到」同步。
         //  只在弹道事件上读它（近战/区域没有 `projectile`），缺省 1 ⇒ 既有特效逐字不变。
         const sizeScale = (event.type === 'projectile' ? projectile?.sizeScale : undefined) ?? 1;
+        //  事件自带的整体倍率（2026-11-17 第 13 批：菌毯爆发 / 菌核爆裂的一次性范围爆炸）。
+        //  area 事件从不按 `event.radius` 缩放，而这一个 `普攻爆炸` prefab 被四处共用 ⇒
+        //  只能由模型算好「判定直径 ÷ prefab 屏上宽度」带过来。缺省 1 ⇒ 既有特效逐字不变。
+        const eventScale = event.effectScale ?? 1;
         this.node.setScale(
-            nodeScale * growFactor * sizeScale,
-            nodeScale * growFactor * sizeScale,
+            nodeScale * growFactor * sizeScale * eventScale,
+            nodeScale * growFactor * sizeScale * eventScale,
             1,
         );
         //  除「定格光束」外一律复位到全不透明：池化节点上一任可能正好淡到 0 才回池。

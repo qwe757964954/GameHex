@@ -186,14 +186,19 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
                 else:
                     site[optional] = raw[optional]
         if site_type == "patrolChest":
-            battle_ids = raw.get("battleIds")
-            if (not isinstance(battle_ids, list) or not battle_ids
-                    or not all(_is_int(value) and 0 < value <= 9007199254740991 for value in battle_ids)):
-                issues.append(f"{label}.battleIds must be a non-empty array of positive integers")
+            # 2026-11-18 起是单值（battleId）：一片巡逻区（同 site.id）共用同一个战斗 ID。
+            battle_id = raw.get("battleId")
+            if not _is_int(battle_id) or not 0 < battle_id <= 9007199254740991:
+                issues.append(f"{label}.battleId must be a positive integer")
             else:
-                site["battleIds"] = list(battle_ids)
-        elif "battleIds" in raw:
-            issues.append(f"{label}.battleIds is only valid for patrolChest sites")
+                site["battleId"] = battle_id
+            if "battleIds" in raw:
+                issues.append(f"{label}.battleIds is deprecated, use battleId")
+        else:
+            if "battleId" in raw:
+                issues.append(f"{label}.battleId is only valid for patrolChest sites")
+            if "battleIds" in raw:
+                issues.append(f"{label}.battleIds is only valid for patrolChest sites")
         if "patrolId" in raw:
             if site_type != "patrolChest":
                 issues.append(f"{label}.patrolId is only valid for patrolChest sites")
@@ -338,4 +343,28 @@ def validate_territory_map(data: Any, fallback_id: str | None = None) -> tuple[d
         warnings.append(f"chapter {chapter} has {len(sites)} fixed sites; expected 10 levels")
     if len(sites) > total // 2:
         warnings.append("fixed site occupancy exceeds half of the chapter map")
+    warnings.extend(_patrol_region_warnings(sites))
     return result, warnings
+
+
+def _patrol_region_warnings(sites: list[dict[str, Any]]) -> list[str]:
+    """一片巡逻区（同 site.id）里 battleId 必须整片一致。
+
+    2026-11-18 口径：一片巡逻区 = 同一个 site.id，整片共用一个战斗 ID。
+    组里有一格数值写歪，那片战斗与停巡判据就按两场算 ⇒ 表现错乱且零报错。
+    这是警告不是错误：旧地图仍能读。与 JS 端 `patrolRegionWarnings` 同口径。
+    """
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for site in sites:
+        if site.get("type") != "patrolChest":
+            continue
+        by_id.setdefault(site.get("id"), []).append(site)
+    warnings: list[str] = []
+    for site_id, members in by_id.items():
+        battle_ids = {member.get("battleId") for member in members}
+        if len(battle_ids) > 1:
+            warnings.append(
+                f"patrol group {site_id} mixes {len(battle_ids)} battleId values; "
+                "every cell in one group must share the same battleId"
+            )
+    return warnings

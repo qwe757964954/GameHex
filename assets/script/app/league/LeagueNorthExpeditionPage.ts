@@ -158,22 +158,19 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     }
 
     protected async onOpen(): Promise<void> {
-        const revision = ++this.revision;
         // 老端 `initAsync()` 只有这一条请求（数据本体随 `CmdUnionActivity` 落地）
         await this.repository.requestActList(LeagueACT_TYPE.NORTHERN_EXPEDITION, this);
-        if (!this.alive || revision !== this.revision) return;
+        if (!this.alive) return;
         await this.reload();
     }
 
     protected onClose(): void {
         this.busy = false;
-        this.revision += 1;
         this.stopTick();
     }
 
     onDestroy(): void {
         EventMgr.instance.offTarget(this);
-        this.revision += 1;
         this.stopTick();
         super.onDestroy();
     }
@@ -196,13 +193,14 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         const snapshot = await this.repository.loadNorthExpedition();
         if (!this.alive || revision !== this.revision) return;
 
-        this.snapshot = snapshot;
-        this.art = await this.loadArtFrames(snapshot);
+        const art = await this.loadArtFrames(snapshot);
         if (!this.alive || revision !== this.revision) return;
 
         await this.nextPopupFrame();
         if (!this.alive || revision !== this.revision) return;
 
+        this.snapshot = snapshot;
+        this.art = art;
         this.present();
         this.startTick();
     }
@@ -400,6 +398,6 @@ export class LeagueNorthExpeditionPage extends PopupBase {
     }
 
     private get alive(): boolean {
-        return !!this.node && this.node.isValid;
+        return this.isPopupOpen && (!this.node || this.node.isValid);
     }
 }

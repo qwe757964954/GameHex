@@ -154,6 +154,16 @@ export interface ZCUnitState {
         & Partial<Pick<ZCUnitDefinition, 'maxHp'>>;
     gateSize?: 'enlarge' | 'shrink';
     gateScale?: number;
+    /**
+     * 技能驱动的基础体型缩放倍数（1 = 不缩放）。
+     *
+     * 2026-11-18 第 17 批：由 `ZCGameModel.syncBodyScale` 每帧从
+     * 「构筑期 patch + 状态 mods」的 `bodySizePct` 折算写入，只给表现层用
+     * （`ZCUnitView` 的本体缩放 / 血条偏移）。**不参与命中判定**——`bodyRadius` 保持原值。
+     * 与 `gateScale`（中立资源门的格子效果）是两条独立来源，视图里两者相乘。
+     * 缺省 undefined ⇒ 1，等价于既有表现逐字不变。
+    */
+    bodyScale?: number;
     gateMoveMultiplier?: number;
     gateAttackSpeedMultiplier?: number;
     gateDamageMultiplier?: number;
@@ -291,6 +301,15 @@ export interface ZCUnitState {
     */
     auraFiredCount?: number;
     /**
+     * `counter_self_buff` 上一次触发时的 `completedAttackCount`（2026-11-18 第 17 批）。
+     *
+     * 101904 生命爆发 / 102704 战神附体：累计 N 次普攻给自己开一段限时增益。
+     * 与 `auraFiredCount` 同一套算法但**各自一份计数** —— 共用会把「光环刚放过」
+     * 当成「增益也放过了」，两条车道互相吃对方的次数。
+     * 缺省 undefined ⇒ 第一次推进只记下当前计数，不立刻放（与 `auraFiredCount` 同口径）。
+    */
+    counterFiredCount?: number;
+    /**
      * 五雷轰顶的下次可用时刻（秒），由 `applyBoltStrike` 推进。
      * 缺省 undefined ⇒ 首次初始化为「当前 + CD」。
     */
@@ -332,6 +351,83 @@ export interface ZCUnitState {
      * ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
     */
     blinkReadyAt?: number;
+    /**
+     * 孢爆箭 / 孢子凝珠（`behaviorKey = 'splash_shot' / 'spore_burst'`，101303 / 101104）的
+     * 下次可用时刻（秒）。
+     *
+     * 与 `selfCastReadyAt` / `boltReadyAt` / `blinkReadyAt` 同一套「绝对时刻」口径；
+     * 缺省 undefined ⇒ 首次推进时初始化为「当前 + CD」，开局不立刻放。
+     * 🔴 单独一条车道而不是复用 `strikeReadyAt`：同一张卡上「多点打击」与「射一发会爆的弹」
+     * 可能同时存在，共用槽位会互相把对方的冷却顶掉。
+    */
+    splashReadyAt?: number;
+    /**
+     * 菌毯爆发 / 菌核爆裂（`behaviorKey = 'burst_aura' / 'burst_knockback'`，101504 / 101804）的
+     * 下次可用时刻（秒）。
+     *
+     * 与 `splashReadyAt` 同一套「绝对时刻」口径，但仍是**独立的一格**：这两条与
+     * 「射一发会爆的弹」可以落在同一张卡上（配表允许），共用一个槽位会互相把对方的冷却顶掉。
+     * 两条行为键共用这一格 —— 它们的机制是同一件事（自心圆一次性爆发），只差爆完加什么。
+    */
+    burstReadyAt?: number;
+    /**
+     * 菌丝绞杀（`behaviorKey = 'fan_slow'`，101503）的下次可用时刻（秒）。
+     *
+     * 与 `secondaryReadyAt` 分开：那条是**副轨**（半径按普攻射程 ×倍率、无人数上限、可击退），
+     * 这条是**主动计划行**（半径取表值 150、最多 4/5/6 人、带减速）。
+     * 同一张卡（机甲菇 68015）现在有四条独立 CD：`secondary` / `burst` / `fan` / `strike`，
+     * 共用一格就会互相顶掉冷却。
+    */
+    fanReadyAt?: number;
+    /**
+     * 菌丝突刺（`behaviorKey = 'single_strike'`，101403）的下次可用时刻（秒）。
+     *
+     * 与 `blinkReadyAt` 分开：那条是魔术师 103404「移形换影」（往返 / 分身 / 搜索半径封顶），
+     * 这条是分裂菇 101403「突进单体 + 眩晕」。两条都可能出现在同一场对局的不同单位上，
+     * 共用一个槽位在换卡 / 复用同一 `ZCUnitState` 形状时会互相干扰。
+    */
+    singleReadyAt?: number;
+    /**
+     * 菌盾冲锋（`behaviorKey = 'charge_shield'`，101204）的下次可用时刻（秒）。
+     *
+     * 与 `dashReadyAt` 分开：两条都是「位移 + 线段命中」，但一条是定长 1 格 + 自护盾、
+     * 一条是朝最近敌人 / 面朝往前冲 + 眩晕或易伤。虽然当前没有任何一支部队同时带两条，
+     * 但 `unit.*ReadyAt` 是「一条车道一格」的口径（同卡多主动共存是这个项目的常态），
+     * 共用会在换卡 / 复用同一 `ZCUnitState` 形状时互相顶掉冷却。
+    */
+    chargeReadyAt?: number;
+    /**
+     * 冲锋 / 尖刺冲锋（`behaviorKey = 'legacy_dash'`，102303 / 102703）的下次可用时刻（秒）。
+     *
+     * 两条技能共用一个槽位是有意的：它们的行为键相同、结算骨架相同，
+     * 只是参数（选向 / 命中状态 / 自保）不同 —— 同一条车道就该共用一格 CD。
+    */
+    dashReadyAt?: number;
+    /**
+     * 孢爆箭（`behaviorKey = 'wind_bolt'`，101303）的下次可用时刻（秒）。
+     *
+     * 与 `splashReadyAt` 分开：同一张卡（风炮菇 68013）此前那条「射一发会爆的弹」就占着
+     * 那一格，而本批把 101303 改成了「风弹 + 命中点留飓风」——
+     * 若继续共用，同一张卡上再出现一条 `splash_shot` 时会互相顶掉冷却。
+    */
+    windReadyAt?: number;
+    /**
+     * 连射导弹（`behaviorKey = 'missile_barrage'`，101304）上一次触发时的 `completedAttackCount`。
+     *
+     * 这条车道按「累计 N 次普攻」触发（同 `auraFiredCount` / `strikeFiredCount`），没有 CD。
+     * 单独一格：风炮菇同一张卡上可能同时有按次数触发的另一条车道，共用会互相吃掉计数。
+    */
+    barrageFiredCount?: number;
+    /**
+     * 连射导弹「这一轮还剩几颗没发」+「下一颗的时刻」。
+     *
+     * 一轮 3 颗按 0/0.4/0.8s 错峰，与 `burstShotsLeft` / `burstNextAt`（普攻连发）同一套算法。
+     * 为什么不把三颗弹体的 `startedAt` 直接排到未来：快照校验要求
+     * `startedAt <= elapsedSeconds`，排未来的弹体过不了校验；而且「每颗按当时的目标重算落点」
+     * 本来就需要逐颗出手。发完 `delete` 掉，回到 `undefined`。
+    */
+    barrageShotsLeft?: number;
+    barrageNextAt?: number;
     /**
      * 分身的爆炸时刻（秒）；`blinkCloneX/Y` 是爆炸点（施法时的原位）。
      *
@@ -433,6 +529,14 @@ export interface ZCCombatEvent {
      * 缺省 undefined ⇒ 不抬。
     */
     visualLiftPx?: number;
+    /**
+     * 这条特效的整体尺寸倍率（一次性范围爆发用）；缺省 undefined ⇒ 1，全部既有特效逐字不变。
+     *
+     * 为什么不能靠 `radius`：`ZCCombatEffectView` 从不按 `event.radius` 缩放，而
+     * `普攻爆炸` 这一个 prefab 被普攻命中 / 孢爆箭溅射 / 两条爆发共用 ⇒ 也没法给路径登记
+     * 全局倍率（会把别人的爆炸一起放大）。`combatEvents` 不进存档，加字段不影响兼容。
+    */
+    effectScale?: number;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。*/
@@ -549,6 +653,47 @@ export interface ZCProjectileState extends ZCCombatEvent {
     burstEffectSeconds?: number;
     /** 弧线飞行：出手点到目标点之间的中段最大横向偏移（世界坐标，缺省 0 = 直线）。*/
     arcOffset?: number;
+    /**
+     * 飞行途中**不碰任何东西**（2026-11-18 第 16 批「连射导弹」101304）。
+     *
+     * 设计原话：「炸弹只有达到落点才会爆炸，行径过程不会提前触碰其他目标」。
+     * 打开后 `ZCProjectileSystem` 整段跳过扫掠（单位与墙体/建筑都不收），
+     * 只按速度推进到 `durationSeconds` 结束，再由 `explodeOnArrival` 在落点引爆。
+     * 缺省 `undefined` ⇒ 存量弹道逐字不变（撞到谁就结算给谁）。
+    */
+    ignoresMidAirCollision?: boolean;
+    /**
+     * 到点（`startedAt + durationSeconds`）引爆，而不是「命中才炸」。
+     *
+     * 与 `ignoresMidAirCollision` 配对使用：让 `ZCProjectileSystem` 在弹体自然飞完那一刻
+     * 回调 `context.arrive`（转给 `ZCAttackResolutionSystem.resolveProjectileArrival`）。
+     * 缺省 ⇒ 飞完就是消失，与存量「打空续飞」一致。
+    */
+    explodeOnArrival?: boolean;
+    /** 落点爆炸的判定半径（世界 px，出手时已乘 `combatDistanceScale`）。*/
+    arriveRadius?: number;
+    /** 落点爆炸对半径内每个敌人的伤害（出手时算好，逐目标再乘克制）。*/
+    arriveDamage?: number;
+    /**
+     * 命中点留下的持续区域（2026-11-18 第 16 批「孢爆箭」101303 的飓风）。
+     *
+     * 四个字段是一组，`hurricaneRadius > 0` 即视为要留一块区域：
+     * 半径（世界 px）/ 存活秒 / 每次接触伤害 / 表现路径。
+     * 区域本身走 `ZCGroundZoneSystem`：`hitOncePerUnit` 保证同一敌人只挨一次。
+     * 缺省 ⇒ 命中即结束，存量弹道不变。
+    */
+    hurricaneRadius?: number;
+    hurricaneSeconds?: number;
+    hurricaneDamage?: number;
+    hurricanePrefabPath?: string | null;
+    /**
+     * 命中/到点爆炸特效（`impactEffectPrefabPath`）的事件级尺寸倍率。
+     *
+     * 同一份 prefab 被两条技能以不同半径复用时只能走这一格（路径级倍率是全局的）：
+     * 镭射飞龙那条按「半径 80 逻辑 px」标定，连射导弹这条是 180 ⇒ 2.25。
+     * 缺省 `undefined` ⇒ 按 1（存量导弹逐字不变）。
+    */
+    impactEffectScale?: number;
 }
 
 /**
@@ -974,6 +1119,16 @@ export interface ZCGroundZoneState {
      * 视图据此延后建节点。缺省 undefined/0 ⇒ 立刻出现。
     */
     visualDelaySeconds?: number;
+    /**
+     * 「同一个敌人只挨一次」的持续接触区域（2026-11-18 第 16 批，孢爆箭的飓风 101303）。
+     *
+     * 与 `maxHits` 的区别：那个是**总名额**（打满 N 人就整片散场，移动区域 / 追踪弹用），
+     * 这个是**去重**（名额不限、区域活满整段时长，每个敌人首次接触挨一次，
+     * 之后站在里面也不再挨）—— 设计原话「同个敌人持续接触也只是 1 次伤害」。
+     * 实现上复用 `hitUnitIds` 记账：命中过的 id 进数组，后续波次直接跳过。
+     * 缺省 `undefined` ⇒ 每波都可以重复打（存量区域逐字不变）。
+    */
+    hitOncePerUnit?: boolean;
 }
 
 /**

@@ -10642,6 +10642,20 @@
                         }
                       }
                     },
+                    "ChapterMonsterBoxInfo": {
+                      "fields": {
+                        "cellId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "lv": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
                     "CmdCityChapterInfoReqMsg": {
                       "fields": {}
                     },
@@ -10832,6 +10846,39 @@
                           "rule": "repeated",
                           "type": "uint64",
                           "id": 4
+                        },
+                        "monsterBoxInfos": {
+                          "rule": "repeated",
+                          "type": "ChapterMonsterBoxInfo",
+                          "id": 5
+                        }
+                      }
+                    },
+                    "CmdCityChapterUpMonsterBoxLvReqMsg": {
+                      "fields": {
+                        "levelChapter": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "cellId": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 2
+                        }
+                      }
+                    },
+                    "CmdCityChapterUpMonsterBoxLvRspMsg": {
+                      "fields": {
+                        "succ": {
+                          "rule": "required",
+                          "type": "uint32",
+                          "id": 1
+                        },
+                        "monsterBoxInfo": {
+                          "rule": "required",
+                          "type": "ChapterMonsterBoxInfo",
+                          "id": 2
                         }
                       }
                     },
@@ -11457,6 +11504,7 @@
                         "CmdCityChapterUnlockCellRspMsg": 45711217,
                         "CmdCityChapterPassCellRspMsg": 1560327682,
                         "CmdCityChapterCellInfoRspMsg": 1137184677,
+                        "CmdCityChapterUpMonsterBoxLvRspMsg": 914309089,
                         "CmdDayWeekMonthGiftGetRewardRspMsg": 1356079122,
                         "CmdDayWeekMonthGiftInfoRspMsg": 1005269291,
                         "CmdDayWeekMonthGiftFreeBuyRspMsg": 355499005,

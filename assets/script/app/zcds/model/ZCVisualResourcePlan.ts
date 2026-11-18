@@ -7,6 +7,19 @@ import { ZC_BOLT_EFFECT_PREFAB_PATH, zcBoltStrikeEffectPath } from './ZCBoltStri
 import {
     ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH, zcTrapEffectPath,
 } from './ZCTrapFx';
+import {
+    ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH, ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH, zcSplashShotEffectPaths,
+} from './ZCSplashShotFx';
+import { ZC_BURST_IMPACT_PREFAB_PATH, zcBurstEffectPaths } from './ZCBurstFx';
+import { zcFanSweepEffectPaths } from './ZCFanSweepFx';
+import { ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH, zcSingleStrikeEffectPaths } from './ZCSingleStrikeFx';
+import {
+    ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_GUARD_PREFAB_PATH, zcChargeEffectPaths,
+} from './ZCDashFx';
+import {
+    ZC_BARRAGE_IMPACT_PREFAB_PATH, ZC_BARRAGE_MISSILE_PREFAB_PATH,
+    ZC_WIND_BOLT_PREFAB_PATH, ZC_WIND_HURRICANE_PREFAB_PATH, zcWindBarrageEffectPaths,
+} from './ZCWindBarrageFx';
 
 export interface IZCVisualDependency {
     readonly unitId: string;
@@ -93,6 +106,40 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
     const trapUnits = new Set((adapters.skillPlans ?? [])
         .filter(plan => plan.enabled && zcTrapEffectPath(plan.behaviorKey))
         .map(plan => plan.unitId));
+    //  孢爆箭 / 孢子凝珠（`splash_shot` / `spore_burst`，2026-11-17 第 12 批）：
+    //  弹体（通用箭矢）与命中爆点（普攻爆炸）的路径同样只登记在 `ZCSplashShotFx` 里。
+    //  漏收的后果与前面几条一模一样 —— 技能照常扣血、屏幕上没有箭也没有爆炸、不报错。
+    const splashShotUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcSplashShotEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
+    //  菌毯爆发 / 菌核爆裂（`burst_aura` / `burst_knockback`，2026-11-17 第 13 批）：
+    //  一次性范围爆炸的 prefab 同样只登记在 `ZCBurstFx` 里。漏收的后果：
+    //  技能照常结算、屏幕上不炸，且不报错。
+    const burstUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcBurstEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
+    //  菌丝绞杀（`fan_slow`，2026-11-17 第 14 批）沿用同一个爆点 prefab；
+    //  菌丝突刺（`single_strike`）用的是 `长戟兵_撕裂` —— 那个 prefab 此前**没有任何技能在用**，
+    //  漏收的后果与前几条一模一样：技能照常结算、屏幕上不播撕裂，不报错。
+    const fanSweepUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcFanSweepEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
+    const singleStrikeUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcSingleStrikeEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
+    //  冲锋车道（`charge_shield` / `legacy_dash`，2026-11-17 第 15 批）：
+    //  `轻骑兵_冲锋`（残影）与 `刀盾兵_护盾`（102303 III 级落地自保的表现）此前都没有技能在用。
+    //  漏收的后果与前几条一模一样：技能照常结算、屏幕上不播，不报错。
+    const chargeDashUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcChargeEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
+    //  风弹 + 飓风 / 连射导弹（`wind_bolt` / `missile_barrage`，2026-11-18 第 16 批）：
+    //  四条路径（风弹弹体 / 龙卷风 / 导弹弹体 / 导弹命中爆炸）都只登记在 `ZCWindBarrageFx` 里。
+    //  其中「导弹弹体 + 命中爆炸」与镭射飞龙那两条是同两个文件，`zcMissileFxOf` 只按 68010 收，
+    //  风炮菇（68013）收不到 ⇒ 这里必须自己补一遍，否则「技能照常掉血、屏幕上一颗炸弹都没有」。
+    const windBarrageUnits = new Set((adapters.skillPlans ?? [])
+        .filter(plan => plan.enabled && zcWindBarrageEffectPaths(plan.behaviorKey).length > 0)
+        .map(plan => plan.unitId));
     // 普攻、命中附加、强化与副轨技能都可能声明独立表现。
     const effects = new Set(units.flatMap(unit => [
         unit.attackProfile.effectPrefabPath,
@@ -109,6 +156,23 @@ export function buildZCVisualResourcePlan<T extends ZCVisualUnit>(
         trapUnits.has(unit.unitId) ? ZC_TRAP_SPAWN_PREFAB_PATH : null,
         trapUnits.has(unit.unitId) ? ZC_TRAP_IDLE_PREFAB_PATH : null,
         trapUnits.has(unit.unitId) ? ZC_TRAP_EXPIRE_PREFAB_PATH : null,
+        //  孢爆箭 / 孢子凝珠：弹体 + 命中爆点（缺一条就是「箭飞过去、什么都不炸」）。
+        splashShotUnits.has(unit.unitId) ? ZC_SPLASH_SHOT_MISSILE_PREFAB_PATH : null,
+        splashShotUnits.has(unit.unitId) ? ZC_SPLASH_SHOT_IMPACT_PREFAB_PATH : null,
+        //  菌毯爆发 / 菌核爆裂：一次性范围爆炸的爆点美术。
+        burstUnits.has(unit.unitId) ? ZC_BURST_IMPACT_PREFAB_PATH : null,
+        //  菌丝绞杀：扇形里铺的那几发爆点（同一个普攻爆炸，尺寸按事件带 effectScale）。
+        fanSweepUnits.has(unit.unitId) ? ZC_BURST_IMPACT_PREFAB_PATH : null,
+        //  菌丝突刺：贴在目标身上播的撕裂。
+        singleStrikeUnits.has(unit.unitId) ? ZC_SINGLE_STRIKE_EFFECT_PREFAB_PATH : null,
+        //  冲锋：残影（轻骑兵_冲锋）+ 落地自保的表现（刀盾兵_护盾）。
+        chargeDashUnits.has(unit.unitId) ? ZC_DASH_EFFECT_PREFAB_PATH : null,
+        chargeDashUnits.has(unit.unitId) ? ZC_DASH_GUARD_PREFAB_PATH : null,
+        //  风弹 + 飓风 / 连射导弹：弹体、飓风、导弹、命中爆炸四条。
+        windBarrageUnits.has(unit.unitId) ? ZC_WIND_BOLT_PREFAB_PATH : null,
+        windBarrageUnits.has(unit.unitId) ? ZC_WIND_HURRICANE_PREFAB_PATH : null,
+        windBarrageUnits.has(unit.unitId) ? ZC_BARRAGE_MISSILE_PREFAB_PATH : null,
+        windBarrageUnits.has(unit.unitId) ? ZC_BARRAGE_IMPACT_PREFAB_PATH : null,
         //  追踪导弹（2026-11-03）：弹体/爆炸路径只登记在 `ZCCombatEffectFlight` 的
         //  代码常量表里，pvpSkill 任何一行都不携带 ⇒ 上面四个字段收不到。
         //  漏收的后果：`ZCGameLoader` 不加载 ⇒ `effectVisualPrefabs.get()` 返回 null

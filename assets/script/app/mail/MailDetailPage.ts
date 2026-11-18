@@ -77,8 +77,6 @@ export class MailDetailPage extends PopupBase {
     private busy = false;
     /** 每个格子要用的图（一次取完，`renderItemFn` 里按 index 同步派发）。 */
     private rewardFrames: readonly (readonly [SpriteFrame | null, SpriteFrame | null])[] = [];
-    /** `renderItemFn` 只绑一次。 */
-    private rewardRendererBound = false;
 
     /** 供测试 / 探针注入替身 Repository。 */
     setRepository(repository: IMailRepository): void {
@@ -97,10 +95,9 @@ export class MailDetailPage extends PopupBase {
         this.closeButton.node.on(Button.EventType.CLICK, this.onCloseClick, this);
         this.takeButton.node.on(Button.EventType.CLICK, this.onTakeOrDelete, this);
 
-        // 只绑一次，回调按 index 现取（同 `MailPage` 铁律 ①）
-        if (!this.rewardRendererBound && this.rewardList) {
+        // `renderItemFn` 是普通属性赋值，不是事件订阅；`onInit` 只跑一次，直接写回调。
+        if (this.rewardList) {
             this.rewardList.renderItemFn = (node, index) => this.renderRewardSlot(node, index);
-            this.rewardRendererBound = true;
         }
     }
 

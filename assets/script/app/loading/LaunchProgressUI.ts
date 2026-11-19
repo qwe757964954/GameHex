@@ -1,4 +1,4 @@
-import { Node, Prefab, instantiate } from 'cc';
+import { Director, director, Node, Prefab, instantiate } from 'cc';
 import { LaunchProgressPage } from './LaunchProgressPage';
 
 /**
@@ -10,6 +10,21 @@ import { LaunchProgressPage } from './LaunchProgressPage';
 export const LAUNCH_UPDATE_WEIGHT = 0.6;
 
 const NODE_NAME = 'LaunchProgress';
+
+/**
+ * 节点 → 它实例化用的 prefab。
+ *
+ * ⚠️ 这张表是**引用计数的一部分**，不是缓存：启动 UI 的节点跨流程存活
+ * （`ProcedureUpdate.onLeave` / `PostLoginComposition.leave` 都只 `hide()` 不销毁），
+ * 而 prefab 的加载引用挂在**流程的 preload 作用域**上，`onLeave` 的
+ * `releaseResourceScope()` 会把它和依赖图（`bar_white` 等）一起 decRef 到 0 ⇒
+ * 节点明明还 `active`，两个 Sprite 却挂着已 destroy 的帧，`Batcher2D` 每帧崩
+ * `frame should not be invalid, it may have been released` → `getGFXTexture` 空指针。
+ *
+ * 所以实例化时 `addRef()` 一次，节点真正销毁后（`release()`）再 `decRef()`：
+ * 谁持有节点，谁就持有 prefab。
+ */
+const nodePrefabs = new WeakMap<Node, Prefab>();
 
 /**
  * 启动进度 UI（热更 + 登录后资源加载共用）的封装。
@@ -39,6 +54,7 @@ export class LaunchProgressUI {
         if (!page) {
             // 半成品/异常节点（缺组件）不能复用，销毁留给调用方重建。
             existed.destroy();
+            releaseNodePrefab(existed);
             return null;
         }
         return new LaunchProgressUI(existed, page);
@@ -55,6 +71,10 @@ export class LaunchProgressUI {
             node.destroy();
             return null;
         }
+        // 节点跨流程存活（onLeave 只 hide），prefab 的加载引用却挂在流程的 preload 作用域上：
+        // 不自己持有的话，`releaseResourceScope()` 会把它连同 `bar_white` 一起 decRef 到 0。
+        prefab.addRef();
+        nodePrefabs.set(node, prefab);
         return new LaunchProgressUI(node, page);
     }
 
@@ -87,6 +107,28 @@ export class LaunchProgressUI {
 
     /** 使命结束（进入 Main）后销毁：登录图移除，露出其下已渲染好的 MainRoot。 */
     release(): void {
+        if (!this.node || !this.node.isValid) return;
         this.node.destroy();
+        releaseNodePrefab(this.node);
     }
+}
+
+/**
+ * 还回 `createFromPrefab` 借的那份 prefab 引用。
+ *
+ * 必须等 `EVENT_AFTER_DRAW`：`node.destroy()` 只是标记，真正销毁在帧末，这一帧还要画；
+ * 立刻 `decRef` 会把贴图从正在提交的渲染里抽走（与 `CocosAssetService.releaseAfterDraw` 同一条口径）。
+ */
+function releaseNodePrefab(node: Node): void {
+    const prefab = nodePrefabs.get(node);
+    if (!prefab) return;
+    nodePrefabs.delete(node);
+    if (!prefab.isValid) return;
+    if (!Director || typeof director?.once !== 'function') {
+        prefab.decRef();
+        return;
+    }
+    director.once(Director.EVENT_AFTER_DRAW, () => {
+        if (prefab.isValid) prefab.decRef();
+    });
 }

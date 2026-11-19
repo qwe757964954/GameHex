@@ -30,6 +30,28 @@ test('卡表中的上阵兵种预制体均有待机动作', () => {
     }
 });
 
+test('怪物卡表的兵种预制体同样真实存在（50017 曾指向已删除的 units/阿尔萨斯）', () => {
+    const packed = JSON.parse(readFileSync('assets/remoteRef/monsterCard.json', 'utf8')) as
+        { k: string[]; v: unknown[][] };
+    const rows = packed.v.map((values) => Object.fromEntries(packed.k.map((key, index) => [key, values[index]])));
+    const paths = new Set(rows.map((row) => row.unitPrefabPath).filter((value): value is string =>
+        typeof value === 'string' && value.length > 0));
+    assert.ok(paths.size > 30, `怪物卡的 prefab 路径数量异常：${paths.size}`);
+    for (const path of paths) {
+        assert.ok(path.startsWith('skel/'), `${path} 应为已交付的 skel 骨骼预制体`);
+        const prefabPath = assetPath(`${path}.prefab`);
+        //  路径失效时运行时不会报错：单位照常出生、照常结算，只是**画面上什么都没有**。
+        //  所以这条只能靠静态守卫兜。
+        assert.ok(existsSync(prefabPath), `${path} 预制体应存在`);
+        assert.match(readFileSync(prefabPath, 'utf8'), /"defaultAnimation": "idle"/,
+            `${path} 骨骼预制体应提供 idle`);
+    }
+    //  回归点：50017 机甲菇的路径曾经是 `units/阿尔萨斯/阿尔萨斯`（目录早已删除），
+    //  2026-11-18 按同名玩家卡修正。改回旧值这条会红，不必等到上线才在战场上看不见人。
+    const mecha = rows.find((row) => row.id === 50017);
+    assert.equal(mecha?.unitPrefabPath, 'skel/机甲菇/机甲菇');
+});
+
 test('上阵预览按兵种预制体路径加载并复用，同一兵种只加载一次', async () => {
     const paths: string[] = [];
     const prefab = { name: 'unit-prefab' };

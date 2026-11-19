@@ -72,10 +72,20 @@ export interface ZCAttackProfile {
     /**
      * 命中时额外播一次的表现（pvpSkill「命中附加特效」）。只影响表现、不参与伤害，
      * 由 `ZCAttackResolutionSystem` 在真正的命中事件之后补一条 `area` 事件，
-     * 落在受击点、走地面层（`zcCombatEffectLayerOf('area') = 'ground'`）。
-     * 运动霸用 `重骑兵_践踏` 当「气浪」—— 项目里没有名为「气浪」的美术资源。
+     * 默认落在受击点、走地面层（`zcCombatEffectLayerOf('area') = 'ground'`）。
+     * 运动霸用 `重骑兵_践踏` 当「气浪」—— 项目里没有名为「气浪」的美术资源；
+     * 这块美术是以自身为中心摊开的地面冲击环，所以它的落点改由下面的 `impactEffectAnchor` 定。
     */
     impactEffectPrefabPath?: string;
+    /**
+     * 命中附加特效的圆心落点（`pvpSkill.impactEffectAnchor`，0~1，留空 = 0）。
+     *
+     * 0 = 受击点（默认）、0.5 = 攻守双方中点、1 = 出手点，中间线性插值。
+     * 2026-11-18 从代码常量挪进表里：原来按 prefab 路径登记「哪块美术要居中」，
+     * 美术一被替换（换名 / 换画）登记就静默失效，气浪悄悄退回受击点。
+     * 现在跟着**技能行**走，换美术不用动它，换落点也只改一格。
+    */
+    impactEffectAnchor?: number;
     /** area 持续秒数；0=一次性。*/
     durationSeconds?: number;
     waves?: number;

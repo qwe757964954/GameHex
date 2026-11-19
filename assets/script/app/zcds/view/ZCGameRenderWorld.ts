@@ -24,6 +24,7 @@ import { ZCCardRevealView } from './ZCCardRevealView';
 import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
 import { ZCHexView } from './ZCHexView';
+import type { IZCMonsterFocusFrames } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { reportGuideComplete } from '../../guide/application/GuideEvents';
@@ -270,6 +271,12 @@ interface ZCRenderWorldOptions {
     */
     unknownResourceFrame?: SpriteFrame | null;
     neutralResourceFrames?: ReadonlyMap<string, SpriteFrame>;
+    /**
+     * 野怪集火按钮的三态底图（`image/spawn-region/frame_01/02/03` ⇒ locked/focus/cancel）。
+     *
+     * 缺省 ⇒ 按钮底图保持 prefab 的白色占位图、按状态染色（旧表现），不影响开关逻辑。
+    */
+    monsterFocusFrames?: IZCMonsterFocusFrames | null;
     /**
      * 飞向 HUD 金币栏的那把金币贴图（`image/map-resource/coin_icon`）。
      *
@@ -764,6 +771,8 @@ export class ZCGameRenderWorld {
             // 用这张帧（`hideNeutralResourceLabel` 为假），喂进去也无副作用。
             view.setUnknownResourceFrame(this.options.unknownResourceFrame ?? null);
             view.setNeutralResourceFrames(this.options.neutralResourceFrames ?? null);
+            // 野怪集火按钮的三态底图：整局一份，逐个视图喂（地块池化复用，注一次不会传到别的格）。
+            view.setMonsterFocusFrames(this.options.monsterFocusFrames ?? null);
             // 兵团资源点（表现键 `unit_cap`）按组合项站 N 个中立待机兵：卡 id + 数量来自
             // 该格抽中的资源项（`neutralResourceGroup`），所以逐格喂、不能共用一份。
             this.injectResourceUnits(view, config.id);

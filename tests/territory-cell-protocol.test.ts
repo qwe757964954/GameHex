@@ -254,9 +254,15 @@ test('★★ 生成产物不比 proto 源旧（proto 更新后必须重跑生成
 });
 
 test('★Repository 通过共享入口发送，保留读取超时', () => {
+    // 查询（拉格子快照）仍走共享入口 + 读取超时。
     assert.match(REPO_SRC, /GameNet\.sendRequest\(build/);
     assert.match(REPO_SRC, /timeoutMs: READ_TIMEOUT_MS/);
-    assert.doesNotMatch(REPO_SRC, /isConnected/);
+    // 写请求只发不等：离线在 `dispatch` 里同步判定，回包走事件通道。
+    assert.match(REPO_SRC, /GameNet\.instance\.isConnected/);
+    assert.match(REPO_SRC, /GameNet\.instance\.send\(request, false\)/);
+    // 组包/入队是同步开销：要能按协议名留痕（`() => unknown` 拿不到名字，没法分析性能）。
+    assert.match(REPO_SRC, /request\.getReqMsgProtoName\(\)/);
+    assert.match(REPO_SRC, /private dispatch\(build: \(\) => RequestMsg<unknown, unknown>/);
 });
 
 test('★章节扫荡请求带倍率 `times`（proto id 3），且运行时编码器真的编得出来', async () => {
@@ -272,7 +278,7 @@ test('★章节扫荡请求带倍率 `times`（proto id 3），且运行时编�
     // ③ Model 必须把倍率透传给网关 —— 只改 Controller 不改这里等于把倍率丢在半路。
     const modelSrc = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
     assert.match(modelSrc, /async sweepIdleRewards\(times: number = 1\)/);
-    assert.match(modelSrc, /gateway\.sweep\(chapterId, target\.site\.cellId, times\)/);
+    assert.match(modelSrc, /gateway\.sendSweep\(chapterId, cellId, times\)/);
 
     // ③ 🔴 运行时编解码走 `protoCompiledStatic`（静态模块），**不是** protoCompiled.json：
     //    static 产物落后于 proto 时，多传的字段会被 protobuf 静默丢弃 —— 日志里看不出任何异常。
@@ -308,11 +314,11 @@ test('★固定与随机资源点的回包都携带奖励明细，弹窗由成�
         //    空格用 \s* 放宽 —— proto 里为对齐写成 `tlCmdGoods   = 4`，钉死单空格会假红。
         assert.match(block, /repeated CmdGoods tlCmdGoods\s*=\s*4/);
     }
-    assert.match(REPO_SRC, /readTerritoryGrantedRewards\(rsp\?\.tlCmdGoods\)/);
+    assert.match(REPO_SRC, /readTerritoryGrantedRewards\(record\?\.tlCmdGoods\)/);
     assert.doesNotMatch(REPO_SRC, /FW\.ShowReward\(/, '网络层不能在失败或页面已关闭后直接弹窗');
-    assert.match(PRESENTER_SRC, /isUnlocked && result\.rewards\?\.length/);
+    assert.match(PRESENTER_SRC, /if \(isUnlocked && write\.rewards\?\.length\)/);
     // 发奖要带上「来自哪一格」：飘字落点用（挂机产出没有来源格 ⇒ 不传，页面回落到起始格）。
-    assert.match(PRESENTER_SRC, /showRewards\(result\.rewards, site\.cellId\)/);
+    assert.match(PRESENTER_SRC, /showRewards\(write\.rewards, site\.cellId\)/);
     // 随机格是「解锁即发奖」，没有开箱这一步 ⇒ 常规分支必须显式带 `{ chest: false }`，
     // 否则页面会按缺省（`chest !== false`）误播一次开箱表演（需求 2026-10-22 §1）。
     assert.match(PRESENTER_SRC, /\{ chest: false \}/, '常规随机格仍不弹窗（2026-10-22 §1）');
@@ -346,7 +352,7 @@ test('★Repository 绝不走 CacheMgr（服务端不推，走缓存只会拿到
 
 test('★TerritoryPage 确实调了 Repository，且在建完 progress 之后立刻合并', () => {
     // Page 持有 Repository（构造 Presenter 时作为 gateway 端口传入）。
-    assert.ok(/new TerritoryCellRepository\(\)/.test(readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8')), 'Entry 装配 Repository，页面不再持有网络依赖');
+    assert.ok(/new TerritoryCellRepository\(this\)/.test(readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8')), 'Entry 装配 Repository 并注入请求宿主，页面不再持有网络依赖');
     // 发请求与合并在 Presenter（gateway 端口）。
     assert.ok(/gateway\.fetchChapterCells\(/.test(PRESENTER_SRC), '必须真的发请求（否则线上不请求）');
     // 顺序：先 new TerritoryProgress，再 fetch + apply。
@@ -438,12 +444,12 @@ test('★切章节要清服务端快照（否则会先渲染上一章的状态�
  */
 test('★★★ 写链路必须有调用方：unlockCell / passCell 都要真的被调', () => {
     assert.ok(
-        /gateway\.unlockCell\(/.test(PRESENTER_SRC),
-        '★TerritoryPresenter 必须调 gateway.unlockCell —— 开战前要让服务端解锁这一格，'
+        /gateway\.sendUnlockCell\(/.test(PRESENTER_SRC),
+        '★TerritoryPresenter 必须调 gateway.sendUnlockCell —— 开战前要让服务端解锁这一格，'
         + '否则服务端永远不知道玩家解锁了哪一格，可解锁前沿只有起点，整张图点不动',
     );
     assert.ok(
-        /gateway\.passCell\(/.test(PRESENTER_SRC),
+        /gateway\.sendPassCell\(/.test(PRESENTER_SRC),
         '★TerritoryPresenter 必须调 gateway.passCell —— 通关要上报，'
         + '否则服务端 passCells 永远只有起点',
     );
@@ -452,35 +458,26 @@ test('★★★ 写链路必须有调用方：unlockCell / passCell 都要真的
 test('★★★ 解锁请求在扣本地资源之前（否则被拒绝时白扣银币体力，且要不回来）', () => {
     // 口径 B：`unlockCells` 由服务端算，客户端不自己推断 ⇒ 必须先问服务端。
     // 顺序反了会在 succ=0 时白扣资源 —— 本地存档是唯一副本，扣了没法退。
+    // 发解锁与扣费进战斗都在 `startBattle` 的回包回调里：解锁先发，`beginBattle` 只在
+    // 「不是 rejected」的分支里调 —— 顺序与分支都在这一个函数体内，直接查。
     const startAt = PRESENTER_SRC.indexOf('private async startBattle(');
     assert.ok(startAt > 0, '找不到 startBattle');
-    const end = PRESENTER_SRC.indexOf('\n    private ', startAt + 10);
-    const body = PRESENTER_SRC.slice(startAt, end > 0 ? end : PRESENTER_SRC.length);
-
-    const unlockAt = body.indexOf('gateway.unlockCell(');
+    const startEnd = PRESENTER_SRC.indexOf('\n    private ', startAt + 10);
+    const body = PRESENTER_SRC.slice(startAt, startEnd > 0 ? startEnd : PRESENTER_SRC.length);
+    const unlockAt = body.indexOf('gateway.sendUnlockCell(');
     assert.ok(unlockAt > 0, 'startBattle 里必须请求解锁');
-    // 扣费已拆到 beginBattle（store.beginBattle 在其中），这里查的是"调用它"在解锁之后。
-    // ⚠️ 必须**从 unlockAt 之后**找：`startBattle` 开头有一条「已解锁 ⇒ 直接进战斗」的快路径
-    //    （`isCellUnlocked` 命中时它本来就不需要再解锁，第一个 `this.beginBattle(` 落在那儿），
-    //    取全局第一个会把这层绕行误报成"先扣费后解锁"。
-    const callBeginAt = body.indexOf('this.beginBattle(', unlockAt);
-    assert.ok(callBeginAt > 0, 'startBattle 必须在解锁确认后调 beginBattle 扣费进战斗');
-    assert.ok(
-        unlockAt < callBeginAt,
-        '★解锁请求必须在扣费/进战斗之前 —— 反过来会在服务端拒绝时白扣银币体力',
-    );
-    // ⚠️ 顺带钉住"扣费真的拆出去了"：如果有人图省事把 store.beginBattle 搬回 startBattle，
-    // 上面的顺序断言会被绕过，故这里直接禁。
-    assert.ok(
-        body.indexOf('store.beginBattle(') < 0,
-        'store.beginBattle 不该再出现在 startBattle 里（扣费已挪到 beginBattle，由解锁结果把关）',
-    );
+    // 关首那条「已解锁直接开战」的快路径也有 `beginBattle`，取最后一条（回包落地那次）。
+    const beginAt = body.lastIndexOf('this.beginBattle(site, stage)');
+    assert.ok(beginAt > unlockAt, '★解锁回包确认后才允许扣费/进战斗 —— 反过来会在服务端拒绝时白扣银币体力');
+    assert.ok(body.indexOf('rejected') < beginAt, '只有服务端拒绝挡在扣费之前');
+    // 扣费只可能在 beginBattle（store.beginBattle 在其中）；网络层不碰扣费。
+    assert.ok(body.indexOf('store.beginBattle(') < 0, 'store.beginBattle 不该出现在 startBattle 里');
 });
 
 test('★★★ 只有 rejected 才停战；离线/网络失败必须放行（网络抖动不该让玩家点不动格子）', () => {
     const startAt = PRESENTER_SRC.indexOf('private async startBattle(');
-    const end = PRESENTER_SRC.indexOf('\n    private ', startAt + 10);
-    const body = PRESENTER_SRC.slice(startAt, end > 0 ? end : PRESENTER_SRC.length);
+    const startEnd = PRESENTER_SRC.indexOf('\n    private ', startAt + 10);
+    const body = PRESENTER_SRC.slice(startAt, startEnd > 0 ? startEnd : PRESENTER_SRC.length);
 
     assert.ok(/rejected/.test(body), "要按 reason 分流：'rejected' 才停");
     assert.ok(/unlockRejected/.test(body), '被服务端拒绝要给玩家一句可读提示，不能静默');

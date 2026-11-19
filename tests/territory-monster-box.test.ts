@@ -33,6 +33,8 @@ const REPO_PATH = 'assets/script/app/territory/application/TerritoryCellReposito
 const REPO_SRC = readFileSync(REPO_PATH, 'utf8');
 const MODEL_SRC = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
 const CONTROLLER_SRC = readFileSync('assets/script/app/territory/application/TerritoryController.ts', 'utf8');
+/** 网关由 Entry 装配（Controller 只接收 Model 实例），见 `territory-mvc-boundary`。 */
+const ENTRY_SRC = readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8');
 const VIEW_STATE_SRC = readFileSync(
     'assets/script/app/territory/application/TerritoryViewState.ts',
     'utf8',
@@ -167,15 +169,16 @@ test('★快照解析带 monsterBoxInfos，且按 maxCell 裁剪', () => {
 });
 
 test('★★ 升级结果只认回包等级：不本地 +1，`succ` 才算成功', () => {
-    const methodAt = REPO_SRC.indexOf('async upMonsterBoxLv(');
-    assert.ok(methodAt > 0, 'Repository 缺 upMonsterBoxLv');
-    const body = REPO_SRC.slice(methodAt, methodAt + 2200);
+    // 写请求只发不等：发送与解码分开，等级只在 `readMonsterBoxRsp` 里认。
+    const methodAt = REPO_SRC.indexOf('readMonsterBoxRsp(');
+    assert.ok(methodAt > 0, 'Repository 缺 readMonsterBoxRsp');
+    const body = REPO_SRC.slice(methodAt, methodAt + 900);
     assert.match(body, /readTerritoryMonsterBox\(/, '等级必须从回包读');
     assert.doesNotMatch(body, /\blv\s*\+\s*1\b/, '不许本地 +1（服务端才是等级真源）');
     assert.match(body, /TERRITORY_REQUEST_STATUS\.rejected/, '`succ !== 1` 必须归 rejected');
     assert.match(body, /withTerritoryMonsterBox\(/, '成功后才把新等级并进快照');
-    // 合并必须限定在"当前章节"，否则升 A 章会顺手改 B 章的箱子。
-    assert.match(body, /this\.state\.levelChapter === chapter/);
+    // 发送侧不许带任何回包假设。
+    assert.match(REPO_SRC, /sendUpMonsterBoxLv\(levelChapter: number, cellId: number/);
 });
 
 /** 抽出真实 Repository 在 Node 里跑（桩掉 GameNet 与请求类）。 */
@@ -185,6 +188,8 @@ function loadRepository() {
         constructor(_args: unknown, _caller: unknown, readonly callback: (msg: unknown) => void) {
             captured.push({ callback });
         }
+        // `dispatch` 用协议名做发送/超时留痕：桩也要能报名字。
+        getReqMsgProtoName(): string { return 'CmdTestReqMsg'; }
     }
     const code = ts.transpileModule(REPO_SRC, { compilerOptions: {
         module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true,
@@ -196,6 +201,11 @@ function loadRepository() {
         require: (id: string) => ({
             '../../net/GameNet': {
                 GameNet: {
+                    // 写请求只发不等：`send` 收下 RequestMsg，回包由测试自己塞给 `read*Rsp`。
+                    instance: {
+                        isConnected: true,
+                        send: (request: unknown) => { captured.push({ callback: () => {} }); return Promise.resolve(true); },
+                    },
                     sendRequest: async (make: () => unknown) => {
                         make();
                         return 'ok';
@@ -221,7 +231,8 @@ function loadRepository() {
     });
     const Repository = exported.TerritoryCellRepository as new () => {
         fetchChapterCells(chapter: number, maxCell: number): Promise<unknown>;
-        upMonsterBoxLv(chapter: number, cellId: number): Promise<unknown>;
+        sendUpMonsterBoxLv(chapter: number, cellId: number): string;
+        readMonsterBoxRsp(msg: unknown): { ok: boolean; monsterBox?: { cellId: number; lv: number } | null; reason?: string };
         state: bitSet.ITerritoryCellState | null;
     };
     return { repository: new Repository(), captured };
@@ -251,15 +262,14 @@ test('★★ 升级成功把新等级并进快照；失败（succ=0）一个字�
     assert.deepEqual(boxesOf(repository), [{ cellId: 4, lv: 2 }]);
 
     // 服务端拒绝 ⇒ 保持原值，不能乐观 +1。
-    const rejected = repository.upMonsterBoxLv(1, 4);
-    captured[captured.length - 1].callback({ succ: 0 });
-    assert.deepEqual(plain(await rejected), { ok: false, reason: 'rejected' });
+    assert.equal(repository.sendUpMonsterBoxLv(1, 4), 'ok', '写请求只发不等，发送成功即 ok');
+    assert.deepEqual(plain(repository.readMonsterBoxRsp({ succ: 0 })), { ok: false, reason: 'rejected' });
     assert.deepEqual(boxesOf(repository), [{ cellId: 4, lv: 2 }], '失败回包不许改快照');
 
     // 成功 ⇒ 用回包的等级覆盖（这里刻意给 7，不是 3 —— 证明不是本地 +1）。
-    const upgraded = repository.upMonsterBoxLv(1, 4);
-    captured[captured.length - 1].callback({ succ: 1, monsterBoxInfo: { cellId: 4, lv: 7 } });
-    assert.deepEqual(plain(await upgraded), { ok: true, monsterBox: { cellId: 4, lv: 7 } });
+    assert.equal(repository.sendUpMonsterBoxLv(1, 4), 'ok');
+    assert.deepEqual(plain(repository.readMonsterBoxRsp({ succ: 1, monsterBoxInfo: { cellId: 4, lv: 7 } })),
+        { ok: true, monsterBox: { cellId: 4, lv: 7 } });
     assert.deepEqual(boxesOf(repository), [{ cellId: 4, lv: 7 }]);
 });
 
@@ -272,10 +282,9 @@ test('★★ succ=1 但回包没有合法条目 ⇒ 成功但等级未知（不�
     });
     await fetching;
 
-    const upgraded = repository.upMonsterBoxLv(1, 4);
-    captured[captured.length - 1].callback({ succ: 1, monsterBoxInfo: { cellId: 4, lv: 'bad' } });
-    assert.deepEqual(plain(await upgraded), { ok: true, monsterBox: null },
-        '服务端已经升级、消耗可能已扣 ⇒ 不能报失败，由调用方重拉');
+    assert.equal(repository.sendUpMonsterBoxLv(1, 4), 'ok');
+    assert.deepEqual(plain(repository.readMonsterBoxRsp({ succ: 1, monsterBoxInfo: { cellId: 4, lv: 'bad' } })),
+        { ok: true, monsterBox: null }, '服务端已经升级、消耗可能已扣 ⇒ 不能报失败，由调用方重拉');
     assert.deepEqual(boxesOf(repository), [{ cellId: 4, lv: 2 }], '拿不到权威值就保持原样');
 });
 
@@ -306,14 +315,17 @@ test('★★ 运行时编码器真的编得出来（static 模块，不是 json�
 });
 
 test('★Model / Controller 接线：意图 → 网关 → 仓储，三层都在', () => {
-    // ① 网关端口声明了这条协议（否则 Model 调不到）。
-    assert.match(MODEL_SRC, /upMonsterBoxLv\(chapterId: number, cellId: number\): Promise<TerritoryMonsterBoxUpgradeResult>/);
+    // ① 网关端口声明了这条协议（只发不等，回包走事件通道）。
+    assert.match(MODEL_SRC, /sendUpMonsterBoxLv\(chapterId: number, cellId: number\): TerritorySendStatus/);
+    assert.match(MODEL_SRC, /sendUpMonsterBoxLv\(chapterId, cellId\)/);
+    assert.match(CONTROLLER_SRC, /CmdCityChapterUpMonsterBoxLvRspMsg/);
+    assert.match(CONTROLLER_SRC, /applyMonsterBoxRsp\(this\.options\.cells\.readMonsterBoxRsp\(message\)\)/);
     // ② Model 有升级入口，且只发「快照里有箱子」的格。
     assert.match(MODEL_SRC, /async upgradeMonsterBox\(cellId: number\): Promise<void>/);
     assert.match(MODEL_SRC, /monsterBoxes\.some\(box => box\.cellId === cellId\)/,
         '没有箱子的格不该发请求（只会被服务端拒）');
-    // ③ Controller 真的把仓储方法接进网关，并接了意图。
-    assert.match(CONTROLLER_SRC, /upMonsterBoxLv: \(chapterId, cellId\) => cells\.upMonsterBoxLv\(chapterId, cellId, this\)/);
+    // ③ Entry 装配仓储并把本页宿主作为 caller 注入（仓储本身就是网关），Controller 接了意图。
+    assert.match(ENTRY_SRC, /new TerritoryCellRepository\(this\)/);
     assert.match(CONTROLLER_SRC, /case 'upgradeMonsterBox': void this\.model\.upgradeMonsterBox\(intent\.cellId\)/);
     // ④ 视图状态两个出口都带上了等级来源。
     assert.match(MODEL_SRC, /readonly monsterBoxes: readonly ITerritoryMonsterBox\[\]/);

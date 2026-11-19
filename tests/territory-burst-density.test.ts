@@ -118,14 +118,15 @@ function modelMethodBody(signature: string): string {
 }
 
 test('Presenter 给随机格标 `chest: false`（页面据此不放开箱）', () => {
-    assert.ok(modelMethodBody('private async openRandomResourceCell(').includes('chest: false'),
-        '随机格必须显式要求"不要宝箱"');
+    // 回包落地就在入口的回调里：随机格显式要求「不要宝箱」。
+    const randomFlow = modelMethodBody('private async openRandomResourceCell(');
+    assert.ok(randomFlow.includes('chest: false'), '随机格必须显式要求"不要宝箱"');
 
-    // 固定资源点那一路仍然走默认（开箱），不能被顺手改成 burst
-    const fixedClaim = modelMethodBody('private async handleUnlockThenPass(');
-    assert.ok(fixedClaim.length > 200, `切片异常短（${fixedClaim.length} 字），锚点八成又只命中注释了`);
-    assert.ok(fixedClaim.includes('showRewards(result.rewards, site.cellId)'), '资源点领取仍走默认开箱');
-    assert.ok(!fixedClaim.includes('chest: false'), '资源点不许被顺手改成喷射');
+    // 固定资源点那一路仍然走默认（开箱），不能被顺手改成 burst。
+    const passFlow = modelMethodBody('private async handleUnlockThenPass(');
+    assert.ok(passFlow.length > 200, `切片异常短（${passFlow.length} 字），锚点八成又只命中注释了`);
+    assert.ok(passFlow.includes('showRewards(write.rewards, site.cellId)'), '资源点领取仍走默认开箱');
+    assert.ok(!passFlow.includes('chest: false'), '资源点不许被顺手改成喷射');
 });
 
 test('页面按 `chest: false` 直接结算（喷射），不判格子类型', () => {

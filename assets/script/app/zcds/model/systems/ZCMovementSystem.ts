@@ -133,10 +133,16 @@ export class ZCMovementSystem {
         return { fromX: current.x, fromY: current.y, x: nx, y: ny, landed: false };
     }
 
-    /** 把单位摆到任意连续坐标：清掉寻路字段，按位移方向取八向朝向，再同步所在格。*/
-    placeAt(unit: ZCUnitState, x: number, y: number): void {
+    /**
+     * 把单位摆到任意连续坐标：清掉寻路字段，按位移方向取八向朝向，再同步所在格。
+     *
+     * `keepFacing = true` 时不动朝向（2026-11-18 第 17 批 召唤物跟随）：舞伴每帧被钉在
+     * 本体的四个阵位上，阵位随本体朝向旋转 ⇒ 若照位移方向重算朝向，本体一转圈舞伴就会
+     * 各自扭头看自己飞过去的方向，观感是「四个人在原地打转」。缺省 false ⇒ 存量逐字不变。
+    */
+    placeAt(unit: ZCUnitState, x: number, y: number, keepFacing = false): void {
         const current = this.position(unit);
-        if (distance(current.x, current.y, x, y) > 1e-6) {
+        if (!keepFacing && distance(current.x, current.y, x, y) > 1e-6) {
             unit.facingRadians = Math.round(Math.atan2(y - current.y, x - current.x) / (Math.PI / 4)) * (Math.PI / 4);
         }
         unit.targetHexId = null;

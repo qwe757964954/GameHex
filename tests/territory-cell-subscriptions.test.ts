@@ -113,7 +113,7 @@ function createHarness() {
         dispose() {}, start() {}, onOutput() { return () => {}; },
     };
     activeNet = net;
-    const controller = new TerritoryController(() => presenter as unknown as TerritoryModel, { context: createControllerContext(),
+    const controller = new TerritoryController(presenter as unknown as TerritoryModel, { context: createControllerContext(),
         cells: repository,
         roleCache: { subscribe: () => () => {} }, schedule: () => () => {},
     });
@@ -132,7 +132,9 @@ test('Controller 订阅两类格子消息并在销毁时解绑，Repository 不�
     assert.equal('listenCellInfo' in h.repository, false);
     h.page.onLoad();
     assert.deepEqual(h.listeners.map(({ name }) => name).sort(), [
-        'CmdCityChapterCellInfoRspMsg', 'CmdCityChapterPassCellBroMsg',
+        'CmdCityChapterCellInfoRspMsg', 'CmdCityChapterIdleRewardRspMsg', 'CmdCityChapterPassCellBroMsg',
+        'CmdCityChapterPassCellRspMsg', 'CmdCityChapterSweepRspMsg', 'CmdCityChapterUnlockCellRspMsg',
+        'CmdCityChapterUpMonsterBoxLvRspMsg',
     ]);
     h.emit('CmdCityChapterPassCellBroMsg', { levelChapter: 0, cellId: [1, '4', -1, 1.5, 'bad'] });
     assert.equal(h.passed.length, 1);

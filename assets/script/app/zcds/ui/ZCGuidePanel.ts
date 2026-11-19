@@ -72,6 +72,13 @@ export class ZCGuidePanel extends PopupBase {
     /** 预制体路径（PopupManager 据此加载）。*/
     static prefabPath = 'ui/game/ZCGuidePanel';
 
+    /**
+     * 引导说明面板有自己的出场时序（引导层按「面板出现」推台词、算焦点孔位置），
+     * 整页淡入会让 `active` 与「看得见」错开 0.24s ⇒ 台词先出来、面板还在半透明。
+     * 全局统一过渡（2026-11-18）对它关掉。
+     */
+    motionEnabled = false;
+
     @property({ type: Sprite, group: '面板', tooltip: 'Panel：羊皮纸底 bg_05' })
     panelBg: Sprite = null;
 

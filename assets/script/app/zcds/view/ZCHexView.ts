@@ -88,6 +88,20 @@ const MONSTER_FOCUS_STYLE = {
     focus: { text: '集火野怪', color: new Color(45, 120, 225) },
     cancel: { text: '取消集火', color: new Color(235, 145, 55) },
 } as const;
+type ZCMonsterFocusStyleKey = keyof typeof MONSTER_FOCUS_STYLE;
+
+/**
+ * 野怪集火按钮的三态底图（`image/spawn-region/frame_01/02/03`）。
+ *
+ * 三张图是同一套 94×45 的九宫气泡（底部箭头本体就是气泡的一部分），只是配色不同
+ * ⇒ 状态切换只换帧、不重建节点。prefab 默认绑 `frame_01`（locked），另外两张随对局
+ * 由 `ZCGameLoader` 预加载后注入（见 `setMonsterFocusFrames`）。
+*/
+export interface IZCMonsterFocusFrames {
+    readonly locked: SpriteFrame;
+    readonly focus: SpriteFrame;
+    readonly cancel: SpriteFrame;
+}
 const BUILDING_SYMBOLS: Readonly<Record<ZCBuildingType, string>> = {
     none: '', hq: '城', mine: '金', barracks: '兵', tower: '塔',
 };
@@ -632,6 +646,13 @@ export class ZCHexView extends Component {
     */
     private unknownResourceFrame: SpriteFrame | null = null;
     private neutralResourceFrames: ReadonlyMap<string, SpriteFrame> | null = null;
+    /**
+     * 野怪集火按钮的三态底图，由渲染层注入（见 `setMonsterFocusFrames`）。
+     * `null` = 没加载到 ⇒ 底图停留在 prefab 默认的 `frame_01`（locked），文字色仍按状态走。
+    */
+    private monsterFocusFrames: IZCMonsterFocusFrames | null = null;
+    /** prefab 上默认绑的 locked 帧（`image/spawn-region/frame_01`）：三态图未注入时沿用它，别把底图刷成 null。*/
+    private monsterFocusPlaceholderFrame: SpriteFrame | null = null;
     private gateCooldownSeconds = 0;
     private portalUses = 0;
     private mowerSpeed = 0;
@@ -831,6 +852,9 @@ export class ZCHexView extends Component {
     private focusHexId = -1;
 
     onLoad(): void {
+        // 三态图未注入时底图停在 prefab 默认的 locked 帧，所以要先记下它；
+        // 之后 renderMonsterFocus 每帧全量赋 spriteFrame，缺图时赋回它而不是 null。
+        this.monsterFocusPlaceholderFrame = this.monsterFocusBackground.spriteFrame;
         this.monsterFocusButton.node.on(Button.EventType.CLICK, this.onMonsterFocus, this);
     }
 
@@ -852,9 +876,14 @@ export class ZCHexView extends Component {
         const focused = feature.focusOwners?.includes(ZCOwner.Player) ?? false;
         const remaining = Math.max(0, (feature.focusReadyAt?.player ?? 0) - now);
         this.monsterFocusButton.interactable = unlocked && remaining <= 0;
-        const style = !unlocked ? MONSTER_FOCUS_STYLE.locked : focused ? MONSTER_FOCUS_STYLE.cancel : MONSTER_FOCUS_STYLE.focus;
+        const styleKey: ZCMonsterFocusStyleKey = !unlocked ? 'locked' : focused ? 'cancel' : 'focus';
+        const style = MONSTER_FOCUS_STYLE[styleKey];
+        const frame = this.monsterFocusFrames?.[styleKey] ?? null;
         this.monsterFocusLabel.string = remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text;
-        this.monsterFocusBackground.color = style.color;
+        this.monsterFocusLabel.color = style.color;
+        this.monsterFocusBackground.spriteFrame = frame ?? this.monsterFocusPlaceholderFrame;
+        // 底图恒为白色：颜色烘在帧里，状态色只上文字。prefab 已按此配置，这里全量赋一次防池化复用残留。
+        this.monsterFocusBackground.color = Color.WHITE;
     }
 
     initialize(onClick: () => void, hexId = -1): void {
@@ -1072,6 +1101,17 @@ export class ZCHexView extends Component {
     setNeutralResourceFrames(frames: ReadonlyMap<string, SpriteFrame> | null): void {
         this.neutralResourceFrames = frames;
         this.contentKey = '';
+    }
+
+    /**
+     * 注入野怪集火按钮的三态底图（`locked/focus/cancel` ⇒ `image/spawn-region/frame_01/02/03`）。
+     *
+     * 尺寸（150×42）、九宫（SLICED）与白色染底都在 prefab 里定死了 —— 这三张图的箭头是
+     * 气泡本体的一部分，节点高度必须撑到 42 才不会被九宫边距吃掉中段。本方法只换帧。
+     * 染色交给 `renderMonsterFocus` 每帧全量刷（底图恒白，缺图时保留 prefab 的 locked 帧）。
+    */
+    setMonsterFocusFrames(frames: IZCMonsterFocusFrames | null): void {
+        this.monsterFocusFrames = frames;
     }
 
     setGateCooldownSeconds(seconds: number): void {

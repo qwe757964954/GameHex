@@ -60,6 +60,78 @@ export function territoryNodeCarrierByCell(sites: readonly TerritorySite[]): Rea
 }
 
 /**
+ * 同一关卡节点的地块 → **用哪一格的进度判地皮 / 格面框**。
+ *
+ * 用户 2026-11-18：「绿圈部分的地块也是归属关卡地块，现在没有和归属相关的地块状态
+ * 同步变化，待解锁是灰色，可激活就应该变成红色了」。
+ *
+ * 现场是 `chapter_01` 的 1-1：`327`（`stage`、`configId=10001`、没配 `buildingId`）与
+ * `328`（同 `configId`、配了 `69004`）是同一个节点的两格。`paintHexes` 原先**逐格**拿
+ * 自己 cellId 的 `isCellUnlocked / isOwned / isAreaPassed` 判地皮和框，两格的进度一旦
+ * 不同步就会「承载格灰、兄弟格褐」，格面红框也只挂在其中一格上。
+ *
+ * 🔴 收敛口径与「UI 收敛」同源但**不是同一件事**：这里管的是整片地块的状态色，
+ * 锁 / 价格 / 编号气泡仍然只长在承载格上（`territoryNodeMutedCells` 一个字没动）。
+ * 多建筑节点（组内每格都有 buildingId）不收敛，各格照旧按自己判 —— 那种节点本来
+ * 就是各自承担 UI，硬拧成一格会读错。
+ *
+ * 没有建筑时退回组内第一个站点的 `cellId`：chapter_02 起一关就是「一个站点 + 5~10 格
+ * footprint」，footprint 里的格在 `siteByCell` 里查不到站点 ⇒ 不收敛的话它们永远拿不到
+ * 关卡的红色格面框。
+ */
+export function territoryNodeStateCellByCell(
+    sites: readonly TerritorySite[],
+): ReadonlyMap<number, number> {
+    const out = new Map<number, number>();
+    for (const list of nodeGroups(sites).values()) {
+        const carriers = list.filter(hasBuilding);
+        // 多建筑节点各自承担 UI ⇒ 不收敛。
+        if (carriers.length > 1) continue;
+        const anchor = carriers.length === 1 ? carriers[0].cellId : list[0].cellId;
+        for (const site of list) {
+            out.set(site.cellId, anchor);
+            for (const cell of site.footprint ?? []) out.set(cell, anchor);
+        }
+    }
+    return out;
+}
+
+/**
+ * 「整片一起置灰」要补的格子（不含入参里已有的那些）。
+ *
+ * 模型侧 `lockBlockedCells` 是**逐格**算前置的，`paintHexes` 也已经把被卡住站点的
+ * footprint 铺开；但 `chapter_01` 那种「多个单格站点共用 configId」的节点，兄弟格
+ * 与承载格可能只有一格进集合 ⇒ 整片里只有它置灰，其余仍是泥土。
+ *
+ * 组内任一格被卡住 ⇒ 整组（含各自 footprint）一起灰；解锁那帧也一起换回颜色。
+ * 只作用于战斗节点组：宝箱 / 随机格本来就是各自独立的格子，不跟着别人变。
+ */
+export function territoryNodeGreyCells(
+    sites: readonly TerritorySite[],
+    blocked: ReadonlySet<number>,
+): ReadonlySet<number> {
+    const out = new Set<number>();
+    for (const list of nodeGroups(sites).values()) {
+        // 与 territoryNodeStateCellByCell 同一条边界：多建筑节点各自承担 UI，不摊灰。
+        if (list.filter(hasBuilding).length > 1) continue;
+        const cells = new Set<number>();
+        for (const site of list) {
+            cells.add(site.cellId);
+            for (const cell of site.footprint ?? []) cells.add(cell);
+        }
+        let anyBlocked = false;
+        for (const cell of cells) {
+            if (blocked.has(cell)) { anyBlocked = true; break; }
+        }
+        if (!anyBlocked) continue;
+        for (const cell of cells) {
+            if (!blocked.has(cell)) out.add(cell);
+        }
+    }
+    return out;
+}
+
+/**
  * 把被卡住的格子收敛成一个节点一处 UI，只落在承载 UI 的那一格上。
  *
  * 锁与价格互斥；组内任一格被前置卡住，整个节点算未解锁，由承载格画锁。

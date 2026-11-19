@@ -358,12 +358,23 @@ export class ZCSnapshotCodec {
                 // 精密陷阱（科学家 68035，2026-11-12）：CD 截止。同一套口径 ——
                 // 不还原的话读档回来会立刻在白送一个陷阱（`undefined` ⇒ 重新按 CD 起算）。
                 'trapReadyAt',
+                // 穿甲爆矢（毒箭蘑菇 68017，2026-11-18 第 17 批）：陷阱走的是「累计普攻 8 次」，
+                // 不是 CD —— 上次计数不还原的话读档回来会立刻白丢一个陷阱。
+                'trapFiredCount',
+                // 闪电链（雷蕉 68022，2026-11-18 第 17 批）：CD 截止。与 `trapReadyAt` 同口径 ——
+                // 不还原的话读档回来会白送一条连锁闪电。
+                'chainReadyAt',
+                // 召唤（舞王 68031 / 103103，2026-11-18 第 17 批）：CD 截止。不还原就是
+                // 「读档回来白送一批舞伴」。
+                'summonReadyAt',
                 // 孢爆箭 / 孢子凝珠（风炮菇 101303 / 水手菇 101104，2026-11-17 第 12 批）：
                 // CD 截止。不还原的话读档回来会白送一发（`undefined` ⇒ 重新按 CD 起算）。
                 'splashReadyAt',
                 // 菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
                 // CD 截止。同一套口径 —— 不还原就是「读档回来白送一次范围爆发」。
                 'burstReadyAt',
+                // 毒液喷吐（诅咒菇 101803，2026-11-18 第 17 批）：独立 CD，不还原 = 读档白送一次喷吐。
+                'venomReadyAt',
                 // 菌丝绞杀 / 菌丝突刺（机甲菇 101503 / 分裂菇 101403，2026-11-17 第 14 批）：
                 // 同样是 CD 截止，不还原就是「读档回来白送一次扇形 / 一次突刺」。
                 'fanReadyAt', 'singleReadyAt',
@@ -381,7 +392,31 @@ export class ZCSnapshotCodec {
                 'barrageShotsLeft', 'barrageNextAt',
                 // 施法动作（2026-11-13 用户需求）：动作窗口截止 + buff 类原地锁截止。
                 // 两个都是「绝对时刻」，只影响表现与「这一秒能不能挪窝」，不进任何伤害算式。
-                'castActionUntil', 'castHoldUntil']) {
+                'castActionUntil', 'castHoldUntil',
+                // 召唤物（2026-11-18 第 17 批 舞王 103103「舞王召唤」）：
+                //  · `summonUntil` = 到期时刻，不还原则读档回来舞伴永不过期；
+                //  · `summonMasterId` = 跟随谁，不还原则读档后舞伴**原地站着不再跟本体**
+                //    （位置每帧由本体算，丢了本体 id 就再也对不上）；
+                //  · `summonSlot` = 第几个阵位，不还原则四个舞伴读档后挤到同一个角；
+                //  · `summonAlpha` = 半透明度，纯表现，但不还原会让读档后的舞伴突然变实心。
+                'summonUntil', 'summonMasterId', 'summonSlot', 'summonSlotRadius', 'summonAlpha',
+                // 累计普攻制召唤（分裂菇 101404，2026-11-18 第 17 批）：上次计数。
+                // 不还原的话读档回来「已经打了 7 次」会被当成从 0 开始，白送一批分身。
+                'summonFiredCount',
+                // 团队增益（雷蕉 102204，2026-11-18 第 17 批）：施法者的 CD / 窗口截止，
+                // 受惠者的截止 / 击杀基线 / 已延长秒数。五个都是绝对时刻或计数量 ——
+                // 不还原则读档回来会「白送一次嗜血术」，或者「延长额度被清零、之后再也延不动」。
+                'teamBuffReadyAt', 'teamBuffWindowEnd', 'teamBuffUntil',
+                'teamBuffKillBase', 'teamBuffExtendUsed',
+                // 击杀计数（102204 III 级的延长靠它算增量）：不还原就是读档后延长从 0 重算。
+                'killCount',
+                // 怒吼（南瓜战神 102304，2026-11-18 第 17 批）：CD 截止。不还原 = 读档白送一次。
+                'roarReadyAt',
+                // 飓风（三叶小丑 102004，2026-11-18 第 17 批）：CD 截止。同上。
+                'stormReadyAt',
+                // 射线集束（科学家 103503，2026-11-19）：累计普攻计数。不还原 =
+                // 读档回来「已经打了 7 次」被当成 0，白送一发射线。
+                'rayFiredCount']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
             for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
@@ -529,6 +564,25 @@ export class ZCSnapshotCodec {
             //  2026-11-11 磁电冲击：区域朝向（度，可负）+ 表现竖直抬升（屏上 px）。
             check(optional(zone.angleDegrees, Number.isFinite), `${path}.angleDegrees`);
             check(optional(zone.visualLiftPx, nonnegative), `${path}.visualLiftPx`);
+            //  2026-11-18 第 17 批「穿甲爆矢」101704：投掷段的剩余飞行秒数 / 是否只炸被踩响的
+            //  那一下 / 是否已经踩响。三条都会改变「这片区域还飞不飞、到期炸不炸」，
+            //  退不出快照的话读档回来会当场落地 + 直接消失（一片形同虚设的陷阱）。
+            check(optional(zone.flightSeconds, nonnegative), `${path}.flightSeconds`);
+            check(optional(zone.expireRequiresContact, v => typeof v === 'boolean'), `${path}.expireRequiresContact`);
+            check(optional(zone.contactTriggered, v => typeof v === 'boolean'), `${path}.contactTriggered`);
+            //  2026-11-18 第 17 批「飓风」102004：随机游走 + 牵引。
+            //  四条都会改变区域「往哪飘、拽不拽人」—— 不还原的话读档回来风向归零、
+            //  牵引直接断掉（一片只掉血、不拽人的风），而且一条错都不报。
+            check(optional(zone.wanderSpeed, nonnegative), `${path}.wanderSpeed`);
+            check(optional(zone.wanderTurnSeconds, nonnegative), `${path}.wanderTurnSeconds`);
+            check(optional(zone.wanderNextTurnAt, nonnegative), `${path}.wanderNextTurnAt`);
+            //  朝向可负（-π~π），按有限数校验，不能用 nonnegative。
+            check(optional(zone.wanderAngleRadians, Number.isFinite), `${path}.wanderAngleRadians`);
+            check(optional(zone.pullSpeed, nonnegative), `${path}.pullSpeed`);
+            check(optional(zone.pullRadius, nonnegative), `${path}.pullRadius`);
+            //  2026-11-19 射线集束 103503：事件级缩放（正数，缺省不写）。
+            //  不还原的后果是读档后光束缩回 prefab 原尺寸 —— 判定仍是长的，看着是短的。
+            check(optional(zone.effectScale, v => nonnegative(v) && (v as number) > 0), `${path}.effectScale`);
         });
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
         check(optional(data.nextCombatEventId, (v) => integer(v) && (v as number) > 0), 'nextCombatEventId');

@@ -29,7 +29,16 @@ test('第一章新号没有相邻随机格时，仍能找到可开启的固定�
     const map = read('assets/resources/config/territory-maps/chapter_01.json');
     const first: FocusState = { ...state, map, randomResourceOpenableCells: [],
         siteOpenableCells: [348, 327, 346, 366, 387, 368] };
-    assert.deepEqual(guideMapFocusCells('Map/Tile_1', first), [348]);
+    // 2026-11-18 地图重导（`chapter_01.json`）后一章开局不止一只可翻的宝箱（多了野怪宝箱
+    // `patrolChest`），候选从「只有 348」变成多只 ⇒ 期望值改成按地图数据自己算，别再硬写一只。
+    // 钉的是两件事：**只收点了能翻出来的宝箱格**（野怪宝箱第一下也算翻地），
+    // 且第一只必须是固定资源宝箱 348 —— 手指先指的永远是它。
+    const chests = (map.sites as { readonly cellId: number; readonly type: string }[])
+        .filter(site => site.type === 'fixedResource' || site.type === 'patrolChest')
+        .filter(site => first.siteOpenableCells.includes(site.cellId))
+        .map(site => site.cellId);
+    assert.equal(chests[0], 348, '第一只候选必须是固定资源宝箱 348');
+    assert.deepEqual(guideMapFocusCells('Map/Tile_1', first), chests);
     assert.deepEqual(guideMapFocusCells('Map/Tile_1', { ...first, siteOpenableCells: [] }), []);
 });
 
@@ -107,6 +116,32 @@ test('步骤表补齐关卡入口和卡牌入口，苏醒两步保持无焦点',
     assert.equal(rows.find(row => row.stepId === '5-3').focusNode, 'Battle/DrawnCard');
     assert.equal(rows.find(row => row.stepId === '5-3').requireAction, '');
     assert.equal(rows.find(row => row.stepId === '5-3').completeCond, 'cardRevealFinished');
+    // 8-1 收尾步：焦点必须是**底栏的任务入口**，不是弹窗内部。
+    // 表还指着 `Popup/MainGoal` 那阵子（代码早已改成点入口）⇒ 组合层解析不出焦点 ⇒
+    // 底栏被当普通 HUD 收掉，玩家连入口都看不见、光圈手指也没地方挖（用户 2026-11-19）。
+    const last = rows.find(row => row.stepId === '8-1');
+    assert.equal(last.focusNode, 'Main/TaskEntry', '8-1 要高亮主线任务入口');
+    assert.equal(last.completeCond, 'pageOpened:task', '面板一开就算完成（玩家自己点开）');
+    assert.equal(last.maskType, 'hole', '挖孔高亮：圈住入口，并让立绘按孔让位');
+});
+
+test('光圈与手指画在遮罩之上：孔外的压暗不许盖住高亮和手指', () => {
+    // 需求（2026-11-19）：主线任务入口的「圈圈 + 手指」不能被遮罩遮挡。
+    // 渲染顺序 = `Canvas` 子节点顺序，所以这条只能在 prefab 上钉死：
+    // Dim → 四块 FocusMask → Portrait → FocusRing → FocusHand → MapHint → DialogBox → Blocker。
+    const data = read('assets/bundles/main-pages/ui/Guide/GuideDialog.prefab');
+    const root = data.find((item: { _name?: string }) => item.__type__ === 'cc.Node' && item._name === 'GuideDialog');
+    const order = (root._children as { __id__: number }[]).map(ref => data[ref.__id__]._name as string);
+    const at = (name: string) => {
+        const index = order.indexOf(name);
+        assert.ok(index >= 0, `GuideDialog 缺子节点 ${name}`);
+        return index;
+    };
+    const maskTop = Math.max(...order.filter(name => name.startsWith('FocusMask')).map(at));
+    assert.ok(order.some(name => name.startsWith('FocusMask')), '四块遮罩必须还在（孔靠它们挖）');
+    assert.ok(at('FocusRing') > maskTop, 'FocusRing 必须排在四块遮罩之后，否则圈被压暗盖住');
+    assert.ok(at('FocusHand') > at('FocusRing'), 'FocusHand 必须排在 FocusRing 之后（手指压在圈上）');
+    assert.ok(at('Dim') < maskTop, 'Dim 在最底层');
 });
 
 test('遮罩孔四边预挂 Sprite 和消费输入的 Button，引用完整且没有 Widget 覆盖坐标', () => {

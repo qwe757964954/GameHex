@@ -15,12 +15,12 @@ import {
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { buildZCVisualResourcePlan } from '../assets/script/app/zcds/model/ZCVisualResourcePlan';
 import {
-    ZC_MISSILE_BARRAGE_IMPACT_PREFAB_PATH, ZC_MISSILE_BARRAGE_MISSILE_PREFAB_PATH,
-    ZC_WIND_BOLT_IMPACT_PREFAB_PATH, ZC_WIND_BOLT_MISSILE_PREFAB_PATH, ZC_WIND_BOLT_ZONE_PREFAB_PATH,
-    ZC_MISSILE_BARRAGE_BEHAVIOR_KEY, ZC_WIND_BOLT_BEHAVIOR_KEY,
+    ZC_BARRAGE_IMPACT_PREFAB_PATH, ZC_BARRAGE_MISSILE_PREFAB_PATH,
+    ZC_WIND_BOLT_PREFAB_PATH, ZC_WIND_HURRICANE_PREFAB_PATH,
+    ZC_BARRAGE_BEHAVIOR_KEY, ZC_WIND_BOLT_BEHAVIOR_KEY,
     zcIsMissileBarrageBehavior, zcIsWindBoltBehavior,
     zcMissileBarrageEffectPaths, zcWindBoltEffectPaths,
-} from '../assets/script/app/zcds/model/ZCWindBoltFx';
+} from '../assets/script/app/zcds/model/ZCWindBarrageFx';
 import { assetPath } from './helpers/asset-paths';
 
 /**
@@ -141,7 +141,7 @@ test('101304 连射导弹（V12）：累计 10 次普攻 / 3 枚 / 间隔 0.4 / 
     assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
     for (const [index, row] of rows.entries()) {
         assert.equal(row.unitId, '68013');
-        assert.equal(row.behaviorKey, ZC_MISSILE_BARRAGE_BEHAVIOR_KEY);
+        assert.equal(row.behaviorKey, ZC_BARRAGE_BEHAVIOR_KEY);
         assert.deepEqual(JSON.parse(String(row.skillParamJson)), BARRAGE_PARAMS[index]);
     }
 });
@@ -171,7 +171,7 @@ test('参数袋前缀必须是 wind* / barrage*，不许出现裸键', () => {
 test('wind_bolt / missile_barrage 必须双登记（白名单 + 运行时注册表）', () => {
     const schemaSource = readFileSync(join(ROOT, 'assets/script/app/zcds/model/ZCStatSchema.ts'), 'utf8');
     const runtimeSource = readFileSync(join(ROOT, 'assets/script/app/zcds/model/ZCSkillRuntime.ts'), 'utf8');
-    for (const key of [ZC_WIND_BOLT_BEHAVIOR_KEY, ZC_MISSILE_BARRAGE_BEHAVIOR_KEY]) {
+    for (const key of [ZC_WIND_BOLT_BEHAVIOR_KEY, ZC_BARRAGE_BEHAVIOR_KEY]) {
         assert.match(schemaSource, new RegExp(`SKILL_BEHAVIORS = new Set\\(\\[[\\s\\S]*?'${key}'[\\s\\S]*?\\]\\)`),
             `ZCStatSchema.SKILL_BEHAVIORS 缺 ${key} ⇒ 读表阶段直接抛「未注册 behaviorKey」`);
         assert.match(runtimeSource, new RegExp(`this\\.register\\('${key}'`),
@@ -181,30 +181,30 @@ test('wind_bolt / missile_barrage 必须双登记（白名单 + 运行时注册�
 
 test('行为键 → 表现路径：两条车道各自成套，且不互相认领', () => {
     assert.equal(zcIsWindBoltBehavior(ZC_WIND_BOLT_BEHAVIOR_KEY), true);
-    assert.equal(zcIsWindBoltBehavior(ZC_MISSILE_BARRAGE_BEHAVIOR_KEY), false);
-    assert.equal(zcIsMissileBarrageBehavior(ZC_MISSILE_BARRAGE_BEHAVIOR_KEY), true);
+    assert.equal(zcIsWindBoltBehavior(ZC_BARRAGE_BEHAVIOR_KEY), false);
+    assert.equal(zcIsMissileBarrageBehavior(ZC_BARRAGE_BEHAVIOR_KEY), true);
     assert.equal(zcIsMissileBarrageBehavior(ZC_WIND_BOLT_BEHAVIOR_KEY), false);
     assert.deepEqual(zcWindBoltEffectPaths(ZC_WIND_BOLT_BEHAVIOR_KEY), [
-        ZC_WIND_BOLT_MISSILE_PREFAB_PATH, ZC_WIND_BOLT_IMPACT_PREFAB_PATH, ZC_WIND_BOLT_ZONE_PREFAB_PATH,
+        ZC_WIND_BOLT_PREFAB_PATH, ZC_WIND_HURRICANE_PREFAB_PATH,
     ]);
-    assert.deepEqual(zcMissileBarrageEffectPaths(ZC_MISSILE_BARRAGE_BEHAVIOR_KEY), [
-        ZC_MISSILE_BARRAGE_MISSILE_PREFAB_PATH, ZC_MISSILE_BARRAGE_IMPACT_PREFAB_PATH,
+    assert.deepEqual(zcMissileBarrageEffectPaths(ZC_BARRAGE_BEHAVIOR_KEY), [
+        ZC_BARRAGE_MISSILE_PREFAB_PATH, ZC_BARRAGE_IMPACT_PREFAB_PATH,
     ]);
 });
 
-test('68013 的五条 prefab 必须进加载清单（漏一条就是「技能照常结算、屏幕没东西」）', () => {
+test('68013 的四条 prefab 必须进加载清单（漏一条就是「技能照常结算、屏幕没东西」）', () => {
     prepare();
     const plan = buildZCVisualResourcePlan([DEFINITION], {
         skillPlans: [
             { enabled: true, unitId: '68013', behaviorKey: ZC_WIND_BOLT_BEHAVIOR_KEY },
-            { enabled: true, unitId: '68013', behaviorKey: ZC_MISSILE_BARRAGE_BEHAVIOR_KEY },
+            { enabled: true, unitId: '68013', behaviorKey: ZC_BARRAGE_BEHAVIOR_KEY },
         ],
         textOverrides: new Map(),
     });
     const paths = plan.effectPaths;
     for (const path of [
-        ZC_WIND_BOLT_MISSILE_PREFAB_PATH, ZC_WIND_BOLT_IMPACT_PREFAB_PATH, ZC_WIND_BOLT_ZONE_PREFAB_PATH,
-        ZC_MISSILE_BARRAGE_MISSILE_PREFAB_PATH, ZC_MISSILE_BARRAGE_IMPACT_PREFAB_PATH,
+        ZC_WIND_BOLT_PREFAB_PATH, ZC_WIND_HURRICANE_PREFAB_PATH,
+        ZC_BARRAGE_MISSILE_PREFAB_PATH, ZC_BARRAGE_IMPACT_PREFAB_PATH,
     ]) {
         assert.ok(paths.includes(path), `加载清单缺 ${path}`);
     }
@@ -308,21 +308,20 @@ test('castWindBolt：射一枚风弹，弹体带「命中后留飓风」的全�
     assert.equal(ZCAttackResolutionSystem.castWindBolt(state, caster, context), true);
     assert.equal(pushed.length, 1, '一次施法只射一枚');
     const projectile = pushed[0];
-    assert.equal(projectile.effectPrefabPath, ZC_WIND_BOLT_MISSILE_PREFAB_PATH);
-    assert.equal(projectile.impactEffectPrefabPath, ZC_WIND_BOLT_IMPACT_PREFAB_PATH);
+    assert.equal(projectile.effectPrefabPath, ZC_WIND_BOLT_PREFAB_PATH);
+    assert.equal(projectile.impactEffectPrefabPath, undefined,
+        '直击不另挂命中特效：风弹弹体本身就是表现，命中点留给飓风');
     //  直击不溅射：范围那部分由飓风自己结算（表里是两列）。
     assert.equal(projectile.splashRadius, undefined);
     //  弹速是**世界 px/秒**（与 `projectileSpeed` 同口径），不乘 combatDistanceScale。
     assert.equal(projectile.velocityX === undefined || Number(projectile.velocityX) !== 0, true);
     //  飓风：30 表值 px × 0.3 = 9 世界 px、活 3 秒、每 0.1 秒扫一遍、同一敌人只结算一次。
-    assert.ok(Math.abs(Number(projectile.zoneRadius) - 30 * SCALE) < 1e-6);
-    assert.equal(projectile.zoneDuration, 3);
-    assert.ok(Math.abs(Number(projectile.zoneWaveInterval) - 0.1) < 1e-6);
-    assert.equal(projectile.zoneHitOnce, true, '不设这个 ⇒ 3 秒 30 波会把踩进去的人打 30 下');
-    assert.equal(projectile.zoneEffectPrefabPath, ZC_WIND_BOLT_ZONE_PREFAB_PATH);
+    assert.ok(Math.abs(Number(projectile.hurricaneRadius) - 30 * SCALE) < 1e-6);
+    assert.equal(projectile.hurricaneSeconds, 3);
+    assert.equal(projectile.hurricanePrefabPath, ZC_WIND_HURRICANE_PREFAB_PATH);
     //  区域伤害按 windZoneDamageRate 另算一份（0.9），与直击（1.5）不是一个数。
-    assert.ok(Number(projectile.zoneDamage) > 0);
-    assert.notEqual(projectile.zoneDamage, projectile.baseDamage);
+    assert.ok(Number(projectile.hurricaneDamage) > 0);
+    assert.notEqual(projectile.hurricaneDamage, projectile.baseDamage);
 });
 
 test('castWindBolt：参数不全 / 射程内没人 ⇒ false 且不推弹', () => {
@@ -351,7 +350,7 @@ test('castMissileBarrage：一枚「会飞的区域」，到点才炸、飞行�
     const enemy = makeUnit(2, ZCOwner.Enemy, 60, '68028');
     const units = [caster, enemy];
     const state = makeState(units);
-    const { context, pushed } = attackContext(units, BARRAGE_PARAMS[0], ZC_MISSILE_BARRAGE_BEHAVIOR_KEY,
+    const { context, pushed } = attackContext(units, BARRAGE_PARAMS[0], ZC_BARRAGE_BEHAVIOR_KEY,
         { id: enemy.id, x: 60, y: 0 });
 
     assert.equal(ZCAttackResolutionSystem.castMissileBarrage(state, caster, context), true);
@@ -363,7 +362,7 @@ test('castMissileBarrage：一枚「会飞的区域」，到点才炸、飞行�
     assert.equal(zone.damage, 0, '飞行段没有伤害');
     //  到点那一下：到期通道结算 `expireDamage` 并播爆炸。
     assert.ok(Number(zone.expireDamage) > 0);
-    assert.equal(zone.expirePrefabPath, ZC_MISSILE_BARRAGE_IMPACT_PREFAB_PATH);
+    assert.equal(zone.expirePrefabPath, ZC_BARRAGE_IMPACT_PREFAB_PATH);
     //  180 表值 px × 0.3 = 54 世界 px。
     assert.ok(Math.abs(zone.radius - 180 * SCALE) < 1e-6);
     //  从一开始就在往落点飞，且落点在爆炸半径之内（不然三枚都炸在圈外）。
@@ -382,7 +381,7 @@ test('castMissileBarrage：落点随机但落在「目标周围 ±0.6R」内，�
     const seen: Array<number> = [];
     for (const value of [0, 0.25, 0.75, 0.99]) {
         state.groundZones.length = 0;
-        const { context } = attackContext(units, BARRAGE_PARAMS[0], ZC_MISSILE_BARRAGE_BEHAVIOR_KEY,
+        const { context } = attackContext(units, BARRAGE_PARAMS[0], ZC_BARRAGE_BEHAVIOR_KEY,
             { id: enemy.id, x: 60, y: 0 }, () => value);
         assert.equal(ZCAttackResolutionSystem.castMissileBarrage(state, caster, context), true);
         const zone = state.groundZones[0];
@@ -451,7 +450,7 @@ test('applyWindBolt：首次只挂 CD、到点出手、打空不消费 CD', () =
 });
 
 test('applyMissileBarrage：累计到 10 次普攻才开一轮，同一个累计数只开一轮', () => {
-    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_MISSILE_BARRAGE_BEHAVIOR_KEY);
+    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_BARRAGE_BEHAVIOR_KEY);
     harness.caster.completedAttackCount = 9;
     harness.step(0);
     assert.equal(harness.calls.length, 0, '第 9 次普攻不满足「每 10 次」');
@@ -469,7 +468,7 @@ test('applyMissileBarrage：累计到 10 次普攻才开一轮，同一个累计
 });
 
 test('applyMissileBarrage：三枚按 barrageInterval 逐拍发出，不是齐射', () => {
-    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_MISSILE_BARRAGE_BEHAVIOR_KEY);
+    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_BARRAGE_BEHAVIOR_KEY);
     harness.caster.completedAttackCount = 10;
     harness.step(0);
     for (let at = 0.05; at <= 1.5; at += 0.05) harness.step(at);
@@ -481,7 +480,7 @@ test('applyMissileBarrage：三枚按 barrageInterval 逐拍发出，不是齐�
 });
 
 test('applyMissileBarrage：某一枚打不出去 ⇒ 本轮作废，不会永久卡在「还剩 N 枚」', () => {
-    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_MISSILE_BARRAGE_BEHAVIOR_KEY);
+    const harness = triggerHarness(BARRAGE_PARAMS[0], ZC_BARRAGE_BEHAVIOR_KEY);
     harness.caster.completedAttackCount = 10;
     harness.step(0);
     harness.setResult(false);

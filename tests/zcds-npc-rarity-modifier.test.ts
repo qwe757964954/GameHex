@@ -318,6 +318,93 @@ test('develop：同一 random 下玩家抽蓝、NPC 抽绿（乘数只对 NPC �
     assert.equal(plain.card?.rarity, 'blue');
 });
 
+/** 读 `assets/remoteRef` 的列存表，转成行对象（与 `territory-campaign-config.test.ts` 同一读法）。 */
+function refRows(name: string): Record<string, any>[] {
+    const payload = JSON.parse(readFileSync(new URL(`../assets/remoteRef/${name}.json`, import.meta.url), 'utf8'));
+    if (Array.isArray(payload)) return payload;
+    return payload.v.map((values: unknown[]) => Object.fromEntries(
+        payload.k.map((key: string, index: number) => [key, values[index]]),
+    ));
+}
+
+/**
+ * ★ 真表回归（2026-11-18）：**卡池驱动再归一** —— 配置写了也可能不算数。
+ *
+ * 事故现场：`pvpTile.10004` 配的是「紫 0.9 / 金 0.1」，但有 11 关的 NPC 队伍卡池里
+ * 一张紫品级兵营卡都没有。`drawPvpTile` 的 `availableRarities` 只保留「本席位卡池里
+ * 真有卡」的品级，`availableTotal` 在剩余品级内重新归一 ⇒ 紫被剔掉后金独吞 100%，
+ * 表里那 10% 形同废纸。补卡后必须回到 90/10。
+ *
+ * 断在「真表 + 真函数」上，不钉队伍里有什么卡（补卡会换 id，那是实现细节）：
+ * 每关用**有效 NPC 队伍**的卡组（`npcTeamType ∈ {1,3}`、`npcTeamMatch` 含该关、
+ * 按 `npcTeamId` 升序取第一支 —— 与 `TerritoryCampaignConfig` 的 `.sort().slice(0,1)` 同口径）
+ * 加本关 `gradeProModifier`，抽「随机兵营-高级」2000 次，金卡占比必须仍是 10%。
+ *
+ * 另外守一条**数据**口径：只要地块配了某品级权重，该关队伍卡池里就必须真有这一档
+ * （同一天补的第二处：队伍 2015 缺蓝 ⇒ 10004 不受影响，但「随机兵营-中等」的蓝 40%
+ * 被绿接管，`10003` 变成 B0 / G94.6）。缺蓝不会让 10004 出问题，所以只靠抽样查不出来。
+ *
+ * 紫/金系数相等是这条能过的前提（见 `ANCHORS` 注释）：乘同一个数，90:10 才不变。
+ */
+test('★ 真表：匹配关的 NPC 队伍四品级齐全，高级兵营按表走 90/10', () => {
+    const cardById = new Map(refRows('pvpCard').map((row) => [Number(row.id), row]));
+    const advancedRow = refRows('pvpTile').find((row) => Number(row.id) === ZCPvpTileType.BarracksAdvanced);
+    assert.ok(advancedRow, 'remoteRef/pvpTile 必须有 10004「随机兵营-高级」');
+    const tiles = {
+        [ZCPvpTileType.BarracksAdvanced]: {
+            type: ZCPvpTileType.BarracksAdvanced,
+            name: String(advancedRow.name),
+            price: Number(advancedRow.price),
+            rarityWeights: advancedRow.rarityWeights as Record<ZCPvpDrawRarity, number>,
+            eligibleCardTypes: [ZCCardType.Barracks],
+        },
+    } as unknown as Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
+
+    const teamByLevel = new Map<number, Record<string, any>>();
+    for (const team of refRows('npcTeam')) {
+        const teamType = Number(team.npcTeamType);
+        if (teamType !== 1 && teamType !== 3) continue;
+        for (const levelId of new Set((team.npcTeamMatch ?? []).map(Number))) {
+            const old = teamByLevel.get(levelId);
+            if (!old || Number(team.npcTeamId) < Number(old.npcTeamId)) teamByLevel.set(levelId, team);
+        }
+    }
+
+    const draws = 2000;
+    const failures: string[] = [];
+    const gaps: string[] = [];
+    let checked = 0;
+    for (const level of refRows('levelInfo')) {
+        if (Number(level.levelMod) !== 1) continue;
+        const levelId = Number(level.levelId);
+        const team = teamByLevel.get(levelId);
+        if (!team) continue;
+        checked += 1;
+        const deck: ZCDeckCard[] = (team.npcCard ?? []).flatMap((entry: any) => {
+            const cardId = Number(typeof entry === 'number' ? entry : entry?.cardID);
+            const card = cardById.get(cardId);
+            const rarity = ZC_PVP_RARITY_KEYS[Number(card?.rarity) - 1];
+            // 金矿/主城这类非兵营卡不参与 10004（`eligibleCardTypes = [2]`），缺配置就跳过。
+            return rarity ? [{ id: String(cardId), name: String(card?.name ?? cardId), type: ZCCardType.Barracks, rarity }] : [];
+        });
+        // `10002/10003/10004` 四种品级都配了非零权重，缺任何一档都会让归一失真。
+        const missing = ZC_PVP_RARITY_KEYS.filter((rarity) => !deck.some((card) => card.rarity === rarity));
+        if (missing.length) gaps.push(`${levelId}（队伍 ${team.npcTeamId}）缺 ${missing.join('/')}`);
+        const random = createRandom(20261118);
+        let gold = 0;
+        for (let index = 0; index < draws; index += 1) {
+            const result = drawPvpTile(deck, ZCPvpTileType.BarracksAdvanced, 0, random, tiles, 1e9,
+                { rarityModifier: level.gradeProModifier ?? null, goldPity: false });
+            if (result.rarity === 'gold') gold += 1;
+        }
+        const share = gold / draws;
+        if (Math.abs(share - 0.1) > 0.02) failures.push(`${levelId}（队伍 ${team.npcTeamId}）金卡 ${(share * 100).toFixed(1)}%`);
+    }
+    assert.ok(checked >= 100, `至少要覆盖 100 个带 NPC 队伍的匹配关，实际 ${checked}`);
+    assert.deepEqual(gaps, [], `这些关的 NPC 卡池缺品级（权重会被重新归一）：\n${gaps.join('\n')}`);
+    assert.deepEqual(failures, [], `这些关的高级兵营没按表走 90/10：\n${failures.join('\n')}`);
+});
+
 test('接线守卫：逐关字段 6 跳都在，且玩家席位被显式拦掉', () => {
     const read = (path: string): string => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 

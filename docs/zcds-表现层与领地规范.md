@@ -24,6 +24,7 @@
 | **冲刺（运动霸「拳击冲撞」）**（2026-11-02 接线） | `ZCUnitSystem`（`chargeSpeedScale` → `speedScale` + `unit.charging`）/ `ZCUnitTargeting.chargeSpeedScale` / `ZCUnitView` 动作切换 | `tests/zcds-charge.test.ts` |
 | **技能释放的触发范围（待触发闸门）**（2026-11-11，见 §13） | `ZCUnitTargeting.hasTargetInAttackRange` / `attackReachOf` → `IZCSkillTriggerContext.inAttackRange` / `attackReachOf` → `ZCSkillTriggerSystem.tick` | `tests/zcds-skill-trigger-range.test.ts`、`tests/zcds-skill-trigger.test.ts` |
 | **施法动作窗口 + buff 类原地锁**（2026-11-13，见 §18） | `ZCUnitCastAction.ts`（两条时长）/ `ZCSkillTriggerSystem.markCastAction` / `ZCUnitSystem.updateUnit`（`castHoldUntil` 分支）/ `ZCUnitView`（`casting` 进片段三元） | `tests/zcds-unit-cast-action.test.ts` |
+| **命中附加特效的落点**（2026-11-18，见 §31） | 配置列 `pvpSkill.impactEffectAnchor`（0~1）→ `ZCImpactEffectFx.zcImpactEffectAnchor` / `ZCAttackResolutionSystem.pushImpactEffect` | `tests/zcds-impact-effect-anchor.test.ts`、`tests/zcds-charge.test.ts` |
 | **五雷轰顶 `bolt_strike` + 磁电冲击 `self_aura`（累计普攻）+ 软控麻痹 `numb`**（2026-11-11，见 §14） | `ZCSkillTriggerSystem.applyBoltStrike` / `applySelfAura`（`auraEvery`）/ `ZCAttackResolutionSystem.castBoltLine` / `ZCBoltStrikeFx.ts` / `ZCStatusSystem.attackBlockedOf` + `ZCUnitSystem.startAttack` | `tests/zcds-magdi-mushroom.test.ts`、`tests/zcds-skill-trigger.test.ts` |
 | 「冒险」领地页与台面中心对齐 | `TerritoryPresenter.ts` / `TerritoryMapView.cellCenter`、`applyIconPlacement` | `tests/territory-presenter.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-cell-center-align.test.ts` |
 | 敌方单位顶点色置灰 | `ZCUnitView.applyVisualTint` | `tests/zcds-unit-view-render.test.ts` |
@@ -49,6 +50,7 @@
 | **快速寻敌开启条件**（激活第 1 章第 4 关地块才出现、解锁后全章常驻；`open` `refId=702` + 条件类型 `territoryLevelActivated`；2026-11-09） | `open` `refId=702` 的 `visibleCondition` / `main/QuickFindGate.ts` / `main/ChestEntryGate.isTerritoryLevelActivatedInTerritory`、`activatedTerritoryLevelIds` / `model/TerritorySaveStore.loadActivatedLevels`、`markLevelsActivated` / `MainPage.applyQuickFindGate`、`rememberActivatedTerritoryLevels`、`refreshOpenGates` | `tests/quick-find-gate.test.ts`、`tests/main-quick-find.test.ts`、`tests/territory-save-store.test.ts` |
 | **未解锁 → 可激活的 1s 过渡**（锁 `1→1.2→0` + 银币数字 `0→1.15→1`，两段同时起手同时收工；2026-11-09） | `model/TerritoryUnlockTransition.territoryUnlockLockScale / territoryUnlockPriceScale` / `TerritoryMapView.applyHexLock`（记「锁刚消失」）、`startUnlockTransitionIfNeeded`、`stepUnlockTransitions`、`applyUnlockTransitionFrame` / `TerritoryStationView.setConditionSpawnScale`、`applyCaptionPlacement` | `tests/territory-unlock-transition.test.ts` |
 | **未解锁地块整块置灰**（锁住 ⇒ `img_land_01_gray`，前置满足那帧换回泥土 + 0.36s 换色；整片灰按**逐格** `lockBlockedCells`、锁仍按节点收敛；2026-11-10） | `TerritoryPageAssets.tileGrey` / `TerritoryMapView.paintHexes`（`greyCell`）、`isStructurallyBlocked` | `tests/territory-tile-frames.test.ts` |
+| **同一关卡节点的地块一起换状态色**（待解锁整片灰 / 已解锁未通关整片叠红 `frame_01` / 通关整片草地并摘框；兄弟格与 footprint 格统一读**承载格**进度，不许一格灰一格褐；2026-11-18） | `model/TerritoryNodeUI.territoryNodeStateCellByCell` / `territoryNodeGreyCells` / `TerritoryMapView.paintHexes`（`stateCellByCell`） | `tests/territory-tile-frames.test.ts` |
 | **固定宝箱格可激活 ⇒ 价格行之上加一颗宝箱 icon**（`icon_baoxiang` 58×45，宝箱在上、`银币+数字`在下、整块居中；无宝箱时零偏移；未解锁仍只画锁；2026-11-10） | `model/TerritoryConditionBadge.territoryConditionBlockLayout` / `TerritoryStationView.applyConditionChest`、`applyCaptionPlacement`、`readCaptionIconHeight` / `TerritoryMapView.stationRenderOf`（`conditionChestIcon`，只给 `fixedResource`）/ `TerritoryPageAssets.chestIcon` | `tests/territory-condition-chest.test.ts` |
 | **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
 | **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
@@ -4340,6 +4342,58 @@ async function loadFrame(assets: AssetService, path: string): Promise<SpriteFram
 BOSS 波 24≠129）、`TerritoryProgress` 前置领地口径、无引擎视图类既有红。
 同文件里被冲掉的两条 `?.`（`bindMapInsetResize` / `scrollToCell`）已顺手补回。
 
+### 3.44 同一关卡节点的地块要一起换状态色（2026-11-18）
+
+> 用户原话（配图绿圈）：「绿圈部分的地块也是归属关卡地块，现在没有和归属相关的
+> 地块状态同步变化，待解锁是灰色，可激活就应该变成红色了」。
+> 同图第 1 条「红框的云层和背景云层是分离的，如果不好实现可以不做」—— 见本节末尾的代价评估。
+
+**现场**：`chapter_01` 的 1-1 由**两个单格站点**组成 —— `327`（`stage`、`configId=10001`、
+没配 `buildingId`，即绿圈那格）与 `328`（同 `configId`、配了 `69004`，灰白带锁 +
+红 `1-1` 气泡的承载格）。`chapter_02` 起则是「一个站点 + 5~10 格 footprint」。
+
+**真因**：`TerritoryMapView.paintHexes` 原先**逐格**用自己 `cellId` 的
+`isCellUnlocked / isOwned / isAreaPassed` 判地皮与格面框：
+
+- `greyCell` = `isStructurallyBlocked(cellId)` ∧ `blockedCells.has(cellId)`，
+  而 `blockedCells` 只由模型那份**逐格** `lockBlockedCells` + 被卡住站点的 footprint 组成；
+  兄弟格与承载格只要有一格没进集合，就会出现「承载格灰、兄弟格褐」；
+- `hexFrameOf(cellId)` 要 `siteByCell.get(cellId)`：footprint 里的格根本查不到站点 ⇒
+  **永远拿不到红色 `frame_01`**；多格节点的兄弟格也各读各的进度 ⇒ 红框只挂在一格上。
+
+🔴 **「一个节点只在一块地上长 UI」（§3.28）管的是锁 / 价格 / 编号气泡，不是整片地皮的颜色**。
+这两件事同源但不同层：UI 继续收敛到承载格，地皮与格面框必须整片同步。
+`territoryNodeMutedCells` / `territoryNodeLockCells` 一个字没动。
+
+**改法**（`model/TerritoryNodeUI.ts` 两个纯函数 + `paintHexes` 三处接线）：
+
+| 判据 | 旧 | 新 |
+| --- | --- | --- |
+| 状态代表格 | 自己 | `territoryNodeStateCellByCell` → 组内**唯一承载格**；无建筑时退回组内首站点；**多建筑节点不收敛**（各自承担 UI） |
+| 整片置灰 | `lockBlockedCells` + 被卡住站点的 footprint | 再并 `territoryNodeGreyCells`：组内任一格被卡住 ⇒ 整组（含各自 footprint）一起灰 |
+| `passed` / 框 / 置灰 | `isCellPassed(cellId)` / `hexFrameOf(cellId)` / `isStructurallyBlocked(cellId)` | 一律传 `stateCellId`；**写节点仍写 `cellId`**（`applyHexFrame(cellId, …)`、`applyHexLock(cellId, …)`） |
+
+🔴 **多建筑节点（组内每格都有 `buildingId`）既不收敛状态代表格、也不整片摊灰**：
+它们各自承担 UI，硬拧成一格会读错；两个纯函数用的是同一条边界。
+🔴 `isCellPassed` 里的 `isAreaPassed` 本来就是 `configId` 区域口径，与本次收敛同源；
+别再额外写一份「区域通关」判据。🔴 宝箱 / 随机格**不参与**节点组（`nodeGroups` 只收
+`stage / boss / asyncPvp`），它们照旧各自判状态，不能被别人带灰或带红框。
+
+判据：`tests/territory-tile-frames.test.ts` 新增 6 条（纯函数代表格 / 整片灰集合 /
+待解锁三格一起灰 / 可激活三格一起挂红框 / 通关三格一起草地并摘框 / 源码守卫不许退回逐格）。
+复刻的图是 `327 + 328 + footprint 329 + 节点外宝箱 900`（对照组）。
+
+**第 1 条「云层分离」的代价评估（结论：先不做）**：`CloudBottomStrip` 用
+`territoryCloudBottomStripPoints` 在「以补云带中线为原点」的局部矩形里重新推一套
+`rowStart/rowEnd`，而 `CloudFillLayer` 用的是**全页格网**（`setFillArea` 的内容层坐标）。
+两套格网在 `MapViewport` 的 rect Mask 底边处相位对不上 ⇒ 一条水平接缝 + 云朵被裁半 +
+缝隙里透出 `zdbg1` 的橙色碎点（用户红框所见）。要真正消除必须：① 补云带改成沿用全页格点、
+② 挂到页面根的层按 `contentShiftY` + `ScrollView` 的滚动偏移**逐帧**对齐 content 原点、
+③ 重算淡出 / 换章 / 安全区指纹。而且铺满层随滚动移动、页面根那层不动，只做静态对齐
+会在拖动地图时重新裂开。改动面 = 几何纯函数 + 云视图逐帧同步 + `territory-cloud` /
+`territory-cloud-bottom-strip` / `territory-map-bottom-inset` 三组 VM 夹具 + 实机截图复核，
+属于「不好实现」那一档 ⇒ 按用户许可**暂不处理**；现有补云带继续保证「不露橙色裸底条」。
+
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
 自选主城局选点结束进入战斗那一帧（`ZCGame.finishSpawnSelection`），纯表现层过渡（绝不回写模型）：
@@ -7051,3 +7105,104 @@ III 级减伤负值 / 尖刺冲锋面朝 & 易伤正值 & III 级护盾 & L1 照
 
 两条夹具坑沿用 §29.9：`distanceScale` 必须显式给 0.3（缺省 1 会把 1 格放大成 3.3 格）、
 `runtimeOf` 只给施法者自己的技能书。
+
+## 31. 命中附加特效的落点：气浪居中（2026-11-18）
+
+用户口径原文：「运动霸命中特效复用重骑兵部分的时，特效的播放位置在运动霸和受击目标的中心点
+坐标位置，不再是受击目标的坐标播放特效」。
+
+### 31.1 这不是「换个坐标」，是「这块美术的圆心该在哪」
+
+`pvpSkill.impactEffectPrefabPath`（命中附加特效）只服务表现：主攻击事件撒完，
+`ZCAttackResolutionSystem.pushImpactEffect` 在同一 `startedAt` 补一条 `area` 事件，
+`damage: 0`、走地面层（`zcCombatEffectLayerOf('area') = 'ground'`），压在角色脚下。
+
+默认落点是**受击点**，因为绝大多数命中特效是「打在身上的一记爆点」——
+`雷弹命中` / `磁电菇_子弹命中` / `麻辣铁锅_爆炸龙卷` 三条都是这个语义。
+
+运动霸是例外：它拿 `重骑兵_践踏` 当「气浪」（项目里没有名为「气浪」的美术资源），
+而那块美术是**以自身为中心向外摊开的地面冲击环**，读作「双方撞在一起的那一下」。
+压在敌人脚下时，观感是「气浪从敌人身体里长出来」，所以圆心要移到双方中点。
+
+### 31.2 落点在表里：`pvpSkill.impactEffectAnchor`（2026-11-18 第二轮）
+
+第一版把「哪块美术要居中」写成代码常量 `ZC_IMPACT_MIDPOINT_PREFAB_PATHS`，按 **prefab 路径** 认。
+用户追问「美术换了会不会失效」—— 会，而且是**静默**失效（登记不到就退回受击点，不报错）。
+所以这一口径整体挪进配置表：
+
+| 列 | 值域 | 说明 |
+| :--- | :--- | :--- |
+| `pvpSkill.impactEffectAnchor` | 0~1，留空 = 0 | 0 = 受击点、0.5 = 攻守双方中点、1 = 出手点，中间线性插值 |
+
+- 源表 `PVP-技能.xlsx`（技能配置）**V 列**，四行头齐全：中文名「命中附加特效落点」/ 说明 / 字段名 /
+  类型 `float`。只有 `30713`（运动霸普攻）填 `0.5`；其余 77 行留空 ⇒ 存量三条爆点类特效逐字不变。
+- 加列脚本 `tools/config/add_pvp_skill_anchor_column.py`（默认预演，`--apply` 才写，幂等）。
+- 三写：源表 V 列 + client `pvpSkill.json`（只有 30713 那一行有这个键）+ `assets/remoteRef/pvpSkill.json`
+  （列存：`k` 末尾加一列、**每行都要补一格**，否则列宽不齐）。
+- 类型声明 `ref_type_all.d.ts` 由 `ref_ref_type_all_gen.py … --table pvpSkill` 重生成。
+  ⚠️ 那个生成器的输出是 **LF**，会把这一个表的 CRLF 冲掉，跑完必须统一回 CRLF，否则 diff 全红。
+
+算法仍是纯函数（`ZCImpactEffectFx.ts`，无 `cc` 依赖，用例可直接读）：
+
+```ts
+export function zcImpactEffectAnchor(ratio, fromX, fromY, toX, toY) {
+    if (!ratio || ratio <= 0) return { x: toX, y: toY };            // 默认：受击点
+    if (ratio >= 1) return { x: fromX, y: fromY };                   // 出手点
+    return { x: toX + (fromX - toX) * ratio, y: toY + (fromY - toY) * ratio };
+}
+```
+
+- **线性插值，不是手调系数**：`0.5` 就是中点，`0.25` 就是「从受击点往出手点方向走 1/4」。
+  解析层 `ZCPvpTableParser.parseImpactAnchor` 把越界值**直接抛错** —— 传 1.7 会让气浪落到出手点外侧，
+  看着像「打空了旁边还有个环」，而表里只错一格、画面上要盯半天才发现。
+- 两点重合时（贴脸、目标被推到同格）插值自然退化成那个点，不需要额外分支。
+- `pushImpactEffect` 里 `fromX/fromY` **仍然给同一个坐标**：`area` 事件是原地播，
+  起终点不同会让 `ZCCombatEffectFlight` 把它当成「有飞行段的特效」算朝向和时长。
+
+### 31.3 为什么落在技能行，不落在代码里
+
+- **换美术不再失效**（本次追问的触发点）：口径跟着**技能行**走 —— `重骑兵_践踏` 被替换、改名、
+  甚至换成真正的爆点画，这一格都不动，行为不会悄悄退回受击点。
+- **换落点也不用发版**：`0.5 → 0.35` 改一格，下次导表生效。
+- 不按 `unitId`：`50035`（怪物卡运动霸）用的是另一条技能行（`30667`）且根本没配命中特效，
+  按单位写死 `68033` 会让人误以为「怪物卡运动霸也居中」——它连这个特效都不播。
+- 代价是「表里多一格没人读也不会报错」，所以用例反向钉死两条：全表只有 `30713` 非 0；
+  且这一行必须同时有 `impactEffectPrefabPath`（否则比例永远没人读）。
+
+### 31.4 只有落点变了，其余字段一个没动
+
+| 字段 | 值 | 说明 |
+| :--- | :--- | :--- |
+| `type` | `area` | 只有 `area` 落地面层 |
+| `damage` | `0` | 纯表现，伤害已由主事件结算 |
+| `radius` | `1` | 不参与判定 |
+| `durationSeconds` | `0.35` | 与近战主特效的 0.3s 对齐，余 0.05s 给冲击环 |
+| `startedAt` | 与主事件同一帧 | 「命中」和「气浪」才是同一拍 |
+| `from` / `to` | **落点（中点或受击点）** | 本次唯一改动 |
+
+冲刺撞停的那条路（`ZCUnitSystem.updateDash` → `placeAt(hit.x, hit.y)`）出手点就是**接触点**，
+所以中点落「运动霸贴上去之后与目标之间」的那一小段；站立近战（没进冲刺距离）出手点在原地，
+中点就是双方之间明显的一段。两种情形都符合「撞在一起」的读法，不需要分成两套。
+
+### 31.5 同轮附带：50017 机甲菇的 prefab 路径
+
+怪物卡 `50017` 的 `unitPrefabPath` 一直是 `units/阿尔萨斯/阿尔萨斯`，而那个目录**早已删除**。
+运行时不会报错：单位照常出生、照常结算，只是**画面上什么都没有**。
+2026-11-18 一并修正为 `skel/机甲菇/机甲菇`（与同名玩家卡 `68015` 一致），
+攻击动画时长 1.1s / 命中时点 0.44s 不变（同一副骨架，上一轮就是按它借的值）。
+
+- 工具：`tools/config/fix_monster_prefab_50017.py`（默认预演，`--apply` 才写；幂等）。
+- 三写：源表 `PVP-怪物卡牌.xlsx` 的 `AF23` / client `monsterCard.json` / `assets/remoteRef/monsterCard.json`。
+- 守卫：`tests/card-unit-preview-assets.test.ts` 现在把怪物卡也一起扫 ——
+  35 张兵种卡的 prefab 必须存在且带 `idle`，并单独钉住 `50017 === 'skel/机甲菇/机甲菇'`。
+
+### 31.6 用例
+
+`tests/zcds-impact-effect-anchor.test.ts` **7 条**：默认（0 / 留空 / `undefined`）= 受击点 /
+0.5 = 双方中点 + 其余比例插值（含斜向、1/4、1 = 出手点、贴脸退化）/ 绕过解析层的越界也不出屏 /
+配表 `30713 = 0.5` 且全表只有它非 0（两份产物都查）/ 加列脚本与列值不许漂移 /
+解析层越界抛错 / 源码守卫（`pushImpactEffect` 必须走 `zcImpactEffectAnchor`，比例取自 `profile.impactEffectAnchor`）。
+
+`tests/zcds-charge.test.ts`：气浪落在**双方中点**（夹具 `source x=0` / `target x=12` ⇒ `x=6`，
+用例里显式给 `impactEffectAnchor: 0.5`）/ 没配落点的爆点类仍贴受击点 /
+解析层把 `0.5` 读进档案、`1.5` 抛错。

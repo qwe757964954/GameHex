@@ -2,7 +2,7 @@ import { Asset, assetManager, Director, director, SpriteFrame } from 'cc';
 import type { AssetLoadOptions, AssetService, AssetType } from '../../core/asset/AssetService';
 import { bundleForPath } from '../../core/asset/BundleCatalog';
 import { loadAssetBundle } from './AssetBundleLoader';
-import { reportDeadSpriteFrames } from './SpriteFrameGuard';
+import { reportDeadSpriteFrames, installBrokenFrameWatch } from './SpriteFrameGuard';
 
 const RESOURCES_BUNDLE = 'resources';
 
@@ -14,6 +14,12 @@ const resolveBundle = (path: string, options: AssetLoadOptions): string | undefi
 export class CocosAssetService implements AssetService {
     private pendingReleases: Asset[] = [];
     private releaseScheduled = false;
+
+    constructor() {
+        // 调试构建下挂只读坏帧哨兵：崩在 `Batcher2D` 里拿不到节点名，靠它点名（见 SpriteFrameGuard）。
+        installBrokenFrameWatch();
+    }
+
     async preload(path: string, options: AssetLoadOptions = {}): Promise<void> {
         if (options.scope?.disposed) return;
         const bundle = await loadAssetBundle(resolveBundle(path, options));

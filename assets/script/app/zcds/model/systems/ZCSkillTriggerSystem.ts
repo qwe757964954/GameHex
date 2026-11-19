@@ -28,6 +28,7 @@ import {
     dashGuardStatusId, dashVulnerableStatusId,
 } from '../ZCDashFx';
 import { ZC_BARRAGE_DEFAULT_INTERVAL } from '../ZCWindBarrageFx';
+import { ZC_EFFECT_STATUS_PREFIX } from '../ZCEffectTuning';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
 
@@ -66,6 +67,48 @@ export interface IZCSkillTriggerContext {
      * 与 `castSecondary` / `castSelfAura` / `strike` 同一条口径。
     */
     castBolt?(unit: ZCUnitState): boolean;
+    /**
+     * 闪电链到点放一条连锁（2026-11-18 第 17 批 雷蕉「闪电链」102203），由 `ZCGameModel`
+     * 转给 `ZCAttackResolutionSystem.castChainLightning`。
+     *
+     * 返回 `false` ⇒ 参数不全或没有活着的单位目标，此时不要消费 CD ——
+     * 与 `castBolt` / `castTrap` 同一条口径。
+     */
+    castChainLightning?(unit: ZCUnitState): boolean;
+    /**
+     * 召唤到点召出一批随从（2026-11-18 第 17 批 舞王「舞王召唤」103103），由 `ZCGameModel`
+     * 转给 `summonUnits`。
+     *
+     * 为什么不像别的车道那样挂在 `ZCAttackResolutionSystem`：召唤要往 `state.units` 里
+     * **加单位**、还要登记 registry / 状态系统，那是模型层的活；攻击系统只管几何与伤害。
+     *
+     * 返回 `false` ⇒ 参数不全（数量 / 生命继承 / 攻击继承有 0），此时不要消费 CD。
+     */
+    castSummon?(unit: ZCUnitState): boolean;
+    /**
+     * 怒吼到点放一次（2026-11-18 第 17 批 南瓜战神「大吼大叫」102304），由 `ZCGameModel`
+     * 转给 `ZCAttackResolutionSystem.castRoar`。
+     *
+     * 返回 `false` ⇒ 参数不全或半径内没有敌人，此时不要消费 CD ——
+     * 与 `castBolt` / `castChainLightning` / `castBurstSkill` 同一条口径。
+     */
+    castRoar?(unit: ZCUnitState): boolean;
+    /**
+     * 飓风到点生成，转给 `ZCAttackResolutionSystem.castStorm`（102004）。
+     *
+     * 返回 `false` ⇒ 参数不全（半径 / 时长 / 每跳倍率任一为 0），此时不要消费 CD。
+     * 与怒吼的差别：**场上没有敌人不算拒放** —— 区域活 6~8 秒、还会飘，敌人走过来照样挨打。
+    */
+    castStorm?(unit: ZCUnitState): boolean;
+    /**
+     * 射线集束到点射出（103503），转给 `ZCAttackResolutionSystem.castRayBeam`。
+     *
+     * `vulnStatusId` 由触发系统按参数算好传进来（「受到伤害提高」的那条状态定义也只在这里
+     * 注册一次）—— 状态归状态系统管，攻击系统只负责几何与伤害，两边各查一次表会算出两个值。
+     *
+     * 返回 `false` ⇒ 参数不全，此时不要消费次数。
+    */
+    castRayBeam?(unit: ZCUnitState, vulnStatusId?: string): boolean;
     /**
      * 陷阱到点布置，转给 `ZCAttackResolutionSystem.castTrap`。
      * 返回 false 表示参数不全，调用方不要消费 CD；陷阱不设普攻射程闸门。
@@ -113,8 +156,12 @@ export interface IZCSkillTriggerContext {
      * ⚠️ 这条**不设普攻射程闸门**：设计口径是「半径 150 内的所有敌人」，
      * 用普攻射程去挡会变成「近战站脸上不放大招、远处一群怪却不放」—— 判据由
      * `castBurstSkill` 自己按爆发半径算，命中 0 人即视为没放。
+     *
+     * `lane`（2026-11-18 第 17 批）：`'burst'` = 菌毯爆发 / 菌核爆裂那套 `burst*` 参数；
+     * `'venom'` = 诅咒菇「毒液喷吐」101803 的 `venom*` 参数（同一张卡两条范围技能，
+     * 参数袋会合并，必须各用各的前缀）。实现只有一份。
      */
-    castBurstSkill?(unit: ZCUnitState, guardStatusId?: string): boolean;
+    castBurstSkill?(unit: ZCUnitState, guardStatusId?: string, lane?: 'burst' | 'venom'): boolean;
     /**
      * 菌丝绞杀到点朝身前扇形甩一次（`fan_slow`），由 `ZCGameModel` 转给
      * `ZCAttackResolutionSystem.castFanSweep`。
@@ -220,6 +267,13 @@ export interface IZCSkillTriggerContext {
 const TEAM_AURA_SECONDS = 0.6;
 
 /**
+ * 团队增益（`team_buff`）每步续挂的时长：与 `TEAM_AURA_SECONDS` 同一档。
+ * 取 0.6 而不是「整段窗口」：设计 N 列要求「友军离开范围即失去效果」，
+ * 续挂时长就是**离开半径后多久掉**——窗口再长也不该让人带着 buff 跑掉。
+*/
+const TEAM_BUFF_REFRESH_SECONDS = 0.6;
+
+/**
  * 一张卡最多几路友军光环。
  *
  * 为什么不是「一路就够」：同一张卡的所有计划行共用 `unitId:pvpSkillId` 一个参数袋
@@ -242,7 +296,7 @@ const STRIKE_RETRY_SECONDS = 0.2;
  * `68024:30671` 这个键上），借它会顺带把这张卡的普攻也变成「每发都麻痹」。
  * 用 `numb` 而不是 `paralysis`：前者只禁攻击 + 移速 −50%（软控），后者是 3 秒硬控。
 */
-const ZC_STRIKE_NUMB_STATUS_ID = 'numb';
+const ZC_STRIKE_NUMB_STATUS_ID = ZC_EFFECT_STATUS_PREFIX.boltNumb;
 
 /**
  * 每个 `unit.id` 槽位多加的退避（秒）：4 个槽 ⇒ 0.2 ~ 1.1s 的错峰。
@@ -311,15 +365,26 @@ export class ZCSkillTriggerSystem {
             if (this.applyPassiveStatus(state, unit, runtime, context)) statusChanged = true;
             this.applyHpRegen(unit, dt, now, context);
             if (this.applyTeamAura(state, unit, runtime, context)) statusChanged = true;
+            //  嗜血术 102204（2026-11-18 第 17 批）：有窗口的团队增益，与光环分开一条车道。
+            if (this.applyTeamBuff(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
             if (this.applyCounterBuff(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
             this.applyBoltStrike(unit, params, now, context, release);
+            this.applyChainLightning(unit, params, now, context, release);
+            this.applySummonUnit(unit, params, now, context);
+            //  大吼大叫 102304（2026-11-18 第 17 批）：范围伤害 + 敌方减攻 + III 级友军护盾。
+            this.applyRoar(unit, params, now, context);
+            this.applyStorm(unit, params, now, context);
+            //  射线集束 103503（第 18 批）：累计普攻触发，没有冷却。
+            this.applyRayBeam(unit, params, now, context, release);
             this.applyTrap(unit, params, now, context);
             this.applySplashShot(unit, params, now, context, release);
             this.applyWindShot(unit, params, now, context, release);
             this.applyMissileBarrage(unit, params, now, context, release);
             this.applyBurstSkill(unit, params, now, context);
+            //  诅咒菇「毒液喷吐」101803：同一张卡的第二条范围技能，`venom*` 参数 + 自己的 CD。
+            this.applyBurstSkill(unit, params, now, context, 'venom');
             this.applyFanSweep(unit, params, now, context);
             this.applyChargeShield(state, unit, params, now, context);
             this.applyRandomStrike(state, unit, params, now, context, release);
@@ -450,8 +515,110 @@ export class ZCSkillTriggerSystem {
         return applied;
     }
 
-    /** 2. 护盾到期：只清 `shieldExpireAt` 到点的那批，没设过期的（旧光环盾）永远不动。*/
-    private static expireShield(unit: ZCUnitState, now: number): void {
+    /**
+     * 团队增益（`team_buff`，2026-11-18 第 17 批 雷蕉 102204「嗜血术」）。
+     *
+     * 与友军光环（`team_aura`）的区别只有一处：**有窗口**。光环是常驻的，这条是
+     * 「开 N 秒、每 N 秒开一次」；窗口一关，半径内的友军最多 `TEAM_BUFF_REFRESH_SECONDS`
+     * 之后掉状态（设计 N 列「友军离开范围即失去效果」）。
+     *
+     * 参数（`teamBuff*` 前缀）：Cooldown / Radius / Seconds /
+     * DamagePct（造成伤害）/ AttackSpeedPct（攻速）/ 以及 III 级的
+     * KillExtendSeconds + KillExtendMaxSeconds。
+     *
+     * 🔴 击杀延长按**受惠者自己**的 `killCount` 增量算，不记在施法者身上：
+     *    设计 N 列「延长在每个目标自身的状态上独立计时」。所以三个字段都挂在受惠者身上
+     *    （`teamBuffUntil` / `teamBuffKillBase` / `teamBuffExtendUsed`），并且封顶按
+     *    「已延长总秒数」而不是「这次延长多少」来判。
+     *
+     * 施法者自己也吃这条增益（距离 0 恒在半径内）—— 与 `team_aura`「含自身」同一口径。
+     */
+    private static applyTeamBuff(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): boolean {
+        const cooldown = Math.max(0, params?.teamBuffCooldown ?? 0);
+        const seconds = Math.max(0, params?.teamBuffSeconds ?? 0);
+        const radiusTable = Math.max(0, params?.teamBuffRadius ?? 0);
+        if (!(cooldown > 0) || !(seconds > 0) || !(radiusTable > 0)) return false;
+        const mods: ZCStatusStatMods = {};
+        const damagePct = params?.teamBuffDamagePct ?? 0;
+        const attackSpeedPct = params?.teamBuffAttackSpeedPct ?? 0;
+        if (damagePct) mods.damageRatePct = damagePct;
+        if (attackSpeedPct) mods.attackIntervalPct = attackSpeedPct;
+        //  一个字缀都没配 ⇒ 这条车道对这张卡是空的，别往状态系统里塞一条空增益。
+        if (!Object.keys(mods).length) return false;
+
+        //  首次：只把 CD 起算点挂上，开局不立刻放（与其它 CD 车道同口径）。
+        if (unit.teamBuffReadyAt === undefined) {
+            unit.teamBuffReadyAt = now + cooldown;
+            return false;
+        }
+        //  窗口关着且 CD 到点 ⇒ 开一个新窗口。
+        if (!((unit.teamBuffWindowEnd ?? 0) > now) && now >= unit.teamBuffReadyAt) {
+            unit.teamBuffWindowEnd = now + seconds;
+            unit.teamBuffReadyAt = now + cooldown;
+            //  团队增益是「待在原地吼一嗓子」：`hold = true`，人跑着放大玩家看不出效果。
+            this.markCastAction(unit, now, true);
+        }
+        const windowEnd = unit.teamBuffWindowEnd ?? 0;
+        if (!(windowEnd > now)) return false;
+
+        const statusId = teamAuraStatusId(mods);
+        if (!context.statusSystem.hasDef(statusId)) {
+            context.statusSystem.register({
+                id: statusId,
+                name: statusId,
+                durationSeconds: TEAM_BUFF_REFRESH_SECONDS,
+                maxStacks: 1,
+                refreshPolicy: 'refresh',
+                statMods: mods,
+                behavior: { kind: 'none' },
+            });
+        }
+        const reach = radiusTable * Math.max(1e-6, context.distanceScale ?? 1);
+        const extendSeconds = Math.max(0, params?.teamBuffKillExtendSeconds ?? 0);
+        const extendMax = Math.max(0, params?.teamBuffKillExtendMaxSeconds ?? 0);
+        let applied = false;
+        for (const ally of state.units) {
+            if (ally.owner !== unit.owner || ally.battleState === 'dead' || ally.hp <= 0) continue;
+            if (Math.hypot(ally.freeX - unit.freeX, ally.freeY - unit.freeY) > reach) continue;
+            if (!((ally.teamBuffUntil ?? 0) > now)) {
+                //  新罩到（或上一轮已经掉干净）⇒ 从窗口截止起算，并把击杀基线拍在当下。
+                ally.teamBuffUntil = windowEnd;
+                ally.teamBuffKillBase = ally.killCount ?? 0;
+                ally.teamBuffExtendUsed = 0;
+            } else if (extendSeconds > 0) {
+                const kills = (ally.killCount ?? 0) - (ally.teamBuffKillBase ?? 0);
+                if (kills > 0) {
+                    const used = ally.teamBuffExtendUsed ?? 0;
+                    const grant = Math.min(kills * extendSeconds, Math.max(0, extendMax - used));
+                    if (grant > 0) {
+                        ally.teamBuffUntil += grant;
+                        ally.teamBuffExtendUsed = used + grant;
+                    }
+                    //  没额度了也要把基线推平：否则额度一放出来会把攒着的击杀一次性补上。
+                    ally.teamBuffKillBase = ally.killCount ?? 0;
+                }
+            }
+            const remaining = ally.teamBuffUntil - now;
+            if (!(remaining > 0)) continue;
+            //  只续到「它自己的截止时刻」为止，而不是固定 0.6 —— 否则最后一个 tick 会把
+            //  状态多拖 0.6 秒，目测就是「窗口关了人还在亮」。
+            const result = context.statusSystem.apply(String(ally.id), statusId, {
+                at: state.elapsedSeconds,
+                durationSeconds: Math.min(TEAM_BUFF_REFRESH_SECONDS, remaining),
+                sourceUnitId: String(unit.id),
+            });
+            if (result.applied) applied = true;
+        }
+        return applied;
+    }
+
+    /** 2. 护盾到期：只清 `shieldExpireAt` 到点的那批，没设过期的（旧光环盾）永远不动。*/    private static expireShield(unit: ZCUnitState, now: number): void {
         const expireAt = unit.shieldExpireAt;
         if (expireAt == null || now < expireAt) return;
         unit.shield = 0;
@@ -736,12 +903,24 @@ export class ZCSkillTriggerSystem {
         //  无尘禁土 / 喷射火焰本来就跟着人走，锁在原地会让喷火变成站桩。
         this.markCastAction(unit, now, false);
 
-        //  2. 光环期间的自身增伤。按「生效词缀签名」复用同一条状态定义（`selfCastStatusId`），
+        //  2. 光环期间的自身增益。按「生效词缀签名」复用同一条状态定义（`selfCastStatusId`），
         //  避免每张卡每种数值都往状态系统里塞一条新定义。
+        //
+        //  2026-11-18 第 17 批扩了三项（仙人侍卫「巨型仙人掌」102104）：
+        //    · `auraBodySizePct` —— 体积变大 30%；
+        //    · `auraReflectPct`  —— 期间受伤反弹 50/51/52%（消费点 `ZCDamageResolutionSystem`）；
+        //    · 原来的 `auraSelfDamagePct` 保持不变。
+        //  三项生命周期完全相同（都是「光环开着才成立」的自身状态），所以并进**同一份**状态，
+        //  不各开一条 —— 分开的话 6 秒里会同时挂三个图标，到期还会错拍。
         const selfDamagePct = Math.max(0, params?.auraSelfDamagePct ?? 0);
+        const bodySizePct = Math.max(0, params?.auraBodySizePct ?? 0);
+        const reflectPct = Math.max(0, params?.auraReflectPct ?? 0);
         const seconds = Math.max(0, params?.auraSeconds ?? 0);
-        if (!(selfDamagePct > 0) || !(seconds > 0)) return false;
-        const mods: ZCStatusStatMods = { damageRatePct: selfDamagePct };
+        const mods: ZCStatusStatMods = {};
+        if (selfDamagePct > 0) mods.damageRatePct = selfDamagePct;
+        if (bodySizePct > 0) mods.bodySizePct = bodySizePct;
+        if (reflectPct > 0) mods.reflectRate = reflectPct;
+        if (!Object.keys(mods).length || !(seconds > 0)) return false;
         const statusId = selfCastStatusId(mods, seconds);
         if (!context.statusSystem.hasDef(statusId)) {
             context.statusSystem.register({
@@ -884,12 +1063,306 @@ export class ZCSkillTriggerSystem {
         this.markCastAction(unit, now, false);
     }
 
+    /**
+     * 闪电链：冷却到点朝锁定目标放一条连锁，逐跳打最近的未命中敌人（2026-11-18 第 17 批）。
+     *
+     * 参数：chainCooldown / chainTargetCount / chainDamageRate / chainFalloff /
+     *       chainJumpRadius / chainFinalCritMultiplier。
+     *
+     * 🔴 用**自己的** `unit.chainReadyAt`，不复用 `boltReadyAt`：雷蕉 68022 这一张卡上
+     * 还挂着 102204 嗜血术（以后可能还有别人），共用字段会让两条技能互相吃掉冷却 ——
+     * 而且症状只是「偶尔少放一次」，几乎查不出来。
+     *
+     * 与 `applyBoltStrike` 同样吃普攻射程闸门（`release`）：技能的目标就是锁定目标，
+     * 目标不在射程内说明普攻也打不到，这时候放技能等于对着空气放电。
+     */
+    private static applyChainLightning(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castChainLightning) return;
+        const cooldown = Math.max(0, params?.chainCooldown ?? 0);
+        //  没配冷却就是「这张卡没有闪电链」。这条车道对每个单位每步都会过一遍，
+        //  不加这道静默返回，`zcSkillCastWatched` 一开别的卡就会被刷成「闪电链没有 CD」。
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.chainReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `boltReadyAt` / `trapReadyAt` 同口径）。
+        if (readyAt === undefined) {
+            unit.chainReadyAt = now + cooldown;
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`chain-arm:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 闪电链冷却挂上：${now.toFixed(1)}s → `
+                    + `${(now + cooldown).toFixed(1)}s 首次可施放（cooldown=${cooldown}s）`);
+            }
+            return;
+        }
+        if (now < readyAt) return;
+        if (!release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`chain-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但普攻范围内没有目标 ⇒ 待触发`);
+            }
+            return;
+        }
+        const cast = context.castChainLightning(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`chain-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 闪电链放出，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 闪电链被拒（参数不全 / 无存活单位目标）`
+                    + ` ⇒ 不消费 CD，下帧重试`);
+        }
+        if (!cast) return;
+        unit.chainReadyAt = now + cooldown;
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 怒吼（`roar`，2026-11-18 第 17 批 南瓜战神 102304「大吼大叫」）。
+     *
+     * 参数（`roar*` 前缀）：Cooldown / Radius / DamageRate / AttackPct（负值 = 减攻）/ Seconds，
+     * III 级再加 AllyShieldRatio。
+     *
+     * 与其它 CD 车道同一套：独立的 `unit.roarReadyAt`（同卡 102303 冲锋占着 `dashReadyAt`），
+     * 首次只挂 CD、被拒不消费 CD。**不设普攻射程闸门** —— 怒吼的意义是「贴不贴脸都能吼到」，
+     * 用射程挡会变成「远处有怪就不吼」，而它本来就是范围技能。
+     */
+    private static applyRoar(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castRoar) return;
+        const cooldown = Math.max(0, params?.roarCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.roarReadyAt;
+        if (readyAt === undefined) {
+            unit.roarReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        const cast = context.castRoar(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`roar-cd:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 怒吼放出，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 怒吼被拒（参数不全 / 半径内无敌人）`
+                    + ' ⇒ 不消费 CD，下帧重试');
+        }
+        if (!cast) return;
+        unit.roarReadyAt = now + cooldown;
+        //  怒吼是「主动出手」：播一次施法动作，不原地锁（吼完还能照常走位）。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 飓风（`storm_zone`，2026-11-18 第 17 批 三叶小丑 68020 的 102004）。
+     *
+     * 与 `applyTrap` / `applyRoar` 同一条「自己一格 CD + 到点转给攻击系统」的骨架，
+     * 三点不同：
+     *  · CD 走**独立**的 `unit.stormReadyAt`（同卡 102001 / 102002 各占各的冷却，
+     *    共用会让「放完飓风、克制条也进冷却」）；
+     *  · 场上没有敌人**不拒放**（区域要活 6~8 秒，等人走进来）；
+     *  · 不设射程闸门 —— 它是「在场上生成」，不是「打谁」，射手够不到也该放得出来。
+    */
+    private static applyStorm(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castStorm) return;
+        const cooldown = Math.max(0, params?.stormCooldown ?? 0);
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.stormReadyAt;
+        if (readyAt === undefined) {
+            unit.stormReadyAt = now + cooldown;
+            return;
+        }
+        if (now < readyAt) return;
+        const cast = context.castStorm(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`storm-cd:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 放出飓风，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 飓风被拒（参数不全）⇒ 不消费 CD，下帧重试`);
+        }
+        if (!cast) return;
+        unit.stormReadyAt = now + cooldown;
+        //  放风是「主动出手」：播一次施法动作，不原地锁（射手放完照常走位 / 继续射）。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 射线集束（`ray_beam`，2026-11-19 第 18 批 科学家 68035 的 103503）。
+     *
+     * 设计 I 列「主动-累计普攻 8」⇒ **没有冷却，只有次数**，所以走 `rayFiredCount` 而不是
+     * 再造一格 `rayReadyAt`：同卡 103504 精密陷阱占着 `trapReadyAt`、103501 / 103502 是普攻类
+     * （`normalPierceCount` / `bulletFalloff`），四张卡挤在同一袋参数上，冷却格也必须各归各。
+     *
+     * 触发判据与 `applySelfAura` 的次数分支一模一样（同一个 `completedAttackCount`），
+     * 但**不借 `auraFiredCount`**：那张卡将来若也配了 `self_aura`，两条会互相吃计数。
+     *
+     * 🔴 射程闸门照吃（`release`）：射线是「打人」的，普攻都够不着时射出去只是一道光。
+     * 被拦下时**不消费次数** —— 目标一进范围立刻补放。
+    */
+    private static applyRayBeam(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean,
+    ): void {
+        if (!context.castRayBeam) return;
+        const every = Math.max(0, Math.round(params?.rayEvery ?? 0));
+        if (!(every > 0)) return;
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.rayFiredCount;
+        if (fired === undefined) { unit.rayFiredCount = done; return; }
+        if (done - fired < every) return;
+        if (!release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`ray-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 累计普攻已满 ${every} 次但射程内没有目标 ⇒ 待触发`);
+            }
+            return;
+        }
+        //  「受到的伤害提高」（L2 起）：按参数值 + 残留时长拼状态 id，同参数复用同一条定义。
+        //  `damageTakenPct` 正 = 受到的伤害变高（破甲），负 = 减伤 —— 写反会变成自残。
+        const vulnPct = Math.max(0, params?.rayVulnPct ?? 0);
+        let vulnStatusId: string | undefined;
+        if (vulnPct > 0) {
+            const seconds = Math.max(0.05, params?.rayVulnSeconds ?? 0.3);
+            vulnStatusId = `__rayvuln:${vulnPct.toFixed(4)}:${seconds.toFixed(2)}__`;
+            if (!context.statusSystem.hasDef(vulnStatusId)) {
+                context.statusSystem.register({
+                    id: vulnStatusId,
+                    name: vulnStatusId,
+                    durationSeconds: seconds,
+                    maxStacks: 1,
+                    refreshPolicy: 'refresh',
+                    statMods: { damageTakenPct: vulnPct },
+                    behavior: { kind: 'none' },
+                });
+            }
+        }
+        const cast = context.castRayBeam(unit, vulnStatusId);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`ray-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 射出射线，次数记到 ${done}`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 射线被拒（参数不全）⇒ 不消费次数，下帧重试`);
+        }
+        if (!cast) return;
+        unit.rayFiredCount = done;
+        //  射出去是「主动出手」：播一次施法动作，不原地锁（射手放完照常走位 / 继续射）。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 召唤（`summon_unit`，2026-11-18 第 17 批 舞王 103103「舞王召唤」）。
+     *
+     * 参数（`skillParamJson`，`summon*` 前缀）：summonCount / summonHpInherit /
+     * summonAttackInherit / summonSeconds（0 = 到战死）/ summonFollow / summonSlotRadius /
+     * summonAlpha。
+     *
+     * 🔴 用**自己的** `unit.summonReadyAt`：艺术家 68031 这张卡上还挂着 103104「迪斯科旋风」，
+     * 将来也可能再有召唤类技能，共用槽位会变成「召完这个、那个也进冷却」。
+     *
+     * 不设普攻射程闸门：舞伴的作用是「多几双手」，不是「对射程内那个目标打一发」——
+     * 用射程挡会变成「远处有怪就不召」，而设计里它本来就该随时召出来跟着走。
+     */
+    private static applySummonUnit(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castSummon) return;
+        //  两条触发互斥（2026-11-18 第 17 批同时挂了两个召唤技能）：
+        //  · `summonEvery`   = 累计普攻 N 次（101404「一人成军」，设计 K 列「累计普攻 8 次」）；
+        //  · `summonCooldown`= 冷却制（103103「舞王召唤」，设计 J 列 12 秒）。
+        //  同时配两条是配置错 —— 这里让 `summonEvery` 优先并照常放，不静默变成「两条都放」；
+        //  `patch_batch17_k.py` / 各自的 patch 脚本都带「只许出现一条」的回读守卫。
+        const every = Math.max(0, Math.round(params?.summonEvery ?? 0));
+        if (every > 0) {
+            this.applySummonByCount(unit, every, now, context);
+            return;
+        }
+        const cooldown = Math.max(0, params?.summonCooldown ?? 0);
+        //  没配冷却就是「这张卡没有召唤」。这条车道对每个单位每步都会过一遍，不加就刷日志。
+        if (!(cooldown > 0)) return;
+        const readyAt = unit.summonReadyAt;
+        //  首次：从「当前时刻 + CD」起算，开局不立刻召（与其它 CD 车道同口径）。
+        if (readyAt === undefined) {
+            unit.summonReadyAt = now + cooldown;
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogOnce(`summon-arm:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 召唤冷却挂上：${now.toFixed(1)}s → `
+                    + `${(now + cooldown).toFixed(1)}s 首次可召唤（cooldown=${cooldown}s）`);
+            }
+            return;
+        }
+        if (now < readyAt) return;
+        const cast = context.castSummon(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`summon-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 召唤成功，CD 推到 ${(now + cooldown).toFixed(1)}s`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 召唤被拒（参数不全）⇒ 不消费 CD，下帧重试`);
+        }
+        if (!cast) return;
+        unit.summonReadyAt = now + cooldown;
+        //  召唤是「主动出手」：播一次施法动作，但不原地锁住（召完还能照常走位）。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 累计普攻制召唤（101404「一人成军」：设计 K 列「累计普攻 8 次后召唤 3/4/6 只分裂菇分身」）。
+     *
+     * 与 `applyCounterBuff` / `applyTrap` 的计数口径逐字一致：
+     *  · 第一次推进只记下当前 `completedAttackCount`，**不补放**（否则开局就白送一批）；
+     *  · 被拒（参数不全）**不消费次数**，下帧重试；
+     *  · 用独立的 `summonFiredCount`，不借 `counterFiredCount`（同卡 101401 连击那条链也数普攻）。
+     */
+    private static applySummonByCount(
+        unit: ZCUnitState,
+        every: number,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.summonFiredCount;
+        if (fired === undefined) {
+            unit.summonFiredCount = done;
+            return;
+        }
+        if (done - fired < every) return;
+        const cast = context.castSummon!(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`summon-count:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} 累计普攻 ${done} 次（阈值 ${every}）⇒ 召唤成功`
+                : `${unit.unitId}#${unit.id} 累计普攻 ${done} 次但召唤被拒（参数不全）`
+                    + ' ⇒ 不消费次数，下帧重试');
+        }
+        if (!cast) return;
+        unit.summonFiredCount = done;
+        this.markCastAction(unit, now, false);
+    }
+
+
     // 精密陷阱
 
     /**
-     * 精密陷阱：留在原地的布置物，只在「被踩」与「到点」两个时刻各结算一次。
+     * 精密陷阱 / 穿甲爆矢：留在原地的布置物，只在「被踩」与「到点」两个时刻各结算一次。
      * 不设普攻射程闸门：落点在自己脚下，等目标进范围会永远落在追兵身后。
-     * 参数：trapCooldown/Duration/Radius/DamageRate/ExplodeRadius/ExplodeDamageRate/Forward。
+     * 参数：trapCooldown/Duration/Radius/DamageRate/ExplodeRadius/ExplodeDamageRate/Forward
+     *      （投掷形态再加 FlightSpeed / FlightSeconds / ExpireOnTimeout，见 `castTrap`）。
+     *
+     * 两种起手口径：
+     *  · `trapCooldown > 0` ⇒ 冷却制（103504 精密陷阱，`unit.trapReadyAt`）；
+     *  · `trapEvery > 0`    ⇒ 累计普攻 N 次（101704 穿甲爆矢，`unit.trapFiredCount`）。
+     *    设计原文是「累计普攻 8 次后朝目标丢出陷阱」，本来就没有冷却这一说；
+     *    硬套 CD 会变成「不打人也能一直丢」。计数用**独立的一份**，理由同 `counterFiredCount`。
     */
     private static applyTrap(
         unit: ZCUnitState,
@@ -898,6 +1371,11 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
     ): void {
         if (!context.castTrap) return;
+        const every = Math.max(0, Math.round(params?.trapEvery ?? 0));
+        if (every > 0) {
+            this.applyTrapByCount(unit, every, now, context);
+            return;
+        }
         const cooldown = Math.max(0, params?.trapCooldown ?? 0);
         if (!(cooldown > 0)) {
             //  诊断 10-a：只有本卡确实配了 `trap*` 参数才说话。
@@ -936,6 +1414,44 @@ export class ZCSkillTriggerSystem {
         unit.trapReadyAt = now + cooldown;
         //  施法动作（2026-11-13）：放下陷阱也算一次主动出手，蹲下摆一个是有必要的；
         //  但不原地锁住 —— 陷阱是「放下就不管」，锁住只会拖慢下一次走位。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 累计普攻 N 次丢一次陷阱（101704 穿甲爆矢）。
+     *
+     * 与 `applyCounterBuff` 同一套「比上次多打了 N 次」算法，差别只有一处：
+     * **被拒时不消费次数**（参数不全 ⇒ 下帧重试），否则一次配错表会把攒了 8 次的
+     * 出手机会直接吞掉，玩家看到的是「技能偶尔不出」。
+     */
+    private static applyTrapByCount(
+        unit: ZCUnitState,
+        every: number,
+        now: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.castTrap) return;
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.trapFiredCount;
+        //  第一次推进只记下当前计数，不补放（与 `auraFiredCount` / `counterFiredCount` 同口径）。
+        if (fired === undefined) {
+            unit.trapFiredCount = done;
+            return;
+        }
+        if (done - fired < every) return;
+        if (!context.castTrap(unit)) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`trap-partial:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} 攒满 ${every} 次但陷阱参数不全 ⇒ 不消费次数，下帧重试`);
+            }
+            return;
+        }
+        unit.trapFiredCount = done;
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`trap-count:${unit.id}`, '触发',
+                `${unit.unitId}#${unit.id} 累计普攻 ${done} 次（上次 ${fired}）⇒ 丢出陷阱`);
+        }
+        //  与 CD 制同口径：陷阱是「丢出去就不管」，不原地锁住。
         this.markCastAction(unit, now, false);
     }
 
@@ -1136,20 +1652,24 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
+        lane: 'burst' | 'venom' = 'burst',
     ): void {
         if (!context.castBurstSkill) return;
-        const cooldown = Math.max(0, params?.burstCooldown ?? 0);
+        const cooldown = Math.max(0, params?.[`${lane}Cooldown`] ?? 0);
         if (!(cooldown > 0)) return;
-        const readyAt = unit.burstReadyAt;
+        //  两条车道的 CD 各记各的：同一张卡（68018）同时挂着菌核爆裂与毒液喷吐，
+        //  共用一个 `burstReadyAt` 会变成「爆完这个、那个也进冷却」。
+        const readyField = lane === 'venom' ? 'venomReadyAt' : 'burstReadyAt';
+        const readyAt = unit[readyField];
         //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `splashReadyAt` / `trapReadyAt` 同口径）。
         if (readyAt === undefined) {
-            unit.burstReadyAt = now + cooldown;
+            unit[readyField] = now + cooldown;
             return;
         }
         if (now < readyAt) return;
-        const guardStatusId = this.burstGuardStatusId(params, context);
-        if (!context.castBurstSkill(unit, guardStatusId)) return;
-        unit.burstReadyAt = now + cooldown;
+        const guardStatusId = lane === 'burst' ? this.burstGuardStatusId(params, context) : undefined;
+        if (!context.castBurstSkill(unit, guardStatusId, lane)) return;
+        unit[readyField] = now + cooldown;
         //  施法动作：爆一次算一次主动出手；不原地锁 —— 战士开团要能立刻跟进走位。
         this.markCastAction(unit, now, false);
     }

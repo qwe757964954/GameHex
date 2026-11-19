@@ -26,6 +26,13 @@ export interface IRewardItemData {
     readonly amount: number;
     /** 概率（百分比，`70` ⇒ 70%）；`0` / 省略 = 不显示（只有宝箱详情用）。 */
     readonly ratePercent?: number;
+    /**
+     * 数量文案覆盖，用于「5~10」这类**区间**。
+     *
+     * 缺省 = 按 `amount` 显示整数（既有行为，不受影响）；配表给的是区间时传它，
+     * 但 `amount` 仍要填一个代表值 —— 图标解析与条目排序都用它。
+     */
+    readonly amountText?: string;
 }
 
 /**
@@ -116,7 +123,8 @@ export class RewardItemView extends Component {
         this.node.active = true;
 
         const amount = Math.floor(data.amount);
-        this.num.string = Number.isFinite(data.amount) && amount > 0 ? String(amount) : '';
+        this.num.string = data.amountText
+            ?? (Number.isFinite(data.amount) && amount > 0 ? String(amount) : '');
 
         const rate = Number(data.ratePercent);
         const hasRate = Number.isFinite(rate) && rate > 0;

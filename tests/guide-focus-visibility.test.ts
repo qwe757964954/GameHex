@@ -376,3 +376,46 @@ test('对话条还在时不动立绘（别把「让位」逻辑的输入改没�
     assert.equal(f.host.dialogBox.active, true, '台词还在播 ⇒ 对话条亮着');
     assert.equal(f.host.portraitNode.active, true, '立绘照站（挡不挡孔交给避让判定）');
 });
+
+/**
+ * 8-1（用户 2026-11-19）：主线任务入口在底栏，尺寸 111×79。
+ *
+ * 三件事必须同时成立，缺一个玩家就看不到「点这里」：
+ * ① 圈和手指真的画出来（入口贴底、靠右，不能因为边界判定被当成「离屏」）；
+ * ② 四块遮罩拼出来的孔正好罩住入口，**孔内不许有任何压暗**（不然手指和图标都被盖住）；
+ * ③ 全屏 `Dim` 让位（有孔时它是关的，否则孔也白挖）。
+ */
+test('8-1 主线任务入口挖孔高亮：圈与手指可见，孔内没有任何遮罩覆盖', () => {
+    const f = fixture(267.5, -86.5);
+    f.host.hostTransform.height = 1280;
+    // 真实入口尺寸 111×79（`MainTaskEntry.prefab` 根节点）；`resolveFocus` 会按它算出
+    // `focusWidth = 控件 + 8` 的留白口径，这里直接摆好同口径的四个字段。
+    f.host.focusTransform.width = 111;
+    f.host.focusTransform.height = 79;
+    f.host.focusWidth = 119;
+    f.host.focusHeight = 87;
+    f.host.focusBaseWidth = 119;
+    f.host.focusBaseHeight = 87;
+    f.masks.length = 0;
+    f.place();
+    assert.equal(f.host.focusRing.active, true, '入口在右下贴底，圈必须画出来');
+    assert.equal(f.host.focusHand.active, true, '手指跟着圈走');
+    assert.equal(f.host.dimNode.active, false, '有孔时全屏暗层必须让位');
+    assert.ok(f.host.focusMasks.every(node => node.active), '四块遮罩都亮着（孔外的压暗靠它们）');
+
+    // 孔 = 焦点中心 ± (宽+8)/2、(高+8)/2（`resolveFocus` 的留白口径）；
+    // 四块遮罩由 `layoutFocusMasks` 按同一个孔拼出来（孔外才算遮罩），这里钉住孔本身。
+    assert.deepEqual(f.masks.at(-1), [267.5, -86.5, (111 + 8) / 2, (79 + 8) / 2],
+        '孔必须正好罩住入口（含 8px 留白），圈和手指才落在图标上');
+    // 入口若解析成「贴左」布局（Widget 位组合不同），同样要能高亮，不能判成离屏。
+    const left = fixture(-304.5, -86.5);
+    left.host.hostTransform.height = 1280;
+    left.host.focusTransform.width = 111;
+    left.host.focusTransform.height = 79;
+    left.host.focusWidth = 119;
+    left.host.focusHeight = 87;
+    left.host.focusBaseWidth = 119;
+    left.host.focusBaseHeight = 87;
+    left.place();
+    assert.equal(left.host.focusRing.active, true, '贴左的入口也要画圈（边界判定别把它当离屏）');
+});

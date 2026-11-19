@@ -53,6 +53,13 @@ const DEFAULT_CANCEL = '取消';
 export class CommonTips extends PopupBase {
     static prefabPath = 'ui/common/CommonTips';
 
+    /**
+     * 通用确认框多为「同步流程里插一句」：调用方常在 `await open()` 之后立刻做下一步，
+     * 而这里是**非**管理器宿主的 `initStandalone` 场景，统一过渡不参与（见 `PopupBase`）。
+     * 显式关掉，避免将来挪回管理器时行为突然变化。
+     */
+    motionEnabled = false;
+
     /*
      * 三个按钮字段是 Node，不是 cc.Button —— 与 prefab 里实际存的节点对齐。
      * 早期按 Button 声明，运行时拿到的是 Node，`this.cancelButton.node` 直接抛 TypeError，

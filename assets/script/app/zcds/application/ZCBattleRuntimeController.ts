@@ -8,6 +8,7 @@ import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } fr
 import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
 import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
 import { buildRankSeats, RANK_FALLBACK_NAMES } from '../model/ZCRankBoard';
+import { buildSettlementMvp, type IZCSettlementMvp, type IZCSettlementMvpCard } from '../model/ZCSettlementMvp';
 import { ZCGameUiEvent, type IZCRequestUnitArtIntent, type IZCRequestEffectArtIntent, type IZCDebugDrawCardIntent } from '../view/ZCGameHudEvents';
 import type { IZCBattlePhase } from './ZCBattleController';
 import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
@@ -292,6 +293,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
             // 老形状（只给 slgBattleType）与领地 PVE 各自保留一条退路。
             battleType: entry.battleType ?? entry.slgBattleType ?? (entry.pveContext ? ZC_BATTLE_TYPE_CHAPTER : null),
             rank: rankSeats.length >= 3 ? { seats: rankSeats, profiles } : null,
+            // MVP 卡片：本局**赢家阵营里输出最高的卡**（骨骼模型 + 卡名 + 输出/承伤占比），
+            // 「查看完整队伍」仍用这份冻结的席位统计。
+            mvp: this.settlementMvp(),
+            players: this.damagePlayers(),
         });
     }
     private async onOpenGuide(): Promise<void> {
@@ -316,6 +321,29 @@ export class ZCBattleRuntimeController extends ControllerBase {
             this.refreshDamageStats();
         } catch (error) { if (!this.isDisposed) this.services.failed(error); }
         finally { this.damageOpening = false; }
+    }
+    /**
+     * 本局结算 MVP：赢家阵营里 `damageCards` 输出最高的那张卡。
+     *
+     * 名称 / 骨骼模型 / 原始尺寸都从本局生效的 `ZCUnitDefinition` 取（与服务端倍率无关，
+     * 只是美术与文案）；等级来自 `entry.heroLevels`（本地局没有 ⇒ 等级行收起）。
+     * 选人规则本身在 `buildSettlementMvp`，这里只做「模型统计 → 卡片行」的翻译。
+    */
+    private settlementMvp(): IZCSettlementMvp | null {
+        const model = this.model, entry = this.entry;
+        if (!model || !entry) return null;
+        const levels = new Map(entry.heroLevels ?? []);
+        const cards: IZCSettlementMvpCard[] = model.damageCards.map((card) => {
+            const definition = model.effectiveDefinitionForUnit(card.owner, card.unitId);
+            return {
+                owner: card.owner, unitId: card.unitId, cardId: card.cardId,
+                name: definition.name, prefabPath: definition.prefabPath,
+                prefabSize: definition.prefabSize,
+                damage: card.damage, damageTaken: card.damageTaken,
+                level: levels.get(card.owner)?.[card.unitId] ?? 0,
+            };
+        });
+        return buildSettlementMvp(cards, model.winner);
     }
     private damagePlayers(): readonly IZCDamageStatsPlayer[] {
         const profiles = new Map(this.entry.seatProfiles), stats = this.model.damageStats;

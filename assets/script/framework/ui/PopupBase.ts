@@ -262,6 +262,20 @@ export class PopupBase extends Component {
     })
     contentNodes: Node[] = [];
 
+    /**
+     * 打开 / 关闭时的统一过渡动画（淡入 + 缩放，曲线见 `UIMotion.ts`）。
+     *
+     * 默认开：需求（2026-11-18）要求 2/3 级界面与弹窗「统一」有过渡，
+     * 所以默认值必须让**新弹窗什么都不用配**就生效。
+     *
+     * 关掉的场景只有两类（见各子类的覆盖）：
+     *   · 本身不是「界面」而是瞬时提示：`Toast` / `LoadingPopup` / `CommonTips`；
+     *   · 自己已经有一整套入场编排，再叠一层整页淡入会抢拍：`HeroObtainPage`、
+     *     `ZCSettlementPage`、`ZCGuidePanel`、`GameRunAway`。
+     */
+    @property({ group: '弹窗', tooltip: '是否播放统一的打开 / 关闭过渡动画' })
+    motionEnabled: boolean = true;
+
     // ============================================================
     // 运行时状态（由 PopupManager 维护，业务只读）
     // ============================================================
@@ -511,7 +525,11 @@ export class PopupBase extends Component {
             console.error(`[PopupBase] ${this.className} onClose 抛错`, error);
         }
         this._callbackOwners?.removeCallerListener(this);
-        this._resourceScope.dispose();
+        // 有离场过渡时**不在这里**释放：`PopupManager._releaseNode` 还要让节点淡出 0.16s，
+        // 同步 dispose 会让 Batcher2D 在淡出帧里提交已销毁的 SpriteFrame
+        // （`frame should not be invalid, it may have been released` → `getGFXTexture` 空指针，每帧崩）。
+        // 延迟到节点真正交还（销毁 / 进缓存池）时由 PopupManager 调 `_internalReleaseResources()`。
+        if (this.motionEnabled === false) this._resourceScope.dispose();
 
         const onClose = this._params?.onClose;
         this._params = null;
@@ -527,6 +545,20 @@ export class PopupBase extends Component {
         } catch (error) {
             console.error(`[PopupBase] ${this.className} onClose 回调抛错`, error);
         }
+    }
+
+    /**
+     * 释放本次打开持有的动态资源。
+     *
+     * @internal 由 `PopupManager` 在节点**真正交还**（销毁或进缓存池）时调用。
+     *
+     * 资源寿命必须跟节点可见寿命对齐，不能跟「业务关闭」对齐：
+     * 离场过渡还有 0.16s 淡出，期间 `Sprite` 仍在每帧提交渲染；提前 `decRef` 归零会让
+     * Batcher2D 拿到已 destroy 的帧（`frame should not be invalid`）+ 已解绑的贴图
+     * （`getGFXTexture` 空指针）。无过渡的弹窗在 `_internalClose` 里已经释放，这里幂等。
+     */
+    public _internalReleaseResources(): void {
+        this._resourceScope.dispose();
     }
 
     /** @internal 由 PopupManager 调用。 */

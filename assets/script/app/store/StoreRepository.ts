@@ -309,21 +309,19 @@ class RuntimeStoreRepository implements IStoreRepository {
     }
 
     async watchAd(type: number, caller?: object): Promise<StoreRequestResult> {
-        return GameNet.sendRequest(
-            () => new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
-                if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
-            }),
-            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
-        );
+        const request = new RequestRoleWatchAdvert({ type }, caller, (rsp: CmdRoleWatchAdvertRspMsg) => {
+            if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
+        });
+        request.allowRetry = false;
+        return GameNet.sendRequest(() => request, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' });
     }
 
     async buyGuanKaGift(resId: number, caller?: object): Promise<StoreRequestResult> {
-        return GameNet.sendRequest(
-            () => new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
-                if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
-            }),
-            { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
-        );
+        const request = new RequestRoleGuanKaGiftBuy({ resId }, caller, (rsp: CmdRoleGuanKaGiftBuyRspMsg) => {
+            if (rsp?.tlCmdGoods?.length) FW.ShowReward(rsp.tlCmdGoods);
+        });
+        request.allowRetry = false;
+        return GameNet.sendRequest(() => request, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' });
     }
 
     pay(payChannelId: number): void {
@@ -338,15 +336,19 @@ class RuntimeStoreRepository implements IStoreRepository {
         caller?: object,
     ): Promise<StoreRequestResult> {
         return GameNet.sendRequest(
-            () => new RequestShopBuy(
-                { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
-                caller,
-                (rsp: CmdShopBuyRspMsg) => {
-                    if (rsp?.tlCmdGoods?.length) {
-                        FW.ShowReward(rsp.tlCmdGoods, { isGold: cmdShopType === STORE_SHOP_TYPE.gold });
-                    }
-                },
-            ),
+            () => {
+                const request = new RequestShopBuy(
+                    { id, cmdShopType, buyTimes } as CmdShopBuyReqMsg,
+                    caller,
+                    (rsp: CmdShopBuyRspMsg) => {
+                        if (rsp?.tlCmdGoods?.length) {
+                            FW.ShowReward(rsp.tlCmdGoods, { isGold: cmdShopType === STORE_SHOP_TYPE.gold });
+                        }
+                    },
+                );
+                request.allowRetry = false;
+                return request;
+            },
             { timeoutMs: WRITE_TIMEOUT_MS, tag: 'Store' },
         );
     }

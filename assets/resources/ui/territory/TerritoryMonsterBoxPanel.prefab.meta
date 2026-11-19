@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "a7f3c2e8-5b91-4d47-8e26-1c4f9b0d3a75",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "TerritoryMonsterBoxPanel",
+    "hasIcon": false
+  }
+}

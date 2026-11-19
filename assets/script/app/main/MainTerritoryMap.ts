@@ -198,6 +198,15 @@ const CHEST_HANDOFF_SETTLE_MS = 100;
  */
 const GAIN_PRESENTATION_SETTLE_MS = 120;
 
+/**
+ * 写请求 loading 的显示延迟（秒）：请求在这之前结束就一次都不弹遮罩。
+ *
+ * 「防连点」的真防线已经落在 Model 的入口闸（`selectSite` / `requestBattle`），全屏遮罩
+ * 只剩「让玩家知道在等」这一个职责。解锁 / 通关正常几十毫秒就回包，立刻弹遮罩反而是噪音：
+ * 快速点击时满屏转圈，还挡着自己下一拍的操作。超过这个阈值才说明真的慢，那时再弹不迟。
+ */
+const TERRITORY_BUSY_SHOW_DELAY = 0.2;
+
 /** 没有附加焦点节点时的共享空数组（每帧都会被读长度，别每次 new）。 */
 const EMPTY_GUIDE_EXTRA: readonly Node[] = [];
 
@@ -401,6 +410,18 @@ export class MainTerritoryMap extends Component {
      *  否则会多减一次全局引用计数、把别的请求的遮罩提前撤掉。
      */
     private battleBusyHiddenLoading = false;
+    /**
+     * `busy` 的待显示层：`pending` = 还在延迟窗口里（快请求回来就直接作废），
+     * `shown` = 已经计入 `LoadingPopup` 引用计数（收尾必须 hide 一次）。
+     *
+     * 队列形态恒为 `[pending..., shown...]`：一旦有层真的弹出来，后续一律立刻同步弹出 ——
+     * 遮罩已经亮了还去延迟，收尾时就会 hide 一层没 show 过的，把别人的遮罩提前撤掉。
+     */
+    private readonly busyLayers: Array<'pending' | 'shown'> = [];
+    /** 延迟显示定时器（`scheduleOnce` 不给句柄，存回调自身用来去重 / 显式取消）。 */
+    private busyShowTimer: (() => void) | null = null;
+    /** 最近一次 `busy=true` 的文案：攒着的那几层一起显示时用它。 */
+    private busyText = '';
     /** `canvas-resize` 只挂一次（页面复用时不重复累积回调）。 */
     private mapInsetResizeBound = false;
     /**
@@ -685,6 +706,12 @@ export class MainTerritoryMap extends Component {
         // ⚠️ 这里不再对子节点调 `off(...)`：`Node._onPreDestroyBase()` 先销毁子节点、
         // 再跑本函数，节点销毁时 EventTarget 已释放，监听不泄漏；引擎这版 `Node.off` 不判空，
         // 手动摘必抛。同族规则见 docs/AI架构与代码规范.md §7.2。
+        // 本页弹出去的 loading 层必须还回去：定时器随组件销毁自动清，但已经 `show` 过的
+        // 那几层挂在 `LoadingPopup` 的全局引用计数上。正常链路（`Disposed` → Model dispose
+        // → `busy=false`）已经把队列消费空，这里兜的是「回包没到页面就没了」。
+        this.busyShowTimer = null;
+        for (const layer of this.busyLayers) if (layer === 'shown') LoadingPopup.hide();
+        this.busyLayers.length = 0;
     }
 
     // ============================================================
@@ -1082,8 +1109,9 @@ export class MainTerritoryMap extends Component {
     }
 
     private onSetBusy(payload: ITerritorySetBusyPayload): void {
-        // 写请求在途 = 全屏 loading 遮挡（引用计数，多个并发请求只显一层）：
-        // 请求期间玩家点不到地图/按钮，从源头防「服务端还没响应就快速连点」。
+        // 写请求在途 = 全屏 loading（引用计数，多层只显一具遮罩）。
+        // 🔴 它**不再承担防连点**：真防线是 Model 的入口闸（一条写请求在途就整片不受理），
+        // 遮罩只负责「让玩家知道在等」。所以快请求可以不弹，见下面的延迟窗口。
         if (payload.busy) {
             // 「开战校验」这条请求在途 ⇒ 先把整页过场演起来（需求 2026-11-02 第 3 条：
             // 雾合拢后**静止等回包**）。按文案认这条请求：`busyBattle` 只在领地 model 层的
@@ -1100,7 +1128,23 @@ export class MainTerritoryMap extends Component {
                 this.battleBusyHiddenLoading = true;
                 return;
             }
-            LoadingPopup.show(payload.text);
+            if (payload.text !== undefined) this.busyText = payload.text;
+            // 遮罩已经亮着 ⇒ 这一层立刻同步弹出：延迟它会让收尾 hide 一层没 show 过的，
+            // 全局引用计数少 1，下一次 `hide` 就把别人的遮罩一起撤掉。
+            if (this.busyLayers.includes('shown')) {
+                this.busyLayers.push('shown');
+                LoadingPopup.show(payload.text);
+                return;
+            }
+            // 快请求不闪遮罩：先攒一层，`TERRITORY_BUSY_SHOW_DELAY` 到点才真弹。
+            this.busyLayers.push('pending');
+            if (this.busyShowTimer) return;
+            const timer = (): void => {
+                this.busyShowTimer = null;
+                this.flushBusyLayers();
+            };
+            this.busyShowTimer = timer;
+            this.scheduleOnce(timer, TERRITORY_BUSY_SHOW_DELAY);
             return;
         }
         // 上一次 `busyBattle` 由过场接管、**没真的 show** ⇒ 这一次也不许 hide：
@@ -1109,7 +1153,19 @@ export class MainTerritoryMap extends Component {
             this.battleBusyHiddenLoading = false;
             return;
         }
-        LoadingPopup.hide();
+        // 只对**真的弹过**的那一层 hide；还在延迟窗口里的直接作废（快请求全程无感）。
+        if (this.busyLayers.shift() === 'shown') LoadingPopup.hide();
+    }
+
+    /** 延迟窗口到点：把攒着的层一起显示（每层 show 一次，收尾才配得平）。 */
+    private flushBusyLayers(): void {
+        let layers = 0;
+        for (let index = 0; index < this.busyLayers.length; index++) {
+            if (this.busyLayers[index] !== 'pending') continue;
+            this.busyLayers[index] = 'shown';
+            layers += 1;
+        }
+        for (let index = 0; index < layers; index++) LoadingPopup.show(this.busyText);
     }
 
     // ============================================================

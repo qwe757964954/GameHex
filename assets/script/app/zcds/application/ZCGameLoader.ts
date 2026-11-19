@@ -18,6 +18,7 @@ import { ZCGuideLoader } from './ZCGuideLoader';
 import type { IZCGuidePreparedContent } from './ZCGuideLoader';
 import type { IZCDeferredBattleArt, IZCGamePreparedResources } from './ZCGamePreparedResources';
 import { SPAWN_REGION_HINT_PREFAB, type IZCSpawnRegionHintFrames } from '../view/ZCSpawnRegionHintOverlay';
+import type { IZCMonsterFocusFrames } from '../view/ZCHexView';
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import { ensureZCRuntimeCompiled } from './ZCRuntimePrecompiler';
@@ -29,7 +30,7 @@ import { ICON_TABLE } from '../../../core/config/TableNames';
 const BATTLE_ENTRY_PRIORITY = 100;
 const BATTLE_DEFERRED_PRIORITY = 10;
 const DEFERRED_ART_YIELD_MS = 16;
-const COMMON_EFFECT_DIRECTORY = 'units/effects';
+const COMMON_EFFECT_DIRECTORY = ZC_BATTLE_FX_PATHS.effectsDirectory;
 
 /** 建筑外观帧目录（buildIcon 指向的图片都在此目录）。*/
 const BUILDING_DIRECTORY = 'image/buildings';
@@ -152,6 +153,7 @@ export class ZCGameLoader {
             spawnRegionFrames: icons.spawnRegionFrames,
             spawnRegionHintPrefab: icons.spawnRegionHintPrefab,
             neutralResourceFrames: icons.neutralResourceFrames,
+            monsterFocusFrames: icons.monsterFocusFrames,
             hexGroundGlowFrames: sceneEffects.hexGroundGlowFrames,
             hexPulseFrames: sceneEffects.hexPulseFrames,
             artifactClaimBurstFrames: sceneEffects.artifactClaimBurstFrames,
@@ -200,15 +202,16 @@ export class ZCGameLoader {
     }
 
     private async loadMapIcons(scope: ResourceScope | undefined, selectSpawn: boolean) {
-        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames] = await Promise.all([
+        const [artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames, monsterFocusFrames] = await Promise.all([
             this.loadArtifactIconFrame(scope),
             selectSpawn ? this.loadUnknownResourceFrame(scope) : null,
             this.loadGoldCoinFrame(scope),
             selectSpawn ? this.loadSpawnRegionFrames(scope) : null,
             selectSpawn ? this.loadSpawnRegionHintPrefab(scope) : null,
             this.loadNeutralResourceFrames(scope),
+            this.loadMonsterFocusFrames(scope),
         ]);
-        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames };
+        return { artifactIconFrame, unknownResourceFrame, goldCoinFrame, spawnRegionFrames, spawnRegionHintPrefab, neutralResourceFrames, monsterFocusFrames };
     }
 
     private async loadInitialSceneEffects(scope: ResourceScope | undefined, progressive: boolean) {
@@ -421,6 +424,29 @@ export class ZCGameLoader {
     private async loadNeutralResourceFrames(scope?: ResourceScope): Promise<ReadonlyMap<string, SpriteFrame>> {
         const frames = await this.resources.assets.loadDir(MAP_RESOURCE_ART_ROOT, SpriteFrame, this.battleOptions(scope));
         return new Map(frames.map(frame => [frame.name, frame]));
+    }
+
+    /**
+     * 野怪集火按钮的三态底图：`locked/focus/cancel` 依次对应 `image/spawn-region/frame_01/02/03`。
+     *
+     * 这套图是 94×45 的九宫气泡、**底部箭头**是气泡的一部分（与 `SpawnRegionHint.prefab`
+     * 同源同尺寸）；别用 `image/gameui/frame_0X` —— 那套是 HUD 积分气泡（110×77、尾巴在
+     * 右下角），压进 150 宽的按钮里只会剩一条窄条 + 角落缺口。
+     * 也别用 `loadDir` 的返回顺序：同目录还有 `frame_04`（宝箱水滴），顺序一变就全串。
+    */
+    private async loadMonsterFocusFrames(scope?: ResourceScope): Promise<IZCMonsterFocusFrames> {
+        const [locked, focus, cancel] = await Promise.all([
+            this.loadSpawnRegionFrame('frame_01', scope),
+            this.loadSpawnRegionFrame('frame_02', scope),
+            this.loadSpawnRegionFrame('frame_03', scope),
+        ]);
+        return { locked, focus, cancel };
+    }
+
+    /** 单张自选主城气泡图（`image/spawn-region/<name>`）。*/
+    private loadSpawnRegionFrame(name: string, scope?: ResourceScope): Promise<SpriteFrame> {
+        const path = spriteFramePath(SPAWN_REGION_ART_ROOT, name);
+        return this.resources.assets.load(path, SpriteFrame, this.battleOptions(scope));
     }
 
     /** 按图片名索引建筑外观帧。*/

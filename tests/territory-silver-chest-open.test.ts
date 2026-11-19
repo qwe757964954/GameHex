@@ -208,9 +208,9 @@ test('这一刻没有宝箱图 / 视图已销毁 ⇒ 不演，也不留半套状
 
 test('Presenter 只按 rewardId 打标；卡牌宝箱保持默认开箱调用不变', () => {
     assert.match(MODEL_SRC, /TERRITORY_SILVER_CHEST_REWARD_ID/);
-    assert.match(MODEL_SRC, /showRewards\(result\.rewards, site\.cellId, \{ silverChest: true \}\)/,
+    assert.match(MODEL_SRC, /showRewards\(write\.rewards, site\.cellId, \{ silverChest: true \}\)/,
         '银币宝箱要带 { silverChest: true }');
-    assert.match(MODEL_SRC, /showRewards\(result\.rewards, site\.cellId\)/,
+    assert.match(MODEL_SRC, /showRewards\(write\.rewards, site\.cellId\)/,
         '卡牌碎片宝箱仍走默认开箱（territory-cell-protocol / burst-density 钉着这串调用）');
     assert.match(MODEL_SRC, /readonly silverChest\?: boolean/, '表现契约里要有这个字段');
 });

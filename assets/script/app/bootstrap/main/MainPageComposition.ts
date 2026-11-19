@@ -52,7 +52,8 @@ export class MainPageComposition extends ControllerBase {
     private territoryView: MainTerritoryMap | null = null;
     get territory(): MainTerritoryMap | null { return this.territoryView; }
 
-    constructor(private readonly context: IControllerContext, private readonly root: Node, private readonly presented: () => void) {
+    constructor(private readonly context: IControllerContext, private readonly root: Node, private readonly presented: () => void,
+        private readonly requestOwner?: object) {
         super(context, 'main-page');
         this.listen(VIEW_LIFECYCLE, this.onLifecycle);
         this.listen(CHEST_EVENTS.REWARDS, this.onTreasureRewards);
@@ -106,7 +107,7 @@ export class MainPageComposition extends ControllerBase {
     private mountTerritory(territory: MainTerritoryMap, main: MainPage | null): void {
         const entry = this.createTerritoryEntry(territory);
         this.registerPage(territory, entry, { ready: () => entry.start() });
-        territory.initialize(entry.controller.resources, entry.saveOwner);
+        territory.initialize(entry.resources, entry.saveOwner);
         this.listen(TerritoryUiEvent.ChestRevealed, this.onChestRevealed);
         this.listen(TerritoryUiEvent.ChestRewardsReady, this.onChestRewardsReady);
         // 2026-11-10 需求 ③：英雄碎片进度徽标的数据源由组合层注入（页面只认接口，
@@ -117,6 +118,13 @@ export class MainPageComposition extends ControllerBase {
             main.territoryMap = territory;
             main.hasTerritoryMap = true;
         }
+    }
+    /**
+     * 宝箱奖励应落到哪一层：本页活跃时由本组合消费；其余情况交给主 tab 兜底，
+     * 保证切页/重开后迟到回包的奖励仍然可见。
+     */
+    treasureRewardRoute(owner: { readonly node: Node }): 'active' | 'fallback' {
+        return !this.isDisposed && owner.node === this.root ? 'active' : 'fallback';
     }
     private onTreasureRewards(event: { readonly owner: MainPage; readonly goods: readonly unknown[] }): void {
         if (event.owner.node !== this.root || !event.goods.length) return;
@@ -257,7 +265,14 @@ export class MainPageComposition extends ControllerBase {
         });
     }
     private createStoreController(store: StorePage): StoreController {
-        return new StoreController(this.context, store, storeAction, reportMainPageFailure);
+        return new StoreController(
+            this.context,
+            store,
+            storeAction,
+            reportMainPageFailure,
+            this.requestOwner,
+            () => store.isValid,
+        );
     }
     private createLeagueController(league: LeagueTabPage): LeagueTabController {
         return new LeagueTabController(this.context, {

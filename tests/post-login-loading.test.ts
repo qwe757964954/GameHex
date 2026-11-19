@@ -175,6 +175,10 @@ test('LaunchProgressUI 是 prefab 封装：ensure 复用 / createFromPrefab 实�
     // 生命周期：登录页期间 hide、进入 Main 后 release 销毁。
     assert.match(source, /hide\(\): void/);
     assert.match(source, /release\(\): void/);
+    // 跨流程存活：节点比加载它的流程作用域活得久（onLeave 只 hide），prefab 必须自己持引用，
+    // 否则 `releaseResourceScope()` 会把它连同 `bar_white` 一起 decRef 到 0 ⇒ 节点 active 但挂着死帧。
+    assert.match(source, /prefab\.addRef\(\)/, '实例化时没接管 prefab 引用');
+    assert.match(source, /prefab\.decRef\(\)/, '销毁节点时没还回 prefab 引用');
     // 热更段权重导出，供两个流程分段映射。
     assert.match(source, /export const LAUNCH_UPDATE_WEIGHT = 0\.6/);
 });

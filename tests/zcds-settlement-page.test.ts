@@ -1,29 +1,30 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
+import { ZC_SETTLEMENT_STYLE } from '../assets/script/app/zcds/model/ZCSettlementStyle';
 
 /**
  * 对局结算页（`ZCSettlementPage` + `ZCSettlement.prefab`）的结构守卫。
  *
- * 蓝湖「结算-胜利」/「结算-失败」两张稿：同一骨架，只有标题套图不同。
- * 奖励格复用物品详情那套 `GoodsBox`（品质框 `cu_quality_*` + 道具图标 + 数量）。
+ * 蓝湖「结算-MVP」稿（720×1610）把面板重排成：标题套图 → MVP 卡片 → 段位行 → 通关奖励；
+ * 旧稿的「变强途径」整组已下线（功能未接线，新稿也没有这一组）。
  *
  * 判据四层：
- *   ① 源码里不许退回「代码搭节点」、不许自己算坐标（几何归 prefab 生成器）；
+ *   ① 源码里不许退回「代码搭节点」、不许自己算坐标（几何归 prefab）；
  *   ② prefab 的树形、尺寸、相对几何逐项等于**下面手抄的设计稿量测表**；
- *   ③ 16 张切图逐张对到 `image/settlement/<名>.png`，`sizeMode=CUSTOM` + `trim=false`；
- *   ④ 每个 `@property` 反解到正确类型；20 个奖励格的三件套与 `GoodsBox` 绑定齐全。
+ *   ③ 切图逐张对到 `image/settlement/<名>.png`，`sizeMode=CUSTOM` + `trim=false`；
+ *   ④ 每个 `@property` 反解到正确类型；奖励格仍走公共 `RewardItem`。
  */
 const pageSource = readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts', 'utf8');
+const styleSource = readFileSync('assets/script/app/zcds/model/ZCSettlementStyle.ts', 'utf8');
 const gameSource = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
 const pageMeta = JSON.parse(readFileSync('assets/script/app/zcds/ui/ZCSettlementPage.ts.meta', 'utf8'));
+const layoutMeta = JSON.parse(readFileSync('assets/script/app/zcds/view/ZCSettlementLayout.ts.meta', 'utf8'));
 const goodsMeta = JSON.parse(readFileSync('assets/script/app/itemdetail/GoodsBox.ts.meta', 'utf8'));
 const rewardItemViewMeta = JSON.parse(readFileSync('assets/script/app/common/RewardItemView.ts.meta', 'utf8'));
-//  prefab / 切图都随 battle 分包搬到了 `assets/bundles/battle/` 下（判据原先读 `assets/resources/`，
-//  整份文件在模块顶层就 ENOENT 崩掉，30+ 条一条都跑不到）。
 const prefabText = readFileSync('assets/bundles/battle/ui/game/ZCSettlement.prefab', 'utf8');
 const objects: any[] = JSON.parse(prefabText);
 
@@ -40,35 +41,53 @@ function stripComments(source: string): string {
 }
 
 /**
- * 设计稿量测表（蓝湖「结算-胜利」稿，画布 720×1610，切片 1:1）——**手抄**，别由 prefab 反推。
- * cocosX = 设计x + 设计w/2 − 360；cocosY = 805 − (设计y + 设计h/2)；子树坐标再减父中心。
+ * 设计稿量测表（蓝湖「结算-MVP」稿，画布 720×1610，切片 1:1）——**手抄**，别由 prefab 反推。
+ * 面板中心设计 (361.5, 799.5) ⇒ 子节点 lpos = (设计x − 361.5, 799.5 − 设计y)，再减父中心。
+ * 数值来自 `tmp/lanhu_settlement/grid_mvp.png`（50px 网格 2×）+ 像素扫描交叉确认。
  */
 const DESIGN = {
     panel: { x: 1.5, y: 5.5, w: 671, h: 811 },
     titlePlate: { x: -1.5, y: 446.5, w: 678, h: 192 },
     titleText: { x: 10, y: -6, w: 346, h: 74 },
-    rankRow: { x: 1.5, y: 287, w: 550, h: 91 },
-    rankIcon: { x: -228.5, y: 8.5, w: 93, h: 72 },
-    rankBar: { x: 8.5, y: 3, w: 369, h: 29 },
-    rankFill: { x: 0, y: 0, w: 361, h: 21 },
-    rankName: { fs: 26, color: 'ffd028' },
-    rankAdd: { fs: 26, color: '57e467' },
+    // MVP 整组：本地 y 95..405（设计 y ≈ 394..705），覆盖 MVP 标识 / 头像 / 两条进度条
+    mvpBlock: { x: 0, y: 250, w: 623, h: 310 },
+    mvpIcon: { x: -46.5, y: 132.5, w: 120, h: 40 },
+    // 设计稿那里是 170×265 的立绘位：本局赢家输出最高卡的骨骼模型站在这里播 idle
+    mvpActor: { x: -141.5, y: -7.5, w: 170, h: 265 },
+    mvpLevel: { x: 70.5, y: 106.5 },
+    mvpName: { x: 175.5, y: 106.5 },
+    mvpDealtLabel: { x: 70.5, y: 32.5 },
+    mvpDealtRate: { x: 235.5, y: 33.5 },
+    mvpDealtBar: { x: 149.5, y: 4, w: 230, h: 27 },
+    mvpDealtFill: { x: 0, y: 0, w: 222, h: 19 },
+    mvpDealtValue: { x: 0, y: 0 },
+    mvpTakenLabel: { x: 70.5, y: -37.5 },
+    mvpTakenRate: { x: 235.5, y: -36.5 },
+    mvpTakenBar: { x: 149.5, y: -65, w: 230, h: 27 },
+    mvpTakenFill: { x: 0, y: 0, w: 222, h: 19 },
+    mvpTakenValue: { x: 0, y: 0 },
+    teamButton: { x: 151, y: -109, w: 160, h: 34 },
+    // 段位行整体下移到 MVP 卡下方（本地 y −2.5..88.5），段位条换 420/412
+    rankRow: { x: 1.5, y: 43, w: 550, h: 91 },
+    rankIcon: { x: -214.5, y: 8.5, w: 93, h: 72 },
+    rankBar: { x: 53, y: -2, w: 420, h: 29 },
+    rankFill: { x: 0, y: 0, w: 412, h: 21 },
+    rankName: { x: -93, y: 31.5, fs: 26, color: 'ffd028' },
+    rankScore: { x: 47, y: -1.5 },
+    rankAdd: { x: 227, y: 35.5, fs: 26, color: '57e467' },
     rankHint: { fs: 22 },
-    rewardTitle: { fs: 28 },
-    // 变强途径整段（设计稿 bg_02 在 (51,1021) 623×131，段容器 (51,982) 623×170）
-    grow: { x: 51, y: 982, w: 623, h: 170 },
+    // 通关奖励区块整体下移：框中心本地 −206（设计 y 1005.5），滚动视窗顶边 −42.5（设计 y 842）
+    rewardSection: { x: 1, y: -187, w: 623, h: 365 },
+    rewardBg: { x: -3.5, y: -19, w: 598, h: 327 },
+    rewardTitle: { x: -2, y: 169 },
     // 视窗锚点被改成 (0.5,1)（虚拟列表的约定）⇒ `_lpos.y` 放的是**顶边**、比中心高半个视口。
-    rewardScroll: { x: 0, y: -19 + 327 / 2, w: 623, h: 327 },
+    rewardScroll: { x: 0, y: 144.5, w: 623, h: 327 },
     btnDouble: { x: -153, y: -535, w: 218, h: 90 },
     btnConfirm: { x: 156, y: -536, w: 218, h: 90 },
 };
 /**
  * 奖励栅格 = **虚拟列表**（`VirtualScrollView`）：设计稿量到**列距 111 / 行距 114**、5 列、
  * 视口 623×327。
- *
- * ⚠️ **格子尺寸 = 公共奖励格 `ui/common/RewardItem.prefab` 的 96×96**（不是原稿的 100×100）——
- * 奖励格统一走公共件后，格宽由公共件决定；**间距按设计稿反推补偿**：
- * `gridSpacing = 111 − 96 = 15`、`spacing = 114 − 96 = 18` ⇒ **落位与原稿逐值相同**。
  */
 const VGRID = { cols: 5, cell: 96, gridSpacing: 15, spacing: 18, header: 20, footer: 20, rows: 4 };
 /** 公共奖励格 prefab（assetPath(`ui/common/RewardItem.prefab`)）的 uuid。 */
@@ -90,21 +109,22 @@ const ART = {
     'ZCSettlement/Panel': 'bg_01',
     'ZCSettlement/Panel/TitlePlate': 'JS_title_bg_01',
     'ZCSettlement/Panel/TitlePlate/TitleText': 'title_text_01',
+    'ZCSettlement/Panel/MvpBlock/MvpIcon': 'icon_mvp',
+    // MvpActor 是骨骼宿主（裸 Node，不挂 Sprite）—— 不在切图表里
+    'ZCSettlement/Panel/MvpBlock/MvpDealtBar': 'progress_r_02',
+    'ZCSettlement/Panel/MvpBlock/MvpDealtBar/MvpDealtFill': 'progress_r_01',
+    'ZCSettlement/Panel/MvpBlock/MvpTakenBar': 'progress_b_02',
+    'ZCSettlement/Panel/MvpBlock/MvpTakenBar/MvpTakenFill': 'progress_b_01',
     'ZCSettlement/Panel/RankRow/RankIcon': 'dw_icon_hj',
     'ZCSettlement/Panel/RankRow/RankBar': 'progress_02',
     'ZCSettlement/Panel/RankRow/RankBar/RankFill': 'progress_01',
+    'ZCSettlement/Panel/RewardSection/RewardBg': 'frame',
     'ZCSettlement/Panel/RewardSection/RewardLineL': 'title_line',
     'ZCSettlement/Panel/RewardSection/RewardLineR': 'title_line',
-    'ZCSettlement/Panel/Grow/GrowBg': 'bg_02',
-    'ZCSettlement/Panel/Grow/GrowLineL': 'title_line',
-    'ZCSettlement/Panel/Grow/GrowLineR': 'title_line',
-    'ZCSettlement/Panel/Grow/Entry0': 'icon_zbsj',
-    'ZCSettlement/Panel/Grow/Entry1': 'icon_yx',
-    'ZCSettlement/Panel/Grow/Entry2': 'icon_fw',
-    'ZCSettlement/Panel/Grow/Entry0/Bg': 'text_bg',
     'ZCSettlement/BtnDouble': 'btn_02',
     'ZCSettlement/BtnConfirm': 'btn_01',
 };
+/** 结算切图目录之外的共用美术（旧的头像框已随骨骼立绘下线）。 */
 
 const nodes = objects.filter((o) => o.__type__ === 'cc.Node');
 const nodeNamed = (name: string, parentName?: string) => nodes.find((node) => {
@@ -128,8 +148,14 @@ const sizeOf = (node: any): [number, number] => {
 };
 const positionOf = (node: any): [number, number] => [node._lpos.x, node._lpos.y];
 const childrenOf = (node: any): string[] => node._children.map((ref: any) => objects[ref.__id__]._name);
-const frameOf = (art: string): string =>
-    JSON.parse(readFileSync(`assets/bundles/battle/image/settlement/${art}.png.meta`, 'utf8')).subMetas.f9941.uuid;
+const frameOf = (art: string): string => frameUuid(art);
+/** 面板底图 `bg_01` 留在 battle/image（跨页复用），其余结算切图在 settlement 下。*/
+const frameUuid = (art: string): string => {
+    const local = `assets/bundles/battle/image/settlement/${art}.png.meta`;
+    const shared = `assets/bundles/battle/image/${art}.png.meta`;
+    const path = existsSync(local) ? local : shared;
+    return JSON.parse(readFileSync(path, 'utf8')).subMetas.f9941.uuid;
+};
 
 test('页面脚本不再自己建节点，坐标全归 prefab', () => {
     const code = stripComments(pageSource);
@@ -137,7 +163,7 @@ test('页面脚本不再自己建节点，坐标全归 prefab', () => {
     assert.doesNotMatch(code, /\.addComponent\(/);
     assert.doesNotMatch(code, /setPosition|setScale/, '位置/缩放归 prefab（规则 215）');
     assert.doesNotMatch(code, /getChildByName\(|getChildByPath\(/, '结构由 prefab 承载，不再按名找节点');
-    for (const key of ['titlePlate', 'rankRow', 'rankFill', 'rewardList', 'confirmButton']) {
+    for (const key of ['titlePlate', 'mvpGroup', 'mvpActor', 'teamButton', 'rankRow', 'rankFill', 'rewardList', 'confirmButton']) {
         assert.match(code, new RegExp(`this\\.${key}\\b`), `${key} 应当被直接使用`);
     }
     // 遮罩是纯 prefab 件（白块 Sprite + 染色 + 四边 Widget），代码一行都不该碰
@@ -181,6 +207,9 @@ test('ZCSettlement.prefab：树形、面板与标题几何按设计稿', () => {
     const panel = nodeNamed('Panel', 'ZCSettlement')!;
     assert.deepEqual(sizeOf(panel), [DESIGN.panel.w, DESIGN.panel.h]);
     assert.deepEqual(positionOf(panel), [DESIGN.panel.x, DESIGN.panel.y]);
+    // 新版面板：标题 → MVP → 段位 → 奖励（变强途径整组已下线）
+    assert.deepEqual(childrenOf(panel), ['TitlePlate', 'MvpBlock', 'RankRow', 'RewardSection'], '面板子节点 = 新版四段');
+    assert.equal(nodeNamed('Grow', 'Panel'), undefined, '旧稿的「变强途径」必须删干净');
 
     const plate = nodeNamed('TitlePlate', 'Panel')!;
     assert.deepEqual(sizeOf(plate), [DESIGN.titlePlate.w, DESIGN.titlePlate.h]);
@@ -188,6 +217,67 @@ test('ZCSettlement.prefab：树形、面板与标题几何按设计稿', () => {
     const titleText = nodeNamed('TitleText', 'TitlePlate')!;
     assert.deepEqual(sizeOf(titleText), [DESIGN.titleText.w, DESIGN.titleText.h]);
     assert.deepEqual(positionOf(titleText), [DESIGN.titleText.x, DESIGN.titleText.y]);
+});
+
+test('ZCSettlement.prefab：MVP 卡片按设计稿（标识 / 骨骼立绘 / Lv+名字 / 两条进度条 / 查看完整队伍）', () => {
+    const block = nodeNamed('MvpBlock', 'Panel')!;
+    assert.deepEqual(sizeOf(block), [DESIGN.mvpBlock.w, DESIGN.mvpBlock.h]);
+    assert.deepEqual(positionOf(block), [DESIGN.mvpBlock.x, DESIGN.mvpBlock.y]);
+    assert.deepEqual(childrenOf(block), [
+        'MvpActor', 'MvpIcon', 'MvpLevel', 'MvpName',
+        'MvpDealtLabel', 'MvpDealtRate', 'MvpDealtBar',
+        'MvpTakenLabel', 'MvpTakenRate', 'MvpTakenBar', 'TeamButton',
+    ], 'MVP 区顺序 = 渲染顺序（骨骼模型在最底层，徽标/文案压在它上面）');
+
+    for (const key of ['MvpActor', 'MvpIcon'] as const) {
+        const node = nodeNamed(key, 'MvpBlock')!;
+        const want = DESIGN[key === 'MvpIcon' ? 'mvpIcon' : 'mvpActor'];
+        assert.deepEqual(sizeOf(node), [want.w, want.h], `${key} 尺寸`);
+        assert.deepEqual(positionOf(node), [want.x, want.y], `${key} 位置`);
+    }
+    // 骨骼宿主是裸 Node：挂 Sprite 会在模型后面闪一块方图，也说明旧头像方案没删干净
+    assert.equal(componentOf(nodeNamed('MvpActor', 'MvpBlock')!, 'cc.Sprite'), undefined, 'MvpActor 不许挂 Sprite');
+    assert.equal(nodeNamed('MvpPortrait', 'MvpBlock'), undefined, '旧头像节点必须删干净');
+    assert.equal(nodeNamed('MvpPortraitFrame', 'MvpBlock'), undefined, '旧头像框必须删干净');
+
+    for (const key of ['MvpLevel', 'MvpName'] as const) {
+        const node = nodeNamed(key, 'MvpBlock')!;
+        assert.deepEqual(positionOf(node), [DESIGN[key === 'MvpLevel' ? 'mvpLevel' : 'mvpName'].x, DESIGN[key === 'MvpLevel' ? 'mvpLevel' : 'mvpName'].y], `${key} 位置`);
+    }
+
+    for (const [prefix, design] of [[
+        'MvpDealt', { label: DESIGN.mvpDealtLabel, rate: DESIGN.mvpDealtRate, bar: DESIGN.mvpDealtBar, fill: DESIGN.mvpDealtFill, value: DESIGN.mvpDealtValue },
+    ], [
+        'MvpTaken', { label: DESIGN.mvpTakenLabel, rate: DESIGN.mvpTakenRate, bar: DESIGN.mvpTakenBar, fill: DESIGN.mvpTakenFill, value: DESIGN.mvpTakenValue },
+    ]] as const) {
+        const label = nodeNamed(`${prefix}Label`, 'MvpBlock')!;
+        const rate = nodeNamed(`${prefix}Rate`, 'MvpBlock')!;
+        const bar = nodeNamed(`${prefix}Bar`, 'MvpBlock')!;
+        const fill = nodeNamed(`${prefix}Fill`, `${prefix}Bar`)!;
+        const value = nodeNamed(`${prefix}Value`, `${prefix}Bar`)!;
+        assert.deepEqual(positionOf(label), [design.label.x, design.label.y], `${prefix}Label 位置`);
+        assert.deepEqual(positionOf(rate), [design.rate.x, design.rate.y], `${prefix}Rate 位置`);
+        assert.deepEqual(sizeOf(bar), [design.bar.w, design.bar.h], `${prefix}Bar 尺寸`);
+        assert.deepEqual(positionOf(bar), [design.bar.x, design.bar.y], `${prefix}Bar 位置`);
+        assert.deepEqual(sizeOf(fill), [design.fill.w, design.fill.h], `${prefix}Fill 尺寸`);
+        assert.deepEqual(positionOf(fill), [design.fill.x, design.fill.y], `${prefix}Fill 位置`);
+        assert.deepEqual(positionOf(value), [design.value.x, design.value.y], `${prefix}Value 位置`);
+        const fillSprite = componentOf(fill, 'cc.Sprite')!;
+        assert.equal(fillSprite._type, 3, `${prefix}Fill 必须是 FILLED`);
+        assert.equal(fillSprite._fillType, 0, `${prefix}Fill HORIZONTAL`);
+        // 数值文本压在进度条上 ⇒ 必须在填充之后（同父下顺序 = 渲染顺序）
+        assert.ok(childrenOf(bar).indexOf(`${prefix}Value`) > childrenOf(bar).indexOf(`${prefix}Fill`), '数值要盖在填充条上');
+    }
+
+    const team = nodeNamed('TeamButton', 'MvpBlock')!;
+    assert.deepEqual(sizeOf(team), [DESIGN.teamButton.w, DESIGN.teamButton.h]);
+    assert.deepEqual(positionOf(team), [DESIGN.teamButton.x, DESIGN.teamButton.y]);
+    assert.ok(componentOf(team, 'cc.Button'), '查看完整队伍必须有 cc.Button');
+    const teamLabel = componentOf(nodeNamed('TeamLabel', 'TeamButton')!, 'cc.Label')!;
+    assert.equal(teamLabel._isUnderline, true, '「查看完整队伍」带下划线（设计稿是一行链接）');
+    assert.equal(teamLabel._string, '查看完整队伍');
+    assert.equal(teamLabel._fontSize, 24);
+    assert.ok(sizeOf(nodeNamed('TeamLabel', 'TeamButton')!)[1] >= teamLabel._lineHeight, '框高不许小于行高（SHRINK 会缩字号）');
 });
 
 test('ZCSettlement.prefab：段位行与底部按钮按设计稿', () => {
@@ -209,16 +299,20 @@ test('ZCSettlement.prefab：段位行与底部按钮按设计稿', () => {
     const fillSprite = componentOf(fill, 'cc.Sprite')!;
     assert.equal(fillSprite._type, 3, '段位条是 FILLED');
     assert.equal(fillSprite._fillType, 0, 'HORIZONTAL');
-    assert.equal(objects.filter((o) => o.__type__ === 'cc.Sprite' && o._type === 3).length, 1);
+    // 全 prefab 只有 3 条 FILLED：段位条 + MVP 的总输出 / 总承伤
+    assert.equal(objects.filter((o) => o.__type__ === 'cc.Sprite' && o._type === 3).length, 3);
 
     // 段位名金色、加分绿色（设计稿量到 rgb(255,208,40) / rgb(87,228,103)）
     const rankName = componentOf(nodeNamed('RankName', 'RankRow')!, 'cc.Label')!;
     assert.equal(rankName._fontSize, DESIGN.rankName.fs);
+    assert.deepEqual(positionOf(nodeNamed('RankName', 'RankRow')!), [DESIGN.rankName.x, DESIGN.rankName.y]);
     assert.equal([rankName._color.r, rankName._color.g, rankName._color.b].map((v: number) => v.toString(16).padStart(2, '0')).join(''), DESIGN.rankName.color);
     const rankAdd = componentOf(nodeNamed('RankAdd', 'RankRow')!, 'cc.Label')!;
     assert.equal(rankAdd._fontSize, DESIGN.rankAdd.fs);
+    assert.deepEqual(positionOf(nodeNamed('RankAdd', 'RankRow')!), [DESIGN.rankAdd.x, DESIGN.rankAdd.y]);
     assert.equal([rankAdd._color.r, rankAdd._color.g, rankAdd._color.b].map((v: number) => v.toString(16).padStart(2, '0')).join(''), DESIGN.rankAdd.color);
     assert.equal(componentOf(nodeNamed('RankHint', 'RankRow')!, 'cc.Label')!._fontSize, DESIGN.rankHint.fs);
+    assert.deepEqual(positionOf(nodeNamed('RankScore', 'RankRow')!), [DESIGN.rankScore.x, DESIGN.rankScore.y]);
 
     for (const [name, want] of [['BtnDouble', DESIGN.btnDouble], ['BtnConfirm', DESIGN.btnConfirm]] as const) {
         const node = nodeNamed(name, 'ZCSettlement')!;
@@ -229,6 +323,13 @@ test('ZCSettlement.prefab：段位行与底部按钮按设计稿', () => {
 });
 
 test('ZCSettlement.prefab：奖励区是虚拟列表（视窗挂 Mask + VirtualScrollView，content 只留模板）', () => {
+    const section = nodeNamed('RewardSection', 'Panel')!;
+    assert.deepEqual(sizeOf(section), [DESIGN.rewardSection.w, DESIGN.rewardSection.h]);
+    assert.deepEqual(positionOf(section), [DESIGN.rewardSection.x, DESIGN.rewardSection.y]);
+    const bg = nodeNamed('RewardBg', 'RewardSection')!;
+    assert.deepEqual(sizeOf(bg), [DESIGN.rewardBg.w, DESIGN.rewardBg.h], '新稿的奖励框 598×327');
+    assert.deepEqual(positionOf(bg), [DESIGN.rewardBg.x, DESIGN.rewardBg.y]);
+
     const scroll = nodeNamed('RewardScroll', 'RewardSection')!;
     assert.deepEqual(sizeOf(scroll), [DESIGN.rewardScroll.w, DESIGN.rewardScroll.h]);
     assert.ok(componentOf(scroll, 'cc.Mask'), '视口必须有 Mask（裁剪矩形 = 视窗 UITransform）');
@@ -239,8 +340,6 @@ test('ZCSettlement.prefab：奖励区是虚拟列表（视窗挂 Mask + VirtualS
     // 列表参数全在 prefab 里（代码只喂条数）：漏一项就是「排得不对、且不报错」
     assert.equal(list.useVirtualList, true);
     assert.equal(list.direction, 0, 'VERTICAL');
-    // ★ 奖励格统一走**公共** `ui/common/RewardItem.prefab`：PREFAB 模式 + itemPrefab 指向它，
-    //   静态槽位全删（自己烘一份 = 同一件事做两遍，改公共件时结算页不跟着变）。
     assert.equal(list.itemCreationMode, 1, 'PREFAB：用公共奖励格 prefab 克隆');
     assert.equal(list.itemPrefab?.__uuid__, REWARD_ITEM_UUID, 'itemPrefab 必须指向 ui/common/RewardItem');
     assert.equal(list.itemNode, null, 'PREFAB 模式不许配 itemNode');
@@ -260,86 +359,45 @@ test('ZCSettlement.prefab：奖励区是虚拟列表（视窗挂 Mask + VirtualS
     assert.deepEqual([contentTransform._anchorPoint.x, contentTransform._anchorPoint.y], [0.5, 1]);
     // 🔴 组件把 `content.position` **直接当滚动偏移**（`scrollToTop()` 会把它写成 0）⇒
     // content 的原点必须落在视窗上边缘，只能靠「视窗锚点 (0.5,1) + content lpos (0,0)」实现。
-    // 靠 lpos 顶边距那套会被 `scrollToTop()` 抹掉 → 整条列表下移半个视口高、只剩第一行可见（截图逮到过）。
     const scrollTransform = componentOf(scroll, 'cc.UITransform')!;
     assert.deepEqual([scrollTransform._anchorPoint.x, scrollTransform._anchorPoint.y], [0.5, 1], '视窗锚点必须 (0.5,1)');
     assert.deepEqual(positionOf(content), [0, 0], 'content 的 lpos 必须 (0,0)（原点 = 视窗上边缘）');
     assert.deepEqual(positionOf(scroll), [DESIGN.rewardScroll.x, DESIGN.rewardScroll.y], '锚点改了，但视觉盒子不许动');
 
-    // ★ content 下**不许留静态槽位**：PREFAB 模式下 `start()` 会 `removeAllChildren()` 清空 content，
-    //   留着既是垃圾、又会被误当成"模板"（旧版 GoodsBox 槽位就是这么混进来的）。
     assert.deepEqual(childrenOf(content), [], 'content 下不许有静态槽位（公共件是唯一来源）');
     assert.equal(nodeNamed('Slot', 'content'), undefined, '旧的 GoodsBox 静态槽位必须删干净');
 });
 
 test('虚拟列表落位公式与设计稿一致（列距 111 / 行距 114）', () => {
-    // ⚠️ 格子 96（公共件），**间距按设计稿反推** ⇒ 列距/行距仍是 111 / 114。
-    //    绝对坐标随格高变（首行中心 = −(header 20 + 格高一半 48) = −68）；
-    //    设计稿量的 −70 是 100 格时的值，差 2px 来自格高，不是排版错。
     assert.equal(slotX(1) - slotX(0), VGRID.cell + VGRID.gridSpacing, '列距 111 = 格宽 96 + 列距 15');
     assert.equal(slotY(1) - slotY(0), -(VGRID.cell + VGRID.spacing), '行距 114 = 格高 96 + 行距 18');
-    // 设计稿量到 −223.5 / −112.5 / −1.5 / 109.5 / 220.5（居中留白 38 : 41）
-    // ⇒ 组件按整行居中算出来是 ±222，整体比稿右 1.5px。1.5px 肉眼不可见，认这个差。
     assert.deepEqual([slotX(0), slotX(2), slotX(4)], [-222, 0, 222]);
-    // 行心：首行 −68（格高 96 的一半 48 + header 20），行距仍是 114
     assert.deepEqual([slotY(0), slotY(1), slotY(2), slotY(3)], [-68, -182, -296, -410]);
 });
 
 test('奖励格用公共 RewardItem（不自带 GoodsBox / 静态槽位）', () => {
-    // ★ 结算页**不再自带**奖励格实现：格子来自公共 `ui/common/RewardItem.prefab`，
-    //   由 `RewardItemView` 自己解析图标 / 品质框 / 数量（与宝箱详情、关卡界面、玩家关卡弹窗同源）。
     const goodsCid = cidOf(goodsMeta.uuid);
     assert.equal(
         objects.filter((o) => o.__type__ === goodsCid).length, 0,
         '结算页 prefab 里不许再挂 GoodsBox（奖励格统一走公共 RewardItem）',
     );
-    // 公共件本体自带三件套 + 概率标签（挂 RewardItemView）
     const rewardItem = JSON.parse(readFileSync(assetPath('ui/common/RewardItem.prefab'), 'utf8')) as any[];
     const rewardItemView = rewardItem.find((o) => o.__type__ === cidOf(rewardItemViewMeta.uuid));
     assert.ok(rewardItemView, '公共 RewardItem 必须挂 RewardItemView');
     for (const prop of ['frame', 'icon', 'num', 'rate']) {
         assert.ok(rewardItemView[prop]?.__id__ !== undefined, `公共 RewardItem 的 ${prop} 未绑定`);
     }
-    // 页面侧：只喂 {resId, amount}，格子自己解析
     assert.match(pageSource, /import \{ RewardItemView, type IRewardItemData \} from '\.\.\/\.\.\/common\/RewardItemView'/);
     assert.match(pageSource, /node\.getComponent\(RewardItemView\)\.render\(this\.rewards\[index\]\)/);
     assert.doesNotMatch(pageSource, /GoodsBox/, '结算页不再使用 GoodsBox');
-    // 数量文案由公共件自己算（`amount` 数字），页面不自己拼字符串
     assert.doesNotMatch(pageSource, /itemNumberTextOf/);
 });
 
 test('品质框/图标是运行时换图 ⇒ prefab 里出厂留空（不能是 `{}` 空对象）', () => {
     // `{}` 空对象既不是 `null` 也不是 `SpriteFrame` ⇒ 引擎 `Sprite._calculateUV` 读 `uv[0]` 抛错
     assert.doesNotMatch(prefabText, /"_spriteFrame":\s*\{\s*\}/);
-});
-
-test('变强途径三个入口：图标 / 文字 / 底板三件套**同心**（宽度不同，不能按左边界摆）', () => {
-    // 设计稿量到图标中心 189 / 358 / 530（间距 169 / 172 —— 不是三等分，别自作主张改匀）；
-    // 稿里 `text_bg` 中心 186 / 357.9 / 530，与图标中心差 ≤3px（手工摆放误差）⇒ 统一取图标中心。
-    // `Grow` 容器中心在设计稿是 362.5 ⇒ 三个入口相对它的偏移如下（就是 189/358/530 减 362.5）。
-    const OFFSETS = [-173.5, -4.5, 167.5];
-    const names = ['Entry0', 'Entry1', 'Entry2'];
-    /** `Grow` 容器中心（设计**绝对**坐标 362.5）—— 入口的 lpos 就是相对它的偏移。 */
-    const growCenterX = DESIGN.grow.x + DESIGN.grow.w / 2;
-    for (const [index, name] of names.entries()) {
-        const entry = nodeNamed(name, 'Grow')!;
-        assert.ok(entry, `${name} 不存在`);
-        assert.deepEqual(sizeOf(entry), [80, 80], `${name} 图标 80×80`);
-        assert.equal(positionOf(entry)[0], OFFSETS[index], `${name} 的图标中心位（相对 Grow 容器）`);
-        // 🔴 入口节点锚点是 0.5 ⇒ 与它同心的子节点 `_lpos.x` 必须恰好 0。
-        // 三者宽度不同（图标 80 / 文字 100 / 底板 110），任何一处按左边界摆都会偏 10~15px，
-        // 视觉上就是「图标相对黑底没居中」（2026-10-14 山猫指出的问题）。
-        for (const child of ['Bg', 'Label']) {
-            const node = nodeNamed(child, name)!;
-            assert.ok(node, `${name}/${child} 不存在`);
-            assert.equal(positionOf(node)[0], 0, `${name}/${child} 必须与图标同心`);
-        }
-        assert.deepEqual(sizeOf(nodeNamed('Bg', name)!), [110, 21], `${name} 的文字底板 110×21`);
-    }
-    // 图标中心之间的间距照稿（169 / 172），不是三等分
-    const centers = names.map((name) => growCenterX + positionOf(nodeNamed(name, 'Grow')!)[0]);
-    assert.deepEqual(centers, [189, 358, 530]);
-    assert.deepEqual([centers[1] - centers[0], centers[2] - centers[1]], [169, 172]);
+    // MVP 立绘位是骨骼宿主，不放任何静态 SpriteFrame（模型由 `ZCSettlementMvpActor` 运行时挂）
+    assert.equal(componentOf(nodeNamed('MvpActor', 'MvpBlock')!, 'cc.Sprite'), undefined);
 });
 
 test('切图逐张指到 image/settlement（sizeMode=CUSTOM + trim=false + 深底文案带描边）', () => {
@@ -352,8 +410,9 @@ test('切图逐张指到 image/settlement（sizeMode=CUSTOM + trim=false + 深�
         assert.equal(sprite._sizeMode, 0, `${path} sizeMode 必须 CUSTOM`);
         assert.equal(sprite._isTrimmedMode, false, `${path} 必须关掉裁剪模式`);
     }
+    // 头像框随骨骼立绘下线：立绘位由 MvpActor 运行时挂模型，不引用任何预制方图
     // 右侧那两条装饰线是镜像的（设计稿右侧是形状，用同一张图翻过来）
-    for (const path of ['ZCSettlement/Panel/RewardSection/RewardLineR', 'ZCSettlement/Panel/Grow/GrowLineR']) {
+    for (const path of ['ZCSettlement/Panel/RewardSection/RewardLineR']) {
         assert.deepEqual([findPath(path)!._lscale.x, findPath(path)!._lscale.y], [-1, 1], `${path} 应当镜像`);
     }
     for (const node of nodes) {
@@ -362,15 +421,41 @@ test('切图逐张指到 image/settlement（sizeMode=CUSTOM + trim=false + 深�
         assert.equal(label._enableOutline, true, `${node._name} 文案缺描边（面板是深底）`);
         assert.ok(label._outlineWidth >= 2, `${node._name} 描边宽度`);
     }
-    assert.match(pageSource, /settlement\/JS_title_bg_01/);
-    assert.match(pageSource, /settlement\/JS_title_02/, '失败态标题套图');
+    assert.match(styleSource, /settlement\/JS_title_bg_01/);
+    assert.match(styleSource, /settlement\/JS_title_02/, '失败态标题套图');
 });
 
 test('设计稿的静态文案烘在 prefab 里（运行时没人写它们）', () => {
     const texts = objects.filter((o) => o?.__type__ === 'cc.Label').map((o) => o._string);
-    for (const want of ['通关奖励', '变强途径', '装备升级', '英雄', '符文', '双倍奖励', '确定']) {
+    for (const want of ['通关奖励', '双倍奖励', '确定', '总输出', '总承伤', '查看完整队伍']) {
         assert.ok(texts.includes(want), `静态文案缺失：${want}`);
     }
+});
+
+test('样式 token 与 prefab / 布局组件一致', () => {
+    const level = componentOf(nodeNamed('MvpLevel', 'MvpBlock')!, 'cc.Label');
+    assert.equal(level._fontSize, ZC_SETTLEMENT_STYLE.fonts.mvpLevel.size);
+    assert.equal(level._lineHeight, ZC_SETTLEMENT_STYLE.fonts.mvpLevel.line);
+    for (const name of ['MvpDealtRate', 'MvpTakenRate']) {
+        const rate = componentOf(nodeNamed(name, 'MvpBlock')!, 'cc.Label');
+        assert.equal(rate._fontSize, ZC_SETTLEMENT_STYLE.fonts.mvpStatRate.size, `${name} 字号`);
+        assert.equal(rate._lineHeight, ZC_SETTLEMENT_STYLE.fonts.mvpStatRate.line, `${name} 行高`);
+    }
+    for (const [name, parent] of [['MvpDealtValue', 'MvpDealtBar'], ['MvpTakenValue', 'MvpTakenBar']] as const) {
+        const value = componentOf(nodeNamed(name, parent)!, 'cc.Label');
+        assert.equal(value._fontSize, ZC_SETTLEMENT_STYLE.fonts.mvpStatValue.size, `${name} 字号`);
+        assert.equal(value._lineHeight, ZC_SETTLEMENT_STYLE.fonts.mvpStatValue.line, `${name} 行高`);
+    }
+    const team = componentOf(nodeNamed('TeamLabel', 'TeamButton')!, 'cc.Label');
+    assert.equal(team._isBold, true, '队伍链接按设计稿加粗');
+    assert.equal(team._outlineWidth, 4, '队伍链接描边');
+
+    const layout = objects.find((o) => o.__type__ === cidOf(layoutMeta.uuid));
+    assert.ok(layout, 'prefab 根节点应挂 ZCSettlementLayout');
+    assert.equal(objects[layout.rankRow.__id__]._name, 'RankRow');
+    assert.equal(objects[layout.rewardSection.__id__]._name, 'RewardSection');
+    assert.equal(layout.rankRewardGap, ZC_SETTLEMENT_STYLE.layout.rankRewardGap);
+    assert.match(pageSource, /this\.layout\?\.apply\(hasRank\)/, '段位行显隐后由布局组件补位');
 });
 
 test('prefabInfo / fileId / layer 形态正确', () => {
@@ -385,20 +470,30 @@ test('prefabInfo / fileId / layer 形态正确', () => {
     const fileIds = objects.filter((o) => typeof o?.fileId === 'string').map((o) => o.fileId);
     for (const id of fileIds) assert.equal(id.length, 22);
     assert.equal(new Set(fileIds).size, fileIds.length);
-    // 每个真对象都要有 __type__（少了它 JSON 会丢键，落盘成没类型的孤儿组件）
     for (const [index, object] of objects.entries()) {
         const keys = Object.keys(object).filter((k) => k !== '__id__');
         if (keys.length > 0) assert.equal(typeof object.__type__, 'string', `#${index} 缺 __type__`);
     }
 });
 
-test('脚本 16 个 @property 全部绑到正确类型的对象', () => {
+test('脚本 23 个 @property 全部绑到正确类型的对象', () => {
     const cid = cidOf(pageMeta.uuid);
     const script = objects.find((o) => o.__type__ === cid);
     assert.ok(script, `prefab 里应当挂 ${cid}（ZCSettlementPage）`);
     const expected: Record<string, string> = {
         titlePlate: 'cc.Sprite',
         titleText: 'cc.Sprite',
+        mvpGroup: 'cc.Node',
+        mvpActor: 'cc.Node',
+        mvpLevel: 'cc.Label',
+        mvpName: 'cc.Label',
+        mvpDealtRate: 'cc.Label',
+        mvpDealtValue: 'cc.Label',
+        mvpDealtFill: 'cc.Sprite',
+        mvpTakenRate: 'cc.Label',
+        mvpTakenValue: 'cc.Label',
+        mvpTakenFill: 'cc.Sprite',
+        teamButton: 'cc.Button',
         rankRow: 'cc.Node',
         rankIcon: 'cc.Sprite',
         rankName: 'cc.Label',
@@ -408,29 +503,24 @@ test('脚本 16 个 @property 全部绑到正确类型的对象', () => {
         rankHint: 'cc.Label',
         rewardList: VSCROLL_CID,
         doubleButton: 'cc.Button',
-        // 变强途径**整组**容器（2026-10-15 加）：收的是它而不是三个入口 ——
-        // 只收入口会剩一个空标题框。收紧到 Grow 本身，见页面逻辑那条用例。
-        growGroup: 'cc.Node',
         confirmButton: 'cc.Button',
-        entryEquip: 'cc.Button',
-        entryHero: 'cc.Button',
-        entryRune: 'cc.Button',
     };
-    assert.equal(Object.keys(expected).length, 16, '属性数量变了要同步这张表（漏一个 = 有属性没人绑）');
+    assert.equal(Object.keys(expected).length, 23, '属性数量变了要同步这张表（漏一个 = 有属性没人绑）');
     for (const [prop, type] of Object.entries(expected)) {
         assert.ok(script[prop]?.__id__ !== undefined, `${prop} 未绑定`);
         assert.equal(objects[script[prop].__id__].__type__, type, `${prop} 应指向 ${type}`);
     }
-    // `growGroup` 必须真的是 `Panel/Grow`（绑成 Panel 会把整个面板收起 = 页面全空）
-    assert.equal(nodeNamed('Grow', 'Panel')!._id, objects[script.growGroup.__id__]._id);
-    // 🔴 prefab 上就把 `closeOnBlank` 烘成 false（2026-10-15）：结算页一关，
-    // `openSettlement` 置死的 `settlementOpened` 就让它再也弹不出来 ⇒ 关页 = 卡死。
-    // 调用方 `open({ closeOnBlank: false })` 只是同向的第二层保险。
+    // MVP 整组必须真的是 `Panel/MvpBlock`（绑成 Panel 会把整个面板收起 = 页面全空）
+    assert.equal(nodeNamed('MvpBlock', 'Panel')!._id, objects[script.mvpGroup.__id__]._id);
+    // 旧「变强途径」四个属性与事件一并下线
+    for (const prop of ['growGroup', 'entryEquip', 'entryHero', 'entryRune']) {
+        assert.equal(script[prop], undefined, `${prop} 应当已删除`);
+    }
+    // 🔴 prefab 上就把 `closeOnBlank` 烘成 false：结算页一关，`openSettlement` 置死的
+    // `settlementOpened` 就让它再也弹不出来 ⇒ 关页 = 卡死。
     assert.equal(script.closeOnBlank, false, 'prefab 上不许把空白关闭开着');
-    // 旧的两个奖励属性随虚拟列表下线（数组属性 MCP 改不了、静态槽位也不再需要）
     assert.equal(script.rewardSlots, undefined, 'rewardSlots 数组属性应当已删除');
     assert.equal(script.rewardContent, undefined, 'rewardContent 应当已删除');
-    // 遮罩随「白块 Sprite」方案下线（纯 prefab 件，代码不碰）
     assert.equal(script.dim, undefined, 'dim 属性应当已删除');
     // 段位行整组收起的口径：`rankRow` 是容器节点，段位元素全在它下面
     const rankRowId = script.rankRow.__id__;
@@ -442,6 +532,17 @@ test('脚本 16 个 @property 全部绑到正确类型的对象', () => {
         while (parent) { chain.push(parent._name); if (parent.__id__ === rankRowId) break; parent = parent._parent ? objects[parent._parent.__id__] : null; }
         assert.ok(chain.length > 1, `${prop} 应当挂在 RankRow 下（实测链：${chain.join('<')}）`);
     }
+    // MVP 的 11 个引用都挂在 MvpBlock 下（整组收起时一起消失）
+    const blockId = script.mvpGroup.__id__;
+    for (const prop of ['mvpActor', 'mvpLevel', 'mvpName', 'mvpDealtRate', 'mvpDealtValue',
+        'mvpDealtFill', 'mvpTakenRate', 'mvpTakenValue', 'mvpTakenFill', 'teamButton']) {
+        let node = objects[script[prop].__id__];
+        node = node.__type__ === 'cc.Node' ? node : objects[node.node.__id__];
+        let parent = objects[node._parent.__id__];
+        const chain: string[] = [];
+        while (parent) { chain.push(parent._name); if (parent.__id__ === blockId) break; parent = parent._parent ? objects[parent._parent.__id__] : null; }
+        assert.ok(chain.length > 0, `${prop} 应当挂在 MvpBlock 下（实测链：${chain.join('<')}）`);
+    }
 });
 
 test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / 两态标题有代号防串', () => {
@@ -449,17 +550,13 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     // 段位：没数据整组收起（别留一行空框）
     assert.match(code, /this\.rankRow\.active = hasRank/);
     // 奖励：**只喂条数**，格内容在 renderItemFn 里按下标现取
-    // 赋**具名方法 + `.bind(this)`**（规范 §7.5 配套第 3 条）：`VScrollView` 是 `this.renderItemFn(node, i)`
-    // 的方法调用语法，不绑的话 `this` 会是 VScrollView、`this.rewards` 读成 undefined。
     assert.match(code, /this\.rewardList\.renderItemFn = this\.renderReward\.bind\(this\)/,
         '回调只在 onInit 接一次（槽位复用，重复接会越滚越多）');
     assert.match(code, /this\.rewards = rewards/);
     assert.match(code, /this\.rewardList\.setTotalCount\(rewards\.length\)/);
-    // 按下标现取本趟数据（★ 公共奖励格：只喂 resId+amount，图标/品质框/数量由格子自己解析）
     assert.match(code, /node\.getComponent\(RewardItemView\)\.render\(this\.rewards\[index\]\)/,
         '按下标现取本趟数据');
     assert.match(code, /this\.rewardList\.scrollToTop\(false\)/);
-    // ⚠️ 禁闭包捕获「本趟」的数组：`renderItemFn` 只在首次铺列表时绑一次，捕获了下一局还是旧数据
     assert.doesNotMatch(code, /renderItemFn = \(node, index\) => \{[^}]*rewards\[/,
         'renderItemFn 只准读 this.rewards，不许闭包捕获入参 rewards');
     // 两态标题：异步加载 + 代号防串（换态 / 关窗后到达的结果要丢掉）
@@ -468,55 +565,68 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     // 遮罩是纯 prefab 件：代码里既不该画它、也不该读它的尺寸
     assert.doesNotMatch(code, /this\.dim/, '代码不该再持有 dim');
     assert.doesNotMatch(code, /\.rect\(/, '遮罩不许用 Graphics 画矩形');
-    // 按钮只在 onInit 绑一次
     assert.match(code, /protected onInit\(\)/);
     assert.match(code, /Button\.EventType\.CLICK/);
 });
 
-test('🔴 确定按钮：派发 Confirm 事件、不退化成 close、且防重复提交（2026-10-16 事件化）', () => {
+test('MVP 卡片：整组按数据显隐，两条进度按模型口径，骨骼模型异步挂且带代号防串', () => {
     const code = stripComments(pageSource);
-    // ① 确定**只派发意图事件**：页面不认识「回主界面 / 换流程」，那是控制器的事
-    //   （旧口径是 `userData.onConfirm` 必填回调 + 拿不到就告警的兜底分支，已删）。
+    assert.match(code, /private renderMvp\(mvp: IZCSettlementMvp \| null\)/);
+    // 没数据 ⇒ 整组收起 + 清掉上一局的模型（别留别人的兵）
+    assert.match(code, /this\.mvpGroup\.active = Boolean\(mvp\)/);
+    assert.match(code, /this\.mvpPreview\?\.clear\(\)/);
+    // 文案与进度**只用模型给的**，页面不自己算百分比 / 缩写
+    for (const field of ['levelText', 'name', 'dealtRateText', 'dealtText', 'takenRateText', 'takenText']) {
+        assert.match(code, new RegExp(`mvp\\.${field}`), `MVP 的 ${field} 应当由模型提供`);
+    }
+    assert.match(code, /this\.mvpDealtFill\.fillRange = mvp\.dealtRate/);
+    assert.match(code, /this\.mvpTakenFill\.fillRange = mvp\.takenRate/);
+    assert.doesNotMatch(code, /Math\.round\(\s*mvp|mvp\.damage|mvp\.damageTaken/, '页面不许回算伤害');
+    // 等级只有服务端英雄数据才有 ⇒ 空串时收起，而不是留一个「Lv.」空标签
+    assert.match(code, /this\.mvpLevel\.node\.active = Boolean\(mvp\.levelText\)/);
+    // 骨骼：prefabPath → 对局同一份兵种 prefab → MvpActor 播 idle；迟到的结果按代号 + scope 丢弃
+    assert.match(code, /this\.mvpActor\.active = Boolean\(mvp\.prefabPath\)/);
+    assert.match(code, /this\.assets\.load\(mvp\.prefabPath, Prefab, \{/);
+    assert.match(code, /bundle: bundleForPath\(mvp\.prefabPath\)/);
+    assert.match(code, /private mvpRevision = 0/);
+    assert.match(code, /revision !== this\.mvpRevision/);
+    assert.match(code, /scope\.disposed/, '资源作用域销毁后不许再挂模型');
+    assert.match(code, /void this\.applyMvpActor\(mvp, revision\)/);
+    assert.match(code, /new ZCSettlementMvpActor\(this\.mvpActor\)/);
+    assert.doesNotMatch(code, /HeadArt|createIconLoader|touxiang_03/, '旧的头像方案必须删干净');
+});
+
+test('🔴 确定按钮：派发 Confirm 事件、不退化成 close、且防重复提交', () => {
+    const code = stripComments(pageSource);
     assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementConfirm\);/, '确定必须派发 ZCGameUiEvent.SettlementConfirm');
-    // 总线**不再从 userData 传**：监听由事件中控（`EventMgr.instance`）统一管理。
     assert.doesNotMatch(code, /userData\.events/, '不再往 userData 塞总线');
     assert.doesNotMatch(code, /EventBus/, '页面不该持有总线实例');
     assert.doesNotMatch(code, /onConfirm\b/, '页面不该再持有收尾回调 —— 意图一律走事件');
-    // ② 绝不能退化成 close()：页面一关，`openSettlement` 置死的 `settlementOpened`
-    //    就让它再也弹不出结算页 ⇒ 卡死。
     assert.doesNotMatch(code, /this\.close\(/, '确定不许退化成只 close()');
-    // ③ 防重复提交（§7.2）：连点两下只派发一次（收尾多半是切流程，重复发等于 navigate 两次）。
     assert.match(code, /private confirming = false/);
     assert.match(code, /if \(this\.confirming\) return;/);
     assert.match(code, /this\.confirming = true;/);
-    assert.match(code, /this\.confirming = false;\s*this\.renderRank/, '每次 onOpen 必须复位，否则第二局点不动');
-    // ④ 页面自己兜住「空白关闭」，不靠调用方记得传 closeOnBlank:false
+    assert.match(code, /this\.confirming = false;\s*this\.renderMvp/, '每次 onOpen 必须复位，否则第二局点不动');
     assert.match(code, /protected canCloseOnBlank\(\): boolean \{\s*return false;\s*\}/,
         '结算页必须覆写 canCloseOnBlank 返回 false');
 });
 
-test('双倍奖励常显；变强途径战败展示，胜利按接线状态整组显隐', () => {
+test('双倍奖励常显按接线置灰；「查看完整队伍」走结算自己的事件', () => {
     const code = stripComments(pageSource);
-    // 双倍奖励在设计稿里是奖励区中间那一段（两侧 `RewardLineL/R` 接过去）⇒ **常显**：
-    // 藏掉会中间断一截、左右不对称。但没接线只能「看得到、点不动」（`interactable = false`），
-    // 不做点了没反应的假交互。
     assert.match(code, /private renderEntryGroups\(data: IZCSettlementOptions\)/);
     assert.match(code, /this\.doubleButton\.node\.active = true;/, '双倍奖励按钮必须常显');
     assert.match(code, /this\.doubleButton\.interactable = Boolean\(data\.hasDoubleReward\)/,
         '★没接线 ⇒ 不可点（展示位，不是假交互）');
-    // ⚠️ 收的是 `Panel/Grow` **整组**（底板 + 标题 + 三个入口）而不是三个入口 ——
-    // 只收入口会剩一个空标题框，比死按钮更奇怪。
-    assert.match(code, /this\.growGroup\.active = !data\.victory \|\| Boolean\(data\.hasGrowEntry\)/);
-    assert.doesNotMatch(code, /entryEquip\.node\.active|entryHero\.node\.active|entryRune\.node\.active/,
-        '三个入口不许各自显隐（会剩空标题框）');
     assert.match(code, /this\.renderEntryGroups\(userData\);/, 'onOpen 必须调它，否则 prefab 的默认 active 会一直露着');
-    // 监听仍是「onInit 绑一次 + 具名方法 + this 作 target」（范本 GameRunAway）：
-    // 箭头闭包在调用栈里没有名字，将来要 off 也没有稳定函数引用可传。
+    // 「查看完整队伍」：结算期运行期入口已被 isSettled 拦掉 ⇒ 必须派结算自己的事件
+    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementViewTeam\)/);
+    assert.doesNotMatch(code, /ZCGameUiEvent\.OpenDamageStats/, '页面不许直接借运行期入口（结算期它会 return');
+    assert.match(code, /teamButton\.node\.on\(Button\.EventType\.CLICK, this\.onViewTeamClicked, this\)/);
     assert.match(code, /confirmButton\.node\.on\(Button\.EventType\.CLICK, this\.onConfirmClicked, this\)/);
     assert.doesNotMatch(code, /Button\.EventType\.CLICK, \(\) =>/, '按钮监听不许再用箭头闭包');
 });
 
-test('变强途径：战败始终显示，胜败切换全量刷新，胜利保留原有显隐', () => {
+test('双倍按钮的显隐 / 置灰全量刷新（战败胜利同一口径）', () => {
     const exports: Record<string, any> = {};
     runInNewContext(ts.transpileModule(pageSource, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
@@ -530,30 +640,22 @@ test('变强途径：战败始终显示，胜败切换全量刷新，胜利保�
     });
     const page = new exports.ZCSettlementPage();
     page.doubleButton = { node: { active: false }, interactable: true };
-    page.growGroup = { active: false };
     for (const victory of [false, true, false, true]) {
-        for (const hasGrowEntry of [undefined, false, true]) {
-            page.renderEntryGroups({ victory, hasGrowEntry });
-            assert.equal(page.growGroup.active, victory ? hasGrowEntry === true : true,
-                `victory=${victory}, hasGrowEntry=${hasGrowEntry}`);
+        for (const hasDoubleReward of [undefined, false, true]) {
+            page.renderEntryGroups({ victory, hasDoubleReward });
             assert.equal(page.doubleButton.node.active, true);
-            assert.equal(page.doubleButton.interactable, false);
+            assert.equal(page.doubleButton.interactable, hasDoubleReward === true, `victory=${victory}`);
         }
     }
 });
 
-test('四个按钮只 emit 意图事件，页面不持有任何回调（视图不认识流程）', () => {
+test('三个按钮只 emit 意图事件，页面不持有任何回调（视图不认识流程）', () => {
     const code = stripComments(pageSource);
-    // 「确定」之外，双倍奖励与变强三入口也统一走事件中控（2026-10-27；此前它们还是回调）。
     assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementDoubleReward\)/);
-    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementGrowEntry, entry\)/,
-        '三个入口共用一条事件，点哪个由 payload 区分');
-    for (const entry of ['equip', 'hero', 'rune']) {
-        assert.match(code, new RegExp(`emitGrowEntry\\('${entry}'\\)`), `${entry} 入口必须走 payload`);
-    }
-    // 页面侧不许再出现 userData 回调：`options?.onXxx?.(...)` 就是「漏传一个 = 点了没反应且零报错」。
+    assert.match(code, /EventMgr\.instance\.emit\(ZCGameUiEvent\.SettlementViewTeam\)/);
+    assert.doesNotMatch(code, /SettlementGrowEntry|emitGrowEntry/, '变强途径入口已随新稿下线');
     assert.doesNotMatch(code, /this\.options\?\.on/, '页面不许持有回调');
-    assert.doesNotMatch(code, /onDoubleReward\?:|onGrowEntry\?:/, 'userData 只留 has* 门闩，不留回调字段');
+    assert.doesNotMatch(code, /onDoubleReward\?:|onTeam\?:|onGrowEntry\?:/, 'userData 只留数据字段，不留回调字段');
     assert.doesNotMatch(code, /private options: IZCSettlementOptions/, '留一份 userData 没意义 —— 意图全派发出去了');
 });
 
@@ -566,6 +668,12 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.match(runtime, /localVictory: !retreated && model\.snapshot\.status === 'victory'/);
     assert.match(runtime, /this\.listen\(ZCGameUiEvent\.SettlementConfirm, this\.onSettlementConfirm\)/);
     assert.match(runtime, /this\.settlement\.confirm\(\)/);
+    // 「查看完整队伍」的数据在结算开始时就冻结进请求（结算期不回读模型）
+    assert.match(runtime, /mvp: this\.settlementMvp\(\)/);
+    assert.match(runtime, /players: this\.damagePlayers\(\)/);
+    assert.match(settlement, /this\.listen\(ZCGameUiEvent\.SettlementViewTeam, this\.onViewTeam\)/);
+    assert.match(settlement, /this\.services\.popup\.openDamage\(this\.players\)/);
+    assert.match(settlement, /mvp: request\.mvp \?\? null/);
     const close = settlement.indexOf("popup?.close('manual');");
     assert.ok(close >= 0 && close < settlement.indexOf('emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN'));
     assert.doesNotMatch(stripComments(gameSource), /ZCSettlementPage|finishBattle|ProcedureManager|settlementPopup/);

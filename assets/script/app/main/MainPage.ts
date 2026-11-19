@@ -49,6 +49,8 @@ import {
 import { resolveQuickFindGate } from './QuickFindGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
+import { playMainHudIntro } from './MainHudIntro';
+import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../framework/ui/ViewLifecycle';
 
 import { OPEN_TABLE } from '../../core/config/TableNames';
 const { ccclass, property } = _decorator;
@@ -221,6 +223,10 @@ export class MainPage extends Component {
         // 需求 2026-11-03：点地图上的章节建筑 / 它的「章节」气泡 ⇒ 打开章节选择弹窗。
         EventMgr.instance.on(TerritoryUiEvent.ChapterSelect, this.onOpenChapterSelect, this);
         EventMgr.instance.on(TerritoryViewEvent.Render, this.onTerritoryRender, this);
+        // 地图首帧就绪 ⇒ 播「各模块平滑进入」（需求 2026-11-18 ③）。
+        // 用 `presented` 而不是 `onLoad`：登录首屏时本页是在登录图底下预挂载的，
+        // 切 tab 回来时地图数据也还没到 —— 两个时刻起播都会被遮挡 / 只看到半截。
+        EventMgr.instance.on(VIEW_LIFECYCLE, this.onViewLifecycle, this);
         this.chestToggle.on(Button.EventType.CLICK, this.onToggleChestPanel, this);
         // 宝箱栏意图：语义见 `ChestEvents.ts`，页面只订阅、退出时统一 offTarget(this)
         EventMgr.instance.on(CHEST_EVENTS.SLOT_ACTION, this.onChestAction, this);
@@ -256,6 +262,9 @@ export class MainPage extends Component {
         // 队列照拉：`open.json` 的开启条件是**客户端显示闸**，服务端不看它；
         // 提前把队列焐热，20001 一过 icon 长出来就有数据，不用再等一次往返。
         void this.loadTreasureQueue();
+        // 没有地图宿主的宿主（测试桩 / 预览）不会有人发 `presented`，这里补一次入场。
+        // ⚠️ 不要用 `scheduleOnce`：本方法在纯逻辑夹具里也会被调用，那里没有调度能力。
+        if (!this.hasTerritoryMap) playMainHudIntro(this.node);
     }
 
     onEnable(): void {
@@ -717,6 +726,18 @@ export class MainPage extends Component {
             return;
         }
         EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'focusLevel' } });
+    }
+
+    /**
+     * 页面生命周期：只接「章节地图首帧就绪」这一条。
+     *
+     * `presented` 由 `MainTerritoryMap` 首次成功渲染时发一次（每挂一次页面发一次），
+     * 正是玩家真正看见这一页的时刻；其余 phase、以及其它宿主（`MainTabHost` 等）都忽略。
+     */
+    private onViewLifecycle(event: IViewLifecycle): void {
+        if (event.phase !== 'presented') return;
+        if (!this.territoryMap || event.owner !== this.territoryMap) return;
+        playMainHudIntro(this.node);
     }
 
     private onTerritoryRender(event: ITerritoryRenderEvent): void {

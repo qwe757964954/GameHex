@@ -138,8 +138,14 @@ export class ZCStatusResolutionSystem {
 
     static healUnit(target: ZCUnitState, amount: number, context: IZCStatusResolutionContext): void {
         if (target.battleState === 'dead' || !(amount > 0)) return;
+        //  治疗削弱（2026-11-18 第 17 批，101803 毒液喷吐 III 级「中毒期间受到的治疗降低 50%」）：
+        //  读**被治疗者**身上的 `healTakenRate`（-50 ⇒ ×0.5）。缺省 0 时整段不执行，
+        //  与改前逐字一致；减到负数（治疗反转）一律按 0 处理，不会变成掉血。
+        const rate = context.statusSystem.statModsOf(String(target.id)).healTakenRate ?? 0;
+        const effective = rate === 0 ? amount : amount * Math.max(0, 1 + rate / 100);
+        if (!(effective > 0)) return;
         const before = target.hp;
-        target.hp = Math.min(target.maxHp, target.hp + amount);
+        target.hp = Math.min(target.maxHp, target.hp + effective);
         const applied = target.hp - before;
         if (applied > 0) context.presentHeal(target, applied);
     }

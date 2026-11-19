@@ -41,6 +41,13 @@ const MAX_QUEUE = 32;
 export class Toast extends PopupBase {
     static prefabPath = 'ui/common/Toast';
 
+    /**
+     * 吐司是「瞬时提示」不是界面：开合各带一段淡入淡出会和它 1.6s 的存活时间抢拍，
+     * 连着弹两条时还会看到前一条正在淡出、后一条在淡入。全局统一过渡（2026-11-18）
+     * 对它关掉，保持原来「说出现就出现、到点直接收」的观感。
+     */
+    motionEnabled = false;
+
     /** 待播放文案（跨实例共享）。 */
     private static queue: string[] = [];
     /** 正在消费队列的实例；非空时不再开新实例。 */

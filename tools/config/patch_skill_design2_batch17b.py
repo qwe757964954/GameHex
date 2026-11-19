@@ -140,6 +140,20 @@ P_103103 = (
     '不是一件事 ⇒ S 列已从「已实现」改回【未实现】，等 summon_unit 落地时把这条参数整体换掉'
 )
 
+# ────────────────────────────────────────── 六、101803 毒液喷吐（诅咒菇 68018）· 已落地回填
+#  设计 J 列是「待定」⇒ 触发用冷却 12；设计没给半径 ⇒ 取同卡菌核爆裂的 150。
+#  两处都写进 P 列标「待确认」，不偷偷当既定值。
+P_101803 = (
+    'skill 域 behaviorKey=burst_aura + **venom 前缀**（同卡 101804 菌核爆裂已占用 burst 前缀，'
+    '一卡一袋会互相覆盖）⇒ venomCooldown=12、venomDamageRate=1.0/1.3/1.8、venomRadius=150；'
+    '中毒走 pvpStatus 三行 poison_venom_l1~l3（handler=periodic_damage、intervalSeconds=1、'
+    'periodicAmountPct=20/25/35、duration=4/5/6、basis=senderAttack）；'
+    'III 级「治疗降低 50%」= 该状态 statJson {"healTakenRate":-50}，由 '
+    '`ZCStatusResolutionSystem.healUnit` 乘算。CD 单独记 `unit.venomReadyAt`。'
+    '⚠ 待确认：J 列原写「待定」⇒ 冷却取 12（菌核爆裂 14 / 菌毯爆发 16 之间）；'
+    '设计未给半径 ⇒ 取 150（与同卡菌核爆裂一致）'
+)
+
 ROWS = {
     71: {'K': TIERS_101404[0], 'L': TIERS_101404[1], 'M': TIERS_101404[2], 'P': P_101404},
     86: {'K': TIERS_101704[0], 'L': TIERS_101704[1], 'M': TIERS_101704[2], 'P': P_101704},
@@ -147,6 +161,7 @@ ROWS = {
          'S': '已实现'},
     136: {'K': TIERS_102704[0], 'L': TIERS_102704[1], 'M': TIERS_102704[2], 'P': P_102704,
           'S': '已实现'},
+    90: {'P': P_101803, 'S': '已实现'},
     155: {'K': K_103103, 'L': L_103103, 'M': M_103103, 'N': N_103103, 'O': O_103103,
           'P': P_103103, 'S': '【未实现】'},
 }

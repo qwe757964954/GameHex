@@ -171,6 +171,7 @@ export function loadViews() {
         _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {}, disallowMultiple: (value: unknown) => value },
         Color, Component: class { node = new FakeNode(); }, Animation: class {}, sp: { Skeleton: class {} }, Graphics, ProgressBar: class {},
         Sprite: class { static SizeMode = { CUSTOM: 0, TRIMMED: 1, RAW: 2 }; static Type = { SLICED: 0, TILED: 1, FILLED: 2, SIMPLE: 3 }; },
+        Button: class { static EventType = { CLICK: 'click' }; },
         SpriteFrame: class {}, Label: class {}, Material, Prefab: class {}, Node: FakeNode, Vec4, Vec2,
         /**
          * 与引擎同义：`UIRenderer` 类组件（Graphics / Sprite）都强制带一份 `UITransform`，
@@ -271,6 +272,9 @@ export function loadViews() {
             './EventBus': 'assets/script/framework/event/EventBus.ts',
             './EventMgr': 'assets/script/framework/event/EventMgr.ts',
             './ZCNeutralBurst': 'assets/script/app/zcds/model/ZCNeutralBurst.ts',
+            // `ZCCombatEffectFlight` 在 model 内引用同层目录，夹具只按 view|ui 查 `./X`。
+            './ZCEffectCatalog': 'assets/script/app/zcds/model/ZCEffectCatalog.ts',
+            './ZCEffectTuning': 'assets/script/app/zcds/model/ZCEffectTuning.ts',
             // P2-6 把 sin 噪声下沉到 core 后，view/model 里的相对路径别名。
             '../math/Scalar': 'assets/script/core/math/Scalar.ts',
         };

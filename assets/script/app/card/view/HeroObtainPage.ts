@@ -75,6 +75,13 @@ type ArtFrames = Partial<Record<keyof typeof HERO_OBTAIN_ARTS, SpriteFrame | nul
 export class HeroObtainPage extends PopupBase {
     static prefabPath = 'ui/heroObtain/HeroObtain';
 
+    /**
+     * 本页自带整套入场编排（底图 / 放射光 / 标题 / 英雄 / 名牌各走各的 `startedAt` 曲线，
+     * 见 `heroObtainBgAlphaOf` 等纯函数）。再叠一层整页淡入会变成「页面先半透明 0.24s，
+     * 里面的东西才逐个出现」，节奏被拉长一倍，所以关掉全局统一过渡。
+     */
+    motionEnabled = false;
+
     @property({ type: Node, tooltip: '缩放舞台（锚点 0.5/1，屏高不足 1610 时整体缩）' })
     stage: Node = null!;
 

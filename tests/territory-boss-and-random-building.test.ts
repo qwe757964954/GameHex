@@ -187,7 +187,7 @@ test('★★bind不到 stage 的关卡只解锁、绝不发通关（防御性兜
     const src = readFileSync(PRESENTER_PATH, 'utf8');
     const unlockOnly = memberOf(src, 'private async handleUnlockOnly');
     assert.ok(unlockOnly.length > 0, 'handleUnlockOnly 要能定位');
-    assert.match(unlockOnly, /gateway\.unlockCell\(/, '只解锁：必须发 unlockCell');
+    assert.match(unlockOnly, /gateway\.sendUnlockCell\(/, '只解锁：必须发 sendUnlockCell');
     assert.ok(!/gateway\.passCell\(/.test(unlockOnly),
         'handleUnlockOnly 里不能有 passCell —— 那是「章节格子非资源类型」被拒的来源');
     assert.ok(!/gateway\.startBattle\(/.test(unlockOnly),

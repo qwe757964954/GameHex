@@ -93,3 +93,29 @@ test('C6 battle/gameui 扩容覆盖伤害统计面板，回退 1024 必须报超
     assert.equal(report.oversizedSingle, false, report.reasons.join('；'));
     assert.equal(atlasReport(meta, { maxWidth: 1024, maxHeight: 1024 }).oversizedSingle, true);
 });
+
+/**
+ * 结算页目录**要求单页装得下**（不是全库规则，只对这类目录成立）。
+ *
+ * 该目录 `removeTextureInBundle` / `removeImageInBundle` / `removeSpriteAtlasInBundle`
+ * 三条全为 true：出包时原图不进包、只留图集，所以一旦分页或装不下，运行期就是
+ * `frame should not be invalid` → `SpriteFrame.getGFXTexture` 空指针（每帧崩）。
+ *
+ * 2026-11-19 实测：r1479 加 MVP 卡六张图后 1,243,300 像素 > 1,048,576（超 18.6%），
+ * 已把全屏底板 `bg_01` 移出该目录（671×811 = 544,181，占 43.8%）→ 剩 699,119。
+ * 再加图前先看这条；大图请移出目录，不要靠扩容 —— 2048² 只为装 0.7M 像素，白占 12MB 显存。
+ */
+const SETTLEMENT_ATLAS = 'assets/bundles/battle/image/settlement/auto-atlas.pac.meta';
+
+test('C7 settlement 图集必须单页装得下：该目录原图不进包，分页即运行期崩', () => {
+    const report = atlasReport(SETTLEMENT_ATLAS);
+    assert.ok(report.files > 0, '目录里一张图都没扫到 ⇒ 扫描路径失效，后面全是假绿');
+    assert.ok(report.pixels <= report.capacity,
+        `像素总量 ${report.pixels} 超出单页容量 ${report.capacity}：大图（全屏底板一类）请移出该目录，`
+        + '不要靠扩容 —— 该目录三条 remove*InBundle 会把原图剔出包，分页就会在 Batcher2D 提交坏帧');
+    assert.equal(report.oversizedSingle, false, report.reasons.join('；'));
+    assert.equal(report.ok, true, report.reasons.join('；'));
+    // 护栏自检（与 C3 同口径）：容量压到 800² 必须立刻判不通过，否则这条是摆设。
+    assert.equal(atlasReport(SETTLEMENT_ATLAS, { maxWidth: 800, maxHeight: 800 }).ok, false,
+        '容量不足时报告必须不通过');
+});

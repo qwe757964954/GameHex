@@ -110,7 +110,7 @@ function createBattlePageProbe(presenter: TerritoryModel) {
     }).outputText, { exports, require: (id: string) => imports[id] ?? {} });
     assert.ok(exports.MainTerritoryMap);
     const page = new exports.MainTerritoryMap();
-    const controller = new TerritoryController(() => presenter, { context: createControllerContext(),
+    const controller = new TerritoryController(presenter, { context: createControllerContext(),
         roleCache: { subscribe: () => () => {} },
         cells: { readCellInfo: () => null, readPassCellsBro: () => null },
         schedule: () => () => {},
@@ -509,21 +509,47 @@ function createFakeGateway(options: {
 } = {}) {
     const calls = { fetch: 0, unlock: 0, unlockedCells: [] as number[],
         pass: 0, passedCells: [] as number[], startBattle: 0,
-        battleTypes: [] as number[], battleParamsList: [] as string[][], clear: 0, claim: 0, sweep: 0 };
-    const gateway: ITerritoryCellGateway = {
+        battleTypes: [] as number[], battleParamsList: [] as string[][], clear: 0, claim: 0, sweep: 0, upgrade: 0 };
+    // 写请求只发不等：`send*` 立刻返回 'ok'，回包用 microtask 模拟事件到达，
+    // `await flush()` 之后才落地 —— 与真实「先进入在途帧、后收回包」的时序一致。
+    let sink: TerritoryModel | null = null;
+    const deliver = <T>(make: () => Promise<T>, apply: (model: TerritoryModel, result: T) => void): void => {
+        const model = sink;
+        if (!model) return;
+        // 请求**同步**发出（旧用例靠这一步抓在途状态），回包按 Promise 微任务到达。
+        const reply = make();
+        void reply.then(result => { if (sink === model) apply(model, result); });
+    };
+    // 旧用例通过改写这几个方法控制回包时序（返回悬着的 Promise）；`send*` 动态取它们。
+    const legacy = {
+        unlockCell: async (_chapterId?: number, _cellId?: number): Promise<TerritoryWriteResult> =>
+            options.unlock ?? { ok: true },
+        passCell: async (_chapterId?: number, _cellId?: number): Promise<TerritoryWriteResult> =>
+            options.pass ?? { ok: true },
+        claimIdleReward: async (): Promise<TerritoryIdleRewardResult> =>
+            options.claim ?? { ok: false, reason: 'offline' },
+        sweep: async (_chapterId?: number, _cellId?: number, _times?: number): Promise<TerritoryWriteResult> =>
+            options.sweep ?? { ok: true },
+        upMonsterBoxLv: async (_chapterId?: number, _cellId?: number): Promise<TerritoryMonsterBoxUpgradeResult> =>
+            ({ ok: true, monsterBox: null }),
+    };
+    const gateway: ITerritoryCellGateway & typeof legacy = {
+        ...legacy,
         fetchChapterCells: async () => {
             calls.fetch++;
             return options.fetch ?? { ok: true, state: emptyCellState(1) };
         },
-        unlockCell: async (_chapterId, cellId) => {
+        sendUnlockCell: (_chapterId, cellId) => {
             calls.unlock++;
             calls.unlockedCells.push(cellId);
-            return options.unlock ?? { ok: true };
+            deliver(() => gateway.unlockCell(_chapterId, cellId), (model, result) => model.applyUnlockRsp(result));
+            return 'ok';
         },
-        passCell: async (_chapterId, cellId) => {
+        sendPassCell: (_chapterId, cellId) => {
             calls.pass++;
             calls.passedCells.push(cellId);
-            return options.pass ?? { ok: true };
+            deliver(() => gateway.passCell(_chapterId, cellId), (model, result) => model.applyPassRsp(result));
+            return 'ok';
         },
         startBattle: async (battleType, battleParams) => {
             calls.startBattle++;
@@ -531,17 +557,24 @@ function createFakeGateway(options: {
             calls.battleParamsList.push([...battleParams]);
             return options.start ?? { ok: true, battle: fakeBattleStart };
         },
-        claimIdleReward: async () => {
+        sendIdleReward: () => {
             calls.claim++;
-            return options.claim ?? { ok: false, reason: 'offline' };
+            deliver(() => gateway.claimIdleReward(), (model, result) => model.applyIdleRewardRsp(result));
+            return 'ok';
         },
-        sweep: async () => {
+        sendSweep: (_chapterId, cellId, times) => {
             calls.sweep++;
-            return options.sweep ?? { ok: true };
+            deliver(() => gateway.sweep(_chapterId, cellId, times), (model, result) => model.applySweepRsp(result));
+            return 'ok';
+        },
+        sendUpMonsterBoxLv: (_chapterId, cellId) => {
+            calls.upgrade++;
+            deliver(() => gateway.upMonsterBoxLv(_chapterId, cellId), (model, result) => model.applyMonsterBoxRsp(result));
+            return 'ok';
         },
         clear: () => { calls.clear++; },
     };
-    return { gateway, calls };
+    return { gateway, calls, bind: (model: TerritoryModel) => { sink = model; } };
 }
 
 const fakeBattleStart: ZCBattleStart = {
@@ -748,7 +781,7 @@ test('an already unlocked stage starts without sending a duplicate unlock', asyn
 
 // 关卡版（原用例测的是「面板上的开始按钮」，那条路已被 2026-10-15 的统一口径取代）：
 // 同一格的解锁还在飞时再点一次 ⇒ 旧的那次作废（`battleRequestId` 校验），只有最后一次记账。
-test('re-clicking a stage while its unlock is in flight cancels the stale attempt', async () => {
+test('one write request at a time: taps on any site are ignored while it is in flight', async () => {
     const pending: Array<(value: TerritoryWriteResult) => void> = [];
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
@@ -764,18 +797,18 @@ test('re-clicking a stage while its unlock is in flight cancels the stale attemp
     // 同一格的解锁还在飞 ⇒ 连点**不再**发第二次（`pendingFixedResourceCells` 挡）。
     h.presenter.selectSite(site);
     assert.equal(pending.length, 1, '★同一格的解锁在飞 ⇒ 连点不重复发请求');
-    // 切到别的站点 ⇒ `cancelBattleRequest()` 递增 ⇒ 那一次回包作废。
-    // ⚠️ 另一格发不发自己的解锁请求，取决于它在不在 `revealed` / 有没有解锁 —— 与本条无关，
-    //    这里只关心 `site` 那一发的命运，所以只把 `pending[0]` 结掉。
-    h.presenter.selectSite(other);
+    // 🔴 2026-11-19 入口单飞：**别的格也不受理**。换格会换交互号，把在途回包判成
+    // 过期丢弃 ⇒ 服务端已经扣费解锁、客户端不记账，格子还锁着，玩家接着点就是又一层
+    // loading（「快速点击转菊花」的根因）。
+    assert.equal(h.presenter.selectSite(other), false, '★写请求在途 ⇒ 别的格一律不受理');
+    assert.equal(pending.length, 1, '不受理 ⇒ 不会发第二条请求');
     pending[0]({ ok: true });
     await flush();
-    assert.equal(h.presenter.state.progress?.isCellUnlocked(site.cellId), false,
-        '★离开这一格之后，旧的解锁回包必须作废 —— 不记账，界面不会「莫名解锁」');
-    assert.equal(h.tips.length, 0, '作废的回包连提示都不给');
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(site.cellId), true,
+        '★请求没被作废 ⇒ 回包必须记账（作废就会「钱扣了格还锁着」）');
 });
 
-test('selecting a different site invalidates an in-flight battle', async () => {
+test('a write request in flight keeps the site that started it; later taps are ignored', async () => {
     let finish!: (value: TerritoryWriteResult) => void;
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 2], passCells: [0] },
@@ -785,12 +818,17 @@ test('selecting a different site invalidates an in-flight battle', async () => {
     h.presenter.start();
     await flush();
     h.presenter.selectSite(h.presenter.state.map!.sites[0]);
+    // 解锁在途（锁着的关卡「解锁即开战」，这条链由起手那一格自己走完）。
     h.presenter.requestBattle();
-    h.presenter.selectSite(h.presenter.state.map!.sites[1]);
+    // 🔴 2026-11-19 入口单飞：在途期间点别的格不受理，交互号不换 ⇒ 起手那一格的
+    // 回包不作废（换号会让服务端已扣的银币在客户端不记账）。
+    assert.equal(h.presenter.selectSite(h.presenter.state.map!.sites[1]), false,
+        '★在途期间点别的格不受理');
     finish({ ok: true });
     await flush();
-    assert.equal(h.nav.length, 0);
-    assert.equal(h.storeCalls.beginBattle, 0);
+    assert.equal(h.gatewayCalls.startBattle, 0, '在途期间没有插进第二条开战请求');
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(h.presenter.state.map!.sites[0].cellId), true,
+        '★起手那一格的解锁回包照常落地');
 });
 
 test('a stage victory stays owned locally, never sends passCell, and waits for a server snapshot', async () => {
@@ -898,28 +936,24 @@ test('repeated ticks cannot duplicate an in-flight unlock, and never send passCe
     // 默认空快照：格子未解锁，reportPendingPasses 走补 unlock。
     const gateway = createFakeGateway();
     let unlockAttempts = 0;
-    let finishUnlock!: (result: TerritoryWriteResult) => void;
-    gateway.gateway.unlockCell = () => {
+    // 只发不等：重试判据是**发送状态**（offline ⇒ 没发出去），不是回包。
+    const sendUnlockCell = gateway.gateway.sendUnlockCell;
+    gateway.gateway.sendUnlockCell = (chapterId, cellId) => {
         unlockAttempts++;
-        return new Promise(resolve => { finishUnlock = resolve; });
+        return unlockAttempts === 1 ? 'offline' : sendUnlockCell(chapterId, cellId);
     };
     const h = createHarness({ gateway, store: createFakeStore({ battle: {
         chapterId: 1, cellId: 1, levelId: 1001, status: 'victory', startedAt: 100, resolvedAt: 200,
     } }) });
     h.presenter.start();
     await flush();
-    // 补 unlock 在途：多次 tick 因 reportingLoadId 锁不会重复发。
+    // 首轮离线没发出去 ⇒ 下一拍重试一次；之后发成功就记进「已补过」集合，不再重复。
     h.presenter.slowTick(Date.now() + 60000);
     h.presenter.slowTick(Date.now() + 120000);
-    assert.equal(unlockAttempts, 1);
-    assert.equal(h.gatewayCalls.pass, 0);
-    // unlock 因断线未完成 ⇒ 下一轮重试一次。
-    finishUnlock({ ok: false, reason: 'offline' });
-    await flush();
     h.presenter.slowTick(Date.now() + 180000);
-    assert.equal(unlockAttempts, 2);
-    finishUnlock({ ok: true });
     await flush();
+    assert.equal(unlockAttempts, 2, '离线那一轮不记已发，下一拍重试；成功后不再重复');
+    assert.equal(h.gatewayCalls.pass, 0);
     // 始终不发 passCell；服务端未确认通关前待确认记录保留。
     assert.equal(h.gatewayCalls.pass, 0);
     assert.deepEqual(h.presenter.state.progress?.pendingPassCells, [1]);
@@ -1012,6 +1046,7 @@ function createHarness(options: HarnessOptions = {}) {
         availableChapters: options.chapters ?? [1],
     };
     const presenter = new TerritoryModel(ports);
+    gateway.bind?.(presenter);
     presenter.onOutput((event) => {
         switch (event.kind) {
             case 'changed': stateChanges++; break;
@@ -1758,11 +1793,7 @@ test('fixed resource unlock rejection leaves the claim available', async () => {
 test('fixed resource keeps one pending request and records success without a detail panel', async () => {
     let finish!: (value: TerritoryWriteResult) => void;
     const gateway = createFakeGateway();
-    gateway.gateway.unlockCell = (_chapterId, cellId) => {
-        gateway.calls.unlock++;
-        gateway.calls.unlockedCells.push(cellId);
-        return new Promise(resolve => { finish = resolve; });
-    };
+    gateway.gateway.unlockCell = () => new Promise(resolve => { finish = resolve; });
     const fixedBundle: ITerritoryChapterBundle = {
         ...bundle,
         mapJson: { ...mapJson, sites: [...mapJson.sites, {
@@ -2749,7 +2780,7 @@ test('territory page sends entry intent while composition supplies battle and ca
 });
 
 // 🔴 同样只管首领关（`mode = defence`）：普通关根本没有在途的开战请求可"作废"。
-test('chapter start ignores repeat clicks while in flight and stale response after selection changes', async () => {
+test('chapter start takes one write at a time: repeat taps and other sites are ignored', async () => {
     const gateway = createFakeGateway({ fetch: {
         ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0, 1, 2], passCells: [0] },
     } });
@@ -2772,13 +2803,17 @@ test('chapter start ignores repeat clicks while in flight and stale response aft
     h.presenter.requestBattle();
     h.presenter.selectSite(site);
     h.presenter.requestBattle();
-    assert.equal(gateway.calls.startBattle, 1);
-    h.presenter.selectSite(h.presenter.state.map!.sites[1]);
+    assert.equal(gateway.calls.startBattle, 1, '★重复点击只发一次开战');
+    // 🔴 2026-11-19 入口单飞：开战在途期间**换格也不受理**。换格会换交互号 ⇒
+    // 这条开战回包被当成过期丢掉 ⇒ 过场干等 3 秒再退回领地。
+    assert.equal(h.presenter.selectSite(h.presenter.state.map!.sites[1]), false,
+        '★开战在途 ⇒ 别的格不受理');
     h.presenter.requestBattle();
+    assert.equal(gateway.calls.startBattle, 1, '不受理 ⇒ 不会插第二条开战');
     pending[0]({ ok: true, battle: fakeBattleStart });
     await flush();
-    assert.equal(h.nav.length, 0);
-    assert.equal(h.storeCalls.beginBattle, 0);
+    assert.equal(h.nav.length, 1, '★回包没被作废 ⇒ 这一格的开战照常落地');
+    assert.equal(h.storeCalls.beginBattle, 1);
 });
 
 test('unconfirmed chapter battle remains pending after returning to territory', async () => {
@@ -2838,6 +2873,7 @@ test('挂机产出没有来源格：originCellId 为空（页面回落到起始�
     assert.equal(h.rewards.length, 0);
     // 领奖已改为异步（在线走 `CmdCityChapterIdleRewardReqMsg`）；夹具 base 返回 offline ⇒ 本地兜底。
     await h.presenter.claimIdleRewards(Date.now());
+    await flush();
     assert.equal(h.storeCalls.settleIdle, 1);
     assert.equal(h.rewards.length, 1, '仅点击征收后发奖');
     assert.ok(h.rewards.every((batch) => batch.some((g) => g.resId === 9 && g.amount === 3)));
@@ -2866,15 +2902,18 @@ test('征收保留离线累计，领取推进真实账本，连点与重进均�
     assert.equal(h.rewards.length, 0);
     assert.equal(h.presenter.state.idleRewardStartedAt, start);
     await h.presenter.claimIdleRewards(now);
+    await flush();
     assert.equal(h.rewards.length, 1);
     assert.equal(h.presenter.state.idleRewardStartedAt, start + 60 * 60 * 1000);
     await h.presenter.claimIdleRewards(now);
+    await flush();
     assert.equal(h.rewards.length, 1, '连点不会重复发奖');
     h.presenter.dispose();
     const reopened = createHarness({ store });
     reopened.presenter.start();
     await flush();
     await reopened.presenter.claimIdleRewards(now);
+    await flush();
     assert.equal(reopened.rewards.length, 0, '重进后不能重复领取已结算小时');
     reopened.presenter.dispose();
 });
@@ -3035,10 +3074,11 @@ test('解锁请求在途：loading 在网关调用前显示，解锁回包后同
     assert.equal(h.nav.length, 1, '解锁回包后同一交互内就去匹配');
 });
 
-// 🔴 两个写请求**并发**时 loading 必须严格配对（show 几次就 hide 几次）：
-// 此前「归零才 hide」会让 LoadingPopup 全局引用计数残留 1 ⇒ 全屏遮罩（含本轮新增的
-// `BlockInputEvents` 拦截）常驻 ⇒ 地图所有点击被吞，表现为「刚解锁的宝箱再点没反应」。
-test('two concurrent write requests pair their loading layers (no leftover mask)', async () => {
+// 🔴 两条点击不能并发出两条写请求（2026-11-19 入口单飞）：换格会换交互号，把在途回包
+// 判成过期丢弃 ⇒ 服务端已扣费、客户端不记账，格子还锁着 ⇒ 玩家继续点 ⇒ 又一层 loading。
+// loading 必须 show / hide 严格配对：残留一层就是全屏遮罩（含 `BlockInputEvents`）常驻，
+// 地图所有点击被吞，表现为「刚解锁的宝箱再点没反应」。
+test('a second write request is refused at the entrance: one loading layer, strictly paired', async () => {
     const fixedBundle: ITerritoryChapterBundle = {
         ...bundle,
         mapJson: { ...mapJson, sites: [...mapJson.sites,
@@ -3061,17 +3101,15 @@ test('two concurrent write requests pair their loading layers (no leftover mask)
     await flush();
     const site4 = h.presenter.state.map!.sites.find((s) => s.cellId === 4)!;
     const site5 = h.presenter.state.map!.sites.find((s) => s.cellId === 5)!;
-    // 同一 tick 同步进两个解锁流程（selectSite 同步执行到网关调用前）⇒ 两层 loading 都弹出。
     h.presenter.selectSite(site4);
-    h.presenter.selectSite(site5);
-    assert.equal(h.busy.length, 2, '并发两个写请求 ⇒ 两层 loading（busy=true）');
+    // 🔴 第一条写请求在途 ⇒ 第二个格**不受理**（不换号、不发包）。
+    assert.equal(h.presenter.selectSite(site5), false, '★写请求在途 ⇒ 第二个格不受理');
+    assert.equal(h.busy.length, 1, '只有一层 loading（busy=true）');
+    assert.equal(unlockCount, 1, '只发一次解锁');
     pending[0]({ ok: true, unlockedCellIds: [4] });
-    pending[1]({ ok: true, unlockedCellIds: [5] });
     await flush();
-    assert.equal(h.busy.length, 4, '两次 exit 各 hide 一次 ⇒ 严格配对（修复前残留只给 3 条）');
-    assert.equal(h.busy[2].busy, false, '第一个请求结束即 hide 一层');
-    assert.equal(h.busy[3].busy, false, '第二个请求结束再 hide 一层，引用计数归零');
-    assert.equal(unlockCount, 2, '两个格各发一次解锁');
+    assert.equal(h.busy.length, 2, 'show / hide 严格配对，不残留遮罩');
+    assert.equal(h.busy[1].busy, false, '回包结束即 hide 那一层');
 });
 
 // 🔴 页面销毁时在途写请求必须撤回其 loading：否则 LoadingPopup 引用计数残留，
@@ -3099,6 +3137,66 @@ test('dispose retracts in-flight loading layers and later exits do not double-hi
     pending[0]({ ok: true, unlockedCellIds: [4] });
     await flush();
     assert.equal(h.busy.length, 2, 'dispose 后 finally 的 exitBusy 幂等，不重复 hide');
+});
+
+// 🔴 服务端拒绝时下发的是 `CmdTips`，**不是**对应的 `Rsp`：`ConnectedNetState` 只把那条
+// `NetworkRequest` 置为 rejected，不派发 Rsp 事件 ⇒ `apply*Rsp` 一条都收不到，在途票只能等
+// `fastTick` 的 5 秒硬超时。实测日志：`CmdTips{前置地块未解锁}` 20ms 就到，loading 转到
+// 5723ms 才由超时收尾 —— 玩家看到的是「菊花一直转，不消失」。
+test('server rejection settles the write ticket at once (no 5s loading wait)', async () => {
+    const fixedBundle: ITerritoryChapterBundle = {
+        ...bundle,
+        mapJson: { ...mapJson, sites: [...mapJson.sites,
+            { id: 'fixed_4', type: 'fixedResource', cellId: 4, footprint: [4], rewardId: 1011,
+                unlock: { requiredCells: [0], combatPower: 0, silverCost: 0, staminaCost: 0, exploreSeconds: 1 } }] },
+    };
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    gateway.gateway.unlockCell = () => new Promise((resolve) => pending.push(resolve));
+    const h = createHarness({ loader: createFakeLoader(fixedBundle), gateway });
+    h.presenter.start();
+    await flush();
+    h.presenter.selectSite(h.presenter.state.map!.sites.find((s) => s.cellId === 4)!);
+    assert.equal(h.busy.length, 1, '请求在途 ⇒ 一层 loading');
+    // 没有对应在途票的协议不许误伤（扫荡那条根本没发）。
+    h.presenter.applyWriteError('CmdCityChapterSweepReqMsg', 'server_error');
+    assert.equal(h.busy.length, 1, '没有在途票 ⇒ 什么都不做');
+    // 服务端拒绝：网络层只 reject 那条请求、不派发 Rsp 事件 ⇒ 走这条旁路当场收尾。
+    h.presenter.applyWriteError('CmdCityChapterUnlockCellReqMsg', 'server_error');
+    await flush();
+    assert.equal(h.busy.length, 2, '★当场 hide，不等 5 秒硬超时');
+    assert.equal(h.busy[1].busy, false, '收尾那一层是 hide');
+    assert.deepEqual(h.presenter.state.pendingFixedResourceCells, [], '在途判重标记同步清掉');
+});
+
+// 🔴 `rejected` 有两个来源，提示口径不同：
+//  · `CmdTips` 错误包（`applyWriteError`）⇒ 服务端已经弹了原因，客户端别再补一条
+//    （Toast 是排队播的，两条连播 3 秒多，还会盖掉服务端那句更具体的话）；
+//  · `Rsp { succ: 0 }`（正常回包，只是业务拒绝）⇒ 服务端没弹过，客户端必须自己提示。
+test('a rejected write tips once: CmdTips path stays silent, Rsp succ=0 still tips', async () => {
+    const pending: Array<(value: TerritoryWriteResult) => void> = [];
+    const gateway = createFakeGateway({ fetch: {
+        ok: true, state: { levelChapter: 1, rewardState: 0, unlockCells: [0], passCells: [0] },
+    } });
+    gateway.gateway.unlockCell = () => new Promise((resolve) => pending.push(resolve));
+    const h = createHarness({ gateway });
+    h.presenter.start();
+    await flush();
+    const sites = h.presenter.state.map!.sites;
+    // ① 服务端走 `CmdTips` 拒绝：提示已经在网络层弹过，这里不许再补一条。
+    h.presenter.selectSite(sites[0]);
+    h.presenter.applyWriteError('CmdCityChapterUnlockCellReqMsg', 'server_error');
+    await flush();
+    assert.equal(h.tips.length, 0, '★CmdTips 路径：客户端不再补提示（服务端已经说过原因）');
+    // ② 正常回包 `succ = 0`：服务端没弹过，客户端必须自己提示。
+    // 收尾后 pending / busy 都清了 ⇒ 同一格可以重新发（服务端拒绝不影响本地锁态）。
+    h.presenter.selectSite(sites[0]);
+    assert.equal(pending.length, 2, '拒绝收尾后同一格可以重新发出解锁');
+    h.presenter.applyUnlockRsp({ ok: false, reason: 'rejected' });
+    await flush();
+    assert.equal(h.tips.length, 1, '★Rsp succ=0 路径：客户端必须提示');
 });
 
 // 🔴 解锁成功后的**最终一次渲染**必须发生在 pending 清空之后：视图 `isLoading` 由

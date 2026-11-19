@@ -10,7 +10,7 @@ import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryCommandEvent } fro
 import type { ITerritoryNavigateBattlePayload, TerritoryModelOutput } from '../assets/script/app/territory/application/TerritoryModel';
 import type { ZCGameEntryParams } from '../assets/script/app/zcds/application/ZCGameEntry';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
-import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
+import { ControllerBase, createScopedResources } from '../assets/script/framework/controller/ControllerBase';
 import { reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
 import { buildTerritoryViewState, isTerritoryChestActionable } from '../assets/script/app/territory/application/TerritoryViewState';
 import { isTerritoryBattleSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
@@ -56,6 +56,8 @@ function fixture(failure = false) {
         '../../zcds/application/ZCBattlePreparation': preparation,
         '../../../framework/procedure/ProcedureManager': { ProcedureManager: { navigate: (_route: string, params: ZCGameEntryParams) => routes.push(params) } },
         '../../../core/runtime/GameRoute': { GameRoute: { Battle: 'battle' } },
+        '../../../core/asset/ResourceScope': { ResourceScope },
+        '../../../framework/controller/ControllerBase': { ControllerBase, createScopedResources },
         '../../main/MainRoleRow': { readRoleRow: () => ({ id: 'captured-role', selectServerId: '17' }) },
         '../../net/CacheMgr': { CacheMgr: { instance: { setEventUpdate() {}, removeEventUpdate() {} } } },
         '../../net/GameNet': { GameNet: { instance: { addEvent() {}, removeCaller() {} } } },

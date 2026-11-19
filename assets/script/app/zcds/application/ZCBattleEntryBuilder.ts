@@ -3,7 +3,7 @@ import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import type { ZCPveDefenceWave } from '../model/ZCMatchConfig';
-import { buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
+import { buildSeatHeroLevels, buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
 
 /** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。*/
 export function buildZCBattleReturnParams(entry: Pick<IZCGameEntry, 'slgBattleType' | 'pveContext'>) {
@@ -80,6 +80,7 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     let playerAvatars: IZCGameEntry['playerAvatars'] = null;
     let seatProfiles: IZCGameEntry['seatProfiles'] = [];
     let seatUnitIds: IZCGameEntry['seatUnitIds'] = [];
+    let heroLevels: IZCGameEntry['heroLevels'] = [];
     if (battle?.units?.length) {
         const sorted = battle.units.slice().sort((a, b) => a.campId - b.campId);
         const self = (selfRoleId ? sorted.find((u) => u.roleId === selfRoleId) : undefined) ?? sorted[0];
@@ -93,6 +94,8 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         seatProfiles = Array.from(buildSeatProfiles(battle.units, selfRoleId ?? null));
         // 战斗统计要按服务端单元 id 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
         seatUnitIds = Array.from(buildSeatUnitIds(battle.units, selfRoleId ?? null));
+        // 结算 MVP 的 `Lv.x`：英雄等级只随 startBattle 回包下发，本地局没有。
+        heroLevels = Array.from(buildSeatHeroLevels(battle.units, selfRoleId ?? null));
         //  服务端属性原文：`[对局卡牌属性]` 只有最终值，面板对不上时分不清「服务端定值」还是
         //  「本地成长叠加」。这里按协议原样打一份（campId 与 ZCOwner 不是一套编号，不混用）。
         for (const unit of sorted) {
@@ -105,7 +108,7 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         resources: prepared,
         battleSeed: battle?.seed ?? null,
         matchConfig: clientCombat.config,
-        playerAvatars, seatProfiles, seatUnitIds,
+        playerAvatars, seatProfiles, seatUnitIds, heroLevels,
         pveContext: pve ? { chapterId: pve.chapterId, territoryCellId: pve.territoryCellId, levelId: pve.levelId } : null,
         slgBattleType: entry?.slgBattleType ?? null,
         // 结算等广播认这个字段：匹配入口的 battleType（宝箱栏「开始战斗」= 1002）必须一路带到这里，

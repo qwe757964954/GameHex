@@ -33,6 +33,14 @@ export interface IZCGameEntry {
      * 那时统计里的 `unitId` 只能是 0（"不知道"，不是"0 号单元"）。
     */
     readonly seatUnitIds?: readonly (readonly [ZCOwner, number])[];
+    /**
+     * 席位 → 卡牌等级（`heroId`(= `pvpCard.id`) → `Lv`）。
+     *
+     * 只供结算 MVP 的 `Lv.x` 文案；等级是英雄属性（`ZCBattleHero.level`），
+     * 本地局 / 老回包没有 `battle.units` 时不产出 ⇒ 结算页收起等级行。
+     * 席位归属与 {@link seatUnitIds} 同一份逻辑（`buildSeatHeroLevels`）。
+    */
+    readonly heroLevels?: readonly (readonly [ZCOwner, Readonly<Record<string, number>>])[];
     readonly pveContext: IZCGamePveContext | null;
     readonly slgBattleType?: IZCSlgBattleType | null;
     /**

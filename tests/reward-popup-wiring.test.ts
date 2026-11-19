@@ -300,6 +300,13 @@ test('所有已使用、且响应带奖励列表的请求都接入 FW.ShowReward
     //   · 扫荡 / 商店 / 铸造等 → 走默认 `true` ⇒ 必须弹（`HangRepository.watchAd` 已接，仍受本测试约束）。
     const fileExceptions: ReadonlyArray<{ request: string; file: string }> = [
         { request: 'RequestRoleWatchAdvert', file: join(APP_ROOT, 'league', 'LeagueRepository.ts') },
+        // 领地写请求：构造点在 Repository（只发不等），奖励展示在 `TerritoryModel` 的回包落地分支
+        // （各入口的回包回调里）。豁免由本文件
+        // 「领地写回包的奖励在 Model 落地分支展示」那条用例兜住，避免变成真空档。
+        ...['UnlockCell', 'PassCell', 'Sweep', 'IdleReward', 'UpMonsterBoxLv'].map(kind => ({
+            request: `RequestTerritory${kind}`,
+            file: join(APP_ROOT, 'territory', 'application', 'TerritoryCellRepository.ts'),
+        })),
     ];
 
     const missing: string[] = [];
@@ -343,6 +350,21 @@ test('所有已使用、且响应带奖励列表的请求都接入 FW.ShowReward
     }
 
     assert.deepEqual(missing, [], `以下奖励响应未接弹窗：\n${missing.join('\n')}`);
+});
+
+test('领地写回包的奖励在 Model 落地分支展示（Repository 只发不等）', () => {
+    const model = readFileSync(`${APP_ROOT}/territory/application/TerritoryModel.ts`, 'utf8');
+    // 回包落地入口齐全。
+    for (const apply of ['applyUnlockRsp', 'applyPassRsp', 'applySweepRsp', 'applyIdleRewardRsp', 'applyMonsterBoxRsp']) {
+        assert.match(model, new RegExp(`${apply}\\(`), `${apply} 缺失 ⇒ 回包会静默丢掉`);
+    }
+    // 奖励展示只在成功分支（`write.rewards` 由锁/卡/随机格三种口径分流）。
+    assert.match(model, /\.showRewards\(write\.rewards, cellId, firstCellEver \? \{ popup: true \} : \{ chest: false \}\)/);
+    assert.match(model, /\.showRewards\(write\.rewards, site\.cellId, \{ silverChest: true \}\)/);
+    assert.match(model, /\.showRewards\(write\.rewards, null, \{ popup: true \}\)/);
+    // Repository 侧不许再自己弹窗（网络层不碰表现）。
+    const repository = readFileSync(`${APP_ROOT}/territory/application/TerritoryCellRepository.ts`, 'utf8');
+    assert.doesNotMatch(repository, /FW\\.ShowReward|showRewards/);
 });
 
 test('支付完成广播由组合根全局接入奖励弹窗', () => {

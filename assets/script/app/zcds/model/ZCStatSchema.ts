@@ -425,6 +425,23 @@ const SKILL_BEHAVIORS = new Set([
     //  102704 战神附体）。与 `self_cast` 的差别只有触发口径（那个是 CD、这个是累计普攻），
     //  与 `empowered_attack` 的差别是「加下一击的形态」vs「加自己一段时间」。
     'counter_self_buff',
+    //  2026-11-18 第 17 批：雷蕉「闪电链」102203 —— 冷却到点放一条连锁闪电，逐跳跳向
+    //  「最近且未被命中」的敌人。与 `bolt_strike` 的差别是那个的落点是「目标背后一串固定点」，
+    //  这个是「跟着敌人走」；与 `random_strike` 的差别是那个随机取点、这个必须连锁。
+    //  见 `ZCSkillTriggerSystem.applyChainLightning` + `ZCAttackResolutionSystem.castChainLightning`。
+    'chain_damage',
+    //  2026-11-18 第 17 批：舞王「舞王召唤」103103 —— 冷却到点召出一批随从，跟随本体移动
+    //  并主动攻击最近的敌人。与 `self_cast` 的差别是那个只改自己的数值、这个要生成新单位。
+    //  见 `ZCSkillTriggerSystem.applySummonUnit` + `ZCGameModel.summonUnits` / `syncSummons`。
+    'summon_unit',
+    //  2026-11-18 第 17 批 雷蕉「嗜血术」102204：友军窗口增益（伤害 / 攻速 + III 级击杀延长）。
+    //  与 `team_aura` 的区别是「有时限、离开范围即失去」，见 `ZCSkillTriggerSystem.applyTeamBuff`。
+    'team_buff',
+    //  2026-11-18 第 17 批 南瓜战神「大吼大叫」102304：范围伤害 + 敌方减攻 + III 级友军护盾。
+    //  见 `ZCSkillTriggerSystem.applyRoar` + `ZCAttackResolutionSystem.castRoar`。
+    'roar',
+    'storm_zone',
+    'ray_beam',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',

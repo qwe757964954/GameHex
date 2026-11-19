@@ -45,6 +45,11 @@ export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {
         finish: async request => { calls.push('finish'); requests.push(request); },
         loadRewards: async () => [],
         open: async options => { calls.push('open'); pages.push(options); return { close: () => calls.push('close') }; },
+        // 结算页「查看完整队伍」走这条（运行期的同名入口在 isSettled 后被拦掉）。
+        openDamage: async players => {
+            calls.push(`viewTeam:${players.length}`);
+            return { isOpen: true, refresh() {}, close: () => calls.push('viewTeamClose') };
+        },
         // 默认「没弹」：≥3 人局也直接进结算。要验顺序时用 overrides 覆盖成可关闭的桩。
         openRank: async seats => { calls.push(`rank:${seats.length}`); return null; },
         watchSwitch: callback => { switchCallback = callback; return () => calls.push('unwatch'); },

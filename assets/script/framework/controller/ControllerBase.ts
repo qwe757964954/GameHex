@@ -14,6 +14,19 @@ export interface IControllerResources {
     readonly scope: ResourceScope;
 }
 
+/**
+ * 把上下文服务绑到一个资源作用域上；`ControllerBase.resources` 与「组合根自己装配模型」共用这一份，
+ * 避免同一段 `scopeAssetService(...)` 组装逻辑散在多处。
+ */
+export function createScopedResources(context: IControllerContext, scope: ResourceScope): IControllerResources {
+    return Object.freeze({
+        assets: scopeAssetService(context.sessionAssets.reusableAssets ?? context.assets, scope),
+        configs: context.configs,
+        sessionAssets: context.sessionAssets,
+        scope,
+    });
+}
+
 export abstract class ControllerBase {
     readonly scope: ResourceScope;
     private readonly lifetime = new ResourceScope('controller-inputs');
@@ -26,15 +39,7 @@ export abstract class ControllerBase {
     }
 
     get resources(): IControllerResources {
-        if (!this.resolvedResources) {
-            const context = this.resolveContext();
-            this.resolvedResources = Object.freeze({
-                assets: scopeAssetService(context.sessionAssets.reusableAssets ?? context.assets, this.scope),
-                configs: context.configs,
-                sessionAssets: context.sessionAssets,
-                scope: this.scope,
-            });
-        }
+        if (!this.resolvedResources) this.resolvedResources = createScopedResources(this.resolveContext(), this.scope);
         return this.resolvedResources;
     }
 

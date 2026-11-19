@@ -34,7 +34,7 @@ export interface IZCUnitMovement {
     /** 冲刺一步的预测落点（不落盘）。可选：缺省 ⇒ 冲刺整段不启用，退回旧追击。*/
     dashStep?(unit: ZCUnitState, dt: number, speedScale: number): IZCDashStep;
     /** 把单位摆到连续坐标（冲刺落位）。可选：与 `dashStep` 成对出现。*/
-    placeAt?(unit: ZCUnitState, x: number, y: number): void;
+    placeAt?(unit: ZCUnitState, x: number, y: number, keepFacing?: boolean): void;
 }
 
 export interface IZCUnitContext extends Pick<IZCModelServices, 'effectiveDefinition' | 'random'> {
@@ -247,6 +247,28 @@ export class ZCUnitSystem {
                 return;
             }
             unit.castHoldUntil = undefined;
+        }
+        // ── 召唤物（`summonMasterId` 有值）──
+        //  位置每帧由 `ZCGameModel.syncSummons` 钉在「本体 + 阵位」上 ⇒ 这里**不许寻路**：
+        //  一旦让它走正常的 `target / move` 分支，`advanceUnitMovement` 会把坐标拽向敌人，
+        //  下一帧又被拽回阵位，观感是四个舞伴在原地抽筋。召唤物只做一件事：
+        //  射程内有敌人就出手（设计口径「跟随本体移动，并主动攻击离自己最近的敌人」）。
+        //
+        //  放在 `attack` 分支**之后**：攻击动作要照常走完 `attackDuration` 才回 idle，
+        //  提前 return 会让它们一直卡在第一帧的挥拳姿势。
+        if (unit.summonMasterId !== undefined) {
+            if (context.attackBlockedOf?.(unit)) return;   // 软控禁普攻：原地站着不动
+            context.targeting.acquire(unit);
+            if (!context.targeting.current(unit)) {
+                if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
+                return;
+            }
+            if (context.targeting.isInAttackRange(unit) && context.now() >= unit.nextAttackAt) {
+                this.startAttack(unit, context);
+                return;
+            }
+            if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
+            return;
         }
         //  冲刺是这套普攻本身 ⇒ 能冲就冲，抢在「贴身挥拳 / 站定等冷却 / 追人」之前。
         if (this.tryStartDash(unit, dt, context)) return;

@@ -1,6 +1,7 @@
 import { ZCCombatSystem } from './systems/ZCCombatSystem';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
+import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
 import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from './systems/ZCNeutralFeatureSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
@@ -62,7 +63,7 @@ import { ZCLegacyCombatSystem, type IZCLegacyCombatContext } from './systems/ZCL
 import { ZCOutcomeSystem, type IZCOutcomeContext } from './systems/ZCOutcomeSystem';
 import { ZCSkillTriggerSystem, type IZCSkillTriggerContext } from './systems/ZCSkillTriggerSystem';
 import { ZCStatusResolutionSystem, type IZCStatusResolutionContext } from './systems/ZCStatusResolutionSystem';
-import { ZCTargetingSystem, type ZCTargetingContext } from './systems/ZCTargetingSystem';
+import type { ZCTargetingContext } from './systems/ZCTargetingSystem';
 import {
     ZC_CARD_START_SECONDS,
     ZCBattlePresentationQueue,
@@ -165,9 +166,24 @@ import type {
     ZCUnitState
 } from './ZCGameTypes';
 
-/** 《占城大师》PVE 对局纯逻辑层，不依赖 Cocos API。
+ /** 《占城大师》PVE 对局纯逻辑层，不依赖 Cocos API。
  * 棋盘解析在 ZCMapConfig，状态结构在 ZCGameTypes，地块生成与抽取规则在 ZCPvpTileRules。
 */
+
+/**
+ * 结算 MVP 的逐卡统计（同一张卡的多只兵合并；键为 `owner:cardId`）。
+ * 只在本局生命周期有效，不进快照。
+*/
+export interface IZCCardDamage {
+    readonly owner: ZCOwner;
+    readonly unitId: string;
+    readonly cardId: string;
+    readonly damage: number;
+    readonly damageTaken: number;
+}
+
+/** 内部账本（同字段但可写；对外只暴露 `IZCCardDamage` 只读形态）。*/
+type ZCCardDamageLedger = { -readonly [K in keyof IZCCardDamage]: IZCCardDamage[K] };
 
 export const ZC_UNIT_CAP = 100;
 /**
@@ -181,6 +197,14 @@ const FRAME_OP_SPAWN = 4;
 
 /** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。*/
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
+/**
+ * 召唤物四个阵位的基准角（度，数学坐标系：0° = +x、90° = 屏幕上方）：
+ * 左上 / 右上 / 左下 / 右下（2026-11-18 第 17 批 舞王 103103，设计案 O 列）。
+ *
+ * 真正摆位时是 `本体朝向 + 这个角` —— 本体一转，四个阵位跟着转，这就是设计说的
+ * 「走位时按本体朝向镜像」，不需要另写一套镜像代码。
+ */
+const SUMMON_SLOT_DEGREES = [135, 45, 225, 315] as const;
 /**
  * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
  *
@@ -399,6 +423,17 @@ export class ZCGameModel {
     private readonly damageDealt: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
     /** 每方「承受伤害」累计值；只给对局结算页（GameRunAway）读，不进快照。*/
     private readonly damageTaken: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
+    /**
+     * 逐卡伤害（键 = `${owner}:${cardId}`）。
+     * 结算页 MVP 要从「输出最高的**卡**」里选人，per-owner 的 `damageDealt` 分不出同阵营多张卡；
+     * 同一张卡的多只兵合并成一行。与 owner 统计同生命周期：重开清零、不进快照。
+    */
+    private readonly cardDamage = new Map<string, ZCCardDamageLedger>();
+    /**
+     * 实例 id → 卡身份（`owner` + 兵种 + 卡）。
+     * 单位死亡后仍保留：伤害发生在死亡前，结算时不能因为单位被摘掉就丢掉归属。
+    */
+    private readonly unitCards = new Map<number, Omit<IZCCardDamage, 'damage' | 'damageTaken'>>();
 
     /**
      * 建成的兵营「首批兵」延迟生成队列：开格动画期间单位不能提前站上来。
@@ -531,6 +566,10 @@ export class ZCGameModel {
             unitsInRadius: (hexId, radiusHex) => this.unitsInRadius(hexId, radiusHex),
             unitPosition: this.services.unitPosition,
             damageUnit: this.services.damageUnit,
+            //  牵引（2026-11-18 第 17 批 102004 飓风）：与状态系统那条强制位移共用同一个出口 ——
+            //  落在不可走格上会减半重试，成功后清掉 `targetHexId` 让单位重新寻路。
+            displaceUnit: (unit, dx, dy) => this.displaceUnit(unit, dx, dy),
+            combatDistanceScale: this.rules.combatDistanceScale,
             ensureSlowStatus: (id, speedPct, duration) => this.ensureMoveSpeedStatus(id, speedPct, duration),
             applyStatus: (unit, id, options) => this.statusSystem.apply(String(unit.id), id, options),
             exportStatusEffects: () => this.statusSystem.exportSnapshot(),
@@ -839,9 +878,6 @@ export class ZCGameModel {
 
     private buildSkillTriggerContext(): IZCSkillTriggerContext {
         return {
-            effectiveDefinition: this.services.effectiveDefinition,
-            selectSkillTarget: (unit, radius, mode) => ZCTargetingSystem.acquireSkillUnit(
-                unit, this.state.units, radius, this.services, mode),
             statusSystem: this.statusSystem,
             //  键口径与 `ZCAttackResolutionSystem.sendAttack` 完全一致（`${unitId}:${普攻 profile.skillId}`），
             //  否则「配置里能查到、运行时查不到」会出现同一张卡在两条链路上行为不一致。
@@ -857,6 +893,22 @@ export class ZCGameModel {
             //  五雷轰顶（磁电菇 101603）：沿「目标 → 背朝向」排开 3/4/5 道雷，每道独立结算。
             //  与副轨 / 光环同样不推进普攻节拍，用自己的 `boltReadyAt`。
             castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
+            //  闪电链（雷蕉 68022 / 102203，2026-11-18 第 17 批）：从锁定目标起跳，
+            //  逐跳打最近的未命中敌人，同一帧全部结算。独立车道（`unit.chainReadyAt`）——
+            //  同卡还挂着 102204 嗜血术，**不能**和 `boltReadyAt` 共用字段。
+            castChainLightning: (unit) => ZCAttackResolutionSystem.castChainLightning(
+                this.state, unit, this.attackResolutionContext),
+            //  召唤（舞王 103103「舞王召唤」，2026-11-18 第 17 批）：生成 4 个舞伴并逐帧跟随本体。
+            //  与其它车道不同，它不走 `ZCAttackResolutionSystem`（那里只管几何与伤害），
+            //  生成 / 属性继承 / 阵位全在模型层，因为要动 `state.units` 与单位注册表。
+            castSummon: (unit) => this.summonUnits(unit),
+            //  大吼大叫（南瓜战神 68023 / 102304，2026-11-18 第 17 批）：自心圆范围伤害 +
+            //  敌方减攻 + III 级友军护盾。独立车道（`unit.roarReadyAt`）—— 同卡 102303 冲锋
+            //  占着 `dashReadyAt`。
+            castRoar: (unit) => ZCAttackResolutionSystem.castRoar(this.state, unit, this.attackResolutionContext),
+            castStorm: (unit) => ZCAttackResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext),
+            castRayBeam: (unit, vulnStatusId) => ZCAttackResolutionSystem.castRayBeam(
+                this.state, unit, this.attackResolutionContext, vulnStatusId),
             //  精密陷阱（科学家 103504）：在自己原地留一个陷阱，踩响或到点各炸一次。
             //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
@@ -866,22 +918,12 @@ export class ZCGameModel {
             //  这里只负责几何与伤害），避免两边各查一次表算出两个值。
             castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            //  风弹（风炮菇 101303，2026-11-18 第 16 批）：朝锁定目标射一枚风弹，
-            //  命中后由 `resolveProjectileHit` 在落点建一片飓风（走弹道的 `zone*` 字段）。
-            //  独立车道（`unit.windBoltReadyAt`），不推进普攻节拍。
-            castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
-                this.state, unit, this.attackResolutionContext),
-            //  连射导弹（风炮菇 101304）：一次一枚，节拍由触发系统的排射进度推进。
-            //  它读的是 `completedAttackCount`（普攻次数）而不是自己的 CD，
-            //  但发弹本身不推进普攻节拍 —— 这是「累计 N 次普攻的奖励」，不是普攻。
-            castMissileBarrage: (unit) => ZCAttackResolutionSystem.castMissileBarrage(
-                this.state, unit, this.attackResolutionContext),
             //  菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
             //  以自身为圆心爆一次，爆完给自己套盾（+III 级减伤）或把怪推开。
             //  独立车道（`unit.burstReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
             //  （判据是爆发半径内有没有人，由 `castBurstSkill` 自己算）。
-            castBurstSkill: (unit, guardStatusId) => ZCAttackResolutionSystem.castBurstSkill(
-                this.state, unit, this.attackResolutionContext, guardStatusId),
+            castBurstSkill: (unit, guardStatusId, lane) => ZCAttackResolutionSystem.castBurstSkill(
+                this.state, unit, this.attackResolutionContext, guardStatusId, lane),
             //  菌丝绞杀（机甲菇 101503，2026-11-17 第 14 批）：身前扇形甩一次 + 减速。
             //  独立车道（`unit.fanReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
             //  （判据是扇形半径内有没有人）。减速状态的定义与 id 由触发系统算好传进来。
@@ -963,7 +1005,10 @@ export class ZCGameModel {
         this.statusSystem.restore(this.state.statusEffects);
         this.effectiveCache.clear();
         this.state.statusEffects = this.statusSystem.exportSnapshot();
-        for (const unit of this.state.units) this.units.register(unit);
+        for (const unit of this.state.units) {
+            this.units.register(unit);
+            this.rememberUnitCard(unit);
+        }
         this.neutralFeatures.initialize(this.state);
         this.refreshTileStates();
         this.checkOutcome();
@@ -1091,6 +1136,44 @@ export class ZCGameModel {
     get artifactChargeFull(): number { return this.rules.artifactChargeFull; }
     get artifactMaxStored(): number { return this.rules.artifactMaxStored; }
     get artifactCooldownDuration(): number { return this.rules.artifactCooldownSeconds; }
+
+    /**
+     * 逐卡伤害明细（结算 MVP 选「赢家阵营输出最高的卡」用）。
+     * 顺序 = 首次产生伤害的先后；调用方按自己需要再排序。
+    */
+    get damageCards(): readonly Readonly<IZCCardDamage>[] {
+        return Array.from(this.cardDamage.values(), card => ({ ...card }));
+    }
+
+    /** 记一条卡身份；实例 id 与卡绑定后不再变。*/
+    private rememberUnitCard(unit: ZCUnitState): void {
+        if (!unit.unitId) return;
+        this.unitCards.set(unit.id, { owner: unit.owner, unitId: unit.unitId, cardId: unit.cardId });
+    }
+
+    private cardDamageBucket(owner: ZCOwner, unitId: string, cardId: string): ZCCardDamageLedger {
+        const key = `${owner}:${cardId}`;
+        let bucket = this.cardDamage.get(key);
+        if (!bucket) {
+            bucket = { owner, unitId, cardId, damage: 0, damageTaken: 0 };
+            this.cardDamage.set(key, bucket);
+        }
+        return bucket;
+    }
+
+    /** 攻击方是单位（有实例 id）时把伤害记到它所属的卡；塔 / 建筑 / 神器 / 中立怪不计。*/
+    private creditCardDamage(unitId: number | undefined, amount: number): void {
+        if (unitId === undefined || !(amount > 0)) return;
+        const card = this.unitCards.get(unitId);
+        if (!card || !this.activeOwners.includes(card.owner)) return;
+        this.cardDamageBucket(card.owner, card.unitId, card.cardId).damage += amount;
+    }
+
+    /** 承受方是卡牌兵时把实际扣血记到该卡（多只兵合并）；中立怪不进 MVP 统计。*/
+    private creditCardTaken(unit: ZCUnitState, amount: number): void {
+        if (!unit.unitId || !(amount > 0) || !this.activeOwners.includes(unit.owner)) return;
+        this.cardDamageBucket(unit.owner, unit.unitId, unit.cardId).damageTaken += amount;
+    }
 
     /**
      * 双方累计伤害（造成 / 承受），供对局结算页 GameRunAway 读取。
@@ -1435,6 +1518,8 @@ export class ZCGameModel {
             this.damageDealt[owner] = 0;
             this.damageTaken[owner] = 0;
         }
+        this.cardDamage.clear();
+        this.unitCards.clear();
         this.refreshTileStates();
         this.checkOutcome();
     }
@@ -1550,6 +1635,9 @@ export class ZCGameModel {
 
     // 战斗循环与索敌、命中处理。
     private updateUnits(dt: number): void {
+        //  召唤物先归位 / 到期收场，再跑状态机：状态机看到的是「这一帧该站的位置」，
+        //  否则跟随的那一帧会先在旧坐标上索敌、再瞬移过去。
+        this.syncSummons();
         ZCUnitSystem.update(this.state.units, dt, this.unitContext);
         this.removeDeadUnits();
         this.refreshTileStates();
@@ -1772,6 +1860,11 @@ export class ZCGameModel {
         const result = ZCDamageResolutionSystem.damageUnit(
             this.state, target, damage, source, this.damageResolutionContext);
         if (!result) return null;
+        if (result.applied > 0) {
+            //  逐卡归属：攻击方必须是单位（塔 / 神器没有卡身份），承受方按目标兵的卡记。
+            if (source.kind === 'unit') this.creditCardDamage(source.unitId, result.applied);
+            this.creditCardTaken(target, result.applied);
+        }
         const position = this.unitPosition(target);
         const floatText = this.pushFloatText({
             kind: source.floatTextKind ?? 'damage',
@@ -1921,6 +2014,7 @@ export class ZCGameModel {
         const result = ZCDamageResolutionSystem.damageWall(
             wall, damage, unit, isExposed, center, this.damageResolutionContext);
         if (!result) return;
+        this.creditCardDamage(unit.id, result.applied);
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
         //  城墙受击特效：与飘字同一坐标（格心），职业取攻击方（2026-11-06 需求）。
@@ -1950,7 +2044,9 @@ export class ZCGameModel {
             }
             delete feature.disengagedAt;
             feature.regenUpdatedAt = this.state.elapsedSeconds;
+            const applied = Math.min(damage, building.hp);
             building.hp = Math.max(0, building.hp - damage);
+            this.creditCardDamage(unit.id, applied);
             if (building.hp === 0) {
                 const center = this.hexCenter(building.id);
                 const item = neutralResourceItemOf(building.neutralResourceId);
@@ -1990,6 +2086,7 @@ export class ZCGameModel {
         const result = ZCDamageResolutionSystem.damageBuilding(
             this.state, building, damage, unit, this.damageResolutionContext);
         if (!result) return;
+        this.creditCardDamage(unit.id, result.applied);
         const center = this.hexCenter(building.id);
         this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
@@ -2211,6 +2308,7 @@ export class ZCGameModel {
         };
         this.units.register(unit);
         this.state.units.push(unit);
+        this.rememberUnitCard(unit);
         //  诊断6.：镭射飞龙真的上场了没。没有这一行 ⇒ 后面所有 `[模型]` 日志都不会出现，
         //  与「技能没触发」是两件事（这张卡是兵营卡，要先翻格建出来才会产兵）。
         if (unit.unitId === '68010') {
@@ -2220,6 +2318,127 @@ export class ZCGameModel {
         // 同上：单位出生不是协议里的「操作」（这里原本误报成 op=1=翻格，params 也不是格子 id）。
         this.state.nextUnitId += 1;
         return unit;
+    }
+
+    /**
+     * 召唤（`summon_unit`，2026-11-18 第 17 批 舞王 103103「舞王召唤」）。
+     *
+     * 设计口径（K/L/M + N 列）：召唤 4 个舞伴，继承本体 80/90/100% 生命与 60/70/80% 攻击，
+     * 持续 6/7/8 秒；**跟随本体移动**（四个固定阵位，按本体朝向镜像）、**主动攻击最近的敌人**；
+     * 只做普攻与被动，**不计入单位上限**，到期一起消失。
+     *
+     * 三条实现取舍，写清楚免得下一个人改回去：
+     *  · **复制本体而不是造新兵种**：舞伴的 `unitId` / `cardId` 直接沿用本体 ⇒ 模型、动作、
+     *    构筑加成全都天然一致，也不用为「舞伴僵尸」新开一张卡。半透明是视图按
+     *    `summonAlpha` 叠的，不是另做一套美术。
+     *  · **不计入上限**靠 `spawnUnit(..., ignoreUnitCap = true)`：这是拆城 Boss 用的同一条
+     *    既有通道，不是新开口子。
+     *  · **继承值写进 `inheritedStats`** 而不是直接改 `definition`：`effectiveDefinition`
+     *    每帧从缓存折算，只有落在单位身上才不会被下一次刷新冲掉。
+     *
+     * 返回 `true` = 至少召出一个，调用方才消费 CD。
+     */
+    private summonUnits(master: ZCUnitState): boolean {
+        const definition = this.effectiveUnitDefinition(master);
+        const runtime = (master.neutralReinforcement ? this.neutralSkillRuntime : this.skillRuntime[master.owner])
+            .get(`${master.unitId}:${definition.attackProfile.skillId}`);
+        const params = runtime?.parameters;
+        const count = Math.max(0, Math.round(params?.summonCount ?? 0));
+        const hpInherit = Math.max(0, params?.summonHpInherit ?? 0);
+        const attackInherit = Math.max(0, params?.summonAttackInherit ?? 0);
+        //  三项缺一不可：漏配任何一项都按「参数不全」拒放（不消费 CD），
+        //  而不是召出一群「0 血 / 0 攻击」的摆设 —— 那种错在场上完全看不出来。
+        if (!(count >= 1) || !(hpInherit > 0) || !(attackInherit > 0)) return false;
+        const card = this.cards[master.owner].get(master.cardId) ?? findCatalogCard(master.cardId);
+        if (!card) return false;
+        const seconds = Math.max(0, params?.summonSeconds ?? 0);
+        const follow = (params?.summonFollow ?? 0) > 0;
+        const slotRadius = Math.max(0, params?.summonSlotRadius ?? 0) * this.rules.combatDistanceScale;
+        const alpha = Math.max(0, Math.min(1, params?.summonAlpha ?? 1));
+        //  基准取「本体当前的继承值」而不是兵种原表：本体若自己也是继承来的（门格复制、
+        //  上一层召唤），链式继承才不会一代比一代虚高。与 `cloneGateUnit` 同一口径。
+        const base = master.inheritedStats ?? definition;
+        const spawned: ZCUnitState[] = [];
+        for (let slot = 0; slot < count; slot += 1) {
+            const clone = this.spawnUnit(master.owner, card, master.tier, master.sourceHexId, true);
+            if (!clone) continue;
+            clone.maxHp = clone.hp = Math.max(1, Math.round(master.maxHp * hpInherit));
+            clone.inheritedStats = {
+                attack: Math.max(1, base.attack * attackInherit),
+                moveSpeed: base.moveSpeed,
+                attackInterval: base.attackInterval,
+                attackRange: base.attackRange,
+                bodyRadius: base.bodyRadius,
+                maxHp: clone.maxHp,
+            };
+            clone.summonMasterId = master.id;
+            if (follow) {
+                clone.summonSlot = slot;
+                clone.summonSlotRadius = slotRadius > 0 ? slotRadius : undefined;
+            }
+            //  `summonSeconds <= 0` ⇒ 不写到期时刻 = 到战死为止（101404 一人成军的裁定口径）。
+            if (seconds > 0) clone.summonUntil = this.state.elapsedSeconds + seconds;
+            if (alpha < 1) clone.summonAlpha = alpha;
+            this.placeSummon(clone, master, slot, slotRadius, follow);
+            spawned.push(clone);
+        }
+        if (zcSkillCastWatched(master.unitId)) {
+            skillCastLog('召唤', `${master.unitId}#${master.id} 召出 ${spawned.length}/${count} 个`
+                + `（生命 ${Math.round(hpInherit * 100)}% / 攻击 ${Math.round(attackInherit * 100)}%`
+                + `，持续 ${seconds > 0 ? `${seconds}s` : '到战死'}`
+                + `${follow ? `，阵位半径 ${slotRadius.toFixed(1)}` : '，自由行动'}）`);
+        }
+        return spawned.length > 0;
+    }
+
+    /**
+     * 把一个召唤物摆到它该站的位置：跟随 ⇒ 「本体坐标 + 阵位（随本体朝向旋转）」，
+     * 不跟随 ⇒ 就站在本体脚下（等它自己走开）。
+     *
+     * `keepFacing`：位置是硬钉的，朝向不能被「位移方向」覆盖，否则本体转一圈，
+     * 四个舞伴会各自扭头看自己"飞过去"的方向。朝向留给索敌/攻击去改。
+     */
+    private placeSummon(unit: ZCUnitState, master: ZCUnitState, slot: number,
+        radius: number, follow: boolean): void {
+        const origin = this.services.unitPosition(master);
+        if (!follow || !(radius > 0)) {
+            this.movement.placeAt(unit, origin.x, origin.y, true);
+            return;
+        }
+        const degrees = SUMMON_SLOT_DEGREES[slot % SUMMON_SLOT_DEGREES.length];
+        const angle = master.facingRadians + degrees * Math.PI / 180;
+        this.movement.placeAt(unit,
+            origin.x + Math.cos(angle) * radius, origin.y + Math.sin(angle) * radius, true);
+    }
+
+    /**
+     * 每帧推进召唤物（在 `ZCUnitSystem.update` **之前**跑，保证状态机看到的是这一帧的位置）。
+     *
+     * 三件事：
+     *  1. 到期 ⇒ 置 `dead` + `deathRemoveAt = now`，同一帧被 `removeDeadUnits` 摘掉
+     *     （设计「到期一起消失」，不留尸体也不走阵亡动画）；
+     *  2. 本体没了（被打死 / 被移除）⇒ 召唤物跟着收场，否则位置无从算起；
+     *  3. 跟随时把位置钉回阵位。
+     */
+    private syncSummons(): void {
+        if (!this.state.units.length) return;
+        const now = this.state.elapsedSeconds;
+        for (const unit of this.state.units) {
+            if (unit.summonMasterId === undefined) continue;
+            if (unit.battleState === 'dead' || unit.hp <= 0) continue;
+            const expired = unit.summonUntil !== undefined && now >= unit.summonUntil - 1e-9;
+            const master = expired ? undefined : this.units.byId.get(unit.summonMasterId);
+            if (expired || !master || master.battleState === 'dead' || master.hp <= 0) {
+                //  与阵亡走同一条出口：`removeDeadUnits` 会把 registry / 状态 / 索敌缓存一起清掉，
+                //  自己 `splice` 只会漏掉别的几份索引。
+                unit.battleState = 'dead';
+                unit.hp = 0;
+                unit.deathRemoveAt = now;
+                continue;
+            }
+            if (unit.summonSlot === undefined) continue;
+            this.placeSummon(unit, master, unit.summonSlot, unit.summonSlotRadius ?? 0, true);
+        }
     }
 
     private cloneGateUnit(source: ZCUnitState): ZCUnitState | void {

@@ -15,6 +15,8 @@
  * 本文件必须保持无 `cc` 依赖。
 */
 
+import { ZC_EFFECT_PATHS } from '../model/ZCEffectCatalog';
+
 /** 一段光束：发射口相对单位中心怎么挪、亮度怎么加粗。*/
 export interface IZCBeamSpec {
     /** 发射口沿弹道方向前伸多少（视图单位，跟着朝向转）。*/
@@ -104,7 +106,7 @@ const BEAM_BY_PREFAB_PATH: Readonly<Record<string, IZCBeamSpec>> = {
     //  不是身体中心 —— 所以「龙眼」要抬到 +44 才算头部，原来的 +16 其实是从脚踝射出来的。
     //  抬到眼睛后，线自然从高处指向目标脚点，正好就是需求里「高处攻击低处」的倾斜感。
     //  数值不对就只改这两个数 —— 它们不参与任何结算。
-    'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻': {
+    [ZC_EFFECT_PATHS.laserAttack]: {
         muzzleForward: 8,
         muzzleLift: 44,
         //  实测自 `atlas/zheerniyasi_buff-xian_loop4_*.png`：16 帧归一化后主体都落在

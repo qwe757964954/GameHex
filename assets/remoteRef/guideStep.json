@@ -68,7 +68,7 @@ null
 0,
 [],
 "2-3",
-""
+null
 ],
 [
 1,
@@ -226,7 +226,7 @@ null
 "7-1",
 "解锁地块",
 "prevDone",
-"hole",
+"none",
 "Map/TileNew_1",
 "click",
 "tileFlipped",
@@ -240,10 +240,10 @@ null
 "8-1",
 "收尾",
 "prevDone",
-"full",
-"Popup/MainGoal",
+"hole",
+"Main/TaskEntry",
 "click",
-"popupClosed",
+"pageOpened:task",
 1,
 [
 {

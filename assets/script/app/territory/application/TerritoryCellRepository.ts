@@ -1,6 +1,7 @@
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
 import { startBattle as requestStartBattle } from '../../battle/BattleStartService';
 import { GameNet } from '../../net/GameNet';
+import type { RequestMsg } from '../../../framework/net/RequestMsg';
 import {
     decodeCellBitSet,
     emptyCellState,
@@ -16,6 +17,7 @@ import {
 } from '../model/TerritoryMonsterBox';
 import { normalizeTerritoryChapter } from '../model/TerritoryProgress';
 import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure, type TerritoryRequestTransportFailure } from '../model/TerritoryRequestStatus';
+import type { TerritorySendStatus } from './TerritoryModel';
 import {
     RequestTerritoryCellInfo,
     RequestTerritoryIdleReward,
@@ -26,6 +28,9 @@ import {
 } from './RequestTerritoryCellInfoMsg';
 
 import { READ_TIMEOUT_MS_LONG as READ_TIMEOUT_MS } from '../../net/Timeouts';
+
+/** 组包 + 入队（本帧同步开销）超过这个毫秒数就留痕：单帧 16.7ms，预留一半给渲染。 */
+const TERRITORY_SEND_WARN_MS = 8;
 /**
  * 占城（领地）· 服务端数据端口。
  *
@@ -133,7 +138,29 @@ function readSeconds(value: unknown): number {
 }
 
 export class TerritoryCellRepository {
+    /**
+     * @param caller 请求宿主（页面 Entry）：构造时注入，作为各方法 `caller` 的默认值。
+     *
+     * 有了它，仓储本身就满足 `ITerritoryCellGateway`，装配处不必再写一层
+     * 「`(chapterId, cellId) => cells.unlockCell(chapterId, cellId, this)`」的转发 lambda；
+     * 需要换宿主的调用（测试、跨页面）仍可显式传第三参覆盖。
+     */
+    constructor(private readonly caller: object | null = null) {}
+
     private state: ITerritoryCellState | null = null;
+
+    /**
+     * 写请求**没拿到成功回包**的通知口（服务端拒绝 / 超时 / 取消），由装配层接到 Model。
+     *
+     * 服务端拒绝时下发的是 `CmdTips`，不是对应的 `Rsp`：`ConnectedNetState` 只把那条
+     * `NetworkRequest` 置为 rejected（`onReject('server_error')`），**不派发 Rsp 事件** ⇒
+     * 事件通道上的业务一句都收不到，只能等各自 5 秒的硬超时。实测日志：`CmdTips` 20ms
+     * 就到，全屏 loading 转到 5.7s 才由 `fastTick` 收尾。
+     *
+     * `NetworkRequest` 会把 `reqMsg.fErrorCallback` 留到 `onReject` 时调用（按 clientIndex
+     * 精确对应那一条请求），所以这里接出来就能把等待压到同一个 tick。
+     */
+    onWriteError: ((requestName: string, reason: string) => void) | null = null;
 
     /** 只排除请求回调实际收到的响应对象；在途请求不能吞掉其它章节或主动推送。 */
     private readonly fetchedResponses = new WeakSet<object>();
@@ -174,7 +201,7 @@ export class TerritoryCellRepository {
     async fetchChapterCells(
         levelChapter: number,
         maxCell: number,
-        caller?: object,
+        caller: object | null = this.caller,
     ): Promise<TerritoryCellFetchResult> {
         const chapter = normalizeTerritoryChapter(levelChapter);
         let resolved: ITerritoryCellState | null = null;
@@ -194,175 +221,110 @@ export class TerritoryCellRepository {
         return { ok: true, state: resolved };
     }
 
-    /**
-     * 解锁格子。
-     *
-     * 回包的 `cellId` 是**数组**，可能一次解锁**整片区域**
-     *
-     * 实机日志：请求 `cellId: 327`，回包 `cellId: [327, 328]` —— 服务端按
-     * 「相同 `configId` = 一片战斗区域」把同区域的一起解锁了。
-     * 早期只读 `succ`、把 `cellId` 整个丢掉 ⇒ 界面上**只显示一格解锁**（同区域其余格仍是锁态），
-     * 玩家会以为要一格格点。
-     *
-     * 所以这里把回包里的格子清单原样带出去，由调用方**逐格**记账。
-     * 空数组（服务端没给）时退回请求的那一格 —— 保守但不会把本次解锁记丢。
-     */
-    async unlockCell(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
-        let unlocked: number[] = [];
-        let rewards: ITerritoryGrantedReward[] = [];
-        const result = await this.writeWithSucc(
-            (recordSuccess) => new RequestTerritoryUnlockCell(
-                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId },
-                caller,
-                (rsp) => {
-                    unlocked = readCellIdArray(rsp);
-                    const success = Number((rsp as { succ?: unknown })?.succ) === 1;
-                    recordSuccess(success);
-                    if (success) rewards = readTerritoryGrantedRewards(rsp?.tlCmdGoods);
-                },
-            ),
-            '[TerritoryCell] 解锁格子失败',
-        );
-        if (!result.ok) return result;
-        return { ok: true, unlockedCellIds: unlocked.length ? unlocked : [cellId], rewards };
+    // ============================================================
+    // 写请求：只发不等（回包走 GameNet 事件通道）
+    // ============================================================
+
+    /** 解锁格子（`CmdCityChapterUnlockCellReqMsg`）。 */
+    sendUnlockCell(levelChapter: number, cellId: number, caller: object | null = this.caller): TerritorySendStatus {
+        return this.dispatch(() => new RequestTerritoryUnlockCell(
+            { levelChapter: normalizeTerritoryChapter(levelChapter), cellId }, caller,
+        ), '解锁格子');
     }
 
-    /** 通关格子（占领）。 */
-    async passCell(levelChapter: number, cellId: number, caller?: object): Promise<TerritoryWriteResult> {
-        let rewards: ITerritoryGrantedReward[] = [];
-        const result = await this.writeWithSucc(
-            (recordSuccess) => new RequestTerritoryPassCell(
-                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId },
-                caller,
-            (rsp) => {
-                const success = Number((rsp as { succ?: unknown })?.succ) === 1;
-                recordSuccess(success);
-                if (success) rewards = readTerritoryGrantedRewards(rsp?.tlCmdGoods);
-            },
-            ),
-            '[TerritoryCell] 通关格子失败',
-        );
-        return result.ok ? { ...result, rewards } : result;
+    /** 通关格子（= 占领）。 */
+    sendPassCell(levelChapter: number, cellId: number, caller: object | null = this.caller): TerritorySendStatus {
+        return this.dispatch(() => new RequestTerritoryPassCell(
+            { levelChapter: normalizeTerritoryChapter(levelChapter), cellId }, caller,
+        ), '通关格子');
     }
 
-    /**
-     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg`）。
-     *
-     * 请求体只有章节与格子，**消耗由服务端按当前等级扣**（客户端不传，也不预扣本地银币）
-     * —— 与解锁/通关同一条「写请求不乐观更新」：等服务端 `succ = 1` 再改快照。
-     *
-     * 成功后只把**那一条** `monsterBoxInfo` 并进当前章节快照（`withTerritoryMonsterBox`），
-     * 不整包重建：格子状态（unlock / pass）由别的回包负责，这里重写会把这期间收到的
-     * 推送覆盖掉。
-     */
-    async upMonsterBoxLv(
-        levelChapter: number,
-        cellId: number,
-        caller?: object,
-    ): Promise<TerritoryMonsterBoxUpgradeResult> {
-        const chapter = normalizeTerritoryChapter(levelChapter);
-        let updated: ITerritoryMonsterBox | null = null;
-        let received = false;
-        let succeeded = false;
-        const sent = await this.send(
-            () => new RequestTerritoryUpMonsterBoxLv(
-                { levelChapter: chapter, cellId },
-                caller,
-                (rsp) => {
-                    received = true;
-                    succeeded = Number((rsp as { succ?: unknown })?.succ) === 1;
-                    if (succeeded) updated = readTerritoryMonsterBox((rsp as { monsterBoxInfo?: unknown })?.monsterBoxInfo);
-                },
-            ),
-            '[TerritoryCell] 升级怪物宝箱失败',
-        );
-        // 不用 `writeWithSucc`：它的返回类型与本方法的成功分支不同（`ok: true` 少了等级），
-        // 而本工程 `strictNullChecks` 未开启、对可判别联合的 `!result.ok` 收窄不生效
-        // （既有代码判失败一律写 `'reason' in result`，见 `mergeServerState`）。
-        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: sent };
-        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: sent };
-        // `send` 的 ok 只代表包发出去了；超时兜底先返回时回调还没跑 —— 与领挂机奖励同口径。
-        if (!received) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
-        if (!succeeded) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
-        // `succ = 1` 但回包条目缺失/脏 ⇒ **不能报失败**：服务端已经升级、消耗可能已扣，
-        // 报失败会让界面回滚出一个与服务端不一致的状态。降级成「等级未知」，由调用方重拉。
-        if (updated && this.state && this.state.levelChapter === chapter) {
-            this.state = { ...this.state, monsterBoxes: withTerritoryMonsterBox(this.state.monsterBoxes, updated) };
-        }
-        return { ok: true, monsterBox: updated };
+    /** 章节扫荡；`times` 非法值（0 / 负数 / 小数 / NaN）一律归 1。 */
+    sendSweep(levelChapter: number, cellId: number, times: number = 1,
+        caller: object | null = this.caller): TerritorySendStatus {
+        const sweepTimes = Number.isSafeInteger(times) && times > 0 ? times : 1;
+        return this.dispatch(() => new RequestTerritorySweep(
+            { levelChapter: normalizeTerritoryChapter(levelChapter), cellId, times: sweepTimes }, caller,
+        ), '章节扫荡');
+    }
+
+    /** 领挂机奖励（空请求体）。 */
+    sendIdleReward(caller: object | null = this.caller): TerritorySendStatus {
+        return this.dispatch(() => new RequestTerritoryIdleReward({}, caller), '领挂机奖励');
+    }
+
+    /** 升级怪物宝箱（消耗由服务端按当前等级扣）。 */
+    sendUpMonsterBoxLv(levelChapter: number, cellId: number,
+        caller: object | null = this.caller): TerritorySendStatus {
+        return this.dispatch(() => new RequestTerritoryUpMonsterBoxLv(
+            { levelChapter: normalizeTerritoryChapter(levelChapter), cellId }, caller,
+        ), '升级怪物宝箱');
     }
 
     /**
      * 章节关开战：请求战斗信息（`CmdStartBattleReqMsg`），battleType = 1002，
      * battleParams = [子类型, 章节id, cellid]（子类型 1 = 格子战斗，由调用方
      * `chapterCellBattleParams` 组好）。返回空（未连接/超时/失败）统一为 `failed`。
+     *
+     * 这条仍保留 Promise：`BattleStartService` 是匹配页 / 大地图共用的开战入口，
+     * 回包的归一化与并发合并都在那边，领地不另建一份解析。
      */
     async startBattle(
         battleType: number,
         battleParams: readonly string[],
-        caller?: object,
+        caller: object | null = this.caller,
     ): Promise<TerritoryStartBattleResult> {
         const started = await requestStartBattle(battleType, battleParams, caller);
         if (!started) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
         return { ok: true, battle: started };
     }
 
-    /**
-     * 章节扫荡（回包 `succ` + 实际发放的 `tlCmdGoods`）。
-     *
-     * `times` 是**扫荡倍率**（协议 `optional uint32 times = 3`，缺省 1）：
-     * 服务端按 `倍率 × 单次消耗` 扣体力、按倍率发奖，客户端只负责把倍率原样带上。
-     * 非法值（0 / 负数 / 小数 / NaN）一律归 1 —— 传 0 会被服务端当成「倍率 0」。
-     */
-    async sweep(
-        levelChapter: number,
-        cellId: number,
-        times: number = 1,
-        caller?: object,
-    ): Promise<TerritoryWriteResult> {
-        const sweepTimes = Number.isSafeInteger(times) && times > 0 ? times : 1;
-        let rewards: ITerritoryGrantedReward[] = [];
-        const result = await this.writeWithSucc(
-            (recordSuccess) => new RequestTerritorySweep(
-                { levelChapter: normalizeTerritoryChapter(levelChapter), cellId, times: sweepTimes },
-                caller,
-                (rsp) => {
-                    const success = Number((rsp as { succ?: unknown })?.succ) === 1;
-                    recordSuccess(success);
-                    if (success) rewards = readTerritoryGrantedRewards((rsp as { tlCmdGoods?: unknown })?.tlCmdGoods);
-                },
-            ),
-            '[TerritoryCell] 章节扫荡失败',
-        );
-        return result.ok ? { ...result, rewards } : result;
+    // ============================================================
+    // 写回包解码（Controller 收到 Rsp 后调用，再回灌 Model）
+    // ============================================================
+
+    /** 解锁回包：`succ` + 整片区域的 `cellId` 数组 + `tlCmdGoods`。 */
+    readUnlockRsp(msg: unknown): TerritoryWriteResult {
+        const record = msg as { succ?: unknown; tlCmdGoods?: unknown } | null;
+        if (Number(record?.succ) !== 1) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
+        return { ok: true, unlockedCellIds: readCellIdArray(msg), rewards: readTerritoryGrantedRewards(record?.tlCmdGoods) };
+    }
+
+    /** 通关回包：`succ` + `tlCmdGoods`。 */
+    readPassRsp(msg: unknown): TerritoryWriteResult {
+        const record = msg as { succ?: unknown; tlCmdGoods?: unknown } | null;
+        if (Number(record?.succ) !== 1) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
+        return { ok: true, rewards: readTerritoryGrantedRewards(record?.tlCmdGoods) };
+    }
+
+    /** 扫荡回包：`succ` + 实际发放的 `tlCmdGoods`。 */
+    readSweepRsp(msg: unknown): TerritoryWriteResult {
+        const record = msg as { succ?: unknown; tlCmdGoods?: unknown } | null;
+        if (Number(record?.succ) !== 1) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
+        return { ok: true, rewards: readTerritoryGrantedRewards(record?.tlCmdGoods) };
     }
 
     /**
-     * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`，**空请求体**）。
-     *
-     * 回包带 `idleTime`（新的挂机起点，秒）与 `tlCmdGoods`（实际发放的物品）。
-     * 这条 rsp **没有 `succ`** ⇒ 不能用 `writeWithSucc`：回包到达即成功，
+     * 领挂机奖励回包：**到达即成功**（这条 rsp 没有 `succ`）。
      * `tlCmdGoods` 为空只是「这一段时间没产出」，不是失败。
-     * 失败的判定只有三种：离线 / 包发不出去 / 包发了但回包没到。
      */
-    async claimIdleReward(caller?: object): Promise<TerritoryIdleRewardResult> {
-        let received = false;
-        let idleTimeSeconds = 0;
-        let rewards: ITerritoryGrantedReward[] = [];
-        const sent = await this.send(
-            () => new RequestTerritoryIdleReward({}, caller, (rsp) => {
-                received = true;
-                idleTimeSeconds = readSeconds((rsp as { idleTime?: unknown })?.idleTime);
-                rewards = readTerritoryGrantedRewards((rsp as { tlCmdGoods?: unknown })?.tlCmdGoods);
-            }),
-            '[TerritoryCell] 领挂机奖励失败',
-        );
-        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: sent };
-        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: sent };
-        // `send` 的 ok 只代表包发出去了；超时兜底先返回时回调可能还没跑。
-        if (!received) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
+    readIdleRewardRsp(msg: unknown): TerritoryIdleRewardResult {
+        const record = msg as { idleTime?: unknown; tlCmdGoods?: unknown } | null;
+        const idleTimeSeconds = readSeconds(record?.idleTime);
         this.lastIdleTime = idleTimeSeconds;
-        return { ok: true, rewards, idleTimeSeconds };
+        return { ok: true, rewards: readTerritoryGrantedRewards(record?.tlCmdGoods), idleTimeSeconds };
+    }
+
+    /** 升级怪物宝箱回包：`succ` + `monsterBoxInfo`（等级真源，不本地 +1）。 */
+    readMonsterBoxRsp(msg: unknown): TerritoryMonsterBoxUpgradeResult {
+        const record = msg as { succ?: unknown; monsterBoxInfo?: unknown } | null;
+        if (Number(record?.succ) !== 1) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
+        const box = readTerritoryMonsterBox(record?.monsterBoxInfo);
+        // 成功且等级已知 ⇒ 同步本仓储快照，供拉取失败时的兜底沿用（不本地 +1）。
+        if (box && this.state) {
+            this.state = { ...this.state, monsterBoxes: withTerritoryMonsterBox(this.state.monsterBoxes, box) };
+        }
+        return { ok: true, monsterBox: box };
     }
 
     /** 最近一次领奖回包里的挂机时间戳，秒。 */
@@ -391,18 +353,54 @@ export class TerritoryCellRepository {
         return GameNet.sendRequest(build, { timeoutMs: READ_TIMEOUT_MS, tag: label });
     }
 
-    /** 写请求公共壳：离线早退 + 超时兜底 + `succ` 判定。 */
-    private async writeWithSucc(
-        build: (recordSuccess: (success: boolean) => void) => unknown,
-        label: string,
-    ): Promise<TerritoryWriteResult> {
-        let isSuccess = false;
-        const sent = await this.send(() => build((success) => { isSuccess = success; }), label);
-        if (sent === TERRITORY_REQUEST_STATUS.offline) return { ok: false, reason: TERRITORY_REQUEST_STATUS.offline };
-        if (sent === TERRITORY_REQUEST_STATUS.failed) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
-        if (!isSuccess) return { ok: false, reason: TERRITORY_REQUEST_STATUS.rejected };
-        return { ok: true };
+    /**
+     * 写请求「只发不等」：离线当场返回 `offline`（不会再有回包），发送异常返回 `failed`。
+     * 回包走 `GameNet.addEvent('CmdCityChapterXxxRspMsg')` 的事件通道，由 Controller 解码后回灌 Model。
+     *
+     * `build` 的类型是 `RequestMsg` 而不是 `unknown`：组包与入队都是**本帧同步开销**
+     * （protobuf 编码 + 入队），留痕要能报出协议名 —— 匿名 `() => unknown` 既拿不到名字，
+     * 也没法和网络层的 `ModelCollectTimeConsumingLog` / 抓包记录对号。
+     */
+    private dispatch(build: () => RequestMsg<unknown, unknown>, label: string): TerritorySendStatus {
+        if (!GameNet.instance.isConnected) return 'offline';
+        let request: RequestMsg<unknown, unknown>;
+        const buildStartedAt = Date.now();
+        try {
+            request = build();
+        } catch (error) {
+            console.warn(`[TerritoryCell] ${label}：组包失败`, error);
+            return 'failed';
+        }
+        const builtAt = Date.now();
+        // 协议名先取出来：回调里别再持有消息实例（等回包期间没必要把它一起留住）。
+        const messageName = request.getReqMsgProtoName();
+        // 服务端拒绝 / 超时 / 取消都从这里回灌：`send` 的返回值只有 boolean，分不出原因。
+        // 必须在 `send` **之前**挂 —— `NetworkRequest.packageRequest` 会把它取走并清空。
+        request.fErrorCallback = (reason: string): void => {
+            console.warn(`[TerritoryCell] ${messageName} 未确认（${reason}），回灌业务按失败收尾`);
+            this.onWriteError?.(messageName, reason);
+        };
+        try {
+            // `send` 里的编码 + 入队是同步的：这一段就是本帧的真实成本。
+            const pending = GameNet.instance.send(request, false);
+            const enqueuedAt = Date.now();
+            // 组包 + 入队都是本帧同步开销：超阈值才留痕（单帧 16.7ms，预留一半给渲染）。
+            if (enqueuedAt - buildStartedAt >= TERRITORY_SEND_WARN_MS) {
+                console.warn(`[TerritoryCell] ${messageName} 发送偏慢：`
+                    + `组包 ${builtAt - buildStartedAt}ms / 入队 ${enqueuedAt - builtAt}ms`);
+            }
+            // 编码失败 / 发送异常才会走 reject（失败回灌已由上面的 `fErrorCallback` 接走），
+            // 这里只负责别让它变成 unhandled rejection。
+            void pending.catch((error: unknown) => {
+                console.warn(`[TerritoryCell] ${messageName} 发送异常`, error);
+            });
+            return 'ok';
+        } catch (error) {
+            console.warn(`[TerritoryCell] ${label}：请求未发出`, error);
+            return 'failed';
+        }
     }
+
 
     private failFetch(reason: TerritoryRequestTransportFailure, chapter: number): TerritoryCellFetchResult {
         return {

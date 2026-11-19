@@ -232,15 +232,14 @@ export class NewTreasureRepository {
         if (!this.isValidIndex(index)) return 'failed';
         return this.withPendingAction(index, 'activate', async () => {
             let updated = false;
-            const result = await this.send(
-                new RequestNewTreasureActivate({ index }, undefined, (rsp) => {
-                    if (rsp?.info) {
-                        this.upsertInfo(rsp.info);
-                        updated = true;
-                    }
-                }),
-                WRITE_TIMEOUT_MS,
-            );
+            const request = new RequestNewTreasureActivate({ index }, undefined, (rsp) => {
+                if (rsp?.info) {
+                    this.upsertInfo(rsp.info);
+                    updated = true;
+                }
+            });
+            request.allowRetry = false;
+            const result = await this.send(request, WRITE_TIMEOUT_MS);
             return this.settledResult(result, updated);
         });
     }
@@ -249,15 +248,14 @@ export class NewTreasureRepository {
         if (!this.isValidIndex(index)) return 'failed';
         return this.withPendingAction(index, 'fastOpen', async () => {
             let succeeded = false;
-            const result = await this.send(
-                new RequestNewTreasureFastOpen({ index }, undefined, (rsp) => {
-                    if (rsp?.succ !== 1) return;
-                    this.removeInfo(rsp.index);
-                    succeeded = true;
-                    if (rsp.tlCmdGoods?.length) this.presentRewards(rsp.tlCmdGoods);
-                }),
-                WRITE_TIMEOUT_MS,
-            );
+            const request = new RequestNewTreasureFastOpen({ index }, undefined, (rsp) => {
+                if (rsp?.succ !== 1) return;
+                this.removeInfo(rsp.index);
+                succeeded = true;
+                if (rsp.tlCmdGoods?.length) this.presentRewards(rsp.tlCmdGoods);
+            });
+            request.allowRetry = false;
+            const result = await this.send(request, WRITE_TIMEOUT_MS);
             return this.settledResult(result, succeeded);
         });
     }
@@ -270,12 +268,14 @@ export class NewTreasureRepository {
             const result = await GameNet.sendRequest(() => {
                 hasProtocol = GameNet.instance.protoMgr?.getMessageId('CmdNewTreasureOpenReqMsg') != null;
                 if (!hasProtocol) throw new Error('未提供开箱响应消息号');
-                return new RequestNewTreasureOpen({ index }, undefined, (rsp) => {
+                const request = new RequestNewTreasureOpen({ index }, undefined, (rsp) => {
                     if (rsp?.succ !== 1) return;
                     this.removeInfo(rsp.index);
                     succeeded = true;
                     if (rsp.tlCmdGoods?.length) this.presentRewards(rsp.tlCmdGoods);
                 });
+                request.allowRetry = false;
+                return request;
             }, { timeoutMs: WRITE_TIMEOUT_MS, tag: 'NewTreasure' });
             return hasProtocol ? this.settledResult(result, succeeded) : 'protocol-missing';
         });

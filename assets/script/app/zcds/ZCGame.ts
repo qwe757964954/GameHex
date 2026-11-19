@@ -431,6 +431,8 @@ export class ZCGame extends Component {
             // 自选地图局的中立资源格盖成问号（资源进游戏才随机，别剧透是箱子还是金矿）。
             unknownResourceFrame: prepared.unknownResourceFrame,
             neutralResourceFrames: prepared.neutralResourceFrames,
+            // 野怪集火按钮的三态底图（frame_01/02/03 ⇒ locked/focus/cancel）。
+            monsterFocusFrames: prepared.monsterFocusFrames,
             ownerNames: this.seatProfiles,
             // 中立资源获取特效：飞向 HUD 金币栏的那把金币贴图。
             goldCoinFrame: prepared.goldCoinFrame,

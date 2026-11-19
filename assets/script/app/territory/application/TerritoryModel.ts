@@ -39,7 +39,7 @@ import { withTerritoryMonsterBox } from '../model/TerritoryMonsterBox';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
 import { TerritoryProgress, normalizeTerritoryChapter } from '../model/TerritoryProgress';
-import { TERRITORY_REQUEST_STATUS } from '../model/TerritoryRequestStatus';
+import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure } from '../model/TerritoryRequestStatus';
 import type {
     TerritoryBeginBattleResult,
     TerritoryChapterSave,
@@ -79,24 +79,6 @@ import {
 // 端口
 // ============================================================
 
-/**
- * 「解锁那一次直开」的请求产物：两段回包一起交给 `runCellWrite` 的收尾处理。
- *
- * 只在解锁**成功**时才产生（失败时 `unlockThenStartBattle` 返回 `null`，
- * 进度不记账、不进战斗），所以这里没有失败态。
- */
-interface ITerritoryUnlockThenBattleOutcome {
-    readonly unlockedCellIds: readonly number[];
-    readonly rewards: readonly ITerritoryGrantedReward[];
-    /**
-     * 服务端开战结果。
-     *
-     * `null` = **这一条没有发开战请求**：普通关（`mode = match`）要先过匹配界面，
-     * 开战请求归匹配页发（见 `ITerritoryNavigateBattlePayload.battleParams`）。
-     */
-    readonly battle: TerritoryStartBattleResult | null;
-}
-
 /** 一章的加载产物；loader 内部允许碰 cc / RefUtil，Controller 只消费结构。 */
 export interface ITerritoryChapterBundle {
     readonly mapJson: unknown;
@@ -116,42 +98,113 @@ export interface ITerritoryChapterLoader {
     load(chapterId: number): Promise<ITerritoryChapterBundle | null>;
 }
 
-/** 服务端格子网关；运行时直接传现有 TerritoryCellRepository 实例（结构匹配）。 */
+/** 写请求的发送结果：只描述「有没有发出去」，不携带回包。 */
+export type TerritorySendStatus = 'ok' | 'offline' | 'failed';
+
+/** 写回包没到 / 没发出去时，回灌给 Model 的失败态（成功态是各协议的 result）。 */
+export interface ITerritoryWriteFailure {
+    readonly failed: TerritoryRequestFailure;
+}
+
+/** 写请求种类：与回包一一对应，Controller 用它把 Rsp 回灌到对应的 `apply*Rsp`。 */
+export const TERRITORY_WRITE_KIND = {
+    unlock: 'unlock',
+    pass: 'pass',
+    sweep: 'sweep',
+    idleReward: 'idleReward',
+    monsterBox: 'monsterBox',
+} as const;
+export type TerritoryWriteKind = (typeof TERRITORY_WRITE_KIND)[keyof typeof TERRITORY_WRITE_KIND];
+
+/**
+ * 写请求协议名 → 写票种类。
+ *
+ * 传输层只报得出「哪条**协议**失败」（`NetworkRequest.fErrorCallback` 带的是请求名），
+ * 要把这次失败认领到对应的在途票上，只能在 Model 这一层做一次映射 ——
+ * 与 `TerritoryController` 的 `apply*Rsp` 一一对应，两边都加协议时要一起改。
+ */
+const TERRITORY_WRITE_KIND_BY_REQUEST: Readonly<Record<string, TerritoryWriteKind>> = {
+    CmdCityChapterUnlockCellReqMsg: TERRITORY_WRITE_KIND.unlock,
+    CmdCityChapterPassCellReqMsg: TERRITORY_WRITE_KIND.pass,
+    CmdCityChapterSweepReqMsg: TERRITORY_WRITE_KIND.sweep,
+    CmdCityChapterIdleRewardReqMsg: TERRITORY_WRITE_KIND.idleReward,
+    CmdCityChapterUpMonsterBoxLvReqMsg: TERRITORY_WRITE_KIND.monsterBox,
+};
+
+/** 两步式资源点用到的文案组（`handleUnlockThenPass` 的入参原样带进票里）。 */
+type TerritoryWriteTexts = Readonly<{
+    unlocked: string;
+    unlockFailed: string;
+    claimed: string;
+    claimFailed: string;
+}>;
+
+/** 一条在途写请求；回包 / 超时 / 离线都靠它收尾。 */
+interface ITerritoryWriteTicket {
+    readonly id: number;
+    readonly kind: TerritoryWriteKind;
+    readonly cellId: number;
+    readonly pending: Set<number> | null;
+    readonly loadId: number;
+    readonly requestId: number;
+    readonly exitBusy: (() => void) | null;
+    readonly sentAt: number;
+    /** 回包落地；`true` = 下一段流程接管 loading（解锁 → 开战）。 */
+    readonly handle: (result: unknown, ticket: ITerritoryWriteTicket) => boolean;
+}
+
+/** 写请求的硬超时：超时按失败收尾（服务端可能已经执行，重拉快照核对由各流程自己决定）。 */
+const TERRITORY_WRITE_TIMEOUT_MS = 5000;
+
+/** 从回灌结果里取失败态；`null` = 这是正常回包。 */
+function readWriteFailure(result: unknown): TerritoryRequestFailure | null {
+    if (!result || typeof result !== 'object') return null;
+    if ('failed' in result) return (result as ITerritoryWriteFailure).failed;
+    return 'reason' in result ? (result as { readonly reason: TerritoryRequestFailure }).reason : null;
+}
+
+/**
+ * 服务端格子网关；运行时直接传现有 TerritoryCellRepository 实例（结构匹配）。
+ *
+ * 写请求是**只发不等**：`sendXxx` 返回发送状态，回包由网络事件通道
+ * （`GameNet.addEvent('CmdCityChapterXxxRspMsg')`）回灌到 `applyXxxRsp`。
+ * 查询与开战仍保留 Promise：前者是加载顺序的一部分，后者走公共的 `BattleStartService`。
+ */
 export interface ITerritoryCellGateway {
     fetchChapterCells(
         chapterId: number, maxCell: number,
     ): Promise<TerritoryCellFetchResult>;
-    /** 服务端解锁格子；战斗入口允许离线继续，固定资源领取只认成功回包。 */
-    unlockCell(chapterId: number, cellId: number): Promise<TerritoryWriteResult>;
-    /** 探索到期占领后上报通关；fire-and-forget。 */
-    passCell(chapterId: number, cellId: number): Promise<TerritoryWriteResult>;
+    /** 解锁格子；回包 `CmdCityChapterUnlockCellRspMsg` → `applyUnlockRsp`。 */
+    sendUnlockCell(chapterId: number, cellId: number): TerritorySendStatus;
+    /** 探索到期占领后上报通关；回包 `CmdCityChapterPassCellRspMsg` → `applyPassRsp`。 */
+    sendPassCell(chapterId: number, cellId: number): TerritorySendStatus;
     /** Boss 关开战：请求战斗信息（`CmdStartBattleReqMsg`），**不走**通关上报。 */
     startBattle(
         battleType: number,
         battleParams: readonly string[],
     ): Promise<TerritoryStartBattleResult>;
     /**
-     * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`）。
+     * 领挂机奖励（`CmdCityChapterIdleRewardReqMsg`）；回包 → `applyIdleRewardRsp`。
      *
      * 回包 `tlCmdGoods` 是**服务端实际发放**的物品，必须原样展示；
      * `idleTime` 是新的挂机起点（秒），写回本地账本的只有它，不再本地掷骰结算。
      */
-    claimIdleReward(): Promise<TerritoryIdleRewardResult>;
+    sendIdleReward(): TerritorySendStatus;
     /**
-     * 章节扫荡（`CmdCityChapterSweepReqMsg { levelChapter, cellId, times }`）。
+     * 章节扫荡（`CmdCityChapterSweepReqMsg { levelChapter, cellId, times }`）；回包 → `applySweepRsp`。
      *
      * 回包 `succ === 1` 才算成功，`tlCmdGoods` 是实际发放。
      * `times` 是**扫荡倍率**（协议缺省 1，档位见 `HJ_SWEEP_GEARS`）：服务端按
      * `倍率 × 单次消耗` 扣体力、按倍率发奖 —— 客户端只透传，不做本地结算。
      */
-    sweep(chapterId: number, cellId: number, times: number): Promise<TerritoryWriteResult>;
+    sendSweep(chapterId: number, cellId: number, times: number): TerritorySendStatus;
     /**
-     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg { levelChapter, cellId }`）。
+     * 升级怪物宝箱（`CmdCityChapterUpMonsterBoxLvReqMsg { levelChapter, cellId }`）；回包 → `applyMonsterBoxRsp`。
      *
      * 消耗由服务端按当前等级扣，客户端不预扣、也不本地 `lv + 1`；
      * 回包 `monsterBoxInfo` 才是新等级（字段缺失时 `monsterBox` 为 `null`，见仓储注释）。
      */
-    upMonsterBoxLv(chapterId: number, cellId: number): Promise<TerritoryMonsterBoxUpgradeResult>;
+    sendUpMonsterBoxLv(chapterId: number, cellId: number): TerritorySendStatus;
     clear(): void;
 }
 
@@ -683,6 +736,23 @@ export class TerritoryModel {
     private pendingFixedResourceCells = new Set<number>();
     private pendingRandomResourceCells = new Set<number>();
     private pendingMonsterBoxCells = new Set<number>();
+    /** 在途写请求票（只发不等；回包 / 超时都从这里收尾）。 */
+    private readonly writeTickets: ITerritoryWriteTicket[] = [];
+    private writeTicketSeq = 0;
+    /**
+     * 本次写失败**已由服务端 `CmdTips` 说过原因** ⇒ `showTip` 跳过，别补第二条。
+     *
+     * `rejected` 有两个来源，不能一刀切：
+     *  · `CmdTips` 错误包（`ConnectedNetState` 走 `onReject`）⇒ 服务端已经弹了原因；
+     *  · `Rsp { succ: 0 }`（正常回包，只是业务拒绝）⇒ 服务端没弹过，客户端必须自己提示。
+     * 只有前一条（`applyWriteError`）会置位，作用域限定在一次 `finishWrite` 的 handle 调用里，
+     * 由 `applyWriteError` 的 `finally` 复位 —— 不做「一次性消耗」，避免 handle 不提示时
+     * 把标志留给下一次正常提示。
+     */
+    private silentWriteTip = false;
+    /** 已补发过解锁的待通关格（按章去重，避免每个 60 秒拍都重发一遍）。 */
+    private readonly reportedPassUnlocks = new Set<number>();
+    private reportedPassLoadId = -1;
     /**
      * 上一次结算里**「胜利通过」收进来的格子**（只给动画挑节奏用，不参与玩法判定）。
      *
@@ -781,6 +851,11 @@ export class TerritoryModel {
         // 与这里逐次 hide 配对）。不清理会留下全屏遮罩：`LoadingPopup` 引用计数不为 0
         // 永不关闭，遮罩上的 `BlockInputEvents` 常驻吞点击，其他页面「点不动」。
         for (const release of this.busyReleases) release();
+        // 在途票一并清空：回包再晚到也不会落到已销毁的实例上（`apply*Rsp` 找不到票即忽略）。
+        this.writeTickets.length = 0;
+        this.pendingFixedResourceCells.clear();
+        this.pendingRandomResourceCells.clear();
+        this.pendingMonsterBoxCells.clear();
         // busy 释放通知完成后，再解除实例输出订阅。
         this.outputs.clear();
     }
@@ -830,7 +905,14 @@ export class TerritoryModel {
      * "点了没反应的格子"上误推进。
      */
     selectSite(site: TerritorySite): boolean {
-        if (this.loadingPushes || this.pendingRandomResourceCells.size > 0) return false;
+        // 写请求单飞闸：任何一条在途就整片不受理（`busyCount` 覆盖全部带 loading 的写入口，
+        // `pending*` 覆盖不进 loading 的随机格）。
+        // 🔴 必须放在 `beginInteraction` **之前**：换格会换交互号，把在途请求判成过期回包
+        // ⇒ 服务端已经扣费解锁、客户端不记账，格子还锁着，玩家接着点就是又一层 loading。
+        // 全屏遮罩是页面**下一帧**才盖上的表现层防线，挡不住同一帧的第二次点击。
+        if (this.loadingPushes || this.busyCount > 0
+            || this.pendingFixedResourceCells.size > 0
+            || this.pendingRandomResourceCells.size > 0) return false;
         // 先行换号：**点哪个格子**就是玩家的最新意图，哪怕这一格还没露出 / 点不动。
         // 在途的旧回包必须作废（否则会出现「点 A 在途 → 点了点不动的 B → A 的回包把界面解锁了」）。
         // 同一格连点是 no-op，所以「连点同一格仍要记账」的那两条用例不受影响。
@@ -1034,7 +1116,10 @@ export class TerritoryModel {
     requestBattle(): void {
         const site = this.detailSite;
         const stage = this.detailStage;
-        if (this.loadingPushes || !site || !this.map || !this.saveState || !this.progress) return;
+        // 与 `selectSite` 同一条闸：别的写请求在途时再发一条，回包只能靠「最新一条」认领，
+        // 结果会记到这次点击的格子上（同格重发则叠一层 loading）。
+        if (this.loadingPushes || this.busyCount > 0
+            || !site || !this.map || !this.saveState || !this.progress) return;
         if (this.startingBattle) return;
         // 站点可达性（解锁/通关/花费）全部由 `handleBattleStationStart` 自己判 ——
         // 这里再拦一次会把「需要先解锁」的关卡挡成静默 return（弹窗点了没反应）。
@@ -1210,9 +1295,9 @@ export class TerritoryModel {
      * 解锁过（或区域已通关）的格子照旧走详情弹窗那条路，不会自动开战。
      *
      * 两个请求**共用一具骨架**：一次 pending 登记、一层 loading、一个交互号。
-     * 所以 `unlockCell` → `startBattle` 都写在 `runCellWrite` 的 `request` 里串行发，
-     * 而不是两次 `runCellWrite` 嵌套 —— 那样 loading 会在中间归零闪一下，
-     * 而且第二段取的是新交互号，中途点别的格作废不掉这条开战。
+     * 解锁走「只发不等」的写票；回包落地后由同一条 `handle` 把 loading 直接交给
+     * `startBattleChained` 串行开战 —— 两次独立登记会让 loading 在中间归零闪一下，
+     * 而且第二段若取新交互号，中途点别的格就作废不掉这条开战。
      */
     private async handleUnlockThenBattle(
         site: TerritorySite,
@@ -1226,54 +1311,33 @@ export class TerritoryModel {
         if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
         // 解锁前的「前置满足 + 钱包够」与 `handleUnlockOnly` 同一条校验（失败自带提示）。
         if (!this.canAffordUnlock(site)) return;
-        await this.runCellWrite<ITerritoryUnlockThenBattleOutcome | null>(
-            site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyBattle,
-            () => this.unlockThenStartBattle(site, stage, map.chapterId),
-            (outcome) => {
-                if (!outcome) return;
-                if (outcome.rewards.length) this.showRewards(outcome.rewards, site.cellId);
+        this.beginWrite(TERRITORY_WRITE_KIND.unlock, site.cellId, this.pendingFixedResourceCells,
+            TERRITORY_TEXTS.busyBattle,
+            () => this.ports.gateway.sendUnlockCell(map.chapterId, this.patrolReportCell(site)),
+            (result, ticket) => {
+                if (readWriteFailure(result)) {
+                    this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
+                    return false;
+                }
+                const write = result as { readonly unlockedCellIds?: readonly number[];
+                    readonly rewards?: readonly ITerritoryGrantedReward[] };
+                if (write.rewards?.length) this.showRewards(write.rewards, site.cellId);
                 // 按**回包给的数组**逐格记账（服务端一次解锁整片区域），与 `handleUnlockOnly` 同口径。
-                progress.markCellsUnlocked(outcome.unlockedCellIds);
+                progress.markCellsUnlocked(write.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                // 只有这条入口带 `approach`：解锁成功即开战是**系统替玩家做的决定**，
-                // 玩家连关卡界面都没看到就突然切场景，所以要一段"遭遇敌人"的过场交代一句。
-                this.applyBattleStart(site, stage, outcome.battle, true);
+                if (stage.mode === 'match') {
+                    // 普通关交给匹配页发开战请求；这里只做解锁即开战的交接。
+                    this.applyBattleStart(site, stage, null, true);
+                    return false;
+                }
+                void this.startBattleChained(site, stage, ticket);
+                return true;
             },
-            // 同上：busy 那一刻**不要**让页面把云盖上来 —— 这一路要先看
+            // busy 那一刻**不要**让页面把云盖上来 —— 这一路要先看
             // 「① 关卡地块生成 → ② 镜头推进 + 提示条 → ③ 云层过场」。
             true,
         );
-    }
-
-    /**
-     * 「解锁 → 开战」两段串行；解锁没成功就返回 `null`（格子仍锁着，下次点击重来）。
-     *
-     * 这里**不做** `startBattle` 那种 fail-open：解锁状态是服务端权威，
-     * 回包 `offline` / `failed` 时直接发开战会被服务端按「未解锁」拒掉，
-     * 不如原地提示（`startBattle` 放行的是纯本地开战，不发 `CmdStartBattleReqMsg`，两者不是一回事）。
-     *
-     * 普通关（`mode = match`）第二段**不发**开战请求，`battle` 返回 `null`：
-     * 它要先过匹配界面，开战请求归匹配页（与 `handleBattleStationStart` 同一条口径）。
-     */
-    private async unlockThenStartBattle(
-        site: TerritorySite,
-        stage: TerritoryCampaignStage,
-        chapterId: number,
-    ): Promise<ITerritoryUnlockThenBattleOutcome | null> {
-        const unlock = await this.ports.gateway.unlockCell(chapterId, site.cellId);
-        if (!unlock.ok) {
-            this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
-            return null;
-        }
-        if (stage.mode === 'match') {
-            return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle: null, rewards: unlock.rewards ?? [] };
-        }
-        const battle = await this.ports.gateway.startBattle(
-            ZC_BATTLE_TYPE_CHAPTER,
-            this.battleParamsFor(site, chapterId),
-        );
-        return { unlockedCellIds: unlock.unlockedCellIds ?? [site.cellId], battle, rewards: unlock.rewards ?? [] };
     }
 
     /**
@@ -1299,23 +1363,26 @@ export class TerritoryModel {
             || this.pendingFixedResourceCells.has(site.cellId)) return;
         if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
         if (!this.canAffordUnlock(site)) return;
-        await this.runCellWrite(
-            site.cellId, this.pendingFixedResourceCells, TERRITORY_TEXTS.busyUnlock,
+        this.beginWrite(TERRITORY_WRITE_KIND.unlock, site.cellId, this.pendingFixedResourceCells,
+            TERRITORY_TEXTS.busyUnlock,
             // 巡逻宝箱：请求发「带 `patrolId` 的那一格」（怪物配置绑在那格），
             // 在途标记/回包记账仍按玩家点的这一格 —— 转圈还在手指底下。
-            () => this.ports.gateway.unlockCell(map.chapterId, this.patrolReportCell(site)),
-            (result) => {
-                if (!result.ok) {
+            () => this.ports.gateway.sendUnlockCell(map.chapterId, this.patrolReportCell(site)),
+            result => {
+                if (readWriteFailure(result)) {
                     this.showTip(TERRITORY_TEXTS.bossUnlockFailed);
-                    return;
+                    return false;
                 }
+                const write = result as { readonly unlockedCellIds?: readonly number[];
+                    readonly rewards?: readonly ITerritoryGrantedReward[] };
                 // 按**回包给的数组**逐格记账：服务端一次解锁整片区域（请求 327 → 回 [327,328]），
                 // 只记请求那一格 ⇒ 同区域其余格界面上仍是锁态。
-                progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
+                progress.markCellsUnlocked(write.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                if (result.rewards?.length) this.showRewards(result.rewards, site.cellId);
+                if (write.rewards?.length) this.showRewards(write.rewards, site.cellId);
                 this.showTip(unlockedText);
+                return false;
             },
         );
     }
@@ -1341,36 +1408,36 @@ export class TerritoryModel {
             console.warn(`[TerritoryModel] 第 ${map.chapterId} 章格子 ${cellId} 不在怪物宝箱快照里，跳过升级`);
             return;
         }
-        this.beginInteraction(cellId);
+        const chapterId = map.chapterId;
         const loadId = this.loadId;
-        await this.runCellWrite(
-            cellId, this.pendingMonsterBoxCells, TERRITORY_TEXTS.busyUpgradeMonsterBox,
-            () => this.ports.gateway.upMonsterBoxLv(map.chapterId, cellId),
-            (result) => {
-                // 与 `mergeServerState` 同口径：非 strict 下 `!result.ok` 收窄不生效，判失败用 `in`。
-                if ('reason' in result) {
+        this.beginInteraction(cellId);
+        this.beginWrite(TERRITORY_WRITE_KIND.monsterBox, cellId, this.pendingMonsterBoxCells,
+            TERRITORY_TEXTS.busyUpgradeMonsterBox,
+            () => this.ports.gateway.sendUpMonsterBoxLv(chapterId, cellId),
+            result => {
+                const failure = readWriteFailure(result);
+                // 与 `mergeServerState` 同口径：非 strict 下 `!result.ok` 收窄不生效，判失败用失败态。
+                if (failure) {
                     this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
                     // 只有服务端明确拒绝才重拉：离线 / 超时时重拉会把本地已有的快照再打一次空请求。
-                    if (result.reason === TERRITORY_REQUEST_STATUS.rejected) {
-                        void this.mergeServerState(map.chapterId, loadId);
-                    }
-                    return;
+                    if (failure === TERRITORY_REQUEST_STATUS.rejected) void this.mergeServerState(chapterId, loadId);
+                    return false;
                 }
-                const box = result.monsterBox;
+                const box = (result as { readonly monsterBox?: ITerritoryMonsterBox | null }).monsterBox ?? null;
                 if (!box) {
                     // 「升级成功但等级未知」：服务端已经改了，别报失败也别猜，重拉取权威值。
-                    void this.mergeServerState(map.chapterId, loadId);
-                    return;
+                    void this.mergeServerState(chapterId, loadId);
+                    return false;
                 }
                 const latest = this.chapter?.serverCellStateCache;
-                if (latest && latest.levelChapter === map.chapterId) {
+                if (latest && latest.levelChapter === chapterId) {
                     this.requireChapter().serverCellStateCache = {
                         ...latest,
                         monsterBoxes: withTerritoryMonsterBox(latest.monsterBoxes, box),
                     };
                 }
                 this.showTip(TERRITORY_TEXTS.monsterBoxUpgraded(box.lv));
-                // 在途帧与最终帧由 `runCellWrite` 的 finally 统一发布，这里不再 emit。
+                return false;
             },
         );
     }
@@ -1392,33 +1459,36 @@ export class TerritoryModel {
             if (!territoryRevealedCells(map, progress, this.previewCellsNow()).includes(site.cellId)) return;
             if (!this.canAffordUnlock(site)) return;
         }
-        await this.runCellWrite(
-            site.cellId, this.pendingFixedResourceCells,
+        const kind = isUnlocked ? TERRITORY_WRITE_KIND.pass : TERRITORY_WRITE_KIND.unlock;
+        this.beginWrite(kind, site.cellId, this.pendingFixedResourceCells,
             isUnlocked ? TERRITORY_TEXTS.busyPass : TERRITORY_TEXTS.busyUnlock,
             () => (isUnlocked
-                ? this.ports.gateway.passCell(map.chapterId, site.cellId)
-                : this.ports.gateway.unlockCell(map.chapterId, site.cellId)),
-            (result) => {
-                if (!result.ok) {
+                ? this.ports.gateway.sendPassCell(map.chapterId, site.cellId)
+                : this.ports.gateway.sendUnlockCell(map.chapterId, site.cellId)),
+            result => {
+                if (readWriteFailure(result)) {
                     this.showTip(isUnlocked ? texts.claimFailed : texts.unlockFailed);
-                    return;
+                    return false;
                 }
+                const write = result as { readonly unlockedCellIds?: readonly number[];
+                    readonly rewards?: readonly ITerritoryGrantedReward[] };
                 if (isUnlocked) progress.markCellPassed(site.cellId);
-                else progress.markCellsUnlocked(result.unlockedCellIds ?? [site.cellId]);
+                else progress.markCellsUnlocked(write.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
                 // 空串表示这次不提示；资源点解锁与领取都只靠开箱表演反馈。
                 const tip = isUnlocked ? texts.claimed : texts.unlocked;
                 if (tip) this.showTip(tip);
-                if (isUnlocked && result.rewards?.length) {
+                if (isUnlocked && write.rewards?.length) {
                     // 银币宝箱走独立打开动画；卡牌碎片宝箱仍走默认开箱表演。
                     // 判据只认配表口径 `site.rewardId`，回包奖励内容会随概率变化。
                     if (site.rewardId === TERRITORY_SILVER_CHEST_REWARD_ID) {
-                        this.showRewards(result.rewards, site.cellId, { silverChest: true });
+                        this.showRewards(write.rewards, site.cellId, { silverChest: true });
                     } else {
-                        this.showRewards(result.rewards, site.cellId);
+                        this.showRewards(write.rewards, site.cellId);
                     }
                 }
+                return false;
             },
         );
     }
@@ -1531,51 +1601,184 @@ export class TerritoryModel {
         // 与入口共用同一份判据（见 `tryRandomResourceOpen`）：入口已经判过一次，
         // 这里再判是为了覆盖"请求排队期间状态变了"的情况，不会重复弹提示。
         if (!this.tryRandomResourceOpen(cellId)) return;
-        await this.runCellWrite(
-            cellId, this.pendingRandomResourceCells, null,
-            async () => {
-                const loadId = this.loadId;
-                const result = await this.ports.gateway.unlockCell(map.chapterId, cellId);
-                // 写请求超时不代表服务器没执行，先用既有章节快照合并流程核对。
-                if (loadId === this.loadId && 'reason' in result && result.reason === TERRITORY_REQUEST_STATUS.failed) {
-                    await this.mergeServerState(map.chapterId, loadId);
+        const chapterId = map.chapterId;
+        this.beginWrite(TERRITORY_WRITE_KIND.unlock, cellId, this.pendingRandomResourceCells, null,
+            () => this.ports.gateway.sendUnlockCell(chapterId, cellId),
+            result => {
+                const failure = readWriteFailure(result);
+                if (failure) {
+                    // 超时不代表服务端没执行：先按快照核对，核对完仍没解锁才提示（与旧实现同序）。
+                    if (failure === TERRITORY_REQUEST_STATUS.failed) {
+                        void this.mergeServerState(chapterId, this.loadId).then(() => {
+                            if (!progress.isCellUnlocked(cellId)) this.showTip(TERRITORY_TEXTS.randomOpenFailed);
+                        });
+                    } else if (!progress.isCellUnlocked(cellId)) {
+                        this.showTip(TERRITORY_TEXTS.randomOpenFailed);
+                    }
+                    return false;
                 }
-                return result;
-            },
-            (result) => {
-                if (!result.ok) {
-                    if (!progress.isCellUnlocked(cellId)) this.showTip(TERRITORY_TEXTS.randomOpenFailed);
-                    return;
-                }
+                const write = result as { readonly unlockedCellIds?: readonly number[];
+                    readonly rewards?: readonly ITerritoryGrantedReward[] };
                 // 随机格「解锁即通关」：服务端在解锁回包时已发奖，没有通关请求。
                 // 只记 unlockable ⇒ 地图底色仍是泥地（未通关）；必须同时记 owned，
                 // 地块才会立即变草地（`img_land_01`），与已领取的固定资源点同口径。
                 // 注意不进 pendingPasses —— 随机格永不发 CmdCityChapterPassCellReqMsg。
-                const openedCellIds = result.unlockedCellIds ?? [cellId];
+                const openedCellIds = write.unlockedCellIds ?? [cellId];
                 // 首次翻格（本账号一个格子都还没有）⇒ 这次走**奖励弹窗**而不是"只喷资源"。
-                // 依据：新手引导 2-2 要求「全屏黑 60% + 奖励弹窗置顶（含初始阵容）+ 点收下关闭」，
-                // 而随机格的默认口径是 `{ chest: false }`（解锁即发奖、不弹窗，§3）。
                 // 只在**第一格**破例，后续翻格仍按原口径走喷资源。
                 const firstCellEver = progress.ownedCells.length === 0;
                 progress.markCellsUnlocked(openedCellIds);
                 progress.markCellsPassed(openedCellIds);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
-                // 不补「已开启」轻提示：随机格是解锁即发奖，**格子上喷出的资源**已经承担了
-                // 这次操作的反馈（这条反馈是粒子 + 飘字，不是奖励弹窗），
-                // 再弹一句轻提示会和它抢同一时刻。
-                // 失败分支的轻提示保留（那时没有资源喷发）。
-                // 随机格是**解锁即发奖**，没有"开箱"这一步：直接喷资源图标（§1）。
-                // 粒子个数由页面按奖励总量分级（< 50 很稀疏），不在这里算。
-                // `{ chest: false }` 同时还意味着**不弹奖励窗**（§3）：
-                // 随机池发的是道具（非钱包类），走 `settleRewards` 会被全部判进 `popup`。
-                if (result.rewards?.length) {
-                    // `{ popup: true }` ⇒ 直接 `FW.ShowReward`（不走宝箱开箱动画）。
-                    // 引导 2-2 要的是"弹窗"，不是"开箱表演"。
-                    this.showRewards(result.rewards, cellId, firstCellEver ? { popup: true } : { chest: false });
+                // 不补「已开启」轻提示：随机格是解锁即发奖，格子上喷出的资源已经承担反馈。
+                // `{ chest: false }` = 不弹奖励窗（随机池发的是道具，走 settleRewards 会被全判进 popup）。
+                if (write.rewards?.length) {
+                    this.showRewards(write.rewards, cellId, firstCellEver ? { popup: true } : { chest: false });
                 }
+                return false;
             },
         );
+    }
+
+    // ============================================================
+    // 只发不等的写通道
+    // ============================================================
+
+    /**
+     * 写请求**没等到成功回包**（服务端拒绝 / 断线 / 取消）：当场按失败收尾。
+     *
+     * 为什么需要这条旁路：服务端拒绝时下发的是 `CmdTips` 而不是对应的 `Rsp` ——
+     * `ConnectedNetState` 只把那条 `NetworkRequest` 置为 rejected，**不派发 Rsp 事件**，
+     * 所以 `apply*Rsp` 一条都收不到，只能干等 `fastTick` 的 5 秒硬超时。
+     * 实测日志：`CmdTips { 前置地块未解锁 }` 20ms 就到，全屏 loading 转到 5723ms 才收。
+     *
+     * `server_error` = 服务端明确拒绝（`CmdTips` 已弹过提示，`handle` 里的提示会再补一条，
+     * 与超时路径一致）；其余 reason（`timeout` / `cancelled`）按普通失败处理。
+     */
+    applyWriteError(requestName: string, reason: string): void {
+        const kind = TERRITORY_WRITE_KIND_BY_REQUEST[requestName];
+        if (!kind) return;
+        // 同 kind 没有在途票（回包已经到过 / 已超时收尾）⇒ `finishNewest` 自己会忽略。
+        if (!this.writeTickets.some(ticket => ticket.kind === kind)) return;
+        // `server_error` = 服务端拒绝：`CmdTips` 已经把原因说给玩家了，handle 里别再补一条
+        // （Toast 是排队播的，两条会连播 3 秒多）。其余 reason 没有服务端提示，照旧由 handle 提示。
+        const rejected = reason === 'server_error';
+        const failed = rejected ? TERRITORY_REQUEST_STATUS.rejected : TERRITORY_REQUEST_STATUS.failed;
+        console.warn(`[TerritoryModel] ${requestName} 未确认（${reason}），按 ${failed} 当场收尾`);
+        this.silentWriteTip = rejected;
+        try {
+            this.finishNewest(kind, { failed });
+        } finally {
+            this.silentWriteTip = false;
+        }
+    }
+
+    /** 解锁回包（`CmdCityChapterUnlockCellRspMsg`）。 */
+    applyUnlockRsp(result: TerritoryWriteResult | ITerritoryWriteFailure): void {
+        this.finishNewest(TERRITORY_WRITE_KIND.unlock, result);
+    }
+
+    /** 通关回包（`CmdCityChapterPassCellRspMsg`）。 */
+    applyPassRsp(result: TerritoryWriteResult | ITerritoryWriteFailure): void {
+        this.finishNewest(TERRITORY_WRITE_KIND.pass, result);
+    }
+
+    /** 扫荡回包（`CmdCityChapterSweepRspMsg`）。 */
+    applySweepRsp(result: TerritoryWriteResult | ITerritoryWriteFailure): void {
+        this.finishNewest(TERRITORY_WRITE_KIND.sweep, result);
+    }
+
+    /** 领挂机奖励回包（`CmdCityChapterIdleRewardRspMsg`，到达即成功）。 */
+    applyIdleRewardRsp(result: TerritoryIdleRewardResult | ITerritoryWriteFailure): void {
+        this.finishNewest(TERRITORY_WRITE_KIND.idleReward, result);
+    }
+
+    /** 升级怪物宝箱回包（`CmdCityChapterUpMonsterBoxLvRspMsg`）。 */
+    applyMonsterBoxRsp(result: TerritoryMonsterBoxUpgradeResult | ITerritoryWriteFailure): void {
+        this.finishNewest(TERRITORY_WRITE_KIND.monsterBox, result);
+    }
+
+    /**
+     * 登记一条「只发不等」的写请求：在途票 → loading → 发送；回包到了交给 `handle` 落地。
+     * `handle` 返回 `true` 表示下一段流程接管 loading（解锁 → 开战），中间不闪。
+     */
+    private beginWrite(kind: TerritoryWriteKind, cellId: number, pending: Set<number> | null,
+        busyText: string | null, send: () => TerritorySendStatus,
+        handle: (result: unknown, ticket: ITerritoryWriteTicket) => boolean, approachBusy = false): void {
+        if (pending?.has(cellId)) return;
+        pending?.add(cellId);
+        const ticket: ITerritoryWriteTicket = {
+            id: ++this.writeTicketSeq, kind, cellId, pending,
+            loadId: this.loadId, requestId: this.interactionId,
+            exitBusy: busyText === null ? null : this.enterBusy(busyText, approachBusy),
+            sentAt: Date.now(), handle,
+        };
+        this.writeTickets.push(ticket);
+        this.emitStateChange();
+        const status = send();
+        if (status === 'ok') return;
+        this.finishWrite(ticket.id, {
+            failed: status === 'offline' ? TERRITORY_REQUEST_STATUS.offline : TERRITORY_REQUEST_STATUS.failed,
+        });
+    }
+
+    /** 同类请求并发时只有**最新一条**交互有效；没有在途票 ⇒ 迟到 / 不属于本页的回包，直接忽略。 */
+    private finishNewest(kind: TerritoryWriteKind, result: unknown): void {
+        for (let index = this.writeTickets.length - 1; index >= 0; index--) {
+            const ticket = this.writeTickets[index];
+            if (ticket.kind === kind) {
+                this.finishWrite(ticket.id, result);
+                return;
+            }
+        }
+    }
+
+    /** 收尾：配对撤 loading、清 pending、竞态作废，回包交给登记时的 `handle`。 */
+    private finishWrite(ticketId: number, result: unknown): void {
+        const index = this.writeTickets.findIndex(ticket => ticket.id === ticketId);
+        if (index < 0) return;
+        const ticket = this.writeTickets.splice(index, 1)[0];
+        ticket.pending?.delete(ticket.cellId);
+        if (ticket.loadId !== this.loadId || ticket.requestId !== this.interactionId) {
+            // 丢弃是**正常**路径（玩家确实切走了），但不该无迹可寻 —— 这条日志救过一次过场空等。
+            console.info(
+                `[TerritoryModel] 第 ${this.map?.chapterId ?? '?'} 章格子 ${ticket.cellId} 的写回包被竞态作废`
+                + `（交互号 ${ticket.requestId} → ${this.interactionId}），结果不记账`,
+            );
+            ticket.exitBusy?.();
+            if (ticket.loadId === this.loadId) this.emitStateChange();
+            return;
+        }
+        let chained = false;
+        try { chained = ticket.handle(result, ticket); }
+        finally {
+            // 链式流程（解锁 → 开战）把这一层 loading 交给下一段，避免中间闪一下。
+            if (!chained) ticket.exitBusy?.();
+            if (ticket.loadId === this.loadId) this.emitStateChange();
+        }
+    }
+
+    /**
+     * 解锁成功后接着开战（首次解锁直开）：开战仍走公共 `BattleStartService` 的 Promise，
+     * loading 由解锁那一层直接交给这里，中间不闪。
+     */
+    private async startBattleChained(site: TerritorySite, stage: TerritoryCampaignStage,
+        ticket: ITerritoryWriteTicket): Promise<void> {
+        const chapterId = this.map?.chapterId ?? 0;
+        try {
+            const result = await this.ports.gateway.startBattle(
+                ZC_BATTLE_TYPE_CHAPTER, this.battleParamsFor(site, chapterId),
+            );
+            if (ticket.loadId !== this.loadId || ticket.requestId !== this.interactionId) {
+                console.info(`[TerritoryModel] 第 ${chapterId} 章格子 ${site.cellId} 的开战回包被竞态作废`);
+                return;
+            }
+            this.applyBattleStart(site, stage, result, true);
+        } finally {
+            ticket.exitBusy?.();
+            if (ticket.loadId === this.loadId) this.emitStateChange();
+        }
     }
 
     /**
@@ -1707,10 +1910,9 @@ export class TerritoryModel {
     private async startBattle(site: TerritorySite, stage: TerritoryCampaignStage): Promise<void> {
         const map = this.map;
         if (!map) return;
-        const loadId = this.loadId;
         // 走 `nextInteraction` 而不是裸 `++this.interactionId`：换号必须同步 `interactionCell`，
         // 否则下一次点同一格会被 `beginInteraction` 判成「同格连点」⇒ 作废不了这条在途请求。
-        const requestId = this.nextInteraction(site.cellId);
+        this.nextInteraction(site.cellId);
         this.startingBattle = true;
         this.emitStateChange();
 
@@ -1719,32 +1921,29 @@ export class TerritoryModel {
             return;
         }
 
-        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyBattle);
-        try {
-            const unlock = await this.ports.gateway.unlockCell(
-                map.chapterId, site.cellId);
-            // 取消或换章 / 换交互会作废任务版本，迟到结果不再提交。
-            if (loadId !== this.loadId || requestId !== this.interactionId) return;
-            if ('reason' in unlock) {
-                if (unlock.reason === TERRITORY_REQUEST_STATUS.rejected) {
+        this.beginWrite(TERRITORY_WRITE_KIND.unlock, site.cellId, null, TERRITORY_TEXTS.busyBattle,
+            () => this.ports.gateway.sendUnlockCell(map.chapterId, site.cellId),
+            result => {
+                const failure = readWriteFailure(result);
+                // 解锁失败只有 `rejected` 停手；离线 / 超时按本地继续（战斗结果随后补报）。
+                if (failure === TERRITORY_REQUEST_STATUS.rejected) {
                     this.startingBattle = false;
                     this.showTip(TERRITORY_TEXTS.unlockRejected);
-                    this.emitStateChange();
-                    return;
+                    return false;
                 }
-                console.warn(
-                    `[TerritoryModel] 第 ${map.chapterId} 章格子 ${site.cellId} 解锁请求未确认（${unlock.reason}），按本地继续`,
-                );
-            }
-            if (unlock.ok) {
-                this.progress?.markCellsUnlocked(unlock.unlockedCellIds ?? [site.cellId]);
-                if (unlock.rewards?.length) this.showRewards(unlock.rewards, site.cellId);
-            }
-
-            this.beginBattle(site, stage);
-        } finally {
-            exitBusy();
-        }
+                if (failure) {
+                    console.warn(`[TerritoryModel] 第 ${map.chapterId} 章格子 ${site.cellId}`
+                        + ` 解锁请求未确认（${failure}），按本地继续`);
+                } else {
+                    const write = result as { readonly unlockedCellIds?: readonly number[];
+                        readonly rewards?: readonly ITerritoryGrantedReward[] };
+                    this.progress?.markCellsUnlocked(write.unlockedCellIds ?? [site.cellId]);
+                    if (write.rewards?.length) this.showRewards(write.rewards, site.cellId);
+                }
+                this.beginBattle(site, stage);
+                return false;
+            },
+        );
     }
 
     /** 解锁已确认（或网络不可用决定放行）之后，真正扣资源 + 进战斗。 */
@@ -1880,6 +2079,14 @@ export class TerritoryModel {
 
     /** 1 秒拍：仅在有探索进行时工作；探索到期且无新占领时早退（与旧 tickProgress 口径一致）。 */
     fastTick(now: number): void {
+        // 只发不等的写请求靠这里兜超时：回包没到也要退出在途帧（服务端可能已执行）。
+        for (const ticket of [...this.writeTickets]) {
+            const elapsed = now - ticket.sentAt;
+            if (elapsed < TERRITORY_WRITE_TIMEOUT_MS) continue;
+            // 超时按协议种类 + 格子 + 实际等待时长留痕：只报「点了没反应」查不出是哪条请求。
+            console.warn(`[TerritoryModel] ${ticket.kind} 回包超时（等待 ${Math.round(elapsed)}ms，格子 ${ticket.cellId}），按失败收尾`);
+            this.finishWrite(ticket.id, { failed: TERRITORY_REQUEST_STATUS.failed });
+        }
         if (this.loadingPushes || !this.progress || !this.progress.activeExplorations.length) return;
         const wasComplete = this.chapterCompletion().complete;
         if (!this.settleProgress(now).length) return;
@@ -2276,6 +2483,10 @@ export class TerritoryModel {
     private async reportPendingPasses(): Promise<void> {
         if (!this.map || !this.progress || this.reportingLoadId === this.loadId) return;
         const loadId = this.loadId;
+        if (this.reportedPassLoadId !== loadId) {
+            this.reportedPassLoadId = loadId;
+            this.reportedPassUnlocks.clear();
+        }
         const chapterId = this.map.chapterId;
         const progress = this.progress;
         this.reportingLoadId = loadId;
@@ -2283,11 +2494,11 @@ export class TerritoryModel {
             for (const cellId of progress.pendingPassCells) {
                 // 离线开战可能连解锁都没送达 ⇒ 补解锁（这是唯一需要发的请求）。
                 if (!progress.serverStateKnown || !progress.isUnlockable(cellId)) {
-                    const unlock = await this.ports.gateway.unlockCell(chapterId, cellId);
-                    if (loadId !== this.loadId) return;
-                    if (!unlock.ok) break;
-                    progress.markCellsUnlocked(unlock.unlockedCellIds ?? [cellId]);
-                    if (unlock.rewards?.length) this.showRewards(unlock.rewards, cellId);
+                    // 只发不等：解锁结果由服务端快照（CellInfo 推送 / 下一次拉取）核对。
+                    // 同一章节里每格只补一次 —— 没有 Promise 可等，重复拍会变成刷请求。
+                    if (this.reportedPassUnlocks.has(cellId)) continue;
+                    if (this.ports.gateway.sendUnlockCell(chapterId, cellId) !== 'ok') break;
+                    this.reportedPassUnlocks.add(cellId);
                 }
                 // 不发 passCell：关卡通关等服务端主动下发，applyServerState 清 pendingPasses。
             }
@@ -2359,32 +2570,32 @@ export class TerritoryModel {
      */
     async claimIdleRewards(now: number): Promise<void> {
         if (this.loadingPushes || !this.chapter) return;
-        const loadId = this.loadId;
-        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busyIdleReward);
-        try {
-            const result = await this.ports.gateway.claimIdleReward();
-            if (loadId !== this.loadId) return;
-            if (result.ok) {
-                if (result.idleTimeSeconds > 0) this.applyServerIdleTime(result.idleTimeSeconds);
-                if (result.rewards.length) this.showRewards(result.rewards, null, { popup: true });
+        // 同一种写请求只允许一条在途：回包按种类落地，双发会让先发的那条等到超时才收尾。
+        if (this.writeTickets.some(ticket => ticket.kind === TERRITORY_WRITE_KIND.idleReward)) return;
+        this.beginWrite(TERRITORY_WRITE_KIND.idleReward, 0, null, TERRITORY_TEXTS.busyIdleReward,
+            () => this.ports.gateway.sendIdleReward(),
+            result => {
+                const failure = readWriteFailure(result);
+                if (failure) {
+                    if (failure !== TERRITORY_REQUEST_STATUS.offline) {
+                        this.showTip(TERRITORY_TEXTS.idleRewardFailed);
+                        return false;
+                    }
+                    // 离线回落本地结算：在线时不本地结算，避免双算 / 借网络失败刷奖励。
+                    const idle = this.settleIdleRewards(now);
+                    this.emitStateChange();
+                    if (idle?.rewards.length) this.showRewards(idle.rewards);
+                    else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+                    return false;
+                }
+                const write = result as { readonly idleTimeSeconds: number;
+                    readonly rewards: readonly ITerritoryGrantedReward[] };
+                if (write.idleTimeSeconds > 0) this.applyServerIdleTime(write.idleTimeSeconds);
+                if (write.rewards.length) this.showRewards(write.rewards, null, { popup: true });
                 else this.showTip(TERRITORY_TEXTS.noIdleRewards);
-                this.emitStateChange();
-                return;
-            }
-            // 用 `'reason' in result` 而不是 `!result.ok` 窄化：本工程 `strictNullChecks` 关闭，
-            // 字面量 `false` 可能被 widen 成 `boolean`，`if (!result.ok)` 之后拿不到 `reason`。
-            if (!('reason' in result)) return;
-            if (result.reason !== TERRITORY_REQUEST_STATUS.offline) {
-                this.showTip(TERRITORY_TEXTS.idleRewardFailed);
-                return;
-            }
-            const idle = this.settleIdleRewards(now);
-            this.emitStateChange();
-            if (idle?.rewards.length) this.showRewards(idle.rewards);
-            else this.showTip(TERRITORY_TEXTS.noIdleRewards);
-        } finally {
-            exitBusy();
-        }
+                return false;
+            },
+        );
     }
 
     /**
@@ -2405,27 +2616,24 @@ export class TerritoryModel {
             this.showTip(TERRITORY_TEXTS.noSweepTarget);
             return;
         }
+        if (this.writeTickets.some(ticket => ticket.kind === TERRITORY_WRITE_KIND.sweep)) return;
         const chapterId = this.map.chapterId;
-        const loadId = this.loadId;
-        const exitBusy = this.enterBusy(TERRITORY_TEXTS.busySweep);
-        try {
-            const result = await this.ports.gateway.sweep(chapterId, target.site.cellId, times);
-            if (loadId !== this.loadId) return;
-            if (!result.ok) {
-                // `'reason' in` 而不是 `!result.ok` —— 本工程 `strictNullChecks` 关闭，
-                // 字面量 `false` 会 widen 成 `boolean`，直接读 `result.reason` 报 TS2339。
-                const reason = 'reason' in result ? result.reason : TERRITORY_REQUEST_STATUS.failed;
-                this.showTip(reason === TERRITORY_REQUEST_STATUS.offline
-                    ? TERRITORY_TEXTS.idleRewardOffline
-                    : TERRITORY_TEXTS.sweepFailed);
-                return;
-            }
-            if (result.rewards?.length) this.showRewards(result.rewards, target.site.cellId, { popup: true });
-            else this.showTip(TERRITORY_TEXTS.noIdleRewards);
-            this.emitStateChange();
-        } finally {
-            exitBusy();
-        }
+        const cellId = target.site.cellId;
+        this.beginWrite(TERRITORY_WRITE_KIND.sweep, cellId, null, TERRITORY_TEXTS.busySweep,
+            () => this.ports.gateway.sendSweep(chapterId, cellId, times),
+            result => {
+                const failure = readWriteFailure(result);
+                if (failure) {
+                    this.showTip(failure === TERRITORY_REQUEST_STATUS.offline
+                        ? TERRITORY_TEXTS.idleRewardOffline : TERRITORY_TEXTS.sweepFailed);
+                    return false;
+                }
+                const write = result as { readonly rewards?: readonly ITerritoryGrantedReward[] };
+                if (write.rewards?.length) this.showRewards(write.rewards, cellId, { popup: true });
+                else this.showTip(TERRITORY_TEXTS.noIdleRewards);
+                return false;
+            },
+        );
     }
 
     /**
@@ -2799,6 +3007,8 @@ export class TerritoryModel {
     }
 
     private showTip(text: string): void {
+        // 服务端 `CmdTips` 已经说过原因（`applyWriteError` 那条路径）⇒ 本次失败不再补一条。
+        if (this.silentWriteTip) return;
         this.publish({ kind: 'tip', payload: { text } });
     }
 

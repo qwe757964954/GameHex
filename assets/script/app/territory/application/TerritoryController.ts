@@ -1,11 +1,10 @@
-import { ControllerBase, type IControllerResources } from '../../../framework/controller/ControllerBase';
+import { ControllerBase } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { reportGuideComplete } from '../../guide/application/GuideEvents';
 import { GameNet } from '../../net/GameNet';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type {
-    ITerritoryCellGateway,
     ITerritoryNavigateBattlePayload,
     TerritoryModel,
     TerritoryModelOutput,
@@ -34,13 +33,9 @@ export class TerritoryController extends ControllerBase {
     private ticking = false;
     private stopOutput: (() => void) | null = null;
 
-    private readonly model: TerritoryModel;
-
-    constructor(createModel: (resources: IControllerResources, gateway: ITerritoryCellGateway) => TerritoryModel,
-        private readonly options: ITerritoryControllerOptions) {
+    /** Model 由 `TerritoryEntry` 装配好传进来；Controller 只消费，不再参与构造。 */
+    constructor(private readonly model: TerritoryModel, private readonly options: ITerritoryControllerOptions) {
         super(options.context, 'territory-controller');
-        try { this.model = createModel(this.resources, this.createCellGateway(options.cells)); }
-        catch (error) { super.dispose(); throw error; }
     }
 
     start(): void {
@@ -54,26 +49,30 @@ export class TerritoryController extends ControllerBase {
         this.model.start();
     }
 
-    /**
-     * 把仓储请求绑定到控制器本体：模型只看到无宿主的 gateway 端口，
-     * 断线 / 关闭页面时由 `removeCaller(this)` 统一取消。
-     */
-    private createCellGateway(cells: TerritoryCellRepository): ITerritoryCellGateway {
-        return {
-            fetchChapterCells: (chapterId, maxCell) => cells.fetchChapterCells(chapterId, maxCell, this),
-            unlockCell: (chapterId, cellId) => cells.unlockCell(chapterId, cellId, this),
-            passCell: (chapterId, cellId) => cells.passCell(chapterId, cellId, this),
-            startBattle: (battleType, battleParams) => cells.startBattle(battleType, battleParams, this),
-            claimIdleReward: () => cells.claimIdleReward(this),
-            sweep: (chapterId, cellId, times) => cells.sweep(chapterId, cellId, times, this),
-            upMonsterBoxLv: (chapterId, cellId) => cells.upMonsterBoxLv(chapterId, cellId, this),
-            clear: () => cells.clear(),
-        };
-    }
-
     private bindNetworkEvents(): void {
         GameNet.instance.addEvent('CmdCityChapterPassCellBroMsg', this, this.onPassCellsBro);
         GameNet.instance.addEvent('CmdCityChapterCellInfoRspMsg', this, this.onCellInfo);
+        // 写请求只发不等：回包全部走事件通道，解成结构化结果后回灌 Model。
+        GameNet.instance.addEvent('CmdCityChapterUnlockCellRspMsg', this, this.onUnlockRsp);
+        GameNet.instance.addEvent('CmdCityChapterPassCellRspMsg', this, this.onPassRsp);
+        GameNet.instance.addEvent('CmdCityChapterSweepRspMsg', this, this.onSweepRsp);
+        GameNet.instance.addEvent('CmdCityChapterIdleRewardRspMsg', this, this.onIdleRewardRsp);
+        GameNet.instance.addEvent('CmdCityChapterUpMonsterBoxLvRspMsg', this, this.onMonsterBoxRsp);
+    }
+    private onUnlockRsp(message: unknown): void {
+        this.model.applyUnlockRsp(this.options.cells.readUnlockRsp(message));
+    }
+    private onPassRsp(message: unknown): void {
+        this.model.applyPassRsp(this.options.cells.readPassRsp(message));
+    }
+    private onSweepRsp(message: unknown): void {
+        this.model.applySweepRsp(this.options.cells.readSweepRsp(message));
+    }
+    private onIdleRewardRsp(message: unknown): void {
+        this.model.applyIdleRewardRsp(this.options.cells.readIdleRewardRsp(message));
+    }
+    private onMonsterBoxRsp(message: unknown): void {
+        this.model.applyMonsterBoxRsp(this.options.cells.readMonsterBoxRsp(message));
     }
     private onPassCellsBro(message: unknown): void {
         const bro = this.options.cells.readPassCellsBro(message);

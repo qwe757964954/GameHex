@@ -22,6 +22,15 @@ export interface GameRunAwayOptions {
 export class GameRunAway extends PopupBase {
     static prefabPath = 'ui/game/GameRunAway';
 
+    /**
+     * 不播统一离场过渡（与 `ZCSettlementPage` 同一条口径，见 `PopupBase.motionEnabled`）。
+     *
+     * 离场过渡会把节点寿命延长 0.16s，而 `_internalClose` 同步 dispose 资源作用域，
+     * 头像 / 图标在 `EVENT_AFTER_DRAW` 就被销毁 ⇒ 淡出期间每帧崩
+     * `frame should not be invalid, it may have been released`。
+     */
+    motionEnabled = false;
+
     @property(Label)
     titleLabel: Label = null!;
     @property(Label)

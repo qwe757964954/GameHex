@@ -2665,6 +2665,7 @@ slowRatio?:number
 secondarySkillId?:number
 chargeDistance?:number
 chargeSpeedScale?:number
+impactEffectAnchor?:number
 }
 type IRefpvpSkill_skillId=number
 type IRefpvpSkill_name=string
@@ -2687,6 +2688,7 @@ type IRefpvpSkill_slowRatio=number
 type IRefpvpSkill_secondarySkillId=number
 type IRefpvpSkill_chargeDistance=number
 type IRefpvpSkill_chargeSpeedScale=number
+type IRefpvpSkill_impactEffectAnchor=number
 
 interface refGen{pvpSkill:IRefpvpSkill}
 

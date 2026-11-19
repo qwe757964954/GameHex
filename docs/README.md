@@ -40,6 +40,7 @@
 | 索敌、目标选择、仇恨与切换规则 | [design/zcds-索敌机制落地方案.md](design/zcds-索敌机制落地方案.md) | 当前口径见开篇，实施与验证见 §9，卡牌价值与导表见 §10；§2～§8 为历史评估 |
 | 对局 HUD、六边形视图决策、趣味中立资源 | [ZCGameHUD.md](ZCGameHUD.md)、[ZCHexView设计决策.md](ZCHexView设计决策.md)、[zcds-趣味中立资源.md](zcds-趣味中立资源.md) | — |
 | 卡牌阵容蓝湖改版 | [CardLineup蓝湖改版说明.md](CardLineup蓝湖改版说明.md) | — |
+| 界面 / 弹窗统一进出场动效、章节地图模块入场 | [UI统一动效实现说明.md](UI统一动效实现说明.md) | 曲线真源 `framework/ui/UIMotion.ts`，节奏表 `app/main/MainHudMotion.ts` |
 | 协议与跨端规则 | [slg-协议接入说明.md](slg-协议接入说明.md) | 跨端资源规则见 [spec/领地随机资源跨端规则.md](spec/领地随机资源跨端规则.md) |
 | 构建、热更新、MCP、微信包体 | [热更新方案.md](热更新方案.md)、[ops/一键打包安卓+热更新流程.html](ops/一键打包安卓+热更新流程.html)、[MCP接入指南.md](MCP接入指南.md)、[wechatgame-构建与包体.md](wechatgame-构建与包体.md) | — |
 | 追溯旧参数、旧实现 | [history/README.md](history/README.md) | 只作参考，不升级为当前要求 |

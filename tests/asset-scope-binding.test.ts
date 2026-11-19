@@ -58,8 +58,9 @@ test('领地章节美术、翻格、云、宝箱统一使用页面作用域，�
     assert.match(source, /this.controllerResources = resources/);
     const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
     assert.match(composition, /new TerritoryEntry\(this\.context,/);
-    assert.match(composition, /territory\.initialize\(entry\.controller\.resources, entry\.saveOwner\)/);
+    assert.match(composition, /territory\.initialize\(entry\.resources, entry\.saveOwner\)/);
     const entry = readFileSync('assets/script/app/territory/application/TerritoryEntry.ts', 'utf8');
+    assert.match(entry, /createScopedResources\(context, this\.scope\)/);
     assert.match(entry, /new TerritoryChapterLoader\(resources.assets\)/);
     for (const method of ['loadHexFlipAssets', 'loadResourceGainIcons', 'loadChestArt', 'loadCloudArt']) {
         assert.ok(source.includes(`this.${method}()`));

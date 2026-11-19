@@ -749,6 +749,16 @@ test('E8 入口：点击分流（可领 ⇒ 领奖；否则 ⇒ 弹详情），�
     assert.ok(body.includes('MainTaskDetailPage.open'), '不可领 ⇒ 弹详情');
 });
 
+test('E8b 入口：快照没到 / 没配任务时点击也要开面板（8-1 强制立起来的入口不能是死按钮）', () => {
+    const body = methodBody(ENTRY_SRC, 'onClick');
+    assert.match(body, /if\s*\(!snapshot \|\| !snapshot\.configured\)/, '缺「没有可展示任务」这一支');
+    // 8-1 的完成条件就是「玩家点开面板」（`pageOpened:task`），而这一步入口是
+    // `GuideComposition.applyTaskEntryGate` **先立起来**的（快照可能还在路上 / 没配任务）
+    // ⇒ 这一支必须真的把面板打开，不能像老口径那样直接 return（玩家点到的就是死按钮）。
+    const branch = body.slice(body.indexOf('!snapshot || !snapshot.configured'));
+    assert.ok(branch.slice(0, 200).includes('MainTaskDetailPage.open'), '这一支要直接开面板');
+});
+
 test('E9 入口：领奖三态提示齐备、有防连点', () => {
     const body = methodBody(ENTRY_SRC, 'claim');
     assert.ok(body.includes('this.busy'), '缺 busy 防连点');

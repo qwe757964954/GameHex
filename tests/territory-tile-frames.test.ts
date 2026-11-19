@@ -679,6 +679,148 @@ test('★★美术引用与磁盘：六张图都在、尺寸与代码口径一�
         '灰图要落到 tileGrey 槽位（不是塞回 tileLocked）');
 });
 
+// ── 2026-11-18：同一关卡节点的地块要一起换状态色 ────────────────────────────
+//
+// 用户原话（配图绿圈）：「绿圈部分的地块也是归属关卡地块，现在没有和归属相关的
+// 地块状态同步变化，待解锁是灰色，可激活就应该变成红色了」。
+// 现场 = chapter_01 的 1-1：327（stage、configId=10001、无 buildingId）与
+// 328（同 configId、配了 69004 的承载格）是同一个节点的两格，brother 不跟着
+// 承载格变色 ⇒ 一格灰一格褐、红框只挂在一格上。
+
+const LEVEL_NODE_SITES = [
+    { id: 'stage_327', type: 'stage', cellId: 327, configId: '10001', footprint: [327], unlock: {} },
+    // 328 带一块 footprint(329)：chapter_02 起「一关 = 一个站点 + 5~10 格」的同型。
+    { id: 'stage_328', type: 'stage', cellId: 328, configId: '10001',
+        buildingId: '69004', footprint: [328, 329], unlock: {} },
+    // 对照组：节点外的宝箱格，既不跟着别的节点置灰、也不该长出关卡红框。
+    { id: 'chest_900', type: 'fixedResource', cellId: 900, footprint: [900], unlock: {} },
+];
+
+/** 复刻 1-1 节点，用**真 paintHexes** 渲染，返回每个格子的地皮与格面框。 */
+function paintLevelNodeMap(options: {
+    unlocked?: number[];
+    owned?: number[];
+    areaPassed?: number[];
+    lockBlockedCells?: number[];
+} = {}) {
+    const MapView = loadMapView();
+    const mapView = new MapView();
+    const cells = new Map<number, ReturnType<typeof makeHexCell>>();
+    const frames = new Map<number, ReturnType<typeof makeFrameSprite>>();
+    for (const cellId of [327, 328, 329, 900]) {
+        cells.set(cellId, makeHexCell());
+        frames.set(cellId, makeFrameSprite());
+    }
+    (mapView as { hexNodes: Map<number, unknown> }).hexNodes =
+        new Map(Array.from(cells, ([id, cell]) => [id, cell.node]));
+    (mapView as { hexFrames: Map<number, unknown> }).hexFrames =
+        new Map(Array.from(frames, ([id, frame]) => [id, frame]));
+    const unlocked = new Set(options.unlocked ?? []);
+    const owned = new Set(options.owned ?? []);
+    const areaPassed = new Set(options.areaPassed ?? []);
+    (mapView as { paintHexes: (input: unknown) => void }).paintHexes({
+        revealedCells: [327, 328, 329, 900],
+        map: { startCellId: 999, sites: LEVEL_NODE_SITES, randomSites: { candidateCells: [] } },
+        progress: {
+            isCellUnlocked: (id: number) => unlocked.has(id),
+            isOwned: (id: number) => owned.has(id),
+            isAreaPassed: (id: number) => areaPassed.has(id),
+        },
+        art: {
+            tileLocked: TILE_LOCKED, tileCleared: TILE_CLEARED, tileGrey: TILE_GREY,
+            frameBoss: FRAME_BOSS, frameStage: FRAME_STAGE,
+            frameAsyncPvp: FRAME_ASYNC, frameChest: FRAME_CHEST,
+        },
+        lockBlockedCells: options.lockBlockedCells ?? [],
+    });
+    return { cells, frames };
+}
+
+test('★★★关卡节点代表格：兄弟格 / footprint 格都指向承载格，节点外的格不参与', () => {
+    const byCell = territoryNodeUIModule.territoryNodeStateCellByCell(LEVEL_NODE_SITES as never);
+    assert.equal(byCell.get(327), 328, '327（无建筑兄弟格）⇒ 用 328 的进度');
+    assert.equal(byCell.get(328), 328, '承载格自己就是代表格');
+    assert.equal(byCell.get(329), 328, 'footprint 格查不到站点 ⇒ 必须收敛到承载格，否则永远拿不到红框');
+    assert.equal(byCell.has(900), false, '宝箱格不属于战斗节点 ⇒ 各格按自己判');
+    // 多建筑节点各自承担 UI，不许被拧成一格。
+    const multi = territoryNodeUIModule.territoryNodeStateCellByCell([
+        { id: 'boss_1', type: 'boss', cellId: 1, configId: '20001', buildingId: '69001' },
+        { id: 'boss_2', type: 'boss', cellId: 2, configId: '20001', buildingId: '69002' },
+    ] as never);
+    assert.equal(multi.size, 0, '组内每格都有建筑 ⇒ 不收敛，保持逐格判');
+});
+
+test('★★★整片一起置灰：组内任一格被卡住，兄弟格与 footprint 格一起补进灰集合', () => {
+    const extra = territoryNodeUIModule.territoryNodeGreyCells(
+        LEVEL_NODE_SITES as never, new Set([328]));
+    assert.deepEqual(Array.from(extra).sort((a, b) => a - b), [327, 329],
+        '🔴 只灰模型列出来的那一格 ⇒ 截图里「承载格灰、绿圈格褐」');
+    assert.equal(extra.has(328), false, '入参里已有的不重复返回');
+    assert.equal(extra.has(900), false, '节点外的宝箱格不跟着别人置灰');
+    assert.equal(territoryNodeUIModule.territoryNodeGreyCells(
+        LEVEL_NODE_SITES as never, new Set([900])).size, 0,
+        '只有节点外的格被卡住时整片不动（不误伤关卡）');
+    assert.equal(territoryNodeUIModule.territoryNodeGreyCells(
+        LEVEL_NODE_SITES as never, new Set()).size, 0);
+    // 与状态代表格同一条边界：多建筑节点各自承担 UI，不整片摊灰。
+    const multi = [
+        { id: 'boss_1', type: 'boss', cellId: 1, configId: '20001', buildingId: '69001' },
+        { id: 'boss_2', type: 'boss', cellId: 2, configId: '20001', buildingId: '69002' },
+    ];
+    assert.equal(territoryNodeUIModule.territoryNodeGreyCells(
+        multi as never, new Set([1])).size, 0);
+});
+
+test('★★★待解锁：1-1 的三格一起灰（承载格被卡住也带得动兄弟格 / footprint 格）', () => {
+    const { cells, frames } = paintLevelNodeMap({ lockBlockedCells: [328] });
+    for (const cellId of [327, 328, 329]) {
+        assert.equal(cells.get(cellId)!.component.spriteFrame, TILE_GREY,
+            `cell ${cellId} 属于 1-1 ⇒ 待解锁时整片灰，不许留一块褐色`);
+        assert.equal(frames.get(cellId)!.spriteFrame, null, '未解锁不许提前出现红框');
+    }
+    assert.equal(cells.get(900)!.component.spriteFrame, TILE_LOCKED,
+        '节点外的宝箱格不跟着置灰');
+});
+
+test('★★★可激活（已解锁未通关）：三格一起换回泥土并同时挂红色 frame_01', () => {
+    const { cells, frames } = paintLevelNodeMap({ unlocked: [328] });
+    for (const cellId of [327, 328, 329]) {
+        assert.equal(cells.get(cellId)!.component.spriteFrame, TILE_LOCKED,
+            `cell ${cellId} 解锁那一刻跟着换回颜色`);
+        assert.equal(frames.get(cellId)!.spriteFrame, FRAME_STAGE,
+            `cell ${cellId} 必须和承载格同时出现红色格面框`);
+        assert.equal(frames.get(cellId)!.node.active, true);
+    }
+    assert.equal(frames.get(900)!.spriteFrame, null, '节点外的宝箱格没解锁 ⇒ 不叠框');
+});
+
+test('★★★通关后整片一起转草地并摘掉红框（区域口径）', () => {
+    const { cells, frames } = paintLevelNodeMap({ unlocked: [328], areaPassed: [328] });
+    for (const cellId of [327, 328, 329]) {
+        assert.equal(cells.get(cellId)!.component.spriteFrame, TILE_CLEARED,
+            `cell ${cellId} 同区域通关 ⇒ 草地`);
+        assert.equal(frames.get(cellId)!.spriteFrame, null,
+            `cell ${cellId} 通关了 frame 要去掉`);
+        assert.equal(frames.get(cellId)!.node.active, false);
+    }
+});
+
+test('★★paintHexes 的状态判据必须走节点代表格，不许退回逐格读进度', () => {
+    const code = stripComments(readFileSync(MAP_VIEW_PATH, 'utf8'));
+    assert.match(code, /territoryNodeStateCellByCell\(input\.map\.sites\)/,
+        '节点状态代表格要在 paintHexes 里现算（换章才不会拿旧索引）');
+    assert.match(code, /territoryNodeGreyCells\(input\.map\.sites, blockedCells\)/,
+        '整片置灰要在铺开 footprint 之后补节点维度');
+    assert.match(code, /const stateCellId = stateCellByCell\.get\(cellId\) \?\? cellId/,
+        '拿不到节点映射时退化为逐格（老图 / 非节点格零改动）');
+    assert.match(code, /isCellPassed\(stateCellId, input, siteByCell, candidateCells\)/,
+        '通关判定按节点代表格，否则同一关里一格草一格泥');
+    assert.match(code, /hexFrameOf\(stateCellId, input, siteByCell, passed\)/,
+        '红框按节点代表格判，否则兄弟格 / footprint 格永远不叠框');
+    assert.match(code, /applyHexFrame\(cellId, /,
+        '框仍写回当前格（不是写三遍到承载格）');
+});
+
 test('★TerritoryPresenter 的默认 art 字面量必须与接口同步（漏字段会静默退成 undefined）', () => {
     const presenter = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
     for (const field of ['tileLocked', 'tileCleared', 'tileGrey', 'frameBoss', 'frameStage', 'frameAsyncPvp', 'frameChest']) {

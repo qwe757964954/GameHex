@@ -297,6 +297,8 @@ test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹�
     runInNewContext(ts.transpileModule(`class RewardView { async playHeroBadges(rewards) { heroBadges.push(rewards); }
         // 开箱「演出窗口」三个钩子：本用例只关心奖励分流，窗口开关由 territory-chest-open 盯。
         cancelChestPresentationWatchdog() {} endChestPresentation() {} openChestPresentation() {}
+        // 随机格喷射演出的收窗计时（第 27 条补丁 B）：presentRewards 一进来就要作废上一批。
+        cancelGainPresentationTimer() {}
         ${methods.join('\n')} } exports.RewardView = RewardView;`, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, heroBadges, splitTerritoryRewards, FW: {
@@ -1046,8 +1048,9 @@ test('读数合成：给了 readout 就只出一条，落在起点线（不叠�
     const src = stripComments(read('assets/script/app/territory/view/TerritoryMapView.ts'));
     const at = src.indexOf('if (readout) {');
     assert.ok(at > 0, '`playResourceGain` 必须有 `readout` 分支');
-    // 只取到 `return;` 为止 —— 后面就是旧的逐条分支，那里出现 `forEach` 是应该的。
-    const branch = src.slice(at, src.indexOf('return;', at));
+    // 只取到 `return` 为止 —— 后面就是旧的逐条分支，那里出现 `forEach` 是应该的。
+    // （返回值现在是 `return true`：视图要回报「到底有没有起播」，见第 27 条补丁 B。）
+    const branch = src.slice(at, src.indexOf('return', at));
     assert.match(branch, /view\.play\(readout\.frame \?\? null, readout\.amount\)/,
         '读数要用 readout 的图与求和后的数字');
     // 起点 = 喷发原点 + 合成读数的抬升（70）；「不叠加」的判据是**不出现 STACK_GAP**。

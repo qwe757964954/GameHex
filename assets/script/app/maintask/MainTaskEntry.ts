@@ -102,7 +102,16 @@ export class MainTaskEntry extends Component {
     /** 老端口径：可领 ⇒ 直接领奖；否则 ⇒ 弹任务详情。 */
     private async onClick(): Promise<void> {
         const snapshot = this.snapshot;
-        if (!snapshot || !snapshot.configured) return;
+        // 快照还没到 / 没有可展示的任务时**也把面板打开**。
+        //
+        // 8-1 的完成条件就是「玩家点开面板」（`pageOpened:task`），而这一步入口是被引导
+        // 强制立起来的（`GuideComposition.applyTaskEntryGate`：先显示、再按快照校正）。
+        // 这里若按老口径直接 return，玩家点到的就是个死按钮 —— 8-1 永久卡住。
+        // 非引导期不会多出副作用：没配任务时 `applySnapshot` 本来就把入口关掉了（点不到）。
+        if (!snapshot || !snapshot.configured) {
+            await MainTaskDetailPage.open({});
+            return;
+        }
         if (snapshot.canClaim) {
             await this.claim();
             return;

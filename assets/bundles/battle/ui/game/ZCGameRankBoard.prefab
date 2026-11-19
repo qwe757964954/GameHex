@@ -1412,6 +1412,7 @@
     },
     "content": null,
     "useVirtualList": true,
+    "nativeScrollView": null,
     "direction": 0,
     "itemCreationMode": 1,
     "itemNode": null,
@@ -1443,6 +1444,7 @@
     "loadMoreMaxOffset": 150,
     "pullDampingRate": 0.5,
     "pixelAlign": true,
+    "interactive": true,
     "enableItemClickEffect": true,
     "disableBounce": false,
     "blockParentScroll": true,
@@ -1759,6 +1761,7 @@
     "popupLayer": 0,
     "closeOnBlank": true,
     "contentNodes": [],
+    "motionEnabled": true,
     "list": {
       "__id__": 56
     },

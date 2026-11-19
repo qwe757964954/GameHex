@@ -55,7 +55,12 @@ import {
     territoryPrerequisiteChestCell,
 } from '../model/TerritoryChestHint';
 import { territoryLevelBubbleText } from '../model/TerritoryLevelBubble';
-import { territoryNodeLockCells, territoryNodeMutedCells } from '../model/TerritoryNodeUI';
+import {
+    territoryNodeGreyCells,
+    territoryNodeLockCells,
+    territoryNodeMutedCells,
+    territoryNodeStateCellByCell,
+} from '../model/TerritoryNodeUI';
 import {
     stepTerritoryPreviewCinema,
     territoryPreviewCinema,
@@ -2909,18 +2914,32 @@ export class TerritoryMapView extends Component {
             if (!blockedCells.has(site.cellId)) continue;
             for (const cell of site.footprint ?? []) blockedCells.add(cell);
         }
+        // 同一关卡节点（同 configId 的战斗站点组）的地块要**一起换状态色**：组内任一格
+        // 被前置卡住 ⇒ 整片一起灰，解锁那帧也一起换回颜色。`chapter_01` 的 1-1 是
+        // 「327 + 328 两个单格站点共用一个 configId」，只铺 footprint 补不到这种兄弟格。
+        for (const cell of territoryNodeGreyCells(input.map.sites, blockedCells)) {
+            blockedCells.add(cell);
+        }
+        // 地皮 / 格面框的状态判据统一到节点代表格（承载格），别逐格读自己的进度。
+        // 🔴 只换「用哪一格的进度判」，写节点仍写当前 cellId：锁 / 价格 / 编号气泡
+        // 的收敛与层级一个字没动（见 `territoryNodeStateCellByCell` 头注释）。
+        const stateCellByCell = territoryNodeStateCellByCell(input.map.sites);
         const recolors: ITerritoryHexRecolorPending[] = [];
         for (const [cellId, node] of this.hexNodes) {
             node.active = revealed.has(cellId);
             if (!node.active) continue;
             // `?.`：渲染输入的 `layout` 在「只测地皮/框」的用例里是缺的（它们不关心坐标）。
             const point = input.layout?.points?.get(cellId);
-            const passed = this.isCellPassed(cellId, input, siteByCell, candidateCells);
+            // 节点内的地块统一用**代表格**的进度判状态：同一片 1-1 不许一格灰一格褐、
+            // 也不许红框只挂在其中一格上。节点外的格子仍是自己（get 不到 ⇒ 退化为 cellId）。
+            const stateCellId = stateCellByCell.get(cellId) ?? cellId;
+            const passed = this.isCellPassed(stateCellId, input, siteByCell, candidateCells);
             // 这一格是不是「被前置卡住」，两套口径**同源判定、分别取集合**（见两个函数的注释）：
             // · `lockCell`：锁标画在哪（节点收敛到承载格）；
             // · `greyCell`：地皮置灰到哪些格（逐格，整片都灰）。
             const lockCell = this.isHexLockCell(cellId, input, passed, lockCells);
-            const greyCell = this.isStructurallyBlocked(cellId, input, passed) && blockedCells.has(cellId);
+            const greyCell = this.isStructurallyBlocked(stateCellId, input, passed)
+                && blockedCells.has(cellId);
             // 未解锁格：格面正中一枚锁（露出来但还没开的格才有它，见 `isHexLockCell`）。
             // 锁住在独立的 `HexLockLayer` 上（不是格子子节点）—— 否则会被建筑/价格/编号压住。
             // 锁美术缺失时整支不显示，此时地皮**照样置灰**：灰表达的是"这格被卡住"，
@@ -2948,7 +2967,9 @@ export class TerritoryMapView extends Component {
                     y: point?.y ?? 0,
                 });
             }
-            this.applyHexFrame(cellId, this.hexFrameOf(cellId, input, siteByCell, passed));
+            // 框写到当前格，但「叠不叠、叠哪张」按节点代表格判 ⇒ footprint 格、
+            // 非建筑兄弟格都跟着承载格一起出现 / 消失红色 `frame_01`。
+            this.applyHexFrame(cellId, this.hexFrameOf(stateCellId, input, siteByCell, passed));
         }
         this.syncHexRecolor(recolors);
         // 破冰：**首帧只做快照**（进页面 / 换章时整图的地皮帧都会"从 null 变成正式帧"）。

@@ -61,15 +61,15 @@ export class MainTaskDetailPage extends PopupBase {
     };
 
     protected async onOpen(): Promise<void> {
+        // 新手引导 8-1「点开主线任务」：面板一开就算这一步完成（用户 2026-11-18 第 27 条：
+        // 引导只高亮任务入口、让玩家自己点，不再代开面板）。与 6-1 的 `pageOpened:card` 同一个
+        // 命名族，步表里写 `pageOpened:task`。
+        reportGuideComplete('pageOpened', 'task');
         this.snapshot = null;
         await this.reload();
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        // 新手引导 8-1「面板关闭」：主线任务详情页是本端唯一会上报 `popupClosed` 的面板。
-        // 这个名字是通用的 —— 以后别的弹窗也要上报关闭时，改成带参（如 `panelClosed:maintask`），
-        // 否则会和 8-1 串味。
-        reportGuideComplete('popupClosed');
         // 关闭由 alive 覆盖，onClose 不再递增 revision。
         this.snapshot = null;
     }

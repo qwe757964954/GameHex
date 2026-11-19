@@ -22,6 +22,13 @@ export class LoadingPopup extends PopupBase {
     private static opening = false;
     private static pendingText: string | undefined = undefined;
 
+    /**
+     * 加载圈是「等待遮罩」不是界面：它的意义是「立刻让玩家知道在等」。
+     * 淡入 0.24s 会把这份「立刻」抹掉，淡出还会在 `hide()` 之后继续挡 0.16s 的视线，
+     * 所以全局统一过渡对它关掉。
+     */
+    motionEnabled = false;
+
     /** 显示 loading；重复调用只加计数。 */
     static show(text?: string): void {
         LoadingPopup.refCount += 1;

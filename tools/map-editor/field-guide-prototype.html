@@ -1,0 +1,1503 @@
+<!doctype html>
+<html lang="zh-CN" data-editor="territory">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>字段描述 · 交互原型 | 地图编辑器</title>
+<!--
+  字段描述弹窗 · 交互原型（独立文件，不改动 index.html / bigmap.html / territory.html）
+  · 字段数据全部来自仓库现有口径，不是编造：
+      领地 = formats/territory-format.js → normalizeTerritoryMap
+      战斗 = presets/gamemap/*.json（结构 v3）
+      SLG  = BIGMAP_FIELDS.md → BigMapLayout.ts / parseBigMapLayout
+  · 需要接真实 schema 时，只替换 <script> 顶部的 FIELD_CATS（已挂到 window.FIELD_DESCRIPTIONS）。
+  · 打开方式：直接双击本文件，或在 tools/map-editor 起本地服务后访问 /field-guide-prototype.html
+-->
+<style>
+  :root{
+    --bg:#111827; --panel:#1f2937; --panel-2:#0f172a; --rail-bg:#0f172a;
+    --line:#374151; --line-soft:#4b5563; --text:#e5e7eb; --muted:#94a3b8; --faint:#64748b;
+    --accent:#60a5fa; --accent-weak:rgba(96,165,250,.14); --accent-line:rgba(96,165,250,.42);
+    --input:#111827; --stage:#0b1220; --row-hover:rgba(148,163,184,.08);
+    --chip-bg:rgba(148,163,184,.10); --req-bg:rgba(251,191,36,.14); --req-fg:#fbbf24;
+    --cond-bg:rgba(96,165,250,.14); --cond-fg:#93c5fd;
+    --mark-bg:rgba(251,191,36,.26); --mark-fg:#fde68a;
+    --shadow:0 28px 70px rgba(0,0,0,.55); --code-bg:rgba(148,163,184,.10);
+  }
+  /* 战斗编辑器是浅色壳（对齐 index.html），弹窗跟随切换，验证两种主题下都可读。 */
+  html[data-editor="battle"]{
+    --bg:#F5F5F3; --panel:#ffffff; --panel-2:#ffffff; --rail-bg:#FAFAF8;
+    --line:#E4E3DC; --line-soft:#D3D1C7; --text:#2C2C2A; --muted:#7C7B74; --faint:#A8A69D;
+    --accent:#185FA5; --accent-weak:#E6F1FB; --accent-line:#C8DDF2;
+    --input:#ffffff; --stage:#101826; --row-hover:#FAFAF8;
+    --chip-bg:#F1EFE8; --req-bg:#FAEEDA; --req-fg:#8A5A00;
+    --cond-bg:#E6F1FB; --cond-fg:#185FA5;
+    --mark-bg:#FCEFC6; --mark-fg:#6B4A00;
+    --shadow:0 24px 60px rgba(30,41,59,.20); --code-bg:#F1EFE8;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; overflow:hidden; background:var(--bg); color:var(--text);
+    font:13px/1.55 system-ui,-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  button,input,select{font:inherit;color:inherit}
+  button{cursor:pointer}
+  ::selection{background:var(--accent-weak);color:var(--text)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .srOnly{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+  /* ── 原型顶栏（仅原型有，真接入时删掉这一条）──────────────── */
+  .protoBar{
+    height:34px;display:flex;align-items:center;gap:10px;padding:0 14px;
+    background:#0b1220;color:#cbd5e1;border-bottom:1px solid #1e293b;
+    font-size:11.5px;user-select:none;position:relative;z-index:20;
+  }
+  .protoBadge{
+    padding:1px 7px;border-radius:999px;border:1px solid #334155;background:#111827;
+    color:#93c5fd;font-size:10.5px;letter-spacing:.04em;
+  }
+  .protoTitle{font-weight:600;color:#e2e8f0}
+  .protoHint{color:#7c8ba1}
+  .protoHint em{font-style:normal;color:#cbd5e1}
+  .protoBar .spacer{flex:1}
+  .protoSwitch{display:flex;align-items:center;gap:4px;background:#111827;border:1px solid #1e293b;border-radius:7px;padding:2px}
+  .protoSwitch .switchLabel{color:#64748b;padding:0 5px;font-size:10.5px}
+  .protoSwitch button{
+    border:0;background:transparent;color:#94a3b8;font-size:11.5px;padding:3px 9px;border-radius:5px;
+    transition:background .15s,color .15s;
+  }
+  .protoSwitch button:hover{color:#e2e8f0;background:#1e293b}
+  .protoSwitch button.on{background:#1d4ed8;color:#eff6ff}
+
+  .app{height:calc(100vh - 34px);display:flex;flex-direction:column;min-height:0}
+
+  /* ── 编辑器顶栏 ───────────────────────────────────────────── */
+  header{
+    flex:none;height:54px;display:flex;align-items:center;gap:8px;padding:0 14px;
+    background:var(--panel-2);border-bottom:1px solid var(--line);white-space:nowrap;
+  }
+  header h1{margin:0 10px 0 0;font-size:15px;font-weight:600;letter-spacing:.01em}
+  .dirtyBadge{
+    padding:2px 7px;border-radius:999px;border:1px solid rgba(251,191,36,.45);
+    background:rgba(251,191,36,.12);color:#fbbf24;font-size:10.5px;
+  }
+  html[data-editor="battle"] .dirtyBadge{border-color:#E8D5A8;background:#FAEEDA;color:#8A5A00}
+  .toolbarSelect{
+    height:30px;padding:0 24px 0 8px;border:1px solid var(--line-soft);border-radius:6px;
+    background:var(--input);color:var(--text);font-size:12px;appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2394a3b8' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 7px center;
+  }
+  .btn{
+    height:30px;padding:0 10px;border-radius:6px;border:1px solid var(--line-soft);
+    background:var(--input);color:var(--text);font-size:12px;
+    transition:border-color .15s,color .15s,background .15s;
+  }
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.subtle{border-color:transparent;background:transparent;color:var(--muted)}
+  .btn.subtle:hover{background:var(--row-hover);color:var(--text)}
+  header .spacer{flex:1}
+  .zoomBox{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:11.5px}
+  .zoomBox input{width:78px;accent-color:var(--accent)}
+
+  /* 入口按钮：清晰但不抢戏 —— 顶栏唯一带强调色的控件 */
+  .entryBtn{
+    position:relative;display:flex;align-items:center;gap:7px;height:31px;padding:0 11px;
+    border:1px solid var(--accent);border-radius:7px;background:var(--accent-weak);color:var(--accent);
+    font-size:12px;font-weight:600;transition:background .15s,box-shadow .15s;
+  }
+  .entryBtn:hover{box-shadow:0 0 0 3px var(--accent-weak)}
+  .entryBtn svg{width:14px;height:14px;flex:none}
+  .entryBtn kbd{
+    font:10.5px ui-monospace,Consolas,monospace;padding:0 4px;border-radius:4px;
+    border:1px solid var(--accent-line);background:var(--panel);color:var(--accent);opacity:.9;
+  }
+  .entryBtn .newDot{
+    position:absolute;top:-3px;right:-3px;width:7px;height:7px;border-radius:50%;
+    background:#f59e0b;box-shadow:0 0 0 3px var(--panel-2);
+  }
+
+  /* ── 三栏 ─────────────────────────────────────────────────── */
+  .layout{flex:1;display:grid;grid-template-columns:224px minmax(0,1fr) 316px;min-height:0}
+  aside{background:var(--panel);overflow:auto;padding:12px}
+  aside.left{border-right:1px solid var(--line)}
+  aside.right{border-left:1px solid var(--line)}
+  .sideBlock{margin-bottom:16px}
+  .sideBlock:last-child{margin-bottom:0}
+  .sideLabel{
+    display:flex;align-items:center;gap:6px;margin:0 0 7px;
+    font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+  }
+  .sideLabel::after{content:"";flex:1;height:1px;background:var(--line)}
+  .inLabel{display:block;margin:8px 0 4px;font-size:11px;color:var(--muted)}
+  .inp{
+    width:100%;height:29px;padding:0 8px;border:1px solid var(--line-soft);border-radius:6px;
+    background:var(--input);color:var(--text);font-size:12px;
+  }
+  .inp:focus{outline:none;border-color:var(--accent)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+  .sideHint{margin:0;font-size:11px;line-height:1.55;color:var(--faint)}
+  .sideHint code,.rail code{font:10.5px ui-monospace,Consolas,monospace;background:var(--code-bg);padding:0 3px;border-radius:3px}
+  .toolStatus{
+    margin:0 0 8px;padding:6px 8px;border:1px solid var(--accent-line);border-radius:6px;
+    background:var(--accent-weak);color:var(--accent);font-size:11.5px;
+  }
+  .toolGrid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+  .toolGrid button{
+    padding:6px 3px;border:1px solid var(--line);border-radius:6px;background:var(--input);
+    color:var(--muted);font-size:11.5px;white-space:nowrap;min-width:0;
+    transition:border-color .15s,background .15s,color .15s;
+  }
+  .toolGrid button:hover{border-color:var(--line-soft);color:var(--text)}
+  .toolGrid button.on{border-color:var(--accent);background:var(--accent-weak);color:var(--accent);font-weight:600}
+
+  .catNav{display:grid;gap:3px;margin-bottom:10px}
+  .catNav button{
+    display:flex;align-items:center;gap:7px;width:100%;padding:6px 8px;text-align:left;
+    border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);font-size:11.5px;
+  }
+  .catNav button:hover{background:var(--row-hover);color:var(--text)}
+  .catNav button.on{border-color:var(--accent-line);background:var(--accent-weak);color:var(--accent);font-weight:600}
+  .catNav .icon{width:16px;text-align:center;font-size:12px;opacity:.9}
+
+  .brushList{display:grid;gap:5px}
+  .brushItem{
+    display:flex;align-items:center;gap:8px;width:100%;padding:6px 8px;text-align:left;
+    border:1px solid var(--line);border-radius:7px;background:var(--input);color:var(--text);
+  }
+  .brushItem:hover{border-color:var(--line-soft);background:var(--row-hover)}
+  .brushItem.on{border-color:var(--accent);background:var(--accent-weak)}
+  .brushItem b{display:block;font-size:11.5px;font-weight:600}
+  .brushItem small{display:block;font-size:10.5px;color:var(--muted)}
+  .sw{width:16px;height:16px;border-radius:4px;border:1px solid;flex:none}
+  .sw.void{background:transparent;border-style:dashed;border-color:var(--faint)}
+  .sw.neutral{background:#F1EFE8;border-color:#888780}
+  .sw.s1{background:#E6F1FB;border-color:#185FA5}
+  .sw.s2{background:#FCEBEB;border-color:#A32D2D}
+  .sw.s3{background:#EAF3DE;border-color:#3B6D11}
+  .sw.s4{background:#FAEEDA;border-color:#8A5A00}
+
+  .stage{
+    position:relative;min-width:0;min-height:0;overflow:hidden;background:var(--stage);
+  }
+  .stage::before{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(circle at 50% 42%,rgba(96,165,250,.12),transparent 62%);
+  }
+  #board{position:absolute;inset:0;display:block;width:100%;height:100%;transition:transform .18s ease}
+  #board .cell{cursor:pointer;transition:filter .15s,stroke .15s}
+  #board .cell:hover{filter:brightness(1.28)}
+  #board .cell.sel{stroke:#fde047;stroke-width:2.6}
+  #board .cellTitle{pointer-events:none}
+  .stagePill{
+    position:absolute;left:12px;top:12px;z-index:2;padding:4px 8px;border-radius:5px;
+    background:#111827dd;border:1px solid #334155;color:#94a3b8;font-size:10.5px;
+    pointer-events:none;max-width:calc(100% - 130px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .stagePill b{color:#e2e8f0;font-weight:500}
+  .zoomPill{
+    position:absolute;right:12px;bottom:12px;z-index:2;display:flex;align-items:center;gap:2px;
+    padding:3px;border-radius:7px;background:#111827e6;border:1px solid #334155;color:#cbd5e1;
+  }
+  .zoomPill button{
+    width:24px;height:24px;border:0;border-radius:5px;background:transparent;color:#cbd5e1;font-size:13px;line-height:1;
+  }
+  .zoomPill button:hover{background:#1e293b;color:#fff}
+  .zoomPill span{min-width:40px;text-align:center;font:10.5px ui-monospace,Consolas,monospace;color:#94a3b8}
+
+  /* 右栏 */
+  .right h3{margin:0 0 7px;font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.05em}
+  .cellCard{
+    padding:9px 10px;border:1px solid var(--line);border-radius:8px;background:var(--input);
+    margin-bottom:14px;
+  }
+  .cellCoord{font:600 12px ui-monospace,Consolas,monospace;color:var(--text)}
+  .cellId{margin:1px 0 7px;font:10.5px ui-monospace,Consolas,monospace;color:var(--faint)}
+  .kvGrid{display:grid;grid-template-columns:auto minmax(0,1fr);gap:3px 10px;font-size:11.5px;align-items:baseline}
+  .kvGrid dt{color:var(--muted)}
+  .kvGrid dd{margin:0;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .kvGrid dd.mono{font-family:ui-monospace,Consolas,monospace;font-size:11px}
+  .ghostBtn{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;
+    padding:7px 9px;border:1px dashed var(--accent-line);border-radius:7px;
+    background:transparent;color:var(--accent);font-size:11.5px;font-weight:600;
+  }
+  .ghostBtn:hover{background:var(--accent-weak)}
+  .ghostBtn span{font-weight:400;opacity:.8}
+  .emptyCell{font-size:11.5px;color:var(--faint);line-height:1.6}
+
+  /* ── 弹窗 ─────────────────────────────────────────────────── */
+  .overlay{
+    position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:24px;
+    background:rgba(2,6,23,.58);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;transition:opacity .18s ease;
+  }
+  .overlay.show{opacity:1}
+  .overlay[hidden]{display:none}
+  .dialog{
+    width:min(940px,100%);height:min(664px,calc(100vh - 48px));
+    display:flex;flex-direction:column;overflow:hidden;
+    background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:14px;
+    box-shadow:var(--shadow);
+    transform:translateY(10px) scale(.986);transition:transform .22s cubic-bezier(.2,.8,.25,1);
+  }
+  .dialog:focus{outline:none}
+  .overlay.show .dialog{transform:none}
+
+  .dialogHead{flex:none;display:flex;align-items:flex-start;gap:11px;padding:16px 18px 13px}
+  .dialogIcon{
+    width:36px;height:36px;flex:none;display:grid;place-items:center;border-radius:9px;
+    border:1px solid var(--accent-line);background:var(--accent-weak);color:var(--accent);
+  }
+  .dialogIcon svg{width:18px;height:18px}
+  .dialogTitle{margin:0;font-size:16px;font-weight:600;letter-spacing:.01em}
+  .dialogSub{margin:2px 0 0;font-size:11.5px;color:var(--muted)}
+  .closeBtn{
+    margin-left:auto;width:28px;height:28px;flex:none;display:grid;place-items:center;
+    border:1px solid transparent;border-radius:6px;background:transparent;color:var(--muted);font-size:17px;line-height:1;
+  }
+  .closeBtn:hover{border-color:var(--line);background:var(--row-hover);color:var(--text)}
+
+  .catTabs{flex:none;display:flex;align-items:stretch;gap:2px;padding:0 14px;border-bottom:1px solid var(--line)}
+  .catTab{
+    position:relative;display:flex;align-items:center;gap:8px;height:42px;padding:0 12px;
+    border:0;background:transparent;color:var(--muted);font-size:12.5px;font-weight:500;
+    transition:color .15s;
+  }
+  .catTab:hover{color:var(--text)}
+  .catTab.on{color:var(--accent);font-weight:600}
+  .catTab.on::after{
+    content:"";position:absolute;left:8px;right:8px;bottom:-1px;height:2px;border-radius:2px;background:var(--accent);
+  }
+  .catTab .tabIndex{
+    font:10px ui-monospace,Consolas,monospace;color:var(--faint);border:1px solid var(--line);
+    border-radius:4px;padding:0 3px;
+  }
+  .catTab.on .tabIndex{color:var(--accent);border-color:var(--accent-line)}
+  .catTab .count{
+    font:10.5px ui-monospace,Consolas,monospace;color:var(--muted);background:var(--chip-bg);
+    border-radius:999px;padding:1px 6px;
+  }
+
+  .dialogBody{flex:1;display:grid;grid-template-columns:minmax(0,1fr) 252px;min-height:0}
+  .content{display:flex;flex-direction:column;min-width:0;min-height:0}
+  .searchRow{flex:none;display:flex;align-items:center;gap:9px;padding:11px 18px 9px}
+  .searchBox{position:relative;flex:1;min-width:0}
+  .searchBox svg{position:absolute;left:9px;top:50%;transform:translateY(-50%);width:13px;height:13px;color:var(--faint);pointer-events:none}
+  .searchInput{
+    width:100%;height:32px;padding:0 30px 0 29px;border:1px solid var(--line-soft);border-radius:7px;
+    background:var(--input);color:var(--text);font-size:12px;
+  }
+  .searchInput::placeholder{color:var(--faint)}
+  .searchInput::-webkit-search-cancel-button{display:none}
+  .searchInput:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-weak)}
+  .clearSearch{
+    position:absolute;right:4px;top:50%;transform:translateY(-50%);width:23px;height:23px;
+    display:none;place-items:center;border:0;border-radius:5px;background:transparent;color:var(--muted);font-size:14px;
+  }
+  .clearSearch:hover{background:var(--row-hover);color:var(--text)}
+  .searchBox.hasQuery .clearSearch{display:grid}
+  .searchCount{flex:none;font:10.5px ui-monospace,Consolas,monospace;color:var(--faint);min-width:54px;text-align:right}
+
+  .fieldScroll{flex:1;min-height:0;overflow:auto;padding:0 18px 18px;scrollbar-gutter:stable}
+  .group{margin-top:12px;scroll-margin-top:44px}
+  .groupHead{
+    position:sticky;top:0;z-index:3;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;
+    padding:9px 0 7px;background:var(--panel);border-bottom:1px solid var(--line);
+  }
+  .groupTitle{font-size:12px;font-weight:600;color:var(--text)}
+  .groupTitle code{font:11px ui-monospace,Consolas,monospace;color:var(--accent);background:var(--accent-weak);padding:0 4px;border-radius:3px}
+  .groupHint{font-size:10.5px;color:var(--faint);min-width:0}
+
+  .field{
+    display:grid;grid-template-columns:196px minmax(0,1fr) 24px;gap:10px;align-items:start;
+    padding:8px 6px 8px 9px;border-radius:7px;position:relative;cursor:pointer;
+    transition:background .12s;
+  }
+  .field:hover{background:var(--row-hover)}
+  .field::before{
+    content:"";position:absolute;left:0;top:8px;bottom:8px;width:2px;border-radius:2px;background:transparent;
+  }
+  .field:hover::before{background:var(--accent)}
+  .fieldMain{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0;padding-top:1px}
+  .fieldName{font:600 12px ui-monospace,Consolas,monospace;color:var(--text);word-break:break-word}
+  .typeChip{
+    font:9.5px ui-monospace,Consolas,monospace;color:var(--muted);border:1px solid var(--line);
+    background:var(--chip-bg);border-radius:4px;padding:0 4px;line-height:15px;
+  }
+  .reqChip{font-size:9.5px;border-radius:4px;padding:0 4px;line-height:15px;white-space:nowrap}
+  .reqChip.req{background:var(--req-bg);color:var(--req-fg)}
+  .reqChip.cond{background:var(--cond-bg);color:var(--cond-fg)}
+  .reqChip.opt{color:var(--faint);border:1px solid var(--line)}
+  .fieldDesc{font-size:11.5px;line-height:1.6;color:var(--muted);min-width:0;overflow-wrap:anywhere}
+  .fieldDesc code{
+    font:10.5px ui-monospace,Consolas,monospace;color:var(--text);background:var(--code-bg);
+    border-radius:3px;padding:0 3px;
+  }
+  .fieldDesc mark{background:var(--mark-bg);color:var(--mark-fg);border-radius:2px;padding:0 1px}
+  .copyBtn{
+    width:22px;height:22px;display:grid;place-items:center;border:0;border-radius:5px;
+    background:transparent;color:var(--faint);opacity:0;transition:opacity .12s,background .12s,color .12s;
+  }
+  .field:hover .copyBtn,.copyBtn:focus-visible{opacity:1}
+  .copyBtn:hover{background:var(--accent-weak);color:var(--accent)}
+  .copyBtn svg{width:12px;height:12px}
+
+  .emptyState{display:grid;place-items:center;gap:6px;padding:52px 20px;text-align:center;color:var(--faint)}
+  .emptyState svg{width:30px;height:30px;opacity:.6;margin-bottom:2px}
+  .emptyState b{font-size:12.5px;color:var(--muted);font-weight:600}
+  .emptyState span{font-size:11.5px}
+
+  .rail{
+    border-left:1px solid var(--line);background:var(--rail-bg);overflow:auto;padding:13px 15px 18px;
+  }
+  .railBlock{margin-bottom:16px}
+  .railBlock:last-child{margin-bottom:0}
+  .railLabel{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-bottom:5px}
+  .railCat{font-size:13px;font-weight:600;color:var(--text)}
+  .railCatMeta{font:10.5px ui-monospace,Consolas,monospace;color:var(--muted);margin-top:2px}
+  .groupNav{display:grid;gap:2px}
+  .groupNav button{
+    display:flex;align-items:center;justify-content:space-between;gap:6px;width:100%;
+    padding:4px 6px;border:0;border-radius:5px;background:transparent;color:var(--muted);
+    font-size:11px;text-align:left;
+  }
+  .groupNav button:hover{background:var(--row-hover);color:var(--text)}
+  .groupNav em{font:10px ui-monospace,Consolas,monospace;font-style:normal;color:var(--faint)}
+  .noteList{margin:0;padding:0;list-style:none;display:grid;gap:6px}
+  .noteList li{position:relative;padding-left:11px;font-size:11px;line-height:1.55;color:var(--muted)}
+  .noteList li::before{content:"";position:absolute;left:1px;top:7px;width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:.75}
+  .noteList code{font:10px ui-monospace,Consolas,monospace;background:var(--code-bg);border-radius:3px;padding:0 3px;color:var(--text)}
+  .cmd{
+    display:block;padding:6px 7px;border:1px solid var(--line);border-radius:5px;background:var(--panel);
+    font:10px/1.5 ui-monospace,Consolas,monospace;color:var(--muted);
+    overflow-wrap:anywhere;word-break:normal;
+  }
+  .railLinks{display:grid;gap:4px;margin-top:7px}
+  .railLinks a{font-size:11px;color:var(--accent);text-decoration:none;display:flex;align-items:center;gap:5px}
+  .railLinks a:hover{text-decoration:underline}
+  .railLinks svg{width:10px;height:10px;flex:none;opacity:.8}
+
+  .dialogFoot{
+    flex:none;height:38px;display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:0 18px;border-top:1px solid var(--line);background:var(--panel-2);
+    font-size:10.5px;color:var(--faint);
+  }
+  .dialogFoot .kbdGroup{display:flex;align-items:center;gap:5px}
+  kbd{
+    font:10px ui-monospace,Consolas,monospace;padding:1px 4px;border-radius:3px;
+    border:1px solid var(--line);border-bottom-width:2px;background:var(--panel);color:var(--muted);
+  }
+
+  .toast{
+    position:fixed;left:50%;bottom:64px;z-index:90;transform:translate(-50%,8px);
+    padding:8px 13px;border-radius:8px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;
+    font-size:11.5px;box-shadow:0 12px 30px rgba(0,0,0,.35);
+    opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast code{font-family:ui-monospace,Consolas,monospace;color:#93c5fd}
+
+  @media (hover:none){ .copyBtn{opacity:.65} }
+  @media (max-width:1100px){ .layout{grid-template-columns:212px minmax(0,1fr) 286px} }
+  @media (max-width:960px){
+    .layout{grid-template-columns:212px minmax(0,1fr)}
+    aside.right{display:none}
+    .dialogBody{grid-template-columns:minmax(0,1fr)}
+    .rail{display:none}
+  }
+  @media (max-width:760px){
+    .protoHint{display:none}
+    .protoSwitch .switchLabel{display:none}
+    header{height:50px;padding:0 10px;gap:6px}
+    header h1{font-size:13px;margin-right:4px;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+    .layout{grid-template-columns:minmax(0,1fr)}
+    aside.left{display:none}
+    .hideSm{display:none!important}
+    .entryBtn kbd{display:none}
+    .app{height:calc(100vh - 34px)}
+    .overlay{padding:10px}
+    .dialog{height:calc(100vh - 20px);border-radius:12px}
+    .dialogHead{padding:13px 14px 10px}
+    .dialogSub{font-size:10.5px}
+    .catTabs{padding:0 8px;overflow-x:auto}
+    .catTab{padding:0 9px;gap:5px;font-size:12px}
+    .catTab .tabIndex{display:none}
+    .searchRow{padding:9px 13px 7px}
+    .fieldScroll{padding:0 13px 14px}
+    .field{grid-template-columns:minmax(0,1fr) 22px;gap:3px 8px}
+    .fieldMain{grid-column:1}
+    .fieldDesc{grid-column:1}
+    .copyBtn{grid-column:2;grid-row:1/3;align-self:center;opacity:.5}
+    .dialogFoot{padding:0 13px}
+    .dialogFoot .kbdGroup{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}
+  }
+</style>
+</head>
+<body>
+
+<div class="protoBar">
+  <span class="protoBadge">交互原型</span>
+  <span class="protoTitle">字段描述弹窗</span>
+  <span class="protoHint">入口在编辑器右上角 · 当前为<em id="protoShellName">领地地图</em>模拟壳</span>
+  <span class="spacer"></span>
+  <div class="protoSwitch" role="group" aria-label="切换模拟编辑器">
+    <span class="switchLabel">模拟编辑器</span>
+    <button data-shell="territory" class="on">领地地图</button>
+    <button data-shell="battle">战斗地图</button>
+    <button data-shell="slg">SLG 地图</button>
+  </div>
+</div>
+
+<div class="app">
+  <header>
+    <h1 id="appTitle">章节领地地图编辑器</h1>
+    <span class="dirtyBadge hideSm">未保存</span>
+    <select class="toolbarSelect hideSm" id="presetSelect" aria-label="选择预设">
+      <option>chapter_01</option><option>chapter_02</option><option>chapter_03</option>
+    </select>
+    <button class="btn hideSm" data-mock-action="加载">加载</button>
+    <button class="btn" data-mock-action="保存">保存</button>
+    <button class="btn hideSm" data-mock-action="校验">校验</button>
+    <button class="btn hideSm" data-mock-action="发布">发布</button>
+    <button class="btn hideSm" data-mock-action="导出 JSON">导出</button>
+    <div class="spacer"></div>
+    <div class="zoomBox hideSm">
+      <span>缩放</span>
+      <input type="range" min="60" max="160" value="100" id="zoomRange" aria-label="画布缩放">
+      <span id="zoomLabel">100%</span>
+    </div>
+    <button class="entryBtn" id="entryBtn" title="查看三类地图的字段说明（按 / 打开）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"></path>
+        <path d="M11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11"></path>
+        <path d="M7 8h1M7 11h1M14 8h3M14 11h3"></path>
+      </svg>
+      字段描述
+      <kbd>/</kbd>
+      <span class="newDot" aria-hidden="true"></span>
+    </button>
+  </header>
+
+  <div class="layout">
+    <aside class="left" id="leftPanel"></aside>
+    <main class="stage">
+      <svg id="board" role="img" aria-label="地图编辑画布（演示）"></svg>
+      <div class="stagePill" id="stagePill">演示画布 · 点击格子查看信息</div>
+      <div class="zoomPill">
+        <button id="zoomOut" title="缩小" aria-label="缩小">−</button>
+        <span id="zoomPillLabel">100%</span>
+        <button id="zoomIn" title="放大" aria-label="放大">+</button>
+      </div>
+    </main>
+    <aside class="right" id="rightPanel"></aside>
+  </div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialogTitle" aria-describedby="dialogSub" tabindex="-1">
+    <div class="dialogHead">
+      <div class="dialogIcon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5z"></path>
+          <path d="M11 4h7.5A1.5 1.5 0 0 1 20 5.5v13a1.5 1.5 0 0 1-1.5 1.5H11"></path>
+          <path d="M7 8h1M7 11h1M14 8h3M14 11h3"></path>
+        </svg>
+      </div>
+      <div>
+        <h2 class="dialogTitle" id="dialogTitle">字段描述</h2>
+        <p class="dialogSub" id="dialogSub">三类地图的落盘字段与校验口径 · 数据取自仓库现有格式定义</p>
+      </div>
+      <button class="closeBtn" id="closeBtn" title="关闭（Esc）" aria-label="关闭弹窗">×</button>
+    </div>
+
+    <div class="catTabs" role="tablist" aria-label="地图分类" id="catTabs"></div>
+
+    <div class="dialogBody">
+      <div class="content">
+        <div class="searchRow">
+          <div class="searchBox" id="searchBox">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path>
+            </svg>
+            <input class="searchInput" id="searchInput" type="search" autocomplete="off" spellcheck="false"
+                   placeholder="搜索字段名 / 说明，例如 hexId、ring、镜像" aria-label="搜索字段">
+            <button class="clearSearch" id="clearSearch" aria-label="清空搜索">×</button>
+          </div>
+          <span class="searchCount" id="searchCount">0 / 0</span>
+        </div>
+        <div class="fieldScroll" id="fieldScroll"></div>
+      </div>
+      <aside class="rail" id="rail"></aside>
+    </div>
+
+    <div class="dialogFoot">
+      <span>点击任意行复制字段名 · 字段口径以源码为准</span>
+      <span class="kbdGroup"><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> 切换分类 <kbd>Esc</kbd> 关闭 <kbd>/</kbd> 打开</span>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   1. 字段数据 —— 唯一需要替换的地方
+   -------------------------------------------------------------------
+   结构：{ 分类: { name, kind, source, test, notes[], files[], groups[] } }
+   group.fields[]: { name, type, req: 必填|选填|条件, desc, copy? }
+   · desc 支持反引号包代码，例如 `hexId`
+   · group.prefix 只影响「点击复制」的完整路径
+   · copy:false 用于 ascii 这类「字段名就是字符」的行
+   现有值均来自仓库：formats/territory-format.js、presets/gamemap/*.json、
+   BIGMAP_FIELDS.md。后续接真实 schema 时可整体替换 window.FIELD_DESCRIPTIONS。
+   ═══════════════════════════════════════════════════════════════════ */
+const FIELD_CATS = {
+  territory: {
+    name: '领地地图',
+    kind: 'territoryChapter',
+    version: 'v1',
+    source: 'formats/territory-format.js → normalizeTerritoryMap',
+    test: 'npx tsx --test tests/territory-map-format.test.ts',
+    notes: [
+      '`battleIds` 数组已废弃：巡逻区改用单值 `battleId`，写了会直接判错。',
+      '站点占格必须连通；`footprint` 不含 `cellId` 也会被拒。',
+      '固定站点不能占用 `startCellId`，否则开局没有落点。'
+    ],
+    files: [
+      ['格式定义 territory-format.js', 'formats/territory-format.js'],
+      ['领地编辑器说明', 'TERRITORY_README.md']
+    ],
+    groups: [
+      {
+        id: 'top', title: '顶层字段', prefix: '', hint: 'territoryChapter 的根结构',
+        fields: [
+          { name: 'id', type: 'string', req: '必填', desc: '地图唯一 ID，同时决定保存与发布文件名（如 `chapter_01`）' },
+          { name: 'mapKind', type: 'string', req: '必填', desc: '固定 `territoryChapter`；不匹配整份拒绝，不会回退' },
+          { name: 'version', type: 'number', req: '必填', desc: '结构版本，只认 `1`；加可选字段不必升版本' },
+          { name: 'chapterId', type: 'number', req: '必填', desc: '章节号 `1~9999`，运行期按章开图' },
+          { name: 'rows', type: 'number', req: '必填', desc: '网格行数，`4~60`' },
+          { name: 'columns', type: 'number', req: '必填', desc: '网格列数，`4~60`；总格数 = `rows × columns`' },
+          { name: 'startCellId', type: 'number', req: '必填', desc: '出生格 ID；任何站点都不得占用这一格' },
+          { name: 'background', type: 'string', req: '选填', desc: '背景资源名，相对 `resources`、不带扩展名' },
+          { name: 'defaults', type: 'object', req: '选填', desc: '站点解锁默认值：`combatPower` / `silverCost` / `exploreSeconds` / `staminaCost`' },
+          { name: 'sites', type: 'array', req: '必填', desc: '固定站点列表；每格至多一个站点' },
+          { name: 'randomSites', type: 'object', req: '选填', desc: '随机据点池：候选格、奖励池、同时在场上限' }
+        ]
+      },
+      {
+        id: 'sites', title: '站点 sites[]', prefix: 'sites[].', hint: '固定站点，每格至多一个',
+        fields: [
+          { name: 'id', type: 'string', req: '必填', desc: '站点 ID；同 ID 的 `patrolChest` 视为同一片巡逻区' },
+          { name: 'type', type: 'enum', req: '必填', desc: '`stage` / `boss` / `asyncPvp` / `fixedResource` / `bonus` / `patrolChest`' },
+          { name: 'cellId', type: 'number', req: '必填', desc: '站点锚点格；必须包含在 `footprint` 内' },
+          { name: 'footprint', type: 'number[]', req: '必填', desc: '占格集合；必须连通、含 `cellId`，且不能压到别的站点' },
+          { name: 'buildingId', type: 'string', req: '选填', desc: '建筑配置 ID，对应 `build.json` 的 `buildType`' },
+          { name: 'configId', type: 'string', req: '选填', desc: '战斗 / 关卡配置 ID' },
+          { name: 'rewardId', type: 'number', req: '条件', desc: '仅 `fixedResource`：关卡地图格子奖励表 ID' },
+          { name: 'battleId', type: 'number', req: '条件', desc: '仅 `patrolChest`：整片巡逻区共用一个战斗 ID（单值）' },
+          { name: 'patrolId', type: 'number', req: '条件', desc: '仅 `patrolChest`：野怪巡逻配置 ID' },
+          { name: 'unlock', type: 'object', req: '选填', desc: '解锁条件：`requiredCells` / `unlockType` / `unlockValue` / `silverCost` / `exploreSeconds` / `staminaCost`' }
+        ]
+      },
+      {
+        id: 'random', title: '随机据点 randomSites', prefix: 'randomSites.', hint: '候选格 + 奖励池抽签',
+        fields: [
+          { name: 'candidateCells', type: 'number[]', req: '必填', desc: '候选格集合；不能与固定站点占格重叠' },
+          { name: 'rewardPoolId', type: 'string', req: '必填', desc: '奖励池 ID，如 `territory_random_01`' },
+          { name: 'triggerSilver', type: 'number', req: '选填', desc: '触发随机据点所需银币' },
+          { name: 'maxActive', type: 'number', req: '选填', desc: '同时在场的随机据点数上限，默认 `1`' },
+          { name: 'buildingIds', type: 'object', req: '选填', desc: '单格指定建筑 ID；键是格子号，留空交给奖励池抽签' }
+        ]
+      },
+      {
+        id: 'enums', title: '枚举', prefix: 'sites[].', hint: '写错直接判错',
+        fields: [
+          { name: 'type', type: 'enum', req: '必填', desc: '站点六类：`stage` 关卡 / `boss` / `asyncPvp` 异步据点 / `fixedResource` 固定资源 / `bonus` 奖励据点 / `patrolChest` 巡逻宝箱' },
+          { name: 'unlockType', type: 'enum', req: '条件', desc: '`combatPower` 战力 / `playerLevel` 玩家等级' }
+        ]
+      }
+    ]
+  },
+
+  battle: {
+    name: '战斗地图',
+    kind: 'gameMap',
+    version: 'v3',
+    source: 'presets/gamemap/*.json（结构 v3）',
+    test: 'npx tsx --test tests/zcds-map-loading.test.ts',
+    notes: [
+      '镜像开启时只存半场：上下存下半场、左右存左半场、两者同时只存左下 1/4。',
+      '四象限建议用偶数列，否则中线列会镜像到自身（只提示、不拦截）。',
+      '主城数量必须等于 `playerCount`，自选主城只能落在本方前 / 中 / 后区。'
+    ],
+    files: [
+      ['示例地图 PVP4-1.json', 'presets/gamemap/PVP4-1.json'],
+      ['编辑器说明', 'README.md']
+    ],
+    groups: [
+      {
+        id: 'top', title: '顶层字段', prefix: '', hint: '战斗地图根结构',
+        fields: [
+          { name: 'id', type: 'string', req: '必填', desc: '地图 ID；按 id 直接载入特定地图' },
+          { name: 'name', type: 'string', req: '必填', desc: '显示名，仅编辑器与地图列表使用' },
+          { name: 'version', type: 'number', req: '必填', desc: '结构版本，当前为 `3`' },
+          { name: 'rows', type: 'number', req: '必填', desc: '逻辑行数；镜像开启时存的是半场行数' },
+          { name: 'columns', type: 'number', req: '必填', desc: '逻辑列数' },
+          { name: 'playerCount', type: 'number', req: '必填', desc: '`2` / `3` / `4`，决定分区数与随机池资格' },
+          { name: 'cityMode', type: 'enum', req: '必填', desc: '主城口径：`fixed` 固定主城 / `select` 自选主城' },
+          { name: 'mirrorVertical', type: 'boolean', req: '选填', desc: '上下镜像；开启时只存下半场' },
+          { name: 'mirrorHorizontal', type: 'boolean', req: '选填', desc: '左右镜像；开启时只存左半场' },
+          { name: 'mirror180', type: 'boolean', req: '选填', desc: '中心对称；与前两者同时开启时只存 1/4' },
+          { name: 'ascii', type: 'string[]', req: '必填', desc: '字符画，每行一个字符串，长度 = `columns`' },
+          { name: 'homes', type: 'array', req: '必填', desc: '主城坐标 `{ row, column }`，数量 = `playerCount`' },
+          { name: 'resourcePoints', type: 'array', req: '选填', desc: '资源点 `{ row, column, groupId }`；只存组合 ID' },
+          { name: 'art', type: 'object', req: '选填', desc: '表现层；`art.freeDecor` 存自由装饰，`art.tiles` 只留分区与地块贴图' }
+        ]
+      },
+      {
+        id: 'ascii', title: '字符画 ascii', prefix: '', hint: '一个字符 = 一格',
+        fields: [
+          { name: '.', type: 'token', req: '—', desc: '虚空，不可通行', copy: false },
+          { name: '0', type: 'token', req: '—', desc: '可通行、不属于任何分区（中立格）', copy: false },
+          { name: '1~4', type: 'token', req: '—', desc: '属于第 N 分区；分区数 = `playerCount`', copy: false }
+        ]
+      },
+      {
+        id: 'decor', title: '自由装饰 art.freeDecor[]', prefix: 'art.freeDecor[].', hint: '画布像素坐标，不是格子坐标',
+        fields: [
+          { name: 'art', type: 'string', req: '必填', desc: '装饰资源名，相对 `resources`' },
+          { name: 'x', type: 'number', req: '必填', desc: '画布像素 X' },
+          { name: 'y', type: 'number', req: '必填', desc: '画布像素 Y' },
+          { name: 'width', type: 'number', req: '必填', desc: '显示宽度；存盘值即权威，不再按格换算' },
+          { name: 'height', type: 'number', req: '必填', desc: '显示高度' },
+          { name: 'rotation', type: 'number', req: '选填', desc: '旋转角度（度）' },
+          { name: 'flipX', type: 'boolean', req: '选填', desc: '水平翻转' },
+          { name: 'flipY', type: 'boolean', req: '选填', desc: '垂直翻转' }
+        ]
+      },
+      {
+        id: 'enums', title: '枚举与口径', prefix: '', hint: '主城与镜像',
+        fields: [
+          { name: 'cityMode', type: 'enum', req: '必填', desc: '`fixed` 固定主城（按模板落位）/ `select` 自选主城（只能落在本方前中后区）' },
+          { name: 'playerCount', type: 'enum', req: '必填', desc: '`2` / `3` / `4`；3 人图镜像一律关闭，3 是奇数配不出第三块分区' },
+          { name: '镜像存盘', type: 'rule', req: '—', desc: '上下只存下半场、左右只存左半场、两者同时只存左下 1/4；全不开镜像才存全图', copy: false }
+        ]
+      }
+    ]
+  },
+
+  slg: {
+    name: 'SLG 地图',
+    kind: 'bigmapWorld',
+    version: 'v1',
+    source: 'BIGMAP_FIELDS.md → BigMapLayout.ts / parseBigMapLayout',
+    test: 'npx tsx --test tests/bigmap-format.test.ts',
+    notes: [
+      '未知字段一律丢弃，手加字段活不过一次保存。',
+      '编辑器镜像与权威有口径差：`ring` 缺省、重复格处理、`terrainOverrides` 同格重复、`rows` 上限。',
+      '`cities[].ring` 不能由几何反推，种子生成会「目标环占满就退一环」。',
+      '`rangeHex` 当前只是布局标注，游戏范围判定走 `radiateCapacity`。'
+    ],
+    files: [
+      ['字段字典 BIGMAP_FIELDS.md', 'BIGMAP_FIELDS.md'],
+      ['权威实现 BigMapLayout.ts', '../../assets/script/app/bigmap/model/BigMapLayout.ts']
+    ],
+    groups: [
+      {
+        id: 'top', title: '顶层字段', prefix: '', hint: 'world_<NN>.json 的根结构',
+        fields: [
+          { name: 'kind', type: 'string', req: '必填', desc: '固定 `bigmapWorld`；认错整份拒绝' },
+          { name: 'version', type: 'number', req: '必填', desc: '结构版本，只认 `1`' },
+          { name: 'layoutVersion', type: 'number', req: '选填', desc: '内容版本，人工递增；只透传，不校验内容' },
+          { name: 'worldId', type: 'number', req: '必填', desc: '世界 ID，决定运行时加载 `world_<NN>.json`' },
+          { name: 'worldName', type: 'string', req: '必填', desc: '世界显示名' },
+          { name: 'rows', type: 'number', req: '必填', desc: '网格行数，必须与 `bigmapWorld.rows` 一致' },
+          { name: 'columns', type: 'number', req: '必填', desc: '网格列数，必须与 `bigmapWorld.cols` 一致' },
+          { name: 'terrainSeed', type: 'number', req: '必填', desc: '地貌种子；改它 = 整张地貌重掷' },
+          { name: 'terrainOverrides', type: 'array', req: '选填', desc: '手改地形 `{ hexId, terrain }`；同一格只能一条' },
+          { name: 'cities', type: 'array', req: '选填', desc: '城池落位' },
+          { name: 'monsters', type: 'array', req: '选填', desc: '野怪落位' },
+          { name: 'bases', type: 'array', req: '选填', desc: '基地（离线调试档）；玩家基地全图最多 1 个' },
+          { name: 'blocked', type: 'number[]', req: '选填', desc: '障碍 / 禁放格；只校验，不进世界' },
+          { name: 'spawnZones', type: 'array', req: '选填', desc: '出生区块' },
+          { name: 'points', type: 'array', req: '选填', desc: '活动据点' },
+          { name: 'background', type: 'string', req: '选填', desc: '背景图资源名；游戏背景另有来源' }
+        ]
+      },
+      {
+        id: 'cities', title: '城池 cities[]', prefix: 'cities[].', hint: '占格数由配置 layer 决定',
+        fields: [
+          { name: 'cityId', type: 'number', req: '必填', desc: '必须存在于 `bigmapCity`，不可重复' },
+          { name: 'anchorHexId', type: 'number', req: '必填', desc: '锚点；必须在该城的 `hexIds` 里' },
+          { name: 'hexIds', type: 'number[]', req: '必填', desc: '占格块；从锚点 BFS 扩，首项即锚点' },
+          { name: 'ring', type: 'number', req: '必填', desc: '落位环号；不能由几何反推（种子生成会退一环）' },
+          { name: 'rangeHex', type: 'number[]', req: '选填', desc: '势力范围标注；P1 联盟层才进规则' },
+          { name: 'adjacentCityIds', type: 'number[]', req: '选填', desc: '相邻城 ID，去重升序写回' },
+          { name: 'label', type: 'string', req: '选填', desc: '图上编号，纯数字：章节 + 关卡补两位（`801` = 8-1）' }
+        ]
+      },
+      {
+        id: 'monsters', title: '野怪 monsters[]', prefix: 'monsters[].', hint: '实例号与配置 ID 分离',
+        fields: [
+          { name: 'instanceId', type: 'number', req: '必填', desc: '实例号（同种怪可多只），不可重复' },
+          { name: 'monsterId', type: 'number', req: '必填', desc: '必须存在于 `bigmapMonster`' },
+          { name: 'level', type: 'number', req: '必填', desc: '落地等级；编辑器取配置里的 `monsterLevel`' },
+          { name: 'anchorHexId', type: 'number', req: '必填', desc: '锚点；必须在该怪的 `hexIds` 里' },
+          { name: 'hexIds', type: 'number[]', req: '必填', desc: '占格集合；占格数取配置里的 `occupyHex`' }
+        ]
+      },
+      {
+        id: 'others', title: '基地 / 区块 / 据点', prefix: '', hint: '三类子结构的关键字段',
+        fields: [
+          { name: 'bases[].baseId', type: 'string', req: '必填', desc: '`player` / `npc-01`…，不可重复；空串判错' },
+          { name: 'bases[].isPlayer', type: 'boolean', req: '选填', desc: '玩家基地全图最多 1 个；一个都没有时运行时兜一个在地图中心' },
+          { name: 'bases[].hexId', type: 'number', req: '必填', desc: '基地只占 1 格，基地之间不可重叠' },
+          { name: 'spawnZones[].cells', type: 'number[]', req: '必填', desc: '区块格集合；区内不能有城 / 怪 / 基地 / 据点 / 障碍' },
+          { name: 'spawnZones[].capacity', type: 'number', req: '选填', desc: '计划放几个基地；`> floor(cells/4)` 出 warning，不阻断' },
+          { name: 'points[].pointType', type: 'number', req: '必填', desc: '`1` 城池 / `2` 挂机资源田 / `3` 地图 BOSS' }
+        ]
+      },
+      {
+        id: 'enums', title: '枚举', prefix: '', hint: '写第 5 种地形直接判错',
+        fields: [
+          { name: 'terrain', type: 'enum', req: '必填', desc: '`plain` 平地 / `forest` 林地 / `rock` 岩石 / `water` 水域' },
+          { name: 'pointType', type: 'enum', req: '条件', desc: '`1` 城池（一般不用，城池走 `cities`）/ `2` 挂机资源田 / `3` 地图 BOSS' },
+          { name: 'layer', type: 'enum', req: '—', desc: '配置表字段：`1` 个人层 / `2` 军团层 / `3` 战盟层 / `4` 王座；只决定占格数，不进布局', copy: false }
+        ]
+      }
+    ]
+  }
+};
+window.FIELD_DESCRIPTIONS = FIELD_CATS;
+
+/* ═══════════════════════════════════════════════════════════════════
+   2. 模拟编辑器壳（只为演示入口位置，不参与字段弹窗逻辑）
+   ═══════════════════════════════════════════════════════════════════ */
+const SHELLS = {
+  territory: {
+    title: '章节领地地图编辑器',
+    presets: ['chapter_01', 'chapter_02', 'chapter_03'],
+    tools: ['选择', '初始格', '关卡', 'BOSS', '异步据点', '固定资源', '奖励据点', '随机候选', '背景装饰', '格式刷', '擦除', '巡逻宝箱'],
+    left: () => `
+      <div class="sideBlock">
+        <div class="sideLabel">地图</div>
+        <label class="inLabel">地图 ID</label><input class="inp" value="chapter_01">
+        <div class="two" style="margin-top:8px">
+          <div><label class="inLabel" style="margin-top:0">行</label><input class="inp" value="20"></div>
+          <div><label class="inLabel" style="margin-top:0">列</label><input class="inp" value="20"></div>
+        </div>
+        <label class="inLabel">章节编号</label><input class="inp" value="1">
+      </div>
+      <div class="sideBlock">
+        <div class="sideLabel">编辑工具</div>
+        <p class="toolStatus" id="toolStatus">当前工具：选择</p>
+        <div class="toolGrid" data-tools>${SHELLS.territory.tools.map((t, i) => `<button class="${i === 0 ? 'on' : ''}">${t}</button>`).join('')}</div>
+      </div>
+      <div class="sideBlock">
+        <div class="sideLabel">背景</div>
+        <input class="inp" value="image/territory/chapter_01">
+        <p class="sideHint" style="margin-top:7px">领地地图不设对局人数与主城镜像。点击格子后，在右栏填写站点配置。</p>
+      </div>`
+  },
+  battle: {
+    title: '六边形地图编辑器',
+    presets: ['PVP4-1', 'standard_4', 'river'],
+    left: () => `
+      <div class="catNav" data-catnav>
+        <button class="on"><span class="icon">▦</span>地图地形</button>
+        <button><span class="icon">◐</span>前中后区</button>
+        <button><span class="icon">⌂</span>主城与资源</button>
+        <button><span class="icon">✦</span>场景装饰</button>
+        <button><span class="icon">⚙</span>高级设置</button>
+      </div>
+      <div class="sideBlock">
+        <p class="toolStatus" id="toolStatus">当前笔刷：虚空</p>
+        <div class="brushList" data-brushes>
+          <button class="brushItem on"><span class="sw void"></span><span><b>虚空</b><small>不可通行</small></span></button>
+          <button class="brushItem"><span class="sw neutral"></span><span><b>中立格</b><small>可通行、无分区</small></span></button>
+          <button class="brushItem"><span class="sw s1"></span><span><b>一号分区</b><small>玩家 1</small></span></button>
+          <button class="brushItem"><span class="sw s2"></span><span><b>二号分区</b><small>玩家 2</small></span></button>
+          <button class="brushItem"><span class="sw s3"></span><span><b>三号分区</b><small>玩家 3</small></span></button>
+          <button class="brushItem"><span class="sw s4"></span><span><b>四号分区</b><small>玩家 4</small></span></button>
+        </div>
+      </div>
+      <div class="sideBlock">
+        <div class="sideLabel">对局</div>
+        <div class="two">
+          <div><label class="inLabel" style="margin-top:0">人数</label><input class="inp" value="4"></div>
+          <div><label class="inLabel" style="margin-top:0">主城</label><input class="inp" value="固定"></div>
+        </div>
+        <p class="sideHint" style="margin-top:7px">镜像开启时只存半场；四象限建议用偶数列。</p>
+      </div>`
+  },
+  slg: {
+    title: '大地图布局编辑器',
+    presets: ['world_01', 'world_02'],
+    tools: ['选择', '城池', '野怪', '基地', '据点', '出生区块', '障碍', '地形', '势力范围', '擦除'],
+    left: () => `
+      <div class="sideBlock">
+        <div class="sideLabel">地图</div>
+        <dl class="kvGrid" style="margin-bottom:7px">
+          <dt>世界</dt><dd class="mono">world_01</dd>
+          <dt>尺寸</dt><dd class="mono">40 × 40</dd>
+          <dt>城池</dt><dd class="mono">25</dd>
+        </dl>
+        <label class="inLabel">预设 ID</label><input class="inp" value="world_01">
+      </div>
+      <div class="sideBlock">
+        <div class="sideLabel">工具</div>
+        <p class="toolStatus" id="toolStatus">当前：选择</p>
+        <div class="toolGrid" data-tools>${SHELLS.slg.tools.map((t, i) => `<button class="${i === 0 ? 'on' : ''}">${t}</button>`).join('')}</div>
+        <label class="inLabel">地形（地形工具用）</label>
+        <select class="inp"><option>平地 plain</option><option>林地 forest</option><option>岩石 rock</option><option>水域 water</option></select>
+      </div>
+      <div class="sideBlock">
+        <p class="sideHint">编辑器决定「东西在哪」，配置表决定「东西值多少」。</p>
+      </div>`
+  }
+};
+
+/* ═══════════════════════════════════════════════════════════════════
+   3. 状态与工具函数
+   ═══════════════════════════════════════════════════════════════════ */
+const state = {
+  shell: 'territory',
+  cat: 'territory',
+  query: '',
+  selected: { r: 5, c: 6 },
+  zoom: 1,
+  lastFocus: null
+};
+
+const $ = (id) => document.getElementById(id);
+const root = document.documentElement;
+const escHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+function richText(text, query) {
+  let html = escHtml(text).replace(/`([^`]+)`/g, '<code>$1</code>');
+  if (!query) return html;
+  return html.split(/(<[^>]+>)/).map((seg) => {
+    if (seg.startsWith('<')) return seg;
+    return seg.replace(new RegExp('(' + escRe(query) + ')', 'ig'), '<mark>$1</mark>');
+  }).join('');
+}
+
+let toastTimer = 0;
+function toast(html) {
+  const el = $('toast');
+  el.innerHTML = html;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 1900);
+}
+
+function copyText(text) {
+  const done = () => toast('已复制 <code>' + escHtml(text) + '</code>');
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+function fallbackCopy(text, done) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); done(); } catch (e) { toast('复制失败，请手动选择'); }
+  ta.remove();
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   4. 编辑器壳：切换 / 左栏 / 画布 / 右栏
+   ═══════════════════════════════════════════════════════════════════ */
+const NS = 'http://www.w3.org/2000/svg';
+const COLS = 15;
+const ROWS = 11;
+const HEX_R = 30;
+const DX = 45;
+const DY = 52;
+
+function applyShell(key) {
+  state.shell = key;
+  state.selected = { r: 5, c: 6 };
+  root.dataset.editor = key;
+  state.zoom = 1;
+  $('appTitle').textContent = SHELLS[key].title;
+  $('protoShellName').textContent = FIELD_CATS[key].name;
+  $('presetSelect').innerHTML = SHELLS[key].presets.map((p) => '<option>' + escHtml(p) + '</option>').join('');
+  $('leftPanel').innerHTML = SHELLS[key].left();
+  $('zoomRange').value = '100';
+  $('zoomLabel').textContent = '100%';
+  $('zoomPillLabel').textContent = '100%';
+  $('board').style.transform = 'none';
+  bindLeftPanel();
+  paintBoard();
+  renderRight();
+  document.querySelectorAll('.protoSwitch button').forEach((b) => b.classList.toggle('on', b.dataset.shell === key));
+}
+
+function bindLeftPanel() {
+  const panel = $('leftPanel');
+  panel.querySelectorAll('[data-tools] button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      panel.querySelectorAll('[data-tools] button').forEach((b) => b.classList.remove('on'));
+      btn.classList.add('on');
+      const status = $('toolStatus');
+      if (status) status.textContent = '当前工具：' + btn.textContent.trim();
+    });
+  });
+  const nav = panel.querySelector('[data-catnav]');
+  if (nav) {
+    nav.querySelectorAll('button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        nav.querySelectorAll('button').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+      });
+    });
+  }
+  const brushes = panel.querySelector('[data-brushes]');
+  if (brushes) {
+    brushes.querySelectorAll('.brushItem').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        brushes.querySelectorAll('.brushItem').forEach((b) => b.classList.remove('on'));
+        btn.classList.add('on');
+        const name = btn.querySelector('b').textContent;
+        const status = $('toolStatus');
+        if (status) status.textContent = '当前笔刷：' + name;
+      });
+    });
+  }
+}
+
+function hexPointString(cx, cy) {
+  const pts = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 180) * (60 * i);
+    pts.push((cx + HEX_R * Math.cos(a)).toFixed(2) + ',' + (cy + HEX_R * Math.sin(a)).toFixed(2));
+  }
+  return pts.join(' ');
+}
+
+function cellCenter(r, c) {
+  return { x: 40 + c * DX, y: 42 + r * DY + (c % 2 ? DY / 2 : 0) };
+}
+
+function hash01(r, c) {
+  let h = (r * 73856093) ^ (c * 19349663) ^ 0x9e3779b9;
+  h = (h ^ (h >>> 13)) * 1274126177;
+  return (h >>> 0) / 4294967295;
+}
+
+/* 领地地图：用一个有机形状模拟「已开启区域」（真实数据由 160 格涂色决定）。 */
+function inTerritory(r, c) {
+  const dx = (c - 7) * 0.92;
+  const dy = (r - 5) * 1.04;
+  return Math.hypot(dx, dy) < 4.55 + Math.sin(c * 1.7 + r * 2.3) * 0.55;
+}
+
+const TERRITORY_SITES = [
+  { r: 5, c: 6, type: 'start', label: '出生', glyph: '⌂', fill: '#16a34a' },
+  { r: 3, c: 5, type: 'stage', label: '关卡', glyph: '▣', fill: '#2563eb' },
+  { r: 4, c: 9, type: 'stage', label: '关卡', glyph: '▣', fill: '#2563eb' },
+  { r: 6, c: 3, type: 'boss', label: 'BOSS', glyph: '☠', fill: '#dc2626' },
+  { r: 7, c: 8, type: 'asyncPvp', label: '异步据点', glyph: '⚔', fill: '#9333ea' },
+  { r: 4, c: 2, type: 'fixedResource', label: '固定资源', glyph: '◆', fill: '#ca8a04' },
+  { r: 8, c: 5, type: 'bonus', label: '奖励据点', glyph: '★', fill: '#0891b2' }
+];
+const TERRITORY_CANDIDATES = [[8, 9], [8, 10], [7, 10], [9, 8]];
+
+const BATTLE_VOID = [[2, 3], [2, 4], [2, 10], [2, 11], [8, 3], [8, 4], [8, 10], [8, 11], [5, 7], [5, 8]];
+const BATTLE_HOMES = [[9, 1], [9, 13], [1, 1], [1, 13]];
+const BATTLE_RESOURCES = [[9, 4, 14001], [9, 10, 14002], [1, 4, 14003], [1, 10, 14004]];
+
+function battleZone(r, c) {
+  if (BATTLE_VOID.some(([vr, vc]) => vr === r && vc === c)) return 'void';
+  if (r === 5 || c === 7) return 'neutral';
+  const top = r < 5;
+  const left = c < 7;
+  return top ? (left ? 1 : 2) : (left ? 3 : 4);
+}
+
+const BATTLE_ZONE_FILL = { 1: '#1e3a8a', 2: '#7f1d1d', 3: '#14532d', 4: '#78350f', neutral: '#334155', void: '#0b1220' };
+const BATTLE_ZONE_STROKE = { 1: '#3b82f6', 2: '#ef4444', 3: '#22c55e', 4: '#f59e0b', neutral: '#64748b', void: '#334155' };
+
+const SLG_TERRAIN_FILL = { plain: '#1b2537', forest: '#16301f', rock: '#2b2b31', water: '#123047', blocked: '#3f1d1d' };
+const SLG_CITIES = [
+  { r: 5, c: 7, cityId: 101, ring: 0 },
+  { r: 3, c: 4, cityId: 102, ring: 3 },
+  { r: 7, c: 10, cityId: 103, ring: 4 },
+  { r: 4, c: 11, cityId: 104, ring: 5 }
+];
+const SLG_MONSTERS = [[6, 4, 8001], [8, 7, 8002], [2, 9, 8003]];
+const SLG_BASE = { r: 6, c: 6 };
+
+function slgTerrain(r, c) {
+  const ring = Math.hypot((r - 5) * 0.95, (c - 7) * 1.05);
+  if (ring > 8.2) return 'rock';
+  const h = hash01(r, c);
+  if (ring < 2.2) return 'plain';
+  if (h < 0.48) return 'plain';
+  if (h < 0.72) return 'forest';
+  if (h < 0.9) return 'rock';
+  return 'water';
+}
+
+let boardCells = [];
+
+function buildBoard() {
+  const svg = $('board');
+  svg.setAttribute('viewBox', '-18 -14 736 668');
+  svg.innerHTML = '';
+  boardCells = [];
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const { x, y } = cellCenter(r, c);
+      const poly = document.createElementNS(NS, 'polygon');
+      poly.setAttribute('points', hexPointString(x, y));
+      poly.setAttribute('stroke-width', '1');
+      poly.classList.add('cell');
+      poly.dataset.r = String(r);
+      poly.dataset.c = String(c);
+      poly.addEventListener('click', () => {
+        state.selected = { r, c };
+        paintBoard();
+        renderRight();
+        showCellPill(r, c);
+      });
+      poly.addEventListener('mouseenter', () => { updateHover(r, c); });
+      poly.addEventListener('mouseleave', () => { updateHover(null); });
+      const title = document.createElementNS(NS, 'title');
+      poly.appendChild(title);
+      svg.appendChild(poly);
+      boardCells.push({ r, c, poly, title, x, y });
+    }
+  }
+}
+
+function updateHover(r, c) {
+  if (r === null) {
+    $('stagePill').innerHTML = '演示画布 · 点击格子查看信息';
+    return;
+  }
+  const hexId = r * COLS + c;
+  $('stagePill').innerHTML = '<b>row ' + r + ' · col ' + c + '</b> · hexId ' + hexId;
+}
+
+/* 点击后在画布角标里回显关键信息：窄屏右栏隐藏时也有反馈。 */
+function showCellPill(r, c) {
+  const info = describeCell(r, c);
+  const facts = info.rows.slice(0, 2).map(([k, v]) => k + ' ' + v).join(' · ');
+  $('stagePill').innerHTML = '<b>row ' + r + ' · col ' + c + '</b> · hexId ' + info.hexId + ' · ' + facts;
+}
+
+function paintBoard() {
+  const shell = state.shell;
+  $('board').querySelectorAll('.entityLayer').forEach((n) => n.remove());
+  const entities = document.createElementNS(NS, 'g');
+  entities.setAttribute('class', 'entityLayer');
+  boardCells.forEach(({ r, c, poly, title, x, y }) => {
+    let fill = '#1f2937';
+    let stroke = '#475569';
+    let dash = null;
+    let tip = 'row ' + r + ' · col ' + c;
+
+    if (shell === 'territory') {
+      const inside = inTerritory(r, c);
+      fill = inside ? '#1c2a3f' : '#131d2d';
+      stroke = inside ? '#43536b' : '#2a3648';
+      tip += inside ? ' · 已开启' : ' · 未开启';
+      const cand = TERRITORY_CANDIDATES.some(([cr, cc]) => cr === r && cc === c);
+      if (cand) { dash = '4 3'; stroke = '#fbbf24'; tip += ' · 随机候选'; }
+      const site = TERRITORY_SITES.find((s) => s.r === r && s.c === c);
+      if (site) { fill = site.fill; stroke = site.fill; tip += ' · ' + site.label; }
+    } else if (shell === 'battle') {
+      const zone = battleZone(r, c);
+      fill = BATTLE_ZONE_FILL[zone];
+      stroke = BATTLE_ZONE_STROKE[zone];
+      if (zone === 'void') dash = '3 3';
+      tip += zone === 'void' ? ' · 虚空' : zone === 'neutral' ? ' · 中立格' : ' · 第 ' + zone + ' 分区';
+    } else {
+      const terrain = slgTerrain(r, c);
+      fill = SLG_TERRAIN_FILL[terrain];
+      stroke = terrain === 'water' ? '#1e4b6b' : '#334155';
+      tip += ' · ' + terrain;
+      const city = SLG_CITIES.find((s) => s.r === r && s.c === c);
+      if (city) { fill = '#2563eb'; stroke = '#93c5fd'; tip += ' · 城 ' + city.cityId; }
+      const monster = SLG_MONSTERS.find(([mr, mc]) => mr === r && mc === c);
+      if (monster) { fill = '#dc2626'; stroke = '#fca5a5'; tip += ' · 野怪 ' + monster[2]; }
+      if (SLG_BASE.r === r && SLG_BASE.c === c) { fill = '#0d9488'; stroke = '#5eead4'; tip += ' · 玩家基地'; }
+    }
+
+    poly.setAttribute('fill', fill);
+    poly.setAttribute('stroke', stroke);
+    if (dash) poly.setAttribute('stroke-dasharray', dash); else poly.removeAttribute('stroke-dasharray');
+    const selected = state.selected && state.selected.r === r && state.selected.c === c;
+    poly.classList.toggle('sel', !!selected);
+    title.textContent = tip;
+
+    if (shell === 'territory') {
+      const site = TERRITORY_SITES.find((s) => s.r === r && s.c === c);
+      if (site) addGlyph(entities, x, y, site.glyph, '#f8fafc', 15, site.type === 'boss' ? 700 : 600);
+      if (TERRITORY_CANDIDATES.some(([cr, cc]) => cr === r && cc === c)) {
+        addGlyph(entities, x, y, '?', '#fbbf24', 12, 600);
+      }
+    } else if (shell === 'battle') {
+      if (BATTLE_HOMES.some(([hr, hc]) => hr === r && hc === c)) addGlyph(entities, x, y, '⌂', '#fde047', 16, 700);
+      const res = BATTLE_RESOURCES.find(([rr, rc]) => rr === r && rc === c);
+      if (res) addGlyph(entities, x, y, '◆', '#93c5fd', 12, 600);
+    } else {
+      const city = SLG_CITIES.find((s) => s.r === r && s.c === c);
+      if (city) addGlyph(entities, x, y, String(city.cityId), '#f8fafc', 11, 700);
+      const monster = SLG_MONSTERS.find(([mr, mc]) => mr === r && mc === c);
+      if (monster) addGlyph(entities, x, y, '✦', '#fecaca', 12, 600);
+      if (SLG_BASE.r === r && SLG_BASE.c === c) addGlyph(entities, x + 11, y + 10, '★', '#fef08a', 11, 700);
+    }
+  });
+  $('board').appendChild(entities);
+}
+
+function addGlyph(parent, x, y, text, fill, size, weight) {
+  const t = document.createElementNS(NS, 'text');
+  t.setAttribute('x', x);
+  t.setAttribute('y', y + 1);
+  t.setAttribute('text-anchor', 'middle');
+  t.setAttribute('dominant-baseline', 'middle');
+  t.setAttribute('fill', fill);
+  t.setAttribute('font-size', String(size));
+  t.setAttribute('font-weight', String(weight));
+  t.setAttribute('font-family', 'system-ui,sans-serif');
+  t.setAttribute('paint-order', 'stroke');
+  t.setAttribute('stroke', '#0b1220');
+  t.setAttribute('stroke-width', '2.5');
+  t.setAttribute('stroke-linejoin', 'round');
+  t.setAttribute('pointer-events', 'none');
+  t.textContent = text;
+  parent.appendChild(t);
+}
+
+function describeCell(r, c) {
+  const hexId = r * COLS + c;
+  if (state.shell === 'territory') {
+    const site = TERRITORY_SITES.find((s) => s.r === r && s.c === c);
+    const cand = TERRITORY_CANDIDATES.some(([cr, cc]) => cr === r && cc === c);
+    return {
+      coord: 'row ' + r + ' · col ' + c,
+      hexId,
+      rows: [
+        ['状态', inTerritory(r, c) ? '已开启' : '未开启'],
+        ['站点', site ? site.label + '（' + site.type + '）' : '—'],
+        ['随机候选', cand ? '是' : '否']
+      ],
+      extra: site ? [['站点 ID', site.type + '_' + hexId], ['占格', '1 格']] : [['占格', '—']]
+    };
+  }
+  if (state.shell === 'battle') {
+    const zone = battleZone(r, c);
+    const res = BATTLE_RESOURCES.find(([rr, rc]) => rr === r && rc === c);
+    const home = BATTLE_HOMES.some(([hr, hc]) => hr === r && hc === c);
+    return {
+      coord: 'row ' + r + ' · col ' + c,
+      hexId,
+      rows: [
+        ['分区', zone === 'void' ? '虚空' : zone === 'neutral' ? '中立' : '第 ' + zone + ' 区'],
+        ['主城', home ? '是' : '否'],
+        ['资源点', res ? '组 ' + res[2] : '—']
+      ],
+      extra: [['字符', zone === 'void' ? '.' : zone === 'neutral' ? '0' : String(zone)]]
+    };
+  }
+  const terrain = slgTerrain(r, c);
+  const city = SLG_CITIES.find((s) => s.r === r && s.c === c);
+  const monster = SLG_MONSTERS.find(([mr, mc]) => mr === r && mc === c);
+  const ring = Math.round(Math.hypot((r - 5) * 0.95, (c - 7) * 1.05));
+  return {
+    coord: 'row ' + r + ' · col ' + c,
+    hexId,
+    rows: [
+      ['地形', terrain],
+      ['环号', 'ring ' + ring],
+      ['占位', city ? '城 ' + city.cityId : monster ? '野怪 ' + monster[2] : '—']
+    ],
+    extra: [['势力范围', city ? '标注 12 格' : '—']]
+  };
+}
+
+function renderRight() {
+  const info = describeCell(state.selected.r, state.selected.c);
+  const kv = info.rows.concat(info.extra).map(([k, v]) => '<dt>' + escHtml(k) + '</dt><dd>' + escHtml(v) + '</dd>').join('');
+  $('rightPanel').innerHTML = `
+    <h3>选中格</h3>
+    <div class="cellCard">
+      <div class="cellCoord">${escHtml(info.coord)}</div>
+      <div class="cellId">hexId ${info.hexId}</div>
+      <dl class="kvGrid">${kv}</dl>
+    </div>
+    <div class="sideBlock">
+      <div class="sideLabel">字段参考</div>
+      <button class="ghostBtn" data-open-fields>打开字段描述 <span>→</span></button>
+      <p class="sideHint" style="margin-top:7px">按 <code>/</code> 也可以打开；支持搜索字段名和分类切换。</p>
+    </div>
+    <div class="sideBlock">
+      <div class="sideLabel">提示</div>
+      <p class="sideHint">这是交互原型：画布与表单均为演示数据，不会写入任何地图文件。</p>
+    </div>`;
+
+  const btn = $('rightPanel').querySelector('[data-open-fields]');
+  if (btn) btn.addEventListener('click', () => openModal(state.shell));
+}
+
+/* 缩放 */
+function setZoom(next) {
+  state.zoom = Math.min(1.6, Math.max(0.6, next));
+  const pct = Math.round(state.zoom * 100);
+  $('board').style.transform = 'scale(' + state.zoom + ')';
+  $('zoomLabel').textContent = pct + '%';
+  $('zoomPillLabel').textContent = pct + '%';
+  $('zoomRange').value = String(pct);
+}
+$('zoomRange').addEventListener('input', (e) => setZoom(Number(e.target.value) / 100));
+$('zoomIn').addEventListener('click', () => setZoom(state.zoom + 0.1));
+$('zoomOut').addEventListener('click', () => setZoom(state.zoom - 0.1));
+
+/* ═══════════════════════════════════════════════════════════════════
+   5. 弹窗：分类 / 搜索 / 分组 / 复制
+   ═══════════════════════════════════════════════════════════════════ */
+const overlay = $('overlay');
+const fieldScroll = $('fieldScroll');
+const searchInput = $('searchInput');
+const searchBox = $('searchBox');
+
+function catCount(cat) {
+  return FIELD_CATS[cat].groups.reduce((n, g) => n + g.fields.length, 0);
+}
+
+function renderTabs() {
+  $('catTabs').innerHTML = Object.keys(FIELD_CATS).map((key, i) => {
+    const cat = FIELD_CATS[key];
+    const on = key === state.cat ? ' on' : '';
+    return `<button class="catTab${on}" role="tab" aria-selected="${key === state.cat}" data-cat="${key}">
+      <span class="tabIndex">${i + 1}</span>${escHtml(cat.name)}<span class="count">${catCount(key)}</span>
+    </button>`;
+  }).join('');
+  $('catTabs').querySelectorAll('[data-cat]').forEach((btn) => {
+    btn.addEventListener('click', () => switchCat(btn.dataset.cat));
+  });
+}
+
+function switchCat(key) {
+  if (!FIELD_CATS[key]) return;
+  state.cat = key;
+  state.query = '';
+  searchInput.value = '';
+  searchBox.classList.remove('hasQuery');
+  fieldScroll.scrollTop = 0;
+  renderTabs();
+  renderFields();
+  renderRail();
+  const active = $('catTabs').querySelector('.catTab.on');
+  if (active) active.focus({ preventScroll: true });
+}
+
+function fieldMatches(field, q) {
+  if (!q) return true;
+  return (field.name + ' ' + field.type + ' ' + field.desc + ' ' + (field.req || '')).toLowerCase().includes(q);
+}
+
+function renderFields() {
+  const cat = FIELD_CATS[state.cat];
+  const q = state.query.trim().toLowerCase();
+  let total = 0;
+  let shown = 0;
+
+  const html = cat.groups.map((group) => {
+    total += group.fields.length;
+    const fields = group.fields.filter((f) => fieldMatches(f, q));
+    shown += fields.length;
+    if (!fields.length) return '';
+
+    const rows = fields.map((f) => {
+      const reqClass = f.req === '必填' ? 'req' : f.req === '条件' ? 'cond' : 'opt';
+      const path = f.copy === false ? '' : (group.prefix || '') + f.name;
+      return `<div class="field" data-copy="${escHtml(path)}" title="${path ? '点击复制 ' + escHtml(path) : ''}">
+        <div class="fieldMain">
+          <span class="fieldName">${richText(f.name, q)}</span>
+          <span class="typeChip">${escHtml(f.type)}</span>
+          <span class="reqChip ${reqClass}">${escHtml(f.req)}</span>
+        </div>
+        <div class="fieldDesc">${richText(f.desc, q)}</div>
+        <button class="copyBtn" tabindex="-1" aria-label="复制字段名">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="9" y="9" width="10" height="11" rx="1.6"></rect>
+            <path d="M15 5.5V4.6A1.6 1.6 0 0 0 13.4 3H5.6A1.6 1.6 0 0 0 4 4.6v9.8A1.6 1.6 0 0 0 5.6 16h.9"></path>
+          </svg>
+        </button>
+      </div>`;
+    }).join('');
+
+    return `<section class="group" id="group-${escHtml(group.id)}">
+      <div class="groupHead">
+        <span class="groupTitle">${escHtml(group.title)}</span>
+        <span class="groupHint">${escHtml(group.hint || '')}</span>
+      </div>
+      ${rows}
+    </section>`;
+  }).join('');
+
+  fieldScroll.innerHTML = html || `<div class="emptyState">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path>
+    </svg>
+    <b>没有匹配的字段</b>
+    <span>换个关键词，或清空搜索查看全部 ${catCount(state.cat)} 个字段</span>
+  </div>`;
+
+  $('searchCount').textContent = shown + ' / ' + total;
+
+  fieldScroll.querySelectorAll('.field[data-copy]').forEach((row) => {
+    const path = row.dataset.copy;
+    if (!path) { row.style.cursor = 'default'; return; }
+    row.addEventListener('click', () => copyText(path));
+  });
+}
+
+function renderRail() {
+  const cat = FIELD_CATS[state.cat];
+  const nav = cat.groups.map((g) => `<button data-jump="${escHtml(g.id)}"><span>${escHtml(g.title)}</span><em>${g.fields.length}</em></button>`).join('');
+  const notes = cat.notes.map((n) => `<li>${richText(n, '')}</li>`).join('');
+  const links = cat.files.map(([label, href]) => `<a href="${escHtml(href)}" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M14 4h6v6M20 4l-9 9"></path><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"></path>
+      </svg>${escHtml(label)}</a>`).join('');
+
+  $('rail').innerHTML = `
+    <div class="railBlock">
+      <div class="railLabel">当前分类</div>
+      <div class="railCat">${escHtml(cat.name)}</div>
+      <div class="railCatMeta">${escHtml(cat.kind)} · ${escHtml(cat.version)} · ${catCount(state.cat)} 字段</div>
+    </div>
+    <div class="railBlock">
+      <div class="railLabel">分组</div>
+      <div class="groupNav">${nav}</div>
+    </div>
+    <div class="railBlock">
+      <div class="railLabel">口径提醒</div>
+      <ul class="noteList">${notes}</ul>
+    </div>
+    <div class="railBlock">
+      <div class="railLabel">校验入口</div>
+      <code class="cmd">${escHtml(cat.test)}</code>
+      <div class="railLinks">${links}</div>
+    </div>`;
+
+  $('rail').querySelectorAll('[data-jump]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const target = $('group-' + btn.dataset.jump);
+      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    });
+  });
+}
+
+let closeTimer = 0;
+
+function openModal(catKey) {
+  clearTimeout(closeTimer);
+  state.lastFocus = document.activeElement;
+  overlay.hidden = false;
+  requestAnimationFrame(() => overlay.classList.add('show'));
+  switchCat(FIELD_CATS[catKey] ? catKey : state.shell);
+  const dialog = overlay.querySelector('.dialog');
+  setTimeout(() => dialog.focus({ preventScroll: true }), 60);
+}
+
+function closeModal() {
+  overlay.classList.remove('show');
+  clearTimeout(closeTimer);
+  closeTimer = setTimeout(() => { overlay.hidden = true; }, 180);
+  if (state.lastFocus && typeof state.lastFocus.focus === 'function') {
+    state.lastFocus.focus({ preventScroll: true });
+  }
+}
+
+$('entryBtn').addEventListener('click', () => openModal(state.shell));
+$('closeBtn').addEventListener('click', closeModal);
+overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeModal(); });
+
+searchInput.addEventListener('input', () => {
+  state.query = searchInput.value;
+  searchBox.classList.toggle('hasQuery', !!state.query);
+  renderFields();
+});
+$('clearSearch').addEventListener('click', () => {
+  searchInput.value = '';
+  state.query = '';
+  searchBox.classList.remove('hasQuery');
+  renderFields();
+  searchInput.focus();
+});
+
+document.addEventListener('keydown', (e) => {
+  const open = overlay.classList.contains('show');
+  if (open) {
+    if (e.key === 'Escape') { e.preventDefault(); closeModal(); return; }
+    const typing = e.target && e.target.tagName === 'INPUT';
+    if (!typing && ['1', '2', '3'].includes(e.key)) {
+      const keys = Object.keys(FIELD_CATS);
+      const key = keys[Number(e.key) - 1];
+      if (key) { e.preventDefault(); switchCat(key); }
+    }
+    if (e.key === 'Tab') {
+      // 轻量焦点循环：弹窗内 Tab 不跑到后面的编辑器
+      const focusables = overlay.querySelectorAll('button, input, a[href]');
+      if (!focusables.length) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    return;
+  }
+  if (e.key === '/' && !(e.target && ['INPUT', 'TEXTAREA'].includes(e.target.tagName))) {
+    e.preventDefault();
+    openModal(state.shell);
+  }
+});
+
+/* 顶栏模拟按钮：给出反馈，但不写文件 */
+document.querySelectorAll('[data-mock-action]').forEach((btn) => {
+  btn.addEventListener('click', () => toast('原型演示：' + btn.dataset.mockAction + ' 不会写入文件'));
+});
+$('presetSelect').addEventListener('change', (e) => toast('加载预设 <code>' + escHtml(e.target.value) + '</code>（演示）'));
+document.querySelectorAll('.protoSwitch button').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    applyShell(btn.dataset.shell);
+    toast('已切换到 ' + FIELD_CATS[btn.dataset.shell].name + ' 模拟壳');
+  });
+});
+
+/* 启动 */
+buildBoard();
+applyShell('territory');
+
+/* 便于评审/分享：?shell=battle 切模拟编辑器，?open=territory|battle|slg 直接打开对应分类 */
+const params = new URLSearchParams(location.search);
+const deepShell = params.get('shell');
+if (deepShell && FIELD_CATS[deepShell]) applyShell(deepShell);
+const deepLink = params.get('open');
+if (deepLink && FIELD_CATS[deepLink]) {
+  applyShell(deepLink);
+  setTimeout(() => openModal(deepLink), 80);
+}
+</script>
+</body>
+</html>

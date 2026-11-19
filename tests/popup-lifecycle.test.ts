@@ -17,6 +17,12 @@ function loadModule(path: string, dependencies: Record<string, unknown>): any {
             if (name.endsWith('/PopupCompositionHost')) return { PopupCompositionHost };
             if (name.endsWith('/ResourceScope')) return { ResourceScope };
             if (name.endsWith('/AssetService')) return { scopeAssetService };
+            // 统一过渡（`UIMotionPlayer`）在本文件里不参与断言：桩成「播不上」，
+            // 让关闭链路走同步销毁 / 回收，与加入过渡之前的行为逐条对齐。
+            // 过渡本身的逐帧行为由 `tests/ui-motion.test.ts` 用假 `cc` 单独验证。
+            if (name.endsWith('/UIMotionPlayer')) {
+                return { UIMotionPlayer: { playEnter: () => false, playExit: () => false, stop: () => {} } };
+            }
             if (name.endsWith('/ProcedureManager')) return dependencies[name] ?? { ProcedureManager: { instance: null } };
             assert.ok(name in dependencies, `missing test dependency: ${name}`);
             return dependencies[name];
@@ -250,6 +256,7 @@ test('PopupManager 默认合并同类打开，打开中关闭后仍可重新打�
         _internalOpen(): Promise<void> { return this.openGate; }
         _bindCallbackOwners(owners: unknown): void { boundOwners = owners; }
         _internalClose(): void { this.finishOpen(); }
+        _internalReleaseResources(): void {}
         _internalDepthChanged(): void {}
         _internalCover(): void {}
         _internalReveal(): void {}
@@ -353,6 +360,7 @@ test('PopupManager 缓存实例时保留 prefab 资源到缓存节点销毁', as
         _bindCallbackOwners(): void {}
         _internalOpen(): Promise<void> { return Promise.resolve(); }
         _internalClose(): void { assert.equal(disposed, sessions, '外部会话先于 View 关闭释放'); }
+        _internalReleaseResources(): void {}
         _internalDepthChanged(): void {}
         _internalCover(): void {}
         _internalReveal(): void {}
@@ -464,6 +472,8 @@ test('PopupBase 资源服务按需解析，未用资源即销毁不要求运行�
 
 test('PopupBase 管理动态资源，缓存关闭即释放，重开取得独立作用域', async () => {
     const h = popupResourceFixture();
+    // 无过渡的弹窗（Toast 一类）关闭即释放：这条锁的是原有语义，不走延迟释放那条路。
+    h.popup.motionEnabled = false;
     let releases = 0;
     h.context.assets.load = async (_path, Type, options) => {
         options?.scope?.defer(() => releases++);
@@ -487,8 +497,31 @@ test('PopupBase 管理动态资源，缓存关闭即释放，重开取得独立�
     assert.equal(releases, 2);
 });
 
+test('有离场过渡的弹窗关闭时不放资源，交还节点时才放（淡出帧不能画已销毁的帧）', async () => {
+    const h = popupResourceFixture();
+    let releases = 0;
+    h.context.assets.load = async (_path, Type, options) => {
+        options?.scope?.defer(() => releases++);
+        return new Type();
+    };
+    await h.popup._internalOpen(1, {}, PopupDef.PopupLayer.NORMAL);
+    const scope = h.popup.ownedScope;
+    await h.popup.ownedAssets.load('preview', class {});
+
+    h.popup._internalClose(PopupDef.PopupCloseReason.Manual);
+    assert.equal(releases, 0,
+        '关闭就 decRef ⇒ 离场过渡那 0.16s 每帧提交已销毁的 SpriteFrame（frame should not be invalid）');
+    assert.equal(scope.disposed, false);
+
+    h.popup._internalReleaseResources();
+    assert.equal(releases, 1, '节点交还时必须把这次打开的动态资源还回去');
+    assert.equal(scope.disposed, true);
+    h.popup.onDestroy();
+});
+
 test('PopupBase 旧打开的迟到资源被释放并拒绝，不占用重开后的作用域', async () => {
     const h = popupResourceFixture();
+    h.popup.motionEnabled = false;
     let complete: () => void = () => {};
     let releases = 0;
     h.context.assets.load = async (_path, Type, options) => {

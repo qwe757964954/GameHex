@@ -286,8 +286,9 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
 
 ### 章节地图 MVC 事件归属（2026-10-30）
 
-- `TerritoryEntry` 为每个页面装配 Model、Controller、章节加载器、Repository 与存档适配器；章节加载器与页面美术共用 ControllerBase 管理的 ResourceScope。
-- `TerritoryController` 集中绑定格子推送、角色缓存与界面意图，管理 1 秒 / 60 秒时钟；网络请求 caller 为 Controller，销毁时统一 removeCaller。
+- `TerritoryEntry` 为每个页面装配一次：页面级 `ResourceScope`（`createScopedResources`）、Model、Controller、章节加载器、Repository 与存档适配器。Model 由 Entry 构造后交给 Controller 消费，Controller 不参与装配；章节美术（Model）与地块 / 宝箱 / 云（View）共用同一个页面 scope，Entry 销毁时统一释放。`TerritoryCellRepository` 构造时注入本页宿主作为请求 caller，自身即满足 `ITerritoryCellGateway`，装配处不再写逐方法的转发 lambda。
+- `TerritoryController` 集中绑定格子推送、角色缓存与界面意图，管理 1 秒 / 60 秒时钟；格子写请求的 caller 是页面宿主 Entry（`TerritoryEntry.dispose` 里 `removeCaller(this)`），推送订阅的 caller 是 Controller（`dispose` 里 `removeCaller(this)`），两者都只解除一次。
+- 领地写请求**只发不等**：Model 调 `sendUnlockCell / sendPassCell / sendSweep / sendIdleReward / sendUpMonsterBoxLv` 拿到发送状态（`offline` / `failed` 当场收尾），回包由 Controller 监听 `CmdCityChapter*RspMsg` 解码后回灌 `applyUnlockRsp / applyPassRsp / applySweepRsp / applyIdleRewardRsp / applyMonsterBoxRsp`。在途状态是一张「写票」（loading 配对、pending 集合、交互号、发送时刻）；回包落地逻辑就写在**入口传给 `beginWrite` 的回调**里（不另设中间分派层），`finishWrite` 统一做竞态作废与收尾，`fastTick` 兜 5 秒超时。发送侧按协议名留痕：组包 + 入队（本帧同步开销）≥ 8ms 打 warn，入队失败与回包超时（带 kind / 格子 / 实际等待）都记一条，便于把卡顿与「点了没反应」对到具体协议。`fetchChapterCells` 与 `startBattle` 仍保留 Promise（前者是加载顺序的一部分，后者由公共 `BattleStartService` 承担）。
 - `TerritoryModel` 复用原 Presenter 的章节上下文、业务规则、加载期推送合并与交互版本校验；只通过实例 onOutput 通知 Controller，不广播全局界面事件。`TerritoryPresenter` 兼容重导出已删除（2026-11），一律 import `TerritoryModel`。
 - `MainTerritoryMap` 只消费 `TerritoryViewEvent.Render/Command`，地图与三个关卡弹窗通过 `TerritoryUiEvent.Intent` 派发操作，页面关闭时由 Controller 统一解除事件、网络和缓存订阅。格子命中在地图内部先做输入锁判定，再转发意图。
 - `TerritoryViewState` 为进度提供独立只读投影；未知服务端状态也须保留本地解锁格，不允许通过渲染快照修改 Model。

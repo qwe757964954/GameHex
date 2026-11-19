@@ -148,6 +148,87 @@ export interface ZCHexState {
 
 export interface ZCUnitState {
     neutralReinforcement?: boolean;
+    /**
+     * 召唤物的到期时刻（秒，同 `chainReadyAt` 的绝对时间基准）；2026-11-18 第 17 批
+     * `summon_unit`（舞王 103103「舞王召唤」）。
+     *
+     * 缺省 `undefined` ⇒ **不过期**，一直活到被打死为止（101404「一人成军」的裁定口径）。
+     * 到点由 `ZCGameModel.syncSummons` 收场：置 `dead` + `deathRemoveAt = now`，
+     * 同一帧就被 `removeDeadUnits` 摘掉，所以「到期一起消失」不留尸体。
+    */
+    summonUntil?: number;
+    /**
+     * 召唤物的本体单位实例 id（不是 unitId）；有值 ⇒ 这个单位是召唤物。
+     *
+     * 两个作用：① `syncSummons` 每帧把它的位置钉在「本体 + 阵位」上；
+     * ② `ZCUnitSystem` 看到它就跳过一切寻路 / 追人分支（召唤物只听本体走）。
+     * 本体死了（或找不到）⇒ 召唤物一起收场，否则位置无从算起。
+    */
+    summonMasterId?: number;
+    /**
+     * 固定阵位编号 0~3（左上 / 右上 / 左下 / 右下），跟随时按本体朝向镜像摆放。
+     * 缺省 `undefined` ⇒ 不钉阵位（101404 那种「放出去自己走」的分身）。
+    */
+    summonSlot?: number;
+    /**
+     * 阵位半径（**世界 px**，召唤时按 `summonSlotRadius × combatDistanceScale` 算好存下）。
+     *
+     * 为什么存进单位而不每帧读配表：`syncSummons` 是每逻辑步都跑的跟随，读一次
+     * `skillRuntime[x].get(...)` 换来的只是同一个常数；而且跟随链一旦丢参数（比如本体
+     * 换了技能书）就会突然缩到 0、四个舞伴全叠在本体身上。
+    */
+    summonSlotRadius?: number;
+    /**
+     * 召唤物的整体半透明度（0~1，表现层用；设计口径「半透明的艺术加工」= 0.5）。
+     * 缺省 `undefined` ⇒ 全不透明，既有单位表现逐字不变。
+     * 只写视图，不参与任何战斗判定。
+    */
+    summonAlpha?: number;
+    /**
+     * 累计普攻制的召唤计数（2026-11-18 第 17 批，101404「一人成军」）。
+     *
+     * 与 `summonReadyAt` 是**两套触发**、互不干扰：101404 设计写的是「累计普攻 8 次后召唤」，
+     * 舞王 103103 是「冷却 12 秒」。共用一格会让「换一张卡就变口径」变成隐性 bug。
+     * 记的是 `completedAttackCount` 的**上次快照值**，不是「还剩几次」——
+     * 与 `counterFiredCount` / `trapFiredCount` / `barrageFiredCount` 同一口径。
+    */
+    summonFiredCount?: number;
+    /**
+     * 怒吼（`roar`，2026-11-18 第 17 批 南瓜战神 102304「大吼大叫」）的下次可用时刻。
+     * 与 `chainReadyAt` / `summonReadyAt` 同一套绝对时间基准；不还原就是读档白送一次怒吼。
+    */
+    roarReadyAt?: number;
+    /**
+     * 飓风（`storm_zone`，2026-11-18 第 17 批 三叶小丑 102004「飓风」）的下次可用时刻。
+     * 同样独占一格：同卡 102001 / 102002 也各占各的冷却，共用会互相拖累。
+    */
+    stormReadyAt?: number;
+    /**
+     * 射线集束（`ray_beam`，2026-11-19 科学家 103503）的累计普攻计数。
+     *
+     * 设计 I 列是「主动-累计普攻 8」⇒ 没有冷却，只有次数，所以不需要 `rayReadyAt`。
+     * 记账口径与 `auraFiredCount` / `trapFiredCount` 一致：存 `completedAttackCount` 的
+     * **上次快照值**，第一次推进只记基线不补放；被拒不消费次数。
+    */
+    rayFiredCount?: number;
+    /**
+     * 由**自己**击杀的单位数（2026-11-18 第 17 批，102204 嗜血术 III 级「友军击杀敌人延长」）。
+     *
+     * 只在 `ZCDamageResolutionSystem.damageUnit` 里由「打出最后一击的那个人」累加。
+     * 反射打死的不计（那条路径没有「谁在打谁」的归属，硬算会把功劳记到挨打的人身上）。
+     * 缺省 `undefined` ⇒ 0，不影响任何存量单位。
+    */
+    killCount?: number;
+    /** 团队增益（`team_buff`，102204）在**施法者**身上的冷却截止时刻。*/
+    teamBuffReadyAt?: number;
+    /** 团队增益的窗口截止时刻（施法者身上）：窗口内每步给半径内友军续状态。*/
+    teamBuffWindowEnd?: number;
+    /** 团队增益在**受惠者**身上的截止时刻（含击杀延长）；缺省 ⇒ 没被这条技能罩到过。*/
+    teamBuffUntil?: number;
+    /** 受惠者上一次结账时的 `killCount`；击杀延长的增量就从这里算。*/
+    teamBuffKillBase?: number;
+    /** 受惠者已经吃到的延长秒数（用于封顶 `teamBuffKillExtendMaxSeconds`）。*/
+    teamBuffExtendUsed?: number;
     /** 兵营传送批次的表现时间轴；恢复时继续飞行，不重新扣次数。*/
     portalFlight?: { fromHexId: number; barracksHexId: number; startedAt: number };
     inheritedStats?: Pick<ZCUnitDefinition, 'attack' | 'moveSpeed' | 'attackInterval' | 'attackRange' | 'bodyRadius'>
@@ -310,6 +391,16 @@ export interface ZCUnitState {
     */
     counterFiredCount?: number;
     /**
+     * `trap_place` 走「累计普攻」口径时上一次丢陷阱的 `completedAttackCount`
+     * （2026-11-18 第 17 批，毒箭蘑菇「穿甲爆矢」101704）。
+     *
+     * 101704 的原话是「累计普攻 8 次后朝目标丢出陷阱」—— 不是冷却，所以不能复用
+     * `trapReadyAt`。另开一份计数而不复用 `counterFiredCount`：同一张卡既攒自我增益、
+     * 又攒陷阱时，共用会让「buff 刚放完」被当成「陷阱也放过了」。
+     * 缺省 undefined ⇒ 第一次推进只记下当前计数，不立刻丢（与 `auraFiredCount` 同口径）。
+     */
+    trapFiredCount?: number;
+    /**
      * 五雷轰顶的下次可用时刻（秒），由 `applyBoltStrike` 推进。
      * 缺省 undefined ⇒ 首次初始化为「当前 + CD」。
     */
@@ -319,6 +410,21 @@ export interface ZCUnitState {
      * 缺省 undefined ⇒ 首次初始化为「当前 + CD」。
     */
     trapReadyAt?: number;
+    /**
+     * 闪电链的下次可用时刻（秒），由 `ZCSkillTriggerSystem.applyChainLightning` 推进。
+     * 缺省 undefined ⇒ 首次初始化为「当前 + CD」（与 `boltReadyAt` / `trapReadyAt` 同口径）。
+     * 单独一个字段而不复用 `boltReadyAt`：雷蕉同一张卡上还挂着 102204 嗜血术，
+     * 共用会让「闪电链放完」把嗜血术一起送进冷却。
+    */
+    chainReadyAt?: number;
+    /**
+     * 召唤（`summon_unit`）的下次可用时刻（秒），由 `ZCSkillTriggerSystem.applySummonUnit` 推进。
+     *
+     * 2026-11-18 第 17 批 舞王 103103「舞王召唤」。单独一个字段：艺术家 68031 这张卡上
+     * 还挂着 103104「迪斯科旋风」，共用槽位会变成「召完舞伴，旋风也进冷却」。
+     * 缺省 undefined ⇒ 首次初始化为「当前 + CD」，开局不立刻召。
+    */
+    summonReadyAt?: number;
     /**
      * 施法动作窗口截止时刻（秒）：主动技能放出的那一刻写 now + ZC_SKILL_CAST_ACTION_SECONDS，
      * 表现层据此把片段换成攻击动作。只管播哪一段，不挡移动与攻击。
@@ -370,6 +476,13 @@ export interface ZCUnitState {
      * 两条行为键共用这一格 —— 它们的机制是同一件事（自心圆一次性爆发），只差爆完加什么。
     */
     burstReadyAt?: number;
+    /**
+     * 毒液喷吐（诅咒菇 101803，2026-11-18 第 17 批）的下次可用时刻。
+     *
+     * 与 `burstReadyAt` 分开：同一张卡同时挂着菌核爆裂 101804，共用一个字段会变成
+     * 「爆完这个、那个也进冷却」。缺省 undefined ⇒ 首次初始化为「当前 + CD」。
+    */
+    venomReadyAt?: number;
     /**
      * 菌丝绞杀（`behaviorKey = 'fan_slow'`，101503）的下次可用时刻（秒）。
      *
@@ -537,6 +650,15 @@ export interface ZCCombatEvent {
      * 全局倍率（会把别人的爆炸一起放大）。`combatEvents` 不进存档，加字段不影响兼容。
     */
     effectScale?: number;
+    /**
+     * 整体透明度（0~1，`1` = 原色）；缺省 undefined ⇒ 全不透明，既有特效逐字不变。
+     *
+     * 2026-11-18 第 17 批闪电链 102203（设计案 O 列「逐跳降透明度」）：同一条链的多跳
+     * 是**同一份 prefab**，不靠这个字段就分不出「刚起跳」和「传到第六跳」。
+     * 视图走宿主节点的 `UIOpacity` 级联整棵子树（与光束淡出同一条通道），
+     * 逐层改 `Sprite.color` 会漏掉亮芯/柔光里的某一层。
+     */
+    effectAlpha?: number;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。*/
@@ -1129,6 +1251,66 @@ export interface ZCGroundZoneState {
      * 缺省 `undefined` ⇒ 每波都可以重复打（存量区域逐字不变）。
     */
     hitOncePerUnit?: boolean;
+    /**
+     * 投掷段的剩余飞行秒数（2026-11-18 第 17 批，毒箭蘑菇「穿甲爆矢」101704）。
+     *
+     * `> 0` 表示区域还在空中：位置由 `moveVelocityX/Y` 每帧推进，到 0 就地落地、
+     * 速度归零，之后按 `remainingSeconds` 原地停留。缺省 `undefined` ⇒ 出生即落地，
+     * 既有区域（陷阱 / 光环 / 暴风）逐字不变。
+     */
+    flightSeconds?: number;
+    /**
+     * 是否「只有被踩响才炸」（2026-11-18 第 17 批 101704）。
+     *
+     * 为 `true` 时**自然到期不结算 `expireDamage`、也不播 `expirePrefabPath`**，整片区域
+     * 直接消失 —— 101704 的原话是「到期无人触碰直接消失」。而既有语义里
+     * `expireDamage > 0` 恒等于「到时自爆」（103504 就靠这个收尾：无人踩中也得炸），
+     * 所以必须多一个开关，不能靠把伤害配成 0 来表达（那样踩响了也不掉血）。
+     * 缺省 `undefined` / `false` ⇒ 到期照旧结算，存量区域不受影响。
+     */
+    expireRequiresContact?: boolean;
+    /**
+     * 这片区域是否已经被敌人踩响过（仅供 `expireRequiresContact` 判定，不参与伤害计算）。
+     *
+     * 由 `ZCGroundZoneSystem.resolveContact` 置位。与 `sprinting` 同一类「阶段标记」：
+     * 决定后续分支走哪条，所以必须进快照，否则读档回来「已经踩响的陷阱」会变成哑弹。
+     */
+    contactTriggered?: boolean;
+    /**
+     * 随机游走速度（世界 px/秒，2026-11-18 第 17 批 三叶小丑「飓风」102004）。
+     *
+     * 与 `moveVelocityX/Y` 的区别：那两个是**定方向**飞（暴风 / 小鹿冲刺），这个是
+     * 「每隔 `wanderTurnSeconds` 秒随机换一次方向」。由 `ZCGroundZoneSystem.advanceWander`
+     * 每帧把结果写回 `moveVelocityX/Y`，位移仍然走原来的那一句 —— 不另开一套位置推进。
+     * 缺省 `undefined` ⇒ 不游走，存量区域（陷阱 / 光环 / 暴风）逐字不变。
+    */
+    wanderSpeed?: number;
+    /** 换向间隔秒数（设计原话「方向随机变化」）。缺省 1 秒。*/
+    wanderTurnSeconds?: number;
+    /** 下次换向的绝对时刻；由区域系统自己维护（不还原则读档后立刻偏一次，无伤大雅但会抖）。*/
+    wanderNextTurnAt?: number;
+    /** 当前朝向（弧度，-π~π）；缺省时由第一帧抽一次。可负 ⇒ 快照校验按有限数走。*/
+    wanderAngleRadians?: number;
+    /**
+     * 牵引：把 `pullRadius` 内的敌人以 `pullSpeed`（世界 px/秒）拽向区域圆心。
+     *
+     * 与 `legacy_traction` **同一套算法**（最小距离 `20 × combatDistanceScale`、每步位移
+     * `speed × dt` 且不超过「到最小距离的剩余」、只拽敌方）—— 差别只有力心：
+     * 那条车道以**单位坐标**为力心（挂在施法者身上），飓风的力心是**会飘的圆心**，
+     * 所以不能直接挂状态，得在区域里算。缺省 0 ⇒ 不牵引。
+    */
+    pullSpeed?: number;
+    /** 牵引作用半径（世界 px）。缺省 0 ⇒ 不牵引。*/
+    pullRadius?: number;
+    /**
+     * 区域表现的**事件级**整体缩放（2026-11-19 射线集束 103503）。
+     *
+     * 为什么必须有：`area` 事件**不按 `radius` 缩放**（视图只读事件上的 `effectScale`），
+     * 所以「同一条矩形光束、长度由表值驱动」只能靠这一格把美术拉到判定大小。
+     * 抄进 `syncHoldVisual` / `resolveWave` / `pushExpireVisual` 三处事件。
+     * 缺省 `undefined` ⇒ 不写这一格，存量区域（陷阱 / 光环 / 暴风）逐字不变。
+    */
+    effectScale?: number;
 }
 
 /**

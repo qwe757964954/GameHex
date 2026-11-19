@@ -38,9 +38,6 @@ const GUIDE_DIALOG_PREFAB = 'ui/Guide/GuideDialog';
  */
 const DIALOG_HIDDEN_HUD = ['TopHud', 'BottomHud', 'BeginGame'] as const;
 
-/** 常驻 GM 入口的节点名（`Canvas/GMButton`，见 `GMManager`）：也压在右上角，对话期间一起收。 */
-const GM_BUTTON_NODE = 'GMButton';
-
 /**
  * 主界面 HUD 的**引导进度**解锁点：第一关打完、回到章节地图（`5-4 → 6-1`）。
  *
@@ -392,7 +389,9 @@ export class GuideComposition extends ControllerBase {
     }
 
     /**
-     * 引导期间收起页面常驻挂件、GM 入口与**底部七格导航**。
+     * 引导期间收起页面常驻挂件与**底部七格导航**。
+     *
+     * `Canvas/GMButton` 不收（见 {@link dialogHudNodes}）。
      *
      * 需求（2026-11-17）：底栏从**第一句台词**播起就收，强制引导阶段同样保持收起 ——
      * 整段引导里玩家能点的只有光圈里那个目标，底栏既点不动也抢注意力。
@@ -419,8 +418,17 @@ export class GuideComposition extends ControllerBase {
         const navBar = this.canvas?.isValid
             ? this.canvas.getComponentInChildren(MainTabHost)?.navBar ?? null : null;
         const keepNav = state.focusNode.startsWith('Main/') && !!navBar?.isValid;
+        // 8-1 的目标（主线任务入口）在 `BottomHud` 里：**整块底栏无条件留着**。
+        //
+        // 不能只靠下面那条 `isInsideNode(focus, node)`：焦点解析要先 `findChildByName` 找到入口，
+        // 而入口的 `refresh()` 是异步读表 + 读缓存 —— 8-1 出场那几帧它可能还是 `active=false`
+        // （解锁时才刚打开），某些时序下甚至拿不到节点。那时 `focus` 为 null ⇒ 底栏被当普通 HUD
+        // 收掉 ⇒ 玩家面前一个能点的图标都没有，光圈和手指也没地方挖（用户 2026-11-19：
+        // 「引导要求点主线任务时，入口被隐藏」）。
+        const keepTaskEntryHost = state.focusNode === 'Main/TaskEntry';
         const targets = this.dialogHudNodes().filter(node => {
             if (keepNav && node === navBar) return false;
+            if (keepTaskEntryHost && node.name === 'BottomHud') return false;
             return !focus || !isInsideNode(focus, node);
         });
         // 上一步收起来、这一步不该收的先还回去。
@@ -463,8 +471,8 @@ export class GuideComposition extends ControllerBase {
      * 主界面 HUD 的**引导进度**门控（第 26 条）。
      *
      * 两档，都只看「走到第几步」，与引导层此刻画不画无关：
-     * · `5-4` **之后**：右上入口排 / 底栏（宝箱·聊天·挂机·任务）/ 底部七格导航 / 快速寻敌 / GM 才解锁。
-     *   之前的每一步（含领奖弹窗让位期间）都压着。
+     * · `5-4` **之后**：右上入口排 / 底栏（宝箱·聊天·挂机·任务）/ 底部七格导航 / 快速寻敌才解锁。
+     *   之前的每一步（含领奖弹窗让位期间）都压着。`Canvas/GMButton` 不在这道闸里 —— 常驻调试入口。
      * · `8-1` **之前**：任务入口（`BottomHud/MainTaskEntry`）单独收着 —— 引导讲到主线任务那一步
      *   才让玩家看见这个按钮（它会自己弹任务详情窗）。
      *
@@ -504,6 +512,10 @@ export class GuideComposition extends ControllerBase {
         if (this.taskEntryUnlocked) return;
         this.taskEntryUnlocked = true;
         if (!node?.isValid) return;
+        // 先立起来再校正：`refresh()` 是异步「读表 + 读缓存」，等它回来才显示的话，
+        // 8-1 开场那几帧玩家面前什么都没有（光圈也就没地方挖）。之后 `applySnapshot`
+        // 会按快照重算一次 —— 真的没任务配置时它自己会关回去，走下面的兜底。
+        if (!node.active) node.active = true;
         // 解锁：让它按自己的快照重新算一次显隐（入口可能没配任务，不能无脑打开）。
         // 算完再判一次：图标真的立不起来（任务未配置 / 已领完 / 面板读不到）时，玩家没有能点的东西，
         // 8-1 会永久卡在那里（完成条件就是「玩家点开面板」）⇒ 退回「引导代开面板」，它一开也算完成。
@@ -570,7 +582,12 @@ export class GuideComposition extends ControllerBase {
         this.rewardHoldTimer = null;
     }
 
-    /** 5-4 之前要压住的主界面 HUD（不含整块 `TopHud`，见 {@link GUIDE_LOCKED_HUD}）。 */
+    /**
+     * 5-4 之前要压住的主界面 HUD（不含整块 `TopHud`，见 {@link GUIDE_LOCKED_HUD}）。
+     *
+     * `Canvas/GMButton` 不在其中：GM 入口是调试用的常驻节点，游标卡在 5-4 之前时
+     * 也不许被这道闸永久关掉（否则只能靠 F1 才能唤回来）。
+     */
     private guideLockedHudNodes(): Node[] {
         const out: Node[] = [];
         for (const name of GUIDE_LOCKED_HUD) {
@@ -581,8 +598,6 @@ export class GuideComposition extends ControllerBase {
         if (canvas?.isValid) {
             const nav = canvas.getComponentInChildren(MainTabHost)?.navBar ?? null;
             if (nav?.isValid) out.push(nav);
-            const gm = canvas.getChildByName(GM_BUTTON_NODE);
-            if (gm?.isValid) out.push(gm);
         }
         return out;
     }
@@ -618,17 +633,17 @@ export class GuideComposition extends ControllerBase {
     }
 
     /**
-     * 这一步要收的 HUD：页面常驻子树、`Canvas` 上的 GM 入口，以及底部七格导航。
+     * 这一步要收的 HUD：页面常驻子树与底部七格导航。
      *
      * `BottomNav` 由 `MainTabHost` 持有；焦点若落在某一格上，调用方的过滤器会把它留下。
+     *
+     * `Canvas/GMButton`（`GMManager` 的常驻入口）**不在这里**：它是调试入口，
+     * 按 GMManager 的契约「跨流程存活、所有界面都可见」，不参与任何 HUD 门控。
      */
     private dialogHudNodes(): Node[] {
         const out: Node[] = [];
         const canvas = this.canvas;
         if (canvas?.isValid) {
-            // GM 入口是 `Canvas` 的直接子节点（不在 tab 页里），但它也压在右上角那一片。
-            const gm = canvas.getChildByName(GM_BUTTON_NODE);
-            if (gm?.isValid) out.push(gm);
             const nav = canvas.getComponentInChildren(MainTabHost)?.navBar ?? null;
             if (nav?.isValid) out.push(nav);
         }

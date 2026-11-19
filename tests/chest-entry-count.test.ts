@@ -53,6 +53,9 @@ function createHarness() {
         if (name === './NewTreasureRepository') return { NewTreasureRepository: RepositoryStub };
         // 2026-11-11：队列变化回调现在还会顺手刷详情弹窗（本夹具没开窗 ⇒ get 恒 null）。
         if (name === '../../framework/ui/PopupManager') return { PopupManager: { inst: { get: () => null } } };
+        // 2026-11-18：`start()` 会给「没有地图宿主」的页面补一次模块入场；
+        // 本夹具只验数量格，动效不参与（逐帧行为见 `tests/main-hud-intro.test.ts`）。
+        if (name === './MainHudIntro') return { playMainHudIntro: () => false };
         return {};
     } });
     assert.ok(exports.MainPage);

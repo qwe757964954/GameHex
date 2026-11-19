@@ -232,28 +232,34 @@ test('chapterLevelAutoStartConfig：1 开 / 0 关；缺行或脏值退回缺省�
 /**
  * `levelInfo.gradeProModifier` 的真表投影（2026-11-09 接线）。
  *
- * 207 关里 190 关配了 `{ blue: 3, green: 3 }`（`green` 于 2026-11-09 由 2 提到 3，
- * 目的是跨过 10003 的 2.6 门槛让绿卡也跟着涨）；17 关是空对象 `{}`（10001~10003 的开局三关、
- * 10006、以及 10010 起每 5 关一档到 10070）。这一列此前全工程无消费，现在经
- * `TerritoryCampaignStage` → 导航参数 → 对局配置，只作用于 NPC 抽卡。
+ * 2026-11-18 重排：原先 190 关清一色 `{ blue: 3, green: 3 }`，缺紫关卡里 NPC 的高级兵营
+ * 直接退化 100% 金卡。现在按章节难度给曲线（第 1 章绿蓝 ×4、往紫金放开），并且
+ * **紫与金必须同系数** —— 乘同一个数「紫:金」比例才不变，高级兵营恒为 90/10。
+ * 塔防关（`levelMod = 2`）本轮不重排：塔防 NPC 的翻地只影响背景建筑，难度由出怪表控制。
  */
-test('★ gradeProModifier：真表投影成乘数，空对象归一成 undefined', () => {
+test('★ gradeProModifier：真表投影成乘数，紫金必须同系数', () => {
     const campaign = buildTerritoryCampaign(
         rows('levelInfo'), rows('monsterCard'), rows('npcTeam'), rows('pvpCard'),
         1, rows('defenceModWave'), [...rows('item'), ...rows('roleProperty')],
     );
     const filled = campaign.stages.find((stage) => stage.levelId === 10004);
     assert.ok(filled, '10004 必须在章节里');
-    assert.deepEqual({ ...filled.gradeProModifier }, { blue: 3, green: 3 });
+    const gpm = filled.gradeProModifier;
+    assert.ok(gpm, '10004 必须配了乘数');
+    // 紫金同系数是「高级兵营 90/10 不被改掉」的唯一前提，单独钉住。
+    assert.equal(gpm.gold, gpm.purple, '紫金系数必须相等，否则高级兵营的 90/10 会被改掉');
+    // 第 1 章压绿蓝：系数 > 1 ⇒ 绿蓝占比抬高、紫金被稀释（难度曲线的前段）。
+    assert.ok(gpm.green > 1 && gpm.blue > 1, '第 1 章必须抬高绿蓝');
 
-    // 开局三关（10001/10002/10003）该列留空 ⇒ 必须不是 `{}`，而是 undefined
-    //（`{}` 会被下游当成「配了但系数全是默认」而多跑一轮乘算）。
+    // 开局三关原先留空（`{}` ⇒ undefined），现在也按章节曲线给值。
     for (const levelId of [10001, 10002, 10003, 10006]) {
         const stage = campaign.stages.find((item) => item.levelId === levelId);
         assert.ok(stage, `${levelId} 必须在章节里`);
-        assert.equal(stage.gradeProModifier, undefined, `${levelId} 该列留空 ⇒ undefined`);
+        assert.ok(stage.gradeProModifier, `${levelId} 现在按章节曲线给值`);
+        assert.equal(stage.gradeProModifier.gold, stage.gradeProModifier.purple,
+            `${levelId} 紫金系数必须相等`);
     }
-    // 塔防关也吃这份配置（10005 是首领关），NPC 出怪前的翻格子同样受限。
+    // 塔防关保持原值不重排（10005 是首领关）。
     const defence = campaign.stages.find((stage) => stage.levelId === 10005);
     assert.equal(defence?.mode, 'defence');
     assert.deepEqual({ ...defence?.gradeProModifier }, { blue: 3, green: 3 });

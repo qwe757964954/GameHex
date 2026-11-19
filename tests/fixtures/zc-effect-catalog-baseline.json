@@ -1,0 +1,55 @@
+{
+  "nodeScale": {
+    "units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风": 0.7,
+    "units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中": 0.6089108910891089,
+    "units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能": 0.8,
+    "units/projectiles/风法师_龙卷风/风法师_龙卷风": 0.5,
+    "units/projectiles/鹿神守护/鹿神守护": 0.145985401459854,
+    "units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效": 2.5,
+    "units/projectiles/持续光环伤害效果/持续光环伤害效果": 2.0709859913793105,
+    "units/projectiles/雷弹攻击/雷弹攻击": 0.5,
+    "units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋": 0.4,
+    "units/projectiles/刀盾兵_护盾/刀盾兵_护盾": 0.55
+  },
+  "anchor": {
+    "units/projectiles/巨力坚果_普攻/巨力坚果_普攻": "midpoint",
+    "units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋": "midpoint"
+  },
+  "liftY": {
+    "units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻": 20,
+    "units/projectiles/玉林好汉_飞镖普攻_强化/玉林好汉_飞镖普攻_强化": 20,
+    "units/projectiles/三叶小丑_普攻/三叶小丑_普攻": 30
+  },
+  "layer": {
+    "units/projectiles/鹿神守护/鹿神守护": "top"
+  },
+  "overlayChild": {
+    "units/projectiles/鹿神守护/鹿神守护": "fx_火船"
+  },
+  "flight": {
+    "units/projectiles/斧盾兵_反击气刃/斧盾兵_反击气刃": {
+      "speed": 420,
+      "minSeconds": 0.14,
+      "maxSeconds": 0.6,
+      "facingOffsetDegrees": 0
+    }
+  },
+  "facing": {
+    "units/projectiles/消灭学霸_普攻/消灭学霸_普攻": 180
+  },
+  "fade": {
+    "units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻": 0.18
+  },
+  "tint": {
+    "units/projectiles/风法师_龙卷风/风法师_龙卷风": [96, 255, 128]
+  },
+  "missile": {
+    "68010": {
+      "missilePrefabPath": "units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能",
+      "impactPrefabPath": "units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中",
+      "arcOffset": 36,
+      "speed": 200,
+      "count": 3
+    }
+  }
+}

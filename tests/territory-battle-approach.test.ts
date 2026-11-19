@@ -111,16 +111,18 @@ const mapViewSource = readText('assets/script/app/territory/view/TerritoryMapVie
 const pageSource = readText('assets/script/app/main/MainTerritoryMap.ts');
 
 test('★★★只有「首次解锁直开」带 approach，弹窗里自己按的「开始战斗」不许拖 1.2 秒', () => {
-    // 直开那条：`handleUnlockThenBattle` 的回包里必须是 `applyBattleStart(..., true)`。
+    // 直开那条落在解锁回包分支：普通关同步交接、首领/组队关由串行开战接手，两处都必须带 `, true`。
     const unlockBody = modelSource.slice(modelSource.indexOf('private async handleUnlockThenBattle('));
-    assert.ok(
-        unlockBody.slice(0, unlockBody.indexOf('\n    }')).includes('this.applyBattleStart(site, stage, outcome.battle, true)'),
-        '首次解锁直开没标记 approach ⇒ 页面不会播过场',
-    );
-    // 反查：全文里 `applyBattleStart(` 的调用只有这两处，且只有直开那一处带 `, true`。
+    const flowBody = unlockBody.slice(0, unlockBody.indexOf('private async handleUnlockOnly('));
+    assert.ok(flowBody.includes('this.applyBattleStart(site, stage, null, true)'),
+        '首次解锁直开（普通关）没标记 approach ⇒ 页面不会播过场');
+    const chained = modelSource.slice(modelSource.indexOf('private async startBattleChained('));
+    assert.ok(chained.slice(0, chained.indexOf('\n    }')).includes('this.applyBattleStart(site, stage, result, true)'),
+        '首次解锁直开（战斗关）没标记 approach ⇒ 页面不会播过场');
+    // 反查：`applyBattleStart(` 一共 3 处调用，只有直开那两处带 `, true`。
     const calls = modelSource.match(/this\.applyBattleStart\([^)]*\)/g) ?? [];
-    assert.equal(calls.length, 2, `applyBattleStart 调用点应为 2 处，实际 ${calls.length}`);
-    assert.equal(calls.filter((call) => call.includes(', true')).length, 1, '只允许直开那一处带 approach');
+    assert.equal(calls.length, 3, `applyBattleStart 调用点应为 3 处，实际 ${calls.length}`);
+    assert.equal(calls.filter((call) => call.includes(', true')).length, 2, '只有直开那两处带 approach');
 });
 
 test('★★navigate 载荷只在需要时才带可选字段（其余调用点保持原样，别污染老断言）', () => {

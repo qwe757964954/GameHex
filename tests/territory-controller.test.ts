@@ -70,7 +70,7 @@ function harness() {
         addEvent(name, caller, handler) { listeners.set(name, { caller, handler }); },
         removeCaller() { calls.push('removeCaller'); listeners.clear(); },
     };
-    const controller = new TerritoryController(() => model as unknown as TerritoryModel, { context: createControllerContext(),
+    const controller = new TerritoryController(model as unknown as TerritoryModel, { context: createControllerContext(),
         roleCache: { subscribe(_caller: object, callback: () => void) { cache = callback; return () => { calls.push('uncache'); cache = null; }; } },
         cells: cells as unknown as TerritoryCellRepository,
         schedule(callback, seconds) { const timer = { callback, seconds }; timers.push(timer); return () => { calls.push(['stop', seconds]); timer.callback = () => {}; }; },
@@ -229,7 +229,9 @@ test('controller owns network/cache and clocks; disposal releases them exactly o
     const h = harness();
     h.controller.start();
     assert.equal(h.calls.filter(c => c === 'start').length, 1);
-    assert.deepEqual([...h.listeners.keys()].sort(), ['CmdCityChapterCellInfoRspMsg', 'CmdCityChapterPassCellBroMsg']);
+    assert.deepEqual([...h.listeners.keys()].sort(), ['CmdCityChapterCellInfoRspMsg', 'CmdCityChapterIdleRewardRspMsg',
+        'CmdCityChapterPassCellBroMsg', 'CmdCityChapterPassCellRspMsg', 'CmdCityChapterSweepRspMsg',
+        'CmdCityChapterUnlockCellRspMsg', 'CmdCityChapterUpMonsterBoxLvRspMsg']);
     const listener = h.listeners.get('CmdCityChapterPassCellBroMsg')!;
     listener.handler.call(listener.caller, {});
     assert.deepEqual(h.calls[h.calls.length - 1], ['pass', 2, [10]]);

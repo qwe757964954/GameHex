@@ -245,6 +245,35 @@ export function buildSeatUnitIds(
     return result;
 }
 
+/**
+ * 由「后端下发的席位」建卡牌等级表（键 = `ZCOwner`，值 = `heroId → Lv`）。
+ *
+ * 只给结算 MVP 的 `Lv.x` 文案用：等级是「英雄」的属性（`ZCBattleHero.level`），
+ * 不在卡组里，也不在快照里 —— 本地局没有 `battle.units` 时这张表不产出，
+ * 结算页就把等级行收起（显示 `Lv.1` 会撒谎）。席位归属仍走 {@link assignSeatUnits}。
+ *
+ * 非法等级（≤0 / 非有限值）跳过：0 是「不知道」，不是 0 级。
+*/
+export function buildSeatHeroLevels(
+    units: readonly {
+        readonly campId: number;
+        readonly roleId: string;
+        readonly heroes?: readonly { readonly heroId: number; readonly level: number }[];
+    }[],
+    selfRoleId: string | null,
+): Map<ZCOwner, Readonly<Record<string, number>>> {
+    const result = new Map<ZCOwner, Readonly<Record<string, number>>>();
+    for (const [owner, unit] of assignSeatUnits(units, selfRoleId)) {
+        const levels: Record<string, number> = {};
+        for (const hero of unit.heroes ?? []) {
+            if (!Number.isFinite(hero.level) || hero.level < 1) continue;
+            levels[String(hero.heroId)] = Math.floor(hero.level);
+        }
+        if (Object.keys(levels).length) result.set(owner, levels);
+    }
+    return result;
+}
+
 
 /**
  * 名次徽章资源键（设计稿的 `icon_01 / icon_02 / icon_03`）。

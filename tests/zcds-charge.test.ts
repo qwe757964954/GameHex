@@ -746,6 +746,8 @@ test('超时兜底：`dashUntil` 过期就按冲空收场，不结算伤害但�
 interface IImpactHarnessOptions {
     /** 普攻行的命中附加特效；缺省 = 不配。 */
     impactEffectPrefabPath?: string;
+    /** 命中附加特效的落点比例（`pvpSkill.impactEffectAnchor`）；缺省 = 0（受击点）。 */
+    impactEffectAnchor?: number;
 }
 
 function makeImpactHarness(options: IImpactHarnessOptions) {
@@ -755,6 +757,7 @@ function makeImpactHarness(options: IImpactHarnessOptions) {
 
     const profile = boxerProfile({
         ...(options.impactEffectPrefabPath ? { impactEffectPrefabPath: options.impactEffectPrefabPath } : {}),
+        ...(options.impactEffectAnchor ? { impactEffectAnchor: options.impactEffectAnchor } : {}),
     });
     const definition = boxerDefinition(profile);
 
@@ -821,8 +824,9 @@ function makeImpactHarness(options: IImpactHarnessOptions) {
     };
 }
 
-test('气浪：命中后多推一条 area 事件，落在受击点、伤害为 0', () => {
-    const harness = makeImpactHarness({ impactEffectPrefabPath: IMPACT_FX });
+test('气浪：命中后多推一条 area 事件，落在双方中点、伤害为 0', () => {
+    //  `impactEffectAnchor = 0.5` 就是 pvpSkill 30713 表里的值（2026-11-18 从代码常量挪进表）。
+    const harness = makeImpactHarness({ impactEffectPrefabPath: IMPACT_FX, impactEffectAnchor: 0.5 });
     harness.attack();
     assert.equal(harness.state.combatEvents.length, 2, '一次出手 = 一条近战事件 + 一条气浪事件');
     const [hit, impact] = harness.state.combatEvents;
@@ -832,10 +836,12 @@ test('气浪：命中后多推一条 area 事件，落在受击点、伤害为 0
     assert.equal(impact.type, ZCCombatEventType.Area, 'area 才会落到地面层（气浪压在脚下）');
     assert.equal(impact.effectPrefabPath, IMPACT_FX);
     assert.equal(impact.damage, 0, '气浪是纯表现，不能再结算一次伤害');
+    //  2026-11-18 用户口径：这张冲击环读作「撞在一起的那一下」，圆心取双方中点，
+    //  不再压在受击目标脚下。夹具 source 在 x=0、target 在 x=12 ⇒ 中点 x=6。
     assert.deepEqual(
         [impact.fromX, impact.fromY, impact.toX, impact.toY],
-        [harness.target.freeX, harness.target.freeY, harness.target.freeX, harness.target.freeY],
-        '落在受击目标身上，不是出手点',
+        [6, 0, 6, 0],
+        '落在攻守双方的中点，而不是受击目标身上',
     );
     assert.equal(impact.skillId, hit.skillId);
     assert.equal(impact.owner, hit.owner);
@@ -849,6 +855,20 @@ test('没配命中附加特效时不额外推事件（存量技能一行都不�
     harness.attack();
     assert.equal(harness.state.combatEvents.length, 1);
     assert.equal(harness.state.combatEvents[0].type, ZCCombatEventType.Melee);
+});
+
+test('没配落点的命中特效应原样贴在受击点（默认 0，只有表里写了 0.5 才居中）', () => {
+    //  雷弹命中 / 磁电菇_子弹命中 / 麻辣铁锅_爆炸龙卷 都是「打在敌人身上」的一次性爆点，
+    //  表里没给 `impactEffectAnchor` ⇒ 落点仍是受击点；给了 0.5 才会挪到中点。
+    const harness = makeImpactHarness({ impactEffectPrefabPath: 'units/projectiles/雷弹命中/雷弹命中' });
+    harness.attack();
+    const impact = harness.state.combatEvents[1];
+    assert.equal(impact.type, ZCCombatEventType.Area);
+    assert.deepEqual(
+        [impact.fromX, impact.fromY, impact.toX, impact.toY],
+        [harness.target.freeX, harness.target.freeY, harness.target.freeX, harness.target.freeY],
+        '未登记的美术仍落在受击目标身上',
+    );
 });
 
 // ------------------------------------------------------------------ ⑦ 配置与资源
@@ -947,13 +967,14 @@ test('气浪资源真的在包里（配了不存在的路径运行时不报错�
     assert.ok(existsSync('assets/bundles/battle/units/projectiles/消灭学霸_普攻/消灭学霸_普攻.prefab'));
 });
 
-test('解析层：三个新字段从表里读进 ZCAttackProfile，缺省不产生 undefined 之外的副作用', async () => {
+test('解析层：四个新字段从表里读进 ZCAttackProfile，缺省不产生 undefined 之外的副作用', async () => {
     const { parseAttackProfiles } = await import('../assets/script/app/zcds/model/ZCPvpTableParser');
     const parsed = parseAttackProfiles([
         {
             skillId: 30713, name: '运动霸普攻', mode: 'melee',
             projectileSpeed: 0, areaRadius: 0, damageRate: null,
             chargeDistance: 220, chargeSpeedScale: 4, impactEffectPrefabPath: IMPACT_FX,
+            impactEffectAnchor: 0.5,
         },
         {
             skillId: 30714, name: '对照普攻', mode: 'melee',
@@ -964,8 +985,16 @@ test('解析层：三个新字段从表里读进 ZCAttackProfile，缺省不产�
     assert.equal(boxer.chargeDistance, 220);
     assert.equal(boxer.chargeSpeedScale, 4);
     assert.equal(boxer.impactEffectPrefabPath, IMPACT_FX);
+    assert.equal(boxer.impactEffectAnchor, 0.5, '气浪落点比例必须原样读出来');
     const plain = parsed.get(30714)!;
     assert.equal(plain.chargeDistance, undefined);
     assert.equal(plain.chargeSpeedScale, undefined);
     assert.equal(plain.impactEffectPrefabPath, undefined);
+    assert.equal(plain.impactEffectAnchor, undefined, '没配就是 undefined，不能自作主张给 0');
+
+    //  越界必须抛：夹到 0/1 等于把「表里填错」变成「画面上偏了一点」，最难查。
+    assert.throws(() => parseAttackProfiles([{
+        skillId: 30715, name: '越界普攻', mode: 'melee',
+        projectileSpeed: 0, areaRadius: 0, impactEffectAnchor: 1.5,
+    }]), /impactEffectAnchor/);
 });

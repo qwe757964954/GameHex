@@ -56,6 +56,7 @@ import {
 } from './PopupDef';
 import type { PopupBase } from './PopupBase';
 import { PopupCompositionHost, type IPopupCompositionFactory } from './PopupCompositionHost';
+import { UIMotionPlayer } from './UIMotionPlayer';
 
 const { ccclass } = _decorator;
 
@@ -131,6 +132,14 @@ export class PopupManager extends Component {
     private _openings: Set<IPopupOpening> = new Set();
     /** 串行 id 发号器。 */
     private _serialId: number = 0;
+    /**
+     * 正在播离场过渡、还没交还节点的弹窗数量。
+     *
+     * 它们已经出栈（`_stack` 里没有），但节点还在场景树里淡出。深度重排要把它当成
+     * 「仍占着最上面几个兄弟位」：否则 `_baseSiblingIndex()` 会把它算成普通子节点、
+     * 把刚露出来的下层弹窗排到它上面，离场就变成了「直接被盖掉」。
+     */
+    private _exiting: number = 0;
     /** 已进入销毁流程；阻止 onClose 回调或迟到异步任务重新打开弹窗。 */
     private _disposed: boolean = false;
     /** Prefab 资源由管理器持有，至少覆盖所有仍存活或缓存中的弹窗节点。 */
@@ -269,6 +278,10 @@ export class PopupManager extends Component {
         if (node.parent !== root) node.setParent(root);
         node.setPosition(0, 0, 0);
         node.active = true;
+        // 统一进场过渡（需求 2026-11-18 ②）。此刻节点刚激活、还没渲染过一帧，
+        // 在这里写起始帧不会「先全亮一下再淡入」。关掉过渡的弹窗（Toast 等）由
+        // `PopupBase.motionEnabled` 决定，判据只在基类一处。
+        if (popup.motionEnabled !== false) UIMotionPlayer.playEnter(node);
 
         const layer = params.layer ?? popup.popupLayer;
         const entry: IPopupInfo = {
@@ -349,17 +362,61 @@ export class PopupManager extends Component {
         this.disposeComposition(entry);
         entry.popup._internalClose(reason);
 
-        if (entry.cache && node && node.isValid) {
-            // 回收进池子：移出场景树并停用，下次 open 复用
-            node.removeFromParent();
-            node.active = false;
-            this._recycle(entry.path, node);
-        } else if (node && node.isValid) {
-            node.destroy();
-        }
+        this._releaseNode(entry, node);
 
         this._refreshDepth();
         this._refreshCover();
+    }
+
+    /**
+     * 交还节点：需要时先播离场过渡，动画走完（或播不上）再销毁 / 回收。
+     *
+     * ⚠️ 出栈、`onClose`、资源释放都是**同步做完**的，只有节点的视觉寿命被延后。
+     *    「业务已关闭」与「画面上还在淡出」是两件事：`close()` 返回后 `get/has` 已经看不到了。
+     */
+    private _releaseNode(entry: IPopupInfo, node: Node | null): void {
+        if (!node || !node.isValid) {
+            // 节点已经没了：资源该放还是得放，否则延迟释放这条路上直接漏掉。
+            entry.popup._internalReleaseResources();
+            return;
+        }
+
+        let released = false;
+        const release = (): void => {
+            if (released) return;
+            released = true;
+            // 先还资源：`decRef` 排在 `EVENT_AFTER_DRAW`，而 `destroy()` 在帧末更早完成，
+            // 顺序反过来就是淡出帧里画已释放的帧（见 PopupBase._internalReleaseResources）。
+            entry.popup._internalReleaseResources();
+            if (node.isValid) {
+                if (entry.cache) {
+                    // 回收进池子：移出场景树并停用，下次 open 复用
+                    node.removeFromParent();
+                    node.active = false;
+                    this._recycle(entry.path, node);
+                } else {
+                    node.destroy();
+                }
+            }
+            this._refreshDepth();
+        };
+
+        if (entry.popup.motionEnabled === false) {
+            release();
+            return;
+        }
+
+        this._exiting += 1;
+        let exitSettled = false;
+        const animated = UIMotionPlayer.playExit(node, () => {
+            exitSettled = true;
+            this._exiting = Math.max(0, this._exiting - 1);
+            release();
+        });
+        if (animated) return;
+        // 播不上（节点已失活 / 测试环境没有渲染组件）：当成「已经播完」直接收尾。
+        if (!exitSettled) this._exiting = Math.max(0, this._exiting - 1);
+        release();
     }
 
     private disposeComposition(entry: IPopupInfo): void {
@@ -508,7 +565,9 @@ export class PopupManager extends Component {
     /** 弹窗应占据的起始兄弟序号：让弹窗永远压在 Popup 节点下其它常驻子节点之上。 */
     private _baseSiblingIndex(): number {
         const total = this.node.children.length;
-        return Math.max(0, total - this._stack.length);
+        // 正在淡出的节点仍占着最上面几个兄弟位（见 `_exiting`），要把它们让出来，
+        // 否则刚露出来的下层弹窗会被排到淡出层之上，离场动画等于被当场盖掉。
+        return Math.max(0, total - this._stack.length - this._exiting);
     }
 
     /** 除最上层外全部标记为「被覆盖」。 */

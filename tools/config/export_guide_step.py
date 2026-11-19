@@ -33,9 +33,11 @@ CLIENT = os.path.join(DOC, 'json', 'client', 'guideStep.json')
 XLSX_KEYS = ['guideId', 'stepId', 'flowName', 'triggerType', 'maskType', 'focusNode',
              'requireAction', 'dialogId', 'completeCond', 'skipAble', 'rewardJson', 'nextStep']
 
-# remoteRef 既有的列序（`rewardJson` 在最后）。保持不动，免得整份文件洗一遍。
+# remoteRef 既有的列序（`completeCond` 在 `requireAction` 之后、`dialogId` 兜底）。保持不动，
+# 免得整份文件洗一遍 —— 列存按 `k` 取值，列序不影响语义，但整文件重排会让 svn diff 里
+# 真实改动（2026-11-19 的 8-1）彻底看不见。
 REMOTE_KEYS = ['guideId', 'stepId', 'flowName', 'triggerType', 'maskType', 'focusNode',
-               'requireAction', 'dialogId', 'completeCond', 'skipAble', 'nextStep', 'rewardJson']
+               'requireAction', 'completeCond', 'skipAble', 'rewardJson', 'nextStep', 'dialogId']
 
 # client 的字段序（`rewardJson` 夹在 `skipAble` 与 `nextStep` 之间）。
 CLIENT_KEYS = XLSX_KEYS
@@ -76,7 +78,11 @@ def dump_remote(rows):
 def _remote_value(row, key):
     value = row.get(key)
     if key == 'rewardJson':
-        # 空奖励在 remoteRef 里是 `null`（历史口径），不要写成 `[]`。
+        # 空奖励保持 `[]`、奖励对象键按字母序（`number`/`pro`/`resId`）—— 既有 remoteRef 的口径。
+        # 这两点语义上都等价（解析侧只看字段名），但换个写法会把 16 行全部洗一遍，diff 里就找不到真实改动。
+        return [dict(sorted(item.items())) for item in value] if value else []
+    if key == 'dialogId':
+        # 既有文件里「无台词组」写 `null`，不是 `""`；`GuideStepConfig` 两种都兜成空串。
         return value or None
     return value
 
@@ -97,6 +103,11 @@ def dump_client(rows):
 
 def write_if_changed(path, text):
     current = io.open(path, encoding='utf-8', newline='').read() if os.path.exists(path) else None
+    # 🔴 两份产物的换行符不同：`assets/remoteRef/*.json` 是 CRLF（SVN 上全仓一致），
+    # `doc/.../json/client/*.json` 是 LF。用 LF 覆盖 CRLF 会让 svn diff 变成
+    # 「整文件替换」，真实改动看不见 —— 按原文件既有的换行符写。
+    if current is not None and '\r\n' in current and '\r\n' not in text:
+        text = text.replace('\n', '\r\n')
     if current == text:
         print('[skip] %s' % os.path.relpath(path, PROJECT))
         return False

@@ -1,3 +1,5 @@
+import { ZC_EFFECT_PATHS } from '../model/ZCEffectCatalog';
+
 /**
  * 弹道拖尾（锥形 + 渐隐）——纯数据 + 纯几何，不 import 任何 `cc`。
  *
@@ -90,7 +92,7 @@ const MISSILE_TRAIL_BY_PREFAB_PATH: Readonly<Record<string, IZCMissileTrailSpec>
     //   · 接触端半宽 16px（本地 20）⇒ 整宽 32px，与弹体半径（屏上 63/2 ≈ 31.5）相近；
     //   · 末端半宽 1.6px（本地 2）⇒ 收成尖，且那一段 α 已经接近 0。
     // 形状是「宽端贴弹体、往外收窄」的锥形（2026-11-05 那版做反了，窄端贴弹体）。
-    'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能': {
+    [ZC_EFFECT_PATHS.missileBody]: {
         startX: -26,
         length: 100,
         rootHalfWidth: 20,
@@ -114,7 +116,7 @@ const MISSILE_TRAIL_BY_PREFAB_PATH: Readonly<Record<string, IZCMissileTrailSpec>
     //   · 接触端整宽 16 屏上（≈ 弹体半径 15.8，与导弹那条的口径一致：整宽 ≈ 半径）→ 半宽 16；
     //   · 末端半宽 2 本地 ⇒ 收成尖。
     // 颜色沿用纯白（与导弹那条一致）；雷蕉偏电，要染色只改这一行的 `color`。
-    'units/projectiles/雷弹攻击/雷弹攻击': {
+    [ZC_EFFECT_PATHS.lightningBullet]: {
         startX: -40,
         length: 110,
         rootHalfWidth: 16,

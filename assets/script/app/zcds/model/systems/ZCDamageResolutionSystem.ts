@@ -54,18 +54,16 @@ export class ZCDamageResolutionSystem {
             target.hatredUntil = state.elapsedSeconds + HATRED_SECONDS;
             // 受击反弹：护体期间被打中，压攻击者 3 秒攻速。
             this.applyRetaliate(state, target, sender, context);
+            //  受伤反弹（2026-11-18 第 17 批，102104「巨型仙人掌」）：尖刺风暴期间把实际掉血的一部分
+            //  打回攻击者。放在 `applyRetaliate` 之后 —— 两者互不影响，但顺序固定住才好回归。
+            this.applyReflect(state, target, sender, applied, context);
         }
         if (target.hp > 0) return { applied, killed: false };
-        target.hp = 0;
-        // 单位死亡不是帧操作：协议只接受开发、技能与聊天。
-        target.targetUnitId = null;
-        target.targetWallHexId = null;
-        target.targetBuildingHexId = null;
-        target.targetHexId = null;
-        target.progress = 0;
-        target.deathRemoveAt = state.elapsedSeconds + DEATH_SECONDS;
-        context.units.markDead(target);
-        ZCCombatSystem.switchState(target, 'dead');
+        this.transferDeath(state, target, context);
+        //  击杀归因（2026-11-18 第 17 批，102204 嗜血术 III 级「期间友军击杀敌人延长」）：
+        //  只记「打出最后一击的那个人」；自伤 / 反射打死的不记（反射那条路径没有归属，
+        //  硬算会把功劳记到挨打的人身上）。缺省从 0 起，存量单位不会因为这个字段改变行为。
+        if (sender && sender !== target) sender.killCount = (sender.killCount ?? 0) + 1;
         return { applied, killed: true };
     }
 
@@ -110,6 +108,51 @@ export class ZCDamageResolutionSystem {
         delete state.spawnClocks[`barracks:${building.id}`];
         delete state.spawnClocks[`tower:${building.id}`];
         return { applied, killed: true };
+    }
+
+    /**
+     * 受伤反弹（2026-11-18 第 17 批，仙人侍卫「巨型仙人掌」102104）。
+     *
+     * 设计原话「尖刺风暴期间反弹 50/51/52% 伤害」⇒ 读**挨打那一方**身上的 `reflectRate`，
+     * 按「实际掉的血」的比例打回攻击者。
+     *
+     * 三条刻意的口径：
+     *  1. **只反弹单位打单位**：区域/塔/城墙没有「攻击者」可回敬（调用点本来就只在
+     *     `sender` 存在时进得来）；
+     *  2. **反弹伤害不再过一遍减伤 / 闪避**：否则「反弹 50%」会同时被对方的减伤打折、
+     *     被闪避整段吃掉，玩家看到的是「有时 50、有时 0」。这里直接 `applyDamage`；
+     *  3. **不递归**：反射出去的那一下不走 `damageUnit`，所以对方的 `reflectRate` 不会再弹回来。
+     *     两个人互相反弹到天荒地老只需要一次「顺手改成递归」。
+     */
+    private static applyReflect(state: ZCSnapshot, target: ZCUnitState, sender: ZCUnitState,
+        applied: number, context: IZCDamageResolutionContext): void {
+        const pct = Math.max(0, context.statusSystem.statModsOf(String(target.id)).reflectRate ?? 0);
+        if (!(pct > 0) || !(applied > 0)) return;
+        if (sender.battleState === 'dead' || sender.hp <= 0) return;
+        const reflected = Math.max(1, Math.round(applied * pct / 100));
+        const dealt = ZCCombatSystem.applyDamage(sender, reflected);
+        this.recordDamage(target.owner, sender.owner, dealt, context);
+        if (!(sender.hp > 0)) this.transferDeath(state, sender, context);
+    }
+
+    /**
+     * 单位阵亡的统一收尾（2026-11-18 第 17 批从 `damageUnit` 抽出来）。
+     *
+     * 抽成方法是为了让「反弹把攻击者打死」走**同一段**逻辑 —— 之前只有主结算路径有这几行，
+     * 复制一份迟早会漏掉新加的清理项（例如后续要清 `spawnClocks`）。
+     */
+    private static transferDeath(state: ZCSnapshot, target: ZCUnitState,
+        context: IZCDamageResolutionContext): void {
+        target.hp = 0;
+        // 单位死亡不是帧操作：协议只接受开发、技能与聊天。
+        target.targetUnitId = null;
+        target.targetWallHexId = null;
+        target.targetBuildingHexId = null;
+        target.targetHexId = null;
+        target.progress = 0;
+        target.deathRemoveAt = state.elapsedSeconds + DEATH_SECONDS;
+        context.units.markDead(target);
+        ZCCombatSystem.switchState(target, 'dead');
     }
 
     /**

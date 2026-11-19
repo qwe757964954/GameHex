@@ -65,6 +65,23 @@ function optionalPositiveNumber(value: unknown, field: string): number | undefin
 }
 
 /**
+ * 命中附加特效的落点比例（`pvpSkill.impactEffectAnchor`）：留空 = 0（受击点）。
+ *
+ * 0 = 受击点、0.5 = 攻守双方中点、1 = 出手点，中间线性插值。
+ * 与 `parsePrefabSize` 的分工一样：**空**是「没配」（走默认 0），**越界**是「配错了」（当场抛）。
+ * 不许越界是有原因的 —— 传 1.7 会让气浪落到出手点外侧，看着像「打空了还有一个环」，
+ * 而这种事在表里只错一格、画面上却要盯着看半天才发现。
+*/
+function parseImpactAnchor(value: unknown, field: string): number | undefined {
+    if (value === null || value === undefined || value === '') return undefined;
+    const parsed = number(value, field);
+    if (parsed < 0 || parsed > 1) {
+        throw new Error(field + ' 必须在 0~1（0=受击点，0.5=双方中点，1=出手点），实际 ' + parsed);
+    }
+    return parsed;
+}
+
+/**
  * 兵种美术的等比缩放系数（`pvpCard.prefabSize`）：留空 = 1（不缩放）。
  *
  * 为什么不用 `optionalPositiveNumber`：那个把 `0` 当「未配置」，而缩放系数取 0 的后果是
@@ -284,6 +301,9 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             chargeDistance: optionalPositiveNumber(raw.chargeDistance, `skills.${skillId}.chargeDistance`),
             chargeSpeedScale: optionalPositiveNumber(raw.chargeSpeedScale, `skills.${skillId}.chargeSpeedScale`),
             impactEffectPrefabPath: assetPath(raw.impactEffectPrefabPath, `skills.${skillId}.impactEffectPrefabPath`),
+            //  命中附加特效的落点（2026-11-18）：0=受击点、0.5=双方中点，留空 = 0。
+            //  从代码常量挪进表里，是因为原来按 prefab 路径登记 —— 美术一换登记就静默失效。
+            impactEffectAnchor: parseImpactAnchor(raw.impactEffectAnchor, `skills.${skillId}.impactEffectAnchor`),
             durationSeconds: optionalNumber(raw.durationSeconds, `skills.${skillId}.durationSeconds`),
             waves: optionalPositiveNumber(raw.waves, `skills.${skillId}.waves`),
             slowRatio: optionalNumber(raw.slowRatio, `skills.${skillId}.slowRatio`),

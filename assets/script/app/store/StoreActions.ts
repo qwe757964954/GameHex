@@ -51,6 +51,17 @@ export interface IStoreActionContext {
     readonly label?: string;
 }
 
+/**
+ * 商城动作的请求归属。
+ *
+ * `caller` 归 Controller（主 tab 作用域），页面切走后已发出的请求仍能回包；
+ * `canSend` 归当前页面，页面销毁后二次确认等延迟入口不得再发新请求。
+ */
+export interface IStoreRequestScope {
+    readonly caller: object;
+    readonly canSend: () => boolean;
+}
+
 /** 动作执行结果。 */
 export type StoreActionOutcome = 'ok' | 'blocked' | 'offline' | 'failed' | 'unavailable';
 
@@ -78,20 +89,25 @@ async function notEnoughTip(resId: number): Promise<string> {
 /**
  * 执行一个商城动作。只做校验、发包和提示，不改本地状态。
  */
-export async function storeAction(kind: StoreActionKind, ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+export async function storeAction(
+    kind: StoreActionKind,
+    ctx: IStoreActionContext,
+    request?: IStoreRequestScope,
+): Promise<StoreActionOutcome> {
     // 供点击链路探针判断按钮是否生效，前缀不要改。
     console.log(`[Store] action=${kind}`, JSON.stringify(ctx));
+    if (request && !request.canSend()) return 'blocked';
 
     let outcome: StoreActionOutcome;
     try {
         switch (kind) {
-            case 'draw': outcome = await handleDraw(ctx); break;
-            case 'ad': outcome = await handleAd(ctx); break;
+            case 'draw': outcome = await handleDraw(ctx, request); break;
+            case 'ad': outcome = await handleAd(ctx, request); break;
             case 'help': outcome = await handleHelp(ctx); break;
             case 'pay': outcome = handlePay(ctx); break;
-            case 'buyCoin': outcome = await handleBuyCoin(ctx); break;
-            case 'buyGoods': outcome = await handleBuyGoods(ctx); break;
-            case 'buyGift': outcome = await handleBuyGift(ctx); break;
+            case 'buyCoin': outcome = await handleBuyCoin(ctx, request); break;
+            case 'buyGoods': outcome = await handleBuyGoods(ctx, request); break;
+            case 'buyGift': outcome = await handleBuyGift(ctx, request); break;
             case 'claimGift': outcome = handleClaimGift(); break;
             case 'page': outcome = handlePage(); break;
             default: outcome = 'failed'; break;
@@ -113,7 +129,7 @@ export async function storeAction(kind: StoreActionKind, ctx: IStoreActionContex
  * 抽 1 次或 10 次：算花费、校验余额，花金币时二次确认，最后发包。
  * 单次和十连各自独立算价。
  */
-async function handleDraw(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+async function handleDraw(ctx: IStoreActionContext, request?: IStoreRequestScope): Promise<StoreActionOutcome> {
     const cardId = Number(ctx.rowId) || 0;
     const ten = Number(ctx.amount) === 10;
     const row = await storeRepository.readGemBox(cardId);
@@ -147,18 +163,23 @@ async function handleDraw(ctx: IStoreActionContext): Promise<StoreActionOutcome>
             userData: {
                 content: STORE_TEXTS.gachaTip.replace('{0}', String(cost.number)),
                 showCancel: true,
-                onSure: () => { void storeRepository.draw(cardId, ten); },
+                onSure: () => {
+                    // 确认框可能比页面活得久：页面已销毁就不再补发这条陈旧的购买意图。
+                    if (request && !request.canSend()) return;
+                    void storeRepository.draw(cardId, ten, request?.caller);
+                },
             },
         });
         return 'ok';
     }
-    return toOutcome(await storeRepository.draw(cardId, ten));
+    if (request && !request.canSend()) return 'blocked';
+    return toOutcome(await storeRepository.draw(cardId, ten, request?.caller));
 }
 
 /**
  * 看广告免费抽。按钮常显，次数用完的判断放在点击时。
  */
-async function handleAd(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+async function handleAd(ctx: IStoreActionContext, request?: IStoreRequestScope): Promise<StoreActionOutcome> {
     const type = storeAdTypeOfBox(ctx.rowId);
     if ((await storeRepository.adRemaining(type)) <= 0) {
         tip(STORE_TEXTS.adUsedUp);
@@ -169,7 +190,8 @@ async function handleAd(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
         tip(STORE_TEXTS.adNotReady);
         return 'blocked';
     }
-    return toOutcome(await storeRepository.watchAd(type));
+    if (request && !request.canSend()) return 'blocked';
+    return toOutcome(await storeRepository.watchAd(type, request?.caller));
 }
 
 /** 概率说明。老端文案表里没有对应键，这里按 gemBox 的原始字段生成，不编造百分比。 */
@@ -223,7 +245,7 @@ function handlePay(ctx: IStoreActionContext): StoreActionOutcome {
  * 买银币或看广告换银币。免费、广告、付费三档依次判断；
  * 付费档再查限购、冷却和余额。
  */
-async function handleBuyCoin(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+async function handleBuyCoin(ctx: IStoreActionContext, request?: IStoreRequestScope): Promise<StoreActionOutcome> {
     const id = Number(ctx.rowId) || 0;
     const row = await storeRepository.readGoldShop(id);
     if (!row) {
@@ -240,7 +262,8 @@ async function handleBuyCoin(ctx: IStoreActionContext): Promise<StoreActionOutco
             tip(STORE_TEXTS.adNotReady);
             return 'blocked';
         }
-        return toOutcome(await storeRepository.watchAd(STORE_AD_TYPE_GOLD_SHOP));
+        if (request && !request.canSend()) return 'blocked';
+        return toOutcome(await storeRepository.watchAd(STORE_AD_TYPE_GOLD_SHOP, request?.caller));
     }
 
     if (branch === 'paid') {
@@ -258,13 +281,14 @@ async function handleBuyCoin(ctx: IStoreActionContext): Promise<StoreActionOutco
         }
     }
     // 免费档（`branch === 'free'`）与付费档都走同一个购买请求。
-    return toOutcome(await storeRepository.buyShopGoods(id, STORE_SHOP_TYPE.gold));
+    if (request && !request.canSend()) return 'blocked';
+    return toOutcome(await storeRepository.buyShopGoods(id, STORE_SHOP_TYPE.gold, request?.caller));
 }
 
 // 杂货铺
 
 /** 买黑市道具。resourceShop 没有免费档和广告档，直接查限购和余额。 */
-async function handleBuyGoods(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+async function handleBuyGoods(ctx: IStoreActionContext, request?: IStoreRequestScope): Promise<StoreActionOutcome> {
     const id = Number(ctx.rowId) || 0;
     const row = await storeRepository.readResourceShop(id);
     if (!row) {
@@ -282,7 +306,8 @@ async function handleBuyGoods(ctx: IStoreActionContext): Promise<StoreActionOutc
         tip(await notEnoughTip(row.priceType));
         return 'blocked';
     }
-    return toOutcome(await storeRepository.buyShopGoods(id, STORE_SHOP_TYPE.resource));
+    if (request && !request.canSend()) return 'blocked';
+    return toOutcome(await storeRepository.buyShopGoods(id, STORE_SHOP_TYPE.resource, request?.caller));
 }
 
 // 关卡礼包
@@ -291,7 +316,7 @@ async function handleBuyGoods(ctx: IStoreActionContext): Promise<StoreActionOutc
  * 买礼包。本地只查限购；等级前置交给服务端拒绝并提示，
  * 避免在商城侧重复实现一套可能算错的关卡判断。
  */
-async function handleBuyGift(ctx: IStoreActionContext): Promise<StoreActionOutcome> {
+async function handleBuyGift(ctx: IStoreActionContext, request?: IStoreRequestScope): Promise<StoreActionOutcome> {
     const id = Number(ctx.rowId) || STORE_GIFT_ROW.id;
     const row = await storeRepository.readGuanKaGift(id);
     if (!row) {
@@ -305,7 +330,8 @@ async function handleBuyGift(ctx: IStoreActionContext): Promise<StoreActionOutco
         tip(STORE_TEXTS.soldOut);
         return 'blocked';
     }
-    return toOutcome(await storeRepository.buyGuanKaGift(row.id));
+    if (request && !request.canSend()) return 'blocked';
+    return toOutcome(await storeRepository.buyGuanKaGift(row.id, request?.caller));
 }
 
 /** 领礼包免费奖励。对应协议还没生成，这里如实提示不可用。 */

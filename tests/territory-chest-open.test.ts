@@ -818,6 +818,9 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         'CardUpgradePage', 'LineupBoardPage', 'RolePage', 'RoleController', 'RoleRepository',
         'MilitiaTalentPage', 'StorePage', 'StoreController', 'StoreActions', 'LeagueTabPage',
         'LeagueTabController', 'LeagueRepository', 'MainPage', 'MainTerritoryMap', 'TerritoryEntry',
+        // 2026-11-18 上游把公会入口接进了主界面组合层（`MainPageComposition`）⇒ 这四个模块
+        // 和 `GameNet` 也要在这里占位，否则 `unresolved` 非空。本用例只跑橙色特写编排，不碰它们。
+        'LeagueJoinController', 'LeagueTabEvents', 'LeagueCreatePage', 'LeagueInfoPage', 'GameNet',
         'FW', 'TerritoryHeroProgressSource', 'ChestEvents', 'EventMgr']) modules['/' + name] = {};
     Object.assign(modules, {
         '/ControllerBase': { ControllerBase: class {} },

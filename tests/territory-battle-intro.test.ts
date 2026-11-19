@@ -942,6 +942,27 @@ test('★★★过场接手后不许再叠全屏 loading：它在弹窗层最上
         '先清标志再决定 hide');
 });
 
+test('★★快请求不闪全屏 loading：延迟窗口内的层直接作废，不 show 也不 hide', () => {
+    const source = stripped(PAGE);
+    assert.ok(source.includes('const TERRITORY_BUSY_SHOW_DELAY = 0.2;'), '延迟阈值必须是可查的常量');
+    const start = source.indexOf('private onSetBusy');
+    assert.ok(start >= 0, '找不到 onSetBusy');
+    const busy = source.slice(start);
+    const takeOver = busy.indexOf('this.battleBusyHiddenLoading = true;');
+    assert.ok(takeOver >= 0, '找不到过场接管的标志位');
+    // 过场接管 ⇒ 立刻 return，连「攒层」都不该走（云不能被 loading 盖掉）。
+    assert.ok(busy.indexOf("this.busyLayers.push('pending')") > takeOver, '攒层排在过场接管之后');
+    assert.ok(busy.indexOf('this.scheduleOnce(timer, TERRITORY_BUSY_SHOW_DELAY)') > takeOver,
+        '延迟显示只在"真的没演过场"时才起');
+    // 收尾只对**真的 show 过**的层 hide；还留在窗口里的层直接丢弃。
+    assert.ok(busy.includes("if (this.busyLayers.shift() === 'shown') LoadingPopup.hide();"),
+        '★只对 show 过的层 hide（多减一次会把别人的遮罩提前撤掉）');
+    // 定时器到点：把攒着的层翻成 shown，每层 show 一次（收尾才配得平）。
+    const flush = busy.slice(busy.indexOf('private flushBusyLayers'));
+    assert.ok(flush.includes("this.busyLayers[index] = 'shown'"), '到点要把 pending 翻成 shown');
+    assert.ok(flush.includes('LoadingPopup.show(this.busyText)'), '每层都要 show 一次');
+});
+
 test('★★过场播不了就直走：不许云盖住一个不动的画面，也不许白等一段推镜', () => {
     const source = stripped(PAGE);
     // 只切到 `beginBattlePrelude` 为止：前奏那段里也有推镜（那是它自己的第二段），

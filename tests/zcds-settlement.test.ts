@@ -51,7 +51,7 @@ test('结算按钮显示、空白关闭被拦截，返回只调用一次，复�
     });
     const popup = new GameRunAway();
     const listeners: Array<{ fn: Function; target: unknown }> = [];
-    popup.returnButton = { node: { active: false, on: (_event: string, fn: Function, target: unknown) => listeners.push({ fn, target }) }, interactable: true };
+    popup.returnButton = { node: { active: false, parent: { active: false }, on: (_event: string, fn: Function, target: unknown) => listeners.push({ fn, target }) }, interactable: true };
     popup.titleLabel = { string: '' };
     popup.panelTransform = { width: 650, setContentSize() {} };
     popup.backgroundTransform = { width: 646, setContentSize() {} };
@@ -64,13 +64,14 @@ test('结算按钮显示、空白关闭被拦截，返回只调用一次，复�
     // 两行数据（`mine`/`enemy`）改版一起下线）。
     popup.onOpen({ title: '胜利', showReturn: true });
     assert.equal(popup.titleLabel.string, '胜利');
-    assert.equal(popup.returnButton.node.active, true);
+    // 按钮的显示/隐藏由它的占位区 `ReturnArea` 承担（按钮本身常驻挂载，只切 interactable）。
+    assert.equal((popup as any).returnArea.active, true);
     assert.equal(popup.canCloseOnBlank(), false, '返回模式不许点空白关');
     const listener = listeners[0]; listener.fn.call(listener.target); listener.fn.call(listener.target);
     assert.deepEqual(events, [ZCGameUiEvent.ReturnToMain], '连点两下只派发一次（第二次 showReturn 已落）');
     assert.equal(popup.returnButton.interactable, false);
     popup.onOpen();
-    assert.equal(popup.titleLabel.string, '伤害统计'); assert.equal(popup.returnButton.node.active, false);
+    assert.equal(popup.titleLabel.string, '伤害统计'); assert.equal((popup as any).returnArea.active, false);
     assert.equal(popup.canCloseOnBlank(), true);
     assert.equal(listeners.length, 1, '复用不重复绑定');
 });
@@ -87,7 +88,7 @@ test('神器结果弹吐司，模型与意图在运行控制器内处理', () =>
     } finally { h.dispose(); }
 });
 
-test('统计面板四人共用量尺、自己标记，切回双人收起多余行并缩短面板', () => {
+test('统计面板按人数显示行、自己那行加标记，切回双人收起多余行', () => {
     const { GameRunAway } = load('assets/script/app/zcds/ui/GameRunAway.ts', {
         cc: { _decorator: decorator, Button: {}, Label: class {}, Node: class {}, UITransform: class {} },
         '../../../framework/ui/PopupBase': { PopupBase: class {} },
@@ -104,13 +105,11 @@ test('统计面板四人共用量尺、自己标记，切回双人收起多余�
     panel.items = Array.from({ length: 4 }, (_, i) => ({ node: node(), refresh: (value: unknown) => { values[i] = value; } }));
     const players = [ZCOwner.Player, ZCOwner.Enemy, ZCOwner.Enemy2, ZCOwner.Enemy3].map((owner, i) => ({ owner, name: `${i}`, headKey: '', damage: (i + 1) * 100, damageTaken: 400 - i * 100 }));
     panel.refresh(players);
-    const fourHeight = panel.panelTransform.height;
     assert.ok(panel.items.every((item: any) => item.node.active));
     assert.ok(values.every(value => value.maxDamage === 400 && value.maxDamageTaken === 400));
     assert.deepEqual(values.map(value => value.owner), players.map(player => player.owner));
-    for (const item of panel.items) assert.ok(Math.abs(item.node.y) + 56 < fourHeight / 2);
+    // 行距/面板高度由 GameRunAway.prefab 的 Layout 负责（2026-11-16 起不再由代码 setPosition）。
     panel.refresh(players.slice(0, 2));
-    assert.equal(panel.panelTransform.height, fourHeight - 2 * 116);
     assert.deepEqual(Array.from(panel.items, (item: any) => item.node.active), [true, true, false, false]);
     assert.equal(values[0].maxDamage, 200);
 });
@@ -162,6 +161,28 @@ test('退出后迟到的统计和指南窗口立即关闭，旧意图不再导�
         EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
         assert.equal(closed, 1); assert.equal(h.calls.includes('navigate'), false);
     }
+});
+
+test('结算页「查看完整队伍」用冻结的席位统计弹面板，重复点击不叠窗', async () => {
+    const h = runtimeFixture();
+    try {
+        h.forceStatus('victory');
+        for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+        await flushRuntime();
+        // 结算请求带上本局统计（MVP 卡与「查看完整队伍」共用这一份）
+        const request = h.requests[0];
+        assert.ok(request.players, '结算请求必须带 players');
+        // 这一局没有伤害（夹具不打仗）⇒ 不出 MVP 卡，页面整组收起
+        assert.equal(request.mvp, null);
+        assert.equal((h.pages[0] as { mvp: unknown }).mvp, null);
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        await flushRuntime();
+        const opened = h.calls.filter(call => call.startsWith('viewTeam:'));
+        assert.equal(opened.length, 1, '第一次点击应打开统计面板');
+        EventMgr.instance.emit(ZCGameUiEvent.SettlementViewTeam);
+        await flushRuntime();
+        assert.equal(h.calls.filter(call => call.startsWith('viewTeam:')).length, 1, '已开着的窗口不重复弹');
+    } finally { h.dispose(); }
 });
 
 test('结算 Prefab 按钮与说明绑定完整，复用现有按钮贴图且位于面板内', () => {

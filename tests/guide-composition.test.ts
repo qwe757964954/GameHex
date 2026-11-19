@@ -152,8 +152,18 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     topHud.children.push(entryBar);
     entryBar.parent = topHud;
     // 任务入口：8-1 之前单独收着（它在 BottomHud 里，5-4 之后随父节点一起露出来）。
+    // `refresh()` 照抄真实 `applySnapshot` 的显隐口径（`snapshot.visible && guideUnlocked`）：
+    // `taskConfigured=false` 模拟「没配任务 / 已领完」⇒ 入口自己关回去，组合层据此走代开兜底。
+    let taskConfigured = true;
+    // `refresh()` 真实实现是 `async`（读表 + 读缓存）⇒ 落地前有几帧空窗。`taskRefreshPending`
+    // 让夹具停在那一拍，验「解锁时先把入口立起来，不等快照」。
+    let taskRefreshPending = false;
     const mainTaskEntry = { ...hudNode('MainTaskEntry'),
-        getComponent: () => ({ refresh() { taskRefreshes += 1; } }) };
+        getComponent: () => ({ refresh() {
+            taskRefreshes += 1;
+            if (taskRefreshPending) return new Promise<void>(() => {});
+            mainTaskEntry.active = taskConfigured && FakeMainTaskEntry.guideUnlocked;
+        } }) };
     bottomHud.children.push(mainTaskEntry);
     // 父子关系要真：`syncDialogHud` 用 `isInsideNode` 判「焦点是不是在这块 HUD 里」，
     // 少了 `parent` 就会把装着焦点的底栏当普通挂件收掉（8-1 的入口在 BottomHud 里）。
@@ -185,6 +195,10 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         navBar, topHud, bottomHud, beginGame, gmButton, entryBar, mainTaskEntry,
         taskRefreshes: () => taskRefreshes,
         taskGuideUnlocked: () => FakeMainTaskEntry.guideUnlocked,
+        /** 模拟「没有可展示的主线任务」：`refresh()` 会把入口关回去。 */
+        setTaskConfigured: (value: boolean) => { taskConfigured = value; },
+        /** 让 `refresh()` 停在未决状态，模拟「快照还在路上」那几帧。 */
+        setTaskRefreshPending: (value: boolean) => { taskRefreshPending = value; },
         presentMap: () => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: territoryView, phase: 'presented' }),
         openCard(id: string) {
             const popup = new CardUpgradePage(); popup.guideCardId = id;
@@ -306,11 +320,46 @@ test('任务入口立不起来时（没配任务）退回代开面板，8-1 才�
     const f = fixture(false, false, 'territory');
     try {
         await tick();
+        // 没配任务 ⇒ `refresh()` 按快照把入口关回去（真实链路是 `applySnapshot` 写的）。
+        f.setTaskConfigured(false);
         f.mainTaskEntry.active = false;
         f.render({ stepId: '8-1', finished: false, focusNode: 'Main/TaskEntry',
             completeCond: 'pageOpened:task', dialogId: 'D11' });
         await tick();
         assert.equal(f.goalCounts().requests, 1, '玩家没有能点的图标 ⇒ 引导代开，面板一开同样算完成');
+    } finally { f.composition.dispose(); }
+});
+
+test('8-1 的入口节点还没解析出来时，底栏同样不许被当普通 HUD 收掉', async () => {
+    // 用户 2026-11-19：引导要求点主线任务时入口被隐藏。
+    // 老判据只认「焦点解析出来、且落在这块 HUD 里才留」⇒ 入口 `refresh()` 还在路上 /
+    // `findChildByName` 刚好返回 null 的那几帧，底栏被整块收掉 —— 玩家面前一个能点的图标都没有。
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        // 入口节点从底栏摘掉：`findChildByName` 找不到 ⇒ 焦点解析必然为空。
+        f.bottomHud.children.length = 0;
+        f.render({ stepId: '8-1', finished: false, focusNode: 'Main/TaskEntry', completeCond: 'pageOpened:task' });
+        assert.equal(f.focus('Main/TaskEntry'), null, '这一步确实解析不出焦点');
+        assert.equal(f.bottomHud.active, true, '8-1 的底栏无条件留着 —— 入口就在里面');
+    } finally { f.composition.dispose(); }
+});
+
+test('8-1 解锁时先把入口立起来，不等快照落地', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.render({ stepId: '6-1', finished: false, focusNode: '', completeCond: 'pageOpened:card' });
+        assert.equal(f.mainTaskEntry.active, false, '8-1 之前收着');
+        // 快照还在路上：真实链路 `MainTaskEntry.refresh()` 是 async（读表 + 读缓存）。
+        f.setTaskRefreshPending(true);
+        f.render({ stepId: '8-1', finished: false, focusNode: 'Main/TaskEntry', completeCond: 'pageOpened:task' });
+        assert.equal(f.taskRefreshes(), 1, '解锁要重读一次快照');
+        assert.equal(f.mainTaskEntry.active, true, '快照没回来也得先显示 —— 否则这几帧玩家没得点');
+        // 引导结束：静态门控保持解锁，显隐交回快照（不再由引导压着）。
+        f.render({ stepId: '', finished: true, focusNode: '', completeCond: '' });
+        assert.equal(f.taskGuideUnlocked(), true);
+        assert.equal(f.bottomHud.active, true, '结束时底栏还回去');
     } finally { f.composition.dispose(); }
 });
 
@@ -431,24 +480,26 @@ test('战斗装配只显示战斗步骤，当前卡牌取最新的有效展示�
 
 test('对话步收起页面挂件与底栏；唯一例外是焦点就落在底栏里（6-1 的英雄格）', async () => {
     const f = fixture(false, false, 'territory');
+    // 第 5 位是 `Canvas/GMButton`：常驻调试入口，按 GMManager 的契约「所有界面都可见」，
+    // 不参与任何 HUD 门控 ⇒ 这一位恒为 `true`。
     const hud = () => [f.topHud.active, f.bottomHud.active, f.beginGame.active, f.navBar.active, f.gmButton.active];
     try {
         await tick();
         const tile = { finished: false, focusNode: 'Map/Tile_1', completeCond: 'tileFlipped', dialogId: 'D04' };
         f.render(tile);
         // 引导期间只留引导 UI：底栏也一起收（用户第 1 条「从第一句台词开始就隐藏底部菜单栏」）。
-        assert.deepEqual(hud(), [false, false, false, false, false],
-            '地图焦点步骤同样收底栏');
+        assert.deepEqual(hud(), [false, false, false, false, true],
+            '地图焦点步骤同样收底栏（GM 入口不参与）');
         // 第 6-1 步的焦点就是英雄页签：底栏留着，其余照收 —— 否则手指导向一个点不到的地方。
         f.render({ finished: false, focusNode: 'Main/CardEntry', completeCond: 'pageOpened:card', dialogId: 'D10' });
-        assert.deepEqual(hud(), [false, false, false, true, false], '焦点在底栏里时底栏不能收');
+        assert.deepEqual(hud(), [false, false, false, true, true], '焦点在底栏里时底栏不能收');
         // 纯引导步（没有台词、只出手指）：仍然是「只留引导 UI」，不把挂件放回去。
         f.render({ ...tile, dialogId: '' });
-        assert.deepEqual(hud(), [false, false, false, false, false], '无台词但仍有焦点 ⇒ 照样收');
+        assert.deepEqual(hud(), [false, false, false, false, true], '无台词但仍有焦点 ⇒ 照样收');
         f.render({ ...tile, dialogId: '', focusNode: '' });
         assert.deepEqual(hud(), [true, true, true, true, true], '既没台词也没焦点 ⇒ 不动 HUD');
         f.render(tile);
-        assert.deepEqual(hud(), [false, false, false, false, false]);
+        assert.deepEqual(hud(), [false, false, false, false, true]);
     } finally { f.composition.dispose(); }
     assert.deepEqual(hud(), [true, true, true, true, true], '引导装配销毁后 HUD 必须还回来');
 });
@@ -587,6 +638,7 @@ test('主界面 HUD 按引导进度解锁：5-4 之前一律不显示（领奖�
         assert.equal(f.bottomHud.active, false, '宝箱 / 聊天条 / 挂机 / 任务入口一起收');
         assert.equal(f.beginGame.active, false, '快速寻敌同样收');
         assert.equal(f.navVisible(), false, '底部七格导航收');
+        assert.equal(f.gmButton.active, true, 'GM 入口不参与门控：游标卡在 5-4 之前也得留着');
         assert.equal(f.topHud.active, true, '门控不碰整块 TopHud —— 左上玩家卡与资源条不在紫框里');
 
         // 领奖弹窗让位（`view.hide()` + `restoreDialogHud()`）—— 这就是现场那一刻，仍不许露。

@@ -1,5 +1,5 @@
 import { ZCDC_LOG_DIAGNOSTICS } from '../ZCDCLogSwitch';
-import { _decorator, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, instantiate, Label, Material, Node, Prefab, ProgressBar, sp, Sprite, SpriteFrame, UIOpacity, UITransform, Vec3 } from 'cc';
 import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import type { ZCUnitState } from '../model/ZCGameModel';
 import { ZCOwner } from '../model/ZCMapConfig';
@@ -275,6 +275,16 @@ export class ZCUnitView extends Component {
      * 与 `appliedVisualScaleX` 同一条理由（setPosition 也置脏标记）。
     */
     private appliedCastLift = Number.NaN;
+    /**
+     * 已写入的整棵子树透明度（0~255）；`-1` = 还没写过。
+     *
+     * 召唤物（舞王 103103 的舞伴）走 `unit.summonAlpha` 半透明；普通单位恒为 255。
+     * 单独记一份是因为池化：上一任舞伴淡到 128 回池，下一个普通单位必须被复位，
+     * 否则会「凭空出现一个半透明的敌人」。
+    */
+    private appliedSummonAlpha = -1;
+    /** 懒挂的整棵子树 `UIOpacity`（与特效淡出同一条通道：一次级联，不逐层改 Sprite）。*/
+    private summonOpacity: UIOpacity | null = null;
     /** 出生抖动起点（表现时间，秒）；null = 没在抖。建筑生成单位时由渲染层设一次。*/
     private spawnShakeStartedAt: number | null = null;
 
@@ -495,6 +505,7 @@ export class ZCUnitView extends Component {
 
     render(presentation: Readonly<IZCUnitPresentation>): void {
         const { unit, definition, x, y, now } = presentation;
+        this.applySummonAlpha(unit.summonAlpha);
         this.renderHealthBar(unit, definition, now);
 
         const size = definition.hero ? ZCUnitView.FOOT_SIZE_HERO : ZCUnitView.FOOT_SIZE_UNIT;
@@ -690,6 +701,33 @@ export class ZCUnitView extends Component {
      * 宽度被抹成满条之后，紧接着的 totalLength / progress 双双因为值没变而早退、
      * 不再重算 → 满血前的那一帧看起来"闪"了一下，下一帧就停在满条（颜色仍按 ratio 走）。
     */
+    /**
+     * 召唤物半透明（舞王 103103「舞王召唤」的舞伴，2026-11-18 第 17 批）。
+     *
+     * 设计口径「半透明的艺术加工」⇒ 模型给 `summonAlpha = 0.5`，这里只负责落到节点上。
+     * 走宿主节点的 `UIOpacity` 级联整棵子树（与 `ZCCombatEffectView` 的淡出同一条通道）：
+     * 单位美术是 spine + 血条 + 轮廓三套节点，逐层改 `Sprite.color` 会漏掉 spine。
+     *
+     * 缺省 `undefined` ⇒ 255（普通单位），且**必须复位** —— 对象池复用下这一任可能是
+     * 刚淡到一半就回池的舞伴，不复位会让下一个普通单位凭空半透明。
+     */
+    private applySummonAlpha(alpha: number | undefined): void {
+        const target = alpha === undefined ? 255 : Math.round(255 * Math.max(0, Math.min(1, alpha)));
+        if (target === this.appliedSummonAlpha) return;
+        this.appliedSummonAlpha = target;
+        const opacity = this.ensureSummonOpacity();
+        if (opacity) opacity.opacity = target;
+    }
+
+    private ensureSummonOpacity(): UIOpacity | null {
+        if (this.summonOpacity?.isValid) return this.summonOpacity;
+        //  无引擎夹具里的假节点没有这两个方法 ⇒ 先探再调（与 `ZCCombatEffectView` 同一口径）。
+        const host = this.node as unknown as { getComponent?: unknown; addComponent?: unknown };
+        if (typeof host.getComponent !== 'function' || typeof host.addComponent !== 'function') return null;
+        this.summonOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
+        return this.summonOpacity;
+    }
+
     private renderHealthBar(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>, now: number): void {
         const width = definition.hero ? this.barWidthHero : this.barWidth;
         const height = this.barHeight;

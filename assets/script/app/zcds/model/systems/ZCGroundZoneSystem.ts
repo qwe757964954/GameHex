@@ -73,6 +73,16 @@ export interface IZCGroundZoneContext extends Pick<IZCModelServices, 'unitPositi
      * 缺了的表现是「追不到目标 ⇒ 就地转冲刺」，不会抛，也不会把区域卡在接近段。
     */
     unitById?(id: number): ZCUnitState | undefined;
+    /**
+     * 强制位移（世界 px 的增量，2026-11-18 第 17 批 102004 飓风的牵引）。
+     *
+     * 与 `ZCStatusResolutionSystem` 的那个同名成员是同一条通道（`ZCGameModel.displaceUnit`：
+     * 落在不可走格上会减半重试、成功后清掉 `targetHexId` 让单位重新寻路）。
+     * 可选：轻量上下文不给 ⇒ 牵引整段不执行。
+    */
+    displaceUnit?(unit: ZCUnitState, dx: number, dy: number): void;
+    /** 表值 → 世界坐标的换算（牵引最小距离 `20 × scale` 要用）。缺省按 1 处理。*/
+    combatDistanceScale?: number;
 }
 
 /**
@@ -110,12 +120,19 @@ export class ZCGroundZoneSystem {
             //  返回 true = 位移已经由追踪逻辑接管，这里不能再按 `moveVelocity` 推一遍。
             const chased = this.advanceChase(zone, dt, now, context);
             if (!chased) {
+                //  随机游走（2026-11-18 第 17 批 三叶小丑「飓风」102004）：换完方向写回
+                //  `moveVelocity`，位移还是下面那一句 —— 两处各推一次位置会变成双倍速。
+                this.advanceWander(zone, now, context);
                 //  移动区域（暴风 / 冲刺段）：先推进位置再结算这一波，否则伤害会永远落在上一帧的格子上。
                 if (zone.moveVelocityX || zone.moveVelocityY) {
                     zone.x += (zone.moveVelocityX ?? 0) * dt;
                     zone.y += (zone.moveVelocityY ?? 0) * dt;
                 }
             }
+            //  投掷段到点落地（2026-11-18 第 17 批 101704「穿甲爆矢」）：飞满就没收速度，
+            //  剩下的时间交给 `remainingSeconds` 当原地停留。必须在位移之后 —— 这一步就是
+            //  「最后一帧还在飞、下一帧已经停在地上」的分界。
+            this.settleFlight(zone, dt);
             //  2. 读秒：只有过了慢档才开始。
             //  小鹿走过去的那几秒是「赶路」不是「技能在读秒」，否则走 4 秒 > 存活 2 秒，
             //  人还没到区域就没了。
@@ -125,6 +142,9 @@ export class ZCGroundZoneSystem {
             //  放在位移之后 —— 同时配了速度和跟随的话，跟随是绝对落点，
             //  应当盖掉这一帧的位移（否则会「一边跟着人走、一边还在往外飘」）。
             this.followCaster(zone, context);
+            //  牵引（2026-11-18 第 17 批 102004 飓风）：圆心这一帧的位置已经定死了，
+            //  现在才拽人 —— 早一步拽会按上一帧的圆心算方向，风一转向就出现「人被往回甩一下」。
+            this.pullEnemies(zone, dt, context);
             //  整段持有视觉：位置推完就把那条长效事件搬到新位置（必须在结算之前，
             //  这样「这一波伤害」和「画面上的小鹿」在同一拍、同一个坐标）。
             this.syncHoldVisual(state, zone);
@@ -149,13 +169,37 @@ export class ZCGroundZoneSystem {
                 //  区域这一拍就没了（自然到点 / 打满名额提前散）⇒ 表现事件同步摘掉，
                 //  「冲刺结束后所有特效一起消失」不靠下一帧的事件裁剪兜底。
                 this.dropHoldVisual(state, zone);
+                //  「只有被踩响才炸」的区域（101704 穿甲爆矢）：自然到期直接消失 ——
+                //  不播爆炸、不结算伤害。设计原话「到期无人触碰直接消失」。
+                //  踩响那一刻 `contactTriggered` 已经置位，走的还是下面原来的两条。
+                const detonate = zone.expireRequiresContact !== true || zone.contactTriggered === true;
                 //  死亡那一拍的一次性表现（2026-11-12 精密陷阱的「陷阱爆炸」）：必须在
                 //  `resolveExpiry` 之前推 —— 同一拍里「画面炸开」和「血条掉一截」才对得上。
-                this.pushExpireVisual(state, zone);
-                if ((zone.expireDamage ?? 0) > 0) this.resolveExpiry(state, zone, context);
+                if (detonate) this.pushExpireVisual(state, zone);
+                if (detonate && (zone.expireDamage ?? 0) > 0) this.resolveExpiry(state, zone, context);
             }
         }
         zones.length = write;
+    }
+
+    /**
+     * 投掷段读秒（2026-11-18 第 17 批 101704）：飞满就把速度清零，原地转成「停留」。
+     *
+     * 归零 `moveVelocityX/Y` 而不是留一个标记位让 tick 每次都判 —— 位移那一段是
+     * 「有速度就推」，清了才是真的停住，也不会在落地后继续每帧算一次乘法。
+     * 缺省（`flightSeconds` 未定义 / 已是 0）⇒ 整段不执行，存量区域一次都不碰。
+     */
+    private static settleFlight(zone: ZCGroundZoneState, dt: number): void {
+        const left = zone.flightSeconds;
+        if (left === undefined || !(left > 0)) return;
+        const next = left - dt;
+        if (next > 0.0001) {
+            zone.flightSeconds = next;
+            return;
+        }
+        zone.flightSeconds = 0;
+        zone.moveVelocityX = 0;
+        zone.moveVelocityY = 0;
     }
 
     /**
@@ -306,6 +350,66 @@ export class ZCGroundZoneSystem {
     }
 
     /**
+     * 随机游走（2026-11-18 第 17 批 三叶小丑「飓风」102004）。
+     *
+     * 设计原话：「飓风移动速度为 10px，方向随机变化」。所以这里只做一件事 ——
+     * 每隔 `wanderTurnSeconds` 秒抽一个新朝向，写进 `moveVelocityX/Y`，
+     * 位移仍由 tick 里那句「有速度就推」完成（自己再推一遍就成了双倍速）。
+     *
+     * 🔴 抽方向必须走 `context.random`（对局种子）。`Math.random` 会让同一份快照
+     * 在回放 / 重算时走出不同的路径 —— 这个 bug 不会报错，只会让「同一局两次不一样」。
+     * 轻量上下文（单测 / 工具）没给 random 时取 0 ⇒ 恒朝 +x 漂，不会抛。
+     */
+    private static advanceWander(zone: ZCGroundZoneState, now: number,
+        context: IZCGroundZoneContext): void {
+        const speed = Math.max(0, zone.wanderSpeed ?? 0);
+        if (!(speed > 0)) return;
+        const turnSeconds = Math.max(0.05, zone.wanderTurnSeconds ?? 1);
+        const due = zone.wanderAngleRadians === undefined
+            || zone.wanderNextTurnAt === undefined || now >= zone.wanderNextTurnAt;
+        if (due) {
+            zone.wanderAngleRadians = (context.random?.() ?? 0) * Math.PI * 2;
+            zone.wanderNextTurnAt = now + turnSeconds;
+        }
+        const angle = zone.wanderAngleRadians as number;
+        zone.moveVelocityX = Math.cos(angle) * speed;
+        zone.moveVelocityY = Math.sin(angle) * speed;
+    }
+
+    /**
+     * 牵引（2026-11-18 第 17 批 102004 飓风）。
+     *
+     * 与 `ZCStatusResolutionSystem.tickLegacyTraction` 同一套算法、同一组常量：
+     *  · 只拽敌方、跳过尸体；
+     *  · 最小距离 `20 × combatDistanceScale`（贴到这么近就松手，否则会把人拖进圆心来回抖）；
+     *  · 每步位移 `speed × dt`，且不超过「到最小距离的剩余」—— 不然最后一步会越过圆心。
+     * 差别只有力心：那条车道挂在**单位**身上（力心 = 施法者坐标），飓风的力心是**会飘的圆心**，
+     * 所以只能在这里算，不能直接挂一条 `legacyTraction` 状态。
+     *
+     * `displaceUnit` 缺省（轻量上下文）⇒ 整段不执行：不拽人也不会抛。
+     */
+    private static pullEnemies(zone: ZCGroundZoneState, dt: number,
+        context: IZCGroundZoneContext): void {
+        const speed = Math.max(0, zone.pullSpeed ?? 0);
+        const range = Math.max(0, zone.pullRadius ?? 0);
+        if (!(speed > 0) || !(range > 0) || !context.displaceUnit) return;
+        const hexId = context.hexIdAt(zone.x, zone.y);
+        if (hexId === null) return;
+        const radiusHex = Math.ceil(range / context.hexStep) + 1;
+        const minimum = 20 * Math.max(0, context.combatDistanceScale ?? 1);
+        for (const target of context.unitsInRadius(hexId, radiusHex)) {
+            if (target.owner === zone.owner || target.battleState === 'dead' || target.hp <= 0) continue;
+            const pos = context.unitPosition(target);
+            const dx = zone.x - pos.x;
+            const dy = zone.y - pos.y;
+            const current = Math.hypot(dx, dy);
+            if (current <= 1e-9 || current < minimum || current > range) continue;
+            const step = Math.min(speed * dt, current - minimum);
+            context.displaceUnit(target, dx / current * step, dy / current * step);
+        }
+    }
+
+    /**
      * 把「整段持有」的表现事件搬到区域当前位置（2026-11-07 鹿神守护）。
      *
      * 事件在区域的第一拍建出来，`durationSeconds` 直接取区域当时的剩余寿命 ——
@@ -377,6 +481,9 @@ export class ZCGroundZoneSystem {
             //  朝向（`area` 事件两端同点，视图算不出方向 ⇒ 由模型给）与竖直抬升。
             angleDegrees: zone.angleDegrees,
             visualLiftPx: zone.visualLiftPx,
+            //  事件级缩放（2026-11-19 射线集束 103503）：`area` 不按 `radius` 缩放，
+            //  「同一条光束、长度由表值驱动」只能靠这一格。缺省不写 ⇒ 存量区域逐字不变。
+            effectScale: zone.effectScale,
         });
         zone.visualEventId = id;
     }
@@ -420,6 +527,7 @@ export class ZCGroundZoneSystem {
             durationSeconds: Math.max(0.05, zone.expireFxSeconds ?? 0.5),
             angleDegrees: zone.angleDegrees,
             visualLiftPx: zone.visualLiftPx,
+            effectScale: zone.effectScale,
         });
     }
 
@@ -439,11 +547,18 @@ export class ZCGroundZoneSystem {
             if (target.owner === zone.owner || target.battleState === 'dead' || target.hp <= 0) continue;
             const pos = context.unitPosition(target);
             if (Math.hypot(pos.x - zone.x, pos.y - zone.y) > contact) continue;
-            const hitText = context.damageUnit(target, Math.max(0, zone.contactDamage ?? 0), {
-                owner: zone.owner, kind: 'unit', unitId: zone.sourceUnitId,
-                floatTextKind: zone.floatTextKind,
-            });
-            context.lifestealFromHit?.(zone.sourceUnitId, hitText);
+            //  触碰伤害允许为 0（101704 穿甲爆矢：踩响只是引爆，本身不掉血，伤害全在爆炸那一份）。
+            //  伤害为 0 时不调 `damageUnit` —— 否则会推出一条「-0」的飘字，玩家以为白打了一下。
+            const contactDamage = Math.max(0, zone.contactDamage ?? 0);
+            if (contactDamage > 0) {
+                const hitText = context.damageUnit(target, contactDamage, {
+                    owner: zone.owner, kind: 'unit', unitId: zone.sourceUnitId,
+                    floatTextKind: zone.floatTextKind,
+                });
+                context.lifestealFromHit?.(zone.sourceUnitId, hitText);
+            }
+            //  踩响标记：`expireRequiresContact` 的区域靠它区分「踩响的爆炸」与「到期消失」。
+            zone.contactTriggered = true;
             return true;
         }
         return false;
@@ -483,6 +598,7 @@ export class ZCGroundZoneSystem {
                 durationSeconds: zone.waveInterval,
                 angleDegrees: zone.angleDegrees,
                 visualLiftPx: zone.visualLiftPx,
+                effectScale: zone.effectScale,
             });
         }
         const targetHexId = context.hexIdAt(zone.x, zone.y);

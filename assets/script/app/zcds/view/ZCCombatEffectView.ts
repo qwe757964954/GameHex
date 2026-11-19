@@ -334,7 +334,12 @@ export class ZCCombatEffectView extends Component {
             1,
         );
         //  除「定格光束」外一律复位到全不透明：池化节点上一任可能正好淡到 0 才回池。
-        if (!event.beamHold) this.resetOpacity();
+        //  例外是模型**显式**要求某个透明度（闪电链 102203 的「逐跳降透明度」）：
+        //  那种事件每一跳都要自己定档，复位成全不透明会把整条链画成一样亮。
+        if (!event.beamHold) {
+            if (event.effectAlpha !== undefined) this.applyOpacity(event.effectAlpha);
+            else this.resetOpacity();
+        }
 
         if (event.type === 'projectile') {
             //  ── 定格光束（`beamHold`）：命中后那 0.18s 的余韵 ──
@@ -537,6 +542,10 @@ export class ZCCombatEffectView extends Component {
 
     private ensureOpacity(): UIOpacity | null {
         if (this.nodeOpacity?.isValid) return this.nodeOpacity;
+        //  无引擎夹具（`zcds-progressive-art` / `zcds-render-performance`）的假节点没有
+        //  `getComponent` / `addComponent` ⇒ 先探方法再调，与 `applyTint` 那条守卫同一口径。
+        const host = this.node as unknown as { getComponent?: unknown; addComponent?: unknown };
+        if (typeof host.getComponent !== 'function' || typeof host.addComponent !== 'function') return null;
         this.nodeOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
         return this.nodeOpacity;
     }

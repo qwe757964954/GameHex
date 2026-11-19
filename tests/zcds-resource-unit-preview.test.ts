@@ -11,28 +11,68 @@ installZCNeutralTestCatalog();
 test('野怪按钮显示我方独立解锁、集火与小数冷却状态，归属后隐藏', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
+    const frames = { locked: { name: 'frame_01' }, focus: { name: 'frame_02' }, cancel: { name: 'frame_03' } };
+    const placeholder = { name: 'frame_01' };
     view.monsterFocusButton = { node: bar().node, interactable: true };
-    view.monsterFocusLabel = { string: '' };
-    view.monsterFocusBackground = { color: null };
+    view.monsterFocusLabel = { string: '', color: null };
+    view.monsterFocusBackground = { color: null, spriteFrame: placeholder, type: cc.Sprite.Type.SLICED };
+    view.onLoad();
+    view.setMonsterFocusFrames(frames);
+    const textColor = () => [view.monsterFocusLabel.color.r, view.monsterFocusLabel.color.g, view.monsterFocusLabel.color.b];
     const feature = { awake: false, claimed: false, unlockedOwners: ['enemy'], focusOwners: [], focusReadyAt: {} };
     const state = { neutralFeature: feature };
     view.renderMonsterFocus(state, 0);
     assert.equal(view.monsterFocusButton.node.active, true);
     assert.equal(view.monsterFocusButton.interactable, false);
     assert.equal(view.monsterFocusLabel.string, '未解锁');
+    assert.deepEqual(textColor(), [130, 140, 150]);
+    assert.equal(view.monsterFocusBackground.spriteFrame, frames.locked);
+    assert.equal(view.monsterFocusBackground.color.r, 255, '底图不染色，状态色只上文字');
     feature.unlockedOwners.push('player');
     view.renderMonsterFocus(state, 0);
     assert.equal(view.monsterFocusLabel.string, '集火野怪');
     assert.equal(view.monsterFocusButton.interactable, true);
+    assert.deepEqual(textColor(), [45, 120, 225]);
+    assert.equal(view.monsterFocusBackground.spriteFrame, frames.focus);
     Object.assign(feature, { focusOwners: ['player'], focusReadyAt: { player: 0.5 } });
     view.renderMonsterFocus(state, 0.25);
     assert.match(view.monsterFocusLabel.string, /^取消集火 0\.3s$/);
+    assert.deepEqual(textColor(), [235, 145, 55]);
+    assert.equal(view.monsterFocusBackground.spriteFrame, frames.cancel);
     assert.equal(view.monsterFocusButton.interactable, false);
     view.renderMonsterFocus(state, 0.5);
     assert.equal(view.monsterFocusButton.interactable, true);
+    // 缺图（加载失败 / 未注入）时底图停在 prefab 默认的 locked 帧，不能空着。
+    view.setMonsterFocusFrames(null);
+    view.renderMonsterFocus(state, 0.5);
+    assert.equal(view.monsterFocusBackground.spriteFrame, placeholder, '缺图时沿用 prefab 的 frame_01，不许刷成 null');
+    assert.deepEqual(
+        [view.monsterFocusBackground.color.r, view.monsterFocusBackground.color.g, view.monsterFocusBackground.color.b],
+        [255, 255, 255],
+        '底图恒为白色，缺图也不按状态染色',
+    );
     feature.claimed = true;
     view.renderMonsterFocus(state, 1);
     assert.equal(view.monsterFocusButton.node.active, false);
+});
+
+test('集火按钮在 prefab 上按气泡排版：150×42、九宫、默认 locked 帧', () => {
+    const prefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/ZCGameHex.prefab', 'utf8')) as any[];
+    const nodeIndex = prefab.findIndex((o: any) => o?.__type__ === 'cc.Node' && o._name === 'MonsterFocus');
+    assert.ok(nodeIndex >= 0, 'prefab 里要有 MonsterFocus 节点');
+    const node = prefab[nodeIndex];
+    const components = (node._components as any[]).map((ref: any) => prefab[ref.__id__]);
+    const transform = components.find((c: any) => c.__type__ === 'cc.UITransform');
+    const sprite = components.find((c: any) => c.__type__ === 'cc.Sprite');
+    const text = prefab[node._children[0].__id__];
+    assert.deepEqual([transform._contentSize.width, transform._contentSize.height], [150, 42],
+        '气泡原图 94×45：九宫要 42 高才不会被上下边距吃掉中段');
+    assert.equal(text._lpos.y, 5, '文字上移，落在气泡主体里、避开底部箭头');
+    assert.equal(sprite._type, 1, 'SLICED：三张 frame 都带九宫边距');
+    assert.deepEqual([sprite._color.r, sprite._color.g, sprite._color.b], [255, 255, 255], '底图不染色');
+    const frameMeta = JSON.parse(readFileSync('assets/bundles/battle/image/spawn-region/frame_01.png.meta', 'utf8'));
+    const lockedFrame = Object.values(frameMeta.subMetas).find((meta: any) => meta.name === 'spriteFrame') as any;
+    assert.equal(sprite._spriteFrame.__uuid__, lockedFrame.uuid, '默认帧 = locked 的 spawn-region/frame_01');
 });
 
 test('强化门缩小图标，各阶段及缺图时都不显示资源文字', () => {

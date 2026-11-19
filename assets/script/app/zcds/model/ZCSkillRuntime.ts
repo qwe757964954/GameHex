@@ -63,6 +63,17 @@ export class ZCSkillRuntimeRegistry {
         //  与上面几条一样「只带数据」—— 施加状态由 `ZCSkillTriggerSystem.applyTeamAura` 每步推进，
         //  结算复用状态系统的 `statMods`（`attackPct` / `maxHpPct` / `moveSpeedPct` / `attackIntervalPct`）。
         this.register('team_aura', 'none');
+        //  2026-11-18 第 17 批 雷蕉「嗜血术」102204：**有窗口**的团队增益（伤害 + 攻速，
+        //  III 级友军击杀可延长）。与 `team_aura` 同一套状态通道，但窗口会关、离开半径即失去。
+        //  施加与计时全在 `ZCSkillTriggerSystem.applyTeamBuff`。
+        this.register('team_buff', 'none');
+        //  2026-11-18 第 17 批 南瓜战神「大吼大叫」102304：一次自心圆怒吼 —— 伤害 + 敌方减攻
+        //  + III 级友军护盾。只带数据，出手在 `ZCAttackResolutionSystem.castRoar`。
+        this.register('roar', 'none');
+        //  飓风（三叶小丑 102004，2026-11-18 第 17 批）：在场上生成一团会走动的区域。
+        this.register('storm_zone', 'none');
+        //  射线集束（科学家 103503，2026-11-19 第 18 批）：身前矩形光束，每秒 5 跳。
+        this.register('ray_beam', 'none');
         //  2026-10-30 六条「第二个主动」的两条新车道，同样只带数据、不带状态机：
         //  · `self_cast`     —— 冷却到点给自己开一段限时增益（可带自愈 / 友军治疗 / 净化），
         //                      施加与计时全在 `ZCSkillTriggerSystem.applySelfCast`；
@@ -91,6 +102,16 @@ export class ZCSkillRuntimeRegistry {
         //  `ZCAttackResolutionSystem.castTrap`，结算复用 `ZCGroundZoneSystem`
         //  （触碰走 `contactRadius`、爆炸走 `expireDamage` + `expirePrefabPath`）。
         this.register('trap_place', 'none');
+        //  2026-11-18 第 17 批：雷蕉「闪电链」102203 —— 冷却到点放一条连锁闪电，
+        //  逐跳跳向「最近且未被命中」的敌人，每跳各自结算、II 级起逐跳递减。
+        //  推进在 `ZCSkillTriggerSystem.applyChainLightning`，落点与结算在
+        //  `ZCAttackResolutionSystem.castChainLightning`，表现路径在 `ZCChainLightningFx`。
+        this.register('chain_damage', 'none');
+        //  2026-11-18 第 17 批：舞王「舞王召唤」103103 —— 冷却到点召出一批随从，
+        //  跟随本体（四个固定阵位、随本体朝向镜像）并主动攻击最近的敌人。
+        //  推进在 `ZCSkillTriggerSystem.applySummonUnit`，生成与逐帧跟随在
+        //  `ZCGameModel.summonUnits` / `syncSummons`（要动 `state.units`，所以不在攻击系统）。
+        this.register('summon_unit', 'none');
         //  2026-11-17 第 12 批：两条「冷却到点射一枚会爆开的弹」的车道。
         //  · `splash_shot`（风炮菇「孢爆箭」101303）—— 朝锁定目标射一发，命中点半径内均等溅射；
         //  · `spore_burst`（水手菇「孢子凝珠」101104）—— 同上，外加给命中目标挂一段减速。

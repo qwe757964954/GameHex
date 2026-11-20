@@ -198,6 +198,7 @@ export function buildTerritoryStationStates(state: TerritoryStationSource): Read
 }
 
 export interface ITerritoryRenderState extends Omit<ITerritoryViewState, 'progress'> {
+    readonly isInitialCellSync?: boolean;
     readonly monsterPatrols: readonly ITerritoryMonsterPatrol[];
     /**
      * 巡逻区「已挑战成功」的格子（含 footprint）。与 `monsterPatrols` 同一拍快照：
@@ -210,7 +211,7 @@ export interface ITerritoryRenderState extends Omit<ITerritoryViewState, 'progre
 }
 
 /** Capture progress so an already published frame cannot change under a delayed renderer. */
-export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryRenderState {
+export function buildTerritoryViewState(state: ITerritoryViewState, isInitialCellSync = false): ITerritoryRenderState {
     const source = state.progress;
     let progress: ITerritoryProgressView | null = null;
     if (source && state.map) {
@@ -230,6 +231,7 @@ export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryR
     }
     return Object.freeze({
         ...state,
+        isInitialCellSync,
         // 钱包同 `progress` 一样要**拍快照**：延迟一帧的渲染若读到已经扣过费的实时钱包，
         // 银币数字会在同一帧里从红变白（玩家看到"闪一下"），红/白也就不再对应付款前的事实。
         wallet: Object.freeze({ silver: state.wallet.silver, stamina: state.wallet.stamina }),

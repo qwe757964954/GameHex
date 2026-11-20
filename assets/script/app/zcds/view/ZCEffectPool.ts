@@ -292,7 +292,7 @@ export class ZCEffectPool {
         );
         node.name = `HitFx_${fx.trait}_${fx.id}`;
         const animation = node.getComponent(Animation);
-        const clip = animation?.defaultClip ?? null;
+        const clip = animation ? (animation.defaultClip ?? null) : null;
         if (animation && clip) {
             // 池里复用回来的节点停在上一轮末端。`play()` 内部走 `crossFade(name, 0)`
             // ⇒ 先 `clear()`（stop 掉残留状态）再 `state.play()` ⇒ `setTime(0)` 从第 0 帧重走，
@@ -332,7 +332,7 @@ export class ZCEffectPool {
         node.setPosition(x, y, 0);
         node.name = `BuildingDestroyFx_${hexId}`;
         const animation = node.getComponent(Animation);
-        const clip = animation?.defaultClip ?? null;
+        const clip = animation ? (animation.defaultClip ?? null) : null;
         if (animation && clip) {
             // 池里复用回来的节点停在上一轮末尾：先 stop 清残留状态，再从头播。
             animation.stop();
@@ -341,7 +341,7 @@ export class ZCEffectPool {
         this.buildingDestroyFxNodes.push({
             node,
             startedAt: now,
-            duration: clip?.duration ?? BUILDING_DESTROY_FX_FALLBACK_DURATION,
+            duration: clip ? clip.duration : BUILDING_DESTROY_FX_FALLBACK_DURATION,
         });
     }
 
@@ -366,7 +366,7 @@ export class ZCEffectPool {
         node.layer = this.deps.mapLayer.layer;
         node.setPosition(x, y, 0);
         const animation = node.getComponent(Animation);
-        const clip = animation?.defaultClip ?? null;
+        const clip = animation ? (animation.defaultClip ?? null) : null;
         if (animation && clip) {
             animation.stop();
             animation.play(clip.name);
@@ -374,7 +374,7 @@ export class ZCEffectPool {
         this.deathFxNodes.push({
             node,
             startedAt: now,
-            duration: clip?.duration ?? DEATH_FX_FALLBACK_DURATION,
+            duration: clip ? clip.duration : DEATH_FX_FALLBACK_DURATION,
         });
     }
 
@@ -397,7 +397,7 @@ export class ZCEffectPool {
         node.layer = host.layer;
         node.active = true;
         const animation = node.getComponent(Animation);
-        const clip = animation?.defaultClip ?? null;
+        const clip = animation ? (animation.defaultClip ?? null) : null;
         if (animation && clip) {
             animation.stop();
             animation.play(clip.name);

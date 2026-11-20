@@ -428,6 +428,29 @@ export class ZCSnapshotCodec {
             for (const key of ['freeX', 'freeY', 'facingRadians']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.marchAngle, (v) => v === null || Number.isFinite(v)), `${path}.marchAngle`);
             check(optional(unit.attackHitDone, (v) => typeof v === 'boolean'), `${path}.attackHitDone`);
+            if (unit.chase !== undefined) {
+                check(record(unit.chase), `${path}.chase`);
+                if (record(unit.chase)) {
+                    check(Number.isFinite(unit.chase.x), `${path}.chase.x`);
+                    check(Number.isFinite(unit.chase.y), `${path}.chase.y`);
+                    check(nonnegative(unit.chase.startedAt) && unit.chase.startedAt <= data.elapsedSeconds, `${path}.chase.startedAt`);
+                }
+            }
+            if (unit.disengagedUnitIds !== undefined) {
+                check(Array.isArray(unit.disengagedUnitIds), `${path}.disengagedUnitIds`);
+                if (Array.isArray(unit.disengagedUnitIds)) {
+                    const seen = new Set<number>();
+                    let valid = true;
+                    for (const id of unit.disengagedUnitIds) {
+                        if (!integer(id) || id <= 0 || id === unit.id || seen.has(id)) {
+                            valid = false;
+                            break;
+                        }
+                        seen.add(id);
+                    }
+                    check(valid, `${path}.disengagedUnitIds`);
+                }
+            }
         });
         let maxUnitId = 0;
         for (const id of ids) if (integer(id)) maxUnitId = Math.max(maxUnitId, id);

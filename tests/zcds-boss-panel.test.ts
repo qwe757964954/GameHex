@@ -217,6 +217,11 @@ test('接线条：守城局实例化首领条、非守城局销毁；顶部信�
     // 不能写位置：位置归 prefab 的 Widget（规则 215）
     const renderer = game.slice(game.indexOf('private renderBossPanel'), game.indexOf('private loadDefenceBossArt'));
     assert.doesNotMatch(renderer, /setPosition/, '实例化后不许再写 setPosition');
+    // 2026-11-20：大血条只在 BOSS 波显示（有当前波 ≠ 有首领）。SVN 合并曾把判据回退成 currentWaveId !== null。
+    assert.match(renderer, /setBossBarVisible\(progress\.currentWaveIsBoss\)/,
+        '判据必须是 currentWaveIsBoss');
+    assert.doesNotMatch(renderer, /setBossBarVisible\([^)]*currentWaveId/,
+        '不许拿 currentWaveId 当「有首领」的判据');
 
     const hud = stripComments(hudSource);
     assert.match(hud, /this\.topInfoPanel\.active = defence === null && !this\.spawnSelectionMode/,

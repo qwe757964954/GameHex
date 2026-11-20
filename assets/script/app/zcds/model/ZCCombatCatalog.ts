@@ -346,7 +346,8 @@ export function cardRarityMeta(): readonly ZCCardRarityMeta[] {
 }
 
 export function rarityDisplayName(rarity: ZCCardRarity): string {
-    return rarityMetadata().find((meta) => meta.id === rarity)?.name ?? '';
+    const meta = rarityMetadata().find((item) => item.id === rarity);
+    return meta ? meta.name : '';
 }
 
 /**
@@ -398,7 +399,7 @@ export function getCounterRules(): readonly ZCCounterRule[] {
 
 /** 四维任一形成克制时取最高倍率；金矿不参与。*/
 export function cardCounterMultiplier(attacker?: ZCDeckCard, defender?: ZCDeckCard, rules = getCounterRules()): number {
-    if (!attacker?.traits || !defender?.traits) return 1;
+    if (!attacker || !defender || !attacker.traits || !defender.traits) return 1;
     const a = attacker.traits;
     const d = defender.traits;
     return rules.reduce((multiplier, rule) => (
@@ -443,8 +444,8 @@ export function getBondRules(): readonly ZCBondRule[] {
 
 /** 由八卡阵容按 pvpBond 规则实时计算羁绊。*/
 export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBondRules()): ZCDeckBonuses {
-    const cards = deck.filter((card) => card.traits);
-    const count = (key: keyof ZCCardTraits, value: string) => cards.filter((card) => card.traits?.[key] === value).length;
+    const cards = deck.filter((card): card is ZCDeckCard & { traits: ZCCardTraits } => card.traits != null);
+    const count = (key: keyof ZCCardTraits, value: string) => cards.filter((card) => card.traits[key] === value).length;
     const result: ZCDeckBonuses = {
         activeBonds: [], unitHpMultiplier: 1, unitAttackMultiplier: 1,
         moveSpeedMultiplier: 1, towerAttackMultiplier: 1,
@@ -452,7 +453,7 @@ export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBon
     };
     for (const rule of rules) {
         const matched = rule.target === 'any'
-            ? Math.max(0, ...Array.from(new Set(cards.map((card) => card.traits?.[rule.trait] ?? '')), (value) => count(rule.trait, value)))
+            ? Math.max(0, ...Array.from(new Set(cards.map((card) => card.traits[rule.trait] ?? '')), (value) => count(rule.trait, value)))
             : count(rule.trait, rule.target);
         if (matched < rule.threshold) continue;
         result.activeBonds.push(rule.name);
@@ -477,16 +478,19 @@ export function calculateDeckBonuses(deck: readonly ZCDeckCard[], rules = getBon
 */
 export function findCatalogCard(cardId: string | null | undefined): ZCDeckCard | null {
     if (!cardId) return null;
-    return ZC_RUNTIME_CONFIG.snapshot.cardCatalog?.get(String(cardId)) ?? null;
+    const catalog = ZC_RUNTIME_CONFIG.snapshot.cardCatalog;
+    return catalog ? (catalog.get(String(cardId)) ?? null) : null;
 }
 
 export function hasUnitDefinition(unitId: ZCUnitId): boolean {
-    return ZC_RUNTIME_CONFIG.snapshot.units?.has(unitId) === true;
+    const units = ZC_RUNTIME_CONFIG.snapshot.units;
+    return units ? units.has(unitId) : false;
 }
 
 /** 取单位定义：数值/Prefab 由 pvpCard 单位列提供，技能由 pvpSkill 提供。不完整时抛错，不兜底。*/
 export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
-    const definition = ZC_RUNTIME_CONFIG.snapshot.units?.get(unitId);
+    const units = ZC_RUNTIME_CONFIG.snapshot.units;
+    const definition = units ? units.get(unitId) : undefined;
     if (!definition || definition.maxHp == null || definition.attack == null || !definition.prefabPath || !definition.attackProfile) {
         throw new Error(`[ZCCombatCatalog] 单位 ${unitId} 的 PVP 配置不完整`);
     }
@@ -495,6 +499,7 @@ export function resolveUnitDefinition(unitId: ZCUnitId): ZCUnitDefinition {
 
 /** 全部可上场单位定义，供批量加载 Prefab。*/
 export function getAllUnitDefinitions(): ZCUnitDefinition[] {
-    return Array.from(ZC_RUNTIME_CONFIG.snapshot.units?.values() ?? []);
+    const units = ZC_RUNTIME_CONFIG.snapshot.units;
+    return units ? Array.from(units.values()) : [];
 }
 //#endregion

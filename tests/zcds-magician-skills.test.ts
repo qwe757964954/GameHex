@@ -580,7 +580,8 @@ test('鹿神守护：小鹿 + 火船的整体倍率 = 100/685（画布高 685 �
     assert.ok(Math.abs(scale - 100 / 685) < 1e-12, `应为 100/685，实际 ${scale}`);
     assert.ok(Math.abs(685 * scale - 100) < 1e-9, '画布高正好落到 100px');
     //  没登记的特效必须仍是 1（默认「美术原样」），否则会静默改掉一堆别人家的尺寸。
-    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/雷弹命中/雷弹命中'), 1);
+    //  🔴 别拿 `雷弹命中` 当例子了：2026-11-20 起它按需求登记成 0.5（见 `zcds-thunder-hit-fx-scale`）。
+    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/椰蛋战士_暴风_未登记/椰蛋战士_暴风_未登记'), 1);
 });
 
 // ── 六、鹿神守护：先走近、再冲刺（2026-11-07 需求 1/2） ─────────────────────────

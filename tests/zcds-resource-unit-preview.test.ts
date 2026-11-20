@@ -8,6 +8,26 @@ import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutra
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
 installZCNeutralTestCatalog();
 
+test('野怪地表在阵营底色下方，重复设置和池化清理不改变图层顺序', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    const root = new cc.Node('hex');
+    const tile = view.tileSprite.node;
+    const ground = new cc.Node('MonsterGround');
+    tile.setParent(root);
+    ground.setParent(root);
+    view.monsterGround = { node: ground, spriteFrame: null };
+    const frame = { name: 'monster_ground' };
+    view.setMonsterGround(frame);
+    view.setMonsterGround(frame);
+    assert.deepEqual(root.children, [ground, tile]);
+    assert.equal(ground.active, true);
+    assert.equal(view.monsterGround.spriteFrame, frame);
+    view.setMonsterGround(null);
+    assert.equal(ground.active, false);
+    assert.equal(view.monsterGround.spriteFrame, null);
+});
+
 test('野怪按钮显示我方独立解锁、集火与小数冷却状态，归属后隐藏', () => {
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);

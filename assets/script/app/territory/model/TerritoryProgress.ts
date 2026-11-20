@@ -180,6 +180,12 @@ export class TerritoryProgress {
         return this.unlockable.has(cellId);
     }
 
+    /** 将当前已占领格与已解锁格收集到指定的 Set 中，避免外部分配多个中间排序数组。 */
+    collectOpenedCells(target: Set<number>): void {
+        for (const cell of this.owned) target.add(cell);
+        for (const cell of this.unlockable) target.add(cell);
+    }
+
     get unlockedCells(): readonly number[] {
         return Array.from(this.unlockable).sort((a, b) => a - b);
     }

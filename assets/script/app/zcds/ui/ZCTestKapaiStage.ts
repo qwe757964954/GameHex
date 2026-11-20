@@ -58,8 +58,9 @@ export class ZCTestKapaiStage {
     private unitPrefabPath = '';
     /** 当前模型的基准缩放 = 69.4 / 骨架 canvas 高 × prefabSize；不含覆盖与视图。*/
     private unitBaseScale = 0;
-    private unitCanvasHeight = 0;
     private unitPrefabSize = 1;
+    /** spine 节点自身的设计高度；用来还原"屏幕上到底多高"，而不是只看节点缩放。*/
+    private unitVisualHeight = 0;
     /** 最近一次画的射程 / 范围，用于视图切换后重绘。*/
     private lastAttackRange = 0;
     private lastAreaRadius = 0;
@@ -128,6 +129,13 @@ export class ZCTestKapaiStage {
         return this.viewScale;
     }
 
+    /** 模型在舞台上的实际高度（设计像素）与占格数；未加载时返回 null。*/
+    unitSizeOf(): { height: number; cells: number } | null {
+        if (!this.unitNode?.isValid || this.unitVisualHeight <= 0) return null;
+        const height = this.unitVisualHeight * this.unitNode.scale.x;
+        return { height, cells: height / (GRID_CELL_HEIGHT * this.viewScale) };
+    }
+
     /* ---------------------------------------------------------------- *
      * 格子与范围
      * ---------------------------------------------------------------- */
@@ -185,6 +193,13 @@ export class ZCTestKapaiStage {
         );
         grid.fill();
 
+        // 双方脚点的连线：长度就是目标距离，和射程值一起看是否够得着。
+        grid.strokeColor = toColor(this.layout.gridColor);
+        grid.lineWidth = 1.2;
+        grid.moveTo(this.layout.unitOffsetX, this.layout.groundOffsetY + 14);
+        grid.lineTo(this.layout.targetOffsetX, this.layout.groundOffsetY + 14);
+        grid.stroke();
+
         // 靶子落点圈。
         const targetRing = this.refs.targetRing;
         const radius = GRID_CELL_WIDTH * scale * 0.55;
@@ -210,12 +225,10 @@ export class ZCTestKapaiStage {
             const centerY = this.layout.groundOffsetY;
             range.strokeColor = toColor(this.layout.guideColor);
             range.lineWidth = 2.2;
-            range.circle(centerX, centerY, radius);
-            range.stroke();
+            this.strokeCircleClipped(range, centerX, centerY, radius);
             range.strokeColor = toColor(this.layout.gridColor);
             range.lineWidth = 1.4;
-            range.circle(centerX, centerY, radius - 2.5);
-            range.stroke();
+            this.strokeCircleClipped(range, centerX, centerY, radius - 2.5);
         }
 
         const aoe = this.refs.aoeRing;
@@ -224,15 +237,35 @@ export class ZCTestKapaiStage {
             const radius = areaRadius * this.viewScale;
             const centerX = this.layout.targetOffsetX;
             const centerY = this.layout.groundOffsetY;
-            const fill = toColor(this.layout.errorColor);
-            aoe.fillColor = new Color(fill.r, fill.g, fill.b, 38);
-            aoe.circle(centerX, centerY, radius);
-            aoe.fill();
             aoe.strokeColor = toColor(this.layout.errorColor);
             aoe.lineWidth = 2.2;
-            aoe.circle(centerX, centerY, radius);
-            aoe.stroke();
+            this.strokeCircleClipped(aoe, centerX, centerY, radius);
         }
+    }
+
+    /** 只画舞台矩形内的圆弧：Graphics 不受 Mask 裁剪，必须在几何层截断。*/
+    private strokeCircleClipped(graphics: Graphics, centerX: number, centerY: number, radius: number): void {
+        const size = this.refs.host.getComponent(UITransform)!.contentSize;
+        const halfWidth = size.width / 2 - 1;
+        const halfHeight = size.height / 2 - 1;
+        const segments = Math.max(64, Math.ceil(radius / 6));
+        let drawing = false;
+        for (let index = 0; index <= segments; index += 1) {
+            const angle = index / segments * Math.PI * 2;
+            const x = centerX + Math.cos(angle) * radius;
+            const y = centerY + Math.sin(angle) * radius;
+            if (Math.abs(x) <= halfWidth && Math.abs(y) <= halfHeight) {
+                if (!drawing) {
+                    graphics.moveTo(x, y);
+                    drawing = true;
+                } else {
+                    graphics.lineTo(x, y);
+                }
+            } else {
+                drawing = false;
+            }
+        }
+        graphics.stroke();
     }
 
     /* ---------------------------------------------------------------- *
@@ -294,7 +327,8 @@ export class ZCTestKapaiStage {
             return;
         }
         const size = Number.isFinite(prefabSize) && prefabSize > 0 ? prefabSize : 1;
-        this.unitCanvasHeight = canvasHeight;
+        const visual = (skeletonNode ?? node).getComponent(UITransform);
+        this.unitVisualHeight = visual ? visual.contentSize.height : 0;
         this.unitPrefabSize = size;
         this.unitBaseScale = ZC_SPINE_CANVAS_TARGET_HEIGHT / canvasHeight * size;
         this.unitNode = node;
@@ -311,10 +345,14 @@ export class ZCTestKapaiStage {
         if (!node || !node.isValid || this.unitBaseScale <= 0) return;
         const scale = this.unitBaseScale * this.modelScale * this.viewScale;
         node.setScale(scale, scale, 1);
+        const rendered = this.unitVisualHeight > 0 ? this.unitVisualHeight * scale : 0;
+        const distance = Math.abs(this.layout.targetOffsetX - this.layout.unitOffsetX);
+        const rangeText = this.lastAttackRange > 0
+            ? ` · 射程 ${round1(this.lastAttackRange)} / 目标 ${round1(distance)}`
+                + (distance > this.lastAttackRange ? '（范围外）' : '')
+            : '';
         this.onStatus(
-            `战斗口径：骨架 ${Math.round(this.unitCanvasHeight)} → 69.4 × ${round2(this.unitPrefabSize)}（prefabSize）`
-            + ` × ${round2(this.modelScale)}（模型覆盖）× ${round2(this.viewScale)}（视图）`
-            + ` ＝ ${round1(scale)}px（${round2(scale / (GRID_CELL_HEIGHT * this.viewScale))} 格）`,
+            `模型 ${round1(rendered)}px · ${round2(rendered / (GRID_CELL_HEIGHT * this.viewScale))} 格${rangeText}`,
             this.layout.guideColor,
         );
     }

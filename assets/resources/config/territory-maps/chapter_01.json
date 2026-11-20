@@ -3017,7 +3017,7 @@
       },
       "buildingId": "69021",
       "battleId": 1002,
-      "patrolId": 50005
+      "patrolId": 50023
     },
     {
       "id": "patrolChest_158",
@@ -3246,7 +3246,7 @@
       },
       "buildingId": "69021",
       "battleId": 1003,
-      "patrolId": 50007
+      "patrolId": 50031
     },
     {
       "id": "patrolChest_174",
@@ -3361,7 +3361,7 @@
       },
       "buildingId": "69021",
       "battleId": 1004,
-      "patrolId": 50005
+      "patrolId": 50032
     },
     {
       "id": "patrolChest_174",
@@ -3572,7 +3572,7 @@
       },
       "buildingId": "69021",
       "battleId": 1001,
-      "patrolId": 50021
+      "patrolId": 50022
     },
     {
       "id": "patrolChest_155",

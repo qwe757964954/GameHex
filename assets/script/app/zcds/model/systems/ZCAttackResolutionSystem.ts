@@ -40,6 +40,7 @@ import type {
 } from '../ZCGameTypes';
 import type { ZCLegacyBuffApplication, ZCLegacySkillEvaluation } from '../ZCLegacySkillEffect';
 import { ZCOwner } from '../ZCMapConfig';
+import { neutralResourceItemOf, ZCNeutralResourceType } from '../ZCNeutralResourceGroup';
 import type { ZCUnitStatPatch } from '../ZCModifierRuntime';
 import type { ZCSkillRuntimeDefinition } from '../ZCSkillRuntime';
 import { ZC_EMPOWERED_LOCK_PARAM } from '../ZCSkillRuntime';
@@ -430,7 +431,12 @@ export class ZCAttackResolutionSystem {
 
     private static targetOwner(state: ZCSnapshot, target: ZCCombatTarget, context: IZCAttackResolutionContext): ZCOwner {
         if (target.kind === 'unit') return context.unitById.get(target.id)?.owner ?? ZCOwner.Enemy;
-        const owner = this.hex(state, target.id)?.owner;
+        const hex = this.hex(state, target.id);
+        // 出生格的阵营不能参与中立野怪的克制结算。
+        if (hex && neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Monster) {
+            return ZCOwner.Enemy;
+        }
+        const owner = hex?.owner;
         return owner && owner !== 'neutral' ? owner : ZCOwner.Enemy;
     }
 

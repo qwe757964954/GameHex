@@ -42,6 +42,28 @@ export function formatZCDefenceHpRate(hpRate: number): string {
 }
 
 /**
+ * 结算扣血动画时长（秒）。
+ *
+ * 与结算镜头拉远（`ZCGameHUDView.MAP_SETTLEMENT_ZOOM_SECONDS` 0.55s）同一拍：
+ * 血条先降完、镜头再拉远、然后才扫场。取 0.5s 是因为这段要「看得出是个过程」
+ * （BOSS 被打死那一下一条满血条瞬间归零很像卡帧），又不能拖住结算节奏。
+*/
+export const ZC_BOSS_HP_DRAIN_SECONDS = 0.5;
+
+/**
+ * 扣血动画某一帧的比例：`from` → `to` 按 smoothstep（`t²(3−2t)`）过渡。
+ *
+ * 与单位血条的白条（`healthBarDamageTrailScale`）同一套缓动：两端速度为 0，
+ * 看上去像被「抽干」而不是被「切」掉。`elapsed` 越界直接落在两端（幂等）。
+*/
+export function bossHpDrainRatio(from: number, to: number, elapsed: number): number {
+    if (!Number.isFinite(elapsed) || elapsed <= 0) return from;
+    if (elapsed >= ZC_BOSS_HP_DRAIN_SECONDS) return to;
+    const progress = elapsed / ZC_BOSS_HP_DRAIN_SECONDS;
+    return from + (to - from) * progress * progress * (3 - 2 * progress);
+}
+
+/**
  * 波次怪守城（塔防）模式左上角的首领条：骷髅 + `第4/8波` + 首领头像框 + 名字 + 红血条 + `X4`。
  *
  * 几何、尺寸与全部美术都在 `ZCBossPanel.prefab` 里（蓝湖「BOSS」稿，画布 720×1610，切片 1:1），
@@ -55,6 +77,9 @@ export function formatZCDefenceHpRate(hpRate: number): string {
  * · 血条 = 本波剩余总血量 / 本波总血量（按波聚合，不是取某只代表怪）
  * · `X{n}` = 该波的血量倍率（`wave.hpRate`）
  * · 头像与名字 = 当前波（`currentWaveId`）那波的怪
+ *
+ * 🔴 2026-11-20：头像框 / 名字 / 血条 / 倍率这整组只在 **BOSS 波** 显示（`setBossBarVisible`），
+ * 非 BOSS 波只留骷髅 + `第N/M波` 徽标；普通小怪走自己的头顶血条。
 */
 @ccclass('ZCHudBossPanel')
 export class ZCHudBossPanel extends Component {
@@ -73,26 +98,48 @@ export class ZCHudBossPanel extends Component {
     @property({ type: Label, group: '节点引用', tooltip: 'Bar/Rate：血量倍率 X4' })
     rateLabel: Label = null;
 
+    /** 上一次真正写进 `hpFill.fillRange` 的比例（= 结算扣血动画的起点，也是「没演动画时」的唯一真源）。*/
+    private displayedRatio = 1;
+    /** 数据侧最新比例；扣血动画期间只更新它，不直接落地。*/
+    private targetRatio = 1;
+    /** 扣血动画的起点比例与已播秒数（`draining` 为 true 时有效）。*/
+    private drainFrom = 0;
+    private drainElapsed = 0;
+    private draining = false;
+    /** 血条组是否可见（`setBossBarVisible` 的最近一次入参）：藏着时不做扣血演出。*/
+    private barVisible = true;
+
     /**
-     * 当前波的头像 / 名字 / 总血条显隐，普通波与 BOSS 波共用。
+     * 当前波的头像 / 名字 / 总血条显隐（「大血条」整组）。
+     *
+     * 🔴 只在 BOSS 波为 true（2026-11-20 恢复 SVN 回退）：非 BOSS 怪只有头顶血条，
+     * 这一组三者一起收起，普通波不再挂首领头像框 / 名字 / 总血条。
      *
      * 波次徽标（`IconBoss` + `WaveText`）不在这里控制：它从第一波起常驻（2026-11-09 用户）。
      * 三处引用都取自本组件已绑定的 Inspector 引用，不需要在 prefab 上再加容器节点：
-     * · 头像 = `Portrait`（`Icon` 是它的子节点）
+     * · 头像框 = `Portrait`（`portraitIcon` 绑在它的子节点 `Icon` 上 ⇒ 要收的是父节点，
+     *   只藏 `Icon` 会在普通波留下一个空头像框）
      * · 名字 = `BossName`
      * · 血条 = `Bar`（`Fill` / `Rate` 的父节点）
     */
     setBossBarVisible(visible: boolean): void {
-        this.portraitIcon.node.active = visible;
+        const portrait = this.portraitIcon.node.parent ?? this.portraitIcon.node;
+        portrait.active = visible;
         this.nameLabel.node.active = visible;
         const bar = this.hpFill.node.parent;
         if (bar) bar.active = visible;
+        // 血条组藏着的时候没有「扣血」可看 ⇒ 结算也别为它多等半秒（见 `beginHpDrain`）。
+        this.barVisible = visible;
     }
 
     /**
      * 全量赋值（每次渲染都会被调）。
      *
      * 头像帧异步取得；切波尚未加载时清空旧图，避免把上一波的怪当作当前波。
+     *
+     * 血条分两条路：平时（对局中）按最新血量**直接落地**；只有在结算扣血动画期间
+     * （`beginHpDrain` 之后）才只记目标、由 `advanceHpDrain` 逐帧把条降下去 ——
+     * 这样「打怪时血条跟手」和「结算时看得见扣血」两件事互不影响。
     */
     render(progress: Readonly<ZCDefenceWaveProgress>, name: string, portrait: SpriteFrame | null): void {
         const wave = formatZCDefenceWaveText(progress);
@@ -107,6 +154,50 @@ export class ZCHudBossPanel extends Component {
 
         // 分母取「生成那一刻记下的总血量」，分母为 0（该波没生成出单位）时条画空。
         const ratio = progress.currentWaveMaxHp > 0 ? progress.currentWaveHp / progress.currentWaveMaxHp : 0;
-        this.hpFill.fillRange = Math.max(0, Math.min(1, ratio));
+        this.targetRatio = Math.max(0, Math.min(1, ratio));
+        if (!this.draining) this.applyHpRatio(this.targetRatio);
+    }
+
+    /**
+     * 结算起手：把血条钉在「死前那一刻的比例」上，随后的新血量改成补间落地。
+     *
+     * **必须在把最终血量 `render` 进面板之前调**，否则条已经跳到 0，起点就丢了。
+     * 这里不判「有没有真的掉血」—— 那一刻面板拿到的还是旧数据（新血量在随后的
+     * `render` 里才进来），判定统一放到 `advanceHpDrain` 的第一帧：没掉血 / 回血 /
+     * 条是隐藏的，就当场放行，调用方不会为空动画白等。
+    */
+    beginHpDrain(): void {
+        this.drainFrom = this.displayedRatio;
+        this.drainElapsed = 0;
+        this.draining = true;
+    }
+
+    /**
+     * 推进扣血动画。返回 `true` = 还在播（调用方先别开结算演出）。
+     *
+     * 按 `dt` 累加而不是取绝对时间：它与扫场（`ZCVictorySweep.advance(dt)`）同处结算分支、
+     * 同一个 `dt` 源，两者不会互相错位。
+    */
+    advanceHpDrain(dt: number): boolean {
+        if (!this.draining) return false;
+        // 起手之后的第一次推进才拿得到真正的目标：没掉血（相等 / 回血）或条藏着 ⇒
+        // 这不是「被扣」，硬拉一条动画只会显得卡 ⇒ 当帧放弃动画、把条写到位。
+        if (!this.barVisible || !(this.targetRatio < this.drainFrom - 1e-4)) {
+            this.draining = false;
+            this.applyHpRatio(this.targetRatio);
+            return false;
+        }
+        this.drainElapsed += Math.max(0, dt);
+        const done = this.drainElapsed >= ZC_BOSS_HP_DRAIN_SECONDS;
+        this.applyHpRatio(done
+            ? this.targetRatio
+            : bossHpDrainRatio(this.drainFrom, this.targetRatio, this.drainElapsed));
+        this.draining = !done;
+        return this.draining;
+    }
+
+    private applyHpRatio(ratio: number): void {
+        this.displayedRatio = ratio;
+        this.hpFill.fillRange = ratio;
     }
 }

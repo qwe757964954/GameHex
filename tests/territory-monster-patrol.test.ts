@@ -94,7 +94,7 @@ test('同一片巡逻区（同 site.id）全部解锁后才从 patrolId 格开�
     }
 });
 
-test('同片共用 battleId：任一格占点即整片通过并停巡，另一片不受影响', () => {
+test('同片共用 battleId：任一格占点即整片通过；通关后野怪仍继续巡逻', () => {
     const map = configureTerritoryMap({ version: 1, mapKind: 'territoryChapter', id: 'patrol-battle',
         name: 'test', chapterId: 1, rows: 4, columns: 4, startCellId: 0, defaults: {}, sites: [
             // 片 A：1（锚点）+ 5，共用 60001
@@ -105,14 +105,16 @@ test('同片共用 battleId：任一格占点即整片通过并停巡，另一�
         ] });
     const progress = new TerritoryProgress(map, { unlockedCells: [1, 2, 5] });
     assert.deepEqual(buildTerritoryMonsterPatrols(map, progress).map(patrol => patrol.cellId), [1, 2]);
-    // 片 A 的 5 号格占点 ⇒ 60001 整片通过：1 号格的野怪停巡；片 B 的 60002 没打，仍在。
+    // 2026-11-20：片 A 的 5 号格占点 ⇒ 60001 整片通过，但**只把怪恢复成原色**，
+    // 不再让它凭空消失（通关片区要继续有怪在走）。
     progress.markCellPassed(5);
-    assert.deepEqual(buildTerritoryMonsterPatrols(map, progress).map(patrol => patrol.cellId), [2]);
+    assert.deepEqual(buildTerritoryMonsterPatrols(map, progress).map(patrol => patrol.cellId), [1, 2]);
     progress.markCellPassed(2);
-    assert.deepEqual(buildTerritoryMonsterPatrols(map, progress), []);
+    assert.deepEqual(buildTerritoryMonsterPatrols(map, progress).map(patrol => patrol.cellId), [1, 2],
+        '两片都通关也照样巡逻，生灭只看「片区格子是否全部开启」');
 });
 
-test('同片格子要全部解锁才启动；片内任一格已占点 ⇒ 整片不再出怪', () => {
+test('同片格子要全部解锁才启动；通关后仍按原路线继续巡逻', () => {
     const source = sourceMap();
     source.sites = [
         { id: 'route', type: 'patrolChest', cellId: 1, footprint: [1], battleId: 60001, patrolId: 50021 },
@@ -125,9 +127,11 @@ test('同片格子要全部解锁才启动；片内任一格已占点 ⇒ 整片
     progress.markCellsUnlocked([5]);
     assert.deepEqual(new Set(buildTerritoryMonsterPatrols(map, progress)[0].route), new Set([1, 5]));
 
-    // 同片共用 60001：5 号格一占点，这一片就算打过 ⇒ 1 号格的怪也停巡。
+    // 2026-11-20：5 号格占点只让整片转成「已通过」表现，路线与生灭都不变。
     progress.markCellPassed(5);
-    assert.deepEqual(buildTerritoryMonsterPatrols(map, progress), []);
+    const after = buildTerritoryMonsterPatrols(map, progress);
+    assert.equal(after.length, 1, '通关不许把怪过滤掉');
+    assert.deepEqual(new Set(after[0].route), new Set([1, 5]), '继续按原路线往返');
 });
 
 test('编辑器与客户端接受巡逻同 ID 和组内依赖，仍拒绝普通站点重名与断开的路线', () => {

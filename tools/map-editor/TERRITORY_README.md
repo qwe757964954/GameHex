@@ -39,6 +39,13 @@ tools\map-editor\copy-territory-maps.bat --id chapter_02
 
 巡逻野怪的消失按**战斗 ID** 判定，与关卡同口径：一片巡逻区（同 `site.id`）共用同一个 `battleId`，格子的占点状态共享 —— 任一格已占点即整片通过，该场战斗的巡逻野怪停止出现。同片任一格命中（解锁 / 开战）都按「带 `patrolId` 的那一格」上报后端（怪物配置绑在那格）。宝箱奖励规则另行接入。
 
+**`patrolId` 填哪只（2026-11-20 定案，别再手填）**：必须是该 `battleId` 对应关卡**真实会出**的怪 ——
+`monsterBox` 最低等级那行的 `monsterBoxLevel` → `levelInfo` 的 `extraCards.enemy`（NPC 队伍）与
+`levelModValue`（塔防出怪组 → `defenceModWave` 波次）；两边都出现的最后一只（= 收尾 BOSS 波）优先。
+填一只这关不会出的怪`画面照常、零报错`，只有玩家能发现对不上，所以批量改完一律用
+`python tools/map-editor/reassign_patrol_ids.py --dry-run` 对一遍（真源 `patrol_monster_source.py`，
+判据会逐片打印）。
+
 ### 随机站点的逐格建筑 ID（2026-10-27 批量填充）
 
 右侧「随机站点（所选格）→ 建筑 ID」写的是 `randomSites.buildingIds`（`{"<cellId>": "<建筑ID>"}`），

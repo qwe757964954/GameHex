@@ -50,14 +50,19 @@ test('chapter two keeps the current editor site format in sync with the publishe
     // 104 → 102（2026-11-11）：2-10 首领（`boss_2`）改「裂开的笑嘴」时，
     // r14 的 289 / 290 / 291 三个固定宝箱格被并进 boss footprint，
     // 同时把退出的 246 补成新的固定格（`fixedResource_90`）⇒ 净减 2 个站点。
-    assert.equal(config.sites.length, 102);
+    // 102 → 122（2026-11-20）：本章补了 5 片「巡逻宝箱野怪」地块，每片 4 格 = 20 条站点
+    // （同 `site.id` 的多格站点，见 `tests/territory-node-ui.test.ts` 的收敛用例）。
+    assert.equal(config.sites.length, 122);
     // configId 两种口径（2026-10 之后的地图）：固定宝箱 `fixedResource_<n>`，
     // 关卡 / Boss / 异步据点直接存**数值关卡号**（10011…）。别再用一条
     // `^(fixedResource|stage|asyncPvp)_\d+$` 一刀切 —— 那会把 stage/boss 全判死。
+    // 巡逻宝箱（`patrolChest`）**没有 configId**：一片区靠 `site.id` + `patrolId` 收敛，
+    // 不挂关卡 `configId`（`TerritoryNodeUI` 的分组判据里也没有这一路）⇒ 不参与这条检查。
     const configIdOf = (type: string, configId: unknown) => (type === TERRITORY_SITE_TYPE.fixedResource
         ? /^fixedResource_\d+$/.test(String(configId))
         : /^\d+$/.test(String(configId)));
     for (const site of config.sites) {
+        if (site.type === TERRITORY_SITE_TYPE.patrolChest) continue;
         assert.ok(configIdOf(site.type, site.configId),
             `${site.type} 的 configId 不合口径：${String(site.configId)}`);
     }

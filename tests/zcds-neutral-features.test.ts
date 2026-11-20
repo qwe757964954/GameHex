@@ -154,7 +154,7 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     return { config, state, hex, system, unit, batches, structureHits, clones: () => clones };
 }
 
-test('monster territory ignores void paths, unlocks each side permanently and wakes only on focus', () => {
+test('野怪领地排除空洞，各方永久解锁，首次解锁立即自动攻击', () => {
     const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     const center = f.config.map.hexes[f.hex.id];
     const second = f.config.map.hexes.find(point => point.playable && hexGridDistance(center, point) === 2);
@@ -162,9 +162,17 @@ test('monster territory ignores void paths, unlocks each side permanently and wa
     for (const id of center.neighbors) f.config.map.hexes[id].playable = false;
     const building = f.state.hexes[second.id];
     building.owner = 'player'; building.building = 'barracks'; building.hp = 10;
+    const nearby = f.unit(1, 'enemy');
+    f.state.units = [nearby];
+    f.system.tick(f.state);
+    assert.equal(nearby.hp, 100);
     f.system.claim(f.state);
     assert.deepEqual(f.hex.neutralFeature.unlockedOwners, ['player']);
-    assert.equal(isZCAwakeMonster(f.hex), false);
+    assert.equal(isZCAwakeMonster(f.hex), true);
+    assert.equal(f.system.hasFocusableMonster(), true);
+    assert.equal(f.system.priorityTarget(f.state, nearby), null);
+    f.system.tick(f.state);
+    assert.ok(nearby.hp < 100);
     assert.ok(f.system.territory(f.hex).includes(second.id));
     assert.ok(center.neighbors.every(id => !f.system.territory(f.hex).includes(id)), JSON.stringify({neighbors: center.neighbors.map(id => [id, f.config.map.hexes[id].playable]), territory: f.system.territory(f.hex)}));
     assert.ok(f.config.map.hexes.filter(point => hexGridDistance(center, point) > 2)
@@ -184,6 +192,72 @@ test('monster territory ignores void paths, unlocks each side permanently and wa
     assert.deepEqual(f.hex.neutralFeature.focusOwners, ['enemy']);
     assert.equal(f.hex.neutralFeature.patrol, undefined);
     assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, 100), { x: center.x, y: center.y });
+});
+
+test('双方小兵踩过野怪领地立即易手，出生格上的存活野怪保留血量', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+    const center = f.config.map.hexes[f.hex.id];
+    const adjacent = f.config.map.hexes[center.neighbors[0]];
+    const outside = f.config.map.hexes.find(point => point.playable && hexGridDistance(center, point) > 2
+        && f.state.hexes[point.id].building === 'none' && f.state.hexes[point.id].owner === 'neutral');
+    assert.ok(outside);
+    const model = new ZCGameModel(f.state, () => 0, {
+        ...f.config, rules: { ...f.config.rules, captureSeconds: 10, captureRequireSupply: true },
+    });
+    const { state } = model as unknown as { state: ZCSnapshot };
+    const monster = state.hexes[f.hex.id];
+    const hp = monster.hp;
+    for (const owner of ['player', 'enemy'] as const) {
+        const centerUnit = f.unit(1, owner);
+        const adjacentUnit = f.unit(2, owner);
+        const outsideUnit = f.unit(3, owner);
+        Object.assign(adjacentUnit, { freeX: adjacent.x, freeY: adjacent.y });
+        Object.assign(outsideUnit, { freeX: outside.x, freeY: outside.y });
+        state.units = [centerUnit, adjacentUnit, outsideUnit];
+        for (const unit of state.units) unit.castHoldUntil = 100;
+        model.tick(0.05);
+        assert.equal(monster.owner, owner);
+        assert.equal(state.hexes[adjacent.id].owner, owner);
+        assert.equal(state.hexes[outside.id].owner, 'neutral');
+        assert.equal(monster.hp, hp);
+        assert.equal(monster.maxHp, hp);
+        assert.equal(monster.neutralResourceId, f.hex.neutralResourceId);
+    }
+    const contestant = f.unit(4);
+    contestant.castHoldUntil = 100;
+    state.units.push(contestant);
+    model.tick(0.05);
+    assert.equal(monster.owner, 'enemy');
+});
+
+test('真实模型自动唤醒后，命中的射程外攻击者会收到反击', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+    const center = f.config.map.hexes[f.hex.id];
+    const building = f.state.hexes[center.neighbors[0]];
+    Object.assign(building, { owner: 'player', building: 'barracks', hp: 10, maxHp: 10, cardId: '68001' });
+    const attacker = f.unit(1);
+    const definition = f.config.units.find(unit => unit.unitId === attacker.unitId);
+    attacker.freeX += 10000;
+    attacker.castHoldUntil = 100;
+    f.state.units = [attacker];
+    f.state.nextUnitId = 2;
+    const model = new ZCGameModel(f.state, () => 0, f.config);
+    const access = model as unknown as {
+        state: ZCSnapshot;
+        damageBuilding(source: Pick<ZCUnitState, 'id' | 'owner'>, hex: ZCHexState, damage: number): void;
+    };
+    const monster = access.state.hexes[center.id];
+    assert.equal(isZCAwakeMonster(monster), true);
+    const shooter = access.state.units[0];
+    assert.ok(definition);
+    assert.ok(Math.hypot(shooter.freeX - center.x, shooter.freeY - center.y)
+        > (definition.attackRange + definition.bodyRadius * 0.5) * f.config.rules.combatDistanceScale);
+    model.tick(0.05);
+    assert.equal(shooter.hp, 100);
+    access.damageBuilding(shooter, monster, 1);
+    model.tick(0.05);
+    assert.equal(monster.neutralFeature.targetUnitId, shooter.id);
+    assert.ok(shooter.hp < 100);
 });
 
 test('monster regeneration retains fractions, resets on combat and respects distant retaliation targets', () => {
@@ -710,7 +784,7 @@ test('三人局不投放传送门，野怪睡眠时不是攻击目标', () => {
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].building = 'barracks';
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].hp = 10;
     m.system.claim(m.state);
-    assert.equal(isZCAwakeMonster(m.hex), false);
+    assert.equal(isZCAwakeMonster(m.hex), true);
     assert.equal(m.system.toggleFocus(m.state, m.hex, 'player'), true);
     assert.ok(isZCAwakeMonster(m.hex));
     const hp = m.hex.hp;

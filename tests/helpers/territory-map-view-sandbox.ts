@@ -5,6 +5,7 @@ import ts from 'typescript';
 import * as mvcEvents from '../../assets/script/app/territory/application/TerritoryEvents';
 import * as territoryBattleApproachModule from '../../assets/script/app/territory/model/TerritoryBattleApproach';
 import * as territoryChestBubbleModule from '../../assets/script/app/territory/model/TerritoryChestBubble';
+import * as territoryHexSpawnModule from '../../assets/script/app/territory/model/TerritoryHexSpawn';
 import * as territoryCostShortfallModule from '../../assets/script/app/territory/model/TerritoryCostShortfall';
 import * as territoryLevelBubbleModule from '../../assets/script/app/territory/model/TerritoryLevelBubble';
 import * as territoryNodeUIModule from '../../assets/script/app/territory/model/TerritoryNodeUI';
@@ -189,10 +190,7 @@ export function loadTerritoryMapViewClass(): any {
                 step() { return false; }
             },
         };
-        if (id === '../model/TerritoryHexSpawn') return {
-            territoryHexSpawnDelays: () => new Map<number, number>(),
-            territoryHexSpawnBatchSeconds: () => 0,
-        };
+        if (id === '../model/TerritoryHexSpawn') return territoryHexSpawnModule;
         // 未解锁云（2026-10-23）：`TerritoryMapView` 又多了一条表现层依赖。本用例关注的
         // 渲染分支与云无关（云的层序 / 帧序 / 消散在 `territory-cloud` 里单独测）⇒ 空壳，
         // 成员按 MapView 实际调用面补齐（`attach` / `setFrames` / `sync` / `step` / `reset`）。

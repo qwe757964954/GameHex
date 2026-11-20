@@ -98,10 +98,28 @@ test('巡逻区：各锚点保留 UI，兄弟格和 footprint 收敛，旧图逐
     assert.deepEqual(territoryNodeLockCells(sites, [11, 12, 13, 20, 21]), new Set([10, 12, 20, 21]));
 });
 
-test('chapter_02~07：一个站点就是一整块 footprint，没有兄弟站 ⇒ 一格都不隐', () => {
+test('chapter_02~07：关卡都是一整块 footprint（没有兄弟站），只有巡逻片收敛到锚点', () => {
+    // 2026-11-20：`chapter_02~07` 各补了 5 片「巡逻宝箱野怪」地块（每片 4 格、同 `site.id`），
+    // 巡逻片的非锚点格按 §3.48 一律隐 UI ⇒ 每章正好隐 20 - 5 = 15 格。
+    // 关卡 / 首领仍然是「一个站点一整块 footprint」，兄弟站只出现在巡逻片里。
     for (const chapter of ['chapter_02', 'chapter_03', 'chapter_04', 'chapter_05', 'chapter_06', 'chapter_07']) {
-        const muted = territoryNodeMutedCells(loadChapter(chapter).sites);
-        assert.equal(muted.size, 0, `${chapter} 不该有被隐的格子（非锚点格本来就不是站点）`);
+        const sites = loadChapter(chapter).sites;
+        const muted = territoryNodeMutedCells(sites);
+        const patrol = sites.filter((site) => site.type === 'patrolChest');
+        assert.equal(patrol.length, 20, `${chapter} 应有 5 片 × 4 格巡逻地块`);
+        assert.equal(muted.size, 15, `${chapter} 该隐 15 格（巡逻片非锚点格）`);
+        const byCell = new Map(sites.map((site) => [site.cellId, site]));
+        for (const cellId of muted) {
+            const target = byCell.get(cellId);
+            assert.ok(target && target.type === 'patrolChest' && !target.patrolId,
+                `${chapter} 的 ${cellId} 只能是巡逻片里没配野怪 id 的那几格`);
+        }
+        // 关卡 / 首领一个都不许被隐（它们没有兄弟站）。
+        assert.equal(
+            Array.from(muted).filter((cellId) => ['stage', 'boss'].includes(String(byCell.get(cellId)?.type))).length,
+            0,
+            `${chapter} 的关卡/首领不该被隐`,
+        );
     }
 });
 

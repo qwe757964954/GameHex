@@ -95,7 +95,7 @@ export class ZCSpawnRegionHintOverlay {
         node.setParent(this.root);
         const sprite = node.getComponent(Sprite);
         const labelNode = node.getChildByName('Label');
-        const label = labelNode?.getComponent(Label) ?? null;
+        const label = labelNode ? labelNode.getComponent(Label) : null;
         if (!label) {
             node.destroy();
             return null;

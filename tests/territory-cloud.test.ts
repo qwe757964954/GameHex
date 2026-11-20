@@ -999,6 +999,18 @@ test('格子露出的那一帧：挪进消散层 → 整朵炸一下 → 体 / �
     assert.equal(view.dissolvingCount, 0);
 });
 
+test('迟到的首份快照直接收起旧地块的云，已在消散的云继续播放', () => {
+    const { view } = stage();
+    const content = cells(4);
+    view.sync(content, new Set());
+    view.sync(content, new Set([0]));
+    view.sync(content, new Set([0, 1]), [], undefined, true);
+    assert.equal(view.dissolvingCount, 1);
+    assert.equal(findNode(view.layerNode, 'Cloud_1')?.active, false);
+    view.sync(content, new Set([0, 1, 2]));
+    assert.equal(view.dissolvingCount, 2);
+});
+
 test('回退：那一格又变回未解锁 ⇒ 挪回云层、恢复静止图与不透明度', () => {
     const { view } = stage();
     view.sync(cells(3), new Set());

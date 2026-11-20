@@ -61,6 +61,10 @@ const PATH_LITERALS = {
     bigFist: 'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效',
     sustainedAura: 'units/projectiles/持续光环伤害效果/持续光环伤害效果',
     lightningBullet: 'units/projectiles/雷弹攻击/雷弹攻击',
+    // 2026-11-20：30231 的命中爆点（68016 / 68022 共用），单独挂 nodeScale 0.5。
+    thunderBulletImpact: 'units/projectiles/雷弹命中/雷弹命中',
+    // 2026-11-20 同轮：30717 的命中爆点（68008 杰克藕），同一口径 0.5。
+    cidianBulletImpact: 'units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中',
     chargeDash: 'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋',
     dashGuard: 'units/projectiles/刀盾兵_护盾/刀盾兵_护盾',
     nutAttack: 'units/projectiles/巨力坚果_普攻/巨力坚果_普攻',

@@ -47,17 +47,19 @@ export interface ITerritoryChestBubbleLayout {
     readonly outlineColor: readonly [number, number, number];
 }
 
+const CHEST_BUBBLE_LAYOUT: ITerritoryChestBubbleLayout = Object.freeze({
+    width: TERRITORY_CHEST_BUBBLE_WIDTH,
+    height: TERRITORY_CHEST_BUBBLE_HEIGHT,
+    iconSize: TERRITORY_CHEST_BUBBLE_ICON_SIZE,
+    iconY: TERRITORY_CHEST_BUBBLE_ICON_Y,
+    textY: TERRITORY_CHEST_BUBBLE_TEXT_Y,
+    fontSize: TERRITORY_CHEST_BUBBLE_FONT_SIZE,
+    lineHeight: TERRITORY_CHEST_BUBBLE_LINE_HEIGHT,
+    textColor: TERRITORY_CHEST_BUBBLE_TEXT_COLOR,
+    outlineWidth: TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH,
+    outlineColor: TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR,
+});
+
 export function territoryChestBubbleLayout(): ITerritoryChestBubbleLayout {
-    return {
-        width: TERRITORY_CHEST_BUBBLE_WIDTH,
-        height: TERRITORY_CHEST_BUBBLE_HEIGHT,
-        iconSize: TERRITORY_CHEST_BUBBLE_ICON_SIZE,
-        iconY: TERRITORY_CHEST_BUBBLE_ICON_Y,
-        textY: TERRITORY_CHEST_BUBBLE_TEXT_Y,
-        fontSize: TERRITORY_CHEST_BUBBLE_FONT_SIZE,
-        lineHeight: TERRITORY_CHEST_BUBBLE_LINE_HEIGHT,
-        textColor: TERRITORY_CHEST_BUBBLE_TEXT_COLOR,
-        outlineWidth: TERRITORY_CHEST_BUBBLE_OUTLINE_WIDTH,
-        outlineColor: TERRITORY_CHEST_BUBBLE_OUTLINE_COLOR,
-    };
+    return CHEST_BUBBLE_LAYOUT;
 }

@@ -60,7 +60,13 @@ export interface IZCBattleView {
     startPlaying(model: IZCBattleRenderModel, config: ZCMatchConfig, selection: ZCSpawnSelection, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void;
     renderBattle(model: IZCBattleRenderModel, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents, mode: 'all' | 'dynamic' | 'static'): void;
     renderSpawnSelection(selection: ZCSpawnSelection, hints: boolean): void;
-    advanceSettlementPresentation(frame: ZCGameRenderFrame, dt: number): boolean;
+    /**
+     * 推进结算演出，`true` = 还在演（调用方先别弹结算）。
+     *
+     * 模型入参只用于**起手那一帧**把最终血量刷进塔防首领条（并演完这次扣血），
+     * 之后结算期不再回读模型 —— 与「结算后模型不再推进」的既有口径一致。
+    */
+    advanceSettlementPresentation(model: IZCBattleRenderModel, frame: ZCGameRenderFrame, dt: number): boolean;
     flashSpawn(message: string): void;
     flashInsufficientGold(): void;
     resetCamera(): void;

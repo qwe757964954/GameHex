@@ -317,7 +317,7 @@ export class ZCGameHUDView extends Component {
         //    ⇒ 不绑的话函数内 `this` 会是 VScrollView，`this.rowOwners` 读到 undefined 直接崩。
         this.playerList.renderItemFn = this.fillPlayerRow.bind(this);
         this.resetMapPosition();
-        if (options?.deferMapIntro) this.showSpawnSelectionMap();
+        if (options && options.deferMapIntro) this.showSpawnSelectionMap();
         else if (!this.mapIntroPlayed) this.playMapIntro();
         this.updateButtons();
     }
@@ -337,8 +337,10 @@ export class ZCGameHUDView extends Component {
     }
 
     private showSpawnSelectionMap(): void {
-        this.mapIntroTween?.stop();
-        this.mapIntroTween = null;
+        if (this.mapIntroTween) {
+            this.mapIntroTween.stop();
+            this.mapIntroTween = null;
+        }
         this.mapIntroPlaying = false;
         const scale = this.mapOverviewScale;
         const center = this.mapCenterAtScale(scale);
@@ -461,15 +463,18 @@ private fillPlayerRow(node: Node, index: number): void {
         if (!owner) return;
         const row = node.getComponent(ZCGameHudPlayerRow);
         if (!row) return;
+        const profile = this.seatProfiles.get(owner);
+        const unitText = this.rowUnitTextOf ? this.rowUnitTextOf(owner, index) : null;
+        const dead = this.rowDeadOf ? this.rowDeadOf(owner, index) : false;
         row.render({
             owner,
-            name: this.seatProfiles.get(owner)?.name ?? '',
+            name: profile ? profile.name : '',
             head: this.headFrames.get(owner) ?? null,
-            unitText: this.rowUnitTextOf?.(owner, index) ?? null,
+            unitText,
             basicInfoVisible: !this.hidePlayerBasicInfo,
             buffA: null,
             buffB: null,
-            dead: this.rowDeadOf?.(owner, index) ?? false,
+            dead,
         });
     }
 
@@ -601,7 +606,9 @@ private fillPlayerRow(node: Node, index: number): void {
         const pop = ZC_GOLD_DENY_POP_SCALE;
         const lift = ZC_GOLD_DENY_LIFT_PIXELS;
         const beat = ZC_GOLD_DENY_BOUNCE_SECONDS / 4;
-        this.goldDenyBounceTween?.stop();
+        if (this.goldDenyBounceTween) {
+            this.goldDenyBounceTween.stop();
+        }
         // 先进静止态：上一次可能停在半空（被这一下点击打断）。
         node.setScale(1, 1, 1);
         node.setPosition(rest.x, rest.y, rest.z);
@@ -679,8 +686,10 @@ private fillPlayerRow(node: Node, index: number): void {
      * （节点都要销毁了，把图标"恢复静止态"本来也没有意义。）
     */
     private cancelGoldDenyFx(): void {
-        this.goldDenyBounceTween?.stop();
-        this.goldDenyBounceTween = null;
+        if (this.goldDenyBounceTween) {
+            this.goldDenyBounceTween.stop();
+            this.goldDenyBounceTween = null;
+        }
         this.unschedule(this.stepGoldLabelDenyFlash);
         this.goldDenyFlashStep = 0;
     }
@@ -693,11 +702,15 @@ private fillPlayerRow(node: Node, index: number): void {
      * —— 两条路径要的"初始点位"必须是同一个，否则玩家一键复位后的构图会和开局第一帧对不上。
     */
     resetMapPosition(): void {
-        this.mapIntroTween?.stop();
-        this.mapIntroTween = null;
+        if (this.mapIntroTween) {
+            this.mapIntroTween.stop();
+            this.mapIntroTween = null;
+        }
         this.mapIntroPlaying = false;
-        this.settlementOverviewTween?.stop();
-        this.settlementOverviewTween = null;
+        if (this.settlementOverviewTween) {
+            this.settlementOverviewTween.stop();
+            this.settlementOverviewTween = null;
+        }
         this.settlementOverviewRequested = false;
         this.settlementOverviewDone = false;
         // 重置回对局视角的停靠点 = 我方主城（没给落点时是整盘中心），再往下让 100px。
@@ -743,13 +756,14 @@ private fillPlayerRow(node: Node, index: number): void {
         this.bindEvents();
     }
     protected onDestroy(): void {
-        this.mapIntroTween?.stop();
-        this.mapIntroTween = null;
-        this.settlementOverviewTween?.stop();
-        this.settlementOverviewTween = null;
-        //  这里只能用 cancelGoldDenyFx（不碰子节点）：此刻 goldIcon / goldLabel
-        // 已经被引擎先销毁了，走 stopGoldDenyFx 会 setScale(null) 抛异常，
-        // 进而打断销毁循环 ⇒ 连带刷出 `destroy twice`。详见 cancelGoldDenyFx 的注释。
+        if (this.mapIntroTween) {
+            this.mapIntroTween.stop();
+            this.mapIntroTween = null;
+        }
+        if (this.settlementOverviewTween) {
+            this.settlementOverviewTween.stop();
+            this.settlementOverviewTween = null;
+        }
         this.cancelGoldDenyFx();
     }
 

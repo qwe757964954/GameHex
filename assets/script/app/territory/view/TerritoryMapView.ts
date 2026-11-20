@@ -456,6 +456,7 @@ interface ITerritoryChestCameraBase {
 
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
+    readonly isInitialCellSync?: boolean;
     readonly monsterPatrols?: readonly ITerritoryMonsterPatrol[];
     /**
      * 巡逻区「已挑战成功」的格子（含 footprint），由 `TerritoryViewState` 与
@@ -777,6 +778,25 @@ export class TerritoryMapView extends Component {
      * 并把气泡抑制解开 —— 收尾只有这一条路径，不会有"跳完气泡再也回不来"的漏放。
      */
     private chestHint: { cellId: number; elapsed: number } | null = null;
+
+    /** 地图站点缓存（避免 paintHexes 每秒分配新 Map）。 */
+    private cachedMapSites: readonly TerritorySite[] | null = null;
+    private readonly cachedSiteByCell = new Map<number, TerritorySite>();
+    /** 候选格缓存（避免 paintHexes 每秒分配新 Set）。 */
+    private cachedCandidateSource: readonly number[] | undefined = undefined;
+    private readonly cachedCandidateCells = new Set<number>();
+    /** 揭示格缓存（避免 paintHexes 每秒分配新 Set）。 */
+    private cachedRevealedSource: readonly number[] | null = null;
+    private readonly cachedRevealedCells = new Set<number>();
+    /** 站点渲染临时记录（避免 syncStations 每轮分配新 Set）。 */
+    private readonly stationSeen = new Set<number>();
+    private cachedOpenableSource: readonly number[] | null = null;
+    private readonly cachedOpenableCells = new Set<number>();
+    private cachedPendingSource: readonly number[] | null = null;
+    private readonly cachedPendingCells = new Set<number>();
+    /** 虚影渲染临时记录（避免 syncGhosts 每轮分配新 Set）。 */
+    private readonly ghostWanted = new Set<number>();
+    private readonly ghostPreviewSet = new Set<number>();
 
     /** 飘字用的资源图标：`resId → 帧`（页面在资源就绪后注入，缺哪张只是那一条没图标）。 */
     private gainIcons = new Map<number, SpriteFrame | null>();
@@ -1539,7 +1559,7 @@ export class TerritoryMapView extends Component {
         this.previewSeen = new Set(preview);
         if (this.previewCinema) return;
         if (added.length === 0) return;
-        if (input.victoryClaimCells.length === 0) return;
+        if (input.isInitialCellSync || input.victoryClaimCells.length === 0) return;
         if (!this.spawnBootstrapped) return;
         let hasBoss = false;
         for (let i = 0; i < added.length; i += 1) {
@@ -2548,7 +2568,8 @@ export class TerritoryMapView extends Component {
         // 只按 `cloudCells` 描就会「云层贴着地块、没有固定间隔」。
         this.clouds.setKeepOutPoints(input.layout.points);
         this.clouds.setChapterCleared(input.chapterCleared, input.chapterClearPending);
-        this.clouds.sync(this.cloudCells, revealed, pockets, (cellId) => this.isCellActivated(cellId, input));
+        this.clouds.sync(this.cloudCells, revealed, pockets,
+            (cellId) => this.isCellActivated(cellId, input), input.isInitialCellSync);
     }
 
     /**
@@ -2659,7 +2680,8 @@ export class TerritoryMapView extends Component {
     private syncFlip(input: ITerritoryMapRenderInput): void {
         const progress = input.progress;
         const candidates = input.map.randomSites?.candidateCells ?? [];
-        if (!this.hexFlipBootstrapped) {
+        if (!this.hexFlipBootstrapped || input.isInitialCellSync) {
+            this.openedRandomCells.clear();
             for (const cellId of candidates) {
                 if (progress.isCellUnlocked(cellId)) this.openedRandomCells.add(cellId);
             }
@@ -2780,6 +2802,19 @@ export class TerritoryMapView extends Component {
         this.revealedSnapshot.clear();
         this.unlockedSnapshot.clear();
         this.spawnBootstrapped = false;
+        this.cachedMapSites = null;
+        this.cachedSiteByCell.clear();
+        this.cachedCandidateSource = undefined;
+        this.cachedCandidateCells.clear();
+        this.cachedRevealedSource = null;
+        this.cachedRevealedCells.clear();
+        this.stationSeen.clear();
+        this.cachedOpenableSource = null;
+        this.cachedOpenableCells.clear();
+        this.cachedPendingSource = null;
+        this.cachedPendingCells.clear();
+        this.ghostWanted.clear();
+        this.ghostPreviewSet.clear();
         this.resetGains();
         // 覆盖层那两套也要收：格子节点会被重建 / 复用，按压缩放留在旧节点上就会「烂掉一格」。
         this.chestView?.stop();
@@ -2976,6 +3011,64 @@ export class TerritoryMapView extends Component {
         sprite.sizeMode = Sprite.SizeMode.RAW;
     }
 
+    private resolveSiteByCell(sites: readonly TerritorySite[]): Map<number, TerritorySite> {
+        if (this.cachedMapSites !== sites) {
+            this.cachedMapSites = sites;
+            this.cachedSiteByCell.clear();
+            for (let i = 0; i < sites.length; i += 1) {
+                const site = sites[i];
+                this.cachedSiteByCell.set(site.cellId, site);
+            }
+        }
+        return this.cachedSiteByCell;
+    }
+
+    private resolveCandidateCells(candidateSource: readonly number[] | undefined): Set<number> {
+        if (this.cachedCandidateSource !== candidateSource) {
+            this.cachedCandidateSource = candidateSource;
+            this.cachedCandidateCells.clear();
+            if (candidateSource) {
+                for (let i = 0; i < candidateSource.length; i += 1) {
+                    this.cachedCandidateCells.add(candidateSource[i]);
+                }
+            }
+        }
+        return this.cachedCandidateCells;
+    }
+
+    private resolveRevealedCells(revealedCells: readonly number[]): Set<number> {
+        if (this.cachedRevealedSource !== revealedCells) {
+            this.cachedRevealedSource = revealedCells;
+            this.cachedRevealedCells.clear();
+            for (let i = 0; i < revealedCells.length; i += 1) {
+                this.cachedRevealedCells.add(revealedCells[i]);
+            }
+        }
+        return this.cachedRevealedCells;
+    }
+
+    private resolveOpenableCells(cells: readonly number[]): ReadonlySet<number> {
+        if (this.cachedOpenableSource !== cells) {
+            this.cachedOpenableSource = cells;
+            this.cachedOpenableCells.clear();
+            for (let i = 0; i < cells.length; i += 1) {
+                this.cachedOpenableCells.add(cells[i]);
+            }
+        }
+        return this.cachedOpenableCells;
+    }
+
+    private resolvePendingCells(cells: readonly number[]): ReadonlySet<number> {
+        if (this.cachedPendingSource !== cells) {
+            this.cachedPendingSource = cells;
+            this.cachedPendingCells.clear();
+            for (let i = 0; i < cells.length; i += 1) {
+                this.cachedPendingCells.add(cells[i]);
+            }
+        }
+        return this.cachedPendingCells;
+    }
+
     /**
      * 格子**地皮 + 格面框**：按 cellId 状态二选一地皮、四选一叠框。幂等，可重复调用。
      *
@@ -2992,13 +3085,9 @@ export class TerritoryMapView extends Component {
      * 需求原文后半句「**通关了，fram 要去掉，用 img_land_01**」就是这里的 `passed ⇒ 不叠框`。
      */
     private paintHexes(input: ITerritoryMapRenderInput): void {
-        const revealed = new Set(input.revealedCells);
-        const siteByCell = new Map<number, TerritorySite>();
-        for (let i = 0; i < input.map.sites.length; i += 1) {
-            const site = input.map.sites[i];
-            siteByCell.set(site.cellId, site);
-        }
-        const candidateCells = new Set(input.map.randomSites?.candidateCells ?? []);
+        const revealed = this.resolveRevealedCells(input.revealedCells);
+        const siteByCell = this.resolveSiteByCell(input.map.sites);
+        const candidateCells = this.resolveCandidateCells(input.map.randomSites?.candidateCells);
         const lockFrame = input.art.lockIcon;
         // 锁只挂在「被前置卡住」的格上（前置没打通 / 前置宝箱没点开 / 随机格四周没开）。
         // 不拿 `siteOpenableCells` 反推：那份含「银币/体力够不够」，会把缺钱也画成锁。
@@ -3058,7 +3147,7 @@ export class TerritoryMapView extends Component {
             const ground = node.getComponent(Sprite);
             // 换色判据要的是「**写之前**那一帧」—— `applyTileFrame` 一写就没有可 diff 的东西了。
             const fromFrame = ground?.spriteFrame ?? null;
-            const recoloring = this.shouldRecolor(cellId, node, ground, nextFrame);
+            const recoloring = !input.isInitialCellSync && this.shouldRecolor(cellId, node, ground, nextFrame);
             this.applyTileFrame(node, nextFrame);
             if (recoloring) {
                 recolors.push({
@@ -3291,7 +3380,7 @@ export class TerritoryMapView extends Component {
      */
     private syncHexSpawn(input: ITerritoryMapRenderInput, revealed: ReadonlySet<number>): void {
         const progress = input.progress;
-        if (!this.spawnBootstrapped) {
+        if (!this.spawnBootstrapped || input.isInitialCellSync) {
             this.revealedSnapshot.clear();
             for (const cellId of revealed) this.revealedSnapshot.add(cellId);
             this.unlockedSnapshot.clear();
@@ -3467,7 +3556,7 @@ export class TerritoryMapView extends Component {
 
     /** 站点：按 cellId diff 复用，逐个全量赋值（同一章内每秒都会走一遍）。 */
     private syncStations(input: ITerritoryMapRenderInput): void {
-        const revealed = new Set(input.revealedCells);
+        const revealed = this.resolveRevealedCells(input.revealedCells);
         // 上锁的格不显示解锁条件（银币图标 + 数量）：锁已经说明「被卡住」，
         // 再挂一条价格会读成「交钱就能开」，与锁自相矛盾（
         // 「上锁下方的银币与字就不要显示了」）。
@@ -3475,11 +3564,12 @@ export class TerritoryMapView extends Component {
         // 组内任一格被卡住 ⇒ 锁落在承载格 ⇒ 承载格的价格整条摘掉，绝不会"锁 + 银币"并排。
         const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
         // 候选格循环里要按 cellId 多次判断，先各建一次 Set，避免逐格线性 includes。
-        const openableCells = new Set(input.randomResourceOpenableCells);
-        const pendingCells = new Set(input.pendingRandomResourceCells);
+        const openableCells = this.resolveOpenableCells(input.randomResourceOpenableCells);
+        const pendingCells = this.resolvePendingCells(input.pendingRandomResourceCells);
         const hasPending = pendingCells.size > 0;
         // 首轮只做快照、不播任何「刚生成」的动效（见 `syncChestSpawnView`）。
-        const firstPass = !this.stationsReady;
+        const firstPass = !this.stationsReady || input.isInitialCellSync;
+        if (input.isInitialCellSync) this.lockVanishedCells.clear();
         const startPoint = input.layout.points.get(input.map.startCellId);
         if (startPoint) {
             const view = this.ensureStartView();
@@ -3504,7 +3594,8 @@ export class TerritoryMapView extends Component {
                 levelBubbleFrame: input.art.levelBubbleFrame ?? null,
             });
         }
-        const seen = new Set<number>();
+        const seen = this.stationSeen;
+        seen.clear();
         // 需求 第 2 条：同屏多个宝箱**只留一个气泡**（解锁 id 最大的那只）。
         // 每轮渲染先算一次再分发 —— 判据在 model 里（纯函数），这里只做一次全图遍历，O(sites)。
         const chestHintCell = territoryChestHintCell(input.map.sites, input.progress, input.revealedCells);
@@ -3660,8 +3751,19 @@ export class TerritoryMapView extends Component {
             this.ghostKey = input.map.id;
             this.clearGhosts();
         }
-        const previewSet = new Set(input.previewCells ?? []);
-        const wanted = new Set<number>();
+        const previewCells = input.previewCells;
+        if ((!previewCells || previewCells.length === 0) && this.ghostViews.size === 0) {
+            return;
+        }
+        const previewSet = this.ghostPreviewSet;
+        previewSet.clear();
+        if (previewCells) {
+            for (let i = 0; i < previewCells.length; i += 1) {
+                previewSet.add(previewCells[i]);
+            }
+        }
+        const wanted = this.ghostWanted;
+        wanted.clear();
         for (const site of input.map.sites) {
             if (!previewSet.has(site.cellId)) continue;
             if (!site.buildingId) continue;

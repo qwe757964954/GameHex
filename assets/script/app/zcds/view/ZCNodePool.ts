@@ -7,13 +7,22 @@ export class ZCNodePool<T extends { active: boolean; isValid: boolean; destroy()
     acquire(key: string, create: () => T): T {
         const bucket = this.buckets.get(key);
         let node: T | undefined;
-        while (bucket?.length) {
-            const candidate = bucket.pop();
-            this.size--;
-            if (candidate.isValid) { node = candidate; break; }
+        if (bucket) {
+            while (bucket.length > 0) {
+                const candidate = bucket.pop();
+                this.size--;
+                if (candidate && candidate.isValid) {
+                    node = candidate;
+                    break;
+                }
+            }
+            if (bucket.length === 0) {
+                this.buckets.delete(key);
+            }
         }
-        if (bucket?.length === 0) this.buckets.delete(key);
-        node ??= create();
+        if (!node) {
+            node = create();
+        }
         node.active = true;
         return node;
     }
@@ -21,18 +30,28 @@ export class ZCNodePool<T extends { active: boolean; isValid: boolean; destroy()
     release(key: string, node: T): void {
         if (!node.isValid) return;
         const bucket = this.buckets.get(key);
-        if (this.size >= this.capacity || (bucket?.length ?? 0) >= this.perKeyCapacity) {
+        const bucketCount = bucket ? bucket.length : 0;
+        if (this.size >= this.capacity || bucketCount >= this.perKeyCapacity) {
             node.destroy();
             return;
         }
         node.active = false;
-        if (bucket) bucket.push(node);
-        else this.buckets.set(key, [node]);
+        if (bucket) {
+            bucket.push(node);
+        } else {
+            this.buckets.set(key, [node]);
+        }
         this.size++;
     }
 
     destroy(): void {
-        for (const bucket of this.buckets.values()) for (const node of bucket) if (node.isValid) node.destroy();
+        for (const bucket of this.buckets.values()) {
+            for (const node of bucket) {
+                if (node.isValid) {
+                    node.destroy();
+                }
+            }
+        }
         this.buckets.clear();
         this.size = 0;
     }

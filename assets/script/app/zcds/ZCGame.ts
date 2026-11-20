@@ -47,6 +47,11 @@ export type { IZCGamePreparedResources } from './application/ZCGamePreparedResou
 
 export type { IZCGameEntry } from './application/ZCGameEntry';
 
+function resolveOwnerDeck(config: ZCMatchConfig, owner: ZCOwner): readonly ZCDeckCard[] {
+    const custom = config.ownerDecks ? config.ownerDecks[owner] : undefined;
+    return custom ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+}
+
 /**
  * Battle presentation adapter, mounted by BattleComposition with externally owned resources.
  * Runtime controllers advance the model; presentation entities live in ZCGameRenderWorld.
@@ -85,7 +90,26 @@ export class ZCGame extends Component {
         }
     }
 
-    advanceSettlementPresentation(frame: ZCGameRenderFrame, dt: number): boolean {
+    /**
+     * 推进结算演出，返回是否还要继续等（`true` = 先别弹结算）。
+     *
+     * 塔防局多一段前置：**先把首领条这次扣血演完，再拉远镜头 + 扫场**。
+     * 起因（2026-11-20 用户）：BOSS 被打死那一帧模型血量已经归零，而 HUD（含首领条）只在
+     * `static` 节奏（0.15s）刷新、结算分支又完全不刷 HUD ⇒ 玩家看到的是「怪已经死了、血条还是
+     * 死前那条满血」的同时结算演出已经开播。所以起手这一下要做两件事，顺序不能换：
+     * ① `beginHpDrain()` 先把条钉在死前那一刻的比例；② 再把最终血量 `render` 进面板
+     * （动画期间只记目标、不直接落地）。条降完才轮到 `beginVictorySweep`。
+     *
+     * 非塔防局（没有首领条）/ 血量本来就没降（延迟一帧已刷到 0）⇒ `advanceHpDrain` 第一帧就
+     * 返回 `false`，这一段零成本跳过，结算演出不需要为空动画白等。
+    */
+    advanceSettlementPresentation(model: IZCBattleRenderModel, frame: ZCGameRenderFrame, dt: number): boolean {
+        if (!this.settlementHpSettled) {
+            this.settlementHpSettled = true;
+            this.bossPanel?.beginHpDrain();
+            this.renderBossPanel(model);
+        }
+        if (this.bossPanel?.advanceHpDrain(dt)) return true;
         if (!this.beginVictorySweep(frame)) {
             return false;
         }
@@ -112,7 +136,9 @@ export class ZCGame extends Component {
     }
     private presentationResources: IControllerResources | null = null;
     private get artResources(): IControllerResources {
-        if (!this.presentationResources) throw new Error('对局显示资源尚未注入');
+        if (!this.presentationResources) {
+            throw new Error('对局显示资源尚未注入');
+        }
         return this.presentationResources;
     }
     private iconLoader: IIconLoader | null = null;
@@ -133,12 +159,12 @@ export class ZCGame extends Component {
         return HeadArt.loadHeadIconFrame(icon, this.loadIcon, resolver);
     }
     private matchConfig: ZCMatchConfig | null = null;
-    private hudView: ZCGameHUDView | null = null;
+    private hudView!: ZCGameHUDView;
     private playerAvatars: Readonly<{ player: string; enemy: string }> | null = null;
     private seatProfiles: Map<ZCOwner, IRankSeatProfile> = new Map();
     private initialized = false;
     private stopped = false;
-    private renderWorld: ZCGameRenderWorld | null = null;
+    private renderWorld!: ZCGameRenderWorld;
     private spawnSelectionView: ZCSpawnSelectionView | null = null;
     /**
      * 从选点 HUD「借出来」的绿色【确认位置】按钮及其原位信息。
@@ -167,10 +193,17 @@ export class ZCGame extends Component {
     private readonly legendPortraitFrames: Map<string, SpriteFrame> = new Map();
     /** 守城局的首领条实例（只在 `model.defenceWaveProgress` 非空时存在）。*/
     private bossPanel: ZCHudBossPanel | null = null;
+    /**
+     * 结算起手的「首领条扣血」那一段是否已经起过（见 `advanceSettlementPresentation`）。
+     * 每局一个 ZCGame 实例，所以不需要额外的复位口。
+    */
+    private settlementHpSettled = false;
     /** 波次怪的头像帧（键 = 卡 id）；与名字一起喂给首领条，异步填、拿不到就留空框。*/
     private readonly bossPortraits: Map<string, SpriteFrame> = new Map();
     private readonly bossNames: Map<string, string> = new Map();
-    private get leaving(): boolean { return this.stopped || !this.isValid; }
+    private get leaving(): boolean {
+        return this.stopped || !this.isValid;
+    }
 
 
     onLoad(): void {
@@ -245,21 +278,20 @@ export class ZCGame extends Component {
         this.stopped = true;
         if (this.deferredAfterDraw) director.off(Director.EVENT_AFTER_DRAW, this.deferredAfterDraw);
         this.deferredAfterDraw = null;
-        // 先归还按钮再拆 HUD：按钮此刻挂在棋盘层，不送回去就随选点 HUD 一起销毁不了。
         this.restoreSpawnConfirmButton();
-        this.spawnSelectionView?.node.destroy();
-        this.spawnSelectionView = null;
-        // 退出前先把扫场还原掉：地块的 sweepOwner 是表现层状态，不还原就留给下一局。
+        if (this.spawnSelectionView) {
+            this.spawnSelectionView.node.destroy();
+            this.spawnSelectionView = null;
+        }
         if (this.renderWorld) {
             this.renderWorld.clearVictorySweep();
-            // 同理：开局归属扩散波若正播到一半退出，格子会停在「过渡到一半」的颜色上。
             this.renderWorld.clearTerritoryClaimWave();
             this.renderWorld.destroy();
-            this.renderWorld = null;
+            this.renderWorld = null!;
         }
         if (this.hudView) {
             this.hudView.node.destroy();
-            this.hudView = null;
+            this.hudView = null!;
         }
         this.preparedResources = null;
         this.unitVisualPrefabs.clear();
@@ -277,20 +309,15 @@ export class ZCGame extends Component {
 
     /**
      * 传说卡横幅右上角的玩家头像。
-     *
-     * 头像要过 head/icon 表 + 控制器 AssetService 才拿得到，是异步的；而 `createGame` 是同步路径
-     * （首帧必须在这一帧画出来），所以这里 fire-and-forget：拿到就注入解析器，拿不到就只留
-     * 四个玩家色的头像环 —— 少一枚头像不影响这次演出，不阻断对局。
-     *
-     * 注入时机晚于横幅弹出也没关系：`ZCGameRenderWorld.setLegendPortraitResolver` 会连同
-     * 已经弹出来的横幅一起刷新。
+     * 头像异步加载；拿到就注入解析器，拿不到就保留头像环。
     */
     private loadLegendPortraits(): void {
-        // 席位档案（3/4 人局也带 headKey）优先；老入口只给 playerAvatars 时，用它补我方 / 2 号两席。
         const sources: Array<readonly [ZCOwner, string]> = [];
         for (const owner of ZC_OWNER_ORDER) {
-            const headKey = this.seatProfiles.get(owner)?.headKey;
-            if (headKey) sources.push([owner, headKey]);
+            const profile = this.seatProfiles.get(owner);
+            if (profile && profile.headKey) {
+                sources.push([owner, profile.headKey]);
+            }
         }
         const avatars = this.playerAvatars;
         if (avatars) {
@@ -300,18 +327,15 @@ export class ZCGame extends Component {
         if (!sources.length) return;
         void Promise.all(sources.map(([, key]) => this.loadHeadFrame(key).catch(() => null)))
             .then((frames) => {
-            //  判据只用 phase：`renderWorld` 与 `leaving` 同由 `shutdown()` 驱动（它首行 `phase.leave()`、
-            // 随后同步置 null）⇒ 两者在每个 await 边界上恒等，多写一个对象判空只是重复判据。
             if (this.leaving) return;
             let any = false;
             frames.forEach((frame, index) => {
-                const owner = sources[index]?.[0];
-                if (!frame || !owner) return;
-                this.legendPortraitFrames.set(owner, frame);
+                const source = sources[index];
+                if (!frame || !source) return;
+                this.legendPortraitFrames.set(source[0], frame);
                 any = true;
             });
             if (!any) return;
-            // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷已经弹出来的横幅。
             this.renderWorld.refreshLegendCardArt();
         });
     }
@@ -335,9 +359,10 @@ export class ZCGame extends Component {
     */
     private loadLegendCardArt(): void {
         const config = this.matchConfig;
-        const decks: ReadonlyArray<readonly ZCDeckCard[]> = (config ? ZC_OWNER_ORDER.map((owner) => (
-            config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
-        )) : []).concat([getPlayerDeck(), getEnemyDeck()]);
+        const decks: ReadonlyArray<readonly ZCDeckCard[]> = (config
+            ? ZC_OWNER_ORDER.map((owner) => resolveOwnerDeck(config, owner))
+            : []
+        ).concat([getPlayerDeck(), getEnemyDeck()]);
         const cards = new Map<string, ZCDeckCard>();
         for (const deck of decks) {
             for (const card of deck) {
@@ -433,8 +458,9 @@ export class ZCGame extends Component {
         wallLayer.setPosition(Vec3.ZERO);
 
         for (const [id, prefab] of prepared.unitVisualPrefabs) this.unitVisualPrefabs.set(id, prefab);
-        const decks = [getPlayerDeck(), getEnemyDeck()].concat(ZC_OWNER_ORDER.map(owner =>
-            setupConfig.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? setupConfig.playerDeck : setupConfig.enemyDeck)));
+        const decks = [getPlayerDeck(), getEnemyDeck()].concat(
+            ZC_OWNER_ORDER.map(owner => resolveOwnerDeck(setupConfig, owner)),
+        );
         for (const deck of decks) for (const card of deck) {
             const frame = card.buildIcon ? prepared.buildingFrames.get(card.buildIcon) : null;
             if (frame) this.buildingFramesByCardId.set(card.id, frame);
@@ -537,8 +563,9 @@ export class ZCGame extends Component {
 
     /** 从 `art.freeDecor` 铺纯表现装饰；不依赖模型，也不参与格子规则。*/
     private installMapDecor(map: ZCMatchMap, decorFrames: ReadonlyMap<string, SpriteFrame>): void {
+        const freeDecor = map.art ? map.art.freeDecor : undefined;
         this.renderWorld.installDecor(
-            buildDecorPlacements(map.art?.freeDecor, (art) => {
+            buildDecorPlacements(freeDecor, (art) => {
                 const frame = decorFrames.get(art);
                 return frame ? frame.originalSize : null;
             }),
@@ -630,7 +657,12 @@ export class ZCGame extends Component {
      *
      * 面板上两拨东西的生命周期不同（2026-11-09 用户）：
      * · 波次徽标（`IconBoss` + `第N/M波`）常驻，从第一波起一直挂着；
-     * · 当前波生成后，普通波与 BOSS 波都显示头像 / 名字 / 总血条。
+     * · 头像 / 名字 / 总血条这条「大血条」**只在 BOSS 波显示**，非 BOSS 怪只有头顶血条。
+     *
+     * 🔴 2026-11-20 恢复：SVN 合并把判据从 `currentWaveIsBoss` 回退成 `currentWaveId !== null`，
+     * 于是普通小怪波（截图「第3/6波」）也挂上了首领大血条。模型 / 配置层的口径从未变过
+     * （`ZCGameModel.defenceWaveProgress.currentWaveIsBoss` ← `defenceBossWaveIndex()`），
+     * 只认这一份，别再用「有当前波」当「有首领」。
      *
      * 头像与名字按 `currentWaveCardId` 查 `loadDefenceBossArt()` 预扫好的表（解析必须同步命中，
      * 否则会先闪一帧空框再换成怪图）；`render` 每帧全量赋值，面板侧不做增量。
@@ -638,10 +670,8 @@ export class ZCGame extends Component {
     private renderBossPanel(model: IZCBattleRenderModel): void {
         const progress = model.defenceWaveProgress;
         if (!progress) {
-            if (this.bossPanel) {
-                this.bossPanel.node.destroy();
-                this.bossPanel = null;
-            }
+            this.bossPanel?.node.destroy();
+            this.bossPanel = null;
             return;
         }
         if (!this.bossPanel) {
@@ -656,7 +686,8 @@ export class ZCGame extends Component {
             // 位置归 prefab 的 Widget（左上角按 top=76 / left=129 钉住），这里不写 setPosition。
             this.bossPanel = node.getComponent(ZCHudBossPanel);
         }
-        this.bossPanel.setBossBarVisible(progress.currentWaveId !== null);
+        // 非 BOSS 波只留波次徽标：大血条（头像框 / 名字 / 总血条）整组收起。
+        this.bossPanel.setBossBarVisible(progress.currentWaveIsBoss);
         const cardId = progress.currentWaveCardId;
         this.bossPanel.render(
             progress,
@@ -673,9 +704,9 @@ export class ZCGame extends Component {
     */
     private loadDefenceBossArt(): void {
         const config = this.matchConfig;
-        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [getEnemyDeck()].concat(config ? ZC_OWNER_ORDER.map((owner) => (
-            config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck)
-        )) : []);
+        const decks: ReadonlyArray<readonly ZCDeckCard[]> = [getEnemyDeck()].concat(
+            config ? ZC_OWNER_ORDER.map((owner) => resolveOwnerDeck(config, owner)) : [],
+        );
         const icons = new Map<string, string>();
         for (const deck of decks) {
             for (const card of deck) {

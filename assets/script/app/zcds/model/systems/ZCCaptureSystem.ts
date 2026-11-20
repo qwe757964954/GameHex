@@ -13,7 +13,7 @@ const FOOTPRINT_SAMPLE_STEP = 2;
 
 /**
  * 空地占领状态机：按脚点轨迹统计驻留，双方同格暂停，无人衰减，原地块所属方加速清进度。
- * 建筑、未破城墙、怪物/号角格不参与；废墟可被单一阵营经过直接易手。
+ * 建筑、未破城墙和号角格不参与；废墟和野怪领地可被单一阵营经过直接易手。
 */
 export class ZCCaptureSystem {
     private readonly occupants = new Map<number, Occupants>();
@@ -46,7 +46,8 @@ export class ZCCaptureSystem {
         }
     }
 
-    update(state: ZCSnapshot, dt: number, capture: (hex: ZCHexState, owner: ZCOwner) => void): void {
+    update(state: ZCSnapshot, dt: number, capture: (hex: ZCHexState, owner: ZCOwner) => void,
+        monsterTerritory?: ReadonlySet<number>): void {
         this.collectFootprints(state.units);
         // 回收上一帧的补给集合：缓存只在帧内有效，避免跨帧复用过期连通性。
         for (const set of this.supplied.values()) {
@@ -56,7 +57,8 @@ export class ZCCaptureSystem {
         this.supplied.clear();
 
         for (const hex of state.hexes) {
-            if (!this.canBeCaptured(hex)) {
+            const isMonsterTerritory = monsterTerritory?.has(hex.id) ?? false;
+            if (!this.canBeCaptured(hex, isMonsterTerritory)) {
                 this.clearProgress(hex);
                 continue;
             }
@@ -74,10 +76,9 @@ export class ZCCaptureSystem {
                 presentCount += 1;
             }
 
-            // 废墟：单一阵营经过即归其所有，不累计时间；双方同格不归属。
-            if (hex.state === 'ruins') {
+            if (hex.state === 'ruins' || isMonsterTerritory) {
                 if (presentCount === 1) {
-                    capture(hex, firstOwner);
+                    if (hex.owner !== firstOwner || hex.state === 'ruins') capture(hex, firstOwner);
                     this.clearProgress(hex);
                 }
                 continue;
@@ -122,11 +123,11 @@ export class ZCCaptureSystem {
             capture(hex, owner);
             this.clearProgress(hex);
         }
-        if (ZCDC_LOG_DIAGNOSTICS) this.diagUncaptured(state);
+        if (ZCDC_LOG_DIAGNOSTICS) this.diagUncaptured(state, monsterTerritory);
     }
 
     /** [ZCCapture] 临时诊断：逐格报出我方有兵却未占领的拦截原因。定位完连同 diagStep 一起删。 */
-    private diagUncaptured(state: ZCSnapshot): void {
+    private diagUncaptured(state: ZCSnapshot, monsterTerritory?: ReadonlySet<number>): void {
         // 方法内早退守卫：新增调用点也不会漏掉开关，同时满足日志开关判据。
         if (!ZCDC_LOG_DIAGNOSTICS) return;
         this.diagStep += 1;
@@ -136,7 +137,7 @@ export class ZCCaptureSystem {
             const occupants = this.occupants.get(hex.id);
             if (!occupants?.player) continue;
             const reasons: string[] = [];
-            if (!this.canBeCaptured(hex)) {
+            if (!this.canBeCaptured(hex, monsterTerritory?.has(hex.id) ?? false)) {
                 reasons.push(`不可占(building=${hex.building},wallHp=${hex.wallHp})`);
             }
             const present = ZC_OWNER_ORDER
@@ -247,9 +248,9 @@ export class ZCCaptureSystem {
         );
     }
 
-    private canBeCaptured(hex: ZCHexState): boolean {
+    private canBeCaptured(hex: ZCHexState, isMonsterTerritory: boolean): boolean {
         const type = neutralResourceItemOf(hex.neutralResourceId)?.resourceType;
-        if (type === ZCNeutralResourceType.Monster || type === ZCNeutralResourceType.Horn) return false;
+        if ((type === ZCNeutralResourceType.Monster && !isMonsterTerritory) || type === ZCNeutralResourceType.Horn) return false;
         if (type === ZCNeutralResourceType.Extension && !hex.neutralFeature?.claimed) return false;
         return hex.building === 'none' && hex.wallHp <= 0;
     }

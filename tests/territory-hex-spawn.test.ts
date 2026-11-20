@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
+import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 import * as model from '../assets/script/app/territory/model/TerritoryHexSpawn';
 import {
     TERRITORY_HEX_SPAWN_FROM_SCALE,
@@ -18,6 +19,34 @@ import {
     territoryHexSpawnDelays,
     territoryHexSpawnFrame,
 } from '../assets/script/app/territory/model/TerritoryHexSpawn';
+
+test('迟到的首份快照只更新翻格和生成基准，下一次开地照常播', () => {
+    const MapView = loadTerritoryMapViewClass();
+    const view = new MapView();
+    const flipped: number[] = [];
+    const spawned: number[] = [];
+    for (const cellId of [1, 2]) view.hexNodes.set(cellId, { cellId, getComponent: () => ({}) });
+    view.hexFlip.isPlaying = () => false;
+    view.hexFlip.play = (node: { cellId: number }) => { flipped.push(node.cellId); return false; };
+    view.hexSpawn.play = (node: { cellId: number }) => spawned.push(node.cellId);
+    const paint = (unlocked: number[], isInitialCellSync = false): void => {
+        const input = {
+            isInitialCellSync, map: { randomSites: { candidateCells: [1, 2] } },
+            layout: { points: new Map() }, art: {}, victoryClaimCells: [],
+            progress: { isCellUnlocked: (cellId: number) => unlocked.includes(cellId) },
+        };
+        view.syncHexSpawn(input, new Set(unlocked));
+        view.syncFlip(input);
+    };
+
+    paint([]);
+    paint([1], true);
+    assert.deepEqual(spawned, []);
+    assert.deepEqual(flipped, []);
+    paint([1, 2]);
+    assert.deepEqual(spawned, [2]);
+    assert.deepEqual(flipped, [2]);
+});
 
 /**
  * 「新地块生成」判据（2026-10-22 需求，三句话）：
@@ -345,7 +374,7 @@ test('地图视图：生成动画排在翻格之后 step，并在翻格起播时
 test('地图视图：diff 触发 + 首帧只做快照 + 换章复位', () => {
     const source = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
     assert.match(source, /private syncHexSpawn\(/);
-    assert.match(source, /if \(!this\.spawnBootstrapped\)/);
+    assert.match(source, /if \(!this\.spawnBootstrapped\b/);
     assert.match(source, /this\.hexSpawn\.reset\(\);/, '换章 / 布局重建必须复位生成动画');
     assert.match(source, /this\.revealedSnapshot\.clear\(\);/, '换章必须清掉「已露出」快照');
     assert.match(source, /if \(this\.hexFlip\.isPlaying\(node\)\) continue;/, '正在翻的格子让给翻格');

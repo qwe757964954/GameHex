@@ -54,6 +54,7 @@
 | **固定格宝箱奖励粒子改道飞向底部卡牌 icon**（与随机格共用顶层 `TerritoryRewardFx` + `playHeroRewardFlight`；`flyStart` 那刻才起飞；`applyFly`/`fireLandings` 逐枚让位给非钱包类，钱包 `7/9` 留守；进度徽标仍由 `presentRewards` 统一触发；2026-11-19） | `MainTerritoryMap.runChestOpening` / `TerritoryMapView.armChestHeroFlight`、`launchChestHeroFlight` / `TerritoryChestView.setFlyStartHook` | `tests/territory-chest-hero-flight.test.ts` |
 | **巡逻宝箱怪未挑战成功与关卡地块同形**（`patrolChest` 用红 `frameStage` 而非蓝 `frameChest`；同 `battleId` 任一格占点 ⇒ 整片转草地摘框；野怪主骨架 `#828282` + 放大 1.08 的 `unit-outline-copy` 红色副本，胜利后写绝对色恢复；2026-11-19，见 §3.47） | `model/TerritoryMonsterPatrol.territoryPatrolPassedCells`、`TERRITORY_PATROL_*` / `application/TerritoryViewState.patrolPassedCells` / `MainTerritoryMap.renderMap` / `TerritoryMapView.TERRITORY_SITE_FRAME`、`isCellPassed`、`renderMap` / `view/TerritoryMonsterPatrolView.attachOutline`、`applyLook` / `application/TerritoryChapterLoader`（描边材质） | `tests/territory-patrol-look.test.ts`、`tests/territory-tile-frames.test.ts` |
 | **巡逻野怪片区 icon 只落在配了野怪 id 的格**（同 `site.id` 收敛到 `patrolId` 锚点；锁 / 价格 / 编号一律不落兄弟格；`NODE_SITE_TYPES` 不许塞 `patrolChest`，否则连带改地皮红框；2026-11-20，见 §3.48） | `model/TerritoryMonsterPatrol.territoryPatrolAnchorByCell` / `model/TerritoryNodeUI.territoryNodeCarrierByCell`、`territoryNodeMutedCells` | `tests/territory-patrol-node-ui.test.ts`、`tests/territory-node-ui.test.ts` |
+| **通关后巡逻野怪继续移动、只去叠加**（通关不再过滤 `monsterPatrols`；`patrolPassedCells` 只喂 `applyLook` 恢复原色 + 收描边、和 `paintHexes` 转草地摘框；2026-11-20，见 §3.50） | `model/TerritoryMonsterPatrol.buildTerritoryMonsterPatrols` / `application/TerritoryViewState.patrolPassedCells` / `view/TerritoryMonsterPatrolView.applyLook` | `tests/territory-monster-patrol.test.ts`、`tests/territory-patrol-look.test.ts` |
 | **固定宝箱格可激活 ⇒ 价格行之上加一颗宝箱 icon**（`icon_baoxiang` 58×45，宝箱在上、`银币+数字`在下、整块居中；无宝箱时零偏移；未解锁仍只画锁；2026-11-10） | `model/TerritoryConditionBadge.territoryConditionBlockLayout` / `TerritoryStationView.applyConditionChest`、`applyCaptionPlacement`、`readCaptionIconHeight` / `TerritoryMapView.stationRenderOf`（`conditionChestIcon`，只给 `fixedResource`）/ `TerritoryPageAssets.chestIcon` | `tests/territory-condition-chest.test.ts` |
 | **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
 | **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
@@ -69,6 +70,7 @@
 | **塔防 BOSS 波识别**（`defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS；客户端 JSON 必须含该列，缺列时按「每组最后一波」兜底，2026-11-07） | `model/TerritoryCampaignConfig.projectDefenceWaves`（→ `TerritoryCampaignWave.isBoss`）/ `ZCGameModel.defenceBossWaveIndex`、`isBossWave`、`ZCPveDefenceWave.isBoss` | `tests/territory-campaign-config.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | **塔防胜负只认「BOSS 已被击败」**（中间波清空不算赢；拆 BOSS 建筑提前触发的跳末波逻辑保持不变，2026-11-07） | `ZCGameModel.defenceBossState`（账本空时按场上同卡单位兜底）→ `ZCOutcomeSystem.checkOutcome(state, context, nextWaveIndex, defenceBoss)` | `tests/zcds-outcome-system.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | **塔防波次面板常驻 + 普通波与 BOSS 波均显示头像和总血条**（波次徽标从第一波起一直挂着；当前波生成后显示头像、名字和总血条，2026-11-10） | `ZCGame.renderBossPanel`（有 `defenceWaveProgress` 就建面板，按 `progress.currentWaveId !== null` 调 `setBossBarVisible`）/ `ZCHudBossPanel.setBossBarVisible`、`formatZCDefenceWaveText`（`spawnedWaves` 钳到 1 起） | `tests/zcds-pve-defence-hud.test.ts` |
+| 🔴 **塔防结算演出必须等首领条把这次扣血演完**（BOSS 被打死那一拍模型血量已归零、HUD 只在 0.15s 的 `static` 节奏刷新且结算分支不刷 HUD ⇒ 旧表现是「怪已死、血条还是死前满血」的同时扫场已经开播；改为结算起手先 `beginHpDrain` 钉住死前比例 → 把最终血量 `render` 进面板（动画期只记目标）→ 条降完（0.5s，smoothstep）才拉远镜头 + 扫场；非塔防局 / 血量没降都当帧放行，2026-11-20） | `ZCGame.advanceSettlementPresentation`（`settlementHpSettled` 起手闸）/ `ZCHudBossPanel.beginHpDrain`、`advanceHpDrain`、`bossHpDrainRatio`、`ZC_BOSS_HP_DRAIN_SECONDS` / 契约 `IZCBattleView.advanceSettlementPresentation(model, frame, dt)` | `tests/zcds-pve-defence-hud.test.ts` |
 | **塔防局 NPC 也翻地块**（靠翻地解锁新的怪物卡；节奏仍受 `openGrideTime` 约束，2026-11-09） | `ZCGameModel.advance`（AI 节拍不再按 `pveDefence` 跳过）/ `runEnemyAI`、`aiDevelopIntervalSeconds` | `tests/zcds-pve-defence.test.ts` |
 | **出怪表的「怪物体型」要生效**（`defenceModWave.monsterSize` 当模型缩放倍率：1 普通 / 2 BOSS，缺省不缩放，封顶 2.5；2026-11-09） | `ZCGameModel.defenceMonsterScale` → 出怪时写 `unit.gateScale`（视图/头顶血条/兜底体型都乘它）/ 链路 `TerritoryCampaignWave.monsterSize` → `ZCPveDefenceWave.monsterSize` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts`、`tests/zcds-client-combat-config.test.ts` |
 | **塔防局收起玩家基础信息**（名字 / 头像 / 兵力三件套不画，buff 位保留，2026-11-09） | `ZCGameHUDView.hidePlayerBasicInfo`（`defence !== null` 置位）→ `ZCGameHudPlayerRow.render`（`basicInfoVisible`） | `tests/zcds-hud-dead-avatar-tint.test.ts` |
@@ -4532,10 +4534,11 @@ footprint 全是单格），同 `site.id` / 同 `battleId` 组成一片。
    `fram_02` 蓝是「待领取的宝箱」，巡逻宝箱是「待挑战的怪」；普通关卡槽位 `frameStage`
    现在加载的就是红 `frame_01`（§3.44 / `TerritoryPageAssets`）。
 2. ② 抽 `territoryPatrolPassedCells(sites, progress)` 到 `model/TerritoryMonsterPatrol`，
-   与 `buildTerritoryMonsterPatrols` 的停巡判据**同源**（后者反过来复用它，删掉自己那份 `passed`）。
    发布帧 `TerritoryViewState` 把它和 `monsterPatrols` 同拍冻结 → 页面透传 `patrolPassedCells`
    → `paintHexes` 的 `isCellPassed` 早于站点查询命中即 `true`（footprint 格查不到站点也能吃到）。
    缺省用模块级 `EMPTY_CELL_SET`，不在每帧 `new Set()`。
+   🔴 2026-11-20 起这份集合**只管表现与地块状态**（野怪恢复原色 / 收描边、地皮转草地、
+   摘红框），不再参与野怪生灭；旧版「与停巡判据同源」那句已作废，见 §3.50。
 3. ③ 复用战斗内 `ZCUnitView` 的**同一形式**：
    - 主骨架 `sp.Skeleton.color = #828282`（`OTHER_PLAYER_TINT`，顶点色相乘；不是盖一层黑 Sprite，
      那会把怪外面透明区也涂黑）；
@@ -4549,17 +4552,17 @@ footprint 全是单格），同 `site.id` / 同 `battleId` 组成一片。
      「只压暗、不描边」（绝不退化成一只放大的红怪）。
 4. 胜利后：`applyLook()` 每次 `sync` 写**绝对色**（白 / 暗）与副本 `active`，不靠「创建时染一次」
    —— 节点按 `cellId` 复用，缓存判断会残留上一次的暗色。
-   🔴 按 11-18 既有口径 `buildTerritoryMonsterPatrols` 在该片通过时**直接不生成野怪**，
-   叠加随野怪一起消失；视图仍显式判 `clearedCells`，将来若改成「留场」也不会残留暗色。
+   🔴 2026-11-20 定案（§3.50）：通关片区**野怪继续巡逻**，不再消失；`clearedCells` 命中时
+   这只怪写回原色、收起描边副本。旧版「通关即不生成、叠加随野怪一起消失」已被覆盖。
 
 🔴 **参数不许各写一套魔数**：`TERRITORY_PATROL_DIM_RGB / EDGE_RGB / OUTLINE_SCALE /
 OUTLINE_EFFECT_PATH` 集中在 `model/TerritoryMonsterPatrol`；`tests/territory-patrol-look.test.ts`
 用源码守卫反查 `ZCUnitView` / `ZCTheme` / `ZCGameLoader` 的同名常量，任一边改了都红。
 领地页**不反向 import `zcds/view`**（分层），只搬数值 + 守卫。
 
-**判据**：`tests/territory-patrol-look.test.ts` **12 条**（整片通过含 footprint / 停巡同源 /
-发布帧冻结 / 暗色与描边全字段 / 胜利双向恢复 / shader 缺失降级 / 锁相 / `clear` 一次销毁 /
-四组同源守卫 / 三处接线守卫）；`tests/territory-tile-frames.test.ts` 追加 **4 条**
+**判据**：`tests/territory-patrol-look.test.ts`（整片通过含 footprint / 通关后继续巡逻 /
+发布帧冻结 / 暗色与描边全字段 / 胜利双向恢复 / 端到端通关帧 / shader 缺失降级 / 锁相 /
+`clear` 一次销毁 / 四组同源守卫 / 三处接线守卫）；`tests/territory-tile-frames.test.ts` 追加 **4 条**
 （激活未通关红框且不误伤普通宝箱 / 未解锁不提前红 / 胜利整片转草地摘框 / 映射表源码守卫）。
 
 **回归**：专项 `12 + 4` 全绿；定向组合 `65 / 65` 绿；领地 `1237 / 1224 绿 / 13 红`，
@@ -4620,6 +4623,177 @@ carrier + footprint / 锁只留一把 / 旧图不收敛 / 多锚点 / footprint 
 21 条红单按用例名逐条完全一致 ⇒ **0 条新红，净增 11 绿**；全量 `6875 / 6761 绿 / 114 红`，
 领地组 21 条红单与对拍结果一致，全量红单里没有一条指向本次改动模块。
 `npx tsc --noEmit` 29 条全在 zcds 合并遗留，改动文件零报错；`verify:hygiene` 通过。
+
+### 3.49 chapter_02~07 各补 5 片巡逻宝箱野怪地块（2026-11-20）
+
+> 用户原话：「使用章节地图编辑器 编辑 chapter02~chapter07，每个章节增加 5 关巡逻宝箱野怪地块，
+> 每关大约 4~6 个地块格子（在主格子上填写巡逻野怪的 id 和装饰宝箱 id 69021，参考 chapter01），
+> 新增的地块可以替代之前旧的随机格，每章最多被替换的随机格不超过 15 个」
+> 「同步在 pvp 关卡表中的章节野怪巡逻宝箱 SHEET，补充章节 2~7 4 个等级的宝箱奖励
+> （1/2/3/4 级宝箱对应 1/2/3/7 个随机格的奖励数量，奖励类型需要对应所在章节的随机格奖励）」
+
+#### 一、形状口径：为什么每片是「3 随机格 + 1 新增空地」
+
+`chapter_01` 的五片是纯随机格改的（31 格 / 5 片，4~8 格一片）。这次有两条硬约束打架：
+
+| 约束 | 数 |
+| :--- | :--- |
+| 5 片 × 4 格（用户说「大约 4~6」） | **20 格** |
+| 每章最多替换的随机格 | **15 个** |
+
+⇒ 至少 5 格必须来自「原本没有地块的空格」。而**空格要能补进片里，必须贴着随机格**
+（不贴随机格的空地长出来与岛断成两截，那片永远点不到）。`chapter_04~07` 的岛是**十字形**，
+随机格全在中段、边缘全是 `fixedResource`，够得到空地的随机格只有 8 个 ⇒ 铁定凑不出 5 片。
+所以种子既可以是随机格，也可以是**贴着岛的边缘空地**（纯新增地形），每片最多吃 3 个随机格
+⇒ 5 × 3 = 15 正好卡上限，多出来的用空地补。实测落地：ch2/3/4/7 各 15 随机格 + 5 空地，
+ch6 14+6、ch5 12+8（十字/放射状岛形那两个方向实在没有可吃的随机格）。
+
+#### 二、分布口径：「相对地图中心点匀称」怎么算
+
+1. 把**所有可行片**枚举出来（每个随机格 / 边缘空地当种子，配额 4/3/2/1/0 各长一次，
+   长法是「随机格优先 → 贴岛优先 → 离中心近优先」，逐格保证连通）；
+2. 按方向角排序后做贪心（每步挑「最贴近上一步 +72°」且与已选片不相邻的那片），
+   8 个起始偏移各试一遍；
+3. 取**最小夹角最大**的一组（72° 是五等分上限），再给 10° 余量、在余量内挑吃掉随机格最多的。
+
+落地最小夹角：ch2 65.0° / ch3 64.2° / ch4 63.5° / ch5 62.9° / ch6 63.1° / ch7 69.2°。
+
+#### 三、字段口径（逐字照 `chapter_01` 的模板）
+
+| 字段 | 值 |
+| :-- | :-- |
+| 一片 = | **同 `site.id` 的 4 条站点**，每条 `footprint: [自己]`（校验器只对 `patrolChest` 放行重复 id，并要求整片连通） |
+| 主格 | 片内邻居最多的那格：`buildingId: "69021"` + `patrolId`（= 该关 **NPC 队伍 ∧ 塔防最后一波** 那只，见「七」） |
+| 其余格 | `buildingId: ""`（空串 ⇒ 不画建筑，§3.48 的 muted 收敛把它们整片隐掉 UI） |
+| `battleId` | **宝箱组 id**（`monsterBox.monsterBoxId`），不是 `levelInfo.levelId` —— 写错这一跳的表现是「开始挑战」恒灰、点格子弹「站点配置待补齐」，零报错 |
+| `unlock` | 整片共用一个前置格（最近的主线 `stage`；**不许指 `fixedResource`**，会被 `isPrerequisiteComplete` 的「可解锁即完成」特例放大），`combatPower 0 / silverCost 10 / exploreSeconds 2 / staminaCost 5` |
+| id | `patrolChest_<N>`，N 接该章既有站点的最大序号（编辑器建点顺序），逐章：ch2 `105~109`、ch3 `122~126`、ch4~07 `52~56` |
+
+#### 四、宝箱表（`PVP-关卡.xlsx` / 「巡逻宝箱怪」页 = `monsterBox`）
+
+巡逻关卡 `60011~60070`（`levelInfo.levelType == 4`，每章 10 条 = 5 组 × 2 档）**表里本来就有**，
+缺的只是宝箱行 ⇒ 补 **120 行**（6 章 × 5 组 × 4 级）：
+
+- 组 id `1006~1035`（`chapter_01` 占 `1001~1005`）；
+- `monsterBoxLevel`：1~3 级 = 该组基础关卡、4 级 = 满级关卡（`60011/60012` 这种成对口径）；
+- 奖励 = 该章随机池（`2001 + 章节号`，ch2=`2003`…ch7=`2008`）每条 `number × 1/2/3/7`，
+  `pro` 与条目顺序不动 ⇒ 「奖励类型对应所在章节的随机格奖励」；
+- 升级四列沿用 `chapter_01` 五个组共同的 `(0,0,0,0) / (20,90,2,99) / (20,60,2,2) / (20,40,2,2)`。
+
+#### 五、落点 + 工具
+
+| 东西 | 落点 | 工具 |
+| :--- | :--- | :--- |
+| 地图预设 + 发布 | `tools/map-editor/presets/territory/*.json` → `assets/resources/config/territory-maps/` + 策划 `sever/territorymap/` | `tools/map-editor/add_patrol_chests.py --preview`（会出 `tmp/patrol_preview_chapter_XX.png` 改前/改后对照图） |
+| 巡逻野怪 id 重算 | 同上 | `tools/map-editor/reassign_patrol_ids.py [--dry-run]`（真源 `patrol_monster_source.py`） |
+| 宝箱表 | 源表 `PVP-关卡.xlsx`（`sheet9.xml`，zip 级手术 + `inlineStr`）/ `json/{client,sever}/monsterBox.json` / `assets/remoteRef/monsterBox.json` | `tools/config/add_patrol_monsterbox.py [--check]` |
+
+`add_patrol_chests.py` 的几何常量全部来自 `HexGridLayout.ts`（`92.25 / 90 / ±22.5`）与
+`territory_format._neighbors`，**不要拿编辑器截图像素反推格号**（编辑器是正六边形、游戏是压扁的，
+拓扑一致但仿射不一致）。
+
+#### 六、判据与已知红
+
+`tests/territory-patrol-chests.test.ts` **7 条**：每章 5 片 × 4 格同 id + 唯一锚点（`69021`）/ 前置格
+必须是主线站点且不能是本片自己 / 巡逻格必须从 `candidateCells` 与 `buildingIds` 里让位 /
+宝箱表四档 = 随机池 ×1/2/3/7 且关卡对 / 地图 `battleId` 全能在 `monsterBox` 查到 / 七章 30 个
+`battleId` 互不重复 / **野怪 id 必须来自该关 NPC 队伍 ∧ 塔防波次**（第 7 条，见「七」）。
+另外同步更新两条既有用例：
+`tests/territory-map-config.test.ts`（ch2 站点 102 → 122，且 `patrolChest` 不参与 `configId` 检查）、
+`tests/territory-node-ui.test.ts`（ch2~07 从「一格都不隐」改成「隐 15 格 = 20 格巡逻片 − 5 个锚点」）。
+
+领地全量 `1269 / 1256 绿 / 13 红`，13 条红单**按名字与改动前逐条一致**（`levelInfo`/`npcTeam` 漂移
+四条、`宝箱3.meta` 缺 spriteFrame 三条、ch01 的 1023 宝箱少 1 格两条、`territory-progress` 两条、
+`69021` 不在 `build` 表一条、玩家关卡弹窗字号一条）⇒ **0 条新红**。
+
+#### 七、地图上展示的野怪 id 从哪来（2026-11-20 定案）
+
+> 「在地图上展示的野怪 id 从对应关卡的 npc 队伍配置和塔防出怪表的波次中抽取 1 个」
+
+`patrolId` 直连 `monsterCard.id`（`TerritoryChapterLoader` 按它取 `unitPrefabPath` 生成巡逻野怪预制）。
+填一只这关根本不会出的怪，**画面照常出、控制台零报错**，只有玩家能发现「打的关和地图上站的怪对不上」。
+
+**取数链路**：
+
+```
+site.battleId（宝箱组 id）
+  → monsterBox 里该组「等级最低」那行的 monsterBoxLevel        ← 与 patrolLevelIdMapOf 同口径
+  → levelInfo 行：
+       extraCards.enemy  → npcTeam.npcTeamId → npcCard[].cardID   （NPC 队伍，表内顺序）
+       levelModValue     → defenceModWave.startId → monsterId      （塔防波次，按 waveId 升序）
+  → 两个来源都成立的最后一只（= 收尾 BOSS 波）⇒ patrolId
+```
+
+**抽哪一只**（`patrol_monster_source.pick_patrol_id`，判据写进产物打印里）：
+
+1. **波次里出现、同时也在 NPC 队伍里**的最后一只 —— 实数据里就是 BOSS 波那只，两个来源交叉命中，
+   单边改表时最不容易漂；
+2. 否则波次最后一波；
+3. 否则 NPC 队伍最后一张卡；
+4. 三个都空 ⇒ 抛错（这关没有怪，配不成巡逻）。
+
+🔴 两张表的 id 域都是 `monsterCard.id`（`50001~50039`），`levelInfo.levelMonsterGroup` 是同一个域
+但它只是出怪表的汇总，**不再是取数来源**（早期按它的「最后一档」取，波次一改就对不上）。
+🔴 选出来的 id 必须能在 `monsterCard.unitPrefabPath` 里查到，否则整章加载抛
+「巡逻野怪 X 缺少 monsterCard.unitPrefabPath」—— 脚本侧 `assert_monster_card()` 先拦。
+
+**落地**：`chapter_02~07` 30 片**全部本来就是 BOSS 波那只**（0 处改动）；`chapter_01` 有 4 处不合规，
+本轮一并修正（只改 `patrolId` 的值，锚点格、`footprint`、`unlock`、`battleId` 一个字节没动）：
+
+| 片 | 格 | 宝箱组 | 关卡 | 原 → 新 |
+| :-- | :-- | :-- | :-- | :-- |
+| `patrolChest_155` | 387 | 1001 | 60001 | `50021` → `50022` |
+| `patrolChest_158` | 331 | 1002 | 60003 | `50005` → `50023` |
+| `patrolChest_200` | 208 | 1003 | 60005 | `50007` → `50031` |
+| `patrolChest_174` | 128 | 1004 | 60007 | `50005` → `50032` |
+
+（`patrolChest_179` / 宝箱组 1005 本来就是 `50005`，不动。原 `50005`/`50007` 在对应关卡的队伍与波次里
+**都不存在** —— 手填的典型症状。）
+
+
+🔴 顺带发现（**未改**，需产品确认）：`chapter_01` 的 `rewardId=1023` 宝箱现在是 **22 格**
+（`territory-building-id` / `territory-silver-chest-open` 两条用例都按 23 写死，故红）。
+`chapter_01.json` 的 mtime 停在 2026-11-20 10:37，不是本轮改的。
+另外 `69021` 至今**不在 `build.json` 里**（`chapter_01` 的五格也一样）⇒ 巡逻主格的外观走
+`patrolChest → fixedResource` 的贴图兜底，与 `chapter_01` 表现完全一致；要让它长成自己的贴图，
+得先给 `69021` 补一条 `build` 行 + 图。
+
+### 3.50 通关后的巡逻野怪：继续巡逻、只去掉暗色与红描边（2026-11-20）
+
+> 用户原话（配图红圈）：「已经通过的巡逻宝箱野怪，会继续展示移动，样式要去掉颜色叠暗和红色描边」
+
+**现场**：截图红圈是一片已通关的绿色地块（地皮已转草地、红框已摘），**里面一只怪都没有**；
+右侧红色未通关地块上那只紫黑色怪还带着暗色 + 红描边。用户要的是：通关片区仍能看到怪按原路线
+来回走，但它不再是「敌方」，所以取消叠加、恢复原色。
+
+**真因**：§3.47 把「通关」同时接到了两条链路上 —— 表现链路（`applyLook(cleared)`，本来就是
+「恢复原色 + 收起描边副本」）是**对的**；但 `buildTerritoryMonsterPatrols` 里还有一句
+`if (passedCells.has(site.cellId)) continue;`（11-18 旧口径「打掉了这组敌人」），
+通关帧直接**不发布这只怪**，视图根本没有节点可写 ⇒ 表现链路写得再对也看不见。
+
+**改法（一处）**：删掉 `buildTerritoryMonsterPatrols` 的 `passedCells` 计算与那句 `continue`。
+生灭从此只看「片区内格子是否全部开启」这一个可见性前置；`territoryPatrolPassedCells` 保留，
+由发布帧 `TerritoryViewState` 同拍冻结，只喂两处消费：
+`TerritoryMonsterPatrolView.applyLook`（怪恢复原色 / 收描边）与 `paintHexes.isCellPassed`
+（地皮转草地 / 摘红框）。`MainTerritoryMap` / `TerritoryMapView` 接线一个字没动。
+
+🔴 **不变量**：`monsterPatrols` 与 `patrolPassedCells` 必须仍是**同一拍**发布帧的两个字段 ——
+通关帧里怪还在、集合也同时标成已通过，视图才能在那一帧既画怪又写原色。
+`applyLook` 每次 `sync` 写绝对色，节点按 `cellId` 复用，缓存判断会残留上一次的暗色。
+🔴 别把「已通过」重新写回生灭判据：那会让通关片区变回一片空草地。
+
+**判据**：`tests/territory-monster-patrol.test.ts` 两条停巡断言改为「通关后仍按原路线巡逻」；
+`tests/territory-patrol-look.test.ts` 改写 3 条并新增 1 条端到端 —— 通关帧仍发布同一只怪、
+视图写回 `[255,255,255]`、描边副本 `active=false`、`step()` 后位置确实变化。
+🔴 同轮把 `tests/territory-patrol-node-ui.test.ts` 的「必须委托锚点表」文本守卫换成
+**行为对拍**（同片多锚点 / 旧图 id 对不上两条边界）：外部进程把 `territoryPatrolAnchorCell`
+换回独立实现时文本守卫会假红，语义守卫不会。
+
+**回归**：专项 `33 / 33` 绿；领地全量分步对拍（备份落盘、字节级恢复）
+基线 `1269 / 1251 绿 / 18 红` → 改动后 `1269 / 1256 绿 / 13 红`，
+diff 只有 5 条「基线独有」（新口径用例在旧判据下的预期红），**0 条新增红**；
+13 条常驻红全在配置 / 建筑对齐 / 进度等外部漂移，两边逐条一致。
+`npx tsc --noEmit` 31 条全在 zcds 合并遗留，改动文件零报错。
 
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
@@ -7433,3 +7607,72 @@ export function zcImpactEffectAnchor(ratio, fromX, fromY, toX, toY) {
 `tests/zcds-charge.test.ts`：气浪落在**双方中点**（夹具 `source x=0` / `target x=12` ⇒ `x=6`，
 用例里显式给 `impactEffectAnchor: 0.5`）/ 没配落点的爆点类仍贴受击点 /
 解析层把 `0.5` 读进档案、`1.5` 抛错。
+
+## 32. 雷电系受击爆点缩到 50%：68016 / 68022 / 68008（2026-11-20）
+
+用户口径原文：「68016 和 68022 使用了磁电菇-子弹命中特效的预制，统一都改小成 50%，
+现在的受击效果太大了」。
+
+### 32.1 先纠一处名字：这两张卡现在播的不是 `磁电菇_子弹命中`
+
+- 两张卡共用普攻行 `pvpSkill 30231「雷法师普攻」`（`pvpCard.unitSkillId = 30231`，全表只有它俩）；
+- 11-06 雷电系换皮（`tools/config/patch_leidan_art.js`）已把这条的
+  `impactEffectPrefabPath` 从 `磁电菇_子弹命中` 换成 `雷弹命中`；
+- `磁电菇_子弹命中` 现在只挂在 `30717 杰克藕普攻` 上。
+
+所以「这两张卡的受击」= `units/projectiles/雷弹命中/雷弹命中`。倍率挂在名字像的那份上
+就是典型的**静默无效**：改了、画面一点没变。
+
+### 32.2 只挂倍率，不动 prefab
+
+命中爆点是 `area` 事件：`ZCAttackResolutionSystem.pushImpactEffect` 补一条 `damage: 0`
+的地面层事件，视觉尺寸 100% 来自 prefab 烘焙值，视图**不按** `event.radius` 缩放。
+所以「缩到 N%」只能走宿主倍率（与椰蛋暴风 0.7 / 轻骑兵冲锋 0.4 同一口径）：
+
+| 项 | 值 |
+| :--- | :--- |
+| prefab 本体烘焙 `_lscale` | 0.7（不动） |
+| 目录 `nodeScale` | **0.5**（新增） |
+| 屏上终值 | 0.35（与同批弹体的 0.35 一致） |
+
+登记位置：`ZCEffectCatalog` → `ZC_EFFECT_PATHS.thunderBulletImpact` + `ZC_EFFECT_SPECS`
+里一条 `nodeScale: 0.5` 的条目；视图侧不用改，`ZCCombatEffectView` 早就在乘
+`zcCombatEffectNodeScaleOf(event.effectPrefabPath)`。
+
+判定一行都没动：本行 `areaRadius` 是 0，这条爆点纯表现。
+
+### 32.3 同轮修掉一条假红
+
+`tests/zcds-effect-catalog-parity.test.ts` 的「② 尺寸逐键 parity」从 11-19 第二轮起一直红：
+那时把 `雷弹攻击` 的宿主从 0.5 收到 0.35（去拖尾配套），但 `tests/fixtures/zc-effect-catalog-baseline.json`
+没跟着改。本轮把基线补成 0.35（新增的 `雷弹命中` 记 0.5），该用例转绿 ——
+基线是「有意改动必须同步登记」的快照，改动本身是生效的，只是没人更新它。
+
+### 32.4 杰克藕（30717）那份也一起缩（同轮追问）
+
+用户追加：「杰克藕（30717）那份 `磁电菇_子弹命中` 也缩」。
+
+它是**另一份美术、另一个键**，只有 `68008 杰克藕` 用（`pvpCard.unitSkillId = 30717`，全表唯一）：
+
+| prefab | 使用者 | 本体烘焙 | `nodeScale` | 屏上终值 |
+| :--- | :--- | ---: | ---: | ---: |
+| `雷弹命中`（`thunderBulletImpact`） | 68016 磁电菇 / 68022 雷蕉 | 0.7 | 0.5 | 0.35 |
+| `磁电菇_子弹命中`（`cidianBulletImpact`） | 68008 杰克藕 | 0.4 | 0.5 | **0.2** |
+
+两条倍率同为 0.5，但烘焙基准不同 ⇒ **屏上不是一个尺寸**（0.35 vs 0.2）。这是「各自按自己原大小的
+50%」的结果，不是漏改；要「两条一样大」得另给一个数，不能靠合并键。
+
+🔴 别把两个键合成一个：它们是两份独立 prefab（不同帧序、不同色相），合并后只要有一条换美术，
+另一条会被连带改尺寸。
+
+### 32.5 用例
+
+`tests/zcds-thunder-hit-fx-scale.test.ts` **4 条**：
+68016/68022 的倍率 0.5 × 烘焙 0.7 = 屏上 0.35（目录与 facade 两个入口都查）/
+两份 `pvpSkill` 的 30231 命中都指向该路径且 `pvpCard` 里只有 68016 / 68022 用 30231 /
+杰克藕 0.5 × 烘焙 0.4 = 屏上 0.2 且两份美术烘焙值必然不同 /
+30717 只挂在杰克藕（68008）上且两份产物都指向 `磁电菇_子弹命中`。
+
+改过口径的三条既有断言：`zcds-magician-skills`（原来拿 `雷弹命中` 当「未登记=1」的例子）、
+`zcds-missile-trail`（原断言「命中不被弹体倍率连带 ⇒ 1」）、`zcds-effect-path-parity`
+（语义键快照补 `thunderBulletImpact` + `cidianBulletImpact`）。

@@ -352,8 +352,8 @@ export function hexActivationFx(progress: number, hasCardReveal = true): IZCHexF
  * 不该被我们放大成糊的。三边同值 ⇒ 保持等比、不变形。
 */
 export function resourceIconScale(frame: SpriteFrame | null | undefined): number {
-    const size = frame?.originalSize;
-    if (!size) return 1;
+    if (!frame || !frame.originalSize) return 1;
+    const size = frame.originalSize;
     const longest = Math.max(size.width, size.height);
     // 帧尺寸缺失/为 0 时不缩放：宁可大一点也不要产出 NaN 缩放把图标缩没。
     if (!Number.isFinite(longest) || longest <= 0) return 1;
@@ -865,20 +865,27 @@ export class ZCHexView extends Component {
     setMonsterGround(frame: SpriteFrame | null): void {
         this.monsterGround.spriteFrame = frame;
         this.monsterGround.node.active = frame !== null;
+        // 阵营底色是半透明的，盖在地表纹理上才能同时显示归属和纹理。
+        if (frame) {
+            const ground = this.monsterGround.node;
+            const tileIndex = this.tileSprite.node.getSiblingIndex();
+            if (ground.getSiblingIndex() > tileIndex) ground.setSiblingIndex(tileIndex);
+        }
     }
 
     renderMonsterFocus(state: DeepReadonly<ZCHexState>, now: number): void {
         const feature = state.neutralFeature;
-        const visible = typeof feature?.awake === 'boolean' && !feature.claimed;
+        const visible = feature !== undefined && typeof feature.awake === 'boolean' && !feature.claimed;
         this.monsterFocusButton.node.active = visible;
-        if (!visible) return;
-        const unlocked = feature.unlockedOwners?.includes(ZCOwner.Player) ?? false;
-        const focused = feature.focusOwners?.includes(ZCOwner.Player) ?? false;
-        const remaining = Math.max(0, (feature.focusReadyAt?.player ?? 0) - now);
+        if (!visible || !feature) return;
+        const unlocked = feature.unlockedOwners ? feature.unlockedOwners.includes(ZCOwner.Player) : false;
+        const focused = feature.focusOwners ? feature.focusOwners.includes(ZCOwner.Player) : false;
+        const focusReadyAt = feature.focusReadyAt ? (feature.focusReadyAt.player ?? 0) : 0;
+        const remaining = Math.max(0, focusReadyAt - now);
         this.monsterFocusButton.interactable = unlocked && remaining <= 0;
         const styleKey: ZCMonsterFocusStyleKey = !unlocked ? 'locked' : focused ? 'cancel' : 'focus';
         const style = MONSTER_FOCUS_STYLE[styleKey];
-        const frame = this.monsterFocusFrames?.[styleKey] ?? null;
+        const frame = this.monsterFocusFrames ? (this.monsterFocusFrames[styleKey] ?? null) : null;
         this.monsterFocusLabel.string = remaining > 0 ? `${style.text} ${remaining.toFixed(1)}s` : style.text;
         this.monsterFocusLabel.color = style.color;
         this.monsterFocusBackground.spriteFrame = frame ?? this.monsterFocusPlaceholderFrame;
@@ -1133,9 +1140,10 @@ export class ZCHexView extends Component {
     renderMower(offsetX: number, offsetY: number, active: boolean,
         directionX = offsetX, directionY = offsetY): void {
         const vertical = Math.abs(directionX) < 0.001;
-        const frame = this.neutralResourceFrames?.get(vertical
+        const frameKey = vertical
             ? directionY > 0 ? 'extension_up' : directionY < 0 ? 'extension_down' : 'extension'
-            : directionY > 0 ? 'extension_right_up' : 'extension');
+            : directionY > 0 ? 'extension_right_up' : 'extension';
+        const frame = this.neutralResourceFrames ? (this.neutralResourceFrames.get(frameKey) ?? null) : null;
         if (frame) {
             this.setSprite(this.iconSprite, frame);
             const scale = resourceIconScale(frame) * NEUTRAL_FEATURE_ICON_SCALE;
@@ -1151,7 +1159,8 @@ export class ZCHexView extends Component {
 
     private applyResourceIconVisibility(): void {
         // 移动结束和地块动画的隐藏条件叠加，任一刷新都不能把另一方隐藏的图标回显。
-        const visible = this.mowerVisible && !this.lastActivationFx?.hidden;
+        const isHidden = this.lastActivationFx ? this.lastActivationFx.hidden : false;
+        const visible = this.mowerVisible && !isHidden;
         if (this.iconSprite.node.active !== visible) this.iconSprite.node.active = visible;
     }
 
@@ -1178,11 +1187,12 @@ export class ZCHexView extends Component {
         const nextCount = Math.max(0, Math.floor(count));
         //  数量变了也必须重建：并排位置按count 算（`(i-(count-1)/2)*spacing`），
         // 只改「可见个数」而沿用旧位置 ⇒ 3 个改 1 个时剩下那只还站在 -16，看着就是歪的。
+        const prefabName = prefab ? prefab.name : '';
         const changed = cardId !== this.resourceUnitKey
-            || (prefab?.name ?? '') !== this.resourceUnitPrefabName
+            || prefabName !== this.resourceUnitPrefabName
             || nextCount !== this.resourceUnitCount;
         this.resourceUnitKey = cardId;
-        this.resourceUnitPrefabName = prefab?.name ?? '';
+        this.resourceUnitPrefabName = prefabName;
         this.resourceUnitPrefab = prefab;
         this.resourceUnitCount = nextCount;
         // 换兵种 / 换数量都要重建节点（骨架与并排布局都变了）。
@@ -1196,11 +1206,14 @@ export class ZCHexView extends Component {
      * （`image/buildings/fx`）。取不到就整格留白 —— 不再回退「废」字（那会盖住废墟图）。
     */
     ensureRuinsFrame(frames: ReadonlyMap<string, SpriteFrame> | undefined): void {
-        this.ruinsFrame ??= frames?.get('fx') ?? null;
+        if (!this.ruinsFrame && frames) {
+            this.ruinsFrame = frames.get('fx') ?? null;
+        }
     }
 
     render(presentation: Readonly<IZCHexPresentation>): void {
-        if ((!presentation.state.neutralFeature?.patrol || presentation.state.neutralFeature.claimed)
+        const feature = presentation.state.neutralFeature;
+        if ((!feature || !feature.patrol || feature.claimed)
             && (this.monsterOffsetX || this.monsterOffsetY)) this.renderMonsterPatrol(0, 0);
         const { state } = presentation;
         const now = presentation.now;
@@ -1213,7 +1226,7 @@ export class ZCHexView extends Component {
         this.noteDevelopableSpawn(presentation.canDevelop, now, presentation.developPulseStartedAt ?? null);
         const canDevelop = presentation.canDevelop;
         const activation = presentation.activation;
-        const hasCardReveal = activation?.hasCardReveal ?? true;
+        const hasCardReveal = activation ? (activation.hasCardReveal ?? true) : true;
         const progress = ZCHexView.activationProgress(activation, now);
         // 激活表现不能受 contentKey 缓存拦截（位移/缩放/active/光效不是「内容」）。
         //  这条是 0.15s 一次的兜底（`renderStatic` 节流）：真正每帧推进的是
@@ -1230,9 +1243,10 @@ export class ZCHexView extends Component {
         this.renderCooldown(
             !canDevelop && state.state !== 'ruins' && state.building !== 'none' ? presentation.cooldown : null,
         );
-        if ((state.neutralFeature?.effect || this.portalUses > 0 && state.neutralFeature?.claimed)
+        const neutral = state.neutralFeature;
+        if (((neutral && neutral.effect) || (this.portalUses > 0 && neutral && neutral.claimed))
             && presentation.hideNeutralResourceLabel !== true) {
-            const gate = state.neutralFeature;
+            const gate = neutral;
             const active = gate.windowUntil > now;
             const cooling = !active && gate.readyAt > now;
             const bar = this.cooldownBar;
@@ -1355,9 +1369,10 @@ export class ZCHexView extends Component {
         }
         // 脉冲染色跟着抽到的卡牌品阶走（用户 2026-10-19）：0 = 没抽到卡 ⇒ 绿。
         // 必须在 `applyActivationFx` 之前写 —— 它每帧读这份缓存去刷 Sprite 的颜色。
-        this.pulseTint = pulseTintForRarity(activation?.cardRarity ?? 0);
+        this.pulseTint = pulseTintForRarity(activation ? (activation.cardRarity ?? 0) : 0);
+        const hasCardReveal = activation ? (activation.hasCardReveal ?? true) : true;
         this.applyActivationFx(
-            hexActivationFx(ZCHexView.activationProgress(activation, now), activation?.hasCardReveal ?? true),
+            hexActivationFx(ZCHexView.activationProgress(activation, now), hasCardReveal),
         );
     }
 
@@ -1723,7 +1738,9 @@ export class ZCHexView extends Component {
         const selectedOwner = presentation.selectedBy;
         // 主城外观与正式对局同源：走注入的 `buildingFrameResolver`（`hq` → `hq-base`），
         // 不再在这里另取一套「我方 / 敌方」通用图 —— 那条路径以前让选点阶段和对局显示两种主城。
-        const hqFrame = selectedOwner ? this.buildingFrameResolver?.(null, 'hq', selectedOwner) ?? null : null;
+        const hqFrame = selectedOwner && this.buildingFrameResolver
+            ? (this.buildingFrameResolver(null, 'hq', selectedOwner) ?? null)
+            : null;
         this.setSprite(this.buildingSprite, hqFrame, presentation.confirmed
             ? Color.WHITE
             : ZCHexView.UNCONFIRMED_HQ_COLOR);
@@ -1890,7 +1907,9 @@ export class ZCHexView extends Component {
     }
 
     private onTouchEnd(): void {
-        this.clickHandler?.();
+        if (this.clickHandler) {
+            this.clickHandler();
+        }
     }
 
     /**
@@ -1905,13 +1924,18 @@ export class ZCHexView extends Component {
         affordable: boolean,
         showDevelopable: boolean,
     ): string {
+        const neutral = state.neutralFeature;
+        const neutralAwake = neutral ? String(neutral.awake) : 'undefined';
+        const neutralEffect = neutral && neutral.effect ? neutral.effect : '';
+        const neutralStatus = neutral
+            ? (neutral.windowUntil > presentation.now ? 'active' : neutral.readyAt > presentation.now ? 'cooling' : 'ready')
+            : 'ready';
         return `${state.owner}|${this.sweepKey}|${state.state}|${state.building}`
             + `|${state.tileType}|${state.neutralResourceId ?? 0}|${state.tier}`
             + `|${state.developmentCost}|${state.developmentResolved}|${canDevelop}`
             + `|${affordable}|${presentation.hideNeutralResourceLabel === true}`
             + `|${presentation.boundaryMask ?? 0}|${showDevelopable}`
-            + `|${state.neutralFeature?.awake}|${state.neutralFeature?.effect ?? ''}|${state.neutralFeature?.windowUntil > presentation.now
-                ? 'active' : state.neutralFeature?.readyAt > presentation.now ? 'cooling' : 'ready'}`;
+            + `|${neutralAwake}|${neutralEffect}|${neutralStatus}`;
     }
 
     renderMonsterPatrol(x: number, y: number): void {
@@ -1947,8 +1971,9 @@ export class ZCHexView extends Component {
         this.observedWallHp = wallHp;
         if (damaged) this.lastDamagedAt = now;
         // updateHealthBar 已经把「maxHp 非法」写进 active，这里再叠 3 秒显示窗口。
-        bar.node.active = bar.node.active && (typeof state.neutralFeature?.awake === 'boolean' && !state.neutralFeature.claimed
-            || isHealthBarVisible(this.lastDamagedAt, now));
+        const feature = state.neutralFeature;
+        const isMonsterAlive = feature !== undefined && typeof feature.awake === 'boolean' && !feature.claimed;
+        bar.node.active = bar.node.active && (isMonsterAlive || isHealthBarVisible(this.lastDamagedAt, now));
         // 扣血白条：城墙耐久 → 建筑耐久切换、以及任意一次掉血都走同一条曲线（只看比例）。
         this.lastBarRatio = healthBarRatio(barHp, barMaxHp);
         this.barTrailAnimating = this.damageTrail.render(bar, this.lastBarRatio, now);
@@ -2067,7 +2092,7 @@ export class ZCHexView extends Component {
         const resourceUnits = wantsResourceUnits
             ? this.rebuildResourceUnitsIfNeeded()
             : this.hideResourceUnits();
-        const sleepingMonster = monster && !state.neutralFeature?.awake;
+        const sleepingMonster = monster && !(state.neutralFeature && state.neutralFeature.awake);
         for (const skeleton of this.resourceUnitSkeletons) {
             skeleton.color = sleepingMonster ? MONSTER_SLEEP_TINT : Color.WHITE;
             skeleton.timeScale = sleepingMonster ? 0.35 : 1;
@@ -2077,13 +2102,16 @@ export class ZCHexView extends Component {
         // 时回退到旧逻辑（`artifactChargeFrame` 静态图 / 文字兜底）。
         const useArtifactSpine = resourceVisual === ZCNeutralResourceVisual.ArtifactCharge
             && !hideNeutralResourceLabel && !!this.artifactHexSpine;
+        const monsterFrameKey = sleepingMonster ? 'monster_sleep' : 'monster_awake';
+        const monsterFrame = this.neutralResourceFrames ? (this.neutralResourceFrames.get(monsterFrameKey) ?? null) : null;
+        const effect = state.neutralFeature ? state.neutralFeature.effect : undefined;
         const resourceFrame = resourceVisual && !hideNeutralResourceLabel && !useArtifactSpine
             ? monster
-                ? this.neutralResourceFrames?.get(sleepingMonster ? 'monster_sleep' : 'monster_awake') ?? null
-                : this.frameForResource(resourceVisual, state.neutralFeature?.effect)
+                ? monsterFrame
+                : this.frameForResource(resourceVisual, effect)
             : null;
-        const coolingGate = state.neutralFeature?.effect && state.neutralFeature.readyAt > now
-            && !(state.neutralFeature.windowUntil > now);
+        const coolingGate = Boolean(state.neutralFeature && state.neutralFeature.effect
+            && state.neutralFeature.readyAt > now && !(state.neutralFeature.windowUntil > now));
         this.setSprite(this.iconSprite,
             resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null),
             coolingGate ? GATE_COOLDOWN_TINT : Color.WHITE);
@@ -2274,8 +2302,11 @@ export class ZCHexView extends Component {
     ): SpriteFrame | null {
         if (ruins) return this.ruinsFrame;
         if (!hasBuilding) return null;
-        return this.buildingFrameResolver?.(state.cardId, state.building, state.owner)
-            ?? this.frameForBuildingType(state.building);
+        if (this.buildingFrameResolver) {
+            const resolved = this.buildingFrameResolver(state.cardId, state.building, state.owner);
+            if (resolved) return resolved;
+        }
+        return this.frameForBuildingType(state.building);
     }
 
     /** 建筑染色：废墟保持原色；敌方针红、多人席位按阵营色；我方纯白。*/
@@ -2329,12 +2360,14 @@ export class ZCHexView extends Component {
      * 调用方会退回 `NEUTRAL_RESOURCE_LABELS` 文字兜底 —— 加新图标只需补一个 `@property` + 一个 `case`。
     */
     private frameForResource(id: string, effect?: IZCGateEffect): SpriteFrame | null {
-        if (id === 'gate' && effect) {
-            const gate = this.neutralResourceFrames?.get(`gate_${effect}`);
-            if (gate) return gate;
+        if (this.neutralResourceFrames) {
+            if (id === 'gate' && effect) {
+                const gate = this.neutralResourceFrames.get(`gate_${effect}`);
+                if (gate) return gate;
+            }
+            const frame = this.neutralResourceFrames.get(id);
+            if (frame) return frame;
         }
-        const frame = this.neutralResourceFrames?.get(id);
-        if (frame) return frame;
         switch (id) {
             case 'gold': return this.goldResourceFrame;
             case 'mine': return this.mineResourceFrame;

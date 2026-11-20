@@ -139,8 +139,11 @@ test('雷蕉电弹（2026-11-19 第二轮）：三角形拖尾保留，弹体仍
     assert.ok(Math.abs(screenBodyWidth - 32.76) < 0.1, `弹体屏上宽 ${screenBodyWidth.toFixed(2)} 应约 32.8`);
     assert.ok(screenBodyWidth < 92.25 / 2, '宽度要明显小于一格（92.25），才不会像个汽油桶飘过去');
 
-    //  命中特效是另一份 prefab，不能被这条缩放连带。
-    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/雷弹命中/雷弹命中'), 1);
+    //  命中特效是另一份 prefab，不受**弹体**这条倍率牵连（各挂各的键）。
+    //  2026-11-20：用户「受击效果太大」⇒ 命中单独登记成 0.5（见 `zcds-thunder-hit-fx-scale`），
+    //  所以这里不再是 1；关键是它和弹体的 0.35 是两条独立倍率，改一条不会带动另一条。
+    assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/雷弹命中/雷弹命中'), 0.5,
+        '命中爆点自己的倍率（2026-11-20 需求：缩到 50%）');
 });
 
 test('视图：拖尾在「位置 + 转角都定好之后」才画，且每帧清一次 graphics', () => {

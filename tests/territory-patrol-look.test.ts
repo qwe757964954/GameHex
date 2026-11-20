@@ -18,6 +18,10 @@ import * as hexLayout from '../assets/script/core/hex/HexGridLayout';
  *
  * 地块那两条在 `territory-tile-frames.test.ts`（共用它的 paintHexes 桩表），
  * 本文件只管**形象**：压暗 / 放大副本红描边 / 胜利后恢复 / 与战斗内真源同源。
+ *
+ * 2026-11-20 追加口径：「已经通过的巡逻宝箱野怪，会继续展示移动，样式要去掉颜色叠暗
+ * 和红色描边」⇒ 通关**不再让野怪消失**，只由 `applyLook(cleared)` 恢复原色、收起描边。
+ * 这条覆盖上面 11-19 第 3 条里「叠加随野怪一起消失」的旧理解。
  */
 const VIEW_PATH = 'assets/script/app/territory/view/TerritoryMonsterPatrolView.ts';
 const VIEW_SRC = readFileSync(VIEW_PATH, 'utf8');
@@ -35,7 +39,7 @@ function sourceMap() {
             // 片 A：两格同 site.id / 同 battleId（与 chapter_01 一样每格一个站点）。
             { id: 'wave_a', type: 'patrolChest', cellId: 1, footprint: [1], battleId: 60001, patrolId: 50021 },
             { id: 'wave_a', type: 'patrolChest', cellId: 2, footprint: [2], battleId: 60001 },
-            // 片 B：另一场战斗，A 打赢不该把它一起变绿 / 停巡。
+            // 片 B：另一场战斗，A 打赢不该把它一起变绿 / 去掉叠加。
             { id: 'wave_b', type: 'patrolChest', cellId: 5, footprint: [5], battleId: 60002, patrolId: 50005 },
         ] };
 }
@@ -61,16 +65,20 @@ test('★ 同 battleId 任一格占点 ⇒ 整片（含 footprint）通过，另
         [1, 9]);
 });
 
-test('★ 野怪生灭与地块通过共用同一份判据：A 停巡、B 继续巡逻', () => {
+test('★ 通关后野怪继续巡逻（不再生灭），只是去掉暗色红描边', () => {
     const map = configureTerritoryMap(sourceMap());
     const isCellUnlocked = (id: number) => [1, 2, 5].includes(id);
     const allPatrols = patrolModule.buildTerritoryMonsterPatrols(map,
         { isCellUnlocked, isOwned: () => false });
     assert.equal(allPatrols.length, 2);
-    const remaining = patrolModule.buildTerritoryMonsterPatrols(map,
+    const passed = patrolModule.territoryPatrolPassedCells(map.sites, { isOwned: (id) => id === 1 });
+    assert.deepEqual(Array.from(passed).sort((a, b) => a - b), [1, 2], 'A 片整片通过');
+    const after = patrolModule.buildTerritoryMonsterPatrols(map,
         { isCellUnlocked, isOwned: (id) => id === 1 });
-    assert.equal(remaining.length, 1, 'A 片通过 ⇒ 那只怪不再生成（叠加自然随之消失）');
-    assert.equal(remaining[0].cellId, 5, 'B 片照旧巡逻');
+    assert.deepEqual(after.map(item => item.cellId).sort((a, b) => a - b), [1, 5],
+        '2026-11-20：A 片通关后那只怪仍在，路线照旧');
+    assert.deepEqual(after[0].route, allPatrols[0].route, '通关不改路线');
+    assert.equal(passed.has(5), false, 'B 片仍待挑战 ⇒ 保持暗色红描边');
 });
 
 test('★ 发布帧把「已通过集合」和「巡逻野怪列表」同一拍冻结', () => {
@@ -88,7 +96,9 @@ test('★ 发布帧把「已通过集合」和「巡逻野怪列表」同一拍�
     assert.equal(before.patrolPassedCells.size, 0, '旧帧仍是没有通过');
     assert.equal(before.monsterPatrols.length, 2, '旧帧的怪也还在');
     assert.ok(later.patrolPassedCells.has(2), '新帧整片一起通过');
-    assert.equal(later.monsterPatrols.length, 1, '新帧 A 片野怪停巡');
+    assert.equal(later.monsterPatrols.length, 2, '新帧 A 片野怪仍在，只是发布帧把该片标成已通过');
+    assert.deepEqual(before.monsterPatrols, later.monsterPatrols,
+        '通关只改「已通过集合」，巡逻投影一个字都不变');
 });
 
 // ── 二、形象：VM 跑真 TerritoryMonsterPatrolView ─────────────────────────
@@ -187,6 +197,30 @@ test('★★★ 挑战成功：主骨架回原色、描边副本收起；状态�
         '节点按 cellId 复用 ⇒ 不许残留上一次的白');
     assert.equal(nodes[1].active, true, '副本重新显示，不靠「只在创建时染一次」');
     assert.equal(nodes.length, 2, '重渲染不重建节点');
+});
+
+test('★★★ 端到端：通关帧仍发布同一只怪，视图写原色、收描边且继续移动', () => {
+    const map = configureTerritoryMap(sourceMap());
+    const progress = new TerritoryProgress(map);
+    progress.markCellsUnlocked([1, 2, 5]);
+    progress.applyServerState({ unlockCells: [1, 2, 5], passCells: [1] });
+    const state = { map, progress, wallet: { silver: 0, stamina: 0 },
+        siteOpenableCells: [], pendingFixedResourceCells: [] } as unknown as ITerritoryViewState;
+    const frame = buildTerritoryViewState(state);
+    assert.equal(frame.monsterPatrols.length, 2, '通关后 A / B 两片的怪都还在');
+    assert.ok(frame.patrolPassedCells.has(1) && frame.patrolPassedCells.has(2), 'A 片整片标成已通过');
+
+    const { view, nodes } = loadPatrolView();
+    const patrolA = frame.monsterPatrols.filter(item => item.cellId === 1);
+    assert.equal(patrolA.length, 1, 'A 片那只怪没有被通关判据过滤掉');
+    view.sync(MAP, LAYOUT, patrolA, PREFABS, 1000,
+        { outlineMaterial: MATERIAL, clearedCells: frame.patrolPassedCells });
+    assert.equal(nodes.length, 2, '怪确实被建出来（本体 + 描边副本各一份 prefab）');
+    assert.deepEqual(rgb(nodes[0].skeleton.color), [255, 255, 255], '通关 ⇒ 恢复原色，不再叠暗');
+    assert.equal(nodes[1].active, false, '通关 ⇒ 红色描边收起');
+    const before = { ...nodes[0].position };
+    view.step(1000 + 1600);
+    assert.notDeepEqual(nodes[0].position, before, '通关后仍在按原 route 往返移动');
 });
 
 test('★★ shader 缺失 ⇒ 不建放大副本，但仍压暗（绝不退化成一只放大的红怪）', () => {

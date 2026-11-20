@@ -4,7 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/TerritoryTexts';
-import { TERRITORY_SILVER_CHEST_REWARD_ID } from '../assets/script/app/territory/model/TerritoryMapConfig';
+import { TERRITORY_SILVER_CHEST_REWARD_ID, TERRITORY_SITE_TYPE } from '../assets/script/app/territory/model/TerritoryMapConfig';
 
 /**
  * 写请求「只发不等」之后，奖励路由就在各入口传给 `beginWrite` 的回调里。
@@ -29,6 +29,7 @@ const Probe = runInNewContext(ts.transpileModule(`class Probe { ${methods} }\ngl
     console,
     TERRITORY_TEXTS,
     TERRITORY_SILVER_CHEST_REWARD_ID,
+    TERRITORY_SITE_TYPE,
     TERRITORY_REQUEST_STATUS: { ok: 'ok', offline: 'offline', failed: 'failed', rejected: 'rejected', invalid: 'invalid' },
     TERRITORY_WRITE_KIND: { unlock: 'unlock', pass: 'pass', sweep: 'sweep', idleReward: 'idleReward', monsterBox: 'monsterBox' },
     territoryRevealedCells: () => [2],

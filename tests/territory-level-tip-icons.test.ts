@@ -68,6 +68,33 @@ test('弹窗预加载尚未结束就关闭时，迟到的弹窗不会重新留�
     assert.equal(closed, 1);
 });
 
+test('巡逻宝箱预制体尚未加载时收到等级，打开后显示最新升级入口', async () => {
+    const exports: Record<string, any> = {};
+    let finish: (panel: unknown) => void = () => {};
+    const opening = new Promise(resolve => { finish = resolve; });
+    const imports: Record<string, unknown> = {
+        cc: { Component: class {}, _decorator: { ccclass: () => (x: unknown) => x, property: () => () => {} } },
+        '../../framework/ui/PopupManager': { PopupManager: { inst: { get: () => null } } },
+        '../territory/view/TerritoryMonsterBoxPanel': { TerritoryMonsterBoxPanel: { open: () => opening } },
+    };
+    runInNewContext(ts.transpileModule(readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
+    }).outputText, { exports, require: (id: string) => imports[id] ?? {} });
+    const page = new exports.MainTerritoryMap();
+    page.isValid = true;
+    const pending = { lv: 0, rewards: [], guards: [], upgradeCost: 0 };
+    const ready = { ...pending, lv: 2, upgradeCost: 20 };
+    page.state = { detail: { monsterBox: pending } };
+    page.renderMonsterBox(pending);
+    page.state = { detail: { monsterBox: ready } };
+    page.renderMonsterBox(ready);
+    const renders: number[] = [];
+    finish({ isPopupOpen: true, applyContent: (content: typeof ready) => renders.push(content.upgradeCost) });
+    await opening;
+    assert.ok(renders.length > 0);
+    assert.ok(renders.every(cost => cost === 20));
+});
+
 
 test('destroyed chapter page ignores late resource icons', async () => {
     const exports: Record<string, any> = {};

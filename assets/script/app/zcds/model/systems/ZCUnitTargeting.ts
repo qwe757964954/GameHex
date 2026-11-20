@@ -67,7 +67,8 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.targetingContext = Object.create(context.targeting) as ZCTargetingContext;
         Object.assign(this.targetingContext, {
             baseDefinition: context.targeting.baseDefinition ?? context.baseDefinition,
-            canTargetUnit: (unit: ZCUnitState, candidate: ZCUnitState) => !unit.disengagedUnitIds?.includes(candidate.id),
+            canTargetUnit: (unit: ZCUnitState, candidate: ZCUnitState) =>
+                !unit.disengagedUnitIds || !unit.disengagedUnitIds.includes(candidate.id),
         });
     }
 
@@ -89,22 +90,45 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         let reason = previous ? 'score' : 'init';
         if (isPriority) reason = 'priority';
         else if (previous) {
-            const victim = previous.kind === 'unit' ? this.context.units.get(previous.id) : this.context.hex(previous.id);
-            if (!victim || victim.hp <= 0) reason = 'dead';
-            else if (previous.kind === 'unit' && (this.context.units.get(previous.id).owner === unit.owner
-                || !this.context.baseDefinition(unit.unitId).canAttackAir
-                    && this.context.baseDefinition(this.context.units.get(previous.id).unitId).flying)) reason = 'invalid';
-            else if (previous.kind === 'unit' && unit.disengagedUnitIds?.includes(previous.id)) reason = 'outOfRange';
-            else if (!target) reason = 'invalid';
-            else {
-                const oldPosition = previous.kind === 'unit'
-                    ? this.context.unitPosition(this.context.units.get(previous.id), this.targetPosition)
-                    : this.context.targeting.hexPosition(previous.id);
-                const oldRadius = previous.kind === 'unit'
-                    ? this.context.baseDefinition(this.context.units.get(previous.id).unitId).bodyRadius
-                    : STRUCTURE_TARGET_BODY_RADIUS;
-                if (ZCTargetingSystem.isOutOfRange(this.context.unitPosition(unit, this.selfPosition), oldPosition,
-                    this.attackReach(this.context.effectiveDefinition(unit), oldRadius))) reason = 'outOfRange';
+            if (previous.kind === 'unit') {
+                const victim = this.context.units.get(previous.id);
+                if (!victim || victim.hp <= 0) {
+                    reason = 'dead';
+                } else if (victim.owner === unit.owner
+                    || (!this.context.baseDefinition(unit.unitId).canAttackAir
+                        && this.context.baseDefinition(victim.unitId).flying)) {
+                    reason = 'invalid';
+                } else if (unit.disengagedUnitIds && unit.disengagedUnitIds.includes(previous.id)) {
+                    reason = 'outOfRange';
+                } else if (!target) {
+                    reason = 'invalid';
+                } else {
+                    const oldPosition = this.context.unitPosition(victim, this.targetPosition);
+                    const oldRadius = this.context.baseDefinition(victim.unitId).bodyRadius;
+                    if (ZCTargetingSystem.isOutOfRange(
+                        this.context.unitPosition(unit, this.selfPosition),
+                        oldPosition,
+                        this.attackReach(this.context.effectiveDefinition(unit), oldRadius),
+                    )) {
+                        reason = 'outOfRange';
+                    }
+                }
+            } else {
+                const hex = this.context.hex(previous.id);
+                if (!hex || hex.hp <= 0) {
+                    reason = 'dead';
+                } else if (!target) {
+                    reason = 'invalid';
+                } else {
+                    const oldPosition = this.context.targeting.hexPosition(previous.id);
+                    if (ZCTargetingSystem.isOutOfRange(
+                        this.context.unitPosition(unit, this.selfPosition),
+                        oldPosition,
+                        this.attackReach(this.context.effectiveDefinition(unit), STRUCTURE_TARGET_BODY_RADIUS),
+                    )) {
+                        reason = 'outOfRange';
+                    }
+                }
             }
         }
         this.observedTargets.set(unit, target ? { kind: target.kind, id: target.id } : null);
@@ -126,24 +150,28 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
             if (!unit.disengagedUnitIds.length) delete unit.disengagedUnitIds;
         }
         const previous = unit.targetUnitId;
-        const monsterId = this.context.priorityMonster?.(unit) ?? null;
-        const target = monsterId === null ? ZCTargetingSystem.acquire(unit, this.targetingContext, false, this.selectionScratch)
+        const monsterId = this.context.priorityMonster ? (this.context.priorityMonster(unit) ?? null) : null;
+        const target = monsterId === null
+            ? ZCTargetingSystem.acquire(unit, this.targetingContext, false, this.selectionScratch)
             : { kind: 'building' as const, id: monsterId };
         unit.targetUnitId = null;
         unit.targetWallHexId = null;
         unit.targetBuildingHexId = null;
-        if (target?.kind === 'unit') unit.targetUnitId = target.id;
-        else if (target?.kind === 'wall') unit.targetWallHexId = target.id;
-        else if (target?.kind === 'building') unit.targetBuildingHexId = target.id;
+        if (target) {
+            if (target.kind === 'unit') unit.targetUnitId = target.id;
+            else if (target.kind === 'wall') unit.targetWallHexId = target.id;
+            else if (target.kind === 'building') unit.targetBuildingHexId = target.id;
+        }
         if (previous !== unit.targetUnitId) delete unit.chase;
     }
 
     /** 波次出怪可打断建筑锁定；已有单位目标仍沿用原来的锁敌规则。*/
     refreshPriorityTarget(unit: ZCUnitState): boolean {
+        const preferUnits = this.context.targeting.preferUnitTargets ? this.context.targeting.preferUnitTargets(unit) : false;
         if (this.context.hasFocusableMonster && !this.context.hasFocusableMonster()
             && unit.targetBuildingHexId === null && unit.targetWallHexId === null
-            && !this.context.targeting.preferUnitTargets?.(unit)) return false;
-        const monsterId = this.context.priorityMonster?.(unit) ?? null;
+            && !preferUnits) return false;
+        const monsterId = this.context.priorityMonster ? (this.context.priorityMonster(unit) ?? null) : null;
         if (monsterId !== null) {
             if (unit.targetBuildingHexId === monsterId) return false;
             unit.targetUnitId = unit.targetWallHexId = null;
@@ -179,8 +207,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
                 return true;
             }
         }
-        if (!this.context.targeting.preferUnitTargets?.(unit)
-            || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
+        if (!preferUnits || (unit.targetWallHexId === null && unit.targetBuildingHexId === null)) return false;
         const target = ZCTargetingSystem.acquire(unit, this.targetingContext, true, this.selectionScratch);
         if (!target) return false;
         unit.targetUnitId = target.id;
@@ -192,7 +219,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
 
     current(unit: ZCUnitState, out?: ZCCombatTarget): ZCCombatTarget | null {
         if (unit.targetUnitId !== null) {
-            const target = this.context.units.get(unit.targetUnitId) ?? null;
+            const target = this.context.units.get(unit.targetUnitId);
             if (!target || target.battleState === 'dead' || target.hp <= 0 || target.owner === unit.owner) return null;
             const definition = this.context.baseDefinition(target.unitId);
             if (!this.context.baseDefinition(unit.unitId).canAttackAir && definition.flying) return null;
@@ -390,9 +417,13 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     findStepToward(unit: ZCUnitState): number | null {
         const target = this.current(unit);
         if (!target) return null;
-        const destinationId = target.kind === 'unit'
-            ? this.context.units.get(target.id)?.sourceHexId
-            : target.id;
+        let destinationId: number | undefined;
+        if (target.kind === 'unit') {
+            const targetUnit = this.context.units.get(target.id);
+            destinationId = targetUnit ? targetUnit.sourceHexId : undefined;
+        } else {
+            destinationId = target.id;
+        }
         if (destinationId === undefined) return null;
         const cached = this.stepCache.get(unit.id);
         if (cached && cached.atHex === unit.sourceHexId && cached.goalHex === destinationId

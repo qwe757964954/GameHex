@@ -1,5 +1,13 @@
 import type { ZCSkillBinding, ZCSkillStateMode, ZCTypedModifier } from './ZCStatSchema';
 
+/**
+ * 技能目标范围模式：Range 限半径，All 全场。
+*/
+export enum ZCSkillTargetMode {
+    Range = 1,
+    All = 2,
+}
+
 export interface ZCSkillRuntimeDefinition {
     unitId: string;
     skillId: number;

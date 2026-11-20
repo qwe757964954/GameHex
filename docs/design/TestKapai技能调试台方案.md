@@ -115,7 +115,7 @@ P0 开放的白名单（不够再加，不一次铺满）：
 | 尺寸 | `ZC_SPINE_CANVAS_TARGET_HEIGHT`（69.4）、`pvpCard.prefabSize`、`zcEffectNodeScaleOf`、六边格 36×42 | 读 + 乘同一个倍率 + 标注换算 |
 | 数值 | 编译后的 `IZCRuntimeCatalogs`、`ZCCombatSystem.unitDamage` | 读 + 临时覆盖 + 展示明细 |
 | 表现 | 真实 prefab、骨架动画名、真实飘字 prefab | 加载 + 播放 + 报错 |
-| 布局 | `config/testkapai.json` | 只扩字段，不改已有语义 |
+| 布局 | `assets/TestKapai.scene` 的节点树；`config/testkapai.json` 只存舞台倍率、调色板与调试默认值 | 场景里改版式，配置里调参数；运行时不再创建 UI 节点 |
 
 ## 八、风险与对策
 
@@ -141,3 +141,16 @@ P0 开放的白名单（不够再加，不一次铺满）：
 1. **最小战斗会话的装配入口**：现有战斗逻辑能否在没有网络 / 存档的情况下直接跑 tick？需要一个研发确认的接入点（这是 P0 的关键依赖）。
 2. **预览与战场的相机 / 适配是否一致**：需要在实机和编辑器预览各截一次同卡对比，确认"1:1"是不是真的 1:1。
 3. **靶子的"守方减伤"口径**：当前公式里守方乘数来自克制 statId，是否需要额外模拟护甲 / 减伤字段（如果要做，必须先有配置列，不能在调试台自造）。
+
+## 十一、当前落地（2026-11-20）
+
+P0 的第一段已经落到工程里，目标是"先能稳定调试"，不是一次铺满方案：
+
+- **场景承载**：`assets/TestKapai.scene` 下 `Canvas/TestKapaiRoot` 预建完整 UI 树（`Header/Switcher/Stage/StatusBar/SkillArea/ResultBar/DebugBar/Stats/Log`），运行时不在代码里创建 UI 节点；版式、字号、按钮和 Sprite 底色都由场景/MCP 维护。
+- **底色**：面板统一用工程已有 `resources/image/common/white.png` Sprite 着色，不再用 Graphics 画大面积色块；Graphics 只保留六边格、脚点连线、射程/AOE 圆弧。
+- **可调项**：视图倍率 `1.0 / 2.0 / 4.2` 同时作用于模型、特效、格子；模型覆盖、特效覆盖、伤害倍率可在 `DebugBar` 直接加减，复位按钮清除本次覆盖。
+- **数值读法**：`Stats` 显示真实卡牌数值，并增加 `模型高度`（spine UITransform 高 × 节点实际缩放，换算 px 与格数）；`StageStatus` 常驻 `模型 px / 格数 / 射程 / 目标距离`，距离超过射程会标注"范围外"。
+- **释放链路**：点技能行会按真实公式扣木桩血、飘字、写日志、更新累计伤害/释放次数，并播放 `pvpSkill.effectPrefabPath` 特效；技能行进入冷却遮罩；支持自动攻击 / 暂停 / 复位。
+- **验证**：`npx tsx --test tests/testkapai-config.test.ts` 18/18；脚本诊断中 TestKapai 相关 0 条（工程仍有既有 Territory 基线红）。
+
+仍未做的：真实战斗 tick 会话、多靶布阵、克制目标选择、覆盖值导出补丁、DPS/TTK 汇总。

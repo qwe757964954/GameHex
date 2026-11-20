@@ -334,3 +334,36 @@ flowchart TD
 | **Phase 3** | **规范化 Context 契约与查询器** | `IZCSkillTriggerContext`、`IZCAttackResolutionContext` | `npx tsx --test tests/zcds-skill-trigger.test.ts tests/zcds-combat-empowered.test.ts`<br>彻底消减 300+ 处 `?.` |
 | **Phase 4** | **巨型系统文件模块化拆分** | `ZCAttackResolutionSystem.ts` 拆分 | 跑全量 ZCDS 测试集（120+ 项用例）：<br>`npx tsx --test tests/zcds-*.test.ts`<br>双向差集无新增失败 |
 | **Phase 5** | **门禁合流** | 提交准备 | `npm run verify:gate`（route + defs + check 全过） |
+
+---
+
+## 5. 当前已落地治理清单（26 个文件已完成重构与治理）
+
+| 模块 | 文件 | 核心治理措施 |
+| :--- | :--- | :--- |
+| **门面适配** | `ZCGame.ts` | 抽取 `resolveOwnerDeck` 消除三处重复卡组退回表达式；收敛 `hudView` 与 `renderWorld` 生命周期非空声明；消除 `?.` 假可空检查；规范属性 getter 首行换行。 |
+| **视图层** | `ZCGameHUDView.ts` | 消除 `fillPlayerRow` 中链式可选链；Tween 停止前置明确存在性判断；清理冗余别名赋值。 |
+| **视图层** | `ZCGameRenderWorld.ts` | 保持静态断言要求的高性能掩码缓存；`attachCooldownOverlay` 增加防空保护；消除野怪类型查验的不确定性。 |
+| **视图层** | `ZCGameViewUtil.ts` | 消除 `buildPlayerHomeFocus`、边界计算与 BFS 邻居遍历中的非必要可选链。 |
+| **视图层** | `ZCHexView.ts` | 消除 20+ 处 loose `?.`；收紧 `resourceIconScale`、`renderMower`、`renderActivation` 的判空与状态映射；严格保留单测关键断言正则。 |
+| **视图层** | `ZCFloatTextView.ts` | `renderPrefix` 增加前缀 Label 保护，防止沙箱桩下空指针异常。 |
+| **视图层** | `ZCWallRenderer.ts` | 消除 `frame.hexesById.get(...)?.connectedDevelopedHexIds` 链式查询；消除偏移计算的 `tile?.offsetX` 冗余运算；UITransform 显式受控窄化。 |
+| **视图层** | `ZCSpawnSelectionView.ts` | Inspector 必填引用规范为 `null!`。 |
+| **视图层** | `ZCSpawnRegionHintOverlay.ts` | 显式解构并窄化 `Label` 节点，消除可选链。 |
+| **对象池** | `ZCNodePool.ts` | 消除 `bucket?.length` 链式查询，以显式分桶受控分支重构获取、归还与销毁。 |
+| **特效池** | `ZCEffectPool.ts` | 受控窄化动画组件，消除 `animation?.defaultClip`。 |
+| **模型契约** | `ZCGameModel.ts` | `matchWinner = null;` 置于 `reset(): void` 顶部（通过 900 字符窗口守卫）；保障 LF 换行符完整性。 |
+| **模型契约** | `ZCGameTypes.ts` | 显式补全 `ZCUnitState` 的 `chase` 与 `disengagedUnitIds` 属性类型声明，实现模块 0 类型报错。 |
+| **模型契约** | `ZCSkillRuntime.ts` | 导出 `ZCSkillTargetMode` 枚举（Range/All），修复单测运行期未定义异常。 |
+| **模型编解码** | `ZCSnapshotCodec.ts` | 新增 `chase` 结构合法性校验与 `disengagedUnitIds` 数组有效性/自环/去重校验。 |
+| **状态系统** | `ZCStatusEffect.ts` | 消除 `stacksOf`、`statModsOf`、`controlOf`、`behaviorsOf` 中 15+ 处 `?.` 假可空与深度链式取值。 |
+| **战斗图集** | `ZCCombatCatalog.ts` | 统一卡牌查找与属性倍率计算，消除属性访问中的过度可选链。 |
+| **地图配置** | `ZCMapConfig.ts` | 消除 `isRandomMapCandidate`、`resolveZCMapZoom` 与 `parseZCMap` 中的 loose 可选链，明确前置守卫。 |
+| **子系统** | `ZCAttackResolutionSystem.ts` | 补全 `emptyStatPatch` 冻结单例；规范投枪与强化表现路径。 |
+| **子系统** | `ZCUnitTargeting.ts` | 内联并重用 `victim` 单次实体查找，消除反复 `get`；明确 `disengagedUnitIds` 过滤。 |
+| **子系统** | `ZCCombatSystem.ts` | 消除 `(unit.completedAttackCount ?? 0)` 冗余防御；收窄 `unitDamageBase` 形参。 |
+| **子系统** | `ZCCaptureSystem.ts` | 消除中立资源类型比较时的可选链。 |
+| **子系统** | `ZCDevelopmentSystem.ts` | 正确按值引用 `ZCNeutralResourceType.Monster`，消除类型未找到错误。 |
+| **子系统** | `ZCNeutralFeatureSystem.ts` | 统一使用 `Math.sqrt` 替代 `Math.hypot`（满足热路径单测约束）。 |
+| **调试测试台** | `ZCTestKapaiModel.ts` | 状态机初始化与重置逻辑收拢。 |
+| **调试测试台** | `TestKapaiView.ts` / `ZCTestKapaiStage.ts` | 节点查找与事件意图规范化。 |

@@ -120,7 +120,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
         }
         this.phase.beginSettlementPresentation();
         this.refreshDamageStats();
-        if (this.view.advanceSettlementPresentation(frame, dt)) return;
+        if (this.view.advanceSettlementPresentation(model, frame, dt)) return;
         this.render();
         this.openSettlement(false);
     }

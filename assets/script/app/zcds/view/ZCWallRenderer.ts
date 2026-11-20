@@ -75,7 +75,9 @@ export class ZCWallRenderer {
         for (const state of frame.snapshot.hexes) {
             if (!state.developmentResolved && state.building === 'none') continue;
             if (visited.has(state.id)) continue;
-            const connected = new Set(frame.hexesById.get(state.id)?.connectedDevelopedHexIds ?? []);
+            const hexFrame = frame.hexesById.get(state.id);
+            const connectedIds = hexFrame ? hexFrame.connectedDevelopedHexIds : undefined;
+            const connected = new Set(connectedIds ?? []);
             for (const id of connected) {
                 visited.add(id);
             }
@@ -121,10 +123,12 @@ export class ZCWallRenderer {
             const sprite = this.segment(segmentIndex);
             if (!sprite) continue;
             const tile = this.tileForEdge(edge);
+            const offsetX = tile ? tile.offsetX : 0;
+            const offsetY = tile ? tile.offsetY : 0;
             // 图中心相对边中点做法向偏移（让砖顶面中线对齐六边形边），否则砖在边的法向错位。
             sprite.node.setPosition(
-                segment.x + (tile?.offsetX ?? 0),
-                segment.y + (tile?.offsetY ?? 0),
+                segment.x + offsetX,
+                segment.y + offsetY,
                 0,
             );
             let wallMaterial: Material | null = null;
@@ -153,7 +157,9 @@ export class ZCWallRenderer {
                 sprite.node.setScale(1, 1, 1);
                 sprite.node.angle = segment.angle;
                 const transform = sprite.getComponent(UITransform);
-                transform?.setContentSize(segment.length, transform.height);
+                if (transform) {
+                    transform.setContentSize(segment.length, transform.height);
+                }
             }
             sprite.customMaterial = wallMaterial;
             const startJoined = (endpointCounts.get(startKey) ?? 0) > 1;
@@ -196,7 +202,9 @@ export class ZCWallRenderer {
     */
     destroy(): void {
         for (const sprite of this.wallSprites) {
-            if (sprite?.node.isValid) sprite.node.destroy();
+            if (sprite && sprite.node && sprite.node.isValid) {
+                sprite.node.destroy();
+            }
         }
         this.wallSprites.length = 0;
         this.wallFrameIndices.clear();
@@ -224,7 +232,7 @@ export class ZCWallRenderer {
     } | null {
         const spec = WALL_TILE_EDGES[edge];
         const frames = this.deps.wallFrames;
-        if (!spec || typeof (frames as { get?: unknown })?.get !== 'function') return null;
+        if (!spec || !frames || typeof (frames as ReadonlyMap<string, SpriteFrame>).get !== 'function') return null;
         const frame = (frames as ReadonlyMap<string, SpriteFrame>).get(spec.art) ?? null;
         if (!frame) return null;
         return {

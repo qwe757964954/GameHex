@@ -153,7 +153,7 @@ export class TerritoryCloudView {
     private dissolveMask: Mask | null = null;
     private dissolveGraphics: Graphics | null = null;
     /** 上一版"正在消散的格"（只在变化时重画消散层的遮罩）。 */
-    private dissolveIds: ReadonlySet<number> = new Set<number>();
+    private readonly dissolveIds = new Set<number>();
     /**
      * 正在批量处理（`sync` 一帧里解锁好几格 / `step` 一帧里散完好几朵）。
      *
@@ -344,7 +344,7 @@ export class TerritoryCloudView {
     /** 消散影子帧（`cloud_dissolve_shadow_0…1`），与 {@link dissolveFrames} **同 index 同步换帧**。 */
     private dissolveShadowFrames: readonly SpriteFrame[] = [];
     /** 上一版挡云范围（只在它变化时才重画遮罩 —— 别每秒重画几百个多边形）。 */
-    private keepOutIds: ReadonlySet<number> = new Set<number>();
+    private readonly keepOutIds = new Set<number>();
     /**
      * **整张格网**的格心坐标（地图视图注入 `input.layout.points`）。
      *
@@ -364,6 +364,8 @@ export class TerritoryCloudView {
     private readonly keepOutFill = new Color(255, 255, 255, 0);
     /** 消散层遮罩的填充色：同样全透明。 */
     private readonly dissolveFill = new Color(255, 255, 255, 0);
+    private readonly scratchKeepOutCell: ITerritoryCloudCell = { cellId: 0, x: 0, y: 0 };
+    private readonly syncSeen = new Set<number>();
 
     /**
      * 在**格子层的父节点**里建四层，并插到格子层的后两位（= 格子之上、站点层之下，见类注释）。
@@ -544,7 +546,7 @@ export class TerritoryCloudView {
         this.keepOutPoints = points;
         this.rebuildKeepOut();
         // 消散层那张「擦邻居」的遮罩也吃同一套格心 ⇒ 判等缓存一并作废，逼它重画。
-        this.dissolveIds = new Set<number>();
+        this.dissolveIds.clear();
         this.syncDissolveKeepOut();
     }
 
@@ -557,10 +559,14 @@ export class TerritoryCloudView {
     private forEachKeepOutCell(visit: (cell: ITerritoryCloudCell) => void): void {
         const source = this.keepOutPoints;
         if (source) {
+            const scratch = this.scratchKeepOutCell;
             for (const cellId of this.keepOutIds) {
                 const point = source.get(cellId);
                 if (!point) continue;
-                visit({ cellId, x: point.x, y: point.y });
+                scratch.cellId = cellId;
+                scratch.x = point.x;
+                scratch.y = point.y;
+                visit(scratch);
             }
             return;
         }
@@ -915,6 +921,7 @@ export class TerritoryCloudView {
         revealed: ReadonlySet<number>,
         pockets: readonly number[] = [],
         isActivated?: (cellId: number) => boolean,
+        isInitialCellSync = false,
     ): void {
         const layer = this.layer;
         if (!layer?.isValid) return;
@@ -952,11 +959,12 @@ export class TerritoryCloudView {
         // 挡云区排在逐格之前：这一帧刚解锁的格子也要立刻进入"云不许碰"的范围。
         this.syncKeepOut(revealed);
         // 云洞**也要在逐格之前**：洞格解锁时它那朵得原地转成"消散"，而不是跟着洞一起被瞬间销毁。
-        this.syncPocket(cells, pockets, revealed);
+        this.syncPocket(cells, pockets, revealed, isInitialCellSync);
 
         // 这一帧可能一口气解锁/回退好几格：消散层遮罩只在批末重建一次。
         this.batching = true;
-        const seen = new Set<number>();
+        this.syncSeen.clear();
+        const seen = this.syncSeen;
         for (const cell of cells) {
             const cellId = cell.cellId;
             seen.add(cellId);
@@ -987,7 +995,8 @@ export class TerritoryCloudView {
                 continue;
             }
             this.shown.delete(cellId);
-            this.startDissolve(cellId);
+            if (isInitialCellSync) this.setCloudVisible(cellId, false);
+            else this.startDissolve(cellId);
         }
         // 布局里没有的格（换章后旧图残留）⇒ 回收，别留一堆孤儿节点在图外飘。
         for (const cellId of this.sprites.keys()) {
@@ -1251,7 +1260,8 @@ export class TerritoryCloudView {
     /** 挡云范围只在**已解锁集合**变化时重画（每秒都重画几百个多边形是纯浪费）。 */
     private syncKeepOut(revealed: ReadonlySet<number>): void {
         if (sameSet(revealed, this.keepOutIds)) return;
-        this.keepOutIds = new Set(revealed);
+        this.keepOutIds.clear();
+        for (const id of revealed) this.keepOutIds.add(id);
         this.rebuildKeepOut();
     }
 
@@ -1303,7 +1313,7 @@ export class TerritoryCloudView {
     }
 
     private clearKeepOut(): void {
-        this.keepOutIds = new Set<number>();
+        this.keepOutIds.clear();
         this.keepOutGraphics?.clear();
         if (this.keepOutMask?.enabled) this.keepOutMask.enabled = false;
     }
@@ -1328,7 +1338,8 @@ export class TerritoryCloudView {
             }
         }
         if (!changed) return;
-        this.dissolveIds = new Set(ids.keys());
+        this.dissolveIds.clear();
+        for (const cellId of ids.keys()) this.dissolveIds.add(cellId);
         graphics.clear();
         if (!ids.size || !this.keepOutIds.size) {
             if (mask.enabled) mask.enabled = false;
@@ -1437,6 +1448,7 @@ export class TerritoryCloudView {
         cells: readonly ITerritoryCloudCell[],
         pockets: readonly number[],
         revealed: ReadonlySet<number>,
+        isInitialCellSync: boolean,
     ): void {
         // 逐帧比较（每帧 `new Set` 是白白造垃圾）：长度 + 成员都对得上就直接返回。
         if (pockets.length === this.pocketCells.size) {
@@ -1455,7 +1467,7 @@ export class TerritoryCloudView {
             if (this.pocketCells.has(cellId)) continue;
             // 只有"变成已解锁"才是解锁消散；洞格只是被挪出洞集合（连通块超过封顶 / 贴到边缘）
             // 时云本来就该消失，不值得播一段消散。
-            if (!revealed.has(cellId)) continue;
+            if (isInitialCellSync || !revealed.has(cellId)) continue;
             this.startPocketDissolve(cellId);
         }
         this.rebuildPocket(cells);
@@ -1574,14 +1586,6 @@ export class TerritoryCloudView {
             world.x = map.worldPosition.x;
             world.y = map.worldPosition.y + shift * scaleY;
             world.z = map.worldPosition.z;
-        }
-        if (this.pocketAppliedShift !== shift || this.pocketWorldX !== world.x
-            || this.pocketWorldY !== world.y || this.pocketWorldZ !== world.z) {
-            this.pocketAppliedShift = shift;
-            this.pocketWorldX = world.x;
-            this.pocketWorldY = world.y;
-            this.pocketWorldZ = world.z;
-            pocket.setWorldPosition(world.x, world.y, world.z);
         }
         if (this.pocketAppliedShift !== shift || this.pocketWorldX !== world.x
             || this.pocketWorldY !== world.y || this.pocketWorldZ !== world.z) {

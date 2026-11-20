@@ -156,17 +156,17 @@ export class TerritoryController extends ControllerBase {
         if (output.kind === 'navigate') {
             const ready = this.options.battle?.prepare(output.payload, this.scope);
             this.command({ ...output, ready });
-        } else if (output.kind === 'changed') this.publish();
+        } else if (output.kind === 'changed') this.publish(output.isInitialCellSync);
         else this.command(output);
     }
-    private publish(): void {
+    private publish(isInitialCellSync = false): void {
         const state = this.model.state;
         if (state.ready && !this.ticking) {
             this.ticking = true;
             this.own(this.options.schedule(() => this.tick(false), 1));
             this.own(this.options.schedule(() => this.tick(true), 60));
         }
-        EventMgr.instance.emit(TerritoryViewEvent.Render, { state: buildTerritoryViewState(state) });
+        EventMgr.instance.emit(TerritoryViewEvent.Render, { state: buildTerritoryViewState(state, isInitialCellSync) });
     }
     private tick(slow: boolean): void {
         const now = this.options.now?.() ?? Date.now();

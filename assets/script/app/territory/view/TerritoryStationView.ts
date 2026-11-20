@@ -883,8 +883,8 @@ export class TerritoryStationView extends Component {
             this.conditionSpawnScale = 1;
             this.applyCaptionScale(this.captionSprite.node, 1);
             this.applyCaptionScale(this.captionLabel.node, 1);
-            this.captionSprite.node.setPosition(x + offsets.caption.x, y + offsets.caption.y, z + offsets.caption.z);
-            this.captionLabel.node.setPosition(x + offsets.text.x, y + offsets.text.y, z + offsets.text.z);
+            this.applyNodePosition(this.captionSprite.node, x + offsets.caption.x, y + offsets.caption.y, z + offsets.caption.z);
+            this.applyNodePosition(this.captionLabel.node, x + offsets.text.x, y + offsets.text.y, z + offsets.text.z);
             return;
         }
         const iconWidth = this.readCaptionIconWidth() * CONDITION_ICON_SCALE;
@@ -906,12 +906,12 @@ export class TerritoryStationView extends Component {
         this.applyCaptionScale(this.captionSprite.node, CONDITION_ICON_SCALE * spawn);
         this.applyCaptionScale(this.captionLabel.node, CONDITION_VALUE_SCALE * spawn);
         const rowY = y + block.rowY;
-        this.captionSprite.node.setPosition(x - total / 2 + iconWidth / 2, rowY, z + offsets.caption.z);
-        this.captionLabel.node.setPosition(x + total / 2 - valueWidth / 2, rowY, z + offsets.text.z);
+        this.applyNodePosition(this.captionSprite.node, x - total / 2 + iconWidth / 2, rowY, z + offsets.caption.z);
+        this.applyNodePosition(this.captionLabel.node, x + total / 2 - valueWidth / 2, rowY, z + offsets.text.z);
         const chest = this.conditionChest;
         if (chest && block.chestY !== 0 && chest.node.active) {
             this.applyCaptionScale(chest.node, TERRITORY_CONDITION_CHEST_SCALE * spawn);
-            chest.node.setPosition(x, y + block.chestY, z + offsets.caption.z);
+            this.applyNodePosition(chest.node, x, y + block.chestY, z + offsets.caption.z);
         }
     }
 
@@ -975,6 +975,15 @@ export class TerritoryStationView extends Component {
         const current = node.scale;
         if (current && current.x === scale && current.y === scale) return;
         node.setScale(scale, scale, 1);
+    }
+
+    /**
+     * 写节点的空间位置（带节流，坐标未变时不触发引擎 transform 脏标记）。
+     */
+    private applyNodePosition(node: Node, x: number, y: number, z: number): void {
+        const p = node.position;
+        if (p && p.x === x && p.y === y && p.z === z) return;
+        node.setPosition(x, y, z);
     }
 
     private hideConditionChest(): void {

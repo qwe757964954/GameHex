@@ -483,7 +483,7 @@ export class ZCStatusSystem {
             for (const inst of instances) {
                 const def = this.defs.get(inst.defId);
                 const runtime = inst.runtimeBehavior;
-                const behavior = runtime?.kind === 'legacyDot' ? runtime : def?.behavior;
+                const behavior = runtime && runtime.kind === 'legacyDot' ? runtime : (def ? def.behavior : undefined);
                 if (!behavior || (behavior.kind !== 'periodic' && behavior.kind !== 'legacyDot')) continue;
                 const intervalSeconds = behavior.intervalSeconds;
                 if (!(intervalSeconds > 0)) continue;
@@ -542,7 +542,8 @@ export class ZCStatusSystem {
     }
 
     stacksOf(unitId: string, defId: string): number {
-        return this.instancesOf(unitId).find((inst) => inst.defId === defId)?.stacks ?? 0;
+        const inst = this.instancesOf(unitId).find((item) => item.defId === defId);
+        return inst ? inst.stacks : 0;
     }
 
     // ---- 聚合 ----
@@ -562,7 +563,7 @@ export class ZCStatusSystem {
         let count = 0;
         for (const inst of this.instancesOf(unitId)) {
             const def = this.defs.get(inst.defId);
-            if (!def?.statMods) continue;
+            if (!def || !def.statMods) continue;
             const mods = def.statMods;
             for (const key of Object.keys(mods) as (keyof ZCStatusStatMods)[]) {
                 const value = mods[key];
@@ -580,7 +581,8 @@ export class ZCStatusSystem {
     /** 与 `statModsOf` 共用缓存；调用方只判断有无修正时用它，避免 `Object.keys`。*/
     statModsCountOf(unitId: string): number {
         this.statModsOf(unitId);
-        return this.statModsCache.get(unitId)?.count ?? 0;
+        const cached = this.statModsCache.get(unitId);
+        return cached ? cached.count : 0;
     }
 
     /**
@@ -591,7 +593,7 @@ export class ZCStatusSystem {
         let best: { kind: ZCControlKind; defId: string; remaining: number } | null = null;
         for (const inst of this.instancesOf(unitId)) {
             const def = this.defs.get(inst.defId);
-            if (!def?.control) continue;
+            if (!def || !def.control) continue;
             const remaining = inst.remainingSeconds ?? Number.POSITIVE_INFINITY;
             if (!best || remaining > best.remaining) {
                 best = { kind: def.control, defId: inst.defId, remaining };
@@ -615,7 +617,7 @@ export class ZCStatusSystem {
         const result: (ZCStatusBehavior & { defId: string; stacks: number })[] = [];
         for (const inst of this.instancesOf(unitId)) {
             const def = this.defs.get(inst.defId);
-            if (!def?.behavior || def.behavior.kind === 'none') continue;
+            if (!def || !def.behavior || def.behavior.kind === 'none') continue;
             result.push({ ...def.behavior, defId: inst.defId, stacks: inst.stacks });
         }
         return result;
@@ -623,7 +625,8 @@ export class ZCStatusSystem {
 
     /** 单位身上是否有任一状态（供结算层跳过无状态单位）。*/
     hasAny(unitId: string): boolean {
-        return (this.instances.get(unitId)?.length ?? 0) > 0;
+        const list = this.instances.get(unitId);
+        return list !== undefined && list.length > 0;
     }
 
     /** 返回独立 ID 快照；提供 out 时清空并复用该缓冲，避免结算层每步分配。*/

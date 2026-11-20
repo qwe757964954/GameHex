@@ -73,7 +73,7 @@ export function buildPlayerHomeFocus(
     }>,
 ): { x: number; y: number } | null {
     if (map.cityMode === 'select') return null;
-    const homeId = map.homes?.[0] ?? map.playerHomeId;
+    const homeId = (map.homes && map.homes.length > 0) ? map.homes[0] : map.playerHomeId;
     if (homeId < 0) return null;
     const home = map.hexes[homeId];
     return home ? { x: mapToViewX(home.x), y: mapToViewY(home.y) } : null;
@@ -112,7 +112,7 @@ export function buildTerritoryBoundaryMasks(
             let best = -Infinity;
             for (const id of hex.neighbors) {
                 const neighbor = map[id];
-                if (!neighbor?.playable) continue;
+                if (!neighbor || !neighbor.playable) continue;
                 const dx = neighbor.x - hex.x;
                 const dy = neighbor.y - hex.y;
                 // `hypot` 带溢出保护（多一层分支与前置缩放）；格距不可能溢出，直接用 sqrt。
@@ -1056,10 +1056,14 @@ export function buildClaimWavePlan(
         for (let head = 0; head < queue.length; head += 1) {
             const current = queue[head];
             const next = (distance.get(current) ?? 0) + 1;
-            for (const neighborId of map[current]?.neighbors ?? []) {
-                if (distance.has(neighborId)) continue;
-                distance.set(neighborId, next);
-                queue.push(neighborId);
+            const currentHex = map[current];
+            const neighbors = currentHex ? currentHex.neighbors : null;
+            if (neighbors) {
+                for (const neighborId of neighbors) {
+                    if (distance.has(neighborId)) continue;
+                    distance.set(neighborId, next);
+                    queue.push(neighborId);
+                }
             }
         }
         const mine = queue

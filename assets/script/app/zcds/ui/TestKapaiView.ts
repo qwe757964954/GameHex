@@ -8,7 +8,7 @@ import {
     formatZCTestKapaiIssue, parseZCTestKapaiConfig,
 } from '../model/ZCTestKapaiModel';
 import type {
-    ITestKapaiCard, ITestKapaiConfig, ITestKapaiIssue, ITestKapaiSkill,
+    ITestKapaiCard, ITestKapaiConfig, ITestKapaiIssue, ITestKapaiSkill, ITestKapaiStat,
 } from '../model/ZCTestKapaiModel';
 import { ZC_RUNTIME_CONFIG } from '../model/ZCRuntimeConfigStore';
 import type { ZCRuntimeRules } from '../model/ZCGameRuntimeConfig';
@@ -392,7 +392,9 @@ export class TestKapaiView extends Component {
     }
 
     private bindClick(node: Node, handler: () => void): void {
-        const button = node.getComponent(Button) ?? node.addComponent(Button);
+        // Button 由场景预挂；运行时只绑事件，不补组件、不建节点。
+        const button = node.getComponent(Button);
+        if (!button) throw new Error(`按钮 ${node.name} 未挂 cc.Button`);
         button.transition = Button.Transition.NONE;
         node.on(Button.EventType.CLICK, handler, this);
     }
@@ -402,10 +404,10 @@ export class TestKapaiView extends Component {
         const palette = this.config.palette;
         paintNode(this.backdrop, palette.background, 0);
         paintNode(this.diagnosticsNode, palette.panel, 8);
-        paintNode(this.statusBg.node, palette.panel, 8);
-        paintNode(this.resultBg.node, palette.panel, 8);
-        paintNode(this.debugBg.node, palette.panel, 8);
-        paintNode(this.logBg.node, palette.panel, 8);
+        paintNode(this.statusBg.node, palette.panelAlt, 8);
+        paintNode(this.resultBg.node, palette.panelAlt, 8);
+        paintNode(this.debugBg.node, palette.panelAlt, 8);
+        paintNode(this.logBg.node, palette.panelAlt, 8);
         paintNode(this.badgeBody.node, palette.panelAlt, 6);
         paintNode(this.prevButton, palette.button, 8);
         paintNode(this.nextButton, palette.button, 8);
@@ -481,18 +483,28 @@ export class TestKapaiView extends Component {
             : `${card.typeLabel} · 无技能行`;
         this.targetName.string = this.config.damageTest.targetName;
 
-        void this.stage?.showUnit(card.unitPrefabPath, card.prefabSize);
+        const unitPromise = this.stage?.showUnit(card.unitPrefabPath, card.prefabSize);
         const areaRadius = card.skills.reduce((max, skill) => Math.max(max, skill.areaRadius), 0);
         this.stage?.setRanges(card.attackRange, areaRadius);
         this.renderStats(card);
+        if (unitPromise) {
+            void unitPromise.then(() => {
+                if (this.isValid && this.currentCard()?.id === card.id) this.renderStats(card);
+            });
+        }
         this.rebuildSkillRows();
         this.refreshViewTag();
     }
 
     private renderStats(card: ITestKapaiCard): void {
+        const stats: ITestKapaiStat[] = [...card.stats];
+        const unit = this.stage?.unitSizeOf();
+        if (unit && stats.length < this.statCells.length) {
+            stats.push({ label: '模型高度', value: `${round1(unit.height)}px`, source: `${round2(unit.cells)} 格` });
+        }
         for (let index = 0; index < this.statCells.length; index += 1) {
             const cell = this.statCells[index];
-            const stat = card.stats[index];
+            const stat = stats[index];
             cell.active = !!stat;
             if (!stat) continue;
             const label = requiredLabel(cell, 'Label');
@@ -500,7 +512,7 @@ export class TestKapaiView extends Component {
             const source = requiredLabel(cell, 'Source');
             label.string = stat.label;
             value.string = stat.value;
-            source.string = stat.source;
+            source.string = stat.source.replace(/^pvpCard\./, '');
         }
     }
 
@@ -641,9 +653,10 @@ export class TestKapaiView extends Component {
         }
         const result = await stage.playEffect(skill.effectPrefabPath);
         if (!this.isValid || !result) return;
+        const unit = stage.unitSizeOf();
         this.setStageStatus(
-            `${skill.name} 特效 ${round2(result.total)}px · 战斗 ${round2(result.battle)}×`
-            + ` / 覆盖 ${round2(this.effectScale)}× / 视图 ${round2(this.viewScale)}×`,
+            `${skill.name} 特效 ×${round2(result.total)}`
+            + (unit ? ` · 模型 ${round1(unit.height)}px / ${round2(unit.cells)} 格` : ''),
             this.config.stage.guideColor,
         );
     }
@@ -933,6 +946,10 @@ function formatScale(value: number): string {
 
 function round2(value: number): number {
     return Math.round(value * 100) / 100;
+}
+
+function round1(value: number): string {
+    return value.toFixed(1);
 }
 
 /** 模型路径只留最后一段，避免 `skel/豌豆射手/豌豆射手` 把头部行撑爆。*/

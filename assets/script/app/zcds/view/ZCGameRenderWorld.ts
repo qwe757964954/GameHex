@@ -877,7 +877,8 @@ export class ZCGameRenderWorld {
         overlay: Node,
     ): void {
         for (const { x, y, view } of placed) {
-            const focus = view.monsterFocusButton.node;
+            const focus = view.monsterFocusButton ? view.monsterFocusButton.node : null;
+            if (!focus) continue;
             const offset = focus.position;
             const offsetY = offset.y;
             focus.setParent(overlay);
@@ -889,7 +890,12 @@ export class ZCGameRenderWorld {
             if (!health) continue;
             const offset = health.position;
             const offsetX = offset.x;
-            const monster = neutralResourceItemOf(this.resourceItemByHex.get(hexId))?.resourceType === ZCNeutralResourceType.Monster;
+            const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
+            const monster = item !== null && (
+                typeof ZCNeutralResourceType !== 'undefined' && ZCNeutralResourceType
+                    ? item.resourceType === ZCNeutralResourceType.Monster
+                    : item.resourceType === 11
+            );
             const offsetY = monster ? 80 : offset.y;
             const offsetZ = offset.z;
             health.setParent(overlay);
@@ -1913,6 +1919,7 @@ export class ZCGameRenderWorld {
         // （模型在点击那一拍就翻了 `canDevelop`，而地块只按 0.15s 节流刷新）。
         const developPulseStartedAt = latestHexActivationStartedAt(frame.hexActivations);
         const boundaryMasks = buildTerritoryBoundaryMasks(this.map, this.ownerForHex, this.boundaryMasks);
+        // buildTerritoryBoundaryMasks(this.map, this.ownerForHex)
         this.redrawSharedOutline(this.map, boundaryMasks);
         const renderArgs = this.hexRenderArgs;
         for (const state of frame.snapshot.hexes) {
@@ -1928,6 +1935,7 @@ export class ZCGameRenderWorld {
             renderArgs.cooldown = hex.cooldown;
             renderArgs.now = now;
             renderArgs.hideNeutralResourceLabel = frame.mapConfig.cityMode === 'select';
+            // hideNeutralResourceLabel: frame.mapConfig.cityMode === 'select'
             renderArgs.boundaryMask = boundaryMasks.get(state.id) ?? 0;
             renderArgs.activation = hex.activation;
             renderArgs.developPulseStartedAt = developPulseStartedAt;

@@ -417,10 +417,17 @@ function edgeNormal(a: ITerritoryCloudPoint, b: ITerritoryCloudPoint): ITerritor
  * @param outline 基准轮廓；**别在运行时传**（默认就是地块轮廓）。只有离线对照图会把它换成
  * 格面轮廓，用来画"旧口径长什么样"。
  */
+let cachedDefaultKeepOutPoints: readonly ITerritoryCloudPoint[] | null = null;
+
 export function territoryCloudKeepOutPoints(
     inset: number = TERRITORY_CLOUD_KEEP_OUT_PX,
     outline: readonly ITerritoryCloudPoint[] = territoryTileOutlinePoints(),
-): ITerritoryCloudPoint[] {
+): readonly ITerritoryCloudPoint[] {
+    const isDefault = (inset === TERRITORY_CLOUD_KEEP_OUT_PX || inset === undefined)
+        && (outline === undefined || outline.length === 6);
+    if (isDefault && cachedDefaultKeepOutPoints) {
+        return cachedDefaultKeepOutPoints;
+    }
     const gap = Number.isFinite(inset) ? (inset > 0 ? inset : 0) : TERRITORY_CLOUD_KEEP_OUT_PX;
     const count = outline.length;
     const out: ITerritoryCloudPoint[] = [];
@@ -435,6 +442,9 @@ export function territoryCloudKeepOutPoints(
         const mx = denominator > 1e-6 ? (first.x + second.x) / denominator : first.x;
         const my = denominator > 1e-6 ? (first.y + second.y) / denominator : first.y;
         out.push({ x: current.x + mx * gap, y: current.y + my * gap });
+    }
+    if (isDefault) {
+        cachedDefaultKeepOutPoints = Object.freeze(out);
     }
     return out;
 }

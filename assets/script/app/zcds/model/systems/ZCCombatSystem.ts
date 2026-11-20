@@ -18,10 +18,11 @@ export class ZCCombatSystem {
         profile: Pick<ZCAttackProfile, 'trigger' | 'cooldown' | 'empoweredEvery'>,
         now: number,
     ): boolean {
-        unit.completedAttackCount = (unit.completedAttackCount ?? 0) + 1;
+        const currentCount = (unit.completedAttackCount ?? 0) + 1;
+        unit.completedAttackCount = currentCount;
         if (profile.trigger !== ZCSkillTrigger.everySeconds) {
             const every = profile.empoweredEvery ?? 0;
-            return every > 0 && (unit.completedAttackCount ?? 0) % every === 0;
+            return every > 0 && currentCount % every === 0;
         }
         const cooldown = profile.cooldown ?? 0;
         if (cooldown <= 0) return false;
@@ -69,7 +70,13 @@ export class ZCCombatSystem {
      * 远程弹道的出手伤害：技能倍率在出手时乘进 `baseDamage`，命中时只再乘克制系数。
      * 这样 `ZCProjectileState.baseDamage` 仍是「出手时的攻击属性」，不必给快照加字段。
     */
-    static unitDamageBase(unit: ZCUnitState, definition: ZCUnitDefinition, bonuses: ZCDeckBonuses, rules: Readonly<ZCRuntimeRules>, skillDamageRate = 1): number {
+    static unitDamageBase(
+        unit: Pick<ZCUnitState, 'tier' | 'neutralReinforcement'>,
+        definition: ZCUnitDefinition,
+        bonuses: ZCDeckBonuses,
+        rules: Readonly<ZCRuntimeRules>,
+        skillDamageRate = 1,
+    ): number {
         const tierMultiplier = 1 + (unit.tier - 1) * rules.unitAttackPerTier;
         return definition.attack * (unit.neutralReinforcement ? 1 : bonuses.unitAttackMultiplier * tierMultiplier) * rules.combatDamageMultiplier * skillDamageRate;
     }

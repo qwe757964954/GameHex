@@ -419,7 +419,7 @@ function formatNumber(value: number): string {
 
 function statOrNull(label: string, value: number | undefined, source: string): ITestKapaiStat | null {
     if (value === undefined || !Number.isFinite(value)) return null;
-    return { label, value: formatNumber(value), source: source.replace(/^pvpCard\./, '') };
+    return { label, value: formatNumber(value), source };
 }
 
 /**

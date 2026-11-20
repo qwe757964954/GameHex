@@ -19,7 +19,7 @@
 | 每片取随机格 | 3 | 5×3 = **15 = 每章替换上限**（用户「不超过 15 个」） |
 | 每片新增空地 | 1 | 20 格 − 15 随机格；用户明确允许「破坏原本的形状定义」 |
 | `battleId` | 该片所属宝箱组 id（`monsterBox.monsterBoxId`） | `TerritoryCampaignRepository` 按它查 `monsterBoxLevel` |
-| `patrolId` | 该宝箱组基础关卡 `levelMonsterGroup` 的**最后一档**（数量 1 的"小 boss"） | 与 `chapter_01` 同字段语义 |
+| `patrolId` | 该宝箱组基础关卡（`monsterBoxLevel` 最低那行）的 **NPC 队伍 ∧ 塔防最后一波** 那只怪 | 用户 2026-11-20；真源见 `patrol_monster_source.py` |
 | `buildingId` | 主格 `"69021"`，其余 `""` | `chapter_01` 同款；只有主格长建筑 + 锁 + 银币 |
 | `unlock` | 整片共用一个前置格（最近的主线 `stage`/`boss` 格），`0 / 10 / 2 / 5` | `chapter_01` 实测 |
 
@@ -64,12 +64,11 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import copy_territory_maps as publisher
+import patrol_monster_source as monster_source
 import presets_io
 from territory_format import TerritoryValidationError, validate_territory_map
 
 SOURCE = publisher.SOURCE
-LEVEL_INFO = presets_io.PROJECT / "assets" / "remoteRef" / "levelInfo.json"
-MONSTER_BOX = presets_io.PROJECT / "assets" / "remoteRef" / "monsterBox.json"
 GRID_REWARD = presets_io.PROJECT / "assets" / "remoteRef" / "levelMapGrideReward.json"
 CHAPTER_PATTERN = re.compile(r"chapter_\d{2}")
 
@@ -91,10 +90,6 @@ UNLOCK_EXPLORE_SECONDS = 2
 UNLOCK_STAMINA = 5
 #: `chapter_02` 的第一组宝箱 id（`chapter_01` 用了 `1001~1005`）。
 FIRST_MONSTER_BOX_ID = 1006
-#: 巡逻关卡起点（`levelInfo.levelType == 4` 的最小 id）。
-FIRST_PATROL_LEVEL_ID = 60001
-#: 每章巡逻关卡条数（5 片 × 基础/满级两档）。
-PATROL_LEVELS_PER_CHAPTER = 10
 #: 宝箱 4 个等级分别相当于几个随机格的奖励（用户口径）。
 GRADE_RANDOM_CELLS = (1, 2, 3, 7)
 #: 「升到这一级」的四列（`chapter_01` 五个组逐行相同，本脚本沿用）。
@@ -180,23 +175,6 @@ def read_column_store(path: Path) -> tuple[list[str], list[list[Any]]]:
     if not isinstance(raw, dict) or raw.get("c") != 1:
         raise SystemExit(f"{path.name} 不是列存格式（c != 1）")
     return list(raw["k"]), [list(row) for row in raw.get("v") or []]
-
-
-def load_patrol_levels() -> dict[int, dict[str, Any]]:
-    """`levelId → {chapter, monsters:[monsterId…]}`，只收 `levelType == 4`（领地巡逻）。"""
-    keys, rows = read_column_store(LEVEL_INFO)
-    idx = {key: i for i, key in enumerate(keys)}
-    out: dict[int, dict[str, Any]] = {}
-    for row in rows:
-        if row[idx["levelType"]] != 4:
-            continue
-        groups = row[idx["levelMonsterGroup"]] or []
-        monsters = [int(item.get("monsterId") or 0) for item in groups if isinstance(item, dict)]
-        out[int(row[idx["levelId"]])] = {
-            "chapter": int(row[idx["levelChapter"]]),
-            "monsters": monsters,
-        }
-    return out
 
 
 def load_random_pools() -> dict[int, list[dict[str, int]]]:
@@ -438,21 +416,31 @@ def build_sites(
     data: dict[str, Any],
     groups: list[list[int]],
     chapter: int,
-    patrol_levels: dict[int, dict[str, Any]],
+    sources: dict[int, dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """生成站点 + 返回「本片用到的宝箱组」清单（供 `monsterBox` 同步）。"""
+    """生成站点 + 返回「本片用到的宝箱组」清单（供 `monsterBox` 同步）。
+
+    `patrolId` 不再按片序轮转、也不再读 `levelMonsterGroup` 的最后一档：一律取
+    `patrol_monster_source` 从**该关 NPC 队伍 ∧ 塔防最后一波**推出来的那只，
+    免得手填一只这关根本不会出的怪（画面照常、零报错，只有玩家能发现）。
+    """
     serial = next_site_serial(data)
     sites: list[dict[str, Any]] = []
     boxes: list[dict[str, Any]] = []
     for index, cells in enumerate(groups):
         box_id = FIRST_MONSTER_BOX_ID + (chapter - CHAPTERS[0]) * GROUPS_PER_CHAPTER + index
-        base_level = FIRST_PATROL_LEVEL_ID + (chapter - 1) * PATROL_LEVELS_PER_CHAPTER + index * 2
-        level = patrol_levels.get(base_level)
-        if level is None:
-            raise SystemExit(f"chapter {chapter}: 巡逻关卡 {base_level} 不在 levelInfo 里")
-        patrol_id = level["monsters"][-1] if level["monsters"] else 0
+        source = sources.get(box_id)
+        if source is None:
+            raise SystemExit(
+                f"chapter {chapter}: 宝箱组 {box_id} 不在 monsterBox 里 —— 先跑 add_patrol_monsterbox.py"
+            )
+        if source["chapter"] != chapter:
+            raise SystemExit(
+                f"chapter {chapter}: 宝箱组 {box_id} 落在第 {source['chapter']} 章的关卡 {source['levelId']}"
+            )
+        patrol_id = source["patrolId"]
         if patrol_id <= 0:
-            raise SystemExit(f"chapter {chapter}: 关卡 {base_level} 没有 levelMonsterGroup")
+            raise SystemExit(f"chapter {chapter}: 关卡 {source['levelId']} 既没有 NPC 队伍也没有波次怪")
 
         # 主格 = 片内「邻居最多」的那个（形状中心），同票取编号小的，保证可复现。
         member = set(cells)
@@ -487,8 +475,9 @@ def build_sites(
         boxes.append({
             "monsterBoxId": box_id,
             "patrolId": patrol_id,
-            "baseLevel": base_level,
-            "maxLevel": base_level + 1,
+            "patrolBasis": source["basis"],
+            "baseLevel": source["levelId"],
+            "maxLevel": source["maxLevelId"],
             "siteId": site_id,
             "cells": cells,
         })
@@ -498,7 +487,7 @@ def build_sites(
 # ---------------------------------------------------------------- 写盘
 
 
-def apply(data: dict[str, Any], chapter: int, patrol_levels: dict[int, dict[str, Any]]) -> dict[str, Any]:
+def apply(data: dict[str, Any], chapter: int, sources: dict[int, dict[str, Any]]) -> dict[str, Any]:
     """返回改好的深拷贝 + 打出摘要（不改入参）。"""
     existing = [site for site in data["sites"] if site["type"] == "patrolChest"]
     if existing:
@@ -506,7 +495,7 @@ def apply(data: dict[str, Any], chapter: int, patrol_levels: dict[int, dict[str,
             f"{data['id']}: 已经有 {len(existing)} 个 patrolChest 格，本脚本不重复添加"
         )
     groups = choose_groups(data)
-    sites, boxes = build_sites(data, groups, chapter, patrol_levels)
+    sites, boxes = build_sites(data, groups, chapter, sources)
 
     converted = {cell for group in groups for cell in group}
     candidates = list(data["randomSites"]["candidateCells"])
@@ -623,7 +612,7 @@ def main() -> int:
     parser.add_argument("--preview", action="store_true", help="额外输出 tmp/patrol_preview_*.png 对照图")
     args = parser.parse_args()
 
-    patrol_levels = load_patrol_levels()
+    sources = monster_source.load_sources()
     names = args.ids or [f"chapter_0{chapter}" for chapter in CHAPTERS]
     paths = [SOURCE / f"{name}.json" for name in names]
     for path in paths:
@@ -635,7 +624,7 @@ def main() -> int:
         before = json.loads(path.read_text(encoding="utf-8"))
         data = json.loads(path.read_text(encoding="utf-8"))
         try:
-            apply(data, chapter, patrol_levels)
+            apply(data, chapter, sources)
         except SystemExit as error:
             print(f"{path.stem}: {error}")
             continue
@@ -650,10 +639,11 @@ def main() -> int:
         spread = getattr(choose_groups, "last_spread", None)
         spread_text = f"  方位角最小间隔 {spread[1]}°（上限 {spread[0]}°）" if spread else ""
         print(f"  片数 {len(report['groups'])}  替换随机格 {len(report['replaced'])}  新增空地 {len(report['added'])}{spread_text}")
+        monster_source.assert_monster_card({box["patrolId"] for box in report["boxes"]})
         for box in report["boxes"]:
             print(
                 f"  {box['siteId']:<16} cells={box['cells']} "
-                f"box={box['monsterBoxId']} patrol={box['patrolId']} "
+                f"box={box['monsterBoxId']} patrol={box['patrolId']}（{box['patrolBasis']}） "
                 f"level {box['baseLevel']}/{box['maxLevel']}"
             )
         for warning in warnings:

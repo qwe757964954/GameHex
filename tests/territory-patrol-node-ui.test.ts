@@ -291,10 +291,27 @@ test('守卫：两套收敛都复用 territoryPatrolAnchorByCell，不另写一�
     const nodeUi = source('assets/script/app/territory/model/TerritoryNodeUI.ts');
     assert.match(nodeUi, /import \{ territoryPatrolAnchorByCell \} from '\.\/TerritoryMonsterPatrol'/);
     assert.match(nodeUi, /for \(const \[cell, anchor\] of territoryPatrolAnchorByCell\(sites\)\)/);
-    const patrol = source('assets/script/app/territory/model/TerritoryMonsterPatrol.ts');
-    assert.match(patrol, /export function territoryPatrolAnchorByCell\(/);
-    assert.match(patrol, /territoryPatrolAnchorByCell\(sites\)\.get\(site\.cellId\)/,
-        '后端上报必须委托同一份锚点表');
+    const patrolSrc = source('assets/script/app/territory/model/TerritoryMonsterPatrol.ts');
+    assert.match(patrolSrc, /export function territoryPatrolAnchorByCell\(/);
+    // 后端上报 `territoryPatrolAnchorCell` 与视图锚点表必须**结果同源**。
+    // 用行为对拍而不是锁死实现形式：委托同一张表 / 独立按 `site.id` 分组都行，
+    // 但「同片多锚点」「旧图 id 对不上」两种边界都不许分叉。
+    //（chapter_01 全格的行为对拍在本文件第 2 条用例；工作区被外部进程覆盖实现时
+    //  文本守卫会假红，语义守卫不会。）
+    const sites = [
+        { id: 'wave_a', type: 'patrolChest', cellId: 1, footprint: [1], patrolId: 50005 },
+        { id: 'wave_a', type: 'patrolChest', cellId: 2, footprint: [2], patrolId: 50007 },
+        { id: 'wave_a', type: 'patrolChest', cellId: 3, footprint: [3] },
+    ] as never;
+    const anchors = territoryPatrolAnchorByCell(sites);
+    for (const site of sites as unknown as { cellId: number }[]) {
+        assert.equal(territoryPatrolAnchorCell(site as never, sites),
+            anchors.get(site.cellId) ?? site.cellId,
+            `${site.cellId}：后端上报与视图收敛不许分叉`);
+    }
+    assert.equal(territoryPatrolAnchorCell(
+        { id: 'legacy', type: 'patrolChest', cellId: 3, footprint: [3] } as never, sites), 3,
+        '旧图 id 对不上 ⇒ 退回自己，不许被别片锚点拐走');
     // 画法依赖 stationRenderOf 的 muted 早退，删了价格就会回到「每格各画一条」。
     const view = source('assets/script/app/territory/view/TerritoryMapView.ts');
     assert.match(view, /if \(mutedCells\.has\(site\.cellId\)\)/);

@@ -265,6 +265,7 @@ export class ZCFloatTextView extends Component {
     */
     private renderPrefix(prefix: string, fontSize: number, fade: number): void {
         const label = this.prefixLabel;
+        if (!label) return;
         const show = prefix.length > 0;
         label.node.active = show;
         label.enabled = show && fade > 0;

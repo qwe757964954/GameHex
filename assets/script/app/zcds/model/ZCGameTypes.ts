@@ -284,6 +284,10 @@ export interface ZCUnitState {
     nextAttackAt: number;
     waitUntil: number;
     attackHitDone: boolean;
+    /** 追击状态：离开射程后追击起点的坐标与起始时刻。*/
+    chase?: { x: number; y: number; startedAt: number };
+    /** 追击脱战后暂时忽略的目标单位 ID 列表。*/
+    disengagedUnitIds?: readonly number[];
     /**
      * 本帧是否正在冲刺：纯派生值，每帧先清、只有冲刺推进处置真，不进快照。
      * 只给表现层用，冲刺期间把移动动作换成循环攻击动作；冷却待机期间必须为 false。

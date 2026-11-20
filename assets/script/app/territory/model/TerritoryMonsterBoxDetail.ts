@@ -46,6 +46,8 @@ export interface ITerritoryMonsterBoxGuardState {
 /** 构造入参。 */
 export interface ITerritoryMonsterBoxDetailInput {
     readonly site: TerritorySite | null;
+    /** 服务端宝箱记录的格子号，用于升级请求。 */
+    readonly boxCellId?: number;
     /** 这一格绑到的关卡行；`null` ⇒ 挑战按钮置灰（`battleId` 在 `monsterBox` 表里查不到）。 */
     readonly stage: TerritoryCampaignStage | null;
     /** 服务端下发的这一格宝箱等级（`0` = 还没拉到快照）。 */
@@ -118,7 +120,7 @@ function mergeRewardsByResId(pool: readonly { resId: number; amount: number; pro
 export function buildTerritoryMonsterBoxDetail(
     input: ITerritoryMonsterBoxDetailInput,
 ): ITerritoryMonsterBoxDetailContent | null {
-    const { site, stage, lv, group } = input;
+    const { site, boxCellId, stage, lv, group } = input;
     if (!site || site.type !== TERRITORY_SITE_TYPE.patrolChest) return null;
 
     const spec = TERRITORY_MONSTER_BOX_SPEC;
@@ -149,7 +151,7 @@ export function buildTerritoryMonsterBoxDetail(
     else if (isMax) footerText = spec.footerTextAtMaxLv;
 
     return {
-        cellId: site.cellId,
+        cellId: boxCellId ?? site.cellId,
         lv: level,
         maxLv: maxLv > 0 ? maxLv : level,
         upgradeCost: canUpgrade ? nextGrade.upCostCoins : 0,

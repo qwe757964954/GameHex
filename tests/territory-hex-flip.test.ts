@@ -398,7 +398,7 @@ test('领地翻格的触发只在首帧快照之后（免得历史已开启格�
         '翻格要挂在每帧推进上');
     const play = /private syncFlip[\s\S]*?\n    \}/.exec(mapView);
     assert.ok(play, '没读到 syncFlip');
-    assert.match(play![0], /if \(!this\.hexFlipBootstrapped\)[\s\S]*?return;/,
+    assert.match(play![0], /if \(!this\.hexFlipBootstrapped\b[^)]*\)[\s\S]*?return;/,
         '首帧必须先做快照再返回，不能直接播');
     // 点击那一帧 `paintHexes` 已把地皮换成新的 ⇒ **旧地皮必须显式传进来**，否则读不出「翻开」。
     assert.match(play![0], /from: input\.art\.tileLocked/, '要把旧地皮传给播放器');

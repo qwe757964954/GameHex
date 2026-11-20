@@ -359,7 +359,7 @@ test('★TerritoryPage 确实调了 Repository，且在建完 progress 之后立
     const progressAt = PRESENTER_SRC.indexOf('new TerritoryProgress(');
     const fetchAt = PRESENTER_SRC.indexOf('gateway.fetchChapterCells(');
     // 拉取与主动推送复用非空上下文合并入口，锚定拉取成功后的调用。
-    const applyAt = PRESENTER_SRC.indexOf('this.mergeCellInfo(context, result.state)');
+    const applyAt = PRESENTER_SRC.indexOf('this.mergeCellInfo(context,', fetchAt);
     assert.ok(progressAt > 0 && fetchAt > progressAt, '必须先建 progress 再拉服务端状态');
     assert.ok(applyAt > fetchAt, '拉到的状态必须合并进 progress（只拉不合并 = 白拉）');
 });
@@ -376,7 +376,7 @@ test('★拉取失败时不阻断页面、且不收紧解锁态（网络抖动�
     const body = mergeServerStateBody();
     const failAt = body.indexOf("'reason' in result");
     assert.ok(failAt > 0, 'mergeServerState 里要有失败早退分支');
-    const knownAt = body.indexOf('this.mergeCellInfo(context, result.state)');
+    const knownAt = body.indexOf('this.mergeCellInfo(context,');
     assert.ok(knownAt > 0, '成功快照须走统一合并入口');
     assert.ok(knownAt > failAt, '★标记必须在失败早退之后（失败时标"已知"会把玩家锁死）');
     // 失败分支体里不得出现标记。

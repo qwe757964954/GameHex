@@ -384,6 +384,8 @@ export interface ITerritoryRewardPresentation {
     readonly popup?: boolean;
 }
 
+const EMPTY_CELL_ARRAY: readonly number[] = [];
+
 export interface ITerritoryModelPorts {
     readonly loader: ITerritoryChapterLoader;
     readonly gateway: ITerritoryCellGateway;
@@ -665,7 +667,7 @@ interface ITerritoryChapterPushes {
  * Controller 负责同步消息入口的订阅存续，退出调用 dispose 作废异步任务。
  */
 export type TerritoryModelOutput =
-    | { readonly kind: 'changed' }
+    | { readonly kind: 'changed'; readonly isInitialCellSync?: boolean }
     | { readonly kind: 'navigate'; readonly payload: ITerritoryNavigateBattlePayload }
     | { readonly kind: 'tip'; readonly payload: ITerritoryShowTipPayload }
     | { readonly kind: 'rewards'; readonly payload: ITerritoryShowRewardsPayload }
@@ -843,6 +845,7 @@ export class TerritoryModel {
      * （类注释「页内刷新只有这一个通知通道」）。
      */
     private stateCache: ITerritoryViewState | null = null;
+    private readonly cachedOpenedSet = new Set<number>();
 
     constructor(private readonly ports: ITerritoryModelPorts) {
         this.currentChapterId = ports.store.loadLastChapter();
@@ -949,6 +952,26 @@ export class TerritoryModel {
         this.beginInteraction(site.cellId);
         if (!this.progress || !this.map
             || !territoryRevealedCells(this.map, this.progress, this.previewCellsNow()).includes(site.cellId)) return false;
+        // 巡逻格先解锁再展示详情，开战由弹窗按钮触发。
+        if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
+            this.levelTipOpen = false;
+            if (this.progress.isOwned(site.cellId)) {
+                this.detailSite = null;
+                this.detailStage = null;
+                this.emitStateChange();
+                return true;
+            }
+            if (!this.progress.isCellUnlocked(site.cellId)) {
+                this.detailSite = null;
+                this.detailStage = null;
+                void this.handleUnlockOnly(site, TERRITORY_TEXTS.stageUnlocked);
+                return true;
+            }
+            this.detailSite = site;
+            this.detailStage = this.stageByCell.get(site.cellId) ?? null;
+            this.emitStateChange();
+            return true;
+        }
         if (this.isBattleSite(site) && this.pendingFixedResourceCells.has(site.cellId)) return false;
         // 关卡、首领和异步据点统一先解锁展示建筑；已解锁后再次点击打开各自详情。
         //
@@ -1002,26 +1025,6 @@ export class TerritoryModel {
             this.detailSite = site;
             this.detailStage = this.stageByCell.get(site.cellId) ?? null;
             this.levelTipOpen = false;
-            this.emitStateChange();
-            return true;
-        }
-        // 未解锁时仍走翻格。已解锁后显示宝箱详情，缺关卡配置时由详情禁用挑战。
-        if (site.type === TERRITORY_SITE_TYPE.patrolChest) {
-            this.levelTipOpen = false;
-            if (this.progress.isOwned(site.cellId)) {
-                this.detailSite = null;
-                this.detailStage = null;
-                this.emitStateChange();
-                return true;
-            }
-            if (!this.progress.isCellUnlocked(site.cellId)) {
-                this.detailSite = null;
-                this.detailStage = null;
-                void this.handleUnlockOnly(site, TERRITORY_TEXTS.stageUnlocked);
-                return true;
-            }
-            this.detailSite = site;
-            this.detailStage = this.stageByCell.get(site.cellId) ?? null;
             this.emitStateChange();
             return true;
         }
@@ -1388,6 +1391,15 @@ export class TerritoryModel {
                 progress.markCellsUnlocked(write.unlockedCellIds ?? [site.cellId]);
                 this.persistProgress();
                 this.refreshWalletFromServer(false);
+                if (site.type === TERRITORY_SITE_TYPE.patrolChest && progress.isCellUnlocked(site.cellId)) {
+                    this.detailSite = site;
+                    this.detailStage = this.stageByCell.get(site.cellId) ?? null;
+                    this.levelTipOpen = false;
+                    // 解锁回包没有宝箱等级；首次激活后需要用章节快照点亮升级入口。
+                    if (!this.monsterBoxForSite(site)?.lv) {
+                        void this.mergeServerState(map.chapterId, this.loadId);
+                    }
+                }
                 if (write.rewards?.length) this.showRewards(write.rewards, site.cellId);
                 this.showTip(unlockedText);
                 return false;
@@ -1662,11 +1674,13 @@ export class TerritoryModel {
         return false;
     }
 
-    private findMonsterBox(boxes: readonly ITerritoryMonsterBox[], cellId: number): ITerritoryMonsterBox | null {
-        for (let i = 0; i < boxes.length; i += 1) {
-            if (boxes[i].cellId === cellId) return boxes[i];
-        }
-        return null;
+    private monsterBoxForSite(site: TerritorySite): ITerritoryMonsterBox | null {
+        const boxes = this.chapter?.serverCellStateCache?.monsterBoxes ?? [];
+        const direct = boxes.find(box => box.cellId === site.cellId);
+        if (direct?.lv) return direct;
+        // 同一巡逻区的宝箱记录可以只挂在服务端交互锚点上。
+        const anchorCell = this.patrolReportCell(site);
+        return boxes.find(box => box.cellId === anchorCell) ?? direct ?? null;
     }
 
     /**
@@ -2320,7 +2334,7 @@ export class TerritoryModel {
         this.emitStateChange();
         this.refreshServerIdleTime(chapterId);
 
-        await this.mergeServerState(chapterId, loadId);
+        await this.mergeServerState(chapterId, loadId, true);
         if (loadId !== this.loadId) return;
 
         this.applyStoredBattleResult();
@@ -2419,6 +2433,7 @@ export class TerritoryModel {
 
     private mergeCellInfo(context: ITerritoryChapterContext, state: ITerritoryCellState): boolean {
         const progress = context.progress;
+        const previousBoxes = context.serverCellStateCache?.monsterBoxes ?? [];
         const known = progress.serverStateKnown;
         const unlocked = progress.unlockedCells.length;
         const pending = progress.pendingPassCells.length;
@@ -2444,7 +2459,9 @@ export class TerritoryModel {
             || pending !== progress.pendingPassCells.length
             || newlyConfirmed;
         if (changed) this.persistChapter(context);
-        return changed;
+        const boxes = state.monsterBoxes ?? [];
+        return changed || previousBoxes.length !== boxes.length || previousBoxes.some((box, index) =>
+            box.cellId !== boxes[index].cellId || box.lv !== boxes[index].lv);
     }
 
     /** 随机资源位置只在章节装载时掷点，随后由章节存档固定。 */
@@ -2525,17 +2542,27 @@ export class TerritoryModel {
     private async mergeServerState(
         chapterId: number,
         loadId: number,
+        isInitialCellSync = false,
     ): Promise<void> {
         const context = this.chapter;
         if (!context) return;
         const total = context.map.rows * context.map.columns;
+        const initialUnlocks = isInitialCellSync ? new Set(context.progress.unlockedCells) : null;
         const result = await this.ports.gateway.fetchChapterCells(chapterId, total);
         if (loadId !== this.loadId || context !== this.chapter) return;
         if ('reason' in result) {
             console.warn(`[TerritoryModel] 第 ${chapterId} 章服务端格子状态不可用（${result.reason}），沿用本地存档`);
             return;
         }
-        if (this.mergeCellInfo(context, result.state)) this.emitStateChange();
+        let state = result.state;
+        if (initialUnlocks && state.unlockCells.length > 0) {
+            // 首屏已经可点，读取在途期间新增的解锁可能比这份快照更新。
+            const addedUnlocks = context.progress.unlockedCells.filter(cellId => !initialUnlocks.has(cellId));
+            if (addedUnlocks.length > 0) {
+                state = { ...state, unlockCells: [...new Set([...state.unlockCells, ...addedUnlocks])] };
+            }
+        }
+        if (this.mergeCellInfo(context, state)) this.emitInitialCellSyncStateChange(isInitialCellSync);
     }
 
     // ============================================================
@@ -2887,14 +2914,11 @@ export class TerritoryModel {
                 }
             }
         }
-        let openedCells: readonly number[] | ReadonlySet<number> = [];
+        let openedCells: readonly number[] | ReadonlySet<number> = EMPTY_CELL_ARRAY;
         if (progress) {
-            const owned = progress.ownedCells;
-            const unlocked = progress.unlockedCells;
-            const openedSet = new Set<number>();
-            for (let i = 0; i < owned.length; i++) openedSet.add(owned[i]);
-            for (let i = 0; i < unlocked.length; i++) openedSet.add(unlocked[i]);
-            openedCells = openedSet;
+            this.cachedOpenedSet.clear();
+            progress.collectOpenedCells(this.cachedOpenedSet);
+            openedCells = this.cachedOpenedSet;
         }
         // 锁标只认「结构性阻塞」：站点格看前置、随机格看「四周有没有已开格」。
         // 不含银币/体力 —— 见 `ITerritoryViewState.lockBlockedCells` 的口径说明。
@@ -2944,13 +2968,15 @@ export class TerritoryModel {
             previewCells,
             siteOpenableCells,
             // 锁标：前置没满足的站点格 + 四周没有已开格的随机候选格（见字段注释）。
-            lockBlockedCells: siteLockCells.concat(randomLockCells),
+            lockBlockedCells: randomLockCells.length === 0
+                ? (siteLockCells.length === 0 ? EMPTY_CELL_ARRAY : siteLockCells)
+                : (siteLockCells.length === 0 ? randomLockCells : siteLockCells.concat(randomLockCells)),
             stageByCell: this.stageByCell,
             randomResourceCells: this.randomResourceCells,
             randomResourceOpenableCells,
-            pendingRandomResourceCells: Array.from(this.pendingRandomResourceCells),
-            pendingFixedResourceCells: Array.from(this.pendingFixedResourceCells),
-            pendingMonsterBoxCells: Array.from(this.pendingMonsterBoxCells),
+            pendingRandomResourceCells: this.pendingRandomResourceCells.size === 0 ? EMPTY_CELL_ARRAY : Array.from(this.pendingRandomResourceCells),
+            pendingFixedResourceCells: this.pendingFixedResourceCells.size === 0 ? EMPTY_CELL_ARRAY : Array.from(this.pendingFixedResourceCells),
+            pendingMonsterBoxCells: this.pendingMonsterBoxCells.size === 0 ? EMPTY_CELL_ARRAY : Array.from(this.pendingMonsterBoxCells),
             victoryClaimCells: this.victoryClaimCells,
             // 地图拿它判「银币 / 体力数字要不要染红」。与 `buildHud` 同一个兜底：
             // 存档还没读到时就当 0（此时 `ready` 为 false，站点根本不会渲染）。
@@ -3016,16 +3042,16 @@ export class TerritoryModel {
      */
     private monsterBoxDetail(): ITerritoryMonsterBoxDetail | null {
         const detailSite = this.detailSite;
-        if (!detailSite) return null;
+        if (!detailSite || detailSite.type !== TERRITORY_SITE_TYPE.patrolChest) return null;
         const chapter = this.chapter;
-        const boxes = chapter?.serverCellStateCache?.monsterBoxes ?? [];
-        const box = this.findMonsterBox(boxes, detailSite.cellId);
+        const box = this.monsterBoxForSite(detailSite);
         // 数值全部来自 monsterBox 表：battleId 是宝箱组 id，按它取整组的等级行。
         const battleId = detailSite.battleId;
         const groups = chapter?.monsterBoxGroups;
         const group = battleId === undefined ? null : groups?.get(battleId) ?? null;
         return buildTerritoryMonsterBoxDetail({
             site: detailSite,
+            boxCellId: box?.cellId,
             stage: this.detailStage,
             lv: box ? box.lv : 0,
             group,
@@ -3061,10 +3087,16 @@ export class TerritoryModel {
 
     private emitStateChange(): void {
         this.stateCache = null;
-        this.publish({ kind: 'changed' });
+        this.publish({ kind: 'changed', isInitialCellSync: false });
         // 「首次通关 ⇒ 整章云散」是**一次性**演出：这一拍已经随状态交给页面了
         //（`publish` 是同步的，页面在返回前就渲染完了）⇒ 立刻消费掉，后面每一拍都不再带。
         // 不消费的话，任何一次重绘都会把同一章的散雾重演一遍。
+        if (this.chapterClearPending && this.state.chapterCleared) this.chapterClearPending = false;
+    }
+
+    private emitInitialCellSyncStateChange(isInitialCellSync: boolean): void {
+        this.stateCache = null;
+        this.publish({ kind: 'changed', isInitialCellSync });
         if (this.chapterClearPending && this.state.chapterCleared) this.chapterClearPending = false;
     }
 

@@ -254,6 +254,7 @@ export class TerritoryChestView {
      * 每帧必须把它传给 `territoryChestCameraFx` 的第三个参数，否则弱档也会按 2.3 推。
      */
     private cameraZoom = 1;
+    private readonly scratchColor = new Color(255, 255, 255, 255);
 
     /**
      * @param root `ui/territory/TerritoryChest.prefab` 的实例（页面 instantiate 后传进来）；
@@ -485,6 +486,7 @@ export class TerritoryChestView {
         const handler = this.onLanded;
         const spec = this.spec;
         if (!handler || !spec || this.rewards.length === 0 || this.flyCount <= 0) return;
+        if (this.landedResIds.size >= this.rewards.length) return;
         for (let index = 0; index < this.flyCount; index += 1) {
             const resId = Number(this.rewards[index % this.rewards.length]?.resId);
             if (!Number.isFinite(resId) || resId <= 0 || this.landedResIds.has(resId)) continue;
@@ -583,7 +585,8 @@ export class TerritoryChestView {
         const mouthY = this.origin.y;
         const topHalf = 74;
         const bottomHalf = 18;
-        g.fillColor = new Color(255, 250, 226, Math.round(Math.min(1, alpha) * 235));
+        this.scratchColor.set(255, 250, 226, Math.round(Math.min(1, alpha) * 235));
+        g.fillColor = this.scratchColor;
         g.moveTo(this.origin.x - bottomHalf, mouthY - 26);
         g.lineTo(this.origin.x + bottomHalf, mouthY - 26);
         g.lineTo(this.origin.x + topHalf, topY);
@@ -593,7 +596,8 @@ export class TerritoryChestView {
         // 落地光环：光柱砸到箱口时炸开的一圈横向环（规格 §3.2）。
         const ring = territoryChestBeamRing(spec, t) * this.tailFade;
         if (ring > 0) {
-            g.strokeColor = new Color(255, 246, 210, Math.round(ring * 220));
+            this.scratchColor.set(255, 246, 210, Math.round(ring * 220));
+            g.strokeColor = this.scratchColor;
             g.lineWidth = 5;
             const rx = 34 + 86 * (1 - ring);
             const ry = rx * 0.32;
@@ -629,7 +633,8 @@ export class TerritoryChestView {
             const y3 = mouthY + Math.cos(rad + spread) * length;
             const x4 = this.origin.x + Math.sin(rad - spread) * length;
             const y4 = mouthY + Math.cos(rad - spread) * length;
-            g.fillColor = new Color(color.r, color.g, color.b, Math.round(fx.alpha * 168));
+            this.scratchColor.set(color.r, color.g, color.b, Math.round(fx.alpha * 168));
+            g.fillColor = this.scratchColor;
             g.moveTo(x1, y1);
             g.lineTo(x2, y2);
             g.lineTo(x3, y3);
@@ -647,7 +652,8 @@ export class TerritoryChestView {
         if (!fx || fx.alpha <= 0.004) return;
         const mouthY = this.origin.y;
         const count = spec.rayCount;
-        g.fillColor = new Color(RAY_COLOR.r, RAY_COLOR.g, RAY_COLOR.b, Math.round(fx.alpha * 210));
+        this.scratchColor.set(RAY_COLOR.r, RAY_COLOR.g, RAY_COLOR.b, Math.round(fx.alpha * 210));
+        g.fillColor = this.scratchColor;
         for (let index = 0; index < count; index += 1) {
             // 均匀铺开但长短交错：偶数条长、奇数条短，读起来更像"放射"而不是"扇子"。
             const angle = (index / count) * Math.PI * 2 + (index % 2 ? 0.11 : 0);
@@ -684,7 +690,8 @@ export class TerritoryChestView {
         const alpha = openRatio * this.tailFade;
         for (let step = 7; step >= 1; step -= 1) {
             const radius = 10 + step * 9;
-            g.fillColor = new Color(255, 224, 150, Math.round(alpha * 26));
+            this.scratchColor.set(255, 224, 150, Math.round(alpha * 26));
+            g.fillColor = this.scratchColor;
             g.circle(this.origin.x, this.origin.y + 6, radius);
             g.fill();
         }
@@ -727,7 +734,8 @@ export class TerritoryChestView {
             const size = 5 * fx.scale;
             const alpha = Math.round(fx.opacity * this.tailFade * 230);
             // 四角星：两个细长菱形交叉（不用贴图，也不会被合批改 rect）。
-            g.fillColor = new Color(color.r, color.g, color.b, alpha);
+            this.scratchColor.set(color.r, color.g, color.b, alpha);
+            g.fillColor = this.scratchColor;
             const rad = (fx.rotationDeg * Math.PI) / 180;
             const cos = Math.cos(rad);
             const sin = Math.sin(rad);
@@ -927,7 +935,8 @@ export class TerritoryChestView {
             const inset = step * band;
             const strength = alpha * (1 - step / steps) * 0.9;
             if (strength <= 0.004) continue;
-            g.strokeColor = new Color(10, 7, 5, Math.round(strength * 255));
+            this.scratchColor.set(10, 7, 5, Math.round(strength * 255));
+            g.strokeColor = this.scratchColor;
             g.rect(-halfW + inset, -halfH + inset, (halfW - inset) * 2, (halfH - inset) * 2);
             g.stroke();
         }

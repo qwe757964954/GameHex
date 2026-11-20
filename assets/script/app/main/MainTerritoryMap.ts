@@ -1609,6 +1609,7 @@ export class MainTerritoryMap extends Component {
         this.lastRenderedChapterCleared = state.chapterCleared;
 
         this.mapView.renderMap({
+            isInitialCellSync: state.isInitialCellSync,
             map: state.map,
             layout: state.layout,
             art: state.art,
@@ -1726,7 +1727,7 @@ export class MainTerritoryMap extends Component {
             if (this.playerStagePanel.isOpen) this.playerStagePanel.close();
             this.closePopup(LevelInfoPanel);
             this.renderLevelTip(null);
-            this.showPopupContent(TerritoryMonsterBoxPanel, this.monsterBoxContentOf(detail.monsterBox));
+            this.renderMonsterBox(detail.monsterBox);
             return;
         }
         if (detail.playerStage) {
@@ -1744,6 +1745,20 @@ export class MainTerritoryMap extends Component {
         if (this.playerStagePanel.isOpen) this.playerStagePanel.close();
         this.closePopup(LevelInfoPanel);
         this.renderLevelTip(null);
+    }
+
+    private renderMonsterBox(detail: ITerritoryMonsterBoxDetail): void {
+        const opened = PopupManager.inst.get(TerritoryMonsterBoxPanel);
+        if (opened) {
+            opened.applyContent(this.monsterBoxContentOf(detail));
+            return;
+        }
+        void TerritoryMonsterBoxPanel.open({ userData: this.monsterBoxContentOf(detail) }).then((panel) => {
+            if (!this.isValid || !panel?.isPopupOpen) return;
+            // 预制体加载期间收到的快照可能和首次打开共用同一个 Promise。
+            const latest = this.state?.detail.monsterBox;
+            if (latest) panel.applyContent(this.monsterBoxContentOf(latest));
+        });
     }
 
     /** 关掉某个 popup（没开就什么都不做；`get` 只查栈，已关的返回 `null`）。 */

@@ -26,6 +26,7 @@ import { TERRITORY_TEXTS } from '../assets/script/app/territory/application/Terr
 import * as territoryEvents from '../assets/script/app/territory/application/TerritoryEvents';
 const { TerritoryUiEvent, TerritoryViewEvent } = territoryEvents;
 import type { TerritoryCampaignStage } from '../assets/script/app/territory/model/TerritoryCampaignConfig';
+import { readTerritoryMonsterBoxGroups } from '../assets/script/app/territory/model/TerritoryMonsterBoxConfig';
 import { TERRITORY_REQUEST_STATUS } from '../assets/script/app/territory/model/TerritoryRequestStatus';
 import type {
     TerritoryChapterSave,
@@ -293,33 +294,68 @@ const bundle: ITerritoryChapterBundle = {
     art: nullArt,
 };
 
-test('巡逻宝箱解锁后点击只打开详情，由挑战按钮发起战斗', async () => {
+test('首次点击巡逻宝箱，解锁成功后自动弹出可升级的详情，只由挑战按钮开战', async () => {
+    const monsterBoxGroups = readTerritoryMonsterBoxGroups([
+        { monsterBoxId: 1001, monsterBoxGrade: 1, monsterBoxLevel: 1001 },
+        { monsterBoxId: 1001, monsterBoxGrade: 2, monsterBoxLevel: 1001, monsterBoxUpCostCoins: 20 },
+    ]);
     const loader = createFakeLoader({
         ...bundle,
         mapJson: {
             ...mapJson,
             sites: [
                 { id: 'patrolChest_1', type: 'patrolChest', cellId: 1, battleId: 1001, patrolLevelId: 1001 },
-                { id: 'patrolChest_2', type: 'patrolChest', cellId: 2, battleId: 1002 },
+                { id: 'patrolChest_1', type: 'patrolChest', cellId: 2, battleId: 1001, patrolId: 2501, patrolLevelId: 1001 },
+                { id: 'patrolChest_2', type: 'patrolChest', cellId: 3, battleId: 1002 },
             ],
         },
-        campaign: { ...bundle.campaign, stages: [{ ...stage, mode: 'defence' }] },
+        campaign: { ...bundle.campaign, stages: [{ ...stage, mode: 'defence' }], monsterBoxGroups },
     });
-    const h = createHarness({ loader });
+    const gateway = createFakeGateway();
+    const initialFetch = gateway.gateway.fetchChapterCells;
+    let finishSnapshot: () => void = () => {};
+    const snapshotReady = new Promise<void>(resolve => { finishSnapshot = resolve; });
+    gateway.gateway.fetchChapterCells = async (chapterId, maxCell) => {
+        const result = await initialFetch(chapterId, maxCell);
+        if ('reason' in result || gateway.calls.fetch === 1) return result;
+        await snapshotReady;
+        return { ok: true, state: { ...result.state, unlockCells: [1], monsterBoxes: [{ cellId: 2, lv: 1 }] } };
+    };
+    const upgradeCells: number[] = [];
+    gateway.gateway.upMonsterBoxLv = async (_chapterId, cellId) => {
+        upgradeCells.push(cellId);
+        return { ok: true, monsterBox: { cellId, lv: 2 } };
+    };
+    const h = createHarness({ loader, gateway });
+    let rendered: ITerritoryViewState['detail']['monsterBox'] = null;
+    h.presenter.onOutput(output => {
+        if (output.kind === 'changed') rendered = h.presenter.state.detail.monsterBox;
+    });
     try {
         h.presenter.start();
         await flush();
-        const [patrol, unbound] = h.presenter.state.map!.sites;
+        const [patrol, anchor, unbound] = h.presenter.state.map!.sites;
 
         assert.equal(h.presenter.selectSite(patrol), true);
+        assert.equal(h.presenter.state.detail.monsterBox, null, '等待解锁确认');
         await flush();
         assert.equal(h.gatewayCalls.unlock, 1);
         assert.equal(h.gatewayCalls.startBattle, 0);
 
-        assert.equal(h.presenter.selectSite(patrol), true);
-        assert.equal(h.presenter.state.detail.monsterBox?.cellId, patrol.cellId);
-        assert.equal(h.presenter.state.detail.monsterBox?.battleEnabled, true);
+        assert.equal(rendered?.lv, 0, '快照未到时，不能猜等级');
+        finishSnapshot();
+        await flush();
+        assert.equal(rendered?.lv, 1, '只收到宝箱等级变化也要刷新已打开的详情');
+        assert.equal(rendered?.cellId, anchor.cellId);
+        assert.equal(rendered?.battleEnabled, true);
+        assert.equal(rendered?.upgradeCost, 20);
+        assert.equal(h.gatewayCalls.fetch, 2, '首次解锁后补拉缺失的宝箱等级');
         assert.equal(h.gatewayCalls.startBattle, 0);
+        await h.presenter.upgradeMonsterBox(rendered.cellId);
+        await flush();
+        assert.deepEqual(upgradeCells, [anchor.cellId]);
+        assert.equal(rendered?.lv, 2, '升级回包应继续刷新同一个巡逻区');
+        assert.equal(rendered?.upgradeCost, 0, '满级时收起升级入口');
 
         h.presenter.state.progress!.markCellUnlocked(unbound.cellId);
         assert.equal(h.presenter.selectSite(unbound), true);
@@ -331,7 +367,7 @@ test('巡逻宝箱解锁后点击只打开详情，由挑战按钮发起战斗',
         assert.equal(h.presenter.selectSite(patrol), true);
         h.presenter.requestBattle();
         await flush();
-        assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']]);
+        assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '2']]);
         assert.equal(h.gatewayCalls.pass, 0);
         assert.equal(h.nav.length, 1);
     } finally {
@@ -1127,6 +1163,37 @@ function createHarness(options: HarnessOptions = {}) {
 }
 
 // ── 加载生命周期 ───────────────────────────────────────────────────────
+
+test('迟到的首份快照补齐历史地块，并保留刚点击成功的解锁', async () => {
+    const gateway = createFakeGateway();
+    let reply = (_result: TerritoryCellFetchResult): void => {};
+    gateway.gateway.fetchChapterCells = () => new Promise(resolve => { reply = resolve; });
+    const h = createHarness({ gateway, loader: createFakeLoader({
+        ...bundle,
+        mapJson: { ...mapJson, randomSites: {
+            triggerSilver: 10, rewardPoolId: '2001', candidateCells: [4, 15], maxActive: 2,
+        } },
+    }) });
+    const paints: boolean[] = [];
+    h.presenter.onOutput(event => {
+        if (event.kind === 'changed') paints.push(event.isInitialCellSync === true);
+    });
+    h.presenter.start();
+    await flush();
+    assert.equal(h.presenter.state.ready, true);
+    h.presenter.selectRandomResource(4);
+    await flush();
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(4), true);
+    assert.ok(paints.every(initial => !initial), '点击成功走正常渲染');
+
+    reply({ ok: true, state: { ...emptyCellState(1), unlockCells: [15], passCells: [15] } });
+    await flush();
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(15), true);
+    assert.equal(h.presenter.state.progress?.isCellUnlocked(4), true, '旧快照不能盖掉后到的写确认');
+    assert.deepEqual(paints.filter(Boolean), [true], '只标记合并首份快照的那一帧');
+    assert.equal(paints.at(-1), false, '后续渲染恢复普通表现');
+    h.presenter.dispose();
+});
 
 test('loading preserves pushed passes and snapshots even when the fetch fails', async () => {
     const loader = createFakeLoader();

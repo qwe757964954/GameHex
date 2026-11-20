@@ -47,6 +47,9 @@ export function territoryPatrolBattleByCell(
 
 /**
  * 获取巡逻区已挑战成功的格子集合（含 footprint）。同 battleId 任一格占点即整片通过。
+ *
+ * 2026-11-20 起这份集合**只管表现与地块状态**（野怪恢复原色 / 收描边、地皮转草地 /
+ * 摘红框），不再决定野怪生灭 —— 见 {@link buildTerritoryMonsterPatrols}。
  */
 export function territoryPatrolPassedCells(
     sites: readonly TerritorySite[],
@@ -116,7 +119,7 @@ export function territoryPatrolAnchorByCell(sites: readonly TerritorySite[]): Re
 /**
  * 巡逻路线组：**同一片巡逻区**（同一个 `site.id`）的全部巡逻格（footprint 并集）。
  *
- * 与 {@link territoryPatrolGroupKey} 同口径；停巡判据与绑关卡也读同一片。
+ * 与 {@link territoryPatrolGroupKey} 同口径；绑关卡也读同一片。
  */
 function territoryRouteCells(sites: readonly TerritorySite[]): ReadonlyMap<string, ReadonlySet<number>> {
     const cellsByGroup = new Map<string, Set<number>>();
@@ -137,22 +140,19 @@ function territoryRouteCells(sites: readonly TerritorySite[]): ReadonlyMap<strin
  * 巡逻野怪：**一片巡逻区**（同 `site.id`）的格子全部开启后，从填了 `patrolId` 的格子出发，
  * 在这片区域的格子内往返（分片口径见 {@link territoryRouteCells}）。
  *
- * 生灭判据是**战斗 id**（与关卡同口径），不是单项占点：
- * - 一片巡逻区（同 `site.id`）共用同一个 `battleId`（见 `territoryPatrolBattleByCell`）；
- * - 同一场战斗（同 battleId）的格子**共享通过状态** —— 任一格已占点即整片通过，
- *   与 `TerritoryProgress.isAreaPassed` 的区域口径一致；
- * - 该场战斗已通过 ⇒ 不再生成这只巡逻野怪（玩家打掉了这组敌人）。
+ * 2026-11-20 口径：「已经通过的巡逻宝箱野怪，会继续展示移动，样式要去掉颜色叠暗和
+ * 红色描边」。⇒ **通关只改表现，不再决定生灭**：本函数只看「片区内格子全部开启」
+ * 这一个可见性前置，战斗通过与否一概不过滤；`territoryPatrolPassedCells` 交给发布帧，
+ * 由 `TerritoryMonsterPatrolView.applyLook` 把该片的怪写成原色并收起描边副本，
+ * 同时 `paintHexes` 用它把地块转草地 / 摘红框。
  *
- * 「片区内格子全部开启」仍保留为前置：它是**可见性**条件，未揭示的格子被云层盖着，
- * 提前出怪会直接穿帮。战斗判定决定的是「已经在巡逻的怪什么时候消失」。
+ * 🔴 别把「已通过」重新写回来当生灭判据：那会让通关片区变成一片空草地，
+ * 用户要的是「怪还在走、只是不再像敌人」。
  */
 export function buildTerritoryMonsterPatrols(
     map: TerritoryMapConfig,
     progress: { isCellUnlocked(cellId: number): boolean; isOwned(cellId: number): boolean },
 ): readonly ITerritoryMonsterPatrol[] {
-    // 已通过的战斗：同 id 的格子任一格占点即算通过（关卡的区域共享同口径）。
-    // 与视图的地皮 / 红框判据共用同一份集合，别在这里另算一遍 `passed`。
-    const passedCells = territoryPatrolPassedCells(map.sites, progress);
     const cellsByGroup = territoryRouteCells(map.sites);
     const patrols: ITerritoryMonsterPatrol[] = [];
     for (const site of map.sites) {
@@ -167,7 +167,6 @@ export function buildTerritoryMonsterPatrols(
             }
         }
         if (!allUnlockedOrOwned) continue;
-        if (passedCells.has(site.cellId)) continue;
         const route = [site.cellId];
         const visited = new Set(route);
         const visit = (cellId: number): void => {

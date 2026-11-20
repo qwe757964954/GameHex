@@ -1499,6 +1499,7 @@ export class ZCGameModel {
     reset(): void {
         this.debugDraw = null;
         this.debugCards.clear();
+        this.matchWinner = null;
         this.territoryCountsReady = false;
         this.territoryCounts.clear();
         this.state = ZCSnapshotCodec.createInitialState(this.config, this.random);
@@ -1517,9 +1518,6 @@ export class ZCGameModel {
         this.deferredBarracksSpawns.length = 0;
         this.frameEvents.length = 0;
         this.nextDefenceWaveIndex = 0;
-        // 胜方也归零：`reset()` 换的是一整局新快照，留着上一局的胜方会让 `renderFrame.winner`
-        // 在下一局开局就带脏值（结算前谁赢这件事必须由本局重新判）。
-        this.matchWinner = null;
         for (const owner of ZC_OWNER_ORDER) {
             this.damageDealt[owner] = 0;
             this.damageTaken[owner] = 0;
@@ -1563,7 +1561,8 @@ export class ZCGameModel {
         //  未配置这些技能的单位行为逐字不变。
         ZCSkillTriggerSystem.tick(this.state, dt, this.skillTriggerContext);
         this.projectileSystem.update(this.state.projectiles, dt, this.projectileContext);
-        this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner));
+        this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner),
+            this.neutralFeatures.monsterTerritory);
         this.refreshTileStates();
         //  塔防局同样要跑 NPC 翻地（2026-11-09）：NPC 靠翻地块解锁新的怪物卡牌，
         //  早前这里用 `!this.pveDefence` 整段跳过 ⇒ 红方棋盘从开局起一格都不动。

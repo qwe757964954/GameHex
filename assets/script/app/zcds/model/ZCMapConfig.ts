@@ -237,10 +237,11 @@ export function isRandomMapCandidate(
     layout: { playerCount?: number; cityMode?: string } | null | undefined,
     requestedPlayerCount?: ZCPlayerCount | null,
 ): boolean {
-    const count = layout?.playerCount ?? 2;
+    if (!layout) return false;
+    const count = layout.playerCount ?? 2;
     return (count === 2 || count === 3 || count === 4)
         && (!requestedPlayerCount || count === requestedPlayerCount)
-        && (layout?.cityMode === undefined || layout.cityMode === 'fixed' || layout.cityMode === 'select');
+        && (layout.cityMode === undefined || layout.cityMode === 'fixed' || layout.cityMode === 'select');
 }
 
 export const ZC_DEFAULT_HOME_MIN_DISTANCE = 2;
@@ -290,8 +291,8 @@ export function resolveZCMapZoom(
         }
         return value;
     };
-    const min = pick(layout?.zoomMin, ZC_MAP_ZOOM_MIN_DEFAULT, 'zoomMin');
-    const max = pick(layout?.zoomMax, ZC_MAP_ZOOM_MAX_DEFAULT, 'zoomMax');
+    const min = pick(layout ? layout.zoomMin : undefined, ZC_MAP_ZOOM_MIN_DEFAULT, 'zoomMin');
+    const max = pick(layout ? layout.zoomMax : undefined, ZC_MAP_ZOOM_MAX_DEFAULT, 'zoomMax');
     if (min > max) throw new Error(`地图镜头倍率下限（${min}）不能大于上限（${max}）`);
     return { min, max };
 }
@@ -426,9 +427,10 @@ export let ZC_MAP_ZOOM_MAX = ZC_MAP_ZOOM_MAX_DEFAULT;
 
 /** 载入编辑器地图；格子 id 仍按 row * columns + column，虚空保留 id 但不可通行。*/
 export function parseZCMap(layout: ZCMapLayout): ZCMatchMap {
-    const rows = layout?.rows;
-    const columns = layout?.columns;
-    const version = layout?.version ?? 1;
+    if (!layout) throw new Error('缺少地图数据');
+    const rows = layout.rows;
+    const columns = layout.columns;
+    const version = layout.version ?? 1;
     if (!Number.isInteger(version) || version < 1 || version > 3) throw new Error('地图版本只支持 1、2 或 3');
     // v1/v2 的镜像语义是「存一半」，要求偶数行；v3 起允许奇数行，中线行镜像到自身。
     const requireEvenRows = version <= 2;
@@ -608,8 +610,9 @@ export function parseZCMap(layout: ZCMapLayout): ZCMatchMap {
     };
 
     // ---- 间距参数（《地图编辑器需求文档》5.5）------------------------------------
-    const homeMinDistance = layout.spacing?.homeMinDistance ?? ZC_DEFAULT_HOME_MIN_DISTANCE;
-    const resourceMinDistance = layout.spacing?.resourceMinDistance ?? ZC_DEFAULT_RESOURCE_MIN_DISTANCE;
+    const spacing = layout.spacing;
+    const homeMinDistance = spacing && spacing.homeMinDistance !== undefined ? spacing.homeMinDistance : ZC_DEFAULT_HOME_MIN_DISTANCE;
+    const resourceMinDistance = spacing && spacing.resourceMinDistance !== undefined ? spacing.resourceMinDistance : ZC_DEFAULT_RESOURCE_MIN_DISTANCE;
     if (!Number.isInteger(homeMinDistance) || homeMinDistance < 0) {
         throw new Error('主城最小间距必须是非负整数');
     }

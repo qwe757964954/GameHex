@@ -128,6 +128,12 @@ export const ZC_EFFECT_PATHS = {
     bigFist: 'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效',
     sustainedAura: 'units/projectiles/持续光环伤害效果/持续光环伤害效果',
     lightningBullet: 'units/projectiles/雷弹攻击/雷弹攻击',
+    //  2026-11-20：雷弹命中（`30231 雷法师普攻` 的命中爆点，68016 磁电菇 / 68022 雷蕉 两张卡共用）。
+    //  单独给语义键是为了挂 `nodeScale` —— 美术本体烘焙 0.7，用户要「缩小成 50%」。
+    thunderBulletImpact: 'units/projectiles/雷弹命中/雷弹命中',
+    //  2026-11-20 同轮：`磁电菇_子弹命中`（`30717 杰克藕普攻` 的命中爆点，只有 68008 杰克藕用）
+    //  也按同一口径缩 50%。它和上面那条是**两份独立美术**（本体烘焙 0.4），别合并成一个键。
+    cidianBulletImpact: 'units/projectiles/磁电菇_子弹命中/磁电菇_子弹命中',
     // 2026-11-19 第 23 批：闪电链**专属**电弧（美术新出的水墨风）。链路是「同一段首尾相接」，
     // 所以它和 `bolt`（落雷，一端亮团一端细丝）不能共用 —— 共用就会一段亮一坨、一段细丝。
     chainArc: 'units/projectiles/闪电链水墨风/闪电链水墨风',
@@ -396,6 +402,25 @@ export const ZC_EFFECT_SPECS: readonly IZCEffectSpec[] = [
         prefabPath: ZC_EFFECT_PATHS.laserAttack,
         fadeSeconds: 0.18,
         notes: '30719/30845 共用；命中后定格 0.18s',
+    },
+    {
+        prefabPath: ZC_EFFECT_PATHS.thunderBulletImpact,
+        nodeScale: 0.5,
+        //  需求 2026-11-20：「68016 和 68022 的受击效果太大了，统一都改小成 50%」。
+        //  这两个单位共用 `pvpSkill 30231 雷法师普攻`，全表只有它俩用它 ⇒ 按 prefab 路径
+        //  挂倍率就是「只影响这两张卡」。prefab 本体烘焙 0.7，乘完屏上 0.35。
+        //  🔴 命中爆点是 `area` 事件，判定半径来自配置（本行 `areaRadius` 为 0，纯表现），
+        //  所以缩倍率不动任何判定；反过来说，谁要改它的**视觉**大小就改这里，别去改 prefab
+        //  —— 那个 prefab 与 `雷弹攻击` 是同一批美术资产，改本体还会牵动拖尾与命中彩度口径。
+        notes: '30231 命中爆点（68016 / 68022 共用）；烘焙 0.7 × 0.5 = 屏上 0.35',
+    },
+    {
+        prefabPath: ZC_EFFECT_PATHS.cidianBulletImpact,
+        nodeScale: 0.5,
+        //  同一条需求的后半句：「杰克藕那份也缩」。它只挂在 `30717 杰克藕普攻`（68008）上。
+        //  注意本体烘焙只有 0.4（比雷弹命中那份小），所以乘完屏上 0.2 —— 两张爆点不再一样大，
+        //  这是「各自按自己原大小的 50%」的结果，不是漏改。
+        notes: '30717 命中爆点（68008 杰克藕）；烘焙 0.4 × 0.5 = 屏上 0.2',
     },
 ];
 

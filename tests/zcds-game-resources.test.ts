@@ -130,10 +130,13 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
 
     const progress = { currentWaveId: 1, currentWaveCardId: null, currentWaveIsBoss: true };
     game.renderBossPanel({ defenceWaveProgress: progress });
+    // 非 BOSS 波：同一块面板不重建、波次徽标继续挂着，但大血条整组收起（2026-11-20）。
+    const normalWave = { currentWaveId: 2, currentWaveCardId: null, currentWaveIsBoss: false };
+    game.renderBossPanel({ defenceWaveProgress: normalWave });
     assert.deepEqual(instantiated, [bossPanelPrefab]);
-    assert.equal(rendered.length, 1);
+    assert.equal(rendered.length, 2);
     assert.equal(rendered[0][0], progress);
-    assert.deepEqual(barVisible, [true], 'BOSS 波要把血条组点亮');
+    assert.deepEqual(barVisible, [true, false], '只有 BOSS 波点亮血条组');
 });
 
 test('view emits frames and destruction with its own owner, without owning business results', () => {

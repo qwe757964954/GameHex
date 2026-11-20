@@ -3,7 +3,7 @@ import type { ZCBuildingType, ZCHexState, ZCSnapshot } from '../ZCGameTypes';
 import type { ZCOwner } from '../ZCMapConfig';
 import type { ZCMatchConfig, ZCMatchMap } from '../ZCMatchConfig';
 import {
-    isZCNeutralResourceBuilding, neutralResourceItemOf,
+    isZCNeutralResourceBuilding, neutralResourceItemOf, ZCNeutralResourceType,
     type ZCNeutralResourceItem,
 } from '../ZCNeutralResourceGroup';
 import { drawPvpTile, type ZCPvpSeatDrawRules, type ZCPvpTileType } from '../ZCPvpTileRules';
@@ -89,6 +89,10 @@ export class ZCDevelopmentSystem {
         const developmentResolved = hex.developmentResolved;
         hex.owner = owner;
         hex.state = developmentResolved ? 'developed' : 'occupied';
+        // 出生格的生命值仍由中立野怪战斗结算持有。
+        if (neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Monster) {
+            return { changed: true, terrainChanged: changedOwner || isRuins };
+        }
         hex.cardId = null;
         hex.developmentResolved = developmentResolved;
         hex.tier = 0;

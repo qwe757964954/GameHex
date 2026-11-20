@@ -87,6 +87,8 @@ const PATH_LITERALS = {
     selfAuraFlame: 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环',
     lightningImpact: 'units/projectiles/雷电冲击/雷电冲击',
     selfAuraFire: 'units/projectiles/麻辣铁锅_喷射火焰/麻辣铁锅_喷射火焰',
+    // 2026-11-20 第 33 批：101404 分裂菇的「生成分身」爆点（散帧序列，见 build_fission_spawn_fx.py）。
+    fissionSpawn: 'units/projectiles/分裂菇_生成分身/分裂菇_生成分身',
 } as const;
 
 /** 行为键 → 目录给出的路径；与改造前每个 `ZC*Fx` 模块的输出逐项一致。*/
@@ -119,6 +121,9 @@ const EXPECTED_BEHAVIOR_PATHS: Readonly<Record<string, readonly string[]>> = {
     ],
     [ZC_EFFECT_BEHAVIOR_KEYS.stormZone]: [PATH_LITERALS.windHurricane],
     [ZC_EFFECT_BEHAVIOR_KEYS.rayBeam]: [PATH_LITERALS.lightningImpact],
+    //  2026-11-20 第 33 批：召唤（`summon_unit`）的分身生成爆点。
+    //  不进预热（`warmup` 未标）⇒ 本局没有分裂菇就不下这 26 张散图。
+    [ZC_EFFECT_BEHAVIOR_KEYS.summonUnit]: [PATH_LITERALS.fissionSpawn],
 };
 
 test('路径语义键的字面量保持改造前快照', () => {

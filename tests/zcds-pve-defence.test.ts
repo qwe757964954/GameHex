@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { defenceMonsterScale, ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
+import {
+    defenceMonsterScale, ZC_DEFENCE_SPAWN_INTERVAL_SECONDS, ZCGameModel,
+} from '../assets/script/app/zcds/model/ZCGameModel';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type ZCPveDefenceWave } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -122,11 +124,15 @@ test('塔防清空本轮怪物后立即出下一波，死亡动画不阻塞且�
     model.tick(.05);
     assert.equal(model.defenceWaveProgress?.spawnedWaves, 0, '首波仍等待配置时间');
     model.tick(.05);
+    // 2026-11-20：同一波逐只出怪（间隔 0.15s）⇒ 触发那一拍只出第一只。
+    assert.equal(model.snapshot.units.length, 1, '波次触发当拍只出一只');
     const firstWave = [...model.snapshot.units];
     Object.assign(firstWave[0], { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
-    assert.equal(model.defenceWaveProgress?.spawnedWaves, 1, '尚有一只存活时继续等待');
-    Object.assign(firstWave[1], { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    assert.equal(model.defenceWaveProgress?.spawnedWaves, 1, '排队中的第二只还没出生，也要继续等待');
+    while (model.snapshot.units.length < 2) model.tick(.05);
+    assert.equal(model.snapshot.units.length, 2, '间隔到点后补出第二只');
+    Object.assign(model.snapshot.units[1], { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
     assert.equal(model.defenceWaveProgress?.spawnedWaves, 2, '清空后无需等到 30 秒');
     assert.equal(model.defenceWaveProgress?.aliveEnemies, 1, '只提前生成下一波');
@@ -211,16 +217,21 @@ test('本波血条：分子随存活血量走，分母固定在生成那一刻',
     assert.equal(model.defenceWaveProgress?.currentWaveMaxHp, unit.maxHp);
 });
 
-test('塔防局的 NPC 照常翻地块（2026-11-09：NPC 靠翻地解锁新的怪物卡）', () => {
+test('首领关的敌方在首领出场前后都不翻格，首领仍按波次出场', () => {
+    const interval = captureZCMatchConfig().rules.enemyAiIntervalSeconds;
     const config = defenceConfig([
-        { waveId: 1, showAtSeconds: 999, cardId: '', monsterCount: 1, tier: 1 },
+        { waveId: 1, showAtSeconds: interval * 2, cardId: '', monsterCount: 1, tier: 1, isBoss: true },
     ]);
     const model = new ZCGameModel(null, () => .1, config);
-    const before = model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
-    model.tick(config.rules.enemyAiIntervalSeconds + .1);
-    const after = model.snapshot.hexes.filter((hex) => hex.owner === 'enemy' && hex.developmentResolved).length;
-    assert.ok(after > before, '塔防局的 NPC 不能整局不动，必须翻地块');
-    assert.equal(model.snapshot.units.length, 0, '这一段不该出怪');
+    const start = enemyDevelopedCount(model);
+    advanceBy(model, interval + .1);
+    assert.equal(enemyDevelopedCount(model), start, '首领出场前敌方不翻格');
+    assert.equal(model.defenceWaveProgress?.spawnedWaves, 0);
+
+    advanceBy(model, interval * 2);
+    assert.equal(model.defenceWaveProgress?.spawnedWaves, 1);
+    assert.equal(model.defenceWaveProgress?.currentWaveIsBoss, true);
+    assert.equal(enemyDevelopedCount(model), start, '首领出场后敌方不翻格');
 });
 
 /** 普通（非塔防）局面：AI 会翻地块，用它量「翻地块速度」。 */
@@ -266,32 +277,6 @@ test('openGrideTime 是「两次翻格之间的最小间隔」，从第一次翻
     // 再等不足 18 秒：不许接着翻。
     advanceBy(model, 2.9);
     assert.equal(enemyDevelopedCount(model), start + 2);
-});
-
-test('塔防局 NPC 同样要翻地块解锁新卡，节奏仍受 openGrideTime 约束', () => {
-    const base = captureZCMatchConfig();
-    const playable = base.enemyDeck.find((card) => card.unitId);
-    assert.ok(playable, 'test requires a spawnable enemy card');
-    // 波次挂到 999 秒：整段用例里不会真的出怪，量到的变化只可能来自翻地。
-    const config = captureZCMatchConfig({
-        ...base,
-        enemyDeck: [playable],
-        openGrideTime: 18,
-        pveDefence: {
-            waves: [{ waveId: 1, showAtSeconds: 999, cardId: playable.id, monsterCount: 1, tier: 1 }],
-        },
-    });
-    const model = new ZCGameModel(null, () => .1, config);
-    const start = enemyDevelopedCount(model);
-    // 塔防局以前整段跳过 AI（红方开局一格不动），这条守「必须动」+「首格不被拖后」。
-    advanceBy(model, .1);
-    assert.equal(enemyDevelopedCount(model), start + 1, '塔防局 NPC 开局就要翻第一格');
-    // 之后 3 秒（远小于 18）不许再翻。
-    advanceBy(model, 3);
-    assert.equal(enemyDevelopedCount(model), start + 1, 'openGrideTime 内不许再翻');
-    // 距首格满 18 秒：放开一拍 —— 塔防局的 NPC 不再整局不动。
-    advanceBy(model, 15);
-    assert.equal(enemyDevelopedCount(model), start + 2, '塔防局 NPC 必须翻地块，且到点只翻一格');
 });
 
 test('openGrideTime 的下限是 1 秒：填 1 真按 1 秒翻，不再被全局 2.8s 抬回去', () => {
@@ -624,4 +609,54 @@ test('波次模式我方建筑仍可受伤，普通对战敌方主城和城墙�
     combat.damageBuilding({ owner: 'player' }, home, home.hp * 2);
     assert.equal(home.building, 'none');
     assert.equal(home.owner, 'player');
+});
+
+test('塔防一波多只按 0.15s 逐只出怪，且同波怪都落在同一条出怪轴上', () => {
+    const config = defenceConfig([{ waveId: 1, showAtSeconds: .1, cardId: '', monsterCount: 4, tier: 1 }]);
+    const model = new ZCGameModel(null, () => .25, config);
+    model.tick(.1);
+    const timeline = [model.snapshot.units.length];
+    for (let step = 0; step < 9; step += 1) {
+        model.tick(.05);
+        timeline.push(model.snapshot.units.length);
+    }
+    // 触发那一拍出第一只，之后每 0.15s（= 3 拍）补一只：0.10 / 0.25 / 0.40 / 0.55。
+    assert.deepEqual(timeline, [1, 1, 1, 2, 2, 2, 3, 3, 3, 4], '同一波逐只出怪，不是同一帧一坨');
+    assert.equal(ZC_DEFENCE_SPAWN_INTERVAL_SECONDS, .15, '用户口径 0.1~0.2s');
+
+    // 队列成直线：所有怪都从「敌方主城 → 我方主城」这条轴上出生，只是出发时刻不同。
+    const home = config.map.hexes[config.map.enemyHomeId];
+    const goal = config.map.hexes[config.map.playerHomeId];
+    const axis = Math.atan2(goal.y - home.y, goal.x - home.x);
+    const units = model.snapshot.units.filter((unit) => unit.battleState !== 'dead');
+    assert.equal(units.length, 4);
+    for (const unit of units) {
+        const offset = (unit.freeX - home.x) * Math.sin(axis) - (unit.freeY - home.y) * Math.cos(axis);
+        assert.ok(Math.abs(offset) < .5, `怪必须压在出怪轴上（偏离 ${offset.toFixed(2)}px）`);
+        assert.ok(Math.abs(unit.facingRadians - axis) < 1e-6);
+    }
+});
+
+test('塔防末波还在排队出怪时不算击败 BOSS', () => {
+    const config = defenceConfig([
+        { waveId: 1, showAtSeconds: .05, cardId: '', monsterCount: 1, tier: 1 },
+        { waveId: 2, showAtSeconds: 100, cardId: '', monsterCount: 2, tier: 4, isBoss: true },
+    ]);
+    const model = new ZCGameModel(null, () => .25, config);
+    model.tick(.05);
+    Object.assign(model.snapshot.units[0], { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    // 清空第一波 ⇒ 末波提前触发，只出第一只 BOSS。
+    model.tick(.05);
+    assert.equal(model.defenceWaveProgress?.currentWaveId, 2);
+    const bossUnits = model.snapshot.units.filter((unit) => unit.battleState !== 'dead');
+    assert.equal(bossUnits.length, 1, '末波也是逐只出怪');
+    Object.assign(bossUnits[0], { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    for (let step = 0; step < 2; step += 1) model.tick(.05);
+    assert.equal(model.snapshot.status, 'playing', '还有一只没出生，不能因为场上空了就判胜');
+    while (model.snapshot.units.filter((unit) => unit.battleState !== 'dead').length === 0) model.tick(.05);
+    const last = model.snapshot.units.find((unit) => unit.battleState !== 'dead');
+    assert.ok(last);
+    Object.assign(last, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
+    model.tick(.05);
+    assert.equal(model.snapshot.status, 'victory', '末波真正清空才结算');
 });

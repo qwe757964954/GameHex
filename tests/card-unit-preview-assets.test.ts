@@ -4,20 +4,19 @@ import { existsSync, readFileSync } from 'node:fs';
 import { CardUnitPreviewAssets } from '../assets/script/app/card/CardUnitPreviewAssets';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { assetPath } from './helpers/asset-paths';
+import { readRefRows } from './helpers/ref-kvc';
+
+/** 读 remoteRef 表 → 行对象数组（列存 / 行对象数组两种产物格式由 helper 收口）。 */
+const readRows = readRefRows;
 
 test('卡表解析保留兵种预制体路径，阵容页无需依赖对局单位目录缓存', () => {
-    const packed = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as
-        { k: string[]; v: unknown[][] };
-    const row = packed.v.map((values) => Object.fromEntries(packed.k.map((key, index) => [key, values[index]])))
-        .find((card) => card.id === 68001);
+    const row = readRows('pvpCard').find((card) => card.id === 68001);
     assert.ok(row);
     assert.equal(parseCardCatalogRow(row).unitPrefabPath, 'skel/豌豆射手/豌豆射手');
 });
 
 test('卡表中的上阵兵种预制体均有待机动作', () => {
-    const packed = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as
-        { k: string[]; v: unknown[][] };
-    const rows = packed.v.map((values) => Object.fromEntries(packed.k.map((key, index) => [key, values[index]])));
+    const rows = readRows('pvpCard');
     const paths = new Set(rows.map((row) => row.unitPrefabPath).filter((value): value is string =>
         typeof value === 'string' && value.length > 0));
     assert.ok(paths.size > 0);
@@ -31,9 +30,7 @@ test('卡表中的上阵兵种预制体均有待机动作', () => {
 });
 
 test('怪物卡表的兵种预制体同样真实存在（50017 曾指向已删除的 units/阿尔萨斯）', () => {
-    const packed = JSON.parse(readFileSync('assets/remoteRef/monsterCard.json', 'utf8')) as
-        { k: string[]; v: unknown[][] };
-    const rows = packed.v.map((values) => Object.fromEntries(packed.k.map((key, index) => [key, values[index]])));
+    const rows = readRows('monsterCard');
     const paths = new Set(rows.map((row) => row.unitPrefabPath).filter((value): value is string =>
         typeof value === 'string' && value.length > 0));
     assert.ok(paths.size > 30, `怪物卡的 prefab 路径数量异常：${paths.size}`);

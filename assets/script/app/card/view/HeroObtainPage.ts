@@ -4,7 +4,7 @@
  * ## 四段动画（时间轴真源在 `model/HeroObtainLayout.ts`）
  *
  * 1. **入场**：底图淡入 → 放射光放大淡入（同时回正角度）→ 标题从上方落下回弹；
- * 2. **卡片展示**：英雄从下方浮起 + 淡入（Spine 播 idle）→ 影子 → 名牌弹入 →
+ * 2. **卡片展示**：英雄从下方浮起 + 淡入（Spine 播 idle，影子随骨骼自带）→ 名牌弹入 →
  *    职业徽标 / 名字错峰淡入；
  * 3. **光效与进度**：进度条底淡入 → 填充从左长满 + 数字同步滚动；
  * 4. **收尾**：「点击屏幕继续」淡入 → 落到设计稿静止态（此后不再有常驻动画）。
@@ -54,7 +54,6 @@ import {
     heroObtainNameAlphaOf,
     heroObtainPlateVisualOf,
     heroObtainRaysVisualOf,
-    heroObtainShadowAlphaOf,
     heroObtainTitleVisualOf,
     heroObtainTotalSeconds,
 } from '../model/HeroObtainLayout';
@@ -108,9 +107,6 @@ export class HeroObtainPage extends PopupBase {
 
     @property({ type: Sprite, tooltip: '英雄宿主 Sprite（Spine 失败时显示头图）' })
     heroSprite: Sprite = null!;
-
-    @property({ type: UIOpacity, tooltip: '英雄影子透明度' })
-    shadowOpacity: UIOpacity = null!;
 
     @property({ type: Node, tooltip: '名牌节点（弹入）' })
     plateNode: Node = null!;
@@ -167,6 +163,8 @@ export class HeroObtainPage extends PopupBase {
     private _elapsed = 0;
     private _playing = false;
     private _done = false;
+    /** 入场落定后放射光继续自转；关闭 / 重置时熄火（`_done` 被 onClose 占用，不能复用）。 */
+    private _raysSpinning = false;
     /** 动画节点的 prefab 初始位置：每帧从它算绝对位置 ⇒ 反复打开也不会越飘越远。 */
     private readonly _basePos = new Map<Node, Vec3>();
     private _progress: { current: number; max: number } | null = null;
@@ -205,6 +203,7 @@ export class HeroObtainPage extends PopupBase {
     protected onClose(): void {
         this._playing = false;
         this._done = true;
+        this._raysSpinning = false;
         this._preview?.clear();
         this._preview = null;
         // 多个橙卡碎片要**逐个**播：关掉这一页之后引导层 / 下一张才轮到。
@@ -221,10 +220,18 @@ export class HeroObtainPage extends PopupBase {
     }
 
     protected update(dt: number): void {
-        if (!this._playing || this.isCovered) return;
+        // 被别的弹窗盖住时整个时钟停走（掀开时从原处接着转，不跳角度）。
+        if (this.isCovered) return;
+        if (this._playing) {
+            this._elapsed += dt;
+            this.applyVisual();
+            if (this._elapsed >= heroObtainTotalSeconds()) this.finishReveal();
+            return;
+        }
+        // 入场落定后只剩放射光自转：每帧只写一个角度，不整份重放 `applyVisual`。
+        if (!this._raysSpinning) return;
         this._elapsed += dt;
-        this.applyVisual();
-        if (this._elapsed >= heroObtainTotalSeconds()) this.finishReveal();
+        this.raysNode.angle = heroObtainRaysVisualOf(this._elapsed).angle;
     }
 
     // 资源
@@ -264,6 +271,7 @@ export class HeroObtainPage extends PopupBase {
         this._elapsed = 0;
         this._playing = false;
         this._done = false;
+        this._raysSpinning = false;
         this._progress = null;
         this._preview?.clear();
         this._preview = null;
@@ -284,7 +292,6 @@ export class HeroObtainPage extends PopupBase {
         this.spriteOf(this.raysNode).spriteFrame = frames.rays ?? null;
         this.spriteOf(this.titleNode).spriteFrame = frames.title ?? null;
         this.spriteOf(this.plateNode).spriteFrame = frames.plate ?? null;
-        this.spriteOf(this.shadowOpacity.node).spriteFrame = frames.shadow ?? null;
         this.shardSprite.spriteFrame = frames.shard ?? null;
         this.barBgSprite.spriteFrame = frames.barBg ?? null;
         this.barFillSprite.spriteFrame = frames.barFill ?? null;
@@ -306,7 +313,7 @@ export class HeroObtainPage extends PopupBase {
 
     /** 进度条底不是脚本引用（只在 renderStatic 里写一次，这里按名字取）。 */
     private spriteOf(node: Node): Sprite {
-        // 目标节点（Rays/Title/Plate/Shadow/BarFill）均已核实带 Sprite；没有可回退的第二来源。
+        // 目标节点（Rays/Title/Plate/BarFill）均已核实带 Sprite；没有可回退的第二来源。
         return node.getComponent(Sprite);
     }
 
@@ -355,8 +362,6 @@ export class HeroObtainPage extends PopupBase {
         this.heroRoot.setScale(hero.scale, hero.scale, 1);
         this.placeWithRise(this.heroRoot, hero.rise);
 
-        this.shadowOpacity.opacity = Math.round(255 * heroObtainShadowAlphaOf(elapsed));
-
         const plate = heroObtainPlateVisualOf(elapsed);
         this.plateOpacity.opacity = Math.round(255 * plate.alpha);
         this.plateNode.setScale(plate.scale, plate.scale, 1);
@@ -391,5 +396,7 @@ export class HeroObtainPage extends PopupBase {
         this._playing = false;
         this._elapsed = heroObtainTotalSeconds();
         this.applyVisual();
+        // 收尾之后仍然要跟时钟：放射光从这一刻开始匀速顺时针转。
+        this._raysSpinning = true;
     }
 }

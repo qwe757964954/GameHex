@@ -36,10 +36,11 @@ import {
     parseUnits,
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { assetPath } from './helpers/asset-paths';
+import { readRefTable } from './helpers/ref-kvc';
 
-/** 读 remoteRef 的列存表（`{k, v, c}`）→ 行对象数组。 */
+/** 读 remoteRef 表 → 行对象数组（列存 / 行对象数组两种产物格式由 helper 收口）。 */
 function readPvpRef(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
+    const source = readRefTable(name);
     return source.v.map((row) => {
         const entry: Record<string, unknown> = {};
         source.k.forEach((key, index) => { entry[key] = row[index]; });

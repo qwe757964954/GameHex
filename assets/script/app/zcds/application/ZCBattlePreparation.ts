@@ -13,7 +13,9 @@ export function createZCBattleSession(context: IControllerContext, input: IZCBat
     const session = new ZCBattleController<ZCGame>(context, {
         prepareDirect: (scope, entry, resources) => {
             const loader = new ZCGameLoader(resources, MAP_DIRECTORY, Math.random, resolveZCBattlePlayerCount(entry));
-            return loader.prepare(scope, entry?.battle, entry?.pve?.waves.map(wave => wave.pvpCardId));
+            const battle = entry ? entry.battle : undefined;
+            const extraCards = entry && entry.pve ? entry.pve.waves.map(wave => wave.pvpCardId) : undefined;
+            return loader.prepare(scope, battle, extraCards);
         },
         buildEntry: buildZCBattleEntry,
         resolvePveResult: (pve, victory) => {

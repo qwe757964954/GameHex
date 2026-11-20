@@ -42,7 +42,7 @@ import { buildArmySkillTable } from './CardSkillList';
 import type { ZCCardLevelUpTable, ZCUpgradeStatus } from './CardUpgradeCost';
 import { buildCardLevelUpTable, evaluateUpgrade } from './CardUpgradeCost';
 import type { FormationSaveResult, ZCFormation } from './FormationService';
-import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, saveFormation, selectFormation } from './FormationService';
+import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, resetFormationSession, saveFormation, selectFormation } from './FormationService';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
 import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
@@ -154,6 +154,9 @@ export class RuntimeCardRepository implements ICardRepository {
         const previous = this.heroes;
         this.heroes = heroes;
         previous?.dispose();
+        if (typeof resetFormationSession === 'function') {
+            resetFormationSession();
+        }
     }
 
     prefetchHeroInfos(): void {
@@ -430,7 +433,17 @@ export class RuntimeCardRepository implements ICardRepository {
                 cooldown: Math.max(0, Number(plan.cooldown) || 0),
             });
         }
-        const itemIds = new Set(skillIds.flatMap(id => table.get(id)?.levels.flatMap(level => level.costs?.map(cost => cost.itemId) ?? []) ?? []));
+        const itemIds = new Set<number>();
+        for (const id of skillIds) {
+            const skill = table.get(id);
+            if (!skill) continue;
+            for (const level of skill.levels) {
+                if (!level.costs) continue;
+                for (const cost of level.costs) {
+                    itemIds.add(cost.itemId);
+                }
+            }
+        }
         const counter = createItemCounter();
         const role: Readonly<Record<string, unknown>> = { ...readRoleRow() };
         const costItems = new Map<number, Omit<ICardSkillCost, 'need'>>();

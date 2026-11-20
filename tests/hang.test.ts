@@ -1014,7 +1014,7 @@ test('prefab 存在，根节点是第一个 `cc.Node` 且 `cc.Prefab.data` 指�
     assert.equal(PREFAB_NODES.length, 58, '节点数变了先确认结构（编辑器往返不会改数量）');
 });
 
-test('⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
+test('hang › ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
     const layers = new Set(PREFAB_NODES.map((n) => n._layer));
     assert.deepEqual([...layers], [33554432], `出现非 UI_2D 的 layer：${[...layers].join(', ')}`);
 });

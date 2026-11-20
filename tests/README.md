@@ -43,19 +43,19 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 反向可达与路径字面量两条机械判据兜底）。
 
 <!-- TEST-INDEX:BEGIN -->
-共 573 个测试文件、175,976 行、6,690 条用例（2026-11-16 实测；`npm run index:tests` 可重算）。
+共 588 个测试文件、181,139 行、6,873 条用例（2026-11-16 实测；`npm run index:tests` 可重算）。
 
 | 前缀 | 文件 | 用例 | 已进路由表 |
 | --- | --- | --- | --- |
-| `zcds` | 186 | 1823 | 36 |
-| `territory` | 86 | 1199 | 27 |
+| `zcds` | 189 | 1889 | 37 |
+| `territory` | 94 | 1270 | 29 |
 | `bigmap` | 65 | 524 | 11 |
-| `card` | 28 | 291 | 0 |
-| `guide` | 19 | 206 | 19 |
+| `card` | 30 | 310 | 7 |
+| `guide` | 19 | 209 | 19 |
 | `league` | 18 | 493 | 17 |
 | `main` | 16 | 141 | 3 |
-| `battle` | 9 | 99 | 0 |
-| `chest` | 7 | 52 | 0 |
+| `battle` | 9 | 99 | 3 |
+| `chest` | 7 | 52 | 2 |
 | `matching` | 7 | 49 | 0 |
 | `login` | 6 | 27 | 6 |
 | `map` | 4 | 133 | 0 |
@@ -72,10 +72,10 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 | `config` | 2 | 9 | 0 |
 | `firstRecharge` | 2 | 43 | 0 |
 | `game` | 2 | 14 | 0 |
-| `hero` | 2 | 15 | 0 |
+| `hero` | 2 | 16 | 2 |
 | `hot` | 2 | 34 | 2 |
 | `militia` | 2 | 23 | 1 |
-| `network` | 2 | 24 | 0 |
+| `network` | 2 | 25 | 0 |
 | `post` | 2 | 16 | 0 |
 | `preview` | 2 | 11 | 0 |
 | `procedure` | 2 | 16 | 1 |
@@ -85,7 +85,7 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 | `tab` | 2 | 13 | 0 |
 | `ui` | 2 | 15 | 0 |
 | `verify` | 2 | 17 | 0 |
-| 其余 60 个单文件前缀 | 60 | 1149 | 13 |
+| 其余 62 个单文件前缀 | 62 | 1171 | 15 |
 <!-- TEST-INDEX:END -->
 
 单文件前缀（一个功能一个文件，按需 grep）：`activity`、`art`、`battletoken`、`bootstrap`、
@@ -129,7 +129,7 @@ node tools/verify/verify.mjs reds               # 重新生成基线红清单，
 
 | 问题 | 现状 | 处置建议 |
 | --- | --- | --- |
-| 巨型文件 | `territory-presenter` 3466 行/113 用例、`map-editor` 2724/109、`hang` 2350/87、`zcds-model` 2328/66 | 按语义块拆成 3–4 个文件，不重写断言 |
+| 巨型文件 | `territory-presenter`（已于 2026-11-20 拆解为 battle/chapter/resource 3 个子文件并提取共享 fixture）、`map-editor` 2724/109、`hang` 2350/87、`zcds-model` 2328/66 | 按语义块拆成 3–4 个文件，不重写断言 |
 | 单源文件被围猎 | `TerritoryMapView.ts` 被 **42** 个测试文件覆盖，每个都自带一份 cc 桩 | 根因是它本身太大；先拆源模块，测试自然收敛 |
 | 重名用例 | 27 组同名（`D3 ⚠️ 所有节点 _layer 都是 UI_2D` ×5） | 加 `<域> ›` 前缀消歧；**改名会让基线失败名单失配**，需与 `baseline` 重算同批做 |
 | 两种风格 | 510 个平铺 `test()`，6 个 `describe/it` | 非缺陷，两种都能被 TAP 采集；保持现状即可，新文件用平铺 |

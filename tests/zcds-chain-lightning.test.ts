@@ -675,7 +675,10 @@ test('车道注册三处齐全：运行时 / 行为键白名单 / 触发系统',
     const schema = readFileSync('assets/script/app/zcds/model/ZCStatSchema.ts', 'utf8');
     assert.match(schema, /'chain_damage'/, 'behaviorKey 不在白名单 ⇒ 计划行会被判非法');
     const trigger = readFileSync('assets/script/app/zcds/model/systems/ZCSkillTriggerSystem.ts', 'utf8');
-    assert.match(trigger, /applyChainLightning\(unit, params, now, context, release\)/, 'tick 里要真的被调用');
+    //  第五个参数 2026-11-20 起是「闸门访问器」而不是算好的 `release`：闪电链与飓风共用一个
+    //  `getRelease`，只在自己那一拍真要放的时候才去扫目标（见 `ZCSkillTriggerSystem.tick`）。
+    //  这条守卫只认「真的被调用 + 带着闸门」，不再钉死形参名。
+    assert.match(trigger, /applyChainLightning\(unit, params, now, context, \w+\)/, 'tick 里要真的被调用');
 });
 
 test('chainReadyAt 进了快照白名单（不还原会读档白送一次）', () => {

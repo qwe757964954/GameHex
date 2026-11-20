@@ -12,9 +12,12 @@
  * ## 四段动画（设计稿只有静止态，时间轴是自拟的）
  *
  * 1. 入场：底图淡入 → 放射光放大淡入 → 标题从上方落下回弹；
- * 2. 卡片展示：英雄从下方浮起 + 淡入 → 影子 → 名牌弹入 → 职业徽标/名字淡入；
+ * 2. 卡片展示：英雄从下方浮起 + 淡入（影子随骨骼自带）→ 名牌弹入 → 职业徽标/名字淡入；
  * 3. 光效与进度：进度条底淡入 → 填充从左长满 + 数字同步滚动；
- * 4. 收尾：「点击屏幕继续」淡入（终态与设计稿逐像素一致，不留任何常驻呼吸动画）。
+ * 4. 收尾：「点击屏幕继续」淡入（终态与设计稿逐像素一致）。
+ *
+ * 常驻动画只有一处：放射光在入场结束后**持续顺时针自转**（见 `heroObtainRaysSpinAngleOf`），
+ * 其余节点落到终态就不再动。
  */
 
 // 进度语义
@@ -66,9 +69,6 @@ export const HERO_OBTAIN_TIMELINE = {
     /** 英雄从下方浮起。 */
     hero: 0.50,
     heroDelay: 0.26,
-    /** 英雄影子。 */
-    shadow: 0.30,
-    shadowDelay: 0.52,
     /** 名牌底弹入。 */
     plate: 0.30,
     plateDelay: 0.60,
@@ -102,9 +102,32 @@ export function heroObtainBgAlphaOf(elapsed: number): number {
     return progressOf(elapsed, 0, HERO_OBTAIN_TIMELINE.bg);
 }
 
-/** 放射光的起始缩放与角度（终态 angle = 0，和设计稿一致）。 */
+/** 放射光的起始缩放与角度（入场结束时角度回到 0，之后交给匀速自转，接缝不跳）。 */
 const HERO_OBTAIN_RAYS_FROM_SCALE = 0.62;
 const HERO_OBTAIN_RAYS_FROM_ANGLE = -16;
+
+/**
+ * 放射光自转一圈的秒数（顺时针）。
+ *
+ * 起点卡在**入场结束那一刻**（`raysDelay + rays`，此时角度恰好回到 0），
+ * 所以入场与自转是同一段曲线，中间不会有一下顿挫。
+ */
+export const HERO_OBTAIN_RAYS_SPIN_SECONDS = 12;
+const HERO_OBTAIN_RAYS_SPIN_START = HERO_OBTAIN_TIMELINE.raysDelay + HERO_OBTAIN_TIMELINE.rays;
+
+/**
+ * 自转角度：顺时针为**负**（Cocos 的 z 正方向是逆时针），落在 `(-360, 0]`。
+ *
+ * 对一圈取模而不是一路累减 —— 这页可能被玩家长时间停在展示态，
+ * `angle` 无限增长会掉精度（大角度下相邻两帧的角度差会退化成 0）。
+ */
+export function heroObtainRaysSpinAngleOf(elapsed: number): number {
+    const spun = elapsed - HERO_OBTAIN_RAYS_SPIN_START;
+    if (!(spun > 0)) return 0;
+    const turn = (spun / HERO_OBTAIN_RAYS_SPIN_SECONDS) % 1;
+    // 整圈处回到 0（写成 `-0` 会让 strictEqual / deepEqual 判不等）。
+    return turn === 0 ? 0 : -360 * turn;
+}
 
 export interface IHeroObtainRaysVisual {
     readonly alpha: number;
@@ -115,7 +138,7 @@ export interface IHeroObtainRaysVisual {
 export function heroObtainRaysVisualOf(elapsed: number): IHeroObtainRaysVisual {
     const progress = progressOf(elapsed, HERO_OBTAIN_TIMELINE.raysDelay, HERO_OBTAIN_TIMELINE.rays);
     if (progress <= 0) return { alpha: 0, scale: HERO_OBTAIN_RAYS_FROM_SCALE, angle: HERO_OBTAIN_RAYS_FROM_ANGLE };
-    if (progress >= 1) return { alpha: 1, scale: 1, angle: 0 };
+    if (progress >= 1) return { alpha: 1, scale: 1, angle: heroObtainRaysSpinAngleOf(elapsed) };
     const eased = heroObtainEaseOutBack(progress);
     return {
         alpha: heroObtainClamp01(progress * 1.4),
@@ -159,10 +182,6 @@ export function heroObtainHeroVisualOf(elapsed: number): IHeroObtainRiseVisual {
         scale: HERO_OBTAIN_HERO_FROM_SCALE + (1 - HERO_OBTAIN_HERO_FROM_SCALE) * eased,
         rise: HERO_OBTAIN_HERO_FROM_RISE * (1 - heroObtainEaseOutQuad(progress)),
     };
-}
-
-export function heroObtainShadowAlphaOf(elapsed: number): number {
-    return progressOf(elapsed, HERO_OBTAIN_TIMELINE.shadowDelay, HERO_OBTAIN_TIMELINE.shadow);
 }
 
 export interface IHeroObtainPlateVisual {

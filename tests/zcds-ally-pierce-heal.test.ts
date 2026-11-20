@@ -33,6 +33,7 @@ import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/z
 import type { ZCProjectileState, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCProjectileSystem } from '../assets/script/app/zcds/model/systems/ZCProjectileSystem';
 import { readSource } from './helpers/source-text';
+import { readRefTable, rowsOf } from './helpers/ref-kvc';
 
 const REMOTE = 'assets/remoteRef';
 const CLIENT = 'D:/Alan/Project/POW/doc/塔防数据配置/json/client';
@@ -40,8 +41,7 @@ const CLIENT = 'D:/Alan/Project/POW/doc/塔防数据配置/json/client';
 // ── 共享：两份产物的读表工具 ─────────────────────────────────────────────────
 
 function remoteRows(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`${REMOTE}/${name}.json`, 'utf8')) as { k: string[]; v: unknown[][] };
-    return source.v.map((row) => Object.fromEntries(source.k.map((key, index) => [key, row[index]])));
+    return rowsOf(readRefTable(name));
 }
 
 function clientRows(name: string): Array<Record<string, unknown>> {

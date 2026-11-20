@@ -361,8 +361,11 @@ test('服务端章节战斗阵容不再受本地关卡敌方卡牌名单裁剪',
     })) };
 
     const combined = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], { battle: server, selfRoleId: 'self', pve: { ...pve, playerCount: 2, stage: 1, enemyName: '', territorySaveOwner: null, mode: 'match' } }).matchConfig;
-    assert.deepEqual(combined, buildZCClientCombatConfig(source, server, 'self').config,
-        '服务端倍率与本地关卡参数同时存在时，也只采用服务端');
+    //  PVE 局入口会补一条 `npcOwners`（伤害飘字口径：非玩家互打不出数字），与倍率无关。
+    assert.deepEqual(combined, {
+        ...buildZCClientCombatConfig(source, server, 'self').config,
+        npcOwners: ['enemy'],
+    }, '服务端倍率与本地关卡参数同时存在时，也只采用服务端');
 
     const local = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], { selfRoleId: 'self', pve: { ...pve, playerCount: 2, stage: 1, enemyName: '', territorySaveOwner: null, mode: 'match' } }).matchConfig;
     assert.deepEqual(local.ownerRates, {}, '没有服务端数据时不补本地倍率');
@@ -609,7 +612,10 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     model.tick(.1);
     assert.equal(model.snapshot.status, 'playing', '首波缺席服务端阵容不能直接判胜');
     assert.equal(model.defenceWaveProgress?.spawnedWaves, 1);
-    assert.deepEqual(model.snapshot.units.map(unit => unit.cardId), ['68002', '68002']);
+    // 2026-11-20：同一波逐只出怪（0.15s 间隔）⇒ 触发那一拍只出第一只。
+    assert.deepEqual(model.snapshot.units.map(unit => unit.cardId), ['68002']);
+    for (let index = 0; index < 3; index += 1) model.tick(.05);
+    assert.deepEqual(model.snapshot.units.map(unit => unit.cardId), ['68002', '68002'], '间隔到点补出第二只');
     for (const unit of model.snapshot.units) Object.assign(unit, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
     assert.equal(model.snapshot.status, 'playing', '第二波必须实际生成并等待击败');

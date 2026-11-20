@@ -840,7 +840,7 @@ test('D2 ⚠️ 4 个协议类名与老端一致（改一个字母就是静默�
     }
 });
 
-test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
+test('mail › D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     const text = src('MailRepository.ts');
     assert.ok(text.includes('GameNet.sendRequest('), 'Repository 没走公共发包壳');
     assert.ok(text.includes("tag: 'Mail'"), '必须带 Mail tag');

@@ -26,6 +26,17 @@ export interface ZCCardFragmentProgress {
     readonly need: number;
     /** 已满级（进度条走满、文案显示「已满级」）。 */
     readonly maxed: boolean;
+    /**
+     * 升级按钮是否激活 —— **卡牌碎片与种族（兵种）经验同时够**、未满级、且这张卡有升级配置。
+     *
+     * 唯一真源是 `CardUpgradeCost.evaluateUpgrade().canUpgrade`（升级弹窗用它决定按钮灰不灰，
+     * 里面已把「通用经验 + 兵种经验」合并判过），卡库条目只读、不自己再算一遍。
+     *
+     * 2026-11-20 用户口径：「升级提示 icon 是卡牌升级按钮激活才展示，卡牌碎片和种族经验值
+     * 同时都满足才展示」。改之前这里只判「碎片够 + 未满级」，于是碎片够了、兵种经验还差
+     * 一截时箭头照样亮着，点进去按钮是灰的。
+     */
+    readonly upgradeable: boolean;
 }
 
 /**
@@ -70,7 +81,7 @@ export class CardLineupCard extends Component {
     @property({ type: Node, tooltip: 'LockVeil：未解锁压暗遮罩（yx_mask，仅未解锁时显示）' })
     lockVeil: Node = null;
 
-    @property({ type: Node, tooltip: 'UpgradeArrow：可升级箭头（碎片已够、且未满级时显示）' })
+    @property({ type: Node, tooltip: 'UpgradeArrow：可升级箭头（碎片与种族经验都够、升级按钮已激活时显示）' })
     upgradeArrow: Node = null;
 
     @property({ tooltip: '碎片数占位值（页面没给进度时的兜底）' })
@@ -110,7 +121,10 @@ export class CardLineupCard extends Component {
         const owned = Math.max(0, Math.round(progress?.owned ?? this.fallbackOwned));
         const need = Math.max(0, Math.round(progress?.need ?? this.fallbackNeed));
         const maxed = progress?.maxed ?? need <= 0;
-        const key = `${card.id}|${onField ? 1 : 0}|${normalizedLevel}|${owned}|${need}|${maxed ? 1 : 0}`;
+        //  `upgradeable` 必须进指纹：碎片没变、只是兵种经验涨够了，箭头也要跟着亮起来，
+        //  否则槽位按「输入没变」短路，下次 `refreshList` 还是旧箭头。
+        const upgradeable = progress?.upgradeable === true;
+        const key = `${card.id}|${onField ? 1 : 0}|${normalizedLevel}|${owned}|${need}|${maxed ? 1 : 0}|${upgradeable ? 1 : 0}`;
         // 图按引用比较：异步补完是另一个对象，必须重画。
         // 短路时不自增 artToken，让上一次 loader 回来还能认这个槽位。
         if (key === this.lastRenderKey && frames === this.lastFrames) return;
@@ -126,8 +140,10 @@ export class CardLineupCard extends Component {
         this.onFieldLabel.string = CARD_LINEUP_TEXTS.onField;
         // 等级 > 0 才算解锁，和排序口径一致。
         this.applyLocked(normalizedLevel <= 0);
-        // 已解锁、未满级、碎片够，才显示可升级箭头。
-        this.upgradeArrow.active = normalizedLevel > 0 && !maxed && need > 0 && owned >= need;
+        // 箭头只认「升级按钮是否激活」—— 碎片与种族经验同时够，与升级弹窗同一份判定。
+        // 别在这里另算 `owned >= need`：那正是「箭头亮着、点进去按钮是灰的」的来源。
+        // 未解锁（0 级）仍然不提示：整卡压暗挂着锁，这张卡上的按钮是「解锁」不是「升级」。
+        this.upgradeArrow.active = normalizedLevel > 0 && upgradeable;
 
         // 满级或没有需求时进度走满，文案显示“已满级”，别出现 12/0。
         this.cardFragmentLabel.string = maxed

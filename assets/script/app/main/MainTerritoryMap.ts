@@ -45,6 +45,7 @@ import {
     territoryBurstTotalSeconds,
 } from '../territory/model/TerritoryResourceGain';
 import { territoryChestTierOfRewards, type TerritoryChestTier } from '../territory/model/TerritoryChestTier';
+import { territoryMonsterBoxArtPath } from '../territory/model/TerritoryMonsterBoxSpec';
 import { TERRITORY_CHEST_OPEN_FRAMES } from '../territory/model/TerritoryChestAnimation';
 import type { ITerritoryChestIconEntry } from '../territory/view/TerritoryChestView';
 import {
@@ -1653,8 +1654,11 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 巡逻宝箱详情要用的图：模型 `image/main/chest/boxLevel{1..4}` + 银币图标。
+     * 巡逻宝箱详情要用的图：模型 `image/territory/buildings/territory_monsterBox_L{1..4}`
+     * （212×212 专用图，与地图锚点格同一套）+ 银币图标。
      *
+     * 原先取 `image/main/chest/boxLevel{1..4}`（100×100 通用宝箱）——那条线是「新手宝箱」那套 UI 图，
+     * 塞进面板 192×192 的 `ChestModel` 里被放大到近 2 倍，发糊且和地图上的箱子长得不一样。
      * 与 `loadChestArt` 同口径：**缺图不阻断**（模型缺就只不画宝箱，弹窗照开）；
      * 加载完如果弹窗已经开着，补刷一次内容（`applyContent` 幂等）。
      */
@@ -1662,7 +1666,7 @@ export class MainTerritoryMap extends Component {
         const chests = new Map<number, SpriteFrame>();
         for (let lv = 1; lv <= 4; lv += 1) {
             try {
-                chests.set(lv, await this.assets.load(`image/main/chest/boxLevel${lv}/spriteFrame`, SpriteFrame));
+                chests.set(lv, await this.assets.load(territoryMonsterBoxArtPath(lv), SpriteFrame));
             } catch {
                 // 缺图 ⇒ 该等级不画模型
             }

@@ -17,6 +17,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
+import { readRefKvc, rowsOf } from './helpers/ref-kvc';
 
 const CLIENT = '../doc/塔防数据配置/json/client';
 
@@ -39,11 +40,9 @@ interface IRow {
     readonly unitAttackHitTime?: number;
 }
 
-/** 读 remoteRef 列存表（`{k, v}`）→ 行对象数组。 */
+/** 读 remoteRef 表 → 行对象数组（列存 / 行对象数组两种产物格式由 helper 收口）。 */
 function readRemoteRef(name: string): IRow[] {
-    const source = JSON.parse(readFileSync(`assets/remoteRef/${name}`, 'utf8')) as
-        { k: string[]; v: unknown[][] };
-    return source.v.map((row) => Object.fromEntries(source.k.map((key, index) => [key, row[index]])) as unknown as IRow);
+    return rowsOf(readRefKvc(`assets/remoteRef/${name}`)) as unknown as IRow[];
 }
 
 /** 读 client 行数组（一行一行的 `[{...}]`）。 */

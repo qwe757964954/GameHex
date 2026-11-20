@@ -124,13 +124,13 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 1304.087158203125,
-      "height": 1442.8153076171875
+      "width": 1956.130615234375,
+      "height": 2164.222900390625
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
-      "x": 0.5037699326842198,
-      "y": 0.2604928972296137
+      "x": 0.5037699797224546,
+      "y": 0.26049287637412255
     },
     "_id": ""
   },
@@ -175,7 +175,7 @@
     "_debugMesh": false,
     "_debugBones": false,
     "_debugSlots": false,
-    "_enableBatch": false,
+    "_enableBatch": true,
     "loop": true,
     "_id": ""
   },

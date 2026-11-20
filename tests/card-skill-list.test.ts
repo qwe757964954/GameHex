@@ -9,7 +9,6 @@
  *   ⑤ 卡表 `pvpCard.skillList` 的初值就是 4 个技能（一行两格 × 每格两个按钮）。
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
     buildArmySkillTable,
@@ -23,13 +22,11 @@ import {
     skillMaxLevel,
 } from '../assets/script/app/card/CardSkillList';
 import type { PvpHeroSkillLevel } from '../assets/script/app/card/PvpHeroService';
+import { readRefTable } from './helpers/ref-kvc';
 
-/** 读 remoteRef 的列存表（`{k, v}`）→ 行对象数组。 */
+/** 读 remoteRef 表 → 行对象数组（两种产物格式由 {@link readRefTable} 收口）。 */
 function readTable(name: string): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8')) as {
-        k: string[];
-        v: unknown[][];
-    };
+    const source = readRefTable(name);
     return source.v.map((row) => {
         const entry: Record<string, unknown> = {};
         source.k.forEach((key, index) => { entry[key] = row[index]; });
@@ -160,10 +157,7 @@ test('isSkillMaxed：按「level + 1 是否存在」判满级，与发包口径�
 });
 
 test('pvpCard.skillList：启用卡每张 4 个技能，主城/金矿为 0', () => {
-    const source = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as {
-        k: string[];
-        v: unknown[][];
-    };
+    const source = readRefTable('pvpCard');
     const idAt = source.k.indexOf('id');
     const enabledAt = source.k.indexOf('enabled');
     const listAt = source.k.indexOf('skillList');

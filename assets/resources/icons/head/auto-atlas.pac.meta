@@ -1,39 +1,39 @@
 {
-  "ver": "1.0.8",
-  "importer": "auto-atlas",
-  "imported": true,
-  "uuid": "cb3603f4-9af4-463a-865a-e049551613b1",
-  "files": [
-    ".json"
-  ],
-  "subMetas": {},
-  "userData": {
-    "maxWidth": 1024,
-    "maxHeight": 1024,
-    "padding": 2,
-    "allowRotation": true,
-    "forceSquared": false,
-    "powerOfTwo": false,
-    "algorithm": "MaxRects",
-    "format": "png",
-    "quality": 80,
-    "contourBleed": true,
-    "paddingBleed": true,
-    "filterUnused": true,
-    "removeTextureInBundle": true,
-    "removeImageInBundle": true,
-    "removeSpriteAtlasInBundle": true,
-    "compressSettings": {
-      "useCompressTexture": true,
-      "presetId": "aabpi/bUVNypEx52HEp8vu"
-    },
-    "textureSetting": {
-      "wrapModeS": "repeat",
-      "wrapModeT": "repeat",
-      "minfilter": "linear",
-      "magfilter": "linear",
-      "mipfilter": "none",
-      "anisotropy": 0
+    "ver": "1.0.8",
+    "importer": "auto-atlas",
+    "imported": true,
+    "uuid": "cb3603f4-9af4-463a-865a-e049551613b1",
+    "files": [
+        ".json"
+    ],
+    "subMetas": {},
+    "userData": {
+        "maxWidth": 2048,
+        "maxHeight": 2048,
+        "padding": 2,
+        "allowRotation": true,
+        "forceSquared": false,
+        "powerOfTwo": false,
+        "algorithm": "MaxRects",
+        "format": "png",
+        "quality": 80,
+        "contourBleed": true,
+        "paddingBleed": true,
+        "filterUnused": true,
+        "removeTextureInBundle": true,
+        "removeImageInBundle": true,
+        "removeSpriteAtlasInBundle": true,
+        "compressSettings": {
+            "useCompressTexture": true,
+            "presetId": "aabpi/bUVNypEx52HEp8vu"
+        },
+        "textureSetting": {
+            "wrapModeS": "repeat",
+            "wrapModeT": "repeat",
+            "minfilter": "linear",
+            "magfilter": "linear",
+            "mipfilter": "none",
+            "anisotropy": 0
+        }
     }
-  }
 }

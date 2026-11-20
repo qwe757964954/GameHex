@@ -1207,7 +1207,7 @@ test('D2 ⚠️ 三张表都走 `CacheMgr`（服务端会推），**不自己存
     assert.ok(REPO_CODE.includes('private readonly appliedIds = new Set<string>()'));
 });
 
-test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
+test('friend › D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     assert.ok(REPO_CODE.includes('GameNet.sendRequest('), '必须走公共发包壳');
     assert.ok(REPO_CODE.includes(`tag: 'Friend'`), '必须带 Friend tag');
     assert.ok(REPO_SRC.includes(`import { WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '写超时走公共真源');

@@ -61,7 +61,8 @@ test('伤害结算只统计实际扣血，护盾和重复死亡不会重复给�
     target.shield = 10;
     const goldBefore = game.snapshot.playerGold;
     const hit = (game as any).damageUnit(target, 100, { owner: 'player', kind: 'artifact' });
-    assert.equal(hit.value, 30);
+    assert.equal(hit.value, 90);
+    assert.equal(hit.appliedDamage, 30);
     assert.equal(target.shield, 0);
     assert.equal(target.battleState, 'dead');
     assert.equal(game.damageStats.player.dealt, 30);

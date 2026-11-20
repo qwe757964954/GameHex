@@ -102,6 +102,15 @@ const ZONE_SPRINT_ANIMATION = 'attack';
 */
 const ZONE_RETARGET_RANGE = 600;
 
+/**
+ * 游走每一段转过的角度（弧度，2026-11-20 S 型口径）。
+ *
+ * 60° / 段：配合 `wanderTurnSeconds`（配表 1 秒）就是 60°/秒 的转向率，一左一右走成蛇形。
+ * 取值口径：太小（< 20°）看着还是直线，太大（> 90°）会绕成圈、走不出位移。
+ * 与「固定直线」的区别就在这里 —— 老实现是每段**整段重掷**随机角，画出来是折线。
+*/
+const ZC_ZONE_WANDER_SWING_RADIANS = Math.PI / 3;
+
 type IZCGroundZoneStepState = Pick<ZCSnapshot,
     'elapsedSeconds' | 'groundZones' | 'combatEvents' | 'nextCombatEventId' | 'statusEffects'>;
 
@@ -120,7 +129,7 @@ export class ZCGroundZoneSystem {
             const chased = this.advanceChase(zone, dt, now, context);
             if (!chased) {
                 // 随机游走：换方向后写回 moveVelocity，位移统一在下方推进。
-                this.advanceWander(zone, now, context);
+                this.advanceWander(zone, now, context, dt);
                 // 移动区域：先推进位置再结算当前波次，避免伤害落后一帧。
                 const vx = zone.moveVelocityX ?? 0;
                 const vy = zone.moveVelocityY ?? 0;
@@ -178,6 +187,17 @@ export class ZCGroundZoneSystem {
         const left = zone.flightSeconds;
         if (left === undefined || !(left > 0)) return;
         const next = left - dt;
+        //  ── 抛掷弧线（2026-11-20 用户口径「蘑菇爆炸要有弧线飞行落地的过程」）──
+        //  位移本身仍是直线（判定 / 触碰都按地面坐标算），弧线只加在**表现**的竖直抬升上：
+        //  把 `visualLiftPx` 按抛物线 `4h·p·(1-p)` 每帧刷一次 —— 起飞和落地都是 0、
+        //  正中间最高，看起来就是「丢出去、落下来」。
+        //  不能直接改 `zone.y`：那是世界坐标，改了接触判定和牵引就全歪了。
+        const arc = Math.max(0, zone.flightArcPx ?? 0);
+        const total = Math.max(1e-6, zone.flightTotalSeconds ?? 0);
+        if (arc > 0) {
+            const progress = Math.min(1, Math.max(0, 1 - Math.max(0, next) / total));
+            zone.visualLiftPx = Math.round(arc * 4 * progress * (1 - progress));
+        }
         if (next > 0.0001) {
             zone.flightSeconds = next;
             return;
@@ -185,6 +205,8 @@ export class ZCGroundZoneSystem {
         zone.flightSeconds = 0;
         zone.moveVelocityX = 0;
         zone.moveVelocityY = 0;
+        //  落地把抬升清掉：留着的话常驻陷阱会飘在半空。
+        if (arc > 0) zone.visualLiftPx = undefined;
         //  落地换挡（2026-11-19 蘑菇爆炸 101704）：飞行段播的是「生成」，落地要换成常驻的
         //  「陷阱」。做法是把飞行段那条持有事件**就地摘掉**（`durationSeconds` 压到「已活时长」，
         //  下一拍就到了），再清掉 `visualEventId` —— 紧接着这一帧的 `syncHoldVisual` 会按
@@ -213,6 +235,15 @@ export class ZCGroundZoneSystem {
     ): boolean {
         const slowSpeed = Math.max(0, zone.approachSpeed ?? 0);
         if (!(slowSpeed > 0)) return false;
+        //  赶路段已耗时（2026-11-20 102004 飓风）：落地时按「总时长含赶路」从剩余寿命里扣，
+        //  见 `releaseToWander`。只累计真在追的帧 ⇒ 中途没追就不该算它。
+        zone.approachSeconds = (zone.approachSeconds ?? 0) + dt;
+        //  兜底：赶路已经耗尽整段寿命 ⇒ 当场落地（扣完就散场）。不设这道闸的话，
+        //  「目标一直在跑、追不上」会让这片风永远在飞、永远不读秒 —— 一片不散场也不打人的风。
+        if (zone.arriveWander === true && zone.approachSeconds >= zone.remainingSeconds) {
+            this.releaseToWander(zone, now);
+            return false;
+        }
 
         // 目标：原目标存活则继续追踪，失效则重选最近敌人。
         let target: ZCUnitState | undefined;
@@ -223,13 +254,56 @@ export class ZCGroundZoneSystem {
             target = this.nearestChaseTarget(zone, context);
             zone.approachTargetId = target ? target.id : undefined;
         }
+        //  最后已知落点（2026-11-20 第 31 批）：目标活着的每一帧刷一次。目标全丢之后
+        //  就靠它继续飞 —— 用户口径「没有目标继续往旧的目标坐标移动，不会静止」。
+        if (target) {
+            const known = context.unitPosition(target);
+            zone.chaseGoalX = known.x;
+            zone.chaseGoalY = known.y;
+        }
 
         // 档位：切快档只发生一次，之后 sprinting 恒为 true。
         let fast = zone.sprinting === true;
         zone.visualAnimation = fast ? ZONE_SPRINT_ANIMATION : ZONE_APPROACH_ANIMATION;
 
         if (!target) {
-            // 无存活目标：沿当前速度方向继续移动直至自然到期。
+            //  ── 没有可追的活目标（2026-11-20 第 31 批）──
+            //  口径：「锁定目标 → 移动 → 目标丢失 → 切换目标 → 没有目标继续往**旧的目标坐标**
+            //  移动，不会静止」。换目标已由上面的 `nearestChaseTarget` 做过；这里负责最后一段：
+            //  先朝 `chaseGoalX/Y`（最后已知坐标）飞，飞到了才按车道收尾。
+            const goalX = zone.chaseGoalX;
+            const goalY = zone.chaseGoalY;
+            //  🔴 速度必须有兜底：飓风的投送段只配了 `approachSpeed`、没有 `sprintSpeed`，
+            //  老代码在这里取 `sprintSpeed ?? 0` ⇒ 整片风定在原地「不会动」。
+            const chaseSpeed = Math.max(0, zone.sprintSpeed ?? 0) || slowSpeed;
+            const goalDx = goalX === undefined ? 0 : goalX - zone.x;
+            const goalDy = goalY === undefined ? 0 : goalY - zone.y;
+            const goalDistance = Math.hypot(goalDx, goalDy);
+            if (goalX !== undefined && goalY !== undefined
+                && goalDistance > Math.max(0, zone.sprintRange ?? 0)) {
+                //  还在飞往旧坐标：位移归追踪段。带 `arriveWander` 的车道（飓风）此时**不**提速、
+                //  也不读秒 —— 它还在路上，读秒会把「含赶路共 N 秒」的账提前花掉。
+                if (zone.arriveWander !== true && !fast) {
+                    fast = true;
+                    this.enterSprint(zone, now);
+                    zone.visualAnimation = ZONE_SPRINT_ANIMATION;
+                }
+                const nx = goalDx / goalDistance;
+                const ny = goalDy / goalDistance;
+                const step = Math.min(chaseSpeed * dt, goalDistance);
+                zone.moveVelocityX = nx * chaseSpeed;
+                zone.moveVelocityY = ny * chaseSpeed;
+                zone.x += nx * step;
+                zone.y += ny * step;
+                return true;
+            }
+            //  到点交还（2026-11-20 102004 飓风）：目标半路死光不该让风定在半空 ——
+            //  交给随机游走，落地照样打完剩下的波次。
+            if (zone.arriveWander === true) {
+                this.releaseToWander(zone, now);
+                return false;
+            }
+            //  连最后坐标都没有（出生就没目标）或已经飞到旧坐标：沿当前速度方向继续移动直至自然到期。
             const vx = zone.moveVelocityX ?? 0;
             const vy = zone.moveVelocityY ?? 0;
             const length = Math.hypot(vx, vy);
@@ -240,7 +314,7 @@ export class ZCGroundZoneSystem {
                 this.enterSprint(zone, now);
                 zone.visualAnimation = ZONE_SPRINT_ANIMATION;
             }
-            const speed = Math.max(0, zone.sprintSpeed ?? 0);
+            const speed = chaseSpeed;
             zone.moveVelocityX = dirX * speed;
             zone.moveVelocityY = dirY * speed;
             zone.x += dirX * speed * dt;
@@ -253,11 +327,17 @@ export class ZCGroundZoneSystem {
         const dy = goal.y - zone.y;
         const distance = Math.hypot(dx, dy);
         if (!fast && distance <= Math.max(0, zone.sprintRange ?? 0)) {
+            if (zone.arriveWander === true) {
+                this.releaseToWander(zone, now);
+                return false;
+            }
             fast = true;
             this.enterSprint(zone, now);
             zone.visualAnimation = ZONE_SPRINT_ANIMATION;
         }
-        const speed = fast ? Math.max(0, zone.sprintSpeed ?? 0) : slowSpeed;
+        //  快档速度同样不许掉到 0（见上面「没有可追的活目标」那段）：`sprintSpeed` 缺省时
+        //  退回慢档速度，否则追到目标那一刻会「贴上去就定住」。
+        const speed = fast ? (Math.max(0, zone.sprintSpeed ?? 0) || slowSpeed) : slowSpeed;
         const nx = distance > 1e-9 ? dx / distance : 1;
         const ny = distance > 1e-9 ? dy / distance : 0;
         zone.moveVelocityX = nx * speed;
@@ -320,6 +400,44 @@ export class ZCGroundZoneSystem {
     }
 
     /**
+     * 到点下车：把移动权从追踪交回随机游走（2026-11-20 第 28 批 102004 飓风）。
+     *
+     * 四件事缺一不可：
+     *  1. **按已耗时扣寿命**（`approachSeconds`）：赶路期不读秒，而口径是「总共活 N 秒
+     *     （含赶路）」⇒ 这段账只能在这里一次结清。同时按剩余时间**重算 `wavesLeft`** ——
+     *     它是照整段 N 秒算的，不重算就会把 12 波塞进剩下的几秒里（落地后每 0.17 秒打一下）。
+     *  2. 清 `approachSpeed` —— 它同时是 `advanceChase` 的入口判据（> 0 就恒接管位移）
+     *     和 `isApproaching` 的判据（> 0 且未提速就**不读秒**）。不清就是「飞到目标后原地
+     *     定住、剩余寿命一直不减、一波都不结算」—— 画面上一片永不消散也不打人的风。
+     *  3. 走一次 `enterSprint` —— 它把 `nextWaveAt` 重置到此刻。赶路期攒着的 `nextWaveAt`
+     *     还停在施法那一刻，不重置的话落地第一帧 `while (now >= nextWaveAt)` 会把
+     *     赶路期间「本该打、但没打」的波次一口气全打出来。
+     *  4. 清 `sprintSpeed` 与旧速度 —— 交还给 `advanceWander` 之前别留下一帧的旧方向位移。
+     *
+     * `sprinting` 保持真（阶段标记「已经到过点了」）：它已经写进快照，读档回来不能又变成
+     * 「还在赶路」；`advanceChase` 下一帧因为 `approachSpeed` 已清而直接返回 false。
+    */
+    private static releaseToWander(zone: ZCGroundZoneState, now: number): void {
+        const travelled = Math.max(0, zone.approachSeconds ?? 0);
+        if (travelled > 0) {
+            zone.remainingSeconds = Math.max(0, zone.remainingSeconds - travelled);
+            const interval = Math.max(0.05, zone.waveInterval);
+            zone.wavesLeft = Math.max(0, Math.round(zone.remainingSeconds / interval));
+        }
+        this.enterSprint(zone, now);
+        zone.approachSpeed = undefined;
+        zone.approachTargetId = undefined;
+        zone.sprintSpeed = undefined;
+        //  「最后已知坐标」也要一起清：留着它，游走接管后一旦再走一次 `advanceChase`
+        //  （比如读档回来 `approachSpeed` 又被写回）就会朝那个旧点飞回去。
+        zone.chaseGoalX = undefined;
+        zone.chaseGoalY = undefined;
+        zone.visualAnimation = undefined;
+        zone.moveVelocityX = 0;
+        zone.moveVelocityY = 0;
+    }
+
+    /**
      * 跟随本体：把圆心拍回施法者当前坐标；给了 followForward 就落到「本体 + 朝向前移」，
      * 并同时刷新 angleDegrees，避免矩形还朝旧角度。
      * 施法者阵亡或上下文缺 unitById 时保持最后位置，剩余波次照常打完。
@@ -343,19 +461,45 @@ export class ZCGroundZoneSystem {
     }
 
     /** 随机游走：定期更新朝向写入 moveVelocityX/Y。*/
+    /**
+     * 随机游走：把当前朝向写回 `moveVelocity`，位移由调用方统一推进。
+     *
+     * 🔴 S 型（2026-11-20 用户口径「飓风类技能的移动要类似 S 型的行走方式，不要固定的直线」）：
+     * 老实现每 `wanderTurnSeconds` 把角度**整段重掷**成 `random × 2π` —— 那是折线，甚至可能
+     * 原地掉头。现在改成**连续转向 + 按段翻号**：每帧按固定角速度累加，每 `wanderTurnSeconds`
+     * 把角速度取反 ⇒ 一左一右，走出来就是蛇形（S）。起点方向仍由对局种子决定，可重演。
+     *
+     * 配了 `wanderSpeed = 0` 的区域（明确标识不能移动的飓风）在第一行就返回，一步都不挪。
+     *
+     * 首帧只定方向、不积分旋转：初始朝向就是 `random × 2π` 那一格，行为与改动前逐字一致
+     * （存量用例按角度断言过这一拍）。
+    */
     private static advanceWander(zone: ZCGroundZoneState, now: number,
-        context: IZCGroundZoneContext): void {
+        context: IZCGroundZoneContext, dt: number): void {
         const speed = Math.max(0, zone.wanderSpeed ?? 0);
         if (!(speed > 0)) return;
         const turnSeconds = Math.max(0.05, zone.wanderTurnSeconds ?? 1);
-        const due = zone.wanderAngleRadians === undefined
-            || zone.wanderNextTurnAt === undefined || now >= zone.wanderNextTurnAt;
-        if (due) {
+        //  首帧：定一个种子方向，这一段先不转（保持「第一拍方向 = random × 2π」）。
+        if (zone.wanderAngleRadians === undefined) {
             const rnd = context.random ? context.random() : 0;
             zone.wanderAngleRadians = rnd * Math.PI * 2;
+            zone.wanderTurnRate = ZC_ZONE_WANDER_SWING_RADIANS / turnSeconds;
+            zone.wanderNextTurnAt = now + turnSeconds;
+            zone.moveVelocityX = Math.cos(zone.wanderAngleRadians) * speed;
+            zone.moveVelocityY = Math.sin(zone.wanderAngleRadians) * speed;
+            return;
+        }
+        //  到点翻号：同一个角速度只换方向，幅值不变 ⇒ 左右对称的 S。
+        let rate = zone.wanderTurnRate;
+        if (rate === undefined) {
+            rate = ZC_ZONE_WANDER_SWING_RADIANS / turnSeconds;
+        } else if (zone.wanderNextTurnAt === undefined || now >= zone.wanderNextTurnAt) {
+            rate = -rate;
             zone.wanderNextTurnAt = now + turnSeconds;
         }
-        const angle = zone.wanderAngleRadians as number;
+        zone.wanderTurnRate = rate;
+        zone.wanderAngleRadians = (zone.wanderAngleRadians as number) + rate * dt;
+        const angle = zone.wanderAngleRadians;
         zone.moveVelocityX = Math.cos(angle) * speed;
         zone.moveVelocityY = Math.sin(angle) * speed;
     }
@@ -452,6 +596,8 @@ export class ZCGroundZoneSystem {
             //  入场「由小变大」：视图从 0 缓出到 1 再乘 prefab 烘焙缩放，
             //  所以「最终大小」仍然由 prefab 说了算，这里只补一段入场。
             growSeconds: zone.growSeconds,
+            //  入场起点占比（2026-11-20 102004 飓风「初始只有 10%」）：缺省不写 ⇒ 视图按 0 处理。
+            growFrom: zone.growFrom,
             //  阶段动画（接近 `move` / 快档 `attack`）：视图只在名字变化时 setAnimation。
             spineAnimation: zone.visualAnimation,
             //  叠层（火船）只在快档亮（2026-11-12 追踪弹口径）。

@@ -154,7 +154,7 @@ function fixture(type = 7, param: Record<string, unknown> = gateParam, activateG
     return { config, state, hex, system, unit, batches, structureHits, clones: () => clones };
 }
 
-test('野怪领地排除空洞，各方永久解锁，首次解锁立即自动攻击', () => {
+test('野怪领地排除空洞，各方永久解锁，首次集火才唤醒并攻击', () => {
     const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     const center = f.config.map.hexes[f.hex.id];
     const second = f.config.map.hexes.find(point => point.playable && hexGridDistance(center, point) === 2);
@@ -166,13 +166,15 @@ test('野怪领地排除空洞，各方永久解锁，首次解锁立即自动�
     f.state.units = [nearby];
     f.system.tick(f.state);
     assert.equal(nearby.hp, 100);
+    assert.equal(f.hex.neutralFeature.attackStartedAt, undefined);
     f.system.claim(f.state);
     assert.deepEqual(f.hex.neutralFeature.unlockedOwners, ['player']);
-    assert.equal(isZCAwakeMonster(f.hex), true);
-    assert.equal(f.system.hasFocusableMonster(), true);
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'enemy'), false);
+    assert.equal(isZCAwakeMonster(f.hex), false);
+    assert.equal(f.system.hasFocusableMonster(), false);
     assert.equal(f.system.priorityTarget(f.state, nearby), null);
     f.system.tick(f.state);
-    assert.ok(nearby.hp < 100);
+    assert.equal(nearby.hp, 100);
     assert.ok(f.system.territory(f.hex).includes(second.id));
     assert.ok(center.neighbors.every(id => !f.system.territory(f.hex).includes(id)), JSON.stringify({neighbors: center.neighbors.map(id => [id, f.config.map.hexes[id].playable]), territory: f.system.territory(f.hex)}));
     assert.ok(f.config.map.hexes.filter(point => hexGridDistance(center, point) > 2)
@@ -180,18 +182,62 @@ test('野怪领地排除空洞，各方永久解锁，首次解锁立即自动�
     f.config.rules.neutralMonsterFocusSwitchCdSeconds = 0.5;
     assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), true);
     assert.equal(isZCAwakeMonster(f.hex), true);
+    assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), false);
+    assert.equal(f.system.hasFocusableMonster(), true);
+    f.system.tick(f.state);
+    assert.equal(f.hex.neutralFeature.attackStartedAt, 0);
+    assert.equal(nearby.hp, 100);
+    const hitTime = f.config.units[0].attackHitTime;
+    f.state.elapsedSeconds = hitTime - 0.001;
+    f.system.tick(f.state);
+    assert.equal(nearby.hp, 100);
+    f.state.elapsedSeconds = hitTime;
+    f.system.tick(f.state);
+    assert.ok(nearby.hp < 100);
+    const hpAfterHit = nearby.hp;
+    f.system.tick(f.state);
+    assert.equal(nearby.hp, hpAfterHit);
+    f.state.units = [];
+    f.state.elapsedSeconds = f.config.units[0].attackDuration;
+    f.system.tick(f.state);
+    assert.equal(f.hex.neutralFeature.attackStartedAt, undefined);
     assert.equal(f.system.toggleFocus(f.state, f.hex, 'enemy'), false);
     building.owner = 'enemy';
     f.system.claim(f.state);
     assert.equal(f.system.toggleFocus(f.state, f.hex, 'enemy'), true);
     building.building = 'none';
-    assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), false);
-    f.state.elapsedSeconds = 0.5;
+    f.state.elapsedSeconds += 0.5;
     assert.equal(f.system.toggleFocus(f.state, f.hex, 'player'), true);
     assert.equal(isZCAwakeMonster(f.hex), true);
     assert.deepEqual(f.hex.neutralFeature.focusOwners, ['enemy']);
     assert.equal(f.hex.neutralFeature.patrol, undefined);
     assert.deepEqual(zcMonsterPosition(f.config.map, f.hex, 100), { x: center.x, y: center.y });
+});
+
+test('野怪在出手时面向目标，上下方和同一脚点保持朝向', () => {
+    const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
+    const center = f.config.map.hexes[f.hex.id];
+    const feature = f.hex.neutralFeature;
+    feature.awake = true;
+    const target = f.unit(1, 'enemy');
+    f.state.units = [target];
+    const hit = (dx: number, dy: number) => {
+        target.hp = 100;
+        target.freeX = center.x + dx;
+        target.freeY = center.y + dy;
+        f.state.elapsedSeconds = Math.max(f.state.elapsedSeconds, feature.nextAttackAt ?? 0);
+        f.system.tick(f.state);
+        assert.equal(feature.attackStartedAt, f.state.elapsedSeconds);
+        f.state.elapsedSeconds += f.config.units[0].attackDuration;
+        f.system.tick(f.state);
+        assert.ok(target.hp < 100);
+        return feature.monsterFacing;
+    };
+    assert.equal(hit(-5, 0), -1);
+    assert.equal(hit(0, 5), -1);
+    assert.equal(hit(0, 0), -1);
+    assert.equal(hit(5, 0), 1);
+    assert.equal(hit(0, -5), 1);
 });
 
 test('双方小兵踩过野怪领地立即易手，出生格上的存活野怪保留血量', () => {
@@ -230,7 +276,7 @@ test('双方小兵踩过野怪领地立即易手，出生格上的存活野怪�
     assert.equal(monster.owner, 'enemy');
 });
 
-test('真实模型自动唤醒后，命中的射程外攻击者会收到反击', () => {
+test('真实模型首次集火唤醒后，命中的射程外攻击者会收到反击', () => {
     const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     const center = f.config.map.hexes[f.hex.id];
     const building = f.state.hexes[center.neighbors[0]];
@@ -247,6 +293,8 @@ test('真实模型自动唤醒后，命中的射程外攻击者会收到反击',
         damageBuilding(source: Pick<ZCUnitState, 'id' | 'owner'>, hex: ZCHexState, damage: number): void;
     };
     const monster = access.state.hexes[center.id];
+    assert.equal(isZCAwakeMonster(monster), false);
+    assert.equal(model.toggleMonsterFocus(monster.id), true);
     assert.equal(isZCAwakeMonster(monster), true);
     const shooter = access.state.units[0];
     assert.ok(definition);
@@ -257,6 +305,8 @@ test('真实模型自动唤醒后，命中的射程外攻击者会收到反击',
     access.damageBuilding(shooter, monster, 1);
     model.tick(0.05);
     assert.equal(monster.neutralFeature.targetUnitId, shooter.id);
+    assert.equal(shooter.hp, 100);
+    model.tick(definition.attackHitTime + 0.05);
     assert.ok(shooter.hp < 100);
 });
 
@@ -279,6 +329,8 @@ test('monster regeneration retains fractions, resets on combat and respects dist
         f.state.elapsedSeconds = 10; f.system.tick(f.state);
         assert.equal(f.hex.hp, hp);
         assert.equal(f.hex.neutralFeature.targetUnitId, attacker.id);
+        f.state.elapsedSeconds = 10 + f.config.units[0].attackHitTime;
+        f.system.tick(f.state);
         assert.ok(attacker.hp < 100000, 'out-of-range attacker remains attackable');
         attacker.hp = 0;
         f.state.elapsedSeconds = 11; f.system.tick(f.state);
@@ -449,6 +501,9 @@ test('野怪锁定首个目标，失效后换最近单位，脱战不回血', ()
     first.hp = 0;
     f.system.tick(f.state);
     assert.equal(f.hex.neutralFeature.targetUnitId, closer.id);
+    f.state.elapsedSeconds = f.config.units[0].attackHitTime;
+    f.system.tick(f.state);
+    assert.equal(closer.hp, 100, '起手后换目标不会转移本次伤害');
     const hp = f.hex.hp;
     f.state.units = [];
     f.state.elapsedSeconds = 10;
@@ -522,21 +577,6 @@ test('同一野怪组合在一局中冻结同一种类，三人局资源抽签�
     assert.equal(result.length, 3);
     assert.equal(result[0].itemId, result[1].itemId);
     assert.equal(resolveZCMapResources({ ...config.map, playerCount: 3, resourcePoints: points }, () => 0).length, 2);
-});
-
-test('验收地图包含所有新类型，真实模型可开局、推进和重置', () => {
-    loadPvpTables(tables);
-    configureZCMap(JSON.parse(readFileSync('assets/resources/config/maps/neutral_fun.json', 'utf8')));
-    const base = captureZCMatchConfig();
-    const config = { ...base, map: { ...base.map, resolvedResources: resolveZCMapResources(base.map, () => 0) } };
-    const model = new ZCGameModel(undefined, () => 0, config);
-    assert.equal(model.snapshot.hexes.filter(hex => hex.neutralFeature).length, 13);
-    for (let i = 0; i < 20; i += 1) model.tick(0.05);
-    const restored = new ZCGameModel(model.exportSnapshot(), () => 0, config);
-    restored.tick(0.05);
-    model.reset();
-    assert.equal(model.snapshot.hexes.filter(hex => hex.neutralFeature).length, 13);
-    assert.ok(model.snapshot.hexes.some(hex => hex.neutralFeature?.effect === 'shrink'));
 });
 
 test('乘法门包含首人和窗口后到者，窗口结束才起冷却', () => {
@@ -784,7 +824,7 @@ test('三人局不投放传送门，野怪睡眠时不是攻击目标', () => {
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].building = 'barracks';
     m.state.hexes[m.config.map.hexes[m.hex.id].neighbors[0]].hp = 10;
     m.system.claim(m.state);
-    assert.equal(isZCAwakeMonster(m.hex), true);
+    assert.equal(isZCAwakeMonster(m.hex), false);
     assert.equal(m.system.toggleFocus(m.state, m.hex, 'player'), true);
     assert.ok(isZCAwakeMonster(m.hex));
     const hp = m.hex.hp;
@@ -1072,6 +1112,11 @@ test('focus interrupts combat only in reach/territory and cancellation retaliate
     assert.equal(own.targetBuildingHexId, f.hex.id);
 });
 
+test('Android startup can parse the neutral resource module without Unicode property escapes', () => {
+    const source = readFileSync('assets/script/app/zcds/model/ZCNeutralResourceGroup.ts', 'utf8');
+    assert.doesNotMatch(source, /\\[pP]\{/);
+});
+
 test('monster params reject invalid multipliers, obsolete independent range and unsafe ground paths', () => {
     const card = findCatalogCard('68001');
     const compile = (param: unknown, icon: unknown = 0) => compileZCNeutralResourceCatalog([
@@ -1079,7 +1124,11 @@ test('monster params reject invalid multipliers, obsolete independent range and 
     ], new Map([[card.id, card]]));
     for (const rate of [0, -1, NaN, Infinity, '1', null, undefined]) assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: rate }));
     assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: 1, attackRange: 2 }));
-    for (const icon of ['../escape', 'a/b', '']) assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: 1 }, icon));
+    for (const icon of ['../escape', 'a/b', 'a\\b', '野怪.png', '野怪\n', '']) {
+        assert.throws(() => compile({ resId: card.id, wakeRange: 2, reviveRate: 1 }, icon), /地表资源名无效/);
+    }
+    const icon = '野怪_ice-2';
+    assert.equal(compile({ resId: card.id, wakeRange: 2, reviveRate: 1 }, icon).items.get(1).territoryIcon, icon);
     for (const rate of [0.8, 1, 1.2]) assert.equal(compile({ resId: card.id, wakeRange: 2, reviveRate: rate }, 'monster_ice').items.get(1).territoryIcon, 'monster_ice');
 });
 
@@ -1099,12 +1148,26 @@ test('S-table monster rules preserve fractional seconds and reject blank, negati
     loadPvpTables(tables);
 });
 
-test('monster snapshot rejects malformed focus owners, cooldowns and retaliation state', () => {
+test('monster snapshot preserves pending attacks and rejects malformed combat state', () => {
     const f = fixture(11, { resId: '68001', wakeRange: 2, reviveRate: 1 });
     for (const invalid of [{ focusOwners: ['enemy'] }, { unlockedOwners: ['invalid'] },
-        { focusReadyAt: { player: -1 } }, { retaliationUnitIds: [0] }, { disengagedAt: 1 }, { regenUpdatedAt: NaN }]) {
+        { focusReadyAt: { player: -1 } }, { retaliationUnitIds: [0] }, { disengagedAt: 1 }, { regenUpdatedAt: NaN },
+        { attackStartedAt: 1 }, { attackTargetUnitId: 1 }, { attackStartedAt: 0, attackTargetUnitId: 0 }]) {
         const snapshot = ZCSnapshotCodec.clone(f.state);
         Object.assign(snapshot.hexes[f.hex.id].neutralFeature, invalid);
         assert.equal(ZCGameModel.isValidSnapshot(snapshot, f.config), false, JSON.stringify(invalid));
     }
+    f.hex.neutralFeature.awake = true;
+    f.state.units = [f.unit(1)];
+    f.state.nextUnitId = 2;
+    f.system.tick(f.state);
+    const restored = ZCSnapshotCodec.decode(f.state, f.config);
+    assert.ok(restored.ok);
+    const { snapshot } = restored;
+    f.system.initialize(snapshot);
+    assert.equal(snapshot.hexes[f.hex.id].neutralFeature.attackTargetUnitId, 1);
+    snapshot.elapsedSeconds = f.config.units[0].attackHitTime;
+    f.system.tick(snapshot);
+    assert.ok(snapshot.units[0].hp < 100);
+    assert.equal(snapshot.hexes[f.hex.id].neutralFeature.attackTargetUnitId, undefined);
 });

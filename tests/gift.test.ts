@@ -612,7 +612,7 @@ const EXPECT_PIVOT: readonly (readonly [string, string, number, number, number, 
     ['Card1/Icon', 'com_goods (55,84) 120×120 中心', 23 + 115, 340 + 144, 104, 104],
 ];
 
-test('C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
+test('gift › C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
     const failures: string[] = [];
     for (const [suffix, label, ex, ey, ew, eh] of EXPECT_LEFT_TOP) {
         const node = geom(suffix);

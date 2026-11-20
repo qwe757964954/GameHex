@@ -267,6 +267,8 @@ test('协议名、Repository 接线与两条引擎约束在源码里被写死（
     // 保存同理：不兜的话按钮永远停在「保存中」，再也点不动。
     assert.match(service, /withTimeout\(\s*sendFormationOp\(/);
     assert.match(service, /FORMATION_SAVE_TIMEOUT_MS/);
+    // 登出/切会话重置缓存断言
+    assert.match(service, /export function resetFormationSession\(\): void/);
 });
 
 test('withTimeout：服务端不回包时用兜底值兑现，绝不让数据加载悬死', async () => {

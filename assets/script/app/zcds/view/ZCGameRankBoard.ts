@@ -65,7 +65,7 @@ export class ZCGameRankBoard extends PopupBase {
     }
 
     protected async onOpen(userData?: IZCRankBoardParams): Promise<void> {
-        const seats = userData?.seats ?? [];
+        const seats = userData ? userData.seats : [];
         const scope = this.resourceScope;
         this.seats = seats;
         const content = await this.loadFrames(scope, seats);
@@ -119,7 +119,8 @@ export class ZCGameRankBoard extends PopupBase {
 
     /** 按相对路径找 Sprite 并赋值；找不到只 warn（prefab 结构由人保证，这里不兜底造节点）。*/
     private setSprite(relativePath: string, frame: SpriteFrame): void {
-        const sprite = this.node.getChildByPath(relativePath)?.getComponent(Sprite);
+        const child = this.node.getChildByPath(relativePath);
+        const sprite = child ? child.getComponent(Sprite) : null;
         if (!sprite) {
             if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGameRankBoard] prefab 缺少节点 ${relativePath}`);
             return;

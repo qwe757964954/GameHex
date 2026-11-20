@@ -1,0 +1,14 @@
+{
+  "ver": "1.1.50",
+  "importer": "prefab",
+  "imported": true,
+  "uuid": "e7e2bbd9-2f98-4eaf-ac3c-fdd07d353c0c",
+  "files": [
+    ".json"
+  ],
+  "subMetas": {},
+  "userData": {
+    "syncNodeName": "CardUpgradeFx",
+    "hasIcon": false
+  }
+}

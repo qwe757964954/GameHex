@@ -726,6 +726,9 @@ test('技能仓库区分角色货币和背包材料，同时按英雄读取技�
             return { name: String(id), icon: `icons/${id}` };
         } } },
         '../itemdetail/ItemDetailArtLoader': { loadItemIconArt: async (path: string) => { iconPaths.push(path); return frame; } },
+        // `bindHeroSession` 会先 `resetFormationSession()` 清阵容缓存；上面的自动桩只给 `{}`，
+        // 不显式补就会报「is not a function」，看起来像被测仓库坏了。
+        './FormationService': { resetFormationSession: () => {} },
     });
     const { RuntimeCardRepository } = loadRuntime<typeof import('../assets/script/app/card/CardRepository')>('CardRepository', dependencies);
     const repository = new RuntimeCardRepository();

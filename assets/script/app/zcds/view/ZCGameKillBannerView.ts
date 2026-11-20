@@ -6,8 +6,10 @@ const { ccclass, property } = _decorator;
 
 /** 横栏高度（设计 px）：截图 22px × 720/248 ≈ 64，取 70 与 88 高的玩家行成比例。*/
 export const KILL_BANNER_HEIGHT = 70;
-/** 横栏顶边距全屏层（HUD 根）顶的距离：玩家列表节点底边 519 + 41。*/
-export const KILL_BANNER_TOP = 560;
+/** 横栏中心距 HUD 顶部的高度比例。*/
+const KILL_BANNER_CENTER_FROM_TOP = 0.23;
+/** 四色底图两端带透明斜切，左右各延伸 8% 交给屏幕裁切。*/
+const PLATE_WIDTH_SCALE = 1.16;
 /** 底板 + 文字的抬头角（度）。截图里 215px 横跨抬升 8px ⇒ 2.1°。*/
 export const KILL_BANNER_SLANT_DEGREES = 2.1;
 /** 头像盘心距屏幕左缘；截图 22% 宽 ⇒ 160。*/
@@ -36,11 +38,11 @@ const PORTRAIT_POP_SECONDS = 0.22;
  *  - 结构同源：`UIOpacity` 负责整条淡入淡出，底板 `Sprite` 按 owner 换四色，
  *    文字用系统字体 + 描边。
  *  - 版面不同：传说卡横幅按人数竖排、占满屏高；击杀横栏是固定的一条（70 高），
- *    永远贴在左侧玩家列表下方，不参与分格。
+ *    位于屏幕上部，可覆盖玩家列表。
  *
  * 截图口径（248×531 的游戏内截图，按 720 设计宽换算）
  *
- *  - 横栏可见高约 22px ⇒ 70 设计高；左端斜切、右端被屏幕边缘裁掉。
+ *  - 横栏可见高约 22px ⇒ 70 设计高；两端斜切延伸至屏外。
  *  - 横栏本身有约 2° 的抬头（右高左低），头像保持竖直 ⇒ 底板与文字一起放进
  *    `Slant` 节点旋转，`Portrait` 单独挂在根节点上，不跟着转。
  *  - 圆形头像用 `zd_txk_01..04`（与 `ZCGameHudPlayerRow` 同一套盘），盘心距屏幕左缘 160、
@@ -172,13 +174,16 @@ export class ZCGameKillBannerView extends Component {
         // 我方 88 / 其他三席 77，头像随之 74 / 66 —— 与 `ZCGameHudPlayerRow` 同档。
         this.writeSize(this.discSprite.node, frames.discSize, frames.discSize);
         this.writeSize(this.headSprite.node, frames.headSize, frames.headSize);
-        this.setSprite(this.headSprite, this.portraitResolver?.(reveal.owner) ?? null);
+        const resolver = this.portraitResolver;
+        this.setSprite(this.headSprite, resolver ? resolver(reveal.owner) : null);
         this.nameLabel.string = killBannerTextOf(this.killerNameOf(reveal.owner), reveal.cardName);
     }
 
     private killerNameOf(owner: ZCOwner): string {
         // 与 `ZCGameLegendBannerView` 同一兜底：席位档案没名字时退回 owner 本身（不另造文案表）。
-        return this.ownerNames?.get(owner)?.name || owner;
+        const ownerNames = this.ownerNames;
+        const entry = ownerNames ? ownerNames.get(owner) : undefined;
+        return entry && entry.name ? entry.name : owner;
     }
 
     /** 尺寸只在层宽变化时重写（`setContentSize` 会置引擎变换脏标记，render 是每帧调的）。*/
@@ -188,7 +193,7 @@ export class ZCGameKillBannerView extends Component {
         this.appliedWidth = width;
         this.writeSize(this.node, width, KILL_BANNER_HEIGHT);
         this.writeSize(this.slantNode, width, KILL_BANNER_HEIGHT);
-        this.writeSize(this.plateSprite.node, width, KILL_BANNER_HEIGHT);
+        this.writeSize(this.plateSprite.node, width * PLATE_WIDTH_SCALE, KILL_BANNER_HEIGHT);
         // 头像盘心固定距屏幕左缘 160，横栏满宽 ⇒ 局部 x = -width / 2 + 160。
         this.portraitNode.setPosition(-width / 2 + KILL_BANNER_PORTRAIT_CENTER_X, 0, 0);
         const left = -width / 2 + KILL_BANNER_TEXT_LEFT;
@@ -238,10 +243,10 @@ export class ZCGameKillBannerView extends Component {
     }
 }
 
-/** 横栏根节点中心 y（相对全屏层中心）：顶部固定距层顶 `KILL_BANNER_TOP`。*/
+/** 横栏根节点中心 y（相对全屏层中心）：按视口高度定位。*/
 export function killBannerYOf(viewHeight: number): number {
     const height = viewHeight > 0 ? viewHeight : FALLBACK_VIEW_HEIGHT;
-    return height / 2 - KILL_BANNER_TOP - KILL_BANNER_HEIGHT / 2;
+    return height * (0.5 - KILL_BANNER_CENTER_FROM_TOP);
 }
 
 /** 「玩家名 击杀了 野怪名」；野怪名缺失时退回「野怪」。*/

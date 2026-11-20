@@ -24,11 +24,12 @@ test('瞬时表现按时间过期、按格读取最新事件，重开清空并�
     assert.equal(queue.pushFloatText({ now: 2, kind: 'miss', owner: 'player', value: 0, x: 0, y: 0, durationSeconds: 1 })?.id, 1);
 });
 
-test('处决合并飘字可取回前一段已显示伤害', () => {
+test('处决合并飘字可取回前一段实际伤害', () => {
     const queue = new ZCBattlePresentationQueue();
-    const text = queue.pushFloatText({ now: 0, kind: 'damage', owner: 'player', value: 12, x: 0, y: 0, durationSeconds: 1 });
+    const text = queue.pushFloatText({ now: 0, kind: 'damage', owner: 'player', value: 83,
+        appliedDamage: 17, x: 0, y: 0, durationSeconds: 1 });
     assert.ok(text);
-    assert.equal(queue.removeFloatText(text.id), 12);
+    assert.equal(queue.removeFloatText(text.id), 17);
     assert.equal(queue.removeFloatText(text.id), 0);
     assert.equal(queue.floatTexts.length, 0);
 });

@@ -149,11 +149,14 @@ export class ZCVictorySweep {
             // 0 只表示"当前没用这个号"。写成 falsy 判断会让 0 号实体静默漏染一格。
             if (entityId === undefined) continue;
             const painted = step <= sweep.litStep;
-            this.hexViews.get(entityId)?.setSweepOwner(
-                painted ? sweep.winner : null,
-                painted ? victorySweepRevertMix(sweep.revertCursor, step) : 0,
-                painted ? victorySweepShimmer(sweep.elapsed, step) : 0,
-            );
+            const view = this.hexViews.get(entityId);
+            if (view) {
+                view.setSweepOwner(
+                    painted ? sweep.winner : null,
+                    painted ? victorySweepRevertMix(sweep.revertCursor, step) : 0,
+                    painted ? victorySweepShimmer(sweep.elapsed, step) : 0,
+                );
+            }
         }
     }
 }

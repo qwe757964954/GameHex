@@ -30,10 +30,26 @@ const { ccclass, property } = _decorator;
 */
 @ccclass('ZCFloatTextView')
 export class ZCFloatTextView extends Component {
+    /**
+     * 伤害类飘字的颜色口径（2026-11-20 用户）：
+     * · 我方打出的伤害 / 暴击 / 克制增伤 —— 全白，靠字号与「暴击」前缀区分，不再分色；
+     * · **本机席位**被扣血 —— 红字 + 负号（`takenFromPlayer`，见 `PLAYER_LOSS_COLOR`）。
+     *   攻方是另一个玩家还是 NPC **都一样**：我方被打只有这一种样式；
+     * · 两个非玩家互打 —— 模型侧直接不出飘字，这里没有对应分支。
+     *
+     * 抵抗（灰）与秒杀（橙）保持原样：需求只点了「伤害 / 暴击 / 克制」三档，
+     * 这两个是提示语义（少受伤 / 处决），并进白字会丢掉信息。
+     *
+     * **前缀（暴击 / 克制 / 抵抗 / 秒杀）只挂在「我方打出去」的那条上**（`dealtByPlayer`）：
+     * 我方被扣血 —— 红字负号那档、以及被 NPC 打的白字那档 —— 只有「负号 + 血量」。
+     * 所以取色只看 kind / `takenFromPlayer`，前缀另看 `dealtByPlayer`，两者不能互相替代。
+     */
     private static readonly NORMAL_DAMAGE_COLOR = new Color(255, 255, 255, 255);
-    private static readonly CRITICAL_COLOR = new Color(255, 198, 45, 255);
+    private static readonly CRITICAL_COLOR = ZCFloatTextView.NORMAL_DAMAGE_COLOR;
+    private static readonly RESTRAINT_COLOR = ZCFloatTextView.NORMAL_DAMAGE_COLOR;
+    /** 本机席位被扣血：红字 + 负号（攻方是玩家或 NPC 都一样）。 */
+    private static readonly PLAYER_LOSS_COLOR = new Color(255, 72, 62, 255);
     private static readonly HEAL_COLOR = new Color(91, 255, 49, 255);
-    private static readonly RESTRAINT_COLOR = new Color(255, 72, 62, 255);
     private static readonly RESISTED_COLOR = new Color(150, 150, 150, 255);
     private static readonly EXECUTE_COLOR = new Color(255, 105, 72, 255);
     private static readonly MISS_COLOR = new Color(120, 205, 255, 255);
@@ -58,9 +74,11 @@ export class ZCFloatTextView extends Component {
     private static readonly COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
         [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K'],
     ];
-    /** 暴击 / 秒杀的大字号；其余普通字号。*/
-    private static readonly EMPHASIS_FONT_SIZE = 34;
     private static readonly DEFAULT_FONT_SIZE = 30;
+    /** 暴击字号 = 普通字号 × 1.7（2026-11-20 用户：「出现暴击就用 1.7 倍大的数字字体」）。*/
+    private static readonly CRITICAL_FONT_SIZE = Math.round(ZCFloatTextView.DEFAULT_FONT_SIZE * 1.7);
+    /** 秒杀沿用旧的大字号（需求没点它，别跟着暴击一起放大）。*/
+    private static readonly EXECUTE_FONT_SIZE = 34;
     /**
      * 前缀字号 = 数字字号 × 该比例。数字只占 0.72em 大写高、汉字占 0.95em，
      * 取 0.5 后视觉高度约 0.66；要再贴近「一半高」只改此值。
@@ -105,6 +123,14 @@ export class ZCFloatTextView extends Component {
     /** 飘字文案拆成「前缀 + 数值」两段（前缀用独立小字号 Label，见 renderPrefix）。*/
     private static battleText(text: Readonly<ZCFloatText>): { prefix: string; value: string } {
         const value = ZCFloatTextView.compactBattleNumber(text.value);
+        // 玩家卡牌被别的玩家扣血：负号直接拼进数值，与数字同字号连成「-5」；
+        // 走前缀位会被缩到一半字号并留出间距，读起来像一个独立的短横。
+        const sign = text.takenFromPlayer ? '-' : '';
+        // 前缀是「我方打出去的」才有的标记（2026-11-20 用户）：
+        // 暴击 / 克制 / 抵抗 / 秒杀 都只在我方对别人造成伤害时出现；
+        // 我方被扣血 —— 被另一个玩家打（红字负号）、被 NPC 打（白字）—— 一律只有数字本身。
+        // 少了这一道闸，塔防局里 NPC 打我方卡的每一下都会挂一个【克制】【暴击】，数字反而读不出来。
+        const mark = (prefix: string): string => (text.dealtByPlayer && !text.takenFromPlayer ? prefix : '');
         switch (text.kind) {
             // 金币无文字，只剩硬币图标，连 + 也不拼。
             case 'gold': return { prefix: '', value: '' };
@@ -115,11 +141,13 @@ export class ZCFloatTextView extends Component {
             case 'heal': return { prefix: '', value: `+${value}` };
             case 'miss': return { prefix: '', value: 'MISS' };
             // 伤害类不带负号：飘字本就在挨打目标身上，负号只增加宽度并易与前缀读成整体。
-            case 'critical': return { prefix: '暴击', value };
-            case 'restraint': return { prefix: '克制', value };
-            case 'resisted': return { prefix: '抵抗', value };
-            case 'execute': return { prefix: '秒杀', value };
-            default: return { prefix: '', value };
+            // 例外是「玩家卡牌被别的玩家扣血」—— 那条要的就是负号，见上面的 `sign`。
+            case 'critical': return { prefix: mark('暴击'), value: `${sign}${value}` };
+            // 克制增伤只在我方打出去时标【克制】；被打到的那一下只有血量。
+            case 'restraint': return { prefix: mark('克制'), value: `${sign}${value}` };
+            case 'resisted': return { prefix: mark('抵抗'), value: `${sign}${value}` };
+            case 'execute': return { prefix: mark('秒杀'), value: `${sign}${value}` };
+            default: return { prefix: '', value: `${sign}${value}` };
         }
     }
 
@@ -129,7 +157,7 @@ export class ZCFloatTextView extends Component {
     @property({
         type: Label,
         group: '节点引用',
-        tooltip: 'Text/Prefix：暴击 / 克制 / 抵抗 / 秒杀 的小字号前缀（只在这四种飘字显示）',
+        tooltip: 'Text/Prefix：暴击 / 克制 / 抵抗 / 秒杀 的小字号前缀（只在我方打出去的伤害上显示）',
     })
     prefixLabel: Label = null!;
 
@@ -194,8 +222,9 @@ export class ZCFloatTextView extends Component {
 
         const parts = ZCFloatTextView.battleText(text);
         this.textLabel.string = parts.value;
-        const fontSize = text.kind === 'critical' || text.kind === 'execute'
-            ? ZCFloatTextView.EMPHASIS_FONT_SIZE : ZCFloatTextView.DEFAULT_FONT_SIZE;
+        const fontSize = text.kind === 'critical' ? ZCFloatTextView.CRITICAL_FONT_SIZE
+            : text.kind === 'execute' ? ZCFloatTextView.EXECUTE_FONT_SIZE
+                : ZCFloatTextView.DEFAULT_FONT_SIZE;
         this.textLabel.fontSize = fontSize;
         // 金币两种各走自己的曲线（掉落 / 产金，方向相反），其余走「快进慢出」，互不干扰。
         const gold = text.kind === 'gold' ? floatTextGoldDrop(progress) : null;
@@ -327,7 +356,10 @@ export class ZCFloatTextView extends Component {
 
     /** 按 kind 取色 + 尾段淡出，返回本帧 alpha 系数（0~1）供金币图标同步。*/
     private applyColor(text: Readonly<ZCFloatText>, progress: number, fadeOverride: number | null = null): number {
-        const base = ZCFloatTextView.FLOAT_TEXT_COLOR_BY_KIND[text.kind];
+        // 「玩家卡牌被别的玩家扣血」优先于 kind：暴击 / 克制在这一档同样是红字（只是字号不同）。
+        const base = text.takenFromPlayer
+            ? ZCFloatTextView.PLAYER_LOSS_COLOR
+            : ZCFloatTextView.FLOAT_TEXT_COLOR_BY_KIND[text.kind];
         // 金币有自己的淡出曲线，其余走 floatTextFade。
         const fade = fadeOverride === null ? floatTextFade(progress, this.entranceProgress) : fadeOverride;
         this.tint.set(base.r, base.g, base.b, Math.round(base.a * fade));

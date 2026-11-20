@@ -287,6 +287,24 @@ export interface ITerritoryMapArt {
      * 查不到 / 缺省一律按 1 —— 与引入该字段之前的表现完全一致。
      */
     readonly buildScales?: ReadonlyMap<number, number>;
+    /**
+     * 巡逻宝箱**锚点格**的模型图（闭合）：`monsterBoxLv`(1~4) →
+     * `territory_monsterBox_L{lv}`（212×212，与其它建筑同规格）。
+     *
+     * 只有锚点格（带 `patrolId` 的那格）画；兄弟格仍然不画 —— 与关卡 / 异步据点
+     * 「一片区域只在一格长建筑」同一条口径。
+     * 缺省 / 空表 ⇒ 不画宝箱（老夹具与「图还没加载」等价，不阻断对局）。
+     */
+    readonly patrolChestFrames?: ReadonlyMap<number, SpriteFrame | null>;
+    /** 同一角色的**开盖**版：本片挑战通过后换这张（`territory_monsterBoxOpen_L{lv}`）。 */
+    readonly patrolChestOpenFrames?: ReadonlyMap<number, SpriteFrame | null>;
+    /**
+     * 巡逻宝箱模型图的**体量倍率**（乘在「可见宽归一」之上，缺省 1）。
+     *
+     * 由 `TerritoryPageAssets` 从 `TERRITORY_MONSTER_BOX_ART_SCALE` 透传 —— 视图不 import 那份常量，
+     * 是为了不让 `TerritoryMapView` 再多一个依赖（每个 VM 桩表都得跟着补，纯属噪音）。
+     */
+    readonly patrolChestIconScale?: number;
 }
 
 /**
@@ -4204,8 +4222,7 @@ export class TerritoryMapView extends Component {
         // 宝箱格：普通宝箱（`fixedResource`）与野怪宝箱（`patrolChest`）共用**状态与交互**，
         // 但外观分开 —— 见下面 `isPatrol` 那几处。
         // 野怪宝箱点开是去打巡逻野怪（`battleIds` 那场），不是开箱领奖；
-        // 它**不展示宝箱模型 / 图标 / 气泡**，只保留地块状态色与未解锁时的银币价
-        // （价格在更上面那条 `!isOpened` 分支里）。
+        // 它**只在自己的锚点格**画模型（4 档专用图，见 `patrolChestIconOf`），不挂体力气泡。
         if (isTerritoryChestSite(site)) {
             const claimed = station.owned;
             const pending = station.pending;
@@ -4214,10 +4231,16 @@ export class TerritoryMapView extends Component {
             // 同一套圆角与尾巴），内容是体力 icon + 消耗数；同屏只留一只（由 `chestHintCell` 给出那一格）。
             // 野怪宝箱不挂：它的第二下是开战，格面只靠地块颜色表达状态。
             const showHintBubble = !isPatrol && !claimed && chestHintCell === site.cellId;
-            // 领取后清除宝箱图，状态只由地块颜色表达；野怪宝箱从一开始就不画。
+            // 普通宝箱领取后清除宝箱图，状态只由地块颜色表达；
+            // 野怪宝箱反而**靠这张图**说明「这里是巡逻宝箱」，通过后换开盖版、不摘图。
             return {
                 site,
-                icon: isPatrol || claimed ? null : this.stationIconOf(site, null, input.art),
+                icon: isPatrol
+                    ? this.patrolChestIconOf(site, station, input)
+                    : claimed ? null : this.stationIconOf(site, null, input.art),
+                // 巡逻宝箱的体量单独压一档（开盖版顶满格子的问题，见 art 侧的常量注释）；
+                // 普通宝箱不传 ⇒ 视图按 1 处理，与改动前完全一致。
+                iconScale: isPatrol ? input.art.patrolChestIconScale ?? 1 : undefined,
                 isLoading: pending,
                 caption: '',
                 levelBubble: showHintBubble ? String(site.unlock.staminaCost) : undefined,
@@ -4325,6 +4348,32 @@ export class TerritoryMapView extends Component {
             badge: '',
             interactive: true,
         };
+    }
+
+    /**
+     * 巡逻宝箱**锚点格**的模型图：`territory_monsterBox_L{lv}`，本片通过后换开盖版
+     * `territory_monsterBoxOpen_L{lv}`（4 档，212×212，与其它建筑同规格）。
+     *
+     * 三条口径，改之前先读：
+     * ① **只有锚点格画**（带 `patrolId` 的那格）。一片巡逻区 4~8 格，每格都画会长出一排箱子；
+     *    「一片区域只在一格长建筑」与关卡 / 异步据点同源（§3.48 / §3.49）。
+     * ② 等级取服务端快照 `station.monsterBoxLv`；快照还没到（`0`）按 1 档画 ——
+     *    锚点格先空着等数据，玩家会读到「这块地什么都没长」。
+     * ③ 通过判据用**片区口径** `patrolPassedCells`（同 `battleId` 任一格占点即整片通过），
+     *    不是逐格 `owned` —— 否则只有占点那格换开盖图，同片其余还是闭合。
+     *    取不到这份集合（老夹具）才退回 `station.owned`。
+     */
+    private patrolChestIconOf(
+        site: TerritorySite,
+        station: ITerritoryStationState,
+        input: ITerritoryMapRenderInput,
+    ): SpriteFrame | null {
+        if (!site.patrolId) return null;
+        const passed = input.patrolPassedCells?.has(site.cellId) ?? station.owned;
+        const frames = passed ? input.art.patrolChestOpenFrames : input.art.patrolChestFrames;
+        if (!frames) return null;
+        const lv = station.monsterBoxLv > 0 ? station.monsterBoxLv : 1;
+        return frames.get(lv) ?? null;
     }
 
     /**

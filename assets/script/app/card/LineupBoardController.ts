@@ -32,27 +32,48 @@ export class LineupBoardController extends ControllerBase {
         this.own(() => options.requests.removeCaller(this));
     }
     async start(): Promise<void> {
-        if (this.started || this.isDisposed) return;
+        if (this.started || this.isDisposed) {
+            return;
+        }
         this.started = true;
         this.listen(CardPopupEvent.BoardIntent, this.onIntent);
         try {
             const data = await this.options.repository.loadBoard(this.options.autoLoadDecks);
-            if (this.isDisposed) return;
-            this.options.model.load(data); await this.publish();
+            if (this.isDisposed) {
+                return;
+            }
+            this.options.model.load(data);
+            await this.publish();
         } catch (error) {
-            if (!this.isDisposed) { this.options.failed(error); this.options.feedback.tip(CARD_LINEUP_TEXTS.boardLoadFailed); }
+            if (!this.isDisposed) {
+                this.options.failed(error);
+                this.options.feedback.tip(CARD_LINEUP_TEXTS.boardLoadFailed);
+            }
         }
     }
     private async publish(): Promise<void> {
         const state = this.options.model.snapshot;
-        if (state && !this.isDisposed) await this.options.view.render(state);
+        if (state && !this.isDisposed) {
+            await this.options.view.render(state);
+        }
     }
     private onIntent(event: LineupBoardIntent): void {
-        if (event.owner !== this.options.owner || !this.options.model.snapshot) return;
-        if (event.kind === 'save') { void this.submit(false); return; }
-        if (event.kind === 'preset') { void this.switchPreset(event.index); return; }
-        if (event.kind === 'toggle') this.options.model.toggle(event.cardId);
-        else this.options.model.reset();
+        if (event.owner !== this.options.owner || !this.options.model.snapshot) {
+            return;
+        }
+        if (event.kind === 'save') {
+            void this.submit(false);
+            return;
+        }
+        if (event.kind === 'preset') {
+            void this.switchPreset(event.index);
+            return;
+        }
+        if (event.kind === 'toggle') {
+            this.options.model.toggle(event.cardId);
+        } else {
+            this.options.model.reset();
+        }
         void this.publishSafely();
     }
 
@@ -103,7 +124,11 @@ export class LineupBoardController extends ControllerBase {
     }
 
     private publishSafely(): Promise<void> {
-        return this.publish().catch(error => { if (!this.isDisposed) this.options.failed(error); });
+        return this.publish().catch(error => {
+            if (!this.isDisposed) {
+                this.options.failed(error);
+            }
+        });
     }
 
     /**
@@ -116,11 +141,15 @@ export class LineupBoardController extends ControllerBase {
     private async submit(quietSuccess: boolean): Promise<boolean> {
         const { model } = this.options;
         const submission = model.beginSave();
-        if (!submission) return false;
+        if (!submission) {
+            return false;
+        }
         try {
             void this.publishSafely();
             const result = await this.options.repository.saveFormation(submission.formationId, submission.heroIds, this);
-            if (this.isDisposed) return false;
+            if (this.isDisposed) {
+                return false;
+            }
             const unchanged = model.finishSave(submission, result.kind);
             if (result.kind !== 'success') {
                 this.options.feedback.tip(result.kind === 'offline' ? CARD_LINEUP_TEXTS.boardSaveOffline : CARD_LINEUP_TEXTS.boardSaveFailed);
@@ -128,15 +157,26 @@ export class LineupBoardController extends ControllerBase {
                 return false;
             }
             EventMgr.instance.emit(CardLineupEvent.DeckSaved, { formationId: submission.formationId, heroIds: submission.heroIds });
-            if (this.isDisposed) return false;
-            if (!quietSuccess) this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaved);
-            if (unchanged && this.options.closeAfterSave) { this.options.view.close(); return true; }
+            if (this.isDisposed) {
+                return false;
+            }
+            if (!quietSuccess) {
+                this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaved);
+            }
+            if (unchanged && this.options.closeAfterSave) {
+                this.options.view.close();
+                return true;
+            }
             await this.publishSafely();
             return unchanged;
         } catch (error) {
-            if (this.isDisposed) return false;
-            model.finishSave(submission, 'failed'); this.options.failed(error);
-            this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaveFailed); await this.publishSafely();
+            if (this.isDisposed) {
+                return false;
+            }
+            model.finishSave(submission, 'failed');
+            this.options.failed(error);
+            this.options.feedback.tip(CARD_LINEUP_TEXTS.boardSaveFailed);
+            await this.publishSafely();
             return false;
         }
     }

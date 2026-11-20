@@ -69,9 +69,11 @@
 | **铺满背景的雾（铺满层）**：盖住"没有内容"的空格与内容层那圈留白；换章那一帧必须**当场重建**（2026-10-26 / 11-06） | `model/TerritoryCloud.territoryCloudFillPoints` / `TerritoryCloudView.setFillArea`、`setFillOccupied`（判据是 `fillAreaReady`，**不是** `fillKey`）、`rebuildFill`、`applyFillActive` / `TerritoryMapView.syncContentSize`、`syncClouds`、`syncGrid`（`reset()`） | `tests/territory-cloud.test.ts` |
 | **塔防 BOSS 波识别**（`defenceModWave.monsterType`：`1` 普通 / `2` 精英 / `3` BOSS；客户端 JSON 必须含该列，缺列时按「每组最后一波」兜底，2026-11-07） | `model/TerritoryCampaignConfig.projectDefenceWaves`（→ `TerritoryCampaignWave.isBoss`）/ `ZCGameModel.defenceBossWaveIndex`、`isBossWave`、`ZCPveDefenceWave.isBoss` | `tests/territory-campaign-config.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | **塔防胜负只认「BOSS 已被击败」**（中间波清空不算赢；拆 BOSS 建筑提前触发的跳末波逻辑保持不变，2026-11-07） | `ZCGameModel.defenceBossState`（账本空时按场上同卡单位兜底）→ `ZCOutcomeSystem.checkOutcome(state, context, nextWaveIndex, defenceBoss)` | `tests/zcds-outcome-system.test.ts`、`tests/zcds-pve-defence.test.ts` |
-| **塔防波次面板常驻 + 普通波与 BOSS 波均显示头像和总血条**（波次徽标从第一波起一直挂着；当前波生成后显示头像、名字和总血条，2026-11-10） | `ZCGame.renderBossPanel`（有 `defenceWaveProgress` 就建面板，按 `progress.currentWaveId !== null` 调 `setBossBarVisible`）/ `ZCHudBossPanel.setBossBarVisible`、`formatZCDefenceWaveText`（`spawnedWaves` 钳到 1 起） | `tests/zcds-pve-defence-hud.test.ts` |
+| 🔴 **塔防波次徽标常驻 + 大血条只在 BOSS 波显示**（`IconBoss` + `第N/M波` 从第一波起一直挂着；头像框 / 名字 / 总血条 / `X{n}` 整组只认 `currentWaveIsBoss`，非 BOSS 怪只有头顶血条。2026-11-20 恢复 SVN 合并回退：旧判据 `currentWaveId !== null` 把「有当前波」当「有首领」，普通小怪波（截图 `第3/6波`）也挂大血条；模型 / 配置层口径从未变过。另：`setBossBarVisible` 收的是 `Portrait` 父节点，只藏 `Icon` 会留一个 86×86 空头像框；见 §4.5） | `ZCGame.renderBossPanel`（有 `defenceWaveProgress` 就建面板，按 `progress.currentWaveIsBoss` 调 `setBossBarVisible`）/ `ZCGameModel.defenceWaveProgress.currentWaveIsBoss` ← `isBossWave()` / `defenceBossWaveIndex()` / `ZCHudBossPanel.setBossBarVisible`、`formatZCDefenceWaveText` | `tests/zcds-pve-defence-hud.test.ts`、`tests/zcds-boss-panel.test.ts`、`tests/zcds-game-resources.test.ts`、`tests/zcds-pve-defence.test.ts` |
 | 🔴 **塔防结算演出必须等首领条把这次扣血演完**（BOSS 被打死那一拍模型血量已归零、HUD 只在 0.15s 的 `static` 节奏刷新且结算分支不刷 HUD ⇒ 旧表现是「怪已死、血条还是死前满血」的同时扫场已经开播；改为结算起手先 `beginHpDrain` 钉住死前比例 → 把最终血量 `render` 进面板（动画期只记目标）→ 条降完（0.5s，smoothstep）才拉远镜头 + 扫场；非塔防局 / 血量没降都当帧放行，2026-11-20） | `ZCGame.advanceSettlementPresentation`（`settlementHpSettled` 起手闸）/ `ZCHudBossPanel.beginHpDrain`、`advanceHpDrain`、`bossHpDrainRatio`、`ZC_BOSS_HP_DRAIN_SECONDS` / 契约 `IZCBattleView.advanceSettlementPresentation(model, frame, dt)` | `tests/zcds-pve-defence-hud.test.ts` |
-| **塔防局 NPC 也翻地块**（靠翻地解锁新的怪物卡；节奏仍受 `openGrideTime` 约束，2026-11-09） | `ZCGameModel.advance`（AI 节拍不再按 `pveDefence` 跳过）/ `runEnemyAI`、`aiDevelopIntervalSeconds` | `tests/zcds-pve-defence.test.ts` |
+| 🔴 **战斗伤害飘字的颜色 / 字号口径**（玩家造成的伤害一律**白字**（含克制增伤，`CRITICAL_COLOR` / `RESTRAINT_COLOR` 都指回 `NORMAL_DAMAGE_COLOR`）；暴击只放大**字号 1.7 倍**（30 → 51，颜色仍是白）；本机席位被**另一个玩家**扣血 ⇒ **红字 + 负号**（`-16`，暴击时同样 51px 且前缀仍是「暴击」）；两个**非玩家**互打 ⇒ **不推飘字**、只留血条变化；`resisted` 灰 / `execute` 橙保持原样。判「谁是玩家」的唯一真源是 `ZCMatchConfig.npcOwners`（入口 `buildZCBattleEntry` 按有无 `pve` 写入非本机席位），🔴 **不能**用 `owner !== player` 反推 —— PVP 4 人局另外三个席位也是真人；红色也只认 `defender === Player`，塔防里 NPC 打我方卡仍是白字，2026-11-20） | `ZCGameModel.floatTextToneOf`、`isPlayerSeat`、`damageUnit` / `ZCMatchConfig.npcOwners` / `ZCBattleEntryBuilder`（`ownersForPlayerCount` 去掉 player）/ `ZCFloatText.takenFromPlayer` / `ZCBattlePresentationQueue.pushFloatText` / `ZCFloatTextView.CRITICAL_FONT_SIZE`、`CRITICAL_COLOR`、`RESTRAINT_COLOR`、`PLAYER_LOSS_COLOR`、`battleText`、`applyColor` | `tests/zcds-damage-float-text.test.ts`、`tests/zcds-progress.test.ts`、`tests/zcds-battle-presentation-queue.test.ts`、`tests/zcds-client-combat-config.test.ts` |
+| **首领关（塔防）敌方不主动翻格**，首领和其他波次怪按配置出场 | `ZCGameModel.advance`、`spawnDueDefenceWaves` | `tests/zcds-pve-defence.test.ts` |
+| 🔴 **塔防同一波多只怪必须逐只出怪**（一波 20~30 只时旧实现同一帧 `for` 循环全生成 ⇒ 从敌方主城爆出一坨、朝向随机四散；用户口径 2026-11-20：逐只 0.1~0.2s、排成直线队列。落法：波次触发只登记「出怪票」，`advanceDefenceSpawnQueue` 每拍按 `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS = 0.15` 补一只；塔防怪的出生点不再随机散角，整波压在「敌方主城 → 目标主城」这条轴上 ⇒ 同点同向 + 时间错开 = 纵队。🔴 两个连带：①「这一波还没打完」必须同时看**活着的敌人 + 排队中的票**（`defenceForceOnField`），只看活体会在「第一只刚死、下一只还没出生」的空场帧提前触发下一波；②末波还在排队时不许判胜（`defenceBossState` 先查票），否则先头几只被打死就当场结算） | `ZCGameModel.triggerDueDefenceWaves`、`advanceDefenceSpawnQueue`、`spawnDefenceWaveUnit`、`defenceForceOnField`、`defenceBossState` / `spawnUnit(..., lineUpAlongGoal)` / `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS` | `tests/zcds-pve-defence.test.ts`、`tests/zcds-client-combat-config.test.ts` |
 | **出怪表的「怪物体型」要生效**（`defenceModWave.monsterSize` 当模型缩放倍率：1 普通 / 2 BOSS，缺省不缩放，封顶 2.5；2026-11-09） | `ZCGameModel.defenceMonsterScale` → 出怪时写 `unit.gateScale`（视图/头顶血条/兜底体型都乘它）/ 链路 `TerritoryCampaignWave.monsterSize` → `ZCPveDefenceWave.monsterSize` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts`、`tests/zcds-client-combat-config.test.ts` |
 | **塔防局收起玩家基础信息**（名字 / 头像 / 兵力三件套不画，buff 位保留，2026-11-09） | `ZCGameHUDView.hidePlayerBasicInfo`（`defence !== null` 置位）→ `ZCGameHudPlayerRow.render`（`basicInfoVisible`） | `tests/zcds-hud-dead-avatar-tint.test.ts` |
 | **`levelInfo.openGrideTime` = NPC 两次翻地块的最小间隔**（「关卡翻地快频率(s)」；**计时从第一次翻格之后开始**，首格不被拖后；下限 **1 秒**（`ZC_AI_MIN_DEVELOP_INTERVAL_SECONDS`，2026-11-11 起不再用全局 2.8s 当下限，否则填 1~2.7 秒会被静默抬回去）；`0`/缺省 = 不额外限速、按全局 `enemyAiIntervalSeconds`；**只压 NPC**，玩家不受影响） | `ZCGameModel.aiDevelopIntervalSeconds` / `restoreOrCreateState` 预置 `state.aiClock`；链路 `TerritoryCampaignStage.openGrideTime` → `ITerritoryBattleNavParams` → `ZCBattleEntryBuilder` | `tests/zcds-pve-defence.test.ts`、`tests/territory-campaign-config.test.ts` |
@@ -1599,7 +1601,7 @@ revealed = owned ∪ unlocked ∪ 前置满足的站点 ∪ **前沿可见的随
   不再算屏幕矩形（算了反而会有「滚到边缘气泡忽隐忽现」的抖动）。
 - 排序：解锁序号大者优先；**同号**（数据脏了）取 `cellId` 小的那个 —— 保证结果与 `sites`
   的遍历顺序无关、可重复。已领取 / 未激活 / 未露出的格子一律**不参选**。
-- 序号取 `fixedResource_<N>` 的 `N`（编辑器建点顺序）。已核对 `chapter_01~07` + `chapter_smile`：
+- 序号取 `fixedResource_<N>` 的 `N`（编辑器建点顺序）。已核对 `chapter_01~07`（历史 `chapter_smile` 预设已清理）：
   固定宝箱 id 全部合规且**同章不重号**，判据钉在 `tests/territory-chest-hint.test.ts`。
 
 #### 四、跳动 1.5s + 播放期间藏气泡
@@ -3229,6 +3231,37 @@ python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + �
 
 判据：`tests/zcds-hud-dead-avatar-tint.test.ts`（7 条）—— 常量口径（三通道相等、够深但不至于全黑）、机制守卫（改 `Sprite.color`，禁 `UIOpacity`/黑块）、头像与圆盘同步翻转、只在翻转时写、名字色不变、虚拟列表复用归位、以及「判据必须复用同帧 `counts`」的源码守卫。
 
+### 4.5 塔防大血条只在 BOSS 波显示，非 BOSS 怪不展示（2026-11-20）
+
+> 用户原话（配图红框）：「塔防模式非BOSS怪不展示大血条UI（合并svn这个改动回退了）」
+> 截图：左上 `第3/6波` 的普通小怪波，头像框 + 名字 + 长血条整条挂在屏上；战场里是多只小怪，不是 BOSS 单体。
+
+🔴 **真因只有视图接线一行**：`ZCGame.renderBossPanel` 被合并回退成
+`setBossBarVisible(progress.currentWaveId !== null)`。「有当前波」从第 1 波起恒真 ⇒ 普通波也挂首领大血条。
+**模型 / 配置层口径从未变过**：`ZCGameModel.defenceWaveProgress.currentWaveIsBoss` 由 `isBossWave()` →
+`defenceBossWaveIndex()` 算（表里有 `isBoss` 就认它，没填按每组最后一波兜底），`ZCMatchConfig` /
+`ZCBattleEntryBuilder` 的注释也都写着「大血条只在 BOSS 波显示」。恢复只认这一份数据，
+别再拿 `currentWaveId` / `spawnedWaves` / 场上怪数去推「有没有首领」。
+
+| 项 | 口径 |
+| --- | --- |
+| 常驻 | 骷髅 `IconBoss` + `第N/M波`（`formatZCDefenceWaveText` 把 `spawnedWaves` 钳到 1 起，2026-11-09 定案） |
+| 只在 BOSS 波 | 头像框 `Portrait` / 名字 `BossName` / 血条 `Bar`（含 `Fill` 与 `X{n}`）—— 由 `setBossBarVisible` 整组收放 |
+| 非 BOSS 波 | 上面三者一起 `active = false`，小怪只走自己的头顶血条；面板**不销毁、不重建** |
+| 结算 | 条藏着时 `advanceHpDrain` 第一帧就放行 ⇒ 不为空动画多等 0.5s（见速查表结算那行） |
+
+🔴 **别只藏 `Icon`**：`portraitIcon` 这个 `cc.Sprite` 绑在 `Portrait/Icon` 子节点上，`Portrait` 自己还带
+86×86 的 `boss_txk` 框贴图。只写 `portraitIcon.node.active = false` 会在普通波留下一个空头像框 ⇒
+要收的是 `portraitIcon.node.parent`（与 `hpFill.node.parent` = `Bar` 同一手法），没有父级时退回自己。
+
+**不变量**：`renderBossPanel` 每次 `static` 刷新都调一次 `setBossBarVisible`，写的是**绝对显隐**；
+从 BOSS 波切回普通波必须能再收起，不能靠「实例化时染一次」。
+
+**判据**：`tests/zcds-pve-defence-hud.test.ts`（波次序列 `[false, false, true, false]` + 整组收起 / 徽标仍刷新）、
+`tests/zcds-boss-panel.test.ts`（接线源码守卫：判据必须是 `currentWaveIsBoss`）、
+`tests/zcds-game-resources.test.ts`（BOSS / 普通波两次 `renderBossPanel` 不重建面板）、
+`tests/zcds-pve-defence.test.ts`（模型侧 `currentWaveIsBoss` 逐波真值）。
+
 ## 5. 自选主城（选择基地模式）：World 层表现 + 跟随基地的确认按钮
 
 沿用既有 `cityMode: 'select'` 的 `ZCSpawnSelection` + `ZCSpawnSelectionView`，仅在 World 层挂载表现，**严禁新建第二套选点状态机或第二颗确认按钮 Prefab**：
@@ -3294,6 +3327,8 @@ python tools/map-editor/retarget_chapter_rewards.py             # 改预设 + �
 剩下 55% 时长只挪 7px —— 所以读起来是「啪」地落到位再慢慢消失，而不是一路匀速飘。
 
 ### 6.2 文案：伤害不再带负号，前缀单独一条小字号 Label（2026-10-17）
+
+伤害飘字显示减伤、护盾吸收之后的完整命中伤害，击杀时也显示剩余生命封顶前的数值。例如命中 83，目标剩余 17 点生命，飘字显示 83，实际扣血、战斗统计和吸血按 17 结算。
 
 | kind | 数值 Label | 前缀 Label（`Text/Prefix`） | 前缀字号 |
 | --- | --- | --- | --- |
@@ -4795,6 +4830,60 @@ diff 只有 5 条「基线独有」（新口径用例在旧判据下的预期红
 13 条常驻红全在配置 / 建筑对齐 / 进度等外部漂移，两边逐条一致。
 `npx tsc --noEmit` 31 条全在 zcds 合并遗留，改动文件零报错。
 
+### 3.51 巡逻宝箱改用 `territory_monsterBox_L1~L4`（2026-11-20）
+
+> 用户原话（配图 = assets 面板里 `image/territory/buildings/` 下的
+> `territory_monsterBox_L1 / L2 / L3 / L4`）：「**巡逻宝箱使用这边的资源**」。
+
+**这两张图原来没人用、锚点格也没长箱子**：`chapter_01~07` 的巡逻主格虽然配了
+`buildingId: "69021"`（§3.49 的「装饰宝箱」），但 ① `69021` 至今不在 `build.json` 里；
+② `stationRenderOf` 的宝箱分支对 `patrolChest` 一律 `icon: null`（11-19 的口径「野怪宝箱不画宝箱外观」）。
+⇒ 玩家在图上只能看见地皮颜色 + 巡逻野怪 + 价格/锁，看不见「这里是个宝箱」。
+详情弹窗那边更早：模型取的是 `image/main/chest/boxLevel{1..4}`（100×100 的新手宝箱 UI 图），
+塞进 `ChestModel` 的 192×192 CUSTOM 尺寸里被放大近 2 倍，发糊，而且和地图上完全不是一个东西。
+
+**改法（四处，缺一处就是「一半生效」）**：
+
+| # | 位置 | 改了什么 |
+| :-- | :-- | :-- |
+| ① | `model/TerritoryMonsterBoxSpec` | 新增 `territoryMonsterBoxArtPath(lv, open)`（4 档 × 闭合/开盖，脏等级夹到 1~4）与 `TERRITORY_MONSTER_BOX_ART_SCALE` |
+| ② | `application/TerritoryPageAssets` | 8 张图随 `loadTerritoryBattleArt` 的 `Promise.all` 一起加载 → `patrolChestFrames` / `patrolChestOpenFrames` / `patrolChestIconScale` |
+| ③ | `view/TerritoryMapView` | 宝箱分支的 `icon` 对 `patrolChest` 走新方法 `patrolChestIconOf`；`iconScale` 取 art 透传的倍率 |
+| ④ | `main/MainTerritoryMap` | 弹窗的 `loadMonsterBoxArt` 换成同一套路径（`territoryMonsterBoxArtPath(lv)`） |
+
+🔴 **四条口径，改之前先读**：
+
+1. **只有锚点格画**（带 `patrolId` 的那格）。一片巡逻区 4~8 格，每格都画会长出一排箱子；
+   与关卡 / 异步据点「一片区域只在一格长建筑」同源（§3.48 / §3.49）。
+2. **等级取服务端快照** `ITerritoryStationState.monsterBoxLv`；快照还没到（`0`）按 **1 档**画 ——
+   锚点格先空着等数据，玩家会读成「这块地什么都没长」。
+3. **通过判据是片区口径** `patrolPassedCells`（同 `battleId` 任一格占点即整片通过），不是逐格 `owned`；
+   否则只有占点那格换开盖图，同片其余还闭合。取不到这份集合（老夹具）才退回 `owned`。
+4. **开盖不换宽**：`TERRITORY_MONSTER_BOX_ART_SCALE = 0.82` 是**两态共用**的体量倍率。
+   归一到可见宽 84 后，闭合版高 70.9~73.1（正常），开盖版被掀起的盖子拉到 **88.9~91.6**，
+   而格面只有 90 高 ⇒ 直接「顶满格子」（`territory-cell-center-align` 的 0.85 上限）。
+   乘 0.82 后闭合 58.1~59.9 / 开盖 72.9~75.1，**可见宽两态恒为 68.9** ——
+   通过那一刻只有盖子往上长、宽度不变，不会读成「箱子突然缩小」。
+   🔴 这个倍率**不要 import 进 `TerritoryMapView`**：视图每多一个依赖，所有 VM 桩表都要跟着补
+   （`Unexpected dependency` 一次性红一片），所以由 `TerritoryPageAssets` 随 art 透传。
+
+**判据**：`tests/territory-monster-box-art.test.ts` **5 条**（路径函数夹取 / 8 张图在盘上且是
+212 正方形建筑规格 / 锚点格按等级取图 + 通过换开盖 + 快照没到按 1 档 / 兄弟格不画 + 缺图不崩 +
+老夹具不传表退回「不画」 / 弹窗不再读 `image/main/chest`）。
+`tests/territory-two-step-render.test.ts` 两条「宝箱格 icon」守卫按新语义改写
+（普通宝箱领完照旧清图，野怪宝箱改由 `patrolChestIconOf` 取图）；
+`tests/territory-cell-center-align.test.ts` 的高度护栏按**显示尺寸**（含 0.82）复算。
+
+**回归**：领地全量 `1280 / 1265 绿 / 15 红`，15 条与改动前**逐条同名**（配置漂移 7 条、
+`宝箱3开` 体量 1 条、`syncStations` 夹具缺 `randomResourceOpenableCells` 的 5 条、进度 2 条）⇒
+**改动范围 0 条新增红**；其中 `宝箱3开` 那条在改动前是被 `territory_monsterBoxOpen_L1` 挡在前面
+（同一断言先红在怪物箱上），本轮的 0.82 把它让过去了，`宝箱3开` 本身是美术遗留、未处理。
+`npx tsc --noEmit` 6 条全在别人未提交的 territory 文件里，改动文件零报错。
+
+**未做（需要产品或表侧确认）**：`69021` 仍不在 `build.json`（源表 `PVP-建筑.xlsx / 装饰建筑`）——
+现在外观由代码按 `patrolId` + 等级解析，不依赖那一行；但 `territory-building-id.test.ts` 那条
+「配了 buildingId 就必须在 build 表里查得到」还是红的。补表要走 xlsx → `ref_compress_json.py` 的正规链路。
+
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 
 自选主城局选点结束进入战斗那一帧（`ZCGame.finishSpawnSelection`），纯表现层过渡（绝不回写模型）：
@@ -5104,6 +5193,39 @@ Creator 的规则是「被多个包引用时，资源存进**优先级高**的�
 ### 13.3 待触发与冷却
 
 没有合法目标、实际形状无法覆盖敌人或参数不全时，保持 readyAt/累计次数不变，不刷新施法动作窗口。目标进入范围当拍补放。持续窗口已施放的后续波次仍按既有节拍推进，不反向取消已创建的效果。
+
+#### 2026-11-20 口径收敛：除被动 / 召唤 / 陷阱，主动技能一律「等找到目标」
+
+用户原话：「除了被动和召唤类以及陷阱类的，其他的主动技能都需要等待找到目标触发」。
+
+逐条核过一遍，**绝大多数主动车道本来就已是这个语义**，只是判据分三种（这也让改动量只有两条）：
+
+| 判据 | 车道 | 被拦下时 |
+| :--- | :--- | :--- |
+| 普攻射程（`release` → `hasTargetInAttackRange`） | `self_aura` / `bolt_strike` / `chain_lightning` / `ray_beam` / `wind_shot` / `missile_barrage` / `random_strike` / `blink_strike` / `splash_shot` / `secondary` / **`storm_zone`（本次新增，另加第二道闸）** | 不消费 CD，下拍重试 |
+| 技能自己的作用范围（在 `castXxx` 里 `return false`） | `roar`（半径内没敌人）/ `burst_skill` + `venom`（同）/ `single_strike`（`singleSearchRadius` 内没人）/ `charge_shield`（`dashHeadingTowardTarget` 拿不到方向）/ `legacy_dash`（`dashTowardNearest = 1` 时找不到最近敌人）/ **`fan_slow`（半径内没敌人，本次新增）** | 同上 |
+| 不看目标（刻意保留） | `self_cast`（自愈 / 迅击 / 闪避 / 净化，效果落在自己身上）、`team_buff`（给友军加攻）、`counter_buff`（累计普攻自增益）、`legacy_dash` 的 `dashTowardNearest = 0` 分支（102703 尖刺冲锋「沿朝向平移」）、`trap` / `summon_unit` / 全部被动 | — |
+
+🔴 两条新增的**判据不同，别抄错**：
+
+- `storm_zone` 用 `release` **加一道「最近敌人 ≤ 普攻射程」**。三叶小丑 68020 普攻射程 300 表值
+  （`skillAttr 502203`「三叶小丑普攻攻击距离」）= **90 世界 px**，比风圈（90 表值 = 27 世界 px）宽松
+  ⇒ 不会因为「风够不着但普攻够得着」漏放。**为什么要第二道**：`release` 把「锁定目标在射程内」
+  也算有目标，而那个目标可能是一堵城墙 —— 只吃 `release` 会出现「贴着墙打、身边一个敌人也没有，
+  却往自己脚下扔一片风」。第二道闸判 `nearestEnemyDistance ≤ attackReachOf`，与 `castStorm` 里
+  挑投送目标（`stormDeliveryTarget`）的扫描同源，保证「闸门放行 ⇒ 必有落点」。
+- `fan_slow` 用**扇形自己的半径**。机甲菇 68015 普攻射程只有 45 表值 = **13.5 世界 px**（贴脸近战），
+  而扇形是 150 表值 = **45 世界 px**。用 `release` 卡会把「扇形够得着的人」全挡在外面，
+  这条 14 秒 CD 的技能几乎放不出来（`zcds-fan-single-batch14` 的夹具里
+  `inAttackRange: () => false` 就是为这条留的守卫）。
+
+⚠️ 副作用：`storm_zone` 与 §33 的「投送段」叠加后，施放瞬间目标必然在 90 世界 px 内
+⇒ 飓风的飞行距离变短（最远约 90 世界 px，约 3.2 秒），视觉上仍是「从本体飞到目标」，
+但不会再有「飞很远」的情况。
+`castStorm` 里「无活目标 ⇒ 原地生成」那条分支仍然保留，但只作为**兜底**：闸门放行后
+锁定目标可能还没写（`targetUnitId` 要等这一拍的攻击流程跑完），投送段会按同一套射程
+再扫一次最近的活敌（`stormDeliveryTarget`），扫不到才原地生成 —— 这条兜底就是
+「一加闸门就不飞了」的修复（2026-11-20 用户实测）。
 
 验证：`zcds-targeting-policy.test.ts`、`zcds-skill-trigger-range.test.ts`、`zcds-skill-plan.test.ts`、`zcds-active-pilot.test.ts` 与各车道回归。追击时钟与脱战名单的快照验证见 `zcds-neutral-features.test.ts`。
 
@@ -7676,3 +7798,236 @@ export function zcImpactEffectAnchor(ratio, fromX, fromY, toX, toY) {
 改过口径的三条既有断言：`zcds-magician-skills`（原来拿 `雷弹命中` 当「未登记=1」的例子）、
 `zcds-missile-trail`（原断言「命中不被弹体倍率连带 ⇒ 1」）、`zcds-effect-path-parity`
 （语义键快照补 `thunderBulletImpact` + `cidianBulletImpact`）。
+
+## 33. 三叶小丑飓风「从本体飞到目标」：移速口径 + 10% 起长（2026-11-20）
+
+用户口径原文：「三叶小丑的【飓风技能】没有从卡牌本体移动到目标的过程（按设计案的规划执行），
+是因为移动速度太小了吗？如果是，改成和卡牌的移速一样，初始生成的大小只有 10%，
+随着移动过程逐渐成长」。
+
+### 33.1 「看着没动」有两层原因，移速小只是第二层
+
+| 层 | 现象 | 数据 |
+| :--- | :--- | :--- |
+| ① 根本没有赶路段 | `castStorm` 只在 `context.unitPosition(unit)` 建区域，`x/y = 本体脚下` 后就交给随机游走 | 无 `approachSpeed` / `approachTargetId` |
+| ② 游走速度小到看不出 | 配表 `stormWanderSpeed: 10` 是**表值 px/s**，经 `× combatDistanceScale (0.3)` 只剩 **3 世界 px/s ≈ 屏上 2.3 px/s** | 一张卡面移速 28 的怪，风比它慢 **9.3 倍** |
+
+🔴 所以「把 `stormWanderSpeed` 从 10 改大」解决不了问题：方向仍然是随机的，不是「飞向目标」。
+真正的修法是补一条**投送段**（追踪式直飞），落点用现成的 `approachSpeed` 两档机制。
+
+### 33.2 移速取哪一格：卡牌面板移速，**不再乘** `combatDistanceScale`
+
+`pvpCard.68020.unitMoveSpeed = 28`，而 `ZCMovementSystem.speedOf` 里是
+`effectiveDefinition(unit).moveSpeed * … * dt` —— 这一格本来就是**世界 px/s**。
+`castStorm` 里其余表值（`stormRadius` / `stormWanderSpeed` / `stormPull*`）要乘 0.3，
+唯独移速不能，乘了就是每秒 8.4px 的蜗牛。🧨 这是本批最容易写错的一格：
+同一个函数里两种口径并排放着，`scale` 一顺手就乘上去了。
+
+### 33.3 三个口径对照
+
+| 项 | 老 | 新 |
+| :--- | :--- | :--- |
+| 出生点 | 本体脚下 | 本体脚下（不变） |
+| 投送 | 无 | `approachSpeed = 28`（面板移速，世界 px/s）飞向 `currentTarget` |
+| 赶路期读秒 | 立刻开始 | **不读**（`isApproaching` 为真），落地那一刻按已耗时**一次性扣减** |
+| 总寿命 | 活满 N 秒 | **含赶路共 N 秒**（`stormSeconds` = 6/7/8 是总账，见 §33.7） |
+| 到达后 | 原地随机游走 | 交还随机游走（`arriveWander` + `releaseToWander`） |
+| 入场大小 | 0 → 100%（`growSeconds: 0.2`） | **10% → 100%**（`growFrom: 0.1`，`growSeconds` = 直线赶路耗时） |
+| 无活目标 / 在打墙 | 原地生成 | 原地生成 + 老出场口径（不追墙、不追建筑）；**2026-11-20 起空场已被 `applyStorm` 的射程闸门拦下**，见 §13.3 |
+
+### 33.4 🔴 到点必须显式「下车」，否则是一片永不消散也不打人的风
+
+`ZCGroundZoneSystem.advanceChase` 的入口判据是 `approachSpeed > 0`，一旦成立就**恒**
+`return true` ⇒ 调用方的 `advanceWander` 与 `moveVelocity` 位移这一段永远轮不上。于是：
+
+- `sprintSpeed` 配 0 ⇒ 飞到目标后**定在半空**；
+- 配正数 ⇒ 一直朝最后一帧的方向冲出去；
+- 更糟的是 `isApproaching` 也为真 ⇒ **不读秒、不结算波次** ⇒ 寿命永不归零。
+
+四件事一起做才叫「落地」，`releaseToWander` 一次做完：
+①按已耗时扣寿命并重算波数（§33.7）；②清 `approachSpeed / approachTargetId / sprintSpeed`；
+③走一次 `enterSprint`（`sprinting = true` + **`nextWaveAt` 重置到此刻**）；④清旧速度。
+🔴 重置 `nextWaveAt` 不能省：赶路期攒着的 `nextWaveAt` 还停在施法那一刻，不重置的话落地第一帧的
+`while (now >= nextWaveAt)` 会把「本该打、但没打」的那几波**一口气全打出来**（用例
+`落地那一拍只补当前一波` 就钉这一条）。目标半路死光走同一条出口（否则风会按 `sprintSpeed: 0` 定住）。
+
+### 33.5 「初始 10%」必须新增一格起点占比
+
+`zcCombatEffectGrowFactor` 的曲线是 `1-(1-t)²`，`t = 0` 时系数是 **0** —— 它只能表达
+「从看不见长到满」。所以加第三参 `growFrom`（0~1，缺省 0），合成
+`growFrom + (1-growFrom) × ease(t)`：
+
+```ts
+zcCombatEffectGrowFactor(growSeconds, ageSeconds, growFrom)
+```
+
+- 缺省 `undefined` ⇒ 当 0，**存量特效（从 0 长起来 / 压根不生长）逐字不变**；
+- 🔴 `growSeconds` 非法时**一律返回 1**（满尺寸），不返回 `growFrom`：宁可「没有入场动画」，
+  也不能让一格写歪的配表把整片飓风永久钉在 10%（那画面等于技能没放出来）。
+- 链路：`ZCGroundZoneState.growFrom` → `syncHoldVisual` 抄进 `area` 事件 →
+  `ZCCombatEffectView.growFactorOf` 传给纯函数。`combatEvents` 不进存档，但**区域进**，
+  所以 `growFrom` 要在 `ZCSnapshotCodec` 登记（`growSeconds` 一直没登记：纯时长、写宽了只是快慢）。
+
+### 33.6 到达容差 = 风半径的 1/4
+
+`sprintRange = radius × 0.25`：本卡 90 表值 × `combatDistanceScale` 0.3 = 27 世界 px 的风半径
+⇒ 容差 **6.75 世界 px**（用例夹具 `combatDistanceScale = 1`，所以断言里读到的是 22.5）。
+两条极端都试过、都不行：
+
+- 取 0 ⇒ **永远差半步**：`advanceChase` 每步都 `step = min(speed*dt, distance)` clamp 到
+  「当时的目标点」，而目标每帧还在走（28 px/s × 16.7ms ≈ 0.5px/帧）；
+- 取整个半径 ⇒ 目标本来就站在风圈里，赶路段被整段跳过，用户还是看不到飞行。
+
+### 33.7 总时长口径：落地时按已耗时扣减（用户 2026-11-20 追加）
+
+> 「落地时按已耗时扣减」
+
+`remainingSeconds` 在赶路期不读秒（`isApproaching` 为真），所以账必须落地那一刻一次结清。
+新增一格 `approachSeconds`：`advanceChase` 每帧 `+= dt`（只累计**真在追**的帧），
+`releaseToWander` 里 `remainingSeconds -= approachSeconds`。
+
+🔴 **`wavesLeft` 必须跟着重算**：它是照整段 N 秒算的（8s ÷ 0.5s = **16 波**），不重算就会把
+16 波塞进剩下的几秒里 —— 表现为「落地后每 0.17 秒打一下」。重算口径与施放时一致：
+`max(0, round(remaining / waveInterval))`。
+
+🔴 **兜底闸**：`approachSeconds >= remainingSeconds`（赶路已经耗尽整段寿命）⇒ 当场
+`releaseToWander`，扣完即散场。不设这道闸，「目标一直在跑、永远追不上」会让这片风
+**永远在飞、永远不读秒**（一片不散场也不打人的风）；设了之后它的表现是
+「追不上就在寿命用尽时落地消失」，至少是可控的。
+
+实测（用例夹具，8 秒 / 每 0.5 秒一跳）：目标 100 世界 px、边飞边被牵引 ⇒ 落地耗时 **1.0s**，
+剩余寿命 **6.9s**（8 − 1.0 − 本帧 0.1），`wavesLeft` 从 16 重算成 14、落地这一拍补 1 波后剩 13。
+``remainingSeconds + elapsedSeconds ≈ N`` 就是这条口径的不变量。
+
+`approachSeconds` 进快照（`nonnegative`）：不还原的话读档回来会白多活一整段赶路。
+
+### 33.8 用例
+
+`tests/zcds-remnant-batch17.test.ts` **+8 条**：
+
+1. 出生在本体脚下、`approachSpeed = 28`、`growFrom = 0.1`、`growSeconds = (100 − 22.5) / 28`；
+   1 秒走 28 世界 px、沿直线、**赶路期一波不打也一秒不掉寿命**；到点后
+   `approachSpeed / approachTargetId / sprintSpeed` 全清、`sprinting` 保留；
+2. 落地那一拍只补当前 1 波（不是攒下的那几波）+ 寿命按总账扣 + `wavesLeft` 按剩余时间重算；
+3. 追不上的目标不能把风变成永动机（2000 世界 px 外 ⇒ 8 秒内落地散场、一下没打到）；
+4. 兜底（直接调 `castStorm`、绕过闸门时）：无活目标 / 射程内没敌人 ⇒ 原地生成 +
+   `growFrom` 缺省 + `growSeconds: 0.2` + 不累计 `approachSeconds`；
+5. 快照白名单三条（`arriveWander` / `growFrom` / `approachSeconds`）；
+6. **闸门放行但这一拍还没锁定**（`currentTarget` 给 `null`）⇒ 自己按普攻射程挑最近的活敌送出去，
+   射程外的不追（2026-11-20 用户实测那条的回归）；
+7. **锁定的是墙** ⇒ 照样飞向射程内的敌人，不飞到墙根定住；
+8. 触发三拍：挂 CD / `release` 为假 ⇒ 待触发 / **`release` 为真但最近敌人还在射程外（只在打墙）
+   ⇒ 仍待触发不消费 CD** / 敌人进射程当帧补放。
+
+`tests/zcds-yedan-skills.test.ts` 扩 8 条断言（`growFactor` 的 `growFrom` 分支 + 区域不再写这一格
+时视图按 0 处理）。既有两条 102004 用例**一条都没改**：它们的夹具 `currentTarget` 恒 `null`
+⇒ 走「无活目标」分支，行为与改动前逐字一致。
+
+### 33.9 已知遗留
+
+目标移速 ≥ 风的移速且一直后退时，`advanceChase` 永远追不上 ⇒ 风一路飞、一下都不打，
+**到寿命用尽时落地散场**（§33.7 的兜底闸兜住了「永不消散」）。这条对 103405 鹿神守护
+仍然成立（同一套机制，它没有兜底闸也不会扣寿命）。本卡实际很少遇到：三叶小丑射程
+300 表值 = **90 世界 px**，`currentTarget` 多在这个圈里，而敌人是朝本体走的。
+
+> 2026-11-20 二次收敛（用户实测「改成等目标之后，飓风又不会移动了」）：原来那段
+> 「`release` 为真但本帧还没锁定 ⇒ 原地生成」不是理论边角，而是**常态** —— 闸门恰好在
+> 「敌人刚进圈的第一帧」放行，而 `targetUnitId` 要等这一拍的攻击流程跑完才写。修法两条：
+> ① `castStorm` 在锁定目标不是活单位时，按**同一套射程**再扫一次最近的活敌
+> （`stormDeliveryTarget`），扫不到才原地；② `applyStorm` 加第二道闸「最近敌人 ≤ 普攻射程」，
+> 把「只是在打墙」从「有目标」里剔掉。用例见 §33.8 的 6~8 条。
+
+### 33.10 追踪弹的目标生命周期（2026-11-20 第 31 批）
+
+用户口径原话：「锁定类的子弹技能逻辑应该是，锁定目标，移动，目标丢失，切换目标，
+没有目标继续往旧的目标坐标移动，不会静止」。
+
+四段各自落在哪：
+
+| 阶段 | 实现 | 关键点 |
+| :--- | :--- | :--- |
+| 锁定目标 | `approachTargetId` + 每帧 `context.unitPosition(target)` 求方向 | 每帧重算方向，不锁死出生朝向 |
+| 移动 | `advanceChase` 慢档 `approachSpeed` / 快档 `sprintSpeed` | 慢档不读秒、不结算波次 |
+| 目标丢失 → 切换 | `nearestChaseTarget`（`unitsInRadius` 粗筛，半径 `max(sprintRange, ZONE_RETARGET_RANGE)`） | 按**区域当前位置**找最近的活敌，不是按出生点 |
+| 没有目标 → 旧坐标 | 新增 `chaseGoalX / chaseGoalY`（**最后已知目标坐标**） | 朝它继续飞，飞到了才按车道收尾 |
+
+🔴 三处必须钉住，少一条就退化成「静止」：
+
+1. **`chaseGoalX/Y` 每帧刷新**（目标活着的每一帧）。只在施法那一刻记一次不够 ——
+   目标边跑边记，最后一段才是它真正的去向。
+2. **速度兜底不能是 0**：老代码在没有目标的分支里取 `sprintSpeed ?? 0`，
+   而飓风的投送段只有 `approachSpeed`、没有 `sprintSpeed` ⇒ 整片风定在原地。
+   现在快档速度一律 `sprintSpeed || slowSpeed`，慢档本来就是「赶路速度」。
+3. **飞到了才收尾**：`arriveWander`（飓风）在旧坐标才 `releaseToWander`（顺带清
+   `chaseGoalX/Y`，否则游走接管后会被重新拽回去）；其余车道沿同方向继续飞到寿命结束。
+
+区分点（改之前 vs 之后）：改之前「无目标」= 沿**旧速度方向**飞，且速度可能为 0；
+改之后 = 朝**最后已知坐标**飞，速度恒 > 0。坐标为 `undefined`（出生就没锁定过目标）时
+才退回「沿旧速度方向」，与存量行为逐字一致。
+
+### 33.11 游走走 S 型（2026-11-20 用户口径）
+
+原话：「飓风类技能的移动是要类似 S 型的行走方式，不要固定的直线（除了有明确标识不能移动的飓风）」。
+
+**改的是什么**：`advanceWander` 原来每 `wanderTurnSeconds` 把朝向**整段重掷**成
+`random × 2π` —— 那是折线，运气不好还会原地掉头。现在改成**连续转向 + 按段翻号**：
+
+```
+首帧：角度 = random × 2π，转向率 = (π/3) / wanderTurnSeconds   （这一拍不积分）
+之后：角度 += 转向率 × dt；每到 nextTurnAt 就把转向率取反
+```
+
+一左一右、幅值不变 ⇒ 画出来是蛇形（S）。`ZC_ZONE_WANDER_SWING_RADIANS = π/3`：
+60°/段（配表 1 秒）＝ 60°/秒。太小（< 20°）还是像直线，太大（> 90°）会绕圈走不出位移。
+
+🔴 两个不动点：
+
+- **`wanderSpeed = 0` 的区域一步都不挪**（第一行就 `return`）—— 这就是用户说的
+  「有明确标识不能移动的飓风」。
+- **首帧只定方向、不积分旋转**：初始朝向仍是 `random × 2π` 那一格，存量用例按角度
+  断言过这一拍，行为逐字不变。
+
+`wanderTurnRate` 进快照（按 `Number.isFinite` 校，**可负**，不能用 `nonnegative`）。
+
+### 33.12 分裂菇分身「先特效、后出现」（2026-11-20 第 33 批）
+
+用户三条原话：
+
+1. 「分身生成坐标落，落在以本体为圆心，20px 为半径的圆内」；
+2. 「每个分身生成有 0.1s 的间隔差」；
+3. 「分身时，在分身坐标先播放【分裂菇_生成分身】，再出现分裂菇分身，分裂菇的分身透明度约为 65%」。
+
+**这是一次「出生时刻」的改动，不是纯表现。** 原来 6 只分身在同一拍 `spawnUnit`、
+坐标都取本体脚下（`placeSummon` 在 `follow=false` 分支就是 `placeAt(origin)`）；
+现在第 i 只在 `t + i × 0.1s` 播特效、`t + i × 0.1s + 0.32s` 才真正出生。
+
+落地口径（`ZCGameModel`）：
+
+| 常量 | 值 | 管什么 |
+| :-- | :-- | :-- |
+| `SUMMON_SCATTER_RADIUS` | 20 逻辑 px（≈15.4 屏上 px） | 落点半径；与舞王阵位 18 同量级 |
+| `SUMMON_STAGGER_SECONDS` | 0.1 | 第 i 只的 `fxAtSeconds` 间隔 |
+| `SUMMON_APPEAR_DELAY_SECONDS` | 0.32 | 特效起播 → `spawnUnit` |
+| `ZC_SUMMON_SPAWN_FX_SECONDS` | 26/24 ≈ 1.0833 | 特效事件寿命，**必须等于 clip `_duration`** |
+| `SUMMON_INDEPENDENT_ALPHA` | 0.65 | 配表 `summonAlpha` 没填时的兜底（只兜独立分身） |
+
+🔴 四个不能改回去的点：
+
+1. **不能「先召出来再隐藏」**：隐藏的单位仍是合法目标 —— 会被看不见的东西挨打、
+   也会自己往敌人方向走开，等到该出现时已经不在那个坐标上了。所以推迟的是
+   `spawnUnit`，队列（`state.pendingSummons`）里存「出生需要的一切」。
+2. **队列必须进快照**：这 0.6~0.9s 是真状态，读档 / 重连丢掉队列 = 白丢 6 只分身
+   （累计普攻的次数已经消费掉了）。`ZCSnapshotCodec` 有 6 条断言守着（见用例）。
+3. **排队中的份也算 12 只名额**：只数 `state.units` 会让 0.6s 内的第二次召唤看见
+   「场上 0 只」再召一批，实际会冒出 15 只。
+4. **角度按序号均分、只用随机量做抖动**：6 只若都听同一颗随机数，某些种子下会
+   **叠在同一个点**上（看起来只召出 1 只）。半径仍按 `sqrt(random)` 铺满圆面。
+
+特效资源：美术只丢了 26 张散帧（1185×1185 画布，裁剪框从 171 长到 912），
+prefab / anim 由 `tools/build_fission_spawn_fx.py` 生成，三条硬要求：
+`_sizeMode=0`（CUSTOM，序列帧尺寸不跟着 frame 变）、`_isTrimmedMode=false`
+（每帧按整张画布画进同一个 contentSize，帧间不抽动）、`wrapMode=1`（一次性，不循环）。
+路径登记在 `ZC_EFFECT_PATHS.fissionSpawn` + 行为键 `summon_unit`（**不标 `warmup`**：
+没有分裂菇的对局不该下这 26 张散图）。
+
+用例：`tests/zcds-split-shroom-summon.test.ts` §七（5 条）。

@@ -4,7 +4,7 @@ import test from 'node:test';
 import type { ZCAttackProfile, ZCDeckCard, ZCUnitDefinition } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import type { ZCRuntimeRules } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import {
-    buildZCTestKapaiCatalog, damageOfSkill, factorsOfSkill, parseZCTestKapaiConfig,
+    buildZCTestKapaiCatalog, damageOfSkill, factorsOfSkill, parseZCTestKapaiConfig, ZCTestKapaiRound,
 } from '../assets/script/app/zcds/model/ZCTestKapaiModel';
 import type { IZCRuntimeCatalogs } from '../assets/script/app/zcds/model/ZCRuntimeConfigStore';
 import { ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
@@ -296,4 +296,28 @@ test('技能带上 effectPrefabPath，舞台按它播放 `pvpSkill.effectPrefabP
 test('技能没登记特效时留空串，调用方据此提示「仅演示数值」而不是静默不播', () => {
     const catalog = buildZCTestKapaiCatalog(catalogsOf([card()], [unit()]));
     assert.equal(catalog.cards[0].skills[0].effectPrefabPath, '');
+});
+
+test('暂停冻结时钟与结算，重开后从满血和零统计开始', () => {
+    const round = new ZCTestKapaiRound();
+    round.restart(1200);
+    round.advance(2);
+    assert.deepEqual(round.hit(213), { before: 1200, after: 987, broke: false });
+    round.paused = true;
+    round.advance(10);
+    assert.equal(round.hit(426), null);
+    assert.deepEqual([round.elapsed, round.totalDamage, round.castCount, round.targetHp], [2, 213, 1, 987]);
+    round.restart(1200);
+    assert.equal(round.paused, false);
+    assert.deepEqual([round.elapsed, round.totalDamage, round.castCount, round.targetHp], [0, 0, 0, 1200]);
+    assert.deepEqual(round.hit(426), { before: 1200, after: 774, broke: false });
+});
+
+test('击破明细保留归零读数，同时为下一发重置木桩', () => {
+    const round = new ZCTestKapaiRound();
+    round.restart(1200);
+    round.hit(987);
+    assert.deepEqual(round.hit(426), { before: 213, after: 0, broke: true });
+    assert.equal(round.targetHp, 1200);
+    assert.equal(round.totalDamage, 1413);
 });

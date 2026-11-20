@@ -235,7 +235,8 @@ export class ZCCardRevealView extends Component {
 
     /** 卡面主图优先角色图；金矿已确定使用建筑图，缺角色图不再告警。*/
     private frameForArt(reveal: Readonly<ZCCardReveal>): SpriteFrame | null {
-        const cardArt = this.presentationArt?.cardArtFrames.get(reveal.cardId) ?? null;
+        const art = this.presentationArt;
+        const cardArt = art ? art.cardArtFrames.get(reveal.cardId) ?? null : null;
         if (cardArt) return cardArt;
         // if (ZCDC_LOG_WARNINGS) {
         //     console.warn(

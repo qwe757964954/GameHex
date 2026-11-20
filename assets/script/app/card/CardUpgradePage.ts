@@ -231,7 +231,27 @@ export class CardUpgradePage extends PopupBase {
     /** 按钮可点时的文字颜色（开机时从 prefab 的 Label 上取，代码不写死）。 */
     private upgradeLabelColor: Color = null!;
 
+    /** 六维属性 Label 的映射缓存，避免 renderDetail 时高频分配 Map 垃圾。 */
+    private statValuesMap!: ReadonlyMap<StatKey, Label>;
+    private statGainsMap!: ReadonlyMap<StatKey, Label>;
+
     protected onInit(): void {
+        this.statValuesMap = new Map<StatKey, Label>([
+            ['hp', this.statHpValue],
+            ['attack', this.statAttackValue],
+            ['buildHp', this.statBuildHpValue],
+            ['spawn', this.statSpawnValue],
+            ['range', this.statRangeValue],
+            ['speed', this.statSpeedValue],
+        ]);
+        this.statGainsMap = new Map<StatKey, Label>([
+            ['hp', this.statHpGain],
+            ['attack', this.statAttackGain],
+            ['buildHp', this.statBuildHpGain],
+            ['range', this.statRangeGain],
+            ['speed', this.statSpeedGain],
+        ]);
+
         this.upgradeLabelColor = this.upgradeLabel.color.clone();
         this.upgradeLabel.string = upgradeButtonText(1, false);
         //  打开瞬间的初始文案由 render 按真实等级覆盖。
@@ -475,24 +495,11 @@ export class CardUpgradePage extends PopupBase {
     }
 
     private statValueLabels(): ReadonlyMap<StatKey, Label> {
-        return new Map<StatKey, Label>([
-            ['hp', this.statHpValue],
-            ['attack', this.statAttackValue],
-            ['buildHp', this.statBuildHpValue],
-            ['spawn', this.statSpawnValue],
-            ['range', this.statRangeValue],
-            ['speed', this.statSpeedValue],
-        ]);
+        return this.statValuesMap;
     }
 
     private statGainLabels(): ReadonlyMap<StatKey, Label> {
-        return new Map<StatKey, Label>([
-            ['hp', this.statHpGain],
-            ['attack', this.statAttackGain],
-            ['buildHp', this.statBuildHpGain],
-            ['range', this.statRangeGain],
-            ['speed', this.statSpeedGain],
-        ]);
+        return this.statGainsMap;
     }
 
     // 固定底栏：升级判定与提示语义保持不变。
@@ -588,5 +595,15 @@ export class CardUpgradePage extends PopupBase {
         this.previewAssets = null;
         this.heroKey = null;
         EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
+    }
+
+    onDestroy(): void {
+        this.closeButton?.node?.off(Button.EventType.CLICK, this.onCloseClick, this);
+        this.previousButton?.node?.off(Button.EventType.CLICK, this.onPreviousClick, this);
+        this.nextButton?.node?.off(Button.EventType.CLICK, this.onNextClick, this);
+        this.upgradeButton?.node?.off(Button.EventType.CLICK, this.onUpgradeClick, this);
+        this.skillButton?.node?.off(Button.EventType.CLICK, this.onSkillClick, this);
+        this.expIconButton?.node?.off(Button.EventType.CLICK, this.onExpIconClick, this);
+        super.onDestroy();
     }
 }

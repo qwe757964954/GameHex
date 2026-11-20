@@ -56,7 +56,7 @@ export class ZCSettlementMvpActor {
             this.clear();
             return false;
         }
-        if (this.prefab === prefab && this.visual?.isValid) {
+        if (this.prefab === prefab && this.visual && this.visual.isValid) {
             this.applySize(prefabSize);
             return true;
         }
@@ -112,7 +112,7 @@ export class ZCSettlementMvpActor {
     }
 
     clear(): void {
-        this.visual?.destroy();
+        if (this.visual) this.visual.destroy();
         this.visual = null;
         this.prefab = null;
         this.appliedSize = Number.NaN;

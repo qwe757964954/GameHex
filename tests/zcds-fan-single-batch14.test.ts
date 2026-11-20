@@ -474,6 +474,33 @@ function harness(params: Record<string, number>, behaviorKey: string, chain: num
     return { caster, state, context, registered, applied, struck };
 }
 
+test('菌丝绞杀：扇形半径内没人 ⇒ 待触发不消费 CD，目标进圈当帧补放', () => {
+    prepare();
+    const test1 = harness(FAN_PARAMS[2], 'fan_slow', 101503);
+    let calls = 0;
+    (test1.context as unknown as Record<string, unknown>).castFanSweep =
+        () => { calls += 1; return true; };
+    //  最近敌人距离可控：默认远处（够不着），后段拉进扇形半径。
+    //  闸门用的是**扇形自己的半径** 150 表值 × distanceScale 0.3 = 45 世界 px，
+    //  不是普攻射程（68015 只有 45 表值 = 13.5 世界 px，用那个会把技能卡死）。
+    let nearest = 999;
+    (test1.context as unknown as Record<string, unknown>).nearestEnemyDistance = () => nearest;
+    const step = (at: number) => {
+        test1.state.elapsedSeconds = at;
+        ZCSkillTriggerSystem.tick(test1.state, 0.05, test1.context);
+    };
+    step(0);
+    assert.equal(test1.caster.fanReadyAt, 12, '开局只挂 CD');
+    step(12);
+    assert.equal(calls, 0, '冷却到点但扇形半径内没人 ⇒ 不放');
+    assert.equal(test1.caster.fanReadyAt, 12, '被拦下 ⇒ 冷却保持就绪，不消费');
+    nearest = 10;
+    //  同一时刻再跑一拍（tick 幂等，`elapsedSeconds` 不动）⇒ 当帧就补放。
+    step(12);
+    assert.equal(calls, 1, '目标一进扇形半径立刻补放');
+    assert.equal(test1.caster.fanReadyAt, 24, '放出去才推到下一个 CD');
+});
+
 test('菌丝绞杀：首次只挂 CD、到点才甩；减速状态按档位签名注册', () => {
     prepare();
     const test1 = harness(FAN_PARAMS[2], 'fan_slow', 101503);

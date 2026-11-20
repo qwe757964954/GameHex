@@ -66,16 +66,27 @@ export function zcCombatEffectNodeScaleOf(
  *
  * @param growSeconds 生长时长（秒）。`undefined` / `0` / 非法 ⇒ 返回 1（不生长）
  * @param ageSeconds  事件年龄（`now - startedAt`）
+ * @param growFrom    起始占比（0~1，缺省 0）。合成 `growFrom + (1-growFrom) × ease(t)`：
+ *                    缓动本身在 t = 0 时是 0，所以「出生就有 10%」只能靠这一格补
+ *                    （2026-11-20 三叶小丑飓风 102004：「初始生成的大小只有 10%，
+ *                    随着移动过程逐渐成长」）。
  *
  * 缓动取 ease-out quad（`1 - (1-t)²`）：0.3s 这类短入场用线性会显得「一顿」，
  * out-back 又会在末段过冲、把飓风撑得比最终尺寸还大一圈。
+ *
+ * 🔴 `growSeconds` 非法时一律返回 **1**（满尺寸），不返回 `growFrom`：宁可「没有入场动画」，
+ * 也不能让一格写歪的配表把整片飓风永久钉在 10% 上（那画面等于技能没放出来）。
  */
 export function zcCombatEffectGrowFactor(
     growSeconds: number | null | undefined,
     ageSeconds: number,
+    growFrom?: number | null,
 ): number {
     if (typeof growSeconds !== 'number' || !Number.isFinite(growSeconds) || growSeconds <= 0) return 1;
     if (!Number.isFinite(ageSeconds)) return 1;
+    const from = typeof growFrom === 'number' && Number.isFinite(growFrom)
+        ? Math.max(0, Math.min(1, growFrom))
+        : 0;
     const t = Math.max(0, Math.min(1, ageSeconds / growSeconds));
-    return 1 - (1 - t) * (1 - t);
+    return from + (1 - from) * (1 - (1 - t) * (1 - t));
 }

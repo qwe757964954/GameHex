@@ -134,6 +134,20 @@ export interface ZCMatchConfig {
     /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。*/
     pveDefence?: Readonly<ZCPveDefenceConfig>;
     /**
+     * 本局哪些席位是**非真人玩家**（关卡 PVE / 塔防的 NPC 队伍，按 `enemy` → `enemy3` 顺序）。
+     *
+     * 只服务伤害飘字的显示口径（2026-11-20 用户）：
+     * · 两个非玩家席位互打 ⇒ 只留血条变化，不出数字；
+     * · 本机席位（`player`）的卡牌被另一个玩家扣血 ⇒ 红字 + 负号；
+     * · 其余一律白字（含玩家打出的伤害、克制增伤、NPC 打我方卡）。
+     *
+     * 缺省 / 空 = 全员真人（PVP 匹配）。玩家席位恒为 `player`，不进这张表。
+     *
+     * 🔴 别用「不是 `player`」代替它：PVP 4 人局里另外三个席位也是真人玩家，
+     * 用 owner 反推会把「别的玩家打我」判成 NPC 打玩家，红色飘字整块失效。
+    */
+    npcOwners?: readonly ZCOwner[];
+    /**
      * `levelInfo.openGrideTime`：NPC 两次点地块之间的最小间隔（秒，0 = 按全局节奏）。
      *
      * 只约束 NPC（本地 AI 席位）翻地块的速度，可快可慢：AI 的开发间隔取

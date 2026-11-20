@@ -133,8 +133,12 @@ test('★★★已领取的 fixedResource 格必须同时清空 icon/caption/bad
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
 
     //🔴 三个必须**都**被 claimed 清掉，缺一个就不算「彻底」：
-    assert.match(body, /icon:\s*isPatrol \|\| claimed \? null :/,
-        '已领取（或野怪宝箱）⇒ icon 必须为 null（宝箱图要藏掉）');
+    // 2026-11-20 起野怪宝箱（`patrolChest`）分开走：锚点格按等级取 `territory_monsterBox_L{lv}`，
+    // 通过后换开盖版 —— 它不再「一领就空」。清图这条只剩普通宝箱。
+    assert.match(body, /:\s*claimed \? null : this\.stationIconOf\(site, null, input\.art\)/,
+        '已领取的普通宝箱 ⇒ icon 必须为 null（宝箱图要藏掉）');
+    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*this\.patrolChestIconOf\(site, station, input\)/,
+        '野怪宝箱改由 patrolChestIconOf 按等级 / 通过状态取图（§3.51）');
     assert.match(body, /caption:\s*''/,
         '已领取 ⇒ caption 必须为空串');
     assert.match(body, /badge:\s*''/,
@@ -166,8 +170,10 @@ test('无建筑图标时不再启用兜底文字，只有未解锁条件可以�
 test('未领取的宝箱格保留图标和交互，地图上不显示「可领取」文字', () => {
     const renderAt = MAP_VIEW_SRC.indexOf('if (isTerritoryChestSite(site))');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
-    assert.match(body, /icon:\s*isPatrol \|\| claimed \? null : this\.stationIconOf\(/,
-        '未领取的普通宝箱必须照常走 stationIconOf 取宝箱图（野怪宝箱不画）');
+    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*this\.patrolChestIconOf\(site, station, input\)/,
+        '野怪宝箱由锚点格模型图表达（§3.51：4 档专用图，通过后换开盖）');
+    assert.match(body, /:\s*claimed \? null : this\.stationIconOf\(site, null, input\.art\)/,
+        '未领取的普通宝箱必须照常走 stationIconOf 取宝箱图');
     assert.match(body, /badge:\s*''/, '不再生成状态角标');
     assert.match(body, /interactive:\s*!claimed && !pending/,
         '已领取不可点（否则会重复发通关请求）');

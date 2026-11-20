@@ -448,7 +448,8 @@ test('闪避：dodgePct > 0 且抽中时这一下完全不掉血', () => {
 
     const dodged = ZCDamageResolutionSystem.damageUnit(state, target, 100, source,
         damageContext({ dodgePct: 0.2 }, () => 0.0));
-    assert.deepEqual(dodged, { applied: 0, killed: false });
+    // 结果对象同时带「夹血上限之前的完整伤害」，闪避这一档两者都是 0。
+    assert.deepEqual(dodged, { damageBeforeHpCap: 0, applied: 0, killed: false });
     assert.equal(target.hp, 1000, '闪避成功不掉血');
 
     const hit = ZCDamageResolutionSystem.damageUnit(state, target, 100, source,

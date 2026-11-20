@@ -19,6 +19,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import test from 'node:test';
 import { assetPath } from './helpers/asset-paths';
+import { TERRITORY_MONSTER_BOX_ART_SCALE } from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
 
 const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
@@ -126,6 +127,17 @@ const buildingNames = readdirSync(BUILDING_DIR)
     .filter((file) => file.endsWith('.png'))
     .map((file) => file.slice(0, -4))
     .sort();
+
+/**
+ * 这类美术在**地图上**还要再乘一档固定倍率（乘在「可见宽归一」之上）。
+ *
+ * 目前只有巡逻宝箱（2026-11-20）：4 档闭合 / 开盖共用 `TERRITORY_MONSTER_BOX_ART_SCALE`，
+ * 因为开盖版掀起的盖子把可见高拉到 88.9~91.6，而格面只有 90 高 —— 不压一档就是「顶满格子」。
+ * 常量从**实现模块**取，抄一份数字进来会变成「实现改了、判据还绿」。
+ */
+function artScaleOf(name: string): number {
+    return name.startsWith('territory_monsterBox') ? TERRITORY_MONSTER_BOX_ART_SCALE : 1;
+}
 
 /**
  * 锁标层的落位（2026-11-10 用户：「锁的 UI 层级要在宝箱气泡 UI 的下层」）。
@@ -327,7 +339,9 @@ test('★★归一后建筑必须明显小于台面（不许「顶满格子」�
     for (const name of buildingNames) {
         const meta = readTrim(name);
         const placement = visiblePlacement(meta);
-        const scale = TARGET_VISIBLE_WIDTH / placement.visibleWidth;
+        // 归一（可见宽 → 84）之后再乘这一档「美术自身倍率」，护栏按**最终显示尺寸**算。
+        const artScale = artScaleOf(name);
+        const scale = (TARGET_VISIBLE_WIDTH / placement.visibleWidth) * artScale;
         const width = placement.visibleWidth * scale;
         const height = placement.visibleHeight * scale;
         assert.ok(width <= FACE_WIDTH * 0.95,

@@ -76,6 +76,36 @@ test('野怪按钮显示我方独立解锁、集火与小数冷却状态，归�
     assert.equal(view.monsterFocusButton.node.active, false);
 });
 
+test('集火按钮随地图缩放并压在后生成的单位上方，归属后隐藏', () => {
+    const { load, cc, bar } = loadViews();
+    const mapLayer = new cc.Node('Map');
+    const board = new cc.Node('Board');
+    mapLayer.addChild(board);
+    const view = stubHexView(load, cc, bar);
+    const button = view.monsterFocusButton.node;
+    board.addChild(button);
+    button.setPosition(-110, 240, 0);
+    view.monsterFocusLabel = {};
+    view.monsterFocusBackground = {};
+    const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ mapLayer });
+    world.hexEntityBySource.set(7, 1);
+    world.hexViews.set(1, view);
+    const feature = { awake: true, claimed: false, unlockedOwners: ['player'] };
+    const frame = { mapConfig: { cityMode: 'fixed' }, snapshot: { status: 'playing', elapsedSeconds: 1,
+        hexes: [{ id: 7, neutralFeature: feature }] } };
+    world.renderNeutralFeatures(frame);
+    const unit = new cc.Node('NewUnit');
+    world.attachToMapLayer(unit);
+    world.renderNeutralFeatures(frame);
+    assert.equal(button.parent.parent, mapLayer);
+    assert.ok(button.parent.getSiblingIndex() > unit.getSiblingIndex());
+    assert.deepEqual([button.position.x, button.position.y], [-110, 240]);
+    assert.equal(view.monsterFocusButton.interactable, true);
+    feature.claimed = true;
+    world.renderNeutralFeatures(frame);
+    assert.equal(button.active, false);
+});
+
 test('集火按钮在 prefab 上按气泡排版：150×42、九宫、默认 locked 帧', () => {
     const prefab = JSON.parse(readFileSync('assets/bundles/battle/ui/game/ZCGameHex.prefab', 'utf8')) as any[];
     const nodeIndex = prefab.findIndex((o: any) => o?.__type__ === 'cc.Node' && o._name === 'MonsterFocus');
@@ -180,7 +210,7 @@ test('衍生、传送与号角显示对应图形，池化换格不会沿用上�
     } finally { installZCNeutralTestCatalog(); }
 });
 
-test('野怪用月牙与利爪区分状态，唤醒复用骨骼，击杀后收起', () => {
+test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和血条', () => {
     installZCNeutralTestCatalog([{ groupId: 14009, id: 1400901, groupName: '野怪', resourceType: 11, weight: 1,
         param: { resId: '68001', wakeRange: 2, reviveRate: 1 } }]);
     try {
@@ -190,10 +220,18 @@ test('野怪用月牙与利爪区分状态，唤醒复用骨骼，击杀后收�
         const awake = { name: 'monster_awake', originalSize: { width: 256, height: 256 } };
         view.setNeutralResourceFrames(new Map([['monster_sleep', sleep], ['monster_awake', awake]]));
         const prefab = spinePrefab(load, cc);
+        load('../model/ZCCombatCatalog').resolveUnitDefinition = () => ({ prefabSize: 1.5, attackDuration: 2 });
         const world = new (load('./ZCGameRenderWorld').ZCGameRenderWorld)({ unitVisualPrefabs: new Map([['68001', prefab]]) });
         world.hexEntityBySource.set(7, 1);
         world.hexViews.set(1, view);
         world.syncResolvedResources([{ hexId: 7, itemId: 1400901 }]);
+        view.healthBar.node.setPosition(0, -40, 0);
+        view.healthBar.node.size = { width: 56, height: 19 };
+        view.monsterFocusButton.node.size = { width: 150, height: 42 };
+        view.monsterFocusButton.node.setPosition(0, 120, 0);
+        view.node.setPosition(-240, 170, 0);
+        const overlay = bar().node;
+        world.attachCooldownOverlay([{ x: -240, y: 170, view }], overlay);
         const feature = { claimed: false, awake: false };
         const presentation = { state: resourceHexState(1400901, { neutralFeature: feature }),
             canDevelop: false, playerGold: 0, cooldown: null, now: 0 };
@@ -201,20 +239,50 @@ test('野怪用月牙与利爪区分状态，唤醒复用骨骼，击杀后收�
         assert.equal(view.resourceUnitNodes.length, 1);
         assert.equal(view.iconLabel.string, '');
         const body = view.resourceUnitNodes[0];
-        assert.equal(view.iconSprite.spriteFrame, sleep);
+        assert.equal(view.iconSprite.spriteFrame, null);
         assert.equal(body.__skeleton.timeScale, 0.35);
+        const unitHeight = load('./ZCUnitView').ZC_SPINE_CANVAS_TARGET_HEIGHT;
+        assert.equal(body.scale.y, unitHeight / 916.29 * 1.5);
+        assert.ok(Math.abs(body.position.y - 90 * body.scale.y + 5) < 1e-6);
+        const head = 170 + body.position.y + (916.29 - 90) * body.scale.y;
+        assert.equal(view.healthBar.node.position.x, -240);
+        assert.equal(view.monsterFocusButton.node.position.x, -240);
+        assert.ok(view.healthBar.node.position.y - 19 / 2 > head);
+        assert.ok(view.monsterFocusButton.node.position.y - 42 / 2 > view.healthBar.node.position.y + 19 / 2);
         assert.ok(body.__skeleton.color.r < 255);
         feature.awake = true;
         view.render(presentation);
         assert.equal(view.iconLabel.string, '');
-        assert.equal(view.iconSprite.spriteFrame, awake);
+        assert.equal(view.iconSprite.spriteFrame, null);
         assert.equal(view.resourceUnitNodes[0], body);
         assert.equal(body.__skeleton.timeScale, 1);
         assert.equal(body.__skeleton.color.r, 255);
+        view.setResourceUnits('68001', prefab, 1, { prefabSize: 1.5, attackDuration: 2 });
+        view.render(presentation);
+        const centered = view.resourceUnitNodes[0];
+        const factor = unitHeight * 1.5 / 916.29;
+        assert.ok(Math.abs(centered.scale.x - factor) < 1e-9);
+        assert.ok(Math.abs(centered.position.x + 90 * factor) < 1e-9);
+        assert.ok(Math.abs(centered.position.y - 90 * factor + 5) < 1e-9);
+        view.renderMonsterAttack(0, 0.5, -1);
+        assert.equal(centered.scale.x, -centered.scale.y);
+        assert.ok(Math.abs(centered.position.x - 90 * factor) < 1e-9);
+        view.render({ ...presentation, state: resourceHexState(1400901, { owner: 'player', neutralFeature: feature }) });
+        view.renderMonsterAttack(0, 1, -1);
+        assert.deepEqual(prefab.played.slice(-2), [{ clip: 'idle', loop: true }, { clip: 'attack', loop: false }]);
+        assert.equal(centered.__skeleton.timeScale, 0.4);
+        assert.equal(centered.__skeleton.track.trackTime, 0.2);
+        view.renderMonsterAttack(0, 2, -1);
+        assert.deepEqual(prefab.played.at(-1), { clip: 'idle', loop: true });
+        assert.equal(centered.__skeleton.timeScale, 1);
+        view.renderMonsterAttack(3, 3, 1);
+        assert.equal(centered.scale.x, centered.scale.y);
         presentation.state = resourceHexState(null, { neutralFeature: { claimed: true, awake: true } });
         view.render(presentation);
         assert.ok(view.resourceUnitNodes.every((node: { active: boolean }) => !node.active));
         assert.equal(view.iconSprite.spriteFrame, null);
+        assert.equal(view.healthBar.node.position.y, 170 - 40);
+        assert.equal(view.monsterFocusButton.node.position.y, 170 + 120);
     } finally { installZCNeutralTestCatalog(); }
 });
 
@@ -230,6 +298,7 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
     view.buildingLayer = bar().node;
     view.iconLabel = { node: bar().node, string: '', enabled: true, color: null };
     view.healthBar = bar();
+    view.monsterFocusButton = { node: bar().node };
     view.cooldownBar = bar();
     return view;
 }
@@ -238,9 +307,18 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
 function spinePrefab(load: (name: string) => any, cc: any, name = '豌豆射手', canvasHeight = 916.29,
     animationNames = ['idle', 'move', 'attack']) {
     const played: Array<{ clip: string; loop: boolean }> = [];
+    const track = { trackTime: 0 };
     const skeleton = {
-        skeletonData: { getRuntimeData: () => ({ height: canvasHeight, animations: animationNames.map((name) => ({ name })) }) },
-        setAnimation(_track: number, clip: string, loop: boolean) { played.push({ clip, loop }); },
+        skeletonData: { getRuntimeData: () => ({ y: -90, height: canvasHeight, animations: animationNames.map((name) => ({ name })) }) },
+        findAnimation(name: string) {
+            return name === 'attack' ? { duration: 0.8 } : null;
+        },
+        track: { trackTime: 0 },
+        setAnimation(_track: number, clip: string, loop: boolean) {
+            played.push({ clip, loop });
+            this.track = { trackTime: 0 };
+            return this.track;
+        },
     };
     const make = () => {
         const node = new (cc.Node as any)();
@@ -250,13 +328,17 @@ function spinePrefab(load: (name: string) => any, cc: any, name = '豌豆射手'
         const sk = { ...skeleton, skeletonData: skeleton.skeletonData, setAnimation: skeleton.setAnimation };
         sk.node = spine;
         node.__skeleton = sk;
-        spine.getComponent = (type: any) => (type === cc.sp?.Skeleton || type?.name === 'Skeleton' ? sk : null);
+        spine.getComponent = (type: any) => {
+            if (type === cc.sp?.Skeleton || type?.name === 'Skeleton') return sk;
+            if (type === cc.UITransform) return { width: 900, height: canvasHeight, anchorX: 0.4, anchorY: 0.1 };
+            return null;
+        };
         node.getComponent = () => null;
         node.name = name;
         node.componentName = name;
         return node;
     };
-    return { name, make, played };
+    return { name, make, played, track };
 }
 
 function resourceHexState(id: number | null, extra: Record<string, unknown> = {}): never {

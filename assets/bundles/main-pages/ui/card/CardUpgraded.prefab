@@ -1093,8 +1093,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 60,
-      "height": 21
+      "width": 70,
+      "height": 22
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1253,7 +1253,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 70,
-      "height": 21
+      "height": 32
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1294,7 +1294,7 @@
     "_actualFontSize": 26,
     "_fontSize": 26,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 21,
+    "_lineHeight": 26,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
@@ -1313,7 +1313,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -1412,7 +1412,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 86,
-      "height": 21
+      "height": 32
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1453,7 +1453,7 @@
     "_actualFontSize": 26,
     "_fontSize": 26,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 21,
+    "_lineHeight": 26,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
@@ -1472,7 +1472,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -1706,7 +1706,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 65,
+      "width": 70,
       "height": 22
     },
     "_anchorPoint": {
@@ -1745,8 +1745,8 @@
     "_string": "攻击力",
     "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 21,
-    "_fontSize": 22,
+    "_actualFontSize": 20,
+    "_fontSize": 20,
     "_fontFamily": "Microsoft YaHei",
     "_lineHeight": 22,
     "_overflow": 2,
@@ -1866,7 +1866,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 70,
-      "height": 23
+      "height": 34
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -1907,7 +1907,7 @@
     "_actualFontSize": 28,
     "_fontSize": 28,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 23,
+    "_lineHeight": 28,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
@@ -1926,7 +1926,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -2025,7 +2025,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 92,
-      "height": 23
+      "height": 34
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2066,7 +2066,7 @@
     "_actualFontSize": 28,
     "_fontSize": 28,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 23,
+    "_lineHeight": 28,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
@@ -2085,7 +2085,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -2478,7 +2478,8 @@
       "a": 255
     },
     "_spriteFrame": {
-      "__uuid__": "f57f8a8b-fb55-4ebb-9dae-215f2868525e@f9941"
+      "__uuid__": "f57f8a8b-fb55-4ebb-9dae-215f2868525e@f9941",
+      "__expectedType__": "cc.SpriteFrame"
     },
     "_type": 1,
     "_fillType": 0,
@@ -2728,7 +2729,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -218,
+      "x": -221,
       "y": 0,
       "z": 0
     },
@@ -2865,7 +2866,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": -1,
-      "y": -1.5,
+      "y": 0,
       "z": 0
     },
     "_lrot": {
@@ -2906,7 +2907,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 68,
-      "height": 23
+      "height": 30
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -2947,7 +2948,7 @@
     "_actualFontSize": 23,
     "_fontSize": 24,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 23,
+    "_lineHeight": 24,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
@@ -2966,7 +2967,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -4309,7 +4310,7 @@
     "_contentSize": {
       "__type__": "cc.Size",
       "width": 220,
-      "height": 24
+      "height": 30
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -4347,17 +4348,17 @@
     "_string": "战斗力增益",
     "_horizontalAlign": 0,
     "_verticalAlign": 1,
-    "_actualFontSize": 18,
-    "_fontSize": 24,
+    "_actualFontSize": 22,
+    "_fontSize": 22,
     "_fontFamily": "Microsoft YaHei",
-    "_lineHeight": 31,
+    "_lineHeight": 28,
     "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
     "_isSystemFontUsed": true,
     "_spacingX": 0,
     "_isItalic": false,
-    "_isBold": true,
+    "_isBold": false,
     "_isUnderline": false,
     "_underlineHeight": 2,
     "_cacheMode": 0,
@@ -4369,7 +4370,7 @@
       "b": 0,
       "a": 255
     },
-    "_outlineWidth": 2,
+    "_outlineWidth": 1,
     "_enableShadow": false,
     "_shadowColor": {
       "__type__": "cc.Color",
@@ -4765,6 +4766,9 @@
     "shadow": {
       "__id__": 12
     },
+    "headerRoot": {
+      "__id__": 123
+    },
     "quality": {
       "__id__": 133
     },
@@ -4777,6 +4781,9 @@
     "classLabel": {
       "__id__": 151
     },
+    "levelRoot": {
+      "__id__": 85
+    },
     "levelLabel": {
       "__id__": 90
     },
@@ -4788,6 +4795,9 @@
     },
     "progressLabel": {
       "__id__": 114
+    },
+    "statsRoot": {
+      "__id__": 21
     },
     "hpValue": {
       "__id__": 49

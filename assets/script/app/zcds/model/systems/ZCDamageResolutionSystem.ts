@@ -4,6 +4,7 @@ import type { ZCOwner } from '../ZCMapConfig';
 import { ZCCombatSystem } from './ZCCombatSystem';
 import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitRegistry } from './ZCUnitRegistry';
+import { ZCDC_LOG_DAMAGE_FLOAT } from '../../ZCDCLogSwitch';
 
 const HATRED_SECONDS = 5;
 const DEATH_SECONDS = 0.45;
@@ -17,6 +18,7 @@ export interface IZCDamageResolutionContext extends Pick<IZCModelServices, 'stat
 }
 
 export interface IZCDamageResult {
+    readonly damageBeforeHpCap: number;
     readonly applied: number;
     readonly killed: boolean;
 }
@@ -30,7 +32,13 @@ export class ZCDamageResolutionSystem {
         // 闪避只对单位打单位的伤害生效；dodgePct 缺省 0 时不抽随机，既有随机序列不变。
         const dodgeChance = Math.max(0, Math.min(1, takenMods.dodgePct ?? 0));
         if (dodgeChance > 0 && source.kind === 'unit' && context.random && context.random() < dodgeChance) {
-            return { applied: 0, killed: false };
+            if (ZCDC_LOG_DAMAGE_FLOAT) {
+                console.info('[伤害飘字][受击结算]', {
+                    sourceId: source.unitId, projectileId: source.projectileId, targetId: target.id,
+                    incomingDamage: damage, dodgeChance, dodged: true, applied: 0,
+                });
+            }
+            return { damageBeforeHpCap: 0, applied: 0, killed: false };
         }
         // 两个减免口径相加后统一乘：damageTakenPct 全伤害，damageTakenRangedPct 仅远程。
         const rangedReduce = source.ranged ? (takenMods.damageTakenRangedPct ?? 0) : 0;
@@ -41,6 +49,13 @@ export class ZCDamageResolutionSystem {
             scaledDamage -= absorbed;
         }
         const applied = ZCCombatSystem.applyDamage(target, scaledDamage);
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][受击结算]', {
+                sourceId: source.unitId, projectileId: source.projectileId, targetId: target.id, incomingDamage: damage,
+                damageTakenPct: takenMods.damageTakenPct ?? 0, damageTakenRangedPct: rangedReduce,
+                absorbed: Math.max(0, absorbed), damageAfterShield: scaledDamage, applied,
+            });
+        }
         this.recordDamage(source.owner, target.owner, applied, context);
         const sender = source.kind === 'unit' && source.unitId !== undefined && source.unitId !== null
             ? context.units.byId.get(source.unitId) : undefined;
@@ -57,11 +72,11 @@ export class ZCDamageResolutionSystem {
             // 受伤反弹：尖刺风暴期间将实际受到的伤害按比例反弹给攻击者。
             this.applyReflect(state, target, sender, applied, context);
         }
-        if (target.hp > 0) return { applied, killed: false };
+        if (target.hp > 0) return { damageBeforeHpCap: scaledDamage, applied, killed: false };
         this.transferDeath(state, target, context);
         // 击杀归因：仅统计打出最后一击的攻击者，自伤或非单位攻击不计入。
         if (sender && sender !== target) sender.killCount = (sender.killCount ?? 0) + 1;
-        return { applied, killed: true };
+        return { damageBeforeHpCap: scaledDamage, applied, killed: true };
     }
 
     static damageWall(wall: ZCHexState, damage: number, attacker: Pick<ZCUnitState, 'owner' | 'freeX' | 'freeY'>,
@@ -72,9 +87,9 @@ export class ZCDamageResolutionSystem {
         wall.wallHp = Math.max(0, wallHpBefore - damage);
         const applied = wallHpBefore - wall.wallHp;
         this.recordDamage(attacker.owner, wall.owner, applied, context);
-        if (wall.wallHp > 0) return { applied, killed: false };
+        if (wall.wallHp > 0) return { damageBeforeHpCap: damage, applied, killed: false };
         wall.wallBreachedEdge = this.wallEdgeToward(attacker, center);
-        return { applied, killed: true };
+        return { damageBeforeHpCap: damage, applied, killed: true };
     }
 
     static damageBuilding(state: ZCSnapshot, building: ZCHexState, damage: number,
@@ -84,7 +99,7 @@ export class ZCDamageResolutionSystem {
         building.hp -= damage;
         const applied = Math.min(damage, Math.max(0, hpBefore));
         this.recordDamage(attacker.owner, building.owner, applied, context);
-        if (building.hp > 0) return { applied, killed: false };
+        if (building.hp > 0) return { damageBeforeHpCap: damage, applied, killed: false };
         building.building = 'none';
         building.state = 'ruins';
         building.owner = attacker.owner;
@@ -104,7 +119,7 @@ export class ZCDamageResolutionSystem {
         delete state.spawnClocks[`mine:${building.id}`];
         delete state.spawnClocks[`barracks:${building.id}`];
         delete state.spawnClocks[`tower:${building.id}`];
-        return { applied, killed: true };
+        return { damageBeforeHpCap: damage, applied, killed: true };
     }
 
     /**

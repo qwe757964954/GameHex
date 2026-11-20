@@ -959,7 +959,7 @@ test('prefab 存在，根节点是第一个 cc.Node 且 cc.Prefab.data 指向它
     assert.equal(PREFAB_NODES.length, 102);
 });
 
-test('⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
+test('battletoken › ⚠️ 所有节点的 `_layer` 都是 UI_2D（落在 DEFAULT 会让整棵子树不渲染）', () => {
     // 两类「不带自己那一份数据」的节点可以跳过，但数量必须对得上（见下）：
     //   ① 嵌套 prefab 实例的根：`_layer` / `_name` / `_children` 都在**子 prefab** 里；
     //   ② `cc.TargetOverrideInfo.target` 的占位节点：整个对象只有 `__editorExtras__`。

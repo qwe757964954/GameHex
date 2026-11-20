@@ -386,7 +386,7 @@ test('C3 ⚠️ 子节点序 = FGUI displayList 序（InfoBg/Banner 必须在三
     assert.equal(nodes.length, 29, '29 个节点（1 根 + 12 直接子 + 6 按钮文案 + 3 旗帜零件 + 6 入口红点实例）');
 });
 
-test('C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
+test('league › C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
     // FGUI `组件_联盟_主界面.xml` 的 xy/size；按钮取**底图**的框（见文件头 ①）
     const EXPECT: readonly [string, number, number, number, number][] = [
         ['Bg', 0, -234, 720, 1742],

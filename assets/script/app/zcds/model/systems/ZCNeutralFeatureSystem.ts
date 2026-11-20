@@ -376,13 +376,7 @@ export class ZCNeutralFeatureSystem {
                 || unlocked.includes(building.owner)) continue;
             unlocked.push(building.owner);
         }
-        // 旧快照可能已解锁但未点集火，首次刷新时也进入战斗。
-        const shouldWake = !feature.awake && unlocked.length > 0;
-        if (shouldWake) {
-            feature.awake = true;
-            this.invalidateTerrain();
-        }
-        if (shouldWake || unlocked.length !== previousCount) this.context.changed();
+        if (unlocked.length !== previousCount) this.context.changed();
     }
 
     toggleFocus(state: ZCSnapshot, hex: ZCHexState, owner: ZCOwner): boolean {
@@ -393,7 +387,12 @@ export class ZCNeutralFeatureSystem {
         if (!feature.unlockedOwners.includes(owner) || (feature.focusReadyAt?.[owner] ?? 0) > state.elapsedSeconds) return false;
         const focused = feature.focusOwners ?? (feature.focusOwners = []);
         const index = focused.indexOf(owner);
-        if (index < 0) focused.push(owner); else focused.splice(index, 1);
+        if (index < 0) {
+            focused.push(owner);
+            feature.awake = true;
+        } else {
+            focused.splice(index, 1);
+        }
         feature.focusReadyAt ??= {};
         feature.focusReadyAt[owner] = state.elapsedSeconds + (this.context.rules?.neutralMonsterFocusSwitchCdSeconds ?? 3);
         this.invalidateTerrain();
@@ -474,9 +473,26 @@ export class ZCNeutralFeatureSystem {
             hex.hp = Math.min(hex.maxHp, hex.hp + hex.maxHp * (this.context.rules?.neutralMonsterRegenRate ?? 0) / 10000 * delta);
             feature.regenUpdatedAt = now;
         }
-        if (!target || now < feature.nextAttackAt) return;
+        if (feature.attackStartedAt !== undefined) {
+            const elapsed = now - feature.attackStartedAt + 1e-9;
+            if (feature.attackTargetUnitId !== undefined && elapsed >= definition.attackHitTime) {
+                const hit = target && target.id === feature.attackTargetUnitId;
+                delete feature.attackTargetUnitId;
+                if (hit) this.context.damageUnit(target, definition.attack);
+            }
+            if (elapsed < definition.attackDuration || feature.attackTargetUnitId !== undefined) return;
+            delete feature.attackStartedAt;
+            return;
+        }
+        if (!target || now + 1e-9 < feature.nextAttackAt) return;
+        const dx = target.freeX - center.x;
+        const dy = target.freeY - center.y;
+        // 与士兵一样取八方向。正上、正下或脚点重合时保留上次出手的朝向。
+        const octant = Math.abs(Math.round(Math.atan2(dy, dx) / (Math.PI / 4)));
+        if (dx !== 0 && octant !== 2) feature.monsterFacing = dx < 0 ? -1 : 1;
         feature.nextAttackAt = now + definition.attackInterval;
-        this.context.damageUnit(target, definition.attack);
+        feature.attackStartedAt = now;
+        feature.attackTargetUnitId = target.id;
     }
 
 }

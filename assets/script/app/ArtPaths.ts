@@ -201,16 +201,17 @@ export const TERRITORY_CHEST_OPEN_ARTS = {
 } as const;
 
 /**
- * 「获得英雄」全屏展示页切图（蓝湖「获得英雄」设计稿，画布 720×1610，**8 张**）。
+ * 「获得英雄」全屏展示页切图（蓝湖「获得英雄」设计稿，画布 720×1610，**7 张**）。
  *
  *  切图是 xhdpi `sliceScale = 2` 导出的 **1:1 设计像素**，不要再乘缩放：
  *  `bg` 720×1610（橙色放射底图，放在 `image/` 根，**不进图集**）、
  *  `rays` 690×690（卡后光效）、`title` 326×54（「获得传说英雄!」标题是**导出图**不是文字）、
- *  `plate` 252×51（名牌底）、`shadow` 302×68（英雄影子）、`shard` 53×52（碎片图标）、
+ *  `plate` 252×51（名牌底）、`shard` 53×52（碎片图标）、
  *  `barBg` 270×42 / `barFill` 255×27（碎片进度条底与填充）。
  *
- *  ⚠️ 英雄立绘**不在这 8 张里**：设计稿那个 421×426 的 `yedanzhanshi` 是工程内同一份
- *  Spine 骨架（`skel/椰蛋战士`），由 `HeroObtainPage` 运行时挂 `CardUnitPreview` 播 idle。
+ *  ⚠️ 英雄立绘**不在这 7 张里**：设计稿那个 421×426 的 `yedanzhanshi` 是工程内同一份
+ *  Spine 骨架（`skel/椰蛋战士`），由 `HeroObtainPage` 运行时挂 `CardUnitPreview` 播 idle；
+ *  影子也随骨骼自带，不再单独切图。
  */
 export const HERO_OBTAIN_ART_ROOT = `${ART_ROOT}/hero_obtain`;
 /** 整屏底图目录 = `image/` 根（720×1610 超过 `image/hero_obtain` 图集页高，进图集会被切）。 */
@@ -221,7 +222,6 @@ export const HERO_OBTAIN_ARTS = {
     rays: 'hdyx_guang',
     title: 'hdyx_title',
     plate: 'hdyx_xxk_di',
-    shadow: 'hdyx_yinying',
     shard: 'hdyx_icon_suipian',
     barBg: 'hdyx_progress_bg',
     barFill: 'hdyx_progress_01',

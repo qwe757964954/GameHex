@@ -219,7 +219,8 @@ export class ZCCombatEffectView extends Component {
      * 用节点自身的时间会让第二个复用它的飓风「一上来就是满尺寸」。
     */
     private growFactorOf(event: Readonly<ZCCombatEvent>, now: number): number {
-        return zcCombatEffectGrowFactor(event.growSeconds, now - event.startedAt);
+        //  `growFrom` 缺省 ⇒ 当成 0（从看不见长到满），存量逐字不变；给了就是「出生即 N%」。
+        return zcCombatEffectGrowFactor(event.growSeconds, now - event.startedAt, event.growFrom);
     }
 
     /**

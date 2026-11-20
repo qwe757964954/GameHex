@@ -44,6 +44,8 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'ui/Celebration', 'ui/FirstRecharge', 'ui/LimitTimeAct', 'ui/MonthCardGift', 'ui/ShowReward',
         'ui/ItemDetail', 'ui/ItemInfo', 'ui/gm', 'ui/vscroll', 'ui/Guide',
         'image/role', 'image/league', 'image/store', 'image/card', 'image/card_lineup', 'image/card_board', 'image/carddetail', 'image/carddetail_bg', 'image/gift', 'image/battletoken',
+        // 卡牌升级成功的序列帧（`007-2-run_loop_05..19`）+ 刷光条：单张独立采样，不进任何图集。
+        'image/card_effect_levelup',
         'image/friend', 'image/chat', 'image/mail', 'image/playerinfo', 'image/hang', 'image/activity',
         'image/activityIcon', 'image/sevenDay', 'image/celebration', 'image/firstRecharge',
         'image/limitTimeAct', 'image/monthcard', 'image/showReward', 'image/itemdetail', 'image/iteminfo',

@@ -35,6 +35,11 @@ import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../.
 export interface IZCSkillTriggerContext {
     readonly statusSystem: ZCStatusSystem;
     /**
+     * 独立技能选敌闸门：在指定半径或全场（mode）寻找合法敌人。
+     * 缺省时回退到 inAttackRange（普攻射程闸门）。
+     */
+    selectSkillTarget?(source: ZCUnitState, radius: number, mode?: number): ZCUnitState | null;
+    /**
      * 取这个单位当前生效的技能运行时。
      *
      * 键是 `${unitId}:${普攻 profile.skillId}`（与 `ZCAttackResolutionSystem.sendAttack` 同一口径），
@@ -358,8 +363,22 @@ export class ZCSkillTriggerSystem {
             if (unit.battleState === 'dead' || unit.hp <= 0) continue;
             const runtime = context.runtimeOf(unit);
             const params = runtime?.parameters;
-            // 触发范围闸门：每个单位每步只算一次，四条打人型车道共用。
-            const release = context.inAttackRange?.(unit) ?? true;
+            let checkedRelease = false;
+            let releaseValue = true;
+            const getRelease = (): boolean => {
+                if (!checkedRelease) {
+                    checkedRelease = true;
+                    releaseValue = context.inAttackRange ? context.inAttackRange(unit) : true;
+                }
+                return releaseValue;
+            };
+            const checkSkillGate = (radiusTable: number, mode?: number): boolean => {
+                if (context.selectSkillTarget) {
+                    const scale = Math.max(1e-6, context.distanceScale ?? 1);
+                    return Boolean(context.selectSkillTarget(unit, radiusTable * scale, mode));
+                }
+                return getRelease();
+            };
 
             if (this.applyPassiveStatus(state, unit, runtime, context)) statusChanged = true;
             this.applyHpRegen(unit, dt, now, context);
@@ -368,31 +387,39 @@ export class ZCSkillTriggerSystem {
             if (this.applyTeamBuff(state, unit, params, now, context)) statusChanged = true;
             if (this.applySelfCast(state, unit, params, now, context)) statusChanged = true;
             if (this.applyCounterBuff(state, unit, params, now, context)) statusChanged = true;
-            if (this.applySelfAura(state, unit, params, now, context, release)) statusChanged = true;
-            this.applyBoltStrike(unit, params, now, context, release);
-            this.applyChainLightning(unit, params, now, context, release);
+            const auraRadius = params ? (params.auraTriggerRange || params.auraRadius || 100) : 100;
+            if (this.applySelfAura(state, unit, params, now, context, () => checkSkillGate(auraRadius, params?.auraTargetMode))) statusChanged = true;
+            const boltRadius = params?.boltRadius ?? 150;
+            this.applyBoltStrike(unit, params, now, context, () => checkSkillGate(boltRadius, params?.boltTargetMode));
+            this.applyChainLightning(unit, params, now, context, getRelease);
             this.applySummonUnit(unit, params, now, context);
             //  大吼大叫 102304（2026-11-18 第 17 批）：范围伤害 + 敌方减攻 + III 级友军护盾。
+            //  （它的目标闸门在 `castRoar` 里：半径内没敌人 ⇒ 返回 false、不消费 CD。）
             this.applyRoar(unit, params, now, context);
-            this.applyStorm(unit, params, now, context);
+            //  飓风 102004：2026-11-20 起也吃射程闸门（空场不放，见方法头）。
+            this.applyStorm(unit, params, now, context, getRelease);
             //  射线集束 103503（第 18 批）：累计普攻触发，没有冷却。
-            this.applyRayBeam(unit, params, now, context, release);
+            this.applyRayBeam(unit, params, now, context, getRelease);
             this.applyTrap(unit, params, now, context);
-            this.applySplashShot(unit, params, now, context, release);
-            this.applyWindShot(unit, params, now, context, release);
-            this.applyMissileBarrage(unit, params, now, context, release);
+            const shotRadius = params?.shotRadius ?? params?.splashRadius ?? 150;
+            this.applySplashShot(unit, params, now, context, () => checkSkillGate(shotRadius, params?.shotTargetMode ?? params?.splashTargetMode));
+            this.applyWindShot(unit, params, now, context, getRelease);
+            this.applyMissileBarrage(unit, params, now, context, getRelease);
             this.applyBurstSkill(unit, params, now, context);
             //  诅咒菇「毒液喷吐」101803：同一张卡的第二条范围技能，`venom*` 参数 + 自己的 CD。
             this.applyBurstSkill(unit, params, now, context, 'venom');
             this.applyFanSweep(unit, params, now, context);
             this.applyChargeShield(state, unit, params, now, context);
-            this.applyRandomStrike(state, unit, params, now, context, release);
-            this.applyBlinkStrike(state, unit, params, now, context, runtime, release);
+            const strikeRadius = params?.strikeRadius ?? 300;
+            this.applyRandomStrike(state, unit, params, now, context, () => checkSkillGate(strikeRadius, params?.strikeTargetMode));
+            const blinkRadius = params?.blinkSearchRadius ?? 300;
+            this.applyBlinkStrike(state, unit, params, now, context, runtime, () => checkSkillGate(blinkRadius, params?.blinkTargetMode));
             this.applySingleStrike(state, unit, params, now, context);
             this.applyLegacyDash(state, unit, params, now, context);
             this.expireShield(unit, now);
             this.advanceBurst(state, unit, now, context);
-            this.advanceSecondary(unit, params, now, context, release);
+            const secRadius = params?.secondaryRadius ?? params?.fanRadius ?? 150;
+            this.advanceSecondary(unit, params, now, context, () => checkSkillGate(secRadius, params?.secondaryTargetMode));
             if (this.applyLowHpGuard(state, unit, params, now, context)) statusChanged = true;
         }
         if (statusChanged) state.statusEffects = context.statusSystem.exportSnapshot();
@@ -655,7 +682,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         const cooldown = Math.max(0, params?.secondaryCooldown ?? 0);
         if (!(cooldown > 0)) return;
@@ -665,7 +692,7 @@ export class ZCSkillTriggerSystem {
         if (now < readyAt) return;
         //  触发范围闸门（2026-11-11）：`castFanSkill` 只判「有没有锁定目标」，锁敌是仇恨锁、
         //  目标可能在半张图外跑过来 —— 那样扇形会原地清一片空气却把 CD 记掉。这里先挡一道。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         //  没打出去就不消费 CD —— 跑位途中别把这次机会转掉。
         if (!context.castSecondary(unit)) return;
         unit.secondaryReadyAt = now + cooldown;
@@ -825,7 +852,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): boolean {
         if (!context.castSelfAura || !params) return false;
         const cooldown = Math.max(0, params.auraCooldown ?? 0);
@@ -866,7 +893,7 @@ export class ZCSkillTriggerSystem {
         //  触发范围闸门（2026-11-11）：条件满足但普攻范围内没人 ⇒ 待触发，不消费条件。
         //  放在 `castSelfAura` 之前：那片区域是「打人」的，身边没人时开出来只是一块空烧的地。
         //  次数分支这里不推进 `auraFiredCount` —— 目标一进范围那一下立刻补放。
-        if (!release) {
+        if (typeof release === 'function' ? !release() : !release) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`aura-pending:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 触发条件已满足但普攻范围内没有目标 ⇒ 待触发`);
@@ -1023,7 +1050,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castBolt || !params) return;
         const cooldown = Math.max(0, params.boltCooldown ?? 0);
@@ -1049,7 +1076,7 @@ export class ZCSkillTriggerSystem {
         }
         if (now < readyAt) return;
         //  触发范围闸门（2026-11-11）：冷却到点但普攻范围内没人 ⇒ 待触发，不消费 CD。
-        if (!release) {
+        if (typeof release === 'function' ? !release() : !release) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`bolt-pending:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但普攻范围内没有目标 ⇒ 待触发`);
@@ -1085,7 +1112,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castChainLightning || !params) return;
         const cooldown = Math.max(0, params.chainCooldown ?? 0);
@@ -1104,7 +1131,7 @@ export class ZCSkillTriggerSystem {
             return;
         }
         if (now < readyAt) return;
-        if (!release) {
+        if (typeof release === 'function' ? !release() : !release) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`chain-pending:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但普攻范围内没有目标 ⇒ 待触发`);
@@ -1165,17 +1192,28 @@ export class ZCSkillTriggerSystem {
      * 飓风（`storm_zone`，2026-11-18 第 17 批 三叶小丑 68020 的 102004）。
      *
      * 与 `applyTrap` / `applyRoar` 同一条「自己一格 CD + 到点转给攻击系统」的骨架，
-     * 三点不同：
+     * 两点不同：
      *  · CD 走**独立**的 `unit.stormReadyAt`（同卡 102001 / 102002 各占各的冷却，
      *    共用会让「放完飓风、克制条也进冷却」）；
-     *  · 场上没有敌人**不拒放**（区域要活 6~8 秒，等人走进来）；
-     *  · 不设射程闸门 —— 它是「在场上生成」，不是「打谁」，射手够不到也该放得出来。
+     *  · 吃射程闸门（2026-11-20 口径调整，见下）。
+     *
+     * 🔴 空场不再放（2026-11-20 用户口径「除了被动 / 召唤 / 陷阱，其他主动技能都要等找到
+     * 目标才触发」）：原先是「场上没有敌人也照放，等人走进来」，但那样 CD 一到就白扔一个
+     * 区域。现在要「普攻射程内有个活敌」才出手，被拦下时**不消费 CD**，目标一进射程当帧补放。
+     * 68020 普攻射程 300 表值 = 90 世界 px，比风圈（90 表值 = 27 世界 px）宽松得多 ——
+     * 不会因为「风够不着但普攻够得着」而漏放。
+     *
+     * 🔴 两道闸缺一不可（2026-11-20 二次收敛，别再退回只吃 `release`）：`release` 把
+     * 「锁定目标在射程内」也算有目标，而那个目标**可能是一堵城墙** —— 只吃它就会出现
+     * 「贴着墙打、身边一个敌人都没有，却往自己脚下扔一片风」（用户反馈「有目标后反而不飞了」）。
+     * 第二道闸改判「最近敌人距离 ≤ 普攻射程」，与 `castStorm` 的投送目标扫描同源。
     */
     private static applyStorm(
         unit: ZCUnitState,
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castStorm || !params) return;
         const cooldown = Math.max(0, params.stormCooldown ?? 0);
@@ -1186,6 +1224,31 @@ export class ZCSkillTriggerSystem {
             return;
         }
         if (now < readyAt) return;
+        //  触发范围闸门：CD 已就绪但普攻射程内没人 ⇒ 待触发，不消费 CD。
+        if (typeof release === 'function' ? !release() : !release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`storm-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但普攻范围内没有目标 ⇒ 待触发`);
+            }
+            return;
+        }
+        //  🔴 第二道闸（2026-11-20 二次收敛）：`release` 来自 `hasTargetInAttackRange`，
+        //  它把「**锁定目标**在射程内」也算成有目标 —— 而那个目标可能是一堵城墙。
+        //  只吃 `release` 的结果是「贴着墙打、射程内一个敌人都没有」时照样往自己脚下扔一片风，
+        //  正是用户反馈「有目标了反而不飞了」的另一半成因。这里补判「最近**敌人**中心距离
+        //  ≤ 普攻射程」，与 `castStorm` 里 `stormDeliveryTarget` 的扫描同一套射程 ⇒
+        //  「闸门放行 ⇒ 必有落点」这条不变量才闭合。
+        //  两个 hook 缺省时退回只吃 `release`（单测夹具可以不传）。
+        const reach = context.attackReachOf?.(unit);
+        const nearest = context.nearestEnemyDistance?.(unit);
+        if (reach !== undefined && nearest !== undefined && !(nearest <= reach)) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`storm-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪，但普攻射程 `
+                    + `${reach.toFixed(1)} px 内没有活敌（最近 ${nearest.toFixed(1)} px，多半只在打墙）⇒ 待触发`);
+            }
+            return;
+        }
         const cast = context.castStorm(unit);
         if (zcSkillCastWatched(unit.unitId)) {
             skillCastLogChanging(`storm-cd:${unit.id}`, '触发', cast
@@ -1216,7 +1279,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castRayBeam || !params) return;
         const every = Math.max(0, Math.round(params.rayEvery ?? 0));
@@ -1225,7 +1288,7 @@ export class ZCSkillTriggerSystem {
         const fired = unit.rayFiredCount;
         if (fired === undefined) { unit.rayFiredCount = done; return; }
         if (done - fired < every) return;
-        if (!release) {
+        if (typeof release === 'function' ? !release() : !release) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`ray-pending:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 累计普攻已满 ${every} 次但射程内没有目标 ⇒ 待触发`);
@@ -1482,7 +1545,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castSplashShot || !params) return;
         const cooldown = Math.max(0, params.shotCooldown ?? 0);
@@ -1495,7 +1558,7 @@ export class ZCSkillTriggerSystem {
         }
         if (now < readyAt) return;
         //  触发范围闸门：到点但普攻范围内没人 ⇒ 待触发、CD 保持就绪。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         const slowStatusId = this.splashShotSlowStatusId(params, context);
         if (!context.castSplashShot(unit, slowStatusId)) return;
         unit.splashReadyAt = now + cooldown;
@@ -1554,7 +1617,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castWindBolt || !params) return;
         const cooldown = Math.max(0, params.windCooldown ?? 0);
@@ -1567,7 +1630,7 @@ export class ZCSkillTriggerSystem {
         }
         if (now < readyAt) return;
         //  触发范围闸门：到点但普攻范围内没人 ⇒ 待触发、CD 保持就绪。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         if (!context.castWindBolt(unit)) return;
         unit.windReadyAt = now + cooldown;
         //  施法动作：射一发算一次主动出手；不原地锁 —— 射手要边走边放。
@@ -1596,7 +1659,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.castBarrageShot || !params) return;
         const interval = Math.max(0.05, params.barrageInterval ?? ZC_BARRAGE_DEFAULT_INTERVAL);
@@ -1622,7 +1685,7 @@ export class ZCSkillTriggerSystem {
         if (fired === undefined) { unit.barrageFiredCount = done; return; }
         if (done - fired < every) return;
         //  触发范围闸门：凑满次数但普攻范围内没人 ⇒ 待触发、不记次数（目标进范围当帧补放）。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         if (!context.castBarrageShot(unit)) return;
         unit.barrageFiredCount = done;
         const count = Math.max(1, Math.round(params.barrageCount ?? 1));
@@ -1745,6 +1808,25 @@ export class ZCSkillTriggerSystem {
             return;
         }
         if (now < readyAt) return;
+        //  触发范围闸门（2026-11-20 用户口径「主动技能都要等找到目标」）：
+        //  🔴 判据**必须是扇形自己的半径**，不能借 `release`（普攻射程）—— 机甲菇 68015
+        //  普攻射程只有 45 表值 = 13.5 世界 px（贴脸近战），而扇形是 150 表值 = 45 世界 px。
+        //  用普攻射程卡的话，「扇形够得着的敌人」全被挡在外面，这条 14 秒 CD 的技能几乎放不出来。
+        //  与 `applySelfAura` 的 `auraTriggerRange` 是同一套写法：只压不抬。
+        //  缺 `nearestEnemyDistance`（轻量上下文 / 工具）⇒ 不压，退回老口径。
+        const radiusTable = Math.max(0, params.fanRadius ?? 0);
+        if (radiusTable > 0 && context.nearestEnemyDistance) {
+            const limit = radiusTable * Math.max(1e-6, context.distanceScale ?? 1);
+            const nearest = context.nearestEnemyDistance(unit);
+            if (nearest > limit) {
+                if (zcSkillCastWatched(unit.unitId)) {
+                    skillCastLogChanging(`fan-pending:${unit.id}`, '触发',
+                        `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 冷却已就绪但扇形半径内没有目标`
+                        + `（最近 ${nearest.toFixed(1)} 世界 px > ${limit.toFixed(1)}）⇒ 待触发`);
+                }
+                return;
+            }
+        }
         const slowStatusId = this.fanSweepSlowStatusId(params, context);
         if (!context.castFanSweep(unit, slowStatusId)) return;
         unit.fanReadyAt = now + cooldown;
@@ -1793,7 +1875,7 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         now: number,
         context: IZCSkillTriggerContext,
-        release: boolean,
+        release: boolean | (() => boolean),
     ): void {
         if (!context.strike || !params) return;
         const count = Math.max(0, params.strikeCount ?? 0);
@@ -1806,8 +1888,8 @@ export class ZCSkillTriggerSystem {
         //  触发范围封顶（2026-11-11 用户口径「直接压到普攻范围」）：
         //  技能自带的搜索半径压到普攻射程以内，只压不抬 ——
         //  镭射飞龙 1100（330px）压到普攻射程；毒箭蘑菇 252（75.6px）本来就比普攻近，保持原样。
-        const reachCap = Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
-        const searchRadius = Math.min(radius * scale, reachCap);
+        const reachCap = params.strikeTargetMode === 2 ? Number.POSITIVE_INFINITY : Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
+        const searchRadius = params.strikeTargetMode === 2 ? Number.POSITIVE_INFINITY : Math.min(radius * scale, reachCap);
         const missileFx = zcMissileFxOf(unit.unitId);
         //  诊断2.：参数快照 + 每次开火结果。打空时 `fire()` 每帧都会被叫一遍（`if (!fire()) return;`
         //  不推进冷却），所以用「值变化才打」的通道，失败只留第一条、转成功再补一条。
@@ -1894,7 +1976,7 @@ export class ZCSkillTriggerSystem {
             }
             if (now < readyAt) return;
             //  触发范围闸门（2026-11-11）：到点但普攻范围内没人 ⇒ 待触发，CD 保持就绪。
-            if (!release) return;
+            if (typeof release === 'function' ? !release() : !release) return;
             //  打空后的退避：见 `STRIKE_RETRY_SECONDS`。没打空过（`strikeRetryAt` 缺省）⇒ 不停留。
             if (now < (unit.strikeRetryAt ?? 0)) return;
             if (!fire()) {
@@ -1918,7 +2000,7 @@ export class ZCSkillTriggerSystem {
         if (done - fired < Math.round(every)) return;
         //  触发范围闸门（2026-11-11）：次数攒够了但身边没人 ⇒ 待触发。
         //  不推进 `strikeFiredCount` —— 目标一进范围，这一波立刻补出去。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         if (!fire()) return;
         unit.strikeFiredCount = done;
         if (windowSeconds > 0) {
@@ -1943,7 +2025,7 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
         runtime?: ZCSkillRuntimeDefinition,
-        release = true,
+        release: boolean | (() => boolean) = true,
     ): void {
         if (!params) return;
         const cooldown = Math.max(0, params.blinkCooldown ?? 0);
@@ -1984,11 +2066,11 @@ export class ZCSkillTriggerSystem {
         if (now < readyAt) return;
 
         //  触发范围闸门（2026-11-11）：到点但普攻范围内没人 ⇒ 待触发，不消费 CD。
-        if (!release) return;
+        if (typeof release === 'function' ? !release() : !release) return;
         //  触发范围封顶（用户口径「直接压到普攻范围」）：`blinkSearchRadius` 是表值 px，
         //  魔术师配的 600（约 180px）大于普攻射程 148.5px ⇒ 压到普攻射程；只压不抬。
-        const reachCap = Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
-        const searchRadius = Math.min(Math.max(0, params.blinkSearchRadius ?? 0) * scale, reachCap);
+        const reachCap = params.blinkTargetMode === 2 ? Number.POSITIVE_INFINITY : Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
+        const searchRadius = params.blinkTargetMode === 2 ? Number.POSITIVE_INFINITY : Math.min(Math.max(0, params.blinkSearchRadius ?? 0) * scale, reachCap);
         if (!(searchRadius > 0)) return;
         const self = posOf(unit);
         let victim: ZCUnitState | undefined;

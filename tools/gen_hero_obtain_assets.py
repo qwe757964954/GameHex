@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""生成「获得英雄」全屏展示页的资源：8 张切图 + `.meta` + prefab。
+"""生成「获得英雄」全屏展示页的资源：7 张切图 + `.meta` + prefab。
 
 设计稿：蓝湖「获得英雄」(`pid 36a56744…` / `image_id db88dd81…`)，画布 720×1610，
 xhdpi `sliceScale = 2` 导出的切图是 **1:1 设计像素**（不用再乘 2）。
@@ -19,8 +19,7 @@ HeroObtain           720×1610  Widget 四边拉伸（ALWAYS）+ HeroObtainPage
 ├── Touch            720×1610  cc.Button（NONE）四边拉伸（ALWAYS）—— 点任意处继续 / 关闭
 └── Stage            720×1610  锚点 0.5/1，Widget 上下左右居中；设计稿溢出部分上下对称
     ├── Rays         690×690   (0,-769)     放射光（缩放 + 角度 + 透明度）
-    ├── Shadow       302×68    (1,-952)     英雄影子
-    ├── HeroRoot     421×426   (0.5,-745)   英雄根（浮起 / 缩放）；子 HeroHost 是 Spine 宿主
+    ├── HeroRoot     421×426   (0.5,-745)   英雄根（浮起 / 缩放）；子 HeroHost 是 Spine 宿主（影子随骨骼自带）
     ├── Title        326×54    (9,-310)     标题（导出图，不是文字）
     ├── Plate        252×51    (-3,-1038.5) 名牌底
     ├── Badge        40×40     (-84,-1038)  职业徽标
@@ -35,7 +34,7 @@ HeroObtain           720×1610  Widget 四边拉伸（ALWAYS）+ HeroObtainPage
 
 产物落点：
 · `assets/resources/image/bg_hero_obtain.png`（720×1610 大图，**不进图集**）
-· `assets/resources/image/hero_obtain/`（其余 7 张）
+· `assets/resources/image/hero_obtain/`（其余 6 张）
 """
 import hashlib
 import json
@@ -57,7 +56,6 @@ SLICES = {
     "hdyx_guang.png": "hdyx_guang.png",
     "title_text.png": "hdyx_title.png",
     "xxk_di.png": "hdyx_xxk_di.png",
-    "yinying.png": "hdyx_yinying.png",
     "icon_suipian.png": "hdyx_icon_suipian.png",
     "progress_bg.png": "hdyx_progress_bg.png",
     "progress_01.png": "hdyx_progress_01.png",
@@ -70,7 +68,6 @@ EXPECTED_SIZES = {
     "hdyx_guang.png": (690, 690),
     "hdyx_title.png": (326, 54),
     "hdyx_xxk_di.png": (252, 51),
-    "hdyx_yinying.png": (302, 68),
     "hdyx_icon_suipian.png": (53, 52),
     "hdyx_progress_bg.png": (270, 42),
     "hdyx_progress_01.png": (255, 27),
@@ -88,7 +85,6 @@ RECTS = {
     "title": (206, 283, 326, 54),
     "rays": (15, 424, 690, 690),
     "hero": (150, 532, 421, 426),
-    "shadow": (210, 918, 302, 68),
     "plate": (231, 1013, 252, 51),
     "badge": (256, 1018, 40, 40),
     "name": (315, 1024, 124, 30),
@@ -510,11 +506,6 @@ def build_prefab():
     rays_opacity = b.uiopacity(rays)
     b.prefab_info(rays)
 
-    shadow = b.node("Shadow", stage, center_of("shadow"), size_of("shadow"))
-    b.sprite(shadow, frame_of("hdyx_yinying.png"))
-    shadow_opacity = b.uiopacity(shadow)
-    b.prefab_info(shadow)
-
     hero_root = b.node("HeroRoot", stage, center_of("hero"), size_of("hero"))
     hero_opacity = b.uiopacity(hero_root)
     b.prefab_info(hero_root)
@@ -581,7 +572,6 @@ def build_prefab():
     body["heroRoot"] = b.ref(hero_root)
     body["heroOpacity"] = b.ref(hero_opacity)
     body["heroSprite"] = b.ref(hero_sprite)
-    body["shadowOpacity"] = b.ref(shadow_opacity)
     body["plateNode"] = b.ref(plate)
     body["plateOpacity"] = b.ref(plate_opacity)
     body["badgeSprite"] = b.ref(badge_sprite)

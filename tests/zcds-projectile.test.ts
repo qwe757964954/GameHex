@@ -71,6 +71,40 @@ test('远程出手不扣血，在途状态存在，命中后移除弹道并产�
     assert.equal(model.snapshot.combatEvents.at(-1)?.targetUnitId, 2);
 });
 
+test('弹道飘字诊断能用弹道 ID 对上出手和命中，并记录实际飘字', (t) => {
+    const log = t.mock.method(console, 'info', () => {});
+    const model = game([unit(1, 'player', -80), { ...unit(2, 'enemy', 40), shield: 30 }]);
+    const projectile = launch(model);
+    model.tick(1.4);
+    const entry = (stage: string) => log.mock.calls.find(call =>
+        call.arguments[0] === `[伤害飘字][${stage}]`)?.arguments[1];
+    assert.equal(entry('弹道出手')?.projectileId, projectile.id);
+    assert.equal(entry('弹道出手')?.baseDamage, projectile.baseDamage);
+    assert.equal(entry('弹道命中')?.projectileId, projectile.id);
+    assert.equal(entry('受击结算')?.projectileId, projectile.id);
+    assert.equal(entry('受击结算')?.absorbed, 30);
+    assert.equal(entry('飘字')?.projectileId, projectile.id);
+    assert.equal(entry('飘字')?.value, model.floatTexts.find(text => text.kind === 'damage')?.value);
+    assert.ok(entry('飘字')?.value > 0);
+});
+
+test('击杀飘字显示完整命中伤害，统计和吸血按实际扣血', () => {
+    const model = game([{ ...unit(1, 'player', -80), hp: 500 }, { ...unit(2, 'enemy', 40), hp: 17, shield: 30 }]);
+    const statuses = model['statusSystem'];
+    statuses.register({ id: 'lifesteal', name: 'lifesteal', durationSeconds: 3,
+        statMods: { lifestealRate: 0.5 }, behavior: { kind: 'none' } });
+    statuses.apply('1', 'lifesteal', { at: 0 });
+    const projectile = launch(model);
+    model.tick(1.4);
+    assert.equal(model.snapshot.units.find(target => target.id === 2)?.hp, 0);
+    assert.equal(model.damageStats.player.dealt, 17);
+    const source = model.snapshot.units.find(candidate => candidate.id === 1);
+    assert.ok(source && Math.abs(source.hp - 508.5) < 1e-9);
+    const damage = model.floatTexts.find(text => text.kind === 'damage');
+    assert.equal(damage?.value, Math.round(projectile.baseDamage) - 30);
+    assert.equal(damage?.appliedDamage, 17);
+});
+
 test('本局文本攻击模式覆盖使远程攻击直接结算', () => {
     const loadout: ZCCompiledModifierLoadout = {
         sourceKey: 'test:text', sourceKind: 'skill', targetUnitId: definition.unitId,

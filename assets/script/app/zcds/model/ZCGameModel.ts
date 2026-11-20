@@ -2,6 +2,7 @@ import { ZCCombatSystem } from './systems/ZCCombatSystem';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
 import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
+import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
 import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from './systems/ZCNeutralFeatureSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
@@ -16,6 +17,8 @@ import { ZCMapGeometry } from './ZCMapGeometry';
 import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
+import { ZC_EFFECT_PATHS } from './ZCEffectCatalog';
+import type { IZCPendingSummon } from './ZCGameTypes';
 import {
     ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES, zcChainArcPieceLayout,
 } from './ZCChainLightningFx';
@@ -209,6 +212,45 @@ const STRUCTURE_TARGET_BODY_RADIUS = 80;
  */
 const SUMMON_SLOT_DEGREES = [135, 45, 225, 315] as const;
 /**
+ * 独立分身（101404 分裂菇）的散落半径（逻辑 px）：落在以本体为圆心的这个圆内
+ * （2026-11-20 第 33 批，用户原话「分身生成坐标落，落在以本体为圆心，20px 为半径的圆内」）。
+ *
+ * 🔴 单位是**棋盘逻辑 px**（`freeX/freeY` 那一套），屏上约 15.4px（×0.76875）。
+ * 与舞王的阵位半径 18（配表 `summonSlotRadius` 60 × `combatDistanceScale` 0.3）同一量级 ——
+ * 6 只分身围出的是紧贴本体的一小圈，不是「散落在半格之外」。嫌挤就只改这一个数。
+ */
+const SUMMON_SCATTER_RADIUS = 20;
+/**
+ * 独立分身的生成间隔（秒）：第 i 个分身在自己那一刻播特效、随后才出现
+ * （用户原话「每个分身生成有 0.1s 的间隔差」）。
+ *
+ * 6 只 ⇒ 最后一只比第一只晚 0.6s 起播。取 0.1s 是因为再短就糊成「同时冒出来」，
+ * 再长（≥0.2s）会让「累计 8 次普攻」的收益变成一串拖沓的排队动画。
+ */
+const SUMMON_STAGGER_SECONDS = 0.1;
+/**
+ * 特效起播到分身真正出现的间隔（秒）：设计口径「先播放【分裂菇_生成分身】，再出现分身」。
+ *
+ * 0.32s ≈ 前 8 帧 —— 爆点已经铺开、光还没散，此刻分身从光里站起来最自然。
+ * 落成「队列里两个时刻」（`fxAtSeconds` / `spawnAtSeconds`）而不是「先召再隐藏」：
+ * 隐藏的单位仍然是合法目标，会被看不见的东西挨打、也会自己走开。
+ */
+const SUMMON_APPEAR_DELAY_SECONDS = 0.32;
+/**
+ * 「分裂菇_生成分身」这条特效的时长（秒）= 26 帧 ÷ 24fps。
+ *
+ * 🔴 必须与 `tools/build_fission_spawn_fx.py` 的 `_duration` 一致：短了会在播到一半时
+ * 被 `combatEvents` 的寿命裁掉（后段爆发看不到），长了会把末帧定格多挂一段。
+ */
+const ZC_SUMMON_SPAWN_FX_SECONDS = 26 / 24;
+/**
+ * 独立分身的默认透明度（设计口径「分裂菇的分身透明度约为 65%」）。
+ *
+ * 配表 `summonAlpha` 给了就以配表为准（舞王 103103 走的是那条，0.6），这里只是
+ * 「101404 三档都没填」时的兜底 —— 不给兜底就是全实心，视觉上和本体分不出谁是谁。
+ */
+const SUMMON_INDEPENDENT_ALPHA = 0.65;
+/**
  * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
  *
  * 格距 36×42、格内切半径约 21 ⇒ 取 8 能保证一帧的飞行段不会被"跳格"漏掉，
@@ -238,6 +280,34 @@ const HIT_FX_SECONDS = 0.15;
  * 21 正好压在相邻格的公共边上，归属会判给上邻格；退 1 后任意角度都落在本格内。
 */
 const SPAWN_OFFSET_RADIUS = HEX_GRID_LOGICAL_ROW_STEP / 2 - 1;
+/**
+ * 塔防「同一波内逐只出怪」的间隔（秒）。
+ *
+ * 🔴 用户口径 0.1~0.2s（2026-11-20）：一波 20~30 只时不再同一帧糊成一坨，而是
+ * 一只接一只从敌方主城走出来，连成一条直线队列。取中间值 0.15：整波出完约 3~4.5 秒，
+ * 既看得出「排队」，又不会把波次节奏拖长到影响难度。
+ *
+ * 队列的**物理长度**由这条间隔乘移速决定（塔防怪 20~32 逻辑 px/s ⇒ 相邻两只拉开 3~5px），
+ * 因此出生点必须固定在一条轴上（见 `spawnUnit` 的 `lineUpAlongGoal`），
+ * 靠「同点同向 + 时间错开」形成纵队 —— 别指望位置错位，地图边界外的怪会被
+ * `advanceMarch` 判成出界、原地定住（见 `ZCMovementSystem.advanceMarch`）。
+ */
+export const ZC_DEFENCE_SPAWN_INTERVAL_SECONDS = 0.15;
+
+/** 一张「这一波还要再出 N 只」的票；`spawned` 到 `count` 就出队。*/
+interface ZCDefenceSpawnTicket {
+    /** 波序（0 基），账本按它记账。*/
+    readonly waveIndex: number;
+    readonly card: ZCDeckCard;
+    readonly tier: number;
+    /** 表 `defenceModWave.monsterSize` 投影出的模型缩放，1 = 不缩放。*/
+    readonly sizeScale: number;
+    readonly count: number;
+    /** 拆城跳末波时为真：末波不能被已有兵力上限吞掉。*/
+    readonly ignoreUnitCap: boolean;
+    spawned: number;
+    nextSpawnAt: number;
+}
 
 /** HUD 只读的塔防进度，不进入战斗快照；恢复时可由配置、时间与存活单位重新推导。*/
 export interface ZCDefenceWaveProgress {
@@ -407,6 +477,14 @@ export class ZCGameModel {
      * `null` ⇒ 本关没配（塔防关卡、以及空对象的 17 关）。
     */
     private readonly npcRarityModifier: ZCPvpRarityModifier | null;
+    /**
+     * 本局的非真人席位（关卡 PVE / 塔防的 NPC 队伍）；空 = 全员真人（PVP 匹配）。
+     *
+     * 只服务伤害飘字的显示口径，见 `floatTextToneOf`。真源是 `ZCMatchConfig.npcOwners`，
+     * 由入口构筑时按「有没有 `pve`」写入 —— 这里不按 owner 反推（PVP 4 人局里
+     * 另外三个席位也是真人）。
+    */
+    private readonly npcOwners: readonly ZCOwner[];
     private nextDefenceWaveIndex = 0;
     /**
      * 本局真正的胜方（draw/未定 = null），由 `ZCOutcomeSystem` 写入。
@@ -422,6 +500,17 @@ export class ZCGameModel {
      * 只记 id 不记对象引用：单位死亡后会被 `removeDeadUnits` 摘掉，活着查不到就按 0 计。
     */
     private readonly defenceWaveLedger: Array<{ ids: number[]; maxHp: number }> = [];
+    /**
+     * 正在逐只出怪的波次（同一波按 `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS` 拉开）。
+     *
+     * 波次到点 / 清空提前出怪时只**登记**一张票（`nextSpawnAt` = 当帧），真正的
+     * `spawnUnit` 交给 `advanceDefenceSpawnQueue` 每拍补——这样同一波的多只怪
+     * 不会挤在同一帧出生。票按波序各自计时：拆城跳末波时老票仍在排队，不互相顶掉。
+     *
+     * 🔴 只活在内存里（和 `defenceWaveLedger` 同口径）：读档后中途未出完的怪不再补，
+     * 波序由 `nextDefenceWaveIndex` 恢复，与旧实现「账本丢失」的边界一致。
+     */
+    private readonly defenceSpawnQueue: ZCDefenceSpawnTicket[] = [];
     /** 本局有效伤害统计；重开清零，存档恢复从零统计。*/
     private readonly damageDealt: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
     /** 每方「承受伤害」累计值；只给对局结算页（GameRunAway）读，不进快照。*/
@@ -476,6 +565,7 @@ export class ZCGameModel {
         this.npcRarityModifier = gradeProModifier && Object.keys(gradeProModifier).length > 0
             ? gradeProModifier
             : null;
+        this.npcOwners = this.config.npcOwners ?? [];
         this.outcomeContext = {
             activeOwners: this.activeOwners,
             pveDefence: this.pveDefence,
@@ -1315,6 +1405,11 @@ export class ZCGameModel {
         const defence = this.pveDefence;
         const index = this.defenceBossWaveIndex();
         if (!defence || index < 0 || this.nextDefenceWaveIndex <= index) return { spawned: false, alive: false };
+        // 逐只出怪（`ZC_DEFENCE_SPAWN_INTERVAL_SECONDS`）：末波还有怪排着队没出生时，
+        // 已经被打死的先头几只不能算「BOSS 已被击败」，否则会当场误判胜利。
+        if (this.defenceSpawnQueue.some((ticket) => ticket.waveIndex === index)) {
+            return { spawned: true, alive: true };
+        }
         const bossCardId = defence.waves[index].cardId;
         const ids = this.defenceWaveLedger[index]?.ids ?? [];
         const alive = ids.length
@@ -1516,6 +1611,9 @@ export class ZCGameModel {
         this.invalidateTerrain();
         this.presentation.reset();
         this.deferredBarracksSpawns.length = 0;
+        //  排队中的召唤物属于「上一场」的状态，重开一局必须清掉，否则下一局一开场
+        //  会有几只分裂菇凭空冒出来（`pendingSummons` 在快照里，`state` 已经被换成新的了）。
+        if (this.state.pendingSummons) this.state.pendingSummons.length = 0;
         this.frameEvents.length = 0;
         this.nextDefenceWaveIndex = 0;
         for (const owner of ZC_OWNER_ORDER) {
@@ -1533,6 +1631,10 @@ export class ZCGameModel {
         this.neutralFeatures.beginStep(this.state);
         this.state.elapsedSeconds = Math.round((this.state.elapsedSeconds + dt) * 1e9) / 1e9;
         this.flushDeferredBarracksSpawns();
+        //  排队中的召唤物（2026-11-20 第 33 批 101404 分裂菇）：「先特效、后出现」的两个时刻
+        //  到点了就地兑现。排在 `updateUnits` 之前 —— 这一帧生出来的分身当帧就能索敌 / 出手，
+        //  与「施法那一拍召出」的旧口径只差「特效先播了 0.32s」。
+        this.flushPendingSummons();
         this.spawnDueDefenceWaves();
         // 原地压缩过期战斗事件：不能每步 filter 出一条新数组（20 Hz 稳定垃圾）。
         const combatEvents = this.state.combatEvents;
@@ -1564,16 +1666,13 @@ export class ZCGameModel {
         this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner),
             this.neutralFeatures.monsterTerritory);
         this.refreshTileStates();
-        //  塔防局同样要跑 NPC 翻地（2026-11-09）：NPC 靠翻地块解锁新的怪物卡牌，
-        //  早前这里用 `!this.pveDefence` 整段跳过 ⇒ 红方棋盘从开局起一格都不动。
-        //  节奏：时钟从第一次翻格之后起算（新建快照时预置成一个完整间隔，见 `restoreOrCreateState`），
-        //  每步最多给一拍，所以同一席位两次翻格的间隔 ≥ `aiDevelopIntervalSeconds`。
-        //   这里每步只减一次、只跑一拍 `runEnemyAI`（多的部分累加到下一步）—— 一帧内不补拍；
-        //  实时间隔 ≥ 1 秒、步长 0.05 秒，永远补不到第二拍。
-        this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
-        if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
-            this.state.aiClock -= this.aiDevelopIntervalSeconds;
-            this.runEnemyAI();
+        // 首领关由配置的波次出怪，跳过通用敌方翻格。
+        if (!this.pveDefence) {
+            this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
+            if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
+                this.state.aiClock -= this.aiDevelopIntervalSeconds;
+                this.runEnemyAI();
+            }
         }
         //  跟随类特效（闪电链 102203）：单位这一帧已经走完了，此时把两端的坐标重算一遍，
         //  渲染读到的就是「弧粘在人身上」的当下位置。排在 AI 之后、`checkOutcome` 之前 ——
@@ -1915,6 +2014,37 @@ export class ZCGameModel {
         });
     }
 
+    /**
+     * 席位上是不是「真人玩家」。关卡 PVE / 塔防的非本机席位是 NPC 队伍，不算玩家；
+     * PVP 匹配 `npcOwners` 为空 ⇒ 每个席位都是玩家。`neutral`（野怪 / 中立）永远不是玩家。
+    */
+    private isPlayerSeat(owner: ZCFaction): boolean {
+        if (owner === 'neutral') return false;
+        return !this.npcOwners.includes(owner);
+    }
+
+    /**
+     * 扣血飘字的显示口径（2026-11-20 用户，同日二改）。
+     *
+     * · `none` —— 两个非玩家（NPC / 野怪）互打：只留血条变化，不出数字；
+     * · `playerLoss` —— **本机席位**的卡牌被扣血：红字 + 负号（`-5`）。
+     *   **不分攻方是玩家还是 NPC** —— 「我方被打」只有这一种样式；
+     * · `normal` —— 其余全部白字（我方打出的伤害、克制增伤、别人家的卡被打）。
+     *
+     * 🔴 两条边界别写歪：
+     * ① 红色只看 `defender === player`（本机），不是「任意玩家的卡」—— 否则我打别人也变红字，
+     *    和「我方造成的伤害用白色」直接打架；
+     * ② 攻方是不是玩家**不再参与**这一判定。2026-11-20 用户口径：「我方被 NPC 打和被另一个玩家打
+     *    是一个样式，红字、无前缀、只有 -血量」。原先只认「受到其他玩家的攻击」，结果同一件
+     *    「我方掉血」在塔防里是白字、在 PVP 里是红字，两套样式。
+     */
+    private floatTextToneOf(attacker: ZCFaction, defender: ZCFaction): 'normal' | 'playerLoss' | 'none' {
+        const attackerIsPlayer = this.isPlayerSeat(attacker);
+        const defenderIsPlayer = this.isPlayerSeat(defender);
+        if (!attackerIsPlayer && !defenderIsPlayer) return 'none';
+        return defender === ZCOwner.Player && attacker !== defender ? 'playerLoss' : 'normal';
+    }
+
     private damageUnit(target: ZCUnitState, damage: number, source: ZCDamageSource): ZCFloatText | null {
         const result = ZCDamageResolutionSystem.damageUnit(
             this.state, target, damage, source, this.damageResolutionContext);
@@ -1925,14 +2055,33 @@ export class ZCGameModel {
             this.creditCardTaken(target, result.applied);
         }
         const position = this.unitPosition(target);
-        const floatText = this.pushFloatText({
+        const tone = this.floatTextToneOf(source.owner, target.owner);
+        // 前缀（暴击 / 克制 / 抵抗 / 秒杀）只标「我方打出去的战果」：
+        // 攻方是玩家席位、且不是「我方被扣血」那一档才带。NPC 打我方卡走 `normal`，
+        // 但攻方不是玩家 ⇒ 不带前缀；我方被另一个玩家扣血 ⇒ 也不带，只要负号 + 血量。
+        const dealtByPlayer = tone === 'normal' && this.isPlayerSeat(source.owner);
+        const floatText = tone === 'none' ? null : this.pushFloatText({
             kind: source.floatTextKind ?? 'damage',
             owner: source.owner === 'neutral' ? target.owner : source.owner,
-            value: result.applied + (source.floatTextValueOffset ?? 0),
+            ...(tone === 'playerLoss' ? { takenFromPlayer: true as const } : {}),
+            ...(dealtByPlayer ? { dealtByPlayer: true as const } : {}),
+            // 飘字显示「完整命中伤害」= 减伤 / 吃盾之后、夹血量上限之前（`damageBeforeHpCap`）；
+            // 统计、吸血、击杀归属走实际扣血（`appliedDamage`）。击杀那一下若按实际扣血显示，
+            // 玩家看到的是「打了 60、只跳 20」（`tests/zcds-state-consistency.test.ts` 钉的就是这条）。
+            value: result.damageBeforeHpCap + (source.floatTextValueOffset ?? 0),
+            appliedDamage: result.applied + (source.floatTextValueOffset ?? 0),
             x: position.x,
             y: position.y,
             durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS,
         });
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][飘字]', {
+                sourceKind: source.kind, sourceId: source.unitId, projectileId: source.projectileId,
+                targetKind: 'unit', targetId: target.id, targetUnitId: target.unitId, incomingDamage: damage,
+                applied: result.applied, executeOffset: source.floatTextValueOffset ?? 0,
+                floatTextId: floatText?.id, kind: floatText?.kind, value: floatText?.value ?? null,
+            });
+        }
         this.pushHitFx(target, result.applied, source, position);
         if (result.killed && source.owner !== 'neutral') {
             this.grantGold(source.owner, this.rules.killUnitGoldReward,
@@ -2074,8 +2223,16 @@ export class ZCGameModel {
             wall, damage, unit, isExposed, center, this.damageResolutionContext);
         if (!result) return;
         this.creditCardDamage(unit.id, result.applied);
-        this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
+        // 同 `damageBuilding`：飘字按完整命中伤害，扣血/统计按实际值。
+        const floatText = this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.damageBeforeHpCap,
+            appliedDamage: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][飘字]', {
+                sourceId: unit.id, targetKind: 'wall', targetId: wall.id, incomingDamage: damage, applied: result.applied,
+                floatTextId: floatText?.id, kind: floatText?.kind, value: floatText?.value ?? null,
+            });
+        }
         //  城墙受击特效：与飘字同一坐标（格心），职业取攻击方（2026-11-06 需求）。
         this.pushStructureHitFx(unit.id, wall.owner, result.applied, center, 'wall');
         if (result.killed) this.invalidateTerrain();
@@ -2116,6 +2273,9 @@ export class ZCGameModel {
                 feature.focusOwners = [];
                 feature.retaliationUnitIds = [];
                 feature.targetUnitId = null;
+                delete feature.monsterFacing;
+                delete feature.attackStartedAt;
+                delete feature.attackTargetUnitId;
                 delete feature.disengagedAt;
                 delete feature.regenUpdatedAt;
                 const reinforcement = this.spawnUnit(unit.owner, card, 1, building.id, true);
@@ -2147,8 +2307,17 @@ export class ZCGameModel {
         if (!result) return;
         this.creditCardDamage(unit.id, result.applied);
         const center = this.hexCenter(building.id);
-        this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.applied,
+        // 飘字显示「完整命中伤害」（`damageBeforeHpCap`），统计与吸血走实际扣血（`applied`）——
+        // 击杀那一下如果按实际扣血显示，玩家会看到「打了 60、只跳 20」。
+        const floatText = this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.damageBeforeHpCap,
+            appliedDamage: result.applied,
             x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][飘字]', {
+                sourceId: unit.id, targetKind: 'building', targetId: building.id, incomingDamage: damage, applied: result.applied,
+                floatTextId: floatText?.id, kind: floatText?.kind, value: floatText?.value ?? null,
+            });
+        }
         //  建筑受击特效：锚点仍是格心，视图按 `surface = 'building'` 抬到建筑图中心
         //  （`ZCGameHex.prefab` 的 `BuildingIcon` 在 +15.65px）—— 2026-11-06 需求。
         //  `defender` 必须在伤害结算之前抓（拆掉那一拍 `building.owner` 已被改成攻方）。
@@ -2320,16 +2489,20 @@ export class ZCGameModel {
         tier: number,
         hexId: number,
         ignoreUnitCap = false,
+        lineUpAlongGoal = false,
     ): ZCUnitState | null {
         if (!card.unitId || (!ignoreUnitCap && this.unitCount(owner) >= this.rules.unitCapPerSide)) return null;
         const definition = this.effectiveUnitDefinitionFor(owner, card.unitId);
         const spawnCenter = this.hexCenter(hexId);
-        // 落点：离兵营中心约半个格距、方向随机 —— 新兵不会和兵营图标叠在一起。
-        // 角度取本局随机源（与抽卡同一个），保证同一种子下表现可复现。
-        // 半径为什么略小于半格，见 `SPAWN_OFFSET_RADIUS`。
+        // 落点：离兵营中心约半个格距 —— 新兵不会和兵营图标叠在一起。
+        // 塔防出怪（`lineUpAlongGoal`）**不随机散角**：整波怪都从「主城 → 目标主城」这条轴上
+        // 同一点出生，配合 `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS` 的时间错开，才排得成一条直线队列。
+        // 🔴 随机值照抽不误（下面的 `random()`），否则随机流一变，抽卡 / 技能全都不是同一个种子了。
         const spawnAngle = this.random() * Math.PI * 2;
-        const spawnX = spawnCenter.x + Math.cos(spawnAngle) * SPAWN_OFFSET_RADIUS;
-        const spawnY = spawnCenter.y + Math.sin(spawnAngle) * SPAWN_OFFSET_RADIUS;
+        const facing = this.facingTowardGoal(owner, hexId);
+        const angle = lineUpAlongGoal ? facing : spawnAngle;
+        const spawnX = spawnCenter.x + Math.cos(angle) * SPAWN_OFFSET_RADIUS;
+        const spawnY = spawnCenter.y + Math.sin(angle) * SPAWN_OFFSET_RADIUS;
         const bonuses = this.bonusesFor(owner);
         const tierMultiplier = 1 + (tier - 1) * this.rules.unitHpPerTier;
         const maxHp = Math.max(1, Math.round(definition.maxHp * bonuses.unitHpMultiplier * tierMultiplier));
@@ -2358,7 +2531,7 @@ export class ZCGameModel {
             attackHitDone: false,
             hatredUnitId: null,
             hatredUntil: 0,
-            facingRadians: this.facingTowardGoal(owner, hexId),
+            facingRadians: facing,
             deathRemoveAt: 0,
             marchAngle: null,
             freeX: spawnX,
@@ -2401,7 +2574,13 @@ export class ZCGameModel {
      *    自己寻路追人、本体阵亡不散（只等血量归零）、不占 `unitCapPerSide` 名额、
      *    场上同兵种最多 `summonMaxAlive` 只、超限整批**不释放**（不消费累计次数）。
      *
-     * 返回 `true` = 至少召出一个，调用方才消费 CD / 累计次数。
+     * 2026-11-20 第 33 批给独立分身加了生成表现：**不在这里当拍出生**，而是压进
+     * `state.pendingSummons`（第 i 只 `i × 0.1s` 播「分裂菇_生成分身」、再过 0.32s 才
+     * `spawnUnit`，见 `flushPendingSummons`）。跟随型舞王仍走原来的当拍出生 ——
+     * 它要钉在本体的阵位上，晚 0.32s 出场只会让「四个舞伴围着本体」这个语义错位。
+     * 因此本方法的返回值含义是「**这次释放成立**」（已排队也算），不只是「当场生出了几个」。
+     *
+     * 返回 `true` = 至少召出一个（含排队中），调用方才消费 CD / 累计次数。
      */
     private summonUnits(master: ZCUnitState): boolean {
         const definition = this.effectiveUnitDefinition(master);
@@ -2421,10 +2600,14 @@ export class ZCGameModel {
         //  `summonMaxAlive` 缺省 0 ⇒ 无上限，舞王 103103 逐字不变。
         const maxAlive = Math.max(0, Math.round(params?.summonMaxAlive ?? 0));
         if (maxAlive > 0) {
+            //  排队中的那几只也要算进名额：它们已经「消费过」这一次释放，
+            //  只数 `state.units` 会让 0.6s 内的第二次召唤看见「场上 0 只」再召一批。
             const alive = this.summonAliveCount(master);
-            if (alive + count > maxAlive) {
+            const pendingCount = this.pendingSummonCount(master);
+            if (alive + pendingCount + count > maxAlive) {
                 if (zcSkillCastWatched(master.unitId)) {
                     skillCastLog('召唤', `${master.unitId}#${master.id} 场上已有 ${alive}/${maxAlive} 只`
+                        + `${pendingCount > 0 ? `（另有 ${pendingCount} 只正在生成）` : ''}`
                         + ` ⇒ 再召 ${count} 只会超限，本次不释放（不消费累计次数）`);
                 }
                 return false;
@@ -2437,25 +2620,71 @@ export class ZCGameModel {
         //  独立分身（101404）：自己寻路追人、本体阵亡也不散、不占单位上限的名额。
         const independent = (params?.summonIndependent ?? 0) > 0;
         const slotRadius = Math.max(0, params?.summonSlotRadius ?? 0) * this.rules.combatDistanceScale;
-        const alpha = Math.max(0, Math.min(1, params?.summonAlpha ?? 1));
+        //  透明度：配表优先（舞王 103103 是 0.6）；101404 三档都没填 `summonAlpha`，
+        //  按设计口径「分身约 65%」兜底 —— 只在独立分身这一条车道上兜，普通召唤仍是实心。
+        const alpha = Math.max(0, Math.min(1,
+            params?.summonAlpha ?? (independent ? SUMMON_INDEPENDENT_ALPHA : 1)));
         //  基准取「本体当前的继承值」而不是兵种原表：本体若自己也是继承来的（门格复制、
         //  上一层召唤），链式继承才不会一代比一代虚高。与 `cloneGateUnit` 同一口径。
         const base = master.inheritedStats ?? definition;
+        const inherited = {
+            attack: Math.max(1, base.attack * attackInherit),
+            moveSpeed: base.moveSpeed,
+            attackInterval: base.attackInterval,
+            attackRange: base.attackRange,
+            bodyRadius: base.bodyRadius,
+        };
+        const maxHp = Math.max(1, Math.round(master.maxHp * hpInherit));
         const spawned: ZCUnitState[] = [];
+        let queued = 0;
+        const origin = this.services.unitPosition(master);
         for (let slot = 0; slot < count; slot += 1) {
+            //  ── 独立分身：排队出生（2026-11-20 第 33 批）──
+            //  三条设计口径都落在「什么时候真正 `spawnUnit`」上：
+            //   1. 坐标散落在以本体为圆心 20px 的圆内（`sqrt` 让落点铺满圆面而不是堆在圆心）；
+            //   2. 第 i 只比第 0 只晚 `i × 0.1s` 播特效；
+            //   3. 自己那只特效起播 0.32s 后才出现在场上。
+            //  不能改成「先召出来再隐藏」：隐藏单位照样是合法目标、也会自己走开（见常量注释）。
+            if (independent) {
+                //  角度按序号均分整圈、只用随机量做抖动：6 只若都听同一颗随机数，
+                //  在某些种子下会**叠在同一个点**上（看起来只召出 1 只）。半径仍按
+                //  `sqrt(随机)` 铺满圆面而不是全挤圆心。
+                //  随机源取本局的（与 `spawnUnit` 的落点、抽卡同一个）⇒ 同一种子下可复现，
+                //  与 `SPAWN_OFFSET_RADIUS` 那条注释同一条约定。
+                const spread = Math.PI * 2 / Math.max(1, count);
+                const angle = slot * spread + (this.random() - 0.5) * spread * 0.6;
+                const radius = Math.sqrt(this.random()) * SUMMON_SCATTER_RADIUS;
+                const fxAt = this.state.elapsedSeconds + slot * SUMMON_STAGGER_SECONDS;
+                (this.state.pendingSummons ??= []).push({
+                    fxAtSeconds: Math.round(fxAt * 1e9) / 1e9,
+                    spawnAtSeconds: Math.round((fxAt + SUMMON_APPEAR_DELAY_SECONDS) * 1e9) / 1e9,
+                    owner: master.owner,
+                    cardId: master.cardId,
+                    tier: master.tier,
+                    sourceHexId: master.sourceHexId,
+                    masterId: master.id,
+                    skillId: definition.attackProfile.skillId,
+                    skillName: definition.attackProfile.name,
+                    x: origin.x + Math.cos(angle) * radius,
+                    y: origin.y + Math.sin(angle) * radius,
+                    maxHp,
+                    attack: inherited.attack,
+                    moveSpeed: inherited.moveSpeed,
+                    attackInterval: inherited.attackInterval,
+                    attackRange: inherited.attackRange,
+                    bodyRadius: inherited.bodyRadius,
+                    summonUntil: seconds > 0 ? this.state.elapsedSeconds + seconds : undefined,
+                    summonAlpha: alpha < 1 ? alpha : undefined,
+                    summonIndependent: true,
+                });
+                queued += 1;
+                continue;
+            }
             const clone = this.spawnUnit(master.owner, card, master.tier, master.sourceHexId, true);
             if (!clone) continue;
-            clone.maxHp = clone.hp = Math.max(1, Math.round(master.maxHp * hpInherit));
-            clone.inheritedStats = {
-                attack: Math.max(1, base.attack * attackInherit),
-                moveSpeed: base.moveSpeed,
-                attackInterval: base.attackInterval,
-                attackRange: base.attackRange,
-                bodyRadius: base.bodyRadius,
-                maxHp: clone.maxHp,
-            };
+            clone.maxHp = clone.hp = maxHp;
+            clone.inheritedStats = { ...inherited, maxHp };
             clone.summonMasterId = master.id;
-            if (independent) clone.summonIndependent = true;
             //  注册那一刻还不知道自己是不是召唤物（`summonMasterId` 是这里才写的）
             //  ⇒ 必须补一刀把「单位上限名额」还回去，否则 12 只分身正好把兵营卡死。
             this.units.markSummon(clone);
@@ -2470,12 +2699,117 @@ export class ZCGameModel {
             spawned.push(clone);
         }
         if (zcSkillCastWatched(master.unitId)) {
-            skillCastLog('召唤', `${master.unitId}#${master.id} 召出 ${spawned.length}/${count} 个`
+            skillCastLog('召唤', `${master.unitId}#${master.id} 召出 ${spawned.length + queued}/${count} 个`
                 + `（生命 ${Math.round(hpInherit * 100)}% / 攻击 ${Math.round(attackInherit * 100)}%`
                 + `，持续 ${seconds > 0 ? `${seconds}s` : '到战死'}`
+                + `${independent ? `，散落半径 ${SUMMON_SCATTER_RADIUS}、间隔 ${SUMMON_STAGGER_SECONDS}s、`
+                    + `透明度 ${Math.round(alpha * 100)}%` : ''}`
                 + `${follow ? `，阵位半径 ${slotRadius.toFixed(1)}` : '，自由行动'}）`);
         }
-        return spawned.length > 0;
+        return spawned.length + queued > 0;
+    }
+
+    /**
+     * 把到点的排队召唤物真正生出来（2026-11-20 第 33 批 101404 分裂菇）。
+     *
+     * 每一只两个时刻：`fxAtSeconds` 推特效事件、`spawnAtSeconds` 才 `spawnUnit`。
+     * 两者之间那 0.32s 就是「先播放【分裂菇_生成分身】，再出现分身」。
+     *
+     * 🔴 三条不能省的：
+     *  1. **本体死了照样出生**：独立分身的裁定是「血量为 0 才消失」，队列里存的是
+     *     施法那一刻算好的继承值，所以这里不回头查本体。
+     *  2. **`markSummon` 必须补**：`spawnUnit` 注册时它是普通单位，不还名额就会吃兵营上限。
+     *  3. **坐标用队列里那一份**，不重新按本体算 —— 本体这 0.32s 内可能已经走开或已经没了。
+     *
+     * 队列通常为空（只有分裂菇在放技能后的 0.9s 内有货），空则直接返回、不分配。
+     */
+    private flushPendingSummons(): void {
+        const pending = this.state.pendingSummons;
+        if (!pending || !pending.length) return;
+        const now = this.state.elapsedSeconds;
+        let write = 0;
+        for (let read = 0; read < pending.length; read += 1) {
+            const entry = pending[read];
+            if (entry.fxPlayed !== true && now + 1e-9 >= entry.fxAtSeconds) {
+                entry.fxPlayed = true;
+                this.pushSummonSpawnFx(entry);
+            }
+            if (now + 1e-9 < entry.spawnAtSeconds) {
+                if (write !== read) pending[write] = entry;
+                write += 1;
+                continue;
+            }
+            this.materializeSummon(entry);
+        }
+        pending.length = write;
+    }
+
+    /** 队列里还排着的、属于这个本体的召唤物数量（`summonMaxAlive` 的名额判据）。*/
+    private pendingSummonCount(master: ZCUnitState): number {
+        const pending = this.state.pendingSummons;
+        if (!pending || !pending.length) return 0;
+        let total = 0;
+        for (const entry of pending) {
+            if (entry.owner !== master.owner || entry.cardId !== master.cardId) continue;
+            total += 1;
+        }
+        return total;
+    }
+
+    /**
+     * 推一条「生成」特效事件：落点就是这一只的出生坐标。
+     *
+     * `startedAt` 写当前时刻而不是排到未来 —— 到点才推是这条链的口径（视图侧对
+     * `startedAt` 在未来的事件整条不建节点，两条一起用只会多一份没必要的排队）。
+     */
+    private pushSummonSpawnFx(entry: IZCPendingSummon): void {
+        this.state.combatEvents.push({
+            id: this.state.nextCombatEventId++,
+            type: 'area',
+            owner: entry.owner,
+            sourceUnitId: entry.masterId,
+            targetUnitId: null,
+            skillId: entry.skillId,
+            skillName: entry.skillName,
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_EFFECT_PATHS.fissionSpawn,
+            fromX: entry.x,
+            fromY: entry.y,
+            toX: entry.x,
+            toY: entry.y,
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: this.state.elapsedSeconds,
+            durationSeconds: ZC_SUMMON_SPAWN_FX_SECONDS,
+        });
+    }
+
+    /** 把一条排队项变成真正的单位：属性、归属、名额、坐标全部按队列里那一份写死。*/
+    private materializeSummon(entry: IZCPendingSummon): void {
+        const card = this.cards[entry.owner].get(entry.cardId) ?? findCatalogCard(entry.cardId);
+        //  卡查不到（构筑被换掉 / 存档来自别的版本）⇒ 这一只放弃，别让队列卡住永久重试。
+        if (!card) return;
+        const clone = this.spawnUnit(entry.owner, card, entry.tier, entry.sourceHexId, true);
+        if (!clone) return;
+        clone.maxHp = clone.hp = entry.maxHp;
+        clone.inheritedStats = {
+            attack: entry.attack,
+            moveSpeed: entry.moveSpeed,
+            attackInterval: entry.attackInterval,
+            attackRange: entry.attackRange,
+            bodyRadius: entry.bodyRadius,
+            maxHp: entry.maxHp,
+        };
+        clone.summonMasterId = entry.masterId;
+        if (entry.summonIndependent === true) clone.summonIndependent = true;
+        this.units.markSummon(clone);
+        if (entry.summonUntil !== undefined) clone.summonUntil = entry.summonUntil;
+        if (entry.summonAlpha !== undefined) clone.summonAlpha = entry.summonAlpha;
+        //  出生坐标用队列里那一份散落点：`placeAt` 同时更新连续坐标、朝向与所在格索引，
+        //  直接写 `freeX/freeY` 会让「显示在哪」与「站在哪一格」分叉。
+        this.movement.placeAt(clone, entry.x, entry.y, true);
     }
 
     /**
@@ -2591,17 +2925,30 @@ export class ZCGameModel {
     /** 到配置时间或已出怪物全部被击退时，在敌方主城生成下一波；首波只按时间。*/
     private spawnDueDefenceWaves(forceLastWave = false): void {
         if (!this.pveDefence) return;
+        this.triggerDueDefenceWaves(forceLastWave);
+        //  每拍都推一次队列：波次触发那一拍也要把第一只当场放出来（旧实现「到点即出怪」）。
+        this.advanceDefenceSpawnQueue();
+    }
+
+    /**
+     * 波次触发：只决定「哪些波现在开始出」并登记出怪票，不直接生成单位。
+     *
+     * 一波 20~30 只时若在这里 for 循环全生成，观感是同一帧从主城爆出一坨、朝向随机散开；
+     * 用户口径（2026-11-20）要求逐只 0.1~0.2s 排队走出来 ⇒ 实际生成挪到
+     * `advanceDefenceSpawnQueue`。
+     */
+    private triggerDueDefenceWaves(forceLastWave: boolean): void {
+        const waves = this.pveDefence?.waves;
+        if (!waves?.length) return;
         if (forceLastWave) {
-            if (this.nextDefenceWaveIndex >= this.pveDefence.waves.length) return;
+            if (this.nextDefenceWaveIndex >= waves.length) return;
             // 拆城直接挑战末波；已在场的怪物保留，尚未生成的中间波不再生成。
-            this.nextDefenceWaveIndex = this.pveDefence.waves.length - 1;
+            this.nextDefenceWaveIndex = waves.length - 1;
         }
-        while (this.nextDefenceWaveIndex < this.pveDefence.waves.length) {
-            const wave = this.pveDefence.waves[this.nextDefenceWaveIndex];
+        while (this.nextDefenceWaveIndex < waves.length) {
+            const wave = waves[this.nextDefenceWaveIndex];
             if (!forceLastWave && wave.showAtSeconds > this.state.elapsedSeconds + 1e-9) {
-                if (this.nextDefenceWaveIndex === 0 || this.state.units.some((unit) => (
-                    unit.owner !== ZCOwner.Player && unit.battleState !== 'dead'
-                ))) return;
+                if (this.nextDefenceWaveIndex === 0 || this.defenceForceOnField()) return;
             }
             this.nextDefenceWaveIndex += 1;
             // 提前出怪后不能再按 elapsedSeconds 推导进度，存档必须记下实际波序。
@@ -2614,20 +2961,63 @@ export class ZCGameModel {
                 continue;
             }
             const count = Math.max(0, Math.floor(wave.monsterCount));
-            // 怪物体型（表 `defenceModWave.monsterSize`）：BOSS 行填 2，模型放大一倍。
-            const sizeScale = defenceMonsterScale(wave.monsterSize);
-            for (let index = 0; index < count; index += 1) {
-                const unit = this.spawnUnit(ZCOwner.Enemy, card, Math.max(1, Math.floor(wave.tier)),
-                    this.homeId(ZCOwner.Enemy), forceLastWave);
-                if (!unit) continue;
-                // `gateScale` 是本工程现有的「单位级视觉缩放」通道：`ZCUnitView` 的模型缩放、
-                // 头顶血条偏移与兜底体型半径都乘它（见 `ZCUnitView.render`）。体型只影响观感，
-                // 不动 `bodyRadius` 等逻辑数值。
-                if (sizeScale !== 1) unit.gateScale = sizeScale;
-                ledger.ids.push(unit.id);
-                ledger.maxHp += Math.max(0, unit.maxHp);
+            if (count > 0) {
+                this.defenceSpawnQueue.push({
+                    waveIndex: this.nextDefenceWaveIndex - 1,
+                    card,
+                    tier: Math.max(1, Math.floor(wave.tier)),
+                    // 怪物体型（表 `defenceModWave.monsterSize`）：BOSS 行填 2，模型放大一倍。
+                    sizeScale: defenceMonsterScale(wave.monsterSize),
+                    count,
+                    ignoreUnitCap: forceLastWave,
+                    spawned: 0,
+                    nextSpawnAt: this.state.elapsedSeconds,
+                });
             }
         }
+    }
+
+    /**
+     * 场上还算不算「这一波没打完」：有活着的敌人，或者还有怪排着队没出生。
+     *
+     * 🔴 后半条不能省：逐只出怪后，「第一只刚死、第二只还没出生」会出现一帧场上空场，
+     * 只判活体的话下一波会当场上没敌人直接提前触发，整局波次节奏就乱了。
+     */
+    private defenceForceOnField(): boolean {
+        if (this.defenceSpawnQueue.length) return true;
+        return this.state.units.some((unit) => unit.owner !== ZCOwner.Player && unit.battleState !== 'dead');
+    }
+
+    /** 按每拍补齐到点的出怪票：同波相邻两只的出生时刻相差 `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS`。*/
+    private advanceDefenceSpawnQueue(): void {
+        if (!this.defenceSpawnQueue.length) return;
+        const now = this.state.elapsedSeconds;
+        for (let index = this.defenceSpawnQueue.length - 1; index >= 0; index -= 1) {
+            const ticket = this.defenceSpawnQueue[index];
+            // 掉帧 / 大步长时补发：按时间轴一只只补，间隔不被帧率吃掉。
+            while (ticket.spawned < ticket.count && ticket.nextSpawnAt <= now + 1e-9) {
+                this.spawnDefenceWaveUnit(ticket);
+                ticket.spawned += 1;
+                ticket.nextSpawnAt = Math.round(
+                    (ticket.nextSpawnAt + ZC_DEFENCE_SPAWN_INTERVAL_SECONDS) * 1e9) / 1e9;
+            }
+            if (ticket.spawned >= ticket.count) this.defenceSpawnQueue.splice(index, 1);
+        }
+    }
+
+    /** 出一只怪并记进本波账本；兵力上限拦下时这一只算已出（与旧的 `continue` 同口径）。*/
+    private spawnDefenceWaveUnit(ticket: ZCDefenceSpawnTicket): void {
+        const unit = this.spawnUnit(ZCOwner.Enemy, ticket.card, ticket.tier,
+            this.homeId(ZCOwner.Enemy), ticket.ignoreUnitCap, true);
+        if (!unit) return;
+        // `gateScale` 是本工程现有的「单位级视觉缩放」通道：`ZCUnitView` 的模型缩放、
+        // 头顶血条偏移与兜底体型半径都乘它（见 `ZCUnitView.render`）。体型只影响观感，
+        // 不动 `bodyRadius` 等逻辑数值。
+        if (ticket.sizeScale !== 1) unit.gateScale = ticket.sizeScale;
+        const ledger = this.defenceWaveLedger[ticket.waveIndex];
+        if (!ledger) return;
+        ledger.ids.push(unit.id);
+        ledger.maxHp += Math.max(0, unit.maxHp);
     }
 
     private cardById(owner: ZCOwner, id: string): ZCDeckCard | undefined {

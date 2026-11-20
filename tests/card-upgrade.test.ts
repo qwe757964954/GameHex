@@ -25,13 +25,11 @@ import {
     ZCItemCounter,
 } from '../assets/script/app/card/CardUpgradeCost';
 import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
+import { readRefRows, readRefTable } from './helpers/ref-kvc';
 
-/** 读 remoteRef 的列存表（`{k, v}`）→ 行对象数组。 */
+/** 读 remoteRef 的升级表 → 行对象数组（两种产物格式由 {@link readRefTable} 收口）。 */
 function readCardLevelUp(): Array<Record<string, unknown>> {
-    const source = JSON.parse(readFileSync('assets/remoteRef/cardLevelUp.json', 'utf8')) as {
-        k: string[];
-        v: unknown[][];
-    };
+    const source = readRefTable('cardLevelUp');
     return source.v.map((row) => {
         const entry: Record<string, unknown> = {};
         source.k.forEach((key, index) => { entry[key] = row[index]; });
@@ -343,14 +341,9 @@ test('卡牌名称：表里每行都带名，且与卡牌表 pvpCard 完全一�
     const withName = rows.filter((row) => String(row.name ?? '').trim().length > 0);
     assert.equal(withName.length, rows.length, `有 ${rows.length - withName.length} 行没有 name`);
 
-    const pvp = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as {
-        k: string[]; v: unknown[][];
-    };
     const cardName = new Map<string, string>();
-    for (const row of pvp.v) {
-        const entry = {} as Record<string, unknown>;
-        pvp.k.forEach((key, index) => { entry[key] = row[index]; });
-        cardName.set(String(entry.id), String(entry.name));
+    for (const row of readRefRows('pvpCard')) {
+        cardName.set(String(row.id), String(row.name));
     }
     const mismatched = rows.filter((row) => cardName.get(String(row.id)) !== row.name);
     assert.deepEqual(mismatched.slice(0, 3), [], '名称必须与 pvpCard 对齐（样例）');

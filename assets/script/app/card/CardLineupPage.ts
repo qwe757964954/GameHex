@@ -20,6 +20,7 @@ import { CardUnitPreviewAssets } from './CardUnitPreviewAssets';
 import {
     activeBondTitle,
     bondPercentTotal,
+    resolveCardDisplayLevel,
     sortLineupCards,
     visibleIconTallies,
     visibleLineupCards,
@@ -163,6 +164,7 @@ export class CardLineupPage extends Component {
 
     protected onDestroy(): void {
         EventMgr.instance.offTarget(this);
+        this.teamEditButton?.node?.off(Button.EventType.CLICK, this.onTeamEditClick, this);
         this.arenaSlotCache = null;
         this.cancelPreviewLoads();
         this.pendingPreviews.length = 0;
@@ -385,6 +387,9 @@ export class CardLineupPage extends Component {
                 owned: cardRequirement?.owned ?? 0,
                 need: cardRequirement?.need ?? 0,
                 maxed: status.maxed || !status.configured,
+                //  箭头与排序只认这一个字段：碎片与种族经验**同时**够（`evaluateUpgrade` 里
+                //  已把「通用经验 + 兵种经验」合并判过），和升级弹窗的按钮激活同一份结果。
+                upgradeable: status.canUpgrade === true,
             });
         }));
         const sortedCards = sortLineupCards(cards, deployedIds, this.heroLevels, fragments, this.art.lineup,
@@ -449,7 +454,9 @@ export class CardLineupPage extends Component {
         const signature = cards.map((card) => {
             const progress = fragments.get(card.id);
             return `${card.id}:${this.levelOf(card)}:${deployedIds.has(card.id) ? 1 : 0}`
-                + `:${progress?.owned ?? 0}:${progress?.need ?? 0}:${progress?.maxed ? 1 : 0}`;
+                + `:${progress?.owned ?? 0}:${progress?.need ?? 0}:${progress?.maxed ? 1 : 0}`
+                //  经验涨够（碎片没变）时箭头要亮起来 ⇒ 这个标志也必须进指纹。
+                + `:${progress?.upgradeable ? 1 : 0}`;
         }).join('|');
 
         //  两个回调每轮都要重绑：它们闭包捕获本轮的 `cards`，不重绑的话滚动时
@@ -488,11 +495,11 @@ export class CardLineupPage extends Component {
      */
     /** 后端列表已知时，未拥有的卡按 0 级显示；离线预览沿用占位等级。 */
     private levelOf(card: ZCDeckCard): number {
+        if (typeof resolveCardDisplayLevel === 'function') {
+            return resolveCardDisplayLevel(card.id, this.heroLevels, this.heroListKnown, this.fallbackLevel);
+        }
         const level = this.heroLevels.get(card.id);
         if (level !== undefined) return level;
-        // 卡库是全表图鉴（含未拥有的卡）：后端列表已经拿到了、但里面没有这张卡，
-        // 说明玩家没拥有它 → 按 0 级显示（进度条会渲染成 0/10 的空白条）。
-        // 只有后端整个不可用时才退回 `fallbackLevel` 占位，否则离线预览会满屏「0/10」。
         return this.heroListKnown ? 0 : this.fallbackLevel;
     }
 

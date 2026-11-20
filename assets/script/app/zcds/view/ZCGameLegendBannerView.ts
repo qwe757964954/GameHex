@@ -376,7 +376,14 @@ export class ZCGameLegendBannerView extends Component {
         const frame = sprite.spriteFrame;
         // 有 `originalSize` 用它（`_isTrimmedMode = false` 时与 rect 同值，但它是原图尺寸、
         // 不受 trim 影响）；桩 / 老格式兜底再看 `rect`。
-        const height = frame?.originalSize?.height || frame?.rect?.height || 0;
+        let height = 0;
+        if (frame) {
+            if (frame.originalSize && frame.originalSize.height > 0) {
+                height = frame.originalSize.height;
+            } else if (frame.rect && frame.rect.height > 0) {
+                height = frame.rect.height;
+            }
+        }
         const scale = legendRoleScaleOf(height);
         sprite.node.setScale(scale, scale, 1);
     }
@@ -443,15 +450,20 @@ export class ZCGameLegendBannerView extends Component {
         const frames = this.framesFor(reveal.owner);
         this.setSprite(this.bannerSprite, frames.banner);
         this.setSprite(this.ringSprite, frames.ring);
-        this.setSprite(this.roleSprite, this.artResolver?.(reveal) ?? null);
+        const artResolver = this.artResolver;
+        this.setSprite(this.roleSprite, artResolver ? artResolver(reveal) : null);
         // 立绘尺寸只跟「换成了哪张图」有关 ⇒ 跟着内容键一起刷新，不进每帧路径。
         this.applyRoleScale();
-        this.setSprite(this.headSprite, this.portraitResolver?.(reveal.owner) ?? null);
+        const portraitResolver = this.portraitResolver;
+        this.setSprite(this.headSprite, portraitResolver ? portraitResolver(reveal.owner) : null);
         this.titleSprite.node.active = !reveal.monsterClaim;
         this.nameLabel.node.active = !reveal.monsterClaim;
         this.monsterClaimLabel.node.active = reveal.monsterClaim === true;
         if (reveal.monsterClaim) {
-            this.monsterClaimLabel.string = `${this.ownerNames?.get(reveal.owner)?.name ?? reveal.owner}\n${MONSTER_CLAIM_TEXT.defeat} ${reveal.cardName}\n${MONSTER_CLAIM_TEXT.reward}`;
+            const ownerNames = this.ownerNames;
+            const entry = ownerNames ? ownerNames.get(reveal.owner) : undefined;
+            const ownerName = entry && entry.name ? entry.name : reveal.owner;
+            this.monsterClaimLabel.string = `${ownerName}\n${MONSTER_CLAIM_TEXT.defeat} ${reveal.cardName}\n${MONSTER_CLAIM_TEXT.reward}`;
         } else if (this.nameLabel.string !== reveal.cardName) this.nameLabel.string = reveal.cardName;
     }
 

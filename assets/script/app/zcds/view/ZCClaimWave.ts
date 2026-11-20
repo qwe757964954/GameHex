@@ -114,7 +114,8 @@ export class ZCClaimWave {
         for (const hexId of state.plan.entries.keys()) {
             const entityId = this.deps.hexEntityBySource.get(hexId);
             if (entityId === undefined) continue;
-            this.deps.hexViews.get(entityId)?.setClaimWave(null);
+            const view = this.deps.hexViews.get(entityId);
+            if (view) view.setClaimWave(null);
         }
         state.written.clear();
     }
@@ -129,8 +130,11 @@ export class ZCClaimWave {
         // 判 `=== undefined` 而不是 falsy：实体序号自增，"没有"是 undefined，0 只表示"当前没用这个号"。
         const entityId = this.deps.hexEntityBySource.get(hexId);
         if (entityId === undefined) return;
-        this.deps.hexViews.get(entityId)?.setClaimWave({
-            from: entry.fromOwner, to: entry.toOwner, progress,
-        });
+        const view = this.deps.hexViews.get(entityId);
+        if (view) {
+            view.setClaimWave({
+                from: entry.fromOwner, to: entry.toOwner, progress,
+            });
+        }
     }
 }

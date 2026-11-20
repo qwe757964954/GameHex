@@ -4,7 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { CardUnitPreviewAssets } from '../assets/script/app/card/CardUnitPreviewAssets';
-import { sortLineupCards, visibleLineupCards } from '../assets/script/app/card/CardLineupTypes';
+import { resolveCardDisplayLevel, sortLineupCards, visibleLineupCards } from '../assets/script/app/card/CardLineupTypes';
 import { ZCCardType } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { CardLineupUiEvent } from '../assets/script/app/card/CardLineupEvents';
 import { formatPowerText } from '../assets/script/app/card/CardLineupPower';
@@ -96,7 +96,7 @@ function fixture(loadPrefab: (path: string) => Promise<unknown>,
         './CardLineupPower': { formatPowerText },
         './CardUnitPreviewAssets': { CardUnitPreviewAssets: previewAssetsOverride ?? CardUnitPreviewAssets },
         './CardLineupTypes': { visibleIconTallies: () => [], activeBondTitle: () => '', bondPercentTotal: () => 0,
-            sortLineupCards, visibleLineupCards },
+            resolveCardDisplayLevel, sortLineupCards, visibleLineupCards },
         '../../framework/event/EventMgr': { EventMgr: { instance: { offTarget() {}, emit(_event: string, payload: { kind?: string; card?: Card }) {
             if (payload.kind === 'upgrade' && payload.card) upgrades.push(payload.card.id);
         } } } },
@@ -341,10 +341,16 @@ test('未解锁卡（0 级）整卡压暗 + 右上角挂锁，复用回已解锁
     assert.equal(view.lockVeil.active, false, '已解锁要收起压暗遮罩');
     assert.equal(view.levelPlate.active, true);
 
-    // 碎片够了且未满级 ⇒ 可升级箭头显形；满级则收起。
-    view.render(card('ready'), null, false, 3, { owned: 10, need: 10, maxed: false });
-    assert.equal(view.upgradeArrow.active, true, '碎片够了要提示可升级');
-    view.render(card('maxed'), null, false, 3, { owned: 10, need: 0, maxed: true });
+    // 升级按钮激活（碎片与种族经验同时都够）才显形；满级、经验不够都收起。
+    view.render(card('ready'), null, false, 3, { owned: 10, need: 10, maxed: false, upgradeable: true });
+    assert.equal(view.upgradeArrow.active, true, '升级按钮激活时才提示可升级');
+    //  用户 2026-11-20：碎片够了、种族经验还差一截 ⇒ 弹窗按钮是灰的，箭头不能亮。
+    view.render(card('exp-short'), null, false, 3, { owned: 10, need: 10, maxed: false, upgradeable: false });
+    assert.equal(view.upgradeArrow.active, false, '碎片够但种族经验不够时不提示升级');
+    //  碎片数没变、只是经验涨够了 ⇒ 指纹含 `upgradeable`，同一槽位也必须重画成亮箭头。
+    view.render(card('exp-short'), null, false, 3, { owned: 10, need: 10, maxed: false, upgradeable: true });
+    assert.equal(view.upgradeArrow.active, true, '经验补够后箭头要跟着亮，不能被「输入没变」短路吃掉');
+    view.render(card('maxed'), null, false, 3, { owned: 10, need: 0, maxed: true, upgradeable: false });
     assert.equal(view.upgradeArrow.active, false, '满级不再提示升级');
 });
 

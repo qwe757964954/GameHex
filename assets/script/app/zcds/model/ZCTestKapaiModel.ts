@@ -266,6 +266,55 @@ export const EMPTY_TEST_KAPAI_CONFIG: ITestKapaiConfig = {
  * 卡牌与技能快照
  * ------------------------------------------------------------------ */
 
+export class ZCTestKapaiRound {
+    paused = false;
+    private maxHp = 0;
+    private _elapsed = 0;
+    private _totalDamage = 0;
+    private _castCount = 0;
+    private _targetHp = 0;
+
+    get elapsed(): number {
+        return this._elapsed;
+    }
+
+    get totalDamage(): number {
+        return this._totalDamage;
+    }
+
+    get castCount(): number {
+        return this._castCount;
+    }
+
+    get targetHp(): number {
+        return this._targetHp;
+    }
+
+    restart(maxHp: number): void {
+        this.maxHp = maxHp;
+        this._targetHp = maxHp;
+        this._elapsed = 0;
+        this._totalDamage = 0;
+        this._castCount = 0;
+        this.paused = false;
+    }
+
+    advance(dt: number): void {
+        if (!this.paused) this._elapsed += dt;
+    }
+
+    hit(damage: number): { before: number; after: number; broke: boolean } | null {
+        if (this.paused) return null;
+        const before = this._targetHp;
+        const after = Math.max(0, before - damage);
+        const broke = after === 0;
+        this._targetHp = broke ? this.maxHp : after;
+        this._totalDamage += damage;
+        this._castCount += 1;
+        return { before, after, broke };
+    }
+}
+
 export type ZCTestKapaiSkillKind = 'basic' | 'empowered' | 'secondary';
 
 export interface ITestKapaiStat {

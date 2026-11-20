@@ -98,6 +98,31 @@ export function parsePrefabSize(value: unknown, field: string): number {
     return number(value, field);
 }
 
+/**
+ * 结算页立绘位的体型**上限**（`pvpCard.gameEndPrefabSize`）的兜底值：表里留空就用它。
+ *
+ * 为什么结算要单开一列、而不是直接用 `prefabSize`：
+ * `prefabSize` 是给战场 / 阵容校准的 —— 那两条链路按**骨架 canvas 高**归一，
+ * 磁电菇 canvas 1798 里本体只占 980（54.5%），于是要配 1.8 才跟别人一样高。
+ * 而结算立绘位按 **idle 首帧美术包围盒** 归一，本身已经对齐到角色本体，
+ * 同一个 1.8 搬过去就成了实打实放大 1.8 倍（显示高 = 288.9 × 系数，立绘框只有 265）。
+ * ⇒ 结算吃的是「不超过上限」的那个值，上限按卡配在表里，调数值不用改代码。
+ */
+export const GAME_END_PREFAB_SIZE_LIMIT = 1.2;
+
+/**
+ * 结算页实际用的体型系数 = `min(prefabSize, 上限)`。
+ *
+ * 空 ⇒ 兜底上限 {@link GAME_END_PREFAB_SIZE_LIMIT}；填了 0 / 负数 ⇒ 抛错
+ * （同 `parsePrefabSize` 的口径：缩放系数取 0 会让模型凭空消失且不报错）。
+ */
+export function parseGameEndPrefabSize(value: unknown, prefabSize: number, field: string): number {
+    const limit = value === null || value === undefined || value === ''
+        ? GAME_END_PREFAB_SIZE_LIMIT
+        : number(value, field);
+    return Math.min(prefabSize, limit);
+}
+
 export function globalNumber(global: Record<string, unknown>, field: string, min = 0, allowZero = false): number {
     return number(global[field], 'global.' + field, min, allowZero);
 }
@@ -360,6 +385,7 @@ export function parseUnits(
         if (skillId === undefined) throw new Error(`pvpCard.${label}.unitSkillId 缺失（已配 unitPrefabPath=${prefabPath}）`);
         const unitId = text(String(raw.unitId ?? raw.id), `pvpCard.${label}.unitId`);
         if (result.has(unitId)) throw new Error(`pvpCard[].unitId 重复：${unitId}`);
+        const prefabSize = parsePrefabSize(raw.prefabSize, `pvpCard.${label}.prefabSize`);
         const attackProfile = skills.get(skillId);
         if (!attackProfile) throw new Error(`pvpCard.${label}.unitSkillId 未在 PVP 技能表中定义：${skillId}`);
         // 强化那一击的技能行（36000 段）。缺失就当场抛：否则「每 N 次普攻打一次技能特效」
@@ -403,7 +429,10 @@ export function parseUnits(
             prefabPath,
             // 美术等比缩放：表里留空按 1（不缩放）。填了 0 或负数直接抛 ——
             // 那会让单位在战场上凭空消失或上下翻转，比报错难查得多。
-            prefabSize: parsePrefabSize(raw.prefabSize, `pvpCard.${label}.prefabSize`),
+            prefabSize,
+            // 结算立绘位专用的收敛值（≤ `gameEndPrefabSize`）；战场 / 阵容不吃这一列。
+            gameEndPrefabSize: parseGameEndPrefabSize(
+                raw.gameEndPrefabSize, prefabSize, `pvpCard.${label}.gameEndPrefabSize`),
             attackProfile,
             empoweredProfile,
             secondaryProfile,

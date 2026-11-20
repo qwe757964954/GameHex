@@ -61,7 +61,7 @@ export class ZCCombatSystem {
         rules: Readonly<ZCRuntimeRules>,
         skillDamageRate = 1,
     ): number {
-        const tierMultiplier = 1 + (unit.tier - 1) * rules.unitAttackPerTier;
+        const tierMultiplier = this.unitTierAttackMultiplier(unit, rules);
         return Math.round(definition.attack * (unit.neutralReinforcement ? 1 : bonuses.unitAttackMultiplier * tierMultiplier)
             * counterMultiplier * rules.combatDamageMultiplier * skillDamageRate);
     }
@@ -77,8 +77,12 @@ export class ZCCombatSystem {
         rules: Readonly<ZCRuntimeRules>,
         skillDamageRate = 1,
     ): number {
-        const tierMultiplier = 1 + (unit.tier - 1) * rules.unitAttackPerTier;
+        const tierMultiplier = this.unitTierAttackMultiplier(unit, rules);
         return definition.attack * (unit.neutralReinforcement ? 1 : bonuses.unitAttackMultiplier * tierMultiplier) * rules.combatDamageMultiplier * skillDamageRate;
+    }
+
+    static unitTierAttackMultiplier(unit: Pick<ZCUnitState, 'tier'>, rules: Readonly<ZCRuntimeRules>): number {
+        return 1 + (unit.tier - 1) * rules.unitAttackPerTier;
     }
 
     static applyDamage(target: { hp: number }, damage: number): number {

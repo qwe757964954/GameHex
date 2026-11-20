@@ -25,14 +25,16 @@ export function zcBeamCoreWidthOf(spec: IZCBeamSpec, skillId: number | undefined
 }
 
 function beamMultiplierOf(spec: IZCBeamSpec, skillId: number | undefined): number {
-    return skillId === undefined ? 1 : (spec.widthMultiplierBySkill?.[skillId] ?? 1);
+    if (skillId === undefined || !spec.widthMultiplierBySkill) return 1;
+    const mult = spec.widthMultiplierBySkill[skillId];
+    return mult !== undefined ? mult : 1;
 }
 
 /** 这条技能是不是「超长射线」，是的话固定拉多长（视图 px）；0 = 不是。*/
 export function zcBeamOvershootOf(spec: IZCBeamSpec, skillId: number | undefined): number {
-    if (skillId === undefined) return 0;
-    const reach = spec.overShootBySkill?.[skillId] ?? 0;
-    return Number.isFinite(reach) && reach > 0 ? reach : 0;
+    if (skillId === undefined || !spec.overShootBySkill) return 0;
+    const reach = spec.overShootBySkill[skillId];
+    return reach !== undefined && Number.isFinite(reach) && reach > 0 ? reach : 0;
 }
 
 /** 特效路径 → 光束配置。未登记 = `null`（走通用弹道）。*/

@@ -7,6 +7,8 @@ import ts from 'typescript';
 import * as MapMarkerBadge from '../assets/script/app/common/MapMarkerBadge';
 import * as TerritoryChestBubble from '../assets/script/app/territory/model/TerritoryChestBubble';
 import * as TerritoryLevelBubble from '../assets/script/app/territory/model/TerritoryLevelBubble';
+// 巡逻宝箱 4 档模型图（2026-11-20）：纯常量 + 纯函数 ⇒ 给**真模块**，不在桩里抄一份路径拼法。
+import * as TerritoryMonsterBoxSpec from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
 import { BATTLE_BUNDLE, bundleForPath } from '../assets/script/core/asset/BundleCatalog';
 import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 
@@ -55,6 +57,8 @@ async function loadArt(makeAssets: (calls: { loaded: string[]; hasCalls: string[
             if (id.endsWith('/MapMarkerBadge')) return MapMarkerBadge;
             if (id === '../model/TerritoryChestBubble') return TerritoryChestBubble;
             if (id === '../model/TerritoryLevelBubble') return TerritoryLevelBubble;
+            // 巡逻宝箱模型图的路径函数（2026-11-20），与本用例的气泡链路无关 ⇒ 给真模块即可。
+            if (id === '../model/TerritoryMonsterBoxSpec') return TerritoryMonsterBoxSpec;
             // 建筑表走 RefUtil，不是 AssetService；给空表让这轮只验气泡链路。
             if (id === '../../../framework/ref/RefUtil') return {
                 RefUtil: { instance: { getRefAllAsync: async () => ([]) } },

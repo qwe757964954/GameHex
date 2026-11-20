@@ -204,6 +204,45 @@ test('参数不全就不放：触碰伤害为 0 只在投掷形态放行', () =>
         trapContext({ x: 100, y: 0 }, { ...PARAMS, trapExplodeRadius: 0 })), false);
 });
 
+test('投掷段：飞行期间走弧线（中途最高、落地归零），丢的是自己普攻那颗弹体', () => {
+    //  用户口径（2026-11-20）：「蘑菇爆炸没有丢出特效，（弧线飞行落地）的过程」。
+    //  两处补齐：① 飞行段的表现不再借「陷阱凭空出现」，改成这张卡自己的普攻弹体；
+    //           ② 竖直方向按抛物线抬高（只动表现，不动地面坐标）。
+    const caster = unit(1, 'player');
+    const state = snapshot([caster]);
+    const context = trapContext({ x: 100, y: 0 });
+    const projectilePath = 'units/projectiles/冰法师_冰锥/冰法师_冰锥';
+    (context as unknown as { effectiveDefinition: () => { attackProfile: Record<string, unknown> } })
+        .effectiveDefinition().attackProfile.effectPrefabPath = projectilePath;
+    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, context), true);
+    const zone = state.groundZones[0];
+
+    assert.equal(zone.flightVisualPath, projectilePath, '飞行段播的是「丢出去的那个东西」');
+    closeTo(zone.flightTotalSeconds ?? 0, 1.2, '弧线进度要用总时长当分母');
+    closeTo(zone.flightArcPx ?? 0, 92, '峰高按屏上 px 给');
+
+    const context2 = zoneContext([]);
+    //  0.1 秒：刚出手，抬升很小。
+    for (let step = 0; step < 2; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);
+    const early = zone.visualLiftPx ?? 0;
+    assert.ok(early > 0 && early < 40, `刚起飞抬升还小（实际 ${early}）`);
+
+    //  0.6 秒：正中间 ⇒ 抬到峰高。
+    for (let step = 0; step < 10; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);
+    closeTo(zone.visualLiftPx ?? -1, 92, '正中间抬到峰高');
+    //  表现事件要跟着抬（视图就是从事件上取的这一格）。
+    const flightEvent = state.combatEvents.find((event) => event.effectPrefabPath === projectilePath);
+    assert.ok(flightEvent, '飞行段那条持有表现必须建出来');
+    closeTo(flightEvent!.visualLiftPx ?? -1, 92, '事件上的抬升与区域同拍');
+
+    //  落地：抬升归零、地面坐标不受影响。
+    for (let step = 0; step < 14; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);
+    closeTo(zone.flightSeconds ?? -1, 0, '已落地');
+    assert.equal(zone.visualLiftPx, undefined, '落地要把抬升清掉，否则常驻陷阱飘在半空');
+    closeTo(zone.x, 36, '水平位移仍是直线推进（30 世界 px/s × 1.2s）');
+    closeTo(zone.y, 0, '弧线不改地面坐标');
+});
+
 // ────────────────────────────────────────────── 二、飞行段 → 落地 → 静止
 
 test('飞满 1.2 秒就地落地：速度归零、剩下的时间当停留', () => {

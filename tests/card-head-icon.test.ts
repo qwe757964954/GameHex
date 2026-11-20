@@ -199,7 +199,11 @@ test('真表 + 磁盘：pvpCard 的每一行 headIcon 都能解出资源名，�
  * 2026-11-10 退役：当前工程配置表零消费的 15 张民兵种族变体。
  * `pvpCard.headIcon` 与 `monsterCard.headIcon` 全不指向它们；`icon_map.json` 里同名的
  * 3 个 key 走的是 `icons/hero/` 下另一套图，不在 cardHead。名单写死在这里 = 单一真源：
- * 既防止有人把退役图重新导入，也防止拿它当借口放过新漏图。
+ * 防止有人把退役图重新导入 cardHead。
+ *
+ * 2026-11-20：icon.json 里这 15 条连同老端 6 张兵种级头像（`tx_icon_DDB_HMR` 等）已整批清掉，
+ * `exempt` 白名单随之取消（原注释：「策划清掉条目时把名单一起删」）—— 名单现在只剩
+ * 「退役图不得再导入」这一条守卫。
  */
 const RETIRED_CARD_HEAD_ARTS: readonly string[] = [
     'tx_icon_MB_BFS_KULOU', 'tx_icon_MB_BFS_SHOUREN', 'tx_icon_MB_BFS_YUREN',
@@ -207,10 +211,7 @@ const RETIRED_CARD_HEAD_ARTS: readonly string[] = [
     'tx_icon_MB_DDB_KULOU', 'tx_icon_MB_DDB_SHOUREN', 'tx_icon_MB_DDB_YUREN',
     'tx_icon_MB_GB_KULOU', 'tx_icon_MB_GB_SHOUREN', 'tx_icon_MB_GB_YUREN',
     'tx_icon_MB_JXK_KULOU', 'tx_icon_MB_JXK_SHOUREN', 'tx_icon_MB_JXK_YUREN',
-];
-
-/** 老端 army / advisor / monster 独占的 6 张兵种级头像：icon.json 有条目、工程从未导入。 */
-const LEGACY_UNIMPORTED_CARD_HEAD_ARTS: readonly string[] = [
+    // 老端 army / advisor / monster 独占的 6 张兵种级头像（2026-11-20 一并清条目）
     'tx_icon_DDB_HMR', 'tx_icon_FDB_yjl', 'tx_icon_MB_GB',
     'tx_icon_MB_CQB', 'tx_icon_MB_DDB', 'tx_icon_MB_BFS',
 ];
@@ -230,14 +231,11 @@ test('真表 + 守卫：cardHead 目录里的图与 icon.json 的「兵种_头�
         assert.equal(target!.root, ArtPaths.CARD_HEAD_ART_ROOT);
         mapped.add(target!.art);
     }
-    const exempt = new Set([...LEGACY_UNIMPORTED_CARD_HEAD_ARTS, ...RETIRED_CARD_HEAD_ARTS]);
     // 双向对应，不写死条目数：2026-11-06 补 35 张专属立绘时，硬编码的 44 整条漂掉过。
-    assert.deepEqual([...mapped].filter((a) => !onDisk.has(a) && !exempt.has(a)), [],
+    assert.deepEqual([...mapped].filter((a) => !onDisk.has(a)), [],
         'icon.json 里每个在用兵种头像都必须已导入 icons/cardHead（否则那张卡静默留白）');
     assert.deepEqual([...onDisk].filter((a) => !mapped.has(a)), [],
         'cardHead 里不该有没登记的孤立图');
     assert.deepEqual([...RETIRED_CARD_HEAD_ARTS].filter((a) => onDisk.has(a)), [],
         '已退役的民兵种族变体不得再导入 cardHead');
-    assert.deepEqual([...exempt].filter((a) => !mapped.has(a)), [],
-        '豁免名单必须真的还在 icon.json 里；策划清掉条目时把名单一起删，别留永久白名单');
 });

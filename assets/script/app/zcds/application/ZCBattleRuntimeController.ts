@@ -1,6 +1,7 @@
 import { ControllerBase, type IControllerContext, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { ZCGameModel } from '../model/ZCGameModel';
+import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
 import { createSeededRandom } from '../model/ZCSeededRandom';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
@@ -150,6 +151,25 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private logCardAttributes(model: ZCGameModel, config: ZCMatchConfig): void {
         for (const owner of model.owners) {
             const deck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+            if (ZCDC_LOG_DAMAGE_FLOAT) {
+                const loadouts = config.modifiers?.[owner] ?? [];
+                console.info('[伤害飘字][开局攻击]', owner, deck.flatMap(card => {
+                    if (!card.unitId) return [];
+                    const unitId = card.unitId;
+                    const attackModifiers = loadouts
+                        .filter(loadout => loadout.targetUnitId === unitId)
+                        .flatMap(loadout => loadout.typedModifiers.filter(modifier =>
+                            modifier.domain === 'unit' && modifier.statId === 'attack'));
+                    const unitRate = config.unitRates?.[owner]?.[unitId]?.attackRate;
+                    const hasServerOverride = attackModifiers.some(modifier =>
+                        modifier.sourceKind === 'server' && modifier.operation === 'override');
+                    return [{
+                        cardId: card.id, unitId, name: card.name, baseAttack: model.definitionForUnit(unitId).attack,
+                        attackModifiers, appliedRate: unitRate ?? (hasServerOverride ? 1 : config.ownerRates?.[owner]?.attackRate ?? 1),
+                        attack: model.effectiveDefinitionForUnit(owner, unitId).attack,
+                    }];
+                }));
+            }
             console.info('[对局卡牌属性]', owner, JSON.stringify(deck.map((card) => {
                 const definition = card.unitId ? model.effectiveDefinitionForUnit(owner, card.unitId) : null;
                 return {
@@ -347,7 +367,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
             return {
                 owner: card.owner, unitId: card.unitId, cardId: card.cardId,
                 name: definition.name, prefabPath: definition.prefabPath,
-                prefabSize: definition.prefabSize,
+                // 结算立绘位吃的是收敛过的 `gameEndPrefabSize`：`prefabSize` 里含「补画布虚大」
+                // 的那部分（磁电菇 canvas 1798 / 本体 980 ⇒ 1.8），搬到按美术归一的立绘位
+                // 就成了纯放大 1.8 倍，会把 265 高的框撑到 520。
+                prefabSize: definition.gameEndPrefabSize,
                 damage: card.damage, damageTaken: card.damageTaken,
                 level: levels.get(card.owner)?.[card.unitId] ?? 0,
             };

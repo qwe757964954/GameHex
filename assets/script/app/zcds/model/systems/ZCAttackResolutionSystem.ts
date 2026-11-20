@@ -1,5 +1,5 @@
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
-import { cardCounterMultiplier, ZC_ATTACK_TRAITS, ZC_CAMP_TRAITS, ZC_EMPOWERED_FX_SCALE, ZCCombatEventType, type ZCAttackProfile, type ZCCardTraits, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard } from '../ZCCombatCatalog';
+import { cardCounterMultiplier, ZC_ATTACK_TRAITS, ZC_CAMP_TRAITS, ZC_EMPOWERED_FX_SCALE, ZCCombatEventType, type ZCAttackProfile, type ZCCardTraits, type ZCCounterRule, type ZCDeckBonuses, type ZCDeckCard, type ZCUnitDefinition } from '../ZCCombatCatalog';
 import { zcCombatEffectTravelSeconds } from '../ZCCombatEffectFlight';
 import {
     ZC_SELF_AURA_EFFECT_PREFAB_PATH, ZC_SELF_AURA_BEHAVIOR_KEY, zcSelfAuraEffectPath,
@@ -34,6 +34,7 @@ import {
 } from '../ZCTrapFx';
 import { missileLog } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLog, skillCastLogChanging, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
+import { ZCDC_LOG_DAMAGE_FLOAT } from '../../ZCDCLogSwitch';
 import type {
     ZCCombatEvent, ZCCombatFloatTextKind, ZCCombatTarget, ZCFloatText,
     ZCHexState, ZCProjectileState, ZCSnapshot, ZCUnitState
@@ -68,6 +69,27 @@ const ZC_LANCE_DEFAULT_PIERCE_COUNT = 3;
 const ZC_LANCE_DEFAULT_SPEED = 700;
 /** 没有专属投枪美术时的占位弹体（可在行参数里用 `lanceEffectPrefabPath` 覆盖）。 */
 export const ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH = 'units/projectiles/子弹_新怪物/通用箭矢';
+
+/**
+ * 三叶小丑「飓风」102004 的入场起点占比（2026-11-20 第 28 批）。
+ *
+ * 用户原话「初始生成的大小只有 10%，随着移动过程逐渐成长」⇒ 出生那一眼就是 10%，
+ * 飞到目标时正好长满（`growSeconds` 取直线赶路耗时）。只在**有赶路段**时才写进区域：
+ * 没有目标的原地生成保持老口径（0.2s 从 0 长起来），存量表现逐字不变。
+*/
+const ZC_STORM_GROW_FROM = 0.1;
+
+/**
+ * 投掷陷阱飞行段的**弧线峰高**（屏上 px，2026-11-20）。
+ *
+ * 用户口径「蘑菇爆炸没有丢出特效（弧线飞行落地）的过程」。位移判定仍是地面直线，
+ * 弧线只落在表现层的竖直抬升上（`ZCGroundZoneSystem.settleFlight` 每帧刷
+ * `visualLiftPx = 4h·p·(1-p)`）—— 起飞与落地都是 0、中途最高。
+ *
+ * 取值：120 逻辑 px ≈ 92 屏上 px，与一格地砖差不多高，「看得出扔出去了」又不至于飞出屏幕。
+ * 注意这一格是**屏上 px**（视图直接加在 `mapToViewY` 之后），不是表值。
+*/
+const ZC_TRAP_FLIGHT_ARC_PX = 92;
 
 /**
  * 打城墙/打建筑的出手方。用坐标壳而非整只 `ZCUnitState`：投射物离手后施法者可能已被移除。
@@ -364,6 +386,23 @@ export class ZCAttackResolutionSystem {
         return unit.neutralReinforcement ? context.neutralSkillRuntime ?? this.emptySkillRuntime : context.skillRuntime[unit.owner];
     }
 
+    private static skillRuntimeOf(
+        unit: ZCUnitState,
+        skillId: number,
+        context: IZCAttackResolutionContext,
+    ): ZCSkillRuntimeDefinition | undefined {
+        return this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${skillId}`);
+    }
+
+    private static skillParamsOf(
+        unit: ZCUnitState,
+        skillId: number,
+        context: IZCAttackResolutionContext,
+    ): Readonly<Record<string, number>> | undefined {
+        const runtime = this.skillRuntimeOf(unit, skillId, context);
+        return runtime ? runtime.parameters : undefined;
+    }
+
     private static cardById(context: IZCAttackResolutionContext, owner: ZCOwner, id: string): ZCDeckCard | undefined {
         return context.cards[owner].get(id);
     }
@@ -394,7 +433,7 @@ export class ZCAttackResolutionSystem {
             : (targetCardId ? this.statPatchOf(context, targetOwner, targetCardId) : this.emptyStatPatch);
         return base * zcSkillCounterMultiplier(
             this.unitStatPatchOf(unit, context), defenderPatch,
-            attackerCard?.traits, defenderCard?.traits);
+            attackerCard ? attackerCard.traits : undefined, defenderCard ? defenderCard.traits : undefined);
     }
 
     /**
@@ -430,13 +469,18 @@ export class ZCAttackResolutionSystem {
     }
 
     private static targetOwner(state: ZCSnapshot, target: ZCCombatTarget, context: IZCAttackResolutionContext): ZCOwner {
-        if (target.kind === 'unit') return context.unitById.get(target.id)?.owner ?? ZCOwner.Enemy;
+        if (target.kind === 'unit') {
+            const unit = context.unitById.get(target.id);
+            return unit ? unit.owner : ZCOwner.Enemy;
+        }
         const hex = this.hex(state, target.id);
+        if (!hex) return ZCOwner.Enemy;
         // 出生格的阵营不能参与中立野怪的克制结算。
-        if (hex && neutralResourceItemOf(hex.neutralResourceId)?.resourceType === ZCNeutralResourceType.Monster) {
+        const resourceItem = neutralResourceItemOf(hex.neutralResourceId);
+        if (resourceItem && resourceItem.resourceType === ZCNeutralResourceType.Monster) {
             return ZCOwner.Enemy;
         }
-        const owner = hex?.owner;
+        const owner = hex.owner;
         return owner && owner !== 'neutral' ? owner : ZCOwner.Enemy;
     }
 
@@ -462,12 +506,35 @@ export class ZCAttackResolutionSystem {
         //  status 域的同一层（2026-10-30 僵尸「嗜血」100703）：限时增益只能落在状态上，
         //  而 unit 域补丁是常驻的 —— 两者口径相同、各自缺省 0 ⇒ 存量伤害逐字不变。
         const statusMultiplier = 1 + (context.statusSystem.statModsOf(String(unit.id)).damageRatePct ?? 0) / 100;
+        const counterMultiplier = this.counterMultiplierFor(unit, targetOwner, targetCardId, context, targetUnitId);
         const damage = ZCCombatSystem.unitDamage(unit, definition, bonuses,
             //  克制只在这里乘一次：全局克制 × 技能级克制条（见 `counterMultiplierFor`）
-            this.counterMultiplierFor(unit, targetOwner, targetCardId, context, targetUnitId),
+            counterMultiplier,
             context.rules,
             skillDamageRate * Math.max(0, rawMultiplier) * Math.max(0, statusMultiplier));
-        return Math.max(1, Math.round(damage * (unit.attackMultiplier ?? 1)));
+        const resolvedDamage = Math.max(1, Math.round(damage * (unit.attackMultiplier ?? 1)));
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][攻击计算]', {
+                ...this.attackLogFields(unit, definition, context),
+                targetOwner, targetCardId, targetId: targetUnitId, skillDamageRate, counterMultiplier,
+                damageRateMultiplier: Math.max(0, rawMultiplier), statusDamageMultiplier: Math.max(0, statusMultiplier),
+                damageBeforeUnitMultiplier: damage, resolvedDamage,
+            });
+        }
+        return resolvedDamage;
+    }
+
+    private static attackLogFields(unit: ZCUnitState, definition: ZCUnitDefinition, context: IZCAttackResolutionContext) {
+        const status = context.statusSystem.statModsOf(String(unit.id));
+        return {
+            sourceId: unit.id, sourceCardId: unit.cardId, unitId: unit.unitId, owner: unit.owner,
+            attack: definition.attack, inheritedAttack: unit.inheritedStats ? unit.inheritedStats.attack : undefined,
+            gateDamageMultiplier: unit.gateSize ? (unit.gateDamageMultiplier ?? 1) : 1,
+            statusAttackFlat: status.attackFlat ?? 0, statusAttackPct: status.attackPct ?? 0,
+            tier: unit.tier, tierMultiplier: unit.neutralReinforcement ? 1 : ZCCombatSystem.unitTierAttackMultiplier(unit, context.rules),
+            bondMultiplier: unit.neutralReinforcement ? 1 : context.deckBonuses[unit.owner].unitAttackMultiplier,
+            globalMultiplier: context.rules.combatDamageMultiplier, unitAttackMultiplier: unit.attackMultiplier ?? 1,
+        };
     }
 
     /**
@@ -482,7 +549,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext, spreadRate = 1): void {
         const ratio = this.lifestealRatioOf(source, context) * Math.max(0, Math.min(1, spreadRate));
         if (!(ratio > 0)) return;
-        const dealt = hitText?.value ?? 0;
+        const dealt = hitText ? (hitText.appliedDamage ?? hitText.value) : 0;
         if (!(dealt > 0)) return;
         context.healUnit(source, dealt * ratio);
     }
@@ -496,8 +563,8 @@ export class ZCAttackResolutionSystem {
     */
     private static lifestealSpreadRateOf(unit: ZCUnitState, context: IZCAttackResolutionContext): number {
         const skillId = context.effectiveDefinition(unit).attackProfile.skillId;
-        const params = context.skillRuntime[unit.owner].get(`${unit.unitId}:${skillId}`)?.parameters;
-        const value = params?.lifestealSpreadRate;
+        const params = this.skillParamsOf(unit, skillId, context);
+        const value = params ? params.lifestealSpreadRate : undefined;
         if (value === undefined || !Number.isFinite(value)) return 1;
         return Math.max(0, Math.min(1, value));
     }
@@ -508,8 +575,8 @@ export class ZCAttackResolutionSystem {
     */
     private static lifestealRatioOf(unit: ZCUnitState, context: IZCAttackResolutionContext): number {
         const skillId = context.effectiveDefinition(unit).attackProfile.skillId;
-        const params = this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${skillId}`)?.parameters;
-        const fromParams = params?.lifestealRate ?? this.unitStatPatchOf(unit, context).lifestealRate ?? 0;
+        const params = this.skillParamsOf(unit, skillId, context);
+        const fromParams = (params && params.lifestealRate) ?? (this.unitStatPatchOf(unit, context).lifestealRate ?? 0);
         //  状态域的同名比例（2026-10-30 僵尸「嗜血」100703）：吸血是限时的，只能挂在状态上。
         //  与上面那层相加而不是择一 —— 常驻吸血 + 开嗜血时临时加吸血，两个来源都该吃。
         //  缺省 0 ⇒ 存量单位比例不变。
@@ -547,11 +614,9 @@ export class ZCAttackResolutionSystem {
         if (extraHits <= 0) return 0;
         //  🔴 参数袋的键是 `${卡牌 id}:${技能 id}`（`unit.unitId`），不是场上实例的 `unit.id` ——
         //  传错的话查不到 `comboDamage`，会静默退回「满伤害不递减」，看起来像「配了没生效」。
-        const params = unit
-            ? context.skillRuntime[unit.owner].get(`${unit.unitId}:${skillId}`)?.parameters
-            : undefined;
-        const first = Math.max(0, Math.min(100, params?.comboDamage ?? 100)) / 100;
-        const falloff = Math.max(0, Math.min(1, params?.comboFalloff ?? 0));
+        const params = unit ? this.skillParamsOf(unit, skillId, context) : undefined;
+        const first = Math.max(0, Math.min(100, (params && params.comboDamage) ?? 100)) / 100;
+        const falloff = Math.max(0, Math.min(1, (params && params.comboFalloff) ?? 0));
         let total = 0;
         for (let index = 0; index < extraHits; index += 1) total += first * Math.pow(1 - falloff, index);
         return total;
@@ -570,8 +635,8 @@ export class ZCAttackResolutionSystem {
      */
     private static lanceBeatOf(unit: ZCUnitState, skillRuntime: ZCSkillRuntimeDefinition | undefined,
         empowered: boolean): boolean {
-        if (empowered) return false;
-        const every = Math.max(0, Math.round(skillRuntime?.parameters.lanceEvery ?? 0));
+        if (empowered || !skillRuntime) return false;
+        const every = Math.max(0, Math.round(skillRuntime.parameters.lanceEvery ?? 0));
         if (every <= 0) return false;
         return (unit.completedAttackCount ?? 0) % every === 0;
     }
@@ -590,11 +655,11 @@ export class ZCAttackResolutionSystem {
      */
     private static lanceProfileOf(base: ZCAttackProfile,
         skillRuntime: ZCSkillRuntimeDefinition | undefined): ZCAttackProfile {
-        const params = skillRuntime?.parameters;
+        const params = skillRuntime ? skillRuntime.parameters : undefined;
         return {
             ...base,
             mode: ZCCombatEventType.Projectile,
-            projectileSpeed: Math.max(1, params?.lanceSpeed ?? ZC_LANCE_DEFAULT_SPEED),
+            projectileSpeed: Math.max(1, (params ? params.lanceSpeed : undefined) ?? ZC_LANCE_DEFAULT_SPEED),
             effectPrefabPath: ZC_LANCE_DEFAULT_EFFECT_PREFAB_PATH,
             onHitStatusId: undefined,
             impactEffectPrefabPath: undefined,
@@ -689,8 +754,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters || !(Math.max(0, parameters.secondaryCooldown ?? 0) > 0)) return false;
         //  上面这道守卫要求 `secondaryCooldown > 0`，而 runtime 缺失时读到的是 0 ⇒ 此处 `parameters` 必存在。
         const activeProfile = definition.secondaryProfile;
@@ -717,18 +781,17 @@ export class ZCAttackResolutionSystem {
         //  不加闸门的话「同一张卡另一条技能的眩晕/易伤」会被副轨顺手一起打出去。
         //  缺省 0 ⇒ 既有副轨（椰蛋战士「横扫」）行为逐字不变。
         const appliesHitStatus = (parameters.secondaryAppliesHitStatus ?? 0) > 0;
+        const runtime = this.skillRuntimeOf(unit, profile.skillId, context);
         const onHitStatusId = appliesHitStatus
-            ? (this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${profile.skillId}`)?.statusId
-                ?? activeProfile.onHitStatusId)
+            ? ((runtime ? runtime.statusId : undefined) ?? activeProfile.onHitStatusId)
             : activeProfile.onHitStatusId;
         const targetOwner = this.targetOwner(state, target, context);
+        const targetUnitId = target.kind === 'unit' ? target.id : undefined;
         const criticalMultiplier = this.criticalMultiplier(unit, context);
         const damage = Math.round(this.unitDamage(context, unit, targetOwner, target.cardId, skillDamageRate,
-            target.kind === 'unit' ? target.id : undefined)
-            * criticalMultiplier);
+            targetUnitId) * criticalMultiplier);
         const counterMultiplier = this.counterMultiplierFor(
-            unit, this.targetOwner(state, target, context), target.cardId, context,
-            target.kind === 'unit' ? target.id : undefined);
+            unit, targetOwner, target.cardId, context, targetUnitId);
         const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
         state.combatEvents.push({
             id: state.nextCombatEventId++,
@@ -794,7 +857,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const runtime = this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${profile.skillId}`);
+        const runtime = this.skillRuntimeOf(unit, profile.skillId, context);
         if (!runtime || !runtime.parameters) return false;
         const parameters = runtime.parameters;
         const radius = Math.max(0, parameters.auraRadius ?? 0) * context.rules.combatDistanceScale;
@@ -832,15 +895,13 @@ export class ZCAttackResolutionSystem {
             return false;
         }
         const targetOwner = target ? this.targetOwner(state, target, context) : unit.owner;
-        const targetCardId = target?.cardId ?? null;
+        const targetCardId = target ? target.cardId : null;
+        const targetUnitId = target && target.kind === 'unit' ? target.id : undefined;
         const criticalMultiplier = this.criticalMultiplier(unit, context);
         const damage = Math.round(
-            this.unitDamage(context, unit, targetOwner, targetCardId, damageRate,
-                target?.kind === 'unit' ? target.id : undefined) * criticalMultiplier);
+            this.unitDamage(context, unit, targetOwner, targetCardId, damageRate, targetUnitId) * criticalMultiplier);
         const counterMultiplier = target
-            ? this.counterMultiplierFor(
-                unit, this.targetOwner(state, target, context), target.cardId, context,
-                target.kind === 'unit' ? target.id : undefined)
+            ? this.counterMultiplierFor(unit, this.targetOwner(state, target, context), target.cardId, context, targetUnitId)
             : 1;
         const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
         //  波数向下取整再加一：`auraSeconds = 4` / `interval = 1` ⇒ 4 波（立刻一波 + 3 波），
@@ -947,7 +1008,7 @@ export class ZCAttackResolutionSystem {
                 type: ZCCombatEventType.Area,
                 owner: unit.owner,
                 sourceUnitId: unit.id,
-                targetUnitId: target?.kind === 'unit' ? target.id : null,
+                targetUnitId,
                 skillId: profile.skillId,
                 skillName: profile.name,
                 effectKey: null,
@@ -974,7 +1035,7 @@ export class ZCAttackResolutionSystem {
                     : '')
                 + `，${seconds}s × 每 ${interval}s = ${waves} 波，单跳 ${damage}，`
                 + (atTargetPoint
-                    ? `落点在受击目标 #${target?.kind === 'unit' ? target.id : '?'}`
+                    ? `落点在受击目标 #${targetUnitId ?? '?'}`
                         + ` (${atTargetPoint.x.toFixed(1)}, ${atTargetPoint.y.toFixed(1)})、不跟随本体`
                     : (follow
                         ? (followForward > 0 ? `跟随本体 #${unit.id}、身前 ${followForward.toFixed(1)} 世界px` : `跟随本体 #${unit.id}`)
@@ -993,8 +1054,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`bolt-params:${unit.id}`, '施法',
@@ -1137,8 +1197,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) {
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`chain-params:${unit.id}`, '施法',
@@ -1350,10 +1409,9 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const runtime = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`);
-        const parameters = runtime?.parameters;
-        if (!parameters) return false;
+        const runtime = this.skillRuntimeOf(unit, profile.skillId, context);
+        if (!runtime) return false;
+        const parameters = runtime.parameters;
         //  爆炸附带的中毒（101704）：id 走计划行的 `statusId` 列（与 `castBurstSkill` 同口径），
         //  秒数走 `trapStatusSeconds`。不带这个前缀的裸 `statusId` 不进参数袋 ——
         //  `skillParamJson` 是「一卡一袋」，塞进去会串到同卡其他技能。
@@ -1392,23 +1450,22 @@ export class ZCAttackResolutionSystem {
         //  陷阱是「布置时灌注的能量」，不是「每次踩都重新掷一次骰」。
         const target = context.currentTarget(unit);
         const targetOwner = target ? this.targetOwner(state, target, context) : unit.owner;
-        const targetCardId = target?.cardId ?? null;
+        const targetCardId = target ? target.cardId : null;
+        const targetUnitId = target && target.kind === 'unit' ? target.id : undefined;
         const criticalMultiplier = this.criticalMultiplier(unit, context);
         const counterMultiplier = target
-            ? this.counterMultiplierFor(
-                unit, this.targetOwner(state, target, context), target.cardId, context,
-                target.kind === 'unit' ? target.id : undefined)
+            ? this.counterMultiplierFor(unit, targetOwner, targetCardId, context, targetUnitId)
             : 1;
         const floatTextKind = damageFloatTextKind(criticalMultiplier > 1, counterMultiplier);
         //  触碰伤害允许为 0（101704 蘑菇爆炸：踩响只是引爆）。这里必须**显式跳过计算**：
         //  `unitDamage(…, 0)` 会按「伤害至少 1 点」兜底，白给一个 1 点伤害 + 一条「-1」飘字。
         const contactDamage = contactRate > 0
             ? Math.round(this.unitDamage(context, unit, targetOwner, targetCardId, contactRate,
-                target?.kind === 'unit' ? target.id : undefined) * criticalMultiplier)
+                targetUnitId) * criticalMultiplier)
             : 0;
         const explodeDamage = Math.round(
             this.unitDamage(context, unit, targetOwner, targetCardId, explodeRate,
-                target?.kind === 'unit' ? target.id : undefined) * criticalMultiplier);
+                targetUnitId) * criticalMultiplier);
 
         const origin = context.unitPosition(unit);
         //  放置点：设计案原文是「原地坐标」⇒ 缺省就压在脚下（`trapForward` 缺省 0）。
@@ -1445,10 +1502,20 @@ export class ZCAttackResolutionSystem {
             //  常驻表现（`idle` 循环）跟着区域走，位置由 `syncHoldVisual` 每帧同步。
             effectPrefabPath: ZC_TRAP_IDLE_PREFAB_PATH,
             holdVisual: true,
-            //  投掷段：飞行那 2 秒播的是「生成」（`科学家_陷阱_出现`），落地才换成上面的
-            //  `idle`。换挡由 `ZCGroundZoneSystem.settleFlight` 在落地那一刻做（摘掉飞行段
+            //  投掷段：飞行期间播的是「抛出去的那个东西」，落地才换成常驻的 `idle`。
+            //  换挡由 `ZCGroundZoneSystem.settleFlight` 在落地那一刻做（摘掉飞行段
             //  那条事件 → 下一帧按 `effectPrefabPath` 重建）。
-            flightVisualPath: flying ? ZC_TRAP_SPAWN_PREFAB_PATH : undefined,
+            //  🔴 飞行段用**这张卡自己的普攻弹体**（2026-11-20）：蘑菇爆炸原先借用
+            //  `科学家_陷阱_出现`（一张「陷阱凭空出现」的动画），看起来不像「丢出去」。
+            //  用自己的弹体既贴合「扔出去一个东西」，也自动跟着卡换皮、不用再单独登记资源
+            //  （普攻弹体本来就在资源计划里）。没配弹体才退回陷阱生成图。
+            flightVisualPath: flying
+                ? (profile.effectPrefabPath || ZC_TRAP_SPAWN_PREFAB_PATH)
+                : undefined,
+            //  抛掷弧线（2026-11-20）：`flightTotalSeconds` 给进度分母、`flightArcPx` 给峰高，
+            //  `settleFlight` 每帧把 `visualLiftPx` 刷成抛物线 —— 只改竖直表现，不动地面坐标。
+            flightTotalSeconds: flying ? flightSeconds : undefined,
+            flightArcPx: flying ? ZC_TRAP_FLIGHT_ARC_PX : undefined,
             //  生成动画先播 0.4s，常驻光环推后出场 —— 两段美术，同帧会双影。
             //  投掷形态不需要这段延迟：飞行段自己就是「生成」，落地那一拍要立刻接上常驻。
             visualDelaySeconds: flying ? 0 : ZC_TRAP_SPAWN_SECONDS,
@@ -1488,7 +1555,7 @@ export class ZCAttackResolutionSystem {
                 type: ZCCombatEventType.Area,
                 owner: unit.owner,
                 sourceUnitId: unit.id,
-                targetUnitId: target?.kind === 'unit' ? target.id : null,
+                targetUnitId: targetUnitId ?? null,
                 skillId: profile.skillId,
                 skillName: profile.name,
                 effectKey: null,
@@ -1538,8 +1605,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext, slowStatusId?: string): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const damageRate = Math.max(0, parameters.shotDamageRate ?? 0);
         const splashTable = Math.max(0, parameters.shotRadius ?? 0);
@@ -1614,8 +1680,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const damageRate = Math.max(0, parameters.windDamageRate ?? 0);
         const speedTable = Math.max(0, parameters.windSpeed ?? 0);
@@ -1729,8 +1794,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const damageRate = Math.max(0, parameters.barrageDamageRate ?? 0);
         const radiusTable = Math.max(0, parameters.barrageRadius ?? 0);
@@ -1887,7 +1951,7 @@ export class ZCAttackResolutionSystem {
                 projectile.sourceUnitId, hitText);
             context.applyHitStatus(victim, projectile.onHitStatusId, projectile.sourceUnitId);
         }
-        if (zcSkillCastWatched(String(context.unitById.get(projectile.sourceUnitId)?.unitId ?? ''))) {
+        if (zcSkillCastWatched(shooter ? shooter.unitId : '')) {
             skillCastLogChanging(`barrage-boom:${projectile.id}`, '施法',
                 `连射导弹在落点引爆：半径 ${radius.toFixed(1)}（世界 px）、命中 ${hit} 人`);
         }
@@ -1918,8 +1982,9 @@ export class ZCAttackResolutionSystem {
         lane: 'burst' | 'venom' = 'burst'): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const runtime = this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${profile.skillId}`);
-        const parameters = runtime?.parameters;
+        const runtime = this.skillRuntimeOf(unit, profile.skillId, context);
+        if (!runtime) return false;
+        const parameters = runtime.parameters;
         //  参数前缀分车道（2026-11-18 第 17 批）：诅咒菇 68018 同时挂着「菌核爆裂 101804」
         //  和「毒液喷吐 101803」，`skillParamJson` 按 `${unitId}:${pvpSkillId}` 合并成一袋
         //  ⇒ 两条技能都叫 `burstRadius` 会互相覆盖。所以毒液喷吐整条用 `venom*`，
@@ -2064,8 +2129,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const damageRate = Math.max(0, parameters.roarDamageRate ?? 0);
         const radiusTable = Math.max(0, parameters.roarRadius ?? 0);
@@ -2200,6 +2264,15 @@ export class ZCAttackResolutionSystem {
      *     「把人往射手身上拽」，而设计要的是往**风心**拽。
      *  3. **场上没有敌人也不拒放**：区域活 6~8 秒，敌人走过来照样挨打、照样被拽，
      *     这与「一次性爆发打空气」不是一回事（怒吼 102304 那种才需要拒放省 CD）。
+     *  4. **先从本体飞到目标，落地再开始读秒**（2026-11-20 第 28 批，用户原话「没有从卡牌
+     *     本体移动到目标的过程…改成和卡牌的移速一样，初始生成的大小只有 10%，随着移动
+     *     过程逐渐成长」）：出生点仍是本体脚下，但挂 `approachSpeed = 卡牌面板移速`
+     *     （`unitMoveSpeed`，**世界 px/s，不再乘 `combatDistanceScale`** —— 它和
+     *     `ZCMovementSystem.speedOf` 同一个口径）飞向 `currentTarget`，`arriveWander`
+     *     让它在到点后交还给随机游走。赶路期 `isApproaching` 为真 ⇒ 不读秒、不打波次，
+     *     所以 `stormSeconds` 是「落地后再活 N 秒」，赶路时间不吃它的寿命。
+     *     这份成长只覆盖画面：`growSeconds` 取「直线赶路耗时」、`growFrom` 取 0.1。
+     *     没有活目标（或在打墙/建筑）⇒ 退回老口径：就在本体脚下生成、不长距离飞行。
      *
      * 伤害按**施放那一刻的克制关系**烘一次：区域每 0.5 秒打的是不同的人，逐个算克制会让
      * 同一个 `zone.damage` 每波都不同（区域只存一个标量），所以与 101303 的飓风同一口径。
@@ -2210,8 +2283,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const scale = Math.max(1e-6, context.rules.combatDistanceScale);
         const radiusTable = Math.max(0, parameters.stormRadius ?? 0);
@@ -2237,6 +2309,33 @@ export class ZCAttackResolutionSystem {
         const turnSeconds = Math.max(0.05, parameters.stormTurnSeconds ?? 1);
         const pullSpeed = Math.max(0, parameters.stormPullSpeed ?? 0) * scale;
         const pullRadius = Math.max(0, parameters.stormPullRadius ?? 0) * scale;
+        //  投送段（方法头第 4 条）：从本体脚下出发、用**卡牌面板移速**飞向当前目标。
+        //  `moveSpeed` 已经是世界 px/s（`ZCMovementSystem.speedOf` 直接 `moveSpeed * dt`），
+        //  🔴 不能再乘 `combatDistanceScale` —— 乘了就是每秒 8.4px 的蜗牛（配表那 10px/秒
+        //  的游走速度正是这么来的，也是用户「看起来没动」的根因）。
+        const travelSpeed = Math.max(0, definition.moveSpeed);
+        const lock = context.currentTarget(unit);
+        //  只追**单位**：调色板里还有墙 / 建筑，那两种没有 `approachTargetId` 可追，
+        //  硬追会让区域一路飞到城墙脚下再定住（那里一个敌人都没有）。
+        const lockedTarget = lock && lock.kind === 'unit' && lock.id > 0 ? lock : null;
+        //  🔴 锁定目标不是活单位时自己再找一次（2026-11-20 修「一加闸门就不飞了」）：
+        //  触发闸门 `release` 走 `ZCUnitTargeting.hasTargetInAttackRange` —— 锁不上就**全表扫**
+        //  射程内有没有活敌；而 `currentTarget` 读的是 `targetUnitId`，那个锁要等这一拍的
+        //  攻击流程跑完才写。闸门恰好会在「敌人刚进圈的第一帧」放行，那一帧常常还没锁定
+        //  （或锁的还是城墙）⇒ 投送段拿不到可追的单位、退回原地生成，画面上就是
+        //  「有目标了反而长在脚下一动不动」。这里按**同一套射程口径**重扫一遍，
+        //  让「闸门放行 ⇒ 必有落点」这条不变量闭合。
+        const chaseTarget = lockedTarget ?? this.stormDeliveryTarget(unit, origin, context, definition, scale);
+        //  到达容差 = 风半径的 1/4。取 0 会「永远差半步」（目标每帧都在走，而 `advanceChase`
+        //  每步都被 clamp 到当时的目标点），取整个半径又会让贴脸的目标直接跳过赶路段、
+        //  看不见飞行。四分之一的半径刚好是「风已经罩住目标」的那一圈。
+        const arriveRange = radiusTable * scale * 0.25;
+        const canTravel = chaseTarget ? travelSpeed > 0 : false;
+        //  画面成长时长 = 直线赶路耗时。目标半路改向 / 阵亡只会让风**提前**长满，不会缩回去 ——
+        //  视觉只负责「边飞边长大」，不参与判定，所以不值得为它每帧重算。
+        const travelSeconds = chaseTarget && travelSpeed > 0
+            ? Math.max(0, Math.hypot(chaseTarget.x - origin.x, chaseTarget.y - origin.y) - arriveRange) / travelSpeed
+            : 0;
         state.groundZones.push({
             x: origin.x,
             y: origin.y,
@@ -2249,7 +2348,17 @@ export class ZCAttackResolutionSystem {
             //  整段一条长效表现跟着风心走：不这么设的话，每 0.5 秒一波会在身后拖出一串
             //  定格的龙卷风（移动区域的通病，见 `syncHoldVisual` 的注释）。
             holdVisual: true,
-            growSeconds: 0.2,
+            //  入场「由小变大」（2026-11-20）：有赶路段就从 10% 起步、飞到目标正好长满；
+            //  没有赶路段（无活目标 / 目标贴脸）退回老口径 0.2s 从 0 长起来。
+            growSeconds: travelSeconds > 0.05 ? travelSeconds : 0.2,
+            growFrom: travelSeconds > 0.05 ? ZC_STORM_GROW_FROM : undefined,
+            //  投送段：飞到目标、到点交还游走（`arriveWander`，见区域系统 `releaseToWander`）。
+            //  赶路期 `isApproaching` 为真 ⇒ 不读秒、不打波次，所以 `stormSeconds` 是
+            //  「落地后再活 N 秒」，赶路时间不吃它的寿命。
+            approachSpeed: canTravel ? travelSpeed : undefined,
+            approachTargetId: chaseTarget && canTravel ? chaseTarget.id : undefined,
+            sprintRange: arriveRange,
+            arriveWander: canTravel ? true : undefined,
             remainingSeconds: seconds,
             //  波次数 = 存活秒 ÷ 间隔：`resolveWave` 每 `waveInterval` 打一次，
             //  打满就散场；`remainingSeconds` 同时读秒，两边任一先到都收。
@@ -2266,13 +2375,67 @@ export class ZCAttackResolutionSystem {
             pullRadius: pullRadius > 0 ? pullRadius : undefined,
         });
         if (zcSkillCastWatched(unit.unitId)) {
+            const travelLog = chaseTarget && canTravel
+                ? `投送 目标#${chaseTarget.id} @ ${travelSpeed} 世界 px/s（面板移速，约 `
+                    + `${travelSeconds.toFixed(2)}s 抵达，入场 ${ZC_STORM_GROW_FROM * 100}% → 100%）`
+                : '投送 无活目标 ⇒ 原地生成、不走赶路段';
             skillCastLogChanging(`storm-cast:${unit.id}`, '施法',
                 `${unit.unitId}#${unit.id} 放出飓风【${profile.name}】：半径 ${radiusTable} 表值 px、`
                 + `${seconds}s / 每 ${interval}s 一跳、单跳 ${damage}、`
                 + `游走 ${(parameters.stormWanderSpeed ?? 0)} 表值 px/s（每 ${turnSeconds}s 换向）、`
-                + `牵引 ${(parameters.stormPullSpeed ?? 0)} 表值 px/s @ ${(parameters.stormPullRadius ?? 0)} 表值 px`);
+                + `牵引 ${(parameters.stormPullSpeed ?? 0)} 表值 px/s @ ${(parameters.stormPullRadius ?? 0)} 表值 px、`
+                + travelLog);
         }
         return true;
+    }
+
+    /**
+     * 投送段的目标兜底：锁定目标不是**活着的单位**时，自己在普攻射程内挑最近的敌人。
+     *
+     * 为什么要有（2026-11-20 用户实测「改成等目标之后，飓风又不会移动了」）：
+     * 触发闸门 `release` 取自 `ZCUnitTargeting.hasTargetInAttackRange` —— 它先看锁定目标，
+     * 锁不上就**全表扫一遍**射程内有没有活敌；而 `currentTarget` 读的是 `unit.targetUnitId`，
+     * 那个锁要等这一拍的攻击流程跑完才写。闸门恰好会在「敌人刚进圈的第一帧」放行，那一帧
+     * 往往还没锁定（或锁的还是城墙）⇒ 投送段拿不到可追的单位，退回「原地生成 + 0.2s 从 0 长起」，
+     * 画面上就是一片长在施法者脚下、一动不动的风。
+     *
+     * 判据与闸门的扫描分支**逐条对齐**，否则又会出现「闸门说有人 / 投送说没人」：
+     * 跳过自己与同阵营、跳过尸体、跳过「卡打不了空却来了飞行单位」，射程用
+     * `ZCTargetingSystem.attackReach`（= (普攻射程 + 目标半径 × 0.5) × `combatDistanceScale`）。
+     *
+     * 射程外的一律不追：宁可就地生成，也不要让一片风斜穿半张地图去追一个够不着的目标。
+    */
+    private static stormDeliveryTarget(
+        unit: ZCUnitState,
+        origin: { readonly x: number; readonly y: number },
+        context: IZCAttackResolutionContext,
+        definition: ZCUnitDefinition,
+        scale: number,
+    ): ZCCombatTarget | null {
+        let bestId = 0;
+        let bestX = 0;
+        let bestY = 0;
+        let bestRadius = 0;
+        let bestCardId: string | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        for (const other of context.unitById.values()) {
+            if (other.id === unit.id || other.owner === unit.owner) continue;
+            if (other.battleState === 'dead' || other.hp <= 0) continue;
+            const otherDefinition = context.effectiveDefinition(other);
+            if (otherDefinition.flying && !definition.canAttackAir) continue;
+            const position = context.unitPosition(other);
+            const distance = Math.hypot(position.x - origin.x, position.y - origin.y);
+            if (distance > ZCTargetingSystem.attackReach(definition, otherDefinition.bodyRadius, scale)) continue;
+            if (distance >= bestDistance) continue;
+            bestDistance = distance;
+            bestId = other.id;
+            bestX = position.x;
+            bestY = position.y;
+            bestRadius = otherDefinition.bodyRadius;
+            bestCardId = other.cardId ?? null;
+        }
+        if (!(bestId > 0)) return null;
+        return { kind: 'unit', id: bestId, x: bestX, y: bestY, bodyRadius: bestRadius, cardId: bestCardId };
     }
 
     /**
@@ -2307,8 +2470,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext, vulnStatusId?: string): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const scale = Math.max(1e-6, context.rules.combatDistanceScale);
         const halfLengthTable = Math.max(0, parameters.rayHalfLength ?? 0);
@@ -2336,10 +2498,11 @@ export class ZCAttackResolutionSystem {
         const forward = Math.max(0, parameters.rayForward ?? 0) * scale;
         //  圆心 = 起点 + 半长：起点在身前 `forward`，射线全长 `2 × halfLength`。
         const centerForward = forward + halfLength;
-        const damage = Math.round(this.unitDamage(context, unit,
-            target ? this.targetOwner(state, target, context) : (unit.owner === ZCOwner.Player
-                ? ZCOwner.Enemy : ZCOwner.Player),
-            target?.cardId ?? null, damageRate, target?.kind === 'unit' ? target.id : undefined));
+        const targetOwner = target ? this.targetOwner(state, target, context) : (unit.owner === ZCOwner.Player
+            ? ZCOwner.Enemy : ZCOwner.Player);
+        const targetCardId = target ? target.cardId : null;
+        const targetUnitId = target && target.kind === 'unit' ? target.id : undefined;
+        const damage = Math.round(this.unitDamage(context, unit, targetOwner, targetCardId, damageRate, targetUnitId));
         //  每跳数量：2 秒 / 0.2 = 10 跳，向下取整再加一吸收浮点误差（与 `castSelfAura` 同口径）。
         const waves = Math.max(1, Math.round(seconds / interval + 1e-6));
         const vulnPct = Math.max(0, parameters.rayVulnPct ?? 0);
@@ -2444,8 +2607,7 @@ export class ZCAttackResolutionSystem {
         context: IZCAttackResolutionContext, slowStatusId?: string): boolean {
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const parameters = this.skillRuntimeFor(unit, context)
-            .get(`${unit.unitId}:${profile.skillId}`)?.parameters;
+        const parameters = this.skillParamsOf(unit, profile.skillId, context);
         if (!parameters) return false;
         const damageRate = Math.max(0, parameters.fanDamageRate ?? 0);
         const radiusTable = Math.max(0, parameters.fanRadius ?? 0);
@@ -2939,7 +3101,7 @@ export class ZCAttackResolutionSystem {
         runtime: ZCSkillRuntimeDefinition | undefined,
         unit: ZCUnitState,
     ): boolean {
-        const every = runtime?.parameters.statusEveryNAttacks ?? 0;
+        const every = runtime ? runtime.parameters.statusEveryNAttacks ?? 0 : 0;
         if (!(every > 0)) return true;
         const count = unit.completedAttackCount ?? 0;
         return count > 0 && count % every === 0;
@@ -2949,7 +3111,7 @@ export class ZCAttackResolutionSystem {
         const attack = this.prepareAttack(state, unit, context);
         if (!attack) return;
         const { empowered, skillRuntime, activeProfile, event, damage, onHitStatusId, legacyTargetBuffs, floatTextKind } = attack;
-        const parameters = skillRuntime?.parameters;
+        const parameters = skillRuntime ? skillRuntime.parameters : undefined;
         if (empowered && parameters && parameters.shieldRatio > 0) {
             this.applyShieldAura(state, unit, parameters.shieldRatio);
         }
@@ -2973,13 +3135,13 @@ export class ZCAttackResolutionSystem {
         //  连发（豌豆机关枪）：empowered 这一击只打第一颗，余下的按固定间隔排进单位状态，
         //  由 `ZCSkillTriggerSystem` 每步推进。`burstCount` 缺省 1 ⇒ 整段不执行，
         //  原有的「一发 / 多发齐射」路径逐字不变。
-        const burstCount = empowered ? Math.max(1, Math.round(parameters?.burstCount ?? 1)) : 1;
-        if (burstCount > 1 && activeProfile.mode === ZCCombatEventType.Projectile) {
-            const burstSeconds = Math.max(0.05, parameters?.burstSeconds ?? 1.2);
+        const burstCount = empowered && parameters ? Math.max(1, Math.round(parameters.burstCount ?? 1)) : 1;
+        if (burstCount > 1 && parameters && activeProfile.mode === ZCCombatEventType.Projectile) {
+            const burstSeconds = Math.max(0.05, parameters.burstSeconds ?? 1.2);
             unit.burstShotsLeft = burstCount - 1;
             unit.burstInterval = Math.max(0.01, burstSeconds / Math.max(1, burstCount - 1));
             unit.burstNextAt = state.elapsedSeconds + unit.burstInterval;
-            unit.burstDamageRate = parameters?.damageRate ?? activeProfile.damageRate ?? 1;
+            unit.burstDamageRate = parameters.damageRate ?? activeProfile.damageRate ?? 1;
             attack.projectileCount = 1;
         }
         if (activeProfile.mode === 'projectile') {
@@ -3011,10 +3173,11 @@ export class ZCAttackResolutionSystem {
         //  这里**照常**调 `consumeEmpoweredAttack` 再作废结果：那个函数顺手累加
         //  `completedAttackCount`，跳过它会让所有「每 N 次普攻」的链路（连击 / 投枪 /
         //  陷阱 / 累计自我增益）一起停摆。代价只是这一次强化机会落空。
-        const skillRuntime = this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${profile.skillId}`);
+        const skillRuntime = this.skillRuntimeOf(unit, profile.skillId, context);
+        const skillParams = skillRuntime ? skillRuntime.parameters : undefined;
         const empoweredBeat = ZCCombatSystem.consumeEmpoweredAttack(unit, profile, state.elapsedSeconds);
         const empowered = empoweredBeat
-            && (skillRuntime?.parameters[ZC_EMPOWERED_LOCK_PARAM] ?? 0) <= 0;
+            && (!skillParams || (skillParams[ZC_EMPOWERED_LOCK_PARAM] ?? 0) <= 0);
         //  投枪（`破阵投枪`）：每 N 次普攻把本次攻击替换成一枚远程穿透弹。
         //  与「强化那一击」互斥（撞拍时强化优先），详见 `lanceBeatOf`。
         const lance = this.lanceBeatOf(unit, skillRuntime, empowered);
@@ -3023,8 +3186,8 @@ export class ZCAttackResolutionSystem {
         //  麻辣铁锅 102601 给 `bulletNum +2`、102604 要求「凤凰降临固定 4 颗」，
         //  两者叠在一起会变成 6 颗。所以声明了固定颗数时不再叠加 `bulletNum`。
         //   现有计划行一条都没用过这个键（全表 grep 无命中）⇒ 存量单位行为逐字不变。
-        const declaredProjectileCount = empowered
-            ? Math.max(0, Math.round(skillRuntime?.parameters.projectileCount ?? 0))
+        const declaredProjectileCount = empowered && skillParams
+            ? Math.max(0, Math.round(skillParams.projectileCount ?? 0))
             : 0;
         let projectileCount = declaredProjectileCount > 0 ? declaredProjectileCount : 1;
         const criticalMultiplier = this.criticalMultiplier(unit, context);
@@ -3046,12 +3209,12 @@ export class ZCAttackResolutionSystem {
         //  不存在「一个被节拍管、另一个不管」的组合。
         //  没配 `statusEveryNAttacks`（缺省 0）时恒为 true，所有既有表数据行为与改动前逐字一致。
         const onHitStatusId = this.hitStatusOnBeat(skillRuntime, unit)
-            ? (skillRuntime?.statusId ?? activeProfile.onHitStatusId)
+            ? ((skillRuntime ? skillRuntime.statusId : undefined) ?? activeProfile.onHitStatusId)
             : undefined;
         const skillDamageRate = (empowered
-            ? (skillRuntime?.parameters.impactDamageRate
-                ?? skillRuntime?.parameters.damageRate
-                ?? definition.empoweredProfile?.damageRate)
+            ? (skillParams
+                ? (skillParams.impactDamageRate ?? skillParams.damageRate)
+                : (definition.empoweredProfile ? definition.empoweredProfile.damageRate : undefined))
             : profile.damageRate) ?? 1;
         const legacy = context.evaluateLegacySkill(unit, activeProfile.legacyEffectKeys ?? [], target, criticalMultiplier > 1);
         // Old Client applies traction to the caster when the attack/bullet is created; it is an
@@ -3075,24 +3238,32 @@ export class ZCAttackResolutionSystem {
         //  第 1 颗是普攻本体（仍是 100%，它就是普攻），第 2 颗起每颗 ×(1 - bulletFalloff)：
         //  `bulletFalloff = 0.4` ⇒ 100% / 60% / 36% / 21.6%（满档 +2 发总额 196%，原 300%）。
         //  缺省 0 ⇒ 每颗同额，没配这个键的卡（含全部强化那一击）行为逐字不变。
-        const bulletFalloff = Math.max(0, Math.min(1, skillRuntime?.parameters.bulletFalloff ?? 0));
+        const bulletFalloff = Math.max(0, Math.min(1, skillParams ? (skillParams.bulletFalloff ?? 0) : 0));
         const baseProjectileCount = Math.max(1, projectileCount - bulletNumExtra);
+        const targetOwner = this.targetOwner(state, target, context);
+        const targetUnitId = target.kind === 'unit' ? target.id : undefined;
         const counterMultiplier = this.counterMultiplierFor(
-            unit, this.targetOwner(state, target, context), target.cardId, context,
-            target.kind === 'unit' ? target.id : undefined);
+            unit, targetOwner, target.cardId, context, targetUnitId);
         const criticalHit = criticalMultiplier > 1;
         const floatTextKind = damageFloatTextKind(criticalHit, counterMultiplier);
         //  投枪的「首目标 70%」：设计口径是相对面板的倍率，不是相对普攻伤害的折扣 ——
         //  与 `damageRate` / `impactDamageRate` 同一条乘法链，所以直接乘进 `skillDamageRate`。
         const lanceDamageRate = lance
-            ? Math.max(0, skillRuntime?.parameters.lanceDamageRate ?? ZC_LANCE_DEFAULT_DAMAGE_RATE)
+            ? Math.max(0, (skillParams ? skillParams.lanceDamageRate : undefined) ?? ZC_LANCE_DEFAULT_DAMAGE_RATE)
             : 1;
         //  投枪固定走面板伤害，不认旧 skillEffect 的伤害公式（那是近战挥击的算法，套在枪上会跑偏）。
         const damage = legacy.hasDamageFormula && !lance
             ? Math.round(legacy.damage * criticalMultiplier * counterMultiplier)
-            : Math.round(this.unitDamage(context, unit, this.targetOwner(state, target, context), target.cardId,
-                skillDamageRate * lanceDamageRate,
-                target.kind === 'unit' ? target.id : undefined) * criticalMultiplier);
+            : Math.round(this.unitDamage(context, unit, targetOwner, target.cardId,
+                skillDamageRate * lanceDamageRate, targetUnitId) * criticalMultiplier);
+        if (ZCDC_LOG_DAMAGE_FLOAT && activeProfile.mode !== 'projectile' && !lance) {
+            console.info('[伤害飘字][技能出手]', {
+                ...this.attackLogFields(unit, definition, context),
+                targetKind: target.kind, targetId: target.id,
+                skillId: activeProfile.skillId, skillName: activeProfile.name, skillDamageRate, criticalMultiplier,
+                counterMultiplier, legacyDamage: legacy.hasDamageFormula ? legacy.damage : undefined, damage,
+            });
+        }
         const legacyAreaRadius = Math.max(0, legacy.range ?? 0) * context.rules.combatDistanceScale;
         const effectiveAreaRadius = legacyAreaRadius > 0
             ? legacyAreaRadius
@@ -3164,7 +3335,7 @@ export class ZCAttackResolutionSystem {
             criticalMultiplier, damageRateMultiplier, skillDamageRate, legacy, legacyTargetBuffs,
             criticalHit, onHitStatusId, legacyAreaRadius, from, event } = attack;
         const { profile } = attack;
-        const parameters = skillRuntime?.parameters;
+        const parameters = skillRuntime ? skillRuntime.parameters : undefined;
         const empParams = empowered ? parameters : undefined;
         const dx = target.x - from.x, dy = target.y - from.y;
         const length = Math.hypot(dx, dy);
@@ -3273,6 +3444,20 @@ export class ZCAttackResolutionSystem {
             //  才是「多打」出来的额外弹体，第 n 颗额外弹乘 `(1 - bulletFalloff)^n`。
             //  `bulletFalloff = 0`（缺省）时恒为 1。
             const bulletScale = zcBulletDamageScale(index, baseProjectileCount, bulletFalloff);
+            const usesLegacyDamage = legacy.hasDamageFormula && !lance;
+            const baseDamage = (usesLegacyDamage
+                ? legacy.damage * criticalMultiplier
+                : ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules,
+                    skillDamageRate * damageRateMultiplier * lanceDamageRate)
+                    * (unit.attackMultiplier ?? 1) * criticalMultiplier) * bulletScale;
+            if (ZCDC_LOG_DAMAGE_FLOAT) {
+                console.info('[伤害飘字][弹道出手]', {
+                    ...this.attackLogFields(unit, definition, context),
+                    projectileId: projectileEvent.id, skillId: activeProfile.skillId, skillName: activeProfile.name,
+                    skillDamageRate, damageRateMultiplier, lanceDamageRate, criticalMultiplier, bulletScale,
+                    legacyDamage: usesLegacyDamage ? legacy.damage : undefined, baseDamage,
+                });
+            }
             state.projectiles.push({
                 ...projectileEvent, type: 'projectile', targetKind: target.kind, targetId: target.id,
                 sourceCardId: unit.cardId,
@@ -3280,11 +3465,7 @@ export class ZCAttackResolutionSystem {
                 toY: bulletToY,
                 //  投枪的首目标折算（`lanceDamageRate`）也必须进这条链：这一发是纯伤害弹，
                 //  没有再走 `unitDamage` 的机会。
-                baseDamage: (legacy.hasDamageFormula && !lance
-                    ? legacy.damage * criticalMultiplier
-                    : ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules,
-                        skillDamageRate * damageRateMultiplier * lanceDamageRate)
-                        * (unit.attackMultiplier ?? 1) * criticalMultiplier) * bulletScale,
+                baseDamage,
                 x: from.x, y: from.y, previousX: from.x, previousY: from.y,
                 velocityX: dirX * speed,
                 velocityY: dirY * speed,
@@ -3302,33 +3483,33 @@ export class ZCAttackResolutionSystem {
                 zoneDuration: activeProfile.durationSeconds ?? 0,
                 zoneWaves: Math.max(1, activeProfile.waves ?? 1),
                 zoneSlow: activeProfile.slowRatio ?? 0,
-                zoneDamage: empowered && skillRuntime?.parameters.explosionDamageRate != null
+                zoneDamage: empowered && parameters && parameters.explosionDamageRate != null
                     ? this.unitDamage(context, unit, this.targetOwner(state, target, context), target.cardId,
-                        skillRuntime.parameters.explosionDamageRate,
+                        parameters.explosionDamageRate,
                         target.kind === 'unit' ? target.id : undefined) * criticalMultiplier
                     : undefined,
                 remainingPierces: lance
                     //  投枪：`lancePierceCount` 是**目标总数**（含首目标），所以剩余穿透 = N − 1。
                     //  与上面 `pierceCount`（额外穿透次数）语义不同，别混用同一个键。
                     ? Math.max(0, Math.floor(
-                        (skillRuntime?.parameters.lancePierceCount ?? ZC_LANCE_DEFAULT_PIERCE_COUNT) - 1))
+                        ((parameters ? parameters.lancePierceCount : undefined) ?? ZC_LANCE_DEFAULT_PIERCE_COUNT) - 1))
                     : empowered
-                    ? Math.max(0, Math.floor(skillRuntime?.parameters.pierceCount ?? 0))
+                    ? Math.max(0, Math.floor((parameters ? parameters.pierceCount : undefined) ?? 0))
                     //  普攻穿透（2026-10-30「穿甲苔刺」100701/100801/103501）：`pierceCount` 原本只服务
                     //  「强化那一击」，被动要求的是「每一次普攻都穿透」。用独立键 `normalPierceCount`
                     //  而不是放宽 `pierceCount`，是为了不动任何既有强化击的口径。
-                    : Math.max(0, Math.floor(skillRuntime?.parameters.normalPierceCount ?? 0)),
+                    : Math.max(0, Math.floor((parameters ? parameters.normalPierceCount : undefined) ?? 0)),
                 //  每次穿透后的伤害衰减（玉林好汉「精英猎手」：每穿一人 -20%）；
                 //  缺省 0 = 不衰减，既有穿透弹道（火船等）行为逐字不变。
                 pierceFalloff: lance
                     ? Math.max(0, Math.min(1,
-                        skillRuntime?.parameters.lancePierceFalloff ?? ZC_LANCE_DEFAULT_PIERCE_FALLOFF))
+                        (parameters ? parameters.lancePierceFalloff : undefined) ?? ZC_LANCE_DEFAULT_PIERCE_FALLOFF))
                     : empowered
-                    ? Math.max(0, Math.min(1, skillRuntime?.parameters.pierceFalloff ?? 0))
-                    : Math.max(0, Math.min(1, skillRuntime?.parameters.normalPierceFalloff ?? 0)),
+                    ? Math.max(0, Math.min(1, (parameters ? parameters.pierceFalloff : undefined) ?? 0))
+                    : Math.max(0, Math.min(1, (parameters ? parameters.normalPierceFalloff : undefined) ?? 0)),
                 hitUnitIds: [],
                 executeChance: Math.max(0, Math.min(1,
-                    (empowered ? skillRuntime?.parameters.executeChance : undefined)
+                    (empParams ? empParams.executeChance : undefined)
                     ?? legacy.executeChance ?? 0)),
                 criticalHit,
                 onHitStatusId,
@@ -3339,14 +3520,14 @@ export class ZCAttackResolutionSystem {
                 //  缺省都没有 ⇒ 整段不执行，存量弹道行为逐字不变。
                 splashRadius: legacyAreaRadius > 0
                     ? legacyAreaRadius
-                    : (empowered ? 0 : (skillRuntime?.parameters.splashRadius ?? 0) * context.rules.combatDistanceScale) || undefined,
+                    : (empowered ? 0 : (parameters ? (parameters.splashRadius ?? 0) : 0) * context.rules.combatDistanceScale) || undefined,
                 splashDamageRate: legacyAreaRadius > 0
                     ? undefined
-                    : (empowered ? undefined : skillRuntime?.parameters.splashDamageRate),
+                    : (empowered ? undefined : (parameters ? parameters.splashDamageRate : undefined)),
                 //  溅射的多目标递减（2026-11-14）：与 `splashDamageRate` 同一路传入，缺省不写。
                 splashFalloff: legacyAreaRadius > 0
                     ? undefined
-                    : (empowered ? undefined : skillRuntime?.parameters.splashFalloff),
+                    : (empowered ? undefined : (parameters ? parameters.splashFalloff : undefined)),
                 //  命中爆炸（见上面 `burstRadius` 那一段）。四项任一为 0 就不写，
                 //  保持「没有这个键」= 存量弹道逐字不变。
                 impactEffectPrefabPath: burstImpactPrefab,
@@ -3364,10 +3545,11 @@ export class ZCAttackResolutionSystem {
     ): void {
         const { target, activeProfile, empowered, skillRuntime, criticalMultiplier, damage,
             floatTextKind, onHitStatusId, effectiveAreaRadius, from, event } = attack;
+        const skillParams = skillRuntime ? skillRuntime.parameters : undefined;
         const durationSeconds = activeProfile.durationSeconds ?? 0;
         const waves = Math.max(1, activeProfile.waves ?? 1);
         const slowRatio = empowered
-            ? Math.max(0, Math.min(1, skillRuntime?.parameters.slowRatio ?? activeProfile.slowRatio ?? 0))
+            ? Math.max(0, Math.min(1, (skillParams ? skillParams.slowRatio : undefined) ?? activeProfile.slowRatio ?? 0))
             : activeProfile.slowRatio ?? 0;
         const areaRadius = effectiveAreaRadius;
 
@@ -3380,24 +3562,23 @@ export class ZCAttackResolutionSystem {
             const zoneTarget = context.unitById.get(target.id);
             if (zoneTarget) context.applyHitStatus(zoneTarget, onHitStatusId, unit.id);
         }
-        const zoneCount = empowered ? Math.max(1, Math.round(skillRuntime?.parameters.zoneCount ?? 1)) : 1;
-        const expireDamage = empowered && skillRuntime?.parameters.expireDamageRate != null
+        const zoneCount = empowered && skillParams ? Math.max(1, Math.round(skillParams.zoneCount ?? 1)) : 1;
+        const expireDamage = empowered && skillParams && skillParams.expireDamageRate != null
             ? this.unitDamage(context, unit, this.targetOwner(state, target, context), target.cardId,
-                skillRuntime.parameters.expireDamageRate,
+                skillParams.expireDamageRate,
                 target.kind === 'unit' ? target.id : undefined) * criticalMultiplier
             : 0;
         //  会移动的区域（2026-11-04 椰蛋战士「暴风」）：给了 `zoneMoveSpeed` 才走这条口径 ——
         //  从施法者出发、朝目标方向扇形抛出、路径上每个敌人只吃一次、命中名额满了提前散。
         //  缺省 0 ⇒ 走下面原地的老分支，暴风雪 / 灼热地带 / 火船行为逐字不变。
-        const moveSpeed = empowered ? Math.max(0, skillRuntime?.parameters.zoneMoveSpeed ?? 0) : 0;
+        const moveSpeed = empowered && skillParams ? Math.max(0, skillParams.zoneMoveSpeed ?? 0) : 0;
         const moving = moveSpeed > 0;
-        const mParams = skillRuntime?.parameters;
-        const movingDuration = moving ? Math.max(0, mParams?.zoneDuration ?? durationSeconds) : durationSeconds;
+        const movingDuration = moving && skillParams ? Math.max(0, skillParams.zoneDuration ?? durationSeconds) : durationSeconds;
         //  移动区域每 0.15s 探一次路（走过敌人就结算），而不是沿用「持续秒数 / 波数」。
-        const movingInterval = Math.max(0.05, mParams?.zoneWaveInterval ?? 0.15);
+        const movingInterval = skillParams ? Math.max(0.05, skillParams.zoneWaveInterval ?? 0.15) : 0.15;
         const movingWaves = Math.max(1, Math.ceil(movingDuration / movingInterval));
-        const maxHits = moving ? Math.max(0, Math.round(mParams?.zoneMaxHits ?? 0)) : 0;
-        const spawnSpread = Math.max(0, mParams?.zoneSpreadDeg ?? 0) * Math.PI / 180;
+        const maxHits = moving && skillParams ? Math.max(0, Math.round(skillParams.zoneMaxHits ?? 0)) : 0;
+        const spawnSpread = skillParams ? Math.max(0, skillParams.zoneSpreadDeg ?? 0) * Math.PI / 180 : 0;
         //  移动区域的扇形中轴（2026-11-07 椰蛋战士「暴风」需求 3）：
         //  「以椰蛋战士的攻击朝向为法线，3 个飓风夹角为 50°」。
         //  所以基准取 `unit.facingRadians`（美术朝向，`ZCUnitTargeting.face()` 在每次 `startAttack`
@@ -3409,20 +3590,20 @@ export class ZCAttackResolutionSystem {
         //  这类技能的判定是「自身周围」，而区域默认落在目标点。给 `zoneSelfCentered = 1`
         //  就改成落在施法者脚下，半径与波次仍按 areaRadius / durationSeconds / waves 走。
         //  缺省 0 ⇒ 仍在目标点，暴风雪 / 灼热地带逐字不变。
-        const selfCentered = !moving && (mParams?.zoneSelfCentered ?? 0) > 0;
+        const selfCentered = !moving && skillParams && (skillParams.zoneSelfCentered ?? 0) > 0;
         //  出生点前移（2026-11-07 鹿神守护需求 1）：「生成位置在魔术师前进方向 15px 处」
         //  （2026-11-12 由 30 改成 15，与「子弹从枪口出来」的观感对齐）。
         //  与攻击距离 / 区域半径同一套表值口径 ⇒ 乘 `combatDistanceScale`。
-        const spawnForward = moving
-            ? Math.max(0, mParams?.zoneSpawnForward ?? 0) * context.rules.combatDistanceScale
+        const spawnForward = moving && skillParams
+            ? Math.max(0, skillParams.zoneSpawnForward ?? 0) * context.rules.combatDistanceScale
             : 0;
         //  追踪式移动（2026-11-07 鹿神守护需求 2，2026-11-12 改成「会追踪的子弹」）：
         //  给了 `zoneApproachSpeed` 才走「慢档走过去、贴近后提速」，缺省 0 ⇒ 一出生就按
         //  `zoneMoveSpeed` 飞（暴风 / 既有移动区域逐字不变）。
-        const approachSpeed = moving
-            ? Math.max(0, mParams?.zoneApproachSpeed ?? 0) * context.rules.combatDistanceScale
+        const approachSpeed = moving && skillParams
+            ? Math.max(0, skillParams.zoneApproachSpeed ?? 0) * context.rules.combatDistanceScale
             : 0;
-        const sprintRange = Math.max(0, mParams?.zoneSprintRange ?? 0) * context.rules.combatDistanceScale;
+        const sprintRange = skillParams ? Math.max(0, skillParams.zoneSprintRange ?? 0) * context.rules.combatDistanceScale : 0;
         for (let index = 0; index < zoneCount; index += 1) {
             //  扇形夹角：移动区域的三条围绕 `axis`（攻击朝向）对称张开；
             //  原地多道（迪斯科旋风一类）仍然绕着施法者均分一圈。
@@ -3454,7 +3635,7 @@ export class ZCAttackResolutionSystem {
                 slowRatio,
                 expireDamage,
                 expireStatusId: expireDamage > 0 ? 'freeze' : undefined,
-                expireStatusDuration: Math.max(0, skillRuntime?.parameters.freezeDuration ?? 0),
+                expireStatusDuration: Math.max(0, skillParams ? (skillParams.freezeDuration ?? 0) : 0),
                 //  表里的 `zoneMoveSpeed` 是「屏上 px/秒」口径，与 attackRange 同一套数，
                 //  和区域半径一样乘 `combatDistanceScale` 换成世界坐标。
                 moveVelocityX: moving ? Math.cos(angle) * moveSpeed * context.rules.combatDistanceScale : undefined,
@@ -3467,17 +3648,17 @@ export class ZCAttackResolutionSystem {
                 //   2026-11-12 起 103405 不再配它：小鹿改成「撞到第一个目标就消失」
                 //  （`zoneMaxHits = 1`），根本没有「第二个目标」可递减。槽位保留给后续技能用。
                 damageFalloff: moving
-                    ? Math.max(0, Math.min(1, mParams?.zoneDamageFalloff ?? 0)) || undefined
+                    ? Math.max(0, Math.min(1, (skillParams ? skillParams.zoneDamageFalloff : undefined) ?? 0)) || undefined
                     : undefined,
                 //  整段持有视觉（2026-11-07 鹿神守护小鹿冲刺）：给了 `zoneHoldVisual = 1` 才开 ——
                 //  开了以后区域只在创建时推一条跟着自己走的长效表现事件，
                 //  不再按波次在每波位置频闪（见 `ZCGroundZoneSystem.syncHoldVisual`）。
                 //  缺省 0 ⇒ 暴风仍是原来的「一串残影」，行为逐字不变。
-                holdVisual: moving && (mParams?.zoneHoldVisual ?? 0) > 0 ? true : undefined,
+                holdVisual: moving && skillParams && (skillParams.zoneHoldVisual ?? 0) > 0 ? true : undefined,
                 //  入场「由小变大」（2026-11-07 暴风需求 2）：只对整段持有视觉生效 ——
                 //  逐波残影每条只活 0.15s，长不出来。
                 growSeconds: moving
-                    ? Math.max(0, mParams?.zoneGrowSeconds ?? 0) || undefined
+                    ? Math.max(0, (skillParams ? skillParams.zoneGrowSeconds : undefined) ?? 0) || undefined
                     : undefined,
                 //  追踪式移动（2026-11-12 鹿神守护改成「会追踪的子弹」）：慢档走近、贴近后提速。
                 //  `approachSpeed` 是世界 px/秒（表值 × combatDistanceScale），
@@ -3499,6 +3680,7 @@ export class ZCAttackResolutionSystem {
     ): void {
         const { target, activeProfile, profile, lance, empowered, skillRuntime, legacy, legacyTargetBuffs,
             floatTextKind, onHitStatusId, damage, legacyAreaRadius, event } = attack;
+        const skillParams = skillRuntime ? skillRuntime.parameters : undefined;
         const areaRadius = attack.effectiveAreaRadius;
 
         state.combatEvents.push(event);
@@ -3516,7 +3698,7 @@ export class ZCAttackResolutionSystem {
                 });
                 this.applyLifesteal(unit, hitText, context);
                 context.tryExecuteUnit(targetUnit,
-                    (empowered ? skillRuntime?.parameters.executeChance : undefined) ?? legacy.executeChance,
+                    (empowered && skillParams ? skillParams.executeChance : undefined) ?? legacy.executeChance,
                     unit.owner, unit.id, hitText);
                 context.applyHitStatus(targetUnit, onHitStatusId, unit.id);
                 context.applyLegacyBuffs(targetUnit, legacyTargetBuffs, unit.id);
@@ -3556,7 +3738,7 @@ export class ZCAttackResolutionSystem {
                         owner: unit.owner, kind: 'unit', unitId: unit.id, floatTextKind, ranged: true,
                     });
                     this.applyLifesteal(unit, hitText, context, this.lifestealSpreadRateOf(unit, context));
-                    context.tryExecuteUnit(splash, empowered ? skillRuntime?.parameters.executeChance : undefined,
+                    context.tryExecuteUnit(splash, empowered && skillParams ? skillParams.executeChance : undefined,
                         unit.owner, unit.id, hitText);
                     context.applyHitStatus(splash, activeProfile.onHitStatusId, unit.id);
                     context.applyLegacyBuffs(splash, legacyTargetBuffs, unit.id);
@@ -3574,7 +3756,7 @@ export class ZCAttackResolutionSystem {
         if (!target) return;
         const definition = context.effectiveDefinition(unit);
         const profile = definition.attackProfile;
-        const skillRuntime = this.skillRuntimeFor(unit, context).get(`${unit.unitId}:${profile.skillId}`);
+        const skillRuntime = this.skillRuntimeOf(unit, profile.skillId, context);
         const damageRate = Math.max(0, unit.burstDamageRate ?? 1);
         const criticalMultiplier = this.criticalMultiplier(unit, context);
         const bonuses = context.deckBonuses[unit.owner];
@@ -3591,6 +3773,13 @@ export class ZCAttackResolutionSystem {
         const baseDamage = ZCCombatSystem.unitDamageBase(unit, definition, bonuses, context.rules,
             damageRate * damageRateMultiplier)
             * (unit.attackMultiplier ?? 1) * criticalMultiplier;
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][弹道出手]', {
+                ...this.attackLogFields(unit, definition, context),
+                projectileId: state.nextCombatEventId, skillId, skillName: profile.name,
+                skillDamageRate: damageRate, damageRateMultiplier, criticalMultiplier, baseDamage,
+            });
+        }
         state.projectiles.push({
             id: state.nextCombatEventId++,
             type: 'projectile',
@@ -3629,7 +3818,7 @@ export class ZCAttackResolutionSystem {
             hitUnitIds: [],
             executeChance: 0,
             criticalHit: criticalMultiplier > 1,
-            onHitStatusId: skillRuntime?.statusId ?? profile.onHitStatusId,
+            onHitStatusId: (skillRuntime ? skillRuntime.statusId : undefined) ?? profile.onHitStatusId,
             legacyBuffs: [],
         });
     }
@@ -3641,6 +3830,13 @@ export class ZCAttackResolutionSystem {
             target.kind === 'unit' ? target.id : undefined);
         const damage = Math.round(projectile.baseDamage * multiplier);
         const floatTextKind = damageFloatTextKind(projectile.criticalHit === true, multiplier);
+        if (ZCDC_LOG_DAMAGE_FLOAT) {
+            console.info('[伤害飘字][弹道命中]', {
+                projectileId: projectile.id, sourceId: projectile.sourceUnitId, skillId: projectile.skillId,
+                targetKind: target.kind, targetId: target.id, baseDamage: projectile.baseDamage,
+                counterMultiplier: multiplier, pierceFalloff: projectile.pierceFalloff ?? 0, damage, floatTextKind,
+            });
+        }
         //  打墙 / 打建筑只要「归属 + 落点」，受击特效还要实例 id 反查攻击方职业
         //  （2026-11-06：结构物受击也要播攻击方职业的闪白）。
         const sender: IZCStructureDamageSource = {
@@ -3657,7 +3853,8 @@ export class ZCAttackResolutionSystem {
             const unit = context.unitById.get(target.id);
             if (unit) {
                 const hitText = context.damageUnit(unit, damage, {
-                    owner: projectile.owner, kind: 'unit', unitId: projectile.sourceUnitId, floatTextKind, ranged: true,
+                    owner: projectile.owner, kind: 'unit', unitId: projectile.sourceUnitId,
+                    projectileId: projectile.id, floatTextKind, ranged: true,
                 });
                 if (shooter) this.applyLifesteal(shooter, hitText, context);
                 if (extraHits > 0) {
@@ -3708,10 +3905,18 @@ export class ZCAttackResolutionSystem {
                     projectile, splash.owner, splash.cardId, context, splash.id);
                 const splashDamage = Math.round(projectile.baseDamage * splashMultiplier
                     * (projectile.splashDamageRate ?? 1) * Math.pow(1 - splashFalloff, index));
+                if (ZCDC_LOG_DAMAGE_FLOAT) {
+                    console.info('[伤害飘字][弹道溅射]', {
+                        projectileId: projectile.id, sourceId: projectile.sourceUnitId, targetId: splash.id,
+                        baseDamage: projectile.baseDamage, counterMultiplier: splashMultiplier,
+                        splashDamageRate: projectile.splashDamageRate ?? 1, splashFalloff, index, damage: splashDamage,
+                    });
+                }
                 const splashText = context.damageUnit(splash, splashDamage, {
                     owner: projectile.owner,
                     kind: 'unit',
                     unitId: projectile.sourceUnitId,
+                    projectileId: projectile.id,
                     floatTextKind: damageFloatTextKind(projectile.criticalHit === true, splashMultiplier),
                     ranged: true,
                 });
@@ -3776,11 +3981,19 @@ export class ZCAttackResolutionSystem {
                 if (distance(projectile.x, projectile.y, position.x, position.y) > burstRadius) continue;
                 const burstMultiplier = this.projectileCounterMultiplier(
                     projectile, victim.owner, victim.cardId, context, victim.id);
+                const burstDamage = Math.round((projectile.burstDamage ?? 0) * burstMultiplier);
+                if (ZCDC_LOG_DAMAGE_FLOAT) {
+                    console.info('[伤害飘字][弹道爆炸]', {
+                        projectileId: projectile.id, sourceId: projectile.sourceUnitId, targetId: victim.id,
+                        baseDamage: projectile.burstDamage ?? 0, counterMultiplier: burstMultiplier, damage: burstDamage,
+                    });
+                }
                 const burstText = context.damageUnit(victim,
-                    Math.round((projectile.burstDamage ?? 0) * burstMultiplier), {
+                    burstDamage, {
                         owner: projectile.owner,
                         kind: 'unit',
                         unitId: projectile.sourceUnitId,
+                        projectileId: projectile.id,
                         floatTextKind: damageFloatTextKind(projectile.criticalHit === true, burstMultiplier),
                         ranged: true,
                     });

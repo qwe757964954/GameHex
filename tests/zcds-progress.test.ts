@@ -489,13 +489,15 @@ test('Old Client 技能飘字覆盖暴击、回复、MISS、秒杀、克制和�
     const prefixNode = bar().node;
     view.textLabel = { node, string: '', enabled: true, color: null as any, fontSize: 30 };
     view.prefixLabel = { node: prefixNode, string: '', enabled: true, color: null as any, fontSize: 15 };
-    const base = { id: 1, owner: 'player', value: 25, x: 0, y: 0, startedAt: 0, durationSeconds: 1 };
+    // `dealtByPlayer` = 「我方打出去的」：前缀只挂在这一档上（2026-11-20 用户）。
+    const base = { id: 1, owner: 'player', value: 25, x: 0, y: 0, startedAt: 0, durationSeconds: 1, dealtByPlayer: true };
     const cases = [
-        ['critical', '暴击', '25', [255, 198, 45], 34],
+        // 2026-11-20 用户：玩家造成的伤害一律白字，暴击只放大字号（30 × 1.7 = 51），克制也是白字。
+        ['critical', '暴击', '25', [255, 255, 255], 51],
         ['heal', '', '+25', [91, 255, 49], 30],
         ['miss', '', 'MISS', [120, 205, 255], 30],
         ['execute', '秒杀', '25', [255, 105, 72], 34],
-        ['restraint', '克制', '25', [255, 72, 62], 30],
+        ['restraint', '克制', '25', [255, 255, 255], 30],
         ['resisted', '抵抗', '25', [150, 150, 150], 30],
     ] as const;
     for (const [kind, prefix, expected, color, fontSize] of cases) {

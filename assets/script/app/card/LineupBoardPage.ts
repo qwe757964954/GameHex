@@ -29,6 +29,9 @@ import { EventMgr } from '../../framework/event/EventMgr';
 
 const { ccclass, property } = _decorator;
 
+/** 图未到达时的空图占位。 */
+const EMPTY_BOARD_CARD_FRAMES: ZCBoardCardFrames = { frame: null, hero: null, badge: null };
+
 /**
  * 布阵弹窗，盖在卡牌阵容页上。
  *
@@ -165,7 +168,6 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         this.saveButton.interactable = false;
         this.saveLabel.string = CARD_LINEUP_TEXTS.boardSave;
         this.poolCards = [];
-        this.poolArt.clear();
         for (const slot of this.arenaSlots()) slot.setEmpty(true);
     }
 
@@ -237,23 +239,28 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
 
     /**
      * 卡池：驱动 PoolList 的虚拟列表。
-     * 先把图异步备好，再交同步的 renderItemFn；滚动回调里不能 await。
+     * 首屏优先加载视口前 15 张卡（满足首屏秒开），剩余卡牌后台平滑预加载，同时 renderItemFn 支持缺图就地按需加载。
      */
     private async renderPool(pool: readonly ZCDeckCard[]): Promise<void> {
-        if (pool === this.poolCards && this.poolArt.size > 0) { this.rerenderPoolItems(); return; }
+        if (pool === this.poolCards && this.poolArt.size > 0) {
+            this.rerenderPoolItems();
+            return;
+        }
         const scope = this.resourceScope;
         const revision = ++this.poolRevision;
         this.poolCards = pool;
 
-        // 按 key 去重后并发预加载（同一张图只 load 一次）
-        const art = new Map<string, ZCBoardCardFrames>();
-        await Promise.all(pool.map(async (card) => {
-            art.set(card.id, await cardArtProvider.loadBoardCard(card, this.art));
+        // 首屏仅预加载前 15 张可见卡牌，避免 30~50 张卡瞬间并发全量 IO
+        const INITIAL_BATCH = 15;
+        const firstBatch = pool.slice(0, INITIAL_BATCH);
+        await Promise.all(firstBatch.map(async (card) => {
+            if (!this.poolArt.has(card.id)) {
+                this.poolArt.set(card.id, await cardArtProvider.loadBoardCard(card, this.art));
+            }
         }));
 
         // 预加载期间面板可能已经关了，节点销毁后 poolList 也没了，先在这挡一下。
         if (scope.disposed || !this.alive || revision !== this.poolRevision) return;
-        this.poolArt = art;
 
         const list = this.poolList;
         if (!list.node.isValid) return;
@@ -263,6 +270,23 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         if (!await this.nextPopupFrame()) return;
         if (scope.disposed || !this.alive || revision !== this.poolRevision || !list.node.isValid) return;
         list.setTotalCount(pool.length);
+
+        // 剩余未加载卡牌异步预热，不阻塞首屏与主线程
+        const remaining = pool.slice(INITIAL_BATCH).filter(card => !this.poolArt.has(card.id));
+        if (remaining.length > 0) {
+            void this.warmRemainingPoolArt(remaining, revision);
+        }
+    }
+
+    private async warmRemainingPoolArt(remaining: readonly ZCDeckCard[], revision: number): Promise<void> {
+        for (const card of remaining) {
+            if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+            if (!this.poolArt.has(card.id)) {
+                const frames = await cardArtProvider.loadBoardCard(card, this.art);
+                if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+                this.poolArt.set(card.id, frames);
+            }
+        }
     }
 
     /**
@@ -272,11 +296,23 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         const card = this.poolCards[index];
         const view = node.getComponent(LineupBoardCard);
         if (!view || !card) return;
-        const frames = this.poolArt.get(card.id);
-        if (!frames) return;
         // 行节点会被回收复用，宿主每轮都要重新指一次（视图实例可能换了卡）。
         view.tapHost = this;
-        view.render(card, frames, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
+        const frames = this.poolArt.get(card.id);
+        if (frames) {
+            view.render(card, frames, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
+            return;
+        }
+        // 图未就绪时先渲染槽位并就地异步加载，图就绪后若节点仍在展示当前卡则刷新
+        view.render(card, EMPTY_BOARD_CARD_FRAMES, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
+        const revision = this.poolRevision;
+        void cardArtProvider.loadBoardCard(card, this.art).then((loadedFrames) => {
+            if (this.resourceScope.disposed || !this.alive || revision !== this.poolRevision) return;
+            this.poolArt.set(card.id, loadedFrames);
+            if (node.isValid && view.node.isValid && this.poolCards[index]?.id === card.id) {
+                view.render(card, loadedFrames, this.deployedIds.has(card.id), this.levelOf(card, this.fallbackPoolLevel));
+            }
+        });
     };
 
     /**
@@ -365,7 +401,11 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     onDestroy(): void {
+        this.resetButton?.node?.off(Button.EventType.CLICK, this.onResetAll, this);
+        this.saveButton?.node?.off(Button.EventType.CLICK, this.onSave, this);
+        this.closeButton?.node?.off(Button.EventType.CLICK, this.onCloseClick, this);
         this.arenaSlotCache = null;
+        this.poolArt.clear();
         super.onDestroy();
     }
 }

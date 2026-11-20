@@ -2,6 +2,7 @@ import { ControllerBase, type IControllerContext } from '../../framework/control
 import { EventMgr } from '../../framework/event/EventMgr';
 import { CardLineupEvent, CardLineupUiEvent, type ICardLineupIntent, type ICardLineupRender, type IHeroUpgradedPayload } from './CardLineupEvents';
 import type { CardLineupData } from './CardRepository';
+import { resolveCardDisplayLevel } from './CardLineupTypes';
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
 
 export interface ICardLineupControllerOptions {
@@ -63,7 +64,10 @@ export class CardLineupController extends ControllerBase {
         this.data = data;
         EventMgr.instance.emit(CardLineupUiEvent.Render, { owner: this.options.owner, data } satisfies ICardLineupRender);
     }
-    private onDeckSaved(): void { void this.refresh(); }
+    private onDeckSaved(): void {
+        void this.refresh();
+    }
+
     private onHeroUpgraded(payload: IHeroUpgradedPayload): void {
         if (this.data) {
             const heroLevels = new Map(this.data.heroLevels);
@@ -73,13 +77,29 @@ export class CardLineupController extends ControllerBase {
         // 升级只改变英雄等级，沿用已有阵型重算战力。
         void this.refresh(false);
     }
+
     private onIntent(event: ICardLineupIntent): void {
-        if (event.owner !== this.options.owner) return;
-        if (event.kind === 'refresh') { void this.refresh(); return; }
-        if (event.kind === 'edit') { this.options.popups.openEditor(); return; }
+        if (event.owner !== this.options.owner) {
+            return;
+        }
+        if (event.kind === 'refresh') {
+            void this.refresh();
+            return;
+        }
+        if (event.kind === 'edit') {
+            this.options.popups.openEditor();
+            return;
+        }
         const card = event.card;
-        if (!card) return;
-        const level = this.data?.heroLevels.get(card.id) ?? (this.data?.heroListKnown ? 0 : this.options.fallbackLevel);
+        if (!card) {
+            return;
+        }
+        const level = resolveCardDisplayLevel(
+            card.id,
+            this.data?.heroLevels,
+            !!this.data?.heroListKnown,
+            this.options.fallbackLevel,
+        );
         this.options.popups.openUpgrade(card, level);
     }
 }

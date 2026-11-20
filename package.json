@@ -10,6 +10,7 @@
     "test": "node tools/verify/verify.mjs run",
     "test:raw": "tsx --test \"tests/**/*.test.ts\"",
     "verify": "node tools/verify/verify.mjs check",
+    "verify:quick": "node tools/verify/verify.mjs check --quick",
     "verify:full": "node tools/verify/verify.mjs full",
     "verify:route": "node tools/verify/verify.mjs route",
     "verify:defs": "node tools/verify/verify.mjs defs",
@@ -39,7 +40,9 @@
     "map:publish-territory": "python tools/map-editor/copy_territory_maps.py",
     "check:zcds": "tsc --noEmit --target ES2020 --module commonjs --moduleResolution node --skipLibCheck assets/script/app/zcds/model/ZCGameModel.ts",
     "check:login": "tsc --noEmit --target ES2020 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck assets/script/app/login/LoginProtocol.ts assets/script/app/login/ProtocolCodec.ts assets/script/platform/network/FetchNetworkTransport.ts",
-    "proxy": "node tools/dev/cors-proxy.js"
+    "proxy": "node tools/dev/cors-proxy.js",
+    "svn:stage": "node tools/dev/svn-stage.mjs",
+    "svn:commit": "node tools/dev/svn-stage.mjs commit"
   },
   "devDependencies": {
     "protobufjs": "7.6.2",

@@ -23,6 +23,8 @@ export interface ZCDamageSource {
     owner: ZCFaction;
     kind: ZCDamageSourceKind;
     unitId?: number;
+    /** 出手与命中日志用同一个弹道 ID 串联。*/
+    projectileId?: number;
     /** Old Client battle-text classification carried from cast to actual hit.*/
     floatTextKind?: ZCCombatFloatTextKind;
     /** Damage already displayed by the same hit (used to merge execute into one number).*/
@@ -596,6 +598,9 @@ export interface IZCNeutralFeatureState {
     awake?: boolean;
     targetUnitId?: number | null;
     nextAttackAt?: number;
+    attackStartedAt?: number;
+    attackTargetUnitId?: number;
+    monsterFacing?: 1 | -1;
     monsterResourceId?: number;
     unlockedOwners?: ZCOwner[];
     focusOwners?: ZCOwner[];
@@ -637,6 +642,14 @@ export interface ZCCombatEvent {
      * `combatEvents` 不进存档，加字段不影响兼容。
     */
     growSeconds?: number;
+    /**
+     * 入场生长的**起始占比**（0~1，2026-11-20 第 28 批 102004 飓风）。
+     *
+     * `growSeconds` 那条缓动在 t = 0 时是 0，只能表达「从看不见长到满」；「出生就是 10%、
+     * 边飞边长大」得靠这一格补起点。视图合成 `growFrom + (1-growFrom) × ease(t)`，
+     * 缺省 `undefined` ⇒ 当成 0（= 老口径）。`combatEvents` 不进存档，加字段不影响兼容。
+    */
+    growFrom?: number;
     /**
      * 这条特效要播的骨架动画名（如 `move` / `attack`）。
      * 名字跟着事件走，阶段判断留在模型；缺省 undefined ⇒ 保留预制体默认动画。
@@ -879,8 +892,42 @@ export interface ZCFloatText {
     kind: ZCFloatTextKind;
     /** 造成伤害 / 获得金币的一方；用于归属、筛选和后续阵营表现扩展。*/
     owner: ZCOwner;
+    /**
+     * 「**本机席位**的卡牌被扣血」这一种伤害飘字（2026-11-20 用户）：
+     * 染色走红、数值前面带负号（`-5`）。缺省 ⇒ 白字，表示我方打出去的伤害。
+     *
+     * 🔴 攻方是谁**不影响**这个标记：被另一个玩家打、被 NPC 打，都是同一个样式
+     * （红字、无前缀、只有 `-血量`）。字段名里的 `FromPlayer` 是历史叫法，
+     * 语义已经收敛成「我方被扣血」—— 别按名字理解成只认玩家。
+     *
+     * 由模型按两端席位判定（`ZCGameModel.floatTextToneOf`），视图不自己猜：
+     * 视图只拿到 `owner`（攻方），判不出被打的那张卡是不是本机的。
+     */
+    takenFromPlayer?: true;
+    /**
+     * 「这一条伤害是玩家席位打出去的」⇒ 才允许带 `暴击 / 克制 / 抵抗 / 秒杀` 前缀
+     * （2026-11-20 用户口径）。
+     *
+     * 🔴 前缀是**我方战果**的标记，不是伤害本身的属性：
+     *   · 我方对别人造成伤害 ⇒ 带前缀（暴击 / 克制 / 抵抗 / 秒杀）；
+     *   · 我方被扣血 —— 被另一个玩家打、被 NPC 打都算 —— **只有「负号 + 血量」**。
+     * 反例就是踩过的坑：塔防局里整局都是 NPC 在打我方卡，按 `kind` 直接出前缀的话，
+     * 屏幕上每一下都挂一个【克制】【暴击】，数字反而读不出来。
+     *
+     * 由模型按攻方席位判定（`ZCGameModel.damageUnit`），视图不自己猜：
+     * 视图只拿到 `owner`（攻方），判不出 `npcOwners` 里谁是 NPC。
+     */
+    dealtByPlayer?: true;
     /** 实际结算数值；MISS 为 0，其余类型为正整数。*/
     value: number;
+    /**
+     * 这条飘字**实际打掉的血量**（不含 `value` 上的展示偏移）。
+     *
+     * 只有需要「事后合并」的场景才写：`tryExecuteUnit` 会先把刚排队的那条普通伤害
+     * 撤销（`removeFloatText` 拿回它的真实伤害），再并进一条 `execute` 秒杀飘字 ——
+     * 撤销时读的就是这个字段，读 `value` 会把 `floatTextValueOffset` 一起算进去。
+     */
+    appliedDamage?: number;
     /** 飘字锚点的逻辑坐标（受击目标 / 产出金币的建筑 / 阵亡单位）。*/
     x: number;
     y: number;
@@ -1115,6 +1162,56 @@ export interface ZCSnapshot {
     statusEffects?: ZCStatusSystemSnapshot;
     /** 持续区域（暴风雪类 area 技能）；缺省 = 空。*/
     groundZones: ZCGroundZoneState[];
+    /**
+     * 排队中的召唤物（2026-11-20 第 33 批 101404 分裂菇的「0.1s 间隔 + 先特效后出现」）。
+     *
+     * 必须进快照：这 0.6~0.9s 是**真状态**，不是表现 —— 重连 / 读档时丢掉队列，
+     * 玩家会白丢 6 只分身（累计普攻的次数已经消费掉了）。旧存档缺省 = 空。
+     */
+    pendingSummons?: IZCPendingSummon[];
+}
+
+/**
+ * 一个「还没出生」的召唤物（2026-11-20 第 33 批，101404 分裂菇 68014「一人成军」）。
+ *
+ * 为什么不是「先召出来再隐藏」：隐藏的单位仍是合法目标 —— 会被看不见的东西挨打、
+ * 也会自己往敌人方向走开，等到该出现时它已经不在那个坐标上了。所以真正推迟的是
+ * `spawnUnit`，队列里只留「出生需要的一切」，到点按原样重建。
+ *
+ * 两个时刻分开存（`fxAtSeconds` / `spawnAtSeconds`）：先播特效、再出现，中间那 0.32s
+ * 的间隔是设计口径的一部分，不是渲染延迟。
+ */
+export interface IZCPendingSummon {
+    /** 这一只播「生成」特效的时刻（秒，`elapsedSeconds` 基准）。*/
+    fxAtSeconds: number;
+    /** 这一只真正出生的时刻（秒）= `fxAtSeconds + 出现延迟`。*/
+    spawnAtSeconds: number;
+    /** 特效是否已经推给视图（同一条只推一次）。*/
+    fxPlayed?: boolean;
+    owner: ZCOwner;
+    cardId: string;
+    tier: number;
+    sourceHexId: number;
+    /** 本体（施法者）的实例 id，只给日志与「谁召的」追溯用，出生不依赖它还活着。*/
+    masterId: number;
+    /** 召唤技能本身（事件与日志用）。*/
+    skillId: number;
+    skillName: string;
+    /** 出生坐标（逻辑 px，已经散落在以本体为圆心的圆内）。*/
+    x: number;
+    y: number;
+    /** 继承后的属性：施法那一刻算好，本体中途阵亡也不影响这几只。*/
+    maxHp: number;
+    attack: number;
+    moveSpeed: number;
+    attackInterval: number;
+    attackRange: number;
+    bodyRadius: number;
+    /** 到期时刻（秒）；缺省 = 到战死（独立分身的裁定口径）。*/
+    summonUntil?: number;
+    /** 半透明度（0~1）；缺省 = 不透明。*/
+    summonAlpha?: number;
+    summonIndependent?: boolean;
 }
 
 /**
@@ -1194,6 +1291,15 @@ export interface ZCGroundZoneState {
     */
     growSeconds?: number;
     /**
+     * 上面那段入场生长的**起始占比**（0~1，2026-11-20 第 28 批 102004 飓风）。
+     *
+     * `growSeconds` 的曲线是 `1-(1-t)²`，t = 0 时系数是 **0** —— 只能表达「从看不见长到满」。
+     * 需求是「初始生成的大小只有 10%，随移动过程逐渐成长」，那 10% 的起点必须单独给。
+     * 视图侧合成 `growFrom + (1-growFrom) × ease(t)`，所以最终大小仍是 prefab 说了算。
+     * 缺省 `undefined` ⇒ 当成 0，存量特效（从 0 长起来 / 压根不生长）逐字不变。
+    */
+    growFrom?: number;
+    /**
      * 追踪段的慢速档（世界 px/秒）：给了就进入追踪式移动，
      * 慢档不结算，距目标 ≤ `sprintRange` 切快档 `sprintSpeed` 并开始结算，目标死了自动改追最近的敌人。
      * 缺省 undefined ⇒ 没有追踪阶段。
@@ -1205,6 +1311,48 @@ export interface ZCGroundZoneState {
     sprintRange?: number;
     /** 快档速度（世界 px/秒）；同时写进 `moveVelocityX/Y`（世界 px/秒）。缺省 0 ⇒ 切档后原地不动。*/
     sprintSpeed?: number;
+    /**
+     * 到点后把移动权交回随机游走（2026-11-20 第 28 批 102004 飓风）。
+     *
+     * 为什么光有 `approachSpeed` 不够：`advanceChase` 一旦看到 `approachSpeed > 0` 就
+     * 恒返回 `true`，位移那一段永不落到 `advanceWander` 手上 —— 于是「飞到目标之后
+     * 继续随机飘」这件事根本轮不上（`sprintSpeed` 配 0 就是原地定住，配正数就一直
+     * 朝旧方向冲）。所以走到位（或目标丢失）的那一刻必须显式「下车」：清掉
+     * `approachSpeed / approachTargetId / sprintSpeed`、把 `sprinting` 置真（顺带让
+     * `enterSprint` 把 `nextWaveAt` 重置到此刻，否则落地那一帧会把赶路期间攒下的
+     * 波次一口气全打出去），下一帧起 `advanceChase` 返回 false ⇒ 游走接管。
+     * 缺省 `undefined` ⇒ 保持「追到就停」的老口径（103405 鹿神守护），存量逐字不变。
+    */
+    arriveWander?: boolean;
+    /**
+     * 赶路段**已耗时**（秒，2026-11-20 第 28 批 102004 飓风的总时长口径）。
+     *
+     * `remainingSeconds` 在赶路期不读秒（`isApproaching` 为真），可设计要的是
+     * 「总共活 N 秒（含赶路）」而不是「落地后再活 N 秒」⇒ 这段账必须在落地那一刻
+     * 一次性结清：`releaseToWander` 把本格从 `remainingSeconds` 里扣掉，并据剩余时间
+     * 重算 `wavesLeft`（不重算就会把整段 12 波塞进剩下的几秒里，变成「落地后每 0.17 秒打一下」）。
+     *
+     * 由 `advanceChase` 每帧 `+= dt` 累加（只有真在追的帧才算），所以它不是「施放到落地」
+     * 的墙钟差 —— 中途被别的分支暂停也不会多算。缺省 `undefined` ⇒ 老车道（103405）
+     * 不累计、也不扣，行为逐字不变。
+    */
+    approachSeconds?: number;
+    /**
+     * 「最后已知目标坐标」（世界 px，2026-11-20 第 31 批）。
+     *
+     * 用户口径原话：「锁定目标，移动，目标丢失，切换目标，没有目标继续往旧的目标坐标移动，
+     * 不会静止」。`approachTargetId` 只能表达「追谁」，追不到人就无从知道该往哪飞 ——
+     * 老代码在这种情况下要么沿旧速度方向继续冲（越过目标后一直飞），要么因为
+     * `sprintSpeed` 缺省取到 0 而**整片定住**（飓风的投送段只有 `approachSpeed`、没有
+     * `sprintSpeed`，走到这一步就是一动不动的一片风）。
+     *
+     * 于是把「目标活着的每一帧的坐标」记下来：目标全没了就朝这个坐标继续飞，飞到了才按
+     * 各车道自己的收尾走（`arriveWander` 交给随机游走、其余继续沿同方向飞）。
+     * 缺省 `undefined` ⇒ 从出生就没锁定过目标，行为与改动前逐字一致（沿原速度方向兜底）。
+    */
+    chaseGoalX?: number;
+    /** 见 `chaseGoalX`。两者同生同灭，只写一个没有意义。*/
+    chaseGoalY?: number;
     /**
      * 是否已经切到快档。
      *
@@ -1310,6 +1458,22 @@ export interface ZCGroundZoneState {
      */
     flightSeconds?: number;
     /**
+     * 投掷段**总时长**（秒，2026-11-20 抛掷弧线）。
+     *
+     * `flightSeconds` 是「还剩几秒」，落到 0 就没法反推进度了；弧线的竖直抬升要按
+     * 「已飞了百分之几」算，所以出生那一刻的总时长必须另存一格。
+     * 缺省 `undefined`（或 `flightArcPx` 为 0）⇒ 不算弧线，平飞，存量投掷逐字不变。
+    */
+    flightTotalSeconds?: number;
+    /**
+     * 抛掷弧线的**峰值抬升**（屏上 px，2026-11-20 用户口径「蘑菇爆炸要有弧线飞行落地的过程」）。
+     *
+     * 只影响表现：`settleFlight` 每帧把 `visualLiftPx` 刷成抛物线 `4h·p·(1-p)`（起点/落点为 0、
+     * 中途最高），**不动 `zone.x/y`** —— 那是地面坐标，接触判定与牵引都按它算，改了就是
+     * 「判定飞在半空」。缺省 0 ⇒ 平飞。
+    */
+    flightArcPx?: number;
+    /**
      * 投掷段（`flightSeconds > 0`）期间的**持有表现**路径（2026-11-19 蘑菇爆炸 101704）。
      *
      * 为什么要单独一格：一件投掷物的「还在飞」和「已落地」是两段美术 ——
@@ -1352,6 +1516,15 @@ export interface ZCGroundZoneState {
     wanderNextTurnAt?: number;
     /** 当前朝向（弧度，-π~π）；缺省时由第一帧抽一次。可负 ⇒ 快照校验按有限数走。*/
     wanderAngleRadians?: number;
+    /**
+     * 当前转向角速度（弧度/秒，**可负** = 左转 / 右转，2026-11-20 S 型游走）。
+     *
+     * 老实现是「每 `wanderTurnSeconds` 秒把朝向整段重掷成随机角」⇒ 折线；现在是
+     * 「每帧按本角速度累加、到点取反」⇒ 一左一右的蛇形（S）。幅值固定为
+     * `ZC_ZONE_WANDER_SWING_RADIANS / wanderTurnSeconds`，取反时只翻号不翻幅。
+     * 缺省 `undefined` ⇒ 下一帧按当前 `wanderTurnSeconds` 补一个初值（读档兼容）。
+    */
+    wanderTurnRate?: number;
     /**
      * 牵引：把 `pullRadius` 内的敌人以 `pullSpeed`（世界 px/秒）拽向区域圆心。
      *

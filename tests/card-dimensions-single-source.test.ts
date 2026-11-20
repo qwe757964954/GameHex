@@ -9,7 +9,6 @@
  * ③ 品级 id 数组在卡牌侧是 re-export，不是第二份副本 —— 用引用相等钉死。
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
     cardRarityMeta, rarityNameOfTier, rarityRank, setCardRarityMeta, ZC_ATTACK_TRAITS, ZC_CAMP_TRAITS,
@@ -17,6 +16,7 @@ import {
 import { ZC_CARD_RARITIES as CARD_RARITIES } from '../assets/script/app/card/CardLineupTypes';
 import { ZC_CARD_RARITIES as MODEL_RARITIES } from '../assets/script/app/zcds/model/ZCCombatCatalog';
 import { cardArtConfig } from './helpers/card-art-config';
+import { readRefKvc } from './helpers/ref-kvc';
 
 test('品级 id 数组只有一份：卡牌侧 re-export 的是同一个引用', () => {
     assert.equal(CARD_RARITIES, MODEL_RARITIES, 'CardLineupTypes 里不应再写一份品级数组');
@@ -51,10 +51,7 @@ test('品级档位由表 sort 派生，改表权重档位自动跟随', () => {
 });
 
 test('pvpCard.traits 的职业 / 阵营取值与 ZCCombatCatalog 的词表完全一致', () => {
-    const table = JSON.parse(readFileSync('assets/remoteRef/pvpCard.json', 'utf8')) as {
-        k: string[];
-        v: unknown[][];
-    };
+    const table = readRefKvc('assets/remoteRef/pvpCard.json');
     const column = table.k.indexOf('traits');
     assert.ok(column >= 0, 'pvpCard 表没有 traits 列');
 

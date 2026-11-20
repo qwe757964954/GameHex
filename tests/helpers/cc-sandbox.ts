@@ -115,6 +115,42 @@ export function loadTsModule<T = Record<string, unknown>>(file: string, opts: Sa
  */
 export function ccStub(parts: Record<string, unknown> = {}): Record<string, unknown> {
     const identity = () => (value: unknown) => value;
+
+    class FakeNode {
+        name = '';
+        active = true;
+        isValid = true;
+        children: FakeNode[] = [];
+        parent: FakeNode | null = null;
+        position = { x: 0, y: 0, z: 0 };
+        getComponent() { return null; }
+        getComponents() { return []; }
+        addComponent() { return null; }
+        on() {}
+        off() {}
+        emit() {}
+        destroy() { this.isValid = false; return true; }
+        removeFromParent() {}
+        addChild(node: FakeNode) { this.children.push(node); node.parent = this; }
+    }
+
+    class FakeVec2 {
+        constructor(public x = 0, public y = 0) {}
+        set(x: number, y: number) { this.x = x; this.y = y; return this; }
+        clone() { return new FakeVec2(this.x, this.y); }
+    }
+
+    class FakeVec3 {
+        constructor(public x = 0, public y = 0, public z = 0) {}
+        set(x: number, y: number, z = 0) { this.x = x; this.y = y; this.z = z; return this; }
+        clone() { return new FakeVec3(this.x, this.y, this.z); }
+    }
+
+    class FakeColor {
+        constructor(public r = 255, public g = 255, public b = 255, public a = 255) {}
+        clone() { return new FakeColor(this.r, this.g, this.b, this.a); }
+    }
+
     return {
         _decorator: {
             ccclass: identity,
@@ -126,6 +162,17 @@ export function ccStub(parts: Record<string, unknown> = {}): Record<string, unkn
             inheritDoc: () => undefined,
         },
         Component: class {},
+        Node: FakeNode,
+        Vec2: FakeVec2,
+        Vec3: FakeVec3,
+        Color: FakeColor,
+        UITransform: class {},
+        Button: class { static EventType = { CLICK: 'click' }; },
+        Sprite: class {},
+        Label: class {},
+        Widget: class {},
+        UIOpacity: class {},
+        EventTouch: class {},
         ...parts,
     };
 }

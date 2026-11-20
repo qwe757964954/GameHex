@@ -1968,7 +1968,8 @@ test('单位先摧毁城墙，再对城墙后的建筑造成伤害', () => {
     assert.equal(game.snapshot.hexes[enemyHexId].wallHp, 0);
     const wallFloat = game.floatTexts.find((text) => text.id === wallFloatId);
     assert.ok(wallFloat, '命中城墙必须产生伤害飘字');
-    assert.equal(wallFloat.value, 1, '城墙只剩 1 点耐久时显示实际扣除值');
+    assert.ok(wallFloat.value > 1, '城墙只剩 1 点耐久时仍显示完整命中伤害');
+    assert.equal(wallFloat.appliedDamage, 1);
     assert.equal(wallFloat.x, ZC_HEX_CONFIG[enemyHexId].x);
     assert.equal(wallFloat.y, ZC_HEX_CONFIG[enemyHexId].y);
     assert.ok(Number.isInteger(game.snapshot.hexes[enemyHexId].wallBreachedEdge));
@@ -1989,7 +1990,7 @@ test('单位先摧毁城墙，再对城墙后的建筑造成伤害', () => {
     assert.equal(buildingFloat.y, ZC_HEX_CONFIG[enemyHexId].y);
 });
 
-test('命中产生伤害飘字：数值取实际扣血，归属取攻击方', () => {
+test('命中产生伤害飘字：显示完整伤害，归属取攻击方', () => {
     const seed = new ZCGameModel(null, () => 0.1);
     const snapshot = cloneSnapshot(seed);
     const enemyUnit = makeUnit(7, 'enemy', ZC_HEX_CONFIG[ZC_ENEMY_HOME_ID].neighbors[0]);
@@ -2004,11 +2005,12 @@ test('命中产生伤害飘字：数值取实际扣血，归属取攻击方', ()
     const rules = getPvpRuntimeRules();
     game.useArtifact();
 
-    // 神器伤害来源为空，按我方记功：飘字归属应为 player，数值是这一击实际打掉的血。
+    // 神器伤害来源为空，按我方记功；击杀也显示完整伤害。
     const damage = game.floatTexts.filter((text) => text.kind === 'damage');
     assert.equal(damage.length, 1);
     assert.equal(damage[0].owner, 'player');
-    assert.equal(damage[0].value, 20);
+    assert.equal(damage[0].value, rules.artifactDamage);
+    assert.equal(game.damageStats.player.dealt, 20);
     assert.equal(damage[0].x, enemyUnit.freeX);
     assert.equal(damage[0].y, enemyUnit.freeY);
     assert.ok(damage[0].durationSeconds > 0);

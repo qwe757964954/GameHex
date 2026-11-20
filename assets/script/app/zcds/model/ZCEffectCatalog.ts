@@ -157,6 +157,10 @@ export const ZC_EFFECT_PATHS = {
     selfAuraFlame: 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环',
     lightningImpact: 'units/projectiles/雷电冲击/雷电冲击',
     selfAuraFire: 'units/projectiles/麻辣铁锅_喷射火焰/麻辣铁锅_喷射火焰',
+    //  2026-11-20 第 33 批：分裂菇 68014「一人成军」101404 的分身生成点。
+    //  26 帧散图（1185 画布）× 一次性爆点，prefab / anim 由
+    //  `tools/build_fission_spawn_fx.py` 生成 —— 手工改 prefab 会被重跑覆盖。
+    fissionSpawn: 'units/projectiles/分裂菇_生成分身/分裂菇_生成分身',
 } as const;
 
 /** 行为键单一真源；Fx facade、资源计划与行为判据都从这里取。*/
@@ -178,6 +182,7 @@ export const ZC_EFFECT_BEHAVIOR_KEYS = {
     missileBarrage: 'missile_barrage',
     stormZone: 'storm_zone',
     rayBeam: 'ray_beam',
+    summonUnit: 'summon_unit',
 } as const;
 
 /**
@@ -302,6 +307,14 @@ export const ZC_EFFECT_BEHAVIOR_SPECS: readonly IZCEffectBehaviorSpec[] = [
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.rayBeam,
         prefabPaths: [ZC_EFFECT_PATHS.lightningImpact],
         notes: '矩形光束；复用雷电冲击，预热不单收（首战由本局清单加载）',
+    },
+    {
+        behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.summonUnit,
+        prefabPaths: [ZC_EFFECT_PATHS.fissionSpawn],
+        //  🔴 不标 `warmup`：这条只在带分裂菇 68014 的阵容里用得上，进全局预热等于给
+        //  所有对局多下 26 张 1185×1185 的散图。`buildZCVisualResourcePlan` 按
+        //  `skillPlans.behaviorKey` 命中本组，所以「有这张卡」才收。
+        notes: '召唤（`summon_unit`）的分身生成爆点；目前只有 68014「一人成军」101404 用它',
     },
 ];
 

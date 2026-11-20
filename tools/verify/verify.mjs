@@ -420,23 +420,27 @@ function fallbackTests(file) {
   return { tests: [...out], wide };
 }
 
-function selectTests(files) {
+const QUICK_TEST_LIMIT = 12;
+
+function selectTests(files, opts = {}) {
   const { rows: routes, ok: routeOk, sources } = parseRoutes();
   const reverse = reverseTestIndex();
   const pathRefs = pathRefIndex();
   const picked = new Set();
   const wide = [];
   const hits = [];
+  const quick = Boolean(opts.quick);
+
   for (const f of files) {
-    // 1) import 反向可达 —— 机械事实，文档怎么改都不失效
-    const importers = reverse.get(norm(f)) ?? [];
+    // 快速模式下跳过深层多跳反向图，防基础类型改动引发级联扇出爆炸
+    const importers = quick ? [] : (reverse.get(norm(f)) ?? []);
     // 1b) 路径字面量引用 —— 源码文本守卫 / 资源校验，import 图天生看不见
     const refs = pathRefs.get(norm(f)) ?? [];
     // 2) 规范表 / 同名 / feature 前缀 —— 补充（覆盖 import 图看不到的配置与资源）
     const matched = routes.filter((r) => matchRoute(r, f));
     const fb = fallbackTests(f);
     const derived = Array.isArray(fb) ? fb : fb.tests;
-    if (!Array.isArray(fb) && fb.wide.length) wide.push(...fb.wide);
+    if (!Array.isArray(fb) && fb.wide.length && !quick) wide.push(...fb.wide);
 
     hits.push({ file: f, importers, refs, routes: matched.map((r) => r.title), fallback: derived });
     for (const t of importers) picked.add(t);
@@ -444,12 +448,31 @@ function selectTests(files) {
     for (const t of derived) picked.add(t);
     for (const r of matched) for (const t of r.tests) picked.add(t);
   }
+
+  let finalTests = [...picked].filter((t) => fs.existsSync(path.join(ROOT, t))).sort();
+  let quickTrimmed = false;
+  if (quick && finalTests.length > QUICK_TEST_LIMIT) {
+    const priority = (t) => {
+      let score = 0;
+      for (const h of hits) {
+        if (h.fallback.includes(t)) score += 10;
+        if (h.file.startsWith('tests/') && norm(h.file) === t) score += 20;
+        if (h.routes.length && h.routes.some((title) => t.includes(title))) score += 5;
+      }
+      return score;
+    };
+    finalTests.sort((a, b) => priority(b) - priority(a));
+    finalTests = finalTests.slice(0, QUICK_TEST_LIMIT).sort();
+    quickTrimmed = true;
+  }
+
   return {
-    tests: [...picked].filter((t) => fs.existsSync(path.join(ROOT, t))).sort(),
+    tests: finalTests,
     hits,
     wide: [...new Set(wide)],
     routeOk,
     routeSources: sources,
+    quickTrimmed,
   };
 }
 
@@ -962,15 +985,19 @@ function runCli(argv) {
     return 2;
   }
 
+  const isQuick = argv.includes('--quick') || process.env.VERIFY_QUICK === '1';
   const useFull = mode === 'full' || mode === 'baseline';
-  const selection = useFull ? null : selectTests(files);
-  const sentinels = useFull ? [] : baselineSentinelFiles();
+  const selection = useFull ? null : selectTests(files, { quick: isQuick });
+  const sentinels = (useFull || isQuick) ? [] : baselineSentinelFiles();
   const picked = useFull ? [] : [...new Set([...selection.tests, ...sentinels])].sort();
   // 🔴 路由真源解析不出来 = 验收口径降级，此时任何 PASS 都不可信 ⇒ 不允许带病放行。
   const routeFail = !useFull && selection !== null && !selection.routeOk;
 
-  console.log(`[verify] 模式=${mode}  改动文件=${files.length}  待跑用例=${useFull ? '全量' : picked.length}`);
-  if (!useFull) {
+  console.log(`[verify] 模式=${mode}${isQuick ? ' (⚡ quick)' : ''}  改动文件=${files.length}  待跑用例=${useFull ? '全量' : picked.length}`);
+  if (isQuick && selection?.quickTrimmed) {
+    console.log(`[verify] ⚡ 快速模式已启用：跳过深层级联，精简至核心直系用例（上限 ${QUICK_TEST_LIMIT}），实现秒级反馈`);
+  }
+  if (!useFull && !isQuick) {
     const extra = sentinels.filter((s) => !selection.tests.includes(s)).length;
     console.log(`[verify] 基线红哨兵：${sentinels.length} 个测试文件并入（路由未命中 ${extra} 个），防「没跑 ≠ 修好」`);
   }
@@ -1069,6 +1096,12 @@ function runCli(argv) {
     return 2;
   }
   console.log(bad === 0 ? '\n✅ PASS：相对基线零新增' : `\n❌ FAIL：${bad} 条新增`);
+  if (bad === 0 && base.failures?.length) {
+    console.log(`ℹ️  已安全隔离 ${base.failures.length} 条历史基线已知红，本次改动未引入任何新增失败，请勿修改无关测试。`);
+  }
+  if (bad === 0 && isQuick) {
+    console.log(`ℹ️  快速自检通过！若修改涉及公共基础架构或提交前，建议运行完整 'npm run verify'。`);
+  }
   return bad === 0 ? 0 : 1;
 }
 

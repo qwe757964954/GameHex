@@ -1,6 +1,6 @@
 # UI 统一进出场动效 · 实现说明
 
-> 状态：实现说明（最后核对 2026-11-18）。
+> 状态：实现说明（最后核对 2026-11-20，增补 §7 卡牌升级详情时间轴动效）。
 
 > 对应需求（2026-11-18）：
 >
@@ -151,3 +151,28 @@ npx tsx --test tests/ui-motion.test.ts tests/main-hud-intro.test.ts
 
 `tests/popup-lifecycle.test.ts` 里 `UIMotionPlayer` 被桩成「播不上」，让关闭链路走同步销毁 / 回收，
 继续守住原有的生命周期与实例池语义 —— 过渡是否真的逐帧跑由上面两个文件负责。
+
+---
+
+## 7. 卡牌升级详情时间轴动效（CardUpgradedTimeline，2026-11-20）
+
+对应需求：「增加升级详情界面的 UI 表现动画」，由 5 阶段串联成一条严格的时间轴：
+
+1. **① 入场（Entrance）**：从上到下逐块从屏幕外滑到各自设计坐标，块间错峰间隔 `ENTRANCE_STAGGER = 0.1s`，单块时长 `0.55s`，滑移距离统一 `1500px`（五块分别为：Header / 立绘与影子 / 等级 / 属性 / 增益）。
+2. **② 角色升级特效（Fx）**：立绘块（Block 1）落位后开始播放，15 帧序列帧（`007-2-run_loop_05..19`，采样 12fps，时长 1.25s）。
+3. **③ 等级数字跳动（Level Pop）**：特效起播 0.35s 后开始跳动，先放大至峰值切成新等级文字，再回弹复位。
+4. **④ 进度条刷光** 与 **⑤ 属性数值刷光**：
+   - 🔴 **硬约束**：「所有的刷光动画同步」。
+   - `CardUpgradedTimeline.ts` 中**只有一个 `shineProgressAt`**，进度条与属性区共用同一个 `0→1` 扫过进度，严禁各自分开计算。刷光结束后属性数值直接切换。
+
+### 架构与生命周期约束
+
+- **纯函数、零引擎依赖**：所有时序、缓动曲线与归一化进度在 `assets/script/app/card/CardUpgradedTimeline.ts` 中计算，可独立单测。
+- **全程不建 tween**：`CardUpgradedPage` 节点进对象池复用，采用 `startedAt` + 逐帧调度采样。关闭或销毁时直接停止，杜绝 tween 回调访问已回收节点的风险。
+- **关联资源**：预制体 `assets/bundles/main-pages/ui/card/CardUpgradeFx.prefab`。
+
+### 验证
+
+```powershell
+npx tsx --test tests/card-upgraded-animation.test.ts tests/card-upgraded-layout.test.ts
+```

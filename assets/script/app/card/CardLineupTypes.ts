@@ -35,38 +35,78 @@ export function visibleLineupCards(cards: readonly ZCDeckCard[]): ZCDeckCard[] {
 }
 
 /**
+ * 解析卡牌在 UI 呈现时的展示等级：
+ * - 优先从 heroLevels 查询已确认等级；
+ * - 查询不到时：若服务端英雄列表已知（heroListKnown=true），代表未拥有，按 0 级展示；
+ * - 若英雄列表未知（离线或编辑器预览），使用 fallbackLevel 兜底。
+ */
+export function resolveCardDisplayLevel(
+    cardId: string | number,
+    heroLevels: ReadonlyMap<string, number> | undefined | null,
+    heroListKnown: boolean,
+    fallbackLevel = 1,
+): number {
+    const key = String(cardId);
+    const level = heroLevels?.get(key);
+    if (level !== undefined && Number.isSafeInteger(level) && level >= 0) {
+        return level;
+    }
+    return heroListKnown ? 0 : fallbackLevel;
+}
+
+const catalogRankCache = new WeakMap<ICardLineupCatalog, {
+    readonly rarityRank: ReadonlyMap<ZCCardRarity, number>;
+    readonly classRank: ReadonlyMap<ZCCardClass, number>;
+}>();
+
+function getCatalogRanks(lineup: ICardLineupCatalog) {
+    let cached = catalogRankCache.get(lineup);
+    if (!cached) {
+        cached = {
+            rarityRank: new Map(lineup.rarities.map((meta) => [meta.id, meta.sort])),
+            classRank: new Map(lineup.classes.map((meta) => [meta.id, meta.sort])),
+        };
+        catalogRankCache.set(lineup, cached);
+    }
+    return cached;
+}
+
+/**
  * 排序分组：**可升级 > 已上阵 > 已解锁 > 解锁中（未解锁但有碎片）> 未获得**；
  * 同组依次比较品质、等级、职业。
  *
  * 可升级排最前是用户 2026-11-17 第 16 条 ③ 的要求：引导第 6-2 步要在卡库里指出豌豆游侠，
  * 而卡库是横向列表 —— 目标卡排在后面就压根不在渲染窗口里，光圈挖不出来（表现为「没有高亮」）。
  * 判据与条目上的「可升级箭头」完全同源（`CardLineupCard.render`）：
- * 已解锁 + 未满级 + 所需碎片 > 0 + 持有 ≥ 所需。
+ * 已解锁 + `upgradeable`（升级按钮激活 = **碎片与种族经验同时够**）。
+ * 不再自己比 `owned >= need` —— 碎片够了但兵种经验还差一截时，那是个点不动的灰按钮
+ * （用户 2026-11-20 口径），不该被当成「可升级」排到最前面。
  */
 export function sortLineupCards(
     cards: readonly ZCDeckCard[],
     deployedIds: ReadonlySet<string>,
     heroLevels: ReadonlyMap<string, number>,
-    fragments: ReadonlyMap<string, { readonly owned: number; readonly need?: number; readonly maxed?: boolean }>,
+    fragments: ReadonlyMap<string, {
+        readonly owned: number;
+        readonly need?: number;
+        readonly maxed?: boolean;
+        /** 升级按钮是否激活（`evaluateUpgrade().canUpgrade`）；缺省按「不可升级」。*/
+        readonly upgradeable?: boolean;
+    }>,
     lineup: ICardLineupCatalog,
     fallbackLevel = 0,
 ): ZCDeckCard[] {
     const levelOf = (card: ZCDeckCard): number => heroLevels.get(card.id) ?? fallbackLevel;
-    const upgradable = (card: ZCDeckCard): boolean => {
-        const progress = fragments.get(card.id);
-        if (!progress || progress.maxed || levelOf(card) <= 0) return false;
-        const need = progress.need ?? 0;
-        return need > 0 && progress.owned >= need;
-    };
+    const upgradable = (card: ZCDeckCard): boolean =>
+        levelOf(card) > 0 && fragments.get(card.id)?.upgradeable === true;
     const groupOf = (card: ZCDeckCard): number => {
         if (upgradable(card)) return 0;
         if (deployedIds.has(card.id)) return 1;
         if (levelOf(card) > 0) return 2;
         return (fragments.get(card.id)?.owned ?? 0) > 0 ? 3 : 4;
     };
-    //  权重来自表 `sort` 列；表里没覆盖到的取值排到最后，不抛错（不阻断列表）。
-    const rarityRank = new Map(lineup.rarities.map((meta) => [meta.id, meta.sort]));
-    const classRank = new Map(lineup.classes.map((meta) => [meta.id, meta.sort]));
+    // 权重来自表 `sort` 列；缓存避免每次排序重构 Map
+    const { rarityRank, classRank } = getCatalogRanks(lineup);
     const rankOf = (ranks: ReadonlyMap<ZCCardRarity | ZCCardClass, number>, key: ZCCardRarity | ZCCardClass): number =>
         ranks.get(key) ?? Number.MAX_SAFE_INTEGER;
     return cards.slice().sort((a, b) => groupOf(a) - groupOf(b)

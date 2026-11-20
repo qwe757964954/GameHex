@@ -223,14 +223,17 @@ export class ZCSnapshotCodec {
                     check(optional(feature.effect, v => oneOf(ZC_GATE_EFFECTS, v)), `${prefix}.effect`);
                     for (const key of ['readyAt', 'windowUntil', 'nextAttackAt', 'cooldownSeconds', 'startedAt', 'lineProgress', 'lineDamage', 'portalAt']) check(optional(feature[key], nonnegative), `${prefix}.${key}`);
                     check(optional(feature.awake, v => typeof v === 'boolean'), `${prefix}.awake`);
+                    check(optional(feature.monsterFacing, v => v === -1 || v === 1), `${prefix}.monsterFacing`);
                     check(optional(feature.monsterResourceId, v => integer(v) && !!neutralResourceItemOf(Number(v))), `${prefix}.monsterResourceId`);
                     for (const key of ['unlockedOwners', 'focusOwners']) check(optional(feature[key], v => Array.isArray(v)
                         && new Set(v).size === v.length && v.every(owner => ownerSet.has(owner))), `${prefix}.${key}`);
                     check(optional(feature.focusReadyAt, v => record(v) && Object.entries(v).every(([owner, at]) => ownerSet.has(owner) && nonnegative(at))), `${prefix}.focusReadyAt`);
                     check(optional(feature.retaliationUnitIds, v => Array.isArray(v) && new Set(v).size === v.length
                         && v.every(id => integer(id) && id > 0)), `${prefix}.retaliationUnitIds`);
-                    for (const key of ['disengagedAt', 'regenUpdatedAt']) check(optional(feature[key], v => nonnegative(v)
+                    for (const key of ['attackStartedAt', 'disengagedAt', 'regenUpdatedAt']) check(optional(feature[key], v => nonnegative(v)
                         && Number(v) <= value.elapsedSeconds), `${prefix}.${key}`);
+                    check(optional(feature.attackTargetUnitId, v => integer(v) && Number(v) > 0
+                        && feature.attackStartedAt !== undefined), `${prefix}.attackTargetUnitId`);
                     if (Array.isArray(feature.focusOwners)) check(feature.focusOwners.every(owner => Array.isArray(feature.unlockedOwners)
                         && feature.unlockedOwners.includes(owner)), `${prefix}.focusOwners.unlocked`);
                     if (feature.patrol !== undefined) {
@@ -534,6 +537,9 @@ export class ZCSnapshotCodec {
             const path = `groundZones[${index}]`;
             if (!record(zone)) { errors.push(path); return; }
             for (const key of ['x', 'y']) check(Number.isFinite(zone[key]), `${path}.${key}`);
+            for (const key of ['chaseGoalX', 'chaseGoalY']) {
+                check(optional(zone[key], Number.isFinite), `${path}.${key}`);
+            }
             for (const key of ['radius', 'remainingSeconds', 'nextWaveAt', 'waveInterval', 'damage']) check(nonnegative(zone[key]), `${path}.${key}`);
             check(ownerSet.has(zone.owner), `${path}.owner`);
             check(integer(zone.sourceUnitId) && zone.sourceUnitId > 0 && zone.sourceUnitId < data.nextUnitId, `${path}.sourceUnitId`);
@@ -595,6 +601,9 @@ export class ZCSnapshotCodec {
             //  那一下 / 是否已经踩响。三条都会改变「这片区域还飞不飞、到期炸不炸」，
             //  退不出快照的话读档回来会当场落地 + 直接消失（一片形同虚设的陷阱）。
             check(optional(zone.flightSeconds, nonnegative), `${path}.flightSeconds`);
+            //  抛掷弧线（2026-11-20）：没有总时长就算不出进度，没有峰高就是平飞，两条都要还原。
+            check(optional(zone.flightTotalSeconds, nonnegative), `${path}.flightTotalSeconds`);
+            check(optional(zone.flightArcPx, nonnegative), `${path}.flightArcPx`);
             //  2026-11-19 蘑菇爆炸 101704：飞行段的持有表现（「生成」），落地后换回
             //  `effectPrefabPath`。不还原的话读档回来的投掷物会一路带着落地那张图在飞。
             check(optional(zone.flightVisualPath, v => v === null || typeof v === 'string'), `${path}.flightVisualPath`);
@@ -608,12 +617,52 @@ export class ZCSnapshotCodec {
             check(optional(zone.wanderNextTurnAt, nonnegative), `${path}.wanderNextTurnAt`);
             //  朝向可负（-π~π），按有限数校验，不能用 nonnegative。
             check(optional(zone.wanderAngleRadians, Number.isFinite), `${path}.wanderAngleRadians`);
+            //  转向角速度**可负**（左转 / 右转），所以按有限数校，不能用 nonnegative。
+            check(optional(zone.wanderTurnRate, Number.isFinite), `${path}.wanderTurnRate`);
             check(optional(zone.pullSpeed, nonnegative), `${path}.pullSpeed`);
             check(optional(zone.pullRadius, nonnegative), `${path}.pullRadius`);
             //  2026-11-19 射线集束 103503：事件级缩放（正数，缺省不写）。
             //  不还原的后果是读档后光束缩回 prefab 原尺寸 —— 判定仍是长的，看着是短的。
             check(optional(zone.effectScale, v => nonnegative(v) && (v as number) > 0), `${path}.effectScale`);
+            //  2026-11-20 第 28 批 102004 飓风「先从本体飞到目标」：到点交还游走的阶段标记。
+            //  不还原的后果是读档回来这阵风又变回「追到就停」—— 飞到目标后定在半空、
+            //  剩余寿命一直不减、一波都不结算（画面上一片不散也不打人的风）。
+            check(optional(zone.arriveWander, v => typeof v === 'boolean'), `${path}.arriveWander`);
+            //  赶路段已耗时（秒）：总时长口径「含赶路共 N 秒」的账本 —— 落地那一刻要拿它扣寿命。
+            //  不还原的话读档回来会多活一整段赶路时间（而且 `wavesLeft` 也按整段算回去）。
+            check(optional(zone.approachSeconds, nonnegative), `${path}.approachSeconds`);
+            //  入场起点占比（0~1）。纯表现，但写歪了会让整片区域只剩 10% 大小，
+            //  所以按比例收口（`growSeconds` 一直没登记：它是纯时长、区间写宽了也只是快慢）。
+            check(optional(zone.growFrom, v => nonnegative(v) && (v as number) <= 1), `${path}.growFrom`);
         });
+        // 排队中的召唤物（2026-11-20 第 33 批 101404 分裂菇「先特效后出现 + 0.1s 间隔」）。
+        //  不校验整列的后果：读档回来这几只要么永远不出生（队列被清）、要么出生成
+        //  「0 血 0 攻击」的空壳 —— 两种都不报错。
+        check(optional(data.pendingSummons, Array.isArray), 'pendingSummons');
+        if (Array.isArray(data.pendingSummons)) {
+            data.pendingSummons.forEach((entry: unknown, index: number) => {
+                const path = `pendingSummons[${index}]`;
+                if (!record(entry)) { errors.push(path); return; }
+                check(nonnegative(entry.fxAtSeconds) && nonnegative(entry.spawnAtSeconds)
+                    && entry.spawnAtSeconds + 1e-9 >= entry.fxAtSeconds, `${path}.spawnAtSeconds`);
+                check(optional(entry.fxPlayed, (v) => typeof v === 'boolean'), `${path}.fxPlayed`);
+                check(typeof entry.owner === 'string' && ownerSet.has(entry.owner), `${path}.owner`);
+                check(typeof entry.cardId === 'string' && entry.cardId.length > 0, `${path}.cardId`);
+                check(integer(entry.tier) && (entry.tier as number) >= 1, `${path}.tier`);
+                check(integer(entry.sourceHexId) && (entry.sourceHexId as number) >= 0, `${path}.sourceHexId`);
+                check(integer(entry.masterId) && (entry.masterId as number) > 0, `${path}.masterId`);
+                check(integer(entry.skillId) && (entry.skillId as number) >= 0, `${path}.skillId`);
+                check(typeof entry.skillName === 'string', `${path}.skillName`);
+                //  坐标是棋盘逻辑坐标，**可负**，只能按有限数校。
+                check(Number.isFinite(entry.x) && Number.isFinite(entry.y), `${path}.x`);
+                for (const key of ['maxHp', 'attack', 'moveSpeed', 'attackInterval', 'attackRange', 'bodyRadius']) {
+                    check(nonnegative(entry[key]), `${path}.${key}`);
+                }
+                check(optional(entry.summonUntil, nonnegative), `${path}.summonUntil`);
+                check(optional(entry.summonAlpha, (v) => nonnegative(v) && (v as number) <= 1), `${path}.summonAlpha`);
+                check(optional(entry.summonIndependent, (v) => typeof v === 'boolean'), `${path}.summonIndependent`);
+            });
+        }
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
         check(optional(data.nextCombatEventId, (v) => integer(v) && (v as number) > 0), 'nextCombatEventId');
         for (const id of projectileIds) check(integer(data.nextCombatEventId) && data.nextCombatEventId > id, 'nextCombatEventId');

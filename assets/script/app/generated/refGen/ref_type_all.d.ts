@@ -2289,6 +2289,7 @@ unitSkillId?:number
 attackStyle?:number
 headIcon?:string
 unitValueFactor?:number
+gameEndPrefabSize?:number
 }
 type IRefpvpCard_id=number
 type IRefpvpCard_name=string
@@ -2329,6 +2330,7 @@ type IRefpvpCard_unitSkillId=number
 type IRefpvpCard_attackStyle=number
 type IRefpvpCard_headIcon=string
 type IRefpvpCard_unitValueFactor=number
+type IRefpvpCard_gameEndPrefabSize=number
 
 interface refGen{pvpCard:IRefpvpCard}
 

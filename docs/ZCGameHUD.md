@@ -1,6 +1,6 @@
 # ZCGameHUD 节点与组件需求
 
-以当前 `assets/resources/ui/game/ZCGameHUD.prefab` 为准。`ZCGameHUDView` 负责展示、按钮事件转发和棋盘拖动；`ZCGame` 负责读取模型、执行游戏动作和刷新 HUD。保留现有节点布局与嵌套 prefab。
+以当前 `assets/bundles/battle/ui/game/ZCGameHUD.prefab` 为准。`ZCGameHUDView` 负责展示、按钮事件转发和棋盘拖动；`ZCGame` 负责读取模型、执行游戏动作和刷新 HUD。保留现有节点布局与嵌套 prefab。
 
 ## 节点与数据对应
 

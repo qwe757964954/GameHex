@@ -835,7 +835,7 @@ const EXPECT_BOX: readonly (readonly [string, number, number, number, number])[]
     ['Chat/AtPopup/RoleList/content/RowTemplate/Head', 136.5, 664, 77, 77],
 ];
 
-test('C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
+test('chat › C4 ⚠️ 几何：每个节点反解回画布像素后必须等于 FGUI XML 原值（差分 0.5px）', () => {
     const failures: string[] = [];
     for (const [path, left, top, w, h] of EXPECT_BOX) {
         const node = BY_PATH.get(path);
@@ -1149,7 +1149,7 @@ test('D2 ⚠️ 三张缓存都走 `CacheMgr`（服务端会推），**不自己
     assert.ok(/private\s+(readonly\s+)?messages|chatStore|Map<string/.test(REPO_CODE), '消息要存在内存里');
 });
 
-test('D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
+test('chat › D3 ⚠️ 写请求必须走 `sendGameRequest`（超时 / 离线 / catch 统一收口）', () => {
     assert.ok(REPO_CODE.includes('GameNet.sendRequest('), '必须走公共发包壳');
     assert.ok(REPO_CODE.includes(`tag: 'Chat'`), '必须带 Chat tag');
     assert.ok(REPO_SRC.includes(`import { READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';`), '超时常量走公共真源');

@@ -40,8 +40,13 @@ export class CardSkillPage extends PopupBase {
         };
         this.upgradeButton.node.on(Button.EventType.CLICK, this.onUpgradeClick, this);
     }
-    protected onOpen(): void { this.render(null); }
-    protected onClose(): void { this.render(null); }
+    protected onOpen(): void {
+        this.render(null);
+    }
+
+    protected onClose(): void {
+        this.render(null);
+    }
 
     render(state: CardSkillListPresentation | null): void {
         this.state = state;
@@ -59,10 +64,21 @@ export class CardSkillPage extends PopupBase {
         this.tierScroll.refreshList(row?.skill.levels.length ?? 0);
         this.upgradeButton.interactable = !!state?.canUpgrade;
         const next = row ? skillLevelRow(row.skill, row.level + 1) : undefined;
-        this.upgradeLabel.string = state?.busy ? texts.skillUpgradeSending : row && !next ? texts.upgradeMaxed : texts.skillUpgradeSingle;
+        this.upgradeLabel.string = this.resolveUpgradeButtonText(state, row, next);
         const costs = state?.costs ?? [];
         this.renderCost(this.coinIcon, this.coinLabel, costs[0]);
         this.renderCost(this.materialIcon, this.materialLabel, costs[1]);
+    }
+
+    private resolveUpgradeButtonText(state: CardSkillListPresentation | null, row: unknown, next: unknown): string {
+        const texts = CARD_LINEUP_TEXTS;
+        if (state?.busy) {
+            return texts.skillUpgradeSending;
+        }
+        if (row && !next) {
+            return texts.upgradeMaxed;
+        }
+        return texts.skillUpgradeSingle;
     }
 
     /**
@@ -85,4 +101,9 @@ export class CardSkillPage extends PopupBase {
     private readonly onUpgradeClick = (): void => {
         EventMgr.instance.emit(CardPopupEvent.SkillIntent, { owner: this });
     };
+
+    onDestroy(): void {
+        this.upgradeButton?.node?.off(Button.EventType.CLICK, this.onUpgradeClick, this);
+        super.onDestroy();
+    }
 }

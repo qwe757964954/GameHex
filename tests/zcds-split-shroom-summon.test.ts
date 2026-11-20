@@ -32,6 +32,7 @@ import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model
 import { compileZCCombatBuild, getZCModifierCatalogs } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import type { ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCUnitSystem, type IZCUnitContext } from '../assets/script/app/zcds/model/systems/ZCUnitSystem';
 import { assetPath } from './helpers/asset-paths';
@@ -117,8 +118,33 @@ function makeModel(config: ZCMatchConfig, units: ZCUnitState[], elapsedSeconds =
     return new ZCGameModel(snapshot, () => 0.5, config);
 }
 
+/**
+ * 把「排队中的分身」全部兑现（2026-11-20 第 33 批起独立分身是排队出生的）。
+ *
+ * `summonUnits` 当拍只往 `pendingSummons` 里压条目：第 i 只在自己 `fxAtSeconds` 播特效、
+ * `spawnAtSeconds` 才 `spawnUnit`。想数到人就必须把时钟推过去。
+ */
+function settlePendingSummons(model: ZCGameModel): void {
+    for (let step = 0; step < 40; step += 1) {
+        if (!tickPending(model, 0.05)) return;
+    }
+    assert.fail('队列推了 2 秒还没兑现完');
+}
+
+/** 时钟往前推 `dt` 并兑现一到点就该做的事；返回队列是否还有货。*/
+function tickPending(model: ZCGameModel, dt: number): boolean {
+    const state = model.snapshot as unknown as ZCSnapshot;
+    state.elapsedSeconds = Math.round((state.elapsedSeconds + dt) * 1e9) / 1e9;
+    (model as unknown as { flushPendingSummons(): void }).flushPendingSummons();
+    return (state.pendingSummons?.length ?? 0) > 0;
+}
+
 function summon(model: ZCGameModel, master: ZCUnitState): boolean {
-    return (model as unknown as { summonUnits(unit: ZCUnitState): boolean }).summonUnits(master);
+    const casted = (model as unknown as { summonUnits(unit: ZCUnitState): boolean }).summonUnits(master);
+    //  生产环境这两步由 `advance()` 分多帧完成；夹具里直接一次推完，
+    //  这样「召出 6 只」这类断言仍然读得到人。
+    settlePendingSummons(model);
+    return casted;
 }
 
 function syncSummons(model: ZCGameModel): void {
@@ -430,4 +456,119 @@ test('跟随型舞伴仍然不动：短路对它们原样有效', () => {
         ZCUnitSystem.update([clone], 0.1, context);
     }
     assert.deepEqual(moves, [], '位置由 syncSummons 钉，自己一步都不走');
+});
+
+// ────────────────────────────────────────────── 七、生成表现（2026-11-20 第 33 批）
+
+/** `ZC_EFFECT_PATHS.fissionSpawn`；特效目录里那一条的唯一路径。*/
+const SPAWN_FX_PATH = 'units/projectiles/分裂菇_生成分身/分裂菇_生成分身';
+/** 设计口径「以本体为圆心，20px 为半径的圆内」（逻辑 px）。*/
+const SCATTER_RADIUS = 20;
+/** 26 帧 ÷ 24fps，与 `tools/build_fission_spawn_fx.py` 的 `_duration` 必须一致。*/
+const SPAWN_FX_SECONDS = 26 / 24;
+
+/** 只施法、不推进时钟：拿到「排队中」的原始队列。*/
+function castOnly(model: ZCGameModel, master: ZCUnitState): boolean {
+    return (model as unknown as { summonUnits(unit: ZCUnitState): boolean }).summonUnits(master);
+}
+
+test('分身落点：以本体为圆心 20px 的圆内，且 6 只互不重叠', () => {
+    const config = buildMatch(27);
+    const model = makeModel(config, [makeUnit(1)]);
+    const master = liveUnit(model, 1);
+    const originX = master.freeX;
+    const originY = master.freeY;
+
+    assert.equal(summon(model, master), true);
+    const clones = clonesOf(model);
+    assert.equal(clones.length, 6);
+    const seats = new Set<string>();
+    let maxDistance = 0;
+    for (const clone of clones) {
+        const distance = Math.hypot(clone.freeX - originX, clone.freeY - originY);
+        maxDistance = Math.max(maxDistance, distance);
+        assert.ok(distance <= SCATTER_RADIUS + 1e-6, `落点 ${distance.toFixed(2)} 超出 ${SCATTER_RADIUS}px`);
+        seats.add(`${clone.freeX.toFixed(3)},${clone.freeY.toFixed(3)}`);
+    }
+    assert.ok(maxDistance > 0, '不能全落在圆心（那就是没散开）');
+    assert.equal(seats.size, 6, '🔴 6 只不许叠在同一个点上');
+});
+
+test('分身生成：0.1s 一只、先播 0.32s 特效再出现', () => {
+    const config = buildMatch(27);
+    const model = makeModel(config, [makeUnit(1)]);
+    const master = liveUnit(model, 1);
+    const state = model.snapshot as unknown as ZCSnapshot;
+
+    assert.equal(castOnly(model, master), true);
+    assert.equal(clonesOf(model).length, 0, '🔴 施法那一拍一个都还没出现');
+    const pending = state.pendingSummons ?? [];
+    assert.equal(pending.length, 6);
+    pending.forEach((entry, index) => {
+        assert.ok(Math.abs(entry.fxAtSeconds - index * 0.1) < 1e-9, `第 ${index} 只间隔 0.1s`);
+        assert.ok(Math.abs(entry.spawnAtSeconds - (index * 0.1 + 0.32)) < 1e-9, '特效起播 0.32s 后才出生');
+    });
+
+    //  0.30s：前 4 只的特效已经在播，场上一只都没有 —— 这就是「先播放特效，再出现分身」。
+    tickPending(model, 0.3);
+    assert.equal(clonesOf(model).length, 0, '特效在播，分身还没出来');
+    const fx = state.combatEvents.filter((event) => event.effectPrefabPath === SPAWN_FX_PATH);
+    assert.equal(fx.length, 4, '到 0.30s 正好 4 条特效事件');
+    assert.equal(fx[0].type, 'area');
+    assert.ok(Math.abs(fx[0].durationSeconds - SPAWN_FX_SECONDS) < 1e-9, '寿命 = 26 帧 ÷ 24fps');
+    assert.equal(fx[0].fromX, pending[0].x, '特效落在这一只的出生坐标上');
+    assert.equal(fx[0].fromY, pending[0].y);
+
+    //  0.35s：第一只出现（其余还在排队）。
+    tickPending(model, 0.05);
+    const spawned = clonesOf(model);
+    assert.equal(spawned.length, 1, '只出现第一只');
+    assert.equal(spawned[0].summonAlpha, 0.65, '设计口径：分身约 65% 透明');
+    assert.equal(spawned[0].summonMasterId, 1);
+});
+
+test('排队中的分身也算 12 只名额：9 只在场 + 3 只正在生成 ⇒ 再召一批直接拒放', () => {
+    const config = buildMatch(9);   // 兵种 9 级 = I 档「3 只」
+    const units = [makeUnit(1)];
+    for (let index = 0; index < 9; index += 1) units.push(makeClone(10 + index, 1));
+    const model = makeModel(config, units);
+    const master = liveUnit(model, 1);
+
+    assert.equal(castOnly(model, master), true, '9 + 3 = 12，第一批放行');
+    assert.equal(clonesOf(model).length, 9, '第一批还在排队');
+    assert.equal(castOnly(model, master), false, '🔴 9 在场 + 3 排队 + 3 = 15 > 12 ⇒ 第二批拒放');
+    assert.equal((model.snapshot as unknown as ZCSnapshot).pendingSummons?.length, 3, '拒放不许偷偷压进队列');
+});
+
+test('本体在特效期间阵亡：排队中的分身照样出生', () => {
+    const config = buildMatch(27);
+    const model = makeModel(config, [makeUnit(1)]);
+    const master = liveUnit(model, 1);
+    assert.equal(castOnly(model, master), true);
+
+    master.hp = 0;
+    master.battleState = 'dead';
+    settlePendingSummons(model);
+    assert.equal(clonesOf(model).length, 6, '🔴 队列里存的是施法那一刻的属性，不回头查本体');
+    assert.equal(clonesOf(model).filter((clone) => clone.hp > 0).length, 6);
+});
+
+test('排队队列必须进快照白名单：合法的不报错，时刻写歪的报得出来', () => {
+    const config = buildMatch(27);
+    const model = makeModel(config, [makeUnit(1)]);
+    const master = liveUnit(model, 1);
+    assert.equal(castOnly(model, master), true);
+    const state = model.snapshot as unknown as ZCSnapshot;
+    assert.equal(state.pendingSummons?.length, 6);
+
+    const errors = ZCSnapshotCodec.errors(state, config).filter((path) => path.startsWith('pendingSummons'));
+    assert.deepEqual(errors, [], '合法队列不许报错');
+
+    //  出生时刻早于特效时刻 = 读档回来「先出现、后播特效」，必须被挡。
+    //  取第 2 只（`fxAtSeconds` = 0.1）：第 1 只的两个时刻都是 0，写成 0 仍然合法。
+    const broken = JSON.parse(JSON.stringify(state)) as { pendingSummons: Array<Record<string, number>> };
+    broken.pendingSummons[1].spawnAtSeconds = 0;
+    const brokenErrors = ZCSnapshotCodec.errors(broken, config);
+    assert.ok(brokenErrors.some((path) => path.startsWith('pendingSummons[1].spawnAtSeconds')),
+        `写歪的时刻必须报出来，实际：${brokenErrors.join(',')}`);
 });

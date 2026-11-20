@@ -14,3 +14,6 @@ export const ZCDC_LOG_MISSILE = true;
 
 /** 技能释放链路专项，只打 ZC_SKILL_CAST_WATCH_UNITS 里的卡，前缀 [技能诊断]。*/
 export const ZCDC_LOG_SKILL_CAST = true;
+
+/** 逐次打印出手、命中与伤害飘字，排查结束后可关闭。*/
+export const ZCDC_LOG_DAMAGE_FLOAT = true;

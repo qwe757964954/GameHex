@@ -25,7 +25,7 @@ export interface IZCSettlementMvpCard {
     readonly name: string;
     /** 骨骼模型 prefab 路径（`resources` 相对路径）；空串 = 只出文案不出模型。*/
     readonly prefabPath: string;
-    /** 该兵种美术的等比缩放（`pvpCard.prefabSize`）。*/
+    /** 立绘位用的等比缩放（`pvpCard.gameEndPrefabSize`，已按结算上限收敛过）。*/
     readonly prefabSize: number;
     readonly damage: number;
     readonly damageTaken: number;
@@ -40,6 +40,7 @@ export interface IZCSettlementMvp {
     readonly cardId: string;
     readonly name: string;
     readonly prefabPath: string;
+    /** 立绘位用的等比缩放（已收敛到 `gameEndPrefabSize`；见 `IZCSettlementMvpCard`）。*/
     readonly prefabSize: number;
     /** `Lv.15`；空串 = 本行不显示（本地局拿不到英雄等级）。*/
     readonly levelText: string;

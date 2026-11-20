@@ -21,6 +21,7 @@ const { ccclass, property } = _decorator;
  * 自己抄一份 69.4 迟早会漂移成「战场上大、预览里小」。
  */
 export const ZC_SPINE_CANVAS_TARGET_HEIGHT = 69.4;
+export const ZC_MONSTER_HEALTH_BAR_GAP = 6;
 
 export interface IZCUnitPresentation {
     unit: Readonly<ZCUnitState>;
@@ -259,6 +260,7 @@ export class ZCUnitView extends Component {
     private barAppliedMaxHp: number | null = null;
     private barAppliedOwner: ZCOwner | null = null;
     private barAppliedOffsetY = Number.NaN;
+    private monsterHeadAtBaseSize = 0;
     /** 扣血白条（被扣掉那段先变白、0.13s 从右往左收没）。纯类，无 tween，见 ZCHealthBarDamageTrail。*/
     private readonly damageTrail = new ZCHealthBarDamageTrail();
     /** 本兵最后一次实际扣血的表现时间；null = 还没挨过打，血条不显示。*/
@@ -422,6 +424,7 @@ export class ZCUnitView extends Component {
         this.outlineCopyNode = null;
         this.outlineCopySkeleton = null;
         this.visualSkeleton = null;
+        this.monsterHeadAtBaseSize = 0;
         this.idleClip = '';
         this.moveClip = '';
         this.attackClip = '';
@@ -459,6 +462,9 @@ export class ZCUnitView extends Component {
         }
         const factor = ZCUnitView.SPINE_CANVAS_TARGET_HEIGHT / canvasHeight;
         this.visualAssetScale.set(scale.x * factor, scale.y * factor, scale.z * factor);
+        const bounds = skeleton.skeletonData.getRuntimeData(true);
+        this.monsterHeadAtBaseSize = (spineNode.position.y + (bounds.y + bounds.height) * spineNode.scale.y)
+            * this.visualAssetScale.y;
 
         this.attachOutlineCopy(prefab);
         // 骨架原点≈脚底，视觉容器不再为序列帧内容原点补 45.7px。
@@ -771,7 +777,10 @@ export class ZCUnitView extends Component {
         // 血条 Y 必须跟着 `prefabSize` 一起缩放：美术放大后头顶也跟着升
         // （基准 +69~+74，×1.2 就是 +83~+89），而条固定在 +80 就会陷进脑袋里。
         // 宽度不缩 —— 血条宽是「可读性」规格（56/64），跟着美术体型缩到 45 会读不出比例。
-        const barOffsetY = this.barOffsetY * this.visualSize * (unit.gateScale ?? 1) * (unit.bodyScale ?? 1);
+        const size = this.visualSize * (unit.gateScale ?? 1) * (unit.bodyScale ?? 1);
+        const barOffsetY = unit.neutralReinforcement && this.visualSkeleton
+            ? this.monsterHeadAtBaseSize * size + ZC_MONSTER_HEALTH_BAR_GAP + height / 2
+            : this.barOffsetY * size;
         if (barOffsetY !== this.barAppliedOffsetY) {
             this.healthBar.node.setPosition(0, barOffsetY, 0);
             this.barAppliedOffsetY = barOffsetY;

@@ -25,6 +25,8 @@ const EFFECT_MAX_SECONDS = 3;
 interface IStageEffect {
     readonly node: Node;
     readonly expireAt: number;
+    readonly animation: Animation | null;
+    readonly skeleton: sp.Skeleton | null;
 }
 
 /**
@@ -55,6 +57,7 @@ export interface IZCTestKapaiStageRefs {
  */
 export class ZCTestKapaiStage {
     private unitNode: Node | null = null;
+    private unitSkeleton: sp.Skeleton | null = null;
     private unitPrefabPath = '';
     /** 当前模型的基准缩放 = 69.4 / 骨架 canvas 高 × prefabSize；不含覆盖与视图。*/
     private unitBaseScale = 0;
@@ -74,6 +77,8 @@ export class ZCTestKapaiStage {
     private battleBundle: AssetManager.Bundle | null = null;
     private elapsed = 0;
     private disposed = false;
+    private paused = false;
+    private effectGeneration = 0;
 
     /** 视图倍率：1.0 = 战场 1:1，其余档位只放大观察。*/
     private viewScale: number;
@@ -95,6 +100,8 @@ export class ZCTestKapaiStage {
      * ---------------------------------------------------------------- */
 
     initialize(): void {
+        this.refs.unitAnchor.setPosition(this.layout.unitOffsetX, this.layout.groundOffsetY, 0);
+        this.refs.targetAnchor.setPosition(this.layout.targetOffsetX, this.layout.groundOffsetY, 0);
         this.refs.effectAnchor.setPosition(0, this.layout.effectOffsetY, 0);
         this.paintStage();
         this.setRanges(0, 0);
@@ -335,6 +342,8 @@ export class ZCTestKapaiStage {
 
         const clip = pickSkeletonAnimation(skeleton, 'idle');
         if (clip) skeleton.setAnimation(0, clip, true);
+        skeleton.paused = this.paused;
+        this.unitSkeleton = skeleton;
         this.applyUnitScale();
         this.setRanges(this.lastAttackRange, this.lastAreaRadius);
     }
@@ -363,6 +372,7 @@ export class ZCTestKapaiStage {
             this.unitNode.destroy();
         }
         this.unitNode = null;
+        this.unitSkeleton = null;
         this.unitBaseScale = 0;
     }
 
@@ -379,14 +389,16 @@ export class ZCTestKapaiStage {
      */
     async playEffect(effectPrefabPath: string): Promise<{ battle: number; total: number } | null> {
         if (!effectPrefabPath || !this.effectRoot?.isValid) return null;
+        const generation = this.effectGeneration;
         let prefab: Prefab;
         try {
             prefab = await this.loadBattlePrefab(effectPrefabPath);
         } catch (error) {
+            if (generation !== this.effectGeneration) return null;
             this.onStatus(`特效加载失败：${effectPrefabPath}（${errorText(error)}）`, this.layout.errorColor);
             return null;
         }
-        if (this.disposed || !this.effectRoot?.isValid) return null;
+        if (generation !== this.effectGeneration || this.disposed || !this.effectRoot?.isValid) return null;
 
         // 锚点与战场同源：`caster` 落在单位脚点，`midpoint` 落在两者中点。
         const anchor = zcEffectAnchorOf(effectPrefabPath) === 'caster' ? this.refs.unitAnchor : this.refs.effectAnchor;
@@ -415,7 +427,9 @@ export class ZCTestKapaiStage {
         const life = Number.isFinite(clipSeconds) && clipSeconds > 0
             ? Math.min(EFFECT_MAX_SECONDS, clipSeconds + EFFECT_TAIL_SECONDS)
             : EFFECT_MAX_SECONDS;
-        this.effects.push({ node, expireAt: this.elapsed + life });
+        const effect: IStageEffect = { node, expireAt: this.elapsed + life, animation, skeleton };
+        if (this.paused) this.setEffectPaused(effect, true);
+        this.effects.push(effect);
         return { battle: battleScale, total: scale };
     }
 
@@ -436,16 +450,36 @@ export class ZCTestKapaiStage {
         }
     }
 
-    dispose(): void {
-        this.disposed = true;
-        this.unitToken += 1;
-        this.clearUnit();
+    setPaused(paused: boolean): void {
+        if (paused === this.paused) return;
+        this.paused = paused;
+        if (this.unitSkeleton) this.unitSkeleton.paused = paused;
+        for (const effect of this.effects) this.setEffectPaused(effect, paused);
+    }
+
+    private setEffectPaused(effect: IStageEffect, paused: boolean): void {
+        if (effect.animation) {
+            if (paused) effect.animation.pause();
+            else effect.animation.resume();
+        }
+        if (effect.skeleton) effect.skeleton.paused = paused;
+    }
+
+    clearEffects(): void {
+        this.effectGeneration += 1;
         for (const effect of this.effects) {
             if (!effect.node.isValid) continue;
             effect.node.removeFromParent();
             effect.node.destroy();
         }
         this.effects.length = 0;
+    }
+
+    dispose(): void {
+        this.disposed = true;
+        this.unitToken += 1;
+        this.clearUnit();
+        this.clearEffects();
         this.prefabCache.clear();
         this.battleBundle = null;
         this.effectRoot = null;

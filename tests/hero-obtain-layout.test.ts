@@ -7,6 +7,7 @@
 import { strict as assert } from 'node:assert';
 import { test } from 'node:test';
 import {
+    HERO_OBTAIN_RAYS_SPIN_SECONDS,
     HERO_OBTAIN_TIMELINE,
     heroObtainBarVisualOf,
     heroObtainBgAlphaOf,
@@ -16,6 +17,7 @@ import {
     heroObtainHeroVisualOf,
     heroObtainHintAlphaOf,
     heroObtainPlateVisualOf,
+    heroObtainRaysSpinAngleOf,
     heroObtainRaysVisualOf,
     heroObtainTitleVisualOf,
     heroObtainTotalSeconds,
@@ -59,13 +61,39 @@ test('时间轴单调：背景/光效/英雄/名牌/提示都从 0 走到 1', ()
     assert.equal(heroObtainHintAlphaOf(total), 1);
 });
 
-test('终态落回设计稿：所有位移归零、缩放 1、光效角度 0', () => {
+test('终态落回设计稿：位移归零、缩放 1，放射光转交给自转', () => {
     const total = heroObtainTotalSeconds();
-    assert.deepEqual(heroObtainRaysVisualOf(total), { alpha: 1, scale: 1, angle: 0 });
+    const rays = heroObtainRaysVisualOf(total);
+    assert.equal(rays.alpha, 1);
+    assert.equal(rays.scale, 1);
+    // 入场把 -16° 收回到 0，之后交给匀速顺时针自转 ⇒ 总时长这一帧已经在转，且是负角度。
+    assert.ok(rays.angle < 0 && rays.angle > -360, `放射光应已开始顺时针自转，实际 ${rays.angle}`);
     assert.deepEqual(heroObtainTitleVisualOf(total), { alpha: 1, scale: 1, rise: 0 });
     assert.deepEqual(heroObtainHeroVisualOf(total), { alpha: 1, scale: 1, rise: 0 });
     assert.deepEqual(heroObtainPlateVisualOf(total), { alpha: 1, scale: 1 });
     assert.deepEqual(heroObtainBarVisualOf(total), { bgAlpha: 1, fillRange: 1, countAlpha: 1 });
+});
+
+test('放射光常驻自转：接缝连续、顺时针、按圈取模', () => {
+    const start = HERO_OBTAIN_TIMELINE.raysDelay + HERO_OBTAIN_TIMELINE.rays;
+    //  接缝：入场结束那一帧角度恰为 0，自转从 0 起算，不会先跳一下再转。
+    assert.equal(heroObtainRaysSpinAngleOf(start - 0.001), 0);
+    assert.equal(heroObtainRaysVisualOf(start).angle, 0);
+
+    //  顺时针 = 负角度：1/4 圈 -90°、半圈 -180°。
+    const turn = (fraction: number) => heroObtainRaysSpinAngleOf(start + HERO_OBTAIN_RAYS_SPIN_SECONDS * fraction);
+    assert.ok(Math.abs(turn(0.25) + 90) < EPS, `1/4 圈应为 -90°，实际 ${turn(0.25)}`);
+    assert.ok(Math.abs(turn(0.5) + 180) < EPS, `半圈应为 -180°，实际 ${turn(0.5)}`);
+
+    //  整圈回 0（取模，不累到 -720 这种大数值）。
+    assert.equal(turn(1), 0);
+    assert.ok(Math.abs(turn(1.25) + 90) < EPS, '第二圈应重新从 0 起算');
+
+    //  长时间停留：角度始终落在 (-360, 0]，不会无限累减（掉精度后相邻帧就不转了）。
+    for (const seconds of [30, 300, 3600]) {
+        const angle = heroObtainRaysSpinAngleOf(start + seconds);
+        assert.ok(angle <= 0 && angle > -360, `${seconds}s 后角度越界：${angle}`);
+    }
 });
 
 test('时间轴常量：总时长 = 1.72s，各阶段顺序不倒置', () => {

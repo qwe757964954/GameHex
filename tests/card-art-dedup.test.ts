@@ -7,14 +7,12 @@ import { CARD_HEAD_ART_ROOT, ICON_PACKAGE_ART_ROOT } from '../assets/script/app/
 import { cardArtConfig } from './helpers/card-art-config';
 import * as cardTypes from '../assets/script/app/card/CardLineupTypes';
 import { assetPath } from './helpers/asset-paths';
+import { readRefKvc, type IRefKvcTable as KvcTable } from './helpers/ref-kvc';
 
-interface KvcTable { k: string[]; v: unknown[][] }
 interface IconArt { art: string; root: string }
 
-/** remoteRef 表（`{k,v,c}` 格式）按行读。 */
-function readKvc(path: string): KvcTable {
-    return JSON.parse(readFileSync(path, 'utf8')) as KvcTable;
-}
+/** remoteRef 表按行读 —— 列存与行对象数组两种产物格式由 {@link readRefKvc} 收口。 */
+const readKvc = readRefKvc;
 
 /** 取列下标。列被导表冲掉时显式失败，避免 indexOf=-1 让数据驱动断言静默零执行。 */
 function columnOf(table: KvcTable, name: string): number {

@@ -14,6 +14,8 @@ import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox'
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
 import * as territoryChestBubbleModule from '../assets/script/app/territory/model/TerritoryChestBubble';
+// 巡逻宝箱 4 档模型图（2026-11-20）：纯常量 + 纯函数，给**真模块**（抄一份路径拼法会两边各改一半）。
+import * as territoryMonsterBoxSpecModule from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
 
 test('locked sites show only the silver icon and amount, and random sites hide the caption after opening', () => {
     const MapView = loadTerritoryMapViewClass() as new () => {
@@ -344,6 +346,8 @@ test('territory art loads the existing silver icon for random conditions', async
             if (id === '../model/TerritoryCostShortfall') return territoryCostShortfallModule;
             // 随机格「飞向英雄按钮」（2026-11-10 需求 ②）：本夹具不演这段，给个空壳即可。
             if (id === './TerritoryHeroFlight') return { TerritoryHeroFlight: class {} };
+            // 巡逻宝箱模型图的路径函数（2026-11-20）：给**真模块**，路径拼错时这一条一起红。
+            if (id === '../model/TerritoryMonsterBoxSpec') return territoryMonsterBoxSpecModule;
             throw new Error(`Unexpected dependency: ${id}`);
         },
     });

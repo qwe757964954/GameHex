@@ -236,7 +236,10 @@ export interface IZCNeutralFeatureConfig {
 }
 
 function parseMonsterTerritoryIcon(value: unknown, where: string): string {
-    if (typeof value !== 'string' || !/^[\p{L}\p{N}_-]+$/u.test(value)) throw new Error(`${where}.icon 地表资源名无效`);
+    // Cocos Creator 3.8.8 的 Android V8 无法解析 Unicode 属性转义。
+    if (typeof value !== 'string' || !/^[A-Za-z0-9\u4e00-\u9fff_-]+$/.test(value)) {
+        throw new Error(`${where}.icon 地表资源名无效`);
+    }
     return value;
 }
 

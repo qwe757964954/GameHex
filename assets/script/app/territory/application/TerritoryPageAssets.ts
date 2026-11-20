@@ -6,6 +6,12 @@ import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PA
 import { TERRITORY_CHEST_BUBBLE_FRAME_PATH } from '../model/TerritoryChestBubble';
 import { TERRITORY_PVP_BUBBLE_PORTRAIT_PATH } from '../model/TerritoryLevelBubble';
 import {
+    TERRITORY_MONSTER_BOX_ART_SCALE,
+    TERRITORY_MONSTER_BOX_MAX_LV,
+    TERRITORY_MONSTER_BOX_MIN_LV,
+    territoryMonsterBoxArtPath,
+} from '../model/TerritoryMonsterBoxSpec';
+import {
     ART_ROOT,
     BUILDING_ART_ROOT,
     COMMON_ART_ROOT,
@@ -156,6 +162,26 @@ export interface ITerritoryBattleArt {
      * 倍率仅供下游乘入缩放。
      */
     readonly buildScales: ReadonlyMap<number, number>;
+    /**
+     * 巡逻宝箱锚点格的模型图（**闭合**）：`monsterBoxLv`(1~4) →
+     * `image/territory/buildings/territory_monsterBox_L{lv}`（212×212）。
+     *
+     * 与 {@link patrolChestOpenFrames} 是同一角色的两个状态；等级真源是服务端快照
+     * （`ITerritoryStationState.monsterBoxLv`），快照没到（`0`）时视图按 1 档画。
+     */
+    readonly patrolChestFrames: ReadonlyMap<number, SpriteFrame | null>;
+    /**
+     * 巡逻宝箱锚点格的模型图（**开盖**）：本片挑战通过后换这张
+     * （`territory_monsterBoxOpen_L{lv}`，与闭合版同尺寸、同锚点）。
+     */
+    readonly patrolChestOpenFrames: ReadonlyMap<number, SpriteFrame | null>;
+    /**
+     * 巡逻宝箱模型图的体量倍率（{@link TERRITORY_MONSTER_BOX_ART_SCALE}）。
+     *
+     * 由这里透传给 `TerritoryMapView`，视图不直接 import 那份常量 ——
+     * 每个 VM 桩表都得跟着补一个新依赖，纯属噪音。
+     */
+    readonly patrolChestIconScale: number;
 }
 
 /**
@@ -282,7 +308,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, pvpBubblePortrait] = await Promise.all([
+    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, pvpBubblePortrait, patrolChestArt] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         // 用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -343,8 +369,39 @@ export async function loadTerritoryBattleArt(
         // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
         loadFrame(assets, TERRITORY_PVP_BUBBLE_PORTRAIT_PATH),
+        // 巡逻宝箱（锚点格）的模型图：4 档 × 闭合 / 开盖。
+        // 是本批新美术（`territory_monsterBox_L{1..4}` / `...Open_L{1..4}`，212×212），
+        // 与 `image/main/chest/boxLevel{N}`（100×100 通用宝箱）**不是一套** —— 别混用。
+        loadPatrolChestArt(assets),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales, pvpBubblePortrait };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales, pvpBubblePortrait, patrolChestFrames: patrolChestArt.frames, patrolChestOpenFrames: patrolChestArt.openFrames, patrolChestIconScale: TERRITORY_MONSTER_BOX_ART_SCALE };
+}
+
+/**
+ * 巡逻宝箱锚点格的模型图（4 档 × 闭合 / 开盖）。
+ *
+ * 单张失败只让那一档退回「不画宝箱」（`null`）——与其它建筑帧同一条降级口径：
+ * 缺图不能阻断整页，也不能把锚点格画成别的东西。
+ */
+async function loadPatrolChestArt(assets: AssetService): Promise<{
+    frames: ReadonlyMap<number, SpriteFrame | null>;
+    openFrames: ReadonlyMap<number, SpriteFrame | null>;
+}> {
+    const levels: number[] = [];
+    for (let lv = TERRITORY_MONSTER_BOX_MIN_LV; lv <= TERRITORY_MONSTER_BOX_MAX_LV; lv += 1) {
+        levels.push(lv);
+    }
+    const [closed, open] = await Promise.all([
+        Promise.all(levels.map(lv => loadFrame(assets, territoryMonsterBoxArtPath(lv)))),
+        Promise.all(levels.map(lv => loadFrame(assets, territoryMonsterBoxArtPath(lv, true)))),
+    ]);
+    const frames = new Map<number, SpriteFrame | null>();
+    const openFrames = new Map<number, SpriteFrame | null>();
+    for (let i = 0; i < levels.length; i += 1) {
+        frames.set(levels[i], closed[i]);
+        openFrames.set(levels[i], open[i]);
+    }
+    return { frames, openFrames };
 }
 
 /**

@@ -131,7 +131,12 @@ export interface IZCFloatTextOptions {
     readonly now: number;
     readonly kind: ZCFloatTextKind;
     readonly owner: ZCOwner;
+    /** 本机席位被扣血 ⇒ 红字 + 负号（攻方是玩家或 NPC 都一样，见 `ZCFloatText.takenFromPlayer`）。*/
+    readonly takenFromPlayer?: true;
+    /** 玩家席位打出去的伤害 ⇒ 才带暴击 / 克制 / 抵抗 / 秒杀前缀（见 `ZCFloatText.dealtByPlayer`）。*/
+    readonly dealtByPlayer?: true;
     readonly value: number;
+    readonly appliedDamage?: number;
     readonly x: number;
     readonly y: number;
     readonly durationSeconds: number;
@@ -215,7 +220,10 @@ export class ZCBattlePresentationQueue {
             id: this.nextFloatTextId++,
             kind: input.kind,
             owner: input.owner,
+            ...(input.takenFromPlayer ? { takenFromPlayer: true as const } : {}),
+            ...(input.dealtByPlayer ? { dealtByPlayer: true as const } : {}),
             value: Math.max(0, Math.round(input.value)),
+            ...(input.appliedDamage === undefined ? {} : { appliedDamage: input.appliedDamage }),
             x: input.x,
             y: input.y,
             startedAt: input.now,
@@ -259,9 +267,9 @@ export class ZCBattlePresentationQueue {
     removeFloatText(id: number): number {
         const index = this.floatingTexts.findIndex((text) => text.id === id);
         if (index < 0) return 0;
-        const value = this.floatingTexts[index].value;
+        const text = this.floatingTexts[index];
         this.floatingTexts.splice(index, 1);
-        return value;
+        return text.appliedDamage ?? text.value;
     }
 
     pushCardReveal(input: Readonly<IZCCardRevealOptions>): void {

@@ -5,13 +5,14 @@ import {
 import { ensureZCRuntimeCompiled } from '../application/ZCRuntimePrecompiler';
 import {
     buildZCTestKapaiCatalog, damageOfSkill, EMPTY_TEST_KAPAI_CONFIG, factorsOfSkill,
-    formatZCTestKapaiIssue, parseZCTestKapaiConfig,
+    formatZCTestKapaiIssue, parseZCTestKapaiConfig, ZCTestKapaiRound,
 } from '../model/ZCTestKapaiModel';
 import type {
     ITestKapaiCard, ITestKapaiConfig, ITestKapaiIssue, ITestKapaiSkill, ITestKapaiStat,
 } from '../model/ZCTestKapaiModel';
 import { ZC_RUNTIME_CONFIG } from '../model/ZCRuntimeConfigStore';
 import type { ZCRuntimeRules } from '../model/ZCGameRuntimeConfig';
+import { HeadArt } from '../../HeadArt';
 import { RefConfigService } from '../../../platform/config/RefConfigService';
 import { ZCTestKapaiStage } from './ZCTestKapaiStage';
 
@@ -29,6 +30,7 @@ const STAT_CELL_COUNT = 8;
 /** 伤害飘字池：场景预建 3 个 Label，循环复用。*/
 const FLOAT_COUNT = 3;
 const FLOAT_SECONDS = 0.7;
+const ROUND_READY_TEXT = '等待释放';
 
 /** 模型 / 特效覆盖的步进与边界。*/
 const SCALE_STEP = 0.1;
@@ -48,6 +50,7 @@ interface ISkillRuntime {
 /** 场景里一行技能按钮的子节点引用（节点由 MCP 建在 TestKapai.scene 上）。*/
 interface ISkillRowView {
     readonly node: Node;
+    readonly button: Button;
     readonly name: Label;
     readonly phase: Label;
     readonly meta: Label;
@@ -140,6 +143,14 @@ export class TestKapaiView extends Component {
     @property(Node) pauseButton: Node = null!;
     @property(Node) resetButton: Node = null!;
 
+    private restoreButton: Node = null!;
+    private detailsButton: Node = null!;
+    private detailsPanel: Node = null!;
+    private detailsFooter: Node = null!;
+    private detailsChevron: Label = null!;
+    private cardPortrait: Sprite = null!;
+    private targetLifeFill: Sprite = null!;
+
     @property([Node]) statCells: Node[] = [];
 
     @property(Sprite) logBg: Sprite = null!;
@@ -156,14 +167,8 @@ export class TestKapaiView extends Component {
     private issues: ITestKapaiIssue[] = [];
     private cardIndex = 0;
 
-    /** 本地时钟（累加 dt）：暂停时冷却一起停，不用墙钟。*/
-    private elapsed = 0;
-    private paused = false;
+    private readonly round = new ZCTestKapaiRound();
     private autoAttack = false;
-    private autoNextAt = 0;
-    private totalDamage = 0;
-    private castCount = 0;
-    private targetHp = 0;
 
     private viewScale = 1;
     private modelScale = 1;
@@ -189,9 +194,9 @@ export class TestKapaiView extends Component {
     }
 
     protected update(dt: number): void {
+        if (this.round.paused) return;
+        this.round.advance(dt);
         this.stage?.update(dt);
-        if (this.paused) return;
-        this.elapsed += dt;
         this.updateCooldowns();
         this.updateFloats();
         this.updateAutoAttack();
@@ -259,10 +264,9 @@ export class TestKapaiView extends Component {
         this.buildStage();
         this.bindChrome();
         this.paintChrome();
-        this.resultText.string = '等待释放 · 视图 ×1.0 即战场 1:1';
-        this.targetHp = this.config.damageTest.targetMaxHp;
-        this.renderTargetLabel();
-        this.selectCard(0);
+        this.setDetailsVisible(false);
+        if (this.cards.length) this.selectCard(0);
+        else this.restartRound();
         this.renderDiagnostics();
         this.refreshOverrideLabels();
         this.pushLog(this.hiddenBuildings > 0
@@ -318,7 +322,9 @@ export class TestKapaiView extends Component {
             const maskNode = requiredNode(cooldown, 'Mask');
             const maskSprite = requiredSprite(maskNode);
             const cd = requiredLabel(cooldown, 'Text');
-            this.skillRows.push({ node, name, phase, meta, maskNode, maskSprite, cd });
+            const button = node.getComponent(Button);
+            if (!button) throw new Error(`技能行 ${node.name} 缺少 cc.Button`);
+            this.skillRows.push({ node, button, name, phase, meta, maskNode, maskSprite, cd });
             this.skillRuntime.push({ readyAt: 0, charge: 0, dimmed: false, cdText: '' });
         }
         if (this.skillRows.length !== SKILL_ROW_COUNT) {
@@ -336,6 +342,14 @@ export class TestKapaiView extends Component {
             this.floatRuntime.push({ label, opacity, startedAt: 0, active: false });
             label.node.active = false;
         }
+        this.restoreButton = requiredNode(this.debugBg.node, 'RestoreDefaults');
+        this.detailsButton = requiredNode(this.resultBg.node, 'Details');
+        this.detailsPanel = requiredNode(this.node, 'DetailsPanel');
+        this.detailsFooter = requiredNode(this.node, 'DetailsFooter');
+        this.detailsChevron = requiredLabel(this.detailsFooter, 'Chevron');
+        this.cardPortrait = requiredSprite(requiredNode(this.badgeBody.node.parent, 'Portrait'));
+        const lifeBar = requiredNode(this.targetAnchor, 'LifeBar');
+        this.targetLifeFill = requiredSprite(requiredNode(lifeBar, 'Fill'));
         this.logLabel = this.logText;
     }
 
@@ -384,7 +398,10 @@ export class TestKapaiView extends Component {
 
         this.bindClick(this.autoButton, () => this.toggleAutoAttack());
         this.bindClick(this.pauseButton, () => this.togglePause());
-        this.bindClick(this.resetButton, () => this.resetDebug());
+        this.bindClick(this.resetButton, () => this.restartRound());
+        this.bindClick(this.restoreButton, () => this.restoreDefaults());
+        this.bindClick(this.detailsButton, () => this.toggleDetails());
+        this.bindClick(this.detailsFooter, () => this.toggleDetails());
 
         for (let index = 0; index < this.skillRows.length; index += 1) {
             this.bindClick(this.skillRows[index].node, () => this.castRow(index));
@@ -405,18 +422,12 @@ export class TestKapaiView extends Component {
         paintNode(this.backdrop, palette.background, 0);
         paintNode(this.diagnosticsNode, palette.panel, 8);
         paintNode(this.statusBg.node, palette.panelAlt, 8);
-        paintNode(this.resultBg.node, palette.panelAlt, 8);
         paintNode(this.debugBg.node, palette.panelAlt, 8);
         paintNode(this.logBg.node, palette.panelAlt, 8);
         paintNode(this.badgeBody.node, palette.panelAlt, 6);
-        paintNode(this.prevButton, palette.button, 8);
-        paintNode(this.nextButton, palette.button, 8);
         for (const row of this.skillRows) paintNode(row.node, palette.button, 10);
         this.paintViewButtons();
         this.paintDamageButtons();
-        this.paintDebugButton(this.autoButton);
-        this.paintDebugButton(this.pauseButton);
-        this.paintDebugButton(this.resetButton);
     }
 
     private paintViewButtons(): void {
@@ -443,15 +454,6 @@ export class TestKapaiView extends Component {
         paintNode(node, active ? this.config.palette.buttonActive : this.config.palette.button, 8);
     }
 
-    private paintDebugButton(node: Node): void {
-        paintNode(node, this.config.palette.button, 8);
-    }
-
-    /** 开关类按钮：打开时用高亮色，避免"点了但看不出状态"。*/
-    private paintToggleButton(node: Node, active: boolean): void {
-        paintNode(node, active ? this.config.palette.buttonActive : this.config.palette.button, 8);
-    }
-
     /* ------------------------------------------------------------------ *
      * 卡牌渲染
      * ------------------------------------------------------------------ */
@@ -460,8 +462,8 @@ export class TestKapaiView extends Component {
         if (!this.cards.length) return;
         const count = this.cards.length;
         this.cardIndex = ((index % count) + count) % count;
+        this.restartRound();
         this.renderCard();
-        this.refreshStatus();
     }
 
     private currentCard(): ITestKapaiCard | null {
@@ -482,6 +484,7 @@ export class TestKapaiView extends Component {
             ? `${card.typeLabel} · ${card.skills.length} 技能\n模型 ${shortName(card.unitPrefabPath) || '无'}`
             : `${card.typeLabel} · 无技能行`;
         this.targetName.string = this.config.damageTest.targetName;
+        void this.renderCardPortrait(card);
 
         const unitPromise = this.stage?.showUnit(card.unitPrefabPath, card.prefabSize);
         const areaRadius = card.skills.reduce((max, skill) => Math.max(max, skill.areaRadius), 0);
@@ -492,8 +495,15 @@ export class TestKapaiView extends Component {
                 if (this.isValid && this.currentCard()?.id === card.id) this.renderStats(card);
             });
         }
-        this.rebuildSkillRows();
         this.refreshViewTag();
+    }
+
+    private async renderCardPortrait(card: ITestKapaiCard): Promise<void> {
+        this.cardPortrait.spriteFrame = null;
+        if (!card.iconName) return;
+        const frame = await HeadArt.loadHeadIconFrame(card.iconName);
+        if (!this.isValid || this.currentCard()?.id !== card.id) return;
+        this.cardPortrait.spriteFrame = frame;
     }
 
     private renderStats(card: ITestKapaiCard): void {
@@ -522,12 +532,10 @@ export class TestKapaiView extends Component {
             const row = this.skillRows[index];
             const skill = card && card.playable ? card.skills[index] : undefined;
             row.node.active = !!skill;
-            if (!skill) continue;
             const runtime = this.skillRuntime[index];
             runtime.readyAt = 0;
             runtime.charge = 0;
-            runtime.dimmed = false;
-            runtime.cdText = '';
+            if (!skill) continue;
             row.name.string = skill.name;
             row.phase.string = this.phaseText(skill, 0);
             row.meta.string = this.metaText(skill);
@@ -536,6 +544,7 @@ export class TestKapaiView extends Component {
     }
 
     private phaseText(skill: ITestKapaiSkill, charge: number): string {
+        if (skill.kind === 'basic') return `攻击间隔 ${formatSeconds(skill.cooldownSeconds)} · ${skill.detail}`;
         if (skill.attacksRequired > 0) return `${skill.triggerText} ${charge}/${skill.attacksRequired}`;
         return `${skill.triggerText} · ${skill.detail}`;
     }
@@ -571,24 +580,13 @@ export class TestKapaiView extends Component {
         const skill = card.skills[index];
         if (!skill) return;
         const runtime = this.skillRuntime[index];
-        if (runtime.readyAt > this.elapsed) return;
+        if (this.round.paused || runtime.readyAt > this.round.elapsed) return;
 
-        // 强化那一击按真实口径计次（`pvpSkill.empoweredEvery`）：没满只累积，不结算伤害。
-        if (skill.attacksRequired > 0) {
-            runtime.charge += 1;
-            if (runtime.charge < skill.attacksRequired) {
-                this.skillRows[index].phase.string = this.phaseText(skill, runtime.charge);
-                this.pushLog(`【${card.name}】${skill.name} 蓄力 ${runtime.charge}/${skill.attacksRequired}`
-                    + `（还差 ${skill.attacksRequired - runtime.charge} 次普攻）`);
-                return;
-            }
-            runtime.charge = 0;
-            this.skillRows[index].phase.string = this.phaseText(skill, 0);
-        }
+        if (skill.attacksRequired > 0) return;
 
         this.resolveHit(skill);
         if (skill.cooldownSeconds > 0) {
-            runtime.readyAt = this.elapsed + skill.cooldownSeconds;
+            runtime.readyAt = this.round.elapsed + skill.cooldownSeconds;
             this.paintSkillCooldown(index, skill.cooldownSeconds);
         }
         if (skill.kind === 'basic') this.feedEmpoweredCharge();
@@ -623,11 +621,8 @@ export class TestKapaiView extends Component {
         const damage = damageOfSkill(skill, card.definition, this.rules, this.damageRate);
         const factors = factorsOfSkill(skill, this.damageRate);
 
-        this.totalDamage += damage;
-        this.castCount += 1;
-        const brokeBefore = this.targetHp > 0 && damage >= this.targetHp;
-        this.targetHp = Math.max(0, this.targetHp - damage);
-        if (brokeBefore) this.targetHp = this.config.damageTest.targetMaxHp;
+        const hit = this.round.hit(damage);
+        if (!hit) return;
 
         this.spawnFloat(damage);
         void this.playSkillEffect(skill);
@@ -636,11 +631,12 @@ export class TestKapaiView extends Component {
             + `（攻击 ${factors.attack} × 品级 ${round2(factors.tier)} × 克制 ${factors.counter}`
             + ` × 全局 ${round2(factors.global)} × 技能 ${round2(factors.skillRate)}）`,
         );
-        if (brokeBefore) {
+        if (hit.broke) {
             this.pushLog(`${this.config.damageTest.targetName}被击破，血量重置 ${this.config.damageTest.targetMaxHp}`);
         }
-        this.resultText.string = `本次 ${damage} 伤害 · 击破需 `
-            + `${Math.max(1, Math.ceil(this.config.damageTest.targetMaxHp / Math.max(1, damage)))} 次（明细见日志）`;
+        this.resultText.string = `${skill.name} · ${damage} 伤害\n`
+            + `${this.config.damageTest.targetName} ${hit.before} → ${hit.after}`
+            + (hit.broke ? ' · 击破' : ` / ${this.config.damageTest.targetMaxHp}`);
         this.refreshStatus();
     }
 
@@ -694,39 +690,64 @@ export class TestKapaiView extends Component {
 
     private toggleAutoAttack(): void {
         this.autoAttack = !this.autoAttack;
-        this.autoNextAt = 0;
-        this.setButtonText(this.autoButton, this.autoAttack ? '停止自动' : '自动攻击');
-        this.paintToggleButton(this.autoButton, this.autoAttack);
+        this.setButtonText(this.autoButton, this.autoAttack ? '停止自动' : '自动普攻');
     }
 
     private togglePause(): void {
-        this.paused = !this.paused;
-        this.setButtonText(this.pauseButton, this.paused ? '继续' : '暂停');
-        this.paintToggleButton(this.pauseButton, this.paused);
+        this.round.paused = !this.round.paused;
+        this.stage?.setPaused(this.round.paused);
+        this.setButtonText(this.pauseButton, this.round.paused ? '继续' : '暂停');
+        const card = this.currentCard();
+        if (!card) return;
+        for (let index = 0; index < card.skills.length && index < this.skillRows.length; index += 1) {
+            const remain = this.skillRuntime[index].readyAt - this.round.elapsed;
+            if (remain > 0) this.paintSkillCooldown(index, remain);
+            else this.paintSkillReady(index);
+        }
     }
 
-    private resetDebug(): void {
+    private restartRound(): void {
+        this.round.restart(this.config.damageTest.targetMaxHp);
+        this.autoAttack = false;
+        this.stage?.clearEffects();
+        this.stage?.setPaused(false);
+        for (const state of this.floatRuntime) {
+            state.active = false;
+            state.label.node.active = false;
+        }
+        this.floatCursor = 0;
+        this.setButtonText(this.autoButton, '自动普攻');
+        this.setButtonText(this.pauseButton, '暂停');
+        this.rebuildSkillRows();
+        this.refreshStatus();
+        this.resultText.string = ROUND_READY_TEXT;
+        this.logLines.length = 0;
+        this.logText.string = '';
+        const card = this.currentCard();
+        if (card) this.stage?.setRanges(card.attackRange, 0);
+    }
+
+    private restoreDefaults(): void {
         this.applyDebugDefaults();
         this.stage?.setViewScale(this.viewScale);
         this.stage?.setModelScale(this.modelScale);
         this.stage?.setEffectScale(this.effectScale);
-        this.paused = false;
-        this.autoAttack = false;
-        this.autoNextAt = 0;
-        this.totalDamage = 0;
-        this.castCount = 0;
-        this.targetHp = this.config.damageTest.targetMaxHp;
-        this.autoButton.getChildByName('Text')!.getComponent(Label)!.string = '自动攻击';
-        this.pauseButton.getChildByName('Text')!.getComponent(Label)!.string = '暂停';
-        this.paintToggleButton(this.autoButton, false);
-        this.paintToggleButton(this.pauseButton, false);
         this.paintViewButtons();
         this.paintDamageButtons();
         this.refreshOverrideLabels();
         this.refreshSkillMeta();
-        this.refreshStatus();
-        this.resultText.string = '等待释放 · 视图 ×1.0 即战场 1:1';
-        this.pushLog('调试项已复位（覆盖不写入配置）');
+        const card = this.currentCard();
+        if (card) this.renderStats(card);
+    }
+
+    private toggleDetails(): void {
+        this.setDetailsVisible(!this.detailsPanel.active);
+    }
+
+    private setDetailsVisible(visible: boolean): void {
+        this.detailsPanel.active = visible;
+        this.detailsChevron.string = visible ? '⌃' : '⌄';
+        this.setButtonText(this.detailsButton, visible ? '收起' : '明细');
     }
 
     private refreshOverrideLabels(): void {
@@ -738,7 +759,7 @@ export class TestKapaiView extends Component {
     private refreshViewTag(): void {
         const options = this.config.stage.scaleOptions;
         this.viewValue.string = `×${formatScale(this.viewScale)}`;
-        this.scaleTag.string = `格 36×42 · 视图 ×${formatScale(this.viewScale)}`;
+        this.scaleTag.string = `视图 ×${formatScale(this.viewScale)}`;
         this.setButtonText(this.view1Button, options[0] === undefined ? '' : `×${formatScale(options[0])}`);
         this.setButtonText(this.view2Button, options[1] === undefined ? '' : `×${formatScale(options[1])}`);
         this.setButtonText(this.view4Button, options[2] === undefined ? '' : `×${formatScale(options[2])}`);
@@ -749,18 +770,19 @@ export class TestKapaiView extends Component {
     }
 
     private refreshStatus(): void {
-        this.statusTotal.string = `累计伤害 ${this.totalDamage}`;
-        this.statusCasts.string = `释放 ${this.castCount} 次`;
+        this.statusTotal.string = `累计伤害 ${this.round.totalDamage}`;
+        this.statusCasts.string = `释放 ${this.round.castCount} 次`;
         this.renderTargetLabel();
     }
 
     private renderTargetLabel(): void {
         const max = this.config.damageTest.targetMaxHp;
-        this.statusTarget.string = `${this.config.damageTest.targetName} ${this.targetHp} / ${max}`;
-        this.statusTarget.color = this.targetHp <= max * 0.3
+        this.statusTarget.string = `${this.config.damageTest.targetName} ${this.round.targetHp} / ${max}`;
+        this.statusTarget.color = this.round.targetHp <= max * 0.3
             ? toColor(this.config.palette.danger)
             : toColor(this.config.palette.muted);
-        this.targetHpLabel.string = `${this.targetHp} / ${max}`;
+        this.targetHpLabel.string = `${this.round.targetHp} / ${max}`;
+        this.targetLifeFill.fillRange = this.round.targetHp / max;
     }
 
     private setStageStatus(text: string, color: string): void {
@@ -776,7 +798,7 @@ export class TestKapaiView extends Component {
         for (let index = 0; index < this.skillRuntime.length; index += 1) {
             const runtime = this.skillRuntime[index];
             if (runtime.readyAt <= 0) continue;
-            const remain = runtime.readyAt - this.elapsed;
+            const remain = runtime.readyAt - this.round.elapsed;
             if (remain <= 0) {
                 runtime.readyAt = 0;
                 this.paintSkillReady(index);
@@ -792,7 +814,10 @@ export class TestKapaiView extends Component {
         runtime.dimmed = false;
         runtime.cdText = '';
         row.maskNode.active = false;
-        row.cd.string = '';
+        const passive = this.currentCard()?.skills[index]?.attacksRequired > 0;
+        row.button.interactable = !this.round.paused && !passive;
+        const available = passive ? '普攻触发' : '可释放';
+        row.cd.string = this.round.paused ? '已暂停' : available;
         paintNode(row.node, this.config.palette.button, 10);
     }
 
@@ -806,6 +831,7 @@ export class TestKapaiView extends Component {
 
         if (!runtime.dimmed) {
             runtime.dimmed = true;
+            row.button.interactable = false;
             paintNode(row.node, this.config.palette.buttonDisabled, 10);
         }
         row.maskNode.active = maskHeight > 0.01;
@@ -814,10 +840,10 @@ export class TestKapaiView extends Component {
             maskTransform.setContentSize(size.width, maskHeight);
             row.maskNode.setPosition(0, size.height / 2, 0);
             const maskColor = toColor(this.config.palette.buttonDisabled);
-            maskColor.a = 200;
+            maskColor.a = 64;
             row.maskSprite.color = maskColor;
         }
-        const text = `${remain.toFixed(1)}s`;
+        const text = this.round.paused ? '已暂停' : `冷却 ${remain.toFixed(1)}s`;
         if (text !== runtime.cdText) {
             runtime.cdText = text;
             row.cd.string = text;
@@ -830,7 +856,7 @@ export class TestKapaiView extends Component {
         const state = this.floatRuntime[this.floatCursor % this.floatRuntime.length];
         this.floatCursor += 1;
         state.active = true;
-        state.startedAt = this.elapsed;
+        state.startedAt = this.round.elapsed;
         state.label.node.active = true;
         state.label.string = `-${damage}`;
         state.opacity.opacity = 255;
@@ -840,7 +866,7 @@ export class TestKapaiView extends Component {
     private updateFloats(): void {
         for (const state of this.floatRuntime) {
             if (!state.active) continue;
-            const progress = (this.elapsed - state.startedAt) / FLOAT_SECONDS;
+            const progress = (this.round.elapsed - state.startedAt) / FLOAT_SECONDS;
             if (progress >= 1) {
                 state.active = false;
                 state.label.node.active = false;
@@ -857,9 +883,7 @@ export class TestKapaiView extends Component {
         if (!card || !card.playable) return;
         const basic = card.skills[0];
         if (!basic || basic.cooldownSeconds <= 0) return;
-        if (this.autoNextAt <= 0) this.autoNextAt = this.elapsed;
-        if (this.elapsed < this.autoNextAt) return;
-        this.autoNextAt = this.elapsed + basic.cooldownSeconds;
+        if (this.skillRuntime[0].readyAt > this.round.elapsed) return;
         this.castRow(0);
     }
 

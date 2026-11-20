@@ -139,6 +139,15 @@ export interface ZCUnitDefinition {
      * 这里是策划给的表现性系数（在归一之后叠加）。两者相乘，顺序不能反。
     */
     prefabSize: number;
+    /**
+     * 结算页立绘位实际使用的体型系数（= `min(prefabSize, pvpCard.gameEndPrefabSize)`）。
+     *
+     * 与 `prefabSize` 分开是因为两条链路归一化的分母不同：战场 / 阵容按骨架 canvas 归一，
+     * 结算按 idle 首帧美术包围盒归一。`prefabSize` 里那部分「补画布虚大」的系数
+     * （磁电菇 canvas 1798 / 本体 980 ⇒ 1.8）在结算里会变成纯放大，所以这里按表里的
+     * 上限再收一次。解析层就给好最终值，消费方不用自己再 `Math.min`。
+     */
+    gameEndPrefabSize: number;
     attackProfile: ZCAttackProfile;
     /** 强化那击对应技能行档案；未配置强化时 undefined。*/
     empoweredProfile?: ZCAttackProfile;

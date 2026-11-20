@@ -46,7 +46,7 @@ export interface ITerritoryMonsterBoxContent {
     readonly lv: number;
     /** 等级上限；`<= 0` ⇒ 不知道上限，点阵只画到 `lv`。 */
     readonly maxLv: number;
-    /** 宝箱模型图（按 `lv` 取 `image/main/chest/boxLevel{N}`，由页面加载后透传）。 */
+    /** 宝箱模型图（按 `lv` 取 `territory_monsterBox_L{N}`，由页面加载后透传）。 */
     readonly chestIcon: SpriteFrame | null;
     readonly guards: readonly ITerritoryMonsterBoxGuard[];
     readonly rewards: readonly IRewardItemData[];

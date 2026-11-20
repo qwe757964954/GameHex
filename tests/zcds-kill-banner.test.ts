@@ -251,9 +251,10 @@ test('击杀横栏：落位 / 换色 / 文案 / 滑入淡出 / 可重复触发',
     // 2 号盘的尺寸档：盘 77 / 头像 66（容器保持 88，盘在容器里居中）。
     assert.equal(view.discSprite.node.getComponent().contentSize.width, 77);
     assert.equal(view.discSprite.node.getComponent().contentSize.height, 77);
-    // 落位：满宽、顶边距层顶 560 ⇒ 中心 y = 640 − 560 − 35 = 45；起点在屏外一整条。
+    // 落位：中心距顶 23%，斜切底图越过左右两边；起点在屏外一整条。
     assert.equal(view.node.position.x, -720, 'progress 0 必须在屏幕外');
-    assert.equal(view.node.position.y, 45);
+    assert.ok(Math.abs(view.node.position.y - 345.6) < 1e-6);
+    assert.ok(view.plateSprite.node.getComponent().contentSize.width >= 720 * 1.15);
     assert.equal(view.bannerOpacity.opacity, 0, 'progress 0 不能先闪一帧');
     assert.ok(Math.abs(view.portraitNode.scale.x - 0.55) < 1e-6, '头像从 0.55 弹入');
     // 文字区：左起 218、右留 20 ⇒ 478 宽。
@@ -292,9 +293,11 @@ test('击杀横栏：落位 / 换色 / 文案 / 滑入淡出 / 可重复触发',
     assert.equal(view.headSprite.enabled, true);
 
     // 层宽变化：横栏跟着满宽，头像盘心距左缘恒定 160，文字区宽度跟着变。
-    view.setLayout({ viewWidth: 1000, viewHeight: 1280 });
+    view.setLayout({ viewWidth: 1000, viewHeight: 1600 });
     view.render(second, 2.6);
     assert.equal(view.node.getComponent().contentSize.width, 1000);
+    assert.equal(view.node.position.y, 432);
+    assert.ok(view.plateSprite.node.getComponent().contentSize.width >= 1000 * 1.15);
     assert.equal(view.portraitNode.position.x, -1000 / 2 + 160);
     assert.equal(view.nameLabel.node.getComponent().contentSize.width, 1000 - 218 - 20);
     assert.equal(view.nameLabel.node.position.x, 99);

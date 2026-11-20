@@ -18,7 +18,7 @@ import { configureZCMap, ZCOwner } from '../assets/script/app/zcds/model/ZCMapCo
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { compileZCCombatBuild, getZCModifierCatalogs } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
-import type { ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
+import type { ZCCombatTarget, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCSkillRuntimeDefinition } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZCSkillTriggerSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
@@ -105,6 +105,22 @@ function liveUnit(model: ZCGameModel, id: number): ZCUnitState {
     const unit = (model as unknown as { units: { byId: Map<number, ZCUnitState> } }).units.byId.get(id);
     assert.ok(unit, `模型里找不到 #${id}`);
     return unit!;
+}
+
+/**
+ * 把「排队中的分身」全部兑现。
+ *
+ * 2026-11-20 第 33 批起，独立分身是**排队出生**的（先播 0.32s 特效、间隔 0.1s），
+ * `summonUnits` 当拍只往 `pendingSummons` 里压条目 —— 想数到人必须把时钟推过去。
+ */
+function settlePendingSummons(model: ZCGameModel): void {
+    const state = model.snapshot as unknown as ZCSnapshot;
+    const flush = (model as unknown as { flushPendingSummons(): void }).flushPendingSummons.bind(model);
+    for (let step = 0; step < 40 && (state.pendingSummons?.length ?? 0) > 0; step += 1) {
+        state.elapsedSeconds += 0.05;
+        flush();
+    }
+    assert.equal(state.pendingSummons?.length ?? 0, 0, '队列必须全部兑现');
 }
 
 // ────────────────────────────────────────────── 101404 一人成军
@@ -228,6 +244,7 @@ test('101404 分身：3/4/6 只、继承 30/50/80% 生命与攻击、不过期�
 
         const cast = (model as unknown as { summonUnits(unit: ZCUnitState): boolean }).summonUnits(master);
         assert.equal(cast, true, `第 ${index + 1} 档召得出来`);
+        settlePendingSummons(model);
         const clones = model.snapshot.units.filter((unit) => unit.summonMasterId !== undefined);
         assert.equal(clones.length, tier.count, `第 ${index + 1} 档 ${tier.count} 只`);
         for (const clone of clones) {
@@ -236,7 +253,9 @@ test('101404 分身：3/4/6 只、继承 30/50/80% 生命与攻击、不过期�
             assert.ok(Math.abs(clone.inheritedStats!.attack - base.attack * tier.inherit) < 1e-6);
             assert.equal(clone.summonUntil, undefined, '持续到战死');
             assert.equal(clone.summonSlot, undefined, '不跟随 ⇒ 没有阵位');
-            assert.equal(clone.summonAlpha, undefined, '设计没要求半透明（舞王才有）');
+            //  2026-11-20 第 33 批（用户原话「分裂菇的分身透明度约为 65%」）：
+            //  配表里 101404 三档都没填 `summonAlpha` ⇒ 走独立分身的 0.65 兜底。
+            assert.equal(clone.summonAlpha, 0.65, '分身 65% 透明');
         }
     }
 });
@@ -575,7 +594,8 @@ interface ICastSpec {
 }
 
 function castContext(units: ZCUnitState[], params: Record<string, number>,
-    statuses: ReturnType<typeof fakeStatuses>, spec: ICastSpec) {
+    statuses: ReturnType<typeof fakeStatuses>, spec: ICastSpec,
+    target: ZCCombatTarget | null = null) {
     const damaged: Array<{ id: number; damage: number }> = [];
     const runtime = {
         skillChainId: spec.chainId, behaviorKey: spec.behaviorKey,
@@ -619,7 +639,8 @@ function castContext(units: ZCUnitState[], params: Record<string, number>,
             },
         } as unknown as Record<ZCOwner, ZCDeckBonuses>,
         unitById: new Map(units.map((unit) => [unit.id, unit])),
-        currentTarget: () => null,
+        //  选敌这里给常量：`null` = 场上没目标（存量用例的口径），给了才是「有目标可投送」。
+        currentTarget: () => target,
         evaluateLegacySkill: () => ({
             buffs: [], hitCount: 0, hasDamageFormula: false, damage: 0,
         }) as unknown as ReturnType<IZCAttackResolutionContext['evaluateLegacySkill']>,
@@ -653,6 +674,9 @@ const JOKER_CHAIN = 102004;
 const STORM_DEFINITION = {
     ...ROAR_DEFINITION,
     unitId: JOKER_UNIT, name: '三叶小丑',
+    //  真实卡面：`pvpCard.68020.unitMoveSpeed = 28`，且它**就是世界 px/s**
+    //  （`ZCMovementSystem.speedOf` 直接 `moveSpeed * dt`）—— 飓风的投送速度照抄这一格。
+    moveSpeed: 28,
     attackProfile: {
         ...(ROAR_DEFINITION.attackProfile as ZCAttackProfile),
         skillId: 30714, name: '三叶小丑普攻',
@@ -664,8 +688,9 @@ const STORM_SPEC: ICastSpec = {
     unitId: JOKER_UNIT, definition: STORM_DEFINITION,
 };
 
-function stormContext(units: ZCUnitState[], params: Record<string, number>) {
-    return castContext(units, params, fakeStatuses(), STORM_SPEC);
+function stormContext(units: ZCUnitState[], params: Record<string, number>,
+    target: ZCCombatTarget | null = null) {
+    return castContext(units, params, fakeStatuses(), STORM_SPEC, target);
 }
 
 /**
@@ -905,11 +930,18 @@ test('102004 触发：CD 走独立的 stormReadyAt，首次只挂 CD', () => {
         parameters: stormParams(8),
     } as unknown as ZCSkillRuntimeDefinition;
     let casts = 0;
+    //  2026-11-20 口径调整：飓风改成「等找到目标才放」⇒ 闸门可开关，用例三头都要覆盖。
+    let inRange = false;
+    //  第二道闸：`release` 为真也可能只是「锁的是墙」⇒ 还要最近**敌人**进普攻射程。
+    let nearest = 2000;
     const tickParams = {
         statusSystem: fakeStatuses().statusSystem,
         //  只给持链的那一个单位：否则同场敌人也会拿到这本「书」自己放风。
         runtimeOf: (unit: ZCUnitState) => (unit.id === 1 ? runtime : undefined),
-        inAttackRange: () => false,
+        inAttackRange: () => inRange,
+        //  普攻射程 300 表值 × 0.3 = 90 世界 px（`skillAttr 502203「三叶小丑普攻攻击距离」`）。
+        attackReachOf: () => 90,
+        nearestEnemyDistance: () => nearest,
         healUnit: () => undefined,
         statPatchOf: () => ({}),
         castStorm: () => { casts += 1; return true; },
@@ -920,9 +952,23 @@ test('102004 触发：CD 走独立的 stormReadyAt，首次只挂 CD', () => {
     assert.equal(casts, 0, '首次只挂 CD');
     assert.equal(caster.stormReadyAt, 12);
 
+    //  冷却到点但普攻射程内没人 ⇒ 待触发，不消费 CD（旧口径这里是「照放」）。
     state.elapsedSeconds = 12;
     ZCSkillTriggerSystem.tick(state, 0.05, tickParams);
-    assert.equal(casts, 1);
+    assert.equal(casts, 0, '空场不许放（主动技能都要等找到目标）');
+    assert.equal(caster.stormReadyAt, 12, '被拦下 ⇒ 冷却保持就绪');
+
+    //  只在打墙：`release` 为真（墙在射程内），但最近敌人还在 2000 px 外 ⇒ 仍不放。
+    //  少了这道闸，风会扔在自己脚下一动不动 —— 用户 2026-11-20 的实测反馈。
+    inRange = true;
+    ZCSkillTriggerSystem.tick(state, 0.05, tickParams);
+    assert.equal(casts, 0, '只在打墙 ⇒ 仍待触发（不能往脚下扔）');
+    assert.equal(caster.stormReadyAt, 12, '被第二道闸拦下也不消费 CD');
+
+    //  敌人真进普攻射程：当帧补放。
+    nearest = 60;
+    ZCSkillTriggerSystem.tick(state, 0.05, tickParams);
+    assert.equal(casts, 1, '敌人一进射程立刻补放');
     assert.equal(caster.stormReadyAt, 24, '放出去才推到下一个 CD');
 
     //  其他冷却格不许被顺手写脏（同卡 102001 / 102002 各有各的）。
@@ -957,6 +1003,9 @@ function stormZoneContext(units: ZCUnitState[], random: () => number = () => 0.1
             unit.freeX += dx;
             unit.freeY += dy;
         },
+        //  追踪段按 `approachTargetId` 取单位；不给的话 `advanceChase` 只能走「重选最近敌人」，
+        //  投送用例就测不出「飞向那个目标」了。
+        unitById: (id: number) => units.find((unit) => unit.id === id),
         combatDistanceScale: 1,
     } as unknown as Parameters<typeof ZCGroundZoneSystem.tick>[2];
     return { context, hits, moved };
@@ -992,6 +1041,52 @@ test('102004 区域：每 0.5 秒打一跳、同一个敌人反复挨，牵引�
     assert.ok(Math.abs(movedX) > 0, `飓风自己在飘（x=${movedX}）`);
 });
 
+test('102004 区域：游走是 S 型（连续转向 + 按段翻号），不是每段整段重掷的折线', () => {
+    //  用户口径（2026-11-20）：「飓风类技能的移动要类似 S 型的行走方式，不要固定的直线」。
+    //  老实现每 `wanderTurnSeconds` 把朝向整段重掷成随机角 ⇒ 折线甚至原地掉头。
+    //  现在：每帧按固定角速度累加、每段取反 ⇒ 一左一右的蛇形。
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    const units = [caster];
+    //  random 恒 0 ⇒ 初始朝向 0（+x），后面全靠转向率走 S。
+    const cast = stormContext(units, stormParams(8));
+    const state = skillState(units, 0);
+    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    const zone = state.groundZones[0];
+    const zoneCtx = stormZoneContext(units, () => 0);
+
+    const angles: number[] = [];
+    const ys: number[] = [];
+    let flips = 0;
+    let lastRate = 0;
+    for (let step = 0; step < 40; step += 1) {
+        state.elapsedSeconds = Math.round((state.elapsedSeconds + 0.1) * 1e6) / 1e6;
+        ZCGroundZoneSystem.tick(state, 0.1, zoneCtx.context);
+        angles.push(zone.wanderAngleRadians as number);
+        ys.push(zone.y);
+        const rate = zone.wanderTurnRate ?? 0;
+        if (lastRate !== 0 && Math.sign(rate) !== Math.sign(lastRate)) flips += 1;
+        lastRate = rate;
+    }
+    //  ① 角速度要按段翻号，否则一直是同一条弧、走不出 S。
+    assert.ok(flips >= 2, `角速度按段翻号（实际翻了 ${flips} 次）`);
+    //  ② 连续转向：每一拍的转角恒 = |rate| × dt，而不是「跳角」。
+    const expected = Math.PI / 3 * 0.1;
+    for (let index = 1; index < angles.length; index += 1) {
+        const delta = Math.abs(angles[index] - angles[index - 1]);
+        assert.ok(Math.abs(delta - expected) < 1e-6,
+            `第 ${index} 拍转角 ${delta.toFixed(6)} 应恒为 ${expected.toFixed(6)}`);
+    }
+    //  ③ 轨迹要真的拐回来（纵向位移方向至少变一次），这就是「S」的观测面。
+    let turns = 0;
+    for (let index = 2; index < ys.length; index += 1) {
+        const now = ys[index] - ys[index - 1];
+        const prev = ys[index - 1] - ys[index - 2];
+        if (prev !== 0 && Math.sign(now) !== Math.sign(prev)) turns += 1;
+    }
+    assert.ok(turns >= 1, `纵向要来回（S 型），实际换向 ${turns} 次`);
+});
+
 test('102004 区域：牵引够不着 / 贴着圆心都不拽，游走方向由对局种子决定', () => {
     prepare();
     const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
@@ -1015,4 +1110,257 @@ test('102004 区域：牵引够不着 / 贴着圆心都不拽，游走方向由�
     assert.ok(Math.abs(zone.wanderAngleRadians! - Math.PI / 2) < 1e-9, '方向 = random × 2π');
     assert.ok(Math.abs(zone.x) < 1e-9, `90° ⇒ x 不变（实际 ${zone.x}）`);
     assert.ok(zone.y > 0, '朝 +y 漂');
+});
+
+// ────────────────────────── 102004 投送段（2026-11-20 第 28 批）
+//
+// 用户原话：「三叶小丑的飓风没有从卡牌本体移动到目标的过程…是因为移动速度太小了吗？
+// 如果是，改成和卡牌的移速一样，初始生成的大小只有 10%，随着移动过程逐渐成长」。
+//
+// 三条口径要在用例里钉死：
+//  1. 出生点仍是**本体脚下**（不是直接糊在目标身上），速度取卡牌面板移速 28 世界 px/s
+//     —— 配表那 10px/秒 的游走速度乘上 `combatDistanceScale` 只剩 3 世界 px/s，就是
+//     「看起来没动」的根因，所以这一格**不能**再乘 `combatDistanceScale`。
+//  2. 赶路期不读秒 ⇒ `stormSeconds` 是「落地后再活 N 秒」，赶路时间不吃它的寿命。
+//  3. 到点必须交还随机游走（`arriveWander`），否则 `sprintSpeed` 为 0 会让它定在半空，
+//     一片永不消散、也不打人的风。
+
+test('102004 投送：出生在本体脚下、按卡牌面板移速飞向目标，到点交还游走', () => {
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    //  目标在正右 100 世界 px（> 到达容差 22.5 = 风半径 90 × combatDistanceScale 1 × 1/4）。
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 100, freeY: 0 });
+    const units = [caster, foe];
+    const target = {
+        kind: 'unit', id: 2, x: 100, y: 0, bodyRadius: 24, cardId: null,
+    } as ZCCombatTarget;
+    const cast = stormContext(units, stormParams(8), target);
+    const state = skillState(units, 0);
+    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    const zone = state.groundZones[0];
+    assert.equal(zone.x, 0, '出生点仍是本体脚下');
+    assert.equal(zone.y, 0);
+    assert.equal(zone.approachSpeed, 28,
+        '投送速度 = 卡牌面板移速（世界 px/s，不再乘 combatDistanceScale）');
+    assert.equal(zone.approachTargetId, 2);
+    assert.equal(zone.arriveWander, true, '到点要交还游走，否则飞到目标就定住');
+    assert.equal(zone.sprintRange, 22.5, '到达容差 = 风半径的 1/4');
+    assert.equal(zone.growFrom, 0.1, '初始生成只有 10%');
+    assert.ok(Math.abs((zone.growSeconds as number) - (100 - 22.5) / 28) < 1e-9,
+        `成长时长 = 直线赶路耗时（实际 ${zone.growSeconds}）`);
+
+    const zoneCtx = stormZoneContext(units);
+    state.elapsedSeconds = 1;
+    ZCGroundZoneSystem.tick(state, 1, zoneCtx.context);
+    assert.ok(Math.abs(zone.x - 28) < 1e-6, `1 秒走 28 世界 px（实际 ${zone.x}）`);
+    assert.equal(zone.y, 0, '朝目标直线飞');
+    assert.equal(zone.remainingSeconds, 8, '赶路期不读秒 ⇒ 寿命还是满的');
+    assert.deepEqual(zoneCtx.hits, [], '赶路期一波都不结算');
+    //  成长口径要真的落到那条长效表现事件上（只登记在区域里不算数）。
+    const visual = state.combatEvents[0] as unknown as Record<string, unknown>;
+    assert.equal(visual.growFrom, 0.1, '表现事件带上了起始占比');
+    assert.ok(Math.abs((visual.growSeconds as number) - (100 - 22.5) / 28) < 1e-9);
+
+    //  继续飞：进到容差之内就「下车」，移动权交还随机游走。
+    for (let index = 0; index < 200 && zone.approachSpeed !== undefined; index += 1) {
+        state.elapsedSeconds += 0.1;
+        ZCGroundZoneSystem.tick(state, 0.1, zoneCtx.context);
+    }
+    assert.equal(zone.approachSpeed, undefined, '到点下车：清掉 approachSpeed');
+    assert.equal(zone.approachTargetId, undefined);
+    assert.equal(zone.sprintSpeed, undefined);
+    assert.equal(zone.sprinting, true, '阶段标记保留（它进快照，读档回来不能又变「还在赶路」）');
+    const gap = Math.hypot(zone.x - foe.freeX, zone.y - foe.freeY);
+    assert.ok(gap <= 30, `确实飞到了目标身边（离目标 ${gap.toFixed(2)}）`);
+
+    //  落地后才开始结算人，且寿命按「含赶路共 N 秒」结账。
+    const before = zoneCtx.hits.length;
+    state.elapsedSeconds += 0.5;
+    ZCGroundZoneSystem.tick(state, 0.5, zoneCtx.context);
+    assert.ok(zoneCtx.hits.length > before, '落地后才开始打人');
+    assert.ok(zone.remainingSeconds + state.elapsedSeconds <= 8.001,
+        `寿命按总账扣掉赶路（剩 ${zone.remainingSeconds.toFixed(2)} + 已耗时 ${state.elapsedSeconds.toFixed(2)}）`);
+    assert.ok(zone.remainingSeconds + state.elapsedSeconds >= 7.8,
+        '扣的只有赶路那一段，不是把寿命多扣一刀');
+});
+
+test('102004 投送：落地那一拍只补当前一波，不把赶路期间攒的波次一次性倾泻', () => {
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 100, freeY: 0 });
+    const units = [caster, foe];
+    const target = {
+        kind: 'unit', id: 2, x: 100, y: 0, bodyRadius: 24, cardId: null,
+    } as ZCCombatTarget;
+    const cast = stormContext(units, stormParams(8), target);
+    const state = skillState(units, 0);
+    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    const zone = state.groundZones[0];
+    const zoneCtx = stormZoneContext(units);
+    for (let index = 0; index < 200 && zone.approachSpeed !== undefined; index += 1) {
+        state.elapsedSeconds += 0.1;
+        ZCGroundZoneSystem.tick(state, 0.1, zoneCtx.context);
+    }
+    assert.equal(zone.approachSpeed, undefined, '已落地');
+    //  口径「含赶路共 N 秒」：剩余寿命 + 已耗时 恒 ≈ N（赶路期不读秒 ⇒ 这笔账只能在落地时结）。
+    assert.ok(zone.remainingSeconds + state.elapsedSeconds <= 8.001,
+        `落地扣掉了赶路段（剩 ${zone.remainingSeconds.toFixed(2)}，已耗时 ${state.elapsedSeconds.toFixed(2)}）`);
+    assert.ok(zone.remainingSeconds < 7.9, '确实扣了，不是一秒没动');
+    //  波数也要按剩余时间重算：不重算就是「整段 16 波（8s ÷ 0.5s）塞进剩下的几秒」，落地后每 0.17 秒打一下。
+    const interval = 0.5;
+    const wholeWaveCount = Math.round(8 / interval);
+    assert.ok(zone.wavesLeft <= Math.round(zone.remainingSeconds / interval),
+        `波数按剩余时间重算（wavesLeft=${zone.wavesLeft}）`);
+    assert.ok(zone.wavesLeft < wholeWaveCount,
+        `比整段 ${wholeWaveCount} 波少（不是照 N 秒算的那一份）：wavesLeft=${zone.wavesLeft}`
+        + ` remaining=${zone.remainingSeconds.toFixed(2)} elapsed=${state.elapsedSeconds.toFixed(2)}`);
+    //  赶路那 1 秒按 0.5 秒间隔本该攒下 2 波；`enterSprint` 把 `nextWaveAt` 重置到落地时刻，
+    //  所以落地这一拍只补当前这一波（不重置的话这一帧会连着打 2 下）。
+    assert.equal(zoneCtx.hits.length, 1, '落地只打一波');
+});
+
+test('102004 投送：追不上的目标不能把风变成永动机（赶路耗尽寿命即落地散场）', () => {
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    //  目标在 2000 世界 px 外且不动：28 px/s 要飞 70 秒，远超这阵风 8 秒的寿命。
+    //  不设「赶路耗尽即落地」这道闸的话，`remainingSeconds` 在赶路期不读秒 ⇒ 它会永远在飞。
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 2000, freeY: 0 });
+    const units = [caster, foe];
+    const target = {
+        kind: 'unit', id: 2, x: 2000, y: 0, bodyRadius: 24, cardId: null,
+    } as ZCCombatTarget;
+    const cast = stormContext(units, stormParams(8), target);
+    const state = skillState(units, 0);
+    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    const zoneCtx = stormZoneContext(units);
+    for (let index = 0; index < 400 && state.groundZones.length; index += 1) {
+        state.elapsedSeconds += 0.1;
+        ZCGroundZoneSystem.tick(state, 0.1, zoneCtx.context);
+    }
+    assert.equal(state.groundZones.length, 0, '赶路耗尽寿命 ⇒ 落地即散场（不会永远在飞）');
+    assert.ok(state.elapsedSeconds <= 8.3, `散场不晚于寿命（实际 ${state.elapsedSeconds.toFixed(2)}s）`);
+    assert.deepEqual(zoneCtx.hits, [], '够不着 ⇒ 全程一下都没打到');
+});
+
+test('102004 投送：闸门放行但这一拍还没锁定 ⇒ 自己按普攻射程挑最近的敌人送出去', () => {
+    prepare();
+    //  用户实测反馈「改成等目标之后，飓风又不会移动了」的根因就在这里：
+    //  闸门 `release` 走全表扫（射程内有活敌就放），`currentTarget` 读的是攻击流程
+    //  才写的 `targetUnitId` —— 敌人刚进圈那一帧还是空的 ⇒ 投送段拿不到目标、原地生成。
+    //  夹具里 `currentTarget` 给 `null` 就是在复现那一帧。
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    //  射程 57 世界 px（= (45 + 24 × 0.5) × combatDistanceScale 1）：50 在圈内、80 在圈外。
+    const near = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 30, freeY: 40 });
+    const far = makeUnit(3, '68001', { owner: ZCOwner.Enemy, freeX: 80, freeY: 0 });
+    const units = [caster, near, far];
+    const cast = stormContext(units, stormParams(8), null);
+    const state = skillState(units, 0);
+    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    const zone = state.groundZones[0];
+    assert.equal(zone.approachSpeed, 28, '照样走赶路段（不能因为没锁定就原地生成）');
+    assert.equal(zone.approachTargetId, 2, '追射程内最近的那个，射程外的 3 不追');
+    assert.equal(zone.growFrom, 0.1, '有赶路段 ⇒ 出生 10%');
+    assert.ok(Math.abs((zone.growSeconds as number) - (50 - 22.5) / 28) < 1e-9,
+        `成长时长按「本体 → 目标」直线算（实际 ${zone.growSeconds}）`);
+    const zoneCtx = stormZoneContext(units);
+    state.elapsedSeconds = 1;
+    ZCGroundZoneSystem.tick(state, 1, zoneCtx.context);
+    assert.ok(Math.abs(zone.x - 16.8) < 1e-6 && Math.abs(zone.y - 22.4) < 1e-6,
+        `朝落点直线飞（实际 ${zone.x.toFixed(2)}, ${zone.y.toFixed(2)}）`);
+});
+
+test('102004 投送：锁的是墙也照样飞向射程内的敌人，不能飞到墙根再定住', () => {
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 50, freeY: 0 });
+    const units = [caster, foe];
+    //  墙在 300 世界 px 外：追墙 = 一片风飞到没有人的墙根下站定（`approachTargetId` 也没得追）。
+    const wall = {
+        kind: 'wall', id: 9, x: 300, y: 0, bodyRadius: 40, cardId: null,
+    } as ZCCombatTarget;
+    const cast = stormContext(units, stormParams(8), wall);
+    const state = skillState(units, 0);
+    assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true);
+    const zone = state.groundZones[0];
+    assert.equal(zone.approachSpeed, 28, '有活敌 ⇒ 走赶路段');
+    assert.equal(zone.approachTargetId, 2, '追的是敌人，不是墙');
+    assert.equal(zone.arriveWander, true);
+});
+
+test('102004 投送：目标半路阵亡且没有替代 ⇒ 继续飞到最后已知坐标，落地才交还游走', () => {
+    //  用户口径（2026-11-20 第 31 批）：「锁定目标，移动，目标丢失，切换目标，
+    //  没有目标继续往旧的目标坐标移动，不会静止」。换目标那一半由 `nearestChaseTarget` 负责，
+    //  这条钉的是最后一段：没有替代目标时，风要朝**最后记录的目标坐标**继续飞，
+    //  而且速度不能掉成 0（投送段只有 `approachSpeed`、没有 `sprintSpeed`，
+    //  老代码在这里取 `sprintSpeed ?? 0` ⇒ 整片风定在原地）。
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 100, freeY: 0 });
+    const units = [caster, foe];
+    const target = {
+        kind: 'unit', id: 2, x: 100, y: 0, bodyRadius: 24, cardId: null,
+    } as ZCCombatTarget;
+    const cast = stormContext(units, stormParams(8), target);
+    const state = skillState(units, 0);
+    ZCAttackResolutionSystem.castStorm(state, caster, cast.context);
+    const zone = state.groundZones[0];
+    const zoneCtx = stormZoneContext(units);
+
+    //  ① 锁定目标在飞：每一拍都把目标坐标记成「最后已知落点」。
+    state.elapsedSeconds = 1;
+    ZCGroundZoneSystem.tick(state, 1, zoneCtx.context);
+    assert.equal(zone.chaseGoalX, 100, '目标活着时记下它的坐标');
+    assert.equal(zone.chaseGoalY, 0);
+    assert.ok(Math.abs(zone.x - 28) < 1e-6);
+
+    //  ② 目标阵亡，且附近没有可换的敌人（场上只剩施法者自己）。
+    foe.hp = 0;
+    foe.battleState = 'dead';
+    state.elapsedSeconds = 2;
+    ZCGroundZoneSystem.tick(state, 1, zoneCtx.context);
+    assert.equal(zone.approachSpeed, 28, '还在飞，不能提前交还游走');
+    assert.equal(zone.approachTargetId, undefined, '目标已经没了');
+    assert.ok(Math.abs(zone.x - 56) < 1e-6, `继续朝最后已知坐标飞（实际 ${zone.x}）`);
+    assert.equal(zone.y, 0);
+
+    //  ③ 飞到旧坐标（容差 = 风半径 1/4）才落地，旧坐标随之清掉。
+    for (let index = 0; index < 100 && zone.approachSpeed !== undefined; index += 1) {
+        state.elapsedSeconds += 0.1;
+        ZCGroundZoneSystem.tick(state, 0.1, zoneCtx.context);
+    }
+    assert.equal(zone.approachSpeed, undefined, '到点交还游走');
+    assert.equal(zone.chaseGoalX, undefined, '旧坐标要清掉，否则游走会被重新拽回去');
+    assert.ok(zone.x >= 100 - 22.5 - 1e-6, `落在旧坐标附近（离旧点 ${(100 - zone.x).toFixed(2)}）`);
+});
+
+test('102004 投送：无活目标（含在打墙）⇒ 原地生成、退回老出场口径', () => {
+    prepare();
+    const caster = makeUnit(1, JOKER_UNIT, { freeX: 0, freeY: 0 });
+    const foe = makeUnit(2, '68001', { owner: ZCOwner.Enemy, freeX: 100, freeY: 0 });
+    const units = [caster, foe];
+    const wall = {
+        kind: 'wall', id: 9, x: 300, y: 0, bodyRadius: 40, cardId: null,
+    } as ZCCombatTarget;
+    for (const target of [null, wall]) {
+        const cast = stormContext(units, stormParams(8), target);
+        const state = skillState(units, 0);
+        assert.equal(ZCAttackResolutionSystem.castStorm(state, caster, cast.context), true,
+            '不拒放（设计：场上没敌人也照放，敌人走过来照样挨）');
+        const zone = state.groundZones[0];
+        assert.equal(zone.x, 0, '原地生成');
+        assert.equal(zone.approachSpeed, undefined, '不走赶路段（墙 / 建筑没有可追的单位）');
+        assert.equal(zone.approachTargetId, undefined);
+        assert.equal(zone.arriveWander, undefined);
+        assert.equal(zone.growFrom, undefined, '入场退回「从 0 长起来」的老口径');
+        assert.equal(zone.growSeconds, 0.2);
+        assert.equal(zone.approachSeconds, undefined, '没有赶路段 ⇒ 不累计、落地也无从扣');
+    }
+});
+
+test('102004 投送：新字段必须进快照白名单（少一条就读档回来又变「追到就停」）', () => {
+    const codec = readFileSync('assets/script/app/zcds/model/ZCSnapshotCodec.ts', 'utf8');
+    assert.match(codec, /optional\(zone\.arriveWander/, '到点交还的阶段标记要还原理');
+    assert.match(codec, /optional\(zone\.growFrom/, '起始占比要还原（写歪成 10% 就整片风缩水）');
+    assert.match(codec, /optional\(zone\.approachSeconds/,
+        '赶路已耗时是寿命账本，少了它读档回来会白多活一整段赶路');
 });

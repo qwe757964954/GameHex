@@ -841,6 +841,16 @@ test('暴风：入场生长系数 0 → 1，之后恒 1（纯函数，与 prefab
     assert.equal(zcCombatEffectGrowFactor(0.3, 9), 1, '之后恒 1');
     assert.equal(zcCombatEffectGrowFactor(undefined, 0.1), 1, '没配时长 ⇒ 不生长（既有特效逐字不变）');
     assert.equal(zcCombatEffectGrowFactor(0, 0.1), 1);
+    //  2026-11-20 第 28 批（三叶小丑飓风）：多一格「起始占比」。缺省 0 ⇒ 老口径逐字不变；
+    //  给了 0.1 就是「出生即 10%」，因为缓动本身在 t = 0 时是 0，光有 `growSeconds` 表达不了。
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0, 0), 0);
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0, 0.1), 0.1, '出生就是 10%');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0.15, 0.1), 0.775, '10% + 90% × ease(0.5)');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0.3, 0.1), 1, '到点仍是满尺寸');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 0, 5), 1, '起点占比钳到 1');
+    assert.equal(zcCombatEffectGrowFactor(0.3, 9, -3), 1, '负值当 0，之后恒 1');
+    assert.equal(zcCombatEffectGrowFactor(undefined, 0, 0.1), 1,
+        '时长非法 ⇒ 满尺寸（宁可没有入场，也不能把整片风永久钉在 10%）');
 });
 
 test('暴风：生长时长经区域落到那条长效表现事件上', () => {
@@ -858,5 +868,7 @@ test('暴风：生长时长经区域落到那条长效表现事件上', () => {
     const visuals = (state as unknown as { combatEvents: Array<Record<string, unknown>> }).combatEvents;
     assert.equal(visuals.length, 1, '整段持有 ⇒ 只有一条视觉事件（不是逐波 20 条）');
     assert.equal(visuals[0].growSeconds, 0.3);
+    //  2026-11-20：涨落起点是另一格，没配就是 `undefined`（视图按 0 处理）——存量逐字不变。
+    assert.equal(visuals[0].growFrom, undefined, '没配起始占比 ⇒ 视图按 0 处理');
     assert.equal(visuals[0].effectPrefabPath, 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风');
 });

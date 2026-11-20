@@ -1,6 +1,5 @@
 import { ZCDC_LOG_DIAGNOSTICS, ZCDC_LOG_WARNINGS } from '../ZCDCLogSwitch';
 import { missileLog } from '../ZCMissileSkillDiagnostics';
-import { ZCNeutralResourceType } from '../model/ZCNeutralResourceGroup';
 import { hexGridDistance } from '../../../core/hex/HexGridLayout';
 import { zcMonsterPosition } from '../model/systems/ZCNeutralFeatureSystem';
 import type { IZCDeferredBattleArt } from '../application/ZCGamePreparedResources';
@@ -420,6 +419,7 @@ export class ZCGameRenderWorld {
      * 表现退回修之前的样子，但不崩。层序事实仍以 prefab 为准（见 `options.board` 的注释）。
     */
     private resourceLayer: Node | null = null;
+    private monsterFocusLayer: Node | null = null;
     /**
      * 共享轮廓的「内容探针」与「上次已画快照」，两个复用数组做逐项比对。
      *
@@ -708,7 +708,9 @@ export class ZCGameRenderWorld {
         // 兵种帧一次算好：`unitVisualPrefabs` 整局不变 ⇒ 下面 `resolveUnitFrame` 必然命中，不必再判缓存。
         //  prefab 里没有 `Sprite.spriteFrame` 的兵种查不到（保持和以前一样返回 null）。
         for (const [unitId, prefab] of this.options.unitVisualPrefabs) {
-            const frame = prefab?.data?.getComponentInChildren(Sprite)?.spriteFrame ?? null;
+            if (!prefab || !prefab.data) continue;
+            const sprite = prefab.data.getComponentInChildren(Sprite);
+            const frame = sprite ? sprite.spriteFrame : null;
             if (frame) this.unitFrames.set(unitId, frame);
         }
         const map = mapConfig;
@@ -799,8 +801,9 @@ export class ZCGameRenderWorld {
         }
         for (const [originId, itemId] of this.resourceItemByHex) {
             const item = neutralResourceItemOf(itemId);
-            if (!item?.territoryIcon) continue;
-            const ground = this.options.neutralResourceFrames?.get(item.territoryIcon);
+            if (!item || !item.territoryIcon) continue;
+            const resourceFrames = this.options.neutralResourceFrames;
+            const ground = resourceFrames ? resourceFrames.get(item.territoryIcon) : undefined;
             if (!ground) throw new Error(`野怪领地地表未加载：${item.territoryIcon}`);
             for (const [id, placed] of placedById) {
                 if (hexGridDistance(mapConfig.hexes[originId], mapConfig.hexes[id]) <= item.feature.wakeRange) placed.view.setMonsterGround(ground);
@@ -858,7 +861,7 @@ export class ZCGameRenderWorld {
         // 换图 / 重建会重跑本方法；先清掉旧登记（attachCooldownOverlay 紧接着追加，不重复清）。
         this.reparentedNodes.length = 0;
         for (const { x, y, view } of placed) {
-            const building = view.buildingSprite?.node;
+            const building = view.buildingSprite ? view.buildingSprite.node : null;
             if (!building) continue;
             // 直读 position 字段而不是 clone()：只取一次、不持有引用，无需分配临时 Vec3。
             const offset = building.position;
@@ -885,25 +888,19 @@ export class ZCGameRenderWorld {
             focus.setPosition(x, y + offsetY, 0);
             this.reparentedNodes.push(focus);
         }
-        for (const { x, y, view, hexId } of placed) {
-            const health = view.healthBar?.node;
+        for (const { x, y, view } of placed) {
+            const health = view.healthBar ? view.healthBar.node : null;
             if (!health) continue;
             const offset = health.position;
             const offsetX = offset.x;
-            const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
-            const monster = item !== null && (
-                typeof ZCNeutralResourceType !== 'undefined' && ZCNeutralResourceType
-                    ? item.resourceType === ZCNeutralResourceType.Monster
-                    : item.resourceType === 11
-            );
-            const offsetY = monster ? 80 : offset.y;
+            const offsetY = offset.y;
             const offsetZ = offset.z;
             health.setParent(overlay);
             health.setPosition(x + offsetX, y + offsetY, offsetZ);
             this.reparentedNodes.push(health);
         }
         for (const { x, y, view } of placed) {
-            const cooldown = view.cooldownBar?.node;
+            const cooldown = view.cooldownBar ? view.cooldownBar.node : null;
             if (!cooldown) continue;
             const offset = cooldown.position;
             const offsetX = offset.x;
@@ -1020,8 +1017,11 @@ export class ZCGameRenderWorld {
         for (const owner of ZC_OWNER_ORDER) {
             const state = snapshot.selections[owner];
             if (!state || state.selectedHexId === null) continue;
-            for (const neighborId of selection.map.hexes[state.selectedHexId]?.neighbors ?? []) {
-                homeNeighborOwner.set(neighborId, owner);
+            const selectedHex = selection.map.hexes[state.selectedHexId];
+            if (selectedHex) {
+                for (const neighborId of selectedHex.neighbors) {
+                    homeNeighborOwner.set(neighborId, owner);
+                }
             }
         }
         //  选点侧也有自己的逐格归属：两份表是上面的成员工作集，已 clear + 重填，
@@ -1064,17 +1064,20 @@ export class ZCGameRenderWorld {
             const blocked = sectionOwner === ZCOwner.Player
                 && !selection.isResourcePoint(config.id)
                 && selection.invalidReason(ZCOwner.Player, config.id) !== null;
-            this.hexViews.get(entityId)?.renderSpawnSelection({
-                sectionOwner,
-                selectedBy: chosen?.owner ?? null,
-                confirmed: chosen?.confirmed ?? false,
-                blocked,
-                resourcePoint: selection.isResourcePoint(config.id),
-                resourceItemId: selection.resourceItemIdAt(config.id),
-                unlocksResource: unlockedResources.has(config.id),
-                boundaryMask: boundaryMasks.get(config.id) ?? 0,
-                homeHighlight: playerBaseNeighbors.has(config.id),
-            });
+            const view = this.hexViews.get(entityId);
+            if (view) {
+                view.renderSpawnSelection({
+                    sectionOwner,
+                    selectedBy: chosen ? chosen.owner : null,
+                    confirmed: chosen ? chosen.confirmed : false,
+                    blocked,
+                    resourcePoint: selection.isResourcePoint(config.id),
+                    resourceItemId: selection.resourceItemIdAt(config.id),
+                    unlocksResource: unlockedResources.has(config.id),
+                    boundaryMask: boundaryMasks.get(config.id) ?? 0,
+                    homeHighlight: playerBaseNeighbors.has(config.id),
+                });
+            }
         }
         this.renderSpawnConfirmButton(playerBaseId);
     }
@@ -1136,6 +1139,18 @@ export class ZCGameRenderWorld {
         this.renderNeutralFeatures(frame);
     }
 
+    /** 棋盘与按钮层共用地图坐标和缩放，按钮画在动态出兵之上。 */
+    private raiseMonsterFocus(button: Node): void {
+        if (!this.monsterFocusLayer) {
+            const layer = new Node('MonsterFocusLayer');
+            layer.layer = this.options.mapLayer.layer;
+            layer.addComponent(UITransform);
+            layer.setParent(this.options.mapLayer);
+            this.monsterFocusLayer = layer;
+        }
+        if (button.parent !== this.monsterFocusLayer) button.setParent(this.monsterFocusLayer);
+    }
+
     private renderNeutralFeatures(frame: ZCGameRenderFrame): void {
         if (frame.mapConfig.cityMode === 'select') return;
         // 直接调用（单测 / 首帧早于 renderStatic）时先补一次索引；正常帧由静态刷新维护。
@@ -1144,8 +1159,12 @@ export class ZCGameRenderWorld {
         for (const hex of this.neutralFeatureHexStates.values()) {
             const feature = hex.neutralFeature;
             const monsterView = this.hexViews.get(this.hexEntityBySource.get(hex.id));
-            if (monsterView && typeof feature?.awake === 'boolean') monsterView.renderMonsterFocus(hex, now);
-            if (feature?.patrol && !feature.claimed) {
+            if (monsterView && feature && typeof feature.awake === 'boolean') {
+                monsterView.renderMonsterFocus(hex, now);
+                monsterView.renderMonsterAttack(feature.claimed ? undefined : feature.attackStartedAt, now, feature.monsterFacing);
+                if (!feature.claimed) this.raiseMonsterFocus(monsterView.monsterFocusButton.node);
+            }
+            if (feature && feature.patrol && !feature.claimed) {
                 const view = this.hexViews.get(this.hexEntityBySource.get(hex.id));
                 if (view) {
                     const position = zcMonsterPosition(frame.mapConfig, hex, now, ZCGameRenderWorld.UNIT_POSITION_SCRATCH);
@@ -1153,7 +1172,7 @@ export class ZCGameRenderWorld {
                     view.renderMonsterPatrol(mapToViewX(position.x - origin.x), mapToViewY(position.y - origin.y));
                 }
             }
-            if (!feature?.claimed) continue;
+            if (!feature || !feature.claimed) continue;
             const entity = this.hexEntityBySource.get(hex.id);
             const view = this.hexViews.get(entity);
             if (!view) continue;
@@ -1165,8 +1184,10 @@ export class ZCGameRenderWorld {
                     continue;
                 }
                 const index = Math.min(line.length - 1, Math.floor(progress));
-                const from = this.scene.get(this.hexEntityBySource.get(line[index]))?.node;
-                const to = this.scene.get(this.hexEntityBySource.get(line[Math.min(line.length - 1, index + 1)]))?.node;
+                const fromEntity = this.scene.get(this.hexEntityBySource.get(line[index]));
+                const from = fromEntity ? fromEntity.node : null;
+                const toEntity = this.scene.get(this.hexEntityBySource.get(line[Math.min(line.length - 1, index + 1)]));
+                const to = toEntity ? toEntity.node : null;
                 if (from && to) {
                     const ratio = progress - index;
                     view.renderMower(from.position.x + (to.position.x - from.position.x) * ratio - view.node.position.x,
@@ -1176,7 +1197,8 @@ export class ZCGameRenderWorld {
             }
             if (feature.portalAt !== undefined && now >= feature.portalAt
                 && portalFlightProgress(feature.portalAt, now) < 1) {
-                const portalFrame = this.options.neutralResourceFrames?.get('portal');
+                const resourceFrames = this.options.neutralResourceFrames;
+                const portalFrame = resourceFrames ? resourceFrames.get('portal') : undefined;
                 const entrance = frame.mapConfig.hexes[hex.id];
                 const exit = frame.mapConfig.hexes[feature.portalExitId];
                 if (portalFrame && exit) {
@@ -1186,13 +1208,18 @@ export class ZCGameRenderWorld {
             }
         }
         this.effectPool.recyclePortalFx(now);
+        const layer = this.monsterFocusLayer;
+        if (layer) {
+            const lastIndex = this.options.mapLayer.children.length - 1;
+            if (this.options.mapLayer.children[lastIndex] !== layer) layer.setSiblingIndex(lastIndex);
+        }
     }
 
     private refreshNeutralFeatureHexIds(frame: ZCGameRenderFrame): void {
         this.neutralFeatureHexStates.clear();
         for (const hex of frame.snapshot.hexes) {
             const feature = hex.neutralFeature;
-            if (typeof feature?.awake === 'boolean' || feature?.claimed) this.neutralFeatureHexStates.set(hex.id, hex);
+            if (feature && (typeof feature.awake === 'boolean' || feature.claimed)) this.neutralFeatureHexStates.set(hex.id, hex);
         }
         this.neutralFeatureSetReady = true;
     }
@@ -1491,7 +1518,8 @@ export class ZCGameRenderWorld {
                 this.cardRevealViews.set(entityId, view);
                 this.cardRevealEntityBySource.set(reveal.id, entityId);
             }
-            this.cardRevealViews.get(entityId)?.render(reveal, this.visualTime(frame));
+            const view = this.cardRevealViews.get(entityId);
+            if (view) view.render(reveal, this.visualTime(frame));
         }
     }
 
@@ -1553,8 +1581,10 @@ export class ZCGameRenderWorld {
                 this.legendBannerEntityBySource.set(reveal.id, entityId);
             }
             const view = this.legendBannerViews.get(entityId);
-            view?.setLayout(placement);
-            view?.render(reveal, this.visualTime(frame));
+            if (view) {
+                view.setLayout(placement);
+                view.render(reveal, this.visualTime(frame));
+            }
         }
     }
 
@@ -1571,12 +1601,14 @@ export class ZCGameRenderWorld {
         readonly viewWidth: number;
         readonly viewHeight: number;
     } {
-        const transform = this.options.overlayLayer?.getComponent(UITransform);
+        const overlayLayer = this.options.overlayLayer;
+        const transform = overlayLayer ? overlayLayer.getComponent(UITransform) : null;
+        const owners = frame.owners;
         return {
             // 老快照 / 测试桩可能没有 `owners` ⇒ 兜底 2 人（与 `ZCMapConfig` 未声明人数的口径一致）。
-            playerCount: frame.owners?.length || 2,
-            viewWidth: transform?.width ?? 0,
-            viewHeight: transform?.height ?? 0,
+            playerCount: (owners && owners.length > 0) ? owners.length : 2,
+            viewWidth: transform ? transform.width : 0,
+            viewHeight: transform ? transform.height : 0,
         };
     }
 
@@ -1587,7 +1619,7 @@ export class ZCGameRenderWorld {
      *  - 同一时刻只显示一条：取 `monsterClaim` 里 id 最大的那条；模型队列在 1.156s 后自己走完，
      *    这条横栏没有下一帧就 `active = false` —— 重复击杀会因 id 变大而重新滑入。
      *  - 单例常驻：不借对象池，节点建好后一直挂在全屏层上（隐藏时留着，省掉每次击杀的实例化）。
-     *  - 落位固定在玩家列表下方（见 `ZCGameKillBannerView`），不需要按人数分格。
+     *  - 落位在屏幕上部（见 `ZCGameKillBannerView`），不需要按人数分格。
     */
     renderKillBanners(frame: ZCGameRenderFrame): void {
         const prefab = this.options.killBannerPrefab;
@@ -1625,8 +1657,9 @@ export class ZCGameRenderWorld {
         const node = this.killBannerNode;
         const view = this.killBannerView;
         if (!node || !view || !view.isValid) return;
-        const transform = this.options.overlayLayer?.getComponent(UITransform);
-        view.setLayout({ viewWidth: transform?.width ?? 0, viewHeight: transform?.height ?? 0 });
+        const overlayLayer = this.options.overlayLayer;
+        const transform = overlayLayer ? overlayLayer.getComponent(UITransform) : null;
+        view.setLayout({ viewWidth: transform ? transform.width : 0, viewHeight: transform ? transform.height : 0 });
         if (!node.active) node.active = true;
         view.render(latest, this.visualTime(frame));
     }
@@ -1691,9 +1724,10 @@ export class ZCGameRenderWorld {
     private territoryOwnerForHex(id: number): ZCFaction {
         const sweepOwner = this.sweep.ownerForHex(id);
         if (sweepOwner) return sweepOwner;
-        const hex = this.territoryFrame?.hexesById.get(id);
-        const owner = hex?.state.owner ?? 'neutral';
-        if (hex?.canDevelop !== true) return territoryTintOwner(owner, false);
+        const territoryFrame = this.territoryFrame;
+        const hex = territoryFrame ? territoryFrame.hexesById.get(id) : undefined;
+        const owner = hex ? hex.state.owner : 'neutral';
+        if (!hex || hex.canDevelop !== true) return territoryTintOwner(owner, false);
         return territoryTintOwner(owner, true);
     }
 
@@ -1775,7 +1809,8 @@ export class ZCGameRenderWorld {
                 this.floatTextViews.set(entityId, view);
                 this.floatTextEntityBySource.set(text.id, entityId);
             }
-            this.floatTextViews.get(entityId)?.render(text, this.visualTime(frame));
+            const view = this.floatTextViews.get(entityId);
+            if (view) view.render(text, this.visualTime(frame));
         }
     }
 
@@ -1825,6 +1860,8 @@ export class ZCGameRenderWorld {
             if (node.isValid) node.destroy();
         }
         this.reparentedNodes.length = 0;
+        if (this.monsterFocusLayer) this.monsterFocusLayer.destroy();
+        this.monsterFocusLayer = null;
         for (const scene of this.scene.values()) {
             if (scene.node.isValid) scene.node.destroy();
         }
@@ -1907,7 +1944,8 @@ export class ZCGameRenderWorld {
             if (!hex) continue;
             const state = hex.state;
             const owner: ZCFaction = state.owner === 'neutral' && hex.canDevelop ? ZCOwner.Player : state.owner;
-            this.hexViews.get(entityId)?.renderActivation(activation, now, owner);
+            const view = this.hexViews.get(entityId);
+            if (view) view.renderActivation(activation, now, owner);
         }
     }
 
@@ -2138,7 +2176,7 @@ export class ZCGameRenderWorld {
     */
     startTerritoryClaimWave(frame: ZCGameRenderFrame, selection: ZCSpawnSelection): boolean {
         const map = frame.mapConfig;
-        if (!map?.homes?.length) return false;
+        if (!map.homes || map.homes.length === 0) return false;
         const states = frame.snapshot.hexes;
         const ownerById = new Map(states.map((state) => [state.id, state.owner] as const));
         return this.claimWave.start(
@@ -2149,8 +2187,11 @@ export class ZCGameRenderWorld {
                 sectionOwnerOf: (hexId) => (selection.regionOwnerOf(hexId) ?? 'neutral') as ZCFaction,
                 // 终点色与底图 / 轮廓同源：开局那一刻中立格都还不可开发，所以事实上全落回中立观感；
                 // 走同一个 `territoryTintOwner` 是为了「万一它已经可开发」也不会在收工那一帧跳色。
-                tintOwnerOf: (hexId) => territoryTintOwner(
-                    ownerById.get(hexId) ?? 'neutral', frame.hexesById.get(hexId)?.canDevelop === true),
+                tintOwnerOf: (hexId) => {
+                    const hex = frame.hexesById.get(hexId);
+                    const canDevelop = hex ? hex.canDevelop === true : false;
+                    return territoryTintOwner(ownerById.get(hexId) ?? 'neutral', canDevelop);
+                },
             },
             this.visualTime(frame),
         );
@@ -2186,7 +2227,8 @@ export class ZCGameRenderWorld {
             if (activeIds.has(sourceId)) continue;
             // 光柱是这个单位节点的子节点：不先摘下来，它会跟着宿主进池，
             // 表现为「人没了原地还立着光柱」，更糟的是复用时挂到别的单位身上。
-            const unitNode = this.scene.get(entityId)?.node;
+            const sceneEntity = this.scene.get(entityId);
+            const unitNode = sceneEntity ? sceneEntity.node : null;
             if (unitNode) this.effectPool.detachSpawnFxOf(unitNode);
             this.removeEntity(entityId);
             this.unitEntityBySource.delete(sourceId);
@@ -2242,20 +2284,22 @@ export class ZCGameRenderWorld {
             presentation.x = mapToViewX(from.x + (unit.freeX - from.x) * progress);
             presentation.y = mapToViewY(from.y + (unit.freeY - from.y) * progress) + portalFlightLift(progress);
         }
-        this.unitViews.get(entityId)?.render(presentation);
+        const unitView = this.unitViews.get(entityId);
+        if (unitView) unitView.render(presentation);
         // 出生光柱挂到单位节点下（不是 mapLayer 的兄弟），这样它自动跟着插值后的位置走。
         if (isBirth) {
             this.effectPool.playSpawnFx(this.scene.get(entityId).node, presentation.now);
             // 新兵自己原地抖一下（Y 拉 110% 回落、再 X 拉 110% 回落）。
-            this.unitViews.get(entityId)?.playSpawnShake(presentation.now);
+            if (unitView) unitView.playSpawnShake(presentation.now);
             // 生成它的建筑也抖一下（需求 2026-10-15 row5）：兵营产兵倒计时结束时，
             // 建筑模型（根下的 BuildingIcon）同样「先 Y 后 X」抖一次。
             //
             // 判据用「出生单位的 `sourceHexId` 这一格的建筑是不是兵营」，不用「有没有冷却环」——
             // 主城 / 金矿也有环（收入 / 产出），而这条路要的是产兵建筑抖；
             // 主城 / 金矿的抖动走的是产金那条表现事件，两者别混。
-            const barracksHexId = unit.portalFlight?.barracksHexId ?? unit.sourceHexId;
-            if (frame.hexesById.get(barracksHexId)?.state.building === 'barracks') {
+            const barracksHexId = unit.portalFlight ? unit.portalFlight.barracksHexId : unit.sourceHexId;
+            const barracksHex = frame.hexesById.get(barracksHexId);
+            if (barracksHex && barracksHex.state.building === 'barracks') {
                 this.triggerBuildingShake(barracksHexId, presentation.now);
             }
         }
@@ -2285,22 +2329,20 @@ export class ZCGameRenderWorld {
     */
     private injectResourceUnits(view: ZCHexView, hexId: number): void {
         const item = neutralResourceItemOf(this.resourceItemByHex.get(hexId));
-        view.setGateCooldownSeconds(item?.feature?.cooldownSeconds ?? 0);
-        view.setPortalUses(item?.feature?.uses ?? 0);
-        view.setMowerSpeed(item?.feature?.speed ?? 0);
-        const monster = item?.visual === ZCNeutralResourceVisual.Monster;
-        const cardId = monster ? item.feature.resId
+        const feature = item ? item.feature : undefined;
+        view.setGateCooldownSeconds(feature && feature.cooldownSeconds !== undefined ? feature.cooldownSeconds : 0);
+        view.setPortalUses(feature && feature.uses !== undefined ? feature.uses : 0);
+        view.setMowerSpeed(feature && feature.speed !== undefined ? feature.speed : 0);
+        const monster = item ? item.visual === ZCNeutralResourceVisual.Monster : false;
+        const cardId = monster && feature ? feature.resId
             : item && item.visual === ZCNeutralResourceVisual.UnitCap ? item.cardId : null;
         const prefabs = this.options.unitVisualPrefabs as ReadonlyMap<ZCUnitId, Prefab> | undefined;
-        const unitId = cardId ? this.unitIdOfCard(cardId) : null;
-        const prefab = unitId ? prefabs?.get(unitId) ?? null : null;
-        view.setResourceUnits(cardId ?? '', prefab, monster ? 1 : item?.unitCount ?? 0);
-    }
-
-    /** 卡 id → unitId。卡表里两者同值，但别假设：用目录反查，查不到就按同值兜一次。*/
-    private unitIdOfCard(cardId: string): ZCUnitId | null {
         const card = findCatalogCard(cardId);
-        return card ? (card.unitId as ZCUnitId) : (cardId as ZCUnitId);
+        const unitId = (card && card.unitId ? card.unitId : cardId) as ZCUnitId;
+        const prefab = unitId && prefabs ? prefabs.get(unitId) ?? null : null;
+        const unitCount = monster ? 1 : (item && item.unitCount !== undefined ? item.unitCount : 0);
+        view.setResourceUnits(cardId ?? '', prefab, unitCount,
+            monster && unitId ? resolveUnitDefinition(unitId) : null);
     }
 
     private unitPosition(unit: Readonly<ZCUnitState>): { x: number; y: number } {
@@ -2410,8 +2452,9 @@ export class ZCGameRenderWorld {
                 this.effectEntityBySource.set(event.id, entityId);
                 //  诊断4.：导弹特效节点建出来的这一拍，本局特效清单里到底有没有这份美术。
                 if (event.effectPrefabPath && event.effectPrefabPath.includes('导弹')) {
+                    const effectPrefab = this.effectVisualPrefabs.get(event.effectPrefabPath);
                     missileLog('视图', `创建导弹特效节点 #${event.id}（${event.type}）`
-                        + ` prefab=${this.effectVisualPrefabs.get(event.effectPrefabPath)?.name ?? '取不到（走按需补载）'}`
+                        + ` prefab=${effectPrefab ? effectPrefab.name : '取不到（走按需补载）'}`
                         + ` hasVisual=${view.hasVisual}`
                         + ` pos=(${node.position.x.toFixed(1)},${node.position.y.toFixed(1)})`
                         + ` sibling=${node.getSiblingIndex()} active=${node.active}`);
@@ -2423,18 +2466,19 @@ export class ZCGameRenderWorld {
             if (view && !view.hasVisual && event.effectPrefabPath) {
                 this.resolveMissingEffectArt(view, event.effectPrefabPath, now);
             }
-            view?.render(event, now, projectile, alpha);
+            if (view) view.render(event, now, projectile, alpha);
             //  诊断5.：首帧渲染后的节点真实状态（挂上了却在屏幕外 / 缩放 0 / 子节点不激活，
             //  三种都表现为「看不见」而日志一片安静）。
-            if (view && event.effectPrefabPath?.includes('导弹') && !this.missileDiagFrameLogged.has(event.id)) {
+            if (view && event.effectPrefabPath && event.effectPrefabPath.includes('导弹') && !this.missileDiagFrameLogged.has(event.id)) {
                 this.missileDiagFrameLogged.add(event.id);
-                const node = this.scene.get(entityId)?.node;
-                const child = node?.children[0];
+                const sceneEntity = this.scene.get(entityId);
+                const node = sceneEntity ? sceneEntity.node : null;
+                const child = node && node.children.length > 0 ? node.children[0] : null;
                 missileLog('视图', `导弹特效首帧 #${event.id}`
-                    + ` 节点=${node?.name ?? 'null'} active=${node?.active}`
-                    + ` pos=(${node?.position.x.toFixed(1)},${node?.position.y.toFixed(1)})`
-                    + ` scale=(${node?.scale.x.toFixed(2)},${node?.scale.y.toFixed(2)})`
-                    + ` angle=${node?.angle.toFixed(1)}`
+                    + ` 节点=${node ? node.name : 'null'} active=${node ? node.active : false}`
+                    + ` pos=(${node ? node.position.x.toFixed(1) : '0'},${node ? node.position.y.toFixed(1) : '0'})`
+                    + ` scale=(${node ? node.scale.x.toFixed(2) : '0'},${node ? node.scale.y.toFixed(2) : '0'})`
+                    + ` angle=${node ? node.angle.toFixed(1) : '0'}`
                     + ` 子=${child ? `${child.name}/active=${child.active}/scale=${child.scale.x.toFixed(2)}` : '无'}`
                     + ` hasVisual=${view.hasVisual}`);
             }

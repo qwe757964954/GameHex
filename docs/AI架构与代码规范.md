@@ -241,7 +241,7 @@ Cocos 引擎中许多配置错误**完全不报错但表现静默失效**，修�
    - **两条严禁**：① **严禁父子目录同时放 pac**（会导致子目录贴图重复打包）；② **严禁在 `image/` 根目录放 pac**（其下 35 个子目录各有独立 pac）。
    - 漏配 pac 引擎**不会报任何错误或警告**，新增美术目录时必须专项核查。
 2. **兵种单位美术的两种形态**：
-   - **序列帧单位**：路径为 `assets/resources/units/<名>/<名>.prefab`。
+   - **序列帧单位**：路径为 `assets/bundles/battle/units/<名>/<名>.prefab`。
    - **Spine 骨骼单位**：路径为 `assets/resources/skel/<目录>/<目录>.prefab`，目录内固定三件套 `<前缀>.atlas.txt`（源 `.atlas` 必须改名为 `.atlas.txt`）+ `<前缀>.png` + `<前缀>.skel`。
    - **Spine Prefab 三条硬约束**：① 根节点与 `spine` 子节点的 `_layer` 均为 `UI_2D`；② `sp.Skeleton.defaultAnimation` 必须设为 `idle`；③ **`sp.Skeleton.enableBatch` 必须开启**（落盘 `_enableBatch: true`，引擎组件默认为 `false`，新建或脚本生成时必须显式写入）。
 3. **卡表路径与目录命名关系**：

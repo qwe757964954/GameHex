@@ -758,6 +758,10 @@ export class TerritoryModel {
         buildFrames: new Map(),
         // 空表 = 所有建筑倍率按 1（与引入 buildSize 之前完全一致）。
         buildScales: new Map(),
+        // 空表 = 巡逻宝箱锚点格不画模型（与引入这批图之前的表现一致），不是报错路径。
+        patrolChestFrames: new Map(),
+        patrolChestOpenFrames: new Map(),
+        patrolChestIconScale: 1,
     };
     private startingBattle = false;
     /**

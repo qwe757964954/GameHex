@@ -1,3 +1,4 @@
+import type { ZCUnitDefinition } from '../model/ZCCombatCatalog';
 import {
     _decorator,
     Button,
@@ -18,6 +19,7 @@ import {
 } from 'cc';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
+import { ZC_MONSTER_HEALTH_BAR_GAP, ZC_SPINE_CANVAS_TARGET_HEIGHT } from './ZCUnitView';
 
 import type { DeepReadonly } from '../model/ZCGameTypes';
 import type {
@@ -126,7 +128,6 @@ const NEUTRAL_FEATURE_ICON_SCALE = 0.85;
 /** 中立资源统一上移量随格面高度缩放，图标、Spine 与兵团预览共用。*/
 export const NEUTRAL_RESOURCE_LIFT = HEX_GRID_FACE_HEIGHT * 0.08;
 const MONSTER_SLEEP_TINT = new Color(130, 150, 180, 255);
-const MONSTER_BADGE_POS = { x: 28, y: 38 + NEUTRAL_RESOURCE_LIFT, z: 0 };
 const GATE_COOLDOWN_TINT = new Color(105, 105, 105, 255);
 
 /**
@@ -507,6 +508,7 @@ export class ZCHexView extends Component {
      * （`-18 + 30 = 12`）。脚底对齐的兵站上来时不会被格子下沿的侧壁压住。
     */
     private static readonly RESOURCE_UNIT_POS_Y = 12 + NEUTRAL_RESOURCE_LIFT;
+    private static readonly MONSTER_GROUND_Y = -5;
 
     /**
      * 骨架 canvas 高度（设计单位），用来算缩放。
@@ -675,9 +677,16 @@ export class ZCHexView extends Component {
     private resourceUnitPrefabName = '';
     /** 本格当前挂着的骨骼节点（池化复用：格子 view 生命周期内只增不减，count 变小时多出来的隐藏）。*/
     private readonly resourceUnitNodes: Node[] = [];
+    private monsterDefinition: Pick<ZCUnitDefinition, 'prefabSize' | 'attackDuration'> | null = null;
+    private monsterAttackStartedAt?: number;
+    private monsterCenterX = 0;
     private monsterOffsetX = 0;
     private monsterOffsetY = 0;
     private monsterBarBase: Vec3 | null = null;
+    private monsterFocusBase: Vec3 | null = null;
+    private resourceUnitBaseY = ZCHexView.RESOURCE_UNIT_POS_Y;
+    private monsterHeadY?: number;
+    private monsterBaseScaleX = 1;
     private readonly resourceUnitSkeletons: sp.Skeleton[] = [];
     /** 骨骼节点的缓存键：`unitId@数量` —— 变了才重建。*/
     private resourceUnitCache = '';
@@ -871,6 +880,32 @@ export class ZCHexView extends Component {
             const tileIndex = this.tileSprite.node.getSiblingIndex();
             if (ground.getSiblingIndex() > tileIndex) ground.setSiblingIndex(tileIndex);
         }
+    }
+
+    renderMonsterAttack(startedAt: number | undefined, now: number, facing: 1 | -1 = 1): void {
+        const definition = this.monsterDefinition;
+        const skeleton = this.resourceUnitSkeletons[0];
+        if (!definition || !skeleton) return;
+        const body = this.resourceUnitNodes[0];
+        const scaleX = this.monsterBaseScaleX * facing;
+        if (body.scale.x !== scaleX) {
+            body.setScale(scaleX, body.scale.y, body.scale.z);
+            body.setPosition(this.monsterOffsetX + this.monsterCenterX * facing, body.position.y, body.position.z);
+        }
+        const playing = startedAt !== undefined && now >= startedAt && now < startedAt + definition.attackDuration;
+        const attackStartedAt = playing ? startedAt : undefined;
+        if (this.monsterAttackStartedAt === attackStartedAt) return;
+        this.monsterAttackStartedAt = attackStartedAt;
+        const clip = playing ? skeleton.findAnimation('attack') : null;
+        if (!clip) {
+            skeleton.timeScale = 1;
+            skeleton.setAnimation(0, ZCHexView.RESOURCE_UNIT_IDLE_ANIMATION, true);
+            return;
+        }
+        const speed = clip.duration / definition.attackDuration;
+        skeleton.timeScale = speed;
+        const track = skeleton.setAnimation(0, 'attack', false);
+        if (track) track.trackTime = (now - attackStartedAt) * speed;
     }
 
     renderMonsterFocus(state: DeepReadonly<ZCHexState>, now: number): void {
@@ -1183,18 +1218,27 @@ export class ZCHexView extends Component {
      * 注入兵力资源点（`unit_cap`）格内要站的中立兵。
      * 详见 docs/ZCHexView设计决策.md §14。
     */
-    setResourceUnits(cardId: string, prefab: Prefab | null, count: number): void {
+    setResourceUnits(cardId: string, prefab: Prefab | null, count: number,
+        monster: Pick<ZCUnitDefinition, 'prefabSize' | 'attackDuration'> | null = null): void {
         const nextCount = Math.max(0, Math.floor(count));
         //  数量变了也必须重建：并排位置按count 算（`(i-(count-1)/2)*spacing`），
         // 只改「可见个数」而沿用旧位置 ⇒ 3 个改 1 个时剩下那只还站在 -16，看着就是歪的。
         const prefabName = prefab ? prefab.name : '';
+        const prevMonster = this.monsterDefinition;
+        const monsterPrefabSize = monster ? monster.prefabSize : undefined;
+        const prevMonsterPrefabSize = prevMonster ? prevMonster.prefabSize : undefined;
+        const monsterAttackDuration = monster ? monster.attackDuration : undefined;
+        const prevMonsterAttackDuration = prevMonster ? prevMonster.attackDuration : undefined;
         const changed = cardId !== this.resourceUnitKey
             || prefabName !== this.resourceUnitPrefabName
-            || nextCount !== this.resourceUnitCount;
+            || nextCount !== this.resourceUnitCount
+            || monsterPrefabSize !== prevMonsterPrefabSize
+            || monsterAttackDuration !== prevMonsterAttackDuration;
         this.resourceUnitKey = cardId;
         this.resourceUnitPrefabName = prefabName;
         this.resourceUnitPrefab = prefab;
         this.resourceUnitCount = nextCount;
+        this.monsterDefinition = monster;
         // 换兵种 / 换数量都要重建节点（骨架与并排布局都变了）。
         if (changed) this.rebuildResourceUnits();
         // 作废内容键：资源点可能在格子已渲染过之后才注入，不作废那一格会一直空着。
@@ -1943,12 +1987,35 @@ export class ZCHexView extends Component {
         this.monsterOffsetY = y;
         for (let i = 0; i < this.resourceUnitNodes.length; i += 1) {
             const node = this.resourceUnitNodes[i];
-            node.setPosition(x + (i - (this.resourceUnitNodes.length - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING,
-                y + ZCHexView.RESOURCE_UNIT_POS_Y, 0);
+            node.setPosition(x + this.monsterCenterX * Math.sign(node.scale.x / this.monsterBaseScaleX) + (i - (this.resourceUnitNodes.length - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING,
+                y + this.resourceUnitBaseY, 0);
         }
-        this.applyIconPosition(MONSTER_BADGE_POS);
         if (!this.monsterBarBase) this.monsterBarBase = this.healthBar.node.position.clone();
-        this.healthBar.node.setPosition(this.monsterBarBase.x + x, this.monsterBarBase.y + y, this.monsterBarBase.z);
+        if (this.monsterHeadY !== undefined) this.positionMonsterHeader();
+        else this.healthBar.node.setPosition(this.monsterBarBase.x + x, this.monsterBarBase.y + y, this.monsterBarBase.z);
+    }
+
+    private positionMonsterHeader(): void {
+        if (this.monsterHeadY === undefined) return;
+        const bar = this.healthBar.node;
+        const focus = this.monsterFocusButton.node;
+        this.monsterBarBase ??= bar.position.clone();
+        this.monsterFocusBase ??= focus.position.clone();
+        const halfBar = bar.getComponent(UITransform).contentSize.height / 2;
+        const halfButton = focus.getComponent(UITransform).contentSize.height / 2;
+        // 实战中血条和按钮都挂在棋盘状态层，需要加上本格在棋盘上的坐标。
+        const origin = bar.parent === this.node ? Vec3.ZERO : this.node.position;
+        const x = origin.x + this.monsterOffsetX;
+        const barY = origin.y + this.monsterOffsetY + this.monsterHeadY + ZC_MONSTER_HEALTH_BAR_GAP + halfBar;
+        bar.setPosition(x, barY, this.monsterBarBase.z);
+        focus.setPosition(x, barY + halfBar + 4 + halfButton, this.monsterFocusBase.z);
+    }
+
+    private restoreMonsterHeader(): void {
+        if (this.monsterBarBase) this.healthBar.node.setPosition(this.monsterBarBase);
+        if (this.monsterFocusBase) this.monsterFocusButton.node.setPosition(this.monsterFocusBase);
+        this.monsterBarBase = null;
+        this.monsterFocusBase = null;
     }
 
     /** 一格共用一根血条，优先显示城墙耐久，其次建筑或野怪生命。*/
@@ -2095,20 +2162,16 @@ export class ZCHexView extends Component {
         const sleepingMonster = monster && !(state.neutralFeature && state.neutralFeature.awake);
         for (const skeleton of this.resourceUnitSkeletons) {
             skeleton.color = sleepingMonster ? MONSTER_SLEEP_TINT : Color.WHITE;
-            skeleton.timeScale = sleepingMonster ? 0.35 : 1;
+            if (this.monsterAttackStartedAt === undefined) skeleton.timeScale = sleepingMonster ? 0.35 : 1;
         }
         // 神器充能点（`artifact_charge`）：若 prefab 已挂 Spine 动画（六边形底 + 问号指示器），
         // 走 Spine 分支——不显示静态神器图标、也不写中文兜底。`null`（prefab 未挂 Spine）
         // 时回退到旧逻辑（`artifactChargeFrame` 静态图 / 文字兜底）。
         const useArtifactSpine = resourceVisual === ZCNeutralResourceVisual.ArtifactCharge
             && !hideNeutralResourceLabel && !!this.artifactHexSpine;
-        const monsterFrameKey = sleepingMonster ? 'monster_sleep' : 'monster_awake';
-        const monsterFrame = this.neutralResourceFrames ? (this.neutralResourceFrames.get(monsterFrameKey) ?? null) : null;
         const effect = state.neutralFeature ? state.neutralFeature.effect : undefined;
-        const resourceFrame = resourceVisual && !hideNeutralResourceLabel && !useArtifactSpine
-            ? monster
-                ? monsterFrame
-                : this.frameForResource(resourceVisual, effect)
+        const resourceFrame = resourceVisual && !monster && !hideNeutralResourceLabel && !useArtifactSpine
+            ? this.frameForResource(resourceVisual, effect)
             : null;
         const coolingGate = Boolean(state.neutralFeature && state.neutralFeature.effect
             && state.neutralFeature.readyAt > now && !(state.neutralFeature.windowUntil > now));
@@ -2119,7 +2182,7 @@ export class ZCHexView extends Component {
         this.applyArtifactSpineVisible(useArtifactSpine);
         // 资源点图标居中；敌方可开发时没有价格/数字，也居中；我方可开发时图标压在地块上半部、价格在底部配对。
         const iconPos = resourceFrame
-            ? monster ? MONSTER_BADGE_POS : ZCHexView.RESOURCE_ICON_POS
+            ? ZCHexView.RESOURCE_ICON_POS
             : enemyCanDevelop
                 ? ZCHexView.ENEMY_DEVELOP_ICON_POS
                 : ZCHexView.DEFAULT_TILE_ICON_POS;
@@ -2135,7 +2198,7 @@ export class ZCHexView extends Component {
         // 漏写任一条 = 沿用上一格留下的值，表现为「资源点旁边的地块图标大小不一」。
         // 金币图标（`priceIcon`）与数字（`iconLabel`）在另一组节点上，这里不碰它们的 scale。
         if (resourceFrame) {
-            const scale = resourceIconScale(resourceFrame) * (monster ? 0.25 : state.neutralFeature ? NEUTRAL_FEATURE_ICON_SCALE : 1);
+            const scale = resourceIconScale(resourceFrame) * (state.neutralFeature ? NEUTRAL_FEATURE_ICON_SCALE : 1);
             this.iconSprite.node.setScale(resourceVisual === ZCNeutralResourceVisual.Extension ? -scale : scale, scale, 1);
         } else if (this.iconSprite.node.scale.x !== TILE_ICON_SCALE) {
             this.iconSprite.node.setScale(TILE_ICON_SCALE, TILE_ICON_SCALE, 1);
@@ -2218,6 +2281,7 @@ export class ZCHexView extends Component {
 
     /** 收掉格内骨骼（已领取 / 不是兵力资源点时）。返回 false 便于在三元表达式里直接用。*/
     private hideResourceUnits(): false {
+        this.restoreMonsterHeader();
         for (const node of this.resourceUnitNodes) {
             if (node.isValid) node.active = false;
         }
@@ -2226,11 +2290,16 @@ export class ZCHexView extends Component {
 
     /** 换兵种时把旧节点全部销毁重建（骨架不同，靠改 scale 换不过来）。*/
     private rebuildResourceUnits(): void {
+        this.restoreMonsterHeader();
+        this.monsterHeadY = undefined;
+        this.resourceUnitBaseY = ZCHexView.RESOURCE_UNIT_POS_Y;
         for (const node of this.resourceUnitNodes) {
             if (node.isValid) node.destroy();
         }
         this.resourceUnitNodes.length = 0;
         this.resourceUnitSkeletons.length = 0;
+        this.monsterCenterX = 0;
+        this.monsterAttackStartedAt = undefined;
         this.resourceUnitCache = '';
     }
 
@@ -2251,7 +2320,6 @@ export class ZCHexView extends Component {
             this.node.addChild(visual);
             // 并排：整体以格心为原点向两侧展开，数量为奇数时正中那只不偏。
             const offsetX = (i - (count - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING;
-            visual.setPosition(offsetX, ZCHexView.RESOURCE_UNIT_POS_Y, 0);
             const spineNode = visual.getChildByName(ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME);
             if (!spineNode) {
                 throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」缺少固定子节点 ${ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME}`);
@@ -2267,8 +2335,28 @@ export class ZCHexView extends Component {
             if (!(canvasHeight > 0)) {
                 throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」的骨架 canvas 高度为 ${canvasHeight}`);
             }
-            const factor = ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT / canvasHeight;
-            visual.setScale(factor, factor, 1);
+            if (this.monsterDefinition) {
+                const scale = visual.scale;
+                const factor = ZC_SPINE_CANVAS_TARGET_HEIGHT / canvasHeight * this.monsterDefinition.prefabSize;
+                this.monsterBaseScaleX = scale.x * factor;
+                visual.setScale(this.monsterBaseScaleX, scale.y * factor, scale.z * factor);
+                const bounds = skeleton.skeletonData.getRuntimeData(true);
+                const spineScaleY = spineNode.scale.y * visual.scale.y;
+                // 两套骨架的原点不同，把模型下沿对齐到格心下方 5 个设计单位。
+                this.resourceUnitBaseY = ZCHexView.MONSTER_GROUND_Y - spineNode.position.y * visual.scale.y - bounds.y * spineScaleY;
+                this.monsterHeadY = ZCHexView.MONSTER_GROUND_Y + bounds.height * spineScaleY;
+                // 举锤或展翼时，模型仍画在血条和可点击的集火按钮下方。
+                if (this.healthBar.node.parent === visual.parent) {
+                    visual.setSiblingIndex(Math.min(this.healthBar.node.getSiblingIndex(), this.monsterFocusButton.node.getSiblingIndex()));
+                }
+                this.positionMonsterHeader();
+                const canvas = spineNode.getComponent(UITransform);
+                this.monsterCenterX = -(spineNode.position.x + (0.5 - canvas.anchorX) * canvas.width * spineNode.scale.x) * this.monsterBaseScaleX;
+            } else {
+                const factor = ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT / canvasHeight;
+                visual.setScale(factor, factor, 1);
+            }
+            visual.setPosition(offsetX + this.monsterOffsetX + this.monsterCenterX, this.resourceUnitBaseY + this.monsterOffsetY, 0);
             this.playResourceUnitIdle(skeleton, prefab.name);
             this.resourceUnitNodes.push(visual);
             this.resourceUnitSkeletons.push(skeleton);
@@ -2276,6 +2364,7 @@ export class ZCHexView extends Component {
     }
 
     private showResourceUnits(count: number): void {
+        this.positionMonsterHeader();
         this.resourceUnitNodes.forEach((node, index) => {
             if (node.isValid) node.active = index < count;
         });

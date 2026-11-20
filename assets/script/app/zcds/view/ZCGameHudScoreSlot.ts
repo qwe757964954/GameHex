@@ -143,7 +143,7 @@ export class ZCGameHudScoreSlot extends Component {
         targetHeight: number,
         leading: boolean,
     ): void {
-        this.sizeTween?.stop();
+        if (this.sizeTween) this.sizeTween.stop();
         const startWidth = rect.width;
         const startHeight = rect.height;
         this.sizeTween = tween(this.node)
@@ -172,7 +172,7 @@ export class ZCGameHudScoreSlot extends Component {
      * 弹跳是瞬时视觉强调，不该把旁边几格挤来挤去；scale 不参与 Layout，弹完即走。
     */
     private playPulse(): void {
-        this.pulseTween?.stop();
+        if (this.pulseTween) this.pulseTween.stop();
         this.node.setScale(1, 1, 1);
         this.pulseTween = tween(this.node)
             .to(PULSE_UP_SECONDS, { scale: PULSE_PEAK }, { easing: 'sineOut' })
@@ -189,7 +189,7 @@ export class ZCGameHudScoreSlot extends Component {
      * 不碰 Score 根节点，所以底板 / 红 X 不会跟着一起跳。
     */
     private playNumberPulse(): void {
-        this.numberPulseTween?.stop();
+        if (this.numberPulseTween) this.numberPulseTween.stop();
         this.value.node.setScale(1, 1, 1);
         this.numberPulseTween = tween(this.value.node)
             .to(PULSE_UP_SECONDS, { scale: PULSE_PEAK }, { easing: 'sineOut' })

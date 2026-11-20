@@ -723,12 +723,15 @@ test('服务端头像覆盖界面：连根目录一起换，同一次刷新不�
     }
 });
 
-test('真表 + 磁盘：head 表 20 行都能解出资源名，且图确实导入到了 HEAD_ART_ROOT', () => {
+test('真表 + 磁盘：head 表每行都能解出资源名，且图确实导入到了 HEAD_ART_ROOT', () => {
     const read = (name: string): unknown => JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
     // `head.json` 是行对象数组（老端那份原样转过来的），`icon.json` 是列式 {k, v}。
     const headRows = read('head') as { resId?: unknown; icon?: unknown }[];
     const iconRaw = read('icon') as { k: string[]; v: unknown[][] };
-    assert.ok(Array.isArray(headRows) && headRows.length === 20, 'head 表应是 20 行（T-头像表.xlsx）');
+    // 不写死条目数：2026-11-20 玩家头像从 20 条扩到 35 条（T-头像表.xlsx），
+    // 硬编码 20 会让「扩池」和「丢行」两种改动看起来一样。
+    assert.ok(Array.isArray(headRows) && headRows.length >= 20,
+        `head 表至少 20 行，实际 ${Array.isArray(headRows) ? headRows.length : '非数组'}`);
     assert.equal(iconRaw.k[0], 'key');
     const iconRows = iconRaw.v.map((row) => ({ key: row[0], path: row[1] }));
 

@@ -11,6 +11,7 @@ import * as upgradeCost from '../assets/script/app/card/CardUpgradeCost';
 import * as lineupPower from '../assets/script/app/card/CardLineupPower';
 import * as skillList from '../assets/script/app/card/CardSkillList';
 import { resolveSelectedDeck } from '../assets/script/app/card/LineupPresets';
+import { readRefTable } from './helpers/ref-kvc';
 
 test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡库为空的首帧快照', async () => {
     const catalog = [{ id: '1' }, { id: '2' }, { id: '3' }];
@@ -29,6 +30,7 @@ test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡�
         if (name === './LineupSnapshot') return { readLineupSnapshot: () => ({ cards: [catalog[0]], levels: { '1': 4 } }) };
 
         if (name === './CardLineupTypes') return { visibleLineupCards };
+        if (name === './FormationService') return { resetFormationSession: () => {} };
         return {};
     } });
     const repository = new exports.RuntimeCardRepository();
@@ -52,8 +54,8 @@ test('真实详情仓库返回完整卡库与最新缓存等级，不借用卡�
 
 test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对值与攻击展示一致', async () => {
     const readRows = (name: string): Array<Record<string, any>> => {
-        const table = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));
-        return table.v.map((values: unknown[]) => Object.fromEntries(table.k.map((key: string, i: number) => [key, values[i]])));
+        const table = readRefTable(name);
+        return table.v.map((values) => Object.fromEntries(table.k.map((key, i) => [key, values[i]])));
     };
     const cards = readRows('pvpCard');
     const levels = readRows('cardLevelUp');
@@ -83,6 +85,9 @@ test('真实详情仓库按当前卡牌和等级返回战力，升级表绝对�
         if (name === './FormationService') return {
             fetchFormations: async () => { formationRequests++; return formations; },
             getCachedFormations: () => formations,
+            // `resetFormationSession()` 在 `loadDetailNavigation` 里清会话缓存；沙箱不给就会
+            // 变成「is not a function」——报错点在仓库内部，看起来像被测代码坏了。
+            resetFormationSession: () => {},
         };
         if (name === './CardLineupDecks') return {
             currentDeckBonuses: () => ({}),

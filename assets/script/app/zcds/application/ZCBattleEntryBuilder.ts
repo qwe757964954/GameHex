@@ -3,6 +3,7 @@ import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
 import { buildZCClientCombatConfig } from './ZCClientCombatConfig';
 import type { ZCPveDefenceWave } from '../model/ZCMatchConfig';
+import { ownersForPlayerCount, ZCOwner } from '../model/ZCMapConfig';
 import { buildSeatHeroLevels, buildSeatProfiles, buildSeatUnitIds } from '../model/ZCRankBoard';
 
 /** 单次返回参数随导航传递，领地页按章节与格子恢复焦点。*/
@@ -36,7 +37,7 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     //    整份敌方卡池（36 张）全上，羁绊 / 卡组加成按整池算，`extraCards.enemy → npcTeam.npcCard`
     //    那套配置根本读不到（用户 2026-11-07）。塔防的敌人只有出怪表里的怪 + 首领，不靠玩家式英雄，
     //    裁掉不会丢服务端阵容：出怪卡由 `pveDefence.cards` 兜底查表，见 `ZCMatchRuntimeCompiler`。
-    const clipToLevelCards = requestedEnemyCards.size > 0 && (!battle || pve?.mode === 'defence');
+    const clipToLevelCards = requestedEnemyCards.size > 0 && (!battle || (pve && pve.mode === 'defence'));
     const pveEnemyDeck = clipToLevelCards
         ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
         : baseConfig.enemyDeck;
@@ -65,6 +66,10 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     let matchConfig = baseConfig;
     if (pve) {
         matchConfig = Object.assign({}, baseConfig);
+        // 关卡 PVE：除本机席位外的都是 NPC 队伍 ⇒ 伤害飘字按「玩家 / 非玩家」分流
+        //（见 `ZCMatchConfig.npcOwners`）。PVP 匹配不写这一格，4 个席位都按真人算。
+        matchConfig.npcOwners = ownersForPlayerCount(pve.playerCount)
+            .filter((owner) => owner !== ZCOwner.Player);
         // 关卡「翻地块频率」：只压 NPC 的翻地块速度（对局内 `runEnemyAI` 的最小间隔）。
         const openGrideTime = Number(pve.openGrideTime);
         if (Number.isFinite(openGrideTime) && openGrideTime > 0) {
@@ -114,6 +119,6 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         slgBattleType: entry ? (entry.slgBattleType ?? null) : null,
         // 结算等广播认这个字段：匹配入口的 battleType（宝箱栏「开始战斗」= 1002）必须一路带到这里，
         // 否则运行时 `battleType` 落到 null ⇒ 不等 `CmdBattleResultBroMsg` ⇒ 结算页奖励区空着。
-        battleType: entry?.battleType ?? entry?.slgBattleType ?? null,
+        battleType: entry ? (entry.battleType ?? entry.slgBattleType ?? null) : null,
     };
 }

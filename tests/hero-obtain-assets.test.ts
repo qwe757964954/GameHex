@@ -3,7 +3,7 @@
  *
  * | 组 | 盯住什么 | 错了会怎样 |
  * |---|---|---|
- * | A | 8 张切图 ↔ 磁盘 ↔ `.meta`（uuid / 尺寸 / trimType / packable） | prefab 引用不存在的 uuid ⇒ 整块白图 |
+ * | A | 7 张切图 ↔ 磁盘 ↔ `.meta`（uuid / 尺寸 / trimType / packable） | prefab 引用不存在的 uuid ⇒ 整块白图 |
  * | B | prefab 节点几何 = `HeroObtainLayout` 纯函数 | 页面元素整体偏一段，肉眼难对齐设计稿 |
  * | C | Widget 对齐口径（根/舞台/底图） | 长屏或窗口 resize 后停在错位置 ⇒「飘」 |
  * | D | 文字规格（字号 / 描边 / overflow / 进度填充锚点） | SHRINK 悄悄缩字号、填充从中间涨 |
@@ -23,7 +23,6 @@ const SLICES = {
     rays: { file: 'hdyx_guang.png', dir: 'assets/resources/image/hero_obtain', size: [690, 690] as const, packable: true },
     title: { file: 'hdyx_title.png', dir: 'assets/resources/image/hero_obtain', size: [326, 54] as const, packable: true },
     plate: { file: 'hdyx_xxk_di.png', dir: 'assets/resources/image/hero_obtain', size: [252, 51] as const, packable: true },
-    shadow: { file: 'hdyx_yinying.png', dir: 'assets/resources/image/hero_obtain', size: [302, 68] as const, packable: true },
     shard: { file: 'hdyx_icon_suipian.png', dir: 'assets/resources/image/hero_obtain', size: [53, 52] as const, packable: true },
     barBg: { file: 'hdyx_progress_bg.png', dir: 'assets/resources/image/hero_obtain', size: [270, 42] as const, packable: true },
     barFill: { file: 'hdyx_progress_01.png', dir: 'assets/resources/image/hero_obtain', size: [255, 27] as const, packable: true },
@@ -59,7 +58,7 @@ function compOf(items: any[], node: any, type: string): any {
     return null;
 }
 
-test('A. 8 张切图落盘且尺寸与设计稿一致', () => {
+test('A. 7 张切图落盘且尺寸与设计稿一致', () => {
     for (const entry of Object.values(SLICES)) {
         const path = `${ROOT}/${entry.dir}/${entry.file}`;
         assert.ok(existsSync(path), `缺切图 ${path}`);
@@ -87,7 +86,6 @@ test('B. prefab 节点坐标 = 设计稿（prefab 是几何真源）', () => {
     const cases: [string, number, number][] = [
         ['HeroHost', -14.5, -17],
         ['Rays', 0, -769],
-        ['Shadow', 1, -952],
         ['HeroRoot', 0.5, -745],
         ['Title', 9, -310],
         ['Plate', -3, -1038.5],
@@ -140,7 +138,7 @@ test('C. Widget：根/点击层四边拉伸且 ALWAYS；底图居中不拉伸；
     const stageUi = compOf(items, stage, 'cc.UITransform');
     assert.deepEqual([stageUi._anchorPoint.x, stageUi._anchorPoint.y], [0.5, 1]);
     // 位移/缩放的动画节点**不能**挂 Widget（会和纯函数写的位置互相拉扯）。
-    for (const name of ['Rays', 'Shadow', 'HeroRoot', 'Title', 'Plate', 'Badge', 'Name', 'Hint', 'ProgressRow']) {
+    for (const name of ['Rays', 'HeroRoot', 'Title', 'Plate', 'Badge', 'Name', 'Hint', 'ProgressRow']) {
         assert.equal(compOf(items, nodeOf(items, name), 'cc.Widget'), null, `${name} 不该挂 Widget`);
     }
 });
@@ -180,7 +178,7 @@ test('E. 脚本 uuid ↔ 压缩 cid、Inspector 引用全绑上', () => {
     assert.ok(page, '根节点缺 HeroObtainPage 组件（cid 与 meta uuid 对不上）');
     const refs = [
         'stage', 'bgOpacity', 'raysNode', 'raysOpacity', 'titleNode', 'titleOpacity', 'heroRoot', 'heroOpacity',
-        'heroSprite', 'shadowOpacity', 'plateNode', 'plateOpacity', 'badgeSprite', 'badgeOpacity', 'nameLabel',
+        'heroSprite', 'plateNode', 'plateOpacity', 'badgeSprite', 'badgeOpacity', 'nameLabel',
         'nameOpacity', 'progressRow', 'progressOpacity', 'barBgSprite', 'barFillSprite', 'barFillOpacity',
         'countLabel', 'countOpacity', 'shardSprite', 'hintOpacity', 'hintLabel', 'touchButton',
     ];

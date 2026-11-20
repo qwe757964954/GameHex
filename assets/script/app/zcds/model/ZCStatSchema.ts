@@ -524,7 +524,16 @@ function parseSkillParams(value: unknown, path: string): Readonly<Record<string,
     const raw = readConfigObject(jsonValue(value, path), `[ZCStatSchema] ${path}`);
     const entries = Object.entries(raw);
     if (!entries.length) return undefined;
-    return Object.fromEntries(entries.map(([key, child]) => [text(key, `${path}.key`), number(child, `${path}.${key}`)]));
+    return Object.fromEntries(entries.map(([key, child]) => {
+        const k = text(key, `${path}.key`);
+        const num = number(child, `${path}.${k}`);
+        if (k.endsWith('TargetMode') || k === 'targetMode') {
+            if (num !== 1 && num !== 2) {
+                throw new Error(`[ZCStatSchema] ${path}.${k} 必须是 Range(1) 或 All(2)，读到 ${num}`);
+            }
+        }
+        return [k, num];
+    }));
 }
 
 /**

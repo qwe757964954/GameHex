@@ -39,6 +39,17 @@ let cachedFormations: readonly ZCFormation[] | null = null;
 let cachedAt = 0;
 let pendingRequest: Promise<readonly ZCFormation[] | null> | null = null;
 
+/**
+ * 重置阵型本地缓存（注销登录 / 切换会话时调用）。
+ * 清空驻留的服务端阵型数据，避免跨会话状态污染。
+ */
+export function resetFormationSession(): void {
+    cachedFormations = null;
+    cachedAt = 0;
+    pendingRequest = null;
+    selectProtocolWarned = false;
+}
+
 /** `fetchFormations()` 的等待策略（不传 = 老口径 3000ms）。 */
 export interface FormationFetchOptions {
     /** 本次等待上限（毫秒）。 */

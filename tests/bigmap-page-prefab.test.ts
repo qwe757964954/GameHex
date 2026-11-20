@@ -24,17 +24,13 @@ test('基地建筑走贴底卡：不再进居中 InfoPopup，点空地能收起�
     const objects = JSON.parse(readFileSync(path, 'utf8'));
     const card = objects.find((o: { __type__: string; _name?: string }) => o.__type__ === 'cc.Node' && o._name === 'PlotCard');
     assert.ok(card, '页面预制体必须有 PlotCard 节点');
-    // 卡片贴底、不能被导航钮压住（ModeNode bottom = nav+20、高 96）。
     const widget = card._components
         .map((r: { __id__: number }) => objects[r.__id__])
         .find((c: { __type__: string }) => c.__type__ === 'cc.Widget');
     assert.ok(widget, 'PlotCard 必须挂 cc.Widget');
-    // `_alignFlags = 20` = BOT(4) + CENTER(16)：贴底 + 水平居中。
-    // ⚠️ 不校验 prefab 里的 `_bottom` 数值 —— Widget 保存时会按当前 position 重算它，
-    // 真正生效的是 `applyNavigationHeight` 里按导航高算的那次赋值（与 ModeNode 同一套）。
     assert.equal(widget._alignFlags, 20, '卡片必须贴底 + 水平居中');
     assert.match(readFileSync('assets/script/app/bigmap/view/BigMapPageLayout.ts', 'utf8'),
-        /cardWidget\.bottom = navigationHeight \+ 124/, '贴底间距必须按导航高算，避免压住模式钮');
+        /cardWidget\.bottom = dockHeight \+ 12/, '详情应放在基地底栏上方');
 
     const layout = objects.find((o: object) => 'plotCard' in o && 'baseView' in o);
     assert.ok(layout, 'BigMapPageLayout 应持有 plotCard');
@@ -198,7 +194,6 @@ test('底板染色代理 BigMapPanel 已整文件移除：prefab 不再挂它，
     const expected: Record<string, [number, number, number, number]> = {
         BaseFallback: [246, 176, 82, 255],
         ResourceCard: [72, 73, 83, 232],
-        QueueStatus: [46, 47, 55, 240],
         ModeFrameFallback: [245, 224, 172, 255],
     };
     for (const [name, rgba] of Object.entries(expected)) {
@@ -214,26 +209,17 @@ test('底板染色代理 BigMapPanel 已整文件移除：prefab 不再挂它，
         '弹窗底板色必须仍是 (72,73,83,232) —— 删组件不能顺带改颜色');
 });
 
-test('建造队列拆成槽位点 + 摘要文本：不再是一行长文本', () => {
+test('建造队列改由设计稿底栏顶行显示，旧队列条已清理', () => {
     const objects = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>[];
-    const queue = objects.find((item) => item.__type__ === 'cc.Node' && item._name === 'QueueStatus');
-    assert.ok(queue, '必须有 QueueStatus');
-    const children = (queue._children as { __id__: number }[]).map((ref) => objects[ref.__id__]);
-    const slots = children.filter((child) => (child._name as string).startsWith('QueueSlot'));
-    // 槽位数 = bigmapQueue.maxBuildQueue（当前 3）；增删要同步改代码里的兜底名单。
-    assert.equal(slots.length, 3, '队列槽位数应与 maxBuildQueue 一致');
-    for (const slot of slots) {
-        const components = (slot._components as { __id__: number }[]).map((ref) => objects[ref.__id__]);
-        const sprite = components.find((item) => item.__type__ === 'cc.Sprite') as Record<string, unknown> | undefined;
-        assert.ok(sprite, `${slot._name} 要有 Sprite 才看得见`);
-        // `_type = 3`(FILLED)：建造中用 `fillRange` 表达进度。
-        assert.equal(sprite._type, 3, `${slot._name} 必须是 FILLED，否则进度显示不出来`);
-        const transform = components.find((item) => item.__type__ === 'cc.UITransform') as Record<string, unknown>;
-        assert.equal((transform._contentSize as { height: number }).height, 32);
-    }
-    // 摘要文本固定宽度、没有 Widget —— 有 Widget 时 MCP 存盘会按 left/right 重算成 0 宽。
-    const text = children.find((child) => child._name === 'QueueText');
-    assert.ok(text, '摘要文本必须还在');
-    const textComponents = (text._components as { __id__: number }[]).map((ref) => objects[ref.__id__]);
-    assert.equal(textComponents.some((item) => item.__type__ === 'cc.Widget'), false, 'QueueText 不该挂 Widget');
+    const node = (name: string) => objects.find((item) => item.__type__ === 'cc.Node' && item._name === name) as Record<string, unknown> | undefined;
+    assert.equal(node('QueueStatus'), undefined, '旧队列条节点必须删除');
+    assert.equal(node('QueueText'), undefined, '旧队列摘要文本必须删除');
+    const queueValue = node('QueueValue');
+    assert.ok(queueValue, '设计稿顶行的队列数值必须存在');
+    const label = (queueValue._components as { __id__: number }[]).map((ref) => objects[ref.__id__])
+        .find((item) => item.__type__ === 'cc.Label') as Record<string, unknown> | undefined;
+    assert.ok(label, 'QueueValue 必须是 Label');
+    assert.equal(label._string, '0/1');
+    const topRow = node('TopRow');
+    assert.ok(topRow, 'DesignDock/TopRow 必须存在');
 });

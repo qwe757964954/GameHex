@@ -3,37 +3,35 @@ import type { TerritoryMapConfig, TerritorySite } from './TerritoryMapConfig';
 
 export const TERRITORY_MONSTER_PATROL_STEP_MS = 1600;
 
+/**
+ * 巡逻宝箱怪「未挑战成功」的叠加参数 —— 与战斗内**其他玩家卡牌**同一形式。
+ *
+ * 真源在 `zcds/view/ZCUnitView.ts`：`OTHER_PLAYER_TINT = #828282`（主骨架顶点色压暗）、
+ * `OWNER_EDGE_COLOR[enemy] = ZC_CLIENT_COLORS.enemyEdge = (251,73,105)`（描边）、
+ * `OUTLINE_COPY_SCALE = 1.08`（整只角色放大副本）。这里只搬**数值与资源路径**，
+ * 不反向 import zcds/view（领地页不该拖战斗视图）；`tests/territory-patrol-look.test.ts`
+ * 用源码守卫盯住两边不许漂移。
+ *
+ * 轮廓渲染规范：通过 shaders/unit-outline-copy 将副本不透明像素着为纯色并适当放大形成外轮廓描边。
+ */
+export const TERRITORY_PATROL_DIM_RGB: readonly [number, number, number] = [0x82, 0x82, 0x82];
+export const TERRITORY_PATROL_EDGE_RGB: readonly [number, number, number] = [251, 73, 105];
+export const TERRITORY_PATROL_OUTLINE_SCALE = 1.08;
+export const TERRITORY_PATROL_OUTLINE_EFFECT_PATH = 'shaders/unit-outline-copy';
+
 export interface ITerritoryMonsterPatrol {
     readonly cellId: number;
     readonly monsterId: number;
     readonly route: readonly number[];
 }
 
-/**
- * 一片巡逻区的键：**`site.id`**。
- *
- * 2026-11-18 口径（山猫）：「巡逻宝箱之前根据战斗 id 判断，现在改由巡逻宝箱 id 相同」——
- * 同 `site.id` 就是同一片，`battleId` / `requiredCells` **不参与**分组。
- * 配置侧同步把同片格子刷成同一个 `site.id`（chapter_01 五片各一个 id），
- * 编辑器读图时按同一口径分组。
- *
- * 为什么不能拿 `battleId` 当分组键：一片只配一个战斗，数值写歪一格就把它拆成两片 ⇒
- * 那片 `route.length === 1` ⇒ 野怪永远站着不动（且零报错）。
- */
+/** 巡逻区分组键：以 site.id 为准，确保同一片巡逻区完整成组。 */
 function territoryPatrolGroupKey(site: TerritorySite): string {
     return site.id;
 }
 
 /**
- * 逐格战斗 ID：每一格 `cellId → battleId`。
- *
- * 一片巡逻区共用同一个 `battleId`（{@link TERRITORY_SITE_TYPE.patrolChest} 的字段），
- * 2026-11-18 起不再有「数组池按下标摊分」—— 配置里一直只填一个值，
- * 摊分只会让「同片数值不一致」变成静默拆片。
- *
- * `battleId` 就是 `levelInfo.levelId`（`levelType=4 / levelMod=2 / chapterStage=0` 的
- * 巡逻野怪关）：**开战参数按格子 id 发**（`chapterCellBattleParams`），这一份映射只用于
- * 「这一格打哪一场」—— 绑关卡行（`TerritoryStageBinding`）与野怪停巡判据都读它。
+ * 映射每一格巡逻宝箱站点到其战斗 ID (battleId)。
  */
 export function territoryPatrolBattleByCell(
     sites: readonly TerritorySite[],
@@ -48,11 +46,30 @@ export function territoryPatrolBattleByCell(
 }
 
 /**
- * 这一片巡逻区上报后端用的格子：同 `site.id` 组里**带 `patrolId` 的那一格**。
- *
- * 怪物配置（`monsterCard.id`）绑在那一格上，服务端按 `cellId` 找配置 ⇒
- * 「同片任一格命中，都把带怪物 id 的格子传给后端」（2026-11-18 口径）：
- * 解锁与开战都用它。没有 `patrolId` 的旧图退回这一格自己。
+ * 获取巡逻区已挑战成功的格子集合（含 footprint）。同 battleId 任一格占点即整片通过。
+ */
+export function territoryPatrolPassedCells(
+    sites: readonly TerritorySite[],
+    progress: { isOwned(cellId: number): boolean },
+): ReadonlySet<number> {
+    const battleByCell = territoryPatrolBattleByCell(sites);
+    const passedBattles = new Set<number>();
+    for (const [cellId, battleId] of battleByCell) {
+        if (progress.isOwned(cellId)) passedBattles.add(battleId);
+    }
+    const out = new Set<number>();
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        const battleId = battleByCell.get(site.cellId);
+        if (battleId === undefined || !passedBattles.has(battleId)) continue;
+        out.add(site.cellId);
+        for (const cell of site.footprint) out.add(cell);
+    }
+    return out;
+}
+
+/**
+ * 确定巡逻区交互锚点格：优先取携带 patrolId 的配置格，向服务端上报统一使用该格。
  */
 export function territoryPatrolAnchorCell(
     site: TerritorySite,
@@ -67,6 +84,33 @@ export function territoryPatrolAnchorCell(
         if (anchor === null || item.cellId < anchor) anchor = item.cellId;
     }
     return anchor ?? site.cellId;
+}
+
+export function territoryPatrolAnchorByCell(sites: readonly TerritorySite[]): ReadonlyMap<number, number> {
+    const anchors = new Map<string, number>();
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest || !site.patrolId) continue;
+        const key = territoryPatrolGroupKey(site);
+        anchors.set(key, Math.min(anchors.get(key) ?? site.cellId, site.cellId));
+    }
+
+    const byCell = new Map<number, number>();
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
+        const anchor = anchors.get(territoryPatrolGroupKey(site));
+        if (anchor === undefined) continue;
+        byCell.set(site.cellId, site.patrolId ? site.cellId : anchor);
+    }
+
+    // 先写站点格，重叠的 footprint 才不会覆盖其他站点的锚点。
+    for (const site of sites) {
+        if (site.type !== TERRITORY_SITE_TYPE.patrolChest || !anchors.has(territoryPatrolGroupKey(site))) continue;
+        const anchor = byCell.get(site.cellId);
+        for (const cell of site.footprint) {
+            if (!byCell.has(cell)) byCell.set(cell, anchor);
+        }
+    }
+    return byCell;
 }
 
 /**
@@ -106,21 +150,24 @@ export function buildTerritoryMonsterPatrols(
     map: TerritoryMapConfig,
     progress: { isCellUnlocked(cellId: number): boolean; isOwned(cellId: number): boolean },
 ): readonly ITerritoryMonsterPatrol[] {
-    const battleByCell = territoryPatrolBattleByCell(map.sites);
     // 已通过的战斗：同 id 的格子任一格占点即算通过（关卡的区域共享同口径）。
-    const passed = new Set<number>();
-    for (const [cellId, battleId] of battleByCell) {
-        if (progress.isOwned(cellId)) passed.add(battleId);
-    }
+    // 与视图的地皮 / 红框判据共用同一份集合，别在这里另算一遍 `passed`。
+    const passedCells = territoryPatrolPassedCells(map.sites, progress);
     const cellsByGroup = territoryRouteCells(map.sites);
     const patrols: ITerritoryMonsterPatrol[] = [];
     for (const site of map.sites) {
         if (site.type !== TERRITORY_SITE_TYPE.patrolChest || !site.patrolId) continue;
         const cells = cellsByGroup.get(territoryPatrolGroupKey(site));
         if (!cells) continue;
-        if (!Array.from(cells).every(cell => progress.isCellUnlocked(cell) || progress.isOwned(cell))) continue;
-        const battleId = battleByCell.get(site.cellId);
-        if (battleId !== undefined && passed.has(battleId)) continue;
+        let allUnlockedOrOwned = true;
+        for (const cell of cells) {
+            if (!progress.isCellUnlocked(cell) && !progress.isOwned(cell)) {
+                allUnlockedOrOwned = false;
+                break;
+            }
+        }
+        if (!allUnlockedOrOwned) continue;
+        if (passedCells.has(site.cellId)) continue;
         const route = [site.cellId];
         const visited = new Set(route);
         const visit = (cellId: number): void => {

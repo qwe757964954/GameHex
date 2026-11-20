@@ -25,9 +25,9 @@ import {
  * 节点池化（换章 / 复位时 `stop()` 只收不销毁），时钟置 `-1` 即空闲。
  */
 
-export const TERRITORY_HERO_FLIGHT_NODE = 'HeroRewardFlight';
+const TERRITORY_HERO_FLIGHT_NODE = 'HeroRewardFlight';
 /** 单枚飞行图标的边长（像素）。与格心喷发 64px 同量级，略小一点免得盖住读数。 */
-export const TERRITORY_HERO_FLIGHT_ICON_SIZE = 56;
+const TERRITORY_HERO_FLIGHT_ICON_SIZE = 56;
 
 export interface ITerritoryHeroFlightEntry {
     readonly frame: SpriteFrame | null;

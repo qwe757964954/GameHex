@@ -71,31 +71,22 @@ export class ZCCombatEffectView extends Component {
         this.allowGeneric = allowGeneric && !prefab;
         this.graphics.clear();
         this.renderedEventId = -1;
-        //  池化复用：上一任可能把骨架切到 `attack`，不复位的话下一只小鹿「一出生就在冲」。
         this.appliedSpineAnimation = '';
-        //  叠层同理：上一任可能把火船点亮着还回来，不复位的话下一只小鹿「一出生就浑身着火」。
         this.overlayChildName = zcCombatEffectOverlayChild(effectPrefabPath);
         this.appliedOverlayFx = null;
         this.node.setRotationFromEuler(0, 0, 0);
-        //  池化复用：上一任可能是淡到全透明的「定格光束」，不在这里复位的话，
-        //  下一次借出来的特效会「一出生就是半透明」。
         this.resetOpacity();
-        if (this.visualPrefab !== prefab || !this.visualNode?.isValid) {
-            this.visualNode?.destroy();
+        if (this.visualPrefab !== prefab || !this.visualNode || !this.visualNode.isValid) {
+            if (this.visualNode && this.visualNode.isValid) {
+                this.visualNode.destroy();
+            }
             this.visualNode = null;
-            //  换了一份美术 ⇒ 旧节点连同它的渲染器一起没了，原始色快照必须跟着作废。
             this.tintBaseColor.clear();
         }
         this.visualPrefab = prefab;
-        //   光束配置必须在 `if (!prefab) return` 之前认出来：美术没加载时也要知道
-        //  「这是一条光束」，才能在 `render` 里画兜底线。放在后面的话 `beamSpec` 恒为 null，
-        //  于是掉回通用弹道 —— 而 `allowGenericEffects=false` 的关卡里通用弹道也不画，
-        //  整条光束凭空消失且不报错（2026-11-02 用户截图）。
         this.beamSpec = zcBeamSpecOf(effectPrefabPath);
         this.beamCanvasWidth = 0;
-        //  诊断：把这个特效节点对应的资源路径记住，`mountVisual` 里要用它决定打不打日志。
         this.diagEffectPath = effectPrefabPath ?? '';
-        //  取不到 prefab 就在这里留一句（`allowGeneric` 决定是画通用短线还是什么都不画）。
         if (!prefab && this.diagEffectPath.includes('导弹')) {
             missileLog('视图', `initialize 取不到 prefab：${this.diagEffectPath}`
                 + `（allowGeneric=${allowGeneric} ⇒ ${this.allowGeneric ? '画通用短线' : '什么都不画'}）`);
@@ -104,23 +95,17 @@ export class ZCCombatEffectView extends Component {
         this.mountVisual(prefab);
     }
 
-    /** 这个特效节点现在有没有挂上美术（后补到货时靠它判断要不要补挂）。*/
+    /** 特效节点是否已挂载有效的美术节点。*/
     get hasVisual(): boolean {
-        return !!this.visualNode?.isValid;
+        return !!(this.visualNode && this.visualNode.isValid);
     }
 
-    /**
-     * 美术后补到货：把 prefab 挂上，但不动渲染状态（`renderedEventId` / 透明度 / 旋转）。
-     *
-     * 为什么需要：渐进加载局（`deferEffects`）首帧 `effectVisualPrefabs` 还是空 Map，
-     * 特效节点会以 `visualNode === null` 创建。而 `ZCGameRenderWorld` 只在节点首次创建
-     * （`if (!entityId)`）时调一次 `initialize`，prefab 之后到货没有任何人再挂 ⇒
-     * 这个子弹整段飞行都只剩一条 18px 的通用短线，看上去就是「子弹不见了」
-     * （2026-11-04 磁电菇/萨满 68016 / 68022）。
-    */
+    /** 渐进加载资源就绪后补挂 prefab。*/
     attachVisualPrefab(prefab: Prefab): void {
-        if (this.visualPrefab === prefab && this.visualNode?.isValid) return;
-        this.visualNode?.destroy();
+        if (this.visualPrefab === prefab && this.visualNode && this.visualNode.isValid) return;
+        if (this.visualNode && this.visualNode.isValid) {
+            this.visualNode.destroy();
+        }
         this.visualNode = null;
         this.visualPrefab = prefab;
         this.mountVisual(prefab);
@@ -248,28 +233,18 @@ export class ZCCombatEffectView extends Component {
     */
     private applySpineAnimation(clip: string | null | undefined): void {
         if (!clip || clip === this.appliedSpineAnimation) return;
-        const skeleton = this.visualNode?.getComponentInChildren(sp.Skeleton);
+        const skeleton = this.visualNode ? this.visualNode.getComponentInChildren(sp.Skeleton) : null;
         if (!skeleton) return;
         this.appliedSpineAnimation = clip;
-        //  与 `ZCUnitView.playClip` / `CardUnitPreview` 同一口径：`(0, name, true)` 且由骨架循环。
         skeleton.setAnimation(0, clip, true);
     }
 
-    /**
-     * 按事件给的语义开关叠层子节点（2026-11-12 鹿神守护：火船只在提速段烧起来）。
-     *
-     * 只在状态翻转时才动节点：`active` 变化会触发子树的启用/禁用周期，每帧写一次
-     * 会让粒子 / 动画反复重启。用 `appliedOverlayFx` 记住上一次的值。
-     *
-     * 这份特效没登记叠层（`overlayChildName === null`）时一次都不碰 ——
-     * 其余所有特效的预制体 `_active` 说了算，行为逐字不变。
-    */
     private applyOverlayFx(active: boolean | undefined): void {
         const name = this.overlayChildName;
         if (!name) return;
         const wanted = active === true;
         if (wanted === this.appliedOverlayFx) return;
-        const child = this.visualNode?.getChildByName(name);
+        const child = this.visualNode ? this.visualNode.getChildByName(name) : null;
         if (!child) return;
         this.appliedOverlayFx = wanted;
         child.active = wanted;
@@ -328,11 +303,13 @@ export class ZCCombatEffectView extends Component {
         //  area 事件从不按 `event.radius` 缩放，而这一个 `普攻爆炸` prefab 被四处共用 ⇒
         //  只能由模型算好「判定直径 ÷ prefab 屏上宽度」带过来。缺省 1 ⇒ 既有特效逐字不变。
         const eventScale = event.effectScale ?? 1;
-        this.node.setScale(
-            nodeScale * growFactor * sizeScale * eventScale,
-            nodeScale * growFactor * sizeScale * eventScale,
-            1,
-        );
+        //  **只沿长轴**的倍率（2026-11-19 第 21 批闪电链「复制后压缩」）：预制体长轴 = 本地 +y、
+        //  锚点在底端 ⇒ 乘在 `scaleY` 上就是「从起点往终点方向变长 / 变短」，而 `scaleX`
+        //  （闪电的粗细）一个像素都不动。缺省 undefined ⇒ 1，所有既有特效逐字不变 ——
+        //  🔴 别把它并进 `eventScale`：那个是等比的，拉长一段闪电会把它一起拉粗。
+        const axisScale = event.stretchAlongAxis ?? 1;
+        const uniformScale = nodeScale * growFactor * sizeScale * eventScale;
+        this.node.setScale(uniformScale, uniformScale * axisScale, 1);
         //  除「定格光束」外一律复位到全不透明：池化节点上一任可能正好淡到 0 才回池。
         //  例外是模型**显式**要求某个透明度（闪电链 102203 的「逐跳降透明度」）：
         //  那种事件每一跳都要自己定档，复位成全不透明会把整条链画成一样亮。
@@ -541,9 +518,7 @@ export class ZCCombatEffectView extends Component {
     }
 
     private ensureOpacity(): UIOpacity | null {
-        if (this.nodeOpacity?.isValid) return this.nodeOpacity;
-        //  无引擎夹具（`zcds-progressive-art` / `zcds-render-performance`）的假节点没有
-        //  `getComponent` / `addComponent` ⇒ 先探方法再调，与 `applyTint` 那条守卫同一口径。
+        if (this.nodeOpacity && this.nodeOpacity.isValid) return this.nodeOpacity;
         const host = this.node as unknown as { getComponent?: unknown; addComponent?: unknown };
         if (typeof host.getComponent !== 'function' || typeof host.addComponent !== 'function') return null;
         this.nodeOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
@@ -552,7 +527,7 @@ export class ZCCombatEffectView extends Component {
 
     /** 复位到全不透明；不新建 `UIOpacity`（没淡出过就不该多挂一个组件）。*/
     private resetOpacity(): void {
-        if (this.nodeOpacity?.isValid) this.nodeOpacity.opacity = 255;
+        if (this.nodeOpacity && this.nodeOpacity.isValid) this.nodeOpacity.opacity = 255;
     }
 
     /**

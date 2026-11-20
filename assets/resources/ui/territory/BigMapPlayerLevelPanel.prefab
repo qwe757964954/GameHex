@@ -1464,16 +1464,16 @@
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 22,
-    "_fontSize": 22,
+    "_fontSize": 26,
     "_fontFamily": "Arial",
-    "_lineHeight": 28,
+    "_lineHeight": 31,
     "_overflow": 2,
     "_enableWrapText": false,
     "_font": null,
     "_isSystemFontUsed": true,
     "_spacingX": 1.3,
     "_isItalic": false,
-    "_isBold": false,
+    "_isBold": true,
     "_isUnderline": false,
     "_underlineHeight": 2,
     "_cacheMode": 0,
@@ -2384,7 +2384,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": -150,
+      "x": -165,
       "y": -233.5,
       "z": 0
     },
@@ -2651,9 +2651,9 @@
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 30,
-    "_fontSize": 30,
+    "_fontSize": 36,
     "_fontFamily": "Arial",
-    "_lineHeight": 41,
+    "_lineHeight": 31,
     "_overflow": 2,
     "_enableWrapText": false,
     "_font": null,
@@ -3015,7 +3015,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 255,
+      "width": 231,
       "height": 108
     },
     "_anchorPoint": {
@@ -3184,7 +3184,7 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 150,
+      "x": 119,
       "y": -233.5,
       "z": 0
     },
@@ -3451,9 +3451,9 @@
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 30,
-    "_fontSize": 30,
+    "_fontSize": 36,
     "_fontFamily": "Arial",
-    "_lineHeight": 41,
+    "_lineHeight": 31,
     "_overflow": 2,
     "_enableWrapText": false,
     "_font": null,
@@ -3815,7 +3815,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 255,
+      "width": 321,
       "height": 108
     },
     "_anchorPoint": {

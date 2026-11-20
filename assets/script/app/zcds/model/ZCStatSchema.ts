@@ -1166,18 +1166,23 @@ export function applyZCTypedUnitModifiers(
         const sources = unitMods.filter((item) => item.statId === statId);
         if (!sources.length && statId === 'attackSpeed') continue;
         const baseStat = baseValue(base, statId);
-        const flat = sources.filter((item) => item.operation === 'add').reduce((sum, item) => sum + item.value, 0);
-        const rate = sources.filter((item) => item.operation === 'addRate').reduce((sum, item) => sum + item.value, 0);
-        const multiplier = sources.filter((item) => item.operation === 'multiply').reduce((product, item) => product * item.value, 1);
         const overrides = sources.filter((item) => item.operation === 'override');
-        const override = overrides.length ? overrides[overrides.length - 1].value : null;
+        const lastOverride = overrides[overrides.length - 1];
+        const override = lastOverride?.value ?? null;
+        const serverOverride = lastOverride?.sourceKind === 'server';
+        const flat = sources.filter((item) => item.operation === 'add').reduce((sum, item) => sum + item.value, 0);
+        const rate = sources
+            .filter((item) => item.operation === 'addRate' && (!serverOverride || item.sourceKind === 'server'))
+            .reduce((sum, item) => sum + item.value, 0);
+        const multiplier = sources.filter((item) => item.operation === 'multiply').reduce((product, item) => product * item.value, 1);
         let effective = override ?? (baseStat + flat) * (1 + rate) * multiplier;
-        // 服务端最终值保留负号，本地计算仍沿用属性下限。
-        if (!overrides.length || overrides[overrides.length - 1].sourceKind !== 'server') {
+        if (serverOverride) {
+            // 服务端定值已含本地构筑，只再叠加协议下发的比例，并收敛乘法浮点尾数。
+            if (rate !== 0) effective = Number((effective * (1 + rate)).toPrecision(15));
+        } else {
             effective = clampStat(statId, effective);
         }
         values.set(statId, effective);
-        //  `override` 直接定值；否则 flat 是绝对增量、rate 是相对增量（乘在 base 上）。
         foldStatPatch(statId, override ?? flat, override === null ? rate * baseStat : 0, statPatch);
         breakdown.push({
             statId,

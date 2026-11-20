@@ -31,6 +31,8 @@ import {
     type ITerritoryChestSpec,
 } from '../model/TerritoryChestAnimation';
 import type { TerritoryChestTier } from '../model/TerritoryChestTier';
+// 非钱包类（卡牌碎片等）改道飞向底部卡牌入口，此处复用统一判断函数。
+import { isTerritoryHeroRewardResId } from '../model/TerritoryHeroReward';
 // 建筑归一宽度（唯一真源）：表演里那只箱子必须与地图上静止的那只**同宽**，见 `CHEST_VISIBLE_WIDTH`。
 import { BUILDING_VISIBLE_WIDTH } from './TerritoryStationView';
 
@@ -82,24 +84,24 @@ const FLY_ICON_BASE_SIZE = 44;
 const FLY_ICON_SCALE = 1.35;
 
 /** 金色放射光条的颜色（越靠外的条越淡，靠数量与 alpha 叠出体积感）。 */
-const RAY_COLOR = new Color(255, 226, 138);
+const RAY_COLOR = Object.freeze(new Color(255, 226, 138));
 /** 星光颜色（规格：青 / 紫 / 黄 / 绿 / 粉随机）。 */
-const STAR_COLORS: readonly Color[] = [
-    new Color(126, 232, 255),
-    new Color(196, 156, 255),
-    new Color(255, 226, 128),
-    new Color(150, 240, 168),
-    new Color(255, 168, 208),
-];
+const STAR_COLORS: readonly Color[] = Object.freeze([
+    Object.freeze(new Color(126, 232, 255)),
+    Object.freeze(new Color(196, 156, 255)),
+    Object.freeze(new Color(255, 226, 128)),
+    Object.freeze(new Color(150, 240, 168)),
+    Object.freeze(new Color(255, 168, 208)),
+]);
 /** 彩虹光束的六段配色（紫→蓝→青→绿→黄→粉，规格 §3.3）。 */
-const RAINBOW_COLORS: readonly Color[] = [
-    new Color(178, 118, 255),
-    new Color(96, 158, 255),
-    new Color(96, 232, 236),
-    new Color(122, 232, 132),
-    new Color(255, 226, 110),
-    new Color(255, 150, 200),
-];
+const RAINBOW_COLORS: readonly Color[] = Object.freeze([
+    Object.freeze(new Color(178, 118, 255)),
+    Object.freeze(new Color(96, 158, 255)),
+    Object.freeze(new Color(96, 232, 236)),
+    Object.freeze(new Color(122, 232, 132)),
+    Object.freeze(new Color(255, 226, 110)),
+    Object.freeze(new Color(255, 150, 200)),
+]);
 
 /** 一条奖励的图标输入（页面按 `resId` 查表后喂进来；查不到就是 `null`，只是没有图标）。 */
 export interface ITerritoryChestIconEntry {
@@ -207,6 +209,12 @@ export class TerritoryChestView {
     private seed = 0;
     private elapsed = -1;
     private onDone: (() => void) | null = null;
+    /**
+     * 奖励起飞时刻钩子（由 TerritoryMapView 注入）。
+     * 在动画进度达到 spec.flyStart 时单次触发，协调顶层特效层起播。
+     */
+    private flyStartHook: (() => void) | null = null;
+    private flyStartFired = false;
     /**
      * 本帧的**收尾淡出系数**（`1` = 正常，`0` = 全灭）。
      *
@@ -348,6 +356,13 @@ export class TerritoryChestView {
         this.onLanded = handler;
     }
 
+    /**
+     * 注册奖励飞行开始回调。在动画时间到达 spec.flyStart 时触发，确保箱子推至目标位置后起飞。
+     */
+    setFlyStartHook(hook: (() => void) | null): void {
+        this.flyStartHook = hook;
+    }
+
     /** 是否正在播（页面据此决定要不要等它结束再弹奖励窗）。 */
     get isPlaying(): boolean {
         return this.elapsed >= 0;
@@ -402,6 +417,7 @@ export class TerritoryChestView {
         this.onDone = onDone ?? null;
         // 落地通知是**每场一次**：上一场同一资源已经通知过，不能带过来把这一场的第一枚吞掉。
         this.landedResIds.clear();
+        this.flyStartFired = false;
         this.node.active = true;
         this.applyChestFrames();
         if (this.chest.active !== true) this.chest.active = true;
@@ -412,6 +428,7 @@ export class TerritoryChestView {
     stop(): void {
         this.elapsed = -1;
         this.onDone = null;
+        this.flyStartFired = false;
         if (this.node.active) this.node.active = false;
         for (const slot of this.fountainSlots) if (slot.node.active) slot.node.active = false;
         for (const slot of this.flySlots) if (slot.node.active) slot.node.active = false;
@@ -426,6 +443,11 @@ export class TerritoryChestView {
         if (this.elapsed < 0 || !this.spec) return;
         const spec = this.spec;
         this.elapsed += dt;
+        // 非钱包类奖励的「改道起飞」与原本 Fly 层同拍（按显式时刻判，掉帧跨过也只发一次）。
+        if (!this.flyStartFired && this.elapsed >= spec.flyStart) {
+            this.flyStartFired = true;
+            this.flyStartHook?.();
+        }
         // 落地通知必须**在停播判断之前**：最后几枚图标是在收尾段落地的，
         // 放到 `stop()` 之后再判就永远收不到（资源栏那一格不会跳）。
         this.fireLandings(this.elapsed);
@@ -466,6 +488,8 @@ export class TerritoryChestView {
         for (let index = 0; index < this.flyCount; index += 1) {
             const resId = Number(this.rewards[index % this.rewards.length]?.resId);
             if (!Number.isFinite(resId) || resId <= 0 || this.landedResIds.has(resId)) continue;
+            // 已改道飞向底部卡牌 icon 的资源不在这层落地 ⇒ 不许再通知资源栏那一格。
+            if (isTerritoryHeroRewardResId(resId)) continue;
             if (t < territoryChestFlyArriveAt(spec, index, this.flyCount)) continue;
             this.landedResIds.add(resId);
             handler(resId, this.amountOfResId(resId));
@@ -737,6 +761,11 @@ export class TerritoryChestView {
             const slot = this.flySlots[index];
             const fx = index < count ? territoryChestFlyFx(spec, index, t, count) : null;
             if (!fx) {
+                if (slot.node.active) slot.node.active = false;
+                continue;
+            }
+            // 非钱包类奖励改道飞向底部卡牌入口，此处仅保留钱包类资源在页面内飞行动画。
+            if (isTerritoryHeroRewardResId(this.rewards[index % this.rewards.length]?.resId)) {
                 if (slot.node.active) slot.node.active = false;
                 continue;
             }

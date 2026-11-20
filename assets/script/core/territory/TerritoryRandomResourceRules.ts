@@ -6,7 +6,7 @@ export interface ITerritoryRandomCellOpenInput {
     readonly columns: number;
     readonly candidateCells: readonly number[];
     /** 已通关或已解锁的格子；服务端 unlockCells 中的固定资源点也能作为前置。 */
-    readonly openedCells: readonly number[];
+    readonly openedCells: readonly number[] | ReadonlySet<number>;
     readonly silver: number;
     readonly stamina: number;
     readonly silverCost: number;
@@ -22,7 +22,7 @@ export function canOpenTerritoryRandomCell(input: ITerritoryRandomCellOpenInput)
     const { cellId, rows, columns } = input;
     if (!Number.isInteger(cellId) || cellId < 0 || cellId >= rows * columns
         || !input.candidateCells.includes(cellId)) return { ok: false, reason: 'notCandidate' };
-    const opened = new Set(input.openedCells);
+    const opened = input.openedCells instanceof Set ? input.openedCells : new Set(input.openedCells);
     if (opened.has(cellId)) return { ok: false, reason: 'alreadyOpen' };
     if (!hexGridNeighborIds(cellId, rows, columns).some((neighbor) => opened.has(neighbor))) {
         return { ok: false, reason: 'needsNeighbor' };

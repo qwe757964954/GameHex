@@ -1,0 +1,38 @@
+{
+    "version": 3,
+    "note": "TestKapai 舞台与调试参数真源；UI 版式由 TestKapai.scene 承载（节点经 Cocos MCP 创建，运行时不建节点）。战斗数值一律取自 pvpCard / pvpSkill / pvpGlobal 编译后的运行时配置，本文件不另立第二套尺寸或伤害。",
+    "stage": {
+        "viewScale": 2.0,
+        "scaleOptions": [1.0, 2.0, 4.2],
+        "groundOffsetY": -104,
+        "unitOffsetX": -170,
+        "targetOffsetX": 170,
+        "effectOffsetY": -104,
+        "gridColor": "#49648C",
+        "gridFillColor": "#0B1422F2",
+        "guideColor": "#9AB2CE",
+        "loadingColor": "#8FA6C0",
+        "errorColor": "#FF8F84"
+    },
+    "palette": {
+        "background": "#0C1220",
+        "panel": "#10161F",
+        "panelAlt": "#151D2BE6",
+        "button": "#274B6E",
+        "buttonActive": "#3C6E9C",
+        "buttonDisabled": "#232B39",
+        "text": "#EAF2FF",
+        "muted": "#93A9C2",
+        "accent": "#FFC98A",
+        "danger": "#FF7A7A"
+    },
+    "debug": {
+        "modelScale": 1.0,
+        "effectScale": 1.0,
+        "damageRate": 1.0
+    },
+    "damageTest": {
+        "targetMaxHp": 1200,
+        "targetName": "木桩"
+    }
+}

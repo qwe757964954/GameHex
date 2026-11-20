@@ -40,7 +40,8 @@ test('同一作用域中的重复建筑资源仅加载一次，布局指定背�
     assert.equal(calls.filter((path) => path.endsWith('/construction/spriteFrame')).length, 1);
     assert.equal(art.background.path, 'custom/world/spriteFrame');
     assert.equal(art.tiledBackground.path, 'bigMapBG/spriteFrame');
-    assert.equal(art.baseBackground.path, 'image/base_background/spriteFrame');
+    assert.equal(art.baseTileGrass.path, 'image/buildings/img_land_01/spriteFrame');
+    assert.equal(art.baseTileDirt.path, 'image/buildings/img_land_02/spriteFrame');
     assert.ok(!calls.some((path) => path.includes('/base_ground/')));
     assert.equal(art.buildings.size, 23);
     assert.equal(art.resources.size, 5);
@@ -59,7 +60,7 @@ test('基础贴图未完成时其他资源组已经发起，不串行等待六�
     } }, { disposed: false });
     await new Promise((resolve) => setImmediate(resolve));
     try {
-        for (const path of ['concept/sprites/construction', 'concept/ui/stamina', 'base_background', 'main/city/btn_quick_fight']) {
+        for (const path of ['concept/sprites/construction', 'concept/ui/stamina', 'image/buildings/img_land_01', 'main/city/btn_quick_fight']) {
             assert.ok(paths.some((entry) => entry.endsWith(`${path}/spriteFrame`)), `${path} 不应等待其他资源组`);
         }
     } finally { finish(); await loading; }
@@ -79,7 +80,8 @@ test('页面加载前关闭不会发起资源请求，加载途中关闭不会�
     scope.disposed = false;
     const late = await load(assets, scope);
     assert.equal(late.home, null);
-    assert.equal(late.baseBackground, null);
+    assert.equal(late.baseTileGrass, null);
+    assert.equal(late.baseTileDirt, null);
     assert.equal(late.tiledBackground, null);
     assert.ok([...late.resources.values()].every((frame) => frame === null));
 });
@@ -118,7 +120,7 @@ test('资源缺失走既有建筑兜底，缺失美术不会改变规则配置',
     const art = await artLoader()(assets, { disposed: false });
     assert.equal(art.home.path, 'image/buildings/camp_home/spriteFrame');
     assert.equal(art.city.path, 'image/buildings/camp_legion/spriteFrame');
-    assert.equal(art.baseBackground.path, 'image/base_background/spriteFrame');
+    assert.equal(art.baseTileGrass.path, 'image/buildings/img_land_01/spriteFrame');
 });
 
  test('基地建筑优先用表里的 baseBuildIcon，世界标记用新的 SLG 据点图', async () => {

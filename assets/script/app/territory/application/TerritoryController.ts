@@ -14,7 +14,7 @@ import { TerritoryUiEvent, TerritoryViewEvent, type ITerritoryIntentEvent,
     type TerritoryViewCommand } from './TerritoryEvents';
 import { buildTerritoryViewState, isTerritoryChestActionable } from './TerritoryViewState';
 import { TERRITORY_TEXTS } from './TerritoryTexts';
-import { isTerritoryBattleSite } from '../model/TerritoryMapConfig';
+import { isTerritoryBattleSite, type TerritorySite } from '../model/TerritoryMapConfig';
 
 export interface ITerritoryControllerOptions {
     readonly context: IControllerContext;
@@ -97,18 +97,18 @@ export class TerritoryController extends ControllerBase {
         const intent = event.intent;
         switch (intent.kind) {
             case 'siteTap': {
-                const site = this.model.state.map?.sites.find((site) => site.cellId === intent.cellId);
-                // 新手引导 5-1「攻打第一关」的判据：设计案要「进入关卡列表」，但主界面的关卡列表
-                // 入口还不存在；改为「点地图上的关卡格」（地图上那个 1-1 红标）⇒ 一样能进战斗。
-                // 只在上报**真的受理**时报（`selectSite` 返回 false 的三种情况：在途 / 未 reveal /
-                // 防连点）。无条件上报会让玩家点一个"点不动的格子"也把引导推过去。
-                // 5-1 的 maskType 是 `full`（用户 2026-11-17 第 21 条：全屏遮罩 + 高亮地块与气泡），
-                // 但这不会吃掉这一下：`GuideDialogView.needsFullScreenBlock()` 只对 `completeCond === 'click'`
-                // 铺满屏，5-1 是 `siteTap` ⇒ 点击区只盖对话条，孔里的点击照旧落到地块上。
-                // 2-1「翻第1块地」/ 2-2「打开宝箱」走的就是这条：资源据点是两步
-                // （`unlockCell` 翻出箱子 → `passCell` 点开箱子），两下都算 `tileFlipped`；
-                // 判据与 `guideMapFocusCells('Map/Chest_N')` 共用 `isTerritoryChestActionable`。
-                // 🔴 只判 `siteOpenableCells` 的话，第二步（已解锁）永远上报不了 ⇒ 2-2 卡死。
+                let site: TerritorySite | null = null;
+                const sites = this.model.state.map?.sites;
+                if (sites) {
+                    for (let i = 0; i < sites.length; i++) {
+                        if (sites[i].cellId === intent.cellId) {
+                            site = sites[i];
+                            break;
+                        }
+                    }
+                }
+                // 新手引导：关卡点击完成 siteTap；宝箱据点两步（翻出/点开）均完成 tileFlipped。
+                // 必须在操作切实受理后上报，防止未响应时误推引导进度。
                 const canFlip = isTerritoryChestActionable(this.model.state, intent.cellId);
                 if (site && this.model.selectSite(site)) {
                     if (canFlip) reportGuideComplete('tileFlipped');
@@ -117,11 +117,7 @@ export class TerritoryController extends ControllerBase {
                 break;
             }
             case 'randomTap': {
-                // 新手引导 2-1/3-1/4-1/7-1 的判据：设计案写「进入翻开动画 / 地块进入通关态」。
-                // 只在**校验通过、真的开始翻**时上报（`selectRandomResource` 返回 false 的情况：
-                // 在途 / 非候选格 / 银币·体力·相邻格不满足 / 已开启）。无条件上报会让
-                // "钱不够点一下"也算翻了一格，引导直接跳步。
-                // 精确到"服务端确认翻格成功"要 Model 暴露 `runCellWrite` 的完成回调，属后续项。
+                // 新手引导：随机资源点开始翻开时上报 tileFlipped。
                 if (this.model.selectRandomResource(intent.cellId)) reportGuideComplete('tileFlipped');
                 break;
             }

@@ -1,68 +1,18 @@
-import { ZC_EFFECT_PATHS } from '../model/ZCEffectCatalog';
-
 /**
- * 弹道拖尾（锥形 + 渐隐）——纯数据 + 纯几何，不 import 任何 `cc`。
+ * 弹道拖尾（锥形 + 渐隐）——纯几何，不 import 任何 `cc`。
  *
- * 需求（2026-11-05，2026-11-06 方向修正）
+ * 形状是「宽端贴弹体、往外收成尖」：宽度从 `rootHalfWidth` 线性收到 `tipHalfWidth`，
+ * 透明度从 `alpha` 衰减到 0。配置数据在 `ZCEffectCatalog.ZC_EFFECT_TRAIL_SPECS`，
+ * 本文件只保留切段算法与兼容导出。
  *
- * 原话「增加一个倒三角的拖尾，拖尾从子弹部分向外倒三角且逐渐变透明」；
- * 2026-11-06 用户看图后纠正：「拖尾的方向做反了，末端窄，和子弹相接触的部分是宽的，
- * 宽度和子弹半径相近，屏幕上的长度改成 80px」。
- *
- * ⇒ 现在的形状（宽端贴弹体、往外收成尖，像一颗锥形尾焰）：
- *
- * ```
- * 弹体 ●●●●
- * ●●●●●●●●           ← 接触端最宽（≈ 子弹半径）
- * ╲      ╱
- * ╲    ╱            ← 往外线性收窄
- * ╲  ╱
- * ╲╱              ← 末端收成尖、α 归零
- * ```
- *
- * 同时越往外越透明，末端完全消失（渐隐曲线没变）。
- *
- * 坐标系
- *
- * 拖尾画在特效宿主节点的 `Graphics` 上，宿主节点已经被 `ZCCombatEffectView` 转成
- * 「本地 +X = 飞行方向」。所以：
- * · 拖尾沿 -X 伸展（在弹体后面）；
- * · 宽度沿 ±Y 对称张开；
- * · 本文件里所有长度都是本地 px，屏上还要乘宿主节点缩放
- * （`zcCombatEffectNodeScaleOf`，导弹登记的是 0.8）——需要按"屏上多少 px"提需求时，
- * 先除以 0.8 再写进来（80px 屏上 = 100 本地）。
- *
- * 为什么不用贴图
- *
- * 拖尾是「一段会一直跟着弹体实时重绘的渐变」，用 Sprite 反而要额外造一张图 + 一个
- * 与弹体同尺寸的节点；`Graphics` 十几段梯形就能画出平滑的渐隐，且颜色/长度改一个数就生效。
- *
- * 本文件必须保持无 `cc` 依赖（同 `ZCBeamEffect` / `ZCCombatEffectScale`），
- * 这样几何与渐隐曲线才能在没有引擎的环境里逐点断言。
-*/
+ * 坐标：拖尾画在特效宿主节点的 `Graphics` 上，宿主已按「本地 +X = 飞行方向」旋转，
+ * 所以沿 -X 伸展。所有长度都是本地 px，屏上还要乘宿主缩放。
+ */
 
-/** 一条拖尾的形状与颜色。*/
-export interface IZCMissileTrailSpec {
-    /**
-     * 起点（贴着弹体的那一端）在宿主节点本地坐标里的 X。
-     *
-     * 取负值：弹体画布 81×77、锚点 0.5 ⇒ 尾缘在 -40.5，取 -26 是让拖尾起点压进
-     * 弹体一点点，避免飞行中弹体与拖尾之间闪出一条缝。
-    */
-    readonly startX: number;
-    /** 拖尾总长（本地 px，沿 -X）。换算屏上：× 宿主缩放（导弹 0.8）。*/
-    readonly length: number;
-    /** 贴弹体那端的半宽（本地 px）—— 宽端，应 ≈ 弹体半径。*/
-    readonly rootHalfWidth: number;
-    /** 远离弹体那端的半宽（本地 px）—— 窄端，通常收到 1~3 成尖。*/
-    readonly tipHalfWidth: number;
-    /** 沿长度切几段；段数越多渐隐越顺，代价是每段一次 `fill()`。*/
-    readonly slices: number;
-    /** 颜色（rgb，0~255）。透明度只由 `alpha` 与段位置决定。*/
-    readonly color: readonly [number, number, number];
-    /** 起点处的不透明度（0~1）；远离弹体那端恒为 0。*/
-    readonly alpha: number;
-}
+import { type IZCEffectTrailSpec, zcEffectTrailOf, zcEffectTrailPaths } from '../model/ZCEffectCatalog';
+
+/** 一条拖尾的形状与颜色；目录 `ZC_EFFECT_TRAIL_SPECS` 的视图侧别名。*/
+export type IZCMissileTrailSpec = IZCEffectTrailSpec;
 
 /** 拖尾的一段梯形（近端 `x0` 靠弹体，远端 `x1` 在更后面）。*/
 export interface IZCMissileTrailQuad {
@@ -78,79 +28,24 @@ export interface IZCMissileTrailQuad {
     readonly alpha: number;
 }
 
-/**
- * 弹体 prefab 路径 → 拖尾配置。未登记 = 没有拖尾（普通弹道原样）。
- *
- * 只登记需要拖尾的弹体：这是观感配置，不是通用能力 —— 每加一个都要单独调宽窄，
- * 默认给所有弹道都挂一条只会让画面糊。
-*/
-const MISSILE_TRAIL_BY_PREFAB_PATH: Readonly<Record<string, IZCMissileTrailSpec>> = {
-    // 镭射飞龙「追踪导弹」的弹体（`镭射飞龙_导弹技能`，81×77、可见内容 79×75）。
-    //
-    // 2026-11-06 按用户口径定的数（屏上 px，括号里是除以宿主缩放 0.8 后的本地值）：
-    //   · 长度 80px（本地 100）；起点压进弹体 26 本地 ⇒ 从弹体边缘往外露出的可见段约 69px；
-    //   · 接触端半宽 16px（本地 20）⇒ 整宽 32px，与弹体半径（屏上 63/2 ≈ 31.5）相近；
-    //   · 末端半宽 1.6px（本地 2）⇒ 收成尖，且那一段 α 已经接近 0。
-    // 形状是「宽端贴弹体、往外收窄」的锥形（2026-11-05 那版做反了，窄端贴弹体）。
-    [ZC_EFFECT_PATHS.missileBody]: {
-        startX: -26,
-        length: 100,
-        rootHalfWidth: 20,
-        tipHalfWidth: 2,
-        slices: 12,
-        //  纯白（2026-11-06 需求「拖尾改成 255 的纯白色」）；靠 alpha 递减做渐隐，
-        //  不用带色调的颜色，避免叠在深色战场上偏橙、叠在亮建筑上偏灰。
-        color: [255, 255, 255],
-        alpha: 0.62,
-    },
-    // 68022「雷蕉」的电弹（`pvpSkill` 30231）。2026-11-11 需求：「雷电子弹的大小缩小成
-    // 50%，并且增加三角形拖尾」—— 缩放在 `ZCCombatEffectScale` 的宿主表里（0.5），
-    // 拖尾画在同一个宿主节点上，所以下面的数都要除以 0.5（本地 = 屏上 × 2）。
-    //
-    // 基准：弹体画布 120×81、prefab 根 `_lscale 0.78`、宿主 0.5
-    //   ⇒ 屏上 46.8 宽 × 31.6 高，后缘在宿主本地 x = -60 × 0.78 = -46.8。
-    // 取值（屏上 → 本地）：
-    //   · `startX` -40 本地：压进弹体 7 本地（≈3.5 屏上），避免飞行中弹体与拖尾之间闪缝；
-    //   · 长度 55 屏上 → 110：弹体本身 46.8 长，尾巴得比它再长一点才读得出"在飞"
-    //     （导弹那条是 80 屏上 / 弹体 65 宽 = 1.23 倍，这条 55 / 46.8 = 1.17 倍）；
-    //   · 接触端整宽 16 屏上（≈ 弹体半径 15.8，与导弹那条的口径一致：整宽 ≈ 半径）→ 半宽 16；
-    //   · 末端半宽 2 本地 ⇒ 收成尖。
-    // 颜色沿用纯白（与导弹那条一致）；雷蕉偏电，要染色只改这一行的 `color`。
-    [ZC_EFFECT_PATHS.lightningBullet]: {
-        startX: -40,
-        length: 110,
-        rootHalfWidth: 16,
-        tipHalfWidth: 2,
-        slices: 12,
-        color: [255, 255, 255],
-        alpha: 0.6,
-    },
-};
-
 /** prefab 路径 → 拖尾配置；未登记 / 非法入参 = `null`。*/
 export function zcMissileTrailOf(prefabPath: string | null | undefined): IZCMissileTrailSpec | null {
-    if (!prefabPath) return null;
-    return MISSILE_TRAIL_BY_PREFAB_PATH[prefabPath] ?? null;
+    return zcEffectTrailOf(prefabPath);
 }
 
 /** 所有登记过拖尾的 prefab 路径（给资源清单 / 测试用）。*/
 export function zcMissileTrailPaths(): readonly string[] {
-    return Object.keys(MISSILE_TRAIL_BY_PREFAB_PATH);
+    return zcEffectTrailPaths();
 }
 
 /**
- * 把一条拖尾切成 `slices` 段梯形：宽度从 `rootHalfWidth` 线性收到 `tipHalfWidth`，
- * 透明度从 `alpha` 线性衰减到 0。
+ * 把一条拖尾切成 `slices` 段梯形。
  *
- * 为什么宽度取线性：锥形的两条边必须是直线，缓动（如 t^0.7）会把边画成外凸的弧形，
- * 看起来像"尾焰"但不像一个规整的三角形。渐隐的平滑程度靠段数解决，不靠曲线。
+ * 宽度取线性：锥形的两条边必须是直线，缓动会把边画成外凸的弧形。
+ * 渐隐的平滑程度靠段数解决，不靠曲线。
  *
- * 方向由两个半宽的大小决定：`root > tip` = 宽端贴弹体、往外收成尖（当前口径）；
- * 反过来就是往外张开。函数本身不假设哪一个更大。
- *
- * @param alphaScale 额外的整体透明度倍率（0~1）。给"快命中时整体淡一点"留的口子，
- * 非法值按 1 处理，绝不允许把拖尾算成负数或 NaN。
-*/
+ * @param alphaScale 额外的整体透明度倍率（0~1）；非法值按 1，不允许负数或 NaN。
+ */
 export function zcMissileTrailQuads(
     spec: IZCMissileTrailSpec,
     alphaScale = 1,
@@ -159,8 +54,7 @@ export function zcMissileTrailQuads(
     const scale = Number.isFinite(alphaScale) ? Math.max(0, Math.min(1, alphaScale)) : 1;
     const quads: IZCMissileTrailQuad[] = [];
     for (let index = 0; index < slices; index += 1) {
-        //  t 用段中点取值：这样第 0 段不会因为 t=0 而整段不透明、
-        //  最后一段也不会因为 t=1 直接跳成 0，渐变看起来是连贯的。
+        //  t 用段中点取值：两端都不会出现整段不透明 / 直接跳成 0，渐变才连贯。
         const t0 = index / slices;
         const t1 = (index + 1) / slices;
         quads.push({

@@ -179,3 +179,6 @@ export class TerritoryTapFeedback {
         return elapsed < TERRITORY_TAP_RING_SECONDS;
     }
 }
+
+/** 语义化别名：区分视图层点击波纹播放器与领域层点击时间轴模型。 */
+export { TerritoryTapFeedback as TerritoryTapFeedbackPlayer };

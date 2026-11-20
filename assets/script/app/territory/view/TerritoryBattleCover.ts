@@ -24,7 +24,7 @@ import {
 } from '../model/TerritoryBattleIntro';
 
 /** 云盖层在覆盖层里的节点名（用例/调试按名字找）。 */
-export const TERRITORY_BATTLE_INTRO_COVER_NODE = 'BattleIntroCover';
+const TERRITORY_BATTLE_INTRO_COVER_NODE = 'BattleIntroCover';
 
 export class TerritoryBattleCover {
     private readonly host: Node;
@@ -375,7 +375,7 @@ export class TerritoryBattleCover {
     }
 
     private createSprite(parent: Node, index: number): Sprite | null {
-        const cloud = this.clouds?.[index];
+        const cloud = this.clouds ? this.clouds[index] : null;
         const frame = this.frames[0];
         if (!cloud || !frame) return null;
         const node = new Node(`BattleIntroCloud_${index}`);

@@ -31,12 +31,13 @@ export type E = string;
 export enum F {}
 export declare const g: number;
 export abstract class H {}
+export async function asyncFn() {}
 export { h, i as j };
 export type { K };
 export default function main() {}
 `);
     assert.ok(names, '普通源不该被判为不可判定');
-    for (const name of ['a', 'b', 'C', 'D', 'E', 'F', 'g', 'H', 'h', 'j', 'K', 'default']) {
+    for (const name of ['a', 'b', 'C', 'D', 'E', 'F', 'g', 'H', 'asyncFn', 'h', 'j', 'K', 'default']) {
         assert.ok(names!.has(name), `漏解析导出符号 ${name}`);
     }
     assert.equal(exportedNamesOf(`export * from './y';`), null,

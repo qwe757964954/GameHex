@@ -33,12 +33,8 @@ export function territoryChestUnlockId(site: TerritorySite): number {
 }
 
 /**
- * 这个宝箱该不该挂提示：**普通宝箱**（`fixedResource`）、已激活且未领取。
- *
- * 野怪宝箱（`patrolChest`）不挂：它点开是去打巡逻野怪，第二下不是「打开宝箱」，
- * 体力气泡挂在它身上会读成「花 5 体力领这只箱子」（2026-11-18）。
- * 判据用本格的 `isCellUnlocked / isOwned`，不能用区域口径，否则同片未解锁的宝箱
- * 也会挂上气泡。
+ * 宝箱提示气泡展示条件：普通宝箱（fixedResource）、已解锁且尚未领取。
+ * 巡逻宝箱（patrolChest）后续为战斗，不展示体力气泡；按单格状态判定，不作区域扩散。
  */
 export function territoryChestShowsHint(site: TerritorySite, progress: ITerritoryChestHintProgress): boolean {
     if (site.type !== TERRITORY_SITE_TYPE.fixedResource) return false;
@@ -84,8 +80,14 @@ export function territoryPrerequisiteChestCell(
     for (const cell of required) {
         // 判据落在前置格上：这一步卡住的是前置格本身。
         if (progress.isOwned(cell)) continue;
-        const chest = sites.find((candidate) => isTerritoryChestSite(candidate)
-            && (candidate.cellId === cell || candidate.footprint.includes(cell)));
+        let chest: TerritorySite | null = null;
+        for (let i = 0; i < sites.length; i++) {
+            const candidate = sites[i];
+            if (isTerritoryChestSite(candidate) && (candidate.cellId === cell || candidate.footprint.includes(cell))) {
+                chest = candidate;
+                break;
+            }
+        }
         if (!chest) continue;
         const unlockId = territoryChestUnlockId(chest);
         if (!best || unlockId > best.unlockId || (unlockId === best.unlockId && chest.cellId < best.cellId)) {

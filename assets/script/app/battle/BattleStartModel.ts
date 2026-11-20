@@ -80,12 +80,24 @@ export interface ZCBattleHeroModifier {
     readonly value: number;
 }
 
+export const ZC_BATTLE_RATE_KEYS = {
+    attack: 'levelAttackRatio',
+    hp: 'levelHpRatio',
+} as const;
+
+export interface IZCBattleRates {
+    readonly hpRate?: number;
+    readonly attackRate?: number;
+}
+
 export interface ZCBattleHeroAttrs {
     readonly heroId: number;
     /** 服务端最终数值，缺失项保留客户端计算结果。 */
     readonly attributes: Readonly<Partial<ZCCardLevelAttrs>>;
     /** 没有增量时不写这个键，保持与旧回包同形。 */
     readonly modifiers?: readonly ZCBattleHeroModifier[];
+    /** 逐单位下发的战斗倍率。*/
+    readonly rates?: IZCBattleRates;
 }
 
 /**
@@ -264,6 +276,7 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
 /** 累加中间态：一个 heroId 下的绝对值属性 + 增量属性。 */
 interface IZCBattleHeroAttrAccumulator {
     readonly attributes: { -readonly [K in keyof ZCCardLevelAttrs]?: number };
+    readonly rates: { -readonly [K in keyof IZCBattleRates]?: number };
     /** 键 = 完整 `attrId`（即 `statId.operation`），重复下发后覆盖前。 */
     readonly modifiers: Map<string, ZCBattleHeroModifier>;
 }
@@ -295,14 +308,20 @@ export function parseBattleHeroAttrs(infos: CmdPvpHeroAttrInfo[] | null | undefi
                 ? undefined : BATTLE_HERO_MODIFIER_STATS[attrId];
             //  合法性按**目标字段**判，不按 attrId 判：`maxHp.add = 0` 与 `maxHp = 0` 一样没意义，
             //  `attack` 系列允许 0 / 负数（服务端会下发减法类规则）。
+            const rateKey = attrId === ZC_BATTLE_RATE_KEYS.attack ? 'attackRate'
+                : attrId === ZC_BATTLE_RATE_KEYS.hp ? 'hpRate' : undefined;
             const statId = key ?? modifier?.statId;
             const value = typeof attr.value === 'string' && attr.value.trim() !== '' ? Number(attr.value) : NaN;
-            if (!statId || !Number.isFinite(value) || (statId !== 'attack' && value === 0)) {
+            const valid = rateKey ? value >= 0 && (rateKey === 'attackRate' || value > 0)
+                : statId && (statId === 'attack' || value !== 0);
+            if (!valid || !Number.isFinite(value)) {
                 console.warn('[BattleStartModel] 无效英雄属性，已跳过', heroId, attr);
                 continue;
             }
-            const entry = heroes.get(heroId) ?? { attributes: {}, modifiers: new Map<string, ZCBattleHeroModifier>() };
-            if (key) {
+            const entry = heroes.get(heroId) ?? { attributes: {}, modifiers: new Map<string, ZCBattleHeroModifier>(), rates: {} };
+            if (rateKey) {
+                entry.rates[rateKey] = value;
+            } else if (key) {
                 const previous = entry.attributes[key];
                 if (previous !== undefined && previous !== value) {
                     console.warn('[BattleStartModel] 同一绝对值属性重复下发，后值覆盖前值',
@@ -326,6 +345,7 @@ export function parseBattleHeroAttrs(infos: CmdPvpHeroAttrInfo[] | null | undefi
         heroId,
         attributes: entry.attributes,
         ...(entry.modifiers.size ? { modifiers: Array.from(entry.modifiers.values()) } : {}),
+        ...(Object.keys(entry.rates).length ? { rates: entry.rates } : {}),
     }));
     //  绝对值与增量同时下发时，`applyZCTypedUnitModifiers` 的口径是：
     //  `addRate` 在定值之后叠乘（关卡减益），`add` 仍被定值压制。只有 `add` 会丢，

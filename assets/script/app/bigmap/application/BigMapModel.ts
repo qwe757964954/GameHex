@@ -265,6 +265,8 @@ export interface IBigMapBuildEntryView {
     /** 分组键（= `baseBuildType`）；行点击按它回查菜单，避免用建过的旧 id。 */
     readonly kind: number;
     readonly name: string;
+    /** 这类建筑当前已有的最高等级；全没建时按目标 1 级展示。 */
+    readonly level?: number;
     readonly unlocked: boolean;
     readonly reason: string;
     readonly count: number;
@@ -924,10 +926,14 @@ export class BigMapModel {
             let lockedReason = '';
             let count = 0;
             let maxOwnNum = 0;
+            let level = 0;
             for (const member of members) {
                 const built = bigMapBuildingCountWithQueue(this.data.base, member.id);
                 count += built;
                 maxOwnNum += member.maxOwnNum;
+                for (const instance of this.data.base.buildings) {
+                    if (instance.buildingId === member.id) level = Math.max(level, instance.level);
+                }
                 if (nextId !== 0 || built >= member.maxOwnNum) continue;
                 const unlock = bigMapBuildingUnlock(member, context);
                 if (!unlock.unlocked) {
@@ -942,6 +948,7 @@ export class BigMapModel {
                 buildingId: nextId,
                 kind: head.kind,
                 name: groupName(head.name),
+                level: level || 1,
                 unlocked: nextId !== 0,
                 reason: nextId !== 0 ? '' : (lockedReason || '已达数量上限'),
                 count,

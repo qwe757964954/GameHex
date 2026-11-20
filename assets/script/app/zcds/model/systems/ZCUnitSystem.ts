@@ -248,7 +248,7 @@ export class ZCUnitSystem {
             }
             unit.castHoldUntil = undefined;
         }
-        // ── 召唤物（`summonMasterId` 有值）──
+        // ── 跟随型召唤物（`summonMasterId` 有值、且不是独立分身）──
         //  位置每帧由 `ZCGameModel.syncSummons` 钉在「本体 + 阵位」上 ⇒ 这里**不许寻路**：
         //  一旦让它走正常的 `target / move` 分支，`advanceUnitMovement` 会把坐标拽向敌人，
         //  下一帧又被拽回阵位，观感是四个舞伴在原地抽筋。召唤物只做一件事：
@@ -256,7 +256,11 @@ export class ZCUnitSystem {
         //
         //  放在 `attack` 分支**之后**：攻击动作要照常走完 `attackDuration` 才回 idle，
         //  提前 return 会让它们一直卡在第一帧的挥拳姿势。
-        if (unit.summonMasterId !== undefined) {
+        //
+        //  🔴 `summonIndependent`（2026-11-19 第 26 批 101404 分裂菇分身）**不进这个短路**：
+        //  设计口径「移动、攻击速度、攻击范围属性与本体一致，也会去寻找敌人攻击」，
+        //  它就是个普通战斗单位，必须走下面完整的 target / move / 追人分支。
+        if (unit.summonMasterId !== undefined && unit.summonIndependent !== true) {
             if (context.attackBlockedOf?.(unit)) return;   // 软控禁普攻：原地站着不动
             context.targeting.acquire(unit);
             if (!context.targeting.current(unit)) {

@@ -421,6 +421,10 @@ export class ZCSnapshotCodec {
             }
             for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.passiveStatusApplied, (v) => typeof v === 'boolean'), `${path}.passiveStatusApplied`);
+            //  独立分身（分裂菇 101404，2026-11-19 第 26 批）：布尔标记，不走上面那串数值白名单
+            //  （`nonnegative` 会把 `true` 判成脏值）。不还原 ⇒ 读档后分身退化成跟随型：
+            //  钉在本体脚下不动，本体一死集体消失。
+            check(optional(unit.summonIndependent, (v) => typeof v === 'boolean'), `${path}.summonIndependent`);
             for (const key of ['freeX', 'freeY', 'facingRadians']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
             check(optional(unit.marchAngle, (v) => v === null || Number.isFinite(v)), `${path}.marchAngle`);
             check(optional(unit.attackHitDone, (v) => typeof v === 'boolean'), `${path}.attackHitDone`);
@@ -568,6 +572,9 @@ export class ZCSnapshotCodec {
             //  那一下 / 是否已经踩响。三条都会改变「这片区域还飞不飞、到期炸不炸」，
             //  退不出快照的话读档回来会当场落地 + 直接消失（一片形同虚设的陷阱）。
             check(optional(zone.flightSeconds, nonnegative), `${path}.flightSeconds`);
+            //  2026-11-19 蘑菇爆炸 101704：飞行段的持有表现（「生成」），落地后换回
+            //  `effectPrefabPath`。不还原的话读档回来的投掷物会一路带着落地那张图在飞。
+            check(optional(zone.flightVisualPath, v => v === null || typeof v === 'string'), `${path}.flightVisualPath`);
             check(optional(zone.expireRequiresContact, v => typeof v === 'boolean'), `${path}.expireRequiresContact`);
             check(optional(zone.contactTriggered, v => typeof v === 'boolean'), `${path}.contactTriggered`);
             //  2026-11-18 第 17 批「飓风」102004：随机游走 + 牵引。
@@ -623,6 +630,7 @@ export class ZCSnapshotCodec {
                 baseDefinition,
                 config.modifiers?.[unit.owner] ?? [],
                 config.ownerRates?.[unit.owner],
+                config.unitRates?.[unit.owner]?.[unit.unitId],
             );
             if (!data.battleState) data.battleState = 'target';
             if (!Number.isFinite(data.stateTime)) data.stateTime = 0;

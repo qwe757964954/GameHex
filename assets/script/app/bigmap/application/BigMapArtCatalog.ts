@@ -19,7 +19,15 @@ export function toBigMapArtPath(path: string): string {
 //2026-11-04：`assets/bundles/bigmap/image/bigmap/` 整目录上提成 `assets/bundles/bigmap/image/`，
 //所以 bundle 内路径少了一层 `bigmap`。服务器下发的旧路径由 `toBigMapArtPath()` 归一（见 `BigMapArtLoader`）。
 export const BIGMAP_CONCEPT_ROOT = 'image/concept';
-export const BIGMAP_BASE_BACKGROUND = 'image/base_background';
+/**
+ *基地地皮切片：蓝湖「大地图(1)」的草地/泥土六边形。
+ *
+ *这两张在首包 `resources/image/buildings`（不是 bigmap 分包），由 `bundleForPath` 自动路由；
+ *尺寸 126×117，台面 123×90。底图使用可平铺的 `bigMapBG` 沙地，上面再铺这两张地皮；
+ *旧的整幅 `base_background` 概念图已随设计稿换皮删除。
+ */
+export const BIGMAP_BASE_TILE_GRASS = 'image/buildings/img_land_01';
+export const BIGMAP_BASE_TILE_DIRT = 'image/buildings/img_land_02';
 
 /**
  *基地建筑表里没配 `baseBuildIcon`（或配了但图没入库）时的通用外观。

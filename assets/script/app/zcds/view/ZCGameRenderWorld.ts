@@ -23,6 +23,7 @@ import { ZCFloatTextView } from './ZCFloatTextView';
 import { ZCCardRevealView } from './ZCCardRevealView';
 import type { IZCBattlePresentationArt } from '../application/ZCBattleRuntimeContract';
 import { ZCGameLegendBannerView } from './ZCGameLegendBannerView';
+import { ZCGameKillBannerView } from './ZCGameKillBannerView';
 import { ZCHexView } from './ZCHexView';
 import type { IZCMonsterFocusFrames } from './ZCHexView';
 import { ZCGameUiEvent } from './ZCGameHudEvents';
@@ -249,6 +250,13 @@ interface ZCRenderWorldOptions {
     /** 传说卡出场横幅 prefab；缺失时只少一层表现，不影响对局。*/
     legendBannerPrefab?: Prefab | null;
     /**
+     * 野怪击杀横栏 prefab；缺失时退回 `legendBannerPrefab` 的旧 `monsterClaim` 大字。
+     *
+     * 与传说卡横幅不同，这一层固定只显示**一条**（最新的那条击杀），
+     * 所以不进对象池，见 `renderKillBanners`。
+    */
+    killBannerPrefab?: Prefab | null;
+    /**
      * 全屏演出层（HUD 根节点）。
      *
      * 传说卡横幅弹在屏幕正中，所以不能挂 `mapLayer` —— 那是可滚动 `ScrollView` 的 content，
@@ -450,6 +458,14 @@ export class ZCGameRenderWorld {
     private readonly cardRevealViews = new Map<number, ZCCardRevealView>();
     private readonly shownPlayerCardReveals = new Set<number>();
     private readonly legendBannerViews = new Map<number, ZCGameLegendBannerView>();
+    /**
+     * 野怪击杀横栏的单例常驻节点（非 ECS）。
+     *
+     * 同一时刻只可能有一条击杀横栏：`renderKillBanners` 每帧取 `monsterClaim` 里 id 最大的一条，
+     * 没有就 `active = false` 留着节点 —— 与传说卡横幅的「按 id 池化」不同，这里没有可并存的第二份。
+    */
+    private killBannerNode: Node | null = null;
+    private killBannerView: ZCGameKillBannerView | null = null;
     private readonly hexEntityBySource = new Map<number, number>();
     /** 静态帧复用的边界掩码容器；`buildTerritoryBoundaryMasks` 支持 out。*/
     private readonly boundaryMasks = new Map<number, number>();
@@ -819,7 +835,7 @@ export class ZCGameRenderWorld {
         this.hintOutlineSettled = false;
         // 换局把提示画布收干净（画布本身挂在棋盘最上层、跨局复用，只清内容不复建）。
         this.hintOutlineAlpha = 0;
-        if (this.hintOutlineNode?.isValid && this.hintOutlineGraphics) {
+        if (this.hintOutlineGraphics) {
             this.hintOutlineGraphics.clear();
             this.hintOutlineGraphics.enabled = false;
         }
@@ -1102,6 +1118,7 @@ export class ZCGameRenderWorld {
         this.renderHitFxs(frame);
         this.renderCardReveals(frame);
         this.renderLegendBanners(frame);
+        this.renderKillBanners(frame);
         this.renderHexActivations(frame);
         this.renderDevelopableSpawns(frame);
         this.renderHealthBarTrails(frame);
@@ -1200,16 +1217,15 @@ export class ZCGameRenderWorld {
     private neutralRewardStartLocal(hexId: number): { x: number; y: number } | null {
         const entityId = this.hexEntityBySource.get(hexId);
         if (entityId === undefined) return null;
-        const node = this.scene.get(entityId)?.node;
-        if (!node?.isValid) return null;
-        return this.overlayLocalOf(node);
+        const entity = this.scene.get(entityId);
+        if (!entity || !entity.node) return null;
+        return this.overlayLocalOf(entity.node);
     }
 
-    /** 节点世界坐标 → 全屏演出层（overlayLayer）局部坐标；节点/图层不可用返回 null。*/
-    private overlayLocalOf(node: Node | null): { x: number; y: number } | null {
-        if (!node?.isValid) return null;
+    /** 节点世界坐标 → 全屏演出层（overlayLayer）局部坐标；图层不可用返回 null。*/
+    private overlayLocalOf(node: Node): { x: number; y: number } | null {
         const overlay = this.options.overlayLayer;
-        if (!overlay?.isValid) return null;
+        if (!overlay) return null;
         const transform = overlay.getComponent(UITransform);
         if (!transform) return null;
         const local = transform.convertToNodeSpaceAR(node.worldPosition);
@@ -1311,14 +1327,15 @@ export class ZCGameRenderWorld {
     private ensureHintOutlineGraphics(): Graphics | null {
         // 判活看节点：画布是节点的子组件，节点没了组件必然一起失效；反过来只查组件
         // 在自己的桩/老版本上不一定有 `isValid`，会每帧重建一份画布。
-        const alive = this.hintOutlineNode?.isValid === true ? this.hintOutlineGraphics : null;
+        const alive = this.hintOutlineNode && this.hintOutlineNode.isValid ? this.hintOutlineGraphics : null;
         if (alive) return alive;
         this.hintOutlineNode = null;
         this.hintOutlineGraphics = null;
         this.hintOutlineAlpha = 0;
         const board = this.options.board;
-        const layer = board?.isValid ? board.getChildByName('CooldownOverlay') : null;
-        if (!layer?.isValid) return null;
+        if (!board || !board.isValid) return null;
+        const layer = board.getChildByName('CooldownOverlay');
+        if (!layer || !layer.isValid) return null;
         const node = new Node('ZCHintOutline');
         node.layer = layer.layer;
         // 画布范围按 `ZCHexView` 的 `TerritoryOutline` 给（128×128，覆盖 123×90 的顶面六边形）；
@@ -1488,8 +1505,13 @@ export class ZCGameRenderWorld {
         if (!prefab) return;
         const activeIds = this.legendBannerIds;
         activeIds.clear();
+        // 击杀横栏在场时，野怪那条 `monsterClaim` 走 `renderKillBanners`，不再弹旧的大字横幅。
+        const hasKillBanner = this.options.killBannerPrefab !== null && this.options.killBannerPrefab !== undefined;
         for (const reveal of frame.cardReveals) {
-            if (reveal.tier === ZCGameRenderWorld.LEGEND_BANNER_TIER) activeIds.add(reveal.id);
+            if (reveal.tier === ZCGameRenderWorld.LEGEND_BANNER_TIER
+                && !(hasKillBanner && reveal.monsterClaim === true)) {
+                activeIds.add(reveal.id);
+            }
         }
         // 落位上下文每帧重算：人数取模型的在场席位，宽度取全屏层（HUD 根）自己的宽度 ——
         // 换手机分辨率 / 折叠屏展开时层宽会变，横幅格子必须跟着重排。
@@ -1501,6 +1523,7 @@ export class ZCGameRenderWorld {
         }
         for (const reveal of frame.cardReveals) {
             if (reveal.tier !== ZCGameRenderWorld.LEGEND_BANNER_TIER) continue;
+            if (hasKillBanner && reveal.monsterClaim === true) continue;
             let entityId = this.legendBannerEntityBySource.get(reveal.id);
             if (!entityId) {
                 const node = this.pool.acquire('legendBanner', () => instantiate(prefab));
@@ -1552,6 +1575,57 @@ export class ZCGameRenderWorld {
     }
 
     /**
+     * 野怪击杀横栏（挂 `renderDynamic`，与卡牌 / 传说卡横幅同拍）。
+     *
+     * 与 `renderLegendBanners` 的三点不同：
+     *  - 同一时刻只显示一条：取 `monsterClaim` 里 id 最大的那条；模型队列在 1.156s 后自己走完，
+     *    这条横栏没有下一帧就 `active = false` —— 重复击杀会因 id 变大而重新滑入。
+     *  - 单例常驻：不借对象池，节点建好后一直挂在全屏层上（隐藏时留着，省掉每次击杀的实例化）。
+     *  - 落位固定在玩家列表下方（见 `ZCGameKillBannerView`），不需要按人数分格。
+    */
+    renderKillBanners(frame: ZCGameRenderFrame): void {
+        const prefab = this.options.killBannerPrefab;
+        if (!prefab) {
+            if (this.killBannerNode) this.killBannerNode.active = false;
+            return;
+        }
+        let latest: ZCCardReveal | null = null;
+        for (const reveal of frame.cardReveals) {
+            if (reveal.monsterClaim !== true) continue;
+            if (!latest || reveal.id > latest.id) latest = reveal;
+        }
+        if (!latest) {
+            if (this.killBannerNode) this.killBannerNode.active = false;
+            return;
+        }
+        if (!this.killBannerNode) {
+            const node = instantiate(prefab);
+            const layer = this.options.overlayLayer;
+            node.setParent(layer);
+            node.setSiblingIndex(layer.children.length - 1);
+            node.layer = layer.layer;
+            // 位置 / 宽度由 ZCGameKillBannerView.render 每帧写，这里只清掉实例化残留。
+            node.setPosition(Vec3.ZERO);
+            node.setScale(Vec3.ONE);
+            node.name = 'KillBanner';
+            this.killBannerNode = node;
+            // 视图组件在 ZCGameKillBanner.prefab 上，与传说卡横幅同一写法。
+            const view = node.getComponent(ZCGameKillBannerView);
+            view.setOwnerNames(this.options.ownerNames);
+            // 每帧现取头像帧表，头像晚到后 `refreshLegendCardArt` 会让它重画。
+            view.setPortraitResolver((owner) => this.options.presentationArt.legendPortraitFrames.get(owner) ?? null);
+            this.killBannerView = view;
+        }
+        const node = this.killBannerNode;
+        const view = this.killBannerView;
+        if (!node || !view || !view.isValid) return;
+        const transform = this.options.overlayLayer?.getComponent(UITransform);
+        view.setLayout({ viewWidth: transform?.width ?? 0, viewHeight: transform?.height ?? 0 });
+        if (!node.active) node.active = true;
+        view.render(latest, this.visualTime(frame));
+    }
+
+    /**
      * 注入 / 摘除选点阶段的【确认位置】按钮节点。
      *
      * 进 `startSpawnSelection`、出 `finishSpawnSelection` / `shutdown` —— 都是 `ZCGame` 调
@@ -1570,6 +1644,7 @@ export class ZCGameRenderWorld {
         for (const view of this.legendBannerViews.values()) {
             if (view.isValid) view.setArtResolver((item) => this.resolveLegendArt(item));
         }
+        if (this.killBannerView && this.killBannerView.isValid) this.killBannerView.refreshPortrait();
         for (const view of this.cardRevealViews.values()) {
             if (view.isValid) view.invalidateArt();
         }
@@ -1726,6 +1801,10 @@ export class ZCGameRenderWorld {
         // 装饰不是 ECS 实体，下面的遍历收不到，必须显式摘。
         // 棋盘图层容器（`options.board`）与城墙层由调用方持有，随 HUD 一起销毁，这里不碰。
         this.clearDecor();
+        // 击杀横栏是单例常驻节点，不进 ECS 也不进对象池，下面的遍历收不到，必须显式销毁。
+        if (this.killBannerNode && this.killBannerNode.isValid) this.killBannerNode.destroy();
+        this.killBannerNode = null;
+        this.killBannerView = null;
         // 中立资源飞行特效不进 ECS，下面的遍历收不到，必须显式销毁（挂 HUD 根，跨局残留会
         // 在下一局继续用上一局的起点/目标坐标算位移）。
         this.neutralRewardFx.clear();
@@ -1771,7 +1850,7 @@ export class ZCGameRenderWorld {
         this.healthBarTrailHexes.clear();
         this.unitInterpolator.clear();
         this.wallGeometry.clear();
-        this.unitOutlineCopyMaterial?.destroy();
+        if (this.unitOutlineCopyMaterial) this.unitOutlineCopyMaterial.destroy();
     }
 
     private createEntity(kind: ZCRenderEntityKind, sourceId: number, node: Node): number {
@@ -1782,9 +1861,10 @@ export class ZCGameRenderWorld {
     }
 
     private removeEntity(entityId: number): void {
-        const node = this.scene.get(entityId)?.node;
+        const entity = this.scene.get(entityId);
+        const node = entity ? entity.node : null;
         const key = this.pooledEntityKeys.get(entityId);
-        if (node?.isValid) {
+        if (node && node.isValid) {
             if (key !== undefined) this.pool.release(key, node);
             else node.destroy();
         }

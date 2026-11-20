@@ -3,9 +3,11 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import {
+    ZC_EFFECT_BEAM_SPECS,
     ZC_EFFECT_BEHAVIOR_KEYS,
     ZC_EFFECT_BEHAVIOR_SPECS,
     ZC_EFFECT_PATHS,
+    ZC_EFFECT_TRAIL_SPECS,
     zcEffectMissilePathsForUnit,
     zcEffectPathsForBehavior,
     zcWarmupEffectPaths,
@@ -15,7 +17,7 @@ import { buildZCBattleWarmupPaths } from '../assets/script/app/zcds/model/ZCGame
 const ROOT = join(__dirname, '..');
 const FX_DIRECTORY = join(ROOT, 'assets/script/app/zcds/model');
 
-/** 旧实现的手工预热顺序（`buildZCBattleWarmupPaths([],[],[])` 改造前实测 29 条）。*/
+/** 旧实现的手工预热顺序（`buildZCBattleWarmupPaths([],[],[])` 含击杀横栏实测 30 条）。*/
 const EXPECTED_WARMUP = [
     'ui/game/ZCGameHUD',
     'ui/game/ZCGameBoard',
@@ -27,6 +29,7 @@ const EXPECTED_WARMUP = [
     'ui/game/ZCGameFloatText',
     'ui/game/ZCGameCardReveal',
     'ui/game/ZCGameLegendBanner',
+    'ui/game/ZCGameKillBanner',
     'ui/game/ZCGameDecor',
     'units/effects/出生特效/出生特效',
     'units/effects/死亡特效/死亡特效',
@@ -48,36 +51,77 @@ const EXPECTED_WARMUP = [
     'units/projectiles/风法师_龙卷风/风法师_龙卷风',
 ];
 
+/** 改造前 `ZCEffectCatalog` 各语义键对应的字面量路径（快照，不跟着实现改）。*/
+const PATH_LITERALS = {
+    stormEgg: 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风',
+    missileImpact: 'units/projectiles/镭射飞龙_导弹技能命中/镭射飞龙_导弹技能命中',
+    missileBody: 'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能',
+    windHurricane: 'units/projectiles/风法师_龙卷风/风法师_龙卷风',
+    deerGuard: 'units/projectiles/鹿神守护/鹿神守护',
+    bigFist: 'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效',
+    sustainedAura: 'units/projectiles/持续光环伤害效果/持续光环伤害效果',
+    lightningBullet: 'units/projectiles/雷弹攻击/雷弹攻击',
+    chargeDash: 'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋',
+    dashGuard: 'units/projectiles/刀盾兵_护盾/刀盾兵_护盾',
+    nutAttack: 'units/projectiles/巨力坚果_普攻/巨力坚果_普攻',
+    yulinDart: 'units/projectiles/玉林好汉_飞镖普攻/玉林好汉_飞镖普攻',
+    yulinDartEmpowered: 'units/projectiles/玉林好汉_飞镖普攻_强化/玉林好汉_飞镖普攻_强化',
+    clownDart: 'units/projectiles/三叶小丑_普攻/三叶小丑_普攻',
+    axeBlade: 'units/projectiles/斧盾兵_反击气刃/斧盾兵_反击气刃',
+    boxerStrike: 'units/projectiles/消灭学霸_普攻/消灭学霸_普攻',
+    laserAttack: 'units/projectiles/镭射飞龙_普攻/镭射飞龙_普攻',
+    blink: 'units/projectiles/瞬间移动特效/瞬间移动特效',
+    bolt: 'units/projectiles/磁电菇_劈雷技能/磁电菇_劈雷技能',
+    // 2026-11-19 第 23 批：闪电链换【闪电链水墨风】，与落雷分家（快照里也补上这一条）。
+    chainArc: 'units/projectiles/闪电链水墨风/闪电链水墨风',
+    burstImpact: 'units/projectiles/普攻爆炸/普攻爆炸',
+    singleStrike: 'units/projectiles/长戟兵_撕裂/长戟兵_撕裂',
+    splashMissile: 'units/projectiles/子弹_新怪物/通用箭矢',
+    trapSpawn: 'units/projectiles/科学家_陷阱/科学家_陷阱_出现',
+    trapIdle: 'units/projectiles/科学家_陷阱/科学家_陷阱',
+    trapExpire: 'units/projectiles/科学家_陷阱爆炸/科学家_陷阱爆炸',
+    selfAuraFlame: 'units/projectiles/大威天芦_火焰光环/大威天芦_火焰光环',
+    lightningImpact: 'units/projectiles/雷电冲击/雷电冲击',
+    selfAuraFire: 'units/projectiles/麻辣铁锅_喷射火焰/麻辣铁锅_喷射火焰',
+} as const;
+
 /** 行为键 → 目录给出的路径；与改造前每个 `ZC*Fx` 模块的输出逐项一致。*/
 const EXPECTED_BEHAVIOR_PATHS: Readonly<Record<string, readonly string[]>> = {
-    [ZC_EFFECT_BEHAVIOR_KEYS.blinkStrike]: [ZC_EFFECT_PATHS.blink],
-    [ZC_EFFECT_BEHAVIOR_KEYS.boltStrike]: [ZC_EFFECT_PATHS.bolt],
-    [ZC_EFFECT_BEHAVIOR_KEYS.chainDamage]: [ZC_EFFECT_PATHS.bolt],
-    [ZC_EFFECT_BEHAVIOR_KEYS.selfAura]: [ZC_EFFECT_PATHS.sustainedAura],
+    [ZC_EFFECT_BEHAVIOR_KEYS.blinkStrike]: [PATH_LITERALS.blink],
+    [ZC_EFFECT_BEHAVIOR_KEYS.boltStrike]: [PATH_LITERALS.bolt],
+    [ZC_EFFECT_BEHAVIOR_KEYS.chainDamage]: [PATH_LITERALS.chainArc],
+    [ZC_EFFECT_BEHAVIOR_KEYS.selfAura]: [PATH_LITERALS.sustainedAura],
+    //  2026-11-19 蘑菇爆炸 101704：炸开的 prefab 按单位换成了通用爆点
+    //  （`ZCTrapFx.ZC_TRAP_EXPIRE_PREFAB_BY_UNIT`）⇒ 清单多收一条 `burstImpact`。
     [ZC_EFFECT_BEHAVIOR_KEYS.trapPlace]: [
-        ZC_EFFECT_PATHS.trapSpawn, ZC_EFFECT_PATHS.trapIdle, ZC_EFFECT_PATHS.trapExpire,
+        PATH_LITERALS.trapSpawn, PATH_LITERALS.trapIdle, PATH_LITERALS.trapExpire,
+        PATH_LITERALS.burstImpact,
     ],
-    [ZC_EFFECT_BEHAVIOR_KEYS.splashShot]: [ZC_EFFECT_PATHS.splashMissile, ZC_EFFECT_PATHS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.sporeBurst]: [ZC_EFFECT_PATHS.splashMissile, ZC_EFFECT_PATHS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.burstAura]: [ZC_EFFECT_PATHS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.burstKnockback]: [ZC_EFFECT_PATHS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.fanSlow]: [ZC_EFFECT_PATHS.burstImpact],
-    [ZC_EFFECT_BEHAVIOR_KEYS.singleStrike]: [ZC_EFFECT_PATHS.singleStrike],
-    [ZC_EFFECT_BEHAVIOR_KEYS.chargeShield]: [ZC_EFFECT_PATHS.chargeDash, ZC_EFFECT_PATHS.dashGuard],
-    [ZC_EFFECT_BEHAVIOR_KEYS.legacyDash]: [ZC_EFFECT_PATHS.chargeDash, ZC_EFFECT_PATHS.dashGuard],
+    [ZC_EFFECT_BEHAVIOR_KEYS.splashShot]: [PATH_LITERALS.splashMissile, PATH_LITERALS.burstImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.sporeBurst]: [PATH_LITERALS.splashMissile, PATH_LITERALS.burstImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.burstAura]: [PATH_LITERALS.burstImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.burstKnockback]: [PATH_LITERALS.burstImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.fanSlow]: [PATH_LITERALS.burstImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.singleStrike]: [PATH_LITERALS.singleStrike],
+    [ZC_EFFECT_BEHAVIOR_KEYS.chargeShield]: [PATH_LITERALS.chargeDash, PATH_LITERALS.dashGuard],
+    [ZC_EFFECT_BEHAVIOR_KEYS.legacyDash]: [PATH_LITERALS.chargeDash, PATH_LITERALS.dashGuard],
     [ZC_EFFECT_BEHAVIOR_KEYS.windBolt]: [
-        ZC_EFFECT_PATHS.clownDart, ZC_EFFECT_PATHS.windHurricane,
-        ZC_EFFECT_PATHS.missileBody, ZC_EFFECT_PATHS.missileImpact,
+        PATH_LITERALS.clownDart, PATH_LITERALS.windHurricane,
+        PATH_LITERALS.missileBody, PATH_LITERALS.missileImpact,
     ],
     [ZC_EFFECT_BEHAVIOR_KEYS.missileBarrage]: [
-        ZC_EFFECT_PATHS.clownDart, ZC_EFFECT_PATHS.windHurricane,
-        ZC_EFFECT_PATHS.missileBody, ZC_EFFECT_PATHS.missileImpact,
+        PATH_LITERALS.clownDart, PATH_LITERALS.windHurricane,
+        PATH_LITERALS.missileBody, PATH_LITERALS.missileImpact,
     ],
-    [ZC_EFFECT_BEHAVIOR_KEYS.stormZone]: [ZC_EFFECT_PATHS.windHurricane],
-    [ZC_EFFECT_BEHAVIOR_KEYS.rayBeam]: [ZC_EFFECT_PATHS.lightningImpact],
+    [ZC_EFFECT_BEHAVIOR_KEYS.stormZone]: [PATH_LITERALS.windHurricane],
+    [ZC_EFFECT_BEHAVIOR_KEYS.rayBeam]: [PATH_LITERALS.lightningImpact],
 };
 
-test('预热路径保持改造前的 29 条集合与顺序', () => {
+test('路径语义键的字面量保持改造前快照', () => {
+    assert.deepEqual(ZC_EFFECT_PATHS, PATH_LITERALS);
+});
+
+test('预热路径保持 30 条集合与顺序（含击杀横栏）', () => {
     assert.deepEqual(buildZCBattleWarmupPaths([], [], []), EXPECTED_WARMUP);
 });
 
@@ -134,6 +178,26 @@ test('68013 同时带 wind_bolt 与 missile_barrage 时只收四条唯一路径'
         ZC_EFFECT_PATHS.clownDart, ZC_EFFECT_PATHS.windHurricane,
         ZC_EFFECT_PATHS.missileBody, ZC_EFFECT_PATHS.missileImpact,
     ]);
+});
+
+test('弹道拖尾与光束数值仍与改造前逐项一致', () => {
+    assert.deepEqual(ZC_EFFECT_TRAIL_SPECS[ZC_EFFECT_PATHS.missileBody], {
+        startX: -26, length: 100, rootHalfWidth: 20, tipHalfWidth: 2,
+        slices: 12, color: [255, 255, 255], alpha: 0.62,
+    });
+    //  2026-11-19 第二轮：用户「三角形拖尾要保留」⇒ 恢复登记；宿主 0.35，本地值 = 屏上 ÷ 0.35。
+    assert.deepEqual(ZC_EFFECT_TRAIL_SPECS[ZC_EFFECT_PATHS.lightningBullet], {
+        startX: -57.142857, length: 157.142857,
+        rootHalfWidth: 22.857143, tipHalfWidth: 2.857143,
+        slices: 12, color: [255, 255, 255], alpha: 0.6,
+    });
+    assert.deepEqual(ZC_EFFECT_BEAM_SPECS[ZC_EFFECT_PATHS.laserAttack], {
+        muzzleForward: 8, muzzleLift: 44,
+        contentStart: 72 / 700, contentEnd: 628 / 700,
+        widthScale: 0.8, coreWidth: 10, tailLift: 30,
+        widthMultiplierBySkill: { 30845: 1.3 },
+        overShootBySkill: { 30845: 1620 },
+    });
 });
 
 test('Fx facade 文件不再自带路径字面量，路径统一由目录提供', () => {

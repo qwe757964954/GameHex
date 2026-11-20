@@ -8,6 +8,7 @@ import { createControllerContext } from './helpers/controller-context';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../assets/script/framework/ui/ViewLifecycle';
 import { GuideEvent, reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { GUIDE_TEXTS } from '../assets/script/app/guide/GuideTexts';
 import { TerritoryUiEvent } from '../assets/script/app/territory/application/TerritoryEvents';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -118,7 +119,9 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         TerritoryChestOpenPage: { TerritoryChestOpenPage },
         HeroObtainPage: { HeroObtainPage },
         TerritoryEvents: { TerritoryUiEvent },
-        // 8-1 完成时的系统提示（「引导完成，获得奖励」）：只记文案，不建节点。
+        // 8-1 完成时的系统提示（「新手引导完成，获得奖励」）：只记文案，不建节点。
+        // 用真常量而不是抄一份字符串 —— 文案改在 `GuideTexts` 里，这里跟着走。
+        GuideTexts: { GUIDE_TEXTS },
         Toast: { Toast },
     };
     const exports: Record<string, any> = {};
@@ -191,7 +194,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     if (page === 'territory' && mapReady) {
         setImmediate(() => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: territoryView, phase: 'presented' }));
     }
-    return { composition, anchors, notifications, revealedCards, scrollLocks, cardTab, territoryTab, mapTile, levelBubble, ShowRewardPage, firstReward,
+    return { composition, anchors, notifications, revealedCards, scrollLocks, cardTab, territoryTab, mapTile, levelBubble, ShowRewardPage, HeroObtainPage, firstReward,
         navBar, topHud, bottomHud, beginGame, gmButton, entryBar, mainTaskEntry,
         taskRefreshes: () => taskRefreshes,
         taskGuideUnlocked: () => FakeMainTaskEntry.guideUnlocked,
@@ -369,6 +372,19 @@ const REWARD_HOLD_STATE = { stepId: '8-1', finished: false, focusNode: 'Main/Tas
     completeCond: 'pageOpened:task', dialogId: 'D11' };
 const presenting = (playing: boolean) => EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { playing });
 
+/**
+ * 模拟「奖励领取弹窗」（`FW.ShowReward` 的 `ShowRewardPage`）开 / 关。
+ *
+ * 组合层就是按 `VIEW_LIFECYCLE` 维护那几个集合的（`enabled` 加、`destroyed`/`disabled` 删），
+ * 所以这里走真事件、不直接改集合 —— 顺带钉住「弹窗生命周期必须能驱动引导层的显隐」。
+ */
+const openRewardPopup = (f: ReturnType<typeof fixture>): object => {
+    const popup = new f.ShowRewardPage();
+    EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup as object, phase: 'enabled' });
+    return popup;
+};
+const closeRewardPopup = (popup: object) => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'destroyed' });
+
 test('8-1 要等翻地的奖励粒子动画播完才出场（演出窗口开→关之后）', async () => {
     const f = fixture(false, false, 'territory');
     try {
@@ -414,17 +430,77 @@ test('那一格没给奖励（演出窗口一直没开）时，兜底计时到�
     assert.equal(f.pendingTimers(), 0, '销毁后不许留悬挂计时');
 });
 
-test('8-1 报「打开主线任务」那一下弹【引导完成，获得奖励】，引导走完后再开面板不弹', async () => {
+// 2026-11-19：翻地那一格除了粒子，还会弹「奖励领取」弹窗（固定格 / 随机格的第一格走
+// `{ popup: true }` ⇒ `FW.ShowReward`；宝箱链路先过英雄页）。粒子演完 ≠ 奖励看完。
+test('8-1 要等奖励领取弹窗关掉才出场（粒子演完、弹窗还开着 → 继续等）', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.render(REWARD_HOLD_STATE);
+        assert.equal(f.counts().rendered, 0);
+        presenting(true);
+        const popup = openRewardPopup(f);
+        assert.equal(f.counts().rendered, 0, '弹窗一开就接管画面，引导层让位');
+        // 统一奖励弹窗 `enabled` 时领地页那一手 `ChestPresentation` 就收了（粒子那一段结束）。
+        presenting(false);
+        assert.equal(f.counts().rendered, 0, '还有弹窗开着 ⇒ 8-1 不许在弹窗底下开口');
+        closeRewardPopup(popup);
+        assert.equal(f.counts().rendered, 1, '弹窗关掉才出场');
+        assert.equal(f.renderedFocus(), 'Main/TaskEntry');
+        assert.equal(f.pendingTimers(), 0, '放行之后兜底计时必须摘掉');
+    } finally { f.composition.dispose(); }
+});
+
+test('固定格宝箱那条链（粒子 → 获得英雄 → 统一奖励）全程按住，最后一个弹窗关掉才出场', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.render(REWARD_HOLD_STATE);
+        presenting(true);
+        // 开箱粒子演完 ⇒ 交组合层弹「获得英雄」，这一拍 `ChestPresentation` 仍是开着。
+        const hero = new f.HeroObtainPage();
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: hero as object, phase: 'enabled' });
+        assert.equal(f.counts().rendered, 0, '英雄页也是奖励页，同样要等');
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: hero as object, phase: 'destroyed' });
+        assert.equal(f.counts().rendered, 0, '英雄页关了不等于看完了 —— 后面还有统一奖励弹窗');
+        // 统一奖励弹窗上台 ⇒ 领地页收窗；它关掉，整段才算走完。
+        const reward = openRewardPopup(f);
+        presenting(false);
+        assert.equal(f.counts().rendered, 0);
+        closeRewardPopup(reward);
+        assert.equal(f.counts().rendered, 1, '最后一个弹窗关掉才出场');
+        assert.equal(f.renderedFocus(), 'Main/TaskEntry');
+    } finally { f.composition.dispose(); }
+});
+
+test('奖励弹窗开着时兜底计时不许挂（2.6s 到点会把 8-1 放到弹窗底下）', async () => {
+    const f = fixture(false, false, 'territory');
+    try {
+        await tick();
+        f.render(REWARD_HOLD_STATE);
+        assert.equal(f.pendingTimers(), 1, '还没动静 ⇒ 挂着兜底');
+        const popup = openRewardPopup(f);
+        assert.equal(f.pendingTimers(), 0, '弹窗一开就把兜底摘掉 —— 玩家可能看十几秒');
+        f.runTimers();
+        assert.equal(f.counts().rendered, 0, '摘掉的兜底不许还能把这一步放出来');
+        closeRewardPopup(popup);
+        assert.equal(f.counts().rendered, 1);
+    } finally { f.composition.dispose(); }
+    assert.equal(f.pendingTimers(), 0, '销毁后不许留悬挂计时');
+});
+
+test('8-1 报「打开主线任务」那一下弹【新手引导完成，获得奖励】，引导走完后再开面板不弹', async () => {
     const f = fixture(false, false, 'territory');
     try {
         await tick();
         f.render(REWARD_HOLD_STATE);
         reportGuideComplete('pageOpened', 'task');
-        assert.deepEqual(f.toasts(), ['引导完成，获得奖励']);
+        assert.deepEqual(f.toasts(), [GUIDE_TEXTS.finishRewardTip]);
+        assert.equal(GUIDE_TEXTS.finishRewardTip, '新手引导完成，获得奖励');
         // 引导已结束：`MainTaskDetailPage.onOpen` 之后每次开面板都会再报一次，不许每次都弹。
         f.render({ stepId: '', finished: true, focusNode: '', completeCond: '' });
         reportGuideComplete('pageOpened', 'task');
-        assert.deepEqual(f.toasts(), ['引导完成，获得奖励'], '引导走完后再开任务面板不许再弹');
+        assert.deepEqual(f.toasts(), [GUIDE_TEXTS.finishRewardTip], '引导走完后再开任务面板不许再弹');
     } finally { f.composition.dispose(); }
 });
 

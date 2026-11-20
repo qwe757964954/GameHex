@@ -39,6 +39,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     needLoading = true;
     allowRetry = true;
     canSend: (() => boolean) | null = null;
+    formatServerTip: ((text: string) => string) | null = null;
 
     destroy() {
         this.cancel();
@@ -54,6 +55,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         this.reject = null;
         this.needLoading = null
         this.canSend = null;
+        this.formatServerTip = null;
         // this.reqMsg = null
     }
 
@@ -70,6 +72,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
         this.cancelled = false;
         this.allowRetry = reqMsg.allowRetry;
         this.canSend = reqMsg.canSend;
+        this.formatServerTip = reqMsg.formatServerTip;
         reqMsg.canSend = null;
         let callback = reqMsg.fCallback;
         let errorCallback = reqMsg.fErrorCallback;
@@ -85,6 +88,7 @@ export class NetworkRequest<CmdReqMsg, CmdRspMsg> extends ScriptObject {
             callback = null;
             errorCallback = null;
             caller = null;
+            this.formatServerTip = null;
             this.cancelCallback = null;
             const stop = stopOwner;
             stopOwner = null;

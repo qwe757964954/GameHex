@@ -16,10 +16,12 @@
 
 1. 使用 Cocos Creator **3.8.8** 打开 `D:\City1001\Demo3.8`。
 2. 等待首次资源导入完成。
-3. 打开 `assets/Root.scene`（工程唯一场景，也是各平台构建配置的 `startScene`）。
-4. 点击预览运行。
+3. 打开 `assets/Root.scene`（正常游戏入口；各平台构建配置的 `startScene` 仍是它）。
+4. 点击预览运行。预览起始场景是 `assets/TestKapai.scene`（卡牌 / 技能验证台），要回到正常流程时在控制台执行 `cc.director.loadScene('Root')`。
 
-启动链由 `Root.scene` 进入 3.8 原生登录页；线上登录成功或点击“离线试玩”后进入 `assets/script/app/zcds/ZCGame.ts`。无需在编辑器里重新挂脚本。
+游戏启动链由 `Root.scene` 进入 3.8 原生登录页；线上登录成功或点击“离线试玩”后进入 `assets/script/app/zcds/ZCGame.ts`。无需在编辑器里重新挂脚本。
+
+预览起始场景单独存放在 `profiles/v2/packages/preview.json` 的 `general.start_scene`，当前指向 `assets/TestKapai.scene`（卡牌 / 技能验证台）。它只影响预览从哪个场景启动，不改变上面的游戏启动链。
 
 编辑器预览时，浏览器会受到旧后台 CORS 策略限制。另开一个终端运行下面的本地代理即可读取真实配置和服务器列表：
 
@@ -54,6 +56,7 @@ assets/script/app/login/
 assets/resources/subproto/  # 从 client 同步的完整业务协议与缓存描述
 
 # 启动入口见「运行」：assets/Root.scene → 登录页 → ZCGame.ts（工程内无 Test.scene / UIDemo.ts）
+# assets/TestKapai.scene 是预览起始的卡牌 / 技能验证台，数值取自 pvpCard / pvpSkill / pvpGlobal
 tests/zcds-model.test.ts      # 核心玩法单元测试
 ```
 

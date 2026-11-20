@@ -142,9 +142,17 @@ export class TerritoryChestOpenPage extends PopupBase {
 
         const tables = await loadRewardGoodsTables(this.configs);
         if (!context || context.cancelled) return;
-        const entries = sortRewardEntries(goods.map((one) => rewardEntryOf(one, tables.items, tables.resources)));
+        const rawEntries: ReturnType<typeof rewardEntryOf>[] = [];
+        for (let i = 0; i < goods.length; i++) {
+            rawEntries.push(rewardEntryOf(goods[i], tables.items, tables.resources));
+        }
+        const entries = sortRewardEntries(rawEntries);
         const frames = await this.loadCardFrames(entries);
-        const icons = await Promise.all(entries.map((entry) => this.loadIcon(entry)));
+        const iconPromises: Promise<SpriteFrame | null>[] = [];
+        for (let i = 0; i < entries.length; i++) {
+            iconPromises.push(this.loadIcon(entries[i]));
+        }
+        const icons = await Promise.all(iconPromises);
         if (!context || context.cancelled) return;
         // 等一帧让根节点的 cc.Widget 生效，卡片区缩放兜底要用到真实屏高。
         if (!(await this.nextPopupFrame())) return;

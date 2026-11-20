@@ -13,19 +13,19 @@ import { TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
  */
 
 /** 页面与面板底色（暖棕木质，对齐阵容页风格）。 */
-export const TERRITORY_COLORS = {
-    page: new Color(46, 32, 22, 255),
-    panel: new Color(74, 54, 38, 248),
-    panelLight: new Color(92, 70, 48, 255),
-    gold: new Color(245, 201, 92, 255),
-    cream: new Color(238, 235, 214, 255),
-    muted: new Color(196, 181, 160, 255),
-    available: new Color(74, 138, 92, 255),
-    owned: new Color(122, 158, 78, 255),
+export const TERRITORY_COLORS = Object.freeze({
+    page: Object.freeze(new Color(46, 32, 22, 255)),
+    panel: Object.freeze(new Color(74, 54, 38, 248)),
+    panelLight: Object.freeze(new Color(92, 70, 48, 255)),
+    gold: Object.freeze(new Color(245, 201, 92, 255)),
+    cream: Object.freeze(new Color(238, 235, 214, 255)),
+    muted: Object.freeze(new Color(196, 181, 160, 255)),
+    available: Object.freeze(new Color(74, 138, 92, 255)),
+    owned: Object.freeze(new Color(122, 158, 78, 255)),
     /** 已通关（奖励已领完、没有奖励可领取）的站点底条色：区别于「可领取 available」与「已占领 owned」。 */
-    cleared: new Color(43, 160, 110, 255),
-    exploring: new Color(201, 138, 61, 255),
-    danger: new Color(160, 67, 57, 255),
+    cleared: Object.freeze(new Color(43, 160, 110, 255)),
+    exploring: Object.freeze(new Color(201, 138, 61, 255)),
+    danger: Object.freeze(new Color(160, 67, 57, 255)),
     /**
      * 「解锁状态」的底条色 —— **红**（定：「关卡的解锁状态 用红色」，
      * 口径 = **所有站点类型**的不可解锁态：关卡 / 首领 / 资源点 / 异步PVP / 奖励点 / 随机格）。
@@ -33,14 +33,14 @@ export const TERRITORY_COLORS = {
      * 与下面的 `randomConditionText` **同值** `230,30,24` —— 同一个「条件不满足」语义：
      * 底条是这个红、条上的银币消耗文字也是这个红。改一处要记得改另一处。
      */
-    locked: new Color(230, 30, 24, 255),
+    locked: Object.freeze(new Color(230, 30, 24, 255)),
     /**
      * 「已解锁但策划还没绑关卡」的据点底条色 —— **不跟着 `locked` 变红**。
      *
      * 它不是「没解锁」（格子已经开了），缺的是**配置**；用中性灰棕跟真正的「不可解锁」区分开，
      * 否则满屏红会把「还差条件」和「待配表」混成一件事。
      */
-    unbound: new Color(107, 93, 79, 255),
+    unbound: Object.freeze(new Color(107, 93, 79, 255)),
     /**
      * 「条件不满足 / 资源不够」的**数字文字色**（红）。
      *
@@ -49,14 +49,25 @@ export const TERRITORY_COLORS = {
      * · 宝箱气泡里的**体力**消耗数字（体力不够时，`ITerritoryStationRender.levelBubbleTextColor`）。
      * 判据统一走 `model/TerritoryCostShortfall`（两项各判各的，别在这里按 `isOpenable` 一刀切）。
      */
-    randomConditionText: new Color(230, 30, 24, 255),
-    randomAvailableText: new Color(255, 255, 255, 255),
+    randomConditionText: Object.freeze(new Color(230, 30, 24, 255)),
+    randomAvailableText: Object.freeze(new Color(255, 255, 255, 255)),
     // 原来的三个**格子底色** `mapNeutral / mapOwned / mapTarget`（米 / 绿 / 金）已于
     // 删除：地图底色改成两张成品美术图二选一（未通关 `img_land_02` 泥土块 /
     // 已通关 `img_land_01` 草地块），不再靠染色区分状态 —— 成品图自带明暗，再乘色会发脏。
     // 状态表达交给「哪张地皮 + 哪个格面框」，见 `TerritoryMapView.paintHexes`。
-    mapLabelText: new Color(62, 43, 30, 255),
-} as const;
+    mapLabelText: Object.freeze(new Color(62, 43, 30, 255)),
+});
+
+/** 弹窗与通用控件复用色彩 Token（纯常量单例，避免重复 new Color）。 */
+export const TERRITORY_THEME_TOKENS = Object.freeze({
+    dotOn: Object.freeze(new Color(58, 36, 16, 255)),
+    buttonDim: Object.freeze(new Color(120, 118, 112, 255)),
+    guardLockedDim: Object.freeze(new Color(255, 255, 255, 96)),
+});
+
+const UNBOUND_PVP_TINT = Object.freeze(new Color(148, 92, 60, 255));
+const UNBOUND_RESOURCE_TINT = Object.freeze(new Color(167, 126, 46, 255));
+const UNBOUND_BONUS_TINT = Object.freeze(new Color(190, 140, 70, 255));
 
 /** 站点底条颜色。 */
 export function territoryStationTint(state: TerritorySiteState): Color {
@@ -76,10 +87,10 @@ export function territoryBossTint(): Color {
 /** 「地图上有格子、但策划还没绑定关卡」的据点：按据点类型给色，好一眼认出是哪一类待补。 */
 export function territoryUnboundTint(type: TerritorySiteType): Color {
     switch (type) {
-        case TERRITORY_SITE_TYPE.asyncPvp: return new Color(148, 92, 60, 255);
+        case TERRITORY_SITE_TYPE.asyncPvp: return UNBOUND_PVP_TINT;
         case TERRITORY_SITE_TYPE.fixedResource:
-        case TERRITORY_SITE_TYPE.patrolChest: return new Color(167, 126, 46, 255);
-        case TERRITORY_SITE_TYPE.bonus: return new Color(190, 140, 70, 255);
+        case TERRITORY_SITE_TYPE.patrolChest: return UNBOUND_RESOURCE_TINT;
+        case TERRITORY_SITE_TYPE.bonus: return UNBOUND_BONUS_TINT;
         default: return TERRITORY_COLORS.unbound;
     }
 }

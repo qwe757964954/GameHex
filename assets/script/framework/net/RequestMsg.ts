@@ -19,6 +19,8 @@ export class RequestMsg<CmdReqMsg, CmdRspMsg> extends ScriptObject {
     public allowRetry = true;
     /** 实际出队前检查请求所属会话与有效期。 */
     public canSend: (() => boolean) | null = null;
+    /** 将服务端提示转换为本请求的界面用语。 */
+    public readonly formatServerTip: ((text: string) => string) | null = null;
     constructor(cmdReqMsg: CmdReqMsg | ProtoInput<CmdReqMsg>, caller?: object, fCallback?: (rsp: CmdRspMsg) => void, fErrorCallback?: Function) {
         super();
         this.cmdReqMsg = cmdReqMsg

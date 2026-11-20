@@ -87,10 +87,22 @@ export class TerritoryProgress {
             if (!validCell(exploration?.cellId)
                 || this.owned.has(exploration.cellId)
                 || this.disabled.has(exploration.cellId)) continue;
-            const cells = (exploration.cells ?? []).filter(validCell);
-            if (!cells.length) continue;
-            if (cells.some((cell) => this.owned.has(cell) || this.disabled.has(cell))) continue;
-            this.explorations.set(exploration.cellId, { ...exploration, cells: Array.from(new Set(cells)) });
+            const rawCells = exploration.cells;
+            if (!rawCells || rawCells.length === 0) continue;
+            const validSet = new Set<number>();
+            let conflict = false;
+            for (let i = 0; i < rawCells.length; i++) {
+                const cell = rawCells[i];
+                if (validCell(cell)) {
+                    if (this.owned.has(cell) || this.disabled.has(cell)) {
+                        conflict = true;
+                        break;
+                    }
+                    validSet.add(cell);
+                }
+            }
+            if (conflict || validSet.size === 0) continue;
+            this.explorations.set(exploration.cellId, { ...exploration, cells: Array.from(validSet) });
         }
     }
 
@@ -288,7 +300,16 @@ export class TerritoryProgress {
         const { byCell, byConfig } = this.areaIndex();
         const configId = byCell.get(cellId);
         if (configId === undefined) return [];
-        return (byConfig.get(configId) ?? []).filter((peer) => peer !== cellId);
+        const peers = byConfig.get(configId);
+        if (!peers || peers.length === 0) return [];
+        const result: number[] = [];
+        for (let i = 0; i < peers.length; i++) {
+            const peer = peers[i];
+            if (peer !== cellId) {
+                result.push(peer);
+            }
+        }
+        return result;
     }
 
     /**
@@ -362,11 +383,17 @@ export class TerritoryProgress {
         if (this.isExploringCell(cellId)) return { ok: false, reason: TERRITORY_TEXTS.cellExploring };
         const site = this.siteForCell(cellId);
         const cells = site ? Array.from(new Set(site.footprint)) : [cellId];
-        if (cells.some((cell) => this.owned.has(cell))) {
-            return { ok: false, reason: TERRITORY_TEXTS.footprintAlreadyOwned };
+        for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i];
+            if (this.owned.has(cell)) {
+                return { ok: false, reason: TERRITORY_TEXTS.footprintAlreadyOwned };
+            }
         }
-        if (cells.some((cell) => this.disabled.has(cell) || this.isExploringCell(cell))) {
-            return { ok: false, reason: TERRITORY_TEXTS.footprintLocked };
+        for (let i = 0; i < cells.length; i++) {
+            const cell = cells[i];
+            if (this.disabled.has(cell) || this.isExploringCell(cell)) {
+                return { ok: false, reason: TERRITORY_TEXTS.footprintLocked };
+            }
         }
         const unlock = site?.unlock ?? this.map.defaults;
         if (this.prerequisiteBlockers(cellId).length) {
@@ -424,15 +451,20 @@ export class TerritoryProgress {
     }
 
     toJSON(): TerritoryProgressData {
+        const explorations: TerritoryActiveExploration[] = [];
+        for (let i = 0; i < this.activeExplorations.length; i++) {
+            const item = this.activeExplorations[i];
+            explorations.push({
+                ...item,
+                cells: Array.from(item.cells),
+            });
+        }
         return {
             ownedCells: Array.from(this.ownedCells),
             unlockedCells: Array.from(this.unlockedCells),
             disabledCells: Array.from(this.disabledCells),
             pendingPassCells: Array.from(this.pendingPassCells),
-            explorations: this.activeExplorations.map((item) => ({
-                ...item,
-                cells: Array.from(item.cells),
-            })),
+            explorations,
         };
     }
 
@@ -471,7 +503,18 @@ export class TerritoryProgress {
     prerequisiteBlockers(cellId: number): number[] {
         const site = this.siteForCell(cellId);
         const required = site?.unlock?.requiredCells ?? this.map.defaults.requiredCells ?? [];
-        return Array.from(new Set(required)).filter((cell) => !this.isPrerequisiteComplete(cell));
+        const seen = new Set<number>();
+        const blockers: number[] = [];
+        for (let i = 0; i < required.length; i++) {
+            const cell = required[i];
+            if (!seen.has(cell)) {
+                seen.add(cell);
+                if (!this.isPrerequisiteComplete(cell)) {
+                    blockers.push(cell);
+                }
+            }
+        }
+        return blockers;
     }
 
     /**
@@ -537,16 +580,7 @@ export class TerritoryProgress {
         if (site && (site.type === TERRITORY_SITE_TYPE.stage || site.type === TERRITORY_SITE_TYPE.boss || site.type === TERRITORY_SITE_TYPE.asyncPvp)) {
             return this.isAreaPassed(site.cellId);
         }
-        // 关卡前置**改走区域口径**（同 `configId` 任一格 owned 即算完成），
-        // 与显示侧 `isAreaPassed` 对齐。
-        //
-        // 之前这里是严格 `owned.has(cellId)`，而显示是区域共享 ⇒ 两套口径：
-        // 玩家看到 327/328（configId=10001）整片绿「已通关」，点 cellId 309 却弹
-        // 「前置领地尚未占领」且**一个协议都不发**（真机实证）。
-        // 而且 328 才有建筑、玩家只点 328 ⇒ 327 永远拿不到 owned ⇒ 不改就是死锁。
-        //
-        // 只对 stage/boss/asyncPvp 生效：fixedResource 是上一行那条「解锁即完成」的特例，
-        // 两者别混成一条（fixedResource 同 configId 有多格，绝不能区域共享）。
+        // 关卡前置遵循区域口径（同 configId 任一格 owned 即算完成），与显示侧 isAreaPassed 对齐。
         return false;
     }
 

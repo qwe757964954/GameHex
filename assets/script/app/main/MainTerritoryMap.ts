@@ -127,10 +127,13 @@ import { LevelInfoPanel } from './LevelInfoPanel';
 import type { ILevelInfoContent } from './LevelInfoPanel';
 import { LevelTipPanel } from './LevelTipPanel';
 import type { ILevelTipContent, ILevelTipEnemy } from './LevelTipPanel';
+import { TerritoryMonsterBoxPanel } from '../territory/view/TerritoryMonsterBoxPanel';
+import type { ITerritoryMonsterBoxContent } from '../territory/view/TerritoryMonsterBoxPanel';
 import type {
     ITerritoryDetailState,
     ITerritoryLevelInfoContent,
     ITerritoryLevelTipContent,
+    ITerritoryMonsterBoxDetail,
     ITerritoryNavigateBattlePayload,
     ITerritoryPlayerStageContent,
     ITerritoryShowRewardsPayload,
@@ -348,6 +351,9 @@ export class MainTerritoryMap extends Component {
      * 再单独 load 一次是白发一次请求。`null` = 图没加载到 ⇒ 弹窗只藏图标、数字照常。
      */
     private staminaIcon: SpriteFrame | null = null;
+    /** 巡逻宝箱详情：模型图（按等级 1~4）与银币消耗图标；缺图只让对应块不显示，不阻断弹窗。 */
+    private monsterBoxChestIcons = new Map<number, SpriteFrame>();
+    private monsterBoxCostIcon: SpriteFrame | null = null;
     private state: ITerritoryRenderState | null = null;
     private lastRenderedChapter = -1;
     /**
@@ -482,6 +488,7 @@ export class MainTerritoryMap extends Component {
         void this.loadHexFlipAssets();
         void this.loadResourceGainIcons();
         void this.loadChestArt();
+        void this.loadMonsterBoxArt();
         void this.loadCloudArt();
     }
 
@@ -683,7 +690,7 @@ export class MainTerritoryMap extends Component {
         this.heroBadge = null;
         // 飞舞奖励图标的顶层宿主挂在 `MainRoot`（本页之外），由视图建、由视图收：
         // 页面只负责通知，不自己搭 UI（架构守卫禁止 `new Node` / `addComponent`）。
-        this.mapView.disposeRewardFxLayer();
+        this.mapView?.disposeRewardFxLayer();
         this.heroProgressSource = null;
         this.mapView.setHeroRewardLandedHandler(null);
         EventMgr.instance.emit(TerritoryUiEvent.Disposed);
@@ -696,6 +703,7 @@ export class MainTerritoryMap extends Component {
         this.endChestPresentation();
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
+        this.closePopup(TerritoryMonsterBoxPanel);
         EventMgr.instance.offTarget(this);
         this.battleReady = null;
         // 开箱表演正在播 ⇒ 收起（`stop` 不回调结算；页面都要没了，结算已由 Controller 落库）。
@@ -746,6 +754,7 @@ export class MainTerritoryMap extends Component {
         // 弹窗挂在全局 PopupManager 下，必须在战斗流程接手时主动收起。
         this.closePopup(LevelTipPanel);
         this.closePopup(LevelInfoPanel);
+        this.closePopup(TerritoryMonsterBoxPanel);
         // 一次开战只跳一次：过场 / 前奏已经拿到去向之后再来一条 navigate
         //（服务端推送 / 迟到回包）一律丢弃。
         // 🔴 别把「过场是否已经起演」当这道判据：`onSetBusy` 在**开战请求在途**时
@@ -947,7 +956,7 @@ export class MainTerritoryMap extends Component {
         this.closeBattleIntroPopups();
         // 前奏两段都不许再点：推镜自己会锁输入，地块生成那 0.7s 没有镜头动画，
         // 只靠 `setInputLocked` 会被下一帧的自动解锁放掉 ⇒ 用前奏那把锁。
-        this.mapView.setPreludeLock(true);
+        this.mapView?.setPreludeLock(true);
         this.battlePrelude = { stage: 'spawn', elapsed: 0, payload, seenSpawn: false };
     }
 
@@ -979,7 +988,7 @@ export class MainTerritoryMap extends Component {
         const nav: ITerritoryBattleIntroNav = { route: 'battle', payload: prelude.payload };
         this.battlePrelude = null;
         // 前奏这把锁交给过场：`beginBattleIntro` 自己会 `setInputLocked(true)`。
-        this.mapView.setPreludeLock(false);
+        this.mapView?.setPreludeLock(false);
         if (this.startBattleIntro()) {
             this.releaseBattleIntro(nav);
             return;
@@ -1101,7 +1110,7 @@ export class MainTerritoryMap extends Component {
     private abortBattlePrelude(): void {
         if (!this.battlePrelude) return;
         this.battlePrelude = null;
-        this.mapView.setPreludeLock(false);
+        this.mapView?.setPreludeLock(false);
     }
 
     private onShowRewards(payload: ITerritoryShowRewardsPayload): void {
@@ -1223,7 +1232,7 @@ export class MainTerritoryMap extends Component {
         //    换图这件事不能因为"过场在演"之类的分支被跳过）。
         if (this.chapterSwapPending) {
             // ①-a 整章云散（章节通过动画）还在演 ⇒ 一帧都不许动地图。
-            if (this.mapView.chapterClearPlaying) return;
+            if (this.mapView?.chapterClearPlaying) return;
             const followup = this.chapterClearSwitch;
             if (followup) {
                 // ①-b 云散演完 ⇒ 接着起「相机上移、新章居中」的切换转场。
@@ -1344,9 +1353,10 @@ export class MainTerritoryMap extends Component {
      */
     private startBattleIntro(): boolean {
         if (this.battleIntro) return true;
-        if (!this.mapView.isValid) return false;
+        const mapView = this.mapView;
+        if (!mapView || !mapView.isValid) return false;
         // 地图那半先起手（它会量基准、锁输入、建雾盖层）；失败就整个过场不做。
-        if (!this.mapView.beginBattleIntro()) return false;
+        if (!mapView.beginBattleIntro()) return false;
         // 用户 2026-11-02：「从弹窗这部分走过程需要先关闭弹窗，再播放过场动画」。
         // 弹窗不关，`out`（UI 推出 + 雾合拢）整段都在它后面 —— 玩家只看得见最后那点雾散。
         // 位置在 `beginBattleIntro()` **之后**：播不了时别白关玩家正在看的弹窗。
@@ -1387,6 +1397,7 @@ export class MainTerritoryMap extends Component {
         this.sendIntent({ kind: 'keepBattleRequest' });
         this.closePopup(LevelInfoPanel);
         this.closePopup(LevelTipPanel);
+        this.closePopup(TerritoryMonsterBoxPanel);
         // 玩家关卡面板不是 `PopupBase`（自带 `isOpen` / `close()`），单独关。
         if (this.playerStagePanel?.isOpen) this.playerStagePanel.close();
     }
@@ -1575,7 +1586,7 @@ export class MainTerritoryMap extends Component {
                 return;
             }
             // 非首通的换章也要让整章云散演完（旧口径，`syncGrid` 会 reset 掉云）。
-            if (this.mapView.chapterClearPlaying) {
+            if (this.mapView?.chapterClearPlaying) {
                 this.chapterSwapPending = true;
                 return;
             }
@@ -1602,6 +1613,9 @@ export class MainTerritoryMap extends Component {
             layout: state.layout,
             art: state.art,
             monsterPatrols: state.monsterPatrols,
+            // 巡逻宝箱怪「未挑战成功」与关卡地块同形（2026-11-19）：
+            // 红框 / 地皮 / 怪物暗色红描边共用的那份「整片已通过」集合。
+            patrolPassedCells: state.patrolPassedCells,
             progress: state.progress,
             revealedCells: state.revealedCells,
             // 提前披露的格（2026-11-09）：视图据此给还没激活的关卡建筑画 35% 虚影。
@@ -1638,12 +1652,83 @@ export class MainTerritoryMap extends Component {
     }
 
     /**
-     * 弹窗分发：**异步据点走「玩家关卡」，关卡 / 首领走「关卡界面」（+ 关卡提示）**。
+     * 巡逻宝箱详情要用的图：模型 `image/main/chest/boxLevel{1..4}` + 银币图标。
+     *
+     * 与 `loadChestArt` 同口径：**缺图不阻断**（模型缺就只不画宝箱，弹窗照开）；
+     * 加载完如果弹窗已经开着，补刷一次内容（`applyContent` 幂等）。
+     */
+    private async loadMonsterBoxArt(): Promise<void> {
+        const chests = new Map<number, SpriteFrame>();
+        for (let lv = 1; lv <= 4; lv += 1) {
+            try {
+                chests.set(lv, await this.assets.load(`image/main/chest/boxLevel${lv}/spriteFrame`, SpriteFrame));
+            } catch {
+                // 缺图 ⇒ 该等级不画模型
+            }
+        }
+        let cost: SpriteFrame | null = null;
+        try {
+            cost = await this.assets.load(spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_联盟银币'), SpriteFrame);
+        } catch {
+            cost = null;
+        }
+        if (!this.isValid) return;
+        this.monsterBoxChestIcons = chests;
+        this.monsterBoxCostIcon = cost;
+        const opened = PopupManager.inst.get(TerritoryMonsterBoxPanel);
+        const detail = this.state?.detail.monsterBox;
+        if (opened && detail) opened.applyContent(this.monsterBoxContentOf(detail));
+    }
+
+    /** Model 的纯数据 → 面板内容（这里只补图标；缺的字段由面板自己收起来）。 */
+    private monsterBoxContentOf(detail: ITerritoryMonsterBoxDetail): ITerritoryMonsterBoxContent {
+        return {
+            cellId: detail.cellId,
+            title: detail.title,
+            lv: detail.lv,
+            maxLv: detail.maxLv,
+            chestIcon: this.monsterBoxChestIcons.get(detail.lv) ?? null,
+            guards: detail.guards.map(guard => ({
+                icon: null,
+                unlocked: guard.unlocked,
+                unlockText: guard.unlockText,
+            })),
+            rewards: detail.rewards.map(reward => ({
+                resId: reward.resId,
+                amount: reward.amount,
+                amountText: reward.amountText,
+                ratePercent: reward.ratePercent,
+            })),
+            upgradeCost: detail.upgradeCost,
+            costIcon: this.monsterBoxCostIcon,
+            successRate: detail.successRate,
+            failCount: detail.failCount,
+            failLimit: detail.failLimit,
+            battleCaption: detail.battleCaption,
+            battleEnabled: detail.battleEnabled,
+            upgradeCaption: detail.upgradeCaption,
+            footerText: detail.footerText,
+            upgrading: detail.upgrading,
+            upgradeProgress: detail.upgradeProgress,
+        };
+    }
+
+    /**
+     * 弹窗分发：**巡逻宝箱走「巡逻宝箱」，异步据点走「玩家关卡」，关卡 / 首领走「关卡界面」（+ 关卡提示）**。
      *
      * 通用站点详情面板已移除（2026-10-27 山猫：不需要了）；选中的是资源点等其它格子时
      * 三个弹窗全部收起，信息只留在左侧 info 区。
      */
     private renderDetail(detail: ITerritoryDetailState): void {
+        // 已解锁的巡逻格走巡逻宝箱详情，挑战由弹窗按钮发起。
+        // 放在最前面 —— 宝箱格同时可能命中 `levelInfo`（绑了关卡行）但那不是它该展示的界面。
+        if (detail.monsterBox) {
+            if (this.playerStagePanel.isOpen) this.playerStagePanel.close();
+            this.closePopup(LevelInfoPanel);
+            this.renderLevelTip(null);
+            this.showPopupContent(TerritoryMonsterBoxPanel, this.monsterBoxContentOf(detail.monsterBox));
+            return;
+        }
         if (detail.playerStage) {
             this.closePopup(LevelInfoPanel);
             this.renderLevelTip(null);
@@ -1662,11 +1747,8 @@ export class MainTerritoryMap extends Component {
     }
 
     /** 关掉某个 popup（没开就什么都不做；`get` 只查栈，已关的返回 `null`）。 */
-    private closePopup(cls: typeof LevelInfoPanel | typeof LevelTipPanel): void {
-        const opened = cls === LevelInfoPanel
-            ? PopupManager.inst.get(LevelInfoPanel)
-            : PopupManager.inst.get(LevelTipPanel);
-        if (opened) opened.close();
+    private closePopup<T extends PopupBase>(cls: new () => T): void {
+        PopupManager.inst.get(cls)?.close();
     }
 
     /**
@@ -2512,6 +2594,24 @@ export class MainTerritoryMap extends Component {
             EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner: this, playing: false });
             return;
         }
+        // 🔴 2026-11-19：固定格宝箱的非钱包类奖励（卡牌碎片 / 种族经验 / 道具）改道
+        //    飞向**底部菜单栏卡牌 icon**，与随机格走**同一条**飞行链路：顶层特效层、
+        //    同一个终点、同一束轻量飞行、落地时英雄按钮播受击抖动。
+        //    `chest_seq_*` 开箱表演照旧演（箱子 / 光柱 / 镜头 / 输入锁一个不少），
+        //    只是它那层 Fly 不再画这些图标 —— 那层活在页面内覆盖层，会被底栏盖住，
+        //    而且落点写死在屏幕顶部中央，就是用户截图里「粒子往上飞」的那批。
+        //    钱包类（银币 / 体力）仍留在这层按原落点飞，判据与随机格共用同一条真源。
+        //    🔴 顺序不能换：先挂顶层宿主再登记终点，否则坐标还是旧宿主的；
+        //    待飞批次只在 `chest_seq` 走到起飞那一帧才由视图起播（`armChestHeroFlight`）。
+        //    拿不到按钮 / 目标坐标 ⇒ 视图整段跳过，开箱、交棒、发奖一个都不少（纯表现）。
+        const heroEntries = entries.filter((entry) => isTerritoryHeroRewardResId(entry.resId));
+        this.mapView.mountRewardFxLayer(this.rewardFxRoot());
+        const heroButton = this.findHeroTabButton();
+        this.mapView.setHeroRewardTargetWorld(this.heroTabWorldPositionOf(heroButton));
+        this.mapView.setHeroRewardLandedHandler(() => {
+            if (heroButton?.isValid) heroButton.playHitFeedback();
+        });
+        this.mapView.armChestHeroFlight(cellId, heroEntries);
         if (this.mapView.playChestOpen(cellId, tier, entries, handOff)) return;
         handOff();
     }

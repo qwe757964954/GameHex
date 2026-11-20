@@ -2,6 +2,7 @@ import { _decorator, Color, Component, EventMouse, EventTouch, Graphics, instant
 import type { IBigMapArt } from '../application/BigMapArtLoader';
 import type { IBigMapPlotCellView, IBigMapViewState } from '../application/BigMapViewState';
 import {
+    BIGMAP_BASE_CONTENT_LIFT, BIGMAP_BASE_TILE_IMAGE_HEIGHT, BIGMAP_BASE_TILE_IMAGE_WIDTH,
     bigMapNearestPlot, buildBigMapBaseLayout, clampBigMapBaseCamera, pickBigMapBasePlot, zoomBigMapBaseCamera,
     type IBigMapBaseCamera, type IBigMapBaseLayout,
 } from './BigMapBasePresentation';
@@ -44,6 +45,8 @@ export class BigMapBaseView extends Component {
     @property(UITransform) private fallback: UITransform = null!;
     @property(Node) private plots: Node = null!;
     @property(Node) private plotTemplate: Node = null!;
+    /** 地皮模板：复用 `PlotTemplate/Building` 的 Sprite 节点，避免运行时新建 UI。 */
+    @property(Node) private tileTemplate: Node = null!;
     /**
      *摆放预览（半透明建筑图，跟着手指走）。
      *
@@ -56,6 +59,9 @@ export class BigMapBaseView extends Component {
     @property(Sprite) private plotGhost: Sprite | null = null;
     @property(UIOpacity) private plotGhostOpacity: UIOpacity | null = null;
     private camera: IBigMapBaseCamera = { zoom: 1, x: 0, y: 0 };
+    /** 地图内容相对浏览区中心的像素偏移（蓝湖稿对齐用；只影响内容，不影响遮罩）。 */
+    private mapOffsetX = 0;
+    private mapOffsetY = 0;
     private dragStart: Vec2 | null = null;
     private dragMoved = 0;
     private pinched = false;
@@ -68,6 +74,8 @@ export class BigMapBaseView extends Component {
     private currentHeight = 900;
     private selectedHexId = -1;
     private pendingBuildingId = 0;
+    /** 实际地块的地皮，垫在建筑层下面。 */
+    private readonly terrainTiles: Node[] = [];
     /** 摆放态下放得下的格子（红绿预判；`pendingBuildingId === 0` 时恒空）。 */
     private placeable: Set<number> = new Set();
     /** 已经画过选中/摆放描边的格；refresh 只在这些格上 clear，避免每格无条件重绘。*/
@@ -216,8 +224,20 @@ export class BigMapBaseView extends Component {
 
     setArt(art: IBigMapArt): void {
         this.art = art;
-        this.background.spriteFrame = art.baseBackground;
-        this.background.node.active = !!art.baseBackground;
+        //设计稿底图只有可平铺沙地（`bigMapBG`）；旧的整幅 `base_background` 概念图已删除。
+        const background = art.tiledBackground;
+        this.background.spriteFrame = background;
+        //设计稿的沙地由页面 `Backdrop` 一层 TILED 铺满；基地内容层不再铺第二层，
+        //否则浏览区底边会出现两条纹理的接缝（2026-11-19 验收反馈）。
+        this.background.node.active = !!background && !art.tiledBackground;
+        //基地浏览区原来的橙色兜底会从视口顶边盖住页面沙地，形成一条硬接缝；
+        //设计稿是整屏一层沙地，有 tiledBackground 时直接让兜底透出背景。
+        if (this.fallback) this.fallback.node.active = !art.tiledBackground;
+        this.background.sizeMode = Sprite.SizeMode.CUSTOM;
+        this.background.trim = false;
+        //Tile 模式必须显式切；测试桩没有 `Sprite.Type` 时跳过，行为退回 SIMPLE。
+        const spriteType = (Sprite as unknown as { Type?: { TILED: number; SIMPLE: number } }).Type;
+        if (spriteType) this.background.type = art.tiledBackground ? spriteType.TILED : spriteType.SIMPLE;
         this.resize(this.currentWidth, this.currentHeight);
     }
 
@@ -229,12 +249,35 @@ export class BigMapBaseView extends Component {
         this.layout = buildBigMapBaseLayout(this.cells);
         this.contentTransform.setContentSize(this.layout.mapSize, this.layout.mapSize);
         requireBigMapTransform(this.background.node).setContentSize(this.layout.mapSize, this.layout.mapSize);
+        this.rebuildTerrain();
         for (const [index, hexId] of this.layout.paintOrder.entries()) {
             const slot = this.slots.get(hexId);
             if (slot) slot.root.setSiblingIndex(index);
         }
         this.refresh();
         this.applyCamera(this.camera);
+    }
+
+    private rebuildTerrain(): void {
+        for (const tile of this.terrainTiles) tile.destroy();
+        this.terrainTiles.length = 0;
+        const grass = this.art?.baseTileGrass;
+        if (!grass) return;
+        for (const [index, hexId] of this.layout.paintOrder.entries()) {
+            const point = this.layout.points.get(hexId);
+            const node = instantiate(this.tileTemplate);
+            node.name = `TerrainTile_${hexId}`;
+            node.setParent(this.content);
+            node.setSiblingIndex(index + 1);
+            const sprite = node.getComponent(Sprite);
+            sprite.spriteFrame = grass;
+            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
+            sprite.trim = false;
+            requireBigMapTransform(node).setContentSize(BIGMAP_BASE_TILE_IMAGE_WIDTH, BIGMAP_BASE_TILE_IMAGE_HEIGHT);
+            node.setScale(1, 1, 1);
+            node.setPosition(point.x, point.y - BIGMAP_BASE_CONTENT_LIFT, 0);
+            this.terrainTiles.push(node);
+        }
     }
 
     setMoving(moving: boolean): void {
@@ -483,6 +526,12 @@ export class BigMapBaseView extends Component {
         graphics.stroke();
     }
 
+    /** 页面布局按蓝湖稿把地皮整体左移/下移；遮罩仍留在浏览区边界。 */
+    setMapOffset(x: number, y: number): void {
+        this.mapOffsetX = x;
+        this.mapOffsetY = y;
+    }
+
     focusOn(hexId: number): void {
         const point = this.layout.points.get(hexId);
         this.applyCamera({ ...this.camera, x: -(point?.x ?? 0) * this.camera.zoom, y: -(point?.y ?? 0) * this.camera.zoom });
@@ -496,7 +545,7 @@ export class BigMapBaseView extends Component {
     private applyCamera(camera: IBigMapBaseCamera): void {
         this.camera = clampBigMapBaseCamera(this.layout, this.currentWidth, this.currentHeight, camera);
         this.content.setScale(this.camera.zoom, this.camera.zoom, 1);
-        this.content.setPosition(this.camera.x, this.camera.y, 0);
+        this.content.setPosition(this.camera.x + this.mapOffsetX, this.camera.y + this.mapOffsetY, 0);
         this.syncVisibility();
     }
 
@@ -507,8 +556,8 @@ export class BigMapBaseView extends Component {
             if (!point) continue;
             const iconTop = slot.icon.node.position.y + requireBigMapTransform(slot.icon.node).height * Math.abs(slot.icon.node.scale.y) / 2;
             const margin = Math.max(200, iconTop + 100) * zoom;
-            const visible = Math.abs(point.x * zoom + x) < this.currentWidth / 2 + margin
-                && Math.abs(point.y * zoom + y) < this.currentHeight / 2 + margin;
+            const visible = Math.abs(point.x * zoom + x + this.mapOffsetX) < this.currentWidth / 2 + margin
+                && Math.abs(point.y * zoom + y + this.mapOffsetY) < this.currentHeight / 2 + margin;
             if (slot.root.active !== visible) slot.root.active = visible;
         }
     }

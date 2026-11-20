@@ -11,6 +11,7 @@ import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRu
 import type { ZCGroundZoneState, ZCSnapshot, ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
+import { ZC_EMPOWERED_LOCK_PARAM } from '../assets/script/app/zcds/model/ZCSkillRuntime';
 import { zcCombatEffectGrowFactor } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
 import { assetPath } from './helpers/asset-paths';
 import { withoutLineupCrit } from './helpers/lineup-crit';
@@ -745,6 +746,54 @@ test('暴风：三道旋风从椰蛋战士坐标生成，以攻击朝向为中�
         assert.equal(zone.hitUnitIds?.length, 0);
         assert.equal(zone.holdVisual, true, '整段一条长效视觉（否则逐波闪烁，长不大）');
         assert.equal(zone.growSeconds, 0.3, '由小变大');
+    }
+});
+
+test('武将技解锁门控：兵种等级没到 12 时，暴风一次都不放', () => {
+    //  2026-11-19 反馈「暴风从椰蛋战士位置飞到目标位置，变成直接生成在目标位置」。
+    //  根因是两套表打架，不是 `createAttackGroundZones` 的 moving 分支坏了：
+    //    · 施放与否由 `pvpSkill` 30707 的 `empoweredEvery: 5` + `empoweredSkillId: 30831` 决定，
+    //      **与等级无关** —— 1 级也会放；
+    //    · 「三道 / 50° / 100px / 3s / 名额 / 由小变大」却写在 `pvpSkillPlan` 的 100504 上，
+    //      三档解锁等级是 12 / 24 / 36。
+    //  等级没到时整条链被 `selectZCSkillPlans` 过滤 ⇒ 参数袋里一个 `zone*` 都没有
+    //  ⇒ `moving = zoneMoveSpeed > 0` 退化成 false ⇒ 落回「原地生成」，且不报任何错。
+    //  用户口径（2026-11-19）：「没到技能解锁以前不能释放技能」⇒ 门控见
+    //  `ZCCompiledModifierLoadout.empoweredLocked` / `ZC_EMPOWERED_LOCK_PARAM`。
+    const base = prepare();
+    //  前提：8 级时 100504 这条链确实还没解锁（否则本用例测的就不是门控那条路）。
+    assert.ok(
+        !selectZCSkillPlans('68005', 8).some((row) => row.skillChainId === 100504),
+        '前提：8 级时 100504 未解锁',
+    );
+    for (const [heroLevel, expectedZones, maxHits] of [[8, 0, 0], [12, 3, 3], [36, 3, 5]] as const) {
+        const compiled = compileZCCombatBuild({ unitId: '68005', heroLevel }, base.units, getZCModifierCatalogs());
+        const runtime = compileZCMatchRuntime({ ...base, modifiers: { player: compiled, enemy: [] } } as never);
+        const runtimeDefinition = runtime.skillRuntime[ZCOwner.Player].get('68005:30707');
+        assert.ok(runtimeDefinition, `Lv${heroLevel} 必须有 68005:30707 的运行时（否则门控标记无处可挂）`);
+        assert.equal(
+            runtimeDefinition.parameters[ZC_EMPOWERED_LOCK_PARAM] ?? 0,
+            heroLevel < 12 ? 1 : 0,
+            `Lv${heroLevel} 的门控标记`,
+        );
+        //  直接把**真实构筑出来的**参数喂进既有夹具，等于把「表 → 运行时 → 区域」整条链验一遍。
+        const harness = stormHarness({
+            facingRadians: 0, targetX: 110, targetY: 20, params: runtimeDefinition.parameters,
+        });
+        ZCAttackResolutionSystem.sendAttack(harness.state, harness.caster, harness.context as never);
+        const zones = harness.state.groundZones;
+        assert.equal(zones.length, expectedZones, `Lv${heroLevel} 区域道数`);
+        //  门控只作废「强化那一击」，普攻计数照常推进（`consumeEmpoweredAttack` 顺手 +1），
+        //  否则连击 / 投枪 / 陷阱这些「每 N 次普攻」的链路会一起停摆。
+        assert.equal(harness.caster.completedAttackCount, 5, `Lv${heroLevel} 普攻计数照常 +1`);
+        for (const zone of zones) {
+            assert.equal(zone.x, 10, `Lv${heroLevel} x 必须等于施法者 x`);
+            assert.equal(zone.y, 20, `Lv${heroLevel} y 必须等于施法者 y`);
+            const speed = Math.hypot(zone.moveVelocityX ?? 0, zone.moveVelocityY ?? 0);
+            assert.ok(Math.abs(speed - 30) < 1e-9, `Lv${heroLevel} 速度应为 100 × 0.3 = 30，实际 ${speed}`);
+            assert.equal(zone.maxHits, maxHits, `Lv${heroLevel} 名额按等级（${maxHits}）`);
+            assert.equal(zone.holdVisual, true, `Lv${heroLevel} 整段持有视觉`);
+        }
     }
 });
 

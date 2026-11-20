@@ -45,9 +45,15 @@ export class ZCCombatSystem {
         }
     }
 
-    /** `skillDamageRate` 为本次技能行的伤害倍率，缺省 1，既有调用方不传即沿用旧口径。*/
+    /**
+     * `skillDamageRate` 为本次技能行的伤害倍率，缺省 1，既有调用方不传即沿用旧口径。
+     *
+     * `unit` 收窄成函数体真正读到的两个字段：伤害公式只关心品级与中立增援，与单位的
+     * 位置/血量/状态机无关。收窄之后离线数值工具（验证台、数值表）可以按同一份公式
+     * 复算伤害，不必伪造一整个 `ZCUnitState`；对原有调用方零影响（完整对象天然满足 `Pick`）。
+    */
     static unitDamage(
-        unit: ZCUnitState,
+        unit: Pick<ZCUnitState, 'tier' | 'neutralReinforcement'>,
         definition: ZCUnitDefinition,
         bonuses: ZCDeckBonuses,
         counterMultiplier: number,

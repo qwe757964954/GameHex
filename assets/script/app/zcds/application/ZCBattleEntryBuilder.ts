@@ -13,19 +13,23 @@ export function buildZCBattleReturnParams(entry: Pick<IZCGameEntry, 'slgBattleTy
 }
 
 export function resolveZCBattlePlayerCount(params?: ZCGameEntryParams): 2 | 3 | 4 | undefined {
-    if (!params?.slgBattleType) return params?.pve?.playerCount;
-    const count = params.battle?.units.length;
+    if (!params) return undefined;
+    if (!params.slgBattleType) {
+        return params.pve ? params.pve.playerCount : undefined;
+    }
+    const count = params.battle ? params.battle.units.length : undefined;
     if (count !== 2 && count !== 3 && count !== 4) throw new Error('SLG 开战数据缺少有效参战人数');
     return count;
 }
 
 /** 纯构筑：不修改预加载配置，不捕获存档服务或控制器回调。*/
 export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: ZCGameEntryParams): IZCGameEntry {
-    const battle = entry?.battle ?? null;
-    const pve = entry?.pve;
+    const battle = (entry && entry.battle) || null;
+    const pve = entry ? entry.pve : undefined;
+    const selfRoleId = entry ? entry.selfRoleId : undefined;
     const captureOptions = { allowUnresolvedSelect: true } as const;
     const baseConfig = prepared.baseMatchConfig;
-    const requestedEnemyCards = new Set((pve?.enemyCardIds ?? []).map(String));
+    const requestedEnemyCards = new Set((pve && pve.enemyCardIds ? pve.enemyCardIds : []).map(String));
     // 本地关卡名单仅供离线使用；提前裁剪会让正式回包中的英雄在构筑前就被丢掉。
     //
     //  例外是塔防（首领）关：它拿到 `battle` 也必须裁，否则「触发 npcCard 卡组」形同虚设 ——
@@ -36,7 +40,7 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     const pveEnemyDeck = clipToLevelCards
         ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
         : baseConfig.enemyDeck;
-    const pveDefence = pve?.mode === 'defence' && pve.waves.length > 0 ? {
+    const pveDefence = pve && pve.mode === 'defence' && pve.waves.length > 0 ? {
         cards: baseConfig.enemyDeck.filter(card => pve.waves.some(wave => String(wave.pvpCardId) === card.id)),
         waves: pve.waves
             .filter((wave) => wave.monsterCount > 0 && wave.showAtSeconds >= 0)
@@ -46,8 +50,9 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
                     waveId: wave.waveId,
                     showAtSeconds: wave.showAtSeconds,
                     cardId: String(wave.pvpCardId),
+                    monsterId: wave.monsterId,
                     monsterCount: wave.monsterCount,
-                    // 波次只决定出怪计划；战斗倍率统一来自服务端 buffInfo。
+                    // 波次只决定出怪计划；战斗倍率来自服务端回包。
                     tier: 1,
                 };
                 // BOSS 波决定 HUD 大血条与「击败首领才算赢」。
@@ -68,49 +73,45 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         // 关卡「NPC 抽卡品质乘数」：有配置就带上，缺省不写（对局内按原表权重抽）。
         if (pve.gradeProModifier) matchConfig.gradeProModifier = pve.gradeProModifier;
         if (pveEnemyDeck.length > 0) matchConfig.enemyDeck = pveEnemyDeck;
-        if (pveDefence?.waves.length) matchConfig.pveDefence = pveDefence;
+        if (pveDefence && pveDefence.waves.length > 0) matchConfig.pveDefence = pveDefence;
     }
     const clientCombat = buildZCClientCombatConfig(
         matchConfig,
         battle,
-        entry?.selfRoleId,
+        selfRoleId,
         captureOptions,
     );
-    const selfRoleId = entry?.selfRoleId;
     let playerAvatars: IZCGameEntry['playerAvatars'] = null;
     let seatProfiles: IZCGameEntry['seatProfiles'] = [];
     let seatUnitIds: IZCGameEntry['seatUnitIds'] = [];
     let heroLevels: IZCGameEntry['heroLevels'] = [];
-    if (battle?.units?.length) {
+    if (battle && battle.units && battle.units.length > 0) {
         const sorted = battle.units.slice().sort((a, b) => a.campId - b.campId);
         const self = (selfRoleId ? sorted.find((u) => u.roleId === selfRoleId) : undefined) ?? sorted[0];
         const foe = sorted.find((u) => u !== self) ?? sorted[1];
-        playerAvatars = { player: self?.avatarId ?? '', enemy: foe?.avatarId ?? '' };
+        playerAvatars = {
+            player: (self && self.avatarId) || '',
+            enemy: (foe && foe.avatarId) || '',
+        };
         // 对局内排行榜按 2~4 席逐行渲染，必须把全量档案随 entry 一起交接。
-        // `buildSeatProfiles` 返回 Map：release 构建会把 `[...map]` 降级成 `[].concat(map)`，
-        // 而 concat 不展开迭代器 ⇒ 变成 `[Map]` ⇒ `new Map([[Map]])` 的值是 undefined
-        // ⇒ HUD 里 `profile.headKey` 崩，整局停在空白（报错点在 setSeatProfiles，真凶在这行）。
-        //  展开源是函数返回值，不是 `.keys()/.values()/.entries()`，正则判据容易漏。
         seatProfiles = Array.from(buildSeatProfiles(battle.units, selfRoleId ?? null));
         // 战斗统计要按服务端单元 id 归属，同一份席位分配逻辑派生（见 buildSeatUnitIds）。
         seatUnitIds = Array.from(buildSeatUnitIds(battle.units, selfRoleId ?? null));
         // 结算 MVP 的 `Lv.x`：英雄等级只随 startBattle 回包下发，本地局没有。
         heroLevels = Array.from(buildSeatHeroLevels(battle.units, selfRoleId ?? null));
-        //  服务端属性原文：`[对局卡牌属性]` 只有最终值，面板对不上时分不清「服务端定值」还是
-        //  「本地成长叠加」。这里按协议原样打一份（campId 与 ZCOwner 不是一套编号，不混用）。
         for (const unit of sorted) {
-            if (unit.heroAttrs?.length) {
+            if (unit.heroAttrs && unit.heroAttrs.length > 0) {
                 console.info('[对局卡牌属性·服务端]', unit.campId, JSON.stringify(unit.heroAttrs));
             }
         }
     }
     return {
         resources: prepared,
-        battleSeed: battle?.seed ?? null,
+        battleSeed: (battle && battle.seed) ?? null,
         matchConfig: clientCombat.config,
         playerAvatars, seatProfiles, seatUnitIds, heroLevels,
         pveContext: pve ? { chapterId: pve.chapterId, territoryCellId: pve.territoryCellId, levelId: pve.levelId } : null,
-        slgBattleType: entry?.slgBattleType ?? null,
+        slgBattleType: entry ? (entry.slgBattleType ?? null) : null,
         // 结算等广播认这个字段：匹配入口的 battleType（宝箱栏「开始战斗」= 1002）必须一路带到这里，
         // 否则运行时 `battleType` 落到 null ⇒ 不等 `CmdBattleResultBroMsg` ⇒ 结算页奖励区空着。
         battleType: entry?.battleType ?? entry?.slgBattleType ?? null,

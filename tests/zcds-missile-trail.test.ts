@@ -24,7 +24,7 @@ import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCComb
  */
 
 const MISSILE_PREFAB = 'units/projectiles/镭射飞龙_导弹技能/镭射飞龙_导弹技能';
-/** 68022 雷蕉的电弹（2026-11-11 需求：缩到 50% + 增加三角形拖尾）。 */
+/** 68022 雷蕉 / 68016 磁电菇共用的 30231 电弹 —— 2026-11-19 起**不登记拖尾**（只留弹体）。 */
 const THUNDER_PREFAB = 'units/projectiles/雷弹攻击/雷弹攻击';
 
 test('拖尾：只给登记过的弹体画，普通弹道一律 null', () => {
@@ -37,6 +37,7 @@ test('拖尾：只给登记过的弹体画，普通弹道一律 null', () => {
     assert.equal(zcMissileTrailOf(null), null);
     assert.equal(zcMissileTrailOf(undefined), null);
     //  逐条列出来而不是 `length > 0`：新增拖尾时这条会红，逼着人回来确认"是不是真该有"。
+    //  2026-11-19 第二轮：用户「三角形拖尾要保留」⇒ 雷蕉电弹那条回来了，顺序 = 目录里的书写顺序。
     assert.deepEqual(zcMissileTrailPaths(), [MISSILE_PREFAB, THUNDER_PREFAB]);
 });
 
@@ -118,28 +119,25 @@ test('拖尾：屏上长度 80px、接触端整宽 ≈ 子弹半径（都要吃�
     assert.ok(screenLength > screenBodyWidth, `尾巴 ${screenLength} 要比弹体宽 ${screenBodyWidth} 长，才读得出"在飞"`);
 });
 
-test('雷蕉电弹（2026-11-11）：宿主缩到 50%，拖尾按弹体实际大小重算', () => {
-    const spec = zcMissileTrailOf(THUNDER_PREFAB)!;
+test('雷蕉电弹（2026-11-19 第二轮）：三角形拖尾保留，弹体仍 35%，两者按屏上口径对齐', () => {
+    //  2026-11-19 上午曾按「缩小并去掉长拖尾」删掉这条；下午用户看实录改口：
+    //  「雷蕉的普通攻击的子弹就是雷弹 + 三角形拖尾」⇒ 拖尾必须留着。
+    //  但宿主已从 0.5 收到 0.35，所以本地值要 **÷ 0.35** 反算，屏上形状才跟改之前一模一样。
+    const trail = zcMissileTrailOf(THUNDER_PREFAB);
+    assert.ok(trail, '用户「三角形拖尾要保留」⇒ 必须登记回目录');
     const nodeScale = zcCombatEffectNodeScaleOf(THUNDER_PREFAB);
-    assert.equal(nodeScale, 0.5, '2026-11-11 需求：雷电子弹大小缩小成 50%');
+    assert.equal(nodeScale, 0.35, '弹体仍按 2026-11-19 缩小到 35%（原 0.5）');
+    assert.ok(Math.abs(trail!.length * nodeScale - 55) < 0.01,
+        `屏上拖尾长 ${(trail!.length * nodeScale).toFixed(2)} 应等于原口径 55px`);
+    assert.ok(Math.abs(trail!.rootHalfWidth * nodeScale - 8) < 0.01,
+        `贴弹体那端屏上半宽 ${(trail!.rootHalfWidth * nodeScale).toFixed(2)} 应等于原口径 8px`);
+    assert.ok(Math.abs(trail!.startX * nodeScale + 20) < 0.01, '起点仍在弹体后方 20 屏上 px');
+    assert.ok(trail!.length > 0 && trail!.rootHalfWidth > trail!.tipHalfWidth, '形状仍是「宽端贴弹体、往外收成尖」');
 
-    //  弹体：画布 120×81、prefab 根 `_lscale 0.78`、宿主 0.5
-    //  ⇒ 屏上 46.8 宽 × 31.6 高，半径 15.8。
+    //  弹体：画布 120×81、prefab 根 `_lscale 0.78`、宿主 0.35 ⇒ 屏上 32.76 宽 × 22.11 高。
     const screenBodyWidth = 120 * 0.78 * nodeScale;
-    const screenBodyHeight = 81 * 0.78 * nodeScale;
-    const screenBodyRadius = screenBodyHeight / 2;
-    const screenLength = spec.length * nodeScale;
-    const screenRootWidth = spec.rootHalfWidth * 2 * nodeScale;
-
-    assert.ok(Math.abs(screenBodyWidth - 46.8) < 0.1, `弹体屏上宽 ${screenBodyWidth.toFixed(2)} 应约 46.8`);
-    assert.ok(Math.abs(screenRootWidth - screenBodyRadius) <= screenBodyRadius * 0.25,
-        `接触端整宽 ${screenRootWidth.toFixed(2)} 应与弹体半径 ${screenBodyRadius.toFixed(2)} 相近（同导弹口径）`);
-    assert.ok(screenRootWidth < screenBodyHeight, '接触端不能厚过弹体本身');
-    assert.ok(screenLength > screenBodyWidth, `尾巴 ${screenLength} 要比弹体宽 ${screenBodyWidth} 长，才读得出"在飞"`);
-
-    //  起点要落在弹体后缘（本地 -46.8）**之内**：压进弹体一点，避免飞行中闪出一条缝。
-    const rearEdge = (120 / 2) * 0.78;
-    assert.ok(spec.startX > -rearEdge, `起点 ${spec.startX} 要压进弹体（后缘 -${rearEdge}）`);
+    assert.ok(Math.abs(screenBodyWidth - 32.76) < 0.1, `弹体屏上宽 ${screenBodyWidth.toFixed(2)} 应约 32.8`);
+    assert.ok(screenBodyWidth < 92.25 / 2, '宽度要明显小于一格（92.25），才不会像个汽油桶飘过去');
 
     //  命中特效是另一份 prefab，不能被这条缩放连带。
     assert.equal(zcCombatEffectNodeScaleOf('units/projectiles/雷弹命中/雷弹命中'), 1);

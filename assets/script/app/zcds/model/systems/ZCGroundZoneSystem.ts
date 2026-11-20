@@ -116,49 +116,39 @@ export class ZCGroundZoneSystem {
         let write = 0;
         for (let read = 0; read < zones.length; read++) {
             const zone = zones[read];
-            //  1. 追踪推进（2026-11-12 鹿神守护改成「会追踪的子弹」）。
-            //  返回 true = 位移已经由追踪逻辑接管，这里不能再按 `moveVelocity` 推一遍。
+            // 追踪推进：返回 true = 位移由追踪接管，不能再按 moveVelocity 推一遍。
             const chased = this.advanceChase(zone, dt, now, context);
             if (!chased) {
-                //  随机游走（2026-11-18 第 17 批 三叶小丑「飓风」102004）：换完方向写回
-                //  `moveVelocity`，位移还是下面那一句 —— 两处各推一次位置会变成双倍速。
+                // 随机游走：换方向后写回 moveVelocity，位移统一在下方推进。
                 this.advanceWander(zone, now, context);
-                //  移动区域（暴风 / 冲刺段）：先推进位置再结算这一波，否则伤害会永远落在上一帧的格子上。
-                if (zone.moveVelocityX || zone.moveVelocityY) {
-                    zone.x += (zone.moveVelocityX ?? 0) * dt;
-                    zone.y += (zone.moveVelocityY ?? 0) * dt;
+                // 移动区域：先推进位置再结算当前波次，避免伤害落后一帧。
+                const vx = zone.moveVelocityX ?? 0;
+                const vy = zone.moveVelocityY ?? 0;
+                if (vx !== 0 || vy !== 0) {
+                    zone.x += vx * dt;
+                    zone.y += vy * dt;
                 }
             }
-            //  投掷段到点落地（2026-11-18 第 17 批 101704「穿甲爆矢」）：飞满就没收速度，
-            //  剩下的时间交给 `remainingSeconds` 当原地停留。必须在位移之后 —— 这一步就是
-            //  「最后一帧还在飞、下一帧已经停在地上」的分界。
-            this.settleFlight(zone, dt);
-            //  2. 读秒：只有过了慢档才开始。
-            //  小鹿走过去的那几秒是「赶路」不是「技能在读秒」，否则走 4 秒 > 存活 2 秒，
-            //  人还没到区域就没了。
+            // 投掷段到点落地：飞满后归零速度，剩余时间转为原地停留。
+            this.settleFlight(state, zone, dt);
+            // 读秒：赶路阶段不读秒，提速后才开始读秒。
             const approaching = this.isApproaching(zone);
             if (!approaching) zone.remainingSeconds -= dt;
-            //  「跟随本体」的光环（2026-11-09 无尘禁土 102503）：每帧把圆心拍回施法者身上。
-            //  放在位移之后 —— 同时配了速度和跟随的话，跟随是绝对落点，
-            //  应当盖掉这一帧的位移（否则会「一边跟着人走、一边还在往外飘」）。
+            // 跟随本体光环：每帧将圆心对齐施法者位置。
             this.followCaster(zone, context);
-            //  牵引（2026-11-18 第 17 批 102004 飓风）：圆心这一帧的位置已经定死了，
-            //  现在才拽人 —— 早一步拽会按上一帧的圆心算方向，风一转向就出现「人被往回甩一下」。
+            // 牵引：在圆心位置确定后计算对周围敌人的牵引位移。
             this.pullEnemies(zone, dt, context);
-            //  整段持有视觉：位置推完就把那条长效事件搬到新位置（必须在结算之前，
-            //  这样「这一波伤害」和「画面上的小鹿」在同一拍、同一个坐标）。
+            // 整段持有视觉：将持续事件同步至新坐标。
             this.syncHoldVisual(state, zone);
-            //  3. 触碰触发（2026-11-12 科学家「精密陷阱」103504）：敌方单位踩进 `contactRadius`
-            //  ⇒ 吃一次触碰伤害，整片区域当场清零，走下面既有的到期通道（爆炸 + 表现）。
-            //  放在波次结算之前：陷阱只有「踩响」和「到点自爆」两个时刻，没有周期性波次
-            //  （`wavesLeft = 0`），所以这个 `while` 对它本来是空转。
+            // 触碰触发：敌方踩进 contactRadius 时触发触碰伤害，并在同帧引爆。
             if (this.resolveContact(state, zone, context)) zone.remainingSeconds = 0;
+            const maxHits = zone.maxHits ?? 0;
             while (!approaching && zone.wavesLeft > 0 && now >= zone.nextWaveAt) {
                 this.resolveWave(state, zone, context);
                 zone.wavesLeft -= 1;
                 zone.nextWaveAt += zone.waveInterval;
-                //  命中名额打满 ⇒ 立刻散（追踪弹口径：`maxHits = 1` ⇒ 撞到第一个目标就消失）。
-                if ((zone.maxHits ?? 0) > 0 && (zone.hitUnitIds?.length ?? 0) >= (zone.maxHits ?? 0)) {
+                // 命中名额打满即提前消散。
+                if (maxHits > 0 && zone.hitUnitIds && zone.hitUnitIds.length >= maxHits) {
                     zone.remainingSeconds = 0;
                     break;
                 }
@@ -166,15 +156,9 @@ export class ZCGroundZoneSystem {
             if (zone.remainingSeconds > 0.0001) {
                 zones[write++] = zone;
             } else {
-                //  区域这一拍就没了（自然到点 / 打满名额提前散）⇒ 表现事件同步摘掉，
-                //  「冲刺结束后所有特效一起消失」不靠下一帧的事件裁剪兜底。
+                // 区域消散：同步清除长效事件，触发到期爆炸表现与结算。
                 this.dropHoldVisual(state, zone);
-                //  「只有被踩响才炸」的区域（101704 穿甲爆矢）：自然到期直接消失 ——
-                //  不播爆炸、不结算伤害。设计原话「到期无人触碰直接消失」。
-                //  踩响那一刻 `contactTriggered` 已经置位，走的还是下面原来的两条。
                 const detonate = zone.expireRequiresContact !== true || zone.contactTriggered === true;
-                //  死亡那一拍的一次性表现（2026-11-12 精密陷阱的「陷阱爆炸」）：必须在
-                //  `resolveExpiry` 之前推 —— 同一拍里「画面炸开」和「血条掉一截」才对得上。
                 if (detonate) this.pushExpireVisual(state, zone);
                 if (detonate && (zone.expireDamage ?? 0) > 0) this.resolveExpiry(state, zone, context);
             }
@@ -183,13 +167,14 @@ export class ZCGroundZoneSystem {
     }
 
     /**
-     * 投掷段读秒（2026-11-18 第 17 批 101704）：飞满就把速度清零，原地转成「停留」。
+     * 投掷段读秒（2026-11-18 第 17 批 101704；2026-11-19 加「落地换挡」）：飞满就把速度清零，
+     * 原地转成「停留」，并把飞行段的持有表现换成常驻那一份（见下面的 `flightVisualPath`）。
      *
      * 归零 `moveVelocityX/Y` 而不是留一个标记位让 tick 每次都判 —— 位移那一段是
      * 「有速度就推」，清了才是真的停住，也不会在落地后继续每帧算一次乘法。
      * 缺省（`flightSeconds` 未定义 / 已是 0）⇒ 整段不执行，存量区域一次都不碰。
      */
-    private static settleFlight(zone: ZCGroundZoneState, dt: number): void {
+    private static settleFlight(state: IZCGroundZoneStepState, zone: ZCGroundZoneState, dt: number): void {
         const left = zone.flightSeconds;
         if (left === undefined || !(left > 0)) return;
         const next = left - dt;
@@ -200,6 +185,18 @@ export class ZCGroundZoneSystem {
         zone.flightSeconds = 0;
         zone.moveVelocityX = 0;
         zone.moveVelocityY = 0;
+        //  落地换挡（2026-11-19 蘑菇爆炸 101704）：飞行段播的是「生成」，落地要换成常驻的
+        //  「陷阱」。做法是把飞行段那条持有事件**就地摘掉**（`durationSeconds` 压到「已活时长」，
+        //  下一拍就到了），再清掉 `visualEventId` —— 紧接着这一帧的 `syncHoldVisual` 会按
+        //  `effectPrefabPath` 在新的落点重建一条。视图侧不需要任何「换图」逻辑。
+        if (zone.flightVisualPath === undefined && zone.visualEventId === undefined) return;
+        const live = zone.visualEventId === undefined
+            ? undefined : state.combatEvents.find((event) => event.id === zone.visualEventId);
+        if (live) {
+            live.durationSeconds = Math.max(0, state.elapsedSeconds - live.startedAt);
+        }
+        zone.visualEventId = undefined;
+        zone.flightVisualPath = undefined;
     }
 
     /**
@@ -217,21 +214,22 @@ export class ZCGroundZoneSystem {
         const slowSpeed = Math.max(0, zone.approachSpeed ?? 0);
         if (!(slowSpeed > 0)) return false;
 
-        //  1. 目标：原目标还活着就继续追，死了 / 丢了就改追最近的敌人（追踪弹的核心行为）。
-        let target = zone.approachTargetId === undefined
-            ? undefined : context.unitById?.(zone.approachTargetId);
+        // 目标：原目标存活则继续追踪，失效则重选最近敌人。
+        let target: ZCUnitState | undefined;
+        if (zone.approachTargetId !== undefined && context.unitById) {
+            target = context.unitById(zone.approachTargetId);
+        }
         if (!this.isChaseable(target)) {
             target = this.nearestChaseTarget(zone, context);
             zone.approachTargetId = target ? target.id : undefined;
         }
 
-        //  2. 档位：切快档只发生一次，之后 `sprinting` 恒 true（主循环据此开始读秒）。
+        // 档位：切快档只发生一次，之后 sprinting 恒为 true。
         let fast = zone.sprinting === true;
         zone.visualAnimation = fast ? ZONE_SPRINT_ANIMATION : ZONE_APPROACH_ANIMATION;
 
         if (!target) {
-            //  视野里一个活敌人都没有：沿当前速度方向继续飞，别原地卡住等人（它会自然读秒到期）。
-            //  连速度都没有（出生即无目标）⇒ 朝 +x 兜底，至少别站着。
+            // 无存活目标：沿当前速度方向继续移动直至自然到期。
             const vx = zone.moveVelocityX ?? 0;
             const vy = zone.moveVelocityY ?? 0;
             const length = Math.hypot(vx, vy);
@@ -255,18 +253,15 @@ export class ZCGroundZoneSystem {
         const dy = goal.y - zone.y;
         const distance = Math.hypot(dx, dy);
         if (!fast && distance <= Math.max(0, zone.sprintRange ?? 0)) {
-            //  进入 `sprintRange` ⇒ 提速：换速度、开始读秒，并在表现上点亮叠层（火船）。
             fast = true;
             this.enterSprint(zone, now);
             zone.visualAnimation = ZONE_SPRINT_ANIMATION;
         }
         const speed = fast ? Math.max(0, zone.sprintSpeed ?? 0) : slowSpeed;
-        //  方向每帧刷新：目标走位 / 换目标都能立刻拐过去。
         const nx = distance > 1e-9 ? dx / distance : 1;
         const ny = distance > 1e-9 ? dy / distance : 0;
         zone.moveVelocityX = nx * speed;
         zone.moveVelocityY = ny * speed;
-        //  别越过目标：这一步最多走到目标身上为止（贴脸时 `distance` 可能小于一步）。
         const step = Math.min(speed * dt, distance);
         if (distance > 1e-9) {
             zone.x += nx * step;
@@ -331,8 +326,8 @@ export class ZCGroundZoneSystem {
     */
     private static followCaster(zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {
         const unitId = zone.followUnitId;
-        if (unitId === undefined) return;
-        const caster = context.unitById?.(unitId);
+        if (unitId === undefined || !context.unitById) return;
+        const caster = context.unitById(unitId);
         if (!caster || caster.battleState === 'dead' || caster.hp <= 0) return;
         const pos = context.unitPosition(caster);
         const forward = Math.max(0, zone.followForward ?? 0);
@@ -341,25 +336,13 @@ export class ZCGroundZoneSystem {
             zone.y = pos.y;
             return;
         }
-        //  朝前固定距离：朝向取美术朝向（`facingRadians` 在每次 `startAttack` 时对齐当前目标），
-        //  不是「指向目标」——目标可能在背后、也可能中途换人，玩家看到的「身前」是角色的正面。
         const radians = caster.facingRadians;
         zone.x = pos.x + Math.cos(radians) * forward;
         zone.y = pos.y + Math.sin(radians) * forward;
         zone.angleDegrees = radians * 180 / Math.PI;
     }
 
-    /**
-     * 随机游走（2026-11-18 第 17 批 三叶小丑「飓风」102004）。
-     *
-     * 设计原话：「飓风移动速度为 10px，方向随机变化」。所以这里只做一件事 ——
-     * 每隔 `wanderTurnSeconds` 秒抽一个新朝向，写进 `moveVelocityX/Y`，
-     * 位移仍由 tick 里那句「有速度就推」完成（自己再推一遍就成了双倍速）。
-     *
-     * 🔴 抽方向必须走 `context.random`（对局种子）。`Math.random` 会让同一份快照
-     * 在回放 / 重算时走出不同的路径 —— 这个 bug 不会报错，只会让「同一局两次不一样」。
-     * 轻量上下文（单测 / 工具）没给 random 时取 0 ⇒ 恒朝 +x 漂，不会抛。
-     */
+    /** 随机游走：定期更新朝向写入 moveVelocityX/Y。*/
     private static advanceWander(zone: ZCGroundZoneState, now: number,
         context: IZCGroundZoneContext): void {
         const speed = Math.max(0, zone.wanderSpeed ?? 0);
@@ -368,7 +351,8 @@ export class ZCGroundZoneSystem {
         const due = zone.wanderAngleRadians === undefined
             || zone.wanderNextTurnAt === undefined || now >= zone.wanderNextTurnAt;
         if (due) {
-            zone.wanderAngleRadians = (context.random?.() ?? 0) * Math.PI * 2;
+            const rnd = context.random ? context.random() : 0;
+            zone.wanderAngleRadians = rnd * Math.PI * 2;
             zone.wanderNextTurnAt = now + turnSeconds;
         }
         const angle = zone.wanderAngleRadians as number;
@@ -376,18 +360,7 @@ export class ZCGroundZoneSystem {
         zone.moveVelocityY = Math.sin(angle) * speed;
     }
 
-    /**
-     * 牵引（2026-11-18 第 17 批 102004 飓风）。
-     *
-     * 与 `ZCStatusResolutionSystem.tickLegacyTraction` 同一套算法、同一组常量：
-     *  · 只拽敌方、跳过尸体；
-     *  · 最小距离 `20 × combatDistanceScale`（贴到这么近就松手，否则会把人拖进圆心来回抖）；
-     *  · 每步位移 `speed × dt`，且不超过「到最小距离的剩余」—— 不然最后一步会越过圆心。
-     * 差别只有力心：那条车道挂在**单位**身上（力心 = 施法者坐标），飓风的力心是**会飘的圆心**，
-     * 所以只能在这里算，不能直接挂一条 `legacyTraction` 状态。
-     *
-     * `displaceUnit` 缺省（轻量上下文）⇒ 整段不执行：不拽人也不会抛。
-     */
+    /** 牵引：将范围内的存活敌方单位向区域中心牵引。*/
     private static pullEnemies(zone: ZCGroundZoneState, dt: number,
         context: IZCGroundZoneContext): void {
         const speed = Math.max(0, zone.pullSpeed ?? 0);
@@ -417,7 +390,12 @@ export class ZCGroundZoneSystem {
      * 早期退化（事件被外部裁掉 / 快照还原后 id 失效）直接重建一条，不抛。
     */
     private static syncHoldVisual(state: IZCGroundZoneStepState, zone: ZCGroundZoneState): void {
-        if (!zone.holdVisual || !zone.effectPrefabPath) return;
+        //  飞行段与落地段是两段美术（2026-11-19 蘑菇爆炸 101704）：空中播「生成」，
+        //  落地播常驻的 `effectPrefabPath`。`settleFlight` 落地那一拍会清掉 `flightVisualPath`
+        //  并作废旧事件，于是下一句就自动按落地路径重建一条 —— 这里只要挑对路径即可。
+        const flying = (zone.flightSeconds ?? 0) > 0.0001;
+        const holdPath = (flying ? (zone.flightVisualPath ?? zone.effectPrefabPath) : zone.effectPrefabPath);
+        if (!zone.holdVisual || !holdPath) return;
         if (!(zone.remainingSeconds > 0.0001)) return;
         if (zone.visualEventId !== undefined) {
             const live = state.combatEvents.find((event) => event.id === zone.visualEventId);
@@ -459,7 +437,7 @@ export class ZCGroundZoneSystem {
             skillName: zone.skillName,
             effectKey: null,
             projectileKey: null,
-            effectPrefabPath: zone.effectPrefabPath,
+            effectPrefabPath: holdPath,
             fromX: zone.x,
             fromY: zone.y,
             toX: zone.x,
@@ -547,17 +525,16 @@ export class ZCGroundZoneSystem {
             if (target.owner === zone.owner || target.battleState === 'dead' || target.hp <= 0) continue;
             const pos = context.unitPosition(target);
             if (Math.hypot(pos.x - zone.x, pos.y - zone.y) > contact) continue;
-            //  触碰伤害允许为 0（101704 穿甲爆矢：踩响只是引爆，本身不掉血，伤害全在爆炸那一份）。
-            //  伤害为 0 时不调 `damageUnit` —— 否则会推出一条「-0」的飘字，玩家以为白打了一下。
             const contactDamage = Math.max(0, zone.contactDamage ?? 0);
             if (contactDamage > 0) {
                 const hitText = context.damageUnit(target, contactDamage, {
                     owner: zone.owner, kind: 'unit', unitId: zone.sourceUnitId,
                     floatTextKind: zone.floatTextKind,
                 });
-                context.lifestealFromHit?.(zone.sourceUnitId, hitText);
+                if (context.lifestealFromHit) {
+                    context.lifestealFromHit(zone.sourceUnitId, hitText);
+                }
             }
-            //  踩响标记：`expireRequiresContact` 的区域靠它区分「踩响的爆炸」与「到期消失」。
             zone.contactTriggered = true;
             return true;
         }
@@ -572,9 +549,6 @@ export class ZCGroundZoneSystem {
 
     private static resolveWave(state: IZCGroundZoneStepState, zone: ZCGroundZoneState, context: IZCGroundZoneContext): void {
         let statusChanged = false;
-        //  「整段持有视觉」的区域已经有一条跟着自己走的长效事件，这里不再逐波推视觉 ——
-        //  否则同一只小鹿身后会再叠出一串 0.15s 的残影（2026-11-07 鹿神守护）。
-        //  伤害结算照旧走下面整段，一条都不少。
         if (!zone.holdVisual) {
             state.combatEvents.push({
                 id: state.nextCombatEventId++,
@@ -603,23 +577,12 @@ export class ZCGroundZoneSystem {
         }
         const targetHexId = context.hexIdAt(zone.x, zone.y);
         if (targetHexId === null) return;
-        //  命中名额（移动区域）：同一个敌人只算一次，满额就这一波直接收工。
         const maxHits = Math.max(0, zone.maxHits ?? 0);
         const hitUnitIds = zone.hitUnitIds;
-        if (maxHits > 0 && (hitUnitIds?.length ?? 0) >= maxHits) return;
+        if (maxHits > 0 && hitUnitIds && hitUnitIds.length >= maxHits) return;
         const radiusHex = Math.ceil(zcGroundZoneBroadRadius(zone) / context.hexStep) + 1;
-        //  逐目标递减（2026-11-06「鹿神守护」103405）：第 k 个被命中的目标吃
-        //  `damage × (1 - damageFalloff)^k`，k 从 0 起。缺省 0 ⇒ 恒等于原伤害。
-        //  递减只按本波内的命中顺序算，不跨波累计 —— 移动区域的 `hitUnitIds` 保证
-        //  同一个敌人只会出现在一波里，跨波累计没有意义。
         const falloff = Math.max(0, Math.min(1, zone.damageFalloff ?? 0));
-        //  每波目标上限（2026-11-11 磁电冲击：每波最多打 5 个）。与 `maxHits` 不同 ——
-        //  这个每波重新计数，同一个敌人下一波照样能再吃，区域也不会提前散场。
         const waveCap = Math.max(0, Math.round(zone.waveMaxTargets ?? 0));
-        //  每个敌人只挨一次（2026-11-18 第 16 批，孢爆箭的飓风 101303）：
-        //  只做去重、**不设名额** —— 区域活满整段时长，第一次踩进来挨一下，
-        //  之后站在里面 / 反复进出都不再挨（设计原话「同个敌人持续接触也只是 1 次伤害」）。
-        //  与 `maxHits` 是两件事：那个是「打满 N 人就整片散场」，这个是「人来多少都行、各挨一次」。
         const hitOnce = zone.hitOncePerUnit === true;
         const onceIds = hitOnce ? (zone.hitUnitIds ?? (zone.hitUnitIds = [])) : null;
         let hitIndex = 0;
@@ -642,22 +605,24 @@ export class ZCGroundZoneSystem {
                 floatTextKind: zone.floatTextKind,
             });
             hitIndex += 1;
-            //  每一跳各自回血：命中 N 人就回 N 次，各按「自身实际掉血 × 比例」。
-            context.lifestealFromHit?.(zone.sourceUnitId, hitText);
+            if (context.lifestealFromHit) {
+                context.lifestealFromHit(zone.sourceUnitId, hitText);
+            }
             if (zone.slowRatio > 0) {
                 const id = `__slow:${zone.slowRatio}__`;
                 context.ensureSlowStatus(id, -zone.slowRatio * 100, 1);
                 context.applyStatus(target, id, { at: state.elapsedSeconds, durationSeconds: 1 });
             }
-            //  命中挂状态（2026-11-11 磁电菇「五雷轰顶」101603）：每波每个被打到的敌人
-            //  各自判一次概率。`random` 缺省 ⇒ 一律不挂（轻量上下文 / 单测里不掷骰）。
             const statusChance = Math.max(0, Math.min(1, zone.hitStatusChance ?? 0));
-            if (zone.hitStatusId && statusChance > 0 && (context.random?.() ?? 1) < statusChance) {
-                context.applyStatus(target, zone.hitStatusId, {
-                    at: state.elapsedSeconds,
-                    durationSeconds: zone.hitStatusSeconds,
-                });
-                statusChanged = true;
+            if (zone.hitStatusId && statusChance > 0) {
+                const roll = context.random ? context.random() : 1;
+                if (roll < statusChance) {
+                    context.applyStatus(target, zone.hitStatusId, {
+                        at: state.elapsedSeconds,
+                        durationSeconds: zone.hitStatusSeconds,
+                    });
+                    statusChanged = true;
+                }
             }
         }
         if (zone.slowRatio > 0 || statusChanged) state.statusEffects = context.exportStatusEffects();
@@ -676,8 +641,10 @@ export class ZCGroundZoneSystem {
                 owner: zone.owner, kind: 'unit', unitId: zone.sourceUnitId,
                 floatTextKind: zone.floatTextKind,
             });
-            context.lifestealFromHit?.(zone.sourceUnitId, hitText);
-            if (target.hp <= 0 || !zone.expireStatusId || !(zone.expireStatusDuration && zone.expireStatusDuration > 0)) continue;
+            if (context.lifestealFromHit) {
+                context.lifestealFromHit(zone.sourceUnitId, hitText);
+            }
+            if (target.hp <= 0 || !zone.expireStatusId || !zone.expireStatusDuration || !(zone.expireStatusDuration > 0)) continue;
             context.applyStatus(target, zone.expireStatusId, {
                 at: state.elapsedSeconds,
                 sourceUnitId: String(zone.sourceUnitId),

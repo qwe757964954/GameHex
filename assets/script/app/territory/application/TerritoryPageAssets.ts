@@ -1,4 +1,5 @@
 import { JsonAsset, Prefab, SpriteFrame } from 'cc';
+import type { Material } from 'cc';
 import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
@@ -24,6 +25,19 @@ import {
  */
 export interface ITerritoryBattleArt {
     readonly monsterPrefabs?: ReadonlyMap<number, Prefab>;
+    /**
+     * 巡逻野怪的体型系数（`monsterCard.prefabSize`，键 = `monsterCard.id`）。
+     *
+     * 与战斗内 `ZCUnitView` 同一列、同一口径：**先按骨架高度做技术归一，再乘这个系数**。
+     * 缺这一项（老数据 / 表列留空）⇒ 按 1 处理，画出来就是「归一后」的大小。
+     */
+    readonly monsterPrefabSizes?: ReadonlyMap<number, number>;
+    /**
+     * 巡逻宝箱怪红色描边副本的材质（`shaders/unit-outline-copy`），由章节加载器建好挂进来。
+     * `null` = shader 缺失 ⇒ 视图只压暗、不描边；不在这里 `new Material()` 是为了让
+     * `loadTerritoryBattleArt` 保持「只碰美术帧」的单一职责。
+     */
+    readonly monsterOutlineMaterial?: Material | null;
     readonly background: SpriteFrame | null;
     /**
      * 关卡气泡底图（**已通关**）：蓝 `image/spawn-region/frame_03`。
@@ -193,15 +207,23 @@ export async function loadTerritoryBuildTable(): Promise<TerritoryBuildTable> {
  */
 export function parseTerritoryBuildTable(raw: unknown): TerritoryBuildTable {
     const table = new Map<number, ITerritoryBuildRow>();
-    const rows: unknown[] = Array.isArray(raw)
-        ? raw
-        : raw !== null && typeof raw === 'object' && (raw as { c?: unknown }).c === 1
-            && Array.isArray((raw as { k?: unknown }).k) && Array.isArray((raw as { v?: unknown }).v)
-            ? ((raw as { k: string[]; v: unknown[][] }).v).map((values) => {
-                const keys = (raw as { k: string[] }).k;
-                return Object.fromEntries(keys.map((key, index) => [key, values[index]]));
-            })
-            : [];
+    let rows: unknown[] = [];
+    if (Array.isArray(raw)) {
+        rows = raw;
+    } else if (raw !== null && typeof raw === 'object' && (raw as { c?: unknown }).c === 1
+        && Array.isArray((raw as { k?: unknown }).k) && Array.isArray((raw as { v?: unknown }).v)) {
+        const rawTable = raw as { k: string[]; v: unknown[][] };
+        const keys = rawTable.k;
+        const valuesList = rawTable.v;
+        for (let i = 0; i < valuesList.length; i++) {
+            const values = valuesList[i];
+            const obj: Record<string, unknown> = {};
+            for (let j = 0; j < keys.length; j++) {
+                obj[keys[j]] = values[j];
+            }
+            rows.push(obj);
+        }
+    }
     for (const item of rows) {
         if (typeof item !== 'object' || item === null) continue;
         const row = item as Partial<ITerritoryBuildRow>;
@@ -342,11 +364,16 @@ async function loadBuildAssets(assets: AssetService): Promise<{
     const table = await loadTerritoryBuildTable();
     const frames = new Map<number, SpriteFrame | null>();
     const scales = new Map<number, number>();
-    await Promise.all(Array.from(table.values()).map(async (row) => {
-        // 倍率与帧同源同表，一起收；帧失败也保留倍率（那格本来就不画建筑，倍率无害）。
+    const loadPromises: Promise<void>[] = [];
+    for (const row of table.values()) {
         scales.set(row.buildId, row.buildSize);
-        frames.set(row.buildId, await loadFrame(assets, spriteFramePathOf(row.buildresource)));
-    }));
+        loadPromises.push(
+            loadFrame(assets, spriteFramePathOf(row.buildresource)).then((frame) => {
+                frames.set(row.buildId, frame);
+            }),
+        );
+    }
+    await Promise.all(loadPromises);
     return { frames, scales };
 }
 

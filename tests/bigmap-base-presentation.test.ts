@@ -62,7 +62,7 @@ test('基地固定格距，不因视口缩小建筑，绘制与拾取共用地�
     }
 });
 
-test('基地相邻六边格按大地图比例共边，列错位恒为半格且同列没有行缝', async () => {
+test('基地相邻六边格按设计稿 126×117 切片的 123×90 台面共边，列错位恒为半格且同列没有行缝', async () => {
     const { buildBigMapBaseLayout } = await import('../assets/script/app/bigmap/view/BigMapBasePresentation');
     const cells = Array.from({ length: 4 }, (_, hexId) => ({
         hexId, row: Math.floor(hexId / 2), column: hexId % 2,
@@ -72,9 +72,27 @@ test('基地相邻六边格按大地图比例共边，列错位恒为半格且�
         const first = layout.points.get(0)!;
         const nextColumn = layout.points.get(1)!;
         const nextRow = layout.points.get(2)!;
-        assert.ok(Math.abs(layout.tileWidth / layout.tileHeight - 147 / 96) < 1e-9);
+        // 台面 123×90（不是旧世界地图的 147×96 扁平格）。
+        assert.ok(Math.abs(layout.tileWidth / layout.tileHeight - 123 / 90) < 1e-9);
         assert.ok(Math.abs(nextColumn.x - first.x - layout.tileWidth * 0.75) < 1e-9);
         assert.ok(Math.abs(Math.abs(nextColumn.y - first.y) - layout.tileHeight * 0.5) < 1e-9);
         assert.ok(Math.abs(Math.abs(nextRow.y - first.y) - layout.tileHeight) < 1e-9);
     }
+});
+
+test('基地绘制顺序涵盖旧稿缺口位置，并且只含实际地块', async () => {
+    const { buildBigMapBaseLayout, pickBigMapBasePlot } = await import('../assets/script/app/bigmap/view/BigMapBasePresentation');
+    const cells = [
+        { hexId: 10, row: 0, column: 2 },
+        { hexId: 20, row: 1, column: 3 },
+        { hexId: 30, row: 1, column: 4 },
+    ];
+    const layout = buildBigMapBaseLayout(cells);
+    assert.deepEqual([...layout.paintOrder].sort((a, b) => a - b), [10, 20, 30]);
+    for (const hexId of layout.paintOrder) {
+        const point = layout.points.get(hexId)!;
+        assert.equal(pickBigMapBasePlot(layout, point.x, point.y), hexId);
+    }
+    const ys = layout.paintOrder.map((hexId) => layout.points.get(hexId)!.y);
+    for (let i = 1; i < ys.length; i += 1) assert.ok(ys[i] <= ys[i - 1]);
 });

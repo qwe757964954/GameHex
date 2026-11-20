@@ -55,6 +55,7 @@ export const BIGMAP_PRESENTATION_TEXT = {
      *平时不显示名字牌，点一下才出 —— 所以这里是「读的时候需要的信息」，不是常显标签。
      */
     buildingLevel: '等级',
+    build: '建造',
     upgrade: '升级',
     cancelBuild: '取消建造',
     /** 已建成建筑的次按钮：能收取就先给「收取」，收不了才给「移动」（同一颗按钮，不新增控件）。 */

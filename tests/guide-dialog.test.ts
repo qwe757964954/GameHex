@@ -1,7 +1,7 @@
 /**
  * 引导台词与立绘配置的判据。
  *
- * 台词表是从设计案「NPC与文案」页提取的 24 句 —— 这里用真表当夹具，
+ * 台词表是从设计案「NPC与文案」页提取的（当前 20 句）—— 这里用真表当夹具，
  * 表被改坏（丢句 / 组错 / 说话人写错）会直接红。
  */
 
@@ -25,16 +25,17 @@ const LINES = parseGuideDialogLines(RAW.v.map((row) => {
     return out;
 }));
 
-test('真表：22 句全部解析成功，id 是数字且不重复', () => {
-    // 第 22 条把 `D06`（战斗里那张抽到的卡）的三句并成一句 ⇒ 24 → 22。
-    assert.equal(LINES.length, 22);
+test('真表：20 句全部解析成功，id 是数字且不重复', () => {
+    // 第 22 条把 `D06`（战斗里那张抽到的卡）的三句并成一句 ⇒ 24 → 22；
+    // 2026-11-18 夜里台词表又被精简到 20 句（末组 `D11` 只剩 2 句）⇒ 22 → 20。
+    assert.equal(LINES.length, 20);
     assert.equal(LINES.every((line) => typeof line.id === 'number' && Number.isSafeInteger(line.id)), true);
     const ids = new Set(LINES.map((line) => line.id));
-    assert.equal(ids.size, 22);
-    // id = 组序号 × 100 + 句序号 ⇒ 首句 101、末句 1103（第 18 条把「点击关卡」两句拆成新的 `D05`，
+    assert.equal(ids.size, 20);
+    // id = 组序号 × 100 + 句序号 ⇒ 首句 101、末句 1102（第 18 条把「点击关卡」两句拆成新的 `D05`，
     // 后面的组整体前移一位，于是末组从 `D10` 变成 `D11`）
     assert.equal(LINES[0].id, 101);
-    assert.equal(LINES[LINES.length - 1].id, 1103);
+    assert.equal(LINES[LINES.length - 1].id, 1102);
 });
 
 test('D06 只剩一句：战斗里那张卡只活 1.156s，第二句根本来不及读（第 22 条）', () => {
@@ -118,17 +119,18 @@ test('立绘来源：D01 组 2 句 = 骨骼(豌豆游侠) → 静图(埃莉斯)'
     );
 });
 
-test('立绘来源：末组 D11 3 句交替，末句回到骨骼', () => {
+test('立绘来源：末组 D11 2 句，骨骼(豌豆游侠) → 静图(埃莉斯)', () => {
+    // 2026-11-18 夜里台词表精简后 `D11` 只剩两句（原来第 3 句又回到骨骼）。
     const groups = groupGuideDialogLines(LINES);
     const last = groups.get('D11');
     assert.ok(last);
     assert.deepEqual(
         last.map((line) => getGuidePortraitAsset(line.speaker)?.kind ?? null),
-        ['prefab', 'sprite', 'prefab'],
+        ['prefab', 'sprite'],
     );
 });
 
-test('全部 24 句都能找到立绘来源（不再有「无立绘」的角色）', () => {
+test('全部台词都能找到立绘来源（不再有「无立绘」的角色）', () => {
     const missing = LINES
         .filter((line) => getGuidePortraitAsset(line.speaker) === null)
         .map((line) => line.id);

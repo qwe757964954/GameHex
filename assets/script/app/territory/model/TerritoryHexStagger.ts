@@ -46,15 +46,20 @@ export function territoryHexStaggerDelays<T extends IHexStaggerCell>(
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
-    const ordered = cells
-        .map((cell) => ({
+    const ordered: { cell: ITerritoryHexStaggerCell; distance: number }[] = [];
+    for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        const dx = cell.x - centerX;
+        const dy = cell.y - centerY;
+        ordered.push({
             cell,
-            distance: (cell.x - centerX) * (cell.x - centerX) + (cell.y - centerY) * (cell.y - centerY),
-        }))
-        .sort((a, b) => (a.distance !== b.distance ? a.distance - b.distance : a.cell.cellId - b.cell.cellId));
+            distance: dx * dx + dy * dy,
+        });
+    }
+    ordered.sort((a, b) => (a.distance !== b.distance ? a.distance - b.distance : a.cell.cellId - b.cell.cellId));
 
-    ordered.forEach((entry, index) => {
-        delays.set(entry.cell.cellId, Math.min(capSeconds, index * gapSeconds));
-    });
+    for (let index = 0; index < ordered.length; index++) {
+        delays.set(ordered[index].cell.cellId, Math.min(capSeconds, index * gapSeconds));
+    }
     return delays;
 }

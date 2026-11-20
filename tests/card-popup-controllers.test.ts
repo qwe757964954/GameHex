@@ -117,9 +117,11 @@ test('详情首屏数据未就绪时连点切卡无效，就绪后仍可正常�
         assert.equal(h.states.at(-1).cardId, '2');
     } finally { h.finish(); }
 });
-function upgradeFixture() {
+function upgradeFixture(upgraded = false) {
     const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];
+    const upgradedContents: any[] = [], heroLoads: string[] = [];
+    const heroPrefab = { name: 'unit-prefab' };
     let calls = 0, loads = 0, releases = 0, loading = 0, removed = 0;
     const pending = deferred<UpgradeHeroResult>();
     const repository = { loadDetailArt: async (_card: ZCDeckCard | null): Promise<ICardDetailArt> => ({ hero: null, diamond: null, classTag: null }), loadUpgradeStatus: async (_id: string, level: number) => { loads++; return upgradeStatus(level); }, loadArtConfig: async () => cardArtConfig,
@@ -129,9 +131,12 @@ function upgradeFixture() {
         loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }),
         upgradeHero: async (_id: number, caller: object) => { calls++; assert.equal(caller, controller); return pending.promise; },
         applyHeroLevel: (id: number, level: number) => applied.push({ id, level }) };
+    const dataCard = upgraded
+        ? { ...card('1'), unitPrefabPath: 'skel/豌豆射手/豌豆射手', rarity: 'green' } as ZCDeckCard
+        : card('1');
     const controller = new CardUpgradeController(createControllerContext(), {
         owner,
-        model: new CardUpgradeModel({ card: card('1'), cardId: '1', level: 0 }),
+        model: new CardUpgradeModel({ card: dataCard, cardId: '1', level: 0 }),
         repository,
         failed: error => failures.push(error),
         view: {
@@ -145,11 +150,19 @@ function upgradeFixture() {
         },
         popups: {
             openSkills: value => skills.push(value),
+            ...(upgraded ? { openUpgraded: value => upgradedContents.push(value) } : {}),
         },
+        ...(upgraded ? {
+            upgradedArt: {
+                loadChrome: async () => ({ background: {} as any, frame: null }),
+                loadClassIcon: async () => null,
+                loadHeroPrefab: async (path: string) => { heroLoads.push(path); return heroPrefab as any; },
+            },
+        } : {}),
     });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
     const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind, skillId: 100101 });
-    return { owner, controller, repository, states, results, applied, skills, pending, intent, failures,
+    return { owner, controller, repository, states, results, applied, skills, pending, intent, failures, upgradedContents, heroLoads, heroPrefab,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; } };
 }
@@ -286,6 +299,16 @@ test('upgrade disposal releases loading immediately and ignores late response an
     h.pending.resolve({ kind: 'success', heroId: 1, level: 7 }); await tick(); h.intent('skills');
     assert.equal(h.states.length, count); assert.equal(h.results.length, 0); assert.equal(h.applied.length, 0); assert.equal(h.skills.length, 0);
     assert.equal(h.loads, 1); assert.equal(h.removed, 1); h.finish();
+});
+test('升级成功弹窗加载当前兵种骨骼 prefab，交给视图播放 idle', async () => {
+    const h = upgradeFixture(true);
+    try {
+        await h.controller.start();
+        h.intent(); h.pending.resolve({ kind: 'success', heroId: 1, level: 1 }); await tick(); await tick();
+        assert.deepEqual(h.heroLoads, ['skel/豌豆射手/豌豆射手']);
+        assert.equal(h.upgradedContents.length, 1);
+        assert.equal(h.upgradedContents[0].heroPrefab, h.heroPrefab);
+    } finally { h.finish(); }
 });
 test('failed upgrade retains level and allows retry; skill navigation comes from controller data', async () => {
     const h = upgradeFixture(); try {

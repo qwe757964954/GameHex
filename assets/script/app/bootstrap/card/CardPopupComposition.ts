@@ -1,9 +1,13 @@
+import { Prefab } from 'cc';
 import type { IControllerContext, ControllerBase } from '../../../framework/controller/ControllerBase';
+import { scopeAssetService } from '../../../core/asset/AssetService';
 import type { IPopupComposition } from '../../../framework/ui/PopupCompositionHost';
 import type { PopupBase } from '../../../framework/ui/PopupBase';
 import { CardUpgradePage } from '../../card/CardUpgradePage';
 import { CardUpgradeModel } from '../../card/CardUpgradeModel';
 import { CardUpgradeController } from '../../card/CardUpgradeController';
+import { CardUpgradedPage } from '../../card/CardUpgradedPage';
+import { loadCardUpgradedChrome, loadCardUpgradedClassIcon } from '../../card/CardUpgradedArt';
 import { LineupBoardPage } from '../../card/LineupBoardPage';
 import { LineupBoardModel } from '../../card/LineupBoardModel';
 import { LineupBoardController } from '../../card/LineupBoardController';
@@ -67,6 +71,17 @@ class CardPopupComposition implements IPopupComposition {
             },
             popups: {
                 openSkills: data => { void CardSkillPage.open({ userData: data }).catch(reportCardPopupFailure); },
+                openUpgraded: content => { void CardUpgradedPage.open({ userData: content }).catch(reportCardPopupFailure); },
+            },
+            upgradedArt: {
+                loadChrome: loadCardUpgradedChrome,
+                loadClassIcon: loadCardUpgradedClassIcon,
+                loadHeroPrefab: (path, scope) => scopeAssetService(this.context.assets, scope)
+                    .load(path, Prefab)
+                    .catch((error: unknown) => {
+                        console.warn(`[CardPopupComposition] 升级弹窗骨骼 prefab 加载失败：${path}`, error);
+                        return null;
+                    }),
             },
         });
     }

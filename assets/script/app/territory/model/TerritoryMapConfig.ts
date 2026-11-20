@@ -72,11 +72,14 @@ export interface TerritorySite {
      * 同片任一格占点即整片通过，该场战斗的巡逻野怪随之停止。
      * 同片任一格命中（解锁 / 开战）都用**带 `patrolId` 的那一格**上报后端 ——
      * 怪物配置绑在那一格上（见 `TerritoryModel.patrolReportCell`）。
-     *
-     * 2026-11-18 起是**单值**：之前是数组池 + 按区域组摊分，配置里实际一直只填一个值，
-     * 徒增「同片数值写歪就拆成两片、野怪待机」的坑。
+     * 巡逻区对应的战斗组 ID（单值）。
      */
     battleId?: number;
+    /**
+     * 巡逻区绑定的关卡 ID（levelInfo.levelId）。
+     * 由 TerritoryCampaignRepository 从 monsterBox 表按 battleId 关联注入。
+     */
+    patrolLevelId?: number;
     /** 初始格的 monsterCard.id；同 `site.id` 的巡逻格全部解锁后生成，旧地图可省略。 */
     patrolId?: number;
     buildingId?: string;
@@ -105,6 +108,8 @@ export interface TerritoryDecoration {
     cellId: number;
     artId: string;
 }
+
+export type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
 
 export interface TerritoryMapConfig {
     version: typeof TERRITORY_MAP_VERSION;
@@ -198,11 +203,14 @@ function nonNegative(value: unknown, label: string): number {
  */
 function cellList(value: unknown, label: string): number[] {
     assert(Array.isArray(value), `${label} must be an array`);
-    return (value as unknown[]).map((item, index) => {
-        const cell = asInt(item);
+    const arr = value as unknown[];
+    const result: number[] = [];
+    for (let index = 0; index < arr.length; index++) {
+        const cell = asInt(arr[index]);
         assert(Number.isFinite(cell), `${label}[${index}] must be an integer`);
-        return cell;
-    });
+        result.push(cell);
+    }
+    return result;
 }
 
 /** 单个格子，必须落在 [0, total)。 */
@@ -215,10 +223,11 @@ function cellInRange(value: unknown, total: number, label: string): number {
 
 /** 整数数组且每格落在 [0, total)。 */
 function cellsInRange(value: unknown, total: number, label: string): number[] {
-    return cellList(value, label).map((cell, index) => {
-        assert(cell >= 0 && cell < total, `${label}[${index}] is out of bounds`);
-        return cell;
-    });
+    const list = cellList(value, label);
+    for (let index = 0; index < list.length; index++) {
+        assert(list[index] >= 0 && list[index] < total, `${label}[${index}] is out of bounds`);
+    }
+    return list;
 }
 
 function parseHeader(data: Record<string, unknown>): TerritoryMapHeader {
@@ -310,10 +319,10 @@ function parseSite(
         ? cellList(raw.footprint, `sites[${index}].footprint`)
         : [];
     const footprintCells = rawFootprint.length ? rawFootprint : [cellId];
-    assert(
-        footprintCells.every((cell) => cell >= 0 && cell < ctx.total),
-        `sites[${index}].footprint is invalid`,
-    );
+    for (let i = 0; i < footprintCells.length; i++) {
+        const cell = footprintCells[i];
+        assert(cell >= 0 && cell < ctx.total, `sites[${index}].footprint is invalid`);
+    }
     const footprint = Array.from(new Set(footprintCells));
     assert(footprint.length === footprintCells.length,
         `sites[${index}].footprint has duplicate cells`);
@@ -379,8 +388,14 @@ function parseRandomSites(raw: unknown, ctx: TerritoryMapContext): TerritoryRand
         'randomSites.rewardPoolId is invalid',
     );
     // 过滤起点与已被站点占用格属于有意的业务归一化（非整数/越界仍 throw）。
-    const candidates = cellsInRange(raw.candidateCells, ctx.total, 'randomSites.candidateCells')
-        .filter((cell) => cell !== ctx.startCellId && !ctx.occupied.has(cell));
+    const allCandidates = cellsInRange(raw.candidateCells, ctx.total, 'randomSites.candidateCells');
+    const candidates: number[] = [];
+    for (let i = 0; i < allCandidates.length; i++) {
+        const cell = allCandidates[i];
+        if (cell !== ctx.startCellId && !ctx.occupied.has(cell)) {
+            candidates.push(cell);
+        }
+    }
     const maxActive = nonNegative(raw.maxActive ?? 1, 'randomSites.maxActive');
     assert(maxActive >= 1, 'randomSites.maxActive must be at least 1');
     const randomSites: TerritoryRandomSites = {
@@ -413,15 +428,18 @@ function parseRandomSites(raw: unknown, ctx: TerritoryMapContext): TerritoryRand
 function parseDecorations(raw: unknown, total: number): TerritoryDecoration[] | undefined {
     if (!Array.isArray(raw)) return undefined;
     const seen = new Set<number>();
-    return raw.map((item, index) => {
+    const decorations: TerritoryDecoration[] = [];
+    for (let index = 0; index < raw.length; index++) {
+        const item = raw[index];
         assert(isRecord(item), `decorations[${index}] must be an object`);
         const cellId = cellInRange(item.cellId, total, `decorations[${index}].cellId`);
         assert(!seen.has(cellId), `decorations[${index}] repeats cell ${cellId}`);
         seen.add(cellId);
         assert(typeof item.artId === 'string' && item.artId.length > 0,
             `decorations[${index}].artId is invalid`);
-        return { cellId, artId: item.artId };
-    });
+        decorations.push({ cellId, artId: item.artId });
+    }
+    return decorations;
 }
 
 /**
@@ -441,12 +459,22 @@ export function configureTerritoryMap(input: unknown): TerritoryMapConfig {
         occupied: new Set(),
         ids: new Map(),
     };
-    const sites = (input.sites as unknown[]).map((raw, index) =>
-        parseSite(raw, ctx, index, defaults));
+    const rawSites = input.sites as unknown[];
+    const sites: TerritorySite[] = [];
+    for (let index = 0; index < rawSites.length; index++) {
+        sites.push(parseSite(rawSites[index], ctx, index, defaults));
+    }
     for (const [id, type] of ctx.ids) {
         if (type !== TERRITORY_SITE_TYPE.patrolChest) continue;
-        const cells = new Set(sites.filter(site => site.type === TERRITORY_SITE_TYPE.patrolChest && site.id === id)
-            .flatMap(site => site.footprint));
+        const cells = new Set<number>();
+        for (let i = 0; i < sites.length; i++) {
+            const site = sites[i];
+            if (site.type === TERRITORY_SITE_TYPE.patrolChest && site.id === id) {
+                for (let j = 0; j < site.footprint.length; j++) {
+                    cells.add(site.footprint[j]);
+                }
+            }
+        }
         const queue = [cells.values().next().value];
         const visited = new Set(queue);
         for (let index = 0; index < queue.length; index += 1) {

@@ -178,3 +178,6 @@ export class TerritoryHexSpawn {
         active.onFrame?.(1);
     }
 }
+
+/** 语义化别名：区分视图层播放器与领域层时间轴模型。 */
+export { TerritoryHexSpawn as TerritoryHexSpawnPlayer };

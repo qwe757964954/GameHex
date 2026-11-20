@@ -14,6 +14,7 @@ import { MainTab, MainTabHost } from '../../main/MainTabHost';
 import { CardLineupPage } from '../../card/CardLineupPage';
 import { CardUpgradePage } from '../../card/CardUpgradePage';
 import { GuideEvent, type IGuideCompletePayload } from '../../guide/application/GuideEvents';
+import { GUIDE_TEXTS } from '../../guide/GuideTexts';
 import { Toast } from '../../common/Toast';
 import { MainTaskDetailPage } from '../../maintask/MainTaskDetailPage';
 import { MainTaskEntry } from '../../maintask/MainTaskEntry';
@@ -60,6 +61,10 @@ const TASK_ENTRY_UNLOCK_STEP = '8-1';
  *
  * 现在：进这一步先按住不出场，等领地页的「演出窗口」开→关完整走一遍
  * （{@link TerritoryUiEvent.ChestPresentation}，粒子演完才关）再画。
+ *
+ * 🔴 2026-11-19 追加：翻地那一格**还会弹「奖励领取」弹窗**（固定格 / 随机格的第一格走
+ * `FW.ShowReward`，宝箱链路还要先过英雄页）。弹窗是独立于粒子的第二段，粒子演完 ≠ 奖励看完 ⇒
+ * 只要还开着任一奖励页就不许放行，等它关掉再画（否则 8-1 在弹窗底下开口、关掉后从第一句重播）。
  */
 const REWARD_HOLD_STEP = '8-1';
 
@@ -76,8 +81,9 @@ const REWARD_HOLD_FALLBACK_MS = 2600;
  *
  * 引导奖励是**后端在完成这一步时发的**：`GuideStepConfig.rewardJson` 客户端只解析、无消费方
  * （`grep rewards assets/script/app/guide` 只有解析那一行），所以这条提示只能由引导层自己补。
+ * 文案本体收在 `GuideTexts`（工程统一做法，见 `SHOW_REWARD_TEXTS` / `MAIN_TASK_TEXTS`）。
  */
-const GUIDE_FINISH_REWARD_TOAST = '引导完成，获得奖励';
+const GUIDE_FINISH_REWARD_TOAST = GUIDE_TEXTS.finishRewardTip;
 
 /**
  * 5-4 之前一律不显示的主界面 HUD。
@@ -214,8 +220,11 @@ export class GuideComposition extends ControllerBase {
             // 8-1：翻地那一格的奖励粒子还在飞就先别出场（第 27 条补丁 B）。
             // 放在这里（`applyHudGate` 之后）是有意的：任务入口该解锁还得解锁，
             // 否则等演出等到最后，玩家面前连个能点的 icon 都没有。
-            const holdForReward = this.syncRewardHold(state, chestPresenting);
-            if (rewards.size > 0 || chestPages.size > 0 || heroPages.size > 0 || chestPresenting || otherCard
+            // 第二段（2026-11-19）：粒子演完还会弹「奖励领取」弹窗（固定格 / 随机格的第一格是
+            // `FW.ShowReward`，宝箱链路先过英雄页）⇒ 只要还开着任一奖励页就一并按住。
+            const rewardPopupOpen = rewards.size > 0 || chestPages.size > 0 || heroPages.size > 0;
+            const holdForReward = this.syncRewardHold(state, chestPresenting, rewardPopupOpen);
+            if (rewardPopupOpen || chestPresenting || otherCard
                 || waitingForMap || holdForReward
                 || (!state.finished && battleFocus !== (this.phase === 'battle'))) {
                 view.hide();
@@ -527,47 +536,70 @@ export class GuideComposition extends ControllerBase {
     }
 
     /**
-     * 8-1 的「等奖励演出」闸（第 27 条补丁 B）：返回 `true` = 这一步**还不许出场**。
+     * 8-1 的「等奖励」闸（第 27 条补丁 B + 2026-11-19 追加）：返回 `true` = 这一步**还不许出场**。
      *
-     * 判据是「领地页的演出窗口走完一次**开 → 关**」：窗口 `playing:true` 是奖励到账（粒子起播），
-     * `playing:false` 是粒子演完（`MainTerritoryMap.playCellGains` 按动画时长收窗）。
-     * 只在这一次循环之后才放行 —— 老口径一上报 `tileFlipped` 就画 8-1，
-     * 光圈和台词整个压在还在飞的粒子上。
+     * 奖励分两段，任何一段没收完都不放行：
+     * ① **演出窗口**：`playing:true` 是奖励到账（粒子起播），`playing:false` 是粒子演完
+     *    （`MainTerritoryMap.playCellGains` 按动画时长收窗）；
+     * ② **奖励领取弹窗**：固定格 / 随机格的第一格走 `{ popup: true }` ⇒ `FW.ShowReward`；
+     *    宝箱链路还要先过「获得英雄」页。窗口和弹窗是两条命，粒子演完不等于奖励看完。
+     *
+     * 放行条件 = 「见过动静」+「现在彻底安静」：只在这一次循环之后才画 —— 老口径一上报
+     * `tileFlipped` 就画 8-1，光圈和台词整个压在还在飞的粒子上（第 27 条补丁 B 现场）。
      *
      * 三条边界：
-     * · 进场那一刻窗口**已经开着**（奖励比引导推进先到）⇒ 当成已经见过，等它关；
-     * · 一直没见过窗口（那一格没给奖励 / 回包丢了）⇒ `REWARD_HOLD_FALLBACK_MS` 到点强制放行；
-     * · 放行之后永久放行（`released`），后面任何一次演出都不再把最后一步收回去。
+     * · 进场那一刻**已经在演 / 已经弹着**（奖励比引导推进先到）⇒ 当成已经见过，等它安静；
+     * · 一直没见过任何动静（那一格没给奖励 / 回包丢了）⇒ `REWARD_HOLD_FALLBACK_MS` 到点强制放行；
+     * · 放行之后永久放行（`released`），后面任何一次演出都不再把最后一步收回去
+     *   （那时台词已经开过口，收回去会从第一句重播）。
+     *
+     * 🔴 **有动静时不许挂着兜底计时**：兜底是给「什么都没来」准备的，2.6s 一到就放行。
+     * 弹窗还开着（玩家可能看十几秒）时若让它继续跑，到点就把 8-1 放到弹窗底下去 ——
+     * 这正是 2026-11-19「8-1 要等奖励弹窗关掉再弹」要修的现象。
      *
      * @param presenting `ChestPresentation` 窗口的当前值（由 `startGuide` 里的闭包持有）
+     * @param popupOpen 任一奖励弹窗（`ShowReward` / 宝箱开启 / 获得英雄）当前是否开着
      */
-    private syncRewardHold(state: IGuideViewState, presenting: boolean): boolean {
+    private syncRewardHold(state: IGuideViewState, presenting: boolean, popupOpen: boolean): boolean {
         if (this.rewardHold === 'released') return false;
         // 不是 8-1（含引导已结束）⇒ 状态清干净，换页重建时能重新武装。
         if (state.finished || this.stepDistance(state.stepId, REWARD_HOLD_STEP) !== 0) {
             this.clearRewardHold();
             return false;
         }
+        const busy = presenting || popupOpen;
         if (this.rewardHold === 'idle') {
             this.rewardHold = 'armed';
-            this.rewardHoldSawPlaying = presenting;
-            this.rewardHoldTimer = setTimeout(() => {
-                this.rewardHoldTimer = null;
-                this.rewardHold = 'released';
-                // 窗口一直没来：这一步不能再等下去了。
-                if (this.latestState && this.draw) this.draw(this.latestState);
-            }, REWARD_HOLD_FALLBACK_MS);
+            this.rewardHoldSawPlaying = busy;
+            // 已经在演 / 已经弹着 ⇒ 兜底先不挂（挂了会在弹窗还开着时到点）。
+            if (busy) return true;
+            this.armRewardHoldTimer();
             return true;
         }
-        if (presenting) {
+        if (busy) {
             this.rewardHoldSawPlaying = true;
+            this.clearRewardHoldTimer();
             return true;
         }
-        // 窗口还没出现过 ⇒ 继续等（等的是「奖励到账」这一拍，不是干等固定时长）。
-        if (!this.rewardHoldSawPlaying) return true;
+        // 安静下来了，但一次动静都没见过 ⇒ 继续等（兜底可能被上一条 busy 摘掉过，补挂）。
+        if (!this.rewardHoldSawPlaying) {
+            if (this.rewardHoldTimer === null) this.armRewardHoldTimer();
+            return true;
+        }
         this.rewardHold = 'released';
         this.clearRewardHoldTimer();
         return false;
+    }
+
+    /** 挂上「什么都没来」的兜底：到点强制放行，不参与任何玩法判据。 */
+    private armRewardHoldTimer(): void {
+        this.clearRewardHoldTimer();
+        this.rewardHoldTimer = setTimeout(() => {
+            this.rewardHoldTimer = null;
+            this.rewardHold = 'released';
+            // 窗口一直没来：这一步不能再等下去了。
+            if (this.latestState && this.draw) this.draw(this.latestState);
+        }, REWARD_HOLD_FALLBACK_MS);
     }
 
     private clearRewardHold(): void {

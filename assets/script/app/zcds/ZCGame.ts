@@ -53,21 +53,49 @@ export type { IZCGameEntry } from './application/ZCGameEntry';
 */
 @ccclass('ZCGame')
 export class ZCGame extends Component {
-    get dragMoved(): boolean { return this.hudView.dragMoved; }
-    resetCamera(): void { this.hudView.resetCamera(); }
-    flashSpawn(message: string): void { this.spawnSelectionView?.flash(message); }
-    flashInsufficientGold(): void { this.hudView.flashInsufficientGold(); }
-    renderBattle(model: IZCBattleRenderModel, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents, mode: 'all' | 'dynamic' | 'static'): void {
-        if (mode !== 'dynamic') { this.hudView.render(model); this.renderBossPanel(model); }
-        if (mode === 'all') this.renderWorld.render(frame, events);
-        else if (mode === 'dynamic') this.renderWorld.renderDynamic(frame, events);
-        else this.renderWorld.renderStatic(frame);
+    get dragMoved(): boolean {
+        return this.hudView.dragMoved;
     }
+
+    resetCamera(): void {
+        this.hudView.resetCamera();
+    }
+
+    flashSpawn(message: string): void {
+        if (this.spawnSelectionView) {
+            this.spawnSelectionView.flash(message);
+        }
+    }
+
+    flashInsufficientGold(): void {
+        this.hudView.flashInsufficientGold();
+    }
+
+    renderBattle(model: IZCBattleRenderModel, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents, mode: 'all' | 'dynamic' | 'static'): void {
+        if (mode !== 'dynamic') {
+            this.hudView.render(model);
+            this.renderBossPanel(model);
+        }
+        if (mode === 'all') {
+            this.renderWorld.render(frame, events);
+        } else if (mode === 'dynamic') {
+            this.renderWorld.renderDynamic(frame, events);
+        } else {
+            this.renderWorld.renderStatic(frame);
+        }
+    }
+
     advanceSettlementPresentation(frame: ZCGameRenderFrame, dt: number): boolean {
-        if (!this.beginVictorySweep(frame)) return false;
-        if (!this.hudView.settlementOverviewSettled) { this.hudView.startSettlementOverview(); return true; }
+        if (!this.beginVictorySweep(frame)) {
+            return false;
+        }
+        if (!this.hudView.settlementOverviewSettled) {
+            this.hudView.startSettlementOverview();
+            return true;
+        }
         return this.renderWorld.advanceVictorySweep(frame, dt);
     }
+
     startPlaying(model: IZCBattleRenderModel, config: ZCMatchConfig, selection: ZCSpawnSelection, frame: ZCGameRenderFrame, events: ZCBattlePresentationEvents): void {
         this.renderWorld.clearSpawnRegionHints();
         this.restoreSpawnConfirmButton();
@@ -222,13 +250,17 @@ export class ZCGame extends Component {
         this.spawnSelectionView?.node.destroy();
         this.spawnSelectionView = null;
         // 退出前先把扫场还原掉：地块的 sweepOwner 是表现层状态，不还原就留给下一局。
-        this.renderWorld?.clearVictorySweep();
-        // 同理：开局归属扩散波若正播到一半退出，格子会停在「过渡到一半」的颜色上。
-        this.renderWorld?.clearTerritoryClaimWave();
-        this.renderWorld?.destroy();
-        this.renderWorld = null;
-        this.hudView?.node.destroy();
-        this.hudView = null;
+        if (this.renderWorld) {
+            this.renderWorld.clearVictorySweep();
+            // 同理：开局归属扩散波若正播到一半退出，格子会停在「过渡到一半」的颜色上。
+            this.renderWorld.clearTerritoryClaimWave();
+            this.renderWorld.destroy();
+            this.renderWorld = null;
+        }
+        if (this.hudView) {
+            this.hudView.node.destroy();
+            this.hudView = null;
+        }
         this.preparedResources = null;
         this.unitVisualPrefabs.clear();
         this.buildingFramesByCardId.clear();
@@ -254,21 +286,32 @@ export class ZCGame extends Component {
      * 已经弹出来的横幅一起刷新。
     */
     private loadLegendPortraits(): void {
+        // 席位档案（3/4 人局也带 headKey）优先；老入口只给 playerAvatars 时，用它补我方 / 2 号两席。
+        const sources: Array<readonly [ZCOwner, string]> = [];
+        for (const owner of ZC_OWNER_ORDER) {
+            const headKey = this.seatProfiles.get(owner)?.headKey;
+            if (headKey) sources.push([owner, headKey]);
+        }
         const avatars = this.playerAvatars;
-        if (!avatars) return;
-        void Promise.all([
-            this.loadHeadFrame(avatars.player).catch(() => null),
-            this.loadHeadFrame(avatars.enemy).catch(() => null),
-        ]).then(([player, enemy]) => {
+        if (avatars) {
+            if (!sources.some(([owner]) => owner === ZCOwner.Player)) sources.push([ZCOwner.Player, avatars.player]);
+            if (!sources.some(([owner]) => owner === ZCOwner.Enemy)) sources.push([ZCOwner.Enemy, avatars.enemy]);
+        }
+        if (!sources.length) return;
+        void Promise.all(sources.map(([, key]) => this.loadHeadFrame(key).catch(() => null)))
+            .then((frames) => {
             //  判据只用 phase：`renderWorld` 与 `leaving` 同由 `shutdown()` 驱动（它首行 `phase.leave()`、
             // 随后同步置 null）⇒ 两者在每个 await 边界上恒等，多写一个对象判空只是重复判据。
             if (this.leaving) return;
-            if (!player && !enemy) return;
+            let any = false;
+            frames.forEach((frame, index) => {
+                const owner = sources[index]?.[0];
+                if (!frame || !owner) return;
+                this.legendPortraitFrames.set(owner, frame);
+                any = true;
+            });
+            if (!any) return;
             // 头像帧落在控制器上（横幅按 owner 现取）；这里只通知渲染世界补刷已经弹出来的横幅。
-            const portraits = new Map<string, SpriteFrame>();
-            if (player) portraits.set(ZCOwner.Player, player);
-            if (enemy) portraits.set(ZCOwner.Enemy, enemy);
-            for (const [owner, frame] of portraits) this.legendPortraitFrames.set(owner, frame);
             this.renderWorld.refreshLegendCardArt();
         });
     }
@@ -335,7 +378,9 @@ export class ZCGame extends Component {
      * 唯一持有者就是渲染世界，入口也只有它一个。
     */
     applyEffectPrefab(path: string, prefab: Prefab): void {
-        this.renderWorld?.applyEffectPrefab(path, prefab);
+        if (this.renderWorld) {
+            this.renderWorld.applyEffectPrefab(path, prefab);
+        }
     }
 
     /** 这里只做同步实例化和首帧渲染；异步工作必须在调用前全部完成。*/
@@ -424,6 +469,8 @@ export class ZCGame extends Component {
             floatTextPrefab: prepared.floatTextPrefab,
             cardRevealPrefab: prepared.cardRevealPrefab,
             legendBannerPrefab: prepared.legendBannerPrefab,
+            // 野怪击杀横栏：同一套底色 / 头像帧，专用 prefab；缺省时退回 legend 的 monsterClaim 大字。
+            killBannerPrefab: prepared.killBannerPrefab,
             // 传说卡横幅弹在屏幕正中 ⇒ 挂全屏层；mapLayer 是 ScrollView 的 content，会跟着拖动跑。
             overlayLayer: this.hudView.node,
             // 中立资源点「神器充能」格显示玩家携带的那件神器（整局一张，逐个地块视图注入）。
@@ -510,7 +557,9 @@ export class ZCGame extends Component {
     }
 
     renderSpawnSelection(selection: ZCSpawnSelection, hints: boolean): void {
-        this.spawnSelectionView?.render(selection.snapshot, hints);
+        if (this.spawnSelectionView) {
+            this.spawnSelectionView.render(selection.snapshot, hints);
+        }
         this.renderWorld.renderSpawnSelection(selection, hints);
     }
 
@@ -589,8 +638,10 @@ export class ZCGame extends Component {
     private renderBossPanel(model: IZCBattleRenderModel): void {
         const progress = model.defenceWaveProgress;
         if (!progress) {
-            this.bossPanel?.node.destroy();
-            this.bossPanel = null;
+            if (this.bossPanel) {
+                this.bossPanel.node.destroy();
+                this.bossPanel = null;
+            }
             return;
         }
         if (!this.bossPanel) {
@@ -634,7 +685,7 @@ export class ZCGame extends Component {
         }
         for (const [cardId, icon] of Array.from(icons)) {
             void this.loadHeadIconFrame(icon).then((frame) => {
-                if (!this.leaving && frame?.isValid) this.bossPortraits.set(cardId, frame);
+                if (!this.leaving && frame && frame.isValid) this.bossPortraits.set(cardId, frame);
             }).catch((error) => { if (ZCDC_LOG_WARNINGS) console.warn(`[ZCGame] 波次怪头像加载失败：${icon}`, error); });
         }
     }

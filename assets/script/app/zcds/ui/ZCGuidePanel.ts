@@ -109,9 +109,15 @@ export class ZCGuidePanel extends PopupBase {
     /** Popup 同步展示已加载内容。*/
     protected onOpen(userData?: ZCGuidePanelOptions): void {
         const content = userData?.content;
-        this.entries = content ? [...content.entries] : [];
-        this.iconFrames = content?.iconFrames ?? new Map();
-        this.applyParams(content?.params ?? EMPTY_PARAMS);
+        if (content) {
+            this.entries = [...content.entries];
+            this.iconFrames = content.iconFrames;
+            this.applyParams(content.params);
+        } else {
+            this.entries = [];
+            this.iconFrames = new Map();
+            this.applyParams(EMPTY_PARAMS);
+        }
         this.refreshList();
     }
 

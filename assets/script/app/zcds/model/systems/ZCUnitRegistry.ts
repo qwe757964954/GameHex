@@ -10,6 +10,17 @@ export class ZCUnitRegistry {
     private readonly byOwner = new Map<ZCOwner, Set<ZCUnitState>>();
     private readonly alive = new Set<number>();
     private readonly counts: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
+    /**
+     * **不计召唤物**的存活数量（`unitCapPerSide` 判的就是这一份）。
+     *
+     * 设计口径（2026-11-19 第 26 批 101404 一人成军）：「分身的数量不加入单位计算数量」——
+     * 12 只分裂菇分身站在场上时，兵营 / 招募该产兵还得能产，不能因为分身占格就卡住。
+     *
+     * 维护方式：`register` 按「注册那一刻有没有 `summonMasterId`」先当普通单位记账，
+     * `summonUnits` 随后置上 `summonMasterId` 时必须补一次 `markSummon` 把它减掉
+     * （召唤物是 `spawnUnit` 之后才打标记的，注册时还不知道自己是不是分身）。
+     */
+    private readonly regularCounts: Record<ZCOwner, number> = { player: 0, enemy: 0, enemy2: 0, enemy3: 0 };
 
     register(unit: ZCUnitState): void {
         if (this.byId.has(unit.id)) throw new Error(`重复单位 ID：${unit.id}`);
@@ -19,7 +30,15 @@ export class ZCUnitRegistry {
         if (unit.battleState !== 'dead' && unit.hp > 0) {
             this.alive.add(unit.id);
             this.counts[unit.owner] += 1;
+            if (unit.summonMasterId === undefined) this.regularCounts[unit.owner] += 1;
         }
+    }
+
+    /** 把一个已经注册过的存活单位改记为「召唤物」（不再占单位上限的名额）。幂等。*/
+    markSummon(unit: ZCUnitState): void {
+        if (!this.alive.has(unit.id)) return;
+        if (unit.summonMasterId === undefined) return;
+        this.regularCounts[unit.owner] = Math.max(0, this.regularCounts[unit.owner] - 1);
     }
 
     move(unit: ZCUnitState, hexId: number): void {
@@ -36,17 +55,25 @@ export class ZCUnitRegistry {
     changeOwner(unit: ZCUnitState, owner: ZCOwner): void {
         if (unit.owner === owner) return;
         const wasAlive = this.alive.has(unit.id);
+        const wasRegular = wasAlive && unit.summonMasterId === undefined;
         if (wasAlive) this.counts[unit.owner] -= 1;
+        if (wasRegular) this.regularCounts[unit.owner] = Math.max(0, this.regularCounts[unit.owner] - 1);
         const oldBucket = this.byOwner.get(unit.owner);
         oldBucket?.delete(unit);
         if (oldBucket?.size === 0) this.byOwner.delete(unit.owner);
         unit.owner = owner;
         this.ownerBucket(owner).add(unit);
         if (wasAlive) this.counts[owner] += 1;
+        if (wasRegular) this.regularCounts[owner] += 1;
     }
 
     markDead(unit: ZCUnitState): void {
-        if (this.alive.delete(unit.id)) this.counts[unit.owner] -= 1;
+        if (this.alive.delete(unit.id)) {
+            this.counts[unit.owner] = Math.max(0, this.counts[unit.owner] - 1);
+            if (unit.summonMasterId === undefined) {
+                this.regularCounts[unit.owner] = Math.max(0, this.regularCounts[unit.owner] - 1);
+            }
+        }
     }
 
     remove(unit: ZCUnitState): void {
@@ -58,7 +85,11 @@ export class ZCUnitRegistry {
         if (bucket?.size === 0) this.byOwner.delete(unit.owner);
     }
 
-    count(owner: ZCOwner): number { return this.counts[owner]; }
+    /** 普通单位数（**不含召唤物**）—— `unitCapPerSide` 判的就是它。*/
+    count(owner: ZCOwner): number { return this.regularCounts[owner]; }
+
+    /** 场上存活总数（含召唤物）。*/
+    countAll(owner: ZCOwner): number { return this.counts[owner]; }
 
     /** 索敌只遍历敌方 owner；返回的集合包含尸体，候选资格仍由 acquire 逐条过滤。*/
     unitsOf(owner: ZCOwner): ReadonlySet<ZCUnitState> {
@@ -67,7 +98,10 @@ export class ZCUnitRegistry {
 
     clear(): void {
         this.byId.clear(); this.byHex.clear(); this.byOwner.clear(); this.alive.clear();
-        for (const owner of ZC_OWNER_ORDER) this.counts[owner] = 0;
+        for (const owner of ZC_OWNER_ORDER) {
+            this.counts[owner] = 0;
+            this.regularCounts[owner] = 0;
+        }
     }
 
     private hexBucket(hexId: number): Set<ZCUnitState> {

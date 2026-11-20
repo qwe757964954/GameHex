@@ -204,6 +204,23 @@ export interface ZCCompiledModifierLoadout {
     textModifiers?: readonly ZCTextAttackModifier[];
     /** 本次构筑实际选中的技能计划行；战斗层据此挂命中状态/未来事件被动。*/
     skillPlans: readonly ZCSkillPlanRecord[];
+    /**
+     * 「强化那一击」的解锁门控（2026-11-19）。
+     *
+     * 为 `true` ⇒ 本局这个单位的 `pvpSkill.empoweredSkillId`（武将技那一击）**不许放**，
+     * 每次普攻都按普通普攻结算。判定口径见 `isZCEmpoweredLocked()`。
+     *
+     * 为什么需要它：施放与否只看基表 `pvpSkill`（`empoweredEvery` + `empoweredSkillId`），
+     * 与等级完全无关 —— 而「这个技能属于哪条链、几级解锁」写在 `pvpSkillPlan` 上。
+     * 结果就是**没解锁的技能照样放**（椰蛋战士 1 级就放暴风），缺的只是参数：轻则形状退化
+     * （暴风静立在目标点），重则空转。用户口径（2026-11-19）：**没到解锁等级就别放**。
+    */
+    empoweredLocked?: boolean;
+    /**
+     * 上面那个门控要写进的参数袋 key（`${unitId}:${pvpSkillId}`，即该单位普攻行的运行时）。
+     * 未解锁时 `skillPlans` 里未必有行能取到 `pvpSkillId`，所以构筑期就把它一起带出来。
+    */
+    empoweredBagKey?: string;
     breakdown: readonly ZCStatBreakdown[];
     effects: readonly ZCMappedEffect[];
     unsupportedAttributes: readonly string[];
@@ -586,6 +603,60 @@ export function selectZCSkillPlans(
     return selected.sort((left, right) => left.skillChainId - right.skillChainId || left.skillLevel - right.skillLevel);
 }
 
+/**
+ * 「主链」的 id 区间（2026-11-19）。
+ *
+ * 设计案里每张卡 4 条主链，id 落在 `100000~109999`（`100501` 蔓生连打 / `102604` 凤凰降临 …）；
+ * 辅助链是 `19xxxx` / `28xxxx` / `37xxxx`（老版残留，按兵种等级一路解锁到 22~23 级）。
+ * 门控只能看主链：拿辅助链一起判，会让 12 级就该解锁的武将技被 22 级那条拴住。
+*/
+const ZC_MAIN_CHAIN_MIN = 100000;
+const ZC_MAIN_CHAIN_MAX = 110000;
+
+/**
+ * 「强化那一击」该不该锁（2026-11-19 用户口径：**没到解锁等级就别放技能**）。
+ *
+ * 规则：**主链里只要还有一条没解锁，这个单位的武将技（`pvpSkill.empoweredSkillId`）就不许放。**
+ *
+ * 数据依据（全表实测）：每张卡 `pvpSkillPlan` 的最后一条主链都是 `100x04`，解锁等级 12 / 24 / 36，
+ * 而它的 `skillParamJson` 恰好就是那个武将技的行为参数（暴风 `zone*` / 豌豆机关枪 `burst*` /
+ * 迪斯科旋风 `zoneSelfCentered` / 飓风 `storm*` / 大吼大叫 `roar*` …）。
+ * 也就是说「武将技解锁了没有」在表结构层面等价于「主链全解锁了没有」，
+ * 不需要「技能 id ↔ 链 id」的映射列（`pvpSkill` 与 `pvpSkillPlan` 之间本来就没有这一列，
+ * 按名字或参数前缀硬推等于把表知识搬进代码，换一张卡就静默失效）。
+*/
+function isZCEmpoweredLocked(
+    unitId: string,
+    skillPlans: readonly ZCSkillPlanRecord[],
+    catalogs: ZCModifierCatalogs,
+): boolean {
+    const unlocked = new Set(skillPlans.map((row) => row.skillChainId));
+    for (const row of catalogs.adapters.skillPlans) {
+        if (!row.enabled || row.unitId !== unitId) continue;
+        if (row.skillChainId < ZC_MAIN_CHAIN_MIN || row.skillChainId >= ZC_MAIN_CHAIN_MAX) continue;
+        if (!unlocked.has(row.skillChainId)) return true;
+    }
+    return false;
+}
+
+/**
+ * 强化门控要写进的参数袋 key（`${unitId}:${pvpSkillId}`，即该单位普攻行的运行时）。
+ *
+ * 同一单位的全部链共用一个普攻袋（`68005:30707` 住五条链），所以取哪一行都一样；
+ * 优先取已选中的行，它为空时（等级低到只剩成长）退到表里第一条 —— 但等级再低也总有
+ * `109001`「全队暴击」那一批，所以正常情况下走不到兜底。
+*/
+function zcEmpoweredBagKey(
+    unitId: string,
+    skillPlans: readonly ZCSkillPlanRecord[],
+    catalogs: ZCModifierCatalogs,
+): string | undefined {
+    const selected = skillPlans[0]?.pvpSkillId;
+    if (selected) return `${unitId}:${selected}`;
+    const row = catalogs.adapters.skillPlans.find((item) => item.enabled && item.unitId === unitId);
+    return row ? `${unitId}:${row.pvpSkillId}` : undefined;
+}
+
 function compileSkillPlanLoadout(
     unitId: string,
     heroLevel: number,
@@ -681,6 +752,9 @@ function compileSkillPlanLoadout(
         typedModifiers,
         textModifiers,
         skillPlans,
+        //  武将技解锁门控：没到解锁等级就别放（见 `isZCEmpoweredLocked`）。
+        empoweredLocked: isZCEmpoweredLocked(unitId, skillPlans, catalogs) || undefined,
+        empoweredBagKey: zcEmpoweredBagKey(unitId, skillPlans, catalogs),
         breakdown: applyZCTypedUnitModifiers(unit, typedModifiers).breakdown,
         effects,
         unsupportedAttributes: [],
@@ -802,24 +876,27 @@ function resolveZCModifiedUnitDefinition(
     return { ...definition, attackProfile, empoweredProfile };
 }
 
-/** 关卡倍率作用于本地构筑；服务端最终属性最后覆盖，避免重复换算。*/
+/** 逐单位倍率优先，席位倍率只补未被服务端定值覆盖的属性。*/
 export function resolveZCUnitDefinition(
     base: ZCUnitDefinition,
     loadouts: readonly ZCCompiledModifierLoadout[],
     rates?: IZCBattleRates,
+    unitRates?: IZCBattleRates,
 ): ZCUnitDefinition {
     const definition = resolveZCModifiedUnitDefinition(base, loadouts);
-    if (!rates) return definition;
+    if (!rates && !unitRates) return definition;
     const serverOverrides = loadouts
         .filter((loadout) => loadout.sourceKind === 'server' && loadout.targetUnitId === base.unitId)
         .flatMap((loadout) => loadout.typedModifiers)
         .filter((modifier) => modifier.domain === 'unit' && modifier.operation === 'override');
+    const attackRate = unitRates?.attackRate
+        ?? (serverOverrides.some((modifier) => modifier.statId === 'attack') ? undefined : rates?.attackRate);
+    const hpRate = unitRates?.hpRate
+        ?? (serverOverrides.some((modifier) => modifier.statId === 'maxHp') ? undefined : rates?.hpRate);
     return {
         ...definition,
-        attack: rates.attackRate === undefined || serverOverrides.some((modifier) => modifier.statId === 'attack')
-            ? definition.attack : definition.attack * rates.attackRate,
-        maxHp: rates.hpRate === undefined || serverOverrides.some((modifier) => modifier.statId === 'maxHp')
-            ? definition.maxHp : definition.maxHp * rates.hpRate,
+        attack: attackRate === undefined ? definition.attack : definition.attack * attackRate,
+        maxHp: hpRate === undefined ? definition.maxHp : definition.maxHp * hpRate,
     };
 }
 

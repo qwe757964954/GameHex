@@ -25,7 +25,7 @@ import { ZCMapGeometry } from '../assets/script/app/zcds/model/ZCMapGeometry';
 import { ZC_PORTAL_FLIGHT_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 import type { ZCEconomyContext } from '../assets/script/app/zcds/model/systems/ZCEconomySystem';
 
-const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
+const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'monsterCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
     'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'neutralResourceGroup', 'neutralEnhanceGate', 'skillAttrModifier', 'generalStar'];
 const tables = Object.fromEntries(names.map(name => {
     const source = JSON.parse(readFileSync(`assets/remoteRef/${name}.json`, 'utf8'));

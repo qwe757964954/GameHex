@@ -38,14 +38,10 @@ export function mapToViewY(y: number): number { return y * ZC_MAP_SCALE_Y; }
 /**
  * 战斗表现项「到点了没」的唯一判据：`startedAt` 落在未来 ⇒ `false`。
  *
- * 逻辑层允许把 `startedAt` 推到未来（`castBoltLine` 的逐道落雷、`ZCProjectileSystem` 的延迟
- * 出发），视图侧必须照它整条不建节点，否则 `ZCCombatEffectView.render` 会把负进度钳成 0
- * ——效果就是「所有还没到点的特效在同一帧全部亮起」（2026-11-12 五雷轰顶反馈）。
+ * 逻辑层允许把 `startedAt` 推到未来（`castBoltLine` 的逐道落雷、`ZCProjectileSystem` 的延迟出发），
+ * 视图侧必须照它整条不建节点，避免未到点的特效在负进度时被钳制提前渲染。
  *
- * 判据放这里而不是散在调用点：`startedAt <= now` 这种比较写两遍，早晚会有一处写成 `<`。
- *
- * 取不到 `startedAt`（`undefined` / `NaN`：老快照、手搓事件、视图夹具）一律视为已到点 ——
- * 省略字段的历史口径是「立刻出现」，闸门不能把这类表现项整条吞掉。
+ * 取不到 `startedAt`（`undefined` / `NaN`）一律视为已到点立刻出现。
 */
 export function zcCombatEffectEntered(startedAt: number | undefined | null, now: number): boolean {
     if (typeof startedAt !== 'number' || !Number.isFinite(startedAt)) return true;
@@ -66,11 +62,7 @@ export function portalFlightLift(progress: number): number {
  *
  * 口径与 `ZCGameModel.homeId(ZCOwner.Player)` 一致：`homes[0]` 优先、缺省退回 `playerHomeId`。
  * 与人数无关 —— 3 / 4 人图上 `homes[0]` 仍然是我方（第 1 席）主城。
- * `cityMode === 'select'` 一律返回 `null`：那种图的 `homes` 只是给玩家看的默认建议，
- * 真正的主城要等选点确认（`ZCGame.finishSpawnSelection`）才知道，提前拿去当镜头落点会停在错的格子上。
- *
- * 之前落点一律取棋盘包围盒中心：2 人图上大致是双方正中，3 / 4 人图上则落在几块领地
- * 之间的中立空白处，开局第一眼看到的是别人的地界而不是自己家。
+ * `cityMode === 'select'` 一律返回 `null`：该模式主城需待选点确认后确定。
 */
 export function buildPlayerHomeFocus(
     map: Readonly<{

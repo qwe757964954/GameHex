@@ -120,7 +120,10 @@ function createBattlePageProbe(presenter: TerritoryModel) {
         (event: territoryEvents.ITerritoryCommandEvent) => {
             if (event.command.kind === 'navigate') page.onNavigateToBattle(event.command.payload);
         }, page);
-    Object.assign(page, { controllerResources: controller.resources });
+    Object.assign(page, {
+        controllerResources: controller.resources,
+        mapView: { isValid: false, beginBattleIntro: () => false },
+    });
     controller.start();
     return {
         page: {
@@ -289,6 +292,52 @@ const bundle: ITerritoryChapterBundle = {
     campaign: { stages: [stage], playerCardCount: 3, idleRewardMaxHours: 8, levelAutoStart: true },
     art: nullArt,
 };
+
+test('巡逻宝箱解锁后点击只打开详情，由挑战按钮发起战斗', async () => {
+    const loader = createFakeLoader({
+        ...bundle,
+        mapJson: {
+            ...mapJson,
+            sites: [
+                { id: 'patrolChest_1', type: 'patrolChest', cellId: 1, battleId: 1001, patrolLevelId: 1001 },
+                { id: 'patrolChest_2', type: 'patrolChest', cellId: 2, battleId: 1002 },
+            ],
+        },
+        campaign: { ...bundle.campaign, stages: [{ ...stage, mode: 'defence' }] },
+    });
+    const h = createHarness({ loader });
+    try {
+        h.presenter.start();
+        await flush();
+        const [patrol, unbound] = h.presenter.state.map!.sites;
+
+        assert.equal(h.presenter.selectSite(patrol), true);
+        await flush();
+        assert.equal(h.gatewayCalls.unlock, 1);
+        assert.equal(h.gatewayCalls.startBattle, 0);
+
+        assert.equal(h.presenter.selectSite(patrol), true);
+        assert.equal(h.presenter.state.detail.monsterBox?.cellId, patrol.cellId);
+        assert.equal(h.presenter.state.detail.monsterBox?.battleEnabled, true);
+        assert.equal(h.gatewayCalls.startBattle, 0);
+
+        h.presenter.state.progress!.markCellUnlocked(unbound.cellId);
+        assert.equal(h.presenter.selectSite(unbound), true);
+        assert.equal(h.presenter.state.detail.monsterBox?.cellId, unbound.cellId);
+        assert.equal(h.presenter.state.detail.monsterBox?.battleEnabled, false);
+        h.presenter.requestBattle();
+        assert.equal(h.gatewayCalls.startBattle, 0);
+
+        assert.equal(h.presenter.selectSite(patrol), true);
+        h.presenter.requestBattle();
+        await flush();
+        assert.deepEqual(h.gatewayCalls.battleParamsList, [['1', '1', '1']]);
+        assert.equal(h.gatewayCalls.pass, 0);
+        assert.equal(h.nav.length, 1);
+    } finally {
+        h.presenter.dispose();
+    }
+});
 
 function createBossFindLoader() {
     return createFakeLoader({

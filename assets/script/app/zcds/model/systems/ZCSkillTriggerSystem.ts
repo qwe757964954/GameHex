@@ -358,8 +358,7 @@ export class ZCSkillTriggerSystem {
             if (unit.battleState === 'dead' || unit.hp <= 0) continue;
             const runtime = context.runtimeOf(unit);
             const params = runtime?.parameters;
-            //  触发范围闸门（2026-11-11）：每个单位每步只算一次，四条打人型车道共用。
-            //  缺省（老上下文 / 单测夹具）⇒ 恒 true，等价于「不设闸门」。
+            // 触发范围闸门：每个单位每步只算一次，四条打人型车道共用。
             const release = context.inAttackRange?.(unit) ?? true;
 
             if (this.applyPassiveStatus(state, unit, runtime, context)) statusChanged = true;
@@ -425,12 +424,13 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        const rate = Math.max(0, context.statPatchOf?.(unit)?.hpRegenPct ?? 0);
+        const patch = context.statPatchOf ? context.statPatchOf(unit) : undefined;
+        const rate = Math.max(0, (patch && patch.hpRegenPct) || 0);
         if (!(rate > 0)) return;
         const ticks = Math.floor(now + 1e-9) - Math.floor(now - dt + 1e-9);
         if (ticks <= 0) return;
         const amount = unit.maxHp * rate / 100 * ticks;
-        if (amount > 0) context.healUnit?.(unit, amount);
+        if (amount > 0 && context.healUnit) context.healUnit(unit, amount);
     }
 
     /** 1. 常驻被动状态：每个单位只挂一次（`passiveStatusApplied` 标记进快照）。*/
@@ -540,13 +540,14 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): boolean {
-        const cooldown = Math.max(0, params?.teamBuffCooldown ?? 0);
-        const seconds = Math.max(0, params?.teamBuffSeconds ?? 0);
-        const radiusTable = Math.max(0, params?.teamBuffRadius ?? 0);
+        if (!params) return false;
+        const cooldown = Math.max(0, params.teamBuffCooldown ?? 0);
+        const seconds = Math.max(0, params.teamBuffSeconds ?? 0);
+        const radiusTable = Math.max(0, params.teamBuffRadius ?? 0);
         if (!(cooldown > 0) || !(seconds > 0) || !(radiusTable > 0)) return false;
         const mods: ZCStatusStatMods = {};
-        const damagePct = params?.teamBuffDamagePct ?? 0;
-        const attackSpeedPct = params?.teamBuffAttackSpeedPct ?? 0;
+        const damagePct = params.teamBuffDamagePct ?? 0;
+        const attackSpeedPct = params.teamBuffAttackSpeedPct ?? 0;
         if (damagePct) mods.damageRatePct = damagePct;
         if (attackSpeedPct) mods.attackIntervalPct = attackSpeedPct;
         //  一个字缀都没配 ⇒ 这条车道对这张卡是空的，别往状态系统里塞一条空增益。
@@ -580,8 +581,8 @@ export class ZCSkillTriggerSystem {
             });
         }
         const reach = radiusTable * Math.max(1e-6, context.distanceScale ?? 1);
-        const extendSeconds = Math.max(0, params?.teamBuffKillExtendSeconds ?? 0);
-        const extendMax = Math.max(0, params?.teamBuffKillExtendMaxSeconds ?? 0);
+        const extendSeconds = Math.max(0, params.teamBuffKillExtendSeconds ?? 0);
+        const extendMax = Math.max(0, params.teamBuffKillExtendMaxSeconds ?? 0);
         let applied = false;
         for (const ally of state.units) {
             if (ally.owner !== unit.owner || ally.battleState === 'dead' || ally.hp <= 0) continue;
@@ -679,19 +680,20 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): boolean {
+        if (!params) return false;
         //  参数名与 `ZCAttackResolutionSystem` / 配表口径一致，见 `pvpSkillPlan.skillParamJson`。
-        const rawThreshold = params?.lowHpThreshold ?? 0;
+        const rawThreshold = params.lowHpThreshold ?? 0;
         if (!(rawThreshold > 0)) return false;
         const threshold = Math.max(0, Math.min(1, rawThreshold));
         if (unit.maxHp > 0 && unit.hp / unit.maxHp > threshold) return false;
-        const cooldown = Math.max(0, params?.lowHpCooldown ?? 0);
+        const cooldown = Math.max(0, params.lowHpCooldown ?? 0);
         const firedAt = unit.lowHpGuardFiredAt;
         if (firedAt != null) {
             //  cooldown = 0 ⇒ 只触发一次：已经触发过就再也不触发。
             if (cooldown <= 0 || now < firedAt + cooldown) return false;
         }
-        const reducePct = Math.max(0, Math.min(95, params?.lowHpReducePct ?? 0));
-        const seconds = Math.max(0, params?.lowHpSeconds ?? 0);
+        const reducePct = Math.max(0, Math.min(95, params.lowHpReducePct ?? 0));
+        const seconds = Math.max(0, params.lowHpSeconds ?? 0);
         if (reducePct <= 0) return false;
         const statusId = lowHpGuardStatusId(reducePct, seconds);
         if (!context.statusSystem.hasDef(statusId)) {
@@ -707,7 +709,7 @@ export class ZCSkillTriggerSystem {
         unit.lowHpGuardFiredAt = now;
         //  受击反弹减益（格挡 III）：护体期间被单位打中就压攻击者攻速，只在本段有效期内生效，
         //  到期由 `ZCDamageResolutionSystem` 的时间比较自动失效（不用额外清理）。
-        const retaliate = Math.max(0, Math.min(95, params?.lowHpRetaliatePct ?? 0));
+        const retaliate = Math.max(0, Math.min(95, params.lowHpRetaliatePct ?? 0));
         if (retaliate > 0) {
             unit.retaliateSlowPct = retaliate;
             unit.retaliateUntil = now + seconds;
@@ -733,7 +735,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): boolean {
-        const cooldown = Math.max(0, params?.selfCastCooldown ?? 0);
+        if (!params) return false;
+        const cooldown = Math.max(0, params.selfCastCooldown ?? 0);
         if (!(cooldown > 0)) return false;
         const readyAt = unit.selfCastReadyAt;
         if (readyAt === undefined) { unit.selfCastReadyAt = now + cooldown; return false; }
@@ -744,12 +747,12 @@ export class ZCSkillTriggerSystem {
         //   只有这条车道 `hold = true`：别的主动都是打人的，锁住会毁掉追击与走位。
         this.markCastAction(unit, now, true);
 
-        const seconds = Math.max(0, params?.selfCastSeconds ?? 0);
+        const seconds = Math.max(0, params.selfCastSeconds ?? 0);
         const mods: ZCStatusStatMods = {};
-        const damagePct = params?.selfCastDamagePct ?? 0;
-        const attackSpeedPct = params?.selfCastAttackSpeedPct ?? 0;
-        const lifestealPct = params?.selfCastLifestealPct ?? 0;
-        const dodgePct = params?.selfCastDodgePct ?? 0;
+        const damagePct = params.selfCastDamagePct ?? 0;
+        const attackSpeedPct = params.selfCastAttackSpeedPct ?? 0;
+        const lifestealPct = params.selfCastLifestealPct ?? 0;
+        const dodgePct = params.selfCastDodgePct ?? 0;
         if (damagePct) mods.damageRatePct = damagePct;
         if (attackSpeedPct) mods.attackIntervalPct = attackSpeedPct;
         //  吸血口径与 `ZCUnitStatPatch.lifestealRate` 一致：比例，表里写 10 就是 10%。
@@ -777,7 +780,7 @@ export class ZCSkillTriggerSystem {
         }
 
         //  自身回血：按当前最大生命算（`maxHpPct` 增益吃到之后的上限才是玩家看到的那根血条）。
-        const selfHealPct = params?.selfCastHealPct ?? 0;
+        const selfHealPct = params.selfCastHealPct ?? 0;
         if (selfHealPct > 0 && context.healUnit) {
             context.healUnit(unit, unit.maxHp * selfHealPct / 100);
         }
@@ -785,8 +788,8 @@ export class ZCSkillTriggerSystem {
         //  友军治疗：与友军光环同一套「半径 × distanceScale」换算，只挑同阵营活着的。
         //  不含自己 —— 设计案把「自身回复 N%」和「友军回复 M%」写成两句话，
         //  自己已经吃了 `selfCastHealPct`，再吃一次友军的会变成 8% + 4% = 12%。
-        const allyRadius = params?.selfCastAllyRadius ?? 0;
-        const allyHealPct = params?.selfCastAllyHealPct ?? 0;
+        const allyRadius = params.selfCastAllyRadius ?? 0;
+        const allyHealPct = params.selfCastAllyHealPct ?? 0;
         if (allyRadius > 0 && allyHealPct > 0 && context.healUnit) {
             const reach = allyRadius * Math.max(1e-6, context.distanceScale ?? 1);
             for (const ally of state.units) {
@@ -798,7 +801,7 @@ export class ZCSkillTriggerSystem {
         }
 
         //  净化：只解「减益」——带硬控的，或任意一项 statMod 为负的。增益状态不动。
-        const cleanse = Math.max(0, params?.selfCastCleanse ?? 0);
+        const cleanse = Math.max(0, params.selfCastCleanse ?? 0);
         if (cleanse > 0) {
             const debuffs = context.statusSystem.instancesOf(String(unit.id))
                 .filter((instance) => isDebuffStatus(context.statusSystem, instance.defId))
@@ -824,18 +827,18 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): boolean {
-        if (!context.castSelfAura) return false;
-        const cooldown = Math.max(0, params?.auraCooldown ?? 0);
+        if (!context.castSelfAura || !params) return false;
+        const cooldown = Math.max(0, params.auraCooldown ?? 0);
         //  第二种触发口径（2026-11-11 磁电菇「磁电冲击」101604）：累计 N 次普攻。
         //  与 `random_strike` 的 `strikeEvery` 同一套算法，两种口径二选一。
-        const every = Math.max(0, params?.auraEvery ?? 0);
+        const every = Math.max(0, params.auraEvery ?? 0);
         if (!(cooldown > 0) && !(every > 0)) {
             //  诊断3.-a：连冷却/次数参数都读不到 ⇒ 说明 `skillParamJson` 没进运行时
             //  （最可能是构筑期整卡被跳过，见 `[技能诊断][构筑]`）。
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`aura-params:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} 自身光环没有 auraCooldown / auraEvery`
-                    + `（读到 ${params?.auraCooldown ?? 'undefined'} / ${params?.auraEvery ?? 'undefined'}）`
+                    + `（读到 ${params.auraCooldown ?? 'undefined'} / ${params.auraEvery ?? 'undefined'}）`
                     + '⇒ 这条车道整段不执行');
             }
             return false;
@@ -874,7 +877,7 @@ export class ZCSkillTriggerSystem {
         //  并且与特效长度对齐 —— 「只有敌人处于 350px 这个距离才会被攻击」。
         //  与上面那道普攻射程闸门是串联的：先证明「普攻够得着」，再把范围往下压。
         //  配 0 / 缺省 ⇒ 不压，退回「只看普攻射程」的旧行为。
-        const triggerRange = Math.max(0, params?.auraTriggerRange ?? 0);
+        const triggerRange = Math.max(0, params.auraTriggerRange ?? 0);
         if (triggerRange > 0 && context.nearestEnemyDistance) {
             const limit = triggerRange * Math.max(1e-6, context.distanceScale ?? 1);
             const nearest = context.nearestEnemyDistance(unit);
@@ -906,16 +909,16 @@ export class ZCSkillTriggerSystem {
         //  2. 光环期间的自身增益。按「生效词缀签名」复用同一条状态定义（`selfCastStatusId`），
         //  避免每张卡每种数值都往状态系统里塞一条新定义。
         //
-        //  2026-11-18 第 17 批扩了三项（仙人侍卫「巨型仙人掌」102104）：
+        //  仙人侍卫「巨型仙人掌」102104 包含三项：
         //    · `auraBodySizePct` —— 体积变大 30%；
         //    · `auraReflectPct`  —— 期间受伤反弹 50/51/52%（消费点 `ZCDamageResolutionSystem`）；
         //    · 原来的 `auraSelfDamagePct` 保持不变。
         //  三项生命周期完全相同（都是「光环开着才成立」的自身状态），所以并进**同一份**状态，
         //  不各开一条 —— 分开的话 6 秒里会同时挂三个图标，到期还会错拍。
-        const selfDamagePct = Math.max(0, params?.auraSelfDamagePct ?? 0);
-        const bodySizePct = Math.max(0, params?.auraBodySizePct ?? 0);
-        const reflectPct = Math.max(0, params?.auraReflectPct ?? 0);
-        const seconds = Math.max(0, params?.auraSeconds ?? 0);
+        const selfDamagePct = Math.max(0, params.auraSelfDamagePct ?? 0);
+        const bodySizePct = Math.max(0, params.auraBodySizePct ?? 0);
+        const reflectPct = Math.max(0, params.auraReflectPct ?? 0);
+        const seconds = Math.max(0, params.auraSeconds ?? 0);
         const mods: ZCStatusStatMods = {};
         if (selfDamagePct > 0) mods.damageRatePct = selfDamagePct;
         if (bodySizePct > 0) mods.bodySizePct = bodySizePct;
@@ -964,7 +967,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): boolean {
-        const every = Math.max(0, Math.round(params?.counterEvery ?? 0));
+        if (!params) return false;
+        const every = Math.max(0, Math.round(params.counterEvery ?? 0));
         if (!(every > 0)) return false;
         const done = unit.completedAttackCount ?? 0;
         const fired = unit.counterFiredCount;
@@ -972,12 +976,12 @@ export class ZCSkillTriggerSystem {
         if (fired === undefined) { unit.counterFiredCount = done; return false; }
         if (done - fired < every) return false;
 
-        const seconds = Math.max(0, params?.counterSeconds ?? 0);
+        const seconds = Math.max(0, params.counterSeconds ?? 0);
         const mods: ZCStatusStatMods = {};
-        const moveSpeedPct = params?.counterMoveSpeedPct ?? 0;
-        const attackPct = params?.counterAttackPct ?? 0;
-        const maxHpPct = params?.counterMaxHpPct ?? 0;
-        const bodySizePct = params?.counterBodySizePct ?? 0;
+        const moveSpeedPct = params.counterMoveSpeedPct ?? 0;
+        const attackPct = params.counterAttackPct ?? 0;
+        const maxHpPct = params.counterMaxHpPct ?? 0;
+        const bodySizePct = params.counterBodySizePct ?? 0;
         if (moveSpeedPct) mods.moveSpeedPct = moveSpeedPct;
         if (attackPct) mods.attackPct = attackPct;
         if (maxHpPct) mods.maxHpPct = maxHpPct;
@@ -1004,7 +1008,7 @@ export class ZCSkillTriggerSystem {
             at: state.elapsedSeconds, durationSeconds: seconds,
         });
         //  回血按「吃到增益之后的上限」算（与 `applySelfCast` 的 selfCastHealPct 同一口径）。
-        const healPct = Math.max(0, params?.counterHealMaxHpPct ?? 0);
+        const healPct = Math.max(0, params.counterHealMaxHpPct ?? 0);
         if (healPct > 0 && context.healUnit) context.healUnit(unit, unit.maxHp * healPct / 100);
         return result.applied;
     }
@@ -1021,14 +1025,14 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castBolt) return;
-        const cooldown = Math.max(0, params?.boltCooldown ?? 0);
+        if (!context.castBolt || !params) return;
+        const cooldown = Math.max(0, params.boltCooldown ?? 0);
         if (!(cooldown > 0)) {
             //  诊断9.-a：读到 0 ⇒ `skillParamJson` 没进运行时（整卡被跳过），这条车道整段不执行。
             if (zcSkillCastWatched(unit.unitId)) {
                 skillCastLogChanging(`bolt-params:${unit.id}`, '触发',
                     `${unit.unitId}#${unit.id} 五雷轰顶没有 boltCooldown`
-                    + `（读到 ${params?.boltCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
+                    + `（读到 ${params.boltCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
             }
             return;
         }
@@ -1083,8 +1087,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castChainLightning) return;
-        const cooldown = Math.max(0, params?.chainCooldown ?? 0);
+        if (!context.castChainLightning || !params) return;
+        const cooldown = Math.max(0, params.chainCooldown ?? 0);
         //  没配冷却就是「这张卡没有闪电链」。这条车道对每个单位每步都会过一遍，
         //  不加这道静默返回，`zcSkillCastWatched` 一开别的卡就会被刷成「闪电链没有 CD」。
         if (!(cooldown > 0)) return;
@@ -1135,8 +1139,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castRoar) return;
-        const cooldown = Math.max(0, params?.roarCooldown ?? 0);
+        if (!context.castRoar || !params) return;
+        const cooldown = Math.max(0, params.roarCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.roarReadyAt;
         if (readyAt === undefined) {
@@ -1173,8 +1177,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castStorm) return;
-        const cooldown = Math.max(0, params?.stormCooldown ?? 0);
+        if (!context.castStorm || !params) return;
+        const cooldown = Math.max(0, params.stormCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.stormReadyAt;
         if (readyAt === undefined) {
@@ -1214,8 +1218,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castRayBeam) return;
-        const every = Math.max(0, Math.round(params?.rayEvery ?? 0));
+        if (!context.castRayBeam || !params) return;
+        const every = Math.max(0, Math.round(params.rayEvery ?? 0));
         if (!(every > 0)) return;
         const done = unit.completedAttackCount ?? 0;
         const fired = unit.rayFiredCount;
@@ -1230,10 +1234,10 @@ export class ZCSkillTriggerSystem {
         }
         //  「受到的伤害提高」（L2 起）：按参数值 + 残留时长拼状态 id，同参数复用同一条定义。
         //  `damageTakenPct` 正 = 受到的伤害变高（破甲），负 = 减伤 —— 写反会变成自残。
-        const vulnPct = Math.max(0, params?.rayVulnPct ?? 0);
+        const vulnPct = Math.max(0, params.rayVulnPct ?? 0);
         let vulnStatusId: string | undefined;
         if (vulnPct > 0) {
-            const seconds = Math.max(0.05, params?.rayVulnSeconds ?? 0.3);
+            const seconds = Math.max(0.05, params.rayVulnSeconds ?? 0.3);
             vulnStatusId = `__rayvuln:${vulnPct.toFixed(4)}:${seconds.toFixed(2)}__`;
             if (!context.statusSystem.hasDef(vulnStatusId)) {
                 context.statusSystem.register({
@@ -1278,18 +1282,18 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castSummon) return;
+        if (!context.castSummon || !params) return;
         //  两条触发互斥（2026-11-18 第 17 批同时挂了两个召唤技能）：
         //  · `summonEvery`   = 累计普攻 N 次（101404「一人成军」，设计 K 列「累计普攻 8 次」）；
         //  · `summonCooldown`= 冷却制（103103「舞王召唤」，设计 J 列 12 秒）。
         //  同时配两条是配置错 —— 这里让 `summonEvery` 优先并照常放，不静默变成「两条都放」；
         //  `patch_batch17_k.py` / 各自的 patch 脚本都带「只许出现一条」的回读守卫。
-        const every = Math.max(0, Math.round(params?.summonEvery ?? 0));
+        const every = Math.max(0, Math.round(params.summonEvery ?? 0));
         if (every > 0) {
             this.applySummonByCount(unit, every, now, context);
             return;
         }
-        const cooldown = Math.max(0, params?.summonCooldown ?? 0);
+        const cooldown = Math.max(0, params.summonCooldown ?? 0);
         //  没配冷却就是「这张卡没有召唤」。这条车道对每个单位每步都会过一遍，不加就刷日志。
         if (!(cooldown > 0)) return;
         const readyAt = unit.summonReadyAt;
@@ -1353,14 +1357,14 @@ export class ZCSkillTriggerSystem {
     // 精密陷阱
 
     /**
-     * 精密陷阱 / 穿甲爆矢：留在原地的布置物，只在「被踩」与「到点」两个时刻各结算一次。
+     * 精密陷阱 / 蘑菇爆炸：留在原地的布置物，只在「被踩」与「到点」两个时刻各结算一次。
      * 不设普攻射程闸门：落点在自己脚下，等目标进范围会永远落在追兵身后。
      * 参数：trapCooldown/Duration/Radius/DamageRate/ExplodeRadius/ExplodeDamageRate/Forward
      *      （投掷形态再加 FlightSpeed / FlightSeconds / ExpireOnTimeout，见 `castTrap`）。
      *
      * 两种起手口径：
      *  · `trapCooldown > 0` ⇒ 冷却制（103504 精密陷阱，`unit.trapReadyAt`）；
-     *  · `trapEvery > 0`    ⇒ 累计普攻 N 次（101704 穿甲爆矢，`unit.trapFiredCount`）。
+     *  · `trapEvery > 0`    ⇒ 累计普攻 N 次（101704 蘑菇爆炸，`unit.trapFiredCount`）。
      *    设计原文是「累计普攻 8 次后朝目标丢出陷阱」，本来就没有冷却这一说；
      *    硬套 CD 会变成「不打人也能一直丢」。计数用**独立的一份**，理由同 `counterFiredCount`。
     */
@@ -1370,24 +1374,24 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castTrap) return;
-        const every = Math.max(0, Math.round(params?.trapEvery ?? 0));
+        if (!context.castTrap || !params) return;
+        const every = Math.max(0, Math.round(params.trapEvery ?? 0));
         if (every > 0) {
             this.applyTrapByCount(unit, every, now, context);
             return;
         }
-        const cooldown = Math.max(0, params?.trapCooldown ?? 0);
+        const cooldown = Math.max(0, params.trapCooldown ?? 0);
         if (!(cooldown > 0)) {
             //  诊断 10-a：只有本卡确实配了 `trap*` 参数才说话。
             //  这条车道对每个单位每步都会过一遍（`castTrap` 是全局钩子），没有陷阱的卡
             //  （大威天芦、磁电菇……）在这里本来就该静默返回；不加这个条件，
             //  只要 `zcSkillCastWatched` 开着，别的卡就会被刷成「精密陷阱没有 trapCooldown」。
             if (zcSkillCastWatched(unit.unitId)) {
-                const declared = !!params && Object.keys(params).some((key) => key.startsWith('trap'));
+                const declared = Object.keys(params).some((key) => key.startsWith('trap'));
                 if (declared) {
                     skillCastLogChanging(`trap-params:${unit.id}`, '触发',
                         `${unit.unitId}#${unit.id} 精密陷阱没有 trapCooldown`
-                        + `（读到 ${params?.trapCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
+                        + `（读到 ${params.trapCooldown ?? 'undefined'}）⇒ 这条车道整段不执行`);
                 }
             }
             return;
@@ -1418,7 +1422,7 @@ export class ZCSkillTriggerSystem {
     }
 
     /**
-     * 累计普攻 N 次丢一次陷阱（101704 穿甲爆矢）。
+     * 累计普攻 N 次丢一次陷阱（101704 蘑菇爆炸）。
      *
      * 与 `applyCounterBuff` 同一套「比上次多打了 N 次」算法，差别只有一处：
      * **被拒时不消费次数**（参数不全 ⇒ 下帧重试），否则一次配错表会把攒了 8 次的
@@ -1480,8 +1484,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castSplashShot) return;
-        const cooldown = Math.max(0, params?.shotCooldown ?? 0);
+        if (!context.castSplashShot || !params) return;
+        const cooldown = Math.max(0, params.shotCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.splashReadyAt;
         //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `boltReadyAt` / `trapReadyAt` 同口径）。
@@ -1510,8 +1514,9 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         context: IZCSkillTriggerContext,
     ): string | undefined {
-        const slowPct = Math.max(0, Math.min(100, params?.shotSlowRatio ?? 0));
-        const seconds = Math.max(0, params?.shotSlowSeconds ?? 0);
+        if (!params) return undefined;
+        const slowPct = Math.max(0, Math.min(100, params.shotSlowRatio ?? 0));
+        const seconds = Math.max(0, params.shotSlowSeconds ?? 0);
         if (!(slowPct > 0) || !(seconds > 0)) return undefined;
         const statusId = splashShotSlowStatusId(slowPct, seconds);
         if (!context.statusSystem.hasDef(statusId)) {
@@ -1551,8 +1556,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castWindBolt) return;
-        const cooldown = Math.max(0, params?.windCooldown ?? 0);
+        if (!context.castWindBolt || !params) return;
+        const cooldown = Math.max(0, params.windCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.windReadyAt;
         //  首次：从「当前时刻 + CD」起算，开局不立刻放（与 `splashReadyAt` / `trapReadyAt` 同口径）。
@@ -1593,8 +1598,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.castBarrageShot) return;
-        const interval = Math.max(0.05, params?.barrageInterval ?? ZC_BARRAGE_DEFAULT_INTERVAL);
+        if (!context.castBarrageShot || !params) return;
+        const interval = Math.max(0.05, params.barrageInterval ?? ZC_BARRAGE_DEFAULT_INTERVAL);
         //  ── 1. 补发 ──
         const left = unit.barrageShotsLeft ?? 0;
         if (left > 0) {
@@ -1610,7 +1615,7 @@ export class ZCSkillTriggerSystem {
             return;
         }
         //  ── 2. 触发（累计普攻） ──
-        const every = Math.max(0, Math.round(params?.barrageEvery ?? 0));
+        const every = Math.max(0, Math.round(params.barrageEvery ?? 0));
         if (!(every > 0)) return;
         const done = unit.completedAttackCount ?? 0;
         const fired = unit.barrageFiredCount;
@@ -1620,7 +1625,7 @@ export class ZCSkillTriggerSystem {
         if (!release) return;
         if (!context.castBarrageShot(unit)) return;
         unit.barrageFiredCount = done;
-        const count = Math.max(1, Math.round(params?.barrageCount ?? 1));
+        const count = Math.max(1, Math.round(params.barrageCount ?? 1));
         if (count > 1) {
             unit.barrageShotsLeft = count - 1;
             unit.barrageNextAt = now + interval;
@@ -1654,8 +1659,8 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         lane: 'burst' | 'venom' = 'burst',
     ): void {
-        if (!context.castBurstSkill) return;
-        const cooldown = Math.max(0, params?.[`${lane}Cooldown`] ?? 0);
+        if (!context.castBurstSkill || !params) return;
+        const cooldown = Math.max(0, params[`${lane}Cooldown`] ?? 0);
         if (!(cooldown > 0)) return;
         //  两条车道的 CD 各记各的：同一张卡（68018）同时挂着菌核爆裂与毒液喷吐，
         //  共用一个 `burstReadyAt` 会变成「爆完这个、那个也进冷却」。
@@ -1692,8 +1697,9 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         context: IZCSkillTriggerContext,
     ): string | undefined {
-        const reducePct = Math.max(0, Math.min(95, params?.burstShieldReducePct ?? 0));
-        const seconds = Math.max(0, params?.burstShieldSeconds ?? 0);
+        if (!params) return undefined;
+        const reducePct = Math.max(0, Math.min(95, params.burstShieldReducePct ?? 0));
+        const seconds = Math.max(0, params.burstShieldSeconds ?? 0);
         if (!(reducePct > 0) || !(seconds > 0)) return undefined;
         const statusId = burstGuardStatusId(reducePct, seconds);
         if (!context.statusSystem.hasDef(statusId)) {
@@ -1729,8 +1735,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castFanSweep) return;
-        const cooldown = Math.max(0, params?.fanCooldown ?? 0);
+        if (!context.castFanSweep || !params) return;
+        const cooldown = Math.max(0, params.fanCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.fanReadyAt;
         //  首次：从「当前时刻 + CD」起算，开局不立刻甩（与其余四条车道同口径）。
@@ -1756,8 +1762,9 @@ export class ZCSkillTriggerSystem {
         params: Readonly<Record<string, number>> | undefined,
         context: IZCSkillTriggerContext,
     ): string | undefined {
-        const slowPct = Math.max(0, Math.min(100, params?.fanSlowRatio ?? 0));
-        const seconds = Math.max(0, params?.fanSlowSeconds ?? 0);
+        if (!params) return undefined;
+        const slowPct = Math.max(0, Math.min(100, params.fanSlowRatio ?? 0));
+        const seconds = Math.max(0, params.fanSlowSeconds ?? 0);
         if (!(slowPct > 0) || !(seconds > 0)) return undefined;
         const statusId = fanSweepSlowStatusId(slowPct, seconds);
         if (!context.statusSystem.hasDef(statusId)) {
@@ -1788,12 +1795,12 @@ export class ZCSkillTriggerSystem {
         context: IZCSkillTriggerContext,
         release: boolean,
     ): void {
-        if (!context.strike) return;
-        const count = Math.max(0, params?.strikeCount ?? 0);
-        const radius = Math.max(0, params?.strikeRadius ?? 0);
+        if (!context.strike || !params) return;
+        const count = Math.max(0, params.strikeCount ?? 0);
+        const radius = Math.max(0, params.strikeRadius ?? 0);
         if (!(count >= 1) || !(radius > 0)) return;
-        const cooldown = Math.max(0, params?.strikeCooldown ?? 0);
-        const every = Math.max(0, params?.strikeEvery ?? 0);
+        const cooldown = Math.max(0, params.strikeCooldown ?? 0);
+        const every = Math.max(0, params.strikeEvery ?? 0);
         if (!(cooldown > 0) && !(every > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
         //  触发范围封顶（2026-11-11 用户口径「直接压到普攻范围」）：
@@ -1810,25 +1817,25 @@ export class ZCSkillTriggerSystem {
                 `单位 ${unit.unitId} 拿到导弹参数：strikeCount=${count} strikeRadius=${radius}`
                 + `（世界 ${(radius * scale).toFixed(1)}，封顶后 ${searchRadius.toFixed(1)}）`
                 + ` cooldown=${cooldown} every=${every}`
-                + ` nearest=${params?.strikeNearest ?? 0} splash=${params?.strikeSplashRadius ?? 0}`
+                + ` nearest=${params.strikeNearest ?? 0} splash=${params.strikeSplashRadius ?? 0}`
                 + ` | 弹体=${missileFx.missilePrefabPath} 爆炸=${missileFx.impactPrefabPath}`);
         }
         const fire = (): boolean => {
             const options: IZCStrikeOptions = {
                 count: Math.round(count),
                 radius: searchRadius,
-                damageRate: Math.max(0, params?.strikeDamageRate ?? 1),
-                nearest: (params?.strikeNearest ?? 0) > 0,
-                splashRadius: Math.max(0, params?.strikeSplashRadius ?? 0) * scale,
-                splashDamageRate: Math.max(0, params?.strikeSplashDamageRate ?? 0),
-                splashFalloff: Math.max(0, Math.min(1, params?.strikeSplashFalloff ?? 0)),
+                damageRate: Math.max(0, params.strikeDamageRate ?? 1),
+                nearest: (params.strikeNearest ?? 0) > 0,
+                splashRadius: Math.max(0, params.strikeSplashRadius ?? 0) * scale,
+                splashDamageRate: Math.max(0, params.strikeSplashDamageRate ?? 0),
+                splashFalloff: Math.max(0, Math.min(1, params.strikeSplashFalloff ?? 0)),
                 //  命中挂状态（2026-11-17 急冻瓜「急冻光线」102404）：必须显式开
                 //  `strikeAppliesStatus = 1` 才挂，缺省 0 ⇒ 既有 `random_strike` 行为逐字不变。
                 //  🔴 状态 id **不能**取 `runtime.statusId`：那是整卡共用的一个槽
                 //  （`mergeSkillPlanIntoRuntime` 按 `unitId:pvpSkillId` 合并），
                 //  写了它会让这张卡的**普攻每一发**都挂上同一个状态（`hitStatusOnBeat` 对
                 //  没配 `statusEveryNAttacks` 的技能恒为 true）。与落雷同一个理由写死常量。
-                statusId: (params?.strikeAppliesStatus ?? 0) > 0 ? ZC_STRIKE_NUMB_STATUS_ID : undefined,
+                statusId: (params.strikeAppliesStatus ?? 0) > 0 ? ZC_STRIKE_NUMB_STATUS_ID : undefined,
                 //  追踪导弹（镭射飞龙 68010）：挑到人就发会飞的导弹，不立即结算。
                 missilePrefabPath: missileFx?.missilePrefabPath,
                 impactPrefabPath: missileFx?.impactPrefabPath,
@@ -1850,8 +1857,8 @@ export class ZCSkillTriggerSystem {
             if (hits > 0) this.markCastAction(unit, now, false);
             return hits > 0;
         };
-        const windowSeconds = Math.max(0, params?.strikeSeconds ?? 0);
-        const interval = Math.max(0.05, params?.strikeInterval ?? 1);
+        const windowSeconds = Math.max(0, params.strikeSeconds ?? 0);
+        const interval = Math.max(0.05, params.strikeInterval ?? 1);
 
         //  1. 窗口进行中：每 interval 秒一波，窗口结束就收工。
         const until = unit.strikeUntil;
@@ -1938,7 +1945,8 @@ export class ZCSkillTriggerSystem {
         runtime?: ZCSkillRuntimeDefinition,
         release = true,
     ): void {
-        const cooldown = Math.max(0, params?.blinkCooldown ?? 0);
+        if (!params) return;
+        const cooldown = Math.max(0, params.blinkCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
         const posOf = (target: ZCUnitState): { x: number; y: number } => (context.unitPosition
@@ -1948,8 +1956,8 @@ export class ZCSkillTriggerSystem {
         //  1. 先结算到点的分身，再判本次 CD —— 反过来的话「闪回 + 分身同帧」会把爆炸推迟一轮。
         const cloneAt = unit.blinkCloneAt;
         if (cloneAt != null && now >= cloneAt) {
-            const radius = Math.max(0, params?.blinkCloneRadius ?? 0) * scale;
-            const rate = Math.max(0, params?.blinkCloneDamageRate ?? 0);
+            const radius = Math.max(0, params.blinkCloneRadius ?? 0) * scale;
+            const rate = Math.max(0, params.blinkCloneDamageRate ?? 0);
             if (radius > 0 && rate > 0 && context.strike) {
                 context.strike(unit, {
                     //  范围爆炸最多波及几个：设计案只写「范围伤害」，没给上限。
@@ -1980,7 +1988,7 @@ export class ZCSkillTriggerSystem {
         //  触发范围封顶（用户口径「直接压到普攻范围」）：`blinkSearchRadius` 是表值 px，
         //  魔术师配的 600（约 180px）大于普攻射程 148.5px ⇒ 压到普攻射程；只压不抬。
         const reachCap = Math.max(0, context.attackReachOf?.(unit) ?? Number.POSITIVE_INFINITY);
-        const searchRadius = Math.min(Math.max(0, params?.blinkSearchRadius ?? 0) * scale, reachCap);
+        const searchRadius = Math.min(Math.max(0, params.blinkSearchRadius ?? 0) * scale, reachCap);
         if (!(searchRadius > 0)) return;
         const self = posOf(unit);
         let victim: ZCUnitState | undefined;
@@ -2000,11 +2008,11 @@ export class ZCSkillTriggerSystem {
         const dx = target.x - self.x;
         const dy = target.y - self.y;
         const length = Math.hypot(dx, dy);
-        const stop = Math.max(0, params?.blinkStopDistance ?? 30) * scale;
+        const stop = Math.max(0, params.blinkStopDistance ?? 30) * scale;
         const landX = length > stop && length > 1e-9 ? target.x - dx / length * stop : target.x;
         const landY = length > stop && length > 1e-9 ? target.y - dy / length * stop : target.y;
-        const hitRadius = Math.max(1, Math.max(0, params?.blinkHitRadius ?? 40) * scale);
-        const damageRate = Math.max(0, params?.blinkDamageRate ?? 0);
+        const hitRadius = Math.max(1, Math.max(0, params.blinkHitRadius ?? 40) * scale);
+        const damageRate = Math.max(0, params.blinkDamageRate ?? 0);
 
         //  出发地闪一下（需求 2026-11-07）。放在 `blinkTo` 之前：这条事件用的是 `self`，
         //  而 `self` 是闪走之前的坐标 —— 先位移再取，位置就成落点了。
@@ -2039,18 +2047,18 @@ export class ZCSkillTriggerSystem {
         }
         //  2. 往返（II 级起）：闪回原位再打同样一发。回位用施法时的坐标，
         //     不是「当前位置」—— 否则闪过去之后回位点会跟着变。
-        if ((params?.blinkRoundTrip ?? 0) > 0) {
+        if ((params.blinkRoundTrip ?? 0) > 0) {
             context.blinkTo(unit, self.x, self.y);
             if (damageRate > 0) {
                 context.strike(unit, { count: 1, radius: hitRadius, damageRate, nearest: true });
             }
         }
         //  3. 分身：留在原位，到时爆炸。
-        const cloneRate = Math.max(0, params?.blinkCloneDamageRate ?? 0);
+        const cloneRate = Math.max(0, params.blinkCloneDamageRate ?? 0);
         if (cloneRate > 0) {
             unit.blinkCloneX = self.x;
             unit.blinkCloneY = self.y;
-            unit.blinkCloneAt = now + Math.max(0, params?.blinkCloneSeconds ?? 0);
+            unit.blinkCloneAt = now + Math.max(0, params.blinkCloneSeconds ?? 0);
         }
         unit.blinkReadyAt = now + cooldown;
     }
@@ -2085,8 +2093,8 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.blinkTo || !context.strike) return;
-        const cooldown = Math.max(0, params?.singleCooldown ?? 0);
+        if (!context.blinkTo || !context.strike || !params) return;
+        const cooldown = Math.max(0, params.singleCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.singleReadyAt;
         //  首次：从「当前时刻 + CD」起算，开局不立刻扑（与其余车道同口径）。
@@ -2094,7 +2102,7 @@ export class ZCSkillTriggerSystem {
         if (now < readyAt) return;
 
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
-        const searchRadius = Math.max(0, params?.singleSearchRadius ?? 0) * scale;
+        const searchRadius = Math.max(0, params.singleSearchRadius ?? 0) * scale;
         if (!(searchRadius > 0)) return;
         const posOf = (target: ZCUnitState): { x: number; y: number } => (context.unitPosition
             ? { ...context.unitPosition(target) }
@@ -2119,11 +2127,11 @@ export class ZCSkillTriggerSystem {
         const length = Math.hypot(dx, dy);
         //  落点 = 目标身边 `singleStopDistance`，与闪现同一条几何：贴上去但不重叠
         //  （重叠会让「谁在打谁」在渲染层分不清，也会让击退方向退化）。
-        const stop = Math.max(0, params?.singleStopDistance ?? 30) * scale;
+        const stop = Math.max(0, params.singleStopDistance ?? 30) * scale;
         const landX = length > stop && length > 1e-9 ? target.x - dx / length * stop : target.x;
         const landY = length > stop && length > 1e-9 ? target.y - dy / length * stop : target.y;
-        const hitRadius = Math.max(1, Math.max(0, params?.singleHitRadius ?? 40) * scale);
-        const damageRate = Math.max(0, params?.singleDamageRate ?? 0);
+        const hitRadius = Math.max(1, Math.max(0, params.singleHitRadius ?? 40) * scale);
+        const damageRate = Math.max(0, params.singleDamageRate ?? 0);
         if (!(damageRate > 0)) return;
 
         //  命中表现贴在**目标**身上（设计案 O 列「长戟兵_撕裂 贴目标播」）。
@@ -2155,7 +2163,7 @@ export class ZCSkillTriggerSystem {
         //  施法动作：扑到位之后在落点播半秒攻击动作；不锁原地（人已经被挪走了）。
         this.markCastAction(unit, now, false);
 
-        const stunSeconds = Math.max(0, params?.singleStunSeconds ?? 0);
+        const stunSeconds = Math.max(0, params.singleStunSeconds ?? 0);
         let stunStatusId: string | undefined;
         if (stunSeconds > 0) {
             stunStatusId = singleStrikeStunStatusId(stunSeconds);
@@ -2178,8 +2186,8 @@ export class ZCSkillTriggerSystem {
             count: 1, radius: hitRadius, damageRate, nearest: true, statusId: stunStatusId,
         });
         //  III 级攻速增益：**命中之后**才给，空放不给（设计案 N 列原话）。
-        const hastePct = Math.max(0, params?.singleHastePct ?? 0);
-        const hasteSeconds = Math.max(0, params?.singleHasteSeconds ?? 0);
+        const hastePct = Math.max(0, params.singleHastePct ?? 0);
+        const hasteSeconds = Math.max(0, params.singleHasteSeconds ?? 0);
         if (hits > 0 && hastePct > 0 && hasteSeconds > 0) {
             const hasteStatusId = singleStrikeHasteStatusId(hastePct, hasteSeconds);
             if (!context.statusSystem.hasDef(hasteStatusId)) {
@@ -2224,19 +2232,19 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castChargeDash || !context.blinkTo) return;
-        const cooldown = Math.max(0, params?.chargeCooldown ?? 0);
+        if (!context.castChargeDash || !context.blinkTo || !params) return;
+        const cooldown = Math.max(0, params.chargeCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.chargeReadyAt;
         //  首次：从「当前 + CD」起算，开局不立刻冲（与其余车道同口径）。
         if (readyAt === undefined) { unit.chargeReadyAt = now + cooldown; return; }
         if (now < readyAt) return;
-        const damageRate = Math.max(0, params?.chargeDamageRate ?? 0);
+        const damageRate = Math.max(0, params.chargeDamageRate ?? 0);
         if (!(damageRate > 0)) return;
         const heading = this.dashHeadingTowardTarget(unit, context);
         if (heading === null) return;
         const destination = this.dashDestination(unit, heading,
-            Math.max(0, params?.chargeCells ?? 1), Number.POSITIVE_INFINITY, context);
+            Math.max(0, params.chargeCells ?? 1), Number.POSITIVE_INFINITY, context);
         if (!destination) return;
         const origin = this.dashOrigin(unit, context);
         //  位移本身「不可被打断」（设计案 N 列 102303 原话），所以先推表现再挪人：
@@ -2245,9 +2253,9 @@ export class ZCSkillTriggerSystem {
         context.blinkTo(unit, destination.x, destination.y);
         this.markCastAction(unit, now, false);
 
-        const shieldRatio = Math.max(0, params?.chargeShieldRatio ?? 0);
-        const shieldSeconds = Math.max(0, params?.chargeShieldSeconds ?? 0);
-        const hitRadius = Math.max(1, Math.max(0, params?.chargeHitRadius ?? 40)
+        const shieldRatio = Math.max(0, params.chargeShieldRatio ?? 0);
+        const shieldSeconds = Math.max(0, params.chargeShieldSeconds ?? 0);
+        const hitRadius = Math.max(1, Math.max(0, params.chargeHitRadius ?? 40)
             * Math.max(1e-6, context.distanceScale ?? 1));
         context.castChargeDash(unit, {
             origin,
@@ -2287,23 +2295,23 @@ export class ZCSkillTriggerSystem {
         now: number,
         context: IZCSkillTriggerContext,
     ): void {
-        if (!context.castChargeDash || !context.blinkTo) return;
-        const cooldown = Math.max(0, params?.dashCooldown ?? 0);
+        if (!context.castChargeDash || !context.blinkTo || !params) return;
+        const cooldown = Math.max(0, params.dashCooldown ?? 0);
         if (!(cooldown > 0)) return;
         const readyAt = unit.dashReadyAt;
         if (readyAt === undefined) { unit.dashReadyAt = now + cooldown; return; }
         if (now < readyAt) return;
-        const damageRate = Math.max(0, params?.dashDamageRate ?? 0);
+        const damageRate = Math.max(0, params.dashDamageRate ?? 0);
         if (!(damageRate > 0)) return;
-        const cells = Math.max(0, params?.dashCells ?? 0);
+        const cells = Math.max(0, params.dashCells ?? 0);
         if (!(cells > 0)) return;
         const scale = Math.max(1e-6, context.distanceScale ?? 1);
-        const towardNearest = (params?.dashTowardNearest ?? 0) > 0;
+        const towardNearest = (params.dashTowardNearest ?? 0) > 0;
         //  朝最近敌人那档要一个最大冲程上限：人就在 20px 外时不该「冲过头」穿到背后去。
         let limit = Number.POSITIVE_INFINITY;
         let heading: number | null;
         if (towardNearest) {
-            const searchRadius = Math.max(0, params?.dashSearchRadius ?? 0) * scale;
+            const searchRadius = Math.max(0, params.dashSearchRadius ?? 0) * scale;
             const target = searchRadius > 0
                 ? this.nearestEnemy(unit, searchRadius, state, context)
                 : null;
@@ -2329,13 +2337,13 @@ export class ZCSkillTriggerSystem {
         //  易伤给**被打的人**、减伤给**自己** —— 两条都叫 `damageTakenPct`，方向正好相反，
         //  写错一处就是「自保变成自残」，而且不报错。
         let statusId: string | undefined;
-        const stunSeconds = Math.max(0, params?.dashStunSeconds ?? 0);
+        const stunSeconds = Math.max(0, params.dashStunSeconds ?? 0);
         if (stunSeconds > 0) {
             statusId = singleStrikeStunStatusId(stunSeconds);
             this.ensureControlStatus(context, statusId, stunSeconds);
         }
-        const vulnPct = Math.max(0, params?.dashVulnerablePct ?? 0);
-        const vulnSeconds = Math.max(0, params?.dashVulnerableSeconds ?? 0);
+        const vulnPct = Math.max(0, params.dashVulnerablePct ?? 0);
+        const vulnSeconds = Math.max(0, params.dashVulnerableSeconds ?? 0);
         if (vulnPct > 0 && vulnSeconds > 0) {
             statusId = dashVulnerableStatusId(vulnPct, vulnSeconds);
             if (!context.statusSystem.hasDef(statusId)) {
@@ -2351,8 +2359,8 @@ export class ZCSkillTriggerSystem {
                 });
             }
         }
-        const guardPct = Math.max(0, params?.dashGuardReducePct ?? 0);
-        const guardSeconds = Math.max(0, params?.dashGuardSeconds ?? 0);
+        const guardPct = Math.max(0, params.dashGuardReducePct ?? 0);
+        const guardSeconds = Math.max(0, params.dashGuardSeconds ?? 0);
         let guardStatusId: string | undefined;
         if (guardPct > 0 && guardSeconds > 0) {
             guardStatusId = dashGuardStatusId(guardPct, guardSeconds);
@@ -2372,11 +2380,11 @@ export class ZCSkillTriggerSystem {
         context.castChargeDash(unit, {
             origin,
             destination,
-            hitRadius: Math.max(1, Math.max(0, params?.dashHitRadius ?? 40) * scale),
+            hitRadius: Math.max(1, Math.max(0, params.dashHitRadius ?? 40) * scale),
             damageRate,
             statusId,
-            shieldRatio: Math.max(0, params?.dashShieldRatio ?? 0),
-            shieldSeconds: Math.max(0, params?.dashShieldSeconds ?? 0),
+            shieldRatio: Math.max(0, params.dashShieldRatio ?? 0),
+            shieldSeconds: Math.max(0, params.dashShieldSeconds ?? 0),
             guardStatusId,
             guardSeconds,
         });

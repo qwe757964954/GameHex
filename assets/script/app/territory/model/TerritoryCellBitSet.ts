@@ -123,7 +123,12 @@ export function decodeCellBitSet(words: readonly unknown[] | null | undefined, m
     // 半截数据比全空更糟：领地页会按"缺格子"渲染 ⇒ 凭空吃掉玩家已通关的领地。
     if (invalid.length) return { cells: null, reason: invalid.join('；') };
     const limit = typeof maxCell === 'number' && Number.isFinite(maxCell) && maxCell > 0 ? maxCell : Infinity;
-    return { cells: Array.from(new Set(cells.filter((cell) => cell >= 0 && cell < limit))).sort((a, b) => a - b) };
+    const cellSet = new Set<number>();
+    for (let i = 0; i < cells.length; i++) {
+        const cell = cells[i];
+        if (cell >= 0 && cell < limit) cellSet.add(cell);
+    }
+    return { cells: Array.from(cellSet).sort((a, b) => a - b) };
 }
 
 /**
@@ -172,7 +177,11 @@ export function encodeCellBitSet(cells: readonly number[]): Array<{ low: number;
         if (bit < BITS_PER_HALF) lows[wordIndex] += bitValue(bit);
         else highs[wordIndex] += bitValue(bit - BITS_PER_HALF);
     }
-    return lows.map((low, index) => ({ low, high: highs[index], unsigned: true }));
+    const result: { low: number; high: number; unsigned: boolean }[] = [];
+    for (let index = 0; index < wordCount; index++) {
+        result.push({ low: lows[index], high: highs[index], unsigned: true });
+    }
+    return result;
 }
 
 /**

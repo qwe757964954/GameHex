@@ -27,9 +27,16 @@ export function territoryRevealedCells(
     const revealed = new Set<number>(opened);
     for (const site of map.sites) {
         const required = site.unlock.requiredCells;
-        if (required.length > 0 && required.every((cell) => progress.isPrerequisiteComplete(cell))) {
-            revealed.add(site.cellId);
-        } else if (required.length === 0 && frontier.has(site.cellId)) {
+        if (required.length > 0) {
+            let allComplete = true;
+            for (let i = 0; i < required.length; i++) {
+                if (!progress.isPrerequisiteComplete(required[i])) {
+                    allComplete = false;
+                    break;
+                }
+            }
+            if (allComplete) revealed.add(site.cellId);
+        } else if (frontier.has(site.cellId)) {
             revealed.add(site.cellId);
         }
     }

@@ -144,4 +144,7 @@
 {"key":"chapterLevelAutoStartConfig","value":1},
 {"key":"bigMapStartCountRankTime","value":[21,10]},
 {"key":"bigMapRankRewardTime","value":[21,30]},
-{"key":"bigMapReFreshRankStopTime","value":60}]
+{"key":"bigMapReFreshRankStopTime","value":60},
+{"key":"neutralMonsterFocusSwitchCdSeconds","value":3},
+{"key":"neutralMonsterRegenDelaySeconds","value":3},
+{"key":"neutralMonsterRegenRate","value":0}]

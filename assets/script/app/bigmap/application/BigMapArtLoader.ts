@@ -5,7 +5,8 @@ import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import { spriteFramePathOf } from '../../ArtPaths';
 import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
-    BIGMAP_BASE_BACKGROUND, BIGMAP_BASE_FALLBACK_ART, BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
+    BIGMAP_BASE_FALLBACK_ART, BIGMAP_BASE_TILE_DIRT, BIGMAP_BASE_TILE_GRASS,
+    BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
     BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_STAMINA_ART,
     BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, toBigMapArtPath, worldCampArtFor,
     type IBigMapHudUiKey, type IBigMapPlateKey,
@@ -22,7 +23,9 @@ export interface IBigMapArt {
     readonly monster: SpriteFrame | null;
     readonly rock: SpriteFrame | null;
     readonly grass: SpriteFrame | null;
-    readonly baseBackground: SpriteFrame | null;
+    /** 基地地皮：草地 / 泥土（蓝湖「大地图(1)」的 126×117 六边切片）。 */
+    readonly baseTileGrass: SpriteFrame | null;
+    readonly baseTileDirt: SpriteFrame | null;
     readonly construction: SpriteFrame | null;
     readonly buildings: ReadonlyMap<number, SpriteFrame | null>;
     readonly camps: ReadonlyMap<number, SpriteFrame | null>;
@@ -145,7 +148,8 @@ export async function loadBigMapArt(
         return [key, key === 'stamina' ? await load(BIGMAP_STAMINA_ART) : await sprite(key)] as const;
     }));
     const baseTask = Promise.all([
-        load(BIGMAP_BASE_BACKGROUND), sprite('construction'), sprite('rocks'), sprite('grass'),
+        load(BIGMAP_BASE_TILE_GRASS), load(BIGMAP_BASE_TILE_DIRT),
+        sprite('construction'), sprite('rocks'), sprite('grass'),
     ]);
     //名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
@@ -153,7 +157,7 @@ export async function loadBigMapArt(
     )));
     const plateFlagTask = load(BIGMAP_PLATE_FLAG_FILE);
     const [[backdrop, home, city, monster, rock, grass, tiledBackground], buildingEntries,
-        hudEntries, resourceEntries, [baseBackground, construction, conceptRock, conceptGrass], campEntries,
+        hudEntries, resourceEntries, [baseTileGrass, baseTileDirt, construction, conceptRock, conceptGrass], campEntries,
         plateEntries, plateFlag] = await Promise.all([
         terrainTask, buildingTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
@@ -166,7 +170,7 @@ export async function loadBigMapArt(
     return { background: backdrop, tiledBackground, ground: null,
         groundVariants: [], home: home ?? buildings.get(71001) ?? null, city, monster,
         rock: conceptRock ?? rock, grass: conceptGrass ?? grass,
-        baseBackground, construction, buildings,
+        baseTileGrass, baseTileDirt, construction, buildings,
         camps: new Map(campEntries.map(([id, frame]) => [id, frame ?? city])),
         hud: new Map(hudEntries), plates: new Map(plateEntries), plateFlag,
         resources: new Map(resourceEntries) };

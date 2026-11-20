@@ -144,7 +144,7 @@ test('建筑图标按「格高」撑满、水平居中、scale=1：换一张图�
 test('基地使用一张连续背景，选择和调整窗口不恢复旧地面贴片', () => {
     const h = buildBase();
     const background = { rect: { width: 2048, height: 2048 }, originalSize: { width: 2048, height: 2048 } };
-    h.view.setArt({ ...h.art, baseBackground: background });
+    h.view.setArt({ ...h.art, tiledBackground: background });
     h.view.select(4);
     for (const [width, height] of [[720, 900], [390, 600], [720, 900]]) {
         h.view.resize(width, height);

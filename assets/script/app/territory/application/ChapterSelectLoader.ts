@@ -119,12 +119,18 @@ async function loadMapInfo(
         // 所以把同 `configId` 的格子全部收进来 —— 玩家打了区域里任意一格都算通了这一关。
         const bossLevelId = finalBossLevelIdOf(levels, chapterId);
         const bossConfigId = bossLevelId === null ? '' : String(bossLevelId);
-        const finalBossCells = bossConfigId
-            ? map.sites.filter((site) => site.configId === bossConfigId).map((site) => site.cellId)
-            : [];
+        const finalBossCells: number[] = [];
+        const siteCells: number[] = [];
+        for (let i = 0; i < map.sites.length; i++) {
+            const site = map.sites[i];
+            siteCells.push(site.cellId);
+            if (bossConfigId && site.configId === bossConfigId) {
+                finalBossCells.push(site.cellId);
+            }
+        }
         return {
             name: map.name,
-            siteCells: map.sites.map((site) => site.cellId),
+            siteCells,
             areaGroups: buildAreaGroups(map.sites),
             ...(finalBossCells.length ? { finalBossCells } : {}),
         };
@@ -160,20 +166,32 @@ export async function loadChapterSelectRows(
     if (totalChapters < highest) totalChapters = highest;
     if (totalChapters === 0) totalChapters = 1;
 
-    const chapterIds = Array.from({ length: totalChapters }, (_, index) => index + 1);
+    const chapterIds: number[] = [];
+    for (let i = 1; i <= totalChapters; i++) {
+        chapterIds.push(i);
+    }
     const store = new TerritorySaveStore(readTerritorySaveOwner());
-    const [infos, ownedCells] = await Promise.all([
-        Promise.all(chapterIds.map((chapterId) => loadMapInfo(resources.assets, chapterId, levels))),
-        Promise.resolve(chapterIds.map((chapterId) => store.load(chapterId).progress.ownedCells ?? [])),
-    ]);
+    const mapInfoPromises: Promise<IChapterSelectMapInfo | null>[] = [];
+    const ownedCells: (readonly number[])[] = [];
+    for (let i = 0; i < chapterIds.length; i++) {
+        const id = chapterIds[i];
+        mapInfoPromises.push(loadMapInfo(resources.assets, id, levels));
+        ownedCells.push(store.load(id).progress.ownedCells ?? []);
+    }
+    const infos = await Promise.all(mapInfoPromises);
 
     const maps = new Map<number, IChapterSelectMapInfo>();
     const cells = new Map<number, readonly number[]>();
-    chapterIds.forEach((chapterId, index) => {
-        const info = infos[index];
+    for (let i = 0; i < chapterIds.length; i++) {
+        const chapterId = chapterIds[i];
+        const info = infos[i];
         if (info) maps.set(chapterId, info);
-        cells.set(chapterId, ownedCells[index]);
-    });
-    const chapterNames = new Map(chapterConfigs.map((row) => [row.chapterId, row.chapterName]));
+        cells.set(chapterId, ownedCells[i]);
+    }
+    const chapterNames = new Map<number, string>();
+    for (let i = 0; i < chapterConfigs.length; i++) {
+        const row = chapterConfigs[i];
+        chapterNames.set(row.chapterId, row.chapterName);
+    }
     return buildChapterSelectRows(availableChapters, currentChapterId, maps, cells, chapterNames, totalChapters);
 }

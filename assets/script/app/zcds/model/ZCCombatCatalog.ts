@@ -25,6 +25,20 @@ export const ZCCombatEventType = {
 } as const;
 export type ZCCombatEventType = typeof ZCCombatEventType[keyof typeof ZCCombatEventType];
 
+/**
+ * 强化那一击的**表现**尺寸倍率（2026-11-19 定案 A）。
+ *
+ * 口径：全部 35 张卡（含怪物卡）的强化攻击与普通攻击**共用同一套特效 prefab**，
+ * 唯一的差别是尺寸放大 20%。理由——两张独立美术（普攻 `xxx_普攻` / 武将技
+ * `xxx_武将闪电`）会让同一张卡在「每 5 秒那一发」突然换造型，玩家读不出这是加强，
+ * 只当成另一个技能；而且换素材要同时维护两份资源。
+ *
+ * 🔴 只放大**表现**，不放大判定：`collisionRadius` / `areaRadius` 一个字节都不动。
+ * 所以落在事件级 `effectScale`（视图 `node.setScale`）上，而不是 `sizeScale`
+ * （那一路会同步乘进命中半径）。
+ */
+export const ZC_EMPOWERED_FX_SCALE = 1.2;
+
 /** 普攻档案。逻辑层消费技能 id/命中/强化计数，表现层消费特效 Prefab。*/
 export interface ZCAttackProfile {
     skillId: number;
@@ -115,7 +129,7 @@ export interface ZCUnitDefinition {
     hero: boolean;
     prefabPath: string;
     /**
-     * 兵种美术的等比缩放系数（`pvpCard.prefabSize`，策划按美术实际体量配 0.8~1.2）。
+     * 兵种美术的等比缩放系数（`pvpCard` / `monsterCard` 同名列，策划按美术实际体量配 0.8~1.5）。
      *
      * 必填、解析层永远给值（表里留空按 1 兜底）：它直接乘进战场单位的美术缩放，
      * 缺省成可选会让每个消费方都要写一遍 `?? 1`，而漏一处就是「有的兵放大、有的兵没放大」。
@@ -224,7 +238,7 @@ export interface ZCDeckCard {
     /** 本卡兵种的 resources 预制体路径；阵容上阵预览与对局使用同一资产。*/
     unitPrefabPath?: string;
     /**
-     * 本卡兵种美术的等比缩放（`pvpCard.prefabSize`；表里留空 ⇒ 1）。
+     * 本卡兵种美术的等比缩放（`pvpCard` / `monsterCard` 的 `prefabSize`；表里留空 ⇒ 1）。
      *
      * 只给表现层的预览用：阵容页站台按它体现「这张卡的兵有多大」，否则所有兵种都被
      * 归一到同一个高度、看不出体型差。对局里同一个系数由 `ZCUnitView.applyVisualSize`

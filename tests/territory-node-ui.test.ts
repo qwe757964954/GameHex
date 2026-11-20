@@ -27,6 +27,7 @@ interface ISite {
     footprint: number[];
     configId?: string;
     buildingId?: string;
+    patrolId?: number;
     unlock: { requiredCells: number[]; combatPower: number; silverCost: number; exploreSeconds: number; staminaCost: number };
 }
 
@@ -45,10 +46,12 @@ function site(type: string, cellId: number, extra: Partial<ISite> = {}): ISite {
     };
 }
 
-test('chapter_01：13 组关卡里，没建筑的那 56 格全部不承载 UI', () => {
+test('chapter_01：13 组关卡 56 格 + 巡逻片区 26 格不承载 UI', () => {
     const sites = loadChapter('chapter_01').sites;
     const muted = territoryNodeMutedCells(sites);
-    assert.equal(muted.size, 56, 'chapter_01 一共 56 个「同节点、无建筑」的格子');
+    // 2026-11-20 起巡逻野怪片区也收敛到「配了 patrolId 的那一格」：
+    // 5 片共 31 格 − 5 个承载格 = 26 格也进 muted（§3.48）。
+    assert.equal(muted.size, 56 + 26, '56 个战斗节点兄弟格 + 26 个巡逻片非承载格');
 
     // 10001 = 327（无建筑）+ 328（69004 建筑）⇒ 只隐 327。
     assert.ok(muted.has(327), '327 没配建筑 ⇒ 不画 UI');
@@ -57,20 +60,42 @@ test('chapter_01：13 组关卡里，没建筑的那 56 格全部不承载 UI', 
     // 10002 = 288 / 309(建筑) / 310 ⇒ 隐两个。
     assert.ok(muted.has(288) && muted.has(310) && !muted.has(309));
 
-    // 只要进了集合，就一定是**战斗站点且没有建筑** —— 别把宝箱/随机格误伤。
+    // 只要进了集合，就一定是「战斗站点且没有建筑」或「巡逻片非承载格」——
+    // 别把宝箱 / 随机格误伤。
     const byCell = new Map(sites.map((s) => [s.cellId, s]));
     for (const cellId of muted) {
         const target = byCell.get(cellId);
         assert.ok(target, `${cellId} 必须是真实站点`);
-        assert.ok(['stage', 'boss', 'asyncPvp'].includes(target.type), `${cellId} 只能是战斗站点`);
-        assert.equal(target.buildingId ?? '', '', `${cellId} 不该有建筑`);
+        const battleSibling = ['stage', 'boss', 'asyncPvp'].includes(target.type)
+            && (target.buildingId ?? '') === '';
+        const patrolSibling = target.type === 'patrolChest' && !target.patrolId;
+        assert.ok(battleSibling || patrolSibling,
+            `${cellId} 只能是「同节点无建筑的战斗格」或「巡逻片没配野怪 id 的格」`);
     }
     // 反向：所有「战斗站点 + 无建筑」的格子都必须被隐（没有漏网的）。
     const expected = sites
         .filter((s) => ['stage', 'boss', 'asyncPvp'].includes(s.type) && !s.buildingId)
         .map((s) => s.cellId)
         .sort((a, b) => a - b);
-    assert.deepEqual(Array.from(muted).sort((a, b) => a - b), expected);
+    assert.deepEqual(
+        Array.from(muted).filter((cellId) => {
+            const target = byCell.get(cellId);
+            return target && ['stage', 'boss', 'asyncPvp'].includes(target.type);
+        }).sort((a, b) => a - b),
+        expected,
+    );
+});
+
+test('巡逻区：各锚点保留 UI，兄弟格和 footprint 收敛，旧图逐格显示', () => {
+    const sites = [
+        site('patrolChest', 12, { id: 'patrol', patrolId: 100, footprint: [12, 10] }),
+        site('patrolChest', 11, { id: 'patrol', footprint: [11, 12, 13] }),
+        site('patrolChest', 10, { id: 'patrol', patrolId: 200 }),
+        site('patrolChest', 20, { id: 'legacy', footprint: [20, 21] }),
+    ];
+
+    assert.deepEqual(territoryNodeMutedCells(sites), new Set([11, 13]));
+    assert.deepEqual(territoryNodeLockCells(sites, [11, 12, 13, 20, 21]), new Set([10, 12, 20, 21]));
 });
 
 test('chapter_02~07：一个站点就是一整块 footprint，没有兄弟站 ⇒ 一格都不隐', () => {

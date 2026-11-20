@@ -185,6 +185,18 @@ export interface ZCUnitState {
     */
     summonAlpha?: number;
     /**
+     * 「独立分身」标记（2026-11-19 第 26 批，101404 一人成军的 3/4/6 只分裂菇分身）。
+     *
+     * 有值 ⇒ 三处「跟随本体」的语义一起取消，按普通单位跑完整状态机：
+     *  ① `ZCUnitSystem` 不再短路（自己寻路、追人、出手）；
+     *  ② `ZCGameModel.syncSummons` 不再因为本体阵亡而收场（设计口径「血量为 0 才消失」）；
+     *  ③ `ZCUnitRegistry.count` 不把它算进 `unitCapPerSide`（设计口径「不加入单位计算数量」）。
+     *
+     * 缺省 `undefined` ⇒ 舞王舞伴那套（钉阵位、只听本体、本体没了就散）。
+     * 🔴 不要靠「有没有 `summonSlot`」来推断：那两件事是正交的，舞伴可以只跟随不钉阵位。
+    */
+    summonIndependent?: boolean;
+    /**
      * 累计普攻制的召唤计数（2026-11-18 第 17 批，101404「一人成军」）。
      *
      * 与 `summonReadyAt` 是**两套触发**、互不干扰：101404 设计写的是「累计普攻 8 次后召唤」，
@@ -659,6 +671,40 @@ export interface ZCCombatEvent {
      * 逐层改 `Sprite.color` 会漏掉亮芯/柔光里的某一层。
      */
     effectAlpha?: number;
+    /**
+     * 起点的跟随锚（单位实例 id）：有它 ⇒ 模型**每帧**把 `fromX/fromY` 重写成这个单位的当前位置。
+     *
+     * 2026-11-19 第 21 批闪电链 102203（用户原话「释放端的卡牌静止不动，敌人移动，
+     * 技能尾端会跟随旋转或伸缩」）：电弧是 `area` 事件，坐标写一次就定死 —— 目标一转身，
+     * 电弧的尾巴就留在原地。想让「弧跟着人走」只有两条路：要么每帧新建事件（会把
+     * `nextCombatEventId` 打爆、也别想淡出），要么让事件自己长着眼睛。
+     * 缺省 undefined ⇒ 所有既有特效的坐标仍然只由施法那一刻决定，逐字不变。
+     */
+    followFromUnitId?: number | null;
+    /**
+     * 终点的跟随锚（单位实例 id）：与 `followFromUnitId` 成对使用。
+     * 只有一端有锚时，另一端保持施法那一刻的坐标（「钉住一端、另一端摆」也是合法用法）。
+     */
+    followToUnitId?: number | null;
+    /**
+     * 一条长链路被切成 `followPieceCount` 段时，本条是第几段（0 起）。
+     * 每帧按「起点 + 单段位移 × 本段序号」重算位置 ⇒ 两端一起动时整条链仍然首尾相接。
+     * 缺省 undefined ⇒ 视为 0（本来就只有一个锚点）。
+     */
+    followPieceIndex?: number;
+    /** 一条长链路被切成几段；缺省 undefined ⇒ 1。见 `followPieceIndex`。*/
+    followPieceCount?: number;
+    /**
+     * **只沿长轴**的缩放倍率（1 = 原长）；缺省 undefined ⇒ 等比，逐字不变。
+     *
+     * 与 `effectScale` 的分工：`effectScale` 是等比的（视图 `node.setScale`），拿它把一段
+     * 闪电拉长会把**粗细**一起拉粗。这条链路要的是「长度不够就摊薄到刚好够」——
+     * 预制体长轴 = 本地 +y、锚点在底端 ⇒ `scaleY` 单独乘这个倍率，`scaleX` 原样不动。
+     * 2026-11-19 第 21 批闪电链（用户原话「可以拉伸特效或者复制多个节点（复制后压缩）」）：
+     * 段数还是 `ceil(段距 / 单段长度)`，但每段压到 `段距 / 段数`，末段正好落在目标中心，
+     * 既不缺口、也不越过目标半段。
+     */
+    stretchAlongAxis?: number;
 }
 
 /** 在途弹道属于可恢复的战斗状态，碰撞后才产生伤害。坐标均为棋盘逻辑坐标。*/
@@ -865,8 +911,8 @@ export interface ZCHitFx {
     */
     surface: ZCHitFxSurface;
     /**
-     * 被打那一方的模型等比缩放（`pvpCard.prefabSize`，基准 1），受击特效按它跟体型走。
-     * 放在受击方而不是攻击方：闪白贴在被打的身体上，与谁打的无直接关系。
+     * 被打那一方的模型等比缩放（`pvpCard` / `monsterCard` 的 `prefabSize`，基准 1），
+     * 受击特效按它跟体型走。放在受击方而不是攻击方：闪白贴在被打的身体上，与谁打的无直接关系。
     */
     targetScale: number;
     /** 特效锚点的世界坐标（=被打单位当前插值位置，与飘字同源）。*/
@@ -1259,6 +1305,17 @@ export interface ZCGroundZoneState {
      * 既有区域（陷阱 / 光环 / 暴风）逐字不变。
      */
     flightSeconds?: number;
+    /**
+     * 投掷段（`flightSeconds > 0`）期间的**持有表现**路径（2026-11-19 蘑菇爆炸 101704）。
+     *
+     * 为什么要单独一格：一件投掷物的「还在飞」和「已落地」是两段美术 ——
+     * 飞行段播「生成」（`科学家_陷阱_出现`），落地后换成常驻的 `effectPrefabPath`
+     * （`科学家_陷阱`）。两者同一拍出场会双影，靠 `visualDelaySeconds` 又只能延后、
+     * 不能换图，所以让区域自己带一份「飞行期路径」，`ZCGroundZoneSystem.settleFlight`
+     * 落地那一刻摘掉飞行段那条事件、下一帧按 `effectPrefabPath` 重建。
+     * 缺省 `undefined` ⇒ 整段都用 `effectPrefabPath`，存量区域（含 103504 精密陷阱）逐字不变。
+     */
+    flightVisualPath?: string | null;
     /**
      * 是否「只有被踩响才炸」（2026-11-18 第 17 批 101704）。
      *

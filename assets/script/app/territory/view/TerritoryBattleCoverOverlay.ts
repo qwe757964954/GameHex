@@ -12,7 +12,7 @@ import { TerritoryBattleCover } from './TerritoryBattleCover';
 const { ccclass } = _decorator;
 
 /** 覆盖层的节点名（用例/调试按名字找）。 */
-export const TERRITORY_BATTLE_COVER_OVERLAY_NODE = 'BattleCoverOverlay';
+const TERRITORY_BATTLE_COVER_OVERLAY_NODE = 'BattleCoverOverlay';
 
 /**
  * 切换落定之后、开始散云之前再等多久（秒）。
@@ -20,10 +20,10 @@ export const TERRITORY_BATTLE_COVER_OVERLAY_NODE = 'BattleCoverOverlay';
  * `onSwitchSettled` 在 `onEnter` **之前**同步触发，战场上那些地块 / HUD 是
  * 在 `onEnter` 里现建的。等两三个渲染帧，散到半透明时底下已经有画面了。
  */
-export const TERRITORY_BATTLE_COVER_RELEASE_DELAY = 0.1;
+const TERRITORY_BATTLE_COVER_RELEASE_DELAY = 0.1;
 
 /** 切换一直不落定时，最多再等这么久就强行散（秒）。 */
-export const TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT = 3;
+const TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT = 3;
 
 @ccclass('TerritoryBattleCoverOverlay')
 export class TerritoryBattleCoverOverlay extends Component {

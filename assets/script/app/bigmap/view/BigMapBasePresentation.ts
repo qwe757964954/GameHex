@@ -1,4 +1,20 @@
-import { BIGMAP_TILE_HEIGHT, BIGMAP_TILE_WIDTH, buildBigMapWorldLayout } from './BigMapWorldLayout';
+import {
+    buildHexGridLayout, HEX_GRID_CONTENT_LIFT, HEX_GRID_FACE_HEIGHT, HEX_GRID_FACE_WIDTH,
+} from '../../../core/hex/HexGridLayout';
+
+/** 基地地皮切片的整图尺寸：`image/buildings/img_land_01/02` 均为 126×117。 */
+export const BIGMAP_BASE_TILE_IMAGE_WIDTH = 126;
+export const BIGMAP_BASE_TILE_IMAGE_HEIGHT = 117;
+/** 片内可见台面（六边形）尺寸；格距 / 拾取 / 选中描边都按台面，而不是整图外框。 */
+export const BIGMAP_BASE_FACE_WIDTH = HEX_GRID_FACE_WIDTH;
+export const BIGMAP_BASE_FACE_HEIGHT = HEX_GRID_FACE_HEIGHT;
+/** 台面中心比整图中心高出的距离；贴图节点要反向下沉，台面才落在格心上。 */
+export const BIGMAP_BASE_CONTENT_LIFT = HEX_GRID_CONTENT_LIFT;
+/**
+ *基地场景的最小画布：设计稿地皮按 126×117 原生尺寸 1:1 展示。
+ *1280 覆盖 720×1610 的 1282 高浏览区，相机的 `minZoom` 不会被强行压到 0.89。
+ */
+export const BIGMAP_BASE_MAP_SIZE = 1280;
 
 export interface IBigMapPlotPosition {
     readonly hexId: number;
@@ -15,24 +31,33 @@ export interface IBigMapBaseLayout {
     readonly mapSize: number;
 }
 
+/**
+ *基地格心：直接复用领地/对局的 123×90 台面口径。
+ *
+ *2026-11-19 蓝湖「大地图(1)」把基地从旧的 235 大格改回原生切片：
+ * `img_land_01` 126×117 整图里台面 123×90，列距 92.25、行距 90、相邻列差 45。
+ * 贴图节点另下沉 {@link BIGMAP_BASE_CONTENT_LIFT}，建筑/拾取/描边全部用台面格心。
+ */
 export function buildBigMapBaseLayout(
     cells: readonly IBigMapPlotPosition[],
 ): IBigMapBaseLayout {
     const rows = cells.reduce((max, cell) => Math.max(max, cell.row + 1), 0);
     const columns = cells.reduce((max, cell) => Math.max(max, cell.column + 1), 0);
-    const source = buildBigMapWorldLayout(rows, columns);
-    const scale = 1;
+    const source = buildHexGridLayout(rows, columns);
     const points = new Map<number, { readonly x: number; readonly y: number }>();
     for (const cell of cells) {
         const point = source.points.get(cell.row * columns + cell.column);
-        if (point) points.set(cell.hexId, { x: point.x * scale, y: point.y * scale });
+        if (point) points.set(cell.hexId, { x: point.x, y: point.y });
     }
     const paintOrder = Array.from(points.entries()).sort(([, first], [, second]) => (
         second.y - first.y || first.x - second.x
     )).map(([hexId]) => hexId);
-    //原图四周是装饰区；格面与建筑顶部均留在中央54%范围内。
-    const mapSize = Math.max(1600, source.width / 0.54, (source.height + 280) / 0.54);
-    return { points, tileWidth: BIGMAP_TILE_WIDTH, tileHeight: BIGMAP_TILE_HEIGHT, scale, paintOrder, mapSize };
+    //原图四周是装饰区；5×5 设计稿按 126 原图 1:1，大网格按 45% 竖屏留白继续放大画布。
+    const mapSize = Math.max(BIGMAP_BASE_MAP_SIZE, source.width / 0.54, source.height / 0.45);
+    return {
+        points, tileWidth: BIGMAP_BASE_FACE_WIDTH, tileHeight: BIGMAP_BASE_FACE_HEIGHT,
+        scale: 1, paintOrder, mapSize,
+    };
 }
 
 export interface IBigMapBaseCamera {

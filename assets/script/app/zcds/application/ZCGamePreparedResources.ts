@@ -34,6 +34,8 @@ export interface IZCGamePreparedResources {
     floatTextPrefab: Prefab;
     cardRevealPrefab: Prefab;
     legendBannerPrefab: Prefab;
+    /** 野怪击杀横栏；缺省时退回传说卡横幅的 `monsterClaim` 大字。*/
+    killBannerPrefab: Prefab | null;
     decorPrefab: Prefab;
     /** 后补完成前为 null；尺寸和动画看 prefab。*/
     spawnFxPrefab: Prefab | null;

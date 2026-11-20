@@ -1,4 +1,4 @@
-import { battleBuffRatio } from '../../battle/BattleStartModel';
+import { battleBuffRatio, ZC_BATTLE_RATE_KEYS } from '../../battle/BattleStartModel';
 import type { ZCBattleHero, ZCBattleHeroModifier, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
 import type { ZCDeckCard } from '../model/ZCCombatCatalog';
 import { ZCOwner, ZCPlayerCount, type ZCSection } from '../model/ZCMapConfig';
@@ -7,6 +7,9 @@ import { ownersForPlayerCount } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig, type ZCMatchMap, type IZCBattleRates } from '../model/ZCMatchConfig';
 import type { ZCCompiledModifierLoadout } from '../model/ZCModifierRuntime';
 import { compileZCCombatBuild, getZCModifierCatalogs, selectZCSkillPlans, type ZCModifierCatalogs } from '../model/ZCModifierRuntime';
+import { ZC_RUNTIME_CONFIG } from '../model/ZCRuntimeConfigStore';
+
+export { ZC_BATTLE_RATE_KEYS } from '../../battle/BattleStartModel';
 
 export interface ZCClientCombatConfigResult {
     readonly config: ZCMatchConfig;
@@ -19,14 +22,6 @@ export interface ZCClientCombatConfigOptions {
 }
 
 const ZC_MAX_BATTLE_HERO_CARDS = 8;
-
-/** 服务端 buff 的乘数键；仅作用于对应阵营成长后的单位属性。*/
-export const ZC_BATTLE_RATE_KEYS = {
-    /** 攻击倍率。*/
-    attack: 'levelAttackRatio',
-    /** 生命倍率。*/
-    hp: 'levelHpRatio',
-} as const;
 
 /** 将服务端字段投影为阵营倍率，不读取本地关卡配置，也不补缺失字段。*/
 export function ownerRatesOf(unit: ZCBattleUnit | undefined): IZCBattleRates | undefined {
@@ -123,26 +118,20 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
         resourcePoints,
         resolvedResources: (info.resourcePoints ?? []).map((point, index) => {
             const hexId = point.row * map.columns + point.column;
-            const depth = regions?.find(region => region.cells.includes(hexId))?.depth;
+            const matchRegion = regions ? regions.find(region => region.cells.includes(hexId)) : undefined;
+            const depth = matchRegion ? matchRegion.depth : undefined;
             return Object.assign({ hexId, section: resourcePoints[index].section, itemId: point.resourceId },
                 depth === undefined ? {} : { depth });
         }),
     });
 }
 
-/**
- * 建筑耐久「基础值 + 品级加成」的提示只在首次出现时打一次。
- *
- * `buildZCClientCombatConfig` 每局会跑两遍（`ZCGameLoader` 预加载 + `ZCBattleEntryBuilder` 正式 entry），
- * 同一个 cardId 逐局重复提示只会把日志刷满、盖住真正的异常。
- */
-const warnedBuildingHpCards = new Set<string>();
-
 /** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。*/
 function buildBattleDeck(
     source: readonly ZCDeckCard[],
     heroes: readonly ZCBattleHero[],
     unit: ZCBattleUnit | undefined,
+    monsterCards: readonly ZCDeckCard[],
 ): readonly ZCDeckCard[] {
     const systemCards = source.filter((card) => card.unitId === undefined);
     const heroCardsById = new Map<string, ZCDeckCard>();
@@ -155,9 +144,12 @@ function buildBattleDeck(
         if (seen.has(hero.heroId)) continue;
         seen.add(hero.heroId);
         if (seen.size > ZC_MAX_BATTLE_HERO_CARDS) break;
-        const card = heroCardsById.get(String(hero.heroId));
+        const heroAttr = unit?.heroAttrs?.find((entry) => entry.heroId === hero.heroId);
+        const unitId = String(hero.heroId);
+        const card = heroCardsById.get(unitId)
+            ?? (heroAttr?.rates ? monsterCards.find((entry) => entry.unitId === unitId) : undefined);
         if (card) {
-            const buildingHp = unit?.heroAttrs?.find((entry) => entry.heroId === hero.heroId)?.attributes.buildingHp;
+            const buildingHp = heroAttr?.attributes.buildingHp;
             //  非正 / 非有限的耐久没有意义：`ZCDevelopmentSystem` 用 `baseHp + 品级加成` 直接算
             //  `hex.maxHp`、没有下限保护 ⇒ 负值会让建筑开局即破、血条倒挂。脏数据回落到本地卡表，
             //  协议层仍原样保留（`heroAttrs` 是原始快照），只在这里拒绝消费。
@@ -165,15 +157,7 @@ function buildBattleDeck(
             if (buildingHp !== undefined && !usable) {
                 console.warn('[ZCClientCombatConfig] 服务端建筑血量非法，已回落本地卡表', card.id, buildingHp);
             }
-            if (usable && (card.cyclePerTierValue ?? 0) > 0) {
-                //  服务端只给「基础耐久」，品级加成仍来自本地卡表 ⇒ 两处叠加。留痕，避免对不上时查错方向。
-                const hintKey = `${card.id}:${buildingHp}:${card.cyclePerTierValue}`;
-                if (!warnedBuildingHpCards.has(hintKey)) {
-                    warnedBuildingHpCards.add(hintKey);
-                    console.warn('[ZCClientCombatConfig] 服务端建筑血量按基础耐久使用，仍会叠加品级加成',
-                        card.id, buildingHp, card.cyclePerTierValue);
-                }
-            }
+            // 回包覆盖基础耐久，品级加成由独立的卡表字段决定。
             selected.push(usable ? Object.assign({}, card, { baseHp: buildingHp }) : card);
         }
     }
@@ -317,13 +301,16 @@ function compileOwnerLoadouts(
     config: ZCMatchConfig,
     skipped: Array<{ owner: ZCOwner; generalId: number; reason: string }>,
     unit: ZCBattleUnit | undefined,
+    defenceUnitIds: ReadonlyMap<number, ReadonlySet<string>>,
+    unitRates: Readonly<Record<string, IZCBattleRates>> | undefined,
 ): readonly ZCCompiledModifierLoadout[] {
     const catalogs = getZCModifierCatalogs();
     const loadouts: ZCCompiledModifierLoadout[] = [];
     //  服务端给了阵容外的英雄属性 ⇒ 永远不会被消费。留痕一次，避免「服务端改了、客户端没反应」
     //  时误判成数值没生效（实际是 heroId 不在这套阵容里）。
     const knownHeroIds = new Set(heroes.map((hero) => hero.heroId));
-    const orphans = (unit?.heroAttrs ?? []).filter((entry) => !knownHeroIds.has(entry.heroId));
+    const orphans = (unit?.heroAttrs ?? []).filter((entry) => !knownHeroIds.has(entry.heroId)
+        && !(entry.rates && (defenceUnitIds.has(entry.heroId) || unitRates?.[String(entry.heroId)])));
     if (orphans.length) {
         console.warn('[ZCClientCombatConfig] 服务端下发了阵容外的英雄属性，已忽略',
             owner, orphans.map((entry) => entry.heroId));
@@ -333,16 +320,16 @@ function compileOwnerLoadouts(
         //  星级不再进构筑（上游口径：星级表弃用）。`hasGeneral` 现在只当「这张卡是不是老卡」的
         //  兜底判据用，不再往构筑里塞 `generalStar` —— 老卡的数值已经整体挪到成长表里。
         const hasGeneral = catalogs.generalStars.has(`${generalId}:1`);
-        const heroAttrs = unit?.heroAttrs?.find((entry) => entry.heroId === generalId);
-        const serverAttributes = heroAttrs?.attributes;
-        const serverModifiers = heroAttrs?.modifiers;
+        const heroAttrs = unit && unit.heroAttrs ? unit.heroAttrs.find((entry) => entry.heroId === generalId) : undefined;
+        const serverAttributes = heroAttrs ? heroAttrs.attributes : undefined;
+        const serverModifiers = heroAttrs ? heroAttrs.modifiers : undefined;
         //   不能用 `serverAttributes` 的真假判：只下发增量属性（`attack.addRate`）时它是 `{}`，
         //  `{}` 是 truthy ⇒ 会绕过下面的 continue 兜底，把没有任何数据的老卡也塞进编译器。
         //  也**不能**用「有任何键」：`buildingHp` 只喂 `buildBattleDeck`，战斗编译器只认
         //  `attack` / `maxHp`，带着它进编译器只会白跑一次、产出空 loadout。
-        const hasServerAbsolute = serverAttributes?.attack !== undefined || serverAttributes?.maxHp !== undefined;
-        const hasServerAttrs = hasServerAbsolute || (serverModifiers?.length ?? 0) > 0;
-        if (serverModifiers?.length && !hasServerAbsolute) warnServerRateOverlap(owner, generalId, unit, serverModifiers);
+        const hasServerAbsolute = serverAttributes ? (serverAttributes.attack !== undefined || serverAttributes.maxHp !== undefined) : false;
+        const hasServerAttrs = hasServerAbsolute || (serverModifiers ? serverModifiers.length > 0 : false);
+        if (serverModifiers && serverModifiers.length > 0 && !hasServerAbsolute) warnServerRateOverlap(owner, generalId, unit, serverModifiers);
         //  技能计划与星级是两件事（2026-11-10）：`pvpSkillPlan.unlockHeroLevel` 比的是
         //  「兵种等级」（= `hero.level`），与 `generalStar` 有没有行完全无关。
         //  原来 `heroLevel` 只写在 `hasGeneral` 分支里 ⇒ 没有星级行的卡（68015~68035 这一批
@@ -381,6 +368,45 @@ function compileOwnerLoadouts(
     return loadouts;
 }
 
+function defenceUnitIdsOf(config: ZCMatchConfig): ReadonlyMap<number, ReadonlySet<string>> {
+    const unitIds = new Map<number, Set<string>>();
+    const enemyDeck = config.ownerDecks?.enemy ?? config.enemyDeck;
+    for (const wave of config.pveDefence?.waves ?? []) {
+        const card = config.pveDefence?.cards?.find((entry) => entry.id === wave.cardId)
+            ?? enemyDeck.find((entry) => entry.id === wave.cardId);
+        const unitId = card?.unitId;
+        if (!unitId) continue;
+        const monsterId = wave.monsterId ?? Number(unitId);
+        const targets = unitIds.get(monsterId) ?? new Set<string>();
+        targets.add(unitId);
+        unitIds.set(monsterId, targets);
+    }
+    return unitIds;
+}
+
+function unitRatesOf(
+    unit: ZCBattleUnit | undefined,
+    heroes: readonly ZCBattleHero[],
+    defenceUnitIds: ReadonlyMap<number, ReadonlySet<string>>,
+): Readonly<Record<string, IZCBattleRates>> | undefined {
+    const rates: Record<string, IZCBattleRates> = {};
+    const attrs = new Map(unit?.heroAttrs?.map((entry) => [entry.heroId, entry.rates]));
+    for (const [monsterId, targets] of defenceUnitIds) {
+        const mapped = attrs.get(monsterId);
+        for (const target of targets) {
+            // 显式下发的运行时 ID 优先，仍保留原始怪物 ID 提供的其余倍率。
+            const direct = attrs.get(Number(target));
+            if (mapped || direct) rates[target] = { ...rates[target], ...mapped, ...direct };
+        }
+    }
+    for (const hero of heroes) {
+        const direct = attrs.get(hero.heroId);
+        const target = String(hero.heroId);
+        if (direct) rates[target] = { ...rates[target], ...direct };
+    }
+    return Object.keys(rates).length ? rates : undefined;
+}
+
 /**
  * 正式客户端开局构筑入口。后端阵容收敛为本局英雄卡池并编译修改器，系统卡继续来自
  * client/remoteRef；尚未完成行为移植的武将会被显式记录为 skipped，不会拖垮整局战斗。
@@ -400,21 +426,33 @@ export function buildZCClientCombatConfig(
     const owners = rosterContext.owners;
     const skipped: Array<{ owner: ZCOwner; generalId: number; reason: string }> = [];
     const modifiers: Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>> = {};
+    const unitRates: Partial<Record<ZCOwner, Readonly<Record<string, IZCBattleRates>>>> = {};
+    const defenceUnitIds = defenceUnitIdsOf(config);
+    const noDefenceUnits = new Map<number, ReadonlySet<string>>();
     for (const owner of owners) {
-        modifiers[owner] = compileOwnerLoadouts(owner, roster[owner] ?? [], config, skipped, rosterContext.unitsByOwner[owner]);
+        const heroes = roster[owner] ?? [];
+        const unit = rosterContext.unitsByOwner[owner];
+        const waveUnits = owner === ZCOwner.Enemy ? defenceUnitIds : noDefenceUnits;
+        const rates = unitRatesOf(unit, heroes, waveUnits);
+        modifiers[owner] = compileOwnerLoadouts(owner, heroes, config, skipped, unit, waveUnits, rates);
+        if (rates) unitRates[owner] = rates;
     }
     const ownerDecks: Partial<Record<ZCOwner, readonly ZCDeckCard[]>> = {};
     for (const owner of owners) {
         const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
+        const monsterCards = owner === ZCOwner.Player || config.pveDefence ? [] : ZC_RUNTIME_CONFIG.snapshot.monsterCards ?? [];
         ownerDecks[owner] = rosterContext.usesServerRoster
-            ? buildBattleDeck(sourceDeck, roster[owner] ?? [], rosterContext.unitsByOwner[owner])
+            ? buildBattleDeck(sourceDeck, roster[owner] ?? [], rosterContext.unitsByOwner[owner], monsterCards)
             : sourceDeck;
     }
     const ownerRates = mapClientRosterOwners(rosterContext, (_owner, unit) => ownerRatesOf(unit));
     const playerDeck = ownerDecks.player ?? config.playerDeck;
     const enemyDeck = ownerDecks.enemy ?? config.enemyDeck;
     return {
-        config: captureZCMatchConfig(Object.assign({}, config, { map: battleMapOf(config, battle, selfRoleId), playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates }), options),
+        config: captureZCMatchConfig(Object.assign({}, config, {
+            map: battleMapOf(config, battle, selfRoleId), playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates,
+            unitRates: Object.keys(unitRates).length ? unitRates : undefined,
+        }), options),
         skipped,
     };
 }

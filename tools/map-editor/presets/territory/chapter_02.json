@@ -2121,6 +2121,391 @@
       "configId": "fixedResource_246",
       "buildingId": "69020",
       "rewardId": 1023
+    },
+    {
+      "id": "patrolChest_105",
+      "type": "patrolChest",
+      "cellId": 71,
+      "footprint": [
+        71
+      ],
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1006
+    },
+    {
+      "id": "patrolChest_105",
+      "type": "patrolChest",
+      "cellId": 91,
+      "footprint": [
+        91
+      ],
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "69021",
+      "battleId": 1006,
+      "patrolId": 50023
+    },
+    {
+      "id": "patrolChest_105",
+      "type": "patrolChest",
+      "cellId": 110,
+      "footprint": [
+        110
+      ],
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1006
+    },
+    {
+      "id": "patrolChest_105",
+      "type": "patrolChest",
+      "cellId": 111,
+      "footprint": [
+        111
+      ],
+      "unlock": {
+        "requiredCells": [
+          75
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1006
+    },
+    {
+      "id": "patrolChest_106",
+      "type": "patrolChest",
+      "cellId": 145,
+      "footprint": [
+        145
+      ],
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1007
+    },
+    {
+      "id": "patrolChest_106",
+      "type": "patrolChest",
+      "cellId": 146,
+      "footprint": [
+        146
+      ],
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "69021",
+      "battleId": 1007,
+      "patrolId": 50031
+    },
+    {
+      "id": "patrolChest_106",
+      "type": "patrolChest",
+      "cellId": 148,
+      "footprint": [
+        148
+      ],
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1007
+    },
+    {
+      "id": "patrolChest_106",
+      "type": "patrolChest",
+      "cellId": 167,
+      "footprint": [
+        167
+      ],
+      "unlock": {
+        "requiredCells": [
+          84
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1007
+    },
+    {
+      "id": "patrolChest_107",
+      "type": "patrolChest",
+      "cellId": 261,
+      "footprint": [
+        261
+      ],
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1008
+    },
+    {
+      "id": "patrolChest_107",
+      "type": "patrolChest",
+      "cellId": 281,
+      "footprint": [
+        281
+      ],
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "69021",
+      "battleId": 1008,
+      "patrolId": 50032
+    },
+    {
+      "id": "patrolChest_107",
+      "type": "patrolChest",
+      "cellId": 282,
+      "footprint": [
+        282
+      ],
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1008
+    },
+    {
+      "id": "patrolChest_107",
+      "type": "patrolChest",
+      "cellId": 302,
+      "footprint": [
+        302
+      ],
+      "unlock": {
+        "requiredCells": [
+          283
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1008
+    },
+    {
+      "id": "patrolChest_108",
+      "type": "patrolChest",
+      "cellId": 351,
+      "footprint": [
+        351
+      ],
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1009
+    },
+    {
+      "id": "patrolChest_108",
+      "type": "patrolChest",
+      "cellId": 371,
+      "footprint": [
+        371
+      ],
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "69021",
+      "battleId": 1009,
+      "patrolId": 50005
+    },
+    {
+      "id": "patrolChest_108",
+      "type": "patrolChest",
+      "cellId": 390,
+      "footprint": [
+        390
+      ],
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1009
+    },
+    {
+      "id": "patrolChest_108",
+      "type": "patrolChest",
+      "cellId": 391,
+      "footprint": [
+        391
+      ],
+      "unlock": {
+        "requiredCells": [
+          314
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1009
+    },
+    {
+      "id": "patrolChest_109",
+      "type": "patrolChest",
+      "cellId": 194,
+      "footprint": [
+        194
+      ],
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "69021",
+      "battleId": 1010,
+      "patrolId": 50006
+    },
+    {
+      "id": "patrolChest_109",
+      "type": "patrolChest",
+      "cellId": 213,
+      "footprint": [
+        213
+      ],
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1010
+    },
+    {
+      "id": "patrolChest_109",
+      "type": "patrolChest",
+      "cellId": 215,
+      "footprint": [
+        215
+      ],
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1010
+    },
+    {
+      "id": "patrolChest_109",
+      "type": "patrolChest",
+      "cellId": 216,
+      "footprint": [
+        216
+      ],
+      "unlock": {
+        "requiredCells": [
+          237
+        ],
+        "combatPower": 0,
+        "silverCost": 10,
+        "exploreSeconds": 2,
+        "staminaCost": 5
+      },
+      "buildingId": "",
+      "battleId": 1010
     }
   ],
   "randomSites": {
@@ -2131,14 +2516,10 @@
       45,
       53,
       67,
-      71,
       86,
       89,
-      91,
       104,
       108,
-      110,
-      111,
       112,
       115,
       117,
@@ -2148,17 +2529,13 @@
       130,
       142,
       143,
-      145,
-      146,
       147,
-      148,
       150,
       151,
       155,
       162,
       164,
       166,
-      167,
       169,
       172,
       174,
@@ -2168,7 +2545,6 @@
       191,
       192,
       193,
-      194,
       195,
       198,
       203,
@@ -2176,9 +2552,6 @@
       205,
       206,
       211,
-      213,
-      215,
-      216,
       228,
       229,
       230,
@@ -2192,7 +2565,6 @@
       264,
       274,
       278,
-      282,
       286,
       287,
       293,
@@ -2205,10 +2577,8 @@
       334,
       346,
       349,
-      351,
       352,
       367,
-      371,
       389
     ],
     "maxActive": 1,
@@ -2216,13 +2586,10 @@
       "27": "69012",
       "45": "69014",
       "67": "69008",
-      "71": "69008",
       "86": "69012",
       "89": "69008",
       "104": "69012",
       "108": "69014",
-      "110": "69015",
-      "111": "69015",
       "112": "69011",
       "115": "69010",
       "117": "69015",
@@ -2230,14 +2597,10 @@
       "128": "69010",
       "142": "69014",
       "143": "69011",
-      "145": "69013",
-      "146": "69010",
-      "148": "69015",
       "150": "69008",
       "151": "69009",
       "162": "69011",
       "164": "69012",
-      "167": "69012",
       "169": "69014",
       "172": "69012",
       "174": "69009",
@@ -2253,9 +2616,6 @@
       "205": "69009",
       "206": "69011",
       "211": "69011",
-      "213": "69015",
-      "215": "69009",
-      "216": "69014",
       "228": "69009",
       "229": "69009",
       "230": "69011",
@@ -2268,7 +2628,6 @@
       "257": "69010",
       "264": "69013",
       "274": "69011",
-      "282": "69015",
       "286": "69013",
       "287": "69009",
       "293": "69009",
@@ -2280,9 +2639,7 @@
       "334": "69014",
       "346": "69012",
       "349": "69008",
-      "351": "69012",
       "367": "69010",
-      "371": "69011",
       "389": "69013"
     }
   }

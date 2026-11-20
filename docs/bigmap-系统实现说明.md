@@ -636,10 +636,10 @@ npx tsx tools/preview_bigmap_info_layout_curves.ts && python tools/preview_bigma
 
 验证：`tests/bigmap-active-layout.test.ts`，以及布局、城池配置与 Entry 回归。
 
-### 5.13 基地连续场景（2026-10-29）
+### 5.13 基地场景与底栏（2026-11-20）
 
-- 基地底图使用 `image/base_background`，来源为美术目录「主基地地图/主基地BG.jpg」（2048×2048），经 Cocos MCP 导入 bigmap 分包，关闭整图 packable。基地不再加载 `concept/base_ground`，也不再创建每格 Foundation；世界页原有地形不受影响。
-- `BigMapBasePresentation` 固定格距147×96，逻辑格和建筑顶部留在背景中央54%内；背景、建筑、格子拾取共用一个 BaseContent 坐标系。行列配置范围3～20（允许偶数），默认仍5×5，保留既有服务端位置编号，不自动扩列重排旧建筑。
+- 基地背景使用页面沙地底衬。草地切片按实际基地地块绘制，与摆放、移动和拾取共用 123×90 的台面；服务端位置编号沿用既有规则。基地没有翻格解锁，空地是可以参与建造校验的实际地块。
+- 底栏建造页优先展示可建造项，其余卡片按实际解锁条件显示。点击建造卡进入地图摆放态，当前建造页再次点击「建造」可打开完整目录及队列解锁入口。升级页读取已建与施工中的建筑，建筑卡和地图建筑共用详情，升级或取消施工经原有确认和请求流程。顶部建造队列读取快照；研究队列无数据时显示「—」。
 - 基地支持单指拖动、双指锚点缩放和鼠标滚轮缩放；纯函数约束缩放与边界，防止露底。进入基地定位主城，正常浏览隐藏空地文本与格线，建造/搬移时显示空位提示。
 - 所有建筑与收取图标共用手势判定，拖动距离超过12或发生双指操作时松手不触发点击。建筑按屏幕纵向排序，视口外节点隐藏；关闭/切换模式清理手势状态。
 - 回归：`bigmap-base-camera`、`bigmap-base-view`、`bigmap-base-render`、`bigmap-base-presentation`、`bigmap-latest-queue-config`、`bigmap-art-loading`。

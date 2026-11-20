@@ -108,6 +108,7 @@ export interface ZCGameEntryParams {
         waves: ReadonlyArray<{
             waveId: number;
             showAtSeconds: number;
+            monsterId?: number;
             pvpCardId: number;
             monsterCount: number;
             hpRate: number;

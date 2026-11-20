@@ -1,3 +1,5 @@
+import type { IZCBattleRates } from '../../battle/BattleStartModel';
+export type { IZCBattleRates } from '../../battle/BattleStartModel';
 import {
     getAllUnitDefinitions, getBondRules, getCounterRules, getEnemyDeck, getPlayerDeck,
     ZCBondRule, ZCCounterRule, ZCDeckCard, ZCUnitDefinition,
@@ -78,6 +80,8 @@ export interface ZCPveDefenceWave {
     waveId: number;
     showAtSeconds: number;
     cardId: string;
+    /** 服务端 attrs 中使用的原始怪物 ID。*/
+    monsterId?: number;
     monsterCount: number;
     tier: number;
     /**
@@ -102,12 +106,6 @@ export interface ZCPveDefenceConfig {
     cards?: readonly ZCDeckCard[];
 }
 
-/** 服务端下发的阵营倍率；缺失字段不修改对应属性。*/
-export interface IZCBattleRates {
-    readonly hpRate?: number;
-    readonly attackRate?: number;
-}
-
 /** 只包含数据，允许测试、机器人模拟和回放注入独立的配置版本。*/
 export interface ZCMatchConfig {
     map: ZCMatchMap;
@@ -126,6 +124,8 @@ export interface ZCMatchConfig {
     modifiers?: Readonly<Partial<Record<ZCOwner, readonly ZCCompiledModifierLoadout[]>>>;
     /** 独立于英雄成长和技能参数，在单位静态属性编译完成后相乘。*/
     ownerRates?: Readonly<Partial<Record<ZCOwner, IZCBattleRates>>>;
+    /** 逐单位倍率，按席位和运行时 unitId 冻结。*/
+    unitRates?: Readonly<Partial<Record<ZCOwner, Readonly<Record<string, IZCBattleRates>>>>>;
     /** 本局冻结的技能行为绑定与状态定义，不在战斗中读取全局表。*/
     skillBindings?: readonly ZCSkillBinding[];
     statusDefinitions?: readonly ZCStatusEffectDef[];

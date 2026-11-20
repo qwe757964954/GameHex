@@ -3015,7 +3015,7 @@
         "exploreSeconds": 2,
         "staminaCost": 5
       },
-      "buildingId": "",
+      "buildingId": "69021",
       "battleId": 1002,
       "patrolId": 50005
     },
@@ -3244,7 +3244,7 @@
         "exploreSeconds": 2,
         "staminaCost": 5
       },
-      "buildingId": "",
+      "buildingId": "69021",
       "battleId": 1003,
       "patrolId": 50007
     },
@@ -3359,7 +3359,7 @@
         "exploreSeconds": 2,
         "staminaCost": 5
       },
-      "buildingId": "",
+      "buildingId": "69021",
       "battleId": 1004,
       "patrolId": 50005
     },
@@ -3474,7 +3474,7 @@
         "exploreSeconds": 2,
         "staminaCost": 5
       },
-      "buildingId": "",
+      "buildingId": "69021",
       "battleId": 1005,
       "patrolId": 50005
     },
@@ -3570,7 +3570,7 @@
         "exploreSeconds": 2,
         "staminaCost": 5
       },
-      "buildingId": "",
+      "buildingId": "69021",
       "battleId": 1001,
       "patrolId": 50021
     },

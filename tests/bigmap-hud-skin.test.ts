@@ -231,17 +231,25 @@ test('详情模态交给独立PopupBase，页面不再挂InfoDim和InfoPanel', (
     assert.match(readFileSync('assets/script/app/bigmap/view/BigMapInfoPopup.ts', 'utf8'), /extends PopupBase/);
 });
 
-test('实心按钮使用 HUD 金钮，模式按钮的三层结构在 Prefab 中维护', () => {
-    for (const name of ['HarvestAll', 'BuildMenu']) {
-        const button = prefabNode(name);
-        assert.ok(prefabComponent(button, 'cc.Button'));
-        const art = button._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: any) => item._name === 'ButtonArt');
-        assert.equal(prefabComponent(art, 'cc.Sprite')._spriteFrame.__uuid__, '016f4b94-22b3-4aeb-9d87-e3b5d2b9fd88@f9941');
-    }
+test('主按钮按设计稿换皮，模式按钮的三层结构在 Prefab 中维护', () => {
+    const buttonFrames: Record<string, string> = {
+        HarvestAll: '016f4b94-22b3-4aeb-9d87-e3b5d2b9fd88@f9941',
+        BuildTab: '6147996f-4583-4596-874b-a760b9f8484f@f9941',
+    };
+    const harvest = prefabNode('HarvestAll');
+    assert.ok(prefabComponent(harvest, 'cc.Button'));
+    const harvestArt = harvest._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: any) => item._name === 'ButtonArt');
+    assert.equal(prefabComponent(harvestArt, 'cc.Sprite')._spriteFrame.__uuid__, buttonFrames.HarvestAll);
+    //旧 BuildMenu 节点已从页面清理；点击区直接挂在设计稿 BuildTab 上。
+    assert.equal(prefabNode('BuildMenu'), undefined);
+    const buildTab = prefabNode('BuildTab');
+    assert.ok(buildTab, '设计稿顶行建造按钮必须存在');
+    assert.ok(prefabComponent(buildTab, 'cc.Button'), 'BuildTab 必须自带点击组件');
+    assert.equal(prefabComponent(buildTab, 'cc.Sprite')._spriteFrame.__uuid__, buttonFrames.BuildTab);
     const toggle = prefabNode('BaseWorldToggle');
     const names = toggle._children.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]._name);
     assert.deepEqual(names, ['ModeFrameFallback', 'ModeFrame', 'ModeIcon', 'ModeLabel']);
-    assert.equal(prefabNode('ModeFrame')._lpos.y, -7.5);
+    assert.equal(prefabNode('ModeFrame')._lpos.y, 0);
     assert.equal(prefabNode('ModeIcon')._lpos.y, 11.5);
     assert.equal(prefabNode('ModeLabel')._lpos.y, -25);
     const label = prefabComponent(prefabNode('ModeLabel'), 'cc.Label');

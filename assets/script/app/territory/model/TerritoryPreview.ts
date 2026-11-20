@@ -61,7 +61,13 @@ export function territoryPreviewLevels(query: ITerritoryPreviewQuery): ITerritor
         a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId);
     const first = ordered[0];
     // 序列为第 1 关加全部首领；第 1 关本身是首领时不重复。
-    const chain = [first, ...ordered.filter((level) => level !== first && level.stage.isBoss)];
+    const chain: (typeof ordered)[number][] = [first];
+    for (let i = 0; i < ordered.length; i++) {
+        const level = ordered[i];
+        if (level !== first && level.stage.isBoss) {
+            chain.push(level);
+        }
+    }
 
     const result: ITerritoryPreviewLevel[] = [];
     let previous: (typeof ordered)[number] | null = null;

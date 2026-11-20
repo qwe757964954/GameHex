@@ -127,7 +127,12 @@ test('六条第二个主动：计划行的 behaviorKey / 关键参数都在', ()
             paramsOf(101003).strikeSplashDamageRate],
         [3, 1, 80, 0.5], 'L1：最近的 3 个 / 爆炸半径 80 / 溅射 50%（2026-11-03 需求，由 100/0.3333 上调口径）');
 
-    assert.equal(behaviorOf(103103), 'self_cast', '舞王召唤本轮是替代口径（折算成限时增伤）');
+    //  舞王 103103 在 2026-11-18 第 17 批已经换掉「折算成限时增伤」的替代口径，
+    //  走的是真正的召唤车道（`summon_unit` + `summonCooldown 12`）—— 这条断言以前
+    //  之所以是绿的，是因为 remoteRef 停在更早的快照上（旧 `self_cast` 参数），
+    //  2026-11-19 把 102001 / 103103 / 103503 三条链的旧快照修回 client 之后才暴露出来。
+    assert.equal(behaviorOf(103103), 'summon_unit', '舞王召唤 = 真召唤车道（第 17 批换掉替代口径）');
+    assert.equal(paramsOf(103103).summonCooldown, 12);
 
     //  迅击的「2 连击」是常驻词缀，落在 unit 域 attackCount 上：
     //  `multiHitFlat` 是**额外**段数，1 = 多打一段 = 共 2 连击。

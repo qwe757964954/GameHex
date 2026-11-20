@@ -142,7 +142,10 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
             throw new Error('对局准备已取消');
         }
         this.adopted = true;
-        this.detachOwner?.();
+        if (this.detachOwner) {
+            this.detachOwner();
+            this.detachOwner = null;
+        }
         this.detachOwner = context.resources.defer(() => this.dispose());
         const entryParams = Object.assign({}, params);
         delete entryParams.session;
@@ -172,7 +175,7 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         }
     }
     private onPveResult({ owner, victory }: IZCBattleResult): void {
-        const pve = this.params?.pve;
+        const pve = this.params ? this.params.pve : undefined;
         if (owner !== this.runtime || !pve || this.resultRecorded) return;
         this.resultRecorded = true;
         this.options.resolvePveResult(pve, victory);
@@ -184,20 +187,27 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         if (this.isDisposed) return;
         this.leave();
         this.releaseInputs();
-        this.detachOwner?.();
-        this.detachOwner = null;
+        if (this.detachOwner) {
+            this.detachOwner();
+            this.detachOwner = null;
+        }
         const runtime = this.runtime;
         this.runtime = null;
         this.prepared = null;
         this.params = undefined;
         const controller = this.runtimeController;
         this.runtimeController = null;
-        try { controller?.dispose(); }
-        finally {
-            try { runtime?.shutdown(); }
-            finally {
-                try { runtime?.destroy(); }
-                finally { super.dispose(); }
+        try {
+            if (controller) controller.dispose();
+        } finally {
+            try {
+                if (runtime) runtime.shutdown();
+            } finally {
+                try {
+                    if (runtime) runtime.destroy();
+                } finally {
+                    super.dispose();
+                }
             }
         }
     }

@@ -47,7 +47,7 @@ export const ZC_GOLD_DENY_FLASH_STEP_SECONDS = 0.06;
  * 闪红用的红。与地块价格的 `ZCHexView.INSUFFICIENT_GOLD_COLOR` 同色：
  * 同一件「钱不够」在棋盘和金币栏上的红必须是同一个，否则玩家会读成两种状况。
 */
-const ZC_GOLD_DENY_LABEL_COLOR = new Color(255, 91, 91, 255);
+const ZC_GOLD_DENY_LABEL_COLOR = Object.freeze(new Color(255, 91, 91, 255));
 
 /**
  * 「镜头一键复位」后，我方主城相对视口中心的下移量（px）。
@@ -357,17 +357,18 @@ export class ZCGameHUDView extends Component {
     */
     startSettlementOverview(): void {
         if (this.settlementOverviewRequested) return;
-        const mapLayer = this.mapLayer;
         this.settlementOverviewRequested = true;
         this.settlementOverviewDone = false;
         // 开局入场可能还没播完（短局 + 手快）；停掉它，否则两个 tween 同时写 mapLayer。
-        this.mapIntroTween?.stop();
-        this.mapIntroTween = null;
+        if (this.mapIntroTween) {
+            this.mapIntroTween.stop();
+            this.mapIntroTween = null;
+        }
         this.mapIntroPlaying = false;
         const scale = this.mapOverviewScale;
         const center = this.mapCenterAtScale(scale);
         this.clearDrag();
-        this.settlementOverviewTween = tween(mapLayer)
+        this.settlementOverviewTween = tween(this.mapLayer)
             .to(ZCGameHUDView.MAP_SETTLEMENT_ZOOM_SECONDS, {
                 scale: new Vec3(scale, scale, 1),
                 position: new Vec3(center.x, center.y, 0),
@@ -975,9 +976,10 @@ private fillPlayerRow(node: Node, index: number): void {
             viewport.height / coverScale,
             mapHeight + 2 * ZCGameHUDView.MAP_EDGE_MARGIN_Y / coverScale,
         );
-        const frameSize = sprite.spriteFrame?.originalSize;
-        const sourceWidth = frameSize?.width || transform.width;
-        const sourceHeight = frameSize?.height || transform.height;
+        const frame = sprite.spriteFrame;
+        const frameSize = frame ? frame.originalSize : null;
+        const sourceWidth = (frameSize && frameSize.width) || transform.width;
+        const sourceHeight = (frameSize && frameSize.height) || transform.height;
         const imageScale = Math.max(requiredWidth / sourceWidth, requiredHeight / sourceHeight);
         transform.setContentSize(sourceWidth * imageScale, sourceHeight * imageScale);
         background.setPosition((bounds.minX + bounds.maxX) / 2, (bounds.minY + bounds.maxY) / 2, 0);

@@ -121,6 +121,15 @@ export interface ZCPvpTables {
     pvpGlobal?: Array<{ key: string; value: unknown }>;
     pvpArtifact?: Array<Record<string, unknown>>;
     pvpCard?: Array<Record<string, unknown>>;
+    /**
+     * 怪物卡牌（`PVP-怪物卡牌.xlsx`）。
+     *
+     * 只服务中立资源点的「随机野怪」（`neutralResourceGroup.resourceType=11`）与
+     * 怪物侧单位目录 —— **不进** `cards` / 出战卡组，玩家抽不到。
+     * 字段与 `pvpCard` 同构，缺 `skillList` / `prefabSize` / `unitValueFactor`，
+     * 由 `parseCard` 按空技能表、缩放 1 处理。
+     */
+    monsterCard?: Array<Record<string, unknown>>;
     //  `pvpUnit` 已于 2026-09-20 并入 `pvpCard`（单位列内联、加 `unit` 前缀）——
     // 表本身已下线，这里也刻意不再留可选字段：留着会让"表没了但代码还读得到空数组"
     // 变成一种能跑通的假象。

@@ -1,103 +1,103 @@
 
 duyan.png
-size: 468,468
+size: 472,472
 format: RGBA8888
 filter: Linear,Linear
 repeat: none
 duy0
-  rotate: false
-  xy: 370, 342
+  rotate: true
+  xy: 190, 30
   size: 97, 125
   orig: 97, 125
   offset: 0, 0
   index: -1
 duy1
   rotate: false
-  xy: 207, 8
+  xy: 148, 24
   size: 28, 37
   orig: 28, 37
   offset: 0, 0
   index: -1
 duy10
   rotate: false
-  xy: 343, 86
+  xy: 380, 113
   size: 91, 125
   orig: 91, 125
   offset: 0, 0
   index: -1
 duy11
   rotate: true
-  xy: 312, 3
+  xy: 316, 30
   size: 82, 107
   orig: 82, 107
   offset: 0, 0
   index: -1
 duy12
   rotate: true
-  xy: 164, 101
+  xy: 201, 128
   size: 110, 178
   orig: 110, 178
   offset: 0, 0
   index: -1
 duy2
-  rotate: true
-  xy: 164, 212
+  rotate: false
+  xy: 370, 239
   size: 101, 232
   orig: 101, 232
   offset: 0, 0
   index: -1
 duy3
   rotate: true
-  xy: 370, 320
+  xy: 201, 241
   size: 21, 55
   orig: 21, 55
   offset: 0, 0
   index: -1
 duy4
-  rotate: false
-  xy: 236, 13
+  rotate: true
+  xy: 148, 62
   size: 33, 32
   orig: 33, 32
   offset: 0, 0
   index: -1
 duy5
-  rotate: false
-  xy: 148, 4
+  rotate: true
+  xy: 148, 96
   size: 58, 41
   orig: 58, 41
   offset: 0, 0
   index: -1
 duy6
   rotate: false
-  xy: 1, 314
+  xy: 1, 318
   size: 368, 153
   orig: 368, 153
   offset: 0, 0
   index: -1
 duy7
   rotate: true
-  xy: 426, 324
+  xy: 257, 245
   size: 17, 31
   orig: 17, 31
   offset: 0, 0
   index: -1
 duy8
-  rotate: false
-  xy: 1, 114
+  rotate: true
+  xy: 1, 155
   size: 162, 199
   orig: 162, 201
   offset: 0, 0
   index: -1
 duy9
   rotate: false
-  xy: 1, 6
+  xy: 1, 47
   size: 146, 107
   orig: 146, 107
   offset: 0, 0
   index: -1
 yz
   rotate: false
-  xy: 148, 46
+  xy: 201, 263
   size: 163, 54
   orig: 163, 54
   offset: 0, 0

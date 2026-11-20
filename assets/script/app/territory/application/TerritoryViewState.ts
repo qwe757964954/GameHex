@@ -1,6 +1,10 @@
 import { TerritoryProgress } from '../model/TerritoryProgress';
-import { buildTerritoryMonsterPatrols, type ITerritoryMonsterPatrol } from '../model/TerritoryMonsterPatrol';
-import { isTerritoryBattleSite, isTerritoryChestSite, TERRITORY_SITE_TYPE } from '../model/TerritoryMapConfig';
+import {
+    buildTerritoryMonsterPatrols,
+    territoryPatrolPassedCells,
+    type ITerritoryMonsterPatrol,
+} from '../model/TerritoryMonsterPatrol';
+import { isTerritoryBattleSite, isTerritoryChestSite, TERRITORY_SITE_TYPE, type TerritorySite } from '../model/TerritoryMapConfig';
 import { territoryUnlockShortfall } from '../model/TerritoryCostShortfall';
 import { territoryMonsterBoxLvByCell } from '../model/TerritoryMonsterBox';
 import type { ITerritoryViewState } from './TerritoryModel';
@@ -45,30 +49,37 @@ export interface ITerritoryStationState {
  * 这里是**第一步**的口径，`Map/Tile_*` 翻地步用它。
  */
 function territoryUnlockableChestCells(state: Pick<ITerritoryRenderState, 'map' | 'siteOpenableCells'>): readonly number[] {
-    return state.map?.sites
-        .filter(site => isTerritoryChestSite(site)
-            && state.siteOpenableCells.includes(site.cellId))
-        .map(site => site.cellId) ?? [];
+    const sites = state.map?.sites;
+    if (!sites || sites.length === 0) return [];
+    const openableSet = new Set(state.siteOpenableCells);
+    const result: number[] = [];
+    for (let i = 0; i < sites.length; i++) {
+        const site = sites[i];
+        if (isTerritoryChestSite(site) && openableSet.has(site.cellId)) {
+            result.push(site.cellId);
+        }
+    }
+    return result;
 }
 
 /**
- * 「宝箱已翻出来、还没点开」：**普通宝箱**（`fixedResource`）且**已解锁未通关**。
- *
- * 🔴 第二步时这一格已经**不在** `siteOpenableCells` 里（那个集合只收「未解锁」的格），
- * 所以 `2-2 打开宝箱` 的焦点必须按「已解锁未通关」筛。按前者筛的后果不是"少画一个圈"：
- * 孔挖不出来 ⇒ `Dim` + 铺满屏的 `Blocker` 压在宝箱上 ⇒ 玩家连点都点不到，整条引导死在这里。
- *
- * 野怪宝箱（`patrolChest`）不算：它已解锁后的下一步是**开战**，不是「打开宝箱」，
- * 引导手指指过去会让玩家以为点一下就能领奖（2026-11-18）。
+ * 已翻出但尚未领取的固定宝箱（fixedResource 且已解锁未通关）。
+ * 此时地块已脱离 siteOpenableCells，需单独由 Chest_N 引导捕获。
  */
 function territoryChestPendingCells(state: Pick<ITerritoryRenderState, 'map' | 'progress'>): readonly number[] {
     const progress = state.progress;
-    if (!progress) return [];
-    return state.map?.sites
-        .filter(site => site.type === TERRITORY_SITE_TYPE.fixedResource
+    const sites = state.map?.sites;
+    if (!progress || !sites || sites.length === 0) return [];
+    const result: number[] = [];
+    for (let i = 0; i < sites.length; i++) {
+        const site = sites[i];
+        if (site.type === TERRITORY_SITE_TYPE.fixedResource
             && progress.isCellUnlocked(site.cellId)
-            && !progress.isOwned(site.cellId))
-        .map(site => site.cellId) ?? [];
+            && !progress.isOwned(site.cellId)) {
+            result.push(site.cellId);
+        }
+    }
+    return result;
 }
 
 /**
@@ -83,7 +94,15 @@ export function isTerritoryChestActionable(
     state: Pick<ITerritoryRenderState, 'map' | 'progress' | 'siteOpenableCells'>,
     cellId: number,
 ): boolean {
-    const site = state.map?.sites.find(one => one.cellId === cellId);
+    const sites = state.map?.sites;
+    if (!sites) return false;
+    let site: TerritorySite | null = null;
+    for (let i = 0; i < sites.length; i++) {
+        if (sites[i].cellId === cellId) {
+            site = sites[i];
+            break;
+        }
+    }
     if (!site || !isTerritoryChestSite(site)) return false;
     if (state.siteOpenableCells.includes(cellId)) return true;
     if (site.type === TERRITORY_SITE_TYPE.patrolChest) return false;
@@ -92,11 +111,8 @@ export function isTerritoryChestActionable(
 }
 
 /**
- * 「还能翻的地块」候选池：随机格在前（既有顺序）+ 还能翻出来的固定资源宝箱。
- *
- * 🔴 已翻出、还没点开的箱子**不在池里** —— 它已经离开 `siteOpenableCells`，
- * 那一格的下一步是「点开宝箱」，归 `Map/Chest_N` 管，不该再被当成「翻一格」的目标。
- * 池的顺序必须**稳定**（同一次会话里跑两次得到同一顺序），`Map/Tile_N` 靠它取第 N 个。
+ * 可翻开地块候选池：包含可开启随机地块及待解锁固定资源宝箱。
+ * 已翻出未领取的宝箱归属于 Chest_N，不纳入翻地候选池。
  */
 function territoryFlipPool(state: Pick<ITerritoryRenderState, 'map' | 'siteOpenableCells' | 'randomResourceOpenableCells'>): readonly number[] {
     const fixed = territoryUnlockableChestCells(state);
@@ -110,12 +126,7 @@ export function guideMapFocusCells(focusNode: string, state: Pick<ITerritoryRend
     if (/^Map\/Chest_\d+$/.test(focusNode)) return territoryChestPendingCells(state);
     const tile = /^Map\/Tile_([123])$/.exec(focusNode);
     if (tile) {
-        // 🔴 `Map/Tile_N` 的 N 是**「第几块要翻的地」**（1 起），不是随便一个序号：
-        //    翻地步（2-1 / 3-1 / 4-1）连着三步，如果每步都给同一份候选、让调用方
-        //    「取离屏幕中心最近的那个」，手指就会一直停在**同一格**上，
-        //    要等宝箱被点开（候选集合变了）才跳到下一格 —— 玩家看到的就是
-        //    「手指要等宝箱打开才移动」（用户 2026-11-17 第 13 条 ①）。
-        //    这里把「本步该指的那一格」**直接排到最前**，顺序即语义。
+        // Map/Tile_N 中的 N 代表第 N 块待翻开地块，通过将对应地块排在首位确保引导定位唯一稳定。
         const pool = territoryFlipPool(state);
         if (!pool.length) return [];
         const index = Math.min(Number(tile[1]) - 1, pool.length - 1);
@@ -128,25 +139,8 @@ export function guideMapFocusCells(focusNode: string, state: Pick<ITerritoryRend
     const levelId = Number(level[1]);
     const progress = state.progress;
     /**
-     * 🔴 `stageByCell` 是**扩散后**的表（`expandBindingsToAreaSites`：同一区域的多个站点
-     * 共享同一个关卡号）⇒ 一个 `levelId` 会命中好几格，光按它挑就会指到**兄弟格**上：
-     * 手指落在空地、真正的关卡建筑在下面一格（用户 2026-11-17 第 17 条）。
-     *
-     * 所以这里分两档，且**只认「这一刻点得动」**：
-     * ① `building`：有建筑的那一格（`site.buildingId`）—— 玩家看到的关卡建筑就在这儿，排最前；
-     * ② `shared`：同区域里共享关卡号的兄弟格，跟在后面**兜底**（建筑那格挪出视口时，
-     *    调用方按顺序取第一个可见的，不至于整步没有光圈）。
-     *
-     * 「点得动」的判据 = **没有锁标**（`!isPrerequisitePending`），不是 `isCellUnlocked`：
-     * 没解锁但前置满足的关卡格显示「银币 + 数字」，点一下 = 花银币解锁并**直接开战**
-     * （`TerritoryModel.selectSite` → `handleUnlockThenBattle`）—— 这正是 `5-1` 要让玩家做的那一下
-     * （用户 2026-11-17 第 21 条）。只按「已解锁」筛会漏掉最常见的现场：格子已经露出来、
-     * 价格也显示了、玩家还没付钱 ⇒ 光圈压根不出现，只剩一句台词飘在屏幕底部。
-     *
-     * 🔴 **锁标照旧一律不算**（用户 2026-11-18 第 24 条：「必须是可花银币解锁（前置满足）才会触发」）：
-     * `isPrerequisitePending` 两种来源都拒 —— 前置关卡没打通（点了只弹「先打通 xxx」）与
-     * 前置宝箱解锁了没点开（玩家眼里同样是锁）。后者服务端其实允许解锁，但画面上顶着锁，
-     * 这时候出手指等于叫玩家点一个看着点不动的格子。
+     * 关卡聚焦点筛选：优先定位带有实心建筑的主地块，兄弟格作为视口外兜底。
+     * 仅当格子未被前置条件锁定时（!isPrerequisitePending）才可作为可点击引导目标。
      */
     const building: number[] = [];
     const shared: number[] = [];
@@ -156,9 +150,7 @@ export function guideMapFocusCells(focusNode: string, state: Pick<ITerritoryRend
         if (!stage || stage.levelId !== levelId) continue;
         if (!isTerritoryBattleSite(site)) continue;
         if (progress.isDisabled(site.cellId)) continue;
-        // 「可花银币解锁（前置满足）」= 已解锁，或者**没有锁标**（`isPrerequisitePending`：
-        // 前置关卡没打通 ∪ 前置宝箱解锁了没点开 —— 后者玩家眼里同样是锁）。
-        // 缺方法的桩（老夹具只给 `isCellUnlocked`）按「没被卡住」处理，别让渲染层抛。
+        // 「可花银币解锁（前置满足）」= 已解锁，或者没有锁标（!isPrerequisitePending）。
         const unlocked = progress.isCellUnlocked(site.cellId);
         const locked = !unlocked && (progress.isPrerequisitePending?.(site.cellId) ?? false);
         if (locked) {
@@ -167,10 +159,7 @@ export function guideMapFocusCells(focusNode: string, state: Pick<ITerritoryRend
         }
         (site.buildingId ? building : shared).push(site.cellId);
     }
-    // 🔴 关卡建筑那一格还锁着 ⇒ 这一步**整步不出引导**（对话框也会一起压住，
-    // 见 `GuideDialogView.waitsForLevelFocus`）。绝不能退到「同区域共享关卡号的兄弟格」上：
-    // 兄弟格可能自己能开（有银币价、没锁标），光圈就画到了隔壁空地、而玩家认的是带 `1-1` 气泡的
-    // 建筑格（用户 2026-11-18 第 24 条现场：光圈套在左侧价格格上，绿框的建筑格还挂着锁）。
+    // 若主建筑格仍处于锁定状态，则整步暂不展示引导，避免将光标引向不带建筑标志的兄弟格。
     if (buildingLocked && !building.length) return [];
     return building.length ? [...building, ...shared] : shared;
 }
@@ -210,6 +199,12 @@ export function buildTerritoryStationStates(state: TerritoryStationSource): Read
 
 export interface ITerritoryRenderState extends Omit<ITerritoryViewState, 'progress'> {
     readonly monsterPatrols: readonly ITerritoryMonsterPatrol[];
+    /**
+     * 巡逻区「已挑战成功」的格子（含 footprint）。与 `monsterPatrols` 同一拍快照：
+     * 视图拿它同时判「地皮绿 / 红框摘掉」和「野怪取消暗色红描边」，
+     * 保证三者在同一帧一起恢复，不会出现「地块绿了、怪还灰着」。
+     */
+    readonly patrolPassedCells: ReadonlySet<number>;
     readonly progress: ITerritoryProgressView | null;
     readonly stationStates: ReadonlyMap<number, ITerritoryStationState>;
 }
@@ -240,6 +235,8 @@ export function buildTerritoryViewState(state: ITerritoryViewState): ITerritoryR
         wallet: Object.freeze({ silver: state.wallet.silver, stamina: state.wallet.stamina }),
         progress,
         monsterPatrols: state.map && progress ? buildTerritoryMonsterPatrols(state.map, progress) : [],
+        patrolPassedCells: state.map && progress
+            ? territoryPatrolPassedCells(state.map.sites, progress) : new Set<number>(),
         stationStates: buildTerritoryStationStates({ ...state, progress }),
     });
 }

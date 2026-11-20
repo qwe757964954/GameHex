@@ -8,17 +8,21 @@ export const ZC_BATTLE_SHELL_PATHS = {
     unit: 'ui/game/ZCGameUnit', effect: 'ui/game/ZCGameEffect', wall: 'ui/game/ZCGameWall',
     wallLayer: 'ui/game/ZCGameWallLayer', floatText: 'ui/game/ZCGameFloatText',
     cardReveal: 'ui/game/ZCGameCardReveal', legendBanner: 'ui/game/ZCGameLegendBanner',
+    killBanner: 'ui/game/ZCGameKillBanner',
     // 装饰 Sprite 的 CUSTOM 尺寸和不裁边由 prefab 声明。
     decor: 'ui/game/ZCGameDecor', spawnSelection: 'ui/game/ZCSpawnSelection', bossPanel: 'ui/game/ZCBossPanel',
 } as const;
 
+const BATTLE_EFFECTS_DIRECTORY = 'units/effects';
+const BATTLE_PROJECTILES_DIRECTORY = 'units/projectiles';
+
 export const ZC_BATTLE_FX_PATHS = {
-    effectsDirectory: 'units/effects',
-    projectilesDirectory: 'units/projectiles',
-    spawn: 'units/effects/出生特效/出生特效',
-    death: 'units/effects/死亡特效/死亡特效',
-    buildingDestroy: 'units/effects/建筑死亡特效/建筑死亡特效',
-    hitDirectory: 'units/effects/受击特效',
+    effectsDirectory: BATTLE_EFFECTS_DIRECTORY,
+    projectilesDirectory: BATTLE_PROJECTILES_DIRECTORY,
+    spawn: `${BATTLE_EFFECTS_DIRECTORY}/出生特效/出生特效`,
+    death: `${BATTLE_EFFECTS_DIRECTORY}/死亡特效/死亡特效`,
+    buildingDestroy: `${BATTLE_EFFECTS_DIRECTORY}/建筑死亡特效/建筑死亡特效`,
+    hitDirectory: `${BATTLE_EFFECTS_DIRECTORY}/受击特效`,
 } as const;
 
 export const ZC_BATTLE_DOWNLOAD_PREFABS = [
@@ -35,7 +39,8 @@ const ZC_BATTLE_COMMON_FX_PREFABS: readonly string[] = coreFxPaths.concat(
 );
 
 export const ZC_BATTLE_COMMON_PREFABS: readonly string[] = Array.from<string>(ZC_BATTLE_DOWNLOAD_PREFABS).concat(
-    [ZC_BATTLE_SHELL_PATHS.cardReveal, ZC_BATTLE_SHELL_PATHS.legendBanner, ZC_BATTLE_SHELL_PATHS.decor],
+    [ZC_BATTLE_SHELL_PATHS.cardReveal, ZC_BATTLE_SHELL_PATHS.legendBanner,
+        ZC_BATTLE_SHELL_PATHS.killBanner, ZC_BATTLE_SHELL_PATHS.decor],
     ZC_BATTLE_COMMON_FX_PREFABS,
 );
 

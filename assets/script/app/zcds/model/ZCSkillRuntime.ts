@@ -23,6 +23,19 @@ export interface ZCSkillRuntimeDefinition {
     passiveStatusId?: string;
 }
 
+/**
+ * 「武将技还没解锁」的运行时标记（2026-11-19）。
+ *
+ * 写在 `${unitId}:${pvpSkillId}` 这个普攻袋的 `parameters` 上，值为 1 就表示本局这个单位的
+ * `pvpSkill.empoweredSkillId`（强化那一击）**不许放**，全部按普通普攻结算。
+ *
+ * 为什么用参数袋传：基表 `pvpSkill` 的 `empoweredEvery` / `empoweredSkillId` 与等级完全无关，
+ * 而「几级解锁」只写在 `pvpSkillPlan` 上 —— 构筑期是唯一同时看得见等级和整表的地方，
+ * 结算期只剩这个袋。键名刻意不撞任何车道前缀（`zone` / `burst` / `chain` …），
+ * 各车道按 `startsWith` 取参，读到它也不会误当成自己的参数。
+*/
+export const ZC_EMPOWERED_LOCK_PARAM = 'zcEmpoweredLocked';
+
 /** 允许把 `pvpSkillPlan` 行直接喂进注册表：计划没有 `legacySkillId`，只借行为/参数/状态三样。*/
 export interface ZCSkillRuntimePlanLike {
     pvpSkillId: number;

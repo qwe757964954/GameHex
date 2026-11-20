@@ -12,6 +12,16 @@ import { ZCGameUiEvent } from './ZCGameHudEvents';
 
 const { ccclass, property } = _decorator;
 
+/**
+ * spine 骨架 canvas 高 → 目标「等效画布高」（69.4），给 spine 单位定缩放。
+ * 实测口径（2026-09-24，`tmp/_spine_unit_scale.mjs`）：spine 可见高/骨架 canvas 高 = 0.970，
+ * 要对齐序列帧可见高 67.27 ⇒ 目标 canvas 高 69.4。
+ *
+ * 导出是为了让离线/验证工具按**同一个数**摆模型（卡牌验证台的舞台），
+ * 自己抄一份 69.4 迟早会漂移成「战场上大、预览里小」。
+ */
+export const ZC_SPINE_CANVAS_TARGET_HEIGHT = 69.4;
+
 export interface IZCUnitPresentation {
     unit: Readonly<ZCUnitState>;
     definition: Readonly<ZCUnitDefinition>;
@@ -93,11 +103,10 @@ export class ZCUnitView extends Component {
     private static readonly FALLBACK_RADIUS_UNIT = 9;
 
     /**
-     * spine 骨架 canvas 高 → 目标「等效画布高」（69.4），给 spine 单位定缩放。
-     * 实测口径（2026-09-24，`tmp/_spine_unit_scale.mjs`）：spine 可见高/骨架 canvas 高 = 0.970，
-     * 要对齐序列帧可见高 67.27 ⇒ 目标 canvas 高 69.4。
-    */
-    private static readonly SPINE_CANVAS_TARGET_HEIGHT = 69.4;
+     * spine 骨架 canvas 高 → 目标「等效画布高」。真源是模块级 {@link ZC_SPINE_CANVAS_TARGET_HEIGHT}，
+     * 这里只是沿用原有私有名，避免改动散落在各个使用点。
+     */
+    private static readonly SPINE_CANVAS_TARGET_HEIGHT = ZC_SPINE_CANVAS_TARGET_HEIGHT;
     /**
      * 「整体外轮廓」副本的放大倍数。
      *
@@ -207,6 +216,8 @@ export class ZCUnitView extends Component {
     private deferredPrefabRequested = false;
     /** 这条兵种美术的骨架；所有上阵单位都来自 `resources/skel/**`，动作走 `setAnimation`。*/
     private visualSkeleton: sp.Skeleton | null = null;
+    /** 骨架脚点对齐原点，基准偏移为 0；悬空高度叠加在其上。*/
+    private readonly visualBaseOffsetY = 0;
     /**
      * 整体外轮廓 = 同一份美术 prefab 的第二个实例（放大 `OUTLINE_COPY_SCALE`、
      * 只画不透明像素，排在美术后面 ⇒ 大出来的那一圈就是顺着角色外形的描边）。
@@ -318,7 +329,7 @@ export class ZCUnitView extends Component {
         //  而这个标记归 `resetForReuse` 管，顺序反了就会带着上一局的标记。
         this.resetForReuse(definition.prefabSize);
         const prefab = this.resolveVisual(definition);
-        if (this.visualNode?.isValid && this.visualPrefab === prefab) {
+        if (this.visualNode && this.visualNode.isValid && this.visualPrefab === prefab) {
             this.visualNode.active = true;
             this.applyVisualSize();
             this.resetVisualTint();
@@ -339,7 +350,7 @@ export class ZCUnitView extends Component {
      * {@link attachDeferredVisual} 在下一帧 `render` 里接上。
     */
     private resolveVisual(definition: Readonly<ZCUnitDefinition>): Prefab | null {
-        const prefab = this.presentationArt?.unitVisualPrefabs.get(definition.unitId) ?? null;
+        const prefab = this.presentationArt ? (this.presentationArt.unitVisualPrefabs.get(definition.unitId) ?? null) : null;
         if (prefab) return prefab;
         if (!this.deferredPrefabRequested) {
             this.deferredPrefabRequested = true;
@@ -405,16 +416,16 @@ export class ZCUnitView extends Component {
     }
 
     private clearVisual(): void {
-        this.visualNode?.destroy();
+        if (this.visualNode && this.visualNode.isValid) this.visualNode.destroy();
         this.visualNode = null;
-        this.outlineCopyNode?.destroy();
+        if (this.outlineCopyNode && this.outlineCopyNode.isValid) this.outlineCopyNode.destroy();
         this.outlineCopyNode = null;
         this.outlineCopySkeleton = null;
         this.visualSkeleton = null;
         this.idleClip = '';
         this.moveClip = '';
         this.attackClip = '';
-        this.visualRoot.setPosition(Vec3.ZERO);
+        this.visualRoot.setPosition(0, this.visualBaseOffsetY, 0);
         this.appliedCastLift = Number.NaN;
     }
 
@@ -534,7 +545,7 @@ export class ZCUnitView extends Component {
             const castLift = presentation.castLiftPx ?? 0;
             if (castLift !== this.appliedCastLift) {
                 this.appliedCastLift = castLift;
-                this.visualRoot.setPosition(0, castLift, 0);
+                this.visualRoot.setPosition(0, this.visualBaseOffsetY + castLift, 0);
             }
 
             // 出生抖动：Y 拉 110% 回落 → X 拉 110% 回落，叠加在朝向翻转之上。
@@ -641,7 +652,7 @@ export class ZCUnitView extends Component {
         if (!skeleton || !this.currentClip || this.outlineSyncedEpoch === this.outlineClipEpoch) return;
         const entry = skeleton.setAnimation(0, this.currentClip, true);
         if (entry) {
-            const mainEntry = this.visualSkeleton?.getCurrent(0);
+            const mainEntry = this.visualSkeleton ? this.visualSkeleton.getCurrent(0) : null;
             if (mainEntry) entry.trackTime = mainEntry.trackTime;
             this.outlineSyncedEpoch = this.outlineClipEpoch;
         }
@@ -669,7 +680,7 @@ export class ZCUnitView extends Component {
         // 朝向翻转由 render 每帧按 facing 重算，这里只把基准值写回去；
         // 强制下一帧重写（appliedVisualScaleX 置 NaN ⇒ NaN !== x 恒真）。
         this.appliedVisualScaleX = Number.NaN;
-        this.visualNode?.setScale(this.visualBaseScale);
+        if (this.visualNode) this.visualNode.setScale(this.visualBaseScale);
         this.applyOutlineCopyScale(this.visualBaseScale.x, this.visualBaseScale.y);
     }
 
@@ -720,12 +731,20 @@ export class ZCUnitView extends Component {
     }
 
     private ensureSummonOpacity(): UIOpacity | null {
-        if (this.summonOpacity?.isValid) return this.summonOpacity;
-        //  无引擎夹具里的假节点没有这两个方法 ⇒ 先探再调（与 `ZCCombatEffectView` 同一口径）。
-        const host = this.node as unknown as { getComponent?: unknown; addComponent?: unknown };
-        if (typeof host.getComponent !== 'function' || typeof host.addComponent !== 'function') return null;
-        this.summonOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
-        return this.summonOpacity;
+        if (this.summonOpacity && this.summonOpacity.isValid) return this.summonOpacity;
+        const host = this.node as unknown as { getComponent?: (type: unknown) => UIOpacity | null };
+        if (typeof host.getComponent !== 'function') return null;
+        const comp = host.getComponent(UIOpacity);
+        if (comp) {
+            this.summonOpacity = comp;
+            return comp;
+        }
+        const addFn = (host as Record<string, unknown>)['addComponent'];
+        if (typeof addFn === 'function') {
+            this.summonOpacity = (addFn as (type: unknown) => UIOpacity).call(host, UIOpacity);
+            return this.summonOpacity;
+        }
+        return null;
     }
 
     private renderHealthBar(unit: Readonly<ZCUnitState>, definition: Readonly<ZCUnitDefinition>, now: number): void {
@@ -741,7 +760,7 @@ export class ZCUnitView extends Component {
             if (barSprite) barSprite.node.getComponent(UITransform).setContentSize(fillWidth, this.barFillHeight);
             this.healthBar.node.getComponent(UITransform).setContentSize(width, height);
             // 填充条锚点是 (0, 0.5)，靠 position 把左缘对齐到外框内沿（与引擎 _initBarSprite 同一算法）。
-            this.healthBar.barSprite?.node.setPosition(-width / 2 + this.barFillInset, 0, 0);
+            if (barSprite) barSprite.node.setPosition(-width / 2 + this.barFillInset, 0, 0);
             this.healthBar.totalLength = fillWidth;
             // 「陷阱1.」：普通单位的 fillWidth 恰好等于 prefab 的 52.8 → 上一行也会因「值没变」早退，
             // 宽度就停在刚写进去的满条上。用一个越界值空写一次，逼 totalLength 必定重算

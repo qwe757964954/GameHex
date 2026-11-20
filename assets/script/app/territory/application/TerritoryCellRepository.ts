@@ -183,9 +183,16 @@ export class TerritoryCellRepository {
         const record = msg as { levelChapter?: unknown; cellId?: unknown } | null;
         if (!record || typeof record !== 'object') return null;
         const raw = record.cellId;
-        const cellIds = (Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw])
-            .map(Number)
-            .filter((cell) => Number.isInteger(cell) && cell >= 0);
+        const cellIds: number[] = [];
+        if (Array.isArray(raw)) {
+            for (let i = 0; i < raw.length; i++) {
+                const cell = Number(raw[i]);
+                if (Number.isInteger(cell) && cell >= 0) cellIds.push(cell);
+            }
+        } else if (raw !== undefined && raw !== null) {
+            const cell = Number(raw);
+            if (Number.isInteger(cell) && cell >= 0) cellIds.push(cell);
+        }
         if (cellIds.length === 0) return null;
         return { levelChapter: normalizeTerritoryChapter(Number(record.levelChapter)), cellIds };
     }
@@ -440,19 +447,6 @@ export class TerritoryCellRepository {
                 unlock.reason ?? pass.reason,
             );
             return null;
-        }
-        // 诊断日志：浏览器对长数组默认折叠，rsp 里的 unlockCells 常常看不全 ——
-        // 「服务端到底给了哪些格子」必须在这里落成一行可读文本，否则只能靠猜。
-        // 截断到前 64 个，避免 400 格章节刷屏。
-        const brief = (cells: readonly number[]): string =>
-            `${cells.length} 格 [${cells.slice(0, 64).join(',')}${cells.length > 64 ? ',…' : ''}]`;
-        // quiet（主动下发的重复解析）不打印诊断日志，避免和 fetch 那次重复刷屏。
-        if (!quiet) {
-            console.log(
-                `[TerritoryCell] 第 ${chapter} 章服务端格子：`
-                + `unlock=${brief(unlock.cells)} pass=${brief(pass.cells)}`
-                + ` 地图共 ${maxCell} 格`,
-            );
         }
         return {
             levelChapter: chapter,

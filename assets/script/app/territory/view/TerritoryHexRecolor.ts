@@ -197,3 +197,6 @@ export class TerritoryHexRecolor {
         if (opacity.isValid && opacity.opacity !== 255) opacity.opacity = 255;
     }
 }
+
+/** 语义化别名：区分视图层换色播放器与领域层换色错峰模型。 */
+export { TerritoryHexRecolor as TerritoryHexRecolorPlayer };

@@ -25,8 +25,7 @@ import {
     TERRITORY_SILVER_CHEST_POP_SECONDS,
     territorySilverChestIconPop,
 } from '../model/TerritorySilverChestOpen';
-import { TERRITORY_EVENTS } from './TerritoryEvents';
-import { TerritoryUiEvent } from '../application/TerritoryEvents';
+import { TERRITORY_EVENTS, TerritoryUiEvent } from '../application/TerritoryEvents';
 
 export interface ITerritoryRandomResourceTarget {
     readonly kind: 'randomResource';
@@ -371,7 +370,7 @@ export class TerritoryStationView extends Component {
     /**
      * 关卡编号气泡节点（`1-1` 胶囊 / 宝箱水滴 / PVP 头像气泡），没建或没显示 ⇒ `null`。
      *
-     * 引导要把它和地块**一起**圈进光圈（用户 2026-11-17 第 17 条）：气泡挂在角标层、
+     * 引导要把气泡和地块**一起**圈进光圈：气泡挂在角标层、
      * 抬在建筑顶上方，和地块节点不是父子关系 ⇒ 只能把这个节点交给引导层做并集。
      */
     getLevelBubbleNode(): Node | null {
@@ -404,6 +403,9 @@ export class TerritoryStationView extends Component {
     private iconBaseY = 0;
     private iconBaseZ = 0;
     private spawnOpacity = 1;
+    /** 复用 Color 容器，避免在 themeLevelBubbleLabel 中高频 new Color 造垃圾。 */
+    private readonly badgeOutlineTint = new Color(0, 0, 0, 255);
+    private readonly badgeTextTint = new Color(255, 255, 255, 255);
     /**
     /**
      * 上一次 `render` 是否走「未解锁条件」分支。
@@ -581,7 +583,12 @@ export class TerritoryStationView extends Component {
             ...(this.conditionChest ? [this.conditionChest.node] : []),
         ];
         if (!this.spawnOpacities) {
-            this.spawnOpacities = nodes.map((node) => node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity));
+            const opacities: UIOpacity[] = [];
+            for (let i = 0; i < nodes.length; i += 1) {
+                const node = nodes[i];
+                opacities.push(node.getComponent(UIOpacity) ?? node.addComponent(UIOpacity));
+            }
+            this.spawnOpacities = opacities;
         }
         for (const opacity of this.spawnOpacities) {
             if (opacity.opacity !== target) opacity.opacity = target;
@@ -970,6 +977,11 @@ export class TerritoryStationView extends Component {
         node.setScale(scale, scale, 1);
     }
 
+    private hideConditionChest(): void {
+        if (this.conditionChest && this.conditionChest.node.active) this.conditionChest.node.active = false;
+        this.conditionChestHeight = 0;
+    }
+
     /**
      * 落条件模式上方那颗**宝箱图标**的帧与显隐，并记下它的高度给排布用。
      *
@@ -985,12 +997,8 @@ export class TerritoryStationView extends Component {
      */
     private applyConditionChest(frame: SpriteFrame | null, visible: boolean): void {
         if (this.isDisposed) return;
-        const hide = (): void => {
-            if (this.conditionChest && this.conditionChest.node.active) this.conditionChest.node.active = false;
-            this.conditionChestHeight = 0;
-        };
         if (!visible || !frame) {
-            hide();
+            this.hideConditionChest();
             return;
         }
         // 取不到原始尺寸（桩 / 坏图）⇒ 当没有这张图，宁可少一颗也不能让排版按 0 高算。
@@ -998,14 +1006,14 @@ export class TerritoryStationView extends Component {
         const width = size && Number.isFinite(size.width) ? size.width! : 0;
         const height = size && Number.isFinite(size.height) ? size.height! : 0;
         if (width <= 0 || height <= 0) {
-            hide();
+            this.hideConditionChest();
             return;
         }
         let chest = this.conditionChest;
         if (!chest) {
             const parent = this.captionSprite.node.parent;
             if (!parent) {
-                hide();
+                this.hideConditionChest();
                 return;
             }
             const node = new Node('ConditionChest');
@@ -1187,9 +1195,13 @@ export class TerritoryStationView extends Component {
             // 字重：`isBold` + 同色系深描边（描边色比文字色深一档，不是黑色 —— 奶白底上黑边会显硬）。
             this.badgeLabel.enableOutline = chest.outlineWidth > 0;
             this.badgeLabel.outlineWidth = chest.outlineWidth;
-            this.badgeLabel.outlineColor = new Color(
-                chest.outlineColor[0], chest.outlineColor[1], chest.outlineColor[2], 255);
-            this.badgeLabel.color = new Color(chest.textColor[0], chest.textColor[1], chest.textColor[2], 255);
+            this.badgeOutlineTint.set(chest.outlineColor[0], chest.outlineColor[1], chest.outlineColor[2], 255);
+            this.badgeLabel.outlineColor = this.badgeOutlineTint;
+            this.badgeTextTint.r = chest.textColor[0];
+            this.badgeTextTint.g = chest.textColor[1];
+            this.badgeTextTint.b = chest.textColor[2];
+            this.badgeTextTint.a = 255;
+            this.badgeLabel.color = this.badgeTextTint;
             if (transform) transform.setContentSize(chest.width, chest.lineHeight);
         } else {
             this.badgeLabel.fontSize = MAP_MARKER_BADGE_FONT_SIZE;

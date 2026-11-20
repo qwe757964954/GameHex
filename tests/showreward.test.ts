@@ -368,7 +368,7 @@ test('B2｜九宫名单 ↔ `.meta` border 双向对账（只有弹窗底是九�
 // C. prefab 结构 + 几何
 // ============================================================
 
-test('C1｜根节点与直接子序：PanelBg → TitleImage → RewardGrid → HintBg → HintLabel', () => {
+test('C1｜根节点与直接子序：Dim → PanelBg → TitleImage → RewardGrid → HintBg → HintLabel', () => {
     const o = loadPrefab();
     const byPath = pathIndex(o);
     const root = byPath.get('ShowReward');
@@ -383,18 +383,41 @@ test('C1｜根节点与直接子序：PanelBg → TitleImage → RewardGrid → 
     assert.equal(rootUi._anchorPoint.x, 0.5);
     assert.equal(rootUi._anchorPoint.y, 0.5);
 
+    // `Dim` 必须在**最底层（index 0）**：用户 2026-11-19 第 28 条 —— 奖励弹窗背后原本
+    // 一点没压暗，任务面板/主界面整块露着（截图里面板外面还能看到任务详情页和底栏挂件）。
     const childNames = (o[root!]._children as any[]).map((c) => o[c.__id__]._name);
-    assert.deepEqual(childNames, ['PanelBg', 'TitleImage', 'RewardGrid', 'HintBg', 'HintLabel']);
+    assert.deepEqual(childNames, ['Dim', 'PanelBg', 'TitleImage', 'RewardGrid', 'HintBg', 'HintLabel']);
     // `com_float`（组件_通用_浮动界面标识，跨包）/ `n13`（group）/ 15 个 `<item/>` 都不该出现
     for (const bad of ['com_float', 'n13', 'item', 'item#1']) {
         assert.equal(byPath.has(`ShowReward/${bad}`), false, `不该迁进来的节点 ${bad}`);
     }
 });
 
+test('C1b｜遮罩层：全屏 720×1280 + 黑 150 + 四边 Widget（与 GuideDialog 的 Dim 同一套口径）', () => {
+    const o = loadPrefab();
+    const byPath = pathIndex(o);
+    const dim = byPath.get('ShowReward/Dim');
+    assert.ok(dim !== undefined, '缺少 ShowReward/Dim');
+    const ui = uitOf(o, dim!);
+    assert.deepEqual([ui._contentSize.width, ui._contentSize.height], [CANVAS_W, CANVAS_H]);
+    const sprite = (o[dim!]._components as any[])
+        .map((c) => o[c.__id__]).find((c) => c.__type__ === 'cc.Sprite');
+    assert.ok(sprite, 'Dim 上要挂 cc.Sprite（无渲染组件 = 什么都没压暗）');
+    assert.deepEqual([sprite._color.r, sprite._color.g, sprite._color.b, sprite._color.a], [0, 0, 0, 150],
+        '颜色与引导层 Dim 一致：纯黑 alpha 150');
+    // `_sizeMode` 必须是 CUSTOM(0)：TRIMMED 会把 720×1280 洗成贴图原始尺寸（遮罩缩成一小块）。
+    assert.equal(sprite._sizeMode, 0, 'Dim 的 Sprite 必须 CUSTOM 尺寸');
+    const widget = (o[dim!]._components as any[])
+        .map((c) => o[c.__id__]).find((c) => c.__type__ === 'cc.Widget');
+    assert.ok(widget, '要挂四边对齐的 Widget，长屏机型才铺满');
+    // 45 = TOP(1) | BOT(4) | LEFT(8) | RIGHT(32)
+    assert.equal(widget._alignFlags, 45);
+});
+
 test('C2｜全部节点的 layer 恒 33554432、`_lscale` 只允许 ±1（规则 80① / 生成器自检①）', () => {
     const o = loadPrefab();
     const nodes = o.filter((v) => v && v.__type__ === 'cc.Node');
-    assert.equal(nodes.length, 18, '仅保留一份奖励模板');
+    assert.equal(nodes.length, 19, '仅保留一份奖励模板（18 + 第 28 条新增的全屏遮罩 Dim）');
     for (const n of nodes) {
         assert.equal(n._layer, 33554432, `${n._name} 的 layer`);
         assert.ok((n._lscale.x === 1 || n._lscale.x === -1) && (n._lscale.y === 1 || n._lscale.y === -1),
@@ -662,7 +685,7 @@ test('C14｜`_active` 烘焙口径：带脚本的节点恒 true（规则 86）�
             assert.ok(hasScript);
         }
         // 主元素一律 true（原稿没有 `visible="false"`）
-        if (['ShowReward', 'PanelBg', 'TitleImage', 'RewardGrid', 'Content', 'HintBg', 'HintLabel'].includes(n._name)) {
+        if (['ShowReward', 'Dim', 'PanelBg', 'TitleImage', 'RewardGrid', 'Content', 'HintBg', 'HintLabel'].includes(n._name)) {
             assert.equal(n._active, true, `${n._name} 应 _active=true`);
         }
     }
@@ -886,7 +909,10 @@ test('D8｜Item：动画作废用 `animRevision` + `Tween.stopAllByTarget`（复
     assert.ok(/rev === this\.animRevision/.test(ITEM_SRC), '回调里要核代号');
     assert.ok(/SR_STAR_TRACKS\[i\]/.test(ITEM_SRC), '轨迹必须按序取表');
     // 铺数据必须无条件写四件（规则 82）
-    assert.ok(/this\.goods\?\.render\(qualityFrame, iconFrame, numberText, showNumber\)/.test(ITEM_SRC));
+    // ⚠️ 判据放宽成 `goods?.` 与 `goods.` 都认：`goods` 是 **必填 Inspector 引用**（`null!`，
+    //    prefab 上已绑），工程约定「不用 `?.` 掩盖必填引用」⇒ 源码这处正确地写成了直接访问，
+    //    老断言仍按 `?.` 写，属 11-17 那批空守卫清理后遗留的过期判据（与本次遮罩改动无关）。
+    assert.ok(/this\.goods\??\.render\(qualityFrame, iconFrame, numberText, showNumber\)/.test(ITEM_SRC));
     assert.ok(/resetAppear\(\): void \{\n\s+this\.stopAnim\(\);/.test(ITEM_CODE), 'resetAppear 先停动画');
     // `resetAppear` 必须把 5 星摆回 `track.from`（与 C8 的 prefab 静置位是同一组数字）
     assert.ok(/star\.node\.setPosition\(track\.from\[0\], track\.from\[1\], 0\)/.test(ITEM_SRC));

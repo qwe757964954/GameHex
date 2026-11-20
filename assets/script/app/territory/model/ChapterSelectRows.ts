@@ -124,7 +124,12 @@ export function chapterClearedOf(
     const finalBossCells = map?.finalBossCells;
     if (finalBossCells && finalBossCells.length > 0) {
         const owned = new Set(ownedCells);
-        return finalBossCells.some((cellId) => owned.has(cellId));
+        for (let i = 0; i < finalBossCells.length; i++) {
+            if (owned.has(finalBossCells[i])) {
+                return true;
+            }
+        }
+        return false;
     }
     return chapterPercentOf(map, ownedCells) >= 100;
 }

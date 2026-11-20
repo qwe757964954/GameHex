@@ -46,16 +46,24 @@ export function territoryPrerequisiteText(
     sites: readonly TerritorySite[],
     stageByCell: ReadonlyMap<number, TerritoryCampaignStage>,
 ): string {
-    const blockers: ITerritoryPrerequisiteBlocker[] = blockerCellIds.map((cellId) => {
-        const site = sites.find((candidate) => candidate.footprint.includes(cellId)) ?? null;
+    const blockers: ITerritoryPrerequisiteBlocker[] = [];
+    for (let i = 0; i < blockerCellIds.length; i++) {
+        const cellId = blockerCellIds[i];
+        let site: TerritorySite | null = null;
+        for (let j = 0; j < sites.length; j++) {
+            if (sites[j].footprint.includes(cellId)) {
+                site = sites[j];
+                break;
+            }
+        }
         // 关卡绑定挂在**站点**格上；前置格可能是同一站点的另一格（`footprint`），两级都查。
         const stage = stageByCell.get(cellId)
             ?? (site ? stageByCell.get(site.cellId) : undefined);
-        return {
+        blockers.push({
             cellId,
             isChest: !!site && isTerritoryChestSite(site),
             label: territoryLevelBubbleText(site, stage),
-        };
-    });
+        });
+    }
     return territoryPrerequisiteBlockText(blockers);
 }

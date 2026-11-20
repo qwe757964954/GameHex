@@ -207,7 +207,7 @@ test('巡逻宝箱点下去要能推进 tileFlipped：可翻地、可点开、�
         map,
         progress: { isCellUnlocked: (cellId: number) => cellId === 2, isOwned: () => false },
         siteOpenableCells: [],
-    }, 2), false, '野怪宝箱第二下是开战，不该上报「打开宝箱」的 tileFlipped');
+    }, 2), false, '巡逻宝箱详情点击不算翻格');
     assert.equal(isTerritoryChestActionable({
         map,
         progress: { isCellUnlocked: (cellId: number) => cellId === 1, isOwned: () => false },
@@ -302,14 +302,8 @@ test('章节 1 起始格旁那 4 格巡逻宝箱，前置 347 一解锁就算可
         '前置满足后点下去要能翻地，而不是静默 return');
 });
 
-test('点击路由：巡逻宝箱解锁后走开战，固定据点仍走 unlock → passCell', () => {
+test('固定据点点击仍走 unlock → passCell', () => {
     const model = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
-    assert.match(model,
-        /if \(site\.type === TERRITORY_SITE_TYPE\.patrolChest\) \{[\s\S]{0,900}?this\.engagePatrolChest\(site, patrolStage\)/,
-        '巡逻宝箱已解锁那一支必须发开战（打掉野怪才占点），不能直接 passCell 领奖');
-    assert.match(model,
-        /private engagePatrolChest\(site: TerritorySite, stage: TerritoryCampaignStage\): void \{[\s\S]{0,400}?handleBattleStationStart\(site, stage\)/,
-        '转调层必须落在 handleBattleStationStart（开战入口只有一处）');
     assert.match(model,
         /if \(isTerritoryChestSite\(site\)\) \{[\s\S]{0,300}?handleUnlockThenPass\(site, FIXED_RESOURCE_TWO_STEP_TEXTS\)/,
         '固定资源据点仍是「解锁 → 探索 → 领奖」');

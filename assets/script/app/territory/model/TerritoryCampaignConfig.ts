@@ -102,8 +102,13 @@ export function readTerritoryIdleRewardMaxHours(
     rows: readonly TerritoryGameConfigRow[],
     fallback = TERRITORY_IDLE_REWARD_MAX_HOURS_FALLBACK,
 ): number {
-    const value = Number(rows.find((row) => row.key === 'idleRewardMaxHour')?.value);
-    return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].key === 'idleRewardMaxHour') {
+            const value = Number(rows[i].value);
+            return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
+        }
+    }
+    return fallback;
 }
 
 /**
@@ -125,7 +130,13 @@ export function readTerritoryLevelAutoStart(
     rows: readonly TerritoryGameConfigRow[],
     fallback = TERRITORY_LEVEL_AUTO_START_FALLBACK,
 ): boolean {
-    const raw = rows.find((entry) => entry.key === 'chapterLevelAutoStartConfig')?.value;
+    let raw: unknown = null;
+    for (let i = 0; i < rows.length; i++) {
+        if (rows[i].key === 'chapterLevelAutoStartConfig') {
+            raw = rows[i].value;
+            break;
+        }
+    }
     if (raw == null) return fallback;
     // 别直接 `Number(raw)`：`Number('')` / `Number(' ')` / `Number(null)` 全是 **0**
     // ⇒ 空值会被当成「关」⇒ 表里多一个空格就把功能静默关掉。空串必须走 fallback。

@@ -115,6 +115,9 @@ test('102403 冰山陨落 / 102404 急冻光线：两条主动的行为、触发
                 assert.equal(param.auraInterval, 0.5, '每 0.5 秒一跳');
                 assert.equal(param.auraRadius, 120, '蓝圈半径');
                 assert.equal(param.auraSlowRatio, 0.5, '区域减速 50%');
+                //  2026-11-19 用户口径：释放位置 = 受击目标，不是自身。
+                assert.equal(param.auraAtTarget, 1, '冰域要落在受击目标身上（不是自身脚下）');
+                assert.equal(param.auraFollow ?? 1, 1, '不写 auraFollow —— 不跟随由 auraAtTarget 隐含');
                 assert.ok(Math.abs(param.auraDamageRate - [0.55, 0.65, 0.75][tier]) < 1e-9, '单跳倍率');
             },
         },
@@ -392,6 +395,64 @@ test('冰山陨落：auraSlowRatio 落进区域 slowRatio，不配时为 0（存
         .filter((zone) => Number(zone.sourceUnitId) === withoutSlow.source.id);
     assert.equal(plain.length, 1);
     assert.equal(plain[0].slowRatio, 0, '不配就是 0，无尘禁土 / 喷射火焰逐字不变');
+});
+
+test('冰山陨落：auraAtTarget 把圆心搬到受击目标，冰锥同点落地且不跟随本体', () => {
+    const parameters = {
+        auraCooldown: 14, auraSeconds: 3, auraInterval: 0.5, auraRadius: 120,
+        auraDamageRate: 0.55, auraSlowRatio: 0.5, auraAtTarget: 1,
+    };
+    const harness = makeHarness({ parameters });
+    //  首次 tick 只挂 CD（`auraReadyAt` = now + 14），第二步才真的施放。
+    harness.step(0.05);
+    harness.step(14);
+    const zones = (harness.state.groundZones as Array<Record<string, unknown>>)
+        .filter((zone) => Number(zone.sourceUnitId) === harness.source.id);
+    assert.equal(zones.length, 1, '还是要张开一片冰域');
+    //  夹具里施法者在 x=0、`currentTarget` 给的目标在 x=60 ⇒ 圆心必须跟着目标走。
+    assert.equal(zones[0].x, 60, '圆心 = 受击目标坐标，不是自身脚下');
+    assert.equal(zones[0].y, 0);
+    assert.equal(zones[0].followUnitId, undefined,
+        '🔴 不许跟随本体：跟了会被每帧拽回施法者，看着像「没生效」');
+
+    const cones = (harness.state.combatEvents as Array<Record<string, unknown>>)
+        .filter((event) => Number(event.sourceUnitId) === harness.source.id
+            && String(event.effectPrefabPath ?? '').includes('冰法师_冰锥'));
+    assert.equal(cones.length, 1, '落地那一击要真的插一条表现事件（漏了就是「天上什么都不砸」）');
+    assert.equal(cones[0].fromX, 60, '冰锥与区域同点：受击目标');
+    assert.equal(cones[0].toX, 60);
+    assert.equal(cones[0].fromY, 0);
+    assert.equal(cones[0].angleDegrees, -90, '设计案原话「旋转 -90°」：弹体朝向改成垂落');
+    assert.equal(Number(cones[0].damage), 0, '落地那一击只是表现，伤害由区域波次结算');
+
+    //  目标没了 ⇒ 拒放、不消费 CD（`castSelfAura` 返回 false，调用方据此不推 `auraReadyAt`）。
+    const lost = makeHarness({ parameters });
+    lost.context.currentTarget = () => null;
+    assert.equal(
+        ZCAttackResolutionSystem.castSelfAura(lost.state, lost.source, lost.context), false,
+        '没有受击目标时不许在原地炸一片空冰域');
+    assert.equal(lost.state.groundZones.length, 0);
+});
+
+test('冰山陨落：三档文案都写「受击目标位置」（计划行 + 卡牌升级表，两份产物）', () => {
+    for (const rows of bothTables('pvpSkillPlan')) {
+        const hits = rows.filter((row) => Number(row.skillChainId) === 102403);
+        assert.equal(hits.length, 3);
+        for (const row of hits) {
+            const desc = String(row.desc);
+            assert.match(desc, /受击目标位置/, `计划行文案：${desc}`);
+            assert.ok(!desc.includes('在自身位置'), `旧文案不许留着：${desc}`);
+        }
+    }
+    for (const rows of bothTables('armySkillLevelUp')) {
+        const hits = rows.filter((row) => Number(row.id) === 102403);
+        assert.equal(hits.length, 3);
+        for (const row of hits) {
+            const desc = String(row.desc);
+            assert.match(desc, /受击目标位置/, `卡牌 UI 文案：${desc}`);
+            assert.ok(!desc.includes('在自身位置'), `旧文案不许留着：${desc}`);
+        }
+    }
 });
 
 test('前置矩形喷火保留350表值长度，All圆形光环无实际命中目标不空放', () => {

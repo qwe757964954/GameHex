@@ -66,7 +66,7 @@ const ZC_SPAWN_SELECTION_WEIGHT = 11;
 
 type IZCShellPrefabs = Pick<IZCGamePreparedResources,
     'hudPrefab' | 'boardPrefab' | 'hexPrefab' | 'unitPrefab' | 'effectPrefab' | 'wallPrefab' |
-    'wallLayerPrefab' | 'floatTextPrefab' | 'cardRevealPrefab' | 'legendBannerPrefab' |
+    'wallLayerPrefab' | 'floatTextPrefab' | 'cardRevealPrefab' | 'legendBannerPrefab' | 'killBannerPrefab' |
     'decorPrefab' | 'spawnSelectionPrefab' | 'bossPanelPrefab'>;
 
 /**
@@ -136,6 +136,7 @@ export class ZCGameLoader {
             floatTextPrefab: shellPrefabs.floatTextPrefab,
             cardRevealPrefab: shellPrefabs.cardRevealPrefab,
             legendBannerPrefab: shellPrefabs.legendBannerPrefab,
+            killBannerPrefab: shellPrefabs.killBannerPrefab,
             decorPrefab: shellPrefabs.decorPrefab,
             spawnSelectionPrefab: shellPrefabs.spawnSelectionPrefab,
             bossPanelPrefab: shellPrefabs.bossPanelPrefab,
@@ -259,6 +260,7 @@ export class ZCGameLoader {
             effectPrefab: ZC_BATTLE_SHELL_PATHS.effect, wallPrefab: ZC_BATTLE_SHELL_PATHS.wall, wallLayerPrefab: ZC_BATTLE_SHELL_PATHS.wallLayer,
             floatTextPrefab: ZC_BATTLE_SHELL_PATHS.floatText, cardRevealPrefab: ZC_BATTLE_SHELL_PATHS.cardReveal,
             legendBannerPrefab: ZC_BATTLE_SHELL_PATHS.legendBanner, decorPrefab: ZC_BATTLE_SHELL_PATHS.decor,
+            killBannerPrefab: ZC_BATTLE_SHELL_PATHS.killBanner,
             spawnSelectionPrefab: selectSpawn ? ZC_BATTLE_SHELL_PATHS.spawnSelection : null,
             bossPanelPrefab: hasBossPanel ? ZC_BATTLE_SHELL_PATHS.bossPanel : null,
         };

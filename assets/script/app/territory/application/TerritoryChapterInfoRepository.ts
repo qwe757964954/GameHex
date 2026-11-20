@@ -106,8 +106,9 @@ export class TerritoryChapterInfoRepository {
      * @param seconds 秒；非正数忽略（避免把 1970 年当起点）
      */
     applyIdleTime(seconds: number): void {
-        const idleTime = Math.floor(Number(seconds));
-        if (!Number.isFinite(idleTime) || idleTime <= 0) return;
+        const raw = Number(seconds);
+        if (!Number.isFinite(raw) || raw <= 0) return;
+        const idleTime = Math.floor(raw);
         this.applySnapshot({ idleTime, chapters: this.snapshot?.chapters ?? FALLBACK_CHAPTERS }, true);
     }
 
@@ -122,12 +123,10 @@ export class TerritoryChapterInfoRepository {
                     // Rsp 外层是 `{ info: ChapterInfo }`，必须先剥壳，否则读到的永远是外层
                     // （外层没有 idleTime/chapters ⇒ 归一化成 idleTime=0, chapters=[] 的假空快照）。
                     const info = readInfoField(rsp);
-                    console.info('[TerritoryChapterInfo] Rsp 原始 info =', JSON.stringify(info));
                     resolved = normalizeChapterInfo(info);
                 }),
             { timeoutMs: READ_TIMEOUT_MS, tag: 'TerritoryChapterInfo' },
         );
-        console.info('[TerritoryChapterInfo] send 结果 =', status, ' resolved =', JSON.stringify(resolved));
         if (status !== 'ok' || !resolved) return;
         this.applySnapshot(resolved, /*persist*/ true);
     }
@@ -144,7 +143,6 @@ export class TerritoryChapterInfoRepository {
                 const normalized = normalizeChapterInfo(info);
                 if (!normalized) return;
                 this.applySnapshot(normalized, true);
-                console.info('[TerritoryChapterInfo] 收到章节汇总广播', normalized);
             },
         );
     }
@@ -207,10 +205,13 @@ export function normalizeChapterInfo(info: unknown): ITerritoryChapterInfo | nul
     const record = info as { idleTime?: unknown; chapters?: unknown };
     const idle = toCount(record.idleTime);
     const rawChapters = Array.isArray(record.chapters) ? record.chapters : [];
-    const chapters = Array.from(new Set(
-        rawChapters
-            .map((item) => Math.floor(toCount(item)))
-            .filter((n) => Number.isSafeInteger(n) && n >= 1),
-    )).sort((a, b) => a - b);
+    const chapterSet = new Set<number>();
+    for (let i = 0; i < rawChapters.length; i++) {
+        const n = Math.floor(toCount(rawChapters[i]));
+        if (Number.isSafeInteger(n) && n >= 1) {
+            chapterSet.add(n);
+        }
+    }
+    const chapters = Array.from(chapterSet).sort((a, b) => a - b);
     return { idleTime: Number.isSafeInteger(idle) && idle >= 0 ? idle : 0, chapters };
 }

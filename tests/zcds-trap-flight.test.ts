@@ -1,8 +1,8 @@
 /**
- * 毒箭蘑菇（68017）「穿甲爆矢」101704（2026-11-18，第 17 批）：
+ * 毒箭菇（68017）「蘑菇爆炸」101704（2026-11-18 第 17 批；2026-11-19 改名 + 调参）：
  *
  * 设计案 K/L/M 三档原文要点：
- *   「累计普攻 8 次后朝目标丢出陷阱，飞行速度 100、飞行 2 秒；途中触碰到敌人立即爆炸，
+ *   「累计普攻 8 次后朝目标丢出陷阱，飞行速度 100、飞行 1.2 秒；途中触碰到敌人立即爆炸，
  *     对半径 150 内敌人造成 180/220/270% 伤害，并使其中毒 6 秒、每秒 15/25/35% 伤害；
  *     若 2 秒内没碰到敌人，则在落点停留 6/8/10 秒，期间被敌人触碰同样爆炸，
  *     到期无人触碰直接消失」
@@ -31,8 +31,10 @@ import { ZCSkillTriggerSystem } from '../assets/script/app/zcds/model/systems/ZC
 import { ZCGroundZoneSystem } from '../assets/script/app/zcds/model/systems/ZCGroundZoneSystem';
 import { ZCAttackResolutionSystem } from '../assets/script/app/zcds/model/systems/ZCAttackResolutionSystem';
 import {
-    ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_SECONDS,
+    ZC_TRAP_EXPIRE_PREFAB_PATH, ZC_TRAP_IDLE_PREFAB_PATH, ZC_TRAP_SPAWN_PREFAB_PATH,
+    ZC_TRAP_SPAWN_SECONDS, zcTrapExpirePath,
 } from '../assets/script/app/zcds/model/ZCTrapFx';
+import { ZC_EFFECT_PATHS } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 
 // ────────────────────────────────────────────── 夹具
 
@@ -41,9 +43,9 @@ const UNIT_ID = '68017';
 const CHAIN = 101704;
 const SKILL_ID = 30701;
 
-/** L1 的参数袋（与配表脚本 `patch_trap_flight_batch17.js` 逐字一致）。 */
+/** L1 的参数袋（与配表脚本 `patch_mushroom_explosion_101704.js` 逐字一致）。 */
 const PARAMS = {
-    trapEvery: 8, trapFlightSpeed: 100, trapFlightSeconds: 2, trapDuration: 6,
+    trapEvery: 8, trapFlightSpeed: 100, trapFlightSeconds: 1.2, trapDuration: 6,
     trapRadius: 50, trapExplodeRadius: 150, trapExplodeDamageRate: 1.8,
     trapStatusSeconds: 6, trapExpireOnTimeout: 0,
 };
@@ -162,9 +164,9 @@ test('castTrap 投掷形态：朝目标飞 2 秒、落地停 6 秒、到期不�
 
     assert.equal(state.groundZones.length, 1);
     const zone = state.groundZones[0];
-    //  总寿命 = 投掷 2 秒 + 停留 6 秒 —— 两段共用一个 remainingSeconds，落地后不会重新数一遍
-    closeTo(zone.remainingSeconds, 8);
-    closeTo(zone.flightSeconds ?? 0, 2);
+    //  总寿命 = 投掷 1.2 秒 + 停留 6 秒 —— 两段共用一个 remainingSeconds，落地后不会重新数一遍
+    closeTo(zone.remainingSeconds, 7.2);
+    closeTo(zone.flightSeconds ?? 0, 1.2);
     closeTo(zone.moveVelocityX ?? 0, 30, '100 逻辑 px/s × 0.3 = 30 世界 px/s');
     closeTo(zone.moveVelocityY ?? 0, 0);
     //  ⚠ 半径：爆炸 150 → 45 世界 px；触碰 50 → 15 世界 px（两个半径分工不同）
@@ -204,23 +206,23 @@ test('参数不全就不放：触碰伤害为 0 只在投掷形态放行', () =>
 
 // ────────────────────────────────────────────── 二、飞行段 → 落地 → 静止
 
-test('飞满 2 秒就地落地：速度归零、剩下的时间当停留', () => {
+test('飞满 1.2 秒就地落地：速度归零、剩下的时间当停留', () => {
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
     ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 }));
     const zone = state.groundZones[0];
     const context = zoneContext([]);
 
-    //  1.9 秒时还在飞
-    for (let step = 0; step < 38; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
-    assert.ok((zone.flightSeconds ?? 0) > 0, '1.9 秒时仍在飞行段');
-    closeTo(zone.x, 57, '30 世界 px/s × 1.9s');
+    //  1.1 秒时还在飞
+    for (let step = 0; step < 22; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
+    assert.ok((zone.flightSeconds ?? 0) > 0, '1.1 秒时仍在飞行段');
+    closeTo(zone.x, 33, '30 世界 px/s × 1.1s');
 
-    //  走到 2 秒之后（多跑两帧，避开浮点误差）
-    for (let step = 0; step < 4; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
+    //  走到 1.2 秒之后（多跑几帧，避开浮点误差）
+    for (let step = 0; step < 6; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
     closeTo(zone.flightSeconds ?? -1, 0, '落地后飞行秒数清零');
     closeTo(zone.moveVelocityX ?? -1, 0, '速度必须归零，否则会一直往前飘');
-    closeTo(zone.x, 60, '飞满 2 秒 = 30 × 2 = 60 世界 px');
+    closeTo(zone.x, 36, '飞满 1.2 秒 = 30 × 1.2 = 36 世界 px');
     const landedX = zone.x;
     for (let step = 0; step < 10; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
     closeTo(zone.x, landedX, '落地后原地不动');
@@ -242,7 +244,7 @@ test('踩响 = 立即引爆：按当前位置结算爆炸 + 挂中毒，并摘�
     assert.equal(victim.hp, 1000 - 54, '爆炸 180% × 面板 30 = 54，踩响那一刻就掉');
     assert.deepEqual(applied, ['2:poison_bolt_l1'], '中毒挂在被打的人身上');
     assert.equal(state.groundZones.length, 0, '引爆后区域立刻消失');
-    const expire = state.combatEvents.filter((event) => event.effectPrefabPath === ZC_TRAP_EXPIRE_PREFAB_PATH);
+    const expire = state.combatEvents.filter((event) => event.effectPrefabPath === zcTrapExpirePath(UNIT_ID));
     assert.equal(expire.length, 1, '爆炸表现要推一条');
 });
 
@@ -260,7 +262,7 @@ test('到期无人触碰：直接消失，不掉血也不播爆炸', () => {
 
     assert.equal(state.groundZones.length, 0, '到点消失');
     assert.equal(victim.hp, 1000, '远处的人不该挨打');
-    assert.equal(state.combatEvents.filter((event) => event.effectPrefabPath === ZC_TRAP_EXPIRE_PREFAB_PATH).length,
+    assert.equal(state.combatEvents.filter((event) => event.effectPrefabPath === zcTrapExpirePath(UNIT_ID)).length,
         0, '「没人踩」不该播爆炸');
 });
 
@@ -363,7 +365,7 @@ test('103504 的冷却制不受影响：trapCooldown 与 trapEvery 各走各的'
 
 // ────────────────────────────────────────────── 四、配表守卫
 
-test('101704 三档：trapEvery 8 + 飞行 2 秒 + 到期消失 + 各指一条中毒', () => {
+test('101704 三档：trapEvery 8 + 飞行 1.2 秒 + 到期消失 + 各指一条中毒', () => {
     const stays = [6, 8, 10];
     const rates = [1.8, 2.2, 2.7];
     for (const rows of [readTable('pvpSkillPlan'), readClientTable('pvpSkillPlan')]) {
@@ -376,8 +378,8 @@ test('101704 三档：trapEvery 8 + 飞行 2 秒 + 到期消失 + 各指一条�
                 '参数全带 trap 前缀，否则会串到 101701~101703');
             assert.equal(bag.trapEvery, 8, '设计 J 列 = 累计普攻 8 次');
             assert.equal(bag.trapCooldown, undefined, '不是冷却制');
-            assert.equal(bag.trapFlightSpeed, 100, '100 逻辑 px / 秒（用户裁定）');
-            assert.equal(bag.trapFlightSeconds, 2);
+            assert.equal(bag.trapFlightSpeed, 100, '100 逻辑 px / 秒（2026-11-19 21:30 口径：70 → 100）');
+            assert.equal(bag.trapFlightSeconds, 1.2, '2026-11-19 21:18 口径：2 秒 → 1.2 秒');
             assert.equal(bag.trapDuration, stays[index]);
             assert.equal(bag.trapExplodeRadius, 150);
             assert.equal(bag.trapExplodeDamageRate, rates[index]);
@@ -426,19 +428,60 @@ test('K 表 / armySkillLevelUp：卡面名字与描述已补齐，解锁等级 =
             .sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
         assert.equal(rows.length, 3);
         rows.forEach((row, index) => {
-            assert.equal(row.name, '穿甲爆矢');
+            assert.equal(row.name, '蘑菇爆炸');
             assert.equal(row.desc, plans[index].desc, '卡面描述必须与 pvpSkillPlan 逐字相同');
             assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
-            assert.deepEqual(row.modfiy, [Number(plans[index].modifierId)]);
+            //  ⚠️ `modfiy` 两份产物形态不同（remoteRef 是数组、client 是逗号串）—— 导表口径的
+            //  历史漂移，不是本批引入的。这里只验「指针指对了」，不锁形态。
+            const pointers = (Array.isArray(row.modfiy) ? row.modfiy : String(row.modfiy ?? '').split(','))
+                .map((item) => Number(String(item).trim()));
+            assert.deepEqual(pointers, [Number(plans[index].modifierId)]);
         });
     }
 });
 
-test('常驻/生成表现仍走 103504 那三条路径，投掷段不需要新资源', () => {
-    assert.ok(ZC_TRAP_IDLE_PREFAB_PATH.length > 0);
-    assert.ok(ZC_TRAP_SPAWN_SECONDS > 0);
-    //  飞行段只改坐标（`syncHoldVisual` 每帧搬事件），不新增 prefab ——
-    //  这条断言是「别再往资源计划里塞第四个 path」的提醒。
-    const spawn = ZC_TRAP_IDLE_PREFAB_PATH.split('/').pop() ?? '';
-    assert.doesNotMatch(spawn, /flight/i);
+test('炸开播哪张图按单位登记：68017 是「普攻爆炸」，别的陷阱仍是「陷阱爆炸」', () => {
+    //  用户口径（2026-11-19）：「敌人触碰消失并播放火法师的普攻爆炸特效」。
+    assert.equal(ZC_EFFECT_PATHS.burstImpact, 'units/projectiles/普攻爆炸/普攻爆炸');
+    assert.equal(zcTrapExpirePath(UNIT_ID), ZC_EFFECT_PATHS.burstImpact);
+    //  103504 精密陷阱（科学家）不许被带跑 —— 它没有登记，落在默认那条。
+    assert.equal(zcTrapExpirePath('68003'), ZC_TRAP_EXPIRE_PREFAB_PATH);
+    assert.notEqual(zcTrapExpirePath(UNIT_ID), ZC_TRAP_EXPIRE_PREFAB_PATH);
+
+    const caster = unit(1, 'player');
+    const state = snapshot([caster]);
+    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
+    assert.equal(state.groundZones[0].expirePrefabPath, ZC_EFFECT_PATHS.burstImpact);
+});
+
+test('三段表现：飞行段播「陷阱生成」、落地换「陷阱」', () => {
+    const caster = unit(1, 'player');
+    const state = snapshot([caster]);
+    assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, trapContext({ x: 100, y: 0 })), true);
+    const zone = state.groundZones[0];
+    //  ① 飞行段的持有表现 = 「生成」。落地段的 = 常驻的「陷阱」。
+    assert.equal(zone.flightVisualPath, ZC_TRAP_SPAWN_PREFAB_PATH, '空中持有表现必须是「生成」');
+    assert.equal(zone.effectPrefabPath, ZC_TRAP_IDLE_PREFAB_PATH, '落地持有表现是「陷阱」');
+    //  ② 投掷形态不再单独推一条「原地出现」：施法点那条会留在原地，而陷阱已经飞走了。
+    assert.equal(state.combatEvents.filter((event) =>
+        event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH
+        && event.durationSeconds === ZC_TRAP_SPAWN_SECONDS).length, 0, '投掷形态不推原地生成事件');
+
+    const context = zoneContext([]);
+    const hold = () => state.combatEvents.find((event) => event.id === zone.visualEventId);
+    ZCGroundZoneSystem.tick(state, 0.05, context);
+    assert.equal(hold()?.effectPrefabPath, ZC_TRAP_SPAWN_PREFAB_PATH, '飞行段跟的是「生成」');
+
+    //  飞到 1.2 秒（+3 帧余量）落地：持有表现要换成「陷阱」，位置钉在落点。
+    for (let step = 0; step < 27; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context);
+    assert.equal(hold()?.effectPrefabPath, ZC_TRAP_IDLE_PREFAB_PATH, '落地必须换成常驻的「陷阱」');
+    closeTo(hold()?.fromX ?? -1, zone.x, '常驻表现钉在落点');
+
+    const flightEvents = state.combatEvents.filter((event) =>
+        event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH);
+    assert.equal(flightEvents.length, 1, '飞行段那条事件只建一次，落地时是「作废」不是「再建一条」');
+    const expired = flightEvents[0];
+    assert.ok(expired.durationSeconds <= state.elapsedSeconds - expired.startedAt + 1e-6,
+        '落地那一刻把飞行段判过期（寿命压到「已活时长」），视图下一帧就摘掉它');
+    assert.equal(zone.flightVisualPath, undefined, '换挡之后不再保留飞行段路径');
 });

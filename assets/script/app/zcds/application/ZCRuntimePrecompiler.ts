@@ -9,6 +9,9 @@ export const ZC_RUNTIME_TABLE_NAMES = [
     'gameConfig',
     'pvpArtifact',
     'pvpCard',
+    //  怪物卡牌：中立资源点「随机野怪」（`neutralResourceGroup.resourceType=11`）
+    //  按 `resId` 引用怪物卡，单位目录与卡目录都要能看到它们。
+    'monsterCard',
     'pvpSkill',
     'pvpCounter',
     'pvpBond',

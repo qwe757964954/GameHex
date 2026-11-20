@@ -82,6 +82,11 @@ export const BIGMAP_HUD_COLORS = {
     scrim: new Color(5, 10, 14, 205),
 } as const;
 
+export const BIGMAP_DOCK_COLORS = {
+    lockedCard: Object.freeze(new Color(90, 105, 139, 255)),
+    lockedArt: Object.freeze(new Color(112, 116, 126, 255)),
+} as const;
+
 export function requireBigMapTransform(node: Node): UITransform {
     const transform = node.getComponent(UITransform);
     if (!transform) throw new Error(`[BigMap] ${node.name} 缺少 UITransform`);

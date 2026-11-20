@@ -84,7 +84,10 @@ export function settleTerritoryIdleRewards(
     const cap = Math.max(1, Math.floor(Number(maxHours) || 1));
     const nextLedger = { ...claimedAtByLevel };
     const totals = new Map<number, TerritoryIdleRewardGain>();
-    const uniqueSources = new Map(sources.map((source) => [source.levelId, source]));
+    const uniqueSources = new Map<number, TerritoryIdleRewardSource>();
+    for (let i = 0; i < sources.length; i++) {
+        uniqueSources.set(sources[i].levelId, sources[i]);
+    }
     let settledHours = 0;
     let changed = false;
 

@@ -42,15 +42,16 @@ interface ISocket {
 function harness(delay: () => Promise<void> = async () => {}) {
     let sent = 0;
     let cacheUpdates = 0;
+    const tips: string[] = [];
     /** `ConnectedNetState.log` 实际打出的每一行（`recived` 的回包耗时就在里面）。 */
     const logs: string[] = [];
-    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay },
+    const fw = { FW: { ignoreShowloadingNet: [], Task: { delay }, showTip: (tip: string) => tips.push(tip),
         CacheMgr: { handleCmdCache: () => { cacheUpdates++; } } } };
     const Request = load('assets/script/framework/net/NetworkRequest.ts', (name) =>
         name.endsWith('/FW') ? fw : { ScriptObject: class {} }).NetworkRequest as new () => IRequest;
     const Connected = load('assets/script/framework/net/state/ConnectedNetState.ts', (name) => {
         if (name.endsWith('/BaseNetState')) return { BaseNetState: class {
-            isSwitchFinish = true; error() {}
+            isSwitchFinish = true; error() {} warn() {}
             log(...args: unknown[]) { logs.push(args.join(' ')); }
         } };
         if (name.endsWith('/TDic')) return { TDic: class extends Map { remove(key: unknown) { this.delete(key); } } };
@@ -81,8 +82,39 @@ function harness(delay: () => Promise<void> = async () => {}) {
         request.packageRequest(++requestIndex, new Uint8Array([1]), { getReqMsgProtoName: () => 'TestReqMsg', allowRetry: retry, canSend }, false);
         return request;
     };
-    return { socket, state, makeRequest, sent: () => sent, cacheUpdates: () => cacheUpdates, logs };
+    return { socket, state, makeRequest, Request, sent: () => sent, cacheUpdates: () => cacheUpdates, logs, tips };
 }
+
+test('只有巡逻宝箱升级把服务端的金币不足显示为银币不足', async () => {
+    const requestMsg = load('assets/script/framework/net/RequestMsg.ts', () => ({ ScriptObject: class {} }));
+    const territoryTexts = await import('../assets/script/app/territory/application/TerritoryTexts');
+    const { RequestTerritoryUpMonsterBoxLv } = load(
+        'assets/script/app/territory/application/RequestTerritoryCellInfoMsg.ts',
+        name => name.endsWith('/TerritoryTexts') ? territoryTexts : requestMsg,
+    ) as { RequestTerritoryUpMonsterBoxLv: new (data: object) => object };
+    const h = harness();
+    const cases = [
+        { msg: new RequestTerritoryUpMonsterBoxLv({ levelChapter: 1, cellId: 346 }), tip: '金币不足' },
+        { msg: new RequestTerritoryUpMonsterBoxLv({ levelChapter: 1, cellId: 346 }), tip: '已达失败上限' },
+        { msg: { getReqMsgProtoName: () => 'OtherReqMsg' }, tip: '金币不足' },
+    ];
+    for (const [index, { msg, tip }] of cases.entries()) {
+        const request = new h.Request();
+        request.packageRequest(index + 1, new Uint8Array([1]), msg, false);
+        const pending = request.promise;
+        h.state.addNetworkRequest(request);
+        Object.assign(h.socket, {
+            receiveMsgAfterSend() {},
+            protoMgr: {
+                decode: () => ({ clientIndex: index + 1, result: false, messageIds: [], data: new Uint8Array() }),
+                decodeDataByName: () => ({ content: tip }),
+            },
+        });
+        h.state.onReceiveMessage(new Uint8Array());
+        assert.equal(await pending, false);
+    }
+    assert.deepEqual(h.tips, ['银币不足', '已达失败上限', '金币不足']);
+});
 
 test('取消排队请求立即结束等待，不发送；同队列下一条仍能发出', async () => {
     const h = harness();

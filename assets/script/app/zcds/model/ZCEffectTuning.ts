@@ -71,6 +71,8 @@ export const ZC_EFFECT_SCALE = {
     fanBurstDistanceRatio: 0.6,
     /** 相邻爆点角度间隔 = 半个扇形角 × 该比例。*/
     fanBurstSpread: 0.6,
+    /** 光束最短长度（视图 px）：贴脸时 `to` 可能落在发射口后面，缩成 0 会整条消失。*/
+    beamMinLength: 6,
 } as const;
 
 /** 参数化状态 id 的固定前缀；格式化函数仍留在各自 Fx facade。*/

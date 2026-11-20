@@ -27,13 +27,14 @@ function readRows(name: string): Array<Record<string, unknown>> {
     ));
 }
 
-function prepare(playerCount: 3 | 4 = 4) {
+function prepare(playerCount: 3 | 4 = 4, includeMonsterCards = false) {
     const names = [
         'pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond',
         'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams',
         'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride',
         'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus',
     ];
+    if (includeMonsterCards) names.push('monsterCard');
     loadPvpTables(Object.fromEntries(names.map((name) => [name, readRows(name)])) as unknown as ZCPvpTables);
     configureZCMap(JSON.parse(readFileSync(
         assetPath(`config/maps/standard_${playerCount}.json`), 'utf8',
@@ -636,6 +637,65 @@ test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后�
     assert.equal(model.snapshot.status, 'victory');
 });
 
+test('服务端逐怪倍率通过波次怪物 ID 生效，保持逐怪、逐属性和席位隔离', () => {
+    const source = prepare(3);
+    const start = battle([68019], [68019]);
+    const remote = { ...start, units: start.units.map(unit => unit.roleId === 'self' ? unit : {
+        ...unit,
+        heroAttrs: parseBattleHeroAttrs([
+            { heroId: 50021, attrs: [
+                { attrId: 'levelAttackRatio', value: '1.03' },
+                { attrId: 'levelHpRatio', value: '1.03' },
+            ] },
+            { heroId: 50023, attrs: [{ attrId: 'levelHpRatio', value: '0.8' }] },
+        ]),
+        buffs: parseBattleBuffs([{ source: 1, buffs: ['levelAttackRatio', '2', 'levelHpRatio', '2'] }]),
+    }) };
+    const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
+        battle: { ...remote, units: remote.units.slice(0, 2) }, selfRoleId: 'self',
+        pve: {
+            mode: 'defence', chapterId: 1, levelId: 50001, territoryCellId: 4, stage: 4,
+            territorySaveOwner: null, enemyName: '', enemyCardIds: [], enemyTeamCardIds: [],
+            playerCount: 2, hpRate: 1, attackRate: 1,
+            waves: [
+                { waveId: 1, showAtSeconds: 0, monsterId: 50021, pvpCardId: 68019, monsterCount: 1, hpRate: 1, attackRate: 1 },
+                { waveId: 2, showAtSeconds: 10, monsterId: 50023, pvpCardId: 68021, monsterCount: 1, hpRate: 1, attackRate: 1 },
+            ],
+        },
+    });
+    const runtime = compileZCMatchRuntime(entry.matchConfig);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68019')?.attack, 13.39);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68019')?.maxHp, 103);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68021')?.attack, 104);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('68021')?.maxHp, 320);
+    assert.equal(runtime.effectiveDefinitions.player.get('68019')?.maxHp, 100);
+    const model = new ZCGameModel(null, () => .25, entry.matchConfig);
+    model.tick(.1);
+    assert.equal(model.snapshot.units.find(unit => unit.cardId === '68019')?.maxHp, 103);
+    assert.equal(model.defenceWaveProgress?.currentWaveHpRate, 1.03);
+});
+
+test('非塔防怪物阵容可按回包原始 ID 出战，并对服务端定值应用逐怪倍率', () => {
+    const source = prepare(3, true);
+    const start = battle([68028], [50030]);
+    const remote = { ...start, units: start.units.map(unit => unit.roleId === 'self' ? unit : {
+        ...unit,
+        heroAttrs: parseBattleHeroAttrs([{ heroId: 50030, attrs: [
+            { attrId: 'maxHp', value: '200' },
+            { attrId: 'levelHpRatio', value: '1.03' },
+            { attrId: 'levelAttackRatio', value: '0' },
+            { attrId: 'levelAttackRatio', value: '-0.2' },
+            { attrId: 'levelHpRatio', value: '0' },
+        ] }]),
+    }) };
+    const { config } = buildZCClientCombatConfig(source, remote, 'self');
+    assert.ok(config.enemyDeck.some(card => card.unitId === '50030'));
+    assert.ok(!config.playerDeck.some(card => card.unitId === '50030'));
+    const runtime = compileZCMatchRuntime(config);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('50030')?.maxHp, 206);
+    assert.equal(runtime.effectiveDefinitions.enemy.get('50030')?.attack, 0);
+});
+
 /**
  * 星级表 2026-11-10 弃用：构筑侧不再传 `generalStar`。
  * 2026-11-10 二次口径（patch_growth_from_card_level_up.js）：「全量重算·去掉补偿」——
@@ -748,21 +808,35 @@ test('服务端绝对值与关卡减益同时下发：减益在定值之后叠�
     const start = battle();
     const remote: ZCBattleStart = { ...start, units: start.units.map((unit) => ({
         ...unit,
-        heroes: [{ heroId: 68001, level: 1 }],
-        heroAttrs: parseBattleHeroAttrs([{ heroId: 68001, attrs: [
-            { attrId: 'attack', value: '12' },
-            { attrId: 'maxHp', value: '40' },
-            { attrId: 'attack.addRate', value: '-0.2' },
-            { attrId: 'maxHp.addRate', value: '-0.2' },
-        ] }]),
+        heroes: [{ heroId: 68001, level: 1 }, { heroId: 68015, level: 1 }],
+        heroAttrs: parseBattleHeroAttrs([
+            { heroId: 68001, attrs: [
+                { attrId: 'attack', value: '12' },
+                { attrId: 'maxHp', value: '40' },
+                { attrId: 'attack.addRate', value: '-0.2' },
+                { attrId: 'maxHp.addRate', value: '-0.2' },
+            ] },
+            { heroId: 68015, attrs: [
+                { attrId: 'attack', value: '130' },
+                { attrId: 'maxHp', value: '1000' },
+                { attrId: 'buildingHp', value: '2000' },
+                { attrId: 'attack.addRate', value: '-0.2' },
+                { attrId: 'maxHp.addRate', value: '-0.2' },
+            ] },
+        ]),
         buffs: [],
     })) };
 
     const result = buildZCClientCombatConfig(source, remote, 'self');
-    const enemy = compileZCMatchRuntime(result.config).effectiveDefinitions.enemy.get('68001');
+    const enemy = compileZCMatchRuntime(result.config).effectiveDefinitions.enemy;
     //  严格相等：叠乘后必须收敛 IEEE 尾数（`9.600000000000001` 会带进伤害与飘字）。
-    assert.equal(enemy?.attack, 9.6, '12 × 0.8 = 9.6');
-    assert.equal(enemy?.maxHp, 32, '40 × 0.8 = 32');
+    assert.equal(enemy.get('68001')?.attack, 9.6, '12 × 0.8 = 9.6');
+    assert.equal(enemy.get('68001')?.maxHp, 32, '40 × 0.8 = 32');
+    assert.equal(enemy.get('68015')?.attack, 104);
+    assert.equal(enemy.get('68015')?.maxHp, 800);
+    const card = result.config.enemyDeck.find((entry) => entry.unitId === '68015');
+    assert.equal(card?.baseHp, 2000);
+    assert.equal(card?.cyclePerTierValue, 8);
     //  `buildingHp` 没有对应增量：服务端没给就回落本地卡表，不能被减益带偏。
     assert.equal(result.config.enemyDeck.find((card) => card.unitId === '68001')?.baseHp,
         source.enemyDeck.find((card) => card.unitId === '68001')?.baseHp);

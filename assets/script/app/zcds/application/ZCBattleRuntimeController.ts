@@ -130,8 +130,13 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private renderSpawn(): void { if (this.selection) this.view.renderSpawnSelection(this.selection, this.hints); }
     private finishSpawnSelection(): void {
-        this.stopShowcase?.(); this.stopShowcase = null;
-        const selection = this.selection, result = selection?.result, entry = this.entry;
+        if (this.stopShowcase) {
+            this.stopShowcase();
+            this.stopShowcase = null;
+        }
+        const selection = this.selection;
+        const result = selection ? selection.result : null;
+        const entry = this.entry;
         if (this.isDisposed || !selection || !result || !entry) return;
         const config = captureZCMatchConfig(resolveZCSpawnMatchConfig(entry.matchConfig, result));
         this.selection = null;
@@ -158,8 +163,9 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private async onRequestUnitArt({ owner, unitId }: IZCRequestUnitArtIntent): Promise<void> {
         if (owner !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;
-        const definition = this.entry?.matchConfig.units.find(unit => unit.unitId === unitId);
-        if (!definition?.prefabPath) return;
+        if (!this.entry) return;
+        const definition = this.entry.matchConfig.units.find(unit => unit.unitId === unitId);
+        if (!definition || !definition.prefabPath) return;
         this.pendingUnitArt.add(unitId);
         try {
             const prefab = await this.services.art.loadUnitPrefab(definition.prefabPath);
@@ -195,7 +201,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private onMonsterFocus(hexId: number): void {
         if (!this.phase.isPlaying || this.view.dragMoved) return;
-        if (this.model?.toggleMonsterFocus(hexId)) this.render();
+        if (this.model && this.model.toggleMonsterFocus(hexId)) this.render();
     }
     private onHexClick(hexId: number): void {
         if (this.phase.isSettled || this.view.dragMoved) return;
@@ -205,7 +211,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
             this.renderSpawn(); return;
         }
         const model = this.model;
-        if (model?.canPlayerDevelop(hexId)) {
+        if (model && model.canPlayerDevelop(hexId)) {
             const result = model.developHex(hexId);
             if (result.reason === 'insufficientGold') this.view.flashInsufficientGold();
             this.render();
@@ -275,8 +281,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || !entry || this.phase.isSettled) return;
         if (!retreated && model.snapshot.status === 'playing') return;
         if (!this.phase.openSettlement()) return;
-        this.damagePopup?.close();
-        this.damagePopup = null;
+        if (this.damagePopup) {
+            this.damagePopup.close();
+            this.damagePopup = null;
+        }
         this.popups.delete('damage');
         const stats = model.damageStats, unitIds = new Map(entry.seatUnitIds ?? []);
         // ≥3 人局的结算要先过排行榜（需求 11-4）。席位与档案和 HUD 那颗「排行榜」按钮同源，
@@ -309,7 +317,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
         } catch (error) { if (!this.isDisposed) this.services.failed(error); }
     }
     private async onOpenDamage(): Promise<void> {
-        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || this.damagePopup?.isOpen) return;
+        const isDamageOpen = Boolean(this.damagePopup && this.damagePopup.isOpen);
+        if (!this.model || !this.entry || this.phase.isSettled || this.damageOpening || isDamageOpen) return;
         this.damageOpening = true;
         try {
             const popup = await this.services.popups.openDamage(this.damagePlayers());

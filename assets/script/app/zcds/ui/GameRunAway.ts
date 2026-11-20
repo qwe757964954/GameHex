@@ -54,11 +54,17 @@ export class GameRunAway extends PopupBase {
     }
 
     protected async onOpen(userData?: GameRunAwayOptions): Promise<void> {
-        this.showReturn = Boolean(userData?.showReturn);
-        this.titleLabel.string = userData?.title ?? DEFAULT_TITLE;
+        if (userData) {
+            this.showReturn = Boolean(userData.showReturn);
+            this.titleLabel.string = userData.title ?? DEFAULT_TITLE;
+            this.refresh(userData.players ?? []);
+        } else {
+            this.showReturn = false;
+            this.titleLabel.string = DEFAULT_TITLE;
+            this.refresh([]);
+        }
         if (this.returnArea) this.returnArea.active = this.showReturn;
         this.returnButton.interactable = true;
-        this.refresh(userData?.players ?? []);
         const scope = this.resourceScope;
         const keys = Array.from(new Set(this.players.map(player => player.headKey).filter(Boolean)));
         if (!keys.length) return;
@@ -77,7 +83,9 @@ export class GameRunAway extends PopupBase {
         this.heads.clear();
     }
 
-    protected canCloseOnBlank(): boolean { return !this.showReturn; }
+    protected canCloseOnBlank(): boolean {
+        return !this.showReturn;
+    }
 
     private returnByButton(): void {
         if (!this.showReturn) return;

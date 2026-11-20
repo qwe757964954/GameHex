@@ -228,7 +228,7 @@ function resolveSpec(fromFile, spec) {
 // -------------------------------- 跨文件定义完整性（规则 402：中间态必须能跑）
 
 const NAMED_IMPORT_RE = /import\s+(?:type\s+)?\{([^}]+)\}\s*from\s*['"](\.[^'"]+)['"]/g;
-const EXPORT_DECL_RE = /export\s+(?:declare\s+)?(?:abstract\s+)?(?:const|let|var|function|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/g;
+const EXPORT_DECL_RE = /export\s+(?:declare\s+)?(?:abstract\s+)?(?:async\s+)?(?:const|let|var|function|class|interface|type|enum)\s+([A-Za-z_$][\w$]*)/g;
 
 /** 源文件对外导出的具名符号；`export *` 不可判定，返回 null 让调用方跳过。 */
 function exportedNamesOf(source) {

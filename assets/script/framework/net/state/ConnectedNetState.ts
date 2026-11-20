@@ -163,7 +163,7 @@ export class ConnectedNetState extends BaseNetState {
             console.log(rspData)
             if (rspData && rspData.content) {
                 tip = rspData.content
-                FW.showTip(tip)
+                FW.showTip(networkRequest?.formatServerTip?.(tip) ?? tip)
                 msgEventProxy.execute("errorTips", rspData)
                 if ("error: Not logged in" == tip || clientIndex == 0) {
                     this.SwitchToReconnectNetState()

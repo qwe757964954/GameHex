@@ -3008,7 +3008,7 @@
       ],
       "battleId": 1002,
       "patrolId": 50005,
-      "buildingId": "",
+      "buildingId": "69021",
       "unlock": {
         "requiredCells": [
           310
@@ -3237,7 +3237,7 @@
       ],
       "battleId": 1003,
       "patrolId": 50007,
-      "buildingId": "",
+      "buildingId": "69021",
       "unlock": {
         "requiredCells": [
           269
@@ -3352,7 +3352,7 @@
       ],
       "battleId": 1004,
       "patrolId": 50005,
-      "buildingId": "",
+      "buildingId": "69021",
       "unlock": {
         "requiredCells": [
           134
@@ -3467,7 +3467,7 @@
       ],
       "battleId": 1005,
       "patrolId": 50005,
-      "buildingId": "",
+      "buildingId": "69021",
       "unlock": {
         "requiredCells": [
           125
@@ -3563,7 +3563,7 @@
       ],
       "battleId": 1001,
       "patrolId": 50021,
-      "buildingId": "",
+      "buildingId": "69021",
       "unlock": {
         "requiredCells": [
           347

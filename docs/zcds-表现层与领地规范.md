@@ -51,6 +51,9 @@
 | **未解锁 → 可激活的 1s 过渡**（锁 `1→1.2→0` + 银币数字 `0→1.15→1`，两段同时起手同时收工；2026-11-09） | `model/TerritoryUnlockTransition.territoryUnlockLockScale / territoryUnlockPriceScale` / `TerritoryMapView.applyHexLock`（记「锁刚消失」）、`startUnlockTransitionIfNeeded`、`stepUnlockTransitions`、`applyUnlockTransitionFrame` / `TerritoryStationView.setConditionSpawnScale`、`applyCaptionPlacement` | `tests/territory-unlock-transition.test.ts` |
 | **未解锁地块整块置灰**（锁住 ⇒ `img_land_01_gray`，前置满足那帧换回泥土 + 0.36s 换色；整片灰按**逐格** `lockBlockedCells`、锁仍按节点收敛；2026-11-10） | `TerritoryPageAssets.tileGrey` / `TerritoryMapView.paintHexes`（`greyCell`）、`isStructurallyBlocked` | `tests/territory-tile-frames.test.ts` |
 | **同一关卡节点的地块一起换状态色**（待解锁整片灰 / 已解锁未通关整片叠红 `frame_01` / 通关整片草地并摘框；兄弟格与 footprint 格统一读**承载格**进度，不许一格灰一格褐；2026-11-18） | `model/TerritoryNodeUI.territoryNodeStateCellByCell` / `territoryNodeGreyCells` / `TerritoryMapView.paintHexes`（`stateCellByCell`） | `tests/territory-tile-frames.test.ts` |
+| **固定格宝箱奖励粒子改道飞向底部卡牌 icon**（与随机格共用顶层 `TerritoryRewardFx` + `playHeroRewardFlight`；`flyStart` 那刻才起飞；`applyFly`/`fireLandings` 逐枚让位给非钱包类，钱包 `7/9` 留守；进度徽标仍由 `presentRewards` 统一触发；2026-11-19） | `MainTerritoryMap.runChestOpening` / `TerritoryMapView.armChestHeroFlight`、`launchChestHeroFlight` / `TerritoryChestView.setFlyStartHook` | `tests/territory-chest-hero-flight.test.ts` |
+| **巡逻宝箱怪未挑战成功与关卡地块同形**（`patrolChest` 用红 `frameStage` 而非蓝 `frameChest`；同 `battleId` 任一格占点 ⇒ 整片转草地摘框；野怪主骨架 `#828282` + 放大 1.08 的 `unit-outline-copy` 红色副本，胜利后写绝对色恢复；2026-11-19，见 §3.47） | `model/TerritoryMonsterPatrol.territoryPatrolPassedCells`、`TERRITORY_PATROL_*` / `application/TerritoryViewState.patrolPassedCells` / `MainTerritoryMap.renderMap` / `TerritoryMapView.TERRITORY_SITE_FRAME`、`isCellPassed`、`renderMap` / `view/TerritoryMonsterPatrolView.attachOutline`、`applyLook` / `application/TerritoryChapterLoader`（描边材质） | `tests/territory-patrol-look.test.ts`、`tests/territory-tile-frames.test.ts` |
+| **巡逻野怪片区 icon 只落在配了野怪 id 的格**（同 `site.id` 收敛到 `patrolId` 锚点；锁 / 价格 / 编号一律不落兄弟格；`NODE_SITE_TYPES` 不许塞 `patrolChest`，否则连带改地皮红框；2026-11-20，见 §3.48） | `model/TerritoryMonsterPatrol.territoryPatrolAnchorByCell` / `model/TerritoryNodeUI.territoryNodeCarrierByCell`、`territoryNodeMutedCells` | `tests/territory-patrol-node-ui.test.ts`、`tests/territory-node-ui.test.ts` |
 | **固定宝箱格可激活 ⇒ 价格行之上加一颗宝箱 icon**（`icon_baoxiang` 58×45，宝箱在上、`银币+数字`在下、整块居中；无宝箱时零偏移；未解锁仍只画锁；2026-11-10） | `model/TerritoryConditionBadge.territoryConditionBlockLayout` / `TerritoryStationView.applyConditionChest`、`applyCaptionPlacement`、`readCaptionIconHeight` / `TerritoryMapView.stationRenderOf`（`conditionChestIcon`，只给 `fixedResource`）/ `TerritoryPageAssets.chestIcon` | `tests/territory-condition-chest.test.ts` |
 | **银币宝箱独立打开动画**（`1023` / `coinBox` ⇒ icon `1→1.3→0` 原地 pop；**不复用** `chest_seq_*` 三档开箱；奖励当场结算不挂动画回调；2026-11-10） | `model/TerritorySilverChestOpen.territorySilverChestIconPop` / `model/TerritoryMapConfig.TERRITORY_SILVER_CHEST_REWARD_ID` / `TerritoryModel.handleUnlockThenPass`（`silverChest: true`）/ `MainTerritoryMap.presentRewards` / `TerritoryMapView.playSilverChestOpen` / `TerritoryStationView.playSilverChestIconPop`、`stepSilverChestPop` | `tests/territory-silver-chest-open.test.ts` |
 | **碎片 / 种族经验飞向底部「英雄」按钮 + 碎片进度长满徽标**（钱包 `7/9` 仍飞资源栏；固定格改落点、随机格补飞行、英雄按钮先 Y 后 X 受击抖动；徽标仅本次新达成、从当前比例长到 100%、多英雄按 `sortLineupCards` 串行；2026-11-10） | `model/TerritoryHeroReward`（`isTerritoryHeroRewardResId` / `territoryHeroFlightFx` / `territoryHeroBadgeFrame` / `detectTerritoryHeroBadges`）/ `view/TerritoryHeroFlight` / `TerritoryMapView.setHeroRewardTargetWorld`、`playHeroRewardFlight` / `MainTerritoryMap.wireRewardCatch`、`playCellGains`、`playHeroBadges`、`findHeroTabButton` / `common/TabButton.playHitFeedback` / `main/HeroFragmentBadge` / `bootstrap/main/TerritoryHeroProgressSource`（`MainPageComposition.mountTerritory` 注入） | `tests/territory-hero-reward.test.ts`、`tests/territory-chest-animation.test.ts`、`tests/tab-button.test.ts` |
@@ -505,7 +508,10 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
 | 站点条目、图标 trim 补偿、未解锁格「银币图标 + 数值」排布 | `ui/territory/TerritoryStation.prefab` + `view/TerritoryStationView.ts` |
 | 站点 / 待配置据点详情弹层 | `ui/territory/TerritorySiteDetail.prefab` + `view/TerritorySiteDetailPanel.ts`（页内 `instantiate` 持有，`Panel` 挂空 `cc.Button` 防点击穿透） |
 | 配色真源 / 坐标换算 / 协议归一化 | `view/TerritoryTheme.ts` / `model/TerritoryMapLayout.ts` / `model/TerritoryMapConfig.ts` |
-| 章节状态与业务规则（纯 TS） | `application/TerritoryModel.ts`，原 `TerritoryPresenter` 仅兼容导出 |
+| 章节状态与业务规则（纯 TS） | `application/TerritoryModel.ts`（持有时钟与业务状态，原 `TerritoryPresenter` 已全面退役） |
+| 界面展示数据纯函数投影（HUD / 关卡详情 / 提示 / 库存） | `application/TerritoryProjection.ts`（无副作用纯函数，从 `TerritoryModel` 剥离解耦） |
+| 数据仓储（Cell / ChapterInfo / Campaign） | 全部位于 `application/`（`TerritoryCampaignRepository.ts` 等含真实配置/网络 I/O，不入纯 TS `model/`） |
+| 意图、命令与视图事件定义 | `application/TerritoryEvents.ts`（唯一真源，包含 `TERRITORY_EVENTS.STATION_TAP` / `TerritoryUiEvent` / `TerritoryViewEvent`） |
 | 网络/缓存订阅、时钟、界面意图与会话生命周期 | `application/TerritoryController.ts`，页面单实例，退出时统一解除订阅并取消异步任务 |
 | 章节 JSON、地图美术与弹窗补图资源归属 | `framework/controller/ControllerBase.ts` 提供必需展示资源契约并统一释放，页面不保存可空 AssetService |
 | 章节加载器、Repository、存档与 MVC 装配 | `application/TerritoryEntry.ts`，页面传入已绑定 ResourceScope 的资源入口 |
@@ -540,7 +546,7 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
 3. **主城 HUD 与地图分层**：`MainTerritoryMap` 只保留地图与详情弹窗；主城顶部信息与导航由 `ArenaRoot` 承载。地图视口顶部贴页面顶边（`MapViewport.Widget.top = 0`），让格子云延伸到顶部 HUD 背后；底部仍预留 168px 导航区。`ArenaRoot` 的 `MapRoot` 排在 `TopHud` / `BottomHud` 前，确保 HUD 显示与按钮点击在地图之上，禁止再通过顶部视口留白裁掉云。进入地图先渲染本地存档，服务端状态后台单调合并，失败仅 `outputs.showTip`。
 4. **`@property` 引用区分**：`{type: Node}` 直接是节点本身，组件引用才访问 `.node`。
 5. **运行时不画站点解锁连线**：依赖连线仅存在于地图编辑器 `tools/map-editor/territory.html` 的 `g.layer-links` 开关。
-6. **Presenter 纯度与单通知通道**：页内只走 `presenter.subscribe()` 一个**本地订阅**通道（纯 TS、返回退订函数、`dispose` 清空），严禁接全局 `FWEventCenter`；视图间跨组件通知统一走**节点事件**（`node.on` / `node.emit` + `view/TerritoryEvents.ts` 的 `TERRITORY_EVENTS` 常量表），监听挂组件自身节点、随节点销毁自动清理；`TerritoryPresenter` 剥掉 `import type` 后严禁 import `cc`、`framework` 或具体边界实现类。
+6. **Model 纯度与单通知通道**：页内只走 `model.onOutput()` 一个**实例订阅**通道（纯 TS、返回退订函数、`dispose` 清空），Controller 经 `TerritoryViewEvent.Render/Command` 派发视图；视图间跨组件通知统一走**节点事件**（`node.on` / `node.emit` + `application/TerritoryEvents.ts` 的 `TERRITORY_EVENTS` 常量表），监听挂组件自身节点、随节点销毁自动清理；`TerritoryModel` 剥掉 `import type` 后严禁 import `cc`、`framework` 或具体边界实现类。
 7. **建筑/站点落在格子可见台面中心（`cellCenter` + trim 补偿 + 可见宽归一 70）**：
    - **台面偏移**：地块底图 `img_land_01_gray`（130×119）可见台面占 `y = 2~91`（高 90px），下方 28px 为侧壁；锚点在整图中心 `y = 59` ⇒ 台面中心比锚点高 `HEX_GRID_CONTENT_LIFT = 12.5px`。因此 `TerritoryMapView.cellCenter()` 必须返回 `{ x: point.x, y: point.y + HEX_GRID_CONTENT_LIFT }`（注意：`syncGrid` 中格子节点自身坐标仍为 `(point.x, point.y, 0)`，只偏移格内建筑/站点内容）。
    - **逐图 trim 偏移补偿与可见宽归一（`TerritoryStationView.applyIconPlacement`）**：读取动态合批安全的 `frame.rect / originalSize / offset` 补偿美术非对称留白，并将**trim 后目标可见宽统一归一为 `84`**（2026-10-19 用户要求「当前尺寸调大 120%」：70 × 1.2；可见高 65~75，占台面高 90 的 72~83%，判据 `可见高 <= 台面高 × 0.85`）。取值历史：100 ⇒ 顶满格子（严禁回去）；70 ⇒ 2026-10-15 的保守值；换尺寸只改这一个常量，同屏建筑等比缩放、比例关系不变。
@@ -550,6 +556,7 @@ tests/zcds-neutral-reward-fx.test.ts 覆盖正式装配的金币栏目标、真�
      - 引擎还没量过的那一帧（读到出厂宽 92）按**位数**估宽（`CONDITION_DIGIT_WIDTH = 9.5`，Arial 数字等宽 `0.556em`）。
      - ⚠️ 退出条件模式必须还原 `overflow` 与两个缩放：`CaptionLabel` 同时承担「名称底条」文案（那边靠 `SHRINK` 防超宽），且站点节点是**池化复用**的。
 - **判据**：`tests/territory-cell-center-align.test.ts`、`tests/territory-map-layout.test.ts`、`tests/territory-map-config.test.ts`、`tests/territory-page-split.test.ts`、`tests/territory-presenter.test.ts`、`tests/territory-station-batching.test.ts`（间距恒 2px / 1·3·5 位数 / 出厂宽那一帧 / 退出模式还原）、`tmp/_territory_probe.mjs`。
+8. **领域模型与视图播放器语义分工**：`model/` 仅承载纯数学曲线与错峰时钟模型（`model/TerritoryHexSpawn.ts`、`model/TerritoryHexRecolor.ts`、`model/TerritoryTapFeedback.ts`），严禁引入 `cc`；`view/` 承载驱动 Cocos Node / UIOpacity / Sprite 的动画播放器，并暴露语义化别名（`TerritoryHexSpawnPlayer`、`TerritoryHexRecolorPlayer`、`TerritoryTapFeedbackPlayer`）；展示数据投影统一由 `application/TerritoryProjection.ts` 纯函数生成，使 `TerritoryModel` 专注于纯领域状态与开合规则管理。
 
 未通关的 PVP（`asyncPvp`）气泡显示玩家头像，复用 `icons/head/icon_hero_head_40018` 和红色九宫格 `frame_02`，尺寸 60×66、头像 46×46，隐藏 `PVP` 文字；已通关保持原有蓝色 `PVP` 气泡。预告承载格同样使用红框头像，头像或红框缺失时保留原文字气泡。普通关卡和宝箱布局不变，沿用原气泡的点击、定位、显隐与资源作用域。判据：`tests/territory-preview-bubble.test.ts`、`tests/territory-station-batching.test.ts`、`tests/territory-bubble-red-frame.test.ts`。
 
@@ -4393,6 +4400,226 @@ BOSS 波 24≠129）、`TerritoryProgress` 前置领地口径、无引擎视图�
 会在拖动地图时重新裂开。改动面 = 几何纯函数 + 云视图逐帧同步 + `territory-cloud` /
 `territory-cloud-bottom-strip` / `territory-map-bottom-inset` 三组 VM 夹具 + 实机截图复核，
 属于「不好实现」那一档 ⇒ 按用户许可**暂不处理**；现有补云带继续保证「不露橙色裸底条」。
+
+### 3.45 固定格宝箱奖励粒子改道飞向底部卡牌 icon（2026-11-19）
+
+> 用户原话（配图红圈）：「这个固定格宝箱打开奖励粒子往上飞的动画改成和随机格往
+> 卡牌 icon 飞的动画一致，都是飞向底部菜单栏卡牌 icon，当对应的卡牌可升级时，也会触发进度动画」。
+
+**现场**：截图红圈 = `TerritoryChest.prefab` 的 `Fly/FlySlot`（奖励图标 + `+N` 数量文字）飞到屏幕顶部中央。
+`TerritoryChestView` 构造里写死 `setCatchPoint(0, height/2 - 46)`；
+`setCatchPointOf(resId, x, y)` 本来支持按资源分开落点，但页面侧旧的 `wireRewardCatch()`
+（`7/9 → ResBar.slotWorldPositionOf`，其余 → 英雄按钮）在 SVN 合并后**整段缺失**，
+`tests/territory-hero-reward.test.ts` 还钉着
+`setRewardCatchWorldPoint|slotWorldPositionOf|bar.playGainFeedback` 不许复活。
+⇒ 没有任何调用方登记落点，全部 FlySlot 回落顶部中央，就是用户看到的「往上飞」。
+
+**两条链路（改前）**：
+
+| | 固定格宝箱 | 随机格 |
+| :--- | :--- | :--- |
+| 宿主 | `TerritoryOverlay`（页面层，被 `MainRoot/BottomNav` 压住） | `MainRoot/TerritoryRewardFx`（顶层，§3.41） |
+| 落点 | 屏幕顶部中央（构造里写死） | `heroTabWorldPositionOf()` → 底栏卡牌 icon |
+| 时间轴 | `chest_seq_*` 三档，`flyStart` = 0.80 / 1.05 / 1.35s，5/15/30 枚 | `TerritoryHeroFlight`，0.62s × ≤8 枚 |
+| 落地反馈 | `setLandedHandler`（页面已不接，等于没有） | `setHeroRewardLandedHandler` → 按钮受击抖动 |
+
+🔴 **不要试图把旧 `wireRewardCatch` 接回来只改个落点**：覆盖层在 `BottomNav` 之下，
+图标飞到底部会被底栏盖住 —— §3.41 已经为随机格踩过一次。这次必须与随机格共用**顶层宿主**。
+
+**改法：一条链路、三处接线**
+
+```
+页面 runChestOpening
+  heroEntries = entries.filter(isTerritoryHeroRewardResId)
+  → mountRewardFxLayer(rewardFxRoot())        // MainRoot 顶层，先挂宿主
+  → setHeroRewardTargetWorld(heroTabWorldPositionOf(heroButton))
+  → setHeroRewardLandedHandler(heroButton.playHitFeedback)
+  → armChestHeroFlight(cellId, heroEntries)   // 只登记，不立刻飞
+  → playChestOpen(cellId, tier, entries, handOff)   // 四参签名一个字没改
+视图 ensureOverlayHost
+  → chestView.setFlyStartHook(() => launchChestHeroFlight())
+开箱表演 step
+  → elapsed 跨过 spec.flyStart ⇒ 钩子发一次
+  → launchChestHeroFlight → playHeroRewardFlight(cellId, entries)   // 随机格同一个入口
+```
+
+🔴 **起飞必须等 `flyStart`**：三档表演先把箱子推到屏幕中央（`cameraFocus → 1`），
+`playHeroRewardFlight` 的起点取「这一帧」的格心世界坐标（`cellPointInNode` 走引擎矩阵）。
+在 `playChestOpen` 那一帧就飞 ⇒ 箱子还没开、图标已经飞走，起点还落在被镜头挪走之前的原格上。
+时间轴归 `TerritoryChestView`（`spec.flyStart` 本来就是三档参数的一部分），地图视图不许再抄一份。
+
+🔴 **Fly 层要逐枚让位，不是整层关掉**：`applyFly` / `fireLandings` 都按
+`isTerritoryHeroRewardResId(rewards[index % rewards.length].resId)` 判；
+只留钱包类（`7` 银币 / `9` 体力）走原落点。判据与随机格共用 `model/TerritoryHeroReward` 的同一条真源，
+不许按 `18xxx 碎片 / 16xxx 经验` 白名单枚举。整层关掉会把银币的 `+N` 一起吞掉；
+整层不改则同一批奖励一上一下飞两遍。
+
+🔴 **待飞批次四处作废**：`launchChestHeroFlight` 起播后清、`playChestOpen` 起播失败清、
+`stopChestPlay` 打断清、`resetHeroFlights`（换章 / 顶层宿主换层）清；
+`play()` / `stop()` 各自把 `flyStartFired` 复位 ⇒ 下一场到点还能再发一次。
+
+**「卡牌可升级 ⇒ 进度动画」不用新接线**：`presentRewards` 开头的
+`void this.playHeroBadges(rewards)` 排在所有分流之前（§3.37 ③），
+固定格 / 随机格 / 银币宝箱 / 挂机弹窗四条路都覆盖；`TerritoryHeroProgressSource.newlyReady`
+按「预测叠加」判本次新达成，`HeroFragmentBadge` 在英雄按钮上方按卡库顺序串行播放。
+本次改动**没有**碰它，也没有为「等图标落地」再触发一遍 —— 同一个 `newlyReady` 连查两次会入队两次。
+时序上徽标在奖励回包那一刻起播、比图标落地早；这是 §3.37 的既有口径，按「不新造平行状态机」保留。
+
+**降级**：拿不到 `MainTabHost` / 英雄按钮 / 顶层宿主 ⇒ `heroRewardTarget` 为 null，
+`playHeroRewardFlight` 整段跳过；开箱表演、交棒 `ChestRewardsReady`、奖励结算一个都不少（纯表现）。
+
+**判据**：`tests/territory-chest-hero-flight.test.ts` **14 条**（判据真值 / 三档起飞时刻 /
+起飞钩子只发一次且掉帧跨过也补发 / Fly 槽位逐枚让位 / 落地通知跳过改道资源 /
+待飞批次只起播一次 / 接线顺序 / 进度徽标仍在所有分流之前）。
+用 `Object.create(prototype)` 的最小 VM 夹具直接跑
+`TerritoryChestView.step / applyFly / fireLandings`，两个 model 模块给**真模块**（不抄判据）。
+
+**回归**：领地 `1218 / 1200 绿 / 18 红`、广域 `1438 / 1417 绿 / 21 红`、
+全量 `6764 / 6655 绿 / 109 红`。为把外来红剥干净，做了
+「临时还原三个源文件 → 跑全量 → 按字节恢复（md5 校验）」对拍：
+基线 `6750 / 6641 绿 / 109 红`，两份红单 `LC_ALL=C sort` 后逐条 diff **完全一致**
+⇒ 本次 **0 条新红**、净增 14 绿。`npx tsc --noEmit` 21 条全在 zcds 合并遗留，改动文件零报错。
+
+### 3.46 巡逻怪物宝箱（Monster Box）弹窗交互与升级协议（2026-11-19）
+
+需求原文（2026-11-19 设计稿）：领地地图上的野怪宝箱格增加独立详情与升级弹窗（`ui/territory/TerritoryMonsterBoxPanel.prefab` + `view/TerritoryMonsterBoxPanel.ts`）。
+
+#### 一、职责与交互三态
+
+| 状态 | 视觉表现 | 操作可用性 |
+| :--- | :--- | :--- |
+| **基础态 (Lv.1~3)** | 点阵（当前等级高亮） + 守护怪 + 奖励列表 + 「升级宝箱」主按钮 + 「开始挑战」副按钮 | 两个按钮皆可交互。设计定位「升级为主、挑战为次」 |
+| **升级态 (upgrading)** | 点阵切换为进度条（0~100% 动效） | 双按钮禁用并压色（`BTN_DIM = new Color(120, 118, 112, 255)`），防连点与穿透 |
+| **满级态 (Max Lv)** | 点阵全亮、守护怪全解锁、隐藏升级按钮 | 仅保留「开始挑战」按钮，自动居中对齐；`upgradeCost <= 0` 隐藏升级入口 |
+
+#### 二、纯渲染契约与协议数据流
+
+1. **纯渲染契约（View 不做业务推算）**：
+   - 弹窗通过 `applyContent(content: ITerritoryMonsterBoxContent)` 驱动，脚本内严禁自算消耗、成功率、守护怪状态或关卡数值。
+   - 缺省数据（`0` / 空数组 / `null`）一律解释为「无该项数据」，UI 整块隐藏，严禁出现「数据尚未下发却显示 0 级 / 0 银币」的误导表现。
+2. **写请求与单调合并（只发不等）**：
+   - 点击「升级宝箱」通过 `EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'upgradeMonsterBox', cellId } })` 报告意图。
+   - `TerritoryController` 将意图分发至 `TerritoryModel.upgradeMonsterBox(cellId)`，向服务端发起 `CmdCityChapterUpMonsterBoxLvReqMsg { levelChapter, cellId }`。
+   - 客户端**不预扣银币**、也**不本地 `lv + 1`**；升级结果由服务端通过 `CmdCityChapterUpMonsterBoxLvRspMsg` 下发确认。
+   - 回包成功（`succ = 1`）时，通过 `TerritoryCellRepository` 解析并单调合并最新 `monsterBoxInfo` 到快照状态；回包失败（`succ = 0`）或超时报错时，弹出提示并作废在途写票据，保留界面状态可重试。
+3. **按钮布局与居中规范**：
+   - 双按钮共存时采用成对排布（升级为主在右/主位，挑战在左/副位）；当升级按钮隐藏时，挑战按钮需动态居中对齐，避免单按钮偏于一侧。
+4. **判据**：
+   - `tests/territory-monster-box.test.ts`（数据解析、状态收窄、等级查表、单向合并与异常裁剪）。
+
+### 3.47 巡逻宝箱怪「未挑战成功」与关卡地块同形（2026-11-19）
+
+> 用户原话（配图红圈）：「新增的巡逻宝箱怪没有挑战成功前和普通的关卡地块一致
+> 1.激活后的地块是红色的
+> 2.巡逻的宝箱怪和战斗内的其他玩家卡牌一样叠加暗色和红色描边（一样的形式
+> 3.战斗胜利后这个形象取消叠加，回复正常的颜色，地块同理（和关卡一致」
+
+**现场**：截图里 `1-1` 普通关卡承载格带红 `frame_01`、附近棕色泥土块一起红；绿色宝箱怪站在棕色地块上，
+地块不红、怪物也没暗色 / 红描边。`chapter_01` 有 31 个 `patrolChest` 站点（5 片，每格一个站点、
+footprint 全是单格），同 `site.id` / 同 `battleId` 组成一片。
+
+**三条真因（互不相关，缺一条都只修好一半）**：
+
+| # | 真因 | 位置 |
+| :--- | :--- | :--- |
+| ① 地块不红 | `TERRITORY_SITE_FRAME` 只配了 boss / stage / asyncPvp / fixedResource，**没有 `patrolChest`** ⇒ `hexFrameOf` 查表落空返回 null | `TerritoryMapView.ts` |
+| ② 胜利后地块不同步 | `isCellPassed` 对宝箱格走逐格 `isOwned`，而巡逻区是「同 `battleId` 任一格占点即整片通过」 ⇒ 只绿了占点那一格，同片其余还挂红框 | `TerritoryMapView.isCellPassed` |
+| ③ 怪物没暗色 / 红描边 | `TerritoryMonsterPatrolView` 只做骨骼实例化、路径位移与朝向，**完全没有染色 / 描边逻辑** | `view/TerritoryMonsterPatrolView.ts` |
+
+**改法**：
+
+1. ① `TERRITORY_SITE_FRAME.patrolChest = 'frameStage'`。🔴 **不是 `frameChest`**：
+   `fram_02` 蓝是「待领取的宝箱」，巡逻宝箱是「待挑战的怪」；普通关卡槽位 `frameStage`
+   现在加载的就是红 `frame_01`（§3.44 / `TerritoryPageAssets`）。
+2. ② 抽 `territoryPatrolPassedCells(sites, progress)` 到 `model/TerritoryMonsterPatrol`，
+   与 `buildTerritoryMonsterPatrols` 的停巡判据**同源**（后者反过来复用它，删掉自己那份 `passed`）。
+   发布帧 `TerritoryViewState` 把它和 `monsterPatrols` 同拍冻结 → 页面透传 `patrolPassedCells`
+   → `paintHexes` 的 `isCellPassed` 早于站点查询命中即 `true`（footprint 格查不到站点也能吃到）。
+   缺省用模块级 `EMPTY_CELL_SET`，不在每帧 `new Set()`。
+3. ③ 复用战斗内 `ZCUnitView` 的**同一形式**：
+   - 主骨架 `sp.Skeleton.color = #828282`（`OTHER_PLAYER_TINT`，顶点色相乘；不是盖一层黑 Sprite，
+     那会把怪外面透明区也涂黑）；
+   - 同一份 prefab 的第二个实例放大 `1.08`、插在本体子节点第 **0** 位（先画副本 ⇒ 大出来的
+     那一圈才是「边」，顺序反了整只怪变成红色块）、`customMaterial` 挂 `shaders/unit-outline-copy`、
+     `premultipliedAlpha = true`（shader 按预乘口径输出）、染 `ZC_CLIENT_COLORS.enemyEdge = (251,73,105)`、
+     与本体同 clip 起播；
+   - `step()` 每帧把副本 `trackTime` 对齐本体，防止红边慢半拍；隐藏的副本不参与锁相。
+   - 材质由 `TerritoryChapterLoader` 加载 `EffectAsset` 后 `new Material().initialize({effectAsset})`
+     挂进 `art.monsterOutlineMaterial`；只在这章真有巡逻怪时才加载，失败 `catch` 降级
+     「只压暗、不描边」（绝不退化成一只放大的红怪）。
+4. 胜利后：`applyLook()` 每次 `sync` 写**绝对色**（白 / 暗）与副本 `active`，不靠「创建时染一次」
+   —— 节点按 `cellId` 复用，缓存判断会残留上一次的暗色。
+   🔴 按 11-18 既有口径 `buildTerritoryMonsterPatrols` 在该片通过时**直接不生成野怪**，
+   叠加随野怪一起消失；视图仍显式判 `clearedCells`，将来若改成「留场」也不会残留暗色。
+
+🔴 **参数不许各写一套魔数**：`TERRITORY_PATROL_DIM_RGB / EDGE_RGB / OUTLINE_SCALE /
+OUTLINE_EFFECT_PATH` 集中在 `model/TerritoryMonsterPatrol`；`tests/territory-patrol-look.test.ts`
+用源码守卫反查 `ZCUnitView` / `ZCTheme` / `ZCGameLoader` 的同名常量，任一边改了都红。
+领地页**不反向 import `zcds/view`**（分层），只搬数值 + 守卫。
+
+**判据**：`tests/territory-patrol-look.test.ts` **12 条**（整片通过含 footprint / 停巡同源 /
+发布帧冻结 / 暗色与描边全字段 / 胜利双向恢复 / shader 缺失降级 / 锁相 / `clear` 一次销毁 /
+四组同源守卫 / 三处接线守卫）；`tests/territory-tile-frames.test.ts` 追加 **4 条**
+（激活未通关红框且不误伤普通宝箱 / 未解锁不提前红 / 胜利整片转草地摘框 / 映射表源码守卫）。
+
+**回归**：专项 `12 + 4` 全绿；定向组合 `65 / 65` 绿；领地 `1237 / 1224 绿 / 13 红`，
+13 红全部是 11-19 基线 18 红的子集 ⇒ **改动范围 0 条新红**；全量 `6821 / 6697 绿 / 124 红`，
+比基线多出来的 28 红全在 `zcds-*` / `bigmap-*` / `popup-fullscreen-widget` / `maintask`，
+属外部进程改表漂移，涉及本次改动源码的红 **0 条**。`npx tsc --noEmit` 仍是 zcds 合并遗留 21 条，
+改动文件零报错。行尾：源码 / 用例主体 LF，`TerritoryViewState.ts` / `TerritoryModel.ts` /
+`territory-tile-frames.test.ts` / 本规范保持 CRLF。
+
+### 3.48 巡逻野怪片区：解锁 / 激活 icon 只落在配了野怪 id 的那一格（2026-11-20）
+
+> 用户原话（配图红圈 / 绿圈）：「同个节点的巡逻野怪地块，只在配置了野怪 id 的地块上展示
+> 解锁 icon 和激活银币 icon，其他地块不显示，参考异步 PVP 地块」
+
+**现场**：`chapter_01` 一片巡逻区 = 同 `site.id` 的 4~8 个 `patrolChest` 站点（31 格 / 5 片）。
+截图红圈里每格都挂「银币 + 10 / 15」，读成「这一片要连续买十几次」；绿圈是异步 PVP 的
+对照 —— 同一个节点两格，**只有承载格挂 100**，另一格是空地。
+
+**真因**：「一个节点只在一块地上长 UI」那套收敛在 `model/TerritoryNodeUI.ts`，
+但 `NODE_SITE_TYPES` 只有 `stage / boss / asyncPvp`，`nodeGroups` 按 `configId` 分组、
+承载格按 `buildingId` 挑。巡逻格**两个字段都没有**（分组键是 `site.id`，承载格是 `patrolId`）
+⇒ 两套收敛一条都命不中：
+
+| 收敛 | 函数 | 巡逻格之前的表现 |
+| :--- | :--- | :--- |
+| 价格 / 编号 / 建筑 | `territoryNodeMutedCells` → `stationRenderOf` 早退 | 每格各画一条 `conditionIcon + caption` |
+| 锁 | `territoryNodeCarrierByCell` → `territoryNodeLockCells` | `lockedCells` 原样透传，同片每格一把锁 |
+
+**改法（只动 model 的收敛判据，视图调用点一字未改）**：
+
+1. `model/TerritoryMonsterPatrol.ts` 新增 `territoryPatrolAnchorByCell(sites)`：
+   按 `site.id` 一次分组，`cellId / footprint → 承载格`。承载格 = **配了 `patrolId` 的格**；
+   没配的兄弟格指向组内 `cellId` 最小的锚点；整片都没配 `patrolId` 的旧图不给映射
+   （调用方 `?? cellId` 退回逐格画法，不许整片 UI 凭空消失）。
+   🔴 先写站点 `cellId`、再补 `footprint`，否则 footprint 压到同片另一站点时会把承载格覆盖掉。
+2. `territoryPatrolAnchorCell`（后端上报用）**委托同一份锚点表**，但先校验 `site` 确实属于
+   `sites` 里的同 `id` 片区 —— 锚点表按 `cellId` 建索引，旧图 / 合成 site 的 `id` 对不上时
+   必须退回自己，不能因为 `cellId` 碰巧相同被别片拐走（既有 `366` 边界用例）。
+3. `TerritoryNodeUI.ts` 两个函数各自合入这份映射：
+   `territoryNodeCarrierByCell` 直接 `out.set`（锁收敛），
+   `territoryNodeMutedCells` 把 `cell !== anchor` 的格加进 muted（价格 / 建筑 / 气泡早退）。
+4. 🔴 **`NODE_SITE_TYPES` 不许塞 `patrolChest`**：`nodeGroups` 还供
+   `territoryNodeStateCellByCell` / `territoryNodeGreyCells` 使用，塞进去会连带改地皮与红框
+   的状态判据（§3.44 / §3.47），本需求只改 UI。用例专门钉死这条。
+
+**边界**：进 muted 的格**任何状态都不画 UI，但仍可点、照常扣银币解锁**（与 §3.28 同口径）；
+同片多格配了 `patrolId` 则那些格都显示；锚点被前置卡住时整片算未解锁 ⇒ 锁落在锚点、
+价格整条摘掉（锁价互斥，不会并排）。普通宝箱 `fixedResource` 不参与这套收敛，照旧各画各的价格。
+
+**判据**：新增 `tests/territory-patrol-node-ui.test.ts` **11 条**（真实五片锚点 / 与后端上报同源 /
+carrier + footprint / 锁只留一把 / 旧图不收敛 / 多锚点 / footprint 压站 / 沙箱 `syncStations`
+两态画法 + 锁价互斥 / 普通宝箱不受影响 / 两条源码守卫）；`tests/territory-node-ui.test.ts`
+把 `muted.size` 从 `56` 更新为 `56 + 26`，并保留原有「战斗站点全部被隐」的覆盖。
+
+**回归**：专项 `11 / 11` 绿；定向组合 `106 / 105 绿 / 1 红`（1 红是既有的
+`TerritoryModel` 点击路由源码守卫，读的是本次未改的文件）；领地全量做「改动前 → 改动后」
+字节级对拍：基线 `1249 / 1228 绿 / 21 红` → 改动后 `1260 / 1239 绿 / 21 红`，
+21 条红单按用例名逐条完全一致 ⇒ **0 条新红，净增 11 绿**；全量 `6875 / 6761 绿 / 114 红`，
+领地组 21 条红单与对拍结果一致，全量红单里没有一条指向本次改动模块。
+`npx tsc --noEmit` 29 条全在 zcds 合并遗留，改动文件零报错；`verify:hygiene` 通过。
 
 ## 7. 开局归属扩散波：归属格直接切换、中立格逐个替换
 

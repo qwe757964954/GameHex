@@ -12,6 +12,7 @@ import {
     rarityNameOfTier,
     setCardRarityMeta,
     resolveUnitDefinition,
+    ZC_EMPOWERED_FX_SCALE,
     ZCCardType,
     type ZCDeckCard,
     type ZCCounterRule,
@@ -1098,6 +1099,10 @@ function collectAttacks(attackerUnitId: string, seconds: number, completedAttack
     const game = new ZCGameModel(snapshot, () => 0.1);
     const seen = new Map<number, (typeof game.snapshot.combatEvents)[number]>();
     const firedAt = new Map<number, number>();
+    //  弹道类单位的「主事件」不在 `combatEvents` 里 —— `createAttackProjectiles` 只把它推进
+    //  `state.projectiles`（视图直接读那个队列）。要验「强化那一击播的是哪份 prefab」，
+    //  必须把两个队列一起收，否则投弹型卡（雷蕉 / 冰法师…）永远看不到主事件。
+    const shots = new Map<number, (typeof game.snapshot.projectiles)[number]>();
     for (let elapsed = 0; elapsed < seconds; elapsed += 0.05) {
         game.tick(0.05);
         for (const event of game.snapshot.combatEvents) {
@@ -1105,16 +1110,22 @@ function collectAttacks(attackerUnitId: string, seconds: number, completedAttack
             seen.set(event.id, event);
             if (!firedAt.has(event.id)) firedAt.set(event.id, game.snapshot.elapsedSeconds);
         }
+        for (const projectile of game.snapshot.projectiles) {
+            if (projectile.sourceUnitId !== 1) continue;
+            shots.set(projectile.id, projectile);
+        }
     }
     return {
         /** 按出手先后排好的普攻事件（`event.id` 单调递增，插入序即时间序）。 */
         events: Array.from(seen.values()),
+        /** 同一段窗口里的弹道主事件（近战 / 区域单位恒为空数组）。 */
+        shots: Array.from(shots.values()),
         /** 某次出手时的 `elapsedSeconds`。 */
         at: (id: number): number => firedAt.get(id) ?? -1,
     };
 }
 
-test('普攻 / 技能双链：every_seconds 触发 —— 首击不强化，满一个冷却后的那一击改用技能行 prefab', () => {
+test('普攻 / 技能双链：every_seconds 触发 —— 首击不强化，满一个冷却后的那一击 = 同 prefab ×1.2', () => {
     // 老客户端（D:/City1001/client）里武将的普攻与技能是**两套独立表现**：
     //   ConquestSkillBase:        `_isGeneral ? this._skillView.exHurt : this._skillView.hurt`
     //   TF_SubStateConquest 节拍:  `isGeneral && ref.exSkillNeedTimes && newTimes % ref.exSkillNeedTimes == 0`
@@ -1142,8 +1153,10 @@ test('普攻 / 技能双链：every_seconds 触发 —— 首击不强化，满�
     assert.ok(cooldown > 0, `every_seconds 必须配一个正的冷却秒数，实际 ${militia.cooldown}`);
     assert.equal(militia.effectPrefabPath, 'units/projectiles/民兵普攻_刀光/民兵普攻_刀光');
     assert.equal(definition.empoweredProfile?.effectPrefabPath, 'units/projectiles/民兵_武将技能/民兵_武将技能');
+    //  ⚠️ 表里两条行仍然各带一份美术（解析层不动），但**表现层不再用武将技那一份**——
+    //     2026-11-19 定案 A：强化那一击复用普攻 prefab，只把尺寸 ×1.2。见下面 events 断言。
     assert.notEqual(definition.empoweredProfile?.effectPrefabPath, militia.effectPrefabPath,
-        '普攻与技能必须是两个不同的 prefab，否则等于没接技能');
+        '技能行必须仍然带着自己的美术路径（换素材时才知道该换哪张图）');
 
     // 开局就记 `completedAttackCount = 5`（按次数语义下这一击正是第 6 次，本该强化）——
     // 故意留着，用来证明 CD 口径**完全不吃**这个计数。
@@ -1156,12 +1169,18 @@ test('普攻 / 技能双链：every_seconds 触发 —— 首击不强化，满�
     const empowered = events.filter((event) => event.empowered);
     assert.ok(empowered.length >= 1, `满 ${cooldown}s 后的那一击必须触发强化`);
     assert.deepEqual(Array.from(new Set(empowered.map((event) => event.skillId))), [36216]);
+    //  🔴 2026-11-19 定案 A：强化那一击**不换 prefab**，只把尺寸 ×1.2
+    //     （`ZC_EMPOWERED_FX_SCALE`）。`skillId` 仍旧切到 36216 —— 那是玩法口径，不动。
     assert.deepEqual(Array.from(new Set(empowered.map((event) => event.effectPrefabPath))),
-        ['units/projectiles/民兵_武将技能/民兵_武将技能']);
+        ['units/projectiles/民兵普攻_刀光/民兵普攻_刀光'], '强化那一击必须复用普攻 prefab');
+    assert.deepEqual(Array.from(new Set(empowered.map((event) => event.effectScale))), [1.2],
+        '强化那一击唯一的差别 = 尺寸 ×1.2');
     const normal = events.filter((event) => !event.empowered);
     assert.ok(normal.length >= 1, '强化之前应当先有普通普攻');
     assert.deepEqual(Array.from(new Set(normal.map((event) => event.effectPrefabPath))),
         ['units/projectiles/民兵普攻_刀光/民兵普攻_刀光']);
+    assert.deepEqual(Array.from(new Set(normal.map((event) => event.effectScale))), [undefined],
+        '普通普攻不带尺寸倍率');
 
     // 冷却必须**真的**被扣：首击 → 首次强化 ≥ 一个冷却，且不拖过一整个攻击节拍。
     const gap = at(empowered[0].id) - at(events[0].id);
@@ -1177,7 +1196,7 @@ test('普攻 / 技能双链：every_seconds 触发 —— 首击不强化，满�
         + ' —— 冷却只在第一轮生效');
 });
 
-test('普攻 / 技能双链：every_n_attacks 触发 —— 第 N 次普攻改用技能行 prefab', () => {
+test('普攻 / 技能双链：every_n_attacks 触发 —— 第 N 次普攻 = 同 prefab ×1.2', () => {
     // 「每 N 次普攻」是**老项目原本的节拍**（`exSkillNeedTimes`），必须继续可用。
     // 民兵（68023）在真表里被分到的是 `every_seconds`，所以这条**注入一张把 trigger 抹掉的表**
     // 把「次数」分支 + `empoweredEvery=6` 的精确落点单独钉住（跑完在 finally 里还原）。
@@ -1202,13 +1221,85 @@ test('普攻 / 技能双链：every_n_attacks 触发 —— 第 N 次普攻改�
         // 强化精确落在第 6 / 12 / 18… 次普攻上 —— 逐击对表，不用「≥ 1 次」糊过去。
         assert.deepEqual(events.map((event) => event.empowered),
             events.map((_, index) => (index + 1) % 6 === 0), '第 N 次普攻的强化落点不对');
+        // 定案 A（2026-11-19）：同一份 prefab，只有尺寸 ×1.2。
         assert.deepEqual(Array.from(new Set(events.filter((event) => event.empowered)
-            .map((event) => event.effectPrefabPath))), ['units/projectiles/民兵_武将技能/民兵_武将技能']);
+            .map((event) => event.effectPrefabPath))), ['units/projectiles/民兵普攻_刀光/民兵普攻_刀光']);
+        assert.deepEqual(Array.from(new Set(events.filter((event) => event.empowered)
+            .map((event) => event.effectScale))), [1.2]);
         assert.deepEqual(Array.from(new Set(events.filter((event) => !event.empowered)
             .map((event) => event.effectPrefabPath))), ['units/projectiles/民兵普攻_刀光/民兵普攻_刀光']);
     } finally {
         loadPvpTables(oldTables);
     }
+});
+
+test('强化那一击的表现口径（2026-11-19 定案 A）：全表「同 prefab ×1.2」，任何一张卡都不许再出现武将技专属美术', () => {
+    // 背景：`pvpSkill` 的 `empoweredSkillId` 指向一条 36xxx / 308xx 技能行，那条行**自带**
+    // 一份美术（`民兵_武将技能` / `雷法师_武将闪电` / `冰雕`…）。历史实现是「强化那一击换 prefab」，
+    // 于是同一张卡每 5 秒突然换成另一个造型 —— 玩家读不出这是加强，只当成另一个技能。
+    // 用户 2026-11-19 定案 A：**全部卡牌（含怪物卡）的强化攻击与普通攻击共用同一套特效**，
+    // 唯一差别 = 尺寸 ×1.2（`ZC_EMPOWERED_FX_SCALE`）。
+    assert.equal(ZC_EMPOWERED_FX_SCALE, 1.2, '放大比例是 20%，只有这一处写死');
+
+    // ① 数据前置：每张有强化的卡，普攻行都必须自带 prefab —— 否则「复用普攻特效」会退化成
+    //    通用命中表现，画面全无且不报错。
+    const unitIds = new Set<string>();
+    for (const name of ['pvpCard', 'monsterCard']) {
+        for (const row of readPvpRows(name)) {
+            const unitId = row.unitId == null ? '' : String(row.unitId);
+            if (unitId && hasUnitDefinition(unitId)) unitIds.add(unitId);
+        }
+    }
+    const withEmpowered: string[] = [];
+    const baseMissing: string[] = [];
+    for (const unitId of Array.from(unitIds).sort()) {
+        const base = resolveUnitDefinition(unitId).attackProfile;
+        if (!base.empoweredSkillId) continue;
+        withEmpowered.push(unitId);
+        if (!base.effectPrefabPath) baseMissing.push(`${unitId}:${base.name}/${base.mode}`);
+    }
+    //  唯一的例外：68009 仙桃行者的普攻行**本来就没有专属美术**（近战，走通用命中表现）⇒
+    //  它的强化那一击也保持「没有专属美术」，与普攻一致。这不是缺陷，是口径本身的边界。
+    assert.deepEqual(baseMissing, ['68009:仙桃行者普攻/melee'],
+        '除仙桃行者外，每张有强化的卡普攻行都必须自带 prefab，否则「复用普攻特效」会退化成通用命中');
+    assert.ok(withEmpowered.length >= 33,
+        `有强化普攻的单位至少 33 个（35 张可出战卡里 68018 / 68024 借的是怪物技能行），实际 ${withEmpowered.length}`);
+
+    // ② 行为：把每一张有强化的卡都真跑一段（对局里只有它 + 一个打不死的木桩），逐拍看它
+    //    在画面上要播哪份 prefab。33 张 ×25 秒跑得比漏测一张便宜。
+    //    🔴 弹道型单位的「主事件」不在 `combatEvents` 里（只进 `state.projectiles`），
+    //    所以 `collectAttacks` 把两个队列都收回来了（见上面的 `shots`）。
+    const WINDOW_SECONDS = 25;
+    let firedSomewhere = 0;
+    for (const unitId of withEmpowered) {
+        const definition = resolveUnitDefinition(unitId);
+        const base = definition.attackProfile;
+        const skillPrefab = definition.empoweredProfile?.effectPrefabPath;
+        const attack = collectAttacks(unitId, WINDOW_SECONDS, Math.max(0, (base.empoweredEvery ?? 0) - 1));
+        const everything = [...attack.events, ...attack.shots];
+        //  ① 任何一拍都不许再播武将技专属美术（含命中附加特效 / 弹道命中表现 / 区域波次）。
+        //  只有当表里两条行**确实配了两份不同美术**时这条才有意义（有的卡本来就共用一份）。
+        if (skillPrefab && skillPrefab !== base.effectPrefabPath) {
+            for (const item of everything) {
+                assert.notEqual(item.effectPrefabPath, skillPrefab,
+                    `${unitId}：强化那一击又换回了武将技专属美术 ${skillPrefab}`);
+            }
+        }
+        //  ② 普通普攻不许被顺手放大（命中附加特效那一拍 `empowered = false`，不在此列）。
+        for (const item of everything) {
+            if (item.empowered || item.effectPrefabPath !== base.effectPrefabPath) continue;
+            assert.notEqual(item.effectScale, ZC_EMPOWERED_FX_SCALE, `${unitId}：普通普攻被一起放大了`);
+        }
+        //  ③ 只要这一窗里真的打出了强化，就必须是「普攻 prefab + ×1.2」。
+        //     少数卡的主动由触发车道（`ZCSkillTriggerSystem`）另起一条独立技能、不走「强化那一击」，
+        //     那类卡的 `reused` 为空属正常 —— 用 `firedSomewhere` 兜住覆盖面，不逐卡强求。
+        const reused = everything.filter((item) => item.empowered
+            && item.effectPrefabPath === base.effectPrefabPath
+            && item.effectScale === ZC_EMPOWERED_FX_SCALE);
+        if (reused.length > 0) firedSomewhere += 1;
+    }
+    assert.ok(firedSomewhere >= 20,
+        `33 张有强化的卡里只有 ${firedSomewhere} 张跑出了「同 prefab ×1.2」—— 覆盖不足，口径没真接上`);
 });
 
 test('普攻 / 技能双链：真表名单 —— 火法师走次数、冰法师走时间（同表并存）', () => {

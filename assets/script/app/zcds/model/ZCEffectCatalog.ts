@@ -1,12 +1,13 @@
 /**
- * 战斗特效目录：路径、行为组、尺寸 / 锚点 / 层级 / 抬升 / 飞行 / 朝向 / 淡出 / 染色 / 导弹
- * 与受击面抬升的单一真源。
+ * 战斗特效目录：路径、行为组、尺寸 / 锚点 / 层级 / 抬升 / 飞行 / 朝向 / 淡出 / 染色 / 导弹、
+ * 弹道拖尾、光束与受击面抬升的单一真源。
  *
  * 本文件是纯 TS，不依赖 `cc`；视图与模型只通过下方查询函数读取，不再各自维护路径表。
  *
  * 新增或调整一条表现时只改本文件：
  *  - 纯路径/表现参数 → `ZC_EFFECT_PATHS` + `ZC_EFFECT_SPECS`；
  *  - 行为技能（`pvpSkill` 没有造型槽）→ `ZC_EFFECT_BEHAVIOR_SPECS`；
+ *  - 弹道拖尾 / 光束几何 → `ZC_EFFECT_TRAIL_SPECS` / `ZC_EFFECT_BEAM_SPECS`；
  *  - 时长、缩放、状态 id 前缀 → `ZCEffectTuning`。
  *
  * 若某条同时受配表数值约束（`areaRadius` / `auraRadius` / `strikeSplashRadius`），
@@ -86,6 +87,37 @@ export interface IZCEffectBehaviorSpec {
     readonly notes?: string;
 }
 
+/** 弹道拖尾的形状与颜色；未登记的弹体不画拖尾。*/
+export interface IZCEffectTrailSpec {
+    /** 起点（贴弹体的一端）在宿主本地坐标的 X。*/
+    readonly startX: number;
+    /** 拖尾总长（本地 px，沿 -X）。*/
+    readonly length: number;
+    /** 贴弹体那端的半宽（本地 px）。*/
+    readonly rootHalfWidth: number;
+    /** 远离弹体那端的半宽（本地 px）。*/
+    readonly tipHalfWidth: number;
+    /** 沿长度切几段；段数越多渐隐越顺。*/
+    readonly slices: number;
+    /** 颜色（rgb，0~255）。透明度只由 `alpha` 与段位置决定。*/
+    readonly color: readonly [number, number, number];
+    /** 起点处的不透明度（0~1）；远端恒为 0。*/
+    readonly alpha: number;
+}
+
+/** 光束的发射口、画布可见段与按技能追加的粗细 / 超长长度。*/
+export interface IZCEffectBeamSpec {
+    readonly muzzleForward: number;
+    readonly muzzleLift: number;
+    readonly contentStart: number;
+    readonly contentEnd: number;
+    readonly widthScale: number;
+    readonly coreWidth: number;
+    readonly tailLift?: number;
+    readonly overShootBySkill?: Readonly<Record<number, number>>;
+    readonly widthMultiplierBySkill?: Readonly<Record<number, number>>;
+}
+
 /** 全部特效 prefab 路径；业务模块只引用语义键，不再各写字符串。*/
 export const ZC_EFFECT_PATHS = {
     stormEgg: 'units/projectiles/椰蛋战士_暴风/椰蛋战士_暴风',
@@ -96,6 +128,9 @@ export const ZC_EFFECT_PATHS = {
     bigFist: 'units/projectiles/大拳飞冲子弹类特效/大拳飞冲子弹类特效',
     sustainedAura: 'units/projectiles/持续光环伤害效果/持续光环伤害效果',
     lightningBullet: 'units/projectiles/雷弹攻击/雷弹攻击',
+    // 2026-11-19 第 23 批：闪电链**专属**电弧（美术新出的水墨风）。链路是「同一段首尾相接」，
+    // 所以它和 `bolt`（落雷，一端亮团一端细丝）不能共用 —— 共用就会一段亮一坨、一段细丝。
+    chainArc: 'units/projectiles/闪电链水墨风/闪电链水墨风',
     chargeDash: 'units/projectiles/轻骑兵_冲锋/轻骑兵_冲锋',
     dashGuard: 'units/projectiles/刀盾兵_护盾/刀盾兵_护盾',
     nutAttack: 'units/projectiles/巨力坚果_普攻/巨力坚果_普攻',
@@ -164,12 +199,12 @@ export const ZC_EFFECT_BEHAVIOR_SPECS: readonly IZCEffectBehaviorSpec[] = [
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.boltStrike,
         prefabPaths: [ZC_EFFECT_PATHS.bolt],
-        notes: '落雷；与链雷共用美术',
+        notes: '落雷；五雷轰顶专用（2026-11-19 第 23 批起闪电链另有 chainArc，不再共用）',
     },
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.chainDamage,
-        prefabPaths: [ZC_EFFECT_PATHS.bolt],
-        notes: '每跳落雷；与五雷轰顶共用美术',
+        prefabPaths: [ZC_EFFECT_PATHS.chainArc],
+        notes: '每段首尾相接的水墨风电弧；不复用落雷（bolt）的端头造型',
     },
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.trapPlace,
@@ -177,8 +212,11 @@ export const ZC_EFFECT_BEHAVIOR_SPECS: readonly IZCEffectBehaviorSpec[] = [
             ZC_EFFECT_PATHS.trapSpawn,
             ZC_EFFECT_PATHS.trapIdle,
             ZC_EFFECT_PATHS.trapExpire,
+            //  101704「蘑菇爆炸」的爆炸按 skillId 换成了通用爆点（`ZCTrapFx.zcTrapExpirePath`），
+            //  清单必须一起收 —— 漏收就是「结算正常、屏幕没东西」。103504 仍然播 trapExpire。
+            ZC_EFFECT_PATHS.burstImpact,
         ],
-        notes: '生成 / 常驻 / 爆炸三段；缺一段即静默无表现',
+        notes: '生成 / 常驻 / 爆炸三段；101704 的爆炸改用通用爆点（普攻爆炸）',
     },
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.splashShot,
@@ -303,8 +341,10 @@ export const ZC_EFFECT_SPECS: readonly IZCEffectSpec[] = [
     },
     {
         prefabPath: ZC_EFFECT_PATHS.lightningBullet,
-        nodeScale: 0.5,
-        notes: '宿主缩放同时作用于拖尾；与导弹 0.8 同一条口径',
+        //  2026-11-19 第 23 批（用户原话「缩小并去掉长拖尾」）：0.5 时屏上 46.8×31.6，
+        //  一颗电池弹比卡牌还宽，看起来就是「一根大电弧」；0.35 收到 32.8×22.1。
+        nodeScale: 0.35,
+        notes: '雷蕉普攻电弹；0.35 与「去掉拖尾」配套，改一个要一起看另一个',
     },
     {
         prefabPath: ZC_EFFECT_PATHS.chargeDash,
@@ -358,6 +398,58 @@ export const ZC_EFFECT_SPECS: readonly IZCEffectSpec[] = [
         notes: '30719/30845 共用；命中后定格 0.18s',
     },
 ];
+
+/**
+ * 弹体 prefab 路径 → 拖尾配置。未登记 = 普通弹道不画拖尾。
+ *
+ * 只登记需要拖尾的弹体：每加一条都要单独调宽窄，默认全挂只会让画面糊。
+ * 长度都是宿主本地 px；屏上长度 = 本地 × `zcEffectNodeScaleOf(path)`。
+ */
+export const ZC_EFFECT_TRAIL_SPECS: Readonly<Record<string, IZCEffectTrailSpec>> = {
+    // 镭射飞龙追踪导弹：屏上 80px、接触端整宽约等于弹体半径，接触端压进弹体 26 本地。
+    [ZC_EFFECT_PATHS.missileBody]: {
+        startX: -26,
+        length: 100,
+        rootHalfWidth: 20,
+        tipHalfWidth: 2,
+        slices: 12,
+        color: [255, 255, 255],
+        alpha: 0.62,
+    },
+    //  🔴 2026-11-19 第二轮：用户「三角形拖尾要保留」⇒ 加回来。
+    //  宿主缩放已从 0.5 收到 0.35，而**屏上**的形状要跟改之前一致（长 55、贴弹体端半宽 8），
+    //  所以本地值全部 ÷ 0.35 × 0.5（= ×1.428571）：本地 110→157.14、半宽 16→22.86。
+    //  只改这里、不动 `zcEffectNodeScaleOf(lightningBullet)`，两边就不会互相打架。
+    [ZC_EFFECT_PATHS.lightningBullet]: {
+        startX: -57.142857,
+        length: 157.142857,
+        rootHalfWidth: 22.857143,
+        tipHalfWidth: 2.857143,
+        slices: 12,
+        color: [255, 255, 255],
+        alpha: 0.6,
+    },
+};
+
+/**
+ * 光束 prefab 路径 → 发射口 / 可见段 / 粗细 / 按技能追加的倍率。
+ *
+ * `contentStart/End` 是画布内线条的占比；素材重新归一化后必须同步这两个数。
+ */
+export const ZC_EFFECT_BEAM_SPECS: Readonly<Record<string, IZCEffectBeamSpec>> = {
+    // 镭射飞龙：单位根是脚点，龙眼在 +44；末端补到模型中心 +30。
+    [ZC_EFFECT_PATHS.laserAttack]: {
+        muzzleForward: 8,
+        muzzleLift: 44,
+        contentStart: 72 / 700,
+        contentEnd: 628 / 700,
+        widthScale: 0.8,
+        coreWidth: 10,
+        tailLift: 30,
+        widthMultiplierBySkill: { 30845: 1.3 },
+        overShootBySkill: { 30845: 1620 },
+    },
+};
 
 /** 受击特效的锚点纵向补偿（视图 px），按受击表面而不是 prefab 路径。*/
 export const ZC_HIT_FX_SURFACE_LIFT_Y: Readonly<Record<ZCEffectHitSurface, number>> = {
@@ -555,4 +647,21 @@ export function zcEffectHitFxSurfaceLiftY(
     if (!surface) return 0;
     const lift = ZC_HIT_FX_SURFACE_LIFT_Y[surface];
     return typeof lift === 'number' && Number.isFinite(lift) ? lift : 0;
+}
+
+/** prefab 路径 → 拖尾配置；未登记 / 非法入参 = `null`。*/
+export function zcEffectTrailOf(prefabPath: string | null | undefined): IZCEffectTrailSpec | null {
+    if (!prefabPath) return null;
+    return ZC_EFFECT_TRAIL_SPECS[prefabPath] ?? null;
+}
+
+/** 所有登记过拖尾的 prefab 路径（给资源清单 / 测试用）。*/
+export function zcEffectTrailPaths(): readonly string[] {
+    return Object.keys(ZC_EFFECT_TRAIL_SPECS);
+}
+
+/** 特效路径 → 光束配置；未登记 = `null`（走通用弹道）。*/
+export function zcEffectBeamOf(effectPrefabPath: string | null | undefined): IZCEffectBeamSpec | null {
+    if (!effectPrefabPath) return null;
+    return ZC_EFFECT_BEAM_SPECS[effectPrefabPath] ?? null;
 }

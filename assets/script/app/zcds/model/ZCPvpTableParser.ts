@@ -82,7 +82,10 @@ function parseImpactAnchor(value: unknown, field: string): number | undefined {
 }
 
 /**
- * 兵种美术的等比缩放系数（`pvpCard.prefabSize`）：留空 = 1（不缩放）。
+ * 兵种美术的等比缩放系数（`pvpCard.prefabSize` / `monsterCard.prefabSize`）：留空 = 1（不缩放）。
+ *
+ * 两张卡表同列同口径（`parseUnits` 一次吃两表），领地的巡逻野怪也调它 ——
+ * 所以这里是**该列唯一的解析入口**，别在外面另写一份 `Number(raw.prefabSize) || 1`。
  *
  * 为什么不用 `optionalPositiveNumber`：那个把 `0` 当「未配置」，而缩放系数取 0 的后果是
  * 单位在战场上凭空消失（scale 全 0 ⇒ 什么都画不出来，且不报错）。
@@ -90,7 +93,7 @@ function parseImpactAnchor(value: unknown, field: string): number | undefined {
  *
  * 值域不设上限：将来真要出「巨人」卡（2~3 倍）时不必再改解析层。
 */
-function parsePrefabSize(value: unknown, field: string): number {
+export function parsePrefabSize(value: unknown, field: string): number {
     if (value === null || value === undefined || value === '') return 1;
     return number(value, field);
 }

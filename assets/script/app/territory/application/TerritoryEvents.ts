@@ -1,6 +1,9 @@
 import type { TerritoryModelOutput } from './TerritoryModel';
 import type { ITerritoryRenderState } from './TerritoryViewState';
 
+/** Internal station input. MapView filters the session before playing feedback or emitting an intent. */
+export const TERRITORY_EVENTS = { STATION_TAP: 'territory:station-tap' } as const;
+
 export const TerritoryUiEvent = {
     Intent: 'territory:ui-intent', Ready: 'territory:view-ready', Disposed: 'territory:view-disposed',
     /**
@@ -14,21 +17,11 @@ export const TerritoryUiEvent = {
     /** 开箱揭晓完成；owner 为本次弹窗，entries 为已排序的奖励展示数据。 */
     ChestRevealed: 'territory:chest-revealed',
     /**
-     * 领地宝箱的**开箱粒子动画播完**；owner 为地图页，rewards 为整箱奖励 `{resId, number}[]`。
-     *
-     * 组合层接手后按需求（2026-11-17 ②）走「橙卡英雄页（卡牌 id 升序）→ 统一获得奖励弹窗」。
-     * 与 {@link ChestRevealed} 的区别：那条是**宝箱开启页**自己揭晓完，弹窗本来就在播奖励；
-     * 这条是地图上的粒子动画演完，奖励还没展示给玩家。
+     * 领地宝箱开箱粒子动画播放完成，通知组合层依次展示传说英雄页及获得奖励弹窗。
      */
     ChestRewardsReady: 'territory:chest-rewards-ready',
     /**
-     * 领地宝箱的**整段演出窗口**：`playing === true` 从「点开宝箱」开始，
-     * 直到「英雄页全关 + 统一奖励弹窗已弹」为止。
-     *
-     * 为什么要单独发一条：这一段里**没有任何全屏弹窗**（开箱是地图粒子、英雄页还没弹），
-     * 引导层没东西可让位 ⇒ 2-3 的台词（需求 2026-11-17 ⑩）会在粒子动画正中间抢播，
-     * 等奖励窗一开又被藏起来、关掉重播一遍。有了这条，引导从点箱子那刻就让位，
-     * 演完才从第一句开始播。
+     * 领地宝箱整段演出状态窗口。用于引导层避让，确保在开箱粒子与英雄结算弹窗全部完成后再推进引导。
      */
     ChestPresentation: 'territory:chest-presentation',
 } as const;
@@ -76,5 +69,6 @@ export interface ITerritoryCommandEvent { readonly command: TerritoryViewCommand
 export interface ITerritoryRenderEvent { readonly state: ITerritoryRenderState }
 
 export type { ITerritoryRewardPresentation, ITerritoryDetailState, ITerritoryLevelInfoContent,
-    ITerritoryLevelTipContent, ITerritoryNavigateBattlePayload, ITerritoryPlayerStageContent,
-    ITerritoryShowRewardsPayload, ITerritoryShowTipPayload, ITerritorySetBusyPayload } from './TerritoryModel';
+    ITerritoryLevelTipContent, ITerritoryMonsterBoxDetail, ITerritoryNavigateBattlePayload,
+    ITerritoryPlayerStageContent, ITerritoryShowRewardsPayload, ITerritoryShowTipPayload,
+    ITerritorySetBusyPayload } from './TerritoryModel';

@@ -1,5 +1,6 @@
 import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import type { TerritorySite, TerritorySiteType } from './TerritoryMapConfig';
+import { territoryPatrolAnchorByCell } from './TerritoryMonsterPatrol';
 
 /**
  * 「一个节点只在一块地上长 UI」：算出同一节点里不该重复画 UI 的格子。
@@ -49,42 +50,41 @@ function nodeGroups(sites: readonly TerritorySite[]): Map<string, TerritorySite[
 export function territoryNodeCarrierByCell(sites: readonly TerritorySite[]): ReadonlyMap<number, number> {
     const out = new Map<number, number>();
     for (const list of nodeGroups(sites).values()) {
-        const carrier = list.filter(hasBuilding)[0]?.cellId ?? null;
+        let carrier: number | null = null;
+        for (let i = 0; i < list.length; i++) {
+            if (hasBuilding(list[i])) {
+                carrier = list[i].cellId;
+                break;
+            }
+        }
         for (const site of list) {
             const target = carrier ?? site.cellId;
             out.set(site.cellId, target);
             for (const cell of site.footprint) out.set(cell, target);
         }
     }
+    // 2026-11-20：巡逻野怪片区也走「一个节点只在一格长 UI」，承载格换成
+    // **配了 `patrolId` 的那一格**（分组键 `site.id`，见 `territoryPatrolAnchorByCell`）。
+    // 战斗节点按 `configId` + `buildingId` 收敛，两套分组互不重叠，直接合进同一份 map：
+    // `territoryNodeLockCells` 不必知道片区类型，锁自然只落在野怪 id 那格。
+    for (const [cell, anchor] of territoryPatrolAnchorByCell(sites)) out.set(cell, anchor);
     return out;
 }
 
 /**
  * 同一关卡节点的地块 → **用哪一格的进度判地皮 / 格面框**。
- *
- * 用户 2026-11-18：「绿圈部分的地块也是归属关卡地块，现在没有和归属相关的地块状态
- * 同步变化，待解锁是灰色，可激活就应该变成红色了」。
- *
- * 现场是 `chapter_01` 的 1-1：`327`（`stage`、`configId=10001`、没配 `buildingId`）与
- * `328`（同 `configId`、配了 `69004`）是同一个节点的两格。`paintHexes` 原先**逐格**拿
- * 自己 cellId 的 `isCellUnlocked / isOwned / isAreaPassed` 判地皮和框，两格的进度一旦
- * 不同步就会「承载格灰、兄弟格褐」，格面红框也只挂在其中一格上。
- *
- * 🔴 收敛口径与「UI 收敛」同源但**不是同一件事**：这里管的是整片地块的状态色，
- * 锁 / 价格 / 编号气泡仍然只长在承载格上（`territoryNodeMutedCells` 一个字没动）。
- * 多建筑节点（组内每格都有 buildingId）不收敛，各格照旧按自己判 —— 那种节点本来
- * 就是各自承担 UI，硬拧成一格会读错。
- *
- * 没有建筑时退回组内第一个站点的 `cellId`：chapter_02 起一关就是「一个站点 + 5~10 格
- * footprint」，footprint 里的格在 `siteByCell` 里查不到站点 ⇒ 不收敛的话它们永远拿不到
- * 关卡的红色格面框。
+ * 将同区域战斗站点的地块状态色收敛到建筑承载格统一判定。
+ * 保持整片地块状态色同步，锁与价格等 UI 仍由承载格独立渲染。
  */
 export function territoryNodeStateCellByCell(
     sites: readonly TerritorySite[],
 ): ReadonlyMap<number, number> {
     const out = new Map<number, number>();
     for (const list of nodeGroups(sites).values()) {
-        const carriers = list.filter(hasBuilding);
+        const carriers: TerritorySite[] = [];
+        for (let i = 0; i < list.length; i++) {
+            if (hasBuilding(list[i])) carriers.push(list[i]);
+        }
         // 多建筑节点各自承担 UI ⇒ 不收敛。
         if (carriers.length > 1) continue;
         const anchor = carriers.length === 1 ? carriers[0].cellId : list[0].cellId;
@@ -113,7 +113,14 @@ export function territoryNodeGreyCells(
     const out = new Set<number>();
     for (const list of nodeGroups(sites).values()) {
         // 与 territoryNodeStateCellByCell 同一条边界：多建筑节点各自承担 UI，不摊灰。
-        if (list.filter(hasBuilding).length > 1) continue;
+        let buildingCount = 0;
+        for (let i = 0; i < list.length; i++) {
+            if (hasBuilding(list[i])) {
+                buildingCount += 1;
+                if (buildingCount > 1) break;
+            }
+        }
+        if (buildingCount > 1) continue;
         const cells = new Set<number>();
         for (const site of list) {
             cells.add(site.cellId);
@@ -150,16 +157,21 @@ export function territoryNodeLockCells(
 }
 
 /**
- * 同一节点里不承载建筑 / 编号气泡的格子。
+ * 同一节点里**任何状态都不画 UI** 的格子（建筑 / 编号气泡 / 价格 / 锁）。
  *
- * 只作用于已解锁后的画法；未解锁的兄弟格仍显示自己的价格。
+ * 战斗节点按 `configId` + `buildingId` 收敛；2026-11-20 起巡逻野怪片区按
+ * `site.id` + `patrolId` 收敛（§3.48）。隐掉的格子仍然可点、照常扣银币解锁，
+ * 与 `stationRenderOf` 的 muted 早退一致。
  */
 export function territoryNodeMutedCells(sites: readonly TerritorySite[]): ReadonlySet<number> {
     const muted = new Set<number>();
     if (!sites.length) return muted;
     for (const list of nodeGroups(sites).values()) {
         if (list.length < 2) continue;
-        const carriers = list.filter(hasBuilding);
+        const carriers: TerritorySite[] = [];
+        for (let i = 0; i < list.length; i++) {
+            if (hasBuilding(list[i])) carriers.push(list[i]);
+        }
         // 一格建筑都没有会隐掉整关；每格都有建筑则各自承担 UI。两种情况都保持现状。
         if (carriers.length === 0 || carriers.length === list.length) continue;
         const carrierCells = new Set<number>();
@@ -175,6 +187,15 @@ export function territoryNodeMutedCells(sites: readonly TerritorySite[]): Readon
                 muted.add(cell);
             }
         }
+    }
+    // 2026-11-20：「同个节点的巡逻野怪地块，只在配置了野怪 id 的地块上展示解锁 icon
+    // 和激活银币 icon，其他地块不显示，参考异步 PVP 地块」。
+    // 巡逻格没有 `buildingId`、没有 `configId`，战斗节点那套分组一条都命不中 ⇒
+    // 必须单独按 `site.id` 收敛：锚点（带 patrolId）留在集合外，其余格（含 footprint）
+    // 全部 mute，交给 `stationRenderOf` 早退成「空地但仍可点」。
+    // 整片都没配 patrolId 的旧图 `territoryPatrolAnchorByCell` 不给映射 ⇒ 一个都不隐。
+    for (const [cell, anchor] of territoryPatrolAnchorByCell(sites)) {
+        if (cell !== anchor) muted.add(cell);
     }
     return muted;
 }

@@ -5,6 +5,7 @@ import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { compileZCCombatBuild, getZCModifierCatalogs, parseZCModifierCatalogs, selectZCSkillPlans } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { ZC_MISSILE_DEBUG_HERO_LEVEL } from '../assets/script/app/zcds/ZCMissileSkillDiagnostics';
 import { assetPath } from './helpers/asset-paths';
 import { withoutLineupCrit } from './helpers/lineup-crit';
 
@@ -154,4 +155,82 @@ test('mix 键写错 statId 时直接抛错，不静默忽略', () => {
         });
         compileZCCombatBuild({ unitId: '68001', heroLevel: 1 }, config.units, catalogs);
     }, /混搭/);
+});
+
+//  ── 武将技解锁门控（2026-11-19） ─────────────────────────────────────────────
+//  用户口径：「所有的卡牌角色没有达到技能解锁以前，都不能释放技能」。
+//  施放与否只看基表 `pvpSkill.empoweredEvery` / `empoweredSkillId`，与等级完全无关；
+//  「几级解锁」只写在 `pvpSkillPlan` 上 ⇒ 没解锁的技能照样放，缺的只是参数。
+//  规则：主链（`100000~109999`）里只要还有一条没解锁，这个单位的强化那一击就不许放。
+//  实测依据：每卡最后一条主链是 `100x04`（解锁 12/24/36），它的参数正是那个武将技的行为参数。
+
+/** 主链 id 区间，与 `ZCModifierRuntime.ZC_MAIN_CHAIN_*` 同口径 —— 这里从原始表独立算一遍。 */
+function mainChainRows(unitId: string): Array<Record<string, unknown>> {
+    return readRows('pvpSkillPlan').filter((row) => {
+        const chainId = Number(row.skillChainId);
+        return String(row.unitId) === unitId && Number(row.enabled) === 1
+            && chainId >= 100000 && chainId < 110000;
+    });
+}
+
+test('武将技解锁门控：全表每张卡的「强化那一击」都按主链解锁情况开关', () => {
+    const config = prepare();
+    const catalogs = getZCModifierCatalogs();
+    const units = new Set(config.units.map((unit) => unit.unitId));
+    const cards = readRows('pvpCard').filter((row) => Number(row.enabled) === 1 && units.has(String(row.id)));
+    assert.ok(cards.length > 20, `样本太少（${cards.length} 张），先确认配表加载成功`);
+
+    let checked = 0;
+    for (const card of cards) {
+        const unitId = String(card.id);
+        //  68010 镭射飞龙被 `ZC_MISSILE_DEBUG_HERO_LEVEL`（当前 24）抬高了技能计划筛选等级，
+        //  低等级也会按 24 级编 ⇒ 门控结果与真实等级不符。这是调试开关的已知副作用，不是门控的漏洞；
+        //  开关改回 0（上线前必做）之后本用例自动覆盖它，所以这里按开关值跳过而不是写死跳过。
+        if (unitId === '68010' && ZC_MISSILE_DEBUG_HERO_LEVEL > 0) continue;
+        const rows = mainChainRows(unitId);
+        if (!rows.length) continue;
+        for (const level of [1, 3, 6, 9, 12, 24, 36, 50]) {
+            const loadout = compileZCCombatBuild({ unitId, heroLevel: level }, config.units, catalogs)
+                .find((item) => item.empoweredBagKey);
+            if (!loadout) continue;
+            //  `replace` 模式按「链里最高已解锁档」生效 ⇒ 一条链只看它**最低**那档的解锁等级。
+            //  按行比会把 `100101@22` 当成「22 级才解锁」，误判 12 级也该锁。
+            const firstUnlock = new Map<number, number>();
+            for (const row of rows) {
+                const chainId = Number(row.skillChainId);
+                const unlock = Number(row.unlockHeroLevel);
+                const current = firstUnlock.get(chainId);
+                if (current === undefined || unlock < current) firstUnlock.set(chainId, unlock);
+            }
+            const expected = [...firstUnlock.values()].some((unlock) => unlock > level);
+            assert.equal(
+                loadout.empoweredLocked === true, expected,
+                `${unitId} @Lv${level}：` + [...firstUnlock].map(([id, unlock]) => `${id}@${unlock}`).join(' '),
+            );
+            checked += 1;
+        }
+    }
+    assert.ok(checked > 100, `只验到 ${checked} 个组合，覆盖面不够`);
+});
+
+test('武将技解锁门控：椰蛋战士 12 级前锁、12 级起放；雷蕉同一条规则', () => {
+    const config = prepare();
+    const catalogs = getZCModifierCatalogs();
+    const lockedAt = (unitId: string, heroLevel: number): boolean => compileZCCombatBuild(
+        { unitId, heroLevel }, config.units, catalogs,
+    ).find((item) => item.empoweredBagKey)?.empoweredLocked === true;
+
+    //  68005 椰蛋战士：暴风 100504 是 12 / 24 / 36 ⇒ 12 级前锁。
+    assert.equal(lockedAt('68005', 8), true, '8 级不该放暴风');
+    assert.equal(lockedAt('68005', 11), true, '11 级仍不该放暴风');
+    assert.equal(lockedAt('68005', 12), false, '12 级解锁暴风');
+    //  门控挂在该单位的普攻袋上（不是随便一条链的袋）。
+    const bagKey = compileZCCombatBuild({ unitId: '68005', heroLevel: 8 }, config.units, catalogs)
+        .find((item) => item.empoweredBagKey)?.empoweredBagKey;
+    assert.equal(bagKey, '68005:30707', '门控写进椰蛋战士普攻袋');
+
+    //  68022 雷蕉：主链 102201(3) / 102202(6) / 102203(9) / 102204(12) ⇒ 12 级起才放武将技。
+    assert.equal(lockedAt('68022', 8), true, '8 级不该放武将技');
+    assert.equal(lockedAt('68022', 11), true, '11 级仍锁（102204 要 12 级）');
+    assert.equal(lockedAt('68022', 12), false, '12 级起放');
 });

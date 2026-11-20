@@ -27,6 +27,11 @@ import { ZCPvpTileType } from './ZCPvpTileRules';
 
 export interface IZCPvpCompiledConfig {
     readonly cards: readonly (ZCDeckCard & { enabled: boolean })[];
+    /**
+     * 怪物卡牌（`monsterCard`），与 `cards` 分开保管：它们只用于中立资源点的
+     * 「随机野怪」和单位目录，**不参与**双方卡组 / 卡池抽取。
+     */
+    readonly monsterCards: readonly (ZCDeckCard & { enabled: boolean })[];
     readonly playerDeck: readonly ZCDeckCard[];
     readonly enemyDeck: readonly ZCDeckCard[];
     readonly units: ReadonlyMap<ZCUnitId, ZCUnitDefinition>;
@@ -68,6 +73,15 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     // 编译期双方共用同一份只读 fallback 卡池（readonly 共享安全）；PVE 敌方定制在
     // ZCBattleEntryBuilder 里单独替换 enemyDeck，不影响这里的 playerDeck。
     const fallbackDeck = cards.filter((card) => !isHqCard(card));
+    //  怪物卡（`PVP-怪物卡牌`）：同构字段，单独一组。
+    //  只被中立资源点的「随机野怪」按 `resId` 引用 —— 那两行（1400901/1400902）
+    //  配的 50038/50039 是怪物卡 id，`pvpCard` 里根本没有这两个 id。
+    //  不能并进 `cards`：`fallbackDeck` 会把它带进出战卡组，玩家就能抽到怪物。
+    //  `unitId` 过滤掉主城/金矿（`unitId=null`）—— 它们是建筑，不能当野怪引用。
+    const monsterCards = (tables.monsterCard ?? [])
+        .map(normalizeCardRow)
+        .map(parseCard)
+        .filter((card) => card.enabled && card.unitId);
     const skillRows = (tables.pvpSkill ?? []).map((row) => ({
         ...row,
         effectKey: refNullable(row.effectKey),
@@ -99,7 +113,13 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     //  合表后单位属性内联在卡行上（2026-09-20 起 `pvpUnit` 表已下线）：直接用原始卡行
     // 建单位目录。不能复用上面那份 `cards` —— 那是过滤后的出战卡，
     // 而卡池里的兵种同样要能上场（抽到卡池卡 → 进卡组 → 出兵）。
-    const units = parseUnits((tables.pvpCard ?? []).map(normalizeCardRow), skills);
+    //  单位目录同时吃玩家卡与怪物卡：中立资源点的野怪要能建单位
+    //  （`ZCGameModel.monsterDefinition(card)` → `units.get(card.unitId)`），
+    //  漏掉怪物卡会拖到「野怪苏醒」那一刻才炸，而不是在配置边界。
+    const units = parseUnits([
+        ...(tables.pvpCard ?? []),
+        ...(tables.monsterCard ?? []),
+    ].map(normalizeCardRow), skills);
     const modifierCatalogs = parseZCModifierCatalogs(
         tables.skillAttrModifier ?? [],
         tables.generalStar ?? [],
@@ -117,7 +137,8 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     //  表缺失 ⇒ 空目录（资源点不会出资源，但不会让整局起不来）；表在但配错 ⇒ 编译期抛。
     const neutralResources = compileZCNeutralResourceCatalog(
         tables.neutralResourceGroup ?? [],
-        new Map(cards.map((card) => [card.id, card])),
+        //  资源点的卡目录 = 玩家卡 + 怪物卡：`resourceType=11`（随机野怪）引用的是怪物卡。
+        new Map([...cards, ...monsterCards].map((card) => [card.id, card])),
         tables.neutralEnhanceGate ?? [],
     );
 
@@ -207,7 +228,7 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
     };
 
     return {
-        cards, playerDeck: fallbackDeck, enemyDeck: fallbackDeck, units, counters, bonds,
+        cards, monsterCards, playerDeck: fallbackDeck, enemyDeck: fallbackDeck, units, counters, bonds,
         tileConfigs, tileWeights, goldPity, modifierCatalogs, neutralResources,
         legacySkillEffects: nextLegacySkillEffects, rules: nextRules,
     };

@@ -310,7 +310,7 @@ view/
 3. 写 parity 测试：对每张旧表的每个 key，断言目录返回值与旧表**严格相等**（数字用 `===`，颜色用现有 `[r,g,b]` 三元组逐通道相等）。
 4. 旧模块改成 facade：导出签名不变，内部查目录。跑全部 zcds 特效相关测试（`zcds-hit-fx-size`、`zcds-combat-effect-placement`、`zcds-effect-tint`、`zcds-combat-effect-flight`、`zcds-missile-trail`、`zcds-beam-effect` 等）。
 5. 接 `ZCVisualResourcePlan`：删除 13 段 `xxxUnits`，按 `behaviorKey` 从目录取 specs；保留"表字段直收"的部分（普攻/强化/副轨）。
-6. 接 `ZCGameResourcePlan`：删除 6 组 `paths.add`，改为 `zcAllEffectPaths()` 与表扫描并集。
+6. 接 `ZCGameResourcePlan`：删除 6 组 `paths.add`，改为 `zcWarmupEffectPaths()`（只取 `warmup: true` 的行为组 + 导弹表）与表扫描并集，保持首包 29 条不变。
 7. 删除已无引用的 `ZC*Fx` 常量模块；`ZCBlinkCastFx / ZCSelfAuraFx` 等若还有"按行为键返回路径"的调用，保留薄函数，内部查目录。
 8. 跑 `npm run verify`，对比基线；资源路径数量必须**不变**（新增 0、缺失 0）。
 
@@ -318,7 +318,14 @@ view/
 
 **回滚**：P1 是纯数据搬运；单 commit 回退即可。旧模块 facade 保证中途任何一步都能编译。
 
-> **执行状态（2026-11-19）**：P1 第 1～4 步已完成，范围限定为 `ZCCombatEffectScale` / `ZCCombatEffectPlacement` / `ZCCombatEffectFlight` / `ZCCombatEffectTint` 四张核心表。目录落在 `assets/script/app/zcds/model/ZCEffectCatalog.ts`，parity 基线落在 `tests/fixtures/zc-effect-catalog-baseline.json`。`ZCMissileTrail → trail`、`ZCBeamEffect → beam` 与资源清单接线（第 5～8 步）尚未开始。
+> **执行状态（2026-11-19，P1 收口）**：第 1～8 步已完成。
+>
+> - **目录**：`model/ZCEffectCatalog.ts` 现有 `ZC_EFFECT_PATHS`（28 条路径）、`ZC_EFFECT_BEHAVIOR_KEYS` / `ZC_EFFECT_BEHAVIOR_SPECS`（17 组行为规格与 `warmup` 标记）、`ZC_EFFECT_TRAIL_SPECS`、`ZC_EFFECT_BEAM_SPECS`、`ZC_HIT_FX_SURFACE_LIFT_Y`；`model/ZCEffectTuning.ts` 集中时长、缩放、状态 id 前缀、命中锚点与通用兜底值。
+> - **第 5 步**：`ZCVisualResourcePlan` 删除 13 段 `*Units` 集合，按 `behaviorKey` 从目录取路径；保留普攻 / 强化 / 副轨字段直收与 `required` 过滤。实战清单 17 条逐条、逐序不变。
+> - **第 6 步**：`ZCGameResourcePlan` 删除 6 组手工 `paths.add` 与全部 `ZC*Fx` import，改 `zcWarmupEffectPaths()` + `ZC_BATTLE_FX_PATHS` 目录前缀；预热清单 29 条逐条、逐序不变。这里刻意不用 `zcAllEffectPaths()`：全量目录会把闪现 / 光环 / 落雷 / 陷阱等按需资源塞进首包，改变加载集合。
+> - **第 7 步**：14 个 `ZC*Fx` 模块降为 facade（导出签名不变，内部查目录）；删除无生产引用的 `ZCWindBoltFx`；`ZCMissileTrail` / `ZCBeamEffect` 的拖尾 / 光束数值表迁入目录，视图只保留几何函数；`ZCBeamEffect` 的 `30845` 超长 / 加粗规则改由目录数据提供。
+> - **第 8 步**：新增 `tests/zcds-effect-path-parity.test.ts`（9 条）锁定路径字面量、预热 29 条、行为组 17 条、拖尾 / 光束数值与「Fx facade 不再写路径字面量」守卫。`buildZCBattleWarmupPaths([],[],[])` 与 `tmp/capture-zc-visual-plan.ts` 的实战 / 预热输出逐条一致（17 / 29）。`npm run check:zcds` 21 errors / 3 files，与改造前基线一致、无新增；全量 `npm test` 6740 条 / 143 失败，较 P1 1～4 的 6726 / 146 失败集合无新增，迁移后的风弹与资源清单用例转绿；`npm run verify:hygiene` 通过（8 个白名单文件）。
+> - **保留的局部单一真源**：`ZCGameLoader` 的 `image/buildings` / `image/buildings/walls` / `image/artifact` / shader URL / 自选主城权重仍是该文件顶部的一次性声明（不是散落重复），本轮未纳入特效目录；各 UI 页面 `static prefabPath` 仍是页面自声明。后续若这些也要热调，按同一模式抽到资源/主题目录。
 
 ### P2 战斗默认值与 ID 特判（2～3 天）
 

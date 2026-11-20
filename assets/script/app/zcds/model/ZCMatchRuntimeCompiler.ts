@@ -7,7 +7,7 @@ import type { ZCCompiledModifierLoadout, ZCUnitStatPatch } from './ZCModifierRun
 import { resolveZCUnitDefinition, resolveZCUnitStatPatch, shareLineupCritDamage } from './ZCModifierRuntime';
 import type { ZCSkillPlanRecord } from './ZCStatSchema';
 import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
-import { ZCSkillRuntimeRegistry } from './ZCSkillRuntime';
+import { ZCSkillRuntimeRegistry, ZC_EMPOWERED_LOCK_PARAM } from './ZCSkillRuntime';
 import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 
 export interface IZCMatchRuntime {
@@ -45,7 +45,7 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
         const deck = deckFor(owner);
         effectiveDefinitions[owner] = new Map(config.units.map((unit) => [
             unit.unitId,
-            resolveZCUnitDefinition(unit, loadouts, config.ownerRates?.[owner]),
+            resolveZCUnitDefinition(unit, loadouts, config.ownerRates?.[owner], config.unitRates?.[owner]?.[unit.unitId]),
         ]));
         unitStatPatches[owner] = shareLineupCritDamage(new Map(config.units.map((unit) => [
             unit.unitId,
@@ -82,6 +82,31 @@ export function compileZCMatchRuntime(config: Readonly<ZCMatchConfig>): IZCMatch
                         : compiled);
                 }
             }
+        }
+        //  武将技解锁门控（2026-11-19，用户口径「没到技能解锁等级就别放」）：
+        //  见 `ZCCompiledModifierLoadout.empoweredLocked`。
+        //  基表 `pvpSkill.empoweredEvery` / `empoweredSkillId` 与等级无关，1 级就会放那一击；
+        //  参数却全在按等级分档的计划行里 —— 没解锁时轻则形状退化（暴风静立在目标点），
+        //  重则一次空转。这里把标记写进该单位的普攻袋，结算层据此把 `empowered` 归零。
+        //  袋子还不存在时（低等级没有任何一条带 `behaviorKey` 的已解锁链）也要建一条，
+        //  否则标记无处可挂、技能照样放 —— 这正是椰蛋战士 1~5 级原本的形态。
+        for (const loadout of loadouts) {
+            if (!loadout.empoweredLocked) continue;
+            const key = loadout.empoweredBagKey;
+            if (!key) continue;
+            const runtime = runtimes.get(key);
+            runtimes.set(key, {
+                unitId: loadout.targetUnitId,
+                skillId: Number(key.slice(key.indexOf(':') + 1)),
+                //  `skill_params` 是「只带数据、不带行为」的车道（`stateMode: 'none'`），
+                //  与横扫 100502 / 异种猎杀 100503 给同一个袋子建出来的键一致。
+                behaviorKey: runtime?.behaviorKey ?? 'skill_params',
+                trigger: runtime?.trigger ?? 'none',
+                stateMode: runtime?.stateMode ?? 'none',
+                ...(runtime?.statusId ? { statusId: runtime.statusId } : {}),
+                ...(runtime?.passiveStatusId ? { passiveStatusId: runtime.passiveStatusId } : {}),
+                parameters: { ...runtime?.parameters, [ZC_EMPOWERED_LOCK_PARAM]: 1 },
+            });
         }
         skillRuntime[owner] = runtimes;
         //  诊断2.：本局建出来的技能运行时里到底有什么参数。

@@ -1,5 +1,5 @@
 /**
- * 「巡逻宝箱」弹窗 —— 领地地图上**野怪宝箱格**的详情 / 升级入口（设计稿 2026-11-19）。
+ * 「巡逻宝箱」弹窗 —— 领地地图上野怪宝箱格的详情与升级入口面板。
  *
  * 三态（设计稿左中右三张）：
  * - `Lv.1~3`：点阵 + 守护怪 + 奖励 + 「开始挑战 / 升级宝箱」两个按钮，**升级为主、打为次**；
@@ -17,13 +17,15 @@
  *
  * - `LevelDots`：子节点按顺序代表第 1..N 级；实心 / 空心只改 `cc.Sprite.color`，不换节点；
  * - `GuardRow/Guard_i`：每格固定三个子节点 `Icon`(cc.Sprite) / `Lock`(Node) / `UnlockLabel`(cc.Label)；
- * - `RewardList`：`VirtualScrollView` + 公共 `RewardItem`，3 列（设计稿 4 个刚好一行）。
+ * - `RewardSection/RewardRow`：四列虚拟列表，奖励卡复用公共 `RewardItemView`。
  */
 import { _decorator, Button, Color, Label, Node, Sprite, type SpriteFrame } from 'cc';
+import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { RewardItemView, type IRewardItemData } from '../../common/RewardItemView';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
+import { TERRITORY_THEME_TOKENS } from './TerritoryTheme';
 
 const { ccclass, property } = _decorator;
 
@@ -54,7 +56,7 @@ export interface ITerritoryMonsterBoxContent {
     readonly costIcon: SpriteFrame | null;
     /** 成功率（百分比，`90` ⇒ 90%）；`<= 0` ⇒ 不显示。 */
     readonly successRate: number;
-    /** 已失败次数；`< 0` ⇒ 不显示这一行。 */
+    /** 已失败次数；`< 0` 表示服务端未提供。 */
     readonly failCount: number;
     /** 失败次数上限；`<= 0` ⇒ 不知道上限，不判「达上限」。 */
     readonly failLimit: number;
@@ -71,7 +73,16 @@ export interface ITerritoryMonsterBoxContent {
 }
 
 /** 点阵「已点亮」的颜色（设计稿：实心近黑、空心是同一字体的 ○）。 */
-const DOT_ON = new Color(58, 36, 16, 255);
+const DOT_ON = TERRITORY_THEME_TOKENS.dotOn;
+
+/**
+ * 按钮不可用时的压色。
+ *
+ * `Button.interactable = false` 只挡点击、**不改外观**（本弹窗三个按钮都是 SCALE 过渡，
+ * 没有 disabled 贴图），所以「升级中按钮要看得出来不能点」得自己在 Sprite 上压一层灰。
+ */
+const BTN_DIM = TERRITORY_THEME_TOKENS.buttonDim;
+const FAIL_LIMIT_LABEL = '失败上限';
 
 /**
  * 巡逻宝箱弹窗。
@@ -81,7 +92,7 @@ const DOT_ON = new Color(58, 36, 16, 255);
  */
 @ccclass('TerritoryMonsterBoxPanel')
 export class TerritoryMonsterBoxPanel extends PopupBase {
-    /** ⚠️ 目录名必须与磁盘一致（`assets/resources/ui/territory/`）。 */
+    /** 预制体路径。 */
     static prefabPath = 'ui/territory/TerritoryMonsterBoxPanel';
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TitleLabel：标题' })
@@ -93,7 +104,7 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/LevelLabel：Lv.N' })
     private levelLabel: Label = null!;
 
-    @property({ type: Label, group: '节点引用', tooltip: 'Panel/DotLabel：等级点阵（●●○○ 由脚本拼）' })
+    @property({ type: Label, group: '节点引用', tooltip: 'Panel/DotLabel：等级指示点阵' })
     private dotLabel: Label = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'Panel/UpgradeProgress：升级进度（点阵的替身，upgrading 时显示）' })
@@ -108,8 +119,11 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     @property({ type: Node, group: '节点引用', tooltip: 'Panel/GuardRow：守护怪容器（每格 Icon/Lock/UnlockLabel）' })
     private guardRoot: Node = null!;
 
-    @property({ type: Node, group: '节点引用', tooltip: 'Panel/RewardRow：奖励格容器（子节点挂 RewardItemView，按顺序填）' })
-    private rewardRoot: Node = null!;
+    @property({ type: Node, group: '节点引用', tooltip: 'Panel/RewardSection：奖励说明、底板与列表' })
+    private rewardSection: Node = null!;
+
+    @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'RewardSection/RewardRow：四列奖励卡' })
+    private rewardList: VirtualScrollView = null!;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/CloseBtn：关闭' })
     private closeButton: Button = null!;
@@ -141,10 +155,27 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/FooterLabel：底部说明' })
     private footerLabel: Label = null!;
 
+    /** 本趟奖励（ 按下标现取，别在回调里闭包捕获某一趟的数据）。 */
+    private rewards: readonly IRewardItemData[] = [];
+
     /** 当前内容，供按钮回调读「这一格是哪一格」。 */
     private content: ITerritoryMonsterBoxContent | null = null;
 
+    /** 两个按钮并排时「开始挑战」的初始 x；满级只剩一个按钮时回到 0 居中（见 `renderButtons`）。 */
+    private battleHomeX = 0;
+
+    /** 两个按钮的常态颜色（预制体里 Start 是白、Upgrade 是白，靠贴图本身区分蓝/金），置灰后要还原。 */
+    private battleTint = new Color(255, 255, 255, 255);
+    private upgradeTint = new Color(255, 255, 255, 255);
+
     protected onInit(): void {
+        this.battleHomeX = this.battleButton.node.position.x;
+        const battleSprite = this.battleButton.node.getComponent(Sprite);
+        if (battleSprite) this.battleTint = battleSprite.color.clone();
+        const upgradeSprite = this.upgradeButton.node.getComponent(Sprite);
+        if (upgradeSprite) this.upgradeTint = upgradeSprite.color.clone();
+        // 奖励卡会被列表复用，渲染时按下标读取当前数据。
+        this.rewardList.renderItemFn = this.renderRewardItem;
         this.battleButton.node.on(Button.EventType.CLICK, this.handleBattle, this);
         this.upgradeButton.node.on(Button.EventType.CLICK, this.handleUpgrade, this);
         this.closeButton.node.on(Button.EventType.CLICK, this.closeByButton, this);
@@ -161,6 +192,8 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
         this.content = content;
         this.titleLabel.string = content.title;
         this.levelLabel.string = content.lv > 0 ? `Lv.${content.lv}` : '';
+        // 升级中：这一行让位给进度条（两者在 prefab 里是同一位置），别叠着画
+        this.levelLabel.node.active = content.lv > 0 && content.upgrading !== true;
 
         this.chestSprite.spriteFrame = content.chestIcon;
         this.chestSprite.node.active = content.chestIcon !== null;
@@ -202,8 +235,11 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
             if (!guard) continue;
             const icon = cell.getChildByName('Icon')?.getComponent(Sprite);
             if (icon) {
-                icon.spriteFrame = guard.icon;
-                icon.color = guard.unlocked ? Color.WHITE : new Color(255, 255, 255, 96);
+                // 有图才覆盖：`guard.icon` 为 null 时**保留 prefab 里的占位图**。
+                // 直接赋 null 会把格子清成空框 —— 那和「未解锁」长得一样，玩家分不清。
+                if (guard.icon) icon.spriteFrame = guard.icon;
+                icon.node.active = true;
+                icon.color = guard.unlocked ? Color.WHITE : TERRITORY_THEME_TOKENS.guardLockedDim;
             }
             const lock = cell.getChildByName('Lock');
             if (lock) lock.active = !guard.unlocked;
@@ -218,37 +254,55 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     }
 
     /**
-     * 奖励：固定槽位（设计稿 4 格），每格挂公共 `RewardItemView`。
+     * 奖励卡的列数、间距与模板由 prefab 配置。
      *
-     * 不用 `VirtualScrollView`：这里最多 4 格、永不滚动，虚拟列表只会多一层
-     * 看不到的复杂度（槽位池 / 回收残影）。要加格数就加节点，脚本按 `children` 顺序填。
+     * 与「宝箱详情」`ChestDetailPanel` 同一套：同一个 `resId` 的多档已在 Model 合并成一格
+     * （见 `mergeRewardsByResId`），所以条数 = 资源种类数，不是掉落池行数。
      */
     private renderRewards(content: ITerritoryMonsterBoxContent): void {
-        const slots = this.rewardRoot.children;
-        for (let index = 0; index < slots.length; index += 1) {
-            const slot = slots[index];
-            const data = content.rewards[index];
-            slot.active = data !== undefined;
-            if (!data) continue;
-            slot.getComponent(RewardItemView).render(data);
-        }
-        this.rewardRoot.active = content.rewards.length > 0;
+        this.rewards = content.rewards;
+        this.rewardSection.active = content.rewards.length > 0;
+        this.rewardList.setTotalCount(content.rewards.length);
+    }
+
+    /**
+     * 列表条目渲染（槽位池化复用，全量赋值防状态残留）。
+     */
+    private readonly renderRewardItem = (item: Node, index: number): void => {
+        const data = this.rewards[index];
+        if (!data) return;
+        item.getComponent(RewardItemView).render(data);
+    };
+
+    /** 按可用性给按钮上色：不能用时压成灰色（`interactable` 本身不改外观）。 */
+    private tintButton(button: Button, normal: Color, usable: boolean): void {
+        const sprite = button.node.getComponent(Sprite);
+        if (sprite) sprite.color = usable ? normal : BTN_DIM;
     }
 
     private renderButtons(content: ITerritoryMonsterBoxContent): void {
         this.battleLabel.string = content.battleCaption;
-        this.battleButton.interactable = content.battleEnabled && content.upgrading !== true;
+        const battleUsable = content.battleEnabled && content.upgrading !== true;
+        this.battleButton.interactable = battleUsable;
+        this.tintButton(this.battleButton, this.battleTint, battleUsable);
 
         // 满级 / 未开放 ⇒ 没有升级入口：整块收起来，不留一个灰按钮
         const hasUpgrade = content.upgradeCost > 0 || content.upgrading === true;
         this.upgradeButton.node.active = hasUpgrade;
+        // 只剩「开始挑战」时回到中线，别留半个空位（设计稿满级那张是单个通栏按钮）
+        this.battleButton.node.setPosition(
+            hasUpgrade ? this.battleHomeX : 0,
+            this.battleButton.node.position.y,
+        );
         if (!hasUpgrade) {
             this.failLabel.node.active = false;
             return;
         }
         const reachedLimit = content.failLimit > 0 && content.failCount >= content.failLimit;
         this.upgradeLabel.string = content.upgradeCaption;
-        this.upgradeButton.interactable = content.upgrading !== true && !reachedLimit;
+        const upgradeUsable = content.upgrading !== true && !reachedLimit;
+        this.upgradeButton.interactable = upgradeUsable;
+        this.tintButton(this.upgradeButton, this.upgradeTint, upgradeUsable);
 
         const hasCost = content.upgradeCost > 0;
         this.costLabel.string = hasCost ? String(Math.round(content.upgradeCost)) : '';
@@ -260,13 +314,16 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
         this.rateLabel.string = hasRate ? `${Math.round(content.successRate)}%` : '';
         this.rateLabel.node.active = hasRate;
 
-        const hasFail = content.failCount >= 0;
-        this.failLabel.node.active = hasFail;
-        this.failLabel.string = hasFail
-            ? (content.failLimit > 0
+        const hasFailCount = content.failCount >= 0;
+        const hasFailLimit = content.failLimit > 0;
+        this.failLabel.node.active = hasFailCount || hasFailLimit;
+        if (hasFailCount) {
+            this.failLabel.string = hasFailLimit
                 ? `失败次数：${content.failCount} / ${content.failLimit}`
-                : `失败次数：${content.failCount}`)
-            : '';
+                : `失败次数：${content.failCount}`;
+        } else {
+            this.failLabel.string = hasFailLimit ? `${FAIL_LIMIT_LABEL}：${content.failLimit} 次` : '';
+        }
     }
 
     /** 单格渲染 —— 下标现取，槽位复用不会拿到上一趟的数据。 */

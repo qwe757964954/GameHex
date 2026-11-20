@@ -638,21 +638,14 @@ export function territoryCloudFillPoints(
 }
 
 /**
- * **底部补云带**的虚拟格点（页面坐标，原点 = 页面中心）。
+ * 底部补云带虚拟格点（页面坐标系，原点为页面中心）。
+ * 用于覆盖视口底边至屏幕底边缘的镂空区域，复用主格网相位与间距以避免密度断层。
  *
- * 🔴 为什么还要单独一条：`CloudFillLayer` 住在 `MapLayer` 里，被 `MapViewport` 的
- *    `cc.Mask`（GRAPHICS_RECT）裁在**视口底边**；而 `MapViewport` 的 Widget `bottom = 168`
- *    ⇒ 视口底边离屏幕底还有一条底栏的高度。底栏在时把这条带盖住，新手引导把底栏
- *    `active = false` 之后就露出整片 `zdbg1` 橙色裸底图（2026-11-17 截图底部那 13%）。
- *    铺满层的 `setFillArea` 再放大也没用 —— 它仍在 Mask 里，画不到视口外面。
- *
- * 复用 {@link territoryCloudFillPoints} 的**同一张格网**（行列相位、间距、边缘外扩都一样），
- * 只是把那块矩形整体挪到页面底部那条带的中线，免得接缝处密度 / 相位对不上。
- *
- * @param rows / @param columns 地图行列（格网相位，必须与铺满层同源）
- * @param width 页面宽（云要横向铺满整屏）
- * @param stripHeight 视口底边 → 页面底边的高度
- * @param centerY 这条带中线在**页面局部坐标**里的 y（通常为负）
+ * @param rows 地图行数
+ * @param columns 地图列数
+ * @param width 铺满宽度
+ * @param stripHeight 底部带高度
+ * @param centerY 局部坐标 Y 偏移
  */
 export function territoryCloudBottomStripPoints(
     rows: number,
@@ -667,8 +660,12 @@ export function territoryCloudBottomStripPoints(
     // 中线不是有限数就别铺：把一整带云落在 y=0（页面正中）比不铺更糟。
     if (!Number.isFinite(centerY)) return [];
     const shift = centerY;
-    return territoryCloudFillPoints(rows, columns, w, h)
-        .map((point) => ({ x: point.x, y: point.y + shift }));
+    const points = territoryCloudFillPoints(rows, columns, w, h);
+    const result: ITerritoryCloudPoint[] = [];
+    for (let i = 0; i < points.length; i++) {
+        result.push({ x: points[i].x, y: points[i].y + shift });
+    }
+    return result;
 }
 
 /**

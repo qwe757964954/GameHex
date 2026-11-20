@@ -68,20 +68,41 @@ function clone<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function filterValidNonNegativeIntegers(values: unknown[]): number[] {
+    const result: number[] = [];
+    for (let i = 0; i < values.length; i++) {
+        const val = values[i];
+        if (Number.isSafeInteger(val) && (val as number) >= 0) {
+            result.push(val as number);
+        }
+    }
+    return result;
+}
+
 function countRecord(value: unknown): Record<string, number> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, count]) => {
-        const normalized = amount(count);
-        return normalized > 0 ? [[key, normalized]] : [];
-    }));
+    const result: Record<string, number> = {};
+    const obj = value as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+        const normalized = amount(obj[key]);
+        if (normalized > 0) {
+            result[key] = normalized;
+        }
+    }
+    return result;
 }
 
 function timestampRecord(value: unknown): Record<string, number> {
     if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-    return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, timestamp]) => {
-        const parsed = Number(timestamp);
-        return Number.isFinite(parsed) && parsed >= 0 ? [[key, Math.floor(parsed)]] : [];
-    }));
+    const result: Record<string, number> = {};
+    const obj = value as Record<string, unknown>;
+    for (const key of Object.keys(obj)) {
+        const parsed = Number(obj[key]);
+        if (Number.isFinite(parsed) && parsed >= 0) {
+            result[key] = Math.floor(parsed);
+        }
+    }
+    return result;
 }
 
 /**
@@ -134,7 +155,12 @@ export class TerritorySaveStore {
     loadPassedLevels(): number[] {
         const parsed = this.readJson(this.passedLevelsKey());
         if (!Array.isArray(parsed)) return [];
-        return parsed.filter((levelId): levelId is number => Number.isSafeInteger(levelId) && levelId > 0);
+        const result: number[] = [];
+        for (let i = 0; i < parsed.length; i++) {
+            const levelId = parsed[i];
+            if (Number.isSafeInteger(levelId) && levelId > 0) result.push(levelId);
+        }
+        return result;
     }
 
     /**
@@ -175,9 +201,7 @@ export class TerritorySaveStore {
                     inventory: countRecord(parsed.inventory),
                     idleRewardAtByLevel: timestampRecord(parsed.idleRewardAtByLevel),
                     ...(Array.isArray(parsed.randomResourceCells)
-                        ? { randomResourceCells: parsed.randomResourceCells.filter(
-                            (cell): cell is number => Number.isSafeInteger(cell) && cell >= 0,
-                        ) }
+                        ? { randomResourceCells: filterValidNonNegativeIntegers(parsed.randomResourceCells) }
                         : {}),
                     ...(parsed.battle ? { battle: parsed.battle } : {}),
                 };
@@ -332,7 +356,12 @@ export class TerritorySaveStore {
     loadActivatedLevels(): number[] {
         const parsed = this.readJson(this.activatedLevelsKey());
         if (!Array.isArray(parsed)) return [];
-        return parsed.filter((levelId): levelId is number => Number.isSafeInteger(levelId) && levelId > 0);
+        const result: number[] = [];
+        for (let i = 0; i < parsed.length; i++) {
+            const levelId = parsed[i];
+            if (Number.isSafeInteger(levelId) && levelId > 0) result.push(levelId);
+        }
+        return result;
     }
 
     /**

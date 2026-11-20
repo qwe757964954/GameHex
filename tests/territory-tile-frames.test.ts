@@ -17,6 +17,7 @@ import * as territoryPreviewCinemaModule from '../assets/script/app/territory/mo
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
 import * as territoryUnlockTransitionModule from '../assets/script/app/territory/model/TerritoryUnlockTransition';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
+import * as territoryPatrolPassedCellsModule from '../assets/script/app/territory/model/TerritoryMonsterPatrol';
 
 /**
  * 领地图纸「地皮 + 格面框」的判据（2026-10-16 山猫需求）。
@@ -813,8 +814,10 @@ test('★★paintHexes 的状态判据必须走节点代表格，不许退回逐
         '整片置灰要在铺开 footprint 之后补节点维度');
     assert.match(code, /const stateCellId = stateCellByCell\.get\(cellId\) \?\? cellId/,
         '拿不到节点映射时退化为逐格（老图 / 非节点格零改动）');
-    assert.match(code, /isCellPassed\(stateCellId, input, siteByCell, candidateCells\)/,
-        '通关判定按节点代表格，否则同一关里一格草一格泥');
+    assert.match(code, /isCellPassed\(stateCellId, input, siteByCell, candidateCells, patrolPassedCells\)/,
+        '通关判定按节点代表格 + 巡逻区整片通过集合，否则同一关里一格草一格泥');
+    assert.match(code, /const patrolPassedCells = input\.patrolPassedCells \?\? EMPTY_CELL_SET/,
+        '巡逻区已通过集合按发布帧取，缺省用模块级空集合（不许每帧 new Set）');
     assert.match(code, /hexFrameOf\(stateCellId, input, siteByCell, passed\)/,
         '红框按节点代表格判，否则兄弟格 / footprint 格永远不叠框');
     assert.match(code, /applyHexFrame\(cellId, /,
@@ -827,4 +830,112 @@ test('★TerritoryPresenter 的默认 art 字面量必须与接口同步（漏�
         assert.match(presenter, new RegExp(`${field}: null`), `Presenter 默认 art 缺字段：${field}`);
     }
     assert.doesNotMatch(stripComments(presenter), /\btile: null/, '旧的单张 tile 字段已删除');
+});
+
+// ── 2026-11-19：巡逻宝箱怪「未挑战成功」要和普通关卡地块一致 ─────────────────
+//
+// 用户原话：「1.激活后的地块是红色的 2.巡逻的宝箱怪和战斗内的其他玩家卡牌一样
+// 叠加暗色和红色描边 3.战斗胜利后这个形象取消叠加，回复正常的颜色，地块同理」。
+// 本文件只验地块那两条（形象在 territory-patrol-look.test.ts）。
+//
+// 现场株型与 chapter_01 一致：巡逻区每个 cellId 各是一个 site、footprint 单格、
+// 同 site.id / 同 battleId 组成一片（31 个站点、5 片）。
+const PATROL_SITES = [
+    { id: 'wave_a', type: 'patrolChest', cellId: 401, footprint: [401], battleId: 60001, patrolId: 50021, unlock: {} },
+    { id: 'wave_a', type: 'patrolChest', cellId: 402, footprint: [402], battleId: 60001, unlock: {} },
+    { id: 'wave_b', type: 'patrolChest', cellId: 403, footprint: [403], battleId: 60002, patrolId: 50005, unlock: {} },
+    // 对照组：普通关卡（红框槽位）与普通宝箱（蓝 fram_02）都不许被这次改动带跑。
+    { id: 'stage_1', type: 'stage', cellId: 404, configId: '10001', footprint: [404], unlock: {} },
+    { id: 'chest_1', type: 'fixedResource', cellId: 405, footprint: [405], unlock: {} },
+];
+const PATROL_CELL_IDS = [401, 402, 403, 404, 405];
+
+function paintPatrolMap(options: {
+    unlocked?: number[]; owned?: number[]; passedCells?: ReadonlySet<number>;
+} = {}) {
+    const MapView = loadMapView();
+    const mapView = new MapView();
+    const cells = new Map<number, ReturnType<typeof makeHexCell>>();
+    const frames = new Map<number, ReturnType<typeof makeFrameSprite>>();
+    for (const id of PATROL_CELL_IDS) {
+        cells.set(id, makeHexCell());
+        frames.set(id, makeFrameSprite());
+    }
+    (mapView as { hexNodes: Map<number, unknown> }).hexNodes =
+        new Map(Array.from(cells, ([id, cell]) => [id, cell.node]));
+    (mapView as { hexFrames: Map<number, unknown> }).hexFrames =
+        new Map(Array.from(frames, ([id, frame]) => [id, frame]));
+    const unlocked = new Set(options.unlocked ?? []);
+    const owned = new Set(options.owned ?? []);
+    (mapView as { paintHexes: (input: unknown) => void }).paintHexes({
+        revealedCells: PATROL_CELL_IDS,
+        map: { startCellId: 999, sites: PATROL_SITES, randomSites: { candidateCells: [] } },
+        progress: {
+            isCellUnlocked: (id: number) => unlocked.has(id),
+            isOwned: (id: number) => owned.has(id),
+            isAreaPassed: (id: number) => owned.has(id),
+        },
+        art: {
+            tileLocked: TILE_LOCKED, tileCleared: TILE_CLEARED, tileGrey: TILE_GREY,
+            frameBoss: FRAME_BOSS, frameStage: FRAME_STAGE,
+            frameAsyncPvp: FRAME_ASYNC, frameChest: FRAME_CHEST,
+        },
+        patrolPassedCells: options.passedCells,
+        lockBlockedCells: [],
+    });
+    return { cells, frames };
+}
+
+test('★★★巡逻宝箱激活未通关 ⇒ 与普通关卡同款红色格面框（不是宝箱蓝框）', () => {
+    const { cells, frames } = paintPatrolMap({ unlocked: PATROL_CELL_IDS });
+    for (const cellId of [401, 402, 403]) {
+        assert.equal(cells.get(cellId)!.component.spriteFrame, TILE_LOCKED,
+            `cell ${cellId} 未通关 ⇒ 泥土`);
+        assert.equal(frames.get(cellId)!.spriteFrame, FRAME_STAGE,
+            `cell ${cellId} 已激活未挑战成功 ⇒ 红色 frameStage（原来查表落空、一格框都没有）`);
+        assert.equal(frames.get(cellId)!.node.active, true);
+    }
+    assert.equal(frames.get(404)!.spriteFrame, FRAME_STAGE, '普通关卡仍是红框');
+    assert.equal(frames.get(405)!.spriteFrame, FRAME_CHEST,
+        '普通宝箱仍用蓝 fram_02 —— 巡逻宝箱没把既有宝箱口径带跑');
+});
+
+test('★★★巡逻宝箱还没解锁 ⇒ 不叠红框（「解锁」才是框出现的那一刻）', () => {
+    const { frames } = paintPatrolMap({ unlocked: [404, 405] });
+    for (const cellId of [401, 402, 403]) {
+        assert.equal(frames.get(cellId)!.spriteFrame, null,
+            `cell ${cellId} 未解锁 ⇒ 不许提前红`);
+        assert.equal(frames.get(cellId)!.node.active, false);
+    }
+});
+
+test('★★★挑战成功 ⇒ 整片一起转草地并摘红框，另一片与对照格不受影响', () => {
+    const passedCells = territoryPatrolPassedCellsModule.territoryPatrolPassedCells(
+        PATROL_SITES as never, { isOwned: (id: number) => id === 401 });
+    assert.deepEqual(Array.from(passedCells).sort((a, b) => a - b), [401, 402]);
+    // 只 owned 了 401：逐格 isOwned 会让 402 留在泥土 + 红框，整片通过集合才修得好。
+    const { cells, frames } = paintPatrolMap({
+        unlocked: PATROL_CELL_IDS, owned: [401], passedCells,
+    });
+    for (const cellId of [401, 402]) {
+        assert.equal(cells.get(cellId)!.component.spriteFrame, TILE_CLEARED,
+            `cell ${cellId} 同片胜利 ⇒ 草地`);
+        assert.equal(frames.get(cellId)!.spriteFrame, null,
+            `cell ${cellId} 胜利 ⇒ 红框摘掉`);
+        assert.equal(frames.get(cellId)!.node.active, false);
+    }
+    assert.equal(cells.get(403)!.component.spriteFrame, TILE_LOCKED,
+        '另一片 battleId 不同 ⇒ 仍是待挑战泥土');
+    assert.equal(frames.get(403)!.spriteFrame, FRAME_STAGE, '另一片仍挂红框');
+    assert.equal(frames.get(405)!.spriteFrame, FRAME_CHEST, '普通宝箱不受巡逻区通关影响');
+});
+
+test('★★源码守卫：patrolChest 进格面框映射表且指向红框槽位', () => {
+    const code = stripComments(readFileSync(MAP_VIEW_PATH, 'utf8'));
+    assert.match(code, /patrolChest: 'frameStage'/,
+        '漏配 patrolChest ⇒ 激活后一块素泥土，读不出「这里要打」');
+    assert.doesNotMatch(code, /patrolChest: 'frameChest'/,
+        '蓝 fram_02 是「待领取的宝箱」，不是「待挑战的怪」');
+    assert.match(code, /if \(patrolPassedCells\.has\(cellId\)\) return true;/,
+        '巡逻区整片通过要排在站点查询之前（footprint 格查不到站点也要吃到）');
 });

@@ -22,7 +22,10 @@ export class ZCRuntimeConfigStore {
         this.catalogs = Object.freeze({
             rarityMeta: this.catalogs.rarityMeta,
             ...compiled,
-            cardCatalog: new Map(compiled.cards.map(card => [card.id, card])),
+            //  卡目录 = 玩家卡 + 怪物卡：`findCatalogCard` 是中立资源点「随机野怪」
+            //  与 Monster 特性的统一入口，怪物卡不在 `cards` 里，必须在这里并进来。
+            cardCatalog: new Map([...compiled.cards, ...(compiled.monsterCards ?? [])]
+                .map(card => [card.id, card])),
         });
         this.compiled = true;
     }

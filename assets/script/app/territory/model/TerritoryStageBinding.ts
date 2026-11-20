@@ -37,7 +37,12 @@ export function findCurrentTerritoryLevel(
         if (!isLevelUnlocked(progress, site.cellId)) continue;
         candidates.push({ site, stage });
     }
-    const unpassed = candidates.filter(({ site }) => !progress.isAreaPassed(site.cellId));
+    const unpassed: { site: TerritorySite; stage: TerritoryCampaignStage }[] = [];
+    for (let i = 0; i < candidates.length; i++) {
+        if (!progress.isAreaPassed(candidates[i].site.cellId)) {
+            unpassed.push(candidates[i]);
+        }
+    }
     const targets = unpassed.length ? unpassed : candidates;
     const direction = unpassed.length ? 1 : -1;
     targets.sort((a, b) => direction * (a.stage.stage - b.stage.stage || a.stage.levelId - b.stage.levelId)
@@ -111,7 +116,10 @@ export function territoryChapterCompletion(
     ownedCells: readonly number[],
 ): TerritoryChapterCompletion {
     const owned = new Set(ownedCells);
-    const occupied = bindings.reduce((count, binding) => count + (owned.has(binding.site.cellId) ? 1 : 0), 0);
+    let occupied = 0;
+    for (let i = 0; i < bindings.length; i++) {
+        if (owned.has(bindings[i].site.cellId)) occupied += 1;
+    }
     const total = bindings.length;
     return { occupied, total, complete: total > 0 && occupied === total };
 }
@@ -174,13 +182,18 @@ export function bindTerritoryPatrolStages(
     sites: readonly TerritorySite[],
     stages: readonly TerritoryCampaignStage[],
 ): TerritoryStageBinding[] {
-    const stageById = new Map(stages.map((stage) => [stage.levelId, stage]));
+    const stageById = new Map<number, TerritoryCampaignStage>();
+    for (let i = 0; i < stages.length; i++) {
+        stageById.set(stages[i].levelId, stages[i]);
+    }
     const battleByCell = territoryPatrolBattleByCell(sites);
     const bindings: TerritoryStageBinding[] = [];
     for (const site of sites) {
         if (site.type !== TERRITORY_SITE_TYPE.patrolChest) continue;
-        const battleId = battleByCell.get(site.cellId);
-        const stage = battleId === undefined ? undefined : stageById.get(battleId);
+        // 关卡 id 优先用 `patrolLevelId`（`monsterBox.monsterBoxLevel` 注入的那一跳）；
+        // 没有注入时退回 `battleId`（老地图 / 单测里没带 monsterBox 表的场景）。
+        const levelId = site.patrolLevelId ?? battleByCell.get(site.cellId);
+        const stage = levelId === undefined ? undefined : stageById.get(levelId);
         if (stage) bindings.push({ site, stage });
     }
     return bindings;
@@ -191,7 +204,10 @@ function bindStagesForSiteTypes(
     stages: readonly TerritoryCampaignStage[],
     siteTypes: readonly TerritorySiteType[],
 ): TerritoryStageBinding[] {
-    const stageById = new Map(stages.map((stage) => [stage.levelId, stage]));
+    const stageById = new Map<number, TerritoryCampaignStage>();
+    for (let i = 0; i < stages.length; i++) {
+        stageById.set(stages[i].levelId, stages[i]);
+    }
     const usedLevelIds = new Set<number>();
     const bindings: TerritoryStageBinding[] = [];
     for (const site of sites) {
@@ -233,7 +249,10 @@ export function expandBindingsToAreaSites(
     sites: readonly TerritorySite[],
     bindings: readonly TerritoryStageBinding[],
 ): Map<number, TerritoryCampaignStage> {
-    const stageById = new Map(bindings.map(({ stage }) => [stage.levelId, stage]));
+    const stageById = new Map<number, TerritoryCampaignStage>();
+    for (let i = 0; i < bindings.length; i++) {
+        stageById.set(bindings[i].stage.levelId, bindings[i].stage);
+    }
     const byCell = new Map<number, TerritoryCampaignStage>();
     for (const { site, stage } of bindings) byCell.set(site.cellId, stage);
     // 遍历顺序不影响结果（按 cellId 写 Map，后者不覆盖前者即可）；
@@ -264,14 +283,21 @@ export function applyTerritoryStageUnlocks(
     for (const [index, binding] of ordered.entries()) {
         requiredByCell.set(binding.site.cellId, index === 0 ? map.startCellId : ordered[index - 1].site.cellId);
     }
-    return {
-        ...map,
-        sites: map.sites.map((site) => {
-            const prerequisite = requiredByCell.get(site.cellId);
-            return prerequisite === undefined ? site : {
+    const newSites: TerritorySite[] = [];
+    for (let i = 0; i < map.sites.length; i++) {
+        const site = map.sites[i];
+        const prerequisite = requiredByCell.get(site.cellId);
+        if (prerequisite === undefined) {
+            newSites.push(site);
+        } else {
+            newSites.push({
                 ...site,
                 unlock: { ...site.unlock, requiredCells: [prerequisite] },
-            };
-        }),
+            });
+        }
+    }
+    return {
+        ...map,
+        sites: newSites,
     };
 }

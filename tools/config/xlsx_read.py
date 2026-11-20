@@ -12,7 +12,7 @@ import sys
 import html
 import zipfile
 
-CELL_RE = re.compile(r'<c\b([^>]*)(?:/>|>(.*?)</c>)', re.S)
+CELL_RE = re.compile(r'<c\b([^>]*?)(?:/>|>(.*?)</c>)', re.S)
 ATTR_R_RE = re.compile(r'\br="([A-Z]+)(\d+)"')
 ATTR_T_RE = re.compile(r'\bt="([^"]+)"')
 V_RE = re.compile(r'<v>(.*?)</v>', re.S)

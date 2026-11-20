@@ -1,14 +1,17 @@
 /**
- * `pvpCard.prefabSize`（兵种美术等比缩放）的两端守卫。
+ * `prefabSize`（兵种/怪物美术等比缩放）的两端守卫。
  *
- * **表侧**（r534 起，35 张兵种卡有值 0.8~1.2，建筑卡留空）：
+ * **表侧**（r534 起 `pvpCard` 35 张兵种卡有值 0.8~1.2；2026-11-20 起 `monsterCard` 37 张怪物卡
+ * 0.8~1.5，两张表同列同口径、建筑卡留空）：
  * 策划按美术实际体量给每个兵种配一个缩放系数，客户端把它乘在战场单位的美术缩放上。
  * 这类「表现参数」列天生脆弱 —— 漏填不报错、填 0 会让单位凭空消失、填错也只表现为「大小不对」，
  * 而大小不对在棋盘上很难一眼归因。所以这里三层钉住：
  *
  *  ① **解析层**（本文件 C1~C3）：留空 ⇒ 1；非正数 ⇒ **当场抛**（不是静默兜底）；
  *  ② **视图层**（V1~V3）：系数真的乘进了节点缩放，且与 spine 的 canvas 归一**相乘而非覆盖**；
- *  ③ **表侧真源**（T1~T2）：真表里每个兵种卡都有合法值，且解析层读出来的与表里逐字一致。
+ *  ③ **表侧真源**（T1~T4）：两张卡表的每个兵种卡都有合法值，且解析层读出来的与表里逐字一致。
+ *     `monsterCard` 单列一层（T3~T4）：领地巡逻野怪走的是同一列，但它由 `TerritoryChapterLoader`
+ *     单独读，漏打表也只表现为「所有怪一样大」。
  *
  * ⚠️ 判「视图层真的缩放了」不能只断言 `visualBaseScale` 字段 —— 那是私有实现。
  * 必须驱动 `initialize(prefab, size)` 后读**节点上实际的 scale**，否则改成别处乘也一样绿。
@@ -252,4 +255,51 @@ test('T2 真表：解析层读出的 prefabSize 与表里逐字一致（不是�
     }
     assert.deepEqual(mismatched, [], `prefabSize 未如实透传：\n${mismatched.join('\n')}`);
     assert.ok(units.size > 0, '应当解析出可上场单位');
+});
+
+test('T3 真表：monsterCard 的 prefabSize 已打表到 remoteRef，且每个兵种卡都是正数', () => {
+    const rows = readPvpRows('monsterCard');
+    // 防空转：这一列整个没打表时下面的循环会「零行全绿」—— 正是要逮的那种静默失效。
+    assert.ok(rows.length > 0, 'remoteRef/monsterCard.json 应当有数据行');
+    assert.ok(rows.some((row) => 'prefabSize' in row), 'monsterCard 缺 prefabSize 列：没打表 / 打表后没压缩到 remoteRef');
+
+    const issues: string[] = [];
+    let unitRows = 0;
+    for (const row of rows) {
+        const label = `${row.id} 「${String(row.name)}」`;
+        if (!isUnitRow(row)) {
+            if (row.prefabSize !== null && row.prefabSize !== undefined) {
+                issues.push(`${label} 是建筑卡却有 prefabSize=${String(row.prefabSize)}`);
+            }
+            continue;
+        }
+        unitRows += 1;
+        const size = row.prefabSize;
+        if (typeof size !== 'number' || !(size > 0)) {
+            issues.push(`${label} 的 prefabSize=${String(size)} 不是正数（转表后应为 number）`);
+        }
+    }
+    assert.deepEqual(issues, [], `monsterCard.prefabSize 体检未通过：\n${issues.join('\n')}`);
+    assert.ok(unitRows > 0, 'monsterCard 里应当有怪物卡');
+});
+
+test('T4 真表：怪物卡的 prefabSize 同样经 parseUnits 透传（与玩家卡同一列、同一口径）', () => {
+    const rows = readPvpRows('monsterCard');
+    const skills = new Map<number, unknown>(rows
+        .filter((row) => typeof row.unitSkillId === 'number')
+        .map((row) => [Number(row.unitSkillId), { skillId: Number(row.unitSkillId) }]));
+    const units = parseUnits(rows, skills as unknown as Parameters<typeof parseUnits>[1]);
+
+    const mismatched: string[] = [];
+    for (const [unitId, definition] of units) {
+        const row = rows.find((candidate) => String(candidate.unitId) === unitId || String(candidate.id) === unitId);
+        const expected = Number(row?.prefabSize);
+        if (definition.prefabSize !== expected) {
+            mismatched.push(`${String(row?.name)}：表 ${expected} vs 解析 ${definition.prefabSize}`);
+        }
+    }
+    assert.deepEqual(mismatched, [], `monsterCard.prefabSize 未如实透传：\n${mismatched.join('\n')}`);
+    // 体型差要真的存在：两只首领（1.5）与最小的一只（0.8）不是一个档 —— 全 1 说明列没打进来。
+    const sizes = [...units.values()].map((definition) => definition.prefabSize);
+    assert.ok(Math.max(...sizes) > Math.min(...sizes), '所有怪物 prefabSize 相同 ⇒ 该列没生效');
 });

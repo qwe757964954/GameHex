@@ -32,7 +32,6 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
     // 漏了就是「图不显示 + 零报错」（`tests/bigmap-bundle-coverage.test.ts` 兜底）。
     [BIGMAP_BUNDLE]: [
         'image/concept',
-        'image/base_background',
         // 2048×2048 大背景，**刻意放在 bundle 顶层、不进 `image/` 的图集子树**：
         // `image/` 根的 pac 递归收一切 png，这么大的图塞进任何一页都会被缩糊；
         // 单个 spriteFrame 独立采样、不进图集也零损失。
@@ -44,7 +43,7 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'ui/Chat', 'ui/Mail', 'ui/PlayerInfo', 'ui/Hang', 'ui/Activity', 'ui/SevenDay',
         'ui/Celebration', 'ui/FirstRecharge', 'ui/LimitTimeAct', 'ui/MonthCardGift', 'ui/ShowReward',
         'ui/ItemDetail', 'ui/ItemInfo', 'ui/gm', 'ui/vscroll', 'ui/Guide',
-        'image/role', 'image/league', 'image/store', 'image/card', 'image/card_lineup', 'image/card_board', 'image/carddetail', 'image/gift', 'image/battletoken',
+        'image/role', 'image/league', 'image/store', 'image/card', 'image/card_lineup', 'image/card_board', 'image/carddetail', 'image/carddetail_bg', 'image/gift', 'image/battletoken',
         'image/friend', 'image/chat', 'image/mail', 'image/playerinfo', 'image/hang', 'image/activity',
         'image/activityIcon', 'image/sevenDay', 'image/celebration', 'image/firstRecharge',
         'image/limitTimeAct', 'image/monthcard', 'image/showReward', 'image/itemdetail', 'image/iteminfo',

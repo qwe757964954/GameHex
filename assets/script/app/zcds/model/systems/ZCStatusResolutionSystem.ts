@@ -102,11 +102,12 @@ export class ZCStatusResolutionSystem {
         }
         if (!(amount > 0)) return;
         if (event.effect === ZCStatusEffectKind.Damage) {
+            const owner = event.sourceOwner ?? (sourceUnit ? sourceUnit.owner : undefined)
+                ?? context.owners.find((owner) => owner !== target.owner) ?? ZCOwner.Player;
             context.damageUnit(target, amount, {
-                owner: event.sourceOwner ?? sourceUnit?.owner
-                    ?? context.owners.find((owner) => owner !== target.owner) ?? ZCOwner.Player,
+                owner,
                 kind: 'unit',
-                unitId: sourceUnit?.id,
+                unitId: sourceUnit ? sourceUnit.id : undefined,
             });
         } else {
             this.healUnit(target, amount, context);
@@ -120,7 +121,7 @@ export class ZCStatusResolutionSystem {
         for (const source of sources) {
             for (const instance of context.statusSystem.instancesOf(String(source.id))) {
                 const runtime = instance.runtimeBehavior;
-                if (runtime?.kind !== 'legacyTraction') continue;
+                if (!runtime || runtime.kind !== 'legacyTraction') continue;
                 const origin = context.unitPosition(source);
                 const minimumDistance = 20 * context.combatDistanceScale;
                 for (const target of sources) {
@@ -138,9 +139,7 @@ export class ZCStatusResolutionSystem {
 
     static healUnit(target: ZCUnitState, amount: number, context: IZCStatusResolutionContext): void {
         if (target.battleState === 'dead' || !(amount > 0)) return;
-        //  治疗削弱（2026-11-18 第 17 批，101803 毒液喷吐 III 级「中毒期间受到的治疗降低 50%」）：
-        //  读**被治疗者**身上的 `healTakenRate`（-50 ⇒ ×0.5）。缺省 0 时整段不执行，
-        //  与改前逐字一致；减到负数（治疗反转）一律按 0 处理，不会变成掉血。
+        // 治疗削弱：读取被治疗单位的 healTakenRate 修正（负值减疗，不产生反转伤害）。
         const rate = context.statusSystem.statModsOf(String(target.id)).healTakenRate ?? 0;
         const effective = rate === 0 ? amount : amount * Math.max(0, 1 + rate / 100);
         if (!(effective > 0)) return;

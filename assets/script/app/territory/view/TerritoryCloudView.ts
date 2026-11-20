@@ -635,15 +635,7 @@ export class TerritoryCloudView {
     // ============================================================
 
     /**
-     * 页面注入：底部 UI 是否被收起（2026-11-17 新手引导）。
-     *
-     * `GuideComposition.syncDialogHud` 在引导有台词 / 焦点时把 `BottomNav`（连同 `BottomHud`）
-     * `active = false`。底栏原本正好盖住 `MapViewport` 的 rect Mask 裁不到的那条 168px，
-     * 收起后那里只剩页面根的 `zdbg1` 橙色裸底图 —— 用户截图底部那一整条橙色。
-     *
-     * 🔴 只在**底栏收起**时点亮：底栏在时它照常盖着这条带，平时画面零变化。
-     *    不是每次 `renderMap` 都铺，也不是把 `setFillArea` 放大 —— 那条路仍在 Mask 里，
-     *    画不到视口外面去。
+     * 设置底部补云带开关。仅在底栏收起时启用以补足视口裁切留白的区域。
      */
     setBottomStripEnabled(enabled: boolean): void {
         const value = enabled === true;
@@ -663,13 +655,8 @@ export class TerritoryCloudView {
     }
 
     /**
-     * 按页面 / 视口的**运行时**尺寸算出底部那条带，铺上同一张格网。
-     *
-     * 🔴 不许抄 `168`：它来自 `MapViewport` 的 Widget `bottom`，长屏 / 安全区变了会跟着变。
-     *    用「视口底边（页面局部坐标）− 页面底边」现算，才是 Mask 真正裁掉的那一段。
-     *
-     * 层级：挂页面根**第 0 个孩子** ⇒ 压住页面自己的橙色 `Sprite`，但被 `MapViewport`
-     * 整棵子树盖住。云溢出到视口里的那半朵会被不透明的 `MapBackground` 盖回去，无需 Mask。
+     * 按页面/视口运行时边界动态计算底部补充云带尺寸并铺设格网，
+     * 挂载于页面底层，由视口背景遮盖溢出部分。
      */
     private buildBottomStrip(): boolean {
         const map = this.mapLayer;
@@ -1003,7 +990,7 @@ export class TerritoryCloudView {
             this.startDissolve(cellId);
         }
         // 布局里没有的格（换章后旧图残留）⇒ 回收，别留一堆孤儿节点在图外飘。
-        for (const cellId of Array.from(this.sprites.keys())) {
+        for (const cellId of this.sprites.keys()) {
             if (seen.has(cellId)) continue;
             this.recycle(cellId);
         }
@@ -1128,7 +1115,11 @@ export class TerritoryCloudView {
             if (nearest > maxDistance) maxDistance = nearest;
         }
         if (!(maxDistance > 0)) return;
-        this.fillWaveOrders = distances.map((distance) => territoryCloudFillWaveOrder(distance, maxDistance));
+        const waveOrders: number[] = [];
+        for (let i = 0; i < distances.length; i++) {
+            waveOrders.push(territoryCloudFillWaveOrder(distances[i], maxDistance));
+        }
+        this.fillWaveOrders = waveOrders;
     }
 
     /**

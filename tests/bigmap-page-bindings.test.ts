@@ -6,6 +6,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
+import * as presentationText from '../assets/script/app/bigmap/view/BigMapPresentationText';
 import * as infoLayout from '../assets/script/app/bigmap/model/BigMapInfoLayout';
 import * as feedbackReal from '../assets/script/app/main/MainResBarFeedback';
 import { bigMapViewStateFixture } from './helpers/bigmap-view-state-fixture';
@@ -21,7 +22,7 @@ class Node {
     name: string; active = true; isValid = true;
     parent: Node | null = null; children: Node[] = [];
     components = new Map<unknown, any>();
-    events = new Map<string, () => void>();
+    events = new Map<string, (...args: any[]) => void>();
     position = { x: 0, y: 0 }; scale = { x: 1, y: 1 };
     constructor(name = '') { this.name = name; }
     addComponent(Type: new () => any) { const item = new Type(); item.node = this; this.components.set(Type, item); return item; }
@@ -32,14 +33,14 @@ class Node {
     setParent(parent: Node) { if (this.parent) this.parent.children.splice(this.parent.children.indexOf(this), 1); this.parent = parent; parent.children.push(this); }
     setSiblingIndex(index: number) { const siblings = this.parent!.children; siblings.splice(siblings.indexOf(this), 1); siblings.splice(index, 0, this); }
     getSiblingIndex() { return this.parent ? this.parent.children.indexOf(this) : 0; }
-    on(event: string, callback: () => void, caller: object) { this.events.set(event, callback.bind(caller)); }
+    on(event: string, callback: (...args: any[]) => void, caller: object) { this.events.set(event, callback.bind(caller)); }
 }
 class Button { static EventType = { CLICK: 'click' }; interactable = true; }
 class Label { static Overflow = { NONE: 0 }; string = ''; lineHeight = 21; color = { r: 238, g: 235, b: 214, a: 255 }; }
 class Sprite {}
 class Widget { bottom = 0; alignmentUpdates = 0; updateAlignment() { this.alignmentUpdates++; } }
 class Graphics { clear() {} roundRect() {} fill() {} stroke() {} }
-class BaseView { node!: Node; build() {} render() {} setArt() {} }
+class BaseView { node!: Node; build() {} render() {} setArt() {} setMapOffset() {} }
 class Color { static WHITE = new Color(); }
 const modules = new Map<string, any>();
 let instantiate: (template: object) => object;
@@ -71,14 +72,14 @@ function load(name: string): any {
         if (id.endsWith('/EventMgr')) return { EventMgr };
         if (id.endsWith('/BigMapEvents')) return mvcEvents;
         if (id === 'cc') return { _decorator: { ccclass: () => (c: unknown) => c, property: (_type: unknown, key?: string) => key ? undefined : () => undefined, executeInEditMode: (c: unknown) => c },
-            Component: class {}, Node, UITransform: Transform, Widget, Button, Label, Sprite, Graphics, Color,
+            Component: class {}, Node, UITransform: Transform, Widget, Button, Label, Sprite, Graphics, Color, BlockInputEvents: class {},
             Vec3: class { constructor(public x = 0, public y = 0) {} }, instantiate: (template: object) => instantiate(template),
             view: { getVisibleSize: () => ({ width: 720, height: 1280 }) } };
         if (id.endsWith('/ResourceScope')) return { ResourceScope };
         if (id === './BigMapBaseView') return { BigMapBaseView: BaseView };
         if (id.endsWith('/BigMapResourceFeedback')) return loadFeedback();
         if (id.endsWith('/BigMapInfoLayout')) return infoLayout;
-        if (id === './BigMapPresentationText') return { BIGMAP_PRESENTATION_TEXT: { baseToggle: '基地', worldToggle: '大地图' } };
+        if (id === './BigMapPresentationText') return presentationText;
         const dependency = id.split('/').pop()!;
         if (['BigMapPageLayout', 'BigMapButton', 'BigMapBuildRow', 'BigMapSkin', 'BigMapTheme'].includes(dependency)) return load(dependency);
         return {};
@@ -96,13 +97,18 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
     instantiate = fixture.instantiate;
     const page = new BigMapPage();
     page.node = new Node('Host');
+    page.node.addComponent(Transform);
     page.layout = fixture.root.getComponent(BigMapPageLayout);
     const world = new Node('World');
     page.worldView = { node: world, build() {} };
     page.data = bigMapViewStateFixture({ canHarvest: true,
         resources: [{ type: 'grain', name: '粮食', amount: 1200, cap: 2000, pending: 0 }],
         queueUnlock: { canUnlock: true, current: 1, max: 3, cost: 100 },
-        buildMenu: [{ kind: 1, name: '粮田', unlocked: true, count: 0, maxOwnNum: 5 }, { kind: 2, name: '木场', unlocked: false, reason: '未解锁' }] });
+        buildMenu: [
+            { buildingId: 71002, kind: 1, name: '粮田', unlocked: true, count: 0, maxOwnNum: 5, buildTime: 65 },
+            { buildingId: 71007, kind: 2, name: '木场', unlocked: true, count: 0, maxOwnNum: 5, buildTime: 70 },
+            { buildingId: 0, kind: 3, name: '铁矿', unlocked: false, reason: '未解锁', count: 0, maxOwnNum: 5 }
+        ] });
     const layout = page.layout;
     layout.onLoad();
     const earlyIntents: unknown[] = [];
@@ -135,7 +141,7 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
         assert.equal(layout.exploreButton.node.active, false, '基地界面没有搜索按钮');
         assert.equal(layout.harvestButton.interactable, true);
         assert.equal(layout.resourceLabels[0].string, '粮食 1200/2000');
-        layout.setArt({ resources: new Map(), hud: new Map() });
+        layout.setArt({ resources: new Map(), hud: new Map(), buildings: new Map() });
         layout.render(base);
         assert.equal(layout.resourceLabels[0].string, '1.2K');
         const recovering = { ...base, actionRecoverSeconds: 12,
@@ -145,8 +151,26 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
         layout.render({ ...recovering, actionRecoverSeconds: null });
         assert.equal(layout.resourceLabels[4].string, '—');
         layout.render(base);
-        assert.equal(layout.modeLabel.string, '大地图');
-        assert.match(layout.queueLabel.string, /0\/0/);
+        assert.equal(layout.modeNode.active, false);
+        assert.equal(layout.baseBackButton.node.active, true);
+        assert.equal(layout.designCardLockReason.string, '未解锁');
+        assert.equal(layout.designCardNames[1].string, '粮田');
+        assert.equal(layout.designCardTimers[0].string, '00:01:05');
+        for (const button of layout.designCardButtons) button.node.events.get('click')(button);
+        layout.upgradeTab.node.events.get('click')();
+        layout.render({ ...base, plotDetails: new Map([[17, {
+            name: '主城', buildingId: 71001, level: 2, buildTime: 300, queueSlotIndex: -1,
+        }]]) });
+        assert.equal(layout.designCardActions[0].string, '升级');
+        const upgrade = layout.designCardButtons[0];
+        upgrade.node.events.get('click')(upgrade);
+        layout.baseBackButton.node.events.get('click')();
+        assert.deepEqual(JSON.parse(JSON.stringify(intents.splice(4))), [
+            { kind: 'build', buildingKind: 1 }, { kind: 'build', buildingKind: 2 },
+            { kind: 'clear' }, { kind: 'plotTap', hexId: 17 }, { kind: 'mode', mode: 'world' },
+        ]);
+        assert.equal(layout.designResearchQueueValue.string, '—');
+        assert.equal(layout.designBuildQueueValue.string, '0/0');
         layout.render({ ...base, canHarvest: false, ui: { ...base.ui, enteringBattle: true, buildMenuVisible: false } });
         assert.equal(layout.harvestButton.interactable, false);
         layout.exploreButton.node.events.get('click')();
@@ -154,8 +178,7 @@ test('真实页面模板绑定全部控件、重复行、地图层级和按钮�
         assert.equal(intents.length, 4, '入战锁同时约束所有 Layout 输入');
         layout.render(page.data);
         assert.equal(layout.baseView.node.active, false);
-        assert.equal(layout.buildMenuButton.node.active, false);
-        assert.equal(layout.queuePanel.active, false);
+        assert.equal(layout.designDock.active, false);
         assert.equal(layout.exploreButton.node.active, true, '回到大地图，搜索按钮要回来');
         assert.equal(layout.modeLabel.string, '基地');
         layout.exploreButton.node.events.get('click')();
@@ -215,13 +238,9 @@ test('资源栏由Prefab外层Layout均分Item，每个Item由Layout排列Icon�
     }
     assert.equal(widget('ResourceCard')._left, 12);
     assert.equal(widget('ResourceCard')._right, 140);
-    assert.equal(widget('QueueStatus')._alignFlags, 41);
-    // QueueText 不再挂 Widget：它现在跟在固定排布的三个队列槽位后面，
-    // 用 Widget 会被按 `left/right` 重算成 0 宽（MCP 存盘时踩过），所以尺寸写死。
-    assert.equal(widget('QueueText'), undefined, 'QueueText 不该再用 Widget');
-    const queueText = node('QueueText')._components.map((ref: any) => objects[ref.__id__])
-        .find((item: any) => item.__type__ === 'cc.UITransform');
-    assert.equal(queueText._contentSize.width, 296);
+    //旧 QueueStatus/QueueText 已从页面清理；基地队列由 DesignDock 顶行接管。
+    assert.equal(node('QueueStatus'), undefined);
+    assert.equal(node('QueueText'), undefined);
     const layout = (name: string) => node(name)._components.map((ref: any) => objects[ref.__id__]).find((item: any) => item.__type__ === 'cc.Layout');
     assert.equal(layout('ResourceCard')._layoutType, 1);
     assert.equal(layout('ResourceCard')._resizeMode, 2);

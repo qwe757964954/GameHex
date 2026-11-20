@@ -16,6 +16,9 @@ import { ZCMapGeometry } from './ZCMapGeometry';
 import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
 import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
+import {
+    ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES, zcChainArcPieceLayout,
+} from './ZCChainLightningFx';
 
 /** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。*/
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
@@ -678,7 +681,8 @@ export class ZCGameModel {
                 durationSeconds: projectile.burstEffectSeconds ?? 0.5,
                 //  到点爆炸的倍率（2026-11-18 第 16 批连射导弹）：同一份 prefab 被两条技能
                 //  以不同半径复用，只能走事件级倍率；缺省 ⇒ 1（镭射飞龙那条逐字不变）。
-                effectScale: projectile.impactEffectScale,
+                //  强化那一击没有 `impactEffectScale`，回落弹体自己的 `effectScale`（×1.2，定案 A）。
+                effectScale: projectile.impactEffectScale ?? projectile.effectScale,
             });
             return;
         }
@@ -1253,6 +1257,8 @@ export class ZCGameModel {
             ? this.pveDefence.waves[this.nextDefenceWaveIndex - 1]
             : null;
         const next = this.pveDefence.waves[this.nextDefenceWaveIndex] ?? null;
+        const currentUnitId = current ? this.cardById(ZCOwner.Enemy, current.cardId)?.unitId : undefined;
+        const waveHpRate = currentUnitId ? this.config.unitRates?.enemy?.[currentUnitId]?.hpRate : undefined;
         // 本波血条：分母取账本里生成那一刻记下的总血量（不随死亡变小），分子现算存活单位的血。
         const ledger = current ? this.defenceWaveLedger[this.nextDefenceWaveIndex - 1] : undefined;
         let currentWaveHp = 0;
@@ -1273,7 +1279,7 @@ export class ZCGameModel {
             ), 0),
             currentWaveHp,
             currentWaveMaxHp: ledger?.maxHp ?? 0,
-            currentWaveHpRate: current ? this.config.ownerRates?.enemy?.hpRate ?? 1 : 1,
+            currentWaveHpRate: current ? waveHpRate ?? this.config.ownerRates?.enemy?.hpRate ?? 1 : 1,
             currentWaveCardId: current?.cardId ?? null,
             currentWaveIsBoss: current ? this.isBossWave(this.nextDefenceWaveIndex - 1) : false,
         };
@@ -1570,7 +1576,61 @@ export class ZCGameModel {
             this.state.aiClock -= this.aiDevelopIntervalSeconds;
             this.runEnemyAI();
         }
+        //  跟随类特效（闪电链 102203）：单位这一帧已经走完了，此时把两端的坐标重算一遍，
+        //  渲染读到的就是「弧粘在人身上」的当下位置。排在 AI 之后、`checkOutcome` 之前 ——
+        //  与渲染同帧，且不会因为单位阵亡引发的移除而算到半路。
+        this.syncFollowingCombatEvents();
         this.checkOutcome();
+    }
+
+    /**
+     * 把「带跟随锚」的战斗事件按两端单位的**当前**坐标重新摆一遍
+     * （闪电链 102203，2026-11-19 第 21 批）。
+     *
+     * 用户原话：「释放端的卡牌静止不动，敌人移动，技能尾端会跟随旋转或伸缩」。
+     * `combatEvents` 是快照，坐标写一次就定死 ⇒ 想让弧跟着人走，只有两条路：
+     * 每帧新建事件（`nextCombatEventId` 会爆、也没法淡出），或者让事件自己长着眼睛 ——
+     * 这里走后者：模型每帧按 `followFromUnitId` / `followToUnitId` 重写坐标。
+     *
+     * 🔴 三个必须守住的细节：
+     *  1. **段数用建链时的那一个**（`followPieceCount`），不按新距离重算 ——
+     *     目标站远了，`ceil(距离/单段)` 会变大，可多出来的段**没有人创建**，
+     *     结果是链条中间凭空缺口；固定段数则只会把每段拉长，正是「伸缩」。
+     *  2. **一端没了就整条跳过**（阵亡被摘掉的单位查不到）⇒ 冻在最后一次的位置上。
+     *     只动一端会把方向算歪，比不动更难看。
+     *  3. **不动 `startedAt` / `durationSeconds`**，也不新建事件 ⇒ 生命周期仍然只由
+     *     `advance()` 开头那一段裁剪决定。
+     */
+    private syncFollowingCombatEvents(): void {
+        const events = this.state.combatEvents;
+        if (!events.length) return;
+        for (const event of events) {
+            const fromId = event.followFromUnitId;
+            const toId = event.followToUnitId;
+            if (fromId == null && toId == null) continue;
+            const fromUnit = fromId == null ? null : this.units.byId.get(fromId);
+            const toUnit = toId == null ? null : this.units.byId.get(toId);
+            if (!fromUnit || !toUnit) continue;
+            const from = this.unitPosition(fromUnit);
+            const to = this.unitPosition(toUnit);
+            //  兜底角 = 上一帧的角度（去掉 -90° 的偏移量），两点重合时沿用上一帧的朝向，
+            //  免得「擦身而过」的那一帧把弧甩成 0°（朝右）。
+            const fallbackRadians = ((event.angleDegrees ?? ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES)
+                - ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES) * Math.PI / 180;
+            const layout = zcChainArcPieceLayout(
+                from.x, from.y, to.x, to.y, fallbackRadians, event.followPieceCount ?? 1);
+            const piece = Math.max(0, Math.round(event.followPieceIndex ?? 0));
+            //  与 `ZCAttackResolutionSystem.pushChainArc` 同款：节点沿长轴后退透明留白，
+            //  两处漏一处 ⇒ 只有首次施放贴合、跟随过程中又裂开。
+            const x = from.x + layout.stepX * piece + layout.offsetX;
+            const y = from.y + layout.stepY * piece + layout.offsetY;
+            event.fromX = x;
+            event.fromY = y;
+            event.toX = x;
+            event.toY = y;
+            event.angleDegrees = layout.angleDegrees;
+            event.stretchAlongAxis = layout.stretch;
+        }
     }
 
     private updateConstruction(dt: number): void {
@@ -2336,7 +2396,13 @@ export class ZCGameModel {
      *  · **继承值写进 `inheritedStats`** 而不是直接改 `definition`：`effectiveDefinition`
      *    每帧从缓存折算，只有落在单位身上才不会被下一次刷新冲掉。
      *
-     * 返回 `true` = 至少召出一个，调用方才消费 CD。
+     * 两条触发共用本方法（2026-11-19 第 26 批把 101404 的「一人成军」口径补全）：
+     *  · 冷却制 `summonCooldown`（103103 舞王）—— 跟随、到期一起散；
+     *  · 累计普攻 `summonEvery`（101404 分裂菇）—— `summonIndependent` 独立分身：
+     *    自己寻路追人、本体阵亡不散（只等血量归零）、不占 `unitCapPerSide` 名额、
+     *    场上同兵种最多 `summonMaxAlive` 只、超限整批**不释放**（不消费累计次数）。
+     *
+     * 返回 `true` = 至少召出一个，调用方才消费 CD / 累计次数。
      */
     private summonUnits(master: ZCUnitState): boolean {
         const definition = this.effectiveUnitDefinition(master);
@@ -2349,10 +2415,28 @@ export class ZCGameModel {
         //  三项缺一不可：漏配任何一项都按「参数不全」拒放（不消费 CD），
         //  而不是召出一群「0 血 / 0 攻击」的摆设 —— 那种错在场上完全看不出来。
         if (!(count >= 1) || !(hpInherit > 0) || !(attackInherit > 0)) return false;
+        //  场上同种召唤物的同时存在上限（2026-11-19 第 26 批 101404）：
+        //  设计原话「场上最多同时存在 12 个技能召唤出来的分裂菇；超过这个个数限制时不释放该技能」。
+        //  口径取「这一批 + 现有 ≤ 上限才放」—— 不是「放到 12 为止」的截断：
+        //  设计写的是「不释放」，截断成 2 只等于偷偷改了召唤数量，看不出错但收益全歪。
+        //  `summonMaxAlive` 缺省 0 ⇒ 无上限，舞王 103103 逐字不变。
+        const maxAlive = Math.max(0, Math.round(params?.summonMaxAlive ?? 0));
+        if (maxAlive > 0) {
+            const alive = this.summonAliveCount(master);
+            if (alive + count > maxAlive) {
+                if (zcSkillCastWatched(master.unitId)) {
+                    skillCastLog('召唤', `${master.unitId}#${master.id} 场上已有 ${alive}/${maxAlive} 只`
+                        + ` ⇒ 再召 ${count} 只会超限，本次不释放（不消费累计次数）`);
+                }
+                return false;
+            }
+        }
         const card = this.cards[master.owner].get(master.cardId) ?? findCatalogCard(master.cardId);
         if (!card) return false;
         const seconds = Math.max(0, params?.summonSeconds ?? 0);
         const follow = (params?.summonFollow ?? 0) > 0;
+        //  独立分身（101404）：自己寻路追人、本体阵亡也不散、不占单位上限的名额。
+        const independent = (params?.summonIndependent ?? 0) > 0;
         const slotRadius = Math.max(0, params?.summonSlotRadius ?? 0) * this.rules.combatDistanceScale;
         const alpha = Math.max(0, Math.min(1, params?.summonAlpha ?? 1));
         //  基准取「本体当前的继承值」而不是兵种原表：本体若自己也是继承来的（门格复制、
@@ -2372,6 +2456,10 @@ export class ZCGameModel {
                 maxHp: clone.maxHp,
             };
             clone.summonMasterId = master.id;
+            if (independent) clone.summonIndependent = true;
+            //  注册那一刻还不知道自己是不是召唤物（`summonMasterId` 是这里才写的）
+            //  ⇒ 必须补一刀把「单位上限名额」还回去，否则 12 只分身正好把兵营卡死。
+            this.units.markSummon(clone);
             if (follow) {
                 clone.summonSlot = slot;
                 clone.summonSlotRadius = slotRadius > 0 ? slotRadius : undefined;
@@ -2389,6 +2477,25 @@ export class ZCGameModel {
                 + `${follow ? `，阵位半径 ${slotRadius.toFixed(1)}` : '，自由行动'}）`);
         }
         return spawned.length > 0;
+    }
+
+    /**
+     * 场上「同阵营 + 同兵种」的活着的召唤物数量（`summonMaxAlive` 判据）。
+     *
+     * 按 `unitId` 而不是按 `summonMasterId` 数：设计说的是「场上最多同时存在 12 个
+     * **技能召唤出来的分裂菇**」—— 三只本体各自召的分身共享同一个 12 的名额，
+     * 因此阵亡/新召的本体不会各自重开一个 12。
+     * `state.units` 里已死但还没被 `removeDeadUnits` 摘掉的会一并过滤。
+     */
+    private summonAliveCount(master: ZCUnitState): number {
+        let total = 0;
+        for (const unit of this.state.units) {
+            if (unit.summonMasterId === undefined) continue;
+            if (unit.owner !== master.owner || unit.unitId !== master.unitId) continue;
+            if (unit.battleState === 'dead' || unit.hp <= 0) continue;
+            total += 1;
+        }
+        return total;
     }
 
     /**
@@ -2418,7 +2525,9 @@ export class ZCGameModel {
      *  1. 到期 ⇒ 置 `dead` + `deathRemoveAt = now`，同一帧被 `removeDeadUnits` 摘掉
      *     （设计「到期一起消失」，不留尸体也不走阵亡动画）；
      *  2. 本体没了（被打死 / 被移除）⇒ 召唤物跟着收场，否则位置无从算起；
-     *  3. 跟随时把位置钉回阵位。
+     *     **独立分身除外**（`summonIndependent`，101404）：设计口径是「血量为 0 才消失」，
+     *     本体先死也照常自己打，否则一波换血就把刚召出来的 6 只一起带走了；
+     *  3. 跟随时把位置钉回阵位（独立分身不跟随，位置交给普通寻路）。
      */
     private syncSummons(): void {
         if (!this.state.units.length) return;
@@ -2427,10 +2536,18 @@ export class ZCGameModel {
             if (unit.summonMasterId === undefined) continue;
             if (unit.battleState === 'dead' || unit.hp <= 0) continue;
             const expired = unit.summonUntil !== undefined && now >= unit.summonUntil - 1e-9;
-            const master = expired ? undefined : this.units.byId.get(unit.summonMasterId);
-            if (expired || !master || master.battleState === 'dead' || master.hp <= 0) {
+            if (expired) {
                 //  与阵亡走同一条出口：`removeDeadUnits` 会把 registry / 状态 / 索敌缓存一起清掉，
                 //  自己 `splice` 只会漏掉别的几份索引。
+                unit.battleState = 'dead';
+                unit.hp = 0;
+                unit.deathRemoveAt = now;
+                continue;
+            }
+            //  独立分身：本体在不在都与它无关（本体查不到也不必收场），只等血量归零。
+            if (unit.summonIndependent === true) continue;
+            const master = this.units.byId.get(unit.summonMasterId);
+            if (!master || master.battleState === 'dead' || master.hp <= 0) {
                 unit.battleState = 'dead';
                 unit.hp = 0;
                 unit.deathRemoveAt = now;

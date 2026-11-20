@@ -104,6 +104,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         '../model/ZCVisualResourcePlan': { buildZCVisualResourcePlan },
         cc,
         '../../../core/asset/BundleCatalog': { BATTLE_BUNDLE: 'battle' },
+        '../../../core/config/TableNames': { ICON_TABLE: 'icon' },
         '../../ArtPaths': {
             decorFramePath: (name: string) => `image/decor/${name}/spriteFrame`,
             // 神器图标走它拼 `image/artifact/<icon>/spriteFrame`（png 是 SpriteFrame 子资源）。
@@ -203,6 +204,9 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         'image/artifact/霜封冰刃/spriteFrame',
         // 中立资源占位问号 / 金币飞行贴图 / 自选主城区域气泡（三组后期新增的图标加载）。
         'image/map-resource/coin_icon/spriteFrame',
+        'image/spawn-region/frame_01/spriteFrame',
+        'image/spawn-region/frame_02/spriteFrame',
+        'image/spawn-region/frame_03/spriteFrame',
         'effects/arrow',
         'effects/empowered',
         'effects/slash',
@@ -218,6 +222,7 @@ test('对局流程在进入前准备地图、配置和全部首屏 Prefab', asyn
         'ui/game/ZCGameFloatText',
         'ui/game/ZCGameHUD',
         'ui/game/ZCGameHex',
+        'ui/game/ZCGameKillBanner',
         'ui/game/ZCGameLegendBanner',
         'ui/game/ZCGameUnit',
         'ui/game/ZCGameWall',
@@ -292,11 +297,11 @@ test('首屏外壳复用资源管理器批次，保留条件槽位并随战斗�
         h.assets.loadBatch = (requests, options) => { batches++; return loadBatch(requests, options); };
         const values = await resourceLoader(h.assets).loadShellPrefabs(scope, selectSpawn, hasBossPanel);
         assert.equal(batches, 1);
-        assert.equal(Object.keys(values).length, 13);
+        assert.equal(Object.keys(values).length, 14);
         assert.equal(values.hudPrefab?.path, resourcePlan.ZC_BATTLE_SHELL_PATHS.hud);
         assert.equal(values.spawnSelectionPrefab?.path ?? null, selectSpawn ? resourcePlan.ZC_BATTLE_SHELL_PATHS.spawnSelection : null);
         assert.equal(values.bossPanelPrefab?.path ?? null, hasBossPanel ? resourcePlan.ZC_BATTLE_SHELL_PATHS.bossPanel : null);
-        assert.equal(h.loaded.length, 11 + Number(selectSpawn) + Number(hasBossPanel));
+        assert.equal(h.loaded.length, 12 + Number(selectSpawn) + Number(hasBossPanel));
         assert.equal(h.released(), 0);
         scope.dispose();
         assert.equal(h.released(), h.loaded.length);

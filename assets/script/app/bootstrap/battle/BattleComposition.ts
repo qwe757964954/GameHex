@@ -28,7 +28,7 @@ import { GameNet } from '../../net/GameNet';
 import { resolveCmdGoodsFrames } from '../../showReward/RewardFrames';
 import { ZC_BATTLE_EVENTS, type IZCBattleShowTip } from '../../zcds/application/ZCBattleEvents';
 import { GuideComposition } from '../guide/GuideComposition';
-import { reportGuideComplete } from '../../guide/application/GuideEvents';
+import { reportBattleGuideSettled } from '../../guide/application/GuideEvents';
 
 /** Cocos 运行期、资源服务和存档适配器只在组合边界装配。 */
 export class BattleComposition extends ControllerBase {
@@ -81,7 +81,11 @@ export class BattleComposition extends ControllerBase {
     }
     private onReturnToMain(_payload: undefined, source: object): void {
         if (!this.controller.current || source !== this.controller.current) return;
-        reportGuideComplete('backToMap');
+        // 🔴 不能只报 `backToMap`：玩家「跳过战斗 / 提前返回」时可能连抽卡演出都没看完
+        //    （`cardRevealFinished` 不上报），引导会永久停在 5-3、回主界面后什么都不显示
+        //    —— 用户 2026-11-24「打完 1-1 出来没引导升级卡牌」。离开对局即把战斗步一并了结，
+        //    表序与命中规则见 `reportBattleGuideSettled`。
+        reportBattleGuideSettled();
         ProcedureManager.navigate(GameRoute.Main, this.returnParams);
     }
     private onShowTip({ message }: IZCBattleShowTip, source: object): void {

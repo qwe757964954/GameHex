@@ -1,4 +1,7 @@
-import { _decorator, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { _decorator, Button, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { RoleEvent } from './RoleEvents';
+import { ROLE_GEM_SOCKET_COUNT } from './RoleTypes';
 
 const { ccclass, property } = _decorator;
 
@@ -9,12 +12,6 @@ const { ccclass, property } = _decorator;
  *   · 图标 + 品质框 —— `com_goods.UpdateByGoods(voEquipPart.GetEquip())`
  *   · 等级        —— `text_level` 的 `Lv.{level}`（`level` 来自 `CmdEquip.level`）
  *   · 红点        —— `com_rd.OnRDUpdate(...)`（本节**不接**，见下）
- *
- * ## 与老端的差异（刻意留下，不造假）
- *
- * 老端每格还有 `组件_宝石`（5 个宝石镶嵌孔，按 `cmdEquip.tlCmdGemInfo` 切品质页）。
- * 本轮按需求只做「图标 + 品质框 + Lv」，**宝石孔不接** —— prefab 里那 5 个 `com1..com5`
- * 保持静态，别写「按空数据切页」的假接线。
  *
  * ## 状态一律无条件写（规则 82）
  *
@@ -40,8 +37,35 @@ export class RoleEquipSlot extends Component {
     /** {@link ensureInit} 是否跑过（幂等标记）。 */
     private inited = false;
 
+    private gemGroup: Node = null!;
+    private readonly gemButtons: Button[] = [];
+    private readonly gemSprites: Sprite[] = [];
+    private readonly emptyGemFrames: Array<SpriteFrame | null> = [];
+
     protected onLoad(): void {
         this.ensureInit();
+        const partId = Number(this.node.name.slice('Equip'.length));
+        const owner = this.node.parent;
+        this.gemGroup = this.node.getChildByName('组件_宝石');
+        for (let order = 1; order <= ROLE_GEM_SOCKET_COUNT; order++) {
+            const hole = this.gemGroup.getChildByName(`com${order}`);
+            const button = hole.getComponent(Button);
+            const sprite = hole.getChildByName('n0').getComponent(Sprite);
+            this.gemButtons.push(button);
+            this.gemSprites.push(sprite);
+            this.emptyGemFrames.push(sprite.spriteFrame);
+            hole.on(Button.EventType.CLICK, () => EventMgr.instance.emit(
+                RoleEvent.Intent, { kind: 'socket', partId, order }, owner,
+            ), this);
+        }
+    }
+
+    renderGems(frames: readonly (SpriteFrame | null)[]): void {
+        this.gemGroup.active = frames.length > 0;
+        for (let index = 0; index < this.gemSprites.length; index++) {
+            this.gemSprites[index].spriteFrame = frames[index] ?? this.emptyGemFrames[index];
+            this.gemButtons[index].interactable = index < frames.length;
+        }
     }
 
     /**

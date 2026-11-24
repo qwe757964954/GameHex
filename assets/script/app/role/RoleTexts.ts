@@ -37,6 +37,27 @@ export const ROLE_TEXTS = {
     talentLack: '材料不足，无法激活',
     talentUpOk: '天赋升级成功',
 
+    gemDetails: (desc: string, count: number, equipped: boolean) =>
+        [desc, `数量：${count}`, equipped ? '已镶嵌' : '未镶嵌'].filter(Boolean).join('\n'),
+    gemChoose: (order: number) => `已选中第 ${order} 孔，请在背包选择对应部位的宝石`,
+    gemChooseSocket: '请先选择装备上的宝石孔',
+    gemInvalid: '该宝石无法用于当前孔位',
+    gemUnavailable: '当前装备方案没有这个宝石孔',
+    gemSocket: (order: number) => `宝石孔 ${order}`,
+    gemUnknown: (id: string) => `宝石 ${id}`,
+    gemLine: (name: string, count: number) => `${name} × ${count}`,
+    gemOn: '镶嵌',
+    gemReplace: '替换',
+    gemDown: '卸下',
+    gemChooseReplacement: '选择替换',
+    gemCompose: '一键合成',
+    gemComposeConfirm: '合成',
+    gemComposeAgain: '确认合成高品质宝石',
+    gemComposeEmpty: '暂无可合成的宝石',
+    gemComposeMaterials: '以下宝石将用于合成',
+    gemChanged: '宝石操作成功',
+    gemComposed: '宝石合成成功',
+
     /** 宝石页签没有可显示的分页。 */
     equipEmpty: '暂无装备',
 

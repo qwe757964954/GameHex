@@ -111,7 +111,7 @@ test('A1 5 段顺序 = FGUI 外层 list 的 item 顺序（键 / prefab 名 / 标
         'StoreGemBox', 'StoreLevelGift', 'StoreGold', 'StoreSilver', 'StoreGoods',
     ]);
     assert.deepEqual(STORE_SECTIONS.map((s) => s.title), [
-        '宝石宝箱', '50关卡礼包', '金币', '银币', '黑市宝箱',
+        '宝石宝箱', '50关卡礼包', '金币', '银币', '黑市宝物',
     ]);
 });
 
@@ -183,8 +183,8 @@ test('A6 美术口径：目录名 / 9 张九宫格 / 关键图名（改名会让
     for (const art of [STORE_ART_BTN_GREEN, STORE_ART_TAG, STORE_ART_ARROW, STORE_ART_DOT_ON, STORE_ART_DOT_OFF]) {
         assert.ok(!STORE_ART_SLICED.has(art), `${art} 不该是九宫格`);
     }
-    assert.equal(STORE_ART_BG, 'sd_fg_01_3gong');
-    assert.equal(STORE_ART_NPC, 'shoping_bg04');
+    assert.equal(STORE_ART_BG, 'store_bg_office');
+    assert.equal(STORE_ART_NPC, 'store_npc_broker');
     assert.equal(STORE_ART_GIFT_CARD, 'gklb');
     assert.equal(STORE_ART_REBATE, 'newsd3');
     assert.equal(STORE_ART_HELP, 'zx_btn01');
@@ -284,7 +284,7 @@ test('B5 银币段（铜钱铺）4 档：只有第一格是看视频免费，后
     ]);
 });
 
-test('B6 黑市宝箱段 7 格：图标 / 品质 / 件数齐备，价格以配置表 cost 为准', () => {
+test('B6 黑市宝物段 7 格：图标 / 品质 / 件数齐备，价格以配置表 cost 为准', () => {
     assert.equal(STORE_GOODS_ROWS.length, 7);
     assert.deepEqual(STORE_GOODS_ROWS.map((r) => r.name), [
         '随机装备图纸', '随机兵种卷轴', '天赋石', '城墙升级石', '城墙突破石', '啤酒', '禁军升级卷轴',
@@ -605,9 +605,9 @@ test('C1 外壳 `Store`：结构 + 3 层背景 + 资源条 + 滚动区（几何�
     expectRect(shell, 'Store', 0, 0, 720, 1280, '外壳根 ');
 
     // 三层背景（与 `组件_商店_界面.xml` + `通用/组件_商店_背景.xml` 逐位）
-    expectRect(shell, 'Store/Bg', 0, 0, 720, 1280, '整屏地牢货架 ');
+    expectRect(shell, 'Store/Bg', 0, -100, 720, 852, '椭圆办公室背景 ');
     expectRect(shell, 'Store/ShopPanel', 0, 384, 720, 926, '木框面板 ');
-    expectRect(shell, 'Store/Npc', 1, 61, 720, 330, 'NPC 哥布林 ');
+    expectRect(shell, 'Store/Npc', 1, 61, 720, 329, 'NPC 金发老板 ');
     // ── 顶部资源条 = **公共件 `common/ResBar` 的嵌套实例** ──────────────────
     // 实例壳只有「锚点落点」落盘（尺寸/内部节点在其源 prefab 里）：
     //   `_lpos=(-131,509)`、父原点 (360,640) ⇒ 锚点 (229,131)。
@@ -886,12 +886,12 @@ test('C8 段五 `StoreGoods`：7 格（2 行 + 1 行 3 格），品质物品框 
     const goods = sections.goods;
     assert.equal(goods.rootName, 'StoreGoods');
     assert.equal(goods.nodes.length, 80 + 1, `cc.Node 条目 80 + 根，实得 ${goods.nodes.length}`);
-    assert.equal(goods.realNodes.length, goods.nodes.length, '黑市宝箱段没有嵌套实例 ⇒ 全是真实节点');
-    expectAllUi2D(goods, '黑市宝箱段');
-    expectRootScript(goods, SECTION_TS, '黑市宝箱段');
+    assert.equal(goods.realNodes.length, goods.nodes.length, '黑市宝物段没有嵌套实例 ⇒ 全是真实节点');
+    expectAllUi2D(goods, '黑市宝物段');
+    expectRootScript(goods, SECTION_TS, '黑市宝物段');
     // 整卡可点：老端 `list.initVirtualList(this, this.RenderGoods, this.onClickCoin)`。
     expectComps(goods, 'StoreGoods/List/Card0', ['cc.Button'], '黑市卡整卡可点 ');
-    expectRect(goods, 'StoreGoods', 0, 0, 666, STORE_SECTION_H.goods, '黑市宝箱段根 ');
+    expectRect(goods, 'StoreGoods', 0, 0, 666, STORE_SECTION_H.goods, '黑市宝物段根 ');
     expectRect(goods, 'StoreGoods/List', 17, 88, 632, 848, '杂货列表 ');
     // 第 3 行只有 1 格（7 = 3 + 3 + 1）
     expectRect(goods, 'StoreGoods/List/Card6', 18, 88 + 2 * 286, 200, 276, '杂货卡 6 ');

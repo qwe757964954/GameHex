@@ -14,13 +14,13 @@ export const STORE_ART_ROOT = 'image/store';
  * `ResBar.resKeys` 决定。资源图走 `MainResBarArt` 的默认目录，这里不重复维护。
  */
 
-// 美术资源名。保留 FGUI 原名，避免和导出资源对不上。
-/** 地牢货架整屏（源是 `.jpg`，720×1280）。 */
-export const STORE_ART_BG = 'sd_fg_01_3gong';
+// 美术资源名。新切图按项目 ASCII 规范命名，其余保留 FGUI 原名，避免和导出资源对不上。
+/** 椭圆办公室背景（720×852，顶部裁切后铺满商城上半屏）。 */
+export const STORE_ART_BG = 'store_bg_office';
 /** 商店木框面板（源图 720×589，靠九宫格撑到 720×1280）。 */
 export const STORE_ART_PANEL = 'sd_bg_01';
-/** NPC 哥布林商人（720×330 透明底）。 */
-export const STORE_ART_NPC = 'shoping_bg04';
+/** NPC 金发老板（720×329 透明底，桌前坐姿）。 */
+export const STORE_ART_NPC = 'store_npc_broker';
 /** 5 段共用的标题绶带（665×81，九宫格）。 */
 export const STORE_ART_TITLE = 'title_brown';
 /** 宝箱卡整张 · 普通（低级）。 */
@@ -38,7 +38,7 @@ export const STORE_ART_ARROW = 'btn_jiantou';
 /** 页码点 · 亮 / 暗。 */
 export const STORE_ART_DOT_ON = 'sd3';
 export const STORE_ART_DOT_OFF = 'sd5';
-/** 竖卡底 200×276（金币 / 银币 / 黑市宝箱三段 15 张卡共用）。 */
+/** 竖卡底 200×276（金币 / 银币 / 黑市宝物三段 15 张卡共用）。 */
 export const STORE_ART_CARD = 'kfqd03';
 /** 按钮底 · 金黄（宝箱「高级」行、价格条、购买按钮）。 */
 export const STORE_ART_BTN_GOLD = 'TY_btn21';
@@ -98,7 +98,7 @@ export const STORE_SECTIONS: readonly IStoreSection[] = [
     { key: 'gift', title: '50关卡礼包', prefab: 'StoreLevelGift', rows: 0, cards: 1, lineGap: 0 },
     { key: 'gold', title: '金币', prefab: 'StoreGold', rows: STORE_GRID_ROWS.gold, cards: 6, lineGap: STORE_GRID_LINE_GAP.gold },
     { key: 'silver', title: '银币', prefab: 'StoreSilver', rows: STORE_GRID_ROWS.silver, cards: 4, lineGap: STORE_GRID_LINE_GAP.silver },
-    { key: 'goods', title: '黑市宝箱', prefab: 'StoreGoods', rows: STORE_GRID_ROWS.goods, cards: 7, lineGap: STORE_GRID_LINE_GAP.goods },
+    { key: 'goods', title: '黑市宝物', prefab: 'StoreGoods', rows: STORE_GRID_ROWS.goods, cards: 7, lineGap: STORE_GRID_LINE_GAP.goods },
 ];
 
 /** 资源条显示哪些格由 Store.prefab 的 ResBar.resKeys 决定，代码不再保留第二份配置。 */

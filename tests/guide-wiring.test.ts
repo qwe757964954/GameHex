@@ -17,6 +17,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { GUIDE_BATTLE_SETTLED_CONDS } from '../assets/script/app/guide/application/GuideEvents';
 
 const read = (path: string): string => readFileSync(path, 'utf8');
 
@@ -136,6 +137,23 @@ test('焦点光圈：坐标必须由地图侧提供（View 不得 import 地图�
     const composition = readFileSync('assets/script/app/bootstrap/guide/GuideComposition.ts', 'utf8');
     assert.match(composition, /extra: this\.territoryView\?\.getGuideFocusExtraNodes\(key\)/,
         '组合层必须把气泡一起交给视图（只查不传等于没做）');
+});
+
+test('离开对局：战斗步一次性了结，顺序必须等于 guideStep 表序（跳过战斗也要接到 6-1）', () => {
+    // 现场（用户 2026-11-24）：1-1 里点「跳过战斗」→ 结算 → 回主界面，没有卡牌升级引导。
+    // 根因是 5-3 的 `cardRevealFinished` 来自「抽到的那张卡消失」，提前退出时永远不上报 ⇒
+    // 只报 backToMap 对不上当前步，引导永久停在 5-3，回主界面后整层让位、什么都不显示。
+    const battle = read('assets/script/app/bootstrap/battle/BattleComposition.ts');
+    assert.match(battle, /reportBattleGuideSettled\(\)/, '离开对局必须把战斗步一并了结');
+    assert.doesNotMatch(battle, /reportGuideComplete\('backToMap'\)/,
+        '别再退回单条 backToMap：抽卡演出没播完时它推不动');
+    // `notify` 严格相等匹配 ⇒ 顺序错了就只推进一条，必须与表里的行序完全一致。
+    const raw = JSON.parse(read('assets/remoteRef/guideStep.json')) as { k: string[]; v: unknown[][] };
+    const condIndex = raw.k.indexOf('completeCond');
+    const settled: readonly unknown[] = GUIDE_BATTLE_SETTLED_CONDS;
+    const tableOrder = raw.v.map(row => row[condIndex]).filter(cond => settled.includes(cond));
+    assert.deepEqual(tableOrder, [...GUIDE_BATTLE_SETTLED_CONDS],
+        'GUIDE_BATTLE_SETTLED_CONDS 必须按 guideStep 的行序排');
 });
 
 test('回到主页面：引导要等领地页首帧（第 23 条）', () => {

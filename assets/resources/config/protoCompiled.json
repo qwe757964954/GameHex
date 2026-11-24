@@ -10354,6 +10354,11 @@
                           "rule": "repeated",
                           "type": "CmdPvpHeroAttrInfo",
                           "id": 9
+                        },
+                        "modifyList": {
+                          "rule": "repeated",
+                          "type": "uint32",
+                          "id": 10
                         }
                       }
                     },

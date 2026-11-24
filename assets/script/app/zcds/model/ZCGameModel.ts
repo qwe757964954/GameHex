@@ -209,109 +209,38 @@ const FRAME_OP_SPAWN = 4;
 
 /** 城墙/建筑占据一格，近战单位可从相邻格继续靠近并攻击其边缘。*/
 const STRUCTURE_TARGET_BODY_RADIUS = 80;
-/**
- * 召唤物四个阵位的基准角（度，数学坐标系：0° = +x、90° = 屏幕上方）：
- * 左上 / 右上 / 左下 / 右下（2026-11-18 第 17 批 舞王 103103，设计案 O 列）。
- *
- * 真正摆位时是 `本体朝向 + 这个角` —— 本体一转，四个阵位跟着转，这就是设计说的
- * 「走位时按本体朝向镜像」，不需要另写一套镜像代码。
- */
+/** 召唤物四个阵位的基准角（度，数学坐标系：0°=+x、90°=屏幕上方）：左上/右上/左下/右下。实际摆位叠加本体朝向。*/
 const SUMMON_SLOT_DEGREES = [135, 45, 225, 315] as const;
-/**
- * 独立分身（101404 分裂菇）的散落半径（逻辑 px）：落在以本体为圆心的这个圆内
- * （2026-11-20 第 33 批，用户原话「分身生成坐标落，落在以本体为圆心，20px 为半径的圆内」）。
- *
- * 🔴 单位是**棋盘逻辑 px**（`freeX/freeY` 那一套），屏上约 15.4px（×0.76875）。
- * 与舞王的阵位半径 18（配表 `summonSlotRadius` 60 × `combatDistanceScale` 0.3）同一量级 ——
- * 6 只分身围出的是紧贴本体的一小圈，不是「散落在半格之外」。嫌挤就只改这一个数。
- */
+/** 独立分身默认散落半径（棋盘逻辑 px）。*/
 const SUMMON_SCATTER_RADIUS = 20;
-/**
- * 独立分身的生成间隔（秒）：第 i 个分身在自己那一刻播特效、随后才出现
- * （用户原话「每个分身生成有 0.1s 的间隔差」）。
- *
- * 6 只 ⇒ 最后一只比第一只晚 0.6s 起播。取 0.1s 是因为再短就糊成「同时冒出来」，
- * 再长（≥0.2s）会让「累计 8 次普攻」的收益变成一串拖沓的排队动画。
- */
+/** 独立分身逐个生成间隔（秒），用于按时序错开生成表现。*/
 const SUMMON_STAGGER_SECONDS = 0.1;
-/**
- * 特效起播到分身真正出现的间隔（秒）：设计口径「先播放【分裂菇_生成分身】，再出现分身」。
- *
- * 0.32s ≈ 前 8 帧 —— 爆点已经铺开、光还没散，此刻分身从光里站起来最自然。
- * 落成「队列里两个时刻」（`fxAtSeconds` / `spawnAtSeconds`）而不是「先召再隐藏」：
- * 隐藏的单位仍然是合法目标，会被看不见的东西挨打、也会自己走开。
- */
+/** 特效起播至分身实体出现的时间差（秒），避免生成前实体作为隐形目标被攻击。*/
 const SUMMON_APPEAR_DELAY_SECONDS = 0.32;
-/**
- * 「分裂菇_生成分身」这条特效的时长（秒）= 26 帧 ÷ 24fps。
- *
- * 🔴 必须与 `tools/build_fission_spawn_fx.py` 的 `_duration` 一致：短了会在播到一半时
- * 被 `combatEvents` 的寿命裁掉（后段爆发看不到），长了会把末帧定格多挂一段。
- */
+/** 分身生成特效默认时长（秒，26 帧 @ 24fps），与动画 clip 长度匹配。*/
 const ZC_SUMMON_SPAWN_FX_SECONDS = 26 / 24;
-/**
- * 独立分身的默认透明度（设计口径「分裂菇的分身透明度约为 65%」）。
- *
- * 配表 `summonAlpha` 给了就以配表为准（舞王 103103 走的是那条，0.6），这里只是
- * 「101404 三档都没填」时的兜底 —— 不给兜底就是全实心，视觉上和本体分不出谁是谁。
- */
+/** 独立分身默认透明度兜底（配表缺省 summonAlpha 时使用）。*/
 const SUMMON_INDEPENDENT_ALPHA = 0.65;
-/**
- * 召唤「脚底持续光环」的兜底时长（秒）：只在 `summonSeconds` 配成 0（到战死）时才用。
- *
- * 光环是被召唤过程的**同期表现**，不是独立技能 —— 它的寿命就取召唤物那一份
- * （舞王 6/7/8 秒），到期跟舞伴一起消失。真给了 0 也必须有上限：区域是有限寿命结构，
- * 无限期的光环会在 `groundZones` 里一直躺着读秒。
- */
+/** 召唤脚底光环默认兜底时长（秒，避免无限期常驻 groundZones）。*/
 const SUMMON_AURA_FALLBACK_SECONDS = 6;
 /**
- * 「持续光环伤害效果」的可见环要盖住「本体 + 4 个舞伴」所需的放大倍率（事件级 `effectScale`）。
- *
- * 🔴 这个数**不是**几何推导出来的漂亮解，是拿真实站位量出来的观感常量，理由分三层：
- *
- * ① 先别把画布宽当环宽（第 35 批踩过的坑）：帧画布 256×390，可见环只有 **153×60 canvas px**
- *   （alpha>60 实测，18 帧都在 149~156 × 58~62）。画布经 `prefab 0.58 × 目录 nodeScale 2.0716`
- *   撑到 307.5 屏上 px ⇒ `effectScale = 1` 时环只有 **183.8 × 72.1 屏上 px**（半轴 91.9 × 36.0）。
- *
- * ② 舞伴不是站在圆周上，而是四个斜角位。屏幕投影的横纵比例并不一样
- *   （`ZC_MAP_SCALE_X` 2.5625 / `ZC_MAP_SCALE_Y` 2.1429 = 90/42），所以阵位 36 世界 px 落到屏幕上
- *   是 **(±65.2, ±54.6)**；再加卡面半宽约 17 ⇒ 需要环的半轴至少 (82.2, 71.6)。
- *
- * ③ 横向 91.9 本来就够，**卡住的是纵向 36.0**：这张盘画得比镜头扁 2 倍
- *   （美术 60/153 = 0.39，投影 2.1429/2.5625 = 0.836）。等比放到能盖住纵向 ⇒ 71.6 / 36.0 = **1.99**，
- *   代价是横向多出 1.2 倍（半轴 182.9 vs 需要 82.2）。想要不"多出来"，只能让美术重画一张更立的
- *   地面盘，或者给区域加纵向拉伸（会把漩涡拉变形）—— 两条都被否过。
- *
- * ⇒ 换美术、改 `summonSlotRadius`、或改镜头比例之后这个数**必须重量**；用例
- * `zcds-king-dance` 钉的是「`effectScale` 等于这个常量且 > 1」，不是随手写的字面量。
+ * 持续光环伤害效果覆盖本体及阵位随从的事件级放大倍率（effectScale）。
+ * 基于可见环半轴（91.9 × 36.05 屏上 px）与斜角阵位投影换算，使纵向能完整圈入站位。
  */
 export const ZC_SUMMON_AURA_COVER_SCALE = ZC_EFFECT_SCALE.summonAuraCoverScale;
 /**
- * 屏上 px ÷ 世界 px（**各向异性**：2.5625 / 2.1429）。
- *
- * 与 `ZCGameViewUtil.ZC_MAP_SCALE_X/Y` 同一组格距常量 —— 模型不 import 视图（那边带 `cc`），
- * 所以这里从 `core/hex/HexGridLayout` 现算一遍。改格距 / 换镜头比例 ⇒ 这里的换算自动跟着走。
+ * 屏上 px ÷ 世界 px（各向异性：2.5625 / 2.1429）。
+ * 与 HexGridLayout 格距常量联动换算，改格距或镜头比例时自动跟随。
  */
 const SUMMON_AURA_MAP_SCALE_X = HEX_GRID_VIEW_COLUMN_SPACING / HEX_GRID_LOGICAL_COLUMN_STEP;
 const SUMMON_AURA_MAP_SCALE_Y = HEX_GRID_VIEW_ROW_SPACING / HEX_GRID_LOGICAL_ROW_STEP;
-/**
- * `effectScale = 1` 时「持续光环伤害效果」可见环的半轴（**屏上 px**）。
- *
- * 来源：第 35 批对 18 帧逐帧 alpha>60 实测——可见环只有 153×60 canvas px，经
- * `prefab 0.58 × 目录 nodeScale 2.0716` 撑到屏上 **183.8 × 72.1**（半轴 91.9 × 36.05）。
- * 🔴 别拿帧画布 256×390 反推（那是含透明边的大画布，差 1.7 倍且完全不报错）。
- */
+/** effectScale = 1 时持续光环可见环半轴（屏上 px）。*/
 const SUMMON_AURA_RING_HALF_SCREEN_X = ZC_EFFECT_SCALE.summonAuraRingHalfScreenX;
 const SUMMON_AURA_RING_HALF_SCREEN_Y = ZC_EFFECT_SCALE.summonAuraRingHalfScreenY;
 
 /**
- * 光圈在**世界坐标**里真正盖住的半轴（世界 px），给定 `effectScale`。
- *
- * 这是「舞伴能走到哪」的唯一真源：`area` 类地面盘的视觉尺寸**完全不看 `radius`**
- * （`ZCCombatEffectView` 只用 prefab 烘焙缩放 × 目录 nodeScale × `effectScale`），
- * 所以表里的 `summonAuraRadius` 只决定区域判定半径（本卡纯表现、判定全关），
- * **决定不了画面上的圈有多大**。2026-11-22 的「分身走出领域特效」就是按判定半径做的拴绳
- * 与按美术盘做的画面打了架：60 的圆在纵向比可见环（≈33）大一倍。
+ * 光圈在世界坐标系下覆盖的半轴（世界 px）。
+ * 地面特效尺寸由 prefab 与 effectScale 决定，以此作为召唤物活动范围真源。
  */
 export function zcSummonAuraLeashHalfWorld(
     effectScale: number = ZC_SUMMON_AURA_COVER_SCALE,
@@ -352,16 +281,8 @@ const HIT_FX_SECONDS = 0.15;
 */
 const SPAWN_OFFSET_RADIUS = HEX_GRID_LOGICAL_ROW_STEP / 2 - 1;
 /**
- * 塔防「同一波内逐只出怪」的间隔（秒）。
- *
- * 🔴 用户口径 0.1~0.2s（2026-11-20）：一波 20~30 只时不再同一帧糊成一坨，而是
- * 一只接一只从敌方主城走出来，连成一条直线队列。取中间值 0.15：整波出完约 3~4.5 秒，
- * 既看得出「排队」，又不会把波次节奏拖长到影响难度。
- *
- * 队列的**物理长度**由这条间隔乘移速决定（塔防怪 20~32 逻辑 px/s ⇒ 相邻两只拉开 3~5px），
- * 因此出生点必须固定在一条轴上（见 `spawnUnit` 的 `lineUpAlongGoal`），
- * 靠「同点同向 + 时间错开」形成纵队 —— 别指望位置错位，地图边界外的怪会被
- * `advanceMarch` 判成出界、原地定住（见 `ZCMovementSystem.advanceMarch`）。
+ * 塔防「同一波内逐只出怪」的时间间隔（秒）。
+ * 同一波怪按固定时间错峰生成形成行进纵队，平衡队列视觉表现与出兵推进节奏。
  */
 export const ZC_DEFENCE_SPAWN_INTERVAL_SECONDS = 0.15;
 
@@ -1056,99 +977,63 @@ export class ZCGameModel {
             fireBurst: (unit) => ZCAttackResolutionSystem.sendBurstShot(this.state, unit, this.attackResolutionContext),
             //  副轨主动（横扫）：走独立的扇形结算，不推进普攻节拍与强化 CD。
             castSecondary: (unit) => ZCAttackResolutionSystem.castFanSkill(this.state, unit, this.attackResolutionContext),
-            //  自身光环（大威天芦「无尘禁土」102503）：在本体脚下开一片跟随本体的周期伤害区域。
-            //  与副轨/强化互不干涉 —— 它有自己的 `auraReadyAt`，不推进普攻节拍。
+            // 自身光环：在本体脚下开启跟随本体的周期伤害区域，独立车道（unit.auraReadyAt）
             castSelfAura: (unit) => ZCAttackResolutionSystem.castSelfAura(this.state, unit, this.attackResolutionContext),
-            //  五雷轰顶（磁电菇 101603）：沿「目标 → 背朝向」排开 3/4/5 道雷，每道独立结算。
-            //  与副轨 / 光环同样不推进普攻节拍，用自己的 `boltReadyAt`。
+            // 五雷轰顶：沿目标背朝向排开落雷，独立车道（unit.boltReadyAt）
             castBolt: (unit) => ZCAttackResolutionSystem.castBoltLine(this.state, unit, this.attackResolutionContext),
-            //  闪电链（雷蕉 68022 / 102203，2026-11-18 第 17 批）：从锁定目标起跳，
-            //  逐跳打最近的未命中敌人，同一帧全部结算。独立车道（`unit.chainReadyAt`）——
-            //  同卡还挂着 102204 嗜血术，**不能**和 `boltReadyAt` 共用字段。
+            // 闪电链：从锁定目标起跳逐跳弹射，独立车道（unit.chainReadyAt）
             castChainLightning: (unit) => ZCAttackResolutionSystem.castChainLightning(
                 this.state, unit, this.attackResolutionContext),
-            //  召唤（舞王 103103「舞王召唤」，2026-11-18 第 17 批）：生成 4 个舞伴并逐帧跟随本体。
-            //  与其它车道不同，它不走 `ZCAttackResolutionSystem`（那里只管几何与伤害），
-            //  生成 / 属性继承 / 阵位全在模型层，因为要动 `state.units` 与单位注册表。
+            // 随从召唤：随从生成与阵位在模型层直接操作 state.units 与注册表
             castSummon: (unit) => this.summonUnits(unit),
-            //  大吼大叫（南瓜战神 68023 / 102304，2026-11-18 第 17 批）：自心圆范围伤害 +
-            //  敌方减攻 + III 级友军护盾。独立车道（`unit.roarReadyAt`）—— 同卡 102303 冲锋
-            //  占着 `dashReadyAt`。
+            // 怒吼：自心圆范围伤害、敌方减攻与友军护盾，独立车道（unit.roarReadyAt）
             castRoar: (unit) => ZCAttackResolutionSystem.castRoar(this.state, unit, this.attackResolutionContext),
             castStorm: (unit) => ZCAttackResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext),
             castRayBeam: (unit, vulnStatusId) => ZCAttackResolutionSystem.castRayBeam(
                 this.state, unit, this.attackResolutionContext, vulnStatusId),
-            //  文明之火（科学家 103503 改造，2026-11-23 第 43 批）：在目标点 200 半径内
-            //  随机撒 3 块火焰区域。与射线集束同一套「累计普攻」触发、各自的计数格。
+            // 火焰区域：在目标点半径内生成地面伤害区域
             castFireZone: (unit) => ZCAttackResolutionSystem.castFireZone(
                 this.state, unit, this.attackResolutionContext),
-            //  精密陷阱（科学家 103504）：在自己原地留一个陷阱，踩响或到点各炸一次。
-            //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
+            // 精密陷阱：在本体脚下布置踩中/到点引爆陷阱，独立车道（unit.trapReadyAt）
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
-            //  孢爆箭 / 孢子凝珠（风炮菇 101303 / 水手菇 101104，2026-11-17 第 12 批）：
-            //  朝锁定目标射一枚「命中就炸一片」的弹。独立车道（`unit.splashReadyAt`），
-            //  不推进普攻节拍；减速状态的定义与 id 由触发系统算好传进来（状态归状态系统管，
-            //  这里只负责几何与伤害），避免两边各查一次表算出两个值。
+            // 爆点投掷物：朝锁定目标发射范围爆炸弹体，减速状态由触发系统统一传入
             castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            //  菌核爆裂（菌王菇 101804，2026-11-17 第 13 批）；同车道的 `burst_aura` 现由
-            //  毒液喷吐（菌王菇 101803）用着 —— 原本的「菌毯爆发」101504 在第 43 批已换成射线集束：
-            //  以自身为圆心爆一次，爆完给自己套盾（+III 级减伤）或把怪推开。
-            //  独立车道（`unit.burstReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
-            //  （判据是爆发半径内有没有人，由 `castBurstSkill` 自己算）。
+            // 范围爆发/毒液喷吐：以自身为圆心爆发伤害并套盾或击退，独立车道（unit.burstReadyAt / unit.venomReadyAt）
             castBurstSkill: (unit, guardStatusId, lane) => ZCAttackResolutionSystem.castBurstSkill(
                 this.state, unit, this.attackResolutionContext, guardStatusId, lane),
-            //  菌丝绞杀（机甲菇 101503，2026-11-17 第 14 批）：身前扇形甩一次 + 减速。
-            //  独立车道（`unit.fanReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
-            //  （判据是扇形半径内有没有人）。减速状态的定义与 id 由触发系统算好传进来。
+            // 扇形甩击：身前扇形判定并施加减速状态，独立车道（unit.fanReadyAt）
             castFanSweep: (unit, slowStatusId) => ZCAttackResolutionSystem.castFanSweep(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            //  冲锋（菌盾冲锋 101204 / 冲锋 102303 / 尖刺冲锋 102703，2026-11-17 第 15 批）：
-            //  沿「起冲点 → 落点」这条线段撞人。几何由触发系统算（它负责挪人），
-            //  这里只把「线段上撞到了谁、各挨多少、落地自保」交给攻击系统。
+            // 冲锋：沿位移线段判定碰撞并施加伤害与护盾
             castChargeDash: (unit, options) => ZCAttackResolutionSystem.castChargeDash(
                 this.state, unit, this.attackResolutionContext, options),
-            //  孢爆箭（风炮菇 101303，2026-11-18 第 16 批改口径）：射一枚慢速风弹，
-            //  命中单体后原地留一片飓风。独立车道（`unit.windReadyAt`），不推进普攻节拍。
+            // 风暴弹：命中单体后生成滞留风暴区域，独立车道（unit.windReadyAt）
             castWindBolt: (unit) => ZCAttackResolutionSystem.castWindBolt(
                 this.state, unit, this.attackResolutionContext),
-            //  连射导弹（风炮菇 101304）：一次发**一颗**，一轮的 0/0.4/0.8s 节拍由触发系统排
-            //  （`barrageShotsLeft` / `barrageNextAt`）——弹体的 `startedAt` 不能排到未来。
+            // 连射导弹：按 0/0.4/0.8s 节拍发射单枚弹体
             castBarrageShot: (unit) => ZCAttackResolutionSystem.castBarrageShot(
                 this.state, unit, this.attackResolutionContext),
-            //  冲锋是一段**定长位移**（1~2 格），不像闪现 / 突刺那样「贴着一个必然合法的
-            //  目标落点走」⇒ 要拿格子合法性兜一道，否则站在地图边缘朝外冲会把人送出
-            //  可玩区域（`placeAt` 不做边界检查）。
+            // 冲锋定长位移边界保护：校验目标格子合法性，避免冲出地图边界
             hexIdAt: (x, y) => this.geometry.hexIdAt(x, y),
-            //  菌盾冲锋的「目标方向」：与攻击链路读同一个 `unitTargeting.current`，
-            //  两边各挑一次会出现「朝 A 的格子冲、打 B」。
+            // 技能朝向与攻击链路锁定目标保持一致
             currentTarget: (unit) => this.unitTargeting.current(unit),
-            //  友军光环半径的「表值 → 世界坐标」换算，与攻击距离 / 区域半径同一口径。
             distanceScale: this.rules.combatDistanceScale,
-            //  自身施法的治疗（吃口菠萝 100603）：走与吸血同一条 `healUnit` 实现，
-            //  封顶 maxHp、死亡不生效、真回了才推 heal 飘字。
+            // 自身施法治疗：走与吸血同一条 healUnit 统一封顶并推飘字
             healUnit: (unit, amount) => ZCStatusResolutionSystem.healUnit(unit, amount, this.statusResolutionContext),
-            //  多点打击（戈壁狂箭 100804 / 追踪导弹 101003）：挑人、伤害、溅射、吸血、处决
-            //  全在攻击系统里，这里只做转发。
+            // 多点打击：转发至攻击系统统一结算命中、溅射与处决
             strike: (unit, options) => ZCAttackResolutionSystem.strikeTargets(
                 this.state, unit, options, this.attackResolutionContext),
-            //  移形换影（魔术师 103404）：位移交给 `placeAt`，那一份实现会同时更新连续坐标、
-            //  朝向与所在格索引；在这里直接改 `freeX/freeY` 会让「显示在哪」与「站在哪一格」分叉。
+            // 移形换影：位移统一转交 placeAt 维护连续坐标、朝向与地块索引一致
             blinkTo: (unit, x, y) => { this.movement.placeAt(unit, x, y); },
-            //  挑「最近的敌人」必须与 `strikeTargets` 用同一份坐标，否则会挑中却打不到。
             unitPosition: (unit) => this.services.unitPosition(unit),
-            //  触发范围闸门（2026-11-11 用户需求）：技能到点后还要「普攻射程内有目标」才真的放出去，
-            //  否则进入待触发、不消费冷却。判据与普攻完全同源（同一个 `attackReach`，
-            //  含 `attackRangePct` 与 `combatDistanceScale`），吃攻击距离 buff。
+            // 触发范围闸门：普攻射程内有目标才实际施放，与普攻判定同源
             inAttackRange: (unit) => this.unitTargeting.hasTargetInAttackRange(unit),
-            //  触发范围本身：给多点打击 / 移形换影的搜索半径封顶，只压不抬。
+            // 触发范围封顶：多点打击/移形换影搜索半径以普攻射程为上限
             attackReachOf: (unit) => this.unitTargeting.attackReachOf(unit),
-            //  技能自己的触发距离（2026-11-12 用户口径）：喷火 102603 要「小于普攻距离、
-            //  与特效 350px 对齐」⇒ 最近目标还在 350 表值 px 之外时待触发，不消费 CD。
+            // 技能专属触发距离：按配置半径进一步收窄判定范围以对齐视觉特效
             nearestEnemyDistance: (unit) => this.unitTargeting.nearestEnemyDistance(unit),
-            //  unit 域属性补丁（2026-11-17 波利奥「孢子回流」100601 的每秒回复）：
-            //  与攻击系统读的是同一份 `unitStatPatches`，别在这里另算一遍，
-            //  否则同一张卡会出现「攻击链路看到 1.5%、技能链路看到 0」。
+            // 单位属性补丁：共享同一份 unitStatPatches 保证数值一致
             statPatchOf: (unit) => this.unitStatPatches[unit.owner]?.get(unit.unitId),
         };
     }

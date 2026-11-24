@@ -26,23 +26,27 @@ interface IRepositoryLike {
     load(): Promise<ISnapshotLike>;
 }
 
-function loadRepository(power: number, cachedPower: number | null = null): { repository: IRepositoryLike; counter: { powerCalls: number } } {
+function loadRepository(power: number, cachedPower: number | null = null, missingConfig = false) {
     const counter = { powerCalls: 0 };
+    const warnings: string[] = [];
     const { exports, unresolved } = loadTsModule<{ roleRepository: IRepositoryLike }>('assets/script/app/role/RoleRepository.ts', {
+        globals: { console: { warn: (message: string) => warnings.push(message) } },
         modules: {
-            '/RefUtil': { RefUtil: { instance: { getRefAllAsync: async () => [] } } },
+            '/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => table === 'head' ? [{ resId: 70001 }] : [] } } },
             '/CacheMgr': {
                 CacheMgr: {
                     instance: {
-                        getTlCmdGem: () => [],
-                        getTlCmdEquipItem: () => [],
+                        getTlCmdGem: () => missingConfig ? [{ id: 1002001, resId: 1000000, attribute: 2001, num: 1 }] : [],
+                        getTlCmdEquipItem: () => missingConfig ? [{ resId: 401001 }, { resId: 401001 }] : [],
                         getTlCmdEquipPart: () => [],
                         getTlCmdEquipPage: () => [],
                         getTlCmdRole: () => [],
                     },
                 },
             },
-            '/RequestGuard': { toCount: (value: unknown) => Number(value) || 0 },
+            '/RequestGuard': { toCount: (value: unknown) => Number(value) || 0, toIdString: String },
+            '/GameNet': { GameNet: {} },
+            '/RequestMsg': { RequestMsg: class {} },
             '/CardRepository': {
                 cardRepository: {
                     getCachedLineupPower: () => cachedPower,
@@ -52,14 +56,14 @@ function loadRepository(power: number, cachedPower: number | null = null): { rep
                     },
                 },
             },
-            '/ItemBag': { readItemCounts: async () => new Map<string, number>() },
-            '/TableNames': { ITEM_TABLE: 'item' },
+            '/ItemBag': { readItemCounts: async () => new Map<string, number>(missingConfig ? [['100001', 3], ['70001', 1]] : []) },
+            '/TableNames': { ITEM_TABLE: 'item', HEAD_TABLE: 'head' },
             '/RoleTable': RoleTable,
             '/RoleTypes': RoleTypes,
         },
     });
     assert.deepEqual(unresolved, [], '桩表必须覆盖 RoleRepository 的全部依赖（漏桩会静默回空对象）');
-    return { repository: exports.roleRepository, counter };
+    return { repository: exports.roleRepository, counter, warnings };
 }
 
 test('角色快照的战斗力直接取卡牌阵容战力，不再走装备攻击力那一套', async () => {
@@ -80,4 +84,18 @@ test('卡牌页首屏缓存（内存 / 本地快照）已有时优先复用，�
     const snapshot = await repository.load();
     assert.equal(counter.powerCalls, 0, '已有卡牌页缓存时不应再发起一次阵容取数');
     assert.equal(snapshot.power, 325);
+});
+
+test('角色背包按配置表汇总缺失 ID，同一 ID 每次刷新只打印一次', async () => {
+    const { repository, warnings } = loadRepository(0, null, true);
+    const snapshot = await repository.load();
+    assert.deepEqual(Object.values(snapshot.bagCounts), [0, 0, 0]);
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0], /gem \[resId=1000000 \(gemId=1002001\)/);
+    assert.match(warnings[0], /gemAttribute \[id=2001 \(gemId=1002001\)/);
+    assert.match(warnings[0], /gemQuality \[quality=3 \(gemId=1002001\)/);
+    assert.match(warnings[0], /equip.*401001/);
+    assert.match(warnings[0], /item.*100001/);
+    assert.doesNotMatch(warnings[0], /70001/);
+    assert.equal(warnings[0].match(/401001/g)?.length, 1);
 });

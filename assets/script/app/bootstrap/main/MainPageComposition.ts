@@ -19,7 +19,8 @@ import { CardUpgradePage } from '../../card/CardUpgradePage';
 import type { ICardUpgradeOpenData } from '../../card/CardPresentations';
 import { LineupBoardPage } from '../../card/LineupBoardPage';
 import { RolePage } from '../../role/RolePage';
-import { RoleController } from '../../role/RoleController';
+import { RoleController, type IRoleGemDialog } from '../../role/RoleController';
+import { CommonTips } from '../../common/CommonTips';
 import { roleRepository } from '../../role/RoleRepository';
 import { MilitiaTalentPage } from '../../role/MilitiaTalentPage';
 import { StorePage } from '../../store/StorePage';
@@ -262,8 +263,26 @@ export class MainPageComposition extends ControllerBase {
         });
     }
     private createRoleController(role: RolePage): RoleController<Awaited<ReturnType<typeof roleRepository.load>>> {
+        const dialog = this.createRoleGemDialog();
         return new RoleController(this.context, {
             owner: role,
+            gems: {
+                source: () => role.node,
+                slots: () => roleRepository.equipParts(),
+                find: id => roleRepository.findGem(id),
+                change: change => roleRepository.changeGem(change, role),
+                preview: async () => {
+                    const { status, materials } = await roleRepository.previewGemCompose(role);
+                    return { status, materials: materials.map(item => ({ id: toIdString(item.id), count: item.num })) };
+                },
+                compose: () => roleRepository.composeGems(role),
+                showRewards: rewards => FW.ShowReward(rewards),
+                dialog: dialog.open,
+                cancel: () => {
+                    dialog.cancel();
+                    GameNet.instance.removeCaller(role);
+                },
+            },
             failed: reportMainPageFailure,
             repository: {
                 load: () => roleRepository.load()
@@ -281,6 +300,53 @@ export class MainPageComposition extends ControllerBase {
             },
         });
     }
+    private createRoleGemDialog() {
+        let cancel: (() => void) | null = null;
+        return {
+            open: (data: IRoleGemDialog) => new Promise<'confirm' | 'alternate' | null>((resolve, reject) => {
+                let popup: CommonTips | null = null;
+                let choice: 'confirm' | 'alternate' | null = null;
+                let settled = false;
+                const finish = () => {
+                    settled = true;
+                    if (cancel === dismiss) cancel = null;
+                    resolve(choice);
+                };
+                const dismiss = () => {
+                    choice = null;
+                    finish();
+                    if (popup?.isPopupOpen) popup.close();
+                };
+                cancel = dismiss;
+                void CommonTips.open({
+                    cache: false,
+                    allowMultiple: true,
+                    userData: {
+                        ...data,
+                        showCancel: !!data.sureText,
+                        onSure: () => {
+                            choice = 'confirm';
+                        },
+                        onCancel: () => {
+                            choice = data.cancelText ? 'alternate' : null;
+                        },
+                    },
+                    onClose: finish,
+                }).then(opened => {
+                    popup = opened;
+                    if (settled && popup?.isPopupOpen) popup.close();
+                    if (!popup) finish();
+                }, error => {
+                    if (cancel === dismiss) cancel = null;
+                    reject(error);
+                });
+            }),
+            cancel: () => {
+                cancel?.();
+            },
+        };
+    }
+
     private createStoreController(store: StorePage): StoreController {
         return new StoreController(
             this.context,

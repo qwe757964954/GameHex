@@ -60,6 +60,25 @@ export interface IRoleBagEntry {
 
 /** 装备部位数（老端 `equipType` 1..6；`Role.prefab` 里对应 `Equip1`..`Equip6`）。 */
 export const ROLE_EQUIP_PART_COUNT = 6;
+export const ROLE_GEM_SOCKET_COUNT = 5;
+
+export interface IRoleGemEntry extends IRoleBagEntry {
+    readonly kind: 'gem';
+    readonly gemId: string;
+    readonly equipId: number;
+}
+
+export interface IRoleGemSocket {
+    readonly page: number;
+    readonly equipId: number;
+    readonly order: number;
+    readonly gemId: string;
+}
+
+export type RoleGemChange =
+    | { readonly kind: 'on'; readonly payload: { equipId: number; page: number; id: string } }
+    | { readonly kind: 'replace'; readonly payload: { equipId: number; page: number; order: number; id: string } }
+    | { readonly kind: 'down'; readonly payload: { equipId: number; page: number; order: number } };
 
 /**
  * 角色页装备栏**一格**的视图数据（`RoleRepository.equipParts()`）。
@@ -74,6 +93,7 @@ export interface IRoleEquipSlotData {
     readonly entry: IRoleBagEntry | null;
     /** 装备等级（`CmdEquip.level`；取不到 = 0 = 不显示）。 */
     readonly level: number;
+    readonly sockets: readonly IRoleGemSocket[];
 }
 
 export interface IRoleSnapshot {

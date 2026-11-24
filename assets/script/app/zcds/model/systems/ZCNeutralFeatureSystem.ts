@@ -450,11 +450,11 @@ export class ZCNeutralFeatureSystem {
         feature.retaliationUnitIds = (feature.retaliationUnitIds ?? []).filter(id => {
             const unit = state.units.find(u => u.id === id && eligible(u));
             if (!unit) return false;
-            const dist = Math.hypot(unit.freeX - center.x, unit.freeY - center.y);
+            const dist = Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2);
             return dist <= reachOf(unit) * 3;
         });
         const inRange = (unit: ZCUnitState) => eligible(unit) && (feature.retaliationUnitIds.includes(unit.id)
-            || Math.hypot(unit.freeX - center.x, unit.freeY - center.y) <= reachOf(unit));
+            || Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2) <= reachOf(unit));
         let target = state.units.find(unit => unit.id === feature.targetUnitId && inRange(unit));
         if (!target) {
             let best = Infinity;

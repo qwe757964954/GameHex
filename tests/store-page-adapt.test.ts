@@ -50,10 +50,12 @@ test('商城页根节点撑满 Content：四边对齐且 inset 全 0', () => {
     assert.equal(root._alignMode, 2, 'ON_WINDOW_RESIZE：旋转/分辨率变化后要重算');
 });
 
-test('背景与木框面板随屏幕高度延伸，顶部锚点与设计稿一致', () => {
+test('背景按 720×852 贴顶铺满，裁掉原图顶部约 100px 天花板', () => {
     const bg = widget('Bg');
-    assert.equal(bg._alignFlags, FLAGS.TOP | FLAGS.BOT | FLAGS.LEFT | FLAGS.RIGHT);
-    for (const key of ['_top', '_bottom', '_left', '_right']) assert.equal(bg[key], 0, key);
+    assert.equal(bg._alignFlags, FLAGS.TOP | FLAGS.LEFT | FLAGS.RIGHT);
+    assert.equal(bg._top, -100, '效果图从相框顶部开始，不露天花板');
+    assert.equal(bg._bottom, 0);
+    for (const key of ['_left', '_right']) assert.equal(bg[key], 0, key);
 
     // ShopPanel：顶边 384=1280-256（FGUI @(0,384)），底部沿用设计稿的 -30 溢出，1280 下高度仍是 926。
     const panel = widget('ShopPanel');

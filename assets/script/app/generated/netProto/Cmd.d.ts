@@ -5747,6 +5747,7 @@
         unitType?: (number|null);
         buffInfo?: (CmdPvpBuffInfo[]|null);
         attrs?: (CmdPvpHeroAttrInfo[]|null);
+        modifyList?: (number[]|null);
     }
 
     

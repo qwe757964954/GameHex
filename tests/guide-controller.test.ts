@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { IControllerContext } from '../assets/script/framework/controller/ControllerBase';
 import { GuideController } from '../assets/script/app/guide/application/GuideController';
-import { reportGuideComplete } from '../assets/script/app/guide/application/GuideEvents';
+import { reportGuideComplete, reportBattleGuideSettled } from '../assets/script/app/guide/application/GuideEvents';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { CardLineupEvent } from '../assets/script/app/card/CardLineupEvents';
 import type { IGuideViewState } from '../assets/script/app/guide/application/GuideController';
@@ -86,6 +86,55 @@ test('章节战斗从进入、当前抽卡展示结束到结算返回，按实�
         assert.equal(controller.notify('click'), false);
         assert.equal(controller.notify('backToMap'), true);
         assert.equal(controller.currentStepId, '6-1');
+    } finally { controller.dispose(); }
+});
+
+test('战斗提前退出（跳过战斗）也要把战斗步了结：卡在 5-3 也能直接走到 6-1', () => {
+    const { controller } = makeController('battle-skip-settle');
+    try {
+        controller.start();
+        // 推进到 5-3 = 抽卡演出还没播完，玩家一秒就「跳过战斗」进结算。
+        for (const step of STEPS) {
+            if (step.stepId === '5-3') break;
+            const [name, arg] = step.completeCond.split(':');
+            assert.equal(controller.notify(name, arg), true);
+        }
+        assert.equal(controller.currentStepId, '5-3');
+        // 现场就是这样：只报 backToMap 对不上当前步，引导永久停在 5-3，
+        // 回主界面后焦点 `Battle/DrawnCard` 解析不出来 ⇒ 什么都不显示。
+        assert.equal(controller.notify('backToMap'), false);
+        assert.equal(controller.currentStepId, '5-3');
+        // 离开对局统一报一遍 ⇒ 5-3 → 5-4 → 6-1。
+        reportBattleGuideSettled();
+        assert.equal(controller.currentStepId, '6-1');
+    } finally { controller.dispose(); }
+});
+
+test('离开对局的战斗步了结：停在 5-2 / 5-4 都能到 6-1，已过 6-1 则是 no-op', () => {
+    const pushTo = (controller: GuideController, stopAt: string) => {
+        for (const step of STEPS) {
+            if (step.stepId === stopAt) return;
+            const [name, arg] = step.completeCond.split(':');
+            assert.equal(controller.notify(name, arg), true);
+        }
+    };
+    for (const stopAt of ['5-2', '5-4']) {
+        const { controller } = makeController(`battle-settle-${stopAt}`);
+        try {
+            controller.start();
+            pushTo(controller, stopAt);
+            assert.equal(controller.currentStepId, stopAt);
+            reportBattleGuideSettled();
+            assert.equal(controller.currentStepId, '6-1', `停在 ${stopAt} 时离开对局也要接到 6-1`);
+        } finally { controller.dispose(); }
+    }
+    const { controller } = makeController('battle-settle-past');
+    try {
+        controller.start();
+        pushTo(controller, '6-2');
+        assert.equal(controller.currentStepId, '6-2');
+        reportBattleGuideSettled();
+        assert.equal(controller.currentStepId, '6-2', '已经过了战斗步就不许往回带');
     } finally { controller.dispose(); }
 });
 

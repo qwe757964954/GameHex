@@ -1,4 +1,5 @@
-import { reportGuideComplete } from '../../assets/script/app/guide/application/GuideEvents';
+import { reportGuideComplete, reportBattleGuideSettled } from '../../assets/script/app/guide/application/GuideEvents';
+import { ownersForPlayerCount, ZCOwner } from '../../assets/script/app/zcds/model/ZCMapConfig';
 import { ZC_BATTLE_EVENTS } from '../../assets/script/app/zcds/application/ZCBattleEvents';
 import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
@@ -30,6 +31,11 @@ export function loadBattlePreparation(dependencies: Record<string, unknown>) {
 
 /** Run the real composition and entry builder while replacing only engine/I/O edges. */
 export function loadBattleComposition(dependencies: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
+    // `ZCBattleEntryBuilder` 自 11-23 起要 `ownersForPlayerCount` / `ZCOwner`（纯函数 + 枚举，
+    // 没有引擎依赖）⇒ 直接用真模块补上，别让「缺桩」把整个组合层夹具卡在求值阶段。
+    if (!('../zcds/model/ZCMapConfig' in dependencies)) {
+        dependencies['../zcds/model/ZCMapConfig'] = { ownersForPlayerCount, ZCOwner };
+    }
     const builder = loadModule('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', name => {
         const key = name.startsWith('./') ? '../zcds/application/' + name.slice(2) : '../zcds/' + name.slice(3);
         if (!(key in dependencies)) throw new Error(`Missing entry dependency ${key}`);
@@ -39,7 +45,7 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
     return loadModule('assets/script/app/bootstrap/battle/BattleComposition.ts', name => {
         if (name in overrides) return overrides[name];
         if (name.endsWith('/GuideComposition')) return { GuideComposition: class { dispose() {} } };
-        if (name.endsWith('/GuideEvents')) return { reportGuideComplete };
+        if (name.endsWith('/GuideEvents')) return { reportGuideComplete, reportBattleGuideSettled };
         if (name === 'cc') return { Prefab: class Prefab {} };
         if (name.endsWith('/BundleCatalog')) return { bundleForPath };
         if (name.endsWith('/ControllerBase')) return { ControllerBase };

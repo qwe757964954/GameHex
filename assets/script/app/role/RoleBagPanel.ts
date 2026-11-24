@@ -1,5 +1,8 @@
 import { _decorator, Component, Node } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
+import { EventMgr } from '../../framework/event/EventMgr';
+import { RoleEvent } from './RoleEvents';
+import type { IRoleGemEntry } from './RoleTypes';
 import { ItemDetailPage } from '../itemdetail/ItemDetailPage';
 import { roleRepository } from './RoleRepository';
 import { loadRoleBagIcon, loadRoleQualityFrame } from './RoleArtLoader';
@@ -166,11 +169,15 @@ export class RoleBagPanel extends Component {
     /**
      * 点一格：
      * · 装备 / 道具 → 物品详情弹窗（ItemDetailPage，同「获得奖励」的处置）；
-     * · 宝石        —— 老端是 LayerGemInfo（镶嵌 / 合成，复杂），本轮不接，点击不弹窗。
+     * · 宝石交由角色 Controller 展示详情或确认镶嵌。
      */
     private onItemClick(index: number): void {
         const entry = this.entries[index];
-        if (!entry || entry.kind === 'gem') return;
+        if (!entry) return;
+        if (entry.kind === 'gem') {
+            EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gem', id: (entry as IRoleGemEntry).gemId }, this.node.parent);
+            return;
+        }
         void ItemDetailPage.open({
             userData: { resId: entry.resId, number: entry.count },
             allowMultiple: true,

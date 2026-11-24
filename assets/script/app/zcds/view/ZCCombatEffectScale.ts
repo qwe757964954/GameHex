@@ -51,9 +51,8 @@ export function zcHitFxNodeScale(
  * 非法值（`NaN` / `≤0` / 非数字）一律退回 `1`：宁可尺寸没改，也不能把节点缩成 0
  * 让整条特效静默消失。
  *
- * 2026-11-03 椰蛋暴风的案例：`area` 类地面区域的视觉尺寸 100% 来自 prefab 烘焙缩放
- * （`ZCCombatEffectView` 不按 `event.radius` 缩放），所以「视觉缩到 80%」只能挂倍率；
- * 「碰撞范围跟着缩」落在配表 `pvpSkill.areaRadius`。两处必须同步，否则「看着变小、判定没变」。
+ * 地面区域（area）视觉尺寸来自 prefab 烘焙缩放（ZCCombatEffectView 不按 event.radius 缩放），
+ * 视觉缩放挂在特效倍率，碰撞范围同步配置在 pvpSkill.areaRadius，保持视觉与判定一致。
  */
 export function zcCombatEffectNodeScaleOf(
     effectPrefabPath: string | null | undefined,
@@ -66,13 +65,9 @@ export function zcCombatEffectNodeScaleOf(
  *
  * @param growSeconds 生长时长（秒）。`undefined` / `0` / 非法 ⇒ 返回 1（不生长）
  * @param ageSeconds  事件年龄（`now - startedAt`）
- * @param growFrom    起始占比（0~1，缺省 0）。合成 `growFrom + (1-growFrom) × ease(t)`：
- *                    缓动本身在 t = 0 时是 0，所以「出生就有 10%」只能靠这一格补
- *                    （2026-11-20 三叶小丑飓风 102004：「初始生成的大小只有 10%，
- *                    随着移动过程逐渐成长」）。
+ * @param growFrom    起始占比（0~1，缺省 0）。合成 `growFrom + (1-growFrom) * ease(t)`，支持初始带初生尺寸的平滑成长。
  *
- * 缓动取 ease-out quad（`1 - (1-t)²`）：0.3s 这类短入场用线性会显得「一顿」，
- * out-back 又会在末段过冲、把飓风撑得比最终尺寸还大一圈。
+ * 缓动取 ease-out quad（1 - (1-t)²），避免线性突兀感与回弹过冲。
  *
  * 🔴 `growSeconds` 非法时一律返回 **1**（满尺寸），不返回 `growFrom`：宁可「没有入场动画」，
  * 也不能让一格写歪的配表把整片飓风永久钉在 10% 上（那画面等于技能没放出来）。

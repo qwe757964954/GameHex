@@ -145,7 +145,7 @@ export const STORE_SILVER_ROWS: readonly IStoreSilverRow[] = [
     { id: 4, name: '银币x5000', price: '400', sale: '8折', video: false, iconPath: 'icons/resource/图标_货币_大量铜钱' },
 ];
 
-// 黑市宝箱段：杂货铺
+// 黑市宝物段：杂货铺
 /** 杂货铺 7 条，图标和品质按 rewards[0].resId 查 item 表。 */
 export interface IStoreGoodsRow {
     /** resourceShop.id。 */

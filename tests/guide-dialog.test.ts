@@ -1,7 +1,7 @@
 /**
  * 引导台词与立绘配置的判据。
  *
- * 台词表是从设计案「NPC与文案」页提取的（当前 20 句）—— 这里用真表当夹具，
+ * 台词表是从设计案「NPC与文案」页提取的（当前 18 句）—— 这里用真表当夹具，
  * 表被改坏（丢句 / 组错 / 说话人写错）会直接红。
  */
 
@@ -25,13 +25,13 @@ const LINES = parseGuideDialogLines(RAW.v.map((row) => {
     return out;
 }));
 
-test('真表：20 句全部解析成功，id 是数字且不重复', () => {
+test('真表：18 句全部解析成功，id 是数字且不重复', () => {
     // 第 22 条把 `D06`（战斗里那张抽到的卡）的三句并成一句 ⇒ 24 → 22；
-    // 2026-11-18 夜里台词表又被精简到 20 句（末组 `D11` 只剩 2 句）⇒ 22 → 20。
-    assert.equal(LINES.length, 20);
+    // 2026-11-18 夜里精简到 20 句；2026-11-24 上午台词表又被砍到 18 句（`D02`~`D04` 各剩一句）。
+    assert.equal(LINES.length, 18);
     assert.equal(LINES.every((line) => typeof line.id === 'number' && Number.isSafeInteger(line.id)), true);
     const ids = new Set(LINES.map((line) => line.id));
-    assert.equal(ids.size, 20);
+    assert.equal(ids.size, 18);
     // id = 组序号 × 100 + 句序号 ⇒ 首句 101、末句 1102（第 18 条把「点击关卡」两句拆成新的 `D05`，
     // 后面的组整体前移一位，于是末组从 `D10` 变成 `D11`）
     assert.equal(LINES[0].id, 101);

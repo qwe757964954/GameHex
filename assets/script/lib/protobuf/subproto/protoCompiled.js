@@ -110008,6 +110008,7 @@ $root.com = (function() {
                      * @property {number|null} [unitType] CmdBattleUnitInfo unitType
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpBuffInfo>|null} [buffInfo] CmdBattleUnitInfo buffInfo
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo>|null} [attrs] CmdBattleUnitInfo attrs
+                     * @property {Array.<number>|null} [modifyList] CmdBattleUnitInfo modifyList
                      */
 
                     /**
@@ -110022,6 +110023,7 @@ $root.com = (function() {
                         this.heroInfos = [];
                         this.buffInfo = [];
                         this.attrs = [];
+                        this.modifyList = [];
                         if (properties)
                             for (var keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                                 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -110101,6 +110103,14 @@ $root.com = (function() {
                     CmdBattleUnitInfo.prototype.attrs = $util.emptyArray;
 
                     /**
+                     * CmdBattleUnitInfo modifyList.
+                     * @member {Array.<number>} modifyList
+                     * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
+                     * @instance
+                     */
+                    CmdBattleUnitInfo.prototype.modifyList = $util.emptyArray;
+
+                    /**
                      * Creates a new CmdBattleUnitInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
@@ -110144,6 +110154,9 @@ $root.com = (function() {
                         if (message.attrs != null && message.attrs.length)
                             for (var i = 0; i < message.attrs.length; ++i)
                                 $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(/* id 9, wireType 2 =*/74).fork(), q + 1).ldelim();
+                        if (message.modifyList != null && message.modifyList.length)
+                            for (var i = 0; i < message.modifyList.length; ++i)
+                                writer.uint32(/* id 10, wireType 0 =*/80).uint32(message.modifyList[i]);
                         return writer;
                     };
 
@@ -110211,6 +110224,17 @@ $root.com = (function() {
                                     if (!(message.attrs && message.attrs.length))
                                         message.attrs = [];
                                     message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+                                    break;
+                                }
+                            case 10: {
+                                    if (!(message.modifyList && message.modifyList.length))
+                                        message.modifyList = [];
+                                    if ((tag & 7) === 2) {
+                                        var end2 = reader.uint32() + reader.pos;
+                                        while (reader.pos < end2)
+                                            message.modifyList.push(reader.uint32());
+                                    } else
+                                        message.modifyList.push(reader.uint32());
                                     break;
                                 }
                             default:

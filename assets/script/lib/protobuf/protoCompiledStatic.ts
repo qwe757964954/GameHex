@@ -51226,6 +51226,7 @@ function CmdBattleUnitInfo(properties) {
 this.heroInfos = [];
 this.buffInfo = [];
 this.attrs = [];
+this.modifyList = [];
 if (properties)
 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
 if (properties[keys[i]] != null && keys[i] !== "__proto__")
@@ -51240,6 +51241,7 @@ CmdBattleUnitInfo.prototype.unitId = 0;
 CmdBattleUnitInfo.prototype.unitType = 0;
 CmdBattleUnitInfo.prototype.buffInfo = $util.emptyArray;
 CmdBattleUnitInfo.prototype.attrs = $util.emptyArray;
+CmdBattleUnitInfo.prototype.modifyList = $util.emptyArray;
 CmdBattleUnitInfo.create = function create(properties) {
 return new CmdBattleUnitInfo(properties);
 };
@@ -51266,6 +51268,9 @@ $root.com.xkhy.tafang.cmd.CmdPvpBuffInfo.encode(message.buffInfo[i], writer.uint
 if (message.attrs != null && message.attrs.length)
 for (let i = 0; i < message.attrs.length; ++i)
 $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uint32(  74).fork(), q + 1).ldelim();
+if (message.modifyList != null && message.modifyList.length)
+for (let i = 0; i < message.modifyList.length; ++i)
+writer.uint32(  80).uint32(message.modifyList[i]);
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -51321,6 +51326,17 @@ case 9: {
 if (!(message.attrs && message.attrs.length))
 message.attrs = [];
 message.attrs.push($root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.decode(reader, reader.uint32(), undefined, long + 1));
+break;
+}
+case 10: {
+if (!(message.modifyList && message.modifyList.length))
+message.modifyList = [];
+if ((tag & 7) === 2) {
+let end2 = reader.uint32() + reader.pos;
+while (reader.pos < end2)
+message.modifyList.push(reader.uint32());
+} else
+message.modifyList.push(reader.uint32());
 break;
 }
 default:

@@ -82,7 +82,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         this.targetScratch.delete(id);
         const units = this.context.units;
         if (units) {
-            const list = typeof (units as any).values === 'function' ? (units as any).values() : units;
+            const list = 'values' in units && typeof units.values === 'function' ? units.values() : units;
             for (const u of list) {
                 if (u && u.hatredUnitId === id) {
                     u.hatredUnitId = null;
@@ -249,7 +249,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         const units = this.context.units;
         if (!units) return null;
         const maxDistSq = maxDistance * maxDistance;
-        const list = typeof (units as any).values === 'function' ? (units as any).values() : units;
+        const list = 'values' in units && typeof units.values === 'function' ? units.values() : units;
         const definition = this.context.effectiveDefinition(unit);
         let bestBreaker: ZCUnitState | null = null;
         let bestDistSq = Infinity;

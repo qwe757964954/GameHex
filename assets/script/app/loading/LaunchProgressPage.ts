@@ -5,7 +5,7 @@ const { ccclass, property } = _decorator;
  * 启动进度页组件（热更 + 登录后资源加载共用）。
  *
  * 挂在 `LaunchProgress.prefab` 根节点上，结构与实现对齐旧 `PostLoginLoadingPage`：
- * 轨道 + 横向填充条（白色圆角条 `image/main/bar_white`：轨道染深色、填充条白色原样，
+ * 轨道 + 横向填充条（白色圆角条 `image/common/bar_white`：轨道染深色、填充条白色原样，
  * FILLED + fillRange 裁剪）+ 百分比文本 + 状态文本四个引用，`onLoad` 代码兜底初始化样式；
  * 两个启动流程通过 `LaunchProgressUI` 驱动它。
  *
@@ -31,7 +31,7 @@ export class LaunchProgressPage extends Component {
 
     onLoad(): void {
         // 样式已在 prefab 中设置；代码兜底，保证与旧 PostLoginLoadingPage 视觉口径一致。
-        // 轨道/填充都用白色圆角条 image/main/bar_white（不改图）：轨道染深色、填充条染
+        // 轨道/填充都用白色圆角条 image/common/bar_white（不改图）：轨道染深色、填充条染
         // 以前的青色(59,206,235)，填充用 FILLED 横向裁剪驱动进度（fillRange）。
         if (this.progressTrack) this.progressTrack.color = new Color(30, 43, 61, 230);
         if (this.progressFill) {

@@ -19,15 +19,13 @@ export const ZC_EFFECT_TUNING = {
     chainFadeStep: 0.12,
     /** 链雷透明度下限。*/
     chainFadeFloor: 0.4,
-    /** 冲锋残影：静态单帧，按设计给的 0.3s。*/
+    /** 冲锋残影时长（秒）。*/
     dashSeconds: 0.3,
     /** 刀盾护盾 clip：17 帧 @ 12fps。*/
     dashGuardSeconds: 17 / 12,
     /**
-     * 仙桃行者重击柱 clip：29 帧 @ 24fps（`仙桃行者_重击技能-play`）。
-     *
-     * 与 `tools/build_xiantao_quake_fx.py` 的 `FRAMES` / `SAMPLE` 必须一致：事件寿命短于 clip
-     * 会被 `ZCGameModel` 按 `startedAt + durationSeconds` 提前摘掉，表现出来就是「砸到一半就没了」。
+     * 仙桃行者重击柱 clip 时长：29 帧 @ 24fps。
+     * 需与动画 clip 长度一致，避免事件提前被摘除导致动画被截断。
      */
     quakeStrikeSeconds: 29 / 24,
     /** 长戟兵撕裂 clip：8 帧 @ 12fps。*/
@@ -38,13 +36,13 @@ export const ZC_EFFECT_TUNING = {
     trapExpireSeconds: 18 / 30,
     /** 飓风接触判定间隔：20Hz 模拟下每逻辑步一波。*/
     hurricaneTouchSeconds: 0.05,
-    /** 连射炸弹落点散布半径（逻辑 px）；设计写的是 30px 直径。*/
+    /** 连射炸弹落点散布半径（逻辑 px）。*/
     barrageScatterRadius: 15,
-    /** 连射炸弹飞行速度（逻辑 px/s）；设计没给，取与 1.2s 节拍同量级的值。*/
+    /** 连射炸弹飞行速度（逻辑 px/s）。*/
     barrageFlightSpeed: 300,
     /** 连射间隔兜底；配表 `barrageInterval` 缺省时使用。*/
     barrageDefaultInterval: 0.4,
-    /** 炸弹最短飞行时间，避免贴脸时在出手帧就炸。*/
+    /** 炸弹最短飞行时间，避免贴脸时在出手帧瞬间爆炸。*/
     barrageMinFlightSeconds: 0.12,
     /** 导弹命中爆炸的基准判定半径（逻辑 px），事件级缩放以它为 1.0。*/
     barrageImpactReferenceRadius: 80,
@@ -54,9 +52,9 @@ export const ZC_EFFECT_TUNING = {
     projectileFadeSeconds: 0.18,
     /** 通用近战 / 区域事件时长兜底（秒）。*/
     eventSeconds: 0.3,
-    /** 近战冲击环的余波时长；比主特效长一点，但不盖住下一次普攻。*/
+    /** 近战冲击环的余波时长；略长于主特效且不遮盖下次攻击。*/
     shockwaveEventSeconds: 0.35,
-    /** 未登记飞行段时，近战 / 区域事件时长（`ZCCombatSystem.attackTravelSeconds` 同源）。*/
+    /** 未登记飞行段时，近战 / 区域事件时长。*/
     defaultAttackTravelSeconds: 0.32,
     /** 未给弹速时的兜底（逻辑 px/s）。*/
     defaultProjectileSpeed: 500,
@@ -69,28 +67,24 @@ export const ZC_EFFECT_SCALE = {
     /** `普攻爆炸` prefab 的屏上宽度：UITransform 141 × 根 `_lscale` 2.0。*/
     burstPrefabScreenWidth: 282,
     /**
-     * 射线集束那张图烘进 prefab 的基准半长（逻辑 px）。
-     *
-     * 2026-11-23 第 43 批换图：雷电冲击 → 镭射飞龙_普攻（用户口径「射线颜色和镭射飞龙
-     * 普攻一致」）。按可见内容重算：画布 700×73、alpha bbox 66~641 ⇒ 可见宽 575，
-     * 根 `_lscale.x = 1` ⇒ 屏上 575 px ⇒ 逻辑 575 / 0.76875 ≈ 748 ⇒ 半长 **374**。
-     * （旧值 180 是按雷电冲击算的：可见宽 485 × 0.575963 / 0.76875 / 2 ≈ 182。）
-     * 🔴 改这条必须同步 `zcRayBeamEffectScale` 的结果：屏上光束长度要等于表值判定长度。
+     * 射线集束 prefab 基准半长（逻辑 px）。
+     * 资产可见宽 575 屏上 px，对应逻辑约 748 px，半长 374。
+     * 保证 zcRayBeamEffectScale 计算出的屏上光束长度等于判定长度。
      */
     rayBeamReferenceHalfLength: 374,
-    /** 菌丝绞杀扇形里铺几发爆点。*/
+    /** 扇形甩击爆点数量。*/
     fanBurstCount: 3,
-    /** 每发爆点半径 = 扇形半径 × 该比例。*/
+    /** 每发爆点半径相对扇形半径的比例。*/
     fanBurstRadiusRatio: 0.5,
-    /** 爆点离施法者距离 = 扇形半径 × 该比例。*/
+    /** 爆点距离相对扇形半径的比例。*/
     fanBurstDistanceRatio: 0.6,
-    /** 相邻爆点角度间隔 = 半个扇形角 × 该比例。*/
+    /** 相邻爆点角度间隔相对半角比例。*/
     fanBurstSpread: 0.6,
-    /** 光束最短长度（视图 px）：贴脸时 `to` 可能落在发射口后面，缩成 0 会整条消失。*/
+    /** 光束最短长度（视图 px）：贴脸时避免缩为 0 导致节点不可见。*/
     beamMinLength: 6,
-    /** 召唤光环可见环要盖住「本体 + 4 个舞伴」的放大倍率（事件级 effectScale）。*/
+    /** 召唤光环可见环覆盖本体与随从的放大倍率（事件级 effectScale）。*/
     summonAuraCoverScale: 1.99,
-    /** `effectScale = 1` 时「持续光环伤害效果」可见环的半轴（屏上 px）。*/
+    /** effectScale = 1 时持续光环可见环半轴（屏上 px）。*/
     summonAuraRingHalfScreenX: 91.9,
     summonAuraRingHalfScreenY: 36.05,
 } as const;

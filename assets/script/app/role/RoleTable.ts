@@ -3,8 +3,10 @@
  *
  * 本轮落地：背包三页签（宝石 / 装备 / 道具）的列表窗口与排序。
  */
+import { toIdString } from '../../core/value/Coerce';
+import type { IRoleGemEntry, IRoleGemSocket, RoleGemChange } from './RoleTypes';
 import type { IEquipPartInfo, IRoleBagEntry, IRoleNavEntry, RoleBagKind, RoleBagTabId, RoleNavId } from './RoleTypes';
-import { ROLE_BAG_TAB_IDS, ROLE_EQUIP_PART_COUNT, ROLE_NAV_IDS } from './RoleTypes';
+import { ROLE_BAG_TAB_IDS, ROLE_EQUIP_PART_COUNT, ROLE_GEM_SOCKET_COUNT, ROLE_NAV_IDS } from './RoleTypes';
 
 // ============================================================
 // 防御式取值
@@ -289,4 +291,38 @@ export function buildEquipSlotPlan(
         });
     }
     return out;
+}
+
+/** Gem orders belong to the selected equipment plan and use one-based indexing. */
+export function buildGemSockets(
+    page: number,
+    equipId: number,
+    pages: readonly Pick<CmdEquipPage, 'page' | 'tlCmdEquip'>[],
+): IRoleGemSocket[] {
+    const equipment = pages.find(row => row.page === page)?.tlCmdEquip?.find(row => row.equipId === equipId);
+    if (!equipment) return [];
+
+    const gemIds = new Map<number, string>();
+    for (const gem of equipment.tlCmdGemInfo ?? []) {
+        const id = toIdString(gem.gemId);
+        if (/^[1-9]\d*$/.test(id)) gemIds.set(gem.order, id);
+    }
+    return Array.from({ length: ROLE_GEM_SOCKET_COUNT }, (_, index) => ({
+        page, equipId, order: index + 1, gemId: gemIds.get(index + 1) ?? '',
+    }));
+}
+
+export function getGemChange(
+    sockets: readonly IRoleGemSocket[],
+    target: IRoleGemSocket,
+    gem: IRoleGemEntry | null,
+): RoleGemChange | null {
+    const { page, equipId, order, gemId } = target;
+    const current = sockets.find(socket => socket.page === page && socket.equipId === equipId && socket.order === order);
+    if (!current || current.gemId !== gemId) return null;
+    if (!gem) return gemId ? { kind: 'down', payload: { equipId, page, order } } : null;
+    if (gem.equipId !== equipId || gem.count <= 0 || sockets.some(socket => socket.gemId === gem.gemId)) return null;
+    return gemId
+        ? { kind: 'replace', payload: { equipId, page, order, id: gem.gemId } }
+        : { kind: 'on', payload: { equipId, page, id: gem.gemId } };
 }

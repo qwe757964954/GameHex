@@ -26,8 +26,8 @@ const BAG_TAB_NODES: ReadonlyArray<readonly [string, RoleBagTabId]> = [
 /** 设计稿顶部「宝石背包」入口（复用页签 1；点击直接切到宝石列表）。 */
 const BAG_ENTRY_GEM = 'BagBtnGem';
 
-/** 设计稿顶部「一键合成 / 全部」入口：业务未接入，沿用未落地导航的提示，不留死按钮。 */
-const BAG_ENTRY_PENDING: readonly string[] = ['BagBtnCompose', 'BagBtnAll'];
+const BAG_ENTRY_COMPOSE = 'BagBtnCompose';
+const BAG_ENTRY_PENDING: readonly string[] = ['BagBtnAll'];
 
 /** 未选中页签的文字色 / 描边色（设计稿：灰底深棕字；选中态白字 + 深棕描边）。 */
 const TAB_LABEL_IDLE = new Color(74, 55, 38, 255);
@@ -170,6 +170,8 @@ export class RolePage extends Component {
 
         const gemEntry = this.node.getChildByName(BAG_ENTRY_GEM)?.getComponent(Button);
         gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }, this), this);
+        this.node.getChildByName(BAG_ENTRY_COMPOSE).on(Button.EventType.CLICK,
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }, this), this);
         for (const name of BAG_ENTRY_PENDING) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
             button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId: 7 }, this), this);
@@ -221,7 +223,7 @@ export class RolePage extends Component {
 
         // 老端结构（`TabRoleMain`）：进页面下半屏**直接铺列表**，默认停在「宝石」页签，
         // 不是「点页签才弹出一个覆盖式面板」（那样进来时下半屏是空白的）。
-        await this.presentEquips();
+        await this.presentEquips(rev);
         if (!this.alive || rev !== this.revision) return;
 
         // 宝石页签红点 = 服务端 `CmdRedDotType.GEM_COMPOSE`（「有宝石可合成」）。
@@ -289,24 +291,25 @@ export class RolePage extends Component {
      * 边加载边写会先闪一格旧图。
      * ⚠️ 空位（`entry === null`）**不隐藏格子** —— 老端也是恒在，只把图 / 框 / 文字清掉。
      */
-    private async presentEquips(): Promise<void> {
-        const slots = roleRepository.equipParts();
-        await Promise.all(
-            slots.map(async (data, index) => {
-                const slot = this.equipSlots[index];
-                const entry = data.entry;
-                if (!entry) {
-                    slot.render(null, null, 0, false);
-                    return;
-                }
-                const [icon, frame] = await Promise.all([
-                    loadRoleBagIcon(entry),
-                    loadRoleQualityFrame(entry.quality),
-                ]);
-                if (!this.alive) return;
-                slot.render(frame, icon, data.level, true);
-            }),
-        );
+    private async presentEquips(revision: number): Promise<void> {
+        const slots = await Promise.all(roleRepository.equipParts().map(async data => {
+            const entry = data.entry;
+            if (!entry) return { data, icon: null, frame: null, gems: [] };
+            const [icon, frame, gems] = await Promise.all([
+                loadRoleBagIcon(entry),
+                loadRoleQualityFrame(entry.quality),
+                Promise.all(data.sockets.map(socket => {
+                    const gem = roleRepository.findGem(socket.gemId);
+                    return gem ? loadRoleBagIcon(gem) : null;
+                })),
+            ]);
+            return { data, icon, frame, gems };
+        }));
+        if (!this.alive || revision !== this.revision) return;
+        slots.forEach(({ data, icon, frame, gems }, index) => {
+            this.equipSlots[index].render(frame, icon, data.level, data.entry !== null);
+            this.equipSlots[index].renderGems(gems);
+        });
     }
 
     /**

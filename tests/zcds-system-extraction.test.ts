@@ -68,7 +68,8 @@ test('索敌复用坐标输出时保持原点、ID 平局、空中筛选和单�
         hexPosition: () => ({ x: 120, y: 0 }), hasExposedWall: () => true,
     };
     assert.deepEqual(ZCTargetingSystem.acquire(source, context), { kind: 'unit', id: 2 });
-    assert.deepEqual(ZCTargetingSystem.acquire(source, { ...context, hexes: [wall] }), { kind: 'wall', id: 1 });
+    // 等距评分时 Hex ID 不会因 ID 较小而踩掉已选中的单位
+    assert.deepEqual(ZCTargetingSystem.acquire(source, { ...context, hexes: [wall] }), { kind: 'unit', id: 2 });
     assert.deepEqual(ZCTargetingSystem.acquire(source, { ...context, hexes: [wall], preferUnitTargets: () => true }), { kind: 'unit', id: 2 });
     source.hatredUnitId = hater.id; source.hatredUntil = 2;
     assert.deepEqual(ZCTargetingSystem.acquire(source, context), { kind: 'unit', id: 6 });

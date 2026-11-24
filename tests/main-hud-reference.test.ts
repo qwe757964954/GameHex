@@ -23,10 +23,12 @@ test('主城顶栏玩家信息在 ArenaRoot 中默认显示', () => {
     assert.equal(nodes[0]._active, true, '顶部玩家头像、名称与经验条不能被 prefab 默认隐藏');
 });
 
-test("挑战页签保持锁定；世界页签解锁并改为大地图（大世界）入口", () => {
-    for (const tab of [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory, MainTab.Alliance, MainTab.World]) assert.equal(isMainTabLocked(tab), false);
+test("挑战与联盟页签保持锁定；世界页签解锁并改为大地图（大世界）入口", () => {
+    for (const tab of [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory, MainTab.World]) assert.equal(isMainTabLocked(tab), false);
     assert.equal(isMainTabLocked(MainTab.Challenge), true);
+    assert.equal(isMainTabLocked(MainTab.Alliance), true);
     assert.deepEqual(mainTabTarget(MainTab.Challenge), { kind: 'locked' });
+    assert.deepEqual(mainTabTarget(MainTab.Alliance), { kind: 'locked' });
     assert.deepEqual(mainTabTarget(MainTab.World), { kind: 'overlay' });
     assert.match(mainTabHost, /button\.setEnabled\(!isMainTabLocked\(type\)\)/);
     assert.match(mainTabHost, /EventMgr\.instance\.emit\(MainTabEvent\.Select/);

@@ -58,7 +58,7 @@ interface IMissileBaseline {
 
 interface IBaseline {
     nodeScale: Record<string, number>;
-    anchor: Record<string, 'caster' | 'midpoint'>;
+    anchor: Record<string, 'caster' | 'midpoint' | 'target'>;
     liftY: Record<string, number>;
     layer: Record<string, 'ground' | 'top'>;
     overlayChild: Record<string, string>;
@@ -73,11 +73,33 @@ const BASELINE = JSON.parse(
     readFileSync(join(__dirname, 'fixtures', 'zc-effect-catalog-baseline.json'), 'utf8'),
 ) as IBaseline;
 
+/**
+ * 迁移**之后**新登记进目录的路径。
+ *
+ * 基线文件是「P1 改造那一刻的逐字快照」，不再往里面追加 —— 否则 parity 就失去意义。
+ * 每个新需求带来的增量列在这里，锚点 / 层级同样要过 ② 那套函数（不是写死在目录里没人校验）。
+ *
+ * 2026-11-23 第 42 批：仙桃行者 68009「重击」落地柱（大地之力 100904 首目标 + 武将技 36241）。
+ * 它落在**受击目标坐标**上（`target`），并且是打在空中的一下（`top`，不能被 `area` 默认压回地面）。
+ *
+ * 🔴 同一批续的「普攻造型」**不在这里**：用户把口径从「长枪兵武将技（地面枪阵）」纠回
+ * 「旧值 长枪兵普攻_刀光」，而刀光 64×42 就是贴在本体出手点的一下挥击 —— 锚点 `caster`、
+ * 层按事件类型（`melee ⇒ top`）、尺寸 1、寿命 `defaultAttackTravelSeconds` 全是兜底默认值，
+ * 与长枪兵行 30171 自己的播法逐字一致 ⇒ 目录**不登记**它，也就不用进这份增量清单。
+ */
+const POST_MIGRATION_PATHS: Readonly<Record<string, {
+    anchor: 'caster' | 'midpoint' | 'target';
+    layer: 'ground' | 'top';
+}>> = {
+    // 2026-11-23 第 42 批：仙桃行者重击柱。
+    'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能': { anchor: 'target', layer: 'top' },
+};
+
 const ROOT = join(__dirname, '..');
 const read = (relative: string): string => readFileSync(join(ROOT, relative), 'utf8');
 const close = (actual: number, expected: number): boolean => Math.abs(actual - expected) < 1e-12;
 
-test('① 目录条目集合 = 基线路径并集，且路径唯一', () => {
+test('① 目录条目集合 = 基线路径并集 + 迁移后新增，且路径唯一', () => {
     const expectedPaths = new Set<string>([
         ...Object.keys(BASELINE.nodeScale),
         ...Object.keys(BASELINE.anchor),
@@ -88,10 +110,17 @@ test('① 目录条目集合 = 基线路径并集，且路径唯一', () => {
         ...Object.keys(BASELINE.facing),
         ...Object.keys(BASELINE.fade),
         ...Object.keys(BASELINE.tint),
+        ...Object.keys(POST_MIGRATION_PATHS),
     ]);
     const actualPaths = ZC_EFFECT_SPECS.map((spec) => spec.prefabPath);
     assert.equal(new Set(actualPaths).size, actualPaths.length, '目录不允许重复路径');
     assert.deepEqual([...actualPaths].sort(), [...expectedPaths].sort());
+    //  增量条目同样要真的在目录里生效（不是只加进这份清单）。
+    for (const [path, expected] of Object.entries(POST_MIGRATION_PATHS)) {
+        assert.equal(zcEffectAnchorOf(path), expected.anchor, `增量锚点 ${path}`);
+        assert.equal(zcCombatEffectAnchorOf(path), expected.anchor, `增量锚点 facade ${path}`);
+        assert.equal(zcEffectLayerOfPath(path), expected.layer, `增量层级 ${path}`);
+    }
 });
 
 test('② 尺寸 / 锚点 / 抬升 / 层级 / 叠层逐键 parity', () => {

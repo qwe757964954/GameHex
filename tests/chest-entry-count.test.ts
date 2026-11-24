@@ -55,7 +55,7 @@ function createHarness() {
         if (name === '../../framework/ui/PopupManager') return { PopupManager: { inst: { get: () => null } } };
         // 2026-11-18：`start()` 会给「没有地图宿主」的页面补一次模块入场；
         // 本夹具只验数量格，动效不参与（逐帧行为见 `tests/main-hud-intro.test.ts`）。
-        if (name === './MainHudIntro') return { playMainHudIntro: () => false };
+        if (name === './MainHudIntro') return { playMainHudIntro: () => false, prepareMainHudIntro: () => false };
         return {};
     } });
     assert.ok(exports.MainPage);
@@ -81,6 +81,7 @@ function createHarness() {
             index: index + 1,
             state: occupiedIndices.includes(index + 1) ? chestTypes.ChestSlotState.Ready : chestTypes.ChestSlotState.Empty,
             action: occupiedIndices.includes(index + 1) ? chestTypes.ChestSlotAction.Activate : chestTypes.ChestSlotAction.Battle,
+            canActivate: occupiedIndices.includes(index + 1),
             name: '', remainSeconds: 10, totalSeconds: 10, cost: 0,
         }));
         if (notify) for (const listener of listeners) listener(slots);

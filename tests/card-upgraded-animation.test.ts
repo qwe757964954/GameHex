@@ -25,9 +25,10 @@ import {
     FX_DURATION,
     FX_FRAME_COUNT,
     LEVEL_POP_SCALE,
+    PROGRESS_GROW,
     PROGRESS_HOLD,
     PROGRESS_POP_SCALE,
-    PROGRESS_SETTLE,
+    PROGRESS_RESET,
     SHINE_DURATION,
     SHINE_SWEEP_EASE,
     buildCardUpgradedSchedule,
@@ -36,6 +37,7 @@ import {
     levelScaleAt,
     progressPopScaleAt,
     progressRatioAt,
+    progressZeroTextOf,
     shineOpacityAt,
     shineProgressAt,
     shineSweepAt,
@@ -172,7 +174,7 @@ test('三条刷光带共用同一份进度，但各扫各的框（不是一个�
     assert.equal(schedule.valueSwitchAt, schedule.shineEnd,
         '「刷光动画结束，数值直接切换」⇒ 换值时刻必须就是刷光结束时刻');
     assert.equal(Math.round((schedule.shineEnd - schedule.shineStart) * 1000) / 1000, SHINE_DURATION);
-    assert.ok(schedule.progressSettleAt > schedule.valueSwitchAt, '退格是刷光之后的事');
+    assert.ok(schedule.progressSettleAt > schedule.valueSwitchAt, '换档是刷光之后的事');
 
     // 刷光窗口内只有一个 0..1，窗口外一律 -1（视图据此把亮度归零）
     assert.equal(shineProgressAt(schedule, schedule.shineStart - 0.01), -1);
@@ -212,38 +214,73 @@ test('三条刷光带共用同一份进度，但各扫各的框（不是一个�
         '亮度包络仍按线性进度，别跟着加速一起被压窄');
 });
 
-test('进度条：满格 → 顿一拍 → 退到下一级，退格要慢到看得清方向', () => {
+test('进度条：满格 → 顿一拍 → 清空归零 → 绿色从左往右涨到下一级', () => {
     // 满格段：换值之前一路满格（刷光要有东西可刷）。
-    assert.equal(progressRatioAt(schedule, 0, 1, 0), 1);
-    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt - 1e-6, 1, 0), 1,
+    assert.equal(progressRatioAt(schedule, 0, 1, 0.5), 1);
+    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt - 1e-6, 1, 0.5), 1,
         '刷光期间必须一直是满格，提前缩下去刷光就没东西可刷');
     // 顿一拍：换值那一刻仍是满格，`PROGRESS_HOLD` 之内不许动 —— 这是「消耗感」的起手。
-    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt, 1, 0), 1, '退格起点不许跳变');
-    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt + PROGRESS_HOLD - 1e-6, 1, 0), 1,
+    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt, 1, 0.5), 1, '起点不许跳变');
+    assert.equal(progressRatioAt(schedule, schedule.valueSwitchAt + PROGRESS_HOLD - 1e-6, 1, 0.5), 1,
         '顿的那一拍里条不许动，否则「原本是满的」这件事玩家没看见');
-    assert.ok(progressRatioAt(schedule, schedule.valueSwitchAt + PROGRESS_HOLD + PROGRESS_SETTLE * 0.4, 1, 0) < 1,
-        '顿完之后必须真的开始掉');
-    assert.equal(progressRatioAt(schedule, schedule.progressSettleAt, 1, 0), 0);
-    assert.ok(Math.abs(schedule.progressSettleAt - schedule.valueSwitchAt - PROGRESS_HOLD - PROGRESS_SETTLE) < 1e-6,
-        '退格段落 = 顿 + 退，别再塞第三段进去');
+    // 清空段：满格 → 0，中途必须是过渡值，末尾精确归零。
+    const resetMid = progressRatioAt(schedule, schedule.valueSwitchAt + PROGRESS_HOLD + PROGRESS_RESET / 2, 1, 0.5);
+    assert.ok(resetMid > 0 && resetMid < 1, `清空段中段必须是过渡值：${resetMid}`);
+    assert.equal(progressRatioAt(schedule, schedule.progressResetAt, 1, 0.5), 0,
+        '清空段终点必须精确归零 —— 这就是「新的进度条首先是空的」');
+    // 涨格段：从 0 单调长到 `to`，也就是「按箭头方向从左往右涨」。
+    const growQuarter = progressRatioAt(schedule, schedule.progressResetAt + PROGRESS_GROW / 4, 1, 0.5);
+    assert.ok(growQuarter > 0 && growQuarter < 0.5, `涨格段要自 0 长起来：${growQuarter}`);
+    assert.ok(Math.abs(progressRatioAt(schedule, schedule.progressSettleAt, 1, 0.5) - 0.5) < 1e-9,
+        '涨格终点必须落在下一级的真实比例');
+    assert.ok(Math.abs(schedule.progressResetAt - schedule.valueSwitchAt - PROGRESS_HOLD - PROGRESS_RESET) < 1e-6,
+        '清空段 = 顿 + 清空');
+    assert.ok(Math.abs(schedule.progressSettleAt - schedule.progressResetAt - PROGRESS_GROW) < 1e-6,
+        '涨格段紧接在清空之后');
 
-    // 时长：0.32s 太快，方向读不出来 ⇒ 退格放到 0.5s 起，前面再垫 0.12s 的顿。
-    assert.ok(PROGRESS_SETTLE >= 0.5, `退格太快，看不出是在「掉」：${PROGRESS_SETTLE}`);
-    assert.ok(PROGRESS_HOLD > 0, '退格前要有顿');
-    const mid = progressRatioAt(schedule, schedule.valueSwitchAt + PROGRESS_HOLD + PROGRESS_SETTLE / 2, 1, 0);
-    assert.ok(mid > 0 && mid < 1, '中段必须是过渡值，不能瞬移');
-    // 单调不回头：一路往下掉，不许中途涨回满格。
+    // 整段「先降后升」：清空段一路下行、涨格段一路上行，中间不许反复。
     let previous = 1;
     for (let i = 0; i <= 20; i++) {
-        const t = schedule.valueSwitchAt + PROGRESS_HOLD + (PROGRESS_SETTLE * i) / 20;
-        const value = progressRatioAt(schedule, t, 1, 0);
-        assert.ok(value <= previous + 1e-9, `退格必须单调下行：t=${t} 涨回了 ${value}`);
+        const t = schedule.valueSwitchAt + PROGRESS_HOLD + (PROGRESS_RESET * i) / 20;
+        const value = progressRatioAt(schedule, t, 1, 0.5);
+        assert.ok(value <= previous + 1e-9, `清空段必须单调下行：t=${t} 涨回了 ${value}`);
+        previous = value;
+    }
+    previous = 0;
+    for (let i = 0; i <= 20; i++) {
+        const t = schedule.progressResetAt + (PROGRESS_GROW * i) / 20;
+        const value = progressRatioAt(schedule, t, 1, 0.5);
+        assert.ok(value >= previous - 1e-9, `涨格段必须单调上行：t=${t} 掉回了 ${value}`);
         previous = value;
     }
 
+    // 没有可消耗的空间就不演换档（满级 / `to >= from`）：否则会读成「升级把进度条洗了一遍」。
+    assert.equal(progressRatioAt(schedule, schedule.progressSettleAt, 0.4, 1), 0.4);
+    assert.equal(progressRatioAt(schedule, schedule.progressResetAt, 0.4, 0.4), 0.4);
+
+    // 时长：清空要快（消耗的结果），涨格要够长（让人看清终点）。
+    assert.ok(PROGRESS_RESET > 0 && PROGRESS_RESET <= 0.25, `清空太拖：${PROGRESS_RESET}`);
+    assert.ok(PROGRESS_GROW >= 0.5, `涨格太快，看不出从左往右：${PROGRESS_GROW}`);
+    assert.ok(PROGRESS_HOLD > 0, '换档前要有一拍顿');
+
     // 视图里宽度只由常量 × 比例得出
-    assert.match(pageSource, /const FILL_TRACK_WIDTH = 436;/, '满格宽度基准丢了，退格比例就无从算起');
+    assert.match(pageSource, /const FILL_TRACK_WIDTH = 436;/, '满格宽度基准丢了，比例就无从算起');
     assert.match(pageSource, /FILL_TRACK_WIDTH \* progressRatioAt\(/, '宽度必须由时序表比例乘出来');
+});
+
+test('数量文字跟着条走：换档当拍归零，涨格结束才显示新值', () => {
+    assert.equal(progressZeroTextOf('40/80'), '0/80');
+    assert.equal(progressZeroTextOf('0/78'), '0/78');
+    assert.equal(progressZeroTextOf(''), '', '空串不许造出「0」这种半截文字');
+    assert.equal(progressZeroTextOf(undefined), '');
+    assert.equal(progressZeroTextOf('40'), '', '没有分母就不改文字');
+
+    // 视图侧：两个端点各切一次，中间不逐帧插值（否则 0→40 之间会闪一串读数）。
+    assert.match(pageSource, /const zero = progressZeroTextOf\(content\.nextProgressText\);/);
+    assert.match(pageSource, /if \(zero\) this\.progressLabel\.string = zero;/);
+    assert.match(pageSource, /if \(!this\.progressGrown && t >= timeline\.progressSettleAt\)/,
+        '涨格结束那一拍要换成新值');
+    assert.match(pageSource, /if \(next\) this\.progressLabel\.string = next;/);
 });
 
 test('进度条起点恒取满格：别再靠消耗行探测起点', () => {
@@ -279,7 +316,7 @@ test('整条时间轴单调、有限，且终点收在最后一段动画之后',
     // 特响起播刻意在「立绘落位」那一拍，此时后面两块还在滑 —— 所以它不与 entranceEnd 比先后。
     const chain = [
         'levelPopAt', 'levelSwitchAt', 'levelSettleEnd',
-        'shineStart', 'shineEnd', 'valueSwitchAt', 'progressSettleAt', 'end',
+        'shineStart', 'shineEnd', 'valueSwitchAt', 'progressResetAt', 'progressSettleAt', 'end',
     ] as const;
     let previous = schedule.entranceEnd;
     for (const key of chain) {

@@ -6,8 +6,7 @@ import {
     isZCNeutralResourceBuilding, neutralResourceItemOf, ZCNeutralResourceType,
     type ZCNeutralResourceItem,
 } from '../ZCNeutralResourceGroup';
-import { drawPvpTile, type ZCPvpSeatDrawRules, type ZCPvpTileType } from '../ZCPvpTileRules';
-import { tileTypeFromLegacyHex } from '../ZCSnapshotCodec';
+import { drawPvpTile, tileTypeFromLegacyHex, type ZCPvpSeatDrawRules, type ZCPvpTileType } from '../ZCPvpTileRules';
 import { ZCArtifactSystem } from './ZCArtifactSystem';
 import { ZCEconomySystem } from './ZCEconomySystem';
 import type { IZCModelServices } from './ZCModelServices';

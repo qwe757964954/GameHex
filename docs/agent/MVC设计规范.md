@@ -31,7 +31,7 @@
 ```
 
 - View 与 Controller 的交互经 EventMgr：View 只报告“用户想做什么”，不传执行函数、不直接调用业务控制器。
-- 事件与载荷类型集中在 feature 的纯 TS 契约文件；多实例或重开会话复用现有 owner/session 作用域，避免串页。不要为已经明确单实例的事件另建全局路由设施。
+- 事件与载荷类型集中在 feature 的纯 TS 契约文件。载荷只包含业务数据。共享事件需要区分页面或对局实例时，由 `emit(event, payload, source)` 传入来源，监听函数从第二个参数读取。单实例事件直接发布业务数据或无参通知。
 - Model 通过实例订阅通知 Controller，不自行向全局派发 UI Render/Command；具体展示事件由 Controller 负责。
 - ViewState 表达可重复渲染的当前状态；Command 表达聚焦、提示、一次性动画等动作。普通 render 不重复触发奖励、扣费或请求。
 - Controller 的 bind*Events 集中管理订阅；View 的节点事件在 onInit/onLoad 绑定，禁止在 render/update 中订阅。

@@ -17,7 +17,9 @@ import type { TerritorySite } from '../model/TerritoryMapConfig';
 import { territoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import {
     TERRITORY_PVP_BUBBLE_WIDTH, TERRITORY_PVP_BUBBLE_HEIGHT,
-    TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE, TERRITORY_PVP_BUBBLE_PORTRAIT_Y,
+    TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE, territoryPvpBubblePortraitPosition,
+    TERRITORY_PVP_CLEAR_BUBBLE_WIDTH, TERRITORY_PVP_CLEAR_BUBBLE_HEIGHT,
+    TERRITORY_PVP_CLEAR_BUBBLE_ICON_SIZE, TERRITORY_PVP_CLEAR_BUBBLE_ICON_Y,
 } from '../model/TerritoryLevelBubble';
 import type { ITerritoryChestBubbleLayout } from '../model/TerritoryChestBubble';
 import { TERRITORY_CONDITION_CHEST_SCALE, territoryConditionBlockLayout } from '../model/TerritoryConditionBadge';
@@ -25,7 +27,7 @@ import {
     TERRITORY_SILVER_CHEST_POP_SECONDS,
     territorySilverChestIconPop,
 } from '../model/TerritorySilverChestOpen';
-import { TERRITORY_EVENTS, TerritoryUiEvent } from '../application/TerritoryEvents';
+import { TERRITORY_EVENTS } from '../application/TerritoryEvents';
 
 export interface ITerritoryRandomResourceTarget {
     readonly kind: 'randomResource';
@@ -174,7 +176,7 @@ export function territoryUsesBottomAnchor(buildId: number): boolean {
 export interface ITerritoryStationRender {
     /**
      * 这个格子对应的站点。**起始格没有站点**（地图的 `startCellId` 不是 `sites` 里的一项），
-     * 传 `null` —— 它也不可点，视图不会去读。
+     * 传 `null`，章节入口由 `chapterEntry` 标识。
      */
     readonly site: TerritoryStationTarget | null;
     /** 站点建筑图标；关卡编号由 levelBubble 单独传入。 */
@@ -238,8 +240,26 @@ export interface ITerritoryStationRender {
      */
     readonly levelBubbleIcon?: SpriteFrame | null;
     readonly levelBubbleFrame?: SpriteFrame | null;
-    /** 未通关 PVP：头像居中，隐藏编号文字，沿用气泡点击与生命周期。 */
+    /**
+     * 未通关 PVP：**左上角玩家卡的头像**（玩家本人头像）居中。
+     *
+     * 与左上角玩家卡同源：黄色底框 {@link levelBubbleAvatarFrame} + 等级角标
+     * {@link levelBubbleLevelFrame}，等级数字见 {@link levelBubbleLevel}。
+     */
     readonly levelBubblePortrait?: SpriteFrame | null;
+    /** PVP 气泡的黄底头像框（`hud_avatar_frame`，与左上角玩家卡同一张）。 */
+    readonly levelBubbleAvatarFrame?: SpriteFrame | null;
+    /** PVP 气泡的等级角标底（`hud_level_bg`，与左上角玩家卡同一张）。 */
+    readonly levelBubbleLevelFrame?: SpriteFrame | null;
+    /** PVP 气泡等级角标上的玩家等级（≤0 不显示角标）。 */
+    readonly levelBubbleLevel?: number;
+    /**
+     * **已通关 PVP** 的问号徽标（2026-11-23 图1）：94×103 蓝底方图 + 74×74 灰盾问号，无文字。
+     *
+     * 与 {@link levelBubblePortrait} 互斥：头像气泡只给**未通关**，这一支只给**已通关**。
+     * 数据层把 `levelBubbleIcon` 直接塞问号图，视图按 `pvpBadge` 走专用版面。
+     */
+    readonly levelBubblePvpBadge?: boolean;
     /**
      * **预告关卡**的编号气泡。这一格仍是「未解锁」画法（`icon: null` +
      * `isCondition: true`），但气泡要照常显示 ⇒ `renderLevelBubble` 对这一支放宽
@@ -269,8 +289,7 @@ export interface ITerritoryStationRender {
      * 这一格是**章节入口**（地图起始格的章节建筑 + 它头上那颗「章节」气泡）。
      *
      * 需求 点它打开「章节选择」弹窗（原来挂在快速寻敌两侧的三角上）。
-     * `site` 恒为 `null`（起始格不属于任何站点）⇒ 点击走 `TerritoryUiEvent.ChapterSelect`，
-     * 不进 `STATION_TAP` 那条链。
+     * `site` 为 `null` 时仍向本地图发点击，由地图检查输入锁后派发章节意图。
      */
     readonly chapterEntry?: boolean;
     readonly interactive: boolean;
@@ -338,6 +357,44 @@ export class TerritoryStationView extends Component {
     @property({ type: UITransform, group: '尺寸绑定', tooltip: 'CaptionLabel 的 UITransform（条件格实测文本宽）' })
     captionTextTransform: UITransform = null;
 
+    /**
+     * 关卡编号 / 宝箱 / PVP 三种气泡共用的根节点（prefab 里的 `LevelBubble`）。
+     *
+     * 三种形态的**内外几何**（头像框 64×64、等级角标 19×19 与左下角落点、11 号角标字）
+     * 全部由 prefab 持有；视图只换底图 / 改根节点尺寸 / 切换子层显隐。
+     */
+    @property({ type: Node, group: '气泡节点', tooltip: 'LevelBubble：气泡根节点' })
+    levelBubbleNode: Node = null!;
+
+    /** 气泡根节点的 `UITransform`（运行时按底图刷新 94×45 / 77×87 / 94×103）。 */
+    @property({ type: UITransform, group: '气泡节点', tooltip: 'LevelBubble 的 UITransform' })
+    levelBubbleTransform: UITransform = null!;
+
+    @property({ type: Sprite, group: '气泡节点', tooltip: 'LevelBubble：气泡底图' })
+    levelBubbleSprite: Sprite = null!;
+
+    @property({ type: Button, group: '气泡节点', tooltip: 'LevelBubble：气泡点击按钮' })
+    levelBubbleButton: Button = null!;
+
+    /** PVP 头像的黄底框（prefab 固定 64×64，落点 y=4）。 */
+    @property({ type: Sprite, group: '气泡节点', tooltip: 'LevelBubbleAvatarFrame：黄底头像框' })
+    levelBubbleAvatarFrameSprite: Sprite = null!;
+
+    /** 气泡里的图标 / 玩家头像（宝箱 36×36、PVP 54×54，尺寸与落点由视图按内容写）。 */
+    @property({ type: Sprite, group: '气泡节点', tooltip: 'LevelBubbleIcon：宝箱图标或玩家头像' })
+    levelBubbleIconSprite: Sprite = null!;
+
+    @property({ type: UITransform, group: '气泡节点', tooltip: 'LevelBubbleIcon 的 UITransform' })
+    levelBubbleIconTransform: UITransform = null!;
+
+    /** PVP 等级角标底图（prefab 固定 19×19，落点左下角）。 */
+    @property({ type: Sprite, group: '气泡节点', tooltip: 'LevelBubbleLevelBadge：等级角标底' })
+    levelBubbleLevelBadgeSprite: Sprite = null!;
+
+    /** PVP 等级数字（prefab 里 11 号白字 + 1px 黑描边，视图只写字符串与显隐）。 */
+    @property({ type: Label, group: '气泡节点', tooltip: 'LevelBubbleLevelLabel：等级数字' })
+    levelBubbleLevelLabel: Label = null!;
+
     /** 当前节点代表的站点；点击时读它，不读闭包。起始格为 `null`。 */
     private site: TerritoryStationTarget | null = null;
     /**
@@ -365,21 +422,19 @@ export class TerritoryStationView extends Component {
     private mapX = 0;
     private mapY = 0;
     private mapZ = 0;
-    private levelBubble: { readonly node: Node; readonly sprite: Sprite; readonly button: Button } | null = null;
 
     /**
-     * 关卡编号气泡节点（`1-1` 胶囊 / 宝箱水滴 / PVP 头像气泡），没建或没显示 ⇒ `null`。
+     * 关卡编号气泡节点（`1-1` 胶囊 / 宝箱水滴 / PVP 头像气泡）当前是否在屏幕上。
      *
      * 引导要把气泡和地块**一起**圈进光圈：气泡挂在角标层、
      * 抬在建筑顶上方，和地块节点不是父子关系 ⇒ 只能把这个节点交给引导层做并集。
      */
     getLevelBubbleNode(): Node | null {
-        const bubble = this.levelBubble;
-        if (!bubble || !bubble.node.isValid || !bubble.node.activeInHierarchy) return null;
-        return bubble.node;
+        const node = this.levelBubbleNode;
+        if (!node || !node.isValid || !node.activeInHierarchy) return null;
+        return node;
     }
-    /** 气泡里的那个图标节点（`levelBubbleIcon` 有值时惰性创建；复用同一个节点）。 */
-    private levelBubbleIcon: { readonly node: Node; readonly sprite: Sprite } | null = null;
+
     /**
      * 上一次 `render` 的入参 —— 只给「气泡抑制解除后按原样重画」用。
      *
@@ -539,8 +594,12 @@ export class TerritoryStationView extends Component {
         this.iconSprite.node.setParent(layers.icon);
         this.captionSprite.node.setParent(layers.caption);
         this.captionLabel.node.setParent(layers.text);
-        this.badgeLabel.node.setParent(layers.badge);
+        // 气泡整棵子树（头像框 / 头像 / 角标 / 文字）一起进角标层：文字是它的子节点，
+        // 层级顺序由 prefab 的兄弟顺序决定（Label 在最后 = 压在最上）。
+        this.levelBubbleNode.setParent(layers.badge);
+        this.badgeLabel.node.setParent(this.levelBubbleNode);
         this.button.node.on(Button.EventType.CLICK, this.handleClick, this);
+        this.levelBubbleButton.node.on(Button.EventType.CLICK, this.handleClick, this);
     }
 
     setMapPosition(x: number, y: number, z = 0): void {
@@ -552,8 +611,8 @@ export class TerritoryStationView extends Component {
         if (!offsets) return;
         this.applyIconPlacement();
         this.applyCaptionPlacement();
-        if (this.levelBubble) this.applyLevelBubblePosition();
-        else this.badgeLabel.node.setPosition(x + offsets.badge.x, y + offsets.badge.y, z + offsets.badge.z);
+        // 气泡根一直存在（prefab 子树），也要跟站点一起摆，池化复用别留上一格的位置。
+        this.applyLevelBubblePosition();
     }
 
     /**
@@ -578,7 +637,7 @@ export class TerritoryStationView extends Component {
             this.iconSprite.node,
             this.captionSprite.node,
             this.captionLabel.node,
-            this.levelBubble?.node ?? this.badgeLabel.node,
+            this.levelBubbleNode,
             // 宝箱图标惰性建 ⇒ 建的时候会把 `spawnOpacities` 置空重建，顺序不能挪到后面。
             ...(this.conditionChest ? [this.conditionChest.node] : []),
         ];
@@ -1111,6 +1170,13 @@ export class TerritoryStationView extends Component {
         const text = content.levelBubble ?? '';
         const frame = content.levelBubbleFrame ?? null;
         const portrait = content.levelBubblePortrait ?? null;
+        const portraitPlate = content.levelBubbleAvatarFrame ?? null;
+        const portraitLevelFrame = content.levelBubbleLevelFrame ?? null;
+        const portraitLevel = Math.max(0, Math.floor(content.levelBubbleLevel ?? 0));
+        // 已通关 PVP 的问号徽标：无文字、无头像，只有「蓝底方图 + 灰盾问号」。
+        // 必须和头像气泡互斥；`iconFrame` 缺失时退回 false ⇒ 仍按 `PVP` 文字胶囊渲染。
+        const pvpBadge = content.levelBubblePvpBadge === true && content.levelBubblePortrait == null
+            && content.levelBubbleIcon != null;
         const iconFrame = portrait ?? content.levelBubbleIcon ?? null;
         this.levelBubbleAnchorFrame = content.levelBubbleAnchorFrame ?? null;
         // 需求 第 3 条：播放「宝箱还没点我」跳动时**隐藏**它的提示气泡。
@@ -1119,53 +1185,50 @@ export class TerritoryStationView extends Component {
         // 按老门槛两颗都过不了。这一支**只放宽这两条**，hidden / loading / suppressed
         // 与气泡形状、点击、层级全部照旧，不另起一套渲染路径。
         const preview = content.previewBubble === true;
-        const visible = text !== '' && frame !== null
+        const visible = (text !== '' || pvpBadge) && frame !== null
             && (preview || (content.icon !== null && !content.isCondition))
             && !content.hidden && !content.isLoading && !this.hintBubbleSuppressed;
         /**
-         * 两套排版，按**有没有体力图标**分流：
-         * · 有 icon ⇒ 宝箱提示气泡，底图 `frame_04` 77×87 竖向水滴，**icon 在上、数字在下**；
-         * · 没 icon ⇒ 关卡编号 / 「章节」，94×45 胶囊，只有一行字。
+         * 四套排版，按**有没有头像 / 问号徽标 / 体力图标**分流：
+         * · 有玩家头像 ⇒ PVP 头像气泡（未通关），红底 `frame_02` 94×103，黄框 / 角标由 prefab 固定；
+         * · 有问号徽标 ⇒ 已通关 PVP，蓝底方图 94×103 + 74 灰盾问号，无文字 / 无角标（2026-11-23 图1）；
+         * · 有体力图标 ⇒ 宝箱提示气泡，底图 `frame_04` 77×87 竖向水滴，**icon 在上、数字在下**；
+         * · 都没有 ⇒ 关卡编号 / 「章节」，94×45 胶囊，只有一行字。
          *
-         * 尺寸与位置全读 `model/TerritoryChestBubble`，这里不许再写数字：
+         * 尺寸与位置全读 `model`，这里不许再写数字：
          * 换图时只要那张图的自然尺寸变了，`UITransform` / 图标 / 文字位置会一起跟着走。
          */
-        const chest = !portrait && iconFrame ? territoryChestBubbleLayout() : null;
-        const bubbleWidth = portrait ? TERRITORY_PVP_BUBBLE_WIDTH : chest ? chest.width : MAP_MARKER_BADGE_WIDTH;
-        const bubbleHeight = portrait ? TERRITORY_PVP_BUBBLE_HEIGHT : chest ? chest.height : MAP_MARKER_BUBBLE_HEIGHT;
-        if (visible && !this.levelBubble) {
-            const parent = this.badgeLabel.node.parent;
-            if (!parent) throw new Error('关卡气泡缺少角标层');
-            const node = new Node('LevelBubble');
-            node.layer = this.badgeLabel.node.layer;
-            node.addComponent(UITransform).setContentSize(bubbleWidth, bubbleHeight);
-            node.setParent(parent);
-            const sprite = node.addComponent(Sprite);
-            sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-            sprite.trim = false;
-            sprite.type = Sprite.Type.SLICED;
-            sprite.color = Color.WHITE;
-            const button = node.addComponent(Button);
-            button.transition = Button.Transition.NONE;
-            node.on(Button.EventType.CLICK, this.handleClick, this);
-            this.badgeLabel.node.setParent(node);
-            this.themeLevelBubbleLabel(chest);
-            this.levelBubble = { node, sprite, button };
-            this.spawnOpacities = null;
-            this.setSpawnOpacity(this.spawnOpacity);
+        const chest = !portrait && !pvpBadge && iconFrame ? territoryChestBubbleLayout() : null;
+        const bubbleWidth = portrait ? TERRITORY_PVP_BUBBLE_WIDTH
+            : pvpBadge ? TERRITORY_PVP_CLEAR_BUBBLE_WIDTH
+                : chest ? chest.width : MAP_MARKER_BADGE_WIDTH;
+        const bubbleHeight = portrait ? TERRITORY_PVP_BUBBLE_HEIGHT
+            : pvpBadge ? TERRITORY_PVP_CLEAR_BUBBLE_HEIGHT
+                : chest ? chest.height : MAP_MARKER_BUBBLE_HEIGHT;
+        // 尺寸与 sprite 类型**每帧**都对一遍：同一格的状态可能从「编号气泡」变成
+        // 「宝箱提示」/「PVP 头像气泡」（换图 / 换章复用视图），首次出现时定死就会留下错尺寸。
+        this.levelBubbleTransform.setContentSize(bubbleWidth, bubbleHeight);
+        // 水滴 / 问号徽标都是**整张成品图**（没有九宫格切边）⇒ `SIMPLE` 按节点尺寸铺满；
+        // 胶囊 / 红框靠九宫格保圆角不变形 ⇒ `SLICED`。
+        const spriteType = chest || pvpBadge ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;
+        if (this.levelBubbleSprite.type !== spriteType) this.levelBubbleSprite.type = spriteType;
+        this.levelBubbleNode.active = visible;
+        this.levelBubbleButton.interactable = visible && content.interactive;
+        if (!visible) {
+            // 三种形态共用一棵子树 ⇒ 收起时把每一层都关掉，别让上一格的角标 / 头像留给下一格。
+            this.badgeLabel.node.active = false;
+            this.levelBubbleLevelLabel.node.active = false;
+            this.levelBubbleAvatarFrameSprite.node.active = false;
+            this.levelBubbleIconSprite.node.active = false;
+            this.levelBubbleLevelBadgeSprite.node.active = false;
+            return;
         }
-        this.badgeLabel.string = text;
-        const bubble = this.levelBubble;
-        if (bubble) {
-            // 尺寸与 sprite 类型**每帧**都对一遍：同一格的状态可能从「编号气泡」变成
-            // 「宝箱提示」（换图 / 换章复用视图），创建时定死就会留下错尺寸。
-            const nodeTransform = bubble.node.getComponent(UITransform);
-            if (nodeTransform) nodeTransform.setContentSize(bubbleWidth, bubbleHeight);
-            // 水滴是一整张成品图（没有九宫格切边）⇒ `SIMPLE` 按节点尺寸铺满；
-            // 胶囊靠九宫格保圆角不变形 ⇒ `SLICED`。
-            const spriteType = chest ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;
-            if (bubble.sprite.type !== spriteType) bubble.sprite.type = spriteType;
-        }
+        if (this.levelBubbleSprite.spriteFrame !== frame) this.levelBubbleSprite.spriteFrame = frame;
+        // 头像气泡 / 问号徽标的编号文字 Label 藏掉，头像气泡的等级数字走 prefab 里那颗 11 号角标字。
+        this.badgeLabel.string = portrait || pvpBadge ? '' : text;
+        this.levelBubbleLevelLabel.string = portrait && portraitLevel > 0 ? String(portraitLevel) : '';
+        this.badgeLabel.node.active = visible && !portrait && !pvpBadge;
+        this.levelBubbleLevelLabel.node.active = portrait !== null && portraitLevel > 0;
         this.themeLevelBubbleLabel(chest);
         // 覆盖色必须**排在 `themeLevelBubbleLabel` 之后**：那一支每帧都会把颜色写回
         // 「宝箱深棕 / 编号白」，写在前面等于被它盖掉（表现：体力不足但数字仍是深棕）。
@@ -1173,18 +1236,12 @@ export class TerritoryStationView extends Component {
         if (bubbleTextColor && !this.badgeLabel.color.equals(bubbleTextColor)) {
             this.badgeLabel.color = bubbleTextColor;
         }
-        this.badgeLabel.node.active = visible && !portrait;
-        if (!bubble) return;
-        bubble.node.active = visible;
-        bubble.button.interactable = visible && content.interactive;
-        if (!visible) return;
-        if (bubble.sprite.spriteFrame !== frame) bubble.sprite.spriteFrame = frame;
-        this.applyLevelBubbleLayout(iconFrame, portrait !== null);
+        this.applyLevelBubbleLayout(iconFrame, portrait !== null, portraitPlate, portraitLevelFrame, portraitLevel, pvpBadge);
         this.applyLevelBubblePosition();
     }
 
     /**
-     * 气泡文字样式（**唯一写入口**，创建与复用都走这里）。
+     * 气泡文字样式（**唯一写入口**，每次复用都走这里）。
      *
      * 两套口径差别很大，别混着改：
      * · **宝箱气泡**：深棕数字（底图是奶白，白字等于没字）、字号/行高按水滴尺寸给，
@@ -1246,56 +1303,63 @@ export class TerritoryStationView extends Component {
      * 水滴**没有横向空间**：77 宽的气泡里并排放 36 的图标 + 两位数会顶到描边，
      * 所以这里不能沿用「图标 + 数字并排」那套（旧实现，已随本次换图删掉）。
      * · **编号气泡**（无图标）：文字居中在 94×45 胶囊里，`MAP_MARKER_BADGE_TEXT_Y` 抬一点给小尾巴让位。
+     * · **PVP 头像气泡**（`isPortrait`）：文字藏掉，头像按 `territoryPvpBubblePortraitPosition`
+     * 摆到「红色圆角主体」中心 —— 底图的小尖角与头像 auto trim 各补一笔。
+     * 头像框 / 等级角标 / 角标字的尺寸与落点全在 `TerritoryStation.prefab`，这里不写数字。
      *
      * 图标取不到时（美术没到）**退回纯数字**：宁可少个图标，也不能让宝箱没有提示。
      */
-    private applyLevelBubbleLayout(iconFrame: SpriteFrame | null, isPortrait = false): void {
-        const bubble = this.levelBubble;
-        if (!bubble) return;
-        const icon = iconFrame ? this.ensureLevelBubbleIcon() : this.levelBubbleIcon;
-        if (!icon || !iconFrame) {
-            if (this.levelBubbleIcon) this.levelBubbleIcon.node.active = false;
+    private applyLevelBubbleLayout(
+        iconFrame: SpriteFrame | null,
+        isPortrait = false,
+        avatarFrame: SpriteFrame | null = null,
+        levelFrame: SpriteFrame | null = null,
+        level = 0,
+        pvpBadge = false,
+    ): void {
+        // 层级顺序由 prefab 的兄弟顺序决定：黄底框 → 头像 → 等级角标 → 角标字 → 编号文字。
+        const plate = this.levelBubbleAvatarFrameSprite;
+        plate.node.active = isPortrait && avatarFrame !== null;
+        if (avatarFrame && plate.spriteFrame !== avatarFrame) plate.spriteFrame = avatarFrame;
+        const levelBadge = this.levelBubbleLevelBadgeSprite;
+        levelBadge.node.active = isPortrait && levelFrame !== null && level > 0;
+        if (levelFrame && levelBadge.spriteFrame !== levelFrame) levelBadge.spriteFrame = levelFrame;
+        const icon = this.levelBubbleIconSprite;
+        if (!iconFrame) {
+            icon.node.active = false;
             this.badgeLabel.node.setPosition(0, MAP_MARKER_BADGE_TEXT_Y, 0);
             return;
         }
-        if (icon.sprite.spriteFrame !== iconFrame) icon.sprite.spriteFrame = iconFrame;
+        if (icon.spriteFrame !== iconFrame) icon.spriteFrame = iconFrame;
         icon.node.active = true;
         const chest = territoryChestBubbleLayout();
-        const iconTransform = icon.node.getComponent(UITransform);
-        const iconSize = isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE : chest.iconSize;
-        if (iconTransform) iconTransform.setContentSize(iconSize, iconSize);
-        icon.node.setPosition(0, isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y : chest.iconY, 0);
+        const iconSize = pvpBadge ? TERRITORY_PVP_CLEAR_BUBBLE_ICON_SIZE
+            : isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE : chest.iconSize;
+        this.levelBubbleIconTransform.setContentSize(iconSize, iconSize);
+        if (pvpBadge) {
+            // 问号徽标是**成品方图**，图标按稿里「距顶 10」的落点，不再走红框的主体中心修正。
+            icon.node.setPosition(0, TERRITORY_PVP_CLEAR_BUBBLE_ICON_Y, 0);
+            return;
+        }
+        if (isPortrait) {
+            // 🔴 PVP 头像按「红色圆角主体」居中，不是按气泡节点中心：底图下面还有一条
+            // 小尖角，且头像是 `trim=false` 的 auto-trim 帧 ⇒ 修正走 model 的纯函数。
+            const point = territoryPvpBubblePortraitPosition(iconFrame, iconSize);
+            icon.node.setPosition(point.x, point.y, 0);
+            return;
+        }
+        icon.node.setPosition(0, chest.iconY, 0);
         this.badgeLabel.node.setPosition(0, chest.textY, 0);
     }
 
-    /** 惰性创建气泡里的图标节点（挂在气泡根上，和文字同层）。 */
-    private ensureLevelBubbleIcon(): { readonly node: Node; readonly sprite: Sprite } | null {
-        if (this.levelBubbleIcon) return this.levelBubbleIcon;
-        const bubble = this.levelBubble;
-        if (!bubble) return null;
-        const chest = territoryChestBubbleLayout();
-        const node = new Node('LevelBubbleIcon');
-        node.layer = bubble.node.layer;
-        node.addComponent(UITransform).setContentSize(chest.iconSize, chest.iconSize);
-        node.setParent(bubble.node);
-        const sprite = node.addComponent(Sprite);
-        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
-        sprite.trim = false;
-        sprite.type = Sprite.Type.SIMPLE;
-        sprite.color = Color.WHITE;
-        this.levelBubbleIcon = { node, sprite };
-        return this.levelBubbleIcon;
-    }
-
     private applyLevelBubblePosition(): void {
-        const bubble = this.levelBubble;
+        const bubble = this.levelBubbleNode;
         const offsets = this.localOffsets;
         if (!bubble || !offsets) return;
-        // 气泡高度按**当前底图**取（胶囊 45 / 水滴 87）：`mapMarkerBadgeY` 是把气泡中心抬到
+        // 气泡高度按**当前底图**取（胶囊 45 / 水滴 87 / PVP 103）：`mapMarkerBadgeY` 是把气泡中心抬到
         // 「可见顶部 + 半高 + 3」，用错高度会让水滴的尖扎进地块、或整体飘高一截。
-        const bubbleTransform = bubble.node.getComponent(UITransform);
-        const bubbleHeight = bubbleTransform && bubbleTransform.contentSize.height > 0
-            ? bubbleTransform.contentSize.height : MAP_MARKER_BUBBLE_HEIGHT;
+        const bubbleHeight = this.levelBubbleTransform.contentSize.height > 0
+            ? this.levelBubbleTransform.contentSize.height : MAP_MARKER_BUBBLE_HEIGHT;
         // 预告格：站点自身没有实心建筑（`icon: null`），改按虚影那张帧算可见高，
         // 否则气泡会落回格心、压住价格与 35% 建筑。缩放也换成对应的归一系数
         // （`previewAnchorScale` 逐字复刻 `applyIconPlacement`），两者必须同源才不飘。
@@ -1306,7 +1370,7 @@ export class TerritoryStationView extends Component {
             ? anchorFrame.rect.height * this.iconTransform.contentSize.height
                 / anchorFrame.originalSize.height * anchorScale : 0;
         const lift = this.bottomAnchored ? height / 2 - TERRITORY_BOTTOM_ANCHOR_DROP_PX : 0;
-        bubble.node.setPosition(this.mapX + offsets.icon.x,
+        bubble.setPosition(this.mapX + offsets.icon.x,
             mapMarkerBadgeY(this.mapY + offsets.icon.y + lift + height / 2, bubbleHeight), this.mapZ + offsets.icon.z);
     }
 
@@ -1329,14 +1393,10 @@ export class TerritoryStationView extends Component {
 
     private readonly handleClick = (): void => {
         if (!this.clickable) return;
-        // 章节入口（起始格的建筑 / 气泡）：没有 `site` 可带，单独发一条 UI 事件给宿主页开弹窗。
-        // 不能塞进 `STATION_TAP` —— 那一条的下游（`TerritoryMapView.onStationClick`）要
-        // 真站点去算 `cellId`、播点击反馈、发解锁 intent，拿 `null` 会整条链空转。
-        if (this.chapterEntry) {
-            EventMgr.instance.emit(TerritoryUiEvent.ChapterSelect);
-            return;
+        // 起始格也经过地图的输入锁；来源限定为本地图的命中层。
+        if (this.chapterEntry || this.site) {
+            EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, { target: this.site }, this.node.parent);
         }
-        if (this.site) EventMgr.instance.emit(TERRITORY_EVENTS.STATION_TAP, { target: this.site });
     };
 
     private setIcon(frame: SpriteFrame | null): void {
@@ -1364,11 +1424,12 @@ export class TerritoryStationView extends Component {
         // 预告气泡锚点帧同理：池化槽位借给下一格时，别把上一格的虚影高度带过去。
         this.levelBubbleAnchorFrame = null;
         this.button.node.off(Button.EventType.CLICK, this.handleClick, this);
+        this.levelBubbleButton.node.off(Button.EventType.CLICK, this.handleClick, this);
         for (const visual of [
             this.iconSprite.node,
             this.captionSprite.node,
             this.captionLabel.node,
-            this.levelBubble?.node ?? this.badgeLabel.node,
+            this.levelBubbleNode,
         ]) {
             if (visual.isValid && visual.parent !== this.node) visual.destroy();
         }
@@ -1378,10 +1439,8 @@ export class TerritoryStationView extends Component {
         this.conditionChest = null;
         this.conditionChestHeight = 0;
         this.site = null;
-        this.levelBubble = null;
-        // 图标节点挂在气泡根上（随它一起销毁），这里只清引用；跳动两项也要复位，
-        // 否则池化复用时会带着上一格的偏移 / 抑制状态借给下一个站点。
-        this.levelBubbleIcon = null;
+        // 图标 / 头像框 / 等级角标都是 `LevelBubble` 的子树，随气泡根一起销毁；
+        // 这里只复位跳动两项，否则池化复用时会带着上一格的偏移 / 抑制状态借给下一个站点。
         this.lastContent = null;
         this.chestHintOffsetY = 0;
         this.hintBubbleSuppressed = false;

@@ -108,8 +108,8 @@ test('切换主导航也会取消尚未创建根节点的世界入口', async ()
     assert.equal(entry.closeCalls, 1);
 });
 
-// 2026-11-05 角色(2) / 联盟(5) 恢复开放 ⇒ 五个可切底页都验一遍（挑战 4 仍锁着）。
-for (const currentTab of [0, 1, 2, 3, 5]) {
+// 2026-11-05 角色(2) 恢复开放，「联盟」(5) 与「挑战」(4) 保持锁定 ⇒ 四个可切底页都验一遍。
+for (const currentTab of [0, 1, 2, 3]) {
     test(`从第 ${currentTab} 页打开世界不切换底页，关闭后保留原页`, async () => {
         const { host, calls, nav } = await makeHost(currentTab);
         const originalPage = host.currentPage;

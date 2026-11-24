@@ -74,8 +74,8 @@ export class LoginController extends ControllerBase {
             if (!this.isDisposed) { this.busy = false; this.render(); }
         }
     }
-    private onIntent(event: ILoginIntent): void {
-        if (event.owner !== this.options.owner || this.busy) return;
+    private onIntent(event: ILoginIntent, source: object): void {
+        if (source !== this.options.owner || this.busy) return;
         if (event.kind === 'select') {
             const server = this.options.service.servers_.find(item => Number(item.serverId) === event.serverId);
             if (!server) { this.options.feedback.tip('选择的服务器不存在，请重新选择'); return; }

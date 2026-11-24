@@ -10,6 +10,8 @@ import {
     zcCombatEffectLiftY,
     zcCombatEffectSiblingIndex,
 } from '../assets/script/app/zcds/view/ZCCombatEffectPlacement';
+import { zcCombatEffectNodeScaleOf } from '../assets/script/app/zcds/view/ZCCombatEffectScale';
+import { zcEffectDurationOf } from '../assets/script/app/zcds/model/ZCEffectCatalog';
 
 /**
  * 巨力坚果普攻特效：**缩小到 30%** + 播在「巨力坚果 ↔ 受击目标」的连线中点
@@ -52,6 +54,65 @@ test('② 中点口径：两端坐标的算术中点，caster 时完全忽略目
     // 两端相同时中点退化成该点（不返回 NaN）。
     const same = { fromX: 42, fromY: 7, toX: 42, toY: 7 };
     assert.deepEqual(zcCombatEffectAnchorPoint(same, 'midpoint'), { x: 42, y: 7 });
+});
+
+/**
+ * 2026-11-23 第 42 批：新增第三种锚点 `target` —— **落在受击目标坐标**。
+ *
+ * 需求原话：「该特效的释放一定是在目标的坐标位置播放」。
+ * 近战 / 参数袋事件的 `from` 是施法者、`to` 才是目标，默认 `caster` 会把整根柱子砸自己头上。
+ */
+test('②-1 目标锚点：取 `to` 端坐标，caster / midpoint 的口径不受影响', () => {
+    const span = { fromX: 100, fromY: 200, toX: 300, toY: 400 };
+    assert.deepEqual(zcCombatEffectAnchorPoint(span, 'target'), { x: 300, y: 400 });
+    // 负坐标与小数照原样取，不做任何取整（连续坐标是浮点）。
+    assert.deepEqual(
+        zcCombatEffectAnchorPoint({ fromX: -90, fromY: 326, toX: -12.5, toY: 8.25 }, 'target'),
+        { x: -12.5, y: 8.25 },
+    );
+    // 两端相同时三种锚点都退化到同一点。
+    const same = { fromX: 42, fromY: 7, toX: 42, toY: 7 };
+    assert.deepEqual(zcCombatEffectAnchorPoint(same, 'target'), { x: 42, y: 7 });
+    assert.deepEqual(zcCombatEffectAnchorPoint(same, 'caster'), { x: 42, y: 7 });
+    assert.deepEqual(zcCombatEffectAnchorPoint(same, 'midpoint'), { x: 42, y: 7 });
+});
+
+/**
+ * 仙桃行者普攻（2026-11-23 第 42 批续）：「普通攻击也要播放 长枪兵的武将技能特效」。
+ *
+ * 用户随后纠正：**不是**「长枪兵_武将技能」那张地面枪阵，而是旧值「长枪兵普攻_刀光」。
+ * 刀光 64×42 就是贴在本体出手点的一下挥击 ⇒ 锚点 `caster`、层按事件类型（melee ⇒ top）、
+ * 尺寸 1、寿命 `defaultAttackTravelSeconds` 全是兜底默认值 —— 与长枪兵行 30171 逐字一致。
+ * 🔴 也就是说：它**不进目录**。这条用例守护的正是「别拿目录里的枪阵条目盖到它头上」。
+ */
+test('②-3 普攻刀光走兜底：caster 锚点 + top 层 + 不登记尺寸/寿命（与长枪兵行一致）', () => {
+    const SLASH = 'units/projectiles/长枪兵普攻_刀光/长枪兵普攻_刀光';
+    assert.equal(zcCombatEffectAnchorOf(SLASH), 'caster',
+        '刀光贴在出手点，不是砸在目标脚下的地面技（那是重击柱）');
+    assert.equal(zcCombatEffectLayerOfPath('melee', SLASH), 'top');
+    //  `area` 事件仍按类型铺地：刀光没有「必须抢回 top」的诉求，交给默认规则。
+    assert.equal(zcCombatEffectLayerOfPath('area', SLASH), 'ground');
+    assert.equal(zcCombatEffectNodeScaleOf(SLASH), 1, '尺寸只认 prefab（烘焙 1），目录不另写倍率');
+    //  🔴 寿命**故意不抬**：clip 是 12fps / 0.667s，但长枪兵原版同样被近战默认 0.32s 截断，
+    //  「旧值观感」就是这一截。抬上去反而变成两张卡不一致。
+    assert.equal(zcEffectDurationOf(SLASH), 0,
+        '未登记 ⇒ 调用方沿用 travelSeconds；刀光一旦登记时长就和长枪兵对不上了');
+    //  未登记的路径一律 0（调用方沿用原寿命），这条是「存量逐字不变」的保证。
+    assert.equal(zcEffectDurationOf(NUT_EFFECT), 0);
+    assert.equal(zcEffectDurationOf(null), 0);
+});
+
+/**
+ * 仙桃行者「重击」落地柱：锚点与层序都按路径登记，尺寸只用 prefab 烘焙那一份。
+ */
+test('②-2 重击柱登记：target 锚点 + top 层 + 不写 nodeScale（尺寸唯一真源在 prefab）', () => {
+    const QUAKE = 'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能';
+    assert.equal(zcCombatEffectAnchorOf(QUAKE), 'target');
+    //  `area` 事件类型默认被压到地面层；这根柱子是「打在空中的一下」，必须按路径抢回 top。
+    assert.equal(zcCombatEffectLayerOfPath('area', QUAKE), 'top');
+    assert.equal(zcCombatEffectLayerOfPath('melee', QUAKE), 'top');
+    //  尺寸：目录里不登记倍率 ⇒ 走「prefab 根 `_lscale` 说了算」，屏上只有 0.56 这一份。
+    assert.equal(zcCombatEffectNodeScaleOf(QUAKE), 1);
 });
 
 test('③ 尺寸：改回「prefab 根 _lscale 说了算」，巨力坚果保留美术根缩放', () => {

@@ -581,6 +581,38 @@ test('首领塔防关拿到服务端开战回包也要按 npcCard 收紧敌方�
     assert.equal(runtime.cards.has('68003'), true);
 });
 
+test('塔防关 NPC 席位从本地卡牌组抽卡：服务端花名册为空也不许削成只剩系统卡', () => {
+    prepare(4);
+    const source = captureZCMatchConfig();
+    //  卡牌组 = `npcTeam.npcCard` 的投影；2001 是系统卡（金矿），跟着卡组一起上阵。
+    const pve = {
+        mode: 'defence' as const, chapterId: 1, levelId: 10005, territoryCellId: 4, stage: 5,
+        territorySaveOwner: null, enemyName: '', territoryTutorial: null,
+        enemyCardIds: [68001, 68002, 2001], enemyTeamCardIds: [[68001, 68002, 2001]],
+        playerCount: 2, hpRate: 1, attackRate: 1, openGrideTime: 18, waves: [],
+    };
+    //  服务端回包里只有玩家那侧有 heroIds —— 塔防的敌方阵容本来就不来自回包。
+    const entry = buildZCBattleEntry({ baseMatchConfig: source } as Parameters<typeof buildZCBattleEntry>[0], {
+        battle: battle([68001], [], [], []), selfRoleId: 'self', pve,
+    });
+    assert.equal(entry.matchConfig.npcDeckFromTeam, true, '塔防关必须打上「别按花名册重建」的标记');
+    assert.deepEqual(entry.matchConfig.enemyDeck.map((card) => card.id).sort(), ['2001', '68001', '68002'],
+        '抽卡池 = 卡牌组，不是整份 30+ 张');
+
+    const npcOwners = Object.keys(entry.matchConfig.ownerDecks ?? {}).filter((owner) => owner !== 'player');
+    assert.ok(npcOwners.length > 0, '塔防关至少要有一个 NPC 席位');
+    for (const owner of npcOwners) {
+        assert.deepEqual((entry.matchConfig.ownerDecks?.[owner] ?? []).map((card) => card.id).sort(),
+            ['2001', '68001', '68002'], `${owner} 席位必须保留卡牌组`);
+    }
+
+    //  对照组：把标记摘掉就是旧行为 —— 空花名册把英雄卡全滤掉，只留 `unitId` 为空的金矿，
+    //  于是 NPC 半场永远翻不出兵种（2026-11-23 用户报的现场）。
+    const legacy = buildZCClientCombatConfig(
+        { ...entry.matchConfig, npcDeckFromTeam: false }, battle([68001], [], [], []), 'self').config;
+    assert.deepEqual(legacy.ownerDecks?.enemy?.map((card) => card.id), ['2001']);
+});
+
 test('领地首领波次卡不在服务端阵容中仍出怪，清空末波后才判胜', () => {
     prepare(4);
     configureZCMap(JSON.parse(readFileSync(assetPath('config/maps/normal.json'), 'utf8')));

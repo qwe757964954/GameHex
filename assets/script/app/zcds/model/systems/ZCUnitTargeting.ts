@@ -68,7 +68,8 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         Object.assign(this.targetingContext, {
             baseDefinition: context.targeting.baseDefinition ?? context.baseDefinition,
             canTargetUnit: (unit: ZCUnitState, candidate: ZCUnitState) =>
-                !unit.disengagedUnitIds || !unit.disengagedUnitIds.includes(candidate.id),
+                !unit.disengagedUnitIds || !unit.disengagedUnitIds.includes(candidate.id)
+                || (candidate.id === unit.hatredUnitId && this.context.targeting.now <= unit.hatredUntil),
         });
     }
 
@@ -79,6 +80,16 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
     removeUnit(id: number): void {
         this.stepCache.delete(id);
         this.targetScratch.delete(id);
+        const units = this.context.units;
+        if (units) {
+            const list = typeof (units as any).values === 'function' ? (units as any).values() : units;
+            for (const u of list) {
+                if (u && u.hatredUnitId === id) {
+                    u.hatredUnitId = null;
+                    u.hatredUntil = 0;
+                }
+            }
+        }
     }
 
     reportTargetChange(unit: ZCUnitState): void {
@@ -95,7 +106,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
                 if (!victim || victim.hp <= 0) {
                     reason = 'dead';
                 } else if (victim.owner === unit.owner
-                    || (!this.context.baseDefinition(unit.unitId).canAttackAir
+                    || (!this.context.effectiveDefinition(unit).canAttackAir
                         && this.context.baseDefinition(victim.unitId).flying)) {
                     reason = 'invalid';
                 } else if (unit.disengagedUnitIds && unit.disengagedUnitIds.includes(previous.id)) {
@@ -142,6 +153,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
             const definition = this.context.effectiveDefinition(unit);
             const from = this.context.unitPosition(unit, this.selfPosition);
             unit.disengagedUnitIds = unit.disengagedUnitIds.filter(id => {
+                if (id === unit.hatredUnitId && this.context.targeting.now <= unit.hatredUntil) return false;
                 const candidate = this.context.units.get(id);
                 return candidate && candidate.hp > 0 && candidate.battleState !== 'dead' && candidate.owner !== unit.owner
                     && !ZCTargetingSystem.isInRange(from, this.context.unitPosition(candidate, this.candidatePosition),
@@ -181,7 +193,19 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         }
         const hex = unit.targetBuildingHexId === null ? null : this.context.hex(unit.targetBuildingHexId);
         if (hex && isZCAwakeMonster(hex)) {
-            if (hex.neutralFeature.focusOwners?.includes(unit.owner)) {
+            const isFocused = !!hex.neutralFeature?.focusOwners?.includes(unit.owner);
+            if (!isFocused) {
+                unit.targetBuildingHexId = null;
+                const newTarget = ZCTargetingSystem.acquire(unit, this.targetingContext, false, this.selectionScratch);
+                if (newTarget) {
+                    if (newTarget.kind === 'unit') unit.targetUnitId = newTarget.id;
+                    else if (newTarget.kind === 'wall') unit.targetWallHexId = newTarget.id;
+                    else if (newTarget.kind === 'building') unit.targetBuildingHexId = newTarget.id;
+                }
+                if (zcTargetSwitchWatched()) this.prioritySwitches.add(unit);
+                return true;
+            }
+            if (hex.neutralFeature?.focusOwners?.includes(unit.owner)) {
                 const opponent = ZCTargetingSystem.acquire(unit, this.targetingContext, true, this.selectionScratch);
                 if (opponent) {
                     unit.targetBuildingHexId = unit.targetWallHexId = null;
@@ -217,12 +241,40 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
         return true;
     }
 
+    /**
+     * 检测近身是否有敌方单位正在攻击我方建筑/城墙。
+     * 命中时返回该敌方单位，供调用方打断远距离追击门闩并优先转火守家。
+     */
+    findNearbyStructureBreaker(unit: ZCUnitState, maxDistance = 150): ZCUnitState | null {
+        const units = this.context.units;
+        if (!units) return null;
+        const maxDistSq = maxDistance * maxDistance;
+        const list = typeof (units as any).values === 'function' ? (units as any).values() : units;
+        const definition = this.context.effectiveDefinition(unit);
+        let bestBreaker: ZCUnitState | null = null;
+        let bestDistSq = Infinity;
+        for (const candidate of list) {
+            if (!candidate || candidate.owner === unit.owner || candidate.hp <= 0 || candidate.battleState === 'dead') continue;
+            if (!definition.canAttackAir && this.context.baseDefinition(candidate.unitId).flying) continue;
+            const targetHexId = candidate.targetWallHexId ?? candidate.targetBuildingHexId;
+            if (targetHexId === null) continue;
+            const hex = this.context.hex(targetHexId);
+            if (!hex || hex.owner !== unit.owner) continue;
+            const distSq = (candidate.freeX - unit.freeX) ** 2 + (candidate.freeY - unit.freeY) ** 2;
+            if (distSq <= maxDistSq && distSq < bestDistSq) {
+                bestDistSq = distSq;
+                bestBreaker = candidate;
+            }
+        }
+        return bestBreaker;
+    }
+
     current(unit: ZCUnitState, out?: ZCCombatTarget): ZCCombatTarget | null {
         if (unit.targetUnitId !== null) {
             const target = this.context.units.get(unit.targetUnitId);
             if (!target || target.battleState === 'dead' || target.hp <= 0 || target.owner === unit.owner) return null;
             const definition = this.context.baseDefinition(target.unitId);
-            if (!this.context.baseDefinition(unit.unitId).canAttackAir && definition.flying) return null;
+            if (!this.context.effectiveDefinition(unit).canAttackAir && definition.flying) return null;
             const result = out ?? this.scratchFor(unit);
             const position = this.context.unitPosition(target, this.targetPosition);
             result.kind = 'unit';
@@ -365,7 +417,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
      * 返回 null 表示这一步没撞到，继续冲。
     */
     dashFirstHit(unit: ZCUnitState, fromX: number, fromY: number, toX: number, toY: number): IZCDashHit | null {
-        const definition = this.context.baseDefinition(unit.unitId);
+        const definition = this.context.effectiveDefinition(unit);
         const dx = toX - fromX;
         const dy = toY - fromY;
         this.dashNearest = Infinity;
@@ -430,7 +482,7 @@ export class ZCUnitTargeting implements IZCUnitTargeting {
             && cached.targetX === target.x && cached.targetY === target.y && cached.bodyRadius === target.bodyRadius) {
             return cached.step;
         }
-        const reach = this.attackReach(this.context.baseDefinition(unit.unitId), target.bodyRadius);
+        const reach = this.attackReach(this.context.effectiveDefinition(unit), target.bodyRadius);
         const step = this.findPathStep(unit, (id) => {
             const config = this.context.map.hexes[id];
             if (target.kind === 'unit' && id === destinationId) return true;

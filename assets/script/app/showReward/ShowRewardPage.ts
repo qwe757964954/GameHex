@@ -31,6 +31,7 @@ export interface IShowRewardParams {
     readonly goods?: readonly unknown[];
     /** 铜钱 / 金币奖励 ⇒ 换音效（老端 isGold）。 */
     readonly isGold?: boolean;
+    readonly soundKey?: string;
 }
 
 /**
@@ -82,7 +83,7 @@ export class ShowRewardPage extends PopupBase {
     }
 
     protected async onOpen(userData?: IShowRewardParams): Promise<void> {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
         this.entries = [];
         this.frames = [];
         this.playedAni.clear();
@@ -112,7 +113,7 @@ export class ShowRewardPage extends PopupBase {
 
         this.entries = sorted;
         this.frames = frames;
-        this.present();
+        this.present(userData?.soundKey);
     }
 
     protected onClose(_reason: PopupCloseReason): void {
@@ -125,7 +126,7 @@ export class ShowRewardPage extends PopupBase {
         this.playedAni.clear();
         this.isGold = false;
         // 不做「奖励飞向背包」收尾动画，见类注释。
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, this);
     }
 
     // ============================================================
@@ -145,7 +146,7 @@ export class ShowRewardPage extends PopupBase {
     // 铺界面
     // ============================================================
 
-    private present(): void {
+    private present(soundKey?: string): void {
         // 无条件写：实例会被复用。
         this.hintLabel.string = SHOW_REWARD_TEXTS.hint;
 
@@ -155,7 +156,7 @@ export class ShowRewardPage extends PopupBase {
         this.playEnterAnimation();
 
         // 音效（老端 init() 时播，不是 enter()）；未接线时静默丢弃。
-        FW.playSound(showRewardSoundKey(this.isGold));
+        FW.playSound(soundKey ?? showRewardSoundKey(this.isGold));
     }
 
     /**

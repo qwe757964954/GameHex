@@ -2,6 +2,7 @@ import {
     Color,
     Graphics,
     instantiate,
+    Label,
     Node,
     Prefab,
     Sprite,
@@ -15,15 +16,24 @@ import {
     TERRITORY_HERO_BADGE_TOTAL_SECONDS,
     sortTerritoryHeroBadges,
     territoryHeroBadgeFrame,
+    territoryHeroBadgeShineFrame,
     type ITerritoryHeroBadgeItem,
+    type ITerritoryHeroBadgeShineFrame,
 } from '../territory/model/TerritoryHeroReward';
 
 /**
- * 底栏「英雄」按钮上方的**碎片进度徽标**（2026-11-10 需求 ③）。
+ * 底栏「英雄 / 卡牌」按钮上方的**碎片进度徽标**（2026-11-10 需求 ③）。
  *
- * 截图口径：左边一颗碎片 icon（方框），右边一条白底圆角槽 + 绿色填充；
- * 播放时填充从该英雄**当前** `owned / need` 长到 100%，随后整个 UI 淡出消失。
- * 多个英雄**串行**：一个演完（{@link TERRITORY_HERO_BADGE_TOTAL_SECONDS}）才轮到下一个。
+ * 截图口径：左边一颗碎片 icon，右边一条**深灰**圆角槽 + 绿色填充，槽正中央压一行白色
+ * `NN%`；icon 与进度条**间隔 2px**，整组摆在按钮图标**上方 10px**（2026-11-22 用户口径）。
+ * 播放时填充从该英雄**当前** `owned / need` 长到 100%，长满时一道白光沿绿条横扫一遍，
+ * 随后整个 UI 淡出消失。多个英雄**串行**：一个演完（{@link TERRITORY_HERO_BADGE_TOTAL_SECONDS}）
+ * 才轮到下一个。
+ *
+ * 🔴 **只有「本次新达成可升级（碎片 + 经验都满）」才展示**（11-10 用户当场确认、
+ *    11-22 再次明确）。11-20 曾加过「本次进度涨了一截就播」的回落通道，
+ *    实机变成「每次领奖都弹一个 26%」，已被用户否决并**整条撤掉**；
+ *    判定真源仍是 `detectTerritoryHeroBadges`，这里只负责演，不参与判据。
  *
  * ## 为什么是纯表现视图、不是 Component
  *
@@ -41,8 +51,11 @@ import {
 /** 徽标 prefab 的 resources 路径。 */
 export const HERO_FRAGMENT_BADGE_PREFAB = 'ui/main/HeroFragmentBadge';
 
-const BAR_BG_COLOR = new Color(255, 255, 255, 255);
+/** 槽底：深灰（2026-11-20）。白字百分比压在白槽上会看不见，按截图改成深灰底。 */
+const BAR_BG_COLOR = new Color(62, 64, 72, 255);
 const BAR_FILL_COLOR = new Color(60, 200, 40, 255);
+/** 刷光带宽度（逻辑 px），比槽高略窄地横扫，避免硬直角溢出圆角。 */
+const BADGE_SHINE_WIDTH = 26;
 
 interface IHeroBadgeQueued {
     readonly item: ITerritoryHeroBadgeItem;
@@ -59,7 +72,11 @@ export class HeroFragmentBadge {
     private readonly barFill: Graphics;
     private readonly iconSprite: Sprite;
     private readonly opacity: UIOpacity;
-    /** 全部版面值来自 prefab：根尺寸、进度条左缘/宽/高、上抬量。 */
+    /** 百分比数字来自 prefab；prefab 被外部回滚时软降级为「只有进度条」，不抛错。 */
+    private readonly percentLabel: Label | null;
+    /** 每帧只改 `.a`，不在 step 里 new Color。 */
+    private readonly shineColor = new Color(255, 255, 255, 0);
+    /** 全部版面值来自 prefab：根尺寸、进度条左缘/宽/高、距图标顶边的间隔。 */
     private readonly barLeft: number;
     private readonly barWidth: number;
     private readonly barHeight: number;
@@ -95,6 +112,8 @@ export class HeroFragmentBadge {
         this.iconSprite.trim = false;
         this.iconSprite.sizeMode = Sprite.SizeMode.CUSTOM;
         this.lift = this.childNode('LiftAnchor').position.y;
+        const percentNode = this.node.getChildByName('BadgePercent');
+        this.percentLabel = percentNode ? percentNode.getComponent(Label) : null;
 
         this.placeAboveHeroButton(navBar, heroButton, rootTransform);
     }
@@ -130,7 +149,8 @@ export class HeroFragmentBadge {
             else this.node.active = false;
             return;
         }
-        this.apply(fx.progress, fx.opacity);
+        // 每一场都是「本次新达成」⇒ 一定长满到 100%，长满那一刻起刷光。
+        this.apply(fx.progress, fx.opacity, territoryHeroBadgeShineFrame(this.elapsed));
     }
 
     /** 换页 / 页面销毁：立刻收起，队列清空（纯表现，不碰任何业务状态）。 */
@@ -138,8 +158,11 @@ export class HeroFragmentBadge {
         this.current = null;
         this.elapsed = -1;
         this.queue.length = 0;
-        if (this.node.active) this.node.active = false;
-        if (this.node.isValid) this.node.destroy();
+        // 与 `BigMapPlayerLevelPanel.dispose()` 同口径：节点可能已被父级连带销毁，
+        // 对已销毁节点再写 `active` / 再 `destroy()` 会打「destroy twice」。
+        if (!this.node?.isValid) return;
+        this.node.active = false;
+        this.node.destroy();
     }
 
     private startNext(): void {
@@ -154,15 +177,22 @@ export class HeroFragmentBadge {
         this.elapsed = 0;
         this.node.active = true;
         if (this.iconSprite.spriteFrame !== next.frame) this.iconSprite.spriteFrame = next.frame;
-        this.apply(territoryHeroBadgeFrame(next.item.from, 0)?.progress ?? 0, 1);
+        this.apply(territoryHeroBadgeFrame(next.item.from, 0)?.progress ?? 0, 1, null);
     }
 
-    /** 全量写这一帧：两条 Graphics 清掉重画，整体透明度交给根节点的 `UIOpacity`。 */
-    private apply(progress: number, alpha: number): void {
+    /**
+     * 全量写这一帧：两条 Graphics 清掉重画，百分比读写 Label，整体透明度交给根 `UIOpacity`。
+     *
+     * 刷光**不新建节点**：在 `barFill` 画完绿填充后，用同一支 Graphics 再叠一条白色半透明
+     * 光带（位置 / 透明度全来自 `territoryHeroBadgeShineFrame`）。增长段 `shine` 为 `null`，
+     * 长满到 100% 后才开始横扫 —— 徽标只在「新达成」时演，所以每场都会走到这一段。
+     */
+    private apply(progress: number, alpha: number, shine: ITerritoryHeroBadgeShineFrame | null): void {
         const left = this.barLeft;
         const width = this.barWidth;
         const half = this.barHeight / 2;
         const radius = half;
+        const ratio = Math.max(0, Math.min(1, progress));
 
         this.barBg.clear();
         this.barBg.fillColor = BAR_BG_COLOR;
@@ -170,28 +200,51 @@ export class HeroFragmentBadge {
         this.barBg.fill();
 
         this.barFill.clear();
-        const filled = Math.max(0, Math.min(1, progress)) * width;
+        const filled = ratio * width;
         if (filled > 0) {
             this.barFill.fillColor = BAR_FILL_COLOR;
             // 填充太窄时半径跟着收，否则圆角会鼓出槽的左端。
             this.barFill.roundRect(left, -half, filled, this.barHeight,
                 Math.min(radius, filled / 2));
             this.barFill.fill();
+            if (shine && shine.opacity > 0 && filled > 2) {
+                const center = left + shine.offset * filled;
+                const x0 = Math.max(left, center - BADGE_SHINE_WIDTH / 2);
+                const x1 = Math.min(left + filled, center + BADGE_SHINE_WIDTH / 2);
+                if (x1 > x0) {
+                    this.shineColor.a = Math.round(200 * shine.opacity);
+                    this.barFill.fillColor = this.shineColor;
+                    this.barFill.rect(x0, -half + 1, x1 - x0, this.barHeight - 2);
+                    this.barFill.fill();
+                }
+            }
         }
+        const text = `${Math.round(ratio * 100)}%`;
+        if (this.percentLabel && this.percentLabel.string !== text) this.percentLabel.string = text;
         const value = Math.max(0, Math.min(255, Math.round(alpha * 255)));
         if (this.opacity.opacity !== value) this.opacity.opacity = value;
     }
 
-    /** 摆在英雄按钮图标正上方（`BottomNav` 局部坐标，走引擎矩阵换算）。 */
+    /**
+     * 摆在底部菜单栏「英雄 / 卡牌」按钮图标**正上方 10px**（2026-11-22 用户口径）。
+     *
+     * 🔴 旧写法是「图标中心 + 固定 58」：图标是 RAW Sprite，尺寸由 `spriteFrame` 回写，
+     *    实际高度远大于徽标的 44 ⇒ 徽标被压在卡牌图标中间（11-22 截图里就压在「英雄」
+     *    卡片上）。现在按**图标顶边的世界坐标**算：徽标底边 = 图标顶边 + `LiftAnchor.y`
+     *    （= 10px），徽标中心 = 底边 + 自身半高。
+     *    顶边与中心都走 `convertToWorldSpaceAR` / `convertToNodeSpaceAR`，把图标节点的
+     *    scale 一起算进去，不自己猜截图高度；徽标根节点 scale 恒为 1。
+     */
     private placeAboveHeroButton(navBar: Node, heroButton: TabButton, rootTransform: UITransform): void {
         const icon = heroButton.icon;
         const iconTransform = icon?.isValid ? icon.node.getComponent(UITransform) : null;
         const navTransform = navBar.getComponent(UITransform);
-        if (!iconTransform || !navTransform) return;
-        const world = iconTransform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
-        const local = navTransform.convertToNodeSpaceAR(world, new Vec3());
-        this.node.setPosition(local.x, local.y + this.lift, 0);
-        // 根节点尺寸也来自 prefab（保留引用，防止后续在编辑器里改尺寸后代码又写回常量）。
-        if (rootTransform.width <= 0 || rootTransform.height <= 0) return;
+        if (!iconTransform || !navTransform || rootTransform.height <= 0) return;
+        const iconCenter = iconTransform.convertToWorldSpaceAR(new Vec3(0, 0, 0), new Vec3());
+        const iconTop = iconTransform.convertToWorldSpaceAR(
+            new Vec3(0, iconTransform.height / 2, 0), new Vec3());
+        const center = navTransform.convertToNodeSpaceAR(iconCenter, new Vec3());
+        const top = navTransform.convertToNodeSpaceAR(iconTop, new Vec3());
+        this.node.setPosition(center.x, top.y + this.lift + rootTransform.height / 2, 0);
     }
 }

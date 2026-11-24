@@ -44,10 +44,14 @@ export interface IMainHudIntroPlanItem {
 }
 
 export const MAIN_HUD_INTRO_PLAN: readonly IMainHudIntroPlanItem[] = [
-    // 地图本体：整页淡进来，轻微上浮。缩放保持 1 —— 地图自带相机推拉，
-    // 再叠一层页面级缩放会和 `restoreChestCamera` 的镜头补偿打架。
-    { name: 'MapRoot', delay: 0, seconds: 0.40, offsetY: -14, scaleFrom: 1 },
-    // 左右两列活动入口：比地图晚一拍，从下方浮起。
+    // 🔴 `MapRoot`（地图本体 + 底图）**不在节奏表里**（2026-11-23）。
+    //
+    //  它曾经有一条 `offsetY:-14` 的淡入。问题是这一页的地图要异步读章节数据 + 美术，
+    //  切 tab 回来时底图早就画在屏幕上了；等 `presented` 到了才把它推到 -14 并归零透明度，
+    //  玩家看到的就是**整屏跳一下 + 闪一下**（用户 2026-11-23：「出现一个空场景…画面会显得跳一下」）。
+    //  底图是这一页的「底」，加载期间必须一直在位（挡住后面什么都没有的 Canvas），
+    //  所以它只能是「一到就在」——地图内容自己是一块块铺上来的，不需要页面级的位移去演。
+    // 左右两列活动入口：从下方浮起。
     { name: 'EntranceLayer', delay: 0.06, seconds: 0.32, offsetY: -18, scaleFrom: 1 },
     // 顶栏：从上方落下（与底栏方向相反，两条 HUD 一起「夹住」屏幕）。
     { name: 'TopHud', delay: 0.10, seconds: 0.32, offsetY: 40, scaleFrom: 1 },

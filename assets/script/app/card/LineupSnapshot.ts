@@ -36,6 +36,8 @@ export interface LineupSnapshot {
     readonly cards: readonly ZCDeckCard[];
     /** 卡 id → 等级；口径与 `CardLineupData.heroLevels` 一致。 */
     readonly levels: Readonly<Record<string, number>>;
+    /** 上阵战力（阵容内攻击力总和，用于 HUD / 阵容页首帧直出）。 */
+    readonly power?: number;
 }
 
 /** 只用得到的两个方法，方便测试注入。 */
@@ -94,7 +96,16 @@ export function normalizeLineupSnapshot(
             if (typeof value === 'number' && Number.isFinite(value)) levels[key] = value;
         }
     }
-    return { version: LINEUP_SNAPSHOT_VERSION, savedAt: source.savedAt, cards, levels };
+    const power = typeof source.power === 'number' && Number.isFinite(source.power) && source.power > 0
+        ? source.power
+        : undefined;
+    return {
+        version: LINEUP_SNAPSHOT_VERSION,
+        savedAt: source.savedAt,
+        cards,
+        levels,
+        ...(power !== undefined ? { power } : {}),
+    };
 }
 
 /** 写快照（失败静默：存储满了/隐私模式不该影响进页面）。 */
@@ -103,6 +114,7 @@ export function writeLineupSnapshot(
     levels: ReadonlyMap<string, number>,
     now: number = Date.now(),
     storage: LineupSnapshotStorage | null = defaultStorage(),
+    power?: number,
 ): void {
     if (!storage) return;
     const levelRecord: Record<string, number> = {};
@@ -112,11 +124,30 @@ export function writeLineupSnapshot(
         savedAt: now,
         cards: cards.slice(),
         levels: levelRecord,
+        ...(typeof power === 'number' && Number.isFinite(power) && power > 0 ? { power } : {}),
     };
     try {
         storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload));
     } catch (error) {
         console.warn('[LineupSnapshot] 写快照失败', error);
+    }
+}
+
+/** 更新已有快照的战力（无快照时不创建假快照）。 */
+export function saveLineupSnapshotPower(
+    power: number,
+    storage: LineupSnapshotStorage | null = defaultStorage(),
+): void {
+    if (!storage || !(power > 0)) return;
+    try {
+        const text = storage.getItem(LINEUP_SNAPSHOT_KEY);
+        if (!text) return;
+        const parsed = JSON.parse(text) as Record<string, unknown>;
+        if (!parsed || parsed.version !== LINEUP_SNAPSHOT_VERSION) return;
+        parsed.power = power;
+        storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(parsed));
+    } catch (error) {
+        console.warn('[LineupSnapshot] 更新快照战力失败', error);
     }
 }
 

@@ -6,7 +6,8 @@ import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IZCGamePreparedResources } from './ZCGamePreparedResources';
 import type { IZCGameEntry } from './ZCGameEntry';
 import type { ZCGameEntryParams } from './ZCGameEntry';
-import { ZC_BATTLE_EVENTS, type IZCBattleResult, type IZCBattleRuntimeDestroyed } from './ZCBattleEvents';
+import { buildZCBattleEntry } from './ZCBattleEntryBuilder';
+import { ZC_BATTLE_EVENTS, type IZCBattleResult } from './ZCBattleEvents';
 
 export const ZCBattlePhase = {
     Idle: 'idle',
@@ -26,11 +27,48 @@ export interface IZCBattleRuntime {
     shutdown(): void;
     destroy(): void;
 }
-export interface IZCBattleControllerOptions {
-    readonly prepareDirect: (scope: ResourceScope, params: ZCGameEntryParams | undefined, resources: IControllerResources) => Promise<IZCGamePreparedResources>;
-    readonly resolvePveResult: (pve: ZCGameEntryParams['pve'], victory: boolean) => void;
-    readonly buildEntry: (prepared: IZCGamePreparedResources, params?: ZCGameEntryParams) => IZCGameEntry;
+
+/** 资源准备服务契约：明确携带真实 caller 宿主 */
+export interface IZCBattleResourceLoader {
+    prepare(scope: ResourceScope, params: ZCGameEntryParams | undefined, resources: IControllerResources, caller: object): Promise<IZCGamePreparedResources>;
 }
+
+/** PVE 结果裁决服务契约：明确携带真实 caller 宿主 */
+export interface IZCBattlePveResolver {
+    resolvePveResult(pve: NonNullable<ZCGameEntryParams['pve']>, victory: boolean, caller: object): void;
+}
+
+/** 组合层注入给单局会话的标准服务契约；buildEntry 缺省使用领域纯函数 buildZCBattleEntry。*/
+export interface IZCBattleControllerServices {
+    readonly loader: IZCBattleResourceLoader;
+    readonly pveResolver?: IZCBattlePveResolver;
+    readonly buildEntry?: (prepared: IZCGamePreparedResources, params?: ZCGameEntryParams) => IZCGameEntry;
+}
+
+/** 兼容旧版选项接口（便于轻量桩与过渡平滑演进） */
+export interface IZCBattleControllerOptions {
+    readonly prepareDirect: (scope: ResourceScope, params: ZCGameEntryParams | undefined, resources: IControllerResources, caller?: object) => Promise<IZCGamePreparedResources>;
+    readonly resolvePveResult?: (pve: ZCGameEntryParams['pve'], victory: boolean, caller?: object) => void;
+    readonly buildEntry?: (prepared: IZCGamePreparedResources, params?: ZCGameEntryParams) => IZCGameEntry;
+}
+
+function normalizeBattleServices(input: IZCBattleControllerServices | IZCBattleControllerOptions): IZCBattleControllerServices {
+    if ('loader' in input) return input;
+    return {
+        loader: {
+            prepare(scope, params, resources, caller) {
+                return input.prepareDirect(scope, params, resources, caller);
+            },
+        },
+        pveResolver: input.resolvePveResult ? {
+            resolvePveResult(pve, victory, caller) {
+                input.resolvePveResult!(pve, victory, caller);
+            },
+        } : undefined,
+        buildEntry: input.buildEntry,
+    };
+}
+
 export interface IZCBattleSessionInput {
     readonly owner: ResourceScope;
     readonly params?: ZCGameEntryParams;
@@ -57,9 +95,11 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
     private detachOwner: (() => void) | null = null;
     private adopted = false;
     private runtimeController: IZCBattleRuntimeController | null = null;
+    private readonly services: IZCBattleControllerServices;
     get current(): T | null { return this.runtime; }
-    constructor(context: IControllerContext, private readonly options: IZCBattleControllerOptions, input: IZCBattleSessionInput) {
+    constructor(context: IControllerContext, servicesOrOptions: IZCBattleControllerServices | IZCBattleControllerOptions, input: IZCBattleSessionInput) {
         super(context, 'battle-session');
+        this.services = normalizeBattleServices(servicesOrOptions);
         this.listen(ZC_BATTLE_EVENTS.PVE_RESULT, this.onPveResult);
         this.listen(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, this.onRuntimeDestroyed);
         this.params = input.params;
@@ -123,11 +163,10 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         try {
             if (battle) {
                 const result = await battle;
-                if (this.isDisposed) throw new Error('对局准备已取消');
                 this.params = Object.assign({}, this.params, { battle: result });
             }
             if (this.isDisposed) throw new Error('对局准备已取消');
-            const prepared = await this.options.prepareDirect(this.scope, this.params, this.resources);
+            const prepared = await this.services.loader.prepare(this.scope, this.params, this.resources, this);
             if (this.isDisposed) throw new Error('对局准备已取消');
             this.prepared = prepared;
             return prepared;
@@ -161,7 +200,8 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
         if (this.runtime) return;
         if (this.isDisposed || !this.prepared) throw new Error('对局资源尚未准备完成，无法初始化 ZCGame');
         try {
-            const entry = this.options.buildEntry(this.prepared, this.params);
+            const buildEntry = this.services.buildEntry ?? buildZCBattleEntry;
+            const entry = buildEntry(this.prepared, this.params);
             const runtime = options.createRuntime();
             this.runtime = runtime;
             const controller = options.createRuntimeController(runtime, entry, this.resources);
@@ -174,14 +214,14 @@ export class ZCBattleController<T extends IZCBattleRuntime> extends ControllerBa
             throw error;
         }
     }
-    private onPveResult({ owner, victory }: IZCBattleResult): void {
+    private onPveResult({ victory }: IZCBattleResult, source: object): void {
         const pve = this.params ? this.params.pve : undefined;
-        if (owner !== this.runtime || !pve || this.resultRecorded) return;
+        if (source !== this.runtime || !pve || this.resultRecorded) return;
         this.resultRecorded = true;
-        this.options.resolvePveResult(pve, victory);
+        this.services.pveResolver?.resolvePveResult(pve, victory, this);
     }
-    private onRuntimeDestroyed({ owner }: IZCBattleRuntimeDestroyed): void {
-        if (owner === this.runtime) this.dispose();
+    private onRuntimeDestroyed(_payload: undefined, source: object): void {
+        if (source === this.runtime) this.dispose();
     }
     dispose(): void {
         if (this.isDisposed) return;

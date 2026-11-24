@@ -4,7 +4,7 @@ import type { AssetService } from '../../../core/asset/AssetService';
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import { MAP_MARKER_BUBBLE_FRAME_PASSED_PATH, MAP_MARKER_BUBBLE_FRAME_PENDING_PATH } from '../../common/MapMarkerBadge';
 import { TERRITORY_CHEST_BUBBLE_FRAME_PATH } from '../model/TerritoryChestBubble';
-import { TERRITORY_PVP_BUBBLE_PORTRAIT_PATH } from '../model/TerritoryLevelBubble';
+import { TERRITORY_PVP_BUBBLE_AVATAR_FRAME_PATH, TERRITORY_PVP_BUBBLE_LEVEL_FRAME_PATH, TERRITORY_PVP_CLEAR_BUBBLE_FRAME_PATH, TERRITORY_PVP_CLEAR_BUBBLE_ICON_PATH } from '../model/TerritoryLevelBubble';
 import {
     TERRITORY_MONSTER_BOX_ART_SCALE,
     TERRITORY_MONSTER_BOX_MAX_LV,
@@ -59,7 +59,21 @@ export interface ITerritoryBattleArt {
      * 编号是这一格唯一的关卡标识）。
      */
     readonly levelBubblePendingFrame?: SpriteFrame | null;
-    readonly pvpBubblePortrait?: SpriteFrame | null;
+    /**
+     * 未通关 PVP 头像气泡的两层底（与左上角玩家卡同源）：
+     * 黄底头像框 `image/main/hud/hud_avatar_frame` / 等级角标 `image/main/hud/hud_level_bg`。
+     * 头像本身由页面按玩家数据异步加载（`HeadArt`），不放这里。
+     */
+    readonly pvpBubbleAvatarFrame?: SpriteFrame | null;
+    readonly pvpBubbleLevelFrame?: SpriteFrame | null;
+    /**
+     * **已通关 PVP** 的问号徽标：94×103 蓝底成品方图 + 74×74 灰盾问号（2026-11-23 图1）。
+     *
+     * 两张都取到才切新样式；任一缺失时 `stationRenderOf` 回退旧「PVP」文字胶囊 ——
+     * 宁可样子旧一点，也不能让已通关的异步据点没有气泡。
+     */
+    readonly pvpClearBubbleFrame?: SpriteFrame | null;
+    readonly pvpClearBubbleIcon?: SpriteFrame | null;
     /**
      * **宝箱提示气泡**专用的底图：`image/spawn-region/frame_04`（77×87 竖向水滴，尖朝下）。
      *
@@ -308,7 +322,7 @@ export async function loadTerritoryBattleArt(
     assets: AssetService,
     backgroundPath: string,
 ): Promise<ITerritoryBattleArt> {
-    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, pvpBubblePortrait, patrolChestArt] = await Promise.all([
+    const [background, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildAssets, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, pvpBubbleAvatarFrame, pvpBubbleLevelFrame, pvpClearBubbleFrame, pvpClearBubbleIcon, patrolChestArt] = await Promise.all([
         // 地图 JSON 有 background 就按它走（spriteFramePathOf 对已带后缀的路径幂等），否则用默认背景。
         // 默认图 zdbg1 在 `image/` **根目录**（不在 `image/territory/`）⇒ 走 `spriteFramePath(ART_ROOT, …)`；
         // 用 `spriteFramePathOf(TERRITORY_ART_ROOT/…)` 拼会在 bundle 索引里查不到
@@ -368,13 +382,20 @@ export async function loadTerritoryBattleArt(
         // 固定宝箱提示气泡里的体力图标。与「宝箱开出的体力飞进资源栏」
         // 用的是同一张 `图标_体力`，别在领地目录里另存一份。
         loadFrame(assets, spriteFramePath(RESOURCE_ICON_ART_ROOT, '图标_体力')),
-        loadFrame(assets, TERRITORY_PVP_BUBBLE_PORTRAIT_PATH),
+        // 未通关 PVP 头像气泡的两层底：与左上角玩家卡**同一张**黄底头像框 / 等级角标，
+        // 不另存领地专用图。头像（玩家本人）由页面按 `role.img` 异步加载后传进 renderMap。
+        loadFrame(assets, TERRITORY_PVP_BUBBLE_AVATAR_FRAME_PATH),
+        loadFrame(assets, TERRITORY_PVP_BUBBLE_LEVEL_FRAME_PATH),
+        // 已通关 PVP 的问号徽标（2026-11-23 图1）：94×103 蓝底成品方图 + 74×74 灰盾问号。
+        // 与上面两张 94×45 文字胶囊、以及未通关头像气泡都不同，别把底图槽位混用。
+        loadFrame(assets, TERRITORY_PVP_CLEAR_BUBBLE_FRAME_PATH),
+        loadFrame(assets, TERRITORY_PVP_CLEAR_BUBBLE_ICON_PATH),
         // 巡逻宝箱（锚点格）的模型图：4 档 × 闭合 / 开盖。
         // 是本批新美术（`territory_monsterBox_L{1..4}` / `...Open_L{1..4}`，212×212），
         // 与 `image/main/chest/boxLevel{N}`（100×100 通用宝箱）**不是一套** —— 别混用。
         loadPatrolChestArt(assets),
     ]);
-    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales, pvpBubblePortrait, patrolChestFrames: patrolChestArt.frames, patrolChestOpenFrames: patrolChestArt.openFrames, patrolChestIconScale: TERRITORY_MONSTER_BOX_ART_SCALE };
+    return { background, levelBubbleFrame, levelBubblePendingFrame, chestBubbleFrame, staminaIcon, tileLocked, tileCleared, tileGrey, lockIcon, frameBoss, frameStage, frameAsyncPvp, frameChest, start, stage, boss, asyncPvp, fixedResource, randomResource, randomSilverIcon, chestIcon, bonus, header, navButton, actionButton, buildFrames: buildAssets.frames, buildScales: buildAssets.scales, pvpBubbleAvatarFrame, pvpBubbleLevelFrame, pvpClearBubbleFrame, pvpClearBubbleIcon, patrolChestFrames: patrolChestArt.frames, patrolChestOpenFrames: patrolChestArt.openFrames, patrolChestIconScale: TERRITORY_MONSTER_BOX_ART_SCALE };
 }
 
 /**

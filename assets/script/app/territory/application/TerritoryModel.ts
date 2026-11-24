@@ -47,8 +47,9 @@ import { withTerritoryMonsterBox } from '../model/TerritoryMonsterBox';
 import { territoryPrerequisiteText } from '../model/TerritoryPrerequisite';
 import type { TerritoryProgressData } from '../model/TerritoryProgress';
 import { TerritoryProgress, normalizeTerritoryChapter } from '../model/TerritoryProgress';
-import { buildTerritoryMonsterBoxDetail, type ITerritoryMonsterBoxDetailContent } from '../model/TerritoryMonsterBoxDetail';
+import { buildTerritoryMonsterBoxDetail, type ITerritoryMonsterBoxAttempt, type ITerritoryMonsterBoxDetailContent } from '../model/TerritoryMonsterBoxDetail';
 import type { ITerritoryMonsterBoxGroup } from '../model/TerritoryMonsterBoxConfig';
+import type { TerritoryGuardMonster } from '../model/TerritoryCampaignConfig';
 import { TERRITORY_REQUEST_STATUS, type TerritoryRequestFailure } from '../model/TerritoryRequestStatus';
 import type {
     TerritoryBeginBattleResult,
@@ -102,6 +103,12 @@ export interface ITerritoryChapterBundle {
         readonly patrolLevelIdByBattleId: ReadonlyMap<number, number>;
         /** 巡逻宝箱组 id → 该组全部等级行（升级消耗 / 成功率 / 失败上限 / 奖励池）。 */
         readonly monsterBoxGroups: ReadonlyMap<number, ITerritoryMonsterBoxGroup>;
+        /**
+         * 关卡 id → 守护怪（`levelInfo.levelMonsterGroup` → `monsterCard.headIcon`）。
+         *
+         * 可选：老夹具 / 老 bundle 不带它 ⇒ 守护怪只留 prefab 占位图（不阻断面板）。
+         */
+        readonly monsterGroupByLevelId?: ReadonlyMap<number, readonly TerritoryGuardMonster[]>;
     };
     readonly art: ITerritoryBattleArt;
 }
@@ -386,6 +393,9 @@ export interface ITerritoryRewardPresentation {
 
 const EMPTY_CELL_ARRAY: readonly number[] = [];
 
+/** 没有守护怪配置时的空表（老 bundle / 老夹具）；**共用一个实例**，别每次 new。 */
+const EMPTY_GUARD_MONSTERS: ReadonlyMap<number, readonly TerritoryGuardMonster[]> = new Map();
+
 export interface ITerritoryModelPorts {
     readonly loader: ITerritoryChapterLoader;
     readonly gateway: ITerritoryCellGateway;
@@ -601,6 +611,18 @@ export interface ITerritoryViewState {
      */
     readonly victoryClaimCells: readonly number[];
     /**
+     * 本次 `loadChapter` 读到的**「战斗胜利」格**（一次性边沿，只给掉落宝箱动画挑起飞点）。
+     *
+     * 与 {@link victoryClaimCells} **不同源**：异步 PVP / 关卡胜利由服务端在战斗结束时
+     * 直接下发 `passCells`，`loadChapter` 先 `mergeServerState` 把格子落成 `owned`，
+     * 再走 `applyStoredBattleResult` 时 `startExplore` 必然被 `checkUnlock` 的
+     * `owned.has(cellId)` 挡掉 ⇒ 本地探索零收地 ⇒ `victoryClaimCells` 恒空。
+     * 所以「这局战斗打赢了」必须直接认**存档里的战斗结果**，而不是收地结果。
+     *
+     * 可选：老快照 / 测试夹具不带这个字段时按「没边沿」处理，不许带崩整页。
+     */
+    readonly victoryBattleCells?: readonly number[];
+    /**
      * 当前钱包（银币 / 体力）的只读快照 —— 供地图判「这颗消耗数字够不够」。
      *
      * 「体力不足或银币不足时，对应的数字 UI 显示红色」。
@@ -642,6 +664,8 @@ interface ITerritoryChapterContext {
     readonly stageByCell: Map<number, TerritoryCampaignStage>;
     /** 巡逻宝箱组配置（monsterBox 表）：面板的消耗 / 成功率 / 奖励池全按它取。 */
     monsterBoxGroups: ReadonlyMap<number, ITerritoryMonsterBoxGroup>;
+    /** 关卡 id → 守护怪（`levelInfo.levelMonsterGroup`）：宝箱面板的守护怪头像。 */
+    readonly monsterGroupByLevelId: ReadonlyMap<number, readonly TerritoryGuardMonster[]>;
     readonly layout: ITerritoryMapLayout;
     readonly art: ITerritoryBattleArt;
     readonly playerCardCount: number;
@@ -677,6 +701,17 @@ export type TerritoryModelOutput =
      * 自动推进不发这条（见 `announceChapterSwitch`）。
      */
     | { readonly kind: 'chapterSwitch'; readonly fromChapterId: number; readonly toChapterId: number };
+
+function getMonsterBoxFailStorage(): { getItem(k: string): string | null; setItem(k: string, v: string): void } | null {
+    try {
+        const anyGlobal = globalThis as { sys?: { localStorage?: { getItem(k: string): string | null; setItem(k: string, v: string): void } } };
+        if (anyGlobal.sys?.localStorage) return anyGlobal.sys.localStorage;
+        if (typeof localStorage !== 'undefined') return localStorage;
+    } catch {
+        // ignore
+    }
+    return null;
+}
 
 export class TerritoryModel {
     private readonly outputs = new Set<(output: TerritoryModelOutput) => void>();
@@ -728,7 +763,8 @@ export class TerritoryModel {
         background: null,
         levelBubbleFrame: null,
         levelBubblePendingFrame: null,
-        pvpBubblePortrait: null,
+        pvpBubbleAvatarFrame: null,
+        pvpBubbleLevelFrame: null,
         // 宝箱提示气泡里的体力 icon（地图还没加载时页面会用这套空图，别让类型少一项）。
         staminaIcon: null,
         // 地皮三态（未通关 / 已通关 / **被前置卡住时置灰**）+ 四张「已解锁未通关」的格面框，
@@ -775,6 +811,16 @@ export class TerritoryModel {
     private pendingFixedResourceCells = new Set<number>();
     private pendingRandomResourceCells = new Set<number>();
     private pendingMonsterBoxCells = new Set<number>();
+    /**
+     * 最近一次**巡逻宝箱升级摇奖**的回包结果（给面板演「黄条停在绿区/灰区」）。
+     *
+     * 只存一条：面板开演时记住当时的 `seq`，回包带更大的 `seq` 才算「这一轮的结果」。
+     * 等级真值不在这里 —— 仍在 `serverCellStateCache.monsterBoxes`（服务端快照）。
+     */
+    private monsterBoxAttempt: ITerritoryMonsterBoxAttempt | null = null;
+    private monsterBoxAttemptSeq = 0;
+    /** 巡逻宝箱升级失败次数（cellId → 失败次数）。升级成功或等级变化时清零。 */
+    private readonly monsterBoxFailCounts = new Map<number, number>();
     /** 在途写请求票（只发不等；回包 / 超时都从这里收尾）。 */
     private readonly writeTickets: ITerritoryWriteTicket[] = [];
     private writeTicketSeq = 0;
@@ -800,6 +846,13 @@ export class TerritoryModel {
     private victoryClaimCells: number[] = [];
     /** 已读到胜利存档、还没被 `settleProgress` 兑现过一次（见 `applyStoredBattleResult`）。 */
     private victoryPending = false;
+    /**
+     * 本次加载读到的「战斗胜利」格（§3.54，11-23 修）。
+     *
+     * 只由 `applyStoredBattleResult` 从**战斗结算存档**写入，与 `victoryClaimCells`
+     * 的「本地探索收地」彻底分家；`loadChapter` / `dispose` 清，天然一局一次。
+     */
+    private victoryBattleCells: number[] = [];
     /**
      * 「本章**刚刚**通关、整章云散还没演过」—— 一次性信号，只随状态发出去一拍。
      *
@@ -855,6 +908,7 @@ export class TerritoryModel {
         this.currentChapterId = ports.store.loadLastChapter();
         // 页面在 start 前注册消息，首次加载也要接住这一小段窗口里的推送。
         this.loadingPushes = { chapterId: this.currentChapterId, passCells: new Set(), cellInfo: null };
+        this.loadMonsterBoxFailCounts();
     }
 
     // ============================================================
@@ -887,6 +941,7 @@ export class TerritoryModel {
         // 页面销毁后实例不再复用，但清掉更安全（防止同一实例被重新 start 时带着旧胜利标记）。
         this.victoryClaimCells = [];
         this.victoryPending = false;
+        this.victoryBattleCells = [];
         // 写请求在途时页面被销毁 ⇒ 撤掉本页面贡献的每层 loading（enterBusy 的 show
         // 与这里逐次 hide 配对）。不清理会留下全屏遮罩：`LoadingPopup` 引用计数不为 0
         // 永不关闭，遮罩上的 `BlockInputEvents` 常驻吞点击，其他页面「点不动」。
@@ -896,6 +951,8 @@ export class TerritoryModel {
         this.pendingFixedResourceCells.clear();
         this.pendingRandomResourceCells.clear();
         this.pendingMonsterBoxCells.clear();
+        // 摇奖结果也作废：页面已销毁，下次进来不该重放上一局的黄条
+        this.monsterBoxAttempt = null;
         // busy 释放通知完成后，再解除实例输出订阅。
         this.outputs.clear();
     }
@@ -1442,6 +1499,11 @@ export class TerritoryModel {
                 const failure = readWriteFailure(result);
                 // 与 `mergeServerState` 同口径：非 strict 下 `!result.ok` 收窄不生效，判失败用失败态。
                 if (failure) {
+                    // 服务端明确拒绝（摇奖失败）：面板据此把黄条停在**灰区**。
+                    // 离线 / 超时不带结果语义（可能已经升上去了），标 `success = false` 但 tip 仍是「升级失败」，
+                    // 与重拉快照后的真值对得上 —— 别在这里把「没网」演成「摇中灰区」以外的第三种结论。
+                    this.recordMonsterBoxFail(cellId);
+                    this.noteMonsterBoxAttempt(cellId, false);
                     this.showTip(TERRITORY_TEXTS.monsterBoxUpgradeFailed);
                     // 只有服务端明确拒绝才重拉：离线 / 超时时重拉会把本地已有的快照再打一次空请求。
                     if (failure === TERRITORY_REQUEST_STATUS.rejected) void this.mergeServerState(chapterId, loadId);
@@ -1450,9 +1512,13 @@ export class TerritoryModel {
                 const box = (result as { readonly monsterBox?: ITerritoryMonsterBox | null }).monsterBox ?? null;
                 if (!box) {
                     // 「升级成功但等级未知」：服务端已经改了，别报失败也别猜，重拉取权威值。
+                    this.resetMonsterBoxFail(cellId);
+                    this.noteMonsterBoxAttempt(cellId, true);
                     void this.mergeServerState(chapterId, loadId);
                     return false;
                 }
+                this.resetMonsterBoxFail(cellId);
+                this.noteMonsterBoxAttempt(cellId, true);
                 const latest = context.serverCellStateCache;
                 if (latest && latest.levelChapter === chapterId) {
                     context.serverCellStateCache = {
@@ -1464,6 +1530,69 @@ export class TerritoryModel {
                 return false;
             },
         );
+    }
+
+    /**
+     * 记一条摇奖结果（`seq` 递增）。
+     *
+     * 面板只认「比开演时更大」的序号 ⇒ 换格子、重复点、重开弹窗都不会把旧结果当成本轮结果重放。
+     * 状态发布由 `finishWrite` 的 `emitStateChange` 统一负责，这里不额外发。
+     */
+    private noteMonsterBoxAttempt(cellId: number, success: boolean): void {
+        this.monsterBoxAttemptSeq += 1;
+        this.monsterBoxAttempt = { cellId, seq: this.monsterBoxAttemptSeq, success };
+    }
+
+    private loadMonsterBoxFailCounts(): void {
+        const storage = getMonsterBoxFailStorage();
+        if (!storage) return;
+        try {
+            const raw = storage.getItem('tafang.monster_box_fails');
+            if (!raw) return;
+            const parsed = JSON.parse(raw);
+            if (parsed && typeof parsed === 'object') {
+                for (const [k, v] of Object.entries(parsed)) {
+                    const cellId = Number(k);
+                    const count = Number(v);
+                    if (Number.isInteger(cellId) && Number.isInteger(count) && count >= 0) {
+                        this.monsterBoxFailCounts.set(cellId, count);
+                    }
+                }
+            }
+        } catch {
+            // ignore
+        }
+    }
+
+    private saveMonsterBoxFailCounts(): void {
+        const storage = getMonsterBoxFailStorage();
+        if (!storage) return;
+        try {
+            const obj: Record<string, number> = {};
+            for (const [k, v] of this.monsterBoxFailCounts) {
+                obj[k] = v;
+            }
+            storage.setItem('tafang.monster_box_fails', JSON.stringify(obj));
+        } catch {
+            // ignore
+        }
+    }
+
+    getMonsterBoxFailCount(cellId: number): number {
+        return this.monsterBoxFailCounts.get(cellId) ?? 0;
+    }
+
+    recordMonsterBoxFail(cellId: number): void {
+        const count = (this.monsterBoxFailCounts.get(cellId) ?? 0) + 1;
+        this.monsterBoxFailCounts.set(cellId, count);
+        this.saveMonsterBoxFailCounts();
+    }
+
+    resetMonsterBoxFail(cellId: number): void {
+        if (this.monsterBoxFailCounts.has(cellId)) {
+            this.monsterBoxFailCounts.delete(cellId);
+            this.saveMonsterBoxFailCounts();
+        }
     }
 
     /**
@@ -1660,7 +1789,7 @@ export class TerritoryModel {
                 // 不补「已开启」轻提示：随机格是解锁即发奖，格子上喷出的资源已经承担反馈。
                 // `{ chest: false }` = 不弹奖励窗（随机池发的是道具，走 settleRewards 会被全判进 popup）。
                 if (write.rewards?.length) {
-                    this.showRewards(write.rewards, cellId, firstCellEver ? { popup: true } : { chest: false });
+                    this.showRewards(write.rewards, cellId, { chest: false, ...(firstCellEver ? { popup: true } : {}) });
                 }
                 return false;
             },
@@ -2202,6 +2331,7 @@ export class TerritoryModel {
         // 上一章的胜利标记不能漏到新章：否则新章第一次普通生成也会被当成「胜利通过」放大播。
         this.victoryClaimCells = [];
         this.victoryPending = false;
+        this.victoryBattleCells = [];
         // 通关演出的待播信号同理：它只属于"刚刚打通的那一章"，新章有它自己的命。
         this.chapterClearPending = false;
         // 切章节必须清上一章的开战记录：它是「防连点重发开战请求」的判据，
@@ -2314,6 +2444,7 @@ export class TerritoryModel {
             stages: bindings.map(({ site, stage }) => ({ site, stage })),
             stageByCell,
             monsterBoxGroups: bundle.campaign.monsterBoxGroups,
+            monsterGroupByLevelId: bundle.campaign.monsterGroupByLevelId ?? EMPTY_GUARD_MONSTERS,
             layout: buildTerritoryMapLayout(map),
             art,
             playerCardCount: campaign.playerCardCount,
@@ -2464,6 +2595,13 @@ export class TerritoryModel {
             || newlyConfirmed;
         if (changed) this.persistChapter(context);
         const boxes = state.monsterBoxes ?? [];
+        for (let i = 0; i < boxes.length; i += 1) {
+            const box = boxes[i];
+            const prev = previousBoxes.find(b => b.cellId === box.cellId);
+            if (!prev || prev.lv !== box.lv) {
+                this.resetMonsterBoxFail(box.cellId);
+            }
+        }
         return changed || previousBoxes.length !== boxes.length || previousBoxes.some((box, index) =>
             box.cellId !== boxes[index].cellId || box.lv !== boxes[index].lv);
     }
@@ -2563,7 +2701,7 @@ export class TerritoryModel {
             // 首屏已经可点，读取在途期间新增的解锁可能比这份快照更新。
             const addedUnlocks = context.progress.unlockedCells.filter(cellId => !initialUnlocks.has(cellId));
             if (addedUnlocks.length > 0) {
-                state = { ...state, unlockCells: [...new Set([...state.unlockCells, ...addedUnlocks])] };
+                state = { ...state, unlockCells: Array.from(new Set([...state.unlockCells, ...addedUnlocks])) };
             }
         }
         if (this.mergeCellInfo(context, state)) this.emitInitialCellSyncStateChange(isInitialCellSync);
@@ -2590,6 +2728,12 @@ export class TerritoryModel {
             return;
         }
         if (battle.status === TERRITORY_BATTLE_STATUS.victory) {
+            // 🔴 §3.54（11-23 修）：「这局打赢了」的一次性边沿只认**战斗结算存档**。
+            // 服务端在战斗结束时直接下发 `passCells`，`loadChapter` 的 `mergeServerState`
+            // 早于本方法把格子落成 owned ⇒ 下面 `startExplore` 在异步 PVP / 重复挑战里
+            // 必被 `checkUnlock` 挡掉，`victoryPending` 与 `victoryClaimCells` 恒为空。
+            // 先在这里落边沿，回城的掉落宝箱飞行才不会静默消失。
+            this.victoryBattleCells = [battle.cellId];
             const result = this.progress.startExplore(
                 battle.cellId,
                 Number.MAX_SAFE_INTEGER,
@@ -2982,6 +3126,8 @@ export class TerritoryModel {
             pendingFixedResourceCells: this.pendingFixedResourceCells.size === 0 ? EMPTY_CELL_ARRAY : Array.from(this.pendingFixedResourceCells),
             pendingMonsterBoxCells: this.pendingMonsterBoxCells.size === 0 ? EMPTY_CELL_ARRAY : Array.from(this.pendingMonsterBoxCells),
             victoryClaimCells: this.victoryClaimCells,
+            // 「这局战斗打赢了」的一次性边沿（与收地无关，见字段注释）。
+            victoryBattleCells: this.victoryBattleCells,
             // 地图拿它判「银币 / 体力数字要不要染红」。与 `buildHud` 同一个兜底：
             // 存档还没读到时就当 0（此时 `ready` 为 false，站点根本不会渲染）。
             wallet: { silver: wallet?.silver ?? 0, stamina: wallet?.stamina ?? 0 },
@@ -3059,6 +3205,9 @@ export class TerritoryModel {
             stage: this.detailStage,
             lv: box ? box.lv : 0,
             group,
+            monsterGroupByLevelId: chapter?.monsterGroupByLevelId ?? null,
+            attempt: this.monsterBoxAttempt,
+            failCount: this.getMonsterBoxFailCount(box?.cellId ?? detailSite.cellId),
         });
     }
 

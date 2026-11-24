@@ -25,9 +25,10 @@ import {
 } from '../ZCSingleStrikeFx';
 import {
     ZC_DASH_EFFECT_PREFAB_PATH, ZC_DASH_EFFECT_SECONDS,
-    dashGuardStatusId, dashVulnerableStatusId,
+    dashGuardStatusId, dashVulnerableStatusId, pushDashGuardVisualEvent,
 } from '../ZCDashFx';
 import { ZC_BARRAGE_DEFAULT_INTERVAL } from '../ZCWindBarrageFx';
+import { ZC_QUAKE_STRIKE_PREFAB_PATH, ZC_QUAKE_STRIKE_SECONDS } from '../ZCQuakeFx';
 import { ZC_EFFECT_STATUS_PREFIX } from '../ZCEffectTuning';
 import { missileLog, missileLogChanging, missileLogOnce } from '../../ZCMissileSkillDiagnostics';
 import { skillCastLogChanging, skillCastLogOnce, zcSkillCastWatched } from '../../ZCSkillCastDiagnostics';
@@ -114,6 +115,15 @@ export interface IZCSkillTriggerContext {
      * 返回 `false` ⇒ 参数不全，此时不要消费次数。
     */
     castRayBeam?(unit: ZCUnitState, vulnStatusId?: string): boolean;
+    /**
+     * 文明之火到点撒区域（103503 改造，2026-11-23 第 43 批），转给
+     * `ZCAttackResolutionSystem.castFireZone`。
+     *
+     * 返回 `false` ⇒ 参数不全（半径 / 块数 / 时长 / 每跳倍率任一为 0），此时不要消费次数。
+     * 区域活 6~10 秒、敌人走过来照样挨打 ⇒ 与飓风同一口径，**场上没有敌人不算拒放**；
+     * 但吐出去的那一下需要一个落点，所以仍然吃普攻射程闸门（见 `applyFireZone`）。
+    */
+    castFireZone?(unit: ZCUnitState): boolean;
     /**
      * 陷阱到点布置，转给 `ZCAttackResolutionSystem.castTrap`。
      * 返回 false 表示参数不全，调用方不要消费 CD；陷阱不设普攻射程闸门。
@@ -400,6 +410,10 @@ export class ZCSkillTriggerSystem {
             this.applyStorm(unit, params, now, context, getRelease);
             //  射线集束 103503（第 18 批）：累计普攻触发，没有冷却。
             this.applyRayBeam(unit, params, now, context, getRelease);
+            //  文明之火 103503 改造（2026-11-23 第 43 批）：同样累计普攻，撒 3 块火焰区域。
+            this.applyFireZone(unit, params, now, context, getRelease);
+            //  腾云驾雾 68009（2026-11-24 第 44 批）：强化那一击的四段突进连击，逐帧推进。
+            this.applyDashChain(state, unit, params, now, dt, context);
             this.applyTrap(unit, params, now, context);
             const shotRadius = params?.shotRadius ?? params?.splashRadius ?? 150;
             this.applySplashShot(unit, params, now, context, () => checkSkillGate(shotRadius, params?.shotTargetMode ?? params?.splashTargetMode));
@@ -817,25 +831,69 @@ export class ZCSkillTriggerSystem {
         //  自己已经吃了 `selfCastHealPct`，再吃一次友军的会变成 8% + 4% = 12%。
         const allyRadius = params.selfCastAllyRadius ?? 0;
         const allyHealPct = params.selfCastAllyHealPct ?? 0;
-        if (allyRadius > 0 && allyHealPct > 0 && context.healUnit) {
-            const reach = allyRadius * Math.max(1e-6, context.distanceScale ?? 1);
+        const allyReach = allyRadius > 0 ? allyRadius * Math.max(1e-6, context.distanceScale ?? 1) : 0;
+        if (allyReach > 0 && allyHealPct > 0 && context.healUnit) {
             for (const ally of state.units) {
                 if (ally === unit) continue;
                 if (ally.owner !== unit.owner || ally.battleState === 'dead' || ally.hp <= 0) continue;
-                if (Math.hypot(ally.freeX - unit.freeX, ally.freeY - unit.freeY) > reach) continue;
+                if (Math.hypot(ally.freeX - unit.freeX, ally.freeY - unit.freeY) > allyReach) continue;
                 context.healUnit(ally, ally.maxHp * allyHealPct / 100);
             }
         }
 
+        //  群体护盾表现（2026-11-21 第 38 批，波利奥 68006「吃口菠萝」100603）。
+        //  用户口径：「吃口菠萝也是一个群体的护盾效果，没有看到给范围内的己方角色附上盾兵的特效」，
+        //  并明确选了「**保留治疗、只补表现**」+「**自己 + 友军都播**」—— 数值一个都不动，
+        //  只是让吃到这一下的人身上各挂一圈 `刀盾兵_护盾`。
+        //
+        //  🔴 判据是 `selfCastAllyRadius > 0`（群体自身施法），不是单位 id：
+        //     同车道的嗜血 100703 / 迅击 100903 都是纯自身增益，没有这一列 ⇒ 天然不播。
+        //     资源侧另按单位覆盖（`ZCEffectCatalog` 的 `self_cast` 组只登记 `68006`），
+        //     将来真有「群体但没盾」的卡，补一条参数或改单位清单，别在这里放开判据。
+        //  🔴 不看 `allyHealPct`：这一圈的表现属于「群体」这件事本身，不是「回了多少血」。
+        if (allyReach > 0) {
+            for (const target of state.units) {
+                if (target !== unit) {
+                    if (target.owner !== unit.owner || target.battleState === 'dead' || target.hp <= 0) continue;
+                    if (Math.hypot(target.freeX - unit.freeX, target.freeY - unit.freeY) > allyReach) continue;
+                }
+                //  坐标必须是连续世界坐标（`freeX / freeY`）；拿不到就别推，
+                //  推一条 NaN 的事件会让视图把特效挂在 (0,0) 或者干脆不建节点。
+                if (!Number.isFinite(target.freeX) || !Number.isFinite(target.freeY)) continue;
+                pushDashGuardVisualEvent(state, target, target.freeX, target.freeY, now);
+            }
+        }
+
         //  净化：只解「减益」——带硬控的，或任意一项 statMod 为负的。增益状态不动。
+        //
+        //  🔴 解谁：**半径内同阵营活着的友军，每人各 `cleanse` 个**（不含自己）。
+        //     依据是两份 desc 都写「并解除**友军**身上 1 个减益」（`armySkillLevelUp` 是卡牌 UI
+        //     真读的那份，`pvpSkillPlan` 也一致）—— 2026-11-22 之前这段只扫施法者自己，
+        //     等于卡面承诺了、代码没做（第 38 批记录成「遗留」，本轮补齐）。
+        //     没有群体半径的卡（`allyReach` 为 0）退回只解自己：那是老 `self_cast` 的语义，
+        //     不因为有这张群体卡就顺手改掉。
         const cleanse = Math.max(0, params.selfCastCleanse ?? 0);
         if (cleanse > 0) {
-            const debuffs = context.statusSystem.instancesOf(String(unit.id))
-                .filter((instance) => isDebuffStatus(context.statusSystem, instance.defId))
-                .sort((a, b) => (b.remainingSeconds ?? Number.POSITIVE_INFINITY)
-                    - (a.remainingSeconds ?? Number.POSITIVE_INFINITY));
-            for (const instance of debuffs.slice(0, Math.round(cleanse))) {
-                if (context.statusSystem.remove(String(unit.id), instance.defId)) changed = true;
+            const reachSquared = allyReach * allyReach;
+            for (const target of state.units) {
+                if (target === unit) {
+                    //  群体卡（`allyReach > 0`）desc 只承诺「解友军」⇒ 自己不跟着解；
+                    //  没有群体半径的老语义仍然是「自净化」，保持原样。
+                    if (allyReach > 0) continue;
+                } else {
+                    if (allyReach <= 0) continue;
+                    if (target.owner !== unit.owner || target.battleState === 'dead' || target.hp <= 0) continue;
+                    const dx = target.freeX - unit.freeX;
+                    const dy = target.freeY - unit.freeY;
+                    if (dx * dx + dy * dy > reachSquared) continue;
+                }
+                const debuffs = context.statusSystem.instancesOf(String(target.id))
+                    .filter((instance) => isDebuffStatus(context.statusSystem, instance.defId))
+                    .sort((a, b) => (b.remainingSeconds ?? Number.POSITIVE_INFINITY)
+                        - (a.remainingSeconds ?? Number.POSITIVE_INFINITY));
+                for (const instance of debuffs.slice(0, Math.round(cleanse))) {
+                    if (context.statusSystem.remove(String(target.id), instance.defId)) changed = true;
+                }
             }
         }
         return changed;
@@ -1324,6 +1382,250 @@ export class ZCSkillTriggerSystem {
         unit.rayFiredCount = done;
         //  射出去是「主动出手」：播一次施法动作，不原地锁（射手放完照常走位 / 继续射）。
         this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 文明之火（`fire_zone`，2026-11-23 第 43 批：科学家 68035 的原射线集束 103503 改造）。
+     *
+     * 需求原话：「科学家的原 射线集束 技能改成 文明之火，特效使用灼热地带的特效，改成蓝色的，
+     * 在目标位中心点，200px 半径的圆内，生成 3 个火焰区域，每个火焰区域的大小都和灼热地带一致，
+     * 持续时间对应 3 个等级 6/8/10 秒，每秒钟造成的伤害为 100%/110%/120%」。
+     *
+     * 参数（`skillParamJson`，`fire*` 前缀；`68035:30709` 这袋里还住着 103501 穿甲苔刺 /
+     * 103502 苔针双连 / 103504 精密陷阱，裸写 `radius` / `seconds` 会串到那三条且**不报错**）：
+     * `fireEvery` / `fireCount` / `fireSpreadRadius` / `fireRadius` / `fireSeconds` /
+     * `fireInterval` / `fireDamageRate`。
+     *
+     * 🔴 触发口径**照搬原射线集束**：累计普攻 N 次、没有冷却（用户 2026-11-23 确认
+     * 「沿用累计普攻 8 次」）⇒ 只记账，不设 `fireReadyAt`。
+     * 🔴 用**自己的** `unit.fireFiredCount`，不与 `rayFiredCount` 共用 —— 机甲菇 68015 拿走了
+     * 射线集束的旧效果、科学家 68035 留着新效果，两张卡随时可能同时挂两条车道。
+     * 🔴 射程闸门照吃（`release`）：区域虽然有 6~10 秒寿命、敌人走过来照样挨打，但这一下
+     * 是「吐在目标脚下」的，射程内连个目标都没有时吐出去只是空放。被拦下**不消费次数**。
+    */
+    private static applyFireZone(
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        context: IZCSkillTriggerContext,
+        release: boolean | (() => boolean),
+    ): void {
+        if (!context.castFireZone || !params) return;
+        const every = Math.max(0, Math.round(params.fireEvery ?? 0));
+        if (!(every > 0)) return;
+        const done = unit.completedAttackCount ?? 0;
+        const fired = unit.fireFiredCount;
+        if (fired === undefined) { unit.fireFiredCount = done; return; }
+        if (done - fired < every) return;
+        if (typeof release === 'function' ? !release() : !release) {
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`fire-pending:${unit.id}`, '触发',
+                    `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 累计普攻已满 ${every} 次但射程内没有目标 ⇒ 待触发`);
+            }
+            return;
+        }
+        const cast = context.castFireZone(unit);
+        if (zcSkillCastWatched(unit.unitId)) {
+            skillCastLogChanging(`fire-cast:${unit.id}`, '触发', cast
+                ? `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 撒下火焰区域，次数记到 ${done}`
+                : `${unit.unitId}#${unit.id} ${now.toFixed(1)}s 文明之火被拒（参数不全）⇒ 不消费次数，下帧重试`);
+        }
+        if (!cast) return;
+        unit.fireFiredCount = done;
+        //  与射线集束同一口径：出手动作播一次，但不原地锁（放完照常走位 / 继续射）。
+        this.markCastAction(unit, now, false);
+    }
+
+    /**
+     * 腾云驾雾（`dash_chain`，2026-11-24 第 44 批：仙桃行者 68009 的强化那一击 100904）。
+     *
+     * 需求原话：「以 150px 速度突进到目标 1 身前攻击 1 次，以目标 1 为圆心 200px 为半径，
+     * 内索取额外 3 个目标（合计 4 人），依次突进到这些目标身前攻击 1 次（每个目标攻击 1 次），
+     * 再回到目标 1 的位置，给每个目标造成 350%/410%/480%（对应等级的伤害），
+     * 每次攻击都会释放重击特效。这个技能的攻击不计入普攻的累计数」。
+     *
+     * 参数（`skillParamJson`，`dashChain*` 前缀 —— `68009:30718` 这袋里还住着 100901~100903）：
+     * `dashChainSpeed`（表值 px/秒）/ `dashChainSpreadRadius`（表值 px）/ `dashChainCount`（含目标 1 共几人）/
+     * `dashChainStopDistance` / `dashChainHitRadius` / `dashChainDamageRate`。
+     * 🔴 前缀必须带 `dashChain`：`dashDamageRate` / `dashHitRadius` 已经是冲锋（`legacy_dash`
+     * 102303 / 102703）的参数名，裸 `dash*` 会让「同一张卡既有冲锋又有腾云驾雾」时两边串味。
+     *
+     * 🔴 为什么整条落在触发系统而不是攻击系统：它要**逐帧挪人**，而 `blinkTo` 只在本侧接线
+     * （与 `blink_strike` / `single_strike` / `charge_shield` 同一个理由）；出手结算照旧走
+     * `strike` → `strikeTargets`，所以「不计入普攻累计数」是天然的（那条计数只在
+     * `consumeEmpoweredAttack` / `sendAttack` 里推进）。
+     *
+     * 🔴 起手由 `ZCAttackResolutionSystem.prepareAttack` 留标记（`dashChainPendingAt` + 目标 1），
+     * 它同时 `return null` ⇒ 强化那一击**不再额外打一发**。两侧同一帧完成：普攻推进
+     * （`updateUnits`）在前，本系统的 `tick` 在后。
+     *
+     * 🔴 序列状态存在单位上（`dashChainIds` / `dashChainIndex` / `dashChainReturnX/Y`），
+     * 全部进快照 —— 不清就是「读档回来单位被 `ZCUnitSystem` 冻在半路，整局站着不动」。
+     * 访问顺序在起手那一刻**拍死**（目标中途死亡就跳过那一段），不每帧重新选人，
+     * 否则「选中的人被打死 ⇒ 换一个」会让四段变成打不完的循环。
+    */
+    private static applyDashChain(
+        state: ZCSnapshot,
+        unit: ZCUnitState,
+        params: Readonly<Record<string, number>> | undefined,
+        now: number,
+        dt: number,
+        context: IZCSkillTriggerContext,
+    ): void {
+        if (!context.blinkTo || !context.strike || !params) return;
+        const speedTable = Math.max(0, params.dashChainSpeed ?? 0);
+        if (!(speedTable > 0)) return;
+        const scale = Math.max(1e-6, context.distanceScale ?? 1);
+        const speed = speedTable * scale;
+        if (!(speed > 0)) return;
+        const posOf = (target: ZCUnitState): { x: number; y: number } => (context.unitPosition
+            ? { ...context.unitPosition(target) }
+            : { x: target.freeX, y: target.freeY });
+        const alive = (target: ZCUnitState | undefined): target is ZCUnitState => Boolean(target)
+            && target!.battleState !== 'dead' && target!.hp > 0;
+
+        //  ① 起手：把「目标 1 + 周边 3 个」拍成一份访问顺序。
+        if (unit.dashChainPendingAt !== undefined) {
+            const targetId = unit.dashChainTargetId;
+            delete unit.dashChainPendingAt;
+            delete unit.dashChainTargetId;
+            const first = targetId === undefined
+                ? undefined
+                : state.units.find((candidate) => candidate.id === targetId);
+            if (!alive(first) || first!.owner === unit.owner) {
+                //  目标在留标记与建序列之间死了：这一拍空过（单位已经不出手了，别再多打一发）。
+                this.clearDashChain(unit);
+                return;
+            }
+            const origin = posOf(first!);
+            const want = Math.max(1, Math.round(params.dashChainCount ?? 1));
+            const spread = Math.max(0, params.dashChainSpreadRadius ?? 0) * scale;
+            const ids = [first!.id];
+            if (want > 1 && spread > 0) {
+                //  「以目标 1 为圆心」：量的是**目标 1 到候选者**的距离，不是本体到候选者 ——
+                //  本体此刻可能离得很远（这正是这条技能要「突进」的原因）。
+                const picks: Array<{ id: number; gap: number }> = [];
+                for (const candidate of state.units) {
+                    if (candidate.id === first!.id || candidate.owner === unit.owner) continue;
+                    if (!alive(candidate)) continue;
+                    const pos = posOf(candidate);
+                    const gap = Math.hypot(pos.x - origin.x, pos.y - origin.y);
+                    if (gap > spread) continue;
+                    picks.push({ id: candidate.id, gap });
+                }
+                //  由近到远；同距按 id（回放可重演，与选敌的其它车道同口径）。
+                picks.sort((a, b) => a.gap - b.gap || a.id - b.id);
+                for (const pick of picks) {
+                    if (ids.length >= want) break;
+                    ids.push(pick.id);
+                }
+            }
+            unit.dashChainIds = ids;
+            unit.dashChainIndex = 0;
+            unit.dashChainReturnX = origin.x;
+            unit.dashChainReturnY = origin.y;
+            if (zcSkillCastWatched(unit.unitId)) {
+                skillCastLogChanging(`dash-begin:${unit.id}`, '施法',
+                    `${unit.unitId}#${unit.id} 腾云驾雾起手：${ids.length} 段（${ids.join('→')}），`
+                    + `回程落点 ${origin.x.toFixed(1)},${origin.y.toFixed(1)}`);
+            }
+        }
+
+        const ids = unit.dashChainIds;
+        const index = unit.dashChainIndex;
+        if (!ids || index === undefined || index < 0) return;
+
+        const self = posOf(unit);
+        //  一步能走多远：`dashChainSpeed` 是表值 px/秒，乘 `combatDistanceScale` 落世界坐标。
+        const step = speed * dt;
+
+        //  ② 四段都打完了 ⇒ 回程。回程点 = 起手那一刻**目标 1 的坐标**（用户口径）。
+        if (index >= ids.length) {
+            const backX = unit.dashChainReturnX;
+            const backY = unit.dashChainReturnY;
+            if (backX === undefined || backY === undefined) { this.clearDashChain(unit); return; }
+            const gap = Math.hypot(backX - self.x, backY - self.y);
+            if (gap <= step || gap <= 1e-6) {
+                context.blinkTo(unit, backX, backY);
+                this.clearDashChain(unit);
+                return;
+            }
+            context.blinkTo(unit, self.x + (backX - self.x) / gap * step, self.y + (backY - self.y) / gap * step);
+            return;
+        }
+
+        //  ③ 这一段的人没了（被打死 / 被移除）⇒ 跳过，不空挥、也不在原地补打别人。
+        const victim = state.units.find((candidate) => candidate.id === ids[index]);
+        if (!alive(victim) || victim!.owner === unit.owner) {
+            unit.dashChainIndex = index + 1;
+            return;
+        }
+        const target = posOf(victim!);
+        const dx = target.x - self.x;
+        const dy = target.y - self.y;
+        const length = Math.hypot(dx, dy);
+        //  落点 = 目标身前 `dashChainStopDistance`（与闪现 / 突刺同一条几何：贴上去但不重叠）。
+        const stop = Math.max(0, params.dashChainStopDistance ?? 30) * scale;
+        const landX = length > stop && length > 1e-9 ? target.x - dx / length * stop : target.x;
+        const landY = length > stop && length > 1e-9 ? target.y - dy / length * stop : target.y;
+        const gap = Math.hypot(landX - self.x, landY - self.y);
+
+        //  ④ 还没到 ⇒ 沿直线推一段（这一步就是「以 150px 速度突进」看得见的那部分）。
+        if (gap > step && gap > 1e-6) {
+            context.blinkTo(unit, self.x + (landX - self.x) / gap * step, self.y + (landY - self.y) / gap * step);
+            return;
+        }
+
+        //  ⑤ 到位：打一下，再轮到下一个人。
+        context.blinkTo(unit, landX, landY);
+        const damageRate = Math.max(0, params.dashChainDamageRate ?? 0);
+        const hitRadius = Math.max(1, Math.max(0, params.dashChainHitRadius ?? 40) * scale);
+        if (damageRate > 0) {
+            //  🔴 `origin` 显式给成**这个目标自己的坐标**：`strikeTargets` 不接受「指定某人」，
+            //  只按「离 origin 最近」挑。刚落地时本体可能还差几 px，附近要是有第二个敌人站得更近，
+            //  这一下就会打到别人身上（四段打击变成打同一个）。把挑人圆心钉在目标身上 ⇒
+            //  距离 0 的它必然排第一，抢不走。
+            context.strike(unit, {
+                count: 1, radius: hitRadius, damageRate, nearest: true,
+                origin: { x: target.x, y: target.y },
+            });
+        }
+        //  每次攻击都播重击特效（用户口径），落在**被打的那个人**身上：
+        //  `quakeStrike` 在目录里登记的锚点是 `target`，取的是 `span.toX/toY`。
+        state.combatEvents.push({
+            id: state.nextCombatEventId++,
+            type: ZCCombatEventType.Melee,
+            owner: unit.owner,
+            sourceUnitId: unit.id,
+            targetUnitId: victim!.id,
+            skillId: 0,
+            skillName: 'dash_chain',
+            effectKey: null,
+            projectileKey: null,
+            effectPrefabPath: ZC_QUAKE_STRIKE_PREFAB_PATH,
+            fromX: self.x,
+            fromY: self.y,
+            toX: target.x,
+            toY: target.y,
+            //  纯表现事件：伤害已经由 `strike` 结算过，这里再写一次就是双倍。
+            radius: 0,
+            damage: 0,
+            empowered: false,
+            startedAt: now,
+            durationSeconds: ZC_QUAKE_STRIKE_SECONDS,
+        });
+        this.markCastAction(unit, now, false);
+        unit.dashChainIndex = index + 1;
+    }
+
+    /** 收尾：四个字段同生同灭（`dashChainIndex` 有值 = 序列在跑，`ZCUnitSystem` 靠它冻结单位）。*/
+    private static clearDashChain(unit: ZCUnitState): void {
+        delete unit.dashChainPendingAt;
+        delete unit.dashChainTargetId;
+        delete unit.dashChainIds;
+        delete unit.dashChainIndex;
+        delete unit.dashChainReturnX;
+        delete unit.dashChainReturnY;
     }
 
     /**

@@ -46,6 +46,7 @@ import {
     levelScaleAt,
     progressPopScaleAt,
     progressRatioAt,
+    progressZeroTextOf,
     shineOpacityAt,
     shineProgressAt,
     shineSweepAt,
@@ -101,6 +102,9 @@ const PROGRESS_AREA_WIDTH = 450;
  * 可见高 855.6，立在脚下时亮芯中心在「脚上 +402」，而角色中心只在「脚上 +213」
  * （立绘区 426 高、锚点居中）—— 于是整根光柱几乎全飘在头顶。
  * 严格中心对齐要挪 189~215；这里先按你给的 70 落一档，实机若仍偏高就只改这一个数。
+ *
+ * 2026-11-24：源图已按 0.4 显示比缩到 309×886 并收进本目录 `auto-atlas.pac`；
+ * prefab 的 772×2214 / 0.4 未动，所以这里的落位与下移量全部照旧。
  */
 export const FX_DROP_PX = 70;
 
@@ -148,7 +152,7 @@ export class CardUpgradedPage extends PopupBase {
     private heroFx: Node | null = null;
     /** 当前特效节点是由哪份 prefab 实例化的（作用域重建后 prefab 会换，得跟着重建）。 */
     private heroFxPrefab: Prefab | null = null;
-    /** 进度条的起止比例：刷光前恒为 `progressFrom`，刷光后退到 `progressTo`。 */
+    /** 进度条的换档端点：满格 `progressFrom` → 清空 → 涨到 `progressTo`。 */
     private progressFrom = 0;
     private progressTo = 0;
     // 一次性事件的门闩（同一次打开内只触发一次；`render` 会全部重置）。
@@ -156,7 +160,10 @@ export class CardUpgradedPage extends PopupBase {
     private fxFinished = false;
     private levelSwitched = false;
     private valueSwitched = false;
+    /** 换档当拍：数量文字已切成「0/need」。 */
     private progressSwitched = false;
+    /** 涨格结束：数量文字已切成下一级的真实值。 */
+    private progressGrown = false;
 
     @property({ group: '背景', type: Sprite, tooltip: 'Bg：720×1610 品质背景' })
     background: Sprite = null!;
@@ -341,7 +348,7 @@ export class CardUpgradedPage extends PopupBase {
         this.levelLabel.string = this.levelSwitched ? content.levelText : previousLevel;
         this.levelLabel.node.setScale(1, 1, 1);
 
-        // ④ 进度条：刷光期间保持「本次消耗那一档的满格」，刷光结束才退到下一级。
+        // ④ 进度条：刷光期间保持「本次消耗那一档的满格」，刷完清空归零、绿色再从左往右涨。
         this.progressRoot.active = content.progressText.length > 0;
         this.progressLabel.string = content.progressText;
         const ratio = clampRatio(content.progressRatio);
@@ -350,6 +357,7 @@ export class CardUpgradedPage extends PopupBase {
             ? ratio
             : clampRatio(content.nextProgressRatio);
         this.progressSwitched = !(content.nextProgressText ?? '');
+        this.progressGrown = this.progressSwitched;
         this.progressFill.node.active = ratio > 0;
         if (this.progressFillUi) this.progressFillUi.width = FILL_TRACK_WIDTH * ratio;
 
@@ -430,6 +438,13 @@ export class CardUpgradedPage extends PopupBase {
         }
         if (!this.progressSwitched && t >= timeline.valueSwitchAt) {
             this.progressSwitched = true;
+            // 条要归零了，数字先跟着归零 —— 否则「空条配 40/80」自相矛盾；
+            // 也不逐帧插值：0→40 之间会闪一串读数，读起来像在抽奖。
+            const zero = progressZeroTextOf(content.nextProgressText);
+            if (zero) this.progressLabel.string = zero;
+        }
+        if (!this.progressGrown && t >= timeline.progressSettleAt) {
+            this.progressGrown = true;
             const next = content.nextProgressText ?? '';
             if (next) this.progressLabel.string = next;
         }
@@ -468,7 +483,7 @@ export class CardUpgradedPage extends PopupBase {
             }
         }
 
-        // 数量文字在换数那一拍弹一下 —— 条在缩短的同时数字动一下，才读得出「被扣掉了」。
+        // 数量文字在换档那一拍弹一下 —— 条归零的同时数字动一下，才读得出「这一档被吃掉了」。
         if (this.progressLabel && this.progressLabel.isValid) {
             const scale = progressPopScaleAt(timeline, t);
             this.progressLabel.node.setScale(scale, scale, 1);

@@ -253,7 +253,11 @@ export class NetSocket extends NetSocketBase {
                 }
                 break
             }
-            await FW.Task.delay(1)
+            if (t.tlRequest.length > 0) {
+                await FW.Task.delay(0);
+            } else {
+                break;
+            }
         }
         t.isSending = false
         return true

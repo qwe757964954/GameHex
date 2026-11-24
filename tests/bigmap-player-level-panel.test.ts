@@ -40,6 +40,6 @@ test('遮罩与面板的 BlockInputEvents 配在 prefab 上，脚本里不再运
         .replace(/\/\/[^\n]*/g, '');
     assert.ok(!/addComponent\(\s*BlockInputEvents\s*\)/.test(code),
         'prefab 已经配好 ⇒ 不许再运行时补挂（绑好的引用不写兜底，绑错应当场炸）');
-    assert.match(code, /dimTransform\.node\.on\(Node\.EventType\.TOUCH_END/,
-        '「点遮罩关闭」仍由脚本绑定 —— BlockInputEvents 只拦穿透，不替它关闭');
+    assert.match(code, /class\s+BigMapPlayerLevelPanel\s+extends\s+PopupBase/,
+        'BigMapPlayerLevelPanel 必须继承 PopupBase，统一弹窗生命周期与空白点击关闭');
 });

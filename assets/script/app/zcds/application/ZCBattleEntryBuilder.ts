@@ -38,8 +38,13 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
     //    那套配置根本读不到（用户 2026-11-07）。塔防的敌人只有出怪表里的怪 + 首领，不靠玩家式英雄，
     //    裁掉不会丢服务端阵容：出怪卡由 `pveDefence.cards` 兜底查表，见 `ZCMatchRuntimeCompiler`。
     const clipToLevelCards = requestedEnemyCards.size > 0 && (!battle || (pve && pve.mode === 'defence'));
+    //  塔防关的抽卡池只认**卡牌组**（`enemyTeamCardIds` = `npcTeam.npcCard` 的投影），不认
+    //  `enemyCardIds`：后者把出怪表的波次怪也并进来了，pool 里混进波次怪 ⇒ NPC 会把它们当兵种建出来。
+    //  卡牌组为空时退回 `enemyCardIds`（旧口径），保证没有队伍配置的关卡行为不变。
+    const defenceTeamCards = new Set((pve?.enemyTeamCardIds ?? []).flat().map(String));
+    const poolCardIds = defenceTeamCards.size > 0 ? defenceTeamCards : requestedEnemyCards;
     const pveEnemyDeck = clipToLevelCards
-        ? baseConfig.enemyDeck.filter((card) => requestedEnemyCards.has(card.id))
+        ? baseConfig.enemyDeck.filter((card) => poolCardIds.has(card.id))
         : baseConfig.enemyDeck;
     const pveDefence = pve && pve.mode === 'defence' && pve.waves.length > 0 ? {
         cards: baseConfig.enemyDeck.filter(card => pve.waves.some(wave => String(wave.pvpCardId) === card.id)),
@@ -78,6 +83,12 @@ export function buildZCBattleEntry(prepared: IZCGamePreparedResources, entry?: Z
         // 关卡「NPC 抽卡品质乘数」：有配置就带上，缺省不写（对局内按原表权重抽）。
         if (pve.gradeProModifier) matchConfig.gradeProModifier = pve.gradeProModifier;
         if (pveEnemyDeck.length > 0) matchConfig.enemyDeck = pveEnemyDeck;
+        //  塔防关的敌方阵容是本地卡牌组，服务端回包里 NPC 席位没有 heroIds ⇒
+        //  必须显式声明「别再按花名册重建」，否则抽卡池会被削成只剩系统卡（金矿）。
+        //  见 `ZCMatchConfig.npcDeckFromTeam`。
+        if (pve.mode === 'defence' && defenceTeamCards.size > 0 && pveEnemyDeck.length > 0) {
+            matchConfig.npcDeckFromTeam = true;
+        }
         if (pveDefence && pveDefence.waves.length > 0) matchConfig.pveDefence = pveDefence;
     }
     const clientCombat = buildZCClientCombatConfig(

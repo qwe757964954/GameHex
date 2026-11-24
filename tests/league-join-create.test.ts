@@ -965,7 +965,7 @@ test('E4 ⚠️ 加入页：刷新列表必须 defer 一帧（虚拟列表槽位
     assert.ok(stripComments(readFileSync(JOIN_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
         '加入成功后由控制器通知容器');
     assert.ok(stripComments(readFileSync(MAIN_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
-        '通知落到容器已有的 Joined 事件（按 owner 限定）');
+        '通知落到容器已有的 Joined 事件（由活动的联盟页消费）');
 });
 
 test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 + 成功后关窗回敲', () => {
@@ -977,8 +977,8 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
     assert.ok(!src.includes('isLeagueNameUsable'), '视图不该自己判名字守卫');
     assert.ok(stripComments(readFileSync(CREATE_MODEL_TS, 'utf8')).includes('isLeagueNameUsable'),
         '名字守卫（空 / `***` 都拒）必须落到 LeagueCreateModel');
-    assert.ok(src.includes('LeagueCreateEvent.Intent') && src.includes('owner: this'),
-        '创建页只 emit 带 owner 的意图');
+    assert.ok(/emit\(LeagueCreateEvent\.Intent, \{ [^}]+\}, this\)/.test(src),
+        '创建页只 emit 带来源的意图');
     // 消耗两态：换色走 LeagueArt 的四色常量
     assert.ok(src.includes('LEAGUE_COST_ENOUGH_COLOR') && src.includes('LEAGUE_COST_SHORT_COLOR'),
         '`lab_has` 两态换色');
@@ -992,14 +992,14 @@ test('E5 ⚠️ 创建页：勾选框同步 + 名字守卫 + 消耗两态换色 
     // ⚠️ 「允许快速加入」的节点是根下的兄弟（不是在 QuickJoinBox 里）
     assert.ok(src.includes('QUICK_JOIN_LABEL_NODE') && src.includes("'QuickJoinLabel'"),
         '要按兄弟名取 label（getComponentInChildren 在盒子里找不到）');
-    // 建盟成功：不再让视图持有容器回调，改由 Controller 按 owner 发 LeagueTabEvent.Joined
+    // 建盟成功：不再让视图持有容器回调，改由 Controller 触发 LeagueTabEvent.Joined
     assert.ok(!src.includes('onCreated'), '视图不再穿透容器回调');
     assert.ok(stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('notifyJoined'),
         '成功通知由 LeagueCreateController 收口');
     assert.ok(stripComments(readFileSync(CREATE_COMPOSITION_TS, 'utf8')).includes('LeagueTabEvent.Joined'),
-        '成功通知必须落到容器已有的 Joined 事件（按 owner 限定）');
+        '成功通知必须落到容器已有的 Joined 事件（由活动的联盟页消费）');
     assert.ok(!stripComments(readFileSync(CREATE_CONTROLLER_TS, 'utf8')).includes('onCreated'),
-        '控制器也不接回调，只认 owner');
+        '控制器按来源处理意图');
 });
 
 test('E6 三个页面类里不出现死写文案（一律从 LeagueTexts 取）', () => {

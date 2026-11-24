@@ -60,6 +60,8 @@ export function loadBattleComposition(dependencies: Record<string, unknown>, ove
         if (name.endsWith('/FW')) return dependencies['../../framework/FW'] ?? { FW: { showTip() {} } };
         // 投降二次确认走通用提示框；这条夹具不验弹窗本身，只要求模块能求值。
         if (name.endsWith('/CommonTips')) return { CommonTips: { open: async () => null } };
+        if (name.endsWith('/AudioMgr')) return { AudioMgr: { instance: { playMusic: async () => {}, stopMusic: () => {}, playSound: () => {} } } };
+        if (name.endsWith('/ResConst')) return { GAME_AUDIO: {} };
         // 结算 MVP 的 `Lv.x` 读本机等级；角色仓库有自己的存储/网络依赖，这里只给个读数壳。
         if (name.endsWith('/RoleRepository')) return { roleRepository: { roleLevel: () => 0 } };
         if (/\/(ZCSettlementPage|GameRunAway|ZCGuidePanel|ZCGameRankBoard|FW|GameRoute|BattleStartService|GameNet|RewardFrames|ZCBattleEvents)$/.test(name)) return {};

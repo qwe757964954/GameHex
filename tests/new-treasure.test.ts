@@ -190,6 +190,38 @@ test('openTime 为零的宝箱必须先激活，即使当前时间已远超配�
     assert.equal(slot.totalSeconds, 10);
 });
 
+test('另一个宝箱计时结束当秒，列表和详情都允许解锁并可发送激活请求', async () => {
+    const { repository, setNow, setResponse } = await loadTreasure([
+        { cardBoxID: 19001, openTime: 100, index: 1 },
+        { cardBoxID: 19002, openTime: 0, index: 2 },
+    ], 109);
+    setResponse({ info: { cardBoxID: 19002, openTime: 110, index: 2 } });
+    assert.equal(repository.slots[1].canActivate, false);
+    assert.equal(repository.detailOf(2)?.canActivate, false);
+    assert.equal(await repository.activate(2), 'activation-blocked');
+    assert.equal(repository.slots[1].action, chestTypes.ChestSlotAction.Activate);
+
+    setNow(110);
+    assert.equal(repository.slots[0].action, chestTypes.ChestSlotAction.Open);
+    assert.equal(repository.slots[1].canActivate, true);
+    assert.equal(repository.detailOf(2)?.canActivate, true);
+    assert.equal(await repository.activate(2), 'ok');
+    assert.equal(repository.slots[1].action, chestTypes.ChestSlotAction.SpeedUp);
+});
+
+test('立即打开计时中的宝箱，成功回包立刻释放另一槽位的解锁权限', async () => {
+    const { repository, setResponse } = await loadTreasure([
+        { cardBoxID: 19001, openTime: 100, index: 1 },
+        { cardBoxID: 19002, openTime: 0, index: 2 },
+    ], 105);
+    const activationStates: boolean[] = [];
+    await repository.load({}, slots => activationStates.push(slots[1].canActivate));
+    setResponse({ succ: 1, index: 1 });
+    assert.equal(await repository.fastOpen(1), 'ok');
+    assert.deepEqual(activationStates, [false, true]);
+    assert.equal(repository.detailOf(2)?.canActivate, true);
+});
+
 test('宝箱名取配置表 cardBoxName（详情与宝箱栏同一份），表里缺名称才回落到 宝箱{id}', async () => {
     const { repository } = await loadTreasure([
         { cardBoxID: 19001, openTime: 0, index: 1 },
@@ -294,7 +326,7 @@ test('卡面区分未激活、倒计时中、到期可开三种状态', () => {
     const view = createChestSlotView();
     const unactivated = {
         index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱19001',
-        remainSeconds: 10, totalSeconds: 10, action: chestTypes.ChestSlotAction.Activate, cost: 0,
+        remainSeconds: 10, totalSeconds: 10, action: chestTypes.ChestSlotAction.Activate, canActivate: true, cost: 0,
     };
     view.render(unactivated);
     assert.equal((view.card as { spriteFrame: { name: string } }).spriteFrame.name, 'blue');
@@ -303,7 +335,7 @@ test('卡面区分未激活、倒计时中、到期可开三种状态', () => {
     assert.equal((view.speedUpIcon as { active: boolean }).active, false);
 
     const ready = {
-        ...unactivated, remainSeconds: 0, action: chestTypes.ChestSlotAction.Open,
+        ...unactivated, remainSeconds: 0, action: chestTypes.ChestSlotAction.Open, canActivate: false,
     };
     view.render(ready);
     assert.equal((view.card as { spriteFrame: { name: string } }).spriteFrame.name, 'gold');
@@ -311,7 +343,7 @@ test('卡面区分未激活、倒计时中、到期可开三种状态', () => {
 
     const counting = {
         ...unactivated, state: chestTypes.ChestSlotState.Counting, remainSeconds: 8,
-        action: chestTypes.ChestSlotAction.SpeedUp,
+        action: chestTypes.ChestSlotAction.SpeedUp, canActivate: false,
     };
     view.render(counting);
     assert.equal((view.card as { spriteFrame: { name: string } }).spriteFrame.name, 'blue');
@@ -325,7 +357,7 @@ test('未激活时隐藏进度并居中闹钟时长，激活后切换时分秒�
     const view = createChestSlotView();
     const waiting = {
         index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱',
-        remainSeconds: 30, totalSeconds: 30, action: chestTypes.ChestSlotAction.Activate, cost: 0,
+        remainSeconds: 30, totalSeconds: 30, action: chestTypes.ChestSlotAction.Activate, canActivate: true, cost: 0,
     };
     const clock = view.clock as unknown as { position: { x: number } };
     const timeBg = view.timeBg as unknown as { active: boolean; position: { x: number }; scale: { x: number } };
@@ -340,14 +372,14 @@ test('未激活时隐藏进度并居中闹钟时长，激活后切换时分秒�
     };
     assertWaiting(30, '30s');
     view.render({ ...waiting, state: chestTypes.ChestSlotState.Counting,
-        action: chestTypes.ChestSlotAction.SpeedUp, remainSeconds: 8 });
+        action: chestTypes.ChestSlotAction.SpeedUp, canActivate: false, remainSeconds: 8 });
     assert.equal(timeBg.active, true);
     assert.equal(text.string, '00:00:08');
     assert.ok(clock.position.x + 13 < timeBg.position.x - 137 * timeBg.scale.x / 2);
     assert.ok(Math.abs(view.timeFill.fillRange - 22 / 30) < 0.00001);
     assertWaiting(86400, '24h');
     assertWaiting(90, '1m 30s');
-    view.render({ ...waiting, remainSeconds: 0, action: chestTypes.ChestSlotAction.Open });
+    view.render({ ...waiting, remainSeconds: 0, action: chestTypes.ChestSlotAction.Open, canActivate: false });
     assert.equal(view.timer.active, false);
     assert.equal(timeBg.active, false);
 });
@@ -364,7 +396,7 @@ test('开启与开始战斗使用相同加粗字形，槽位状态切换后不�
     const view = createChestSlotView();
     const slot = {
         index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱',
-        remainSeconds: 0, totalSeconds: 30, action: chestTypes.ChestSlotAction.Open, cost: 0,
+        remainSeconds: 0, totalSeconds: 30, action: chestTypes.ChestSlotAction.Open, canActivate: false, cost: 0,
     };
     for (const action of [chestTypes.ChestSlotAction.Battle, chestTypes.ChestSlotAction.Open,
         chestTypes.ChestSlotAction.SpeedUp, chestTypes.ChestSlotAction.Activate]) {
@@ -420,12 +452,14 @@ test('★★★还没开始等 ⇒ 金色「解锁」；等完了 ⇒ 绿色「�
     const view = createChestSlotView();
     const base = {
         index: 1, state: chestTypes.ChestSlotState.Ready, name: '宝箱',
-        remainSeconds: 30, totalSeconds: 30, cost: 0,
+        remainSeconds: 30, totalSeconds: 30, canActivate: false, cost: 0,
     };
     const frameOf = () => String((view.btn.spriteFrame as { name?: string } | null)?.name ?? '');
 
     // 未激活：卡上显示"要等多久"（formatRemain 口径），按钮是**解锁**。
     view.render({ ...base, action: chestTypes.ChestSlotAction.Activate });
+    assert.equal(view.btnLabel.string, '等待解锁');
+    view.render({ ...base, action: chestTypes.ChestSlotAction.Activate, canActivate: true });
     assert.equal(view.btnLabel.string, '解锁', '等待解锁的宝箱不许写「开启」');
     assert.equal(frameOf(), 'gold-button', '「解锁」仍是金色底（绿色留给"可以开启"）');
 
@@ -480,10 +514,10 @@ test('异步宝箱奖励经宿主事件接开箱页，不再落普通奖励窗',
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
     const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
     assert.doesNotMatch(repository, /FW\.ShowReward/);
-    assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ owner: this, goods \}\)/);
+    assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ goods \}, this\)/);
     assert.match(composition, /this\.listen\(CHEST_EVENTS\.REWARDS, this\.onTreasureRewards\)/);
     const handler = composition.slice(composition.indexOf('    private onTreasureRewards('), composition.indexOf('    private onChestRevealed('));
-    assert.match(handler, /event\.owner\.node !== this\.root/);
+    assert.match(handler, /source\.node !== this\.root/);
     assert.match(handler, /TerritoryChestOpenPage\.open\(\{ userData: \{ goods: event\.goods \} \}\)/);
     assert.match(handler, /if \(this\.isDisposed\) popup\?\.close\(\)/);
 });

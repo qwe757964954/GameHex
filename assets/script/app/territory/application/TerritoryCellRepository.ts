@@ -1,5 +1,5 @@
 import type { ZCBattleStart } from '../../battle/BattleStartModel';
-import { startBattle as requestStartBattle } from '../../battle/BattleStartService';
+import { requestBattleStart } from '../../battle/BattleStartService';
 import { GameNet } from '../../net/GameNet';
 import type { RequestMsg } from '../../../framework/net/RequestMsg';
 import {
@@ -138,6 +138,7 @@ function readSeconds(value: unknown): number {
 }
 
 export class TerritoryCellRepository {
+    private battleRequest: ReturnType<typeof requestBattleStart> | null = null;
     /**
      * @param caller 请求宿主（页面 Entry）：构造时注入，作为各方法 `caller` 的默认值。
      *
@@ -279,11 +280,18 @@ export class TerritoryCellRepository {
     async startBattle(
         battleType: number,
         battleParams: readonly string[],
-        caller: object | null = this.caller,
     ): Promise<TerritoryStartBattleResult> {
-        const started = await requestStartBattle(battleType, battleParams, caller);
+        const request = requestBattleStart(battleType, battleParams);
+        this.battleRequest = request;
+        const started = await request;
+        if (this.battleRequest === request) this.battleRequest = null;
         if (!started) return { ok: false, reason: TERRITORY_REQUEST_STATUS.failed };
         return { ok: true, battle: started };
+    }
+
+    cancelBattleStart(): void {
+        this.battleRequest?.cancel();
+        this.battleRequest = null;
     }
 
     // ============================================================

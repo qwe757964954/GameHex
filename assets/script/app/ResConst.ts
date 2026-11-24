@@ -18,3 +18,25 @@ export const AUDIO_ROOT = 'audio';
 export const SFX_ROOT = `${AUDIO_ROOT}/sfx`;
 /** 受击音效完整路径。 */
 export const HIT_SFX_PATH = `${SFX_ROOT}/hit`;
+
+export const GAME_AUDIO_ROOT = 'resources://塔防/音效';
+export const GAME_AUDIO = {
+    chapterMusic: `${GAME_AUDIO_ROOT}/关卡背景音乐`,
+    battleMusic: `${GAME_AUDIO_ROOT}/战斗背景音乐`,
+    victory: `${GAME_AUDIO_ROOT}/战斗胜利音效`,
+    defeat: `${GAME_AUDIO_ROOT}/战斗失败音效`,
+    randomTile: `${GAME_AUDIO_ROOT}/随机格奖励`,
+    smallFixedTile: `${GAME_AUDIO_ROOT}/固定格奖励小`,
+    largeFixedTile: `${GAME_AUDIO_ROOT}/固定格奖励大`,
+    goldFragment: `${GAME_AUDIO_ROOT}/金卡碎片展示`,
+    explosion: `${GAME_AUDIO_ROOT}/爆炸技能`,
+    /**
+     * 战斗内翻地块的抽卡结果音（用户 2026-11-24），按抽到的卡牌品阶四选一。
+     * 与领地那三颗（`randomTile` / `smallFixedTile` / `largeFixedTile`）不是一套：
+     * 领地按「有没有箱子 / 数量大小」分，战斗按「抽空 / 蓝绿 / 紫 / 金」分。
+     */
+    drawEmpty: `${GAME_AUDIO_ROOT}/战斗中抽空`,
+    drawGreenBlue: `${GAME_AUDIO_ROOT}/战斗中抽蓝绿`,
+    drawPurple: `${GAME_AUDIO_ROOT}/战斗中抽紫`,
+    drawGold: `${GAME_AUDIO_ROOT}/战斗中抽金`,
+} as const;

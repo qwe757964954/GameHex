@@ -134,6 +134,21 @@ export interface ZCMatchConfig {
     /** 仅领地塔防局存在；普通 PVP / 异步匹配均为空。*/
     pveDefence?: Readonly<ZCPveDefenceConfig>;
     /**
+     * 塔防关：NPC 席位的**抽卡池已经按 `npcTeam.npcCard`（卡牌组）定好**，不要再拿服务端花名册重建。
+     *
+     * 🔴 为什么需要这个开关（2026-11-23 用户报「塔防里 NPC 还是翻不出新卡牌」）：
+     * 塔防的敌方阵容是**本地配表**（`extraCards.enemy → npcTeam.npcCard`），服务端开战回包
+     * 只带玩家那侧的 `heroIds`，NPC 席位是空花名册。而 `ZCClientCombatConfig` 只要拿到
+     * `battle` 就走 `buildBattleDeck(sourceDeck, roster[owner])` —— 空花名册会把英雄卡全滤掉，
+     * 只留 `unitId` 为空的系统卡（金矿）。实测 10005：裁剪后本该有 5 张，最终只剩 `2001 金矿`
+     * ⇒ NPC 一辈子只能建金矿。
+     *
+     * 置真时 `ownerDecks` 的非玩家席位直接吃裁剪后的 `enemyDeck`（= 卡牌组投影），
+     * 服务端 `heroAttrs` 的耐久覆盖也一并跳过（塔防 NPC 不下发）。
+     * 缺省 / false ⇒ 维持「服务端花名册权威」的旧行为（PVP 匹配、普通领地关）。
+     */
+    npcDeckFromTeam?: boolean;
+    /**
      * 本局哪些席位是**非真人玩家**（关卡 PVE / 塔防的 NPC 队伍，按 `enemy` → `enemy3` 顺序）。
      *
      * 只服务伤害飘字的显示口径（2026-11-20 用户）：

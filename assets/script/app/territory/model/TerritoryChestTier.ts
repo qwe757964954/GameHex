@@ -69,3 +69,24 @@ export const TERRITORY_CHEST_TIER_LABEL: Readonly<Record<TerritoryChestTier, str
     medium: '中宝箱',
     strong: '大宝箱',
 };
+
+/**
+ * 固定格奖励音效的分界（用户 2026-11-23 第 3 条）。
+ *
+ * 「奖励数量小于 1000 播固定格奖励小，大于 1000 播固定格奖励大」——**注意它与三档动画
+ * 不是同一套刻度**：动画还分弱 / 中 / 强（100 / 1000），音效只按 1000 切两档，
+ * 所以不能拿 `territoryChestTierOf` 的档位当音效判据（弱档会错误地落到「大」上）。
+ */
+export const TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE = 1000;
+
+/**
+ * 这批固定格奖励该播「大」还是「小」音效。
+ *
+ * 合计 > 1000 ⇒ 大；≤ 1000（含 1000）⇒ 小 —— 与「小于 1000 小 / 大于 1000 大」一致，
+ * 边界值 1000 取小档（与三档动画的中档上界同口径）。
+ */
+export function territoryFixedTileSoundIsLarge(
+    rewards: readonly ITerritoryChestRewardLike[] | null | undefined,
+): boolean {
+    return territoryChestTotal(rewards) > TERRITORY_FIXED_TILE_SOUND_LARGE_ABOVE;
+}

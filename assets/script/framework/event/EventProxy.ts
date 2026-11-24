@@ -73,6 +73,13 @@ export class EventProxy<T extends number | string> extends ScriptObject {
         this.removeWithCaller(event, listener, caller)
     }
 
+    uniqueCaller(event: T): object | null {
+        const listeners = this._tmEvent?.get(event);
+        if (!listeners) return null;
+        const active = [...listeners.tlEventListener, ...listeners.tlEventListenerLater].filter(listener => !listener.destroyed);
+        return active.length === 1 ? active[0].caller ?? null : null;
+    }
+
     removeCallerListener(caller: object) {
         let t = this;
         if (t.destroyed) {

@@ -204,10 +204,9 @@ test('参数不全就不放：触碰伤害为 0 只在投掷形态放行', () =>
         trapContext({ x: 100, y: 0 }, { ...PARAMS, trapExplodeRadius: 0 })), false);
 });
 
-test('投掷段：飞行期间走弧线（中途最高、落地归零），丢的是自己普攻那颗弹体', () => {
-    //  用户口径（2026-11-20）：「蘑菇爆炸没有丢出特效，（弧线飞行落地）的过程」。
-    //  两处补齐：① 飞行段的表现不再借「陷阱凭空出现」，改成这张卡自己的普攻弹体；
-    //           ② 竖直方向按抛物线抬高（只动表现，不动地面坐标）。
+test('投掷段：飞行期间走弧线（中途最高、落地归零），空中播的是陷阱生成', () => {
+    //  用户口径（2026-11-20）；同日第二次裁定：「丢技能的这段特效使用的应该是陷阱生成，
+    //  而不是普攻的子弹」—— 所以哪怕这张卡配了普攻弹体，飞行段也不许用那一格。
     const caster = unit(1, 'player');
     const state = snapshot([caster]);
     const context = trapContext({ x: 100, y: 0 });
@@ -217,7 +216,9 @@ test('投掷段：飞行期间走弧线（中途最高、落地归零），丢�
     assert.equal(ZCAttackResolutionSystem.castTrap(state, caster, context), true);
     const zone = state.groundZones[0];
 
-    assert.equal(zone.flightVisualPath, projectilePath, '飞行段播的是「丢出去的那个东西」');
+    assert.equal(zone.flightVisualPath, ZC_TRAP_SPAWN_PREFAB_PATH,
+        '飞行段是「陷阱生成」，不吃普攻弹体那一格');
+    assert.notEqual(zone.flightVisualPath, projectilePath, '配了普攻弹体也不许借用');
     closeTo(zone.flightTotalSeconds ?? 0, 1.2, '弧线进度要用总时长当分母');
     closeTo(zone.flightArcPx ?? 0, 92, '峰高按屏上 px 给');
 
@@ -231,9 +232,11 @@ test('投掷段：飞行期间走弧线（中途最高、落地归零），丢�
     for (let step = 0; step < 10; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);
     closeTo(zone.visualLiftPx ?? -1, 92, '正中间抬到峰高');
     //  表现事件要跟着抬（视图就是从事件上取的这一格）。
-    const flightEvent = state.combatEvents.find((event) => event.effectPrefabPath === projectilePath);
+    const flightEvent = state.combatEvents.find((event) => event.effectPrefabPath === ZC_TRAP_SPAWN_PREFAB_PATH);
     assert.ok(flightEvent, '飞行段那条持有表现必须建出来');
     closeTo(flightEvent!.visualLiftPx ?? -1, 92, '事件上的抬升与区域同拍');
+    assert.equal(state.combatEvents.some((event) => event.effectPrefabPath === projectilePath), false,
+        '普攻弹体一帧都不该出现在这条链上');
 
     //  落地：抬升归零、地面坐标不受影响。
     for (let step = 0; step < 14; step += 1) ZCGroundZoneSystem.tick(state, 0.05, context2);

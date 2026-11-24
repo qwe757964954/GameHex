@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { loadViews } from './helpers/zcds-view-fixtures';
 import { configureZCMap, ZCMapLayout } from '../assets/script/app/zcds/model/ZCGameModel';
+import { ZC_HEX_ACTIVATION_SECONDS } from '../assets/script/app/zcds/model/ZCBattlePresentationQueue';
 import { installZCNeutralTestCatalog, ZC_TEST_ITEM } from './helpers/zcds-neutral-catalog';
 
 configureZCMap(JSON.parse(readFileSync('tests/fixtures/zcds-legacy-map.json', 'utf8')) as ZCMapLayout);
@@ -230,6 +231,15 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         view.monsterFocusButton.node.size = { width: 150, height: 42 };
         view.monsterFocusButton.node.setPosition(0, 120, 0);
         view.node.setPosition(-240, 170, 0);
+        const board = new cc.Node('ZCGameBoard');
+        const hexLayer = new cc.Node('HexLayer');
+        board.addChild(hexLayer);
+        hexLayer.addChild(view.node);
+        const outline = new cc.Node('OutlineLayer');
+        board.addChild(outline);
+        const resourceLayer = new cc.Node('ResourceLayer');
+        board.addChild(resourceLayer);
+        view.setResourceIconLayer(resourceLayer);
         const overlay = bar().node;
         world.attachCooldownOverlay([{ x: -240, y: 170, view }], overlay);
         const feature = { claimed: false, awake: false };
@@ -239,12 +249,14 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         assert.equal(view.resourceUnitNodes.length, 1);
         assert.equal(view.iconLabel.string, '');
         const body = view.resourceUnitNodes[0];
+        assert.equal(body.parent, resourceLayer);
+        assert.ok(body.parent.getSiblingIndex() > outline.getSiblingIndex());
         assert.equal(view.iconSprite.spriteFrame, null);
         assert.equal(body.__skeleton.timeScale, 0.35);
         const unitHeight = load('./ZCUnitView').ZC_SPINE_CANVAS_TARGET_HEIGHT;
         assert.equal(body.scale.y, unitHeight / 916.29 * 1.5);
-        assert.ok(Math.abs(body.position.y - 90 * body.scale.y + 5) < 1e-6);
-        const head = 170 + body.position.y + (916.29 - 90) * body.scale.y;
+        assert.ok(Math.abs(body.position.y - 170 - 90 * body.scale.y + 5) < 1e-6);
+        const head = body.position.y + (916.29 - 90) * body.scale.y;
         assert.equal(view.healthBar.node.position.x, -240);
         assert.equal(view.monsterFocusButton.node.position.x, -240);
         assert.ok(view.healthBar.node.position.y - 19 / 2 > head);
@@ -262,11 +274,14 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         const centered = view.resourceUnitNodes[0];
         const factor = unitHeight * 1.5 / 916.29;
         assert.ok(Math.abs(centered.scale.x - factor) < 1e-9);
-        assert.ok(Math.abs(centered.position.x + 90 * factor) < 1e-9);
-        assert.ok(Math.abs(centered.position.y - 90 * factor + 5) < 1e-9);
+        assert.ok(Math.abs(centered.position.x + 240 + 90 * factor) < 1e-9);
+        assert.ok(Math.abs(centered.position.y - 170 - 90 * factor + 5) < 1e-9);
+        view.renderMonsterPatrol(30, -20);
+        assert.ok(Math.abs(centered.position.x + 210 + 90 * factor) < 1e-9);
+        assert.ok(Math.abs(centered.position.y - 150 - 90 * factor + 5) < 1e-9);
         view.renderMonsterAttack(0, 0.5, -1);
         assert.equal(centered.scale.x, -centered.scale.y);
-        assert.ok(Math.abs(centered.position.x - 90 * factor) < 1e-9);
+        assert.ok(Math.abs(centered.position.x + 210 - 90 * factor) < 1e-9);
         view.render({ ...presentation, state: resourceHexState(1400901, { owner: 'player', neutralFeature: feature }) });
         view.renderMonsterAttack(0, 1, -1);
         assert.deepEqual(prefab.played.slice(-2), [{ clip: 'idle', loop: true }, { clip: 'attack', loop: false }]);
@@ -277,12 +292,19 @@ test('野怪通过模型表现沉睡与攻击，转身不影响头顶按钮和�
         assert.equal(centered.__skeleton.timeScale, 1);
         view.renderMonsterAttack(3, 3, 1);
         assert.equal(centered.scale.x, centered.scale.y);
+        const activation = { startedAt: 3, durationSeconds: ZC_HEX_ACTIVATION_SECONDS };
+        view.renderActivation(activation, 3 + 0.4 * ZC_HEX_ACTIVATION_SECONDS);
+        assert.equal(centered.active, false);
+        view.renderActivation(activation, 4 + ZC_HEX_ACTIVATION_SECONDS);
+        assert.equal(centered.active, true);
         presentation.state = resourceHexState(null, { neutralFeature: { claimed: true, awake: true } });
         view.render(presentation);
         assert.ok(view.resourceUnitNodes.every((node: { active: boolean }) => !node.active));
         assert.equal(view.iconSprite.spriteFrame, null);
         assert.equal(view.healthBar.node.position.y, 170 - 40);
         assert.equal(view.monsterFocusButton.node.position.y, 170 + 120);
+        view.onDestroy();
+        assert.equal(centered.isValid, false);
     } finally { installZCNeutralTestCatalog(); }
 });
 
@@ -390,6 +412,7 @@ test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，
     const { load, cc, bar } = loadViews();
     const view = stubHexView(load, cc, bar);
     const prefab = spinePrefab(load, cc, '豌豆射手');
+    view.setResourceIconLayer(new cc.Node('ResourceLayer'));
     view.setResourceUnits('68001', prefab as never, 3);
 
     view.render({
@@ -401,6 +424,7 @@ test('unit_cap 不再写中文「兵力」：按配置站N 个中立待机兵，
     const nodes = (view as any).resourceUnitNodes as any[];
     assert.equal(nodes.length, 3, `应站 3 个中立兵，实际 ${nodes.length}`);
     assert.ok(nodes.every((n) => n.active), '未领取时三个兵都该可见');
+    assert.ok(nodes.every((n) => n.parent === view.node));
 
     // ② 播的是 idle 且循环。
     assert.equal(prefab.played.length, 3, '每个兵都要起一次待机动作');

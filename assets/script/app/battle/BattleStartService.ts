@@ -1,8 +1,11 @@
 import { RequestFinishBattle, RequestStartBattle } from '../generated/requestMsg/RequestBattleMsg';
 import { GameNet } from '../net/GameNet';
-import { toCount, withTimeout } from '../net/RequestGuard';
+import { toCount, withTimeout, type CancellableRequest } from '../net/RequestGuard';
 import type { ZCBattleStart } from './BattleStartModel';
-import { ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleStart } from './BattleStartModel';
+import {
+    BATTLE_START_SETTLED, ZC_BATTLE_TYPE_PVP, ZC_BATTLE_TYPE_SLG_CAMP, ZC_BATTLE_TYPE_SLG_MONSTER,
+    normalizeBattleStart,
+} from './BattleStartModel';
 
 /**
  * 开始战斗网络层。载荷必须放在 startBattleInfo 里：
@@ -16,30 +19,58 @@ export const BATTLE_START_TIMEOUT_MS = 10000;
 /** 最近一次成功的结果；对局随机源与单元信息从这里取。 */
 let lastResult: ZCBattleStart | null = null;
 
-/** 相同参数的并发请求合并；不同战斗不能共用同一份回包。 */
-let pendingRequest: Promise<ZCBattleStart | null> | null = null;
-let pendingRequestKey: string | null = null;
+/** 同参数的重复开战共用同一个在途请求。 */
+let pending: {
+    readonly key: string;
+    readonly result: CancellableRequest<ZCBattleStart | null>;
+} | null = null;
 
-/** 请求开一局；返回 `null` 表示服务端未确认开战。 */
-export function startBattle(
+/** 统一开战入口，网络层通知当前开战场景。 */
+export function requestBattleStart(
     battleType: number = ZC_BATTLE_TYPE_PVP,
     battleParams: readonly string[] = [],
-    caller?: object,
-    isCurrent?: () => boolean,
-): Promise<ZCBattleStart | null> {
-    if (isCurrent && !isCurrent()) return Promise.resolve(null);
-    const requestKey = JSON.stringify([battleType, battleParams]);
-    if (pendingRequest) {
-        if (pendingRequestKey === requestKey && !isCurrent) return pendingRequest;
-        console.warn('[BattleStartService] 另一种战斗的开战请求尚未结束');
-        return Promise.resolve(null);
-    }
-    pendingRequestKey = requestKey;
-    pendingRequest = requestStartBattle(battleType, battleParams, caller, isCurrent).finally(() => {
-        pendingRequest = null;
-        pendingRequestKey = null;
+): CancellableRequest<ZCBattleStart | null> {
+    const key = JSON.stringify([battleType, battleParams]);
+    if (pending?.key === key) return pending.result;
+
+    const blocked = pending !== null;
+    const isSlg = battleType === ZC_BATTLE_TYPE_SLG_CAMP || battleType === ZC_BATTLE_TYPE_SLG_MONSTER;
+    if (blocked) console.warn('[BattleStartService] 有开战请求尚未结束');
+    const result = GameNet.requestResult<CmdStartBattleRspMsg, ZCBattleStart>(blocked ? null : receive => {
+        const request = new RequestStartBattle(
+            { startBattleInfo: { battleType, battleParams: Array.from(battleParams) }, version: '1.0.1' },
+            undefined,
+            receive,
+        );
+        if (isSlg) request.allowRetry = false;
+        return request;
+    }, {
+        event: BATTLE_START_SETTLED,
+        timeoutMs: BATTLE_START_TIMEOUT_MS,
+        tag: 'BattleStartService',
+        decode(response) {
+            if (isSlg) {
+                const info = response.startBattleInfo;
+                if (!info || info.battleType !== battleType || JSON.stringify(info.battleParams) !== JSON.stringify(battleParams)) return null;
+            }
+            const battle = normalizeBattleStart(response);
+            // SLG 只随 entry params 交接。
+            if (battle && !isSlg) lastResult = battle;
+            return battle;
+        },
     });
-    return pendingRequest;
+    if (blocked) return result;
+    const release = (): void => {
+        if (pending?.result === result) pending = null;
+    };
+    const cancel = result.cancel;
+    result.cancel = () => {
+        release();
+        cancel();
+    };
+    pending = { key, result };
+    void result.then(release, release);
+    return result;
 }
 
 /** 读取最近一次成功响应（`null` = 从没成功过）。 */
@@ -50,72 +81,6 @@ export function getLastBattleStart(): ZCBattleStart | null {
 /** 离开对局/重新匹配时清掉。 */
 export function clearLastBattleStart(): void {
     lastResult = null;
-}
-
-async function requestStartBattle(
-    battleType: number,
-    battleParams: readonly string[],
-    caller?: object,
-    isCurrent?: () => boolean,
-): Promise<ZCBattleStart | null> {
-
-    let active = true;
-    const canSend = (): boolean => active && (!isCurrent || isCurrent());
-    try {
-        return await withTimeout(sendStartBattle(battleType, battleParams, caller, canSend), BATTLE_START_TIMEOUT_MS, () => {
-            active = false;
-            console.info(`[BattleStartService] 开始战斗 ${BATTLE_START_TIMEOUT_MS}ms 无响应，无法进入对局`);
-            return null;
-        });
-    } finally {
-        active = false;
-    }
-}
-
-async function sendStartBattle(
-    battleType: number,
-    battleParams: readonly string[],
-    caller?: object,
-    isCurrent: () => boolean = () => true,
-): Promise<ZCBattleStart | null> {
-    let response: CmdStartBattleRspMsg | null = null;
-    let responseAt = 0;
-    const isSlg = battleType === ZC_BATTLE_TYPE_SLG_CAMP || battleType === ZC_BATTLE_TYPE_SLG_MONSTER;
-    try {
-        const request = new RequestStartBattle(
-            { startBattleInfo: { battleType, battleParams: Array.from(battleParams) }, version: '1.0.1' },
-            caller,
-            (rsp) => {
-                if (!isCurrent()) return;
-                response = rsp;
-                responseAt = Date.now();
-                console.info(`[BattleLoading] 收到开战回包 type=${battleType}`);
-            },
-        );
-        if (isSlg) {
-            request.allowRetry = false;
-            request.canSend = isCurrent;
-        }
-        const status = await GameNet.sendRequest(() => request, { timeoutMs: BATTLE_START_TIMEOUT_MS, tag: 'BattleStartService' });
-        if (!isCurrent()) return null;
-        if (status !== 'ok' || !response) {
-            console.warn(`[BattleLoading] 开战未获确认 type=${battleType} status=${status} hasResponse=${response !== null}`);
-            return null;
-        }
-        console.info(`[BattleLoading] 开战回包交接 ${Date.now() - responseAt}ms`);
-    } catch (error) {
-        console.warn('[BattleStartService] 开始战斗请求失败，未获得开战确认', error);
-        return null;
-    }
-
-    if (isSlg) {
-        const info = response.startBattleInfo;
-        if (!info || info.battleType !== battleType || JSON.stringify(info.battleParams) !== JSON.stringify(battleParams)) return null;
-    }
-    const result = normalizeBattleStart(response);
-    // SLG 只随 entry params 交接，不能被后续 PVP 匹配消费。
-    if (result && !isSlg) lastResult = result;
-    return result;
 }
 
 // 完成战斗上报

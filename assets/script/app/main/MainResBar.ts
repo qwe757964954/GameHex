@@ -47,12 +47,14 @@
  *  编辑器直连预览 / 登录半途进主界面都会走到这条分支，
  *  界面该显示的是"还没数据"，不是"空壳"。
  */
-import { _decorator, Button, Component, Label, Sprite } from 'cc';
+import { _decorator, Button, Component, Label, Sprite, type SpriteFrame } from 'cc';
+import { EventMgr } from '../../framework/event/EventMgr';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { HeadArt } from '../HeadArt';
 import { PlayerInfoPage } from '../playerinfo/PlayerInfoPage';
 import { cardRepository } from '../card/CardRepository';
+import { CardLineupEvent } from '../card/CardLineupEvents';
 import { formatPowerText } from '../card/CardLineupPower';
 import { readRoleRow } from './MainRoleRow';
 import { buildResBarView, LevelRow, ResBarView } from './MainResBarTypes';
@@ -92,11 +94,30 @@ export class MainResBar extends Component {
     private loading = false;
 
     /**
+     * 页面已加载的玩家头像。
+     *
+     * 大地图顶栏复用页面 `playerPortrait` 的同一帧：页面按自己的 `ResourceScope`
+     * 加载一次，玩家卡不再走 `HeadArt` 重复请求；为空时仍回退到 `HeadArt`。
+     */
+    private injectedPortrait: SpriteFrame | null = null;
+
+    /** 由页面注入已加载的玩家头像；只负责换图，不改变 CmdRole 数据链。 */
+    setPortraitFrame(frame: SpriteFrame | null): void {
+        this.injectedPortrait = frame;
+        if (frame) this.avatarIcon.spriteFrame = frame;
+    }
+
+    /**
      * CmdRole 缓存变化回调（GM 加经验、升级、资源变动等服务器推送）。
      * 箭头函数属性：引用稳定，供 onDestroy 精确摘除。
      */
     private onRoleCacheUpdate = (): void => {
         void this.reload();
+    };
+
+    /** 阵容或英雄等级变更回调，自动刷新战力。 */
+    private onLineupChanged = (): void => {
+        void this.refreshPower();
     };
 
     onLoad(): void {
@@ -110,6 +131,19 @@ export class MainResBar extends Component {
         // 点头像打开「个人信息」——对齐老端 `LayerMainResources.InitClick`。
         this.bindHeadClick();
 
+        // 战力是异步算的（要读卡表 / 成长表 / 等级表）。页面每次重建都拿不到首帧值，只能挂着
+        // prefab 上的中性占位 —— 以前占位写的是 `15.98K`，切回主界面就会先闪一下这个假数字
+        // 再跳成真值。现在先铺上一次算成功的真值（同一次登录内），首帧就没有中间值了。
+        // 没有缓存（本次登录还没算过 / 刚换号）就**什么都不写**，让 prefab 的 `—` 留着：
+        // 宁可显示「还不知道」，也不能显示一个像真数字的假值，更不能写 `--`（看着像负号）。
+        if (this.powerLabel) {
+            const cachedPower = cardRepository.getCachedLineupPower?.() ?? null;
+            if (cachedPower !== null && cachedPower > 0) this.powerLabel.string = formatPowerText(cachedPower);
+        }
+
+        EventMgr.instance.on(CardLineupEvent.HeroUpgraded, this.onLineupChanged, this);
+        EventMgr.instance.on(CardLineupEvent.DeckSaved, this.onLineupChanged, this);
+
         // 订阅 CmdRole 缓存更新：服务器推下来的经验/等级变化会走 cmdCaches
         // 更新缓存并触发 onUpdate，这里收到后重读缓存整条刷新（对齐旧客户端
         // LayerMainResources 的做法；不订阅的话界面只在创建时读一次，之后再也不更新）。
@@ -121,6 +155,8 @@ export class MainResBar extends Component {
 
     onDestroy(): void {
         CacheMgr.instance.removeEventUpdate('CmdRole', this, this.onRoleCacheUpdate);
+        EventMgr.instance.off(CardLineupEvent.HeroUpgraded, this.onLineupChanged, this);
+        EventMgr.instance.off(CardLineupEvent.DeckSaved, this.onLineupChanged, this);
     }
 
     /**
@@ -178,7 +214,7 @@ export class MainResBar extends Component {
     private async refreshPower(): Promise<void> {
         try {
             const power = await cardRepository.loadLineupPower();
-            if (!this.isValid) return;
+            if (!this.isValid || !this.powerLabel) return;
             if (power > 0) this.powerLabel.string = formatPowerText(power);
         } catch (error) {
             console.warn('[MainResBar] 战力刷新失败，保留占位', error);
@@ -217,6 +253,10 @@ export class MainResBar extends Component {
      */
     private async applyAvatar(avatarId: string): Promise<void> {
         if (!avatarId || avatarId === '0') return;
+        if (this.injectedPortrait) {
+            this.avatarIcon.spriteFrame = this.injectedPortrait;
+            return;
+        }
         const frame = await HeadArt.loadHeadFrame(avatarId);
         if (!this.isValid || !frame) return;
         this.avatarIcon.spriteFrame = frame;

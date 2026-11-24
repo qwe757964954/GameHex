@@ -9,6 +9,71 @@ import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCChapterBattleOutcome } from '../assets/script/app/battle/BattleResultService';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 import type { IZCDamageStatsPlayer, IZCDamageStatsPopup } from '../assets/script/app/zcds/application/ZCBattleRuntimeContract';
+import { GAME_AUDIO } from '../assets/script/app/ResConst';
+import { battleDrawSoundOf } from '../assets/script/app/zcds/application/ZCBattleRuntimeController';
+import { getPlayerDeck } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+
+test('战斗翻地块的抽卡音按品阶四选一：抽空 / 蓝绿 / 紫 / 金', () => {
+    // 用户 2026-11-24：「抽空播战斗中抽空音效；抽出蓝绿卡都播蓝绿卡音效；
+    // 抽出紫卡播紫卡音效；抽出金卡播金卡音效」——四颗是**按品阶**分档，
+    // 与领地那三颗（按奖励数量分大小）不是一套刻度。
+    assert.equal(battleDrawSoundOf(undefined), GAME_AUDIO.drawEmpty);
+    assert.equal(battleDrawSoundOf('green'), GAME_AUDIO.drawGreenBlue);
+    assert.equal(battleDrawSoundOf('blue'), GAME_AUDIO.drawGreenBlue);
+    assert.equal(battleDrawSoundOf('purple'), GAME_AUDIO.drawPurple);
+    assert.equal(battleDrawSoundOf('gold'), GAME_AUDIO.drawGold);
+    // 四颗互不相同，别把两颗映射到同一个键上（尤其蓝绿与紫）。
+    assert.equal(new Set([GAME_AUDIO.drawEmpty, GAME_AUDIO.drawGreenBlue, GAME_AUDIO.drawPurple, GAME_AUDIO.drawGold]).size, 4);
+});
+
+test('战斗内点击地块按实际抽到的卡牌品阶播音，开发不了 / 拖拽中静默', () => {
+    const played: string[] = [];
+    const h = runtimeFixture({}, false, undefined, { playSound: key => played.push(key) });
+    try {
+        const model = h.runtime.currentModel;
+        assert.ok(model);
+        model.addDebugGold(100000);
+        // 用 GM 指定卡把品阶钉死：声源必须来自 `ZCDevelopResult.cardRarity`（模型算出来的），
+        // 不能是控制器自己猜的 —— 所以同时验 `cardReveals` 里真有这张卡。
+        const deck = getPlayerDeck().filter(card => card.unitId);
+        let verified = 0;
+        for (const rarity of ['gold', 'purple', 'blue', 'green'] as const) {
+            const card = deck.find(entry => entry.rarity === rarity);
+            if (!card || !model.setDebugDrawCard(card.id, 1).ok) continue;
+            const hex = model.snapshot.hexes.find(cell => model.canPlayerDevelop(cell.id));
+            if (!hex) break;
+            played.length = 0;
+            EventMgr.instance.emit(ZCGameUiEvent.HexClick, hex.id, h.view);
+            assert.deepEqual(played, [battleDrawSoundOf(rarity)], `${rarity} 卡应播对应音效`);
+            assert.ok(model.cardReveals.some(reveal => reveal.cardId === card.id), `应真的抽出 ${card.id}`);
+            verified += 1;
+        }
+        assert.ok(verified > 0, '测试卡组里至少要有一张带单位的可翻格卡');
+        // 同一格已开发 ⇒ 不可开发 ⇒ 静默，不会一直点一直响。
+        const developed = model.snapshot.hexes.find(cell => !model.canPlayerDevelop(cell.id) && cell.owner === 'player');
+        played.length = 0;
+        if (developed) EventMgr.instance.emit(ZCGameUiEvent.HexClick, developed.id, h.view);
+        assert.deepEqual(played, []);
+        // 拖地图松手那一下会带一次点击（`dragMoved`）⇒ 不许响。
+        const another = model.snapshot.hexes.find(cell => model.canPlayerDevelop(cell.id));
+        h.view.dragMoved = true;
+        if (another) EventMgr.instance.emit(ZCGameUiEvent.HexClick, another.id, h.view);
+        h.view.dragMoved = false;
+        assert.deepEqual(played, []);
+        // 金币不足已有金栏闪红，不许再叠一颗抽卡音（否则像白捡了一次奖励）。
+        const broke = model.snapshot.hexes.find(cell => model.canPlayerDevelop(cell.id));
+        if (broke) {
+            // 直接清零（`addDebugGold` 只收正数）：`goldOf` 读的是 state 上的活值。
+            model.snapshot.playerGold = 0;
+            played.length = 0;
+            EventMgr.instance.emit(ZCGameUiEvent.HexClick, broke.id, h.view);
+            assert.deepEqual(played, []);
+            assert.ok(h.calls.includes('gold'));
+        }
+    } finally {
+        h.dispose();
+    }
+});
 
 test('固定与自选出生点开局按阵营打印卡牌最终属性，后续帧不重复打印', (t) => {
     const log = t.mock.method(console, 'info', () => {});
@@ -20,7 +85,7 @@ test('固定与自选出生点开局按阵营打印卡牌最终属性，后续�
             if (selecting) {
                 assert.equal(cardLogs().length, 0);
                 EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 20 });
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
                 h.finishShowcase();
             }
             const model = h.runtime.currentModel;
@@ -42,7 +107,7 @@ test('固定与自选出生点开局按阵营打印卡牌最终属性，后续�
                 const building = deck.find((item) => !item.unitId);
                 if (building) assert.equal(rows.find((row) => row.cardId === building.id).maxHp, null);
             }
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
             EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
             h.finishShowcase();
             assert.equal(cardLogs().length, model.owners.length);
@@ -108,12 +173,12 @@ test('伤害面板按实际席位逐人显示，打开时追平并按静态节�
             assert.equal(updates[updates.length - 1][1].headKey, '2');
             const before = updates.length;
             stats.enemy.dealt = 100;
-            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.05 });
+            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 }, h.view);
             assert.equal(updates.length, before + 1);
             assert.deepEqual(updates[updates.length - 1].map(player => player.owner), owners, '伤害改变不重排行');
             assert.equal(updates[updates.length - 1][1].damage, 100);
             isOpen = false;
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.15 });
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.15 }, h.view);
             assert.equal(updates.length, before + 1);
             isOpen = true;
             EventMgr.instance.emit(ZCGameUiEvent.OpenDamageStats);
@@ -121,7 +186,7 @@ test('伤害面板按实际席位逐人显示，打开时追平并按静态节�
             assert.equal(opens, 2);
             h.dispose();
             const final = updates.length;
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 1 });
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
             assert.equal(updates.length, final);
             assert.equal(isOpen, false);
         } finally { h.dispose(); }
@@ -138,20 +203,20 @@ test('missing unit art is scoped to its real view, deduplicated and ignored afte
     h.view.applyUnitPrefab = (...args) => applied.push(args);
     const definition = h.entry.matchConfig.units.find(unit => unit.prefabPath);
     assert.ok(definition);
-    const intent = { owner: h.view, unitId: definition.unitId };
+    const intent = { unitId: definition.unitId };
     try {
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { ...intent, owner: {} });
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId: 'unknown-unit' });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent, {});
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { unitId: 'unknown-unit' }, h.view);
         await flush();
         assert.equal(loads.length, 0);
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent, h.view);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent, h.view);
         assert.deepEqual(loads, [definition.prefabPath]);
         h.dispose();
         pending.resolve({});
         await flush();
         assert.deepEqual(applied, []);
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, intent, h.view);
         assert.equal(loads.length, 1);
     } finally { h.dispose(); }
 });
@@ -184,11 +249,11 @@ test('successful unit art is published once and failed requests allow a later re
     h.view.applyUnitPrefab = (...args) => applied.push(args);
     const unitId = h.entry.matchConfig.units.find(unit => unit.prefabPath).unitId;
     try {
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { unitId }, h.view);
         await flush();
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { unitId }, h.view);
         await flush();
-        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { owner: h.view, unitId });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, { unitId }, h.view);
         assert.equal(attempts, 2);
         assert.deepEqual(applied, [[unitId, prefab]]);
     } finally { h.dispose(); }
@@ -205,15 +270,15 @@ test('effect art is loaded on demand, deduplicated per path and published to the
     h.view.applyEffectPrefab = (...args) => applied.push(args);
     try {
         // 别的视图发的请求不能落进来（同一个 EventMgr 里可能同时有多局）。
-        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: {}, path });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { path }, {});
         // 弹幕：同一路径同一帧发多次，只加载一次。
-        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
-        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { path }, h.view);
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { path }, h.view);
         await flush();
         assert.deepEqual(loads, [path]);
         assert.deepEqual(applied, [[path, prefab]]);
         // 到货之后再问不会重复加载。
-        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: h.view, path });
+        EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { path }, h.view);
         await flush();
         assert.deepEqual(loads, [path]);
     } finally { h.dispose(); }
@@ -223,8 +288,8 @@ test('settlement waits before report, closes before navigation and restores on c
     const calls: string[] = [], pages: object[] = [];
     let settled = (_entered: boolean) => {};
     const owner = {}, target = {};
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.PVE_RESULT, event => { if (event.owner === owner) calls.push('record'); }, target);
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, event => { if (event.owner === owner) calls.push('navigate'); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.PVE_RESULT, (_payload, source) => { if (source === owner) calls.push('record'); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, (_payload, source) => { if (source === owner) calls.push('navigate'); }, target);
     t.after(() => EventMgr.instance.offTarget(target));
     const controller = new ZCBattleSettlementController(createControllerContext(), {
         results: {
@@ -263,14 +328,14 @@ test('runtime consumes only its own frame, drains events once and keeps static c
         const drain = model.drainPresentationEvents.bind(model);
         model.drainPresentationEvents = () => { drained++; return drain(); };
         h.calls.length = 0;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: {}, dt: 1 });
-        for (let i = 0; i < 10; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.05 });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, {});
+        for (let i = 0; i < 10; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.05 }, h.view);
         assert.equal(ticks, 10); assert.equal(drained, 10);
         assert.equal(h.calls.filter(call => call === 'dynamic').length, 10);
         assert.equal(h.calls.filter(call => call === 'static').length, 3);
         h.dispose();
         assert.equal(h.session.currentPhase, 'leaving');
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 1 });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
         assert.equal(ticks, 10);
     } finally { h.dispose(); }
 });
@@ -283,11 +348,11 @@ test('terminal tick waits for presentation before settlement; retreat reports on
             h.runtime.currentModel.useArtifact = () => { artifacts++; return { ok: true, message: 'ok' }; };
             if (!retreat) {
                 h.forceStatus('victory'); h.holdSweep(true);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
                 assert.equal(h.requests.length, 0); assert.equal(ticks, 1);
                 assert.equal(h.session.currentPhase, 'settlement-presentation');
                 h.holdSweep(false);
-                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+                EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
             } else EventMgr.instance.emit(ZCGameUiEvent.Retreat);
             EventMgr.instance.emit(ZCGameUiEvent.Retreat);
             // 投降是「两次确认」的异步流程；这里等它落定再断言阶段与冻结效果。
@@ -295,7 +360,7 @@ test('terminal tick waits for presentation before settlement; retreat reports on
             assert.equal(h.session.currentPhase, 'settlement');
             const frozenTicks = ticks;
             EventMgr.instance.emit(ZCGameUiEvent.UseArtifact);
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 1 });
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 1 }, h.view);
             await flush();
             assert.equal(h.requests.length, 1); assert.equal(h.requests[0].localVictory, !retreat);
             assert.equal(artifacts, 0); assert.equal(ticks, frozenTicks);
@@ -328,7 +393,7 @@ test('spawn selection has no battle model, resolves once, then renders before re
         assert.equal(h.session.currentPhase, 'spawn-selection');
         assert.equal(h.runtime.currentModel, null);
         EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 20 });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
         h.finishShowcase();
         assert.equal(h.session.currentPhase, 'playing');
         assert.ok(h.runtime.currentModel);
@@ -394,7 +459,7 @@ test('exiting selection cancels its showcase timer and ignores a late timer call
     const h = runtimeFixture({}, true, undefined, {
         schedule: next => { callback = next; return () => { cancellations++; }; },
     });
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 20 });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 }, h.view);
     h.dispose(); callback();
     assert.equal(cancellations, 1);
     assert.equal(h.runtime.currentModel, null);
@@ -444,16 +509,16 @@ test('one auxiliary popup close failure does not retain other popups or runtime 
     } finally { h.dispose(); }
 });
 
-test('runtime publishes return and tip notifications with the real view owner', async t => {
+test('runtime publishes return and tip notifications with the real view as source', async t => {
     const h = runtimeFixture();
     const notifications: unknown[] = [], target = {};
     t.after(() => { EventMgr.instance.offTarget(target); h.dispose(); });
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.SHOW_TIP, event => notifications.push(event), target);
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, event => notifications.push(event), target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.SHOW_TIP, (payload, source) => notifications.push({ payload, source }), target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, (payload, source) => notifications.push({ payload, source }), target);
     h.runtime.currentModel.useArtifact = () => ({ ok: true, message: 'artifact tip' });
     EventMgr.instance.emit(ZCGameUiEvent.UseArtifact);
     EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
-    assert.deepEqual(notifications, [{ owner: h.view, message: 'artifact tip' }, { owner: h.view }]);
+    assert.deepEqual(notifications, [{ payload: { message: 'artifact tip' }, source: h.view }, { payload: undefined, source: h.view }]);
     h.dispose();
     EventMgr.instance.emit(ZCGameUiEvent.ReturnToMain);
     assert.equal(notifications.length, 2);

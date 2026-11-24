@@ -10,11 +10,10 @@
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { CacheMgr } from '../net/CacheMgr';
 import { toCount } from '../net/RequestGuard';
+import { cardRepository } from '../card/CardRepository';
 import { readItemCounts } from '../card/ItemBag';
 import type { IRoleBagEntry, IRoleEquipSlotData, IRoleSnapshot, RoleBagTabId } from './RoleTypes';
 import { ROLE_BAG_TAB_KINDS, buildEquipSlotPlan, buildRoleNavs, sortBagEntries } from './RoleTable';
-import { totalAttackOf } from './RolePowerTable';
-import type { IEquipLevelRow, IEquipPowerPart, IEquipRankRow, ISkillAttrModifierRow, ISkillAttrModify } from './RolePowerTable';
 
 import { ITEM_TABLE } from '../../core/config/TableNames';
 /** 宝石「镶嵌中」锁定阈值：GemLockState.wear = 2（lock / wearLock 也算已镶嵌）。 */
@@ -45,10 +44,13 @@ class RoleRepository {
      * 同时把三页背包解析缓存，供 {@link bagEntries} 取。不抛（坏数据降级为空）。
      */
     async load(): Promise<IRoleSnapshot> {
-        const [gemBag, equip, itemBag] = await Promise.all([
+        // 与卡牌页首屏同一条取数链：先读内存 / 本地快照缓存，未命中再走阵容取数。
+        const cachedPower = cardRepository.getCachedLineupPower();
+        const [gemBag, equip, itemBag, power] = await Promise.all([
             this.readGemBag(),
             this.readEquipBag(),
             this.readItemBag(),
+            cachedPower ?? cardRepository.loadLineupPower(),
         ]);
         this._gemBag = gemBag;
         this._equipBag = equip.bag;
@@ -56,8 +58,8 @@ class RoleRepository {
         this._itemBag = itemBag;
 
         return {
-            // 攻击力：客户端算（老端 `ModelTeam.GetTotalAtk`），见 readTotalAttack 的注释与待接清单。
-            power: equip.power,
+            // 战斗力 = 卡牌阵容战力（`CardLineupPower.lineupAttackTotal`），与卡牌页 / 主界面同源同式。
+            power,
             navs: buildRoleNavs(),
             bagCounts: {
                 1: gemBag.length,
@@ -163,7 +165,7 @@ class RoleRepository {
      * 品质框按实例 curQuality（升品档），缺失退 equip.quality。
      * upMark（更优装备箭头）本轮不接 —— 依赖 equipRank/equipLevel 的攻击对比，后续补。
      */
-    private async readEquipBag(): Promise<{ bag: IRoleBagEntry[]; slots: IRoleEquipSlotData[]; power: number }> {
+    private async readEquipBag(): Promise<{ bag: IRoleBagEntry[]; slots: IRoleEquipSlotData[] }> {
         const equipRows = await RefUtil.instance.getRefAllAsync('equip');
         const equipByResId = indexBy(equipRows as Array<Record<string, unknown>>, 'resId');
 
@@ -203,90 +205,7 @@ class RoleRepository {
         }
 
         const slots = this.buildEquipSlots(parts, equipRows);
-        // 攻击力的「装备支」只算**穿着中的** 6 件（老端 `ModelTeam.GetTotalAtk` 遍历的就是
-        // `VOEquipPartBag` = 6 个部位），不是整个装备背包。
-        const equippedItems: CmdEquipItem[] = [];
-        for (const part of parts) equippedItems.push(part.equip);
-        return { bag: out, slots, power: await this.readTotalAttack(equippedItems, slots) };
-    }
-
-    /**
-     * 角色**攻击力**（老端 `ModelTeam.GetTotalAtk()` 口径）。
-     *
-     * ```
-     * atk = 属性袋['攻击力'] + 属性袋['装备攻击力']
-     *     + Σ skillAttrModifier[modifyId] 里 type='修改属性' 的 data['攻击力']
-     *     + gameConfig.roleDefaultAtk
-     * ```
-     * ⚠️ **本轮只接了「装备」这一支**（`RolePowerTable.equipFightAttrs`）：
-     *   · 禁军 `ModelGuards.GetAtkAttr`、主公技、神像祝福、宝物天赋 ⇒ **待接**（见 `RolePowerTable` 顶部那张表）；
-     *   · 部队（老端自身空实现）、城墙（只产血量/皮肤）⇒ **对攻击力无贡献，不需要接**。
-     * 所以现在这个数字**偏小但不是错的**（结构对，来源逐个补）。
-     */
-    private async readTotalAttack(
-        items: readonly CmdEquipItem[],
-        slots: readonly IRoleEquipSlotData[],
-    ): Promise<number> {
-        const [levelRows, rankRows, libRows, modifierRows, configRows] = await Promise.all([
-            RefUtil.instance.getRefAllAsync('equipLevel'),
-            RefUtil.instance.getRefAllAsync('equipRank'),
-            RefUtil.instance.getRefAllAsync('equipLib'),
-            RefUtil.instance.getRefAllAsync('skillAttrModifier'),
-            RefUtil.instance.getRefAllAsync('gameConfig'),
-        ]);
-
-        const equipLevel = new Map<number, IEquipLevelRow>();
-        for (const r of (levelRows ?? []) as Array<Record<string, unknown>>) {
-            equipLevel.set(toCount(r.equipLevel), {
-                attack: toCount(r.attack),
-                hpPer: toCount(r.hpPer),
-            });
-        }
-
-        const equipRank = new Map<string, IEquipRankRow>();
-        for (const r of (rankRows ?? []) as Array<Record<string, unknown>>) {
-            equipRank.set(`${toCount(r.rank)}|${toCount(r.qualityLevel)}`, {
-                attack: toCount(r.attack),
-                hpPer: toCount(r.hpPer),
-                add1: toCount(r.add1),
-                add2: toCount(r.add2),
-                add3: toCount(r.add3),
-            });
-        }
-
-        const equipLib = new Map<number, { attribute: string }>();
-        for (const r of (libRows ?? []) as Array<Record<string, unknown>>) {
-            equipLib.set(toCount(r.id), { attribute: String(r.attribute ?? '') });
-        }
-
-        const skillAttrModifier = new Map<number, ISkillAttrModifierRow>();
-        for (const r of (modifierRows ?? []) as Array<Record<string, unknown>>) {
-            skillAttrModifier.set(toCount(r.id), { modify: normalizeModify(r.modify) });
-        }
-
-        let roleDefaultAtk = 0;
-        for (const r of (configRows ?? []) as Array<Record<string, unknown>>) {
-            if (String(r.key ?? '') === 'roleDefaultAtk') roleDefaultAtk = toCount(r.value);
-        }
-
-        // 穿着中的装备：`CmdEquipPart` 的部位 → 该部位等级（来自 slots）+ 实例的 rank/品质/附加属性
-        const itemByUniqueId = new Map(items.map((i) => [toCount(i.uniqueId), i]));
-        const parts: IEquipPowerPart[] = [];
-        for (const slot of slots) {
-            if (!slot.entry) continue;
-            const item = itemByUniqueId.get(slot.entry.id);
-            if (!item) continue;
-            parts.push({
-                level: slot.level,
-                rank: item.rank,
-                qualityLevel: item.curQuality,
-                effects: item.tlEffects ?? [],
-            });
-        }
-
-        return totalAttackOf(parts, [], {
-            equipLevel, equipRank, equipLib, skillAttrModifier, roleDefaultAtk,
-        });
+        return { bag: out, slots };
     }
 
     /**
@@ -355,31 +274,3 @@ class RoleRepository {
 
 /** 角色模块数据仓库单例。 */
 export const roleRepository = new RoleRepository();
-
-/**
- * `skillAttrModifier.modify` 的防御式归一。
- *
- * 表里这一列是**嵌套数组**（`[{type, data}]`），但 ref 装配层有时给的是**JSON 字符串**
- * （`refSmallAll` 那种压缩形态）⇒ 两种都认，认不出就返回空数组（宁可少算也不抛）。
- */
-function normalizeModify(raw: unknown): readonly ISkillAttrModify[] {
-    let value: unknown = raw;
-    if (typeof value === 'string') {
-        try {
-            value = JSON.parse(value);
-        } catch {
-            return [];
-        }
-    }
-    if (!Array.isArray(value)) return [];
-    const out: Array<{ type: string; data: Record<string, number> }> = [];
-    for (const entry of value) {
-        const row = entry as { type?: unknown; data?: unknown } | null;
-        if (!row) continue;
-        out.push({
-            type: String(row.type ?? ''),
-            data: (row.data && typeof row.data === 'object' ? row.data : {}) as Record<string, number>,
-        });
-    }
-    return out;
-}

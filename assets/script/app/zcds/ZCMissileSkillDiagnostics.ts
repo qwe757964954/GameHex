@@ -7,6 +7,14 @@ import { ZCDC_LOG_MISSILE } from './ZCDCLogSwitch';
 */
 export const ZC_MISSILE_DEBUG_HERO_LEVEL = 24;
 
+/** 需要监视追踪导弹诊断的单位 ID 清单。*/
+export const ZC_MISSILE_WATCH_UNIT_IDS: readonly string[] = ['68010'];
+
+export function zcIsMissileWatchUnit(unitId: string | number | null | undefined): boolean {
+    if (unitId == null) return false;
+    return ZC_MISSILE_WATCH_UNIT_IDS.includes(String(unitId));
+}
+
 const onceKeys = new Set<string>();
 const lastMessage = new Map<string, string>();
 

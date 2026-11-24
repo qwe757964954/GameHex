@@ -7,8 +7,15 @@
  * 那种「把回调塞进视图」的写法，漏接一个就是「点了没反应且零报错」。
  */
 export const CHEST_EVENTS = {
-    /** 异步对战宝箱成功开启后的奖励；载荷 { owner: MainPage, goods }，由主界面组合层展示。 */
+    /** 异步对战宝箱成功开启后的奖励 `{ goods }`，由来源主页面对应的组合层展示。 */
     REWARDS: 'chest:rewards',
+    /**
+     * 一局领地战斗（异步 PVP）胜利回来、掉落宝箱的一次性边沿。
+     * 载荷 `{ origin: {x,y} | null, cellId }`：`origin` 是地图胜利格心的**世界坐标**，
+     * 由 `MainTerritoryMap` 从 `victoryBattleCells`（战斗结算存档的一次性边沿）取；`MainPage` 据此起播
+     * `ChestDropFlightView`。`null` = 格心暂时取不到，页面退回默认起飞点，不静默消失。
+     */
+    DROP_FLIGHT: 'chest:drop-flight',
     // ── 宝箱栏（`ChestBar` / `ChestSlotView`）──
     /** 点了某一格的按钮。载荷：界面数组下标 `0~3`（不是服务端 1~4 的 `item.index`）。 */
     SLOT_ACTION: 'chest:slot-action',

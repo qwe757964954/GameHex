@@ -58,6 +58,14 @@ export class ZCCombatEffectView extends Component {
     /** 诊断用：本节点对应的特效资源路径（只有 `initialize` 知道）。*/
     private diagEffectPath = '';
     /**
+     * 事件级染色覆盖（2026-11-23 第 43 批文明之火 103503）。
+     *
+     * 文明之火复用灼热地带那张图但要求蓝色，而火焰树妖自己的灼热地带必须保持紫品红 ——
+     * 同一个 prefab 路径两种颜色，路径表给不出来，只能由事件带进来。
+     * `null` ⇒ 回落 `zcCombatEffectTintOf(path)`（绝大多数特效走这一档）。
+     */
+    private diagEffectTint: [number, number, number] | null = null;
+    /**
      * 每个渲染器的**原始色**快照（2026-11-18 第 17 批「飓风要绿色」）。
      *
      * 为什么一定要快照：染色是乘算，如果直接在 `renderer.color` 上反复乘，第二次复用就变成
@@ -67,8 +75,12 @@ export class ZCCombatEffectView extends Component {
     /** 混色用的临时 `Color`（避免每个渲染器 new 一个，每帧分配在热路径上）。*/
     private readonly tintScratch = new Color(255, 255, 255, 255);
 
-    initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null): void {
+    initialize(prefab: Prefab | null, allowGeneric = false, effectPrefabPath?: string | null,
+        tint?: readonly [number, number, number] | null): void {
         this.allowGeneric = allowGeneric && !prefab;
+        //  🔴 染色必须在 `mountVisual` 之前定好：那一段末尾会 `applyTint()`，
+        //  它同 prefab 复用（灼热地带紫 → 文明之火蓝）时不会重建节点，晚赋值就还是上一任的颜色。
+        this.diagEffectTint = tint && tint.length === 3 ? [tint[0], tint[1], tint[2]] : null;
         this.graphics.clear();
         this.renderedEventId = -1;
         this.appliedSpineAnimation = '';
@@ -167,7 +179,7 @@ export class ZCCombatEffectView extends Component {
         //  两个作用：省掉一次全子树遍历；更关键的是无引擎的视图夹具（`zcds-progressive-art` /
         //  `zcds-render-performance` 里的假节点只有 `isValid` / `children`）连
         //  `getComponentsInChildren` 都没有 ⇒ 先判 tint 再判方法，夹具路径一次都不碰它。
-        const tint = zcCombatEffectTintOf(this.diagEffectPath);
+        const tint = this.diagEffectTint ?? zcCombatEffectTintOf(this.diagEffectPath);
         if (!tint) {
             //  先从上一任的染色里退回来再清表：池化复用下同一个 visual 节点会换 prefab，
             //  不还原就等于「染过绿的飓风借给别的特效用，还是绿的」。

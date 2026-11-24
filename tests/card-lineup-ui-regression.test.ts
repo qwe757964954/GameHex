@@ -162,6 +162,40 @@ const layoutOf = (items: Array<Record<string, any>>, nodeName: string) => {
         .find((component: Record<string, any>) => component.__type__ === 'cc.Layout');
 };
 
+test('站台整体居中：容器宽 = 内容宽 + 左右 padding，两侧留白必须相等', () => {
+    // 2026-11-23 用户：「红框内的阵容没有整体居中，右侧留白比左侧多」。
+    // 根因不是站台坐标，是 `cc.Layout` 的 GRID 排版口径（engine cocos/ui/layout.ts）：
+    //   const startPos = (this._horizontalDirection - layoutAnchor.x) * baseWidth + sign * paddingX;
+    // `horizontalDirection=0`、`layoutAnchor.x=0.5` ⇒ 从容器**左边缘**开始排，没有「行内居中」；
+    // 容器比内容宽时，多出来的宽度**全落在右边**。TeamArea 720 宽、内容 4×151+3×23.5=674.5，
+    // 于是右侧凭空多 45.5px。修法是把这份多余量劈成对称 padding，别改站台尺寸（视觉密度不能变）。
+    const uiTransformOf = (items: Array<Record<string, any>>, nodeName: string) => {
+        const node = items.find((item) => item.__type__ === 'cc.Node' && item._name === nodeName);
+        if (!node) return undefined;
+        return node._components
+            .map((ref: { __id__: number }) => items[ref.__id__])
+            .find((component: Record<string, any>) => component.__type__ === 'cc.UITransform');
+    };
+
+    const check = (items: Array<Record<string, any>>, nodeName: string, columns: number) => {
+        const layout = layoutOf(items, nodeName);
+        const width = uiTransformOf(items, nodeName)?._contentSize?.width as number;
+        assert.ok(layout && width, `${nodeName} 必须挂 Layout 且有宽度`);
+        const content = columns * layout!._cellSize.width + (columns - 1) * layout!._spacingX;
+        const left = layout!._paddingLeft as number;
+        const right = layout!._paddingRight as number;
+        assert.equal(left, right, `${nodeName}：左右 padding 必须相等（右侧多出来的留白就是从这漏的）`);
+        assert.ok(Math.abs(width - content - left - right) <= 0.5,
+            `${nodeName}：容器宽 ${width} 与 内容 ${content} + padding ${left}/${right} 对不上，`
+            + 'GRID 会把差额全排到右边');
+    };
+
+    // 阵容页：TeamArea 4 列（`_constraint: 2` FIXED_COL + `_constraintNum: 4`）。
+    check(pagePrefab, 'TeamArea', 4);
+    // 布阵面板：Slots 570 宽、内容 4×125+3×23.3=569.9，本来就只有 0.1 的差。
+    check(boardPrefab, 'Slots', 4);
+});
+
 test('站台顺序靠 Layout 的兄弟顺序，不再按坐标反推', () => {
     const teamLayout = layoutOf(pagePrefab, 'TeamArea');
     assert.ok(teamLayout, 'TeamArea 必须挂 cc.Layout —— 站台顺序的契约就是它的兄弟顺序');
@@ -501,7 +535,7 @@ test('技能行点击走事件，注入式宿主回调已删', () => {
     //  P0 架构整改：View 只做只读渲染，意图订阅 / 业务状态归 Controller，由组合层装配。
     assert.doesNotMatch(skillPageSource, /cardRepository/, 'View 不得直连 repository');
     assert.doesNotMatch(skillPageSource, /EventMgr\.instance\.(on|off)/, 'View 不得订阅业务意图');
-    assert.match(skillPageSource, /emit\(CardPopupEvent\.SkillIntent, \{ owner: this \}/);
+    assert.match(skillPageSource, /emit\(CardPopupEvent\.SkillIntent, undefined, this/);
     assert.match(skillPageSource, /render\(state: CardSkillListPresentation \| null\)/,
         'Page 只按只读 ViewState 渲染');
     assert.match(skillControllerSource, /this\.listen\(CardPopupEvent\.SkillIntent, this\.onUpgradeIntent\)/,

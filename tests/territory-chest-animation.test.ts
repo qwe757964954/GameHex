@@ -727,7 +727,9 @@ test('页面接线：加载**补帧序列** + 销毁时停播（漏了就是「�
     assert.ok(src.includes('chest_seq_'), '宝箱走补帧序列 image/territory/chest/chest_seq_N');
     assert.ok(src.includes('TERRITORY_CHEST_OPEN_FRAMES'), '帧数必须取 model 常量，不写死 6');
     assert.ok(src.includes('setChestArt'), '加载完要注入视图');
-    assert.ok(src.includes('stopChestPlay'), 'onDestroy 要停播');
+    const map = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    assert.match(map.slice(map.indexOf('protected onDestroy()'), map.indexOf('    initialize()')),
+        /this\.chestView\?\.stop\(\)/, '地图视图销毁时停播');
     assert.ok(src.includes('territoryChestTierOfRewards'), '档位必须由 model 判，不在页面 if');
 });
 
@@ -739,7 +741,7 @@ test('页面接线：领地宝箱先播地图开箱表演，再交棒组合层�
     assert.doesNotMatch(body, /playChestThenSettle|wireRewardCatch/, '旧的前置表演写法不复存在');
     assert.match(body, /this\.presentChestRewards\(rewards, cellId, tier\)/, '档位齐了才进开箱链');
     assert.match(body, /this\.mapView\.playChestOpen\(cellId, tier, entries, handOff\)/, '要真的播 chest_seq 开箱表演');
-    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ owner: this, rewards: goods \}\)/,
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}, this\)/,
         '演完交给组合层：橙卡英雄页（id 升序）→ 统一奖励弹窗');
 });
 
@@ -834,7 +836,7 @@ test('地图视图接线：镜头那一半真的动了 `MapLayer`，且在解锁
     assert.ok(from > 0, '找不到 stopChestPlay');
     const stopBody = body.slice(from, body.indexOf('\n    }', from));
     const restoreAt = stopBody.indexOf('restoreChestCamera()');
-    const unlockAt = stopBody.indexOf('setInputLocked(false)');
+    const unlockAt = stopBody.indexOf('syncInputLock()');
     assert.ok(restoreAt > 0, 'stopChestPlay 要兜底还原地图');
     assert.ok(unlockAt > restoreAt, '还原地图必须在解锁滚动之前');
 });

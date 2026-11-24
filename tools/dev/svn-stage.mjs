@@ -63,13 +63,17 @@ export function loadStagedFiles() {
 
   return content
     .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter((line) => line.length > 0);
+    .map((line) => line.replace(/[\0\r\n]/g, '').trim())
+    .filter((line) => line.length > 0 && !line.includes('\0'));
 }
 
 export function saveStagedFiles(files) {
   ensureTmpDir();
-  const unique = Array.from(new Set(files.map((f) => path.resolve(ROOT, f))));
+  const unique = Array.from(new Set(files
+    .map((f) => (typeof f === 'string' ? f.replace(/[\0\r\n]/g, '').trim() : ''))
+    .filter((f) => f.length > 0)
+    .map((f) => path.resolve(ROOT, f))
+  ));
   // TortoiseProc 官方规定：/pathfile 必须是 UTF-16 且无 BOM（严禁写入 0xFF 0xFE，否则会导致首字符被识别为非法字符触发 svn_dirent_is_absolute 断言崩溃）
   const content = Buffer.from(unique.join('\r\n'), 'utf16le');
   fs.writeFileSync(STAGE_FILE, content);
@@ -222,12 +226,6 @@ export function commitFiles(args) {
     process.exit(1);
   }
 
-  const files = loadStagedFiles();
-  if (files.length === 0) {
-    console.error('错误: 暂存单为空！请先通过 `add` / `pick` 添加，或使用 `commit --all` 自动抓取。');
-    process.exit(1);
-  }
-
   // 根目录卫生检查
   try {
     console.log('[检查] 正在执行根目录卫生检查...');
@@ -235,6 +233,50 @@ export function commitFiles(args) {
   } catch (err) {
     console.error('错误: 根目录卫生检查未通过，提交已终止。');
     process.exit(1);
+  }
+
+  let files = [];
+  if (isAll) {
+    files = loadStagedFiles();
+  } else {
+    // 过滤掉磁盘不存在或损坏的路径
+    const rawFiles = loadStagedFiles().filter((f) => {
+      try {
+        return fs.existsSync(f) && !f.includes('\0') && !f.includes('\r') && !f.includes('\n');
+      } catch {
+        return false;
+      }
+    });
+
+    // 获取 SVN 中真正有状态变动的文件（M/A/D/?/!等），过滤未变动的 clean 文件
+    if (!isDryRun) {
+      try {
+        const svnOut = execSync('svn status', { encoding: 'utf8' });
+        const svnChangedSet = new Set(
+          svnOut
+            .split(/\r?\n/)
+            .filter((line) => line.trim().length > 0)
+            .map((line) => {
+              const match = line.match(/^.{1,8}\s+(.+)$/);
+              return match ? path.resolve(ROOT, match[1].trim()) : null;
+            })
+            .filter(Boolean)
+        );
+        const filtered = rawFiles.filter((f) => svnChangedSet.has(f));
+        files = filtered.length > 0 ? filtered : rawFiles;
+      } catch {
+        files = rawFiles;
+      }
+    } else {
+      files = rawFiles;
+    }
+
+    if (files.length === 0) {
+      console.error('错误: 暂存单中无有效变动文件！请先通过 `add` 添加，或使用 `commit --all` 自动抓取。');
+      process.exit(1);
+    }
+    // 重新写盘，确保暂存单纯净无 BOM UTF-16LE 且无坏字符
+    saveStagedFiles(files);
   }
 
   if (isDryRun) {
@@ -248,31 +290,51 @@ export function commitFiles(args) {
   }
 
   console.log(`[SVN 提交] 准备唤起 TortoiseProc 确认窗口...`);
-  console.log(`- 待确认文件数: ${files.length}`);
+  console.log(`- 待确认文件数: ${isAll ? '全量工作区' : files.length}`);
   console.log(`- 提交日志: "${logmsg}"`);
 
-  // 当路径总长度在安全限制内（< 2000 字符）时优先直传 /path（* 分隔），彻底绕过文件读写；长列表使用无 BOM 的 UTF-16LE /pathfile
-  const pathArgString = files.join('*');
-  const pathArgs = pathArgString.length < 2000
-    ? [`/path:${pathArgString}`]
-    : [`/pathfile:${STAGE_FILE}`];
+  // 全量模式直接传项目根目录，零文件解析、零乱码风险；
+  // 增量模式短列表直传 /path，长列表使用纯净 /pathfile
+  let pathArgs = [];
+  if (isAll) {
+    pathArgs = [`/path:${ROOT}`];
+  } else {
+    const pathArgString = files.join('*');
+    pathArgs = pathArgString.length < 2000
+      ? [`/path:${pathArgString}`]
+      : [`/pathfile:${STAGE_FILE}`];
+  }
 
-  const proc = spawn(
-    TORTOISE_PROC,
-    [
-      '/command:commit',
-      ...pathArgs,
-      `/logmsg:${logmsg}`,
-      '/closeonend:2',
-    ],
-    { detached: true, stdio: 'ignore' }
-  );
-  proc.unref();
+  const commitArgs = [
+    '/command:commit',
+    ...pathArgs,
+    `/logmsg:${logmsg}`,
+  ];
 
   console.log('\n======================================================');
-  console.log(' TortoiseSVN 提交窗口已弹出，请在窗口中确认文件并点击【确定】！');
+  console.log(' TortoiseSVN 提交窗口已调起，请在窗口中核对文件并点击【确定】！');
+  console.log(' 若未在前台看到窗口，可在本地终端直接粘贴执行以下命令：');
+  console.log(`   & "${TORTOISE_PROC}" ${commitArgs.map((a) => `"${a}"`).join(' ')}`);
   console.log(' 提交完成后，可运行 `node tools/dev/svn-stage.mjs clear` 清空暂存单。');
   console.log('======================================================\n');
+
+  // 默认保持进程存活等待用户点击确定或关闭窗口，防止宿主环境过早回收窗口；
+  // 仅在明确传入 --detach / -d 时才转为后台分离模式
+  const isDetached = args.includes('--detach') || args.includes('-d');
+  if (isDetached) {
+    const proc = spawn(TORTOISE_PROC, commitArgs, { detached: true, stdio: 'ignore' });
+    proc.unref();
+  } else {
+    const proc = spawn(TORTOISE_PROC, commitArgs, { stdio: 'inherit' });
+    proc.on('error', (err) => {
+      console.error(`[SVN 提交] 调起 TortoiseProc 失败: ${err.message}`);
+      console.log('请在本地终端手动运行以下直调命令：');
+      console.log(`  & "${TORTOISE_PROC}" ${commitArgs.map((a) => `"${a}"`).join(' ')}`);
+    });
+    proc.on('exit', (code) => {
+      console.log(`[SVN 提交] TortoiseProc 窗口已关闭（退出码: ${code ?? 0}）。`);
+    });
+  }
 }
 
 // CLI 执行入口

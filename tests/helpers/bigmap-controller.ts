@@ -17,6 +17,9 @@ import * as bigMapCampRoleInfo from '../../assets/script/app/bigmap/model/BigMap
 import * as bigMapCampMove from '../../assets/script/app/bigmap/model/BigMapCampMove';
 import * as bigMapEvents from '../../assets/script/app/bigmap/application/BigMapEvents';
 import * as bigMapViewState from '../../assets/script/app/bigmap/application/BigMapViewState';
+import * as battleStartModel from '../../assets/script/app/battle/BattleStartModel';
+import * as bigMapBattle from '../../assets/script/app/bigmap/model/BigMapBattle';
+import type { requestBattleStart } from '../../assets/script/app/battle/BattleStartService';
 
 export interface IBigMapNetPort {
     addEvent(name: string, caller: object, listener: (message: unknown) => void): void;
@@ -26,12 +29,17 @@ export interface IBigMapNetPort {
 const EMPTY_NET: IBigMapNetPort = { addEvent() {}, removeCaller() {} };
 type BigMapControllerModule = typeof import('../../assets/script/app/bigmap/application/BigMapController');
 
-export function loadBigMapController(net: IBigMapNetPort = EMPTY_NET): BigMapControllerModule {
+export function loadBigMapController(net: IBigMapNetPort = EMPTY_NET,
+    request: typeof requestBattleStart = () => { throw new Error('Unexpected battle request'); },
+): BigMapControllerModule {
     const { exports, unresolved } = loadTsModule<BigMapControllerModule>(
         'assets/script/app/bigmap/application/BigMapController.ts', { modules: {
             '/ControllerBase': { ControllerBase },
             '/EventMgr': { EventMgr },
             '/GameNet': { GameNet: { instance: net } },
+            '/BattleStartModel': battleStartModel,
+            '/BattleStartService': { requestBattleStart: request },
+            '/BigMapBattle': bigMapBattle,
             '/BigMapWorld': bigMapWorld,
             '/BigMapCampRoleInfo': bigMapCampRoleInfo,
             '/BigMapCampMove': bigMapCampMove,

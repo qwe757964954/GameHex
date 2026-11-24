@@ -1,6 +1,12 @@
 /**
  * 第 18 批（2026-11-19）：103503「射线集束」（科学家 68035）—— 新增 `ray_beam` 车道。
  *
+ * 🔴 2026-11-23 第 43 批把这条技能**整体搬给了机甲菇 68015**（101504，参数一行没改），
+ * 科学家这条原地改成 `fire_zone`「文明之火」。所以本文件现在钉两件事：
+ *  · 前两条：103503 的**新真值**（fire 参数 / 描述 / 修改器号）；
+ *  · 后半段：`ray_beam` 车道的几何与播法（代码一行没删，只是换了主人）——
+ *    夹具仍用 68035 的普攻袋，因为「按参数在不在分发」这条口径与宿主单位无关。
+ *
  * 这条技能的坑集中在「**看着像换了、其实没换**」：
  *  · 表里原本是 `skill_params` + 副轨四键，`desc` 却早就是射线口径 ⇒ 必须整袋换；
  *  · 射线是**矩形**、还跟着本体转，用圆形光环能「放出去」但打不对人；
@@ -25,9 +31,11 @@ import type { ZCFloatText } from '../assets/script/app/zcds/model/ZCGameTypes';
 import type { ZCUnitStatPatch } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { ZCStatusSystem } from '../assets/script/app/zcds/model/ZCStatusEffect';
 import {
-    ZC_RAY_BEAM_PREFAB_PATH, ZC_RAY_BEAM_REFERENCE_HALF_LENGTH,
-    zcRayBeamEffectPaths, zcRayBeamEffectScale,
+    ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, zcRayBeamEffectScale,
 } from '../assets/script/app/zcds/model/ZCRayBeamFx';
+import {
+    ZC_FIRE_ZONE_PREFAB_PATH, zcFireZoneEffectPaths,
+} from '../assets/script/app/zcds/model/ZCFireZoneFx';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
 import { compileZCCombatBuild, getZCModifierCatalogs } from '../assets/script/app/zcds/model/ZCModifierRuntime';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
@@ -179,37 +187,36 @@ function rayState(units: ZCUnitState[], elapsedSeconds: number): ZCSnapshot {
 
 // ────────────────────────────────────────── 配表
 
-test('103503 配表：整袋换到 ray_beam，旧 secondary* 四键一个不剩', () => {
+test('103503 配表：整袋换成 fire_zone，ray* 一个不剩（射线集束已搬去 68015）', () => {
+    //  🔴 2026-11-23 第 43 批：用户把「射线集束」整条技能挪给机甲菇（101504），
+    //  科学家这条原地改成「文明之火」（`fire_zone`）。射线车道的几何 / 播法仍由本文件
+    //  后半段钉着（`castRayBeam` 一行没删，只是换了主人）。
     for (const rows of [readRows('pvpSkillPlan'), readClient('pvpSkillPlan')]) {
         const plan = rows.filter((row) => Number(row.skillChainId) === CHAIN)
             .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
         assert.equal(plan.length, 3, '三档都要在（原本就是三条占位行，原地改写不是追加）');
         plan.forEach((row, index) => {
             const bag = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
-            assert.equal(row.behaviorKey, 'ray_beam', '换车道 —— 还写着 skill_params 就是「射线放出来是扇形」');
-            assert.equal(row.skillName, '射线集束');
+            assert.equal(row.behaviorKey, 'fire_zone', '还写着 ray_beam 就是「文明之火放出一道射线」');
+            assert.equal(row.skillName, '文明之火');
             assert.equal(row.skillKind, 'active_cd', '累计普攻触发也照旧用 active_cd');
             assert.equal(Number(row.unitId), Number(UNIT));
             assert.equal(Number(row.pvpSkillId), SKILL_ID);
             assert.equal(Number(row.unlockHeroLevel), [9, 18, 27][index]);
-            assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('ray')), [],
-                '参数袋里不许串进 103501 / 103502 / 103504 的键');
-            for (const key of ['secondaryCooldown', 'secondaryDamageRate', 'secondaryFanDeg', 'secondaryRadiusScale']) {
-                assert.equal(key in bag, false, `旧副轨参数没清干净：${key}`);
+            assert.deepEqual(Object.keys(bag).filter((key) => !key.startsWith('fire')), [],
+                '参数袋里不许串进 103501 / 103502 / 103504 的键，也不许留 ray*');
+            for (const key of ['rayEvery', 'rayHalfLength', 'rayHalfWidth', 'rayForward',
+                'raySeconds', 'rayInterval', 'rayDamageRate', 'rayVulnPct',
+                'secondaryCooldown', 'secondaryDamageRate', 'secondaryFanDeg', 'secondaryRadiusScale']) {
+                assert.equal(key in bag, false, `旧车道的参数没清干净：${key}`);
             }
-            assert.equal(bag.rayEvery, 8, '设计 I 列：累计普攻 8 次');
-            assert.equal(bag.rayInterval, 0.2, '设计：每 0.2 秒一跳');
-            assert.equal(bag.raySeconds, [2, 3, 4][index]);
-            assert.equal(bag.rayDamageRate, [0.2, 0.25, 0.35][index]);
-            assert.equal(bag.rayVulnPct, [0, 10, 20][index], 'I 级没有破甲，显式写 0');
-            if (index === 0) {
-                assert.equal('rayVulnSeconds' in bag, false, '没破甲就不写残留时长');
-                assert.equal('raySpotRadius' in bag, false, '末端光斑只在 III 级');
-            }
-            if (index === 2) {
-                assert.equal(bag.raySpotRadius, 60);
-                assert.equal(bag.raySpotDamageRate, 0.5, '设计：光斑额外 50% 范围伤害');
-            }
+            assert.equal(bag.fireEvery, 8, '设计：累计普攻 8 次');
+            assert.equal(bag.fireCount, 3, '设计：3 个火焰区域');
+            assert.equal(bag.fireSpreadRadius, 200, '设计：目标点 200px 半径圆内');
+            assert.equal(bag.fireRadius, 60, '每块必须与灼热地带同尺寸');
+            assert.equal(bag.fireSeconds, [6, 8, 10][index]);
+            assert.equal(bag.fireInterval, 1, '每秒结算一次');
+            assert.equal(bag.fireDamageRate, [1, 1.1, 1.2][index]);
         });
         const zero = plan[0].modifierId;
         assert.equal(Number(zero), 94035031, '修改器号沿用表里既有值，不重算');
@@ -225,7 +232,7 @@ test('103503 卡面：desc 三份一致（pvpSkillPlan 与 armySkillLevelUp 两�
             .sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
         assert.equal(rows.length, 3);
         rows.forEach((row, index) => {
-            assert.equal(row.name, '射线集束');
+            assert.equal(row.name, '文明之火');
             assert.equal(row.desc, plans[index].desc);
             assert.equal(Number(row.unlockarmylevel), [9, 18, 27][index]);
             assert.deepEqual(row.modfiy, [94035031 + index]);
@@ -451,8 +458,8 @@ test('103503 没有冷却格：不许顺手写脏同卡其他链的 CD', () => {
     }
 });
 
-test('103503 端到端：真实构筑把 ray 参数编进模型技能书', () => {
-    //  这条守的是「表改了、构筑没捡到」—— 症状是技能一声不响地不触发（`params` 里读不到 rayEvery）。
+test('103503 端到端：真实构筑把 fire 参数编进模型技能书', () => {
+    //  这条守的是「表改了、构筑没捡到」—— 症状是技能一声不响地不触发（`params` 里读不到 fireEvery）。
     prepare();
     const captured = captureZCMatchConfig();
     const loadout = compileZCCombatBuild({ unitId: UNIT, heroLevel: 27 }, captured.units, getZCModifierCatalogs())
@@ -467,32 +474,36 @@ test('103503 端到端：真实构筑把 ray 参数编进模型技能书', () =>
     const book = (model as unknown as {
         skillRuntime: Record<string, Map<string, ZCSkillRuntimeDefinition>>;
     }).skillRuntime[ZCOwner.Player];
-    const withRay = [...book.values()]
-        .filter((runtime) => typeof runtime.parameters?.rayHalfLength === 'number');
-    assert.equal(withRay.length, 1, '三条 ray 参数只应落在一条运行时里（按 pvpSkillId 分袋）');
-    const params = withRay[0].parameters!;
-    //  🔴 不要在这里断言 `behaviorKey === 'ray_beam'`：`68035:30709` 这一袋里住着四条链，
+    const withFire = [...book.values()]
+        .filter((runtime) => typeof runtime.parameters?.fireSpreadRadius === 'number');
+    assert.equal(withFire.length, 1, '三条 fire 参数只应落在一条运行时里（按 pvpSkillId 分袋）');
+    const params = withFire[0].parameters!;
+    //  🔴 不要在这里断言 `behaviorKey === 'fire_zone'`：`68035:30709` 这一袋里住着四条链，
     //  运行时**只建一条** runtime，`behaviorKey` 由第一个创建它的计划行决定（103501 穿甲苔刺，
     //  值是 `skill_params`），后面的链只往 `parameters` 里并参数（`mergeSkillPlanIntoRuntime`）。
-    //  ⇒ 车道分发靠「参数在不在」（`applyRayBeam` 只看 `rayEvery`），
+    //  ⇒ 车道分发靠「参数在不在」（`applyFireZone` 只看 `fireEvery`），
     //  表现收拢靠**表行**的 `behaviorKey`（`ZCVisualResourcePlan` 读的是原始计划行，不是 runtime）。
-    assert.equal(typeof withRay[0].behaviorKey, 'string');
-    assert.equal(params.rayEvery, 8);
-    assert.equal(params.rayHalfLength, 120);
-    assert.equal(params.raySeconds, 4, '27 级 = III 级');
-    assert.equal(params.raySpotDamageRate, 0.5);
+    assert.equal(typeof withFire[0].behaviorKey, 'string');
+    assert.equal(params.fireEvery, 8);
+    assert.equal(params.fireCount, 3);
+    assert.equal(params.fireSpreadRadius, 200);
+    assert.equal(params.fireRadius, 60);
+    assert.equal(params.fireSeconds, 10, '27 级 = III 级');
+    assert.equal(params.fireDamageRate, 1.2);
     //  表行（不是运行时）的 behaviorKey 才是资源清单的判据。
     const planRow = readRows('pvpSkillPlan')
         .find((row) => Number(row.skillChainId) === CHAIN && Number(row.skillLevel) === 3);
-    assert.equal(planRow?.behaviorKey, 'ray_beam');
-    assert.deepEqual(zcRayBeamEffectPaths(String(planRow?.behaviorKey)), [ZC_RAY_BEAM_PREFAB_PATH],
-        '资源清单按表行 behaviorKey 收光束 prefab —— 收不到就是「照常掉血、屏幕上一道光都没有」');
+    assert.equal(planRow?.behaviorKey, 'fire_zone');
+    assert.deepEqual(zcFireZoneEffectPaths(String(planRow?.behaviorKey)), [ZC_FIRE_ZONE_PREFAB_PATH],
+        '资源清单按表行 behaviorKey 收火焰 prefab —— 收不到就是「照常掉血、地上一片火都没有」');
 });
 
 test('103503 表现缩放：事件级 scale 按「半长 ÷ 基准」算，非法值退回 1', () => {
-    assert.equal(ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, 180, '基准是复用美术被烘焙时的那条半径');
-    assert.equal(zcRayBeamEffectScale(180), 1);
-    assert.equal(zcRayBeamEffectScale(120), 120 / 180);
+    //  基准是**镭射飞龙那张图**烘进资产的可见半长（第 43 批换图后重算）：
+    //  画布 alpha 可见宽 575 屏上 px ÷ 0.76875 = 748 逻辑 px ⇒ 半长 374。
+    assert.equal(ZC_RAY_BEAM_REFERENCE_HALF_LENGTH, 374, '发射线的基准半长必须按新图重算');
+    assert.equal(zcRayBeamEffectScale(374), 1);
+    assert.equal(zcRayBeamEffectScale(120), 120 / 374);
     assert.equal(zcRayBeamEffectScale(0), 1, '非法值不能让节点缩成 0');
     assert.equal(zcRayBeamEffectScale(-5), 1);
 });

@@ -25,6 +25,7 @@ import {
     FakeUIOpacity,
     FakeUITransform,
     attach,
+    createLevelBubble,
     loadTerritoryStationModule,
     loadTerritoryStationView,
     makeStationView,
@@ -51,32 +52,44 @@ const GAP = STATION_MODULE.CONDITION_GAP as number;
 /** 图标节点未缩放时的可见宽（prefab `CaptionBg` 是 40×40，读不到就退回同一个兜底值）。 */
 const ICON_BASE_WIDTH = STATION_MODULE.CONDITION_ICON_WIDTH_FALLBACK as number;
 
-test('PVP 红框头像复用气泡，通关及池化后恢复文字、尺寸和点击', () => {
+test('PVP 红框头像复用左上角玩家卡的头像资源，通关及池化后恢复文字、尺寸和点击', () => {
     const { view, badge } = makeStationView();
     const content = { site: {}, icon: { originalSize: { width: 128, height: 128 }, rect: { width: 128, height: 128 }, offset: { x: 0, y: 0 } },
-        levelBubble: 'PVP', levelBubbleFrame: {}, levelBubblePortrait: {},
+        levelBubble: 'PVP', levelBubbleFrame: {},
+        levelBubblePortrait: {}, levelBubbleAvatarFrame: {}, levelBubbleLevelFrame: {}, levelBubbleLevel: 12,
         caption: '', badge: '', tint: FakeColor.WHITE, interactive: true };
     view.render(content);
-    const bubble = badge.parent;
-    const portrait = (view as unknown as { levelBubbleIcon: { node: FakeNode } }).levelBubbleIcon.node;
-    assert.equal(badge.active, false);
+    const bubble = view.levelBubbleNode;
+    const portrait = view.levelBubbleIconSprite.node;
+    const plate = view.levelBubbleAvatarFrameSprite.node;
+    const levelBadge = view.levelBubbleLevelBadgeSprite.node;
+    const levelLabel = view.levelBubbleLevelLabel;
     assert.equal(bubble.active, true);
-    assert.equal(bubble.getComponent(FakeSprite).type, FakeSprite.Type.SLICED);
-    assert.equal(bubble.getComponent(FakeUITransform).contentSize.width, TERRITORY_PVP_BUBBLE_WIDTH);
-    assert.equal(bubble.getComponent(FakeUITransform).contentSize.height, TERRITORY_PVP_BUBBLE_HEIGHT);
-    assert.equal(portrait.getComponent(FakeUITransform).contentSize.width, TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE);
+    assert.equal(badge.active, false, 'PVP 形态藏掉编号 Label，等级数字改走角标字');
+    assert.equal(levelLabel.node.active, true);
+    assert.equal(levelLabel.string, '12');
+    assert.equal(view.levelBubbleSprite.type, FakeSprite.Type.SLICED);
+    assert.equal(view.levelBubbleTransform.contentSize.width, TERRITORY_PVP_BUBBLE_WIDTH);
+    assert.equal(view.levelBubbleTransform.contentSize.height, TERRITORY_PVP_BUBBLE_HEIGHT);
+    assert.equal(view.levelBubbleIconTransform.contentSize.width, TERRITORY_PVP_BUBBLE_PORTRAIT_SIZE);
     assert.equal(portrait.position.y, TERRITORY_PVP_BUBBLE_PORTRAIT_Y);
-    assert.equal(portrait.getComponent(FakeSprite).spriteFrame, content.levelBubblePortrait);
+    assert.equal(view.levelBubbleIconSprite.spriteFrame, content.levelBubblePortrait);
+    assert.equal(plate.active, true);
+    assert.equal(levelBadge.active, true);
     stationEmitLog.length = 0;
     bubble.emit(FakeButton.EventType.CLICK);
     assert.equal(stationEmitLog.length, 1);
     view.render({ ...content, hidden: true });
     assert.equal(bubble.active, false);
+    assert.equal(levelLabel.node.active, false);
     view.render({ ...content, levelBubblePortrait: null });
     assert.equal(badge.active, true);
+    assert.equal(levelLabel.node.active, false);
     assert.equal(portrait.active, false);
+    assert.equal(plate.active, false, '退回文字气泡时头像框要收起');
+    assert.equal(levelBadge.active, false, '退回文字气泡时等级角标要收起');
     assert.equal(view.badgeLabel.string, 'PVP');
-    assert.equal(bubble.getComponent(FakeUITransform).contentSize.height, MAP_MARKER_BUBBLE_HEIGHT);
+    assert.equal(view.levelBubbleTransform.contentSize.height, MAP_MARKER_BUBBLE_HEIGHT);
 });
 
 test('随机格等待期间不展示文字，重复渲染和失败恢复保持正确', () => {
@@ -157,6 +170,7 @@ test('station visuals move into contiguous global render layers and preserve pre
     const caption = withTransform(attach(new FakeNode('CaptionBg'), root, 0, 52), 40, 40);
     const text = withTransform(attach(new FakeNode('CaptionLabel'), root, 0, 52), 92, 28);
     const badge = attach(new FakeNode('BadgeLabel'), root, 35, 35);
+    const level = createLevelBubble(root);
     const button = new FakeButton();
     button.node = root;
     const iconSprite = new FakeSprite();
@@ -174,6 +188,15 @@ test('station visuals move into contiguous global render layers and preserve pre
         iconTransform: icon.uiTransform,
         captionIconTransform: caption.uiTransform,
         captionTextTransform: text.uiTransform,
+        levelBubbleNode: level.node,
+        levelBubbleTransform: level.transform,
+        levelBubbleSprite: level.sprite,
+        levelBubbleButton: level.button,
+        levelBubbleAvatarFrameSprite: level.avatarFrameSprite,
+        levelBubbleIconSprite: level.iconSprite,
+        levelBubbleIconTransform: level.iconTransform,
+        levelBubbleLevelBadgeSprite: level.levelBadgeSprite,
+        levelBubbleLevelLabel: level.levelLabel,
     });
 
     const layers: StationLayers = {
@@ -193,10 +216,10 @@ test('station visuals move into contiguous global render layers and preserve pre
     assert.equal(icon.parent, layers.icon);
     assert.equal(caption.parent, layers.caption);
     assert.equal(text.parent, layers.text);
-    assert.equal(badge.parent, layers.badge);
+    assert.equal(level.node.parent, layers.badge);
+    assert.equal(badge.parent, level.node, '编号文字跟着气泡子树一起挂角标层');
     assert.deepEqual([root.position.x, root.position.y], [100, 200]);
     assert.deepEqual([caption.position.x, caption.position.y], [100, 252]);
-    assert.deepEqual([badge.position.x, badge.position.y], [135, 235]);
     assert.equal(root.listenerCount(FakeButton.EventType.CLICK), 1, 'initialize must be idempotent');
     assert.equal(captionSprite.color, tint);
     assert.equal(captionLabel.string, '关卡 1');
@@ -263,7 +286,8 @@ test('station visuals move into contiguous global render layers and preserve pre
     view.dispose();
     view.dispose();
     assert.equal(root.listenerCount(FakeButton.EventType.CLICK), 0);
-    for (const node of [icon, caption, text, badge]) assert.equal(node.destroyCount, 1);
+    for (const node of [icon, caption, text]) assert.equal(node.destroyCount, 1);
+    assert.equal(view.levelBubbleNode.destroyCount, 1, '气泡整棵子树由站点头统一销毁');
     assert.equal(root.destroyCount, 0, 'owner destroys the station hit root');
 });
 
@@ -321,6 +345,7 @@ test(`locked-cell cost shows icon ×${ICON_SCALE} / value ×${VALUE_SCALE} with 
     const caption = withTransform(attach(new FakeNode('CaptionBg'), root, 0, 52), 40, 40);
     const text = withTransform(attach(new FakeNode('CaptionLabel'), root, 0, 52), 92, 28);
     const badge = attach(new FakeNode('BadgeLabel'), root, 35, 35);
+    const level = createLevelBubble(root);
     const button = new FakeButton();
     button.node = root;
     const iconSprite = new FakeSprite();
@@ -336,6 +361,15 @@ test(`locked-cell cost shows icon ×${ICON_SCALE} / value ×${VALUE_SCALE} with 
         iconTransform: icon.uiTransform,
         captionIconTransform: caption.uiTransform,
         captionTextTransform: text.uiTransform,
+        levelBubbleNode: level.node,
+        levelBubbleTransform: level.transform,
+        levelBubbleSprite: level.sprite,
+        levelBubbleButton: level.button,
+        levelBubbleAvatarFrameSprite: level.avatarFrameSprite,
+        levelBubbleIconSprite: level.iconSprite,
+        levelBubbleIconTransform: level.iconTransform,
+        levelBubbleLevelBadgeSprite: level.levelBadgeSprite,
+        levelBubbleLevelLabel: level.levelLabel,
     });
     view.initialize({
         icon: new FakeNode('StationIconLayer'),
@@ -422,6 +456,7 @@ test('station survives the engine destroy order where cc.Button is destructed be
     const caption = attach(new FakeNode('CaptionBg'), root, 0, 52);
     const text = attach(new FakeNode('CaptionLabel'), root, 0, 52);
     const badge = attach(new FakeNode('BadgeLabel'), root, 35, 35);
+    const level = createLevelBubble(root);
     const button = new FakeButton();
     button.node = root;
     const iconSprite = new FakeSprite();
@@ -437,6 +472,15 @@ test('station survives the engine destroy order where cc.Button is destructed be
         iconTransform: icon.uiTransform,
         captionIconTransform: caption.uiTransform,
         captionTextTransform: text.uiTransform,
+        levelBubbleNode: level.node,
+        levelBubbleTransform: level.transform,
+        levelBubbleSprite: level.sprite,
+        levelBubbleButton: level.button,
+        levelBubbleAvatarFrameSprite: level.avatarFrameSprite,
+        levelBubbleIconSprite: level.iconSprite,
+        levelBubbleIconTransform: level.iconTransform,
+        levelBubbleLevelBadgeSprite: level.levelBadgeSprite,
+        levelBubbleLevelLabel: level.levelLabel,
     });
 
     const layers: StationLayers = {

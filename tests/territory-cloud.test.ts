@@ -1955,7 +1955,7 @@ test('接线：MapLayer 用 (1+(fit-1)·zoom, zoom) 推镜头，输入锁与还�
     assert.ok(/private mapCenterInOverlay\(\): Vec3 \| null/.test(source), '对焦点 = 地图包围盒中心');
     assert.ok(/this\.cloudDollyOrigin = center;/.test(source),
         '对焦点只取一次（镜头一动它每帧都在变，每帧重量就是反馈环）');
-    assert.ok(/this\.setInputLocked\(true\)/.test(source), '推镜头时必须锁拖动（MapLayer 是 content）');
+    assert.ok(/this\.syncInputLock\(\)/.test(source), '推镜头时必须锁拖动（MapLayer 是 content）');
     // 收尾只留一条：`cameraBusyLocked` 同时管开箱、散场与战斗过场，谁在播都不还原。
     // 2026-11-02 起多了一路「首次解锁直开的镜头过场」（§3.15）：漏掉它，起播那一帧
     // 就会被 `restoreChestCamera` 按回原位 ⇒ 提示条弹了、画面却纹丝不动。

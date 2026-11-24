@@ -53,8 +53,20 @@ export interface IChestSlotData {
     totalSeconds: number;
     /** 按钮行为。 */
     action: ChestSlotAction;
+    /** 队列有其他宝箱正在计时时，未激活的宝箱不可解锁。 */
+    readonly canActivate: boolean;
     /** 空槽位的体力消耗（`Battle` 才显示闪电 + 数字）。 */
     cost: number;
+}
+
+export function withChestActivationAvailability(
+    slots: readonly Omit<IChestSlotData, 'canActivate'>[],
+): readonly IChestSlotData[] {
+    const hasActiveUnlock = slots.some((slot) => slot.state === ChestSlotState.Counting);
+    return slots.map((slot) => ({
+        ...slot,
+        canActivate: slot.action === ChestSlotAction.Activate && !hasActiveUnlock,
+    }));
 }
 
 // ============================================================
@@ -99,6 +111,7 @@ export interface IChestDetailData {
     readonly remainSeconds: number;
     readonly state: ChestSlotState;
     readonly action: ChestSlotAction;
+    readonly canActivate: boolean;
 }
 
 /**
@@ -129,9 +142,46 @@ export function formatChestCountdown(seconds: number): string {
  * 同一天把等待中改成「加速」，弹窗又落后一轮（用户：「点击解锁中的宝箱，宝箱详情中的开启按钮
  * 用加速按钮替换」）。所以文案只在这里写一次，视图与页面都从这儿取。
  */
-export function chestActionCaption(action: ChestSlotAction): string {
+export function chestActionCaption(action: ChestSlotAction, canActivate = true): string {
     if (action === ChestSlotAction.Battle) return '开始战斗';
     if (action === ChestSlotAction.SpeedUp) return '加速';
-    if (action === ChestSlotAction.Activate) return '解锁';
+    if (action === ChestSlotAction.Activate) return canActivate ? '解锁' : '等待解锁';
     return '开启';
+}
+
+// ============================================================
+// 点了那颗按钮之后走哪条路
+// ============================================================
+
+/**
+ * 一颗宝箱格按钮的**去向**。`chestActionCaption` 管"写什么字"，这里管"点了去哪"，
+ * 两条都放在这个零 `cc` 的文件里，就是为了能按值验而不是靠源码正则。
+ */
+export const ChestActionRoute = {
+    /** 空槽位：进匹配（宿主那边还要先问过场）。 */
+    Battle: 'battle',
+    /** 队列正忙：别的宝箱正在倒计时，这颗写着「等待解锁」⇒ 只给一句提示。 */
+    Blocked: 'blocked',
+    /** 等完了：**直接开**，不弹详情（2026-11-23 用户）。 */
+    OpenDirect: 'open-direct',
+    /** 解锁 / 加速：先弹详情，让玩家看清能开出什么、立即开要多少。 */
+    Detail: 'detail',
+} as const;
+export type ChestActionRoute = (typeof ChestActionRoute)[keyof typeof ChestActionRoute];
+
+/**
+ * 点一颗宝箱格按钮之后该走哪条路。
+ *
+ * 这份判断以前散在 `MainPage.onChestAction` 的 `if` 链里，缺了两个分支：
+ *  · `Activate && !canActivate`（按钮写着「等待解锁」）一路落到弹详情 —— 而详情的主按钮
+ *    此时是禁用的 ⇒ 玩家点两下全是死路，一条反馈都没有（2026-11-23 用户：
+ *    「有解锁中的宝箱，等待解锁按钮点击后的提示没有弹出」）。
+ *  · `Open`（等完了）也弹详情 —— 多一层确认，开箱还得多点一次（同日用户：
+ *    「点击开启按钮直接打开宝箱界面了，不用再打开一次弹窗」）。
+ */
+export function chestActionRoute(action: ChestSlotAction, canActivate: boolean): ChestActionRoute {
+    if (action === ChestSlotAction.Battle) return ChestActionRoute.Battle;
+    if (action === ChestSlotAction.Activate && !canActivate) return ChestActionRoute.Blocked;
+    if (action === ChestSlotAction.Open) return ChestActionRoute.OpenDirect;
+    return ChestActionRoute.Detail;
 }

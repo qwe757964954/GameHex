@@ -48,8 +48,8 @@ export class RoleController<T> extends ControllerBase {
         }
     }
     cancel(): void { this.revision++; this.selectionRevision++; }
-    private onIntent(event: IRoleIntent): void {
-        if (event.owner !== this.options.owner) return;
+    private onIntent(event: IRoleIntent, source: object): void {
+        if (source !== this.options.owner) return;
         if (event.kind === 'bag') { void this.selectBag(event.tab); return; }
         if (event.navId === 2) { this.options.popups.openTalent(); return; }
         if (!ROLE_NAV_READY.has(event.navId)) this.options.feedback.tip(ROLE_TEXTS.navMissing);

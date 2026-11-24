@@ -65,6 +65,11 @@ const TASK_ENTRY_UNLOCK_STEP = '8-1';
  * 🔴 2026-11-19 追加：翻地那一格**还会弹「奖励领取」弹窗**（固定格 / 随机格的第一格走
  * `FW.ShowReward`，宝箱链路还要先过英雄页）。弹窗是独立于粒子的第二段，粒子演完 ≠ 奖励看完 ⇒
  * 只要还开着任一奖励页就不许放行，等它关掉再画（否则 8-1 在弹窗底下开口、关掉后从第一句重播）。
+ *
+ * 🔴 2026-11-24 追加：这一步**只属于领地界面**。底栏切到其它 tab 时 `MainTabHost.mountPage`
+ * 会把这一页整块销毁、组合层重建，新页上根本没有 `MainTaskEntry` ⇒ 焦点解析为空，
+ * 引导层只剩全屏 `Blocker` 没有孔，玩家点不动任何东西（「强制引导出来、画面卡死」）。
+ * 所以 `territoryView` 为空（不是领地页）时整层让位，等玩家回来再播。
  */
 const REWARD_HOLD_STEP = '8-1';
 
@@ -223,8 +228,18 @@ export class GuideComposition extends ControllerBase {
             // 第二段（2026-11-19）：粒子演完还会弹「奖励领取」弹窗（固定格 / 随机格的第一格是
             // `FW.ShowReward`，宝箱链路先过英雄页）⇒ 只要还开着任一奖励页就一并按住。
             const rewardPopupOpen = rewards.size > 0 || chestPages.size > 0 || heroPages.size > 0;
-            const holdForReward = this.syncRewardHold(state, chestPresenting, rewardPopupOpen);
-            if (rewardPopupOpen || chestPresenting || otherCard
+            // 8-1 是**领地界面专属**的收尾步（用户 2026-11-24）：它高亮的是主界面底栏里的任务入口
+            // （`Main/TaskEntry`），而底栏切到其它 tab 时 `MainTabHost.mountPage` 会把这一页整块销毁、
+            // 组合层随之重建 —— 新页上没有那个节点，焦点解析为空 ⇒ 引导层只剩全屏 `Blocker`、没有孔，
+            // 玩家点不动任何东西（用户看到的「强制引导出来、画面卡死」）。
+            // ⇒ 不在领地页就整层让位，且**不占 hold 状态**；玩家切回领地时组合层会重建，
+            //    8-1 自然按原口径重新「等奖励」再出场。
+            const finishOffStage = !state.finished && !this.territoryView
+                && this.stepDistance(state.stepId, REWARD_HOLD_STEP) === 0;
+            if (finishOffStage) this.clearRewardHold();
+            const holdForReward = !finishOffStage
+                && this.syncRewardHold(state, chestPresenting, rewardPopupOpen);
+            if (finishOffStage || rewardPopupOpen || chestPresenting || otherCard
                 || waitingForMap || holdForReward
                 || (!state.finished && battleFocus !== (this.phase === 'battle'))) {
                 view.hide();
@@ -243,22 +258,22 @@ export class GuideComposition extends ControllerBase {
         };
         // 「地图首帧迟到了」的几条路都从这里补画一次（`presented` 事件 / 兜底计时）。
         this.draw = render;
-        this.listen(VIEW_LIFECYCLE, ({ owner, phase }: IViewLifecycle) => {
+        this.listen(VIEW_LIFECYCLE, ({ phase }: IViewLifecycle, source: object) => {
             // 领地页首帧画出来了 ⇒ 放开「等地图」这道闸，并立刻补画一次（此刻 `latestState` 多半已就绪）。
-            if (owner === this.territoryView && phase === 'presented') { this.markMapPresented(); return; }
-            const popups: Set<object> | null = owner instanceof ShowRewardPage ? rewards
-                : owner instanceof CardUpgradePage ? cardDetails
-                : owner instanceof TerritoryChestOpenPage ? chestPages
-                : owner instanceof HeroObtainPage ? heroPages
+            if (source === this.territoryView && phase === 'presented') { this.markMapPresented(); return; }
+            const popups: Set<object> | null = source instanceof ShowRewardPage ? rewards
+                : source instanceof CardUpgradePage ? cardDetails
+                : source instanceof TerritoryChestOpenPage ? chestPages
+                : source instanceof HeroObtainPage ? heroPages
                 : null;
             if (!popups) return;
-            if (phase === 'enabled') popups.add(owner);
-            else if (phase === 'disabled' || phase === 'destroyed') popups.delete(owner);
+            if (phase === 'enabled') popups.add(source);
+            else if (phase === 'disabled' || phase === 'destroyed') popups.delete(source);
             else return;
             // 统一奖励弹窗是领地宝箱演出的**最后一棒**：它上了台，演出窗口就由它接着挡；
             // 它关掉，窗口才算真正结束（这之后 2-3 的台词才开口）。
             // 只有它来关这个窗口 —— 组合层提前关会露出几帧空档，对话框先闪一下再被盖住。
-            if (owner instanceof ShowRewardPage) chestPresenting = false;
+            if (source instanceof ShowRewardPage) chestPresenting = false;
             if (this.latestState) render(this.latestState);
         });
         this.listen(GuideEvent.Complete, (event: IGuideCompletePayload) => {

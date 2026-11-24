@@ -257,7 +257,7 @@ test('dispose 后事件总线不再把旧会话推进或强制跳过', () => {
     controller.dispose();
 
     // 生产路径经 EventMgr 订阅；dispose 必须由 offTarget 解除，而不是靠回调内再判一次。
-    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    EventMgr.instance.emit(GuideEvent.Advance, { stepId: '1-1' }, states);
     EventMgr.instance.emit(GuideEvent.Complete, { cond: 'click' });
     EventMgr.instance.emit(GuideDebugEvent.ForceSkip);
 
@@ -270,14 +270,14 @@ test('dispose 后事件总线不再把旧会话推进或强制跳过', () => {
 test('点击意图只接受当前展示实例和当前步骤，旧步骤与退出后的事件不能推进', () => {
     const { controller, states } = makeController('c-scoped-advance');
     controller.start();
-    EventMgr.instance.emit(GuideEvent.Advance, { owner: {}, stepId: '1-1' });
+    EventMgr.instance.emit(GuideEvent.Advance, { stepId: '1-1' }, {});
     assert.equal(controller.currentStepId, '1-1');
-    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    EventMgr.instance.emit(GuideEvent.Advance, { stepId: '1-1' }, states);
     assert.equal(controller.currentStepId, '1-2');
-    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-1' });
+    EventMgr.instance.emit(GuideEvent.Advance, { stepId: '1-1' }, states);
     assert.equal(controller.currentStepId, '1-2');
     controller.dispose();
-    EventMgr.instance.emit(GuideEvent.Advance, { owner: states, stepId: '1-2' });
+    EventMgr.instance.emit(GuideEvent.Advance, { stepId: '1-2' }, states);
     assert.equal(controller.currentStepId, '1-2');
 });
 

@@ -23,6 +23,13 @@ export const ZC_EFFECT_TUNING = {
     dashSeconds: 0.3,
     /** 刀盾护盾 clip：17 帧 @ 12fps。*/
     dashGuardSeconds: 17 / 12,
+    /**
+     * 仙桃行者重击柱 clip：29 帧 @ 24fps（`仙桃行者_重击技能-play`）。
+     *
+     * 与 `tools/build_xiantao_quake_fx.py` 的 `FRAMES` / `SAMPLE` 必须一致：事件寿命短于 clip
+     * 会被 `ZCGameModel` 按 `startedAt + durationSeconds` 提前摘掉，表现出来就是「砸到一半就没了」。
+     */
+    quakeStrikeSeconds: 29 / 24,
     /** 长戟兵撕裂 clip：8 帧 @ 12fps。*/
     singleStrikeSeconds: 8 / 12,
     /** 陷阱生成动画：12 帧 @ sample 30，同时是常驻视觉的延迟。*/
@@ -61,8 +68,16 @@ export const ZC_EFFECT_SCALE = {
     screenPxPerLogic: 0.76875,
     /** `普攻爆炸` prefab 的屏上宽度：UITransform 141 × 根 `_lscale` 2.0。*/
     burstPrefabScreenWidth: 282,
-    /** `雷电冲击` 烘进 prefab 的基准半长（逻辑 px）。*/
-    rayBeamReferenceHalfLength: 180,
+    /**
+     * 射线集束那张图烘进 prefab 的基准半长（逻辑 px）。
+     *
+     * 2026-11-23 第 43 批换图：雷电冲击 → 镭射飞龙_普攻（用户口径「射线颜色和镭射飞龙
+     * 普攻一致」）。按可见内容重算：画布 700×73、alpha bbox 66~641 ⇒ 可见宽 575，
+     * 根 `_lscale.x = 1` ⇒ 屏上 575 px ⇒ 逻辑 575 / 0.76875 ≈ 748 ⇒ 半长 **374**。
+     * （旧值 180 是按雷电冲击算的：可见宽 485 × 0.575963 / 0.76875 / 2 ≈ 182。）
+     * 🔴 改这条必须同步 `zcRayBeamEffectScale` 的结果：屏上光束长度要等于表值判定长度。
+     */
+    rayBeamReferenceHalfLength: 374,
     /** 菌丝绞杀扇形里铺几发爆点。*/
     fanBurstCount: 3,
     /** 每发爆点半径 = 扇形半径 × 该比例。*/
@@ -73,6 +88,11 @@ export const ZC_EFFECT_SCALE = {
     fanBurstSpread: 0.6,
     /** 光束最短长度（视图 px）：贴脸时 `to` 可能落在发射口后面，缩成 0 会整条消失。*/
     beamMinLength: 6,
+    /** 召唤光环可见环要盖住「本体 + 4 个舞伴」的放大倍率（事件级 effectScale）。*/
+    summonAuraCoverScale: 1.99,
+    /** `effectScale = 1` 时「持续光环伤害效果」可见环的半轴（屏上 px）。*/
+    summonAuraRingHalfScreenX: 91.9,
+    summonAuraRingHalfScreenY: 36.05,
 } as const;
 
 /** 参数化状态 id 的固定前缀；格式化函数仍留在各自 Fx facade。*/

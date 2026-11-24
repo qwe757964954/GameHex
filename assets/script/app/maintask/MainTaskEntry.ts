@@ -1,7 +1,7 @@
 import { _decorator, Button, Component, Label, Node } from 'cc';
 import { Toast } from '../common/Toast';
 import { MainTaskDetailPage } from './MainTaskDetailPage';
-import { mainTaskRepository } from './MainTaskRepository';
+import { mainTaskRepository, subscribeMainTaskChange } from './MainTaskRepository';
 import type { IMainTaskRepository, IMainTaskSnapshot } from './MainTaskRepository';
 import { MAIN_TASK_TEXTS } from './MainTaskTexts';
 import { GameNet } from '../net/GameNet';
@@ -38,17 +38,29 @@ export class MainTaskEntry extends Component {
     private snapshot: IMainTaskSnapshot | null = null;
     /** 每次 refresh 递增，用来丢弃过期的异步结果。 */
     private revision = 0;
+    /** `CmdTask` 缓存订阅的退订函数（`onDestroy` 必须摘掉）。 */
+    private unsubscribe: (() => void) | null = null;
     /** 领奖请求进行中（防连点）。 */
     private busy = false;
 
     protected onDestroy(): void {
+        this.unsubscribe?.();
+        this.unsubscribe = null;
         GameNet.instance.removeCaller(this);
     }
 
     protected onLoad(): void {
         this.bindClick();
+        // 入口常驻：翻地块 / 战斗结算把 `CmdTask.count`、`rewardState` 推下来时本页不会重建，
+        // 只读一次会让红点与「点入口直接领奖」永远停在打开页面那一刻的快照。
+        this.unsubscribe = subscribeMainTaskChange(this, this.onTaskCacheChanged);
         void this.refresh();
     }
+
+    /** `CmdTask` 缓存变化 → 重读整条快照（revision 保证并发时最后一次生效）。 */
+    private readonly onTaskCacheChanged = (): void => {
+        void this.refresh();
+    };
 
     /** 供测试 / 探针注入替身 Repository。 */
     setRepository(repository: IMainTaskRepository): void {

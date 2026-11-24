@@ -14,8 +14,8 @@ import { ZC_EFFECT_SCALE } from './ZCEffectTuning';
 /** 向身前打出一道持续若干秒的矩形射线。*/
 export const ZC_RAY_BEAM_BEHAVIOR_KEY = ZC_EFFECT_BEHAVIOR_KEYS.rayBeam;
 
-/** 射线的表现：横向雷电束。*/
-export const ZC_RAY_BEAM_PREFAB_PATH = ZC_EFFECT_PATHS.lightningImpact;
+/** 射线的表现：横向红色光束（2026-11-23 第 43 批从「雷电冲击」换成镭射飞龙那张图）。*/
+export const ZC_RAY_BEAM_PREFAB_PATH = ZC_EFFECT_PATHS.laserAttack;
 
 /** 该 prefab 烘进资产的基准半长（表值逻辑 px）。*/
 export const ZC_RAY_BEAM_REFERENCE_HALF_LENGTH = ZC_EFFECT_SCALE.rayBeamReferenceHalfLength;

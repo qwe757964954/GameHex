@@ -223,10 +223,9 @@ test('源码守卫：文案 / 加速态判据都来自页面，弹窗不自造�
     assert.match(panelSrc, /content\.openSpeedUp === true/);
     assert.match(panelSrc, /state\?\.caption \?\? this\.openCaption/);
     assert.match(panelSrc, /state\?\.speedUp \?\? this\.openSpeedUp/);
-    // 页面：内容构造与每秒刷新都从 `chestActionCaption` / `detail.action` 取，不另写一份。
+    // 内容构造与每秒刷新从同一处取文案。
     assert.match(pageSrc, /openSpeedUp: counting/);
-    assert.match(pageSrc, /caption: chestActionCaption\(detail\.action\)/);
-    assert.match(pageSrc, /const speedUp = detail\.action === ChestSlotAction\.SpeedUp/);
-    assert.match(pageSrc, /this\.treasureRepository\.load\(this, \(\) => this\.refreshTreasureDisplay\(\)\)/);
+    assert.match(pageSrc, /caption: chestActionCaption\(slot\.action, slot\.canActivate\)/);
+    assert.match(pageSrc, /const speedUp = slot\.action === ChestSlotAction\.SpeedUp/);
     assert.doesNotMatch(panelSrc, /tween\(|cc\.tween/);
 });

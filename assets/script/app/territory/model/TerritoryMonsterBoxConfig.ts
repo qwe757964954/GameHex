@@ -36,6 +36,8 @@ export interface ITerritoryMonsterBoxGrade {
     readonly levelId: number;
     /** **升到这一级**消耗的银币；`0` = 没有升级入口（初始级 / 未开放）。 */
     readonly upCostCoins: number;
+    /** **升到这一级**失败达上限后消耗的金币（幻灵玉）；`0` = 没配金币消耗。 */
+    readonly upCostDiamond: number;
     /** **升到这一级**的成功率（百分数）；`0` = 不显示。 */
     readonly upPro: number;
     /** **升到这一级**的失败次数上限；`0` = 不限。 */
@@ -55,6 +57,7 @@ interface IMonsterBoxRow {
     readonly monsterBoxGrade?: unknown;
     readonly monsterBoxLevel?: unknown;
     readonly monsterBoxUpCostCoins?: unknown;
+    readonly monsterBoxUpCostDiamond?: unknown;
     readonly monsterBoxUpPro?: unknown;
     readonly maxUpFailTimes?: unknown;
     readonly monsterBoxVictoryRwrad?: unknown;
@@ -99,6 +102,7 @@ export function readTerritoryMonsterBoxGroups(raw: unknown): Map<number, ITerrit
             grade,
             levelId: readInt(row?.monsterBoxLevel, 0),
             upCostCoins: Math.max(0, readInt(row?.monsterBoxUpCostCoins, 0)),
+            upCostDiamond: Math.max(0, readInt(row?.monsterBoxUpCostDiamond, 0)),
             upPro: Math.max(0, readInt(row?.monsterBoxUpPro, 0)),
             maxFailTimes: Math.max(0, readInt(row?.maxUpFailTimes, 0)),
             rewards: readRewardPool(row?.monsterBoxVictoryRwrad),

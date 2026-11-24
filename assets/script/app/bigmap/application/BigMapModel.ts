@@ -132,8 +132,7 @@ export interface IBigMapModelDeps {
     readonly campRepository?: BigMapCampRepository;
     readonly slgRepository?: BigMapSlgRepository;
     readonly selfRoleId?: string;
-    /** 发起服务端战斗并通过 GameRoute 导航；不得回退本地结算。 */
-    readonly startBattle?: (battleType: IZCSlgBattleType, targetConfigId: number, isCurrent: () => boolean) => Promise<IBigMapActionFeedback>;
+    readonly canRequestBattle?: boolean;
 }
 
 /**
@@ -393,6 +392,10 @@ export interface IBigMapActionFeedback {
     readonly ok: boolean;
     readonly message: string;
     readonly rewards?: readonly IBigMapSlgReward[];
+}
+
+export interface IBigMapAttackResult extends IBigMapActionFeedback {
+    readonly battle?: { readonly battleType: IZCSlgBattleType; readonly targetConfigId: number };
 }
 
 export class BigMapModel {
@@ -1293,7 +1296,7 @@ export class BigMapModel {
         if (this.isDisposed) return BIGMAP_BATTLE_TEXT.closed;
         if (this.isStartingBattle) return BIGMAP_BATTLE_TEXT.pending;
         if (!this.config.camps.has(campId)) return BIGMAP_BATTLE_TEXT.campMissing;
-        if (!this.deps.startBattle) return BIGMAP_CAMP_QUERY_TEXT.attackUnavailable;
+        if (!this.deps.canRequestBattle) return BIGMAP_CAMP_QUERY_TEXT.attackUnavailable;
         if (!info) {
             //详情查询与开战是独立协议；查询失败不能让开战入口永久不可用，资格以开战回包为准。
             return this.campDetailStatuses.get(campId) === 'failed' ? '' : BIGMAP_CAMP_QUERY_TEXT.pending;
@@ -1413,10 +1416,10 @@ export class BigMapModel {
             staminaCost: monster.staminaCost,
             respawnInSeconds,
             battle: monster.battle,
-            canAttack: (!!monster.offlineBattle || !!this.deps.startBattle && !!monster.battle)
+            canAttack: (!!monster.offlineBattle || !!this.deps.canRequestBattle && !!monster.battle)
                 && unlock.unlocked && respawnInSeconds === 0 && !this.isStartingBattle && !this.isDisposed,
             attackReason: !unlock.unlocked ? unlock.reason : this.isStartingBattle ? BIGMAP_BATTLE_TEXT.pending
-                : monster.battle && !this.deps.startBattle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : '',
+                : monster.battle && !this.deps.canRequestBattle ? BIGMAP_MONSTER_BATTLE_UNAVAILABLE : '',
         };
     }
 
@@ -1447,7 +1450,7 @@ export class BigMapModel {
         return best;
     }
 
-    async requestAttackCity(cityId: number): Promise<IBigMapActionFeedback> {
+    requestAttackCity(cityId: number): IBigMapAttackResult {
         if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
         if (!this.deps.campRepository) return this.attackCity(cityId);
         const view = this.cityView(cityId);
@@ -1457,7 +1460,7 @@ export class BigMapModel {
         return this.requestServerBattle(ZC_BATTLE_TYPE_SLG_CAMP, camp.campId);
     }
 
-    async requestAttackMonster(instanceId: number): Promise<IBigMapActionFeedback> {
+    requestAttackMonster(instanceId: number): IBigMapAttackResult {
         if (this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
         const site = this.worldInstance.monsters.find((item) => item.instanceId === instanceId);
         const monster = site ? this.config.monsters.get(site.monsterId) : null;
@@ -1469,20 +1472,16 @@ export class BigMapModel {
         return this.requestServerBattle(ZC_BATTLE_TYPE_SLG_MONSTER, monster.id);
     }
 
-    private async requestServerBattle(battleType: IZCSlgBattleType, targetConfigId: number): Promise<IBigMapActionFeedback> {
-        const start = this.deps.startBattle;
-        if (!start || this.isStartingBattle || this.isDisposed) return { ok: false, message: BIGMAP_BATTLE_TEXT.unavailable };
+    private requestServerBattle(battleType: IZCSlgBattleType, targetConfigId: number): IBigMapAttackResult {
+        if (!this.deps.canRequestBattle) return { ok: false, message: BIGMAP_BATTLE_TEXT.unavailable };
         this.isStartingBattle = true;
         this.emit();
-        try {
-            const result = await start(battleType, targetConfigId, () => !this.isDisposed);
-            return this.isDisposed ? { ok: false, message: BIGMAP_BATTLE_TEXT.closed } : result;
-        } catch {
-            return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
-        } finally {
-            this.isStartingBattle = false;
-            this.emit();
-        }
+        return { ok: true, message: '', battle: { battleType, targetConfigId } };
+    }
+
+    finishBattleRequest(): void {
+        this.isStartingBattle = false;
+        this.emit();
     }
 
     attackCity(cityId: number): IBigMapActionFeedback {

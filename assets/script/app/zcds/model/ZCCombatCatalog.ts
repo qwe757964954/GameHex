@@ -102,6 +102,8 @@ export interface ZCAttackProfile {
     impactEffectAnchor?: number;
     /** area 持续秒数；0=一次性。*/
     durationSeconds?: number;
+    /** 贯穿/穿透射程（逻辑距离）。配置了该值时终点沿目标方向延伸此射程并穿透路径上的敌人。*/
+    penetrateRange?: number;
     waves?: number;
     slowRatio?: number;
     /** 命中单位后施加的状态 id（pvpStatus.statusId）；不填=不施加。直伤/弹道命中均生效。*/

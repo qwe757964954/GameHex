@@ -14,7 +14,7 @@ import {
     Vec3,
     view,
 } from 'cc';
-import type { EffectAsset, Material, SpriteFrame } from 'cc';
+import type { EffectAsset, SpriteFrame } from 'cc';
 import {
     HEX_GRID_CONTENT_LIFT,
     HEX_GRID_FACE_HEIGHT,
@@ -54,7 +54,6 @@ import {
     territoryChestHintCell,
     territoryPrerequisiteChestCell,
 } from '../model/TerritoryChestHint';
-import { territoryLevelBubbleText } from '../model/TerritoryLevelBubble';
 import {
     territoryNodeGreyCells,
     territoryNodeLockCells,
@@ -105,14 +104,10 @@ import {
 import { territoryHexRecolorDelays } from '../model/TerritoryHexRecolor';
 import { TerritoryCloudView, type ITerritoryCloudFrames } from './TerritoryCloudView';
 import { territoryCloudPocketCells } from '../model/TerritoryCloud';
-import {
-    TERRITORY_COLORS,
-    TERRITORY_STATION_STATE,
-    territoryBossTint,
-    territoryStationTint,
-    territoryUnboundTint,
-} from './TerritoryTheme';
+import { TERRITORY_COLORS } from './TerritoryTheme';
 import type { ITerritoryStationState } from '../application/TerritoryViewState';
+import type { ITerritoryMapArt } from './TerritoryMapArt';
+import { buildScaleOf, stationIconOf, stationRenderOf } from './TerritoryStationPresentation';
 
 const { ccclass, property } = _decorator;
 
@@ -142,207 +137,6 @@ export const TERRITORY_START_BUBBLE_TEXT = '章节';
 export { TERRITORY_ASYNC_PVP_BUBBLE_TEXT } from '../model/TerritoryLevelBubble';
 
 /** 地图渲染需要的建筑帧（页面持有更全的一套，多出的字段不影响结构类型兼容）。 */
-export interface ITerritoryMapArt {
-    readonly monsterPrefabs?: ReadonlyMap<number, Prefab>;
-    /** 巡逻野怪的体型系数（`monsterCard.prefabSize`，键 = `monsterCard.id`）；缺省按 1。 */
-    readonly monsterPrefabSizes?: ReadonlyMap<number, number>;
-    /**
-     * 巡逻宝箱怪「红色描边」副本用的材质（`shaders/unit-outline-copy`）。
-     *
-     * 与战斗内 `ZCUnitView` 的整体外轮廓同一份 shader / 同一份材质构建方式；
-     * `null` = shader 没加载到 ⇒ 只压暗、不描边（宁可少一圈边，也不能出现放大的红色怪）。
-     */
-    readonly monsterOutlineMaterial?: Material | null;
-    /** 地图底图（`MapLayer/MapBackground` 的帧；null = 保持 prefab 默认）。 */
-    readonly background: SpriteFrame | null;
-    /**
-     * **未通关**格的地皮：`img_land_02` 泥土块。
-     *
-     * 换口径：地皮按「通关 / 未通关」二选一，**不再三色染色**。
-     * 未解锁、已解锁未通关、中立格**共用这一张** —— 「这一格有东西可打」由叠在上面的
-     * `frameBoss/frameStage/frameAsyncPvp/frameChest` 表达，不靠地皮区分。
-     */
-    readonly tileLocked: SpriteFrame | null;
-    /** **已通关**格的地皮：`img_land_01` 草地块。 */
-    readonly tileCleared: SpriteFrame | null;
-    /**
-     * **被锁住**（前置没满足 / 随机格四周没开）那一格的地皮：`img_land_01_gray` 灰版。
-     *
-     * 需求 「未解锁的地块整个地块图片都置灰，等切换成可激活（银币 icon + 数字）
-     * 时再重新加载颜色」。**只换图不染色** —— 与 「成品图自带明暗，再乘色会发脏」
-     * 同一条理由（乘灰只会把泥土压得更黑，读不出"灰"）。
-     *
-     * 取不到 ⇒ 退回 {@link tileLocked}（宁可这一格不置灰，也不能没地皮）。
-     * 这张灰图是**旧的 130×119**（新地皮是 126×117），比邻居每边多 2px。锁着的格
-     * **不画格面框**（框只给「已解锁未通关」），所以 126→130 那套"框缩在格子中间"的问题
-     * 在这里不成立；真要修的是美术补一张 126×117 的灰版。
-     */
-    readonly tileGrey?: SpriteFrame | null;
-    /**
-     * 未解锁格的锁标（`image/territory/icon_lock`，31×43 原样显示）。
-     *
-     * 画在「露出来 + 还没开」的格上（见 {@link TerritoryMapView} 的 `isHexLockCell`），
-     * 不区分这一格有没有建筑/价格 —— 锁只说明「没开」。
-     * 取不到就整支不显示 —— 不要退回别的图标（别的锁图尺寸/配色都对不上泥土台面）。
-     */
-    readonly lockIcon: SpriteFrame | null;
-    /**
-     * 「已解锁但还没通关」的**格面高亮框**，按站点类型四选一；通关后一律摘掉。
-     *
-     * 四张框都是 124×92 的六边形描边图，**贴地皮、不贴建筑** —— 它作为格子节点的子节点
-     * （`Frame`）渲染，所以天然在建筑图标之下、地皮之上。
-     */
-    readonly frameBoss: SpriteFrame | null;
-    /**
-     * 普通关卡（`stage`）的框。
-     *
-     * **与首领同图（红）**：原来的 `frame_03` 紫框已被用户否掉。
-     * 映射表里 `stage` 仍然指向这个槽位，换图只发生在 `TerritoryPageAssets` 的加载路径上。
-     */
-    readonly frameStage: SpriteFrame | null;
-    /** 异步关卡（`asyncPvp`）的框。 */
-    readonly frameAsyncPvp: SpriteFrame | null;
-    /** 宝箱（`fixedResource`）的框。 */
-    readonly frameChest: SpriteFrame | null;
-    readonly start: SpriteFrame | null;
-    readonly stage: SpriteFrame | null;
-    readonly boss: SpriteFrame | null;
-    /**
-     * **已无渲染消费者**。
-     *
-     * `asyncPvp` 并入「只有配了 `buildingId` 才画建筑」的口径后，这张固定图不再被任何分支取用
-     * （`TERRITORY_SITE_ART` 里那条映射已不可达）。暂不删：它同时是 `build.json` 里 `69002`
-     * 的贴图来源，删字段要连 `loadTerritoryBattleArt` 的 `Promise.all` 一起改（两处一起改，
-     * 否则漏一处只会在运行期报 `Bundle resources doesn't contain`）。
-     */
-    readonly asyncPvp: SpriteFrame | null;
-    readonly fixedResource: SpriteFrame | null;
-    /**
-     * **已不是随机格的外观来源**。
-     *
-     * 随机格改成**逐格**取建筑（`randomSites.buildingIds[cellId]` → `buildFrames`），
-     * 没配 id 的开启格只显示绿色地块、不给建筑图 ⇒ 这张固定图**没有渲染消费者了**。
-     *
-     * 暂不删：`territory_random_resource_v1` 同时是 `build.json` 里 `69006` 的贴图来源，
-     * 删字段会连带要从 `loadTerritoryBattleArt` 的 `Promise.all` 里摘掉那一项。
-     * 真要清理时**两处一起改**，否则会漏。
-     */
-    readonly randomResource: SpriteFrame | null;
-    readonly randomSilverIcon: SpriteFrame | null;
-    /**
-     * 固定宝箱格「**可激活**」时压在价格行上方的那颗宝箱图标：
-     * `image/territory/icon_baoxiang`（58×45）。
-     *
-     * 需求 （附美术效果图）：`fixedResource` 格可激活时，价格行照旧是
-     * `银币 icon + 数字`，**上面再加一颗宝箱 icon**（两行整块居中，排版见
-     * `model/TerritoryConditionBadge`）。银币不足只染数字那条规则不变。
-     *
-     * **未解锁（前置没满足 / 还没开）的宝箱格不传** —— 「仍然只显示锁 icon」。
-     * 取不到这张图 ⇒ 退回旧版只有价格行，不阻断对局。
-     */
-    readonly chestIcon?: SpriteFrame | null;
-    /**
-     * 固定宝箱提示气泡里的**体力图标**。
-     *
-     * 与随机格的银币图标同一套取图口径（`roleProperty` 的 `图标_体力`）；取不到就退化成
-     * **纯数字气泡**（见 `TerritoryStationView.renderLevelBubble` 的降级分支），不会没气泡。
-     */
-    readonly staminaIcon?: SpriteFrame | null;
-    readonly bonus: SpriteFrame | null;
-    /**
-     * 关卡编号气泡底图（**已通关**，蓝 `image/spawn-region/frame_03`）。
-     *
-     * 气泡按「通没通过」二选一 —— 已通关蓝 / 未通关红，判据是 `progress.isAreaPassed`。
-     * 初始点位「章节」也用这一张，跟「已通关」同色。
-     */
-    readonly levelBubbleFrame?: SpriteFrame | null;
-    /**
-     * 关卡编号气泡的**未通关**槽位（红 `image/spawn-region/frame_02`）。
-     *
-     * 取不到时回退 {@link levelBubbleFrame}：宁可蓝一下，也不能没气泡 ——
-     * 编号是这一格唯一的关卡标识（`stationRenderOf` 里做兜底）。
-     */
-    readonly levelBubblePendingFrame?: SpriteFrame | null;
-    readonly pvpBubblePortrait?: SpriteFrame | null;
-    /**
-     * **宝箱提示气泡**的底图（新美术 `image/spawn-region/frame_04`，77×87 竖向水滴）。
-     *
-     * 需求 宝箱气泡改用它，且内部排版是「icon 在上、数字在下」两行 ——
-     * 与关卡编号那颗 94×45 胶囊完全不同（见 `model/TerritoryChestBubble`）。
-     * 取不到时回落 {@link levelBubbleFrame}：宁可样子旧一点，也不能让宝箱没有提示。
-     */
-    readonly chestBubbleFrame?: SpriteFrame | null;
-    /**
-     * **建筑表按 `buildId` 查到的帧**（`buildId` → 帧）。
-     *
-     * 这一路优先于上面那组「按站点类型固定取图」的字段：外观由**地图 JSON 配的 `buildingId`**
-     * 决定（口径「地图编辑配置哪个 id 就用哪个 id」）。
-     * 查不到 / 没配 id 才回退到 `TERRITORY_SITE_ART` 那套。
-     */
-    readonly buildFrames?: ReadonlyMap<number, SpriteFrame | null>;
-    /**
-     * `buildId → buildSize`（表的「模型大小」，缺省 1）。
-     *
-     * 与 {@link buildFrames} 分开查：帧负责「画哪张图」，倍率负责「这张图多大」。
-     * 查不到 / 缺省一律按 1 —— 与引入该字段之前的表现完全一致。
-     */
-    readonly buildScales?: ReadonlyMap<number, number>;
-    /**
-     * 巡逻宝箱**锚点格**的模型图（闭合）：`monsterBoxLv`(1~4) →
-     * `territory_monsterBox_L{lv}`（212×212，与其它建筑同规格）。
-     *
-     * 只有锚点格（带 `patrolId` 的那格）画；兄弟格仍然不画 —— 与关卡 / 异步据点
-     * 「一片区域只在一格长建筑」同一条口径。
-     * 缺省 / 空表 ⇒ 不画宝箱（老夹具与「图还没加载」等价，不阻断对局）。
-     */
-    readonly patrolChestFrames?: ReadonlyMap<number, SpriteFrame | null>;
-    /** 同一角色的**开盖**版：本片挑战通过后换这张（`territory_monsterBoxOpen_L{lv}`）。 */
-    readonly patrolChestOpenFrames?: ReadonlyMap<number, SpriteFrame | null>;
-    /**
-     * 巡逻宝箱模型图的**体量倍率**（乘在「可见宽归一」之上，缺省 1）。
-     *
-     * 由 `TerritoryPageAssets` 从 `TERRITORY_MONSTER_BOX_ART_SCALE` 透传 —— 视图不 import 那份常量，
-     * 是为了不让 `TerritoryMapView` 再多一个依赖（每个 VM 桩表都得跟着补，纯属噪音）。
-     */
-    readonly patrolChestIconScale?: number;
-}
-
-/**
- * 站点类型 → 建筑帧字段（换新美术：关卡建筑图按类型分）。
- *
- * 起始格（`startCellId`）**不在 `sites` 里**，单独走 `start`。
- * 改建筑外观只需动两处：这里的字段名 + `TerritoryPageAssets.loadTerritoryBattleArt` 的加载路径。
- */
-/**
- * 只允许指向「单个 SpriteFrame 字段」。
- *
- * 不能直接写 `keyof ITerritoryMapArt` —— `ITerritoryMapArt` 新增了 `buildFrames`（一张
- * `ReadonlyMap`），`keyof` 会把它算进来，于是 `art[TERRITORY_SITE_ART[type]]` 的类型变成
- * `SpriteFrame | ReadonlyMap<…>`，`stationIconOf` 的返回类型就跟着不匹配（TS2322）。
- * 用 `Exclude` 按「值的类型不是 SpriteFrame」排除，比条件类型直观。
- */
-type TerritorySiteArtKey = Exclude<
-    keyof ITerritoryMapArt,
-    { [K in keyof ITerritoryMapArt]: ITerritoryMapArt[K] extends SpriteFrame | null ? never : K }[keyof ITerritoryMapArt]
->;
-
-/**
- * 站点类型 → 建筑帧字段（按 type 取图的那条**兜底**路径）。
- *
- * 只有 `fixedResource` / `bonus` 会真的走到这里：`stage` / `boss` / `asyncPvp`
- * 在 `stationIconOf` 里就「没配 `buildingId` ⇒ `return null`」早退了，映射表里那三条
- * **不可达**（保留是为了类型完整 + 万一口径再放宽时不用回来补表）。
- * 改建筑外观只需动两处：这里的字段名 + `TerritoryPageAssets.loadTerritoryBattleArt` 的加载路径。
- */
-const TERRITORY_SITE_ART: Readonly<Record<TerritorySiteType, TerritorySiteArtKey>> = {
-    stage: 'stage',
-    boss: 'boss',
-    asyncPvp: 'asyncPvp',
-    fixedResource: 'fixedResource',
-    bonus: 'bonus',
-    patrolChest: 'fixedResource',
-};
-
 /**
  * 「已解锁未通关」站点类型 → 格面高亮框字段（定：框放**立体格子上**）。
  *
@@ -474,6 +268,7 @@ interface ITerritoryChestCameraBase {
 
 /** 一次完整的地图渲染输入（纯数据 + 只读状态查询）。 */
 export interface ITerritoryMapRenderInput {
+    readonly chapterId: number;
     readonly isInitialCellSync?: boolean;
     readonly monsterPatrols?: readonly ITerritoryMonsterPatrol[];
     /**
@@ -547,6 +342,15 @@ export interface ITerritoryMapRenderInput {
      * 「通过的动画只有首次通关章节播放，切换章节后获取到通过状态也不用播放」。
      */
     readonly chapterClearPending: boolean;
+    /**
+     * 左上角玩家卡的**玩家本人头像**（未通关 PVP 的气泡用它代替旧英雄头像）。
+     *
+     * 与 `MainResBar` 同源（`HeadArt.loadHeadFrame(role.img)`）；页面异步取，取不到时
+     * PVP 气泡退回原「PVP」文字胶囊 —— 气泡文案与点击都不受影响。
+     */
+    readonly playerPortrait?: SpriteFrame | null;
+    /** 玩家等级（PVP 气泡左下角的等级角标；≤0 不显示）。 */
+    readonly playerLevel?: number;
 }
 
 /**
@@ -688,7 +492,7 @@ export class TerritoryMapView extends Component {
     /** 起始格单独一个实例：唯一、不可点、不参与池化。 */
     private startView: TerritoryStationView | null = null;
     /** 上一次渲染的地图标识；变了才重建格子（同一章内每秒 tick 只更新站点状态）。 */
-    private gridKey = '';
+    private gridLayout: ITerritoryMapLayout | null = null;
     private stationLayers: ITerritoryStationLayers | null = null;
 
     /**
@@ -1049,11 +853,21 @@ export class TerritoryMapView extends Component {
     }
 
     protected onDestroy(): void {
+        // 地图比页面先销毁，覆盖层却挂在地图节点之外。由持有者在这里收尾。
+        this.scrollLock = null;
+        this.heroRewardLandedHandler = null;
+        this.disposeRewardFxLayer();
         this.monsterPatrolView?.clear();
         // 过场云盖层自己持着帧引用（`TerritoryBattleCover.held`，跨流程交接时那几帧比页面活得久）。
         // 页面都没了就要还回去，否则这一屏云图永远掉不出引用计数。
         this.battleCover?.dispose();
         this.battleCover = null;
+        if (this.overlayHost?.isValid) {
+            // 销毁时只取消开箱回调与表现，镜头和滚动容器也正在退出。
+            this.chestView?.setCameraHook(null);
+            this.chestView?.stop();
+            this.overlayHost.destroy();
+        }
     }
 
     initialize(): void {
@@ -1226,6 +1040,23 @@ export class TerritoryMapView extends Component {
      * 地图在 ScrollView 里滚动、章节之间布局尺寸也不同，只有引擎的矩阵是权威。
      * 拿不到节点 / 变换时返回 `null`（调用方直接跳过这次表现，不猜一个坐标）。
      */
+    /**
+     * 格心（台面中心）→ **世界坐标**。
+     *
+     * 给跨宿主的表现用：战斗掉落宝箱从地图上的 PVP 格起飞、落到 `ArenaRoot/BottomHud`
+     * 里的 `ChestEntry`，起点与终点必须用**同一个宿主**再换算一次（见 `ChestDropFlightView`）。
+     * 拿不到节点 / 变换时返回 `null`（调用方自己兜底，不猜一个坐标）。
+     */
+    cellWorldPoint(cellId: number): Vec3 | null {
+        const hex = this.hexNodes.get(cellId);
+        if (!hex?.isValid) return null;
+        const hexTransform = hex.getComponent(UITransform);
+        if (!hexTransform) return null;
+        // `HEX_GRID_CONTENT_LIFT` = 锚点与"人眼看到的台面中心"的差（见 `cellCenter`）。
+        return hexTransform.convertToWorldSpaceAR(
+            new Vec3(0, HEX_GRID_CONTENT_LIFT, 0), new Vec3());
+    }
+
     private cellPointInOverlay(cellId: number): Vec3 | null {
         return this.cellPointInNode(cellId, this.ensureOverlayHost());
     }
@@ -1237,13 +1068,9 @@ export class TerritoryMapView extends Component {
      * 其它全屏表演仍走 {@link cellPointInOverlay}，不受影响。
      */
     private cellPointInNode(cellId: number, host: Node): Vec3 | null {
-        const hex = this.hexNodes.get(cellId);
-        if (!hex?.isValid) return null;
-        const hexTransform = hex.getComponent(UITransform);
+        const world = this.cellWorldPoint(cellId);
         const hostTransform = host.getComponent(UITransform);
-        if (!hexTransform || !hostTransform) return null;
-        // `HEX_GRID_CONTENT_LIFT` = 锚点与"人眼看到的台面中心"的差（见 `cellCenter`）。
-        const world = hexTransform.convertToWorldSpaceAR(new Vec3(0, HEX_GRID_CONTENT_LIFT, 0));
+        if (!world || !hostTransform) return null;
         return hostTransform.convertToNodeSpaceAR(world, new Vec3());
     }
 
@@ -1473,7 +1300,7 @@ export class TerritoryMapView extends Component {
         // 开演即锁输入（§4）：表演挂在**页面坐标**上，而地图是 ScrollView content，
         // 播放期间拖动一次地图，宝箱就会和地块错位（实机 screenshot-3）。
         if (started) {
-            this.setInputLocked(true);
+            this.syncInputLock();
             // 摘掉地图上那只（见 `chestPlayingCell`：不摘会在收尾淡出时透出来）。
             this.chestPlayingCell = cellId;
         } else {
@@ -1489,8 +1316,8 @@ export class TerritoryMapView extends Component {
         return this.chestView?.isPlaying === true;
     }
 
-    /** 立刻收掉开箱表演（换章 / 页面销毁前）。同时解锁输入（打断也要放开，否则页面点不动）。 */
-    stopChestPlay(): void {
+    /** 在地图仍可用时结束表演，归位镜头并重新计算输入锁。 */
+    private stopChestPlay(): void {
         this.chestView?.stop();
         // 表演被打断（换章 / 页面销毁）⇒ 待起飞的改道奖励也作废，别带进下一场。
         this.chestHeroFlight = null;
@@ -1500,7 +1327,7 @@ export class TerritoryMapView extends Component {
         // 真正把 position / scale 写回基准的是这一句；带着放大 + 平移过的 content 去开 `ScrollView`，
         // 之后的拖拽边界会按错的尺寸算（见 §3.1.1）。
         this.restoreChestCamera();
-        this.setInputLocked(false);
+        this.syncInputLock();
         // 地图上那只宝箱要还回来：被打断时进度没变，格子还是"可领取"。
         this.chestPlayingCell = null;
     }
@@ -1527,7 +1354,7 @@ export class TerritoryMapView extends Component {
         this.battleApproach = { elapsed: 0, origin: point };
         // 推镜期间锁输入：地图是 ScrollView content，推着的时候被拖一下，格心与屏幕就对不上了
         // （与开箱同一条理由，见 §3.4）。
-        this.setInputLocked(true);
+        this.syncInputLock();
         this.applyChestCamera(1, 0, point);
         return true;
     }
@@ -1602,7 +1429,7 @@ export class TerritoryMapView extends Component {
             anchor: point,
         };
         this.previewCinemaHold = new Set(added);
-        this.setInputLocked(true);
+        this.syncInputLock();
         this.applyChestCamera(1, 0, point);
     }
 
@@ -1820,7 +1647,7 @@ export class TerritoryMapView extends Component {
         this.battleIntroOrigin = center;
         this.battleIntroActive = true;
         // 过场期间地图是 ScrollView content，拖着走格心就对不上了（与开箱同一条理由）。
-        this.setInputLocked(true);
+        this.syncInputLock();
         if (!this.battleIntroOpacity?.node?.isValid) {
             this.battleIntroOpacity = this.node.getComponent(UIOpacity) ?? this.node.addComponent(UIOpacity);
         }
@@ -1891,8 +1718,7 @@ export class TerritoryMapView extends Component {
         this.battleIntroOrigin = null;
         // 必须在放开输入锁**之前**还原：滚动容器要按 content 的真实尺寸算拖拽边界。
         this.restoreChestCamera();
-        this.preludeLocked = false;
-        this.setInputLocked(false);
+        this.syncInputLock();
     }
 
     /** 整页过场是否在演（页面 / 用例可读）。 */
@@ -1992,7 +1818,8 @@ export class TerritoryMapView extends Component {
      *
      * 用「标志位 + 一个回调」而不是 `node.active` 之类：锁只影响输入，地图与 UI 必须照常渲染。
      */
-    setInputLocked(locked: boolean): void {
+    private syncInputLock(): void {
+        const locked = this.cameraBusyLocked || this.preludeLocked || this.chapterSwitchActive;
         if (this.inputLocked === locked) return;
         this.inputLocked = locked;
         this.scrollLock?.(locked);
@@ -2012,8 +1839,7 @@ export class TerritoryMapView extends Component {
      */
     setPreludeLock(locked: boolean): void {
         this.preludeLocked = locked === true;
-        if (this.preludeLocked) this.setInputLocked(true);
-        else if (this.inputLocked && !this.cameraBusyLocked) this.setInputLocked(false);
+        this.syncInputLock();
     }
 
     // ============================================================
@@ -2032,8 +1858,7 @@ export class TerritoryMapView extends Component {
      */
     setChapterSwitchActive(active: boolean): void {
         this.chapterSwitchActive = active === true;
-        if (this.chapterSwitchActive) this.setInputLocked(true);
-        else if (this.inputLocked && !this.cameraBusyLocked && !this.preludeLocked) this.setInputLocked(false);
+        this.syncInputLock();
     }
 
     /**
@@ -2275,9 +2100,7 @@ export class TerritoryMapView extends Component {
         // `stop()` 不走 `onDone`，锁必须由「还在不在播」这个状态来释放，才不会有漏放的路径。
         // 前奏那把锁例外：它由页面在"生成 / 推镜"之间显式开关（`setPreludeLock`）。
         // 切章转场同理（`setChapterSwitchActive`）：云盖层不写 `MapLayer`，`cameraBusy` 判不出来。
-        if (this.inputLocked && !cameraBusy && !this.preludeLocked && !this.chapterSwitchActive) {
-            this.setInputLocked(false);
-        }
+        this.syncInputLock();
         // 表演结束 ⇒ 解开"摘掉地图宝箱"的标记（结算已经把进度改成已领取，格子自然不再画宝箱；
         // 若是被打断/降级导致没结算，这里也让宝箱回到格子上）。
         if (this.chestPlayingCell !== null && !this.chestView?.isPlaying) this.chestPlayingCell = null;
@@ -2504,6 +2327,10 @@ export class TerritoryMapView extends Component {
      * （下一帧才被隐藏、要等 0.7s 再长出来）。
      */
     renderMap(input: ITerritoryMapRenderInput): void {
+        const previous = this.lastRenderInput;
+        if (previous && (previous.chapterId !== input.chapterId || previous.layout !== input.layout)) {
+            this.resetChapterPresentation();
+        }
         this.lastRenderInput = input;
         // 「预告首领关」过场：起演判定必须排在**画格子之前** —— 它要先把这一批新披露的格压住，
         // 否则第一帧云就散了、地块就长完了，镜头再推过去只剩静态地形（见 `previewCinemaHold`）。
@@ -2664,7 +2491,7 @@ export class TerritoryMapView extends Component {
             // 对焦点也只取一次：`mapCenterInOverlay` 量的是**当前世界位置**，镜头一动它每帧都在变，
             // 每帧重量就成了"追着自己跑"的反馈环。
             this.cloudDollyOrigin = center;
-            this.setInputLocked(true);
+            this.syncInputLock();
             this.cloudDollyStarted = true;
         }
         const zoom = this.clouds.dollyZoom;
@@ -2792,15 +2619,8 @@ export class TerritoryMapView extends Component {
      * 章节之间行列数常常不同，交界处会有一批新格子与一批废弃格子；diff 只动差异部分，
      * 重叠的 cellId 连节点实例都保持不变。
      */
-    private syncGrid(input: ITerritoryMapRenderInput): void {
-        const key = `${input.layout.points.size}|${input.layout.width}|${input.layout.height}`;
-        if (key === this.gridKey) {
-            this.paintHexes(input);
-            return;
-        }
-        this.gridKey = key;
-        // 换图（换章 / 改布局）：格子节点会被重建 ⇒ 先把在播的翻格复位，并重新做一次
-        // 「已开启」快照，免得新图的首帧把历史已开启格全当成刚翻开。
+    private resetChapterPresentation(): void {
+        // 章节快照和动画状态按 cellId 保存，切章后这个编号会指向另一格。
         this.hexFlip.reset();
         // 生成动画同理：格子节点要重建，按压缩放 / 半透明留在旧节点上会「烂掉一格」；
         // 快照一并作废 ⇒ 新图首帧只做快照，不会把整张图当成"刚生成"。
@@ -2809,11 +2629,7 @@ export class TerritoryMapView extends Component {
         // 破冰标志一并作废 ⇒ 新图首帧只做快照，不会把整张图当成"刚通关"。
         this.hexRecolor.reset();
         this.recolorBootstrapped = false;
-        // 云跟着重建：换章后 cellId 换了含义，留着旧图的云会飘在错误的格位上。
-        // 这里排在本帧 `syncContentSize`（`setFillArea`）**之后** ⇒ 铺满层刚按新尺寸建好
-        // 就被清空了。补回来的是紧随其后的 `syncClouds`：它因为 `cloudCellsKey` 被清空
-        // 而必然喂一次 `setFillOccupied`（判据见 `TerritoryCloudView.setFillOccupied`，
-        // 那张"chapter02 整片裸底图"就是这条链子断了）。
+        // 旧章地图云清空；切章转场的云盖由页面驱动，继续盖到新章就绪。
         this.clouds.reset();
         this.cloudCells.length = 0;
         this.cloudCellsKey = '';
@@ -2834,16 +2650,15 @@ export class TerritoryMapView extends Component {
         this.ghostWanted.clear();
         this.ghostPreviewSet.clear();
         this.resetGains();
-        // 覆盖层那两套也要收：格子节点会被重建 / 复用，按压缩放留在旧节点上就会「烂掉一格」。
-        this.chestView?.stop();
-        // 换章时把战斗过场一并作废：格子节点会被重建，半路的 scale/focus 留在新图上就是"地图歪着"。
-        this.battleApproach = null;
         // 「预告首领关」过场同理：被压住的格、镜头基准、已看快照都要作废，否则新图首帧会
         // 带着旧图的"压住集合"渲染（表现为新章前几格永久不出现）。
         this.cancelPreviewCinema();
+        this.clearGhosts();
+        for (const lock of this.hexLocks.values()) lock.node.active = false;
+        this.monsterPatrolView?.clear();
         // 整页过场同理（云盖层是真的盖住整屏，不作废会一直挡着新章节）。
         this.endBattleIntro();
-        this.restoreChestCamera();
+        this.stopChestPlay();
         // 网格被重建 ⇒ 上一条转场留下的位移没有意义了（新图要按自己的基准摆）。
         // 转场本身在 `renderAll` **之后**才重新写偏移，所以这里归零不会打架。
         this.resetChapterSwitchOffset();
@@ -2862,6 +2677,14 @@ export class TerritoryMapView extends Component {
         // 待办建筑跟着作废：格子节点会被重建，留着会让新图上的同名格「永远等一个不会播完的翻转」。
         this.pendingBuildingReveal.clear();
         this.pendingBuildingRender.clear();
+    }
+
+    private syncGrid(input: ITerritoryMapRenderInput): void {
+        if (input.layout === this.gridLayout) {
+            this.paintHexes(input);
+            return;
+        }
+        this.gridLayout = input.layout;
         const seen = new Set<number>();
         for (const [cellId, point] of input.layout.points) {
             seen.add(cellId);
@@ -2920,7 +2743,7 @@ export class TerritoryMapView extends Component {
 
     /** 已建出来的格子 id（按渲染顺序）。引导按「第一个还没拥有的」挑焦点。 */
     getCellIds(): readonly number[] {
-        return [...this.hexNodes.keys()];
+        return Array.from(this.hexNodes.keys());
     }
 
     /** 引导跟随真实格节点，位置与缩放仍由地图唯一维护。 */
@@ -3102,6 +2925,17 @@ export class TerritoryMapView extends Component {
      * 异步关卡 `frame_04` 金 / 宝箱 `fram_02` 蓝）。
      * 需求原文后半句「**通关了，fram 要去掉，用 img_land_01**」就是这里的 `passed ⇒ 不叠框`。
      */
+    private nodeLockInput: ITerritoryMapRenderInput | null = null;
+    private nodeLockCells: ReadonlySet<number> = EMPTY_CELL_SET;
+
+    private resolveNodeLockCells(input: ITerritoryMapRenderInput): ReadonlySet<number> {
+        if (this.nodeLockInput !== input) {
+            this.nodeLockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
+            this.nodeLockInput = input;
+        }
+        return this.nodeLockCells;
+    }
+
     private paintHexes(input: ITerritoryMapRenderInput): void {
         const revealed = this.resolveRevealedCells(input.revealedCells);
         const siteByCell = this.resolveSiteByCell(input.map.sites);
@@ -3114,7 +2948,7 @@ export class TerritoryMapView extends Component {
         // 不会出现锁和银币同时存在」）⇒ 组内任一格被卡住，锁都收敛到承载格，空地不画。
         // 战斗节点承载格 = 配 `buildingId` 的格；2026-11-20 起巡逻野怪片区承载格 =
         // 配 `patrolId` 的格（§3.48），两者都由 `territoryNodeCarrierByCell` 给出。
-        const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
+        const lockCells = this.resolveNodeLockCells(input);
         // 地皮置灰用的是**逐格**口径，不是上面那份"一个节点一把锁"的收敛集合：
         // 7 格的首领节点只有承载格画锁，但这 7 格都得灰 —— 只灰一格会读成"这格特殊"。
         // 还要铺开 `footprint`：`chapter_02` 起「一关 = 一块 5~10 格的 footprint」，模型只把
@@ -3137,7 +2971,13 @@ export class TerritoryMapView extends Component {
         const recolors: ITerritoryHexRecolorPending[] = [];
         for (const [cellId, node] of this.hexNodes) {
             node.active = revealed.has(cellId);
-            if (!node.active) continue;
+            if (!node.active) {
+                const lock = this.hexLocks.get(cellId);
+                if (lock) lock.node.active = false;
+                this.lockPops.delete(cellId);
+                this.unlockTransitions.delete(cellId);
+                continue;
+            }
             // `?.`：渲染输入的 `layout` 在「只测地皮/框」的用例里是缺的（它们不关心坐标）。
             const point = input.layout?.points?.get(cellId);
             // 节点内的地块统一用**代表格**的进度判状态：同一片 1-1 不许一格灰一格褐、
@@ -3255,6 +3095,8 @@ export class TerritoryMapView extends Component {
         if (!layer) {
             layer = new Node(TERRITORY_HEX_LOCK_LAYER);
             layer.layer = this.gridLayer.layer;
+            // 首次渲染已应用留白偏移，懒建的图层要立即跟地块层对齐。
+            layer.setPosition(0, this.gridLayer.position.y, 0);
             layer.setParent(parent);
             layer.addComponent(UITransform);
             // 新节点 append 在末尾（index 最大）⇒ 挪到气泡层当前下标 = 插在它前面（= 在气泡下层）。
@@ -3580,7 +3422,7 @@ export class TerritoryMapView extends Component {
         // 「上锁下方的银币与字就不要显示了」）。
         // 与 `paintHexes` 同源（同一份收敛结果）：锁与价格**互斥** ——
         // 组内任一格被卡住 ⇒ 锁落在承载格 ⇒ 承载格的价格整条摘掉，绝不会"锁 + 银币"并排。
-        const lockCells = territoryNodeLockCells(input.map.sites, input.lockBlockedCells);
+        const lockCells = this.resolveNodeLockCells(input);
         // 候选格循环里要按 cellId 多次判断，先各建一次 Set，避免逐格线性 includes。
         const openableCells = this.resolveOpenableCells(input.randomResourceOpenableCells);
         const pendingCells = this.resolvePendingCells(input.pendingRandomResourceCells);
@@ -3632,7 +3474,7 @@ export class TerritoryMapView extends Component {
             view.setMapPosition(center.x, center.y, 0);
             // 建筑体量倍率（表「模型大小」）在这里统一补：stationRenderOf 有 5 个 return 分支，
             // 逐个加字段容易漏；包一层只动一个点，且 site 本来就在手边。
-            const base = this.stationRenderOf(site, input, chestHintCell, mutedCells);
+            const base = stationRenderOf(site, input, chestHintCell, mutedCells);
             const performing = this.chestPlayingCell === site.cellId;
             // 上锁的格把「银币图标 + 数量」整条摘掉（`isCondition = false` ⇒ 视图把
             // `captionSprite` 与 `captionLabel` 两个节点都关掉，见 `TerritoryStationView.render`）。
@@ -3641,7 +3483,7 @@ export class TerritoryMapView extends Component {
             const content = {
                 ...base,
                 interactive: base.interactive && !hasPending,
-                iconScale: this.buildScaleOf(site, input.art),
+                iconScale: base.iconScale ?? buildScaleOf(site, input.art),
                 // 四棵棕榈（69010~69013）走「底边对齐格心」而不是居中 —— 与 `iconScale` 同源
                 // 判据（`site.buildingId` 在地图 JSON 里是**字符串**，必须 `Number(...)`）。
                 // 判定函数从 `TerritoryStationView` 引入，白名单只留一份（这里抄 id 会口径分裂）。
@@ -3813,7 +3655,7 @@ export class TerritoryMapView extends Component {
      * 虚影和实心建筑才会逐像素重合「不然大建筑会有错位」。
      */
     private renderGhost(site: TerritorySite, input: ITerritoryMapRenderInput, point: ITerritoryMapPoint): boolean {
-        const frame = this.stationIconOf(site, input.stageByCell.get(site.cellId) ?? null, input.art);
+        const frame = stationIconOf(site, input.stageByCell.get(site.cellId) ?? null, input.art);
         if (!frame) return false;
         const layer = this.ensureGhostLayer();
         const shell = this.ghostShell;
@@ -3842,7 +3684,7 @@ export class TerritoryMapView extends Component {
         view.render({
             site: null,
             icon: frame,
-            iconScale: this.buildScaleOf(site, input.art),
+            iconScale: buildScaleOf(site, input.art),
             // 与实心建筑同一条判据（棕榈那四棵树走底边对齐），否则虚影会比实心"浮"半格。
             bottomAnchor: territoryUsesBottomAnchor(Number(site.buildingId)),
             caption: '',
@@ -3867,6 +3709,7 @@ export class TerritoryMapView extends Component {
         if (!layer) {
             layer = new Node(TERRITORY_GHOST_LAYER);
             layer.layer = this.stationIconLayer.layer;
+            layer.setPosition(0, this.gridLayer.position.y, 0);
             layer.setParent(parent);
             layer.addComponent(UITransform);
             // 新节点 append 在末尾（index 最大）⇒ 挪到**价格层**当前下标就是"插在它前面"，
@@ -4075,16 +3918,20 @@ export class TerritoryMapView extends Component {
         const view = node.getComponent(TerritoryStationView);
         view.initialize(this.getStationLayers());
         // 站点点击不再逐节点挂监听：全局订阅 `STATION_TAP` 一次（见 `onEnable`）。
-        // 起始格（`ensureStartView` 走 `clickable = false`）本来就不发。
         this.stationViews.set(site.cellId, view);
         return view;
     }
 
-    /** 站点点击转发：站点节点事件 → 地图容器节点事件（页面在 `mapView.node` 上收）。 */
-    private readonly onStationClick = (event: { readonly target: TerritoryStationTarget }): void => {
+    /** 由当前地图审核站点或章节入口的点击，再派发对应意图。 */
+    private readonly onStationClick = (event: { readonly target: TerritoryStationTarget | null }, source?: object): void => {
+        if (source !== this.stationHitLayer) return;
         const site = event.target;
         // 表演期间的输入锁：直接吞掉（连点会再发一次解锁/领取请求，且动画位置会被刷新打断）。
         if (this.inputLocked) return;
+        if (site === null) {
+            EventMgr.instance.emit(TerritoryUiEvent.ChapterSelect);
+            return;
+        }
         // 点击反馈必须在**转发之前**播：页面收到事件会发请求，请求期间有全屏 loading 遮挡，
         // 反馈若排在后面就永远被挡住（等于没做）—— 规格要求「按下 0.1s 内看到反馈」。
         this.playTapFeedback(site.cellId);
@@ -4122,304 +3969,4 @@ export class TerritoryMapView extends Component {
         };
         return this.stationLayers;
     }
-
-    /**
-     * 站点 → 画法。**状态判定的唯一真源**就在这里，视图只收结果。
-     */
-    private stationRenderOf(
-        site: TerritorySite,
-        input: ITerritoryMapRenderInput,
-        /** 本轮唯一该挂气泡的宝箱格（`territoryChestHintCell` 的结果；`null` = 一个都不挂）。 */
-        chestHintCell: number | null = null,
-        /**
-         * 同一节点里**不承载 UI** 的格子（`territoryNodeMutedCells` 的结果）。
-         *
-         * 不传 = 空集合 = 保持现状（每个站点各自画自己的价格/编号），沙箱测试与老调用方零改动。
-         */
-        mutedCells: ReadonlySet<number> = EMPTY_CELL_SET,
-    ): ITerritoryStationRender {
-        const stage = input.stageByCell.get(site.cellId) ?? null;
-        const station = input.stationStates.get(site.cellId);
-        const isOpened = station.opened;
-        // 同一节点的「非建筑格」：**任何状态都不画任何 UI**（
-        // 「和 boss 关卡是同一个节点的地块都不显示 UI，只有建筑虚影上显示 UI
-        // （锁住的 icon 或者是银币 icon + 数字）」）。
-        // ⇒ 价格 / 编号气泡 / 建筑 / 锁**全部只落在承载格**上，兄弟格永远是空地。
-        // 第四 / 五轮曾两次放宽（「解锁后兄弟格还是要显示银币 icon 和数量」、
-        // 「兄弟格跟 30 样式一样」），两条都被本轮覆盖：同一关十几片褐色格各挂一条 35，
-        // 读起来就是"这一关要连续买十几次"。状态改由承载格一处表达。
-        // `interactive` 保持原样：这些格照样能点、照样扣银币解锁（§3.28「保留可点，照常解锁」），
-        // 消耗数字由点击后的确认弹窗承担。
-        if (mutedCells.has(site.cellId)) {
-            const mutedPending = station.pending;
-            return {
-                site,
-                icon: null,
-                caption: '',
-                // 地皮色是**地形**不是 UI：未解锁仍是泥土色，解锁后转草地（与承载格同一套 `isOpened` 判定）。
-                tint: isOpened ? TERRITORY_COLORS.cleared : TERRITORY_COLORS.locked,
-                badge: '',
-                isLoading: mutedPending,
-                interactive: !mutedPending,
-            };
-        }
-        if (!isOpened) {
-            const isOpenable = station.openable;
-            const isPending = station.pending;
-            // 「预告关卡节点，展示气泡提示（红色未通过的状态）」。
-            // 提前披露只改可见性 —— 这一格仍然走「未解锁」的锁 / 价格画法，气泡是**额外叠上去的**，
-            // 绝不因此放宽解锁、扣费、开战判据（模型侧 `territoryRevealedCells` 的口径一个字没动）。
-            // 四条判据同时成立才挂：
-            // ① 在 `previewCells` 里（披露序列 = 本章第 1 关 + 每个首领，见 `model/TerritoryPreview`）；
-            // ② 是战斗站点（stage / boss / asyncPvp），资源点与装饰格不挂编号；
-            // ③ 配了 `buildingId` 且查得到帧 = **虚影承载格**（`syncGhosts` 也只在这格画虚影）；
-            // ④ 能算出气泡文案（asyncPvp 恒 `PVP`，其余要绑到 campaign 行才有 `章节-关卡`）。
-            // ⇒ 一关 footprint 有 5~10 格，只有承载格挂一颗，不会满屏 `1-1`（§3.28 同口径）。
-            const isPreviewBattleSite = (input.previewCells ?? []).includes(site.cellId)
-                && station.battle
-                && !!site.buildingId
-                && territoryLevelBubbleText(site, stage) !== undefined;
-            // 站点自身 `icon` 必须是 null（未解锁不画实心建筑），但气泡要抬到**虚影建筑**顶上：
-            // 把虚影那张帧单独交给视图算可见高，别让它按「没有建筑 ⇒ height 0」把气泡压回格心。
-            const previewAnchor = isPreviewBattleSite
-                ? this.stationIconOf(site, stage, input.art) : null;
-            const previewBubble = isPreviewBattleSite && previewAnchor !== null;
-            return {
-                site,
-                icon: null,
-                isCondition: true,
-                isLoading: isPending,
-                conditionIcon: input.art.randomSilverIcon,
-                // 固定宝箱格可激活时在价格行**上方**再加一颗宝箱图标。
-                // 只给**普通宝箱**（`fixedResource`）：关卡 / 异步据点 / 随机格的格心只放价格，
-                // 别跟着长出一颗箱子；野怪宝箱（`patrolChest`）也不再长（它点开是去打野怪，
-                // 不画任何宝箱外观，见下面的宝箱分支）。
-                // 前置没满足的宝箱格走的是 `syncStations` 的 `locked` 分支（`isCondition = false`），
-                // 到这里的一定是「可激活」⇒ 天然满足「未解锁只显示锁」。
-                conditionChestIcon: site.type === TERRITORY_SITE_TYPE.fixedResource
-                    ? input.art.chestIcon ?? null
-                    : null,
-                conditionTextColor: station.silverRed
-                    ? TERRITORY_COLORS.randomConditionText : TERRITORY_COLORS.randomAvailableText,
-                // 预告关卡的红色编号气泡：文案复用 `model/TerritoryLevelBubble`，底图固定取
-                // 「未通关」红 `frame_02`（这一格本来就没通过）；红图缺失照旧回退蓝图，别让编号消失。
-                levelBubble: previewBubble ? territoryLevelBubbleText(site, stage) : undefined,
-                levelBubblePortrait: previewBubble && site.type === TERRITORY_SITE_TYPE.asyncPvp
-                    && input.art.levelBubblePendingFrame ? input.art.pvpBubblePortrait ?? null : null,
-                levelBubbleFrame: previewBubble
-                    ? input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null
-                    : undefined,
-                previewBubble,
-                levelBubbleAnchorFrame: previewAnchor,
-                caption: isPending
-                    ? ''
-                    : String(site.unlock.silverCost),
-                tint: isOpenable ? TERRITORY_COLORS.gold : TERRITORY_COLORS.locked,
-                badge: '',
-                interactive: !isPending,
-            };
-        }
-        // 宝箱格：普通宝箱（`fixedResource`）与野怪宝箱（`patrolChest`）共用**状态与交互**，
-        // 但外观分开 —— 见下面 `isPatrol` 那几处。
-        // 野怪宝箱点开是去打巡逻野怪（`battleIds` 那场），不是开箱领奖；
-        // 它**只在自己的锚点格**画模型（4 档专用图，见 `patrolChestIconOf`），不挂体力气泡。
-        if (isTerritoryChestSite(site)) {
-            const claimed = station.owned;
-            const pending = station.pending;
-            const isPatrol = site.type === TERRITORY_SITE_TYPE.patrolChest;
-            // 普通宝箱挂气泡提示（样式同「章节」那颗：同一张 `levelBubbleFrame` 蓝底、
-            // 同一套圆角与尾巴），内容是体力 icon + 消耗数；同屏只留一只（由 `chestHintCell` 给出那一格）。
-            // 野怪宝箱不挂：它的第二下是开战，格面只靠地块颜色表达状态。
-            const showHintBubble = !isPatrol && !claimed && chestHintCell === site.cellId;
-            // 普通宝箱领取后清除宝箱图，状态只由地块颜色表达；
-            // 野怪宝箱反而**靠这张图**说明「这里是巡逻宝箱」，通过后换开盖版、不摘图。
-            return {
-                site,
-                icon: isPatrol
-                    ? this.patrolChestIconOf(site, station, input)
-                    : claimed ? null : this.stationIconOf(site, null, input.art),
-                // 巡逻宝箱的体量单独压一档（开盖版顶满格子的问题，见 art 侧的常量注释）；
-                // 普通宝箱不传 ⇒ 视图按 1 处理，与改动前完全一致。
-                iconScale: isPatrol ? input.art.patrolChestIconScale ?? 1 : undefined,
-                isLoading: pending,
-                caption: '',
-                levelBubble: showHintBubble ? String(site.unlock.staminaCost) : undefined,
-                // 宝箱气泡用**专属新底图** `frame_04`（77×87 竖向水滴，指定），
-                // 不再借用关卡那颗 94×45 的蓝胶囊：形状与内部排版都不同（那张是横向一行，
-                // 这张是「icon 在上、数字在下」两行，见 `model/TerritoryChestBubble`）。
-                // 别按 `claimed` 去取未通关红 —— 这是**提示**不是「待挑战」，
-                // 宝箱本来就还没领，取红会读成"被打败了"。取不到新图才退回蓝胶囊。
-                levelBubbleFrame: showHintBubble
-                    ? input.art.chestBubbleFrame ?? input.art.levelBubbleFrame ?? null
-                    : undefined,
-                levelBubbleIcon: showHintBubble ? input.art.staminaIcon ?? null : undefined,
-                // 体力**不够**时这颗数字染红「对应的数字 UI 显示红色」。
-                // 只给气泡这一支，且只在气泡真的显示时才算 —— 其余格没有体力数字可染。
-                // 不要拿 `claimed` / `isOpenable` 判：这是"付不起"的提示，不是"被打了"的状态色。
-                levelBubbleTextColor: showHintBubble
-                    && station.staminaShort
-                    ? TERRITORY_COLORS.randomConditionText : undefined,
-                // 已领取（已通关）的固定资源点不再显示解锁消耗，用「已通关」绿与「可领取」区分开。
-                tint: claimed ? TERRITORY_COLORS.cleared : territoryStationTint(TERRITORY_STATION_STATE.available),
-                badge: '',
-                interactive: !claimed && !pending,
-            };
-        }
-        // 所有战斗站点（`stage` / `boss` / `asyncPvp`）都在这里：先解锁展示建筑，
-        // 已解锁再点击 ⇒ `CmdStartBattleReqMsg` 开战（**不发**通关）。
-        // 判定必须与 `TerritoryModel.selectSite` 的关卡分支**同口径**（都是站点类型），
-        // 之前两边都写的是「两步式名单 [327,328] 或 isBoss」⇒ 只有关卡 1 会长这样、能点下有反应，
-        // 其余关卡外观照旧却已经不可点 ⇒ 「外观说能打、点了没反应」。
-        if (station.battle) {
-            const isAsyncPvp = site.type === TERRITORY_SITE_TYPE.asyncPvp;
-            if (isAsyncPvp && !stage) {
-                const isUnlocked = station.unlocked;
-                const isOwned = station.owned;
-                return {
-                    site,
-                    icon: this.stationIconOf(site, null, input.art),
-                    levelBubble: !isOwned ? territoryLevelBubbleText(site, null) : undefined,
-                    levelBubbleFrame: !isOwned
-                        ? input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null : undefined,
-                    levelBubblePortrait: !isOwned && input.art.levelBubblePendingFrame
-                        ? input.art.pvpBubblePortrait ?? null : null,
-                    caption: '',
-                    tint: isUnlocked ? territoryBossTint()
-                        : isOwned ? TERRITORY_COLORS.owned : territoryStationTint(station.phase),
-                    badge: '',
-                    interactive: !isUnlocked && !isOwned,
-                };
-            }
-            // **区域口径**：327 与 328 同 `configId=10001`、打同一关卡
-            // ⇒ 任一格通关，整片都算已通关「327/328 算一起的」。
-            // 只查查询态、不动 `owned` 存储 —— 见 `TerritoryProgress.isAreaPassed` 注释。
-            const claimed = station.areaPassed;
-            const pending = station.pending;
-            return {
-                site,
-                icon: this.stationIconOf(site, stage, input.art),
-                // 美术稿是 `1-1`：连字符两侧**不留空格**。间距由 `MAP_MARKER_BADGE_SPACING_X` 控，
-                // 字符串里塞空格的话，换字号 / 换字体时那个空格宽度会跟着漂。
-                // 文案真源在 `model/TerritoryLevelBubble`（异步据点固定 `PVP`，其余拼编号）——
-                // 点击被前置挡住时的提示也调它，两处**必须同源**「名字同气泡文案」。
-                levelBubble: territoryLevelBubbleText(site, stage),
-                levelBubblePortrait: isAsyncPvp && !claimed && input.art.levelBubblePendingFrame
-                    ? input.art.pvpBubblePortrait ?? null : null,
-                // 气泡底图按「通没通过」二选一：未通关红 `frame_02` / 已通关蓝 `frame_03`。
-                // 判据必须用**区域口径** `isAreaPassed`（同 `configId` 的兄弟格共享通关状态）；
-                // 红图没加载到时回退蓝图，别让这一格连编号都没有。
-                levelBubbleFrame: claimed
-                    ? input.art.levelBubbleFrame ?? null
-                    : input.art.levelBubblePendingFrame ?? input.art.levelBubbleFrame ?? null,
-                isLoading: pending,
-                caption: '',
-                // 已通关不再显示解锁消耗，用「已通关」绿区分开（与 fixedResource 同口径）。
-                tint: claimed ? TERRITORY_COLORS.cleared
-                    : isAsyncPvp && station.unlocked
-                        ? territoryBossTint() : territoryStationTint(station.phase),
-                badge: '',
-                // 「点击已通过的关卡也可以打开【领地关卡信息弹窗】」。
-                // 原来这里写的是 `claimed ? isAsyncPvp : true` —— 打完的 `stage`/`boss` 直接不可点，
-                // 玩家想回头看一眼通关目标 / 占领奖励 / 敌军一览都点不开。
-                // 现在**已通关也可点**：`selectSite` 对已解锁 / 区域已通关的关卡一律只开弹窗
-                // （开战请求在 `handleBattleStationStart` 里另有守卫，不会误发）。
-                // 唯一不可点的情况是请求在途（`pending`，防连点；loading 遮挡是主防线）。
-                interactive: !pending,
-            };
-        }
-        if (!stage) {
-            return {
-                site,
-                icon: this.stationIconOf(site, null, input.art),
-                caption: '',
-                tint: station.owned
-                    ? TERRITORY_COLORS.owned
-                    : territoryUnboundTint(site.type),
-                badge: '',
-                interactive: true,
-            };
-        }
-        const state = station.phase;
-        return {
-            site,
-            icon: this.stationIconOf(site, stage, input.art),
-            caption: '',
-            tint: stage.isBoss && state !== TERRITORY_STATION_STATE.owned ? territoryBossTint() : territoryStationTint(state),
-            badge: '',
-            interactive: true,
-        };
-    }
-
-    /**
-     * 巡逻宝箱**锚点格**的模型图：`territory_monsterBox_L{lv}`，本片通过后换开盖版
-     * `territory_monsterBoxOpen_L{lv}`（4 档，212×212，与其它建筑同规格）。
-     *
-     * 三条口径，改之前先读：
-     * ① **只有锚点格画**（带 `patrolId` 的那格）。一片巡逻区 4~8 格，每格都画会长出一排箱子；
-     *    「一片区域只在一格长建筑」与关卡 / 异步据点同源（§3.48 / §3.49）。
-     * ② 等级取服务端快照 `station.monsterBoxLv`；快照还没到（`0`）按 1 档画 ——
-     *    锚点格先空着等数据，玩家会读到「这块地什么都没长」。
-     * ③ 通过判据用**片区口径** `patrolPassedCells`（同 `battleId` 任一格占点即整片通过），
-     *    不是逐格 `owned` —— 否则只有占点那格换开盖图，同片其余还是闭合。
-     *    取不到这份集合（老夹具）才退回 `station.owned`。
-     */
-    private patrolChestIconOf(
-        site: TerritorySite,
-        station: ITerritoryStationState,
-        input: ITerritoryMapRenderInput,
-    ): SpriteFrame | null {
-        if (!site.patrolId) return null;
-        const passed = input.patrolPassedCells?.has(site.cellId) ?? station.owned;
-        const frames = passed ? input.art.patrolChestOpenFrames : input.art.patrolChestFrames;
-        if (!frames) return null;
-        const lv = station.monsterBoxLv > 0 ? station.monsterBoxLv : 1;
-        return frames.get(lv) ?? null;
-    }
-
-    /**
-     * 站点转建筑帧。建筑外观以地图配置的 buildingId 为准。
-     *
-     * stage、boss、asyncPvp 只有配置 buildingId 且查得到帧时才画建筑；
-     * fixedResource 与 bonus 仍按类型取图，否则宝箱会集体消失。
-     * 是否解锁由 stationRenderOf 处理，本方法只判断该不该有建筑图。
-     */
-    private stationIconOf(
-        site: TerritorySite,
-        stage: TerritoryCampaignStage | null,
-        art: ITerritoryMapArt,
-    ): SpriteFrame | null {
-        const buildingId = Number(site.buildingId);
-        if (Number.isFinite(buildingId) && site.buildingId) {
-            const framed = art.buildFrames?.get(buildingId);
-            if (framed) return framed;
-        }
-        // 关卡 / 首领 / **异步据点**：没配 `buildingId`（或查不到帧）⇒ **返回 null，不画建筑**。
-        // 这里**不能**再往下 fallback 到 `TERRITORY_SITE_ART` ——
-        // 同一片战斗区域（相同 configId）里多个站点共用一张 type 图，
-        // 而 `stage` 的 type 图恰好就是 `69004` 查表得到的同一张
-        // ⇒「327 和 328 长得一样」，视觉上仍是「一片区域到处是建筑」。
-        // 「**异步战点也要跟 Boss 一样**，通关 / 解锁都是有建筑 id 才显示建筑」
-        // ⇒ `asyncPvp` 从「按 type 取图」并入本名单。chapter_01 的 16 个异步据点里只有 4 个配了
-        // `buildingId=69002` ⇒ 其余 12 个不再画建筑，只留格面框 + 「异步据点」文案。
-        // 连带 `TerritorySiteType` 的 type 回退现在**只服务 `fixedResource` / `bonus`**。
-        if (isTerritoryBattleSite(site)) return null;
-        if (stage?.isBoss) return art.boss ?? art.stage;
-        return art[TERRITORY_SITE_ART[site.type]] ?? art.stage;
-    }
-
-    /**
-     * 建筑体量倍率（表 `build.json` 的 `buildSize`，缺省 1）。
-     *
-     * 查表键与 `stationIconOf` 同一套口径：地图 JSON 的 `buildingId` 是**字符串**（`"69003"`），
-     * 不 `Number(...)` 归一就永远查不到，表现是「配了 buildSize 但外观没变」，零报错。
-     * 非法值（NaN / ≤0）一律按 1 —— 倍率 0 会让建筑凭空消失，也不报错。
-     */
-    private buildScaleOf(site: TerritorySite, art: ITerritoryMapArt): number {
-        const buildingId = Number(site.buildingId);
-        if (!Number.isFinite(buildingId) || !site.buildingId) return 1;
-        const scale = art.buildScales?.get(buildingId);
-        return Number.isFinite(scale) && (scale as number) > 0 ? (scale as number) : 1;
-    }
-
-
 }

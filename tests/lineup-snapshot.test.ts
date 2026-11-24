@@ -7,6 +7,7 @@ import {
     clearLineupSnapshot,
     normalizeLineupSnapshot,
     readLineupSnapshot,
+    saveLineupSnapshotPower,
     writeLineupSnapshot,
 } from '../assets/script/app/card/LineupSnapshot';
 import type { LineupSnapshotStorage } from '../assets/script/app/card/LineupSnapshot';
@@ -116,4 +117,19 @@ test('空卡组能存能读（玩家一键下阵后保存过）', () => {
     const snapshot = readLineupSnapshot(1_000, storage);
     assert.ok(snapshot);
     assert.equal(snapshot.cards.length, 0);
+});
+
+test('战力字段冷启动增强：可持久化并在快照中原样读回', () => {
+    const storage = new MemoryStorage();
+    writeLineupSnapshot([CARD('101')], new Map([['101', 3]]), 1_000, storage, 15980);
+    const snapshot = readLineupSnapshot(1_000, storage);
+    assert.ok(snapshot);
+    assert.equal(snapshot.power, 15980);
+
+    // saveLineupSnapshotPower 增量更新已存快照中的战力
+    saveLineupSnapshotPower(24500, storage);
+    const updated = readLineupSnapshot(1_000, storage);
+    assert.ok(updated);
+    assert.equal(updated.power, 24500);
+    assert.equal(updated.cards[0].id, '101');
 });

@@ -209,6 +209,16 @@ test('★★★留白是运行时值：视图两处尺寸计算都必须带上**
         '内容层偏移必须同时注入云层 —— 云洞层不在 MapLayer 的子树里，自己算会算成缺省值');
 });
 
+test('懒建的锁标层和预告建筑层在首次显示时继承地块层的留白偏移', () => {
+    for (const name of ['ensureHexLockLayer', 'ensureGhostLayer']) {
+        const at = MAP_VIEW_SRC.indexOf(`private ${name}(`);
+        assert.ok(at >= 0, `缺少 ${name}`);
+        const body = MAP_VIEW_SRC.slice(at, MAP_VIEW_SRC.indexOf('\n    }', at));
+        assert.match(body, /layer\.setPosition\(0, this\.gridLayer\.position\.y, 0\)/,
+            `${name} 创建图层时应与地块层在同一高度`);
+    }
+});
+
 test('★★★改留白必须走 setter（偏移要同步重写）', () => {
     for (const [name, field] of [
         ['setContentPaddingBottom(', 'this.contentPaddingBottom = value;'],

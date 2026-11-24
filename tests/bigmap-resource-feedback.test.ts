@@ -4,6 +4,7 @@ import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
 import * as feedbackReal from '../assets/script/app/main/MainResBarFeedback';
+import * as topHudTypes from '../assets/script/app/bigmap/view/BigMapTopHudTypes';
 
 class Vec { constructor(public x = 0, public y = 0, public z = 0) {} }
 class MockNode {
@@ -66,6 +67,8 @@ function loadFeedback(): any {
     runInNewContext(code, { exports, require: (id: string) => {
         if (id === 'cc') return { Color: MockColor, Label: MockLabel, Node: MockNode, UITransform: Transform };
         if (id.endsWith('/MainResBarFeedback')) return feedbackReal;
+        // 金额格式化已从反馈类搬到纯函数模块；这里加载真实实现，避免测试里再抄一份口径。
+        if (id.endsWith('/BigMapTopHudTypes')) return topHudTypes;
         return {};
     } });
     return exports;

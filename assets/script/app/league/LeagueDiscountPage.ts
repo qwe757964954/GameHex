@@ -384,7 +384,7 @@ export class LeagueDiscountPage extends PopupBase {
     /** 发一次砍价（`buy=false`）或购买（`buy=true`）。 */
     private async sendBargain(buy: boolean): Promise<void> {
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'bargain', buy } } satisfies ILeagueRewardIntent);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'bargain', buy } } satisfies ILeagueRewardIntent, this);
     }
 
     /** 「金币」—— 从 `roleProperty` 表取 `resId=10` 那行的 `name`，取不到退回空串。 */
@@ -420,8 +420,8 @@ export class LeagueDiscountPage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
-        if (event.owner !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
+        if (source !== this) return;
         try {
             await this.afterWrite(event.status);
         } finally {

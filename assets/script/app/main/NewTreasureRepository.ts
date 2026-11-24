@@ -16,10 +16,11 @@ import {
     CHEST_SLOT_COUNT,
     ChestSlotAction,
     ChestSlotState,
+    withChestActivationAvailability,
 } from './ChestTypes';
 
 import { READ_TIMEOUT_MS_SLOW as READ_TIMEOUT_MS, WRITE_TIMEOUT_MS } from '../net/Timeouts';
-type Result = 'ok' | 'offline' | 'failed' | 'protocol-missing' | 'busy';
+type Result = 'ok' | 'offline' | 'failed' | 'protocol-missing' | 'busy' | 'activation-blocked';
 type TreasureInfo = CmdNewTreasureInfo;
 type ChestChangeListener = (slots: readonly IChestSlotData[]) => void;
 
@@ -82,7 +83,7 @@ export class NewTreasureRepository {
 
     get slots(): readonly IChestSlotData[] {
         const nowSeconds = Math.floor(Date.now() / 1000);
-        return Array.from({ length: CHEST_SLOT_COUNT }, (_, slot) => {
+        const slots = Array.from({ length: CHEST_SLOT_COUNT }, (_, slot): Omit<IChestSlotData, 'canActivate'> => {
             // 界面数组为 0～3，协议槽位固定为 1～4；出站请求始终保留服务端下标。
             const index = slot + 1;
             const info = this.infos.get(index);
@@ -124,6 +125,7 @@ export class NewTreasureRepository {
                 cost: 0,
             };
         });
+        return withChestActivationAvailability(slots);
     }
 
     /**
@@ -149,25 +151,20 @@ export class NewTreasureRepository {
         const info = this.infos.get(index);
         if (!info || info.cardBoxID <= 0) return null;
         const config = this.configs.get(info.cardBoxID);
-        const durationSeconds = Math.max(0, config?.cardBoxOpenTime ?? 0);
-        const remainSeconds = info.openTime <= 0
-            ? durationSeconds
-            : Math.max(0, info.openTime + durationSeconds - Math.floor(Date.now() / 1000));
+        const slot = this.slots[index - 1];
         const cell = resBarCellOfRefId(info.cardBoxID, this.propRows, this.itemRows);
         return {
             index: info.index,
             cardBoxId: info.cardBoxID,
-            name: this.names.get(info.cardBoxID) ?? `${BOX_NAME_PREFIX}${info.cardBoxID}`,
+            name: slot.name,
             quality: this.qualityOf(info.cardBoxID),
             icon: resBarIconSpritePath(cell),
             rewards: this.detailRewards(info.cardBoxID),
             fastOpenCost: parseFastOpenCost(config?.cardBoxOpenNow),
-            remainSeconds,
-            state: info.openTime <= 0
-                ? ChestSlotState.Ready
-                : (remainSeconds > 0 ? ChestSlotState.Counting : ChestSlotState.Ready),
-            action: info.openTime <= 0 ? ChestSlotAction.Activate
-                : (remainSeconds > 0 ? ChestSlotAction.SpeedUp : ChestSlotAction.Open),
+            remainSeconds: slot.remainSeconds,
+            state: slot.state,
+            action: slot.action,
+            canActivate: slot.canActivate,
         };
     }
 
@@ -230,7 +227,8 @@ export class NewTreasureRepository {
 
     async activate(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        return this.withPendingAction(index, 'activate', async () => {
+        if (!this.slots[index - 1].canActivate) return 'activation-blocked';
+        return this.withPendingAction('activate', async () => {
             let updated = false;
             const request = new RequestNewTreasureActivate({ index }, undefined, (rsp) => {
                 if (rsp?.info) {
@@ -246,7 +244,7 @@ export class NewTreasureRepository {
 
     async fastOpen(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        return this.withPendingAction(index, 'fastOpen', async () => {
+        return this.withPendingAction(`${index}:fastOpen`, async () => {
             let succeeded = false;
             const request = new RequestNewTreasureFastOpen({ index }, undefined, (rsp) => {
                 if (rsp?.succ !== 1) return;
@@ -262,7 +260,7 @@ export class NewTreasureRepository {
 
     async open(index: number): Promise<Result> {
         if (!this.isValidIndex(index)) return 'failed';
-        return this.withPendingAction(index, 'open', async () => {
+        return this.withPendingAction(`${index}:open`, async () => {
             let succeeded = false;
             let hasProtocol = true;
             const result = await GameNet.sendRequest(() => {
@@ -299,8 +297,7 @@ export class NewTreasureRepository {
         return GameNet.sendRequest(() => request, { timeoutMs, tag: 'NewTreasure' });
     }
 
-    private async withPendingAction(index: number, action: string, perform: () => Promise<Result>): Promise<Result> {
-        const key = `${index}:${action}`;
+    private async withPendingAction(key: string, perform: () => Promise<Result>): Promise<Result> {
         if (this.pendingActions.has(key)) return 'busy';
         this.pendingActions.add(key);
         try {

@@ -1,4 +1,4 @@
-// 事件都带 owner：订阅方只处理自己当前持有的展示实例，换局后旧实例发的事件直接丢。
+// 订阅方按事件来源识别当前对局的展示实例。
 export const ZC_BATTLE_EVENTS = {
     PVE_RESULT: 'zcds:battle:pve-result',
     RUNTIME_DESTROYED: 'zcds:battle:runtime-destroyed',
@@ -9,14 +9,10 @@ export const ZC_BATTLE_EVENTS = {
     SHOW_TIP: 'zcds:battle:show-tip',
 } as const;
 
-export interface IZCBattleReturnToMain { readonly owner: object; }
-
 /** 只有 PVE 发服务端结算；同一会话的重复结果只回写一次。*/
-export interface IZCBattleResult { readonly owner: object; readonly victory: boolean; }
+export interface IZCBattleResult { readonly victory: boolean; }
 
-export interface IZCBattleRuntimeDestroyed { readonly owner: object; }
+export interface IZCBattleShowTip { readonly message: string; }
 
-export interface IZCBattleShowTip { readonly owner: object; readonly message: string; }
-
-/** 引擎只给帧脉冲，单局控制器按 owner 消费。*/
-export interface IZCBattleFrame { readonly owner: object; readonly dt: number; }
+/** 引擎只给帧脉冲，单局控制器按来源消费。*/
+export interface IZCBattleFrame { readonly dt: number; }

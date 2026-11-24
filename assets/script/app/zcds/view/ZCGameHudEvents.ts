@@ -93,12 +93,10 @@ export interface IZCDebugDrawCardResult {
 }
 
 export interface IZCRequestUnitArtIntent {
-    readonly owner: object;
     readonly unitId: string;
 }
 
 export interface IZCRequestEffectArtIntent {
-    readonly owner: object;
     /** 资源路径（= `effectVisualPrefabs` 的 key，如 `units/projectiles/磁电菇_子弹攻击/磁电菇_子弹攻击`）。*/
     readonly path: string;
 }

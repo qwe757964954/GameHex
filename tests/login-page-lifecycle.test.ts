@@ -33,11 +33,11 @@ test('LoginPage restores optional status binding, emits scoped inputs and fully 
     });
     Object.assign(page, { accountInput: { string: '' }, passwordInput: { string: '', inputMode: 0 }, passwordToggleLabel: new Label(), serverStatusDot: { node: { active: true } }, versionLabel: new Label(), serverButtonLabel: new Label() });
     const events: any[] = [], owner = {};
-    EventMgr.instance.on(LoginUiEvent.Intent, (event: unknown) => events.push(event), owner);
+    EventMgr.instance.on(LoginUiEvent.Intent, (event, source) => events.push({ ...event, source }), owner);
     try {
         page.onLoad(); assert.equal(page.statusLabel, status);
         page.restoreCredentials({ account: 'a', password: 'secret' }); handlers.get('btn')();
-        assert.equal(events.length, 1); assert.equal(events[0].owner, page); assert.equal(events[0].password, 'secret');
+        assert.equal(events.length, 1); assert.equal(events[0].source, page); assert.equal(events[0].password, 'secret');
         page.agreementCheck = { active: true };
         page.render({ version: '1', status: 'ready', busy: true, server: null, agreed: false, showPassword: false, platformLoginVisible: false, accountPasswordVisible: true, gmVisible: true, loginButtonText: '登录中…' });
         assert.equal(status.string, 'ready');
@@ -86,9 +86,9 @@ test('login failures only show a tip and leave successful bootstrap status intac
     try {
         await controller.start();
         // 先勾选协议
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind: 'toggle-agreement', agreed: true });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-agreement', agreed: true }, owner);
         // 再提交空账号密码登录
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind: 'login', account: '', password: '' });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'login', account: '', password: '' }, owner);
         await new Promise(resolve => setImmediate(resolve));
         assert.deepEqual(tips, ['请输入账号和密码']); assert.equal(states[states.length - 1].status, '服务器列表已就绪');
     } finally { controller.dispose(); }

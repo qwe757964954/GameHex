@@ -15,6 +15,7 @@
  *
  * - **payload 可选**：多数界面意图无参（"点了什么"），少数要带一个值（如地块点击的 `hexId`）⇒
  *   `emit(event, payload)` / `handler(payload)`，形状与 `EventProxy.execute(event, p1…p6)` 同族。
+ * - **source 可选**：需要匹配页面或对局实例时，使用独立的事件来源参数。
  * - `on` **幂等**：同一 (事件, 函数, target) 重复订阅只保留一份 —— 视图支持重复初始化，否则会叠成「点一下走两遍」。
  * - 本类**不提供 `clear()`**：总线实例归谁就跟着谁回收，没有"忘了清"这一摊。
  *
@@ -25,7 +26,7 @@
  * bus.off(MyEvent.A, this.onA, this);
  * ```
  */
-export type EventBusHandler = (payload?: any) => void;
+export type EventBusHandler = (payload?: any, source?: object) => void;
 
 type EventBusListener = { handler: EventBusHandler; target: unknown; active: boolean };
 
@@ -85,11 +86,11 @@ export class EventBus<E extends number | string = string> {
      * `on/off` 替换数组，旧快照里的记录用 `active` 标记是否已被解绑；派发只读这个标记，
      * 不再对每个 handler 做 `Map.get` + `includes`（监听多时那会是 O(n²)）。
      */
-    emit(event: E, payload?: any): void {
+    emit(event: E, payload?: any, source?: object): void {
         const list = this.handlers.get(event);
         if (!list) return;
         for (const item of list) {
-            if (item.active) item.handler.call(item.target, payload);
+            if (item.active) item.handler.call(item.target, payload, source);
         }
     }
 }

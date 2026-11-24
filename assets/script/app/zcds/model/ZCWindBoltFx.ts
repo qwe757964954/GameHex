@@ -1,6 +1,6 @@
 /**
  * 风炮菇 68013 的两条主动（2026-11-18 第 16 批，设计案 V12）：
- *  · `wind_bolt`（101303「孢爆箭」）—— 射一枚风弹，命中留一片飓风，接触者各吃一次；
+ *  · `wind_bolt`（101303「风炮弹」，原「孢爆箭」）—— 射一枚风弹，命中留一片飓风，接触者各吃一次；
  *  · `missile_barrage`（101304「连射导弹」）—— 每累计 N 次普攻，1.2s 内抛 3 枚炸弹，
  *    落点在目标周围随机，到达落点才爆炸（途中不碰人）。
  *
@@ -19,11 +19,13 @@
  * 本文件不能引 cc：用例要在没有引擎的环境里直接读这些常量。
 */
 
+import { ZC_EFFECT_PATHS } from './ZCEffectCatalog';
+
 /** 风弹的飞行段（青色月牙）。*/
-export const ZC_WIND_BOLT_MISSILE_PREFAB_PATH = 'units/projectiles/风法师_绿风/风法师_绿风';
+export const ZC_WIND_BOLT_MISSILE_PREFAB_PATH = ZC_EFFECT_PATHS.clownDart;
 
 /** 风弹命中当拍的爆点（与普攻爆炸同一个 prefab）。*/
-export const ZC_WIND_BOLT_IMPACT_PREFAB_PATH = 'units/projectiles/普攻爆炸/普攻爆炸';
+export const ZC_WIND_BOLT_IMPACT_PREFAB_PATH = ZC_EFFECT_PATHS.burstImpact;
 
 /**
  * 命中点留下的飓风（常驻区域）。
@@ -31,7 +33,7 @@ export const ZC_WIND_BOLT_IMPACT_PREFAB_PATH = 'units/projectiles/普攻爆炸/�
  * 与爆点是两个 prefab：爆点只在命中那一拍闪一次，飓风要活满 `windZoneSeconds`。
  * 用同一个的话，角色身上会挂着一段「爆炸序列帧」当区域，看着像一直在挨打。
 */
-export const ZC_WIND_BOLT_ZONE_PREFAB_PATH = 'units/projectiles/风法师_龙卷风/风法师_龙卷风';
+export const ZC_WIND_BOLT_ZONE_PREFAB_PATH = ZC_EFFECT_PATHS.windHurricane;
 
 /** 连射导弹的飞行段：与风弹共用那枚月牙（都是「风系弹体」，同一张卡）。*/
 export const ZC_MISSILE_BARRAGE_MISSILE_PREFAB_PATH = ZC_WIND_BOLT_MISSILE_PREFAB_PATH;

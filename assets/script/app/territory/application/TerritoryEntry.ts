@@ -51,6 +51,7 @@ export class TerritoryEntry {
             const chapters = TerritoryChapterInfoRepository.instance.availableChapters;
             // caller 在构造时注入（本页宿主）：仓储本身就是网关端口，不再套一层转发 lambda。
             const cells = new TerritoryCellRepository(this);
+            this.scope.defer(() => cells.cancelBattleStart());
             const model = this.createModel(this.resources, cells, chapters);
             // 写请求被服务端拒绝时下发的是 `CmdTips`、**不派发 Rsp 事件** ⇒ 业务侧收不到任何
             // 信号，只能等 5 秒硬超时（玩家看到的是「菊花一直转」）。仓储把 `fErrorCallback`

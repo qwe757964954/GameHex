@@ -24,6 +24,7 @@ import {
     territoryChestTierOf,
     territoryChestTierOfRewards,
     territoryChestTotal,
+    territoryFixedTileSoundIsLarge,
 } from '../assets/script/app/territory/model/TerritoryChestTier';
 
 // ============================================================
@@ -132,6 +133,24 @@ test('奖励 → 档位：三档各取一例（含「一条顶多条」的等价
 // ============================================================
 // 文案
 // ============================================================
+
+// ============================================================
+// 固定格奖励音效：只按 1000 切两档（与三档动画不是同一套刻度）
+// ============================================================
+
+test('固定格音效：< 1000 播「小」，> 1000 播「大」，1000 归小', () => {
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 999 }]), false);
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 1000 }]), false);
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 1001 }]), true);
+    // 多条相加，判的是合计
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 500 }, { resId: 9, amount: 400 }]), false);
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 500 }, { resId: 9, amount: 600 }]), true);
+    // 弱档（<100）不能因为「档位映射」被误配成「大」—— 这是旧实现的错法
+    assert.equal(territoryFixedTileSoundIsLarge([{ resId: 7, amount: 80 }]), false);
+    // 空 / 脏数据一律小档，不炸
+    assert.equal(territoryFixedTileSoundIsLarge([]), false);
+    assert.equal(territoryFixedTileSoundIsLarge(null), false);
+});
 
 test('三档中文名齐全且不重复', () => {
     const labels = Object.values(TERRITORY_CHEST_TIER).map((tier) => TERRITORY_CHEST_TIER_LABEL[tier]);

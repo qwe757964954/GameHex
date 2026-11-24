@@ -441,7 +441,12 @@ export function buildZCClientCombatConfig(
     for (const owner of owners) {
         const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
         const monsterCards = owner === ZCOwner.Player || config.pveDefence ? [] : ZC_RUNTIME_CONFIG.snapshot.monsterCards ?? [];
-        ownerDecks[owner] = rosterContext.usesServerRoster
+        //  🔴 塔防关（`npcDeckFromTeam`）：敌方抽卡池就是本地 `npcTeam.npcCard` 的投影，
+        //  服务端回包里 NPC 席位没有 heroIds。照常走 `buildBattleDeck` 的话，空花名册会把
+        //  所有英雄卡滤掉、只留 `unitId` 为空的系统卡（金矿）⇒ NPC 永远翻不出兵种/防御塔。
+        //  这里只对**非玩家席位**放行，玩家自己仍按服务端阵容构筑。
+        const keepConfiguredDeck = config.npcDeckFromTeam === true && owner !== ZCOwner.Player;
+        ownerDecks[owner] = rosterContext.usesServerRoster && !keepConfiguredDeck
             ? buildBattleDeck(sourceDeck, roster[owner] ?? [], rosterContext.unitsByOwner[owner], monsterCards)
             : sourceDeck;
     }

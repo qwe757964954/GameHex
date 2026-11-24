@@ -297,7 +297,7 @@ test('★★★点地块 ⇒ 起跳；换章 ⇒ 收掉（否则半空的偏移�
         clickBody.slice(0, clickBody.indexOf('\n    };')).includes('this.playChestHint(site.cellId);'),
         'onStationClick 没触发宝箱跳动',
     );
-    const gridBody = mapViewSource.slice(mapViewSource.indexOf('private syncGrid('));
+    const gridBody = mapViewSource.slice(mapViewSource.indexOf('private resetChapterPresentation('));
     assert.ok(
         gridBody.slice(0, gridBody.indexOf('\n    }')).includes('this.clearChestHint();'),
         'syncGrid 换章时没收掉宝箱跳动',
@@ -336,13 +336,13 @@ test('★★★跳动偏移必须走唯一的坐标出口 `writeIconPosition`（
 test('★★体力图标接进了资源加载（拿不到只是退化成纯数字，不许整体失败）', () => {
     assert.ok(pageAssetsSource.includes("'图标_体力'"), 'TerritoryPageAssets 没加载体力图标');
     assert.ok(pageAssetsSource.includes('staminaIcon'), 'TerritoryPageAssets 没把 staminaIcon 交出去');
-    assert.ok(mapViewSource.includes('staminaIcon'), 'MapView 的 art 里没有 staminaIcon');
+    assert.ok(readFileSync('assets/script/app/territory/view/TerritoryMapArt.ts', 'utf8').includes('staminaIcon'), 'MapView 的 art 里没有 staminaIcon');
     assert.ok(
-        mapViewSource.includes('levelBubbleIcon: showHintBubble ? input.art.staminaIcon ?? null : undefined'),
+        readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8').includes('levelBubbleIcon: showHintBubble ? input.art.staminaIcon ?? null : undefined'),
         '宝箱气泡没把体力图标传下去',
     );
     assert.ok(
-        mapViewSource.includes('levelBubble: showHintBubble ? String(site.unlock.staminaCost) : undefined'),
+        readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8').includes('levelBubble: showHintBubble ? String(site.unlock.staminaCost) : undefined'),
         '宝箱气泡的内容不是体力消耗数',
     );
 });
@@ -356,7 +356,7 @@ test('★★★唯一气泡的选择**一轮只算一次**，再透传给每一�
     );
     assert.match(
         body,
-        /this\.stationRenderOf\(site, input, chestHintCell[,)]/,
+        /stationRenderOf\(site, input, chestHintCell[,)]/,
         'chestHintCell 没透传给 stationRenderOf ⇒ 每格都会觉得"该我挂"或"都不挂"',
     );
     const calls = body.match(/territoryChestHintCell\(/g) ?? [];
@@ -365,10 +365,7 @@ test('★★★唯一气泡的选择**一轮只算一次**，再透传给每一�
 
 test('★★点击时能拿到「整张 sites + progress」：`renderMap` 必须留一份入参快照', () => {
     const renderBody = mapViewSource.slice(mapViewSource.indexOf('renderMap(input: ITerritoryMapRenderInput): void {'));
-    const firstLine = renderBody
-        .slice(renderBody.indexOf('{') + 1)
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0 && !line.startsWith('//') && !line.startsWith('*') && !line.startsWith('/*'))[0];
-    assert.equal(firstLine, 'this.lastRenderInput = input;', 'renderMap 第一句必须是入参快照');
+    const snapshot = renderBody.indexOf('this.lastRenderInput = input;');
+    assert.ok(snapshot >= 0 && snapshot < renderBody.indexOf('this.armPreviewCinema(input);'));
+
 });

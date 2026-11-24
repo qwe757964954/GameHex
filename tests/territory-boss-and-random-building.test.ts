@@ -236,7 +236,7 @@ test('★★★随机格没配buildingId 时不给建筑图，只保留绿色地
 });
 
 test('★★art.randomResource 已无渲染消费者 —— 留字段但要写明为什么没删', () => {
-    const src = readFileSync(VIEW_PATH, 'utf8');
+    const src = readFileSync('assets/script/app/territory/view/TerritoryMapArt.ts', 'utf8');
     // 字段声明处的注释必须写清「已不是随机格外观来源」+「清理时要两处一起改」，
     // 否则下一个人看到「没人用」会直接删掉、把 build.json 的69006 贴图来源一起弄坏。
     const declAt = src.indexOf('readonly randomResource: SpriteFrame | null;');
@@ -252,10 +252,11 @@ test('★★art.randomResource 已无渲染消费者 —— 留字段但要写�
 
 test('★★★★关卡/首领/异步据点没配buildingId 必须 return null，不许回退到 type 图', () => {
     const src = readFileSync(VIEW_PATH, 'utf8');
-    const start = src.indexOf('private stationIconOf');
-    const end = src.indexOf('private buildScaleOf', start);
+    const presentation = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
+    const start = presentation.indexOf('function stationIconOf');
+    const end = presentation.indexOf('function buildScaleOf', start);
     assert.ok(start > 0 && end > start, 'stationIconOf 要能定位');
-    const fn = src.slice(start, end);
+    const fn = presentation.slice(start, end);
     // 🔴 剥注释后再比位置 —— 注释里也出现了 `TERRITORY_SITE_ART` 字样，
     //    不剥就会命中注释而非代码，得出「早退在回退之后」的反向假结论（规则 104）。
     const code = fn.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -313,14 +314,20 @@ test('★★★同一 configId 区域内，配了 buildingId 的站点恰好一�
     }
 });
 
-test('★★关卡/首领的 type 建筑图在无 buildingId 时不再被使用（stage 图已被兜底路径覆盖）', () => {
-    const src = readFileSync(VIEW_PATH, 'utf8');
-    const start = src.indexOf('private stationIconOf');
-    const end = src.indexOf('private buildScaleOf', start);
-    const fn = src.slice(start, end);
-    // `stage?.isBoss` 分支仍留着：asyncPvp/fixedResource 理论上可绑到 isBoss 的 stage，
-    // 它不受「关卡才严格」这条新口径影响（山猫 2026-10-12 只点了 stage + boss）。
-    assert.match(fn, /stage\?\.isBoss/, 'isBoss 的 type 回退对非关卡类型仍有效，不能一并删掉');
+test('★★非战斗站点取图不再按 isBoss 分叉：该兜底在当前绑定事实下不可达', () => {
+    const presentation = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
+    const start = presentation.indexOf('function stationIconOf');
+    const end = presentation.indexOf('function buildScaleOf', start);
+    const fn = presentation.slice(start, end);
+    const code = fn.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+    // 2026-10-12 的原注释认为「asyncPvp / fixedResource 理论上可绑到 isBoss 的 stage」，
+    // 但当前绑定事实已否定这条路径：`bindTerritoryBattleStages` 只覆盖
+    // stage / boss / asyncPvp（都在上面的 null 早退里），fixedResource / bonus 不绑关卡，
+    // 巡逻宝箱的关卡只用于开战、模型图走 `patrolChestIconOf`。⇒ 该分支永远到不了。
+    assert.doesNotMatch(code, /stage\?\.isBoss/,
+        '不可达的 isBoss 兜底已删除（2026-11-23）');
+    assert.match(code, /return art\[TERRITORY_SITE_ART\[site\.type\]\] \?\? art\.stage;/,
+        '剩余的类型回退仍保留，只服务 fixedResource / bonus');
 });
 
 // ============================================================

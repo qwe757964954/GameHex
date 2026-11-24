@@ -17,6 +17,7 @@ import {
     type ZCMapLayout,
 } from '../assets/script/app/zcds/model/ZCGameModel';
 import type { ZCMatchConfig, ZCMatchMap } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { ZCSnapshotCodec } from '../assets/script/app/zcds/model/ZCSnapshotCodec';
 import {
     resolveZCMapResources,
@@ -246,8 +247,11 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
             hqMaxHp: 100, wallMaxHp: 10, matchDurationSeconds: 180,
             initialGold: 100, initialGuaranteedMine: 0,
         },
-        tiles: { mine: { price: 25 } },
-        tileWeights: [{ type: 'mine', weight: 1, initialCountLimit: 0, setCountLimit: 0 }],
+        tiles: {
+            [ZCPvpTileType.AllRandom]: { price: 25 },
+            [ZCPvpTileType.Mine]: { price: 50 },
+        },
+        tileWeights: [{ type: ZCPvpTileType.Mine, weight: 1, initialCountLimit: 0, setCountLimit: 0 }],
         playerDeck: [], enemyDeck: [], units: [], bonds: [], counters: [], goldPity: 0,
     } as unknown as ZCMatchConfig;
 
@@ -261,6 +265,11 @@ test('资源点生成后固定为中立格且开局一律未消费（相邻自�
     assert.equal(snapshot.hexes[playerResourceId].state, 'occupiable', '资源点在自动领取前保持可占据');
     assert.equal(snapshot.hexes[enemyResourceId].owner, 'neutral');
     assert.equal(snapshot.hexes[enemyResourceId].developmentResolved, false, '未相邻资源同样未消费');
+    for (const hexId of [playerResourceId, enemyResourceId]) {
+        const hex = snapshot.hexes[hexId];
+        assert.equal(hex.tileType, ZCPvpTileType.AllRandom);
+        assert.equal(hex.developmentCost, config.tiles[ZCPvpTileType.AllRandom].price);
+    }
 });
 
 test('固定主城地图也在开局冻结资源点，不依赖自选主城流程', () => {

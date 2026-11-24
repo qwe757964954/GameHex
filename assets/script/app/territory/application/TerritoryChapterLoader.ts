@@ -85,6 +85,7 @@ export class TerritoryChapterLoader implements ITerritoryChapterLoader {
                 levelAutoStart: campaign.levelAutoStart,
                 patrolLevelIdByBattleId: campaign.patrolLevelIdByBattleId,
                 monsterBoxGroups: campaign.monsterBoxGroups,
+                monsterGroupByLevelId: campaign.monsterGroupByLevelId,
             },
             art: { ...art, monsterPrefabs, monsterPrefabSizes, monsterOutlineMaterial },
         };

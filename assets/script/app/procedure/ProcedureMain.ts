@@ -1,5 +1,7 @@
 import { instantiate, Node, Prefab, UIOpacity, Vec3 } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
+import { AudioMgr } from '../../framework/audio/AudioMgr';
+import { GAME_AUDIO } from '../ResConst';
 import { ProcedureBase } from '../../framework/procedure/ProcedureBase';
 import type { ProcedurePreloadContext } from '../../framework/procedure/ProcedureBase';
 import { LaunchProgressUI } from '../loading/LaunchProgressUI';
@@ -117,6 +119,7 @@ export class ProcedureMain extends ProcedureBase {
         if (launchUi) launchUi.release();
         const tabHost = this.mainNode ? this.mainNode.getComponent(MainTabHost) : null;
         if (tabHost) tabHost.activateBackgroundWarmup();
+        void AudioMgr.instance.playMusic(GAME_AUDIO.chapterMusic);
         this.log('进入主界面流程');
     }
 
@@ -136,6 +139,7 @@ export class ProcedureMain extends ProcedureBase {
     }
 
     onLeave(): void {
+        AudioMgr.instance.stopMusic();
         this.destroyMainNode();
         this.releaseResourceScope();
         this.log('离开主界面流程');

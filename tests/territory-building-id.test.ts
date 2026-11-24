@@ -143,7 +143,8 @@ test('build 表：buildType 枚举与策划口径一致（1基地 2异步 3boss 
 
 test('视图：选图优先级 = 地图配的 buildingId > 站点 type', () => {
     const src = readFileSync(VIEW_PATH, 'utf8');
-    const fn = src.slice(src.indexOf('private stationIconOf'), src.indexOf('private stateOf'));
+    const presentation = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
+    const fn = presentation.slice(presentation.indexOf('function stationIconOf'), presentation.indexOf('function buildScaleOf'));
     // ① 先查 buildFrames，且查表键做了 Number 归一（字符串 '69003' 也要能查到）
     assert.match(fn, /Number\(site\.buildingId\)/,
         '查表键必须 Number 归一 —— 表里是数字、地图 JSON 是字符串，不归一就是静默查不到');

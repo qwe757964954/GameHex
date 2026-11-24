@@ -27,7 +27,7 @@ const STAGE_BRANCH_ANCHOR = '\n        if (station.battle) {';
 const STAGE_BRANCH = "station.battle";
 
 const MAP_VIEW_SRC = readFileSync(
-    'assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+    'assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
 const PRESENTER_SRC = readFileSync(
     'assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
 const CONFIG_SRC = readFileSync(
@@ -85,7 +85,7 @@ test('★★关卡型站点的 configId 必须都能在 levelInfo 里找到（�
 });
 
 test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"的渲染分支', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
+    const renderAt = MAP_VIEW_SRC.indexOf('function stationRenderOf(');
     assert.ok(renderAt > 0, '找不到 stationRenderOf');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
     // 分支本体：按**站点类型**命中，不是按 cellId 名单。
@@ -105,22 +105,28 @@ test('stationRenderOf 为关卡保留"解锁后展示建筑、通关后变绿"�
 });
 
 test('首领站点保留建筑渲染及共享战斗流程，不生成首领序号和状态文字', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
+    const renderAt = MAP_VIEW_SRC.indexOf('function stationRenderOf(');
     assert.ok(renderAt > 0, '找不到 stationRenderOf');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
     assert.match(body, new RegExp(`if \\(${STAGE_BRANCH}\\)`));
-    assert.match(body, /icon: this\.stationIconOf\(site, stage, input\.art\)/);
+    assert.match(body, /icon: stationIconOf\(site, stage, input\.art\)/);
     assert.doesNotMatch(body, /bossBattleReady|bossBattleClaimed|首领 \$\{stage\.stage\}/);
 });
 
-test('stationRenderOf binds asyncPvp to the shared battle flow and turns unlocked cells red', () => {
-    const renderAt = MAP_VIEW_SRC.indexOf('private stationRenderOf(');
+test('stationRenderOf 把 asyncPvp 与其它战斗站点收成同一条分支', () => {
+    const renderAt = MAP_VIEW_SRC.indexOf('function stationRenderOf(');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    private ', renderAt + 10));
     assert.match(body, /const isAsyncPvp = site\.type === TERRITORY_SITE_TYPE\.asyncPvp/);
     assert.match(body, /isAsyncPvp && station\.unlocked[\s\S]*?territoryBossTint\(\)/,
         'unlocked async PvP station should use the danger tint');
-    assert.match(body, /if \(isAsyncPvp && !stage\)[\s\S]*?interactive: !isUnlocked && !isOwned/,
-        '缺失战斗配置时仍保留交互限制');
+    // 2026-11-23 收口：旧特例把 `interactive` 写成 `!isUnlocked && !isOwned` ——
+    // 能走到战斗分支的站点必定 `opened = unlocked || owned`，该表达式恒 false，
+    // 缺关卡行时整格永久点不动；它还漏了区域通关口径与已通关问号徽标。
+    const code = codeOf(body);
+    assert.ok(!/isAsyncPvp && !stage/.test(code),
+        '不许恢复「查不到 stage ⇒ 不可点」的特例分支');
+    assert.ok(!/interactive: !isUnlocked && !isOwned/.test(code),
+        '旧特例的 interactive 恒 false（未解锁已在前面 return）');
 });
 
 // ============================================================
@@ -135,9 +141,9 @@ test('★★★已领取的 fixedResource 格必须同时清空 icon/caption/bad
     //🔴 三个必须**都**被 claimed 清掉，缺一个就不算「彻底」：
     // 2026-11-20 起野怪宝箱（`patrolChest`）分开走：锚点格按等级取 `territory_monsterBox_L{lv}`，
     // 通过后换开盖版 —— 它不再「一领就空」。清图这条只剩普通宝箱。
-    assert.match(body, /:\s*claimed \? null : this\.stationIconOf\(site, null, input\.art\)/,
+    assert.match(body, /:\s*claimed \? null : stationIconOf\(site, null, input\.art\)/,
         '已领取的普通宝箱 ⇒ icon 必须为 null（宝箱图要藏掉）');
-    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*this\.patrolChestIconOf\(site, station, input\)/,
+    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*patrolChestIconOf\(site, station, input\)/,
         '野怪宝箱改由 patrolChestIconOf 按等级 / 通过状态取图（§3.51）');
     assert.match(body, /caption:\s*''/,
         '已领取 ⇒ caption 必须为空串');
@@ -154,7 +160,7 @@ test('无建筑图标时不再启用兜底文字，只有未解锁条件可以�
         // `badgeLabel` / 气泡根都跟着同一个 `visible` 开关 —— 没有文案时两者都关，
         // 所以这里钉的是「跟 `visible` 走」，不是写死的 false。
         /this\.badgeLabel\.node\.active = visible/,
-        /bubble\.node\.active = visible/,
+        /this\.levelBubbleNode\.active = visible/,
     ];
     for (const re of dependents) {
         assert.match(view, re);
@@ -170,9 +176,9 @@ test('无建筑图标时不再启用兜底文字，只有未解锁条件可以�
 test('未领取的宝箱格保留图标和交互，地图上不显示「可领取」文字', () => {
     const renderAt = MAP_VIEW_SRC.indexOf('if (isTerritoryChestSite(site))');
     const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf(STAGE_BRANCH_ANCHOR, renderAt));
-    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*this\.patrolChestIconOf\(site, station, input\)/,
+    assert.match(body, /icon:\s*isPatrol\s*\n?\s*\?\s*patrolChestIconOf\(site, station, input\)/,
         '野怪宝箱由锚点格模型图表达（§3.51：4 档专用图，通过后换开盖）');
-    assert.match(body, /:\s*claimed \? null : this\.stationIconOf\(site, null, input\.art\)/,
+    assert.match(body, /:\s*claimed \? null : stationIconOf\(site, null, input\.art\)/,
         '未领取的普通宝箱必须照常走 stationIconOf 取宝箱图');
     assert.match(body, /badge:\s*''/, '不再生成状态角标');
     assert.match(body, /interactive:\s*!claimed && !pending/,
@@ -185,18 +191,20 @@ test('未领取的宝箱格保留图标和交互，地图上不显示「可领�
 // 关卡（含无建筑格 327）：无建筑 ⇒ 不挂文案；同区域共享通关状态（2026-10-12）
 // ============================================================
 
-test('★★★无建筑的关卡格（327）必须清空 caption 与 badge', () => {
+test('★★★无建筑的关卡格（327）同样清空 caption 与 badge', () => {
     // 山猫原话：「关卡 可 通关去掉」——截图上 327 那个黄块挂着「关卡」底条 + 「可通关」角标。
+    // 2026-11-23：`asyncPvp && !stage` 的旧特例删除后，全部战斗站点只走这一条分支，
+    // 所以切片直接到战斗分支结束（bonus 的注释是稳定锚点）。
     const renderAt = MAP_VIEW_SRC.indexOf(`if (${STAGE_BRANCH})`);
     assert.ok(renderAt > 0, '要能定位关卡渲染分支');
-    const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n        if (!stage)', renderAt));
+    const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    // 走到这里的只剩', renderAt));
 
     assert.match(body, /caption:\s*''/,
         '无建筑格必须清空 caption（「关卡」底条要消失）');
     assert.match(body, /badge:\s*''/,
         '无建筑格必须清空 badge（「可通关」角标要消失）');
     // 🔴 图照画：有建筑的（328）不受这条影响。
-    assert.match(body, /icon:\s*this\.stationIconOf\(site, stage, input\.art\),/,
+    assert.match(body, /icon:\s*stationIconOf\(site, stage, input\.art\),/,
         'icon 仍走 stationIconOf —— 有建筑的两步式格要保留建筑图');
 });
 
@@ -204,8 +212,8 @@ test('建筑图仍由 stationIconOf 决定，移除仅为兜底文字使用的�
     const src = MAP_VIEW_SRC;
     assert.doesNotMatch(src, /hasBuildingArt|isPlainTwoStep/);
     // 单一真源：stationIconOf 里没有第二个「返回 null」的早退。
-    const iconAt = src.indexOf('private stationIconOf(');
-    const iconFn = src.slice(iconAt, src.indexOf('private buildScaleOf(', iconAt));
+    const iconAt = src.indexOf('function stationIconOf(');
+    const iconFn = src.slice(iconAt, src.indexOf('function buildScaleOf(', iconAt));
     assert.equal((iconFn.match(/return null;/g) ?? []).length, 1,
         'stationIconOf 只应有一个「不画图」的早退（stage/boss 无 buildingId）');
 });
@@ -213,7 +221,7 @@ test('建筑图仍由 stationIconOf 决定，移除仅为兜底文字使用的�
 test('★★★同区域共享通关：claimed 走 isAreaPassed，不是 isOwned', () => {
     // 山猫原话：「327 与 328 configId 一样，都是打同一关卡，327 328 就算一起的」。
     const renderAt = MAP_VIEW_SRC.indexOf(`if (${STAGE_BRANCH})`);
-    const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n        if (!stage)', renderAt));
+    const body = MAP_VIEW_SRC.slice(renderAt, MAP_VIEW_SRC.indexOf('\n    // 走到这里的只剩', renderAt));
     assert.match(body, /const claimed = station\.areaPassed;/,
         '关卡分支的已通关判定必须走区域口径（否则打 327 后 328 还显示「可通关」）');
     assert.ok(!/const claimed = station\.owned;/.test(body),

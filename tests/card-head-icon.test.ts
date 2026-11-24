@@ -135,6 +135,61 @@ test('loadIconByKey 是底层原语：加载器的错误**原样透传**', async
     );
 });
 
+/**
+ * 直路径形态（2026-11-23）。
+ *
+ * `headIcon` / `icon` 这类格子原先只认 `icon.json` 的 key；美术换图时按习惯写成资源路径
+ * （`icons/cardHead/wandouyouxia`），解析落空 ⇒ 头像整片退占位图且**不报错**。
+ * 现在两种写法都认，key 优先。
+ */
+test('图标名也可以是直路径：真目录 / 老端包名 / 带 spriteFrame 尾巴都认', () => {
+    const resolver = createIconArtResolver([
+        { key: '兵种_头像_弓兵', path: 'ui://图标_兵种_头像/tx_icon_GB_SPL' },
+    ]);
+
+    // ① 真目录形态（美术现在填的就是这种）
+    assert.deepEqual(resolver.resolve('icons/cardHead/wandouyouxia'),
+        { art: 'wandouyouxia', root: ArtPaths.CARD_HEAD_ART_ROOT });
+    assert.deepEqual(resolver.resolve('icons/head/icon_hero_head_40018'),
+        { art: 'icon_hero_head_40018', root: ArtPaths.HEAD_ART_ROOT });
+    // ② 老端包名形态（表里两种写法都出现过，别只认一种）
+    assert.deepEqual(resolver.resolve('ui://图标_兵种_头像/wandouyouxia'),
+        { art: 'wandouyouxia', root: ArtPaths.CARD_HEAD_ART_ROOT });
+    assert.deepEqual(resolver.resolve('ui://图标/x'),
+        { art: 'x', root: ArtPaths.HEAD_ART_ROOT });
+    // ③ `spriteFrame` 尾巴（`TERRITORY_PVP_BUBBLE_PORTRAIT_PATH` 那种写法）要剥掉，
+    //    否则缓存键会变成 `.../spriteFrame/spriteFrame`。
+    assert.deepEqual(resolver.resolve('icons/head/icon_hero_head_40018/spriteFrame'),
+        { art: 'icon_hero_head_40018', root: ArtPaths.HEAD_ART_ROOT });
+    // ④ key 优先：同一个字符串既是 key 又能当路径时，走表（美术换了图只要改 icon.json）
+    assert.deepEqual(resolver.resolve('兵种_头像_弓兵'),
+        { art: 'tx_icon_GB_SPL', root: ArtPaths.CARD_HEAD_ART_ROOT });
+
+    // ⑤ 不认的：没登记的目录（配错列的典型写法）、只有一段、空串
+    assert.equal(resolver.resolve('skel/豌豆射手/豌豆射手'), null, '配到「单位预设」列了，不许当头像加载');
+    assert.equal(resolver.resolve('units/阿尔萨斯/阿尔萨斯'), null);
+    assert.equal(resolver.resolve('icons/cardHead/'), null, '只有目录没有文件名');
+    assert.equal(resolver.resolve('/wandouyouxia'), null);
+    assert.equal(resolver.resolve(''), null);
+});
+
+test('直路径解析对「表没读到」也成立（不依赖 icon.json）', async () => {
+    // `createIconArtResolver(null)` 是「icon.json 没读到」的形态：key 形态恒 null，
+    // 但直路径不查表也能拆 —— 塔防这一路本来就不保证主包的表已经加载好。
+    const empty = createIconArtResolver(null);
+    assert.equal(empty.resolve('兵种_头像_弓兵'), null);
+    assert.deepEqual(empty.resolve('icons/cardHead/wandouyouxia'),
+        { art: 'wandouyouxia', root: ArtPaths.CARD_HEAD_ART_ROOT });
+
+    const asked: { name: string; root: string }[] = [];
+    const loader = (name: string, root: string) => {
+        asked.push({ name, root });
+        return Promise.resolve(FRAME);
+    };
+    assert.equal(await loadIconByKey('icons/cardHead/wandouyouxia', empty, loader), FRAME);
+    assert.deepEqual(asked, [{ name: 'wandouyouxia', root: ArtPaths.CARD_HEAD_ART_ROOT }]);
+});
+
 test('parseCard 把 headIcon 带进 ZCDeckCard；留空 = undefined（不是空串）', () => {
     // 直接用**真表的一行**当夹具：`parseCard` 的必填列不少（baseHp / soilderAddTime /
     // cyclePerTierValue…），手拼 fixture 漏一个就报"必须是不小于 0 的数字"，
@@ -193,6 +248,46 @@ test('真表 + 磁盘：pvpCard 的每一行 headIcon 都能解出资源名，�
     assert.ok(filled.length >= 32, `至少应有 32 张卡配了头像，实际 ${filled.length}`);
     assert.ok(blank >= 1, '骷髅战士 / 冰霜巨龙 / 亡灵法师 老端也没有头像，应当留空');
     assert.ok(new Set(filled).size >= 32, '角色应使用专属头像，不能全部回退到同一张兵种图');
+});
+
+test('真表 + 磁盘：monsterCard 的 headIcon 逐行可解、图确实在磁盘，主城 / 金矿留空', () => {
+    // 怪物卡这一列 2026-11-23 才纳入守卫：美术把源表整列改成了直路径，写的却是 **`icons/head/*`**。
+    // 两个目录不是同一批图：`cardHead` = 全身立绘 256，`head` = 头像特写 128，
+    // 而兵种卡面 / 传说卡横幅的立绘要的是全身 ⇒ 直路径必须指向 cardHead，否则卡面变成"裁到胸口的头像"。
+    // 所以这里禁的不是 head 目录本身（近卫卡的 `图标_头像_*` 本来就落在 head），而是**直路径写成 icons/head**。
+    const cards = readRows('monsterCard');
+    const resolver = createIconArtResolver(readRows('icon') as { key?: unknown; path?: unknown }[]);
+    const cardHead = new Set(readdirSync(assetPath('icons/cardHead')));
+    const head = new Set(readdirSync(assetPath('icons/head')));
+
+    assert.ok(cards.length >= 39, `monsterCard 应有 39 行，实际 ${cards.length}`);
+    const headPath: string[] = [];
+    const unresolved: string[] = [];
+    const missing: string[] = [];
+    const blank: string[] = [];
+
+    for (const row of cards) {
+        const id = String(row.id);
+        const headIcon = typeof row.headIcon === 'string' ? row.headIcon : '';
+        if (!headIcon) {
+            blank.push(id);
+            continue;
+        }
+        if (headIcon.startsWith('icons/head/')) headPath.push(`${id}(${row.name}) → ${headIcon}`);
+        const target = resolver.resolve(headIcon);
+        if (!target) {
+            unresolved.push(`${id}(${row.name}) → ${headIcon}`);
+            continue;
+        }
+        const pool = target.root === ArtPaths.CARD_HEAD_ART_ROOT ? cardHead : head;
+        if (!pool.has(`${target.art}.png`)) missing.push(`${id}(${row.name}) → ${target.root}/${target.art}.png`);
+    }
+
+    assert.deepEqual(unresolved, [], 'headIcon 必须能解出（key 或直路径都行，解析不了 = 界面静默留白）');
+    assert.deepEqual(headPath, [], '直路径不许写 icons/head（头像特写 128）：兵种卡面要 cardHead 的全身图');
+    assert.deepEqual(missing, [], '解出来的每一张都必须已在对应目录下');
+    // 主城 / 金矿没有头像，冰霜巨龙 / 独眼巨人 美术还没出 —— 留空合法，但不许整列空。
+    assert.deepEqual(blank.sort(), ['50001', '50002', '50038', '50039'], '留空的应只有这四行');
 });
 
 /**

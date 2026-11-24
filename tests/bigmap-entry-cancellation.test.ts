@@ -8,7 +8,6 @@ import test from 'node:test';
 import ts from 'typescript';
 import { toIdString } from '../assets/script/app/net/RequestGuard';
 import * as artifactPaths from '../assets/script/app/ArtPaths';
-import { BIGMAP_BATTLE_TEXT } from '../assets/script/app/bigmap/model/BigMapBattle';
 // core 纯 TS：直接拿真源常量，别在桩里写死 'bigmap'（改名后断言要跟着红）。
 import * as BundleCatalog from '../assets/script/core/asset/BundleCatalog';
 
@@ -55,7 +54,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     const chapterOwners: unknown[] = [];
     const nodes: FakeNode[] = [];
     const presenters: FakePresenter[] = [];
-    const battles: { type: number; params: readonly string[]; isCurrent: () => boolean }[] = [];
+    const events = new EventMgr();
     const preloads: { assets: unknown; battle: unknown }[] = [];
     const routes: { route: string; params: Record<string, unknown> }[] = [];
     const settledListeners: ((entered: boolean) => void)[] = [];
@@ -75,7 +74,6 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
             return new Promise<void>((resolve) => { chapterRefreshWaiters.push(resolve); });
         },
     };
-    let finishBattle: (value: unknown) => void = () => {};
     let finishPage: (() => void) | null = null;
     let pageWait: Promise<void> | null = null;
     let slgWait: Promise<boolean> = Promise.resolve(true);
@@ -119,7 +117,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     let unlockRefreshes = 0;
     class FakePresenter {
         constructor(public deps: { config?: { world: { rows: number; cols: number } }; adventureChapter(): number;
-            startBattle(type: number, id: number, isCurrent: () => boolean): Promise<{ ok: boolean }> }) { presenters.push(this); }
+            canRequestBattle?: boolean }) { presenters.push(this); }
         initializeSlg(): Promise<boolean> { slgRequests += 1; return slgWait; }
         refreshUnlockContext(): void { unlockRefreshes += 1; }
         dispose(): void {}
@@ -128,7 +126,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bigmap/application/BigMapEntry.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText, { exports, console: { warn() {} }, require(name: string) {
-        if (name.endsWith('/EventMgr')) return { EventMgr };
+        if (name.endsWith('/EventMgr')) return { EventMgr: { instance: events } };
         if (name.endsWith('/BigMapEvents')) return mvcEvents;
         if (name === 'cc') return { Node: FakeNode, UITransform: Transform, Widget, UIOpacity: Opacity,
             // ⚠️ 刻意不提供 `assetManager`：页面宿主 prefab 必须经 `AssetService` 加载，
@@ -143,18 +141,17 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
             },
             Layers: { Enum: { UI_2D: 33554432 } }, view: { getVisibleSize: () => ({ width: 720, height: 1280 }) },
             director: { getScene: () => ({ getChildByName: () => ({ getChildByName: () => null }) }) } };
-        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattleSession: (_context: unknown, { battle }: { battle: unknown }) => { const preload = { battle }; preloads.push(preload); return preload; } };
+        if (name.endsWith('/ZCBattlePreparation')) return { createZCBattleSession: (_context: unknown, { params }: { params: { battle: unknown } }) => {
+            const preload = { battle: params.battle, assets: context.assets };
+            preloads.push(preload);
+            return preload;
+        } };
         if (name.endsWith('/MainRoleRow')) return { readRoleRow: () => role };
         // 背包读取链（ItemBag → CacheMgr → … → cc）在沙箱里不打桩会直接 require 'cc' 失败。
         if (name.endsWith('/ItemBag')) return { readItemCounts: () => new Map<string, number>() };
         if (name.endsWith('/RequestGuard')) return { toIdString };
         if (name.endsWith('/ArtPaths')) return artifactPaths;
-        if (name.endsWith('/BigMapBattle')) return { BIGMAP_BATTLE_TEXT };
         if (name.endsWith('/BundleCatalog')) return BundleCatalog;
-        if (name.endsWith('/BattleStartService')) return { startBattle: (type: number, params: readonly string[], _caller: unknown, isCurrent: () => boolean) => {
-            battles.push({ type, params, isCurrent });
-            return new Promise((resolve) => { finishBattle = resolve; });
-        } };
         if (name.endsWith('/GameRoute')) return { GameRoute: { Battle: 'battle' } };
         if (name.endsWith('/ProcedureManager')) return { ProcedureManager: {
             instance: { context },
@@ -197,7 +194,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         open(configs: object): Promise<void>; close(): void; isOpen: boolean;
     };
     const entry = new Entry();
-    return { entry, context, owners, chapterOwners, presenters, nodes, battles, routes, preloads, detailCallbacks,
+    return { entry, context, owners, chapterOwners, presenters, nodes, routes, preloads, detailCallbacks,
         cancelledEnters, assetLoads,
         setChapters(chapters: readonly number[] | null) {
             chapterSnapshot = chapters ? { idleTime: 0, chapters: [...chapters] } : null;
@@ -211,7 +208,7 @@ function createOwnerHarness(config: Promise<object> = Promise.resolve({}), layou
         chapterRequests: () => chapterRequests,
         unlockRefreshes: () => unlockRefreshes,
         settleSwitch(entered: boolean) { for (const listener of [...settledListeners]) listener(entered); },
-        finishBattle: (value: unknown) => finishBattle(value),
+        finishBattle(battle: unknown, battleType = 1004) { events.emit(mvcEvents.BIGMAP_BATTLE_READY, { battle, battleType }); },
         switchRole(id: string, serverId = '1') { role = { id, selectServerId: serverId }; },
         waitPage() { pageWait = new Promise<void>((resolve) => { finishPage = resolve; }); },
         finishPage() { finishPage?.(); pageWait = null; },
@@ -262,13 +259,10 @@ test('入口把精确角色与区服交给存储，冒险章节使用同一份�
 test('世界入口把城池配置 ID 字符串交给现有服务，成功后进入战斗，流程落定才关闭覆盖页', async () => {
     const h = createOwnerHarness();
     await h.entry.open({});
-    const result = h.presenters[0].deps.startBattle(1004, 205, () => true);
-    assert.equal(h.battles[0].type, 1004);
-    assert.equal(h.battles[0].params[0], '205');
+    assert.equal(h.presenters[0].deps.canRequestBattle, true);
     assert.equal(h.routes.length, 0, '开战成功前不导航');
     const battle = { battleId: 'server-1', units: [], seed: '123' };
     h.finishBattle(battle);
-    await result;
     assert.equal(h.routes[0].route, 'battle');
     assert.equal(h.routes[0].params.battle, battle);
     assert.equal(h.routes[0].params.slgBattleType, 1004);
@@ -283,9 +277,7 @@ test('世界入口把城池配置 ID 字符串交给现有服务，成功后进�
 test('战斗预加载失败时世界页保留，并撤掉「正在进入」遮罩让玩家重试', async () => {
     const h = createOwnerHarness();
     await h.entry.open({});
-    const attacking = h.presenters[0].deps.startBattle(1003, 8013, () => true);
-    h.finishBattle({ battleId: 'server-2', units: [], seed: '1' });
-    assert.equal((await attacking).ok, true);
+    h.finishBattle({ battleId: 'server-2', units: [], seed: '1' }, 1003);
     assert.equal(h.routes.length, 1);
     h.settleSwitch(false);
     assert.equal(h.entry.isOpen, true, '没进战斗就不该关页面');
@@ -293,16 +285,13 @@ test('战斗预加载失败时世界页保留，并撤掉「正在进入」遮�
     h.entry.close();
 });
 
-test('SLG 开战失败或等待期间关页/换服，旧回包不能导航或影响新角色', async () => {
-    for (const interrupt of ['failed', 'close', 'switch'] as const) {
+test('关页或换服后，迟到的战斗交接事件不能导航', async () => {
+    for (const interrupt of ['close', 'switch'] as const) {
         const h = createOwnerHarness();
         await h.entry.open({});
-        const result = h.presenters[0].deps.startBattle(1004, 205, () => true);
         if (interrupt === 'close') h.entry.close();
-        if (interrupt === 'switch') h.switchRole('B', '2');
-        if (interrupt !== 'failed') assert.equal(h.battles[0].isCurrent(), false);
-        h.finishBattle(interrupt === 'failed' ? null : { battleId: 'late' });
-        assert.equal((await result).ok, false);
+        else h.switchRole('B', '2');
+        h.finishBattle({ battleId: 'late' });
         assert.equal(h.routes.length, 0);
         h.entry.close();
     }
@@ -421,12 +410,12 @@ test('大地图回包后把统一预加载移交战斗入口', async () => {
     const h = createOwnerHarness(); const sharedAssets = {};
     Object.assign(h.context.sessionAssets, { reusableAssets: sharedAssets, warmupBattle: async () => {} });
     await h.entry.open({});
-    const attacking = h.presenters[0].deps.startBattle(1004, 205, () => true);
     const battle = { battleId: 'actual', seed: '1', units: [] };
-    h.finishBattle(battle); assert.equal((await attacking).ok, true);
+    h.finishBattle(battle);
     assert.equal(h.preloads.length, 1);
-    assert.equal(await h.preloads[0].battle, battle);
+    assert.equal(h.preloads[0].battle, battle);
     assert.equal(h.routes[0].params.session, h.preloads[0]);
+    h.entry.close();
 });
 
 

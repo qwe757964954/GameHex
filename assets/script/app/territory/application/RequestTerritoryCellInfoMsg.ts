@@ -40,10 +40,6 @@ export class RequestTerritoryUpMonsterBoxLv extends RequestMsg<
     CmdCityChapterUpMonsterBoxLvReqMsg,
     CmdCityChapterUpMonsterBoxLvRspMsg
 > {
-    // 账号协议的 gold 对应领地界面中的银币。
-    override readonly formatServerTip = (text: string): string =>
-        text.trim() === '金币不足' ? TERRITORY_TEXTS.silverNotEnough : text;
-
     getReqMsgProtoName(): ReqMsgProtoName {
         return 'CmdCityChapterUpMonsterBoxLvReqMsg';
     }

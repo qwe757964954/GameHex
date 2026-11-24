@@ -3,19 +3,15 @@ import type { BigMapMode, IBigMapViewState } from '../application/BigMapViewStat
 import type { IBigMapArt } from '../application/BigMapArtLoader';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, type BigMapIntent } from '../application/BigMapEvents';
-import { BIGMAP_COLORS } from './BigMapTheme';
-import { BIGMAP_DOCK_COLORS, BIGMAP_HUD_COLORS, fitBigMapSprite } from './BigMapSkin';
+import { BIGMAP_DOCK_COLORS, fitBigMapSprite } from './BigMapSkin';
 import { BIGMAP_PRESENTATION_TEXT, formatBigMapDuration } from './BigMapPresentationText';
 import { BigMapBaseView } from './BigMapBaseView';
 import type { IBigMapPlotCardContent } from './BigMapPlotCard';
 import { BigMapPlotCard } from './BigMapPlotCard';
-import { BigMapResourceFeedback, formatBigMapResourceAmount } from './BigMapResourceFeedback';
-import type { IBigMapResourceView } from '../application/BigMapViewState';
+import { BigMapTopHud } from './BigMapTopHud';
+import { Toast } from '../../common/Toast';
 
 const { ccclass, property } = _decorator;
-const RESOURCE_TYPES = ['grain', 'wood', 'iron', 'coin', 'stamina'] as const;
-/** 设计稿顶部资源胶囊只放四种；金币在玩家卡里，不再重复占胶囊位。 */
-const DESIGN_RESOURCE_TYPES = ['grain', 'wood', 'iron', 'stamina'] as const;
 
 const BASE_REFERENCE_HEIGHT = 1610;
 const BASE_MAP_OFFSET_Y = 68;
@@ -33,9 +29,6 @@ interface IBigMapDockCard {
 /** 持有页面预制体内部控件，负责渲染和输入；外部仅交付展示快照与资源。 */
 @ccclass('BigMapPageLayout')
 export class BigMapPageLayout extends Component {
-    @property([Label]) private resourceLabels: Label[] = [];
-    @property([Sprite]) private resourceIcons: Sprite[] = [];
-    @property(Sprite) private backdrop: Sprite = null!;
     @property(BigMapBaseView) private baseView: BigMapBaseView = null!;
     @property(Button) private harvestButton: Button = null!;
     @property(Button) private buildMenuButton: Button = null!;
@@ -58,16 +51,18 @@ export class BigMapPageLayout extends Component {
      */
     @property(BigMapPlotCard) private plotCard: BigMapPlotCard = null!;
 
-    /** 设计稿顶部 HUD（玩家卡 / 队列卡 / 资源胶囊），只在基地模式显示。 */
-    @property(Node) private designHud: Node = null!;
+    /**
+     * 顶部 HUD（玩家卡 / 5 格资源 / 基地队列卡）。
+     *
+     * 世界与基地共用同一棵节点树、同一份渲染；模式差异只在
+     * `BigMapTopHud.render` 内切「队列卡是否显示」，不再维护两套 Label。
+     */
+    @property(BigMapTopHud) private topHud: BigMapTopHud = null!;
     /** 设计稿底部 720×559 建造面板，只在基地模式显示。 */
     @property(Node) private designDock: Node = null!;
-    /** 旧顶栏：世界模式继续用，基地模式让位给 `designHud`。 */
-    @property(Node) private legacyHeader: Node = null!;
+    /** 建造面板展开时的空白区域点击接收层：点击面板外空白处隐藏建造面板。 */
+    @property(Button) private dockBlankCatcher: Button = null!;
 
-    @property([Label]) private designResourceLabels: Label[] = [];
-    @property(Label) private designBuildQueueValue: Label = null!;
-    @property(Label) private designResearchQueueValue: Label = null!;
     @property([Label]) private designCardNames: Label[] = [];
     @property([Label]) private designCardLevels: Label[] = [];
     @property([Label]) private designCardTimers: Label[] = [];
@@ -78,16 +73,15 @@ export class BigMapPageLayout extends Component {
     @property([Label]) private designCardActions: Label[] = [];
     @property(Button) private upgradeTab: Button = null!;
     @property(Button) private baseBackButton: Button = null!;
+    @property(Button) private seasonButton: Button = null!;
+    @property(Button) private warButton: Button = null!;
     @property(Label) private designCardLockReason: Label = null!;
 
     private dockCards: readonly IBigMapDockCard[] = [];
     private isUpgradeTab = false;
+    private isDockOpen = false;
+    private latestState: IBigMapViewState | null = null;
     private dockButtonFrames: readonly SpriteFrame[] = [];
-
-    /** 每个资源格的反馈驱动（懒建，与 resourceLabels 对齐）。 */
-    private resourceFeedback: BigMapResourceFeedback[] | null = null;
-    /** 有没有反馈在播（没有就整段 update 直接返回，不逐帧空转）。 */
-    private resourceFeedbackActive = false;
 
     //仅保留输入所需的表现状态；初始化前不接收操作。
     private inputEnabled = false;
@@ -104,6 +98,11 @@ export class BigMapPageLayout extends Component {
         for (const button of this.designCardButtons) {
             button.node.on(Button.EventType.CLICK, this.onDesignCardClick, this);
         }
+        const queueBtn = this.topHud?.queueCardButton;
+        if (queueBtn) queueBtn.node.on(Button.EventType.CLICK, this.onQueueClick, this);
+        if (this.dockBlankCatcher) this.dockBlankCatcher.node.on(Button.EventType.CLICK, this.onBlankClick, this);
+        this.seasonButton.node.on(Button.EventType.CLICK, this.onLockedNavClick, this);
+        this.warButton.node.on(Button.EventType.CLICK, this.onLockedNavClick, this);
     }
 
     initialize(data: IBigMapViewState, navigationHeight: number): void {
@@ -112,10 +111,13 @@ export class BigMapPageLayout extends Component {
         this.plotCard.node.active = false;
         this.applyNavigationHeight(navigationHeight);
 
+        this.node.getComponent(Widget)?.updateAlignment();
+        this.baseView.node.getComponent(Widget)?.updateAlignment();
         const pageHeight = this.node.getComponent(UITransform).height;
         const dockHeight = this.designDock.getComponent(UITransform).height;
         this.designDock.setPosition(0, (dockHeight - pageHeight) / 2, 0);
-        this.designHud.setPosition(0, (pageHeight - BASE_REFERENCE_HEIGHT) / 2, 0);
+        this.topHud.node.setPosition(0, (pageHeight - BASE_REFERENCE_HEIGHT) / 2, 0);
+        this.dockBlankCatcher?.node.getComponent(Widget)?.updateAlignment();
 
         const cardWidget = this.plotCard.node.getComponent(Widget);
         cardWidget.bottom = dockHeight + 12;
@@ -124,51 +126,39 @@ export class BigMapPageLayout extends Component {
 
     mountWorld(node: Node): void {
         node.setParent(this.node);
-        node.setSiblingIndex(1);
+        node.setSiblingIndex(0);
     }
 
-    buildBase(data: IBigMapViewState, rect: { x: number; y: number; width: number; height: number }): void {
-        this.baseView.node.setPosition(rect.x, rect.y, 0);
-        this.baseView.setMapOffset(0, BASE_MAP_OFFSET_Y);
-        this.baseView.build(data, rect.width, rect.height);
+    buildBase(data: IBigMapViewState, width: number, height: number, focusOffsetY: number): void {
+        this.baseView.node.setPosition(0, 0, 0);
+        this.baseView.setMapOffset(0, BASE_MAP_OFFSET_Y + focusOffsetY);
+        this.baseView.build(data, width, height);
     }
 
     focusBase(hexId: number): void { this.baseView.focusOn(hexId); }
 
     setArt(art: IBigMapArt): void {
         this.art = art;
-        //页面底衬也铺沙地：设计稿顶部 HUD 后面是连续地表，不能露出黑底。
-        if (this.backdrop && art.tiledBackground) {
-            this.backdrop.spriteFrame = art.tiledBackground;
-            this.backdrop.color = Color.WHITE;
-            //基地底图由页面这一层统一铺满：SIMPLE 拉伸整张沙地，
-            //不再用 TILED 让 2048 贴图按自身尺寸重复 —— 那样会在浏览区顶边出现一条接缝。
-            this.backdrop.type = Sprite.Type.SIMPLE;
-            this.backdrop.sizeMode = Sprite.SizeMode.CUSTOM;
-            this.backdrop.trim = false;
-            //Prefab 根节点仍是 720×1280，宿主实际高度按设备变化；底衬必须盖满宿主，不能留黑边。
-            const host = this.node.parent?.getComponent(UITransform)?.contentSize;
-            if (host) {
-                this.backdrop.node.getComponent(UITransform).setContentSize(
-                    Math.max(host.width, 720), Math.max(host.height, BASE_REFERENCE_HEIGHT),
-                );
-            }
-            this.backdrop.node.setPosition(0, 0, 0);
-        }
         this.baseView.setArt(art);
-        this.resourceIcons.forEach((icon, index) => {
-            icon.spriteFrame = art.resources.get(RESOURCE_TYPES[index]) ?? null;
-        });
         this.applyMode(this.mode);
     }
 
     render(data: IBigMapViewState): void {
+        this.latestState = data;
         this.inputEnabled = !data.ui.enteringBattle;
-        if (this.mode !== data.ui.mode) this.isUpgradeTab = false;
+        if (this.mode !== data.ui.mode) {
+            this.isUpgradeTab = false;
+            this.isDockOpen = false;
+        }
+        if (data.ui.pendingBuildingId !== 0) {
+            this.isDockOpen = false;
+        }
         this.mode = data.ui.mode;
-        this.applyMode(this.mode);
-        this.refreshHeader(data);
-        if (this.mode === 'base') {
+        this.applyMode(this.mode, data);
+        this.topHud.render(data);
+        this.harvestButton.interactable = !data.ui.baseActionPending && data.canHarvest;
+        const dockActive = (this.mode === 'base') && (this.isDockOpen || data.ui.buildMenuVisible);
+        if (dockActive) {
             this.refreshQueue(data);
             this.refreshDock(data);
         }
@@ -183,6 +173,7 @@ export class BigMapPageLayout extends Component {
         if (this.isUpgradeTab) {
             this.isUpgradeTab = false;
             this.sendIntent({ kind: 'clear' });
+            if (this.latestState) this.refreshDock(this.latestState);
             return;
         }
         this.sendIntent({ kind: 'toggleBuildMenu' });
@@ -192,11 +183,70 @@ export class BigMapPageLayout extends Component {
         if (this.isUpgradeTab) return;
         this.isUpgradeTab = true;
         this.sendIntent({ kind: 'clear' });
+        if (this.latestState) this.refreshDock(this.latestState);
+    }
+
+    private onQueueClick(): void {
+        if (!this.inputEnabled || this.mode !== 'base') return;
+        const dockActive = this.isDockOpen || (this.latestState?.ui.buildMenuVisible ?? false);
+        if (dockActive) {
+            this.isDockOpen = false;
+            if (this.latestState?.ui.buildMenuVisible) {
+                this.sendIntent({ kind: 'closeBuildMenu' });
+            } else if (this.latestState) {
+                this.applyDockVisibility(this.latestState);
+            }
+        } else {
+            this.isDockOpen = true;
+            if (this.latestState) {
+                this.applyDockVisibility(this.latestState);
+                this.refreshQueue(this.latestState);
+                this.refreshDock(this.latestState);
+            }
+        }
+    }
+
+    private onBlankClick(): void {
+        const dockActive = (this.mode === 'base') && (this.isDockOpen || (this.latestState?.ui.buildMenuVisible ?? false));
+        if (!this.inputEnabled || !dockActive) return;
+        this.isDockOpen = false;
+        if (this.latestState?.ui.buildMenuVisible) {
+            this.sendIntent({ kind: 'closeBuildMenu' });
+        } else if (this.latestState) {
+            this.applyDockVisibility(this.latestState);
+        }
+    }
+
+    private onLockedNavClick(): void {
+        if (!this.inputEnabled) return;
+        Toast.show(BIGMAP_PRESENTATION_TEXT.featureNotOpen);
+    }
+
+    private applyDockVisibility(data: IBigMapViewState): void {
+        const base = this.mode === 'base';
+        const dockActive = base && (this.isDockOpen || data.ui.buildMenuVisible);
+        this.designDock.active = dockActive;
+        if (this.dockBlankCatcher) this.dockBlankCatcher.node.active = dockActive;
+        this.modeNode.active = !base || !dockActive;
+        if (this.art) {
+            const icon = this.art.hud.get(this.mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
+            fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
+            const frame = this.art.hud.get('mode_frame') ?? null;
+            fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
+            this.modeFallback.node.active = !frame;
+            this.modeLabel.string = this.mode === 'world' ? BIGMAP_PRESENTATION_TEXT.baseToggle : BIGMAP_PRESENTATION_TEXT.worldToggle;
+        }
     }
 
     private onDesignCardClick(button: Button): void {
         const card = this.dockCards[this.designCardButtons.indexOf(button)];
-        if (card) this.sendIntent(card.intent);
+        if (card) {
+            if (card.intent.kind === 'build') {
+                this.isDockOpen = false;
+                if (this.latestState) this.applyDockVisibility(this.latestState);
+            }
+            this.sendIntent(card.intent);
+        }
     }
 
     private onExploreClick(): void { this.sendIntent({ kind: 'searchMonster' }); }
@@ -220,105 +270,50 @@ export class BigMapPageLayout extends Component {
         if (content) this.plotCard.render(content);
     }
 
-    private applyMode(mode: BigMapMode): void {
+    /** 页面加载好的玩家头像转交给顶部玩家卡（`MainResBar`），不二次请求。 */
+    setPlayerPortrait(frame: SpriteFrame | null): void {
+        this.topHud.setPlayerPortrait(frame);
+    }
+
+    private applyMode(mode: BigMapMode, data?: IBigMapViewState): void {
         const base = mode === 'base';
         this.baseView.node.active = base;
-        this.legacyHeader.active = !base;
-        this.designHud.active = base;
-        this.designDock.active = base;
-        this.modeNode.active = !base;
+        // 顶栏两模式都显示；队列卡由 TopHud 按模式自行切换。
+        this.topHud.node.active = true;
+        const currentData = data ?? this.latestState;
+        const dockActive = base && (this.isDockOpen || (currentData?.ui.buildMenuVisible ?? false));
+        this.designDock.active = dockActive;
+        if (this.dockBlankCatcher) this.dockBlankCatcher.node.active = dockActive;
+        this.modeNode.active = !base || !dockActive;
         this.exploreButton.node.active = !base;
-        if (!base && this.art) {
+        //「一键收获」是世界玩法入口：基地模式收起，世界模式恢复。
+        // prefab 中该按钮 right=70：给 Canvas/GMButton（52 宽 + 右 10）再留 8px 间隙，避免压住 GM 入口。
+        this.harvestButton.node.active = !base;
+        if (this.art) {
             const icon = this.art.hud.get(mode === 'world' ? 'mode_base' : 'mode_world') ?? null;
             fitBigMapSprite(this.modeIcon, icon, this.modeIconSize, 0, this.modeIconY);
             const frame = this.art.hud.get('mode_frame') ?? null;
             fitBigMapSprite(this.modeFrame, frame, this.modeFrameWidth, 0, this.modeFrameY);
             this.modeFallback.node.active = !frame;
-            this.modeLabel.string = BIGMAP_PRESENTATION_TEXT.baseToggle;
+            this.modeLabel.string = mode === 'world' ? BIGMAP_PRESENTATION_TEXT.baseToggle : BIGMAP_PRESENTATION_TEXT.worldToggle;
         }
     }
 
     /**
-     *统一心跳：推进各资源格反馈。
+     * 统一心跳：推进顶部 5 个资源格的反馈。
      *
-     *不用 tween：反馈驱动只记 elapsed，每帧向 MainResBarFeedback 纯函数要当帧值。
-     *没有反馈在播时直接返回，不做逐帧空转。
+     * 不用 tween：反馈驱动只记 elapsed，每帧向 MainResBarFeedback 纯函数要当帧值；
+     * TopHud 内部逐格 `step`，没有反馈时返回 false，不做额外节点操作。
      */
     update(dt: number): void {
-        if (!this.resourceFeedbackActive) return;
-        let busy = false;
-        for (const feedback of this.resourceFeedbackList()) {
-            if (feedback.step(dt)) busy = true;
-        }
-        this.resourceFeedbackActive = busy;
-    }
-
-    private resourceFeedbackList(): readonly BigMapResourceFeedback[] {
-        if (!this.resourceFeedback) {
-            this.resourceFeedback = this.resourceLabels.map((label) => new BigMapResourceFeedback(label));
-        }
-        return this.resourceFeedback;
-    }
-
-    private refreshHeader(data: IBigMapViewState): void {
-        const feedbacks = this.resourceFeedbackList();
-        for (const view of data.resources) {
-            const index = RESOURCE_TYPES.indexOf(view.type);
-            const label = this.resourceLabels[index];
-            //反馈在播（含本帧刚起播）⇒ Label 由反馈驱动接管，本帧不写常态文本。
-            if (feedbacks[index].sync(view)) {
-                this.resourceFeedbackActive = true;
-                continue;
-            }
-            label.string = this.steadyResourceText(view, data);
-            //HUD 皮肤：米白压深板岩卡；没加载到美术（纯色兜底）时退回旧的深棕字压浅纸面。
-            label.color = this.art ? BIGMAP_HUD_COLORS.cream : BIGMAP_COLORS.text;
-        }
-        if (this.mode === 'base') this.refreshDesignResources(data);
-        this.harvestButton.interactable = !data.ui.baseActionPending && data.canHarvest;
-    }
-
-    /** 设计稿资源胶囊：只显示粮/木/铁/体力，数值与旧顶栏同一套口径。 */
-    private refreshDesignResources(data: IBigMapViewState): void {
-        for (let index = 0; index < this.designResourceLabels.length; index += 1) {
-            const type = DESIGN_RESOURCE_TYPES[index];
-            const view = data.resources.find((item) => item.type === type);
-            const label = this.designResourceLabels[index];
-            if (!view || !label) continue;
-            //设计稿写的是 `3078` 而不是 `3.1K`；这里保留整数原值，
-            //只有行动力仍按 `当前/上限` 展示，避免和顶部资源胶囊的视觉口径不一致。
-            if (view.amountKnown === false) {
-                label.string = this.steadyResourceText(view, data);
-            } else {
-                const amount = Math.floor(view.amount);
-                const cap = type === 'stamina' && Number.isFinite(view.cap) ? `/${Math.floor(view.cap)}` : '';
-                label.string = `${amount}${cap}`;
-            }
-            label.color = BIGMAP_HUD_COLORS.cream;
-        }
-    }
-
-    /** 反馈未在播时的常态资源文本：未知 / 恢复倒计时 / 美术态 K 值 / 纯色兜底全名。 */
-    private steadyResourceText(view: IBigMapResourceView, data: IBigMapViewState): string {
-        const cap = Number.isFinite(view.cap) ? `/${Math.floor(view.cap)}` : '';
-        const pending = view.pending > 0 ? `  +${view.pending}` : '';
-        const recovery = data.actionRecoverSeconds;
-        if (view.amountKnown === false) {
-            return view.type === 'stamina' && recovery !== null && recovery > 0 ? `${recovery}s` : '—';
-        }
-        if (this.art) {
-            return formatBigMapResourceAmount(view.amount) + (view.type === 'stamina' ? cap : '');
-        }
-        return `${view.name} ${view.amount}${cap}${pending}`;
+        this.topHud.step(dt);
     }
 
     private refreshQueue(data: IBigMapViewState): void {
         const busy = data.queues.filter((queue) => queue.busy).length;
         const unlocked = data.queues.filter((queue) => !queue.locked).length;
         const summary = `${busy}/${unlocked}`;
-        this.designBuildQueueValue.string = summary;
         this.designDock.getChildByName('TopRow').getChildByName('QueueValue').getComponent(Label).string = summary;
-        this.designResearchQueueValue.string = '—';
     }
 
     private refreshDock(data: IBigMapViewState): void {

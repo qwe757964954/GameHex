@@ -5,7 +5,7 @@
  * 散开露出的就是战场。兄弟位每帧校正，切换超时时强制散云。
  */
 
-import { _decorator, Component, Node, Vec3 } from 'cc';
+import { _decorator, Component, Node, UITransform, Vec3 } from 'cc';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 import { TerritoryBattleCover } from './TerritoryBattleCover';
 
@@ -38,6 +38,8 @@ export class TerritoryBattleCoverOverlay extends Component {
     private stopSwitchWatch: (() => void) | null = null;
     /** 战场（流程宿主）节点：这一层永远是它的下一个兄弟。 */
     private anchor: Node | null = null;
+    /** 启动 armed 的绝对时间戳（防 update 暂停卡死）。 */
+    private armedWallTime = 0;
 
     /**
      * 把已经建好的云搬到**宿主的旁边**（就绪的云层才会搬）。
@@ -47,14 +49,21 @@ export class TerritoryBattleCoverOverlay extends Component {
     static create(host: Node, cover: TerritoryBattleCover): TerritoryBattleCoverOverlay | null {
         if (!host?.isValid || !cover?.built) return null;
         // 挂宿主的**父节点**：战场进入时会 `host.removeAllChildren()`（见类注释）。
-        const parent = host.parent?.isValid ? host.parent : host;
+        const isSibling = !!host.parent?.isValid;
+        const parent = isSibling ? host.parent! : host;
         const node = new Node(TERRITORY_BATTLE_COVER_OVERLAY_NODE);
         node.layer = parent.layer;
+        // 遵守工程红线：脚本动态创建 2D 节点必须挂载 UITransform
+        node.addComponent(UITransform);
         node.setParent(parent);
         node.setPosition(Vec3.ZERO);
-        node.setSiblingIndex(Math.min(parent.children.length - 1, host.getSiblingIndex() + 1));
+        if (isSibling) {
+            node.setSiblingIndex(Math.min(parent.children.length - 1, host.getSiblingIndex() + 1));
+        } else {
+            node.setSiblingIndex(Math.max(0, parent.children.length - 1));
+        }
         const overlay = node.addComponent(TerritoryBattleCoverOverlay);
-        overlay.anchor = host;
+        overlay.anchor = isSibling ? host : null;
         overlay.adopt(cover);
         return overlay;
     }
@@ -67,8 +76,8 @@ export class TerritoryBattleCoverOverlay extends Component {
     private adopt(cover: TerritoryBattleCover): void {
         this.cover = cover;
         const layer = cover.layerNode;
-        // 世界坐标不变：匹配页节点与这一层都在 (0,0)、没有缩放，直接换父节点不会有位移。
-        if (layer?.isValid) layer.setParent(this.node);
+        // 保持世界坐标：显式 keepWorldTransform=true 避免受父级缩放/偏移/安全区适配影响
+        if (layer?.isValid) layer.setParent(this.node, true);
     }
 
     /**
@@ -80,6 +89,14 @@ export class TerritoryBattleCoverOverlay extends Component {
     arm(): void {
         if (this.armedAt >= 0 || !this.node?.isValid) return;
         this.armedAt = this.elapsed;
+        this.armedWallTime = Date.now();
+        this.keepOnTop();
+
+        // 注册引擎调度器兜底：即便组件被非预期隐藏或暂停 update，也能在超时后触发强制散云
+        this.scheduleOnce(() => {
+            this.triggerRelease();
+        }, TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT);
+
         if (!ProcedureManager.instance) {
             // 没有管理器（单测/脱离流程跑）：当作"已经落定"，到点就散。
             this.settledAt = this.elapsed;
@@ -89,33 +106,51 @@ export class TerritoryBattleCoverOverlay extends Component {
             this.stopSwitchWatch?.();
             this.stopSwitchWatch = null;
             if (this.settledAt < 0) this.settledAt = this.elapsed;
+            // 流程落定后做一次层级校验，后续无需再每帧更新兄弟索引
+            this.keepOnTop();
         });
     }
 
     update(dt: number): void {
         const cover = this.cover;
         if (!cover) { this.finish(); return; }
-        this.keepOnTop();
+
+        // 性能优化：仅在未落定（等待切流程）阶段才需要维持置顶，落定后兄弟树稳定不再每帧轮询遍历
+        if (this.settledAt < 0) {
+            this.keepOnTop();
+        }
+
         const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
         this.elapsed += step;
+
         if (this.armedAt >= 0 && this.releasedAt < 0) {
             const settled = this.settledAt >= 0 && this.elapsed - this.settledAt >= TERRITORY_BATTLE_COVER_RELEASE_DELAY;
-            const expired = this.elapsed - this.armedAt >= TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT;
+            const expired = this.elapsed - this.armedAt >= TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT ||
+                (this.armedWallTime > 0 && Date.now() - this.armedWallTime >= TERRITORY_BATTLE_COVER_RELEASE_MAX_WAIT * 1000);
             if (settled || expired) {
-                // 已经起散就不用再听流程切换了（超时那条路尤其要退订，否则监听会一直挂着）。
-                this.stopSwitchWatch?.();
-                this.stopSwitchWatch = null;
-                cover.startRelease();
-                this.releasedAt = this.elapsed;
+                this.triggerRelease();
             }
         }
+
         cover.tick(step);
         if (this.releasedAt >= 0 && cover.releaseFinished) this.finish();
+    }
+
+    /** 触发散场逻辑（幂等） */
+    private triggerRelease(): void {
+        if (this.releasedAt >= 0 || !this.cover) return;
+        // 已经起散就不用再听流程切换了（超时那条路尤其要退订，否则监听会一直挂着）。
+        this.stopSwitchWatch?.();
+        this.stopSwitchWatch = null;
+        this.unscheduleAllCallbacks();
+        this.cover.startRelease();
+        this.releasedAt = this.elapsed;
     }
 
     protected onDestroy(): void {
         this.stopSwitchWatch?.();
         this.stopSwitchWatch = null;
+        this.unscheduleAllCallbacks();
         this.releaseCover();
     }
 
@@ -123,6 +158,7 @@ export class TerritoryBattleCoverOverlay extends Component {
     private finish(): void {
         this.stopSwitchWatch?.();
         this.stopSwitchWatch = null;
+        this.unscheduleAllCallbacks();
         this.releaseCover();
         if (this.node?.isValid) this.node.destroy();
     }

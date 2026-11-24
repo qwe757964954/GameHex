@@ -359,8 +359,8 @@ export class ZCUnitView extends Component {
             ZCUnitView.reportMissingPrefab(definition);
             if (this.presentationOwner) {
                 EventMgr.instance.emit(ZCGameUiEvent.RequestUnitArt, {
-                    owner: this.presentationOwner, unitId: definition.unitId,
-                });
+                    unitId: definition.unitId,
+                }, this.presentationOwner);
             }
         }
         return null;
@@ -406,6 +406,9 @@ export class ZCUnitView extends Component {
         this.appliedRootX = Number.NaN;
         this.appliedRootY = Number.NaN;
         this.appliedTint = -1;
+        // 复用回来的节点不能带着上一任「舞伴」的半透明度：`UIOpacity` 挂在节点上、
+        // 写入缓存挂在这个组件上，两样都不随 `active=false` 复位 ⇒ 不清就会「新单位凭空半透明」。
+        this.appliedSummonAlpha = -1;
         this.appliedOutlineCopyOwner = null;
         this.outlineSyncedEpoch = -1;
         // 复用回来的节点不能带着上一条命的抖动/缩放/朝向残影。
@@ -522,7 +525,11 @@ export class ZCUnitView extends Component {
 
     render(presentation: Readonly<IZCUnitPresentation>): void {
         const { unit, definition, x, y, now } = presentation;
-        this.applySummonAlpha(unit.summonAlpha);
+        //  🔴 只有**召唤物**能半透明：透明度是用来区分「本体 / 分身」的，本体必须 100% 实心。
+        //  判据只认 `summonMasterId`，不认「配表有没有给 `summonAlpha`」——
+        //  后者是数值袋里的一个键，哪天被拷到别的行上（或读档还原串了），本体就会跟着变透，
+        //  而且一点错都不报。这里宁可把「本体不参与半透明」写死。
+        this.applySummonAlpha(unit.summonMasterId === undefined ? undefined : unit.summonAlpha);
         this.renderHealthBar(unit, definition, now);
 
         const size = definition.hero ? ZCUnitView.FOOT_SIZE_HERO : ZCUnitView.FOOT_SIZE_UNIT;

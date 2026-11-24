@@ -1,18 +1,17 @@
-import { _decorator, Button, Component, instantiate, Label, Node, UITransform } from 'cc';
+import { _decorator, Button, Component, Label, Layout, Node, UIOpacity } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
-import type { MatchIconLoader } from './MatchIcons';
 import { MatchPlayerItem } from './MatchPlayerItem';
+import type { IIconLoader } from '../common/SpriteFrameCache';
 import { matchRevealDelays } from './MatchReveal';
 import { MATCH_TEXT, type MatchPhase, type MatchPlayerData } from './MatchTypes';
 import type { IMatchingViewState } from './MatchingModel';
-import { matchingTipProgress, matchingWaveOffset } from './MatchingTimeline';
+import { matchingTipOpacity, matchingTipOffsetY, matchingTipProgress, matchingWaveOffset } from './MatchingTimeline';
 const { ccclass, property } = _decorator;
 /**
  * 匹配页只渲染快照、驱动视觉时间轴；搜索及开战由外部控制器负责。
  *
- * ⚠️ **这里不许有"本局几个人"的常量**：条数由 `state.slots` 给（实际参与人数 2/3/4，
- * 口径在 `MatchSlots`）。历史上写死过 2、后来又写死过 4，两次都被实机打回。
+ * 信息条按 `state.slots` 布局，已确认的对手资料来自 `state.opponents`。
  */
 @ccclass('MatchingPage')
 export class MatchingPage extends Component {
@@ -21,11 +20,11 @@ export class MatchingPage extends Component {
 
     @property({
         type: Node,
-        tooltip: 'ItemList：信息条容器；子节点依次是各参与方（0 号 = 我方），数量 = 本局人数（2~4）',
+        tooltip: 'ItemList：展示席位的信息条容器（0 号是我方）',
     })
     itemList: Node = null!;
 
-    @property({ type: Label, tooltip: 'TipText：提示条正文当前页，翻页时与备页一左一右滑动' })
+    @property({ type: Label, tooltip: 'TipText：提示条正文当前页，翻页时淡入淡出与垂直微浮动' })
     tipText: Label = null!;
 
     @property({ type: Node, tooltip: 'TipArrowL：提示条左箭头，点击切到上一条' })
@@ -34,16 +33,17 @@ export class MatchingPage extends Component {
     @property({ type: Node, tooltip: 'TipArrowR：提示条右箭头，点击切到下一条' })
     tipArrowR: Node = null!;
 
+    @property({ type: UIOpacity, tooltip: 'TipOpacity：提示条文本透明度组件，挂载于 TipText 节点' })
+    tipOpacity: UIOpacity = null!;
+
     private phase: MatchPhase = 'searching';
     private opponents: readonly MatchPlayerData[] = [];
     private itemViews: MatchPlayerItem[] = [];
-    private iconLoader: MatchIconLoader | null = null;
+    private loadIcon: IIconLoader = null!;
     private tips: readonly string[] = [];
     private tipIndex = 0;
-    private tipSpareText: Label = null!;
-    private tipPageWidth = 0;
     private tipNextAt = 0;
-    private slide: { startedAt: number; side: number } | null = null;
+    private tipTransition: { startedAt: number; direction: number; targetIndex: number; switched: boolean } | null = null;
     private waveStartedAt = 0;
     private waveNodes: { node: Node; x: number; y: number }[] = [];
     /**
@@ -60,23 +60,20 @@ export class MatchingPage extends Component {
     get currentPhase(): MatchPhase { return this.phase; }
     get matchedOpponents(): readonly MatchPlayerData[] { return this.opponents; }
     get tipCount(): number { return this.tips.length; }
-    initialize(iconLoader: MatchIconLoader, tips: readonly string[]): void {
-        this.iconLoader = iconLoader;
+    initialize(tips: readonly string[], loader: IIconLoader | { readonly load: IIconLoader }): void {
         this.tips = tips;
+        this.loadIcon = typeof loader === 'function' ? loader : loader.load;
     }
     protected onLoad(): void {
-        const iconLoader = this.iconLoader;
-        if (!iconLoader) throw new Error('MatchingPage 缺少图标服务');
-        this.itemViews = this.itemList.children.map(node => node.getComponent(MatchPlayerItem)).filter(view => view != null);
-        if (this.itemViews.length < 2) throw new Error('MatchingPage 至少需要两条信息条');
+        this.itemViews = this.itemList.children.map(node => node.getComponent(MatchPlayerItem));
         this.revealed = this.itemViews.map(() => false);
-        this.itemViews.forEach((view, index) => { view.setIconLoader(iconLoader); void view.applySlot(index); });
+        this.itemViews.forEach((view, index) => {
+            view.initialize(this.loadIcon);
+            void view.applySlot(index);
+        });
         this.tipArrowL.on(Button.EventType.CLICK, this.previousTip, this);
         this.tipArrowR.on(Button.EventType.CLICK, this.nextTip, this);
-        this.tipPageWidth = this.tipText.node.getComponent(UITransform).width;
-        const spare = instantiate(this.tipText.node);
-        spare.name = 'TipTextSpare'; spare.active = false; spare.setParent(this.tipText.node.parent);
-        this.tipSpareText = spare.getComponent(Label);
+        this.tipOpacity = this.tipOpacity ?? this.tipText.getComponent(UIOpacity);
         this.tipText.node.active = this.tips.length > 0;
         this.tipArrowL.active = this.tipArrowR.active = this.tips.length > 1;
         this.tipText.string = this.tips[0] ?? '';
@@ -84,13 +81,10 @@ export class MatchingPage extends Component {
         this.waveStartedAt = Date.now() / 1000;
         this.tipNextAt = this.waveStartedAt + 3;
     }
-    protected start(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' }); }
+    protected start(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this); }
     render(state: IMatchingViewState): void {
         this.phase = state.phase;
         this.opponents = state.opponents;
-        // 🔴 条数 = 本局**实际参与人数**（`state.slots`，2 / 3 / 4），视图不自己定：
-        //    这里原来写死过 2，后来又写死过 4，两次都不对 —— 人数是服务端/入口给的，
-        //    页面只负责按它排（口径见 `MatchSlots`）。`layout` 内部再夹一次 itemViews 上限。
         this.layout(state.slots);
         this.statusLabel.enabled = state.phase !== 'searching';
         this.statusLabel.string = MATCH_TEXT[state.phase];
@@ -169,16 +163,20 @@ export class MatchingPage extends Component {
                 wave.node.setPosition(wave.x, wave.y + matchingWaveOffset(now - this.waveStartedAt, index), 0);
             }
         }
-        const slide = this.slide;
-        if (slide) {
-            const progress = matchingTipProgress(now - slide.startedAt);
-            this.tipText.node.setPosition(-slide.side * this.tipPageWidth * progress, 0, 0);
-            this.tipSpareText.node.setPosition(slide.side * this.tipPageWidth * (1 - progress), 0, 0);
+        const transition = this.tipTransition;
+        if (transition) {
+            const progress = matchingTipProgress(now - transition.startedAt);
+            if (progress >= 0.5 && !transition.switched) {
+                this.tipIndex = transition.targetIndex;
+                this.tipText.string = this.tips[this.tipIndex] ?? '';
+                transition.switched = true;
+            }
+            this.tipOpacity.opacity = matchingTipOpacity(progress);
+            this.tipText.node.setPosition(0, matchingTipOffsetY(progress, transition.direction), 0);
             if (progress === 1) {
-                this.tipText.string = this.tipSpareText.string;
+                this.tipOpacity.opacity = 255;
                 this.tipText.node.setPosition(0, 0, 0);
-                this.tipSpareText.node.active = false;
-                this.slide = null;
+                this.tipTransition = null;
                 this.tipNextAt = now + 3;
             }
         } else if (now >= this.tipNextAt && this.tips.length > 1) this.stepTip(1);
@@ -186,23 +184,30 @@ export class MatchingPage extends Component {
     private readonly previousTip = (): void => this.stepTip(-1);
     private readonly nextTip = (): void => this.stepTip(1);
     private stepTip(step: number): void {
-        if (this.slide || this.tips.length < 2) return;
-        this.tipIndex = (this.tipIndex + step + this.tips.length) % this.tips.length;
-        this.slide = { startedAt: Date.now() / 1000, side: step > 0 ? 1 : -1 };
-        this.tipSpareText.string = this.tips[this.tipIndex];
-        this.tipSpareText.node.setPosition(this.slide.side * this.tipPageWidth, 0, 0);
-        this.tipSpareText.node.active = true;
+        if (this.tipTransition || this.tips.length < 2) return;
+        const targetIndex = (this.tipIndex + step + this.tips.length) % this.tips.length;
+        this.tipTransition = {
+            startedAt: Date.now() / 1000,
+            direction: step > 0 ? 1 : -1,
+            targetIndex,
+            switched: false,
+        };
     }
     protected onDestroy(): void {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
         this.revealToken += 1;
-        this.waveNodes = []; this.itemViews = []; this.slide = null; this.iconLoader = null;
+        this.waveNodes = []; this.itemViews = []; this.tipTransition = null;
     }
     private layout(count: number): void {
         const visibleCount = Math.max(1, Math.min(this.itemViews.length, count));
         this.itemList.children.forEach((node, index) => {
             node.active = index < visibleCount;
         });
+        // 设计稿两套行距：匹配成功 4 条=205+10、正在寻找 3 条=205+25；
+        // 两种都是**整体居中**，容器固定在 y=42，不再按人数做旧的 y 补偿。
+        const layout = this.itemList.getComponent(Layout);
+        if (layout) layout.spacingY = visibleCount >= 4 ? 10 : 25;
+        this.itemList.setPosition(0, 42, 0);
     }
 
 }

@@ -104,6 +104,7 @@ test('★ 发布帧把「已通过集合」和「巡逻野怪列表」同一拍�
 // ── 二、形象：VM 跑真 TerritoryMonsterPatrolView ─────────────────────────
 
 class FakeColor {
+    static WHITE = new FakeColor(255, 255, 255, 255);
     constructor(public r = 0, public g = 0, public b = 0, public a = 255) {}
 }
 
@@ -277,7 +278,7 @@ test('★★ 描边副本的四条硬口径都落在视图里（少一条就「�
     assert.match(VIEW_SRC, /skeleton\.customMaterial = material/, '必须挂 shader 材质');
     assert.match(VIEW_SRC, /skeleton\.premultipliedAlpha = true/, '预乘口径必须钉死');
     assert.match(VIEW_SRC, /copy\.setScale\(TERRITORY_PATROL_OUTLINE_SCALE/);
-    assert.match(VIEW_SRC, /visual\.skeleton\.color = cleared \? PATROL_NORMAL : PATROL_DIM/,
+    assert.match(VIEW_SRC, /visual\.skeleton\.color = cleared \? Color\.WHITE : PATROL_DIM/,
         '写绝对色，不许靠「创建时染一次」');
     assert.match(VIEW_SRC, /if \(!outline \|\| !outline\.node\.active\) continue/,
         '隐藏的副本不参与锁相');

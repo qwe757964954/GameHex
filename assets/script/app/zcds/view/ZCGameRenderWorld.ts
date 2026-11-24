@@ -431,6 +431,16 @@ export class ZCGameRenderWorld {
     private readonly outlineDrawn: number[] = [];
     private readonly unitViews = new Map<number, ZCUnitView>();
     /**
+     * 召唤物（分身 / 舞伴）的实体 id。
+     *
+     * 只服务一件事：**绘制顺序**。分身是半透明的，若它排在普通单位之上，
+     * 5~6 个半透明复制品压在本体身上，看起来就是「本体跟着变透了」——
+     * 而设计口径恰恰是「只有分身有透明度，本体 100% 实心，透明度用来区分本体与分身」。
+     * 所以召唤物一律插到「第一个普通单位之前」（仍在格子之上、特效之外不受影响），
+     * 本体永远画在自己所有分身的上面。
+    */
+    private readonly summonEntityIds = new Set<number>();
+    /**
      * 一次性表现件（出生光柱 / 受击闪白 / 阵亡特效）统一由特效池管理，不进 ECS。
      *
      * 它们都是「本地一次性动画」，不来自模型快照、不参与网络同步，按时间轴回收就够
@@ -1869,6 +1879,7 @@ export class ZCGameRenderWorld {
         this.scene.clear();
         this.hexViews.clear();
         this.unitViews.clear();
+        this.summonEntityIds.clear();
         this.effectViews.clear();
         this.floatTextViews.clear();
         this.cardRevealViews.clear();
@@ -1896,6 +1907,36 @@ export class ZCGameRenderWorld {
         if (this.unitOutlineCopyMaterial) this.unitOutlineCopyMaterial.destroy();
     }
 
+    /**
+     * 单位节点的绘制顺序：**召唤物在下、普通单位在上**。
+     *
+     * 只在新实体建出来那一刻摆一次（节点池复用会保留旧下标，所以这条必须每建必跑）：
+     *  · 普通单位 ⇒ 挪到队尾（最上层）；
+     *  · 召唤物 ⇒ 插到「当前最靠下的普通单位」之前，于是本体永远盖住自己的分身。
+     *
+     * 为什么必须动：分身的造型与本体一模一样（复制本体，不是另开兵种），
+     * 唯一区别就是那层 65% / 60% 的透明度。它们出生就在本体脚边（101404 是 20px 圆内），
+     * 排在普通单位之上时，半透明复制品会直接糊在本体脸上 —— 看起来就是「本体也变透了」。
+     */
+    private applyUnitDrawOrder(entityId: number, node: Node, unit: Readonly<ZCUnitState>): void {
+        if (unit.summonMasterId === undefined) {
+            this.summonEntityIds.delete(entityId);
+            const siblings = node.parent ? node.parent.children.length : 0;
+            if (siblings > 0) node.setSiblingIndex(siblings - 1);
+            return;
+        }
+        this.summonEntityIds.add(entityId);
+        let firstRegular = Number.POSITIVE_INFINITY;
+        for (const otherId of this.unitViews.keys()) {
+            if (this.summonEntityIds.has(otherId)) continue;
+            const other = this.scene.get(otherId)?.node;
+            if (!other || !other.isValid || other.parent !== node.parent) continue;
+            firstRegular = Math.min(firstRegular, other.getSiblingIndex());
+        }
+        //  一个普通单位都没有（极端：只召出了分身）⇒ 保持队尾，至少不会掉到格子下面。
+        if (Number.isFinite(firstRegular)) node.setSiblingIndex(firstRegular);
+    }
+
     private createEntity(kind: ZCRenderEntityKind, sourceId: number, node: Node): number {
         const entityId = this.nextEntityId++;
         this.identity.set(entityId, { kind, sourceId });
@@ -1912,6 +1953,7 @@ export class ZCGameRenderWorld {
             else node.destroy();
         }
         this.pooledEntityKeys.delete(entityId);
+        this.summonEntityIds.delete(entityId);
         this.identity.delete(entityId);
         this.scene.delete(entityId);
         this.hexViews.delete(entityId);
@@ -2263,6 +2305,7 @@ export class ZCGameRenderWorld {
             this.pooledEntityKeys.set(entityId, key);
             this.unitViews.set(entityId, view);
             this.unitEntityBySource.set(unit.id, entityId);
+            this.applyUnitDrawOrder(entityId, node, unit);
         }
         const currentPosition = this.unitPosition(unit);
         const { x, y } = this.unitInterpolator.positionOf(unit, frame, currentPosition.x, currentPosition.y);
@@ -2445,7 +2488,10 @@ export class ZCGameRenderWorld {
                     !!this.options.allowGenericEffects && !!event.effectPrefabPath,
                     //  光束类特效（镭射飞龙）按路径认：同一份美术被普攻与「镭射死光」共用，
                     //  配一次两条都对；见 `ZCBeamEffect`。
-                    event.effectPrefabPath);
+                    event.effectPrefabPath,
+                    //  事件级染色（2026-11-23 第 43 批）：文明之火复用灼热地带的图但要蓝色，
+                    //  而火焰树妖自己的灼热地带保持紫 ⇒ 颜色跟着事件走，不覆盖路径表。
+                    event.tint);
                 entityId = this.createEntity('effect', event.id, node);
                 this.pooledEntityKeys.set(entityId, key);
                 this.effectViews.set(entityId, view);
@@ -2511,7 +2557,7 @@ export class ZCGameRenderWorld {
                 this.missingEffectArtRequested.add(path);
                 //  请求在第一次取不到时就发（此刻正有一发子弹在飞，晚一帧就飞完了）；
                 //  控制器去重（pending / loaded 两个集合），失败也不会反复重试打网络。
-                EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { owner: this.options.owner, path });
+                EventMgr.instance.emit(ZCGameUiEvent.RequestEffectArt, { path }, this.options.owner);
                 if (ZCDC_LOG_DIAGNOSTICS) console.info(`[ZCGameRenderWorld] 本局特效清单里没有这条美术，已按需补载：${path}`);
             }
             return;

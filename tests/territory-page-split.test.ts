@@ -144,7 +144,7 @@ test('MainTerritoryMap.prefab：主城只嵌地图视图，HUD 已移除，弹�
 });
 
 // ── 站点条目 ─────────────────────────────────────────────────────────────
-test('TerritoryStation.prefab：128 站点 + 名称条 + 角标，整块可点，五个引用形态正确', () => {
+test('TerritoryStation.prefab：128 站点 + 名称条 + 角标 + 气泡子树，整块可点，引用形态正确', () => {
     const objects = load(PATHS.station);
     const view = scriptOf(objects, cidOf('assets/script/app/territory/view/TerritoryStationView.ts'));
     const root = nodeIndexOf(objects, 'TerritoryStation');
@@ -178,6 +178,39 @@ test('TerritoryStation.prefab：128 站点 + 名称条 + 角标，整块可点�
     );
     assert.equal(componentOf(objects, nodeIndexOf(objects, 'CaptionLabel'), 'cc.Label')._cacheMode, 2);
     assert.equal(componentOf(objects, nodeIndexOf(objects, 'BadgeLabel'), 'cc.Label')._cacheMode, 2);
+
+    // 气泡子树（2026-11-23）：几何 / 字号归 prefab，视图只绑引用、换帧、切显隐。
+    expectRef(objects, view, 'levelBubbleNode', 'LevelBubble', 'cc.Node');
+    expectRef(objects, view, 'levelBubbleTransform', 'LevelBubble', 'cc.UITransform');
+    expectRef(objects, view, 'levelBubbleSprite', 'LevelBubble', 'cc.Sprite');
+    expectRef(objects, view, 'levelBubbleButton', 'LevelBubble', 'cc.Button');
+    expectRef(objects, view, 'levelBubbleAvatarFrameSprite', 'LevelBubbleAvatarFrame', 'cc.Sprite');
+    expectRef(objects, view, 'levelBubbleIconSprite', 'LevelBubbleIcon', 'cc.Sprite');
+    expectRef(objects, view, 'levelBubbleIconTransform', 'LevelBubbleIcon', 'cc.UITransform');
+    expectRef(objects, view, 'levelBubbleLevelBadgeSprite', 'LevelBubbleLevelBadge', 'cc.Sprite');
+    expectRef(objects, view, 'levelBubbleLevelLabel', 'LevelBubbleLevelLabel', 'cc.Label');
+
+    const levelBubble = nodeIndexOf(objects, 'LevelBubble');
+    const bubbleTransform = componentOf(objects, levelBubble, 'cc.UITransform');
+    assert.equal(bubbleTransform._contentSize.width, 94);
+    assert.equal(bubbleTransform._contentSize.height, 45, '胶囊默认高度；PVP / 宝箱尺寸由视图按底图刷新');
+    assert.equal(objects[levelBubble]._active, false, '气泡根默认收起');
+    const bubbleButton = componentOf(objects, levelBubble, 'cc.Button');
+    assert.equal(bubbleButton._transition, 0, '气泡按钮不做缩放过渡');
+    const avatarFrame = nodeIndexOf(objects, 'LevelBubbleAvatarFrame');
+    assert.equal(componentOf(objects, avatarFrame, 'cc.UITransform')._contentSize.width, 64);
+    assert.deepEqual(objects[avatarFrame]._lpos, { __type__: 'cc.Vec3', x: 0, y: 4, z: 0 },
+        '头像框对准红气泡主体中心（1 条 8px 小尾巴 ⇒ +4）');
+    const levelIcon = nodeIndexOf(objects, 'LevelBubbleIcon');
+    assert.equal(componentOf(objects, levelIcon, 'cc.UITransform')._contentSize.width, 54);
+    const levelBadge = nodeIndexOf(objects, 'LevelBubbleLevelBadge');
+    assert.equal(componentOf(objects, levelBadge, 'cc.UITransform')._contentSize.width, 19);
+    assert.deepEqual(objects[levelBadge]._lpos, { __type__: 'cc.Vec3', x: -27, y: -19, z: 0 },
+        '等级角标贴在头像框左下角');
+    const levelLabel = componentOf(objects, nodeIndexOf(objects, 'LevelBubbleLevelLabel'), 'cc.Label');
+    assert.equal(levelLabel._fontSize, 11);
+    assert.equal(levelLabel._outlineWidth, 1);
+    assert.equal(levelLabel._cacheMode, 2);
 
     // 名称条在站点上方（旧实现 `box(node,'CaptionBg',0,52,94,26,…)`）。
     assert.deepEqual(objects[nodeIndexOf(objects, 'CaptionBg')]._lpos, { __type__: 'cc.Vec3', x: 0, y: 52, z: 0 });

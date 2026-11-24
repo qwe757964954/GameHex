@@ -88,6 +88,7 @@ function harness(getChildByName: (name: string) => { active: boolean } | null): 
             '/RoleBagPanel': { RoleBagPanel: class {} },
             '/RoleEquipSlot': { RoleEquipSlot: class {} },
             '/RoleArtLoader': { loadRoleBagIcon: async () => null, loadRoleQualityFrame: async () => null },
+            '/CardLineupPower': { formatPowerText: (value: number) => String(value) },
         },
         globals: {
             setTimeout: () => 1,

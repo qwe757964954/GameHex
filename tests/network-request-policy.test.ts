@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
-import { sendGameRequest, withTimeout } from '../assets/script/app/net/RequestGuard';
+import { sendGameRequest, sendGameRequestResult, withTimeout } from '../assets/script/app/net/RequestGuard';
 import type { GameRequestStatus, IGameRequestOptions } from '../assets/script/app/net/RequestGuard';
+import { TMap } from '../assets/script/framework/collection/TMap';
 
 function load(path: string, require: (name: string) => unknown): Record<string, unknown> {
     const exports: Record<string, unknown> = {};
@@ -23,6 +24,44 @@ interface IRequest {
     resolve(response: unknown): void;
     packageRequest(index: number, data: Uint8Array, msg: object, loading: boolean): void;
 }
+
+test('唯一结果订阅者解绑后，旧请求不会把结果派发给下一位订阅者', async () => {
+    const Proxy = load('assets/script/framework/event/EventProxy.ts', name => {
+        if (name.endsWith('/TMap')) return { TMap };
+        return { ScriptObject: class { destroyed = false; assert(value: unknown) { assert.ok(value); } } };
+    }).EventProxy as typeof import('../assets/script/framework/event/EventProxy').EventProxy;
+    const events = new Proxy<string>();
+    const GameNet = load('assets/script/app/net/GameNet.ts', name => {
+        if (name.endsWith('/NetSocket')) return { NetSocket: { msgEventProxy: events } };
+        if (name.endsWith('/RequestGuard')) return { sendGameRequestResult };
+        return { ScriptObject: class {} };
+    }).GameNet as typeof import('../assets/script/app/net/GameNet').GameNet;
+
+    let finish!: (ok: boolean) => void;
+    let cancelCount = 0;
+    Object.assign(GameNet.instance, {
+        _netSocket: { isSocketConnected: true },
+        send: () => Object.assign(new Promise<boolean>(resolve => { finish = resolve; }), {
+            cancel() { cancelCount++; },
+        }),
+    });
+    const received: Array<string | null> = [];
+    const screen = {};
+    const nextScreen = {};
+    GameNet.instance.addEvent('response', screen, (data: string | null) => received.push(data));
+    let respond!: (data: string) => void;
+    const pending = GameNet.requestResult<string, string>(receive => {
+        respond = receive;
+        return {};
+    }, { event: 'response', decode: data => data });
+    GameNet.instance.removeCaller(screen);
+    GameNet.instance.addEvent('response', nextScreen, (data: string | null) => received.push(data));
+    respond('旧回包');
+    finish(true);
+    assert.equal(await pending, null);
+    assert.equal(cancelCount, 1);
+    assert.deepEqual(received, []);
+});
 interface IState {
     socket: object;
     addNetworkRequest(request: IRequest): boolean;
@@ -341,4 +380,49 @@ test('GM 请求复用共享入口：离线不发送，列表成功或失败都�
     assert.equal((await list())[0].gm, 'serverOnly');
     assert.equal(calls, 3);
     assert.equal(sends, 2);
+});
+
+test('发送泵在队列清空后立即复位 isSending，不产生无谓等待，后续请求立即发出', async () => {
+    let delays = 0;
+    const h = harness(async () => {
+        delays++;
+    });
+    const req1 = h.makeRequest();
+    // 首次入队单条请求
+    h.socket.addNetworkRequest(req1);
+    // sendData 是 async，等待其微任务执行完
+    await Promise.resolve();
+    assert.equal(h.sent(), 1, '第一条请求立即发出');
+    assert.equal(h.socket.tlRequest.length, 0, '队列已清空');
+    assert.equal(h.socket.isSending, false, '队列清空后 isSending 必须立即为 false');
+    assert.equal(delays, 0, '单条请求发完即止，不触发任何 delay 等待');
+
+    // 此时后续新请求到来，必须立即发出而不能被 isSending 锁住
+    const req2 = h.makeRequest();
+    h.socket.addNetworkRequest(req2);
+    await Promise.resolve();
+    assert.equal(h.sent(), 2, '后续新请求立即发出');
+    assert.equal(h.socket.isSending, false, '第二条发完后 isSending 仍为 false');
+    assert.equal(delays, 0, '无并发排队时不产生 delay');
+});
+
+test('发送泵批量排队时按微任务连续发空，末尾请求发完后不空等', async () => {
+    let delays = 0;
+    const h = harness(async () => {
+        delays++;
+    });
+    const req1 = h.makeRequest();
+    const req2 = h.makeRequest();
+    const req3 = h.makeRequest();
+    h.socket.isSending = true; // 暂锁，批量推入
+    h.socket.addNetworkRequest(req1);
+    h.socket.addNetworkRequest(req2);
+    h.socket.addNetworkRequest(req3);
+    h.socket.isSending = false;
+
+    await h.socket.sendData();
+    assert.equal(h.sent(), 3, '3 条请求全部发出');
+    assert.equal(h.socket.tlRequest.length, 0, '队列完全排空');
+    assert.equal(h.socket.isSending, false, '发完后 isSending 复位');
+    assert.equal(delays, 2, '3 条请求之间仅产生 2 次间隙调度，末尾请求不产生第 3 次 delay');
 });

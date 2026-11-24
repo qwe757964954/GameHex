@@ -516,6 +516,27 @@ test('缓存的索敌目标在破墙、摧毁建筑和重开对局后立即更�
     assert.equal(actor.targetWallHexId, config.map.enemyHomeId);
 });
 
+test('建筑受击按格心向附近守军广播仇恨', () => {
+    const snapshot = ZCGameModel.createInitialState(() => .1, config);
+    const homeId = config.map.playerHomeId;
+    snapshot.hexes[homeId].wallHp = 0;
+    snapshot.units = [unit(1, 'player', homeId), unit(2, 'enemy', config.map.hexes[homeId].neighbors[0])];
+    snapshot.nextUnitId = 3;
+    const game = new ZCGameModel(snapshot, () => .1, config);
+    const combat = game as unknown as {
+        readonly state: typeof snapshot;
+        damageBuilding(source: ZCUnitState, building: ZCHexState, damage: number): void;
+    };
+    const building = combat.state.hexes[homeId];
+    const [guard, attacker] = combat.state.units;
+    const hpBefore = building.hp;
+
+    combat.damageBuilding(attacker, building, 1);
+
+    assert.equal(building.hp, hpBefore - 1);
+    assert.equal(guard.hatredUnitId, attacker.id);
+});
+
 test('地图坐标查询覆盖所有格心、棋盘外和水域，水域不吸附到邻格', () => {
     const geometry = new ZCMapGeometry(config.map);
     for (const hex of config.map.hexes) assert.equal(geometry.hexIdAt(hex.x, hex.y), hex.id);

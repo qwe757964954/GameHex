@@ -236,6 +236,32 @@ test("ArenaRoot.prefab：TopHud 玩家信息绑定完整，经验使用水平填
     for(const node of prefab.filter(o=>o.__type__==='cc.Node' && Array.isArray(o._components))) assert.equal(node._layer,33554432,String(node._name));
 });
 
+test("ArenaRoot.prefab：战力占位不许是假数字（切回主界面不闪 15.98K）", () => {
+    // 2026-11-23 用户：「从别的页面切回来，攻击力会闪一下，从 15.98K 闪成玩家真实的攻击力」。
+    // 根因不在计算，在 **prefab 占位**：这一格写死过 `15.98K`，而战力是异步算的
+    // （卡表 + 成长表 + 等级表），页面重建的第一帧只能显示这个占位 ⇒ 真值一到就跳。
+    // 修法两条：① 占位改成中性 `—`；② `MainResBar` 首帧铺 repository 缓存的上次真值。
+    const prefab = readPrefab(HUD_PREFAB);
+    const top = prefab.find(o => o.__type__ === 'cc.Node' && o._name === 'TopHud')!;
+    const renderer = component(prefab, top, 'powerLabel');
+    const labelNode = hostNode(prefab, binding(prefab, renderer, 'powerLabel'));
+    const label = labelNode._components
+        .map((ref: { __id__: number }) => prefab[ref.__id__])
+        .find((o: PrefabObject) => o.__type__ === 'cc.Label');
+    assert.ok(label, 'PowerLabel 必须挂 cc.Label');
+    const text = String((label as PrefabObject)._string ?? '');
+    assert.doesNotMatch(text, /^[\d.]+[KMBT]?$/,
+        `战力占位不许写成看起来像真值的数字（实际 "${text}"）—— 玩家会当真值读，然后看它跳掉`);
+    // 左对齐 + 锚点 x=0：占位换成真值时左沿不动，数字不会横着滑一下。
+    const transformOf = transform(prefab, labelNode);
+    assert.equal(transformOf._anchorPoint.x, 0, 'PowerLabel 锚点必须 x=0（左沿固定）');
+    assert.equal(label._horizontalAlign, 0, 'PowerLabel 必须左对齐');
+    // 没有缓存时**什么都不写**（让 prefab 的 `—` 留着）；写 `--` 会被读成负号。
+    const source = readFileSync('assets/script/app/main/MainResBar.ts', 'utf8');
+    assert.doesNotMatch(source, /powerLabel\.string\s*=\s*'--'/,
+        '没有缓存时不许把战力写成 `--`（看着像负号），要留 prefab 的中性占位');
+});
+
 test("ArenaRoot.prefab：货币条复用公共实例，按目标fileId还原两格覆写", () => {
     const {host,objects}=currentHudBar();
     const root=objects[(objects[0].data as ObjRef).__id__];

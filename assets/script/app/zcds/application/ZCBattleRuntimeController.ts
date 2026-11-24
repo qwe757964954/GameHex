@@ -1,21 +1,24 @@
 import { ControllerBase, type IControllerContext, type IControllerResources } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { GAME_AUDIO } from '../../ResConst';
+import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
+import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
+import type { ZCCardRarity } from '../model/ZCCombatCatalog';
 import { ZCGameModel } from '../model/ZCGameModel';
-import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
-import { createSeededRandom } from '../model/ZCSeededRandom';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { captureZCMatchConfig, type ZCMatchConfig } from '../model/ZCMatchConfig';
-import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
-import { buildDamageStatistics } from '../../battle/BattleStatisticsModel';
-import { ZC_BATTLE_TYPE_CHAPTER } from '../../battle/BattleStartModel';
 import { buildRankSeats, RANK_FALLBACK_NAMES } from '../model/ZCRankBoard';
+import { createSeededRandom } from '../model/ZCSeededRandom';
 import { buildSettlementMvp, type IZCSettlementMvp, type IZCSettlementMvpCard } from '../model/ZCSettlementMvp';
-import { ZCGameUiEvent, type IZCRequestUnitArtIntent, type IZCRequestEffectArtIntent, type IZCDebugDrawCardIntent } from '../view/ZCGameHudEvents';
+import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../model/ZCSpawnSelection';
+import { ZCGameUiEvent, type IZCDebugDrawCardIntent, type IZCRequestEffectArtIntent, type IZCRequestUnitArtIntent } from '../view/ZCGameHudEvents';
+import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
+import { ZCBattleAudio } from './ZCBattleAudio';
 import type { IZCBattlePhase } from './ZCBattleController';
 import { ZC_BATTLE_EVENTS, type IZCBattleFrame } from './ZCBattleEvents';
-import type { IZCGameEntry } from './ZCGameEntry';
-import type { IZCBattleView, IZCBattleRuntimeServices, IZCBattleConfirmOptions, IZCDamageStatsPlayer, IZCDamageStatsPopup } from './ZCBattleRuntimeContract';
+import type { IZCBattleConfirmOptions, IZCBattleRuntimeServices, IZCBattleView, IZCDamageStatsPlayer, IZCDamageStatsPopup } from './ZCBattleRuntimeContract';
 import { ZCBattleSettlementController, type IZCBattlePopup } from './ZCBattleSettlementController';
+import type { IZCGameEntry } from './ZCGameEntry';
 
 /**
  * 投降（提前退出）的确认文案。
@@ -31,6 +34,22 @@ const RETREAT_CONFIRM = {
     content: '你确定放弃当前对局，提前退出嘛？', sureText: '确定', cancelText: '取消',
 } as const;
 
+/**
+ * 战斗内翻地块的抽卡音按品阶四选一（用户 2026-11-24）：
+ * 抽空 → `战斗中抽空`；蓝卡/绿卡 → `战斗中抽蓝绿`；紫卡 → `战斗中抽紫`；金卡 → `战斗中抽金`。
+ *
+ * 四颗与领地那三颗（`randomTile` / `smallFixedTile` / `largeFixedTile`）**不是一套刻度**：
+ * 那三颗按奖励数量分档，这四颗按抽出来的卡牌品阶分档。也别拿 `rarityRank()` 当判据 ——
+ * 它给出的是数字序号，落成音效还得再映射一次，不如直接按品阶枚举。
+ */
+export function battleDrawSoundOf(rarity: ZCCardRarity | undefined): string {
+    if (!rarity) return GAME_AUDIO.drawEmpty;
+    if (rarity === 'gold') return GAME_AUDIO.drawGold;
+    if (rarity === 'purple') return GAME_AUDIO.drawPurple;
+    // 'blue' / 'green' 共用一颗：用户口径「抽出蓝绿卡 都播放 蓝绿卡音效」。
+    return GAME_AUDIO.drawGreenBlue;
+}
+
 /** 每局唯一的规则编排入口；组件只提供帧脉冲及展示端口。*/
 export class ZCBattleRuntimeController extends ControllerBase {
     private model: ZCGameModel | null = null;
@@ -38,6 +57,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private entry: IZCGameEntry | null = null;
     private random: () => number = Math.random;
     private renderClock = 0;
+    private readonly battleAudio = new ZCBattleAudio();
+    private readonly audioSourceOf = (id: number) => this.model?.attackInfoForUnit(id);
     private hints = true;
     private stopShowcase: (() => void) | null = null;
     private readonly popups = new Map<'guide' | 'damage' | 'rank' | 'retreat', IZCBattlePopup>();
@@ -95,8 +116,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
         this.listen(ZCGameUiEvent.SpawnConfirm, this.onSpawnConfirm);
         this.listen(ZCGameUiEvent.SpawnToggleHints, this.onSpawnToggleHints);
     }
-    private onFrame({ owner, dt }: IZCBattleFrame): void {
-        if (owner !== this.view || this.isDisposed) return;
+    private onFrame({ dt }: IZCBattleFrame, source: object): void {
+        if (source !== this.view) return;
         if (this.selection) {
             this.selection.tick(dt);
             this.renderSpawn();
@@ -109,6 +130,10 @@ export class ZCBattleRuntimeController extends ControllerBase {
         if (!model || this.phase.isSettled) return;
         model.tick(dt);
         const frame = model.createRenderFrame(), events = model.drainPresentationEvents();
+        if (this.services.playSound) {
+            const { combatEvents, projectiles, elapsedSeconds } = frame.snapshot;
+            this.battleAudio.present(combatEvents, elapsedSeconds, this.audioSourceOf, this.services.playSound, projectiles);
+        }
         this.view.renderBattle(model, frame, events, 'dynamic');
         if (model.snapshot.status === 'playing') {
             this.renderClock += dt;
@@ -181,8 +206,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
             })));
         }
     }
-    private async onRequestUnitArt({ owner, unitId }: IZCRequestUnitArtIntent): Promise<void> {
-        if (owner !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;
+    private async onRequestUnitArt({ unitId }: IZCRequestUnitArtIntent, source: object): Promise<void> {
+        if (source !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;
         if (!this.entry) return;
         const definition = this.entry.matchConfig.units.find(unit => unit.unitId === unitId);
         if (!definition || !definition.prefabPath) return;
@@ -204,8 +229,8 @@ export class ZCBattleRuntimeController extends ControllerBase {
      * 都不会报（压根没被要求加载）。派发方 `ZCGameRenderWorld` 在第一次取不到时发一次，
      * 到货后由它下一帧补挂（{@link IZCBattleView.applyEffectPrefab}）。
     */
-    private onRequestEffectArt({ owner, path }: IZCRequestEffectArtIntent): void {
-        if (owner !== this.view || this.isDisposed || !path) return;
+    private onRequestEffectArt({ path }: IZCRequestEffectArtIntent, source: object): void {
+        if (source !== this.view || !path) return;
         if (this.loadedEffectArt.has(path) || this.pendingEffectArt.has(path)) return;
         //  同一路径可能同时有好几发子弹在飞（弹幕），共享一个 Promise，不重复打加载。
         const task = (async () => {
@@ -233,7 +258,16 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const model = this.model;
         if (model && model.canPlayerDevelop(hexId)) {
             const result = model.developHex(hexId);
-            if (result.reason === 'insufficientGold') this.view.flashInsufficientGold();
+            if (result.reason === 'insufficientGold') {
+                this.view.flashInsufficientGold();
+            } else if (result.ok && this.services.playSound) {
+                // 战斗内翻地块的四档抽卡音（用户 2026-11-24）：抽空 / 蓝绿 / 紫 / 金。
+                // 只在**开发真的落地**那一拍响：不可开发的格、金币不足都静默
+                // （后者已有金栏闪红），否则玩家会以为白捡了一次奖励。
+                // 品阶取 `result.cardRarity`（`ZCDevelopResult`）：抽空时它是 `undefined`，
+                // 抽到卡但该格建不上时仍有值 ⇒ 音效按「抽到什么」走，不按「建没建成」走。
+                this.services.playSound(battleDrawSoundOf(result.cardRarity));
+            }
             this.render();
         }
     }
@@ -247,7 +281,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
     private onSpawnToggleHints(): void { this.hints = !this.hints; this.renderSpawn(); }
     private onUseArtifact(): void {
         if (!this.model || !this.phase.isPlaying) return;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { owner: this.view, message: this.model.useArtifact().message });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.SHOW_TIP, { message: this.model.useArtifact().message }, this.view);
         this.render();
     }
     private onDebugDrawCard(intent: IZCDebugDrawCardIntent): void {
@@ -265,7 +299,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
      * 取消 / 点空白关闭都直接返回，不产生任何对局副作用；`retreating` 挡住连点。
     */
     private async onRetreat(): Promise<void> {
-        if (this.isDisposed || this.phase.isSettled || this.retreating) return;
+        if (this.phase.isSettled || this.retreating) return;
         this.retreating = true;
         try {
             if (!await this.askRetreat(RETREAT_CONFIRM)) return;
@@ -295,7 +329,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
     }
     private onResetCamera(): void { this.view.resetCamera(); }
     private onSettlementConfirm(): void { this.settlement.confirm(); }
-    private onReturnToMain(): void { EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: this.view }); }
+    private onReturnToMain(): void { EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, this.view); }
     private openSettlement(retreated: boolean): void {
         const model = this.model, entry = this.entry;
         if (!model || !entry || this.phase.isSettled) return;
@@ -431,6 +465,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
                 try { this.closePopups(); }
                 finally {
                     this.pendingUnitArt.clear(); this.loadedUnitArt.clear();
+                    this.pendingEffectArt.clear(); this.loadedEffectArt.clear();
                     this.model = null; this.selection = null; this.entry = null;
                     this.damagePopup = null;
                     super.dispose();

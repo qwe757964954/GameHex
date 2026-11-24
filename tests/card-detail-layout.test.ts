@@ -284,6 +284,39 @@ test('材料图标引用保持绑定，页面只同步展示 ViewState 中的图
     }
 });
 
+test('战力胶囊：取数未回时沿用同卡上一次的值，换卡才退回中性占位', () => {
+    // 2026-11-23 用户：「切换到英雄界面也会闪」。战力要读卡表 / 成长表，是异步的，
+    // 打开页面第一帧 `detail` 还是 null ⇒ 以前直接写 `'--'`，真值一到就跳。
+    const { page } = createPage();
+    page.nameLabel = { string: '' };
+    page.campTagRoot = { active: false };
+    page.tagCampLabel = { string: '' };
+    page.tagClassLabel = { string: '' };
+    page.powerLabel = { string: '' };
+    page.renderHero = () => {};
+    const header = (cardId: string, powerText: string | null) => page.renderHeader({
+        cardId,
+        data: { card: { id: cardId, name: `卡${cardId}` } },
+        detail: powerText === null ? null : { powerText },
+        art: null,
+        lineup: null,
+    });
+
+    header('1', '战力 326');
+    assert.equal(page.powerLabel.string, '战力 326', '真值到了就照写');
+
+    header('1', null);
+    assert.equal(page.powerLabel.string, '战力 326',
+        '同一张卡取数没回来时沿用上一次的真值 —— 等级没变战力就不变，不许退回占位再跳一次');
+
+    header('2', null);
+    assert.equal(page.powerLabel.string, '战力 —',
+        '换卡时必须回到中性占位：绝不能把上一张卡的战力挂到这张上');
+
+    header('2', '战力 12.3K');
+    assert.equal(page.powerLabel.string, '战力 12.3K');
+});
+
 test('材料两行按 key 取，requirements 倒序也不会把卡牌与经验串位', () => {
     const { page } = createPage();
     for (const field of ['matCardCountLabel', 'matCardItemLabel', 'matExpCountLabel', 'matExpItemLabel',

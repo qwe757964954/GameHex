@@ -26,8 +26,9 @@ import { assetPath } from './helpers/asset-paths';
 /**
  * 第 16 批 · 风炮菇 68013 的两条主动（2026-11-18，设计案 V12）。
  *
- *   · 「孢爆箭」101303 —— `wind_bolt`：射一枚风弹（150/180/220%），命中点留一片
- *     半径 30 / 3 秒的飓风，接触者各吃一次 90/108/132%（同一敌人只结算一次）。
+ *   · 「风炮弹」101303（原「孢爆箭」，2026-11-23 改名）—— `wind_bolt`：射一枚风弹
+ *     （150/180/220%），命中点留一片半径 30 / 3 秒的飓风，接触者各吃一次 90/108/132%
+ *     （同一敌人只结算一次）。风弹前段移速同日口径改为 **表值 175 px/s**（原 70，×2.5）。
  *   · 「连射导弹」101304 —— `missile_barrage`：每累计 10 次普攻，1.2 秒内抛 3 枚炸弹，
  *     落点在目标周围随机，**到达落点才爆炸**（途中不碰目标），半径 180 内一次性 160/200/220%。
  *
@@ -105,10 +106,11 @@ function makeState(units: ZCUnitState[]): ZCSnapshot {
 
 // ────────────────────────────────────────────── 一、配表真值
 
+//  2026-11-23（第 44 批）：`windSpeed` 70 → 175（前段移速 ×2.5），三档同步。
 const WIND_PARAMS: Array<Record<string, number>> = [
-    { windCooldown: 12, windDamageRate: 1.5, windSpeed: 70, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 0.9 },
-    { windCooldown: 12, windDamageRate: 1.8, windSpeed: 70, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 1.08 },
-    { windCooldown: 12, windDamageRate: 2.2, windSpeed: 70, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 1.32 },
+    { windCooldown: 12, windDamageRate: 1.5, windSpeed: 175, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 0.9 },
+    { windCooldown: 12, windDamageRate: 1.8, windSpeed: 175, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 1.08 },
+    { windCooldown: 12, windDamageRate: 2.2, windSpeed: 175, windLifeSeconds: 4, windZoneRadius: 30, windZoneSeconds: 3, windZoneDamageRate: 1.32 },
 ];
 const BARRAGE_PARAMS: Array<Record<string, number>> = [
     { barrageEvery: 10, barrageCount: 3, barrageInterval: 0.4, barrageDamageRate: 1.6, barrageRadius: 180 },
@@ -116,7 +118,7 @@ const BARRAGE_PARAMS: Array<Record<string, number>> = [
     { barrageEvery: 10, barrageCount: 3, barrageInterval: 0.4, barrageDamageRate: 2.2, barrageRadius: 180 },
 ];
 
-test('101303 孢爆箭（V12）：三档直击/飓风倍率与设计案一致', () => {
+test('101303 风炮弹（V12）：三档直击/飓风倍率与设计案一致', () => {
     prepare();
     const rows = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101303)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));

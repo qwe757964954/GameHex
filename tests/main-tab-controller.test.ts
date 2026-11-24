@@ -62,26 +62,26 @@ test('tab controller merges repeats, discards stale loads, preserves old page af
     assert.equal(h.requests[1].scope.disposed, true);
 });
 
-test('only challenge stays locked; invalid targets do not cancel a valid load', async () => {
+test('challenge and alliance stay locked; invalid targets do not cancel a valid load', async () => {
     const h = harness();
     const loading = h.controller.switchTab(MainTab.Territory);
     await h.controller.switchTab(MainTab.Challenge);
+    await h.controller.switchTab(MainTab.Alliance);
     await h.controller.switchTab(99);
     assert.equal(h.requests.length, 1, '未开放 / 无效的页签不该发起资源加载');
     assert.equal(h.requests[0].scope.disposed, false);
-    EventMgr.instance.emit(MainTabEvent.Select, { owner: {}, tab: MainTab.World });
     assert.deepEqual(h.reported, []);
     h.requests[0].resolve({}); await loading;
-    EventMgr.instance.emit(MainTabEvent.Select, { owner: h.owner, tab: MainTab.World });
+    EventMgr.instance.emit(MainTabEvent.Select, { tab: MainTab.World });
     await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(h.reported, [6]); assert.deepEqual(h.selected, [3, 6]);
     h.controller.worldClosed(); assert.equal(h.selected[h.selected.length - 1], 3);
     h.controller.dispose();
-    EventMgr.instance.emit(MainTabEvent.Select, { owner: h.owner, tab: MainTab.Shop });
+    EventMgr.instance.emit(MainTabEvent.Select, { tab: MainTab.Shop });
     assert.deepEqual(h.reported, [6]);
 });
 
-test('role / alliance are unlocked and each loads its own main-pages prefab', async () => {
+test('role is unlocked and loads its own main-pages prefab', async () => {
     const h = harness();
     const role = h.controller.switchTab(MainTab.Role);
     assert.equal(h.requests.length, 1, '角色格解锁后必须真的发起页面加载');
@@ -89,13 +89,6 @@ test('role / alliance are unlocked and each loads its own main-pages prefab', as
     assert.equal(h.requests[0].bundle, MAIN_PAGES_BUNDLE);
     h.requests[0].resolve({}); await role;
     assert.equal(h.controller.snapshot.currentTab, MainTab.Role);
-
-    const alliance = h.controller.switchTab(MainTab.Alliance);
-    assert.equal(h.requests.length, 2, '联盟格解锁后必须真的发起页面加载');
-    assert.equal(h.requests[1].path, 'ui/League/LeagueTab');
-    assert.equal(h.requests[1].bundle, MAIN_PAGES_BUNDLE);
-    h.requests[1].resolve({}); await alliance;
-    assert.equal(h.controller.snapshot.currentTab, MainTab.Alliance);
     h.controller.dispose();
 });
 
@@ -110,7 +103,7 @@ test('closing world before a failed tab restores the retained page highlight', a
     h.controller.dispose();
 });
 
-test('world to alliance highlights the target while loading without flashing the retained tab', async () => {
+test('world to role highlights the target while loading without flashing the retained tab', async () => {
     const h = harness();
     const first = h.controller.switchTab(MainTab.Territory);
     h.requests[0].resolve({ name: 'territory' });
@@ -118,18 +111,18 @@ test('world to alliance highlights the target while loading without flashing the
     await h.controller.switchTab(MainTab.World);
     h.selected.length = 0;
 
-    const alliance = h.controller.switchTab(MainTab.Alliance);
+    const role = h.controller.switchTab(MainTab.Role);
     h.controller.worldClosed();
-    assert.deepEqual(h.selected, [MainTab.Alliance]);
+    assert.deepEqual(h.selected, [MainTab.Role]);
     assert.equal(h.controller.snapshot.currentTab, MainTab.Territory);
-    h.requests[1].resolve({ name: 'alliance' });
-    await alliance;
-    assert.deepEqual(h.selected, [MainTab.Alliance, MainTab.Alliance]);
-    assert.equal(h.controller.snapshot.currentTab, MainTab.Alliance);
+    h.requests[1].resolve({ name: 'role' });
+    await role;
+    assert.deepEqual(h.selected, [MainTab.Role, MainTab.Role]);
+    assert.equal(h.controller.snapshot.currentTab, MainTab.Role);
     h.controller.dispose();
 });
 
-test('failed world to alliance restores the retained tab only after failure', async () => {
+test('failed world to role restores the retained tab only after failure', async () => {
     const h = harness();
     const first = h.controller.switchTab(MainTab.Territory);
     h.requests[0].resolve({});
@@ -137,11 +130,11 @@ test('failed world to alliance restores the retained tab only after failure', as
     await h.controller.switchTab(MainTab.World);
     h.selected.length = 0;
 
-    const alliance = h.controller.switchTab(MainTab.Alliance);
-    assert.deepEqual(h.selected, [MainTab.Alliance]);
+    const role = h.controller.switchTab(MainTab.Role);
+    assert.deepEqual(h.selected, [MainTab.Role]);
     h.requests[1].reject(new Error('offline'));
-    await alliance;
-    assert.deepEqual(h.selected, [MainTab.Alliance, MainTab.Territory]);
+    await role;
+    assert.deepEqual(h.selected, [MainTab.Role, MainTab.Territory]);
     assert.equal(h.controller.snapshot.currentTab, MainTab.Territory);
     h.controller.dispose();
 });
@@ -152,12 +145,12 @@ test('stale tab failure does not overwrite the world highlight', async () => {
     h.requests[0].resolve({});
     await first;
     await h.controller.switchTab(MainTab.World);
-    const alliance = h.controller.switchTab(MainTab.Alliance);
+    const role = h.controller.switchTab(MainTab.Role);
     await h.controller.switchTab(MainTab.World);
     h.selected.length = 0;
 
     h.requests[1].reject(new Error('offline'));
-    await alliance;
+    await role;
     assert.deepEqual(h.selected, []);
     assert.equal(h.controller.snapshot.worldVisible, true);
     h.controller.dispose();

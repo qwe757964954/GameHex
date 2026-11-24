@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, Label, Node, sp } from 'cc';
+import { _decorator, Button, Color, Component, Label, Node, sp } from 'cc';
 import { roleRepository } from './RoleRepository';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { RoleEvent } from './RoleEvents';
@@ -12,6 +12,7 @@ import type { RoleBagTabId, RoleNavId } from './RoleTypes';
 import { RoleBagPanel } from './RoleBagPanel';
 import { RoleEquipSlot } from './RoleEquipSlot';
 import { loadRoleBagIcon, loadRoleQualityFrame } from './RoleArtLoader';
+import { formatPowerText } from '../card/CardLineupPower';
 
 const { ccclass, property } = _decorator;
 
@@ -21,6 +22,16 @@ const BAG_TAB_NODES: ReadonlyArray<readonly [string, RoleBagTabId]> = [
     ['BagTabEquip', 2],
     ['BagTabItem', 3],
 ];
+
+/** 设计稿顶部「宝石背包」入口（复用页签 1；点击直接切到宝石列表）。 */
+const BAG_ENTRY_GEM = 'BagBtnGem';
+
+/** 设计稿顶部「一键合成 / 全部」入口：业务未接入，沿用未落地导航的提示，不留死按钮。 */
+const BAG_ENTRY_PENDING: readonly string[] = ['BagBtnCompose', 'BagBtnAll'];
+
+/** 未选中页签的文字色 / 描边色（设计稿：灰底深棕字；选中态白字 + 深棕描边）。 */
+const TAB_LABEL_IDLE = new Color(74, 55, 38, 255);
+const TAB_LABEL_OUTLINE = new Color(54, 34, 17, 255);
 
 /** 左侧导航节点名 → nav id。 */
 const NAV_NODES: ReadonlyArray<readonly [string, RoleNavId]> = [
@@ -128,7 +139,7 @@ export class RolePage extends Component {
 
     protected onLoad(): void {
         this.ensureInit();
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
 
     /**
@@ -138,7 +149,7 @@ export class RolePage extends Component {
      * 但同一个 tab 连点两次不会重建 —— 两种情况都要保证数据是最新的。
      */
     protected onEnable(): void {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
     }
 
     selectBag(tab: RoleBagTabId): void { this.activeTab = tab; this.applyTabLook(); }
@@ -149,12 +160,19 @@ export class RolePage extends Component {
 
         for (const [name, tab] of BAG_TAB_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { owner: this, kind: 'bag', tab }), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }, this), this);
         }
 
         for (const [name, navId] of NAV_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { owner: this, kind: 'nav', navId }), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }, this), this);
+        }
+
+        const gemEntry = this.node.getChildByName(BAG_ENTRY_GEM)?.getComponent(Button);
+        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }, this), this);
+        for (const name of BAG_ENTRY_PENDING) {
+            const button = this.node.getChildByName(name)?.getComponent(Button);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId: 7 }, this), this);
         }
 
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
@@ -190,12 +208,13 @@ export class RolePage extends Component {
         return this.isValid && this.node.activeInHierarchy;
     }
 
-    /** 刷数据：攻击力 / 主角 idle / 装备栏 / 背包列表 / 红点。 */
+    /** 刷数据：战斗力（卡牌阵容战力）/ 主角 idle / 装备栏 / 背包列表 / 红点。 */
     async renderSnapshot(snapshot: IRoleSnapshot): Promise<void> {
         const rev = ++this.revision;
 
-        // 攻击力**无条件写**（规则 82）：0 也显示成 "0" —— 留白会被误读成"压根没接"。
-        this.powerLabel.string = String(snapshot.power);
+        // 战斗力与卡牌页同源同式：`CardLineupPower.formatPowerText` 负责万位缩写；
+        // 0 也照写 "0"（规则 82），留白会被误读成"压根没接"。
+        this.powerLabel.string = formatPowerText(snapshot.power);
 
         // 主角立绘：每次进页面从头播 idle（spine 的 `setAnimation` 会让轨道重新计时）。
         this.playHeroIdle();
@@ -246,13 +265,13 @@ export class RolePage extends Component {
      */
     protected onDestroy(): void {
         this.clearQipaoTimer();
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
     }
 
     protected onDisable(): void {
         // 切 tab / 关页面：把面板收掉、红点归零（`RedDot` 复用不留残影）。
         this.revision += 1;
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, this);
         this.bagPanelComp?.hide();
         this.activeTab = null;
         this.gemTabRedDot?.setRedDot(0);
@@ -296,11 +315,23 @@ export class RolePage extends Component {
      * ⚠️ `ROLE_NAV_READY` 只表示「这条落地了」，**打开哪个界面由这里分发** ——
      * 别把 prefab 路径塞进表里（视图层的事归视图层）。
      */
-    /** 页签选中观感：当前页签放大 1.08，其余 1。 */
+    /**
+     * 页签选中观感：选中项亮橙色高亮（`hl`）+ 白字描边，其余保持灰底深棕字。
+     *
+     * 高亮 / 文字色都烘在 prefab 的静态初值里，这里只做状态切换；不再缩放节点。
+     */
     private applyTabLook(): void {
         for (const [name, tab] of BAG_TAB_NODES) {
             const node = this.node.getChildByName(name);
-            node.setScale(this.activeTab === tab ? 1.08 : 1, this.activeTab === tab ? 1.08 : 1, 1);
+            const active = this.activeTab === tab;
+            const hl = node.getChildByName('hl');
+            if (hl) hl.active = active;
+            const label = node.getChildByName('title')?.getComponent(Label);
+            if (!label) continue;
+            label.color = active ? new Color(255, 255, 255, 255) : TAB_LABEL_IDLE.clone();
+            label.enableOutline = active;
+            label.outlineColor = TAB_LABEL_OUTLINE.clone();
+            label.outlineWidth = 2;
         }
     }
 

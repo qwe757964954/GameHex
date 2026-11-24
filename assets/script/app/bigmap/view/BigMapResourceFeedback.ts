@@ -1,5 +1,6 @@
 import { Color, Label, Node, UITransform } from 'cc';
-import type { IBigMapResourceView } from '../application/BigMapViewState';
+import type { IBigMapTopResourceSource } from './BigMapTopHudTypes';
+import { formatBigMapResourceAmount } from './BigMapTopHudTypes';
 import {
     formatResBarSpendFloat,
     resBarCountValue,
@@ -13,12 +14,6 @@ import {
 const FLOAT_OUTLINE_WIDTH = 2;
 /** 飘字起点离资源格上沿的间隙（px）。 */
 const FLOAT_GAP = 2;
-
-/** 资源整数 → 顶部栏紧凑文本（≥1000 用一位小数 K），常态与反馈滚动共用同一口径。 */
-export function formatBigMapResourceAmount(amount: number): string {
-    const value = Math.floor(Number.isFinite(amount) ? amount : 0);
-    return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : `${value}`;
-}
 
 /**
  *大地图顶部单个资源格的反馈驱动（普通类，非组件）。
@@ -85,7 +80,7 @@ export class BigMapResourceFeedback {
      *
      *amountKnown=false（联机余额未知）不起播并重置基线；首帧只建立基线，不演。
      */
-    sync(view: IBigMapResourceView): boolean {
+    sync(view: IBigMapTopResourceSource): boolean {
         if (view.amountKnown === false) {
             this.settledAmount = null;
             return false;
@@ -134,7 +129,7 @@ export class BigMapResourceFeedback {
         this.settledAmount = null;
     }
 
-    private beginHit(from: number, to: number, view: IBigMapResourceView): void {
+    private beginHit(from: number, to: number, view: IBigMapTopResourceSource): void {
         this.cancelSpend();
         this.hitFrom = from;
         this.hitTo = to;
@@ -143,7 +138,7 @@ export class BigMapResourceFeedback {
         this.applyHit();
     }
 
-    private beginSpend(from: number, to: number, view: IBigMapResourceView): void {
+    private beginSpend(from: number, to: number, view: IBigMapTopResourceSource): void {
         this.cancelHit();
         this.spendFrom = from;
         this.spendTo = to;
@@ -154,7 +149,7 @@ export class BigMapResourceFeedback {
         this.applySpend();
     }
 
-    private suffixOf(view: IBigMapResourceView): string {
+    private suffixOf(view: IBigMapTopResourceSource): string {
         if (view.type !== 'stamina' || !Number.isFinite(view.cap)) return '';
         return `/${Math.floor(view.cap)}`;
     }

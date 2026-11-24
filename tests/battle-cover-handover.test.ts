@@ -9,7 +9,7 @@
  * 三件事必须同时成立，缺一条就退回旧的"云散完 → 空屏 → 匹配页"：
  *  ① 领地这一侧**不散场**，out 播完 + 回包到了就直接跳匹配；
  *  ② 匹配页在**自己底下**重建同一屏云（第 0 个子节点），并把待机步进接上；
- *  ③ 匹配成功后：先瞬间关界面、等战场资源、再散云、最后才切场景。
+ *  ③ 匹配成功后：先瞬间关界面、等战场资源、切场景后再散云。
  *
  * 行为判据在 `territory-battle-intro.test.ts`（`setBaseStep` / `startRelease` / `tick`）与
  * `matching-controller.test.ts`（交接时序）；这里只钉"接线有没有接上"。
@@ -22,8 +22,15 @@ const read = (path: string): string => readFileSync(new URL(`../assets/script/ap
 const MAIN = read('main/MainTerritoryMap.ts');
 const MAP_VIEW = read('territory/view/TerritoryMapView.ts');
 const COMPOSITION = read('bootstrap/matching/MatchingComposition.ts');
-const CONTROLLER = read('matching/MatchingController.ts');
 const PROCEDURE = read('procedure/ProcedureMatching.ts');
+
+test('匹配在启动前订阅交接事件，并在导航后启动散云计时', () => {
+    const mount = COMPOSITION.slice(COMPOSITION.indexOf('    mount('), COMPOSITION.indexOf('    private createController'));
+    assert.match(mount, /this\.listen\(MATCHING_EVENTS\.HANDOFF, this\.onHandoff\)/);
+    assert.ok(mount.indexOf('this.listen(MATCHING_EVENTS.LEAVE') < mount.indexOf('node.setParent'));
+    const leave = COMPOSITION.slice(COMPOSITION.indexOf('private onLeaveMatching'), COMPOSITION.indexOf('private async loadCloudFrames'));
+    assert.match(leave, /ProcedureManager\.navigate[\s\S]+this\.handoffOverlay\?\.arm\(\)/);
+});
 
 test('★★★领地普通关不许自己散场：回包一到就把云交给匹配页', () => {
     // 判据只认 `mode = match` + 有 `battleParams`（塔防关没有匹配页，必须自己散完再跳）
@@ -56,51 +63,25 @@ test('★★★交接必须把待机步进带过去，否则切流程那一帧�
 test('★★★匹配页要在自己底下重建同一屏云（第 0 个子节点，不是盖在界面上）', () => {
     // 用户说的"静止在匹配界面下方"，落到代码就是这一行
     assert.ok(COMPOSITION.includes('setSiblingIndex(0)'), '云必须压到匹配 UI 之下');
-    assert.ok(COMPOSITION.includes('cover.setBaseStep(params.coverStep ?? 0)'), '没接步进');
+    assert.ok(COMPOSITION.includes('cover.setBaseStep(params?.coverStep ?? 0)'), '没接步进');
     // 交接进来时云已经是"合拢到位、整层不透明"，不是从头再演一遍 out
     assert.ok(COMPOSITION.includes('cover.apply(1, 1, 0)'), '云的就位状态不对');
     // 只有领地普通关才建云（PVP 匹配底下不该突然出现一屏云）
-    assert.ok(COMPOSITION.includes('if (params?.pve) await this.loadCloudFrames(context);'),
+    assert.ok(COMPOSITION.includes('params?.pve ? this.loadCloudFrames(context.resources) : []'),
         '云帧要在预加载阶段取好，进页时才有云可铺');
-    assert.ok(COMPOSITION.includes('if (!params?.pve || !this.cloudFrames.length)'), '建云没有按 pve 收口');
+    assert.ok(COMPOSITION.includes('if (!this.cloudFrames.length) return;'), '无云帧时应跳过建云');
     // 云帧缺了只是"没有云"，不许把匹配本身搞挂
-    assert.ok(COMPOSITION.includes('this.cloudFrames = [];'), '加载失败要降级成空数组');
+    assert.match(COMPOSITION, /private async loadCloudFrames[\s\S]+?catch[\s\S]+?return \[\];/, '加载失败要降级成空数组');
     // 换流程时把云一起带走（`dispose` 而不是 `destroy`：盖层自持的帧引用也要还回去）
     assert.ok(COMPOSITION.includes('const cover = this.cover;') && COMPOSITION.includes('cover?.dispose()'), 'dispose 没销毁云层');
 });
 
 test('★★★「瞬间关闭」只藏 UI：云留着，界面不留半张', () => {
-    const hide = COMPOSITION.slice(COMPOSITION.indexOf('private hidePageContent'));
+    const hide = COMPOSITION.slice(COMPOSITION.indexOf('private handOverCover'));
     const body = hide.slice(0, hide.indexOf('\n    }\n'));
     assert.ok(body.includes('child === coverNode'), '关界面时把云也关掉了');
     assert.ok(body.includes('child.active = false'), '必须是瞬间关（不是淡出）：淡出会露出半张界面');
     assert.ok(!body.includes('opacity'), '「瞬间关闭」不许走透明度那条路');
-});
-
-test('★★★匹配成功后：关界面 → 等资源 → **先切战场** → 战场挂上才散云', () => {
-    const body = CONTROLLER.slice(CONTROLLER.indexOf('private handoffToBattle'),
-        CONTROLLER.indexOf('private navigateToBattle'));
-    const closeAt = body.indexOf('handoff.closeInstantly()');
-    const navigateAt = body.indexOf('this.navigateToBattle()');
-    const releaseAt = body.indexOf('handoff.releaseCover()');
-    assert.ok(closeAt > 0, '没关界面');
-    assert.ok(navigateAt > closeAt, '切战场必须在关界面之后');
-    // 🔴 用户 2026-11-02 打回：云散开时底下必须是战场。所以切场要排在散云**之前**。
-    assert.ok(releaseAt > navigateAt, '散云必须排在切战场之后（先散就会露黑底）');
-    // 切场 + 散云都封在 `enter()` 里，而 `enter` 只由"资源到了"或"超时兜底"两条路触发：
-    // 资源没到就切场 = 战场自己弹加载态（用调用点判断，别按文本先后比 —— `enter` 是闭包，定义在前）。
-    assert.ok(body.includes('this.session?.ready'), '没有等战场资源');
-    assert.ok(body.includes('void ready.then(enter'), '资源到了才切场');
-    assert.ok(body.includes('this.options.clock.schedule(enter, handoff.readyTimeout)'), '超时兜底也要切场');
-    assert.ok(body.includes('handoff.readyTimeout'), '没有超时兜底');
-    assert.ok(body.includes('GameRoute.Main'), '资源失败要有去处（回主界面）');
-    // 失败那条路也要散：云已经交接出去了，不散就一直盖着主界面
-    const fail = body.slice(body.indexOf('this.options.failed(error)'));
-    assert.ok(fail.includes('handoff.releaseCover()'), '回主界面时没散云，一屏云会一直盖着');
-    // 跳转只有一处出口，PVP 那条路与交接那条路共用载荷形状
-    const navigate = CONTROLLER.slice(CONTROLLER.indexOf('private navigateToBattle'));
-    assert.ok(navigate.includes('GameRoute.Battle'), '没找到切战场的出口');
-    assert.equal(CONTROLLER.split('GameRoute.Battle').length - 1, 1, '切战场只许一个出口');
 });
 
 test('★★★云必须被搬出匹配页：留在页里就活不过 navigate（这就是黑底那一版）', () => {
@@ -109,8 +90,7 @@ test('★★★云必须被搬出匹配页：留在页里就活不过 navigate�
     const body = handOver.slice(0, handOver.indexOf('\n    }\n'));
     assert.ok(body.includes('TerritoryBattleCoverOverlay.create'), '没有把云交给跨流程宿主');
     assert.ok(body.includes('this.cover = null'), '所有权没转交（dispose 会把云一起销毁）');
-    assert.ok(COMPOSITION.includes('closeInstantly: () => this.handOverCover()'), '交接没走搬云那一步');
-    assert.ok(COMPOSITION.includes('releaseCover: () => this.handoffOverlay?.arm()'), '散云没交给宿主');
+    assert.match(COMPOSITION, /private onHandoff\(\): void \{\s*this\.handOverCover\(this\.mounted\.page\.node\)/);
     // dispose 里那份清理也要按"还是不是自己的云"判断，否则交接完又被销毁
     assert.ok(COMPOSITION.includes('const cover = this.cover;') && COMPOSITION.includes('this.cover = null;') && COMPOSITION.includes('cover?.dispose()'),
         'dispose 会销毁已经交接出去的那层云');
@@ -121,6 +101,7 @@ test('★★★云必须被搬出匹配页：留在页里就活不过 navigate�
     const overlay = read('territory/view/TerritoryBattleCoverOverlay.ts');
     assert.ok(overlay.includes('host.parent'), '覆盖层挂错了地方（会被战场上来的 removeAllChildren 清掉）');
     assert.ok(overlay.includes('setSiblingIndex'), '覆盖层没有排到战场之上');
+    assert.ok(overlay.includes('addComponent(UITransform)'), '覆盖层容器节点必须挂载 UITransform');
     assert.ok(overlay.includes('onSwitchSettled'), '覆盖层没等流程切换落定就散云（会散在空屏上）');
     assert.ok(overlay.includes('releaseFinished'), '散完没人收工');
 });

@@ -89,6 +89,19 @@ const PATH_LITERALS = {
     selfAuraFire: 'units/projectiles/麻辣铁锅_喷射火焰/麻辣铁锅_喷射火焰',
     // 2026-11-20 第 33 批：101404 分裂菇的「生成分身」爆点（散帧序列，见 build_fission_spawn_fx.py）。
     fissionSpawn: 'units/projectiles/分裂菇_生成分身/分裂菇_生成分身',
+    // 2026-11-23 第 42 批：仙桃行者 68009 的「重击」落地柱（大地之力 100904 首目标 + 武将技 36241）。
+    // 散帧序列，见 tools/build_xiantao_quake_fx.py；锚点/层在 ZCEffectCatalog 里按路径覆盖。
+    quakeStrike: 'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能',
+    // 2026-11-23 第 42 批续：仙桃行者 68009 的**普通攻击**造型。
+    // 🔴 用户纠正口径后的值：「搞错了，应该使用的是 旧值 长枪兵普攻_刀光」。
+    // 它只作为路径常量流通（`pvpSkill 30718` 的 `effectPrefabPath`），目录里**没有 spec** ——
+    // 锚点/层/尺寸/寿命全是兜底默认值，与长枪兵行 30171 逐字一致。
+    spearSlash: 'units/projectiles/长枪兵普攻_刀光/长枪兵普攻_刀光',
+    // 2026-11-23 第 43 批：文明之火（103503 改造）直接复用灼热地带那张图。
+    // 同一个路径被火焰树妖 68003 自己的灼热地带（30811）用着 ⇒ 蓝色只能按事件染，
+    // 目录里**不登记** tint（否则 68003 也会变蓝）。
+    hotZone: 'units/projectiles/火焰树妖_灼热地带技能/火焰树妖_灼热地带技能',
+    iceCone: 'units/projectiles/冰法师_冰锥/冰法师_冰锥',
 } as const;
 
 /** 行为键 → 目录给出的路径；与改造前每个 `ZC*Fx` 模块的输出逐项一致。*/
@@ -120,10 +133,24 @@ const EXPECTED_BEHAVIOR_PATHS: Readonly<Record<string, readonly string[]>> = {
         PATH_LITERALS.missileBody, PATH_LITERALS.missileImpact,
     ],
     [ZC_EFFECT_BEHAVIOR_KEYS.stormZone]: [PATH_LITERALS.windHurricane],
-    [ZC_EFFECT_BEHAVIOR_KEYS.rayBeam]: [PATH_LITERALS.lightningImpact],
+    //  2026-11-23 第 43 批换图：射线集束要「和镭射飞龙普攻颜色一致」（用户口径），
+    //  原来那张【雷电冲击】是青蓝、镭射飞龙是正红，乘算做不到 ⇒ 直接用同一张红图。
+    [ZC_EFFECT_BEHAVIOR_KEYS.rayBeam]: [PATH_LITERALS.laserAttack],
+    //  文明之火（103503 改造）：目标点周围撒 3 块火焰区域，图同灼热地带。
+    [ZC_EFFECT_BEHAVIOR_KEYS.fireZone]: [PATH_LITERALS.hotZone],
     //  2026-11-20 第 33 批：召唤（`summon_unit`）的分身生成爆点。
-    //  不进预热（`warmup` 未标）⇒ 本局没有分裂菇就不下这 26 张散图。
-    [ZC_EFFECT_BEHAVIOR_KEYS.summonUnit]: [PATH_LITERALS.fissionSpawn],
+    //  第 34 批追加「舞王脚底持续光环」（借用 self_aura 那份 prefab，但那条车道只覆盖
+    //  self_aura 自己的单位，召唤这一组必须自己再收一次）。
+    //  不进预热（`warmup` 未标）⇒ 本局没有分裂菇 / 艺术家就不下这些资源。
+    [ZC_EFFECT_BEHAVIOR_KEYS.summonUnit]: [PATH_LITERALS.fissionSpawn, PATH_LITERALS.sustainedAura],
+    //  2026-11-21 第 37 批：`skill_params`（只带数据的参数袋车道）本身没有造型，但巨力坚果 68002
+    //  的「亡者护盾」挂在这条车道上 ⇒ 按单位覆盖补收 `刀盾兵_护盾`。公共清单仍是空，
+    //  其余卡在这条车道一个资源都不多收。
+    [ZC_EFFECT_BEHAVIOR_KEYS.skillParams]: [],
+    //  2026-11-21 第 38 批：`self_cast`（冷却型自身施法）同样没造型槽。波利奥 68006 的
+    //  「吃口菠萝」100603 是群体治疗，视觉上要给半径内每个己方单位挂一圈刀盾兵_护盾 ⇒
+    //  按单位覆盖补收。嗜血 100703 / 迅击 100903 同车道但零资源。
+    [ZC_EFFECT_BEHAVIOR_KEYS.selfCast]: [],
 };
 
 test('路径语义键的字面量保持改造前快照', () => {

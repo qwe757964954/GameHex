@@ -1,6 +1,6 @@
 import { _decorator, Button, Color, Component, Label, Node, Sprite, SpriteFrame } from 'cc';
 import { EventMgr } from '../../framework/event/EventMgr';
-import { LoginUiEvent } from './LoginEvents';
+import { LoginUiEvent, type ILoginIntent } from './LoginEvents';
 import { ServerInfoData, ServerStatus } from './LoginProtocol';
 
 const { ccclass, property } = _decorator;
@@ -65,7 +65,7 @@ export class ServerSelectItem extends Component {
 
     private readonly handleSelect = (): void => {
         const selection = this.selection;
-        if (selection) EventMgr.instance.emit(LoginUiEvent.Intent, { ...selection, kind: 'select' });
+        if (selection) EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'select', serverId: selection.serverId } satisfies ILoginIntent, selection.owner);
     };
 
 }

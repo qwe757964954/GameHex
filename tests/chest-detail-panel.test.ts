@@ -228,6 +228,8 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     panel.chestIcon = { spriteFrame: fallbackIcon };
     for (const key of ['fastCostRoot', 'openCostRoot']) panel[key] = node();
     panel.fastCostIcon = { spriteFrame: null };
+    panel.openFrame = { spriteFrame: null };
+    panel.openSpeedUpIcon = node();
     for (const key of ['fastButton', 'openButton', 'closeButton']) panel[key] = { node: node(), interactable: true };
     panel.closeByButton = () => { closedByButton += 1; };
     const counts: number[] = [];
@@ -286,6 +288,13 @@ test('弹窗组件：全量赋值、三颗按钮派发意图事件、倒计时�
     assert.equal(panel.openCostLabel.string, '01:00:00');
     assert.equal(panel.openButton.interactable, true, '未激活时展示所需时长但仍可启动');
     assert.deepEqual(positions[positions.length - 1], [4, 21.5], '倒计时重新出现时回到两行态');
+    panel.updateCountdown(3600, false, { caption: '等待解锁', speedUp: false, enabled: false });
+    assert.equal(panel.openLabel.string, '等待解锁');
+    assert.equal(panel.openButton.interactable, false);
+    assert.equal(panel.fastButton.interactable, true);
+    panel.updateCountdown(3600, false, { caption: '解锁', speedUp: false, enabled: true });
+    assert.equal(panel.openLabel.string, '解锁');
+    assert.equal(panel.openButton.interactable, true);
     panel.updateCountdown(3599, true);
     assert.equal(panel.openCostLabel.string, '00:59:59');
     assert.equal(panel.openButton.interactable, false, '计时中不能提前打开');

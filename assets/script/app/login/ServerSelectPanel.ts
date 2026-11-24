@@ -60,7 +60,7 @@ export class ServerSelectPanel extends PopupBase {
         const owner = this.owner;
         this.owner = null;
         this.servers = [];
-        if (owner) EventMgr.instance.emit(LoginUiEvent.ServerClosed, { owner, panel: this });
+        if (owner) EventMgr.instance.emit(LoginUiEvent.ServerClosed, { panel: this }, owner);
     }
 
     private renderItem(node: Node, index: number): void {

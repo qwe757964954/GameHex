@@ -3,12 +3,17 @@ import type { AssetService } from '../../../core/asset/AssetService';
 import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { bundleForPath } from '../../../core/asset/BundleCatalog';
 import { spriteFramePathOf } from '../../ArtPaths';
-import type { BigMapResType, IBigMapBuildingConfig, IBigMapCampConfig } from '../model/BigMapTypes';
 import {
-    BIGMAP_BASE_FALLBACK_ART, BIGMAP_BASE_TILE_DIRT, BIGMAP_BASE_TILE_GRASS,
-    BIGMAP_CONCEPT_ROOT, BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS,
+    BIGMAP_RES_ORDER,
+    type BigMapResType, type IBigMapBuildingConfig, type IBigMapCampConfig,
+} from '../model/BigMapTypes';
+import {
+    BIGMAP_BASE_FALLBACK_ART, BIGMAP_BASE_SPRITE_NAMES, BIGMAP_BASE_TILE_DIRT, BIGMAP_BASE_TILE_GRASS,
+    BIGMAP_CONCEPT_SPRITE_ROOT, BIGMAP_DECOR_GRASS_ART, BIGMAP_DECOR_ROCK_ART,
+    BIGMAP_HUD_UI_FILES, BIGMAP_HUD_UI_KEYS, BIGMAP_LEGACY_WASTELAND_BG,
     BIGMAP_PLATE_FILES, BIGMAP_PLATE_FLAG_FILE, BIGMAP_PLATE_KEYS, BIGMAP_STAMINA_ART,
-    BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART, toBigMapArtPath, worldCampArtFor,
+    BIGMAP_TILED_BG_ART, BIGMAP_WORLD_CITY_ART, BIGMAP_WORLD_HOME_ART,
+    BIGMAP_WORLD_MONSTER_ART, toBigMapArtPath, worldCampArtFor,
     type IBigMapHudUiKey, type IBigMapPlateKey,
 } from './BigMapArtCatalog';
 
@@ -32,7 +37,7 @@ export interface IBigMapArt {
     /** 据点名条（按归属四选一）与「谁占着」小旗。缺图时标记退回手画角标，不影响布局。 */
     readonly plates: ReadonlyMap<IBigMapPlateKey, SpriteFrame | null>;
     readonly plateFlag: SpriteFrame | null;
-    /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city`）。缺图时上层退回手画底，不影响布局。 */
+    /** 领地页 HUD 同款按钮 / 模式木牌（`image/common` + `image/main/city` / `image/main/hud`）。缺图时上层退回手画底，不影响布局。 */
     readonly hud: ReadonlyMap<IBigMapHudUiKey, SpriteFrame | null>;
     readonly resources: ReadonlyMap<BigMapResType, SpriteFrame | null>;
 }
@@ -68,21 +73,23 @@ export async function loadBigMapArt(
             //`quiet` 只给表驱动且可能整列未入库的入口用（`baseBuildIcon`）：那一列现在
             //23 座建筑都还没出图，逐条 warn 会在每次进大地图刷一屏、把真正的缺失淹掉。
             //这类「配了但图还没进库」属于预期状态，静默回退概念图即可。
-            if (!(await assets.has(framePath, SpriteFrame, options))) {
+            const exists = await assets.has(framePath, SpriteFrame, options);
+            if (scope.disposed) return null;
+            if (!exists) {
                 if (!quiet) console.warn(`[BigMap] 资源未命中（has=false）：${framePath} bundle=${options.bundle}`);
                 return null;
             }
-            if (scope.disposed) return null;
             const frame = await assets.load(framePath, SpriteFrame, options);
             return scope.disposed ? null : frame;
         } catch (error) {
-            if (!quiet) console.warn(`[BigMap] 美术加载失败，保留地形和标记兜底：${path}`, error);
+            if (!scope.disposed && !quiet) console.warn(`[BigMap] 美术加载失败，保留地形和标记兜底：${path}`, error);
             return null;
         }
     };
     const requests = new Map<string, Promise<SpriteFrame | null>>();
     const load = (rawPath: string, quiet = false): Promise<SpriteFrame | null> => {
-        if (scope.disposed) return Promise.resolve(null);
+        //空路径只可能是上游数据漏字段；这里直接落 null，别让它拼成 `/spriteFrame` 再打一条误导性的未命中日志。
+        if (!rawPath || scope.disposed) return Promise.resolve(null);
         //归一化放在去重之前：同一张图新旧两种写法只加载一次。
         const path = toBigMapArtPath(rawPath);
         const existing = requests.get(path);
@@ -92,16 +99,16 @@ export async function loadBigMapArt(
         return request;
     };
     const terrainTask = Promise.all([
-        background && toBigMapArtPath(background) !== 'image/wasteland_background'
+        background && toBigMapArtPath(background) !== BIGMAP_LEGACY_WASTELAND_BG
             ? load(background) : Promise.resolve(null),
         load(BIGMAP_WORLD_HOME_ART),
         load(BIGMAP_WORLD_CITY_ART),
-        load('image/territory/buildings/territory_boss_v1'),
-        load('image/decor/wasteland/st2'),
-        load('image/decor/wasteland/cao'),
-        load('bigMapBG'),
+        load(BIGMAP_WORLD_MONSTER_ART),
+        load(BIGMAP_DECOR_ROCK_ART),
+        load(BIGMAP_DECOR_GRASS_ART),
+        load(BIGMAP_TILED_BG_ART),
     ]);
-    const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_ROOT}/sprites/${name}`);
+    const sprite = (name: string): Promise<SpriteFrame | null> => load(`${BIGMAP_CONCEPT_SPRITE_ROOT}/${name}`);
     /**
      *表里配了 `baseBuildIcon` 但没加载到的（建筑 id:路径）。
      *
@@ -135,7 +142,7 @@ export async function loadBigMapArt(
         const frame = await load(BIGMAP_HUD_UI_FILES[key]);
         return [key, frame] as const;
     }));
-    const resourceTask = Promise.all((['grain', 'wood', 'iron', 'coin', 'stamina'] as const).map(async (key) => {
+    const resourceTask = Promise.all(BIGMAP_RES_ORDER.map(async (key) => {
         //背包道具图标优先：`item.icon` 是相对 resources 的路径（`icons/item/xxx`），
         //`load` 补 `/spriteFrame`，bundle 由 `BundleCatalog` 路由到 `main-pages`。
         const itemIcon = resourceIcons.get(key);
@@ -149,7 +156,7 @@ export async function loadBigMapArt(
     }));
     const baseTask = Promise.all([
         load(BIGMAP_BASE_TILE_GRASS), load(BIGMAP_BASE_TILE_DIRT),
-        sprite('construction'), sprite('rocks'), sprite('grass'),
+        ...BIGMAP_BASE_SPRITE_NAMES.map((name) => sprite(name)),
     ]);
     //名条是整条原尺寸贴图，走自己的加载分支、不参与任何九宫覆写（见 `BIGMAP_PLATE_KEYS` 注释）。
     const plateTask = Promise.all(BIGMAP_PLATE_KEYS.map(async (key) => (
@@ -162,7 +169,7 @@ export async function loadBigMapArt(
         terrainTask, buildingTask, hudTask, resourceTask, baseTask, campTask, plateTask, plateFlagTask,
     ]);
     const buildings = new Map(buildingEntries);
-    if (missedIcons.length > 0) {
+    if (!scope.disposed && missedIcons.length > 0) {
         const sample = missedIcons.slice(0, 4).join('、');
         console.warn(`[BigMap] ${missedIcons.length} 座建筑的 baseBuildIcon 没加载到，已回退通用建筑图：${sample}`
             + `${missedIcons.length > 4 ? ' …' : ''}（检查路径是否在 resources / 对应 bundle 下）`);

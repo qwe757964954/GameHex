@@ -3,10 +3,10 @@ import { director, instantiate, Node, Prefab, SpriteFrame, UIOpacity, UITransfor
 import type { GameContext } from '../../../core/runtime/GameContext';
 import type { ConfigService } from '../../../core/config/ConfigService';
 import { GameRoute } from '../../../core/runtime/GameRoute';
+import { EventMgr } from '../../../framework/event/EventMgr';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 //常驻弹窗根节点名：世界页要插到它下面，否则 Toast / CmdTips 全被地图盖住。
 import { POPUP_ROOT_NAME } from '../../../framework/ui/PopupDef';
-import { startBattle } from '../../battle/BattleStartService';
 import { readRoleRow } from '../../main/MainRoleRow';
 import { HeadArt } from '../../HeadArt';
 import { spriteFramePath } from '../../ArtPaths';
@@ -19,6 +19,7 @@ import { NpcBigMapRankProvider } from './NpcBigMapRankProvider';
 import { RemoteBigMapRankProvider } from './RemoteBigMapRankProvider';
 import { BigMapModel } from './BigMapModel';
 import { BigMapController } from './BigMapController';
+import { BIGMAP_BATTLE_READY, type IBigMapBattleReady } from './BigMapEvents';
 import { BIGMAP_SAVE_KEY, type IBigMapSaveOwner } from './BigMapSaveKeys';
 import { createBigMapStorage } from './BigMapStorage';
 import { BIGMAP_BUNDLE } from '../../../core/asset/BundleCatalog';
@@ -31,7 +32,6 @@ import { BigMapPage } from '../view/BigMapPage';
 import { mountBigMapNavigation } from '../view/BigMapNavigation';
 import type { IBigMapLayout } from '../model/BigMapLayout';
 import type { IBigMapConfig } from '../model/BigMapTypes';
-import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 //顶栏资源数量走背包（`CmdItem` 缓存）：SLG 资源在服务端就是道具 18501~18505。
 import { readItemCounts } from '../../card/ItemBag';
 
@@ -187,43 +187,7 @@ export class BigMapEntry {
                 rankProvider: owner ? new RemoteBigMapRankProvider(owner.roleId,
                     () => revision === this.openRevision && this.isSaveOwnerCurrent(owner)) : new NpcBigMapRankProvider(config),
                 campRepository,
-                startBattle: owner ? async (battleType, targetConfigId, isPresenterCurrent) => {
-                    const isCurrent = (): boolean => revision === this.openRevision && root.isValid
-                        && this.isSaveOwnerCurrent(owner) && isPresenterCurrent();
-                    if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
-                    this.controller?.resources.sessionAssets.pauseWarmup?.();
-                    const battle = await startBattle(battleType, [String(targetConfigId)], root, isCurrent);
-                    if (!isCurrent()) return { ok: false, message: BIGMAP_BATTLE_TEXT.closed };
-                    if (!battle) return { ok: false, message: BIGMAP_BATTLE_TEXT.failed };
-                    const session = createZCBattleSession(this.context, { owner: this.controller.scope, battle: Promise.resolve(battle), params: {
-                        slgBattleType: battleType, selfRoleId: owner.roleId,
-                    } });
-                    // 别在这里立刻 `close()`：`navigate` 是「预加载 → 进入」两阶段，
-                    //战斗资源没就绪之前当前界面一直不动。提前关掉世界页，露出来的就是
-                    //主界面的 `currentTab`（默认 tab = 领地）⇒ 玩家看到的是
-                    //「点攻打先跑回领地，等几十秒才进战斗」（2026-10-26 反馈）。
-                    //世界页挂 Canvas、不在 Main 节点下，`ProcedureMain.onLeave` 销毁不到它，
-                    //所以要自己关 —— 但必须等到流程真正切走的那一刻，见下面的落定钩子。
-                    this.stopBattleSwitch?.();
-                    this.stopBattleSwitch = ProcedureManager.onSwitchSettled((entered) => {
-                        this.stopBattleSwitch?.();
-                        this.stopBattleSwitch = null;
-                        if (!isCurrent()) return;
-                        if (entered) {
-                            this.close();
-                            return;
-                        }
-                        //预加载失败 / 被别的切换顶掉：世界页还在，把「正在进入」撤掉让玩家重试。
-                        this.controller?.cancelEnteringBattle();
-                    });
-                    ProcedureManager.navigate(GameRoute.Battle, {
-                        battle,
-                        slgBattleType: battleType,
-                        session,
-                        selfRoleId: owner.roleId,
-                    });
-                    return { ok: true, message: '' };
-                } : undefined,
+                canRequestBattle: owner !== null,
                 slgRepository,
                 selfRoleId: owner?.roleId ?? '',
             });
@@ -238,6 +202,7 @@ export class BigMapEntry {
             const navigationHeight = navigation?.isValid ? navigation.getComponent(UITransform)?.height ?? 0 : 0;
             this.root = root;
             this.controller = controller;
+            EventMgr.instance.on(BIGMAP_BATTLE_READY, this.onBattleReady, this);
             controller.start();
             this.onCloseCallback = options?.onClose ?? null;
             //基地写操作由 serverBaseReady 拦截；同步回包不应挡住世界浏览，更不能等到缺包超时才亮页。
@@ -284,7 +249,38 @@ export class BigMapEntry {
         }
     }
 
+    private onBattleReady({ battle, battleType }: IBigMapBattleReady): void {
+        const controller = this.controller;
+        const saveOwner = this.saveOwner;
+        if (!controller || !saveOwner || !this.root?.isValid || !this.isSaveOwnerCurrent(saveOwner)) {
+            controller?.cancelEnteringBattle();
+            return;
+        }
+        try {
+            const session = createZCBattleSession(this.context, {
+                owner: controller.scope,
+                params: { battle, slgBattleType: battleType, selfRoleId: saveOwner.roleId },
+            });
+            // 战场资源就绪前保留世界页，避免提前露出底下的主界面。
+            this.stopBattleSwitch?.();
+            this.stopBattleSwitch = ProcedureManager.onSwitchSettled(entered => {
+                this.stopBattleSwitch?.();
+                this.stopBattleSwitch = null;
+                if (!this.isSaveOwnerCurrent(saveOwner)) return;
+                if (entered) this.close();
+                else controller.cancelEnteringBattle();
+            });
+            ProcedureManager.navigate(GameRoute.Battle, { battle, slgBattleType: battleType, session, selfRoleId: saveOwner.roleId });
+        } catch (error) {
+            this.stopBattleSwitch?.();
+            this.stopBattleSwitch = null;
+            controller.cancelEnteringBattle();
+            console.error('[BigMapEntry] 战斗交接失败', error);
+        }
+    }
+
     close(): void {
+        EventMgr.instance.offTarget(this);
         this.controller?.resources.sessionAssets.pauseWarmup?.();
         this.openRevision += 1;
         this.opening = false;

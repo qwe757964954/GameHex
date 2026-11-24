@@ -10,11 +10,9 @@ export type LeagueRewardAction =
     | { readonly kind: 'sweep' };
 
 export interface ILeagueRewardIntent {
-    readonly owner: object;
     readonly action: LeagueRewardAction;
 }
 
 export interface ILeagueRewardCompletion {
-    readonly owner: object;
     readonly status: LeagueRequestResult;
 }

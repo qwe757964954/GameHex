@@ -225,6 +225,10 @@ export function compilePvpTables(tables: ZCPvpTables): IZCPvpCompiledConfig {
         // `developed` 且品级固定为 1，所以这里直接拍下算好的值。
         wallMaxHp: globalNumber(global, 'wallMaxHp'),
         hqMaxHp: Math.round((hqCard.baseHp ?? 0) + (hqCard.cyclePerTierValue ?? 0)),
+        hatredSeconds: globalNumberOr(global, 'hatredSeconds', 5, 0),
+        chaseMaxSeconds: globalNumberOr(global, 'chaseMaxSeconds', 5, 0),
+        floatTextDamageSeconds: globalNumberOr(global, 'floatTextDamageSeconds', 0.85, 0),
+        hitFxSeconds: globalNumberOr(global, 'hitFxSeconds', 0.15, 0),
     };
 
     return {

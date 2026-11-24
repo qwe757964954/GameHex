@@ -5,6 +5,7 @@ import { ZC_PORTAL_FLIGHT_SECONDS } from '../ZCBattlePresentationQueue';
 import type { IZCDashStep } from './ZCMovementSystem';
 import type { IZCDashHit } from './ZCUnitTargeting';
 import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../../core/hex/HexGridLayout';
+import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 
 export interface IZCUnitTargeting {
     acquire(unit: ZCUnitState): void;
@@ -23,11 +24,15 @@ export interface IZCUnitTargeting {
     chargeSpeedScale?(unit: ZCUnitState): number;
     /** 冲刺路径上第一个撞到的敌人；缺省时冲刺只会跑到终点、不发生碰撞。*/
     dashFirstHit?(unit: ZCUnitState, fromX: number, fromY: number, toX: number, toY: number): IZCDashHit | null;
+    /** 检测近身是否有敌方单位正在攻击我方建筑/城墙。*/
+    findNearbyStructureBreaker?(unit: ZCUnitState, maxDistance?: number): ZCUnitState | null;
 }
 
 export interface IZCUnitMovement {
     /** `speedScale` = 冲刺倍率（缺省 1 ⇒ 与旧签名逐字一致）。*/
     advanceTowardUnit(unit: ZCUnitState, target: ZCUnitState, dt: number, speedScale?: number): void;
+    /** 朝任意点直线走一步（不寻路）。可选：缺省 ⇒ 召唤物不追击，只在射程内出手。*/
+    advanceTowardPoint?(unit: ZCUnitState, x: number, y: number, dt: number, speedScale?: number): void;
     advanceUnitMovement(unit: ZCUnitState, dt: number, speedScale?: number): void;
     startMarch(unit: ZCUnitState): void;
     advanceMarch(unit: ZCUnitState, dt: number): void;
@@ -39,6 +44,7 @@ export interface IZCUnitMovement {
 
 export interface IZCUnitContext extends Pick<IZCModelServices, 'effectiveDefinition' | 'random'> {
     now(): number;
+    readonly rules?: Readonly<ZCRuntimeRules>;
     /** 当前硬控（无则 null）；受控单位由状态机闸门冻结一切行动。*/
     controlOf(unit: ZCUnitState): { kind: string; defId: string } | null;
     /** 软控：禁普攻，移动与技能照常；缺省不禁。*/
@@ -192,8 +198,24 @@ export class ZCUnitSystem {
         }
         // 冲刺标记每帧先清：它是本帧派生量，残留会让表现层停在出拳姿势。
         unit.charging = false;
-        // 硬控优先：冻结 stateTime、索敌、移动与攻击；冲刺中挨控则作废并按冲空进冷却。
+        // 仇恨惰性 GC：过期或目标已死/失效时主动置空，避免陈旧或僵尸 ID 残留
+        if (unit.hatredUnitId !== null) {
+            if (context.now() > unit.hatredUntil) {
+                unit.hatredUnitId = null;
+                unit.hatredUntil = 0;
+            } else {
+                const hater = context.unitById.get(unit.hatredUnitId);
+                if (!hater || hater.battleState === 'dead' || hater.hp <= 0 || hater.owner === unit.owner) {
+                    unit.hatredUnitId = null;
+                    unit.hatredUntil = 0;
+                }
+            }
+        }
+        // 硬控优先：冻结 stateTime、索敌、移动与攻击；仇恨时间窗口随硬控等量顺延；冲刺中挨控则作废并按冲空进冷却。
         if (context.controlOf(unit)) {
+            if (unit.hatredUnitId !== null && unit.hatredUntil > context.now()) {
+                unit.hatredUntil = Math.round((unit.hatredUntil + dt) * 1e9) / 1e9;
+            }
             if (unit.dashUntil !== undefined) {
                 this.endDash(unit);
                 this.startDashCooldown(unit, context);
@@ -209,6 +231,12 @@ export class ZCUnitSystem {
             this.endDash(unit);   // 超时兜底：按冲空收场，同样要进冷却
             this.startDashCooldown(unit, context);
         }
+        //  腾云驾雾（仙桃行者 68009，2026-11-24 第 44 批）：四段突进连击期间，位移与出手
+        //  全归 `ZCSkillTriggerSystem.applyDashChain`（它每帧 `blinkTo` + 到位 `strike`）。
+        //  这里必须整段跳过：不索敌（否则中途锁到新目标）、不出手（会多打一发普攻）、
+        //  不自己挪窝（会和 `blinkTo` 每帧抢坐标，画面抖成一团）。
+        //  `dashChainIndex` 有值 = 序列在跑；`undefined` = 空闲，存量单位逐字不变。
+        if (unit.dashChainIndex !== undefined) return;
         unit.stateTime = Math.round((unit.stateTime + dt) * 1e9) / 1e9;
         const definition = context.effectiveDefinition(unit);
 
@@ -249,10 +277,11 @@ export class ZCUnitSystem {
             unit.castHoldUntil = undefined;
         }
         // ── 跟随型召唤物（`summonMasterId` 有值、且不是独立分身）──
-        //  位置每帧由 `ZCGameModel.syncSummons` 钉在「本体 + 阵位」上 ⇒ 这里**不许寻路**：
-        //  一旦让它走正常的 `target / move` 分支，`advanceUnitMovement` 会把坐标拽向敌人，
-        //  下一帧又被拽回阵位，观感是四个舞伴在原地抽筋。召唤物只做一件事：
-        //  射程内有敌人就出手（设计口径「跟随本体移动，并主动攻击离自己最近的敌人」）。
+        //  位置由 `ZCGameModel.syncSummons` 看着（不是无脑钉死）：配了拴绳 `summonLeashRadius`
+        //  就只在出圈时拉回边界，圈里随便走 ⇒ 这里**不许走正常寻路**（`advanceUnitMovement`
+        //  那套会按格推进 `progress`，和拴绳的自由坐标打架），只允许「朝目标直线挪一步」。
+        //  召唤物要做的事按优先级：射程内 ⇒ 出手；射程外 ⇒ 圈内追一步；
+        //  没目标 / 没拴绳 ⇒ 站住（设计口径「跟随本体移动，并主动攻击离自己最近的敌人」）。
         //
         //  放在 `attack` 分支**之后**：攻击动作要照常走完 `attackDuration` 才回 idle，
         //  提前 return 会让它们一直卡在第一帧的挥拳姿势。
@@ -263,13 +292,34 @@ export class ZCUnitSystem {
         if (unit.summonMasterId !== undefined && unit.summonIndependent !== true) {
             if (context.attackBlockedOf?.(unit)) return;   // 软控禁普攻：原地站着不动
             context.targeting.acquire(unit);
-            if (!context.targeting.current(unit)) {
+            const target = context.targeting.current(unit);
+            if (!target) {
                 if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
                 return;
             }
             if (context.targeting.isInAttackRange(unit) && context.now() >= unit.nextAttackAt) {
                 this.startAttack(unit, context);
                 return;
+            }
+            //  ── 圈内追击（2026-11-21 第 36 批）──
+            //  🔴 不追就是「四个舞伴站着发呆」：它们被钉在阵位上，而普攻射程只有
+            //  `(attackRange + 目标半身) × combatDistanceScale` ≈ 17 世界 px，
+            //  阵位半径却有 36 —— 敌人贴到本体脸上也够不到（用户实测「现在不会攻击了」）。
+            //  只有在配了 `summonLeashRadius` 时才追（没配就还是老行为：只打射程内的）。
+            //  追是直线走、不寻路：拴绳半径就一两格，直线足够；出圈的位移由 `syncSummons` 拉回。
+            if (unit.summonLeashRadius !== undefined && context.movement.advanceTowardPoint
+                && !context.targeting.isInAttackRange(unit)) {
+                //  目标坐标就在 `ZCCombatTarget` 上（城墙 / 建筑给的是格心）⇒ 结构目标同样能追。
+                const master = unit.summonMasterId !== undefined ? context.unitById.get(unit.summonMasterId) : undefined;
+                const masterPos = master ? { x: master.freeX, y: master.freeY } : null;
+                const reach = context.targeting.attackReachOf?.(unit) ?? 0;
+                const leashLimit = (unit.summonLeashRadius + reach) * 1.5;
+                const withinLeash = !masterPos || Math.hypot(target.x - masterPos.x, target.y - masterPos.y) <= leashLimit;
+                if (withinLeash) {
+                    context.movement.advanceTowardPoint(unit, target.x, target.y, dt);
+                    if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
+                    return;
+                }
             }
             if (unit.battleState !== 'idle') ZCCombatSystem.switchState(unit, 'idle');
             return;
@@ -299,8 +349,22 @@ export class ZCUnitSystem {
 
         // 正在射程内锁定目标时保持当前目标（RTS 式仇恨锁）：
         // 目标死亡或移出射程（isTargetOutOfAttackRange 滞回判定）后才重新索敌，切到最近的。
+        // 若受击产生了活跃仇恨且当前处于非单位目标（打墙/打建筑）或追击未进射程，允许打破锁定重索敌。
+        // 若当前目标不在普攻射程内（追人/走位），且近身有敌方正在攻击我方建筑/城墙，允许打破锁定重索敌守家。
+        const target = context.targeting.current(unit);
+        const hasActiveHatred = unit.hatredUnitId !== null && context.now() <= unit.hatredUntil;
+        const notInAttackRange = !target || !context.targeting.isInAttackRange(unit);
+        let canBreakLock = hasActiveHatred && target && (target.kind !== 'unit' || notInAttackRange);
+        if (!canBreakLock && notInAttackRange && context.targeting.findNearbyStructureBreaker) {
+            const breaker = context.targeting.findNearbyStructureBreaker(unit);
+            if (breaker) {
+                unit.hatredUnitId = breaker.id;
+                unit.hatredUntil = context.now() + 5;
+                canBreakLock = true;
+            }
+        }
         const lockedAndFighting = (unit.battleState === 'idle' || unit.battleState === 'move')
-            && !!context.targeting.current(unit);
+            && !!target && !canBreakLock;
         if (!lockedAndFighting) {
             context.targeting.acquire(unit);
             if (context.targeting.current(unit)) ZCCombatSystem.switchState(unit, context.targeting.isInAttackRange(unit) ? 'idle' : 'move');
@@ -332,7 +396,8 @@ export class ZCUnitSystem {
             }
             if (target.kind === 'unit') {
                 unit.chase ??= { x: unit.freeX, y: unit.freeY, startedAt: context.now() };
-                if (context.now() - unit.chase.startedAt >= CHASE_MAX_SECONDS
+                const maxChaseSeconds = context.rules?.chaseMaxSeconds ?? CHASE_MAX_SECONDS;
+                if (context.now() - unit.chase.startedAt >= maxChaseSeconds
                     || Math.hypot(unit.freeX - unit.chase.x, unit.freeY - unit.chase.y) >= CHASE_MAX_DISTANCE) {
                     if (!unit.disengagedUnitIds?.includes(target.id)) {
                         unit.disengagedUnitIds = [...(unit.disengagedUnitIds ?? []), target.id];
@@ -355,6 +420,15 @@ export class ZCUnitSystem {
             }
             if (unit.targetHexId === null) unit.targetHexId = context.targeting.findStepToward(unit);
             if (unit.targetHexId === null) {
+                if (target.kind === 'unit') {
+                    if (!unit.disengagedUnitIds?.includes(target.id)) {
+                        unit.disengagedUnitIds = [...(unit.disengagedUnitIds ?? []), target.id];
+                    }
+                    unit.targetUnitId = null;
+                    delete unit.chase;
+                    ZCCombatSystem.switchState(unit, 'target');
+                    return;
+                }
                 ZCCombatSystem.switchState(unit, 'idle');
                 return;
             }

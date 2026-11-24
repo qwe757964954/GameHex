@@ -240,6 +240,11 @@ function loadPanelClass(emitted: string[]): new () => Record<string, any> {
         DETAIL_SCOUT: 'scout',
     };
     class RewardItemView { render() {} clear() {} }
+    class PopupBase {
+        isPopupOpen = false;
+        close() { (this as any).onClose?.(); }
+        closeByButton() { (this as any).onClose?.(); }
+    }
     //  事件走 `EventMgr` 全局中控：这里记下所有 emit 的事件名，供断言「派发了哪个意图」。
     const EventMgr = { instance: { emit: (event: string, payload: { intent: { kind: string } }) => { assert.equal(event, TerritoryUiEvent.Intent); emitted.push(payload.intent.kind); }, on() {}, offTarget() {} } };
     const stub = (request: string) => {
@@ -247,8 +252,9 @@ function loadPanelClass(emitted: string[]): new () => Record<string, any> {
         if (request.includes('event/EventMgr')) return { EventMgr };
         if (request === '../../common/RewardItemView') return { RewardItemView };
         if (request === '../../../vscrollview/VScrollView') return { VirtualScrollView: class {} };
+        if (request.includes('PopupBase')) return { PopupBase };
         return {
-            Component, Button, Node, Sprite, UITransform, SpriteFrame, Label, BlockInputEvents,
+            Component, Button, Node, Sprite, UITransform, SpriteFrame, Label, BlockInputEvents, PopupBase,
             _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
         };
     };
@@ -321,4 +327,91 @@ test('玩家关卡弹窗组件：全量赋值、两颗按钮与关闭各自派�
     assert.equal(panel.fightCostRoot.active, false);
     assert.equal(panel.chestLabel.node.active, false, '没有第一条奖励时整行隐藏');
     assert.equal(panel.node.active, true, 'open 幂等：重复打开仍可见');
+});
+
+/**
+ * §3.56 层级真源：`open()` 里原先的 `setSiblingIndex(本父最后)` 只在
+ * `MainTerritoryMap.node` 内有效，而领地页整棵子树属于 `ArenaRoot/MapRoot`（第 0 个孩子）——
+ * `BeginGame`（快速寻敌）、`TopHud`、`BottomHud`、`ChestBar` 都是后画的兄弟，
+ * `BottomNav` 更是 `MainRoot` 上比 `Content` 晚画的孩子。弹窗必须抬到 `MainRoot` 最后一位。
+ */
+test('玩家关卡弹窗：打开挂 MainRoot 最后一位、关闭挂回领地页、dispose 自己收节点（§3.56）', () => {
+    const emitted: string[] = [];
+    const PanelClass = loadPanelClass(emitted);
+    const panel = new PanelClass();
+
+    const makeNode = (name: string): any => {
+        const n: any = {
+            name, active: true, isValid: true, parent: null, children: [], siblingIndex: 0,
+            setParent(p: any) {
+                if (n.parent) n.parent.children = n.parent.children.filter((c: any) => c !== n);
+                n.parent = p;
+                p.children.push(n);
+                n.siblingIndex = p.children.length - 1;
+            },
+            setSiblingIndex(index: number) {
+                n.siblingIndex = index;
+                if (!n.parent) return;
+                n.parent.children = n.parent.children.filter((c: any) => c !== n);
+                n.parent.children.splice(index, 0, n);
+            },
+            getChildByName(key: string) { return n.children.find((c: any) => c.name === key) ?? null; },
+            getComponent: () => ({ setContentSize() {} }),
+            setContentSize() {}, setPosition() {}, setScale() {}, addComponent() {}, on() {}, emit() {},
+            destroy() {
+                n.isValid = false;
+                if (n.parent) n.parent.children = n.parent.children.filter((c: any) => c !== n);
+            },
+        };
+        return n;
+    };
+    const mainRoot = makeNode('MainRoot');
+    const content = makeNode('Content'); content.setParent(mainRoot);
+    const arenaRoot = makeNode('ArenaRoot'); arenaRoot.setParent(content);
+    const mapRoot = makeNode('MapRoot'); mapRoot.setParent(arenaRoot);
+    const home = makeNode('MainTerritoryMap'); home.setParent(mapRoot);
+    const bottomNav = makeNode('BottomNav'); bottomNav.setParent(mainRoot);
+    const panelNode = makeNode('BigMapPlayerLevelPanel'); panelNode.setParent(home);
+
+    const label = () => ({ string: '', node: makeNode('Label'), color: null });
+    Object.assign(panel, {
+        node: panelNode,
+        panelTransform: { node: makeNode('Panel'), width: 651, height: 717 },
+        dimTransform: { node: makeNode('Dim'), setContentSize() {} },
+        titleLabel: label(), chestLabel: label(),
+        dropList: { renderItemFn: null, setTotalCount() {} },
+        scoutLabel: label(), scoutCostLabel: label(), fightLabel: label(), fightCostLabel: label(),
+        scoutCostRoot: makeNode('scoutCostRoot'), fightCostRoot: makeNode('fightCostRoot'),
+        scoutCostIcon: { spriteFrame: null, node: makeNode('icon') },
+        fightCostIcon: { spriteFrame: null, node: makeNode('icon') },
+        scoutButton: { node: makeNode('btn'), interactable: true },
+        fightButton: { node: makeNode('btn'), interactable: true },
+        closeButton: { node: makeNode('btn'), interactable: true },
+    });
+    const contentOf = (title: string) => ({
+        title, chestText: '', rewards: [], scoutCost: 0, fightCost: 0,
+        fightCaption: '开始战斗', fightEnabled: true,
+    });
+
+    panel.initialize(720, 1280, {});
+    assert.equal(panelNode.parent, home, '初始宿主必须是领地页根节点');
+    assert.equal(mainRoot.children.length, 2, 'MainRoot 原本是 [Content, BottomNav]');
+
+    panel.open(contentOf('据点甲'));
+    assert.equal(panelNode.parent, mainRoot, '打开必须挂 MainRoot，否则盖不住 BeginGame / BottomNav');
+    assert.equal(mainRoot.children[mainRoot.children.length - 1], panelNode, '必须排 MainRoot 最后一位');
+    assert.equal(panel.isOpen, true);
+
+    panel.close();
+    assert.equal(panelNode.parent, home, '关闭必须挂回领地页，节点才会随页面一起销毁');
+    assert.equal(panel.isOpen, false);
+    assert.equal(mainRoot.children.includes(panelNode), false, '关闭后不该在 MainRoot 留幽灵节点');
+
+    // 再开一次（幂等）后从「页面销毁」路径收：节点挂在页面之外，引擎不会连带销毁。
+    panel.open(contentOf('据点乙'));
+    assert.equal(panelNode.parent, mainRoot);
+    panel.dispose();
+    assert.equal(panelNode.isValid, false, 'dispose 必须自己 destroy 顶层节点');
+    assert.equal(mainRoot.children.includes(panelNode), false, '销毁后不该留在 MainRoot 上');
+    assert.equal(panel.isOpen, false);
 });

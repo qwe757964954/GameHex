@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { TERRITORY_RANDOM_GAIN_READOUT_ART } from '../assets/script/app/ArtPaths';
+import { GAME_AUDIO } from '../assets/script/app/ResConst';
 import {
     isTerritoryWalletResId,
     splitTerritoryRewards,
@@ -287,12 +288,13 @@ test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹�
     });
     type Reward = { resId: number; amount: number };
     const popups: { resId: number; number: number }[][] = [];
+    const popupSounds: (string | undefined)[] = [];
     const gained: Reward[][] = [];
     const heroBadges: readonly Reward[][] = [];
     const exports: Record<string, new () => {
         state: { map: { startCellId: number } };
         mapView: { playResourceGain(cellId: number, rewards: readonly Reward[]): void };
-        presentRewards(rewards: readonly Reward[], originCellId?: number, presentation?: { popup: boolean }): void;
+        presentRewards(rewards: readonly Reward[], originCellId?: number, presentation?: { popup: boolean; chest?: boolean }): void;
     }> = {};
     runInNewContext(ts.transpileModule(`class RewardView { async playHeroBadges(rewards) { heroBadges.push(rewards); }
         // 开箱「演出窗口」三个钩子：本用例只关心奖励分流，窗口开关由 territory-chest-open 盯。
@@ -301,8 +303,11 @@ test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹�
         cancelGainPresentationTimer() {}
         ${methods.join('\n')} } exports.RewardView = RewardView;`, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, heroBadges, splitTerritoryRewards, FW: {
-        ShowReward: (items: readonly { resId: number; number: number }[]) => popups.push(Array.from(items, item => ({ ...item }))),
+    }).outputText, { exports, heroBadges, splitTerritoryRewards, GAME_AUDIO, FW: {
+        ShowReward: (items: readonly { resId: number; number: number }[], options?: { soundKey?: string }) => {
+            popups.push(Array.from(items, item => ({ ...item })));
+            popupSounds.push(options?.soundKey);
+        },
     } });
     const view = new exports.RewardView();
     view.state = { map: { startCellId: 3 } };
@@ -327,6 +332,8 @@ test('页面奖励按来源分流：默认钱包飘字，挂机征收整批弹�
     view.presentRewards([], undefined, { popup: true });
     assert.deepEqual(popups, []);
     assert.equal(heroBadges.length, 3, '空奖励不触发英雄徽标');
+    view.presentRewards([{ resId: 18003, amount: 2 }], 3, { popup: true, chest: false });
+    assert.deepEqual(popupSounds, [undefined, undefined, GAME_AUDIO.randomTile]);
 });
 
 // ── 喷发曲线（需求 2026-10-16 row17） ────────────────────────────────────
@@ -356,6 +363,7 @@ test('随机资源格（chest:false）**不许弹奖励窗**：整批走喷发 +
     const fn = src.slice(fnAt, fnAt + 1600);
     assert.doesNotMatch(fn, /FW\.ShowReward/, '随机格发奖不许弹奖励窗');
     assert.match(fn, /playResourceGain\(/, '随机格必须在格子上喷出来');
+    assert.match(fn, /if \(!played\) return 0;\s*void AudioMgr\.instance\.playSound\(GAME_AUDIO\.randomTile,/);
     // ③ 图标是动态的（道具 id 来自随机池），必须现取现塞给视图，否则粒子和飘字都是空图。
     assert.match(fn, /setGainIcon\(/, '道具图标要现取现塞（`setGainIcon`），否则粒子是空的');
     assert.match(fn, /collectRewardIcons\(/, '先按这一批 resId 取图标，再喷');

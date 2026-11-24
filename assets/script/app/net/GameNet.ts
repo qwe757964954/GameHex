@@ -10,8 +10,8 @@ import { PopupLayer } from '../../framework/ui/PopupDef';
 import { CommonTips } from '../common/CommonTips';
 import { CacheMgr } from './CacheMgr';
 import { RequestHeartbeat } from './HeartbeatMsg';
-import type { GameRequestStatus, IGameRequestOptions } from './RequestGuard';
-import { sendGameRequest } from './RequestGuard';
+import type { CancellableRequest, GameRequestStatus, IGameRequestOptions, IGameRequestResultOptions } from './RequestGuard';
+import { sendGameRequest, sendGameRequestResult } from './RequestGuard';
 
 export interface ReconnectLoginResult {
     ok: boolean;
@@ -316,6 +316,20 @@ export class GameNet extends ScriptObject {
         options?: IGameRequestOptions,
     ): Promise<GameRequestStatus> {
         return sendGameRequest(this.instance, make, options);
+    }
+
+    static requestResult<TResponse, TResult>(
+        make: ((receive: (response: TResponse) => void) => unknown) | null,
+        options: IGameRequestResultOptions<TResponse, TResult>,
+    ): CancellableRequest<TResult | null> {
+        const events = NetSocket.msgEventProxy;
+        const caller = events.uniqueCaller(options.event);
+        const request = sendGameRequestResult(this.instance, make, options, (event, result) => events.execute(event, result));
+        if (caller) {
+            const unlink = events.addCallerCleanup(caller, () => request.cancel());
+            void request.then(unlink, unlink);
+        }
+        return request;
     }
 
     /**

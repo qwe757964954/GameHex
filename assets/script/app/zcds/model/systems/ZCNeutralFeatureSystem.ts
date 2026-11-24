@@ -445,11 +445,16 @@ export class ZCNeutralFeatureSystem {
         const center = this.map.hexes[hex.id];
         const eligible = (unit: ZCUnitState) => unit.hp > 0 && unit.battleState !== 'dead'
             && (definition.canAttackAir || !this.context.definition(unit).flying);
-        feature.retaliationUnitIds = (feature.retaliationUnitIds ?? []).filter(id => state.units.some(unit => unit.id === id && eligible(unit)));
+        const reachOf = (unit: ZCUnitState) => ZCTargetingSystem.attackReach(definition, this.context.definition(unit).bodyRadius,
+            this.context.rules?.combatDistanceScale ?? 1);
+        feature.retaliationUnitIds = (feature.retaliationUnitIds ?? []).filter(id => {
+            const unit = state.units.find(u => u.id === id && eligible(u));
+            if (!unit) return false;
+            const dist = Math.hypot(unit.freeX - center.x, unit.freeY - center.y);
+            return dist <= reachOf(unit) * 3;
+        });
         const inRange = (unit: ZCUnitState) => eligible(unit) && (feature.retaliationUnitIds.includes(unit.id)
-            || Math.sqrt((unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2)
-                <= ZCTargetingSystem.attackReach(definition, this.context.definition(unit).bodyRadius,
-                    this.context.rules?.combatDistanceScale ?? 1));
+            || Math.hypot(unit.freeX - center.x, unit.freeY - center.y) <= reachOf(unit));
         let target = state.units.find(unit => unit.id === feature.targetUnitId && inRange(unit));
         if (!target) {
             let best = Infinity;

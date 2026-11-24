@@ -40,14 +40,14 @@ interface ICreateCall {
 }
 
 function fixture() {
-    const owner = {}, joinedOwner = {};
+    const owner = {};
     const states: ILeagueCreateViewState[] = [];
-    const tips: string[] = [], cancelled: object[] = [], joined: Array<object | null> = [];
+    const tips: string[] = [], cancelled: object[] = [], joined: boolean[] = [];
     const costCalls: ICostCall[] = [], createCalls: ICreateCall[] = [];
     let closed = 0;
     const model = new LeagueCreateModel();
     const controller = new LeagueCreateController(createControllerContext(), {
-        owner, joinedOwner, model,
+        owner, model,
         repository: {
             createCost: () => new Promise<ILeagueCostView>((resolve, reject) => { costCalls.push({ resolve, reject }); }),
             requestCreat: (icon, name, quick, caller) => new Promise<LeagueRequestResult>((resolve, reject) => {
@@ -57,16 +57,16 @@ function fixture() {
         view: { render: state => states.push({ ...state }), close: () => { closed += 1; } },
         feedback: {
             tip: text => tips.push(text),
-            notifyJoined: target => joined.push(target),
+            notifyJoined: () => joined.push(true),
         },
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     controller.start();
-    const emit = (intent: ILeagueCreateIntent) => EventMgr.instance.emit(LeagueCreateEvent.Intent, intent);
+    const emit = (intent: ILeagueCreateIntent, source: object) => EventMgr.instance.emit(LeagueCreateEvent.Intent, intent, source);
     const submit = (name = '联盟名', quickJoin = true, target: object = owner) =>
-        emit({ owner: target, kind: 'submit', name, quickJoin });
+        emit({ kind: 'submit', name, quickJoin }, target);
     return {
-        owner, joinedOwner, model, controller, states, tips, cancelled, joined,
+        owner, model, controller, states, tips, cancelled, joined,
         costCalls, createCalls, emit, submit,
         get closed() { return closed; },
     };
@@ -104,17 +104,17 @@ test('意图按 owner 隔离；名字 / 旗帜 / 勾选同步并只派发原文�
     try {
         h.costCalls[0].resolve(cost(true)); await flush();
         const stranger = {};
-        h.emit({ owner: stranger, kind: 'banner', index: 5 });
-        h.emit({ owner: stranger, kind: 'quickJoin', quickJoin: false });
+        h.emit({ kind: 'banner', index: 5 }, stranger);
+        h.emit({ kind: 'quickJoin', quickJoin: false }, stranger);
         h.submit('陌生名', false, stranger);
         assert.equal(h.model.selectIndex, 0);
         assert.equal(h.model.quickJoin, true);
         assert.equal(h.createCalls.length, 0);
 
-        h.emit({ owner: h.owner, kind: 'name', name: '名字' });
+        h.emit({ kind: 'name', name: '名字' }, h.owner);
         assert.equal(h.model.name, '名字');
-        h.emit({ owner: h.owner, kind: 'banner', index: 4 });
-        h.emit({ owner: h.owner, kind: 'quickJoin', quickJoin: false });
+        h.emit({ kind: 'banner', index: 4 }, h.owner);
+        h.emit({ kind: 'quickJoin', quickJoin: false }, h.owner);
         assert.equal(h.model.banner, 4);
         assert.equal(h.model.quickJoin, false);
         assert.equal(h.states[h.states.length - 1].selectIndex, 4);
@@ -165,16 +165,16 @@ test('费用变化：提交时现读，`enough=false` 不发包；三级兜底�
     }
 });
 
-test('成功：关窗 + 按 owner 发 Joined；输入/旗帜/勾选原样进协议', async () => {
+test('成功：关窗并发 Joined；输入/旗帜/勾选原样进协议', async () => {
     const h = fixture();
     try {
         h.costCalls[0].resolve(cost(true)); await flush();
-        h.emit({ owner: h.owner, kind: 'banner', index: 6 });
+        h.emit({ kind: 'banner', index: 6 }, h.owner);
         h.submit('新盟', false);
         h.costCalls[1].resolve(cost(true)); await flush();
         h.createCalls[0].resolve('ok'); await flush();
         assert.equal(h.closed, 1);
-        assert.deepEqual(h.joined, [h.joinedOwner]);
+        assert.deepEqual(h.joined, [true]);
         assert.equal(h.createCalls[0].icon, 6);
         assert.equal(h.createCalls[0].quick, false);
         assert.deepEqual(h.tips, []);
@@ -188,7 +188,7 @@ test('迟到回包：提交后改名字，成功 / 失败 / 抛错都不许上�
             h.costCalls[0].resolve(cost(true)); await flush();
             h.submit('旧名');
             h.costCalls[1].resolve(cost(true)); await flush();
-            h.emit({ owner: h.owner, kind: 'name', name: '新名' });
+            h.emit({ kind: 'name', name: '新名' }, h.owner);
             if (outcome === 'reject') h.createCalls[0].reject(new Error('late'));
             else h.createCalls[0].resolve(outcome);
             await flush();
@@ -237,8 +237,8 @@ test('dispose 取消真实 caller 一次，并拦住迟到的成功 / 失败 / �
         else h.createCalls[0].reject(new Error('late failure'));
         await flush();
         h.submit('联盟名');
-        h.emit({ owner: h.owner, kind: 'banner', index: 2 });
-        h.emit({ owner: h.owner, kind: 'quickJoin', quickJoin: false });
+        h.emit({ kind: 'banner', index: 2 }, h.owner);
+        h.emit({ kind: 'quickJoin', quickJoin: false }, h.owner);
         assert.deepEqual(h.cancelled, [h.controller]);
         assert.equal(h.states.length, rendered, '关闭后不再 render');
         assert.equal(h.createCalls.length, 1);

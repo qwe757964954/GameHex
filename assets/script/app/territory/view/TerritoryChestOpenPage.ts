@@ -130,7 +130,7 @@ export class TerritoryChestOpenPage extends PopupBase {
 
     protected async onOpen(userData?: any, context?: PopupOpenContext): Promise<void> {
         // 先报「我在前台」再加载：引导层要立刻让位，否则开箱那一下的对话会盖在这一页上闪一下。
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
         this.clearCards();
         this.resetRevealState();
 
@@ -178,7 +178,7 @@ export class TerritoryChestOpenPage extends PopupBase {
         this._revealDone = true;
         this.clearCards();
         // 关掉之后引导层才回来（2-3 的奖励对话就是在这个时机开始播的）。
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, this);
     }
 
     /** 入场期间点空白 = 跳过动画（而不是把窗关掉）；入场结束后才允许关。 */
@@ -379,7 +379,7 @@ export class TerritoryChestOpenPage extends PopupBase {
         for (const card of this._cards) card.settle();
         this.skipButton.node.active = true;
         this.skipOpacity.opacity = 255;
-        EventMgr.instance.emit(TerritoryUiEvent.ChestRevealed, { owner: this, entries: this._entries });
+        EventMgr.instance.emit(TerritoryUiEvent.ChestRevealed, { entries: this._entries }, this);
     }
 
     /** 入场期间 = 直接落静止态；已静止 = 等同于关闭（按钮不留死状态）。 */

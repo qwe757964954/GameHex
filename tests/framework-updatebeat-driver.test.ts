@@ -41,6 +41,7 @@ const REAL_MODULES: readonly string[] = [
     `${FRAMEWORK}/pool/Pool.ts`,
     `${FRAMEWORK}/utils/UpdateBeat.ts`,
     `${FRAMEWORK}/utils/Timer.ts`,
+    `${FRAMEWORK}/task/Task.ts`,
 ];
 
 /** `cc` 只需要"存在"：这条链上被调到的都是纯展示 / 尺寸接口。 */
@@ -51,6 +52,9 @@ interface FrameworkContext {
         getTimer(func: (time?: unknown) => void, caller?: unknown, duration?: number, loop?: number): { start(): void; stop(): void };
     };
     UpdateBeat: { loop(dt: number): void };
+    Task: {
+        instance: { delay(time: number, caller?: unknown): Promise<void> };
+    };
 }
 
 /**
@@ -70,8 +74,11 @@ function createFrameworkContext(): FrameworkContext {
         const dir = path.posix.dirname(file);
         const moduleExports: Record<string, unknown> = {};
         loaded.set(file, moduleExports);
+        const contextWindow = {};
         runInNewContext(code, {
             exports: moduleExports,
+            window: contextWindow,
+            globalThis: { window: contextWindow },
             require: (name: string) => {
                 if (name === 'cc') return CC_STUB;
                 if (name === 'cc/env') return {};
@@ -89,6 +96,7 @@ function createFrameworkContext(): FrameworkContext {
         const moduleExports = loadModule(file) as Record<string, unknown>;
         if (moduleExports.Timer) exports.Timer = moduleExports.Timer as FrameworkContext['Timer'];
         if (moduleExports.UpdateBeat) exports.UpdateBeat = moduleExports.UpdateBeat as FrameworkContext['UpdateBeat'];
+        if (moduleExports.Task) exports.Task = moduleExports.Task as FrameworkContext['Task'];
     }
     return exports;
 }
@@ -127,4 +135,18 @@ test('Timer 只在 UpdateBeat.loop 被调用时推进 —— 发送泵的 await 
     UpdateBeat.loop(1.1);
     assert.equal(repeated, 2, 'loop=-1 的定时器每满 1 秒触发一次');
     loopTimer.stop();
+});
+
+test('Task.delay 传 <= 0 且无 caller 时立即以微任务兑现，无需 UpdateBeat 驱动', async () => {
+    const { Task } = createFrameworkContext();
+    let settled = false;
+    const task = Task.instance;
+    const pending = task.delay(0).then(() => {
+        settled = true;
+    });
+
+    // 关键断言：完全不需要 UpdateBeat.loop，直接在下一个微任务周期兑现
+    assert.equal(settled, false, '同 tick 微任务排队前仍未 settled');
+    await pending;
+    assert.equal(settled, true, '微任务排空后必须已兑现');
 });

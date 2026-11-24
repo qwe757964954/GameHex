@@ -163,8 +163,8 @@ export class CardUpgradeController extends ControllerBase {
                 }),
         ]);
     }
-    private onIntent(event: CardUpgradeIntent): void {
-        if (event.owner !== this.options.owner || this.switching) {
+    private onIntent(event: CardUpgradeIntent, source: object): void {
+        if (source !== this.options.owner || this.switching) {
             return;
         }
         if (event.kind === 'submit') {
@@ -319,7 +319,7 @@ export class CardUpgradeController extends ControllerBase {
         const nextNeed = nextRow?.need ?? 0;
         const nextOwned = Math.min(nextRow?.owned ?? 0, nextNeed);
         const nextRatio = nextNeed > 0 ? Math.min(1, Math.max(0, nextOwned / nextNeed)) : 0;
-        // 进度条分两段演：先「刚好凑满的那一档」满格，再退到下一级的真实进度。
+        // 进度条分三段演：先「刚好凑满的那一档」满格 → 清空归零 → 绿色从左往右涨到下一级的真实进度。
         //
         // 起点**恒取满格**：能走到这里就说明本次是「攒够了才升」的，满格才是那一刻的事实。
         // 别再用 `consumedRow` 去探测起点 —— 需求行的形状一变（key 改名、只有属性行、
@@ -328,8 +328,8 @@ export class CardUpgradeController extends ControllerBase {
         const progressTo = nextNeed > 0 ? nextRatio : ratio;
         const progressFrom = progressTo < 1 ? 1 : ratio;
         // 文字与条必须同源：起点满格就写满格。
-        // `need` 取不到时退回 `nextNeed` —— 否则 `progressText` 是空串、整条进度条被判为
-        // 「没有材料行」直接隐藏，视觉上同样像「条从无到有长出来」。
+        // `need` 取不到时退回 `nextNeed` —— 否则 `progressText` 是空串、整条进度条被
+        // `CardUpgradedPage` 判为「没有材料行」直接隐藏，满格与归零两段演出都看不到。
         const trackNeed = need > 0 ? need : nextNeed;
         const trackOwned = progressFrom >= 1 ? trackNeed : owned;
         const previousHp = previousStats?.find(line => line.key === 'hp')?.value ?? '';

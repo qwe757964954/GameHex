@@ -40,11 +40,11 @@ export class LoginComposition extends ControllerBase {
             const page = node.getComponent(LoginPage);
             const controller = this.createController(page);
             this.own(() => controller.dispose());
-            this.listen(LoginUiEvent.ServerClosed, (event: { owner: object; panel: ServerSelectPanel }) => {
-                if (event.owner === page && event.panel === this.panel) this.panel = null;
+            this.listen(LoginUiEvent.ServerClosed, (event: { panel: ServerSelectPanel }, source: object) => {
+                if (source === page && event.panel === this.panel) this.panel = null;
             });
-            this.listen(VIEW_LIFECYCLE, (event: IViewLifecycle) => {
-                if (event.owner !== page) return;
+            this.listen(VIEW_LIFECYCLE, (event: IViewLifecycle, source: object) => {
+                if (source !== page) return;
                 if (event.phase === 'ready') void controller.start();
                 else if (event.phase === 'destroyed') this.dispose();
             });

@@ -41,10 +41,13 @@ export class ZCMovementSystem {
 
     startMarch(unit: ZCUnitState): void {
         const pos = this.position(unit);
+        const source = this.context.map.hexes[unit.sourceHexId];
         const goal = this.context.map.hexes[this.context.goalHomeId(unit.owner, unit.sourceHexId)];
         unit.freeX = pos.x;
         unit.freeY = pos.y;
-        unit.marchAngle = Math.atan2(goal.y - pos.y, goal.x - pos.x);
+        const dx = source && goal ? goal.x - source.x : 0;
+        const dy = source && goal ? goal.y - source.y : 0;
+        unit.marchAngle = (dx !== 0 || dy !== 0) ? Math.atan2(dy, dx) : (goal ? Math.atan2(goal.y - pos.y, goal.x - pos.x) : 0);
     }
 
     /** 自由直线移动推进：跨格更新索引，撞敌方建筑或出界即停。*/
@@ -91,16 +94,26 @@ export class ZCMovementSystem {
 
     /** 同格追击按目标实际坐标推进；格心可能始终落在近战射程之外。*/
     advanceTowardUnit(unit: ZCUnitState, target: ZCUnitState, dt: number, speedScale = 1): void {
-        const current = this.position(unit);
         const destination = this.position(target);
-        const remaining = distance(current.x, current.y, destination.x, destination.y);
+        this.advanceTowardPoint(unit, destination.x, destination.y, dt, speedScale);
+    }
+
+    /**
+     * 朝任意一点直线走一步（**不寻路**、不占格推进，只改连续坐标）。
+     *
+     * 给「圈内追击」用（2026-11-21 第 36 批 舞王舞伴）：它们不跑 `targetHexId` 那套寻路，
+     * 也不想因为寻路把 `progress` 写脏；拴绳半径比一格大不了多少，直线过去就够了。
+     */
+    advanceTowardPoint(unit: ZCUnitState, x: number, y: number, dt: number, speedScale = 1): void {
+        const current = this.position(unit);
+        const remaining = distance(current.x, current.y, x, y);
         const step = Math.min(remaining, this.speedOf(unit, speedScale) * dt);
         unit.targetHexId = null;
         unit.progress = 0;
         if (remaining <= 0 || step <= 0) return;
-        unit.facingRadians = Math.round(Math.atan2(destination.y - current.y, destination.x - current.x) / (Math.PI / 4)) * (Math.PI / 4);
-        unit.freeX = current.x + (destination.x - current.x) * step / remaining;
-        unit.freeY = current.y + (destination.y - current.y) * step / remaining;
+        unit.facingRadians = Math.round(Math.atan2(y - current.y, x - current.x) / (Math.PI / 4)) * (Math.PI / 4);
+        unit.freeX = current.x + (x - current.x) * step / remaining;
+        unit.freeY = current.y + (y - current.y) * step / remaining;
         this.syncOccupiedHex(unit);
     }
 

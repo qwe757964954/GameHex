@@ -1,10 +1,9 @@
 import { ControllerBase, type IControllerContext } from '../../framework/controller/ControllerBase';
-import { LeagueTabEvent, type ILeagueJoinedEvent } from './LeagueTabEvents';
+import { LeagueTabEvent } from './LeagueTabEvents';
 import type { LeagueJoinController } from './LeagueJoinController';
 import type { ILeagueJoinView } from './LeagueJoinEvents';
 
 export interface ILeagueTabControllerOptions {
-    readonly owner: object;
     readonly failed: (error: unknown) => void;
     readonly repository: {
         readonly load: () => Promise<{ readonly joined: boolean }>;
@@ -32,11 +31,11 @@ export class LeagueTabController extends ControllerBase {
         this.listen(LeagueTabEvent.Refresh, this.onRefresh);
         void this.refresh();
     }
-    private onRefresh(event: ILeagueJoinedEvent & { readonly force?: boolean }): void {
-        if (event.owner === this.options.owner) void this.refresh(event.force);
+    private onRefresh(event: { readonly force?: boolean }): void {
+        void this.refresh(event.force);
     }
-    private onJoined(event: ILeagueJoinedEvent): void {
-        if (event.owner === this.options.owner) void this.refresh();
+    private onJoined(): void {
+        void this.refresh();
     }
     async refresh(force = false): Promise<void> {
         if (this.isDisposed) return;

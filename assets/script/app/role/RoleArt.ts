@@ -15,8 +15,6 @@
  */
 export const RL_ART_NAMES = {
     // ---------- 角色背包页（image/role）----------
-    /** 整屏底图 720×2015（老端 `js_img_bg`） */
-    bg: 'role/rl_js_img_bg',
     /** 右侧装备区底板 441×749（老端 `frame_window_02_9gong`，**未配 9 宫**） */
     equipPlate: 'role/rl_frame_window_02_9gong',
     /** 战斗力底条 345×83（老端 `bb_pic11`，9 宫 2,0,343,83） */
@@ -25,12 +23,7 @@ export const RL_ART_NAMES = {
     qipao: 'role/rl_frame_qipao1',
     /** 左钮标题底 `zg_pic24` 76×34（`标题底=1` 时显示，默认关） */
     navTitleBg: 'role/rl_zg_pic24',
-    // 左钮图标（老端 `按钮_角色_通用` 的 `icon`）
-    icoHero: 'role/rl_yx',
-    icoMilitia: 'role/rl_tf',
-    icoGuards: 'role/rl_jj',
-    icoGongMing: 'role/rl_gm',
-    icoPreview: 'role/rl_bs',
+    /** 左钮图标 `sq`（隐藏的第七入口，prefab 仍引用） */
     icoArtifact: 'role/rl_sq',
 
     // ---------- 天赋页（image/militia）----------
@@ -68,14 +61,7 @@ export const RL_ART_NAMES = {
     // ---------- 共用（image/common）----------
     title07: 'common/cu_title_07',
     tybg: 'common/cu_tybg',
-    /**
-     * 底栏页签底板 —— **两态两张图**（老端 `按钮_角色_页签` 的 `gearIcon`/`gearXY`/`gearSize`）：
-     *   - `up`（控制器 `button` 页 id `1`，= 设计期 `selected`）⇒ `js_tab_01`，`xy=(23,4)`，尺寸 **153×59**
-     *   - `down`（页 id `0`）⇒ `TY_btn30`，`xy=(0,-2)`，尺寸 191×66
-     * ⚠️ 2026-09-24 更正：先前把两者**写反了**（以为 up=TY_btn30）。真源 = `fairygui.js` 的 gear 语义 +
-     * `tmp/_fgui_layout.mjs` 引擎复算（`按钮_角色_页签/icon` = `(23,4,153,59)`）。
-     */
-    tabBgUp: 'role/rl_js_tab_01_9g',
+    /** 底栏页签未选中底板（老端 `按钮_角色_页签` 的 down 态 TY_btn30，191×66）。 */
     tabBgDown: 'common/cu_ty_btn30',
     navPlate: 'common/cu_bb_pic20_sj',
     /**
@@ -135,7 +121,6 @@ export const RL_ART_NAMES = {
     btn2Blue2: 'common/cu_ty_btn27',
 
     // ---------- 装备锻造页（`组件_装备锻造_主界面` + `_洗练分页`，2026-09-26 移植）----------
-    evoBg: 'role/rl_zhuangbei_bg',            // zhuangbei_bg 720×1280（锻造主背景）
     evoFrame: 'role/rl_frame_dikuang03',      // frame_Dikuang03 九宫 147,110,100,112（主容器外框）
     evoPlate: 'role/rl_frame_01_9gong',       // frame_01_9gong 九宫 160,127,57,50（内板）
     // ⚠️ `evoPlate` 必须用 rl_ 这份：工程里 image/chat/ct_bubble_bg.png 与它 **md5 同源但 border 不同**
@@ -168,6 +153,12 @@ export const RL_ART_NAMES = {
     quality2: 'frame/common_img_pzk_02',
     quality3: 'frame/common_img_pzk_03',
     quality4: 'frame/common_img_pzk_04',
+    // ---------- 背包 96 格扁平品质底（蓝湖「角色界面」参考图的平涂圆角块） ----------
+    bagQuality1: 'role/rl_bag_quality_01',
+    bagQuality2: 'role/rl_bag_quality_02',
+    bagQuality3: 'role/rl_bag_quality_03',
+    bagQuality4: 'role/rl_bag_quality_04',
+    bagQuality5: 'role/rl_bag_quality_05',
 };
 
 /** `RL_ART_NAMES` 里所有图的 key（生成器 / 单测用来做「有没有漏摆」的反向对账）。 */
@@ -190,7 +181,7 @@ export const RL_ICON_ROOT_PREFIX = 'icons/';
  * 分两支：
  *  | value 形如 | 例子 | 结果 |
  *  |---|---|---|
- *  | `role/…` `common/…` `frame/…` `activity/…` `celebration/…` | `role/rl_zhuangbei_bg` | `image/role/rl_zhuangbei_bg` |
+ *  | `role/…` `common/…` `frame/…` `activity/…` `celebration/…` | `role/rl_frame_dikuang03` | `image/role/rl_frame_dikuang03` |
  *  | `icons/**`（与 `image/` 平级） | `icons/main/icon_qianghua` | 原样，**不拼前缀** |
  */
 export function roleArtRelPath(key: string): string {
@@ -220,7 +211,6 @@ export const RL_ART_SLICED = new Set<string>([
     'btn2Green',      // TY_btn21      border 56,19,56,22
     'btn2Gray2',      // ZB_btn02      border 51,23,55,26
     'btn2Blue2',      // TY_btn27      border 54,17,56,18
-    'tabBgUp',        // js_tab_01     border 8,11,189,71（207×84，页签 up 态）
     'bossBar',        // BB_img03      border 58,0,59,0
     'frame1',         // frame_Zhikuang01 border 38,28,41,29
     'frame6',         // frame_Zhikuang06 border 12,12,13,11

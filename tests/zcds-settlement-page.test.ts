@@ -4,7 +4,7 @@ import test from 'node:test';
 import { runInNewContext } from 'node:vm';
 import ts from 'typescript';
 import { assetPath } from './helpers/asset-paths';
-import { ZC_SETTLEMENT_STYLE } from '../assets/script/app/zcds/model/ZCSettlementStyle';
+import { calcMvpAdaptiveBadgeY, calcMvpEffectiveArtHeight, ZC_SETTLEMENT_STYLE } from '../assets/script/app/zcds/model/ZCSettlementStyle';
 
 /**
  * 对局结算页（`ZCSettlementPage` + `ZCSettlement.prefab`）的结构守卫。
@@ -679,4 +679,37 @@ test('外部战斗控制器装配结算页与伤害统计，ZCGame 只保留展�
     assert.doesNotMatch(stripComments(gameSource), /ZCSettlementPage|finishBattle|ProcedureManager|settlementPopup/);
     assert.match(pageSource, /static prefabPath = 'ui\/game\/ZCSettlement'/);
     assert.match(pageSource, /export class ZCSettlementPage extends PopupBase/);
+});
+
+test('MVP 徽标自适应落位：按角色可见头顶浮动，超高收敛、极矮保底、永不挡脸', () => {
+    const token = ZC_SETTLEMENT_STYLE.mvpBadge;
+    assert.equal(token.defaultY, 132.5, '默认位置与设计稿一致');
+    assert.equal(token.halfHeight, 20);
+    assert.equal(token.maxCenterY, 132.5, '徽标高度绝不超出设计稿基准，避免顶撞上方飘带');
+
+    // 1. 无效或未建立模型：落回默认 132.5
+    assert.equal(calcMvpAdaptiveBadgeY(Number.NaN), token.defaultY);
+
+    // 2. 正常身高（如懂王，高 231，头顶约在 91）：悬浮在头顶上方，徽标底边离头顶留白约 21.5px
+    const normalTop = 91;
+    const normalY = calcMvpAdaptiveBadgeY(normalTop);
+    assert.equal(normalY, token.maxCenterY); // 91 + 21.5 + 20 = 132.5 精准命中基准
+    assert.ok(normalY - token.halfHeight > normalTop, '徽标底边必须在头顶上方');
+
+    // 3. 极高角色（如运动霸戴头盔、仙人侍卫举刀）：立绘高度被 maxHeadTopInBlock 压制到设计稿角色高 (231)
+    const footInBlock = -140; // -7.5 + (-132.5)
+    const giantDesiredHeight = 317.8;
+    const effectiveHeight = calcMvpEffectiveArtHeight(giantDesiredHeight, footInBlock);
+    assert.equal(effectiveHeight, token.maxHeadTopInBlock - footInBlock); // 91 - (-140) = 231
+    const clampedHeadTop = footInBlock + effectiveHeight;
+    assert.equal(clampedHeadTop, token.maxHeadTopInBlock);
+    const clampedY = calcMvpAdaptiveBadgeY(clampedHeadTop);
+    assert.equal(clampedY, token.maxCenterY); // 锁死在 132.5，绝不往上冲
+    assert.ok(clampedY <= token.maxCenterY, '不得超出上限顶撞上方飘带');
+    assert.ok(clampedY - token.halfHeight >= clampedHeadTop, '必须不遮挡头盔与面部');
+
+    // 4. 极矮角色（头顶 30）：徽标底线保底不低于 minCenterY (125)
+    const shortTop = 30;
+    const shortY = calcMvpAdaptiveBadgeY(shortTop);
+    assert.equal(shortY, token.minCenterY); // 125
 });

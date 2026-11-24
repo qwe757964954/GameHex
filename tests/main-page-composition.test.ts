@@ -16,7 +16,7 @@ import { CHEST_EVENTS } from '../assets/script/app/main/ChestEvents';
 import { createControllerContext } from './helpers/controller-context';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
-const phase = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner, phase });
+const phase = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase }, owner);
 
 function fixture() {
     class StorePage {}
@@ -72,7 +72,7 @@ function fixture() {
 test('external composition binds before mount, starts only the ready owner and releases only that page', async () => {
     const f = fixture(), first = new f.StorePage(), second = new f.StorePage();
     const a = f.bind(first), b = f.bind(second);
-    const buy = (owner: object) => EventMgr.instance.emit(StoreEvent.Action, { owner, kind: 'buyGoods', context: { section: 'goods', rowId: 1 } });
+    const buy = (owner: object) => EventMgr.instance.emit(StoreEvent.Action, { kind: 'buyGoods', context: { section: 'goods', rowId: 1 } }, owner);
     try {
         buy(first); assert.equal(f.purchases, 0);
         phase({}, 'ready'); buy(first); assert.equal(f.purchases, 0);
@@ -89,13 +89,13 @@ test('hero view receives only presentation resources and ready data after its re
     const f = fixture(), page = new f.CardLineupPage(), binding = f.bind(page);
     let renders = 0;
     const listener = {};
-    EventMgr.instance.on(CardLineupUiEvent.Render, event => { if (event.owner === page) renders++; }, listener);
+    EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === page) renders++; }, listener);
     try {
         assert.ok(page.resources); assert.equal(f.loads, 0);
         phase(page, 'ready'); await tick(); assert.equal(f.loads, 1); assert.equal(renders, 1);
         phase(page, 'destroyed');
         assert.equal(page.resources.scope.disposed, true);
-        EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: page, kind: 'refresh' });
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'refresh' }, page);
         await tick(); assert.equal(f.loads, 1);
     } finally { EventMgr.instance.offTarget(listener); binding.dispose(); }
 });

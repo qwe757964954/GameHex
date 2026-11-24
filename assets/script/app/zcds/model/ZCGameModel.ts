@@ -1,27 +1,31 @@
-import { ZCCombatSystem } from './systems/ZCCombatSystem';
-import { HEX_GRID_LOGICAL_ROW_STEP } from '../../../core/hex/HexGridLayout';
-import { missileLog } from '../ZCMissileSkillDiagnostics';
-import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
+import {
+    HEX_GRID_LOGICAL_COLUMN_STEP, HEX_GRID_LOGICAL_ROW_STEP,
+    HEX_GRID_VIEW_COLUMN_SPACING, HEX_GRID_VIEW_ROW_SPACING,
+} from '../../../core/hex/HexGridLayout';
 import { ZCDC_LOG_DAMAGE_FLOAT } from '../ZCDCLogSwitch';
+import { missileLog, zcIsMissileWatchUnit } from '../ZCMissileSkillDiagnostics';
+import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 import { ZCCaptureSystem } from './systems/ZCCaptureSystem';
-import { ZCNeutralFeatureSystem, isZCAwakeMonster, zcMonsterPosition } from './systems/ZCNeutralFeatureSystem';
+import { ZCCombatSystem } from './systems/ZCCombatSystem';
 import type { IZCModelServices } from './systems/ZCModelServices';
 import { ZCMovementSystem } from './systems/ZCMovementSystem';
+import { isZCAwakeMonster, zcMonsterPosition, ZCNeutralFeatureSystem } from './systems/ZCNeutralFeatureSystem';
 import { ZCProjectileContext, ZCProjectileSystem } from './systems/ZCProjectileSystem';
 import { ZCTileSystem } from './systems/ZCTileSystem';
 import { ZCUnitRegistry } from './systems/ZCUnitRegistry';
 import { ZCUnitSystem, type IZCUnitContext } from './systems/ZCUnitSystem';
 import { ZCUnitTargeting } from './systems/ZCUnitTargeting';
-import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
-import { ZCMapGeometry } from './ZCMapGeometry';
-import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
-import { ZCSnapshotCodec } from './ZCSnapshotCodec';
-import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
-import { ZC_EFFECT_PATHS } from './ZCEffectCatalog';
-import type { IZCPendingSummon } from './ZCGameTypes';
 import {
     ZC_CHAIN_SEGMENT_ANGLE_OFFSET_DEGREES, zcChainArcPieceLayout,
 } from './ZCChainLightningFx';
+import { zcCombatEffectFadeSecondsOf } from './ZCCombatEffectFlight';
+import { ZC_EFFECT_PATHS } from './ZCEffectCatalog';
+import { ZC_EFFECT_SCALE } from './ZCEffectTuning';
+import type { ZCBattlePresentationEvents, ZCGameRenderFrame, ZCGameRenderHex } from './ZCGameRenderFrame';
+import type { IZCPendingSummon } from './ZCGameTypes';
+import { ZCMapGeometry } from './ZCMapGeometry';
+import { captureZCMatchConfig, ZCMatchConfig, ZCPveDefenceConfig, type ZCMatchMap } from './ZCMatchConfig';
+import { ZCSnapshotCodec } from './ZCSnapshotCodec';
 
 /** 20 Hz 固定逻辑步长；每次最多接受 5 秒，限制后台恢复时的主线程阻塞。*/
 export const ZC_SIMULATION_STEP_SECONDS = 0.05;
@@ -61,7 +65,7 @@ export function defenceMonsterScale(monsterSize: number | null | undefined): num
 
 import { ZCArtifactSystem } from './systems/ZCArtifactSystem';
 import { ZCAttackResolutionSystem, type IZCAttackResolutionContext, type IZCStructureDamageSource } from './systems/ZCAttackResolutionSystem';
-import { ZCDamageResolutionSystem, type IZCDamageResolutionContext } from './systems/ZCDamageResolutionSystem';
+import { ZCDamageResolutionSystem, type IZCDamageResolutionContext, HATRED_SECONDS } from './systems/ZCDamageResolutionSystem';
 import { ZCDevelopmentSystem, type IZCDevelopmentContext } from './systems/ZCDevelopmentSystem';
 import { ZCEconomyContext, ZCEconomySystem } from './systems/ZCEconomySystem';
 import { ZCGroundZoneSystem, type IZCGroundZoneContext } from './systems/ZCGroundZoneSystem';
@@ -95,13 +99,13 @@ import {
 } from './ZCLegacySkillEffect';
 import { compileZCMatchRuntime } from './ZCMatchRuntimeCompiler';
 import type { ZCUnitStatPatch } from './ZCModifierRuntime';
-import { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCPvpRarityModifier } from './ZCPvpTileRules';
+import { ZCPvpTileType } from './ZCPvpTileRules';
 import type { ZCSkillRuntimeDefinition } from './ZCSkillRuntime';
 import { ZCStatusSystem } from './ZCStatusEffect';
 
-import { ownersForPlayerCount, ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
 import type { ZCFaction } from './ZCMapConfig';
+import { ownersForPlayerCount, ZC_OWNER_ORDER, ZCOwner } from './ZCMapConfig';
 import {
     isZCNeutralResourceBuilding, neutralResourceItemOf,
     type ZCNeutralResourceItem,
@@ -115,6 +119,7 @@ export type {
     ZCCombatEvent,
     ZCCombatEventType,
     ZCCombatFloatTextKind,
+    ZCDevelopResult,
     ZCFloatText,
     ZCFloatTextKind,
     ZCGameStatus,
@@ -161,6 +166,7 @@ import type {
     ZCBuildingCooldownState, ZCCardReveal,
     ZCCombatTarget,
     ZCDamageSource,
+    ZCDevelopResult,
     ZCFloatText, ZCGameStatus,
     ZCHexActivation,
     ZCHexState,
@@ -250,6 +256,71 @@ const ZC_SUMMON_SPAWN_FX_SECONDS = 26 / 24;
  * 「101404 三档都没填」时的兜底 —— 不给兜底就是全实心，视觉上和本体分不出谁是谁。
  */
 const SUMMON_INDEPENDENT_ALPHA = 0.65;
+/**
+ * 召唤「脚底持续光环」的兜底时长（秒）：只在 `summonSeconds` 配成 0（到战死）时才用。
+ *
+ * 光环是被召唤过程的**同期表现**，不是独立技能 —— 它的寿命就取召唤物那一份
+ * （舞王 6/7/8 秒），到期跟舞伴一起消失。真给了 0 也必须有上限：区域是有限寿命结构，
+ * 无限期的光环会在 `groundZones` 里一直躺着读秒。
+ */
+const SUMMON_AURA_FALLBACK_SECONDS = 6;
+/**
+ * 「持续光环伤害效果」的可见环要盖住「本体 + 4 个舞伴」所需的放大倍率（事件级 `effectScale`）。
+ *
+ * 🔴 这个数**不是**几何推导出来的漂亮解，是拿真实站位量出来的观感常量，理由分三层：
+ *
+ * ① 先别把画布宽当环宽（第 35 批踩过的坑）：帧画布 256×390，可见环只有 **153×60 canvas px**
+ *   （alpha>60 实测，18 帧都在 149~156 × 58~62）。画布经 `prefab 0.58 × 目录 nodeScale 2.0716`
+ *   撑到 307.5 屏上 px ⇒ `effectScale = 1` 时环只有 **183.8 × 72.1 屏上 px**（半轴 91.9 × 36.0）。
+ *
+ * ② 舞伴不是站在圆周上，而是四个斜角位。屏幕投影的横纵比例并不一样
+ *   （`ZC_MAP_SCALE_X` 2.5625 / `ZC_MAP_SCALE_Y` 2.1429 = 90/42），所以阵位 36 世界 px 落到屏幕上
+ *   是 **(±65.2, ±54.6)**；再加卡面半宽约 17 ⇒ 需要环的半轴至少 (82.2, 71.6)。
+ *
+ * ③ 横向 91.9 本来就够，**卡住的是纵向 36.0**：这张盘画得比镜头扁 2 倍
+ *   （美术 60/153 = 0.39，投影 2.1429/2.5625 = 0.836）。等比放到能盖住纵向 ⇒ 71.6 / 36.0 = **1.99**，
+ *   代价是横向多出 1.2 倍（半轴 182.9 vs 需要 82.2）。想要不"多出来"，只能让美术重画一张更立的
+ *   地面盘，或者给区域加纵向拉伸（会把漩涡拉变形）—— 两条都被否过。
+ *
+ * ⇒ 换美术、改 `summonSlotRadius`、或改镜头比例之后这个数**必须重量**；用例
+ * `zcds-king-dance` 钉的是「`effectScale` 等于这个常量且 > 1」，不是随手写的字面量。
+ */
+export const ZC_SUMMON_AURA_COVER_SCALE = ZC_EFFECT_SCALE.summonAuraCoverScale;
+/**
+ * 屏上 px ÷ 世界 px（**各向异性**：2.5625 / 2.1429）。
+ *
+ * 与 `ZCGameViewUtil.ZC_MAP_SCALE_X/Y` 同一组格距常量 —— 模型不 import 视图（那边带 `cc`），
+ * 所以这里从 `core/hex/HexGridLayout` 现算一遍。改格距 / 换镜头比例 ⇒ 这里的换算自动跟着走。
+ */
+const SUMMON_AURA_MAP_SCALE_X = HEX_GRID_VIEW_COLUMN_SPACING / HEX_GRID_LOGICAL_COLUMN_STEP;
+const SUMMON_AURA_MAP_SCALE_Y = HEX_GRID_VIEW_ROW_SPACING / HEX_GRID_LOGICAL_ROW_STEP;
+/**
+ * `effectScale = 1` 时「持续光环伤害效果」可见环的半轴（**屏上 px**）。
+ *
+ * 来源：第 35 批对 18 帧逐帧 alpha>60 实测——可见环只有 153×60 canvas px，经
+ * `prefab 0.58 × 目录 nodeScale 2.0716` 撑到屏上 **183.8 × 72.1**（半轴 91.9 × 36.05）。
+ * 🔴 别拿帧画布 256×390 反推（那是含透明边的大画布，差 1.7 倍且完全不报错）。
+ */
+const SUMMON_AURA_RING_HALF_SCREEN_X = ZC_EFFECT_SCALE.summonAuraRingHalfScreenX;
+const SUMMON_AURA_RING_HALF_SCREEN_Y = ZC_EFFECT_SCALE.summonAuraRingHalfScreenY;
+
+/**
+ * 光圈在**世界坐标**里真正盖住的半轴（世界 px），给定 `effectScale`。
+ *
+ * 这是「舞伴能走到哪」的唯一真源：`area` 类地面盘的视觉尺寸**完全不看 `radius`**
+ * （`ZCCombatEffectView` 只用 prefab 烘焙缩放 × 目录 nodeScale × `effectScale`），
+ * 所以表里的 `summonAuraRadius` 只决定区域判定半径（本卡纯表现、判定全关），
+ * **决定不了画面上的圈有多大**。2026-11-22 的「分身走出领域特效」就是按判定半径做的拴绳
+ * 与按美术盘做的画面打了架：60 的圆在纵向比可见环（≈33）大一倍。
+ */
+export function zcSummonAuraLeashHalfWorld(
+    effectScale: number = ZC_SUMMON_AURA_COVER_SCALE,
+): { readonly x: number; readonly y: number } {
+    return {
+        x: SUMMON_AURA_RING_HALF_SCREEN_X * effectScale / SUMMON_AURA_MAP_SCALE_X,
+        y: SUMMON_AURA_RING_HALF_SCREEN_Y * effectScale / SUMMON_AURA_MAP_SCALE_Y,
+    };
+}
 /**
  * 弹道扫掠段找结构目标时的采样间隔（逻辑 px）。
  *
@@ -809,6 +880,7 @@ export class ZCGameModel {
             units: this.units,
             damageDealt: this.damageDealt,
             damageTaken: this.damageTaken,
+            rules: this.rules,
             random: () => this.random(),
         };
     }
@@ -822,9 +894,11 @@ export class ZCGameModel {
             spawnUnit: this.services.spawnUnit,
             //  关卡抽卡规则只作用于 NPC：玩家翻地块拿到的仍是 `pvpTile.rarityWeights` 原表 + 正常金色保底。
             //  NPC 一并关掉金色保底：保底绕过权重，会让本关的 `gradeProModifier` 形同虚设。
+            //  同时打开「缺档逐级下降」：NPC 卡组由 `npcTeam.npcCard` 定，常常只有绿/蓝，
+            //  而高级兵营格要求紫/金 —— 不兜底就永远是空手（用户 2026-11-23）。
             drawRulesOf: (owner) => (owner === ZCOwner.Player
                 ? null
-                : { rarityModifier: this.npcRarityModifier, goldPity: false }),
+                : { rarityModifier: this.npcRarityModifier, goldPity: false, rarityFallback: true }),
             onNeutralReward: (hexId, itemId, owner, item) => {
                 this.pushNeutralReward(hexId, itemId, owner, item);
             },
@@ -845,7 +919,7 @@ export class ZCGameModel {
                 const position = this.unitPosition(unit);
                 this.pushFloatText({
                     kind: 'heal', owner: unit.owner, value: amount,
-                    x: position.x, y: position.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS,
+                    x: position.x, y: position.y, durationSeconds: this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS,
                 });
             },
         };
@@ -958,6 +1032,7 @@ export class ZCGameModel {
     private buildUnitContext(): IZCUnitContext {
         return {
             now: () => this.state.elapsedSeconds,
+            rules: this.rules,
             effectiveDefinition: this.services.effectiveDefinition,
             controlOf: (unit) => this.statusSystem.controlOf(String(unit.id)),
             //  软控（磁电菇「麻痹」`numb`）：只挡普攻 / 起冲，不冻移动 —— 与上面那行硬控分开。
@@ -1003,6 +1078,10 @@ export class ZCGameModel {
             castStorm: (unit) => ZCAttackResolutionSystem.castStorm(this.state, unit, this.attackResolutionContext),
             castRayBeam: (unit, vulnStatusId) => ZCAttackResolutionSystem.castRayBeam(
                 this.state, unit, this.attackResolutionContext, vulnStatusId),
+            //  文明之火（科学家 103503 改造，2026-11-23 第 43 批）：在目标点 200 半径内
+            //  随机撒 3 块火焰区域。与射线集束同一套「累计普攻」触发、各自的计数格。
+            castFireZone: (unit) => ZCAttackResolutionSystem.castFireZone(
+                this.state, unit, this.attackResolutionContext),
             //  精密陷阱（科学家 103504）：在自己原地留一个陷阱，踩响或到点各炸一次。
             //  同样是独立车道（`unit.trapReadyAt`），不推进普攻节拍，也不看普攻射程闸门。
             castTrap: (unit) => ZCAttackResolutionSystem.castTrap(this.state, unit, this.attackResolutionContext),
@@ -1012,7 +1091,8 @@ export class ZCGameModel {
             //  这里只负责几何与伤害），避免两边各查一次表算出两个值。
             castSplashShot: (unit, slowStatusId) => ZCAttackResolutionSystem.castSplashShot(
                 this.state, unit, this.attackResolutionContext, slowStatusId),
-            //  菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
+            //  菌核爆裂（菌王菇 101804，2026-11-17 第 13 批）；同车道的 `burst_aura` 现由
+            //  毒液喷吐（菌王菇 101803）用着 —— 原本的「菌毯爆发」101504 在第 43 批已换成射线集束：
             //  以自身为圆心爆一次，爆完给自己套盾（+III 级减伤）或把怪推开。
             //  独立车道（`unit.burstReadyAt`），不推进普攻节拍，也不吃普攻射程闸门
             //  （判据是爆发半径内有没有人，由 `castBurstSkill` 自己算）。
@@ -1207,6 +1287,32 @@ export class ZCGameModel {
     get terrainRevision(): number { return this.topologyRevision; }
     get mapConfig(): ZCMatchMap { return this.config.map; }
     definitionForUnit(id: string): ZCUnitDefinition { return this.unitDefinition(id); }
+    /**
+     * 战斗音效取「攻击方职业 + 普攻/主动技能行」（`ZCBattleAudio` 的唯一数据源）。
+     *
+     * `activeSkillIds` 只装**主动**那两行（武将技 / 副轨）：被动触发的纯表现事件
+     * （冲锋护盾 / 召唤 / 践踏）也带着自己的 `skillId` 走 `combatEvents`，
+     * 不区分就会在没有施法时响技能音。
+     */
+    attackInfoForUnit(id: number): {
+        readonly trait: ZCAttackTrait;
+        readonly attackSkillId: number;
+        readonly activeSkillIds: readonly number[];
+    } | undefined {
+        const unit = this.units.byId.get(id);
+        if (!unit) return undefined;
+        const trait = this.traitOfAttackerUnitId(id);
+        if (!trait) return undefined;
+        const profile = this.unitDefinition(unit.unitId).attackProfile;
+        const activeSkillIds: number[] = [];
+        if (Number.isFinite(profile.empoweredSkillId) && (profile.empoweredSkillId as number) > 0) {
+            activeSkillIds.push(profile.empoweredSkillId as number);
+        }
+        if (Number.isFinite(profile.secondarySkillId) && (profile.secondarySkillId as number) > 0) {
+            activeSkillIds.push(profile.secondarySkillId as number);
+        }
+        return { trait, attackSkillId: profile.skillId, activeSkillIds };
+    }
     /** UI/调试读取本局最终属性；基础目录仍可用 definitionForUnit 查询。*/
     effectiveDefinitionForUnit(owner: ZCOwner, id: string): ZCUnitDefinition {
         return this.effectiveUnitDefinitionFor(owner, id);
@@ -1547,7 +1653,7 @@ export class ZCGameModel {
         return this.success(`后续 ${count} 次我方翻格必出【${card.name}】（${cardId}）`);
     }
 
-    developHex(hexId: number): ZCActionResult {
+    developHex(hexId: number): ZCDevelopResult {
         if (this.state.status !== 'playing') return this.fail('本局已经结束。');
         const hex = this.hex(hexId);
         if (!hex) return this.fail('地块不存在。');
@@ -1666,8 +1772,10 @@ export class ZCGameModel {
         this.captureSystem.update(this.state, dt, (hex, owner) => this.captureEmptyTile(hex, owner),
             this.neutralFeatures.monsterTerritory);
         this.refreshTileStates();
-        // 首领关由配置的波次出怪，跳过通用敌方翻格。
-        if (!this.pveDefence) {
+        // 首领关默认由配置的波次出怪、跳过通用敌方翻格；但只要本关配了 NPC 卡组
+        // （`npcDeckFromTeam` = `npcTeam.npcCard` 投影），防守方仍要按卡组翻地块发育 ——
+        // 否则 NPC 整局站着不动，配表里的卡组一张都用不上（用户 2026-11-23）。
+        if (!this.pveDefence || this.config.npcDeckFromTeam) {
             this.state.aiClock = Math.round((this.state.aiClock + dt) * 1e9) / 1e9;
             if (this.state.aiClock >= this.aiDevelopIntervalSeconds) {
                 this.state.aiClock -= this.aiDevelopIntervalSeconds;
@@ -2072,7 +2180,7 @@ export class ZCGameModel {
             appliedDamage: result.applied + (source.floatTextValueOffset ?? 0),
             x: position.x,
             y: position.y,
-            durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS,
+            durationSeconds: this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS,
         });
         if (ZCDC_LOG_DAMAGE_FLOAT) {
             console.info('[伤害飘字][飘字]', {
@@ -2114,7 +2222,7 @@ export class ZCGameModel {
             targetScale: this.definitions.get(target.unitId)?.prefabSize ?? 1,
             x: position.x,
             y: position.y,
-            durationSeconds: HIT_FX_SECONDS,
+            durationSeconds: this.rules.hitFxSeconds ?? HIT_FX_SECONDS,
         });
     }
 
@@ -2171,7 +2279,7 @@ export class ZCGameModel {
             targetScale: 1,
             x: position.x,
             y: position.y,
-            durationSeconds: HIT_FX_SECONDS,
+            durationSeconds: this.rules.hitFxSeconds ?? HIT_FX_SECONDS,
         });
     }
 
@@ -2217,16 +2325,45 @@ export class ZCGameModel {
         }
     }
 
+    private broadcastStructureGuardAggro(attacker: IZCStructureDamageSource, defenderOwner: ZCOwner | 'neutral', hexId: number): void {
+        if (!attacker || attacker.id === undefined || defenderOwner === 'neutral' || attacker.owner === defenderOwner) return;
+        const attackerUnit = this.units.byId.get(attacker.id);
+        if (!attackerUnit || attackerUnit.battleState === 'dead' || attackerUnit.hp <= 0) return;
+        const center = this.hexCenter(hexId);
+        if (!center || typeof center.x !== 'number' || typeof center.y !== 'number') return;
+        const GUARD_RADIUS_SQ = 150 * 150; // 约 1.5 格守家求援半径
+        for (const unit of this.state.units) {
+            if (unit.owner !== defenderOwner || unit.battleState === 'dead' || unit.hp <= 0) continue;
+            // 若当前正在与目标贴身肉搏交战（普攻前摇或等待），不打断既有决斗
+            const inCombat = (unit.battleState === 'attack' || unit.battleState === 'waitAttack')
+                && this.unitTargeting.isInAttackRange(unit);
+            if (inCombat) continue;
+            const distSq = (unit.freeX - center.x) ** 2 + (unit.freeY - center.y) ** 2;
+            if (distSq > GUARD_RADIUS_SQ) continue;
+            // 写入守家求援仇恨
+            unit.hatredUnitId = attacker.id;
+            unit.hatredUntil = this.state.elapsedSeconds + (this.rules.hatredSeconds ?? HATRED_SECONDS);
+            // 若当前目标不是该攻击者，打破锁定重新索敌
+            if (unit.targetUnitId !== attacker.id) {
+                this.unitTargeting.acquire(unit);
+                if (this.unitTargeting.current(unit)) {
+                    ZCCombatSystem.switchState(unit, this.unitTargeting.isInAttackRange(unit) ? 'idle' : 'move');
+                }
+            }
+        }
+    }
+
     private damageWall(unit: IZCStructureDamageSource, wall: ZCHexState, damage: number, isExposed = this.hasExposedWall(wall)): void {
         const center = this.hexCenter(wall.id);
         const result = ZCDamageResolutionSystem.damageWall(
             wall, damage, unit, isExposed, center, this.damageResolutionContext);
         if (!result) return;
+        this.broadcastStructureGuardAggro(unit, wall.owner, wall.id);
         this.creditCardDamage(unit.id, result.applied);
         // 同 `damageBuilding`：飘字按完整命中伤害，扣血/统计按实际值。
         const floatText = this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.damageBeforeHpCap,
             appliedDamage: result.applied,
-            x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+            x: center.x, y: center.y, durationSeconds: this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS });
         if (ZCDC_LOG_DAMAGE_FLOAT) {
             console.info('[伤害飘字][飘字]', {
                 sourceId: unit.id, targetKind: 'wall', targetId: wall.id, incomingDamage: damage, applied: result.applied,
@@ -2305,13 +2442,14 @@ export class ZCGameModel {
         const result = ZCDamageResolutionSystem.damageBuilding(
             this.state, building, damage, unit, this.damageResolutionContext);
         if (!result) return;
-        this.creditCardDamage(unit.id, result.applied);
+        this.broadcastStructureGuardAggro(unit, defender, building.id);
         const center = this.hexCenter(building.id);
+        this.creditCardDamage(unit.id, result.applied);
         // 飘字显示「完整命中伤害」（`damageBeforeHpCap`），统计与吸血走实际扣血（`applied`）——
         // 击杀那一下如果按实际扣血显示，玩家会看到「打了 60、只跳 20」。
         const floatText = this.pushFloatText({ kind: 'damage', owner: unit.owner, value: result.damageBeforeHpCap,
             appliedDamage: result.applied,
-            x: center.x, y: center.y, durationSeconds: FLOAT_TEXT_DAMAGE_SECONDS });
+            x: center.x, y: center.y, durationSeconds: this.rules.floatTextDamageSeconds ?? FLOAT_TEXT_DAMAGE_SECONDS });
         if (ZCDC_LOG_DAMAGE_FLOAT) {
             console.info('[伤害飘字][飘字]', {
                 sourceId: unit.id, targetKind: 'building', targetId: building.id, incomingDamage: damage, applied: result.applied,
@@ -2384,7 +2522,11 @@ export class ZCGameModel {
         this.frameEvents.push({ frameId: Math.round(this.state.elapsedSeconds * 1000), owner, op, params });
     }
 
-    private developFor(owner: ZCOwner, hex: ZCHexState): ZCActionResult {
+    /**
+     * 玩家点地块开垦（`ZCGame.onHexClick`）；返回值在通用结果上多带一格 `cardRarity`，
+     * 让表现层能按品阶挑音效（抽空 / 蓝绿 / 紫 / 金）—— 见 {@link ZCDevelopResult}。
+     */
+    private developFor(owner: ZCOwner, hex: ZCHexState): ZCDevelopResult {
         this.pushFrameEvent(owner, FRAME_OP_DEVELOP, [hex.id]);
         const forced = owner === ZCOwner.Player ? this.debugDraw : null;
         const result = ZCDevelopmentSystem.develop(
@@ -2415,10 +2557,12 @@ export class ZCGameModel {
         const card = result.card;
         if (!result.building) {
             this.refreshTileStates();
-            return this.success();
+            // 抽到了卡但落不了地（该格建不上）：仍算「抽到这张」，音效按品阶走。
+            return { ok: true, cardRarity: card.rarity };
         }
         const building = result.building;
         const tier = result.tier;
+        const randomTile = result.tileType === ZCPvpTileType.AllRandom;
         this.pushCardReveal({
             owner,
             hexId: hex.id,
@@ -2427,12 +2571,13 @@ export class ZCGameModel {
             tier,
             cardName: card.name,
             unitId: card.unitId ?? null,
-            luckText: result.tileType === ZCPvpTileType.AllRandom ? luckTextOfTier(tier) : '',
+            luckText: randomTile ? luckTextOfTier(tier) : '',
+            randomTile,
         });
         this.refreshTileStates();
         // 首批兵推到「翻面段」播完再出（见 `deferredBarracksSpawns`）。
         if (hex.constructionRemainingSeconds <= 0) this.scheduleFirstBarracksUnit(hex.id);
-        return this.success(`抽到${rarityDisplayName(card.rarity)}卡【${card.name}】`);
+        return { ok: true, message: `抽到${rarityDisplayName(card.rarity)}卡【${card.name}】`, cardRarity: card.rarity };
     }
 
     private spawnFirstBarracksUnit(hex: ZCHexState): void {
@@ -2490,19 +2635,38 @@ export class ZCGameModel {
         hexId: number,
         ignoreUnitCap = false,
         lineUpAlongGoal = false,
+        lineUpIndex = 0,
+        lineUpCount = 1,
     ): ZCUnitState | null {
         if (!card.unitId || (!ignoreUnitCap && this.unitCount(owner) >= this.rules.unitCapPerSide)) return null;
         const definition = this.effectiveUnitDefinitionFor(owner, card.unitId);
         const spawnCenter = this.hexCenter(hexId);
         // 落点：离兵营中心约半个格距 —— 新兵不会和兵营图标叠在一起。
-        // 塔防出怪（`lineUpAlongGoal`）**不随机散角**：整波怪都从「主城 → 目标主城」这条轴上
-        // 同一点出生，配合 `ZC_DEFENCE_SPAWN_INTERVAL_SECONDS` 的时间错开，才排得成一条直线队列。
+        // 塔防出怪（`lineUpAlongGoal`）两列错位队列行进：整波怪在「主城 → 目标主城」主轴两侧
+        // 呈左右交替错位（±9px 并附带 ±1.5px 微小抖动），避免单点重叠造成残影，同时保持两列队列前行。
         // 🔴 随机值照抽不误（下面的 `random()`），否则随机流一变，抽卡 / 技能全都不是同一个种子了。
         const spawnAngle = this.random() * Math.PI * 2;
         const facing = this.facingTowardGoal(owner, hexId);
-        const angle = lineUpAlongGoal ? facing : spawnAngle;
-        const spawnX = spawnCenter.x + Math.cos(angle) * SPAWN_OFFSET_RADIUS;
-        const spawnY = spawnCenter.y + Math.sin(angle) * SPAWN_OFFSET_RADIUS;
+        let spawnX: number;
+        let spawnY: number;
+        if (lineUpAlongGoal) {
+            const forwardX = Math.cos(facing);
+            const forwardY = Math.sin(facing);
+            const lateralX = -forwardY;
+            const lateralY = forwardX;
+            let lateral = 0;
+            if (lineUpCount > 1) {
+                // 两列错位：偶数只在左侧（-1），奇数只在右侧（+1），基础偏移 9px，附带微小抖动
+                const side = lineUpIndex % 2 === 0 ? -1 : 1;
+                const jitter = Math.sin(spawnAngle) * 1.5;
+                lateral = side * 9 + jitter;
+            }
+            spawnX = spawnCenter.x + forwardX * SPAWN_OFFSET_RADIUS + lateralX * lateral;
+            spawnY = spawnCenter.y + forwardY * SPAWN_OFFSET_RADIUS + lateralY * lateral;
+        } else {
+            spawnX = spawnCenter.x + Math.cos(spawnAngle) * SPAWN_OFFSET_RADIUS;
+            spawnY = spawnCenter.y + Math.sin(spawnAngle) * SPAWN_OFFSET_RADIUS;
+        }
         const bonuses = this.bonusesFor(owner);
         const tierMultiplier = 1 + (tier - 1) * this.rules.unitHpPerTier;
         const maxHp = Math.max(1, Math.round(definition.maxHp * bonuses.unitHpMultiplier * tierMultiplier));
@@ -2541,9 +2705,8 @@ export class ZCGameModel {
         this.units.register(unit);
         this.state.units.push(unit);
         this.rememberUnitCard(unit);
-        //  诊断6.：镭射飞龙真的上场了没。没有这一行 ⇒ 后面所有 `[模型]` 日志都不会出现，
-        //  与「技能没触发」是两件事（这张卡是兵营卡，要先翻格建出来才会产兵）。
-        if (unit.unitId === '68010') {
+        //  诊断6.：追踪导弹单位是否真的上场了。
+        if (zcIsMissileWatchUnit(unit.unitId)) {
             missileLog('模型', `镭射飞龙上场：#${unit.id} owner=${unit.owner} hp=${maxHp}`
                 + ` 位置=(${spawnX.toFixed(1)},${spawnY.toFixed(1)}) t=${this.state.elapsedSeconds.toFixed(1)}s`);
         }
@@ -2620,6 +2783,14 @@ export class ZCGameModel {
         //  独立分身（101404）：自己寻路追人、本体阵亡也不散、不占单位上限的名额。
         const independent = (params?.summonIndependent ?? 0) > 0;
         const slotRadius = Math.max(0, params?.summonSlotRadius ?? 0) * this.rules.combatDistanceScale;
+        //  脚底光环的判定半径（世界 px）：既是「纯表现区域」的大小，也是舞伴的拴绳半径
+        //  （用户口径「会在特效范围内移动和攻击」⇒ 光圈到哪，它们就能走到哪）。
+        const auraRadiusTable = Math.max(0, params?.summonAuraRadius ?? 0);
+        const auraRadiusWorld = auraRadiusTable * this.rules.combatDistanceScale;
+        //  光圈放大倍率：跟随型才需要放大到圈住舞伴（阵位为 0 ⇒ 原尺寸）。
+        //  🔴 只算一次：区域的 `effectScale` 与召唤物拴绳必须同一个数 ——
+        //  一边 1.99 一边 1 就是「分身走出领域特效」那种错，而且只有肉眼能发现。
+        const auraCoverScale = slotRadius > 0 ? (params?.summonAuraCoverScale ?? ZC_SUMMON_AURA_COVER_SCALE) : 1;
         //  透明度：配表优先（舞王 103103 是 0.6）；101404 三档都没填 `summonAlpha`，
         //  按设计口径「分身约 65%」兜底 —— 只在独立分身这一条车道上兜，普通召唤仍是实心。
         const alpha = Math.max(0, Math.min(1,
@@ -2653,11 +2824,14 @@ export class ZCGameModel {
                 //  与 `SPAWN_OFFSET_RADIUS` 那条注释同一条约定。
                 const spread = Math.PI * 2 / Math.max(1, count);
                 const angle = slot * spread + (this.random() - 0.5) * spread * 0.6;
-                const radius = Math.sqrt(this.random()) * SUMMON_SCATTER_RADIUS;
-                const fxAt = this.state.elapsedSeconds + slot * SUMMON_STAGGER_SECONDS;
+                const scatterRadius = Math.max(0, params?.summonScatterRadius ?? SUMMON_SCATTER_RADIUS);
+                const staggerSeconds = Math.max(0, params?.summonStaggerSeconds ?? SUMMON_STAGGER_SECONDS);
+                const appearDelaySeconds = Math.max(0, params?.summonAppearDelaySeconds ?? SUMMON_APPEAR_DELAY_SECONDS);
+                const radius = Math.sqrt(this.random()) * scatterRadius;
+                const fxAt = this.state.elapsedSeconds + slot * staggerSeconds;
                 (this.state.pendingSummons ??= []).push({
                     fxAtSeconds: Math.round(fxAt * 1e9) / 1e9,
-                    spawnAtSeconds: Math.round((fxAt + SUMMON_APPEAR_DELAY_SECONDS) * 1e9) / 1e9,
+                    spawnAtSeconds: Math.round((fxAt + appearDelaySeconds) * 1e9) / 1e9,
                     owner: master.owner,
                     cardId: master.cardId,
                     tier: master.tier,
@@ -2665,6 +2839,7 @@ export class ZCGameModel {
                     masterId: master.id,
                     skillId: definition.attackProfile.skillId,
                     skillName: definition.attackProfile.name,
+                    effectPrefabPath: (params as any)?.summonSpawnFx ?? ZC_EFFECT_PATHS.fissionSpawn,
                     x: origin.x + Math.cos(angle) * radius,
                     y: origin.y + Math.sin(angle) * radius,
                     maxHp,
@@ -2691,12 +2866,37 @@ export class ZCGameModel {
             if (follow) {
                 clone.summonSlot = slot;
                 clone.summonSlotRadius = slotRadius > 0 ? slotRadius : undefined;
+                //  拴绳 = **画面上那圈光环**的半轴（世界 px，2026-11-22 第 41 批改口径）。
+                //  🔴 不是 `summonAuraRadius` 的判定半径：光圈是美术画的一张扁地面盘，
+                //  视觉尺寸只由 `effectScale` 决定（见 `zcSummonAuraLeashHalfWorld`）。
+                //  按判定半径（60 的圆）拴，纵向比可见环（≈33）大一倍 ⇒ 舞伴追人时明显出圈。
+                //  🔴 没有光环就没有「圈」可拴 ⇒ 不写这个字段，保持老的「钉死阵位」行为。
+                if (auraRadiusWorld > 0) {
+                    const half = zcSummonAuraLeashHalfWorld(auraCoverScale);
+                    clone.summonLeashRadius = half.x;
+                    clone.summonLeashRadiusY = half.y;
+                }
             }
             //  `summonSeconds <= 0` ⇒ 不写到期时刻 = 到战死为止（101404 一人成军的裁定口径）。
             if (seconds > 0) clone.summonUntil = this.state.elapsedSeconds + seconds;
             if (alpha < 1) clone.summonAlpha = alpha;
+            if ((params as any)?.summonSlotAngles) clone.summonSlotAngles = (params as any).summonSlotAngles;
             this.placeSummon(clone, master, slot, slotRadius, follow);
             spawned.push(clone);
+        }
+        //  ── 脚底持续光环（2026-11-20 第 34 批 舞王 103103）──
+        //  用户口径：「艺术家释放分身时，在本体脚底同步播放【持续光环伤害效果】，范围要囊括
+        //  本体和 4 个分身」+「纯表现，无伤害」。所以它是**一条跟着本体的纯表现区域**：
+        //  没有波次、没有触碰、到期不炸（三个口子都关死），只负责把那张 `holdVisual` 事件
+        //  钉在本体脚下、和舞伴同起同落。
+        //  🔴 只在**这一次真的召出来了**（含排队）才建：被 12 只上限拒放的那一次不该留一圈空光环。
+        //  独立分身（101404）三档都没配 `summonAuraRadius` ⇒ 这段一次都不进。
+        //  🔴 `auraRadiusTable` / `auraRadiusWorld` 只喂区域本身（判定半径 + 「有没有圈」）；
+        //  召唤物的拴绳**不看它** —— 光圈的可视大小由 prefab 与 `effectScale` 决定，
+        //  两者在纵向差近一倍（2026-11-22 第 41 批，见 `zcSummonAuraLeashHalfWorld`）。
+        if (auraRadiusTable > 0 && spawned.length + queued > 0) {
+            this.pushSummonAuraZone(master, auraRadiusTable, seconds, auraCoverScale,
+                definition.attackProfile.skillId, definition.attackProfile.name);
         }
         if (zcSkillCastWatched(master.unitId)) {
             skillCastLog('召唤', `${master.unitId}#${master.id} 召出 ${spawned.length + queued}/${count} 个`
@@ -2707,6 +2907,55 @@ export class ZCGameModel {
                 + `${follow ? `，阵位半径 ${slotRadius.toFixed(1)}` : '，自由行动'}）`);
         }
         return spawned.length + queued > 0;
+    }
+
+    /**
+     * 召唤的「脚底持续光环」（2026-11-20 第 34 批 舞王 103103）。
+     *
+     * 设计口径（用户原话）：「艺术家释放分身时，在本体脚底同步播放【持续光环伤害效果】预制体
+     * 特效，改特效的范围需要囊括本体和 4 个分身」；问过口径 ⇒ **纯表现，无伤害**。
+     *
+     * 做法是借「整段持有视觉」那条既有通道（`holdVisual` + `followUnitId`）—— 不是新开一套
+     * 挂在单位身上的循环特效：
+     *  · 区域本身就是「有寿命 + 每帧同步坐标」的结构，`syncHoldVisual` 会给它建一条长效
+     *    `area` 事件、每帧把坐标刷过去，区域消散时同步摘掉 ⇒ 光圈自然跟着本体走、跟舞伴同起同落；
+     *  · 视觉大小**不能**指望 `nodeScale` 那一刀切：那份倍率是给 `68021` / `68024` 的
+     *    `auraRadius 120` 调的（它们看到环 174 屏上 px、判定 184.5，正好），照它的口径算
+     *    「200 与画面同一圈」会差 1.77 倍。这条车道改走事件级 `effectScale`
+     *    = `ZC_SUMMON_AURA_COVER_SCALE`（1.99，实测：这张盘比镜头扁 2 倍，纵向才是卡点）；
+     *  · 三个「会伤人」的口子全部关死：`wavesLeft = 0`（不结算波次）、`contactRadius` 不写
+     *    （踩上去什么都不会发生）、`expireDamage = 0` + `expirePrefabPath` 不写（到期不炸）。
+     *    少关一个就会变成「一圈看不见的光环一直在掉血」—— 结算正常、画面全无，最难查。
+     */
+    private pushSummonAuraZone(master: ZCUnitState, radiusTable: number, seconds: number,
+        coverScale: number, skillId: number, skillName: string): void {
+        const origin = this.services.unitPosition(master);
+        const duration = seconds > 0 ? seconds : SUMMON_AURA_FALLBACK_SECONDS;
+        this.state.groundZones.push({
+            x: origin.x,
+            y: origin.y,
+            //  表值是逻辑 px，与世界坐标差一个 `combatDistanceScale`（与 auraRadius 同一套）。
+            radius: radiusTable * this.rules.combatDistanceScale,
+            owner: master.owner,
+            sourceUnitId: master.id,
+            skillId,
+            skillName,
+            effectPrefabPath: (params as any)?.summonAuraFx ?? ZC_EFFECT_PATHS.sustainedAura,
+            //  整段持有：一条事件跟着区域走，消散时摘掉（不是按波次频闪）。
+            holdVisual: true,
+            //  每帧把圆心拍回本体脚下；本体阵亡后停在最后位置，光圈到时自己消失。
+            followUnitId: master.id,
+            //  放大到「正好圈住本体 + 一圈舞伴」：`effectScale = 1` 时那圈环只有 184×72 屏上 px，
+            //  而 4 个舞伴落在屏幕上 (65,55) 处、纵向还差一半 —— 不放大就是脚在环外。
+            effectScale: coverScale,
+            remainingSeconds: duration,
+            wavesLeft: 0,
+            nextWaveAt: this.state.elapsedSeconds + duration,
+            waveInterval: duration,
+            damage: 0,
+            slowRatio: 0,
+            expireDamage: 0,
+        });
     }
 
     /**
@@ -2773,7 +3022,7 @@ export class ZCGameModel {
             skillName: entry.skillName,
             effectKey: null,
             projectileKey: null,
-            effectPrefabPath: ZC_EFFECT_PATHS.fissionSpawn,
+            effectPrefabPath: entry.effectPrefabPath ?? ZC_EFFECT_PATHS.fissionSpawn,
             fromX: entry.x,
             fromY: entry.y,
             toX: entry.x,
@@ -2845,7 +3094,9 @@ export class ZCGameModel {
             this.movement.placeAt(unit, origin.x, origin.y, true);
             return;
         }
-        const degrees = SUMMON_SLOT_DEGREES[slot % SUMMON_SLOT_DEGREES.length];
+        const degreesList = unit.summonSlotAngles && unit.summonSlotAngles.length > 0
+            ? unit.summonSlotAngles : SUMMON_SLOT_DEGREES;
+        const degrees = degreesList[slot % degreesList.length];
         const angle = master.facingRadians + degrees * Math.PI / 180;
         this.movement.placeAt(unit,
             origin.x + Math.cos(angle) * radius, origin.y + Math.sin(angle) * radius, true);
@@ -2860,7 +3111,10 @@ export class ZCGameModel {
      *  2. 本体没了（被打死 / 被移除）⇒ 召唤物跟着收场，否则位置无从算起；
      *     **独立分身除外**（`summonIndependent`，101404）：设计口径是「血量为 0 才消失」，
      *     本体先死也照常自己打，否则一波换血就把刚召出来的 6 只一起带走了；
-     *  3. 跟随时把位置钉回阵位（独立分身不跟随，位置交给普通寻路）。
+     *  3. 跟随时守住阵位（独立分身不跟随，位置交给普通寻路）。两种语义：
+     *     · 没配拴绳（`summonLeashRadius` 为空）⇒ 每帧钉死阵位，寸步不移；
+     *     · 配了拴绳 ⇒ 只在**跑出圈**时拉回边界，圈内放过它自己走到的坐标
+     *       （`ZCUnitSystem` 会用 `advanceTowardPoint` 让它去追目标）。
      */
     private syncSummons(): void {
         if (!this.state.units.length) return;
@@ -2887,8 +3141,50 @@ export class ZCGameModel {
                 continue;
             }
             if (unit.summonSlot === undefined) continue;
-            this.placeSummon(unit, master, unit.summonSlot, unit.summonSlotRadius ?? 0, true);
+            const leash = unit.summonLeashRadius;
+            if (!(typeof leash === 'number' && leash > 0)) {
+                this.placeSummon(unit, master, unit.summonSlot, unit.summonSlotRadius ?? 0, true);
+                continue;
+            }
+            //  `summonLeashRadiusY` 缺省 ⇒ 圆形（老快照 / 读档兼容）；非正数也按圆形兜（否则除以 0）。
+            const leashY = unit.summonLeashRadiusY;
+            this.leashSummon(unit, master, leash, typeof leashY === 'number' && leashY > 0 ? leashY : leash);
         }
+    }
+
+    /**
+     * 拴绳：只处理「跑出圈」这一种情况。
+     *
+     * 🔴 为什么不能继续每帧 `placeSummon`：舞伴的普攻射程只有
+     *    `(45 表内 + 12 体型) × combatDistanceScale` ≈ 17 世界 px，而阵位半径是 36 ——
+     *    把坐标钉死在阵位上，它们**永远够不到站在本体旁边的敌人**（2026-11-21 第 36 批，
+     *    用户原话「分身会在特效范围内移动和攻击其他敌人目标 / 建筑 / 城墙，现在不会攻击了」）。
+     *
+     * 🔴 圈是**椭圆**（2026-11-22 第 41 批）：光圈在屏上是个扁盘，换回世界坐标横向比纵向宽一倍
+     *    （现在 ≈ 71 × 33）。按圆形拴的话，纵向会允许它们走到可见环的两倍高度以外 ——
+     *    用户实测「分身会走出领域特效的范围」。
+     *
+     * 圈心是**本体**（光环挂在脚下），不是阵位点：阵位点只是出生位置，出了圈才拉回边界。
+     * 🔴 这里**不为阵位留余量**（第 36 批曾经 `max(拴绳, 阵位半径)`）：圈就是画面上那圈光，
+     *    阵位若比圈还大（配表调大 `summonSlotRadius`），正确的做法是「出生即被拉进圈」，
+     *    而不是把圈放大到装下阵位 —— 那等于又允许它们站在画面外。
+     */
+    private leashSummon(unit: ZCUnitState, master: ZCUnitState, leashX: number, leashY: number): void {
+        const origin = this.services.unitPosition(master);
+        const current = this.services.unitPosition(unit);
+        const rx = leashX;
+        const ry = leashY;
+        const dx = current.x - origin.x;
+        const dy = current.y - origin.y;
+        //  归一化到「单位椭圆」上判越界：`(dx/rx)² + (dy/ry)² > 1` ⇒ 出了圈。
+        const nx = dx / rx;
+        const ny = dy / ry;
+        const norm = Math.sqrt(nx * nx + ny * ny);
+        if (norm <= 1 + 1e-6) return;
+        //  按同一比例缩回边界（椭圆上的点）：`(dx/norm, dy/norm)`。
+        //  拉回边界而不是拉回阵位：它想打的目标通常就在圈边外一点，
+        //  每帧拉回阵位等于让它「走一步退十步」，永远在原地抽动。
+        this.movement.placeAt(unit, origin.x + dx / norm, origin.y + dy / norm, true);
     }
 
     private cloneGateUnit(source: ZCUnitState): ZCUnitState | void {
@@ -3007,8 +3303,10 @@ export class ZCGameModel {
 
     /** 出一只怪并记进本波账本；兵力上限拦下时这一只算已出（与旧的 `continue` 同口径）。*/
     private spawnDefenceWaveUnit(ticket: ZCDefenceSpawnTicket): void {
+        const isBoss = ticket.sizeScale > 1;
+        const lineUpCount = isBoss ? 1 : ticket.count;
         const unit = this.spawnUnit(ZCOwner.Enemy, ticket.card, ticket.tier,
-            this.homeId(ZCOwner.Enemy), ticket.ignoreUnitCap, true);
+            this.homeId(ZCOwner.Enemy), ticket.ignoreUnitCap, true, ticket.spawned, lineUpCount);
         if (!unit) return;
         // `gateScale` 是本工程现有的「单位级视觉缩放」通道：`ZCUnitView` 的模型缩放、
         // 头顶血条偏移与兜底体型半径都乘它（见 `ZCUnitView.render`）。体型只影响观感，

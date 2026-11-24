@@ -7,6 +7,17 @@
  */
 import assert from 'node:assert/strict';
 import test from 'node:test';
+
+test('事件来源与业务载荷分别交给订阅方', () => {
+    const bus = new EventBus();
+    const source = {};
+    const data = { phase: 'ready' };
+    const target = {};
+    const received: unknown[] = [];
+    bus.on('lifecycle', function (payload, sender) { received.push(this, payload, sender); }, target);
+    bus.emit('lifecycle', data, source);
+    assert.deepEqual(received, [target, data, source]);
+});
 import { readFileSync } from 'node:fs';
 import { EventBus } from '../assets/script/framework/event/EventBus';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';

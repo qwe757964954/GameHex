@@ -76,6 +76,74 @@ export function qualityFrameSuffixOf(quality: number): string {
     return step < 10 ? `0${step}` : String(step);
 }
 
+/**
+ * 卡牌道具（碎片 / 民兵 / 金矿）的底框要**抬一档**：品阶 1..4 → `cu_quality_02..05`。
+ *
+ * 来历：这批道具的 `item.quality` 填的是**卡牌品阶**（1..4 = 普通/稀有/史诗/传说），
+ * 而品质框 `cu_quality_0N` 是**道具品质 8 档**（实测主色：01 灰 / 02 绿 / 03 蓝 / 04 紫 / 05 金 …）。
+ * 两套刻度错开一档，直接拿品阶当档位 ⇒ 传说卡碎片显示紫框、普通卡碎片显示灰框。
+ *
+ * 🔴 2026-11-23 用户口径：「卡牌碎片的底框颜色没有对应上卡牌的品阶，绿蓝紫金」，
+ *   随后补「民兵/金矿 也跟普通卡一样显绿框」。
+ *   再补：「品阶1绿 2蓝 3紫 4金 **大于4也是金**」⇒ 上限钳在 05，不许串到 06 红。
+ *   截图（铁角配给箱）五格全是 `cu_quality_01` 灰框 —— 那批碎片品阶都是 1（普通）。
+ *
+ * 🔴 **只抬底框，不动 `quality` 本身**：品质名走 `gameConfig.qualityname`
+ *   （普通/精良/优秀/史诗/传说），和卡牌品阶名（普通/稀有/史诗/传说）不是同一套；
+ *   改表把这批道具的品质 +1 会把道具详情页的品质文案一起带歪。
+ */
+export const CARD_ITEM_FRAME_STEP_SHIFT = 1;
+
+/**
+ * 卡牌道具底框的封顶档位：`cu_quality_05` = 金。
+ *
+ * 卡牌只有四档品阶，4（传说）已经是最高的一档；表里若填出 5 及以上（脏数据 /
+ * 以后的特殊卡），也一律按金处理 —— 再往上就是「红 / 蓝紫 / 将」，那是道具品质档的
+ * 后几档，用在卡上会让玩家读成别的分级。
+ */
+export const CARD_ITEM_FRAME_STEP_MAX = 5;
+
+/**
+ * 没有升级配置的基础卡道具：`民兵`(18001) / `金矿`(18002)。
+ *
+ * 它们是卡、`item.quality` 同样填卡牌品阶（1 = 普通），但 `cardLevelUp` 里没有行
+ * （没有升级曲线），光靠 `costCardID` 认不出来，只能在这里点名。
+ * `英雄·通用`(18000) **不在**其中：它是升星材料，quality 5 走普通道具品质档，不该抬。
+ */
+export const BASE_CARD_ITEM_IDS: readonly number[] = [18001, 18002];
+
+/**
+ * 由 `cardLevelUp` 行算出「品质填的是卡牌品阶」的道具集合：全部 `costCardID` ∪ 基础卡。
+ *
+ * 两个落点（`RewardItemView` / `MainTerritoryMap`）都从这里取，别各自拼一遍 ——
+ * 漏了基础卡就会退回「民兵/金矿显灰框」。
+ */
+export function cardItemIdsOf(
+    rows: readonly { readonly costCardID?: unknown }[] | null | undefined,
+): ReadonlySet<number> {
+    const ids = new Set<number>(BASE_CARD_ITEM_IDS);
+    for (const row of rows ?? []) {
+        const resId = Number(row?.costCardID);
+        if (Number.isSafeInteger(resId) && resId > 0) ids.add(resId);
+    }
+    return ids;
+}
+
+/**
+ * 物品品质 → 品质框档位（`cu_quality_0N` 的 N）。
+ *
+ * 卡牌道具：品阶 1/2/3/4 → 绿/蓝/紫/金（02/03/04/05），**大于 4 一律金**。
+ *
+ * @param isCardItem 由 `cardItemIdsOf()` 判定 —— 卡牌/碎片才用卡牌品阶口径；
+ *   普通材料（如 `英雄·通用`）仍按道具品质档 1:1 走（它自己的 6=红、7=蓝紫 是有效的）。
+ */
+export function itemFrameQualityOf(quality: number, isCardItem: boolean): number {
+    const n = Math.floor(quality);
+    const grade = Number.isFinite(n) && n >= 1 ? n : 1;
+    if (!isCardItem) return grade;
+    return Math.min(grade + CARD_ITEM_FRAME_STEP_SHIFT, CARD_ITEM_FRAME_STEP_MAX);
+}
+
 // ============================================================
 // 数量
 // ============================================================

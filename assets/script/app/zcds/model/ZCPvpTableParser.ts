@@ -333,6 +333,8 @@ export function parseAttackProfiles(value: unknown): ReadonlyMap<number, ZCAttac
             //  从代码常量挪进表里，是因为原来按 prefab 路径登记 —— 美术一换登记就静默失效。
             impactEffectAnchor: parseImpactAnchor(raw.impactEffectAnchor, `skills.${skillId}.impactEffectAnchor`),
             durationSeconds: optionalNumber(raw.durationSeconds, `skills.${skillId}.durationSeconds`),
+            penetrateRange: optionalPositiveNumber(raw.penetrateRange, `skills.${skillId}.penetrateRange`)
+                ?? (skillId === 30845 ? 18 * 42 : undefined),
             waves: optionalPositiveNumber(raw.waves, `skills.${skillId}.waves`),
             slowRatio: optionalNumber(raw.slowRatio, `skills.${skillId}.slowRatio`),
             onHitStatusId: optionalText(raw.onHitStatusId, `skills.${skillId}.onHitStatusId`),

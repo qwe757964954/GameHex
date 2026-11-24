@@ -100,8 +100,9 @@ function loadClass(overrides: Record<string, unknown> = {}): {
         '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async () => [] } } },
         '../ArtPaths': { spriteFramePathOf: (path: string) => path },
         '../itemdetail/ItemDetailArtLoader': { itemQualityFrameRelPath: () => 'image/common/cu_quality_01' },
+        '../itemdetail/ItemDetailTable': itemDetailTable,
         '../common/ResTypes': {
-            ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty',
+            ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty', CARD_LEVEL_UP_TABLE: 'cardLevelUp',
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '',
         },
         ...overrides,
@@ -441,7 +442,100 @@ test('任务详情按当前奖励渲染公共框，复用清理多余格，旧�
 test('公共奖励格：品质框路径必须走统一前缀入口（`ItemDetailArtLoader`）', () => {
     const src = readFileSync('assets/script/app/common/RewardItemView.ts', 'utf8');
     // 2026-10-28 真机踩过：漏了前缀 ⇒ 图标正常、品质框整片空白（不报错）
-    assert.match(src, /itemQualityFrameRelPath\(quality\)/, '品质框路径必须走 ItemDetailArtLoader 的统一入口');
+    assert.match(src, /itemQualityFrameRelPath\(/, '品质框路径必须走 ItemDetailArtLoader 的统一入口');
+});
+
+/**
+ * 卡牌道具（碎片 / 民兵 / 金矿）的 `item.quality` 是**卡牌品阶**（1..4），
+ * 而 `cu_quality_0N` 是**道具品质 8 档**（1 灰 / 2 绿 / 3 蓝 / 4 紫 / 5 金）。
+ * 2026-11-23 用户口径：「卡牌碎片的底框颜色没有对应上卡牌的品阶，绿蓝紫金」+「民兵/金矿也跟普通卡一样显绿框」。
+ */
+test('卡牌道具底框按卡牌品阶取（绿/蓝/紫/金），普通材料仍按道具品质', async () => {
+    const requested: number[] = [];
+    const rows: Record<string, unknown[]> = {
+        roleProperty: [],
+        item: [
+            { resId: 18001, name: '民兵', quality: 1 },
+            { resId: 18002, name: '金矿', quality: 1 },
+            { resId: 18003, name: '豌豆游侠碎片', quality: 1 },
+            { resId: 18009, name: '吞噬大嘴花碎片', quality: 4 },
+            { resId: 18022, name: '三叶小丑碎片', quality: 2 },
+            //  升星材料，quality 5 是道具品质档（金），不在卡牌口径里。
+            { resId: 18000, name: '英雄·通用', quality: 5 },
+            //  脏数据/特殊卡：品阶填到 5、7 也只能是金，不许串到 06 红 / 07 蓝紫。
+            { resId: 18004, name: '巨力坚果碎片', quality: 5 },
+            { resId: 18005, name: '火焰树妖碎片', quality: 7 },
+            { resId: 16014, name: '强化石', quality: 1 },
+        ],
+        //  只有「可升级卡牌的碎片」在表里；民兵/金矿没有升级曲线，靠 `BASE_CARD_ITEM_IDS` 认。
+        cardLevelUp: [
+            { id: 68001, costCardID: 18003 },
+            { id: 68002, costCardID: 18004 },
+            { id: 68003, costCardID: 18005 },
+            { id: 68007, costCardID: 18009 },
+            { id: 68020, costCardID: 18022 },
+        ],
+    };
+    const ViewClass = loadClass({
+        '../../framework/ref/RefUtil': {
+            RefUtil: { instance: { getRefAllAsync: async (table: string) => rows[table] ?? [] } },
+        },
+        '../itemdetail/ItemDetailArtLoader': {
+            itemQualityFrameRelPath: (quality: number) => {
+                requested.push(quality);
+                return `image/common/cu_quality_0${quality}`;
+            },
+        },
+    });
+    const cases: ReadonlyArray<readonly [number, number]> = [
+        [18003, 2], // 普通卡碎片：品阶 1 → 02 绿
+        [18022, 3], // 稀有卡碎片：品阶 2 → 03 蓝
+        [18009, 5], // 传说卡碎片：品阶 4 → 05 金（不是 04 紫）
+        [18004, 5], // 品阶 5（脏数据）：封顶在 05 金，不许变 06 红
+        [18005, 5], // 品阶 7：同样封顶在 05 金
+        [18001, 2], // 民兵：基础卡，同样显绿框
+        [18002, 2], // 金矿：基础卡，同样显绿框
+        [18000, 5], // 英雄·通用：升星材料，quality 5 原样（不抬成 06 红）
+        [16014, 1], // 普通材料保持 01
+    ];
+    for (const [resId, expected] of cases) {
+        const view = new ViewClass();
+        Object.assign(view, {
+            isValid: true, node: { active: true },
+            frame: { spriteFrame: null }, icon: { spriteFrame: null, node: { active: true } },
+            num: { string: '' }, rate: { string: '', node: { active: false } },
+        });
+        view.render({ resId, amount: 1 });
+        await flushFrames();
+        assert.equal(requested[requested.length - 1], expected, `resId=${resId} 的底框档位`);
+        view.onDestroy();
+    }
+});
+
+test('奖励格读不到 cardLevelUp 时不炸，底框退回道具品质口径', async () => {
+    const requested: number[] = [];
+    const ViewClass = loadClass({
+        '../../framework/ref/RefUtil': {
+            RefUtil: { instance: { getRefAllAsync: async (table: string) => {
+                if (table === 'cardLevelUp') throw new Error('表缺失');
+                if (table === 'item') return [{ resId: 18009, quality: 4 }];
+                return [];
+            } } },
+        },
+        '../itemdetail/ItemDetailArtLoader': {
+            itemQualityFrameRelPath: (quality: number) => { requested.push(quality); return `image/common/cu_quality_0${quality}`; },
+        },
+    });
+    const view = new ViewClass();
+    Object.assign(view, {
+        isValid: true, node: { active: true },
+        frame: { spriteFrame: null }, icon: { spriteFrame: null, node: { active: true } },
+        num: { string: '' }, rate: { string: '', node: { active: false } },
+    });
+    view.render({ resId: 18009, amount: 1 });
+    await flushFrames();
+    assert.equal(requested[0], 4, '缺表只降级配色，不能让奖励格空着');
+    view.onDestroy();
 });
 
 test('公共奖励格使用控制器资源，无需主界面或组合根单独注入', () => {

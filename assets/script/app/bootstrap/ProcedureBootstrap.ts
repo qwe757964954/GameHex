@@ -90,8 +90,8 @@ export class ProcedureBootstrap extends Component {
         // 「获得奖励」弹窗出口 → app 层的 `ShowRewardPage`。放在组合根的原因同 `showTip`
         // （framework 不反向依赖 app）。`ShowRewardPage` 内部只走 `PopupManager`，没有前置依赖；
         // 没有 `PopupManager` 时 `PopupBase.open` 会打一条 error 并返 null，不会抛。
-        FW.showReward = (goods, isGold) => {
-            void ShowRewardPage.open({ userData: { goods, isGold } });
+        FW.showReward = (goods, isGold, soundKey) => {
+            void ShowRewardPage.open({ userData: { goods, isGold, soundKey } });
         };
         // 对齐 2.0 `ModelStore.enter()`：支付请求/中心服开单本身不代表发货，必须等游戏服
         // `CmdRechargeBroMsg`。首充、灵玉直充等所有充值入口共用这一条全局结算出口。

@@ -750,8 +750,9 @@ test('D3b｜首帧不许闪全尺寸：入场起手态必须在 onOpen 的第一
         '起手态必须早于任何 await —— 否则加载期间弹窗先露一帧全尺寸，再缩回去重播 ⇒ 闪/跳');
 });
 
-test('D4｜音效走 `FW.playSound`，key 来自 `showRewardSoundKey(isGold)`', () => {
-    assert.ok(/FW\.playSound\(showRewardSoundKey\(this\.isGold\)\)/.test(PAGE_SRC));
+test('D4｜奖励展示时播放指定音效，缺省按 isGold 选音效', () => {
+    assert.ok(/this\.present\(userData\?\.soundKey\)/.test(PAGE_SRC));
+    assert.ok(/FW\.playSound\(soundKey \?\? showRewardSoundKey\(this\.isGold\)\)/.test(PAGE_SRC));
     assert.ok(/import \{ FW \}/.test(PAGE_SRC));
 });
 
@@ -788,7 +789,7 @@ test('D6｜RewardGrid 使用四列虚拟列表，复用单个模板', () => {
 
 test('D7｜首次铺列表等到 start 后，打开时回到顶部', () => {
     const waitAt = PAGE_CODE.indexOf('await this.nextPopupFrame()');
-    const presentAt = PAGE_CODE.indexOf('this.present()');
+    const presentAt = PAGE_CODE.indexOf('this.present(userData?.soundKey)');
     assert.ok(waitAt >= 0 && waitAt < presentAt);
     assert.ok(!PAGE_CODE.slice(waitAt, presentAt).includes('loadRevision'),
         '单次打开不需要 revision，等待一帧后直接铺');
@@ -994,20 +995,19 @@ test('E2｜音效 key 必须在 `audioConfig.json` 里，且 mp3 真在磁盘上
 // ============================================================
 
 test('F1｜`FW.showReward` 是可注入出口，`FW.ShowReward` 只做转交（框架层不反向依赖 app）', () => {
-    assert.ok(/static showReward: \(goods: CmdGoods\[\], isGold: boolean\) => void = \(\) => \{ \};/.test(FW_SRC),
+    assert.ok(/static showReward: \(goods: CmdGoods\[\], isGold: boolean, soundKey\?: string\) => void = \(\) => \{ \};/.test(FW_SRC),
         '缺可注入的 FW.showReward 空实现');
     const body = FW_SRC.slice(FW_SRC.indexOf('static ShowReward('));
-    assert.ok(/FW\.showReward\(tlCmdGoods \?\? \[\], !!param\?\.isGold\)/.test(body), 'ShowReward 应转交并归一化参数');
-    // 老端 `ModelRole` L599 传的就是 `{ isGold }`
-    assert.ok(/param\?: \{ isGold\?: boolean \}/.test(body), 'param 形状应为 { isGold? }');
+    assert.ok(/FW\.showReward\(tlCmdGoods \?\? \[\], !!param\?\.isGold, param\?\.soundKey\)/.test(body), 'ShowReward 应转交并归一化参数');
+    assert.ok(/param\?: \{ isGold\?: boolean; soundKey\?: string \}/.test(body), '音效参数应保持可选');
     // 框架层不许 import app 层
     assert.ok(!/from '\.\.\/app\//.test(FW_SRC), 'framework 层不得反向 import app');
 });
 
 test('F2｜组合根把出口接到 `ShowRewardPage.open`', () => {
     assert.ok(/import \{ ShowRewardPage \} from '\.\.\/showReward\/ShowRewardPage';/.test(BOOTSTRAP_SRC));
-    assert.ok(/FW\.showReward = \(goods, isGold\) =>/.test(BOOTSTRAP_SRC), '组合根要注入实现');
-    assert.ok(/ShowRewardPage\.open\(\{ userData: \{ goods, isGold \} \}\)/.test(BOOTSTRAP_SRC));
+    assert.ok(/FW\.showReward = \(goods, isGold, soundKey\) =>/.test(BOOTSTRAP_SRC), '组合根要注入实现');
+    assert.ok(/ShowRewardPage\.open\(\{ userData: \{ goods, isGold, soundKey \} \}\)/.test(BOOTSTRAP_SRC));
     // 注入点必须与 showTip / playSound 同处（都在 onLoad 里、且早于导航）
     const onLoadAt = BOOTSTRAP_SRC.indexOf('onLoad(): void {');
     const bindAt = BOOTSTRAP_SRC.indexOf('this.configurePresentation();');

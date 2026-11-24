@@ -1,10 +1,12 @@
 import { RefUtil } from '../../../framework/ref/RefUtil';
 import {
     buildTerritoryCampaign,
+    readTerritoryGuardMonsters,
     TerritoryCardRow,
     TerritoryCampaignStage,
     TerritoryDefenceWaveRow,
     TerritoryGameConfigRow,
+    TerritoryGuardMonster,
     TerritoryLevelRow,
     TerritoryNpcTeamRow,
     TerritoryResourceRow,
@@ -44,6 +46,13 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
      * 面板的数值全部从这里读 —— 别再往  里补猜的常量。
      */
     monsterBoxGroups: ReadonlyMap<number, ITerritoryMonsterBoxGroup>;
+    /**
+     * 关卡 id → 守护怪（`levelInfo.levelMonsterGroup` → `monsterCard.headIcon`）。
+     *
+     * 巡逻宝箱面板的守护怪头像读它：`monsterBox.monsterBoxLevel` 定位关卡再取前几只。
+     * 全表建表（不按章过滤）—— 宝箱组的等级行可能指向本章之外的关卡 id。
+     */
+    monsterGroupByLevelId: ReadonlyMap<number, readonly TerritoryGuardMonster[]>;
 }> {
     const [levels, monsters, teams, cards, defenceWaves, items, roleProperties, gameConfig, monsterBoxes] = await Promise.all([
         RefUtil.instance.getRefAllAsync('levelInfo'),
@@ -59,10 +68,12 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
     ]);
     const resourceRows = asRows<TerritoryResourceRow>(items).concat(asRows<TerritoryResourceRow>(roleProperties));
     const monsterBoxGroups = readTerritoryMonsterBoxGroups(monsterBoxes);
+    const levelRows = asRows<TerritoryLevelRow>(levels);
+    const monsterRows = asRows<TerritoryCardRow>(monsters);
     return {
         ...buildTerritoryCampaign(
-            asRows<TerritoryLevelRow>(levels),
-            asRows<TerritoryCardRow>(monsters),
+            levelRows,
+            monsterRows,
             asRows<TerritoryNpcTeamRow>(teams),
             asRows<TerritoryCardRow>(cards),
             chapterId,
@@ -73,6 +84,7 @@ export async function loadTerritoryCampaign(chapterId: number): Promise<{
         levelAutoStart: readTerritoryLevelAutoStart(asRows<TerritoryGameConfigRow>(gameConfig)),
         patrolLevelIdByBattleId: patrolLevelIdMapOf(monsterBoxGroups),
         monsterBoxGroups,
+        monsterGroupByLevelId: readTerritoryGuardMonsters(levelRows, monsterRows),
     };
 }
 

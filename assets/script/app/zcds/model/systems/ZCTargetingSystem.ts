@@ -105,14 +105,21 @@ export class ZCTargetingSystem {
         let bestId = Infinity;
         let bestDistance = Infinity;
         let bestCurrent = false;
-        if (unit.hatredUnitId !== null && context.now <= unit.hatredUntil) {
-            const hater = context.unitById(unit.hatredUnitId);
-            if (hater && hater.id !== unit.id && hater.battleState !== 'dead' && hater.hp > 0 && hater.owner !== unit.owner
-                && (definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)
-                && (!context.canTargetUnit || context.canTargetUnit(unit, hater))) {
-                bestDistance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, ACQUIRE_POSITION))
-                    * 0.25 * (context.baseDefinition(hater.unitId).valueFactor ?? 1);
-                bestKind = 'unit'; bestId = hater.id; bestCurrent = hater.id === unit.targetUnitId;
+        if (unit.hatredUnitId !== null) {
+            if (context.now > unit.hatredUntil) {
+                unit.hatredUnitId = null;
+                unit.hatredUntil = 0;
+            } else {
+                const hater = context.unitById(unit.hatredUnitId);
+                if (!hater || hater.id === unit.id || hater.battleState === 'dead' || hater.hp <= 0 || hater.owner === unit.owner) {
+                    unit.hatredUnitId = null;
+                    unit.hatredUntil = 0;
+                } else if ((definition.canAttackAir || !context.baseDefinition(hater.unitId).flying)
+                    && (!context.canTargetUnit || context.canTargetUnit(unit, hater))) {
+                    bestDistance = targetDistanceSquared(fromX, fromY, context.unitPosition(hater, ACQUIRE_POSITION))
+                        * 0.25 * (context.baseDefinition(hater.unitId).valueFactor ?? 1);
+                    bestKind = 'unit'; bestId = hater.id; bestCurrent = hater.id === unit.targetUnitId;
+                }
             }
         }
         if (context.unitsOf) {
@@ -163,7 +170,7 @@ export class ZCTargetingSystem {
             }
             const distance = targetDistanceSquared(fromX, fromY, context.hexPosition(hex.id));
             const current = kind === 'wall' ? unit.targetWallHexId === hex.id : unit.targetBuildingHexId === hex.id;
-            if (distance < bestDistance || (distance === bestDistance && (current && !bestCurrent || current === bestCurrent && hex.id < bestId))) {
+            if (distance < bestDistance || (distance === bestDistance && (current && !bestCurrent || current === bestCurrent && (bestKind === kind ? hex.id < bestId : false)))) {
                 bestDistance = distance; bestKind = kind; bestId = hex.id; bestCurrent = current;
             }
         }

@@ -118,7 +118,7 @@ test('胜负和平局自动结算一次，返回使用组合层导航端口', as
         const h = runtimeFixture();
         try {
             h.forceStatus(status);
-            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+            for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
             await flushRuntime();
             assert.equal(h.requests.length, 1);
             assert.equal((h.pages[0] as { victory: boolean }).victory, status === 'victory');
@@ -167,7 +167,7 @@ test('结算页「查看完整队伍」用冻结的席位统计弹面板，重�
     const h = runtimeFixture();
     try {
         h.forceStatus('victory');
-        for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { owner: h.view, dt: 0.1 });
+        for (let i = 0; i < 3; i++) EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 }, h.view);
         await flushRuntime();
         // 结算请求带上本局统计（MVP 卡与「查看完整队伍」共用这一份）
         const request = h.requests[0];

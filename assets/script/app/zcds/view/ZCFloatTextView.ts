@@ -22,6 +22,13 @@ const { ccclass, property } = _decorator;
  * 普通飘字是「快进慢出」：前 entranceProgress 完成入场（位移 + 缩放），之后线性淡出并带少量同向漂移，
  * 曲线真源在 ZCGameViewUtil.floatTextEntrance / floatTextFade / floatTextDrift。
  *
+ * 伤害类那条的**纵向方向分两档**（2026-11-23 用户：「玩家方造成的伤害数字是往上飞的，
+ * 运动路径和现在的相反，受到伤害的数字运动路径保持不变」）：
+ * · 我方打出去（`dealtByPlayer`）—— 起点在目标头顶，**向上飞**：
+ *   `y = headY + row × 行距 + (入场位移 + 收尾漂移)`；
+ * · 我方挨打 / 无标记 —— 起点同上，**原路向下坠**：`y = headY + row × 行距 − (入场位移 + 收尾漂移)`。
+ * 两条**只有符号相反**，起点、距离、时序、轨道散落、弹出缩放全部共用 —— 判据见 `damageTravelSign`。
+ *
  * 金币是例外，而且分两条完全相反的路（`ZCFloatTextKind` 已按来处拆开）：
  * · `gold`（击杀 / 拆建筑的掉落）—— `floatTextGoldDrop`：无数字，硬币从角色中心上方落到地面、
  * 停一下、原地缩小消失；不使用 riseDistance / driftDistance / popScale。
@@ -41,8 +48,9 @@ export class ZCFloatTextView extends Component {
      * 这两个是提示语义（少受伤 / 处决），并进白字会丢掉信息。
      *
      * **前缀（暴击 / 克制 / 抵抗 / 秒杀）只挂在「我方打出去」的那条上**（`dealtByPlayer`）：
-     * 我方被扣血 —— 红字负号那档、以及被 NPC 打的白字那档 —— 只有「负号 + 血量」。
-     * 所以取色只看 kind / `takenFromPlayer`，前缀另看 `dealtByPlayer`，两者不能互相替代。
+     * 我方被扣血 —— 红字负号那档、以及被 NPC 打的白字那档 —— 只有「负号 + 血量」，
+     * 而且**字号也是默认号**（`takenFromPlayer` 压平 kind 的放大，2026-11-23 用户）。
+     * 所以取色只看 kind / `takenFromPlayer`，前缀与字号另看 `dealtByPlayer`，两者不能互相替代。
      */
     private static readonly NORMAL_DAMAGE_COLOR = new Color(255, 255, 255, 255);
     private static readonly CRITICAL_COLOR = ZCFloatTextView.NORMAL_DAMAGE_COLOR;
@@ -151,6 +159,27 @@ export class ZCFloatTextView extends Component {
         }
     }
 
+    /**
+     * 伤害飘字的纵向方向：`+1` 向上飞 / `−1` 向下坠（2026-11-23 用户）。
+     *
+     * > 「战斗中，玩家方造成的伤害数字是往上飞的，运动路径和现在的相反，
+     * >  受到伤害的数字运动路径保持不变」
+     *
+     * 判据直接用模型已经算好的两个正交标记，**视图不拿 `owner` 反推**：PVP 四人局里另外三个
+     * 席位也是真人，按 owner 判会把「我方打出去」和「我方挨打」两档都判错
+     * （真源是 `ZCMatchConfig.npcOwners`，见 ZCGameTypes 里两个字段的注释）：
+     * · `dealtByPlayer` ⇒ 我方打出的一击，向上飞；
+     * · `takenFromPlayer` ⇒ 我方掉的血，**原样向下**（红字负号那档一个像素都不动）。
+     * 两个同时出现时以 `takenFromPlayer` 为准 —— 挨打那条的样式是「我掉了多少血」，
+     * 方向跟着它走才和颜色 / 字号 / 负号是同一档语义。
+     *
+     * 无标记（`heal` / `miss` / 测试里的裸伤害文本）保持旧行为：向下坠。
+     * 运行时不会出现「无标记的伤害」—— 非玩家互打模型侧直接不推飘字。
+     */
+    private static damageTravelSign(text: Readonly<ZCFloatText>): 1 | -1 {
+        return text.dealtByPlayer === true && text.takenFromPlayer !== true ? 1 : -1;
+    }
+
     @property({ type: Label, group: '节点引用', tooltip: 'Text：显示数值的 Label（必填）' })
     textLabel: Label = null!;
 
@@ -180,7 +209,14 @@ export class ZCFloatTextView extends Component {
     @property({ group: '数值表现', tooltip: '伤害数字与人物头顶之间保留的距离' })
     damageHeadPadding = 6;
 
-    @property({ group: '数值表现', tooltip: '伤害泪滴向下坠落的总距离' })
+    /**
+     * 伤害数字的纵向位移距离 —— **两档共用同一个距离、只有方向相反**（2026-11-23 用户
+     * 「运动路径和现在的相反」）：我方打出去的往上飞这么远，挨打的往下坠这么远。
+     *
+     * 名字停在 Drop 是因为 prefab 按字段名绑值（改名会丢序列化值、静默退回缺省），
+     * 语义已经是「纵向位移」；要两档走不同距离再拆一个新字段，别改这个。
+     */
+    @property({ group: '数值表现', tooltip: '伤害数字的纵向位移距离：我方造成向上飞 / 挨打向下坠（同一距离、方向相反）' })
     damageDropDistance = 100;
 
     @property({ group: '数值表现', tooltip: '同位置连续伤害的横向轨道间距' })
@@ -197,7 +233,7 @@ export class ZCFloatTextView extends Component {
     entranceProgress = FLOAT_TEXT_ENTRANCE_PROGRESS;
 
     /** 慢出段收尾漂移距离：沿入场方向再走一点，避免静止淡出的死板感。*/
-    @property({ group: '数值表现', tooltip: '慢出段的收尾漂移距离（像素）：伤害继续下沉 / 金币继续上飘' })
+    @property({ group: '数值表现', tooltip: '慢出段的收尾漂移距离（像素）：随该条飘字的方向 —— 我方造成继续上浮 / 挨打继续下沉' })
     driftDistance = FLOAT_TEXT_DRIFT_DISTANCE;
 
     /** 复用的取色缓存：Label.color 的 setter 会拷贝，同一条飘字不会互相串色。*/
@@ -222,9 +258,14 @@ export class ZCFloatTextView extends Component {
 
         const parts = ZCFloatTextView.battleText(text);
         this.textLabel.string = parts.value;
-        const fontSize = text.kind === 'critical' ? ZCFloatTextView.CRITICAL_FONT_SIZE
-            : text.kind === 'execute' ? ZCFloatTextView.EXECUTE_FONT_SIZE
-                : ZCFloatTextView.DEFAULT_FONT_SIZE;
+        // 我方被扣血只有一种样式（2026-11-23 用户）：红字 + 负号 + **默认字号**。
+        // 暴击 1.7 倍 / 秒杀 34 号的放大在这一档一并压平 —— 那条飘字要说的是「我掉了多少血」，
+        // 放大数字会让人误读成「我方打出暴击」，与「暴击」前缀是同一个战果语义，
+        // 所以字号和前缀一起只挂在 `dealtByPlayer` 那一侧（见 battleText 的 mark）。
+        const fontSize = text.takenFromPlayer ? ZCFloatTextView.DEFAULT_FONT_SIZE
+            : text.kind === 'critical' ? ZCFloatTextView.CRITICAL_FONT_SIZE
+                : text.kind === 'execute' ? ZCFloatTextView.EXECUTE_FONT_SIZE
+                    : ZCFloatTextView.DEFAULT_FONT_SIZE;
         this.textLabel.fontSize = fontSize;
         // 金币两种各走自己的曲线（掉落 / 产金，方向相反），其余走「快进慢出」，互不干扰。
         const gold = text.kind === 'gold' ? floatTextGoldDrop(progress) : null;
@@ -270,16 +311,19 @@ export class ZCFloatTextView extends Component {
             const sequence = Math.max(0, text.id - 1);
             const lane = ZCFloatTextView.DAMAGE_LANES[sequence % ZCFloatTextView.DAMAGE_LANES.length];
             const row = Math.floor(sequence / ZCFloatTextView.DAMAGE_LANES.length) % 3;
-            // 散落 / 下坠 / 摇摆都用入场进度，位移在入场段内走完（用 progress 会飘满整条时长）。
+            // 散落 / 纵向位移 / 摇摆都用入场进度，位移在入场段内走完（用 progress 会飘满整条时长）。
             const spreadProgress = 0.55 + 0.45 * enter;
             const sway = Math.sin(enter * Math.PI) * (lane === 0 ? (row - 1) * ZCFloatTextView.DAMAGE_ROW_SWAY_CENTER : Math.sign(lane) * ZCFloatTextView.DAMAGE_ROW_SWAY_OFFSET);
             const x = lane * this.damageLaneSpacing * spreadProgress + sway;
             // 98×98 视觉中心锚定，头顶 = 中心 +49px，再留少量呼吸空间。
             const headY = this.damageTargetSize * 0.5 + this.damageHeadPadding;
-            // 慢出段沿同一方向（继续下沉）做惯性收尾。
-            const y = headY + row * ZCFloatTextView.DAMAGE_ROW_STEP
-                - enter * (this.damageDropDistance + row * ZCFloatTextView.DAMAGE_ROW_DROP_EXTRA)
-                - drift * this.driftDistance;
+            // 纵向两档（2026-11-23 用户）：我方打出去 ⇒ 向上飞；挨打 ⇒ 保持向下坠。
+            // 起点、距离、时序、轨道、缩放全部共用，只有这个符号相反 —— 见 damageTravelSign。
+            const dir = ZCFloatTextView.damageTravelSign(text);
+            // 入场段走完位移、慢出段沿同一方向做惯性收尾（两段同向，不会互相打架）。
+            const travel = enter * (this.damageDropDistance + row * ZCFloatTextView.DAMAGE_ROW_DROP_EXTRA)
+                + drift * this.driftDistance;
+            const y = headY + row * ZCFloatTextView.DAMAGE_ROW_STEP + dir * travel;
             this.textLabel.node.setPosition(x, y, 0);
             // 起手弹出：入场段内从 popScale 收回 1，之后保持 1。
             const scale = 1 + (this.popScale - 1) * (1 - enter);
@@ -356,7 +400,8 @@ export class ZCFloatTextView extends Component {
 
     /** 按 kind 取色 + 尾段淡出，返回本帧 alpha 系数（0~1）供金币图标同步。*/
     private applyColor(text: Readonly<ZCFloatText>, progress: number, fadeOverride: number | null = null): number {
-        // 「玩家卡牌被别的玩家扣血」优先于 kind：暴击 / 克制在这一档同样是红字（只是字号不同）。
+        // 「玩家卡牌被别的玩家扣血」优先于 kind：暴击 / 克制在这一档同样是红字，
+        // 而且字号也一样（2026-11-23 起 takenFromPlayer 会把 kind 的字号一起压平）。
         const base = text.takenFromPlayer
             ? ZCFloatTextView.PLAYER_LOSS_COLOR
             : ZCFloatTextView.FLOAT_TEXT_COLOR_BY_KIND[text.kind];

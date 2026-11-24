@@ -29,7 +29,7 @@ import { assetPath } from './helpers/asset-paths';
 /**
  * 第 14 批 · 「近身型主动」两条车道（2026-11-17）。
  *
- *   · 机甲菇（68015）「菌丝绞杀」101503 —— `fan_slow`：
+ *   · 机甲菇（68015）「三尖两刃」101503 —— `fan_slow`：
  *     130/160/200% @身前 120° 扇形（半径表值 150）、最多 4/5/6 人、减速 40/45/50%·2s；冷却 14/13/12。
  *   · 分裂菇（68014）「菌丝突刺」101403 —— `single_strike`：
  *     150/180/220% + 眩晕 1/1.5/2s；III 级命中后攻速 +30%·4s；冷却 12/12/11。
@@ -37,7 +37,7 @@ import { assetPath } from './helpers/asset-paths';
  * 这一批有五个「照设计案 P 列字面配就会静默出错 / 做错」的点，正是本用例要钉住的：
  *
  *  1. **参数键必须带 `fan` / `single` 前缀**。68015 的袋子里已经有 101501 的 `splashRadius`
- *     与 101504 的 `burstRadius` ⇒ 裸 `radius` 会同时改掉普攻溅射与爆发半径，不报错。
+ *     与 101504 的 `ray*`（第 43 批起该链换成射线集束）⇒ 裸 `radius` 会同时改掉普攻溅射与射线长度，不报错。
  *  2. **扇形没有人数上限就错**。设计写「最多 N 名」，副轨那条 `castFanSkill` 是「扇形内全打」，
  *     直接复用它等于把人数上限这条设计约束丢掉。
  *  3. **眩晕必须是硬控且时长跟着档位走**。`pvpStatus` 里那几条 `stun_1/1_5/2` 只是值巧合相同；
@@ -123,7 +123,7 @@ const SINGLE_PARAMS: Array<Record<string, number>> = [
     { singleCooldown: 11, singleDamageRate: 2.2, singleSearchRadius: 300, singleStopDistance: 30, singleHitRadius: 40, singleStunSeconds: 2, singleHastePct: 30, singleHasteSeconds: 4 },
 ];
 
-test('101503 菌丝绞杀：三档倍数/人数/减速/冷却与设计案一致', () => {
+test('101503 三尖两刃：三档倍数/人数/减速/冷却与设计案一致', () => {
     prepare();
     const rows = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101503)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
@@ -175,17 +175,20 @@ test('参数袋不许出现裸键（会串到普攻 / 爆发车道）', () => {
     }
 });
 
-test('68015 既有两条车道没被本批带跑（普攻溅射 38/46/55、爆发半径 150）', () => {
+test('68015 既有两条车道没被本批带跑（普攻溅射 38/46/55、射线半长 120）', () => {
     prepare();
     const splash = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101501)
         .sort((a, b) => Number(a.modifierId) - Number(b.modifierId));
     assert.deepEqual(
         splash.map((row) => (JSON.parse(String(row.skillParamJson)) as Record<string, number>).splashRadius),
         [38, 46, 55]);
-    const burst = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101504);
+    //  101504 第 43 批从菌毯爆发换成射线集束（`burstRadius` ⇒ `rayHalfLength`）。
+    const ray = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101504);
     assert.deepEqual(
-        [...new Set(burst.map((row) => (JSON.parse(String(row.skillParamJson)) as Record<string, number>).burstRadius))],
-        [150]);
+        [...new Set(ray.map((row) => (JSON.parse(String(row.skillParamJson)) as Record<string, number>).rayHalfLength))],
+        [120], '101504 的射线半长被带跑了');
+    assert.deepEqual(
+        [...new Set(ray.map((row) => row.behaviorKey))], ['ray_beam'], '101504 车道不是射线集束');
 });
 
 test('两份产物逐格一致：pvpSkillPlan / armySkillLevelUp', () => {
@@ -214,7 +217,7 @@ test('K 表（armySkillLevelUp）：名字/描述/修改器号三档都指向新
     prepare();
     const rows = readRows('armySkillLevelUp');
     const expectations: Array<[number, string, number[]]> = [
-        [101503, '菌丝绞杀', [94015031, 94015032, 94015033]],
+        [101503, '三尖两刃', [94015031, 94015032, 94015033]],
         [101403, '菌丝突刺', [94014031, 94014032, 94014033]],
     ];
     for (const [chain, name, modifierIds] of expectations) {
@@ -358,16 +361,17 @@ function fanContext(
     return { context, hit, damaged };
 }
 
-test('菌丝绞杀：只打扇形里的人，且最多 fanMaxTargets 个', () => {
+test('三尖两刃：只打扇形里的人，且最多 fanMaxTargets 个', () => {
     prepare();
     const caster = makeUnit(1, ZCOwner.Player, 0);
     //  150 表值 × 0.3 = 45 世界 px；扇形朝向独立选中的最近敌人。
+    //  扇形半角 60°（`fanAngle` 120）：id 5 在 −58° 勉强进圈，id 6 在 21.8° 但最远（32.3）。
     const near1 = makeUnit(2, ZCOwner.Enemy, 22);
     const near2 = makeUnit(3, ZCOwner.Enemy, 14, 6);
     const near3 = makeUnit(4, ZCOwner.Enemy, 26, -8);
     const near4 = makeUnit(5, ZCOwner.Enemy, 10, -16);
     const near5 = makeUnit(6, ZCOwner.Enemy, 30, 12);
-    //  扇形外：背后（180°）与侧后方（>60°）。
+    //  扇形外：背后（180°）与正侧方（90°）。
     const behind = makeUnit(7, ZCOwner.Enemy, -30);
     const side = makeUnit(8, ZCOwner.Enemy, 0, 40);
     const units = [caster, near1, near2, near3, near4, near5, behind, side];
@@ -376,13 +380,14 @@ test('菌丝绞杀：只打扇形里的人，且最多 fanMaxTargets 个', () =>
     const slowId = fanSweepSlowStatusId(40, 2);
 
     assert.equal(ZCAttackResolutionSystem.castFanSweep(state, caster, context, slowId), true);
-    //  L1 上限 4：独立目标方向的扇形里只打最近的 4 个，背后与侧面那两个一个都不许中。
+    //  L1 上限 4：扇形里 5 个（id 2/3/4/5/6），按距离丢掉最远的 id 6；
+    //  背后与正侧方那两个一个都不许中。
     assert.equal(hit.length, 4, '「最多 4 名敌人」是设计约束，扇形内全打就错了');
-    assert.deepEqual(hit.map((item) => item.id).sort((a, b) => a - b), [2, 3, 4, 6]);
+    assert.deepEqual(hit.map((item) => item.id).sort((a, b) => a - b), [2, 3, 4, 5]);
     for (const item of hit) assert.equal(item.statusId, slowId, '命中必须挂减速');
 });
 
-test('菌丝绞杀：扇形方向独立选择最近合法目标，同距按 id', () => {
+test('三尖两刃：扇形方向独立选择最近合法目标，同距按 id', () => {
     prepare();
     const caster = makeUnit(1, ZCOwner.Player, 0);
     caster.facingRadians = Math.PI;                    // 面朝 −x
@@ -397,7 +402,7 @@ test('菌丝绞杀：扇形方向独立选择最近合法目标，同距按 id',
     assert.equal(hit.length, 0, '不传减速 id ⇒ 一个状态都不许挂');
 });
 
-test('菌丝绞杀：扇形里没人 / 参数不全 ⇒ 返回 false，且不推表现事件', () => {
+test('三尖两刃：扇形里没人 / 参数不全 ⇒ 返回 false，且不推表现事件', () => {
     prepare();
     const caster = makeUnit(1, ZCOwner.Player, 0);
     const behind = makeUnit(2, ZCOwner.Enemy, -100);
@@ -415,7 +420,7 @@ test('菌丝绞杀：扇形里没人 / 参数不全 ⇒ 返回 false，且不推
         '缺 fanDamageRate ⇒ 不出手');
 });
 
-test('菌丝绞杀的爆点铺在扇形里（3 发、尺寸按半径反算）', () => {
+test('三尖两刃的爆点铺在扇形里（3 发、尺寸按半径反算）', () => {
     prepare();
     const caster = makeUnit(1, ZCOwner.Player, 0);
     const enemy = makeUnit(2, ZCOwner.Enemy, 22);
@@ -474,7 +479,7 @@ function harness(params: Record<string, number>, behaviorKey: string, chain: num
     return { caster, state, context, registered, applied, struck };
 }
 
-test('菌丝绞杀：扇形半径内没人 ⇒ 待触发不消费 CD，目标进圈当帧补放', () => {
+test('三尖两刃：扇形半径内没人 ⇒ 待触发不消费 CD，目标进圈当帧补放', () => {
     prepare();
     const test1 = harness(FAN_PARAMS[2], 'fan_slow', 101503);
     let calls = 0;
@@ -501,7 +506,7 @@ test('菌丝绞杀：扇形半径内没人 ⇒ 待触发不消费 CD，目标进
     assert.equal(test1.caster.fanReadyAt, 24, '放出去才推到下一个 CD');
 });
 
-test('菌丝绞杀：首次只挂 CD、到点才甩；减速状态按档位签名注册', () => {
+test('三尖两刃：首次只挂 CD、到点才甩；减速状态按档位签名注册', () => {
     prepare();
     const test1 = harness(FAN_PARAMS[2], 'fan_slow', 101503);
     let calls = 0;

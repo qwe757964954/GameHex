@@ -13,7 +13,7 @@
 | `assets/bundles/main-pages/ui/card/LineupSlot.prefab` | 站台 151×204：`Stage` 151×63、`Disc` 117×31、`Hero` 256×256 scale 0.65、`Meta` 下 `ClassBadge` 36×36 + `LevelLabel`（22px）。 |
 | `assets/bundles/main-pages/ui/card/CardLineupCard.prefab` | 卡条目 169×230：`Face` 160×223、`HeroShadow`、`Hero` scale 0.57、`ClassBadge` 40×40、`OnField`、`LevelPlate`、`Progress`、`UpgradeArrow`、`LockVeil`、`Lock`。 |
 | `assets/bundles/main-pages/ui/card/CardLineupBond.prefab` | 羁绊条目 40×40：`Icon` 40×40 + `CountLabel`（20px，右伸）。 |
-| `assets/script/app/card/CardArtProvider.ts` | 新增阵容页固定图映射：站台光效按职业、职业角标、统计条职业/阵营图标、卡面品质框；`loadLineupSlot` / `loadLineupCard` / `loadTallyFrames` 切新图。布阵页取图改走表内 `badge`（新 `yx_zhiye_*`），立绘统一走 `headIcon`。 |
+| `assets/script/app/card/CardArtProvider.ts` | 新增阵容页固定图映射：站台光圈按**品级**（2026-11-23 由「按职业」改回，见 §7）、职业角标、统计条职业/阵营图标、卡面品质框；`loadLineupSlot` / `loadLineupCard` / `loadTallyFrames` 切新图。布阵页取图改走表内 `badge`（新 `yx_zhiye_*`），立绘统一走 `headIcon`。 |
 | `assets/script/app/card/CardLineupCard.ts` | 新增 `lockVeil` / `upgradeArrow` 绑定；未解锁改为 `yx_mask` 遮罩显隐 + 锁标，不再用 `Sprite.color` 乘算压暗；碎片够且未满级显示可升级箭头。 |
 | `assets/script/app/card/CardLineupTexts.ts` | `onField` 文案「已出战！」→「出战中」。 |
 | `assets/bundles/main-pages/image/card/common_img_kp_01..04.png` | 用品质框 `yx_kp_01..04` 覆盖（160×223），UUID 不变，卡面绑定不变。 |
@@ -44,7 +44,7 @@
 | `icon_lock.png` 29×40 | 同名 | `2d2f47c1-e82c-4725-b864-06b1b57171f2@f9941` | `CardLineupCard/Lock` |
 | `icon_lock_02.png` 28×36 | 同名 | `19427a86-38ac-4153-81e6-dee5c4d7bc59@f9941` | `TabBar/Lock` |
 | `yx_img_taizi.png` 151×63 | 同名 | `5729b272-2fb2-490b-8721-51593fde7dbe@f9941` | `LineupSlot/Stage` |
-| `yx_img_guang_01..04.png` 117×31 | 同名 | `bc1fe86e…` / `e4a93a8a…` / `4a20aadb…` / `7d841fd0…` | `LineupSlot/Disc`（按职业取图） |
+| `yx_img_guang_01..04.png` 117×31 | 同名 | `bc1fe86e…` / `e4a93a8a…` / `4a20aadb…` / `7d841fd0…` | `LineupSlot/Disc`（**按品级**取图，见 §7） |
 | `yx_img_yinying.png` 107×17 | 同名 | `855b2400-6030-441e-996e-c5b3c0783627@f9941` | `CardLineupCard/HeroShadow` |
 | `yx_mask.png` 167×227 | 同名 | `10ed9e5f-3f88-4185-8549-86afd8f06e74@f9941` | `CardLineupCard/LockVeil` |
 | `progress_bg.png` 156×28 | 同名 | `c98d0898-17ed-4221-af30-20160deb8b02@f9941` | `CardLineupCard/Progress` |
@@ -54,7 +54,8 @@
 | `common_jiantou.png` 30×32 | 同名 | `de09ec1f-9f66-48d4-be88-97b7acd958fe@f9941` | `UpgradeArrow` |
 | `common_img_pzk_01..04.png` 113×113 | 同名 | `048299e2…` / `761ec3c1…` / `5015c644…` / `cccc0fe8…` | 本页未引用，备用（见待确认 2） |
 
-> 光效颜色实测：01 金（战士）、02 蓝（射手）、03 绿（坦克）、04 紫（法师）。
+> 光效颜色实测（PNG 采样，alpha>200 的高饱和均值）：01 金 (248,191,10)、02 蓝 (55,132,247)、03 绿 (155,231,60)、04 紫 (189,80,238)。
+> 这与卡面品质框 `image/card/common_img_kp_01..04` 的实测主色（金 218,149,42 / 紫 173,112,221 / 绿 109,164,66 / 蓝 81,126,203）**是同一套色板** —— 所以光效一旦按职业取图，玩家就会读成品级。2026-11-23 已改按品级取图，见 §7。
 
 ### 2.2 职业/阵营图标（`icons/card`）
 
@@ -182,4 +183,40 @@
 4. **新图集**：`image/card_lineup` 独立 `auto-atlas.pac`（1024×2048）。原因：`yx_bg` 720×1293 超过原 `image/card` 图集的 1024 高度，且原目录已有 `auto-atlas.pac`，子目录再放 pac 会触发父子目录重复打包守卫。总量约 1.80M 像素，预计 2 页。
 5. **字号**：按蓝湖文字 bounds 高度换算（品质 20、战力 24、统计条 26、Banner 标题 24/数值 32、卡等级 18、卡进度 16、出战 20、羁绊数字 20）。蓝湖接口未返回字体名称/字重，若美术指定字体需再对齐。
 6. **截图比对**：用户运行截图暴露的加成条换行问题已修复（标题 158×25、数值 81×29，单行 SHRINK）；整页截图比对仍未完成，本次以蓝湖节点坐标、prefab 序列化值、单测与 prefab validate 为准。
+
+## 7. 站台光圈改按品级取图（2026-11-23，偏离蓝湖稿）
+
+用户口径：「阵容显示的品质和卡牌实际的品质不符合」，截图圈的是僵尸站台 —— 光圈绿、卡库卡框紫。
+
+**真因不是色值算错，是维度用错。**
+
+| | 站台光圈 `LineupSlot/Disc` | 卡库卡面框 `CardLineupCard/Face` |
+| --- | --- | --- |
+| 原取数 | `LINEUP_SLOT_GLOW[cardClass]`（职业） | `art.paths.get('face.' + card.rarity)`（品级） |
+| 色板 | 金战士 / 蓝射手 / 绿坦克 / 紫法师 | 金gold / 紫purple / 绿green / 蓝blue |
+| 结果 | 光圈在说**职业**，边框在说**品级** | |
+
+两套色板实测是**同一套四色**（见 §2.1 末的采样值），而玩家读色即读品级 ⇒ 八站台里
+「职业 ≠ 品级」的那几格必然矛盾。以截图那一屏为例：四格碰巧一致（法师+紫、坦克+绿、
+战士+金 ×2），另外四格全对不上（战士+紫框、射手+紫框、坦克+紫框、战士+蓝框）。
+
+**改法**：`LINEUP_SLOT_GLOW` 的键从 `ZCCardClass` 换成 `ZCCardRarity`，四张图不换、尺寸不变：
+
+| 品级 | 光效图 | 实测主色 |
+| --- | --- | --- |
+| gold 传说 | `yx_img_guang_01` | 金 (248,191,10) |
+| blue 稀有 | `yx_img_guang_02` | 蓝 (55,132,247) |
+| green 普通 | `yx_img_guang_03` | 绿 (155,231,60) |
+| purple 史诗 | `yx_img_guang_04` | 紫 (189,80,238) |
+
+⚠️ **这个顺序和卡面框的 `01..04`（金/紫/绿/蓝）不是同一套**，别按下标搬。
+
+**为什么不是纯按设计稿（职业）**：职业信息已经由左下角角标（剑/弓/盾/卷轴，`yx_zhiye_*`，
+两处同图）完整表达；光圈再重复一次职业色，只会和品级色打架。改完后三个通道互不重叠 ——
+台座造型、光圈=品级、角标=职业，也和布阵页 `loadBoardSlot` 的 `disc.${card.rarity}` 口径统一。
+
+**副作用**：光圈不再区分职业（角标仍然区分）；`Disc` 四张图同为 117×31，prefab 与版式零改动。
+
+**回归**：`tests/card-slot-quality-art.test.ts`（5 条）—— 光圈只随品级变 / 同品级四职业共用一张 /
+角标两入口同图且只随职业变 / 卡面框仍按品级 / 映射键必须是品级（源码守卫）。
 

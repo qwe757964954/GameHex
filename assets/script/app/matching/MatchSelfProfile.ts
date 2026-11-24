@@ -4,8 +4,10 @@ import { CacheMgr } from '../net/CacheMgr';
 import { toIdString } from '../net/RequestGuard';
 import { applyHeadArt } from '../HeadArtModel';
 import type { MatchProfileLookup } from '../battle/BattleStartModel';
+import { readLineupSnapshot } from '../card/LineupSnapshot';
+import { getPlayerDeck } from '../zcds/model/ZCCombatCatalog';
 import { LOCAL_PLAYER } from './MatchPool';
-import type { MatchPlayerData } from './MatchTypes';
+import { MATCH_CARD_SLOTS, type MatchCardData, type MatchPlayerData } from './MatchTypes';
 
 export interface SelfIdentity {
     readonly roleId: string;
@@ -55,12 +57,35 @@ export function readSelfIdentity(): SelfIdentity | null {
     return readFromRoleCache() ?? readFromLoginSession();
 }
 
+/**
+ * 我方卡牌：优先用「卡牌阵容」页写下的本地快照（首帧也能有真实阵容），
+ * 没有快照再用运行时注入的玩家卡组；保持阵容顺序。
+ */
+function selfCards(lookup?: MatchProfileLookup | null): readonly MatchCardData[] {
+    if (!lookup) return [];
+    const deck = readLineupSnapshot()?.cards ?? getPlayerDeck();
+    const cards: MatchCardData[] = [];
+    for (const card of deck) {
+        if (cards.length >= MATCH_CARD_SLOTS) break;
+        const info = lookup.cardInfo(Number(card.id));
+        if (!info) continue;
+        cards.push({
+            id: card.id,
+            rarity: info.rarity,
+            roleIcon: info.roleIcon,
+            headIcon: info.headIcon,
+            headRoot: info.headRoot,
+        });
+    }
+    return cards;
+}
+
 /** 返回独立展示副本，昵称与头像分别覆盖。 */
 export function buildSelfPlayerData(
     identity: SelfIdentity | null = readSelfIdentity(),
     lookup?: MatchProfileLookup | null,
 ): MatchPlayerData {
-    const next: MatchPlayerData = { ...LOCAL_PLAYER, stats: [] };
+    const next: MatchPlayerData = { ...LOCAL_PLAYER, stats: [], cards: selfCards(lookup) };
     if (!identity) return next;
     if (identity.name) next.name = identity.name;
     applyHeadArt(next, identity.avatarId, lookup?.headArt);

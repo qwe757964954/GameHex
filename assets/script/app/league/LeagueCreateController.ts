@@ -18,8 +18,6 @@ import {
 
 export interface ILeagueCreateControllerOptions {
     readonly owner: object;
-    /** 容器页 owner；成功后按它发 `LeagueTabEvent.Joined`，替代视图回调穿透。 */
-    readonly joinedOwner: object | null;
     readonly model: LeagueCreateModel;
     readonly repository: Pick<ILeagueRepository, 'createCost' | 'requestCreat'>;
     readonly view: {
@@ -28,7 +26,7 @@ export interface ILeagueCreateControllerOptions {
     };
     readonly feedback: {
         readonly tip: (text: string) => void;
-        readonly notifyJoined: (owner: object | null) => void;
+        readonly notifyJoined: () => void;
     };
     readonly requests: { readonly removeCaller: (caller: object) => void };
 }
@@ -57,8 +55,8 @@ export class LeagueCreateController extends ControllerBase {
         void this.refreshCost();
     }
 
-    private readonly onIntent = (event: ILeagueCreateIntent): void => {
-        if (event.owner !== this.options.owner) return;
+    private readonly onIntent = (event: ILeagueCreateIntent, source: object): void => {
+        if (source !== this.options.owner) return;
         const model = this.options.model;
         if (event.kind === 'name') {
             model.name = event.name;
@@ -115,7 +113,7 @@ export class LeagueCreateController extends ControllerBase {
             if (this.isDisposed || model.name !== name) return;
             if (result === 'ok') {
                 view.close();
-                feedback.notifyJoined(this.options.joinedOwner);
+                feedback.notifyJoined();
                 return;
             }
             feedback.tip(result === 'offline' ? LEAGUE_TIP_OFFLINE : LEAGUE_TIP_FAILED);

@@ -10,7 +10,6 @@ import * as TerritoryLevelBubble from '../assets/script/app/territory/model/Terr
 // 巡逻宝箱 4 档模型图（2026-11-20）：纯常量 + 纯函数 ⇒ 给**真模块**，不在桩里抄一份路径拼法。
 import * as TerritoryMonsterBoxSpec from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
 import { BATTLE_BUNDLE, bundleForPath } from '../assets/script/core/asset/BundleCatalog';
-import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 
 /**
  * 2026-11-11 用户：「合并svn之后，未通关的预告气泡又变回了蓝色，不是红色」。
@@ -101,8 +100,26 @@ test('★bundle 索引查不到（has=false）时，未通关红图仍然加载�
         '两个槽位不许被压成同一张图（2026-10-28 踩过一次）');
     assert.equal(calls.loaded.includes(RED_PATH), true, '红图必须真的被 load 过');
     assert.equal(calls.loaded.includes(BLUE_PATH), true);
-    assert.equal(art.pvpBubblePortrait.path, TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_PORTRAIT_PATH);
-    assert.equal(existsSync('assets/resources/' + TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_PORTRAIT_PATH.replace('/spriteFrame', '.png')), true);
+    assert.equal(art.pvpBubbleAvatarFrame.path, TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_AVATAR_FRAME_PATH);
+    assert.equal(art.pvpBubbleLevelFrame.path, TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_LEVEL_FRAME_PATH);
+    // 2026-11-23 已通关 PVP 问号徽标（图1）：两张新图也必须进 art，否则已通关会回退文字胶囊。
+    assert.equal(art.pvpClearBubbleFrame.path, TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_FRAME_PATH);
+    assert.equal(art.pvpClearBubbleIcon.path, TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_ICON_PATH);
+    assert.equal(calls.loaded.includes(TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_FRAME_PATH), true,
+        '问号徽标底图必须真的被 load 过');
+    assert.equal(calls.loaded.includes(TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_ICON_PATH), true,
+        '灰盾问号必须真的被 load 过');
+    for (const path of [
+        TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_AVATAR_FRAME_PATH,
+        TerritoryLevelBubble.TERRITORY_PVP_BUBBLE_LEVEL_FRAME_PATH,
+        TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_FRAME_PATH,
+        TerritoryLevelBubble.TERRITORY_PVP_CLEAR_BUBBLE_ICON_PATH,
+    ]) {
+        const png = path.startsWith('image/spawn-region/')
+            ? 'assets/bundles/battle/' + path.replace('/spriteFrame', '.png')
+            : 'assets/resources/' + path.replace('/spriteFrame', '.png');
+        assert.equal(existsSync(png), true, `${path} 必须真的有图`);
+    }
     // 正常路径根本不该再查索引：预检只用于失败时写日志。
     assert.equal(calls.hasCalls.length, 0, 'has 已从「加载前的闸门」降级为「失败后的日志」');
 });
@@ -208,20 +225,14 @@ const GHOST_FRAME = {
 };
 
 function stationRenderOf(opts: { preview?: boolean; unlocked?: boolean; passed?: boolean }): Record<string, any> {
-    const View = loadTerritoryMapViewClass();
-    const view = new View();
-    Object.assign(view, {
-        stationIconOf: () => GHOST_FRAME,
-        stateOf: () => 'available',
-    });
     const site = {
         cellId: 213, type: 'boss', configId: '10005', buildingId: '69003',
         footprint: [213, 214], unlock: { silverCost: 35, staminaCost: 1, requiredCells: [] },
     };
     const stage = { chapterId: 2, stage: 10, isBoss: true };
-    return stationRenderWithProjection(view)(site, {
+    return stationRenderWithProjection()(site, {
         stageByCell: new Map([[213, stage]]),
-        art: { randomSilverIcon: {}, chestIcon: null,
+        art: { randomSilverIcon: {}, chestIcon: null, buildFrames: new Map([[69003, GHOST_FRAME]]),
             levelBubbleFrame: BLUE_FRAME, levelBubblePendingFrame: RED_FRAME },
         previewCells: opts.preview ? [213] : [],
         siteOpenableCells: [213],
@@ -251,7 +262,8 @@ test('已解锁但未通关也走红图（不是只有预告分支才是红）',
 });
 
 test('视图两条分支都优先取 levelBubblePendingFrame（源码守卫）', () => {
-    const src = readFileSync(MAP_VIEW, 'utf8');
+    const src = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
     assert.match(src, /levelBubbleFrame: previewBubble\s*\? input\.art\.levelBubblePendingFrame/);
-    assert.match(src, /levelBubbleFrame: claimed\s*\? input\.art\.levelBubbleFrame[\s\S]{0,240}input\.art\.levelBubblePendingFrame/);
+    // 2026-11-23 已通关 PVP 先切问号徽标；普通关 / 未通关仍按 claimed 取「蓝 → 红 → 蓝」兜底。
+    assert.match(src, /levelBubbleFrame: pvpClearBadge[\s\S]{0,120}: claimed[\s\S]{0,160}input\.art\.levelBubblePendingFrame/);
 });

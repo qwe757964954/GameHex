@@ -11,15 +11,14 @@ import {
 import type { ITerritoryMapLayout } from '../model/TerritoryMapLayout';
 
 /**
- * 「没挑战成功」的暗色叠加：与 `ZCUnitView.OTHER_PLAYER_TINT` 同源的 `#828282`。
- * 走 `sp.Skeleton.color`（顶点色相乘），不是给节点盖一层黑 Sprite —— 后者会把
- * 怪外面的透明区域也涂黑，读成一块黑板而不是「这只怪暗下来了」。
+ * 「没挑战成功」的暗色叠加，数值只认 model 的 `TERRITORY_PATROL_DIM_RGB`
+ * （与 `ZCUnitView.OTHER_PLAYER_TINT` 同源）。走 `sp.Skeleton.color`（顶点色相乘），
+ * 不是给节点盖一层黑 Sprite —— 后者会把怪外面的透明区域也涂黑，读成一块黑板
+ * 而不是「这只怪暗下来了」。
  */
 const PATROL_DIM = new Color(
     TERRITORY_PATROL_DIM_RGB[0], TERRITORY_PATROL_DIM_RGB[1], TERRITORY_PATROL_DIM_RGB[2], 255);
-/** 已挑战成功 / 正常态：原色。每次 sync 都写绝对值，不依赖「建节点时染过一次」。 */
-const PATROL_NORMAL = new Color(255, 255, 255, 255);
-/** 描边副本染红：与 `ZC_CLIENT_COLORS.enemyEdge` 同源。 */
+/** 描边副本染红，数值只认 model 的 `TERRITORY_PATROL_EDGE_RGB`（与 `ZC_CLIENT_COLORS.enemyEdge` 同源）。 */
 const PATROL_EDGE = new Color(
     TERRITORY_PATROL_EDGE_RGB[0], TERRITORY_PATROL_EDGE_RGB[1], TERRITORY_PATROL_EDGE_RGB[2], 255);
 
@@ -171,7 +170,9 @@ export class TerritoryMonsterPatrolView {
     }
 
     private applyLook(visual: ITerritoryPatrolVisual, cleared: boolean): void {
-        visual.skeleton.color = cleared ? PATROL_NORMAL : PATROL_DIM;
+        // 通关 = 原色（`Color.WHITE`，与 `ZCUnitView.applyVisualTint` 的「正常态」同一份白），
+        // 未通关 = 压暗；每次 sync 都写绝对值，节点按 cellId 复用，不许残留上一次的状态。
+        visual.skeleton.color = cleared ? Color.WHITE : PATROL_DIM;
         if (visual.outline) visual.outline.node.active = !cleared;
     }
 

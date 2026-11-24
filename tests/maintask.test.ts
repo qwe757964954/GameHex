@@ -57,6 +57,7 @@ const ARENA_PREFAB = assetPath('ui/main/ArenaRoot.prefab');
 
 const DETAIL_SRC = readFileSync('assets/script/app/maintask/MainTaskDetailPage.ts', 'utf8');
 const ENTRY_SRC = readFileSync('assets/script/app/maintask/MainTaskEntry.ts', 'utf8');
+const REPO_SRC = readFileSync('assets/script/app/maintask/MainTaskRepository.ts', 'utf8');
 
 /** prefab 的 uuid —— 从 `.meta` 读，不硬编码（改名 / 重新生成都不会静默失配）。 */
 function prefabUuid(path: string): string {
@@ -732,6 +733,17 @@ test('E6 入口：显隐归属自己（`onLoad` 调 refresh，且**没有** onEn
     assert.ok(methodBody(ENTRY_SRC, 'onLoad').includes('refresh()'), 'onLoad 里要 refresh');
     assert.ok(!/\bonEnable\s*\(/.test(ENTRY_SRC),
         '不能加 onEnable + refresh：会互相触发，且隐藏后再也没人点亮它');
+});
+
+test('E6b 入口：订阅 `CmdTask` 缓存变化，销毁时退订', () => {
+    assert.ok(methodBody(ENTRY_SRC, 'onLoad').includes('subscribeMainTaskChange'),
+        '入口常驻，进度 / 奖励状态由服务端推 CmdTask —— 不订阅就停在打开页面那一刻');
+    assert.ok(methodBody(ENTRY_SRC, 'onDestroy').includes('this.unsubscribe'),
+        'onDestroy 必须退订，否则节点销毁后回调仍在写 Label / Node');
+    const def = ENTRY_SRC.slice(ENTRY_SRC.indexOf('private readonly onTaskCacheChanged'));
+    assert.ok(def.slice(0, def.indexOf('};')).includes('this.refresh()'), '缓存变化后必须重读快照');
+    assert.ok(REPO_SRC.includes('setEventChange(MAIN_TASK_CACHE'), '订阅必须落在 CmdTask 表');
+    assert.ok(REPO_SRC.includes('removeEventChange(MAIN_TASK_CACHE'), '退订必须摘同一张表');
 });
 
 test('E7 入口：`applySnapshot` 每处都**无条件写**（规则 82，`_active` 烘的是 true）', () => {

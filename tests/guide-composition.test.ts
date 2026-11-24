@@ -192,7 +192,7 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
     // 否则领地页上的每条用例都得先「等地图」（第 23 条的新闸门）。
     // `mapReady=false` 用来复现「结算返回、地图还没出来」那一刻。
     if (page === 'territory' && mapReady) {
-        setImmediate(() => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: territoryView, phase: 'presented' }));
+        setImmediate(() => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'presented' }, territoryView));
     }
     return { composition, anchors, notifications, revealedCards, scrollLocks, cardTab, territoryTab, mapTile, levelBubble, ShowRewardPage, HeroObtainPage, firstReward,
         navBar, topHud, bottomHud, beginGame, gmButton, entryBar, mainTaskEntry,
@@ -202,16 +202,16 @@ function fixture(waitForDialogs = false, existingReward = false, page: 'battle' 
         setTaskConfigured: (value: boolean) => { taskConfigured = value; },
         /** 让 `refresh()` 停在未决状态，模拟「快照还在路上」那几帧。 */
         setTaskRefreshPending: (value: boolean) => { taskRefreshPending = value; },
-        presentMap: () => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: territoryView, phase: 'presented' }),
+        presentMap: () => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'presented' }, territoryView),
         openCard(id: string) {
             const popup = new CardUpgradePage(); popup.guideCardId = id;
             openedPopups.push(popup);
-            EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'enabled' });
+            EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, popup);
             return popup;
         },
         closeCard(popup: CardUpgradePage) {
             openedPopups.splice(openedPopups.indexOf(popup), 1);
-            EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'destroyed' });
+            EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, popup);
         },
         finishGoal: () => finishGoal(), goalCounts: () => ({ requests: goalRequests, cancels: goalCancels, opened: openedPopups.includes(goalPopup) }),
         reopenGoalManually: () => { openedPopups.splice(openedPopups.indexOf(goalPopup), 1, new MainTaskDetailPage()); },
@@ -380,10 +380,10 @@ const presenting = (playing: boolean) => EventMgr.instance.emit(TerritoryUiEvent
  */
 const openRewardPopup = (f: ReturnType<typeof fixture>): object => {
     const popup = new f.ShowRewardPage();
-    EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup as object, phase: 'enabled' });
+    EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, popup as object);
     return popup;
 };
-const closeRewardPopup = (popup: object) => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: popup, phase: 'destroyed' });
+const closeRewardPopup = (popup: object) => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, popup);
 
 test('8-1 要等翻地的奖励粒子动画播完才出场（演出窗口开→关之后）', async () => {
     const f = fixture(false, false, 'territory');
@@ -459,9 +459,9 @@ test('固定格宝箱那条链（粒子 → 获得英雄 → 统一奖励）全�
         presenting(true);
         // 开箱粒子演完 ⇒ 交组合层弹「获得英雄」，这一拍 `ChestPresentation` 仍是开着。
         const hero = new f.HeroObtainPage();
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: hero as object, phase: 'enabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, hero as object);
         assert.equal(f.counts().rendered, 0, '英雄页也是奖励页，同样要等');
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: hero as object, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, hero as object);
         assert.equal(f.counts().rendered, 0, '英雄页关了不等于看完了 —— 后面还有统一奖励弹窗');
         // 统一奖励弹窗上台 ⇒ 领地页收窗；它关掉，整段才算走完。
         const reward = openRewardPopup(f);
@@ -471,6 +471,46 @@ test('固定格宝箱那条链（粒子 → 获得英雄 → 统一奖励）全�
         assert.equal(f.counts().rendered, 1, '最后一个弹窗关掉才出场');
         assert.equal(f.renderedFocus(), 'Main/TaskEntry');
     } finally { f.composition.dispose(); }
+});
+
+// 2026-11-24：底栏切到别的 tab 时 `MainTabHost.mountPage` 会把整页换掉、组合层重建，
+// 新页上没有 `MainTaskEntry` ⇒ 8-1 硬画出来只有全屏 Blocker、没有孔（画面卡死）。
+test('8-1 在别的 tab（不是领地页）上根本不弹：焦点节点不存在，弹出来就是一整块点不动的 Blocker', async () => {
+    const f = fixture(false, false, 'card');
+    try {
+        await tick();
+        f.render(REWARD_HOLD_STATE);
+        assert.equal(f.counts().rendered, 0, '卡牌页上没有任务入口 ⇒ 不许硬画');
+        assert.equal(f.pendingTimers(), 0, '也不许占住「等奖励」的兜底 —— 回到领地要重新武装');
+        // 奖励照常在别的 tab 上弹（那是全局的），但它不该把引导层拉起来。
+        const popup = openRewardPopup(f);
+        presenting(true);
+        presenting(false);
+        assert.equal(f.counts().rendered, 0);
+        closeRewardPopup(popup);
+        assert.equal(f.counts().rendered, 0, '弹窗关掉也不许在非领地页触发收尾');
+    } finally { f.composition.dispose(); }
+});
+
+test('同一份 8-1 状态：卡牌页让位、回到领地页才等奖励并出场', async () => {
+    const card = fixture(false, false, 'card');
+    const territory = fixture(false, false, 'territory');
+    try {
+        await tick();
+        card.render(REWARD_HOLD_STATE);
+        assert.equal(card.counts().rendered, 0);
+        // 切回领地页 = 旧页销毁 + 新组合层（夹具里用另一个 fixture 表达）。
+        territory.render(REWARD_HOLD_STATE);
+        assert.equal(territory.counts().rendered, 0, '回来仍要先等奖励');
+        assert.equal(territory.pendingTimers(), 1, '领地页才挂兜底');
+        presenting(true);
+        presenting(false);
+        assert.equal(territory.counts().rendered, 1, '奖励看完就出场');
+        assert.equal(territory.renderedFocus(), 'Main/TaskEntry');
+    } finally {
+        card.composition.dispose();
+        territory.composition.dispose();
+    }
 });
 
 test('奖励弹窗开着时兜底计时不许挂（2.6s 到点会把 8-1 放到弹窗底下）', async () => {
@@ -657,7 +697,7 @@ test('卡牌引导同样收底栏，结束时只还回本次收起的那一条�
 test('奖励窗打开时隐藏引导，多个奖励窗全部关闭后恢复最新步骤，退出解除订阅', async () => {
     const f = fixture();
     await tick();
-    const lifecycle = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner, phase });
+    const lifecycle = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase }, owner);
     const second = new f.ShowRewardPage();
     try {
         f.render({ finished: false, focusNode: 'Battle/DrawnCard' });
@@ -685,7 +725,7 @@ test('引导加载完成时奖励窗已打开，也必须等其关闭再显示',
         await tick();
         f.render({ finished: false, focusNode: 'Battle/DrawnCard' });
         assert.equal(f.counts().rendered, 0);
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: f.firstReward, phase: 'disabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, f.firstReward);
         assert.equal(f.counts().rendered, 1);
     } finally { f.composition.dispose(); }
 });
@@ -706,7 +746,7 @@ test('台词异步加载期间退出，不再启动引导或上报进入战斗',
 // 就看见了完整主界面（用户截图：顶栏入口排、宝箱、聊天条、底部七色导航全在）。
 test('主界面 HUD 按引导进度解锁：5-4 之前一律不显示（领奖让位也不例外），任务入口要等 8-1', async () => {
     const f = fixture(false, false, 'territory');
-    const lifecycle = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { owner, phase });
+    const lifecycle = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase }, owner);
     try {
         await tick();
         f.render({ finished: false, stepId: '2-3', focusNode: '' });

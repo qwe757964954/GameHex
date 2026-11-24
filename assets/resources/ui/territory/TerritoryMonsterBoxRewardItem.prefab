@@ -238,7 +238,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 14,
+      "y": 12,
       "z": 0
     },
     "_lrot": {
@@ -278,8 +278,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 104,
-      "height": 104
+      "width": 106,
+      "height": 116
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -371,7 +371,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": 16,
+      "y": 12,
       "z": 0
     },
     "_lrot": {
@@ -411,8 +411,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 82,
-      "height": 82
+      "width": 96,
+      "height": 96
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -503,8 +503,8 @@
     },
     "_lpos": {
       "__type__": "cc.Vec3",
-      "x": 4,
-      "y": -24,
+      "x": 8,
+      "y": -38,
       "z": 0
     },
     "_lrot": {
@@ -544,7 +544,7 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 102,
+      "width": 100,
       "height": 26
     },
     "_anchorPoint": {
@@ -586,23 +586,23 @@
     "_actualFontSize": 21,
     "_fontSize": 21,
     "_fontFamily": "Arial",
-    "_lineHeight": 21,
+    "_lineHeight": 22,
     "_overflow": 2,
     "_enableWrapText": false,
     "_font": null,
     "_isSystemFontUsed": true,
     "_spacingX": 0,
     "_isItalic": false,
-    "_isBold": false,
+    "_isBold": true,
     "_isUnderline": false,
     "_underlineHeight": 2,
     "_cacheMode": 0,
     "_enableOutline": true,
     "_outlineColor": {
       "__type__": "cc.Color",
-      "r": 30,
-      "g": 20,
-      "b": 12,
+      "r": 28,
+      "g": 82,
+      "b": 24,
       "a": 255
     },
     "_outlineWidth": 2,
@@ -663,7 +663,7 @@
     "_lpos": {
       "__type__": "cc.Vec3",
       "x": 0,
-      "y": -58,
+      "y": -63,
       "z": 0
     },
     "_lrot": {
@@ -703,8 +703,8 @@
     },
     "_contentSize": {
       "__type__": "cc.Size",
-      "width": 110,
-      "height": 28
+      "width": 116,
+      "height": 24
     },
     "_anchorPoint": {
       "__type__": "cc.Vec2",
@@ -734,19 +734,19 @@
     "_dstBlendFactor": 4,
     "_color": {
       "__type__": "cc.Color",
-      "r": 80,
+      "r": 90,
       "g": 58,
-      "b": 49,
+      "b": 40,
       "a": 255
     },
     "_string": "",
     "_horizontalAlign": 1,
     "_verticalAlign": 1,
     "_actualFontSize": 20,
-    "_fontSize": 21,
+    "_fontSize": 20,
     "_fontFamily": "Arial",
-    "_lineHeight": 25,
-    "_overflow": 1,
+    "_lineHeight": 24,
+    "_overflow": 2,
     "_enableWrapText": true,
     "_font": null,
     "_isSystemFontUsed": true,

@@ -18,10 +18,10 @@ export class StorePage extends Component {
     static prefabPath = 'ui/Store/Store';
 
     onLoad(): void {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
 
     onDestroy(): void {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
     }
 }

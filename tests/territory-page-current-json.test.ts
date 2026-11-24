@@ -35,7 +35,7 @@ function componentOf(objects: Array<Record<string, unknown>>, node: Record<strin
 test('territory page renders every site from the current map JSON, not only bound PVE stations', () => {
     // 每个 site 都要出节点 —— 与有没有绑定关卡无关（绑定只影响文案与颜色）。
     assert.match(mapView, /for \(const site of input\.map\.sites\)/);
-    assert.match(mapView, /const stage = input\.stageByCell\.get\(site\.cellId\) \?\? null;/);
+    assert.match(readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8'), /const stage = input\.stageByCell\?\.get\(site\.cellId\) \?\? null;/);
     // 未绑定站点同样保留命中区，但地图不再显示类型名或「待配置」角标。
     assert.doesNotMatch(mapView, /TERRITORY_UNBOUND_TYPE_NAMES|TERRITORY_TEXTS\.pendingConfig/);
     // 站点详情面板已移除（2026-10-27）⇒ 未绑定站点不再弹任何面板，信息只留在左侧 info 区。
@@ -195,7 +195,7 @@ test('★★地图底图随格子一起滑动，且格子画在背景上', () =>
         '底图应在 prefab 上默认挂好一张图（运行时可再换）');
 
     // 视图脚本：真的消费了 background（此前 `art.background` 加载了却没有任何消费方 —— 纯浪费）。
-    assert.match(mapView, /readonly background: SpriteFrame \| null/);
+    assert.match(readFileSync('assets/script/app/territory/view/TerritoryMapArt.ts', 'utf8'), /readonly background: SpriteFrame \| null/);
     assert.match(mapView, /syncBackground\(input\)/, '★renderMap 必须同步底图');
     // 等比 cover：不能按包围盒非等比拉伸（会把美术纹理压扁），也不能只按视口尺寸（滑到边缘露白）。
     assert.match(mapView, /Math\.max\(width \/ artWidth, height \/ artHeight\)/,

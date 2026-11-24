@@ -46,7 +46,7 @@ export function territoryHexStaggerDelays<T extends IHexStaggerCell>(
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
 
-    const ordered: { cell: ITerritoryHexStaggerCell; distance: number }[] = [];
+    const ordered: { cell: T; distance: number }[] = [];
     for (let i = 0; i < cells.length; i++) {
         const cell = cells[i];
         const dx = cell.x - centerX;

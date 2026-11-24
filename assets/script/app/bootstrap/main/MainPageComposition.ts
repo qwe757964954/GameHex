@@ -33,10 +33,15 @@ import { LeagueCreatePage } from '../../league/LeagueCreatePage';
 import { LeagueInfoPage } from '../../league/LeagueInfoPage';
 import { leagueRepository } from '../../league/LeagueRepository';
 import { GameNet } from '../../net/GameNet';
+import { CacheMgr } from '../../net/CacheMgr';
+import { toCount, toIdString } from '../../net/RequestGuard';
+import { readRoleRow } from '../../main/MainRoleRow';
 import { MainPage } from '../../main/MainPage';
 import { MainTerritoryMap } from '../../main/MainTerritoryMap';
 import { TerritoryEntry } from '../../territory/application/TerritoryEntry';
 import { FW } from '../../../framework/FW';
+import { AudioMgr } from '../../../framework/audio/AudioMgr';
+import { GAME_AUDIO } from '../../ResConst';
 import { TerritoryHeroProgressSource } from './TerritoryHeroProgressSource';
 
 
@@ -108,6 +113,14 @@ export class MainPageComposition extends ControllerBase {
         const entry = this.createTerritoryEntry(territory);
         this.registerPage(territory, entry, { ready: () => entry.start() });
         territory.initialize(entry.resources, entry.saveOwner);
+        // 未通关 PVP 气泡复用左上角玩家卡的头像 / 等级：组合层是读 `CmdRole` 的边界，
+        // 页面只收纯数据。角色缓存一变就让它重取头像并补画一帧。
+        territory.setPlayerProfileSource(() => {
+            const role = readRoleRow();
+            return { avatarId: toIdString(role?.img), level: toCount(role?.lv) };
+        });
+        CacheMgr.instance.setEventUpdate('CmdRole', this, this.onTerritoryPlayerProfileChange);
+        this.own(() => CacheMgr.instance.removeEventUpdate('CmdRole', this, this.onTerritoryPlayerProfileChange));
         this.listen(TerritoryUiEvent.ChestRevealed, this.onChestRevealed);
         this.listen(TerritoryUiEvent.ChestRewardsReady, this.onChestRewardsReady);
         // 2026-11-10 需求 ③：英雄碎片进度徽标的数据源由组合层注入（页面只认接口，
@@ -126,22 +139,25 @@ export class MainPageComposition extends ControllerBase {
     treasureRewardRoute(owner: { readonly node: Node }): 'active' | 'fallback' {
         return !this.isDisposed && owner.node === this.root ? 'active' : 'fallback';
     }
-    private onTreasureRewards(event: { readonly owner: MainPage; readonly goods: readonly unknown[] }): void {
-        if (event.owner.node !== this.root || !event.goods.length) return;
+    private onTreasureRewards(event: { readonly goods: readonly unknown[] }, source: MainPage): void {
+        if (source.node !== this.root || !event.goods.length) return;
         void TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
             if (this.isDisposed) popup?.close();
         }).catch(reportMainPageFailure);
     }
 
-    private onChestRevealed(event: { readonly owner: { readonly isValid: boolean }; readonly entries: readonly IRewardEntry[] }): void {
+    private onChestRevealed(event: { readonly entries: readonly IRewardEntry[] }, source: { readonly isValid: boolean }): void {
         // 宝箱开启页（宝箱栏 / 巡逻等入口）那条：页内已经把奖励画出来了，这里只补英雄页。
-        void this.presentChestHeroes(event.entries, event.owner).catch(reportMainPageFailure);
+        void this.presentChestHeroes(event.entries, source).catch(reportMainPageFailure);
     }
 
-    private onChestRewardsReady(event: { readonly owner: MainTerritoryMap; readonly rewards: readonly IRewardEntry[] }): void {
+    private onTerritoryPlayerProfileChange(): void {
+        this.territoryView?.refreshPlayerBubble();
+    }
+    private onChestRewardsReady(event: { readonly rewards: readonly IRewardEntry[] }, source: MainTerritoryMap): void {
         // 领地宝箱：地图上的开箱粒子动画演完了（奖励还没给玩家看）⇒ 英雄页 → 统一奖励弹窗。
-        if (event.owner !== this.territoryView) return;
-        void this.runChestRewardChain(event.owner, event.rewards).catch(reportMainPageFailure);
+        if (source !== this.territoryView) return;
+        void this.runChestRewardChain(source, event.rewards).catch(reportMainPageFailure);
     }
 
     /**
@@ -171,7 +187,7 @@ export class MainPageComposition extends ControllerBase {
             })) as unknown as CmdGoods[]);
         } finally {
             if (!popupPlanned) {
-                EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { owner, playing: false });
+                EventMgr.instance.emit(TerritoryUiEvent.ChestPresentation, { playing: false });
             }
         }
     }
@@ -221,6 +237,7 @@ export class MainPageComposition extends ControllerBase {
                 unregister();
                 continue;
             }
+            void AudioMgr.instance.playSound(GAME_AUDIO.goldFragment, this.scope);
             const releasePopup = this.scope.defer(() => { popup.close(); });
             await closed;
             releasePopup();
@@ -276,7 +293,6 @@ export class MainPageComposition extends ControllerBase {
     }
     private createLeagueController(league: LeagueTabPage): LeagueTabController {
         return new LeagueTabController(this.context, {
-            owner: league,
             failed: reportMainPageFailure,
             repository: {
                 load: () => leagueRepository.load()
@@ -287,15 +303,14 @@ export class MainPageComposition extends ControllerBase {
             join: {
                 create: view => new LeagueJoinController(this.context, {
                     owner: view,
-                    joinedOwner: league,
                     repository: leagueRepository,
                     view: { render: rows => view.render(rows) },
                     feedback: {
                         tip: text => FW.showTip(text),
-                        notifyJoined: owner => EventMgr.instance.emit(LeagueTabEvent.Joined, { owner }),
+                        notifyJoined: () => EventMgr.instance.emit(LeagueTabEvent.Joined),
                     },
                     popups: {
-                        openCreate: owner => { void LeagueCreatePage.open({ userData: { owner } }); },
+                        openCreate: () => { void LeagueCreatePage.open(); },
                         openUnion: union => { void LeagueInfoPage.open({ userData: { union } }); },
                     },
                     requests: { removeCaller: caller => GameNet.instance.removeCaller(caller) },
@@ -309,8 +324,8 @@ export class MainPageComposition extends ControllerBase {
             return () => territory.unschedule(callback);
         });
     }
-    private onLifecycle(event: IViewLifecycle): void {
-        const page = this.pages.get(event.owner);
+    private onLifecycle(event: IViewLifecycle, source: object): void {
+        const page = this.pages.get(source);
         if (!page) return;
         if (event.phase === 'presented') { this.presented(); return; }
         if (event.phase === 'destroyed') { this.dispose(); return; }

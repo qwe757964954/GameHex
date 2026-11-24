@@ -228,7 +228,7 @@ function hasDelegatedWiring(request: string, file: string, scope: string): boole
                 const view = read(`league/${name}.ts`);
                 return composition.includes(`view instanceof ${name}`)
                     && view.includes(`kind: '${reward.kind}'`)
-                    && view.includes('EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action:')
+                    && view.includes('EventMgr.instance.emit(LeagueRewardEvent.Intent, { action:')
                     && view.includes('EventMgr.instance.on(LeagueRewardEvent.Completed, this.onRewardCompleted, this)');
             });
     }
@@ -359,7 +359,8 @@ test('领地写回包的奖励在 Model 落地分支展示（Repository 只发�
         assert.match(model, new RegExp(`${apply}\\(`), `${apply} 缺失 ⇒ 回包会静默丢掉`);
     }
     // 奖励展示只在成功分支（`write.rewards` 由锁/卡/随机格三种口径分流）。
-    assert.match(model, /\.showRewards\(write\.rewards, cellId, firstCellEver \? \{ popup: true \} : \{ chest: false \}\)/);
+    // 随机格：恒 `{ chest: false }`，只有「本账号第一格」才叠 `popup: true`（走奖励弹窗）。
+    assert.match(model, /\.showRewards\(write\.rewards, cellId, \{ chest: false, \.\.\.\(firstCellEver \? \{ popup: true \} : \{\}\) \}\)/);
     assert.match(model, /\.showRewards\(write\.rewards, site\.cellId, \{ silverChest: true \}\)/);
     assert.match(model, /\.showRewards\(write\.rewards, null, \{ popup: true \}\)/);
     // Repository 侧不许再自己弹窗（网络层不碰表现）。

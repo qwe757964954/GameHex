@@ -11,7 +11,7 @@ import { TERRITORY_SILVER_CHEST_REWARD_ID, TERRITORY_SITE_TYPE } from '../assets
  *
  * 这里把入口方法原样抽出来跑（`beginWrite` 换成「记下回调、测试手动喂回包」），钉住：
  *   ① 成功回包才展示奖励，失败 / 过期回包一个奖励都不许发；
- *   ② 随机格 `{ chest: false }`（首格 `{ popup: true }`），固定资源点默认开箱；
+ *   ② 随机格 `{ chest: false }`（首格额外传 `popup: true`），固定资源点默认开箱；
  *   ③ 银币宝箱按 `site.rewardId` 单独打标，卡牌宝箱保持默认调用。
  */
 const source = ts.createSourceFile('model.ts', readFileSync(
@@ -145,7 +145,7 @@ test('随机格：默认 chest:false，本账号第一格 popup:true', async () 
     const first = probeWith();
     await first.probe.openRandomResourceCell(2);
     first.deliver({ ok: true, rewards, unlockedCellIds: [2] });
-    assert.deepEqual(plain(first.shown[0].options), { popup: true }, '新手引导 2-2：第一格要弹奖励窗');
+    assert.deepEqual(plain(first.shown[0].options), { chest: false, popup: true }, '新手引导 2-2：第一格要弹奖励窗');
 });
 
 test('固定资源点：默认开箱；银币宝箱按 rewardId 单独打标', async () => {

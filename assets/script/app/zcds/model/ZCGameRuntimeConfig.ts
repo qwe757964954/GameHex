@@ -63,6 +63,14 @@ export interface ZCRuntimeRules {
     initialGuaranteedMine: number;
     wallMaxHp: number;
     hqMaxHp: number;
+    /** 单位受击仇恨保持秒数（默认 5s，可通过 pvpGlobal.hatredSeconds 配置）。*/
+    hatredSeconds: number;
+    /** 追击最大超时秒数（默认 5s，可通过 pvpGlobal.chaseMaxSeconds 配置）。*/
+    chaseMaxSeconds: number;
+    /** 伤害飘字存活时长（默认 0.85s，可通过 pvpGlobal.floatTextDamageSeconds 配置）。*/
+    floatTextDamageSeconds: number;
+    /** 受击特效存活时长（默认 0.15s，可通过 pvpGlobal.hitFxSeconds 配置）。*/
+    hitFxSeconds: number;
 }
 
 /** 运行时目录已就绪（getTable + compile + loadPvpTables 完成），进对局可直接复用。*/

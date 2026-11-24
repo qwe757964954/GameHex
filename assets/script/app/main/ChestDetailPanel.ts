@@ -25,10 +25,11 @@ interface IChestOpenButtonState {
     readonly enabled: boolean;
 }
 
-/** 页面「每秒 + 状态变化」要补传的那两位（倒计时与可点由 `updateCountdown` 自己算）。 */
+/** 页面每秒及队列变化时传入的按钮状态。 */
 export interface IChestOpenButtonRefresh {
     readonly caption: string;
     readonly speedUp: boolean;
+    readonly enabled?: boolean;
 }
 
 /** 弹窗内容，全部由 `NewTreasureRepository` 的数据 + 配置算出。 */
@@ -225,7 +226,7 @@ export class ChestDetailPanel extends PopupBase {
             caption: state?.caption ?? this.openCaption,
             countdown: remainSeconds > 0 ? formatChestCountdown(remainSeconds) : '',
             speedUp: state?.speedUp ?? this.openSpeedUp,
-            enabled: !isCounting || remainSeconds <= 0,
+            enabled: state?.enabled ?? (!isCounting || remainSeconds <= 0),
         });
     }
 

@@ -47,9 +47,9 @@ export class EventMgr {
         this.bus.off(event, handler, target);
     }
 
-    /** 派发；需要带值时给第二个参数（如地块点击的 `hexId`）。 */
-    emit(event: string, payload?: any): void {
-        this.bus.emit(event, payload);
+    /** 共享事件可另传来源实例，订阅方的解绑宿主仍由 on 指定。 */
+    emit(event: string, payload?: any, source?: object): void {
+        this.bus.emit(event, payload, source);
     }
 
     /** 摘掉某个宿主挂过的**全部**监听 —— 订阅方销毁时必须调（见类注释）。 */

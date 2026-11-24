@@ -14,7 +14,6 @@ export const GuideEvent = {
 } as const;
 
 export interface IGuideAdvancePayload {
-    readonly owner: object;
     readonly stepId: string;
 }
 

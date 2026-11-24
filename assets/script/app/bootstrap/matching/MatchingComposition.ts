@@ -1,25 +1,23 @@
 import { game, instantiate, Node, Prefab, SpriteFrame, Vec3, view } from 'cc';
+import { GameRoute } from '../../../core/runtime/GameRoute';
+import type { ResourceScope } from '../../../core/asset/ResourceScope';
 import { ControllerBase, type IControllerContext } from '../../../framework/controller/ControllerBase';
 import type { ProcedurePreloadContext } from '../../../framework/procedure/ProcedureBase';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../../framework/ui/ViewLifecycle';
-import { ARTIFACT_ART_ROOT, MATCH_ART_ROOT, MATCH_SLOT_BARS, MATCH_SLOT_FRAMES, TERRITORY_CLOUD_ART_ROOT } from '../../ArtPaths';
-import { preloadHeadByIds } from '../../HeadArtModel';
-import { ZC_BATTLE_TYPE_PVP, type MatchProfileLookup } from '../../battle/BattleStartModel';
-import { clearLastBattleStart, startBattle } from '../../battle/BattleStartService';
-import { getLastPvpInfo, fetchPvpInfo } from '../../battle/PvpInfoService';
-import { GameNet } from '../../net/GameNet';
-import { createMatchIconLoader, preloadMatchIcons, type MatchIconLoader } from '../../matching/MatchIcons';
+import { TERRITORY_CLOUD_ART_ROOT, spriteFramePath } from '../../ArtPaths';
+import type { MatchProfileLookup } from '../../battle/BattleStartModel';
+import { clearLastBattleStart } from '../../battle/BattleStartService';
+import { getLastPvpInfo } from '../../battle/PvpInfoService';
+import { MatchIcons } from '../../matching/MatchIcons';
 import { MatchingPage } from '../../matching/MatchingPage';
 import { MatchingController } from '../../matching/MatchingController';
-import { MatchingModel } from '../../matching/MatchingModel';
+import { MatchingModel, type IMatchingViewState } from '../../matching/MatchingModel';
 import { resolveMatchSeats } from '../../matching/MatchSlots';
-import { LOCAL_PLAYER } from '../../matching/MatchPool';
 import { loadMatchProfileLookup } from '../../matching/MatchProfileConfig';
-import { buildSelfPlayerData, readSelfIdentity } from '../../matching/MatchSelfProfile';
+import { buildSelfPlayerData, readSelfIdentity, type SelfIdentity } from '../../matching/MatchSelfProfile';
 import { loadMatchTips } from '../../matching/MatchTipsConfig';
-import type { IMatchingEntryParams } from '../../matching/MatchTypes';
-import { createZCBattleSession } from '../../zcds/application/ZCBattlePreparation';
+import { MATCHING_EVENTS, type IMatchingEntryParams, type IMatchingLeave } from '../../matching/MatchTypes';
 import { getZCLocalPlayerCountOverride } from '../../zcds/model/ZCMapConfig';
 import { TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS } from '../../territory/model/TerritoryBattleIntro';
 import { TerritoryBattleCover } from '../../territory/view/TerritoryBattleCover';
@@ -29,7 +27,9 @@ import { TerritoryBattleCoverOverlay } from '../../territory/view/TerritoryBattl
 export class MatchingComposition extends ControllerBase {
     private prefab: Prefab | null = null;
     private node: Node | null = null;
-    private iconLoader: MatchIconLoader | null = null;
+    private mounted: { readonly page: MatchingPage; readonly controller: MatchingController } | null = null;
+    private icons: MatchIcons | null = null;
+    private identity: SelfIdentity | null = null;
     private tips: readonly string[] = [];
     private lookup: MatchProfileLookup | null = null;
     /**
@@ -46,44 +46,44 @@ export class MatchingComposition extends ControllerBase {
      * `onLeave` 里被整体销毁 —— 所以关界面那一刻把云**搬**到流程宿主下的这一层。
      */
     private handoffOverlay: TerritoryBattleCoverOverlay | null = null;
-    /** 待机五帧（`cloud_idle_0..4`）；只有领地普通关会在 preload 里加载。 */
+    /** 与领地页共用的纯云体帧。 */
     private cloudFrames: SpriteFrame[] = [];
     constructor(context: IControllerContext, private readonly host: Node) { super(context, 'matching-composition'); }
     async preload(context: ProcedurePreloadContext, params?: IMatchingEntryParams): Promise<void> {
         this.resources.sessionAssets.pauseWarmup?.();
         const prefab = await this.resources.assets.load('ui/matching/MatchingRoot', Prefab, { scope: context.resources });
         if (context.cancelled || this.isDisposed) return;
-        this.prefab = prefab;
-        // 领地普通关：匹配界面底下要铺同一屏云（约 5 张 PNG，与主界面同源，通常已在缓存里）。
-        if (params?.pve) await this.loadCloudFrames(context);
-        if (context.cancelled || this.isDisposed) return;
-        const iconLoader = createMatchIconLoader(this.resources.assets, context.resources);
-        this.iconLoader = iconLoader;
-        const [tips, lookup] = await Promise.all([loadMatchTips(this.resources.configs), loadMatchProfileLookup(this.resources.configs)]);
-        if (context.cancelled || this.isDisposed) return;
-        this.tips = tips;
-        this.lookup = lookup;
-        await Promise.all([
-            preloadMatchIcons([LOCAL_PLAYER.avatarIcon, 'icon_fdj'].concat(MATCH_SLOT_BARS, MATCH_SLOT_FRAMES), MATCH_ART_ROOT, iconLoader),
-            preloadMatchIcons(lookup.allArtifactIcons(), ARTIFACT_ART_ROOT, iconLoader),
-            preloadHeadByIds([readSelfIdentity()?.avatarId ?? ''], lookup.headArt, iconLoader),
+        const [tips, lookup, cloudFrames] = await Promise.all([
+            loadMatchTips(this.resources.configs),
+            loadMatchProfileLookup(this.resources.configs),
+            params?.pve ? this.loadCloudFrames(context.resources) : [],
         ]);
         if (context.cancelled || this.isDisposed) return;
+        const identity = readSelfIdentity();
+        const icons = new MatchIcons(this.resources.assets, context.resources);
+        await icons.preload(lookup, identity?.avatarId ?? '');
+        if (context.cancelled || this.isDisposed) return;
+        this.prefab = prefab;
+        this.icons = icons;
+        this.identity = identity;
+        this.tips = tips;
+        this.lookup = lookup;
+        this.cloudFrames = cloudFrames;
     }
     mount(params?: IMatchingEntryParams): void {
-        if (!this.prefab || !this.iconLoader || this.isDisposed) throw new Error('MatchingRoot 尚未准备好');
+        if (!this.prefab || !this.icons || this.isDisposed) throw new Error('MatchingRoot 尚未准备好');
         try {
             const node = instantiate(this.prefab);
             this.node = node;
             const page = node.getComponent(MatchingPage);
-            page.initialize(this.iconLoader, this.tips);
-            const controller = this.createController(page, params);
+            page.initialize(this.tips, this.icons.load);
+            const controller = this.createController(params);
+            this.mounted = { page, controller };
             this.own(() => controller.dispose());
-            this.listen(VIEW_LIFECYCLE, (event: IViewLifecycle) => {
-                if (event.owner !== page) return;
-                if (event.phase === 'ready') controller.start();
-                else if (event.phase === 'destroyed') this.dispose();
-            });
+            this.listen(VIEW_LIFECYCLE, this.onLifecycle);
+            this.listen(MATCHING_EVENTS.STATE, this.onStateChanged);
+            this.listen(MATCHING_EVENTS.HANDOFF, this.onHandoff);
+            this.listen(MATCHING_EVENTS.LEAVE, this.onLeaveMatching);
             node.setPosition(Vec3.ZERO);
             node.setParent(this.host);
             this.buildCover(node, page, params);
@@ -93,78 +93,61 @@ export class MatchingComposition extends ControllerBase {
             throw error;
         }
     }
-    private createController(page: MatchingPage, params?: IMatchingEntryParams): MatchingController {
-        const identity = readSelfIdentity();
-        // 本局几个人：入口声明（按模式）与本地固定人数取大者；都没有就 `null`，
-        // 让模型按最小值铺，等服务端回包再按真实人数重排（口径见 `MatchSlots`）。
+    advanceTime(seconds: number): void {
+        this.mounted?.controller.advanceTime(seconds);
+    }
+
+    private createController(params?: IMatchingEntryParams): MatchingController {
+        const identity = this.identity;
+        // 入口声明和本地固定人数决定预期席位，回包后展示席位可按参战人数增加。
         const seats = resolveMatchSeats(params?.participants, getZCLocalPlayerCountOverride());
         const model = new MatchingModel(buildSelfPlayerData(identity, this.lookup), identity?.roleId, this.lookup, seats);
-        model.pvp = getLastPvpInfo();
+        model.updatePvpInfo(getLastPvpInfo());
         clearLastBattleStart();
         this.own(() => clearLastBattleStart());
         return new MatchingController(this.resources, {
             model,
-            failed: error => console.error('[MatchingComposition]', error),
-            // 领地普通关：匹配成功后不直接切战场，而是「关界面 → 露云 → 等资源 → 散云 → 跳」。
-            // 云是这一页自己的子节点，所以这三件事只能在这里做（那边的主界面已经销毁了）。
-            handoff: params?.pve
-                ? {
-                    closeInstantly: () => this.handOverCover(),
-                    // 顺序是"先切场、再散云"：`releaseCover` 在 `navigate` 之后才被调，
-                    // 云这时已经搬到跨流程的顶层，等战场挂上才开始散（见 overlay）。
-                    releaseCover: () => this.handoffOverlay?.arm(),
-                    readyTimeout: TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS,
-                }
-                : undefined,
-            battle: {
-                requestBattle: (caller, isCurrent) => startBattle(params?.battleType ?? ZC_BATTLE_TYPE_PVP, params?.battleParams ?? [], caller, isCurrent),
-                createSession: (task, owner) => createZCBattleSession(this.resources, { owner, battle: task.then(battle => {
-                        if (!battle)
-                            throw new Error('服务端未确认开战');
-                        return battle;
-                    }), params: { pve: params?.pve, selfRoleId: identity?.roleId, battleType: params?.battleType } }),
-                fetchPvp: caller => fetchPvpInfo(caller),
-                removeCaller: caller => GameNet.instance.removeCaller(caller)
-            },
-            view: {
-                render: state => page.render(state)
-            },
-            navigation: {
-                // 领地普通关的 `pve` 在这里透传：匹配页不认识它，但战斗流程要靠它拿波次表 /
-                // 敌阵 / `territorySaveOwner`（战报回写）。丢了这一项，打完这一关领地进度不动。
-                navigate: (route, entry) => {
-                    const pve = params?.pve;
-                    ProcedureManager.navigate(route, pve && entry && typeof entry === 'object'
-                        ? Object.assign({}, entry as Record<string, unknown>, { pve })
-                        : entry);
-                }
-            },
-            clock: {
-                schedule: (callback, seconds) => { page.scheduleOnce(callback, seconds); return () => page.unschedule(callback); }
-            },
+            entry: params,
+            handoffReadyTimeout: params?.pve ? TERRITORY_BATTLE_INTRO_READY_MAX_SECONDS : undefined,
         });
     }
-    /**
-     * 取过场用那几张**云体**（`image/territory/cloud/cloud_body_*`）。
-     *
-     * 🔴 不要换成 `cloud_idle_*`：那是「云体 + 影子」烤在一起的合并图，密铺时每朵的黑影
-     * 会盖在邻居的白云体上 ⇒ 整屏发灰（实机整屏均值 147，领地正常页 231）。
-     * 与领地页共用同一组帧，交接过去才是同一屏云。
-     *
-     * 目录整个没导入 / 加载失败都只是"没有云"，不影响匹配本身：`buildCover` 会跳过，
-     * 散场那一下露出空底色 —— 比让玩家进不了匹配强。
-     */
-    private async loadCloudFrames(context: ProcedurePreloadContext): Promise<void> {
+
+    private onLifecycle(event: IViewLifecycle, source: object): void {
+        const mounted = this.mounted;
+        if (!mounted || source !== mounted.page) return;
+        if (event.phase === 'ready') mounted.controller.start();
+        else if (event.phase === 'destroyed') this.dispose();
+    }
+
+    private onStateChanged(state: IMatchingViewState): void {
+        this.mounted.page.render(state);
+    }
+
+    private onHandoff(): void {
+        this.handOverCover(this.mounted.page.node);
+    }
+
+    private onLeaveMatching(event: IMatchingLeave): void {
+        if (event.destination === 'battle') {
+            ProcedureManager.navigate(GameRoute.Battle, event.entry);
+        } else {
+            console.error('[MatchingComposition]', event.error);
+            ProcedureManager.navigate(GameRoute.Main);
+        }
+        this.handoffOverlay?.arm();
+    }
+    /** 纯云体与领地页一致（实际项目资源只有 cloud_body_0 单帧），密铺时避免合成影子把画面压暗。 */
+    private async loadCloudFrames(scope: ResourceScope): Promise<SpriteFrame[]> {
         try {
-            const frames = await this.resources.assets.loadDir(TERRITORY_CLOUD_ART_ROOT, SpriteFrame, {
-                scope: context.resources,
-            });
-            this.cloudFrames = (frames ?? [])
-                .filter((frame) => !!frame?.name && frame.name.startsWith('cloud_body_'))
-                .sort((left, right) => left.name.localeCompare(right.name));
+            const frame = await this.resources.assets.load(
+                spriteFramePath(TERRITORY_CLOUD_ART_ROOT, 'cloud_body_0'),
+                SpriteFrame,
+                { scope },
+            );
+            return frame ? [frame] : [];
         } catch (error) {
-            this.cloudFrames = [];
-            console.warn('[MatchingComposition] 过场云帧加载失败', error);
+            if (!scope.disposed) console.warn('[MatchingComposition] 过场云帧加载失败', error);
+            return [];
         }
     }
 
@@ -178,23 +161,17 @@ export class MatchingComposition extends ControllerBase {
      * 最上层（地图那边要盖住一切），所以这里必须再往下压一次。
      */
     private buildCover(node: Node, page: MatchingPage, params?: IMatchingEntryParams): void {
-        if (!params?.pve || !this.cloudFrames.length) {
-            if (params?.pve) {
-                console.warn('[MatchingComposition] 过场云帧缺失（image/territory/cloud/cloud_idle_0…4），'
-                    + '匹配界面底下不会有云，散场那一下会露出空底色');
-            }
-            return;
-        }
+        if (!this.cloudFrames.length) return;
         // 尺寸以领地页带过来的为准（那才是它实际铺过的那一屏）；没带才退回可视区域。
-        const viewport = params.coverViewport;
+        const viewport = params?.coverViewport;
         const size = viewport && viewport.width > 0 && viewport.height > 0
             ? viewport
             : view.getVisibleSize();
         const cover = new TerritoryBattleCover(node, this.cloudFrames);
         if (!cover.build(size.width, size.height)) return;
-        cover.layerNode?.setSiblingIndex(0);
+        cover.layerNode.setSiblingIndex(0);
         // 与领地页最后一帧对齐：云已经合拢到位、整层不透明。
-        cover.setBaseStep(params.coverStep ?? 0);
+        cover.setBaseStep(params?.coverStep ?? 0);
         cover.apply(1, 1, 0);
         this.cover = cover;
         // 菜单页不会给"每帧回调"，用组件的调度器（interval=0 ⇒ 每帧）。
@@ -202,28 +179,15 @@ export class MatchingComposition extends ControllerBase {
         page.schedule(() => cover.tick(game.deltaTime), 0);
     }
 
-    /** 匹配界面**瞬间**消失：只把 UI 那几棵子树关掉，云留着（它就是"被露出来的底"）。 */
-    private hidePageContent(): void {
-        const node = this.node;
-        if (!node?.isValid) return;
-        const coverNode = this.cover?.layerNode ?? null;
+    /** 匹配 UI 即时隐藏，已建的云层交给跨流程宿主，切场时继续覆盖画面。 */
+    private handOverCover(node: Node): void {
+        const cover = this.cover;
+        const coverNode = cover?.layerNode;
         for (const child of node.children) {
             if (child === coverNode) continue;
             child.active = false;
         }
-    }
-
-    /**
-     * 交接的第一步：藏 UI + 把云**搬出匹配页**。
-     *
-     * 🔴 为什么要搬：下一步就是 `navigate('battle')`，而 `onLeave` 会把匹配页连同页内的云
-     * 一起销毁。云要是留在页里，"散云"就只能在切场之前发生 —— 那正是被打回的那版：
-     * 云底下一片黑（页面 UI 已经关了，战场还没挂上）。
-     */
-    private handOverCover(): void {
-        this.hidePageContent();
-        const cover = this.cover;
-        if (!cover?.built) return;
+        if (!cover) return;
         const overlay = TerritoryBattleCoverOverlay.create(this.host, cover);
         if (!overlay) return;
         this.handoffOverlay = overlay;
@@ -233,6 +197,7 @@ export class MatchingComposition extends ControllerBase {
 
     dispose(): void {
         this.releaseInputs();
+        this.mounted = null;
         const cover = this.cover;
         this.cover = null;
         const overlay = this.handoffOverlay;
@@ -240,7 +205,7 @@ export class MatchingComposition extends ControllerBase {
         const node = this.node;
         this.node = null;
         this.cloudFrames = [];
-        this.prefab = null; this.iconLoader = null; this.lookup = null; this.tips = [];
+        this.prefab = null; this.icons = null; this.identity = null; this.lookup = null; this.tips = [];
         try { cover?.dispose(); }
         finally {
             // 已交接的云归 overlay；离开时 arm 保证中断导航也能超时散场。

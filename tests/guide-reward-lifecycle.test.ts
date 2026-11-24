@@ -29,16 +29,16 @@ test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期�
         scrollToTop() {},
         refreshList(_total: number) {},
     });
-    const events: Array<{ owner: object; phase: string }> = [];
+    const events: Array<{ source: object; phase: string }> = [];
     const listener = {};
-    EventMgr.instance.on(VIEW_LIFECYCLE, payload => events.push(payload), listener);
+    EventMgr.instance.on(VIEW_LIFECYCLE, (payload, source) => events.push({ ...payload, source }), listener);
     try {
         const empty = new exports.ShowRewardPage();
         empty.grid = gridStub();
         empty.prepareEnterAnimation = () => {};
         await empty.onOpen({ goods: [] });
         assert.deepEqual(events.map(e => e.phase), ['enabled', 'disabled']);
-        assert.ok(events.every(e => e.owner === empty));
+        assert.ok(events.every(e => e.source === empty));
 
         const pending = new exports.ShowRewardPage();
         pending.grid = gridStub();
@@ -51,6 +51,6 @@ test('奖励窗从打开前即通知暂停，空奖励立即关闭或加载期�
         resolve([]);
         await opening;
         assert.deepEqual(events.slice(2).map(e => e.phase), ['enabled', 'disabled']);
-        assert.ok(events.slice(2).every(e => e.owner === pending));
+        assert.ok(events.slice(2).every(e => e.source === pending));
     } finally { EventMgr.instance.offTarget(listener); }
 });

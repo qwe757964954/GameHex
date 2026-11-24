@@ -1,3 +1,4 @@
+import type { ZCRuntimeRules } from '../ZCGameRuntimeConfig';
 import type { ZCDamageSource, ZCHexState, ZCSnapshot, ZCUnitState } from '../ZCGameTypes';
 import { zcHexTopEdgeToward } from '../ZCHexTopGeometry';
 import type { ZCOwner } from '../ZCMapConfig';
@@ -6,13 +7,14 @@ import type { IZCModelServices } from './ZCModelServices';
 import type { ZCUnitRegistry } from './ZCUnitRegistry';
 import { ZCDC_LOG_DAMAGE_FLOAT } from '../../ZCDCLogSwitch';
 
-const HATRED_SECONDS = 5;
+export const HATRED_SECONDS = 5;
 const DEATH_SECONDS = 0.45;
 
 export interface IZCDamageResolutionContext extends Pick<IZCModelServices, 'statusSystem'> {
     readonly units: ZCUnitRegistry;
     readonly damageDealt: Record<ZCOwner, number>;
     readonly damageTaken: Record<ZCOwner, number>;
+    readonly rules?: Readonly<ZCRuntimeRules>;
     /** 闪避随机源；仅目标 `dodgePct > 0` 时调用，缺省视为无闪避。*/
     readonly random?: () => number;
 }
@@ -66,7 +68,7 @@ export class ZCDamageResolutionSystem {
             if (target.hatredUnitId === sender.id || !oldHatred || state.elapsedSeconds > target.hatredUntil) {
                 target.hatredUnitId = sender.id;
             }
-            target.hatredUntil = state.elapsedSeconds + HATRED_SECONDS;
+            target.hatredUntil = state.elapsedSeconds + (context.rules?.hatredSeconds ?? HATRED_SECONDS);
             // 受击反弹：护体期间被打中，压攻击者 3 秒攻速。
             this.applyRetaliate(state, target, sender, context);
             // 受伤反弹：尖刺风暴期间将实际受到的伤害按比例反弹给攻击者。

@@ -73,6 +73,7 @@ export interface IZCBattleView {
 }
 /** 服务只提供外部能力，流程状态与释放句柄仍由运行期持有。*/
 export interface IZCBattleRuntimeServices {
+    readonly playSound?: (key: string) => void;
     readonly art: {
         loadUnitPrefab(path: string): Promise<Prefab | null>;
         /** 同 `loadUnitPrefab`，只是语义上给技能特效用（bundle 路由一样走 `bundleForPath`）。*/

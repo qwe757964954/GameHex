@@ -161,7 +161,7 @@ function upgradeFixture(upgraded = false) {
         } : {}),
     });
     EventMgr.instance.on(CardLineupEvent.HeroUpgraded, value => results.push(value), owner);
-    const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: eventOwner, kind, skillId: 100101 });
+    const intent = (kind = 'submit', eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind, skillId: 100101 }, eventOwner);
     return { owner, controller, repository, states, results, applied, skills, pending, intent, failures, upgradedContents, heroLoads, heroPrefab,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); },
         get calls() { return calls; }, get loads() { return loads; }, get releases() { return releases; }, get loading() { return loading; }, get removed() { return removed; } };
@@ -349,7 +349,7 @@ function boardFixture(closeAfterSave = false) {
         },
     });
     EventMgr.instance.on(CardLineupEvent.DeckSaved, value => events.push(value), owner);
-    const intent = (kind: string, data = {}, eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: eventOwner, kind, ...data });
+    const intent = (kind: string, data = {}, eventOwner = owner) => EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind, ...data }, eventOwner);
     return { controller, repository, pending, states, events, submissions, tips, selects, intent,
         finish() { controller.dispose(); EventMgr.instance.offTarget(owner); }, get removed() { return removed; }, get closed() { return closed; } };
 }

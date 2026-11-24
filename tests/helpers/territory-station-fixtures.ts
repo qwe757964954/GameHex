@@ -196,8 +196,14 @@ export interface StationRenderContent {
     readonly tint: FakeColor;
     readonly badge: string;
     readonly levelBubble?: string;
+    readonly levelBubbleIcon?: unknown;
     readonly levelBubbleFrame?: unknown;
     readonly levelBubblePortrait?: unknown;
+    readonly levelBubbleAvatarFrame?: unknown;
+    readonly levelBubbleLevelFrame?: unknown;
+    readonly levelBubbleLevel?: number;
+    /** 2026-11-23 已通关 PVP：蓝底方图 + 问号徽标，无文字。 */
+    readonly levelBubblePvpBadge?: boolean;
     /** 2026-11-11 预告关卡：未解锁条件格也要显示编号气泡。 */
     readonly previewBubble?: boolean;
     /** 预告气泡按虚影建筑抬升用的锚点帧（与 syncGhosts 同源）。 */
@@ -219,6 +225,16 @@ export interface StationView {
     iconTransform: FakeUITransform;
     captionIconTransform: FakeUITransform;
     captionTextTransform: FakeUITransform;
+    /** `LevelBubble` 子树：prefab 持有几何，视图只换帧 / 切显隐。 */
+    levelBubbleNode: FakeNode;
+    levelBubbleTransform: FakeUITransform;
+    levelBubbleSprite: FakeSprite;
+    levelBubbleButton: FakeButton;
+    levelBubbleAvatarFrameSprite: FakeSprite;
+    levelBubbleIconSprite: FakeSprite;
+    levelBubbleIconTransform: FakeUITransform;
+    levelBubbleLevelBadgeSprite: FakeSprite;
+    levelBubbleLevelLabel: FakeLabel;
     initialize(layers: StationLayers, clickable?: boolean): void;
     setMapPosition(x: number, y: number, z?: number): void;
     render(content: StationRenderContent): void;
@@ -358,9 +374,54 @@ export function withTransform(node: FakeNode, width: number, height: number): Fa
     return node;
 }
 
+/** `LevelBubble` 子树夹具：几何按 prefab 抄，运行时只换帧 / 切显隐。 */
+export function createLevelBubble(root: FakeNode): {
+    node: FakeNode;
+    transform: FakeUITransform;
+    sprite: FakeSprite;
+    button: FakeButton;
+    avatarFrameSprite: FakeSprite;
+    iconSprite: FakeSprite;
+    iconTransform: FakeUITransform;
+    levelBadgeSprite: FakeSprite;
+    levelLabel: FakeLabel;
+} {
+    const bubble = withTransform(attach(new FakeNode('LevelBubble'), root, 0, 0), 94, 45);
+    bubble.active = false;
+    const bubbleSprite = bubble.addComponent(FakeSprite);
+    bubbleSprite.sizeMode = FakeSprite.SizeMode.CUSTOM;
+    bubbleSprite.trim = false;
+    bubbleSprite.color = FakeColor.WHITE;
+    const bubbleButton = bubble.addComponent(FakeButton);
+    const avatarFrame = withTransform(attach(new FakeNode('LevelBubbleAvatarFrame'), bubble, 0, 4), 64, 64);
+    const avatarFrameSprite = avatarFrame.addComponent(FakeSprite);
+    const levelIcon = withTransform(attach(new FakeNode('LevelBubbleIcon'), bubble, 0, 4), 54, 54);
+    const levelIconSprite = levelIcon.addComponent(FakeSprite);
+    const levelBadge = withTransform(attach(new FakeNode('LevelBubbleLevelBadge'), bubble, -27, -19), 19, 19);
+    const levelBadgeSprite = levelBadge.addComponent(FakeSprite);
+    const levelLabelNode = withTransform(attach(new FakeNode('LevelBubbleLevelLabel'), levelBadge, 0, 0), 19, 19);
+    const levelLabel = levelLabelNode.addComponent(FakeLabel);
+    for (const sprite of [avatarFrameSprite, levelIconSprite, levelBadgeSprite]) {
+        sprite.sizeMode = FakeSprite.SizeMode.CUSTOM;
+        sprite.trim = false;
+        sprite.type = FakeSprite.Type.SIMPLE;
+        sprite.color = FakeColor.WHITE;
+    }
+    return {
+        node: bubble,
+        transform: bubble.uiTransform!,
+        sprite: bubbleSprite,
+        button: bubbleButton,
+        avatarFrameSprite,
+        iconSprite: levelIconSprite,
+        iconTransform: levelIcon.uiTransform!,
+        levelBadgeSprite,
+        levelLabel,
+    };
+}
+
 /** 按 `TerritoryStation.prefab` 的角色接好一个站点视图（子节点尺寸 / 偏移全按 prefab 抄）。 */
-export function makeStationView(): {
-    view: StationView;
+export function makeStationView(): {    view: StationView;
     root: FakeNode;
     icon: FakeNode;
     caption: FakeNode;
@@ -378,7 +439,8 @@ export function makeStationView(): {
     const icon = withTransform(attach(new FakeNode('Icon'), root, 0, 0), 128, 128);
     const caption = withTransform(attach(new FakeNode('CaptionBg'), root, 0, 52), 40, 40);
     const text = withTransform(attach(new FakeNode('CaptionLabel'), root, 0, 52), 92, 28);
-    const badge = attach(new FakeNode('BadgeLabel'), root, 35, 35);
+    const badge = attach(new FakeNode('BadgeLabel'), root, 28, 30);
+    const level = createLevelBubble(root);
     const button = new FakeButton();
     button.node = root;
     const iconSprite = new FakeSprite();
@@ -396,6 +458,15 @@ export function makeStationView(): {
         iconTransform: icon.uiTransform,
         captionIconTransform: caption.uiTransform,
         captionTextTransform: text.uiTransform,
+        levelBubbleNode: level.node,
+        levelBubbleTransform: level.transform,
+        levelBubbleSprite: level.sprite,
+        levelBubbleButton: level.button,
+        levelBubbleAvatarFrameSprite: level.avatarFrameSprite,
+        levelBubbleIconSprite: level.iconSprite,
+        levelBubbleIconTransform: level.iconTransform,
+        levelBubbleLevelBadgeSprite: level.levelBadgeSprite,
+        levelBubbleLevelLabel: level.levelLabel,
     });
     const layers: StationLayers = {
         icon: new FakeNode('StationIconLayer'),

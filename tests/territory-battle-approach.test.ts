@@ -172,7 +172,7 @@ test('★★过场与开箱共用同一套镜头基准（倍率/对焦喂给同�
     const body = playBody.slice(0, playBody.indexOf('\n    }'));
     assert.ok(body.includes('this.captureChestCamera(point)'), '必须量基准，否则镜头会推到错误的位置');
     assert.ok(body.includes('this.applyChestCamera(1, 0, point)'), '起播帧要显式摆到原位');
-    assert.ok(body.includes('this.setInputLocked(true)'), '推镜期间必须锁输入（地图是 ScrollView content）');
+    assert.ok(body.includes('this.syncInputLock()'), '推镜期间必须锁输入（地图是 ScrollView content）');
     assert.ok(mapViewSource.includes('this.applyChestCamera(fx.scale, fx.focus, approach.origin)'),
         '每帧必须把曲线的 (scale, focus) 喂给同一套镜头');
 });

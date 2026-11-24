@@ -72,9 +72,9 @@ export class LoginPage extends Component {
         if (this.passwordToggleBtn) this.passwordToggleBtn.on(Button.EventType.CLICK, this.onTogglePasswordVisibility, this);
         if (this.platformLoginBtn) this.platformLoginBtn.on(Button.EventType.CLICK, this.onPlatformLogin, this);
 
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
-    onDestroy(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' }); }
+    onDestroy(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this); }
 
     restoreCredentials(value: { account: string; password: string }): void {
         this.accountInput.string = value.account;
@@ -114,19 +114,19 @@ export class LoginPage extends Component {
         // GM 按钮可见性
         if (this.gmBtn) this.gmBtn.active = state.gmVisible;
     }
-    private readonly onServers = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind: 'servers' }); };
+    private readonly onServers = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'servers' }, this); };
     private readonly onLogin = (): void => { this.submit('login'); };
     private readonly onRegister = (): void => { this.submit('register'); };
-    private readonly onPlatformLogin = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind: 'platform-login' }); };
+    private readonly onPlatformLogin = (): void => { EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'platform-login' }, this); };
     private readonly onToggleAgreement = (): void => {
         // 取当前勾选状态的反值，由 Controller 更新状态后 render 回来
         const currentlyChecked = this.agreementCheck?.active ?? false;
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind: 'toggle-agreement', agreed: !currentlyChecked });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-agreement', agreed: !currentlyChecked }, this);
     };
     private readonly onTogglePasswordVisibility = (): void => {
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind: 'toggle-password-visibility' });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'toggle-password-visibility' }, this);
     };
     private submit(kind: 'login' | 'register'): void {
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner: this, kind, account: this.accountInput.string, password: this.passwordInput.string });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind, account: this.accountInput.string, password: this.passwordInput.string }, this);
     }
 }

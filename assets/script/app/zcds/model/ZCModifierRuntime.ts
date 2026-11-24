@@ -1,7 +1,7 @@
 import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 import type { ZCUnitDefinition } from './ZCCombatCatalog';
 import type { IZCBattleRates } from './ZCMatchConfig';
-import { missileLog, ZC_MISSILE_DEBUG_HERO_LEVEL } from '../ZCMissileSkillDiagnostics';
+import { missileLog, ZC_MISSILE_DEBUG_HERO_LEVEL, zcIsMissileWatchUnit } from '../ZCMissileSkillDiagnostics';
 import { skillCastLog, zcSkillCastWatched } from '../ZCSkillCastDiagnostics';
 import {
     executeGeneralStarModifiers,
@@ -669,12 +669,13 @@ function compileSkillPlanLoadout(
     //  ⇒ 战场上一枚导弹都不会有，而配表看起来「明明配了」。
     //  `ZC_MISSILE_DEBUG_HERO_LEVEL` 只抬 68010 的技能计划筛选等级（成长仍按真实等级），
     //  用于低等级账号验证导弹美术/弹道，默认应改回 0。
-    const planLevel = unitId === '68010' && ZC_MISSILE_DEBUG_HERO_LEVEL > 0
+    const isMissileUnit = zcIsMissileWatchUnit(unitId);
+    const planLevel = isMissileUnit && ZC_MISSILE_DEBUG_HERO_LEVEL > 0
         ? Math.max(heroLevel, ZC_MISSILE_DEBUG_HERO_LEVEL)
         : heroLevel;
     const skillPlans = selectZCSkillPlans(unitId, planLevel, catalogs);
-    if (unitId === '68010') {
-        missileLog('配表', `镭射飞龙 heroLevel=${heroLevel}`
+    if (isMissileUnit) {
+        missileLog('配表', `导弹监视单位 ${unitId} heroLevel=${heroLevel}`
             + (planLevel !== heroLevel ? `（技能按 ${planLevel} 级筛，测试开关）` : '')
             + ` | 命中技能链 ${skillPlans.map(row => `${row.skillChainId}@Lv${row.skillLevel}`).join(' ') || '（空）'}`
             + ` | 含 101003 追踪导弹？${skillPlans.some(row => row.skillChainId === 101003)}`);

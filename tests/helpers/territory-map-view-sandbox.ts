@@ -17,7 +17,7 @@ import { buildTerritoryStationStates } from '../../assets/script/app/territory/a
 export function mapInputWithProjection(input: any): any {
     if (input.stationStates) return input;
     const progress = input.progress;
-    return { ...input, stationStates: buildTerritoryStationStates({
+    return { randomResourceOpenableCells: [], pendingRandomResourceCells: [], ...input, stationStates: buildTerritoryStationStates({
         ...input,
         progress: {
             isCellUnlocked: id => progress.isCellUnlocked(id),
@@ -30,8 +30,9 @@ export function mapInputWithProjection(input: any): any {
     }) };
 }
 
-export function stationRenderWithProjection(view: any): (...args: any[]) => any {
-    return (site, input, ...args) => view.stationRenderOf(site,
+export function stationRenderWithProjection(_view?: unknown): (...args: any[]) => any {
+    const { stationRenderOf } = loadTerritoryStationPresentation();
+    return (site, input, ...args) => stationRenderOf(site,
         mapInputWithProjection({ ...input, map: { ...input.map, sites: [site] } }), ...args);
 }
 
@@ -44,17 +45,22 @@ export function stationRenderWithProjection(view: any): (...args: any[]) => any 
  *
  * ⚠️ 新增 MapView 的 import 时**必须**在这里补桩，否则所有引用者一起红。
  */
-export function loadTerritoryMapViewClass(): any {
-    const source = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
-    const code = ts.transpileModule(source, { compilerOptions: {
-        experimentalDecorators: true,
-        module: ts.ModuleKind.CommonJS,
-        target: ts.ScriptTarget.ES2020,
-    } }).outputText;
-    const moduleExports: Record<string, unknown> = {};
-    runInNewContext(code, {
-        exports: moduleExports,
-        require: (id: string) => {
+function loadTerritoryViewModule(entry: string, emit = (_event: string): void => {}): Record<string, any> {
+    function loadViewModule(name: string): Record<string, unknown> {
+        const source = readFileSync(`assets/script/app/territory/view/${name}.ts`, 'utf8');
+        const code = ts.transpileModule(source, { compilerOptions: {
+            experimentalDecorators: true,
+            module: ts.ModuleKind.CommonJS,
+            target: ts.ScriptTarget.ES2020,
+        } }).outputText;
+        const exports: Record<string, unknown> = {};
+        runInNewContext(code, { exports, require: requireViewModule });
+        return exports;
+    }
+
+    const presentation = loadViewModule('TerritoryStationPresentation');
+    function requireViewModule(id: string): unknown {
+        if (id === './TerritoryStationPresentation') return presentation;
             if (id === 'cc') return {
                 _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
                 Component: class {},
@@ -233,7 +239,7 @@ export function loadTerritoryMapViewClass(): any {
         };
         //  事件走 `EventMgr` 全局中控（组件侧 emit、页面侧 on 都经它）。
         if (id.includes('event/EventMgr')) {
-            return { EventMgr: { instance: { emit() {}, on() {}, offTarget() {} } } };
+            return { EventMgr: { instance: { emit, on() {}, offTarget() {} } } };
         }
         if (id === '../application/TerritoryEvents') return mvcEvents;
         // 宝箱提示气泡 / 前置宝箱跳动（2026-11-02）：本用例关注的分支与它无关 ⇒ 给「不挂气泡、
@@ -269,7 +275,15 @@ export function loadTerritoryMapViewClass(): any {
         // 退化成一个常量会让「锁该缩到几倍 / 价格该不该已经长出来」这类断言失去意义。
         if (id === '../model/TerritoryUnlockTransition') return territoryUnlockTransitionModule;
         throw new Error(`Unexpected dependency: ${id}`);
-    },
-});
-    return moduleExports.TerritoryMapView as any;
+    }
+
+    return entry === 'TerritoryStationPresentation' ? presentation : loadViewModule(entry);
+}
+
+export function loadTerritoryStationPresentation(): Record<string, any> {
+    return loadTerritoryViewModule('TerritoryStationPresentation');
+}
+
+export function loadTerritoryMapViewClass(emit?: (event: string) => void): any {
+    return loadTerritoryViewModule('TerritoryMapView', emit).TerritoryMapView;
 }

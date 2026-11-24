@@ -356,7 +356,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     selectPreset(index: number): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'preset', index });
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'preset', index }, this);
     }
 
     private updatePresetTabs(index: number): void {
@@ -379,17 +379,17 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
     }
 
     onResetAll(): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'reset' });
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'reset' }, this);
     }
 
     private onCloseClick(): void { this.closeByButton(); }
 
     onSave(): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'save' });
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'save' }, this);
     }
 
     onCardTap(card: ZCDeckCard): void {
-        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { owner: this, kind: 'toggle', cardId: card.id });
+        EventMgr.instance.emit(CardPopupEvent.BoardIntent, { kind: 'toggle', cardId: card.id }, this);
     }
 
     protected onClose(): void {

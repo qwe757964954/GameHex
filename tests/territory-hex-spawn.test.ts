@@ -406,12 +406,12 @@ test('站点视图：整站透明度覆盖全部视觉根，气泡背景与文�
     const start = source.indexOf('setSpawnOpacity(value: number)');
     assert.ok(start > 0, 'setSpawnOpacity 必须存在');
     const body = source.slice(start, source.indexOf('setGhostOpacity(', start));
-    // 四个固定的视觉根：Icon / 银币图标 / 数字 / 气泡（没有气泡时退回角标）。
+    // 四个固定的视觉根：Icon / 银币图标 / 数字 / 气泡（气泡是 prefab 子树，文字挂在它下面）。
     for (const root of [
         'this.iconSprite.node',
         'this.captionSprite.node',
         'this.captionLabel.node',
-        'this.levelBubble?.node ?? this.badgeLabel.node',
+        'this.levelBubbleNode',
     ]) {
         assert.ok(body.includes(root), `${root} 必须在淡入名单里`);
     }

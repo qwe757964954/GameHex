@@ -384,24 +384,21 @@ test('工程内所有请求类都能发出去', async () => {
 test('开始战斗请求兜硬超时、永不 reject、失败返回 null', () => {
     const service = readFileSync('assets/script/app/battle/BattleStartService.ts', 'utf8');
     assert.match(service, /export const BATTLE_START_TIMEOUT_MS\s*=\s*\d+/, '必须有硬超时常量');
-    assert.match(service, /withTimeout\(sendStartBattle\(/, '发送必须包在 withTimeout 里');
-    // 共享请求入口负责离线拦截，不在业务服务重复判断
-    assert.match(service, /GameNet\.sendRequest\(/,  '离线时不能发包（离线复现不出"悬着"的问题）');
-    // GameNet 统一检查 MessageId；战斗服务只负责离线、超时和响应归一化。
+    assert.match(service, /GameNet\.requestResult<CmdStartBattleRspMsg, ZCBattleStart>/);
+    assert.match(service, /timeoutMs: BATTLE_START_TIMEOUT_MS/);
+    assert.doesNotMatch(service, /EventMgr|msgEventProxy|export function startBattle\(/);
     const gameNet = codeOf('assets/script/app/net/GameNet.ts');
     assert.match(gameNet, /getMessageId\(messageName\)/);
     assert.match(gameNet, /if \(!messageId\)/);
-    // catch 里必须 return null（降级），不能 rethrow → 否则 awaitReady 会把流程带崩
-    assert.match(service, /\}\s*catch\s*\(error\)\s*\{[\s\S]{0,400}?return null;/, 'catch 分支必须降级返回 null');
-    assert.equal(/^\s*throw\s/m.test(codeOf('assets/script/app/battle/BattleStartService.ts')), false,
-        '本层不允许抛出：契约是"永远兑现、永远不 reject"');
+    assert.match(gameNet, /sendGameRequestResult\(this\.instance, make, options,[\s\S]*?events\.execute\(event, result\)/);
 });
 
 test('matching controller only enters an authoritative battle once and composition owns adapters', () => {
     const composition = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
     const controller = readFileSync('assets/script/app/matching/MatchingController.ts', 'utf8');
     const model = readFileSync('assets/script/app/matching/MatchingModel.ts', 'utf8');
-    assert.match(composition, /startBattle\(params\?\.battleType \?\? ZC_BATTLE_TYPE_PVP/);
+    assert.match(controller, /requestBattleStart\(entry\?\.battleType \?\? ZC_BATTLE_TYPE_PVP, entry\?\.battleParams \?\? \[\]\)/);
+    assert.match(controller, /GameNet\.instance\.addEvent\(BATTLE_START_SETTLED, this, this\.onBattleStartSettled\)/);
     assert.match(composition, /clearLastBattleStart\(\)/);
     assert.doesNotMatch(model + controller, /getLastBattleStart/);
     assert.match(controller, /opponents\.length === 0/);
@@ -827,8 +824,8 @@ test('battleType 取值已定：PVP 匹配局 = 1001，且集中一处', () => {
     assert.match(model, /export const ZC_BATTLE_TYPE_PVP/, '取值必须集中一处，否则将来要满工程找字面量');
     // 调用点不许再出现裸字面量（Service 文件头的日志原文里那个 `battleType: 1` 是历史记录，
     // 所以只盯 ProcedureMatching 这个真正的调用点，别把注释也算进来）
-    const caller = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
-    assert.match(caller, /startBattle\(\s*(?:params\?\.battleType\s*\?\?\s*)?ZC_BATTLE_TYPE_PVP\s*,/, '发请求必须引用常量');
+    const caller = readFileSync('assets/script/app/matching/MatchingController.ts', 'utf8');
+    assert.match(caller, /requestBattleStart\(\s*entry\?\.battleType\s*\?\?\s*ZC_BATTLE_TYPE_PVP\s*,/, '发请求必须引用常量');
     assert.doesNotMatch(caller, /battleType\s*[:=]\s*\d/, '调用点不要散落字面量');
     // Service 的默认参数同样引用常量
     assert.match(

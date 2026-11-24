@@ -321,12 +321,14 @@ test('C2 结算等待和奖励解析位于控制器与组合层，匹配局不�
  * 所以三处必须同时成立：匹配组合层透传 → builder 收敛成一个字段 → 运行时直接用它。
  */
 test('C7 匹配入口（宝箱战斗）的 battleType 必须一路透传到结算', () => {
-    const matchingSource = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
+    const matchingSource = readFileSync('assets/script/app/matching/MatchingController.ts', 'utf8');
     const builderSource = readFileSync('assets/script/app/zcds/application/ZCBattleEntryBuilder.ts', 'utf8');
     const entrySource = readFileSync('assets/script/app/zcds/application/ZCGameEntry.ts', 'utf8');
-    assert.match(matchingSource, /params: \{ pve: params\?\.pve, selfRoleId: identity\?\.roleId, battleType: params\?\.battleType \}/,
-        '匹配组合层丢了这个字段 ⇒ 宝箱战斗结算无奖励');
-    assert.match(builderSource, /battleType: entry\?\.battleType \?\? entry\?\.slgBattleType \?\? null/);
+    assert.match(matchingSource, /params: \{[^}]*battleType: entry\?\.battleType/,
+        '匹配预加载必须携带战斗类型');
+    assert.match(matchingSource, /destination: 'battle',[\s\S]*?battleType: entry\?\.battleType/,
+        '进入战斗时必须保留战斗类型');
+    assert.match(builderSource, /battleType: entry \? \(entry\.battleType \?\? entry\.slgBattleType \?\? null\) : null/);
     assert.match(entrySource, /readonly battleType\?: number \| null;/, 'IZCGameEntry 要带上收敛后的 battleType');
     assert.match(entrySource, /battleType\?: number;/, 'ZCGameEntryParams 要能接收入口的协议 battleType');
 });
@@ -420,7 +422,7 @@ test('据点结算真实字节未携带 optional warScore 时，不把 protobuf 
 
 test('C6 仅服务端结果驱动领地回写，退出后不消费迟到结果', () => {
     assert.match(settlementSource, /if \(result && this\.host\.hasPveContext\)/);
-    assert.match(settlementSource, /emit\(ZC_BATTLE_EVENTS\.PVE_RESULT, \{ owner: this\.host\.owner, victory: result\.code === 1 \}\)/);
+    assert.match(settlementSource, /emit\(ZC_BATTLE_EVENTS\.PVE_RESULT, \{ victory: result\.code === 1 \}, this\.host\.owner\)/);
     const guard = settlementSource.indexOf('if (this.isDisposed) return;');
     assert.ok(guard >= 0 && guard < settlementSource.indexOf('emit(ZC_BATTLE_EVENTS.PVE_RESULT'));
 });

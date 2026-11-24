@@ -9,7 +9,7 @@ import {
 import { ownersForPlayerCount, type ZCFaction, ZCOwner } from './ZCMapConfig';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 import { resolveZCUnitDefinition } from './ZCModifierRuntime';
-import { createPvpTileTypes, ZCPvpTileType } from './ZCPvpTileRules';
+import { createPvpTileTypes, tileTypeFromLegacyHex, ZCPvpTileType } from './ZCPvpTileRules';
 import { ZCStatusSystem } from './ZCStatusEffect';
 import { ZC_GATE_EFFECTS, neutralResourceItemOf, ZCNeutralResourceType } from './ZCNeutralResourceGroup';
 
@@ -373,8 +373,9 @@ export class ZCSnapshotCodec {
                 // 孢爆箭 / 孢子凝珠（风炮菇 101303 / 水手菇 101104，2026-11-17 第 12 批）：
                 // CD 截止。不还原的话读档回来会白送一发（`undefined` ⇒ 重新按 CD 起算）。
                 'splashReadyAt',
-                // 菌毯爆发 / 菌核爆裂（菌壶菇 101504 / 菌王菇 101804，2026-11-17 第 13 批）：
+                // 菌核爆裂 / 同车道爆发（菌王菇 101804 / 101803，2026-11-17 第 13 批）：
                 // CD 截止。同一套口径 —— 不还原就是「读档回来白送一次范围爆发」。
+                // 🔴 原本列在这里的「菌毯爆发」101504 已在第 43 批换成射线集束（走 `fireFiredCount`）。
                 'burstReadyAt',
                 // 毒液喷吐（诅咒菇 101803，2026-11-18 第 17 批）：独立 CD，不还原 = 读档白送一次喷吐。
                 'venomReadyAt',
@@ -402,7 +403,12 @@ export class ZCSnapshotCodec {
                 //    （位置每帧由本体算，丢了本体 id 就再也对不上）；
                 //  · `summonSlot` = 第几个阵位，不还原则四个舞伴读档后挤到同一个角；
                 //  · `summonAlpha` = 半透明度，纯表现，但不还原会让读档后的舞伴突然变实心。
+                //  · `summonLeashRadius` / `summonLeashRadiusY` = 拴绳椭圆的横 / 纵半轴
+                //    （世界 px，2026-11-21 第 36 批 + 2026-11-22 第 41 批）：不还原则读档回来
+                //    又退回「每帧钉死阵位」，舞伴再次寸步不移、够不到站在本体旁边的敌人。
+                //    纵向那一格缺省时按圆形处理 ⇒ 老快照照样能读。
                 'summonUntil', 'summonMasterId', 'summonSlot', 'summonSlotRadius', 'summonAlpha',
+                'summonLeashRadius', 'summonLeashRadiusY',
                 // 累计普攻制召唤（分裂菇 101404，2026-11-18 第 17 批）：上次计数。
                 // 不还原的话读档回来「已经打了 7 次」会被当成从 0 开始，白送一批分身。
                 'summonFiredCount',
@@ -419,10 +425,21 @@ export class ZCSnapshotCodec {
                 'stormReadyAt',
                 // 射线集束（科学家 103503，2026-11-19）：累计普攻计数。不还原 =
                 // 读档回来「已经打了 7 次」被当成 0，白送一发射线。
-                'rayFiredCount']) {
+                'rayFiredCount',
+                // 文明之火（科学家 103503 改造，2026-11-23 第 43 批）：同上的累计普攻计数。
+                'fireFiredCount',
+                // 腾云驾雾（仙桃行者 68009，2026-11-24 第 44 批）：起手时刻 + 目标 1 的 id +
+                // 当前段号。不还原的后果是「读档回来四段突进停在半路」——单位被 `ZCUnitSystem`
+                // 冻结（`dashChainIndex` 有值就 return），却再没人推进它，整局站着不动。
+                'dashChainPendingAt', 'dashChainTargetId', 'dashChainIndex']) {
                 check(optional(unit[key], nonnegative), `${path}.${key}`);
             }
-            for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
+            for (const key of ['dashX', 'dashY', 'blinkCloneX', 'blinkCloneY',
+                'dashChainReturnX', 'dashChainReturnY']) check(optional(unit[key], Number.isFinite), `${path}.${key}`);
+            //  四段突进的访问顺序：与弹道 / 区域的 `hitUnitIds` 同一套「正整数、不重复」口径。
+            check(optional(unit.dashChainIds, v => Array.isArray(v)
+                && v.every(id => integer(id) && (id as number) > 0)
+                && new Set(v).size === v.length), `${path}.dashChainIds`);
             check(optional(unit.passiveStatusApplied, (v) => typeof v === 'boolean'), `${path}.passiveStatusApplied`);
             //  独立分身（分裂菇 101404，2026-11-19 第 26 批）：布尔标记，不走上面那串数值白名单
             //  （`nonnegative` 会把 `true` 判成脏值）。不还原 ⇒ 读档后分身退化成跟随型：
@@ -516,6 +533,11 @@ export class ZCSnapshotCodec {
             check(optional(projectile.burstSecondDamage, nonnegative), `${path}.burstSecondDamage`);
             check(optional(projectile.burstSecondDelay, nonnegative), `${path}.burstSecondDelay`);
             check(optional(projectile.burstEffectSeconds, nonnegative), `${path}.burstEffectSeconds`);
+            //  首目标重击（2026-11-23 仙桃行者「大地之力」100904）：伤害基数 / 落点圆半径 / 表现时长。
+            //  三项都决定「谁掉多少血」，退不出快照就会让联机两端在这一击上分叉。
+            check(optional(projectile.quakeDamage, nonnegative), `${path}.quakeDamage`);
+            check(optional(projectile.quakeRadius, nonnegative), `${path}.quakeRadius`);
+            check(optional(projectile.quakeEffectSeconds, nonnegative), `${path}.quakeEffectSeconds`);
             //  2026-11-18 第 16 批「连射导弹」101304：只走落点引爆的弹体。
             //  两个开关 + 落点爆炸的半径/伤害都必须进快照 —— 退不出去的话，
             //  联机两端会在「这一颗炸没炸、炸多大」上分叉。
@@ -661,6 +683,7 @@ export class ZCSnapshotCodec {
                 check(optional(entry.summonUntil, nonnegative), `${path}.summonUntil`);
                 check(optional(entry.summonAlpha, (v) => nonnegative(v) && (v as number) <= 1), `${path}.summonAlpha`);
                 check(optional(entry.summonIndependent, (v) => typeof v === 'boolean'), `${path}.summonIndependent`);
+                check(optional(entry.effectPrefabPath, (v) => typeof v === 'string'), `${path}.effectPrefabPath`);
             });
         }
         // 在途弹道复用战斗事件 ID，恢复时不能与后续表现事件冲突。
@@ -821,12 +844,4 @@ export class ZCSnapshotCodec {
         }
     }
 
-}
-
-export function tileTypeFromLegacyHex(hex: Pick<ZCHexState, 'building' | 'developmentCost'>): ZCPvpTileType {
-    if (hex.building === 'mine') return ZCPvpTileType.Mine;
-    if (hex.developmentCost >= 250) return ZCPvpTileType.BarracksAdvanced;
-    if (hex.developmentCost >= 100) return ZCPvpTileType.BarracksMedium;
-    if (hex.developmentCost >= 50) return ZCPvpTileType.BarracksCommon;
-    return ZCPvpTileType.AllRandom;
 }

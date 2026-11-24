@@ -23,7 +23,7 @@ function fixture(type = 1, content = '初值') {
     });
     controller.start();
     const intent = (kind: 'submit' | 'change', value = model.content, target = owner) =>
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { owner: target, kind, content: value });
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind, content: value }, target);
     return { owner, model, controller, states, tips, requests, cancelled, intent, get closed() { return closed; } };
 }
 

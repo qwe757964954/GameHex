@@ -385,16 +385,16 @@ test('★★★地图视图：转场必须能建云、写位移、收工归位�
     assert.match(offsetBody, /this\.chapterSwitchRestY = this\.node\.position\.y;/, '基点只量一次');
 
     // 输入锁不能被 `update` 的自动解锁放掉。
-    assert.match(view, /!this\.chapterSwitchActive\) \{/);
+    assert.match(view, /this\.preludeLocked \|\| this\.chapterSwitchActive/);
 });
 
 test('★★★换章重建网格时把转场位移归零（新图要按自己的基准摆）', () => {
     const view = read(MAP_VIEW);
-    const grid = view.slice(view.indexOf('    private syncGrid(input: ITerritoryMapRenderInput): void {'));
+    const grid = view.slice(view.indexOf('    private resetChapterPresentation(): void {'));
     const body = grid.slice(0, grid.indexOf('\n    }\n'));
     const order = body.indexOf('this.resetChapterSwitchOffset()');
     assert.ok(order > 0, '换章不归零 ⇒ 新章第一帧是歪的');
-    assert.ok(body.indexOf('this.restoreChestCamera()') < order, '先还镜头基准，再归零转场位移');
+    assert.ok(body.indexOf('this.stopChestPlay()') >= 0 && body.indexOf('this.stopChestPlay()') < order, '先结束开箱并还原镜头，再归零转场位移');
     // 云仍然要在换章时复位：这就是"演出必须演完才换图"的根因，别顺手删掉。
     assert.match(body, /this\.clouds\.reset\(\);/, 'syncGrid 换章复位云是正确行为，「压住换图」才是解法');
 });

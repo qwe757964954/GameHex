@@ -400,8 +400,8 @@ const SKILL_BEHAVIORS = new Set([
     //  水手菇「孢子凝珠」101104）。两个 key 共用一套实现，后者多一段按档位变比例的减速。
     //  见 `ZCSkillTriggerSystem.applySplashShot` + `ZCAttackResolutionSystem.castSplashShot`。
     'splash_shot', 'spore_burst',
-    //  2026-11-17 第 13 批：以自身为圆心爆一次（菌壶菇「菌毯爆发」101504 /
-    //  菌王菇「菌核爆裂」101804）。两个 key 共用一套实现，后者把「爆完给自己套盾」
+    //  2026-11-17 第 13 批：以自身为圆心爆一次（原菌壶菇「菌毯爆发」101504，现由菌王菇
+    //  「毒液喷吐」101803 使用 / 菌王菇「菌核爆裂」101804）。两个 key 共用一套实现，后者把「爆完给自己套盾」
     //  换成「爆完把怪推开」。见 `ZCSkillTriggerSystem.applyBurstSkill` +
     //  `ZCAttackResolutionSystem.castBurstSkill`。
     'burst_aura', 'burst_knockback',
@@ -442,6 +442,14 @@ const SKILL_BEHAVIORS = new Set([
     'roar',
     'storm_zone',
     'ray_beam',
+    //  2026-11-23 第 43 批 科学家「文明之火」103503（原射线集束改造）：累计普攻 N 次后
+    //  在目标点 200 半径内随机撒 3 个火焰区域，每块独立按秒结算。
+    //  见 `ZCSkillTriggerSystem.applyFireZone` + `ZCAttackResolutionSystem.castFireZone`。
+    'fire_zone',
+    //  2026-11-24 第 44 批 仙桃行者「腾云驾雾」100904（原大地之力改造）：强化那一击改成
+    //  四段突进连击（目标 1 + 周围 3 个，各打一次，再回到目标 1 的位置）。
+    //  见 `ZCSkillTriggerSystem.applyDashChain` + `ZCAttackResolutionSystem.prepareAttack` 的起手分支。
+    'dash_chain',
 ]);
 const STATUS_HANDLERS = new Set([
     'none', 'periodic_damage', 'periodic_heal', 'on_hit_status',

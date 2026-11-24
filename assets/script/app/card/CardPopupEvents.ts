@@ -4,12 +4,12 @@ export const CardPopupEvent = {
     SkillIntent: 'card-popup:skill-intent',
 } as const;
 
-/** owner isolates concurrently open popup instances. */
-export type CardUpgradeIntent = { readonly owner: object } & (
+/** 事件来源用于区分同时打开的卡牌弹窗。 */
+export type CardUpgradeIntent = (
     { readonly kind: 'skills'; readonly skillId: number } |
     { readonly kind: 'submit' | 'previous' | 'next' }
 );
-export type LineupBoardIntent = { readonly owner: object } & (
+export type LineupBoardIntent = (
     { readonly kind: 'toggle'; readonly cardId: string } |
     { readonly kind: 'preset'; readonly index: number } |
     { readonly kind: 'reset' | 'save' }

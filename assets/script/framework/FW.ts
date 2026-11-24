@@ -123,7 +123,7 @@ export class FW {
      * @param goods  奖励明细（`CmdGoods[]`，`{resId, number}`）
      * @param isGold 铜钱 / 金币奖励 ⇒ 换音效（老端 `params?.isGold`）
      */
-    static showReward: (goods: CmdGoods[], isGold: boolean) => void = () => { };
+    static showReward: (goods: CmdGoods[], isGold: boolean, soundKey?: string) => void = () => { };
 
     /**
      * 发起支付出口。
@@ -196,10 +196,10 @@ export class FW {
      *
      * @param tlCmdGoods 奖励明细（`CmdGoods{resId, number}`；空数组 ⇒ 弹窗自己 `close()`，
      *                   与老端 `UpdateList()` 里 `tlGoods.length <= 0` 的 `unload()` 同口径）
-     * @param param      `{ isGold }` —— 铜钱 / 金币奖励换音效（老端 `ModelRole` L599 传的这个形状）
+     * @param param 奖励音效选项。显式 soundKey 优先于 isGold 对应的默认音效。
      */
-    static ShowReward(tlCmdGoods: CmdGoods[], param?: { isGold?: boolean }) {
+    static ShowReward(tlCmdGoods: CmdGoods[], param?: { isGold?: boolean; soundKey?: string }) {
         // ⚠️ 这里**只做转交**，不直接弹窗：真正的实现由组合根注入（见 `FW.showReward` 的说明）。
-        FW.showReward(tlCmdGoods ?? [], !!param?.isGold);
+        FW.showReward(tlCmdGoods ?? [], !!param?.isGold, param?.soundKey);
     }
 }

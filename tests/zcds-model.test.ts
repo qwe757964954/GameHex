@@ -57,6 +57,7 @@ import {
 } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { parseCardCatalogRow } from '../assets/script/app/zcds/model/ZCPvpTableParser';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
+import { zcEmpoweredFxOverrideOf } from '../assets/script/app/zcds/model/ZCQuakeFx';
 import { assetPath } from './helpers/asset-paths';
 
 function readPvpRef(name: string): Array<Record<string, unknown>> {
@@ -1258,10 +1259,12 @@ test('强化那一击的表现口径（2026-11-19 定案 A）：全表「同 pre
         withEmpowered.push(unitId);
         if (!base.effectPrefabPath) baseMissing.push(`${unitId}:${base.name}/${base.mode}`);
     }
-    //  唯一的例外：68009 仙桃行者的普攻行**本来就没有专属美术**（近战，走通用命中表现）⇒
-    //  它的强化那一击也保持「没有专属美术」，与普攻一致。这不是缺陷，是口径本身的边界。
-    assert.deepEqual(baseMissing, ['68009:仙桃行者普攻/melee'],
-        '除仙桃行者外，每张有强化的卡普攻行都必须自带 prefab，否则「复用普攻特效」会退化成通用命中');
+    //  2026-11-23 起全表没有空缺：68009 仙桃行者的普攻行补上了「长枪兵普攻_刀光」
+    //  （用户口径「普通攻击也要播放 长枪兵的武将技能特效」，随后纠正为刀光那份旧值）
+    //  ⇒ 这一列为空是硬要求。
+    //  再出现空缺就意味着某张卡的强化那一击会退化成通用命中表现（画面全无、不报错）。
+    assert.deepEqual(baseMissing, [],
+        '每张有强化的卡普攻行都必须自带 prefab，否则「复用普攻特效」会退化成通用命中');
     assert.ok(withEmpowered.length >= 33,
         `有强化普攻的单位至少 33 个（35 张可出战卡里 68018 / 68024 借的是怪物技能行），实际 ${withEmpowered.length}`);
 
@@ -1271,15 +1274,44 @@ test('强化那一击的表现口径（2026-11-19 定案 A）：全表「同 pre
     //    所以 `collectAttacks` 把两个队列都收回来了（见上面的 `shots`）。
     const WINDOW_SECONDS = 25;
     let firedSomewhere = 0;
+    //  名单覆盖真的命中了哪些卡（下面断言它非空：这批需求落地的就是它们）。
+    const overrideUnits: string[] = [];
     for (const unitId of withEmpowered) {
         const definition = resolveUnitDefinition(unitId);
         const base = definition.attackProfile;
         const skillPrefab = definition.empoweredProfile?.effectPrefabPath;
         const attack = collectAttacks(unitId, WINDOW_SECONDS, Math.max(0, (base.empoweredEvery ?? 0) - 1));
         const everything = [...attack.events, ...attack.shots];
+        //  名单例外（2026-11-23 第 42 批）：`ZC_EMPOWERED_FX_OVERRIDES` 里登记的武将技行**必须**
+        //  播它自己那份图。用户对重骑兵武将技 36241 的原话是「所有使用了【重骑兵_武将技能的】
+        //  统一更换为【仙桃行者_重击技能】特效，并且该特效的释放一定是在目标的坐标位置播放」——
+        //  这是对定案 A 的显式让位，名单外的 36xxx 行一条都不许跟着放开。
+        const override = zcEmpoweredFxOverrideOf(base.empoweredSkillId);
         //  ① 任何一拍都不许再播武将技专属美术（含命中附加特效 / 弹道命中表现 / 区域波次）。
         //  只有当表里两条行**确实配了两份不同美术**时这条才有意义（有的卡本来就共用一份）。
-        if (skillPrefab && skillPrefab !== base.effectPrefabPath) {
+        //  🔴 名单有三种状态：路径（必须播它）/ `null`（登记为不播贴图）/ `undefined`（没登记，借普攻行）。
+        if (override === null) {
+            overrideUnits.push(unitId);
+            const overridden = everything.filter((item) => item.empowered);
+            assert.ok(overridden.length > 0, `${unitId}：强化那一击在这一窗里一次都没打出来`);
+            for (const item of overridden) {
+                //  只钉「不再借普攻那张图」：强化那一击的命中确认事件仍可能带自己的 effectScale。
+                assert.notEqual(item.effectPrefabPath, base.effectPrefabPath,
+                    `${unitId}：登记为「不播」的强化那一击仍拖着普攻贴图 ${base.effectPrefabPath}`);
+            }
+        } else if (override) {
+            overrideUnits.push(unitId);
+            assert.equal(override, skillPrefab,
+                `${unitId}：名单里的路径与 empoweredProfile.effectPrefabPath 不一致（配置两处漂了）`);
+            const overridden = everything.filter((item) => item.empowered);
+            assert.ok(overridden.length > 0, `${unitId}：名单覆盖的强化那一击在这一窗里一次都没打出来`);
+            for (const item of overridden) {
+                assert.equal(item.effectPrefabPath, override,
+                    `${unitId}：名单覆盖没生效 —— 强化那一击又借回普攻图了`);
+                //  同一份美术在仙桃行者自己那条链上是不带倍率的，两处出现必须一样大。
+                assert.equal(item.effectScale, undefined, `${unitId}：名单覆盖那一份不许再叠 ×1.2`);
+            }
+        } else if (skillPrefab && skillPrefab !== base.effectPrefabPath) {
             for (const item of everything) {
                 assert.notEqual(item.effectPrefabPath, skillPrefab,
                     `${unitId}：强化那一击又换回了武将技专属美术 ${skillPrefab}`);
@@ -1300,6 +1332,11 @@ test('强化那一击的表现口径（2026-11-19 定案 A）：全表「同 pre
     }
     assert.ok(firedSomewhere >= 20,
         `33 张有强化的卡里只有 ${firedSomewhere} 张跑出了「同 prefab ×1.2」—— 覆盖不足，口径没真接上`);
+    //  名单必须真的落在具体某张卡上 —— 只在目录里登记、实战里一次都命中不了，等于没做。
+    assert.ok(overrideUnits.includes('68015'),
+        `重骑兵 68015 没吃到 36241 的名单覆盖（实际命中 ${overrideUnits.join(', ') || '无'}）`);
+    assert.ok(overrideUnits.includes('68009'),
+        `仙桃行者 68009 没吃到 30844 的「不播」登记（实际命中 ${overrideUnits.join(', ') || '无'}）`);
 });
 
 test('普攻 / 技能双链：真表名单 —— 火法师走次数、冰法师走时间（同表并存）', () => {

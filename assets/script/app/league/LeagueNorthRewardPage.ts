@@ -245,11 +245,11 @@ export class LeagueNorthRewardPage extends PopupBase {
     private async onClaim(view: ILeagueNorthRewardRowView): Promise<void> {
         if (this.busy) return;
         this.busy = true;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'task', resId: view.resId } } satisfies ILeagueRewardIntent, this);
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
-        if (event.owner !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
+        if (source !== this) return;
         try {
             await this.afterWrite(event.status);
         } finally {

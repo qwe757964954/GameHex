@@ -1,4 +1,4 @@
-import { _decorator, Button, Component, EventTouch, Node, Sprite, SpriteFrame, UITransform, Vec2 } from 'cc';
+import { _decorator, Button, Component, EventTouch, Node, Sprite, SpriteFrame, UITransform, Vec2, Vec3 } from 'cc';
 import type { IControllerResources } from '../../framework/controller/ControllerBase';
 import { ResourceScope } from '../../core/asset/ResourceScope';
 import { GameRoute } from '../../core/runtime/GameRoute';
@@ -15,9 +15,11 @@ import { PopupManager } from '../../framework/ui/PopupManager';
 import { ChestDetailPanel } from './ChestDetailPanel';
 import type { IChestDetailContent } from './ChestDetailPanel';
 import { CHEST_EVENTS } from './ChestEvents';
+import { ChestDropFlightView } from './ChestDropFlightView';
+import { chestDropHitScale, type IChestDropPoint } from './ChestDropFlight';
 import {
-    CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestSlotAction, ChestSlotState,
-    chestActionCaption, formatChestCountdown,
+    CHEST_EMPTY_SLOT_STAMINA_COST, CHEST_SLOT_COUNT, ChestActionRoute, ChestSlotAction, ChestSlotState,
+    chestActionCaption, chestActionRoute, formatChestCountdown,
 } from './ChestTypes';
 import type { IChestDetailData, IChestSlotData } from './ChestTypes';
 import { NewTreasureRepository } from './NewTreasureRepository';
@@ -49,7 +51,7 @@ import {
 import { resolveQuickFindGate } from './QuickFindGate';
 import { EMPTY_ENTRANCE_PLAYER_STATE } from './MainEntranceVisible';
 import type { EntrancePlayerState, EntranceVisibleRow } from './MainEntranceVisible';
-import { playMainHudIntro } from './MainHudIntro';
+import { prepareMainHudIntro, playMainHudIntro } from './MainHudIntro';
 import { VIEW_LIFECYCLE, type IViewLifecycle } from '../../framework/ui/ViewLifecycle';
 
 import { OPEN_TABLE } from '../../core/config/TableNames';
@@ -74,6 +76,13 @@ const MAIN_PAGE_TEXTS = {
     actionFailed: '操作失败，请稍后重试',
     openProtocolMissing: '开箱协议消息号未配置',
     bossMapUnavailable: '关卡地图未就绪',
+    /**
+     * 2026-11-23 用户：「有解锁中的宝箱，等待解锁按钮点击后的提示没有弹出」。
+     *
+     * 队列一次只能解锁一个：`canActivate = false` 时栏位那颗按钮的文案变成「等待解锁」，
+     * 点了以前**什么都不发生**（弹窗里那颗是禁用的，等于死路）。这条提示就是那个出口。
+     */
+    chestAlreadyUnlocking: '已经在解锁其他宝箱',
 } as const;
 
 /**
@@ -149,15 +158,14 @@ export class MainPage extends Component {
      */
     territoryMap: MainTerritoryMap | null = null;
     private readonly treasureRepository = new NewTreasureRepository((goods) => {
-        EventMgr.instance.emit(CHEST_EVENTS.REWARDS, { owner: this, goods });
+        EventMgr.instance.emit(CHEST_EVENTS.REWARDS, { goods }, this);
     });
     /** 运行时当前章节（来自 `TerritoryViewEvent.Render` 的 `state.chapterId`），弹窗标「当前章」用。 */
     private currentChapterId = 0;
     /** 章节弹窗行数据在途标记：挡连点，避免同一次点击并发拉两次地图。 */
     private chapterSelectLoading = false;
-    /** 详情弹窗当前对应的槽位（1~4）与那颗按钮要发的动作；`0` = 没开。 */
+    /** 详情弹窗当前对应的槽位（1~4）；`0` = 没开。 */
     private detailSlot = 0;
-    private detailAction: ChestSlotAction = ChestSlotAction.Open;
     /** 宝箱栏展开期间的空白接收层（懒建，收起后只置 `active=false`，不反复 new）。 */
     private chestBlankCatcher: Node | null = null;
     private readonly chestBlankTouchStart = new Vec2();
@@ -169,6 +177,13 @@ export class MainPage extends Component {
      * 默认 `false`（fail-closed）：`onLoad` 判完之前一帧都不该露出来。
      */
     private quickFindUnlocked = false;
+    /**
+     * 「异步据点弹窗开着」的上一帧电平（§3.56）。
+     *
+     * 只在**边沿**那一拍重算 `startButton.active`，平时不写：`GuideComposition`
+     * 也管同一颗 `BeginGame`（引导未到 5-4 时 `gateHidden`），每帧无条件写会顶掉它。
+     */
+    private stagePopupMasked = false;
     /** 领地最新一帧的「格子 → 关卡」映射（判 pvp 据点通没通要用）。 */
     private territoryStageByCell: ReadonlyMap<number, TerritoryCampaignStage> | null = null;
     /** 领地最新一帧的进度快照（冻结过的，读 `isAreaPassed` 不会读到半更新状态）。 */
@@ -194,6 +209,26 @@ export class MainPage extends Component {
     /** 生成缩放动画的起播时刻（秒）；`chestEntryPopping` 为假时不看它。 */
     private chestEntryPopStartedAt = 0;
     private chestEntryPopping = false;
+    /**
+     * 战斗掉落宝箱飞行视图（懒建，挂 `MainRoot` 最后一位）。
+     * 本页只建一次；切页 `stop()` 收起、销毁 `dispose()`，不反复 `new Node`。
+     */
+    private chestDropFlight: ChestDropFlightView | null = null;
+    /** 本页只演一次掉落动画：`DROP_FLIGHT` 可能因同一 state 重复 render 而被 emit 多次。 */
+    private chestDropPlayed = false;
+    /** 已经收到「这局战斗胜利回城」的边沿，但闸门 / 节点还没就绪 ⇒ 等 `tryStartChestDrop` 补起播。 */
+    private chestDropArmed = false;
+    /** 地图给的 PVP 格心（世界坐标）；`null` = 取不到，用默认起飞点。 */
+    private chestDropOrigin: IChestDropPoint | null = null;
+    /**
+     * 动画在飞 ⇒ `renderChests` 先把最后一颗绿点压住，落地那一拍才点亮。
+     * 服务端队列可能比 `DROP_FLIGHT` 早到（回城全量拉），不加这个闩就会「绿点先亮、宝箱才飞到」。
+     */
+    private chestDropPending = false;
+    /** 落地抖动时钟（< 0 = 空闲）；基准缩放是起播那一刻 icon 的缩放。 */
+    private chestDropHitElapsed = -1;
+    private chestDropHitBaseX = 1;
+    private chestDropHitBaseY = 1;
     private get assets() { return this.presentationResources.assets; }
     /** 图标按路径缓存（同一批奖励反复加载同一张图不值得）。 */
     private readonly chestIconCache = new Map<string, SpriteFrame>();
@@ -207,6 +242,7 @@ export class MainPage extends Component {
         remainSeconds: 0,
         totalSeconds: 0,
         action: ChestSlotAction.Battle,
+        canActivate: false,
         cost: CHEST_EMPTY_SLOT_STAMINA_COST,
     }));
 
@@ -231,6 +267,7 @@ export class MainPage extends Component {
         // 宝箱栏意图：语义见 `ChestEvents.ts`，页面只订阅、退出时统一 offTarget(this)
         EventMgr.instance.on(CHEST_EVENTS.SLOT_ACTION, this.onChestAction, this);
         EventMgr.instance.on(CHEST_EVENTS.COLLAPSE, this.onChestCollapse, this);
+        EventMgr.instance.on(CHEST_EVENTS.DROP_FLIGHT, this.onChestDropFlight, this);
 
         // 宝箱详情走 `PopupBase`：页面不实例化、不撑尺寸（层级 / 遮罩 / 点空白关闭由 `PopupManager` 管）。
         EventMgr.instance.on(CHEST_EVENTS.CLOSE, this.onChestDetailClose, this);
@@ -259,16 +296,36 @@ export class MainPage extends Component {
         this.chestBar.setOpen(false, false);
         // ⚠️ 不能无条件 `true`：这会把 `onLoad` 刚判完的「快速寻敌还没解锁」又亮回来。
         this.startButton.active = this.quickFindUnlocked;
+        this.maskQuickFindForPopup();
         // 队列照拉：`open.json` 的开启条件是**客户端显示闸**，服务端不看它；
         // 提前把队列焐热，20001 一过 icon 长出来就有数据，不用再等一次往返。
         void this.loadTreasureQueue();
-        // 没有地图宿主的宿主（测试桩 / 预览）不会有人发 `presented`，这里补一次入场。
+        // 入场分两段，**不能只留「就绪才播」那一段**（2026-11-23 用户：
+        // 「从别的界面加载回领地界面时，出现一个空场景，再加载了按钮，但是按钮的位置和
+        //   空场景按钮的位置偏差，画面会显得跳一下」）：
+        //  ① 有地图宿主 ⇒ 现在就摆成「未入场」的起始姿态（这会儿还没人看见，或者还在登录图底下），
+        //     等地图首帧就绪（`presented`）再起表。以前是等到就绪才摆，等于把**已经静止显示**
+        //     的顶栏 / 底栏一把推开再缓回来 —— 那就是"跳一下"。
+        //  ② 没有地图宿主（测试桩 / 预览）没人发 `presented` ⇒ 照老口径当场播完。
         // ⚠️ 不要用 `scheduleOnce`：本方法在纯逻辑夹具里也会被调用，那里没有调度能力。
-        if (!this.hasTerritoryMap) playMainHudIntro(this.node);
+        if (this.hasTerritoryMap) prepareMainHudIntro(this.node);
+        else playMainHudIntro(this.node);
     }
 
     onEnable(): void {
         this.schedule(this.refreshTreasureDisplay, 1);
+    }
+
+    /**
+     * 掉落宝箱飞行 + 落地抖动都由 `update` 逐帧推进。
+     *
+     * 不用 `cc.tween`：主城页每局重建，tween 挂在回收 / 销毁后的节点上仍会继续写缩放
+     * （与 `TabButton.playHitFeedback` 同一条口径）。
+     */
+    update(dt: number): void {
+        this.chestDropFlight?.step(dt);
+        this.stepChestDropHit(dt);
+        this.syncQuickFindOnPopupEdge();
     }
 
     onDisable(): void {
@@ -279,6 +336,11 @@ export class MainPage extends Component {
             this.chestEntryPopping = false;
             this.chestToggle.setScale(1, 1, 1);
         }
+        // 飞行 / 抖动同样要收：否则复用节点上留着上一场的拖尾与半截缩放。
+        this.chestDropFlight?.stop();
+        this.chestDropPending = false;
+        this.chestDropHitElapsed = -1;
+        if (this.chestToggle?.isValid) this.chestToggle.setScale(1, 1, 1);
     }
 
     onDestroy(): void {
@@ -289,6 +351,8 @@ export class MainPage extends Component {
         if (this.chestBlankCatcher?.isValid) this.chestBlankCatcher.destroy();
         this.chestBlankCatcher = null;
         this.chestIconCache.clear();
+        this.chestDropFlight?.dispose();
+        this.chestDropFlight = null;
         EventMgr.instance.offTarget(this);
         this.treasureRepository.dispose();
         GameNet.instance.removeCaller(this);
@@ -352,6 +416,7 @@ export class MainPage extends Component {
         this.quickFindUnlocked = gate.unlocked;
         // 宝箱栏正展开时它是被收起的；这里只决定「解锁后该不该回来」。
         this.startButton.active = gate.unlocked && !(this.chestBar ? this.chestBar.opened : false);
+        this.maskQuickFindForPopup();
     }
 
     /**
@@ -392,6 +457,8 @@ export class MainPage extends Component {
         this.chestToggle.active = true;
         this.setChestCellsVisible(true);
         if (!this.chestEntryPopping) this.chestToggle.setScale(1, 1, 1);
+        // 掉落事件可能比 701 闸门先到（open 表是异步拉的）：解锁这一拍补一次起播。
+        this.tryStartChestDrop();
         if (MainPage.chestEntryCelebrated) return;
         MainPage.chestEntryCelebrated = true;
         this.startChestEntryPop();
@@ -626,7 +693,7 @@ export class MainPage extends Component {
     private async loadTreasureQueue(): Promise<void> {
         // 队列变化的回调同时刷宝箱栏与详情弹窗（激活回包 / 广播一到就同步，
         // 不等下一次 1s tick；2026-11-11「点击解锁后详情按钮同步刷新」）。
-        const result = await this.treasureRepository.load(this, () => this.refreshTreasureDisplay());
+        const result = await this.treasureRepository.load(this, (slots) => this.renderTreasureDisplay(slots));
         if (!this.isValid) return;
         if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.treasureUnavailable);
         else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.treasureLoadFailed);
@@ -643,7 +710,55 @@ export class MainPage extends Component {
         this.chestBar.setOpen(open);
         // 🔴 不能只写 `!open`：快速寻敌没解锁时，收起宝箱栏不该把它顺手亮出来。
         this.startButton.active = this.quickFindUnlocked && !open;
+        this.maskQuickFindForPopup();
         this.applyChestBlankCatcher(open);
+    }
+
+    // ========================================================
+    // 弹窗遮罩期收起【快速寻敌】（§3.56）
+    // ========================================================
+
+    /**
+     * 「异步据点」弹窗是否开着。
+     *
+     * 它不是 `PopupBase`、不在 `PopupManager._stack` 里 ⇒ 全局弹窗栈查不到。
+     * 经 `MainPageComposition` 注入的 `territoryMap` 读取玩家关卡弹窗的生命周期状态。
+     */
+    private stagePanelOpen(): boolean {
+        return this.territoryMap?.playerStageOpen === true;
+    }
+
+    /**
+     * 弹窗遮罩期压住【快速寻敌】：**只写 false，不负责恢复**。
+     *
+     * `start` / `applyQuickFindGate` / `setChestPanelOpen` 三处各自只判 702 闸门与宝箱栏，
+     * 领地页重绘（`refreshOpenGates`）、宝箱栏收起、池化复用都会把按钮顺手点亮；
+     * 每处后面补一刀，保证「开着弹窗就绝不露出来」。
+     * 恢复统一交给关弹窗那一拍的边沿，避免两个 owner 反复对写。
+     */
+    private maskQuickFindForPopup(): void {
+        if (!this.stagePanelOpen()) return;
+        this.startButton.active = false;
+    }
+
+    /**
+     * 弹窗开 / 关的**一次性边沿**：开 → 压住；关 → 按完整判据恢复。
+     *
+     * 只在 `update()` 里比电平，不在每帧无条件写 `active`：`GuideComposition`
+     * 也管同一颗 `BeginGame`，每帧写会把它的 `gateHidden` 隐藏口径顶掉。
+     * 关弹窗那一拍才写一次，是唯一需要「放回」的时刻。
+     */
+    private syncQuickFindOnPopupEdge(): void {
+        const masked = this.stagePanelOpen();
+        if (masked === this.stagePopupMasked) return;
+        this.stagePopupMasked = masked;
+        if (!this.startButton) return;
+        if (masked) {
+            this.startButton.active = false;
+            return;
+        }
+        this.startButton.active = this.quickFindUnlocked
+            && !(this.chestBar ? this.chestBar.opened : false);
     }
 
     // ========================================================
@@ -734,9 +849,9 @@ export class MainPage extends Component {
      * `presented` 由 `MainTerritoryMap` 首次成功渲染时发一次（每挂一次页面发一次），
      * 正是玩家真正看见这一页的时刻；其余 phase、以及其它宿主（`MainTabHost` 等）都忽略。
      */
-    private onViewLifecycle(event: IViewLifecycle): void {
+    private onViewLifecycle(event: IViewLifecycle, source: object): void {
         if (event.phase !== 'presented') return;
-        if (!this.territoryMap || event.owner !== this.territoryMap) return;
+        if (!this.territoryMap || source !== this.territoryMap) return;
         playMainHudIntro(this.node);
     }
 
@@ -775,11 +890,125 @@ export class MainPage extends Component {
         }
     }
 
+    /**
+     * 一局领地战斗（异步 PVP）胜利回城：记下起飞点，等闸门就绪再起播。
+     *
+     * 只收「边沿」，不判断宝箱数量 —— 回城时 `NewTreasureRepository` 是**全量重拉**，
+     * 没有「本次新增一个」的增量信号；`victoryBattleCells`（战斗结算存档）才是那一局的唯一一次性边沿。
+     */
+    private readonly onChestDropFlight = (payload: unknown): void => {
+        const data = payload as { origin?: IChestDropPoint | null } | null;
+        const origin = data?.origin;
+        this.chestDropArmed = true;
+        if (origin && Number.isFinite(origin.x) && Number.isFinite(origin.y)) {
+            this.chestDropOrigin = { x: origin.x, y: origin.y };
+        }
+        this.tryStartChestDrop();
+    };
+
+    /**
+     * 起播「掉落宝箱获得」动画（双向汇合：事件早到 / 闸门早到都能播，且只播一次）。
+     *
+     * 图标直接取 `chestToggle` 上那颗 `hud_chest.png`，不再 `resources.load`：
+     * 目标 icon 与飞行 icon 必须是同一张图，换资源路径会「飞过去的是另一个箱子」。
+     */
+    private tryStartChestDrop(): void {
+        if (this.chestDropPlayed || !this.chestDropArmed || !this.chestEntryUnlocked) {
+            // 实机「宝箱没飞」时只看这一行就知道卡在哪：事件没来（armed=false）、
+            // 701 闸门没开（unlocked=false）、这一页已经播过（played=true）。
+            if (this.chestDropArmed && !this.chestDropPlayed) {
+                console.warn(`[ChestDrop] 待播中：701 入口闸门还没开（unlocked=${this.chestEntryUnlocked}），等下一次渲染重试`);
+            }
+            return;
+        }
+        if (!this.chestToggle?.isValid || !this.chestToggle.active) {
+            console.warn('[ChestDrop] 待播中：宝箱入口节点不可用（未激活 / 已销毁）');
+            return;
+        }
+        const targetTransform = this.chestToggle.getComponent(UITransform);
+        if (!targetTransform) {
+            console.warn('[ChestDrop] 起播失败：宝箱入口节点没有 UITransform，量不到落点');
+            return;
+        }
+        const targetWorld = targetTransform.convertToWorldSpaceAR(new Vec3(), new Vec3());
+        const target: IChestDropPoint = { x: targetWorld.x, y: targetWorld.y };
+        const layer = this.chestDropFxRoot();
+        if (!layer) return;
+        if (!this.chestDropFlight) {
+            const frame = this.chestToggle.getComponent(Sprite)?.spriteFrame ?? null;
+            this.chestDropFlight = new ChestDropFlightView(layer, frame);
+        }
+        const origin = this.chestDropOrigin ?? this.defaultChestDropOrigin(target);
+        const started = this.chestDropFlight.play(origin, target, () => this.onChestDropLanded());
+        if (!started) {
+            // 🔴 起播成功才落「这一页已播过」的闩：`play` 失败（宿主节点被连带销毁 /
+            //    `UITransform` 已失效）还照样置位，这一局的动画会永久消失且再没有重试机会。
+            console.warn('[ChestDrop] 起播失败：特效宿主已失效，保留待播状态等下一次渲染重试');
+            return;
+        }
+        this.chestDropPlayed = true;
+        // 先压住最后一颗绿点：它可能已经被回城的全量刷新提前点亮了。
+        this.chestDropPending = true;
+        this.refreshTreasureDisplay();
+        console.info(`[ChestDrop] 起飞 (${Math.round(origin.x)}, ${Math.round(origin.y)}) -> `
+            + `(${Math.round(target.x)}, ${Math.round(target.y)})`);
+    }
+
+    /** 飞行落进目标 icon 的那一拍：点亮绿点 + 播「类似卡牌 icon」的受击抖动。 */
+    private onChestDropLanded(): void {
+        this.chestDropPending = false;
+        this.refreshTreasureDisplay();
+        if (!this.chestToggle?.isValid) return;
+        const scale = this.chestToggle.scale;
+        this.chestDropHitBaseX = scale.x;
+        this.chestDropHitBaseY = scale.y;
+        this.chestDropHitElapsed = 0;
+    }
+
+    /** 逐帧写落地抖动；与 `TabButton.playHitFeedback` 同一条「先 Y 后 X」曲线。 */
+    private stepChestDropHit(dt: number): void {
+        if (this.chestDropHitElapsed < 0) return;
+        const step = Number.isFinite(dt) && dt > 0 ? dt : 0;
+        this.chestDropHitElapsed += step;
+        const fx = chestDropHitScale(this.chestDropHitElapsed);
+        if (!fx || !this.chestToggle?.isValid) {
+            if (this.chestToggle?.isValid) {
+                this.chestToggle.setScale(this.chestDropHitBaseX, this.chestDropHitBaseY, 1);
+            }
+            this.chestDropHitElapsed = -1;
+            return;
+        }
+        // 701「生成」缩放那一拍不抢同一个节点的 scale，等它落位。
+        if (this.chestEntryPopping) return;
+        this.chestToggle.setScale(this.chestDropHitBaseX * fx.x, this.chestDropHitBaseY * fx.y, 1);
+    }
+
+    /**
+     * 飞行特效的顶层宿主：找得到 `BottomNav` 的那个父节点（= `MainRoot`）。
+     * 与 `MainTerritoryMap.rewardFxRoot()` 同一口径：挂 `MainRoot` 并排最后一位才盖得过
+     * `BottomNav` 与 `ArenaRoot/BottomHud`；弹窗在 `MainRoot` 之外，仍在其上。
+     */
+    private chestDropFxRoot(): Node {
+        let node: Node | null = this.node;
+        for (let depth = 0; node && depth < 5; depth += 1) {
+            if (node.getChildByName('BottomNav')) return node;
+            node = node.parent;
+        }
+        return this.node.parent?.parent ?? this.node;
+    }
+
+    /** 地图给不出格心时的兜底起飞点（左上方）：宁可从屏幕里飞进来，也不静默消失。 */
+    private defaultChestDropOrigin(target: IChestDropPoint): IChestDropPoint {
+        return { x: target.x - 260, y: target.y + 420 };
+    }
+
     private renderChests(data: readonly IChestSlotData[]): void {
         const count = data.reduce((total, slot) => total + Number(slot.state !== ChestSlotState.Empty), 0);
+        // 飞行动画期间把最后一颗留到落地才亮 ⇒「宝箱飞入 → 激活绿点」是一拍完成的。
+        const visibleCount = this.chestDropPending ? Math.max(0, count - 1) : count;
         const cells = this.chestCells();
         for (let index = 0; index < cells.length; index++) {
-            cells[index].spriteFrame = index < count ? this.chestCellFilled : this.chestCellEmpty;
+            cells[index].spriteFrame = index < visibleCount ? this.chestCellFilled : this.chestCellEmpty;
         }
         this.chestBar.render(data);
     }
@@ -788,35 +1017,38 @@ export class MainPage extends Component {
     private readonly onChestCollapse = (): void => { this.setChestPanelOpen(false); };
 
     private readonly refreshTreasureDisplay = (): void => {
-        this.renderChests(this.treasureRepository.slots);
-        this.refreshChestDetailCountdown();
+        this.renderTreasureDisplay(this.treasureRepository.slots);
     };
 
-    /** 弹窗开着时每秒刷一次倒计时（只写那一颗按钮，不整窗重开）。 */
-    private refreshChestDetailCountdown(): void {
+    private renderTreasureDisplay(slots: readonly IChestSlotData[]): void {
+        this.renderChests(slots);
+        this.refreshChestDetailCountdown(slots);
+    }
+
+    private refreshChestDetailCountdown(slots = this.treasureRepository.slots): void {
         const panel = PopupManager.inst.get(ChestDetailPanel);
         if (!panel || this.detailSlot <= 0) return;
-        const detail = this.treasureRepository.detailOf(this.detailSlot);
-        if (!detail) {
+        const slot = slots[this.detailSlot - 1];
+        if (!slot || slot.state === ChestSlotState.Empty) {
             // 槽位没了（刚开完箱）⇒ 收起弹窗，别指着一个空槽
             panel.close();
             return;
         }
-        this.detailAction = detail.action;
-        // 🔴 2026-11-11 用户：「点击解锁后，详情的按钮也要同步刷新」。
-        //    旧实现只把倒计时塞给弹窗 ⇒ 槽位已变成绿色「加速」，弹窗还写着黄色「解锁」。
-        //    现在文案、绿底、播放 icon 都随这份状态一起下发（弹窗内部是全量赋值）。
-        const speedUp = detail.action === ChestSlotAction.SpeedUp;
-        panel.updateCountdown(detail.remainSeconds, speedUp, {
-            caption: chestActionCaption(detail.action),
+        const speedUp = slot.action === ChestSlotAction.SpeedUp;
+        panel.updateCountdown(slot.remainSeconds, speedUp, {
+            caption: chestActionCaption(slot.action, slot.canActivate),
             speedUp,
+            enabled: slot.canActivate || slot.action === ChestSlotAction.Open,
         });
     }
 
     private async onChestAction(slot: number): Promise<void> {
         const item = this.treasureRepository.slots[slot];
         if (!item) return;
-        if (item.action === ChestSlotAction.Battle) {
+        // 去向判断全在 `chestActionRoute`（零 cc 依赖，可按值验）：空槽位进匹配、
+        // 队列忙只提示、等完了直接开、解锁 / 加速才弹详情。
+        const route = chestActionRoute(item.action, item.canActivate);
+        if (route === ChestActionRoute.Battle) {
             const entry: IMatchingEntryParams = {
                 battleType: ZC_BATTLE_TYPE_CHAPTER,
                 battleParams: [String(ZC_CHAPTER_BATTLE_SUB_TREASURE)],
@@ -828,10 +1060,44 @@ export class MainPage extends Component {
             ProcedureManager.navigate(GameRoute.Matching, entry);
             return;
         }
+        // 队列一次只解锁一个：别的宝箱正在倒计时时这颗按钮写着「等待解锁」，
+        // 点它必须给一句提示（2026-11-23 用户：「等待解锁按钮点击后的提示没有弹出」）。
+        // 以前这里直接弹详情，而详情的主按钮是禁用的 ⇒ 玩家点了两下全是死路，一条反馈都没有。
+        if (route === ChestActionRoute.Blocked) {
+            FW.showTip(MAIN_PAGE_TEXTS.chestAlreadyUnlocking);
+            return;
+        }
+        // 2026-11-23 用户：「点击开启按钮直接打开宝箱界面了，不用再打开一次弹窗」——
+        // 「开启」是纯确认动作（奖励本来就要开出来看），中间那层详情弹窗只会多一次点击。
+        // 解锁 / 加速仍走详情：那两条要玩家看清「能开出什么、立即开要多少」。
+        if (route === ChestActionRoute.OpenDirect) {
+            await this.openChestFromBar(item.index);
+            return;
+        }
         // 2026-10-27（蓝湖「宝箱详情」）：非空槽位**先弹详情**，让玩家看见能开出什么、
         // 立即开要花多少，再由弹窗的两颗按钮发请求。原来这里是点一下直接发
         // activate / fastOpen / open 三条之一，全程没有确认也没有奖励预览。
         await this.openChestDetail(item.index);
+    }
+
+    /**
+     * 栏位上直接「开启」（跳过详情弹窗）。
+     *
+     * 与 `runTreasureAction` 的区别：那条读 `this.detailSlot`（弹窗当前那张），这条拿显式下标，
+     * 因此不碰 `detailSlot`、也不负责关弹窗。收尾口径两者一致（同一组提示文案）。
+     * 奖励展示由 `treasureRepository.open` 内部的 `presentRewards` 负责，这里不再画一遍。
+     */
+    private async openChestFromBar(index: number): Promise<void> {
+        const result = await this.treasureRepository.open(index);
+        if (!this.isValid) return;
+        if (result === 'ok') {
+            this.refreshTreasureDisplay();
+            return;
+        }
+        if (result === 'busy') return;
+        if (result === 'offline') FW.showTip(MAIN_PAGE_TEXTS.networkUnavailable);
+        else if (result === 'failed') FW.showTip(MAIN_PAGE_TEXTS.actionFailed);
+        else if (result === 'protocol-missing') FW.showTip(MAIN_PAGE_TEXTS.openProtocolMissing);
     }
 
     // ============================================================
@@ -842,14 +1108,18 @@ export class MainPage extends Component {
         const detail = this.treasureRepository.detailOf(index);
         if (!detail) return;
         this.detailSlot = index;
-        this.detailAction = detail.action;
         const content = await this.chestDetailContentOf(detail);
         if (!this.isValid) return;
         // 加载期间玩家可能又点了别的箱子（或关了弹窗）⇒ 以最新那次为准
         if (this.detailSlot !== index) return;
         const opened = PopupManager.inst.get(ChestDetailPanel);
-        if (opened) { opened.applyContent(content); return; }
-        void ChestDetailPanel.open({ userData: content });
+        if (opened) {
+            opened.applyContent(content);
+        } else {
+            await ChestDetailPanel.open({ userData: content });
+            if (!this.isValid || this.detailSlot !== index) return;
+        }
+        this.refreshChestDetailCountdown();
     }
 
     private async chestDetailContentOf(detail: IChestDetailData): Promise<IChestDetailContent> {
@@ -864,7 +1134,6 @@ export class MainPage extends Component {
             })),
         ]);
         const counting = detail.action === ChestSlotAction.SpeedUp;
-        const activated = detail.action !== ChestSlotAction.Activate;
         return {
             name: detail.name,
             qualityText: `品质：${qualityNameOf(null, detail.quality)}`,
@@ -882,7 +1151,7 @@ export class MainPage extends Component {
             // 🔴 与宝箱栏那颗按钮**同源**（`chestActionCaption`）：未激活 ⇒「解锁」、**正在等 ⇒「加速」**、
             //    等完 ⇒「开启」。以前这里固定写「打开」，未激活时点它其实是**启动倒计时**；
             //    2026-11-09 用户又补了一轮：「点击解锁中的宝箱，宝箱详情中的开启按钮用加速按钮替换」。
-            openCaption: chestActionCaption(detail.action),
+            openCaption: chestActionCaption(detail.action, detail.canActivate),
             // 加速态 = 绿色底 + 播放 icon（2026-11-11）；解锁 / 开启仍是黄色底。
             openSpeedUp: counting,
             openCountdown: detail.remainSeconds > 0 ? formatChestCountdown(detail.remainSeconds) : '',
@@ -891,7 +1160,7 @@ export class MainPage extends Component {
             //    `CmdNewTreasure{InfoList,Activate,FastOpen,Open}`，没有"加速"这条命令 ——
             //    真加速（看广告 / 扣资源把 openTime 提前）要先有协议，接上后把这里改 true
             //    并在 `onChestDetailOpen` 里加 `speedUp` 分支。
-            openEnabled: !counting && (activated || detail.remainSeconds >= 0),
+            openEnabled: detail.canActivate || detail.action === ChestSlotAction.Open,
         };
     }
 
@@ -925,9 +1194,12 @@ export class MainPage extends Component {
     };
 
     private readonly onChestDetailOpen = (): void => {
-        // 「打开」在未激活状态 = 开始计时；到点状态 = 开箱。
-        if (this.detailAction === ChestSlotAction.Activate) void this.runTreasureAction('activate');
-        else if (this.detailAction === ChestSlotAction.Open) void this.runTreasureAction('open');
+        const slot = this.treasureRepository.slots[this.detailSlot - 1];
+        if (slot?.canActivate) void this.runTreasureAction('activate');
+        else if (slot?.action === ChestSlotAction.Open) void this.runTreasureAction('open');
+        // 还轮不到解锁（别的宝箱在倒计时）：与栏位那颗按钮同一句提示。
+        // 正常路径下这颗按钮是禁用的（`openEnabled`），但每秒刷新与点击之间可能刚好翻面。
+        else if (slot?.action === ChestSlotAction.Activate) FW.showTip(MAIN_PAGE_TEXTS.chestAlreadyUnlocking);
     };
 
     /**
@@ -945,6 +1217,12 @@ export class MainPage extends Component {
                 : await this.treasureRepository.open(index));
         if (!this.isValid || this.detailSlot !== index) return;
         if (result === 'busy') return;
+        if (result === 'activation-blocked') {
+            // 队列已经有别的宝箱在倒计时：以前这里只闷声刷新一遍，玩家点了解锁什么反馈都没有。
+            FW.showTip(MAIN_PAGE_TEXTS.chestAlreadyUnlocking);
+            this.refreshTreasureDisplay();
+            return;
+        }
         if (result === 'ok') {
             if (kind === 'activate') this.refreshChestDetailCountdown();
             else PopupManager.inst.get(ChestDetailPanel)?.close();

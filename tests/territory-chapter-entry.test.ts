@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { TERRITORY_EVENTS } from '../assets/script/app/territory/view/TerritoryEvents';
+import { TERRITORY_EVENTS } from '../assets/script/app/territory/application/TerritoryEvents';
 import { TerritoryUiEvent } from '../assets/script/app/territory/application/TerritoryEvents';
 import { makeStationView, stationEmitLog } from './helpers/territory-station-fixtures';
 
@@ -28,7 +28,7 @@ const read = (path: string): string => readFileSync(path, 'utf8').replace(/\r\n/
 // 一、视图：章节建筑 / 气泡点了发「章节入口」事件
 // ============================================================
 
-test('★★★起始格内容带 `chapterEntry`，点建筑发 ChapterSelect（不是 STATION_TAP）', () => {
+test('★★★起始格内容带 `chapterEntry`，点建筑交由地图判断输入锁', () => {
     const { view, root, iconSprite } = makeStationView();
     view.render({
         site: null,
@@ -41,9 +41,7 @@ test('★★★起始格内容带 `chapterEntry`，点建筑发 ChapterSelect（
     });
     stationEmitLog.length = 0;
     root.emit('click');
-    assert.deepEqual(stationEmitLog, [TerritoryUiEvent.ChapterSelect],
-        '章节建筑必须发「打开章节选择」；STATION_TAP 那条链要真站点，拿 null 会空转');
-    assert.equal(stationEmitLog.includes(TERRITORY_EVENTS.STATION_TAP), false);
+    assert.deepEqual(stationEmitLog, [TERRITORY_EVENTS.STATION_TAP]);
 });
 
 test('★★★`chapterEntry` 是**每帧**从内容写的（池化复用不能带上一格的身份）', () => {
@@ -78,7 +76,7 @@ test('★★★`interactive` 同时管住建筑与气泡两处点击', () => {
     // 气泡的 `interactable` 与建筑共用同一个 `interactive`（`visible && content.interactive`），
     // 所以「包括气泡部分」不需要再单独一个开关 —— 这里钉住那份共用关系。
     const source = read(STATION_VIEW_PATH);
-    assert.match(source, /bubble\.button\.interactable = visible && content\.interactive;/);
+    assert.match(source, /this\.levelBubbleButton\.interactable = visible && content\.interactive;/);
 });
 
 test('★★地图：起始格渲染 `chapterEntry: true` + 可交互（只在有待领随机格时让位）', () => {
@@ -102,9 +100,9 @@ test('★事件常量只此一份：view 发、application 定义', () => {
     assert.equal(TerritoryUiEvent.ChapterSelect, 'territory:chapter-select');
     assert.notEqual(TERRITORY_EVENTS.STATION_TAP, TerritoryUiEvent.ChapterSelect,
         '两条事件不能撞名：一条带站点、一条开弹窗');
-    const station = read(STATION_VIEW_PATH);
-    assert.match(station, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChapterSelect\)/,
-        '站点视图没发 ChapterSelect');
+    const map = read(MAP_VIEW_PATH);
+    assert.match(map, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChapterSelect\)/,
+        '地图视图没发 ChapterSelect');
 });
 
 // ============================================================

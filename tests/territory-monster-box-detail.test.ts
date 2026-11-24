@@ -39,13 +39,13 @@ function patrolChestSite(cellId = 42): TerritorySite {
 /** 照真实 monsterBox 表（1002 组）造一组配置：grade 1 是初始态，2~4 才带消耗与成功率。 */
 const GROUP: ITerritoryMonsterBoxGroup = {
     grades: [
-        { grade: 1, levelId: 60003, upCostCoins: 0, upPro: 0, maxFailTimes: 0,
+        { grade: 1, levelId: 60003, upCostCoins: 0, upCostDiamond: 0, upPro: 0, maxFailTimes: 0,
           rewards: [{ resId: 10010, amount: 100, pro: 10000 }, { resId: 7, amount: 50, pro: 500 }] },
-        { grade: 2, levelId: 60003, upCostCoins: 20, upPro: 90, maxFailTimes: 99,
+        { grade: 2, levelId: 60003, upCostCoins: 20, upCostDiamond: 2, upPro: 90, maxFailTimes: 99,
           rewards: [{ resId: 10010, amount: 200, pro: 10000 }, { resId: 7, amount: 100, pro: 500 }] },
-        { grade: 3, levelId: 60003, upCostCoins: 20, upPro: 60, maxFailTimes: 2,
+        { grade: 3, levelId: 60003, upCostCoins: 20, upCostDiamond: 2, upPro: 60, maxFailTimes: 2,
           rewards: [{ resId: 10010, amount: 300, pro: 10000 }, { resId: 7, amount: 150, pro: 500 }] },
-        { grade: 4, levelId: 60004, upCostCoins: 20, upPro: 40, maxFailTimes: 2,
+        { grade: 4, levelId: 60004, upCostCoins: 20, upCostDiamond: 2, upPro: 40, maxFailTimes: 2,
           rewards: [{ resId: 10010, amount: 400, pro: 10000 }, { resId: 7, amount: 50, pro: 500 }] },
     ],
 };
@@ -126,8 +126,27 @@ test('lv=1 显示的是「升到 2 级」那行：20 银币 / 90% / 失败上限
     const detail = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 1 });
     assert.ok(detail);
     assert.equal(detail.upgradeCost, 20);
+    assert.equal(detail.costResId, 7);
     assert.equal(detail.successRate, 90);
     assert.equal(detail.failLimit, 99);
+});
+
+test('失败次数未达上限：消耗银币（resId: 7）；达到上限后切换为金币（resId: 10）', () => {
+    // lv=2 升 lv=3：maxFailTimes=2, upCostCoins=20, upCostDiamond=2
+    const silverDetail = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2, failCount: 1 });
+    assert.ok(silverDetail);
+    assert.equal(silverDetail.upgradeCost, 20);
+    assert.equal(silverDetail.costResId, 7);
+    assert.equal(silverDetail.failCount, 1);
+    assert.equal(silverDetail.failLimit, 2);
+
+    const goldDetail = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2, failCount: 2 });
+    assert.ok(goldDetail);
+    assert.equal(goldDetail.upgradeCost, 2);
+    assert.equal(goldDetail.costResId, 10);
+    assert.equal(goldDetail.failCount, 2);
+    assert.equal(goldDetail.failLimit, 2);
+    assert.equal(goldDetail.upgradeCaption, TERRITORY_MONSTER_BOX_SPEC.upgradeCaption);
 });
 
 test('没有组配置 ⇒ 不给升级入口，但挑战照常（不让面板整片空白）', () => {
@@ -188,4 +207,83 @@ test('同一个 resId 的多档奖励合并成一格（否则 4 格全是同一�
         { resId: 19350, amount: 3, ratePercent: 5 },
         { resId: 19301, amount: 1, ratePercent: 5 },
     ]);
+});
+
+// ------------------------------------------------------------------
+// 守护怪头像：levelInfo.levelMonsterGroup → monsterCard.headIcon
+// ------------------------------------------------------------------
+
+/** 照真实表造：60003 出 50021 / 50030，60004 换关后出 50023（1002 组的 grade 4 就是这么换的）。 */
+const GUARD_MONSTERS = new Map([
+    [60003, [
+        { monsterId: 50021, headIcon: '兵种_头像_窝瓜人' },
+        { monsterId: 50030, headIcon: '兵种_头像_饥饿战士' },
+    ]],
+    [60004, [{ monsterId: 50023, headIcon: '兵种_头像_仙人侍卫' }]],
+]);
+
+test('★★守护怪头像读「当前等级那一关」的 levelMonsterGroup（不是静态绑定那关）', () => {
+    const lv3 = buildTerritoryMonsterBoxDetail({
+        site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 3, monsterGroupByLevelId: GUARD_MONSTERS,
+    });
+    assert.ok(lv3);
+    // 组里的怪只有两只 ⇒ 第三格没有头像（面板保留 prefab 占位图），不许整格消失
+    assert.deepEqual(lv3.guards.map((guard) => guard.headIcon),
+        ['兵种_头像_窝瓜人', '兵种_头像_饥饿战士', '']);
+    assert.match(lv3.guards[2].unlockText, /解锁/, '没头像不影响「4 级解锁」文案');
+
+    // grade 4 那行的 monsterBoxLevel 换成了 60004 ⇒ 满级后显示的是新关的怪
+    const lv4 = buildTerritoryMonsterBoxDetail({
+        site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 4, monsterGroupByLevelId: GUARD_MONSTERS,
+    });
+    assert.ok(lv4);
+    assert.deepEqual(lv4.guards.map((guard) => guard.headIcon),
+        ['兵种_头像_仙人侍卫', '', '']);
+});
+
+test('守护怪数量按 levelMonsterGroup.number 透传；未解锁格不显示', () => {
+    const withCount = new Map([[60003, [
+        { monsterId: 50021, headIcon: '兵种_头像_窝瓜人', count: 44 },
+        { monsterId: 50030, headIcon: '兵种_头像_饥饿战士', count: 32 },
+        { monsterId: 50022, headIcon: '', count: 1 },
+    ]]]);
+    const detail = buildTerritoryMonsterBoxDetail({
+        site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 3, monsterGroupByLevelId: withCount,
+    });
+    assert.ok(detail);
+    assert.equal(detail.guards[0].countText, '数量：44');
+    assert.equal(detail.guards[1].countText, '数量：32');
+    assert.equal(detail.guards[2].countText, '', '4 级才解锁的格子不显示数量');
+});
+
+test('没有守护怪配置（老 bundle / 老夹具）⇒ 头像空串，整块照常显示', () => {
+    const detail = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2 });
+    assert.ok(detail);
+    assert.deepEqual(detail.guards.map((guard) => guard.headIcon), ['', '', '']);
+    assert.deepEqual(detail.guards.map((guard) => guard.unlocked), [true, true, false]);
+});
+
+test('组配置缺失时按静态绑定的关卡取守护怪（不能因为没升级入口就丢掉头像）', () => {
+    const detail = buildTerritoryMonsterBoxDetail({
+        site: patrolChestSite(), stage: { levelId: 60003 } as TerritoryCampaignStage,
+        group: null, lv: 2, monsterGroupByLevelId: GUARD_MONSTERS,
+    });
+    assert.ok(detail);
+    assert.equal(detail.guards[0].headIcon, '兵种_头像_窝瓜人');
+});
+
+// ------------------------------------------------------------------
+// 升级摇奖结果：只透传，不在这里判成功
+// ------------------------------------------------------------------
+
+test('★摇奖结果原样透传（面板据它决定黄条停绿区还是灰区）', () => {
+    const attempt = { cellId: 42, seq: 7, success: false };
+    const detail = buildTerritoryMonsterBoxDetail({
+        site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2, attempt,
+    });
+    assert.ok(detail);
+    assert.deepEqual(detail.upgradeAttempt, attempt);
+    // 没摇过 ⇒ null（面板据此知道「没有结果可等」，不会空等）
+    const fresh = buildTerritoryMonsterBoxDetail({ site: patrolChestSite(), stage: STAGE, group: GROUP, lv: 2 });
+    assert.equal(fresh?.upgradeAttempt, null);
 });

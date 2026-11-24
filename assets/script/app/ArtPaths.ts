@@ -88,17 +88,40 @@ export const COMMON_ART_ROOT = `${ART_ROOT}/common`;
 /** 匹配页页面大图：头像占位、神器、雷达、阵营旗、展示底图。 */
 export const MATCH_ART_ROOT = `${ART_ROOT}/matching`;
 
-/** 匹配页信息条小图标：icon_01~icon_04。 */
-export const MATCH_ICON_ART_ROOT = `icons/matching`;
-
 /**
  * 匹配页信息条槽位配色（资源在 `MATCH_ART_ROOT` 下）。
  *
  * 槽位 0 = 我方（蓝），1~3 = 对手（红 / 紫 / 黄）—— 人数由本局实际参与方决定（2~4 人）。
  * 由 `MatchPlayerItem.applySlot()` 在运行时按槽位取图，所以**新增配色只改这两张表**。
  */
-export const MATCH_SLOT_BARS: readonly string[] = ['bar_01', 'bar_02', 'bar_03', 'bar_04'];
-export const MATCH_SLOT_FRAMES: readonly string[] = ['frame_01', 'frame_02', 'frame_03', 'frame_04'];
+export const MATCH_SLOT_BARS: readonly string[] = ['zdpp_dik_01', 'zdpp_dik_02', 'zdpp_dik_03', 'zdpp_dik_04'];
+
+/** 槽位配色的战力/奖杯数值底（`frame_01..04`，115×27 深色圆角条）。 */
+export const MATCH_SLOT_PILLS: readonly string[] = ['frame_01', 'frame_02', 'frame_03', 'frame_04'];
+
+/**
+ * 匹配中（搜索态）的整条条底：638×141，顶部 46px 亮色抬头 + 95px 主色，**不带**头像盘。
+ *
+ * `zdpp_dik_01..04` 左上角把空头像盘烘焙进了图里，搜索态再叠 `SearchAvatar` 会露出两层圆盘；
+ * 这四张是纯条底，运行时和 `SearchAvatar` 叠用（空盘位置仍由 prefab 的 `SearchAvatar` 控制）。
+ */
+export const MATCH_SEARCH_BARS: readonly string[] = ['search_bar_01', 'search_bar_02', 'search_bar_03', 'search_bar_04'];
+
+/** 匹配页卡牌品级框：金 / 紫 / 蓝 / 绿（88×88，`image/matching`）。 */
+export const MATCH_CARD_FRAME_ART: Readonly<Record<'gold' | 'purple' | 'blue' | 'green', string>> = {
+    gold: 'card_frame_gold',
+    purple: 'card_frame_purple',
+    blue: 'card_frame_blue',
+    green: 'card_frame_green',
+};
+
+/** 职业角标（`icons/card/yx_zhiye_*`），键与 `pvpCard.traits.attack` 的中文值一致。 */
+export const CARD_ROLE_ICON_BY_ATTACK: Readonly<Record<string, string>> = {
+    射手: 'yx_zhiye_ss',
+    战士: 'yx_zhiye_zs',
+    法师: 'yx_zhiye_fs',
+    坦克: 'yx_zhiye_tk',
+};
 
 /**
  * 神器图标：`image/artifact`（与对局里的神器格**同一张图**、同一个根）。

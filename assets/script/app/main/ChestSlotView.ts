@@ -91,6 +91,8 @@ export class ChestSlotView extends Component {
     private clockWidth = 0;
     /** 按钮文案的宽度上限：来自 prefab 的 UITransform。 */
     private btnLabelWidth = 0;
+    /** 上面这几份基准是否已经从 prefab 抓过（见 `captureLayoutBaseline`）。 */
+    private layoutCaptured = false;
 
     /** 由宿主一次性注入美术（三张卡底 / 三张按钮底）。 */
     static setArt(
@@ -102,12 +104,7 @@ export class ChestSlotView extends Component {
     }
 
     onLoad(): void {
-        this.timeTextMaxWidth = this.timeTextTransform.width;
-        this.timeTextMaxHeight = this.timeTextTransform.height;
-        this.timeTextBaseX = this.timeText.node.position.x;
-        this.clockBaseX = this.clock.position.x;
-        this.clockWidth = this.clock.getComponent(UITransform).width;
-        this.btnLabelWidth = this.btnLabel.node.getComponent(UITransform).width;
+        this.captureLayoutBaseline();
         // cc.Button 会停止触摸事件冒泡，必须监听实际按钮的 CLICK。
         this.btn.node.on(Button.EventType.CLICK, this.handleAction, this);
         // 🔴 2026-11-09 用户：「点击整个宝箱都会打开宝箱详情弹窗」——
@@ -117,6 +114,32 @@ export class ChestSlotView extends Component {
         this.node.on(Button.EventType.CLICK, this.handleAction, this);
     }
 
+    /**
+     * 从 prefab 抓一次基准几何：时钟 / 文字的原点、文本测量上限、按钮字宽。
+     *
+     * 🔴 **不能只在 `onLoad` 里抓**（2026-11-23 用户：「出现时间进度条时，时钟 icon 移动到进度条的
+     *    左侧，进度上展示具体的时间倒计时」）。`ChestBar` 在 `ArenaRoot.prefab` 上是 `active=false`，
+     *    而宿主 `MainPage.start()` 会先 `renderChests(空槽)` 走一遍 `render()` —— 那一帧槽位还没激活、
+     *    `onLoad` 没跑，基准全是 0；而这一帧又会把时钟 / 文字摆到 `x=0`、把文本 UITransform 改成
+     *    `0×0`。等 `onLoad` 真正执行时读到的已经是**被自己改坏的值** ⇒ `clockBaseX = 0`、
+     *    `timeTextMaxWidth/Height = 0` 永久生效：倒计时态画成「时钟压在进度条中间、进度条上没有
+     *    倒计时文字」，且再也不会自愈（每秒重绘读的还是这份坏基准）。
+     *
+     * 所以改成「第一次 `render()` 之前抓」：`render` 是本组件唯一会动这几个节点的地方，
+     * 抓完置 `layoutCaptured`，`onLoad` 再调一次是空操作；refs 没绑（测试桩）就跳过、不置位。
+     */
+    private captureLayoutBaseline(): void {
+        if (this.layoutCaptured) return;
+        if (!this.clock || !this.timeText || !this.timeTextTransform || !this.btnLabel) return;
+        this.layoutCaptured = true;
+        this.timeTextMaxWidth = this.timeTextTransform.width;
+        this.timeTextMaxHeight = this.timeTextTransform.height;
+        this.timeTextBaseX = this.timeText.node.position.x;
+        this.clockBaseX = this.clock.position.x;
+        this.clockWidth = this.clock.getComponent(UITransform).width;
+        this.btnLabelWidth = this.btnLabel.node.getComponent(UITransform).width;
+    }
+
     private handleAction(): void {
         if (!this.actionEnabled) return;
         EventMgr.instance.emit(CHEST_EVENTS.SLOT_ACTION, this.dataIndex);
@@ -124,6 +147,8 @@ export class ChestSlotView extends Component {
 
     /** 全量赋值；空槽仅在被宝箱栏选为战斗入口时显示按钮及消耗。 */
     render(data: IChestSlotData, showBattleEntry = true, dataIndex = -1): void {
+        // 🔴 必须早于下面任何一次 `setPosition` / `setContentSize`（见 `captureLayoutBaseline`）。
+        this.captureLayoutBaseline();
         const empty = data.state === ChestSlotState.Empty;
         const isUnactivated = data.action === ChestSlotAction.Activate;
         const isCounting = data.state === ChestSlotState.Counting;
@@ -174,8 +199,13 @@ export class ChestSlotView extends Component {
             }
             this.timeText.overflow = Label.Overflow.SHRINK;
             this.timeTextTransform.setContentSize(textWidth, this.timeTextMaxHeight);
-            // 两种排版：等待态「时钟 + 时长」整体居中；倒计时态胶囊 + 文案，时钟回到 prefab
-            // 的左侧位（等待态把它改写过，切回来必须复原，否则图标会叠在胶囊上）。
+            // 两种排版，**时钟位置都由字宽 / prefab 决定，不写死第三个数**：
+            //  · 等待态（没有胶囊）：只有「时钟 + 时长」，按本帧真实字宽整体居中；
+            //  · 倒计时态（胶囊出现）：时钟回到 prefab 的 `clockBaseX` —— 那一格必须落在
+            //    胶囊**左侧**（2026-11-23 用户：「时间 icon 应该在进度条的左侧位置」）。
+            //    prefab 的口径：时钟右沿 `-49.5` / 胶囊左沿 `-45.5`，留 4px 缝；
+            //    「时钟 26 + 缝 4 + 胶囊 121」正好 151，与卡面同宽、整组以 0 居中。
+            //    改这三个数里任意一个都要重算整组，`tests/chest-bar.test.ts` C7 会挡。
             this.clock.setPosition(
                 isCounting ? this.clockBaseX : -(textWidth + this.timerGap) / 2, 0, 0);
             this.timeText.node.setPosition(
@@ -231,7 +261,7 @@ export class ChestSlotView extends Component {
      * 视图这边一个字都不许自己写 —— 上一轮就是"栏位改了、弹窗还停在旧词"。
      */
     private static actionText(data: IChestSlotData): string {
-        return chestActionCaption(data.action);
+        return chestActionCaption(data.action, data.canActivate);
     }
 
     /** 秒 → 紧凑英文时长；省略为零的单位，超过 24 小时继续累计小时。 */

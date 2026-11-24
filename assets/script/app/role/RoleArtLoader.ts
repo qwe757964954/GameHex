@@ -1,7 +1,7 @@
 import type { SpriteFrame } from 'cc';
 import { createRoutedSpriteFrameCache } from '../common/SpriteFrameCache';
 import { spriteFramePathOf } from '../ArtPaths';
-import { loadItemIconArt, loadItemQualityFrame } from '../itemdetail/ItemDetailArtLoader';
+import { loadItemIconArt } from '../itemdetail/ItemDetailArtLoader';
 import { RL_ART_NAMES, RL_ART_ROOT, roleArtRelPath } from './RoleArt';
 import type { IRoleBagEntry } from './RoleTypes';
 
@@ -14,7 +14,7 @@ import type { IRoleBagEntry } from './RoleTypes';
  */
 export const ROLE_ART_ROOT = RL_ART_ROOT;
 
-/** key → `resources.load` 用的装配路径（`image/role/rl_js_img_bg/spriteFrame`）。 */
+/** key → `resources.load` 用的装配路径（`image/role/rl_slot_empty_96/spriteFrame`）。 */
 export function roleFramePathOf(key: string): string {
     const rel = RL_ART_NAMES[key];
     if (!rel) return '';
@@ -100,7 +100,11 @@ export function loadMilitiaTalentIcon(iconKey: string): Promise<SpriteFrame | nu
     return iconKey ? loadRoleBagIconSprite('militia', iconKey) : Promise.resolve(null);
 }
 
-/** 按品质加载品质框（与「获得奖励」弹窗同一套 cu_quality 图）。 */
+/** 品质 1..5 → 角色背包扁平底；5 以上统一收口到金色，避免越界空图。 */
+const ROLE_BAG_QUALITY_KEYS = ['bagQuality1', 'bagQuality2', 'bagQuality3', 'bagQuality4', 'bagQuality5'] as const;
+
+/** 按品质加载角色背包的扁平底（蓝湖参考图的平涂圆角块，不再用跨模块的 `cu_quality`）。 */
 export function loadRoleQualityFrame(quality: number): Promise<SpriteFrame | null> {
-    return loadItemQualityFrame(quality);
+    const index = Math.min(Math.max(Math.round(quality) || 1, 1), ROLE_BAG_QUALITY_KEYS.length) - 1;
+    return loadRoleArt(ROLE_BAG_QUALITY_KEYS[index]);
 }

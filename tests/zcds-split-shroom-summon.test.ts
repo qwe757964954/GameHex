@@ -525,6 +525,9 @@ test('分身生成：0.1s 一只、先播 0.32s 特效再出现', () => {
     assert.equal(spawned.length, 1, '只出现第一只');
     assert.equal(spawned[0].summonAlpha, 0.65, '设计口径：分身约 65% 透明');
     assert.equal(spawned[0].summonMasterId, 1);
+    //  本体必须 100% 实心（2026-11-20 用户口径「只有分身有透明度，本体是 100% 实心的，
+    //  透明度是用来区分本体和分身的」）—— 漏了这一半，看着就是「本体跟着变透」。
+    assert.equal(master.summonAlpha, undefined, '本体不许被打上透明度');
 });
 
 test('排队中的分身也算 12 只名额：9 只在场 + 3 只正在生成 ⇒ 再召一批直接拒放', () => {

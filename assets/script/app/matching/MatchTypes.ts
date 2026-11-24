@@ -1,4 +1,16 @@
 import type { ZCGameEntryParams } from '../zcds/application/ZCGameEntry';
+
+export const MATCHING_EVENTS = {
+    STATE: 'matching:state',
+    /** 隐藏匹配 UI，并将云层移交给跨流程盖层。 */
+    HANDOFF: 'matching:handoff',
+    LEAVE: 'matching:leave',
+} as const;
+
+/** Composition 发起导航后，由盖层等待目标流程落定再散云。 */
+export type IMatchingLeave =
+    | { readonly destination: 'battle'; readonly entry: ZCGameEntryParams & { readonly opponents: readonly MatchPlayerData[] } }
+    | { readonly destination: 'main'; readonly error: unknown };
 /** 匹配开战参数；普通 PVP 可不传。 */
 export interface IMatchingEntryParams {
     readonly battleType: number;
@@ -35,10 +47,22 @@ export interface IMatchingEntryParams {
     readonly coverViewport?: { readonly width: number; readonly height: number };
 }
 
-/** 信息条统计项，图标根目录为 MATCH_ICON_ART_ROOT。 */
+/** 废弃字段类型，保留兼容旧接口。 */
 export interface MatchStat {
     icon: string;
     value: number;
+}
+
+/** 匹配条上展示的卡牌（6 格）。头像是 `icons/head` 的方头像名，品级决定卡框颜色。 */
+export interface MatchCardData {
+    readonly id: string;
+    readonly rarity: 'gold' | 'purple' | 'blue' | 'green';
+    /** 职业角标资源名；空串 = 无角标（查不到职业时）。 */
+    readonly roleIcon: string;
+    /** `HEAD_ART_ROOT` 下的方头像资源名。 */
+    readonly headIcon: string;
+    /** 头像根目录（与 `headIcon` 成对）。 */
+    readonly headRoot: string;
 }
 
 /** 参与方展示数据，阵营配色由槽位决定。 */
@@ -54,21 +78,16 @@ export interface MatchPlayerData {
     artifactName: string;
     /** 神器资源名，根目录为 ARTIFACT_ART_ROOT。 */
     artifactIcon: string;
-    /** 最多展示 MATCH_STAT_SLOTS 项。 */
-    stats: MatchStat[];
+    /** @deprecated 已废弃，匹配页现已改用卡牌列表（cards） */
+    stats?: MatchStat[];
+    /** 匹配条下方 6 格卡牌；空数组 = 无卡（匹配中 / 对手未回包）。 */
+    cards: readonly MatchCardData[];
 }
 
+/** 匹配条上的卡牌格数（蓝湖稿固定 6 格）。 */
+export const MATCH_CARD_SLOTS = 8;
+
 export type MatchPhase = 'searching' | 'matched';
-
-export const MATCH_STAT_SLOTS = 4;
-
-/** 蓝湖匹配条顺序：僵尸阵营、坦克、战士、射手；同一卡可同时贡献阵营和职业。 */
-export const MATCH_STAT_TYPES = [
-    { icon: 'icon_01', trait: 'camp', value: '僵尸' },
-    { icon: 'icon_03', trait: 'attack', value: '坦克' },
-    { icon: 'icon_02', trait: 'attack', value: '战士' },
-    { icon: 'icon_04', trait: 'attack', value: '射手' },
-] as const;
 
 export const MATCH_TEXT = {
     searching: '正在寻找对手中...',

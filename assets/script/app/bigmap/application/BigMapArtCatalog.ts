@@ -1,4 +1,7 @@
-import { COMMON_ART_ROOT } from '../../ArtPaths';
+import {
+    ART_ROOT, COMMON_ART_ROOT, DECOR_ART_ROOT, MAIN_ART_ROOT,
+    MAIN_CITY_ART_ROOT, TERRITORY_BUILDING_ART_ROOT,
+} from '../../ArtPaths';
 
 /**
  *bundle 内旧前缀 —— 2026-11-04 `assets/bundles/bigmap/image/bigmap/` 整目录上提成
@@ -9,8 +12,11 @@ import { COMMON_ART_ROOT } from '../../ArtPaths';
  */
 const LEGACY_BUNDLE_IMAGE_PREFIX = 'image/bigmap/';
 
-/** 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）。 */
+/** 旧前缀 `image/bigmap/x` → 新前缀 `image/x`；已是新前缀的原样返回（幂等）；空值返回空串。 */
 export function toBigMapArtPath(path: string): string {
+    //服务器历史快照 / 旧分支 json 可能把字段漏成 null；`strict` 未开时编译器也不会拦调用方，
+    //所以在函数边界先窄化，避免 `startsWith` 抛 TypeError 把整张大地图拖垮。
+    if (!path || typeof path !== 'string') return '';
     return path.startsWith(LEGACY_BUNDLE_IMAGE_PREFIX)
         ? `image/${path.slice(LEGACY_BUNDLE_IMAGE_PREFIX.length)}`
         : path;
@@ -44,6 +50,9 @@ export const BIGMAP_BASE_FALLBACK_ART = 'image/buildings/camp_outpost';
 
 /** 概念占位图目录：`bigMapCamp.campIcon` 现在指向这里（由 `worldCampArtFor` 归一成新美术）。 */
 export const BIGMAP_CONCEPT_SPRITE_ROOT = `${BIGMAP_CONCEPT_ROOT}/sprites`;
+
+/** 基地兜底概念切片（建造中 / 石头 / 草）：加载时拼在 `BIGMAP_CONCEPT_SPRITE_ROOT` 下。 */
+export const BIGMAP_BASE_SPRITE_NAMES = ['construction', 'rocks', 'grass'] as const;
 
 /**
  *世界地图据点外观：`campId // 100` 分段的候选图，段内按 `campId % len` 稳定取一张。
@@ -81,19 +90,40 @@ export const BIGMAP_WORLD_HOME_ART = 'image/buildings/camp_home';
 /** 城池没配 `campIcon`（或配了但不在分段表里）时的兜底外观（`art.city`）。 */
 export const BIGMAP_WORLD_CITY_ART = 'image/buildings/camp_legion';
 
+/** 野怪据点默认外观（复用领地首领建筑图，首包 `image/territory/buildings`）。 */
+export const BIGMAP_WORLD_MONSTER_ART = `${TERRITORY_BUILDING_ART_ROOT}/territory_boss_v1`;
+
+/** 荒地装饰：石头 / 草（首包 `image/decor`）。 */
+export const BIGMAP_DECOR_ROCK_ART = `${DECOR_ART_ROOT}/wasteland/st2`;
+export const BIGMAP_DECOR_GRASS_ART = `${DECOR_ART_ROOT}/wasteland/cao`;
+
+/**
+ *大地图连续平铺底图（2048×2048）。
+ *
+ *刻意放在 bigmap bundle 顶层、不进 `image/` 图集子树（见 `BundleCatalog`）：这么大的图
+ *塞进任何一页都会被缩糊。加载时走 `bundleForPath` 的精确匹配，别把它挪进 `image/`。
+ */
+export const BIGMAP_TILED_BG_ART = 'bigMapBG';
+
+/** 已退役的整幅荒地背景：服务器旧布局可能仍下发，Loader 只把它当黑名单、不再加载。 */
+export const BIGMAP_LEGACY_WASTELAND_BG = `${ART_ROOT}/wasteland_background`;
+
 /**
  *把旧数据里配的概念占位图换成新美术；已经是真实图名就原样返回。
  *
  *只在 `campIcon` 指向 `image/concept/sprites/*` 时生效 —— 那 8 张是初版占位图，
  *不代表「这座据点就该长这样」。表已在 2026-11-12 换成真实图名，所以正常链路不会命中
  *（见 `BIGMAP_WORLD_CAMP_ART` 注释）；留这条是为了兜服务器历史快照 / 旧分支导出的 json。
+ *未知段（0 / 9xx）回退 `BIGMAP_WORLD_CITY_ART`，不再把已删库的概念图原样交回加载链。
  */
 export function worldCampArtFor(iconPath: string, campId: number): string {
     const path = toBigMapArtPath(iconPath);
     if (!path.startsWith(`${BIGMAP_CONCEPT_SPRITE_ROOT}/`)) return path;
-    const group = BIGMAP_WORLD_CAMP_ART[Math.floor(campId / 100)];
-    if (!group || group.length === 0) return path;
-    return group[campId % group.length] ?? path;
+    //先净化 ID 再分段：`NaN` / 负数直接取绝对值，避免 `group[-1]` 静默回落到已删库的概念图。
+    const id = Number.isFinite(campId) ? Math.abs(Math.trunc(campId)) : 0;
+    const group = BIGMAP_WORLD_CAMP_ART[Math.floor(id / 100)];
+    if (!group || group.length === 0) return BIGMAP_WORLD_CITY_ART;
+    return group[id % group.length] ?? BIGMAP_WORLD_CITY_ART;
 }
 
 /**
@@ -133,12 +163,12 @@ export const BIGMAP_STAMINA_ART = `${BIGMAP_CONCEPT_ROOT}/ui/stamina`;
 export const BIGMAP_PLATE_KEYS = ['monster', 'city', 'self', 'other'] as const;
 export type IBigMapPlateKey = typeof BIGMAP_PLATE_KEYS[number];
 
-export const BIGMAP_PLATE_FILES: Readonly<Record<IBigMapPlateKey, string>> = {
+export const BIGMAP_PLATE_FILES = {
     monster: `${BIGMAP_CONCEPT_ROOT}/ui/plate_monster`,
     city: `${BIGMAP_CONCEPT_ROOT}/ui/plate_city`,
     self: `${BIGMAP_CONCEPT_ROOT}/ui/plate_self`,
     other: `${BIGMAP_CONCEPT_ROOT}/ui/plate_other`,
-};
+} as const satisfies Record<IBigMapPlateKey, string>;
 
 /** 名条左端徽章外那颗小旗（设计稿 `icon_qizhi`）：标「谁占着这个据点」。 */
 export const BIGMAP_PLATE_FLAG_FILE = `${BIGMAP_CONCEPT_ROOT}/ui/plate_flag`;
@@ -147,10 +177,10 @@ export const BIGMAP_PLATE_FLAG_FILE = `${BIGMAP_CONCEPT_ROOT}/ui/plate_flag`;
 export const BIGMAP_COMMON_ART_ROOT = COMMON_ART_ROOT;
 
 /** 主城页 HUD / 按钮的根目录（`快速寻敌` 那颗大金钮就在这）。 */
-export const BIGMAP_MAIN_CITY_ART_ROOT = 'image/main/city';
+export const BIGMAP_MAIN_CITY_ART_ROOT = MAIN_CITY_ART_ROOT;
 
 /** 主界面 HUD 的根目录（【任务】按钮那块深板岩底框 + 它压在上面的卡通图标）。 */
-export const BIGMAP_MAIN_HUD_ART_ROOT = 'image/main/hud';
+export const BIGMAP_MAIN_HUD_ART_ROOT = `${MAIN_ART_ROOT}/hud`;
 
 /**
  *世界页「领地页 HUD 皮肤」要用的图（2026-10-22 第二轮用户口径：
@@ -181,10 +211,10 @@ export const BIGMAP_HUD_UI_KEYS = ['mode_frame', 'mode_base', 'mode_world', 'but
 export type IBigMapHudUiKey = typeof BIGMAP_HUD_UI_KEYS[number];
 
 /** 键 → 完整资源路径（不带 `/spriteFrame`）。按键分别落在三个根目录下，所以写全路径。 */
-export const BIGMAP_HUD_UI_FILES: Readonly<Record<IBigMapHudUiKey, string>> = {
+export const BIGMAP_HUD_UI_FILES = {
     mode_frame: `${BIGMAP_MAIN_HUD_ART_ROOT}/hud_task_tab`,
     mode_base: `${BIGMAP_MAIN_CITY_ART_ROOT}/nav_territory`,
     mode_world: `${BIGMAP_MAIN_HUD_ART_ROOT}/hud_mode_world`,
     button: `${BIGMAP_MAIN_CITY_ART_ROOT}/btn_quick_fight`,
-};
+} as const satisfies Record<IBigMapHudUiKey, string>;
 

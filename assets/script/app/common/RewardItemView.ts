@@ -6,7 +6,9 @@ import type { ResourceScope } from '../../core/asset/ResourceScope';
 import { RefUtil } from '../../framework/ref/RefUtil';
 import { spriteFramePathOf } from '../ArtPaths';
 import { itemQualityFrameRelPath } from '../itemdetail/ItemDetailArtLoader';
+import { cardItemIdsOf, itemFrameQualityOf } from '../itemdetail/ItemDetailTable';
 import {
+    CARD_LEVEL_UP_TABLE,
     ITEM_TABLE,
     ROLE_PROPERTY_TABLE,
     resBarCellOfRefId,
@@ -56,6 +58,13 @@ export class RewardItemView extends Component {
     // 表数据只读共享；动态帧由每个格子的控制器持有。
     private static propRows: readonly IResPropertyRow[] = [];
     private static itemRows: readonly IItemRefRow[] = [];
+    /**
+     * 「品质填的是卡牌品阶」的道具（碎片 + 民兵/金矿），见 `ItemDetailTable.cardItemIdsOf`。
+     *
+     * 这批道具的 `item.quality` 是 1..4 的卡牌品阶，不是道具品质档（1..8），
+     * 底框要先抬一档才是卡牌的真实颜色。
+     */
+    private static cardItemIds: ReadonlySet<number> = new Set<number>();
     private static tablesLoading: Promise<void> | null = null;
 
     private readonly controller = new ComponentController('ui:reward-item');
@@ -82,12 +91,15 @@ export class RewardItemView extends Component {
     }
 
     private static async loadTables(): Promise<void> {
-        const [props, items] = await Promise.all([
+        const [props, items, levelUp] = await Promise.all([
             RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE).catch(() => null),
             RefUtil.instance.getRefAllAsync(ITEM_TABLE).catch(() => null),
+            //  读不到就空集：底框退回道具品质口径（颜色可能低一档），但**不能**让奖励格整片不显示。
+            RefUtil.instance.getRefAllAsync(CARD_LEVEL_UP_TABLE).catch(() => null),
         ]);
         RewardItemView.propRows = (props ?? []) as IResPropertyRow[];
         RewardItemView.itemRows = (items ?? []) as IItemRefRow[];
+        RewardItemView.cardItemIds = cardItemIdsOf(levelUp as readonly { readonly costCardID?: unknown }[] | null);
     }
 
     private static qualityOf(resId: number): number {
@@ -141,9 +153,11 @@ export class RewardItemView extends Component {
         await (RewardItemView.tablesLoading ??= RewardItemView.loadTables());
         if (!this.isValid || this.resourceScope.disposed || this.currentResId !== resId) return;
         const quality = RewardItemView.qualityOf(resId);
+        //  卡牌道具（碎片 / 民兵 / 金矿）的品质是「卡牌品阶」，底框要抬一档才是卡牌本身的颜色（绿/蓝/紫/金）。
+        const frameQuality = itemFrameQualityOf(quality, RewardItemView.cardItemIds.has(resId));
         const iconPath = resBarIconSpritePath(resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows));
         const [qualityFrame, iconFrame] = await Promise.all([
-            this.loadFrame(itemQualityFrameRelPath(quality)),
+            this.loadFrame(itemQualityFrameRelPath(frameQuality)),
             this.loadFrame(iconPath),
         ]);
         // 加载期间格子可能已被复用成别的物品，以最后一次 render 为准。

@@ -45,7 +45,7 @@ import type { FormationSaveResult, ZCFormation } from './FormationService';
 import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, resetFormationSession, saveFormation, selectFormation } from './FormationService';
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
-import { readLineupSnapshot, writeLineupSnapshot } from './LineupSnapshot';
+import { readLineupSnapshot, saveLineupSnapshotPower, writeLineupSnapshot } from './LineupSnapshot';
 import type { PvpHeroInfo, PvpHeroService, PvpHeroSkillLevel } from './PvpHeroService';
 import { normalizePvpHeroInfos } from './PvpHeroService';
 
@@ -128,6 +128,8 @@ export interface ICardRepository {
      * 阵容战力，本地算，不发协议。返回 0 表示阵容未就绪或全是建筑卡。
      */
     loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number>;
+    /** 同步获取当前已缓存的阵容战力（优先内存会话缓存，缺失时回退本地快照）。 */
+    getCachedLineupPower?(): number | null;
     upgradeHero(heroId: number, caller?: object): Promise<UpgradeHeroResult>;
     upgradeHeroSkill(heroId: number, skillId: number, caller?: object): Promise<UpgradeHeroSkillResult>;
     /** 技能面板取数（卡表技能顺序 + `armySkillLevelUp` + 该英雄技能等级）。 */
@@ -147,9 +149,11 @@ export interface ICardRepository {
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
 export class RuntimeCardRepository implements ICardRepository {
     private heroes: PvpHeroService | null = null;
+    private cachedPower: number | null = null;
 
     /** 登录组合层绑定新会话；返回登录和应用销毁时传 null。 */
     bindHeroSession(heroes: PvpHeroService | null): void {
+        this.cachedPower = null;
         if (this.heroes === heroes) return;
         const previous = this.heroes;
         this.heroes = heroes;
@@ -157,6 +161,19 @@ export class RuntimeCardRepository implements ICardRepository {
         if (typeof resetFormationSession === 'function') {
             resetFormationSession();
         }
+    }
+
+    /** 同步获取当前已缓存的阵容战力（优先内存会话缓存，缺失时回退本地快照）。 */
+    getCachedLineupPower(): number | null {
+        if (this.cachedPower !== null && this.cachedPower > 0) {
+            return this.cachedPower;
+        }
+        const snapshot = typeof readLineupSnapshot === 'function' ? readLineupSnapshot() : null;
+        if (snapshot && typeof snapshot.power === 'number' && snapshot.power > 0) {
+            this.cachedPower = snapshot.power;
+            return snapshot.power;
+        }
+        return null;
     }
 
     prefetchHeroInfos(): void {
@@ -242,9 +259,13 @@ export class RuntimeCardRepository implements ICardRepository {
         if (this.heroes !== heroes) throw new Error('卡牌会话已结束');
         const heroLevels = this.levels(heroInfos);
         const selectedDeck = resolveSelectedDeck({ deck: tableDeck, pool: catalog, formations });
-        // 只给服务端确认过的选中阵型写快照，本地默认八卡不能当玩家阵容持久化。
-        if (selectedDeck) writeLineupSnapshot(selectedDeck, heroLevels);
         const deck = formations === null ? [] : (selectedDeck ?? tableDeck);
+        const power = formations !== null && heroInfos !== null ? await this.loadLineupPower({ deck, heroLevels }) : undefined;
+        // 只给服务端确认过的选中阵型写快照，本地默认八卡不能当玩家阵容持久化。
+        if (selectedDeck && typeof writeLineupSnapshot === 'function') {
+            writeLineupSnapshot(selectedDeck, heroLevels, Date.now(), undefined, power);
+        }
+        if (power !== undefined && power > 0) this.cachedPower = power;
         return {
             art,
             deck,
@@ -253,7 +274,7 @@ export class RuntimeCardRepository implements ICardRepository {
             heroLevelCaps,
             heroListKnown: heroInfos !== null,
             formationsKnown: formations !== null,
-            power: formations !== null && heroInfos !== null ? await this.loadLineupPower({ deck, heroLevels }) : undefined,
+            power,
             bonuses: currentDeckBonuses(deck),
         };
     }
@@ -265,10 +286,13 @@ export class RuntimeCardRepository implements ICardRepository {
     loadLineupSnapshot(): CardLineupData | null {
         const art = this.artConfig;
         if (!art) return null;
-        const snapshot = readLineupSnapshot();
+        const snapshot = typeof readLineupSnapshot === 'function' ? readLineupSnapshot() : null;
         if (!snapshot || snapshot.cards.length === 0) return null;
         const heroLevels = new Map<string, number>();
         for (const [key, value] of Object.entries(snapshot.levels)) heroLevels.set(key, value);
+        if (typeof snapshot.power === 'number' && snapshot.power > 0 && this.cachedPower === null) {
+            this.cachedPower = snapshot.power;
+        }
         return {
             art,
             deck: snapshot.cards,
@@ -278,6 +302,7 @@ export class RuntimeCardRepository implements ICardRepository {
             // 快照来自服务端确认过的数据，未出现在 levels 里的等级按 0 处理。
             heroListKnown: true,
             formationsKnown: true,
+            power: snapshot.power,
             bonuses: currentDeckBonuses(snapshot.cards),
         };
     }
@@ -366,7 +391,19 @@ export class RuntimeCardRepository implements ICardRepository {
      */
     async loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number> {
         try {
-            if (!lineup) return (await this.loadLineup(false)).power ?? 0;
+            if (!lineup) {
+                if (this.cachedPower !== null && this.cachedPower > 0) return this.cachedPower;
+                let data = await this.loadLineup(false, false);
+                if (data.power === undefined) {
+                    data = await this.loadLineup(false, true);
+                }
+                const power = data.power ?? 0;
+                if (power > 0) {
+                    this.cachedPower = power;
+                    if (typeof saveLineupSnapshotPower === 'function') saveLineupSnapshotPower(power);
+                }
+                return power;
+            }
             if (lineup.deck.length === 0) return 0;
             const [cardRows, growthRaw, levelUpRaw] = await Promise.all([
                 loadPvpCardRawRows(),
@@ -386,7 +423,12 @@ export class RuntimeCardRepository implements ICardRepository {
                     levelAttrs: resolveCardLevelAttrs(table, card.id, level),
                 };
             });
-            return lineupAttackTotal(inputs, parseGrowthRows(growthRaw));
+            const power = lineupAttackTotal(inputs, parseGrowthRows(growthRaw));
+            if (power > 0) {
+                this.cachedPower = power;
+                if (typeof saveLineupSnapshotPower === 'function') saveLineupSnapshotPower(power);
+            }
+            return power;
         } catch (error) {
             console.warn('[CardRepository] 阵容战力计算失败，保留占位', error);
             return 0;
@@ -547,14 +589,17 @@ export class RuntimeCardRepository implements ICardRepository {
 
     /** 把服务端确认的英雄等级（可选带技能表快照）写回本地列表缓存。 */
     applyHeroLevel(heroId: number, level: number, skills?: readonly PvpHeroSkillLevel[]): void {
+        this.cachedPower = null;
         this.heroes?.applyPvpHeroLevel(heroId, level, skills);
     }
 
     saveFormation(formationId: number, heroIds: readonly number[], caller?: object): Promise<FormationSaveResult> {
+        this.cachedPower = null;
         return saveFormation(formationId, heroIds, caller);
     }
 
     selectFormation(formationId: number, caller?: object): Promise<boolean> {
+        this.cachedPower = null;
         return selectFormation(formationId, caller);
     }
 

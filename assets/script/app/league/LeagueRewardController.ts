@@ -23,8 +23,8 @@ export class LeagueRewardController extends ControllerBase {
         this.listen(LeagueRewardEvent.Intent, this.onIntent);
     }
 
-    private readonly onIntent = (event: ILeagueRewardIntent): void => {
-        if (event.owner !== this.options.owner || this.busy) return;
+    private readonly onIntent = (event: ILeagueRewardIntent, source: object): void => {
+        if (source !== this.options.owner || this.busy) return;
         void this.execute(event.action);
     };
 
@@ -40,7 +40,7 @@ export class LeagueRewardController extends ControllerBase {
         }
         if (this.isDisposed) return;
         if (result.status === 'ok' && result.rewards.length > 0) this.options.feedback.reward(result.rewards);
-        EventMgr.instance.emit(LeagueRewardEvent.Completed, { owner: this.options.owner, status: result.status });
+        EventMgr.instance.emit(LeagueRewardEvent.Completed, { status: result.status }, this.options.owner);
     }
 
     private request(action: LeagueRewardAction): Promise<ILeagueRewardResult> {

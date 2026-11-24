@@ -611,7 +611,7 @@ test('波次模式我方建筑仍可受伤，普通对战敌方主城和城墙�
     assert.equal(home.owner, 'player');
 });
 
-test('塔防一波多只按 0.15s 逐只出怪，且同波怪都落在同一条出怪轴上', () => {
+test('塔防一波多只按 0.15s 逐只出怪，多只怪呈现两列错位队列行进（单只怪保持居中）', () => {
     const config = defenceConfig([{ waveId: 1, showAtSeconds: .1, cardId: '', monsterCount: 4, tier: 1 }]);
     const model = new ZCGameModel(null, () => .25, config);
     model.tick(.1);
@@ -624,17 +624,31 @@ test('塔防一波多只按 0.15s 逐只出怪，且同波怪都落在同一条�
     assert.deepEqual(timeline, [1, 1, 1, 2, 2, 2, 3, 3, 3, 4], '同一波逐只出怪，不是同一帧一坨');
     assert.equal(ZC_DEFENCE_SPAWN_INTERVAL_SECONDS, .15, '用户口径 0.1~0.2s');
 
-    // 队列成直线：所有怪都从「敌方主城 → 我方主城」这条轴上出生，只是出发时刻不同。
+    // 多只小怪呈现两列错位行进（微小横向横移/抖动，左右两列各约 9px 偏移），避免重叠残影
     const home = config.map.hexes[config.map.enemyHomeId];
     const goal = config.map.hexes[config.map.playerHomeId];
     const axis = Math.atan2(goal.y - home.y, goal.x - home.x);
     const units = model.snapshot.units.filter((unit) => unit.battleState !== 'dead');
     assert.equal(units.length, 4);
-    for (const unit of units) {
-        const offset = (unit.freeX - home.x) * Math.sin(axis) - (unit.freeY - home.y) * Math.cos(axis);
-        assert.ok(Math.abs(offset) < .5, `怪必须压在出怪轴上（偏离 ${offset.toFixed(2)}px）`);
-        assert.ok(Math.abs(unit.facingRadians - axis) < 1e-6);
+    const offsets = units.map((unit) => (unit.freeX - home.x) * Math.sin(axis) - (unit.freeY - home.y) * Math.cos(axis));
+    for (let i = 0; i < units.length; i += 1) {
+        const offset = offsets[i];
+        assert.ok(Math.abs(offset) >= 4 && Math.abs(offset) <= 12, `两列错位间距（当前偏离 ${offset.toFixed(2)}px）`);
+        assert.ok(units[i].facingRadians < 0, '朝向朝向目标行军半平面');
     }
+    // 偶数与奇数只分居主轴两侧（两列交替错位）
+    assert.ok(offsets[0] * offsets[1] < 0, '相邻两只分属左右两列');
+    assert.ok(offsets[0] * offsets[2] > 0, '同列保持同侧');
+    assert.ok(offsets[1] * offsets[3] > 0, '同列保持同侧');
+
+    // 单只怪物（如单体 BOSS）保持在出怪主轴正中，不偏移
+    const singleConfig = defenceConfig([{ waveId: 1, showAtSeconds: .1, cardId: '', monsterCount: 1, tier: 1 }]);
+    const singleModel = new ZCGameModel(null, () => .25, singleConfig);
+    singleModel.tick(.1);
+    const singleUnits = singleModel.snapshot.units.filter((unit) => unit.battleState !== 'dead');
+    assert.equal(singleUnits.length, 1);
+    const singleOffset = (singleUnits[0].freeX - home.x) * Math.sin(axis) - (singleUnits[0].freeY - home.y) * Math.cos(axis);
+    assert.ok(Math.abs(singleOffset) < 0.5, '单只怪保持轴线居中');
 });
 
 test('塔防末波还在排队出怪时不算击败 BOSS', () => {
@@ -659,4 +673,53 @@ test('塔防末波还在排队出怪时不算击败 BOSS', () => {
     Object.assign(last, { hp: 0, battleState: 'dead', deathRemoveAt: 100 });
     model.tick(.05);
     assert.equal(model.snapshot.status, 'victory', '末波真正清空才结算');
+});
+
+/**
+ * ★ 塔防关的防守方也要发育（2026-11-23 用户报「NPC 还是翻不出新卡牌」）。
+ *
+ * 两处断点同时钉在这里：
+ *  1. `tick()` 原来一刀切 `if (!this.pveDefence)` —— 首领关整段跳过通用敌方翻格，
+ *     于是 NPC 半场永远是空地，配在 `npcTeam.npcCard` 里的卡组一张都用不上；
+ *  2. 只有本关**真的配了卡组**（`npcDeckFromTeam`）才放行，否则首领关仍按原样由波次出怪。
+ */
+function defenceDeckConfig(npcDeckFromTeam: boolean): ZCMatchConfig {
+    const base = captureZCMatchConfig();
+    const wanted = new Set(['2001', '68001', '68002', '68019']);
+    const deck = base.enemyDeck.filter((card: ZCDeckCard) => wanted.has(card.id));
+    assert.ok(deck.length >= 3, `测试卡组至少要 3 张，实际 ${deck.map((card) => card.id).join(',')}`);
+    return captureZCMatchConfig({
+        ...base,
+        enemyDeck: deck,
+        npcDeckFromTeam,
+        openGrideTime: 1,
+        pveDefence: {
+            waves: [{ waveId: 1, showAtSeconds: 9999, cardId: '', monsterCount: 1, tier: 1 }],
+        },
+    });
+}
+
+/** 走满 120 秒，返回防守方**除主城以外**真正开发出来的格子。*/
+function developedByEnemy(config: ZCMatchConfig): ZCHexState[] {
+    const model = new ZCGameModel(null, () => .7, config);
+    for (let step = 0; step < 120 / .05; step += 1) model.tick(.05);
+    // 主城（`building === 'hq'`）开局就是已开发的，不能算进「翻出来的格子」。
+    return model.snapshot.hexes.filter((hex) => hex.owner === 'enemy'
+        && hex.developmentResolved && hex.building !== 'hq');
+}
+
+test('★ 塔防关配了 NPC 卡组时防守方照常翻地块（不是整局站着不动）', () => {
+    const equipped = developedByEnemy(defenceDeckConfig(true));
+    assert.ok(equipped.length >= 3, `NPC 至少要开发 3 格，实际 ${equipped.length}`);
+
+    // 对照组：摘掉标记就是旧行为 —— 首领关整段跳过 AI 翻格，只剩主城。
+    const legacy = developedByEnemy(defenceDeckConfig(false));
+    assert.equal(legacy.length, 0, `没有卡组标记时不该翻格，实际翻了 ${legacy.length} 格`);
+
+    // 翻出来的建筑只能是卡组里的卡（系统卡 2001 金矿也算），不许冒出卡池外的兵种。
+    const allowed = new Set(['2001', '68001', '68002', '68019']);
+    for (const hex of equipped) {
+        assert.ok(hex.cardId === null || allowed.has(String(hex.cardId)),
+            `冒出了卡组外的卡：${hex.cardId}`);
+    }
 });

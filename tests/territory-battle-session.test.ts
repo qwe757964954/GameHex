@@ -68,7 +68,7 @@ function fixture(failure = false) {
         } },
         './TerritoryController': { TerritoryController },
         './TerritoryChapterLoader': { TerritoryChapterLoader: class {} },
-        './TerritoryCellRepository': { TerritoryCellRepository: class {} },
+        './TerritoryCellRepository': { TerritoryCellRepository: class { cancelBattleStart() {} } },
         './TerritoryChapterInfoRepository': { TerritoryChapterInfoRepository: { instance: { availableChapters: [1] } } },
         './TerritorySaveStoreAdapter': { TerritorySaveStoreAdapter: class {} },
         './TerritoryTexts': territoryTexts,

@@ -102,7 +102,7 @@ test('★★★未解锁格的银币数字：只看银币（体力不足不许�
 });
 
 test('★★★宝箱气泡的体力数字：只认 `stamina`', () => {
-    const source = read(MAP_VIEW_PATH);
+    const source = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
     const start = source.indexOf('levelBubbleTextColor: showHintBubble');
     assert.ok(start > 0, '宝箱气泡没接 `levelBubbleTextColor` ⇒ 体力不足时数字不会变红');
     const tail = source.slice(start, start + 300);

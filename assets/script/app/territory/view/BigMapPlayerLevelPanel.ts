@@ -1,7 +1,8 @@
 import { EventMgr } from '../../../framework/event/EventMgr';
 import {
-    _decorator, Button, Component, Label, Node, Sprite, SpriteFrame, UITransform,
+    _decorator, Button, Label, Node, Sprite, SpriteFrame, UITransform,
 } from 'cc';
+import { PopupBase } from '../../../framework/ui/PopupBase';
 import { TerritoryUiEvent } from '../application/TerritoryEvents';
 import { RewardItemView } from '../../common/RewardItemView';
 import type { IRewardItemData } from '../../common/RewardItemView';
@@ -31,126 +32,103 @@ export interface IBigMapPlayerLevelContent {
     readonly fightCost: number;
     readonly fightCaption: string;
     readonly fightEnabled: boolean;
+    /** 费用图标（体力）。`null` ⇒ 只藏图标、数字照常显示。 */
+    readonly staminaIcon?: SpriteFrame | null;
 }
 
 /**
  * 「玩家关卡」弹窗 —— 领地页点**异步据点**（`TERRITORY_SITE_TYPE.asyncPvp`）时弹出。
  *
- * 资产名沿用设计稿（蓝湖「玩家关卡」，`ui/territory/BigMapPlayerLevelPanel.prefab`），
- * 类名与 prefab 同名便于对照；归属是领地页，所以代码放在 `app/territory/view`。
- *
- * 不复用 `BigMapTargetPanel`
- *
- * 后者是「三行文字 + 一颗开战按钮」的通用关卡弹窗（`BigMapLevelInfoPanel` 在用）；
- * 这个面板是**玩家据点专用**结构：标题木牌 + 两条占领奖励（第二条是图标格）+ 侦查/开战双按钮，
- * 两个按钮**各带一份货币消耗**。硬塞进通用组件会把它的字段撑成一半永远用不上。
+ * 走 `PopupBase` 处理，层级、遮罩与点击空白关闭均由 `PopupManager` / `PopupBase` 统一接管。
  *
  * 交互：只派发意图，不收回调
- *
- * 按钮点击一律在本节点上 `emit`（`TERRITORY_EVENTS`），页面订阅后转给 Controller。
- * 这是 `docs/AI架构与代码规范.md` §2.1 的口径 —— 视图不持有控制器入口，
- * 漏传回调不会变成「点了没反应且零报错」。
+ * 按钮点击一律经 `EventMgr.instance.emit` 派发意图事件，由页面/控制器集中处理。
  */
 @ccclass('BigMapPlayerLevelPanel')
-export class BigMapPlayerLevelPanel extends Component {
-    @property({ type: UITransform, group: '节点引用', tooltip: 'Panel：弹窗主卡（用于等比缩放适配）' })
-    private panelTransform: UITransform = null;
-
-    @property({ type: UITransform, group: '节点引用', tooltip: 'Dim：全屏暗底（点它 = 关闭）' })
-    private dimTransform: UITransform = null;
+export class BigMapPlayerLevelPanel extends PopupBase {
+    /** 预制体路径（PopupManager 统一按需加载）。 */
+    static prefabPath = 'ui/territory/BigMapPlayerLevelPanel';
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/TitleLabel：据点名' })
-    private titleLabel: Label = null;
+    private titleLabel: Label = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/RewardText1：第一条占领奖励文案' })
-    private chestLabel: Label = null;
+    private chestLabel: Label = null!;
 
     /** 占领奖励：**公共格子 `ui/common/RewardItem.prefab`** 的 3 列网格虚拟列表。 */
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/RewardSlots：占领奖励（itemPrefab = common/RewardItem）' })
-    private dropList: VirtualScrollView = null;
+    private dropList: VirtualScrollView = null!;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnSecondary：侦查' })
-    private scoutButton: Button = null;
+    private scoutButton: Button = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/Label：侦查文案' })
-    private scoutLabel: Label = null;
+    private scoutLabel: Label = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnSecondary/CostBg：费用底色（无费用时隐藏）' })
-    private scoutCostRoot: Node = null;
+    private scoutCostRoot: Node = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnSecondary/CostIcon：货币图标' })
-    private scoutCostIcon: Sprite = null;
+    private scoutCostIcon: Sprite = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnSecondary/CostLabel：费用数字' })
-    private scoutCostLabel: Label = null;
+    private scoutCostLabel: Label = null!;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/BtnPrimary：开始战斗' })
-    private fightButton: Button = null;
+    private fightButton: Button = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/Label：开战文案' })
-    private fightLabel: Label = null;
+    private fightLabel: Label = null!;
 
     @property({ type: Node, group: '节点引用', tooltip: 'BtnPrimary/CostBg：费用底色' })
-    private fightCostRoot: Node = null;
+    private fightCostRoot: Node = null!;
 
     @property({ type: Sprite, group: '节点引用', tooltip: 'BtnPrimary/CostIcon：货币图标' })
-    private fightCostIcon: Sprite = null;
+    private fightCostIcon: Sprite = null!;
 
     @property({ type: Label, group: '节点引用', tooltip: 'BtnPrimary/CostLabel：费用数字' })
-    private fightCostLabel: Label = null;
+    private fightCostLabel: Label = null!;
 
     @property({ type: Button, group: '节点引用', tooltip: 'Panel/Close：关闭' })
-    private closeButton: Button = null;
+    private closeButton: Button = null!;
 
-    private inited = false;
+    /** 兼容字段（历史留存，不再参与手工尺寸适配与事件监听）。 */
+    panelTransform?: UITransform;
+    dimTransform?: UITransform;
 
-    /**
-     * 上一次 `open` 的内容。
-     *
-     * 只为一件事留着：**费用图标晚于弹窗到达**。页面在 `onLoad` 里 `initialize(..., null)`
-     * （那时体力图还在异步加载），`setCostIcon` 补帧后要能把已开着的角标重算一遍，
-     * 否则本轮会一直停在"有数字、没图标"。
-     */
+    /** 上一次渲染的内容。 */
     private lastContent: IBigMapPlayerLevelContent | null = null;
-
-    /**
-     * 绑一次交互并做屏幕适配；重复调用无副作用（页面在 `onLoad` 里调一次）。
-     *
-     * `costIcon` 是**体力**图标「这里是扣体力不是扣银币」：
-     * 弹窗自己不解表（避免视图里出现配置读取），由页面加载后注入。
-     */
-    initialize(width: number, height: number, costIcon: SpriteFrame | null): void {
-        this.dropList.renderItemFn = this.renderReward;
-        this.setCostIcon(costIcon);
-        if (width > 0 && height > 0) {
-            const root = this.node.getComponent(UITransform);
-            root.setContentSize(width, height);
-            this.dimTransform.setContentSize(width, height);
-            const scale = Math.min(1, (width - 32) / this.panelTransform.width,
-                (height - 64) / this.panelTransform.height);
-            this.panelTransform.node.setScale(scale, scale, 1);
-        }
-        if (this.inited) return;
-        this.inited = true;
-        // `Dim` / `Panel` 的 `cc.BlockInputEvents` 挂在 prefab 上（拦点击穿透），这里不再运行时 addComponent。
-        this.dimTransform.node.on(Node.EventType.TOUCH_END, this.handleClose, this);
-        this.closeButton.node.on(Button.EventType.CLICK, this.handleClose, this);
-        this.scoutButton.node.on(Button.EventType.CLICK, this.handleScout, this);
-        this.fightButton.node.on(Button.EventType.CLICK, this.handleFight, this);
-        this.node.active = false;
-    }
 
     /** 本趟的奖励（`renderItemFn` 按下标现取）。 */
     private rewards: readonly IRewardItemData[] = [];
 
+    protected onInit(): void {
+        this.dropList.renderItemFn = this.renderReward;
+        this.closeButton.node.on(Button.EventType.CLICK, this.closeByButton, this);
+        this.scoutButton.node.on(Button.EventType.CLICK, this.handleScout, this);
+        this.fightButton.node.on(Button.EventType.CLICK, this.handleFight, this);
+    }
+
+    protected onOpen(userData?: unknown): void {
+        if (userData) this.applyContent(userData as IBigMapPlayerLevelContent);
+    }
+
+    protected onClose(): void {
+        this.lastContent = null;
+        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeDetail' } });
+    }
+
+    /**
+     * 兼容历史接口；改用 PopupBase 后全屏适配由 PopupManager 与 Widget 统一负责。
+     */
+    initialize(_width?: number, _height?: number, costIcon: SpriteFrame | null = null): void {
+        if (costIcon !== null) this.setCostIcon(costIcon);
+    }
+
     /** 单格渲染 —— 走公共 `RewardItemView`（不带概率）。 */
     private readonly renderReward = (item: Node, index: number): void => {
         item.getComponent(RewardItemView).render(this.rewards[index]);
-    }
-
-    get isOpen(): boolean {
-        return this.node.active;
-    }
+    };
 
     /**
      * 费用角标的货币图标（两个按钮共用同一张，内容是**体力**）。
@@ -160,17 +138,17 @@ export class BigMapPlayerLevelPanel extends Component {
     setCostIcon(frame: SpriteFrame | null): void {
         this.scoutCostIcon.spriteFrame = frame;
         this.fightCostIcon.spriteFrame = frame;
-        // 图补到时弹窗可能已经开着 ⇒ 立刻重算两颗角标，别等玩家关掉再点开
-        if (this.lastContent && this.node.active) this.applyCosts(this.lastContent);
+        if (this.lastContent && this.isPopupOpen) {
+            this.applyCosts(this.lastContent);
+        }
     }
 
-    /** 打开并全量赋值（幂等：连续两次 `open` 与一次等价）。 */
-    open(content: IBigMapPlayerLevelContent): void {
+    /** 面板已开时换内容或由 onOpen 填充（幂等）。 */
+    applyContent(content: IBigMapPlayerLevelContent): void {
         this.titleLabel.string = content.title;
         this.chestLabel.string = content.chestText;
         this.chestLabel.node.active = content.chestText !== '';
 
-        // 条数交给虚拟列表（3 列网格）；`renderItemFn` 按下标现取
         this.rewards = content.rewards;
         this.dropList.setTotalCount(content.rewards.length);
 
@@ -180,16 +158,13 @@ export class BigMapPlayerLevelPanel extends Component {
         this.fightLabel.string = content.fightCaption;
         this.fightButton.interactable = content.fightEnabled;
 
+        if (content.staminaIcon !== undefined) {
+            this.scoutCostIcon.spriteFrame = content.staminaIcon;
+            this.fightCostIcon.spriteFrame = content.staminaIcon;
+        }
+
         this.lastContent = content;
         this.applyCosts(content);
-
-        this.node.active = true;
-        this.node.setSiblingIndex(this.node.parent ? this.node.parent.children.length - 1 : 0);
-    }
-
-    close(): void {
-        this.node.active = false;
-        this.lastContent = null;
     }
 
     /** 两颗按钮的费用角标（数字 + 底色 + **体力图标**一起显隐）。 */
@@ -202,9 +177,6 @@ export class BigMapPlayerLevelPanel extends Component {
         const has = Number.isFinite(cost) && cost > 0;
         label.string = has ? String(Math.round(cost)) : '';
         root.active = has;
-        // `CostIcon` 是按钮的**直接子节点**（与 `CostBg` / `CostLabel` 平级），
-        // 不跟着 `CostBg` 一起关 ⇒ 少了这行会留一颗没有数字的体力图标挂在按钮上。
-        // 帧还没加载到（`null`）时只少一颗图标，数字照常显示。
         icon.node.active = has && icon.spriteFrame !== null;
     }
 
@@ -217,6 +189,6 @@ export class BigMapPlayerLevelPanel extends Component {
     }
 
     private handleClose(): void {
-        EventMgr.instance.emit(TerritoryUiEvent.Intent, { intent: { kind: 'closeDetail' } });
+        this.closeByButton();
     }
 }

@@ -1,6 +1,6 @@
 import {
     _decorator, Button, Color, Component, EventMouse, EventTouch, Graphics, instantiate,
-    Node, Prefab, Sprite, SpriteFrame, UITransform, Vec2, Vec3,
+    Node, Prefab, Sprite, SpriteFrame, UITransform, Vec2, Vec3, Widget,
 } from 'cc';
 import type { IHexGridLayout } from '../../../core/hex/HexGridLayout';
 import type { IBigMapArt } from '../application/BigMapArtLoader';
@@ -159,6 +159,7 @@ export class BigMapWorldView extends Component {
     /** 上次绘制时玩家基地所在的格（`data.playerBaseHexId`）；变化即重建标记。 */
     private markerAnchorHexId = -1;
     private zoom = 1;
+    private focusOffsetY = 0;
     private selectedHexId = -1;
     /** 已经为哪座城把相机抬起来过（-1 = 没抬）；聚焦态切换时用来幂等/可逆地补偿。 */
     private liftedFocusHexId = -1;
@@ -172,7 +173,7 @@ export class BigMapWorldView extends Component {
     private gesturePinched = false;
     private campRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-    build(data: IBigMapViewState, width: number, height: number): void {
+    build(data: IBigMapViewState, width: number, height: number, insets: { top: number; bottom: number }): void {
         this.ensureTemplates();
         this.unbindInput();
         for (const marker of this.markers) marker.node.destroy();
@@ -190,6 +191,11 @@ export class BigMapWorldView extends Component {
         this.rootTransform.setContentSize(width, height);
         this.viewportTransform.setContentSize(width, height);
         this.sandTransform.setContentSize(width, height);
+        this.focusOffsetY = (insets.bottom - insets.top) / 2;
+        const controls = this.focusButton.node.parent.getComponent(Widget);
+        controls.top = insets.top;
+        controls.bottom = insets.bottom;
+        controls.updateAlignment();
         this.buildMarkers();
         this.markerAnchorHexId = data.playerBaseHexId;
         this.rebuildTerritorySlots();
@@ -904,9 +910,8 @@ export class BigMapWorldView extends Component {
         if (!this.data) return;
         //绝对重定位 ⇒ 之前为城池聚焦抬过的那段已被覆盖，标记作废，免得解除选中时再落一次。
         this.liftedFocusHexId = -1;
-        const base = this.centerOf(this.data.playerBaseHexId);
-        const scale = Math.min(1, Math.max(0.55, this.viewportTransform.width / 720));
-        this.applyCamera(scale, -base.x * scale, -base.y * scale - 100);
+        this.zoom = Math.min(1, Math.max(0.55, this.viewportTransform.width / 720));
+        this.centerOnHex(this.data.playerBaseHexId, 0);
     }
 
     zoomBy(factor: number, anchor = new Vec2()): void {
@@ -918,7 +923,7 @@ export class BigMapWorldView extends Component {
     }
 
     /**
-     *把某格挪到视口中央（`-100` = 略低于正中，给顶部 HUD 留位）。
+     *把某格挪到 HUD 与导航栏之间的中心下方 100 像素处。
      *
      *城池据点额外上抬 `BIGMAP_FOCUSED_CITY_LIFT`（2026-11-11：抬的是相机，背景跟着一起动）。
      *只有「这一格正是当前选中的城池」才抬 ⇒「回家」（选中的是玩家基地、没有城池选中态）
@@ -931,7 +936,7 @@ export class BigMapWorldView extends Component {
     /** 相机绝对定位到某格：`lift > 0` 时额外上抬（屏幕位移 = `lift * zoom`）。 */
     private centerOnHex(hexId: number, lift: number): void {
         const center = this.centerOf(hexId);
-        this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom - 100 + lift * this.zoom);
+        this.applyCamera(this.zoom, -center.x * this.zoom, -center.y * this.zoom + this.focusOffsetY - 100 + lift * this.zoom);
     }
 
     private onTouchStart(event: EventTouch): void {

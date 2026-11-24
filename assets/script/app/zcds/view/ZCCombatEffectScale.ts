@@ -90,3 +90,17 @@ export function zcCombatEffectGrowFactor(
     const t = Math.max(0, Math.min(1, ageSeconds / growSeconds));
     return from + (1 - from) * (1 - (1 - t) * (1 - t));
 }
+
+// 统一导出表现层与判定几何所需的换算及缩放工具
+export {
+    zcBurstEffectScale,
+} from '../model/ZCBurstFx';
+export {
+    zcRayBeamEffectScale,
+} from '../model/ZCRayBeamFx';
+export {
+    zcBarrageImpactScale,
+} from '../model/ZCWindBarrageFx';
+export {
+    ZC_EFFECT_SCALE,
+} from '../model/ZCEffectTuning';

@@ -27,19 +27,19 @@ export interface ICardUpgradedContent {
      * 0..1，进度条按左端对齐裁剪。
      *
      * **口径：升级成功弹窗里恒为满格（1）**，代表「本次刚好攒够、这一档被吃掉」；
-     * 之后才由 {@link nextProgressRatio} 退到下一级的真实进度。
-     * 别传当级的真实持有比例 —— 那样 `progressRatio == nextProgressRatio`，条根本不动，
-     * 配合刷光看过去会被读成「进度条自己在从左往右长」（2026-11-20 用户反馈）。
+     * 刷光后先**清空到 0**，再由 {@link nextProgressRatio} 从左往右涨到下一级的真实进度
+     * （2026-11-24：「新的进度条首先是空的，绿色部分再按箭头方向从左往右涨」）。
+     * 别传当级的真实持有比例 —— 那样 `progressRatio == nextProgressRatio`，条根本不动。
      */
     readonly progressRatio: number;
     /**
-     * 刷光后退到的**下一级**材料进度，如「0/78」；省略时刷光后不回退。
+     * 刷光后退到 0、再涨到的**下一级**材料进度，如「40/80」；省略时不做换档演出。
      *
      * 与 `progressRatio` 是两个不同的时间点：前者是「本次消耗那一档」的满格，
-     * 后者是升级完成后的新起点。
+     * 后者是升级完成后重新攒出来的位置。
      */
     readonly nextProgressText?: string;
-    /** 刷光后进度条退到的比例（0..1）；省略时沿用 `progressRatio`。 */
+    /** 清空后涨到的比例（0..1）；省略时沿用 `progressRatio`（不演换档）。 */
     readonly nextProgressRatio?: number;
     readonly hpValue: string;
     readonly hpGain: string;

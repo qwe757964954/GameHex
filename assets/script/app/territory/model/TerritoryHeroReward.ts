@@ -123,15 +123,47 @@ export const TERRITORY_HERO_BADGE_GROW_SECONDS = 0.7;
 export const TERRITORY_HERO_BADGE_HOLD_SECONDS = 0.2;
 /** 整个徽标淡出时长（秒）。 */
 export const TERRITORY_HERO_BADGE_FADE_SECONDS = 0.25;
-/** 单个英雄一次表演的总时长（秒）；播完才能轮到下一个。 */
+/**
+ * 进度条刷光时长（秒，2026-11-20）：**正好等于 hold + fade**。
+ * 长满那一刻起一道白光横扫整条绿填充，扫完徽标也淡出收工，不额外拖时长。
+ */
+export const TERRITORY_HERO_BADGE_SHINE_SECONDS =
+    TERRITORY_HERO_BADGE_HOLD_SECONDS + TERRITORY_HERO_BADGE_FADE_SECONDS;
+/**
+ * 单个英雄一次表演的总时长（秒）；播完才能轮到下一个。
+ * 🔴 必须写成 `grow + 刷光时长`（而不是 `grow + hold + fade`）：两个浮点加法顺序不同会差
+ *    1 ulp，`shineFrame` 与 `badgeFrame` 的收尾边界就会错开一帧（光带永远收不干净）。
+ */
 export const TERRITORY_HERO_BADGE_TOTAL_SECONDS =
-    TERRITORY_HERO_BADGE_GROW_SECONDS + TERRITORY_HERO_BADGE_HOLD_SECONDS + TERRITORY_HERO_BADGE_FADE_SECONDS;
+    TERRITORY_HERO_BADGE_GROW_SECONDS + TERRITORY_HERO_BADGE_SHINE_SECONDS;
 
 export interface ITerritoryHeroBadgeFrame {
     /** 进度条填充比：从 `from` 长到 1。 */
     readonly progress: number;
     /** 整个徽标的不透明度（1 → 0）。 */
     readonly opacity: number;
+}
+
+export interface ITerritoryHeroBadgeShineFrame {
+    /** 光带中心在**绿色填充区**上的归一化位置 0→1。 */
+    readonly offset: number;
+    /** 光带不透明度，两端 0、中间 1。 */
+    readonly opacity: number;
+}
+
+/**
+ * 满进度刷光在 `elapsed` 秒时的帧；`null` = 还没长满 / 已经扫完。
+ *
+ * 纯函数 + `elapsed`，不建 tween（徽标池化复用，tween 回收后还会继续写节点）；
+ * `sin(πk)` 让光带两端淡入淡出，不会在条边缘硬切一刀。
+ * 徽标只在「本次新达成可升级」时才演，所以每一场都会长满到 100% ⇒ 每场都有刷光。
+ */
+export function territoryHeroBadgeShineFrame(elapsed: number): ITerritoryHeroBadgeShineFrame | null {
+    if (!Number.isFinite(elapsed) || elapsed >= TERRITORY_HERO_BADGE_TOTAL_SECONDS) return null;
+    const t = elapsed - TERRITORY_HERO_BADGE_GROW_SECONDS;
+    if (t < 0) return null;
+    const k = Math.min(1, t / TERRITORY_HERO_BADGE_SHINE_SECONDS);
+    return { offset: k, opacity: Math.sin(Math.PI * k) };
 }
 
 /**

@@ -1,0 +1,171 @@
+{
+  "__type__": "cc.AnimationClip",
+  "_name": "仙桃行者_重击技能-play",
+  "_objFlags": 0,
+  "_native": "",
+  "sample": 24,
+  "speed": 1,
+  "wrapMode": 1,
+  "events": [],
+  "_duration": 1.2083333333,
+  "_keys": [],
+  "_stepness": 0,
+  "curveDatas": {},
+  "_curves": [],
+  "_commonTargets": [],
+  "_hash": 0,
+  "_tracks": [
+    {
+      "__type__": "cc.animation.ObjectTrack",
+      "_binding": {
+        "__type__": "cc.animation.TrackBinding",
+        "path": {
+          "__type__": "cc.animation.TrackPath",
+          "_paths": [
+            {
+              "__type__": "cc.animation.ComponentPath",
+              "component": "cc.Sprite"
+            },
+            "spriteFrame"
+          ]
+        },
+        "proxy": null
+      },
+      "_channel": {
+        "__type__": "cc.animation.Channel",
+        "_curve": {
+          "__type__": "cc.ObjectCurve",
+          "_times": [
+            0.0,
+            0.0416666667,
+            0.0833333333,
+            0.125,
+            0.1666666667,
+            0.2083333333,
+            0.25,
+            0.2916666667,
+            0.3333333333,
+            0.375,
+            0.4166666667,
+            0.4583333333,
+            0.5,
+            0.5416666667,
+            0.5833333333,
+            0.625,
+            0.6666666667,
+            0.7083333333,
+            0.75,
+            0.7916666667,
+            0.8333333333,
+            0.875,
+            0.9166666667,
+            0.9583333333,
+            1.0,
+            1.0416666667,
+            1.0833333333,
+            1.125,
+            1.1666666667
+          ],
+          "_values": [
+            {
+              "__uuid__": "a0e3b35f-37a7-425d-b561-2d133b76353b@f9941"
+            },
+            {
+              "__uuid__": "bfb6260a-57fd-4ec0-a186-8a94c1dc508f@f9941"
+            },
+            {
+              "__uuid__": "821b01ac-4df5-49f8-ba63-94156a73d217@f9941"
+            },
+            {
+              "__uuid__": "de6e8661-c3cc-41e1-a1ab-46a591891a05@f9941"
+            },
+            {
+              "__uuid__": "0c67aaf1-ce33-4fa4-a82b-7557313c1802@f9941"
+            },
+            {
+              "__uuid__": "ef74bf84-44a5-4ca2-98ad-9eb36b738ba7@f9941"
+            },
+            {
+              "__uuid__": "6013b769-b828-4609-aea0-2ea088e31e44@f9941"
+            },
+            {
+              "__uuid__": "4d29f7b5-88fb-4500-89fb-eb1b415dba21@f9941"
+            },
+            {
+              "__uuid__": "2f6e7da0-0597-4f7d-8484-3adc317a9d8b@f9941"
+            },
+            {
+              "__uuid__": "5276baa2-c921-4f7b-a78c-704d8634d954@f9941"
+            },
+            {
+              "__uuid__": "1a0fb7c4-63de-4476-a1f7-876693581884@f9941"
+            },
+            {
+              "__uuid__": "0713b868-0ec9-43d3-924a-928912a37b1b@f9941"
+            },
+            {
+              "__uuid__": "32a65974-2181-41f3-951f-5db6c8722362@f9941"
+            },
+            {
+              "__uuid__": "21c1bd66-e9f0-472c-bc22-22687049f63f@f9941"
+            },
+            {
+              "__uuid__": "09481f84-d277-4026-aba7-203acab9882d@f9941"
+            },
+            {
+              "__uuid__": "f0cbef55-2f84-4472-bc34-b4bad6eaa5ef@f9941"
+            },
+            {
+              "__uuid__": "64e60d75-8aee-4f63-9032-0eeb1031e3bf@f9941"
+            },
+            {
+              "__uuid__": "8d1d5485-4614-4b62-ae19-5b5962091fed@f9941"
+            },
+            {
+              "__uuid__": "763fc170-1c1b-4784-8617-7086e3c9e384@f9941"
+            },
+            {
+              "__uuid__": "2f0ae91e-f418-498d-a2d3-3e5d1f35cdc7@f9941"
+            },
+            {
+              "__uuid__": "99f5bb65-5409-4748-834f-19f89938bbb0@f9941"
+            },
+            {
+              "__uuid__": "8ea29085-2efb-4ee3-be0e-1fe4526857e2@f9941"
+            },
+            {
+              "__uuid__": "2e5d1814-a0b6-4e2e-8827-e62cd5008c82@f9941"
+            },
+            {
+              "__uuid__": "007fe060-7500-4a95-87c8-a94fd6f2be65@f9941"
+            },
+            {
+              "__uuid__": "e51503a8-0937-4168-89ef-f887eca212fa@f9941"
+            },
+            {
+              "__uuid__": "2282f4e8-46e0-444b-a549-960ac97ea20a@f9941"
+            },
+            {
+              "__uuid__": "901aac1d-0c80-4d89-995c-e807f72616aa@f9941"
+            },
+            {
+              "__uuid__": "dffee3b2-b610-49cb-a023-e81de8051a34@f9941"
+            },
+            {
+              "__uuid__": "54a57806-deec-4b4c-b4d9-e5388b3f459c@f9941"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "_exoticAnimation": null,
+  "_events": [],
+  "_embeddedPlayers": [],
+  "_additiveSettings": {
+    "__type__": "cc.AnimationClipAdditiveSettings",
+    "enabled": false,
+    "refClip": null
+  },
+  "_auxiliaryCurveEntries": []
+}

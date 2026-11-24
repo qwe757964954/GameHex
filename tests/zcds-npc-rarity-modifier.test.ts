@@ -426,8 +426,115 @@ test('接线守卫：逐关字段 6 跳都在，且玩家席位被显式拦掉',
     // 4) 配置 → 抽卡；玩家拿 null（原表 + 保底），NPC 拿乘数且关掉保底
     const gameModel = read('assets/script/app/zcds/model/ZCGameModel.ts');
     assert.match(gameModel, /drawRulesOf: \(owner\) => \(owner === ZCOwner\.Player/);
-    assert.match(gameModel, /: \{ rarityModifier: this\.npcRarityModifier, goldPity: false \}\)/);
+    assert.match(gameModel, /: \{ rarityModifier: this\.npcRarityModifier, goldPity: false, rarityFallback: true \}\)/);
 
     const development = read('assets/script/app/zcds/model/systems/ZCDevelopmentSystem.ts');
     assert.match(development, /context\.drawRulesOf\?\.\(owner\) \?\? null/);
+});
+
+/**
+ * ★ 缺档逐级下降（`rarityFallback`，2026-11-23 用户口径）。
+ *
+ * 事故现场：塔防关的 NPC 抽卡池由 `npcTeam.npcCard` 决定，很多队伍只有 3 绿 1 紫，
+ * 而「随机兵营-高级」（`10004`）配的是**紫 0.9 / 金 0.1** —— 绿/蓝权重本身就是 0。
+ * `availableRarities` 要求「权重 > 0 且卡池有卡」，紫/金都没卡时就一张都不剩
+ * ⇒ `availableTotal <= 0` ⇒ 这格永远空手，NPC 半场十几格全是空地。
+ *
+ * 用户原话：「地块保持一致，当 npc 队伍开出紫卡或金卡，但是卡牌阵容内没有对应的配置，
+ * 按照等级逐级下降去查找，找到等级最接近的卡牌生成」。三条硬边界：
+ *  1. **地块不换** —— 仍然是高级兵营格，只是产出降档；
+ *  2. **只往下降** —— 绿档卡池配了金矿格，不许反而升到金卡；
+ *  3. **只给 NPC** —— 玩家那一侧 `drawRulesOf` 返回 `null`，行为逐字不变。
+ */
+
+/** 「随机兵营-高级」：紫 .9 / 金 .1，绿蓝权重都是 0。 */
+const ADVANCED_WEIGHTS: Readonly<Record<ZCPvpDrawRarity, number>> = {
+    empty: 0, green: 0, blue: 0, purple: 0.9, gold: 0.1,
+};
+
+function tileTableOf(
+    tileType: ZCPvpTileType,
+    weights: Readonly<Record<ZCPvpDrawRarity, number>>,
+    eligibleCardTypes: ZCCardType[],
+): Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>> {
+    return {
+        [tileType]: { type: tileType, name: `tile-${tileType}`, price: 100, rarityWeights: weights, eligibleCardTypes },
+    } as unknown as Readonly<Record<ZCPvpTileType, ZCPvpTileConfig>>;
+}
+
+function deckOfRarities(rarities: readonly ZCCardRarity[], type = ZCCardType.Barracks): ZCDeckCard[] {
+    return rarities.map((rarity) => ({ id: `card-${rarity}`, name: rarity, type, rarity }));
+}
+
+test('缺档兜底：10004 只配绿卡池时，玩家照旧空手、NPC 逐级下降拿绿卡', () => {
+    const deck = deckOfRarities(['green']);
+    const tiles = tileTableOf(ZCPvpTileType.BarracksAdvanced, ADVANCED_WEIGHTS, [ZCCardType.Barracks]);
+
+    const player = drawPvpTile(deck, ZCPvpTileType.BarracksAdvanced, 0, () => 0.5, tiles, 1e9, null);
+    assert.equal(player.card, null, '玩家不许兜底：卡池缺档就是空手');
+    assert.equal(player.rarity, 'empty');
+
+    const npc = drawPvpTile(deck, ZCPvpTileType.BarracksAdvanced, 0, () => 0.5, tiles, 1e9,
+        { goldPity: false, rarityFallback: true });
+    assert.equal(npc.card?.rarity, 'green', 'NPC 从紫档往下逐级找到绿卡');
+    assert.equal(npc.card?.id, 'card-green');
+    assert.equal(npc.pityTriggered, false, '兜底不是保底，不许记成 pityTriggered');
+});
+
+test('兜底落在「最近的下一档」而不是最底档', () => {
+    // 只有绿 + 蓝；10004 要紫/金 ⇒ 必须落到蓝（差一档），不能一路掉到绿。
+    const deck = deckOfRarities(['green', 'blue']);
+    const tiles = tileTableOf(ZCPvpTileType.BarracksAdvanced, ADVANCED_WEIGHTS, [ZCCardType.Barracks]);
+    const npc = drawPvpTile(deck, ZCPvpTileType.BarracksAdvanced, 0, () => 0.5, tiles, 1e9,
+        { goldPity: false, rarityFallback: true });
+    assert.equal(npc.card?.rarity, 'blue');
+    assert.equal(npc.card?.id, 'card-blue');
+});
+
+test('兜底只往下降：金卡池抽绿档地块不许升到金卡', () => {
+    const deck = deckOfRarities(['gold']);
+    // 一张只要求绿档的地块：`green: 1`，卡池里只有金 ⇒ 往下也没有 ⇒ 空手。
+    const greenOnly = { empty: 0, green: 1, blue: 0, purple: 0, gold: 0 } as const;
+    const npc = drawPvpTile(deck, ZCPvpTileType.BarracksCommon, 0, () => 0.5,
+        tileTableOf(ZCPvpTileType.BarracksCommon, greenOnly, [ZCCardType.Barracks]), 1e9,
+        { goldPity: false, rarityFallback: true });
+    assert.equal(npc.card, null, '绿档下面没有档位了 ⇒ 保持空手，不许把金卡塞进绿格');
+    assert.equal(npc.rarity, 'empty');
+});
+
+test('要求的档位有卡时兜底不介入（真正的紫卡仍然优先）', () => {
+    const deck = deckOfRarities(['green', 'purple']);
+    const tiles = tileTableOf(ZCPvpTileType.BarracksAdvanced, ADVANCED_WEIGHTS, [ZCCardType.Barracks]);
+    const npc = drawPvpTile(deck, ZCPvpTileType.BarracksAdvanced, 0, () => 0.5, tiles, 1e9,
+        { goldPity: false, rarityFallback: true });
+    assert.equal(npc.card?.rarity, 'purple');
+    assert.equal(npc.card?.id, 'card-purple');
+});
+
+test('兜底不跨卡牌类型：金矿格不会拿兵营卡糊上来', () => {
+    // 10005 只抽 `Mine` 类型；卡池里全是兵营 ⇒ 任何档位都没有可用的卡。
+    const deck = deckOfRarities(['green', 'purple'], ZCCardType.Barracks);
+    const mineWeights = { empty: 0, green: 1, blue: 0, purple: 0, gold: 0 } as const;
+    const npc = drawPvpTile(deck, ZCPvpTileType.Mine, 0, () => 0.5,
+        tileTableOf(ZCPvpTileType.Mine, mineWeights, [ZCCardType.Mine]), 1e9,
+        { goldPity: false, rarityFallback: true });
+    assert.equal(npc.card, null, '兵营卡不能顶替金矿卡');
+    assert.equal(npc.rarity, 'empty');
+});
+
+test('兜底只救「整档都缺」，全类型随机的 0.7 空手率不被吃掉', () => {
+    const tiles = tileTableOf(ZCPvpTileType.AllRandom, ALL_RANDOM_WEIGHTS, [ZCCardType.Barracks]);
+    const deck = deckOfRarities(['green']);
+    const draws = 6000;
+    const random = createRandom(20261123);
+    const counts: Record<string, number> = { empty: 0, green: 0, blue: 0, purple: 0, gold: 0 };
+    for (let index = 0; index < draws; index += 1) {
+        const result = drawPvpTile(deck, ZCPvpTileType.AllRandom, 0, random, tiles, 1e9,
+            { goldPity: false, rarityFallback: true });
+        counts[result.rarity] += 1;
+    }
+    // 空手权重 0.7 与非空档位无关，必须原样保留；剩下的 0.3 全部落到唯一的绿档。
+    const emptyShare = counts.empty / draws;
+    assert.ok(Math.abs(emptyShare - 0.7) < 0.02, `空手率应仍是 70%，实际 ${(emptyShare * 100).toFixed(1)}%`);
+    assert.equal(counts.empty + counts.green, draws, '只该出现「空手」和「绿卡」两种结果');
 });

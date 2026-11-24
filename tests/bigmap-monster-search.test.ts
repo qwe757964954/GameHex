@@ -19,7 +19,7 @@ function makeModel() {
     return new BigMapModel({
         config, storage: createMemoryBigMapStorage(), saveKey: 'monster-search',
         now: () => 957600, adventureChapter: () => 3,
-        startBattle: async () => ({ ok: true, message: '' }),
+        canRequestBattle: true,
     });
 }
 

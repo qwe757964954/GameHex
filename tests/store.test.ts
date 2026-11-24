@@ -948,7 +948,7 @@ test('D2 商店导航契约指定 main-pages 分包内的 Store 页面', () => {
 });
 
 test('D3 所有页面导航目标都能解析到真实 prefab 与引擎元数据', () => {
-    for (const tab of [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory, MainTab.Alliance]) {
+    for (const tab of [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory]) {
         const target = mainTabTarget(tab);
         assert.equal(target?.kind, 'page');
         if (target?.kind !== 'page') throw new Error(`缺少页面目标 ${tab}`);

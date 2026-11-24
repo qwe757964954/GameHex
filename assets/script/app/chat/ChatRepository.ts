@@ -338,7 +338,7 @@ export class RuntimeChatRepository implements IChatRepository {
         this.stageNames.clear();
         this.readed = null;
         this.readDirty = false;
-        for (const caller of [...this.listeners.keys()]) this.unlisten(caller);
+        for (const caller of Array.from(this.listeners.keys())) this.unlisten(caller);
     }
 
     // ============================================================

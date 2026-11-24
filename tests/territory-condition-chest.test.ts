@@ -38,7 +38,6 @@ import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox'
  */
 
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
-const MAP_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
 const ASSETS_SRC = readFileSync('assets/script/app/territory/application/TerritoryPageAssets.ts', 'utf8');
 
 const STATION_MODULE = loadTerritoryStationModule();
@@ -298,9 +297,10 @@ test('★★★美术：icon_baoxiang 从 territory 目录加载，落到 chestI
 
 test('★★★数据：只有普通宝箱（fixedResource）分支传 conditionChestIcon', () => {
     // 赋值只许出现在「可激活」那一个分支里：多一处就说明有别的格也长了宝箱。
-    const assigned = MAP_SRC.match(/conditionChestIcon:/g) ?? [];
+    const presentation = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
+    const assigned = presentation.match(/conditionChestIcon:/g) ?? [];
     assert.equal(assigned.length, 1, `conditionChestIcon 只该赋值一次，实际 ${assigned.length} 处`);
-    assert.match(MAP_SRC, /site\.type === TERRITORY_SITE_TYPE\.fixedResource\s*\r?\n\s*\?\s*input\.art\.chestIcon/,
+    assert.match(presentation, /site\.type === TERRITORY_SITE_TYPE\.fixedResource\s*\r?\n\s*\?\s*input\.art\.chestIcon/,
         '只有普通宝箱长这颗图标：野怪宝箱（patrolChest）按 2026-11-18 需求不展示任何宝箱外观');
     // 渲染契约只有一处声明（`TerritoryStationView` 的入参接口）。
     const declared = STATION_SRC.match(/readonly conditionChestIcon\?: SpriteFrame \| null;/g) ?? [];

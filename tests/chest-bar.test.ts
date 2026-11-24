@@ -33,6 +33,18 @@ const childNames = (prefab: Entry[], parent: Entry): string[] =>
         .filter((e) => e?._name)
         .map((e) => e._name as string);
 
+/** 节点横向占位 `[左沿, 右沿]`（相对 `Timer`）。锚点一律 0.5（这个 prefab 全部如此）。 */
+const spansX = (prefab: Entry[], name: string, parentX = 0): [number, number] => {
+    const target = node(prefab, name);
+    assert.ok(target, `prefab 缺少节点 ${name}`);
+    const transform = ((target!._components ?? []) as Array<{ __id__: number }>)
+        .map((r) => prefab[r.__id__]).find((e) => e?.__type__ === 'cc.UITransform');
+    assert.ok(transform, `${name} 缺少 UITransform`);
+    const width = (transform!._contentSize as { width: number }).width;
+    const x = (target!._lpos as { x: number }).x + parentX;
+    return [x - width / 2, x + width / 2];
+};
+
 test('C1 宝箱单格结构：7 个直接子节点，顺序即渲染序', () => {
     const slot = node(SLOT, 'ChestSlot');
     assert.ok(slot, 'ChestSlot.prefab 没有根节点');
@@ -119,12 +131,43 @@ test('C7 蓝卡计时条保留时钟图标，时间文字与图标同排', () =>
     const clock = node(SLOT, 'Clock')!;
     const clockSprite = ((clock._components ?? []) as Array<{ __id__: number }>)
         .map((ref) => SLOT[ref.__id__]).find((entry) => entry?.__type__ === 'cc.Sprite') as Entry | undefined;
-    assert.deepEqual([ (clock._lpos as { x: number; y: number }).x, (clock._lpos as { x: number; y: number }).y ], [-57, 0]);
     assert.equal((clockSprite?._spriteFrame as { __uuid__?: string })?.__uuid__,
         'b022a368-7f62-4ac9-9e61-152a2328b86c@f9941');
 
     const timeText = node(SLOT, 'TimeText')!;
     assert.deepEqual([ (timeText._lpos as { x: number; y: number }).x, (timeText._lpos as { x: number; y: number }).y ], [15, 0]);
+});
+
+/**
+ * C7b 守护 2026-11-23 用户口径：「时间 icon 在时间进度条出现后应该在进度条的左侧位置」。
+ *
+ * 老几何：`Clock` x=-57（宽 26 ⇒ 右沿 -44）、`TimeBg` x=15（宽 137 ⇒ 左沿 -53.5）
+ * ⇒ 时钟**压在胶囊上** 9.5px。而 `ChestSlotView` 倒计时态是把时钟写回 prefab 的
+ * `clockBaseX`，所以只改代码修不掉 —— 必须把这三个数一起改成「时钟 26 + 缝 4 + 胶囊 121」。
+ *
+ * 断言的是**关系**而不是死数字：时钟整颗在胶囊左侧、且有缝；整组仍以 0 居中、不出卡面。
+ */
+test('C7b 倒计时胶囊出现后，时钟在它左侧且不压条；整组仍居中不出卡面', () => {
+    const [clockLeft, clockRight] = spansX(SLOT, 'Clock');
+    const [barLeft, barRight] = spansX(SLOT, 'TimeBg');
+    const [textLeft, textRight] = spansX(SLOT, 'TimeText');
+    // `TimeFill` 是 `TimeBg` 的子节点，`_lpos` 是相对胶囊的 ⇒ 要加上胶囊自己的 x
+    const barX = (node(SLOT, 'TimeBg')!._lpos as { x: number }).x;
+    const [fillLeft, fillRight] = spansX(SLOT, 'TimeFill', barX);
+
+    assert.ok(clockRight <= barLeft,
+        `时钟右沿 ${clockRight} 压到胶囊左沿 ${barLeft} —— 用户要的是「在进度条左侧」`);
+    assert.ok(barLeft - clockRight >= 2, `时钟与胶囊之间至少要留 2px 缝（实际 ${barLeft - clockRight}）`);
+
+    // 时钟 + 胶囊整体：居中（锚点 0.5 的父节点 Timer 在 x=0）
+    assert.ok(Math.abs(clockLeft + barRight) <= 1, `整组没有居中（左 ${clockLeft} / 右 ${barRight}）`);
+    // 卡面 151 宽 ⇒ ±75.5。整组不许比卡面还宽，否则会压在相邻格上。
+    assert.ok(clockLeft >= -75.5 && barRight <= 75.5,
+        `整组 ${clockLeft}..${barRight} 超出了卡面 ±75.5`);
+
+    // 文案与填充必须落在胶囊里面（否则字会画到胶囊外）
+    assert.ok(textLeft > barLeft && textRight < barRight, '时间文案超出胶囊');
+    assert.ok(fillLeft > barLeft && fillRight < barRight, '进度填充超出胶囊');
 });
 
 test('C8 宝箱入口展开宝箱栏时隐藏快速寻敌按钮，收起时恢复', () => {

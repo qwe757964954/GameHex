@@ -227,11 +227,8 @@ export class BigMapBaseView extends Component {
         //设计稿底图只有可平铺沙地（`bigMapBG`）；旧的整幅 `base_background` 概念图已删除。
         const background = art.tiledBackground;
         this.background.spriteFrame = background;
-        //设计稿的沙地由页面 `Backdrop` 一层 TILED 铺满；基地内容层不再铺第二层，
-        //否则浏览区底边会出现两条纹理的接缝（2026-11-19 验收反馈）。
-        this.background.node.active = !!background && !art.tiledBackground;
-        //基地浏览区原来的橙色兜底会从视口顶边盖住页面沙地，形成一条硬接缝；
-        //设计稿是整屏一层沙地，有 tiledBackground 时直接让兜底透出背景。
+        //基地内容层自持沙地背景，平铺铺满基地范围。
+        this.background.node.active = !!background;
         if (this.fallback) this.fallback.node.active = !art.tiledBackground;
         this.background.sizeMode = Sprite.SizeMode.CUSTOM;
         this.background.trim = false;
@@ -244,11 +241,17 @@ export class BigMapBaseView extends Component {
     resize(width: number, height: number): void {
         this.currentWidth = width;
         this.currentHeight = height;
+        requireBigMapTransform(this.node).setContentSize(width, height);
         this.viewport.setContentSize(width, height);
         this.fallback.setContentSize(width, height);
         this.layout = buildBigMapBaseLayout(this.cells);
         this.contentTransform.setContentSize(this.layout.mapSize, this.layout.mapSize);
-        requireBigMapTransform(this.background.node).setContentSize(this.layout.mapSize, this.layout.mapSize);
+        const zoom = Math.min(1, this.camera.zoom || 1);
+        const bgSize = Math.max(
+            this.layout.mapSize,
+            Math.ceil(Math.max(width, height) / zoom + Math.max(Math.abs(this.mapOffsetX), Math.abs(this.mapOffsetY)) * 2 + 600),
+        );
+        requireBigMapTransform(this.background.node).setContentSize(bgSize, bgSize);
         this.rebuildTerrain();
         for (const [index, hexId] of this.layout.paintOrder.entries()) {
             const slot = this.slots.get(hexId);

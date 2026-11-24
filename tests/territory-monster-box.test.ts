@@ -212,7 +212,7 @@ function loadRepository() {
                     },
                 },
             },
-            '../../battle/BattleStartService': { startBattle: async () => null },
+            '../../battle/BattleStartService': { requestBattleStart: async () => null },
             '../../net/Timeouts': { READ_TIMEOUT_MS_LONG: 5000 },
             './RequestTerritoryCellInfoMsg': {
                 RequestTerritoryCellInfo: Request,

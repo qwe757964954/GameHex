@@ -20,12 +20,15 @@ import { assetPath } from './helpers/asset-paths';
  *
  * > 二改：「我方被 NPC 打和被另一个玩家打是**一个样式**，红字、无前缀、只有 -血量。」
  *
+ * > 三改（2026-11-23）：「暴击时我方被扣血仍然按 1.7 倍字号放大」—— 挨打那条连放大也不要，
+ * >  字号一并压平成默认号，`takenFromPlayer` 同时盖掉 kind 的颜色与字号。
+ *
  * 拆成两层，各自钉死：
  *
  * | 层 | 判据 | 真源 |
  * | --- | --- | --- |
  * | 模型（谁打谁） | 非玩家互打 ⇒ 一条都不推；**本机席位被扣血**（攻方是谁都一样）⇒ `takenFromPlayer` | `ZCGameModel.floatTextToneOf` |
- * | 视图（怎么画） | 白字 / 红字 + 负号 / 暴击 1.7 倍字号 / 克制白字；前缀只在我方打出去时出现 | `ZCFloatTextView` |
+ * | 视图（怎么画） | 白字 / 红字 + 负号 + 默认字号 / 暴击 1.7 倍字号 / 克制白字；前缀与放大只在我方打出去时出现 | `ZCFloatTextView` |
  *
  * 🔴 「玩家」= 真人席位，不是「owner 是不是 player」：PVP 4 人局里另外三个席位也是真人，
  * 拿 owner 反推会让白色 / 红色两档都判错。真源是 `ZCMatchConfig.npcOwners`（关卡 PVE 才写）。
@@ -122,7 +125,7 @@ test('PVP：玩家卡被另一个玩家扣血 ⇒ 红字负号（暴击同样是
     assert.equal(plain.takenFromPlayer, true);
     assert.equal(plain.kind, 'damage');
 
-    // 暴击不改口径：颜色照旧走红，字号另算（视图层）。
+    // 暴击不改口径：颜色照旧走红、字号也不放大（视图层 takenFromPlayer 压平）。
     combat.damageUnit(playerUnit, 7, {
         ...ENEMY_HIT, unitId: enemyUnit.id, floatTextKind: 'critical',
     });
@@ -186,17 +189,20 @@ function createView() {
         return { ...util, mapToViewX: (x: number) => x, mapToViewY: (y: number) => y };
     }, loaded, loaded.exports);
 
+    /** Text 子节点每帧的局部坐标（`[x, y, z]`）：纵向两档只差符号，靠它逐帧比。*/
+    const positions: Array<[number, number, number]> = [];
     const textNode = {
-        setPosition() {}, setScale() {},
         // Text 的 UITransform：模拟「引擎已在上一帧按文字内容刷新过」。
         getComponent: (type: unknown) => (type === UITransform ? { width: 40 } : null),
+        setPosition: (...args: unknown[]) => { positions.push(args as [number, number, number]); },
+        setScale: () => {},
     };
     const prefixNode = { active: true, setPosition() {} };
     const view = new loaded.exports.ZCFloatTextView();
     view.node = { setPosition() {} };
     view.textLabel = { string: '', fontSize: 30, color: null, enabled: true, node: textNode };
     view.prefixLabel = { string: '', fontSize: 15, color: null, enabled: true, node: prefixNode };
-    return { view, textLabel: view.textLabel, prefixLabel: view.prefixLabel };
+    return { view, textLabel: view.textLabel, prefixLabel: view.prefixLabel, positions };
 }
 
 /** 一条伤害飘字；`durationSeconds` 1s ⇒ 取 `now = 0.2` 落在入场段内（还看得见）。 */
@@ -236,7 +242,7 @@ test('伤害数字：普通 / 克制都是白字，暴击白字且字号 1.7 倍
     assert.equal(prefixOf().node.active, true);
 });
 
-test('玩家卡被别的玩家扣血：红字 + 负号，暴击同样红且更大，但一律不带前缀', () => {
+test('玩家卡被别的玩家扣血：红字 + 负号，暴击也不放大，且一律不带前缀', () => {
     const { view, textLabel } = createView();
     const label = textLabel as unknown as {
         string: string; fontSize: number; color: { r: number; g: number; b: number };
@@ -247,10 +253,17 @@ test('玩家卡被别的玩家扣血：红字 + 负号，暴击同样红且更�
     assert.deepEqual([label.color.r, label.color.g, label.color.b], RED);
     assert.equal(label.fontSize, 30);
 
+    // 2026-11-23 用户：「暴击时我方被扣血仍然按 1.7 倍字号放大」—— 这一档连放大也不要。
+    // 挨打那条只说「我掉了多少血」，放大数字会被读成「我方打出暴击」。
     view.render(damageText({ takenFromPlayer: true, kind: 'critical' }), 0.2);
     assert.equal(label.string, '-16');
-    assert.equal(label.fontSize, 51);
+    assert.equal(label.fontSize, 30, '我方被暴击击中的字号与普通挨打一样');
     assert.deepEqual([label.color.r, label.color.g, label.color.b], RED, '红字优先于 kind 取色');
+
+    for (const kind of ['critical', 'execute']) {
+        view.render(damageText({ takenFromPlayer: true, kind }), 0.2);
+        assert.equal(label.fontSize, 30, `我方被 ${kind} 击中不许放大字号`);
+    }
 
     // 2026-11-20 用户：「我方被伤害扣血的 UI 只有 负号 + 血量」。
     // 暴击 / 克制 / 抵抗 / 秒杀 都是我方的战果标记，被打到的那一下一个都不许挂。
@@ -287,3 +300,80 @@ test('红色只认 takenFromPlayer：同样的暴击，没人打玩家卡就还�
     assert.deepEqual([color.r, color.g, color.b], WHITE);
     assert.equal((textLabel as unknown as { string: string }).string, '16', '没有负号');
 });
+
+/**
+ * 纵向两档（2026-11-23 用户）：
+ *
+ * > 「战斗中，玩家方造成的伤害数字是往上飞的，运动路径和现在的相反，
+ * >  受到伤害的数字运动路径保持不变」
+ *
+ * 判据用模型已经给好的两个正交标记（视图不拿 `owner` 反推，理由见 `damageTravelSign`）：
+ * · `dealtByPlayer` ⇒ 向上飞；
+ * · `takenFromPlayer` ⇒ 原样向下坠。
+ *
+ * 两档**只有纵向符号相反** —— 起点、总距离、入场时序、轨道行距、弹出缩放全共用，
+ * 所以这里钉的第一件事是「逐拍互为镜像」，不是两条各写一套数字：
+ * 各自写一套的话，哪天有人只调了其中一条的距离 / 时序，用例还是会绿。
+ */
+test('我方造成的伤害数字向上飞，挨打那条保持向下坠（路径互为镜像）', () => {
+    const { view, positions } = createView();
+    const entrance = view.entranceProgress;
+    // 采样点覆盖：入场起点 / 入场四分之一 / 半程 / 入场结束 / 淡出中段 / 结束，全是「看得见」的拍子。
+    const samples = [0, entrance * 0.25, entrance * 0.5, entrance, 0.7, 1];
+    const track = (over: Record<string, unknown>) => samples.map((now) => {
+        positions.length = 0;
+        view.render(damageText(over), now);
+        assert.equal(positions.length, 1, '每帧只写一次 Text 子节点位置');
+        return positions[0][1];
+    });
+    const headY = view.damageTargetSize * 0.5 + view.damageHeadPadding;
+
+    // ① 逐拍方向 + 镜像。`id` 决定轨道：1 ⇒ 第 0 行，7 ⇒ 第 1 行（行距 30 也要跟着镜像）。
+    for (const id of [1, 7]) {
+        const up = track({ id, dealtByPlayer: true });
+        const down = track({ id, dealtByPlayer: undefined, takenFromPlayer: true });
+        assert.ok(up[0] >= headY, `起点不许低于目标头顶（实际 ${up[0]} < ${headY}）`);
+        assert.equal(up[0], down[0], '两档起点必须是同一个点（头顶 + 轨道行距），只差方向');
+        for (let i = 1; i < samples.length; i += 1) {
+            assert.ok(up[i] > up[i - 1],
+                `id=${id} 第 ${i} 拍：我方造成的那条必须越飘越高（${up[i]} ≤ ${up[i - 1]}）`);
+            assert.ok(down[i] < down[i - 1],
+                `id=${id} 第 ${i} 拍：挨打那条保持向下坠（${down[i]} ≥ ${down[i - 1]}）`);
+            assert.ok(Math.abs(up[i] + down[i] - 2 * up[0]) < 1e-9,
+                `id=${id} 第 ${i} 拍：两档必须互为镜像（${up[i]} / ${down[i]} 之和应 = ${2 * up[0]}）`);
+        }
+    }
+
+    // ② 幅度：入场段走满 damageDropDistance，慢出段沿**同一方向**再漂 driftDistance。
+    const atEntrance = samples.indexOf(entrance);
+    const up = track({ id: 1, dealtByPlayer: true });
+    const down = track({ id: 1, dealtByPlayer: undefined, takenFromPlayer: true });
+    assert.ok(Math.abs(up[0] - headY) < 1e-9, '第 0 行的起点就是目标头顶（行距 0）');
+    assert.ok(Math.abs((up[atEntrance] - up[0]) - view.damageDropDistance) < 1e-6,
+        `入场段上浮量应等于 damageDropDistance（实际 ${(up[atEntrance] - up[0]).toFixed(4)}）`);
+    assert.ok(Math.abs((up.at(-1)! - up[atEntrance]) - view.driftDistance) < 1e-6,
+        `慢出段应继续上浮 driftDistance（实际 ${(up.at(-1)! - up[atEntrance]).toFixed(4)}）`);
+    assert.ok(Math.abs((down[0] - down[atEntrance]) - view.damageDropDistance) < 1e-6,
+        `挨打那条的下坠量仍是 damageDropDistance（实际 ${(down[0] - down[atEntrance]).toFixed(4)}）`);
+    assert.ok(Math.abs((down[atEntrance] - down.at(-1)!) - view.driftDistance) < 1e-6,
+        `挨打那条的下沉收尾仍是 driftDistance（实际 ${(down[atEntrance] - down.at(-1)!).toFixed(4)}）`);
+
+    // ③ 不带任何标记的伤害文本（`heal` / `miss` / 别的用例里的裸伤害）保持旧行为：向下。
+    //    运行时不会出现「非玩家互打的伤害」—— 那条模型侧直接不推飘字，所以这是纯兼容位。
+    assert.deepEqual(track({ id: 1, dealtByPlayer: undefined, takenFromPlayer: undefined }), down,
+        '无标记 == 挨打那条的路径，旧行为一个像素都不动');
+});
+
+test('两个标记同时出现时以 takenFromPlayer 为准（挨打那档）：两个方向不许打架', () => {
+    // 理论上不会出现「我方打我方」，但真出现了必须有确定答案：
+    // 红字负号那档说的是「我掉了多少血」，方向、颜色、字号、负号要跟着同一档语义走。
+    const { view, positions } = createView();
+    const yAt = (now: number) => {
+        positions.length = 0;
+        view.render(damageText({ dealtByPlayer: true, takenFromPlayer: true }), now);
+        return positions[0][1];
+    };
+    const entrance = view.entranceProgress;
+    assert.ok(yAt(entrance) < yAt(0), '有 takenFromPlayer ⇒ 向下，不被 dealtByPlayer 翻上去');
+});
+

@@ -80,11 +80,11 @@ export class MainTabHost extends Component {
             button.setEnabled(!isMainTabLocked(type));
             button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
             button.node.on(Button.EventType.CLICK, () => {
-                EventMgr.instance.emit(MainTabEvent.Select, { owner: this, tab: type });
+                EventMgr.instance.emit(MainTabEvent.Select, { tab: type });
             }, this);
         }
 
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
 
     /**
@@ -95,17 +95,17 @@ export class MainTabHost extends Component {
     };
 
     switchTab(index: number): void {
-        EventMgr.instance.emit(MainTabEvent.Select, { owner: this, tab: index, source: 'route' });
+        EventMgr.instance.emit(MainTabEvent.Select, { tab: index, source: 'route' });
     }
 
     activateBackgroundWarmup(): void {
-        EventMgr.instance.emit(MainTabEvent.Warmup, { owner: this });
+        EventMgr.instance.emit(MainTabEvent.Warmup);
     }
 
     resolveFirstScreen(): void { this.scheduleOnce(() => this.firstScreenReadyResolve(), 0); }
 
     onDestroy(): void {
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
         this.firstScreenReadyResolve();
     }
 

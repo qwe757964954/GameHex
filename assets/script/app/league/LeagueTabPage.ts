@@ -25,9 +25,9 @@ export class LeagueTabPage extends Component {
     private currentPage: Node | null = null;
 
     private showingJoined: boolean | null = null;
-    onLoad(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' }); }
-    onDestroy(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' }); }
-    refresh(force = false): void { EventMgr.instance.emit(LeagueTabEvent.Refresh, { owner: this, force }); }
+    onLoad(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this); }
+    onDestroy(): void { EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this); }
+    refresh(force = false): void { EventMgr.instance.emit(LeagueTabEvent.Refresh, { force }); }
 
     /** 整页替换：销毁旧的，实例化新的挂到本节点下（位置归零，两者都是 720×1280）。 */
     showPage(joined: boolean): LeagueJoinPage | null {

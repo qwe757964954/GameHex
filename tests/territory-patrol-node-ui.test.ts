@@ -314,7 +314,7 @@ test('守卫：两套收敛都复用 territoryPatrolAnchorByCell，不另写一�
         '旧图 id 对不上 ⇒ 退回自己，不许被别片锚点拐走');
     // 画法依赖 stationRenderOf 的 muted 早退，删了价格就会回到「每格各画一条」。
     const view = source('assets/script/app/territory/view/TerritoryMapView.ts');
-    assert.match(view, /if \(mutedCells\.has\(site\.cellId\)\)/);
+    assert.match(source('assets/script/app/territory/view/TerritoryStationPresentation.ts'), /if \(mutedCells\.has\(site\.cellId\)\)/);
     assert.match(view, /const mutedCells = territoryNodeMutedCells\(input\.map\.sites\)/);
-    assert.match(view, /const lockCells = territoryNodeLockCells\(input\.map\.sites, input\.lockBlockedCells\)/);
+    assert.match(view, /this\.nodeLockCells = territoryNodeLockCells\(input\.map\.sites, input\.lockBlockedCells\)/);
 });

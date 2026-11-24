@@ -56,6 +56,7 @@ export interface IZCBattleSettlementRequest {
     readonly mvp?: IZCSettlementMvp | null;
 }
 export interface IZCBattleSettlementServices {
+    readonly playOutcome?: (victory: boolean) => void;
     readonly results: {
         waitResult(battleType: number, caller: object): Promise<IZCChapterBattleOutcome | null>;
         finish(request: IZCBattleSettlementRequest, caller: object): Promise<unknown>;
@@ -123,14 +124,17 @@ export class ZCBattleSettlementController extends ControllerBase {
         if (this.isDisposed) return;
         // 广播 code 1 表示获胜；服务端结果覆盖本地模拟结果。
         if (result && this.host.hasPveContext) {
-            EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: this.host.owner, victory: result.code === 1 });
+            EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { victory: result.code === 1 }, this.host.owner);
         }
         // 需求：≥3 人局的结算先排行榜、后奖励。排行榜是「看过就关」的信息页，
         // 它没关之前不加载奖励、也不弹结算页（否则两页叠在一起，玩家看不到排行榜）。
         await this.presentRank(request.rank);
         if (this.isDisposed) return;
-        const rewards = result ? await this.services.rewards.loadRewards(result) : [];
-        if (this.isDisposed) return;
+        let rewards: IZCSettlementReward[] = [];
+        if (result) {
+            rewards = await this.services.rewards.loadRewards(result);
+            if (this.isDisposed) return;
+        }
         this.options = Object.assign({
             victory: result ? result.code === 1 : request.localVictory, rewards,
             // 运行期已算好 MVP（空 ⇒ 页面整组收起，不留空框）。
@@ -140,6 +144,7 @@ export class ZCBattleSettlementController extends ControllerBase {
             rankHint: `本次战斗获得 ${result.warScore} 战功`,
         } : {});
         await this.open();
+        if (this.popup) this.services.playOutcome?.(this.options.victory);
     }
     /**
      * 弹结算前的排行榜并等玩家关掉。
@@ -184,7 +189,7 @@ export class ZCBattleSettlementController extends ControllerBase {
             }
         });
         this.stopSwitch = stop;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, { owner: this.host.owner });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, undefined, this.host.owner);
     }
     /**
      * 「查看完整队伍」：用本局冻结的席位统计弹伤害面板。
@@ -193,7 +198,7 @@ export class ZCBattleSettlementController extends ControllerBase {
      * 连点两下用 `teamPopup.isOpen` 挡住（结算页不关，弹窗会叠在它上面）。
     */
     private onViewTeam(): void {
-        if (this.isDisposed || !this.options || this.teamPopup?.isOpen) return;
+        if (!this.options || this.teamPopup?.isOpen) return;
         void this.services.popup.openDamage(this.players)
             .then(popup => {
                 if (!popup) return;

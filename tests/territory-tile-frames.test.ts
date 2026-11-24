@@ -1,3 +1,4 @@
+import { loadTerritoryStationPresentation } from './helpers/territory-map-view-sandbox';
 import { isTerritoryBattleSite, isTerritoryChestSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
 import { stationRenderWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
@@ -102,6 +103,7 @@ function loadMapView() {
     runInNewContext(code, {
         exports: moduleExports,
         require: (id: string) => {
+            if (id === './TerritoryStationPresentation') return loadTerritoryStationPresentation();
             if (id === 'cc') return {
                 _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
                 Component: class {},
@@ -551,7 +553,7 @@ test('★★灰版地皮取不到 ⇒ 退回泥土（宁可这一格不置灰，
 test('★★锁只画一处、地皮却是整片灰：两条判据各取各的集合', () => {
     const code = stripComments(readFileSync(MAP_VIEW_PATH, 'utf8'));
     // 锁：收敛集合（`territoryNodeLockCells`，一个节点一把）。
-    assert.match(code, /const lockCells = territoryNodeLockCells\(input\.map\.sites, input\.lockBlockedCells\)/);
+    assert.match(code, /this\.nodeLockCells = territoryNodeLockCells\(input\.map\.sites, input\.lockBlockedCells\)/);
     // 地皮：逐格集合（原样吃 `lockBlockedCells`），否则 7 格的首领节点只会灰掉一格。
     assert.match(code, /const blockedCells = new Set(<number>)?\(input\.lockBlockedCells \?\? \[\]\)/);
     // 还要铺开 footprint：chapter_02 起一关一块 5~10 格，只把锚点格置灰等于没做。

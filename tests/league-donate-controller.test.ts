@@ -79,7 +79,7 @@ function fixture() {
     });
     controller.start();
     const emit = (kind: 'free' | 'coin', target: object = owner) =>
-        EventMgr.instance.emit(LeagueDonateEvent.Intent, { owner: target, kind } as ILeagueDonateIntent);
+        EventMgr.instance.emit(LeagueDonateEvent.Intent, { kind } as ILeagueDonateIntent, target);
     return {
         owner, model, controller, states, tips, rewards, cancelled, confirms,
         loadCalls, donateCalls, adPlays, emit,

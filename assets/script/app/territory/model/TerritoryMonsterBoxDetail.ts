@@ -15,11 +15,13 @@
  * | `failLimit` | 同上那行的 `maxUpFailTimes` |
  * | `rewards` | **当前 `lv`** 那行的 `monsterBoxVictoryRwrad`（`pro` 万分比 → 百分比） |
  * | `battleEnabled` | 这一格有没有绑到关卡行 |
+ * | `guards[].headIcon` | **当前 `lv`** 那行的 `monsterBoxLevel` → `levelInfo.levelMonsterGroup` 前 N 只 → `monsterCard.headIcon` |
+ * | `upgradeAttempt` | Model 记的最近一次升级回包结果（原样透传，这里不判成功） |
  *
- * @note 升级所需消耗取 grade = lv + 1 配置，奖励取当前等级配置。
+ * @note 升级所需消耗取 grade = lv + 1 配置，奖励与守护怪取当前等级配置。
  */
 
-import type { TerritoryCampaignStage } from './TerritoryCampaignConfig';
+import type { TerritoryCampaignStage, TerritoryGuardMonster } from './TerritoryCampaignConfig';
 import type { TerritorySite } from './TerritoryMapConfig';
 import { TERRITORY_SITE_TYPE } from './TerritoryMapConfig';
 import { gradeOf, maxGradeOf, type ITerritoryMonsterBoxGroup } from './TerritoryMonsterBoxConfig';
@@ -41,6 +43,29 @@ export interface ITerritoryMonsterBoxGuardState {
     readonly unlocked: boolean;
     /** 空串 = 已解锁，不显示解锁条件。 */
     readonly unlockText: string;
+    /**
+     * 守护怪头像（`monsterCard.headIcon`：图标名或直路径，**原样透传**，由 `HeadArt` 解析）。
+     *
+     * 空串 = 这一关的 `levelMonsterGroup` 没配够 / 那只怪没配头像：
+     * 面板保留米黄卡底、不画头像（只有未解锁才换成深棕锁卡），不把格子藏起来。
+     */
+    readonly headIcon: string;
+    /** 守护怪数量文案（`数量：44`）；空串 = 表里没填 / 未解锁，整行隐藏。 */
+    readonly countText: string;
+}
+
+/**
+ * 一次升级摇奖的回包结果 —— **只给前端演动画用**。
+ *
+ * 等级真值仍以服务端快照 `monsterBoxInfos` 为准（`lv` 不在这里），
+ * 这里只有「成功 / 失败」这一比特，否则「停在绿区还是灰区」就得由视图自己猜。
+ */
+export interface ITerritoryMonsterBoxAttempt {
+    /** 格子号；面板只认自己这一格的结果（玩家可能在回包前点了别的格子）。 */
+    readonly cellId: number;
+    /** 递增序号：面板按「比开演时大」判这是新一次，避免重放旧结果。 */
+    readonly seq: number;
+    readonly success: boolean;
 }
 
 /** 构造入参。 */
@@ -54,6 +79,12 @@ export interface ITerritoryMonsterBoxDetailInput {
     readonly lv: number;
     /** 这一格的宝箱组配置（`monsterBox` 表）；`null` ⇒ 只显示等级与挑战，升级块收起。 */
     readonly group: ITerritoryMonsterBoxGroup | null;
+    /** 关卡 id → 守护怪（`levelInfo.levelMonsterGroup`）；缺省 ⇒ 守护怪只留占位图。 */
+    readonly monsterGroupByLevelId?: ReadonlyMap<number, readonly TerritoryGuardMonster[]> | null;
+    /** 最近一次升级摇奖的回包结果；缺省 / `null` ⇒ 还没摇过。 */
+    readonly attempt?: ITerritoryMonsterBoxAttempt | null;
+    /** 这一格累计升级失败次数；缺省为 0。 */
+    readonly failCount?: number;
 }
 
 /** 构造结果（结构对齐 `TerritoryModel.ITerritoryMonsterBoxDetail`）。 */
@@ -62,6 +93,8 @@ export interface ITerritoryMonsterBoxDetailContent {
     readonly lv: number;
     readonly maxLv: number;
     readonly upgradeCost: number;
+    /** 升级消耗货币的 resId（7: 银币，10: 金币/幻灵玉）。 */
+    readonly costResId: number;
     readonly successRate: number;
     readonly failCount: number;
     readonly failLimit: number;
@@ -74,6 +107,8 @@ export interface ITerritoryMonsterBoxDetailContent {
     readonly battleEnabled: boolean;
     readonly upgradeCaption: string;
     readonly footerText: string;
+    /** 最近一次升级摇奖的结果（面板据此决定黄条停在绿区还是灰区）；`null` = 还没摇过。 */
+    readonly upgradeAttempt: ITerritoryMonsterBoxAttempt | null;
 }
 
 /**
@@ -134,13 +169,35 @@ export function buildTerritoryMonsterBoxDetail(
     const nextGrade = gradeOf(group, level + 1);
     // 奖励池按**当前级**取（打赢这一级的巡逻野怪掉的就是它）
     const currentGrade = gradeOf(group, level);
-    const canUpgrade = !isMax && nextGrade !== null && nextGrade.upCostCoins > 0;
+    const failCount = input.failCount !== undefined ? Math.max(0, Math.floor(Number(input.failCount) || 0)) : -1;
+    const maxFailTimes = nextGrade ? nextGrade.maxFailTimes : 0;
+    const reachedFailLimit = maxFailTimes > 0 && failCount >= 0 && failCount >= maxFailTimes;
+    // 当失败次数达到上限时，如果有配金币消耗（monsterBoxUpCostDiamond），切成金币；否则不可升级
+    const useDiamond = !isMax && nextGrade !== null && reachedFailLimit && nextGrade.upCostDiamond > 0;
+    const canUpgrade = !isMax && nextGrade !== null && (
+        useDiamond ? true : (!reachedFailLimit && nextGrade.upCostCoins > 0)
+    );
+    const upgradeCost = canUpgrade ? (useDiamond ? nextGrade.upCostDiamond : nextGrade.upCostCoins) : 0;
+    const costResId = useDiamond ? 10 : 7;
+
+    // 守护怪头像按「当前等级那一关」的 `levelMonsterGroup` 取：
+    // 等级行的 `monsterBoxLevel` 会随等级换关（如 1002 组 grade 4 → 60004），
+    // 用静态绑定的 `stage.levelId` 会在满级后显示上一关的怪。
+    const guardLevelId = currentGrade?.levelId ?? stage?.levelId ?? 0;
+    const guardMonsters = input.monsterGroupByLevelId?.get(guardLevelId) ?? [];
 
     const guards: ITerritoryMonsterBoxGuardState[] = [];
     for (let index = 0; index < spec.guardCount; index += 1) {
         const requiredLv = spec.guardUnlockLvs[Math.min(index, spec.guardUnlockLvs.length - 1)] ?? 0;
         const unlocked = level >= requiredLv;
-        guards.push({ unlocked, unlockText: unlocked ? '' : `${requiredLv} 级解锁` });
+        const guard = guardMonsters[index];
+        const guardCount = guard?.count ?? 0;
+        guards.push({
+            unlocked,
+            unlockText: unlocked ? '' : `${requiredLv} 级解锁`,
+            headIcon: guard?.headIcon ?? '',
+            countText: unlocked && guardCount > 0 ? `数量：${guardCount}` : '',
+        });
     }
 
     const rewards = mergeRewardsByResId(currentGrade?.rewards ?? []);
@@ -154,9 +211,10 @@ export function buildTerritoryMonsterBoxDetail(
         cellId: boxCellId ?? site.cellId,
         lv: level,
         maxLv: maxLv > 0 ? maxLv : level,
-        upgradeCost: canUpgrade ? nextGrade.upCostCoins : 0,
+        upgradeCost,
+        costResId,
         successRate: canUpgrade ? nextGrade.upPro : 0,
-        failCount: -1,
+        failCount,
         failLimit: canUpgrade ? nextGrade.maxFailTimes : 0,
         upgrading: false,
         upgradeProgress: 0,
@@ -167,5 +225,6 @@ export function buildTerritoryMonsterBoxDetail(
         battleEnabled,
         upgradeCaption: canUpgrade ? spec.upgradeCaption : '',
         footerText,
+        upgradeAttempt: input.attempt ?? null,
     };
 }

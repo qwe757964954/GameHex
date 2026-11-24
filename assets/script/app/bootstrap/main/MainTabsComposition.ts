@@ -36,7 +36,6 @@ export class MainTabsComposition extends ControllerBase {
     }
     private createController(): MainTabController<Prefab> {
         return new MainTabController(this.context, {
-            owner: this.host,
             assetType: Prefab,
             failed: (tab, error) => console.warn(`[MainTabsComposition] 页面加载失败：${tab}`, error),
             view: {
@@ -80,8 +79,8 @@ export class MainTabsComposition extends ControllerBase {
             ]);
         } catch (error) { console.warn('[MainTabsComposition] 卡牌首屏图片预取失败', error); }
     }
-    private onLifecycle(event: IViewLifecycle): void {
-        if (event.owner !== this.host) return;
+    private onLifecycle(event: IViewLifecycle, source: object): void {
+        if (source !== this.host) return;
         if (event.phase === 'ready') this.start();
         else if (event.phase === 'destroyed') this.dispose();
     }
@@ -122,16 +121,15 @@ export class MainTabsComposition extends ControllerBase {
      * 宝箱奖励的兜底路由：页面组合还活着时由它处理；页面已销毁或已换成新页时由主 tabs 接手，
      * 避免 `fastOpen/open` 回包迟到导致奖励丢失。
      */
-    private onTreasureRewardsFallback(event: { readonly owner: { readonly node: Node }; readonly goods: readonly CmdGoods[] }): void {
+    private onTreasureRewardsFallback(event: { readonly goods: readonly CmdGoods[] }, source: { readonly node: Node }): void {
         if (!event.goods.length) return;
-        const route = this.page?.treasureRewardRoute?.(event.owner) ?? 'fallback';
+        const route = this.page?.treasureRewardRoute?.(source) ?? 'fallback';
         if (route === 'active') return;
         void TerritoryChestOpenPageModule.TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
             if (this.isDisposed) popup?.close();
         }).catch(error => console.warn('[MainTabsComposition] 宝箱奖励展示失败', error));
     }
-    private onWarmup(event: { readonly owner: object }): void {
-        if (event.owner !== this.host) return;
+    private onWarmup(): void {
         this.backgroundWarmupActive = true;
         this.scheduleBackgroundWarmup();
     }

@@ -145,7 +145,7 @@ test('★结构守卫：弹窗与地图共用同一套图，弹窗不再读 imag
     assert.doesNotMatch(code, /image\/main\/chest\/boxLevel/,
         'image/main/chest/boxLevel* 是新手宝箱那套 100×100 UI 图，不许回流');
     // 地图侧：4 档表由 `TerritoryPageAssets` 加载，视图只取不拼路径。
-    assert.match(MAP_VIEW_SRC, /private patrolChestIconOf\(/);
-    assert.match(MAP_VIEW_SRC, /input\.patrolPassedCells\?\.has\(site\.cellId\) \?\? station\.owned/,
+    assert.match(readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8'), /function patrolChestIconOf\(/);
+    assert.match(readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8'), /input\.patrolPassedCells\?\.has\(site\.cellId\) \?\? station\.owned/,
         '通过判据必须用片区口径 patrolPassedCells（不是逐格 owned）');
 });

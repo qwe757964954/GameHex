@@ -288,6 +288,43 @@ function emptyFirstSnapshot(): IMainTaskSnapshot {
     };
 }
 
+/** 主线任务所在缓存表名。 */
+const MAIN_TASK_CACHE = 'CmdTask';
+
+/**
+ * 订阅 `CmdTask` 缓存变化（服务端把任务进度 / 奖励状态推下来时触发）。
+ *
+ * 为什么必须订阅、而不是只在 `onLoad` 读一次：
+ * · 主线任务的 `count` / `rewardState` 由服务端在事件结算后推 `CmdTask`，不挂在任何响应体上；
+ * · 主界面入口常驻，玩家在同一页里翻地块把进度打满时入口不会重建
+ *   ⇒ 不订阅就永远停在打开页面那一刻的快照（红点不亮，点击仍走详情而不是领奖）。
+ *
+ * 返回退订函数（按 caller 一次性摘干净，重复调用安全）。
+ */
+export function subscribeMainTaskChange(caller: object, listener: () => void): () => void {
+    const mgr = CacheMgr.instance;
+    try {
+        // `onChange` 在一条缓存批次处理完后触发，add / update / delete 都覆盖 —— 入口只需重读一次。
+        mgr.setEventChange(MAIN_TASK_CACHE, caller, listener);
+    } catch (error) {
+        // `setEvent` 走 `getCache`，缺缓存时会 new GameCache 去读 `protoCache` 描述表；
+        // 编辑器未登录预览下表还没加载，构造会抛。订阅失败只影响「推送即刷新」，
+        // `onLoad` 那次主动读取仍在 —— 不能让一次订阅把主界面打挂。
+        console.warn('[MainTask] 订阅 CmdTask 缓存失败', error);
+        return () => {};
+    }
+    let done = false;
+    return () => {
+        if (done) return;
+        done = true;
+        try {
+            mgr.removeEventChange(MAIN_TASK_CACHE, caller, listener);
+        } catch (error) {
+            console.warn('[MainTask] 取消 CmdTask 缓存订阅失败', error);
+        }
+    };
+}
+
 class MainTaskRepositoryImpl implements IMainTaskRepository {
     async load(): Promise<IHeroTaskSnapshot> {
         let rows: readonly unknown[] = [];

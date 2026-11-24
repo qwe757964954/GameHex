@@ -217,11 +217,18 @@ const PAGE_PREFAB = JSON.parse(readFileSync('assets/bundles/bigmap/ui/bigmap/Big
 const prefabNode = (name: string) => PAGE_PREFAB.find((item: Record<string, unknown>) => item.__type__ === 'cc.Node' && item._name === name);
 const prefabComponent = (node: Record<string, any>, type: string) => node._components.map((ref: { __id__: number }) => PAGE_PREFAB[ref.__id__]).find((item: Record<string, unknown>) => item.__type__ === type);
 
-test('顶栏保留透明 Header、独立资源卡和收取按钮', () => {
-    const header = prefabNode('Header');
-    assert.equal(prefabComponent(header, 'cc.Graphics'), undefined);
-    assert.ok(prefabNode('ResourceCard'));
-    assert.ok(prefabNode('HarvestAll'));
+test('顶栏合并为一套 TopHud：透明底、5 格资源与收取按钮都在 prefab 里', () => {
+    const topHud = prefabNode('TopHud');
+    assert.ok(topHud, '唯一顶栏 TopHud 必须存在');
+    assert.equal(prefabNode('Header'), undefined, '旧世界 Header 已删除');
+    assert.equal(prefabNode('ResourceCard'), undefined, '旧资源条已删除');
+    const topHudComponent = PAGE_PREFAB.find((item: Record<string, unknown>) => 'resourceValues' in item && 'playerCard' in item) as
+        { resourceValues: unknown[]; resourceIcons: unknown[] } | undefined;
+    assert.ok(topHudComponent, 'TopHud 必须挂 BigMapTopHud');
+    assert.equal(topHudComponent.resourceValues.length, 5, '5 格资源统一为一套');
+    assert.equal(topHudComponent.resourceIcons.length, 5);
+    assert.ok(prefabNode('HarvestAll'), '一键收获仍由页面持有，仅世界模式显示');
+    assert.equal(prefabComponent(prefabNode('HarvestAll'), 'cc.Button') !== undefined, true);
 });
 
 test('详情模态交给独立PopupBase，页面不再挂InfoDim和InfoPanel', () => {

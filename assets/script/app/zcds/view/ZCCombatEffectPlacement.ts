@@ -19,7 +19,8 @@ import {
     zcEffectOverlayChildOf,
 } from '../model/ZCEffectCatalog';
 
-/** 特效锚点：`caster` = 出手方（既有口径）、`midpoint` = 攻击者与受击目标的连线中点。*/
+/** 特效锚点：`caster` = 出手方（既有口径）、`midpoint` = 攻击者与受击目标的连线中点、
+ *  `target` = 受击方（「一定落在目标坐标」的重击类）。*/
 export type ZCCombatEffectAnchor = ZCEffectAnchor;
 
 /** 特效层级：`ground` = 铺在地上（棋盘之上、动态对象之下）；`top` = 动态对象最上层。*/
@@ -50,6 +51,9 @@ export function zcCombatEffectAnchorPoint(
     span: Readonly<IZCombatEffectSpan>,
     anchor: ZCCombatEffectAnchor,
 ): { x: number; y: number } {
+    //  `target`：受击方的落点。用 `toX/toY` 而不是「谁离得近取谁」—— 结构物（墙 / 建筑）
+    //  的 `to` 也是它的格子坐标，同一份口径对单位与结构都成立。
+    if (anchor === 'target') return { x: span.toX, y: span.toY };
     if (anchor !== 'midpoint') return { x: span.fromX, y: span.fromY };
     return { x: (span.fromX + span.toX) * 0.5, y: (span.fromY + span.toY) * 0.5 };
 }

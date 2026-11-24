@@ -52,8 +52,8 @@ test('6-2：选中卡牌上报 cardSelected:<cardId>，不得硬编码 id', () =
 
 test('卡牌详情开关报告生命周期，误开详情的引导暂停和恢复有真实入口', () => {
     const src = read('assets/script/app/card/CardUpgradePage.ts');
-    assert.match(src, /protected onOpen\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'enabled' \}\)/);
-    assert.match(src, /protected onClose\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ owner: this, phase: 'disabled' \}\)/);
+    assert.match(src, /protected onOpen\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ phase: 'enabled' \}, this\)/);
+    assert.match(src, /protected onClose\(\)[\s\S]*?emit\(VIEW_LIFECYCLE, \{ phase: 'disabled' \}, this\)/);
 });
 
 test('8-1：玩家自己点开主线任务面板就算完成（不再由引导代开、也不等关闭）', () => {
@@ -145,7 +145,7 @@ test('回到主页面：引导要等领地页首帧（第 23 条）', () => {
     assert.match(src, /const waitingForMap = !state\.finished && !!this\.territoryView && !this\.mapPresented/,
         '缺「等地图首帧」的闸门：6-1 会在章节地图出来之前就渲染');
     assert.match(src, /\|\| waitingForMap/, '闸门必须真的接进 view.hide() 那条分支，写了不用等于没做');
-    assert.match(src, /owner === this\.territoryView && phase === 'presented'/,
+    assert.match(src, /source === this\.territoryView && phase === 'presented'/,
         '必须认领地页首帧的 presented 事件（那是 state.ready && map && progress 都到位的时刻）');
     assert.match(src, /private markMapPresented\(\): void/, 'presented 与兜底计时要走同一个幂等入口');
     // 兜底：章节数据永远拉不下来时不能把整条引导钉死（与 MainTabHost 首屏兜底同一个思路）。
@@ -211,7 +211,7 @@ test('样式与接线：描边不遮地块，底板和姓名牌复用九宫格�
     }
     const source = read('assets/script/app/guide/ui/GuideDialogView.ts');
     assert.doesNotMatch(source, /private advance\s*:|ensureBound|Phase\s*\+=|new Node\('DebugSkip'/);
-    assert.match(source, /emit\(GuideEvent\.Advance, \{ owner: this, stepId: this\.stepId \}\)/);
+    assert.match(source, /emit\(GuideEvent\.Advance, \{ stepId: this\.stepId \}, this\)/);
 });
 
 test('光圈坐标：取之前必须刷新世界矩阵（分帧建格时 worldPosition 是脏的）', () => {

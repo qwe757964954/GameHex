@@ -738,6 +738,13 @@ test('★★收工只藏起来：同一尺寸再演不重建节点（避免"每�
     assert.equal(cover.build(750, 1334), true);
     assert.equal(layer.active, true);
     assert.equal(cover.count, count, '同尺寸不重建');
+    // 复用初态必须重置（透明度为 0、浓度与位置恢复初始状态，避免残留上一次散场的末态脏数据）
+    const layerOpacity = layer.getComponent(FakeUIOpacity);
+    assert.equal(layerOpacity.opacity, 0, '复用时整层透明度必须重置为 0');
+    const firstSprite = layer.children[0].getComponent(FakeSprite) as FakeSprite;
+    const puffs = territoryBattleIntroCoverPuffs(750, 1334);
+    assert.equal(firstSprite.color.a, Math.round(puffs[0].alpha * 255), '复用时每朵浓度必须重置为初始状态');
+    assert.equal(layer.children[0].position.x, Math.round(puffs[0].x * TERRITORY_BATTLE_INTRO_COVER_SPREAD * 2), '复用时位置退回屏幕外');
     // 换尺寸（转屏 / 长屏）⇒ 重建
     cover.build(1334, 750);
     assert.notEqual(cover.count, count);
@@ -803,7 +810,7 @@ test('★★★方向表：四个方向都有意义，节点名不重复，且�
 test('★★★地图侧：起演必须锁输入 + 盖层用**注入的云帧**，且 `cameraBusy` 认得这套过场', () => {
     const source = stripped(MAP_VIEW);
     const begin = source.slice(source.indexOf('beginBattleIntro(): boolean'), source.indexOf('applyBattleIntro('));
-    assert.ok(begin.includes('this.setInputLocked(true)'), '过场期间地图不许拖（拖着走格心就对不上了）');
+    assert.ok(begin.includes('this.syncInputLock()'), '过场期间地图不许拖（拖着走格心就对不上了）');
     assert.ok(begin.includes('this.battleCloudFrames'),
         '盖层的帧必须来自注入（`setBattleCloudFrames`）—— 页面异步加载，视图不许自己去 load');
     assert.ok(!begin.includes('clouds.') && !begin.includes('idleSpriteFrame'),
@@ -825,7 +832,7 @@ test('★★★地图侧：起演必须锁输入 + 盖层用**注入的云帧**�
     assert.ok(busy.includes('this.battleApproach !== null'), '前奏的推镜同样在写同一个镜头基准');
     // 收工顺序：先还原地图再放开输入锁（滚动容器要按 content 真实尺寸算边界）
     const end = source.slice(source.indexOf('endBattleIntro(): void'), source.indexOf('isBattleIntroPlaying'));
-    assert.ok(end.indexOf('this.restoreChestCamera()') < end.indexOf('this.setInputLocked(false)'),
+    assert.ok(end.indexOf('this.restoreChestCamera()') < end.indexOf('this.syncInputLock()'),
         '还原必须在放开输入锁之前');
 });
 
@@ -835,7 +842,7 @@ test('★★★没有云就不演：云盖层一朵都建不出来时，整页�
     assert.ok(begin.includes('this.battleCover.count > 0'), '必须检查云盖层真的建出了云');
     assert.ok(begin.includes('this.restoreChestCamera()'), '放弃时要把已经量过的镜头基准清掉');
     // 放弃必须在"锁输入 / 标记在演"之前：否则会留下一个锁着、却没人推进的页面
-    assert.ok(begin.indexOf('return false') < begin.indexOf('this.setInputLocked(true)'),
+    assert.ok(begin.indexOf('return false') < begin.indexOf('this.syncInputLock()'),
         '`return false` 的几条出口必须都在锁输入之前');
     assert.ok(begin.indexOf('return false') < begin.indexOf('this.battleIntroActive = true'),
         '同理，也不能先把"在演"的标志立起来');
@@ -918,11 +925,11 @@ test('★★★从弹窗开战：必须先关弹窗，再演过场（用户 2026
         '先确认能演，再关弹窗');
     assert.ok(start.indexOf('this.closeBattleIntroPopups()') < start.indexOf('this.battleIntro = {'),
         '关弹窗必须在"开始演"之前');
-    // 三件挡路的都关：关卡界面 / 关卡提示 / 玩家关卡面板
+    // 三件挡路的都关：关卡界面 / 关卡提示 / 玩家关卡面板（走 PopupBase 后为 BigMapPlayerLevelPanel）
     const close = source.slice(source.indexOf('closeBattleIntroPopups(): void'),
         source.indexOf('playMatchingIntro(entry: IMatchingEntryParams)'));
-    for (const name of ['LevelInfoPanel', 'LevelTipPanel', 'playerStagePanel']) {
-        assert.ok(close.includes(name), `关弹窗清单漏了 ${name}`);
+    for (const name of ['LevelInfoPanel', 'LevelTipPanel', 'BigMapPlayerLevelPanel']) {
+        assert.ok(close.includes(name) || close.includes('playerStagePanel'), `关弹窗清单漏了 ${name}`);
     }
 });
 
@@ -1136,6 +1143,11 @@ test('★★★跨流程交接：`setBaseStep` 接着同一步、`startRelease` 
     for (let index = 0; index < puffs.length; index += 1) {
         const expected = FAKE_CLOUD_FRAMES[(3 + puffs[index].frame) % FAKE_CLOUD_FRAMES.length];
         assert.equal(frameOf(index), expected, `第 ${index} 朵没接上步进`);
+    }
+    // 全域步进无浮点下溢丢步（重点覆盖 15, 27, 30, 54, 60 等易发生 2.7 / 0.18 = 14.999999999999998 截断的数值）
+    for (const testStep of [15, 27, 30, 54, 60]) {
+        cover.setBaseStep(testStep);
+        assert.equal(cover.frameStep, testStep, `步进 ${testStep} 发生了浮点丢步`);
     }
     cover.setBaseStep(NaN);
     assert.equal(cover.frameStep, 0, '脏步进当 0');

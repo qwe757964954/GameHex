@@ -44,14 +44,12 @@ export const CardLineupUiEvent = {
     Intent: 'card-lineup:intent', Render: 'card-lineup:render',
 } as const;
 
-/** owner 限定当前页；编辑与升级只报意图，数据更新由控制器发布。 */
+/** 编辑与升级只报意图，数据更新由控制器发布。 */
 export interface ICardLineupIntent {
-    readonly owner: object;
     readonly kind: 'edit' | 'upgrade' | 'refresh';
     readonly card?: ZCDeckCard;
 }
 
 export interface ICardLineupRender {
-    readonly owner: object;
     readonly data: CardLineupData;
 }

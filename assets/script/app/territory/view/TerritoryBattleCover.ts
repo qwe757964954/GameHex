@@ -148,7 +148,7 @@ export class TerritoryBattleCover {
      */
     private retainExact(next: readonly SpriteFrame[]): void {
         const keep: SpriteFrame[] = [];
-        for (const frame of next) if (frame && !keep.includes(frame)) keep.push(frame);
+        for (const frame of next) if (frame?.isValid && !keep.includes(frame)) keep.push(frame);
         for (let index = this.held.length - 1; index >= 0; index -= 1) {
             const frame = this.held[index];
             if (keep.includes(frame)) continue;
@@ -169,49 +169,52 @@ export class TerritoryBattleCover {
      * @returns 是否铺好了（`false` ⇒ 调用方应把云层当作"没有"，放弃整页过场）
      */
     build(width: number, height: number): boolean {
-        if (!this.host?.isValid) return false;
-        const w = Number.isFinite(width) && width > 0 ? width : 0;
-        const h = Number.isFinite(height) && height > 0 ? height : 0;
-        if (!(w > 0) || !(h > 0)) return false;
-        // 同一尺寸 ⇒ 点阵不变，直接复用（只把层打开 + 把帧补上）。
-        if (this.layer?.isValid && this.clouds && this.width === w && this.height === h) {
+        // 前置必备条件不满足（宿主失效、无云贴图帧、尺寸非法）直接返回 false，放弃过场
+        if (!this.host?.isValid || !this.frames.length) return false;
+        if (!(width > 0 && height > 0 && Number.isFinite(width) && Number.isFinite(height))) return false;
+        // 同一尺寸 ⇒ 点阵不变，直接复用（把层打开 + 重置初态 + 把帧补上）。
+        if (this.layer?.isValid && this.width === width && this.height === height) {
             this.layer.active = true;
             this.releaseElapsed = -1;
             this.released = false;
+            this.applySpread(TERRITORY_BATTLE_INTRO_COVER_SPREAD * 2);
+            this.applyRelease(0);
+            this.writeOpacity(0);
             this.writtenStep = -1;
             this.writeFrames(territoryBattleIntroCoverFrameStep(this.clock));
             return true;
         }
-        // 没有云美术 ⇒ 整层不建（宁可让调用方退回推镜过场，也不要盖一片空白上来）。
-        if (!this.frames.length) return false;
         this.destroy();
         const layer = new Node(TERRITORY_BATTLE_INTRO_COVER_NODE);
         layer.layer = this.host.layer;
         layer.setParent(this.host);
         const transform = layer.addComponent(UITransform);
-        transform.setContentSize(w, h);
+        transform.setContentSize(width, height);
         this.opacity = layer.addComponent(UIOpacity);
         this.opacity.opacity = 0;
         // 最后一位 = 画在覆盖层里所有东西之上（点击反馈 / 宝箱 / 光柱都在它下面）。
         layer.setSiblingIndex(this.host.children.length - 1);
         this.layer = layer;
-        this.width = w;
-        this.height = h;
+        this.width = width;
+        this.height = height;
         this.releaseElapsed = -1;
         this.released = false;
-        this.clouds = territoryBattleIntroCoverPuffs(w, h);
+        this.clouds = territoryBattleIntroCoverPuffs(width, height);
+        const frameCount = this.frames.length;
+        const initialSpread = TERRITORY_BATTLE_INTRO_COVER_SPREAD * 2;
         for (let index = 0; index < this.clouds.length; index += 1) {
-            const sprite = this.createSprite(layer, index);
-            if (sprite) this.sprites.push(sprite);
+            const cloud = this.clouds[index];
+            const phase = Number.isFinite(cloud?.frame) ? cloud.frame : 0;
+            const initialFrame = this.frames[((phase % frameCount) + frameCount) % frameCount];
+            const sprite = this.createSprite(layer, index, cloud, initialFrame, initialSpread);
+            this.sprites.push(sprite);
         }
-        // 起手就位在画面之外（`spread` 的 2 倍，比曲线里的起手值还远一档）：
-        // 建出来的那一帧玩家看到的是**干净**的画面，等第一帧 `apply` 才收拢。
-        this.applySpread(TERRITORY_BATTLE_INTRO_COVER_SPREAD * 2);
-        this.applyRelease(0);
+        if (this.sprites.length !== this.clouds.length) {
+            this.destroy();
+            return false;
+        }
         this.writeOpacity(0);
-        // 全部先填满一帧：否则 `out` 段前 0.18s 里所有精灵都还没有 `spriteFrame`（一片空白）。
-        this.writtenStep = -1;
-        this.writeFrames(0);
+        this.writtenStep = 0;
         return true;
     }
 
@@ -236,7 +239,8 @@ export class TerritoryBattleCover {
      */
     setBaseStep(step: number): void {
         const value = Number.isFinite(step) && step > 0 ? step : 0;
-        this.clock = value * TERRITORY_BATTLE_INTRO_COVER_FRAME_SECONDS;
+        // +0.001 消除 IEEE 754 浮点截断下溢（例如 step=15 时 2.7 / 0.18 = 14.999999999999998）。
+        this.clock = (value + 0.001) * TERRITORY_BATTLE_INTRO_COVER_FRAME_SECONDS;
         this.writtenStep = -1;
         this.writeFrames(territoryBattleIntroCoverFrameStep(this.clock));
     }
@@ -289,7 +293,8 @@ export class TerritoryBattleCover {
 
     /** 收工：藏起来（节点保留，下次直接复用）。 */
     clear(): void {
-        if (this.layer?.isValid) this.layer.active = false;
+        if (!this.layer?.isValid) return;
+        this.layer.active = false;
         this.writeOpacity(0);
     }
 
@@ -321,10 +326,9 @@ export class TerritoryBattleCover {
 
     private applySpread(spread: number): void {
         const clouds = this.clouds;
-        if (!clouds || clouds.length !== this.sprites.length) return;
+        if (!clouds) return;
         for (let index = 0; index < clouds.length; index += 1) {
             const sprite = this.sprites[index];
-            if (!sprite?.node?.isValid) continue;
             const cloud = clouds[index];
             // 取整：位置每帧都在变，浮点尾数会让同一朵反复标脏、也便于用例逐字比对。
             const x = Math.round(cloud.x * spread);
@@ -338,10 +342,9 @@ export class TerritoryBattleCover {
     /** 逐朵写自己在 `in` 段那份额外的淡出（乘在基准 alpha 上）。 */
     private applyRelease(release: number): void {
         const clouds = this.clouds;
-        if (!clouds || clouds.length !== this.sprites.length) return;
+        if (!clouds) return;
         for (let index = 0; index < clouds.length; index += 1) {
             const sprite = this.sprites[index];
-            if (!sprite?.node?.isValid) continue;
             const alpha = territoryBattleIntroCoverAlpha(clouds[index], release);
             const target = Math.round((alpha <= 0 ? 0 : alpha >= 1 ? 1 : alpha) * 255);
             if (sprite.color.a === target) continue;
@@ -353,13 +356,13 @@ export class TerritoryBattleCover {
     /** 把待机帧按 `步进 + 每朵相位` 写进去；同一步重复调只在第一次真的写。 */
     private writeFrames(step: number): void {
         const count = this.frames.length;
-        const clouds = this.clouds;
-        if (!count || !clouds || !this.layer?.isValid) return;
+        if (!count || !this.layer?.isValid) return;
         if (step === this.writtenStep) return;
         this.writtenStep = step;
+        const clouds = this.clouds;
+        if (!clouds) return;
         for (let index = 0; index < this.sprites.length; index += 1) {
             const sprite = this.sprites[index];
-            if (!sprite?.node?.isValid) continue;
             const phase = Number.isFinite(clouds[index]?.frame) ? clouds[index].frame : 0;
             const frame = this.frames[((step + phase) % count + count) % count];
             if (!frame || sprite.spriteFrame === frame) continue;
@@ -368,35 +371,46 @@ export class TerritoryBattleCover {
     }
 
     private writeOpacity(value: number): void {
-        if (!this.opacity?.node?.isValid) return;
+        if (!this.opacity) return;
         const clamped = value <= 0 ? 0 : value >= 1 ? 1 : value;
         const target = Math.round(clamped * 255);
         if (this.opacity.opacity !== target) this.opacity.opacity = target;
     }
 
-    private createSprite(parent: Node, index: number): Sprite | null {
-        const cloud = this.clouds ? this.clouds[index] : null;
-        const frame = this.frames[0];
-        if (!cloud || !frame) return null;
+    private createSprite(
+        parent: Node,
+        index: number,
+        cloud: ITerritoryBattleIntroCover,
+        frame: SpriteFrame,
+        initialSpread: number,
+    ): Sprite {
         const node = new Node(`BattleIntroCloud_${index}`);
         node.layer = parent.layer;
-        node.setParent(parent);
-        // 尺寸必须写成**显示尺寸**（260×312），贴图只有 200×240。
-        // 用 `SizeMode.RAW` 的话节点会跟着位图走 ⇒ 屏幕上只有设计尺寸的 3/4，
-        // 而模型里的"间距 < 云体尺寸"是按 260×312 算的 ⇒ 团与团之间会漏出底色。
-        node.addComponent(UITransform)
-            .setContentSize(TERRITORY_BATTLE_INTRO_COVER_WIDTH, TERRITORY_BATTLE_INTRO_COVER_HEIGHT);
+        const transform = node.addComponent(UITransform);
         const sprite = node.addComponent(Sprite);
         // `CUSTOM` = 按节点尺寸拉伸这张 200×240 的位图。
+        // 严格遵循先 CUSTOM + trim=false → 赋图 → 兜底 setContentSize 的防回写顺序。
         sprite.trim = false;
         sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         sprite.spriteFrame = frame;
+        // 尺寸必须写成**显示尺寸**（260×312），贴图只有 200×240。
+        // 用 `SizeMode.RAW` 的话节点会跟着位图走 ⇒ 屏幕上只有设计尺寸的 3/4，
+        // 而模型里的"间距 < 云体尺寸"是按 260×312 算的 ⇒ 团与团之间会漏出底色。
+        transform.setContentSize(TERRITORY_BATTLE_INTRO_COVER_WIDTH, TERRITORY_BATTLE_INTRO_COVER_HEIGHT);
         // 倍率逐朵略有差别（0.9~1.12）：完全一致的话，云的轮廓会连成整齐的行列。
         const scale = Number.isFinite(cloud.scale) && cloud.scale > 0 ? cloud.scale : 1;
         // 左右镜像再多一倍形态（云本来就没有正反之分）。
         node.setScale(cloud.flip ? -scale : scale, scale, 1);
+        // 起手就位在画面之外（`spread` 的 2 倍，比曲线里的起手值还远一档）：
+        // 建出来的那一帧玩家看到的是**干净**的画面，等第一帧 `apply` 才收拢。直接设置省去后置全量遍历。
+        const x = Math.round(cloud.x * initialSpread);
+        const y = Math.round(cloud.y * initialSpread);
+        node.setPosition(x, y, 0);
+        // 直接设置初始浓度，省去后置 applyRelease(0) 全量重复赋色。
         this.tint.a = Math.round((cloud.alpha <= 0 ? 0 : cloud.alpha >= 1 ? 1 : cloud.alpha) * 255);
         sprite.color = this.tint;
+        // 属性与组件完备后再挂入父节点，避免父级多次触发不完整节点的层级监听。
+        node.setParent(parent);
         return sprite;
     }
 }

@@ -1,4 +1,4 @@
-import { _decorator, Component, instantiate, Prefab, SpriteFrame, UITransform, Vec3, view } from 'cc';
+import { _decorator, Component, instantiate, Prefab, SpriteFrame, UITransform, view } from 'cc';
 import { ResourceScope } from '../../../core/asset/ResourceScope';
 import type { IControllerResources } from '../../../framework/controller/ControllerBase';
 import { loadBigMapArt, type IBigMapArt } from '../application/BigMapArtLoader';
@@ -16,16 +16,14 @@ import { ShowRewardPage } from '../../showReward/ShowRewardPage';
 import { Toast } from '../../common/Toast';
 import { BigMapCityPopup, type IBigMapCityPopupContent } from './BigMapCityPopup';
 import { BigMapInfoPopup, type IBigMapInfoPopupContent } from './BigMapInfoPopup';
-import { BIGMAP_QUEUE_ROW_KIND, BigMapBuildMenuPopup, type IBigMapBuildMenuRow } from './BigMapBuildMenuPopup';
 import type { IBigMapPlotCardContent } from './BigMapPlotCard';
 import { BigMapPageLayout } from './BigMapPageLayout';
+import { BIGMAP_TOP_HUD_HEIGHT } from './BigMapTopHudTypes';
 
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapRenderEvent, type IBigMapViewCommandEvent } from '../application/BigMapEvents';
 
 const { ccclass } = _decorator;
-
-const HEADER_HEIGHT = 108;
 
 const FOOTER_HEIGHT = 88;
 
@@ -57,8 +55,6 @@ export class BigMapPage extends Component {
     private infoPopupOpening = false;
     private infoPopupRevision = 0;
     private infoPopupContent: IBigMapInfoPopupContent | null = null;
-    /** `open` 是异步的（要读 prefab），期间 `get` 仍返回 null ⇒ 不挡住会连开好几层。 */
-    private buildMenuOpening = false;
     /** 上一次自动聚焦过的城池 —— 只在选中变化时聚焦一次，避免每帧把视角拽回去。 */
     private focusedCityId = 0;
 
@@ -154,7 +150,9 @@ export class BigMapPage extends Component {
         if (!art) return;
         this.worldView.setArt(art);
         this.worldView.setPlayerPortrait(this.playerPortrait);
+        // 同一帧头像交付给顶部玩家卡：世界与基地两边看到的是同一个人。
         this.layout.setArt(art);
+        this.layout.setPlayerPortrait(this.playerPortrait);
     }
 
     //-------------------------------------------------------------- 构建
@@ -173,32 +171,14 @@ export class BigMapPage extends Component {
         const ui = this.layout;
         ui.initialize(data, this.navigationHeight);
         ui.mountWorld(this.worldView.node);
-        this.buildWorldArea(data, width, height);
-        this.buildBaseArea(data, width, height);
-        this.mode = 'world';
-        this.applyMode();
-    }
-
-    /** 浏览地图铺满屏宽；浮层放在地图之上，不再把竖屏压成负宽度。 */
-    private worldAreaRect(width: number, height: number): { x: number; y: number; width: number; height: number } {
-        const left = -width / 2 + 12;
-        const right = width / 2 - 12;
-        const bottom = -height / 2 + this.navigationHeight;
-        const top = height / 2 - HEADER_HEIGHT - 20;
-        return { x: (left + right) / 2, y: (bottom + top) / 2, width: right - left, height: top - bottom };
-    }
-
-    private buildWorldArea(data: IBigMapViewState, width: number, height: number): void {
-        const rect = this.worldAreaRect(width, height);
-        const node = this.worldView.node;
-        node.setPosition(new Vec3(rect.x, rect.y, 0));
+        this.worldView.node.setPosition(0, 0, 0);
         //先交付已加载的贴图，避免 build 把整张世界逐格画成 Graphics 后又立即清空重画。
         if (this.art) this.worldView.setArt(this.art);
-        this.worldView.build(data, rect.width, rect.height);
-    }
-
-    private buildBaseArea(data: IBigMapViewState, width: number, height: number): void {
-        this.layout.buildBase(data, this.worldAreaRect(width, height));
+        const insets = { top: BIGMAP_TOP_HUD_HEIGHT, bottom: this.navigationHeight };
+        this.worldView.build(data, width, height, insets);
+        ui.buildBase(data, width, height, (insets.bottom - insets.top) / 2);
+        this.mode = 'world';
+        this.applyMode();
     }
 
     //-------------------------------------------------------------- 模式切换
@@ -245,70 +225,8 @@ export class BigMapPage extends Component {
     private refreshAll(data: IBigMapViewState): void {
         this.loadRolePortraits(data);
         this.layout.render(data);
-        this.refreshBuildMenu(data);
         this.refreshInfo(data);
         this.worldView.render(data);
-    }
-
-    /**
-     *建造目录：`buildMenuVisible` 一开就打开弹窗，一关就关掉。
-     *
-     *走 `PopupBase`（`BigMapBuildMenuPopup`）而不是页面内节点：
-     *遮罩、点空白关闭、栈顺序、关闭原因全部由基类接管，页面这边只剩「什么时候开」。
-     */
-    private refreshBuildMenu(data: IBigMapViewState): void {
-        const shouldOpen = data.ui.mode === 'base' && data.ui.buildMenuVisible;
-        const opened = PopupManager.inst.get(BigMapBuildMenuPopup);
-        if (!shouldOpen) {
-            this.buildMenuOpening = false;
-            if (opened) opened.close(PopupCloseReason.Force);
-            return;
-        }
-        const content = { rows: this.buildMenuRows(data) };
-        if (opened) { opened.render(content); return; }
-        if (this.buildMenuOpening) return;
-        this.buildMenuOpening = true;
-        void BigMapBuildMenuPopup.open({
-            userData: content,
-            //点空白只让弹窗自己收掉，页面状态里的 `buildMenuVisible` 还是 true ⇒
-            //下一次 500ms `tick → publish` 会按「该开」再弹回来。所以把用户主动收起
-            //翻译成意图，让 model 的可见性跟着关；`Force` 是页面自己收，不在此列。
-            onClose: (reason) => {
-                if (reason === PopupCloseReason.Force) return;
-                if (this.isValid) this.sendIntent({ kind: 'closeBuildMenu' });
-            },
-        }).then((popup) => {
-            this.buildMenuOpening = false;
-            if (!popup || !this.isValid) return;
-            const now = this.data;
-            //打开期间状态已经变了（关页 / 退出基地 / 又点了一次「建造」）⇒ 立刻收掉，别留个孤儿弹窗。
-            if (!now || now.ui.mode !== 'base' || !now.ui.buildMenuVisible) popup.close(PopupCloseReason.Force);
-        });
-    }
-
-    /** 把 `buildMenu` + `queueUnlock` 摊平成行数据 —— 弹窗不认识 model，只吃这份结果。 */
-    private buildMenuRows(data: IBigMapViewState): IBigMapBuildMenuRow[] {
-        const rows: IBigMapBuildMenuRow[] = data.buildMenu.map((entry) => ({
-            kind: entry.kind,
-            name: `${entry.name}  ${entry.count}/${entry.maxOwnNum}`,
-            detail: entry.unlocked
-                ? `粮${entry.costGrain} 木${entry.costWood} 铁${entry.costIron} · ${entry.buildTime}s · 第${entry.unlockChapter}章`
-                : entry.reason,
-            selected: data.ui.pendingBuildingId !== 0 && data.ui.pendingBuildingId === entry.buildingId,
-            nameMuted: !entry.unlocked,
-            detailDanger: !entry.unlocked || !entry.affordable,
-        }));
-        //解锁队列固定排最后一行（与目录的「你还能再开一条队列」语义一致）。
-        const unlock = data.queueUnlock;
-        rows.push({
-            kind: BIGMAP_QUEUE_ROW_KIND,
-            name: `解锁建造队列  ${unlock.current}/${unlock.max}`,
-            detail: unlock.canUnlock ? `货币 ${Math.round(unlock.cost)} · 点击解锁第 ${unlock.current + 1} 条` : unlock.reason,
-            selected: false,
-            nameMuted: !unlock.canUnlock,
-            detailDanger: !unlock.canUnlock,
-        });
-        return rows;
     }
 
     private refreshInfo(data: IBigMapViewState): void {

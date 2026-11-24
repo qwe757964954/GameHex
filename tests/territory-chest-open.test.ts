@@ -567,7 +567,7 @@ test('E2｜`runChestOpening`：先演 `chest_seq_*`，演完发 ChestRewardsRead
     const playAt = body.indexOf('this.mapView.playChestOpen(');
     // 演出窗口从「点开箱子」那一刻就要开（取图是异步的，晚开就会抢台词）
     assert.match(body.slice(0, body.indexOf('entries = await this.collectRewardIcons')),
-        /ChestPresentation, \{ owner: this, playing: true \}/);
+        /ChestPresentation, \{ playing: true \}/);
     assert.ok(iconAt > 0 && playAt > iconAt, '必须先取图再起播，否则喷空图');
     assert.match(body,
         /try \{\s*entries = await this\.collectRewardIcons\(rewards\);\s*\} catch \(error\) \{[\s\S]{0,240}?\}\s*if \(!this\.isValid\) \{/,
@@ -575,7 +575,7 @@ test('E2｜`runChestOpening`：先演 `chest_seq_*`，演完发 ChestRewardsRead
 
     // ② 动画演完 → 发事件交棒组合层（英雄页 / 统一奖励窗由组合层决定）
     assert.match(body, /const goods = rewards\.map\(\(reward\) => \(\{ resId: Number\(reward\.resId\), number: Number\(reward\.amount\) \|\| 0 \}\)\);/);
-    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ owner: this, rewards: goods \}\)/);
+    assert.match(body, /EventMgr\.instance\.emit\(TerritoryUiEvent\.ChestRewardsReady, \{ rewards: goods \}, this\)/);
     // ②' 动画最后一帧到交棒之间要留一拍缓冲（用户 2026-11-17 第 13 条 ④）：
     //     粒子动画结束 → 0.1s → 才接奖励窗 / 下一段台词，硬接会显得很急。
     assert.match(body, /this\.chestHandOffTimer = setTimeout\(/, '交棒必须延时，不能和动画最后一帧硬接');
@@ -612,7 +612,7 @@ test('点开宝箱那一下就关遮罩：等奖励回包才关会慢一个往�
 
     // ② 开窗口：先发 playing:true，并挂兜底计时器
     const open = body.slice(body.indexOf('private openChestPresentation('), body.indexOf('private cancelChestPresentationWatchdog('));
-    assert.match(open, /ChestPresentation, \{ owner: this, playing: true \}/);
+    assert.match(open, /ChestPresentation, \{ playing: true \}/);
     assert.match(open, /setTimeout\(/, '回包丢了也要把引导层还回去');
     assert.match(open, /CHEST_PRESENTATION_WATCHDOG_MS/);
 
@@ -821,6 +821,9 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         // 2026-11-18 上游把公会入口接进了主界面组合层（`MainPageComposition`）⇒ 这四个模块
         // 和 `GameNet` 也要在这里占位，否则 `unresolved` 非空。本用例只跑橙色特写编排，不碰它们。
         'LeagueJoinController', 'LeagueTabEvents', 'LeagueCreatePage', 'LeagueInfoPage', 'GameNet',
+        // 2026-11-23 领地 PVP 气泡的头像 / 等级改由组合层从 `CmdRole` 注入（页面不读缓存），
+        // 这三个模块同样只占位：本用例不实例化组合层，不碰它们。
+        'CacheMgr', 'RequestGuard', 'MainRoleRow',
         'FW', 'TerritoryHeroProgressSource', 'ChestEvents', 'EventMgr']) modules['/' + name] = {};
     Object.assign(modules, {
         '/ControllerBase': { ControllerBase: class {} },
@@ -841,6 +844,9 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         '/CardUpgradeCost': upgrade,
         '/ItemBag': { createItemCounter: () => () => 4 },
         '/FW': { FW: { ShowReward: (goods: unknown[]) => { rewardCalls.push(goods); } } },
+        // 2026-11-23 金卡碎片展示音效：特写页弹出时由组合层播音（本用例只占位，不校验声音）。
+        '/AudioMgr': { AudioMgr: { instance: { playSound: async () => true } } },
+        '/ResConst': { GAME_AUDIO: { goldFragment: '金卡碎片展示' }, GAME_AUDIO_ROOT: 'resources://塔防/音效' },
         '/TerritoryChestOpenPage': { TerritoryChestOpenPage: { open: async (params: unknown) => {
             chestOpens.push(params);
             return { close: () => { chestCloses++; } };
@@ -910,14 +916,14 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     const treasureHost = Object.create(loaded.exports.MainPageComposition.prototype);
     treasureHost.root = root; treasureHost.isDisposed = false;
     const goods = [{ resId: 18001, number: 2 }];
-    treasureHost.onTreasureRewards({ owner: { node: {} }, goods });
-    treasureHost.onTreasureRewards({ owner: { node: root }, goods: [] });
+    treasureHost.onTreasureRewards({ goods }, { node: {} });
+    treasureHost.onTreasureRewards({ goods: [] }, { node: root });
     assert.equal(chestOpens.length, 0, '忽略其他宿主及空奖励');
-    treasureHost.onTreasureRewards({ owner: { node: root }, goods });
+    treasureHost.onTreasureRewards({ goods }, { node: root });
     await tick();
     assert.equal(chestOpens.length, 1);
     assert.equal((chestOpens[0] as { userData: { goods: unknown } }).userData.goods, goods);
-    treasureHost.onTreasureRewards({ owner: { node: root }, goods });
+    treasureHost.onTreasureRewards({ goods }, { node: root });
     treasureHost.isDisposed = true;
     await tick();
     assert.equal(chestCloses, 1, '开箱页加载期间退出时关闭迟到弹窗');

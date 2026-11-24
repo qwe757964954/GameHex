@@ -77,7 +77,7 @@ export interface IRoleEquipSlotData {
 }
 
 export interface IRoleSnapshot {
-    /** 战斗力（本轮先不接，0 = 未取到）。 */
+    /** 战斗力：卡牌阵容战力（与卡牌页 / 主界面同源同式）；0 = 空阵容或未取到。 */
     readonly power: number;
     /** 导航条目（按 id 升序）。 */
     readonly navs: readonly IRoleNavEntry[];

@@ -56,6 +56,16 @@ export class CardUpgradePage extends PopupBase {
     private previewAssets: CardUnitPreviewAssets<Prefab> | null = null;
     private heroKey: string | null = null;
     private hasRenderedStatus = false;
+    /**
+     * 上一次真的画出来的战力（`战力 12.3K`）与它对应的卡。
+     *
+     * 战力要读卡表 / 成长表，属于异步取数 ⇒ 打开页面的第一帧 `detail` 还是空的。
+     * 以前这一格直接写 `'--'`，于是「切到英雄界面先闪一下 -- 再跳成真值」。
+     * 现在**同一张卡**再打开时先铺上一次的值（几乎总是对的：等级没变战力就不变），
+     * 换成别的卡才退回中性占位。判据按 cardId 分开，绝不把 A 卡的战力挂到 B 卡上。
+     */
+    private lastPowerText: string | null = null;
+    private lastPowerCardId: string | null = null;
     /** 弹窗预制体在 resources 下的路径（`PopupManager` 用它加载）。 */
     static prefabPath = 'ui/card/CardUpgrade';
 
@@ -287,7 +297,7 @@ export class CardUpgradePage extends PopupBase {
         this.heroSprite.spriteFrame = null;
         this.qualitySprite.spriteFrame = null;
         this.tagClassSprite.spriteFrame = null;
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'enabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
     }
 
     private readonly onSkillClick = (): void => {
@@ -299,7 +309,7 @@ export class CardUpgradePage extends PopupBase {
     };
 
     private openSkill(skillId: number): void {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'skills', skillId });
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'skills', skillId }, this);
     }
 
     /**
@@ -317,11 +327,11 @@ export class CardUpgradePage extends PopupBase {
     };
 
     private readonly onPreviousClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'previous' });
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'previous' }, this);
     };
 
     private readonly onNextClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'next' });
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'next' }, this);
     };
 
     /** 唯一的写 UI 入口：头部 + 详情区 + 升级状态。 */
@@ -383,10 +393,29 @@ export class CardUpgradePage extends PopupBase {
             this.campTagRoot.active = false;
             this.tagClassLabel.string = '';
         }
-        this.powerLabel.string = data.detail?.powerText || '--';
+        this.powerLabel.string = this.powerTextFor(data);
         this.qualitySprite.spriteFrame = data.art?.diamond ?? null;
         this.tagClassSprite.spriteFrame = data.art?.classTag ?? null;
         this.renderHero(card, data.art?.hero ?? null);
+    }
+
+    /**
+     * 战力胶囊的文案：新值优先，其次「同一张卡上一次的真值」，最后才是中性占位。
+     *
+     * 三个分支的来源与理由见 `lastPowerText` 的注释。占位用 `战力 —`（prefab 里也是这个），
+     * 不再用 `--`：`--` 看起来像负号，`—` 才是「还不知道」。
+     */
+    private powerTextFor(data: ICardUpgradeViewState): string {
+        const cardId = data.data.card?.id ?? data.cardId;
+        const fresh = data.detail?.powerText;
+        if (fresh) {
+            this.lastPowerText = fresh;
+            this.lastPowerCardId = cardId;
+            return fresh;
+        }
+        // 取数还没回来：同一张卡就沿用上一次的值（等级没变 ⇒ 战力没变，不会骗人）。
+        if (this.lastPowerText && this.lastPowerCardId === cardId) return this.lastPowerText;
+        return '战力 —';
     }
 
     /** 优先展示对应兵种的循环待机，缺少模型或 idle 时保留原立绘。 */
@@ -586,7 +615,7 @@ export class CardUpgradePage extends PopupBase {
     }
 
     private readonly onUpgradeClick = (): void => {
-        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { owner: this, kind: 'submit' });
+        EventMgr.instance.emit(CardPopupEvent.UpgradeIntent, { kind: 'submit' }, this);
     };
 
     protected onClose(): void {
@@ -594,7 +623,7 @@ export class CardUpgradePage extends PopupBase {
         this.preview = null;
         this.previewAssets = null;
         this.heroKey = null;
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'disabled' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'disabled' }, this);
     }
 
     onDestroy(): void {

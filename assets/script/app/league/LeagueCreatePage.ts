@@ -27,14 +27,6 @@ import {
 
 const { ccclass, property } = _decorator;
 
-/**
- * 打开本弹窗的参数（`PopupBase.open({ userData: ... })`）。
- * 只带容器 owner，不带回调 —— 成功后由控制器按 owner 发 `LeagueTabEvent.Joined`。
- */
-export interface ILeagueCreateParams {
-    readonly owner?: object | null;
-}
-
 /** 旗帜行的两个可切节点名（与别的页面同源：`组件_联盟_旗帜` 的 `n5` / `icon`）。 */
 const BANNER_FRAME = 'Frame';
 const BANNER_COLOR_ICON = 'ColorIcon';
@@ -132,28 +124,27 @@ export class LeagueCreatePage extends PopupBase {
 
     private emitName(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: this, kind: 'name', name: this.nameInput.string ?? '',
-        });
+            kind: 'name', name: this.nameInput.string ?? '',
+        }, this);
     }
 
     private emitBanner(index: number): void {
         if (this.bannerIndices[index] === undefined) return;
-        EventMgr.instance.emit(LeagueCreateEvent.Intent, { owner: this, kind: 'banner', index });
+        EventMgr.instance.emit(LeagueCreateEvent.Intent, { kind: 'banner', index }, this);
     }
 
     private emitQuickJoin(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: this, kind: 'quickJoin', quickJoin: !this.quickJoinCheck.active,
-        });
+            kind: 'quickJoin', quickJoin: !this.quickJoinCheck.active,
+        }, this);
     }
 
     private emitSubmit(): void {
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: this,
             kind: 'submit',
             name: this.nameInput.string ?? '',
             quickJoin: this.quickJoinSelected,
-        });
+        }, this);
     }
 
     // 渲染（控制器推来的状态一律绝对赋值）

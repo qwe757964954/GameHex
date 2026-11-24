@@ -1,11 +1,11 @@
-import { _decorator, Component, Label, Layout, Node, Sprite, SpriteFrame, Tween, tween, UITransform, Vec3 } from 'cc';
+import { _decorator, Color, Component, Label, Node, Sprite, SpriteFrame, Tween, tween, Vec3 } from 'cc';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
-import { ARTIFACT_ART_ROOT, MATCH_ART_ROOT, MATCH_ICON_ART_ROOT, MATCH_SLOT_BARS, MATCH_SLOT_FRAMES } from '../ArtPaths';
-import type { MatchIconLoader } from './MatchIcons';
+import { MATCH_ART_ROOT, MATCH_SEARCH_BARS, MATCH_SLOT_BARS, MATCH_SLOT_PILLS } from '../ArtPaths';
+import { MatchCardSlot } from './MatchCardSlot';
+import type { IIconLoader } from '../common/SpriteFrameCache';
 import { MATCH_REVEAL_POP_SCALE, MATCH_REVEAL_POP_SECONDS } from './MatchReveal';
-import { MATCH_STAT_SLOTS } from './MatchTypes';
-import type { MatchPlayerData, MatchStat } from './MatchTypes';
-import { MatchStatItem } from './MatchStatItem';
+import { MATCH_CARD_SLOTS } from './MatchTypes';
+import type { MatchCardData, MatchPlayerData } from './MatchTypes';
 
 const { ccclass, property } = _decorator;
 
@@ -16,111 +16,110 @@ const SEARCH_ORBIT_SECONDS_PER_TURN = 1.9;
 
 const SEARCH_ORBIT_SPEED = (Math.PI * 2) / SEARCH_ORBIT_SECONDS_PER_TURN;
 
-/** 段位底图宽度随内容增长，至少保持设计宽度。 */
-const RANK_ROW_MIN_WIDTH = 205;
-const RANK_ROW_PADDING = 16;
+/** 匹配中空头像盘的按槽位底色：蓝 / 红 / 紫 / 黄，与蓝湖空盘取色一致。 */
+const SEARCH_AVATAR_TINTS: readonly (readonly [number, number, number])[] = [
+    [44, 76, 132],
+    [122, 40, 40],
+    [105, 82, 167],
+    [132, 74, 18],
+];
 
-/** 参与方信息条：按槽位配色，统计列表由 prefab 配置。 */
+/** 参与方信息条，按槽位配色并展示可横向滚动的卡牌。 */
 @ccclass('MatchPlayerItem')
 export class MatchPlayerItem extends Component {
     @property({ type: Node, tooltip: 'Content：数据展示容器；匹配中整体隐藏' })
-    contentRoot: Node = null;
+    contentRoot: Node = null!;
 
     @property({ type: Sprite, tooltip: 'SearchIcon：匹配中显示的放大镜' })
-    searchIcon: Sprite = null;
+    searchIcon: Sprite = null!;
+
+    @property({ type: Sprite, tooltip: 'SearchAvatar：匹配中的空头像盘（按槽位染色）' })
+    searchAvatar: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Bar：条底图，由 applySlot() 按槽位换色' })
-    barFrame: Sprite = null;
-
-    @property({ type: Sprite, tooltip: 'AvatarFrame：阵营头像框，由 applySlot() 按槽位换色' })
-    avatarFrame: Sprite = null;
+    barFrame: Sprite = null!;
 
     @property({ type: Sprite, tooltip: 'Avatar：玩家头像' })
-    avatar: Sprite = null;
+    avatar: Sprite = null!;
 
-    @property({ type: Sprite, tooltip: 'RoleIcon：神器图标' })
-    artifactIcon: Sprite = null;
+    @property({ type: Sprite, tooltip: 'PowerBg：战力数值底（frame_01..04）' })
+    powerBg: Sprite = null!;
 
-    @property({ type: Label, tooltip: 'RoleNameLabel：神器名称' })
-    artifactNameLabel: Label = null;
-
-    @property({ type: Sprite, tooltip: 'RankBadge：段位徽章' })
-    rankBadge: Sprite = null;
-
-    @property({ type: Label, tooltip: 'RankLabel：段位名，如「黄金」' })
-    rankLabel: Label = null;
-
-    @property({ type: Label, tooltip: 'TrophyLabel：奖杯数量' })
-    trophyLabel: Label = null;
-
-    @property({
-        type: VirtualScrollView,
-        tooltip: 'Content/StatRow/StatList：小图标+数值的虚拟列表（容器、条目预制体等配置绑在它自己身上）',
-    })
-    statList: VirtualScrollView = null!;
-
-    @property({
-        type: Node,
-        tooltip: 'Content/StatRow：无统计数据时整行隐藏',
-    })
-    statRow: Node = null;
-
-    @property({
-        type: Node,
-        tooltip: 'Content/ArtifactRow：无神器时整组隐藏',
-    })
-    artifactRow: Node = null;
-
-    @property({
-        type: Node,
-        tooltip: 'Content/RankLayout：段位与奖杯横排容器',
-    })
-    rankLayout: Node = null;
-
-    @property({ type: Sprite, tooltip: 'Content/RankRowBg：段位行底图，宽度跟着 RankLayout 的内容走' })
-    rankRowBg: Sprite = null;
+    @property({ type: Sprite, tooltip: 'TrophyBg：奖杯数值底（frame_01..04）' })
+    trophyBg: Sprite = null!;
 
     @property({ type: Label, tooltip: 'PlayerNameLabel：昵称' })
-    nameLabel: Label = null;
+    nameLabel: Label = null!;
 
     @property({ type: Label, tooltip: 'PowerValueLabel：战力数值' })
-    powerValueLabel: Label = null;
+    powerValueLabel: Label = null!;
 
-    /** 内容与配色独立失效，销毁时一并递增。 */
-    private contentRevision = 0;
-    private slotRevision = 0;
-    private iconLoader: MatchIconLoader = async () => null;
+    @property({ type: Label, tooltip: 'TrophyLabel：奖杯数量' })
+    trophyLabel: Label = null!;
 
-    private stats: MatchStat[] = [];
+    @property(VirtualScrollView)
+    private cardList: VirtualScrollView = null!;
 
-    private statFrames: (SpriteFrame | null)[] = [];
+    private cards: readonly MatchCardData[] = [];
+    private loader: IIconLoader | { readonly load: IIconLoader } = null!;
+    private avatarRevision = 0;
+
+    private get loadIcon(): IIconLoader {
+        return typeof this.loader === 'function' ? this.loader : this.loader.load;
+    }
 
     /** 在 onLoad 保存 prefab 原位，进入和退出搜索时共用。 */
     private readonly searchOrbitCenter = new Vec3();
+
+    /** 数据态条底 / 搜索态条底分开存，切状态时只换帧，不动节点位置和缩放。 */
+    private normalBarFrame: SpriteFrame | null = null;
+    private searchBarSpriteFrame: SpriteFrame | null = null;
 
     private searchOrbitAngle = 0;
 
     private isSearching = false;
 
+    initialize(loader: IIconLoader | { readonly load: IIconLoader }): void {
+        this.loader = loader;
+    }
+
     protected onLoad(): void {
         this.searchOrbitCenter.set(this.searchIcon.node.position);
+        this.cardList.renderItemFn = (node, index) => {
+            void node.getComponent(MatchCardSlot).render(this.cards[index], this.loader);
+        };
     }
 
-    setIconLoader(loader: MatchIconLoader): void {
-        this.iconLoader = loader;
+    protected onDestroy(): void {
+        if (this.node && typeof Tween !== 'undefined' && Tween?.stopAllByTarget) {
+            Tween.stopAllByTarget(this.node);
+        }
     }
 
-    /** 按槽位加载阵营底图和头像框；过期结果不应用。 */
+    /** 按槽位加载条底、搜索态条底和数值底。 */
     async applySlot(slot: number): Promise<void> {
-        const token = ++this.slotRevision;
-        const slotIndex = Math.max(0, Math.min(MATCH_SLOT_BARS.length - 1, Math.floor(slot)));
-        const [bar, frame] = await Promise.all([
-            this.iconLoader(MATCH_SLOT_BARS[slotIndex], MATCH_ART_ROOT),
-            this.iconLoader(MATCH_SLOT_FRAMES[slotIndex], MATCH_ART_ROOT),
+        const slotIndex = Math.max(0, Math.min((MATCH_SLOT_BARS?.length || 1) - 1, Math.floor(slot)));
+        const barName = MATCH_SLOT_BARS?.[slotIndex];
+        const pillName = MATCH_SLOT_PILLS?.[slotIndex];
+        const searchBarName = MATCH_SEARCH_BARS?.[slotIndex];
+        const load = this.loadIcon;
+        const [bar, pill, searchBar] = await Promise.all([
+            load(barName, MATCH_ART_ROOT),
+            load(pillName, MATCH_ART_ROOT),
+            load(searchBarName, MATCH_ART_ROOT),
         ]);
-        if (token !== this.slotRevision) return;
-        if (bar) this.barFrame.spriteFrame = bar;
-        if (frame) this.avatarFrame.spriteFrame = frame;
+        if (!this.isValid) return;
+        if (bar) this.normalBarFrame = bar;
+        if (searchBar) this.searchBarSpriteFrame = searchBar;
+        this.applyBarFrame();
+        if (pill) {
+            if (this.powerBg) this.powerBg.spriteFrame = pill;
+            if (this.trophyBg) this.trophyBg.spriteFrame = pill;
+        }
+        const tint = SEARCH_AVATAR_TINTS[slotIndex] ?? SEARCH_AVATAR_TINTS[0];
+        if (this.searchAvatar && tint) {
+            this.searchAvatar.color = new Color(tint[0], tint[1], tint[2], 255);
+        }
     }
 
     update(deltaTime: number): void {
@@ -139,52 +138,46 @@ export class MatchPlayerItem extends Component {
     }
 
     async refresh(data: MatchPlayerData): Promise<void> {
-        const token = ++this.contentRevision;
-
         this.nameLabel.string = data.name;
-        this.rankLabel.string = data.rank;
         this.trophyLabel.string = String(Math.max(0, Math.floor(data.trophy)));
         this.powerValueLabel.string = String(Math.max(0, Math.floor(data.power)));
-        this.artifactNameLabel.string = data.artifactName;
 
-        // 名字底与内容整组显隐，避免留下空底板。
-        this.artifactRow.active = !!data.artifactIcon || !!data.artifactName;
-        this.syncRankRowWidth();
+        this.cards = data.cards ?? [];
+        this.cardList.refreshList(Math.min(this.cards.length, MATCH_CARD_SLOTS));
 
-        // 先并行加载，再按版本一次应用，避免旧图覆盖新数据。
-        const slots = data.stats.slice(0, MATCH_STAT_SLOTS);
-        const avatarRoot = data.avatarRoot || MATCH_ART_ROOT;
-
-        const [avatarFrame, artifactFrame, statFrames] = await Promise.all([
-            this.iconLoader(data.avatarIcon, avatarRoot),
-            this.iconLoader(data.artifactIcon, ARTIFACT_ART_ROOT),
-            Promise.all(slots.map((stat) => this.iconLoader(stat.icon, MATCH_ICON_ART_ROOT))),
-        ]);
-        if (token !== this.contentRevision) return;
+        const revision = ++this.avatarRevision;
+        const avatarFrame = await this.loadIcon(data.avatarIcon, data.avatarRoot || MATCH_ART_ROOT);
+        if (!this.isValid || revision !== this.avatarRevision) return;
         if (avatarFrame) this.avatar.spriteFrame = avatarFrame;
-        this.artifactIcon.spriteFrame = artifactFrame;
-        this.renderStats(slots, statFrames);
     }
 
     clear(): void {
-        this.contentRevision += 1;
+        this.avatarRevision++;
         this.nameLabel.string = '';
-        this.rankLabel.string = '';
         this.trophyLabel.string = '0';
         this.powerValueLabel.string = '0';
-        this.artifactNameLabel.string = '';
-        this.artifactRow.active = false;
-        this.syncRankRowWidth();
-        this.renderStats([], []);
+        this.cards = [];
+        this.cardList.refreshList(0);
+        this.cardList.scrollToTop();
     }
 
     setSearching(isSearching: boolean): void {
         this.isSearching = isSearching;
+        this.applyBarFrame();
         this.searchIcon.node.active = isSearching;
+        this.searchAvatar.node.active = isSearching;
         this.contentRoot.active = !isSearching;
         this.searchOrbitAngle = 0;
         if (isSearching) this.applySearchOrbit();
         else this.searchIcon.node.setPosition(this.searchOrbitCenter);
+    }
+
+    /** 搜索态换纯条底；没有搜索条资源时退回数据态条底，不出现空条。 */
+    private applyBarFrame(): void {
+        const frame = this.isSearching
+            ? (this.searchBarSpriteFrame || this.normalBarFrame)
+            : this.normalBarFrame;
+        if (frame) this.barFrame.spriteFrame = frame;
     }
 
     /**
@@ -202,36 +195,5 @@ export class MatchPlayerItem extends Component {
         tween(node)
             .to(MATCH_REVEAL_POP_SECONDS, { scale: new Vec3(1, 1, 1) }, { easing: 'backOut' })
             .start();
-    }
-
-    /** 先强制刷新文字，再按子项宽度求和；同帧读取 Layout 尺寸可能仍是旧值。 */
-    private syncRankRowWidth(): void {
-        this.rankLabel.updateRenderData(true);
-        this.trophyLabel.updateRenderData(true);
-
-        const layout = this.rankLayout.getComponent(Layout);
-        const children = this.rankLayout.children;
-        let contentWidth = layout.spacingX * Math.max(0, children.length - 1);
-        for (const child of children) contentWidth += child.getComponent(UITransform).width;
-
-        const width = Math.max(RANK_ROW_MIN_WIDTH, contentWidth + RANK_ROW_PADDING);
-        const background = this.rankRowBg.getComponent(UITransform);
-        background.setContentSize(width, background.height);
-        this.rankRowBg.node.setPosition(this.rankLayout.position.x + width / 2, this.rankRowBg.node.position.y, 0);
-    }
-
-    private renderStats(slots: MatchStat[], frames: (SpriteFrame | null)[]): void {
-        this.stats = slots;
-        this.statFrames = frames;
-
-        this.statRow.active = slots.length > 0;
-
-        const list = this.statList;
-
-        list.renderItemFn = (itemNode: Node, index: number): void => {
-            const item = itemNode.getComponent(MatchStatItem);
-            item.render(this.stats[index] ?? null, this.statFrames[index] ?? null);
-        };
-        list.refreshList(slots);
     }
 }

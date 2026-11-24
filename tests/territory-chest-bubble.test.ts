@@ -35,7 +35,7 @@ const FRAME_PNG = 'assets/bundles/battle/image/spawn-region/frame_04.png';
 
 /** 站点视图 / 页面资源 / 地图视图的源码（接线守卫用）。 */
 const stationViewSource = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
-const mapViewSource = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+const mapViewSource = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
 const pageAssetsSource = readFileSync('assets/script/app/territory/application/TerritoryPageAssets.ts', 'utf8');
 
 /** 相对亮度（0~255），用来判「深字 / 浅底」。 */
@@ -173,13 +173,22 @@ test('★★★视图按「有没有 icon」切两套排版：水滴走上下两
     assert.ok(stationViewSource.includes('territoryChestBubbleLayout()'),
         '视图没读 `model/TerritoryChestBubble` 的排版常量');
     // icon 与数字**各自**水平居中：x 恒为 0（并排那套是 ±total/2，已删）。
-    assert.ok(stationViewSource.includes('icon.node.setPosition(0, isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y : chest.iconY, 0)'),
-        'icon 没按常量放到上半区');
+    assert.ok(stationViewSource.includes('icon.node.setPosition(0, chest.iconY, 0)'),
+        '宝箱 icon 没水平居中放到上半区');
+    // 🔴 PVP 头像气泡是第三套排版：x / y 都按「红框主体中心 + trim 偏移」算（§3.55）。
+    // 旧写法 `isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y : ...` 只补了 auto trim，
+    // 没补 frame_02 底下 8px 小尖角 ⇒ 头像贴在红框下沿，看起来「没有居中」。
+    assert.ok(stationViewSource.includes('territoryPvpBubblePortraitPosition(iconFrame, iconSize)'),
+        'PVP 头像落点必须走 model 的纯函数，不许再写死常量');
+    assert.ok(stationViewSource.includes('icon.node.setPosition(point.x, point.y, 0)'),
+        '头像落点必须 x / y 都写，不能只改 y');
+    assert.ok(!stationViewSource.includes('isPortrait ? TERRITORY_PVP_BUBBLE_PORTRAIT_Y'),
+        '旧的固定 Y 分支还在 ⇒ 换头像图 / 换尺寸又会偏');
     assert.ok(stationViewSource.includes('this.badgeLabel.node.setPosition(0, chest.textY, 0)'),
         '数字没按常量放到下半区');
-    // 水滴是整张成品图，没有九宫格切边 ⇒ 用 SIMPLE；胶囊仍用 SLICED 保圆角。
-    assert.ok(stationViewSource.includes('const spriteType = chest ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;'),
-        '气泡底图类型要按排版切换（水滴 SIMPLE / 胶囊 SLICED）');
+    // 水滴 / 问号徽标都是整张成品图，没有九宫格切边 ⇒ 用 SIMPLE；胶囊仍用 SLICED 保圆角。
+    assert.ok(stationViewSource.includes('const spriteType = chest || pvpBadge ? Sprite.Type.SIMPLE : Sprite.Type.SLICED;'),
+        '气泡底图类型要按排版切换（水滴 / 问号徽标 SIMPLE / 胶囊 SLICED）');
     // 反向：并排那套必须真的删干净，否则下次有人「顺手」把它改回来。
     assert.ok(!stationViewSource.includes('LEVEL_BUBBLE_ICON_GAP'),
         '并排布局的间距常量还在 ⇒ 两套排版同时存在，迟早用错');
@@ -202,10 +211,10 @@ test('★★气泡尺寸按底图走：高度不能被写死成胶囊的 45', ()
     // 渲染入口：尺寸也是每帧对一遍（同一格可能从编号气泡变成宝箱提示）。
     const renderAt = stationViewSource.indexOf('private renderLevelBubble(');
     const renderBody = stationViewSource.slice(renderAt, stationViewSource.indexOf('\n    private ', renderAt + 10));
-    assert.ok(renderBody.includes('nodeTransform.setContentSize(bubbleWidth, bubbleHeight)'),
+    assert.ok(renderBody.includes('this.levelBubbleTransform.setContentSize(bubbleWidth, bubbleHeight)'),
         '气泡节点尺寸必须在渲染时按当前底图刷新');
-    assert.ok(renderBody.includes('const chest = !portrait && iconFrame ? territoryChestBubbleLayout() : null;'),
-        '宝箱排版按体力图标判定，PVP 头像使用独立布局');
+    assert.ok(renderBody.includes('const chest = !portrait && !pvpBadge && iconFrame ? territoryChestBubbleLayout() : null;'),
+        '宝箱排版按体力图标判定，PVP 头像 / 已通关问号徽标各自使用独立布局');
 });
 
 test('★★数字字号要装得进水滴：行高 ≥ 字号，且字号有明显权重', () => {

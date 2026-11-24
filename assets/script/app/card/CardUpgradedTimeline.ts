@@ -6,7 +6,7 @@
  *   ① 入场 —— 各块**同时**起播，各自从屏幕的不同方向滑到自己的坐标；
  *   ② 角色升级特效 —— 15 帧序列帧，在立绘落位后播 1 次；
  *   ③ 等级数字 —— 跳一下放大，在放大峰值切成新数字，再回弹；
- *   ④ 进度条刷光 —— 刷光扫过，再从「满格」退到下一级的比例；
+ *   ④ 进度条换档 —— 刷光扫过、满格顿一拍，再**清空归零**，随后绿色从左往右涨到下一级的比例；
  *   ⑤ 属性数值刷光 —— 刷光结束，数值直接切换。
  *
  * **「所有的刷光动画同步」** 是这条需求里唯一的硬约束，所以本文件里
@@ -86,12 +86,26 @@ export const SHINE_DURATION = 0.42;
 export const PROGRESS_HOLD = 0.12;
 
 /**
- * 满格 → 下一级比例的退格时长。
+ * 清空段：满格 → 空（2026-11-24）。
  *
- * 2026-11-20 从 `0.32` 放到 `0.5`：0.32s 太快，退格几乎看不出方向，
- * 观感上像进度条自己在动而不是「被扣掉」。
+ * 用户口径：「升级进度满了切换新的进度条，新的进度条首先是空的，绿色部分再按箭头方向
+ * 从左往右涨」。所以换档不是「从满格退回下一级比例」（那是绿条**从右往左缩**，读作被扣掉），
+ * 而是「这一档被吃干净（归零）→ 新的一档从零开始攒」。
+ *
+ * 快（0.2s）：归零是「消耗」的结果，不该拖；真正要看的是后面重新涨起来那一段。
  */
-export const PROGRESS_SETTLE = 0.5;
+export const PROGRESS_RESET = 0.2;
+
+/**
+ * 涨格段：空 → 下一级比例（2026-11-24）。
+ *
+ * 比清空段长得多，落点是「本次升级后已经攒了多少」。这是整条时间轴最后一拍，
+ * 留够时间让人看清绿条从左边一点点铺到终点。
+ */
+export const PROGRESS_GROW = 0.55;
+
+/** 换档演出的总时长（清空 + 涨格），只给断言与文档用。 */
+export const PROGRESS_SWAP = PROGRESS_RESET + PROGRESS_GROW;
 
 /** 退格起手时数量文字的那一下弹跳（1 → 峰值 → 1）。 */
 export const PROGRESS_POP_SCALE = 1.14;
@@ -114,9 +128,11 @@ export interface ICardUpgradedSchedule {
     /** 刷光扫过的起止（进度条与属性区**同一份**）。 */
     readonly shineStart: number;
     readonly shineEnd: number;
-    /** 数值直接切换的时刻（= 刷光结束）；进度条在这里顿一拍后再退格。 */
+    /** 数值直接切换的时刻（= 刷光结束）；进度条在这里顿一拍后开始清空。 */
     readonly valueSwitchAt: number;
-    /** 进度条退到下一级比例的时刻。 */
+    /** 进度条清空到 0 的时刻（此后才开始从左往右涨）。 */
+    readonly progressResetAt: number;
+    /** 进度条涨到下一级比例的时刻。 */
     readonly progressSettleAt: number;
     /** 整条时间轴的终点。 */
     readonly end: number;
@@ -142,7 +158,8 @@ export function buildCardUpgradedSchedule(): ICardUpgradedSchedule {
     const levelSettleEnd = round(levelSwitchAt + LEVEL_POP_SETTLE);
     const shineStart = round(levelSettleEnd + SHINE_DELAY);
     const shineEnd = round(shineStart + SHINE_DURATION);
-    const progressSettleAt = round(shineEnd + PROGRESS_HOLD + PROGRESS_SETTLE);
+    const progressResetAt = round(shineEnd + PROGRESS_HOLD + PROGRESS_RESET);
+    const progressSettleAt = round(progressResetAt + PROGRESS_GROW);
 
     return {
         entrance,
@@ -154,8 +171,9 @@ export function buildCardUpgradedSchedule(): ICardUpgradedSchedule {
         levelSettleEnd,
         shineStart,
         shineEnd,
-        // ⑤ 要求「刷光动画结束，数值直接切换」，④ 的退格也从这一拍开始 —— 同一个时刻。
+        // ⑤ 要求「刷光动画结束，数值直接切换」，④ 的清空也从这一拍起手 —— 同一个时刻。
         valueSwitchAt: shineEnd,
+        progressResetAt,
         progressSettleAt,
         end: Math.max(progressSettleAt, fxEnd),
     };
@@ -242,10 +260,19 @@ export function shineOpacityAt(progress: number): number {
 }
 
 /**
- * 进度条比例：换值那一刻起先顿 `PROGRESS_HOLD`，再用 `PROGRESS_SETTLE` 退到 `to`。
+ * 进度条比例：满格 → 顿一拍 → **清空到 0** → 再从 0 涨到 `to`（2026-11-24）。
  *
- * `from` 恒为满格（见 `CardUpgradeController` 的 `progressFrom`）——
- * 这一条是「消耗感」的根：掉之前先让玩家看清「原本是满的」。
+ * 三段的分工：
+ *  · `valueSwitchAt` 起 `PROGRESS_HOLD`：条钉在满格（刷光要压着它、玩家要先看清「原本是满的」）；
+ *  · 然后 `PROGRESS_RESET`：满格 → 0（这一档被吃掉）；
+ *  · 再 `PROGRESS_GROW`：0 → `to`，**从左往右**涨（绿条自左端灌进去）。
+ *
+ * 🔴 为什么不是「满格直接退到 `to`」：那样绿条是**从右端往回缩**，读作「被扣掉」；
+ * 而用户要的是「换了一条新条、从零开始攒」（2026-11-24：「新的进度条首先是空的，
+ * 绿色部分再按箭头方向从左往右涨」）。归零那一拍正是「换条」的动作。
+ *
+ * `to >= from` 时原样返回：没有可消耗的空间（例如满级、`nextProgressRatio` 恰好也是满格），
+ * 不该演出「清空再涨回来」—— 那会读成「升级把进度条洗了一遍」。
  */
 export function progressRatioAt(
     schedule: ICardUpgradedSchedule,
@@ -253,17 +280,43 @@ export function progressRatioAt(
     from: number,
     to: number,
 ): number {
+    if (!(to < from)) return from;
     const drainStart = schedule.valueSwitchAt + PROGRESS_HOLD;
     if (t < drainStart) return from;
-    const p = clamp01((t - drainStart) / PROGRESS_SETTLE);
-    return from + (to - from) * outCubic(p);
+    const resetEnd = drainStart + PROGRESS_RESET;
+    if (t < resetEnd) {
+        // 满格 → 空。起点不跳变：resetEnd 处恰好为 0。
+        const p = clamp01((t - drainStart) / PROGRESS_RESET);
+        return from * (1 - outCubic(p));
+    }
+    // 空 → 下一级比例：自左端匀速铺出来。
+    //
+    // 这里**不用** `outCubic`：实测它 0.14s（全段 1/4）就冲到 29%，前半段几乎瞬间完成、
+    // 后半段慢慢蹭，读起来像「已经攒到一半了，卡住了」。涨格要的是「一直在攒」的匀速感。
+    const p = clamp01((t - resetEnd) / PROGRESS_GROW);
+    return to * p;
 }
 
 /**
- * 退格起手时数量文字的那一下弹跳（1 → 峰值 → 1）。
+ * 换档当拍显示的数量文字：把「40/80」换成「0/80」。
  *
- * 与等级数字的跳动同一个语汇：等级字跳完刷光，刷光完换数量 ——
- * 数字动一下才能把「402 变成 294」这件事推到玩家眼前，否则只看见条在缩短。
+ * 条归零了、数字还写 40/80 会自相矛盾；逐帧插值又会在 0→40 之间闪一串读数。
+ * 所以文字只走两个端点：换档当拍 `0/need`，涨格结束 `need` 侧的真实值（`nextProgressText`）。
+ *
+ * 取不到分母（空串 / 没有斜杠）时返回空串 —— 调用方据此「不改文字」。
+ */
+export function progressZeroTextOf(nextText: string | undefined): string {
+    const text = nextText ?? '';
+    const slash = text.lastIndexOf('/');
+    if (slash <= 0) return '';
+    return `0${text.slice(slash)}`;
+}
+
+/**
+ * 换档起手时数量文字的那一下弹跳（1 → 峰值 → 1）。
+ *
+ * 与等级数字的跳动同一个语汇：等级字跳完刷光，刷光完换档 ——
+ * 数字动一下才能把「80/80 变成 0/80」这件事推到玩家眼前，否则只看见条一下空掉。
  */
 export function progressPopScaleAt(schedule: ICardUpgradedSchedule, t: number): number {
     const upEnd = schedule.valueSwitchAt + PROGRESS_POP_UP;

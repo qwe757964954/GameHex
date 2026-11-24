@@ -1,171 +1,199 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { MatchingController } from '../assets/script/app/matching/MatchingController';
-import { MatchingModel } from '../assets/script/app/matching/MatchingModel';
-import { normalizeBattleStart } from '../assets/script/app/battle/BattleStartModel';
+import { MatchingModel, type IMatchingViewState } from '../assets/script/app/matching/MatchingModel';
+import { MATCHING_EVENTS, type IMatchingLeave } from '../assets/script/app/matching/MatchTypes';
+import { BATTLE_START_SETTLED, normalizeBattleStart } from '../assets/script/app/battle/BattleStartModel';
 import { LOCAL_PLAYER } from '../assets/script/app/matching/MatchPool';
+import { EventMgr } from '../assets/script/framework/event/EventMgr';
+import type { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { createControllerContext } from './helpers/controller-context';
+import { loadMatchingController } from './helpers/matching-controller';
+
 const tick = () => new Promise(resolve => setImmediate(resolve));
-function deferred<T>() { let resolve: (v: T) => void = () => {}; let reject: (e: Error) => void = () => {}; const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
-const battle = () => normalizeBattleStart({ code: 1, battleId: '11', seed: '12', unitInfos: [{ campId: 1, showInfo: { roleId: '1', name: 'me' } }, { campId: 2, showInfo: { roleId: '2', name: 'enemy' } }] });
-function fixture() {
-    const request = deferred<ReturnType<typeof battle>>(), states: any[] = [], routes: any[] = [], timers = new Map<number, () => void>();
-    let releases = 0, removed = 0;
-    const session = { ready: Promise.resolve() };
+function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    let reject: (error: Error) => void = () => {};
+    const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
+    return { promise, resolve, reject };
+}
+
+const battle = () => normalizeBattleStart({ code: 1, battleId: '11', seed: '12', unitInfos: [
+    { campId: 1, showInfo: { roleId: '1', name: 'me' } },
+    { campId: 2, showInfo: { roleId: '2', name: 'enemy' } },
+] });
+
+function fixture(t: { after(callback: () => void): void }, ready?: Promise<unknown>) {
+    const request = deferred<ReturnType<typeof battle>>();
+    const states: IMatchingViewState[] = [];
+    const leaves: IMatchingLeave[] = [];
+    const calls: string[] = [];
+    const callers: object[] = [];
+    const removed: object[] = [];
+    let releases = 0;
+    let cancelled = false;
+    let cancelBattleRequest: (() => void) | undefined;
+    const session = { ready: ready ?? Promise.resolve() };
+    const MatchingController = loadMatchingController({
+        '../battle/BattleStartService': { requestBattleStart() {
+            const publish = (battle: Awaited<typeof request.promise>) => {
+                if (!cancelled) EventMgr.instance.emit(BATTLE_START_SETTLED, battle);
+                return battle;
+            };
+            const result = Object.assign(request.promise.then(publish, () => publish(null)), {
+                cancel() { cancelled = true; },
+            });
+            cancelBattleRequest = result.cancel;
+            return result;
+        } },
+        '../battle/PvpInfoService': { fetchPvpInfo: async (caller: object) => { callers.push(caller); return null; } },
+        '../net/GameNet': { GameNet: { instance: {
+            addEvent(event: string, caller: object, handler: (battle: Awaited<typeof request.promise>) => void) {
+                EventMgr.instance.on(event, handler, caller);
+            },
+            removeCaller(caller: object) {
+                EventMgr.instance.offTarget(caller);
+                cancelBattleRequest?.();
+                removed.push(caller);
+            },
+        } } },
+        '../zcds/application/ZCBattlePreparation': { createZCBattleSession(_context, { owner }: { owner: ResourceScope }) {
+            owner.defer(() => releases++);
+            return session;
+        } },
+    });
     const controller = new MatchingController(createControllerContext(), {
         model: new MatchingModel(LOCAL_PLAYER, '1', null),
-        failed: () => {},
-        battle: {
-            requestBattle: () => request.promise,
-            createSession: (_task, owner) => { owner.defer(() => releases++); return session; },
-            fetchPvp: async () => null,
-            removeCaller: () => { removed++; }
-        },
-        view: {
-            render: value => states.push(value)
-        },
-        navigation: {
-            navigate: (route, params) => routes.push({ route, params })
-        },
-        clock: {
-            schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; }
-        },
+        handoffReadyTimeout: ready ? 12 : undefined,
     });
-    return { controller, request, states, routes, timers, session, get releases() { return releases; }, get removed() { return removed; } };
+    const subscriber = {};
+    const bus = EventMgr.instance;
+    bus.on(MATCHING_EVENTS.STATE, (state: IMatchingViewState) => states.push(state), subscriber);
+    bus.on(MATCHING_EVENTS.HANDOFF, payload => {
+        assert.equal(payload, undefined);
+        calls.push('handoff');
+    }, subscriber);
+    bus.on(MATCHING_EVENTS.LEAVE, (event: IMatchingLeave) => {
+        calls.push(event.destination);
+        leaves.push(event);
+    }, subscriber);
+    t.after(() => {
+        bus.offTarget(subscriber);
+        controller.dispose();
+    });
+    return { controller, request, states, leaves, calls, session, callers, removed,
+        get releases() { return releases; }, get cancelled() { return cancelled; } };
 }
-test('match waits for server and minimum search, then holds result before navigating with the same battle', async () => {
+
+test('收到服务端确认并满足最低搜索时间后，发布匹配结果并交接同一个会话', async t => {
     for (const serverFirst of [true, false]) {
-        const h = fixture(); h.controller.start(); h.controller.start();
-        const data = battle(); assert.ok(data);
+        const h = fixture(t);
+        h.controller.start();
+        assert.equal(h.states[0].phase, 'searching');
+        assert.deepEqual(h.callers, [h.controller]);
+        const data = battle();
+        assert.ok(data);
         if (serverFirst) { h.request.resolve(data); await tick(); }
-        h.timers.get(3)(); assert.equal(h.routes.length, 0);
+        for (let frame = 0; frame < 179; frame++) h.controller.advanceTime(1 / 60);
+        assert.equal(h.states.at(-1).phase, 'searching');
+        h.controller.advanceTime(1 / 60);
+        assert.equal(h.leaves.length, 0);
         if (!serverFirst) { h.request.resolve(data); await tick(); }
-        assert.equal(h.states[h.states.length - 1].phase, 'matched');
-        h.timers.get(1.4)(); assert.equal(h.routes.length, 1);
-        assert.equal(h.routes[0].params.battle, data); assert.equal(h.routes[0].params.session, h.session);
-        h.controller.dispose(); assert.equal(h.releases, 1); assert.equal(h.removed, 1);
+        assert.equal(h.states.at(-1).phase, 'matched');
+        for (let frame = 0; frame < 83; frame++) h.controller.advanceTime(1 / 60);
+        assert.equal(h.leaves.length, 0);
+        h.controller.advanceTime(1 / 60);
+        assert.equal(h.leaves.length, 1);
+        const leave = h.leaves[0];
+        assert.equal(leave.destination, 'battle');
+        if (leave.destination !== 'battle') throw new Error('缺少战场入口');
+        assert.equal(leave.entry.battle, data);
+        assert.equal(leave.entry.session, h.session);
+        h.controller.dispose();
+        assert.equal(h.releases, 1);
+        assert.deepEqual(h.removed, [h.controller]);
     }
 });
-test('failed or empty server result returns main once and cannot create a fake battle', async () => {
+
+test('开战被拒绝、异常或缺失对手时只发布一次回主界面命令', async t => {
     for (const mode of ['null', 'reject', 'empty']) {
-        const h = fixture(); h.controller.start();
+        const h = fixture(t);
+        h.controller.start();
         if (mode === 'reject') h.request.reject(new Error('offline'));
         else h.request.resolve(mode === 'empty' ? { battleId: '1', seed: '1', version: '', units: [] } : null);
-        await tick(); assert.equal(h.routes.length, 1); assert.equal(h.timers.has(1.4), false);
-        h.controller.dispose();
+        await tick();
+        h.controller.advanceTime(20);
+        assert.deepEqual(h.calls, ['main']);
     }
 });
-test('leaving during request or hold cancels output, timers, caller and preload exactly once', async () => {
+
+test('请求或结果停留期间退出，释放请求并停止推进匹配', async t => {
     for (const step of ['request', 'hold']) {
-        const h = fixture(); h.controller.start();
-        if (step === 'hold') { h.request.resolve(battle()); await tick(); h.timers.get(3)(); }
+        const h = fixture(t);
+        h.controller.start();
+        assert.equal(h.cancelled, false);
+        if (step === 'hold') { h.request.resolve(battle()); await tick(); h.controller.advanceTime(3); }
         const count = h.states.length;
-        h.controller.dispose(); h.controller.dispose(); h.request.resolve(battle()); await tick();
-        assert.equal(h.states.length, count); assert.equal(h.routes.length, 0); assert.equal(h.timers.size, 0);
-        assert.equal(h.releases, 1); assert.equal(h.removed, 1);
+        h.controller.dispose();
+        h.controller.dispose();
+        h.request.resolve(battle());
+        await tick();
+        h.controller.advanceTime(20);
+        assert.equal(h.cancelled, true);
+        assert.equal(h.states.length, count);
+        assert.equal(h.leaves.length, 0);
+        assert.equal(h.releases, step === 'hold' ? 1 : 0);
+        assert.deepEqual(h.removed, [h.controller]);
     }
 });
 
-/**
- * 领地普通关的交接：匹配成功后**不是**直接切战场，而是
- * 「关界面（瞬间）→ 露云 → 等战场资源 → **先切战场** → 战场挂上后散云」。
- *
- * ⚠️ 顺序在 2026-11-02 被用户改过一次：原来是"散云 → 散到 60% 才切"，实机看到的是
- * 「云散开 → 一片黑 → 战场」（匹配页 UI 关了、战场还没挂上）。现在必须先切场再散云。
- *
- * 这一组钉的是**顺序**：
- *  · 关界面必须在 1.4s 那一刻就发生（晚了玩家会看见"匹配成功了但界面还挂着"）；
- *  · 云**必须等资源**再散；资源到了也不许先散 —— 得先切战场；
- *  · 全程只切一次场景、只散一次云。
- */
-function handoffFixture(ready: Promise<unknown>) {
-    const routes: any[] = [];
-    const timers = new Map<number, () => void>();
-    const calls: string[] = [];
-    const controller = new MatchingController(createControllerContext(), {
-        model: new MatchingModel(LOCAL_PLAYER, '1', null),
-        failed: () => calls.push('failed'),
-        handoff: {
-            closeInstantly: () => calls.push('close'),
-            releaseCover: () => calls.push('release'),
-            readyTimeout: 12,
-        },
-        battle: {
-            requestBattle: async () => battle(),
-            createSession: () => ({ ready }),
-            fetchPvp: async () => null,
-            removeCaller: () => {}
-        },
-        view: {
-            render: () => {}
-        },
-        navigation: {
-            navigate: (route, params) => { calls.push(`go:${route}`); routes.push({ route, params }); }
-        },
-        clock: {
-            schedule: (fn, seconds) => { timers.set(seconds, fn); return () => { timers.delete(seconds); }; }
-        },
-    });
-    return { controller, routes, timers, calls };
-}
-
-test('★交接：匹配成功先瞬间关界面；资源没到之前既不散云也不切场', async () => {
-    let resolveReady: (value?: unknown) => void = () => {};
-    const ready = new Promise(resolve => { resolveReady = resolve; });
-    const h = handoffFixture(ready);
-    h.controller.start();
-    await tick();
-    h.timers.get(3)();
-    h.timers.get(1.4)();
-    // ① 界面立刻关掉、云还没散、也还没切场
-    assert.deepEqual(h.calls, ['close']);
-    assert.equal(h.routes.length, 0);
-    // ② 资源到了：**先**切战场（战场挂到云下面），**再**散云
-    resolveReady();
-    await tick();
-    assert.deepEqual(h.calls, ['close', 'go:battle', 'release'],
-        '顺序必须是 关界面 → 切战场 → 散云（先散云就会露黑底）');
-    assert.equal(h.routes.length, 1);
-    assert.equal(h.routes[0].route, 'battle');
-    h.controller.dispose();
+test('领地匹配先交接云层，再等战场资源就绪或超时后进入战场', async t => {
+    for (const timeout of [false, true]) {
+        const ready = deferred<unknown>();
+        const h = fixture(t, ready.promise);
+        h.controller.start();
+        h.request.resolve(battle());
+        await tick();
+        h.controller.advanceTime(3);
+        h.controller.advanceTime(1.4);
+        assert.deepEqual(h.calls, ['handoff']);
+        h.controller.advanceTime(11.9);
+        assert.deepEqual(h.calls, ['handoff']);
+        if (timeout) h.controller.advanceTime(0.1);
+        ready.resolve(undefined);
+        await tick();
+        h.controller.advanceTime(12);
+        assert.deepEqual(h.calls, ['handoff', 'battle']);
+    }
 });
 
-test('★交接：资源一直不来也要切场 + 散云（超时不是失败），且只走一次', async () => {
-    const never = new Promise<unknown>(() => {});
-    const h = handoffFixture(never);
+test('领地匹配交接期间准备资源失败，发出带原始错误的回主界面命令', async t => {
+    const ready = deferred<unknown>();
+    const h = fixture(t, ready.promise);
     h.controller.start();
+    h.request.resolve(battle());
     await tick();
-    h.timers.get(3)();
-    h.timers.get(1.4)();
-    assert.deepEqual(h.calls, ['close']);
-    // 上限到了：照样切场 + 散云，不报失败（让战场页自己显示加载态）
-    h.timers.get(12)();
-    assert.deepEqual(h.calls, ['close', 'go:battle', 'release']);
-    assert.equal(h.routes.length, 1);
-    // 迟到的那条（ready）不许再触发一次散场 / 切场
-    h.timers.get(12)();
-    assert.equal(h.routes.length, 1);
-    assert.deepEqual(h.calls, ['close', 'go:battle', 'release']);
-    h.controller.dispose();
+    h.controller.advanceTime(3);
+    h.controller.advanceTime(1.4);
+    const error = new Error('offline');
+    ready.reject(error);
+    await tick();
+    h.controller.advanceTime(12);
+    assert.deepEqual(h.calls, ['handoff', 'main']);
+    const leave = h.leaves[0];
+    assert.equal(leave.destination === 'main' && leave.error, error);
 });
 
-test('★交接：战场资源准备失败 ⇒ 不回滚成"半关界面 + 一屏云"，回主界面并照样散云', async () => {
-    // 用"晚一点才失败"的 promise：一上来就 reject 的话，`start()` 里那条已有的
-    // `preload.ready.catch` 会先报一次（那时的语义是"提前知道要打不成了"），
-    // 这段要验的是**交接途中**失败怎么收场。
-    let failPreload: (error: Error) => void = () => {};
-    const ready = new Promise<unknown>((_, reject) => { failPreload = reject; });
-    const h = handoffFixture(ready);
+test('领地交接期间退出，迟到的资源就绪和后续帧都不能切战场', async t => {
+    const ready = deferred<unknown>();
+    const h = fixture(t, ready.promise);
     h.controller.start();
+    h.request.resolve(battle());
     await tick();
-    h.timers.get(3)();
-    h.timers.get(1.4)();
-    assert.deepEqual(h.calls, ['close']);
-    failPreload(new Error('offline'));
-    await tick();
-    // 云已经交接出去了（不在匹配页里），回主界面之后必须照样散 —— 否则一屏云会一直盖着
-    assert.deepEqual(h.calls, ['close', 'failed', 'go:main', 'release']);
-    assert.equal(h.routes.length, 1);
-    assert.equal(h.routes[0].route, 'main');
+    h.controller.advanceTime(3);
+    h.controller.advanceTime(1.4);
     h.controller.dispose();
+    ready.resolve(undefined);
+    await tick();
+    h.controller.advanceTime(12);
+    assert.deepEqual(h.calls, ['handoff']);
 });

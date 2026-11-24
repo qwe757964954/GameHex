@@ -60,20 +60,20 @@ test('battle initialization failure releases runtime and resources', async () =>
 test('battle result is scoped to runtime, persisted once, and disconnected after exit', async () => {
     const h = fixture(), pending = h.controller.adopt({ pve: { chapterId: 1 } } as ZCGameEntryParams, h.context);
     h.resolve({}); await pending; h.controller.mount(h.runtimeOptions);
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: {}, victory: true });
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: h.runtime, victory: true });
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: h.runtime, victory: false });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { victory: true }, {});
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { victory: true }, h.runtime);
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { victory: false }, h.runtime);
     h.controller.dispose();
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { owner: h.runtime, victory: false });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.PVE_RESULT, { victory: false }, h.runtime);
     assert.equal(h.calls.filter(call => call === 'result').length, 1);
 });
 
 test('raw runtime destruction ends the session and releases preloaded resources', async () => {
     const h = fixture(), pending = h.controller.adopt(undefined, h.context);
     h.resolve({}); await pending; h.controller.mount(h.runtimeOptions);
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, { owner: {} });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, {});
     assert.equal(h.controller.current, h.runtime);
-    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, { owner: h.runtime });
+    EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, h.runtime);
     assert.equal(h.controller.current, null);
     assert.deepEqual(h.calls, ['initialize', 'controllerDispose', 'shutdown', 'destroy', 'release']);
     h.context.resources.dispose();

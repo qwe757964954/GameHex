@@ -35,7 +35,7 @@ function fixture(agreementStorage = { value: false }) {
         channel: { platformLoginVisible: false, gmVisible: true },
     };
     const controller = new LoginController(createControllerContext(), options);
-    const intent = (kind: 'login' | 'register' | 'servers' | 'select' | 'platform-login' | 'toggle-agreement' | 'toggle-password-visibility', extra = {}) => EventMgr.instance.emit(LoginUiEvent.Intent, { owner, kind, account: 'testuser', password: 'secret123', ...extra });
+    const intent = (kind: 'login' | 'register' | 'servers' | 'select' | 'platform-login' | 'toggle-agreement' | 'toggle-password-visibility', extra = {}) => EventMgr.instance.emit(LoginUiEvent.Intent, { kind, account: 'testuser', password: 'secret123', ...extra }, owner);
     return { controller, service, options, owner, states, tips, routes, timers, credentials, intent, get logins() { return logins; }, get registrations() { return registrations; }, get disposed() { return disposed; }, get opened() { return opened; }, get closed() { return closed; }, get platformLogins() { return platformLogins; } };
 }
 
@@ -46,7 +46,7 @@ test('login initializes once, isolates intents and keeps successful login busy u
         assert.equal(h.credentials.length, 1);
         // 先勾选协议，否则登录会被拦截
         h.intent('toggle-agreement', { agreed: true });
-        EventMgr.instance.emit(LoginUiEvent.Intent, { owner: {}, kind: 'login' });
+        EventMgr.instance.emit(LoginUiEvent.Intent, { kind: 'login' }, {});
         h.intent('login'); h.intent('login'); await tick(); h.intent('login');
         assert.equal(h.logins, 1); assert.equal(h.routes.length, 0); assert.equal(h.timers.size, 1);
         assert.equal(h.states[h.states.length - 1].busy, true);

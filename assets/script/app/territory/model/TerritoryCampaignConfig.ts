@@ -33,6 +33,13 @@ export interface TerritoryLevelRow {
     /** NPC 抽卡品质权重乘数（`{ green: 2, blue: 3 }`）；缺省 / 空对象 = 不调整。 */
     gradeProModifier?: TerritoryGradeProModifier;
     extraCards?: { enemy?: number };
+    /**
+     * `levelInfo.levelMonsterGroup`：本关出怪的汇总（`[{ monsterId, number }]`，按表顺序）。
+     *
+     * 巡逻宝箱面板的**守护怪头像**读的就是这一列（前 N 只，`monsterCard.headIcon`）。
+     * 战斗波次**不**用它取数（真源是 `defenceModWave`，见 `TerritoryStageBinding`）。
+     */
+    levelMonsterGroup?: unknown;
     idleReward?: TerritoryRewardRow[];
 }
 
@@ -84,6 +91,22 @@ export interface TerritoryRewardRow {
     number: number;
     /** 万分比概率。 */
     pro: number;
+}
+
+/**
+ * 一关的守护怪（宝箱面板守护怪格用）。
+ *
+ * `monsterId` 与 `headIcon` 都是 `monsterCard` 的域：前者是 `id`（`50001+`），
+ * 后者是 `monsterCard.headIcon` —— **原样透传**，两种写法都可能出现（2026-11-23 起）：
+ * 图标名（`兵种_头像_豌豆游侠`，走 `icon.json`）或直路径（`icons/cardHead/wandouyouxia`）。
+ * 页面统一交给 `HeadArt.loadHeadIconFrame` / `createIconArtResolver` 解析，别在这里拆字符串。
+ */
+export interface TerritoryGuardMonster {
+    readonly monsterId: number;
+    /** 空串 = 这只怪没配头像 / 表里查不到；面板保留占位图，不整格隐藏。 */
+    readonly headIcon: string;
+    /** `levelMonsterGroup[].number`（这批怪的数量）；缺省 / 0 ⇒ 面板不显示数量行。 */
+    readonly count?: number;
 }
 
 export interface TerritoryResourceRow {
@@ -260,6 +283,64 @@ function asGradeProModifier(value: unknown): TerritoryGradeProModifier | undefin
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function asArray<T = any>(value: unknown): T[] {
     return Array.isArray(value) ? value : [];
+}
+
+/** 卡表的头像列：`headIcon` 优先，老表用 `icon`；非字符串一律当没配。 */
+function headIconOfCard(row: TerritoryCardRow | undefined): string {
+    const raw = row?.headIcon ?? row?.icon ?? '';
+    return typeof raw === 'string' ? raw : '';
+}
+
+/**
+ * `levelInfo.levelMonsterGroup` 原始列 → 有序的怪 id。
+ *
+ * 表里是 `[{ monsterId: 50014, number: 44 }, …]`，也可能整列空成 `{}`（转表器对空列表的口径）。
+ * **脏条目只丢那一条**：`monsterId` 不是正数就是坏数据，丢它不会影响同关其它怪。
+ */
+export function readLevelMonsterGroup(value: unknown): number[] {
+    const ids: number[] = [];
+    for (const entry of asArray(value)) {
+        const monsterId = asNumber(asRecord(entry).monsterId);
+        if (monsterId > 0) ids.push(monsterId);
+    }
+    return ids;
+}
+
+/**
+ * `levelInfo` 全表 → 「关卡 id → 守护怪（怪 id + 头像 key）」。
+ *
+ * 巡逻宝箱面板的守护怪格读它：先把 `monsterBox.monsterBoxLevel` 定位到关卡，
+ * 再按顺序取前 {@link TERRITORY_MONSTER_BOX_SPEC.guardCount} 只。
+ *
+ * 用**全表**而不是本章的 stages：宝箱组的等级行可能指向本章之外的关卡 id
+ * （`levelChapter` 是关卡自己的归属，不跟着宝箱走），按章过滤会静默丢图。
+ */
+export function readTerritoryGuardMonsters(
+    levelRows: readonly TerritoryLevelRow[],
+    monsterRows: readonly TerritoryCardRow[],
+): ReadonlyMap<number, readonly TerritoryGuardMonster[]> {
+    const headIconById = new Map<number, string>();
+    for (const row of monsterRows) {
+        const id = asNumber(row?.id);
+        if (id > 0) headIconById.set(id, headIconOfCard(row));
+    }
+    const byLevel = new Map<number, readonly TerritoryGuardMonster[]>();
+    for (const row of levelRows) {
+        const levelId = asNumber(row?.levelId);
+        if (levelId <= 0) continue;
+        const monsters: TerritoryGuardMonster[] = [];
+        for (const entry of asArray(row?.levelMonsterGroup)) {
+            const record = asRecord(entry);
+            const monsterId = asNumber(record.monsterId);
+            if (monsterId <= 0) continue;
+            const count = asNumber(record.number);
+            const headIcon = headIconById.get(monsterId) ?? '';
+            monsters.push(count > 0 ? { monsterId, headIcon, count } : { monsterId, headIcon });
+        }
+        if (monsters.length === 0) continue;
+        byLevel.set(levelId, monsters);
+    }
+    return byLevel;
 }
 
 function teamMatchesLevel(team: TerritoryNpcTeamRow, levelId: number): boolean {

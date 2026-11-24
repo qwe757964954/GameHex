@@ -1,9 +1,11 @@
 import { toCount, toIdString, toPositiveInt } from '../net/RequestGuard';
-import type { MatchPlayerData, MatchStat } from '../matching/MatchTypes';
-import { MATCH_STAT_TYPES } from '../matching/MatchTypes';
-import { applyHeadArt, createHeadArtResolver } from '../HeadArtModel';
+import { CARD_ROLE_ICON_BY_ATTACK, HEAD_ART_ROOT } from '../ArtPaths';
+import type { MatchCardData, MatchPlayerData, MatchStat } from '../matching/MatchTypes';
+import { MATCH_CARD_SLOTS } from '../matching/MatchTypes';
+import { applyHeadArt, createHeadArtResolver, createIconArtResolver } from '../HeadArtModel';
 import type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 import { CARD_LEVEL_ATTR_STAT, type ZCCardLevelAttrs } from '../card/CardLevelAttr';
+import { rarityOfTier } from '../zcds/model/ZCCombatCatalog';
 
 /**
  * 「开始游戏」数据模型与边界校验 —— 纯函数，零引擎依赖，可单测。
@@ -22,6 +24,8 @@ export type IZCSlgBattleType = typeof ZC_BATTLE_TYPE_SLG_MONSTER | typeof ZC_BAT
  * 服务端会按未知类型处理且不报错。
  */
 export const ZC_BATTLE_TYPE_CHAPTER = 1002;
+
+export const BATTLE_START_SETTLED = 'battle:start-settled';
 
 /**
  * 章节战斗内嵌的子类型，固定放在 battleParams[0]。
@@ -476,13 +480,26 @@ export interface ArtifactRow {
 export interface MatchCardRow {
     id?: unknown;
     traits?: { camp?: unknown; attack?: unknown } | null;
+    /** `pvpCard.rarity`：对局档位 1..4（绿 / 蓝 / 紫 / 金）。 */
+    rarity?: unknown;
+    /** `pvpCard.headIcon`：icon.json 的键（如 `兵种_头像_豌豆游侠`）。 */
+    headIcon?: unknown;
+}
+
+/** 卡牌品级 + 头像 + 职业角标；头像查不到时返回 null（该格不展示）。 */
+export interface MatchCardInfo {
+    readonly rarity: MatchCardData['rarity'];
+    readonly roleIcon: string;
+    readonly headIcon: string;
+    readonly headRoot: string;
 }
 
 export type { HeadArtResolver, HeadRow, IconRow } from '../HeadArtModel';
 
 /** 服务端 id → 界面显示值解析器；查不到返回空串，调用方保留原值。 */
 export interface MatchProfileLookup {
-    heroStats(heroIds: readonly number[]): MatchStat[];
+    /** @deprecated 已废弃：匹配页不再展示阵容小图标统计 */
+    heroStats?(heroIds: readonly number[]): MatchStat[];
     gradeName(gradeId: number): string;
     artifactName(artifactId: number): string;
     /** 神器图标资源名（`pvpArtifact[].icon`）；查不到返回空串，调用方保留 prefab 原帧。 */
@@ -495,6 +512,8 @@ export interface MatchProfileLookup {
      * 与 `artifactIcon()` 同一份 `artifactRows`，口径不会漂移。
      */
     allArtifactIcons(): string[];
+    /** 英雄 id → 卡牌展示信息（品级 / 职业角标 / 立绘）；查不到返回 null。 */
+    cardInfo(heroId: number): MatchCardInfo | null;
     headArt: HeadArtResolver;
 }
 
@@ -526,29 +545,58 @@ export function buildMatchProfileLookup(
         if (name) artifacts.set(id, name);
         if (icon) artifactIcons.set(id, icon);
     }
+    const icons = createIconArtResolver(iconRows);
     const cards = new Map<number, { camp: string; attack: string }>();
+    const cardInfos = new Map<number, MatchCardInfo>();
     for (const row of cardRows ?? []) {
         if (!row) continue;
         const id = toCount(row.id);
         if (id <= 0) continue;
+        const attack = typeof row.traits?.attack === 'string' ? row.traits.attack : '';
         cards.set(id, {
             camp: typeof row.traits?.camp === 'string' ? row.traits.camp : '',
-            attack: typeof row.traits?.attack === 'string' ? row.traits.attack : '',
+            attack,
+        });
+        const headKey = typeof row.headIcon === 'string' ? row.headIcon : '';
+        const head = headKey ? icons.resolve(headKey) : null;
+        if (!head) continue;
+        const tier = Number(row.rarity);
+        cardInfos.set(id, {
+            rarity: (Number.isFinite(tier) ? rarityOfTier(tier) : undefined) ?? 'blue',
+            roleIcon: CARD_ROLE_ICON_BY_ATTACK[attack] ?? '',
+            headIcon: head.art,
+            // 匹配条设计稿用的是方头像（icons/head），不是卡牌阵容的全身立绘。
+            headRoot: HEAD_ART_ROOT,
         });
     }
     return {
-        heroStats: heroIds => cards.size === 0 ? [] : MATCH_STAT_TYPES.map(stat => ({
-            icon: stat.icon,
-            value: heroIds.filter(id => cards.get(id)?.[stat.trait] === stat.value).length,
-        })),
         gradeName: (gradeId: number): string => grades.get(toCount(gradeId)) ?? '',
         artifactName: (artifactId: number): string => artifacts.get(toCount(artifactId)) ?? '',
         artifactIcon: (artifactId: number): string => artifactIcons.get(toCount(artifactId)) ?? '',
         // 用 Array.from 而不是展开 Set：构建期 Babel 的 loose 模式会把它降级成 concat，
         // Set 迭代器展开后为空，预热列表会恒空。
         allArtifactIcons: (): string[] => Array.from(new Set(artifactIcons.values())),
+        cardInfo: (heroId: number): MatchCardInfo | null => cardInfos.get(toCount(heroId)) ?? null,
         headArt: createHeadArtResolver(headRows, iconRows),
     };
+}
+
+/** 按服务端阵容顺序生成匹配条卡牌，跳过缺少展示配置的英雄。 */
+function buildMatchCards(unit: ZCBattleUnit, lookup: MatchProfileLookup): readonly MatchCardData[] {
+    const cards: MatchCardData[] = [];
+    for (const hero of unit.heroes) {
+        if (cards.length >= MATCH_CARD_SLOTS) break;
+        const info = lookup.cardInfo(hero.heroId);
+        if (!info) continue;
+        cards.push({
+            id: String(hero.heroId),
+            rarity: info.rarity,
+            roleIcon: info.roleIcon,
+            headIcon: info.headIcon,
+            headRoot: info.headRoot,
+        });
+    }
+    return cards;
 }
 
 /**
@@ -563,7 +611,11 @@ export function applyUnitToPlayerView(
 ): MatchPlayerData {
     if (!unit) return base;
     const next: MatchPlayerData = { ...base };
-    if (lookup) next.stats = lookup.heroStats(unit.heroIds);
+    if (lookup) {
+        if (lookup.heroStats) next.stats = lookup.heroStats(unit.heroIds);
+        const cards = buildMatchCards(unit, lookup);
+        if (cards.length) next.cards = cards;
+    }
     if (unit.artifactId === 0) {
         next.artifactName = '';
         next.artifactIcon = '';

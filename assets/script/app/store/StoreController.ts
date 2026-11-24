@@ -20,8 +20,8 @@ export class StoreController extends ControllerBase {
         this.started = true;
         this.listen(StoreEvent.Action, this.onAction);
     }
-    private async onAction(event: IStoreActionEvent): Promise<void> {
-        if (event.owner !== this.owner || this.pending) return;
+    private async onAction(event: IStoreActionEvent, source: object): Promise<void> {
+        if (source !== this.owner || this.pending) return;
         this.pending = true;
         try {
             await this.action(event.kind, event.context, {

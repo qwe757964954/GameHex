@@ -63,7 +63,7 @@ async function createOnline(now: (reads: number) => number): Promise<IHarness> {
         saveKey: 'city-view-clock',
         now: clock,
         adventureChapter: () => 6,
-        startBattle: async () => ({ ok: true, message: '' }),
+        canRequestBattle: true,
     });
     // 关键：没有这一步，`campInfo` 恒 null ⇒ 日程分支根本不执行，用例会假绿。
     await repository.refreshSimple([101]);

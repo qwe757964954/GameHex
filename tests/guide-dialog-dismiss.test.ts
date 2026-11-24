@@ -29,7 +29,8 @@ function methodText(name: string): string {
 
 interface ISignal {
     readonly name: string;
-    readonly payload: { readonly owner: object; readonly stepId: string };
+    readonly payload: { readonly stepId: string };
+    readonly source: object;
 }
 
 const signals: ISignal[] = [];
@@ -41,7 +42,7 @@ runInNewContext(ts.transpileModule(
 ).outputText, {
     exports,
     console,
-    EventMgr: { instance: { emit: (name: string, payload: ISignal['payload']) => { signals.push({ name, payload }); } } },
+    EventMgr: { instance: { emit: (name: string, payload: ISignal['payload'], source: object) => { signals.push({ name, payload, source }); } } },
     GuideEvent,
 });
 

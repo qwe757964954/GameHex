@@ -36,7 +36,7 @@ import {
 // 自己抄一份顶点迟早会和轮廓错开半个像素。
 import { ZC_OUTLINE_HEX_POINTS } from './ZCOutlineLayer';
 import { ZCHealthBarDamageTrail } from './ZCHealthBarDamageTrail';
-import { ZCPvpTileType } from '../model/ZCPvpTileRules';
+import { tileTypeFromLegacyHex, ZCPvpTileType } from '../model/ZCPvpTileRules';
 import { ZCOwner } from '../model/ZCMapConfig';
 import { neutralResourceVisualOf, ZCNeutralResourceVisual, type IZCGateEffect } from '../model/ZCNeutralResourceGroup';
 import {
@@ -677,6 +677,7 @@ export class ZCHexView extends Component {
     private resourceUnitPrefabName = '';
     /** 本格当前挂着的骨骼节点（池化复用：格子 view 生命周期内只增不减，count 变小时多出来的隐藏）。*/
     private readonly resourceUnitNodes: Node[] = [];
+    private resourceUnitsVisible = false;
     private monsterDefinition: Pick<ZCUnitDefinition, 'prefabSize' | 'attackDuration'> | null = null;
     private monsterAttackStartedAt?: number;
     private monsterCenterX = 0;
@@ -890,7 +891,7 @@ export class ZCHexView extends Component {
         const scaleX = this.monsterBaseScaleX * facing;
         if (body.scale.x !== scaleX) {
             body.setScale(scaleX, body.scale.y, body.scale.z);
-            body.setPosition(this.monsterOffsetX + this.monsterCenterX * facing, body.position.y, body.position.z);
+            this.positionResourceUnit(body, 0, this.resourceUnitNodes.length);
         }
         const playing = startedAt !== undefined && now >= startedAt && now < startedAt + definition.attackDuration;
         const attackStartedAt = playing ? startedAt : undefined;
@@ -1006,6 +1007,7 @@ export class ZCHexView extends Component {
             }
             this.artifactSpineRoot.active = false;
         }
+        this.hideResourceUnits();
         this.applyTileOffset(0, 1);
         this.applyTileTransform(1, 1);
         this.applyGroundGlow(0, 1);
@@ -1461,7 +1463,15 @@ export class ZCHexView extends Component {
             return;
         }
         this.lastActivationFx = fx;
-        if (this.node.active === fx.hidden) this.node.active = !fx.hidden;
+        if (this.node.active === fx.hidden) {
+            this.node.active = !fx.hidden;
+            // 野怪骨骼脱离格子后，整格隐藏时也要收起，回场时按当前内容恢复。
+            if (this.monsterDefinition && this.resourceIconLayer) {
+                for (const node of this.resourceUnitNodes) {
+                    node.active = this.resourceUnitsVisible && !fx.hidden;
+                }
+            }
+        }
         // 抬到棋盘层的资源图标不随格节点隐藏（它已经不在格节点下了），单独跟一下显隐，
         // 否则卡牌独占视线那段「整格隐藏」里会剩一个图标飘着。
         if (this.resourceIconRaised) this.applyResourceIconVisibility();
@@ -1943,6 +1953,9 @@ export class ZCHexView extends Component {
     onDestroy(): void {
         this.node.off(Node.EventType.TOUCH_END, this.onTouchEnd, this);
         this.clickHandler = null;
+        for (const node of this.resourceUnitNodes) {
+            if (node.isValid && node.parent !== this.node) node.destroy();
+        }
         // 脉冲段 2026-10-19 起只换 `spriteFrame`，不再有运行时克隆的材质要销毁
         // （原 `ensurePulseMaterial` / `new Material()` 那条链已随 30 帧旧美术一起退役）。
         //  仍然别在销毁期碰子节点组件（规则 176）：`groundGlow.customMaterial = null` 之类会炸整个对局销毁。
@@ -1986,13 +1999,20 @@ export class ZCHexView extends Component {
         this.monsterOffsetX = x;
         this.monsterOffsetY = y;
         for (let i = 0; i < this.resourceUnitNodes.length; i += 1) {
-            const node = this.resourceUnitNodes[i];
-            node.setPosition(x + this.monsterCenterX * Math.sign(node.scale.x / this.monsterBaseScaleX) + (i - (this.resourceUnitNodes.length - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING,
-                y + this.resourceUnitBaseY, 0);
+            this.positionResourceUnit(this.resourceUnitNodes[i], i, this.resourceUnitNodes.length);
         }
         if (!this.monsterBarBase) this.monsterBarBase = this.healthBar.node.position.clone();
         if (this.monsterHeadY !== undefined) this.positionMonsterHeader();
         else this.healthBar.node.setPosition(this.monsterBarBase.x + x, this.monsterBarBase.y + y, this.monsterBarBase.z);
+    }
+
+    private positionResourceUnit(node: Node, index: number, count: number): void {
+        // ResourceLayer 与 HexLayer 共用棋盘原点，抬层后要补回格心坐标。
+        const origin = node.parent === this.node ? Vec3.ZERO : this.node.position;
+        const facing = Math.sign(node.scale.x / this.monsterBaseScaleX);
+        const offsetX = (index - (count - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING;
+        node.setPosition(origin.x + this.monsterOffsetX + this.monsterCenterX * facing + offsetX,
+            origin.y + this.monsterOffsetY + this.resourceUnitBaseY, 0);
     }
 
     private positionMonsterHeader(): void {
@@ -2175,8 +2195,11 @@ export class ZCHexView extends Component {
             : null;
         const coolingGate = Boolean(state.neutralFeature && state.neutralFeature.effect
             && state.neutralFeature.readyAt > now && !(state.neutralFeature.windowUntil > now));
+        const developFrame = enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop
+            ? this.frameForTileType(state.tileType || tileTypeFromLegacyHex(state))
+            : null;
         this.setSprite(this.iconSprite,
-            resourceFrame ?? (enemyCanDevelop ? this.enemyDevelopFrame : effectiveCanDevelop ? this.frameForTileType(state.tileType) : null),
+            resourceFrame ?? developFrame,
             coolingGate ? GATE_COOLDOWN_TINT : Color.WHITE);
         // 神器点 Spine 显隐与动画：六边形底播 `animation`（循环），问号指示器播 `ui_indicatorNPC`（循环）。
         this.applyArtifactSpineVisible(useArtifactSpine);
@@ -2281,6 +2304,7 @@ export class ZCHexView extends Component {
 
     /** 收掉格内骨骼（已领取 / 不是兵力资源点时）。返回 false 便于在三元表达式里直接用。*/
     private hideResourceUnits(): false {
+        this.resourceUnitsVisible = false;
         this.restoreMonsterHeader();
         for (const node of this.resourceUnitNodes) {
             if (node.isValid) node.active = false;
@@ -2290,6 +2314,7 @@ export class ZCHexView extends Component {
 
     /** 换兵种时把旧节点全部销毁重建（骨架不同，靠改 scale 换不过来）。*/
     private rebuildResourceUnits(): void {
+        this.resourceUnitsVisible = false;
         this.restoreMonsterHeader();
         this.monsterHeadY = undefined;
         this.resourceUnitBaseY = ZCHexView.RESOURCE_UNIT_POS_Y;
@@ -2312,14 +2337,15 @@ export class ZCHexView extends Component {
         }
         this.rebuildResourceUnits();
         this.resourceUnitCache = key;
+        this.resourceUnitsVisible = true;
+        // 野怪会跨格巡逻，模型挂在共享轮廓之上的资源层。
+        const parent = this.monsterDefinition && this.resourceIconLayer ? this.resourceIconLayer : this.node;
         for (let i = 0; i < count; i += 1) {
             const visual = instantiate(prefab);
             visual.name = `ResourceUnit_${i}`;
             visual.layer = this.node.layer;
-            visual.active = true;
-            this.node.addChild(visual);
-            // 并排：整体以格心为原点向两侧展开，数量为奇数时正中那只不偏。
-            const offsetX = (i - (count - 1) / 2) * ZCHexView.RESOURCE_UNIT_SPACING;
+            visual.active = parent === this.node || this.node.active;
+            parent.addChild(visual);
             const spineNode = visual.getChildByName(ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME);
             if (!spineNode) {
                 throw new Error(`ZCHexView 资源点单位 prefab「${prefab.name}」缺少固定子节点 ${ZCHexView.RESOURCE_UNIT_SPINE_NODE_NAME}`);
@@ -2356,7 +2382,7 @@ export class ZCHexView extends Component {
                 const factor = ZCHexView.RESOURCE_UNIT_TARGET_HEIGHT / canvasHeight;
                 visual.setScale(factor, factor, 1);
             }
-            visual.setPosition(offsetX + this.monsterOffsetX + this.monsterCenterX, this.resourceUnitBaseY + this.monsterOffsetY, 0);
+            this.positionResourceUnit(visual, i, count);
             this.playResourceUnitIdle(skeleton, prefab.name);
             this.resourceUnitNodes.push(visual);
             this.resourceUnitSkeletons.push(skeleton);
@@ -2364,9 +2390,12 @@ export class ZCHexView extends Component {
     }
 
     private showResourceUnits(count: number): void {
+        this.resourceUnitsVisible = true;
         this.positionMonsterHeader();
         this.resourceUnitNodes.forEach((node, index) => {
-            if (node.isValid) node.active = index < count;
+            if (!node.isValid) return;
+            if (node.parent !== this.node) this.positionResourceUnit(node, index, count);
+            node.active = index < count && (node.parent === this.node || this.node.active);
         });
     }
 

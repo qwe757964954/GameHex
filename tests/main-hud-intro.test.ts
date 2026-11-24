@@ -145,21 +145,40 @@ class FakeComponent {
     node!: FakeNode;
     isValid = true;
     private readonly scheduled = new Set<() => void>();
+    private readonly once = new Set<() => void>();
 
     schedule(callback: () => void): void {
         this.scheduled.add(callback);
     }
 
+    /** 兜底计时（`prepare` 用）；与逐帧调度分开记，用例可以单独触发。 */
+    scheduleOnce(callback: () => void): void {
+        this.once.add(callback);
+    }
+
     unschedule(callback: () => void): void {
         this.scheduled.delete(callback);
+        this.once.delete(callback);
     }
 
     runScheduled(): void {
         for (const callback of Array.from(this.scheduled)) callback();
     }
 
+    /** 触发兜底计时（模拟"等太久了"）。 */
+    runOnce(): void {
+        for (const callback of Array.from(this.once)) {
+            this.once.delete(callback);
+            callback();
+        }
+    }
+
     get scheduledCount(): number {
         return this.scheduled.size;
+    }
+
+    get onceCount(): number {
+        return this.once.size;
     }
 }
 
@@ -210,10 +229,14 @@ test('入场节奏表：模块名必须是 ArenaRoot 的真实直接子节点', 
     for (const name of planned) {
         assert.ok(names.includes(name), `节奏表里的 ${name} 不在 ArenaRoot 的直接子节点里（改名了？）`);
     }
-    // 反过来的漏项：顶栏 / 底栏 / 地图这三块必须都在，否则「各模块平滑进入」名不副实。
-    for (const required of ['MapRoot', 'TopHud', 'BottomHud']) {
+    // 顶栏 / 底栏这两块必须在，否则「各模块平滑进入」名不副实。
+    for (const required of ['TopHud', 'BottomHud']) {
         assert.ok(planned.includes(required), `节奏表缺少 ${required}`);
     }
+    // 🔴 `MapRoot` **不许**进节奏表：它是这一页的底图，加载期间必须一直在位。
+    // 给它做位移 / 淡入就等于「等地图就绪了再把整屏推开」= 用户 2026-11-23 说的
+    // 「出现一个空场景…画面会显得跳一下」。
+    assert.ok(!planned.includes('MapRoot'), '节奏表不许再动 MapRoot（底图必须一到就在）');
 });
 
 test('入场节奏表：延迟递增，顶栏从上落下、底栏从下浮起', () => {
@@ -228,7 +251,6 @@ test('入场节奏表：延迟递增，顶栏从上落下、底栏从下浮起',
     const byName = new Map(MAIN_HUD_INTRO_PLAN.map((item) => [item.name, item]));
     assert.ok(byName.get('TopHud')!.offsetY > 0, '顶栏从上往下落');
     assert.ok(byName.get('BottomHud')!.offsetY < 0, '底栏从下往上升');
-    assert.equal(byName.get('MapRoot')!.scaleFrom, 1, '地图本体不叠页面级缩放（会和相机推拉打架）');
 });
 
 test('入场进度：按各自的 delay / 时长推进，边界不抛', () => {
@@ -299,16 +321,151 @@ test('入场播放：页面里没有这些模块时安静返回 false', () => {
     assert.equal(playMainHudIntro(null), false);
 });
 
+// ------------------------------------------------- 2b. 挂载先摆位、就绪只起表
+
+test('入场预备：挂载当场就摆好起始姿态，但**不**开始播放（地图还没就绪）', () => {
+    const { prepareMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 1_000;
+
+    assert.equal(prepareMainHudIntro(root), true);
+    const topHud = modules.get('TopHud')!;
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 0, '挂载时就要把顶栏藏好');
+    assert.equal(topHud.position.y, 440, '挂载时就停在起始姿态（上方 40px）');
+
+    const player = root.getComponent(MainHudIntroPlayer)!;
+    assert.equal(player.scheduledCount, 0, '还没到就绪时刻，不许起表');
+    assert.equal(player.onceCount, 1, '挂载时必须留一个"等太久就算了"的兜底计时');
+});
+
+test('入场预备 → 就绪起表：基准沿用挂载时抓的，走完回到**真正的原位**', () => {
+    const { prepareMainHudIntro, playMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 2_000;
+
+    prepareMainHudIntro(root);
+    const topHud = modules.get('TopHud')!;
+    const player = root.getComponent(MainHudIntroPlayer)!;
+
+    // 地图两三秒后才就绪：这段时间页面一直显示着（HUD 在起始姿态，玩家看不见）
+    clockMs = 4_000;
+    assert.equal(playMainHudIntro(root), true, '就绪即起表');
+    assert.equal(player.onceCount, 0, '起表了就不需要兜底计时了');
+
+    clockMs += mainHudIntroTotalSeconds() * 1000;
+    player.runScheduled();
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 255);
+    // 🔴 这一条就是"跳一下"的根：起表时**重抓一次基准**的话，基准会变成 440（起始姿态），
+    //    走完就停在 440 —— 顶栏整块比原位置高 40px。
+    assert.equal(topHud.position.y, 400, '必须回到挂载时抓的原位，不许把起始姿态当成原位');
+    assert.equal(topHud.scale.x, 1);
+});
+
+test('入场预备：地图一直不就绪 ⇒ 到点把 HUD 放出来，并放弃这一轮动画', () => {
+    const { prepareMainHudIntro, playMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 1_000;
+
+    prepareMainHudIntro(root);
+    const topHud = modules.get('TopHud')!;
+    const player = root.getComponent(MainHudIntroPlayer)!;
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 0);
+
+    // 兜底时间到（地图数据失败 / 没有地图宿主）
+    player.runOnce();
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 255, '宁可没有动画，也不能让玩家对着没有 HUD 的页面');
+    assert.equal(topHud.position.y, 400, '放出来时必须回到原位');
+    assert.equal(player.scheduledCount, 0);
+
+    // 迟到的 `presented`：不许再摆一次（那正是"跳一下"）
+    assert.equal(playMainHudIntro(root), false, '已经放出来了就不要再播');
+    assert.equal(topHud.position.y, 400);
+});
+
+test('入场播放只播一次：重复的 presented 不许把 HUD 再推开一次', () => {
+    const { playMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 1_000;
+
+    playMainHudIntro(root);
+    const player = root.getComponent(MainHudIntroPlayer)!;
+    clockMs += mainHudIntroTotalSeconds() * 1000;
+    player.runScheduled();
+    const topHud = modules.get('TopHud')!;
+    assert.equal(topHud.position.y, 400);
+
+    assert.equal(playMainHudIntro(root), false, '播完了再收到 presented 不许重播');
+    assert.equal(topHud.position.y, 400, '重播会把顶栏再推到 440 —— 那就是跳一下');
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 255);
+});
+
+test('入场预备：`presented` 抢在 `start()` 前面到时，预备不许再摆位（顺序反了也不跳）', () => {
+    const { prepareMainHudIntro, playMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 1_000;
+
+    // 章节数据在内存里 / 命中缓存 ⇒ 首帧就绪可能早于页面的 `start()`
+    assert.equal(playMainHudIntro(root), true);
+    const player = root.getComponent(MainHudIntroPlayer)!;
+    clockMs += mainHudIntroTotalSeconds() * 1000;
+    player.runScheduled();
+
+    const topHud = modules.get('TopHud')!;
+    assert.equal(prepareMainHudIntro(root), false, '入场已经了结过，不许再预备一次');
+    assert.equal(topHud.getComponent(FakeUIOpacity)!.opacity, 255, 'HUD 不许被重新藏起来');
+    assert.equal(topHud.position.y, 400);
+    assert.equal(player.onceCount, 0, '也不该挂兜底计时');
+});
+
+test('入场预备：挂载时还没亮出来的模块（门禁未过）在起表时补进来，起手就落到起始姿态', () => {
+    const { prepareMainHudIntro, playMainHudIntro, MainHudIntroPlayer } = loadIntro();
+    const { root, modules } = buildRoot();
+    clockMs = 1_000;
+
+    // 快速寻敌（BeginGame）在 `onLoad` 里先被压住，门禁过了才亮 —— 挂载时它是收起的
+    const begin = modules.get('BeginGame')!;
+    begin.activeInHierarchy = false;
+    prepareMainHudIntro(root);
+    assert.equal(begin.getComponent(FakeUIOpacity), null, '挂载时收起的模块不碰它');
+
+    // 门禁过了：此刻的位置就是基准
+    begin.activeInHierarchy = true;
+    begin.setPosition(0, -345, 0);
+    assert.equal(playMainHudIntro(root), true);
+    assert.equal(begin.getComponent(FakeUIOpacity)!.opacity, 0, '补进来的模块要立刻藏住，否则会先闪一帧');
+    assert.equal(begin.scale.x, 0.8, '并按自己的起始缩放落位');
+
+    const player = root.getComponent(MainHudIntroPlayer)!;
+    clockMs += mainHudIntroTotalSeconds() * 1000;
+    player.runScheduled();
+    assert.equal(begin.getComponent(FakeUIOpacity)!.opacity, 255);
+    assert.equal(begin.scale.x, 1);
+    assert.equal(begin.position.y, -345, '回到它自己亮出来那一刻的位置');
+});
+
 // ---------------------------------------------------------------- 3. 接线
 
 test('接线：由地图首帧就绪触发，而不是 onLoad', () => {
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
     assert.match(page, /EventMgr\.instance\.on\(VIEW_LIFECYCLE, this\.onViewLifecycle, this\)/, '必须订阅页面生命周期');
     assert.match(page, /event\.phase !== 'presented'/, '只接 presented');
-    assert.match(page, /event\.owner !== this\.territoryMap/, '只认本章节地图实例');
+    assert.match(page, /source !== this\.territoryMap/, '只认本章节地图实例');
     assert.match(page, /playMainHudIntro\(this\.node\)/, '就绪即播各模块入场');
 
     // `onLoad` 里不许直接起播：登录首屏时本页在登录图底下预挂载，那时演完等于白演。
     const onLoad = page.slice(page.indexOf('onLoad(): void {'), page.indexOf('start(): void {'));
     assert.doesNotMatch(onLoad, /playMainHudIntro/, 'onLoad 不许起播（会被登录图 / 加载态盖住）');
 });
+
+test('接线：有地图宿主时 `start()` 先摆位，等 presented 才起表', () => {
+    const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
+    const start = page.slice(page.indexOf('start(): void {'), page.indexOf('onEnable(): void {'));
+    // 2026-11-23 用户：「出现一个空场景，再加载了按钮，但是按钮的位置和空场景按钮的位置偏差，
+    // 画面会显得跳一下」。根因是起播点（地图首帧就绪）远晚于页面显示 —— 到那一刻才摆起始姿态，
+    // 等于把已经静止的 HUD 一把推开。所以挂载时就得先摆。
+    assert.match(start, /if \(this\.hasTerritoryMap\) prepareMainHudIntro\(this\.node\);/,
+        '有地图宿主 ⇒ 挂载时先摆成未入场姿态');
+    assert.match(start, /else playMainHudIntro\(this\.node\);/,
+        '没有地图宿主（测试桩 / 预览）没人发 presented ⇒ 当场播完');
+});
+

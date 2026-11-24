@@ -894,7 +894,7 @@ export class GuideDialogView extends Component {
         }
         if (this.canAdvance) {
             this.canAdvance = false;
-            EventMgr.instance.emit(GuideEvent.Advance, { owner: this, stepId: this.stepId });
+            EventMgr.instance.emit(GuideEvent.Advance, { stepId: this.stepId }, this);
             return;
         }
         this.dismissDialog();

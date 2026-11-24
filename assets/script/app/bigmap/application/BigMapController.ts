@@ -1,14 +1,17 @@
 import { ControllerBase } from '../../../framework/controller/ControllerBase';
 import type { IControllerContext } from '../../../framework/controller/ControllerBase';
 import { EventMgr } from '../../../framework/event/EventMgr';
+import { BATTLE_START_SETTLED, type IZCSlgBattleType, type ZCBattleStart } from '../../battle/BattleStartModel';
+import { requestBattleStart } from '../../battle/BattleStartService';
 import { GameNet } from '../../net/GameNet';
+import { BIGMAP_BATTLE_TEXT } from '../model/BigMapBattle';
 import { bigMapOccupantOf } from '../model/BigMapWorld';
 import { normalizeBigMapRoleEvent } from '../model/BigMapCampRoleInfo';
 import { BIGMAP_CAMP_MOVE_TEXT } from '../model/BigMapCampMove';
-import { BIGMAP_MOVE_HINT, BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapIntentEvent,
+import { BIGMAP_BATTLE_READY, BIGMAP_MOVE_HINT, BigMapUiEvent, BigMapViewEvent, type BigMapIntent, type IBigMapBattleReady, type IBigMapIntentEvent,
     type BigMapViewCommand } from './BigMapEvents';
 import { buildBigMapViewState, type BigMapMode, type IBigMapUiState, type IBigMapViewState } from './BigMapViewState';
-import type { BigMapModel, IBigMapActionFeedback } from './BigMapModel';
+import type { BigMapModel, IBigMapActionFeedback, IBigMapAttackResult } from './BigMapModel';
 import type { BigMapCampRepository } from './BigMapCampRepository';
 import type { BigMapSlgRepository } from './BigMapSlgRepository';
 /** 「探索」两颗提示：没目标 / 定位成功（后半截由等级拼出来）。 */
@@ -36,6 +39,7 @@ export interface IBigMapControllerOptions {
 /** 唯一的事件编排入口：网络/Model/UI → 状态变更 → 展示事件。 */
 export class BigMapController extends ControllerBase {
     private started = false;
+    private pendingBattleType: IZCSlgBattleType | null = null;
     private visibleCampIds: readonly number[] = [];
     private visibleCampRefreshPending = false;
     /** 上一轮可见据点查询的时间戳（限速用；`-Infinity` = 还没发过，首轮立即发）。 */
@@ -69,6 +73,7 @@ export class BigMapController extends ControllerBase {
     refreshUnlockContext(): void { if (!this.isDisposed) this.model.refreshUnlockContext(); }
 
     private bindNetworkEvents(): void {
+        GameNet.instance.addEvent(BATTLE_START_SETTLED, this, this.onBattleStartSettled);
         GameNet.instance.addEvent('CmdSlgGameRoleInfoBroMsg', this, this.onRoleBroadcast);
         GameNet.instance.addEvent('CmdSlgGameInfoBroMsg', this, this.onGameBroadcast);
         GameNet.instance.addEvent('CmdSlgBuildInfoBroMsg', this, this.onBuildBroadcast);
@@ -279,10 +284,44 @@ export class BigMapController extends ControllerBase {
             if (detail) void this.runAction(() => detail.queueSlotIndex >= 0
                 ? this.model.requestCancelQueue(detail.queueSlotIndex) : this.model.requestUpgrade(detail.instanceId));
         } else if (this.ui.selectedCityId !== 0) {
-            void this.runAction(() => this.model.requestAttackCity(this.ui.selectedCityId), () => { this.ui.enteringBattle = true; });
+            this.startAttack(this.model.requestAttackCity(this.ui.selectedCityId));
         } else if (this.ui.selectedMonsterId !== 0) {
-            void this.runAction(() => this.model.requestAttackMonster(this.ui.selectedMonsterId), () => { this.ui.enteringBattle = true; });
+            this.startAttack(this.model.requestAttackMonster(this.ui.selectedMonsterId));
         } else this.feedback({ ok: false, message: '先在地图上选一座城池或一只野怪' });
+    }
+
+    private startAttack(result: IBigMapAttackResult): void {
+        const target = result.battle;
+        if (!target) {
+            this.feedback(result);
+            return;
+        }
+        this.ui.baseActionPending = true;
+        this.publish();
+        try {
+            this.resources.sessionAssets.pauseWarmup?.();
+            this.pendingBattleType = target.battleType;
+            void requestBattleStart(target.battleType, [String(target.targetConfigId)]);
+        } catch {
+            this.pendingBattleType = null;
+            this.ui.baseActionPending = false;
+            this.model.finishBattleRequest();
+            this.feedback({ ok: false, message: BIGMAP_BATTLE_TEXT.failed });
+        }
+    }
+
+    private onBattleStartSettled(battle: ZCBattleStart | null): void {
+        const battleType = this.pendingBattleType;
+        if (battleType === null) return;
+        this.pendingBattleType = null;
+        this.ui.baseActionPending = false;
+        this.ui.enteringBattle = !!battle;
+        this.model.finishBattleRequest();
+        if (battle) {
+            EventMgr.instance.emit(BIGMAP_BATTLE_READY, { battle, battleType } satisfies IBigMapBattleReady);
+        } else {
+            this.feedback({ ok: false, message: BIGMAP_BATTLE_TEXT.failed });
+        }
     }
     private secondary(): void {
         if (this.ui.pendingCampMoveId > 0) { this.clearSelection(); this.publish(); return; }
@@ -372,6 +411,7 @@ export class BigMapController extends ControllerBase {
     dispose(): void {
         // 先断输入，再交给 Model 释放仓库（Model 自身保证仓库只释放一次）。
         this.releaseInputs();
+        this.pendingBattleType = null;
         this.model.dispose();
         super.dispose();
     }

@@ -47,12 +47,11 @@ interface IJoinCall extends IPending<'ok' | 'offline' | 'failed'> {
 
 function fixture() {
     const owner = {};
-    const joinedOwner = {};
     const views: ILeagueUnionView[][] = [];
     const tips: string[] = [];
-    const joined: Array<object | null> = [];
+    const joined: boolean[] = [];
     const cancelled: object[] = [];
-    const openedCreate: Array<object | null> = [];
+    const openedCreate: boolean[] = [];
     const openedUnion: ILeagueUnionView[] = [];
     let unions: ILeagueUnionRow[] = [row('11'), row('12'), row('13')];
     let cached: ILeagueUnionRow | null = null;
@@ -76,24 +75,23 @@ function fixture() {
 
     const controller = new LeagueJoinController(createControllerContext(), {
         owner,
-        joinedOwner,
         repository,
         view: { render: rows => views.push([...rows]) },
         feedback: {
             tip: text => tips.push(text),
-            notifyJoined: target => joined.push(target),
+            notifyJoined: () => joined.push(true),
         },
         popups: {
-            openCreate: target => openedCreate.push(target),
+            openCreate: () => openedCreate.push(true),
             openUnion: view => openedUnion.push(view),
         },
         requests: { removeCaller: caller => cancelled.push(caller) },
     });
     controller.start();
 
-    const emit = (intent: ILeagueJoinIntent) => EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
+    const emit = (intent: ILeagueJoinIntent, source: object) => EventMgr.instance.emit(LeagueJoinEvent.Intent, intent, source);
     return {
-        owner, joinedOwner, controller, views, tips, joined, cancelled,
+        owner, controller, views, tips, joined, cancelled,
         openedCreate, openedUnion, listCalls, searchCalls, joinCalls,
         get cached() { return cached; },
         setUnions(next: ILeagueUnionRow[]) { unions = next; },
@@ -121,13 +119,13 @@ test('搜索空值提示；乱序搜索只落最新一趟', async () => {
     try {
         h.listCalls[0].resolve('ok');
         await flush();
-        h.emit({ owner: h.owner, kind: 'search' });
+        h.emit({ kind: 'search' }, h.owner);
         assert.deepEqual(h.tips, [LEAGUE_TIP_INPUT_UNION_ID], '空输入不发包');
 
-        h.emit({ owner: h.owner, kind: 'input', text: '12' });
-        h.emit({ owner: h.owner, kind: 'search' });
-        h.emit({ owner: h.owner, kind: 'input', text: '11' });
-        h.emit({ owner: h.owner, kind: 'search' });
+        h.emit({ kind: 'input', text: '12' }, h.owner);
+        h.emit({ kind: 'search' }, h.owner);
+        h.emit({ kind: 'input', text: '11' }, h.owner);
+        h.emit({ kind: 'search' }, h.owner);
         assert.equal(h.searchCalls.length, 2);
 
         h.setCached(row('11'));
@@ -144,13 +142,13 @@ test('搜索空值提示；乱序搜索只落最新一趟', async () => {
     }
 });
 
-test('快速加入防连点；成功后重新拉列表并按容器 owner 发 Joined', async () => {
+test('快速加入防连点；成功后重新拉列表并发 Joined', async () => {
     const h = fixture();
     try {
         h.listCalls[0].resolve('ok');
         await flush();
-        h.emit({ owner: h.owner, kind: 'quickJoin' });
-        h.emit({ owner: h.owner, kind: 'quickJoin' });
+        h.emit({ kind: 'quickJoin' }, h.owner);
+        h.emit({ kind: 'quickJoin' }, h.owner);
         await flush();
         assert.equal(h.joinCalls.length, 1, '写操作在飞时第二次点击被挡掉');
         assert.equal(h.joinCalls[0].caller, h.controller);
@@ -161,7 +159,7 @@ test('快速加入防连点；成功后重新拉列表并按容器 owner 发 Joi
         assert.equal(h.listCalls.length, 2, '成功后重新拉一次列表');
         h.listCalls[1].resolve('ok');
         await flush();
-        assert.deepEqual(h.joined, [h.joinedOwner]);
+        assert.deepEqual(h.joined, [true]);
     } finally {
         h.controller.dispose();
     }
@@ -173,7 +171,7 @@ test('无快速加入目标只提示，不发包', async () => {
         h.listCalls[0].resolve('ok');
         await flush();
         h.setUnions([row('21', { autoJoin: false })]);
-        h.emit({ owner: h.owner, kind: 'quickJoin' });
+        h.emit({ kind: 'quickJoin' }, h.owner);
         await flush();
         assert.equal(h.joinCalls.length, 0);
         assert.deepEqual(h.tips, [LEAGUE_NO_JOINABLE]);
@@ -203,15 +201,15 @@ test('意图按 owner 隔离；create / openUnion 走组合注入的路由', asy
         h.listCalls[0].resolve('ok');
         await flush();
         const stranger = {};
-        h.emit({ owner: stranger, kind: 'quickJoin' });
-        h.emit({ owner: stranger, kind: 'create' });
+        h.emit({ kind: 'quickJoin' }, stranger);
+        h.emit({ kind: 'create' }, stranger);
         assert.equal(h.joinCalls.length, 0);
         assert.deepEqual(h.openedCreate, []);
 
-        h.emit({ owner: h.owner, kind: 'create' });
-        assert.deepEqual(h.openedCreate, [h.joinedOwner]);
+        h.emit({ kind: 'create' }, h.owner);
+        assert.deepEqual(h.openedCreate, [true]);
         const union = h.views[0][0];
-        h.emit({ owner: h.owner, kind: 'openUnion', union });
+        h.emit({ kind: 'openUnion', union }, h.owner);
         assert.deepEqual(h.openedUnion, [union]);
     } finally {
         h.controller.dispose();

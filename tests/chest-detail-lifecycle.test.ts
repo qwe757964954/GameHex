@@ -11,6 +11,8 @@ import * as chestTypes from '../assets/script/app/main/ChestTypes';
 function createPage() {
     const context = createControllerContext();
     let panel: { updateCountdown: (...args: unknown[]) => void; close: () => void } | null = null;
+    /** 页面弹过的提示（`FW.showTip`）。用户 2026-11-23：「提示没有弹出」就是漏了这一格。 */
+    const tips: string[] = [];
     const exports: Record<string, new () => Record<string, any>> = {};
     const code = ts.transpileModule(readFileSync('assets/script/app/main/MainPage.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, experimentalDecorators: true },
@@ -34,6 +36,9 @@ function createPage() {
         if (name === '../net/GameNet') return { GameNet: { instance: { removeCaller() {} } } };
         // `onDestroy` 会退订关卡缓存（战斗宝箱入口的开启动条件看 `CmdBattleLevel`）
         if (name === '../net/CacheMgr') return { CacheMgr: { instance: { setEventUpdate() {}, removeEventUpdate() {} } } };
+        // 🔴 别让未知模块落进下面那个 `{}`：`FW` 少了就是「点了解锁什么也没发生」，
+        //    而那是**运行时**才炸的 TypeError（2026-11-23 补）。
+        if (name === '../../framework/FW') return { FW: { showTip: (text: string) => { tips.push(text); } } };
         return {};
     } });
     const page = new exports.MainPage();
@@ -41,7 +46,7 @@ function createPage() {
     const { ComponentController } = componentControllerModule(context);
     const composition = new ComponentController('test-main-page-composition');
     page.initialize(composition.resources);
-    return { page, context, composition, setPanel: (value: typeof panel) => { panel = value; } };
+    return { page, context, composition, tips, setPanel: (value: typeof panel) => { panel = value; } };
 }
 
 test('未激活宝箱显示配置等待时长并允许开启，激活后立即刷新倒计时', async () => {
@@ -50,7 +55,8 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
     page.loadQualityFrame = async () => null;
     // 后面会把它改成 SpeedUp：显式放宽成枚举类型，否则 TS 把字面量推成 'activate'。
     const detail = { name: '宝箱', quality: 1, icon: '', rewards: [], fastOpenCost: 10,
-        action: chestTypes.ChestSlotAction.Activate as chestTypes.ChestSlotAction, remainSeconds: 3600 };
+        action: chestTypes.ChestSlotAction.Activate as chestTypes.ChestSlotAction, remainSeconds: 3600,
+        canActivate: true };
     const content = await page.chestDetailContentOf(detail);
     assert.equal(content.openCountdown, '01:00:00');
     assert.equal(content.openEnabled, true);
@@ -70,7 +76,7 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
     //    ⚠️ 仍是禁用态：服务端只有 InfoList/Activate/FastOpen/Open，没有"加速"命令，
     //    接上广告位或新协议后才把 `openEnabled` 打开。
     const waiting = await page.chestDetailContentOf({
-        ...detail, action: chestTypes.ChestSlotAction.SpeedUp, remainSeconds: 11,
+        ...detail, action: chestTypes.ChestSlotAction.SpeedUp, remainSeconds: 11, canActivate: false,
     });
     assert.equal(waiting.openCaption, '加速', '等待中 ⇒ 与栏位同写「加速」，不许还写「开启」');
     assert.equal(waiting.openSpeedUp, true, '2026-11-11：加速态 ⇒ 弹窗换绿底 + 文案前播放 icon');
@@ -80,8 +86,14 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
     let closeCount = 0;
     setPanel({ updateCountdown: (...args) => updates.push(args), close: () => { closeCount++; } });
     page.detailSlot = 1;
-    page.treasureRepository = { activate: async () => { detail.action = chestTypes.ChestSlotAction.SpeedUp; return 'ok'; },
-        detailOf: () => detail };
+    page.treasureRepository = {
+        activate: async () => {
+            detail.action = chestTypes.ChestSlotAction.SpeedUp;
+            detail.canActivate = false;
+            return 'ok';
+        },
+        slots: [detail],
+    };
     await page.runTreasureAction('activate');
     assert.equal(page.detailSlot, 1);
     assert.equal(closeCount, 0);
@@ -91,28 +103,56 @@ test('未激活宝箱显示配置等待时长并允许开启，激活后立即�
     // 页面跑在 `runInNewContext` 沙箱里，第三个参数是跨 realm 的对象，
     // `deepStrictEqual` 会因原型不同判红 ⇒ 按值序列化后再比。
     assert.deepEqual(JSON.parse(JSON.stringify(updates)),
-        [[3600, true, { caption: '加速', speedUp: true }]]);
-    assert.equal(page.detailAction, chestTypes.ChestSlotAction.SpeedUp);
+        [[3600, true, { caption: '加速', speedUp: true, enabled: false }]]);
 });
 
 test('宝箱队列变化立即同步刷新详情按钮，不等下一秒 tick', async () => {
     const { page, setPanel } = createPage();
-    let onChange: (() => void) | null = null;
+    let onChange: ((slots: readonly unknown[]) => void) | null = null;
     const updates: unknown[][] = [];
     setPanel({ updateCountdown: (...args) => updates.push(args), close: () => {} });
     page.detailSlot = 1;
+    page.renderChests = () => {};
     page.treasureRepository = {
-        load: async (_caller: unknown, cb: () => void) => { onChange = cb; return 'ok'; },
-        slots: [],
-        detailOf: () => ({ action: chestTypes.ChestSlotAction.SpeedUp, remainSeconds: 12 }),
+        load: async (_caller: unknown, cb: typeof onChange) => { onChange = cb; return 'ok'; },
     };
     await page.loadTreasureQueue();
     assert.ok(onChange, '队列必须注册变化回调');
     // 激活回包 / 服务端广播到点就刷；旧实现这个回调只 renderChests，弹窗要等下一次 1s tick。
-    onChange!();
+    onChange!([{ action: chestTypes.ChestSlotAction.SpeedUp, remainSeconds: 12, canActivate: false }]);
     assert.deepEqual(JSON.parse(JSON.stringify(updates)),
-        [[12, true, { caption: '加速', speedUp: true }]],
+        [[12, true, { caption: '加速', speedUp: true, enabled: false }]],
         '变化回调必须带上当前文案与加速态，详情按钮才不会停在黄色「解锁」');
+});
+
+test('宝箱详情保持打开时，每秒刷新解除另一槽位的解锁限制，点击读取最新权限', () => {
+    const { page, setPanel, tips } = createPage();
+    const updates: unknown[][] = [];
+    setPanel({ updateCountdown: (...args) => updates.push(args), close: () => assert.fail('详情不应关闭') });
+    page.detailSlot = 2;
+    const slot = { action: chestTypes.ChestSlotAction.Activate, remainSeconds: 30, canActivate: false };
+    page.treasureRepository = { slots: [null, slot] };
+    page.renderChests = () => {};
+    const actions: string[] = [];
+    page.runTreasureAction = (action: string) => actions.push(action);
+
+    page.refreshTreasureDisplay();
+    page.onChestDetailOpen();
+    assert.deepEqual(actions, []);
+    // 🔴 2026-11-23 用户：「等待解锁按钮点击后的提示没有弹出」。以前这里静默 return，
+    //    玩家点两下（栏位 + 弹窗主按钮）全是死路，一条反馈都没有。
+    assert.deepEqual(tips, ['已经在解锁其他宝箱'], '还轮不到解锁时必须给一句提示');
+
+    tips.length = 0;
+    slot.canActivate = true;
+    page.refreshTreasureDisplay();
+    page.onChestDetailOpen();
+    assert.deepEqual(actions, ['activate']);
+    assert.deepEqual(tips, [], '轮到它了就走请求，不该再弹「已经在解锁其他宝箱」');
+    assert.deepEqual(JSON.parse(JSON.stringify(updates)), [
+        [30, false, { caption: '等待解锁', speedUp: false, enabled: false }],
+        [30, false, { caption: '解锁', speedUp: false, enabled: true }],
+    ]);
 });
 
 test('详情图标和品质框持有独立资源作用域，页面销毁后释放', async () => {

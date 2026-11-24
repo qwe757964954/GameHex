@@ -48,7 +48,7 @@ export function readTerritoryMonsterBoxes(raw: unknown, maxCell?: number): ITerr
         // 同 cellId 重复下发：后一条覆盖前一条（服务端顺序即权威，别自作主张"取大值"）。
         byCell.set(box.cellId, box);
     }
-    return [...byCell.values()].sort((a, b) => a.cellId - b.cellId);
+    return Array.from(byCell.values()).sort((a, b) => a.cellId - b.cellId);
 }
 
 /**
@@ -64,7 +64,7 @@ export function withTerritoryMonsterBox(
     const byCell = new Map<number, ITerritoryMonsterBox>();
     for (const item of boxes) byCell.set(item.cellId, item);
     byCell.set(box.cellId, box);
-    return [...byCell.values()].sort((a, b) => a.cellId - b.cellId);
+    return Array.from(byCell.values()).sort((a, b) => a.cellId - b.cellId);
 }
 
 /**

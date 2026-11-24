@@ -82,7 +82,12 @@ test('战力数字与图标不重叠，且底条刚好包住「拳头 + 数字�
     const labelComponent = componentOf(objects, findNode(objects, 'PowerLabel'), 'cc.Label');
     assert.ok(labelComponent, 'PowerLabel 上没有 cc.Label');
     // 文本宽按「字符数 × 字号 × 0.6」估算（数字/大写/点号的保守上界，够用来判「底条包不包得住」）。
-    const text = String(labelComponent!._string ?? '');
+    //
+    // 🔴 估算用的是**真实战力的最长形态**，不是 prefab 上那个占位字符串：
+    //    2026-11-23 起占位改成中性的「—」（切页不再闪假数字 `15.98K`），
+    //    再拿它量宽就只剩 1 个字，这条「底条刚好包住」的守卫会假红。
+    //    `formatPowerText` 的最长输出是 6 字（`99.99K` / `12.34M`）。
+    const text = '15.98K';
     const fontSize = labelComponent!._fontSize as number;
     const textWidth = text.length * fontSize * 0.6;
     assert.ok(bg.right >= label.left + textWidth,

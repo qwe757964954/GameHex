@@ -14,7 +14,9 @@
  * 必须按条目 `notes` 同步修改配表，否则会出现“看着变了、判定没变”。
  */
 
-export type ZCEffectAnchor = 'caster' | 'midpoint';
+import { ZC_EFFECT_TUNING } from './ZCEffectTuning';
+
+export type ZCEffectAnchor = 'caster' | 'midpoint' | 'target';
 export type ZCEffectLayer = 'ground' | 'top';
 export type ZCEffectTint = readonly [number, number, number];
 export type ZCEffectHitSurface = 'unit' | 'wall' | 'building';
@@ -64,6 +66,14 @@ export interface IZCEffectSpec {
     readonly facingDegrees?: number;
     /** 弹道消失后定格淡出的秒数。*/
     readonly fadeSeconds?: number;
+    /**
+     * 事件寿命**下限**（秒）：一次性长演出必须盖住整段 clip。
+     *
+     * `ZCGameModel` 按 `startedAt + durationSeconds` 摘事件，而近战 / 区域事件默认只有 0.32s
+     * （`defaultAttackTravelSeconds`）⇒ 不登记这一项的 1 秒以上动画会被截在一半。
+     * 未登记 = `0` ⇒ 调用方沿用原寿命，存量逐字不变。
+     */
+    readonly durationSeconds?: number;
     /** 乘算叠加色 `[r, g, b]`，0~255。*/
     readonly tint?: ZCEffectTint;
     /** 与配表同步的约束；不含日期与批次。*/
@@ -161,6 +171,23 @@ export const ZC_EFFECT_PATHS = {
     //  26 帧散图（1185 画布）× 一次性爆点，prefab / anim 由
     //  `tools/build_fission_spawn_fx.py` 生成 —— 手工改 prefab 会被重跑覆盖。
     fissionSpawn: 'units/projectiles/分裂菇_生成分身/分裂菇_生成分身',
+    //  2026-11-23：仙桃行者 68009 的「重击」落地柱（大地之力 100904 的首目标 + 武将技 36241）。
+    //  32 张 1065×2372 散图 → 29 帧一次性演出，prefab / anim 由
+    //  `tools/build_xiantao_quake_fx.py` 生成 —— 手工改 prefab 会被重跑覆盖。
+    //  🔴 画面里那圈地面裂纹 = 判定圆（半径 54 逻辑 px），改一边必须同步另一边。
+    quakeStrike: 'units/projectiles/仙桃行者_重击技能/仙桃行者_重击技能',
+    //  2026-11-23（第 42 批续）：仙桃行者 68009 的**普通攻击**造型。
+    //  🔴 用户原话纠正：「搞错了，应该使用的是 旧值 长枪兵普攻_刀光」——不是枪阵那份
+    //  `长枪兵_武将技能`。这里只留路径常量、**不登记 spec**：刀光 64×42 就是贴在本体出手点
+    //  的一下挥击（锚点 `caster`、层按事件类型 `melee ⇒ top`、尺寸 1 全是兜底默认值），
+    //  与长枪兵自己那行 30171 的播法逐字一致。
+    spearSlash: 'units/projectiles/长枪兵普攻_刀光/长枪兵普攻_刀光',
+    //  2026-11-23 第 43 批：灼热地带那张图（十簇火苗散图），文明之火直接复用。
+    //  🔴 蓝色不在这里烘：目录按路径给 `tint`（见 `ZC_EFFECT_SPECS`），美术保持原样 ——
+    //  火焰树妖 68003 自己的灼热地带还要继续用紫品红那一版。
+    hotZone: 'units/projectiles/火焰树妖_灼热地带技能/火焰树妖_灼热地带技能',
+    // 68024 急冻瓜「冰山陨落」102403 落地冰锥
+    iceCone: 'units/projectiles/冰法师_冰锥/冰法师_冰锥',
 } as const;
 
 /** 行为键单一真源；Fx facade、资源计划与行为判据都从这里取。*/
@@ -182,7 +209,32 @@ export const ZC_EFFECT_BEHAVIOR_KEYS = {
     missileBarrage: 'missile_barrage',
     stormZone: 'storm_zone',
     rayBeam: 'ray_beam',
+    fireZone: 'fire_zone',
+    /**
+     * 四段突进连击（仙桃行者 68009「腾云驾雾」100904，2026-11-24 第 44 批）。
+     *
+     * 这条车道**没有自己的 prefab**：每次攻击播的是重击柱（`quakeStrike`），
+     * 那张图已经按单位登记在 `skill_params` 的 `unitPrefabPaths['68009']` 里
+     * （第 42 批为「大地之力」补的，本批沿用）⇒ 本车道只登记行为键，不重复收路径。
+    */
+    dashChain: 'dash_chain',
     summonUnit: 'summon_unit',
+    /**
+     * 「只带数据、不带行为」的参数袋车道（`ZCSkillRuntime` 里注册成 `stateMode: 'none'`）。
+     *
+     * 它本身没有造型，但**某些卡的自护盾就挂在这条车道上**（巨力坚果 68002 的
+     * 「亡者护盾」100204：`triggerEvent = active`、`behaviorKey = skill_params`）⇒
+     * 资源计划要能按单位给它补收表现，见下面 `ZC_EFFECT_BEHAVIOR_SPECS` 里那条 `unitPrefabPaths`。
+     */
+    skillParams: 'skill_params',
+    /**
+     * 冷却型自身施法（`applySelfCast`）：自愈 / 限时增益 / 净化 / 群体治疗。
+     *
+     * 这条车道同样没有造型槽 —— 但波利奥 68006「吃口菠萝」100603 是**群体**施法，
+     * 吃到治疗的每个己方单位身上都要挂一圈 `刀盾兵_护盾`（2026-11-21 第 38 批）。
+     * 路径按单位覆盖登记，别写进 `prefabPaths`：嗜血 / 迅击也在同一条车道，会连带预载。
+     */
+    selfCast: 'self_cast',
 } as const;
 
 /**
@@ -305,16 +357,80 @@ export const ZC_EFFECT_BEHAVIOR_SPECS: readonly IZCEffectBehaviorSpec[] = [
     },
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.rayBeam,
-        prefabPaths: [ZC_EFFECT_PATHS.lightningImpact],
-        notes: '矩形光束；复用雷电冲击，预热不单收（首战由本局清单加载）',
+        //  🔴 2026-11-23 第 43 批换成【镭射飞龙_普攻】那张红色光束。
+        //  用户原话：「机甲菇使用的射线颜色和镭射飞龙的普通攻击颜色一致，不需要改成蓝色」。
+        //  原来用的是【雷电冲击】（主色青蓝 rgb(84,156,252)），而乘法染色只能压通道、不能提亮 ——
+        //  青底乘红只会得到暗红，「与镭射飞龙一致」是做不到的，只能直接换同一张图。
+        //  基准半长随之从 180 改成 374（见 `ZCEffectTuning.rayBeamReferenceHalfLength`）。
+        prefabPaths: [ZC_EFFECT_PATHS.laserAttack],
+        notes: '矩形光束；用镭射飞龙普攻那张红图，颜色与它天然一致',
+    },
+    {
+        behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.fireZone,
+        //  文明之火（2026-11-23 第 43 批）：直接复用灼热地带那张图。
+        //  🔴 蓝色**不在这里**登记 —— 它按事件染色（`ZC_FIRE_ZONE_TINT`），因为同一个路径
+        //  被火焰树妖 68003 自己的灼热地带用着、那边必须保持紫品红。
+        prefabPaths: [ZC_EFFECT_PATHS.hotZone],
+        notes: '目标点周围撒 3 块火焰区域；图同灼热地带，颜色由事件级 tint 给蓝色',
     },
     {
         behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.summonUnit,
-        prefabPaths: [ZC_EFFECT_PATHS.fissionSpawn],
-        //  🔴 不标 `warmup`：这条只在带分裂菇 68014 的阵容里用得上，进全局预热等于给
-        //  所有对局多下 26 张 1185×1185 的散图。`buildZCVisualResourcePlan` 按
+        prefabPaths: [
+            ZC_EFFECT_PATHS.fissionSpawn,
+            //  舞王 103103 的「脚底持续光环」（2026-11-20 用户口径「本体脚底同步播放
+            //  【持续光环伤害效果】，范围囊括本体和 4 个分身，纯表现」）。与 `self_aura` 共用
+            //  同一份 prefab，但**没有单位的造型覆盖** ⇒ 这里必须单独收一次：
+            //  `zcEffectPathsForBehavior` 只按本组给清单，漏收就是「光圈不出现、结算与伤害都正常」。
+            ZC_EFFECT_PATHS.sustainedAura,
+        ],
+        //  🔴 不标 `warmup`：这条只在带分裂菇 68014 / 艺术家 68031 的阵容里用得上，进全局预热等于给
+        //  所有对局多下 26 张 1185×1185 的散图 + 一份光环。`buildZCVisualResourcePlan` 按
         //  `skillPlans.behaviorKey` 命中本组，所以「有这张卡」才收。
-        notes: '召唤（`summon_unit`）的分身生成爆点；目前只有 68014「一人成军」101404 用它',
+        notes: '召唤（`summon_unit`）：分身 / 舞伴的生成爆点 + 舞王脚底持续光环；目前只有 68014 / 68031 用它',
+    },
+    {
+        //  自护盾的表现（2026-11-21 第 37 批）。
+        //
+        //  🔴 巨力坚果 68002 的「亡者护盾」100204 写在**参数袋车道**上（`behaviorKey = skill_params`，
+        //  `triggerEvent = active`），它自己没有造型槽；`pvpSkill` 那边 `30802 坚果重砸` 的造型
+        //  是普攻的，`30803 亡者护盾` 又是一个只有名字、没有 `effectPrefabPath` 的 profile。
+        //  于是「盾上了、画面什么都没有」—— 用户实测「巨力坚果没有释放刀盾兵的护盾效果」。
+        //
+        //  为什么用 `unitPrefabPaths` 而不是往 `prefabPaths` 里加：这条车道被十几种卡的
+        //  被动共用，写进公共清单等于给所有卡预载一张护盾。按单位覆盖才是「有这张卡才收」。
+        behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.skillParams,
+        prefabPaths: [],
+        unitPrefabPaths: {
+            '68002': [ZC_EFFECT_PATHS.dashGuard],
+            //  仙桃行者 68009 的「大地之力」100904 也在这条车道上（`skill_params` + 每 5 次普攻）。
+            //  它的重击特效由代码常量推动（`ZC_EFFECT_PATHS.quakeStrike`），`pvpSkill` 那两行
+            //  （30844 / 36241）**都不带这张图**能被本局清单收到 ⇒ 必须按单位补一次，
+            //  否则「特效在编辑器里有、实战里一次都不播」。
+            '68009': [ZC_EFFECT_PATHS.quakeStrike],
+        },
+        //  🔴 不标 `warmup`：`charge_shield` / `legacy_dash` 那两组已经带着这张 prefab 进了全局预热
+        //  （`zcWarmupEffectPaths`），再标一次只是重复；这里补的是**本局清单**
+        //  （`buildZCVisualResourcePlan` → `ZCGameLoader.effects`），缺了它预热有、实战没有。
+        notes: '自护盾（`skill_params` 车道）：68002 亡者护盾补收刀盾兵_护盾；68009 大地之力补收重击柱；其余卡在这条车道零资源',
+    },
+    {
+        //  群体自身施法的护盾表现（2026-11-21 第 38 批）。
+        //
+        //  波利奥 68006「吃口菠萝」100603 走的是 `self_cast` 车道：`selfCastAllyRadius 252`
+        //  的群体治疗（自身 8/10/15% + 6 格友军 4/5/8%，III 级再解一个减益）。
+        //  用户口径「这也是一个群体的护盾效果」+「保留治疗只补表现」⇒ 数值不动，
+        //  由 `ZCSkillTriggerSystem.applySelfCast` 给半径内每个己方单位（含自己）推一条
+        //  `刀盾兵_护盾` 的纯表现事件。
+        //
+        //  🔴 按单位覆盖，不写进 `prefabPaths`：同车道的嗜血 100703 / 迅击 100903 是纯自身增益，
+        //  写进公共清单等于给它们也预载一张护盾，而且它们根本不会推这条事件。
+        behaviorKey: ZC_EFFECT_BEHAVIOR_KEYS.selfCast,
+        prefabPaths: [],
+        unitPrefabPaths: { '68006': [ZC_EFFECT_PATHS.dashGuard] },
+        //  🔴 不标 `warmup`：`charge_shield` / `legacy_dash` 那两组已经带着这张 prefab 进了全局预热，
+        //  这里补的只是本局清单（`buildZCVisualResourcePlan` → `ZCGameLoader.effects`）——
+        //  缺了它 = 预热有、实战没有。
+        notes: '群体自身施法（`self_cast` 车道）：68006 吃口菠萝给半径内每个己方单位挂刀盾兵_护盾；其它卡零资源',
     },
 ];
 
@@ -356,7 +472,13 @@ export const ZC_EFFECT_SPECS: readonly IZCEffectSpec[] = [
     {
         prefabPath: ZC_EFFECT_PATHS.sustainedAura,
         nodeScale: 307.5 / (256 * 0.58),
-        notes: 'auraRadius 200；分母 = 256×0.58，改半径需同步倍率',
+        //  🔴 分母是**画布宽**，不是环宽：画布 256 里那圈可见环只有 153（alpha>60 实测），
+        //  画布上半截是空的。所以 `nodeScale = 1` 语义下「画布 = 307.5 屏上」时，
+        //  环其实只有 184 屏上 px（半轴 92）。68021 / 68024 的 `auraRadius 120`
+        //  （判定直径 184.5）正好对得上这一档 ⇒ **别凭「200 半径」改这里**，
+        //  需要更大的光环走事件级 `effectScale`（舞王 103103 就是那条，
+        //  见 `ZCGameModel.ZC_SUMMON_AURA_COVER_SCALE`）。
+        notes: '画布 307.5 屏上、可见环仅 184（环占画布 153/256）；68021/68024 的 120 半径匹配此档，改大小走 effectScale',
     },
     {
         prefabPath: ZC_EFFECT_PATHS.lightningBullet,
@@ -434,6 +556,23 @@ export const ZC_EFFECT_SPECS: readonly IZCEffectSpec[] = [
         //  注意本体烘焙只有 0.4（比雷弹命中那份小），所以乘完屏上 0.2 —— 两张爆点不再一样大，
         //  这是「各自按自己原大小的 50%」的结果，不是漏改。
         notes: '30717 命中爆点（68008 杰克藕）；烘焙 0.4 × 0.5 = 屏上 0.2',
+    },
+    {
+        prefabPath: ZC_EFFECT_PATHS.quakeStrike,
+        //  🔴 `target`：这条必须**落在受击目标的坐标**上，不是出手点。
+        //  需求口径（2026-11-23）：「该特效的释放一定是在目标的坐标位置播放」。
+        //  近战事件的 `from` 是施法者、`to` 才是目标，默认 `caster` 会整根柱子砸在自己头上。
+        anchor: 'target',
+        //  层：`top`。它是「打在空中的一下」，压在角色身上才对；`area` 事件类型默认会被压到地面层
+        //  （`zcCombatEffectLayerOf`），所以这里按路径覆盖回来。
+        layer: 'top',
+        //  🔴 不写 `nodeScale`：尺寸已经烘进 prefab（`_lscale = 0.56`），再乘一次就是两个真源。
+        //  画面里的地面裂纹环直径 83 屏上 px ↔ 判定圆直径 108 逻辑 px，两者是对齐的，
+        //  要改必须同时改 `tools/build_xiantao_quake_fx.py` 与 `skillParamJson.quakeRadius`。
+        notes: '仙桃行者 68009 重击（100904 首目标 / 36241 武将技）；画面上那圈裂纹 = 判定圆',
+        //  一次性长演出（29 帧）：事件寿命必须盖住整段 clip，短了会被
+        //  `ZCGameModel` 按 `startedAt + durationSeconds` 摘掉（「砸到一半没了」）。
+        durationSeconds: ZC_EFFECT_TUNING.quakeStrikeSeconds,
     },
 ];
 
@@ -580,6 +719,20 @@ export function zcEffectFadeSecondsOf(
     effectPrefabPath: string | null | undefined,
 ): number {
     const seconds = zcEffectSpecOfPath(effectPrefabPath)?.fadeSeconds;
+    if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return 0;
+    return seconds;
+}
+
+/**
+ * 路径 → 事件寿命下限（秒）；未登记 / 非法值 / 非正数 = `0`（调用方沿用原寿命）。
+ *
+ * 只用于「一次性长演出」：登记了就必须让事件活过整段 clip，
+ * 否则 `ZCGameModel` 会在动画播完前把节点摘掉。返回 0 表示「不改」。
+ */
+export function zcEffectDurationOf(
+    effectPrefabPath: string | null | undefined,
+): number {
+    const seconds = zcEffectSpecOfPath(effectPrefabPath)?.durationSeconds;
     if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) return 0;
     return seconds;
 }

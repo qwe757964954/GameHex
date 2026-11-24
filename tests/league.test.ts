@@ -658,20 +658,21 @@ test('D1 LeaguePage.prefabPath 大小写正确，且磁盘上有这个 prefab', 
     assert.ok(assetExists('ui/League.meta'), '目录 meta 缺失');
 });
 
-test("D2 联盟页签由 MainTabModel 路由至已开放的联盟容器页", () => {
-    assert.equal(isMainTabLocked(MainTab.Alliance),false);
-    assert.deepEqual(mainTabTarget(MainTab.Alliance),{kind:'page',path:'ui/League/LeagueTab',bundle:'main-pages'});
+test("D2 联盟页签在 MainTabModel 中处于锁定状态", () => {
+    assert.equal(isMainTabLocked(MainTab.Alliance), true);
+    assert.deepEqual(mainTabTarget(MainTab.Alliance), { kind: 'locked' });
 });
 
-test("D3 联盟、角色和领地路由资源存在，联盟指向容器而非大厅", () => {
-    for (const tab of [MainTab.Alliance,MainTab.Role,MainTab.Territory]) {
-        const target=mainTabTarget(tab);assert.ok(target && target.kind==='page');
-        assert.ok(assetExists(target.path+'.prefab'),target.path);
+test("D3 角色和领地路由资源存在，联盟指向容器而非大厅", () => {
+    for (const tab of [MainTab.Role, MainTab.Territory]) {
+        const target = mainTabTarget(tab); assert.ok(target && target.kind === 'page');
+        assert.ok(assetExists(target.path + '.prefab'), target.path);
     }
-    const target=mainTabTarget(MainTab.Alliance);assert.ok(target && target.kind==='page');
-    const uuid=JSON.parse(readFileSync(assetPath(target.path+'.prefab.meta'),'utf8')).uuid;
-    assert.equal(uuid,leagueTabPrefabUuid);
-    assert.notEqual(uuid,leaguePrefabUuid);
+    const leaguePath = 'ui/League/LeagueTab';
+    assert.ok(assetExists(leaguePath + '.prefab'), leaguePath);
+    const uuid = JSON.parse(readFileSync(assetPath(leaguePath + '.prefab.meta'), 'utf8')).uuid;
+    assert.equal(uuid, leagueTabPrefabUuid);
+    assert.notEqual(uuid, leaguePrefabUuid);
 });
 
 test('D4 LeaguePage 的 onLoad 真的接了入口 / 信息条 / 旗面（源码文本层守一遍）', () => {

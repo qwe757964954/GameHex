@@ -331,7 +331,7 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         if (!snapshot) return;
         if (!this.ensureOpen()) return;
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'sweep' } } satisfies ILeagueRewardIntent);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'sweep' } } satisfies ILeagueRewardIntent, this);
     }
 
     /**
@@ -366,8 +366,8 @@ export class LeagueNorthExpeditionPage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
-        if (event.owner !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
+        if (source !== this) return;
         try {
             await this.afterWrite(event.status);
         } finally {

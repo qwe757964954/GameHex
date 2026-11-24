@@ -2,7 +2,6 @@ import { stationRenderWithProjection } from './helpers/territory-map-view-sandbo
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadTerritoryMapViewClass } from './helpers/territory-map-view-sandbox';
 import { FakeColor, makeStationView } from './helpers/territory-station-fixtures';
 
 /**
@@ -17,13 +16,16 @@ import { FakeColor, makeStationView } from './helpers/territory-station-fixtures
  * 真的把气泡节点显示出来、并按虚影锚点抬高）、源码层（判据与名单不漂移）。
  */
 
-const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
+const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationPresentation.ts', 'utf8');
 const STATION_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
 const MODEL_SRC = readFileSync('assets/script/app/territory/application/TerritoryModel.ts', 'utf8');
-const PAGE_SRC = readFileSync('assets/script/app/main/MainTerritoryMap.ts', 'utf8');
+/** 详情弹窗分流已从页面迁到 `TerritoryDetailCoordinator`（页面只上报生命周期）。 */
+const DETAIL_SRC = readFileSync('assets/script/app/territory/presentation/TerritoryDetailCoordinator.ts', 'utf8');
 
 const BLUE_FRAME = { name: 'frame_03' };
 const RED_FRAME = { name: 'frame_02' };
+const CLEAR_FRAME = { name: 'pvp_clear_frame' };
+const CLEAR_ICON = { name: 'pvp_clear_icon' };
 const PVP_PORTRAIT = { name: 'pvp_portrait' };
 /** 虚影建筑帧：`applyIconPlacement` / `previewAnchorScale` 要读的四个字段全给齐。 */
 const GHOST_FRAME = {
@@ -57,28 +59,29 @@ interface RenderOptions {
     /** 红色底图没加载到的场景。 */
     noRedFrame?: boolean;
     noPortrait?: boolean;
+    /** 2026-11-23 已通关 PVP 的问号徽标两张新图没加载到的场景。 */
+    noClearFrames?: boolean;
 }
 
 /** 跑真 `stationRenderOf`（VM 夹具的桩表在 helpers/territory-map-view-sandbox 里收口）。 */
 function stationRenderOf(site: Site, opts: RenderOptions = {}): Record<string, any> {
     const ghost = opts.ghost === undefined ? GHOST_FRAME : opts.ghost;
-    const View = loadTerritoryMapViewClass();
-    const view = new View();
-    Object.assign(view, {
-        // 与 `syncGhosts` 同一条判据的桩：配了 buildingId 才查得到建筑帧。
-        stationIconOf: (s: Site) => (s && s.buildingId ? ghost : null),
-        stateOf: () => 'available',
-    });
     const stage = { chapterId: 1, stage: 2, isBoss: false };
     const input = {
         stageByCell: opts.bindStage === false ? new Map() : new Map([[site.cellId, stage]]),
         art: {
             randomSilverIcon: {},
             chestIcon: null,
+            buildFrames: new Map([[Number(site.buildingId), ghost]]),
             levelBubbleFrame: BLUE_FRAME,
             levelBubblePendingFrame: opts.noRedFrame ? undefined : RED_FRAME,
-            pvpBubblePortrait: opts.noPortrait ? null : PVP_PORTRAIT,
+            pvpBubbleAvatarFrame: {},
+            pvpBubbleLevelFrame: {},
+            pvpClearBubbleFrame: opts.noClearFrames ? undefined : CLEAR_FRAME,
+            pvpClearBubbleIcon: opts.noClearFrames ? undefined : CLEAR_ICON,
         },
+        playerPortrait: opts.noPortrait ? null : PVP_PORTRAIT,
+        playerLevel: 12,
         previewCells: opts.previewCells ?? [],
         siteOpenableCells: [site.cellId],
         pendingFixedResourceCells: [],
@@ -89,7 +92,7 @@ function stationRenderOf(site: Site, opts: RenderOptions = {}): Record<string, a
             isAreaPassed: () => opts.passed ?? false,
         },
     };
-    return stationRenderWithProjection(view)(site, input) as Record<string, any>;
+    return stationRenderWithProjection()(site, input) as Record<string, any>;
 }
 
 // ============================================================
@@ -135,21 +138,35 @@ test('预告的异步据点写 PVP，没绑关卡也写（文案真源不看 sta
     assert.equal(out.levelBubble, 'PVP');
     assert.equal(out.levelBubbleFrame, RED_FRAME);
     assert.equal(out.levelBubblePortrait, PVP_PORTRAIT);
+    assert.ok(out.levelBubbleAvatarFrame, '黄底头像框要跟着头像一起交给视图');
+    assert.ok(out.levelBubbleLevelFrame, '等级角标要跟着头像一起交给视图');
+    assert.equal(out.levelBubbleLevel, 12);
 });
 
-test('PVP 未通关显示头像，区域通关后恢复蓝色文字气泡，其他关卡不变', () => {
+test('PVP 未通关显示头像，区域通关后换成图1问号徽标，其他关卡不变', () => {
     const site = stageSite({ type: 'asyncPvp' });
     const pending = stationRenderOf(site, { unlocked: true });
     assert.equal(pending.levelBubblePortrait, PVP_PORTRAIT);
     assert.equal(pending.levelBubbleFrame, RED_FRAME);
     const passed = stationRenderOf(site, { unlocked: true, passed: true });
-    assert.equal(passed.levelBubblePortrait, null);
-    assert.equal(passed.levelBubbleFrame, BLUE_FRAME);
-    assert.equal(passed.levelBubble, 'PVP');
+    assert.equal(passed.levelBubblePortrait, null, '已通关不再显示头像');
+    assert.equal(passed.levelBubbleFrame, CLEAR_FRAME, '已通关换成 94×103 蓝底方图');
+    assert.equal(passed.levelBubbleIcon, CLEAR_ICON, '问号徽标图交给视图');
+    assert.equal(passed.levelBubblePvpBadge, true, '视图按问号徽标排版');
+    assert.equal(passed.levelBubble, undefined, '徽标没有文字，不再写 PVP');
     assert.equal(stationRenderOf(stageSite(), { unlocked: true }).levelBubblePortrait, null);
     assert.equal(stationRenderOf(site, { unlocked: true, noPortrait: true }).levelBubblePortrait, null);
     assert.equal(stationRenderOf(site, { unlocked: true, noRedFrame: true }).levelBubblePortrait, null);
     assert.equal(stationRenderOf(site, { unlocked: true, bindStage: false }).levelBubblePortrait, PVP_PORTRAIT);
+});
+
+test('已通关 PVP 缺新图时回退蓝 PVP 胶囊（不让气泡消失）', () => {
+    const out = stationRenderOf(stageSite({ type: 'asyncPvp' }), {
+        unlocked: true, passed: true, noClearFrames: true,
+    });
+    assert.equal(out.levelBubblePvpBadge, undefined, '缺图不切徽标');
+    assert.equal(out.levelBubbleFrame, BLUE_FRAME, '回退已通关蓝图');
+    assert.equal(out.levelBubble, 'PVP', '回退文字胶囊');
 });
 
 test('已解锁 / 已通关走正常分支：不走预告标记，底图仍按 isAreaPassed 分色', () => {
@@ -205,7 +222,9 @@ test('没有 previewBubble 时，同样的未解锁内容不显示气泡（旧�
     const { view, badgeLabel } = makeStationView();
     view.render(previewContent({ levelBubbleAnchorFrame: GHOST_FRAME }));
     assert.equal(badgeLabel.node.active, false);
-    assert.equal(badgeLabel.node.parent?.name, 'StationBadgeLayer');
+    assert.equal(badgeLabel.node.parent?.name, 'LevelBubble', '文字挂在气泡子树里');
+    assert.equal(view.levelBubbleNode.parent?.name, 'StationBadgeLayer');
+    assert.equal(view.levelBubbleNode.active, false);
 });
 
 test('★锚点帧把预告气泡抬到虚影建筑顶上，而不是压回格心', () => {
@@ -237,14 +256,17 @@ test('预告气泡仍受 hidden / isLoading / hintBubbleSuppressed 约束（只�
 // ============================================================
 
 test('★预告判据四条同处一源，且与 syncGhosts 的「只画有 buildingId 那格」同源', () => {
-    const at = MAP_VIEW_SRC.indexOf('const isPreviewBattleSite');
-    assert.ok(at > 0, '要能定位预告判据');
+    const at = MAP_VIEW_SRC.indexOf('const bubbleText = territoryLevelBubbleText(site, stage)');
+    assert.ok(at > 0, '要能定位预告判据（从文案缓存那一行起）');
     const block = MAP_VIEW_SRC.slice(at, MAP_VIEW_SRC.indexOf('return {', at));
-    assert.match(block, /\(input\.previewCells \?\? \[\]\)\.includes\(site\.cellId\)/);
+    assert.match(block, /Boolean\(input\.previewCells\?\.includes\(site\.cellId\)\)/,
+        '在 previewCells 里（可选链短路，不再给每个未解锁站点分配空数组）');
     assert.match(block, /station\.battle/, '战斗类型来自发布帧的共享投影');
     assert.match(block, /!!site\.buildingId/, '只有虚影承载格才挂气泡');
-    assert.match(block, /territoryLevelBubbleText\(site, stage\) !== undefined/, '要有文案才挂');
-    assert.match(block, /this\.stationIconOf\(site, stage, input\.art\)/, '锚点帧与虚影同源');
+    assert.match(block, /const bubbleText = territoryLevelBubbleText\(site, stage\)/,
+        '文案只算一次（同一帧还要给 levelBubble 复用）');
+    assert.match(block, /bubbleText !== undefined/, '要有文案才挂');
+    assert.match(block, /stationIconOf\(site, stage, input\.art\)/, '锚点帧与虚影同源');
     assert.match(block, /previewAnchor !== null/, '虚影画不出来就不挂气泡');
     assert.match(MAP_VIEW_SRC, /levelBubbleFrame: previewBubble\s*\? input\.art\.levelBubblePendingFrame/,
         '预告气泡必须取红色未通关底图');
@@ -276,8 +298,8 @@ test('★异步据点并入「解锁即直开」，已解锁 / 已通关仍弹�
     assert.doesNotMatch(MODEL_SRC, /isLevelSite\(/, '旧「只给主线关卡」的判据必须彻底退役');
     // 已解锁 / 已通关仍走 detailSite ⇒ 页面照旧弹 BigMapPlayerLevelPanel。
     assert.match(MODEL_SRC, /this\.detailSite = site;/);
-    assert.match(PAGE_SRC, /if \(detail\.playerStage\)/);
-    assert.match(PAGE_SRC, /BigMapPlayerLevelPanel/, '侦查面板不许被顺手删掉');
+    assert.match(DETAIL_SRC, /if \(detail\.playerStage\)/);
+    assert.match(DETAIL_SRC, /BigMapPlayerLevelPanel/, '侦查面板不许被顺手删掉');
     // 绑不到 campaign 行仍退回「只解锁」，不发空请求。
     assert.match(MODEL_SRC, /void this\.handleUnlockOnly\(site, TERRITORY_TEXTS\.stageUnlocked\)/);
 });

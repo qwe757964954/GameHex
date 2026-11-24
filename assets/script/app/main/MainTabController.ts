@@ -5,7 +5,6 @@ import { MainTab, MainTabModel, mainTabTarget } from './MainTabModel';
 import { MainTabEvent, type IMainTabSelectEvent } from './MainTabEvents';
 
 export interface IMainTabControllerOptions<T> {
-    readonly owner: object;
     readonly assetType: AssetType<T>;
     readonly failed: (tab: number, error: unknown) => void;
     readonly view: {
@@ -47,7 +46,6 @@ export class MainTabController<T> extends ControllerBase {
         this.listen(MainTabEvent.Select, this.onSelect);
     }
     private onSelect(event: IMainTabSelectEvent): void {
-        if (event.owner !== this.options.owner) return;
         const target = mainTabTarget(event.tab);
         if (!target || target.kind === 'locked') return;
         if (event.source !== 'route') this.options.telemetry.reportClick(event.tab);

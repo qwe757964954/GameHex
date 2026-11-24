@@ -29,13 +29,13 @@ test('store routes only its own intents, prevents repeated purchases and detache
     const owner = {}, gate = deferred<void>(); let actions = 0;
     const controller = new StoreController(createControllerContext(), owner, async () => { actions++; await gate.promise; }, assert.fail);
     controller.start();
-    const action = { owner, kind: 'buyGoods', context: { section: 'goods', rowId: 1 } };
-    EventMgr.instance.emit(StoreEvent.Action, { ...action, owner: {} });
-    EventMgr.instance.emit(StoreEvent.Action, action); EventMgr.instance.emit(StoreEvent.Action, action);
+    const action = { kind: 'buyGoods', context: { section: 'goods', rowId: 1 } };
+    EventMgr.instance.emit(StoreEvent.Action, { ...action }, {});
+    EventMgr.instance.emit(StoreEvent.Action, action, owner); EventMgr.instance.emit(StoreEvent.Action, action, owner);
     assert.equal(actions, 1);
     gate.resolve(); await tick();
-    EventMgr.instance.emit(StoreEvent.Action, action); assert.equal(actions, 2);
-    controller.dispose(); EventMgr.instance.emit(StoreEvent.Action, action); assert.equal(actions, 2);
+    EventMgr.instance.emit(StoreEvent.Action, action, owner); assert.equal(actions, 2);
+    controller.dispose(); EventMgr.instance.emit(StoreEvent.Action, action, owner); assert.equal(actions, 2);
 });
 
 test('role default loading does not override a bag chosen while loading; cancellation ignores stale render', async () => {
@@ -59,19 +59,18 @@ test('role default loading does not override a bag chosen while loading; cancell
         },
     });
     controller.start(); const loading = controller.refresh();
-    EventMgr.instance.emit(RoleEvent.Intent, { owner, kind: 'bag', tab: 2 });
+    EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 2 }, owner);
     gate.resolve(12); await loading;
     assert.deepEqual(shown, [2]); assert.deepEqual(rendered, [12]);
     const late = controller.refresh(); controller.cancel(); await late;
     assert.deepEqual(rendered, [12]);
-    controller.dispose(); EventMgr.instance.emit(RoleEvent.Intent, { owner, kind: 'bag', tab: 1 });
+    controller.dispose(); EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }, owner);
     assert.deepEqual(shown, [2]);
 });
 
-test('league join event rechecks membership for the matching container and ignores stale results', async () => {
-    const owner = {}, requests: ReturnType<typeof deferred<{ joined: boolean }>>[] = [], shown: boolean[] = [];
+test('league join event rechecks membership for the active container and ignores stale results', async () => {
+    const requests: ReturnType<typeof deferred<{ joined: boolean }>>[] = [], shown: boolean[] = [];
     const controller = new LeagueTabController(createControllerContext(), {
-        owner,
         failed: assert.fail,
         repository: {
             load: () => { const gate = deferred<{ joined: boolean }>(); requests.push(gate); return gate.promise; }
@@ -81,8 +80,9 @@ test('league join event rechecks membership for the matching container and ignor
         },
     });
     controller.start();
-    EventMgr.instance.emit(LeagueTabEvent.Joined, { owner: {} }); assert.equal(requests.length, 1);
-    EventMgr.instance.emit(LeagueTabEvent.Joined, { owner });
+    assert.equal(requests.length, 1);
+    EventMgr.instance.emit(LeagueTabEvent.Joined);
+    assert.equal(requests.length, 2);
     requests[1].resolve({ joined: true }); await tick();
     requests[0].resolve({ joined: false }); await tick(); assert.deepEqual(shown, [true]);
     const late = controller.refresh(true); controller.dispose(); requests[2].resolve({ joined: false }); await late;
@@ -94,7 +94,7 @@ test('hero snapshot publishes before authority and only latest refresh survives;
     const snapshot = lineupData(false);
     const authority = lineupData(true);
     const observer = {};
-    EventMgr.instance.on(CardLineupUiEvent.Render, event => { if (event.owner === owner) seen.push(event.data); }, observer);
+    EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === owner) seen.push(event.data); }, observer);
     const controller = new CardLineupController(createControllerContext(), {
         owner,
         autoLoadDecks: true,
@@ -132,7 +132,7 @@ test('hero upgrade immediately updates reopening level while authoritative refre
     });
     controller.start();
     EventMgr.instance.emit(CardLineupEvent.HeroUpgraded, { heroId: 101, level: 4 });
-    EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner, kind: 'upgrade', card: { id: '101' } });
+    EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'upgrade', card: { id: '101' } }, owner);
     assert.deepEqual(levels, [4]);
     controller.dispose();
 });
@@ -143,7 +143,7 @@ test('冷配置就绪后先发布完整快照；迟到快照不能覆盖权威�
         const snapshot = lineupData(false), authority = lineupData(true);
         const owner = {}, observer = {}, seen: CardLineupData[] = [];
         let ready = false;
-        EventMgr.instance.on(CardLineupUiEvent.Render, event => { if (event.owner === owner) seen.push(event.data); }, observer);
+        EventMgr.instance.on(CardLineupUiEvent.Render, (event, source) => { if (source === owner) seen.push(event.data); }, observer);
         const controller = new CardLineupController(createControllerContext(), {
             owner, autoLoadDecks: true, fallbackLevel: 1,
             repository: {

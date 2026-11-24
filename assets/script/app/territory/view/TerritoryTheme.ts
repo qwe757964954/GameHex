@@ -60,9 +60,7 @@ export const TERRITORY_COLORS = Object.freeze({
 
 /** 弹窗与通用控件复用色彩 Token（纯常量单例，避免重复 new Color）。 */
 export const TERRITORY_THEME_TOKENS = Object.freeze({
-    dotOn: Object.freeze(new Color(58, 36, 16, 255)),
     buttonDim: Object.freeze(new Color(120, 118, 112, 255)),
-    guardLockedDim: Object.freeze(new Color(255, 255, 255, 96)),
 });
 
 const UNBOUND_PVP_TINT = Object.freeze(new Color(148, 92, 60, 255));

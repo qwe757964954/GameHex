@@ -9,14 +9,14 @@ test('challenge tab stays visible but cannot open the old adventure page', () =>
     const source = readFileSync(new URL('../assets/script/app/main/MainTabHost.ts', import.meta.url), 'utf8');
     // 旧挑战入口仍保留在底栏，但不再绑定切页回调或章节地图 prefab。
     // 世界格 2026-10-21 起改为大地图入口（不再是锁定态）。
-    // 2026-11-05 起「角色 / 联盟」恢复开放，未开放名单只剩挑战（唯一真源 = `MainTabModel.LOCKED_TABS`）。
+    // 挑战与联盟处于未开放名单（名单唯一真源 = `MainTabModel.LOCKED_TABS`）。
     assert.deepEqual(mainTabTarget(MainTab.Challenge), { kind: 'locked' });
+    assert.deepEqual(mainTabTarget(MainTab.Alliance), { kind: 'locked' });
     assert.deepEqual(mainTabTarget(MainTab.Role), { kind: 'page', path: 'ui/Role/Role', bundle: MAIN_PAGES_BUNDLE });
-    assert.deepEqual(mainTabTarget(MainTab.Alliance), { kind: 'page', path: 'ui/League/LeagueTab', bundle: MAIN_PAGES_BUNDLE });
     assert.deepEqual(
-        [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory, MainTab.Alliance].map(tab => mainTabTarget(tab)?.kind),
-        ['page', 'page', 'page', 'page', 'page'],
-        '商店 / 英雄 / 角色 / 领地 / 联盟必须仍可切',
+        [MainTab.Shop, MainTab.Hero, MainTab.Role, MainTab.Territory].map(tab => mainTabTarget(tab)?.kind),
+        ['page', 'page', 'page', 'page'],
+        '商店 / 英雄 / 角色 / 领地必须仍可切',
     );
     assert.match(source, /button\.setEnabled\(!isMainTabLocked\(type\)\)/);
     assert.doesNotMatch(source, /button\.setEnabled\(type !== MainTab\.Challenge\)/,

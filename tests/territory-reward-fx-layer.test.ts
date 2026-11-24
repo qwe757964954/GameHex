@@ -317,7 +317,7 @@ test('★ 视图负责建层：排最后 / layer 跟随 / 幂等 / 销毁回收'
     assert.match(mount, /host\.setParent\(root\);/);
     assert.match(mount, /host\.setSiblingIndex\(root\.children\.length - 1\);/,
         '子节点顺序 = 渲染顺序，排最后才盖得过 BottomNav');
-    assert.match(methodBody(code, 'disposeRewardFxLayer()'),
+    assert.match(methodBody(code, '    disposeRewardFxLayer(): void'),
         /if \(owned\?\.isValid\) owned\.destroy\(\);/);
 });
 
@@ -332,11 +332,9 @@ test('★ 注入发生在登记终点之前：否则这次飞行还在旧坐标�
     assert.match(fn, /this\.mapView\.mountRewardFxLayer\(this\.rewardFxRoot\(\)\);/);
 });
 
-test('★ 页面销毁时通知视图收掉顶层宿主（它不随本页子节点销毁）', () => {
-    const fn = methodBody(body(PAGE), 'onDestroy()');
-    assert.match(fn, /this\.mapView\?\.disposeRewardFxLayer\(\);/);
-    assert.doesNotMatch(fn, /rewardFxHost/,
-        '页面不持有 / 不销毁节点，所有权全在视图');
+test('★ 地图视图销毁时自行释放页面外的奖励层', () => {
+    assert.match(methodBody(body(VIEW), 'onDestroy()'), /this\.disposeRewardFxLayer\(\);/);
+    assert.doesNotMatch(methodBody(body(PAGE), 'onDestroy()'), /this\.mapView\b/);
 });
 
 test('★ 视图：飞行链路四处都走 rewardFxLayer / 指定宿主', () => {

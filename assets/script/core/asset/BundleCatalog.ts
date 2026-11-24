@@ -44,13 +44,14 @@ export const BUNDLE_DIRECTORIES: Readonly<Record<string, readonly string[]>> = {
         'ui/Celebration', 'ui/FirstRecharge', 'ui/LimitTimeAct', 'ui/MonthCardGift', 'ui/ShowReward',
         'ui/ItemDetail', 'ui/ItemInfo', 'ui/gm', 'ui/vscroll', 'ui/Guide',
         'image/role', 'image/league', 'image/store', 'image/card', 'image/card_lineup', 'image/card_board', 'image/carddetail', 'image/carddetail_bg', 'image/gift', 'image/battletoken',
-        // 卡牌升级成功的序列帧（`007-2-run_loop_05..19`）+ 刷光条：单张独立采样，不进任何图集。
+        // 卡牌升级成功的序列帧（`007-2-run_loop_05..19`，2026-11-24 按 `CardUpgradeFx` 的 0.4 显示比
+        // 从 772×2214 缩到 309×886）+ 刷光条 `shine`：同目录 `auto-atlas.pac` 收成 2048 图集，不再单张独立采样。
         'image/card_effect_levelup',
         'image/friend', 'image/chat', 'image/mail', 'image/playerinfo', 'image/hang', 'image/activity',
         'image/activityIcon', 'image/sevenDay', 'image/celebration', 'image/firstRecharge',
         'image/limitTimeAct', 'image/monthcard', 'image/showReward', 'image/itemdetail', 'image/iteminfo',
         'icons/item', 'icons/equip', 'icons/gem', 'icons/cardHead', 'icons/card', 'icons/skill',
-        'icons/hero', 'icons/militia',
+        'icons/militia',
         // 新手引导立绘：762×1107 的单张大图，刻意不进 `image/role`（那目录有 auto-atlas，会被图集缩糊）
         'image/guide',
     ],

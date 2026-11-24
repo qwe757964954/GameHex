@@ -2,8 +2,12 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { buildMatchProfileLookup, applyUnitToPlayerView } from '../assets/script/app/battle/BattleStartModel';
+import { ARTIFACT_ART_ROOT, HEAD_ART_ROOT, spriteFramePath } from '../assets/script/app/ArtPaths';
 import type { MatchPlayerData } from '../assets/script/app/matching/MatchTypes';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { assetPath } from './helpers/asset-paths';
+import { createControllerContext } from './helpers/controller-context';
+import { loadMatchIcons } from './helpers/sprite-frame-cache';
 
 /**
  * 匹配界面的神器图标必须与对局里**同一张图**。
@@ -50,11 +54,11 @@ test('对手数据带上图标名（服务端 artifactId → 资源名）', () =
     const lookup = buildMatchProfileLookup(null, ARTIFACT_ROWS);
     const base: MatchPlayerData = {
         name: '', avatarIcon: '', power: 0, rank: '', trophy: 0,
-        artifactName: '', artifactIcon: '', stats: [],
+        artifactName: '', artifactIcon: '', stats: [], cards: [],
     };
     const merged = applyUnitToPlayerView(
         base,
-        { artifactId: 69001, name: '对手', power: 72, gradeScore: 386 } as never,
+        { artifactId: 69001, name: '对手', power: 72, gradeScore: 386, heroIds: [], heroes: [] } as never,
         lookup,
     );
     assert.equal(merged.artifactName, '希瓦的守护');
@@ -66,27 +70,14 @@ test('对手数据带上图标名（服务端 artifactId → 资源名）', () =
 test('回包神器为 0 时清空旧神器，有效 id 时显示查表结果', () => {
     const lookup = buildMatchProfileLookup(null, ARTIFACT_ROWS);
     const base: MatchPlayerData = { name: '', avatarIcon: '', power: 0, rank: '', trophy: 0,
-        artifactName: '旧神器', artifactIcon: '旧图', stats: [] };
-    const withoutArtifact = applyUnitToPlayerView(base, { artifactId: 0, heroIds: [] } as never, lookup);
+        artifactName: '旧神器', artifactIcon: '旧图', stats: [], cards: [] };
+    const withoutArtifact = applyUnitToPlayerView(base, { artifactId: 0, heroIds: [], heroes: [] } as never, lookup);
     assert.equal(withoutArtifact.artifactName, '');
     assert.equal(withoutArtifact.artifactIcon, '');
-    const withArtifact = applyUnitToPlayerView(withoutArtifact, { artifactId: 69002, heroIds: [] } as never, lookup);
+    const withArtifact = applyUnitToPlayerView(withoutArtifact, { artifactId: 69002, heroIds: [], heroes: [] } as never, lookup);
     assert.equal(withArtifact.artifactName, '疾风之靴');
     assert.equal(withArtifact.artifactIcon, '狂猎皮靴');
     assert.equal(base.artifactName, '旧神器');
-});
-
-test('匹配界面从 image/artifact 取神器图，不是 image/matching', () => {
-    const artPaths = readFileSync('assets/script/app/ArtPaths.ts', 'utf8');
-    assert.match(artPaths, /ARTIFACT_ART_ROOT\s*=\s*`\$\{ART_ROOT\}\/artifact`/,
-        '神器图根必须是 image/artifact（与对局同一张图）');
-    const item = readFileSync('assets/script/app/matching/MatchPlayerItem.ts', 'utf8');
-    assert.match(item, /iconLoader\(data\.artifactIcon,\s*ARTIFACT_ART_ROOT\)/,
-        '匹配视图必须用 artifact 根加载神器图标');
-    assert.ok(
-        !/iconLoader\(data\.artifactIcon,\s*MATCH_ART_ROOT\)/.test(item),
-        '**不能再用 MATCH_ART_ROOT 取神器** —— 那儿只有一张固定占位图',
-    );
 });
 
 test('匹配 prefab 不再硬绑那张占位神器图', () => {
@@ -127,8 +118,9 @@ test('我方神器不得读从未订阅的 CmdArtifact 推送缓存（那条恒�
         '我方神器应由 refreshMineView 的 applyUnitToPlayerView 统一合并上屏');
 });
 
-test('预热走全表图标名：按 id 预热必然查不到（本局神器 id 要等开始游戏回包）', () => {
-    const lookup = buildMatchProfileLookup(null, ARTIFACT_ROWS);
+test('本机头像和神器全表同批预热，渲染复用匹配作用域内的缓存', async () => {
+    const lookup = buildMatchProfileLookup(null, ARTIFACT_ROWS,
+        [{ resId: 1, icon: 'head-key' }], [{ key: 'head-key', path: 'ui://图标/mine' }]);
     assert.deepEqual(lookup.allArtifactIcons(), ['霜封冰刃', '狂猎皮靴', '狂暴战斧'],
         '全表预热必须给出去重后的图标名');
     assert.deepEqual(buildMatchProfileLookup(null, null).allArtifactIcons(), [],
@@ -142,7 +134,23 @@ test('预热走全表图标名：按 id 预热必然查不到（本局神器 id 
         ['同一张'],
     );
 
-    const src = readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8');
-    assert.match(src, /preloadMatchIcons\(\s*lookup\.allArtifactIcons\(\),\s*ARTIFACT_ART_ROOT/,
-        '匹配页预热必须用 allArtifactIcons() 全表预热，否则我方神器图标要等 onDemand 晚一帧');
+    const { MatchIcons } = loadMatchIcons();
+    const scope = new ResourceScope('matching');
+    const paths: string[] = [];
+    const context = createControllerContext();
+    const icons = new MatchIcons({ ...context.assets, async load(path, Type, options) {
+        assert.equal(options?.scope, scope);
+        paths.push(path);
+        return new Type();
+    } }, scope);
+    await icons.preload(lookup, '1');
+    assert.equal(ARTIFACT_ART_ROOT, 'image/artifact');
+    assert.deepEqual(paths.filter(path => path.startsWith(`${ARTIFACT_ART_ROOT}/`)),
+        ARTIFACT_ROWS.map(row => spriteFramePath(ARTIFACT_ART_ROOT, row.icon)));
+    assert.ok(paths.includes(spriteFramePath(HEAD_ART_ROOT, 'mine')));
+    const count = paths.length;
+    assert.ok(await icons.load('mine', HEAD_ART_ROOT));
+    assert.ok(await icons.load(ARTIFACT_ROWS[0].icon, ARTIFACT_ART_ROOT));
+    assert.equal(paths.length, count);
+    scope.dispose();
 });

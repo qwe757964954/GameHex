@@ -13,6 +13,9 @@ export class ProcedureMatching extends ProcedureBase {
         await composition.preload(context, params);
     }
     onEnter(params?: IMatchingEntryParams): void { this.composition?.mount(params); }
+    onUpdate(elapseSeconds: number): void {
+        this.composition?.advanceTime(elapseSeconds);
+    }
     onPreloadCancelled(): void { this.disposeComposition(); }
     onLeave(): void { this.disposeComposition(); this.releaseResourceScope(); }
     protected onDestroy(): void { this.onLeave(); super.onDestroy(); }

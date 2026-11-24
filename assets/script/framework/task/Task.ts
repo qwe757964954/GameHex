@@ -24,11 +24,14 @@ export class Task extends ScriptObject {
     /**
      * 返回一个延时time秒的Promise
      * 使用方法：await FW.Task.delay(time)
-     * @param time 延时时间(毫秒)
+     * @param time 延时时间(秒)；<= 0 且无 caller 时直接微任务兑现，不占用帧计时器
      * @param caller 回调对象，可无！
      * @returns 返回一个Promise,需要await
      */
     delay(time: number, caller?: destroyable): Promise<void> {
+        if (time <= 0 && caller == null) {
+            return Promise.resolve();
+        }
         return new Promise<void>((resolve) => {
             let frameTimer = Timer.getTimer(() => {
                 resolve();

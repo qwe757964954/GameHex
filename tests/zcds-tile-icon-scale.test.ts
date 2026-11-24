@@ -52,7 +52,7 @@ function stubHexView(load: (name: string) => any, cc: any, bar: () => any): any 
 }
 
 /** 可开发格：我方走 `frameForTileType`（`icon_jk/by/wh`），敌方走 `enemyDevelopFrame`（`icon_em`）。 */
-function developablePresentation(owner: string, tileType: number, canDevelop: boolean): any {
+function developablePresentation(owner: string, tileType: number | null, canDevelop: boolean): any {
     return {
         state: {
             id: 3, owner, state: 'developable', building: 'none', tier: 0,
@@ -66,6 +66,19 @@ function developablePresentation(owner: string, tileType: number, canDevelop: bo
         now: 0,
     };
 }
+
+test('缺少地块类型的可开发格仍会在 25 金币上方显示问号', () => {
+    const { load, cc, bar } = loadViews();
+    const view = stubHexView(load, cc, bar);
+    view.priceIcon.spriteFrame = { name: 'gold-coin' };
+
+    view.render(developablePresentation('player', null, true));
+
+    assert.equal(view.iconLabel.string, '25');
+    assert.equal(view.priceIcon.enabled, true);
+    assert.equal(view.iconSprite.spriteFrame, view.mysteryFrame);
+    assert.equal(view.iconSprite.enabled, true);
+});
 
 test('地块类型图标缩放：我方可开发格落在 0.8，不是被覆写掉的 1', () => {
     const { load, cc, bar } = loadViews();

@@ -142,19 +142,19 @@ export class LeagueJoinPage extends Component {
     private onSearchTextChanged(): void {
         const input = this.searchInput;
         input.string = sanitizeLeagueSearchInput(input.string);
-        this.emit({ owner: this, kind: 'input', text: input.string ?? '' });
+        this.emit({ kind: 'input', text: input.string ?? '' });
     }
 
     private readonly emitSearch = (): void => {
-        this.emit({ owner: this, kind: 'search' });
+        this.emit({ kind: 'search' });
     };
 
     private readonly emitCreate = (): void => {
-        this.emit({ owner: this, kind: 'create' });
+        this.emit({ kind: 'create' });
     };
 
     private readonly emitQuickJoin = (): void => {
-        this.emit({ owner: this, kind: 'quickJoin' });
+        this.emit({ kind: 'quickJoin' });
     };
 
     /**
@@ -167,11 +167,11 @@ export class LeagueJoinPage extends Component {
     private onRowClick(_node: Node, index: number): void {
         const view = this.rows[index];
         if (!view) return;
-        this.emit({ owner: this, kind: 'openUnion', union: view });
+        this.emit({ kind: 'openUnion', union: view });
     }
 
     private emit(intent: ILeagueJoinIntent): void {
-        EventMgr.instance.emit(LeagueJoinEvent.Intent, intent);
+        EventMgr.instance.emit(LeagueJoinEvent.Intent, intent, this);
     }
 
     /** 按名字接按钮；prefab 必须挂 `cc.Button`（缺节点只 warn，不再用 TOUCH_END 兜底）。 */

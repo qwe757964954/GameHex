@@ -95,6 +95,20 @@ export class ZCSkillRuntimeRegistry {
         this.register('storm_zone', 'none');
         //  射线集束（科学家 103503，2026-11-19 第 18 批）：身前矩形光束，每秒 5 跳。
         this.register('ray_beam', 'none');
+        //  文明之火（科学家 103503 改造，2026-11-23 第 43 批）：射线集束换成「在目标点 200 半径内
+        //  随机撒 3 个火焰区域」。与 `ray_beam` 的差别是那个是一条跟着本体转的矩形光束、这个是
+        //  撒在地上的三块独立区域；与 `bolt_strike` 的差别是那个落点固定在目标背后一串、
+        //  这个是圆内随机且三块**同时**存在（不是依次落下）。
+        //  推进在 `ZCSkillTriggerSystem.applyFireZone`，撒区域在 `ZCAttackResolutionSystem.castFireZone`，
+        //  结算复用 `ZCGroundZoneSystem`（每块各自 `wavesLeft`）。
+        this.register('fire_zone', 'none');
+        //  腾云驾雾（仙桃行者 68009 的强化那一击 100904，2026-11-24 第 44 批）：
+        //  突进到目标 1 身前 → 打 1 次 → 以目标 1 为圆心 200 内再索取 3 个 → 依次各打 1 次 →
+        //  回到目标 1 的位置。**没有冷却也没有累计计数**：起手标记由 `prepareAttack` 在
+        //  「强化那一击」那一拍写下，之后全由 `applyDashChain` 逐帧推进（位移 + 出手）。
+        //  与所有「到点放一次」的车道都不同：它跨帧占住单位，`ZCUnitSystem` 靠 `dashChainIndex`
+        //  把单位整段冻住。
+        this.register('dash_chain', 'none');
         //  2026-10-30 六条「第二个主动」的两条新车道，同样只带数据、不带状态机：
         //  · `self_cast`     —— 冷却到点给自己开一段限时增益（可带自愈 / 友军治疗 / 净化），
         //                      施加与计时全在 `ZCSkillTriggerSystem.applySelfCast`；
@@ -145,8 +159,8 @@ export class ZCSkillRuntimeRegistry {
         this.register('splash_shot', 'none');
         this.register('spore_burst', 'none');
         //  2026-11-17 第 13 批：两条「以自身为圆心爆一次」的车道。
-        //  · `burst_aura`（菌壶菇「菌毯爆发」101504）—— 半径内均等伤害 + 给自己套一段护盾，
-        //    III 级护盾期间再叠一层「受到伤害降低」；
+        //  · `burst_aura`（原菌壶菇「菌毯爆发」101504，现由菌王菇「毒液喷吐」101803 使用）
+        //    —— 半径内均等伤害 + 给自己套一段护盾，III 级护盾期间再叠一层「受到伤害降低」；
         //  · `burst_knockback`（菌王菇「菌核爆裂」101804）—— 半径内均等伤害 + 把命中目标推开 N 格。
         //  与第 12 批的 `splash_shot` 正好互补：那个的圆心由**命中点**决定，这个的圆心恒等于**自己**，
         //  所以不能用 `strikeTargets` 的导弹分支（那条要先选中一个远处目标、再让弹体飞过去）。
@@ -179,8 +193,8 @@ export class ZCSkillRuntimeRegistry {
         this.register('charge_shield', 'none');
         this.register('legacy_dash', 'none');
         //  2026-11-18 第 16 批：风炮菇（68013）的一对主动，一条「命中留区域」、一条「落点引爆」。
-        //  · `wind_bolt`（孢爆箭 101303）—— 射一枚慢速风弹（70 逻辑 px/s、4 秒寿命），
-        //    命中单体后**在原地留一片 3 秒飓风**（每个接触到的敌人只挨一次）。
+        //  · `wind_bolt`（风炮弹 101303，原「孢爆箭」）—— 射一枚风弹（表值 175 逻辑 px/s、
+        //    4 秒寿命），命中单体后**在原地留一片 3 秒飓风**（每个接触到的敌人只挨一次）。
         //    上一版（第 12 批）借的是 `splash_shot`：命中点周围均等溅射。设计改口径后
         //    两者差得太多（单体 + 持续区域 vs 一次性旁溅），保留 `splash_shot` 那条车道不动，
         //    这里另开一条 —— 两条键共用一套壳子的话，「有没有飓风」会退化成「参数在不在」，

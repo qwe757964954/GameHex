@@ -152,8 +152,8 @@ test('基地使用一张连续背景，选择和调整窗口不恢复旧地面�
         assert.equal(h.view.background.sizeMode, 0);
         assert.equal(h.view.background.trim, false);
         const transform = h.view.background.node.getComponent(h.Transform) as InstanceType<typeof h.Transform>;
-        assert.equal(transform.width, h.view.layout.mapSize);
-        assert.equal(transform.height, h.view.layout.mapSize);
+        assert.ok(transform.width >= h.view.layout.mapSize && transform.width >= width);
+        assert.ok(transform.height >= h.view.layout.mapSize && transform.height >= height);
         for (const slot of h.view.slots.values()) {
             assert.equal(slot.root.children.some((node) => node.name === 'Foundation'), false);
         }

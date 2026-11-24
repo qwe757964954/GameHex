@@ -17,8 +17,8 @@ const { ccclass, property } = _decorator;
  *
  * ## 列表：工程 `VirtualScrollView`（网格模式）
  *
- * 5 列网格（`gridCount=5`）由 Inspector 配置，**代码不覆盖**（项目约定：配置只在 prefab 一处）。
- * 本类只挂 `renderItemFn` / `onItemClickFn` 两个回调 + 喂 `refreshList(length)`。
+ * 6 列网格（`gridCount=6`，格 96×96、横间距 22、行间距 15）由 Inspector 配置，**代码不覆盖**（项目约定：配置只在 prefab 一处）。
+ * 本类只挂 `renderItemFn` / `onItemClickFn` 两个回调 + 喂 `refreshList(按 6 列补满的槽数)`。
  *
  * ⚠️ 两条时序（技能 §20.3）：
  *   ① 图必须先 `await` 完再 `refresh`（`renderItemFn` 同步，现加载会闪上一格图）；
@@ -28,7 +28,7 @@ const { ccclass, property } = _decorator;
 export class RoleBagPanel extends Component {
     // ⚠️ 同 RolePage：prefab 里这个引用存的是【节点】，声明一律 `Node`，
     //    组件在 onLoad 里 getComponent 现取并缓存（声明成组件类型会拿到 cc.Node，运行时静默失效）。
-    @property({ type: Node, tooltip: 'Grid：背包网格节点（其上挂 VirtualScrollView，gridCount=5）' })
+    @property({ type: Node, tooltip: 'Grid：背包网格节点（其上挂 VirtualScrollView，gridCount=6）' })
     grid: Node = null;
 
     @property({ type: Node, tooltip: 'EmptyTip：空背包提示（无条目时显示）' })
@@ -91,8 +91,8 @@ export class RoleBagPanel extends Component {
         if (rev !== this.revision) return;
         this.iconFrames = icons;
 
-        // 预加载本页出现的品质框（去重，只 8 种）。
-        const qualities = Array.from(new Set(this.entries.map((e) => e.quality)));
+        // 预加载本页出现的品质框（去重，含空槽用的 1 号中性框）。
+        const qualities = Array.from(new Set([1, ...this.entries.map((e) => e.quality)]));
         await Promise.all(
             qualities.map(async (q) => {
                 this.qualityFrames.set(q, await loadRoleQualityFrame(q));
@@ -100,7 +100,10 @@ export class RoleBagPanel extends Component {
         );
         if (rev !== this.revision) return;
 
-        this.list.refreshList(this.entries.length);
+        // 固定 6 列整页铺满：不足一页时补空槽，与效果图的 6×4 网格数量一致（不伪造物品）。
+        const gridCount = this.list.gridCount > 0 ? this.list.gridCount : 1;
+        const slotCount = Math.ceil(this.entries.length / gridCount) * gridCount;
+        this.list.refreshList(slotCount);
         this.list.scrollToTop(false);
         this.emptyTip.active = this.entries.length === 0;
     }
@@ -126,8 +129,25 @@ export class RoleBagPanel extends Component {
     /** 铺一格（图标 / 品质框 / 数量 / 品阶 / 标记全部无条件写）。 */
     private renderItem(node: Node, index: number): void {
         const item = node.getComponent(RoleBagItem);
+        if (!item) return;
+
         const entry = this.entries[index];
-        if (!item || !entry) return;
+        if (!entry) {
+            // 整页补位槽：只留中性品质框，图标 / 数量 / 品阶 / 状态全部清空。
+            item.render(
+                this.qualityFrames.get(1) ?? null,
+                null,
+                {
+                    selected: false,
+                    equipped: false,
+                    upMark: false,
+                    redDot: false,
+                },
+                '',
+                '',
+            );
+            return;
+        }
 
         item.render(
             this.qualityFrames.get(entry.quality) ?? null,

@@ -5,20 +5,24 @@ import test from 'node:test';
 import ts from 'typescript';
 import * as catalog from '../assets/script/app/bigmap/application/BigMapArtCatalog';
 import * as artifactPaths from '../assets/script/app/ArtPaths';
+import * as bigMapTypes from '../assets/script/app/bigmap/model/BigMapTypes';
 import * as bundleCatalog from '../assets/script/core/asset/BundleCatalog';
+import { ResourceLoadQueue } from '../assets/script/core/asset/ResourceLoadQueue';
+import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
-function artLoader() {
+function artLoader(warn = console.warn) {
     const source = readFileSync('assets/script/app/bigmap/application/BigMapArtLoader.ts', 'utf8');
     const code = ts.transpileModule(source, {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     }).outputText;
     const moduleExports: Record<string, Function> = {};
     runInNewContext(code, {
-        exports: moduleExports, console,
+        exports: moduleExports, console: { warn },
         require: (name: string) => {
             if (name === 'cc') return { SpriteFrame: class {} };
             if (name === './BigMapArtCatalog') return catalog;
+            if (name === '../model/BigMapTypes') return bigMapTypes;
             if (name === '../../ArtPaths') return artifactPaths;
             if (name === '../../../core/asset/BundleCatalog') return bundleCatalog;
             throw new Error(`未预期依赖 ${name}`);
@@ -84,6 +88,48 @@ test('页面加载前关闭不会发起资源请求，加载途中关闭不会�
     assert.equal(late.baseTileDirt, null);
     assert.equal(late.tiledBackground, null);
     assert.ok([...late.resources.values()].every((frame) => frame === null));
+});
+
+test('切页释放作用域时，取消排队中的贴图且不打印缺图告警', async () => {
+    const warnings: unknown[][] = [];
+    const scope = new ResourceScope('bigmap');
+    const queue = new ResourceLoadQueue(1);
+    let finish: (value: object) => void = () => {};
+    const pending = new Promise<object>(resolve => { finish = resolve; });
+    const requests: string[] = [];
+    const artTask = artLoader((...args) => warnings.push(args))({
+        has: async () => true,
+        load: (path: string) => {
+            requests.push(path);
+            return queue.run(() => pending, scope);
+        },
+    }, scope);
+    await new Promise(resolve => setImmediate(resolve));
+    scope.dispose();
+    finish({});
+    const art = await artTask;
+    assert.ok(requests.length > 1);
+    assert.equal(art.tiledBackground, null);
+    assert.ok([...art.buildings.values(), ...art.resources.values(), ...art.hud.values()].every(frame => frame === null));
+    assert.deepEqual(warnings, []);
+});
+
+test('页面存活时，缺图和真实加载失败仍告警并使用现有兜底', async () => {
+    const warnings: unknown[][] = [];
+    const failure = new Error('加载失败');
+    const art = await artLoader((...args) => warnings.push(args))({
+        has: async (path: string) => path !== 'bigMapBG/spriteFrame',
+        load: async (path: string) => {
+            if (path === 'icons/item/图标_木材/spriteFrame') throw failure;
+            return { path };
+        },
+    }, new ResourceScope('bigmap'), 'custom/world', new Map([['wood', 'icons/item/图标_木材']]));
+    assert.equal(art.tiledBackground, null);
+    assert.equal(art.background.path, 'custom/world/spriteFrame');
+    assert.equal(art.resources.get('wood').path, 'image/concept/sprites/wood/spriteFrame');
+    assert.equal(warnings.length, 2);
+    assert.match(String(warnings[0][0]), /资源未命中.*bigMapBG/);
+    assert.equal(warnings[1][1], failure);
 });
 
 test('连续背景缺失时保留自定义布局背景，不再加载旧地皮', async () => {
@@ -236,4 +282,25 @@ test('旧表 / 旧包的概念占位图仍归一成新据点图，按段与 camp
     assert.equal(art('image/buildings/camp_sky', 701), 'image/buildings/camp_sky');
     assert.equal(art('image/territory/buildings/territory_boss_v1', 101),
         'image/territory/buildings/territory_boss_v1');
+});
+
+test('空 / 负 / 未知段据点 ID 不会抛错，也不会把概念占位图原样返回', () => {
+    //历史快照漏字段时，纯函数不能让 `startsWith` 抛 TypeError；空串原样返回，Loader 会直接落 null。
+    assert.equal(catalog.toBigMapArtPath(null as unknown as string), '');
+    assert.equal(catalog.toBigMapArtPath(undefined as unknown as string), '');
+    assert.equal(catalog.worldCampArtFor(null as unknown as string, 101), '');
+    const concept = 'image/concept/sprites/mutant_camp';
+    //0 / 9xx / NaN 没有对应段，回退到城池兜底图，不能返回已删库的概念图。
+    assert.equal(catalog.worldCampArtFor(concept, 0), catalog.BIGMAP_WORLD_CITY_ART);
+    assert.equal(catalog.worldCampArtFor(concept, 901), catalog.BIGMAP_WORLD_CITY_ART);
+    assert.equal(catalog.worldCampArtFor(concept, Number.NaN), catalog.BIGMAP_WORLD_CITY_ART);
+    //负数先取绝对值，仍落到 1xx 段的真实新图，不会出现 `group[-1]`。
+    assert.match(catalog.worldCampArtFor(concept, -101), /^image\/buildings\/camp_outpost/);
+});
+
+test('Loader 不再散落大地图美术目录，路径只从 Catalog 取', () => {
+    const source = readFileSync('assets/script/app/bigmap/application/BigMapArtLoader.ts', 'utf8');
+    for (const literal of ['bigMapBG', 'territory_boss_v1', 'image/decor/wasteland', 'image/wasteland_background']) {
+        assert.equal(source.includes(literal), false, `Loader 仍硬编码了 ${literal}`);
+    }
 });

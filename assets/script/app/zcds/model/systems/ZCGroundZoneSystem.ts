@@ -608,6 +608,9 @@ export class ZCGroundZoneSystem {
             //  事件级缩放（2026-11-19 射线集束 103503）：`area` 不按 `radius` 缩放，
             //  「同一条光束、长度由表值驱动」只能靠这一格。缺省不写 ⇒ 存量区域逐字不变。
             effectScale: zone.effectScale,
+            //  事件级染色（2026-11-23 第 43 批文明之火 103503）：同一张灼热地带图，
+            //  火焰树妖那边是紫、文明之火那边是蓝，只能按事件区分。
+            tint: zone.tint,
         });
         zone.visualEventId = id;
     }
@@ -652,6 +655,7 @@ export class ZCGroundZoneSystem {
             angleDegrees: zone.angleDegrees,
             visualLiftPx: zone.visualLiftPx,
             effectScale: zone.effectScale,
+            tint: zone.tint,
         });
     }
 
@@ -719,6 +723,7 @@ export class ZCGroundZoneSystem {
                 angleDegrees: zone.angleDegrees,
                 visualLiftPx: zone.visualLiftPx,
                 effectScale: zone.effectScale,
+                tint: zone.tint,
             });
         }
         const targetHexId = context.hexIdAt(zone.x, zone.y);

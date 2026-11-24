@@ -49,7 +49,7 @@ function strOf(value: unknown): string {
  * 数字数组归一。
  *
  * ⚠️ 表里这两列（`attrList` / `modify`）在压缩形态下可能是 **JSON 字符串**
- * （同 `skillAttrModifier.modify`，见 `RoleRepository.normalizeModify`）⇒ 两种都认。
+ * （`skillAttrModifier.modify` 也是同一种压缩形态）⇒ 两种都认。
  */
 function numsOf(value: unknown): readonly number[] {
     let raw: unknown = value;
@@ -104,7 +104,7 @@ export function parseMilitiaLevelRows(raw: readonly unknown[]): IMilitiaLevelRow
 /**
  * `skillAttrModifier` 原始行 → id 索引。
  *
- * ⚠️ `modify` / `armyTalent` 两列在压缩形态下可能是 **JSON 字符串**（同 `RoleRepository.normalizeModify`）
+ * ⚠️ `modify` / `armyTalent` 两列在压缩形态下可能是 **JSON 字符串**（与 `skillAttrModifier.modify` 同一种压缩形态）
  * ⇒ 两种都认，认不出就当空。
  */
 export function parseMilitiaModifiers(raw: readonly unknown[]): Map<number, IMilitiaModifierRow> {

@@ -141,18 +141,19 @@ export class CardLineupPage extends Component {
     protected start(): void {
         this.qualityLabel.string = CARD_LINEUP_TEXTS.qualityBonus;
         this.bondTitleLabel.string = CARD_LINEUP_TEXTS.bondBonusTitle;
-        this.powerLabel.string = '--';
+        const cachedPower = cardRepository.getCachedLineupPower();
+        this.powerLabel.string = cachedPower !== null && cachedPower > 0 ? formatPowerText(cachedPower) : '--';
         this.bindTeamEdit();
         this.renderLoading();
         EventMgr.instance.on(CardLineupUiEvent.Render, this.onLineupRender, this);
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'ready' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);
     }
 
     /**
      * 首屏先画本地快照，等权威值回来再校正。没有快照就停在空台，等 refresh。
      */
-    private readonly onLineupRender = (event: ICardLineupRender): void => {
-        if (event.owner === this) void this.presentLineup(event.data).catch(error => {
+    private readonly onLineupRender = (event: ICardLineupRender, source: object): void => {
+        if (source === this) void this.presentLineup(event.data).catch(error => {
             if (this.isValid) console.warn('[CardLineup] 渲染失败', error);
         });
     };
@@ -169,7 +170,7 @@ export class CardLineupPage extends Component {
         this.cancelPreviewLoads();
         this.pendingPreviews.length = 0;
         this.previewFlushScheduled = false;
-        EventMgr.instance.emit(VIEW_LIFECYCLE, { owner: this, phase: 'destroyed' });
+        EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'destroyed' }, this);
     }
 
     /** 队伍编辑按钮绑在 cc.Button 上，点击监听挂在节点上。 */
@@ -181,10 +182,10 @@ export class CardLineupPage extends Component {
      * 打开布阵面板。保存结果不回调，面板发 DeckSaved，本页收到后自己重刷。
      */
     private onTeamEditClick(): void {
-        EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'edit' });
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'edit' }, this);
     }
 
-    refresh(): void { EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'refresh' }); }
+    refresh(): void { EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'refresh' }, this); }
 
     /**
      * 页面统一写节点的地方，只渲染不取数。
@@ -477,7 +478,7 @@ export class CardLineupPage extends Component {
         // 按下-抬起位移判定，滑动列表不会误触发）。
         this.cardGrid.onItemClickFn = (_node, index) => {
             const card = cards[index];
-            if (card) EventMgr.instance.emit(CardLineupUiEvent.Intent, { owner: this, kind: 'upgrade', card });
+            if (card) EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'upgrade', card }, this);
         };
         const unchanged = signature === this.poolSignature && cards.length === this.poolCount;
         this.poolSignature = signature;

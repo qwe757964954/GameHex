@@ -5,16 +5,28 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { loadBigMapController, type IBigMapNetPort } from './helpers/bigmap-controller';
 import { BigMapModel, type IBigMapActionFeedback } from '../assets/script/app/bigmap/application/BigMapModel';
 import { BigMapCampRepository } from '../assets/script/app/bigmap/application/BigMapCampRepository';
-import { BigMapUiEvent, BigMapViewEvent, type BigMapIntent } from '../assets/script/app/bigmap/application/BigMapEvents';
+import { BIGMAP_BATTLE_READY, BigMapUiEvent, BigMapViewEvent, type BigMapIntent } from '../assets/script/app/bigmap/application/BigMapEvents';
+import { BATTLE_START_SETTLED } from '../assets/script/app/battle/BattleStartModel';
 import type { IBigMapViewState } from '../assets/script/app/bigmap/application/BigMapViewState';
 import { createMemoryBigMapStorage } from '../assets/script/app/bigmap/application/BigMapSaveKeys';
 import { loadBigMapConfig } from './helpers/bigmap-fixtures';
 
 /** 每个 harness 自己的网络端口；Controller 直连的单例在下面桥过来。 */
 let activeNet: IBigMapNetPort = { addEvent() {}, removeCaller() {} };
+let cancelActiveBattle: (() => void) | undefined;
+const battleRequests: Array<{ type: number; params: readonly string[]; cancelled: boolean }> = [];
 const { BigMapController } = loadBigMapController({
     addEvent: (name, caller, listener) => activeNet.addEvent(name, caller, listener),
-    removeCaller: (caller) => activeNet.removeCaller(caller),
+    removeCaller: (caller) => {
+        activeNet.removeCaller(caller);
+        cancelActiveBattle?.();
+        cancelActiveBattle = undefined;
+    },
+}, (type, params) => {
+    const request = { type, params, cancelled: false };
+    battleRequests.push(request);
+    cancelActiveBattle = () => { request.cancelled = true; };
+    return Object.assign(Promise.resolve(null), { cancel: cancelActiveBattle });
 });
 
 const config = loadBigMapConfig();
@@ -90,7 +102,7 @@ test('Controller 集中绑定一次、接收意图并发布纯展示快照，退
     const h = create();
     try {
         h.controller.start();
-        assert.equal([...h.network.handlers.values()].flat().length, 4);
+        assert.equal([...h.network.handlers.values()].flat().length, 5);
         h.intent({ kind: 'mode', mode: 'base' });
         assert.equal(h.snapshots.at(-1)?.ui.mode, 'base');
         assert.equal('model' in h.snapshots.at(-1)!, false);
@@ -505,30 +517,55 @@ test('关闭后重开只由新 Controller 接收事件，旧监听已解除', ()
     } finally { h.dispose(); }
 });
 
-test('选中世界目标由 Controller 查询详情，开战成功锁输入，预加载失败后可重试', async () => {
+test('开战立即发出请求，失败回包解锁，成功回包才交接战斗，退出取消在途请求', () => {
     const h = create();
     let queries = 0, attacks = 0;
     const city = [...h.model.world.cities.values()][0];
     const cityView = h.model.cityView(city.cityId);
     h.model.cityView = () => ({ ...cityView, isServerCamp: true });
     h.model.refreshCampDetail = async () => { queries++; };
-    h.model.requestAttackCity = async () => { attacks++; return { ok: true, message: '' }; };
+    const events: unknown[] = [];
+    const recorder = {};
+    EventMgr.instance.on(BIGMAP_BATTLE_READY, event => events.push(event), recorder);
+    const firstRequest = battleRequests.length;
+    h.model.requestAttackCity = () => {
+        attacks++;
+        return { ok: true, message: '', battle: { battleType: 1004, targetConfigId: 205 } };
+    };
     try {
         h.intent({ kind: 'worldTap', hexId: city.anchorHexId });
         assert.equal(queries, 1);
         assert.equal(h.controller.snapshot.ui.selectedCityId, city.cityId);
         h.intent({ kind: 'primary' }); h.intent({ kind: 'primary' });
-        await new Promise(resolve => setImmediate(resolve));
         assert.equal(attacks, 1);
+        assert.equal(battleRequests.length, firstRequest + 1);
+        assert.equal(battleRequests[firstRequest].type, 1004);
+        assert.equal(battleRequests[firstRequest].params[0], '205');
+        assert.equal(h.controller.snapshot.ui.baseActionPending, true);
+        assert.equal(h.controller.snapshot.ui.enteringBattle, false);
+        h.network.emit(BATTLE_START_SETTLED, null);
+        assert.equal(h.controller.snapshot.ui.baseActionPending, false);
+        assert.equal(events.length, 0);
+        h.intent({ kind: 'primary' });
+        const battle = { battleId: 'ready' };
+        h.network.emit(BATTLE_START_SETTLED, battle);
+        assert.equal(events.length, 1);
+        assert.equal((events[0] as { battle: unknown }).battle, battle);
         assert.equal(h.controller.snapshot.ui.enteringBattle, true);
         h.intent({ kind: 'mode', mode: 'base' });
         assert.equal(h.controller.snapshot.ui.mode, 'world');
         h.controller.cancelEnteringBattle();
         assert.equal(h.controller.snapshot.ui.enteringBattle, false);
         h.intent({ kind: 'primary' });
-        await new Promise(resolve => setImmediate(resolve));
-        assert.equal(attacks, 2);
-    } finally { h.dispose(); }
+        assert.equal(attacks, 3);
+        h.controller.dispose();
+        assert.equal(battleRequests.at(-1)?.cancelled, true);
+        h.network.emit(BATTLE_START_SETTLED, battle);
+        assert.equal(events.length, 1);
+    } finally {
+        EventMgr.instance.offTarget(recorder);
+        h.dispose();
+    }
 });
 
 test('切到基地只把镜头对准主城、不自动选中：首屏不被详情弹窗糊住', () => {

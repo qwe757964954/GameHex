@@ -22,7 +22,6 @@ import {
     GAMEUI_ART_ROOT,
     MAIN_CITY_ART_ROOT,
     MATCH_ART_ROOT,
-    MATCH_ICON_ART_ROOT,
     BUILDING_ART_ROOT,
 } from '../assets/script/app/ArtPaths';
 import { CARD_LINEUP_TEXTS } from '../assets/script/app/card/CardLineupTexts';
@@ -130,44 +129,30 @@ test('主城七格文案配置与 prefab 绑定的新图标资源齐全', () => 
         'tab 图标与类型应由主城 prefab 实例维护');
 });
 
-test('匹配页图标按「页面大图 / 信息条小图标」分两个根目录', () => {
+test('匹配页图标走 MATCH_ART_ROOT 根目录', () => {
     // 页面大图：头像 / 雷达
-    assertSpriteExists(MATCH_ART_ROOT, 'img_people', '匹配头像');
+    assertSpriteExists(MATCH_ART_ROOT, 'tx_01', '匹配头像');
     assertSpriteExists(MATCH_ART_ROOT, 'icon_fdj', '匹配雷达图标');
     // ⚠️ 神器图标**不在这里**：`image/matching/icon_faqi.png`（固定蓝色法杖占位）已于
     //  2026-10-13 随匹配界面改版删除，真源是 `ARTIFACT_ART_ROOT`
     //  （`image/artifact/<pvpArtifact[].icon>`，与对局里的神器格同一张图），
     //  口径见 `tests/matching-artifact-icon.test.ts`。
 
-    // 信息条小图标在 `MATCH_ICON_ART_ROOT`（`icons/matching`），与页面大图是两个根目录：
-    // 两个目录下都有 `icon_*` 风格的名字，往一个根目录写死只会静默留白 ——
-    // 界面上表现为 `[MatchIcons] 图标加载失败：icon_04`，但页面照常渲染。
-    //  ⚠️ 资源名是**运行时**由服务端数据给的（`MatchPlayerData.stats[].icon`），代码里没有静态列表，
-    //  所以这里直接核对目录里有设计稿要的那四张，别再去扫一个已经空掉的占位数据源。
-    for (const name of ['icon_01', 'icon_02', 'icon_03', 'icon_04']) {
-        assertSpriteExists(MATCH_ICON_ART_ROOT, name, `信息条小图标（${name}）`);
-    }
-
-    // 两个根目录只能在 ArtPaths 里定义一次，业务侧不许写死子目录字面量
-    const loader = readFileSync('assets/script/app/matching/MatchIcons.ts', 'utf8');
-    assert.match(loader, /createIconLoader as createMatchIconLoader/);
+    // 匹配常规 UI 与槽位视觉组件均在 MATCH_ART_ROOT
+    assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchingResourcePlan.ts', 'utf8'), 'MatchingResourcePlan');
     assertUsesArtPaths(readFileSync('assets/script/app/common/SpriteFrameCache.ts', 'utf8'), '公共图标加载器');
     assertUsesArtPaths(readFileSync('assets/script/app/matching/MatchPlayerItem.ts', 'utf8'), 'MatchPlayerItem');
     assertUsesArtPaths(readFileSync('assets/script/app/bootstrap/matching/MatchingComposition.ts', 'utf8'), 'ProcedureMatching');
 });
 
 /**
- * 2026-11-13 清理：`icon_05` / `char_01` / `char_02` 全工程无引用（无按名加载、无配置表、
- * 无 prefab/scene 的 UUID 硬绑），已归档到 `art-cleanup/icons-matching/archive`
- * （连同 `.meta` 一起保留，UUID 不变，可直接拷回原目录恢复）。
- *
- * 信息条只吃 `icon_01~04`（`MATCH_STAT_TYPES` 四条），别再往这个目录补"备用图"：
- * 多一张既不会被加载，又会被打进 `auto-atlas`。
+ * 信息条小图标目录 icons/matching 整体下线（原 icon_01~icon_04 为旧版阵容阵营职业统计小图标，
+ * 匹配界面重构为 8 格卡牌后已无任何运行时引用与渲染，MatchStatItem 预制体也一并下线）。
  */
-test('匹配页目录不再放回已退役的占位图', () => {
-    for (const name of ['icon_05', 'char_01', 'char_02']) {
+test('匹配页信息条小图标目录 icons/matching 整体已退役', () => {
+    for (const name of ['icon_01', 'icon_02', 'icon_03', 'icon_04', 'icon_05', 'char_01', 'char_02']) {
         // 负向断言用 assetExists（assetPath 找不到会直接抛，那是正向读取的口径）。
-        assert.equal(assetExists(`${MATCH_ICON_ART_ROOT}/${name}.png`), false, `${name} 已退役，别放回 ${MATCH_ICON_ART_ROOT}`);
+        assert.equal(assetExists(`icons/matching/${name}.png`), false, `${name} 已退役，别放回 icons/matching`);
     }
 });
 

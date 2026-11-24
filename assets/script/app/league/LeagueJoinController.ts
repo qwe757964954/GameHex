@@ -25,16 +25,14 @@ export type ILeagueJoinRepository = Pick<
 
 export interface ILeagueJoinControllerOptions {
     readonly owner: object;
-    /** 容器页 owner；成功后按它发 `LeagueTabEvent.Joined`，替代视图回调穿透。 */
-    readonly joinedOwner: object | null;
     readonly repository: ILeagueJoinRepository;
     readonly view: ILeagueJoinView;
     readonly feedback: {
         readonly tip: (text: string) => void;
-        readonly notifyJoined: (owner: object | null) => void;
+        readonly notifyJoined: () => void;
     };
     readonly popups: {
-        readonly openCreate: (owner: object | null) => void;
+        readonly openCreate: () => void;
         readonly openUnion: (view: ILeagueUnionView) => void;
     };
     readonly requests: { readonly removeCaller: (caller: object) => void };
@@ -72,8 +70,8 @@ export class LeagueJoinController extends ControllerBase {
         void this.reload();
     }
 
-    private readonly onIntent = (event: ILeagueJoinIntent): void => {
-        if (event.owner !== this.options.owner) return;
+    private readonly onIntent = (event: ILeagueJoinIntent, source: object): void => {
+        if (source !== this.options.owner) return;
         switch (event.kind) {
             case 'input':
                 this.searchKey = event.text;
@@ -85,7 +83,7 @@ export class LeagueJoinController extends ControllerBase {
                 void this.quickJoin();
                 return;
             case 'create':
-                this.options.popups.openCreate(this.options.joinedOwner);
+                this.options.popups.openCreate();
                 return;
             case 'openUnion':
                 this.options.popups.openUnion(event.union);
@@ -170,7 +168,7 @@ export class LeagueJoinController extends ControllerBase {
 
             await this.reload();
             if (this.isDisposed) return;
-            this.options.feedback.notifyJoined(this.options.joinedOwner);
+            this.options.feedback.notifyJoined();
         } catch (error) {
             if (!this.isDisposed) {
                 console.warn('[LeagueJoinController] 快速加入失败', error);

@@ -70,6 +70,7 @@ export const BIGMAP_PRESENTATION_TEXT = {
     /** 弹窗底部那颗大按钮（设计稿写「进攻」，与旧面板的「攻打」是同一件事）。 */
     attack: '进攻',
     cannotAttack: '不可进攻',
+    featureNotOpen: '功能暂未开放',
 } as const;
 
 /** 只有配置开放日时展示条件，不把配置天数当成剩余天数。 */

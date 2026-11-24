@@ -1,5 +1,6 @@
 import { ZC_RUNTIME_CONFIG } from './ZCRuntimeConfigStore';
 import { ZCCardRarity, ZCCardType, ZCDeckCard } from './ZCCombatCatalog';
+import type { ZCHexState } from './ZCGameTypes';
 import type { ZCMatchConfig } from './ZCMatchConfig';
 
 /**
@@ -17,6 +18,14 @@ export const ZCPvpTileType = {
     Mine: 10005,
 } as const;
 export type ZCPvpTileType = (typeof ZCPvpTileType)[keyof typeof ZCPvpTileType];
+
+export function tileTypeFromLegacyHex(hex: Pick<ZCHexState, 'building' | 'developmentCost'>): ZCPvpTileType {
+    if (hex.building === 'mine') return ZCPvpTileType.Mine;
+    if (hex.developmentCost >= 250) return ZCPvpTileType.BarracksAdvanced;
+    if (hex.developmentCost >= 100) return ZCPvpTileType.BarracksMedium;
+    if (hex.developmentCost >= 50) return ZCPvpTileType.BarracksCommon;
+    return ZCPvpTileType.AllRandom;
+}
 
 /** 五种地块类型枚举，供运行时配置完整性校验使用（程序逻辑，非策划数值）。*/
 export const ZC_PVP_TILE_TYPES: readonly ZCPvpTileType[] = Object.values(ZCPvpTileType);
@@ -67,6 +76,20 @@ export interface ZCPvpSeatDrawRules {
      * 且它绕过 `rarityWeights`，与本关的 `gradeProModifier` 目的直接冲突。
     */
     goldPity?: boolean;
+    /**
+     * 卡池缺档时**逐级下降**找最近的一档；缺省 `false`（维持旧的「抽空」行为）。
+     *
+     * 🟡 2026-11-23 用户口径：「地块保持一致，当 NPC 队伍开出紫卡或金卡，但是卡牌阵容内没有
+     * 对应的配置，按照等级逐级下降去查找，找到等级最接近的卡牌生成」。
+     *
+     * 地块类型和权重都不动，只改「某一档一张卡都没有」时的兜底：例如「随机兵营-高级」
+     * （10004）配的是 `purple 0.9 / gold 0.1`，而 NPC 卡组只配了绿卡 ⇒ 旧逻辑
+     * `availableTotal <= 0` 直接返回空手，NPC 一辈子建不出兵营。开启后按
+     * `green → blue → purple → gold` 从**该地块要求的最高档往下降**，落到第一个真有卡的档。
+     *
+     * 只给 NPC 席位开（玩家仍按原表，缺档即空手，避免影响玩家侧平衡）。
+    */
+    rarityFallback?: boolean;
 }
 
 export interface ZCPvpTileConfig {
@@ -344,6 +367,30 @@ export function applyPvpRarityModifier(
 }
 
 /**
+ * 缺档兜底：从「该地块要求的最高档」**往下降**，返回第一个卡池里真有卡的档。
+ *
+ * 口径（2026-11-23 用户）：「当 NPC 队伍开出紫卡或金卡，但是卡牌阵容内没有对应的配置，
+ * 按照等级逐级下降去查找，找到等级最接近的卡牌生成」。地块类型与权重都不动 ——
+ * 本函数只回答「这一格该用哪一档的卡」，返回 `null` 表示往下也没有卡（仍按空手处理）。
+ */
+function closestLowerRarity(
+    rarityWeights: Readonly<Record<ZCPvpDrawRarity, number>>,
+    cardsByRarity: ReadonlyMap<ZCCardRarity, ZCDeckCard[]>,
+    rarities: readonly ZCCardRarity[],
+): { rarity: ZCCardRarity } | null {
+    let highest = -1;
+    for (let index = 0; index < rarities.length; index += 1) {
+        if (rarityWeights[rarities[index]] > 0) highest = index;
+    }
+    //  配置的档位都没卡时，从次高档开始往下逐级找（含 `highest === -1` 的「全空权重」）。
+    for (let index = highest - 1; index >= 0; index -= 1) {
+        const rarity = rarities[index];
+        if ((cardsByRarity.get(rarity)?.length ?? 0) > 0) return { rarity };
+    }
+    return null;
+}
+
+/**
  * 按品级配置抽牌：先抽空/品级，再从命中品级的本局卡池中等概率选一张。
  *
  * @param seatRules 该席位的关卡规则（`levelInfo.gradeProModifier` + 是否保留金色保底）。
@@ -405,6 +452,24 @@ export function drawPvpTile(
     ));
     const availableTotal = availableRarities.reduce((sum, rarity) => sum + rarityWeights[rarity], 0);
     if (availableTotal <= 0) {
+        //  🟡 缺档兜底（`rarityFallback`，只给 NPC）：本块要求的档位在卡池里一张都没有时，
+        //  从**要求的最高档往下降**，取第一个真有卡的档 —— 「等级最接近的卡牌」。
+        //  地块本身不换（用户 2026-11-23：地块保持一致），只把这格的产出救回来。
+        const fallback = seatRules?.rarityFallback ? closestLowerRarity(rarityWeights, cardsByRarity, rarities) : null;
+        if (fallback) {
+            const fallbackCards = cardsByRarity.get(fallback.rarity) ?? [];
+            const picked = fallbackCards[Math.floor(clampRandom(random()) * fallbackCards.length)];
+            if (picked) {
+                return {
+                    card: picked,
+                    rarity: fallback.rarity,
+                    pityTriggered: false,
+                    nextAllRandomNonGoldDraws: tileType !== ZCPvpTileType.AllRandom
+                        ? allRandomNonGoldDraws
+                        : fallback.rarity === 'gold' ? 0 : allRandomNonGoldDraws + 1,
+                };
+            }
+        }
         const next = tileType === ZCPvpTileType.AllRandom ? allRandomNonGoldDraws + 1 : allRandomNonGoldDraws;
         return { card: null, rarity: 'empty', pityTriggered: false, nextAllRandomNonGoldDraws: next };
     }

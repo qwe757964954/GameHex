@@ -44,6 +44,7 @@ import {
     DEFAULT_VOLUME,
     buildClipPathMap,
     clampVolume,
+    clipPathOf,
     formatVolume,
     isVolumeOn,
     musicStorageKey,
@@ -229,14 +230,15 @@ export class AudioMgr {
      * 音量为 0 时**直接早退**：既不发请求也不播放，省掉一次白加载
      * （老端是靠 `setEffectsVolume(0)` 静音，资源照样加载）。
      */
-    public async playSound(key: string): Promise<boolean> {
-        if (!key || !isVolumeOn(this._soundVolume)) return false;
+    public async playSound(key: string, scope?: { readonly disposed: boolean }): Promise<boolean> {
+        if (!key || scope?.disposed || !isVolumeOn(this._soundVolume)) return false;
         this.ensureSources();
-        if (!this._sound) return false;
+        const sound = this._sound;
+        if (!sound) return false;
 
         const clip = await this.loadClip(key);
-        if (!clip || !this._sound.isValid) return false;
-        this._sound.playOneShot(clip, toVolumeScale(this._soundVolume));
+        if (!clip || scope?.disposed || !sound.isValid || !isVolumeOn(this._soundVolume)) return false;
+        sound.playOneShot(clip, toVolumeScale(this._soundVolume));
         return true;
     }
 
@@ -320,6 +322,7 @@ export class AudioMgr {
     }
 
     private async getClipPath(key: string): Promise<string> {
+        if (key.startsWith('resources://')) return clipPathOf(key);
         if (this._clipPaths == null) {
             let rows: AudioConfigRow[] | null = null;
             try {

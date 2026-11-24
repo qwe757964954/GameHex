@@ -32,8 +32,8 @@ export class LeagueEditController extends ControllerBase {
         this.publish();
     }
 
-    private readonly onIntent = (event: ILeagueEditIntent): void => {
-        if (event.owner !== this.options.owner) return;
+    private readonly onIntent = (event: ILeagueEditIntent, source: object): void => {
+        if (source !== this.options.owner) return;
         if (event.kind === 'change') {
             this.options.model.setContent(event.content);
         } else if (event.kind === 'submit') {

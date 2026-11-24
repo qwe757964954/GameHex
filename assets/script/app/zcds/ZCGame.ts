@@ -222,11 +222,11 @@ export class ZCGame extends Component {
     }
 
     /** 帧事件 payload 复用：EventMgr 同步派发，唯一监听者只解构取 owner/dt，不持有引用。*/
-    private readonly framePayload: { owner: ZCGame; dt: number } = { owner: this, dt: 0 };
+    private readonly framePayload: { dt: number } = { dt: 0 };
 
     update(dt: number): void {
         this.framePayload.dt = dt;
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, this.framePayload);
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, this.framePayload, this);
     }
 
 
@@ -259,7 +259,7 @@ export class ZCGame extends Component {
 
     onDestroy(): void {
         this.shutdown();
-        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, { owner: this });
+        EventMgr.instance.emit(ZC_BATTLE_EVENTS.RUNTIME_DESTROYED, undefined, this);
     }
 
     /**

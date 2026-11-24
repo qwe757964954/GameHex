@@ -118,7 +118,16 @@ const KNOCK_PARAMS: Array<Record<string, number>> = [
     { burstCooldown: 14, burstDamageRate: 2.1, burstRadius: 120, burstKnockbackCells: 2 },
 ];
 
-test('101504 菌毯爆发：三档倍率/护盾/冷却与设计案一致', () => {
+/**
+ * 101504 已被第 43 批换成**射线集束**（用户：「科学家的射线集束给机甲菇使用，
+ * 直接替换掉机甲菇的菌毯爆发，菌毯爆发弃用」）。
+ *
+ * 旧断言（三档倍率 / 护盾 / 冷却）不再声称是 101504 的配表值；`AURA_PARAMS` 降级为
+ * `castBurstSkill` 的**纯行为夹具**（车道代码仍被别的单位用着，不在本批删除）。但**结构位**仍要钉：
+ * modifierId 与解锁等级是 K 表 / 材料位的引用键，换技能不该动它们。
+ * 菌毯爆发本身没被删代码（`castBurstSkill` 还有 101804 在用），只是 68015 不再挂它。
+ */
+test('101504 已换成射线集束：菌毯爆发弃用，三档结构位（修改器号/解锁等级）不动', () => {
     prepare();
     const rows = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101504)
         .sort((a, b) => Number(a.skillLevel) - Number(b.skillLevel));
@@ -126,13 +135,18 @@ test('101504 菌毯爆发：三档倍率/护盾/冷却与设计案一致', () =>
     assert.deepEqual(rows.map((row) => Number(row.modifierId)), [94015041, 94015042, 94015043]);
     assert.deepEqual(rows.map((row) => Number(row.unlockHeroLevel)), [12, 24, 36], '技能 4 = 12/24/36');
     assert.deepEqual(rows.map((row) => Number(row.pvpSkillId)), [30241, 30241, 30241], '键 = 本卡普攻 skillId');
-    for (const [index, row] of rows.entries()) {
+    for (const row of rows) {
         assert.equal(row.unitId, '68015');
-        assert.equal(row.behaviorKey, 'burst_aura');
-        assert.equal(row.skillKind, 'active_cd');
+        assert.equal(row.behaviorKey, 'ray_beam', '菌毯爆发（burst_aura）已被射线集束替换');
         assert.equal(row.statId, null, '机制全在参数袋里，主链不挂属性');
-        assert.deepEqual(JSON.parse(String(row.skillParamJson)), AURA_PARAMS[index]);
+        const params = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
+        assert.equal('burstCooldown' in params, false, '旧车道的参数袋不许残留');
+        assert.ok('rayEvery' in params, '射线集束的参数袋必须完整');
     }
+    //  全表扫一遍：68015 身上再也不能出现 burst_aura（弃用就是弃用，别留一条暗车道）。
+    const leftovers = readRows('pvpSkillPlan').filter(
+        (row) => row.unitId === '68015' && row.behaviorKey === 'burst_aura');
+    assert.deepEqual(leftovers, [], '机甲菇还挂着 burst_aura');
 });
 
 test('101804 菌核爆裂：三档倍率/击退格数/冷却与设计案一致', () => {
@@ -151,9 +165,9 @@ test('101804 菌核爆裂：三档倍率/击退格数/冷却与设计案一致',
 
 test('参数袋不许出现裸键（会串到普攻链路）', () => {
     prepare();
-    const rows = readRows('pvpSkillPlan').filter(
-        (row) => Number(row.skillChainId) === 101504 || Number(row.skillChainId) === 101804);
-    assert.equal(rows.length, 6);
+    //  101504 已换成射线集束（第 43 批），裸键守卫只剩 101804 这条真·爆发的车道。
+    const rows = readRows('pvpSkillPlan').filter((row) => Number(row.skillChainId) === 101804);
+    assert.equal(rows.length, 3);
     for (const row of rows) {
         const params = JSON.parse(String(row.skillParamJson)) as Record<string, number>;
         for (const banned of ['splashRadius', 'splashDamageRate', 'damageRate', 'cooldown']) {
@@ -199,20 +213,30 @@ test('两份产物逐格一致：pvpSkillPlan / armySkillLevelUp', () => {
 test('K 表（armySkillLevelUp）：名字/描述/修改器号三档都指向新技能', () => {
     prepare();
     const rows = readRows('armySkillLevelUp');
-    const expectations: Array<[number, string, number[]]> = [
-        [101504, '菌毯爆发', [94015041, 94015042, 94015043]],
-        [101804, '菌核爆裂', [94018041, 94018042, 94018043]],
+    //  101504 第 43 批换成射线集束：名字、描述全换，修改器号（材料位引用键）不动。
+    const expectations: Array<[number, string, number[], RegExp]> = [
+        [101504, '射线集束', [94015041, 94015042, 94015043], /集束射线/],
+        [101804, '菌核爆裂', [94018041, 94018042, 94018043], /以自身为圆心/],
     ];
-    for (const [chain, name, modifierIds] of expectations) {
+    for (const [chain, name, modifierIds, descPattern] of expectations) {
         const tiers = rows.filter((row) => Number(row.id) === chain)
             .sort((a, b) => Number(a.skilllevel) - Number(b.skilllevel));
         assert.equal(tiers.length, 3, `${chain} 应有三档`);
         for (const [index, row] of tiers.entries()) {
             assert.equal(row.name, name, `${chain} L${row.skilllevel} 还在用旧名字`);
             assert.deepEqual(row.modfiy, [modifierIds[index]]);
-            assert.ok(String(row.desc).includes('冷却'), '主动技能的描述必须写清冷却');
-            assert.ok(String(row.desc).includes('以自身为圆心'), '两条都是自心圆爆发');
+            assert.match(String(row.desc), descPattern, `${chain} L${row.skilllevel} 描述口径不对`);
         }
+    }
+    //  菌核爆裂仍是「冷却型自心圆」⇒ 这两句还必须写着。
+    for (const row of rows.filter((entry) => Number(entry.id) === 101804)) {
+        assert.ok(String(row.desc).includes('冷却'), '主动技能的描述必须写清冷却');
+        assert.ok(String(row.desc).includes('以自身为圆心'), '自心圆爆发');
+    }
+    //  射线集束是「累计普攻触发」⇒ 不许再写冷却。
+    for (const row of rows.filter((entry) => Number(entry.id) === 101504)) {
+        assert.equal(String(row.desc).includes('冷却'), false, '101504 已经不吃冷却了');
+        assert.ok(String(row.desc).includes('累计普攻'), '射线集束按累计普攻触发');
     }
 });
 

@@ -57,8 +57,8 @@ export class LineupBoardController extends ControllerBase {
             await this.options.view.render(state);
         }
     }
-    private onIntent(event: LineupBoardIntent): void {
-        if (event.owner !== this.options.owner || !this.options.model.snapshot) {
+    private onIntent(event: LineupBoardIntent, source: object): void {
+        if (source !== this.options.owner || !this.options.model.snapshot) {
             return;
         }
         if (event.kind === 'save') {

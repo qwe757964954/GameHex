@@ -1,10 +1,17 @@
 import type { IBigMapSlgReward } from './BigMapSlgRepository';
 import type { IBigMapViewState, BigMapMode } from './BigMapViewState';
+import type { IZCSlgBattleType, ZCBattleStart } from '../../battle/BattleStartModel';
 
 export const BIGMAP_MOVE_HINT = '点击空地移过去；点这格取消';
 
 export const BigMapUiEvent = { Intent: 'bigmap:ui-intent', Ready: 'bigmap:view-ready', Disposed: 'bigmap:view-disposed' } as const;
 export const BigMapViewEvent = { Render: 'bigmap:render', Command: 'bigmap:view-command' } as const;
+export const BIGMAP_BATTLE_READY = 'bigmap:battle-ready';
+
+export interface IBigMapBattleReady {
+    readonly battle: ZCBattleStart;
+    readonly battleType: IZCSlgBattleType;
+}
 
 export type BigMapIntent =
     | { readonly kind: 'worldTap' | 'plotTap'; readonly hexId: number }

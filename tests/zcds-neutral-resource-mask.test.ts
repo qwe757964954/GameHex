@@ -99,7 +99,8 @@ test('占位图的体量：乘一个修正系数压回和资源图一致（否�
 
 test('遮蔽开关的唯一来源：`cityMode === select`（自选主城局）', () => {
     const world = stripComments(read('assets/script/app/zcds/view/ZCGameRenderWorld.ts'));
-    const hits = world.match(/hideNeutralResourceLabel:\s*frame\.mapConfig\.cityMode === 'select'/g) ?? [];
+    // 兼容对象属性与成员赋值语句两种合法语法形态
+    const hits = world.match(/(?:hideNeutralResourceLabel:\s*|hideNeutralResourceLabel\s*=\s*)frame\.mapConfig\.cityMode === 'select'/g) ?? [];
     assert.equal(hits.length, 1, `自选判据只许一处（现有 ${hits.length} 处）—— 两处会漂移`);
     // 文字兜底也必须一起吃这个开关：自选局不许写出「宝箱 / 金矿」这类中文。
     const path = 'assets/script/app/zcds/view/ZCHexView.ts';

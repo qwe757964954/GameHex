@@ -3,12 +3,23 @@ import { readFileSync } from 'node:fs';
 /** 用真实 Prefab 的层级和引用装配引擎桩，避免测试继续复制旧版 UI 构建代码。 */
 export function bigMapPrefabFixture(types: Record<string, new (...args: any[]) => any>, path = 'assets/bundles/bigmap/ui/bigmap/BigMapPage.prefab') {
     const objects = JSON.parse(readFileSync(path, 'utf8'));
-    const scriptNames = ['BigMapPageLayout', 'BigMapBaseView', 'BigMapBasePlot', 'BigMapBuildRow', 'BigMapButton',
-        'BigMapInfoPopup', 'BigMapPlotCard'];
+    const scriptPaths: Record<string, string> = {
+        BigMapPageLayout: 'assets/script/app/bigmap/view/BigMapPageLayout.ts',
+        BigMapBaseView: 'assets/script/app/bigmap/view/BigMapBaseView.ts',
+        BigMapBasePlot: 'assets/script/app/bigmap/view/BigMapBasePlot.ts',
+        BigMapBuildRow: 'assets/script/app/bigmap/view/BigMapBuildRow.ts',
+        BigMapButton: 'assets/script/app/bigmap/view/BigMapButton.ts',
+        BigMapInfoPopup: 'assets/script/app/bigmap/view/BigMapInfoPopup.ts',
+        BigMapPlotCard: 'assets/script/app/bigmap/view/BigMapPlotCard.ts',
+        // 顶栏与玩家卡是跨模块组件：它们在 prefab 里不是 `class {}` 占位，
+        // 需要真实构造器才能验证 5 格资源与 MainResBar 的绑定。
+        BigMapTopHud: 'assets/script/app/bigmap/view/BigMapTopHud.ts',
+        MainResBar: 'assets/script/app/main/MainResBar.ts',
+    };
     const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
     const constructors = { ...types };
-    for (const name of scriptNames) {
-        const hex = JSON.parse(readFileSync(`assets/script/app/bigmap/view/${name}.ts.meta`, 'utf8')).uuid.replaceAll('-', '');
+    for (const [name, scriptPath] of Object.entries(scriptPaths)) {
+        const hex = JSON.parse(readFileSync(`${scriptPath}.meta`, 'utf8')).uuid.replaceAll('-', '');
         let id = hex.slice(0, 5);
         for (let i = 5; i < 32; i += 3) {
             const value = parseInt(hex.slice(i, i + 3), 16);

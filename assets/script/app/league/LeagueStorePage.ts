@@ -170,7 +170,7 @@ export class LeagueStorePage extends PopupBase {
             return;
         }
         if (!this.beginWrite()) return;
-        EventMgr.instance.emit(LeagueRewardEvent.Intent, { owner: this, action: { kind: 'store', id: view.id } } satisfies ILeagueRewardIntent);
+        EventMgr.instance.emit(LeagueRewardEvent.Intent, { action: { kind: 'store', id: view.id } } satisfies ILeagueRewardIntent, this);
     }
 
     /**
@@ -190,8 +190,8 @@ export class LeagueStorePage extends PopupBase {
         return true;
     }
 
-    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion): Promise<void> => {
-        if (event.owner !== this) return;
+    private readonly onRewardCompleted = async (event: ILeagueRewardCompletion, source: object): Promise<void> => {
+        if (source !== this) return;
         try {
             await this.afterWrite(event.status);
         } finally {

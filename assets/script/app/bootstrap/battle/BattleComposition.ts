@@ -19,12 +19,14 @@ import { ZCGameRankBoard } from '../../zcds/view/ZCGameRankBoard';
 import { PopupCloseReason, PopupLayer } from '../../../framework/ui/PopupDef';
 import { ProcedureManager } from '../../../framework/procedure/ProcedureManager';
 import { FW } from '../../../framework/FW';
+import { AudioMgr } from '../../../framework/audio/AudioMgr';
+import { GAME_AUDIO } from '../../ResConst';
 import { GameRoute } from '../../../core/runtime/GameRoute';
 import { BattleResultService } from '../../battle/BattleResultService';
 import { finishBattle, BATTLE_RESULT_WIN, BATTLE_RESULT_LOSE } from '../../battle/BattleStartService';
 import { GameNet } from '../../net/GameNet';
 import { resolveCmdGoodsFrames } from '../../showReward/RewardFrames';
-import { ZC_BATTLE_EVENTS, type IZCBattleReturnToMain, type IZCBattleShowTip } from '../../zcds/application/ZCBattleEvents';
+import { ZC_BATTLE_EVENTS, type IZCBattleShowTip } from '../../zcds/application/ZCBattleEvents';
 import { GuideComposition } from '../guide/GuideComposition';
 import { reportGuideComplete } from '../../guide/application/GuideEvents';
 
@@ -49,6 +51,8 @@ export class BattleComposition extends ControllerBase {
             createRuntime: () => this.createRuntime(),
             createRuntimeController: (view, entry, resources) => this.createRuntimeController(view, entry, resources),
         });
+        void AudioMgr.instance.playMusic(GAME_AUDIO.battleMusic);
+        this.own(() => AudioMgr.instance.stopMusic());
     }
     private createRuntime(): ZCGame {
         return this.host.addComponent(ZCGame);
@@ -75,13 +79,13 @@ export class BattleComposition extends ControllerBase {
         return new ZCBattleSettlementController(this.context, createBattleSettlementServices(resources),
             { owner: view, hasPveContext: !!entry.pveContext });
     }
-    private onReturnToMain({ owner }: IZCBattleReturnToMain): void {
-        if (!this.controller.current || owner !== this.controller.current) return;
+    private onReturnToMain(_payload: undefined, source: object): void {
+        if (!this.controller.current || source !== this.controller.current) return;
         reportGuideComplete('backToMap');
         ProcedureManager.navigate(GameRoute.Main, this.returnParams);
     }
-    private onShowTip({ owner, message }: IZCBattleShowTip): void {
-        if (!this.controller.current || owner !== this.controller.current) return;
+    private onShowTip({ message }: IZCBattleShowTip, source: object): void {
+        if (!this.controller.current || source !== this.controller.current) return;
         FW.showTip(message);
     }
     dispose(): void {
@@ -165,6 +169,9 @@ async function wrapPopup(pending: Promise<{ close(reason: PopupCloseReason): voi
 }
 function createBattleRuntimeServices(view: ZCGame, resources: IControllerResources): IZCBattleRuntimeServices {
     return {
+        playSound(key) {
+            void AudioMgr.instance.playSound(key, resources.scope);
+        },
         art: {
             loadUnitPrefab(path) {
                 return resources.assets.load(path, Prefab, { scope: resources.scope, bundle: bundleForPath(path) });
@@ -186,6 +193,11 @@ function createBattleRuntimeServices(view: ZCGame, resources: IControllerResourc
 }
 function createBattleSettlementServices(resources: IControllerResources): IZCBattleSettlementServices {
     return {
+        playOutcome(victory) {
+            const audio = AudioMgr.instance;
+            audio.stopMusic();
+            void audio.playSound(victory ? GAME_AUDIO.victory : GAME_AUDIO.defeat, resources.scope);
+        },
         results: BATTLE_RESULTS,
         rewards: {
             async loadRewards(result) {

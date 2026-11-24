@@ -60,9 +60,9 @@ interface ICreateViewHarness {
     quickJoinBox: NodeStub;
     quickJoinCheck: NodeStub;
     costButton: NodeStub;
-    costIcon: null;
-    costHasLabel: null;
-    costNeedLabel: null;
+    costIcon: { isValid: boolean; node: NodeStub };
+    costHasLabel: { string: string };
+    costNeedLabel: { string: string };
     node: { getChildByName(): null; isValid: boolean };
     closed: number;
     onInit(): void;
@@ -107,9 +107,9 @@ function makeView(Page: new () => ICreateViewHarness): ICreateViewHarness {
     view.quickJoinBox = new NodeStub();
     view.quickJoinCheck = new NodeStub();
     view.costButton = new NodeStub();
-    view.costIcon = null;
-    view.costHasLabel = null;
-    view.costNeedLabel = null;
+    view.costIcon = { isValid: true, node: new NodeStub() };
+    view.costHasLabel = { string: '' };
+    view.costNeedLabel = { string: '' };
     view.node = { getChildByName: () => null, isValid: true };
     return view;
 }
@@ -117,9 +117,9 @@ function makeView(Page: new () => ICreateViewHarness): ICreateViewHarness {
 /** 组装一套「真 Page + 真 Controller + 真 Host」的会话，repository 用内存桩。 */
 function compositionHarness() {
     const { LeagueCreatePage } = load<{ LeagueCreatePage: new () => ICreateViewHarness }>(PAGE_TS, pageImports());
-    const tips: string[] = [], cancelled: object[] = [], joined: object[] = [];
+    const tips: string[] = [], cancelled: object[] = [], joined: boolean[] = [];
     const joinedTarget = {};
-    EventMgr.instance.on(LeagueTabEvent.Joined, (event: { owner: object }) => joined.push(event.owner), joinedTarget);
+    EventMgr.instance.on(LeagueTabEvent.Joined, () => joined.push(true), joinedTarget);
     const costCalls: Array<{ resolve: (cost: ILeagueCostView) => void }> = [];
     const createCalls: Array<{
         icon: number; name: string; quick: boolean; caller: object;
@@ -157,12 +157,12 @@ function compositionHarness() {
     };
 }
 
-test('真创建页只派发 owner 意图，render 按状态绝对赋值，不持有回调', () => {
+test('真创建页只派发带来源的意图，render 按状态绝对赋值，不持有回调', () => {
     const { LeagueCreatePage } = load<{ LeagueCreatePage: new () => ICreateViewHarness }>(PAGE_TS, pageImports());
     const view = makeView(LeagueCreatePage);
-    const events: Array<{ owner: object; kind: string }> = [];
+    const events: Array<{ source: object; kind: string }> = [];
     const target = {};
-    EventMgr.instance.on(LeagueCreateEvent.Intent, event => events.push(event), target);
+    EventMgr.instance.on(LeagueCreateEvent.Intent, (event, source) => events.push({ ...event, source }), target);
     try {
         view.onInit();
         view.nameInput.string = '名字';
@@ -172,7 +172,7 @@ test('真创建页只派发 owner 意图，render 按状态绝对赋值，不持
         view.bannerList.onItemClickFn?.call(null, null, 3);
         view.costButton.emit('click');
         assert.deepEqual(events.map(event => event.kind), ['name', 'quickJoin', 'banner', 'submit']);
-        assert.ok(events.every(event => event.owner === view));
+        assert.ok(events.every(event => event.source === view));
 
         view.render({ name: '新值', selectIndex: 5, quickJoin: false, cost: null, submitting: true });
         assert.equal(view.nameInput.string, '新值');
@@ -192,14 +192,13 @@ test('factory 只认创建页；一次打开一个控制器，关闭取消 calle
     try {
         assert.equal(h.factory(h.context, {}), null);
         const view = h.newView();
-        const owner = {};
-        assert.equal(await h.host.open(view, { owner }), true);
+        assert.equal(await h.host.open(view, undefined), true);
         assert.equal(h.costCalls.length, 1, 'start() 主动读一次消耗');
         h.costCalls[0].resolve(h.makeCost(true)); await flush();
 
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: view, kind: 'submit', name: '旧名', quickJoin: true,
-        });
+            kind: 'submit', name: '旧名', quickJoin: true,
+        }, view);
         assert.equal(h.costCalls.length, 2);
         h.costCalls[1].resolve(h.makeCost(true)); await flush();
         assert.equal(h.createCalls.length, 1);
@@ -208,7 +207,7 @@ test('factory 只认创建页；一次打开一个控制器，关闭取消 calle
         h.host.close(view); h.host.close(view);
         assert.deepEqual(h.cancelled, [firstCaller], '关闭立刻作废在飞请求');
 
-        assert.equal(await h.host.open(view, { owner }), true);
+        assert.equal(await h.host.open(view, undefined), true);
         assert.equal(h.costCalls.length, 3);
         h.costCalls[2].resolve(h.makeCost(true)); await flush();
         const rendered = view.closed;
@@ -217,15 +216,15 @@ test('factory 只认创建页；一次打开一个控制器，关闭取消 calle
         assert.deepEqual(h.joined, [], '旧会话不许通知容器');
 
         EventMgr.instance.emit(LeagueCreateEvent.Intent, {
-            owner: view, kind: 'submit', name: '新名', quickJoin: false,
-        });
+            kind: 'submit', name: '新名', quickJoin: false,
+        }, view);
         h.costCalls[3].resolve(h.makeCost(true)); await flush();
         assert.equal(h.createCalls.length, 2);
         assert.equal(h.createCalls[1].name, '新名');
         assert.notEqual(h.createCalls[1].caller, firstCaller);
         h.createCalls[1].resolve('ok'); await flush();
         assert.equal(view.closed, rendered + 1);
-        assert.deepEqual(h.joined, [owner], '成功按传入 owner 发 Joined 事件');
+        assert.deepEqual(h.joined, [true], '成功发 Joined 事件');
         h.host.close(view);
         assert.deepEqual(h.cancelled, h.createCalls.map(call => call.caller));
     } finally { h.close(); }

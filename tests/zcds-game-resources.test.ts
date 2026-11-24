@@ -22,7 +22,7 @@ interface IGameClass {
     new (): IGameInstance;
 }
 
-function loadGame(instantiate: (prefab: unknown) => unknown, emit = (_event: string, _data: unknown) => {}): IGameClass {
+function loadGame(instantiate: (prefab: unknown) => unknown, emit = (_event: string, _data: unknown, _source?: object) => {}): IGameClass {
     const source = readFileSync('assets/script/app/zcds/ZCGame.ts', 'utf8');
     const code = ts.transpileModule(source, {
         compilerOptions: {
@@ -139,16 +139,16 @@ test('守城首领条延迟创建时使用本局预加载的 Prefab', () => {
     assert.deepEqual(barVisible, [true, false], '只有 BOSS 波点亮血条组');
 });
 
-test('view emits frames and destruction with its own owner, without owning business results', () => {
-    const events: Array<{ event: string; payload: unknown }> = [];
-    const ZCGame = loadGame(() => ({}), (event, payload) => events.push({ event, payload }));
+test('view emits frames and destruction with itself as source, without owning business results', () => {
+    const events: Array<{ event: string; payload: unknown; source?: object }> = [];
+    const ZCGame = loadGame(() => ({}), (event, payload, source) => events.push({ event, payload, source }));
     const game = new ZCGame();
     game.createGame = () => {};
     game.initialize({ resources: {}, seatProfiles: [], pveContext: { chapterId: 1, levelId: 2, territoryCellId: 3 } }, createControllerResources());
     game.update(0.1);
     game.onDestroy();
     assert.deepEqual(events.map(value => value.event), [ZC_BATTLE_EVENTS.FRAME, ZC_BATTLE_EVENTS.RUNTIME_DESTROYED]);
-    assert.equal((events[0].payload as { owner: object }).owner, game);
+    assert.equal(events[0].source, game);
     assert.equal((events[0].payload as { dt: number }).dt, 0.1);
-    assert.equal((events[1].payload as { owner: object }).owner, game);
+    assert.equal(events[1].source, game);
 });

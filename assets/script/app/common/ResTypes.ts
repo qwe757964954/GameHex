@@ -18,6 +18,7 @@ import {
 import { toCount } from '../../core/value/Coerce';
 import { asRow, parseRowsToMap } from '../../core/table/RowParse';
 import {
+    CARD_LEVEL_UP_TABLE as CORE_CARD_LEVEL_UP_TABLE,
     ITEM_TABLE as CORE_ITEM_TABLE,
     OPEN_TABLE as CORE_OPEN_TABLE,
     ROLE_PROPERTY_TABLE as CORE_ROLE_PROPERTY_TABLE,
@@ -37,6 +38,14 @@ export const OPEN_TABLE = CORE_OPEN_TABLE;
 
 /** `item` 表名（`resShowType` 里那些不是 `roleProperty` 的 id 落这张表）。 */
 export const ITEM_TABLE = CORE_ITEM_TABLE;
+
+/**
+ * `cardLevelUp` 表名。
+ *
+ * 只为 `costCardID` 而来：卡牌碎片的 `item.quality` 填的是**卡牌品阶**，不是道具品质档，
+ * 底框要先按它抬一档（见 `ItemDetailTable.itemFrameQualityOf`）。
+ */
+export const CARD_LEVEL_UP_TABLE = CORE_CARD_LEVEL_UP_TABLE;
 
 /** 继承链最深几层（防表里配出环）。老端只有一层 `preResId`，这里放宽到 8 层够用。 */
 const MAX_PRE_DEPTH = 8;

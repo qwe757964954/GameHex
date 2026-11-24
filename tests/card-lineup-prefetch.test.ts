@@ -56,7 +56,7 @@ function fixture(hasSnapshot = true, cachedHeroes: unknown = null, artConfig: Pr
     };
     const owner = {};
     const composition = new Composition(context, owner);
-    const warmup = () => EventMgr.instance.emit(MainTabEvent.Warmup, { owner });
+    const warmup = () => EventMgr.instance.emit(MainTabEvent.Warmup);
     const draw = () => { for (const callback of Array.from(afterDraw)) { afterDraw.delete(callback); callback(); } };
     return { composition, requested, deck, warmup, draw };
 }

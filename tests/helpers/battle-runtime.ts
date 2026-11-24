@@ -19,7 +19,7 @@ export function deferred<T>() {
 }
 export const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 type ISettlementFixtureMethods = IZCBattleSettlementServices['results'] & IZCBattleSettlementServices['rewards'] & IZCBattleSettlementServices['popup'] & IZCBattleSettlementServices['flow'] & Pick<IZCBattleSettlementServices, 'failed'>;
-type IRuntimeFixtureMethods = IZCBattleRuntimeServices['art'] & IZCBattleRuntimeServices['popups'] & IZCBattleRuntimeServices['clock'] & Pick<IZCBattleRuntimeServices, 'failed'>;
+type IRuntimeFixtureMethods = IZCBattleRuntimeServices['art'] & IZCBattleRuntimeServices['popups'] & IZCBattleRuntimeServices['clock'] & Pick<IZCBattleRuntimeServices, 'failed' | 'playSound'>;
 export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {}, selecting = false, slgBattleType?: 1003 | 1004, auxiliary: Partial<IRuntimeFixtureMethods> = {}) {
     const names = ['pvpGlobal', 'pvpArtifact', 'pvpCard', 'pvpSkill', 'pvpCounter', 'pvpBond', 'pvpTile', 'pvpPity', 'pvpTileGen', 'pvpTileGenParams', 'skillAttrModifier', 'generalStar', 'pvpAttrMap', 'pvpModifierOverride', 'pvpUnitGrowth', 'pvpSkillBinding', 'pvpStatus'];
     const tables = Object.fromEntries(names.map(name => {
@@ -73,6 +73,7 @@ export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {
     };
     const runtime = new ZCBattleRuntimeController(context, view, settlement, {
         art: runtimeMethods, popups: runtimeMethods, clock: runtimeMethods, failed: runtimeMethods.failed,
+        playSound: runtimeMethods.playSound,
     }, session);
     const entry: IZCGameEntry = {
         resources: { loadGuide: async () => ({ entries: [], params: {}, iconFrames: new Map() }) } as IZCGameEntry['resources'],
@@ -81,9 +82,9 @@ export function runtimeFixture(overrides: Partial<ISettlementFixtureMethods> = {
     };
     const resources = createControllerResources(context);
     const target = {};
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, ({ owner }) => { if (owner === view) calls.push('navigate'); }, target);
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.SHOW_TIP, ({ owner, message }) => { if (owner === view) calls.push('tip:' + message); }, target);
-    EventMgr.instance.on(ZC_BATTLE_EVENTS.PVE_RESULT, ({ owner, victory }) => { if (owner === view) persisted.push(victory); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.RETURN_TO_MAIN, (_payload, source) => { if (source === view) calls.push('navigate'); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.SHOW_TIP, ({ message }, source) => { if (source === view) calls.push('tip:' + message); }, target);
+    EventMgr.instance.on(ZC_BATTLE_EVENTS.PVE_RESULT, ({ victory }, source) => { if (source === view) persisted.push(victory); }, target);
     resources.scope.defer(() => EventMgr.instance.offTarget(target));
     runtime.start(entry, resources);
     return { runtime, session, settlement, entry, view, calls, requests, pages, persisted, resources,

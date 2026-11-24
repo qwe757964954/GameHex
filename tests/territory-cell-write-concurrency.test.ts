@@ -35,7 +35,7 @@ test('overlapping unlock responses keep their own succ results', () => {
             RequestTerritoryPassCell: Request, RequestTerritorySweep: Request,
             RequestTerritoryUnlockCell: Request, RequestTerritoryUpMonsterBoxLv: Request,
         };
-        if (id === '../../battle/BattleStartService') return { startBattle: async () => null };
+        if (id === '../../battle/BattleStartService') return { requestBattleStart: async () => null };
         if (id === '../model/TerritoryCellBitSet') return {};
         if (id === '../model/TerritoryMonsterBox') return {};
         if (id === '../model/TerritoryProgress') return {

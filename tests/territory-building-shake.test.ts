@@ -1,3 +1,4 @@
+import { loadTerritoryStationPresentation } from './helpers/territory-map-view-sandbox';
 import { mapInputWithProjection } from './helpers/territory-map-view-sandbox';
 import * as mvcEvents from '../assets/script/app/territory/application/TerritoryEvents';
 /**
@@ -43,6 +44,8 @@ import * as territoryPreviewCinemaModule from '../assets/script/app/territory/mo
 import * as territoryCostShortfallModule from '../assets/script/app/territory/model/TerritoryCostShortfall';
 import * as territoryUnlockTransitionModule from '../assets/script/app/territory/model/TerritoryUnlockTransition';
 import * as territoryBattleApproachModule from '../assets/script/app/territory/model/TerritoryBattleApproach';
+import { TERRITORY_MONSTER_BOX_ART_SCALE } from '../assets/script/app/territory/model/TerritoryMonsterBoxSpec';
+import { isTerritoryChestSite } from '../assets/script/app/territory/model/TerritoryMapConfig';
 
 const STATION_SRC = readFileSync('assets/script/app/territory/view/TerritoryStationView.ts', 'utf8');
 const MAP_VIEW_SRC = readFileSync('assets/script/app/territory/view/TerritoryMapView.ts', 'utf8');
@@ -215,6 +218,7 @@ function makeMapView() {
     runInNewContext(code, {
         exports: moduleExports,
         require: (id: string) => {
+            if (id === './TerritoryStationPresentation') return loadTerritoryStationPresentation();
             if (id === 'cc') {
                 return {
                     _decorator: { ccclass: () => (value: unknown) => value, property: () => () => undefined },
@@ -296,8 +300,11 @@ function makeMapView() {
             if (id === '../model/TerritoryMapConfig') return {
                 TERRITORY_SITE_TYPE: {
                     stage: 'stage', boss: 'boss', asyncPvp: 'asyncPvp',
-                    fixedResource: 'fixedResource', bonus: 'bonus',
+                    fixedResource: 'fixedResource', bonus: 'bonus', patrolChest: 'patrolChest',
                 },
+                // 巡逻宝箱走「宝箱」分支（2026-11-20 起），`syncChestSpawnView` 会调它。
+                // 给**真模块**，别在这里再抄一份 fixedResource / patrolChest 名单。
+                isTerritoryChestSite,
             };
             // 内容层留白（2026-10-21）：`syncContentSize` 现在把「地图包围盒 + 四周留白」写进
             // 内容层，留白归 `TerritoryMapLayout` 统一算。本用例不校验尺寸，桩只保证宽度高度可用。
@@ -565,9 +572,9 @@ test('★row14 换章 / 重建格子时必须清空待办（否则永远等一�
     // `hexSpawn.reset()` 等三行，距离判据会随无关语句的增长而假红；真正的不变量是
     // 「同一个换图分支内、`hexFlip.reset()` 之后、两张表都要清、且两张表仍相邻」。
     const branchSource = stripComments(MAP_VIEW_SRC);
-    const branchStart = branchSource.indexOf('this.gridKey = key;');
+    const branchStart = branchSource.indexOf('private resetChapterPresentation(');
     assert.ok(branchStart > 0, '没读到 syncGrid 的换图分支');
-    const branchEnd = branchSource.indexOf('const seen = new Set<number>();', branchStart);
+    const branchEnd = branchSource.indexOf('private syncGrid(', branchStart);
     assert.ok(branchEnd > branchStart, '没读到换图分支的结尾');
     const branch = branchSource.slice(branchStart, branchEnd);
     const flipResetAt = branch.indexOf('this.hexFlip.reset();');
@@ -632,4 +639,59 @@ test('★★★buildSize 按 buildId 传到渲染入参（查不到一律 1，�
     b.syncStations(mapInputWithProjection(noScale));
     assert.equal(b.rendered[b.rendered.length - 1].iconScale, 1,
         '查不到倍率必须兜底成 1');
+});
+
+/**
+ * 巡逻宝箱锚点格：无 `buildingId` → `buildScaleOf` 恒 1，正是会被「后展开」覆盖的场景。
+ * `patrolChestIconScale` 来自 `TERRITORY_MONSTER_BOX_ART_SCALE`（0.82），与 4 档模型图同源。
+ */
+function patrolChestInput(): any {
+    const site = {
+        id: 'patrol_27',
+        cellId: 27,
+        type: 'patrolChest',
+        configId: '',
+        buildingId: '',
+        patrolId: '60001',
+        footprint: [27],
+        unlock: { silverCost: 0, staminaCost: 0, requiredCells: [] },
+    };
+    return {
+        map: { startCellId: 0, sites: [site], randomSites: { candidateCells: [] } },
+        layout: { points: new Map([[27, { x: 10, y: 20 }]]) },
+        revealedCells: [27],
+        randomResourceOpenableCells: [],
+        pendingRandomResourceCells: [],
+        siteOpenableCells: [],
+        pendingFixedResourceCells: [],
+        monsterBoxes: [],
+        wallet: { silver: 0, stamina: 0 },
+        progress: {
+            isCellUnlocked: () => true,
+            isOwned: () => false,
+            isAreaPassed: () => false,
+            isDisabled: () => false,
+            explorationAt: () => null,
+            checkUnlock: () => ({ ok: true }),
+            isPrerequisitePending: () => false,
+        },
+        art: {
+            patrolChestFrames: new Map([[1, 'closed-L1']]),
+            patrolChestOpenFrames: new Map<number, string>(),
+            patrolChestIconScale: TERRITORY_MONSTER_BOX_ART_SCALE,
+            buildFrames: new Map(),
+            // 没配 `buildScales` ⇒ `buildScaleOf` 返回 1，旧写法会把它盖到 base.iconScale 上。
+            buildScales: new Map(),
+        },
+    };
+}
+
+test('★★★巡逻宝箱的专属倍率不被 buildScaleOf 覆盖（iconScale 回归）', () => {
+    const { rendered, syncStations } = makeMapView();
+    syncStations(patrolChestInput());
+    const content = rendered[rendered.length - 1];
+    assert.equal(content.icon, 'closed-L1');
+    assert.equal(content.iconScale, TERRITORY_MONSTER_BOX_ART_SCALE,
+        'MapView 必须 `base.iconScale ?? buildScaleOf`：无 buildingId 的巡逻宝箱'
+        + '若被 buildScaleOf(=1) 覆盖，实机就回到满格体量（只测 stationRenderOf 会漏掉）');
 });

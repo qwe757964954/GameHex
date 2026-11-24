@@ -42,7 +42,7 @@ interface IPageHarness {
     render(state: ILeagueEditViewState): void;
 }
 
-test('real edit view binds CLICK and text change once, emits owner intents and renders reused state', () => {
+test('real edit view binds CLICK and text change once, emits scoped intents and renders reused state', () => {
     class Base { closed = 0; closeByButton() { this.closed++; } }
     const { LeagueEditPage } = load<{ LeagueEditPage: new () => IPageHarness }>('assets/script/app/league/LeagueEditPage.ts', {
         cc: { _decorator: { ccclass: () => (value: unknown) => value, property: () => () => {} },
@@ -53,14 +53,14 @@ test('real edit view binds CLICK and text change once, emits owner intents and r
     const view = new LeagueEditPage();
     view.closeButton = new NodeStub(); view.cancelButton = new NodeStub(); view.sureButton = new NodeStub();
     view.inputField = { node: new NodeStub(), string: '' };
-    const target = {}, events: Array<{ owner: object; kind: string; content: string }> = [];
-    EventMgr.instance.on(LeagueEditEvent.Intent, event => events.push(event), target);
+    const target = {}, events: Array<{ source: object; kind: string; content: string }> = [];
+    EventMgr.instance.on(LeagueEditEvent.Intent, (event, source) => events.push({ ...event, source }), target);
     try {
         view.onInit();
         view.render({ content: '原文', submitting: false });
         view.inputField.string = '新草稿'; view.inputField.node.emit('text-changed'); view.sureButton.emit('click');
         assert.equal(events.length, 2);
-        assert.ok(events.every(event => event.owner === view && event.content === '新草稿'));
+        assert.ok(events.every(event => event.source === view && event.content === '新草稿'));
         assert.deepEqual(events.map(event => event.kind), ['change', 'submit']);
         view.render({ content: '新草稿', submitting: true });
         assert.equal(view.sureButton.button.interactable, false);
@@ -98,14 +98,14 @@ test('real composition owns one controller per opening, cancels old caller and i
     const view = new Page();
     try {
         assert.equal(await host.open(view, { type: 1, content: '旧值' }), true);
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { owner: view, kind: 'submit', content: '旧值' });
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'submit', content: '旧值' }, view);
         host.close(view); host.close(view);
         assert.equal(await host.open(view, { type: 4, content: '新值' }), true);
         const rendered = view.states.length;
         requests[0].resolve('ok'); await flush();
         assert.equal(view.states.length, rendered);
         assert.equal(view.closed, 0);
-        EventMgr.instance.emit(LeagueEditEvent.Intent, { owner: view, kind: 'submit', content: '新值' });
+        EventMgr.instance.emit(LeagueEditEvent.Intent, { kind: 'submit', content: '新值' }, view);
         assert.equal(requests.length, 2);
         assert.equal(requests[1].type, 4);
         assert.notEqual(requests[0].caller, requests[1].caller);

@@ -7,6 +7,7 @@ import {
   addFiles,
   removeFiles,
   loadStagedFiles,
+  saveStagedFiles,
   clearFiles,
   commitFiles,
   pickFiles,
@@ -74,6 +75,12 @@ test('svn-stage: 增量暂存、去重与伴生 meta 识别', () => {
     assert.doesNotThrow(() => {
       commitFiles(['--all', '--dry-run', '-m', '全量秒级对齐提交测试']);
     }, 'commit --all 应当自动完成抓取并通过校验');
+
+    // 9. 测试坏字符与空字符过滤净化
+    saveStagedFiles(['package.json\0corrupt', 'AGENTS.md\r']);
+    const sanitized = loadStagedFiles();
+    assert.ok(sanitized.every((p) => !p.includes('\0') && !p.includes('\r')), '暂存单应彻底过滤清洗坏字符');
+    assert.ok(sanitized.some((p) => p.endsWith('AGENTS.md')), '清洗后合法路径应保留');
   } finally {
     if (originalContent !== null) {
       fs.writeFileSync(STAGE_FILE, originalContent);

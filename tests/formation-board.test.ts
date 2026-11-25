@@ -258,12 +258,7 @@ test('协议名、Repository 接线与两条引擎约束在源码里被写死（
     assert.match(cardView, /this\.node\.on\(Node\.EventType\.TOUCH_END/);
     assert.match(cardView, /this\.node\.on\(Node\.EventType\.TOUCH_CANCEL/);
 
-    // 阵型请求必须兜硬超时：`GameNet.send` 没有按请求的超时，服务端不回包就永远悬着，
-    // 而它挂在 `loadBoard` 的 `Promise.all` 上 → 整块面板停在 prefab 占位外观（真机踩过）。
-    //  （2026-10-27：预算改成可传参的 `timeoutMs`，默认 `FORMATION_REQUEST_TIMEOUT_MS`；
-    //   阵容页不再用短超时兜底 —— 没拿到就留空台等真数据。）
-    assert.match(service, /withTimeout\(inflight, timeoutMs/);
-    assert.match(service, /options\.timeoutMs \?\? FORMATION_REQUEST_TIMEOUT_MS/);
+    // 读取超时和并发去重由 card-runtime-regression 的实际回包用例验证。
     // 保存同理：不兜的话按钮永远停在「保存中」，再也点不动。
     assert.match(service, /withTimeout\(\s*sendFormationOp\(/);
     assert.match(service, /FORMATION_SAVE_TIMEOUT_MS/);

@@ -102,9 +102,8 @@ export function buildDetailChain(
     heroLevel: number,
 ): readonly CardDetailSkillSlot[] {
     const slots: CardDetailSkillSlot[] = [];
-    for (const rawId of skillIds.slice(0, DETAIL_CHAIN_SLOTS)) {
-        const skillId = Number(rawId);
-        const skill: ZCArmySkill | undefined = Number.isSafeInteger(skillId) && skillId > 0 ? table.get(skillId) : undefined;
+    for (const skillId of skillIds.slice(0, DETAIL_CHAIN_SLOTS)) {
+        const skill: ZCArmySkill | undefined = table.get(skillId);
         if (!skill) {
             slots.push({ skillId: 0, name: '', unlockLevel: 0, unlocked: false, empty: true });
             continue;
@@ -132,8 +131,7 @@ export function buildDetailMilestones(
 ): readonly CardDetailMilestone[] {
     const milestones: CardDetailMilestone[] = [];
     const seen = new Set<string>();
-    for (const rawId of skillIds) {
-        const skillId = Number(rawId);
+    for (const skillId of skillIds) {
         const skill = table.get(skillId);
         if (!skill) continue;
         for (const row of skill.levels) {
@@ -167,24 +165,25 @@ export function milestoneAnchorIndex(milestones: readonly CardDetailMilestone[])
     return lastUnlocked === total - 1 ? Math.max(0, total - 2) : lastUnlocked;
 }
 
-/** `pvpCard` 原始行 → 详情属性的基础值（缺列按 0）。 */
-export function detailBaseOfRow(row: Record<string, unknown> | null): ZCCardDetailBase {
-    const num = (key: string): number => {
-        const value = Number(row?.[key]);
-        return Number.isFinite(value) ? value : 0;
-    };
+/**
+ * `pvpCard` 原始行 → 详情属性的基础值（缺列按 0）。
+ *
+ * 列类型由导表保证（`unitMaxHp` / `unitAttack` 等均为 number，建筑卡整列为空），
+ * 直接按可选数字读取；不再做 `Number()` / `isFinite` 的二次类型校验。
+ */
+export function detailBaseOfRow(row: Partial<IRefpvpCard> | null): ZCCardDetailBase {
     return {
-        unitMaxHp: num('unitMaxHp'),
-        unitAttack: num('unitAttack'),
-        unitMoveSpeed: num('unitMoveSpeed'),
-        unitAttackRange: num('unitAttackRange'),
-        spawnSeconds: num('soilderAddTime'),
-        baseHp: num('baseHp'),
+        unitMaxHp: row?.unitMaxHp ?? 0,
+        unitAttack: row?.unitAttack ?? 0,
+        unitMoveSpeed: row?.unitMoveSpeed ?? 0,
+        unitAttackRange: row?.unitAttackRange ?? 0,
+        spawnSeconds: row?.soilderAddTime ?? 0,
+        baseHp: row?.baseHp ?? 0,
     };
 }
 
-/** pvpUnitGrowth 原始行数组 → 归一化行（坏行跳过）。 */
-export function parseGrowthRows(rows: readonly unknown[]): readonly ZCUnitGrowthRow[] {
+/** pvpUnitGrowth 原始行数组 → 归一化行（缺 unitId / 非正档位的行跳过）。 */
+export function parseGrowthRows(rows: readonly IRefpvpUnitGrowth[]): readonly ZCUnitGrowthRow[] {
     const parsed: ZCUnitGrowthRow[] = [];
     for (const row of rows) {
         const normalized = parseUnitGrowthRow(row);

@@ -98,7 +98,7 @@ export class RechargeDailyView extends Component {
         this.captureTabFrames();
         const tabs = this.tabs;
         for (let index = 0; index < tabs.length; index++) {
-            tabs[index].on(Button.EventType.CLICK, () => this.emitSwitch(index), this);
+            tabs[index].on(Button.EventType.CLICK, () => this.emitSwitch(index));
         }
 
         for (let index = 0; index < this.stages.length; index++) {

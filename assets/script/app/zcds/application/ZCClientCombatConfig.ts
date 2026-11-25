@@ -1,6 +1,6 @@
-import { battleBuffRatio, ZC_BATTLE_RATE_KEYS } from '../../battle/BattleStartModel';
-import type { ZCBattleHero, ZCBattleHeroModifier, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
-import type { ZCDeckCard } from '../model/ZCCombatCatalog';
+import { battleBuffRatio, ZC_BATTLE_BUILDING_IDS, ZC_BATTLE_RATE_KEYS } from '../../battle/BattleStartModel';
+import type { IZCBattleBuildingLevels, ZCBattleHero, ZCBattleHeroModifier, ZCBattleStart, ZCBattleUnit } from '../../battle/BattleStartModel';
+import { findCatalogCard, type ZCDeckCard } from '../model/ZCCombatCatalog';
 import { ZCOwner, ZCPlayerCount, type ZCSection } from '../model/ZCMapConfig';
 import { getZCNeutralResourceCatalog } from '../model/ZCNeutralResourceGroup';
 import { ownersForPlayerCount } from '../model/ZCMapConfig';
@@ -126,7 +126,14 @@ function battleMapOf(config: ZCMatchConfig, battle: ZCBattleStart | null | undef
     });
 }
 
-/** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡始终由本地表保留。*/
+function validBattleBuildingHp(buildingHp: number | undefined, cardId: string): number | undefined {
+    if (buildingHp === undefined) return undefined;
+    if (Number.isFinite(buildingHp) && buildingHp > 0) return buildingHp;
+    console.warn('[ZCClientCombatConfig] 服务端建筑血量非法，已回落本地卡表', cardId, buildingHp);
+    return undefined;
+}
+
+/** 后端英雄阵容只替换英雄卡；无 unitId 的金矿、塔等系统卡保留在卡池。*/
 function buildBattleDeck(
     source: readonly ZCDeckCard[],
     heroes: readonly ZCBattleHero[],
@@ -149,16 +156,9 @@ function buildBattleDeck(
         const card = heroCardsById.get(unitId)
             ?? (heroAttr?.rates ? monsterCards.find((entry) => entry.unitId === unitId) : undefined);
         if (card) {
-            const buildingHp = heroAttr?.attributes.buildingHp;
-            //  非正 / 非有限的耐久没有意义：`ZCDevelopmentSystem` 用 `baseHp + 品级加成` 直接算
-            //  `hex.maxHp`、没有下限保护 ⇒ 负值会让建筑开局即破、血条倒挂。脏数据回落到本地卡表，
-            //  协议层仍原样保留（`heroAttrs` 是原始快照），只在这里拒绝消费。
-            const usable = buildingHp !== undefined && Number.isFinite(buildingHp) && buildingHp > 0;
-            if (buildingHp !== undefined && !usable) {
-                console.warn('[ZCClientCombatConfig] 服务端建筑血量非法，已回落本地卡表', card.id, buildingHp);
-            }
+            const buildingHp = validBattleBuildingHp(heroAttr?.attributes.buildingHp, card.id);
             // 回包覆盖基础耐久，品级加成由独立的卡表字段决定。
-            selected.push(usable ? Object.assign({}, card, { baseHp: buildingHp }) : card);
+            selected.push(buildingHp === undefined ? card : { ...card, baseHp: buildingHp });
         }
     }
     return selected.concat(systemCards);
@@ -309,6 +309,8 @@ function compileOwnerLoadouts(
     //  服务端给了阵容外的英雄属性 ⇒ 永远不会被消费。留痕一次，避免「服务端改了、客户端没反应」
     //  时误判成数值没生效（实际是 heroId 不在这套阵容里）。
     const knownHeroIds = new Set(heroes.map((hero) => hero.heroId));
+    knownHeroIds.add(ZC_BATTLE_BUILDING_IDS.mine);
+    knownHeroIds.add(ZC_BATTLE_BUILDING_IDS.hq);
     const orphans = (unit?.heroAttrs ?? []).filter((entry) => !knownHeroIds.has(entry.heroId)
         && !(entry.rates && (defenceUnitIds.has(entry.heroId) || unitRates?.[String(entry.heroId)])));
     if (orphans.length) {
@@ -442,7 +444,17 @@ export function buildZCClientCombatConfig(
         if (rates) unitRates[owner] = rates;
     }
     const ownerDecks: Partial<Record<ZCOwner, readonly ZCDeckCard[]>> = {};
+    const ownerBuildingLevels: Partial<Record<ZCOwner, IZCBattleBuildingLevels>> = {};
+    const ownerHqMaxHp: Partial<Record<ZCOwner, number>> = {};
+    const mineId = String(ZC_BATTLE_BUILDING_IDS.mine);
+    const hqId = String(ZC_BATTLE_BUILDING_IDS.hq);
+    const hqTierHp = findCatalogCard(hqId)?.cyclePerTierValue ?? 0;
     for (const owner of owners) {
+        const unit = rosterContext.unitsByOwner[owner];
+        if (unit?.buildingLevels) ownerBuildingLevels[owner] = unit.buildingLevels;
+        const hqHp = validBattleBuildingHp(unit?.heroAttrs?.find(entry => entry.heroId === ZC_BATTLE_BUILDING_IDS.hq)?.attributes.buildingHp, hqId);
+        if (hqHp !== undefined) ownerHqMaxHp[owner] = Math.round(hqHp + hqTierHp);
+        const mineHp = validBattleBuildingHp(unit?.heroAttrs?.find(entry => entry.heroId === ZC_BATTLE_BUILDING_IDS.mine)?.attributes.buildingHp, mineId);
         const sourceDeck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
         const monsterCards = owner === ZCOwner.Player || config.pveDefence ? [] : ZC_RUNTIME_CONFIG.snapshot.monsterCards ?? [];
         //  🔴 塔防关（`npcDeckFromTeam`）：敌方抽卡池就是本地 `npcTeam.npcCard` 的投影，
@@ -450,9 +462,11 @@ export function buildZCClientCombatConfig(
         //  所有英雄卡滤掉、只留 `unitId` 为空的系统卡（金矿）⇒ NPC 永远翻不出兵种/防御塔。
         //  这里只对**非玩家席位**放行，玩家自己仍按服务端阵容构筑。
         const keepConfiguredDeck = config.npcDeckFromTeam === true && owner !== ZCOwner.Player;
-        ownerDecks[owner] = rosterContext.usesServerRoster && !keepConfiguredDeck
-            ? buildBattleDeck(sourceDeck, roster[owner] ?? [], rosterContext.unitsByOwner[owner], monsterCards)
+        const deck = rosterContext.usesServerRoster && !keepConfiguredDeck
+            ? buildBattleDeck(sourceDeck, roster[owner] ?? [], unit, monsterCards)
             : sourceDeck;
+        ownerDecks[owner] = mineHp === undefined ? deck
+            : deck.map(card => card.id === mineId ? { ...card, baseHp: mineHp } : card);
     }
     const ownerRates = mapClientRosterOwners(rosterContext, (_owner, unit) => ownerRatesOf(unit));
     const playerDeck = ownerDecks.player ?? config.playerDeck;
@@ -460,6 +474,8 @@ export function buildZCClientCombatConfig(
     return {
         config: captureZCMatchConfig(Object.assign({}, config, {
             map: battleMapOf(config, battle, selfRoleId), playerDeck, enemyDeck, ownerDecks, modifiers, ownerRates,
+            ownerBuildingLevels: Object.keys(ownerBuildingLevels).length ? ownerBuildingLevels : undefined,
+            ownerHqMaxHp: Object.keys(ownerHqMaxHp).length ? ownerHqMaxHp : undefined,
             unitRates: Object.keys(unitRates).length ? unitRates : undefined,
         }), options),
         skipped,

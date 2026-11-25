@@ -58,6 +58,8 @@ export class ZCDevelopmentSystem {
         hex.developmentResolved = true;
         hex.wallMaxHp = context.rules.wallMaxHp;
         hex.wallHp = hex.wallMaxHp;
+        const wallLevel = config.ownerBuildingLevels?.[owner]?.wall;
+        if (wallLevel !== undefined) hex.wallLevel = wallLevel;
         hex.wallBreachedEdge = null;
         const card = result.card;
         const building = card ? cardTypeToBuilding(card.type) : null;
@@ -99,6 +101,7 @@ export class ZCDevelopmentSystem {
         hex.maxHp = 0;
         hex.wallHp = 0;
         hex.wallMaxHp = 0;
+        delete hex.wallLevel;
         hex.wallBreachedEdge = null;
         hex.constructionRemainingSeconds = 0;
         hex.constructionTotalSeconds = 0;

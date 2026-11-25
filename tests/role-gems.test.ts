@@ -48,7 +48,6 @@ const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
 function roleGemFixture(growth?: IRoleGrowthOperations) {
     const owner = {};
-    const source = {};
     const dialogs: IRoleGemDialog[] = [];
     const changes: RoleGemChange[] = [];
     const renders: number[] = [];
@@ -84,7 +83,6 @@ function roleGemFixture(growth?: IRoleGrowthOperations) {
         popups: { openTalent() {} },
         feedback: { tip() {} },
         gems: {
-            source: () => source,
             slots: () => [{ partId: 1, entry: null, level: 1, sockets: [socket] }],
             find: id => id === gemId ? gem : null,
             change: change => {
@@ -297,6 +295,21 @@ test('宝石有待处理洗练结果时，确认新属性只发保存协议', as
         assert.deepEqual(f.requests, [{ proto: 'CmdGemRefineSaveReqMsg', payload: { id: gemId, type: 2 } }]);
         assert.deepEqual(f.renders, [1]);
         assert.deepEqual(f.errors, []);
+    } finally {
+        f.controller.dispose();
+    }
+});
+
+test('弹窗发出 GemChanged 事件后，RoleController 刷新当前背包页签', async () => {
+    const f = roleGemFixture();
+    try {
+        await f.controller.refresh(true);
+        await tick();
+        assert.deepEqual(f.renders, [1]);
+        EventMgr.instance.emit(RoleEvent.GemChanged);
+        await tick();
+        assert.deepEqual(f.renders, [1, 2]);
+        assert.deepEqual(f.shown, [1, 1]);
     } finally {
         f.controller.dispose();
     }

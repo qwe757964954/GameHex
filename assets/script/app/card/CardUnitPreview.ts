@@ -48,7 +48,6 @@ export class CardUnitPreview {
     private glowNode: Node | null = null;
     private glowSkeleton: sp.Skeleton | null = null;
     private glowOpacity: UIOpacity | null = null;
-    private glowMaterial: Material | null = null;
     private visualSkeleton: sp.Skeleton | null = null;
     /** 骨架 canvas 高（建节点时读一次，之后只按体型系数重乘，不重建）；NaN = 尚未建立预览。 */
     private sourceHeight = Number.NaN;
@@ -153,13 +152,15 @@ export class CardUnitPreview {
      */
     attachGlow(material: Material | null, tint: Readonly<Color>): boolean {
         const visual = this.visual;
+        const main = this.visualSkeleton;
         const prefab = this.prefab;
-        if (!material || !prefab || !visual || !visual.isValid) {
+        if (!material || !prefab || !main || !visual || !visual.isValid) {
             this.clearGlow();
             return false;
         }
-        if (this.glowNode && this.glowNode.isValid && this.glowNode.parent === this.hero.node) {
-            this.syncGlow(material, tint);
+        const existing = this.glowSkeleton;
+        if (existing && existing.isValid && this.glowNode.parent === this.hero.node) {
+            this.applyGlowStyle(existing, material, tint);
             return true;
         }
         const copy = instantiate(prefab);
@@ -172,13 +173,6 @@ export class CardUnitPreview {
         copy.name = `${copy.name}_Glow`;
         copy.setParent(this.hero.node);
         copy.setSiblingIndex(Math.min(visual.getSiblingIndex() + 1, this.hero.node.children.length - 1));
-        // 副本里带着 prefab 自己的 `CardUnitPreviewPlayer`：它在 `start()` 会 `setAnimation('idle')`
-        // 从 0 重播。而副本是 `active = false` 建的，`start()` 恰好被推迟到「点亮」那一帧才跑
-        // ⇒ 刚抄好的 `trackTime` 立刻被归零，剪影与本体错开一大截（2026-11-25 截图：白斑飘在脸右侧）。
-        // 副本的动画从这里开始只由 `CardGlowSync` 管，不许有第二个起播者。
-        const autoPlay = spineNode.getComponent(CardUnitPreviewPlayer);
-        if (autoPlay) autoPlay.destroy();
-        skeleton.customMaterial = material;
         // 与 `ZCUnitView.attachOutlineCopy` 同口径：shader 按预乘输出，别依赖 prefab 上的勾选。
         skeleton.premultipliedAlpha = true;
         this.glowNode = copy;
@@ -187,34 +181,14 @@ export class CardUnitPreview {
         this.glowOpacity.opacity = 0;
         copy.active = false;
         this.syncGlowTransform();
-        this.syncGlow(material, tint);
-        skeleton.addComponent(CardGlowSync).bind(this.visualSkeleton);
+        this.applyGlowStyle(skeleton, material, tint);
+        skeleton.addComponent(CardGlowSync).bind(main, UNIT_IDLE_ANIMATION);
         return true;
     }
 
-    /**
-     * 写发光层的材质与颜色，并做**第一次**对齐：起播动画段 + 抄本体的播放头。
-     *
-     * `setAnimation` 会让轨道从头计时，所以这里只能建好时调一次。之后每一帧的跟随由
-     * `CardGlowSync.lateUpdate` 负责 —— 副本是晚于本体建出来的（材质异步到），只对齐一次
-     * 挡不住后续的漂移，叠在角色上就是重影（2026-11-25 用户：「叠加的白色会歪」）。
-     */
-    private syncGlow(material: Material, tint: Readonly<Color>): void {
-        const skeleton = this.glowSkeleton;
-        if (!skeleton || !skeleton.isValid) return;
-        if (this.glowMaterial !== material) {
-            this.glowMaterial = material;
-            skeleton.customMaterial = material;
-        }
+    private applyGlowStyle(skeleton: sp.Skeleton, material: Material, tint: Readonly<Color>): void {
+        if (skeleton.customMaterial !== material) skeleton.customMaterial = material;
         skeleton.color = new Color(tint.r, tint.g, tint.b, tint.a);
-        // 起播的那一段抄本体的，别写死 `idle`：本体可能已经不是待机（比如刚进场还没切回来）。
-        const main = this.visualSkeleton?.getCurrent(0) ?? null;
-        const name = main?.animation?.name || UNIT_IDLE_ANIMATION;
-        const entry = skeleton.setAnimation(0, name, main ? !!main.loop : true);
-        if (main) {
-            if (entry) entry.trackTime = main.trackTime;
-            skeleton.timeScale = this.visualSkeleton!.timeScale;
-        }
     }
 
     /** 发光层的不透明度（0..1）；0 时整层不参与渲染。 */
@@ -234,7 +208,6 @@ export class CardUnitPreview {
         this.glowNode = null;
         this.glowSkeleton = null;
         this.glowOpacity = null;
-        this.glowMaterial = null;
     }
 
     /**

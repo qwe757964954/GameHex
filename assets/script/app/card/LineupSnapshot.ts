@@ -1,4 +1,5 @@
 import type { ZCDeckCard } from '../zcds/model/ZCCombatCatalog';
+import type { PostLoginIdentity } from '../loading/PostLoginContract';
 
 /**
  * 「卡牌阵容」页的本地阵容快照（`localStorage`，纯函数、零 `cc`）。
@@ -25,8 +26,12 @@ export const LINEUP_SNAPSHOT_VERSION = 1;
  */
 export const LINEUP_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** 存储键。加前缀避免与老端的键撞车。 */
+/** 存储键前缀。旧版共享键缺少归属，不能迁移到任何角色。 */
 export const LINEUP_SNAPSHOT_KEY = 'cardLineupSnapshot';
+
+function storageKey(owner: PostLoginIdentity): string {
+    return `${LINEUP_SNAPSHOT_KEY}:${owner.serverId}:${owner.roleId}`;
+}
 
 export interface LineupSnapshot {
     readonly version: number;
@@ -110,6 +115,7 @@ export function normalizeLineupSnapshot(
 
 /** 写快照（失败静默：存储满了/隐私模式不该影响进页面）。 */
 export function writeLineupSnapshot(
+    owner: PostLoginIdentity,
     cards: readonly ZCDeckCard[],
     levels: ReadonlyMap<string, number>,
     now: number = Date.now(),
@@ -127,7 +133,7 @@ export function writeLineupSnapshot(
         ...(typeof power === 'number' && Number.isFinite(power) && power > 0 ? { power } : {}),
     };
     try {
-        storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload));
+        storage.setItem(storageKey(owner), JSON.stringify(payload));
     } catch (error) {
         console.warn('[LineupSnapshot] 写快照失败', error);
     }
@@ -135,17 +141,19 @@ export function writeLineupSnapshot(
 
 /** 更新已有快照的战力（无快照时不创建假快照）。 */
 export function saveLineupSnapshotPower(
+    owner: PostLoginIdentity,
     power: number,
     storage: LineupSnapshotStorage | null = defaultStorage(),
 ): void {
     if (!storage || !(power > 0)) return;
     try {
-        const text = storage.getItem(LINEUP_SNAPSHOT_KEY);
+        const key = storageKey(owner);
+        const text = storage.getItem(key);
         if (!text) return;
         const parsed = JSON.parse(text) as Record<string, unknown>;
         if (!parsed || parsed.version !== LINEUP_SNAPSHOT_VERSION) return;
         parsed.power = power;
-        storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(parsed));
+        storage.setItem(key, JSON.stringify(parsed));
     } catch (error) {
         console.warn('[LineupSnapshot] 更新快照战力失败', error);
     }
@@ -153,13 +161,14 @@ export function saveLineupSnapshotPower(
 
 /** 读快照；没有 / 不合法 / 过期都返回 `null`。 */
 export function readLineupSnapshot(
+    owner: PostLoginIdentity,
     now: number = Date.now(),
     storage: LineupSnapshotStorage | null = defaultStorage(),
 ): LineupSnapshot | null {
     if (!storage) return null;
     let text: string | null = null;
     try {
-        text = storage.getItem(LINEUP_SNAPSHOT_KEY);
+        text = storage.getItem(storageKey(owner));
     } catch {
         return null;
     }
@@ -169,19 +178,22 @@ export function readLineupSnapshot(
         parsed = JSON.parse(text);
     } catch {
         // 坏数据不清也不影响（下次写会覆盖），但留着会每次进页面都失败一次，顺手删掉。
-        clearLineupSnapshot(storage);
+        clearLineupSnapshot(owner, storage);
         return null;
     }
     const snapshot = normalizeLineupSnapshot(parsed, now);
-    if (!snapshot) clearLineupSnapshot(storage);
+    if (!snapshot) clearLineupSnapshot(owner, storage);
     return snapshot;
 }
 
-/** 清快照（账号切换 / 脏数据时用）。 */
-export function clearLineupSnapshot(storage: LineupSnapshotStorage | null = defaultStorage()): void {
+/** 清理当前角色的失效快照。 */
+export function clearLineupSnapshot(
+    owner: PostLoginIdentity,
+    storage: LineupSnapshotStorage | null = defaultStorage(),
+): void {
     if (!storage) return;
     try {
-        storage.removeItem(LINEUP_SNAPSHOT_KEY);
+        storage.removeItem(storageKey(owner));
     } catch {
         /* 清不掉就算了，下次写入会覆盖 */
     }

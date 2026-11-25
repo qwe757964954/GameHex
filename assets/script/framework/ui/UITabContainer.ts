@@ -147,7 +147,7 @@ export class UITabContainer extends Component {
         const btn = this.resolveButtonRoot()?.getChildByName(btnName) ?? null;
         tab._bindButton(btn);
         if (btn) {
-            btn.on(Node.EventType.TOUCH_END, () => this.selectTab(tab), this);
+            btn.on(Node.EventType.TOUCH_END, () => this.selectTab(tab));
         } else {
             console.warn(`[UITabContainer] 找不到按钮 ${DEFAULT_BUTTON_ROOT_NAME}/${btnName}，该 Tab 无法通过点击切换`);
         }

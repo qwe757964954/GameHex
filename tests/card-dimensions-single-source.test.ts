@@ -68,4 +68,8 @@ test('pvpCard.traits 的职业 / 阵营取值与 ZCCombatCatalog 的词表完全
         '职业词表与 pvpCard 不一致：表里新词会被 resolveCardClass 静默兜底成 tank');
     assert.deepEqual([...camps].sort(), [...ZC_CAMP_TRAITS].sort(),
         '阵营词表与 pvpCard 不一致：表里新词会被 resolveCardCamp 静默返回 null');
+    assert.deepEqual(cardArtConfig.lineup.classes.map(meta => meta.name).sort(), [...attacks].sort(),
+        'cardUiArtClass.name 必须覆盖 pvpCard.traits.attack');
+    assert.deepEqual(cardArtConfig.lineup.camps.map(meta => meta.name).sort(), [...camps].sort(),
+        'cardUiArtCamp.name 必须覆盖 pvpCard.traits.camp');
 });

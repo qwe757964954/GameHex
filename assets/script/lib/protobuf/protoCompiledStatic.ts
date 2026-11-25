@@ -51242,6 +51242,7 @@ CmdBattleUnitInfo.prototype.unitType = 0;
 CmdBattleUnitInfo.prototype.buffInfo = $util.emptyArray;
 CmdBattleUnitInfo.prototype.attrs = $util.emptyArray;
 CmdBattleUnitInfo.prototype.modifyList = $util.emptyArray;
+CmdBattleUnitInfo.prototype.wallLevel = 0;
 CmdBattleUnitInfo.create = function create(properties) {
 return new CmdBattleUnitInfo(properties);
 };
@@ -51271,6 +51272,8 @@ $root.com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo.encode(message.attrs[i], writer.uin
 if (message.modifyList != null && message.modifyList.length)
 for (let i = 0; i < message.modifyList.length; ++i)
 writer.uint32(  80).uint64(message.modifyList[i]);
+if (message.wallLevel != null && Object.hasOwnProperty.call(message, "wallLevel"))
+writer.uint32(  88).uint32(message.wallLevel);
 return writer;
 };
 CmdBattleUnitInfo.decode = function decode(reader, length, error, long) {
@@ -51337,6 +51340,10 @@ while (reader.pos < end2)
 message.modifyList.push(reader.uint64());
 } else
 message.modifyList.push(reader.uint64());
+break;
+}
+case 11: {
+message.wallLevel = reader.uint32();
 break;
 }
 default:

@@ -3,13 +3,12 @@ import { existsSync, readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import test from 'node:test';
 import ts from 'typescript';
-import { CARD_HEAD_ART_ROOT, ICON_PACKAGE_ART_ROOT } from '../assets/script/app/ArtPaths';
+import { CARD_HEAD_ART_ROOT } from '../assets/script/app/ArtPaths';
+import { createIconArtResolver, type IconArtResolver, type IconArtTarget } from '../assets/script/app/HeadArtModel';
 import { cardArtConfig } from './helpers/card-art-config';
 import * as cardTypes from '../assets/script/app/card/CardLineupTypes';
 import { assetPath } from './helpers/asset-paths';
 import { readRefKvc, type IRefKvcTable as KvcTable } from './helpers/ref-kvc';
-
-interface IconArt { art: string; root: string }
 
 /** remoteRef 表按行读 —— 列存与行对象数组两种产物格式由 {@link readRefKvc} 收口。 */
 const readKvc = readRefKvc;
@@ -19,25 +18,6 @@ function columnOf(table: KvcTable, name: string): number {
     const idx = table.k.indexOf(name);
     assert.ok(idx >= 0, `配置表缺少列 ${name}（导表把它冲掉了？）`);
     return idx;
-}
-
-/** icon.json：图标名 → 资源名（path 末段）与目录（包名映射）。复刻 HeadArt 解析。 */
-function iconArtByKey(table: KvcTable = readKvc('assets/remoteRef/icon.json')): Map<string, IconArt> {
-    const keyIdx = columnOf(table, 'key');
-    const pathIdx = columnOf(table, 'path');
-    const map = new Map<string, IconArt>();
-    for (const row of table.v) {
-        const key = row[keyIdx];
-        const path = row[pathIdx];
-        if (typeof key !== 'string' || typeof path !== 'string') continue;
-        const body = path.startsWith('ui://') ? path.slice('ui://'.length) : path;
-        const cut = body.indexOf('/');
-        if (cut < 0) continue;
-        const root = ICON_PACKAGE_ART_ROOT[body.slice(0, cut)];
-        if (!root) continue;
-        map.set(key, { art: body.slice(cut + 1), root });
-    }
-    return map;
 }
 
 /** pvpCard.json：卡 id → headIcon（图标名）。 */
@@ -53,15 +33,15 @@ function headIconOf(cardId: string, table: KvcTable = readKvc('assets/remoteRef/
 /** 解析每条 headIcon；解析不到必须显式失败（配置漂移），不许静默 continue。 */
 function headIconTargets(
     table: KvcTable,
-    byIconKey: ReadonlyMap<string, IconArt>,
-): Array<{ iconKey: string; target: IconArt }> {
+    icons: IconArtResolver,
+): Array<{ iconKey: string; target: IconArtTarget }> {
     const hiIdx = columnOf(table, 'headIcon');
-    const out: Array<{ iconKey: string; target: IconArt }> = [];
+    const out: Array<{ iconKey: string; target: IconArtTarget }> = [];
     for (const row of table.v) {
         const iconKey = row[hiIdx];
         if (typeof iconKey !== 'string' || !iconKey) continue;
-        const target = byIconKey.get(iconKey);
-        assert.ok(target, `headIcon ${iconKey} 在 icon.json 解析不到（包名映射或配置漂移）`);
+        const target = icons.resolve(iconKey);
+        assert.ok(target, `headIcon ${iconKey} 解析不到资源（图标名或直接路径无效）`);
         out.push({ iconKey, target });
     }
     return out;
@@ -72,10 +52,11 @@ test('卡牌专属立绘由 headIcon+icon.json 配置驱动且落配置目录，
         const path = cardArtConfig.paths.get(`boardHero.${key}`);
         assert.ok(existsSync(assetPath(`${path}.png`)), path);
     }
-    // 真源 = pvpCard.headIcon → icon.json → 资源名+目录；每条能解析的配置，其解析目标必须真实存在。
-    // 目录由包名决定：兵种头像/专属立绘在 cardHead，68018 的 `图标_头像_*` 在 icons/head（玩家头像）。
-    const byIconKey = iconArtByKey();
-    const targets = headIconTargets(readKvc('assets/remoteRef/pvpCard.json'), byIconKey);
+    const iconTable = readKvc('assets/remoteRef/icon.json');
+    columnOf(iconTable, 'key');
+    columnOf(iconTable, 'path');
+    const icons = cardArtConfig.heroIcons;
+    const targets = headIconTargets(readKvc('assets/remoteRef/pvpCard.json'), icons);
     assert.ok(targets.length > 0, '至少要校验到一条 headIcon，否则整段存在性断言零执行（假绿）');
     for (const { iconKey, target } of targets) {
         assert.ok(existsSync(assetPath(`${target.root}/${target.art}.png`)), `${iconKey} -> ${target.root}/${target.art}`);
@@ -88,8 +69,8 @@ test('卡牌专属立绘由 headIcon+icon.json 配置驱动且落配置目录，
     for (const [cardId, slot] of [['68001', 'warrior'], ['68028', 'mage']] as const) {
         const iconKey = headIconOf(cardId);
         assert.ok(iconKey, `${cardId} 必须有 headIcon`);
-        const target = byIconKey.get(iconKey);
-        assert.ok(target, `${cardId} 的 headIcon ${iconKey} 必须能在 icon.json 解析`);
+        const target = icons.resolve(iconKey);
+        assert.ok(target, `${cardId} 的 headIcon ${iconKey} 必须能解析到资源`);
         assert.equal(cardArtConfig.paths.get(`boardHero.${slot}`), `${target.root}/${target.art}`);
         assert.equal(target.root, CARD_HEAD_ART_ROOT, `${cardId} 的兵种头像必须落 cardHead 目录`);
     }
@@ -101,14 +82,12 @@ test('配置护栏：导表冲掉列时显式失败，不让数据驱动断言�
 });
 
 test('配置护栏：headIcon 解析不到时显式失败，不许静默跳过', () => {
-    const byIconKey = new Map<string, IconArt>([
-        ['已知图标', { art: 'wandouyouxia', root: CARD_HEAD_ART_ROOT }],
-    ]);
-    const good: KvcTable = { k: ['id', 'headIcon'], v: [['68001', '已知图标']] };
-    assert.equal(headIconTargets(good, byIconKey).length, 1);
+    const icons = createIconArtResolver([{ key: '已知图标', path: 'ui://图标_兵种_头像/wandouyouxia' }]);
+    const good: KvcTable = { k: ['id', 'headIcon'], v: [['68001', '已知图标'], ['68002', 'icons/cardHead/wandouyouxia']] };
+    assert.equal(headIconTargets(good, icons).length, 2);
     const drifted: KvcTable = { k: ['id', 'headIcon'], v: [['68001', '被改名_不存在']] };
-    assert.throws(() => headIconTargets(drifted, byIconKey), /解析不到/);
-    assert.throws(() => headIconTargets({ k: ['id'], v: [['68001']] }, byIconKey), /缺少列 headIcon/);
+    assert.throws(() => headIconTargets(drifted, icons), /解析不到/);
+    assert.throws(() => headIconTargets({ k: ['id'], v: [['68001']] }, icons), /缺少列 headIcon/);
 });
 
 test('专属立绘加载器使用 cardHead 根目录', async () => {

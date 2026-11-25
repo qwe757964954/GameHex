@@ -1,5 +1,5 @@
-import { _decorator, Color, Component, Sprite, SpriteFrame, UIOpacity, Tween, tween, Vec3 } from 'cc';
-import { GoodsBox } from '../itemdetail/GoodsBox';
+import { _decorator, Color, Component, Sprite, UIOpacity, Tween, tween, Vec3 } from 'cc';
+import { RewardItemView, type IRewardItemData } from '../common/RewardItemView';
 import { FGUI_FPS, SR_STAR_TRACKS } from './ShowRewardTable';
 
 const { ccclass, property } = _decorator;
@@ -8,7 +8,7 @@ const { ccclass, property } = _decorator;
 const sec = (frames: number): number => frames / FGUI_FPS;
 
 /**
- * 一个奖励格（FGUI `列表_奖励列表Item`，100×100）：GoodsBox + 闪光 Glow + 5 星点。
+ * 一个奖励格（FGUI `列表_奖励列表Item`，100×100）：公共 RewardItem + 闪光 Glow + 5 星点。
  *
  * 显隐由虚拟列表管理 active，格子通过 UIOpacity 隐藏（错峰等待期不许露出 0.2 倍的小方块 + 全亮闪光），轮到本格时再由 `appear()` /
  * `settle()` 显示。使用透明度避免列表重新激活槽位时露出待播态。
@@ -19,9 +19,6 @@ const sec = (frames: number): number => frames / FGUI_FPS;
  */
 @ccclass('ShowRewardItem')
 export class ShowRewardItem extends Component {
-    @property({ type: GoodsBox, tooltip: 'Goods：物品框（品质框 / 图标 / 数量），FGUI 的 com_goods' })
-    goods: GoodsBox = null!;
-
     @property({ type: Sprite, tooltip: 'Glow：闪光（FGUI n1），入场时 alpha 1→0 淡出' })
     glow: Sprite = null!;
 
@@ -41,20 +38,12 @@ export class ShowRewardItem extends Component {
     // 铺数据
     // ============================================================
 
-    /**
-     * 铺一个奖励。参数无条件写：复用槽位条件式赋值会在图加载失败时残留上一格品质颜色。
-     * @param qualityFrame 品质框（`null` = 用 prefab 静态帧）
-     * @param iconFrame    道具图标（`null` = 整块隐藏，不画问号）
-     * @param numberText   数量文案（空串不显示）
-     * @param showNumber   是否显示数量
-     */
-    render(
-        qualityFrame: SpriteFrame | null,
-        iconFrame: SpriteFrame | null,
-        numberText: string,
-        showNumber: boolean,
-    ): void {
-        this.goods.render(qualityFrame, iconFrame, numberText, showNumber);
+    private get rewardItem(): RewardItemView {
+        return this.getComponentInChildren(RewardItemView);
+    }
+
+    render(data: IRewardItemData): void {
+        this.rewardItem.render(data);
     }
 
     // ============================================================
@@ -90,6 +79,7 @@ export class ShowRewardItem extends Component {
      */
     prepareAppear(): void {
         this.resetAppear();
+        this.rewardItem.node.active = false;
         this.opacity.opacity = 0;
     }
 
@@ -108,11 +98,13 @@ export class ShowRewardItem extends Component {
             star.node.setScale(0, 0, 1);
         }
         this.opacity.opacity = 255;
+        this.rewardItem.node.active = true;
     }
 
     /** 播一次出现动画（同一格只播一次，见类注释）。 */
     appear(): void {
         // active 由列表持有，延迟动画不能重新激活已回收槽位。
+        this.rewardItem.node.active = true;
         this.opacity.opacity = 255;
         this.resetAppear();
         const rev = this.animRevision;
@@ -185,17 +177,17 @@ export class ShowRewardItem extends Component {
 
     /** 数量文案（探针判有没有铺上数据）。 */
     get numberText(): string {
-        return this.goods.num?.string ?? '';
+        return this.rewardItem.num.string;
     }
 
     /** 品质框 uuid（探针对比两格是否不同图）。 */
     get qualityUuid(): string {
-        return this.goods.frame?.spriteFrame?._uuid ?? '';
+        return this.rewardItem.frame.spriteFrame?._uuid ?? '';
     }
 
     /** 道具图 uuid。 */
     get iconUuid(): string {
-        return this.goods.icon?.spriteFrame?._uuid ?? '';
+        return this.rewardItem.icon.spriteFrame?._uuid ?? '';
     }
 
     private setAlpha(sprite: Sprite, alpha: number): void {

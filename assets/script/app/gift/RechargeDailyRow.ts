@@ -60,7 +60,7 @@ export class RechargeDailyRow extends Component {
 
     protected onLoad(): void {
         for (const button of [this.btnGoto, this.btnClaim]) {
-            button.node.on(Button.EventType.CLICK, () => this.onAction?.(), this);
+            button.node.on(Button.EventType.CLICK, () => this.onAction?.());
         }
     }
 

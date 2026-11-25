@@ -46,6 +46,8 @@ import { fetchFormations, FORMATION_PREFETCH_FRESH_MS, getCachedFormations, rese
 import { createItemCounter } from './ItemBag';
 import { resolveSelectedDeck } from './LineupPresets';
 import { readLineupSnapshot, saveLineupSnapshotPower, writeLineupSnapshot } from './LineupSnapshot';
+import type { LineupSnapshot } from './LineupSnapshot';
+import type { PostLoginIdentity } from '../loading/PostLoginContract';
 import type { PvpHeroInfo, PvpHeroService, PvpHeroSkillLevel } from './PvpHeroService';
 import { normalizePvpHeroInfos } from './PvpHeroService';
 
@@ -149,14 +151,16 @@ export interface ICardRepository {
 /** 生产环境 Repository：统一封装 Ref 表、后端英雄列表、背包与升级请求。 */
 export class RuntimeCardRepository implements ICardRepository {
     private heroes: PvpHeroService | null = null;
+    private snapshotOwner: PostLoginIdentity | null = null;
     private cachedPower: number | null = null;
 
     /** 登录组合层绑定新会话；返回登录和应用销毁时传 null。 */
-    bindHeroSession(heroes: PvpHeroService | null): void {
+    bindHeroSession(heroes: PvpHeroService | null, owner: PostLoginIdentity | null = null): void {
         this.cachedPower = null;
         if (this.heroes === heroes) return;
         const previous = this.heroes;
         this.heroes = heroes;
+        this.snapshotOwner = heroes ? owner : null;
         previous?.dispose();
         if (typeof resetFormationSession === 'function') {
             resetFormationSession();
@@ -168,12 +172,17 @@ export class RuntimeCardRepository implements ICardRepository {
         if (this.cachedPower !== null && this.cachedPower > 0) {
             return this.cachedPower;
         }
-        const snapshot = typeof readLineupSnapshot === 'function' ? readLineupSnapshot() : null;
+        const snapshot = this.getCachedLineupSnapshot();
         if (snapshot && typeof snapshot.power === 'number' && snapshot.power > 0) {
             this.cachedPower = snapshot.power;
             return snapshot.power;
         }
         return null;
+    }
+
+    getCachedLineupSnapshot(): LineupSnapshot | null {
+        const owner = this.snapshotOwner;
+        return owner ? readLineupSnapshot(owner) : null;
     }
 
     prefetchHeroInfos(): void {
@@ -262,8 +271,10 @@ export class RuntimeCardRepository implements ICardRepository {
         const deck = formations === null ? [] : (selectedDeck ?? tableDeck);
         const power = formations !== null && heroInfos !== null ? await this.loadLineupPower({ deck, heroLevels }) : undefined;
         // 只给服务端确认过的选中阵型写快照，本地默认八卡不能当玩家阵容持久化。
-        if (selectedDeck && typeof writeLineupSnapshot === 'function') {
-            writeLineupSnapshot(selectedDeck, heroLevels, Date.now(), undefined, power);
+        if (this.heroes !== heroes) throw new Error('卡牌会话已结束');
+        const owner = this.snapshotOwner;
+        if (selectedDeck && owner) {
+            writeLineupSnapshot(owner, selectedDeck, heroLevels, Date.now(), undefined, power);
         }
         if (power !== undefined && power > 0) this.cachedPower = power;
         return {
@@ -286,7 +297,7 @@ export class RuntimeCardRepository implements ICardRepository {
     loadLineupSnapshot(): CardLineupData | null {
         const art = this.artConfig;
         if (!art) return null;
-        const snapshot = typeof readLineupSnapshot === 'function' ? readLineupSnapshot() : null;
+        const snapshot = this.getCachedLineupSnapshot();
         if (!snapshot || snapshot.cards.length === 0) return null;
         const heroLevels = new Map<string, number>();
         for (const [key, value] of Object.entries(snapshot.levels)) heroLevels.set(key, value);
@@ -379,7 +390,7 @@ export class RuntimeCardRepository implements ICardRepository {
             ),
             powerText: formatPowerText(cardAttackOf({ cardId, base, unitId, level, levelAttrs: levelAttrs.current }, growthRows)),
             // 全队暴击伤害链按「目标等级」那一行取增量（卡牌升级就给，与星级/技能档无关）。
-            critDamageGain: critDamageGainAt(this.critGainTableOf(plans ?? []), String(cardId), level),
+            critDamageGain: critDamageGainAt(this.critGainTableOf(plans ?? []), unitId, level),
             chain: buildDetailChain(table, skillIds, heroLevel),
             milestones: buildDetailMilestones(table, skillIds, heroLevel),
         };
@@ -390,17 +401,21 @@ export class RuntimeCardRepository implements ICardRepository {
      * 保证主界面与详情页攻击力口径一致。读表异常只告警返回 0，不拖垮 HUD。
      */
     async loadLineupPower(lineup?: Pick<CardLineupData, 'deck' | 'heroLevels'>): Promise<number> {
+        const heroes = this.heroes;
+        const owner = this.snapshotOwner;
         try {
             if (!lineup) {
                 if (this.cachedPower !== null && this.cachedPower > 0) return this.cachedPower;
                 let data = await this.loadLineup(false, false);
+                if (this.heroes !== heroes) return 0;
                 if (data.power === undefined) {
                     data = await this.loadLineup(false, true);
+                    if (this.heroes !== heroes) return 0;
                 }
                 const power = data.power ?? 0;
                 if (power > 0) {
                     this.cachedPower = power;
-                    if (typeof saveLineupSnapshotPower === 'function') saveLineupSnapshotPower(power);
+                    if (owner) saveLineupSnapshotPower(owner, power);
                 }
                 return power;
             }
@@ -410,7 +425,8 @@ export class RuntimeCardRepository implements ICardRepository {
                 loadPvpUnitGrowthRows(),
                 loadCardLevelUpRows(),
             ]);
-            const rowById = new Map<string, Record<string, unknown>>();
+            if (this.heroes !== heroes) return 0;
+            const rowById = new Map<string, IRefpvpCard>();
             for (const row of cardRows) rowById.set(String(row.id), row);
             const table = this.levelUpTableOf(levelUpRaw);
             const inputs: ICardPowerInput[] = lineup.deck.map((card) => {
@@ -426,7 +442,7 @@ export class RuntimeCardRepository implements ICardRepository {
             const power = lineupAttackTotal(inputs, parseGrowthRows(growthRaw));
             if (power > 0) {
                 this.cachedPower = power;
-                if (typeof saveLineupSnapshotPower === 'function') saveLineupSnapshotPower(power);
+                if (owner) saveLineupSnapshotPower(owner, power);
             }
             return power;
         } catch (error) {
@@ -601,6 +617,16 @@ export class RuntimeCardRepository implements ICardRepository {
     selectFormation(formationId: number, caller?: object): Promise<boolean> {
         this.cachedPower = null;
         return selectFormation(formationId, caller);
+    }
+
+    /** 轻量读取英雄等级映射；命中内存缓存则跳过请求，也不拉取阵容、图鉴或战力。 */
+    async loadHeroLevelsOnly(): Promise<ReadonlyMap<string, number>> {
+        const heroes = this.heroes;
+        if (!heroes) return new Map();
+        const cached = heroes.getCachedPvpHeroInfos() ?? null;
+        const infos = cached === null ? await heroes.fetchPvpHeroInfos() : cached;
+        if (this.heroes !== heroes) return new Map();
+        return this.levels(infos);
     }
 
     private levels(infos: readonly PvpHeroInfo[] | null): ReadonlyMap<string, number> {

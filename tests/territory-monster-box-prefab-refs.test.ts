@@ -59,6 +59,18 @@ test('面板字段按组件类型绑定：Button / Label / Sprite 不能退化�
     }
 });
 
+test('巡逻宝箱与宝箱详情共用奖励卡片，拖动时取消物品点击', () => {
+    const panel = componentsOf(PANEL_TYPE)[0];
+    const list = targetOf(panel, 'rewardList');
+    const sharedCard = JSON.parse(readFileSync('assets/resources/ui/main/ChestDetailRewardItem.prefab.meta', 'utf8'));
+    assert.deepEqual(list.itemPrefab, { __uuid__: sharedCard.uuid, __expectedType__: 'cc.Prefab' });
+    assert.equal(list.gridCount, 4);
+    const scroll = targetOf(list, 'nativeScrollView');
+    assert.equal(scroll.__type__, 'cc.ScrollView');
+    assert.deepEqual(scroll._content, list.content);
+    assert.equal(scroll.cancelInnerEvents, true);
+});
+
 test('★旧进度条（2026-11-22 的摇奖方案）已整块从 prefab 移除', () => {
     // 2026-11-24 改版：摇奖改成「空星槽虚影 + 宝箱变白」，进度条那一行不再存在。
     // 留着死节点会让面板字段重新绑到它上面，动画两套并存。

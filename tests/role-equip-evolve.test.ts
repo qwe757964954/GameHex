@@ -10,11 +10,9 @@ const tick = () => new Promise<void>(resolve => setImmediate(resolve));
 
 test('RoleController opens rich equip info popup when equipPart intent is received', async () => {
     const owner = {};
-    const source = {};
     const openedPopups: Array<{ name: string; args: unknown[] }> = [];
 
     const gems: IRoleGemOperations = {
-        source: () => source,
         slots: () => [],
         find: id => ({
             kind: 'gem',
@@ -101,6 +99,12 @@ test('RoleController opens rich equip info popup when equipPart intent is receiv
         await tick();
         assert.equal(openedPopups.length, 4);
         assert.deepEqual(openedPopups[3], { name: 'RoleGemInfoPopup', args: ['gem_1001'] });
+
+        // 5. 装备详情弹窗发出带部位的 forge 意图 -> 透传 partId 给锻造界面
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge', partId: 4 });
+        await tick();
+        assert.equal(openedPopups.length, 5);
+        assert.deepEqual(openedPopups[4], { name: 'EquipEvolvePage', args: [4, undefined] });
     } finally {
         controller.dispose();
     }

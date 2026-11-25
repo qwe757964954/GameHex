@@ -50,10 +50,13 @@ describe('parseUnitGrowthRow', () => {
 describe('resolveGrowthRow', () => {
     it('精确匹配 (unitId, level) 单行；未启用/无行按全 0', () => {
         const rows = growthRows();
-        assert.ok(Math.abs(resolveGrowthRow(rows, '68005', 2).maxHpRate - 0.05) < 1e-9);
-        assert.ok(Math.abs(resolveGrowthRow(rows, '68005', 3).maxHpRate - 0.1) < 1e-9);
-        assert.equal(resolveGrowthRow(rows, '68005', 9).maxHpRate, 0);
-        assert.equal(resolveGrowthRow(rows, '68001', 2).maxHpRate, 0);
+        assert.ok(Math.abs(resolveGrowthRow(rows, '68005', 2).maxHp.rate - 0.05) < 1e-9);
+        assert.ok(Math.abs(resolveGrowthRow(rows, '68005', 3).maxHp.rate - 0.1) < 1e-9);
+        assert.equal(resolveGrowthRow(rows, '68005', 9).maxHp.rate, 0);
+        assert.equal(resolveGrowthRow(rows, '68001', 2).maxHp.rate, 0);
+        // 射程只有 flat、移速只有 rate，另一项恒 0。
+        assert.equal(resolveGrowthRow(rows, '68005', 2).attackRange.rate, 0);
+        assert.equal(resolveGrowthRow(rows, '68005', 2).moveSpeed.flat, 0);
     });
 });
 

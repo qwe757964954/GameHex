@@ -336,7 +336,7 @@ test('C7 匹配入口（宝箱战斗）的 battleType 必须一路透传到结�
 test('C3 换算链真复用：结算页与奖励弹窗共用一份 RewardFrames', () => {
     const frames = readFileSync('assets/script/app/showReward/RewardFrames.ts', 'utf8');
     assert.match(frames, /export async function resolveCmdGoodsFrames/);
-    assert.match(frames, /rewardEntryOf\(one, tables\.items, tables\.resources\)/);
+    assert.match(frames, /rewardEntryOf\(one, tables\.items, tables\.resources, tables\.gems\)/);
     assert.match(frames, /const qualityFrameRel = itemQualityFrameRelPath\(entry\.quality\)/);
     assert.match(frames, /loadItemQualityFrame\(entry\.quality\)/);
     assert.match(frames, /loadControllerRewardFrame\(resources, qualityFrameRel\)/);

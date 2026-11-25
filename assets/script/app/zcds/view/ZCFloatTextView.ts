@@ -1,3 +1,4 @@
+import { formatBattleFloatAmount } from '../../../core/math/CompactNumber';
 import { _decorator, Color, Component, Label, Sprite, UITransform, UIOpacity } from 'cc';
 import type { ZCFloatText, ZCFloatTextKind } from '../model/ZCGameTypes';
 import {
@@ -78,10 +79,6 @@ export class ZCFloatTextView extends Component {
 
     /** 连续伤害按中、左、右交替排布；五条轨道正好收在 98px 兵种画布宽度内。*/
     private static readonly DAMAGE_LANES = [0, -1, 1, -2, 2] as const;
-    /** 数值压缩档位（千/百万/十亿/万亿 → 后缀）。*/
-    private static readonly COMPACT_UNITS: ReadonlyArray<readonly [number, string]> = [
-        [1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K'],
-    ];
     private static readonly DEFAULT_FONT_SIZE = 30;
     /** 暴击字号 = 普通字号 × 1.7（2026-11-20 用户：「出现暴击就用 1.7 倍大的数字字体」）。*/
     private static readonly CRITICAL_FONT_SIZE = Math.round(ZCFloatTextView.DEFAULT_FONT_SIZE * 1.7);
@@ -117,20 +114,9 @@ export class ZCFloatTextView extends Component {
     /** 宽度读不到时的兜底宽度（按 3 个字符数字估算）。*/
     private static readonly TEXT_WIDTH_FALLBACK = 40;
 
-    /** 数值压缩：千/百万/十亿/万亿 → K/M/B/T 后缀。*/
-    private static compactBattleNumber(value: number): string {
-        const rounded = Math.max(0, Math.ceil(value));
-        for (const [limit, suffix] of ZCFloatTextView.COMPACT_UNITS) {
-            if (rounded < limit) continue;
-            const compact = rounded / limit;
-            return `${compact >= 100 ? Math.round(compact) : Number(compact.toFixed(1))}${suffix}`;
-        }
-        return String(rounded);
-    }
-
     /** 飘字文案拆成「前缀 + 数值」两段（前缀用独立小字号 Label，见 renderPrefix）。*/
     private static battleText(text: Readonly<ZCFloatText>): { prefix: string; value: string } {
-        const value = ZCFloatTextView.compactBattleNumber(text.value);
+        const value = formatBattleFloatAmount(text.value);
         // 玩家卡牌被别的玩家扣血：负号直接拼进数值，与数字同字号连成「-5」；
         // 走前缀位会被缩到一半字号并留出间距，读起来像一个独立的短横。
         const sign = text.takenFromPlayer ? '-' : '';

@@ -75,42 +75,52 @@ test('战斗内点击地块按实际抽到的卡牌品阶播音，开发不了 /
     }
 });
 
-test('固定与自选出生点开局按阵营打印卡牌最终属性，后续帧不重复打印', (t) => {
+test('固定与自选出生点在开战时打印一份最终配置，后续帧不重复打印', (t) => {
     const log = t.mock.method(console, 'info', () => {});
     for (const selecting of [false, true]) {
         const before = log.mock.callCount();
         const h = runtimeFixture({}, selecting);
         try {
-            const cardLogs = () => log.mock.calls.slice(before).filter((call) => call.arguments[0] === '[对局卡牌属性]');
+            const openingLogs = () => log.mock.calls.slice(before).filter((call) => call.arguments[0] === '[对局开局配置]');
             if (selecting) {
-                assert.equal(cardLogs().length, 0);
+                assert.equal(openingLogs().length, 0);
                 EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
                 EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 20 });
                 h.finishShowcase();
             }
             const model = h.runtime.currentModel;
             assert.ok(model);
-            assert.deepEqual(cardLogs().map((call) => call.arguments[1]), model.owners);
-            for (const call of cardLogs()) {
-                const owner = call.arguments[1];
-                const rows = JSON.parse(call.arguments[2]);
-                const config = h.entry.matchConfig;
+            assert.equal(openingLogs().length, 1);
+            const opening = JSON.parse(openingLogs()[0].arguments[1]);
+            const config = h.entry.matchConfig;
+            assert.equal(opening.seed, h.entry.battleSeed);
+            assert.equal(opening.map.id, config.map.id);
+            assert.equal(opening.map.spawnMode, selecting ? 'select' : 'fixed');
+            assert.equal(opening.rules.initialGold, config.rules.initialGold);
+            assert.deepEqual(opening.seats.map(seat => seat.owner), model.owners);
+            for (const seat of opening.seats) {
+                const { owner, cards: rows } = seat;
+                const home = model.snapshot.hexes.find(hex => hex.owner === owner && hex.building === 'hq');
+                assert.ok(home);
+                assert.deepEqual(seat.home, { hexId: home.id, maxHp: home.maxHp, wallMaxHp: home.wallMaxHp, wallLevel: null });
+                assert.equal(seat.gold, model.snapshot.goldByOwner[owner]);
                 const deck = config.ownerDecks?.[owner] ?? (owner === 'player' ? config.playerDeck : config.enemyDeck);
                 assert.equal(rows.length, deck.length);
                 const card = deck.find((item) => item.unitId);
                 assert.ok(card);
                 const definition = model.effectiveDefinitionForUnit(owner, card.unitId);
-                assert.deepEqual(rows.find((row) => row.cardId === card.id), {
-                    cardId: card.id, name: card.name, heroId: card.unitId,
-                    buildingHp: card.baseHp ?? null, maxHp: definition.maxHp, attack: definition.attack,
-                });
+                const logged = rows.find(row => row.cardId === card.id);
+                assert.equal(logged.heroId, card.unitId);
+                assert.equal(logged.buildingHp, card.baseHp ?? null);
+                assert.equal(logged.maxHp, definition.maxHp);
+                assert.equal(logged.attack, definition.attack);
                 const building = deck.find((item) => !item.unitId);
                 if (building) assert.equal(rows.find((row) => row.cardId === building.id).maxHp, null);
             }
             EventMgr.instance.emit(ZC_BATTLE_EVENTS.FRAME, { dt: 0.1 });
             EventMgr.instance.emit(ZCGameUiEvent.SpawnConfirm);
             h.finishShowcase();
-            assert.equal(cardLogs().length, model.owners.length);
+            assert.equal(openingLogs().length, 1);
         } finally { h.dispose(); }
     }
 });

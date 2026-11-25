@@ -5748,6 +5748,7 @@
         buffInfo?: (CmdPvpBuffInfo[]|null);
         attrs?: (CmdPvpHeroAttrInfo[]|null);
         modifyList?: (Long[]|null);
+        wallLevel?: (number|null);
     }
 
     

@@ -1,8 +1,9 @@
+import { formatDamageStatsValue } from '../assets/script/core/math/CompactNumber';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
     buildDamageStatsColumns, damageStatsBarRatio, damageValueOf, defaultEnemyOwner, enemyOwnersOf,
-    formatDamageStatsValue, isDeckStatsUnit, type IZCDamageStatsUnit,
+    isDeckStatsUnit, type IZCDamageStatsUnit,
 } from '../assets/script/app/zcds/model/ZCDamageStats';
 
 const units: readonly IZCDamageStatsUnit[] = [
@@ -89,7 +90,9 @@ test('战斗统计数值按设计稿口径格式化，异常值收敛为 0', () 
     assert.equal(formatDamageStatsValue(265700), '265.7K');
     assert.equal(formatDamageStatsValue(65288), '65288');
     assert.equal(formatDamageStatsValue(100), '100');
-    assert.equal(formatDamageStatsValue(100000), '100K');
+    assert.equal(formatDamageStatsValue(99_999.9), '99999');
+    assert.equal(formatDamageStatsValue(100_000), '100K');
+    assert.equal(formatDamageStatsValue(1_000_000), '1M');
     assert.equal(formatDamageStatsValue(1200000), '1.2M');
     assert.equal(formatDamageStatsValue(0), '0');
     assert.equal(formatDamageStatsValue(-5), '0');

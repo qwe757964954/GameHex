@@ -110009,6 +110009,7 @@ $root.com = (function() {
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpBuffInfo>|null} [buffInfo] CmdBattleUnitInfo buffInfo
                      * @property {Array.<com.xkhy.tafang.cmd.CmdPvpHeroAttrInfo>|null} [attrs] CmdBattleUnitInfo attrs
                      * @property {Array.<Long>|null} [modifyList] CmdBattleUnitInfo modifyList
+                     * @property {number|null} [wallLevel] CmdBattleUnitInfo wallLevel
                      */
 
                     /**
@@ -110111,6 +110112,14 @@ $root.com = (function() {
                     CmdBattleUnitInfo.prototype.modifyList = $util.emptyArray;
 
                     /**
+                     * CmdBattleUnitInfo wallLevel.
+                     * @member {number} wallLevel
+                     * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
+                     * @instance
+                     */
+                    CmdBattleUnitInfo.prototype.wallLevel = 0;
+
+                    /**
                      * Creates a new CmdBattleUnitInfo instance using the specified properties.
                      * @function create
                      * @memberof com.xkhy.tafang.cmd.CmdBattleUnitInfo
@@ -110157,6 +110166,8 @@ $root.com = (function() {
                         if (message.modifyList != null && message.modifyList.length)
                             for (var i = 0; i < message.modifyList.length; ++i)
                                 writer.uint32(/* id 10, wireType 0 =*/80).uint64(message.modifyList[i]);
+                        if (message.wallLevel != null && Object.hasOwnProperty.call(message, "wallLevel"))
+                            writer.uint32(/* id 11, wireType 0 =*/88).uint32(message.wallLevel);
                         return writer;
                     };
 
@@ -110235,6 +110246,10 @@ $root.com = (function() {
                                             message.modifyList.push(reader.uint64());
                                     } else
                                         message.modifyList.push(reader.uint64());
+                                    break;
+                                }
+                            case 11: {
+                                    message.wallLevel = reader.uint32();
                                     break;
                                 }
                             default:

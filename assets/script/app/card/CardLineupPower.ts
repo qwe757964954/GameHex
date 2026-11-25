@@ -41,17 +41,7 @@ export function cardAttackOf(
     return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
-/**
- * 战力显示：四位数以内原样输出，上万才缩成 K/M，保留两位并去掉尾零。
- * 负数和非法值按 0。
- */
-export function formatPowerText(value: number): string {
-    const num = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-    if (num < 10000) return String(num);
-    const trim = (text: string): string => text.replace(/\.?0+$/, '');
-    if (num >= 1000000) return `${trim((num / 1000000).toFixed(2))}M`;
-    return `${trim((num / 1000).toFixed(2))}K`;
-}
+export { formatPowerText } from '../../core/math/CompactNumber';
 
 /**
  * 上阵卡攻击求和后取整。坏行按 0 计，避免 NaN；空阵容返回 0。

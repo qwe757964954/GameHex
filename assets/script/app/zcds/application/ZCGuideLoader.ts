@@ -9,6 +9,7 @@ import {
     ZC_GUIDE_PARAMS_TABLE,
     type IZCGuidePreparedContent,
     type ZCGuideEntry,
+    type ZCGuideIconKey,
 } from '../model/ZCGuideConfig';
 
 export type { IZCGuidePreparedContent };
@@ -34,14 +35,15 @@ async function loadGuideIconFrames(
     resources: Pick<IControllerResources, 'assets'>,
     entries: readonly ZCGuideEntry[],
     scope?: ResourceScope,
-): Promise<ReadonlyMap<string, SpriteFrame>> {
-    const iconPaths = new Map<string, string>();
+): Promise<ReadonlyMap<ZCGuideIconKey, SpriteFrame>> {
+    const iconPaths = new Map<ZCGuideIconKey, string>();
     for (const entry of entries) {
+        if (entry.icon === null) continue;
         const path = getGuideIconPath(entry.icon);
         if (path) iconPaths.set(entry.icon, path);
     }
 
-    const frames = new Map<string, SpriteFrame>();
+    const frames = new Map<ZCGuideIconKey, SpriteFrame>();
     await Promise.all(Array.from(iconPaths, async ([key, path]) => {
         const frame = await resources.assets.load(path, SpriteFrame, { scope });
         if (frame) frames.set(key, frame);

@@ -5,9 +5,8 @@ import { MainTabController } from '../../main/MainTabController';
 import { MainTab, MainTabHost } from '../../main/MainTabHost';
 import { MainTabEvent } from '../../main/MainTabEvents';
 import { MainPageComposition } from './MainPageComposition';
+import { MainChestRewardCoordinator } from './MainChestRewardCoordinator';
 import { BigMapEntry } from '../../bigmap/application/BigMapEntry';
-import { CHEST_EVENTS } from '../../main/ChestEvents';
-import * as TerritoryChestOpenPageModule from '../../territory/view/TerritoryChestOpenPage';
 import { fetchFormations } from '../../card/FormationService';
 import { cardRepository } from '../../card/CardRepository';
 import { cardArtProvider } from '../../card/CardArtProvider';
@@ -16,12 +15,10 @@ import { checkFirstRechargeOnEnterMain } from '../../firstRecharge/FirstRecharge
 import { GAME_VIEW_MARK, reportGameViewClick } from '../../main/GameViewClickService';
 import { GameNet } from '../../net/GameNet';
 
-/** 宝箱奖励事件名；单测把 `ChestEvents` 模块桩成空对象时仍能注册监听。 */
-const CHEST_REWARDS_EVENT = CHEST_EVENTS?.REWARDS ?? 'chest:rewards';
-
 /** ProcedureMain owns this object; no view holds a controller or its teardown callback. */
 export class MainTabsComposition extends ControllerBase {
     readonly tabs: MainTabController<Prefab>;
+    private readonly chestRewards: MainChestRewardCoordinator | null;
     private page: MainPageComposition | null = null;
     private backgroundWarmupActive = false;
     private afterDrawWarmup: (() => void) | null = null;
@@ -30,9 +27,13 @@ export class MainTabsComposition extends ControllerBase {
     constructor(private readonly context: IControllerContext, private readonly host: MainTabHost) {
         super(context, 'main-tabs-composition');
         this.tabs = this.createController();
+        this.chestRewards = this.createChestRewards();
         this.listen(VIEW_LIFECYCLE, this.onLifecycle);
         this.listen(MainTabEvent.Warmup, this.onWarmup);
-        this.listen(CHEST_REWARDS_EVENT, this.onTreasureRewardsFallback);
+    }
+    private createChestRewards(): MainChestRewardCoordinator | null {
+        if (typeof MainChestRewardCoordinator !== 'function') return null;
+        return new MainChestRewardCoordinator(this.context);
     }
     private createController(): MainTabController<Prefab> {
         return new MainTabController(this.context, {
@@ -117,17 +118,6 @@ export class MainTabsComposition extends ControllerBase {
         this.page?.dispose();
         this.page = next;
     }
-    /**
-     * 宝箱奖励的兜底路由：页面组合还活着时由它处理；页面已销毁或已换成非主页时由主 tabs 接手，
-     * 避免 `fastOpen/open` 回包迟到导致奖励丢失。
-     */
-    private onTreasureRewardsFallback(event: { readonly goods: readonly CmdGoods[] }): void {
-        if (!event.goods.length) return;
-        if (this.page?.handlesTreasureRewards) return;
-        void TerritoryChestOpenPageModule.TerritoryChestOpenPage.open({ userData: { goods: event.goods } }).then(popup => {
-            if (this.isDisposed) popup?.close();
-        }).catch(error => console.warn('[MainTabsComposition] 宝箱奖励展示失败', error));
-    }
     private onWarmup(): void {
         this.backgroundWarmupActive = true;
         this.scheduleBackgroundWarmup();
@@ -162,7 +152,10 @@ export class MainTabsComposition extends ControllerBase {
             try { this.tabs.dispose(); }
             finally {
                 try { page?.dispose(); }
-                finally { super.dispose(); }
+                finally {
+                    try { this.chestRewards?.dispose(); }
+                    finally { super.dispose(); }
+                }
             }
         }
     }

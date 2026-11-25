@@ -11,15 +11,15 @@ import { StoreEvent } from '../assets/script/app/store/StoreEvents';
 import { CardLineupController } from '../assets/script/app/card/CardLineupController';
 import { CardLineupUiEvent } from '../assets/script/app/card/CardLineupEvents';
 import { RoleController } from '../assets/script/app/role/RoleController';
+import { RoleEvent } from '../assets/script/app/role/RoleEvents';
 import { LeagueTabController } from '../assets/script/app/league/LeagueTabController';
-import { CHEST_EVENTS } from '../assets/script/app/main/ChestEvents';
 import { createControllerContext } from './helpers/controller-context';
 
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const phase = (owner: object, phase: string) => EventMgr.instance.emit(VIEW_LIFECYCLE, { phase }, owner);
 
 function fixture() {
-    class StorePage {}
+    class StorePage { isValid = true; }
     class CardLineupPage {
         resources: IControllerResources | null = null;
         autoLoadDecks = true; fallbackLevel = 3;
@@ -33,32 +33,70 @@ function fixture() {
     class LeagueTabPage {}
     class MainPage {}
     class MainTerritoryMap {}
-    let purchases = 0, loads = 0;
+    let purchases = 0, loads = 0, guideDisposes = 0;
     const pendingRoles: Array<(value: object) => void> = [];
+    const removedCallers: object[] = [];
+    const openedPopups: Array<{ kind: string; userData: unknown; closeCalls: number; open?: boolean }> = [];
+    const pendingTips: Array<{
+        resolve: (popup: { isPopupOpen: boolean; close(): void } | null) => void;
+        onClose?: () => void;
+    }> = [];
+    const popupStub = (kind: string) => ({
+        open: async (params?: { userData?: unknown }) => {
+            const record = { kind, userData: params?.userData, closeCalls: 0 };
+            openedPopups.push(record);
+            await tick();
+            return { close: () => { record.closeCalls++; } };
+        },
+    });
     const exports: Record<string, unknown> = {};
     const imports: Record<string, unknown> = {
-        ControllerBase: { ControllerBase }, ViewLifecycle: { VIEW_LIFECYCLE },
+        ControllerBase: { ControllerBase },
+        EventMgr: { EventMgr },
+        ViewLifecycle: { VIEW_LIFECYCLE },
         StorePage: { StorePage }, CardLineupPage: { CardLineupPage }, RolePage: { RolePage },
         LeagueTabPage: { LeagueTabPage }, MainPage: { MainPage }, MainTerritoryMap: { MainTerritoryMap },
         StoreController: { StoreController }, CardLineupController: { CardLineupController },
         RoleController: { RoleController }, LeagueTabController: { LeagueTabController },
         StoreActions: { storeAction: async () => { purchases++; } },
-        CardRepository: { cardRepository: { loadArtConfig: async () => ({}), loadLineupSnapshot: () => null, loadLineup: async () => { loads++; return { heroLevels: new Map() }; } } },
+        CardRepository: {
+            cardRepository: {
+                loadArtConfig: async () => ({}),
+                loadLineupSnapshot: () => null,
+                loadLineup: async () => { loads++; return { heroLevels: new Map() }; },
+            },
+        },
+        LineupBoardPage: { LineupBoardPage: popupStub('LineupBoardPage') },
+        CardUpgradePage: { CardUpgradePage: popupStub('CardUpgradePage') },
+        MilitiaTalentPage: { MilitiaTalentPage: popupStub('MilitiaTalentPage') },
+        EquipEvolvePage: { EquipEvolvePage: popupStub('EquipEvolvePage') },
+        RoleEquipInfoPopup: { RoleEquipInfoPopup: popupStub('RoleEquipInfoPopup') },
+        RoleGemInfoPopup: { RoleGemInfoPopup: popupStub('RoleGemInfoPopup') },
+        RoleGongMingPopup: { RoleGongMingPopup: popupStub('RoleGongMingPopup') },
+        LeagueCreatePage: { LeagueCreatePage: popupStub('LeagueCreatePage') },
+        LeagueInfoPage: { LeagueInfoPage: popupStub('LeagueInfoPage') },
+        CommonTips: {
+            CommonTips: {
+                open: (params: { onClose?: () => void }) => new Promise(resolve => {
+                    pendingTips.push({ resolve, onClose: params?.onClose });
+                }),
+            },
+        },
         RoleRepository: { roleRepository: { load: () => new Promise(resolve => pendingRoles.push(resolve)) } },
-        FW: { FW: { showTip() {} } },
-        // 🔴 组合层构造时就会 `listen(CHEST_EVENTS.REWARDS, …)`（异步对战宝箱的奖励转交），
-        //    漏这条桩 ⇒ `CHEST_EVENTS` 是 `undefined`，`.REWARDS` 直接抛，四条用例全崩在构造上。
-        ChestEvents: { CHEST_EVENTS },
-        GuideComposition: { GuideComposition: class { dispose() {} } },
+        FW: { FW: { showTip() {}, ShowReward() {} } },
+        GameNet: { GameNet: { instance: { removeCaller: (caller: object) => removedCallers.push(caller) } } },
+        GuideComposition: { GuideComposition: class { dispose() { guideDisposes++; } } },
     };
     runInNewContext(ts.transpileModule(readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
-    }).outputText, { exports, console, require: (path: string) => imports[path.split('/').pop()] ?? {} });
-    const Composition = exports.MainPageComposition as new (context: unknown, root: unknown, presented: () => void) => ControllerBase;
-    const bind = (view: object) => new Composition(createControllerContext(), {
+    }).outputText, { exports, console, Promise, require: (path: string) => imports[path.split('/').pop()!] ?? {} });
+    const Composition = exports.MainPageComposition as new (
+        context: unknown, root: unknown, presented: () => void, requestOwner?: object,
+    ) => ControllerBase;
+    const bind = (view: object, requestOwner?: object) => new Composition(createControllerContext(), {
         getComponent: (type: new () => object) => view instanceof type ? view : null,
         getComponentInChildren: () => null,
-    }, () => {});
+    }, () => {}, requestOwner);
     const failAfterCard = (card: CardLineupPage) => new Composition(createControllerContext(), {
         getComponent: (type: unknown) => {
             if (type === CardLineupPage) return card;
@@ -66,7 +104,13 @@ function fixture() {
             return null;
         },
     }, () => {});
-    return { bind, failAfterCard, StorePage, CardLineupPage, RolePage, pendingRoles, get purchases() { return purchases; }, get loads() { return loads; } };
+    return {
+        bind, failAfterCard, StorePage, CardLineupPage, RolePage,
+        pendingRoles, removedCallers, openedPopups, pendingTips,
+        get purchases() { return purchases; },
+        get loads() { return loads; },
+        get guideDisposes() { return guideDisposes; },
+    };
 }
 
 test('external composition binds before mount, starts only the ready owner and releases only that page', async () => {
@@ -108,6 +152,7 @@ test('role disable and destruction cancel late data while a later enable can ref
         phase(page, 'enabled'); f.pendingRoles.shift()({}); await tick(); assert.equal(page.renders, 1);
         phase(page, 'enabled'); phase(page, 'destroyed'); f.pendingRoles.shift()({});
         await tick(); assert.equal(page.renders, 1); assert.equal(binding.isDisposed, true);
+        assert.equal(f.removedCallers.includes(page), true, '角色页销毁时应移除在途网络请求 caller');
     } finally { binding.dispose(); }
 });
 
@@ -118,4 +163,58 @@ test('composition construction failure releases already injected resources and l
     assert.equal(page.resources.scope.disposed, true);
     phase(page, 'ready'); await tick();
     assert.equal(f.loads, 0, 'failed construction must not leave a ready listener behind');
+});
+
+test('scoped popups close when resolved after disposal and dispose is idempotent', async () => {
+    const f = fixture(), page = new f.CardLineupPage(), binding = f.bind(page);
+    try {
+        phase(page, 'ready');
+        EventMgr.instance.emit(CardLineupUiEvent.Intent, { kind: 'edit' });
+        assert.equal(f.openedPopups.length, 1);
+        binding.dispose();
+        binding.dispose();
+        assert.equal(f.guideDisposes, 1, '重复 dispose 不重复释放内部组合');
+        await tick();
+        assert.equal(f.openedPopups[0].closeCalls, 1, '组合已释放时关闭迟到弹窗');
+    } finally {
+        binding.dispose();
+    }
+});
+
+test('store controller cleans up fallback caller when requestOwner is omitted', () => {
+    const f = fixture();
+    const hostOwner = {};
+    const storeWithoutOwner = new f.StorePage();
+    const storeWithOwner = new f.StorePage();
+    const a = f.bind(storeWithoutOwner);
+    const b = f.bind(storeWithOwner, hostOwner);
+    a.dispose();
+    assert.equal(f.removedCallers.length, 1, '未传 requestOwner 时由组合层兜底移除 StoreController caller');
+    b.dispose();
+    assert.equal(f.removedCallers.length, 1, '已传 requestOwner 时交由外层宿主统一清理');
+});
+
+test('role popups no longer receive callback closures and role gem dialog cancel is idempotent', async () => {
+    const f = fixture(), role = new f.RolePage(), binding = f.bind(role);
+    try {
+        phase(role, 'ready');
+        EventMgr.instance.emit(RoleEvent.Intent, { kind: 'equipPart', partId: 3 });
+        assert.equal(f.openedPopups.length, 1);
+        assert.equal(f.openedPopups[0].kind, 'RoleEquipInfoPopup');
+        assert.deepEqual({ ...(f.openedPopups[0].userData as object) }, { partId: 3, bagUniqueId: undefined });
+        const dialog = (binding as unknown as {
+            createRoleGemDialog(): { open(d: object): Promise<string | null>; cancel(): void };
+        }).createRoleGemDialog();
+        let closedOnLateOpen = 0;
+        const promise = dialog.open({ title: 'T', content: 'C', sureText: 'OK' });
+        dialog.cancel();
+        dialog.cancel();
+        f.pendingTips[0].resolve({ isPopupOpen: true, close: () => { closedOnLateOpen++; f.pendingTips[0].onClose?.(); } });
+        const res = await promise;
+        await tick();
+        assert.equal(closedOnLateOpen, 1, '取消后迟到的 CommonTips 应被关闭');
+        assert.equal(res, null);
+    } finally {
+        binding.dispose();
+    }
 });

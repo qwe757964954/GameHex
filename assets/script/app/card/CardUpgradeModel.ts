@@ -26,5 +26,10 @@ export class CardUpgradeModel {
         this.detail = null;
         this.phase = 'loading';
     }
-    confirm(level: number): void { this.level = level; this.status = null; this.phase = 'loading'; }
+    confirm(level: number): void {
+        this.level = level;
+        this.status = null;
+        this.detail = null;
+        this.phase = 'loading';
+    }
 }

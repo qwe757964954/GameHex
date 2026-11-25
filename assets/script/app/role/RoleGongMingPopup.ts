@@ -68,7 +68,7 @@ export class RoleGongMingPopup extends PopupBase {
     }
 
     private bindEvents(): void {
-        this.closeBtn.node.on(Button.EventType.CLICK, () => this.close(PopupCloseReason.CloseButton), this);
+        this.closeBtn.node.on(Button.EventType.CLICK, () => this.close(PopupCloseReason.CloseButton));
     }
 
     private renderView(): void {

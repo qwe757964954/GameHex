@@ -30,7 +30,6 @@ export interface IRoleGrowthOperations {
 type RoleOperationIntent = Exclude<IRoleIntent, { kind: 'bag' | 'nav' }>;
 
 interface IRoleGemOperations {
-    readonly source: () => object;
     readonly slots: () => readonly IRoleEquipSlotData[];
     readonly find: (id: string) => IRoleGemEntry | null;
     readonly change: (change: RoleGemChange) => Promise<GameRequestStatus>;
@@ -81,6 +80,10 @@ export class RoleController<T> extends ControllerBase {
         if (this.started || this.isDisposed) return;
         this.started = true;
         this.listen(RoleEvent.Intent, this.onIntent);
+        this.listen(RoleEvent.GemChanged, this.onGemChanged);
+    }
+    private onGemChanged(): void {
+        void this.refresh(false);
     }
     async refresh(resetBag = true): Promise<void> {
         if (this.isDisposed) return;
@@ -113,6 +116,10 @@ export class RoleController<T> extends ControllerBase {
 
     private onIntent(event: IRoleIntent): void {
         if (event.kind !== 'bag' && event.kind !== 'nav') {
+            if (event.kind === 'forge' && this.options.popups.openEquipEvolve) {
+                this.options.popups.openEquipEvolve(event.partId);
+                return;
+            }
             const gems = this.options.gems;
             if (gems && !this.gemBusy) void this.handleGem(event, gems);
             return;
@@ -278,7 +285,7 @@ export class RoleController<T> extends ControllerBase {
         }
         if (event.kind === 'forge') {
             if (this.options.popups.openEquipEvolve) {
-                this.options.popups.openEquipEvolve();
+                this.options.popups.openEquipEvolve(event.partId);
                 return;
             }
             const choice = await ops.dialog({

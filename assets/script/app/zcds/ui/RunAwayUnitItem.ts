@@ -1,5 +1,6 @@
+import { formatDamageStatsValue } from '../../../core/math/CompactNumber';
 import { _decorator, Component, Label, Sprite, SpriteFrame } from 'cc';
-import { damageStatsBarRatio, formatDamageStatsValue } from '../model/ZCDamageStats';
+import { damageStatsBarRatio } from '../model/ZCDamageStats';
 
 const { ccclass, property, disallowMultiple } = _decorator;
 

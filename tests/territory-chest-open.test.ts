@@ -813,27 +813,38 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     const rewardCalls: unknown[][] = [];
     const events: Array<{ name: string; payload: { playing?: boolean } }> = [];
     const tick = (): Promise<void> => new Promise(resolve => setImmediate(resolve));
-    const modules: Record<string, unknown> = {};
-    // 只执行特写编排，不实例化主界面、其他页签和其控制器。
-    for (const name of ['GuideComposition', 'ViewLifecycle', 'CardLineupPage', 'CardLineupController',
-        'CardUpgradePage', 'LineupBoardPage', 'RolePage', 'RoleController', 'RoleRepository',
-        'MilitiaTalentPage', 'StorePage', 'StoreController', 'StoreActions', 'LeagueTabPage',
-        'LeagueTabController', 'LeagueRepository', 'MainPage', 'MainTerritoryMap', 'TerritoryEntry',
-        // 2026-11-18 上游把公会入口接进了主界面组合层（`MainPageComposition`）⇒ 这四个模块
-        // 和 `GameNet` 也要在这里占位，否则 `unresolved` 非空。本用例只跑橙色特写编排，不碰它们。
-        'LeagueJoinController', 'LeagueTabEvents', 'LeagueCreatePage', 'LeagueInfoPage', 'GameNet',
-        // 2026-11-23 领地 PVP 气泡的头像 / 等级改由组合层从 `CmdRole` 注入（页面不读缓存），
-        // 这三个模块同样只占位：本用例不实例化组合层，不碰它们。
-        'CacheMgr', 'RequestGuard', 'MainRoleRow',
-        'FW', 'TerritoryHeroProgressSource', 'ChestEvents', 'EventMgr']) modules['/' + name] = {};
-    Object.assign(modules, {
+    const modules: Record<string, unknown> = {
         '/ControllerBase': { ControllerBase: class {} },
         '/EventMgr': { EventMgr: { instance: { emit: (name: string, payload: unknown) => { events.push({ name, payload }); } } } },
-        '/TerritoryEvents': { TerritoryUiEvent: { ChestRewardsReady: 'territory:chest-rewards-ready', ChestPresentation: 'territory:chest-presentation' } },
-        '/HeroObtainPage': { HeroObtainPage: { open: async (params: typeof opened[number]) => {
-            opened.push(params);
-            return { close: () => { closed++; params.onClose(); } };
-        } } },
+        '/FW': { FW: { ShowReward: (goods: unknown[]) => { rewardCalls.push(goods); } } },
+        '/AudioMgr': { AudioMgr: { instance: { playSound: async () => true } } },
+        '/ResConst': { GAME_AUDIO: { goldFragment: '金卡碎片展示' }, GAME_AUDIO_ROOT: 'resources://塔防/音效' },
+        '/ChestEvents': { CHEST_EVENTS: { REWARDS: 'chest:rewards' } },
+        '/TerritoryEvents': {
+            TerritoryUiEvent: {
+                ChestRevealed: 'territory:chest-revealed',
+                ChestRewardsReady: 'territory:chest-rewards-ready',
+                ChestPresentation: 'territory:chest-presentation',
+                Disposed: 'territory:view-disposed',
+            },
+        },
+        '/TerritoryChestOpenPage': {
+            TerritoryChestOpenPage: {
+                open: async (params: unknown) => {
+                    chestOpens.push(params);
+                    return { close: () => { chestCloses++; } };
+                },
+            },
+        },
+        '/TerritoryChestOpenLayout': layout,
+        '/HeroObtainPage': {
+            HeroObtainPage: {
+                open: async (params: typeof opened[number]) => {
+                    opened.push(params);
+                    return { close: () => { closed++; params.onClose(); } };
+                },
+            },
+        },
         // 3 张卡：18001 / 18002 是橙卡（rarity 4），18003 是紫卡 ⇒ 只该弹前两张。
         '/CardLineupDecks': {
             loadCardLevelUpRows: async () => [1, 2, 3].map(id => ({
@@ -844,27 +855,18 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         },
         '/CardUpgradeCost': upgrade,
         '/ItemBag': { createItemCounter: () => () => 4 },
-        '/FW': { FW: { ShowReward: (goods: unknown[]) => { rewardCalls.push(goods); } } },
-        // 2026-11-23 金卡碎片展示音效：特写页弹出时由组合层播音（本用例只占位，不校验声音）。
-        '/AudioMgr': { AudioMgr: { instance: { playSound: async () => true } } },
-        '/ResConst': { GAME_AUDIO: { goldFragment: '金卡碎片展示' }, GAME_AUDIO_ROOT: 'resources://塔防/音效' },
-        '/TerritoryChestOpenPage': { TerritoryChestOpenPage: { open: async (params: unknown) => {
-            chestOpens.push(params);
-            return { close: () => { chestCloses++; } };
-        } } },
-        '/TerritoryChestOpenLayout': layout,
-        '/CardRepository': { cardRepository: { loadLineup: async () => ({ heroLevels: new Map() }) } },
-    });
-    const loaded = loadTsModule<{ MainPageComposition: new (...args: unknown[]) => any }>(
-        'assets/script/app/bootstrap/main/MainPageComposition.ts', { modules });
+        '/CardRepository': { cardRepository: { loadHeroLevelsOnly: async () => new Map() } },
+    };
+    const loaded = loadTsModule<{ MainChestRewardCoordinator: new (...args: unknown[]) => any }>(
+        'assets/script/app/bootstrap/main/MainChestRewardCoordinator.ts', { modules });
     assert.deepEqual(loaded.unresolved, []);
-    const composition = Object.create(loaded.exports.MainPageComposition.prototype);
-    composition.scope = new ResourceScope('test');
-    composition.isDisposed = false;
+    const coordinator = Object.create(loaded.exports.MainChestRewardCoordinator.prototype);
+    coordinator.scope = new ResourceScope('test');
+    coordinator.isDisposed = false;
     // 奖励故意倒序 + 掺一张紫卡：出去必须是「橙卡、卡牌 id 升序」。
     const entries = [{ resId: 18002, number: 1 }, { resId: 18003, number: 1 }, { resId: 18001, number: 1 }];
     const owner = { isValid: true };
-    const task = composition.presentChestHeroes(entries, owner);
+    const task = coordinator.presentChestHeroes(entries, () => !owner.isValid);
     await tick();
     assert.equal(opened.length, 1);
     assert.deepEqual({ ...opened[0].userData }, { heroId: '68001', progressCurrent: 4, progressMax: 10 },
@@ -873,24 +875,24 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
     await tick();
     assert.equal(opened.length, 2, '关掉前一张才开下一张');
     assert.equal(opened[1].userData.heroId, '68002');
-    composition.isDisposed = true;
-    composition.scope.dispose();
+    coordinator.isDisposed = true;
+    coordinator.scope.dispose();
     await task;
     assert.equal(closed, 1);
     assert.equal(opened.length, 2);
 
-    const stale = Object.create(loaded.exports.MainPageComposition.prototype);
+    const stale = Object.create(loaded.exports.MainChestRewardCoordinator.prototype);
     stale.scope = new ResourceScope('stale'); stale.isDisposed = false;
     const staleOwner = { isValid: false };
-    await stale.presentChestHeroes(entries, staleOwner);
-    assert.equal(opened.length, 2, '回包前宝箱页已销毁时不再弹英雄');
+    await stale.presentChestHeroes(entries, () => !staleOwner.isValid);
+    assert.equal(opened.length, 2, '回包前已失效时不再弹英雄');
 
     // 整条链：英雄页全部关掉之后才是统一「获得奖励」弹窗，且拿到的是**整批**奖励。
-    const chain = Object.create(loaded.exports.MainPageComposition.prototype);
+    const chain = Object.create(loaded.exports.MainChestRewardCoordinator.prototype);
     chain.scope = new ResourceScope('chain'); chain.isDisposed = false;
     const chainOwner = { isValid: true };
     const rewards = [{ resId: 18002, number: 1 }, { resId: 18001, number: 1 }, { resId: 7, number: 300 }];
-    const chainTask = chain.runChestRewardChain(chainOwner, rewards);
+    const chainTask = chain.runChestRewardChain(rewards, () => !chainOwner.isValid);
     await tick();
     assert.equal(opened.length, 3);
     assert.equal(rewardCalls.length, 0, '英雄页没关完不许弹统一奖励窗');
@@ -905,21 +907,19 @@ test('橙卡特写逐个播放；关闭前一张才开下一张，退出释放�
         rewardCalls.map(call => call.map(one => ({ ...(one as { resId: number; number: number }) }))),
         [[{ resId: 18002, number: 1 }, { resId: 18001, number: 1 }, { resId: 7, number: 300 }]],
         '统一奖励窗拿到整批（含货币），且只弹一次');
-        // 有统一奖励弹窗接棒时组合层**不**关窗口：弹窗要等 prefab 加载完才 enabled，
-        // 这里抢先关会让 2-3 的对话框闪一下再被盖住。窗口由引导层在奖励窗关闭时收。
-        assert.deepEqual(events.map(one => [one.name, one.payload.playing]), []);
-        // 没有弹窗可等（空奖励 / 页面已毁掉）时必须自己关，否则引导层永远让位
-        await chain.runChestRewardChain({ isValid: true }, []);
-        assert.deepEqual(events.map(one => [one.name, one.payload.playing]),
-            [['territory:chest-presentation', false]]);
+    // 有统一奖励弹窗接棒时协调器**不**关窗口：弹窗要等 prefab 加载完才 enabled，
+    // 这里抢先关会让 2-3 的对话框闪一下再被盖住。窗口由引导层在奖励窗关闭时收。
+    assert.deepEqual(events.map(one => [one.name, one.payload.playing]), []);
+    // 没有弹窗可等（空奖励 / 页面已毁掉）时必须自己关，否则引导层永远让位
+    await chain.runChestRewardChain([], () => false);
+    assert.deepEqual(events.map(one => [one.name, one.payload.playing]),
+        [['territory:chest-presentation', false]]);
 
-    const treasureHost = Object.create(loaded.exports.MainPageComposition.prototype);
-    treasureHost.hasMainPage = false; treasureHost.isDisposed = false;
+    const treasureHost = Object.create(loaded.exports.MainChestRewardCoordinator.prototype);
+    treasureHost.isDisposed = false;
     const goods = [{ resId: 18001, number: 2 }];
-    treasureHost.onTreasureRewards({ goods });
-    treasureHost.hasMainPage = true;
     treasureHost.onTreasureRewards({ goods: [] });
-    assert.equal(chestOpens.length, 0, '忽略非主页组合及空奖励');
+    assert.equal(chestOpens.length, 0, '忽略空奖励');
     treasureHost.onTreasureRewards({ goods });
     await tick();
     assert.equal(chestOpens.length, 1);

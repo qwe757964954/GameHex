@@ -751,3 +751,84 @@ test('Tier 虚拟列表条数跟随配置，超过三档也能展示并在空态
     assert.equal((f.state.tiers[3][0] as { desc: string }).desc, '第四档');
     f.page.render(null); assert.equal(f.state.tiers.length, 0);
 });
+
+function formationReplies() {
+    const replies: Array<(data: object) => void> = [];
+    let cancels = 0;
+    class Request {
+        constructor(readonly body: object, readonly caller: object, readonly receive: (data: object) => void) {}
+    }
+    const service = loadRuntime<typeof import('../assets/script/app/card/FormationService')>('FormationService', {
+        '../generated/requestMsg/RequestFormationMsg': { RequestFormationInfo: Request, RequestFormationOp: Request },
+        '../net/GameNet': { GameNet: { sendRequest(make: () => Request) {
+            const request = make();
+            let cancel: () => void;
+            const result = new Promise<requestGuard.GameRequestStatus>(resolve => {
+                cancel = () => {
+                    cancels++;
+                    resolve('failed');
+                };
+                replies.push(data => {
+                    request.receive(data);
+                    resolve('ok');
+                });
+            });
+            return Object.assign(result, { cancel: () => cancel() });
+        } } },
+        './FormationModel': formationModel,
+        '../net/RequestGuard': requestGuard,
+    });
+    return { service, replies, get cancels() {
+        return cancels;
+    } };
+}
+
+test('较早发出的查询回包不能覆盖保存成功的阵型', async () => {
+    const { service, replies } = formationReplies();
+    const read = service.fetchFormations();
+    const save = service.saveFormation(2, [68002]);
+    replies[1]({ info: { formationId: 2, heroId: [68002], select: 1 } });
+    assert.equal((await save).kind, 'success');
+    replies[0]({ infos: [{ formationId: 1, heroId: [68001], select: 1 }] });
+    assert.equal((await read)?.[0].formationId, 2);
+    assert.equal(service.getCachedFormations()?.[0].formationId, 2);
+});
+
+test('重置阵型会话后旧查询不能写缓存或清掉新查询', async () => {
+    const fixture = formationReplies();
+    const { service, replies } = fixture;
+    const old = service.fetchFormations();
+    service.resetFormationSession();
+    assert.equal(fixture.cancels, 1);
+    const current = service.fetchFormations();
+    replies[0]({ infos: [{ formationId: 1, heroId: [68001], select: 1 }] });
+    assert.equal(await old, null);
+    assert.equal(service.getCachedFormations(), null);
+
+    const joined = service.fetchFormations();
+    replies[1]({ infos: [{ formationId: 2, heroId: [68002], select: 1 }] });
+    assert.equal((await current)?.[0].formationId, 2);
+    assert.equal((await joined)?.[0].formationId, 2);
+    assert.equal(replies.length, 2);
+});
+
+test('短等待超时只结束本次等待，其他调用方仍可复用阵型回包', async () => {
+    const fixture = formationReplies();
+    const { service, replies } = fixture;
+    const shortWait = service.fetchFormations({ timeoutMs: 1 });
+    const longWait = service.fetchFormations();
+    assert.equal(await shortWait, null);
+    assert.equal(fixture.cancels, 0);
+    replies[0]({ infos: [{ formationId: 2, heroId: [68002], select: 1 }] });
+    assert.equal((await longWait)?.[0].formationId, 2);
+    assert.equal(replies.length, 1);
+});
+
+test('重置阵型会话后旧保存回包不能填入新会话缓存', async () => {
+    const { service, replies } = formationReplies();
+    const save = service.saveFormation(2, [68002]);
+    service.resetFormationSession();
+    replies[0]({ info: { formationId: 2, heroId: [68002], select: 1 } });
+    assert.equal((await save).kind, 'failed');
+    assert.equal(service.getCachedFormations(), null);
+});

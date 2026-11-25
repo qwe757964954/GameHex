@@ -109,7 +109,7 @@ export class RechargeTotalView extends Component {
 
         const tabs = this.tabsSorted;
         for (let index = 0; index < tabs.length; index++) {
-            tabs[index].on(Button.EventType.CLICK, () => this.emitSwitch(index), this);
+            tabs[index].on(Button.EventType.CLICK, () => this.emitSwitch(index));
         }
 
         const chests = this.chestsSorted;

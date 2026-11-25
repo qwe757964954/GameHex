@@ -14,6 +14,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { REWARD_ITEM_DETAIL_INTENT } from '../assets/script/app/common/RewardItemEvents';
 import * as itemDetailTable from '../assets/script/app/itemdetail/ItemDetailTable';
 import * as resTypes from '../assets/script/app/common/ResTypes';
+import * as gemReward from '../assets/script/app/common/GemReward';
 
 /**
  * **公共奖励格** `ui/common/RewardItem.prefab` 的判据。
@@ -101,6 +102,7 @@ function loadClass(overrides: Record<string, unknown> = {}): {
         '../ArtPaths': { spriteFramePathOf: (path: string) => path },
         '../itemdetail/ItemDetailArtLoader': { itemQualityFrameRelPath: () => 'image/common/cu_quality_01' },
         '../itemdetail/ItemDetailTable': itemDetailTable,
+        './GemReward': gemReward,
         '../common/ResTypes': {
             ITEM_TABLE: 'item', ROLE_PROPERTY_TABLE: 'roleProperty', CARD_LEVEL_UP_TABLE: 'cardLevelUp',
             resBarCellOfRefId: () => null, resBarIconSpritePath: () => '',
@@ -120,7 +122,7 @@ function loadClass(overrides: Record<string, unknown> = {}): {
     return Object.values(exports)[0] as ReturnType<typeof loadClass>;
 }
 
-function createRewardLifecycleFixture(gate?: Promise<void>) {
+function createRewardLifecycleFixture(gate?: Promise<void>, overrides: Record<string, unknown> = {}) {
     class Frame {
         refs = 0;
         isValid = true;
@@ -148,7 +150,7 @@ function createRewardLifecycleFixture(gate?: Promise<void>) {
         loadDir: async () => [], has: async () => true,
     };
     const context = { ...createControllerContext(), assets };
-    const ViewClass = loadClass({ '../../framework/controller/ComponentController': componentControllerModule(context) });
+    const ViewClass = loadClass({ ...overrides, '../../framework/controller/ComponentController': componentControllerModule(context) });
     const createView = () => {
         const view = new ViewClass();
         Object.assign(view, { isValid: true, node: { active: true },
@@ -552,4 +554,63 @@ test('公共奖励格：帧加载失败必须出声（不许静默吞成空框�
     // 🔴 静默 `() => null` ⇒ 奖励格渲染成空框、零报错（看不出是"图没加载"还是"没数据"）
     assert.match(src, /奖励格资源加载失败/, '加载失败必须 warn 出声');
     assert.doesNotMatch(src, /\)\s*,\s*\(\)\s*=>\s*null\s*\)/, '不许再把失败静默吞掉');
+});
+
+/**
+ * 宝石奖励：服务端奖池/合成返回的 `CmdGoods.resId` 是**宝石实例 id**（gemId），
+ * 两张道具表（`item` / `roleProperty`）都查不到 —— 不接 `gem` + `gemQuality` 就是
+ * 「品质 1 灰框 + 没有图标」，也就是截图里那 10 个空格子。
+ */
+test('宝石奖励：gemId 不带 quality 也能按末四位推品质，并从 gemQuality 取图标', async () => {
+    const requested: number[] = [];
+    const h = createRewardLifecycleFixture(undefined, {
+        '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => {
+            if (table === 'gem') return [{ resId: 1000000, desc: '头盔宝石' }];
+            if (table === 'gemQuality') return [
+                { quality: 1, desc: '白色', icon: '图标_宝石_白色' },
+                { quality: 5, desc: '橙色', icon: '图标_宝石_橙色' },
+                { quality: 7, desc: '粉色', icon: '图标_宝石_粉色' },
+            ];
+            return [];
+        } } } },
+        '../itemdetail/ItemDetailArtLoader': {
+            itemQualityFrameRelPath: (quality: number) => { requested.push(quality); return `image/common/cu_quality_0${quality}`; },
+        },
+    });
+    const view = h.createView();
+    // gemId = 部位 1000000 × 10000 前段 + attrId 6001 ⇒ 品质 7（粉色）
+    view.render({ resId: 1006001, amount: 1 });
+    await flushFrames();
+    assert.deepEqual(requested, [7], '宝石底框必须按品质换档，不能再统一灰框');
+    assert.ok(h.loads.includes('icons/gem/图标_宝石_粉色'), '图标必须走 gemQuality.icon（icons/gem）');
+    assert.equal(view.icon.node.active, true);
+    view.onDestroy();
+});
+
+test('宝石奖励：CmdGoods.quality 优先于末四位推导，resId 只给部位也认', async () => {
+    const requested: number[] = [];
+    const h = createRewardLifecycleFixture(undefined, {
+        '../../framework/ref/RefUtil': { RefUtil: { instance: { getRefAllAsync: async (table: string) => {
+            if (table === 'gem') return [{ resId: 1000000, desc: '头盔宝石' }];
+            if (table === 'gemQuality') return [
+                { quality: 1, desc: '白色', icon: '图标_宝石_白色' },
+                { quality: 5, desc: '橙色', icon: '图标_宝石_橙色' },
+            ];
+            return [];
+        } } } },
+        '../itemdetail/ItemDetailArtLoader': {
+            itemQualityFrameRelPath: (quality: number) => { requested.push(quality); return `image/common/cu_quality_0${quality}`; },
+        },
+    });
+    const view = h.createView();
+    // 部位 resId + 服务端品质：宝石的 quality 不在表里，必须吃 payload
+    view.render({ resId: 1000000, amount: 1, quality: 5 });
+    await flushFrames();
+    assert.deepEqual(requested, [5]);
+    assert.ok(h.loads.includes('icons/gem/图标_宝石_橙色'));
+    // 宿主已解析好的 iconPath 直通（「获得奖励」弹窗就是这条路径）
+    view.render({ resId: 1000002, amount: 1, quality: 5, iconPath: 'icons/gem/图标_宝石_橙色' });
+    await flushFrames();
+    assert.equal(h.loads.filter((path) => path === 'icons/gem/图标_宝石_橙色').length >= 1, true);
+    view.onDestroy();
 });

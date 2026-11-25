@@ -110,6 +110,7 @@ export class ZCDamageResolutionSystem {
         building.maxHp = 0;
         building.wallHp = 0;
         building.wallMaxHp = 0;
+        delete building.wallLevel;
         building.wallBreachedEdge = null;
         building.cardId = null;
         building.developmentResolved = false;

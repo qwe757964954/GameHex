@@ -130,17 +130,12 @@ export async function loadPvpCatalogCards(): Promise<readonly ZCDeckCard[]> {
     return cards;
 }
 
-/** 从 `cardLevelUp` 计算每个英雄的等级上限，供卡牌进度条作分母。 */
+/** 从 `cardLevelUp` 取每张卡的最高档位；布阵页按它钳制后端等级。 */
 export async function loadPvpHeroLevelCaps(): Promise<ReadonlyMap<string, number>> {
     const caps = new Map<string, number>();
-    for (const value of await readRows('cardLevelUp')) {
-        if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
-        const row = value as Record<string, unknown>;
-        const id = Number(row.id);
-        const level = Number(row.level);
-        if (!Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(level) || level < 0) continue;
-        const key = String(id);
-        caps.set(key, Math.max(caps.get(key) ?? 0, level));
+    for (const row of (await readRows('cardLevelUp')) as readonly IRefcardLevelUp[]) {
+        const key = String(row.id);
+        caps.set(key, Math.max(caps.get(key) ?? 0, row.level));
     }
     return caps;
 }
@@ -177,8 +172,8 @@ export async function loadPvpCardRarities(): Promise<ReadonlyMap<string, number>
  *
  * 与 `loadCardLevelUpRows` 同口径：只负责取数，聚合与判定在 `CardSkillList`（无引擎依赖、可单测）。
  */
-export async function loadArmySkillLevelUpRows(): Promise<readonly unknown[]> {
-    return readRows('armySkillLevelUp');
+export async function loadArmySkillLevelUpRows(): Promise<readonly IRefarmySkillLevelUp[]> {
+    return (await readRows('armySkillLevelUp')) as readonly IRefarmySkillLevelUp[];
 }
 
 /**
@@ -187,31 +182,25 @@ export async function loadArmySkillLevelUpRows(): Promise<readonly unknown[]> {
  * 详情页的六维属性要用 `unitMaxHp` / `unitAttack` 等未进 `ZCDeckCard` 的列，
  * 与 `loadCardLevelUpRows` 同一条「原始行」口径，不另写一套解析。
  */
-export async function loadPvpCardRawRow(cardId: string): Promise<Record<string, unknown> | null> {
+export async function loadPvpCardRawRow(cardId: string): Promise<IRefpvpCard | null> {
     for (const row of await readRows('pvpCard')) {
-        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-        const record = row as Record<string, unknown>;
+        const record = row as IRefpvpCard;
         if (String(record.id) === String(cardId)) return record;
     }
     return null;
 }
 
 /** 读 `pvpUnitGrowth` 的原始行（详情页兵种成长）。 */
-export async function loadPvpUnitGrowthRows(): Promise<readonly unknown[]> {
-    return readRows('pvpUnitGrowth');
+export async function loadPvpUnitGrowthRows(): Promise<readonly IRefpvpUnitGrowth[]> {
+    return (await readRows('pvpUnitGrowth')) as readonly IRefpvpUnitGrowth[];
 }
 
 /**
  * 一次读回 pvpCard 全部原始行，调用方按 id 自己查。
  * 战力要连算 8 张，逐张走 loadPvpCardRawRow 会反复读整表。
  */
-export async function loadPvpCardRawRows(): Promise<readonly Record<string, unknown>[]> {
-    const rows: Record<string, unknown>[] = [];
-    for (const row of await readRows('pvpCard')) {
-        if (!row || typeof row !== 'object' || Array.isArray(row)) continue;
-        rows.push(row as Record<string, unknown>);
-    }
-    return rows;
+export async function loadPvpCardRawRows(): Promise<readonly IRefpvpCard[]> {
+    return (await readRows('pvpCard')) as readonly IRefpvpCard[];
 }
 
 /** 当前阵容的羁绊加成（供加成条展示）。deck 为空时返回中性值。 */

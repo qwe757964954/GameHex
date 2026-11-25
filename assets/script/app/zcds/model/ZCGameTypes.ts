@@ -107,6 +107,8 @@ export interface ZCHexState {
     /** 外围城墙独立耐久；归零后方可攻击本格建筑。 */
     wallHp: number;
     wallMaxHp: number;
+    /** 该席位建造城墙时使用的等级，旧回包可省略。 */
+    wallLevel?: number;
     /** 城墙被击破的单边缺口索引（0~5）；null 为完整或旧版全毁。 */
     wallBreachedEdge?: number | null;
     developmentCost: number;

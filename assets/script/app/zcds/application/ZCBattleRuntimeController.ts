@@ -91,7 +91,7 @@ export class ZCBattleRuntimeController extends ControllerBase {
                 map: Object.assign({}, config.map, { resolvedResources: resolveZCMapResources(config.map, this.random) }),
             });
             this.model = new ZCGameModel(null, this.random, resolved);
-            this.logCardAttributes(this.model, resolved);
+            this.logOpeningConfig(entry, this.model, resolved);
             this.phase.startPlaying();
         }
         this.bindUiEvents();
@@ -167,14 +167,14 @@ export class ZCBattleRuntimeController extends ControllerBase {
         const config = captureZCMatchConfig(resolveZCSpawnMatchConfig(entry.matchConfig, result));
         this.selection = null;
         const model = new ZCGameModel(null, this.random, config);
-        this.logCardAttributes(model, config);
+        this.logOpeningConfig(entry, model, config);
         model.recordSpawnSelection();
         this.model = model;
         this.phase.startPlaying();
         this.view.startPlaying(model, config, selection, model.createRenderFrame(), model.drainPresentationEvents());
     }
-    private logCardAttributes(model: ZCGameModel, config: ZCMatchConfig): void {
-        for (const owner of model.owners) {
+    private logOpeningConfig(entry: IZCGameEntry, model: ZCGameModel, config: ZCMatchConfig): void {
+        const seats = model.owners.map(owner => {
             const deck = config.ownerDecks?.[owner] ?? (owner === ZCOwner.Player ? config.playerDeck : config.enemyDeck);
             if (ZCDC_LOG_DAMAGE_FLOAT) {
                 const loadouts = config.modifiers?.[owner] ?? [];
@@ -195,16 +195,42 @@ export class ZCBattleRuntimeController extends ControllerBase {
                     }];
                 }));
             }
-            console.info('[对局卡牌属性]', owner, JSON.stringify(deck.map((card) => {
-                const definition = card.unitId ? model.effectiveDefinitionForUnit(owner, card.unitId) : null;
-                return {
-                    cardId: card.id, name: card.name, heroId: card.unitId ?? null,
-                    buildingHp: card.baseHp ?? null,
-                    maxHp: definition?.maxHp ?? null,
-                    attack: definition?.attack ?? null,
-                };
-            })));
-        }
+            const home = model.snapshot.hexes.find(hex => hex.owner === owner && hex.building === 'hq');
+            const heroLevels = entry.heroLevels?.find(([seat]) => seat === owner)?.[1];
+            return {
+                owner,
+                unitId: entry.seatUnitIds?.find(([seat]) => seat === owner)?.[1] ?? null,
+                gold: model.snapshot.goldByOwner?.[owner] ?? config.rules.initialGold,
+                buildingLevels: config.ownerBuildingLevels?.[owner] ?? {},
+                home: home ? {
+                    hexId: home.id, maxHp: home.maxHp, wallMaxHp: home.wallMaxHp, wallLevel: home.wallLevel ?? null,
+                } : null,
+                rates: config.ownerRates?.[owner] ?? {},
+                unitRates: config.unitRates?.[owner] ?? {},
+                cards: deck.map(card => {
+                    const definition = card.unitId ? model.effectiveDefinitionForUnit(owner, card.unitId) : null;
+                    return {
+                        cardId: card.id, name: card.name, heroId: card.unitId ?? null, level: heroLevels?.[card.id] ?? null,
+                        buildingHp: card.baseHp ?? null,
+                        maxHp: definition?.maxHp ?? null,
+                        attack: definition?.attack ?? null,
+                        cycleSeconds: card.cycleSeconds,
+                        buildDigGoldNum: card.buildDigGoldNum,
+                    };
+                }),
+            };
+        });
+        const { id, name, version, rows, columns, resolvedResources } = config.map;
+        console.info('[对局开局配置]', JSON.stringify({
+            seed: entry.battleSeed,
+            battleType: entry.battleType ?? entry.slgBattleType ?? null,
+            pveContext: entry.pveContext,
+            configHash: config.configHash,
+            map: { id, name, version, rows, columns, spawnMode: entry.matchConfig.map.cityMode ?? 'fixed',
+                resources: resolvedResources ?? [] },
+            rules: config.rules,
+            seats,
+        }));
     }
     private async onRequestUnitArt({ unitId }: IZCRequestUnitArtIntent, source: object): Promise<void> {
         if (source !== this.view || this.pendingUnitArt.has(unitId) || this.loadedUnitArt.has(unitId)) return;

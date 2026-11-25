@@ -9,7 +9,7 @@ import type { ICardDetailArt } from './CardArtProvider';
 import type { ICardLineupCatalog } from './CardArtConfig';
 import type { ICardUpgradedChrome } from './CardUpgradedArt';
 import type { ICardUpgradedContent } from './CardUpgradedPresentation';
-import type { CardDetailStatLine } from './CardDetailPresenter';
+import type { CardDetailPresentation } from './CardDetailPresenter';
 import { formatCritDamageGain } from './CardDetailCritDamage';
 import { resolveDetailNeighbor } from './CardDetailPresenter';
 import { cardClassName, resolveCardClass, resolveCardDisplayLevel } from './CardLineupTypes';
@@ -257,7 +257,7 @@ export class CardUpgradeController extends ControllerBase {
      * 会得到一条空槽，和设计稿的满格语义也不一致；没有材料行时退回新等级的持有/需求。
      *
      * 动画需要「旧值 → 新值」，所以除了新等级/新属性，还要把**升级前**那一份一起带上：
-     * `consumed` 是提交前抓的旧状态（含旧等级），`previousStats` 是提交前的六维属性。
+     * `consumed` 是提交前的材料状态，`previousDetail` 包含旧属性和本次升级的预览增量。
      * 下一级的材料行取升级后的 `snapshot.status` —— 刷光后进度条从满格退到它。
      */
     /**
@@ -290,11 +290,12 @@ export class CardUpgradeController extends ControllerBase {
     private async openUpgraded(
         level: number,
         consumed: ZCUpgradeStatus | null,
-        previousStats?: readonly CardDetailStatLine[],
+        previousDetail: CardDetailPresentation | null,
         prefetchedArt?: Promise<ICardUpgradedArtBundle>,
     ): Promise<void> {
         const open = this.options.popups.openUpgraded;
-        const card = this.options.model.snapshot.data.card;
+        const snapshot = this.options.model.snapshot;
+        const card = snapshot.data.card;
         if (!open || this.isDisposed || !card) return;
         const lineup = this.lineup;
         const cardClass: ZCCardClass = lineup ? resolveCardClass(card, lineup) : 'tank';
@@ -306,7 +307,6 @@ export class CardUpgradeController extends ControllerBase {
             console.warn('[CardUpgradeController] 升级弹窗背景缺失，跳过展示');
             return;
         }
-        const snapshot = this.options.model.snapshot;
         const hp = snapshot.detail?.stats.find(line => line.key === 'hp');
         const attack = snapshot.detail?.stats.find(line => line.key === 'attack');
         const consumedRow = consumed?.requirements.find(row => row.key === 'card') ?? consumed?.requirements[0];
@@ -332,9 +332,9 @@ export class CardUpgradeController extends ControllerBase {
         // `CardUpgradedPage` 判为「没有材料行」直接隐藏，满格与归零两段演出都看不到。
         const trackNeed = need > 0 ? need : nextNeed;
         const trackOwned = progressFrom >= 1 ? trackNeed : owned;
-        const previousHp = previousStats?.find(line => line.key === 'hp')?.value ?? '';
-        const previousAttack = previousStats?.find(line => line.key === 'attack')?.value ?? '';
-        const bonus = formatCritDamageGain(snapshot.detail?.critDamageGain ?? 0);
+        const previousHp = previousDetail?.stats.find(line => line.key === 'hp');
+        const previousAttack = previousDetail?.stats.find(line => line.key === 'attack');
+        const bonus = formatCritDamageGain(previousDetail?.critDamageGain ?? 0);
         open({
             background: chrome.background,
             frame: chrome.frame,
@@ -351,27 +351,26 @@ export class CardUpgradeController extends ControllerBase {
             nextProgressText: nextNeed > 0 ? `${nextOwned}/${nextNeed}` : undefined,
             nextProgressRatio: nextNeed > 0 ? nextRatio : undefined,
             hpValue: hp?.value ?? '',
-            hpGain: hp?.gain ?? '',
+            hpGain: previousHp?.gain ?? '',
             attackValue: attack?.value ?? '',
-            attackGain: attack?.gain ?? '',
-            previousHpValue: previousHp || undefined,
-            previousAttackValue: previousAttack || undefined,
+            attackGain: previousAttack?.gain ?? '',
+            previousHpValue: previousHp?.value || undefined,
+            previousAttackValue: previousAttack?.value || undefined,
             bonusText: bonus ? `所有单位暴击伤害提升<color=#1E9007>${bonus}</color>` : '',
         });
     }
     private async submit(): Promise<void> {
         const { model, repository } = this.options;
-        if (!model.canSubmit || this.isDisposed) {
+        if (!model.canSubmit || this.releaseLoading || this.isDisposed) {
             return;
         }
         this.refreshRevision++;
         model.setPhase('submitting');
         this.publish();
-        this.releaseLoading = this.options.loading.beginLoading();
+        const releaseLoading = this.options.loading.beginLoading();
+        this.releaseLoading = releaseLoading;
         try {
-            const consumed = model.snapshot.status;
-            // 弹窗要做「旧属性 → 新属性」的切换，属性必须在刷新前抓（`refresh` 会换成新等级的详情）。
-            const previousStats = model.snapshot.detail?.stats;
+            const { status: consumed, detail, cardId, level } = model.snapshot;
             // 成功弹窗的美术与升级请求**并行**起跑：它只取决于卡 / 品级 / 职业，与升级结果无关。
             // 串行等的话，点完升级要依次等「请求 + 刷新 + 三张图」才见到弹窗，体感就是「进弹窗很慢」。
             const upgradedArt = this.loadUpgradedArt();
@@ -387,13 +386,17 @@ export class CardUpgradeController extends ControllerBase {
                     return;
                 }
                 this.publish();
-                await this.refresh();
-                if (this.isDisposed) {
+                // 升级按钮可早于详情就绪，缺旧详情时与新等级刷新并行补读。
+                const previousDetail = this.options.popups.openUpgraded && result.level === level + 1
+                    ? detail ?? repository.loadCardDetail(cardId, level).catch(() => null)
+                    : null;
+                const [, upgradedFrom] = await Promise.all([this.refresh(), previousDetail]);
+                if (this.isDisposed || model.snapshot.cardId !== cardId || model.snapshot.level !== result.level) {
                     return;
                 }
                 // 先收起“升级中”，让成功弹窗自己承担出入场；刷新失败也不改升级结果。
                 this.stopLoading();
-                await this.openUpgraded(result.level, consumed, previousStats, upgradedArt);
+                await this.openUpgraded(result.level, consumed, upgradedFrom, upgradedArt);
             } else {
                 model.setPhase(result.kind);
                 this.publish();
@@ -404,6 +407,8 @@ export class CardUpgradeController extends ControllerBase {
                 this.publish();
                 this.options.failed(error);
             }
-        } finally { this.stopLoading(); }
+        } finally {
+            if (this.releaseLoading === releaseLoading) this.stopLoading();
+        }
     }
 }

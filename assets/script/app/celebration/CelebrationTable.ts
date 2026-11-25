@@ -638,21 +638,7 @@ export function pickActiveServer(
     return null;
 }
 
-/**
- * 数字缩写（老端 `StringUtil.numAbbr`）：`>= 1e10` 取 G、`>= 1e7` 取 M、`>= 1e4` 取 k，其余取 floor，
- * 阈值判断走绝对值，`k` 是小写。
- *
- * 不要换成 `StringUtil.formatNumberToKMBT`：后者是 T/B/M/K 四档，分母差 1000 倍，
- * 同一战力会显示成两个数。详细排行那行战力走的是 `numAbbr`。
- */
-export function numAbbrOf(value: number): string {
-    const n = Number.isFinite(value) ? value : 0;
-    const abs = Math.abs(n);
-    if (abs >= 1e10) return `${Math.floor(n / 1e9)}G`;
-    if (abs >= 1e7) return `${Math.floor(n / 1e6)}M`;
-    if (abs >= 1e4) return `${Math.floor(n / 1e3)}k`;
-    return `${Math.floor(n)}`;
-}
+export { formatCelebrationRankAmount as numAbbrOf } from '../../core/math/CompactNumber';
 
 /** 两段补零。 */
 function pad2(n: number): string {

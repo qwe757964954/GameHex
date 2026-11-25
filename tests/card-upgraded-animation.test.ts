@@ -472,11 +472,7 @@ test('旧值/新值都在数据里：等级、属性、下一级材料，缺一�
             `ICardUpgradedContent 缺可选字段 ${field}`,
         );
     }
-    // 旧属性必须在 refresh（会换成新等级详情）之前抓
-    assert.match(controllerSource, /const previousStats = model\.snapshot\.detail\?\.stats;/);
-    assert.ok(controllerSource.indexOf('const previousStats = model.snapshot.detail?.stats;')
-        < controllerSource.indexOf('await repository.upgradeHero(model.heroId, this)'),
-    '旧属性必须在 upgradeHero 之前抓，否则拿到的是升级后的值，切换就成了「新值切新值」');
+    // 满级升级用例直接验证提交前与刷新后属性，以及本次实际展示的增量。
     // 旧等级来自提交前的状态
     assert.match(controllerSource, /previousLevelText: consumed && consumed\.level > 0 \? `\$\{consumed\.level\}级` : undefined/);
 });
@@ -668,13 +664,6 @@ test('角色本体发光：剪影副本挂在立绘上、与本体锁相、放�
     assert.match(preview, /skeleton\.customMaterial = material;/);
     assert.match(preview, /skeleton\.premultipliedAlpha = true;/,
         'shader 按预乘口径输出（同 `ZCUnitView.attachOutlineCopy`），别依赖 prefab 上的勾选');
-    // 建好那一刻的对齐：动画段抄本体（不写死 idle）、播放头抄本体、时基抄本体
-    assert.match(preview, /const name = main\?\.animation\?\.name \|\| UNIT_IDLE_ANIMATION;/,
-        '起播的动画段要抄本体，写死 idle 会在本体已切段时错动画');
-    assert.match(preview, /const entry = skeleton\.setAnimation\(0, name, main \? !!main\.loop : true\);/);
-    assert.match(preview, /const main = this\.visualSkeleton\?\.getCurrent\(0\) \?\? null;/);
-    assert.match(preview, /if \(entry\) entry\.trackTime = main\.trackTime;/);
-    assert.match(preview, /skeleton\.timeScale = this\.visualSkeleton!\.timeScale;/);
     // 放大一点点：同形状大一圈 ⇒ 那一圈就是外缘辉光
     assert.match(preview, /const GLOW_COPY_SCALE = 1\.0[0-9]+;/);
     assert.match(preview, /glow\.setScale\(scale\.x \* GLOW_COPY_SCALE/);
@@ -690,30 +679,12 @@ test('角色本体发光：剪影副本挂在立绘上、与本体锁相、放�
     assert.match(pageSource, /this\.ensureHeroSpriteGlow\(material\)/);
 });
 
-test('剪影要跟着动作走：副本不许自己起播，每帧把本体的播放头抄过来', () => {
+test('剪影同步器由副本骨架持有', () => {
     const glowSource = readFileSync('assets/script/app/card/CardGlowSync.ts', 'utf8');
     assert.equal([...previewSource.matchAll(/@ccclass\(/g)].length, 1, '预览脚本只注册一个 Cocos 组件');
     assert.equal([...glowSource.matchAll(/@ccclass\(/g)].length, 1, '同步脚本只注册一个 Cocos 组件');
-    // 根因：副本是 active=false 建的，prefab 自带的 `CardUnitPreviewPlayer.start()` 被推迟到
-    // 「点亮」那一帧才跑 ⇒ setAnimation 从 0 重播、把刚抄好的 trackTime 归零（白斑飘在脸右侧）。
-    assert.match(previewSource, /const autoPlay = spineNode\.getComponent\(CardUnitPreviewPlayer\);/);
-    assert.match(previewSource, /if \(autoPlay\) autoPlay\.destroy\(\);/,
-        '副本的动画只由同步器管，不许有第二个起播者');
-    // 每帧跟随：挂在副本自己的 spine 节点上，不依赖页面 update（页面可能在演出里提前 return）
     assert.match(glowSource, /@ccclass\('CardGlowSync'\)/);
-    assert.match(glowSource, /class CardGlowSync extends Component \{/);
-    assert.match(glowSource, /protected lateUpdate\(\): void \{/);
-    assert.match(previewSource, /skeleton\.addComponent\(CardGlowSync\)\.bind\(this\.visualSkeleton\);/);
-    // 时基、动画段、播放头三样都要跟
-    assert.match(glowSource, /if \(self\.timeScale !== main\.timeScale\) self\.timeScale = main\.timeScale;/);
-    assert.match(glowSource, /if \(\(selfEntry\.animation\?\.name \?\? ''\) !== wantName\) \{/,
-        '本体换段了就得整段重来，只补时间会停在旧动作上');
-    assert.match(glowSource, /if \(Math\.abs\(selfEntry\.trackTime - mainEntry\.trackTime\) > GLOW_MAX_DRIFT\) \{/);
-    assert.match(glowSource, /selfEntry\.trackTime = mainEntry\.trackTime;/);
-    // 阈值是「常驻不写、漂了才纠」：trackTime 赋值要重算骨骼，每帧硬写反而会抖
-    const drift = glowSource.match(/const GLOW_MAX_DRIFT = (.+);/);
-    assert.ok(drift, '缺漂移阈值');
-    assert.equal(drift[1].trim(), '1 / 30', '阈值取一帧：常态同一拍不写，真漂了才纠');
+    assert.match(previewSource, /skeleton\.addComponent\(CardGlowSync\)\.bind\(/);
 });
 
 

@@ -10,6 +10,7 @@ import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ControllerBase } from '../assets/script/framework/controller/ControllerBase';
 import { PostLoginController } from '../assets/script/app/loading/PostLoginController';
 import { resolvePostLoginIdentity } from '../assets/script/app/loading/PostLoginContract';
+import type { PostLoginIdentity } from '../assets/script/app/loading/PostLoginContract';
 import { createControllerContext } from './helpers/controller-context';
 import { assetPath } from './helpers/asset-paths';
 
@@ -18,7 +19,7 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
     const ratios: number[] = [], statuses: string[] = [];
     const navigations: Array<{ route: string; params: unknown }> = [];
     const owners: string[][] = [];
-    const heroSessions: object[] = [];
+    const heroSessions: Array<{ session: object; owner: PostLoginIdentity | null }> = [];
     let releases = 0, oldReleases = 0, audio = 0, reads = 0;
     const ui = {
         show() {}, release() { releases++; },
@@ -36,7 +37,7 @@ function loadPostLogin(options: { startRatio?: number; saved?: string; load?: ()
             if (name.endsWith('/ControllerBase')) return { ControllerBase };
             if (name.endsWith('/PostLoginController')) return options.controllerError
                 ? { PostLoginController: class { constructor() { throw options.controllerError; } } } : { PostLoginController };
-            if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: session => heroSessions.push(session) } };
+            if (name.endsWith('/CardRepository')) return { cardRepository: { bindHeroSession: (session, owner) => heroSessions.push({ session, owner }) } };
             if (name.endsWith('/PvpHeroService')) return { PvpHeroService: class {} };
             if (name.endsWith('/GameNet')) return { GameNet: { instance: {} } };
             if (name.endsWith('/PostLoginContract')) return { resolvePostLoginIdentity };
@@ -269,7 +270,10 @@ test('PostLogin 复用热更实际进度、入口身份优先；失败退出释�
     await h.preload(); h.procedure.onEnter(); await new Promise(resolve => setImmediate(resolve));
     assert.deepEqual(h.owners, [['1', '2'], ['8', '9']]); assert.equal(h.audio, 2);
     assert.equal(h.heroSessions.length, 2);
-    assert.notEqual(h.heroSessions[0], h.heroSessions[1], '再次登录创建新英雄会话');
+    assert.notEqual(h.heroSessions[0].session, h.heroSessions[1].session, '再次登录创建新英雄会话');
+    assert.deepEqual(h.heroSessions.map(({ owner }) => owner), [
+        { roleId: '1', serverId: '2' }, { roleId: '8', serverId: '9' },
+    ]);
     h.procedure.onDestroy(); assert.equal(h.releases, 2);
 });
 

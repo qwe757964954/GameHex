@@ -139,12 +139,10 @@ export function parseCardLevelUpRow(value: unknown): ZCCardLevelUpRow | null {
     };
 }
 
-/** 建「卡牌 → (等级 → 行)」两级表。重复行后值覆盖。 */
-export function buildCardLevelUpTable(rows: readonly unknown[]): ZCCardLevelUpTable {
+/** 将已解析行索引为「卡牌 → (等级 → 行)」两级表；重复行后值覆盖。 */
+export function indexCardLevelUpRows(rows: readonly ZCCardLevelUpRow[]): ZCCardLevelUpTable {
     const table = new Map<string, Map<number, ZCCardLevelUpRow>>();
-    for (const raw of rows) {
-        const row = parseCardLevelUpRow(raw);
-        if (!row) continue;
+    for (const row of rows) {
         let levels = table.get(row.id);
         if (!levels) {
             levels = new Map<number, ZCCardLevelUpRow>();
@@ -153,6 +151,16 @@ export function buildCardLevelUpTable(rows: readonly unknown[]): ZCCardLevelUpTa
         levels.set(row.level, row);
     }
     return table;
+}
+
+/** 建「卡牌 → (等级 → 行)」两级表。重复行后值覆盖。 */
+export function buildCardLevelUpTable(rows: readonly unknown[]): ZCCardLevelUpTable {
+    const parsed: ZCCardLevelUpRow[] = [];
+    for (const raw of rows) {
+        const row = parseCardLevelUpRow(raw);
+        if (row) parsed.push(row);
+    }
+    return indexCardLevelUpRows(parsed);
 }
 
 /** 等级上限（表里最大 level）；无配置返回 0。 */

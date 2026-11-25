@@ -64,8 +64,8 @@ export class RechargeTotalRow extends Component {
     onAction: (() => void) | null = null;
 
     protected onLoad(): void {
-        this.btnClaim.node.on(Button.EventType.CLICK, () => this.onAction?.(), this);
-        this.btnUndone.node.on(Button.EventType.CLICK, () => this.onAction?.(), this);
+        this.btnClaim.node.on(Button.EventType.CLICK, () => this.onAction?.());
+        this.btnUndone.node.on(Button.EventType.CLICK, () => this.onAction?.());
     }
 
     render(

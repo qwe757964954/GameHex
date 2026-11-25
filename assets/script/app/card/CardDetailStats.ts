@@ -6,6 +6,9 @@
  *     `soilderAddTime`（生产时间）/ `baseHp`（建筑血量）。
  *   - `pvpUnitGrowth`：一行 = `(unitId, level)` 的一档成长修正（enabled 过滤）。
  *
+ * 成长修正的类型与公式落在 `model/UnitGrowthModifier`：一行六个平铺列先归一成
+ * 「血量 / 攻击 / 移速 / 射程」四个 `{ flat, rate }` 槽位，本文件只负责查表与组合。
+ *
  * 公式与战斗层同口径（`ZCModifierRuntime.compileGrowthLoadout`：按 `(unitId, level)`
  * 取单行，行值本身就是到该级的累计修正）：
  *   value(level) = (base + row(level).flat) × (1 + row(level).rate)
@@ -16,17 +19,21 @@
  */
 
 import type { ZCCardLevelAttrs } from './CardLevelAttr';
+import {
+    growthScaled,
+    NO_UNIT_GROWTH_MODIFIERS,
+    unitGrowthModifiersOf,
+} from './model/UnitGrowthModifier';
+import type {
+    IGrowthModifier,
+    IUnitGrowthColumns,
+    IUnitGrowthModifiers,
+} from './model/UnitGrowthModifier';
 
-/** `pvpUnitGrowth` 一行（已归一化）。 */
-export interface ZCUnitGrowthRow {
+/** `pvpUnitGrowth` 一行（已归一化）：业务字段 + 六个成长列。 */
+export interface ZCUnitGrowthRow extends IUnitGrowthColumns {
     readonly unitId: string;
     readonly level: number;
-    readonly attackFlat: number;
-    readonly attackRate: number;
-    readonly maxHpFlat: number;
-    readonly maxHpRate: number;
-    readonly moveSpeedRate: number;
-    readonly attackRangeFlat: number;
     readonly enabled: boolean;
 }
 
@@ -59,58 +66,40 @@ export interface ZCCardDetailBase {
     readonly baseHp: number;
 }
 
-function toCount(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null;
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    return Math.floor(num);
-}
+/**
+ * 解析一行 pvpUnitGrowth；只保留「空 unitId / 非正档位」这类业务上不可用的行。
+ *
+ * 列类型由导表保证（`unitId: string`，其余 `number`），客户端不再做第二次类型校验；
+ * `enabled` 从表里的 1/0 归一成 boolean 是运行口径转换，不是类型校验。
+ */
+export function parseUnitGrowthRow(row: IRefpvpUnitGrowth | null | undefined): ZCUnitGrowthRow | null {
+    if (!row) return null;
 
-function toRate(value: unknown): number {
-    const num = Number(value);
-    return Number.isFinite(num) ? num : 0;
-}
-
-/** 解析一行 pvpUnitGrowth；坏行（缺 unitId/level）返回 null。 */
-export function parseUnitGrowthRow(value: unknown): ZCUnitGrowthRow | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const row = value as Record<string, unknown>;
-
-    const unitId = typeof row.unitId === 'string' ? row.unitId.trim() : String(row.unitId ?? '').trim();
-    const level = toCount(row.level);
-    if (unitId.length === 0 || level === null) return null;
+    const unitId = String(row.unitId ?? '').trim();
+    const level = row.level;
+    if (unitId.length === 0 || !(level > 0)) return null;
 
     return {
         unitId,
         level,
-        attackFlat: toRate(row.attackFlat),
-        attackRate: toRate(row.attackRate),
-        maxHpFlat: toRate(row.maxHpFlat),
-        maxHpRate: toRate(row.maxHpRate),
-        moveSpeedRate: toRate(row.moveSpeedRate),
-        attackRangeFlat: toRate(row.attackRangeFlat),
-        enabled: toCount(row.enabled) !== 0,
+        attackFlat: row.attackFlat,
+        attackRate: row.attackRate,
+        maxHpFlat: row.maxHpFlat,
+        maxHpRate: row.maxHpRate,
+        moveSpeedRate: row.moveSpeedRate,
+        attackRangeFlat: row.attackRangeFlat,
+        enabled: row.enabled !== 0,
     };
 }
 
-/** 与战斗层 `scaled` 同式：`(base + Σflat) × (1 + Σrate)`。 */
-function scaled(base: number, flat: number, rate: number): number {
-    return (base + flat) * (1 + rate);
-}
-
-/** 取该 unit 该级的成长行（未启用 / 无行按全 0）。与战斗层同一行，不累加。 */
+/** 取该 unit 该级的成长修正（未启用 / 无行按全 0）。与战斗层同一行，不累加。 */
 export function resolveGrowthRow(
     rows: readonly ZCUnitGrowthRow[],
     unitId: string,
     level: number,
-): { attackFlat: number; attackRate: number; maxHpFlat: number; maxHpRate: number; moveSpeedRate: number; attackRangeFlat: number } {
+): IUnitGrowthModifiers {
     const row = rows.find((r) => r.enabled && r.unitId === unitId && r.level === level);
-    if (!row) return { attackFlat: 0, attackRate: 0, maxHpFlat: 0, maxHpRate: 0, moveSpeedRate: 0, attackRangeFlat: 0 };
-    return {
-        attackFlat: row.attackFlat, attackRate: row.attackRate,
-        maxHpFlat: row.maxHpFlat, maxHpRate: row.maxHpRate,
-        moveSpeedRate: row.moveSpeedRate, attackRangeFlat: row.attackRangeFlat,
-    };
+    return row ? unitGrowthModifiersOf(row) : NO_UNIT_GROWTH_MODIFIERS;
 }
 
 /** 表里该 unit 的最大成长档；没有行返回 0（= 永远按满级处理）。 */
@@ -177,24 +166,23 @@ export function computeDetailStats(
         }, levelAttrs, nextLevelAttrs);
     }
 
-    const sum = resolveGrowthRow(growthRows, unitId, lv);
-    const nextSum = resolveGrowthRow(growthRows, unitId, lv + 1);
+    const current = resolveGrowthRow(growthRows, unitId, lv);
+    const next = resolveGrowthRow(growthRows, unitId, lv + 1);
     const maxed = !growthRows.some((r) => r.enabled && r.unitId === unitId && r.level === lv + 1);
 
-    const stat = (pick: (s: ReturnType<typeof resolveGrowthRow>) => { flat: number; rate: number }, baseValue: number): ZCDetailStatValue => {
-        const cur = pick(sum);
-        const value = scaled(baseValue, cur.flat, cur.rate);
-        const gain = maxed ? 0 : scaled(baseValue, pick(nextSum).flat, pick(nextSum).rate) - value;
+    const stat = (baseValue: number, cur: IGrowthModifier, nextMod: IGrowthModifier): ZCDetailStatValue => {
+        const value = growthScaled(baseValue, cur);
+        const gain = maxed ? 0 : growthScaled(baseValue, nextMod) - value;
         return { value, gain };
     };
 
     return applyLevelAttrs({
-        unitHp: stat((s) => ({ flat: s.maxHpFlat, rate: s.maxHpRate }), Math.max(0, base.unitMaxHp)),
-        unitAttack: stat((s) => ({ flat: s.attackFlat, rate: s.attackRate }), Math.max(0, base.unitAttack)),
+        unitHp: stat(Math.max(0, base.unitMaxHp), current.maxHp, next.maxHp),
+        unitAttack: stat(Math.max(0, base.unitAttack), current.attack, next.attack),
         buildHp: buildHpValue,
         spawnSeconds,
-        attackRange: stat((s) => ({ flat: s.attackRangeFlat, rate: 0 }), Math.max(0, base.unitAttackRange)),
-        moveSpeed: stat((s) => ({ flat: 0, rate: s.moveSpeedRate }), Math.max(0, base.unitMoveSpeed)),
+        attackRange: stat(Math.max(0, base.unitAttackRange), current.attackRange, next.attackRange),
+        moveSpeed: stat(Math.max(0, base.unitMoveSpeed), current.moveSpeed, next.moveSpeed),
         maxed,
     }, levelAttrs, nextLevelAttrs);
 }

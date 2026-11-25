@@ -83,7 +83,7 @@ export class LimitTimeActPage extends PopupBase {
     protected onInit(): void {
         for (const [name, tab] of TAB_NODES) {
             const button = this.node.getChildByName(name)!.getComponent(Button)!;
-            button.node.on(Button.EventType.CLICK, () => this.onClickTab(tab), this);
+            button.node.on(Button.EventType.CLICK, () => this.onClickTab(tab));
         }
         this.closeBtn.node.on(Button.EventType.CLICK, this.closeByButton, this);
     }

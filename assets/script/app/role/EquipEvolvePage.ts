@@ -186,9 +186,9 @@ export class EquipEvolvePage extends PopupBase {
     }
 
     private bindEvents(): void {
-        this.backBtn.node.on(Button.EventType.CLICK, () => this.close(), this);
-        this.tabHero.node.on(Button.EventType.CLICK, () => this.switchTab('strengthen'), this);
-        this.tabForge.node.on(Button.EventType.CLICK, () => this.switchTab('upgrade'), this);
+        this.backBtn.node.on(Button.EventType.CLICK, () => this.close());
+        this.tabHero.node.on(Button.EventType.CLICK, () => this.switchTab('strengthen'));
+        this.tabForge.node.on(Button.EventType.CLICK, () => this.switchTab('upgrade'));
 
         this.buildBtn.node.on(Button.EventType.CLICK, this.onBuildClick, this);
         this.buildAllBtn.node.on(Button.EventType.CLICK, this.onBuildAllClick, this);
@@ -201,9 +201,9 @@ export class EquipEvolvePage extends PopupBase {
             const partId = i + 1;
             const slot = this.slotItems[i];
             if (slot.button) {
-                slot.button.node.on(Button.EventType.CLICK, () => this.selectPart(partId), this);
+                slot.button.node.on(Button.EventType.CLICK, () => this.selectPart(partId));
             } else {
-                slot.node.on(Button.EventType.CLICK, () => this.selectPart(partId), this);
+                slot.node.on(Button.EventType.CLICK, () => this.selectPart(partId));
             }
         }
     }

@@ -9,6 +9,8 @@ import { parseItemRows, parseRolePropertyRows } from '../common/ResTypes';
 import type { IResGoodsInfo as IActivityGoodsInfo } from '../common/ResTypes';
 import { parseCmdGoodsList, rewardEntryOf, sortRewardEntries } from '../common/RewardEntries';
 import type { IShowRewardEntry as IRewardEntry } from '../common/RewardEntries';
+import { GEM_QUALITY_TABLE, GEM_TABLE, parseGemQualityRows, parseGemRows } from '../common/GemReward';
+import type { IGemTables } from '../common/GemReward';
 
 import { ROLE_PROPERTY_TABLE, ITEM_TABLE } from '../../core/config/TableNames';
 /**
@@ -26,25 +28,34 @@ export interface IRewardFrames {
     readonly iconFrame: SpriteFrame | null;
 }
 
-/** 奖励换算要用的两张表（`item` 道具 + `roleProperty` 货币）。 */
+/** 奖励换算要用的三组表（`item` 道具 + `roleProperty` 货币 + `gem`/`gemQuality` 宝石）。 */
 export interface IRewardGoodsTables {
     readonly items: Map<number, IActivityGoodsInfo>;
     readonly resources: Map<number, IActivityGoodsInfo>;
+    readonly gems: IGemTables;
 }
 
 /**
- * 拉并解析 `item` / `roleProperty` 两张表。
+ * 拉并解析 `item` / `roleProperty` / `gem` / `gemQuality`。
  *
- * ⚠️ 两张表都要读：漏掉 `roleProperty` 那一支，货币格只剩品质框、没有图标（静默降级）。
+ * ⚠️ 两张道具表都要读：漏掉 `roleProperty` 那一支，货币格只剩品质框、没有图标（静默降级）。
+ * ⚠️ 宝石走 `gem`（部位 resId）+ `gemQuality`（品质图标）：服务端发的 `resId` 是宝石实例 id，
+ *   两张道具表里都查不到，不接宝石分支就是「品质 1 灰框 + 没有图标」。
  */
 export async function loadRewardGoodsTables(configs?: ConfigService): Promise<IRewardGoodsTables> {
-    const [itemRows, resourceRows] = await Promise.all([
+    const [itemRows, resourceRows, gemRows, gemQualityRows] = await Promise.all([
         configs ? configs.getTable(ITEM_TABLE) : RefUtil.instance.getRefAllAsync(ITEM_TABLE),
         configs ? configs.getTable(ROLE_PROPERTY_TABLE) : RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE),
+        configs ? configs.getTable(GEM_TABLE) : RefUtil.instance.getRefAllAsync(GEM_TABLE),
+        configs ? configs.getTable(GEM_QUALITY_TABLE) : RefUtil.instance.getRefAllAsync(GEM_QUALITY_TABLE),
     ]);
     return {
         items: parseItemRows(itemRows ?? []),
         resources: parseRolePropertyRows(resourceRows ?? []),
+        gems: {
+            gems: parseGemRows(gemRows ?? []),
+            qualities: parseGemQualityRows(gemQualityRows ?? []),
+        },
     };
 }
 
@@ -86,7 +97,7 @@ export async function resolveCmdGoodsFrames(
     const goods = parseCmdGoodsList(raw);
     if (!goods.length) return [];
     const tables = await loadRewardGoodsTables(resources?.configs);
-    const entries = sortRewardEntries(goods.map((one) => rewardEntryOf(one, tables.items, tables.resources)));
+    const entries = sortRewardEntries(goods.map((one) => rewardEntryOf(one, tables.items, tables.resources, tables.gems)));
     const frames = await loadRewardFrames(entries, resources);
     return entries.map((entry, index) => ({ entry, frames: frames[index] }));
 }

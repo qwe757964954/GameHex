@@ -40,8 +40,12 @@ export const CARD_LEVEL_ATTR_STAT: Readonly<Record<string, keyof ZCCardLevelAttr
 /** 一条 attrList 都没有 / 一条都认不得 ⇒ `null`（= 没配，交给调用方回落）。 */
 export function attrsOfEntries(entries: readonly ZCCardAttrEntry[]): ZCCardLevelAttrs | null {
     if (entries.length === 0) return null;
-    const result: { maxHp: number; attack: number; buildingHp: number } = {
-        maxHp: 0, attack: 0, buildingHp: 0,
+    // 解析期要按 statId 逐项落值，先收在 ZCCardLevelAttrs 的可写副本里；
+    // 对外仍只返回 readonly 契约，字段增减由这里跟着编译报错。
+    const result: { -readonly [K in keyof ZCCardLevelAttrs]: ZCCardLevelAttrs[K] } = {
+        maxHp: 0,
+        attack: 0,
+        buildingHp: 0,
     };
     let hit = false;
     for (const entry of entries) {

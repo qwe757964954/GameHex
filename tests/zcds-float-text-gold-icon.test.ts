@@ -1,3 +1,4 @@
+import { formatBattleFloatAmount } from '../assets/script/core/math/CompactNumber';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -50,6 +51,7 @@ function createView() {
     const loaded = { exports: {} as Record<string, any> };
     new Function('require', 'module', 'exports', compiled)((name: string) => {
         if (name === 'cc') return cc;
+        if (name.endsWith('/CompactNumber')) return { formatBattleFloatAmount };
         assert.equal(name, './ZCGameViewUtil');
         return { ...util, mapToViewX: (x: number) => x, mapToViewY: (y: number) => y };
     }, loaded, loaded.exports);

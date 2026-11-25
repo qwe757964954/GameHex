@@ -17,8 +17,8 @@
  * 所有子节点引用通过 @property 在 Inspector 拖拽绑定，不在运行时按名字查找。
 */
 
-import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UITransform, Vec3 } from 'cc';
-import type { ZCGuideEntry, ZCGuideRarity, ZCGuideReward } from '../model/ZCGuideConfig';
+import { _decorator, Color, Component, Label, Sprite, SpriteFrame, UITransform } from 'cc';
+import type { ZCGuideEntry, ZCGuideParams, ZCGuideReward } from '../model/ZCGuideConfig';
 
 const { ccclass, property } = _decorator;
 
@@ -31,6 +31,10 @@ function formatRate(rate: number): string {
 const REWARD_COLUMN_X = [-105, 125] as const;
 /** 奖励文字行距；参考图两行中心 y440 / y484。*/
 const REWARD_ROW_PITCH = 44;
+/** 单列有三到四行时，缩小行距以留在卡片正文区内。 */
+const COMPACT_REWARD_ROW_PITCH = 26;
+/** Prefab 奖励标签行高 32，四行布局时文字需跟随行距缩小。 */
+const COMPACT_REWARD_SCALE = 0.8;
 /** 奖励文字整块的垂直中心（相对卡片中心）。*/
 const REWARD_BLOCK_CENTER_Y = -15;
 /**
@@ -46,48 +50,42 @@ export class ZCGuideItem extends Component {
     /** 正文/标题深棕，与参考图取色一致。原在 `ui/ZCGuideConfig.ts` 导出，仅本类用。*/
     private static readonly GUIDE_INK = new Color(87, 46, 35, 255);
 
-    /** 品级高亮色；'空' 沿用正文色，不做强调。*/
-    private static readonly RARITY_COLORS: Readonly<Record<ZCGuideRarity, Color>> = {
-        空: ZCGuideItem.GUIDE_INK,
-        绿: new Color(74, 143, 34, 255),
-        蓝: new Color(42, 111, 184, 255),
-        紫: new Color(139, 63, 196, 255),
-        金: new Color(229, 115, 3, 255),
+    private static readonly RARITY_COLORS: Readonly<Record<ZCGuideReward['rarity'], Color>> = {
+        empty: ZCGuideItem.GUIDE_INK,
+        green: new Color(74, 143, 34, 255),
+        blue: new Color(42, 111, 184, 255),
+        purple: new Color(139, 63, 196, 255),
+        gold: new Color(229, 115, 3, 255),
     };
 
-    /** 取奖励文字颜色；未登记品级回退正文色。不依赖实例状态，静态即可。*/
-    private static guideRewardColor(reward: ZCGuideReward): Color {
-        return ZCGuideItem.RARITY_COLORS[reward.rarity] ?? ZCGuideItem.GUIDE_INK;
-    }
-
     @property({ type: Label, group: '标题', tooltip: 'TitleLab：卡片标题，如「获得一座金矿」' })
-    titleLabel: Label = null;
+    titleLabel: Label = null!;
 
     @property({ type: Sprite, group: '图标', tooltip: 'HexIcon：绿色六边形地块底图' })
-    hexIcon: Sprite = null;
+    hexIcon: Sprite = null!;
 
     @property({ type: Sprite, group: '图标', tooltip: 'HexIcon/icon_question：六边形里的图标槽位（金矿/兵营/问号）' })
-    iconSprite: Sprite = null;
+    iconSprite: Sprite = null!;
 
     @property({ type: Sprite, group: '消耗', tooltip: 'HexIcon/CostIcon：金币图标' })
-    costIcon: Sprite = null;
+    costIcon: Sprite = null!;
 
     @property({ type: Label, group: '消耗', tooltip: 'HexIcon/CostLab：开发消耗金币' })
-    costLabel: Label = null;
+    costLabel: Label = null!;
 
     // 奖励槽位拆成 4 个显式 @property，方便在 Inspector 逐个拖拽绑定
     // （cc 的组件数组属性在编辑器脚本里不便批量赋值，显式字段更稳）。
     @property({ type: Label, group: '奖励', tooltip: 'Reward0：奖励文字槽位 1（行优先，左列）' })
-    reward0: Label = null;
+    reward0: Label = null!;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward1：奖励文字槽位 2（行优先，右列）' })
-    reward1: Label = null;
+    reward1: Label = null!;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward2：奖励文字槽位 3（行优先，左列第二行）' })
-    reward2: Label = null;
+    reward2: Label = null!;
 
     @property({ type: Label, group: '奖励', tooltip: 'Reward3：奖励文字槽位 4（行优先，右列第二行）' })
-    reward3: Label = null;
+    reward3: Label = null!;
 
     /** 4 个奖励槽位，按「行优先」顺序展开，供内部遍历。*/
     private get rewardSlots(): Label[] {
@@ -97,13 +95,13 @@ export class ZCGuideItem extends Component {
     /**
      * 用一条指南数据刷新卡片。
      * @param entry 指南条目
-     * @param iconFrames 预加载好的图标帧表（key = 条目 icon 字段）
+     * @param iconFrame 当前条目的预加载图标
     */
-    render(entry: ZCGuideEntry, iconFrames: ReadonlyMap<string, SpriteFrame>): void {
+    render(entry: ZCGuideEntry, iconFrame: SpriteFrame | null, rewardColumns: ZCGuideParams['rewardColumns']): void {
         this.titleLabel.string = entry.title;
         this.costLabel.string = String(Math.max(0, Math.floor(entry.price)));
-        this.renderIcon(iconFrames.get(entry.icon) ?? null);
-        this.renderRewards(entry);
+        this.renderIcon(iconFrame);
+        this.renderRewards(entry.rewards, rewardColumns);
     }
 
     /** 无数据时把卡片清空，避免虚拟列表复用残留上一条内容。*/
@@ -132,36 +130,32 @@ export class ZCGuideItem extends Component {
         sprite.spriteFrame = frame;
         if (!frame) return;
 
-        // 尺寸由代码统一控制，所以切成 CUSTOM：TRIMMED 会在换图时把节点拉回原图尺寸
-        sprite.sizeMode = Sprite.SizeMode.CUSTOM;
         const size = fitInside(frame, ICON_BOX_WIDTH, ICON_BOX_HEIGHT);
         sprite.node.getComponent(UITransform).setContentSize(size.width, size.height);
     }
 
-    /**
-     * 奖励文字按「行优先」填进 2 列栅格，整块在卡片正文里垂直居中：
-     * 1 行 → y = -15；2 行 → y = +7 / -37（由 REWARD_BLOCK_CENTER_Y 与 REWARD_ROW_PITCH 推出）。
-    */
-    private renderRewards(entry: ZCGuideEntry): void {
+    private renderRewards(rewards: readonly ZCGuideReward[], columns: ZCGuideParams['rewardColumns']): void {
         const slots = this.rewardSlots;
-        const count = Math.min(entry.rewards.length, slots.length);
-        const rows = Math.max(1, Math.ceil(count / REWARD_COLUMN_X.length));
-        const topY = REWARD_BLOCK_CENTER_Y + ((rows - 1) * REWARD_ROW_PITCH) / 2;
+        const rows = Math.ceil(rewards.length / columns);
+        const pitch = rows > 2 ? COMPACT_REWARD_ROW_PITCH : REWARD_ROW_PITCH;
+        const scale = rows > 2 ? COMPACT_REWARD_SCALE : 1;
+        const topY = REWARD_BLOCK_CENTER_Y + ((rows - 1) * pitch) / 2;
 
         for (let i = 0; i < slots.length; i += 1) {
             const label = slots[i];
-            const reward = i < count ? entry.rewards[i] : undefined;
+            const reward = rewards[i];
             if (!reward) {
                 label.string = '';
                 label.node.active = false;
                 continue;
             }
-            const column = i % REWARD_COLUMN_X.length;
-            const row = Math.floor(i / REWARD_COLUMN_X.length);
-            label.node.setPosition(new Vec3(REWARD_COLUMN_X[column], topY - row * REWARD_ROW_PITCH, 0));
+            const column = i % columns;
+            const row = Math.floor(i / columns);
+            label.node.setPosition(REWARD_COLUMN_X[column], topY - row * pitch, 0);
+            label.node.setScale(scale, scale, 1);
             label.node.active = true;
             label.string = `${reward.name}:${formatRate(reward.rate)}%`;
-            label.color = ZCGuideItem.guideRewardColor(reward);
+            label.color = ZCGuideItem.RARITY_COLORS[reward.rarity];
         }
     }
 }

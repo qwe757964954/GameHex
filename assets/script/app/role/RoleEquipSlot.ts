@@ -46,7 +46,7 @@ export class RoleEquipSlot extends Component {
         this.ensureInit();
         const partId = Number(this.node.name.slice('Equip'.length));
         this.node.getChildByName('com_goods').on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'equipPart', partId }), this);
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'equipPart', partId }));
         this.gemGroup = this.node.getChildByName('组件_宝石');
         for (let order = 1; order <= ROLE_GEM_SOCKET_COUNT; order++) {
             const hole = this.gemGroup.getChildByName(`com${order}`);
@@ -57,7 +57,7 @@ export class RoleEquipSlot extends Component {
             this.emptyGemFrames.push(sprite.spriteFrame);
             hole.on(Button.EventType.CLICK, () => EventMgr.instance.emit(
                 RoleEvent.Intent, { kind: 'socket', partId, order },
-            ), this);
+            ));
         }
     }
 

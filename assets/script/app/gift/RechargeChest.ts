@@ -29,7 +29,7 @@ export class RechargeChest extends Component {
     onAction: (() => void) | null = null;
 
     protected onLoad(): void {
-        this.button.node.on(Button.EventType.CLICK, () => this.onAction?.(), this);
+        this.button.node.on(Button.EventType.CLICK, () => this.onAction?.());
     }
 
     render(

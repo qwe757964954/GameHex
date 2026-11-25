@@ -93,7 +93,7 @@ export class EquipWashPopup extends PopupBase {
     }
 
     private bindEvents(): void {
-        this.closeBtn.node.on(Button.EventType.CLICK, () => this.onCancelClick(), this);
+        this.closeBtn.node.on(Button.EventType.CLICK, () => this.onCancelClick());
         this.washBtn.node.on(Button.EventType.CLICK, this.onConfirmClick, this);
         this.cancelBtn.node.on(Button.EventType.CLICK, this.onCancelClick, this);
     }

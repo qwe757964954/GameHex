@@ -7,15 +7,42 @@ import { ResourceScope } from '../assets/script/core/asset/ResourceScope';
 import * as guideConfig from '../assets/script/app/zcds/model/ZCGuideConfig';
 import type { ZCGuideLoader } from '../assets/script/app/zcds/application/ZCGuideLoader';
 import { runtimeFixture, deferred, flush } from './helpers/battle-runtime';
+import { loadViews } from './helpers/zcds-view-fixtures';
 import { EventMgr } from '../assets/script/framework/event/EventMgr';
 import { ZCGameUiEvent } from '../assets/script/app/zcds/view/ZCGameHudEvents';
 import type { IZCGuidePreparedContent } from '../assets/script/app/zcds/application/ZCGuideLoader';
 import type { IZCBattlePopup } from '../assets/script/app/zcds/application/ZCBattleSettlementController';
 
-const content: IZCGuidePreparedContent = { entries: [], params: {}, iconFrames: new Map() };
+const content: IZCGuidePreparedContent = { entries: [], params: guideConfig.ZC_GUIDE_DEFAULT_PARAMS, iconFrames: new Map() };
+
+test('指南条目支持单列四项并在复用时恢复双列尺寸', () => {
+    const { load, FakeNode } = loadViews();
+    const { ZCGuideItem } = load('./ZCGuideItem');
+    const item = new ZCGuideItem();
+    const makeLabel = () => ({ node: new FakeNode(), string: '' });
+    const slots = Array.from({ length: 4 }, makeLabel);
+    [item.reward0, item.reward1, item.reward2, item.reward3] = slots;
+    item.titleLabel = makeLabel();
+    item.costLabel = makeLabel();
+    item.iconSprite = { node: new FakeNode() };
+    const [entry] = guideConfig.parseGuideEntries([{
+        id: 'a', rewards: ['empty', 'green', 'blue', 'gold'].map(rarity => ({ name: '奖励', rarity, rate: 25 })),
+    }]);
+
+    item.render(entry, null, 1);
+    assert.deepEqual(slots.map(label => label.node.position.x), [-105, -105, -105, -105]);
+    assert.deepEqual(slots.map(label => label.node.position.y), [24, -2, -28, -54]);
+    assert.ok(slots.every(label => label.node.active && label.node.scale.x < 1));
+
+    item.render({ ...entry, rewards: entry.rewards.slice(0, 2) }, null, 2);
+    assert.deepEqual(slots.map(label => label.node.active), [true, true, false, false]);
+    assert.equal(slots[1].node.position.x, 125);
+    assert.equal(slots[1].node.scale.x, 1);
+    assert.equal(slots[2].string, '');
+});
 
 function guideLoader(load: (path: string, scope: ResourceScope) => Promise<object>,
-    rows: Promise<readonly unknown[]> = Promise.resolve([{ id: 'mine', icon: '金矿' }])) {
+    rows: Promise<readonly unknown[]> = Promise.resolve([{ id: 'mine', icon: 'mine' }])) {
     const warnings: unknown[] = [];
     let configReads = 0;
     const context = {
@@ -41,11 +68,11 @@ test('指南图标按键去重，传递当前对局作用域并返回完整内�
         assert.equal(owner, scope);
         paths.push(path);
         return frame;
-    }, Promise.resolve([{ id: 'a', icon: '金矿' }, { id: 'b', icon: '金矿' }]));
+    }, Promise.resolve([{ id: 'a', icon: 'mine' }, { id: 'b', icon: 'mine' }]));
     const result = await h.loader.prepare(scope);
-    assert.deepEqual(paths, [guideConfig.getGuideIconPath('金矿')]);
+    assert.deepEqual(paths, [guideConfig.getGuideIconPath('mine')]);
     assert.equal(result.entries.length, 2);
-    assert.equal(result.iconFrames.get('金矿'), frame);
+    assert.equal(result.iconFrames.get('mine'), frame);
     scope.dispose();
 });
 

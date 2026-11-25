@@ -238,6 +238,9 @@ class RoleRepository {
      * 数据源与 `buildGemSockets` 同一条：当前装备页 `CmdEquipPage.tlCmdEquip[].tlCmdGemInfo`，
      * 再按 `CmdGem.attribute`（缺省退 gemId 末四位，与 {@link readGemBag} 同口径）查 `gemAttribute`。
      * 只读缓存、不发请求；页快照过期时它和孔位一起陈旧。
+     *
+     * ⚠️ `gemAttribute` 有 15 行主键写错（type 91..99 的 id 多了 +10，正确 id 2091/3091/… 缺失），
+     * 按 id 查不到时退 `(quality, type)` 反查 —— id 的编码就是 `(quality-1)*1000 + type`。
      */
     private async gemEffectsOf(equipResId: number): Promise<string[]> {
         const cache = CacheMgr.instance;
@@ -251,7 +254,12 @@ class RoleRepository {
             const attrId = cache.getCmdGem(gemId)?.attribute || Number(gemId.slice(-4));
             if (!attrId) continue;
             const attr = await RefUtil.instance.getRefAsync('gemAttribute', 'id', attrId);
-            const desc = String(attr?.modifyDesc ?? '');
+            let desc = String(attr?.modifyDesc ?? '');
+            if (!desc) {
+                const rows = await RefUtil.instance.getTlRefAsync('gemAttribute', ['quality', 'type'],
+                    Math.floor(attrId / 1000) + 1, attrId % 1000);
+                desc = String(rows?.[0]?.modifyDesc ?? '');
+            }
             if (desc) out.push(desc);
         }
         return out;

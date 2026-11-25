@@ -392,7 +392,7 @@ export class TerritoryMonsterBoxPanel extends PopupBase {
     private readonly renderRewardItem = (item: Node, index: number): void => {
         const data = this.rewards[index];
         if (!data) return;
-        item.getComponent(RewardItemView).render(data);
+        item.getComponentInChildren(RewardItemView).render(data);
     };
 
     /** 按可用性给按钮上色：不能用时压成灰色（`interactable` 本身不改外观）。 */

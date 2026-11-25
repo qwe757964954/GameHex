@@ -47,6 +47,7 @@ Cocos Creator 3.8.8 + TypeScript。
 
 ## 通用红线
 
+- 模块接口：跨模块调用如果单看函数名难以判断归属，优先用 `import * as 模块名`，模块名与文件职责一致。仅供本模块使用的辅助函数留在模块内部。需要持有状态、依赖或管理生命周期时，才考虑引入类。调整公开导出前，先查生产调用方和测试。存量治理先从卡牌模块开始。
 - 依赖从外向内：`app/bootstrap → app/procedure、app/<feature>/application、view → core`；`platform` / `framework → core`。`core` 为纯 TS，禁止引入 `cc/framework/app/platform`、直接 I/O 或全局服务访问；`framework` 不依赖 feature / `Procedure*`；adapter 不放业务规则。
 - 页面经 `GameRoute` 导航。正式流程资源、配置、网络经 `AssetService`、`ConfigService`、`NetworkTransport` 或既有 repository/gateway；feature 禁直调 `resources.load/fetch`。规则放 `model/domain` 或 `core`。
 - `await` / Promise 回调之后处理失效与取消：tab 换页销毁，弹窗默认 `cache=false`；`PopupBase` 现提供 `onViewReady` 生命周期（首帧渲染就绪后框架自动安全调用，业务无需手动等帧），或显式 `if (!await this.nextPopupFrame()) return;`（已集成有效性与作用域检查，严禁在后重复堆叠第二行 `if (!this.isValid || scope.disposed)`）；流程预加载判 `context.cancelled`。同步事件、生命周期与组件 `schedule` 回调不重复判 `isValid`。

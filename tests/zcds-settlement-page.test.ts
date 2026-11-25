@@ -548,7 +548,7 @@ test('脚本 23 个 @property 全部绑到正确类型的对象', () => {
     }
 });
 
-test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / 两态标题有代号防串', () => {
+test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / 标题图随本次打开取消', () => {
     const code = stripComments(pageSource);
     // 段位：没数据整组收起（别留一行空框）
     assert.match(code, /this\.rankRow\.active = hasRank/);
@@ -562,9 +562,8 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     assert.match(code, /this\.rewardList\.scrollToTop\(false\)/);
     assert.doesNotMatch(code, /renderItemFn = \(node, index\) => \{[^}]*rewards\[/,
         'renderItemFn 只准读 this.rewards，不许闭包捕获入参 rewards');
-    // 两态标题：异步加载 + 代号防串（换态 / 关窗后到达的结果要丢掉）
-    assert.match(code, /private titleRevision = 0/);
-    assert.match(code, /revision !== this\.titleRevision \|\| !this\.isValid/);
+    assert.match(code, /this\.applyTitle\(userData\.victory \? 'victory' : 'defeat', context\)/);
+    assert.match(code, /await Promise\.all\(\[[\s\S]+?\]\);\s*if \(!this\.isValid \|\| context\.cancelled\) return;/);
     // 遮罩是纯 prefab 件：代码里既不该画它、也不该读它的尺寸
     assert.doesNotMatch(code, /this\.dim/, '代码不该再持有 dim');
     assert.doesNotMatch(code, /\.rect\(/, '遮罩不许用 Graphics 画矩形');
@@ -572,9 +571,9 @@ test('页面逻辑：整组显隐 / 虚拟列表喂条数 + 按下标现取 / �
     assert.match(code, /Button\.EventType\.CLICK/);
 });
 
-test('MVP 卡片：整组按数据显隐，两条进度按模型口径，骨骼模型异步挂且带代号防串', () => {
+test('MVP 卡片：整组按数据显隐，两条进度按模型口径，骨骼模型加载随本次打开取消', () => {
     const code = stripComments(pageSource);
-    assert.match(code, /private renderMvp\(mvp: IZCSettlementMvp \| null\)/);
+    assert.match(code, /this\.renderMvp\(userData\.mvp \?\? null, context\)/);
     // 没数据 ⇒ 整组收起 + 清掉上一局的模型（别留别人的兵）
     assert.match(code, /this\.mvpGroup\.active = Boolean\(mvp\)/);
     assert.match(code, /this\.mvpPreview\?\.clear\(\)/);
@@ -587,14 +586,13 @@ test('MVP 卡片：整组按数据显隐，两条进度按模型口径，骨骼�
     assert.doesNotMatch(code, /Math\.round\(\s*mvp|mvp\.damage|mvp\.damageTaken/, '页面不许回算伤害');
     // 等级只有服务端英雄数据才有 ⇒ 空串时收起，而不是留一个「Lv.」空标签
     assert.match(code, /this\.mvpLevel\.node\.active = Boolean\(mvp\.levelText\)/);
-    // 骨骼：prefabPath → 对局同一份兵种 prefab → MvpActor 播 idle；迟到的结果按代号 + scope 丢弃
+    // 骨骼：prefabPath → 对局同一份兵种 prefab → MvpActor 播 idle。
     assert.match(code, /this\.mvpActor\.active = Boolean\(mvp\.prefabPath\)/);
     assert.match(code, /this\.assets\.load\(mvp\.prefabPath, Prefab, \{/);
     assert.match(code, /bundle: bundleForPath\(mvp\.prefabPath\)/);
-    assert.match(code, /private mvpRevision = 0/);
-    assert.match(code, /revision !== this\.mvpRevision/);
+    assert.match(code, /await this\.assets\.load\([^;]+\);\s*if \(!this\.isValid \|\| context\.cancelled \|\| scope\.disposed\) return;/);
     assert.match(code, /scope\.disposed/, '资源作用域销毁后不许再挂模型');
-    assert.match(code, /void this\.applyMvpActor\(mvp, revision\)/);
+    assert.match(code, /void this\.applyMvpActor\(mvp, context\)/);
     assert.match(code, /new ZCSettlementMvpActor\(this\.mvpActor\)/);
     assert.doesNotMatch(code, /HeadArt|createIconLoader|touxiang_03/, '旧的头像方案必须删干净');
 });

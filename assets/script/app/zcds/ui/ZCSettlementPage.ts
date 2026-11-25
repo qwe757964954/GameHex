@@ -1,5 +1,5 @@
 import { _decorator, Button, Label, Node, Prefab, Sprite } from 'cc';
-import { PopupBase } from '../../../framework/ui/PopupBase';
+import { PopupBase, type PopupOpenContext } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { RewardItemView, type IRewardItemData } from '../../common/RewardItemView';
@@ -169,10 +169,6 @@ export class ZCSettlementPage extends PopupBase {
 
     /** 本趟要显示的奖励（`renderItemFn` 按下标现取 —— 禁止闭包捕获，槽位会跨趟复用）。*/
     private rewards: readonly IZCSettlementReward[] = [];
-    /** 标题套图的加载代号：两态切换 / 关闭后到达的异步结果要丢掉。*/
-    private titleRevision = 0;
-    /** MVP 骨骼的加载代号：同桌复用、两局连开时丢掉上一趟迟到的 prefab。*/
-    private mvpRevision = 0;
     /** MVP 立绘位的模型包装（懒建；宿主节点随页面常驻）。*/
     private mvpPreview: ZCSettlementMvpActor | null = null;
     /** 「确定」防重复提交：连点两下只发一次收尾（收尾多半是切流程，重复发等于 navigate 两次）。*/
@@ -190,20 +186,17 @@ export class ZCSettlementPage extends PopupBase {
     }
 
     /** 这一页不留 userData：所有意图都派发出去，页面不需要记得「谁接的」。*/
-    protected onOpen(userData?: IZCSettlementOptions): void {
+    protected onOpen(userData: IZCSettlementOptions | undefined, context: PopupOpenContext): void {
         if (!userData) return;
         this.confirming = false;
-        this.renderMvp(userData.mvp ?? null);
+        this.renderMvp(userData.mvp ?? null, context);
         this.renderRank(userData);
         this.renderRewards(userData.rewards ?? []);
         this.renderEntryGroups(userData);
-        void this.applyTitle(userData.victory ? 'victory' : 'defeat');
+        void this.applyTitle(userData.victory ? 'victory' : 'defeat', context);
     }
 
     protected onClose(_reason: PopupCloseReason): void {
-        // 关掉后异步回来的标题图 / 模型不许再写（槽位会被下一局复用）。
-        this.titleRevision += 1;
-        this.mvpRevision += 1;
         this.mvpPreview?.clear();
         this.layout?.reset();
     }
@@ -238,15 +231,13 @@ export class ZCSettlementPage extends PopupBase {
     
 
     /** 标题套图：异步加载完才换；加载期间保留 prefab 默认那套（先清空会闪一帧空底板）。*/
-    private async applyTitle(outcome: ZCSettlementOutcome): Promise<void> {
-        const revision = ++this.titleRevision;
+    private async applyTitle(outcome: ZCSettlementOutcome, context: PopupOpenContext): Promise<void> {
         const rel = ZC_SETTLEMENT_STYLE.title[outcome];
         const [plate, text] = await Promise.all([
             loadIdArtByRel(rel.plate),
             loadIdArtByRel(rel.text),
         ]);
-        // 期间换了态 / 弹窗已关 / 节点已销毁 ⇒ 丢弃这次结果。
-        if (revision !== this.titleRevision || !this.isValid) return;
+        if (!this.isValid || context.cancelled) return;
         if (plate) this.titlePlate.spriteFrame = plate;
         if (text) this.titleText.spriteFrame = text;
     }
@@ -257,9 +248,7 @@ export class ZCSettlementPage extends PopupBase {
      * 「没数据」有两种：`mvp` 为 `null`（统计缺失 / 全员 0 输出）⇒ 整组收起，不留空框；
      * `prefabPath` 为空（兵种目录里没配美术）⇒ 立绘位留空，但名字 / 进度照常显示。
     */
-    private renderMvp(mvp: IZCSettlementMvp | null): void {
-        // 每次换数据都换代号：上一趟还在 loading 的模型到了也不许写进来。
-        const revision = ++this.mvpRevision;
+    private renderMvp(mvp: IZCSettlementMvp | null, context: PopupOpenContext): void {
         this.mvpGroup.active = Boolean(mvp);
         this.mvpPreview?.clear();
         if (!mvp) return;
@@ -275,21 +264,21 @@ export class ZCSettlementPage extends PopupBase {
         this.mvpTakenValue.string = mvp.takenText;
         this.mvpTakenFill.fillRange = mvp.takenRate;
         this.mvpActor.active = Boolean(mvp.prefabPath);
-        if (mvp.prefabPath) void this.applyMvpActor(mvp, revision);
+        if (mvp.prefabPath) void this.applyMvpActor(mvp, context);
     }
 
     /**
      * 骨骼模型：`prefabPath` → 本局兵种 prefab（和对局内单位同一份资源）→ 立绘位播 idle。
      *
-     * 加载期间立绘位留空，到货再挂；迟到的结果按代号 + `resourceScope.disposed` 丢弃。
+     * 加载期间立绘位留空，仍在本次打开且资源有效时才挂模型。
      * 美术契约不符（缺 `spine` / 缺 `idle`）只让立绘位空着并告警，不能把整张结算页挂掉。
     */
-    private async applyMvpActor(mvp: IZCSettlementMvp, revision: number): Promise<void> {
+    private async applyMvpActor(mvp: IZCSettlementMvp, context: PopupOpenContext): Promise<void> {
         const scope = this.resourceScope;
         const prefab = await this.assets.load(mvp.prefabPath, Prefab, {
             scope, bundle: bundleForPath(mvp.prefabPath),
         });
-        if (!this.isValid || scope.disposed || revision !== this.mvpRevision) return;
+        if (!this.isValid || context.cancelled || scope.disposed) return;
         try {
             this.mvpPreview ??= new ZCSettlementMvpActor(this.mvpActor);
             this.mvpPreview.show(prefab, mvp.prefabSize);

@@ -63,6 +63,7 @@ import {
     windowSlotOf,
 } from './fixtures/showreward-grid-layout';
 import type { IShowRewardEntry } from '../assets/script/app/common/RewardEntries';
+import { parseGemQualityRows, parseGemRows } from '../assets/script/app/common/GemReward';
 import { parseItemRows, parseRolePropertyRows } from '../assets/script/app/common/ResTypes';
 import { assetPath } from './helpers/asset-paths';
 
@@ -288,6 +289,41 @@ test('A7｜图标分流：`item` 表直通、`roleProperty` 表落 icons/resourc
     assert.deepEqual([miss.quality, miss.iconPath], [1, '']);
 });
 
+/**
+ * 宝石奖池 / 宝石合成返回的 `CmdGoods` 是**宝石实例**：`resId` 是 gemId，
+ * `item` / `roleProperty` 两张表都查不到。不接 `gem` + `gemQuality` ⇒
+ * 弹窗里就是一格「品质 1 灰框 + 没有图标」（2026-11-25 用户截图：10 连全是空格子）。
+ */
+test('A7b｜宝石奖励：gemId 走 gem 部位 + gemQuality 图标/品质，payload quality 优先', () => {
+    const tables = {
+        gems: parseGemRows([{ resId: 1000000, desc: '头盔宝石' }, { resId: 1010000, desc: '衣服宝石' }]),
+        qualities: parseGemQualityRows([
+            { quality: 1, desc: '白色', icon: '图标_宝石_白色' },
+            { quality: 2, desc: '绿色', icon: '图标_宝石_绿色' },
+            { quality: 5, desc: '橙色', icon: '图标_宝石_橙色' },
+            { quality: 7, desc: '粉色', icon: '图标_宝石_粉色' },
+        ]),
+    };
+    const emptyItems = new Map<number, never>();
+    const emptyResources = new Map<number, never>();
+
+    // gemId = 部位 1000000 前段 × 10000 + attrId 6001 ⇒ 品质 7（粉色），与老端 `RoleRepository.readGemBag` 同口径
+    const derived = rewardEntryOf({ resId: 1006001, number: 1 }, emptyItems, emptyResources, tables);
+    assert.deepEqual([derived.quality, derived.iconPath], [7, 'icons/gem/图标_宝石_粉色']);
+
+    // 服务端直接下发 quality 时优先用它（宝石品质不在表里，不能只靠末四位）
+    const payload = rewardEntryOf({ resId: 1010000, number: 1, quality: 2 }, emptyItems, emptyResources, tables);
+    assert.deepEqual([payload.quality, payload.iconPath], [2, 'icons/gem/图标_宝石_绿色']);
+
+    // `toCmdGoods` 必须把 CmdGoods.quality 带下来；缺省不落键（既有口径不变）
+    assert.deepEqual(toCmdGoods({ resId: 1006001, number: '1', quality: 7 }), { resId: 1006001, number: 1, quality: 7 });
+    assert.deepEqual(toCmdGoods({ resId: 7, number: 2 }), { resId: 7, number: 2 });
+
+    // 非宝石 resId 不受影响，仍按两张道具表解析
+    const normal = rewardEntryOf({ resId: 999999, number: 1 }, emptyItems, emptyResources, tables);
+    assert.deepEqual([normal.quality, normal.iconPath], [1, '']);
+});
+
 test('A8｜动画时间轴：FGUI 帧率 60，错峰是 100×(index+1) ms', () => {
     assert.equal(FGUI_FPS, 60);
     assert.equal(framesToSeconds(5), 5 / 60);
@@ -416,8 +452,8 @@ test('C1b｜遮罩层：全屏 720×1280 + 黑 150 + 四边 Widget（与 GuideDi
 
 test('C2｜全部节点的 layer 恒 33554432、`_lscale` 只允许 ±1（规则 80① / 生成器自检①）', () => {
     const o = loadPrefab();
-    const nodes = o.filter((v) => v && v.__type__ === 'cc.Node');
-    assert.equal(nodes.length, 19, '仅保留一份奖励模板（18 + 第 28 条新增的全屏遮罩 Dim）');
+    const nodes = o.filter((v) => v?.__type__ === 'cc.Node' && v._name);
+    assert.equal(nodes.length, 15, '公共 RewardItem 的子节点由嵌套预制体提供');
     for (const n of nodes) {
         assert.equal(n._layer, 33554432, `${n._name} 的 layer`);
         assert.ok((n._lscale.x === 1 || n._lscale.x === -1) && (n._lscale.y === 1 || n._lscale.y === -1),
@@ -497,34 +533,15 @@ test('C5｜奖励模板保留尺寸、锚点与美术子节点', () => {
     assert.deepEqual(names, Array.from({ length: 1 }, (_u, i) => `Slot${i + 1}`));
 });
 
-test('C6｜每格的兄弟序 = 原稿 displayList 序：Goods → Glow → Star1..Star5', () => {
+test('C6｜每格复用公共 RewardItem，闪光与星点叠在物品之上', () => {
     const o = loadPrefab();
-    const byPath = pathIndex(o);
-    const slot = byPath.get('ShowReward/RewardGrid/Content/Slot1')!;
-    assert.deepEqual((o[slot]._children as any[]).map((c) => o[c.__id__]._name),
-        ['Goods', 'Glow', 'Star1', 'Star2', 'Star3', 'Star4', 'Star5']);
-    const goods = byPath.get('ShowReward/RewardGrid/Content/Slot1/Goods')!;
-    assert.deepEqual((o[goods]._children as any[]).map((c) => o[c.__id__]._name), ['Frame', 'Icon', 'Num']);
-});
-
-test('C7｜物品框三件套：尺寸 / 锚点 / `Num` 的 overflow 与字号（照 `gen_maintask` 的同一套折算）', () => {
-    const o = loadPrefab();
-    const byPath = pathIndex(o);
-    const base = 'ShowReward/RewardGrid/Content/Slot1/Goods';
-    const frame = byPath.get(`${base}/Frame`)!;
-    const icon = byPath.get(`${base}/Icon`)!;
-    const num = byPath.get(`${base}/Num`)!;
-    assert.deepEqual(uitOf(o, frame)._contentSize.width, 100);
-    assert.deepEqual(uitOf(o, icon)._contentSize.width, 80, 'Icon = 0.8 全盒');
-    assert.deepEqual([o[icon]._lpos.x, o[icon]._lpos.y], [0, 0], 'Icon 居中');
-    // ⚠️ `Num` 锚点必须是 (1,0.5)：老端 `text_number` 宽 13 是**单字符**宽，
-    //    实际数量靠 `overflow=NONE` 回写实测宽度 ⇒ 右对齐只能靠锚点（写 (0,1) 会右溢出）
-    assert.deepEqual([uitOf(o, num)._anchorPoint.x, uitOf(o, num)._anchorPoint.y], [1, 0.5]);
-    assert.equal(compOf(o, num, 'cc.Label')._overflow, 0);
-    assert.equal(compOf(o, num, 'cc.Label')._enableWrapText, false);
-    assert.equal(compOf(o, num, 'cc.Label')._fontSize, 24);
-    // `Goods` 自己不该有 Sprite（三件套在**子节点**上）
-    assert.equal(compOf(o, byPath.get('ShowReward/RewardGrid/Content/Slot1/Goods')!, 'cc.Sprite'), null);
+    const slot = pathIndex(o).get('ShowReward/RewardGrid/Content/Slot1')!;
+    const [reward, ...effects] = o[slot]._children;
+    assert.deepEqual(effects.map((c: any) => o[c.__id__]._name), ['Glow', 'Star1', 'Star2', 'Star3', 'Star4', 'Star5']);
+    const info = o[o[reward.__id__]._prefab.__id__];
+    assert.equal(info.asset.__uuid__, prefabUuid(assetPath('ui/common/RewardItem.prefab')));
+    assert.equal(o[info.instance.__id__].__type__, 'cc.PrefabInstance');
+    assert.deepEqual(o[o[1]._prefab.__id__].nestedPrefabInstanceRoots, [reward]);
 });
 
 test('C8｜闪光 + 5 星：尺寸 / 加色混合 / 颜色 / 静置位 = `SR_STAR_TRACKS.from`', () => {
@@ -590,8 +607,6 @@ test('C9｜主元素贴图：弹窗底是九宫 SLICED(1)、另外两张 SIMPLE(
     assert.equal(spriteUuidOf(o, starIdx), metaOf(SR_ART_NAMES.star).uuid);
     const glowIdx = byPath.get('ShowReward/RewardGrid/Content/Slot1/Glow')!;
     assert.equal(spriteUuidOf(o, glowIdx), metaOf(SR_ART_NAMES.glow).uuid);
-    // 三件套的 Frame/Icon 不烘静态图（运行时由 `GoodsBox.render` 无条件写）
-    assert.equal(spriteUuidOf(o, byPath.get('ShowReward/RewardGrid/Content/Slot1/Goods/Frame')!), '');
 });
 
 test('C10｜`HintLabel`：文案照原稿、`overflow=NONE`（SHRINK 会把 24 号静默压到 ~21.8）', () => {
@@ -610,7 +625,7 @@ test('C10｜`HintLabel`：文案照原稿、`overflow=NONE`（SHRINK 会把 24 �
     assert.deepEqual([uitOf(o, idx)._contentSize.width, uitOf(o, idx)._contentSize.height], [196, 34]);
 });
 
-test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×1 / PanelBg×1，且无 MissingScript', () => {
+test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / PanelBg×1，且无 MissingScript', () => {
     const o = loadPrefab();
     const cids = new Map<string, number>();
     for (const obj of o) {
@@ -618,12 +633,12 @@ test('C11｜脚本挂载：Page×1 / VirtualScrollView×1 / Item×1 / GoodsBox×
         if (obj.__type__ === 'cc.MissingScript') assert.fail('prefab 里出现 cc.MissingScript');
         if (/^[0-9A-Za-z+/]{23}$/.test(obj.__type__)) cids.set(obj.__type__, (cids.get(obj.__type__) ?? 0) + 1);
     }
-    assert.equal(cids.size, 5, `脚本类应有 5 种，实际 ${[...cids.keys()].join(',')}`);
+    assert.equal(cids.size, 4, `脚本类应有 4 种，实际 ${[...cids.keys()].join(',')}`);
     const counts = [...cids.values()].sort((a, b) => a - b);
-    assert.deepEqual(counts, [1, 1, 1, 1, 1]);
+    assert.deepEqual(counts, [1, 1, 1, 1]);
 });
 
-test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 goods/glow/stars(5)', () => {
+test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 glow/stars(5)', () => {
     const o = loadPrefab();
     const byPath = pathIndex(o);
     const scriptOf = (rel: string) => {
@@ -663,15 +678,11 @@ test('C12｜`@property` 绑定：Page 的 5 个 + Grid 的 content + 每格的 g
         const item = scriptOf(`RewardGrid/Content/Slot${i}`);
         assert.equal(o[item.opacity.__id__].__type__, 'cc.UIOpacity');
         assert.equal(nameOfRef(item.opacity), `Slot${i}`);
-        assert.equal(nameOfRef(item.goods), 'Goods');
         assert.equal(nameOfRef(item.glow), 'Glow');
         assert.ok(Array.isArray(item.stars), 'stars 必须是数组引用');
         assert.equal(item.stars.length, SR_STAR_COUNT);
         // 顺序必须与 `SR_STAR_TRACKS` 一一对应（`stars[i]` 配 `track[i]`）
         assert.deepEqual(item.stars.map(nameOfRef), ['Star1', 'Star2', 'Star3', 'Star4', 'Star5']);
-
-        const goods = scriptOf(`RewardGrid/Content/Slot${i}/Goods`);
-        assert.deepEqual(['frame', 'icon', 'num'].map((k) => nameOfRef(goods[k])), ['Frame', 'Icon', 'Num']);
     }
 });
 
@@ -679,8 +690,8 @@ test('C14｜`_active` 烘焙口径：带脚本的节点恒 true（规则 86）�
     const o = loadPrefab();
     const nodes = o.filter((v) => v && v.__type__ === 'cc.Node');
     for (const n of nodes) {
-        const hasScript = (n._components as any[]).some((c) => /^[0-9A-Za-z+/]{23}$/.test(o[c.__id__].__type__));
-        if (/^Slot\d+$/.test(n._name) || n._name === 'Goods') {
+        const hasScript = (n._components as any[] | undefined)?.some((c) => /^[0-9A-Za-z+/]{23}$/.test(o[c.__id__].__type__));
+        if (/^Slot\d+$/.test(n._name)) {
             assert.equal(n._active, true, `${n._name} 带脚本 ⇒ 必须 _active=true（规则 86：烘 false = 死锁）`);
             assert.ok(hasScript);
         }
@@ -720,12 +731,7 @@ test('D2｜空奖励直接关窗，异步结果只用 alive 判定', () => {
     assert.ok(/this\.close\(PopupCloseReason\.Manual\)/.test(PAGE_SRC), '空奖励应关窗而不是白屏');
     assert.ok(/if \(!this\.alive\) return/.test(PAGE_SRC), '异步回来必须检查存活');
     assert.ok(!/loadRevision/.test(PAGE_SRC), '单次打开没有并发刷新，不再维护 revision');
-    // 排序必须在加载图之前（`frames` 与 `entries` 必须同序）。
-    // ⚠️ 2026-10-14：帧加载搬进了共用件 `RewardFrames`（结算页是第二个宿主），
-    //    所以这里认的是 `loadRewardFrames(sorted)`，不再有私有的 `this.loadFrames`。
-    const sortAt = PAGE_SRC.indexOf('sortRewardEntries(entries)');
-    const loadAt = PAGE_SRC.indexOf('loadRewardFrames(sorted)');
-    assert.ok(sortAt > 0 && loadAt > 0 && sortAt < loadAt, '排序必须在加载图之前');
+    assert.match(PAGE_CODE, /this\.entries = sortRewardEntries\(entries\)/);
 });
 
 test('D3｜入场动效：PanelBg / TitleImage 缩放 + Hint 延迟显示，全走 `framesToSeconds`', () => {
@@ -756,14 +762,10 @@ test('D4｜奖励展示时播放指定音效，缺省按 isGold 选音效', () =
     assert.ok(/import \{ FW \}/.test(PAGE_SRC));
 });
 
-test('D5｜点一格 → 物品详情：必须传 resId **和 number** + `allowMultiple`（漏 number 就静默无效）', () => {
-    assert.ok(/ItemInfoPage\.open\(\{/.test(PAGE_SRC));
-    assert.ok(/resId: entry\.resId/.test(PAGE_SRC), 'onItemClick 要传 resId');
-    assert.ok(/number: entry\.number/.test(PAGE_SRC), 'onItemClick 要传 number');
-    assert.ok(/allowMultiple: true/.test(PAGE_SRC));
-    const openCall = stripComments(PAGE_SRC).match(/ItemInfoPage\.open\(\{[\s\S]*?\}\)/);
-    assert.ok(openCall && /layer:\s*this\.popupLayer/.test(openCall[0]),
-        '物品详情须继承奖励弹窗层级，否则 NORMAL 详情会被 SYSTEM 奖励窗遮挡');
+test('D5｜将物品 ID 和数量（+ 已解析的品质/图标）交给公共奖励格，点击由公共按钮处理', () => {
+    assert.match(PAGE_CODE, /item\.render\(\{ resId: entry\.resId, amount: entry\.number, quality: entry\.quality, iconPath: entry\.iconPath \}\)/);
+    assert.match(ITEM_CODE, /this\.rewardItem\.render\(data\)/);
+    assert.doesNotMatch(PAGE_CODE, /ItemInfoPage|onItemClickFn/);
 });
 
 test('D6｜RewardGrid 使用四列虚拟列表，复用单个模板', () => {
@@ -782,9 +784,11 @@ test('D6｜RewardGrid 使用四列虚拟列表，复用单个模板', () => {
     assert.equal(grid.enableItemClickEffect, false);
     assert.equal(grid.enableMouseWheel, true);
     assert.match(PAGE_CODE, /this\.grid\.renderItemFn =/);
-    assert.match(PAGE_CODE, /this\.grid\.onItemClickFn =/);
+    const scroll = o[grid.nativeScrollView.__id__];
+    assert.equal(scroll.__type__, 'cc.ScrollView');
+    assert.deepEqual(scroll._content, grid.content);
+    assert.equal(scroll.cancelInnerEvents, true);
     assert.doesNotMatch(PAGE_CODE, /ShowRewardGrid|TOUCH_END/);
-    assert.match(PAGE_CODE, /private onItemClick\(dataIndex: number\): void \{\s*if \(!this\.playedAni\.has\(dataIndex\)\) return;/, '待播透明格不可点击');
 });
 
 test('D7｜首次铺列表等到 start 后，打开时回到顶部', () => {
@@ -802,8 +806,6 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
         '../../framework/FW': {},
         '../../framework/event/EventMgr': { EventMgr: { instance: { emit() {} } } },
         '../../framework/ui/ViewLifecycle': { VIEW_LIFECYCLE: {} },
-        '../itemdetail/ItemInfoPage': {},
-        '../itemdetail/ItemDetailTable': { itemNumberTextOf: String },
         '../../vscrollview/VScrollView': {}, './ShowRewardItem': {},
         './ShowRewardTexts': {}, './RewardFrames': {},
         '../common/RewardEntries': {
@@ -826,7 +828,6 @@ test('同一奖励重复渲染不打断闪光与星点，换槽位才恢复已�
         page.isPopupOpen = true;
         page.node = { isValid: true };
         page.entries = [{ resId: 1, number: 1 }];
-        page.frames = [{}];
         const pending = [];
         page.scheduleOnce = fn => pending.push(fn);
         let appeared = 0;
@@ -881,19 +882,25 @@ test('虚拟槽位回收后，延迟动画不能改变列表管理的 active', (
         },
     }).outputText, { exports, require(name: string) {
         if (name === 'cc') return cc;
-        if (name === '../itemdetail/GoodsBox') return { GoodsBox: class {} };
+        if (name === '../common/RewardItemView') return { RewardItemView: class {} };
         if (name === './ShowRewardTable') return { FGUI_FPS, SR_STAR_TRACKS };
         throw new Error(`Unexpected dependency: ${name}`);
     } });
     const item = new exports.ShowRewardItem();
     const node = { active: true, setScale() {} };
-    Object.assign(item, { node, opacity: { opacity: 255 }, glow: { node: { active: false }, color: {} } });
+    const rewardNode = { active: true };
+    Object.assign(item, {
+        node, opacity: { opacity: 255 }, glow: { node: { active: false }, color: {} },
+        getComponentInChildren: () => ({ node: rewardNode }),
+    });
     item.prepareAppear();
     assert.equal(item.opacity.opacity, 0);
+    assert.equal(rewardNode.active, false, '待播时奖励按钮不可点击');
     assert.equal(node.active, true, '等待动画时仍由列表控制激活状态');
     node.active = false;
     item.appear();
     assert.equal(item.opacity.opacity, 255);
+    assert.equal(rewardNode.active, true, '开始显示时恢复奖励按钮');
     assert.equal(node.active, false, '旧动画不能重新激活已回收槽位');
     item.settle();
     assert.equal(node.active, false);
@@ -907,11 +914,6 @@ test('D8｜Item：动画作废用 `animRevision` + `Tween.stopAllByTarget`（复
     assert.ok(/Tween\.stopAllByTarget\(star\.node\)/.test(ITEM_SRC), '星的 tween 也要停');
     assert.ok(/rev === this\.animRevision/.test(ITEM_SRC), '回调里要核代号');
     assert.ok(/SR_STAR_TRACKS\[i\]/.test(ITEM_SRC), '轨迹必须按序取表');
-    // 铺数据必须无条件写四件（规则 82）
-    // ⚠️ 判据放宽成 `goods?.` 与 `goods.` 都认：`goods` 是 **必填 Inspector 引用**（`null!`，
-    //    prefab 上已绑），工程约定「不用 `?.` 掩盖必填引用」⇒ 源码这处正确地写成了直接访问，
-    //    老断言仍按 `?.` 写，属 11-17 那批空守卫清理后遗留的过期判据（与本次遮罩改动无关）。
-    assert.ok(/this\.goods\??\.render\(qualityFrame, iconFrame, numberText, showNumber\)/.test(ITEM_SRC));
     assert.ok(/resetAppear\(\): void \{\n\s+this\.stopAnim\(\);/.test(ITEM_CODE), 'resetAppear 先停动画');
     // `resetAppear` 必须把 5 星摆回 `track.from`（与 C8 的 prefab 静置位是同一组数字）
     assert.ok(/star\.node\.setPosition\(track\.from\[0\], track\.from\[1\], 0\)/.test(ITEM_SRC));
@@ -1034,7 +1036,7 @@ test('F4｜反向守卫：`HeadGridList` 的死回调 + 错误滚动模型都不
     // ① 死回调：`onItemClick` 必须**真的被调用**（此前只声明不调用 ⇒ 换头像点一格选不中）
     assert.ok(/this\.onItemClick\?\.\(dataIndex\)/.test(HEAD_SRC), 'onItemClick 必须被调用（死回调回归）');
     assert.ok(/private onSlotTap\(slot: number\): void/.test(HEAD_SRC), '缺 onSlotTap');
-    assert.ok(/slots\[i\]\.on\(Node\.EventType\.TOUCH_END, \(\) => this\.onSlotTap\(i\), this\)/.test(HEAD_SRC),
+    assert.ok(/slots\[i\]\.on\(Node\.EventType\.TOUCH_END, \(\) => this\.onSlotTap\(i\)\)/.test(HEAD_SRC),
         '槽位要绑 TOUCH_END 并捕获槽位序号');
     assert.ok(!/Button\.EventType\.CLICK/.test(HEAD_CODE), '槽位没有 cc.Button（规则 81b）');
     // ② 滚动模型：禁 Content 位移

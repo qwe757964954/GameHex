@@ -5,15 +5,16 @@
  * MVP 卡片卖的是**本局赢家阵营里输出最高的那张卡**——骨骼模型站在立绘位播 idle，
  * 旁边是 `Lv.x` + 卡名，下面两条「总输出 / 总承伤」进度条（各带百分比与数值）。
  *
- * 三处口径写死在这里，视图只负责摆 prefab：
+ * MVP 评选与占比在这里计算，视图只负责呈现：
  *   · 谁当选：**赢家阵营**内 `damage` 最大的卡；并列时取传入顺序在前的（席位序 = 本机在前）。
  *     平局 / 主动撤退没有胜方（`winner` 为空）⇒ 退化成「全场输出最高的卡」，
  *     否则这两种局面会把 MVP 整块藏掉；
  *   · 百分比：该卡输出（/ 承伤）占**全场所有卡合计**的比例，四舍五入到整数百分点；
- *   · 数值：`265700` → `265.7K`（千 / 百万两级，整数值不留 `.0`）。
+ *   · 数值使用公共缩写工具：`265700` → `265.7K`（千 / 百万两级，整数值不留 `.0`）。
  *
  * 全场总输出为 0（统计缺失 / 一枪没开）⇒ 不出卡：避免一张「0%」的假卡片。
  */
+import { formatSettlementAmount } from '../../../core/math/CompactNumber';
 import { ZCOwner } from './ZCMapConfig';
 
 /** 参与评选的一张卡（同一张卡的多只兵已在模型侧合并成一行）。*/
@@ -52,24 +53,7 @@ export interface IZCSettlementMvp {
     readonly takenRateText: string;
 }
 
-const THOUSAND = 1000;
-const MILLION = 1000 * 1000;
-
-/** 去掉一位小数的 `.0` 尾巴：`1.0K` → `1K`。*/
-function trimFixed(text: string): string {
-    return text.endsWith('.0') ? text.slice(0, -2) : text;
-}
-
-/**
- * 结算数值缩写：999 → `999`、1000 → `1K`、265700 → `265.7K`、1234567 → `1.2M`。
- * 负数与非有限值按 0（统计链上偶发 NaN 时不把 `NaN` 写进 UI）。
- */
-export function formatSettlementAmount(value: number): string {
-    const amount = Number.isFinite(value) ? Math.max(0, value) : 0;
-    if (amount >= MILLION) return `${trimFixed((amount / MILLION).toFixed(1))}M`;
-    if (amount >= THOUSAND) return `${trimFixed((amount / THOUSAND).toFixed(1))}K`;
-    return String(Math.round(amount));
-}
+export { formatSettlementAmount } from '../../../core/math/CompactNumber';
 
 /** 占比 → 0~1（分母为 0 时给 0，避免 NaN 进 `fillRange`）。*/
 function rateOf(part: number, total: number): number {

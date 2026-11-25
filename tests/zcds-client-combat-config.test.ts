@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import type { ZCBattleStart } from '../assets/script/app/battle/BattleStartModel';
-import { ZC_BATTLE_TYPE_CHAPTER, ZC_BATTLE_TYPE_SLG_MONSTER, parseBattleBuffs, parseBattleHeroAttrs } from '../assets/script/app/battle/BattleStartModel';
+import { ZC_BATTLE_TYPE_CHAPTER, ZC_BATTLE_TYPE_SLG_MONSTER, normalizeBattleUnit, parseBattleBuffs, parseBattleHeroAttrs } from '../assets/script/app/battle/BattleStartModel';
 import type { ZCUnitState } from '../assets/script/app/zcds/model/ZCGameTypes';
 import { ZCCombatSystem } from '../assets/script/app/zcds/model/systems/ZCCombatSystem';
 import { compileZCMatchRuntime } from '../assets/script/app/zcds/model/ZCMatchRuntimeCompiler';
@@ -13,6 +13,7 @@ import { configureZCMap } from '../assets/script/app/zcds/model/ZCMapConfig';
 import { loadPvpTables, type ZCPvpTables } from '../assets/script/app/zcds/model/ZCGameRuntimeConfig';
 import { captureZCMatchConfig } from '../assets/script/app/zcds/model/ZCMatchConfig';
 import { ZCGameModel } from '../assets/script/app/zcds/model/ZCGameModel';
+import { ZCPvpTileType } from '../assets/script/app/zcds/model/ZCPvpTileRules';
 import { assetPath } from './helpers/asset-paths';
 import { compileZCNeutralResourceCatalog } from '../assets/script/app/zcds/model/ZCNeutralResourceGroup';
 import { resolveZCMapResources, resolveZCSpawnMatchConfig, ZCSpawnSelection } from '../assets/script/app/zcds/model/ZCSpawnSelection';
@@ -63,6 +64,60 @@ function battle(
         ],
     };
 }
+
+test('开战回包的主城、金矿和城墙等级按席位进入对局，不占英雄卡名额', () => {
+    const source = prepare();
+    const heroIds = source.enemyDeck.filter(card => card.unitId).slice(0, 8).map(card => Number(card.unitId));
+    const start = battle();
+    const units = start.units.map((unit, index) => normalizeBattleUnit({
+        campId: unit.campId,
+        unitId: index + 1,
+        showInfo: { roleId: unit.roleId },
+        wallLevel: [8, 0, -1, 9][index],
+        heroInfos: [
+            ...(index < 3 ? [{ heroId: 2001, level: index + 2 }, { heroId: 2002, level: index + 5 }] : []),
+            ...heroIds.map(heroId => ({ heroId, level: 1 })),
+        ],
+        attrs: index === 0 ? [
+            { heroId: 2001, attrs: [{ attrId: 'buildingHp', value: '777' }] },
+            { heroId: 2002, attrs: [{ attrId: 'buildingHp', value: '2800' }] },
+        ] : index === 2 ? [
+            { heroId: 2001, attrs: [{ attrId: 'buildingHp', value: '-1' }] },
+        ] : [],
+    } as unknown as CmdBattleUnitInfo));
+    const config = buildZCClientCombatConfig(source, { ...start, units }, 'self').config;
+
+    assert.deepEqual(clientHeroIdsByOwner(source, { ...start, units }, 'self').enemy, heroIds);
+    assert.deepEqual(config.enemyDeck.filter(card => card.unitId).map(card => Number(card.unitId)), heroIds);
+    assert.equal(config.enemyDeck.filter(card => card.id === '2001').length, 1);
+    assert.deepEqual(config.ownerBuildingLevels, {
+        player: { mine: 3, hq: 6, wall: 0 },
+        enemy: { mine: 2, hq: 5, wall: 8 },
+        enemy2: { mine: 4, hq: 7 },
+        enemy3: { wall: 9 },
+    });
+    const localMine = source.enemyDeck.find(card => card.id === '2001');
+    assert.equal(config.enemyDeck.find(card => card.id === '2001').baseHp, 777);
+    assert.equal(config.ownerDecks.enemy2.find(card => card.id === '2001').baseHp, localMine.baseHp);
+    const hqCard = ZC_RUNTIME_CONFIG.snapshot.cardCatalog.get('2002');
+    const model = new ZCGameModel(null, () => 0.5, config);
+    for (const [index, home] of config.map.homes.entries()) {
+        const hp = index === 1 ? Math.round(2800 + hqCard.cyclePerTierValue) : source.rules.hqMaxHp;
+        assert.equal(model.snapshot.hexes[home].maxHp, hp);
+        assert.equal(model.snapshot.hexes[home].hp, hp);
+        assert.equal(model.snapshot.hexes[home].wallLevel, [0, 8, undefined, 9][index]);
+        assert.equal(model.snapshot.hexes[home].wallMaxHp, source.rules.wallMaxHp);
+    }
+    const mineHex = model.snapshot.hexes.find(hex => hex.owner === 'player' && hex.tileType === ZCPvpTileType.Mine);
+    assert.ok(mineHex);
+    assert.equal(mineHex.wallLevel, undefined);
+    assert.equal(model.developHex(mineHex.id).ok, true);
+    assert.equal(model.snapshot.hexes[mineHex.id].wallLevel, 0);
+    assert.equal(model.snapshot.hexes[mineHex.id].wallHp, source.rules.wallMaxHp);
+    const restored = new ZCGameModel(model.exportSnapshot(), () => 0.5, config);
+    assert.equal(restored.snapshot.hexes[mineHex.id].wallLevel, 0);
+    assert.equal(restored.snapshot.hexes[config.map.enemyHomeId].wallLevel, 8);
+});
 
 function serverMapBattle(source: ReturnType<typeof prepare>): ZCBattleStart {
     const start = battle();

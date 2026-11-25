@@ -509,15 +509,19 @@ test('异步对战宝箱：到点开启和立即打开均交付回包奖励，�
     assert.equal(rewards.length, 2);
 });
 
-test('异步宝箱奖励经宿主事件接开箱页，不再落普通奖励窗', () => {
+test('异步宝箱奖励经全页签协调器接开箱页，不再落普通奖励窗', () => {
     const repository = readFileSync('assets/script/app/main/NewTreasureRepository.ts', 'utf8');
     const page = readFileSync('assets/script/app/main/MainPage.ts', 'utf8');
-    const composition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    const tabs = readFileSync('assets/script/app/bootstrap/main/MainTabsComposition.ts', 'utf8');
+    const pageComposition = readFileSync('assets/script/app/bootstrap/main/MainPageComposition.ts', 'utf8');
+    const coordinator = readFileSync('assets/script/app/bootstrap/main/MainChestRewardCoordinator.ts', 'utf8');
     assert.doesNotMatch(repository, /FW\.ShowReward/);
     assert.match(page, /EventMgr\.instance\.emit\(CHEST_EVENTS\.REWARDS, \{ goods \}\)/);
-    assert.match(composition, /this\.listen\(CHEST_EVENTS\.REWARDS, this\.onTreasureRewards\)/);
-    const handler = composition.slice(composition.indexOf('    private onTreasureRewards('), composition.indexOf('    private onChestRevealed('));
-    assert.match(handler, /!this\.hasMainPage \|\| !event\.goods\.length/);
+    assert.match(tabs, /new MainChestRewardCoordinator\(this\.context\)/);
+    assert.doesNotMatch(pageComposition, /CHEST_EVENTS|onTreasureRewards/);
+    assert.match(coordinator, /this\.listen\(CHEST_REWARDS_EVENT, this\.onTreasureRewards\)/);
+    const handler = coordinator.slice(coordinator.indexOf('    private onTreasureRewards('), coordinator.indexOf('    private onChestRevealed('));
+    assert.match(handler, /if \(!event\.goods\.length\) return;/);
     assert.match(handler, /TerritoryChestOpenPage\.open\(\{ userData: \{ goods: event\.goods \} \}\)/);
     assert.match(handler, /if \(this\.isDisposed\) popup\?\.close\(\)/);
 });

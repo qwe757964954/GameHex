@@ -147,13 +147,13 @@ export class SevenDayPage extends PopupBase {
         this.rowList.renderItemFn = (node, index) => this.renderRow(node, index);
 
         for (const tab of this.dayTabs) {
-            tab.node.on(Button.EventType.CLICK, () => this.onDayClick(tab), this);
+            tab.node.on(Button.EventType.CLICK, () => this.onDayClick(tab));
         }
         for (const tab of this.pageTabs) {
-            tab.node.on(Button.EventType.CLICK, () => this.onPageTabClick(tab), this);
+            tab.node.on(Button.EventType.CLICK, () => this.onPageTabClick(tab));
         }
         for (const box of this.boxes) {
-            box.boxButton.on(Button.EventType.CLICK, () => this.onBoxClick(box), this);
+            box.boxButton.on(Button.EventType.CLICK, () => this.onBoxClick(box));
         }
     }
 

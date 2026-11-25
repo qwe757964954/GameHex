@@ -85,7 +85,7 @@ export class HeadGridList extends Component {
         //    别的数据，捕获数据下标就会「点第 3 格触发第 1 格的逻辑」（规则 55）。
         const slots = this.slots;
         for (let i = 0; i < slots.length; i += 1) {
-            slots[i].on(Node.EventType.TOUCH_END, () => this.onSlotTap(i), this);
+            slots[i].on(Node.EventType.TOUCH_END, () => this.onSlotTap(i));
         }
     }
 

@@ -32,7 +32,7 @@ export class RechargeDailyStage extends Component {
      * 节点带 UITransform，命中检测正常。
      */
     protected onLoad(): void {
-        this.node.on(Node.EventType.TOUCH_END, () => this.onAction?.(), this);
+        this.node.on(Node.EventType.TOUCH_END, () => this.onAction?.());
     }
 
     /** 铺一个阶段格；三态全部绝对赋值。 */

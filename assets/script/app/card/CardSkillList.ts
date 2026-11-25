@@ -49,26 +49,29 @@ export interface ZCArmySkill {
 /** 「技能 → 档位」索引，供卡牌页按 `pvpCard.skillList` 取用。 */
 export type ZCArmySkillTable = ReadonlyMap<number, ZCArmySkill>;
 
-/** 一行的解析结果：坏行返回 null（缺 id / 档位等必需列）。 */
-export function parseArmySkillLevelRow(value: unknown): ZCArmySkillLevelRow | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-    const row = value as Record<string, unknown>;
-
-    const skillId = toPositiveInt(row.id);
-    const level = toPositiveInt(row.skilllevel);
-    if (skillId === null || level === null) return null;
+/**
+ * 一行的解析结果：缺 id / 档位的行返回 null。
+ *
+ * 列类型由导表保证（`armySkillLevelUp` 的 id / skilllevel / 消耗均为 number，
+ * name / desc 为 string），客户端不再做 `Number()` / `typeof` 的二次类型校验；
+ * 只保留「技能号与档位必须为正」这一业务不变量。
+ */
+export function parseArmySkillLevelRow(row: IRefarmySkillLevelUp): ZCArmySkillLevelRow | null {
+    const skillId = row.id;
+    const level = row.skilllevel;
+    if (!(skillId > 0) || !(level > 0)) return null;
 
     return {
         skillId,
         level,
-        // 解锁等级允许 0（一级就有），非法值按 0 处理而不是丢掉整行 —— 丢掉会让技能凭空少一档。
-        unlockHeroLevel: Math.max(0, toCount(row.unlockarmylevel) ?? 0),
-        skillType: toCount(row.armySkillType) ?? 1,
-        desc: typeof row.desc === 'string' ? row.desc : '',
+        // 解锁等级允许 0（一级就有）；配表整列为 int，缺值按 0 处理。
+        unlockHeroLevel: Math.max(0, row.unlockarmylevel ?? 0),
+        skillType: row.armySkillType ?? 1,
+        desc: row.desc ?? '',
         ...(row.costCoinID !== undefined || row.costArmySkillLevelID !== undefined ? {
             costs: [
-                { itemId: toPositiveInt(row.costCoinID) ?? 0, need: toCount(row.costCoinNum) ?? 0 },
-                { itemId: toPositiveInt(row.costArmySkillLevelID) ?? 0, need: toCount(row.costArmySkillLevelNum) ?? 0 },
+                { itemId: row.costCoinID, need: row.costCoinNum },
+                { itemId: row.costArmySkillLevelID, need: row.costArmySkillLevelNum },
             ].filter(cost => cost.itemId > 0 && cost.need > 0),
         } : {}),
     };
@@ -79,7 +82,7 @@ export function parseArmySkillLevelRow(value: unknown): ZCArmySkillLevelRow | nu
  *
  * `name` 取该技能第一个非空的名字：表里有些技能的某几行 `name` 是空的。
  */
-export function buildArmySkillTable(rows: readonly unknown[]): ZCArmySkillTable {
+export function buildArmySkillTable(rows: readonly IRefarmySkillLevelUp[]): ZCArmySkillTable {
     const levels = new Map<number, Map<number, ZCArmySkillLevelRow>>();
     const names = new Map<number, string>();
 
@@ -95,7 +98,7 @@ export function buildArmySkillTable(rows: readonly unknown[]): ZCArmySkillTable 
         byLevel.set(row.level, row);
 
         if (!names.has(row.skillId)) {
-            const name = readName(raw);
+            const name = String(raw.name ?? '').trim();
             if (name) names.set(row.skillId, name);
         }
     }
@@ -119,9 +122,7 @@ export function resolveCardSkills(
     cardId?: string,
 ): readonly ZCArmySkill[] {
     const skills: ZCArmySkill[] = [];
-    for (const raw of skillIds ?? []) {
-        const skillId = Number(raw);
-        if (!Number.isSafeInteger(skillId) || skillId <= 0) continue;
+    for (const skillId of skillIds ?? []) {
         const skill = table.get(skillId);
         if (!skill) {
             console.warn(`[CardSkillList] 卡 ${cardId ?? '?'} 的技能 ${skillId} 在 armySkillLevelUp 里没有配置，已跳过`);
@@ -199,25 +200,4 @@ export function canStepSkill(
     // 往下翻总是允许（目标档一定已解锁过，否则也升不上来）；往上翻要判解锁等级。
     if (direction < 0) return true;
     return skillLevelUnlocked(skill, target, heroLevel);
-}
-
-// 内部工具
-
-function toCount(value: unknown): number | null {
-    if (value === null || value === undefined || value === '') return null;
-    const num = Number(value);
-    if (!Number.isFinite(num)) return null;
-    return Math.floor(num);
-}
-
-function toPositiveInt(value: unknown): number | null {
-    const num = toCount(value);
-    if (num === null || num <= 0) return null;
-    return num;
-}
-
-function readName(value: unknown): string {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) return '';
-    const name = (value as Record<string, unknown>).name;
-    return typeof name === 'string' ? name.trim() : '';
 }

@@ -7,6 +7,7 @@ import { RefUtil } from '../../framework/ref/RefUtil';
 import { spriteFramePathOf } from '../ArtPaths';
 import { itemQualityFrameRelPath } from '../itemdetail/ItemDetailArtLoader';
 import { cardItemIdsOf, itemFrameQualityOf } from '../itemdetail/ItemDetailTable';
+import { GEM_QUALITY_TABLE, GEM_TABLE, gemRewardOf, parseGemQualityRows, parseGemRows, type IGemTables } from './GemReward';
 import {
     CARD_LEVEL_UP_TABLE,
     ITEM_TABLE,
@@ -26,6 +27,14 @@ const { ccclass, property } = _decorator;
 export interface IRewardItemData {
     readonly resId: number;
     readonly amount: number;
+    /**
+     * 品质覆盖（宝石必须靠它）：`item` / `roleProperty` 两张表里没有宝石，
+     * 宝石的品质要么由服务端 `CmdGoods.quality` 给，要么按实例 id 末四位推。
+     * 普通道具 / 货币不传，仍按表解析。
+     */
+    readonly quality?: number;
+    /** 图标路径覆盖：宿主已经解析过（如「获得奖励」的 `IShowRewardEntry.iconPath`）就直通，省一次查表。 */
+    readonly iconPath?: string;
     /** 概率（百分比，`70` ⇒ 70%）；`0` / 省略 = 不显示（只有宝箱详情用）。 */
     readonly ratePercent?: number;
     /**
@@ -65,12 +74,17 @@ export class RewardItemView extends Component {
      * 底框要先抬一档才是卡牌的真实颜色。
      */
     private static cardItemIds: ReadonlySet<number> = new Set<number>();
+    /** `gem`（部位 resId）+ `gemQuality`（品质图标）：宝石奖励的图标与品质真源。 */
+    private static gemTables: IGemTables = { gems: new Map(), qualities: new Map() };
     private static tablesLoading: Promise<void> | null = null;
 
     private readonly controller = new ComponentController('ui:reward-item');
     private readonly frameCache = new Map<string, Promise<SpriteFrame | null>>();
     /** 本格当前的 resId（异步加载回来时确认没被复用成别的物品）。 */
     private currentResId = 0;
+    /** 本格当前的品质覆盖 + 图标覆盖（同上，异步回来时确认没被复用）。 */
+    private currentQuality = 0;
+    private currentIconPath = '';
 
     private get resourceScope(): ResourceScope {
         return this.controller.scope;
@@ -91,15 +105,22 @@ export class RewardItemView extends Component {
     }
 
     private static async loadTables(): Promise<void> {
-        const [props, items, levelUp] = await Promise.all([
+        const [props, items, levelUp, gems, gemQualities] = await Promise.all([
             RefUtil.instance.getRefAllAsync(ROLE_PROPERTY_TABLE).catch(() => null),
             RefUtil.instance.getRefAllAsync(ITEM_TABLE).catch(() => null),
             //  读不到就空集：底框退回道具品质口径（颜色可能低一档），但**不能**让奖励格整片不显示。
             RefUtil.instance.getRefAllAsync(CARD_LEVEL_UP_TABLE).catch(() => null),
+            //  宝石同理：表缺只影响宝石格，不影响其它奖励。
+            RefUtil.instance.getRefAllAsync(GEM_TABLE).catch(() => null),
+            RefUtil.instance.getRefAllAsync(GEM_QUALITY_TABLE).catch(() => null),
         ]);
         RewardItemView.propRows = (props ?? []) as IResPropertyRow[];
         RewardItemView.itemRows = (items ?? []) as IItemRefRow[];
         RewardItemView.cardItemIds = cardItemIdsOf(levelUp as readonly { readonly costCardID?: unknown }[] | null);
+        RewardItemView.gemTables = {
+            gems: parseGemRows(gems as readonly unknown[] | null),
+            qualities: parseGemQualityRows(gemQualities as readonly unknown[] | null),
+        };
     }
 
     private static qualityOf(resId: number): number {
@@ -132,6 +153,8 @@ export class RewardItemView extends Component {
      */
     render(data: IRewardItemData): void {
         this.currentResId = data.resId;
+        this.currentQuality = Number(data.quality) > 0 ? Math.floor(Number(data.quality)) : 0;
+        this.currentIconPath = data.iconPath ?? '';
         this.node.active = true;
 
         const amount = Math.floor(data.amount);
@@ -150,18 +173,26 @@ export class RewardItemView extends Component {
     }
 
     private async applyFrames(resId: number): Promise<void> {
+        const qualityOverride = this.currentQuality;
+        const iconOverride = this.currentIconPath;
         await (RewardItemView.tablesLoading ??= RewardItemView.loadTables());
-        if (!this.isValid || this.resourceScope.disposed || this.currentResId !== resId) return;
-        const quality = RewardItemView.qualityOf(resId);
+        if (!this.isValid || this.resourceScope.disposed
+            || this.currentResId !== resId) return;
+        if (this.currentQuality !== qualityOverride) return;
+        //  宝石不是道具：`resId` 是宝石实例 id（gemId），品质 / 图标走 `gem` + `gemQuality`。
+        const gem = gemRewardOf(resId, qualityOverride, RewardItemView.gemTables);
+        const quality = gem ? gem.quality : RewardItemView.qualityOf(resId);
         //  卡牌道具（碎片 / 民兵 / 金矿）的品质是「卡牌品阶」，底框要抬一档才是卡牌本身的颜色（绿/蓝/紫/金）。
-        const frameQuality = itemFrameQualityOf(quality, RewardItemView.cardItemIds.has(resId));
-        const iconPath = resBarIconSpritePath(resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows));
+        const frameQuality = itemFrameQualityOf(quality, !gem && RewardItemView.cardItemIds.has(resId));
+        const iconPath = gem?.iconPath || iconOverride
+            || resBarIconSpritePath(resBarCellOfRefId(resId, RewardItemView.propRows, RewardItemView.itemRows));
         const [qualityFrame, iconFrame] = await Promise.all([
             this.loadFrame(itemQualityFrameRelPath(frameQuality)),
             this.loadFrame(iconPath),
         ]);
         // 加载期间格子可能已被复用成别的物品，以最后一次 render 为准。
-        if (!this.isValid || this.resourceScope.disposed || this.currentResId !== resId) return;
+        if (!this.isValid || this.resourceScope.disposed
+            || this.currentResId !== resId) return;
         this.frame.spriteFrame = qualityFrame;
         this.icon.spriteFrame = iconFrame;
         this.icon.node.active = iconFrame !== null;

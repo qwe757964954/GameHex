@@ -1,3 +1,4 @@
+import { formatBigMapResourceAmount } from '../../../core/math/CompactNumber';
 import type { BigMapResType } from '../model/BigMapTypes';
 
 /**
@@ -43,10 +44,7 @@ export interface IBigMapTopHudView {
 }
 
 /** 资源整数 → 顶栏紧凑文本（≥1000 用一位小数 K），常态与滚动反馈共用。 */
-export function formatBigMapResourceAmount(amount: number): string {
-    const value = Math.floor(Number.isFinite(amount) ? amount : 0);
-    return value >= 1000 ? `${(value / 1000).toFixed(1)}K` : `${value}`;
-}
+export { formatBigMapResourceAmount } from '../../../core/math/CompactNumber';
 
 /**
  * 单格常态文本。

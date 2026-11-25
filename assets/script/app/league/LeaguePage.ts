@@ -182,7 +182,7 @@ export class LeaguePage extends Component {
                 console.warn(`[League] ${entrance.node} 上没有 cc.Button，点击不会生效`);
                 continue;
             }
-            button.node.on(Button.EventType.CLICK, () => this.onEntranceClick(entrance.node), this);
+            button.node.on(Button.EventType.CLICK, () => this.onEntranceClick(entrance.node));
 
             const redDot = node.getChildByName(LEAGUE_ENTRANCE_RED_DOT);
             if (redDot) this.entranceRedDots.set(entrance.key, redDot);

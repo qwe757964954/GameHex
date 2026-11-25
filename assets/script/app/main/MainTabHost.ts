@@ -81,7 +81,7 @@ export class MainTabHost extends Component {
             button.bindRedDotExpr(mainTabItem(type)?.rdExpr);
             button.node.on(Button.EventType.CLICK, () => {
                 EventMgr.instance.emit(MainTabEvent.Select, { tab: type });
-            }, this);
+            });
         }
 
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'ready' }, this);

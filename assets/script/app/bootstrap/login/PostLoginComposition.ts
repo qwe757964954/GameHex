@@ -84,7 +84,6 @@ export class PostLoginComposition extends ControllerBase {
 }
 
 function bootstrapPostLoginIdentity(params: unknown): void {
-    cardRepository.bindHeroSession(new PvpHeroService(GameNet.instance));
     let owner = resolvePostLoginIdentity(params, null);
     if (!owner) {
         try {
@@ -94,6 +93,7 @@ function bootstrapPostLoginIdentity(params: unknown): void {
             console.warn('[PostLoginComposition] 读取身份缓存失败', error);
         }
     }
+    cardRepository.bindHeroSession(new PvpHeroService(GameNet.instance), owner);
     if (!owner) {
         console.warn('[PostLoginComposition] 缺少有效角色身份，跳过章节汇总拉取');
         return;

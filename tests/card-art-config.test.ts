@@ -181,20 +181,26 @@ test('详情品质与职业使用新版切图，专属立绘缺失时回退布�
     const card = { id: '1', rarity: 'green', traits: { attack: '法师' }, headIcon: '专属图' } as ZCDeckCard;
     const result = await provider.loadDetail(card, art);
     assert.equal(result.hero, art.paths.get('boardHero.mage'));
-    assert.equal(result.diamond, 'identity/icon_quality_uncommon');
+    assert.equal(result.diamond, 'image/carddetail/identity/icon_quality_uncommon');
     assert.equal(result.classTag, 'identity/icon_class_mage');
     assert.ok(requested.includes('icons/cardHead/missing'));
     const tables = readCardArtTables();
     const different = parseCardArtConfig({
         ...tables,
-        cardClass: tables.cardClass.map((row: any) => (row.class === 'mage' ? { ...row, boardHero: 'icons/card/另一个占位' } : row)),
+        rarity: tables.rarity.map((row: Record<string, unknown>) => row.rarity === 'green'
+            ? { ...row, diamond: 'image/carddetail/identity/另一个品质图' } : row),
+        cardClass: tables.cardClass.map((row: Record<string, unknown>) => row.class === 'mage'
+            ? { ...row, boardHero: 'icons/card/另一个占位', badge: 'icons/card/另一个角标' } : row),
     }, []);
     assert.equal((await provider.loadDetail(card, different)).hero, 'icons/card/另一个占位');
+    assert.equal((await provider.loadDetail(card, different)).diamond, 'image/carddetail/identity/另一个品质图');
+    assert.equal((await provider.loadLineupCard(card, different)).badge, 'icons/card/另一个角标');
+    assert.equal((await provider.loadLineupSlot(card, different)).badge, 'icons/card/另一个角标');
     assert.equal((await provider.loadDetail(card, art)).hero, art.paths.get('boardHero.mage'), '不同宿主的配置不能串用');
     for (const [rarity, file] of Object.entries({ gold: 'legendary', purple: 'epic', blue: 'rare', green: 'uncommon' })) {
         const frames = await provider.loadDetail({ ...card, rarity } as ZCDeckCard, art);
-        assert.equal(frames.diamond, `identity/icon_quality_${file}`);
-        assert.ok(assetPath(`image/carddetail/${frames.diamond}.png`));
+        assert.equal(frames.diamond, `image/carddetail/identity/icon_quality_${file}`);
+        assert.ok(assetPath(`${frames.diamond}.png`));
     }
     for (const meta of art.lineup.classes) {
         const frames = await provider.loadDetail({ ...card, traits: { attack: meta.name } }, art);

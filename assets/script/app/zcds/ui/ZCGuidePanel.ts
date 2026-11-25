@@ -45,16 +45,16 @@ import {
 import { VirtualScrollView } from '../../../vscrollview/VScrollView';
 import { PopupBase } from '../../../framework/ui/PopupBase';
 import { PopupCloseReason } from '../../../framework/ui/PopupDef';
-import type { IZCGuidePreparedContent, ZCGuideEntry, ZCGuideParams } from '../model/ZCGuideConfig';
+import {
+    ZC_GUIDE_DEFAULT_PARAMS,
+    type IZCGuidePreparedContent,
+    type ZCGuideEntry,
+    type ZCGuideIconKey,
+    type ZCGuideParams,
+} from '../model/ZCGuideConfig';
 import { ZCGuideItem } from './ZCGuideItem';
 
 const { ccclass, property } = _decorator;
-
-const EMPTY_PARAMS: ZCGuideParams = {
-    panelTitle: '指南',
-    footerText: '',
-    emptyText: '暂无指南内容',
-};
 
 /** ZCGuidePanel.open 的 userData 结构。*/
 export interface ZCGuidePanelOptions {
@@ -94,7 +94,8 @@ export class ZCGuidePanel extends PopupBase {
     listView: VirtualScrollView = null;
 
     private entries: ZCGuideEntry[] = [];
-    private iconFrames: ReadonlyMap<string, SpriteFrame> = new Map();
+    private iconFrames: ReadonlyMap<ZCGuideIconKey, SpriteFrame> = new Map();
+    private rewardColumns: ZCGuideParams['rewardColumns'] = ZC_GUIDE_DEFAULT_PARAMS.rewardColumns;
 
     /** 当前展示的条目数，供上层/调试读取。*/
     get entryCount(): number {
@@ -115,7 +116,7 @@ export class ZCGuidePanel extends PopupBase {
         } else {
             this.entries = [];
             this.iconFrames = new Map();
-            this.applyParams(EMPTY_PARAMS);
+            this.applyParams(ZC_GUIDE_DEFAULT_PARAMS);
         }
         this.refreshList();
     }
@@ -146,7 +147,8 @@ export class ZCGuidePanel extends PopupBase {
             item.clear();
             return;
         }
-        item.render(entry, this.iconFrames);
+        const iconFrame = entry.icon === null ? null : this.iconFrames.get(entry.icon) ?? null;
+        item.render(entry, iconFrame, this.rewardColumns);
     }
 
     
@@ -155,7 +157,8 @@ export class ZCGuidePanel extends PopupBase {
 
     private applyParams(params: ZCGuideParams): void {
         this.titleLabel.string = params.panelTitle;
-        this.footerLabel.string = params.footerText;
+        this.footerLabel.string = this.entries.length ? params.footerText : params.emptyText;
+        this.rewardColumns = params.rewardColumns;
     }
 
     /**

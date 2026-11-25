@@ -115,7 +115,7 @@ export class FirstRechargePage extends PopupBase {
         this.buyAction.node.on(Button.EventType.CLICK, this.onBuyClick, this);
 
         for (const tab of this.tierTabs) {
-            tab.node.on(Button.EventType.CLICK, () => this.onTierClick(tab), this);
+            tab.node.on(Button.EventType.CLICK, () => this.onTierClick(tab));
         }
     }
 

@@ -35,7 +35,7 @@ export class ServerSelectPanel extends PopupBase {
     private servers: ServerInfoData[] = [];
 
     protected onInit(): void {
-        this.closeButton.on(Button.EventType.CLICK, () => this.closeByButton(), this);
+        this.closeButton.on(Button.EventType.CLICK, () => this.closeByButton());
         // ⚠️ renderItemFn 只在这里绑一次；回调里禁止捕获"本趟"的数据快照
         //    （否则第二次打开还停在上一次那份服务器列表上）。
         this.serverList.renderItemFn = (node, index) => this.renderItem(node, index);

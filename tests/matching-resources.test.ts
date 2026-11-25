@@ -116,7 +116,7 @@ test('我方展示数据使用独立统计数组，不能修改下一次匹配�
         artifactName: '', artifactIcon: '', stats: [] };
     const { buildSelfPlayerData } = load<typeof import('../assets/script/app/matching/MatchSelfProfile')>('MatchSelfProfile', {
         cc: {}, '../net/CacheMgr': {}, '../net/RequestGuard': {}, '../HeadArtModel': { applyHeadArt() {} },
-        '../card/LineupSnapshot': { readLineupSnapshot: () => null },
+        '../card/CardRepository': { cardRepository: { getCachedLineupSnapshot: () => null } },
         '../zcds/model/ZCCombatCatalog': { getPlayerDeck: () => [] },
         './MatchTypes': MatchTypes,
         './MatchPool': { LOCAL_PLAYER: template },

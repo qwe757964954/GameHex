@@ -1,3 +1,4 @@
+import { formatBattleFloatAmount } from '../assets/script/core/math/CompactNumber';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -185,6 +186,7 @@ function createView() {
     const loaded = { exports: {} as Record<string, any> };
     new Function('require', 'module', 'exports', compiled)((name: string) => {
         if (name === 'cc') return cc;
+        if (name.endsWith('/CompactNumber')) return { formatBattleFloatAmount };
         assert.equal(name, './ZCGameViewUtil');
         return { ...util, mapToViewX: (x: number) => x, mapToViewY: (y: number) => y };
     }, loaded, loaded.exports);
@@ -228,6 +230,11 @@ test('伤害数字：普通 / 克制都是白字，暴击白字且字号 1.7 倍
     assert.deepEqual(rgb(), WHITE, '普通伤害白字');
     assert.equal(size(), 30);
     assert.equal(prefixOf().string, '', '普通伤害没有前缀');
+
+    for (const [value, expected] of [[999.1, '1K'], [1_250, '1.3K'], [100_500, '101K'], [1e9, '1B'], [1e12, '1T']] as const) {
+        view.render(damageText({ value }), 0.2);
+        assert.equal((textLabel as unknown as { string: string }).string, expected);
+    }
 
     view.render(damageText({ kind: 'restraint' }), 0.2);
     assert.deepEqual(rgb(), WHITE, '克制增伤也是白字');

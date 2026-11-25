@@ -297,7 +297,7 @@ export class GameRunAway extends PopupBase {
             chip.setPosition(-SEAT_CHIP_SIZE / 2 - (owners.length - 1 - index) * step, 0, 0);
             const button = chip.addComponent(Button);
             button.transition = Button.Transition.NONE;
-            chip.on(Button.EventType.CLICK, () => this.selectEnemy(owner), this);
+            chip.on(Button.EventType.CLICK, () => this.selectEnemy(owner));
 
             //  选中框画在头像内侧：标题带上下只剩 1~9px，放不下「头像 + 下划线」那种两段式标记。
             const ring = new Node('Ring');

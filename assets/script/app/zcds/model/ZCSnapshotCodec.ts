@@ -90,9 +90,9 @@ export class ZCSnapshotCodec {
             const owner: ZCFaction = neutralResourceId !== null ? 'neutral'
                 : homeOwner ?? neighborOwner ?? match.map.owners[config.id];
             const building: ZCBuildingType = isHome ? 'hq' : 'none';
-            // 主城耐久：卡表「主城」行（`baseHp + 品级1×cyclePerTierValue`），已拍进 rules。
-            const maxHp = isHome ? rules.hqMaxHp : 0;
+            const maxHp = homeOwner === undefined ? 0 : match.ownerHqMaxHp?.[homeOwner] ?? rules.hqMaxHp;
             const wallMaxHp = isHome ? rules.wallMaxHp : 0;
+            const wallLevel = isHome ? match.ownerBuildingLevels?.[homeOwner]?.wall : undefined;
             // 资源标记清除后仍可开发，保留与既有抽卡回退一致的全类型随机类型。
             const tileType = isHome || !config.playable ? null
                 : neutralResourceId !== null ? ZCPvpTileType.AllRandom : tileTypes[config.id];
@@ -107,6 +107,7 @@ export class ZCSnapshotCodec {
                 maxHp,
                 wallHp: wallMaxHp,
                 wallMaxHp,
+                ...(wallLevel !== undefined ? { wallLevel } : {}),
                 wallBreachedEdge: null,
                 developmentCost: tileType ? match.tiles[tileType].price : 25,
                 tileType,
@@ -206,6 +207,7 @@ export class ZCSnapshotCodec {
             for (const key of ['wallHp', 'wallMaxHp', 'constructionRemainingSeconds', 'constructionTotalSeconds']) {
                 check(optional(hex[key], nonnegative), `${path}.${key}`);
             }
+            check(optional(hex.wallLevel, v => integer(v) && (v as number) <= 0xffffffff), `${path}.wallLevel`);
             check(optional(hex.wallBreachedEdge, (v) => v === null || integer(v) && (v as number) <= 5), `${path}.wallBreachedEdge`);
             check(optional(hex.developmentResolved, (v) => typeof v === 'boolean'), `${path}.developmentResolved`);
             check(optional(hex.captureOwner, v => v === null || typeof v === 'string' && ownerSet.has(v)), `${path}.captureOwner`);

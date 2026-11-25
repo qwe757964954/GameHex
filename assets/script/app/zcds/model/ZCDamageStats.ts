@@ -58,14 +58,6 @@ export interface IZCDamageStatsSeats {
 /** 进度条首位可见下限：真实占比更小时仍留一条细线，避免「有伤害但看起来是空条」。*/
 export const ZC_DAMAGE_STATS_MIN_BAR_RATIO = 0.02;
 
-/** 4 位数以内直接显示，10 万起收成 K，百万起收成 M（与设计稿 `265.7K` 同口径）。*/
-export function formatDamageStatsValue(value: number): string {
-    const normalized = normalize(value);
-    if (normalized >= 1000000) return `${trimFixed(normalized / 1000000)}M`;
-    if (normalized >= 100000) return `${trimFixed(normalized / 1000)}K`;
-    return String(normalized);
-}
-
 /**
  * 行进度条比例 = 本行数值 ÷ 本列合计 ⇒ **占全队总量的占比**（11-24 用户口径）。
  *
@@ -197,8 +189,4 @@ function seatRankOf(owner: ZCOwner): number {
 
 function normalize(value: number): number {
     return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
-}
-
-function trimFixed(value: number): string {
-    return value.toFixed(1).replace(/\.0$/, '');
 }

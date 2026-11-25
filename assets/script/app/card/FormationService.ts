@@ -1,6 +1,7 @@
 import { RequestFormationInfo, RequestFormationOp, RequestFormationSelect } from '../generated/requestMsg/RequestFormationMsg';
 import { GameNet } from '../net/GameNet';
 import { withTimeout } from '../net/RequestGuard';
+import type { GameRequestStatus } from '../net/RequestGuard';
 import type { ZCFormation } from './FormationModel';
 import { normalizeFormation, normalizeFormations, normalizeHeroIds, toPositiveInt } from './FormationModel';
 
@@ -37,16 +38,21 @@ export const FORMATION_PREFETCH_FRESH_MS = 1500;
 let cachedFormations: readonly ZCFormation[] | null = null;
 /** `cachedFormations` 是什么时候拿到的（毫秒时间戳）；用于 `maxAgeMs` 的新鲜期判定。 */
 let cachedAt = 0;
-let pendingRequest: Promise<readonly ZCFormation[] | null> | null = null;
+let pendingRequest: ReturnType<typeof requestFormations> | null = null;
+let sessionRevision = 0;
+let writeRevision = 0;
 
 /**
  * 重置阵型本地缓存（注销登录 / 切换会话时调用）。
  * 清空驻留的服务端阵型数据，避免跨会话状态污染。
  */
 export function resetFormationSession(): void {
+    sessionRevision++;
+    const previous = pendingRequest;
+    pendingRequest = null;
+    previous?.cancel();
     cachedFormations = null;
     cachedAt = 0;
-    pendingRequest = null;
     selectProtocolWarned = false;
 }
 
@@ -71,13 +77,16 @@ export function fetchFormations(options: FormationFetchOptions = {}): Promise<re
     if (maxAgeMs > 0 && cachedFormations !== null && Date.now() - cachedAt <= maxAgeMs) {
         return Promise.resolve(cachedFormations);
     }
+    const session = sessionRevision;
     if (!pendingRequest) {
-        pendingRequest = requestFormations().finally(() => {
-            pendingRequest = null;
+        const request = requestFormations(session, writeRevision);
+        pendingRequest = request;
+        void request.promise.then(() => {
+            if (pendingRequest === request) pendingRequest = null;
         });
     }
-    const inflight = pendingRequest;
-    return withTimeout(inflight, timeoutMs, () => {
+    return withTimeout(pendingRequest.promise, timeoutMs, () => {
+        if (session !== sessionRevision) return null;
         console.warn(
             `[FormationService] ${options.label ?? '阵型'}请求 ${timeoutMs}ms 无响应，`
             + '先按本地卡组 / 本地快照渲染',
@@ -102,6 +111,7 @@ export function applyFormation(formation: ZCFormation): void {
     });
     if (!current.some((entry) => entry.formationId === formation.formationId)) replaced.push(formation);
     cachedFormations = replaced.slice().sort((a, b) => a.formationId - b.formationId);
+    writeRevision++;
     // 刚保存过的缓存算「新鲜」，否则 `maxAgeMs` 会把玩家自己刚改的结果挡掉。
     cachedAt = Date.now();
 }
@@ -141,6 +151,7 @@ async function sendFormationOp(
     heroIds: number[],
     caller?: object,
 ): Promise<FormationSaveResult> {
+    const session = sessionRevision;
     let response: CmdFormationOpRspMsg | null = null;
     try {
         // 保存顺带置选中。否则服务端记着的出阵阵型仍是别的，而阵容页读的是选中阵型，
@@ -150,6 +161,7 @@ async function sendFormationOp(
             caller,
             (rsp) => { response = rsp; },
         ), { timeoutMs: FORMATION_SAVE_TIMEOUT_MS, tag: 'FormationService' });
+        if (session !== sessionRevision) return { kind: 'failed' };
         if (status === 'offline') return { kind: 'offline' };
         if (status !== 'ok' || !response) return { kind: 'failed' };
     } catch (error) {
@@ -211,6 +223,7 @@ export function selectFormation(formationId: number, caller?: object): Promise<b
 }
 
 async function sendFormationSelect(formationId: number, caller?: object): Promise<boolean> {
+    const session = sessionRevision;
     let response: CmdFormationSelectRspMsg | null = null;
     try {
         const status = await GameNet.sendRequest(() => new RequestFormationSelect(
@@ -218,12 +231,13 @@ async function sendFormationSelect(formationId: number, caller?: object): Promis
             caller,
             (rsp) => { response = rsp; },
         ), { timeoutMs: FORMATION_REQUEST_TIMEOUT_MS, tag: 'FormationService' });
-        if (status !== 'ok' || !response) return false;
+        if (session !== sessionRevision || status !== 'ok' || !response) return false;
     } catch (error) {
         console.warn('[FormationService] 选中阵型请求失败', error);
         return false;
     }
-    // 更新本地缓存：其他阵型 selected=false，当前的 selected=true
+    // 确认选中后，早于该写入发出的查询不能覆盖本地状态。
+    writeRevision++;
     if (cachedFormations) {
         cachedFormations = cachedFormations.map((entry) => ({
             ...entry,
@@ -234,25 +248,31 @@ async function sendFormationSelect(formationId: number, caller?: object): Promis
     return true;
 }
 
-async function requestFormations(): Promise<readonly ZCFormation[] | null> {
+function requestFormations(session: number, write: number) {
     let response: CmdFormationInfoRspMsg | null = null;
+    let request: Promise<GameRequestStatus> & { cancel?: () => void };
     try {
-        const status = await GameNet.sendRequest(() => new RequestFormationInfo(
+        request = GameNet.sendRequest(() => new RequestFormationInfo(
             {},
             undefined,
-            (rsp) => { response = rsp; },
+            rsp => {
+                response = rsp;
+            },
         ), { timeoutMs: FORMATION_REQUEST_TIMEOUT_MS, tag: 'FormationService' });
-        if (status !== 'ok' || !response) return cachedFormations;
     } catch (error) {
+        request = Promise.reject(error);
+    }
+    const promise = request.then(status => {
+        if (session !== sessionRevision) return null;
+        if (write === writeRevision && status === 'ok' && response) {
+            cachedFormations = normalizeFormations(response.infos);
+            cachedAt = Date.now();
+        }
+        return cachedFormations;
+    }).catch(error => {
+        if (session !== sessionRevision) return null;
         console.warn('[FormationService] 请求阵型失败，布阵面板退回本地卡组', error);
         return cachedFormations;
-    }
-
-    //  必须断言：`response` 的赋值发生在回调里，TS 不做跨函数控制流分析 ——
-    //  在它眼里 `response` 始终还是初始值 `null`，上面那句 `!response` 早退之后
-    //  类型就被收窄成 `never` 了。运行时是好的，只是检查器读不出来。
-    //  （`sendFormationOp` 里对 `CmdFormationOpRspMsg` 用的是同一套写法。）
-    cachedFormations = normalizeFormations((response as CmdFormationInfoRspMsg).infos);
-    cachedAt = Date.now();
-    return cachedFormations;
+    });
+    return { promise, cancel: () => request.cancel?.() };
 }

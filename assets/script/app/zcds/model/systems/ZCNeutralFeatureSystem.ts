@@ -89,6 +89,7 @@ export class ZCNeutralFeatureSystem {
             }
             hex.neutralFeature = { claimed: false };
             hex.wallHp = hex.wallMaxHp = 0;
+            delete hex.wallLevel;
             if (item.resourceType === ZCNeutralResourceType.Gate) {
                 const gates = item.feature.gates;
                 const gate = gates[gates.length === 1 ? 0 : Math.min(gates.length - 1, Math.floor(this.context.random() * gates.length))];

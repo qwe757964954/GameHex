@@ -93,7 +93,7 @@ export class ItemInfoPage extends PopupBase {
     protected onInit(): void {
         // 行是 prefab 预建的固定节点（下标恒定），监听只绑一次，点击时按 index 现取数据。
         this.rows.forEach((row, index) => {
-            row.node.on(Button.EventType.CLICK, () => this.onAccessClick(index), this);
+            row.node.on(Button.EventType.CLICK, () => this.onAccessClick(index));
         });
         this.createRewardView();
     }

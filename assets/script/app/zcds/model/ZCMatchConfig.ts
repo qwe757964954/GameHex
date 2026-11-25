@@ -1,4 +1,4 @@
-import type { IZCBattleRates } from '../../battle/BattleStartModel';
+import type { IZCBattleBuildingLevels, IZCBattleRates } from '../../battle/BattleStartModel';
 export type { IZCBattleRates } from '../../battle/BattleStartModel';
 import {
     getAllUnitDefinitions, getBondRules, getCounterRules, getEnemyDeck, getPlayerDeck,
@@ -114,6 +114,9 @@ export interface ZCMatchConfig {
     enemyDeck: readonly ZCDeckCard[];
     /** 正式多方对局的逐 owner 卡池；旧配置缺省时仍按 playerDeck / enemyDeck 兼容。*/
     ownerDecks?: Readonly<Partial<Record<ZCOwner, readonly ZCDeckCard[]>>>;
+    /** 服务端开战快照中的建筑等级，与局内建筑品级独立。 */
+    ownerBuildingLevels?: Readonly<Partial<Record<ZCOwner, IZCBattleBuildingLevels>>>;
+    ownerHqMaxHp?: Readonly<Partial<Record<ZCOwner, number>>>;
     units: readonly ZCUnitDefinition[];
     bonds: readonly ZCBondRule[];
     counters: readonly ZCCounterRule[];

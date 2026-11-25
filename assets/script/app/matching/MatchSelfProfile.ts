@@ -4,7 +4,7 @@ import { CacheMgr } from '../net/CacheMgr';
 import { toIdString } from '../net/RequestGuard';
 import { applyHeadArt } from '../HeadArtModel';
 import type { MatchProfileLookup } from '../battle/BattleStartModel';
-import { readLineupSnapshot } from '../card/LineupSnapshot';
+import { cardRepository } from '../card/CardRepository';
 import { getPlayerDeck } from '../zcds/model/ZCCombatCatalog';
 import { LOCAL_PLAYER } from './MatchPool';
 import { MATCH_CARD_SLOTS, type MatchCardData, type MatchPlayerData } from './MatchTypes';
@@ -63,7 +63,7 @@ export function readSelfIdentity(): SelfIdentity | null {
  */
 function selfCards(lookup?: MatchProfileLookup | null): readonly MatchCardData[] {
     if (!lookup) return [];
-    const deck = readLineupSnapshot()?.cards ?? getPlayerDeck();
+    const deck = cardRepository.getCachedLineupSnapshot()?.cards ?? getPlayerDeck();
     const cards: MatchCardData[] = [];
     for (const card of deck) {
         if (cards.length >= MATCH_CARD_SLOTS) break;

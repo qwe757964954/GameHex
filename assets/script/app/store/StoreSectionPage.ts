@@ -262,7 +262,7 @@ export class StoreSectionPage extends Component {
             while (root && !root.getComponent(StorePage)) root = root.parent;
             if (!root) throw new Error('StoreSectionPage requires StorePage');
             EventMgr.instance.emit(StoreEvent.Action, { kind, context: ctx }, root.getComponent(StorePage));
-        }, this);
+        });
     }
 
     /**

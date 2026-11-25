@@ -150,7 +150,7 @@ export class TerritoryChestOpenPage extends PopupBase {
         if (!context || context.cancelled) return;
         const rawEntries: ReturnType<typeof rewardEntryOf>[] = [];
         for (let i = 0; i < goods.length; i++) {
-            rawEntries.push(rewardEntryOf(goods[i], tables.items, tables.resources));
+            rawEntries.push(rewardEntryOf(goods[i], tables.items, tables.resources, tables.gems));
         }
         const entries = sortRewardEntries(rawEntries);
         const frames = await this.loadCardFrames(entries);

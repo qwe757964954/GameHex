@@ -1,3 +1,4 @@
+import { formatCityScore } from '../assets/script/core/math/CompactNumber';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
@@ -284,6 +285,7 @@ function loadPopup(headArt: object = {}) {
     runInNewContext(code, {
         exports,
         require: (name: string) => {
+            if (name.endsWith('/CompactNumber')) return { formatCityScore };
             if (name.endsWith('/HeadArt')) return { HeadArt: headArt };
             if (name.endsWith('/ArtPaths')) return artifactPaths;
             if (name.endsWith('/EventMgr')) return { EventMgr };

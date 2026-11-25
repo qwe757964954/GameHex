@@ -4,14 +4,10 @@ import { PopupCloseReason } from '../../framework/ui/PopupDef';
 import { EventMgr } from '../../framework/event/EventMgr';
 import { VIEW_LIFECYCLE } from '../../framework/ui/ViewLifecycle';
 import { FW } from '../../framework/FW';
-import { ItemInfoPage } from '../itemdetail/ItemInfoPage';
-import { itemNumberTextOf } from '../itemdetail/ItemDetailTable';
 import { VirtualScrollView } from '../../vscrollview/VScrollView';
 import { ShowRewardItem } from './ShowRewardItem';
 import { SHOW_REWARD_TEXTS, showRewardSoundKey } from './ShowRewardTexts';
-// 「CmdGoods → 帧」的换算与对局结算页**共用一份**（`RewardFrames`），别在这儿再抄一遍。
-import { loadRewardFrames, loadRewardGoodsTables } from './RewardFrames';
-import type { IRewardFrames } from './RewardFrames';
+import { loadRewardGoodsTables } from './RewardFrames';
 import {
     framesToSeconds,
     staggerSecondsOf,
@@ -64,8 +60,6 @@ export class ShowRewardPage extends PopupBase {
 
     /** 本次奖励（已排序）。 */
     private entries: IRewardEntry[] = [];
-    /** 与 entries 同序的图。 */
-    private frames: IRewardFrames[] = [];
     /** 是否铜钱奖励（决定音效）。 */
     private isGold = false;
     private soundKey?: string;
@@ -80,13 +74,11 @@ export class ShowRewardPage extends PopupBase {
     protected onInit(): void {
         // Grid 回调只在这里绑一次，回调体按 dataIndex 现取 entries（捕获入参会永远显示第一屏）。
         this.grid.renderItemFn = (node: Node, dataIndex: number) => this.renderItem(node, dataIndex);
-        this.grid.onItemClickFn = (_node: Node, dataIndex: number) => this.onItemClick(dataIndex);
     }
 
     protected async onOpen(userData?: IShowRewardParams): Promise<void> {
         EventMgr.instance.emit(VIEW_LIFECYCLE, { phase: 'enabled' }, this);
         this.entries = [];
-        this.frames = [];
         this.playedAni.clear();
         this.isGold = !!userData?.isGold;
         // 起手态必须在任何 await 之前写好：弹窗节点在 onOpen 前已 active，
@@ -102,15 +94,7 @@ export class ShowRewardPage extends PopupBase {
 
         const entries = await this.resolveEntries(goods);
         if (!this.alive) return;
-        // 排序在加载图之前：frames 与 entries 须同序。
-        const sorted = sortRewardEntries(entries);
-
-        // 图先 await 完再铺：renderItem 同步，现加载会闪一帧旧图，漏项还会静默留白。
-        const frames = await loadRewardFrames(sorted);
-        if (!this.alive) return;
-
-        this.entries = sorted;
-        this.frames = frames;
+        this.entries = sortRewardEntries(entries);
         this.soundKey = userData?.soundKey;
     }
 
@@ -124,7 +108,6 @@ export class ShowRewardPage extends PopupBase {
         this.unscheduleAllCallbacks();
         this.grid.refreshList(0);
         this.entries = [];
-        this.frames = [];
         this.playedAni.clear();
         this.isGold = false;
         // 不做「奖励飞向背包」收尾动画，见类注释。
@@ -141,7 +124,7 @@ export class ShowRewardPage extends PopupBase {
      */
     private async resolveEntries(goods: readonly ICmdGoodsLike[]): Promise<IRewardEntry[]> {
         const tables = await loadRewardGoodsTables();
-        return goods.map((one) => rewardEntryOf(one, tables.items, tables.resources));
+        return goods.map((one) => rewardEntryOf(one, tables.items, tables.resources, tables.gems));
     }
 
     // ============================================================
@@ -170,20 +153,14 @@ export class ShowRewardPage extends PopupBase {
         item.dataIndex = dataIndex;
 
         const entry = this.entries[dataIndex];
-        const frame = this.frames[dataIndex];
         if (!entry) {
             // 空槽也走待播态：隐藏 + 起手态归位，别留下上一格的半截动画。
             item.prepareAppear();
             return;
         }
 
-        // 参数无条件写，避免残留上一格品质颜色。
-        item.render(
-            frame?.qualityFrame ?? null,
-            frame?.iconFrame ?? null,
-            itemNumberTextOf(entry.number),
-            entry.number > 0,
-        );
+        //  品质 / 图标已在本页解析过（宝石走 `gem` + `gemQuality`），直通给公共格，避免它再查一遍。
+        item.render({ resId: entry.resId, amount: entry.number, quality: entry.quality, iconPath: entry.iconPath });
 
         if (this.playedAni.has(dataIndex)) {
             // 同槽刷新保留正在播放的特效，换槽复用才恢复终态。
@@ -203,18 +180,6 @@ export class ShowRewardPage extends PopupBase {
             // 列表管理槽位 active，appear 只恢复表现与动画。
             item.appear();
         }, staggerSecondsOf(dataIndex));
-    }
-
-    /** 点一格 ⇒ 弹物品详情（传 resId + number、allowMultiple）。 */
-    private onItemClick(dataIndex: number): void {
-        if (!this.playedAni.has(dataIndex)) return;
-        const entry = this.entries[dataIndex];
-        if (!entry || !(entry.resId > 0)) return;
-        void ItemInfoPage.open({
-            userData: { resId: entry.resId, number: entry.number },
-            layer: this.popupLayer,
-            allowMultiple: true,
-        });
     }
 
     /**

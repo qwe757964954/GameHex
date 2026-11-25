@@ -1620,8 +1620,10 @@ export class VirtualScrollView extends Component {
    * 固定尺寸模式按新视口补足槽位（只增不减，已建节点继续复用）。
    */
   public refreshViewportSize(): void {
-    if (!this.useVirtualList || !this._isStarted || !this.content) return;
+    if (!this.useVirtualList || !this.content) return;
     this._upWidgetAlignment();
+    // 还没 start()：start 会在对齐后的真实视口上量尺寸，这里只把父级 Widget 对齐掉。
+    if (!this._isStarted) return;
     const viewportSize = this._getViewportMainSize();
     if (Math.abs(viewportSize - this._viewportSize) < 0.5) return;
     const oldPos = this._getContentMainPos();

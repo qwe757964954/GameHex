@@ -1,5 +1,6 @@
 import { cardArtConfig } from './helpers/card-art-config';
 import type { ICardDetailArt } from '../assets/script/app/card/CardArtProvider';
+import type { CardDetailPresentation } from '../assets/script/app/card/CardDetailPresenter';
 import type { SpriteFrame } from 'cc';
 import type { ICardMaterialIcon } from '../assets/script/app/card/CardPresentations';
 import assert from 'node:assert/strict';
@@ -115,7 +116,7 @@ test('详情首屏数据未就绪时连点切卡无效，就绪后仍可正常�
         assert.equal(h.states.at(-1).cardId, '2');
     } finally { h.finish(); }
 });
-function upgradeFixture(upgraded = false) {
+function upgradeFixture(upgraded = false, initialLevel = 0) {
     const owner = {}, states: any[] = [], results: any[] = [], applied: any[] = [], skills: any[] = [];
     const failures: unknown[] = [];
     const upgradedContents: any[] = [], heroLoads: string[] = [];
@@ -126,7 +127,7 @@ function upgradeFixture(upgraded = false) {
         loadMaterialIcon: async (_ids: readonly string[]): Promise<ICardMaterialIcon | null> => null,
         loadLineupSnapshot: (): CardLineupData | null => null,
         loadDetailNavigation: async () => ({ catalog: [] as readonly ZCDeckCard[], heroLevels: new Map<string, number>(), heroListKnown: true }),
-        loadCardDetail: async (_id: string, _level: number) => ({ stats: [], powerText: '', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }),
+        loadCardDetail: async (_id: string, _level: number): Promise<CardDetailPresentation> => ({ stats: [], powerText: '', critDamageGain: 0, chain: [{ skillId: 100101, name: '技能', unlockLevel: 3, unlocked: false, empty: false }], milestones: [] }),
         upgradeHero: async (_id: number, caller: object) => { calls++; assert.equal(caller, controller); return pending.promise; },
         applyHeroLevel: (id: number, level: number) => applied.push({ id, level }) };
     const dataCard = upgraded
@@ -134,7 +135,7 @@ function upgradeFixture(upgraded = false) {
         : card('1');
     const controller = new CardUpgradeController(createControllerContext(), {
         owner,
-        model: new CardUpgradeModel({ card: dataCard, cardId: '1', level: 0 }),
+        model: new CardUpgradeModel({ card: dataCard, cardId: '1', level: initialLevel }),
         repository,
         failed: error => failures.push(error),
         view: {
@@ -722,4 +723,39 @@ test('原位切卡后旧卡迟到详情不能覆盖新卡，详情失败仍保�
         await opening;
         assert.equal(h.states.length, count);
     } finally { h.finish(); }
+});
+
+test('升级到满级仍显示本次属性增量和暴击奖励', async () => {
+    const h = upgradeFixture(true, 49);
+    h.repository.loadUpgradeStatus = async (_id, level) => ({
+        ...upgradeStatus(level), maxLevel: 50, maxed: level === 50, canUpgrade: level === 49,
+    });
+    const loadDetail = h.repository.loadCardDetail;
+    h.repository.loadCardDetail = async (id, level) => ({
+        ...await loadDetail(id, level),
+        stats: [
+            { key: 'hp', value: level === 49 ? '4180' : '4347', gain: level === 49 ? '+167' : '' },
+            { key: 'attack', value: level === 49 ? '836' : '869', gain: level === 49 ? '+33' : '' },
+        ],
+        critDamageGain: level === 49 ? 1 : 0,
+    });
+    try {
+        await h.controller.start();
+        h.intent();
+        h.pending.resolve({ kind: 'success', heroId: 1, level: 50 });
+        await tick();
+        assert.equal(h.upgradedContents.length, 1);
+        const [content] = h.upgradedContents;
+        assert.equal(content.previousLevelText, '49级');
+        assert.equal(content.levelText, '50级');
+        assert.equal(content.previousHpValue, '4180');
+        assert.equal(content.hpValue, '4347');
+        assert.equal(content.previousAttackValue, '836');
+        assert.equal(content.attackValue, '869');
+        assert.equal(content.hpGain, '+167');
+        assert.equal(content.attackGain, '+33');
+        assert.match(content.bonusText, />1%<\/color>/);
+    } finally {
+        h.finish();
+    }
 });

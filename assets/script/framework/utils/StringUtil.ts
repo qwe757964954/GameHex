@@ -1,4 +1,4 @@
-
+import { formatLegacyRankAmount, formatNumberToKMBT, formatNumberToZH, formatNumberWithLimit } from '../../core/math/CompactNumber';
 export class StringUtil {
     public static __cname: string = "StringUtil";
 
@@ -20,35 +20,11 @@ export class StringUtil {
     }
 
     static formatNumberToZH(num: number): string {
-        if (num < 1e4) {
-            return Math.floor(num).toString();
-        }
-        if (num < 1e8) {
-            return (Math.floor(num / 1e3) / 10).toString() + "万";
-        }
-        return (Math.floor(num / 1e7) / 10).toString() + "亿";
+        return formatNumberToZH(num);
     }
 
     static formatNumberToKMBT(num: number): string {
-        if (num < 1e4) {
-            return Math.floor(num).toString();
-        }
-
-        const units = [
-            { value: 1e12, symbol: 'T' },
-            { value: 1e9, symbol: 'B' },
-            { value: 1e6, symbol: 'M' },
-            { value: 1e3, symbol: 'K' }
-        ];
-
-        for (const unit of units) {
-            if (num >= unit.value) {
-                const divided = num / unit.value;
-                return Math.floor(divided) + unit.symbol;
-            }
-        }
-
-        return Math.floor(num).toString();
+        return formatNumberToKMBT(num);
     }
     /**
      *
@@ -193,22 +169,7 @@ export class StringUtil {
      * @param convertNumber 转换值 （目前支持万，千） 默认 万
      */
     static forbidNumber(num: number, limitNum: number = 10000, convertNumber: number = 1000): string {
-        if (num >= limitNum) {
-            let limitStr: string
-            if (convertNumber == 10000) {
-                limitStr = "W"
-            } else if (convertNumber == 1000) {
-                limitStr = "K"
-            } else {
-                convertNumber = 10000
-                limitStr = "W"
-            }
-            if (num >= convertNumber) {
-                let n = Math.floor(num / convertNumber)
-                return n.toString() + limitStr
-            }
-        }
-        return num.toString()
+        return formatNumberWithLimit(num, limitNum, convertNumber);
     }
 
     /**不够位数,在前面填充0 */
@@ -261,18 +222,6 @@ export class StringUtil {
     }
 
     static numAbbr(num: number): string {
-        const trillion = 1e10; // 1兆 = 1万亿
-        const billion = 1e7;   // 1亿
-        const tenThousand = 1e4; // 1万
-
-        if (Math.abs(num) >= trillion) {
-            return Math.floor((num / 1e9)) + 'G';
-        } else if (Math.abs(num) >= billion) {
-            return Math.floor((num / 1e6)) + 'M';
-        } else if (Math.abs(num) >= tenThousand) {
-            return Math.floor((num / 1e3)) + 'k';
-        } else {
-            return Math.floor(num).toString();
-        }
+        return formatLegacyRankAmount(num);
     }
 }

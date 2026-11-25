@@ -10359,6 +10359,10 @@
                           "rule": "repeated",
                           "type": "uint64",
                           "id": 10
+                        },
+                        "wallLevel": {
+                          "type": "uint32",
+                          "id": 11
                         }
                       }
                     },

@@ -1,3 +1,4 @@
+import { formatCityScore } from '../../../core/math/CompactNumber';
 import { _decorator, Button, Color, Label, Node, Sprite, SpriteFrame, UITransform } from 'cc';
 import { EventMgr } from '../../../framework/event/EventMgr';
 import { PopupBase } from '../../../framework/ui/PopupBase';
@@ -45,12 +46,6 @@ export const BIGMAP_CITY_POPUP_BUFF_SLOTS = 2;
 export const BIGMAP_CITY_POPUP_RANK_SLOTS = 3;
 /** 排行榜每行「积分」前缀 —— 设计稿里是独立文本节点（与数值分两段）。 */
 export const BIGMAP_CITY_POPUP_SCORE_LABEL = '积分';
-
-/** 设计稿积分统一用 K，避免切到 M 后丢掉千位信息。 */
-function formatCityScore(score: string): string {
-    const value = Number(score);
-    return value >= 1000 ? `${Math.floor(value / 1000)}K` : score;
-}
 
 /**
  *城池弹窗 —— 蓝湖「城池弹窗3」（山猫 2026-11-02 口径：「弹窗按照设计稿，尺寸按照设计稿 1:1」）。

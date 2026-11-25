@@ -43,6 +43,9 @@ class MemoryStorage implements LineupSnapshotStorage {
 //  所以用 `unknown` 中转，避免为一个夹具把整张表的字段抄一遍。
 const CARD = (id: string): ZCDeckCard => ({ id, name: `卡${id}` }) as unknown as ZCDeckCard;
 
+const OWNER = { serverId: '1', roleId: '10' };
+const OWNER_KEY = `${LINEUP_SNAPSHOT_KEY}:1:10`;
+
 const payload = (overrides: Record<string, unknown> = {}) => ({
     version: LINEUP_SNAPSHOT_VERSION,
     savedAt: 1_000,
@@ -53,34 +56,34 @@ const payload = (overrides: Record<string, unknown> = {}) => ({
 
 test('写进去能原样读回来（卡组 + 等级）', () => {
     const storage = new MemoryStorage();
-    writeLineupSnapshot([CARD('101'), CARD('102')], new Map([['101', 5], ['102', 3]]), 1_000, storage);
+    writeLineupSnapshot(OWNER, [CARD('101'), CARD('102')], new Map([['101', 5], ['102', 3]]), 1_000, storage);
 
-    const snapshot = readLineupSnapshot(1_000, storage);
+    const snapshot = readLineupSnapshot(OWNER, 1_000, storage);
     assert.ok(snapshot);
     assert.deepEqual(snapshot.cards.map((card) => card.id), ['101', '102']);
     assert.deepEqual(snapshot.levels, { '101': 5, '102': 3 });
-    assert.equal(storage.map.has(LINEUP_SNAPSHOT_KEY), true);
+    assert.equal(storage.map.has(OWNER_KEY), true);
 });
 
 test('版本不符：整份丢弃（不做迁移）', () => {
     const storage = new MemoryStorage();
-    storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload({ version: LINEUP_SNAPSHOT_VERSION + 1 })));
-    assert.equal(readLineupSnapshot(1_000, storage), null);
+    storage.setItem(OWNER_KEY, JSON.stringify(payload({ version: LINEUP_SNAPSHOT_VERSION + 1 })));
+    assert.equal(readLineupSnapshot(OWNER, 1_000, storage), null);
 });
 
 test('过期就用不了，而且顺手把键删掉（否则每次进页面都白读一次）', () => {
     const storage = new MemoryStorage();
-    storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload({ savedAt: 1_000 })));
+    storage.setItem(OWNER_KEY, JSON.stringify(payload({ savedAt: 1_000 })));
     const justExpired = 1_000 + LINEUP_SNAPSHOT_MAX_AGE_MS + 1;
 
-    assert.equal(readLineupSnapshot(justExpired, storage), null);
-    assert.equal(storage.map.has(LINEUP_SNAPSHOT_KEY), false, '过期快照要清键，不能留着反复读');
+    assert.equal(readLineupSnapshot(OWNER, justExpired, storage), null);
+    assert.equal(storage.map.has(OWNER_KEY), false, '过期快照要清键，不能留着反复读');
 });
 
 test('savedAt 在未来（设备时间被往回调）也算不可信', () => {
     const storage = new MemoryStorage();
-    storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload({ savedAt: 5_000 })));
-    assert.equal(readLineupSnapshot(1_000, storage), null);
+    storage.setItem(OWNER_KEY, JSON.stringify(payload({ savedAt: 5_000 })));
+    assert.equal(readLineupSnapshot(OWNER, 1_000, storage), null);
 });
 
 test('脏数据一律 null：卡缺 id / JSON 坏 / 不是对象', () => {
@@ -95,41 +98,59 @@ test('脏数据一律 null：卡缺 id / JSON 坏 / 不是对象', () => {
     }
 
     const storage = new MemoryStorage();
-    storage.setItem(LINEUP_SNAPSHOT_KEY, '{ 这不是 json');
-    assert.equal(readLineupSnapshot(1_000, storage), null);
-    assert.equal(storage.map.has(LINEUP_SNAPSHOT_KEY), false, '坏 JSON 要清掉');
+    storage.setItem(OWNER_KEY, '{ 这不是 json');
+    assert.equal(readLineupSnapshot(OWNER, 1_000, storage), null);
+    assert.equal(storage.map.has(OWNER_KEY), false, '坏 JSON 要清掉');
 });
 
 test('没有存储 / 写不进去：安静失败，不抛', () => {
-    assert.equal(readLineupSnapshot(1_000, null), null);
+    assert.equal(readLineupSnapshot(OWNER, 1_000, null), null);
 
     const storage = new MemoryStorage();
     storage.failWrite = true;
-    assert.doesNotThrow(() => writeLineupSnapshot([CARD('101')], new Map(), 1_000, storage));
-    assert.equal(readLineupSnapshot(1_000, storage), null);
+    assert.doesNotThrow(() => writeLineupSnapshot(OWNER, [CARD('101')], new Map(), 1_000, storage));
+    assert.equal(readLineupSnapshot(OWNER, 1_000, storage), null);
 
-    assert.doesNotThrow(() => clearLineupSnapshot(storage));
+    assert.doesNotThrow(() => clearLineupSnapshot(OWNER, storage));
 });
 
 test('空卡组能存能读（玩家一键下阵后保存过）', () => {
     const storage = new MemoryStorage();
-    writeLineupSnapshot([], new Map(), 1_000, storage);
-    const snapshot = readLineupSnapshot(1_000, storage);
+    writeLineupSnapshot(OWNER, [], new Map(), 1_000, storage);
+    const snapshot = readLineupSnapshot(OWNER, 1_000, storage);
     assert.ok(snapshot);
     assert.equal(snapshot.cards.length, 0);
 });
 
 test('战力字段冷启动增强：可持久化并在快照中原样读回', () => {
     const storage = new MemoryStorage();
-    writeLineupSnapshot([CARD('101')], new Map([['101', 3]]), 1_000, storage, 15980);
-    const snapshot = readLineupSnapshot(1_000, storage);
+    writeLineupSnapshot(OWNER, [CARD('101')], new Map([['101', 3]]), 1_000, storage, 15980);
+    const snapshot = readLineupSnapshot(OWNER, 1_000, storage);
     assert.ok(snapshot);
     assert.equal(snapshot.power, 15980);
 
     // saveLineupSnapshotPower 增量更新已存快照中的战力
-    saveLineupSnapshotPower(24500, storage);
-    const updated = readLineupSnapshot(1_000, storage);
+    saveLineupSnapshotPower(OWNER, 24500, storage);
+    const updated = readLineupSnapshot(OWNER, 1_000, storage);
     assert.ok(updated);
     assert.equal(updated.power, 24500);
     assert.equal(updated.cards[0].id, '101');
+});
+
+test('同设备的阵容和战力按服务器与角色隔离', () => {
+    const storage = new MemoryStorage();
+    const owner = { serverId: '1', roleId: '10' };
+    const otherRole = { serverId: '1', roleId: '20' };
+    const otherServer = { serverId: '2', roleId: '10' };
+    storage.setItem(LINEUP_SNAPSHOT_KEY, JSON.stringify(payload({ power: 999 })));
+    assert.equal(readLineupSnapshot(owner, 1_000, storage), null);
+
+    writeLineupSnapshot(owner, [CARD('101')], new Map([['101', 3]]), 1_000, storage, 100);
+    assert.equal(readLineupSnapshot(otherRole, 1_000, storage), null);
+    assert.equal(readLineupSnapshot(otherServer, 1_000, storage), null);
+    writeLineupSnapshot(otherRole, [CARD('102')], new Map(), 1_000, storage, 200);
+    saveLineupSnapshotPower(otherRole, 250, storage);
+    assert.equal(readLineupSnapshot(otherRole, 1_000, storage)?.power, 250);
+    assert.equal(readLineupSnapshot(owner, 1_000, storage)?.power, 100);
+    assert.equal(readLineupSnapshot(owner, 1_000, storage)?.cards[0].id, '101');
 });

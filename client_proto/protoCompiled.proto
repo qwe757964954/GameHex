@@ -4511,6 +4511,8 @@ message CmdBattleUnitInfo {
    repeated CmdPvpHeroAttrInfo attrs = 9;//英雄属性   
    //宝石修改器id集合(由服务器收集透传,前端战斗应用)
    repeated uint64 modifyList = 10;//宝石修改器id   
+   //城墙等级
+   optional uint32 wallLevel = 11;//城墙等级   
 }
 
 // 请求战斗信息

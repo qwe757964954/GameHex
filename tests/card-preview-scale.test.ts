@@ -69,15 +69,31 @@ test('A3 非法值兜成 1（缩放 0 会让模型凭空消失，且控制台干
  */
 function loadPreviewClass(): {
     Preview: new (hero: any, visibleHeight: number) => any;
-    Kinds: { Skeleton: new () => any; UITransform: new () => any };
+    Kinds: { Skeleton: new () => any; UITransform: new () => any; CardGlowSync: new () => unknown };
 } {
     const moduleExports: Record<string, unknown> = {};
 
-    class Component { node: any = null; }
-    class Skeleton {
-        node: any = null;
+    class Component {
+        node: FakeNode | null = null;
+        isValid = true;
+        getComponent(type: new () => unknown): unknown {
+            return this.node?.getComponent(type);
+        }
+        addComponent(type: new () => unknown): unknown {
+            return this.node?.addComponent(type);
+        }
+    }
+    class Skeleton extends Component {
         skeletonData: any = null;
-        setAnimation(): boolean { return true; }
+        timeScale = 1;
+        track: { animation: { name: string }; loop: boolean; trackTime: number } | null = null;
+        setAnimation(_index: number, name: string, loop: boolean) {
+            this.track = { animation: { name }, loop, trackTime: 0 };
+            return this.track;
+        }
+        getCurrent() {
+            return this.track;
+        }
     }
     class UITransform { height = 0; anchorY = 0.5; }
 
@@ -91,6 +107,14 @@ function loadPreviewClass(): {
         position = { x: 0, y: 0, z: 0 };
         readonly components: any[] = [];
         constructor(name = 'visual') { this.name = name; }
+        getSiblingIndex(): number {
+            return this.parent.children.indexOf(this);
+        }
+        setSiblingIndex(index: number): void {
+            const siblings = this.parent.children;
+            siblings.splice(this.getSiblingIndex(), 1);
+            siblings.splice(index, 0, this);
+        }
         setScale(x: number, y: number, z: number): void { this.scale = { x, y, z }; }
         setPosition(x: number, y: number, z: number): void { this.position = { x, y, z }; }
         setParent(parent: FakeNode): void {
@@ -112,7 +136,7 @@ function loadPreviewClass(): {
 
     const cc = {
         _decorator: { ccclass: () => (target: unknown) => target, property: () => () => {} },
-        Component, Skeleton, UITransform, Node: FakeNode,
+        Component, Skeleton, UITransform, Node: FakeNode, Color: class {}, UIOpacity: class {},
         sp: { Skeleton },
         instantiate: (prefab: any) => prefab.make(FakeNode),
     };
@@ -137,7 +161,7 @@ function loadPreviewClass(): {
     });
     return {
         Preview: moduleExports.CardUnitPreview as new (hero: any, visibleHeight: number) => any,
-        Kinds: { Skeleton, UITransform },
+        Kinds: { Skeleton, UITransform, CardGlowSync: glowExports.CardGlowSync as new () => unknown },
     };
 }
 
@@ -155,7 +179,6 @@ function spinePrefab(Skeleton: new () => any, canvasHeight: number, rootScale = 
             const skeleton: any = new Skeleton();
             skeleton.node = spine;
             skeleton.skeletonData = { getRuntimeData: () => ({ height: canvasHeight, animations: [{ name: 'idle' }] }) };
-            skeleton.setAnimation = () => true;
             spine.components.push(skeleton);
             node.scale = { x: rootScale, y: rootScale, z: 1 };
             return node;
@@ -165,7 +188,7 @@ function spinePrefab(Skeleton: new () => any, canvasHeight: number, rootScale = 
 
 /** 站台立绘节点（模型挂在它下面，所以要抵消它的缩放）。 */
 function heroSprite(height = 155, anchorY = 0, scaleY = 1): any {
-    const node = { active: true, scale: { x: scaleY, y: scaleY, z: 1 } };
+    const node = { active: true, children: [], scale: { x: scaleY, y: scaleY, z: 1 } };
     return {
         node: Object.assign(node, { getComponent: () => ({ height, anchorY }) }),
         enabled: true,
@@ -234,6 +257,46 @@ test('B5 换 prefab（不同兵种）重建节点，体型按新卡重算', () =
     const magician = preview.visual.scale.y;
     assert.ok(Math.abs(magician / lily - (0.85 / 1.5) * (1527 / 976)) < 1e-9,
         `换卡后应按新 canvas + 新体型重算，实际比值 ${magician / lily}`);
+});
+
+test('剪影创建时对齐本体，复用时继续播放，换动作或超出容差时同步', () => {
+    const { Preview, Kinds } = loadPreviewClass();
+    const preview = new Preview(heroSprite(), 120);
+    preview.show(spinePrefab(Kinds.Skeleton, 420));
+    const main = preview.visualSkeleton;
+    const attack = main.setAnimation(0, 'attack', false);
+    attack.trackTime = 0.6;
+    main.timeScale = 0.75;
+    const material = {};
+    const tint = { r: 255, g: 255, b: 255, a: 255 };
+
+    assert.equal(preview.attachGlow(material, tint), true);
+    const copy = preview.glowSkeleton;
+    const sync = copy.getComponent(Kinds.CardGlowSync);
+    const track = copy.getCurrent(0);
+    assert.deepEqual(track, attack);
+    assert.equal(copy.timeScale, 0.75);
+    assert.equal(preview.attachGlow(material, tint), true);
+    assert.equal(copy.getCurrent(0), track, '更新发光样式时保留正在播放的轨道');
+
+    track.trackTime = 0.58;
+    sync.lateUpdate();
+    assert.equal(track.trackTime, 0.58, '容差内不改播放头');
+    track.trackTime = 0.5;
+    main.timeScale = 1;
+    sync.lateUpdate();
+    assert.equal(track.trackTime, 0.6);
+    assert.equal(copy.timeScale, 1);
+
+    const idle = main.setAnimation(0, 'idle', true);
+    idle.trackTime = 0.2;
+    sync.lateUpdate();
+    assert.deepEqual(copy.getCurrent(0), idle);
+
+    main.track = null;
+    copy.track = null;
+    sync.lateUpdate();
+    assert.equal(copy.getCurrent(0).animation.name, 'idle', '本体没有轨道时，剪影继续使用绑定的待机动画');
 });
 
 // ==================== C. 真表 ====================

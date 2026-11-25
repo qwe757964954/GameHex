@@ -6513,6 +6513,9 @@
       },
       {
         "__id__": 279
+      },
+      {
+        "__id__": 371
       }
     ],
     "_prefab": {
@@ -6747,12 +6750,14 @@
       "__id__": 269
     },
     "useVirtualList": true,
-    "nativeScrollView": null,
+    "nativeScrollView": {
+      "__id__": 371
+    },
     "direction": 0,
     "itemCreationMode": 1,
     "itemNode": null,
     "itemPrefab": {
-      "__uuid__": "21db50c3-7a55-4c53-9650-fce7af05b10a",
+      "__uuid__": "83286ffd-0c20-4f7d-a032-136fdf654de9",
       "__expectedType__": "cc.Prefab"
     },
     "useDynamicSize": false,
@@ -8990,5 +8995,36 @@
     "fileId": "AeMPFJqBVG5yEWvl8uO85y",
     "instance": null,
     "targetOverrides": null
+  },
+  {
+    "__type__": "cc.ScrollView",
+    "_name": "",
+    "_objFlags": 0,
+    "__editorExtras__": {},
+    "node": {
+      "__id__": 268
+    },
+    "_enabled": true,
+    "__prefab": {
+      "__id__": 372
+    },
+    "bounceDuration": 0.23,
+    "brake": 0.5,
+    "elastic": true,
+    "inertia": true,
+    "horizontal": false,
+    "vertical": true,
+    "cancelInnerEvents": true,
+    "scrollEvents": [],
+    "_content": {
+      "__id__": 269
+    },
+    "_horizontalScrollBar": null,
+    "_verticalScrollBar": null,
+    "_id": ""
+  },
+  {
+    "__type__": "cc.CompPrefabInfo",
+    "fileId": "patrolChestNativeScroll"
   }
 ]

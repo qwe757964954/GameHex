@@ -2,9 +2,12 @@ import type { ZCCardRarity, ZCCardRarityMeta } from '../zcds/model/ZCCombatCatal
 import { createIconArtResolver, type IconArtResolver, type IconRow } from '../HeadArtModel';
 import { ZC_CARD_CAMPS, ZC_CARD_CLASSES, ZC_CARD_RARITIES, type ZCCardCamp, type ZCCardClass } from './CardLineupTypes';
 
+const RARITY_ART_FIELDS = ['face', 'disc', 'frame', 'diamond'] as const;
+const CLASS_ART_FIELDS = ['badge', 'boardHero'] as const;
+
 export type ICardArtKey =
-    | `${'face' | 'disc' | 'frame' | 'diamond'}.${ZCCardRarity}`
-    | `${'badge' | 'boardHero'}.${ZCCardClass}`;
+    | `${(typeof RARITY_ART_FIELDS)[number]}.${ZCCardRarity}`
+    | `${(typeof CLASS_ART_FIELDS)[number]}.${ZCCardClass}`;
 
 /**
  * 表内品级 id 与运行时 `ZCCardRarity` 同一套英文值（gold/purple/blue/green），无需映射。
@@ -38,10 +41,10 @@ export interface ICardArtTableRows {
 function buildRequiredCardArtKeys(): ICardArtKey[] {
     const keys: ICardArtKey[] = [];
     for (const rarity of ZC_CARD_RARITIES) {
-        for (const kind of ['face', 'disc', 'frame', 'diamond'] as const) keys.push(`${kind}.${rarity}`);
+        for (const field of RARITY_ART_FIELDS) keys.push(`${field}.${rarity}`);
     }
     for (const cardClass of ZC_CARD_CLASSES) {
-        for (const kind of ['badge', 'boardHero'] as const) keys.push(`${kind}.${cardClass}`);
+        for (const field of CLASS_ART_FIELDS) keys.push(`${field}.${cardClass}`);
     }
     return keys;
 }
@@ -68,11 +71,7 @@ export interface ICardCampMeta {
     readonly name: string;
 }
 
-/**
- * 三个维度的元数据（表内 `name` / `sort` 列），供后续把 `CardLineupTypes` 里的
- * 职业名、阵营名、traits 归一化和列表排序权重切到配置。
- * 现阶段 Provider / 页面仍用代码常量，切换时只改引用，不动表。
- */
+/** 阵容展示、排序与 traits 反查共用的维度元数据。 */
 export interface ICardLineupCatalog {
     /** 表行顺序。 */
     readonly rarities: readonly ICardRarityMeta[];
@@ -151,62 +150,62 @@ export function parseCardArtConfig(tables: ICardArtTableRows, iconRows: readonly
         if (seenRaritySort.has(sort)) throw new Error(`${table} sort 重复：${rarityId}=${sort}`);
         seenRaritySort.add(sort);
         rarities.push({ id: rarity, name, sort });
-        for (const kind of ['face', 'disc', 'frame', 'diamond'] as const) {
-            paths.set(`${kind}.${rarity}` as ICardArtKey, readPath(row, kind, table, `${kind}.${rarity}`));
+        for (const field of RARITY_ART_FIELDS) {
+            const key = `${field}.${rarity}` as const;
+            paths.set(key, readPath(row, field, table, key));
         }
     }
 
     const classes: ICardClassMeta[] = [];
-    const seenClassName = new Set<string>();
+    const classByTrait = new Map<string, ZCCardClass>();
     const seenClassSort = new Set<number>();
     const seenClass = new Set<string>();
     for (const value of tables.cardClass) {
         const table = CARD_ART_TABLES.cardClass;
         const row = asRow(value, table);
-        const cardClass = row.class;
-        if (typeof cardClass !== 'string' || !ZC_CARD_CLASSES.includes(cardClass as ZCCardClass)) {
+        const cardClass = row.class as ZCCardClass;
+        if (!ZC_CARD_CLASSES.includes(cardClass)) {
             throw new Error(`${table} 未知职业：${String(cardClass)}`);
         }
         if (seenClass.has(cardClass)) throw new Error(`${table} 重复职业：${cardClass}`);
         seenClass.add(cardClass);
         const name = readName(row, table, cardClass);
-        if (seenClassName.has(name)) throw new Error(`${table} name 重复：${name}（traits 归一化会歧义）`);
-        seenClassName.add(name);
+        if (classByTrait.has(name)) throw new Error(`${table} name 重复：${name}（traits 归一化会歧义）`);
+        classByTrait.set(name, cardClass);
         const sort = readSort(row, table, cardClass);
         if (seenClassSort.has(sort)) throw new Error(`${table} sort 重复：${cardClass}=${sort}`);
         seenClassSort.add(sort);
-        classes.push({ id: cardClass as ZCCardClass, name, sort });
-        for (const kind of ['badge', 'boardHero'] as const) {
-            paths.set(`${kind}.${cardClass}` as ICardArtKey, readPath(row, kind, table, `${kind}.${cardClass}`));
+        classes.push({ id: cardClass, name, sort });
+        for (const field of CLASS_ART_FIELDS) {
+            const key = `${field}.${cardClass}` as const;
+            paths.set(key, readPath(row, field, table, key));
         }
     }
 
     const camps: ICardCampMeta[] = [];
-    const seenCampName = new Set<string>();
+    const campByTrait = new Map<string, ZCCardCamp>();
     const seenCamp = new Set<string>();
     for (const value of tables.camp) {
         const table = CARD_ART_TABLES.camp;
         const row = asRow(value, table);
-        const camp = row.camp;
-        if (typeof camp !== 'string' || !ZC_CARD_CAMPS.includes(camp as ZCCardCamp)) {
+        const camp = row.camp as ZCCardCamp;
+        if (!ZC_CARD_CAMPS.includes(camp)) {
             throw new Error(`${table} 未知阵营：${String(camp)}`);
         }
         if (seenCamp.has(camp)) throw new Error(`${table} 重复阵营：${camp}`);
         seenCamp.add(camp);
         const name = readName(row, table, camp);
-        if (seenCampName.has(name)) throw new Error(`${table} name 重复：${name}（traits 归一化会歧义）`);
-        seenCampName.add(name);
-        camps.push({ id: camp as ZCCardCamp, name });
+        if (campByTrait.has(name)) throw new Error(`${table} name 重复：${name}（traits 归一化会歧义）`);
+        campByTrait.set(name, camp);
+        camps.push({ id: camp, name });
     }
     if (camps.length !== ZC_CARD_CAMPS.length) {
-        const missing = ZC_CARD_CAMPS.find(camp => !camps.some(row => row.id === camp));
+        const missing = ZC_CARD_CAMPS.find(camp => !seenCamp.has(camp));
         throw new Error(`cardUiArtCamp 缺少映射：camp.${missing}`);
     }
 
     for (const key of REQUIRED_CARD_ART_KEYS) if (!paths.has(key)) throw new Error(`cardUiArt 缺少映射：${key}`);
 
-    const classByTrait = new Map(classes.map((meta) => [meta.name, meta.id]));
-    const campByTrait = new Map(camps.map((meta) => [meta.name, meta.id]));
     const lineup: ICardLineupCatalog = {
         rarities,
         classes,

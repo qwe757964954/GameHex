@@ -27,6 +27,14 @@ export const ZC_BATTLE_TYPE_CHAPTER = 1002;
 
 export const BATTLE_START_SETTLED = 'battle:start-settled';
 
+export const ZC_BATTLE_BUILDING_IDS = { mine: 2001, hq: 2002 } as const;
+
+export interface IZCBattleBuildingLevels {
+    readonly mine?: number;
+    readonly hq?: number;
+    readonly wall?: number;
+}
+
 /**
  * 章节战斗内嵌的子类型，固定放在 battleParams[0]。
  * 1 = 格子战斗，2 = 宝箱战斗；两者参数结构相同，只有首项不同。
@@ -139,6 +147,7 @@ export interface ZCBattleUnit {
     readonly heroIds: readonly number[];
     /** 供卡牌技能解锁和升级在开局前编译。 */
     readonly heroes?: readonly ZCBattleHero[];
+    readonly buildingLevels?: IZCBattleBuildingLevels;
     readonly heroAttrs?: readonly ZCBattleHeroAttrs[];
     /** 阵营宝石修改器，重复 ID 对应多个宝石。 */
     readonly modifyIds?: readonly number[];
@@ -254,7 +263,14 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         console.warn('[BattleStartModel] 缺少 showInfo，已跳过', info);
         return null;
     }
-    const heroes = normalizeBattleHeroes(info.heroInfos);
+    const roster = normalizeBattleHeroes(info.heroInfos);
+    const mine = roster.find((hero) => hero.heroId === ZC_BATTLE_BUILDING_IDS.mine);
+    const hq = roster.find((hero) => hero.heroId === ZC_BATTLE_BUILDING_IDS.hq);
+    const heroes = roster.filter((hero) => hero !== mine && hero !== hq);
+    // Protobuf 的原型默认值是 0，只有解码出的自有属性才表示服务端明确下发。
+    const wall = Object.prototype.hasOwnProperty.call(info, 'wallLevel')
+        && Number.isInteger(info.wallLevel) && info.wallLevel >= 0 && info.wallLevel <= 0xffffffff
+        ? info.wallLevel : undefined;
     // `campId` / `unitId` / `power` / `gradeId` / `gradeScore` / `artifactId` / `artifactLevel`
     // 在 proto 里都是 `int32` / `uint32` ⇒ 运行时就是 number，不再过一遍 Long 转换；
     // `roleId` / `img` / `headFrame` 是 `uint64` ⇒ `Long`，必须走 `toIdString`（超 2^53 保持精度）。
@@ -271,6 +287,11 @@ export function normalizeBattleUnit(info: CmdBattleUnitInfo | null | undefined):
         gradeScore: show.gradeScore,
         heroIds: heroes.map((hero) => hero.heroId),
         heroes,
+        ...(mine || hq || wall !== undefined ? { buildingLevels: {
+            ...(mine ? { mine: mine.level } : {}),
+            ...(hq ? { hq: hq.level } : {}),
+            ...(wall !== undefined ? { wall } : {}),
+        } } : {}),
         artifactId: info.artifactId,
         artifactLevel: info.artifactLevel,
         unitType: normalizeBattleUnitType(info.unitType),

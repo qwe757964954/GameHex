@@ -98,7 +98,7 @@ export class ChestDetailPanel extends PopupBase {
     @property({ type: Label, group: '节点引用', tooltip: 'Panel/CountText：数量' })
     private countLabel: Label = null;
 
-    /** 奖励说明：四列网格使用详情页样式，仍由公共 RewardItemView 解析物品。 */
+    /** 奖励说明：详情卡片内嵌公共 RewardItem。 */
     @property({ type: VirtualScrollView, group: '节点引用', tooltip: 'Panel/ItemSlots：奖励说明（itemPrefab = ChestDetailRewardItem）' })
     private dropList: VirtualScrollView = null;
 
@@ -279,7 +279,7 @@ export class ChestDetailPanel extends PopupBase {
 
     /** 单格渲染 —— 走公共 `RewardItemView`（带概率的那套只有这个弹窗用）。 */
     private readonly renderReward = (item: Node, index: number): void => {
-        item.getComponent(RewardItemView).render(this.rewards[index]);
+        item.getComponentInChildren(RewardItemView).render(this.rewards[index]);
     };
 
     private updateCountdownText(text: string): void {

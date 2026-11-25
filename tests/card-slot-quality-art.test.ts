@@ -20,8 +20,10 @@ import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 import * as ts from 'typescript';
 import type { ICardArtConfig } from '../assets/script/app/card/CardArtConfig';
+import * as lineupTypes from '../assets/script/app/card/CardLineupTypes';
 import type { ZCCardClass } from '../assets/script/app/card/CardLineupTypes';
 import type { ZCCardRarity, ZCDeckCard } from '../assets/script/app/zcds/model/ZCCombatCatalog';
+import { cardArtConfig } from './helpers/card-art-config';
 
 const RARITIES: readonly ZCCardRarity[] = ['gold', 'purple', 'blue', 'green'];
 const CLASSES: readonly ZCCardClass[] = ['warrior', 'mage', 'archer', 'tank'];
@@ -65,28 +67,14 @@ function loadModule<T>(file: string, dependencies: Record<string, unknown>): T {
     return exports as T;
 }
 
-/** 装配一份 Provider + 只含 `face.*` 的美术配置（立绘/职业映射走真的 `resolveCardClass`）。 */
+/** 装配一份 Provider，使用真实美术配置和职业映射。 */
 function buildProvider(): { provider: { loadLineupSlot: (c: ZCDeckCard, a: ICardArtConfig) => Promise<{ disc: string; hero: unknown; badge: string }>; loadLineupCard: (c: ZCDeckCard, a: ICardArtConfig) => Promise<{ face: string; hero: unknown; badge: string }> }; art: ICardArtConfig } {
-    const lineupTypes = loadModule<{ resolveCardClass: Function; ZC_CARD_CLASSES: readonly string[] }>('CardLineupTypes', {
-        '../zcds/model/ZCCombatCatalog': { ZCCardType: { Mine: 'mine' }, ZC_CARD_RARITIES: RARITIES },
-        './CardLineupTexts': { CARD_LINEUP_TEXTS: new Proxy({}, { get: () => '' }) },
-    });
     const mod = loadModule<{ CardArtProvider: new () => any }>('CardArtProvider', {
         //  原样回吐路径：断言直接看「拿到哪张图」，不必再反解 SpriteFrame。
         './CardLineupIcons': { loadCardDetailArt: async () => null, loadIconByArtPath: async (path: string) => path },
         './CardLineupTypes': lineupTypes,
     });
-    const order = new Map(Object.entries(CLASS_TRAIT).map(([id, trait]) => [trait, id]));
-    const art = {
-        paths: new Map(Object.entries(FACE_BY_RARITY).map(([rarity, path]) => [`face.${rarity}`, path])),
-        heroIcons: { resolve: () => null },
-        lineup: {
-            rarities: [], classes: [], camps: [],
-            classOfTrait: (name: string) => order.get(name) ?? null,
-            campOfTrait: () => null,
-        },
-    } as unknown as ICardArtConfig;
-    return { provider: new mod.CardArtProvider(), art };
+    return { provider: new mod.CardArtProvider(), art: cardArtConfig };
 }
 
 function makeCard(rarity: ZCCardRarity, cardClass: ZCCardClass): ZCDeckCard {

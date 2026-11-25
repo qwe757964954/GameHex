@@ -161,6 +161,8 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
         // r936：PVP buff 列表（另有一条用例专门钉它的结构）
         'buffInfo',
         'attrs',
+        'modifyList',
+        'wallLevel',
     ]);
     assert.equal(unit.fields.showInfo.resolvedType, show);
     assert.equal(unit.fields.campId.type, 'uint32');
@@ -171,6 +173,9 @@ test('运行时 protobuf 含开始战斗的 4 个 message，且字段号/类型�
     assert.equal(unit.fields.unitType.id, 7);
     assert.equal(unit.fields.unitType.type, 'uint32');
     assert.equal(unit.fields.unitType.optional, true);
+    assert.equal(unit.fields.wallLevel.id, 11);
+    assert.equal(unit.fields.wallLevel.type, 'uint32');
+    assert.equal(unit.fields.wallLevel.optional, true);
 
     assert.deepEqual(
         Object.keys(show.fields),
@@ -342,7 +347,7 @@ test('真 ProtoCoder 能解出服务端回包：code / seed / battleId / unitInf
         startBattleInfo: { battleType: ZC_BATTLE_TYPE_PVP, battleParams: ['a'] },
         unitInfos: [
             { campId: 1, showInfo: { roleId: '10022', serverId: 1, name: '我', power: 1234 } },
-            { campId: 2, showInfo: { roleId: '10088', serverId: 1, name: '对面', power: 4321 } },
+            { campId: 2, wallLevel: 0, showInfo: { roleId: '10088', serverId: 1, name: '对面', power: 4321 } },
         ],
     })).finish();
 
@@ -355,6 +360,9 @@ test('真 ProtoCoder 能解出服务端回包：code / seed / battleId / unitInf
     assert.equal(toIdString(decoded.seed), '18446744073709551615');
     assert.equal(decoded.unitInfos.length, 2);
     assert.equal(toIdString(decoded.unitInfos[1].showInfo.roleId), '10088');
+    const start = normalizeBattleStart(decoded);
+    assert.ok(start);
+    assert.deepEqual(start.units.map(unit => unit.buildingLevels?.wall), [undefined, 0]);
 });
 
 test('工程内所有请求类都能发出去', async () => {

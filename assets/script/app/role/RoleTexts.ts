@@ -49,6 +49,7 @@ export const ROLE_TEXTS = {
     gemOn: '镶嵌',
     gemReplace: '替换',
     gemDown: '卸下',
+    gemDownConfirm: (name: string) => `确定卸下「${name}」？`,
     gemChooseReplacement: '选择替换',
     gemCompose: '一键合成',
     gemComposeConfirm: '合成',

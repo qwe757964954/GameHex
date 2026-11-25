@@ -183,22 +183,22 @@ export class RolePage extends Component {
 
         for (const [name, tab] of BAG_TAB_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab }));
         }
 
         for (const [name, navId] of NAV_NODES) {
             const button = this.node.getChildByName(name)?.getComponent(Button);
-            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }), this);
+            button?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'nav', navId }));
         }
 
         const gemEntry = this.node.getChildByName(BAG_ENTRY_GEM)?.getComponent(Button);
-        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }), this);
+        gemEntry?.node.on(Button.EventType.CLICK, () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'bag', tab: 1 }));
         this.node.getChildByName(BAG_ENTRY_COMPOSE).on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }), this);
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'compose' }));
         this.node.getChildByName(BAG_ENTRY_FILTER).on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gemFilter' }), this);
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'gemFilter' }));
         this.node.getChildByName('ForgeBtn').on(Button.EventType.CLICK,
-            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge' }), this);
+            () => EventMgr.instance.emit(RoleEvent.Intent, { kind: 'forge' }));
 
         // prefab 已绑好，不判空：绑错应当场抛出来，而不是静默留个死界面。
         this.bagPanelComp = this.bagPanel.getComponent(RoleBagPanel);

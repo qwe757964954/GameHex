@@ -2574,6 +2574,7 @@ unitHero?:number
 unitStatus?:string
 unitPrefabPath?:string
 prefabSize?:number
+gameEndPrefabSize?:number
 unitSkillId?:number
 attackStyle?:number
 headIcon?:string
@@ -2614,6 +2615,7 @@ type IRefpvpCard_unitHero=number
 type IRefpvpCard_unitStatus=string
 type IRefpvpCard_unitPrefabPath=string
 type IRefpvpCard_prefabSize=number
+type IRefpvpCard_gameEndPrefabSize=number
 type IRefpvpCard_unitSkillId=number
 type IRefpvpCard_attackStyle=number
 type IRefpvpCard_headIcon=string

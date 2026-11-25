@@ -157,7 +157,7 @@ export class LineupBoardPage extends PopupBase implements IBoardCardHost {
         );
         for (let index = 0; index < presets.length; index += 1) {
             const button = presets[index].node.getComponent(Button);
-            button.node.on(Button.EventType.CLICK, () => this.selectPreset(index), this);
+            button.node.on(Button.EventType.CLICK, () => this.selectPreset(index));
         }
     }
 

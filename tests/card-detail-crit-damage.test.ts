@@ -7,6 +7,7 @@ import {
     buildCritDamageGainTable,
     critDamageGainAt,
     formatCritDamageGain,
+    parseCritDamageGainRow,
 } from '../assets/script/app/card/CardDetailCritDamage';
 
 function planRow(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -23,7 +24,7 @@ function planRow(overrides: Record<string, unknown> = {}): Record<string, unknow
 }
 
 describe('buildCritDamageGainTable', () => {
-    it('只收 109001 链上启用的 critDamage 行，按卡 + 等级入表', () => {
+    it('只收 109001 链上启用的 critDamage 行，按 unit + 等级入表', () => {
         const table = buildCritDamageGainTable([
             planRow({ skillLevel: 1, value: 1 }),
             planRow({ skillLevel: 2, value: 2 }),
@@ -41,12 +42,37 @@ describe('buildCritDamageGainTable', () => {
     it('addRate 按比例折算成百分点，坏行跳过', () => {
         const table = buildCritDamageGainTable([
             planRow({ skillLevel: 9, operation: 'addRate', value: 0.03 }),
+            planRow({ skillLevel: 10, operation: 'addRate', value: 0.07 }),
             planRow({ skillLevel: 0, value: 1 }),
             null,
             { unitId: '68003' },
         ]);
         assert.equal(table.get('68003')!.get(9), 3);
-        assert.equal(table.get('68003')!.size, 1);
+        assert.equal(table.get('68003')!.get(10), 7);
+        assert.equal(table.get('68003')!.size, 2);
+    });
+
+    it('同一 unit + 等级的重复行后值覆盖', () => {
+        const table = buildCritDamageGainTable([
+            planRow({ skillLevel: 2, value: 1 }),
+            planRow({ skillLevel: 2, value: 2 }),
+        ]);
+        assert.equal(table.get('68003')!.get(2), 2);
+    });
+});
+
+describe('parseCritDamageGainRow', () => {
+    it('按生成表列类型严格解析，拒绝 Number/String 能洗白的值', () => {
+        assert.deepEqual(parseCritDamageGainRow(planRow()), { unitId: '68003', level: 1, points: 1 });
+        assert.equal(parseCritDamageGainRow(planRow({ statId: ['critDamage'] })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ unitId: 68003 })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ unitId: { id: 68003 } })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ skillLevel: '2' })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ skillLevel: 2.9 })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ value: '2' })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ enabled: '1' })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ operation: 'mulRate' })), null);
+        assert.equal(parseCritDamageGainRow(planRow({ skillChainId: '109001' })), null);
     });
 });
 
@@ -61,9 +87,15 @@ describe('critDamageGainAt', () => {
         assert.equal(critDamageGainAt(table, '68003', 11), 2);
     });
 
-    it('已满级 / 没这张卡时是 0（视图据此不显示文案）', () => {
+    it('已满级 / 没这个 unit 时是 0（视图据此不显示文案）', () => {
         assert.equal(critDamageGainAt(table, '68003', 12), 0);
         assert.equal(critDamageGainAt(table, '68999', 1), 0);
+    });
+
+    it('按 unitId 取数，不认卡 id', () => {
+        const unitTable = buildCritDamageGainTable([planRow({ unitId: 'unit-68003' })]);
+        assert.equal(critDamageGainAt(unitTable, 'unit-68003', 0), 1);
+        assert.equal(critDamageGainAt(unitTable, '68003', 0), 0);
     });
 });
 
@@ -74,10 +106,12 @@ describe('formatCritDamageGain', () => {
         assert.equal(formatCritDamageGain(1.25), '1.3%');
     });
 
-    it('0 与非法值返回空串', () => {
+    it('0 与非法值返回空串，正数四舍五入后归零也不显示', () => {
         assert.equal(formatCritDamageGain(0), '');
         assert.equal(formatCritDamageGain(-1), '');
         assert.equal(formatCritDamageGain(Number.NaN), '');
+        assert.equal(formatCritDamageGain(0.04), '');
+        assert.equal(formatCritDamageGain(0.05), '0.1%');
     });
 });
 
@@ -86,7 +120,7 @@ describe('真表：pvpSkillPlan 的 109001 链', () => {
     const rows = (ref.v as unknown[][]).map(row => Object.fromEntries((ref.k as string[]).map((key, index) => [key, row[index]])));
     const table = buildCritDamageGainTable(rows);
 
-    it('35 张卡 × 50 级，每级都有正增量', () => {
+    it('35 个 unit × 50 级，每级都有正增量', () => {
         assert.equal(table.size, 35);
         for (const [, byLevel] of table) {
             assert.equal(byLevel.size, 50);
